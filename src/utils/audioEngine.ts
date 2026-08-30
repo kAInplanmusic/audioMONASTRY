@@ -2086,6 +2086,28 @@ class AudioEngine {
     }
   }
 
+  /** Einmalige Hörprobe eines synthetischen Samples (biblioMONK Play-Button). */
+  public previewSynthesizedSample(params: { frequency?: number; decay?: number; pitchDecay?: number; oscillatorType?: string }): void {
+    this.ensureInitialized();
+    try {
+      const freq = Math.max(20, Math.min(20000, params.frequency ?? 220));
+      const decay = Math.max(0.05, Math.min(2, params.decay ?? 0.3));
+      const types: OscillatorType[] = ['sine', 'triangle', 'square', 'sawtooth'];
+      const type = types.includes(params.oscillatorType as OscillatorType) ? (params.oscillatorType as OscillatorType) : 'sine';
+      const synth = new Tone.Synth({
+        oscillator: { type },
+        envelope: { attack: 0.005, decay, sustain: 0.02, release: 0.12 },
+      });
+      const bus = this.masterBuses['GLOBAL_MASTER'];
+      if (bus) synth.connect(bus);
+      else synth.toDestination();
+      synth.triggerAttackRelease(freq, '8n');
+      setTimeout(() => { try { synth.dispose(); } catch { /* noop */ } }, 1200);
+    } catch (e) {
+      console.warn('previewSynthesizedSample fehlgeschlagen:', e);
+    }
+  }
+
   public async loadTrackSample(track: TrackType, url: string | null) {
     // If there's an existing player for this track, dispose of it.
     // De-Klick: erst weich ausblenden (Volume-Rampe), dann nach kurzer Zeit

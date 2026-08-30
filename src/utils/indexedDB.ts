@@ -9,8 +9,12 @@
  * localStorage, Audio-Blobs liegen in OPFS. Audio-Pfade warten NIE auf
  * IndexedDB – alle Schreibzugriffe sind fire-and-forget.
  */
+/** Einmal geöffnete Verbindung wird wiederverwendet (kein Connection-Leak). */
+let dbPromise: Promise<IDBDatabase> | null = null;
+
 export const openDB = (): Promise<IDBDatabase> => {
-  return new Promise<IDBDatabase>((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open('AudioMonastryDB', 2);
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -22,8 +26,12 @@ export const openDB = (): Promise<IDBDatabase> => {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      dbPromise = null; // erneuter Versuch nach Fehler
+      reject(request.error);
+    };
   });
+  return dbPromise;
 };
 
 export const saveToDB = async (item: unknown): Promise<void> => {
