@@ -246,12 +246,12 @@ describe('VoiceControlService (alle 4 User, alle Plugins)', () => {
     expect(calls.length).toBe(2);
   });
 
-  it('Registry deckt alle 17 Plugin-IDs ab (Side-Effect-Registrierung)', () => {
+  it('Registry deckt alle Plugin-IDs ab (Side-Effect-Registrierung)', () => {
     const ids = voiceControlService.listPlugins();
     for (const id of [
       'sequencer', 'drum', 'mixer', 'spatial', 'instrument', 'fx', 'eq', 'dsp',
-      'synth', 'voice', 'library', 'controller', 'sampler', 'stem', 'recording',
-      'mastering', 'visualizer', 'performance',
+      'synthesizer', 'voice', 'library', 'controller', 'sampler', 'stem', 'recording',
+      'mastering', 'performance', 'sound', 'drop', 'ai',
     ]) {
       expect(ids).toContain(id);
     }

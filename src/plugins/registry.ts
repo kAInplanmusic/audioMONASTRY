@@ -1,53 +1,67 @@
 import { 
   Sliders, Keyboard, Grid3X3, Box, Music, Speaker, Sparkles, Waves, 
-  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge 
+  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge, Bot, AudioLines
 } from 'lucide-react';
 // Lazy-Code-Splitting: Jedes Terminal wird erst beim Aktivieren geladen
 // (reduziert das Hauptbundle erheblich; Vite erzeugt eigene Chunks).
 import { lazy } from 'react';
-const MischpultTerminal = lazy(() => import('../components/MischpultTerminal').then(m => ({ default: m.MischpultTerminal })));
-const SequencerPluginTerminal = lazy(() => import('../components/SequencerPluginTerminal').then(m => ({ default: m.SequencerPluginTerminal })));
-const LibraryTerminal = lazy(() => import('../components/LibraryTerminal').then(m => ({ default: m.LibraryTerminal })));
-const DrumMachineTerminal = lazy(() => import('../components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
+const MasterPlayerTerminal = lazy(() => import('../components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const InstrumentsTerminal = lazy(() => import('../components/InstrumentsTerminal').then(m => ({ default: m.InstrumentsTerminal })));
-const SpatialPluginTerminal = lazy(() => import('../components/SpatialPluginTerminal').then(m => ({ default: m.SpatialPluginTerminal })));
-const EQPluginTerminal = lazy(() => import('../components/EQPluginTerminal').then(m => ({ default: m.EQPluginTerminal })));
-const MasteringOverlay = lazy(() => import('../components/MasteringOverlay').then(m => ({ default: m.MasteringOverlay })));
+const SynthesizerTerminal = lazy(() => import('../components/SynthesizerTerminal').then(m => ({ default: m.SynthesizerTerminal })));
+const DrumMachineTerminal = lazy(() => import('../components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
+const SamplerTerminal = lazy(() => import('../components/SamplerTerminal').then(m => ({ default: m.SamplerTerminal })));
+const SequencerPluginTerminal = lazy(() => import('../components/SequencerPluginTerminal').then(m => ({ default: m.SequencerPluginTerminal })));
+const VoiceGenTerminal = lazy(() => import('../components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
+const SoundTerminal = lazy(() => import('../components/SoundTerminal').then(m => ({ default: m.SoundTerminal })));
+const MischpultTerminal = lazy(() => import('../components/MischpultTerminal').then(m => ({ default: m.MischpultTerminal })));
 const MIDIControllerTerminal = lazy(() => import('../components/MIDIControllerTerminal').then(m => ({ default: m.MIDIControllerTerminal })));
 const FXEngineTerminal = lazy(() => import('../components/FXEngineTerminal').then(m => ({ default: m.FXEngineTerminal })));
-const StemExtractorTerminal = lazy(() => import('../components/StemExtractorTerminal').then(m => ({ default: m.StemExtractorTerminal })));
-const VoiceGenTerminal = lazy(() => import('../components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
-const RecorderTerminal = lazy(() => import('../components/RecorderTerminal').then(m => ({ default: m.RecorderTerminal })));
+const DropTerminal = lazy(() => import('../components/DropTerminal').then(m => ({ default: m.DropTerminal })));
+const LibraryTerminal = lazy(() => import('../components/LibraryTerminal').then(m => ({ default: m.LibraryTerminal })));
+const EQPluginTerminal = lazy(() => import('../components/EQPluginTerminal').then(m => ({ default: m.EQPluginTerminal })));
 const DSPTerminal = lazy(() => import('../components/DSPTerminal').then(m => ({ default: m.DSPTerminal })));
-const VisualizerTerminal = lazy(() => import('../components/VisualizerTerminal').then(m => ({ default: m.VisualizerTerminal })));
-const SamplerTerminal = lazy(() => import('../components/SamplerTerminal').then(m => ({ default: m.SamplerTerminal })));
-const SynthesizerTerminal = lazy(() => import('../components/SynthesizerTerminal').then(m => ({ default: m.SynthesizerTerminal })));
+const MasteringOverlay = lazy(() => import('../components/MasteringOverlay').then(m => ({ default: m.MasteringOverlay })));
+const StemExtractorTerminal = lazy(() => import('../components/StemExtractorTerminal').then(m => ({ default: m.StemExtractorTerminal })));
+const SpatialPluginTerminal = lazy(() => import('../components/SpatialPluginTerminal').then(m => ({ default: m.SpatialPluginTerminal })));
+const RecorderTerminal = lazy(() => import('../components/RecorderTerminal').then(m => ({ default: m.RecorderTerminal })));
 const PerformanceMonitorTerminal = lazy(() => import('../components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
+const AiMonkTerminal = lazy(() => import('../components/AiMonkTerminal').then(m => ({ default: m.AiMonkTerminal })));
 
 const ICON_MAP: Record<string, any> = {
   Sliders, Keyboard, Grid3X3, Box, Music, Speaker, Sparkles, Waves, 
-  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge
+  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge, Bot, AudioLines
 };
 
+// ============================================================================
+// Plugin-Reihenfolge (verbindlich):
+//   0 masterplayer · 1 instrument · 2 synthesizer · 3 drum · 4 sampler
+//   5 sequencer · 6 voice · 7 sound · 8 mixer · 9 controller · 10 effect
+//   11 drop · 12 library · 13 eq · 14 dsp · 15 mastering · 16 stem
+//   17 spatial · 18 recording · 19 performance · 20 ai
+// visMONK wurde entfernt; seine Signal-Anzeige ist in perfMONK integriert.
+// ============================================================================
 const COMPONENT_MAP: Record<string, any> = {
+  masterplayer: MasterPlayerTerminal,
+  instrument: InstrumentsTerminal,
+  synthesizer: SynthesizerTerminal,
+  drum: DrumMachineTerminal,
+  sampler: SamplerTerminal,
+  sequencer: SequencerPluginTerminal,
+  voice: VoiceGenTerminal,
+  sound: SoundTerminal,
   mixer: MischpultTerminal,
   controller: MIDIControllerTerminal,
-  sequencer: SequencerPluginTerminal,
-  spatial: SpatialPluginTerminal,
-  instrument: InstrumentsTerminal,
-  drum: DrumMachineTerminal,
   effect: FXEngineTerminal,
-  synth: SynthesizerTerminal,
-  voice: VoiceGenTerminal,
-  visualizer: VisualizerTerminal,
-  sampler: SamplerTerminal,
-  stem: StemExtractorTerminal,
-  recording: RecorderTerminal,
+  drop: DropTerminal,
   library: LibraryTerminal,
   eq: EQPluginTerminal,
   dsp: DSPTerminal,
   mastering: MasteringOverlay,
-  performance: PerformanceMonitorTerminal
+  stem: StemExtractorTerminal,
+  spatial: SpatialPluginTerminal,
+  recording: RecorderTerminal,
+  performance: PerformanceMonitorTerminal,
+  ai: AiMonkTerminal,
 };
 
 // ============================================================================
@@ -64,7 +78,7 @@ const COMPONENT_MAP: Record<string, any> = {
 /** Gruppen mit ihren Mitgliedern und dem primären (verbleibenden) Modul. */
 export const METAMODULE_GROUPS: { group: string; members: string[]; primary: string }[] = [
   { group: 'process', members: ['dsp', 'eq', 'effect'], primary: 'effect' },
-  { group: 'sound',   members: ['synth', 'instrument'],  primary: 'instrument' },
+  { group: 'sound',   members: ['synthesizer', 'instrument'],  primary: 'instrument' },
   { group: 'source',  members: ['recording', 'voice'],   primary: 'recording' },
 ];
 
@@ -80,26 +94,30 @@ export function resolveComponent(id: string): any {
 }
 
 const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; icon: string }> = {
+  masterplayer: { name: 'masterplayerMONK', short: 'MPR', icon: 'Activity' },
+  instrument: { name: 'instrumentMONK', short: 'INS', icon: 'Music' },
+  synthesizer: { name: 'synthesizerMONK', short: 'SYN', icon: 'Waves' },
+  drum: { name: 'drumMONK', short: 'DRM', icon: 'Speaker' },
+  sampler: { name: 'samplerMONK', short: 'SAM', icon: 'Speaker' },
+  sequencer: { name: 'sequencerMONK', short: 'SEQ', icon: 'Grid3X3' },
+  voice: { name: 'voiceMONK', short: 'VOX', icon: 'Mic' },
+  sound: { name: 'soundMONK', short: 'SND', icon: 'AudioLines' },
   mixer: { name: 'mixerMONK', short: 'MIX', icon: 'Sliders' },
   controller: { name: 'controllerMONK', short: 'CTRL', icon: 'Keyboard' },
-  sequencer: { name: 'sequencerMONK', short: 'SEQ', icon: 'Grid3X3' },
-  spatial: { name: 'spatialMONK', short: '3D', icon: 'Box' },
-  instrument: { name: 'instrumentMONK', short: 'INS', icon: 'Music' },
-  drum: { name: 'drumMONK', short: 'DRM', icon: 'Speaker' },
   effect: { name: 'effectMONK', short: 'FX', icon: 'Sparkles' },
-  synth: { name: 'synthesizerMONK', short: 'SYN', icon: 'Waves' },
-  voice: { name: 'voiceMONK', short: 'VOX', icon: 'Mic' },
-  visualizer: { name: 'visMONK', short: 'VIS', icon: 'Activity' },
-  sampler: { name: 'samplerMONK', short: 'SAM', icon: 'Speaker' },
-  stem: { name: 'stemMONK', short: 'RMX', icon: 'Radio' },
-  recording: { name: 'recordingMONK', short: 'REC', icon: 'Activity' },
+  drop: { name: 'dropMONK', short: 'DRP', icon: 'Zap' },
   library: { name: 'biblioMONK', short: 'LIB', icon: 'Database' },
   eq: { name: 'eqMONK', short: 'EQ', icon: 'Activity' },
+  dsp: { name: 'dspMONK', short: 'DSP', icon: 'Cpu' },
   mastering: { name: 'masteringMONK', short: 'MST', icon: 'Square' },
+  stem: { name: 'stemMONK', short: 'RMX', icon: 'Radio' },
+  spatial: { name: 'spatialMONK', short: '3D', icon: 'Box' },
+  recording: { name: 'recordingMONK', short: 'REC', icon: 'Activity' },
   performance: { name: 'perfMONK', short: 'PRF', icon: 'Gauge' },
+  ai: { name: 'aiMONK', short: 'AI', icon: 'Bot' },
 };
 
-const EXPECTED_PLUGIN_COUNT = 17;
+const EXPECTED_PLUGIN_COUNT = 21;
 
 const createFallbackRegistry = () =>
   Object.keys(COMPONENT_MAP).map((id) => {
