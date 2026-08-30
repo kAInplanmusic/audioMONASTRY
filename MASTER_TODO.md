@@ -74,9 +74,9 @@ Legende:
 **Rest-Aktionen (priorisiert):**
 - [x] P1: End-to-End-Latenz persistieren (LatencyMonitor → Telemetrie/Grafana) – umgesetzt in `src/App.tsx` (30s-Snapshot mit baseLatency/sampleRate/RTT/Dropouts an `/api/telemetry`)
 - [x] P1: Lazy-Worklet-Audit abschließen (alle `new AudioWorkletNode` außerhalb init() absichern – setEffectParam-Muster) – Commit `fab92d1` „MASTER_TODO P1 erledigt“
-- [x] P1: OPFS-Sample-Cache für Bibliotheken >2 GB – Integration verifiziert (`SampleContext persistFile/listSamples`); >2-GB-Benchmark läuft als Sandbox V1.6 in `VISIONS_TODO.md`
+- [x] P1: OPFS-Sample-Cache für Bibliotheken >2 GB – Integration verifiziert (`SampleContext persistFile/listSamples`); >2-GB-Benchmark läuft als Sandbox V1.6 im `visions`-Branch
 - [x] P1: Live-2-Browser-WebRTC – erledigt (2 unabhängige Browser-Prozesse, DataChannel+ICE verifiziert; Glare-Race gefixt, siehe oben)
-- [x] P2: Hybrid-Split Low-Latency/High-Quality – als Sandbox V1.5 in `VISIONS_TODO.md` geführt (Aufnahme erst nach Benchmark, siehe Aufnahme-Kriterien)
+- [x] P2: Hybrid-Split Low-Latency/High-Quality – als Sandbox V1.5 im `visions`-Branch geführt (Aufnahme erst nach Benchmark, siehe Aufnahme-Kriterien)
 - [x] P0/P2 wie oben: Identität, Rampen, Dropout, npm audit 0, WASM/WebGPU/Binär-Entscheidungen, Alert-Webhook
 
 ---
