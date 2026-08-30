@@ -1,0 +1,33 @@
+# Prometheus-Alerting-Regeln für sampleMONK (Live-Betrieb)
+groups:
+  - name: samplemonk
+    rules:
+      - alert: SamplemonkAppDown
+        expr: up{job="samplemonk"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations: { summary: "sampleMONK App nicht erreichbar", description: "{{ $labels.instance }} ist seit 2 Minuten down." }
+
+      - alert: SamplemonkHighErrorRate
+        expr: rate(samplemonk_http_errors_total[5m]) / rate(samplemonk_http_requests_total[5m]) > 0.1
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Hohe HTTP-Fehlerrate", description: ">10% Fehler über 5 Minuten ({{ $value }})." }
+
+      - alert: SamplemonkStemQueueFull
+        expr: samplemonk_stem_jobs_active >= samplemonk_stem_jobs_max
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Stem-Queue voll", description: "Alle Stem-Slots sind seit 10 Minuten belegt." }
+
+      - alert: NodeHighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations: { summary: "Hoher RAM-Verbrauch", description: "{{ $labels.instance }} nutzt >90% RAM." }
+
+      - alert: NodeHighCpu
+        expr: 100 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100 > 90
+        for: 10m
+        labels: { severity: warning }
+        annotations: { summary: "Hohe CPU-Last", description: "{{ $labels.instance }} >90% CPU über 10 Minuten." }

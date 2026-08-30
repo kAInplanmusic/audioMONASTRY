@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.cache
+.npm
+coverage
+test-results
+playwright-report
+deepcode
+.continue
+.env.deploy
+public/models
+public/samples/instruments/general_midi.sf2
+# Hinweis: .env bleibt bewusst IM Build-Kontext, weil `vite build` die VITE_*-Werte
+# daraus liest. Das finale Image enthaelt .env nicht (nur die Builder-Stage).

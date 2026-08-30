@@ -1,0 +1,239 @@
+# =============================================================================
+# sampleMONK · Hetzner Cloud (docker compose) – high-end production
+# -----------------------------------------------------------------------------
+# Rollen (siehe docs/SERVER_SIZING.md / docs/SERVER_FLEET.md):
+#   * caddy          – HTTPS-Terminierung + Reverse-Proxy (KLEIN, 0.5 CPU)
+#   * sample-monk    – App + REST + WebRTC-Signaling (GUT: 2 CPU/2 GB;
+#                      bei 4 Usern + SFU auf 4 CPU/8 GB anheben)
+#   * master-player  – Mixing/Mastering (KLEIN, 1 CPU/1 GB)
+#   * redis          – OPTIONAL, Profil "fleet": Socket.io-Multi-Instanz-Adapter
+#   * stem-ai        – OPTIONAL Demucs-Stems (GROSS/GPU empfohlen; erst
+#                      aktivieren, wenn STEM_AI_URL gebraucht wird)
+#   * ollama         – OPTIONAL, Profil "ai": lokales LLM/TTS/Song-Fallback
+#
+#   Start:        docker compose -f docker-compose.hetzner.yml up -d --build
+#   Fleet (SFU):  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk
+#   Redis-Knoten: docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
+#   Secrets kommen aus .env (Kopie von .env.hetzner.example).
+# =============================================================================
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Gemeinsame Runtime-Härtung für alle App-Container
+x-runtime: &default-runtime
+  restart: unless-stopped
+  logging: *default-logging
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  # --- HTTPS-Terminierung + Reverse-Proxy (automatische Zertifikate) -------
+  # Hinweis: Caddy benötigt Port 80/443 und behält daher CAP_NET_BIND_SERVICE.
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: samplemonk-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3 (optional; im Caddyfile aktuell h1/h2)
+    environment:
+      # WICHTIG: Default ":80" = reiner HTTP-Test ohne Domain.
+      # Mit DOMAIN=deine-domain.example wird automatisch HTTPS aktiviert.
+      DOMAIN: ${DOMAIN:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging: *default-logging
+    depends_on:
+      - sample-monk
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+
+  # --- Haupt-App (static + REST + WebRTC-Signaling) ------------------------
+  sample-monk:
+    build:
+      context: .
+      dockerfile: Dockerfile.hetzner
+    image: samplemonk:hetzner
+    container_name: samplemonk
+    <<: *default-runtime
+    expose:
+      - "8080"          # nur intern; extern läuft alles über Caddy/HTTPS
+    # RTP-Ports für den SFU-Betrieb kommen aus docker-compose.sfu.yml
+    # (nur auf dem SFU-Knoten publizieren, nicht auf App-Knoten).
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      SIGNALING_IDLE_TIMEOUT_MS: ${SIGNALING_IDLE_TIMEOUT_MS:-1200000}
+      MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-http://master-player:8000}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-100}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+
+  # --- Nativer Mixing/Mastering-Dienst (FFmpeg+NumPy) ----------------------
+  master-player:
+    build: ./services/master-player
+    image: samplemonk-master-player:hetzner
+    container_name: samplemonk-master
+    <<: *default-runtime
+    expose:
+      - "8000"
+    environment:
+      PORT: 8000
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+
+  # --- OPTIONAL (Profil fleet): Redis für Multi-Instanz-Signaling ----------
+  # Ab 2 App-Knoten: REDIS_URL=redis://redis:6379 in der .env der App-Knoten.
+  # Start: docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
+  redis:
+    image: redis:7-alpine
+    container_name: samplemonk-redis
+    <<: *default-runtime
+    profiles: ["fleet"]
+    # Direkt als redis-User starten: der Entrypoint braucht sonst SETUID/SETGID
+    # (setpriv), was cap_drop: ALL verbietet. Als redis-User sind keine Caps nötig.
+    user: redis
+    expose:
+      - "6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 60 1000
+      --tcp-keepalive 60
+    volumes:
+      - redis_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+
+  # --- OPTIONAL: midi-bridge (MIDI <-> WebSocket <-> OSC) ----------------------
+  # Nur auf Maschinen mit echter MIDI-/Audio-Hardware sinnvoll (lokal/Laptop).
+  # Start:  docker compose -f docker-compose.hetzner.yml --profile midi up -d
+  midi-bridge:
+    build: ./services/midi-bridge
+    container_name: samplemonk-midi
+    <<: *default-runtime
+    profiles: ["midi"]
+    ports:
+      - "9100:9100"
+    devices:
+      - "/dev/snd:/dev/snd"
+    environment:
+      WS_PORT: "9100"
+      MIDI_IN_NAME: ${MIDI_IN_NAME:-}
+      MIDI_OUT_NAME: ${MIDI_OUT_NAME:-}
+      OSC_HOST: ${OSC_HOST:-}
+      OSC_PORT: ${OSC_PORT:-9000}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+
+  # --- OPTIONAL: stem-ai (Demucs) – GROSS/GPU empfohlen ------------------------
+  # Bei Bedarf einkommentieren und STEM_AI_URL=http://stem-ai:8000 setzen.
+  # stem-ai:
+  #   build: ./services/stem-ai
+  #   container_name: samplemonk-stem
+  #   <<: *default-runtime
+  #   expose:
+  #     - "8000"
+  #   env_file:
+  #     - .env
+  #   read_only: true
+  #   tmpfs:
+  #     - /tmp:rw,noexec,nosuid,size=2g
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 16G
+  #         cpus: "8.0"
+  #       reservations:
+  #         devices:
+  #           - capabilities: ["gpu"]
+
+  # --- OPTIONAL (Profil ai): lokales Ollama-LLM (MOA/TTS/Song-Fallback) --------
+  # Nur auf dem ai-1-Knoten (siehe docs/SERVER_FLEET.md). Großes Image,
+  # Models werden beim ersten Start gezogen.
+  # Start: docker compose -f docker-compose.hetzner.yml --profile ai up -d ollama
+  # ollama:
+  #   image: ollama/ollama:0.6
+  #   container_name: samplemonk-ollama
+  #   <<: *default-runtime
+  #   profiles: ["ai"]
+  #   expose:
+  #     - "11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 12G
+  #         cpus: "8.0"
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:
+  # ollama_data:

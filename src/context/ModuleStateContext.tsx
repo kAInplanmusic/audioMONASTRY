@@ -1,0 +1,90 @@
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { storageGet, storageSet } from '../utils/storage';
+import { webRTCManager } from '../utils/WebRTCManager';
+
+export type ModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
+
+const STORAGE_KEY = 'audiomonastry_module_states';
+
+interface ModuleContextType {
+  moduleStates: Record<string, ModuleState>;
+  setModuleState: (id: string, state: ModuleState) => void;
+}
+
+const ModuleStateContext = createContext<ModuleContextType | undefined>(undefined);
+
+const loadPersistedStates = (): Record<string, ModuleState> => {
+  try {
+    const raw = storageGet(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore corrupt data */ }
+  return {};
+};
+
+/**
+ * Kanonischer AUTO_AI-/Modul-State mit LWW-Replikation über den bestehenden
+ * WebRTC-DataChannel (PLUGIN_STATE_UPDATE). Stale/Duplicate-Messages werden
+ * über (timestamp, senderId)-Tie-Breaks verworfen; Audio läuft bei
+ * WebRTC-Ausfall unverändert weiter.
+ */
+export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [moduleStates, setModuleStates] = useState<Record<string, ModuleState>>(loadPersistedStates);
+  const lastSeen = useRef<Record<string, { t: number; sender: string }>>({});
+
+  // Persistiere Modul-Zustände über den Storage-Adapter (UI-Präferenz, asynchron).
+  useEffect(() => {
+    try {
+      storageSet(STORAGE_KEY, JSON.stringify(moduleStates));
+    } catch { /* quota exceeded – non-critical */ }
+  }, [moduleStates]);
+
+  const setModuleState = useCallback((id: string, state: ModuleState) => {
+    const now = Date.now();
+    lastSeen.current[id] = { t: now, sender: 'localUser' };
+    setModuleStates(prev => ({ ...prev, [id]: state }));
+    // Replikation an alle Peers (bestehender Kollaborations-Kanal).
+    webRTCManager.sendToAllPeers({
+      type: 'PLUGIN_STATE_UPDATE',
+      pluginId: id,
+      state,
+      senderId: 'localUser',
+      timestamp: now,
+    });
+  }, []);
+
+  // Eingehende Peer-Updates LWW-merge (idempotent, stale-safe).
+  useEffect(() => {
+    const previous = webRTCManager.onDataChannelMessage;
+    webRTCManager.onDataChannelMessage = (msg: any) => {
+      if (!msg || msg.type !== 'PLUGIN_STATE_UPDATE') return;
+      const { pluginId, state, senderId, timestamp } = msg as {
+        pluginId?: string;
+        state?: ModuleState;
+        senderId?: string;
+        timestamp?: number;
+      };
+      if (!pluginId || !state) return;
+      if (state !== 'OFF' && state !== 'AUTO_AI' && state !== 'PRO') return;
+      const t = Number(timestamp) || 0;
+      const last = lastSeen.current[pluginId];
+      if (last && (t < last.t || (t === last.t && (senderId ?? '') <= last.sender))) return; // stale/duplicate
+      lastSeen.current[pluginId] = { t, sender: senderId ?? '' };
+      setModuleStates(prev => (prev[pluginId] === state ? prev : { ...prev, [pluginId]: state }));
+    };
+    return () => {
+      webRTCManager.onDataChannelMessage = previous;
+    };
+  }, []);
+
+  return (
+    <ModuleStateContext.Provider value={{ moduleStates, setModuleState }}>
+      {children}
+    </ModuleStateContext.Provider>
+  );
+};
+
+export const useModuleState = () => {
+  const context = useContext(ModuleStateContext);
+  if (!context) throw new Error('useModuleState must be used within ModuleStateProvider');
+  return context;
+};

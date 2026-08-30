@@ -1,0 +1,78 @@
+# =============================================================================
+# sampleMONK · Dockerfile.hetzner  (high-end production image)
+# -----------------------------------------------------------------------------
+# Optimiert fuer Hetzner Cloud VPS (stuendlich abgerechnet):
+#   - nutzt das VOR-KOMPILIERTE native Mixer-Modul (services/mixer/*.node)
+#     statt den Rust-Mixer im Build neu zu kompilieren → schneller, robuster.
+#   - serviert die App + REST API + WebRTC-Signaling in EINEM Container/Port.
+#   - Multi-Stage: Builder (npm ci + vite/esbuild) → schlanke Runtime.
+#   - tini als PID 1 (Zombie-Reaping, saubere Signal-Weiterleitung).
+#   - Non-root User, OCI-Labels, Healthcheck.
+#
+# Build:  docker build -f Dockerfile.hetzner -t samplemonk:hetzner .
+# =============================================================================
+FROM node:20-slim AS builder
+WORKDIR /app
+
+# libatomic1 wird vom mediasoup-worker-Prebuild benoetigt (postinstall)
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Nur package.json/lock zuerst kopieren (besseres Layer-Caching)
+COPY package.json ./
+COPY package-lock.json ./
+# NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
+RUN npm ci --no-audit --no-fund
+
+COPY . .
+# Build + Prod-Deps in EINEM Layer (spart Image-Groesse):
+#   npm prune --omit=dev entfernt Dev-Dependencies (esbuild/tsc/…),
+#   mediasoup/socket.io/tone bleiben als Runtime-Dependencies erhalten.
+RUN npm run build \
+    && npm prune --omit=dev \
+    && npm cache clean --force
+
+# =============================================================================
+FROM node:20-slim
+WORKDIR /app
+
+# OCI-Labels (OCI Image Format Spec)
+LABEL org.opencontainers.image.title="sampleMONK" \
+      org.opencontainers.image.description="audioMONASTRY Pro Audio Workstation – App, REST API, WebRTC-Signaling" \
+      org.opencontainers.image.source="https://github.com/kAInplanmusic/sampleMONK" \
+      org.opencontainers.image.vendor="monkMONASTRY" \
+      org.opencontainers.image.licenses="UNLICENSED"
+
+ENV NODE_ENV=production \
+    PORT=8080 \
+    NODE_OPTIONS="--enable-source-maps"
+
+# Laufzeit benoetigt: libatomic1 (mediasoup-worker), tini (PID 1),
+# ca-certificates (ausgehende HTTPS-Calls zu HF/DeepSeek/Mistral/Supabase/R2)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libatomic1 \
+    tini \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Gebautes Frontend + gebuendeltes Server-Bundle
+COPY --from=builder /app/dist ./dist
+
+# Services (z. B. vorkompilierter Mixer) + node_modules (inkl. mediasoup/socket.io)
+COPY --from=builder /app/services ./services
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+# Nicht-root Nutzer (node:20-slim bringt den User "node" mit)
+RUN chown -R node:node /app
+USER node
+
+EXPOSE 8080
+
+# Healthcheck direkt im Image (wird von docker-compose zusätzlich überwacht)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+# tini als PID 1, danach npm start (node dist/server.cjs)
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["npm", "start"]

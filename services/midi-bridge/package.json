@@ -1,0 +1,15 @@
+{
+  "name": "midi-bridge",
+  "version": "1.0.0",
+  "description": "audioMONASTRY MIDI-Bridge: MIDI <-> WebSocket <-> OSC (Sidecar, optional)",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "midi": "^2.0.0",
+    "osc": "^2.4.4",
+    "ws": "^8.18.0"
+  }
+}

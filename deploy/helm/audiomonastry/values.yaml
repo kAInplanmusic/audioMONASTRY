@@ -1,0 +1,47 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/kainplanmusic/audiomonastry
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  port: 8080
+
+ingress:
+  enabled: false
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+# Multi-Region: pro Region eigene Values-Datei + Geo-Routing vor dem Ingress.
+region: eu-west-1
+geoRouting:
+  enabled: false
+  regions:
+    - eu-west-1
+    - us-east-1
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+env:
+  PORT: "8080"
+  NODE_ENV: production
+  ENABLE_SFU: "0"
+  SIGNALING_IDLE_TIMEOUT_MS: "1200000"
+
+# Backup-CronJob (7.1.4): point-in-time Recovery für Sessions/Assets.
+backup:
+  enabled: true
+  schedule: "0 3 * * *"
+  retentionDays: 14

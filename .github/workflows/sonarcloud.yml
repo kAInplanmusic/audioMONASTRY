@@ -1,0 +1,48 @@
+name: SonarCloud Scan
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonarcloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Sparse-Checkout: nur die Verzeichnisse laden, die Sonar/Tests brauchen.
+          # Das public/-Verzeichnis (~674 MB Musik/Modelle) wird NICHT geladen.
+          sparse-checkout: |
+            src
+            server
+            services
+            scripts
+            tests
+            server.ts
+            sonar-project.properties
+            package.json
+            package-lock.json
+            vitest.config.ts
+            tsconfig.json
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tests with coverage
+        run: npm run test:coverage
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io

@@ -1,0 +1,230 @@
+{
+  "uid": "samplemonk-overview",
+  "title": "sampleMONK Overview",
+  "tags": ["samplemonk", "audio", "hetzner"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "editable": true,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Uptime",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "samplemonk_uptime_seconds", "legendFormat": "uptime" }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "HTTP Requests (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "samplemonk_http_requests_total", "legendFormat": "requests" }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "HTTP Errors (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "samplemonk_http_errors_total", "legendFormat": "errors" }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "HTTP Request Rate / s",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "rate(samplemonk_http_requests_total[5m])", "legendFormat": "requests/s" }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Avg Request Latency (ms)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 4 },
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "samplemonk_http_avg_latency_ms", "legendFormat": "avg latency" }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "AI Requests / Failures (rate)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "rate(samplemonk_ai_requests_total[5m])", "legendFormat": "ai requests" },
+        { "refId": "B", "expr": "rate(samplemonk_ai_failures_total[5m])", "legendFormat": "ai failures" }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Stem Requests / Failures (rate)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 12 },
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "rate(samplemonk_stem_requests_total[5m])", "legendFormat": "stem requests" },
+        { "refId": "B", "expr": "rate(samplemonk_stem_failures_total[5m])", "legendFormat": "stem failures" }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "gauge",
+      "title": "Active Stem Jobs",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 4, "x": 0, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 4,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 2 }, { "color": "red", "value": 4 }] }
+        },
+        "overrides": []
+      },
+      "options": { "showThresholdLabels": false, "showThresholdMarkers": true, "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "samplemonk_stem_jobs_active", "legendFormat": "active" }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Host CPU (%)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 4, "x": 4, "y": 20 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "max": 100, "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "100 - avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100", "legendFormat": "cpu" }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Host Memory (%)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 4, "x": 8, "y": 20 },
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "max": 100, "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "(1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100", "legendFormat": "mem" }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Container CPU (samplemonk*)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"samplemonk.*\"}[5m]))", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "Client-Telemetrie-Events (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 36 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "refId": "A", "expr": "samplemonk_telemetry_events_total", "legendFormat": "events" }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Telemetrie-Events nach Typ (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 40 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum by (type) (increase(samplemonk_telemetry_events_by_type_total[5m]))", "legendFormat": "{{type}}" }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "Telemetrie-Events nach Quelle (5m)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 40 },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "fillOpacity": 15, "lineWidth": 2 } },
+        "overrides": []
+      },
+      "targets": [
+        { "refId": "A", "expr": "sum by (source) (increase(samplemonk_telemetry_events_by_source_total[5m]))", "legendFormat": "{{source}}" }
+      ]
+    }
+  ]
+}

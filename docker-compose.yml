@@ -1,0 +1,93 @@
+version: '3'
+# =============================================================================
+# audioMONASTRY V 1.000.001 Beta „Fabölus" – Lokale Entwicklung (docker compose up)
+# -----------------------------------------------------------------------------
+# Rollen: Haupt-App (Express+API+Signaling), stem-ai (optional via ENABLE_STEMS=1)
+# und master-player. Alle Services mit Healthcheck, Log-Rotation und Limits.
+# Siehe auch: docs/SERVER_SIZING.md (Instanz-Flotte) und docker-compose.hetzner.yml.
+# =============================================================================
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  sample-monk:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - PORT=8080
+      - NODE_ENV=production
+      - MASTER_PLAYER_URL=http://master-player:8000
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+
+  # P11: Separater Demucs-Stem-Service (FastAPI).
+  # Setzt ENABLE_STEMS=1 im Hauptcontainer, damit server.ts das echte
+  # /api/separate-stems an diesen Service weiterreicht (statt dem Stub).
+  stem-ai:
+    build: ./services/stem-ai
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/stem-ai:/app
+    environment:
+      - AI_DEVICE=cpu        # auf GPU-Hosts: auf "cuda" setzen
+      - AI_DEMUCS_MODEL=htdemucs
+      - PORT=8000
+      - AI_MAX_UPLOAD_MB=50
+      - AI_SEPARATION_TIMEOUT_SEC=900
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+  # Nativer Mixing/Mastering-Dienst (FFmpeg+NumPy).
+  # server.ts reicht /api/master/* an diesen Service weiter
+  # (MASTER_PLAYER_URL=http://master-player:8000, intern im Compose-Netz).
+  master-player:
+    build: ./services/master-player
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./services/master-player:/app
+    environment:
+      - PORT=8000
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"

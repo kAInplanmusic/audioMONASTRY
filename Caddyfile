@@ -1,0 +1,63 @@
+# Caddyfile – audioMONASTRY Reverse-Proxy (automatisches HTTPS)
+# -----------------------------------------------------------------------------
+# Die Domain kommt aus der Umgebungsvariable DOMAIN (siehe docker-compose.hetzner.yml
+# bzw. .env). A/AAAA-Record der Domain muss auf die Hetzner-IP zeigen.
+# Caddy holt Zertifikate automatisch via Let's Encrypt.
+# WICHTIG: HTTPS ist Pflicht für Mikrofon/WebRTC auf iPhone/iPad.
+#
+# Site-Adresse bewusst OHNE ":80"-Suffix:
+#   DOMAIN=deine-domain.example  ->  automatisches HTTPS + HTTP->HTTPS-Redirect
+#   DOMAIN=:80 (Compose-Default) ->  reiner HTTP-Test ohne Domain (http://IP)
+# Ein explizites ":80" im Caddyfile würde das automatische HTTPS DEAKTIVIEREN.
+#
+# HTTP/3 (QUIC/UDP) ist bewusst deaktiviert: In der Docker-/Hetzner-Umgebung
+# war der UDP-Buffer zu klein (QUIC internal_error in Firefox). H1+H2 über TCP
+# sind für diesen Betrieb stabiler.
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# App + API + Signaling (gleicher Ursprung, COOP/COEP-Header bleiben erhalten)
+	# WebSockets (Socket.io) werden von Caddy automatisch über den gleichen Pfad getunnelt.
+	reverse_proxy sample-monk:8080 {
+		# Längere Idle-Timeouts für Socket.io-/SSE-Verbindungen
+		transport http {
+			read_timeout 5m
+			write_timeout 30s
+		}
+	}
+
+	# Uploads dürfen größer sein (Sample-Upload bis 100 MB)
+	request_body {
+		max_size 120MB
+	}
+
+	header {
+		# Basis-Security-Header (COOP/COEP setzt die App selbst)
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(self), microphone=(self), midi=(self)"
+		-Server
+		-X-Powered-By
+	}
+
+	# Gebaute Assets sind content-hashed (Vite) -> lange immutable cachen
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	# AudioWorklets: stabil, aber nicht versioniert -> 1 Tag
+	header /worklets/* Cache-Control "public, max-age=86400"
+	# index.html & API dürfen nie gecacht werden
+	header /index.html Cache-Control "no-cache"
+	header /api/* Cache-Control "no-store"
+}

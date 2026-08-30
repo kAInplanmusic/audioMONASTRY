@@ -1,0 +1,12 @@
+{
+  "name": "audioMONASTRY",
+  "version": "1.1.420",
+  "codename": "AnunnakiDNA",
+  "description": "Kollaborative, objektbasierte Pro-Audio-Workstation: 17 Plugins, AudioWorklets, KI (MOA/MCP, TTS/Gesang/Song), Spatial bis 24.2, WebRTC/SFU.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_AI",
+    "MAJOR_CAPABILITY_REALTIME_COLLABORATION",
+    "MAJOR_CAPABILITY_SPATIAL_AUDIO_24_2"
+  ]
+}

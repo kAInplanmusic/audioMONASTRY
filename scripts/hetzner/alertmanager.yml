@@ -1,0 +1,26 @@
+# =============================================================================
+# sampleMONK · Alertmanager-Konfiguration (Prometheus-Alerts → Chat-Webhook)
+# -----------------------------------------------------------------------------
+# Route: alle Prometheus-Alerts → sampleMONK-App-Endpoint /api/alerts/webhook.
+# Der App-Server leitet sie an die in .env konfigurierten Webhooks weiter:
+#   DISCORD_WEBHOOK, SLACK_WEBHOOK, TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
+#
+# URL anpassen, falls der Monitoring-Stack NICHT im selben Docker-Netzwerk
+# wie der App-Container läuft (z. B. edge-1 → app-1):
+#   url: 'https://anunnakitools.de/api/alerts/webhook'
+# =============================================================================
+global:
+  resolve_timeout: 1m
+
+route:
+  receiver: 'chat-webhook'
+  group_by: ['alertname', 'severity']
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 1h
+
+receivers:
+  - name: 'chat-webhook'
+    webhook_configs:
+      - url: 'http://sample-monk:8080/api/alerts/webhook'
+        send_resolved: true

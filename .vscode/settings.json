@@ -1,0 +1,13 @@
+{
+  // Tailwind CSS IntelliSense: Lint-Einstellungen.
+  // cssConflict wird auf "ignore" gesetzt, weil bewusst gewählte State-Overrides
+  // (enabled:disabled: und not-focus-within:/focus-within:-Varianten, die sich
+  // gegenseitig ausschliessen) vom Linter fälschlich als Konflikt gemeldet werden.
+  "tailwindCSS.lint.cssConflict": "ignore",
+  // Canonical-Class-Vorschläge (z.B. w-[540px] -> w-135) sind nur Quick-Fixes;
+  // wir gelten die canonicalen v4-Klassen bereits an, daher keine Fehlerstufe.
+  "tailwindCSS.lint.classOrder": "none",
+  "tailwindCSS.lint.recommendedVariantOrder": "ignore",
+  "continue.remoteConfigSyncPeriod": 15,
+  "continue.enableTabAutocomplete": false
+}

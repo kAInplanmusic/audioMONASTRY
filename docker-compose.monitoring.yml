@@ -1,0 +1,137 @@
+# =============================================================================
+# sampleMONK · docker-compose.monitoring.yml – optionales Observability-Stack
+# -----------------------------------------------------------------------------
+# High-End-Monitoring für den Hetzner-Betrieb (edge-1 oder eigener Knoten):
+#   - node-exporter : Host-Metriken (CPU/RAM/Disk/Netz)
+#   - cadvisor      : Container-Metriken (CPU/RAM/Netz je Service)
+#   - prometheus    : Scraping + Alerting-Grundlage
+#   - grafana       : Dashboards (Login: admin / GF_SECURITY_ADMIN_PASSWORD)
+#
+# Start:
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d
+#
+# Danach:
+#   Grafana:  https://<DOMAIN>/grafana  (via Caddy-Route unten aktivierbar)
+#   oder      http://<host>:3000         (nur im privaten Netz/Firewall öffnen)
+#
+# Hinweise:
+#   - Ports 9090/3000/9100 sind nur intern (expose); für externen Zugriff
+#     Caddy-Routen ergänzen oder gezielt publizieren.
+#   - Persistenz: benannte Volumes (prometheus_data, grafana_data).
+# =============================================================================
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-runtime: &default-runtime
+  restart: unless-stopped
+  logging: *default-logging
+  init: true
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: samplemonk-node-exporter
+    <<: *default-runtime
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    pid: host
+    volumes:
+      - /:/rootfs:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    expose:
+      - "9100"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+          cpus: "0.25"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: samplemonk-cadvisor
+    <<: *default-runtime
+    privileged: true          # cAdvisor benötigt Host-Zugriff für cgroups
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    expose:
+      - "8080"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: samplemonk-prometheus
+    <<: *default-runtime
+    volumes:
+      - prometheus_data:/prometheus
+      - ./scripts/hetzner/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./scripts/hetzner/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    expose:
+      - "9090"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+  # Prometheus-Alerts → Chat-Webhook (Discord/Slack/Telegram via App-Endpoint
+  # /api/alerts/webhook; Konfiguration siehe scripts/hetzner/alertmanager.yml).
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: samplemonk-alertmanager
+    <<: *default-runtime
+    volumes:
+      - ./scripts/hetzner/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    expose:
+      - "9093"
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: samplemonk-grafana
+    <<: *default-runtime
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL:-http://localhost:3000}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./scripts/hetzner/grafana-provisioning:/etc/grafana/provisioning:ro
+      - ./scripts/hetzner/grafana-dashboards:/var/lib/grafana/dashboards:ro
+    expose:
+      - "3000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
+volumes:
+  prometheus_data:
+  grafana_data:

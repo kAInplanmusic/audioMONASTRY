@@ -1,0 +1,41 @@
+name: WASM SIMD Matrix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  wasm:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+
+      - name: Build WASM (SIMD + Skalar)
+        run: bash scripts/build-wasm-audio.sh
+
+      - name: Verify SIMD feature in SIMD build
+        shell: bash
+        run: |
+          if command -v wasm-opt >/dev/null 2>&1; then
+            wasm-opt --detect-features dist/wasm/dspKernel.simd.wasm | tee /tmp/simd-features.txt
+            grep -qi "simd" /tmp/simd-features.txt
+            echo "✅ SIMD-Feature im SIMD-Build vorhanden."
+          else
+            echo "⚠️ wasm-opt nicht verfügbar – Feature-Check übersprungen."
+          fi
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-${{ matrix.os }}
+          path: dist/wasm/
+          retention-days: 7

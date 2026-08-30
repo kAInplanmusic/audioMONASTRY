@@ -1,0 +1,94 @@
+{
+  "sessions": {
+    "$sessionId": {
+      "meta": {
+        "createdAt": "TIMESTAMP",
+        "activeUsers": ["user_1", "user_2"],
+        "maxUsers": 4,
+        "bpm": 128,
+        "isPlaying": true
+      },
+      "plugins": {
+        "mischpult": {
+          "id": "mischpult",
+          "uiState": "PRO", 
+          "lockedBy": "user_1", 
+          "colorCode": "#FF5733",
+          "state": {
+            "deckA": { "channel1_volume": 0.8, "crossfader": 0.0 },
+            "deckB": { "channel1_volume": 0.2 }
+          }
+        },
+        "sequenzer": {
+          "id": "sequenzer",
+          "uiState": "AUTO_AI",
+          "lockedBy": null,
+          "colorCode": "#33FF57",
+          "state": {
+            "matrix": "0010010010010010",
+            "activeChannels": 8
+          }
+        },
+        "library": {
+          "id": "library",
+          "uiState": "OFF",
+          "lockedBy": null,
+          "colorCode": "#3357FF",
+          "state": {
+            "lastGeneratedAssetId": "stem_vocals_099"
+          }
+        },
+        "spatial_surround": {
+          "id": "spatial_surround",
+          "uiState": "PRO",
+          "lockedBy": "user_2",
+          "colorCode": "#F3FF33",
+          "state": {
+            "vector_x": 0.45,
+            "vector_y": -0.12
+          }
+        },
+        "recorder": {
+          "id": "recorder",
+          "uiState": "OFF", 
+          "lockedBy": null, 
+          "colorCode": "#FF0055",
+          "state": {
+            "isRecording": false,
+            "routingSource": "main_sound",
+            "format": "wav_24bit"
+          }
+        },
+        "dsp": {
+          "id": "dsp",
+          "uiState": "AUTO_AI",
+          "lockedBy": null,
+          "colorCode": "#00E5FF",
+          "state": {
+            "bypass": false,
+            "phaseInvert": false,
+            "lowCutFrequency": 30
+          }
+        },
+        "custom_slot_16": {
+          "id": "custom_slot_16",
+          "uiState": "OFF",
+          "lockedBy": null,
+          "colorCode": "#9A33FF",
+          "state": {
+            "activePluginIdentifier": "none",
+            "customParameters": {}
+          }
+        }
+      }
+    }
+  },
+  "users": {
+    "$userId": {
+      "username": "ProducerHans",
+      "role": "DJ",
+      "currentSession": "$sessionId",
+      "isRemote": true
+    }
+  }
+}

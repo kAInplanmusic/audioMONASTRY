@@ -1,0 +1,22 @@
+name: MIDI Loopback
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  midi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ALSA virmidi laden (optional)
+        run: sudo modprobe snd-virmidi || echo "snd-virmidi nicht ladbar – Test wird ggf. geskippt"
+
+      - name: python-rtmidi installieren
+        run: pip install python-rtmidi
+
+      - name: MIDI-Loopback-Test
+        run: python3 scripts/ci-midi-loopback.py

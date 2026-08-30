@@ -1,0 +1,17 @@
+{
+  "name": "backend-core",
+  "version": "1.0.0",
+  "description": "Unified Backend Core for Audio Routing, Signaling, and AI Processing",
+  "main": "node/index.js",
+  "scripts": {
+    "start:node": "node node/index.js",
+    "start:python": "cd python && uvicorn main:app --reload",
+    "start": "concurrently \"npm run start:node\" \"npm run start:python\""
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "ws": "^8.21.1",
+    "concurrently": "^8.2.2"
+  }
+}

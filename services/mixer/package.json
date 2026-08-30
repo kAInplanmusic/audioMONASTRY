@@ -1,0 +1,19 @@
+{
+  "name": "mixer",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "devDependencies": {
+    "@napi-rs/cli": "^2.16.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build:rust": "napi build --platform --release"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "dependencies": {
+    "socket.io-client": "^4.8.3",
+    "wrtc": "^0.4.7"
+  }
+}

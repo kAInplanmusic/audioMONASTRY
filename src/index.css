@@ -1,0 +1,143 @@
+@import "tailwindcss";
+
+@utility grid-cols-16 {
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+}
+
+/* Querformat mit wenig Höhe (Tablet/Handy landscape): kompaktere Regler. */
+@custom-variant short-landscape {
+  @media (orientation: landscape) and (max-height: 620px) {
+    @slot;
+  }
+}
+
+/* Grobe Zeiger (Touch): größere Trefferflächen für Step-Pads. */
+@custom-variant touch {
+  @media (pointer: coarse) {
+    @slot;
+  }
+}
+
+/* ============================================================================
+   sampleMONK Design-System-Tokens
+   ----------------------------------------------------------------------------
+   Die Marke (dunkel + Teal/Cyan) zieht sich durch alle Overlays, Glows und
+   Micro-Interactions. Bewusst dezent, um Module farblich hervorstechen zu lassen.
+   ========================================================================== */
+:root {
+  --monk-bg: #050607;
+  --monk-teal: #14b8c9;
+  --monk-cyan: #22d3ee;
+  --monk-fuchsia: #d946ef;
+  --monk-glow-teal: rgba(20, 184, 201, 0.45);
+  --monk-glow-cyan: rgba(34, 211, 238, 0.35);
+  --monk-panel: rgba(15, 17, 20, 0.78);
+  --monk-edge: rgba(255, 255, 255, 0.07);
+}
+
+/* Seamless hochwertige Basistypo */
+html, body, #root { height: 100%; }
+body {
+  background: radial-gradient(1200px 600px at 50% -10%, #0c1116 0%, #050607 55%) fixed;
+  color: #e8eaed;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Sanfte, stille Scrollbars */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.09);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--monk-glow-teal); }
+
+::selection { background: rgba(34,211,238,0.25); }
+
+/* Premium-Fokus sichtbarheit für Keyboard-/Accessibility-User */
+button:focus-visible, input:focus-visible, select:focus-visible,
+a:focus-visible, label:focus-visible, audio:focus-visible {
+  outline: 2px solid var(--monk-cyan);
+  outline-offset: 2px;
+}
+
+/* Sanfte Einblendung für Ergebnis-Panels (MasterPlayerTerminal u. a.) */
+@keyframes mp-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Reduced-Motion: Animationen für Nutzer mit Bewegungs-Empfindlichkeit minimieren */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Wiederverwendbare Monkey-Utilities für konsistente Glow-Panels */
+@utility monk-panel {
+  background: var(--monk-panel);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--monk-edge);
+  border-radius: 1rem;
+}
+
+@utility teal-glow {
+  box-shadow: 0 0 0 1px rgba(34,211,238,0.08), 0 8px 40px -12px var(--monk-glow-teal);
+}
+
+@utility edge-inset {
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -30px 44px -30px rgba(0,0,0,0.9);
+}
+
+/* ============================================================================
+   Mobile-/Touch-Optimierungen (100% Touch-fähig)
+   ----------------------------------------------------------------------------
+   Größere Trefferflächen, kein Tap-Highlight/Zoom-Flackern, sanftes Scrollen.
+   ========================================================================== */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  button, [role="button"], select, input[type="range"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  /* Mindest-Trefferfläche 44px für Touch-Geräte */
+  button, select {
+    min-height: 40px;
+  }
+  input[type="range"] {
+    min-height: 44px;
+  }
+  .touch-scroll {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+}
+
+/* Sanftes Scrollen in allen Modul-Panels */
+.overflow-y-auto, .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+
+/* Kein Text-Selektieren auf Bedienelementen (seamless UX) */
+button, select, input[type="range"] {
+  user-select: none;
+  -webkit-user-select: none;
+}

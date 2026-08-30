@@ -1,0 +1,6 @@
+apiVersion: v2
+name: audiomonastry
+description: audioMONASTRY – kollaborative Echtzeit-Audio-Workstation (App + REST + Signaling + optional SFU)
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
