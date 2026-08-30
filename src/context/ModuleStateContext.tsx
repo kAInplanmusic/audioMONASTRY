@@ -40,22 +40,22 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const setModuleState = useCallback((id: string, state: ModuleState) => {
     const now = Date.now();
-    lastSeen.current[id] = { t: now, sender: 'localUser' };
+    const sender = webRTCManager.userId;
+    lastSeen.current[id] = { t: now, sender };
     setModuleStates(prev => ({ ...prev, [id]: state }));
     // Replikation an alle Peers (bestehender Kollaborations-Kanal).
     webRTCManager.sendToAllPeers({
       type: 'PLUGIN_STATE_UPDATE',
       pluginId: id,
       state,
-      senderId: 'localUser',
+      senderId: sender,
       timestamp: now,
     });
   }, []);
 
   // Eingehende Peer-Updates LWW-merge (idempotent, stale-safe).
   useEffect(() => {
-    const previous = webRTCManager.onDataChannelMessage;
-    webRTCManager.onDataChannelMessage = (msg: any) => {
+    return webRTCManager.addDataChannelListener((msg: any) => {
       if (!msg || msg.type !== 'PLUGIN_STATE_UPDATE') return;
       const { pluginId, state, senderId, timestamp } = msg as {
         pluginId?: string;
@@ -70,10 +70,7 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (last && (t < last.t || (t === last.t && (senderId ?? '') <= last.sender))) return; // stale/duplicate
       lastSeen.current[pluginId] = { t, sender: senderId ?? '' };
       setModuleStates(prev => (prev[pluginId] === state ? prev : { ...prev, [pluginId]: state }));
-    };
-    return () => {
-      webRTCManager.onDataChannelMessage = previous;
-    };
+    });
   }, []);
 
   return (

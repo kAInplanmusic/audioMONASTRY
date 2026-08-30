@@ -741,7 +741,8 @@ class AudioEngine {
     this.ensureChannelNode(track);
     const eq = this.channelEQs[track];
     if (!eq) return;
-    const v = Math.max(-Infinity, Math.min(12, gain));
+    // F6-Fix: NaN/Inf abfangen (Math.max/min allein lassen NaN durch).
+    const v = Number.isFinite(gain) ? Math.max(-24, Math.min(12, gain)) : 0;
     try { eq[band].gain.rampTo(v, 0.03); } catch { /* ignore */ }
   }
 
@@ -749,7 +750,7 @@ class AudioEngine {
   public setMasterVolume(gain01: number): void {
     this.ensureInitialized();
     if (!this.masterVolume) return;
-    const v = Math.max(0, Math.min(1.5, gain01));
+    const v = Number.isFinite(gain01) ? Math.max(0, Math.min(1.5, gain01)) : 0;
     const db = v <= 0.001 ? -Infinity : 20 * Math.log10(v);
     this.masterVolume.volume.rampTo(db, 0.03);
   }
@@ -758,7 +759,7 @@ class AudioEngine {
   public setChannelGain(track: TrackType, gain01: number): void {
     this.ensureInitialized();
     this.ensureChannelNode(track);
-    const v = Math.max(0, Math.min(1.5, gain01));
+    const v = Number.isFinite(gain01) ? Math.max(0, Math.min(1.5, gain01)) : 0;
     const db = v <= 0.001 ? -Infinity : 20 * Math.log10(v);
     this.channelGains[track]!.volume.rampTo(db, 0.03);
   }

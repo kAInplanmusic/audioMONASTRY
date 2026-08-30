@@ -229,9 +229,6 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
 
-                // Persist local description
-                localStorage.setItem('webrtcLocalDescription', JSON.stringify(pc.localDescription));
-
                 let answer;
                 if (!SIGNALING_HTTP_URL) {
                     console.warn('WebRTC signaling is disabled: no production signaling endpoint configured.');
@@ -304,28 +301,9 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
                 console.warn("WebRTC-Signaling übersprungen (optional):", signalingError);
               }
             };
-            // Check for existing signaling state
-            const storedLocalDescription = localStorage.getItem('webrtcLocalDescription');
-            const storedRemoteDescription = localStorage.getItem('webrtcRemoteDescription');
-
-            if (storedLocalDescription && storedRemoteDescription) {
-                // console.log("Attempting to restore WebRTC connection.");
-                const localDesc = JSON.parse(storedLocalDescription);
-                const remoteDesc = JSON.parse(storedRemoteDescription);
-
-                try {
-                    await pc.setLocalDescription(new RTCSessionDescription(localDesc));
-                    await pc.setRemoteDescription(new RTCSessionDescription(remoteDesc));
-                    // console.log("WebRTC connection restored.");
-                } catch (e) {
-                    console.warn("Failed to restore WebRTC connection, performing full signaling.", e);
-                    localStorage.removeItem('webrtcLocalDescription');
-                    localStorage.removeItem('webrtcRemoteDescription');
-                    await performSignaling();
-                }
-            } else {
-                await performSignaling();
-            }
+            // F7-Fix: Kein SDP mehr in localStorage persistieren – WebRTC wird
+            // bei jedem Start frisch signalisiert (kein Netz-Metadaten-Leak).
+            await performSignaling();
 
             // Connection status monitoring
             const handleNetworkChange = async () => {

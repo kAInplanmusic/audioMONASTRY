@@ -6,14 +6,14 @@ import { webRTCManager } from '../utils/WebRTCManager';
 export const useSessionSync = () => {
   const { addToScratchpad, removeFromScratchpad } = useSession();
 
-  // Listen for remote updates
+  // Listen for remote updates (Multi-Listener statt Single-Slot, F2-Fix)
   useEffect(() => {
-    webRTCManager.onDataChannelMessage = (message) => {
-      if (message.type === 'SCRATCHPAD_UPDATE') {
+    return webRTCManager.addDataChannelListener((message) => {
+      if (message?.type === 'SCRATCHPAD_UPDATE') {
         if (message.action === 'ADD') addToScratchpad(message.sample);
         if (message.action === 'REMOVE') removeFromScratchpad(message.id);
       }
-    };
+    });
   }, [addToScratchpad, removeFromScratchpad]);
 
   // Sync local changes to remote

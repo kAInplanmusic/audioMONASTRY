@@ -3,9 +3,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('tone', () => {
   class MockNode {
-    volume = { value: 0 };
+    volume = { value: 0, rampTo: () => {} };
     pan = { value: 0 };
     frequency = { value: 440 };
+    gain = { value: 0, rampTo: () => {} };
+    Q = { value: 0 };
     connect() { return this; }
     disconnect() { return this; }
     chain() { return this; }
@@ -30,6 +32,7 @@ vi.mock('tone', () => {
     NoiseSynth: MockNode,
     MonoSynth: MockNode,
     Synth: MockNode,
+    Panner: MockNode,
     FeedbackDelay: MockNode,
     Compressor: MockNode,
     MultibandCompressor: MockNode,
@@ -92,6 +95,13 @@ describe('audioEngine (jsdom, Tone gemockt)', () => {
   it('previewSynthesizedSample wirft nicht bei ungültigen Parametern', () => {
     expect(() => audioEngine.previewSynthesizedSample({ frequency: 440, decay: 0.2 })).not.toThrow();
     expect(() => audioEngine.previewSynthesizedSample({})).not.toThrow();
+  });
+
+  it('EQ/Master/Kanal-Gain klemmen NaN/Inf (F6-Fix)', () => {
+    expect(() => audioEngine.setChannelEQ('channel1', 'mid', NaN)).not.toThrow();
+    expect(() => audioEngine.setChannelEQ('channel1', 'high', Infinity)).not.toThrow();
+    expect(() => audioEngine.setMasterVolume(NaN)).not.toThrow();
+    expect(() => audioEngine.setChannelGain('channel1', NaN)).not.toThrow();
   });
 
   it('Spatial-Setup/Mode lassen sich setzen und lesen', () => {

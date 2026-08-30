@@ -190,16 +190,38 @@ touch /root/.samplemonk-bootstrap-done
 // ---------------------------------------------------------------------------
 // Auth (signiertes Session-Cookie)
 // ---------------------------------------------------------------------------
+// P-3-Fix: Portal ist ohne ADMIN_PASSWORD/SESSION_SECRET nicht betriebsbereit.
+function portalConfigProblems(env) {
+  const problems = [];
+  if (!env.ADMIN_USER || !env.ADMIN_PASSWORD || env.ADMIN_PASSWORD === 'change-me') {
+    problems.push('ADMIN_USER/ADMIN_PASSWORD fehlt oder ist Platzhalter');
+  }
+  if (!env.SESSION_SECRET || env.SESSION_SECRET === 'change-me') {
+    problems.push('SESSION_SECRET fehlt oder ist Platzhalter');
+  }
+  if (!env.HCLOUD_TOKEN) problems.push('HCLOUD_TOKEN fehlt');
+  return problems;
+}
+
 async function hmacHex(env, data) {
   const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(env.SESSION_SECRET || 'change-me'),
+    new TextEncoder().encode(env.SESSION_SECRET),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
   );
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
   return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Konstantzeit-Vergleich über HMAC-Digests (kein direktes Passwort-Equals). */
+async function safeEqual(env, a, b) {
+  const [ha, hb] = await Promise.all([hmacHex(env, String(a)), hmacHex(env, String(b))]);
+  if (ha.length !== hb.length) return false;
+  let diff = 0;
+  for (let i = 0; i < ha.length; i++) diff |= ha.charCodeAt(i) ^ hb.charCodeAt(i);
+  return diff === 0;
 }
 
 async function makeSession(env, user) {
@@ -457,15 +479,22 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // P-3-Fix: ohne Konfiguration sofort 503 (kein offener Wake-Pfad).
+    const configProblems = portalConfigProblems(env);
+    if (configProblems.length > 0) {
+      return json({ error: 'Portal nicht konfiguriert: ' + configProblems.join('; ') }, 503);
+    }
+
     // API-Routen
     if (url.pathname.startsWith('/api/')) {
       if (url.pathname === '/api/login' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
         const user = String(body.user ?? '');
         const pass = String(body.pass ?? '');
-        if (user !== (env.ADMIN_USER || 'admin') || pass !== (env.ADMIN_PASSWORD || '')) {
-          return json({ error: 'Login fehlgeschlagen' }, 401);
-        }
+        if (!user || !pass) return json({ error: 'Login fehlgeschlagen' }, 401);
+        const userOk = await safeEqual(env, user, env.ADMIN_USER);
+        const passOk = await safeEqual(env, pass, env.ADMIN_PASSWORD);
+        if (!userOk || !passOk) return json({ error: 'Login fehlgeschlagen' }, 401);
         const session = await makeSession(env, user);
         return new Response(JSON.stringify({ ok: true }), {
           status: 200,
@@ -516,6 +545,9 @@ export default {
   },
 
   async scheduled(event, env) {
+    // P-3-Fix: ohne Konfiguration nichts tun.
+    if (portalConfigProblems(env).length > 0) return;
+
     // Auto-Stopp: Sobald app-1 (nach 20 min Idle) ausgeschaltet wurde, löschen.
     const servers = await fleetServers(env);
     const app = servers['samplemonk-app-1'];
