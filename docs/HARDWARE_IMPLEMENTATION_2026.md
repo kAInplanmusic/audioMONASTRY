@@ -1,5 +1,6 @@
 # Final Audit — Hardware-Abstraktion audioMONASTRY (2026-08-30)
 **Release: audioMONASTRY V. 1|010|001 · Codename „HyperAudioWorkstation"**
+**Supabase live (2026-08-31): Schema+RLS angewendet · Health `ok (service_role)` · Seed-Sync real ausgeführt (29 Samples, 48 Tracks) · Anon-Read verifiziert. R2: noch ohne Keys (lokaler OPFS-Fallback aktiv).**
 
 > Implementierungs-Audit auf Basis von `docs/HARDWARE_AUDIT_2026.md` (Commit d71759e).
 > Stand: Commit nach der Implementierung. Alle Aussagen sind code-verifiziert;
