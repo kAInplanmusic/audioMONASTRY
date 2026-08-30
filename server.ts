@@ -1,10 +1,11 @@
 import express, { type Response } from 'express';
+import * as BusboyModule from 'busboy';
 import { random } from './src/utils/random';
 import http from 'http';
 import path from 'path';
 import compression from 'compression';
 import dotenv from 'dotenv';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
 import { syncR2ToSupabase, ingestAudioObject } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
@@ -138,7 +139,7 @@ app.use('/api', (req, res, next) => {
 });
 
 const studioKeyGenerator = (req: any): string =>
-  studioTokenFromRequest(req) || req.ip || 'unknown';
+  studioTokenFromRequest(req) || ipKeyGenerator(req.ip);
 
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
@@ -608,11 +609,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
   // Pay-per-Use GPU-Stems über Replicate (Serverless, ~3–5 Cent/Song).
   if (replicateStemsActive && req.is('multipart/form-data')) {
     try {
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve) => { req.on('data', (c: Buffer) => chunks.push(c)); req.on('end', () => resolve()); });
-      const raw = Buffer.concat(chunks);
-      const ct = (req.headers['content-type'] || '') as string;
-      const files = parseMultipart(raw, ct).files;
+      const { files } = await parseMultipartStream(req, STEM_MAX_UPLOAD_MB * 1024 * 1024);
       if (files.length === 0) { res.status(400).json({ error: 'keine Audiodatei' }); return; }
       const file = files[0];
       const dataUri = `data:${file.contentType || 'audio/wav'};base64,${file.data.toString('base64')}`;
@@ -676,33 +673,14 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
     stemActiveJobs += 1;
 
     try {
-      const chunks: Buffer[] = [];
-      await new Promise<void>((resolve) => {
-        req.on('data', (c: Buffer) => chunks.push(c));
-        req.on('end', () => resolve());
-      });
-      const raw = Buffer.concat(chunks);
-      const ct = (req.headers['content-type'] || '') as string;
-      const boundary = ct.match(/boundary=(.+)$/)?.[1] as string | undefined;
-      if (!boundary) throw new Error('multipart boundary fehlt');
-
+      // P-2/P-8: Streaming-Parser mit Limit (kein unbegrenztes RAM-Puffern).
+      const { fields, files } = await parseMultipartStream(req, STEM_MAX_UPLOAD_MB * 1024 * 1024);
       const fd = new FormData();
-      const parts = raw.toString('latin1').split('--' + boundary);
-      for (const p of parts) {
-        if (!p.trim()) continue;
-        const sep = p.indexOf('\r\n\r\n');
-        if (sep < 0) continue;
-        const header = p.slice(0, sep);
-        const body = p.slice(sep + 4).replace(/\r\n$/, '');
-        const nameMatch = header.match(/name="([^"]+)"/);
-        if (!nameMatch) continue;
-        const filenameMatch = header.match(/filename="([^"]+)"/);
-        if (filenameMatch) {
-          const buf = Buffer.from(body, 'latin1');
-          fd.append(nameMatch[1], new Blob([buf]), filenameMatch[1]);
-        } else {
-          fd.append(nameMatch[1], body);
-        }
+      for (const f of files) {
+        fd.append(f.name, new Blob([f.data], { type: f.contentType }), f.filename);
+      }
+      for (const [name, value] of Object.entries(fields)) {
+        fd.append(name, value);
       }
 
       const resp = await fetch(STEM_AI_URL + '/separate-stems', {
@@ -812,37 +790,75 @@ app.post('/api/master/analyze', async (req, res) => proxyMasterPlayer('/analyze'
 //           Audio in Cloudflare R2 -> Metadaten in Supabase.
 // ===========================================================================
 const UPLOAD_MAX_MB = Number(process.env.UPLOAD_MAX_MB || 100);
+const STEM_MAX_UPLOAD_MB = Number(process.env.STEM_MAX_UPLOAD_MB || 100);
 const UPLOAD_KINDS = new Set(['sample', 'recording', 'stem', 'sound', 'voice']);
 const AUDIO_EXT_RE = /\.(wav|mp3|flac|ogg|m4a|aac|aiff|aif)$/i;
 
-function parseMultipart(raw: Buffer, contentType: string) {
-  const boundary = contentType.match(/boundary=(.+)$/)?.[1];
-  if (!boundary) throw new Error('multipart boundary fehlt');
-  const fields: Record<string, string> = {};
-  const files: { name: string; filename: string; contentType: string; data: Buffer }[] = [];
-  const parts = raw.toString('latin1').split('--' + boundary);
-  for (const p of parts) {
-    if (!p.trim()) continue;
-    const sep = p.indexOf('\r\n\r\n');
-    if (sep < 0) continue;
-    const header = p.slice(0, sep);
-    const body = p.slice(sep + 4).replace(/\r\n$/, '');
-    const nameMatch = header.match(/name="([^"]+)"/);
-    if (!nameMatch) continue;
-    const filenameMatch = header.match(/filename="([^"]+)"/);
-    if (filenameMatch) {
-      const ctMatch = header.match(/Content-Type:\s*([^\r\n]+)/i);
-      files.push({
-        name: nameMatch[1],
-        filename: filenameMatch[1],
-        contentType: (ctMatch?.[1] ?? 'application/octet-stream').trim(),
-        data: Buffer.from(body, 'latin1'),
+// P-8: Bewährter Streaming-Multipart-Parser (busboy). Prüft die Dateigröße
+// WÄHREND des Streamens (kein unbegrenztes RAM-Puffern, P-2-Fix) und kommt
+// mit quoted Boundaries/Parametern korrekt zurecht.
+function parseMultipartStream(
+  req: import('http').IncomingMessage,
+  maxFileBytes: number,
+): Promise<{ fields: Record<string, string>; files: { name: string; filename: string; contentType: string; data: Buffer }[] }> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const fields: Record<string, string> = {};
+    const files: { name: string; filename: string; contentType: string; data: Buffer }[] = [];
+
+    // busboy v1 exportiert eine Factory-Funktion (keinen Konstruktor).
+    const BusboyFactory = ((BusboyModule as any).default ?? BusboyModule) as unknown as (opts: {
+      headers: import('http').IncomingHttpHeaders;
+      limits: { fileSize: number; files: number; fields: number; fieldSize: number };
+    }) => import('stream').Writable & {
+      on(event: 'field', cb: (name: string, value: string) => void): unknown;
+      on(event: 'file', cb: (name: string, stream: import('stream').Readable, info: { filename: string; mimeType: string }) => void): unknown;
+      on(event: 'limit' | 'error' | 'close', cb: (arg?: any) => void): unknown;
+    };
+    const bb = BusboyFactory({
+      headers: req.headers as import('http').IncomingHttpHeaders,
+      limits: { fileSize: maxFileBytes, files: 5, fields: 20, fieldSize: 64 * 1024 },
+    });
+
+    bb.on('field', (name: string, value: string) => {
+      fields[name] = value;
+    });
+
+    bb.on('file', (name: string, stream: import('stream').Readable, info: { filename: string; mimeType: string }) => {
+      const chunks: Buffer[] = [];
+      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('limit', () => {
+        if (!settled) {
+          settled = true;
+          reject(new Error(`Datei zu groß (max. ${Math.round(maxFileBytes / 1024 / 1024)} MB).`));
+          req.destroy();
+        }
       });
-    } else {
-      fields[nameMatch[1]] = body;
-    }
-  }
-  return { fields, files };
+      stream.on('end', () => {
+        files.push({
+          name,
+          filename: info.filename || 'upload.bin',
+          contentType: info.mimeType || 'application/octet-stream',
+          data: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    bb.on('error', (e: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(e);
+      }
+    });
+    bb.on('close', () => {
+      if (!settled) {
+        settled = true;
+        resolve({ fields, files });
+      }
+    });
+
+    req.pipe(bb);
+  });
 }
 
 app.post('/api/upload/sample', async (req, res) => {
@@ -850,13 +866,9 @@ app.post('/api/upload/sample', async (req, res) => {
     return res.status(415).json({ status: 'error', message: 'Erwartet multipart/form-data mit Feld "file".' });
   }
   try {
-    const chunks: Buffer[] = [];
-    await new Promise<void>((resolve) => {
-      req.on('data', (c: Buffer) => chunks.push(c));
-      req.on('end', () => resolve());
-    });
-    const raw = Buffer.concat(chunks);
-    const { fields, files } = parseMultipart(raw, (req.headers['content-type'] || '') as string);
+    // P-2/P-8: Streaming-Parser mit Limit – bricht zu große Uploads WÄHREND
+    // des Lesens ab, statt erst nach Buffer.concat zu prüfen.
+    const { fields, files } = await parseMultipartStream(req, UPLOAD_MAX_MB * 1024 * 1024);
     const file = files[0];
     if (!file) return res.status(400).json({ status: 'error', message: 'Kein Datei-Feld "file" gefunden.' });
 
