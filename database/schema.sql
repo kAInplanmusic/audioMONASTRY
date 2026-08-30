@@ -114,21 +114,30 @@ alter table public.music_tracks enable row level security;
 alter table public.library_links enable row level security;
 
 -- anon/publishable darf Samples + Musik lesen (kein Schreiben)
+-- Idempotent: bestehende Policies zuerst entfernen (P-6, kein Fehler bei Re-Run).
+drop policy if exists "anon_read_samples" on public.samples;
 create policy "anon_read_samples" on public.samples
   for select to anon using (true);
+drop policy if exists "anon_read_tags" on public.sample_tags;
 create policy "anon_read_tags" on public.sample_tags
   for select to anon using (true);
+drop policy if exists "anon_read_music" on public.music_tracks;
 create policy "anon_read_music" on public.music_tracks
   for select to anon using (true);
+drop policy if exists "anon_read_links" on public.library_links;
 create policy "anon_read_links" on public.library_links
   for select to anon using (true);
 
 -- service_role schreibt (Seed/Sync)
+drop policy if exists "service_write_samples" on public.samples;
 create policy "service_write_samples" on public.samples
   for all to service_role using (true) with check (true);
+drop policy if exists "service_write_tags" on public.sample_tags;
 create policy "service_write_tags" on public.sample_tags
   for all to service_role using (true) with check (true);
+drop policy if exists "service_write_music" on public.music_tracks;
 create policy "service_write_music" on public.music_tracks
   for all to service_role using (true) with check (true);
+drop policy if exists "service_write_links" on public.library_links;
 create policy "service_write_links" on public.library_links
   for all to service_role using (true) with check (true);
