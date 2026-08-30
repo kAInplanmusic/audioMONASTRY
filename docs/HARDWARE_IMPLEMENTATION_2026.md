@@ -1,7 +1,8 @@
 # Final Audit — Hardware-Abstraktion audioMONASTRY (2026-08-30)
 **Release: audioMONASTRY V. 1|010|001 · Codename „HyperAudioWorkstation"**
 **Supabase live (2026-08-31): Schema+RLS angewendet · Health `ok (service_role)` · Seed-Sync real ausgeführt (29 Samples, 48 Tracks) · Anon-Read verifiziert.**
-**Cloudflare R2 live (2026-08-31): Bucket `audiomonastrysamples` · `ListBuckets`/`PutObject` real verifiziert · Upload-Pfad vollständig (R2 + Supabase).**
+**Cloudflare R2 live (2026-08-31): Bucket `audiomonastrysamples` · `ListBuckets`/`PutObject`/Public-URL real verifiziert · Upload-Pfad vollständig (R2 + Supabase).**
+**KI live (2026-08-31): DeepSeek (`deepseek-v4-flash`) und Hugging Face (`Qwen/Qwen2.5-72B-Instruct` via HF-Router) real durch den LlmRouter verifiziert.**
 
 > Implementierungs-Audit auf Basis von `docs/HARDWARE_AUDIT_2026.md` (Commit d71759e).
 > Stand: Commit nach der Implementierung. Alle Aussagen sind code-verifiziert;

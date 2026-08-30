@@ -1586,7 +1586,7 @@ async function startServer() {
   }
 
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`audioMONASTRY (cloud-frei) running on http://0.0.0.0:${PORT}`);
+    console.log(`audioMONASTRY running on http://0.0.0.0:${PORT}`);
   });
 }
 
