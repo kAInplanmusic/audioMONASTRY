@@ -65,12 +65,9 @@ export const SequencerPluginTerminal = React.memo(function SequencerPluginTermin
   };
 
   useEffect(() => {
-    audioEngine.onStepUpdate = (step) => {
+    return audioEngine.addStepListener((step) => {
         setCurrentStep(step);
-    };
-    return () => {
-        audioEngine.onStepUpdate = () => {};
-    };
+    });
   }, []);
 
   const handleDrop = (e: React.DragEvent, track: TrackType) => {

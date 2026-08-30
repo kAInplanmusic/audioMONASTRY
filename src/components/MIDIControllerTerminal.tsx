@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { random } from '../utils/random';
 import { Keyboard, Activity, Link2, RefreshCw, Cpu, Usb, Volume2 } from 'lucide-react';
 import { AudioSample } from '../data/samples';
@@ -30,7 +30,7 @@ function detectTouchLimited(): boolean {
   return !midiCapable && !hidCapable;
 }
 
-export function MIDIControllerTerminal() {
+export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal() {
   const { state, lockStatus, updateState } = usePluginState('midi', 'PRO');
   const { midiAccess, inputs, lastMessage, detected, error: midiError, rescan } = useMIDI();
   const { devices: hidDevices, error: hidError, supported: hidSupported, requestDevice: pairHid } = useHID();
@@ -329,4 +329,4 @@ export function MIDIControllerTerminal() {
       </div>
     </div>
   );
-}
+});

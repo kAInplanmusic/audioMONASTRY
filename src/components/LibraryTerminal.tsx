@@ -16,7 +16,7 @@ function cloudRowToTrack(row: CloudMusicRow): MusicTrack {
   return { id: row.id, name: row.name, artist: row.artist, url: row.url, bpm: row.bpm ?? undefined };
 }
 
-export function LibraryTerminal() {
+export const LibraryTerminal = React.memo(function LibraryTerminal() {
   const { samples, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample, setPendingSample } = useSamples();
   const [category, setCategory] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -324,4 +324,4 @@ export function LibraryTerminal() {
       </div>
     </div>
   );
-}
+});

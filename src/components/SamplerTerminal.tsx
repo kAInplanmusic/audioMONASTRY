@@ -30,7 +30,7 @@ const emptyPads = (): Pad[] =>
     slice: 1, loop: false, reverse: false, pitch: 0,
   }));
 
-export const SamplerTerminal: React.FC = () => {
+export const SamplerTerminal = React.memo(() => {
   const { state, lockStatus, updateState } = usePluginState('sampler', 'PRO');
   const [pads, setPads] = useState<Pad[]>(emptyPads);
   const [capturing, setCapturing] = useState(false);
@@ -157,4 +157,4 @@ export const SamplerTerminal: React.FC = () => {
       )}
     </div>
   );
-};
+});

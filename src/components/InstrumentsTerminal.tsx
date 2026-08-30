@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Music, Piano, Guitar, Layers, Loader2, Cpu, Radio, Drum, Sparkles } from 'lucide-react';
 import { DropTarget } from './DropTarget';
 import { AudioSample } from '../data/samples';
@@ -103,7 +103,7 @@ const SYNTH_PRESET_INSTRUMENTS: Instrument[] = SYNTHESIS_INSTRUMENTS.map(d => ({
   type: 'synth2',
 }));
 
-export function InstrumentsTerminal() {
+export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const { state, lockStatus, updateState } = usePluginState('instruments', 'PRO');
   const [activeCategory, setActiveCategory] = useState('Alle');
   const [search, setSearch] = useState('');
@@ -254,4 +254,4 @@ export function InstrumentsTerminal() {
       </div>
     </div>
   );
-}
+});

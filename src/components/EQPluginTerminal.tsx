@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Waves, Power } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
@@ -222,7 +222,7 @@ function QKnob({ value, onChange, disabled }: { value: number; onChange: (v: num
 // Terminal
 // ---------------------------------------------------------------------------
 
-export function EQPluginTerminal() {
+export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   const { state, lockStatus, updateState } = usePluginState('eq', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
 
@@ -518,4 +518,4 @@ export function EQPluginTerminal() {
       </div>
     </div>
   );
-}
+});

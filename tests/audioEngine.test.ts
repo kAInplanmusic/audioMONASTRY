@@ -66,6 +66,28 @@ describe('audioEngine (jsdom, Tone gemockt)', () => {
     audioEngine.setStep('channel1', 0, false);
   });
 
+  it('addStepListener unterstützt mehrere Step-Subscriber (kein Single-Slot)', () => {
+    const seen: number[] = [];
+    const off1 = audioEngine.addStepListener((s) => seen.push(s));
+    const off2 = audioEngine.addStepListener((s) => seen.push(s * 10));
+    const legacy = vi.fn();
+    const prev = audioEngine.onStepUpdate;
+    audioEngine.onStepUpdate = legacy;
+
+    const emitter = audioEngine as unknown as { emitStep: (step: number) => void };
+    emitter.emitStep(4);
+    expect(seen).toEqual([4, 40]);
+    expect(legacy).toHaveBeenCalledWith(4);
+
+    off1();
+    seen.length = 0;
+    emitter.emitStep(5);
+    expect(seen).toEqual([50]);
+
+    off2();
+    audioEngine.onStepUpdate = prev;
+  });
+
   it('Spatial-Setup/Mode lassen sich setzen und lesen', () => {
     audioEngine.setSpatialSetup('10.0');
     expect(audioEngine.getSpatialSetupId()).toBe('10.0');

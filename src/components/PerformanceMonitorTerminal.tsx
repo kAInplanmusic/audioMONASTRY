@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Activity, Cpu, Gauge, Network } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
@@ -12,7 +12,7 @@ import { telemetry } from '../utils/telemetry';
  * Echtzeit-CPU-/UI-Metriken, Latenz-Budgets pro Pipeline und
  * WebRTC-/Jitter-Überblick.
  */
-export function PerformanceMonitorTerminal() {
+export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitorTerminal() {
   const { state, updateState } = usePluginState('performance', 'PRO');
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
 
@@ -93,4 +93,4 @@ export function PerformanceMonitorTerminal() {
       </div>
     </div>
   );
-}
+});

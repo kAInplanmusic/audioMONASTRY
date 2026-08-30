@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { audioEngine } from '../utils/audioEngine';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { ALL_TRACKS, TrackRole, TrackType, TRACK_ROLE_MAP } from '../types';
@@ -178,7 +178,7 @@ function A9MasterMeter({ level }: { level: number }) {
   );
 }
 
-export function DJMixer({ initialChannels = 8 }: { initialChannels?: MixerChannelCount }) {
+export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { initialChannels?: MixerChannelCount }) {
   const [channelCount, setChannelCount] = useState<MixerChannelCount>(initialChannels);
   const strips = useMemo(() => buildStrips(channelCount), [channelCount]);
   const [ch, setCh] = useState<ChannelState[]>(() => buildStrips(initialChannels).map(freshChannel));
@@ -420,7 +420,7 @@ export function DJMixer({ initialChannels = 8 }: { initialChannels?: MixerChanne
       <div className="h-[3px] bg-gradient-to-r from-zinc-700 via-zinc-400 to-zinc-700" />
     </div>
   );
-}
+});
 
 /** Abwärtskompatibler Alias (bisheriger 4-Kanal-Name). */
 export const DJ4ChMixer = DJMixer;

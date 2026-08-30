@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useEffect, useState  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useState  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { usePluginManager } from './context/PluginManagerContext';
@@ -49,7 +49,6 @@ function AppComponent() {
   const { pendingSample, setPendingSample } = useSamples();
 
   const [isPlaying, setIsPlaying] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
   const [bpm, setBpm] = useState(128);
   const [patterns, setPatterns] = useState(TECHNO_PRESETS[0].patterns);
   const [stepCount, setStepCount] = useState<16 | 32>(16);
@@ -71,7 +70,7 @@ function AppComponent() {
   }, []);
 
   // Sequencer: zwischen 16 und 32 Steps umschalten (Patterns werden gepolstert).
-  const handleSetStepCount = (n: 16 | 32) => {
+  const handleSetStepCount = useCallback((n: 16 | 32) => {
     if (n === stepCount) return;
     setStepCount(n);
     audioEngine.setStepCount(n);
@@ -82,7 +81,7 @@ function AppComponent() {
     });
     setPatterns(next);
     audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
-  };
+  }, [stepCount, patterns]);
 
   // Task 22: Rollen-Start-Presets – wendet das Modul-Profil einer Rolle an.
   const applyRole = (role: StudioRole) => {
@@ -91,12 +90,26 @@ function AppComponent() {
     Object.entries(states).forEach(([id, s]) => setModuleState(id, s));
   };
 
+  // Keyboard-Transport: Leertaste = Play/Stop. Bewusst NICHT in Eingabefeldern
+  // (Input/Textarea/Select/ContentEditable), damit Tippen nicht unterbrochen wird.
   useEffect(() => {
-    audioEngine.onStepUpdate = setCurrentStep;
-    return () => {
-      audioEngine.onStepUpdate = () => {};
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName ?? '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      e.preventDefault();
+      if (isPlaying) {
+        audioEngine.stop();
+        setIsPlaying(false);
+      } else {
+        audioEngine.play();
+        setIsPlaying(true);
+      }
     };
-  }, []);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPlaying]);
 
   // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
   useEffect(() => {
@@ -160,6 +173,43 @@ function AppComponent() {
     };
     window.addEventListener('monk:apply-patterns', handler);
     return () => window.removeEventListener('monk:apply-patterns', handler);
+  }, []);
+
+  // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
+  const togglePlugin = useCallback((id: string) => {
+    if (id === 'mixer') return;
+
+    const currentState = moduleStates[id] || 'OFF';
+    const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
+    releaseLock(id, webRTCManager.userId);
+    setModuleState(id, nextState);
+  }, [moduleStates, releaseLock, setModuleState]);
+
+  const promotePlugin = useCallback((id: string) => {
+    if (id === 'mixer') return;
+    const currentState = moduleStates[id] || 'OFF';
+    if (currentState === 'OFF') return;
+    const lockGranted = requestLock(id, webRTCManager.userId);
+    if (!lockGranted) return;
+    setModuleState(id, 'PRO');
+  }, [moduleStates, requestLock, setModuleState]);
+
+  const handleToggleStep = useCallback((track: TrackType, stepIndex: number) => {
+    setPatterns(prev => {
+      const nextArr = [...prev[track]];
+      nextArr[stepIndex] = !nextArr[stepIndex];
+      const next = { ...prev, [track]: nextArr };
+      // AudioEngine unmittelbar nachschieben, damit die Klinge hörbar synchron ist.
+      audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
+      return next;
+    });
+  }, []);
+
+  const handleApplyPatterns = useCallback((next: Patterns, nextBpm: number) => {
+    setPatterns(next);
+    setBpm(nextBpm);
+    audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
+    audioEngine.setBpm(nextBpm);
   }, []);
 
   const startApp = async () => {
@@ -237,43 +287,6 @@ function AppComponent() {
           </div>
       );
   }
-
-  // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
-  const togglePlugin = (id: string) => {
-    if (id === 'mixer') return;
-
-    const currentState = moduleStates[id] || 'OFF';
-    const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
-    releaseLock(id, webRTCManager.userId);
-    setModuleState(id, nextState);
-  };
-
-  const promotePlugin = (id: string) => {
-    if (id === 'mixer') return;
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'OFF') return;
-    const lockGranted = requestLock(id, webRTCManager.userId);
-    if (!lockGranted) return;
-    setModuleState(id, 'PRO');
-  };
-
-  const handleToggleStep = (track: TrackType, stepIndex: number) => {
-    setPatterns(prev => {
-      const nextArr = [...prev[track]];
-      nextArr[stepIndex] = !nextArr[stepIndex];
-      const next = { ...prev, [track]: nextArr };
-      // AudioEngine unmittelbar nachschieben, damit die Klinge hörbar synchron ist.
-      audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
-      return next;
-    });
-  };
-
-  const handleApplyPatterns = (next: Patterns, nextBpm: number) => {
-    setPatterns(next);
-    setBpm(nextBpm);
-    audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
-    audioEngine.setBpm(nextBpm);
-  };
 
   return (
     <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 short-landscape:p-2">
@@ -452,7 +465,6 @@ function AppComponent() {
                                 {plugin.id === 'sequencer' ? (
                                   <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Sequencer…</div>}><SequencerPluginTerminal
                                       isPlaying={isPlaying}
-                                      currentStep={currentStep}
                                       tracks={patterns}
                                       bpm={bpm}
                                       setBpm={setBpm}
@@ -469,7 +481,7 @@ function AppComponent() {
                                       <VoiceMonkPanel userId="localUser" />
                                     </div></Suspense>
                                   ) : plugin.id === 'drum' ? (
-                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Machine…</div>}><DrumMachineTerminal isPlaying={isPlaying} currentStep={currentStep} bpm={bpm} /></Suspense>
+                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Machine…</div>}><DrumMachineTerminal isPlaying={isPlaying} bpm={bpm} /></Suspense>
                                   ) : plugin.id === 'mastering' ? (
                                     <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
                                       <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />

@@ -1,4 +1,4 @@
-import {  useState, useEffect, useRef  } from 'react';
+import React, {  useState, useEffect, useRef  } from 'react';
 import { random } from '../utils/random';
 import { Sparkles, Activity, Power, Sliders, Radio, Cpu } from 'lucide-react';
 import { DropTarget } from './DropTarget';
@@ -7,7 +7,7 @@ import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 
-export function FXEngineTerminal() {
+export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
   const { state, lockStatus, updateState } = usePluginState('effect', 'PRO');
   const [power, setPower] = useState(true);
   const [activeFx, setActiveFx] = useState('REVERB');
@@ -243,4 +243,4 @@ export function FXEngineTerminal() {
       </div>
     </div>
   );
-}
+});

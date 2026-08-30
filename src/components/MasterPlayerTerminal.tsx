@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import React, { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
 import { random } from '../utils/random';
 import { Activity, Download, RefreshCw, Upload, X } from 'lucide-react';
 
@@ -207,7 +207,7 @@ function ProgressBar({ busy }: { busy: boolean }) {
     </div>
   );
 }
-export function MasterPlayerTerminal() { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
+export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
   const [mode, setMode] = useState<Mode>('analyze');
   const [trackA, setTrackA] = useState<LoadedFile | null>(null);
   const [trackB, setTrackB] = useState<LoadedFile | null>(null);
@@ -527,4 +527,4 @@ export function MasterPlayerTerminal() { // NOSONAR: bewusst komplexe Audio-/DSP
       )}
     </div>
   );
-}
+});

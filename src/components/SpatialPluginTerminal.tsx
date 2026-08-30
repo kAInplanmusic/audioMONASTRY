@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { random } from '../utils/random';
 import { Box, Play, Pause, Ruler, RotateCw } from 'lucide-react';
 import { DropTarget } from './DropTarget';
@@ -222,7 +222,7 @@ function SpatialStage({ nodes, setup, selectedId, motionPath, lfoActive, onSelec
   );
 }
 
-export function SpatialPluginTerminal() {
+export const SpatialPluginTerminal = React.memo(function SpatialPluginTerminal() {
   const { lockStatus } = usePluginState('spatial', 'PRO');
   const { pendingSample, setPendingSample } = useSamples();
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
@@ -551,4 +551,4 @@ export function SpatialPluginTerminal() {
       {showRoomPlan && <RoomPlannerPanel onClose={() => setShowRoomPlan(false)} />}
     </div>
   );
-}
+});

@@ -1,10 +1,10 @@
-import {  useState  } from 'react';
+import React, {  useState  } from 'react';
 import { Puzzle, Lock, Code, Terminal, Play, RefreshCw, Upload, Network } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 
-export function CustomSlotTerminal() {
+export const CustomSlotTerminal = React.memo(function CustomSlotTerminal() {
   useSamples();
   const { state, lockStatus, updateState } = usePluginState('custom_slot', 'PRO');
   const [activeTab, setActiveTab] = useState('RUNTIME');
@@ -192,4 +192,4 @@ export default definePlugin({
       </div>
     </div>
   );
-}
+});
