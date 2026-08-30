@@ -88,6 +88,18 @@ export const SYNTHESIS_INSTRUMENTS: InstrumentDefinition[] = [
   // (Die 50 physikalischen Patches sind die Kernakkustik; hier 2 Hybrid-Add-Ons.)
   { id: 131, key: 'acoustic-hybrid-piano', name: 'Hybrid Grand (Sample+Model)', kind: 'acoustic', category: 'acoustic', midiProgram: 0, osc: 'triangle', partials: [{ ratio: 1, amp: 1 }, { ratio: 2, amp: 0.5 }, { ratio: 3, amp: 0.25 }], env: [0.001, 0.4, 0, 0.35], filterType: 'lowpass', filterFreq: 5000, filterQ: 0.7, vibratoHz: 0, vibratoAmt: 0, detune: 8, noise: 0.15, harmonicity: 1, description: 'Klavier, additiv ausgebaut' },
 
+  // --- KATEGORIE AUSSERGEWÖHNLICHE INSTRUMENTE (exo) --------------------------
+  // (Sonderlinge der Klangwelt: Theremin, Ondes Martenot, Hang, Kalimba, …)
+  { id: 132, key: 'exo-theremin',   name: 'Theremin',          kind: 'synth', category: 'fx-experimental', midiProgram: 70, osc: 'sine',     filter: 'lowpass', cutoff: 6000, resonance: 2,  attack: 0.02, release: 0.90, description: 'Stufenlose Tonhöhe – per Pitch-Bend/XY spielbar' },
+  { id: 133, key: 'exo-ondes',      name: 'Ondes Martenot',    kind: 'synth', category: 'fx-experimental', midiProgram: 71, osc: 'sine',     filter: 'lowpass', cutoff: 3200, resonance: 3,  attack: 0.05, release: 1.20, description: 'Singende Welle mit Vibrato' },
+  { id: 134, key: 'exo-hang',       name: 'Hang Drum',         kind: 'drum',  category: 'drums-percussion', midiProgram: 72, freqStart: 220, freqEnd: 220, decay: 1.6, click: true, description: 'Warmes, schwebendes Handpan-Metall' },
+  { id: 135, key: 'exo-kalimba',    name: 'Kalimba',           kind: 'drum',  category: 'drums-percussion', midiProgram: 73, freqStart: 420, freqEnd: 420, decay: 0.8, click: true, description: 'Holzig-perkussive Daumenklavier-Zunge' },
+  { id: 136, key: 'exo-steelpan',   name: 'Steelpan',          kind: 'drum',  category: 'drums-percussion', midiProgram: 74, freqStart: 520, freqEnd: 520, decay: 0.5, description: 'Karibisches Stahlfass-Timbre' },
+  { id: 137, key: 'exo-sitar',      name: 'Sitar Drone',       kind: 'synth', category: 'fx-experimental', midiProgram: 75, osc: 'sawtooth', filter: 'bandpass', cutoff: 1600, resonance: 9, attack: 0.01, release: 1.10, description: 'Schnarrende Bordun-Saiten mit Resonanz' },
+  { id: 138, key: 'exo-duduk',      name: 'Duduk',             kind: 'synth', category: 'fx-experimental', midiProgram: 76, osc: 'sine',     filter: 'lowpass', cutoff: 900,  resonance: 1,  attack: 0.12, release: 1.50, description: 'Wehmütiges armenisches Holzblasinstrument' },
+  { id: 139, key: 'exo-waterphone', name: 'Waterphone',        kind: 'fx',    category: 'fx-experimental', midiProgram: 77, wave: 'sine', lfoRate: 0.2, attack: 0.10, release: 2.50, resonance: 14, description: 'Waberndes, unheimliches Wasser-Metall' },
+  { id: 140, key: 'exo-otamatone',  name: 'Otamatone',         kind: 'synth', category: 'fx-experimental', midiProgram: 78, osc: 'square',   filter: 'lowpass', cutoff: 2400, resonance: 5,  attack: 0.02, release: 0.40, description: 'Quietschig-süße Spielzeug-Singstimme' },
+
   // --- KATEGORIE FX / EXPERIMENTAL (fx) ---
   { id: 141, key: 'fx-ai-ambient',       name: 'AI Neural Ambient',        kind: 'fx', category: 'fx-experimental', midiProgram: 90, wave: 'sine',     lfoRate: 0.2, attack: 1.5, release: 3.0,  description: 'Schwebender Neural-Ambient-Drone' },
   { id: 142, key: 'fx-glitch-gran',      name: 'Glitch Granulator',        kind: 'fx', category: 'fx-experimental', midiProgram: 91, wave: 'square',   lfoRate: 12,  attack: 0.001, release: 0.1, description: 'Zerhackte Grains' },
