@@ -646,7 +646,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
       const prediction = await createResp.json() as any;
       const status = prediction?.status;
       if (status === 'succeeded') {
-        res.json({ status: 'success', stems: prediction.output ?? {} });
+        res.json({ status: 'success', provider: 'replicate', stems: prediction.output ?? {} });
       } else if (status === 'failed') {
         res.status(502).json({ status: 'error', message: 'Replicate-Stem-Job fehlgeschlagen' });
       } else {
@@ -660,7 +660,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
           });
           current = await pollResp.json();
         }
-        if (current?.status === 'succeeded') res.json({ status: 'success', stems: current.output ?? {} });
+        if (current?.status === 'succeeded') res.json({ status: 'success', provider: 'replicate', stems: current.output ?? {} });
         else res.status(502).json({ status: 'error', message: 'Replicate-Stem-Job fehlgeschlagen' });
       }
     } catch (e) {
@@ -711,7 +711,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
       });
       const data = await resp.json() as any;
       if (idempotencyKey) stemJobStatus.set(idempotencyKey, resp.ok ? 'success' : 'failed');
-      res.status(resp.status).json(data);
+      res.status(resp.status).json({ ...data, provider: 'stem-ai' });
       return;
     } catch (e) {
       metrics.stemFailures += 1;
@@ -744,6 +744,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
       clearInterval(timer);
       res.write(`data: ${JSON.stringify({
         status: 'success',
+        provider: 'fallback',
         stems: {
           vocals: '', melody: '', highs: '', mids: '', lows: '',
         },
