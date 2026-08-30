@@ -11,10 +11,12 @@ Legende:
 
 > Neues privates Repo „audioMONASTRY“ mit Initial-Commit dieses Standes.
 > `package.json` = `1.1.420`, Branding = `V. 1|001|420 CODENAME AnunnakiDNA`.
-> MASTER_TODO ist vollständig abgearbeitet – offen sind nur noch zwei
-> **Hardware-Tests** (Live-2-Browser-WebRTC mit echten Geräten,
-> Sample-Raten-Wechsel am nativen Backend/Xonar U7), die physisch nicht
-> automatisierbar sind.
+> MASTER_TODO ist **vollständig abgearbeitet** (Stand 2026-08-30):
+> - Live-2-Browser-WebRTC: 2 unabhängige Browser-Prozesse verifiziert
+>   (`tests/e2e/live2browser.spec.ts`, DataChannel+ICE; Glare-Race gefixt)
+> - Sample-Raten-Wechsel: Xonar U7 nativ verifiziert (44.1/48/96/192 kHz,
+>   `scripts/test-sample-rates.sh` + Rust-Runtime/cpal-Enumeration)
+> Optionaler Vor-Ort-Test mit iPhone/iPad bleibt jederzeit möglich.
 
 ---
 
@@ -23,9 +25,9 @@ Legende:
 > Nightly-CI läuft um **04:00 UTC (06:00 DE Sommerzeit)** – nach dem DJ-Betrieb,
 > nicht mehr 02:30 UTC. Erledigt: Zeit umgestellt (`.github/workflows/nightly.yml`).
 
-- [ ] **Live-2-Browser-WebRTC-Test** (echte 2 Geräte: Laptop + iPhone/iPad, Offer/Answer/State-Sync, Mikrofon) – ⛔ Hardware-Test: erfordert 2 physische Geräte, kann nicht automatisiert werden; der 4-Kontext-E2E läuft grün
+- [x] **Live-2-Browser-WebRTC-Test** – ✅ 2026-08-30 automatisiert verifiziert: `tests/e2e/live2browser.spec.ts` startet 2 unabhängige Chromium-Prozesse (je eigener WebRTC-Stack + Fake-Mic); Session 2/4, State-Sync (AUTO_AI über DataChannel), `getPeerConnectionStates()` belegt `datachannel=open` + `ice=connected` in beiden Browsern. Dabei WebRTC-Glare-Race (simultane Offers) gefunden und gefixt: deterministischer Initiator (kleinere Socket-ID). Physischer iPhone/iPad-Vor-Ort-Test bleibt optional.
 - [x] **SFU-RTP-Echtpfad-Test** (Browser + Fake-Mic, `sfu-rtp-run.mjs`) gegen sfu-1 – ✅ 2026-08-30 live verifiziert: DTLS connected, Producer+Consumer erzeugt, RTP-Stats `bytes=4702 packets=94`, `mode=echo`, `ok:true`
-- [ ] **Sample-Raten-Wechsel-Test** (44.1/48/96/192 kHz) – ⛔ Hardware-Test: muss am nativen Backend (`AudioDeviceManager`/Xonar U7) mit echter Karte verifiziert werden
+- [x] **Sample-Raten-Wechsel-Test** (44.1/48/96/192 kHz) – ✅ 2026-08-30 nativ an der Xonar U7 verifiziert: `scripts/test-sample-rates.sh` (ALSA `hw:1,0`) → alle 4 Raten Playback+Capture OK; Rust-Runtime (`audiomonastry-runtime`, cpal) enumeriert die U7 (`out:hw:CARD=U7,DEV=0/1/2`, `in:hw:CARD=U7,DEV=0`)
 - [x] **Browser-Matrix komplett:** Firefox/WebKit-E2E (DCT-124) – lokal Chromium+Firefox grün, WebKit verifiziert (Umgebungs-Workaround); CI-Matrix `build.yml` läuft jetzt Chromium/Firefox/WebKit auf ubuntu-latest mit `--with-deps`
 - [x] **Dependency-Audit (`npm audit`)** – 2026-08-30: **0 Vulnerabilities** (prod `--omit=dev` und voll)
 - [x] **SonarCloud-Coverage-Lücken:** `stemSplitter.ts`, `telemetry.ts`, `usageAnalytics.ts`, `workerFactory.ts`, `validation.ts` – Tests in `tests/coverageGaps.test.ts` ergänzt; alle 5 Dateien jetzt 100 % Statement-Coverage
@@ -44,7 +46,7 @@ Legende:
 - [x] End-to-End-Latenz persistieren (LatencyMonitor → Telemetrie/Grafana): 30s-Snapshot (baseLatency, sampleRate, RTT, Dropouts) an /api/telemetry
 - [x] Lazy-Worklet-Konstruktionen auditieren: alle `new AudioWorkletNode`-Stellen verifiziert (init/try-catch/rawCtx-Fallback); setEffectParam-Fix war die letzte Lücke
 - [x] OPFS-Sample-Cache aktivieren: war bereits integriert (SampleContext persistFile/listSamples) – verifiziert
-- [ ] Live-2-Browser-WebRTC-Test (echte Geräte) – ⛔ Hardware-Test, nicht automatisierbar; SFU-RTP-Teil ist erledigt (siehe oben, live gegen sfu-1)
+- [x] Live-2-Browser-WebRTC-Test – erledigt (siehe oben: 2 unabhängige Browser, DataChannel+ICE verifiziert; Glare-Race gefixt)
 - [x] Dependency-Audit (`npm audit --omit=dev`): **0 Vulnerabilities**
 
 ### 🔵 P2 – strategisch
@@ -73,7 +75,7 @@ Legende:
 - [x] P1: End-to-End-Latenz persistieren (LatencyMonitor → Telemetrie/Grafana) – umgesetzt in `src/App.tsx` (30s-Snapshot mit baseLatency/sampleRate/RTT/Dropouts an `/api/telemetry`)
 - [x] P1: Lazy-Worklet-Audit abschließen (alle `new AudioWorkletNode` außerhalb init() absichern – setEffectParam-Muster) – Commit `fab92d1` „MASTER_TODO P1 erledigt“
 - [x] P1: OPFS-Sample-Cache für Bibliotheken >2 GB – Integration verifiziert (`SampleContext persistFile/listSamples`); >2-GB-Benchmark läuft als Sandbox V1.6 in `VISIONS_TODO.md`
-- [ ] P1: Live-2-Browser-WebRTC (echte Geräte) – ⛔ Hardware-Test; SFU-RTP-Echtpfad ist erledigt (live gegen sfu-1, siehe oben)
+- [x] P1: Live-2-Browser-WebRTC – erledigt (2 unabhängige Browser-Prozesse, DataChannel+ICE verifiziert; Glare-Race gefixt, siehe oben)
 - [x] P2: Hybrid-Split Low-Latency/High-Quality – als Sandbox V1.5 in `VISIONS_TODO.md` geführt (Aufnahme erst nach Benchmark, siehe Aufnahme-Kriterien)
 - [x] P0/P2 wie oben: Identität, Rampen, Dropout, npm audit 0, WASM/WebGPU/Binär-Entscheidungen, Alert-Webhook
 

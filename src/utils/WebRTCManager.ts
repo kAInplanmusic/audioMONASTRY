@@ -209,20 +209,46 @@ class WebRTCManager {
 
     this.socket.on('offer', async (data) => {
       const pc = this.createPeerConnection(data.sender);
-      await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      this.socket.emit('answer', { target: data.sender, answer });
+      // Race-Guard: Bei simultanem Beitritt kann ein zweites Offer eintreffen,
+      // während bereits ein Offer verarbeitet wird. Nur im Zustand 'stable'
+      // darf ein Remote-Offer gesetzt werden.
+      if (pc.signalingState !== 'stable') {
+        console.warn('[webrtc] Offer außerhalb des erwarteten Zustands verworfen:', pc.signalingState);
+        return;
+      }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        this.socket.emit('answer', { target: data.sender, answer });
+      } catch (e) {
+        console.warn('[webrtc] Offer/Answer fehlgeschlagen:', (e as Error).message);
+      }
     });
 
     this.socket.on('answer', async (data) => {
       const pc = this.peerConnections.get(data.sender);
-      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      if (!pc) return;
+      // Antwort nur annehmen, wenn lokal ein Offer offen ist (sonst Race).
+      if (pc.signalingState !== 'have-local-offer') {
+        console.warn('[webrtc] Answer außerhalb des erwarteten Zustands verworfen:', pc.signalingState);
+        return;
+      }
+      try {
+        await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      } catch (e) {
+        console.warn('[webrtc] Answer setzen fehlgeschlagen:', (e as Error).message);
+      }
     });
 
     this.socket.on('ice-candidate', (data) => {
       const pc = this.peerConnections.get(data.sender);
-      if (pc) pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      if (!pc) return;
+      try {
+        pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } catch (e) {
+        console.warn('[webrtc] ICE-Kandidat verworfen:', (e as Error).message);
+      }
     });
 
     this.socket.on('connect_error', (error) => {
@@ -297,6 +323,13 @@ class WebRTCManager {
     if (!targetId || targetId === this.socket?.id) return;
     if (this.peerConnections.has(targetId)) return;
 
+    // Glare-Auflösung (simultaner Beitritt): Nur der Peer mit der lexikografisch
+    // KLEINEREN Socket-ID erstellt das Offer (deterministischer Initiator).
+    // Der größere Peer wartet auf das eingehende Offer und beantwortet es;
+    // der DataChannel wird dort über ondatachannel übernommen.
+    const selfId = this.socket?.id ?? '';
+    if (selfId && targetId < selfId) return;
+
     const pc = this.createPeerConnection(targetId);
     const dc = pc.createDataChannel('plugin-sync');
     this.dataChannels.set(targetId, dc);
@@ -334,6 +367,19 @@ class WebRTCManager {
     }
   }
 
+  /** Diagnose-/Test-API: Zustand aller Peer-Verbindungen (E2E-Assertions). */
+  public getPeerConnectionStates(): Record<string, { signaling: string; ice: string; datachannel: string }> {
+    const out: Record<string, { signaling: string; ice: string; datachannel: string }> = {};
+    this.peerConnections.forEach((pc, id) => {
+      out[id] = {
+        signaling: pc.signalingState,
+        ice: pc.iceConnectionState,
+        datachannel: this.dataChannels.get(id)?.readyState ?? 'none',
+      };
+    });
+    return out;
+  }
+
   private flushPendingState() {
     this.flushTimer = null;
     if (this.pendingState.size === 0) return;
@@ -346,3 +392,9 @@ class WebRTCManager {
 }
 
 export const webRTCManager = new WebRTCManager();
+
+// Test-/Diagnose-Hook (nur DEV): erlaubt E2E-Assertions auf den echten
+// WebRTC-Zustand (Signaling/ICE/DataChannel) ohne Produktions-API-Fläche.
+if (typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV) {
+  (globalThis as any).__webRTCManager = webRTCManager;
+}
