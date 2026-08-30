@@ -1,0 +1,532 @@
+// ============================================================================
+// audioMONASTRY Portal Worker – Login/Wake/Ladebildschirm/Proxy/Auto-Delete
+// ============================================================================
+// Laufzeit: Cloudflare Workers (kostenlos). Kein Server, 0 € Fixkosten.
+// Verhalten:
+//   GET  /              -> Flotte AN: Proxy auf app-1 · Flotte AUS: Login-Seite
+//   GET  /portal        -> Portal-Seite (Login oder Ladebildschirm/Status)
+//   POST /api/login     -> Admin-Login, setzt signiertes Session-Cookie
+//   POST /api/wake      -> erstellt die 5 Hetzner-Server (cloud-init bootstrappt)
+//   GET  /api/status    -> Flotten-Status (für Ladebildschirm-Polling)
+//   POST /api/stop      -> löscht die Flotte sofort (Kosten stoppen)
+//   Cron */5 * * * *    -> löscht die Flotte, sobald app-1 nach 20 min Idle
+//                          (Idle-Auto-Shutdown) ausgeschaltet wurde.
+// ============================================================================
+
+const HETZNER = 'https://api.hetzner.cloud/v1';
+
+const FLEET = [
+  { name: 'samplemonk-app-1',    type: 'cx33', role: 'app' },
+  { name: 'samplemonk-sfu-1',    type: 'cx33', role: 'sfu' },
+  { name: 'samplemonk-ai-1',     type: 'cx33', role: 'ai' },
+  { name: 'samplemonk-master-1', type: 'cx23', role: 'master' },
+  { name: 'samplemonk-edge-1',   type: 'cx23', role: 'edge' },
+];
+
+const LOCATION = 'fsn1';
+const IMAGE = 'ubuntu-24.04';
+const REPO_URL = 'https://github.com/kAInplanmusic/audioMONASTRY.git';
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
+
+async function hz(env, method, path, payload) {
+  const init = {
+    method,
+    headers: {
+      Authorization: `Bearer ${env.HCLOUD_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (payload) init.body = JSON.stringify(payload);
+  const res = await fetch(HETZNER + path, init);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok && res.status < 500) {
+    data.__http = res.status;
+  }
+  return data;
+}
+
+const hzGet = (env, path) => hz(env, 'GET', path);
+const hzPost = (env, path, payload) => hz(env, 'POST', path, payload);
+const hzDelete = (env, path) => hz(env, 'DELETE', path);
+
+async function fleetServers(env) {
+  const data = await hzGet(env, '/servers?per_page=50');
+  const map = {};
+  for (const s of data.servers ?? []) {
+    if (FLEET.some((f) => f.name === s.name)) map[s.name] = s;
+  }
+  return map;
+}
+
+async function ensureSshKey(env) {
+  const pub = (env.SSH_PUBLIC_KEY ?? '').trim();
+  if (!pub) return null;
+  const list = await hzGet(env, '/ssh_keys?per_page=100');
+  const existing = (list.ssh_keys ?? []).find((k) => k.public_key.trim() === pub);
+  if (existing) return existing.id;
+  const created = await hzPost(env, '/ssh_keys', { name: 'audioMONASTRY-portal', public_key: pub });
+  return created.ssh_key?.id ?? null;
+}
+
+function firewallRules(role) {
+  const base = [
+    { direction: 'in', protocol: 'icmp', source_ips: ['0.0.0.0/0', '::/0'] },
+    { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'] },
+    { direction: 'in', protocol: 'tcp', port: '80', source_ips: ['0.0.0.0/0', '::/0'] },
+    { direction: 'in', protocol: 'tcp', port: '443', source_ips: ['0.0.0.0/0', '::/0'] },
+  ];
+  if (role === 'sfu') {
+    base.push({ direction: 'in', protocol: 'udp', port: '40000-40099', source_ips: ['0.0.0.0/0', '::/0'] });
+    base.push({ direction: 'in', protocol: 'tcp', port: '40000-40099', source_ips: ['0.0.0.0/0', '::/0'] });
+  }
+  return base;
+}
+
+async function ensureFirewall(env, name, rules) {
+  const list = await hzGet(env, `/firewalls?name=${encodeURIComponent(name)}`);
+  if ((list.firewalls ?? []).length > 0) return list.firewalls[0].id;
+  const created = await hzPost(env, '/firewalls', { name, rules });
+  return created.firewall?.id ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Cloud-Init: bootstrapet einen Server komplett (Docker + Repo + .env + Rolle)
+// ---------------------------------------------------------------------------
+const APP_ENV_KEYS = [
+  'DOMAIN',
+  'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_ANON_PUB',
+  'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
+  'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
+  'OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL', 'MASTER_PLAYER_URL',
+];
+
+function envFile(env, role) {
+  const lines = [
+    `DOMAIN=${role === 'app' ? ':80' : ''}`,
+    'SIGNALING_ALLOWED_ORIGINS=*',
+    'VOICE_PROVIDER=replicate',
+    'STEM_AI_PROVIDER=replicate',
+    'ENABLE_SFU=0',
+  ];
+  for (const key of APP_ENV_KEYS) {
+    if (key === 'DOMAIN') continue;
+    const v = env[key];
+    if (v && String(v).trim()) lines.push(`${key}=${String(v).trim()}`);
+  }
+  return lines.join('\n');
+}
+
+function userData(env, role) {
+  const token = env.GITHUB_TOKEN ?? '';
+  const envLines = envFile(env, role).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
+  return `#!/bin/bash
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+mkdir -p /opt/samplemonk
+apt-get update -qq
+apt-get install -y -qq git curl rsync python3 python3-venv
+curl -fsSL https://get.docker.com | sh
+git clone --depth 1 https://x-access-token:${token}@github.com/kAInplanmusic/audioMONASTRY.git /opt/samplemonk 2>/dev/null || git -C /opt/samplemonk pull
+cat > /opt/samplemonk/.env <<'ENVEOF'
+${envLines}
+ENVEOF
+cd /opt/samplemonk
+case "${role}" in
+  app)
+    docker compose -f docker-compose.hetzner.yml up -d caddy sample-monk
+    ;;
+  sfu)
+    echo "SFU_ANNOUNCED_IP=$(hostname -I | awk '{print $1}')" >> .env
+    docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk
+    ;;
+  master)
+    docker compose -f docker-compose.hetzner.yml up -d master-player
+    ;;
+  edge)
+    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d
+    ;;
+  ai)
+    curl -fsSL https://ollama.com/install.sh | sh || true
+    systemctl enable --now ollama || true
+    ollama pull qwen2.5:7b || true
+    cd services/stem-ai
+    python3 -m venv .venv 2>/dev/null || { apt-get install -y -qq python3.12-venv; python3 -m venv .venv; }
+    . .venv/bin/activate
+    pip install --quiet -r requirements.txt || true
+    cat > /etc/systemd/system/stem-ai.service <<'UNIT'
+[Unit]
+Description=sampleMONK stem-ai (Demucs CPU-Fallback)
+After=network.target
+[Service]
+Type=simple
+WorkingDirectory=/opt/samplemonk/services/stem-ai
+Environment=AI_DEVICE=cpu
+ExecStart=/opt/samplemonk/services/stem-ai/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable --now stem-ai || true
+    ;;
+esac
+# Idle-Auto-Shutdown nur auf app-1 (misst /api/online der App)
+if [ "${role}" = "app" ]; then
+  bash /opt/samplemonk/scripts/hetzner/install-idle-shutdown.sh || true
+fi
+touch /root/.samplemonk-bootstrap-done
+`;
+}
+
+// ---------------------------------------------------------------------------
+// Auth (signiertes Session-Cookie)
+// ---------------------------------------------------------------------------
+async function hmacHex(env, data) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(env.SESSION_SECRET || 'change-me'),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data));
+  return [...new Uint8Array(sig)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function makeSession(env, user) {
+  const exp = Math.floor(Date.now() / 1000) + 86400;
+  const payload = `${user}.${exp}`;
+  const sig = await hmacHex(env, payload);
+  return `${payload}.${sig}`;
+}
+
+async function checkSession(env, request) {
+  const cookie = (request.headers.get('cookie') ?? '');
+  const m = cookie.match(/(?:^|;\s*)portal=([^;]+)/);
+  if (!m) return false;
+  const parts = decodeURIComponent(m[1]).split('.');
+  if (parts.length !== 3) return false;
+  const payload = `${parts[0]}.${parts[1]}`;
+  const exp = Number(parts[1]);
+  if (!Number.isFinite(exp) || Date.now() / 1000 > exp) return false;
+  const expected = await hmacHex(env, payload);
+  return expected === parts[2];
+}
+
+function sessionCookie(env, session) {
+  return `portal=${encodeURIComponent(session)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400; Secure`;
+}
+
+// ---------------------------------------------------------------------------
+// Status
+// ---------------------------------------------------------------------------
+async function computeStatus(env) {
+  const servers = await fleetServers(env);
+  const existing = Object.values(servers);
+  if (existing.length === 0) return { state: 'off', created: 0, total: FLEET.length };
+
+  const app = servers['samplemonk-app-1'];
+  const running = existing.filter((s) => s.status === 'running').length;
+
+  if (app && app.status === 'running') {
+    const ip = app.public_net?.ipv4?.ip;
+    if (ip) {
+      try {
+        const res = await fetch(`http://${ip}/api/health`);
+        if (res.ok) {
+          return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/' };
+        }
+      } catch {
+        /* App antwortet noch nicht */
+      }
+    }
+    return { state: 'starting-app', created: existing.length, total: FLEET.length, running };
+  }
+
+  return {
+    state: 'creating',
+    created: existing.length,
+    total: FLEET.length,
+    running,
+    states: existing.map((s) => `${s.name}:${s.status}`),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Fleet-Aktionen
+// ---------------------------------------------------------------------------
+async function startFleet(env) {
+  const servers = await fleetServers(env);
+  if (Object.keys(servers).length > 0) return { started: false, message: 'Flotte existiert bereits.' };
+
+  const sshKeyId = await ensureSshKey(env);
+  const created = [];
+
+  for (const item of FLEET) {
+    const fwName = `samplemonk-${item.role}`;
+    const fwId = await ensureFirewall(env, fwName, firewallRules(item.role));
+    const payload = {
+      name: item.name,
+      server_type: item.type,
+      image: IMAGE,
+      location: LOCATION,
+      firewalls: fwId ? [{ firewall: fwId }] : [],
+      user_data: userData(env, item.role),
+      labels: { app: 'audioMONASTRY', 'managed-by': 'portal-worker', role: item.role },
+    };
+    if (sshKeyId) payload.ssh_keys = [sshKeyId];
+    const result = await hzPost(env, '/servers', payload);
+    if (result.server?.id) created.push(item.name);
+  }
+
+  return { started: true, created };
+}
+
+async function stopFleet(env) {
+  const servers = await fleetServers(env);
+  const deleted = [];
+  for (const s of Object.values(servers)) {
+    await hzDelete(env, `/servers/${s.id}`);
+    deleted.push(s.name);
+  }
+  return { deleted };
+}
+
+// ---------------------------------------------------------------------------
+// HTML (Login + Ladebildschirm mit großer Zeit)
+// ---------------------------------------------------------------------------
+const PAGE_HTML = `<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>audioMONASTRY · Studio starten</title>
+<style>
+  :root { --bg:#050607; --teal:#14b8c9; --cyan:#22d3ee; --fuchsia:#d946ef; --edge:rgba(255,255,255,0.08); }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+         background:radial-gradient(1000px 500px at 50% -10%, #0c1116 0%, #050607 60%);
+         color:#e8eaed; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .card { width:min(560px, 92vw); background:rgba(15,17,20,0.9); border:1px solid var(--edge);
+          border-radius:1rem; padding:2rem; text-align:center; box-shadow:0 30px 80px -30px rgba(0,0,0,0.9); }
+  h1 { font-size:1.4rem; letter-spacing:0.25em; color:#fff; margin:0 0 .4rem; }
+  .sub { font-size:0.65rem; letter-spacing:0.3em; color:#6b7280; text-transform:uppercase; }
+  .timer { font-size:4.5rem; font-weight:900; color:var(--cyan); letter-spacing:0.05em;
+           text-shadow:0 0 30px rgba(34,211,238,0.45); margin:1.2rem 0; font-variant-numeric:tabular-nums; }
+  .steps { text-align:left; margin:1.2rem auto 0; max-width:420px; }
+  .step { display:flex; align-items:center; gap:0.6rem; padding:0.5rem 0; border-bottom:1px solid rgba(255,255,255,0.04);
+          font-size:0.75rem; color:#9ca3af; }
+  .step .dot { width:8px; height:8px; border-radius:50%; background:#374151; flex:none; }
+  .step.done { color:#6ee7b7; } .step.done .dot { background:#34d399; box-shadow:0 0 8px #34d39988; }
+  .step.active { color:#67e8f9; } .step.active .dot { background:var(--cyan); animation:pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow:0 0 12px var(--cyan); } }
+  input { width:100%; padding:0.8rem; margin:0.5rem 0; background:#0b0d0f; border:1px solid var(--edge);
+          border-radius:0.6rem; color:#fff; font:inherit; text-align:center; }
+  input:focus { outline:2px solid var(--cyan); }
+  button { width:100%; margin-top:1rem; padding:0.9rem; border-radius:0.6rem; border:1px solid rgba(34,211,238,0.5);
+           background:rgba(34,211,238,0.12); color:#a5f3fc; font:inherit; font-weight:700; letter-spacing:0.2em;
+           cursor:pointer; transition:all .2s; }
+  button:hover { background:rgba(34,211,238,0.25); }
+  .err { color:#fca5a5; font-size:0.7rem; min-height:1rem; margin-top:.5rem; }
+  .hint { font-size:0.6rem; color:#4b5563; margin-top:1rem; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>AUDIO MONASTRY</h1>
+  <div class="sub">Studio · Flotten-Start</div>
+
+  <!-- Login -->
+  <div id="login">
+    <input id="user" type="text" placeholder="Admin-User" autocomplete="username" />
+    <input id="pass" type="password" placeholder="Passwort" autocomplete="current-password" />
+    <button id="loginBtn">ANMELDEN &amp; STARTEN</button>
+    <div class="err" id="err"></div>
+    <div class="hint">Nach dem Login wird die Hetzner-Flotte automatisch hochgefahren.</div>
+  </div>
+
+  <!-- Ladebildschirm -->
+  <div id="loading" style="display:none">
+    <div class="sub">Das Studio wird hochgefahren</div>
+    <div class="timer" id="timer">00:00</div>
+    <div class="steps" id="steps"></div>
+    <div class="err" id="loadErr"></div>
+    <div class="hint">Die Seite leitet dich automatisch weiter, sobald alles bereit ist.</div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const startedAt = Date.now();
+
+function fmt(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60), r = s % 60;
+  return String(m).padStart(2, '0') + ':' + String(r).padStart(2, '0');
+}
+setInterval(() => { $('timer').textContent = fmt(Date.now() - startedAt); }, 500);
+
+const STEPS = [
+  ['server', 'Hetzner-Server erstellen (n/5)'],
+  ['docker', 'Docker + System-Tuning installieren'],
+  ['deploy', 'Repo klonen + Rollen deployen (app/sfu/ai/master/edge)'],
+  ['app', 'App starten + Health-Check'],
+  ['ready', 'Studio bereit – Weiterleitung'],
+];
+
+function renderSteps(status) {
+  const steps = $('steps');
+  steps.innerHTML = '';
+  STEPS.forEach(([key, label], i) => {
+    const d = document.createElement('div');
+    d.className = 'step';
+    let state = 'pending';
+    if (status.state === 'ready') state = 'done';
+    else if (status.state === 'starting-app' && key !== 'ready') state = 'done';
+    else if (status.state === 'starting-app' && key === 'ready') state = 'active';
+    else if (status.state === 'creating') {
+      if (key === 'server') state = 'active';
+      if (i === 0) label = 'Hetzner-Server erstellen (' + (status.created ?? 0) + '/' + (status.total ?? 5) + ')';
+    }
+    if (state === 'done') { d.classList.add('done'); label = '✓ ' + label; }
+    if (state === 'active') { d.classList.add('active'); label = '▶ ' + label; }
+    d.innerHTML = '<span class="dot"></span>' + label;
+    steps.appendChild(d);
+  });
+}
+
+async function poll() {
+  try {
+    const res = await fetch('/api/status');
+    const status = await res.json();
+    if (status.state === 'off') {
+      $('login').style.display = '';
+      $('loading').style.display = 'none';
+      return;
+    }
+    $('login').style.display = 'none';
+    $('loading').style.display = '';
+    renderSteps(status);
+    if (status.state === 'ready') {
+      $('loadErr').textContent = '✓ Bereit – Weiterleitung …';
+      setTimeout(() => { location.href = '/'; }, 1200);
+      return;
+    }
+    setTimeout(poll, 4000);
+  } catch (e) {
+    $('loadErr').textContent = 'Status nicht erreichbar – erneut …';
+    setTimeout(poll, 4000);
+  }
+}
+
+$('loginBtn').onclick = async () => {
+  $('err').textContent = '';
+  const res = await fetch('/api/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user: $('user').value, pass: $('pass').value }),
+  });
+  const data = await res.json();
+  if (!res.ok) { $('err').textContent = data.error || 'Login fehlgeschlagen'; return; }
+  const wake = await fetch('/api/wake', { method: 'POST' });
+  const wd = await wake.json();
+  if (!wake.ok) { $('err').textContent = wd.error || 'Start fehlgeschlagen'; return; }
+  $('login').style.display = 'none';
+  $('loading').style.display = '';
+  renderSteps({ state: 'creating', created: 0, total: 5 });
+  poll();
+};
+
+poll();
+</script>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+
+    // API-Routen
+    if (url.pathname.startsWith('/api/')) {
+      if (url.pathname === '/api/login' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        const user = String(body.user ?? '');
+        const pass = String(body.pass ?? '');
+        if (user !== (env.ADMIN_USER || 'admin') || pass !== (env.ADMIN_PASSWORD || '')) {
+          return json({ error: 'Login fehlgeschlagen' }, 401);
+        }
+        const session = await makeSession(env, user);
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json; charset=utf-8',
+            'set-cookie': sessionCookie(env, session),
+          },
+        });
+      }
+
+      if (url.pathname === '/api/wake' && request.method === 'POST') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        const result = await startFleet(env);
+        return json(result);
+      }
+
+      if (url.pathname === '/api/status') {
+        if (!(await checkSession(env, request))) return json({ state: 'off', locked: true });
+        return json(await computeStatus(env));
+      }
+
+      if (url.pathname === '/api/stop' && request.method === 'POST') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        return json(await stopFleet(env));
+      }
+
+      return json({ error: 'not found' }, 404);
+    }
+
+    // Portal-Seite immer unter /portal erreichbar
+    if (url.pathname === '/portal' || url.pathname.startsWith('/portal/')) {
+      return new Response(PAGE_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+    }
+
+    // Hauptdomain: wenn Flotte bereit -> Proxy auf app-1, sonst Portal-Seite
+    const servers = await fleetServers(env);
+    const app = servers['samplemonk-app-1'];
+    if (app && app.status === 'running' && app.public_net?.ipv4?.ip) {
+      const upstream = new URL(request.url);
+      upstream.protocol = 'http:';
+      upstream.host = app.public_net.ipv4.ip;
+      upstream.port = '';
+      const proxied = new Request(upstream.toString(), request);
+      return fetch(proxied);
+    }
+
+    return new Response(PAGE_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+  },
+
+  async scheduled(event, env) {
+    // Auto-Stopp: Sobald app-1 (nach 20 min Idle) ausgeschaltet wurde, löschen.
+    const servers = await fleetServers(env);
+    const app = servers['samplemonk-app-1'];
+    const existing = Object.keys(servers);
+
+    if (existing.length === 0) return;
+
+    const shouldDeleteAll = !app || app.status === 'off';
+    if (shouldDeleteAll) {
+      await stopFleet(env);
+      console.log(`[portal] Flotte gelöscht (${existing.length} Server).`);
+    }
+  },
+};
