@@ -34,6 +34,7 @@ npm install -g wrangler        # falls nicht vorhanden
 wrangler secret put ADMIN_USER          # admin
 wrangler secret put ADMIN_PASSWORD      # Passwort aus .env.portal
 wrangler secret put SESSION_SECRET      # aus .env.portal
+wrangler secret put STUDIO_ACCESS_TOKEN # Zufallstoken (z. B. openssl rand -hex 32) – schützt /api + Socket.io
 wrangler secret put HCLOUD_TOKEN        # aus .env.deploy
 wrangler secret put SSH_PUBLIC_KEY      # Inhalt von ~/.ssh/id_ed25519.pub
 wrangler secret put GITHUB_TOKEN        # Personal Access Token (repo-Lesen reicht)

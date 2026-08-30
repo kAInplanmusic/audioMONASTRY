@@ -116,6 +116,11 @@ function envFile(env, role) {
     'STEM_AI_PROVIDER=replicate',
     'ENABLE_SFU=0',
   ];
+  // P-1: Studio-Token nur auf den App-Knoten (der einzige mit /api + Socket.io).
+  if (role === 'app' && env.STUDIO_ACCESS_TOKEN) {
+    lines.push(`STUDIO_ACCESS_TOKEN=${env.STUDIO_ACCESS_TOKEN}`);
+    lines.push('TRUST_PROXY=1');
+  }
   for (const key of APP_ENV_KEYS) {
     if (key === 'DOMAIN') continue;
     const v = env[key];
@@ -200,6 +205,9 @@ function portalConfigProblems(env) {
     problems.push('SESSION_SECRET fehlt oder ist Platzhalter');
   }
   if (!env.HCLOUD_TOKEN) problems.push('HCLOUD_TOKEN fehlt');
+  if (!env.STUDIO_ACCESS_TOKEN || env.STUDIO_ACCESS_TOKEN === 'change-me') {
+    problems.push('STUDIO_ACCESS_TOKEN fehlt oder ist Platzhalter');
+  }
   return problems;
 }
 
@@ -246,6 +254,10 @@ async function checkSession(env, request) {
 
 function sessionCookie(env, session) {
   return `portal=${encodeURIComponent(session)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400; Secure`;
+}
+
+function studioCookie(env) {
+  return `studio=${encodeURIComponent(env.STUDIO_ACCESS_TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400; Secure`;
 }
 
 // ---------------------------------------------------------------------------
@@ -500,7 +512,8 @@ export default {
           status: 200,
           headers: {
             'content-type': 'application/json; charset=utf-8',
-            'set-cookie': sessionCookie(env, session),
+            // P-1: Studio-Cookie gleich mitsetzen – die App verlangt es später.
+            'set-cookie': [sessionCookie(env, session), studioCookie(env)],
           },
         });
       }
