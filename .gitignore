@@ -31,3 +31,6 @@ public/sfu-rtp-test.js
 
 # Rust
 services/audio-runtime/target/
+
+# NAPI-Rust-Binary wird aus Quellcode gebaut (Dockerfile.multistage)
+services/mixer/*.node

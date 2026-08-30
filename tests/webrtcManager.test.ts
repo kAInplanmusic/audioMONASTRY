@@ -32,4 +32,17 @@ describe('WebRTCManager (jsdom)', () => {
     expect(() => webRTCManager.sendData({ type: 'test' })).not.toThrow();
     expect(() => webRTCManager.sendToAllPeers({ type: 'test' } as never)).not.toThrow();
   });
+
+  it('addDataChannelListener unterstützt mehrere Listener (F2-Fix)', () => {
+    const seen: string[] = [];
+    const off1 = webRTCManager.addDataChannelListener((m: any) => seen.push('a:' + m.type));
+    const off2 = webRTCManager.addDataChannelListener((m: any) => seen.push('b:' + m.type));
+    const emitter = webRTCManager as unknown as { dispatchDataMessage: (d: any) => void };
+    emitter.dispatchDataMessage({ type: 'X' });
+    expect(seen).toEqual(['a:X', 'b:X']);
+    off1();
+    emitter.dispatchDataMessage({ type: 'Y' });
+    expect(seen).toEqual(['a:X', 'b:X', 'b:Y']);
+    off2();
+  });
 });

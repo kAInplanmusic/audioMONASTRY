@@ -25,6 +25,7 @@ export class WebRTCTransport implements ITransport {
   private _onMessage: (payload: unknown, fromPeerId: string) => void = () => {};
   private _onPeerJoin: (peerId: string) => void = () => {};
   private _onPeerLeave: (peerId: string) => void = () => {};
+  private _unsubscribeData: (() => void) | null = null;
 
   onMessage: ITransport['onMessage'] = (cb) => { this._onMessage = cb; };
   onPeerJoin: ITransport['onPeerJoin'] = (cb) => { this._onPeerJoin = cb; };
@@ -32,9 +33,13 @@ export class WebRTCTransport implements ITransport {
 
   async connect(_sessionId: string, _userId: string): Promise<void> {
     // Der WebRTCManager ist bereits per WebSocket-Signaling verdrahtet.
-    webRTCManager.onDataChannelMessage = (payload) => this._onMessage(payload, 'peer');
+    // Multi-Listener (F2-Fix): eigener Listener statt Single-Slot-Überschreiben.
+    this._unsubscribeData = webRTCManager.addDataChannelListener((payload) => this._onMessage(payload, 'peer'));
   }
-  disconnect(): void { /* Peer-Verbindungen werden durch WebRTCManager gemanagt. */ }
+  disconnect(): void {
+    this._unsubscribeData?.();
+    this._unsubscribeData = null;
+  }
 
   broadcast(payload: unknown): void { webRTCManager.sendData(payload); }
   sendTo(_peerId: string, payload: unknown): void { webRTCManager.sendData(payload); }

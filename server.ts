@@ -18,7 +18,7 @@ const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
 const STEM_JOB_TIMEOUT_MS = Math.max(10_000, Number(process.env.STEM_JOB_TIMEOUT_MS ?? 300_000));
 let stemActiveJobs = 0;
 let stemJobSeq = 0;
-const stemJobStatus = new Map<string, 'active' | 'pending' | 'failed' | 'cancelled' | 'timeout'>();
+const stemJobStatus = new Map<string, 'active' | 'pending' | 'success' | 'failed' | 'cancelled' | 'timeout'>();
 
 /**
  * audioMONASTRY Server – VENDOR-/CLOUD-FREI.
@@ -654,7 +654,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
         signal: AbortSignal.timeout(STEM_JOB_TIMEOUT_MS),
       });
       const data = await resp.json() as any;
-      if (idempotencyKey) stemJobStatus.set(idempotencyKey, resp.ok ? 'failed' : 'failed');
+      if (idempotencyKey) stemJobStatus.set(idempotencyKey, resp.ok ? 'success' : 'failed');
       res.status(resp.status).json(data);
       return;
     } catch (e) {
@@ -664,9 +664,11 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
       return;
     } finally {
       stemActiveJobs = Math.max(0, stemActiveJobs - 1);
-      // Idempotency-Key nach Abschluss freigeben (kein Zombie-Job).
+      // P-14-Fix: Idempotency-Key sofort nach Abschluss freigeben – die Sperre
+      // gilt nur für den aktiven Job. Legitime Retries (auch nach Fehlschlag)
+      // sind damit sofort wieder möglich.
       if (idempotencyKey) {
-        setTimeout(() => stemJobStatus.delete(idempotencyKey), 60_000);
+        stemJobStatus.delete(idempotencyKey);
       }
       void jobId;
     }

@@ -40,6 +40,19 @@ class WebRTCManager {
 
   public onRemoteStream: (stream: MediaStream, senderId: string) => void = () => {};
   public onDataChannelMessage: (message: any) => void = () => {};
+  // Mehrfach-Listener (F2-Fix): Mehrere Verbraucher (SessionSync, ModuleState,
+  // Transport-Adapter) können gleichzeitig Peer-Nachrichten empfangen.
+  private dataChannelListeners = new Set<(message: any) => void>();
+
+  public addDataChannelListener(cb: (message: any) => void): () => void {
+    this.dataChannelListeners.add(cb);
+    return () => { this.dataChannelListeners.delete(cb); };
+  }
+
+  private dispatchDataMessage(data: any): void {
+    this.onDataChannelMessage(data);
+    this.dataChannelListeners.forEach((l) => l(data));
+  }
   /** Wird bei jeder Änderung der Session (Join/Peer-Join/Peer-Left/Voll) aufgerufen. */
   public onSessionUpdate: (info: SessionInfo) => void = () => {};
 
@@ -178,7 +191,7 @@ class WebRTCManager {
 
     // DCT-102: Socket.io-Relay-Fallback für Plugin-/AUTO_AI-State.
     this.socket.on('plugin-state', (data: any) => {
-      this.onDataChannelMessage(data);
+      if (data && typeof data === 'object') this.dispatchDataMessage(data);
     });
 
     this.socket.on('peer-joined', (data: any) => {
@@ -285,7 +298,15 @@ class WebRTCManager {
     pc.ondatachannel = (e) => {
       this.dataChannels.set(targetId, e.channel);
       e.channel.onmessage = (msg) => {
-        const data = JSON.parse(msg.data);
+        // F3-Fix: Peer-Frames sind untrusted – kaputte Frames verwerfen, nie werfen.
+        let data: any;
+        try {
+          data = JSON.parse(msg.data);
+        } catch {
+          console.warn('[webrtc] Ungültiger DataChannel-Frame verworfen.');
+          return;
+        }
+        if (!data || typeof data !== 'object') return;
         if (data.type === 'CLOCK_PING') {
             e.channel.send(JSON.stringify({ type: 'CLOCK_PONG', pingTime: data.timestamp, pongTime: performance.now() }));
         }
@@ -296,7 +317,7 @@ class WebRTCManager {
             // One-Way-Latenz für die Telemetrie (RTT/2).
             this.lastRttMs = Math.max(0, (performance.now() - data.timestamp) / 2);
         }
-        this.onDataChannelMessage(data);
+        this.dispatchDataMessage(data);
         // console.log('Data from', targetId, data);
       };
     };
