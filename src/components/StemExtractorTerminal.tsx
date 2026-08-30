@@ -8,6 +8,7 @@ import { routeStemToMixer } from '../utils/StemRouter';
 import { splitStemsLocally, LocalStemUrls } from '../utils/stemSplitter';
 import { separateStemsWithDemucs } from '../ai/localDemucs';
 import { MoaAssistant } from './MoaAssistant';
+import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } from '../utils/stemUsage';
 
 export const StemExtractorTerminal = React.memo(function StemExtractorTerminal() {
   const { addSample } = useSamples();
@@ -17,6 +18,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   const [progress, setProgress] = useState(0);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [usage, setUsage] = useState(loadStemUsage);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -64,25 +66,30 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
 
     let stems: LocalStemUrls | null = null;
     let realStems: { drums: string; bass: string; other: string; vocals: string } | null = null;
+    let usedProvider: StemProvider = 'fallback';
 
     // 1) ECHTES HTDemucs-ONNX-Modell (100% Inferenz, WebGPU/WASM).
     try {
       realStems = await separateStemsWithDemucs(file, (p) => setProgress(p));
+      if (realStems) usedProvider = 'local';
     } catch (e) {
       console.warn('Demucs-ONNX nicht verfügbar – DSP-Notfall übernimmt.', e);
     }
 
     if (!realStems) {
-      // 2) Server-/stem-ai-Pfad.
+      // 2) Server-/stem-ai-/Replicate-Pfad.
       try {
         const stream = streamStems(file);
-        let finalData: { stems?: Partial<LocalStemUrls> } | null = null;
+        let finalData: { stems?: Partial<LocalStemUrls>; provider?: string } | null = null;
         for await (const update of stream) {
           if (typeof update === 'number') {
             setProgress(update);
           } else {
             finalData = update;
           }
+        }
+        if (finalData?.provider === 'replicate' || finalData?.provider === 'stem-ai' || finalData?.provider === 'fallback') {
+          usedProvider = finalData.provider;
         }
         if (finalData?.stems && Object.values(finalData.stems).some((u) => typeof u === 'string' && u.length > 0)) {
           stems = finalData.stems as LocalStemUrls;
@@ -106,6 +113,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
 
     setIsExtracting(false);
     setProgress(100);
+    setUsage(recordStemExtraction(usedProvider));
 
     if (realStems) {
       const realMap: Record<string, string> = {
@@ -168,6 +176,14 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
             <option value="AUTO_AI">AI</option>
             <option value="PRO">ACTIVE</option>
         </select>
+      </div>
+
+      <div className="mb-4 px-3 py-2 rounded-lg border border-neutral-800 bg-black/30 text-[10px] font-mono text-neutral-400 flex items-center justify-between">
+        <span>
+          Stem-Zähler: <span className="text-neutral-200">{usage.count}</span> Extraktionen
+          {usage.lastProvider ? <> · letzter Provider: <span className="text-neutral-200 uppercase">{usage.lastProvider}</span></> : null}
+        </span>
+        <span title="Geschätzte Cloud-Kosten (lokal = 0)">≈ {formatUsd(usage.estimatedCostUsd)}</span>
       </div>
 
       {error && (

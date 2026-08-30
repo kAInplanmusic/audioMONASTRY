@@ -65,8 +65,22 @@ export const useAudioAI = () => {
                 if (line.startsWith('data: ')) {
                     const data = JSON.parse(line.slice(6));
                     if (data.progress) yield data.progress;
-                    if (data.status === 'success') return { status: 'success', stems: data.stems };
+                    if (data.status === 'success') {
+                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server' };
+                    }
                 }
+            }
+
+            // Nicht-SSE-Antworten (z. B. Replicate-Pfad liefert Plain-JSON):
+            // Buffer als Ganzes parsen, falls er ein fertiges JSON-Objekt ist.
+            const trimmed = buffer.trim();
+            if (trimmed.startsWith('{')) {
+                try {
+                    const data = JSON.parse(trimmed);
+                    if (data.status === 'success') {
+                        return { status: 'success', stems: data.stems, provider: (data.provider as string | undefined) ?? 'server' };
+                    }
+                } catch { /* kein JSON – ignorieren */ }
             }
         }
     } catch (error) {
@@ -78,6 +92,7 @@ export const useAudioAI = () => {
         }
         return {
             status: 'mocked',
+            provider: 'fallback',
             stems: {
                 vocals: 'mock_url_vocals',
                 melody: 'mock_url_melody',
