@@ -5,6 +5,7 @@ import { DropTarget } from './DropTarget';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
+import { isTrustedMediaUrl } from '../utils/mediaUrlGuard';
 import { storageGetJson, storageSetJson } from '../utils/storage';
 import { SampleModuleWrapper } from './SampleModuleWrapper';
 import { MoaAssistant } from './MoaAssistant';
@@ -109,6 +110,8 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
 
   const playStepSample = useCallback((sample: AudioSample) => {
     if (sample.url) {
+      // F4-Fix: Peer-gesteuerte URLs nur nach Allowlist laden.
+      if (!isTrustedMediaUrl(sample.url)) return;
       try {
         const a = new Audio(sample.url);
         a.volume = 0.9;
