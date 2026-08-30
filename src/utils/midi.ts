@@ -146,3 +146,6 @@ export class NrpnParser {
     this.hasLsb = false;
   }
 }
+
+// RPN-Parser (Audit G10): liegt im vollständigen MIDI-1.0-Codec des Core.
+export { RpnParser, MidiStreamParser, midiClock, midiStart, midiStop, midiContinue, midiSongPosition, midiPolyAftertouch, midiChannelAftertouch, rpn } from '../core/hardware/midiCodec';

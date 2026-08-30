@@ -41,42 +41,94 @@ struct AudioDevice {
     id: String,
     name: String,
     direction: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default_sample_rate: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    channels: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    buffer_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sample_format: Option<String>,
 }
 
-fn list_devices_cpal() -> Vec<AudioDevice> {
+impl AudioDevice {
+    fn with_direction(id: String, name: String, direction: &str) -> Self {
+        Self {
+            id,
+            name,
+            direction: direction.to_string(),
+            default_sample_rate: None,
+            channels: None,
+            buffer_size: None,
+            sample_format: None,
+        }
+    }
+}
+
+/// Host-Id → App-Backend-Kennung (WASAPI/ASIO/CoreAudio/PipeWire/ALSA/JACK).
+fn backend_kind(host_id: &str) -> &'static str {
+    let h = host_id.to_lowercase();
+    if h.contains("wasapi") { "wasapi" }
+    else if h.contains("asio") { "asio" }
+    else if h.contains("coreaudio") { "coreaudio" }
+    else if h.contains("pipewire") { "pipewire" }
+    else if h.contains("jack") { "jack" }
+    else if h.contains("alsa") { "alsa" }
+    else { "unknown" }
+}
+
+fn list_devices_cpal() -> (String, String, Vec<AudioDevice>) {
     let mut devices = Vec::new();
     let host = cpal::default_host();
+    let host_id = format!("{:?}", host.id());
+    let backend = backend_kind(&host_id).to_string();
 
     if let Ok(outputs) = host.output_devices() {
         for device in outputs {
             let name = device.name().unwrap_or_else(|_| "Output Device".to_string());
-            devices.push(AudioDevice {
-                id: format!("out:{name}"),
-                name: name.clone(),
-                direction: "output".to_string(),
-            });
+            let mut info = AudioDevice::with_direction(format!("out:{name}"), name.clone(), "output");
+            if let Ok(cfg) = device.default_output_config() {
+                info.default_sample_rate = Some(cfg.sample_rate().0);
+                info.channels = Some(cfg.channels());
+                info.buffer_size = match cfg.buffer_size() {
+                    // cpal meldet bei manchen ALSA-Geräten u32::MAX als
+                    // Sentinel – das ist kein nutzbarer Wert, also `None`.
+                    cpal::SupportedBufferSize::Range { max, .. } if *max <= 1_000_000 => Some(*max),
+                    _ => None,
+                };
+                info.sample_format = Some(format!("{:?}", cfg.sample_format()));
+            }
+            devices.push(info);
         }
     }
 
     if let Ok(inputs) = host.input_devices() {
         for device in inputs {
             let name = device.name().unwrap_or_else(|_| "Input Device".to_string());
-            devices.push(AudioDevice {
-                id: format!("in:{name}"),
-                name,
-                direction: "input".to_string(),
-            });
+            let mut info = AudioDevice::with_direction(format!("in:{name}"), name, "input");
+            if let Ok(cfg) = device.default_input_config() {
+                info.default_sample_rate = Some(cfg.sample_rate().0);
+                info.channels = Some(cfg.channels());
+                info.buffer_size = match cfg.buffer_size() {
+                    // cpal meldet bei manchen ALSA-Geräten u32::MAX als
+                    // Sentinel – das ist kein nutzbarer Wert, also `None`.
+                    cpal::SupportedBufferSize::Range { max, .. } if *max <= 1_000_000 => Some(*max),
+                    _ => None,
+                };
+                info.sample_format = Some(format!("{:?}", cfg.sample_format()));
+            }
+            devices.push(info);
         }
     }
 
     if devices.is_empty() {
-        devices.push(AudioDevice {
-            id: "default".to_string(),
-            name: "Default Audio Device".to_string(),
-            direction: "output".to_string(),
-        });
+        devices.push(AudioDevice::with_direction(
+            "default".to_string(),
+            "Default Audio Device".to_string(),
+            "output",
+        ));
     }
-    devices
+    (host_id, backend, devices)
 }
 
 /// Startet einen echten 440-Hz-Testton-Stream auf dem Gerät.
@@ -260,12 +312,15 @@ fn handle(message: &IpcMessage) -> IpcResponse {
             error: None,
             payload: Some(json!({ "pong": true, "runtime": "audiomonastry-runtime" })),
         },
-        "device.list" => IpcResponse {
-            id: message.id.clone(),
-            ok: true,
-            error: None,
-            payload: Some(json!({ "devices": list_devices_cpal() })),
-        },
+        "device.list" => {
+            let (host, backend, devices) = list_devices_cpal();
+            IpcResponse {
+                id: message.id.clone(),
+                ok: true,
+                error: None,
+                payload: Some(json!({ "host": host, "backend": backend, "devices": devices })),
+            }
+        }
         "device.open" => {
             let device_id = message
                 .payload

@@ -101,7 +101,64 @@ export type { NativeAudioBackend, NativeAudioDevice } from './native/NativeAudio
 // 8.2.2/8.2.3 – Hardware-Simulator & Hotplug
 export { HardwareSimulator, hardwareSimulator } from './hardware/HardwareSimulator';
 export { HotplugManager, hotplugManager } from './hardware/HotplugManager';
-export type { HardwareDevice, HardwareState } from './hardware/HotplugManager';
+export type { HardwareDevice, HardwareState, HotplugEvent, HotplugEventKind } from './hardware/HotplugManager';
+
+// 8.2.4 – Control-Event-Abstraktion + Codecs (transportagnostisch)
+export {
+  controlMessageToEvent, eventToControlMessage, normalizeControlValue, nowMs,
+} from './hardware/controlEvent';
+export {
+  MidiStreamParser, ParameterNumberParser, RpnParser,
+  midiClock, midiStart, midiStop, midiContinue, midiSongPosition,
+  midiPolyAftertouch, midiChannelAftertouch, rpn, nrpn,
+} from './hardware/midiCodec';
+export type { ParsedMidiEvent } from './hardware/midiCodec';
+export {
+  parseHidReportDescriptor, extractHidReportValues, normalizeRelative,
+} from './hardware/hidReport';
+export type { HidReportDescriptor, HidReportField, HidReportValue } from './hardware/hidReport';
+export {
+  encodeOscMessage, encodeOscBundle, encodeOscPacket,
+  decodeOscMessage, decodeOscPacket, ntpTimetag, timetagToMs, parseControlAddress,
+} from './hardware/oscCodec';
+export type { OscArgument, OscMessage, OscBundle, OscPacket } from './hardware/oscCodec';
+export {
+  DeviceProfileStore, deviceProfileStore, buildProfileId, fingerprintMatches,
+} from './hardware/deviceProfile';
+export type { DeviceFingerprint, DeviceProfile, DeviceProfileSettings } from './hardware/deviceProfile';
+export { HardwareDiagnostics, hardwareDiagnostics } from './hardware/diagnostics';
+export type { HardwareEventKind, HardwareLogEntry } from './hardware/diagnostics';
+
+// 8.2.5 – Mapping-Engine (ControlEvent → App-Parameter)
+export { MappingEngine, ruleMatches } from './mapping/MappingEngine';
+export type { MappingRule, MappingKind, MappedParameter } from './mapping/MappingEngine';
+export { MappingStore, mappingStore } from './mapping/MappingStore';
+export type { MappingBundle } from './mapping/MappingStore';
+
+// 8.2.6 – MIDI 2.0 / UMP-Codec
+export {
+  parseUmpPacket, parseUmpMidi1ChannelVoice, parseUmpMidi2,
+  encodeUmpMidi1ChannelVoice, encodeUmpMidi2NoteOn, encodeUmpMidi2NoteOff,
+  encodeUmpMidi2Controller, encodeUmpMidi2PitchBend, encodeUmpMidi2ChannelPressure,
+  midi1BytesToUmp, umpMidi1ToBytes, umpWordCount,
+} from './hardware/ump';
+export type { UmpPacket, ParsedUmp, UmpMidi2NoteOn, UmpMidi2Controller } from './hardware/ump';
+
+// 8.2.7 – OSC-Bridge-Logik (OSC ↔ MIDI ↔ ControlEvent)
+export {
+  oscPacketToControlEvents, oscMessageToControlEvents, controlEventToOsc, midiBytesToBridgeOsc,
+} from './hardware/oscBridge';
+export type { BridgeMessage, BridgeOscMessage, BridgeMidiMessage } from './hardware/oscBridge';
+
+// 8.2.8 – Native Runtime Audio Backend (cpal-IPC → IAudioDeviceBackend)
+export { NativeRuntimeAudioBackend } from './audio/runtime/NativeRuntimeAudioBackend';
+export type { NativeDeviceInfo } from './audio/runtime/NativeRuntimeClient';
+
+// 8.2.9 – ControlHub (Adapter-Registry + Event-Bus) & Translation-Layer
+export { ControlHub, controlHub } from './hardware/ControlHub';
+export type { ControlHubDeviceState } from './hardware/ControlHub';
+export { TranslationLayer } from './hardware/translationLayer';
+export type { TranslationRule, TranslationResult } from './hardware/translationLayer';
 
 // R4 – WebGPU-Spatialization
 export { spatialConvolve, cpuSpatialConvolve } from './gpu/SpatialConvKernel';

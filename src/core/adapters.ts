@@ -4,6 +4,9 @@
  * Konkrete, funktionale Referenzimplementierungen hinter den Abstraktions-
  * Interfaces. Diese Adapter wrappen die bereits vorhandene Engine-Logik
  * (WebRTCManager, spatialMath) und bieten saubere Fallback-Ketten.
+ *
+ * Hardware-Adapter (WebMIDI/HID/OSC) erzeugen sowohl das Legacy-
+ * `ControlMessage` als auch das transportagnostische `ControlEvent`.
  */
 import { webRTCManager } from '../utils/WebRTCManager';
 import {
@@ -11,10 +14,25 @@ import {
 } from '../utils/spatialMath';
 import { workerPool } from './workers/WorkerPool';
 import {
-  AIBackendKind, AIResult, AudioSignal, ComputeMode, ControlMessage,
-  IAudioBackend, IAIRuntime, IComputeBackend, IComputeJob, IHardwareAdapter,
-  ISpatialRenderer, SpatialSource, ITransport, TransportMode,
+  AIBackendKind, AIResult, AudioSignal, ComputeMode, ControlEvent,
+  ControlMessage, IAudioBackend, IAIRuntime, IComputeBackend, IComputeJob,
+  IHardwareAdapter, ISpatialRenderer, SpatialSource, ITransport, TransportMode,
 } from './interfaces';
+import {
+  MidiStreamParser, ParsedMidiEvent, rpn, nrpn, midiClock, midiStart,
+  midiContinue, midiStop, midiSongPosition, midiEventToControlMessage,
+  encodeControlMessage,
+} from './hardware/midiCodec';
+// Rückwärtskompatibler Re-Export (Funktionen liegen jetzt im MIDI-Codec).
+export { midiEventToControlMessage, encodeControlMessage } from './hardware/midiCodec';
+import {
+  HidReportDescriptor, HidReportField, HidReportType,
+  extractHidReportValues, encodeHidOutputReport,
+} from './hardware/hidReport';
+import {
+  decodeOscPacket, encodeOscMessage, OscArgument, OscMessage, parseControlAddress,
+} from './hardware/oscCodec';
+import { controlMessageToEvent, nowMs } from './hardware/controlEvent';
 
 // ---------------------------------------------------------------------------
 // 1.1.6 · WebRTCTransport  (Referenz für ITransport)
@@ -158,11 +176,13 @@ export class SpatialRenderer implements ISpatialRenderer {
       for (let i = 0; i < mono.length; i++) buf[i] = mono[i] * g;
       out.push(buf);
     }
+    void hrtf; // HRTF-Anteil fließt über spatialMath-Panning ein
     return { channelData: out, sampleRate: signal.sampleRate };
   }
 }
 
 export const spatialRenderer = new SpatialRenderer();
+
 
 // ---------------------------------------------------------------------------
 // 1.1.5 · WebMIDIAdapter  (Referenz für IHardwareAdapter)
@@ -170,108 +190,326 @@ export const spatialRenderer = new SpatialRenderer();
 export class WebMIDIAdapter implements IHardwareAdapter {
   readonly id = 'webmidi';
   private _onControl: (msg: ControlMessage) => void = () => {};
+  private _onControlEvent: (ev: ControlEvent) => void = () => {};
   private access: MIDIAccess | null = null;
+  private parsers = new Map<string, MidiStreamParser>();
+  private outputs: MIDIOutput[] = [];
+  private stateChangeHandler: ((e: Event) => void) | null = null;
+  private midiHandlers = new Map<string, (e: MIDIMessageEvent) => void>();
 
   onControl(cb: (msg: ControlMessage) => void): void { this._onControl = cb; }
+  onControlEvent(cb: (ev: ControlEvent) => void): void { this._onControlEvent = cb; }
 
   async connect(): Promise<void> {
-    if (!navigator?.requestMIDIAccess) throw new Error('Web MIDI nicht verfügbar');
-    this.access = await navigator.requestMIDIAccess();
-    this.access.inputs.forEach((port) => {
-      port.onmidimessage = (e) => {
-        const [status, d1, d2] = e.data;
-        const chan = (status & 0x0f) + 1;
-        const kind = (status >> 4) as 0x8 | 0x9 | 0xB | 0xC | 0xE;
-        let k: ControlMessage['kind'];
-        switch (kind) {
-          case 0x8: k = 'noteOff'; break;
-          case 0x9: k = d2 > 0 ? 'noteOn' : 'noteOff'; break;
-          case 0xB: k = 'cc'; break;
-          case 0xC: k = 'program'; break;
-          case 0xE: k = 'pitch'; break;
-          default: k = 'cc';
+    if (typeof navigator === 'undefined' || !navigator.requestMIDIAccess) {
+      throw new Error('Web MIDI nicht verfügbar');
+    }
+    // SysEx bevorzugt; manche Browser verweigern das → Fallback ohne SysEx.
+    try {
+      this.access = await navigator.requestMIDIAccess({ sysex: true });
+    } catch {
+      this.access = await navigator.requestMIDIAccess();
+    }
+    this.bindPorts(this.access);
+    this.stateChangeHandler = () => {
+      if (this.access) this.bindPorts(this.access);
+    };
+    this.access.onstatechange = this.stateChangeHandler;
+  }
+
+  private bindPorts(access: MIDIAccess): void {
+    const currentIds = new Set<string>();
+    access.inputs.forEach((port) => {
+      currentIds.add(port.id);
+      if (!this.parsers.has(port.id)) this.parsers.set(port.id, new MidiStreamParser());
+      const parser = this.parsers.get(port.id)!;
+      const deviceId = port.id;
+
+      // addEventListener statt onmidimessage: koexistiert mit dem useMIDI-Hook
+      // (der die Legacy-Property nutzt) und weiteren ControlHub-Listenern.
+      if (this.midiHandlers.has(port.id)) return;
+      const handler = (e: MIDIMessageEvent) => {
+        const events = parser.push(e.data as unknown as ArrayLike<number>);
+        for (const ev of events) {
+          const msg = midiEventToControlMessage(ev);
+          this._onControl(msg);
+          this._onControlEvent(controlMessageToEvent(msg, deviceId, 'midi'));
         }
-        // Bei Program-Change trägt d1 die Programmnummer (d2 ist ungenutzt).
-        this._onControl({ kind: k, idNum: d1, value: kind === 0xC ? d1 : d2, channel: chan });
       };
+      this.midiHandlers.set(port.id, handler);
+      try {
+        port.addEventListener?.('midimessage', handler as EventListener);
+      } catch {
+        // Fallback für sehr alte Implementierungen.
+        port.onmidimessage = handler;
+      }
     });
+    // Entfernte Ports aufräumen.
+    for (const [id, handler] of [...this.midiHandlers]) {
+      if (!currentIds.has(id)) {
+        const port = access.inputs.get(id);
+        if (port) {
+          try { port.removeEventListener?.('midimessage', handler as EventListener); } catch { /* ignore */ }
+          if (port.onmidimessage === (handler as unknown as typeof port.onmidimessage)) port.onmidimessage = null;
+        }
+        this.midiHandlers.delete(id);
+        this.parsers.delete(id);
+      }
+    }
+    this.outputs = Array.from(access.outputs.values());
   }
 
   disconnect(): void {
-    this.access?.inputs.forEach((p) => { p.onmidimessage = null; });
+    if (this.access) {
+      this.access.onstatechange = null;
+      this.access.inputs.forEach((p) => {
+        const handler = this.midiHandlers.get(p.id);
+        if (handler) {
+          try { p.removeEventListener?.('midimessage', handler as EventListener); } catch { /* ignore */ }
+          if (p.onmidimessage === (handler as unknown as typeof p.onmidimessage)) p.onmidimessage = null;
+        }
+      });
+    }
+    this.midiHandlers.clear();
+    this.parsers.clear();
+    this.outputs = [];
+    this.access = null;
   }
 
-  send(_msg: ControlMessage): void { /* Rück-Kanal (LEDs) – best-effort, hier no-op. */ }
+  send(msg: ControlMessage): void {
+    const bytes = encodeControlMessage(msg);
+    if (bytes.length === 0) return;
+    for (const out of this.outputs) {
+      try { out.send(bytes); } catch { /* Port getrennt – best effort */ }
+    }
+  }
 }
+
 
 export const webMIDIAdapter = new WebMIDIAdapter();
 
 // ---------------------------------------------------------------------------
-// 1.1.5 · HIDAdapter – WebHID-Controller (Pads/Fader/Rotaries)
+// 1.1.5 · HIDAdapter – generische WebHID-Anbindung (Report-Descriptoren)
 // ---------------------------------------------------------------------------
+
+interface WebHidLikeDevice {
+  vendorId?: number;
+  productId?: number;
+  productName?: string;
+  opened?: boolean;
+  open?: () => Promise<void>;
+  close?: () => void;
+  collections?: WebHidCollection[];
+  oninputreport?: ((e: { data?: Uint8Array | DataView }) => void) | null;
+}
+
+interface WebHidCollection {
+  usagePage?: number;
+  usage?: number;
+  inputReports?: WebHidReport[];
+  outputReports?: WebHidReport[];
+  featureReports?: WebHidReport[];
+  children?: WebHidCollection[];
+}
+
+interface WebHidReport {
+  reportId?: number;
+  items?: WebHidItem[];
+}
+
+interface WebHidItem {
+  usagePage?: number;
+  usages?: number[];
+  usageMinimum?: number;
+  usageMaximum?: number;
+  reportSize?: number;
+  reportCount?: number;
+  logicalMinimum?: number;
+  logicalMaximum?: number;
+  isAbsolute?: boolean;
+}
+
+/** Baut Feld-Definitionen aus WebHID-Collections (Browser hat Descriptor geparst). */
+export function fieldsFromWebHidCollections(collections: WebHidCollection[] | undefined): HidReportDescriptor {
+  const fields: HidReportField[] = [];
+  const usagePages = new Set<number>();
+  const usages = new Set<number>();
+
+  const walk = (cols: WebHidCollection[], reportType: HidReportType): void => {
+    for (const col of cols) {
+      const reports = reportType === 'input'
+        ? col.inputReports
+        : reportType === 'output'
+          ? col.outputReports
+          : col.featureReports;
+      for (const report of reports ?? []) {
+        let bitOffset = 0;
+        for (const item of report.items ?? []) {
+          const count = Math.max(1, item.reportCount ?? 1);
+          const size = Math.max(1, item.reportSize ?? 1);
+          const usagesList = item.usages ?? [];
+          const hasRange = item.usageMinimum !== undefined && item.usageMaximum !== undefined;
+          for (let i = 0; i < count; i++) {
+            const usage = usagesList[i] ?? (hasRange ? (item.usageMinimum ?? 0) + i : item.usageMinimum ?? 0);
+            const page = item.usagePage ?? 0;
+            usagePages.add(page);
+            usages.add(usage);
+            fields.push({
+              reportId: report.reportId ?? 0,
+              reportType,
+              usagePage: page,
+              usage,
+              bitOffset: bitOffset + i * size,
+              bitSize: size,
+              logicalMin: item.logicalMinimum ?? 0,
+              logicalMax: item.logicalMaximum ?? 1,
+              isRelative: item.isAbsolute === false,
+              isArray: usagesList.length === 0 && hasRange,
+            });
+          }
+          bitOffset += count * size;
+        }
+      }
+      walk(col.children ?? [], reportType);
+    }
+  };
+  walk(collections ?? [], 'input');
+  walk(collections ?? [], 'output');
+  walk(collections ?? [], 'feature');
+
+  return {
+    fields,
+    usagePages: [...usagePages].sort((a, b) => a - b),
+    usages: [...usages].sort((a, b) => a - b),
+  };
+}
+
 export class HIDAdapter implements IHardwareAdapter {
   readonly id = 'hid';
 
   private _onControl: (msg: ControlMessage) => void = () => {};
-  private devices: unknown[] = [];
+  private _onControlEvent: (ev: ControlEvent) => void = () => {};
+  private devices: WebHidLikeDevice[] = [];
+  private descriptors = new Map<WebHidLikeDevice, HidReportDescriptor>();
 
   onControl(cb: (msg: ControlMessage) => void): void { this._onControl = cb; }
+  onControlEvent(cb: (ev: ControlEvent) => void): void { this._onControlEvent = cb; }
 
   async connect(): Promise<void> {
     const nav = navigator as unknown as {
-      hid?: { requestDevice: (opts: { filters: unknown[] }) => Promise<unknown[]> };
+      hid?: { requestDevice: (opts: { filters: unknown[] }) => Promise<WebHidLikeDevice[]> };
     };
     if (!nav?.hid?.requestDevice) throw new Error('WebHID nicht verfügbar');
     const devices = await nav.hid.requestDevice({ filters: [] });
     this.devices = devices;
     for (const raw of devices) {
-      const d = raw as {
-        opened?: boolean;
-        open?: () => Promise<void>;
-        oninputreport?: ((e: { data?: Uint8Array }) => void) | null;
-      };
-      if (!d.opened && d.open) await d.open().catch(() => { /* Gerät blockiert */ });
-      d.oninputreport = (e) => {
+      if (!raw.opened && raw.open) {
+        try { await raw.open(); } catch { /* Gerät blockiert – überspringen */ }
+      }
+      const descriptor = fieldsFromWebHidCollections(raw.collections);
+      this.descriptors.set(raw, descriptor);
+      raw.oninputreport = (e) => {
         const data = e.data;
-        if (!data || data.length < 2) return;
-        // Pragmatisches Mapping: erster Byte = Control-ID, zweiter = Wert (0..255).
-        this._onControl({
-          kind: 'cc',
-          idNum: data[0] ?? 0,
-          value: Math.min(127, Math.round((data[1] ?? 0) / 2)),
-          channel: 1,
-        });
+        if (!data || data.byteLength === 0) return;
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        const values = extractHidReportValues(bytes, descriptor);
+        for (const v of values) {
+          this.emitHidValue(raw, v.field.usagePage, v.field.usage, v.raw, v.normalized01, v.field);
+        }
       };
     }
+  }
+
+  private emitHidValue(device: WebHidLikeDevice, usagePage: number, usage: number, raw: number, normalized01: number, field: HidReportField): void {
+    // Eindeutige numerische Adresse: UsagePage in den oberen 16 Bit.
+    const parameter = ((usagePage & 0xffff) * 65536) + (usage & 0xffff);
+    const resolution = Math.max(1, field.logicalMax - field.logicalMin);
+    const semantics = field.isRelative ? 'relative'
+      : usagePage === 0x09 ? 'momentary'
+      : 'absolute';
+    const ev: ControlEvent = {
+      sourceDevice: `${device.vendorId?.toString(16) ?? '0000'}:${device.productId?.toString(16) ?? '0000'}`,
+      sourceProtocol: 'hid',
+      channel: 0,
+      parameter,
+      value: raw,
+      resolution,
+      messageType: 'cc',
+      timestamp: nowMs(),
+      semantics,
+      address: `hid:0x${usagePage.toString(16)}:0x${usage.toString(16)}`,
+    };
+    this._onControlEvent(ev);
+    // Legacy-Äquivalent: 7-Bit-kompatibles CC (Buttons/Fader direkt nutzbar).
+    const v7 = Math.max(0, Math.min(127, Math.round(normalized01 * 127)));
+    this._onControl({ kind: 'cc', idNum: parameter & 0x7f, value: v7, channel: 1 });
   }
 
   disconnect(): void {
     for (const raw of this.devices) {
-      const d = raw as { close?: () => void };
-      try { d.close?.(); } catch { /* ignore */ }
+      if (raw.oninputreport) raw.oninputreport = null;
+      try { raw.close?.(); } catch { /* ignore */ }
     }
     this.devices = [];
+    this.descriptors.clear();
   }
 
-  send(_msg: ControlMessage): void { /* HID-Rückkanal (LEDs) – best effort, no-op. */ }
+  send(msg: ControlMessage): void {
+    // HID-Rückkanal (LEDs/Motorfader): schreibt Output-Reports, wenn der
+    // Descriptor passende Output-Felder enthält. Die Adresse folgt der
+    // emitHidValue-Kodierung: usagePage in den oberen, usage in den unteren
+    // 16 Bit von `idNum`. Ohne Output-Deskriptor bleibt der Aufruf no-op
+    // (dokumentierter Best-Effort, kein Fake).
+    if (!Number.isFinite(msg.idNum) || msg.idNum < 0) return;
+    const usagePage = Math.floor(msg.idNum / 65536) & 0xffff;
+    const usage = msg.idNum % 65536;
+
+    for (const device of this.devices) {
+      const descriptor = this.descriptors.get(device);
+      if (!descriptor) continue;
+      const outputFields = descriptor.fields.filter((f) => f.reportType === 'output');
+      if (outputFields.length === 0) continue;
+
+      const field = outputFields.find((f) => f.usagePage === usagePage && f.usage === usage);
+      if (!field) continue;
+
+      const span = field.logicalMax - field.logicalMin;
+      const raw = span > 0
+        ? field.logicalMin + (Math.max(0, Math.min(127, msg.value)) / 127) * span
+        : msg.value > 0 ? field.logicalMax : field.logicalMin;
+
+      const data = encodeHidOutputReport(descriptor.fields, 'output', field.reportId, [
+        { usagePage, usage, raw },
+      ]);
+      if (data.length === 0) continue;
+
+      const out = device as WebHidLikeDevice & { sendReport?: (reportId: number, data: Uint8Array) => Promise<void> };
+      try {
+        void out.sendReport?.(field.reportId, data);
+      } catch { /* Gerät getrennt – Best Effort */ }
+    }
+  }
 }
 
 export const hidAdapter = new HIDAdapter();
 
 // ---------------------------------------------------------------------------
-// 1.1.5 · OSCAdapter – OSC-/Netzwerk-Controller (Produktions-Scaffold)
+// 1.1.5 · OSCAdapter – echter OSC-Codec (UDP via Server-Bridge/WS-Transport)
 // ---------------------------------------------------------------------------
 export class OSCAdapter implements IHardwareAdapter {
   readonly id = 'osc';
 
   private ws: WebSocket | null = null;
   private _onControl: (msg: ControlMessage) => void = () => {};
+  private _onControlEvent: (ev: ControlEvent) => void = () => {};
 
   constructor(private url = 'ws://127.0.0.1:9000') {}
 
   onControl(cb: (msg: ControlMessage) => void): void { this._onControl = cb; }
+  onControlEvent(cb: (ev: ControlEvent) => void): void { this._onControlEvent = cb; }
 
   async connect(): Promise<void> {
+    if (typeof WebSocket === 'undefined') throw new Error('WebSocket nicht verfügbar');
     this.ws = new WebSocket(this.url);
     await new Promise<void>((resolve, reject) => {
       this.ws!.onopen = () => resolve();
@@ -286,34 +524,86 @@ export class OSCAdapter implements IHardwareAdapter {
   }
 
   send(msg: ControlMessage): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      // JSON-Fallback für Tools ohne natives OSC; Produktivpfad kann hier
-      // echtes OSC-Encoding (Big-Endian) ergänzen.
-      this.ws.send(JSON.stringify(msg));
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    // Echtes OSC (Big-Endian): /control/<kind>/<id> mit Args [value, channel].
+    const address = `/control/${msg.kind}/${Math.max(0, Math.round(msg.idNum))}`;
+    const args: OscArgument[] = [
+      { type: 'f', value: msg.value },
+      { type: 'i', value: msg.channel },
+    ];
+    try {
+      this.ws.send(encodeOscMessage(address, args));
+    } catch {
+      // Transportfehler isolieren – App bleibt stabil.
     }
   }
 
-  /** Versteht `/control/<kind>/<idNum>/<value>[/<channel>]` (Text-OSC-Fallback). */
+  /** Versteht binäre OSC-Pakete und (legacy) Text-Pfade. */
   private handleIncoming(data: unknown): void {
     try {
-      const text = typeof data === 'string'
+      if (typeof data === 'string') {
+        this.handleText(data);
+        return;
+      }
+      const bytes = data instanceof Uint8Array
         ? data
-        : new TextDecoder().decode(data as ArrayBuffer);
-      const m = /^\/control\/([a-zA-Z]+)\/(\d+)\/([-0-9.]+)(?:\/(\d+))?/.exec(text.trim());
-      if (!m) return;
-      const rawKind = m[1].toLowerCase();
-      const kind: ControlMessage['kind'] =
-        rawKind === 'noteon' ? 'noteOn'
-        : rawKind === 'noteoff' ? 'noteOff'
-        : rawKind === 'cc' ? 'cc'
-        : 'osc';
-      this._onControl({
-        kind,
-        idNum: Math.max(0, Math.min(127, Number(m[2]) || 0)),
-        value: Math.max(0, Math.min(127, Number(m[3]) || 0)),
-        channel: m[4] ? Math.max(1, Math.min(16, Number(m[4]))) : 1,
-      });
-    } catch { /* Nicht-Text-Payload ignorieren */ }
+        : data instanceof ArrayBuffer
+          ? new Uint8Array(data)
+          : null;
+      if (!bytes) return;
+      const packet = decodeOscPacket(bytes);
+      const messages: OscMessage[] = packet.kind === 'bundle'
+        ? packet.elements.filter((p): p is OscMessage => p.kind === 'message')
+        : [packet];
+      for (const m of messages) this.handleOscMessage(m);
+    } catch { /* Nicht-OSC-Payload ignorieren */ }
+  }
+
+  private handleOscMessage(m: OscMessage): void {
+    const parsed = parseControlAddress(m.address);
+    if (!parsed) return;
+    const value = m.args[0]?.type === 'f' || m.args[0]?.type === 'i' || m.args[0]?.type === 'd'
+      ? (m.args[0] as { value: number }).value
+      : parsed.value;
+    const channel = m.args[1]?.type === 'i' ? (m.args[1] as { value: number }).value : parsed.channel;
+
+    const kind: ControlMessage['kind'] =
+      parsed.kind === 'noteon' ? 'noteOn'
+      : parsed.kind === 'noteoff' ? 'noteOff'
+      : parsed.kind === 'cc' ? 'cc'
+      : parsed.kind === 'pitch' ? 'pitch'
+      : parsed.kind === 'program' ? 'program'
+      : 'osc';
+
+    const msg: ControlMessage = {
+      kind,
+      idNum: Math.max(0, Math.min(127, parsed.id)),
+      value: Math.max(0, Math.min(127, Number(value) || 0)),
+      channel: Math.max(1, Math.min(16, channel || 1)),
+    };
+    this._onControl(msg);
+    this._onControlEvent(controlMessageToEvent(msg, this.url, 'osc'));
+  }
+
+  private handleText(text: string): void {
+    const m = /^\/control\/([a-zA-Z]+)\/(\d+)\/([-0-9.]+)(?:\/(\d+))?/.exec(text.trim());
+    if (!m) return;
+    const rawKind = m[1].toLowerCase();
+    const kind: ControlMessage['kind'] =
+      rawKind === 'noteon' ? 'noteOn'
+      : rawKind === 'noteoff' ? 'noteOff'
+      : rawKind === 'cc' ? 'cc'
+      : rawKind === 'pitch' ? 'pitch'
+      : rawKind === 'program' ? 'program'
+      : 'osc';
+    const msg: ControlMessage = {
+      kind,
+      idNum: Math.max(0, Math.min(127, Number(m[2]) || 0)),
+      value: Math.max(0, Math.min(127, Number(m[3]) || 0)),
+      channel: m[4] ? Math.max(1, Math.min(16, Number(m[4]))) : 1,
+    };
+    this._onControl(msg);
+    this._onControlEvent(controlMessageToEvent(msg, this.url, 'osc'));
   }
 }
 

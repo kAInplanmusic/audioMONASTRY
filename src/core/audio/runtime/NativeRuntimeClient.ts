@@ -11,6 +11,17 @@ import {
   type IpcTransport,
 } from './ipc';
 
+/** Geräte-Info aus `device.list` (cpal-Default-Config je Gerät). */
+export interface NativeDeviceInfo {
+  id: string;
+  name: string;
+  direction: 'input' | 'output';
+  default_sample_rate?: number;
+  channels?: number;
+  buffer_size?: number;
+  sample_format?: string;
+}
+
 export class NativeRuntimeClient {
   private pending = new Map<string, { resolve: (v: IpcResponse) => void; reject: (e: Error) => void }>();
   private handlers = new Map<string, Set<(payload: unknown) => void>>();
@@ -76,8 +87,8 @@ export class NativeRuntimeClient {
     return this.request('graph.sync', payload);
   }
 
-  listDevices(): Promise<{ devices: unknown[] }> {
-    return this.request<{ devices: unknown[] }>('device.list', {});
+  listDevices(): Promise<{ host: string; backend: string; devices: NativeDeviceInfo[] }> {
+    return this.request<{ host: string; backend: string; devices: NativeDeviceInfo[] }>('device.list', {});
   }
 
   openDevice(deviceId: string): Promise<unknown> {

@@ -95,9 +95,13 @@ class WebRTCManager {
     });
   }
 
-  private async initLocalAudio() {
+  private async initLocalAudio(deviceId?: string) {
     try {
-      this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Geräte-Wahl: explizite deviceId (Settings) oder System-Default.
+      const constraints: MediaStreamConstraints = deviceId
+        ? { audio: { deviceId: { ideal: deviceId } } }
+        : { audio: true };
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
       if (this.sfuMode && this.sfu) {
         this.localStream.getAudioTracks().forEach((track) => {
           this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
@@ -108,11 +112,14 @@ class WebRTCManager {
     }
   }
 
-  /** Mikrofon nach User-Geste anfragen (wird von App.tsx beim Studio-Start aufgerufen). */
-  public async startLocalAudio(): Promise<void> {
+  /**
+   * Mikrofon nach User-Geste anfragen (wird von App.tsx beim Studio-Start
+   * aufgerufen). `deviceId` wählt ein konkretes Eingabegerät (Settings).
+   */
+  public async startLocalAudio(deviceId?: string): Promise<void> {
     if (this.localAudioStarted) return;
     this.localAudioStarted = true;
-    await this.initLocalAudio();
+    await this.initLocalAudio(deviceId);
   }
 
   /**

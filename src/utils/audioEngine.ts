@@ -345,13 +345,19 @@ class AudioEngine {
     // Dropout-/Underrun-Telemetrie aus dem Audio-Thread (analyzerProcessor)
     // an den Main-Thread durchreichen. App/PerformanceMonitor meldet den
     // Zähler an /api/telemetry (P0 Architecture-Audit).
-    this.analyzerNode.port.onmessage = (e: MessageEvent) => {
-      const d = e.data as { type?: string; count?: number };
-      if (d?.type === 'dropout' && typeof d.count === 'number') {
-        this.dropoutCount = d.count;
-        this.onDropout?.(d.count);
-      }
-    };
+    // Guard: Wenn das Worklet nicht verfügbar ist (Gain-Fallback), existiert
+    // kein MessagePort – dann gibt es auch keine Dropout-Telemetrie (kein Reject).
+    if (this.analyzerNode && typeof this.analyzerNode.port?.postMessage === 'function') {
+      try {
+        this.analyzerNode.port.onmessage = (e: MessageEvent) => {
+          const d = e.data as { type?: string; count?: number };
+          if (d?.type === 'dropout' && typeof d.count === 'number') {
+            this.dropoutCount = d.count;
+            this.onDropout?.(d.count);
+          }
+        };
+      } catch { /* Port nicht verfügbar – Dropout-Telemetrie entfällt */ }
+    }
 
     this.lufsNode = makeWorklet('lufs-processor');
     const lufsSab = makeSafeArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
@@ -403,20 +409,30 @@ class AudioEngine {
     }
     prevNode.connect(this.toneShiftTilt);
 
-    this.toneShiftTilt.connect(this.eqNode);
-    this.eqNode.connect(this.masteringNode);
-    this.masteringNode.connect(this.dspNode);
-    this.dspNode.connect(this.lufsNode);
-    this.lufsNode.connect(this.analyzerNode);
+    // Worklet-Kette verbindet nur tatsächlich vorhandene Knoten. Ohne
+    // AudioContext/Worklets (Silent-Modus, jsdom-Tests) bleibt die Kette
+    // offen, statt mit `null.connect()` zu rejecten (Error-Recovery).
+    const connectSafe = (from: unknown, to: unknown): void => {
+      const f = from as { connect?: (n: unknown) => unknown } | null | undefined;
+      const t = to as { connect?: (n: unknown) => unknown } | null | undefined;
+      if (f && t && typeof f.connect === 'function') {
+        try { f.connect(t); } catch { /* Worklet-Fallback – Kette bleibt offen */ }
+      }
+    };
+    connectSafe(this.toneShiftTilt, this.eqNode);
+    connectSafe(this.eqNode, this.masteringNode);
+    connectSafe(this.masteringNode, this.dspNode);
+    connectSafe(this.dspNode, this.lufsNode);
+    connectSafe(this.lufsNode, this.analyzerNode);
     // Use raw destination for AudioWorkletNode – über einen finalen Gain,
     // damit Spatial-Mode-Wechsel (SEPARATION) weich ausgeblendet werden kann.
     if (this.ctx && typeof this.ctx.createGain === 'function') {
       this.outputGain = this.ctx.createGain();
       this.outputGain.gain.value = 1;
-      this.analyzerNode.connect(this.outputGain);
-      this.outputGain.connect(this.ctx.destination);
+      connectSafe(this.analyzerNode, this.outputGain);
+      connectSafe(this.outputGain, this.ctx.destination);
     } else {
-      this.analyzerNode.connect(this.ctx.destination);
+      connectSafe(this.analyzerNode, this.ctx?.destination);
     }
 
     for(let i=0; i<12; i++) { this.toneShiftEqBands[i].gain.value = 0; }
@@ -427,7 +443,10 @@ class AudioEngine {
     // Wellenform dem Main-Out um die Lookahead-Latenz voraus).
     // lufsNode ist nativ, Tone.Analyser.input ist ein Tone.Gain -> dessen
     // .input ist der native GainNode (Firefox-safe).
-    this.lufsNode.connect((this.analyser as any).input?.input ?? (this.analyser as any).input ?? this.analyser);
+    // Analyser ist optional: ohne Worklet/Context kein Crash (Error-Recovery).
+    if (this.lufsNode && this.analyser) {
+      connectSafe(this.lufsNode, (this.analyser as any).input?.input ?? (this.analyser as any).input ?? this.analyser);
+    }
 
     // Synth (jede Stimme über eigene Kanal-Gain/Pan für echtes Mischpult-Routing)
     this.ensureChannelNode('channel1'); // kick
@@ -1627,12 +1646,16 @@ class AudioEngine {
   }
 
   /** Audio-Health-Snapshot für den Echtzeit-Performance-Monitor. */
-  public getAudioHealth(): { state: string; sampleRate: number; baseLatencyMs: number } {
-    const ctx = this.ctx as unknown as { state?: string; sampleRate?: number; baseLatency?: number } | null;
+  public getAudioHealth(): { state: string; sampleRate: number; baseLatencyMs: number; outputLatencyMs: number } {
+    const ctx = this.ctx as unknown as {
+      state?: string; sampleRate?: number; baseLatency?: number; outputLatency?: number;
+    } | null;
     return {
       state: ctx?.state ?? 'closed',
       sampleRate: ctx?.sampleRate ?? 0,
       baseLatencyMs: (ctx?.baseLatency ?? 0) * 1000,
+      // Chromium liefert outputLatency (Ausgabe-Puffer); andere Browser 0.
+      outputLatencyMs: (ctx?.outputLatency ?? 0) * 1000,
     };
   }
 

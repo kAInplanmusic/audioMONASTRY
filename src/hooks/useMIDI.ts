@@ -1,5 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { resolveMidiProfile, MidiDeviceType } from '../config/midiDevices';
+import {
+  MidiStreamParser, midiEventToControlMessage,
+} from '../core/hardware/midiCodec';
+import type { ParsedMidiEvent } from '../core/hardware/midiCodec';
+import { controlMessageToEvent } from '../core/hardware/controlEvent';
+import type { ControlEvent } from '../core/interfaces';
+import { hotplugManager } from '../core/hardware/HotplugManager';
+import { hardwareDiagnostics } from '../core/hardware/diagnostics';
+import { deviceProfileStore, buildProfileId } from '../core/hardware/deviceProfile';
 
 export interface DetectedMidiDevice {
   id: string;
@@ -7,16 +16,19 @@ export interface DetectedMidiDevice {
   manufacturer?: string;
   profile: string;
   type: MidiDeviceType;
+  /** Device-Profile-ID (Fingerprint), falls ein Profil existiert. */
+  deviceProfileId?: string;
 }
 
+const MAX_EVENT_BUFFER = 64;
+
 /**
- * Purer Web-MIDI-Hook (kein WebHID, keine Abhängigkeiten) mit robustem
- * Hotplug:
- * - requestMIDIAccess (sysex: false)
- * - onstatechange → sofortige Re-Enumeration + Message-Handler-Rebind
- *   (neue Geräte bekommen ihren onmidimessage-Handler, entfernte werden
- *   vergessen). Debounce gegen doppelte statechange-Events.
- * - Cleanup beim Unmount (Handler entfernen, statechange abmelden).
+ * Purer Web-MIDI-Hook mit robustem Hotplug und vollständigem MIDI-1.0-Parsing:
+ * - requestMIDIAccess bevorzugt mit SysEx, Fallback ohne
+ * - MidiStreamParser je Port (Running Status, Clock, SysEx, RPN/NRPN …)
+ * - onstatechange → Re-Enumeration + Handler-Rebind (Debounce 50 ms)
+ * - HotplugManager + HardwareDiagnostics angebunden
+ * - Device-Profile-Touch (VID/PID-frei: Namens-Fingerprint, letzte Sichtung)
  */
 export const useMIDI = () => {
   const [midiAccess, setMidiAccess] = useState<MIDIAccess | null>(null);
@@ -24,25 +36,61 @@ export const useMIDI = () => {
   const [outputs, setOutputs] = useState<MIDIOutput[]>([]);
   const [lastMessage, setLastMessage] = useState<MIDIMessageEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Auto-Erkannte, auf Profile aufgelöste Geräte (Plug-and-Play).
   const [detected, setDetected] = useState<DetectedMidiDevice[]>([]);
+  /** Zuletzt geparste MIDI-Events (ein Batch pro onmidimessage). */
+  const [parsedEvents, setParsedEvents] = useState<ParsedMidiEvent[]>([]);
+  /** Ring-Puffer der letzten ControlEvents (transportagnostisch). */
+  const [controlEvents, setControlEvents] = useState<ControlEvent[]>([]);
+  const [lastControlEvent, setLastControlEvent] = useState<ControlEvent | null>(null);
 
   const accessRef = useRef<MIDIAccess | null>(null);
   const boundInputs = useRef<Set<string>>(new Set());
+  const parsers = useRef<Map<string, MidiStreamParser>>(new Map());
   const stateChangeTimer = useRef<number | null>(null);
+  const eventBuffer = useRef<ControlEvent[]>([]);
+
+  const pushControlEvents = useCallback((events: ControlEvent[]) => {
+    if (events.length === 0) return;
+    const next = [...eventBuffer.current, ...events];
+    if (next.length > MAX_EVENT_BUFFER) next.splice(0, next.length - MAX_EVENT_BUFFER);
+    eventBuffer.current = next;
+    setControlEvents(next);
+    setLastControlEvent(events[events.length - 1]);
+  }, []);
 
   /** Bindet onmidimessage für alle Inputs (idempotent, hotplug-sicher). */
   const bindInputs = useCallback((access: MIDIAccess) => {
     const currentIds = new Set<string>();
     Array.from(access.inputs.values()).forEach((input) => {
       currentIds.add(input.id);
+      const deviceId = input.id;
+      const name = input.name ?? deviceId;
       if (boundInputs.current.has(input.id)) return;
       boundInputs.current.add(input.id);
-      input.onmidimessage = (message) => setLastMessage(message);
+      if (!parsers.current.has(input.id)) parsers.current.set(input.id, new MidiStreamParser());
+      const parser = parsers.current.get(input.id)!;
+      input.onmidimessage = (message) => {
+        setLastMessage(message);
+        const events = parser.push(message.data as unknown as ArrayLike<number>);
+        if (events.length > 0) {
+          setParsedEvents(events);
+          const ctrlEvents = events.map((ev) => controlMessageToEvent(midiEventToControlMessage(ev), deviceId, 'midi'));
+          pushControlEvents(ctrlEvents);
+        }
+      };
+      hotplugManager.attach(`midi:${deviceId}`, name);
+      hardwareDiagnostics.log('CONNECT', name, { backend: 'webmidi', deviceId });
     });
-    // Bereits entfernte Inputs aus dem gebundenen Set austragen.
-    boundInputs.current = new Set([...boundInputs.current].filter((id) => currentIds.has(id)));
-  }, []);
+    // Bereits entfernte Inputs austragen + Hotplug/Diagnostics melden.
+    for (const id of [...boundInputs.current]) {
+      if (!currentIds.has(id)) {
+        boundInputs.current.delete(id);
+        parsers.current.delete(id);
+        hotplugManager.detach(`midi:${id}`);
+        hardwareDiagnostics.log('DISCONNECT', id, { backend: 'webmidi' });
+      }
+    }
+  }, [pushControlEvents]);
 
   /** Geräteliste + Auto-Erkennung aktualisieren und Handler neu binden. */
   const refreshDevices = useCallback((access: MIDIAccess) => {
@@ -52,18 +100,29 @@ export const useMIDI = () => {
     setOutputs(outs);
     bindInputs(access);
 
-    // Auto-Erkennung: jedes Input-Gerät zum Profil auflösen.
     const merged: DetectedMidiDevice[] = ins.map((i) => {
       const profile = resolveMidiProfile(i.name ?? '', i.manufacturer ?? undefined);
+      const deviceProfileId = buildProfileId({ manufacturer: i.manufacturer ?? undefined, product: i.name ?? undefined });
       return {
         id: i.id,
         name: i.name ?? 'Unbekanntes MIDI-Gerät',
         manufacturer: i.manufacturer ?? undefined,
         profile: profile?.profile ?? 'UNKNOWN',
         type: profile?.type ?? 'PAD',
+        deviceProfileId,
       };
     });
     setDetected(merged);
+
+    // Device-Profile-Touch (fire-and-forget, nie blockierend).
+    for (const d of merged) {
+      void deviceProfileStore.find({ manufacturer: d.manufacturer, product: d.name }).then(async (existing) => {
+        if (existing) {
+          existing.lastSeenAt = Date.now();
+          await deviceProfileStore.save(existing);
+        }
+      }).catch(() => { /* Profil-Persistenz optional */ });
+    }
   }, [bindInputs]);
 
   const requestAccess = useCallback(async () => {
@@ -77,14 +136,18 @@ export const useMIDI = () => {
     }
 
     try {
-      const access = await navigator.requestMIDIAccess({ sysex: false });
+      // SysEx bevorzugt (Audit G9); bei Verweigerung Fallback ohne SysEx.
+      let access: MIDIAccess;
+      try {
+        access = await navigator.requestMIDIAccess({ sysex: true });
+      } catch {
+        access = await navigator.requestMIDIAccess();
+      }
       accessRef.current = access;
       setMidiAccess(access);
       setError(null);
       refreshDevices(access);
 
-      // Hotplug: bei statechange sofort neu enumerieren + Handler binden.
-      // Debounce, weil manche Browser mehrere statechange-Events feuern.
       access.onstatechange = () => {
         if (stateChangeTimer.current !== null) window.clearTimeout(stateChangeTimer.current);
         stateChangeTimer.current = window.setTimeout(() => {
@@ -117,10 +180,15 @@ export const useMIDI = () => {
         access.onstatechange = null;
         Array.from(access.inputs.values()).forEach((i) => { i.onmidimessage = null; });
       }
+      for (const id of [...boundInputs.current]) hotplugManager.detach(`midi:${id}`);
       boundInputs.current.clear();
+      parsers.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { midiAccess, inputs, outputs, detected, lastMessage, error, rescan };
+  return {
+    midiAccess, inputs, outputs, detected, lastMessage, error, rescan,
+    parsedEvents, controlEvents, lastControlEvent,
+  };
 };

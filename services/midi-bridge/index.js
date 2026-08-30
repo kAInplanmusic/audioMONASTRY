@@ -30,6 +30,7 @@ const { WebSocketServer } = require('ws');
 const WS_PORT = Number(process.env.WS_PORT || 9100);
 const OSC_HOST = process.env.OSC_HOST || '';
 const OSC_PORT = Number(process.env.OSC_PORT || 9000);
+const OSC_LISTEN_PORT = Number(process.env.OSC_LISTEN_PORT || 0);
 
 const log = (...a) => console.log(`[midi-bridge ${new Date().toISOString()}]`, ...a);
 
@@ -72,7 +73,7 @@ if (output && midiOutPort !== null) {
   log('Kein MIDI-OUT verfügbar (oder Port-Name nicht gefunden).');
 }
 
-// --- OSC (optional) -----------------------------------------------------------
+// --- OSC (optional, senden) ---------------------------------------------------
 let oscClient = null;
 if (OSC_HOST && OSC_PORT) {
   try {
@@ -87,6 +88,34 @@ if (OSC_HOST && OSC_PORT) {
 function sendOsc(address, ...args) {
   if (!oscClient) return;
   try { oscClient.send({ address, args }); } catch { /* UDP best effort */ }
+}
+
+// --- OSC-UDP-Listener (optional, empfangen) -----------------------------------
+// OSC_LISTEN_PORT=9010 node index.js
+// Eingehende OSC-Messages werden an alle WebSocket-Clients broadcastet und
+// /midi/cc/...-Adressen zusätzlich an MIDI-OUT gesendet (OSC -> MIDI).
+let oscServer = null;
+if (OSC_LISTEN_PORT > 0) {
+  try {
+    const { UDPPort } = require('osc');
+    oscServer = new UDPPort({ localAddress: '0.0.0.0', localPort: OSC_LISTEN_PORT, metadata: true });
+    oscServer.on('message', (oscMsg) => {
+      const data = { type: 'osc', address: oscMsg.address, args: oscMsg.args };
+      for (const client of wss.clients) {
+        if (client.readyState === 1) client.send(JSON.stringify(data));
+      }
+      // OSC -> MIDI (CC-Konvention /midi/cc/<channel>/<cc>)
+      const m = /^\/midi\/cc\/(\d+)\/(\d+)$/.exec(oscMsg.address);
+      if (m) {
+        const value = oscMsg.args && typeof oscMsg.args[0]?.value === 'number' ? oscMsg.args[0].value : 0;
+        sendMidi(cc(Number(m[1]) || 0, Number(m[2]) || 0, Math.round(value * 127)));
+      }
+    });
+    oscServer.open();
+    log(`OSC-UDP lauscht auf :${OSC_LISTEN_PORT}`);
+  } catch (e) {
+    log('osc-UDP-Listener nicht verfügbar:', e.message);
+  }
 }
 
 // --- MIDI-Kodierung (deckungsgleich mit src/utils/midi.ts) --------------------
