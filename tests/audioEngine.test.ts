@@ -29,6 +29,7 @@ vi.mock('tone', () => {
     MetalSynth: MockNode,
     NoiseSynth: MockNode,
     MonoSynth: MockNode,
+    Synth: MockNode,
     FeedbackDelay: MockNode,
     Compressor: MockNode,
     MultibandCompressor: MockNode,
@@ -86,6 +87,11 @@ describe('audioEngine (jsdom, Tone gemockt)', () => {
 
     off2();
     audioEngine.onStepUpdate = prev;
+  });
+
+  it('previewSynthesizedSample wirft nicht bei ungültigen Parametern', () => {
+    expect(() => audioEngine.previewSynthesizedSample({ frequency: 440, decay: 0.2 })).not.toThrow();
+    expect(() => audioEngine.previewSynthesizedSample({})).not.toThrow();
   });
 
   it('Spatial-Setup/Mode lassen sich setzen und lesen', () => {

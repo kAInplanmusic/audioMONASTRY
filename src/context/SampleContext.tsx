@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { PRESET_SAMPLE_DATABASE, AudioSample } from '../data/samples';
 import { persistFile, listSamples } from '../utils/opfs';
 import { fetchCloudSamples, CloudSampleRow, isCloudAvailable, pushSampleToCloud as pushSampleToCloudApi, syncCloudDatabase as syncCloudDatabaseApi, CloudActionResult } from '../lib/supabaseClient';
@@ -94,8 +94,11 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const getSampleById = (id: string) => samples.find(s => s.id === id);
-  const addSample = (sample: AudioSample) => {
+  // O(1)-Lookup statt O(n)-Suche (biblioMONK/Sampler fragen häufig nach IDs).
+  const samplesById = useMemo(() => new Map(samples.map((s) => [s.id, s])), [samples]);
+  const getSampleById = useCallback((id: string) => samplesById.get(id), [samplesById]);
+
+  const addSample = useCallback((sample: AudioSample) => {
     setSamples(prev => [...prev, sample]);
     // Task 15: bei Blob-URLs das Sample zusätzlich im OPFS zwischenspeichern.
     if (sample.url && sample.url.startsWith('blob:')) {
@@ -104,11 +107,11 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
         .then(blob => persistFile(sample.id + '.wav', blob))
         .catch(() => { /* OPFS optional, Fehler ignorieren */ });
     }
-  };
+  }, []);
 
   // Cloud-Schreibpfad: Einzel-Upsert über die Server-API (service_role bleibt
   // serverseitig). Kein Fehler-Wurf – der Aufrufer erhält { ok, error? }.
-  const pushSampleToCloud = async (sample: AudioSample): Promise<CloudActionResult> => {
+  const pushSampleToCloud = useCallback(async (sample: AudioSample): Promise<CloudActionResult> => {
     return pushSampleToCloudApi({
       id: sample.id,
       name: sample.name,
@@ -119,14 +122,27 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       tags: sample.tags ?? [],
       parameters: sample.parameters ?? {},
     });
-  };
+  }, []);
 
-  const syncCloudDatabase = async (): Promise<CloudActionResult> => {
+  const syncCloudDatabase = useCallback(async (): Promise<CloudActionResult> => {
     return syncCloudDatabaseApi();
-  };
+  }, []);
+
+  const value = useMemo(() => ({
+    samples,
+    selectedSample,
+    setSelectedSample,
+    getSampleById,
+    addSample,
+    cloudEnabled,
+    pushSampleToCloud,
+    syncCloudDatabase,
+    pendingSample,
+    setPendingSample,
+  }), [samples, selectedSample, getSampleById, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample]);
 
   return (
-    <SampleContext.Provider value={{ samples, selectedSample, setSelectedSample, getSampleById, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample, setPendingSample }}>
+    <SampleContext.Provider value={value}>
       {children}
     </SampleContext.Provider>
   );

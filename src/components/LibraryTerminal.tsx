@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Database, Play, Download, Clipboard, GripVertical, ChevronLeft, ChevronRight, Cloud, CloudOff, Upload } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
@@ -94,16 +94,28 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
     setCloudBusy(false);
   };
 
-  // --- Automatische Musik-Analyse (BPM/Key, offline) ---
+  // --- Automatische Musik-Analyse (BPM/Key, offline) – mit Ergebnis-Cache, ---
+  // --- damit Tracks nicht bei jedem musicTracks-Update erneut analysiert werden.
   const [analysis, setAnalysis] = useState<Record<string, { bpm?: number; key?: string }>>({});
+  const analysisCache = useRef<Map<string, { bpm?: number; key?: string } | null>>(new Map());
   useEffect(() => {
     if (category !== 'music') return;
     let cancelled = false;
 
+    const apply = (url: string, a: { bpm?: number; key?: string } | null) => {
+      if (cancelled || !a) return;
+      setAnalysis((prev) => ({ ...prev, [url]: { bpm: a.bpm, key: a.key } }));
+    };
+
     musicTracks.forEach((t) => {
+      if (analysisCache.current.has(t.url)) {
+        apply(t.url, analysisCache.current.get(t.url) ?? null);
+        return;
+      }
+      analysisCache.current.set(t.url, null); // reserviert (verhindert Doppel-Analyse)
       analyzeMusic(t.url).then((a) => {
-        if (cancelled || !a) return;
-        setAnalysis((prev) => ({ ...prev, [t.url]: { bpm: a.bpm, key: a.key } }));
+        analysisCache.current.set(t.url, a ?? null);
+        apply(t.url, a);
       });
     });
     return () => { cancelled = true; };
@@ -256,7 +268,16 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
                     <span className="text-[10px] font-mono text-fuchsia-400 uppercase">{sample.type}</span>
                   </div>
                 </div>
-                <button type="button" className="w-8 h-8 rounded-full bg-[#111] flex items-center justify-center hover:bg-fuchsia-600 transition-colors">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (sample.url) audioEngine.previewSample('channel5', undefined, sample.url);
+                    else audioEngine.previewSynthesizedSample(sample.parameters ?? {});
+                  }}
+                  title={sample.url ? 'Sample-Vorschau abspielen' : 'Synthetische Vorschau abspielen'}
+                  aria-label={`${sample.name} Vorschau`}
+                  className="w-8 h-8 rounded-full bg-[#111] flex items-center justify-center hover:bg-fuchsia-600 transition-colors cursor-pointer"
+                >
                   <Play className="w-4 h-4 text-neutral-400 hover:text-white fill-current" />
                 </button>
               </div>

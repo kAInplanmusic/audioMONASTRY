@@ -263,6 +263,26 @@ describe('Server API', () => {
     expect(body.stem).toBeTruthy();
   });
 
+  it('POST /api/cloud/upload (binär) ohne Key → 400', async () => {
+    const res = await fetch(`${baseUrl}/api/cloud/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(4),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/cloud/upload (binär) mit Path-Traversal-Key → 400', async () => {
+    const res = await fetch(`${baseUrl}/api/cloud/upload?key=../evil.wav`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(4),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(String(body.error)).toContain('path traversal');
+  });
+
   it('POST /api/telemetry zählt Events nach type/source', async () => {
     const res = await fetch(`${baseUrl}/api/telemetry`, {
       method: 'POST',

@@ -140,28 +140,22 @@ export async function pushMusicToCloud(
   }
 }
 
-/** Einen Audio-Blob (base64) in Cloudflare R2 hochladen. */
+/** Einen Audio-Blob (binär, ohne Base64-Overhead) in Cloudflare R2 hochladen. */
 export async function uploadSampleBlobToCloud(
   key: string,
   blob: Blob,
   contentType = blob.type || 'audio/wav',
 ): Promise<CloudActionResult & { key?: string; url?: string }> {
   try {
-    const dataBase64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = String(reader.result ?? '');
-        const comma = result.indexOf(',');
-        resolve(comma >= 0 ? result.slice(comma + 1) : result);
-      };
-      reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'));
-      reader.readAsDataURL(blob);
+    const arrayBuffer = await blob.arrayBuffer();
+    const qs = `key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(contentType)}`;
+    const resp = await fetch(`/api/cloud/upload?${qs}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: arrayBuffer,
     });
-    const data = await postJson<CloudActionResult & { key?: string; url?: string }>(
-      '/api/cloud/upload',
-      { key, dataBase64, contentType },
-    );
-    return { ok: !!data.ok, error: data.error, key: data.key, url: data.url };
+    const data = (await resp.json().catch(() => ({}))) as CloudActionResult & { key?: string; url?: string };
+    return { ok: data.ok ?? resp.ok, error: data.error, key: data.key, url: data.url };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }

@@ -346,17 +346,35 @@ app.post('/api/cloud/music', async (req, res) => {
   }
 });
 
-// --- POST /api/cloud/upload → Audio-Blob (base64) in Cloudflare R2 legen ---
-app.post('/api/cloud/upload', async (req, res) => {
+// --- POST /api/cloud/upload → Audio-Blob (binär ODER base64-JSON) in R2 legen ---
+// Binär (empfohlen):  POST /api/cloud/upload?key=…&contentType=audio/wav
+//   Body = rohe Bytes, Content-Type: application/octet-stream.
+// Legacy-JSON:        Body = { key, dataBase64, contentType } (bleibt kompatibel).
+app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', 'audio/*', 'application/wav'], limit: '200mb' }), async (req, res) => {
   try {
-    const body = (req.body ?? {}) as { key?: string; dataBase64?: string; contentType?: string };
-    if (!body.key || !body.dataBase64) {
-      return res.status(400).json({ ok: false, error: 'upload requires key and dataBase64' });
+    let key = String(req.query.key ?? '');
+    let contentType = String(req.query.contentType ?? 'audio/wav');
+    let buf: Buffer | null = null;
+
+    if (Buffer.isBuffer(req.body)) {
+      buf = req.body;
+    } else {
+      const body = (req.body ?? {}) as { key?: string; dataBase64?: string; contentType?: string };
+      if (!body.key || !body.dataBase64) {
+        return res.status(400).json({ ok: false, error: 'upload requires key + binary body (?key=…) or JSON { key, dataBase64 }' });
+      }
+      key = body.key;
+      contentType = body.contentType ?? contentType;
+      buf = Buffer.from(body.dataBase64, 'base64');
     }
-    const buf = Buffer.from(body.dataBase64, 'base64');
-    const result = await uploadSampleToR2(body.key, buf, body.contentType ?? 'audio/wav');
+
+    if (!key) return res.status(400).json({ ok: false, error: 'upload requires key' });
+    if (key.includes('..')) return res.status(400).json({ ok: false, error: 'invalid key (path traversal)' });
+    if (!buf || buf.byteLength === 0) return res.status(400).json({ ok: false, error: 'upload requires non-empty body' });
+
+    const result = await uploadSampleToR2(key, buf, contentType);
     // Automation: neues Audio direkt analysieren + in Supabase ablegen.
-    const ingest = await ingestAudioObject(body.key, buf.byteLength);
+    const ingest = await ingestAudioObject(key, buf.byteLength);
     res.json({ ok: true, ...result, ingest });
   } catch (e) {
     res.status(502).json({ ok: false, error: (e as Error).message });
