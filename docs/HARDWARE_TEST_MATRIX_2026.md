@@ -13,7 +13,7 @@
 | Supabase (pwtwtqbcynsjtkxlkrwh) | Cloud | service_role + anon | ✅ `cloudHealth`: `ok (service_role)` | ✅ Schema + RLS angewendet (4 Tabellen) |
 | Supabase Sync (Seed) | Cloud | service_role | ✅ 29 Samples + 48 Music-Tracks upserted | ✅ Write-Pfad real verifiziert |
 | Supabase Anon-Read | Cloud | anon REST | ✅ 5/5 Zeilen gelesen (z. B. `TR-909 Classic Kick`) | ✅ Read-Pfad real verifiziert |
-| Cloudflare R2 | Cloud | S3 | ⬜ NOT TESTED — keine R2-Keys bereitgestellt | Upload fällt auf lokalen OPFS-Fallback zurück |
+| Cloudflare R2 | Cloud | S3 | ✅ `ListBuckets` + `PutObject` real verifiziert | Bucket `audiomonastrysamples` (5 Objekte vorhanden) |
 
 ## Automatisierte Tests (ohne Hardware, in CI reproduzierbar)
 

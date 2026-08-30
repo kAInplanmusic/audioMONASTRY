@@ -78,7 +78,8 @@ function supabaseAnon(): SupabaseClient | null {
 
 /** R2-Endpoint: explizit konfiguriert ODER Standard-Endpoint aus Account-ID. */
 function r2Endpoint(accountId: string): string {
-  const raw = env.CLOUDFLARE_API?.trim();
+  // CFR2_URL / CFR2_ENDPOINT haben Vorrang (vom Betreiber bereitgestellter Endpoint).
+  const raw = env.CFR2_URL?.trim() || env.CFR2_ENDPOINT?.trim() || env.CLOUDFLARE_API?.trim();
   if (raw) {
     try {
       const u = new URL(raw);
@@ -92,8 +93,18 @@ function r2Endpoint(accountId: string): string {
 
 /** Liefert einen konfigurierten R2-S3-Client oder null, wenn Keys fehlen. */
 function r2Client(): S3Client | null {
-  const accountId = env.CFR2_ACCOUNT_ID?.trim();
-  const accessKeyId = env.CFR2_ACCESS_KEY_ID?.trim();
+  // CFR2_URL-Hostname als Account-ID-Fallback (z. B. https://<account>.r2.cloudflarestorage.com).
+  const fromUrl = (() => {
+    const raw = env.CFR2_URL?.trim();
+    if (!raw) return null;
+    try {
+      return new URL(raw).hostname.split('.')[0] ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const accountId = env.CFR2_ACCOUNT_ID?.trim() || fromUrl || '';
+  const accessKeyId = env.CFR2_ACCESS_KEY_ID?.trim() || env.CFR2_ACCESS_KEY?.trim();
   const secretAccessKey = env.CFR2_SECRET_ACCESS_KEY?.trim();
   if (!accountId || !accessKeyId || !secretAccessKey) return null;
   // R2-Zugangsdaten sind hexadezimale Keys (Access 32, Secret 64 Zeichen).
