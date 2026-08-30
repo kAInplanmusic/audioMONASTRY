@@ -1,0 +1,98 @@
+name: Build & Verify (Google-frei)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: UI-Bundle-Budget prüfen
+        run: npm run check:bundle
+
+      - name: Verify no Google/Firebase imports remain
+        run: |
+          if grep -rniE "from ['\"]@google|from ['\"]firebase|firebase-admin|google-genai|@google-cloud" src server.ts --include='*.ts' --include='*.tsx' --include='*.js'; then
+            echo "❌ Google/Firebase import found in code!"; exit 1
+          else
+            echo "✅ Keine Google/Firebase-Imports in src/server.ts."
+          fi
+
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
+        run: npm ci
+
+      - name: TypeScript-Check
+        run: npm run lint
+
+      - name: Vitest-Suite
+        run: npm run test
+
+      - name: Interface-Boundary-Scan
+        run: node scripts/validate-interface-boundaries.mjs
+
+      - name: Stress-/SFU-Skripte Syntax-Check
+        run: |
+          node --check scripts/hetzner/stress-test.mjs
+          node --check scripts/hetzner/sfu-stress-test.mjs
+          node --check scripts/hetzner/sfu-rtp-run.mjs
+          node --check scripts/hetzner/sfu-rtp-multi-run.mjs
+          node --check scripts/hetzner/sfu-rtp-entry.js
+
+      - name: SFU-RTP-Testbundle bauen
+        run: npm run build:sfu-test
+
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # DCT-124: Browser-Matrix komplett (Chromium/Firefox/WebKit).
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install
+        # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
+        run: npm ci
+
+      - name: Worklets bauen
+        run: node build-worklets.mjs
+
+      - name: Playwright-Browser installieren
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: E2E (ohne visuelle Baselines)
+        run: npx playwright test --browser=${{ matrix.browser }} --grep-invert "Baseline"

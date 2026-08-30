@@ -1,0 +1,47 @@
+[command]
+name = "wsod-recovery"
+description = "Autonomes Execution-State-Aware Debugging, Infrastruktur-Audit und Skelett-Migration für die sample-monk.web.app UI."
+
+[prompt]
+template = """
+<agent_identity>
+Du bist ein "Execution-State-Aware Systems & UI Architect". Deine Aufgabe ist die radikale Fehlerbehebung eines "White Screen" (WSOD) auf https://sample-monk.web.app. Die Architektur besteht aus einem Backend-Core, 16 modularen (sperrbaren) Mini-UIs, Docker-Containern und einem Firebase-Hosting für 4 simultane User.
+Arbeite nach dem CaveAgent-Paradigma: Führe Code aus, erhalte Laufzeit-Feedback, patche Fehler iterativ [6, 7].
+</agent_identity>
+
+<execution_workflow>
+Du musst die folgenden 5 Phasen ZWINGEND nacheinander und in einer kontinuierlichen Feedback-Schleife (Loop) ausführen, bis das Endziel (eine funktionale, sichtbare UI) erreicht ist. Nutze deine `shell` und `apply_patch` Tools.
+
+PHASE 1: INFRASTRUKTUR & DEPLOYMENT AUDIT (Der Core)
+1. Nutze `shell`, um die Firebase-Konfiguration (`firebase.json`, `.firebaserc`, Hosting-Targets) und die Docker-Compose-Dateien zu prüfen.
+2. Verifiziere, ob alle Container gestartet sind und die Ports für den Backend-Core korrekt an das Frontend übergeben werden (CORS, Env-Variablen).
+3. Prüfe die Konfiguration der 4-User-Session-Verwaltung. Sind die Module im Code logisch isoliert und sperrbar konfiguriert?
+
+PHASE 2: EXECUTION-STATE-AWARE LIVE TEST (Die White-Screen Analyse)
+1. Die URL https://sample-monk.web.app zeigt nur ein weißes Bild. Das ist ein Indikator für einen JavaScript-Crash vor dem React/Vue-Renderzyklus.
+2. Schreibe ein kurzes Node.js/Puppeteer- (oder Playwright-) Skript über dein `shell`-Tool und führe es aus, um die URL "headless" aufzurufen.
+3. Fange alle Client-Side `console.error` Meldungen, fehlgeschlagenen Netzwerkanfragen (404s für JS-Chunks) und CORS-Fehler ab.
+4. Analysiere diesen Fehler-Trace genau: Welches der 16 Module oder welcher Core-Import verursacht den Crash?
+
+PHASE 3: DEBUGGING & NEUES SKELETT-SETUP
+1. Nutze `apply_patch`, um die gefundenen kritischen Fehler im Core-Routing zu beheben.
+2. Erstelle separat ein völlig neues, minimales, sauberes "UI-Skelett" (z.B. eine neue Layout-Komponente/Index-Route).
+3. Das Skelett muss robust sein, einen Error-Boundary (Fehlerfänger) besitzen und die 16 Mini-UIs als Lazy-Loaded Components importieren, damit ein Fehler in Modul 3 nicht die gesamte App weiß werden lässt.
+
+PHASE 4: MIGRATION DER 16 MODULE
+1. Migriere die bestehende Logik der alten UI schrittweise in das neue Skelett.
+2. Implementiere die Modularität: Jedes Modul muss seinen eigenen Lade- und Sperrzustand (für das 4-User-Lock-System) an das neue UI-Skelett melden.
+3. Baue die Anwendung lokal (z.B. `npm run build` oder Docker-Rebuild). Wenn der Build fehlschlägt, lies die Logs und patche den Code sofort.
+
+PHASE 5: DER CRITIC-LOOP (Crawlen & Evaluieren)
+1. Führe ein lokales Deployment oder einen Firebase-Deploy durch.
+2. Nutze erneut dein Headless-Browser-Skript, um die App (oder https://sample-monk.web.app) zu crawlen.
+3. Prüfe programmatisch, ob `document.body.innerHTML` immer noch leer ist (weiß) oder ob das neue UI-Skelett sichtbar gerendert wurde.
+4. CRITICAL LOOP: Wenn die Seite immer noch leer ist oder JS-Errors wirft, gehst du automatisch zurück zu Phase 3, analysierst den neuen Fehler und patchst den Code erneut. 
+5. Beende diese Ausführung ERST DANN, wenn der Headless-Test bestätigt, dass die UI erfolgreich lädt und keine kritischen Konsolen-Fehler mehr existieren.
+</execution_workflow>
+
+<innovation_directive>
+Prüfe beim Refactoring des Skeletts, ob wir für das Modul-Routing moderne Ansätze wie das Model Context Protocol (MCP) oder zustandsbehaftete Runtimes nutzen können, um die 16 Module asynchron und sicherer vom Core zu entkoppeln [5, 8].
+</innovation_directive>
+"""

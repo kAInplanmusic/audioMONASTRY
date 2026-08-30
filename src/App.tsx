@@ -1,0 +1,515 @@
+import {  Suspense, lazy, useEffect, useState  } from 'react';
+import { getPluginRegistry, discoverPlugins } from './plugins/registry';
+import { audioEngine } from './utils/audioEngine';
+import { usePluginManager } from './context/PluginManagerContext';
+import { useModuleState, ModuleState } from './context/ModuleStateContext';
+import { ModuleContainer } from './components/ModuleContainer';
+import { BeatVisualizer } from './components/BeatVisualizer';
+const SequencerPluginTerminal = lazy(() => import('./components/SequencerPluginTerminal').then(m => ({ default: m.SequencerPluginTerminal })));
+import { TECHNO_PRESETS } from './presets';
+import { TrackType, Patterns } from './types';
+import { SafeModuleBoundary } from './components/SafeModuleBoundary';
+import { PluginButton } from './components/PluginButton';
+import { FEATURE_FLAGS } from './config/featureFlags';
+const VoiceGenTerminal = lazy(() => import('./components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
+const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m => ({ default: m.VoiceMonkPanel })));
+import { MoaHistoryPanel } from './components/MoaHistoryPanel';
+import { MasteringOverlay } from './components/MasteringOverlay';
+import { useAudio } from './context/AudioContext';
+import { useSamples } from './context/SampleContext';
+import { SettingsDialog } from './components/SettingsDialog';
+import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
+import { Settings } from 'lucide-react';
+import { Logo } from './components/Logo';
+const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
+const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
+const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
+import { webRTCManager } from './utils/WebRTCManager';
+
+// Monitor-Solo: welcher Mixer-Kanal gehört zu welchem Plugin (best effort).
+const PLUGIN_SOLO_CHANNEL: Record<string, TrackType> = {
+  mixer: 'channel1', sequencer: 'channel1', drum: 'channel2', sampler: 'channel5',
+  synth: 'channel4', instrument: 'channel4', effect: 'channel6', dsp: 'channel6',
+  eq: 'channel6', voice: 'channel8', spatial: 'channel7', mastering: 'channel1',
+};
+
+
+export default function App() {
+  return (
+    <SafeModuleBoundary>
+      <AppComponent />
+    </SafeModuleBoundary>
+  );
+}
+
+function AppComponent() {
+  const { startAudio } = useAudio();
+  const { moduleStates, setModuleState } = useModuleState();
+  const { requestLock, releaseLock } = usePluginManager();
+  const { pendingSample, setPendingSample } = useSamples();
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [bpm, setBpm] = useState(128);
+  const [patterns, setPatterns] = useState(TECHNO_PRESETS[0].patterns);
+  const [stepCount, setStepCount] = useState<16 | 32>(16);
+  const [isStarted, setIsStarted] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [masteringOpen, setMasteringOpen] = useState(false);
+  const [monitorMode, setMonitorMode] = useState<'MAIN' | 'MON' | 'PLUGIN'>('MAIN');
+  const [monitorUser, setMonitorUser] = useState<'MON1' | 'MON2' | 'MON3' | 'MON4'>('MON1');
+  const [sessionMembers, setSessionMembers] = useState(0);
+  const [sessionFull, setSessionFull] = useState(false);
+
+  // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
+  useEffect(() => {
+    webRTCManager.onSessionUpdate = (info) => {
+      setSessionMembers(info.members.length);
+      setSessionFull(info.full);
+    };
+    return () => { webRTCManager.onSessionUpdate = () => {}; };
+  }, []);
+
+  // Sequencer: zwischen 16 und 32 Steps umschalten (Patterns werden gepolstert).
+  const handleSetStepCount = (n: 16 | 32) => {
+    if (n === stepCount) return;
+    setStepCount(n);
+    audioEngine.setStepCount(n);
+    const next: Patterns = { ...patterns };
+    (Object.keys(next) as TrackType[]).forEach((t) => {
+      const arr = next[t] ?? [];
+      next[t] = arr.length >= n ? arr.slice(0, n) : [...arr, ...Array(n - arr.length).fill(false)];
+    });
+    setPatterns(next);
+    audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
+  };
+
+  // Task 22: Rollen-Start-Presets – wendet das Modul-Profil einer Rolle an.
+  const applyRole = (role: StudioRole) => {
+    const ids = getPluginRegistry().map(p => p.id);
+    const states = moduleStateForRole(role, ids);
+    Object.entries(states).forEach(([id, s]) => setModuleState(id, s));
+  };
+
+  useEffect(() => {
+    audioEngine.onStepUpdate = setCurrentStep;
+    return () => {
+      audioEngine.onStepUpdate = () => {};
+    };
+  }, []);
+
+  // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
+  useEffect(() => {
+    audioEngine.onDropout = (count) => {
+      try {
+        fetch('/api/telemetry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ events: [{ type: 'dropout', source: 'audio-thread', message: 'Audio-Dropout erkannt', context: { count }, ts: Date.now() }] }),
+          keepalive: true,
+        }).catch(() => { /* offline */ });
+      } catch { /* noop */ }
+    };
+    return () => { audioEngine.onDropout = null; };
+  }, []);
+
+  // P1: End-to-End-Latenz persistieren (alle 30 s an /api/telemetry).
+  useEffect(() => {
+    const sendLatency = () => {
+      try {
+        const health = audioEngine.getAudioHealth();
+        fetch('/api/telemetry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            events: [{
+              type: 'latency',
+              source: 'telemetry',
+              message: 'Latenz-Snapshot',
+              context: {
+                baseLatencyMs: Math.round(health.baseLatencyMs * 10) / 10,
+                sampleRate: health.sampleRate,
+                rttMs: Math.round(webRTCManager.lastRttMs * 10) / 10,
+                dropouts: audioEngine.dropoutCount,
+              },
+              ts: Date.now(),
+            }],
+          }),
+          keepalive: true,
+        }).catch(() => { /* offline */ });
+      } catch { /* noop */ }
+    };
+    const interval = setInterval(sendLatency, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // MOA-Kommando (Sequencer-Registry): Patterns + BPM sichtbar übernehmen.
+  // WICHTIG: Hook MUSS vor dem Early-Return des Start-Screens stehen (Rules of Hooks).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { patterns?: Patterns; bpm?: number } | undefined;
+      if (!detail?.patterns) return;
+      // Partielle Patterns MERGEN (nicht ersetzen), sonst crasht das
+      // Sequencer-Terminal bei fehlenden Tracks (undefined.map).
+      setPatterns(prev => {
+        const merged = { ...prev, ...detail.patterns };
+        audioEngine.loadPatterns(merged as unknown as Record<string, boolean[]>);
+        return merged;
+      });
+      if (typeof detail.bpm === 'number' && Number.isFinite(detail.bpm)) setBpm(detail.bpm);
+    };
+    window.addEventListener('monk:apply-patterns', handler);
+    return () => window.removeEventListener('monk:apply-patterns', handler);
+  }, []);
+
+  const startApp = async () => {
+      // UX-Debug: markiert den Start-Ablauf sichtbar in der Konsole.
+      console.log('[startApp] Aktion ausgelöst – Audio-Init beginnt');
+      // UX-Fix: Jeder Initialisierungsschritt wird einzeln abgefangen. Wenn das
+      // Backend (WebRTC-Signaling) oder einzelne Worklets nicht verfügbar sind,
+      // darf die App NICHT auf dem Start-Screen hängen bleiben – sie startet
+      // trotzdem und protokolliert den Fehler konsolen-seitig.
+      try {
+        await startAudio();
+      } catch (e) {
+        console.error('[startApp] startAudio fehlgeschlagen (App startet trotzdem):', e);
+      }
+      console.log('[startApp] startAudio done');
+      // Mikrofon für die WebRTC-Session erst NACH der User-Geste anfragen
+      // (iOS-Safari verweigert getUserMedia ohne Geste). Fehler sind optional.
+      webRTCManager.startLocalAudio().catch((e) => console.warn('[startApp] Mikrofon nicht verfügbar:', e));
+      try {
+        await discoverPlugins();
+      } catch (e) {
+        console.error('[startApp] discoverPlugins fehlgeschlagen (Fallback-Registry aktiv):', e);
+      }
+      console.log('[startApp] discoverPlugins done');
+      // KEIN Autoplay: Es darf erst klingen, wenn im Plugin ein Ton gestartet
+      // oder im Master-Player Play gedrückt wird.
+      // Sequenzer-Pattern synchron in die AudioEngine laden, damit der geladene
+      // Tech-Preset beim ersten Play sofort hörbar ist.
+      try {
+        const initialPreset = TECHNO_PRESETS[0];
+        audioEngine.loadPatterns(initialPreset.patterns as unknown as Record<string, boolean[]>, initialPreset.synthNotes, initialPreset.bpm);
+        setBpm(initialPreset.bpm);
+      } catch (e) {
+        console.warn('[startApp] Preset-Sync fehlgeschlagen:', (e as Error).message);
+      }
+      // IMMER in den App-Screen wechseln – Backend/Worklet-Defizite brechen die App nicht.
+      console.log('[startApp] isStarted=true setzen');
+      setIsStarted(true);
+      setIsPlaying(false);
+  };
+
+  if (!isStarted) {
+      return (
+          <div className="min-h-screen relative flex flex-col items-center justify-center bg-black text-white overflow-hidden">
+              {/* Ambient-Aura passend zur Logofarbe (Teal/Cyan) */}
+              <div className="absolute inset-0 pointer-events-none opacity-40"
+                   style={{ background: 'radial-gradient(520px 380px at 50% 42%, rgba(16,120,130,0.35) 0%, rgba(8,20,24,0.2) 45%, transparent 75%)' }} />
+              <div className="absolute w-135 h-135 rounded-full blur-3xl opacity-25"
+                   style={{ background: 'radial-gradient(circle, rgba(34,211,238,0.5), transparent 70%)' }} />
+
+              <button type="button"
+                onClick={startApp}
+                aria-label="audioMONASTRY starten"
+                className="group relative flex flex-col items-center gap-6 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 rounded-2xl"
+              >
+                  {/* Logo mit sanftem Glow + Hover-Orbit */}
+                  <div className="relative">
+                    <div className="absolute inset-0 rounded-2xl blur-2xl bg-cyan-400/20 group-hover:bg-cyan-300/30 transition-colors duration-700 scale-110 group-hover:scale-125" />
+                    <div className="relative ring-1 ring-cyan-400/20 rounded-2xl overflow-hidden">
+                      <Logo size={96} glow rounded={false} className="group-hover:scale-[1.03] transition-transform duration-500" />
+                    </div>
+                    <span className="absolute -inset-3 rounded-2xl border border-cyan-400/0 group-hover:border-cyan-400/30 transition-all duration-500" />
+                  </div>
+
+                  <span className="text-[9px] font-mono tracking-[0.5em] text-neutral-500 uppercase">Audio Workstation</span>
+                  <span className="text-4xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-cyan-300 via-teal-200 to-fuchsia-400">
+                    AUDIO MONASTRY
+                  </span>
+                  <span className="px-5 py-2.5 rounded-full border border-cyan-400/40 text-cyan-200 text-xs font-bold tracking-[0.3em] uppercase
+                                 bg-cyan-500/8 hover:bg-cyan-500/18 hover:border-cyan-300/70 hover:shadow-[0_0_30px_-6px_var(--monk-glow-teal)]
+                                 transition-all duration-300 active:scale-95">
+                    ▶ Studio betreten
+                  </span>
+              </button>
+          </div>
+      );
+  }
+
+  // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
+  const togglePlugin = (id: string) => {
+    if (id === 'mixer') return;
+
+    const currentState = moduleStates[id] || 'OFF';
+    const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
+    releaseLock(id, webRTCManager.userId);
+    setModuleState(id, nextState);
+  };
+
+  const promotePlugin = (id: string) => {
+    if (id === 'mixer') return;
+    const currentState = moduleStates[id] || 'OFF';
+    if (currentState === 'OFF') return;
+    const lockGranted = requestLock(id, webRTCManager.userId);
+    if (!lockGranted) return;
+    setModuleState(id, 'PRO');
+  };
+
+  const handleToggleStep = (track: TrackType, stepIndex: number) => {
+    setPatterns(prev => {
+      const nextArr = [...prev[track]];
+      nextArr[stepIndex] = !nextArr[stepIndex];
+      const next = { ...prev, [track]: nextArr };
+      // AudioEngine unmittelbar nachschieben, damit die Klinge hörbar synchron ist.
+      audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
+      return next;
+    });
+  };
+
+  const handleApplyPatterns = (next: Patterns, nextBpm: number) => {
+    setPatterns(next);
+    setBpm(nextBpm);
+    audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
+    audioEngine.setBpm(nextBpm);
+  };
+
+  return (
+    <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 short-landscape:p-2">
+      <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
+      {/* 1. Header: STICKY, Logo schwarz, Titel-4-Farben, Steuerung rechts */}
+      <header className="flex items-center justify-between gap-4 mb-8 short-landscape:mb-3 sticky top-0 z-30 -mx-6 px-6 short-landscape:px-3 py-4 short-landscape:py-2 bg-black/70 backdrop-blur-xl [box-shadow:0_1px_0_rgba(34,211,238,0.06),0_20px_40px_-24px_rgba(0,0,0,0.9)]">
+        <div className="flex items-center gap-3">
+          <div className="relative shrink-0">
+            <div className="absolute -inset-1 rounded-xl bg-cyan-400/15 blur-lg" />
+            <div className="relative overflow-hidden rounded-lg ring-1 ring-cyan-400/15">
+              <Logo size={38} rounded={false} />
+            </div>
+          </div>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-cyan-300 via-teal-200 to-fuchsia-400 leading-none">
+                AUDIO MONASTRY
+            </h1>
+            <p className="text-[9px] text-neutral-500 font-mono tracking-[0.3em] uppercase mt-1">4-Person Studio</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[9px] font-mono tracking-widest ${
+              sessionFull
+                ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300'
+            }`}
+            title="Aktive Studio-Session (eine feste Session, max. 4 User)"
+            role="status"
+            aria-live="polite"
+          >
+            <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
+            {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
+          </div>
+          <div className="relative">
+            <select
+              value={monitorMode}
+              onChange={(e) => {
+                const mode = e.target.value as 'MAIN' | 'MON' | 'PLUGIN';
+                setMonitorMode(mode);
+                const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
+                  ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
+                  ?? 'sequencer';
+                audioEngine.setMonitorSource(mode, monitorUser, PLUGIN_SOLO_CHANNEL[activeId] ?? 'channel1');
+              }}
+              className="appearance-none pl-3 pr-8 py-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-xs hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
+              title="Monitor-Quelle: MAIN / eigener User-Mix / aktuelles Plugin"
+              aria-label="Monitor-Quelle wählen"
+            >
+              <option value="MAIN">🎧 MAIN</option>
+              <option value="MON">🎧 USER-MIX</option>
+              <option value="PLUGIN">🎧 PLUGIN</option>
+            </select>
+          </div>
+          {monitorMode === 'MON' && (
+            <div className="relative">
+              <select
+                value={monitorUser}
+                onChange={(e) => {
+                  const mon = e.target.value as 'MON1' | 'MON2' | 'MON3' | 'MON4';
+                  setMonitorUser(mon);
+                  audioEngine.setMonitorSource('MON', mon);
+                }}
+                className="appearance-none pl-3 pr-6 py-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
+                title="Eigener Monitor-Bus (User 1-4)"
+                aria-label="Monitor-Bus wählen"
+              >
+                <option value="MON1">USER 1</option>
+                <option value="MON2">USER 2</option>
+                <option value="MON3">USER 3</option>
+                <option value="MON4">USER 4</option>
+              </select>
+            </div>
+          )}
+          <div className="relative">
+            <select
+              defaultValue=""
+              onChange={e => e.target.value && applyRole(e.target.value as StudioRole)}
+              className="appearance-none pl-3 pr-8 py-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-xs hover:border-fuchsia-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
+              title="Rollen-Startprofil wählen"
+              aria-label="Rollen-Startprofil wählen"
+            >
+              <option value="" disabled>Rolle</option>
+              {ROLE_PRESETS.map(r => (
+                <option key={r.role} value={r.role}>{r.role.replace('_', ' ')}</option>
+              ))}
+            </select>
+          </div>
+          <button type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="p-2.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
+            title="Audio / I-O Einstellungen"
+            aria-label="Audio / I-O Einstellungen öffnen"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
+      </header>
+
+      {/* 1b. FESTES DJ-MISCHPULT (oberstes Plugin, immer sichtbar) – Allen & Heath XONE-Style, 4/8 Kanäle umschaltbar */}
+      <div className="mb-8 short-landscape:mb-3 -mx-6">
+        <Suspense fallback={<div className="h-24 flex items-center justify-center text-neutral-500 text-xs">Lade DJ-Mixer…</div>}><DJMixer /></Suspense>
+      </div>
+
+      {/* 2. Module Selection + Icon Grid (2 x 8) */}
+      <div className="mb-8">
+        <div className="flex items-center gap-4 mb-4">
+          <span className="h-px flex-1 bg-linear-to-r from-transparent to-neutral-800" />
+          <h2 className="text-[11px] font-bold tracking-[0.4em] text-neutral-400 uppercase">Module Selection</h2>
+          <span className="h-px flex-1 bg-linear-to-l from-transparent to-neutral-800" />
+        </div>
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 max-w-5xl mx-auto">
+        {getPluginRegistry().map(plugin => {
+          const state = moduleStates[plugin.id] || 'OFF';
+          const isActive = state !== 'OFF';
+
+          return (
+            <PluginButton
+              key={plugin.id}
+              id={plugin.id}
+              icon={plugin.icon}
+              short={plugin.short}
+              isActive={isActive}
+              state={state}
+              onClick={() => togglePlugin(plugin.id)}
+              onDoubleClick={() => promotePlugin(plugin.id)}
+            />
+          );
+        })}
+      </div>
+      </div>
+
+      {/* 3. Master-Player + Waveform (BPM-Anzeige) */}
+      <section className="monk-panel edge-inset p-5 short-landscape:p-3 mb-8 short-landscape:mb-3">
+        <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <h3 className="text-[11px] font-bold tracking-[0.35em] text-neutral-500 uppercase">Master Player</h3>
+            <span className={`font-mono text-lg font-bold tracking-tight ${isPlaying ? 'text-cyan-300' : 'text-neutral-600'}`}>
+              {isPlaying ? <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse mr-1" /> : null}
+              {bpm} BPM
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button"
+              disabled={isPlaying}
+              onClick={() => { audioEngine.play(); setIsPlaying(true); }}
+              aria-label={isPlaying ? 'Wiedergabe läuft' : 'Wiedergabe starten'}
+              className="px-5 py-2 rounded-full bg-cyan-500/12 border border-cyan-500/50 text-cyan-200 text-xs font-bold tracking-widest uppercase hover:bg-cyan-500/25 hover:shadow-[0_0_20px_-6px_var(--monk-glow-teal)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
+            >
+              {isPlaying ? '▶ Läuft' : '▶ Play'}
+            </button>
+            <button type="button"
+              onClick={() => { audioEngine.stop(); setIsPlaying(false); }}
+              disabled={!isPlaying}
+              aria-label="Wiedergabe stoppen"
+              className="px-5 py-2 rounded-full bg-fuchsia-500/12 border border-fuchsia-500/50 text-fuchsia-200 text-xs font-bold tracking-widest uppercase hover:bg-fuchsia-500/25 hover:shadow-[0_0_20px_-6px_rgba(217,70,239,0.5)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
+            >
+              ⏹ Stop
+            </button>
+          </div>
+        </div>
+        <BeatVisualizer isPlaying={isPlaying} />
+        <div className="mt-4 pt-4 border-t border-neutral-800/80">
+          <Suspense fallback={<div className="h-12 text-neutral-500 text-xs">Lade Master-Player…</div>}><MasterPlayerTerminal /></Suspense>
+        </div>
+      </section>
+
+      {/* 4. Active Modules */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {getPluginRegistry()
+          .filter(p => (p.id === 'mixer' ? true : (moduleStates[p.id] && moduleStates[p.id] !== 'OFF')))
+          .map(plugin => (
+            <ModuleContainer key={plugin.id} id={plugin.id} name={plugin.name} state={moduleStates[plugin.id]}>
+
+                              <SafeModuleBoundary>
+                                {plugin.id === 'sequencer' ? (
+                                  <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Sequencer…</div>}><SequencerPluginTerminal
+                                      isPlaying={isPlaying}
+                                      currentStep={currentStep}
+                                      tracks={patterns}
+                                      bpm={bpm}
+                                      setBpm={setBpm}
+                                      stepCount={stepCount}
+                                      onSetStepCount={handleSetStepCount}
+                                      onPlay={() => { audioEngine.play(); setIsPlaying(true); }}
+                                      onStop={() => { audioEngine.stop(); setIsPlaying(false); }}
+                                      onToggleStep={handleToggleStep}
+                                      onApplyPatterns={handleApplyPatterns}
+                                  /></Suspense>
+                                  ) : plugin.id === 'voice' ? (
+                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Voice-Modul…</div>}><div className="flex flex-col gap-4">
+                                      <VoiceGenTerminal enabled={FEATURE_FLAGS.VOICE_GENERATOR_ENABLED} />
+                                      <VoiceMonkPanel userId="localUser" />
+                                    </div></Suspense>
+                                  ) : plugin.id === 'drum' ? (
+                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Machine…</div>}><DrumMachineTerminal isPlaying={isPlaying} currentStep={currentStep} bpm={bpm} /></Suspense>
+                                  ) : plugin.id === 'mastering' ? (
+                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
+                                      <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />
+                                      <button
+                                        type="button"
+                                        onClick={() => setMasteringOpen(true)}
+                                        className="w-full px-4 py-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-200 text-xs font-mono tracking-widest hover:bg-sky-500/15 transition-all cursor-pointer"
+                                      >
+                                        NEXUS KONTROL ÖFFNEN
+                                      </button>
+                                    </Suspense>
+                                  ) : (
+                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Modul…</div>}><plugin.component /></Suspense>
+                                  )}
+                              </SafeModuleBoundary>
+                            </ModuleContainer>
+
+        ))}
+      </div>
+
+      <MoaHistoryPanel />
+
+      {/* Touch-Fallback: armiertes Sample global anzeigen */}
+      {pendingSample && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2.5 rounded-full bg-fuchsia-600/90 border border-fuchsia-300/60 text-white text-[10px] font-mono tracking-widest shadow-[0_8px_30px_rgba(217,70,239,0.5)] backdrop-blur">
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          <span className="max-w-[220px] truncate">{pendingSample.name}</span>
+          <span className="text-fuchsia-100">→ Ziel antippen</span>
+          <button type="button"
+            onClick={() => setPendingSample(null)}
+            aria-label="Sample-Auswahl aufheben"
+            className="px-2 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Settings / Audio-I/O */}
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+    </div>
+  );
+}

@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "plugins": {
+    "instrumente": { "procedure": "Map MIDI velocity to sample layer", "rules": ["Prevent clipping", "Maintain velocity curve"], "fallback": "Load default piano" },
+    "sequenzer": { "procedure": "Adjust probability per step", "rules": ["Keep 4/4 sync", "Prevent step accumulation"], "fallback": "Reset to 16-step grid" },
+    "mischpult": { "procedure": "Auto-level gain based on headroom", "rules": ["No dB over 0", "Maintain balance"], "fallback": "Unity Gain" },
+    "mastering-tool": { "procedure": "Loudness maximization", "rules": ["LUFS -14", "Limit to -0.1dB"], "fallback": "Bypass" },
+    "voice-generator": { "procedure": "Text-to-vocal synthesis", "rules": ["Maintain intelligibility", "Apply compression"], "fallback": "Disable vocal effect" },
+    "dsp-engine": { "procedure": "Spectral dynamic adjust", "rules": ["No phase cancellation", "Maintain spectral balance"], "fallback": "Bypass" },
+    "fx-engine": { "procedure": "Modulation scaling", "rules": ["Keep feedback < 90%", "Protect transient"], "fallback": "Dry signal" },
+    "spatial-surround": { "procedure": "3D panning trajectory", "rules": ["Keep within head-radius", "Smooth motion"], "fallback": "Center pan" },
+    "drum-synths": { "procedure": "Dynamic transient shaping", "rules": ["Short decay", "Punchy attack"], "fallback": "Static sine kick" },
+    "recorder": { "procedure": "Gain staging on input", "rules": ["No digital clipping", "Auto-normalize"], "fallback": "Monitor only" },
+    "midi-controller": { "procedure": "MIDI CC mapping", "rules": ["No feedback loops"], "fallback": "Ignore CC" },
+    "custom-slot": { "procedure": "Container mapping", "rules": ["Resource isolation"], "fallback": "Unload plugin" },
+    "extension-slot": { "procedure": "Host integration", "rules": ["Memory safety"], "fallback": "Isolate" },
+    "equalizer": { "procedure": "Freq contouring", "rules": ["Cut resonances"], "fallback": "Flat EQ" },
+    "sample-bibliothek": { "procedure": "Asset indexing", "rules": ["Verify integrity"], "fallback": "Read-only mode" },
+    "stem-extractor": { "procedure": "Source separation", "rules": ["Maintain fidelity"], "fallback": "Bypass" }
+  }
+}
+EOF

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "audiomonastry.fullname" . }}
+  labels:
+    app.kubernetes.io/name: audiomonastry
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: audiomonastry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: audiomonastry
+    spec:
+      containers:
+        - name: audiomonastry
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "{{ .Values.env.PORT }}"
+            - name: NODE_ENV
+              value: "{{ .Values.env.NODE_ENV }}"
+            - name: ENABLE_SFU
+              value: "{{ .Values.env.ENABLE_SFU }}"
+            - name: SIGNALING_IDLE_TIMEOUT_MS
+              value: "{{ .Values.env.SIGNALING_IDLE_TIMEOUT_MS }}"
+            - name: REGION
+              value: "{{ .Values.region }}"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

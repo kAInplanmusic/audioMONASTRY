@@ -1,0 +1,6 @@
+# .gcloudignore
+**/.git
+**/.gitignore
+**/node_modules
+**/dist
+!static_assets/general_midi.sf2

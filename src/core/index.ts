@@ -1,0 +1,135 @@
+/**
+ * audioMONASTRY · Core-Abstraktionen (Public API)
+ * ----------------------------------------------
+ * Zentral erreichbarer Einstiegspunkt der Phase-1-Abstraktionsschichten und
+ * der erweiterten Kern-Bausteine (WebGPU, Worker-Pool, SFU, instrumentMONK).
+ */
+export * from './interfaces';
+export { WebAudioBackend, webAudioBackend } from './WebAudioBackend';
+export {
+  WebRTCTransport, webRTCTransport,
+  AIRuntime, aiRuntime,
+  ComputeBackend, computeBackend,
+  SpatialRenderer, spatialRenderer,
+  WebMIDIAdapter, webMIDIAdapter,
+  HIDAdapter, hidAdapter,
+  OSCAdapter, oscAdapter,
+  createBackends,
+} from './adapters';
+export type { Backends } from './adapters';
+
+// 1.1.4 – Spatial-Renderer (Stereo/Binaural/Multichannel)
+export {
+  StereoSpatialRenderer, stereoSpatialRenderer,
+  BinauralSpatialRenderer, binauralSpatialRenderer,
+  MultichannelSpatialRenderer, multichannelSpatialRenderer,
+} from './spatial/spatialRenderers';
+
+// 1.1.6 – Transport-Registry & LocalTransport
+export {
+  LocalTransport, localTransport,
+  TransportRegistry, transportRegistry,
+} from './transport/TransportRegistry';
+
+// 1.2.1 – Objekt-Identitätssystem
+export { ObjectRegistry, uuidV4 } from './session/ObjectRegistry';
+export type { SessionObject } from './session/ObjectRegistry';
+
+// 1.2.2 – State-Replication (CRDT/LWW/OR-Set)
+export {
+  LamportClock,
+  entryForObject, tombstoneFor,
+  mergeEntry, mergeEntries, applyReplicationToRegistry, converge,
+} from './session/stateReplication';
+export type { ReplicationEntry, ReplicationState } from './session/stateReplication';
+
+// 1.2.3 – Lease-basiertes Locking (Heartbeat + Auto-Release)
+export { LockManager, lockManager } from './session/locking';
+export type { LeaseLock } from './session/locking';
+
+// 1.2.4 – Deterministisches Random-Seed-Management
+export {
+  hashString, mulberry32, SeedManager, seedManager,
+} from './session/seedManagement';
+export type { SeedState } from './session/seedManagement';
+
+// 2.1.1/2.2.4 – RingBuffer (SAB/SPSC)
+export { RingBuffer } from './workers/RingBuffer';
+
+// 2.1.2 – Worklet-/Prozessor-Pooling
+export { ProcessorPool, processorPool } from './workers/WorkletPool';
+export type { PooledProcessor } from './workers/WorkletPool';
+
+// 2.2.2 – Async-Sandboxing (Live/Offline)
+export { registerSandboxedTask, runOffline, runLive } from './workers/AsyncSandbox';
+export type { SandboxedTask } from './workers/AsyncSandbox';
+
+// 3.1.4 – Session-Snapshots & Delta-Kompression
+export {
+  createSnapshot, createDelta, applyDelta,
+  serializeSnapshot, deserializeSnapshot,
+} from './session/SessionSnapshot';
+export type { SessionSnapshot, SessionDelta } from './session/SessionSnapshot';
+
+// 5.1.x – Spatial-Szene, Ambisonics, HRTF-Interpolation
+export { SpatialScene, spatialScene } from './spatial/SpatialScene';
+export type { SceneSource } from './spatial/SpatialScene';
+export { encodeAmbisonics, decodeAmbisonicsToRing } from './spatial/ambisonics';
+export type { AmbisonicFrame } from './spatial/ambisonics';
+export { HrtfInterpolator } from './spatial/hrtfInterpolator';
+export type { HrtfPair } from './spatial/hrtfInterpolator';
+
+// Raumplaner 12.x/18.x/24.x + Xonar-U7-Kanalzuordnung
+export {
+  planRoom, planAllSetups, assignXonarDevices, requiredXonarDevices, isXonarU7,
+  XONAR_U7_CHANNELS, XONAR_U7_CHANNEL_NAMES, ROOM_PLAN_FAMILIES,
+} from './spatial/roomPlanner';
+export type { RoomDimensions, RoomPlan, SpeakerPlacement, XonarDeviceAssignment } from './spatial/roomPlanner';
+
+// 5.2.2/7.2.x – Edge-DSP, Routing & Failover
+export { EdgeDspClient, edgeDspClient } from './edge/EdgeDspClient';
+export type { EdgeVectorFrame, EdgeStatusFrame } from './edge/EdgeDspClient';
+export { EdgeRouter, edgeRouter } from './edge/EdgeRouter';
+export type { EdgeNode } from './edge/EdgeRouter';
+export { FailoverController, failoverController } from './edge/FailoverController';
+export type { FailoverState } from './edge/FailoverController';
+
+// 8.1.1 – Native-Audio-Abstraktion
+export { StubNativeAudioBackend, nativeAudioBackend } from './native/NativeAudioBackend';
+export type { NativeAudioBackend, NativeAudioDevice } from './native/NativeAudioBackend';
+
+// 8.2.2/8.2.3 – Hardware-Simulator & Hotplug
+export { HardwareSimulator, hardwareSimulator } from './hardware/HardwareSimulator';
+export { HotplugManager, hotplugManager } from './hardware/HotplugManager';
+export type { HardwareDevice, HardwareState } from './hardware/HotplugManager';
+
+// R4 – WebGPU-Spatialization
+export { spatialConvolve, cpuSpatialConvolve } from './gpu/SpatialConvKernel';
+export type { SpatialConvJob } from './gpu/SpatialConvKernel';
+
+// WebGPU-Beschleuniger (4.1.1)
+export { WebGPUKernel, getGPUKernel } from './gpu/WebGPUKernel';
+
+// Worker-Pool (2.2.2)
+export { workerPool } from './workers/WorkerPool';
+export { computeLocal } from './computeLocal';
+
+// SFU / Kollaborations-Transport (3.1.1)
+export { MediasoupTransport, sfuTransport } from './transport/MediasoupTransport';
+
+// instrumentMONK: Instrumenten-Engine (Plugin #5)
+export type { IInstrumentBackend } from './instrument/IInstrumentBackend';
+export { InstrumentBackend, instrumentBackend } from './instrument/InstrumentBackend';
+export {
+  INSTRUMENT_CATALOG, getInstrument, listByCategory, catalogStats,
+  ACOUSTIC_INSTRUMENTS, SYNTHESIS_INSTRUMENTS,
+} from './instrument/catalog';
+export {
+  INSTRUMENT_PROGRAM_MAP, INSTRUMENT_TO_PROGRAM, PROGRAM_CHANGE_TABLE,
+  getInstrumentByProgram, getProgramForInstrument, MAX_MIDI_PROGRAM,
+} from './instrument/midiProgramMap';
+export type {
+  InstrumentDefinition, InstrumentPreset, InstrumentChannel,
+  InstrumentCategory, SynthKind, NoteInput,
+  SynthDef, FmDef, DrumDef, FxDef, AcousticDef,
+} from './instrument/types';

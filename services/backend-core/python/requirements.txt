@@ -1,0 +1,14 @@
+# Backend-Core Python – Google/firebase-frei
+fastapi
+uvicorn
+celery[redis]
+torch
+torchaudio
+transformers
+demucs
+accelerate
+huggingface_hub
+pillow
+librosa
+scikit-learn
+chromadb

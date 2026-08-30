@@ -1,0 +1,74 @@
+#cloud-config
+# =============================================================================
+# sampleMONK – Hetzner Cloud-Init (Ubuntu 24.04) – high-end production
+# -----------------------------------------------------------------------------
+# Installiert Docker + Compose + Firewall + Monitoring-Grundlagen auf einer
+# frischen Hetzner-Instanz und tuned das System für Echtzeit-Audio/WebRTC:
+#   - BBR Congestion Control, große UDP/TCP-Buffer (Mediasoup-SFU)
+#   - chrony (präzise Uhr), fail2ban (SSH-Härtung), zram (Build-Headroom)
+#   - Docker-Daemon mit hohen File-Limits (WebSockets)
+# Wird von scripts/hetzner/provision.py beim Server-Create übergeben.
+# =============================================================================
+package_update: true
+package_upgrade: false
+package_reboot_if_required: false
+
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - curl
+  - ufw
+  - fail2ban
+  - chrony
+
+write_files:
+  - path: /etc/sysctl.d/99-audiomonastry-lowlatency.conf
+    permissions: '0644'
+    owner: root:root
+    content: |
+      # audioMONASTRY – Echtzeit-/WebRTC-Tuning für Hetzner-Instanzen
+      # SFU (Mediasoup) braucht große UDP-Buffer; Socket.io viele FDs.
+      net.core.rmem_default = 262144
+      net.core.wmem_default = 262144
+      net.core.rmem_max = 16777216
+      net.core.wmem_max = 16777216
+      net.core.netdev_max_backlog = 65536
+      net.core.somaxconn = 8192
+      net.core.busy_read = 50
+      net.core.busy_poll = 50
+      net.ipv4.tcp_rmem = 4096 87380 16777216
+      net.ipv4.tcp_wmem = 4096 65536 16777216
+      net.ipv4.tcp_congestion_control = bbr
+      net.ipv4.tcp_fastopen = 3
+      net.ipv4.tcp_slow_start_after_idle = 0
+      net.ipv4.tcp_tw_reuse = 1
+      net.ipv4.ip_local_port_range = 1024 65535
+      net.ipv4.udp_rmem_min = 8192
+      net.ipv4.udp_wmem_min = 8192
+      vm.swappiness = 10
+      fs.file-max = 2097152
+      fs.inotify.max_user_watches = 524288
+
+  - path: /etc/systemd/system/docker.service.d/00-limits.conf
+    permissions: '0644'
+    owner: root:root
+    content: |
+      [Service]
+      LimitNOFILE=1048576
+      LimitNPROC=infinity
+      TasksMax=infinity
+
+runcmd:
+  - sysctl --system
+  - systemctl daemon-reload
+  - systemctl enable --now docker
+  - systemctl restart docker
+  - systemctl enable --now chrony
+  - systemctl enable --now fail2ban
+  - apt-get install -y --no-install-recommends zram-tools && systemctl enable --now zramswap || true
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+  - echo "samplemonk cloud-init done" > /root/.samplemonk-bootstrap-done

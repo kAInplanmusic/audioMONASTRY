@@ -1,0 +1,158 @@
+{
+  "worklets": [
+    {
+      "id": "analyzer-processor",
+      "url": "/worklets/analyzerProcessor.js",
+      "hash": "placeholder_hash_analyzer"
+    },
+    {
+      "id": "dsp-processor",
+      "url": "/worklets/dspProcessor.js",
+      "hash": "placeholder_hash_dsp"
+    },
+    {
+      "id": "fallback-processor",
+      "url": "/worklets/fallbackProcessor.js",
+      "hash": "placeholder_hash_fallback"
+    },
+    {
+      "id": "lufs-processor",
+      "url": "/worklets/lufsProcessor.js",
+      "hash": "placeholder_hash_lufs"
+    },
+    {
+      "id": "eq-processor",
+      "url": "/worklets/eqProcessor.js",
+      "hash": "placeholder_hash_eq"
+    },
+    {
+      "id": "mastering-processor",
+      "url": "/worklets/masteringProcessor.js",
+      "hash": "placeholder_hash_mastering"
+    },
+    {
+      "id": "clock-processor",
+      "url": "/worklets/clockProcessor.js",
+      "hash": "placeholder_hash_clock"
+    },
+    {
+      "id": "synth-processor",
+      "url": "/worklets/synthProcessor.js",
+      "hash": "placeholder_hash_synth"
+    },
+    {
+      "id": "it-synth-processor",
+      "url": "/worklets/itSynthProcessor.js",
+      "hash": "placeholder_hash_itsynth"
+    },
+    {
+      "id": "effect-processor",
+      "url": "/worklets/effectProcessor.js",
+      "hash": "placeholder_hash_effect"
+    }
+  ],
+  "ui_plugins": [
+    {
+      "id": "mixer",
+      "name": "mixerMONK",
+      "short": "MIX",
+      "icon": "Sliders"
+    },
+    {
+      "id": "controller",
+      "name": "controllerMONK",
+      "short": "CTRL",
+      "icon": "Keyboard"
+    },
+    {
+      "id": "sequencer",
+      "name": "sequencerMONK",
+      "short": "SEQ",
+      "icon": "Grid3X3"
+    },
+    {
+      "id": "spatial",
+      "name": "spatialMONK",
+      "short": "3D",
+      "icon": "Box"
+    },
+    {
+      "id": "instrument",
+      "name": "instrumentMONK",
+      "short": "INS",
+      "icon": "Music"
+    },
+    {
+      "id": "drum",
+      "name": "drumMONK",
+      "short": "DRM",
+      "icon": "Speaker"
+    },
+    {
+      "id": "effect",
+      "name": "effectMONK",
+      "short": "FX",
+      "icon": "Sparkles"
+    },
+    {
+      "id": "synth",
+      "name": "synthesizerMONK",
+      "short": "SYN",
+      "icon": "Waves"
+    },
+    {
+      "id": "voice",
+      "name": "voiceMONK",
+      "short": "VOX",
+      "icon": "Mic"
+    },
+    {
+      "id": "visualizer",
+      "name": "visMONK",
+      "short": "VIS",
+      "icon": "Activity"
+    },
+    {
+      "id": "stem",
+      "name": "stemMONK",
+      "short": "RMX",
+      "icon": "Radio"
+    },
+    {
+      "id": "recording",
+      "name": "recordingMONK",
+      "short": "REC",
+      "icon": "Activity"
+    },
+    {
+      "id": "library",
+      "name": "biblioMONK",
+      "short": "LIB",
+      "icon": "Database"
+    },
+    {
+      "id": "eq",
+      "name": "eqMONK",
+      "short": "EQ",
+      "icon": "Activity"
+    },
+    {
+      "id": "sampler",
+      "name": "samplerMONK",
+      "short": "SAM",
+      "icon": "Speaker"
+    },
+    {
+      "id": "mastering",
+      "name": "masteringMONK",
+      "short": "MST",
+      "icon": "Square"
+    },
+    {
+      "id": "performance",
+      "name": "perfMONK",
+      "short": "PRF",
+      "icon": "Gauge"
+    }
+  ]
+}

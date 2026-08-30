@@ -1,0 +1,9 @@
+{
+  "routing": [
+    {"source": "kick-track", "channel": 1, "color": "bg-red-500", "type": "sample"},
+    {"source": "hat-track", "channel": 2, "color": "bg-blue-500", "type": "sample"},
+    {"source": "synth-engine", "channel": 3, "color": "bg-purple-500", "type": "instrument"},
+    {"source": "fx-engine", "channel": 4, "color": "bg-orange-500", "type": "effect"},
+    {"source": "mastering", "channel": 5, "color": "bg-yellow-500", "type": "master"}
+  ]
+}

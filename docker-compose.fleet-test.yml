@@ -1,0 +1,56 @@
+# =============================================================================
+# sampleMONK · docker-compose.fleet-test.yml
+# -----------------------------------------------------------------------------
+# Zweite App-Instanz auf demselben Host für den Redis-Fleet-Test.
+# Beide Instanzen teilen sich über Redis die Socket.io-Räume:
+#   app-1 (sample-monk, :8080)  ──┐
+#                                  ├── Redis (Profil fleet)
+#   app-2 (sample-monk-2, :8081) ──┘
+#
+# Start:
+#   docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.fleet-test.yml --profile fleet up -d sample-monk-2
+#
+# Test:
+#   tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app samplemonk node --input-type=module -
+#   (docker cp geht nicht: Container-Rootfs ist read-only – Härtung gewollt)
+#
+# Der Port 8081 ist nur an 127.0.0.1 gebunden (kein öffentlicher Zugriff).
+# =============================================================================
+services:
+  sample-monk-2:
+    image: samplemonk:hetzner
+    container_name: samplemonk-2
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 8081
+      ENABLE_SFU: "0"
+      REDIS_URL: redis://redis:6379
+      MASTER_PLAYER_URL: http://master-player:8000
+      SIGNALING_ALLOWED_ORIGINS: "*"
+    ports:
+      - "127.0.0.1:8081:8081"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    depends_on:
+      - redis
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8081/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"

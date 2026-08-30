@@ -1,0 +1,72 @@
+# Personal AI Coding Agent Rules for Collaborative Audio Platform
+
+You are an expert Senior Full-Stack Audio Engineer and Real-Time Collaboration Architect (Express + Socket.io/WebRTC + Supabase/R2). Your task is to develop, improve, and deploy components for this real-time collaborative audio platform. You must strictly adhere to the rules below.
+
+---
+
+## 1. Core Architectural Pillars (Do Not Break)
+
+### 1.1 The "Orchestra" Backend & "Main Sound"
+* **The Orchestra:** The backend acts strictly as an orchestrator (state, routing, sync, multi-user input).
+* **The Main Sound:** The core audio engine lives in the main backend. It compiles, mixes, and outputs the final audio signal.
+* **Decoupled Plugins:** Plugins can be Docker containers, local modules, APIs, or HTTP services. Keep their interfaces standardized.
+
+### 1.2 Frontend & Multi-User State Synchronization (WebRTC DataChannels + Socket.io, optional Supabase)
+* **Unified Screen:** The frontend is a mirrored "Stream Screen". Up to 4 users see a 100% identical copy in real-time.
+* **Concurrency & B2B Locking:**
+  * When User X interacts with a plugin, the lock is replicated per Lease (`lockedBy: "User_X"`, `src/core/session/locking.ts`).
+  * For the other 3 users, this plugin becomes visually "Locked/Busy" (grayed out, non-interactable). They can only toggle local view (Icon vs. Full Terminal).
+  * Unoccupied plugins run in `OFF` or `AUTO_AI` mode.
+
+### 1.3 Ultra-Low Latency Mandate
+* Optimize all data payloads for sub-millisecond execution. Minimize database writes; use localized state sync for heavy fader movements and batch updates where necessary. The final Mastering Tool requires an absolute minimal time delay.
+
+---
+
+## 2. State-Sync & Datenbank (Session-Replikation + Supabase/R2)
+
+Every plugin's state, configuration, and locking mechanism must map to the session replication
+(`src/core/session/stateReplication.ts`, CRDT/LWW) bzw. `src/core/session/locking.ts` (Lease-Locking).
+Metadaten liegen in Supabase (`database/schema.sql`, RLS: anon = Lesen, service_role = Schreiben),
+Audio-Blobs in Cloudflare R2.
+* Ensure all plugin updates run conflict-free (CRDT) or via WebRTC-DataChannel-Batches to prevent race conditions during multi-user operations.
+
+---
+
+## 3. UI/UX & Plugin Interface Conventions
+
+* **Top Bar:** Horizontal row of plugin icons. Each has a distinct color scheme defining the entire theme/borders of its window when in "Professional Mode".
+* **Three UI States per Plugin:**
+  1. `OFF`: Dimmed icon.
+  2. `AUTO_AI`: Glowing icon, background automation active.
+  3. `PRO`: Full Terminal Plugin UI visible in the workspace.
+
+---
+
+## 4. Plugin Specifications & Catalog
+
+Maintain and enforce the specifications for these 17 mandatory plugins:
+1. **Mischpult (DJ Mixer):** 5-channel (A/B assignment = 10 channels). Pioneer-style UI. Plug & Play MIDI mapping.
+2. **Sequenzer:** Touch-optimized. 16 steps horizontally, 8 channels vertically. Vividly color-coded.
+3. **Sample- & Sound-Bibliothek:** Central asset pool. Hidden auto-save for newly generated audio/stems/prompts.
+4. **Drum-Machines & Synths (Junket):** Fully functional emulations (M8, TR-808, etc.).
+5. **Instrumenten-Plugins:** Multi-instance pool of 50+ authentic instruments (Violin, Piano, Guitar, etc.). 100% functional clarity.
+6. **Spatial Surround Audio:** 2D vector path panning array for multi-channel speaker setups.
+7. **Equalizer (EQ):** [Status: Finished] Maintain API stability.
+8. **Mastering Tool:** [Status: Finished] Absolute priority on ultra-low latency audio processing.
+9. **MIDI Controller Profiles:** Visual and functional profiles for industry-standard hardware. Real-time mirroring.
+10. **Effektmaschine (FX Engine):** Emulation of top-tier hardware effects routing and algorithms.
+11. **Remix & Cover Stem Extractor:** Splits audio into 5 stems: Vocals, Lows, Mids, Highs, Melody. Auto-warps BPM/Key to the running project. Saves to Library.
+12. **Voice Generator (AI Vocalist):** Text-to-speech/singing with prompt inputs and presets.
+13. **Open Extension Slot:** Modular registry for future developer plugins.
+14. **Recorder (Master Recorder):** Bit-perfect capture & export.
+15. **DSP Engine:** Worklet-Automation (Cutoff/Reso/LFO) + Stimmen-Monitoring.
+16. **Visualizer:** OffscreenCanvas-Waveform (Worker).
+17. **Performance-Monitor:** FPS/Jitter/Latenz-Budgets (Slot 17).
+
+---
+
+## 5. Coding & Deployment Guidelines
+* Write modular, readable code. 
+* Never deploy changes that introduce state desync or network jitter.
+* Always validate changes against the interface-boundary rules (`scripts/validate-interface-boundaries.mjs` → 0 Verstöße) und Supabase-RLS.

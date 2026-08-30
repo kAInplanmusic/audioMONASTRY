@@ -1,0 +1,40 @@
+# Caddyfile.master – audioMONASTRY Master-Player (öffentlicher MAIN-Sound-Endpoint)
+# -----------------------------------------------------------------------------
+# Läuft auf master-1 und exponiert NUR den master-player (fertiger MAIN Mix).
+# Domain: master.anunnakitools.de (A-Record -> master-1 IP).
+# Endpoints: /health, /selftest, POST /master, POST /mix, POST /analyze,
+#            POST /offer (WebRTC-Live-Audio), GET / (Index)
+# -----------------------------------------------------------------------------
+{$DOMAIN} {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# master-player (Python/aiohttp, Port 8000) – große Audio-Payloads erlauben
+	reverse_proxy master-player:8000 {
+		transport http {
+			read_timeout  10m
+			write_timeout 10m
+		}
+	}
+
+	# Mastering-Uploads können groß sein (WAV bis 500 MB)
+	request_body {
+		max_size 500MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+		-X-Powered-By
+	}
+
+	# Health/Metriken nie cachen
+	header /health Cache-Control "no-store"
+}

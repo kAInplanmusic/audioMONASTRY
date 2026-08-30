@@ -1,0 +1,20 @@
+# docker-compose.sfu.yml – SFU-Knoten-Override
+# -----------------------------------------------------------------------------
+# Nur auf dem SFU-Server verwenden:
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk
+#
+# Publiziert die Mediasoup-RTP-Ports und aktiviert die SFU im sample-monk-
+# Container. Auf App-Knoten NICHT verwenden (dort bleibt ENABLE_SFU=0).
+# =============================================================================
+services:
+  sample-monk:
+    environment:
+      ENABLE_SFU: "1"
+      SFU_LISTEN_IP: "0.0.0.0"
+      SFU_ANNOUNCED_IP: "${SFU_ANNOUNCED_IP}"
+      SFU_RTC_MIN_PORT: "${SFU_RTC_MIN_PORT:-40000}"
+      SFU_RTC_MAX_PORT: "${SFU_RTC_MAX_PORT:-40099}"
+    ports:
+      # Achtung: grosse Bereiche erzeugen viele iptables-Regeln (Docker langsam).
+      - "${SFU_PORTS:-40000-40099}:${SFU_PORTS:-40000-40099}/udp"
+      - "${SFU_PORTS:-40000-40099}:${SFU_PORTS:-40000-40099}/tcp"

@@ -1,0 +1,223 @@
+{
+  "version": "1.1.420",
+  "created": "2026-08-27",
+  "completed": "2026-08-27",
+  "note": "DCT-101 bis DCT-130 vollständig abgearbeitet (umgesetzt, getestet oder als vorbereitetes Host-Gate dokumentiert).",
+  "tasks": [
+    {
+      "id": "DCT-001",
+      "title": "Server-Sizing & Volllast-Simulation dokumentieren",
+      "file": "docs/SERVER_SIZING.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-002",
+      "title": "deepcodetodo.json anlegen und auf GitHub pushen",
+      "file": "deepcodetodo.json",
+      "status": "done"
+    },
+    {
+      "id": "DCT-003",
+      "title": "README + Doku um Server-Sizing/Fleet verlinken",
+      "file": "README.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-004",
+      "title": "docker-compose.hetzner.yml Rollen (app/sfu/stem) prüfen und kommentieren",
+      "file": "docker-compose.hetzner.yml",
+      "status": "done"
+    },
+    {
+      "id": "DCT-005",
+      "title": "Volle Verifikation: tsc, Tests, Boundary-Scan, Build",
+      "status": "done"
+    },
+    {
+      "id": "DCT-006",
+      "title": "Commit + Push nach main",
+      "status": "done"
+    },
+    {
+      "id": "DCT-101",
+      "title": "Stem-Queue-Limit (STEM_MAX_JOBS, 429, Idempotency-Key, Timeout-Reset)",
+      "file": "server.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-102",
+      "title": "AUTO_AI-Status synchronisieren (kanonischer State + LWW + Socket.io-Relay-Fallback)",
+      "file": "src/context/ModuleStateContext.tsx, src/utils/WebRTCManager.ts, server.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-103",
+      "title": "PLUGIN_REGISTRY eliminiert (getPluginRegistry als einzige immutable Quelle)",
+      "file": "src/plugins/registry.ts, src/App.tsx",
+      "status": "done"
+    },
+    {
+      "id": "DCT-104",
+      "title": "Playwright E2E (Boot, 17 Module, MOA, Plugin-Toggle, 0 pageerrors)",
+      "file": "tests/e2e/",
+      "status": "done"
+    },
+    {
+      "id": "DCT-105",
+      "title": "Redis-/Multi-Instance-Readiness (REDIS_URL-Check, Socket.io-Relay, Single-Instance-Fallback)",
+      "file": "server.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-106",
+      "title": "IndexedDB für große States (largeStore + MoaHistory migriert)",
+      "file": "src/utils/indexedDB.ts, src/core/ai/MoaHistory.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-107",
+      "title": "Legacy konsolidiert (firebase-schema.historical.json, backend-core markiert)",
+      "file": "docs/, README.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-108",
+      "title": "Metriken + Trace-IDs (/api/metrics, X-Request-Id, AI/Stem-Counter)",
+      "file": "server.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-109",
+      "title": "Audio-Realtime-Audit (Callback-Reinheit, NaN/Denormal, Clock) – Script + Doku",
+      "file": "scripts/audit-audio-realtime.sh, docs/PERFORMANCE_AUDIT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-110",
+      "title": "V2 als kanonischen Migrationspfad definiert (V1 bleibt produktiver Default)",
+      "file": "README.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-111",
+      "title": "Ringbuffer/BufferPool/Worklet-Lifecycle-Audit (im Audio-Realtime-Audit enthalten)",
+      "file": "scripts/audit-audio-realtime.sh",
+      "status": "done"
+    },
+    {
+      "id": "DCT-112",
+      "title": "Spatial-Renderer-Validierung (Stereo/Binaural/Multichannel, NaN-frei, Fallback)",
+      "file": "tests/spatialValidation.test.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-113",
+      "title": "Collaboration-Tests (2/4-User-E2E, AUTO_AI-Sync, Session voll)",
+      "file": "tests/e2e/collab.spec.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-114",
+      "title": "AI-Failure-Tests (429, Malformed Response, Alle Provider down)",
+      "file": "tests/aiControl.test.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-115",
+      "title": "Stem-Routing/Taxonomie zentralisiert (STEM_CHANNEL_MAP + Fallback + Tests)",
+      "file": "src/utils/StemRouter.ts, tests/stemRouter.test.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-116",
+      "title": "Security-Audit (Uploads, WebSocket/WebRTC, AI-Prompts, Path-Traversal) – Doku + Tests",
+      "file": "docs/SECURITY_AUDIT.md, tests/server.test.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-117",
+      "title": "Deployment-Gate (docker-gate.sh: Build → Up → Health → Down)",
+      "file": "scripts/docker-gate.sh",
+      "status": "done"
+    },
+    {
+      "id": "DCT-118",
+      "title": "White-Screen-Killer (ErrorBoundary + Boot-Diagnostics)",
+      "file": "src/components/ErrorBoundary.tsx, src/main.tsx",
+      "status": "done"
+    },
+    {
+      "id": "DCT-119",
+      "title": "Performance-Audit (Bundle/CPU/Latenz – gemessen + dokumentiert)",
+      "file": "docs/PERFORMANCE_AUDIT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-120",
+      "title": "Dead-Code-Sweep (Script, 0 Funde)",
+      "file": "scripts/dead-code-sweep.sh",
+      "status": "done"
+    },
+    {
+      "id": "DCT-121",
+      "title": "Test-Matrix + Release-Gate dokumentiert",
+      "file": "docs/RELEASE_GATE.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-122",
+      "title": "Production-Readiness-Report mit GO/NO-GO",
+      "file": "docs/PRODUCTION_READINESS_REPORT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-123",
+      "title": "Failure-Injection (Stem-Proxy 502, Provider-Ausfälle, Timeout-Reset)",
+      "file": "tests/server.test.ts, tests/aiControl.test.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-124",
+      "title": "Browser-Matrix (Chromium E2E grün; Firefox/WebKit auf Zielhost via npx playwright install)",
+      "file": "tests/e2e/",
+      "status": "done"
+    },
+    {
+      "id": "DCT-125",
+      "title": "Architecture-Boundary-Audit (0 Verstöße + Doku)",
+      "file": "docs/ARCHITECTURE_BOUNDARY_AUDIT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-126",
+      "title": "4-User-Real-World-Test (E2E: 4 Kontexte, Session voll, AUTO_AI-Sync)",
+      "file": "tests/e2e/collab.spec.ts",
+      "status": "done"
+    },
+    {
+      "id": "DCT-127",
+      "title": "Performance-Audit-Doku erstellt",
+      "file": "docs/PERFORMANCE_AUDIT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-128",
+      "title": "Security-Audit-Doku erstellt",
+      "file": "docs/SECURITY_AUDIT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-129",
+      "title": "Architecture-Boundary-Doku erstellt",
+      "file": "docs/ARCHITECTURE_BOUNDARY_AUDIT.md",
+      "status": "done"
+    },
+    {
+      "id": "DCT-130",
+      "title": "Release-Gate final: verify + E2E + Build + Audits grün",
+      "status": "done"
+    }
+  ],
+  "via": "github-api-pr",
+  "updated": "2026-08-27T20:00Z"
+}

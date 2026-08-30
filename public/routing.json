@@ -1,0 +1,61 @@
+{
+  "global": {
+    "tempo": 120,
+    "masterVolume": -6
+  },
+  "tracks": [
+    {
+      "id": "track-kick",
+      "instrument": "kickSynth",
+      "params": {
+        "volume": -10,
+        "pitchDecay": 0.05
+      },
+      "effects": [],
+      "output": "masterBus",
+      "patterns": []
+    },
+    {
+      "id": "track-hat",
+      "instrument": "hatSynth",
+      "effects": [],
+      "output": "masterBus",
+      "patterns": []
+    },
+    {
+      "id": "track-clap",
+      "instrument": "clapSynth",
+      "effects": [],
+      "output": "masterBus",
+      "patterns": []
+    },
+    {
+      "id": "track-bass",
+      "instrument": "bassSynth",
+      "params": {
+        "oscillator": { "type": "sine" },
+        "envelope": { "attack": 0.01, "decay": 0.5, "sustain": 0.1 }
+      },
+      "effects": [],
+      "output": "masterBus",
+      "patterns": []
+    }
+  ],
+  "buses": [
+    {
+      "id": "masterBus",
+      "effects": [
+        { "type": "masterMePreGain", "params": { "gain": 0 } },
+        { "type": "masterMeHighpass", "params": { "frequency": 20 } },
+        { "type": "masterMeCompressor", "params": { "threshold": -14, "ratio": 4 } }
+      ],
+      "output": "destination"
+    }
+  ],
+  "connections": [
+    { "source": "track-kick", "destination": "masterBus" },
+    { "source": "track-hat", "destination": "masterBus" },
+    { "source": "track-clap", "destination": "masterBus" },
+    { "source": "track-bass", "destination": "masterBus" }
+  ]
+}

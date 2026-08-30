@@ -1,0 +1,11 @@
+[package]
+name = "rust_mixer"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = "2.16"
+napi-derive = "2.16"

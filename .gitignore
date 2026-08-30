@@ -1,0 +1,33 @@
+node_modules
+dist
+public/worklets
+dist/worklets
+.env
+.env.*
+!.env.example
+!.env.hetzner.example
+!.env.deploy.example
+
+# lokale Agent-Tooling-Konfiguration (enthält API-Keys)
+deepcode/
+
+# ONNX-Modelle (gross, separat via scripts/download-models.sh)
+public/models/
+
+# Python
+__pycache__/
+*.pyc
+
+# Test-Coverage (Vitest/SonarQube)
+coverage/
+
+# Playwright E2E
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Generiertes SFU-RTP-Testbundle (npx esbuild scripts/hetzner/sfu-rtp-entry.js ...)
+public/sfu-rtp-test.js
+
+# Rust
+services/audio-runtime/target/

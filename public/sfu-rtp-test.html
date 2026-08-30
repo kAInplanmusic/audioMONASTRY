@@ -1,0 +1,16 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>SFU RTP Test</title>
+<!--
+  Testseite fuer den echten SFU-RTP-Pfad.
+  Bundle erzeugen:
+    npx esbuild scripts/hetzner/sfu-rtp-entry.js --bundle --platform=browser \
+      --format=iife --outfile=public/sfu-rtp-test.js
+  Nutzung:
+    http://localhost:8123/sfu-rtp-test.html?server=http://49.13.65.150
+  (localhost = secure context fuer WebRTC; server = Hetzner-SFU-Signaling)
+-->
+<body>
+  <script src="/sfu-rtp-test.js"></script>
+</body>
+</html>

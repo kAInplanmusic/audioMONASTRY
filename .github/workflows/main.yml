@@ -1,0 +1,22 @@
+name: Export SonarQube Issues to CSV
+on: workflow_dispatch
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SonarQube CLI Export
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          # Wichtig: Installiere die CLI (wird automatisch gemacht, wenn du das sonar-scanner Image nutzt)
+          # Hier nutzen wir das offizielle Docker-Image, das die CLI enthält
+          docker run --rm \
+            -e SONAR_TOKEN \
+            sonarsource/sonar-scanner-cli:latest \
+            sonar list issues -p DEIN_PROJEKT_KEY --format csv > issues.csv
+      - name: Upload CSV as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-issues
+          path: issues.csv
