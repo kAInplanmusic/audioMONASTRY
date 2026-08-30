@@ -152,6 +152,19 @@ class AudioEngine {
   public stepCount: 16 | 32 = 16;
   public onStepUpdate: (step: number) => void = () => {};
   public onBeatCallback: (step: number) => void = () => {};
+  private stepListeners = new Set<(step: number) => void>();
+
+  /** Registriert einen Step-Listener; liefert eine Deregistrierungs-Funktion. */
+  public addStepListener(cb: (step: number) => void): () => void {
+    this.stepListeners.add(cb);
+    return () => { this.stepListeners.delete(cb); };
+  }
+
+  /** Verteilt einen Step an den Legacy-Callback und alle registrierten Listener. */
+  private emitStep(step: number): void {
+    this.onStepUpdate(step);
+    this.stepListeners.forEach((l) => l(step));
+  }
 
   // Lookahead Scheduler
   private isPlaying = false;
@@ -473,7 +486,7 @@ class AudioEngine {
     this.patterns.channel8 = [true,false,false,false,false,false,true,false,true,false,false,false,false,false,true,false];          // lead (nur falls Sample)
     this.synthNotes = [0,4,0,7, 3,7,0,5, 0,3,0,7, 4,0,3,7];
     this.normalizeAllPatterns();
-    this.onStepUpdate(this.currentStep);
+    this.emitStep(this.currentStep);
   }
 
   /** Bringt alle Patterns + synthNotes auf die aktuelle Schrittanzahl. */
@@ -502,7 +515,7 @@ class AudioEngine {
     this.stepCount = count;
     this.normalizeAllPatterns();
     this.currentStep = this.currentStep % count;
-    this.onStepUpdate(this.currentStep);
+    this.emitStep(this.currentStep);
   }
 
   /** Globales Transport-Tempo setzen (clamped, z. B. für Sprach-/KI-Steuerung). */
@@ -1154,7 +1167,7 @@ class AudioEngine {
     });
 
     this.currentStep = (this.currentStep + 1) % this.stepCount;
-    this.onStepUpdate(this.currentStep);
+    this.emitStep(this.currentStep);
     this.onBeatCallback(this.currentStep);
   }
 

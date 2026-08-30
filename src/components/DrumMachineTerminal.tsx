@@ -37,7 +37,7 @@ interface DrumMachineProps {
   bpm?: number;
 }
 
-export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isPlaying = false, currentStep = 0, bpm = 128 }) => {
+export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isPlaying = false, bpm = 128 }) => {
   const { addSample, pendingSample, setPendingSample } = useSamples();
   const { state, lockStatus, updateState } = usePluginState('drum', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
@@ -47,8 +47,13 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   const [patterns, setPatterns] = useState<Record<string, boolean[]>>({});
   const [stepSamples, setStepSamples] = useState<Record<string, Record<number, AudioSample>>>({});
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
   const lastStepRef = useRef(-1);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Eigener Step-Subscriber (Mehrfach-Listener statt Single-Slot): Das Terminal
+  // aktualisiert seinen Step unabhängig vom App-Shell-Render (UI-Performance).
+  useEffect(() => audioEngine.addStepListener(setCurrentStep), []);
 
   const activeDrumKit = DRUM_KITS.find((k) => k.id === activeKit) ?? DRUM_KITS[0];
   const selectedSound = activeDrumKit.sounds.find((s) => s.id === selectedSoundId) ?? activeDrumKit.sounds[0];

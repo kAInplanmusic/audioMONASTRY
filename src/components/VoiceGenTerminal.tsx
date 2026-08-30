@@ -1,4 +1,4 @@
-import {  useState, useRef  } from 'react';
+import React, {  useState, useRef  } from 'react';
 import { random } from '../utils/random';
 import { Mic, Play, Download, RefreshCw, AlignLeft, Wand2 } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
@@ -11,7 +11,7 @@ import { MoaAssistant } from './MoaAssistant';
 import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
 
-export function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
+export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
   const { addSample } = useSamples();
   const { generateVoice } = useAudioAI();
   const { state, lockStatus, updateState } = usePluginState('voice_gen', 'PRO');
@@ -267,4 +267,4 @@ export function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
       </div>
     </div>
   );
-}
+});

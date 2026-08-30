@@ -1,11 +1,11 @@
-import {  useState, useEffect, useRef  } from 'react';
+import React, {  useState, useEffect, useRef  } from 'react';
 import { Activity, Power, Cpu, Zap, SlidersHorizontal } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 
-export function DSPTerminal() {
+export const DSPTerminal = React.memo(function DSPTerminal() {
   const { state, lockStatus, updateState } = usePluginState('dsp', 'PRO');
   const [power, setPower] = useState(true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -258,4 +258,4 @@ export function DSPTerminal() {
       </div>
     </div>
   );
-}
+});

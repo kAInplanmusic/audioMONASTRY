@@ -1,8 +1,8 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 
 type Skin = 'oscilloscope' | 'analytic' | 'galactic';
 
-export const MasterTrackTerminal: React.FC = () => {
+export const MasterTrackTerminal = React.memo(() => {
   const [skin, setSkin] = useState<Skin>('galactic');
   const [timeRange, setTimeRange] = useState(15);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -37,4 +37,4 @@ export const MasterTrackTerminal: React.FC = () => {
       <canvas ref={canvasRef} className="w-full h-32 bg-neutral-900 rounded" />
     </div>
   );
-};
+});

@@ -9,7 +9,7 @@ import { splitStemsLocally, LocalStemUrls } from '../utils/stemSplitter';
 import { separateStemsWithDemucs } from '../ai/localDemucs';
 import { MoaAssistant } from './MoaAssistant';
 
-export function StemExtractorTerminal() {
+export const StemExtractorTerminal = React.memo(function StemExtractorTerminal() {
   const { addSample } = useSamples();
   const { streamStems } = useAudioAI();
   const { state, lockStatus, updateState } = usePluginState('stem_extractor', 'PRO');
@@ -191,4 +191,4 @@ export function StemExtractorTerminal() {
       </button>
     </div>
   );
-}
+});

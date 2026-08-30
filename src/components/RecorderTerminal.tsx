@@ -1,4 +1,4 @@
-import {  useState, useEffect, useRef, useCallback  } from 'react';
+import React, {  useState, useEffect, useRef, useCallback  } from 'react';
 import { Radio, Mic, Save, Download, Play, Square, Circle } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
@@ -10,7 +10,7 @@ import { MoaAssistant } from './MoaAssistant';
 
 
 
-export function RecorderTerminal() {
+export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const { addSample } = useSamples();
   const { audioContext } = useAudio();
   const { state, lockStatus, updateState } = usePluginState('recorder', 'PRO');
@@ -220,4 +220,4 @@ export function RecorderTerminal() {
       </div>
     </div>
   );
-}
+});
