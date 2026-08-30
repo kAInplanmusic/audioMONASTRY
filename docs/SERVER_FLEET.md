@@ -1,10 +1,32 @@
 # audioMONASTRY – 5-Instanzen-Architektur (final)
 
-> Stand: 2026-08-29 · Ziel: 5 Server, klare Rollen, GPU nur für lokale KI/Stem.
+> Stand: 2026-08-30 · Ziel: 5 Server, klare Rollen, GPU nur für lokale KI/Stem.
 > Cloud bleibt extern: Supabase (DB), Cloudflare R2 (Audio-Blobs),
 > DeepSeek/HF/Mistral/Replicate (Cloud-KI). Lokale KI/Stem laufen auf ai-1.
 
-## Live-Flotte (provisioniert 2026-08-29, stündlich abgerechnet)
+## 💶 Kostenmodell (wichtig, Stand 2026-08-30)
+
+- **Hetzner berechnet Server ab ERSTELLUNG – auch im ausgeschalteten Zustand.**
+  Der 20-min-Idle-Auto-Shutdown spart daher **kein Geld**, nur Ressourcen.
+- Kosten stoppen geht **nur durch Löschen** der Server.
+- Aktuelle Flotte (netto): 3× CX33 (à 8,49 €) + 2× CX23 (à 5,49 €)
+  + Floating-IPv4 (3,00 €) = **≈ 39,45 €/Monat**, solange die Server existieren.
+- **Nach dem Löschen:** 0 € Serverkosten; nur die Floating-IP bleibt
+  reserviert (3,00 €/Monat), damit `anunnakitools.de` stabil bleibt.
+
+```bash
+# Komplett hochfahren (provisionieren → deployen → installieren → Tests → Browser):
+bash scripts/hetzner/bring-up-fleet.sh
+
+# Nach der Session: Server löschen (Kosten stoppen), Floating-IP bleibt:
+bash scripts/hetzner/delete-fleet.sh
+```
+
+> GitHub reicht als Ablage: Alle Provisionierungs-, Deploy-, Install- und
+> Test-Skripte liegen im Repo unter `scripts/hetzner/`. Ein Docker-Image ist
+> für die Steuerung nicht nötig (die App selbst läuft auf den VMs in Docker).
+
+## Live-Flotte (Stand 2026-08-30: gelöscht, Floating-IP reserviert)
 
 | # | Name | Typ | IP | Rolle |
 |---|---|---|---|---|
