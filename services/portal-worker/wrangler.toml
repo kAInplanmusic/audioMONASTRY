@@ -1,0 +1,27 @@
+# =============================================================================
+# audioMONASTRY – Portal Worker (Weg A: 0 €/Monat)
+# -----------------------------------------------------------------------------
+# Cloudflare Worker, der auf anunnakitools.de läuft:
+#   - Flotte AUS  -> Login-Seite + „Flotte starten"
+#   - Start läuft -> Ladebildschirm mit großer Zeit + Status-Schritten
+#   - Flotte AN   -> Reverse-Proxy auf app-1 (App/API/WebSocket)
+#   - Cron alle 5 min -> löscht die Flotte, sobald app-1 (Idle-Auto-Shutdown)
+#                        nach 20 min ohne Nutzung ausgeschaltet wurde.
+#
+# Secrets (wrangler secret put / .dev.vars):
+#   ADMIN_USER, ADMIN_PASSWORD, SESSION_SECRET
+#   HCLOUD_TOKEN, SSH_PUBLIC_KEY, GITHUB_TOKEN
+#   SUPABASE_URL, SUPABASE_SERVICE_ROLE, SUPABASE_ANON_PUB
+#   CFR2_ACCOUNT_ID, CFR2_ACCESS_KEY_ID, CFR2_SECRET_ACCESS_KEY, CFR2_BUCKET, CFR2_PUBLIC_URL
+#   REPLICATE_API_TOKEN, DEEPSEEK_API_KEY, HF_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY
+# =============================================================================
+name = "audiomonastry-portal"
+main = "src/index.js"
+compatibility_date = "2026-08-30"
+workers_dev = false
+
+# Route auf der eigenen Zone (nach DNS-Umzug zu Cloudflare):
+route = { pattern = "anunnakitools.de/*", zone_name = "anunnakitools.de" }
+
+[triggers]
+crons = ["*/5 * * * *"]
