@@ -13,7 +13,9 @@
 | Supabase (pwtwtqbcynsjtkxlkrwh) | Cloud | service_role + anon | ✅ `cloudHealth`: `ok (service_role)` | ✅ Schema + RLS angewendet (4 Tabellen) |
 | Supabase Sync (Seed) | Cloud | service_role | ✅ 29 Samples + 48 Music-Tracks upserted | ✅ Write-Pfad real verifiziert |
 | Supabase Anon-Read | Cloud | anon REST | ✅ 5/5 Zeilen gelesen (z. B. `TR-909 Classic Kick`) | ✅ Read-Pfad real verifiziert |
-| Cloudflare R2 | Cloud | S3 | ✅ `ListBuckets` + `PutObject` real verifiziert | Bucket `audiomonastrysamples` (5 Objekte vorhanden) |
+| Cloudflare R2 | Cloud | S3 | ✅ `ListBuckets` + `PutObject` + Public-URL real verifiziert | Bucket `audiomonastrysamples`, Public via `pub-...r2.dev` |
+| DeepSeek LLM | Cloud | API | ✅ `deepseek-v4-flash` via App-Router („Bereit", 1,1 s) | Guthaben aktiv |
+| Hugging Face LLM | Cloud | Router | ✅ `Qwen/Qwen2.5-72B-Instruct` via HF-Router (30,6 s Kaltstart) | Guthaben aktiv, Router-Endpoint gefixt |
 
 ## Automatisierte Tests (ohne Hardware, in CI reproduzierbar)
 

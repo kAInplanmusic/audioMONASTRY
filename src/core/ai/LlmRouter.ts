@@ -51,7 +51,7 @@ export interface ILlmProvider {
 }
 
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
-  hf: 'mistralai/Mistral-7B-Instruct-v0.3',
+  hf: 'Qwen/Qwen2.5-72B-Instruct',
   mistral: 'mistral-small-latest',
   ollama: 'qwen2.5:7b',
   'deepseek-flash': 'deepseek-v4-flash',
@@ -138,10 +138,17 @@ class HfProvider implements ILlmProvider {
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const started = Date.now();
     const model = envKey('HF_LLM_MODEL') || DEFAULT_MODELS.hf;
+    // HF Inference Providers: OpenAI-kompatibler Router (api-inference.huggingface.co
+    // ist veraltet und löst in manchen Netzen nicht mehr auf).
     const resp = await postJson(
-      `https://api-inference.huggingface.co/models/${model}`,
+      'https://router.huggingface.co/v1/chat/completions',
       { Authorization: `Bearer ${envKey('HF_API_KEY')}` },
-      { inputs: req.prompt, parameters: { max_new_tokens: req.maxTokens ?? 256, temperature: req.temperature ?? 0.7 } },
+      {
+        model,
+        messages: [{ role: 'user', content: req.prompt }],
+        max_tokens: req.maxTokens ?? 256,
+        temperature: req.temperature ?? 0.7,
+      },
     );
     return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
   }
