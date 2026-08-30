@@ -98,15 +98,69 @@ app.use((_req, res, next) => {
 // --- Security: Rate limiting (per Env konfigurierbar fuer Lasttests) ---
 const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60 * 1000);
 const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 60);
+
+// P-1: Studio-Zugangstoken. Wird vom Portal (Cloudflare Worker) gesetzt und
+// als HttpOnly-Cookie `studio` an den Browser gegeben. Leer = lokaler
+// Dev-Modus (kein Schutz, wie bisher). Gesetzt = alle /api/* (außer health)
+// und der Socket.io-Handshake verlangen den Token.
+const STUDIO_ACCESS_TOKEN = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
+const studioTokenEnabled = STUDIO_ACCESS_TOKEN.length > 0;
+
+/** Konstantzeit-Vergleich zweier Token (Buffer-XOR). */
+function safeTokenEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  if (bufA.length !== bufB.length) return false;
+  let diff = 0;
+  for (let i = 0; i < bufA.length; i++) diff |= bufA[i] ^ bufB[i];
+  return diff === 0;
+}
+
+function studioTokenFromRequest(req: any): string {
+  const header = String(req.headers?.['x-studio-token'] ?? '');
+  if (header) return header;
+  const cookie = String(req.headers?.cookie ?? '');
+  const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : '';
+}
+
+if (process.env.TRUST_PROXY === '1') {
+  app.set('trust proxy', 1);
+}
+
+// P-1: Auth-Middleware für alle /api/* außer /api/health.
+app.use('/api', (req, res, next) => {
+  if (req.path === '/health') return next();
+  if (!studioTokenEnabled) return next();
+  const token = studioTokenFromRequest(req);
+  if (token && safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) return next();
+  res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
+});
+
+const studioKeyGenerator = (req: any): string =>
+  studioTokenFromRequest(req) || req.ip || 'unknown';
+
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
   max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute/IP
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later.' }
+  message: { error: 'Too many requests, please try again later.' },
+  keyGenerator: studioKeyGenerator,
+});
+
+// Teure KI-/Cloud-/Upload-Routen: enges Limit pro Studio-Token (Kostenbremse).
+const expensiveLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.API_EXPENSIVE_RATE_LIMIT_MAX || 10),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many expensive requests, please try again later.' },
+  keyGenerator: studioKeyGenerator,
 });
 
 app.use('/api', apiLimiter);
+app.use(['/api/ai', '/api/voice', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload'], expensiveLimiter);
 
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
@@ -369,7 +423,10 @@ app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', '
     }
 
     if (!key) return res.status(400).json({ ok: false, error: 'upload requires key' });
-    if (key.includes('..')) return res.status(400).json({ ok: false, error: 'invalid key (path traversal)' });
+    // P-12: Strikte Key-Whitelist (nur uploads/<name>, keine Sonderzeichen-Pfade).
+    if (!/^uploads\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$/.test(key)) {
+      return res.status(400).json({ ok: false, error: 'invalid key (nur uploads/<dateiname> erlaubt)' });
+    }
     if (!buf || buf.byteLength === 0) return res.status(400).json({ ok: false, error: 'upload requires non-empty body' });
 
     const result = await uploadSampleToR2(key, buf, contentType);
@@ -1217,6 +1274,31 @@ async function startServer() {
         methods: ['GET', 'POST'],
       },
       path: '/webrtc-signaling',
+    });
+
+    // P-11: Handshake-Auth + Origin-Prüfung. Mit STUDIO_ACCESS_TOKEN müssen
+    // Clients das `studio`-Cookie (vom Portal gesetzt) mitschicken.
+    io.use((socket: any, next: (err?: Error) => void) => {
+      const origin = String(socket.handshake?.headers?.origin ?? '');
+      if (
+        ALLOWED_ORIGINS.length > 0 &&
+        !ALLOWED_ORIGINS.includes('*') &&
+        origin &&
+        !ALLOWED_ORIGINS.includes(origin)
+      ) {
+        return next(new Error('origin-not-allowed'));
+      }
+      if (studioTokenEnabled) {
+        const cookie = String(socket.handshake?.headers?.cookie ?? '');
+        const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
+        const token = String(socket.handshake?.auth?.token ?? '') ||
+          String(socket.handshake?.headers?.['x-studio-token'] ?? '') ||
+          (m ? decodeURIComponent(m[1]) : '');
+        if (!token || !safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) {
+          return next(new Error('unauthorized'));
+        }
+      }
+      next();
     });
 
     // Multi-Instanz-Modus: Mit REDIS_URL teilen sich alle App-Knoten die

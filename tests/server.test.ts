@@ -11,6 +11,9 @@ beforeAll(async () => {
   process.env.VOICE_PROVIDER = 'hf';
   process.env.STEM_AI_PROVIDER = '';
   delete process.env.REPLICATE_API_TOKEN;
+  // Test-Baseline: keine Studio-Token-Pflicht + hohes Test-Rate-Limit.
+  delete process.env.STUDIO_ACCESS_TOKEN;
+  process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
   const mod = await import('../server');
   server = mod.app.listen(0);
   const addr = server.address();
@@ -280,7 +283,7 @@ describe('Server API', () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(String(body.error)).toContain('path traversal');
+    expect(String(body.error)).toContain('invalid key');
   });
 
   it('POST /api/telemetry zählt Events nach type/source', async () => {
