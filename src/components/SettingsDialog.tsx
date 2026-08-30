@@ -9,6 +9,7 @@ import { aggregationStatus } from '../utils/audioAggregator';
 import { sfuTransport } from '../core/transport/MediasoupTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { isWebMidiSupported, requestWebMidiAccess } from '../utils/midiAccess';
+import { CloudStatusBadge } from './CloudStatusBadge';
 
 /**
  * SettingsDialog – Audio-I/O & Device-Auswahl
@@ -184,6 +185,7 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           <p className="text-[10px] text-neutral-600 mt-1 font-mono">
             Native Runtime (cpal/WASAPI/CoreAudio/PipeWire): Desktop-Build erforderlich – im Browser nicht aktiv.
           </p>
+          <div className="mt-2"><CloudStatusBadge /></div>
           {xonarCount > 0 && (
             <p className="text-[10px] text-lime-400 mt-1 font-mono">
               ✓ {xonarCount}× ASUS Xonar U7 erkannt (8 Kanäle je Gerät) – Spatial 12.x/18.x/24.x über den RAUMPLAN im Spatial-Modul zuweisen.

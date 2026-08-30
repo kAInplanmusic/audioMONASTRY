@@ -1645,6 +1645,29 @@ class AudioEngine {
     this.itSynthNode.port.postMessage({ type: 'automate', param, value, rampTime });
   }
 
+  /**
+   * Erzeugt eine MediaStream-Destination am Master-Ausgang (für Stream/SFU).
+   * Liefert null, wenn kein AudioContext/Master vorhanden ist (kein Fake).
+   */
+  public createMasterStreamDestination(): MediaStreamAudioDestinationNode | null {
+    try {
+      if (!this.ctx || typeof this.ctx.createMediaStreamDestination !== 'function' || !this.masterVolume) return null;
+      const dest = this.ctx.createMediaStreamDestination();
+      this.masterVolume.connect(dest);
+      return dest;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Trennt eine zuvor erzeugte Master-Stream-Destination sauber. */
+  public disconnectMasterStreamDestination(dest: MediaStreamAudioDestinationNode): void {
+    try {
+      this.masterVolume?.disconnect(dest);
+      dest.disconnect();
+    } catch { /* bereits getrennt */ }
+  }
+
   /** Audio-Health-Snapshot für den Echtzeit-Performance-Monitor. */
   public getAudioHealth(): { state: string; sampleRate: number; baseLatencyMs: number; outputLatencyMs: number } {
     const ctx = this.ctx as unknown as {

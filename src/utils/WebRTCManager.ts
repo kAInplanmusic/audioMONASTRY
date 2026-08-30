@@ -122,6 +122,11 @@ class WebRTCManager {
     await this.initLocalAudio(deviceId);
   }
 
+  /** Ob der Media-Pfad aktuell über die SFU (Mediasoup) läuft. */
+  public get isSfuMode(): boolean {
+    return this.sfuMode;
+  }
+
   /**
    * Schaltet den Transport-Modus um:
    *   p2p  – Full-Mesh-WebRTC (DataChannels + Media), bisheriges Verhalten.
