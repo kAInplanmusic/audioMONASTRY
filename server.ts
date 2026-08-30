@@ -96,6 +96,16 @@ app.use((_req, res, next) => {
   next();
 });
 
+// P-16: Security-Header (ohne CSP-Bruch – CSP separat, da Worklets/Blob/WebRTC
+// besondere Regeln brauchen).
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  next();
+});
+
 // --- Security: Rate limiting (per Env konfigurierbar fuer Lasttests) ---
 const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60 * 1000);
 const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 60);
@@ -255,7 +265,7 @@ app.get('/api/online', (_req, res) => {
 // POST /api/telemetry  body: { events: [{type, source, message, context?, ts?}] }
 // Der Server loggt jede Meldung als JSON-Line (Docker-Log-Rotation greift)
 // und zählt sie in den Prometheus-Metriken (samplemonk_telemetry_events_total).
-app.post('/api/telemetry', (req, res) => {
+app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
   const events = Array.isArray((req.body ?? {}).events) ? (req.body as any).events : [];
   let accepted = 0;
   for (const ev of events.slice(0, 50)) {
@@ -263,11 +273,22 @@ app.post('/api/telemetry', (req, res) => {
     const type = String(ev.type ?? 'log').slice(0, 32);
     const source = String(ev.source ?? 'client').slice(0, 128);
     const message = String(ev.message ?? '').slice(0, 1000);
+    // P-10: Context hart kappen (max. 2 KB im Log), sonst kann ein Client
+    // riesige Objekte ins Log schreiben.
+    let ctx: unknown = {};
+    try {
+      const ctxStr = JSON.stringify(ev.context ?? {});
+      ctx = ctxStr.length > 2048
+        ? { truncated: true, preview: ctxStr.slice(0, 2048) }
+        : (ev.context ?? {});
+    } catch {
+      ctx = {};
+    }
     metrics.telemetryEvents = (metrics.telemetryEvents ?? 0) + 1;
     metrics.telemetryByType[type] = (metrics.telemetryByType[type] ?? 0) + 1;
     metrics.telemetryBySource[source] = (metrics.telemetryBySource[source] ?? 0) + 1;
     accepted += 1;
-    console.log(JSON.stringify({ t: 'telemetry', type, source, message, ctx: ev.context ?? {}, ts: ev.ts ?? Date.now() }));
+    console.log(JSON.stringify({ t: 'telemetry', type, source, message, ctx, ts: ev.ts ?? Date.now() }));
   }
   res.status(202).json({ accepted });
 });
