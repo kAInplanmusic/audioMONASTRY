@@ -36,6 +36,11 @@
 | useHID erweitert | Hotplug + Diagnostics + Profil-Touch (VID/PID), Disconnect-Tracking | `src/hooks/useHID.ts` |
 | Mapping-Apply | `mixer.*`/`master.volume`/`worklet.*`-Targets → audioEngine (transportagnostisch) | `src/hooks/useMappingApply.ts` |
 | Multi-Listener-MIDI | WebMIDIAdapter nutzt `addEventListener` (koexistiert mit useMIDI-Hook) | `src/core/adapters.ts` |
+| Upload-UI | `SampleUploadPanel` (Datei-Picker, Kategorie, Tags) → `/api/upload/sample`, lokaler OPFS-Fallback | `src/components/SampleUploadPanel.tsx`, `src/utils/sampleUpload.ts` |
+| Cloud-Status | `CloudStatusBadge` (GET /api/cloud/health → konfiguriert/teilw./offline) | `src/components/CloudStatusBadge.tsx` |
+| Master-Stream | STREAM AN/AUS im Studio-Header (Master → MediaStream → SFU/lokal) | `src/hooks/useMasterStream.ts`, `src/components/MasterStreamToggle.tsx` |
+| Instrument-Views | View 1 Universalkeyboard, View 2 Pad-Grid, View 3 Instrument-Canvas (Gitarre/Theremin/Hang/Drums) | `src/components/instrument/*`, `src/core/instrument/canvasDefs.ts` |
+| MOA-Vollabdeckung | Alle Katalog-Kommandos haben Handler (transport/synth/visualizer/effect ergänzt) + Coverage-Audit-Test | `src/core/voice/pluginCommandRegistry.ts`, `tests/moaCoverage.test.ts` |
 
 ## 2. VERBESSERT
 
@@ -161,7 +166,7 @@ liefert (keine erfundenen VID/PID/Kanalzahlen).
 | Prüfung | Ergebnis |
 |---|---|
 | `tsc --noEmit` | ✅ 0 Fehler |
-| `vitest run` | ✅ 294/294 (51 Dateien) |
+| `vitest run` | ✅ 305/305 (57 Dateien) |
 | `vite build` + Worklets + Server-Bundle | ✅ |
 | Boundary-Scan (`validate-interface-boundaries`) | ✅ 234 Dateien, 0 Verstöße |
 

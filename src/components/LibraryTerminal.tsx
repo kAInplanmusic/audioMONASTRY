@@ -9,6 +9,8 @@ import { MoaAssistant } from './MoaAssistant';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { SemanticSampleSearch } from './SemanticSampleSearch';
 import { Scratchpad } from './Scratchpad';
+import { CloudStatusBadge } from './CloudStatusBadge';
+import { SampleUploadPanel } from './SampleUploadPanel';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -125,7 +127,10 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
   return (
     <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans shadow-2xl">
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="library" placeholder="MOA: z. B. 'Cloud-Sync starten'" />
+        <div className="flex items-center gap-2">
+          <MoaAssistant pluginId="library" placeholder="MOA: z. B. 'Cloud-Sync starten'" />
+          <CloudStatusBadge />
+        </div>
       </div>
       <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-fuchsia-900/20 to-[#111] border-b border-fuchsia-900/30 gap-4">
         <div className="flex items-center gap-3">
@@ -136,6 +141,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
         </div>
 
         <div className="flex items-center gap-2 flex-1 max-w-sm">
+            <SampleUploadPanel />
             <SemanticSampleSearch onSelect={addSample} />
             <Scratchpad />
         </div>

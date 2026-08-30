@@ -29,7 +29,10 @@
 | OSC-Bridge | `tests/oscBridge.test.ts` | virtuell | ✅ 6 Tests grün |
 | Native Backend | `tests/nativeRuntimeBackend.test.ts` | Mock-IPC-Transport | ✅ 4 Tests grün |
 | Mapping-UI | `tests/mappingLearnPanel.test.tsx` | jsdom + Testing Library | ✅ 3 Tests grün |
-| E2E-Hardware | `tests/e2e/hardware.spec.ts` | Playwright + virtuelles Web MIDI | ✅ 1 Test grün (9,3 s) |
+| E2E-Hardware | `tests/e2e/hardware.spec.ts` | Playwright + virtuelles Web MIDI | ✅ 1 Test grün |
+| Upload-Helfer | `tests/sampleUpload.test.ts` | virtuell | ✅ 4 Tests grün |
+| Instrument-Canvas | `tests/canvasDefs.test.ts` | virtuell (Geometrie/Noten) | ✅ 5 Tests grün |
+| MOA-Abdeckung | `tests/moaCoverage.test.ts` | Registry-Audit | ✅ 2 Tests grün |
 
 ## Hardware-Testmatrix
 

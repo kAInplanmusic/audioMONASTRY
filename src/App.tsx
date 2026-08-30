@@ -18,6 +18,7 @@ import { MasteringOverlay } from './components/MasteringOverlay';
 import { useAudio } from './context/AudioContext';
 import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
+import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
 import { Settings } from 'lucide-react';
 import { Logo } from './components/Logo';
@@ -383,6 +384,7 @@ function AppComponent() {
               ))}
             </select>
           </div>
+          <MasterStreamToggle />
           <button type="button"
             onClick={() => setSettingsOpen(true)}
             className="p-2.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"

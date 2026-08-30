@@ -27,23 +27,24 @@ Legende:
 > **Theremin**, Ondes Martenot, Hang Drum, Kalimba, Steelpan, Sitar, Duduk,
 > Waterphone, Otamatone – ids 132–140 in `src/core/instrument/catalog.ts`).
 
-- [ ] **(a) Universalkeyboard** – ein einziges, wiederverwendbares
+- [x] **(a) Universalkeyboard** – ein einziges, wiederverwendbares
       Keyboard-UI für instrumentMONK: Tastatur (Klick + Touch), Velocity,
       Pitch-Bend, Mod-Wheel, Oktav-Umschaltung, Sustain; speist denselben
       `IInstrumentBackend`/`ControlMessage`-Pfad wie externe MIDI-Controller.
-- [ ] **(b) Universal-Touchpad-Array** – konfigurierbares Pad-Raster (z. B.
+- [x] **(b) Universal-Touchpad-Array** – konfigurierbares Pad-Raster (z. B.
       4×4 / 8×2 / 16-Pads) als universelle Spielfläche: Note-/Chord-Trigger,
       XY-Pad-Modus, Pressure/Aftertouch, pro Pad beleuchtbar (Feedback).
-- [ ] **(c) Interaktive Instrument-Canvases** – jedes Instrument bekommt eine
+- [x] **(c) Interaktive Instrument-Canvases** – jedes Instrument bekommt eine
       eigene, spielbare Canvas-Darstellung (z. B. **Gitarre**: Saiten per
       Klick/Touch anschlagbar, Bund-Positionen wählbar). Umschaltung zwischen
       drei Ansichten in instrumentMONK:
-      - **View 1:** Universalkeyboard
-      - **View 2:** Universal-Touchpad-Array
+      - **View 1:** Universalkeyboard (`src/components/instrument/UniversalKeyboard.tsx`)
+      - **View 2:** Universal-Touchpad-Array (`src/components/instrument/PadGrid.tsx`)
       - **View 3:** Instrument-Canvas (Gitarre, Theremin-Fläche, Hang-Drum,
         Kalimba-Zungen, Steelpan-Felder, Sitar-Saiten, …)
-  - [ ] Instrument-Canvas-Bibliothek initial: Gitarre (Saiten), Theremin
-        (XY-Fläche), Hang/Kalimba (Zonen-Pads), Drums (Pad-Set) – erweiterbar.
+  - [x] Instrument-Canvas-Bibliothek initial: Gitarre (Saiten), Theremin
+        (XY-Fläche), Hang/Kalimba (Zonen-Pads), Drums (Pad-Set) – erweiterbar
+        (`src/core/instrument/canvasDefs.ts`).
   - [ ] Canvas-Inputs gehen über dieselbe Control-Abstraktion
         (`ControlMessage` → `IInstrumentBackend`) wie MIDI/HID/OSC.
 

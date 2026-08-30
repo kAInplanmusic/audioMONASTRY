@@ -154,6 +154,12 @@ export type { BridgeMessage, BridgeOscMessage, BridgeMidiMessage } from './hardw
 export { NativeRuntimeAudioBackend } from './audio/runtime/NativeRuntimeAudioBackend';
 export type { NativeDeviceInfo } from './audio/runtime/NativeRuntimeClient';
 
+// 8.3.x – Instrument-Canvas-Definitionen (View 3, spielbare Flächen)
+export {
+  INSTRUMENT_CANVAS_DEFS, canvasDefForInstrument, hitZone, zoneNote,
+} from './instrument/canvasDefs';
+export type { CanvasDef, CanvasZone, InstrumentCanvasKind } from './instrument/canvasDefs';
+
 // 8.2.9 – ControlHub (Adapter-Registry + Event-Bus) & Translation-Layer
 export { ControlHub, controlHub } from './hardware/ControlHub';
 export type { ControlHubDeviceState } from './hardware/ControlHub';

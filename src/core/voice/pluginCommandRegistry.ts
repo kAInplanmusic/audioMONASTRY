@@ -44,6 +44,22 @@ export function registerDefaultVoiceCommands(): void {
     audioEngine.stop();
   });
 
+  // transport auch als Plugin-Kommando (MOA plant pluginId='transport').
+  voiceControlService.registerPluginCommand('transport', 'set_tempo', async (ctx) => {
+    const bpm = Number(ctx.intent.parameters.bpm);
+    if (!Number.isFinite(bpm)) return;
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.setBpm(bpm);
+  }, ['tempo', 'bpm']);
+  voiceControlService.registerPluginCommand('transport', 'play', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    await audioEngine.play();
+  }, ['play', 'start']);
+  voiceControlService.registerPluginCommand('transport', 'stop', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.stop();
+  }, ['stop', 'halt']);
+
   // --- sequencerMONK ----------------------------------------------------------
   const applyPatterns = async (patterns: Record<string, boolean[]>, bpm?: number) => {
     const { audioEngine } = await import('../../utils/audioEngine');
@@ -124,11 +140,28 @@ export function registerDefaultVoiceCommands(): void {
   }, ['automat', 'filter', 'sweep']);
 
   // --- synthesizerMONK --------------------------------------------------------
-  voiceControlService.registerPluginCommand('synthesizer', 'note', async (ctx) => {
+  const playSynthNote = async (ctx: { intent: { parameters: Record<string, number | string> } }) => {
     const freq = Number(ctx.intent.parameters.freq ?? 440);
     const { audioEngine } = await import('../../utils/audioEngine');
     audioEngine.noteOnWorklet(Math.max(20, Math.min(20000, freq)), 0.8, 'saw');
-  }, ['note', 'ton', 'freq']);
+  };
+  voiceControlService.registerPluginCommand('synthesizer', 'note', playSynthNote, ['note', 'ton', 'freq']);
+  // Katalog-Alias: MOA plant pluginId='synth'.
+  voiceControlService.registerPluginCommand('synth', 'note', playSynthNote, ['note', 'ton', 'freq']);
+
+  // --- visualizer (Katalog-Alias auf performance/visualizer-mode) ------------
+  voiceControlService.registerPluginCommand('visualizer', 'mode', async (ctx) => {
+    const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('monk:visualizer-mode', { detail: mode }));
+    }
+  }, ['mode', 'visual', 'visualizer', 'scope']);
+
+  // --- effectMONK (Katalog-Alias auf fx.automate) -----------------------------
+  voiceControlService.registerPluginCommand('effect', 'automate', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.automateEffect('depth', 0.8, 0.5);
+  }, ['automat', 'filter', 'sweep']);
 
   // --- voiceMONK --------------------------------------------------------------
   voiceControlService.registerPluginCommand('voice', 'speak', async (ctx) => {
@@ -214,6 +247,11 @@ export function registerDefaultVoiceCommands(): void {
       // Zusätzlicher Status-Handler (Kommandos wie "Status").
     }, ['status', 'bereit', 'ready']);
   }
+}
+
+/** Audit-Helfer: alle registrierten Plugin-Kommandos (pluginId, action). */
+export function listRegisteredPluginCommands(): { pluginId: string; action: string }[] {
+  return voiceControlService.listPluginCommands().map((c) => ({ pluginId: c.pluginId, action: c.action }));
 }
 
 // Beim Import direkt registrieren (Side-Effect-Modul).

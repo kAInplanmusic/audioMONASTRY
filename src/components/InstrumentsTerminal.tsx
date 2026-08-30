@@ -9,6 +9,9 @@ import { SYNTHESIS_INSTRUMENTS, listByCategory } from '../core/instrument/catalo
 import { instrumentBackend } from '../core/instrument/InstrumentBackend';
 import { webMIDIAdapter } from '../core/adapters';
 import { getProgramForInstrument } from '../core/instrument/midiProgramMap';
+import { UniversalKeyboard } from './instrument/UniversalKeyboard';
+import { PadGrid } from './instrument/PadGrid';
+import { InstrumentCanvas } from './instrument/InstrumentCanvas';
 
 // --- WAM2 / Instrument Standards ---
 type InstrumentType = 'sampler' | 'synth' | 'soundfont' | 'synth2';
@@ -113,6 +116,8 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const [droppedSample, setDroppedSample] = useState<AudioSample | null>(null);
   // Task 2: MIDI-Program-Change – zuletzt empfangene Programmnummer (UI-Spiegelung).
   const [midiProgram, setMidiProgram] = useState<number | null>(null);
+  // Spielansichten: Vorschau-Keyboard, Universalkeyboard, Pads, Instrument-Canvas.
+  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas'>('preview');
 
   // MIDI-Program-Change via WebMIDIAdapter (controllerMONK) → instrumentBackend.
   useEffect(() => {
@@ -228,27 +233,47 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
                 </div>}
             </DropTarget>
 
-            {/* Physikalisches Instrument-Vorschau-Keyboard (additive Synthese) */}
+            {/* Spielansichten (View 1/2/3) */}
             <div className="w-full bg-black/40 rounded-lg border border-neutral-800 p-3">
                 <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono text-purple-400 uppercase tracking-widest">Vorschau-Keyboard</span>
-                    <span className="text-[10px] text-neutral-500 truncate max-w-[60%]">
+                    <span className="text-[10px] font-mono text-purple-400 uppercase tracking-widest">Spielansicht</span>
+                    <span className="text-[10px] text-neutral-500 truncate max-w-[50%]">
                         {activeInstrument ? activeInstrument.name : 'kein Instrument'}
                     </span>
                 </div>
-                <div className="flex gap-1 overflow-x-auto pb-1">
-                    {['C4','D4','E4','F4','G4','A4','B4','C5'].map(note => (
-                        <button type="button"
-                            key={note}
-                            onMouseDown={(e) => { e.preventDefault(); previewNote(note); }}
-                            onMouseUp={releaseNote}
-                            onMouseLeave={releaseNote}
-                            className="flex-1 min-w-[28px] h-16 rounded shadow-inner bg-linear-to-b from-neutral-300 to-neutral-400 text-neutral-900 text-xs font-bold hover:from-neutral-200 active:from-purple-300"
+                <div className="flex gap-1 mb-3" role="tablist" aria-label="Spielansicht">
+                    {([['preview', 'PREVIEW'], ['keys', 'KEYS'], ['pads', 'PADS'], ['canvas', 'CANVAS']] as const).map(([v, label]) => (
+                        <button type="button" key={v} role="tab" aria-selected={playView === v}
+                            onClick={() => setPlayView(v)}
+                            className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest border ${
+                                playView === v ? 'bg-purple-900/40 border-purple-400 text-purple-200' : 'border-neutral-800 text-neutral-500 hover:text-neutral-300'
+                            }`}
                         >
-                            {note}
+                            {label}
                         </button>
                     ))}
                 </div>
+
+                {playView === 'preview' && (
+                    <div className="flex gap-1 overflow-x-auto pb-1">
+                        {['C4','D4','E4','F4','G4','A4','B4','C5'].map(note => (
+                            <button type="button"
+                                key={note}
+                                onMouseDown={(e) => { e.preventDefault(); previewNote(note); }}
+                                onMouseUp={releaseNote}
+                                onMouseLeave={releaseNote}
+                                className="flex-1 min-w-[28px] h-16 rounded shadow-inner bg-linear-to-b from-neutral-300 to-neutral-400 text-neutral-900 text-xs font-bold hover:from-neutral-200 active:from-purple-300"
+                            >
+                                {note}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                {playView === 'keys' && <UniversalKeyboard baseNote={48} octaves={2} />}
+                {playView === 'pads' && <PadGrid rows={4} cols={4} baseNote={48} />}
+                {playView === 'canvas' && (
+                    <InstrumentCanvas instrumentName={activeInstrument?.name ?? 'Guitar'} />
+                )}
             </div>
         </div>
       </div>
