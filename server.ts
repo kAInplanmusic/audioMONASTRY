@@ -635,13 +635,30 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
       const file = files[0];
       const dataUri = `data:${file.contentType || 'audio/wav'};base64,${file.data.toString('base64')}`;
       const token = (process.env.REPLICATE_API_TOKEN || '').trim();
-      const model = (process.env.REPLICATE_STEM_MODEL || 'ryan5453/demucs').trim();
-      const createResp = await fetch(`https://api.replicate.com/v1/models/${model}/predictions`, {
+      const model = (process.env.REPLICATE_STEM_MODEL || 'cjwbw/demucs').trim();
+
+      // Version explizit auflösen: der Modell-Alias kann 404 liefern, obwohl
+      // die Version lauffähig ist. Danach Prediction auf der Version starten.
+      const modelResp = await fetch(`https://api.replicate.com/v1/models/${model}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!modelResp.ok) { res.status(modelResp.status).json({ error: `Replicate model ${modelResp.status}` }); return; }
+      const modelInfo = await modelResp.json() as any;
+      const versionId: string = modelInfo?.latest_version?.id ?? '';
+      if (!versionId) { res.status(404).json({ error: 'Replicate: keine lauffähige Version' }); return; }
+
+      const createResp = await fetch(`https://api.replicate.com/v1/models/${model}/versions/${versionId}/predictions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'wait' },
         body: JSON.stringify({ input: { audio: dataUri } }),
         signal: AbortSignal.timeout(180_000),
       });
+      if (createResp.status === 402) {
+        // Kein Guthaben mehr → Client soll auf lokal zurückfallen (Dropdown-Logik).
+        res.status(402).json({ status: 'error', code: 'INSUFFICIENT_CREDIT', provider: 'replicate', message: 'Replicate-Guthaben aufgebraucht – lokale Extraktion nutzen.' });
+        return;
+      }
       if (!createResp.ok) { res.status(createResp.status).json({ error: `Replicate ${createResp.status}` }); return; }
       const prediction = await createResp.json() as any;
       const status = prediction?.status;
@@ -777,6 +794,17 @@ async function proxyMasterPlayer(pathName: string, req: express.Request, res: ex
     res.status(502).json({ status: 'error', message: 'master-player Proxy fehlgeschlagen: ' + ((e as Error).message ?? '') });
   }
 }
+
+// --- Stem-Provider-Status (öffentlich, ohne Secrets) --------------------------
+app.get('/api/stem/status', (_req, res) => {
+  const provider = (process.env.STEM_AI_PROVIDER || 'fallback').trim();
+  const replicateActive = provider === 'replicate' && Boolean((process.env.REPLICATE_API_TOKEN || '').trim());
+  res.json({
+    provider: replicateActive ? 'replicate' : provider,
+    replicateActive,
+    estimateUsdPerSong: 0.05, // ehrliche Schätzung inkl. Kaltstart-Overhead (Stand 2026)
+  });
+});
 
 // --- Admin/Root-Debug (nur mit ADMIN_TOKEN, z. B. fuer Root-Debugging) -------
 app.get('/api/admin/debug', (req, res) => {

@@ -19,8 +19,18 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState(loadStemUsage);
+  const [providerChoice, setProviderChoice] = useState<'auto' | 'local' | 'api'>('auto');
+  const [stemStatus, setStemStatus] = useState<{ provider: string; replicateActive: boolean; estimateUsdPerSong: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Stem-Provider-Status vom Server (replicate aktiv? Kosten-Schätzung).
+  useEffect(() => {
+    fetch('/api/stem/status')
+      .then((r) => r.json())
+      .then((d) => setStemStatus(d))
+      .catch(() => { /* Server nicht erreichbar – lokaler Modus */ });
+  }, []);
 
   // MOA-Kommando: Dateiauswahl öffnen.
   useEffect(() => {
@@ -68,35 +78,53 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
     let realStems: { drums: string; bass: string; other: string; vocals: string } | null = null;
     let usedProvider: StemProvider = 'fallback';
 
-    // 1) ECHTES HTDemucs-ONNX-Modell (100% Inferenz, WebGPU/WASM).
-    try {
-      realStems = await separateStemsWithDemucs(file, (p) => setProgress(p));
-      if (realStems) usedProvider = 'local';
-    } catch (e) {
-      console.warn('Demucs-ONNX nicht verfügbar – DSP-Notfall übernimmt.', e);
-    }
+    // Provider-Priorität:
+    //  - 'api':  Replicate (Pay-per-Use) zuerst, lokales ONNX als Fallback
+    //  - 'auto': Replicate zuerst (wenn aktiv), sonst lokal
+    //  - 'local': NUR lokal (ONNX → DSP)
+    const apiFirst = providerChoice === 'api' || (providerChoice === 'auto' && !!stemStatus?.replicateActive);
 
-    if (!realStems) {
-      // 2) Server-/stem-ai-/Replicate-Pfad.
+    const tryServer = async (): Promise<boolean> => {
       try {
         const stream = streamStems(file);
         let finalData: { stems?: Partial<LocalStemUrls>; provider?: string } | null = null;
         for await (const update of stream) {
-          if (typeof update === 'number') {
-            setProgress(update);
-          } else {
-            finalData = update;
-          }
+          if (typeof update === 'number') setProgress(update);
+          else finalData = update;
         }
         if (finalData?.provider === 'replicate' || finalData?.provider === 'stem-ai' || finalData?.provider === 'fallback') {
           usedProvider = finalData.provider;
         }
         if (finalData?.stems && Object.values(finalData.stems).some((u) => typeof u === 'string' && u.length > 0)) {
           stems = finalData.stems as LocalStemUrls;
+          return true;
         }
       } catch (e) {
-        console.warn('Server-Stem-Pfad nicht verfügbar – DSP-Notfall übernimmt.', e);
+        console.warn('Server-Stem-Pfad nicht verfügbar – Fallback übernimmt.', e);
       }
+      return false;
+    };
+
+    const tryLocal = async (): Promise<boolean> => {
+      try {
+        realStems = await separateStemsWithDemucs(file, (p) => setProgress(p));
+        if (realStems) {
+          usedProvider = 'local';
+          return true;
+        }
+      } catch (e) {
+        console.warn('Demucs-ONNX nicht verfügbar – DSP-Notfall übernimmt.', e);
+      }
+      return false;
+    };
+
+    if (apiFirst) {
+      await tryServer();
+      if (!stems && providerChoice !== 'api') await tryLocal();
+      if (!stems && providerChoice === 'api') await tryLocal(); // API gewählt, aber kein Guthaben/Fehler → lokal retten
+    } else {
+      await tryLocal();
+      if (!stems && providerChoice !== 'local') await tryServer();
     }
 
     // 3) DSP-Notfall (nur wenn weder Modell noch Server Stems geliefert haben).
@@ -167,7 +195,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
       <div className="mb-4 -mt-2">
         <MoaAssistant pluginId="stem" placeholder="MOA: z. B. 'Datei trennen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-3">
         <h3 className="text-sm font-black uppercase tracking-widest text-neutral-400 flex items-center gap-2">
             <Radio className="w-4 h-4 text-red-400" /> STEM MONK
         </h3>
@@ -176,6 +204,23 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
             <option value="AUTO_AI">AI</option>
             <option value="PRO">ACTIVE</option>
         </select>
+      </div>
+
+      <div className="mb-4 flex items-center gap-1.5" role="tablist" aria-label="Stem-Provider">
+        {([['auto', 'AUTO'], ['local', 'LOKAL'], ['api', 'API']] as const).map(([v, label]) => (
+          <button key={v} type="button" role="tab" aria-selected={providerChoice === v}
+            onClick={() => setProviderChoice(v)}
+            title={v === 'api' ? `API Call ≈ ${formatUsd(stemStatus?.estimateUsdPerSong ?? 0.05)}/Song` : v === 'local' ? 'Lokale ONNX-Extraktion (kostenlos)' : 'Automatisch: API zuerst, lokal als Fallback'}
+            className={`px-2.5 py-1 rounded text-[9px] font-bold tracking-widest border ${
+              providerChoice === v ? 'bg-red-900/40 border-red-400 text-red-200' : 'border-neutral-800 text-neutral-500 hover:text-neutral-300'
+            }`}
+          >
+            {label}{v === 'api' ? ` ≈${formatUsd(stemStatus?.estimateUsdPerSong ?? 0.05)}` : ''}
+          </button>
+        ))}
+        <span className="ml-auto text-[9px] font-mono text-neutral-500">
+          {stemStatus ? (stemStatus.replicateActive ? 'API bereit' : 'API aus (lokal aktiv)') : '…'}
+        </span>
       </div>
 
       <div className="mb-4 px-3 py-2 rounded-lg border border-neutral-800 bg-black/30 text-[10px] font-mono text-neutral-400 flex items-center justify-between">
