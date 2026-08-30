@@ -28,9 +28,10 @@ import { webRTCManager } from './utils/WebRTCManager';
 
 // Monitor-Solo: welcher Mixer-Kanal gehört zu welchem Plugin (best effort).
 const PLUGIN_SOLO_CHANNEL: Record<string, TrackType> = {
-  mixer: 'channel1', sequencer: 'channel1', drum: 'channel2', sampler: 'channel5',
-  synth: 'channel4', instrument: 'channel4', effect: 'channel6', dsp: 'channel6',
+  mixer: 'channel1', masterplayer: 'channel1', sequencer: 'channel1', drum: 'channel2', sampler: 'channel5',
+  synthesizer: 'channel4', instrument: 'channel4', effect: 'channel6', dsp: 'channel6',
   eq: 'channel6', voice: 'channel8', spatial: 'channel7', mastering: 'channel1',
+  sound: 'channel5', drop: 'channel5', ai: 'channel1',
 };
 
 
@@ -399,7 +400,7 @@ function AppComponent() {
           <span className="h-px flex-1 bg-linear-to-l from-transparent to-neutral-800" />
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 max-w-5xl mx-auto">
-        {getPluginRegistry().map(plugin => {
+        {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer').map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
           const isActive = state !== 'OFF';
 
@@ -457,6 +458,7 @@ function AppComponent() {
       {/* 4. Active Modules */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {getPluginRegistry()
+          .filter(p => p.id !== 'masterplayer')
           .filter(p => (p.id === 'mixer' ? true : (moduleStates[p.id] && moduleStates[p.id] !== 'OFF')))
           .map(plugin => (
             <ModuleContainer key={plugin.id} id={plugin.id} name={plugin.name} state={moduleStates[plugin.id]}>

@@ -62,9 +62,9 @@ describe('MOA Event-Handler (jsdom)', () => {
     expect(stopRes.handled).toBe(true);
   });
 
-  it('visualizer mode überträgt den gewünschten Modus', async () => {
+  it('performance mode überträgt den gewünschten Signal-Modus (ex-visMONK)', async () => {
     const eventPromise = nextEvent('monk:visualizer-mode');
-    await voiceControlService.executePluginCommand('User1', 'visualizer', 'mode', { mode: 'SPECTROGRAM' });
+    await voiceControlService.executePluginCommand('User1', 'performance', 'mode', { mode: 'SPECTROGRAM' });
     const event = await eventPromise;
     expect(event.detail).toBe('SPECTROGRAM');
   });

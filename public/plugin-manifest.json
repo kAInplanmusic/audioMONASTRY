@@ -53,6 +53,54 @@
   ],
   "ui_plugins": [
     {
+      "id": "masterplayer",
+      "name": "masterplayerMONK",
+      "short": "MPR",
+      "icon": "Activity"
+    },
+    {
+      "id": "instrument",
+      "name": "instrumentMONK",
+      "short": "INS",
+      "icon": "Music"
+    },
+    {
+      "id": "synthesizer",
+      "name": "synthesizerMONK",
+      "short": "SYN",
+      "icon": "Waves"
+    },
+    {
+      "id": "drum",
+      "name": "drumMONK",
+      "short": "DRM",
+      "icon": "Speaker"
+    },
+    {
+      "id": "sampler",
+      "name": "samplerMONK",
+      "short": "SAM",
+      "icon": "Speaker"
+    },
+    {
+      "id": "sequencer",
+      "name": "sequencerMONK",
+      "short": "SEQ",
+      "icon": "Grid3X3"
+    },
+    {
+      "id": "voice",
+      "name": "voiceMONK",
+      "short": "VOX",
+      "icon": "Mic"
+    },
+    {
+      "id": "sound",
+      "name": "soundMONK",
+      "short": "SND",
+      "icon": "AudioLines"
+    },
+    {
       "id": "mixer",
       "name": "mixerMONK",
       "short": "MIX",
@@ -65,64 +113,16 @@
       "icon": "Keyboard"
     },
     {
-      "id": "sequencer",
-      "name": "sequencerMONK",
-      "short": "SEQ",
-      "icon": "Grid3X3"
-    },
-    {
-      "id": "spatial",
-      "name": "spatialMONK",
-      "short": "3D",
-      "icon": "Box"
-    },
-    {
-      "id": "instrument",
-      "name": "instrumentMONK",
-      "short": "INS",
-      "icon": "Music"
-    },
-    {
-      "id": "drum",
-      "name": "drumMONK",
-      "short": "DRM",
-      "icon": "Speaker"
-    },
-    {
       "id": "effect",
       "name": "effectMONK",
       "short": "FX",
       "icon": "Sparkles"
     },
     {
-      "id": "synth",
-      "name": "synthesizerMONK",
-      "short": "SYN",
-      "icon": "Waves"
-    },
-    {
-      "id": "voice",
-      "name": "voiceMONK",
-      "short": "VOX",
-      "icon": "Mic"
-    },
-    {
-      "id": "visualizer",
-      "name": "visMONK",
-      "short": "VIS",
-      "icon": "Activity"
-    },
-    {
-      "id": "stem",
-      "name": "stemMONK",
-      "short": "RMX",
-      "icon": "Radio"
-    },
-    {
-      "id": "recording",
-      "name": "recordingMONK",
-      "short": "REC",
-      "icon": "Activity"
+      "id": "drop",
+      "name": "dropMONK",
+      "short": "DRP",
+      "icon": "Zap"
     },
     {
       "id": "library",
@@ -137,10 +137,10 @@
       "icon": "Activity"
     },
     {
-      "id": "sampler",
-      "name": "samplerMONK",
-      "short": "SAM",
-      "icon": "Speaker"
+      "id": "dsp",
+      "name": "dspMONK",
+      "short": "DSP",
+      "icon": "Cpu"
     },
     {
       "id": "mastering",
@@ -149,10 +149,34 @@
       "icon": "Square"
     },
     {
+      "id": "stem",
+      "name": "stemMONK",
+      "short": "RMX",
+      "icon": "Radio"
+    },
+    {
+      "id": "spatial",
+      "name": "spatialMONK",
+      "short": "3D",
+      "icon": "Box"
+    },
+    {
+      "id": "recording",
+      "name": "recordingMONK",
+      "short": "REC",
+      "icon": "Activity"
+    },
+    {
       "id": "performance",
       "name": "perfMONK",
       "short": "PRF",
       "icon": "Gauge"
+    },
+    {
+      "id": "ai",
+      "name": "aiMONK",
+      "short": "AI",
+      "icon": "Bot"
     }
   ]
 }

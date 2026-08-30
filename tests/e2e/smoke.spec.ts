@@ -1,14 +1,15 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * E2E-Smoke: App lädt, Entry-Gate passieren, alle 17 Plugin-Buttons sind da,
+ * E2E-Smoke: App lädt, Entry-Gate passieren, alle 20 Plugin-Buttons sind da,
  * Mixer-Terminal + MOA-Leiste rendern, Plugin-Toggle funktioniert und es gibt
  * keine uncaught pageerrors (White-Screen-Killer, DCT-104/118).
  */
 
 const PLUGIN_SHORTS = [
-  'MIX', 'CTRL', 'SEQ', '3D', 'INS', 'DRM', 'FX', 'SYN', 'VOX',
-  'VIS', 'SAM', 'RMX', 'REC', 'LIB', 'EQ', 'MST', 'PRF',
+  'INS', 'SYN', 'DRM', 'SAM', 'SEQ', 'VOX', 'SND',
+  'MIX', 'CTRL', 'FX', 'DRP', 'LIB', 'EQ', 'DSP',
+  'MST', 'RMX', '3D', 'REC', 'PRF', 'AI',
 ];
 
 /** Startseite öffnen und das „Studio betreten"-Gate passieren. */
@@ -30,7 +31,7 @@ function collectErrors(page: Page): { pageErrors: string[]; consoleErrors: strin
   return { pageErrors, consoleErrors };
 }
 
-test('App lädt mit korrektem Titel und 17 Plugin-Buttons', async ({ page }) => {
+test('App lädt mit korrektem Titel und 20 Plugin-Buttons', async ({ page }) => {
   const errors = collectErrors(page);
   await enterStudio(page);
 

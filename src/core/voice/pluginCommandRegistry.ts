@@ -124,7 +124,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['automat', 'filter', 'sweep']);
 
   // --- synthesizerMONK --------------------------------------------------------
-  voiceControlService.registerPluginCommand('synth', 'note', async (ctx) => {
+  voiceControlService.registerPluginCommand('synthesizer', 'note', async (ctx) => {
     const freq = Number(ctx.intent.parameters.freq ?? 440);
     const { audioEngine } = await import('../../utils/audioEngine');
     audioEngine.noteOnWorklet(Math.max(20, Math.min(20000, freq)), 0.8, 'saw');
@@ -194,15 +194,14 @@ export function registerDefaultVoiceCommands(): void {
     }
   }, ['preset', 'master', 'mastering']);
 
-  // --- visualizerMONK ----------------------------------------------------------
-  voiceControlService.registerPluginCommand('visualizer', 'mode', async (ctx) => {
+  // --- performanceMONK (inkl. ehem. visualMONK-Signalmodus) ---------------------
+  voiceControlService.registerPluginCommand('performance', 'mode', async (ctx) => {
     const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('monk:visualizer-mode', { detail: mode }));
     }
-  }, ['mode', 'visual', 'visualizer']);
+  }, ['mode', 'visual', 'visualizer', 'scope']);
 
-  // --- performanceMONK ---------------------------------------------------------
   voiceControlService.registerPluginCommand('performance', 'reset', async () => {
     const { performanceMonitor } = await import('../../utils/PerformanceMonitor');
     performanceMonitor.stop();
@@ -210,7 +209,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['reset', 'performance', 'monitor']);
 
   // --- UI-only Plugins (Status-Meldung, Folgeschritte verdrahten) ---------------
-  for (const id of ['stem', 'recording', 'mastering', 'visualizer', 'performance']) {
+  for (const id of ['stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {
     voiceControlService.registerPluginCommand(id, 'status', async () => {
       // Zusätzlicher Status-Handler (Kommandos wie "Status").
     }, ['status', 'bereit', 'ready']);
