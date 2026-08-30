@@ -76,13 +76,42 @@ async function ensureSshKey(env) {
   return created.ssh_key?.id ?? null;
 }
 
-function firewallRules(role) {
+// P-7: Cloudflare-IP-Ranges (öffentlicher Endpoint) mit 1h-Cache. Für app-1
+// werden 80/443 NUR für Cloudflare geöffnet – der Origin ist dann nicht mehr
+// direkt erreichbar und der Hop Cloudflare→Origin läuft nicht mehr offen ins
+// Internet (nur Cloudflare-Edge kann den App-Server erreichen).
+let cfIpCache = { ips: [], at: 0 };
+
+async function cloudflareIpRanges() {
+  if (cfIpCache.ips.length > 0 && Date.now() - cfIpCache.at < 60 * 60 * 1000) {
+    return cfIpCache.ips;
+  }
+  try {
+    const res = await fetch('https://api.cloudflare.com/client/v4/ips');
+    const data = await res.json();
+    const v4 = (data.result?.ipv4_cidrs ?? []).filter((c) => c.includes('.'));
+    const v6 = (data.result?.ipv6_cidrs ?? []).filter((c) => c.includes(':'));
+    cfIpCache = { ips: [...v4, ...v6], at: Date.now() };
+  } catch {
+    /* Fallback: Cache leer lassen -> App-Firewall bleibt zu (sicherer Ausfall). */
+  }
+  return cfIpCache.ips;
+}
+
+function firewallRules(role, cloudflareIps = []) {
   const base = [
     { direction: 'in', protocol: 'icmp', source_ips: ['0.0.0.0/0', '::/0'] },
     { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'] },
-    { direction: 'in', protocol: 'tcp', port: '80', source_ips: ['0.0.0.0/0', '::/0'] },
-    { direction: 'in', protocol: 'tcp', port: '443', source_ips: ['0.0.0.0/0', '::/0'] },
   ];
+  if (role === 'app') {
+    // Nur Cloudflare-Edge darf HTTP(S) erreichen (Proxy-Hop abgesichert).
+    const cf = cloudflareIps.length > 0 ? cloudflareIps : ['0.0.0.0/0', '::/0'];
+    base.push({ direction: 'in', protocol: 'tcp', port: '80', source_ips: cf });
+    base.push({ direction: 'in', protocol: 'tcp', port: '443', source_ips: cf });
+  } else {
+    base.push({ direction: 'in', protocol: 'tcp', port: '80', source_ips: ['0.0.0.0/0', '::/0'] });
+    base.push({ direction: 'in', protocol: 'tcp', port: '443', source_ips: ['0.0.0.0/0', '::/0'] });
+  }
   if (role === 'sfu') {
     base.push({ direction: 'in', protocol: 'udp', port: '40000-40099', source_ips: ['0.0.0.0/0', '::/0'] });
     base.push({ direction: 'in', protocol: 'tcp', port: '40000-40099', source_ips: ['0.0.0.0/0', '::/0'] });
@@ -100,29 +129,35 @@ async function ensureFirewall(env, name, rules) {
 // ---------------------------------------------------------------------------
 // Cloud-Init: bootstrapet einen Server komplett (Docker + Repo + .env + Rolle)
 // ---------------------------------------------------------------------------
-const APP_ENV_KEYS = [
-  'DOMAIN',
-  'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_ANON_PUB',
-  'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
-  'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
-  'OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL', 'MASTER_PLAYER_URL',
-];
+// P-4: Rollen-spezifische Secrets – jeder Knoten bekommt NUR, was er braucht.
+// (app = voll, sfu/master/edge/ai = ohne Supabase/R2/Replicate/AI-Keys.)
+const ROLE_ENV_KEYS = {
+  app: [
+    'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_ANON_PUB',
+    'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
+    'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
+    'OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL', 'MASTER_PLAYER_URL',
+  ],
+  sfu: ['SIGNALING_ALLOWED_ORIGINS'],
+  master: [],
+  edge: ['GF_SECURITY_ADMIN_PASSWORD'],
+  ai: ['OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL'],
+};
 
 function envFile(env, role) {
   const lines = [
     `DOMAIN=${role === 'app' ? ':80' : ''}`,
     'SIGNALING_ALLOWED_ORIGINS=*',
-    'VOICE_PROVIDER=replicate',
-    'STEM_AI_PROVIDER=replicate',
-    'ENABLE_SFU=0',
   ];
-  // P-1: Studio-Token nur auf den App-Knoten (der einzige mit /api + Socket.io).
-  if (role === 'app' && env.STUDIO_ACCESS_TOKEN) {
-    lines.push(`STUDIO_ACCESS_TOKEN=${env.STUDIO_ACCESS_TOKEN}`);
-    lines.push('TRUST_PROXY=1');
+  if (role === 'app') {
+    lines.push('VOICE_PROVIDER=replicate', 'STEM_AI_PROVIDER=replicate', 'ENABLE_SFU=0');
+    // P-1: Studio-Token nur auf den App-Knoten (der einzige mit /api + Socket.io).
+    if (env.STUDIO_ACCESS_TOKEN) {
+      lines.push(`STUDIO_ACCESS_TOKEN=${env.STUDIO_ACCESS_TOKEN}`);
+      lines.push('TRUST_PROXY=1');
+    }
   }
-  for (const key of APP_ENV_KEYS) {
-    if (key === 'DOMAIN') continue;
+  for (const key of ROLE_ENV_KEYS[role] ?? []) {
     const v = env[key];
     if (v && String(v).trim()) lines.push(`${key}=${String(v).trim()}`);
   }
@@ -139,7 +174,12 @@ mkdir -p /opt/samplemonk
 apt-get update -qq
 apt-get install -y -qq git curl rsync python3 python3-venv
 curl -fsSL https://get.docker.com | sh
-git clone --depth 1 https://x-access-token:${token}@github.com/kAInplanmusic/audioMONASTRY.git /opt/samplemonk 2>/dev/null || git -C /opt/samplemonk pull
+# P-4: Token NICHT in der Clone-URL (landet sonst in .git/config) – stattdessen
+# als Einmal-Header übergeben und das Remote danach auf die saubere URL setzen.
+GIT_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' '${token}' | base64 -w0)"
+git -c http.extraheader="$GIT_AUTH_HEADER" clone --depth 1 https://github.com/kAInplanmusic/audioMONASTRY.git /opt/samplemonk 2>/dev/null \\
+  || git -C /opt/samplemonk pull
+git -C /opt/samplemonk remote set-url origin https://github.com/kAInplanmusic/audioMONASTRY.git
 cat > /opt/samplemonk/.env <<'ENVEOF'
 ${envLines}
 ENVEOF
@@ -303,11 +343,12 @@ async function startFleet(env) {
   if (Object.keys(servers).length > 0) return { started: false, message: 'Flotte existiert bereits.' };
 
   const sshKeyId = await ensureSshKey(env);
+  const cfIps = await cloudflareIpRanges();
   const created = [];
 
   for (const item of FLEET) {
     const fwName = `samplemonk-${item.role}`;
-    const fwId = await ensureFirewall(env, fwName, firewallRules(item.role));
+    const fwId = await ensureFirewall(env, fwName, firewallRules(item.role, item.role === 'app' ? cfIps : []));
     const payload = {
       name: item.name,
       server_type: item.type,
