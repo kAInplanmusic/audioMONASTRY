@@ -146,7 +146,8 @@ const ROLE_ENV_KEYS = {
 
 function envFile(env, role) {
   const lines = [
-    `DOMAIN=${role === 'app' ? ':80' : ''}`,
+    // Origin-TLS (P-7b): app-1 dient HTTPS mit Cloudflare-Origin-Zertifikat.
+    `DOMAIN=${role === 'app' ? (env.APP_DOMAIN || 'anunnakitools.de') : ''}`,
     'SIGNALING_ALLOWED_ORIGINS=*',
   ];
   if (role === 'app') {
@@ -166,10 +167,14 @@ function envFile(env, role) {
 
 function userData(env, role) {
   const token = env.GITHUB_TOKEN ?? '';
+  const originCert = String(env.ORIGIN_CERT ?? '');
+  const originKey = String(env.ORIGIN_KEY ?? '');
   const envLines = envFile(env, role).replace(/\\/g, '\\\\').replace(/`/g, '\\`');
   return `#!/bin/bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
+ORIGIN_CERT='${originCert}'
+ORIGIN_KEY='${originKey}'
 mkdir -p /opt/samplemonk
 apt-get update -qq
 apt-get install -y -qq git curl rsync python3 python3-venv
@@ -186,6 +191,14 @@ ENVEOF
 cd /opt/samplemonk
 case "${role}" in
   app)
+    # P-7b: Origin-TLS mit Cloudflare-Origin-Zertifikat (falls Secrets gesetzt).
+    if [ -n "\${ORIGIN_CERT:-}" ] && [ -n "\${ORIGIN_KEY:-}" ]; then
+      mkdir -p /opt/samplemonk/certs
+      echo "\${ORIGIN_CERT}" | base64 -d > /opt/samplemonk/certs/origin.crt
+      echo "\${ORIGIN_KEY}" | base64 -d > /opt/samplemonk/certs/origin.key
+      chmod 600 /opt/samplemonk/certs/origin.key
+      cp scripts/hetzner/Caddyfile.origin Caddyfile
+    fi
     docker compose -f docker-compose.hetzner.yml up -d caddy sample-monk
     ;;
   sfu)
@@ -588,9 +601,10 @@ export default {
     const app = servers['samplemonk-app-1'];
     if (app && app.status === 'running' && app.public_net?.ipv4?.ip) {
       const upstream = new URL(request.url);
-      upstream.protocol = 'http:';
+      // P-7b: Origin-TLS – app-1 dient HTTPS (Cloudflare-Origin-Zertifikat).
+      upstream.protocol = 'https:';
       upstream.host = app.public_net.ipv4.ip;
-      upstream.port = '';
+      upstream.port = '443';
       const proxied = new Request(upstream.toString(), request);
       return fetch(proxied);
     }

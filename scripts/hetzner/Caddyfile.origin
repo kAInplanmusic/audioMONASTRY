@@ -1,0 +1,52 @@
+# Caddyfile.origin – audioMONASTRY Origin-TLS (hinter Cloudflare, Full/strict)
+# -----------------------------------------------------------------------------
+# Wird vom Portal-Worker auf app-1 installiert, wenn ORIGIN_CERT/ORIGIN_KEY
+# gesetzt sind. Caddy terminiert dann selbst TLS mit dem Cloudflare-Origin-
+# Zertifikat; Cloudflare verbindet sich per HTTPS (kein Klartext-Hop mehr).
+# Ansonsten identisch zur Standard-Caddyfile.
+{
+	servers {
+		protocols h1 h2
+	}
+}
+
+{$DOMAIN} {
+	tls /etc/caddy/certs/origin.crt /etc/caddy/certs/origin.key
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# App + API + Signaling (gleicher Ursprung, COOP/COEP-Header bleiben erhalten)
+	# WebSockets (Socket.io) werden von Caddy automatisch über den gleichen Pfad getunnelt.
+	reverse_proxy sample-monk:8080 {
+		# Längere Idle-Timeouts für Socket.io-/SSE-Verbindungen
+		transport http {
+			read_timeout 5m
+			write_timeout 30s
+		}
+	}
+
+	# Uploads dürfen größer sein (Sample-Upload bis 100 MB)
+	request_body {
+		max_size 120MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(self), microphone=(self), midi=(self)"
+		-Server
+		-X-Powered-By
+	}
+
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header /worklets/* Cache-Control "public, max-age=86400"
+	header /index.html Cache-Control "no-cache"
+	header /api/* Cache-Control "no-store"
+}
