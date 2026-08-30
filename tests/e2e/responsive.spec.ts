@@ -12,7 +12,7 @@ test.describe('Responsive/Touch-Matrix', () => {
     test('Studio lädt ohne horizontalen Overflow und Plugin-Toggle funktioniert', async ({ page }) => {
       await page.goto('/');
       await page.getByLabel('audioMONASTRY starten').click();
-      await expect(page.getByTitle('MIX')).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
 
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow).toBeLessThanOrEqual(1);
@@ -28,7 +28,7 @@ test.describe('Responsive/Touch-Matrix', () => {
     test('Studio lädt ohne horizontalen Overflow', async ({ page }) => {
       await page.goto('/');
       await page.getByLabel('audioMONASTRY starten').click();
-      await expect(page.getByTitle('MIX')).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
 
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow).toBeLessThanOrEqual(1);

@@ -10,7 +10,7 @@ async function enterStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 15_000 });
 }
 
 test('2 Browser-Kontexte synchronisieren die Session (2/4)', async ({ browser }) => {

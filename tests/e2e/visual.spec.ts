@@ -28,7 +28,7 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
   await expect(page).toHaveScreenshot('02-studio.png', {
     fullPage: true,
     animations: 'disabled',

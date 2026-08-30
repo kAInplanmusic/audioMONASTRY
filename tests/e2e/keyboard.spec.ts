@@ -8,7 +8,7 @@ test.describe('Tastatur-Navigation', () => {
   test('Skip-Link springt zum Studio-Inhalt', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
 
     await page.keyboard.press('Tab');
     const skipText = await page.evaluate(() => document.activeElement?.textContent ?? '');
@@ -22,7 +22,7 @@ test.describe('Tastatur-Navigation', () => {
   test('Settings-Dialog hält den Fokus gefangen und schließt per Escape', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
     // autoFocus setzt den Fokus auf den Schließen-Button.
