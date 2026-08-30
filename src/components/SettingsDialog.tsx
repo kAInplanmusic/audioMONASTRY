@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Settings, Volume2, Mic, SlidersHorizontal, MonitorSpeaker, X } from 'lucide-react';
 import * as Tone from 'tone';
 import { storageGet, storageSet } from '../utils/storage';
-import { enumerateMediaDevices, requestUserMedia } from '../utils/mediaDevices';
+import { enumerateMediaDevices } from '../utils/mediaDevices';
 import { isXonarU7 } from '../core/spatial/roomPlanner';
 import { audioDeviceManager } from '../utils/audioDeviceManager';
 import { aggregationStatus } from '../utils/audioAggregator';
@@ -70,21 +70,31 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   const [midiInputCount, setMidiInputCount] = useState(0);
   const [midiOutputCount, setMidiOutputCount] = useState(0);
   const [midiError, setMidiError] = useState<string | null>(null);
+  const [latency, setLatency] = useState(() => audioDeviceManager.getLatencySnapshot());
 
   useEffect(() => {
     if (!open) return;
     const ctx = Tone.context.rawContext as AudioContext & { setSinkId?: (id: string) => Promise<void> };
     setSinkSupported(!!ctx?.setSinkId);
 
-
-    enumerateMediaDevices()
-      .then(devs => {
-        const outs = devs.filter(d => d.kind === 'audiooutput');
-        setOutputDevices(outs);
-        setInputDevices(devs.filter(d => d.kind === 'audioinput'));
-        setXonarCount(outs.filter(d => isXonarU7(d.label || d.deviceId)).length);
-      })
-      .catch(() => { /* Permission/Hardware nicht verfügbar */ });
+    const refresh = () => {
+      enumerateMediaDevices()
+        .then(devs => {
+          const outs = devs.filter(d => d.kind === 'audiooutput');
+          setOutputDevices(outs);
+          setInputDevices(devs.filter(d => d.kind === 'audioinput'));
+          setXonarCount(outs.filter(d => isXonarU7(d.label || d.deviceId)).length);
+          setLatency(audioDeviceManager.getLatencySnapshot());
+        })
+        .catch(() => { /* Permission/Hardware nicht verfügbar */ });
+    };
+    refresh();
+    audioDeviceManager.startMonitoring();
+    const off = audioDeviceManager.onDeviceChange(() => refresh());
+    return () => {
+      off();
+      audioDeviceManager.stopMonitoring();
+    };
   }, [open]);
 
   const applyOutput = async (deviceId: string) => {
@@ -98,8 +108,9 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
   const applyInput = async (deviceId: string) => {
     update({ ...settings, inputDeviceId: deviceId });
-    // Mikrofon-Selektion wird beim Record/Voice genutzt (hier nur speichern).
-    try { await requestUserMedia({ audio: { deviceId: { ideal: deviceId } } }); } catch { /* Stille Fahrt */ }
+    // Geräte-Wahl wird beim nächsten startLocalAudio genutzt; hier sofort
+    // testen, damit Permission-/Device-Fehler sichtbar sind.
+    await audioDeviceManager.applyInput(deviceId);
   };
 
   const applyMidi = async (enabled: boolean) => {
@@ -166,6 +177,13 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
               <option key={d.deviceId} value={d.deviceId}>{d.label || 'Audio-Ausgabegerät'}</option>
             ))}
           </select>
+          <p className="text-[10px] text-neutral-500 mt-1 font-mono">
+            Engine: {latency.state} · {latency.sampleRate || '—'} Hz · Base {latency.baseLatencyMs.toFixed(1)} ms · Out {latency.outputLatencyMs.toFixed(1)} ms · RT {latency.roundTripMs.toFixed(1)} ms
+            <span className="text-neutral-600"> (Browser-Metriken, keine Device-Garantie)</span>
+          </p>
+          <p className="text-[10px] text-neutral-600 mt-1 font-mono">
+            Native Runtime (cpal/WASAPI/CoreAudio/PipeWire): Desktop-Build erforderlich – im Browser nicht aktiv.
+          </p>
           {xonarCount > 0 && (
             <p className="text-[10px] text-lime-400 mt-1 font-mono">
               ✓ {xonarCount}× ASUS Xonar U7 erkannt (8 Kanäle je Gerät) – Spatial 12.x/18.x/24.x über den RAUMPLAN im Spatial-Modul zuweisen.

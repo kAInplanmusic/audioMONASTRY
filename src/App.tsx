@@ -25,6 +25,7 @@ const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ defaul
 const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
+import { storageGetJson } from './utils/storage';
 
 // Monitor-Solo: welcher Mixer-Kanal gehört zu welchem Plugin (best effort).
 const PLUGIN_SOLO_CHANNEL: Record<string, TrackType> = {
@@ -228,7 +229,13 @@ function AppComponent() {
       console.log('[startApp] startAudio done');
       // Mikrofon für die WebRTC-Session erst NACH der User-Geste anfragen
       // (iOS-Safari verweigert getUserMedia ohne Geste). Fehler sind optional.
-      webRTCManager.startLocalAudio().catch((e) => console.warn('[startApp] Mikrofon nicht verfügbar:', e));
+      // Geräte-Wahl aus den Audio-Settings (falls der Nutzer ein Interface
+      // gewählt hat), sonst System-Default.
+      let preferredInput = '';
+      try {
+        preferredInput = storageGetJson<{ inputDeviceId?: string }>('audiomonastry_audio_settings')?.inputDeviceId ?? '';
+      } catch { /* Settings nicht lesbar – Default */ }
+      webRTCManager.startLocalAudio(preferredInput || undefined).catch((e) => console.warn('[startApp] Mikrofon nicht verfügbar:', e));
       try {
         await discoverPlugins();
       } catch (e) {

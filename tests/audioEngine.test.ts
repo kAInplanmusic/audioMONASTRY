@@ -34,6 +34,7 @@ vi.mock('tone', () => {
     Synth: MockNode,
     Panner: MockNode,
     FeedbackDelay: MockNode,
+    Delay: MockNode,
     Compressor: MockNode,
     MultibandCompressor: MockNode,
     Limiter: MockNode,

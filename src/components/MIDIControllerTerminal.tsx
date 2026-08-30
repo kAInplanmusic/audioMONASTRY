@@ -9,7 +9,11 @@ import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 import { audioDeviceManager, ManagedOutputDevice } from '../utils/audioDeviceManager';
 import { SkinEngine } from './midi/SkinEngine';
+import { MappingLearnPanel } from './midi/MappingLearnPanel';
 import { MidiDeviceType } from '../config/midiDevices';
+import { useControlHub } from '../hooks/useControlHub';
+import { applyMappedParameter } from '../hooks/useMappingApply';
+import { mappingStore } from '../core/mapping/MappingStore';
 
 /**
  * audioMONASTRY Hardware-Dashboard (controllerMONK)
@@ -32,8 +36,12 @@ function detectTouchLimited(): boolean {
 
 export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal() {
   const { state, lockStatus, updateState } = usePluginState('midi', 'PRO');
-  const { midiAccess, inputs, lastMessage, detected, error: midiError, rescan } = useMIDI();
+  const {
+    midiAccess, inputs, detected, error: midiError, rescan, lastMessage,
+    lastControlEvent: midiLastControlEvent,
+  } = useMIDI();
   const { devices: hidDevices, error: hidError, supported: hidSupported, requestDevice: pairHid } = useHID();
+  const { status: hubStatus, lastEvent: hubLastEvent, busy: hubBusy, connect: hubConnect, disconnect: hubDisconnect } = useControlHub();
 
   const [activeProfile, setActiveProfile] = useState('APC40');
   const [soundOutputs, setSoundOutputs] = useState<ManagedOutputDevice[]>([]);
@@ -42,11 +50,31 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
 
   const isConnected = !!midiAccess && inputs.length > 0;
 
-  // Soundkarten einmalig (und nach jedem Rescan) einlesen.
+  // Unified Learn-Event: MIDI-Hook (primär) oder ControlHub (HID/OSC-Adjapter).
+  const learnEvent = midiLastControlEvent ?? hubLastEvent;
+
+  // Mapping-Engine anwenden: transportagnostische Regeln → Audio-Parameter.
+  useEffect(() => {
+    if (!learnEvent) return;
+    const mapped = mappingStore.engineRef.map(learnEvent);
+    for (const m of mapped) applyMappedParameter(m.target, m.value01);
+  }, [learnEvent]);
+
+
+  // Soundkarten einmalig (und nach jedem Rescan) einlesen; devicechange-
+  // Monitoring hält die Liste bei Hot-Plug aktuell.
   const refreshSoundCards = () => {
     audioDeviceManager.refresh().then((devs) => setSoundOutputs(devs)).catch(() => { /* keine Hardware */ });
   };
-  useEffect(() => { refreshSoundCards(); }, []);
+  useEffect(() => {
+    refreshSoundCards();
+    audioDeviceManager.startMonitoring();
+    const off = audioDeviceManager.onDeviceChange(() => refreshSoundCards());
+    return () => {
+      off();
+      audioDeviceManager.stopMonitoring();
+    };
+  }, []);
 
   const applyOutput = async (deviceId: string) => {
     setActiveOutput(deviceId);
@@ -246,6 +274,12 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
                        ✓ {soundOutputs.filter((d) => d.isXonar).length}× ASUS Xonar U7 (8 Kanäle je Gerät)
                      </div>
                    )}
+                   <div className="text-[9px] font-mono text-neutral-500 leading-snug">
+                     {(() => {
+                       const h = audioEngine.getAudioHealth();
+                       return `Engine ${h.state} · ${h.sampleRate || '—'} Hz · Lat ${h.baseLatencyMs.toFixed(1)} ms + ${h.outputLatencyMs.toFixed(1)} ms`;
+                     })()}
+                   </div>
                  </>
                )}
              </div>
@@ -274,7 +308,34 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
             ))}
            </div>
 
-           <div>
+           <div className="space-y-3">
+             <MappingLearnPanel lastEvent={learnEvent} />
+             <details className="rounded-lg border border-neutral-800 bg-black/40 p-3">
+               <summary className="cursor-pointer text-[10px] font-mono text-neutral-400 uppercase tracking-widest flex items-center justify-between">
+                 <span>CONTROL BUS</span>
+                 <span className="text-emerald-400">{hubStatus.filter((h) => h.connected).length}/{hubStatus.length} verbunden</span>
+               </summary>
+               <div className="mt-2 space-y-1.5">
+                 {hubStatus.map((h) => (
+                   <div key={h.adapterId} className="flex items-center gap-2 text-[10px]">
+                     <span className={`w-1.5 h-1.5 rounded-full ${h.connected ? 'bg-emerald-400' : 'bg-neutral-600'}`} />
+                     <span className="text-neutral-300 uppercase">{h.adapterId}</span>
+                     <button type="button"
+                       onClick={() => (h.connected ? hubDisconnect(h.adapterId) : void hubConnect(h.adapterId))}
+                       disabled={hubBusy === h.adapterId}
+                       className={`ml-auto px-2 py-0.5 rounded border text-[8px] font-bold tracking-widest ${
+                         h.connected ? 'border-red-500/40 text-red-300 hover:bg-red-500/10' : 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10'
+                       } disabled:opacity-40`}
+                     >
+                       {hubBusy === h.adapterId ? '…' : h.connected ? 'TRENNEN' : 'VERBINDEN'}
+                     </button>
+                   </div>
+                 ))}
+                 <div className="text-[8px] text-neutral-600 leading-snug">
+                   Verbindet die Referenz-Adapter (WebMIDI/HID/OSC) mit dem ControlHub. Events fließen in Mapping-Learn und -Engine.
+                 </div>
+               </div>
+             </details>
              <button type="button"
                onClick={() => { rescan(); refreshSoundCards(); }}
                className="w-full py-3 bg-[#222] hover:bg-[#333] border border-neutral-700 rounded text-xs font-bold tracking-widest text-neutral-400 flex items-center justify-center gap-2 transition-colors cursor-pointer"

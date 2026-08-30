@@ -136,11 +136,20 @@ export interface ISpatialRenderer {
 // ---------------------------------------------------------------------------
 // 1.1.5 · IHardwareAdapter
 // ---------------------------------------------------------------------------
+export type ControlMessageKind =
+  | 'noteOn' | 'noteOff' | 'cc' | 'pitch' | 'program' | 'osc'
+  | 'polyAftertouch' | 'channelAftertouch'
+  | 'clock' | 'start' | 'stop' | 'continue' | 'songPosition'
+  | 'sysex' | 'nrpn' | 'rpn';
+
 export interface ControlMessage {
-  kind: 'noteOn' | 'noteOff' | 'cc' | 'pitch' | 'program' | 'osc';
+  kind: ControlMessageKind;
   idNum: number;
-  value: number;     // 0..127
+  value: number;     // 0..127 (7-Bit), bei pitch 0..16383
   channel: number;   // 1..16
+  /** SysEx-Payload ohne F0/F7 oder Transport-Position (Song Position, 14-Bit). */
+  data?: number[];
+  position?: number;
 }
 
 /**
@@ -151,8 +160,56 @@ export interface IHardwareAdapter {
   connect(): Promise<void>;
   disconnect(): void;
   onControl: (cb: (msg: ControlMessage) => void) => void;
+  /** Transportagnostisches Event-Modell (für Mapping-Engine). Optional. */
+  onControlEvent?: (cb: (ev: ControlEvent) => void) => void;
   /** Sende Logik-Ausgabe zurück zur Hardware (LEDs/Motorfader). */
   send(msg: ControlMessage): void;
+}
+
+// ---------------------------------------------------------------------------
+// 1.1.5.1 · ControlEvent – transportagnostisches Control-Modell
+// ---------------------------------------------------------------------------
+/** Protokoll-Herkunft eines ControlEvents. */
+export type ControlSourceProtocol = 'midi' | 'hid' | 'osc' | 'virtual';
+
+/** Semantik-Klasse eines Controls (für Mapping-Engine). */
+export type ControlSemantics =
+  | 'absolute'   // Fader/Poti/Encoder mit Absolutwert (0..resolution)
+  | 'relative'   // Endlos-Encoder/Jog (Deltawerte, ggf. mit Vorzeichen)
+  | 'toggle'     // Umschalter (Wert wechselt 0/1 bei jedem Drücken)
+  | 'momentary'; // Taster (1 solange gedrückt, 0 beim Loslassen)
+
+/**
+ * Das zentrale, transportagnostische Hardware-Event.
+ *
+ * PHYSICAL DEVICE → PROTOCOL → CONTROL EVENT → MAPPING → APP PARAMETER
+ *
+ * `parameter` ist die protokollspezifische Adresse (MIDI-CC-Nummer, HID-Usage,
+ * OSC-Address). Applikations-Parameter dürfen dieses Event NIE direkt mit
+ * physischen Geräten verknüpfen – das übernimmt ausschließlich die
+ * Mapping-Engine.
+ */
+export interface ControlEvent {
+  /** Eindeutige Geräte-ID (MIDI-Port-ID, HID-Device-ID, OSC-Endpoint). */
+  sourceDevice: string;
+  sourceProtocol: ControlSourceProtocol;
+  /** MIDI-Kanal 1..16; für HID/OSC ohne Kanal = 0. */
+  channel: number;
+  /** Protokoll-Adresse: CC-Nummer, Note, HID-Usage, OSC-Address-Teil. */
+  parameter: number;
+  /** Rohwert (7-Bit, 14-Bit, HID-Logical, OSC-Float). */
+  value: number;
+  /** Auflösung des Rohwerts (127, 16383, 65535, 1.0 …). */
+  resolution: number;
+  messageType: ControlMessageKind;
+  /** Monotone Zeit (performance.now()-Basis) in Millisekunden. */
+  timestamp: number;
+  /** Vom Adapter erkannte Semantik (falls bekannt). */
+  semantics?: ControlSemantics;
+  /** Freitext-Adresse für OSC (`/control/...`). */
+  address?: string;
+  /** Song Position (14-Bit) für MIDI-Transport-Events. */
+  position?: number;
 }
 
 // ---------------------------------------------------------------------------
