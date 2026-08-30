@@ -15,6 +15,7 @@
 | Supabase Anon-Read | Cloud | anon REST | ✅ 5/5 Zeilen gelesen (z. B. `TR-909 Classic Kick`) | ✅ Read-Pfad real verifiziert |
 | Cloudflare R2 | Cloud | S3 | ✅ `ListBuckets` + `PutObject` + Public-URL real verifiziert | Bucket `audiomonastrysamples`, Public via `pub-...r2.dev` |
 | DeepSeek LLM | Cloud | API | ✅ `deepseek-v4-flash` via App-Router („Bereit", 1,1 s) | Guthaben aktiv |
+| Replicate Stems | Cloud | API | ✅ Token+Modell validiert · ⚠️ Account ohne Guthaben (402) | `cjwbw/demucs`, Fallback lokal |
 | Hugging Face LLM | Cloud | Router | ✅ `Qwen/Qwen2.5-72B-Instruct` via HF-Router (30,6 s Kaltstart) | Guthaben aktiv, Router-Endpoint gefixt |
 
 ## Automatisierte Tests (ohne Hardware, in CI reproduzierbar)
