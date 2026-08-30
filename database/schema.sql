@@ -2,8 +2,11 @@
 -- audioMONASTRY – Supabase-Schema (externe Sample-/Musik-Datenbank)
 -- ============================================================================
 -- Anwendung: im Supabase-Dashboard unter "SQL Editor" einmalig ausführen
--- (bzw. via `psql`/Migration). Das Skript ist idempotent und setzt die
--- audioMONASTRY-Tabellen auf den definierten Stand zurück.
+-- (bzw. via `psql`/Migration). Das Skript ist NICHT-DESTRUKTIV (P-6):
+--   - `create table if not exists` legt fehlende Tabellen an
+--   - `alter table … add column if not exists` migriert Alt-Tabellen
+--   - es werden KEINE Tabellen gelöscht oder Daten entfernt
+-- Für einen bewussten, destruktiven Reset: database/reset.sql verwenden.
 --
 -- Tabellen:
 --   samples         Metadaten der Sample-Bibliothek (AudioSample-Äquivalent)
@@ -15,17 +18,6 @@
 -- Hinweis: Eigentliche Audio-Blobs liegen in Cloudflare R2; die URLs der
 -- Objekte werden in samples.url / music_tracks.url hinterlegt.
 -- ============================================================================
-
--- ----------------------------------------------------------------------------
--- ACHTUNG (Migration): Die folgenden DROP-Anweisungen entfernen abweichende
--- Alt-Tabellen (z.B. ein falsches `samples`-Layout aus anderen Templates),
--- damit `create table if not exists` das korrekte audioMONASTRY-Schema
--- anlegen kann. Die Tabellen sind Metadaten-Only – Audio-Blobs liegen in R2.
--- ----------------------------------------------------------------------------
-drop table if exists public.samples cascade;
-drop table if exists public.sample_tags cascade;
-drop table if exists public.music_tracks cascade;
-drop table if exists public.library_links cascade;
 
 -- ----------------------------------------------------------------------------
 -- SAMPLES
@@ -51,6 +43,19 @@ create table if not exists public.samples (
   source      text not null default 'seed',        -- 'seed' | 'opfs' | 'generated' | 'r2' | 'upload'
   created_at  timestamptz not null default now()
 );
+
+-- P-6: Migration bestehender Alt-Tabellen ohne Datenverlust.
+alter table public.samples add column if not exists kind text not null default 'sample';
+alter table public.samples add column if not exists artist text;
+alter table public.samples add column if not exists style text;
+alter table public.samples add column if not exists key text;
+alter table public.samples add column if not exists bpm numeric;
+alter table public.samples add column if not exists duration_seconds numeric;
+alter table public.samples add column if not exists sample_rate integer;
+alter table public.samples add column if not exists lufs numeric;
+alter table public.samples add column if not exists file_size bigint;
+alter table public.samples add column if not exists source text not null default 'seed';
+
 create index if not exists samples_kind_idx on public.samples (kind);
 create index if not exists samples_style_idx on public.samples (style);
 create index if not exists samples_bpm_idx on public.samples (bpm);
@@ -77,6 +82,12 @@ create table if not exists public.music_tracks (
   tags       jsonb not null default '[]'::jsonb,   -- Tags (Stimmung, Instrument, ...)
   created_at timestamptz not null default now()
 );
+
+-- P-6: Alt-Tabellen-Migration (ohne Datenverlust).
+alter table public.music_tracks add column if not exists style text;
+alter table public.music_tracks add column if not exists key text;
+alter table public.music_tracks add column if not exists duration_seconds numeric;
+alter table public.music_tracks add column if not exists tags jsonb not null default '[]'::jsonb;
 
 -- ----------------------------------------------------------------------------
 -- LIBRARY LINKS (generische Querverweise quer über alle Module)

@@ -21,6 +21,7 @@ import secrets
 import shutil
 import tempfile
 import threading
+import time
 from typing import Annotated, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
@@ -90,35 +91,43 @@ def get_separator():
 
 
 # --------------------------------------------------------------------------- #
-# Temp-Session-Registry (token -> dir). Ring-Puffer mit Aufräumen.
+# Temp-Session-Registry (token -> dir). Ring-Puffer mit Grace-Zeit.
 # --------------------------------------------------------------------------- #
 _sessions_lock = threading.Lock()
-_sessions: dict[str, str] = {}
+# P-15: token -> (tmp_dir, created_monotonic). Sessions werden erst nach Ablauf
+# der Grace-Zeit verdrängt, damit laufende Downloads nicht ins Leere greifen.
+_sessions: dict[str, tuple[str, float]] = {}
 MAX_SESSIONS = int(os.environ.get("AI_MAX_STEM_SESSIONS", "10"))
+SESSION_GRACE_SEC = float(os.environ.get("AI_STEM_SESSION_GRACE_SEC", "1800"))
 
 
 def register_session(tmp_dir: str) -> str:
     token = secrets.token_urlsafe(12)
+    now = time.monotonic()
     with _sessions_lock:
-        _sessions[token] = tmp_dir
-        # Älteste Sessions aufräumen (Ring-Puffer).
+        _sessions[token] = (tmp_dir, now)
+        # Älteste Sessions aufräumen – aber nur, wenn die Grace-Zeit um ist.
         while len(_sessions) > MAX_SESSIONS:
             oldest_token = next(iter(_sessions))
-            old_dir = _sessions.pop(oldest_token)
-            shutil.rmtree(old_dir, ignore_errors=True)
+            oldest_dir, oldest_at = _sessions[oldest_token]
+            if now - oldest_at < SESSION_GRACE_SEC:
+                break
+            _sessions.pop(oldest_token, None)
+            shutil.rmtree(oldest_dir, ignore_errors=True)
     return token
 
 
 def session_dir(token: str) -> str:
     with _sessions_lock:
-        return _sessions.get(token, "")
+        entry = _sessions.get(token)
+        return entry[0] if entry else ""
 
 
 def drop_session(token: str) -> None:
     with _sessions_lock:
-        old_dir = _sessions.pop(token, None)
-    if old_dir:
-        shutil.rmtree(old_dir, ignore_errors=True)
+        entry = _sessions.pop(token, None)
+    if entry:
+        shutil.rmtree(entry[0], ignore_errors=True)
 
 
 # --------------------------------------------------------------------------- #
