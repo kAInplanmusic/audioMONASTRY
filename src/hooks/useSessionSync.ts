@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { useSession } from '../context/SessionContext';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { isTrustedMediaUrl } from '../utils/mediaUrlGuard';
 
 export const useSessionSync = () => {
   const { addToScratchpad, removeFromScratchpad } = useSession();
@@ -10,7 +11,17 @@ export const useSessionSync = () => {
   useEffect(() => {
     return webRTCManager.addDataChannelListener((message) => {
       if (message?.type === 'SCRATCHPAD_UPDATE') {
-        if (message.action === 'ADD') addToScratchpad(message.sample);
+        // F4-Fix: Peer-Samples nur mit vertrauenswürdiger URL annehmen.
+        if (message.action === 'ADD') {
+          const sample = message.sample;
+          if (
+            sample &&
+            typeof sample === 'object' &&
+            (!sample.url || isTrustedMediaUrl(sample.url))
+          ) {
+            addToScratchpad(sample);
+          }
+        }
         if (message.action === 'REMOVE') removeFromScratchpad(message.id);
       }
     });

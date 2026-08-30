@@ -6,6 +6,8 @@
  * VoiceMonkService), Sprache über den VoiceMonkService.
  */
 
+import { isTrustedMediaUrl } from '../../utils/mediaUrlGuard';
+
 export interface VoiceModel {
   id: string;
   name: string;
@@ -71,6 +73,8 @@ export class LocalSingingEngine implements ISingingEngine {
 
   private async playUrl(url: string): Promise<void> {
     if (typeof Audio === 'undefined') return;
+    // F4-Fix: nur vertrauenswürdige URLs abspielen (blob:/data:/eigene Hosts).
+    if (!isTrustedMediaUrl(url)) return;
     const audio = new Audio(url);
     try {
       await audio.play();

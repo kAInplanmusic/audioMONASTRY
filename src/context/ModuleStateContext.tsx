@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { storageGet, storageSet } from '../utils/storage';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { can, roleForUser, readSessionConfig } from '../utils/rbac';
 
 export type ModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
 
@@ -65,6 +66,15 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       };
       if (!pluginId || !state) return;
       if (state !== 'OFF' && state !== 'AUTO_AI' && state !== 'PRO') return;
+      // F1-Fix: Empfangs-RBAC – PRO-Promotion nur durch Producer+ (Lock-Aktion),
+      // OFF/AUTO_AI durch alle Rollen (State-Aktion). Client-RBAC bleibt UX,
+      // aber fremde States werden nicht mehr blind übernommen.
+      const senderRole = roleForUser(senderId ?? '', readSessionConfig().hostUid || null);
+      const neededAction = state === 'PRO' ? 'lock' : 'state';
+      if (!can(senderRole, neededAction)) {
+        console.warn('[module-state] RBAC: Update verworfen', { senderId, state, senderRole });
+        return;
+      }
       const t = Number(timestamp) || 0;
       const last = lastSeen.current[pluginId];
       if (last && (t < last.t || (t === last.t && (senderId ?? '') <= last.sender))) return; // stale/duplicate
