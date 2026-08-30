@@ -4,6 +4,27 @@
 > Abgleich gegen den Code. Ziel: **alle 16 Server-Befunde + F1–F7 + Rust-F9
 > beheben**, Tests ergänzen, Re-Audit grün, CI grün.
 
+## ✅ Status nach Umsetzung (2026-08-30)
+
+| Phase | Inhalt | Commit | Status |
+|---|---|---|---|
+| 0 | Portal-Passwort-Pflicht, Idempotenz, DataChannel-Multi-Listener, NaN-Guards, SDP-Persistenz, Rust-Binary | `24a9a01` | ✅ |
+| 1 | Studio-Token-Auth (API + Socket.io), Trust-Proxy, per-Route Rate-Limits, Metriken-Schutz, R2-Key-Whitelist | `5b3740e` | ✅ |
+| 2 | Streaming-Multipart-Parser (busboy) mit Datei-Limit (OOM-DoS-Fix) | `8426416` | ✅ |
+| 3 | Rollen-spezifische Secrets, GitHub-Token via Einmal-Header, App-Firewall nur Cloudflare-IPs, Telemetrie-ctx 2-KB-Cap, Security-Header | `9f95753` | ✅ |
+| 4 | `schema.sql` nicht-destruktiv + `reset.sql`, stem-ai Session-Grace | `4b552b4` | ✅ |
+| 5 | Empfangs-RBAC (F1), Media-URL-Allowlist (F4) | `80ae4a2` | ✅ |
+| 6 | Re-Audit (dieser Abschnitt) | – | ✅ |
+
+**Re-Audit-Ergebnis:**
+- `npm audit` (prod + dev): **0 Vulnerabilities**
+- `tsc --noEmit`: sauber
+- Vitest: **210/210 grün** (neue Tests: Security-Token, Multi-Listener, NaN-Klemmung, Media-URL-Guard)
+- Boundary-Scan: 0 Verstöße (224 Dateien)
+- Production-Build: ok · Bundle: 1,86 MB (Warn >1,43 MB – bekannter UI-07-Backlog)
+- E2E Chromium: 11/11 · Firefox: 11/11 (inkl. Responsive mit Scrollbar-Toleranz)
+- Portal-Worker: `wrangler deploy --dry-run` ok (21,76 KiB)
+
 **Kernarchitektur-Entscheidung (behebt 1, 3, 5, 9, 11, 12 gemeinsam):**
 Das Portal (Cloudflare Worker) ist bereits die einzige Tür. Es erhält beim
 Flottenstart ein **Studio-Token**-Konzept:
