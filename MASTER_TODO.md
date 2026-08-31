@@ -583,6 +583,71 @@ Quellen, die ausgewertet wurden:
 
 ---
 
+## 9d. FREMDAUDIT-ABGLEICH (2026-08-31) – 15 Findings aus „Code-Review (max effort)“
+
+> Quelle: Fremdaudit Stand `dcba45f` (15 Findings). Abgleich gegen aktuellen
+> HEAD: **2 Findings bereits gefixt**, **13 weiter offen** + **1 neuer Fund**
+> (`hf_generate`-NameError). Details unten.
+
+### Abgleich-Tabelle
+
+| FA-ID | Befund (Fremdaudit) | Status im aktuellen Code | Neue/verknüpfte Tasks |
+|---|---|---|---|
+| FA-1 | Handler nutzen Manifest-ID statt Repository | ✅ **FIXED** – `handlers.py` übergibt `definition.repository` + `revision` | FA-P2-2 (Regressionstest) |
+| FA-2 | AI-Tabellen ohne RLS | ❌ **OFFEN** – `ai_migration_001.sql`: 8 Tabellen, 0× `enable row level security` | FA-P1-1 |
+| FA-3 | MCP-Permission vom Aufrufer selbst erteilt | ❌ **OFFEN** – `mcp_runtime.py:45` liest `permission` aus Body | FA-P0-1 |
+| FA-4 | Revision-Pinning wirkungslos | ✅ **FIXED** – `revision=definition.revision` in allen Handlern | FA-P2-2 (Test) |
+| FA-5 | VRAM-Buchhaltung ohne echtes Laden | ❌ **OFFEN** – `model_manager._load_locked` nur Zähler; Handler laden je Request | FA-P0-2 |
+| FA-6 | `/status` KeyError bei fehlender LoadClass | ❌ **OFFEN** – `get_status()`/`app.status_payload()` inkonsistente Keys (`on_demand` vs. `onDemand`, `rare` fehlt) | FA-P1-2 |
+| FA-7 | busboy erlaubt 5 × fileSize im RAM | ❌ **OFFEN** – `server.ts:955` `files:5`, `Buffer.concat` je Datei | FA-P0-3 |
+| FA-8 | HF-Endpoint: jeder Fehler → create | ❌ **OFFEN** – `hf_manage_endpoint.py` fängt `Exception` breit | FA-P1-3 |
+| FA-9 | HID-Felder ab 32 Bit falsch | ❌ **OFFEN** – `hidReport.ts` nutzt `1 << bitSize` (32-Bit-Signed) | FA-P1-4 |
+| FA-10 | OSC-Decoder ohne Bounds-Checks | ❌ **OFFEN** – `oscCodec.ts` `decodeOscArg`/`decodeOscMessage` ohne Längenprüfung | FA-P1-5 |
+| FA-11 | A100-Endpoint vor günstigem Serverless | ❌ **OFFEN** – `providerRouter.ts` sortiert nicht nach Kosten | FA-P1-6 |
+| FA-12 | Retry bis ~10,5 min ohne Gesamtlimit | ❌ **OFFEN** – `HfEndpointProvider.run` erzeugt je Versuch neues Timeout | FA-P1-7 |
+| FA-13 | HALF_OPEN lässt alle Calls durch | ❌ **OFFEN** – `circuitBreaker.call` prüft nur `OPEN`; `getState()` mutiert | FA-P1-8 |
+| FA-14 | `costTracker.entries` wächst unbegrenzt | ❌ **OFFEN** – kein Pruning, O(n)-Abfragen | FA-P2-1 |
+| FA-15 | `/infer` gibt rohe Exception-Texte aus | ❌ **OFFEN** – `app.py` liefert `str(exc)` nach außen | FA-P1-9 |
+| FA-16 | **NEU:** `hf_generate` nutzt `_definition` statt `definition` | ❌ **OFFEN** – `handlers.py:127` → NameError bei jedem MusicGen-Call | FA-P0-4 |
+
+### Priorisierte Maßnahmen aus dem Fremdaudit
+
+- [ ] **FA-P0-1** `mcp_runtime.py`: Permission nicht aus Request-Body übernehmen,
+      sondern aus serverseitigem Auth-/Trust-Context ableiten; DESTRUCTIVE nur
+      mit expliziter Server-Freigabe (FA-3)
+- [ ] **FA-P0-2** `model_manager.py`: echte Modell-Instanzen laden/cachen,
+      Handler nutzen geladene Instanz statt `from_pretrained` je Request;
+      VRAM real tracken (FA-5)
+- [ ] **FA-P0-3** `server.ts` Upload: Gesamtlimit statt `files:5` (entweder nur
+      1 Datei oder Summenlimit); Streams auf Temp/disk statt `Buffer.concat`
+      (FA-7)
+- [ ] **FA-P0-4** `handlers.py` `hf_generate`: `_definition` → `definition`
+      fixen + MusicGen-Smoke-Test (FA-16)
+- [ ] **FA-P1-1** `database/ai_migration_001.sql`: RLS + Policies für alle
+      8 Tabellen (anon read, service_role write), analog `schema.sql` (FA-2)
+- [ ] **FA-P1-2** `model_manager.get_status()`/`app.status_payload()`:
+      immer alle Klassen liefern, `onDemand`-Key korrekt, kein KeyError (FA-6)
+- [ ] **FA-P1-3** `hf_manage_endpoint.py`: nur 404/Not-Found → create; andere
+      Fehler (401/429/500/Timeout) hart fehlschlagen lassen (FA-8)
+- [ ] **FA-P1-4** `hidReport.ts`: 32-Bit-feste Bit-Extraktion (Number/BigInt),
+      `bitSize` auf 1..32 clamps, Sign-Berechnung für 32 Bit korrigieren (FA-9)
+- [ ] **FA-P1-5** `oscCodec.ts`: Bounds-Checks vor jedem Lesen, negative
+      Blob-Längen abfangen, `decodeOscMessage` try/catch (FA-10)
+- [ ] **FA-P1-6** `providerRouter.ts`: Kandidaten nach `estimateCostUsd()`
+      sortieren (billigster zuerst), GPU-Endpoint nur als Fallback (FA-11)
+- [ ] **FA-P1-7** `HfEndpointProvider.run`: Gesamt-Timeout (z. B. 120 s) über
+      alle Versuche, AbortSignal durchreichen, Backoff-Deckel (FA-12)
+- [ ] **FA-P1-8** `circuitBreaker.ts`: HALF_OPEN mit Probe-Lock (nur 1 Call),
+      `getState()` ohne Mutation, Erfolg/Failure korrekt zählen (FA-13)
+- [ ] **FA-P1-9** `app.py` `/infer`: Fehlerdetails nur ins Log, Client erhält
+      generische Meldung ohne Pfade/Traceback (FA-15)
+- [ ] **FA-P2-1** `costTracker.ts`: Pruning/Fenster (z. B. 30 Tage), Index
+      `Map<sessionId, entries>` / `Map<jobId, entries>` statt O(n)-Filter (FA-14)
+- [ ] **FA-P2-2** Regressionstests für FA-1/FA-4: sicherstellen, dass
+      `repository` + `revision` aus Manifest verwendet werden (FA-1, FA-4)
+
+---
+
 ## 10. ✅ VERKNÜPFTE PRÜFPUNKTE / GATES (vor jedem Release)
 
 | Gate | Prüfung | Verknüpfte Tasks |
@@ -601,6 +666,7 @@ Quellen, die ausgewertet wurden:
 | G12 Verify | `npm run verify` (tsc + Tests + Boundary-Scan) grün | alle |
 | G13 Audit-Regression | `npm run verify` 348/348 grün + Boundary-Scan 0 (AUD-1 fix) | AUD-P1-1, AUD-P1-4 |
 | G14 Vollständigkeits-Gate | GAP-1…GAP-8 abgeschlossen: Fehler-Register, Plugin-Matrix, Prompt-Matrix, Alternativen- & Konfig-Matrix vorhanden; keine offene Checkbox außerhalb MASTER_TODO | GAP-1…GAP-8 |
+| G15 Fremdaudit-Regression | Alle FA-P0/FA-P1/FA-P2 erledigt; FA-1/FA-4 durch Tests abgesichert; keine offenen Kritisch-Findings aus 9d | FA-P0-1…FA-P2-2 |
 
 ---
 
