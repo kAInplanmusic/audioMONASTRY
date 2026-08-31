@@ -79,7 +79,7 @@ def _create_kwargs() -> dict:
     kwargs = _common_kwargs()
     kwargs["region"] = REGION
     kwargs["vendor"] = VENDOR
-    kwargs["repository"] = "gpt2"  # API verlangt existierendes Repo (Custom-Container ignoriert es)
+    kwargs["repository"] = "AnunnakiTools/samplemonk-ai-runtime"  # eigenes HF-Repo (Custom-Container verlangt existierendes Repo im Namespace)
     kwargs["framework"] = "pytorch"  # Custom-Container: framework muss gesetzt sein
     return kwargs
 
