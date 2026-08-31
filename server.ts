@@ -59,6 +59,27 @@ const metrics = {
 // Aktive Socket.io-Verbindungen (User-Sessions) für /api/online + Idle-Shutdown.
 let activeSocketConnections = 0;
 
+// P4-2: Server-seitiges Audit-Log (Rollenwechsel, Lock-/State-Events, RBAC-Denials).
+const serverAuditLog: { ts: string; userId: string; role: string; action: string; target?: string; ok: boolean }[] = [];
+const MAX_SERVER_AUDIT = 1000;
+function addServerAudit(userId: string, role: string, action: string, ok: boolean, target?: string): void {
+  serverAuditLog.push({ ts: new Date().toISOString(), userId, role, action, target, ok });
+  if (serverAuditLog.length > MAX_SERVER_AUDIT) serverAuditLog.splice(0, serverAuditLog.length - MAX_SERVER_AUDIT);
+}
+
+// P4-2: Server-seitige Rollenzuordnung je User-ID (Host = admin, Rest = SESSION_ROLE).
+const sessionRoles = new Map<string, string>();
+function roleForSessionUser(userId: string): string {
+  if (sessionRoles.size === 0) return 'admin'; // Erster User = Host/Admin
+  if (process.env.SESSION_HOST_USER && userId === process.env.SESSION_HOST_USER) return 'admin';
+  const r = (process.env.SESSION_ROLE || '').trim();
+  return r === 'admin' || r === 'producer' || r === 'engineer' || r === 'guest' ? r : 'guest';
+}
+function roleCanState(role: string, state: string): boolean {
+  if (state !== 'PRO') return true; // OFF/AUTO_AI = state-Aktion für alle
+  return role === 'admin' || role === 'producer';
+}
+
 // DCT-108: Request/Trace-ID-Middleware (Korrelation User-Action → HTTP → AI).
 app.use((req, res, next) => {
   const id = (req.headers['x-request-id'] as string) || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -262,6 +283,11 @@ app.get('/api/metrics', (req, res) => {
 // --- Aktive User (Socket.io-Verbindungen) für Idle-Auto-Shutdown ------------
 app.get('/api/online', (_req, res) => {
   res.json({ online: Math.max(0, activeSocketConnections) });
+});
+
+// --- P4-2: Server-Audit-Log (Rollenzuweisung, Plugin-State, RBAC-Denials) ----
+app.get('/api/audit', (_req, res) => {
+  res.json({ entries: serverAuditLog.slice(-500).reverse(), total: serverAuditLog.length });
 });
 
 // --- Live-Telemetrie: Client-Events/Fehler einsammeln (auto-logging) --------
@@ -1507,14 +1533,14 @@ async function startServer() {
       const MAX_SESSION_USERS = 4;
 
       const sessionMembers = (room: string) => {
-        const members: { socketId: string; userId: string }[] = [];
+        const members: { socketId: string; userId: string; role: string }[] = [];
         const sockets = io.sockets.adapter.rooms.get(room);
         if (sockets) {
           for (const sid of sockets) {
             if (sid === socket.id) continue;
             const s = io.sockets.sockets.get(sid);
             if (s?.data?.sessionUserId) {
-              members.push({ socketId: sid, userId: s.data.sessionUserId });
+              members.push({ socketId: sid, userId: s.data.sessionUserId, role: s.data.sessionRole ?? 'guest' });
             }
           }
         }
@@ -1527,6 +1553,11 @@ async function startServer() {
         const room = `session:${SESSION_ROOM_ID}`;
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
+        // P4-2: Server-seitige Rolle – erster User ist Host/Admin, Rest lt. SESSION_ROLE.
+        const role = roleForSessionUser(userId);
+        socket.data.sessionRole = role;
+        if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
+        addServerAudit(userId, role, 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
 
         const members = sessionMembers(room);
@@ -1536,8 +1567,31 @@ async function startServer() {
           return;
         }
 
-        socket.emit('session-members', { roomId: SESSION_ROOM_ID, members });
-        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
+        socket.emit('session-members', { roomId: SESSION_ROOM_ID, members, selfRole: role, hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? userId });
+        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId, role });
+      });
+
+      // P4-2: Admin kann einem User eine neue Rolle zuweisen (server-erzwungen).
+      socket.on('assign-role', (data: any) => {
+        refreshIdleTimer();
+        const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        if (senderRole !== 'admin') {
+          addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', false, String(data?.userId ?? ''));
+          socket.emit('rbac-denied', { action: 'assign-role', reason: 'admin required' });
+          return;
+        }
+        const targetUserId = String(data?.userId ?? '').trim();
+        const newRole = String(data?.role ?? '').trim();
+        if (!targetUserId || !['admin', 'producer', 'engineer', 'guest'].includes(newRole)) return;
+        sessionRoles.set(targetUserId, newRole);
+        // Alle Sockets dieses Users aktualisieren.
+        for (const [, s] of io.sockets.sockets as any) {
+          if (s?.data?.sessionUserId === targetUserId) s.data.sessionRole = newRole;
+        }
+        addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', true, `${targetUserId}->${newRole}`);
+        const roomId = socket.data?.sessionRoom;
+        if (roomId) socket.to(`session:${roomId}`).emit('role-changed', { userId: targetUserId, role: newRole });
+        socket.emit('role-changed', { userId: targetUserId, role: newRole });
       });
 
       // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
@@ -1546,10 +1600,20 @@ async function startServer() {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        // P4-2: Server-seitige RBAC – PRO-Promotion nur für admin/producer.
+        const state = (data as any)?.state;
+        if (state && !roleCanState(senderRole, String(state))) {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, String((data as any)?.pluginId ?? ''));
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId: (data as any)?.pluginId, state, role: senderRole });
+          return;
+        }
+        addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, String((data as any)?.pluginId ?? ''));
         // Session-Identität: Sender-User-ID anhängen, damit Empfänger
         // Änderungen einem User zuordnen können (Locking/Audit).
         const payload = data && typeof data === 'object'
-          ? { ...data, senderUserId: socket.data?.sessionUserId ?? socket.id }
+          ? { ...data, senderUserId, senderRole }
           : data;
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
       });

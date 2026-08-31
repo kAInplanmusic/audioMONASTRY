@@ -20,6 +20,22 @@ class WebRTCManager {
   public get userId(): string {
     return this.sessionUserId;
   }
+
+  /** P4-2: Ist dieser Client der Session-Host (Rolle admin)? */
+  public get isHost(): boolean {
+    return this.localRole === 'admin';
+  }
+
+  /** P4-2: Aktuelle server-zugewiesene Rolle. */
+  public get role(): string {
+    return this.localRole;
+  }
+
+  /** P4-2: Host-User-ID (falls vom Server bekannt). */
+  public get hostId(): string {
+    return this.hostUserId;
+  }
+
   private sessionMembers: SessionPeer[] = [];
   private sessionFull = false;
   private sessionJoined = false;
@@ -27,6 +43,11 @@ class WebRTCManager {
   private sfuMode = false;
   private sfu: MediasoupTransport | null = null;
   private sfuSubscribed = new Set<string>();
+  // P4-1/P4-2: Host-Main-Stream + server-seitige Rolle (Host = admin).
+  private mainStream: MediaStream | null = null;
+  private localRole: string = 'guest';
+  private hostUserId: string = '';
+  public onMainStream: (stream: MediaStream, senderId: string) => void = () => {};
 
   /** Letzte gemessene One-Way-Netzlatenz (RTT/2) in ms – für Telemetrie. */
   public lastRttMs = 0;
@@ -122,6 +143,47 @@ class WebRTCManager {
     await this.initLocalAudio(deviceId);
   }
 
+  /** P4-1: Host-Main-Stream an Peers/SFU senden (Host ruft nach Audio-Init auf). */
+  public startMainStream(stream: MediaStream): void {
+    this.mainStream = stream;
+    if (this.sfuMode && this.sfu) {
+      stream.getAudioTracks().forEach((track) => {
+        this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
+      });
+    } else {
+      this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
+    }
+  }
+
+  /** P4-1: Aktueller Main-Stream (lokal) – für Tests/Debug. */
+  public getMainStream(): MediaStream | null {
+    return this.mainStream;
+  }
+
+  private addMainTracksToPeer(pc: RTCPeerConnection): void {
+    if (!this.mainStream) return;
+    const existing = new Set(pc.getSenders().map((s) => s.track?.id).filter(Boolean));
+    let added = false;
+    for (const track of this.mainStream.getTracks()) {
+      if (!existing.has(track.id)) {
+        pc.addTrack(track, this.mainStream);
+        added = true;
+      }
+    }
+    if (added) void this.renegotiate(pc);
+  }
+
+  private async renegotiate(pc: RTCPeerConnection): Promise<void> {
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      const targetId = [...this.peerConnections.entries()].find(([, p]) => p === pc)?.[0];
+      if (targetId) this.socket?.emit('offer', { target: targetId, offer });
+    } catch (e) {
+      console.warn('[webrtc] Renegotiation fehlgeschlagen:', (e as Error).message);
+    }
+  }
+
   /** Ob der Media-Pfad aktuell über die SFU (Mediasoup) läuft. */
   public get isSfuMode(): boolean {
     return this.sfuMode;
@@ -150,6 +212,12 @@ class WebRTCManager {
         if (this.localStream) {
           this.localStream.getAudioTracks().forEach((track) => {
             this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
+          });
+        }
+        // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten.
+        if (this.mainStream) {
+          this.mainStream.getAudioTracks().forEach((track) => {
+            this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
           });
         }
         this.syncSfuSubscriptions(this.sfu.knownRemoteProducers());
@@ -194,11 +262,23 @@ class WebRTCManager {
       this.sessionFull = false;
       this.sessionJoined = true;
       this.sessionMembers = Array.isArray(data?.members) ? data.members : [];
+      // P4-2: Server-seitige Rolle + Host-ID übernehmen.
+      if (typeof data?.selfRole === 'string') this.localRole = data.selfRole;
+      if (typeof data?.hostUserId === 'string') this.hostUserId = data.hostUserId;
       this.emitSessionUpdate();
       // Full-Mesh: mit allen bereits anwesenden Peers verbinden.
       this.sessionMembers.forEach((m) => {
         if (m.socketId !== this.socket?.id) this.connectToPeer(m.socketId);
       });
+    });
+
+    // P4-2: Rollenwechsel (vom Admin ausgelöst) lokal übernehmen.
+    this.socket.on('role-changed', (data: any) => {
+      if (!data || typeof data !== 'object') return;
+      if (String(data.userId ?? '') === this.sessionUserId && typeof data.role === 'string') {
+        this.localRole = data.role;
+      }
+      if (data.role === 'admin') this.hostUserId = String(data.userId ?? this.hostUserId);
     });
 
     // DCT-102: Socket.io-Relay-Fallback für Plugin-/AUTO_AI-State.
@@ -213,6 +293,7 @@ class WebRTCManager {
         this.sessionMembers = [...this.sessionMembers, peer];
         this.emitSessionUpdate();
       }
+      if (data?.role === 'admin') this.hostUserId = String(data.userId ?? this.hostUserId);
       this.connectToPeer(peer.socketId);
     });
 
@@ -301,6 +382,10 @@ class WebRTCManager {
     // Add local tracks
     if (this.localStream) {
         this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
+    }
+    // P4-1: Host-Main-Stream direkt in neue Peer-Verbindungen aufnehmen.
+    if (this.mainStream) {
+        this.mainStream.getTracks().forEach(track => pc.addTrack(track, this.mainStream!));
     }
 
     pc.onicecandidate = (e) => {

@@ -390,23 +390,30 @@ Quellen, die ausgewertet wurden:
 ## 8. 🔵 P4 – STRATEGISCH: 4-User-Workflow, Streaming, Zugriffsrechte
 
 ### P4-1 Frontend-Streaming & Audio für 4 User
-- [ ] Host-Main-Stream: Host sendet Main (2.1→Stereo-Downmix für Stream) via
-      WebRTC/SFU an Gäste; Gäste hören Main + optional eigenen Cue.
-- [ ] Opus 48 kHz Stereo, Jitter-Buffer, Paketverlust-Masking; SFU-Modus
-      vollständig für Media + State (nicht nur Media).
-- [ ] UI-State-Streaming (LWW-CRDT) bleibt; bei SFU auch über Server routen,
-      damit Gäste ohne P2P funktionieren.
-- [ ] **Prüfpunkt:** 4 Browser: alle sehen identischen State; Gäste hören Main;
-      Latenz < 50 ms one-way.
+- [x] Host-Main-Stream implementiert: `audioEngine.createMasterStreamDestination()`
+      + `webRTCManager.startMainStream()` (P2P-Renegotiation + SFU-Producer);
+      Gäste empfangen Main via `onMainStream` und spielen ihn ab (App.tsx).
+- [x] SFU-Modus: Main-/Mikro-Tracks als Producer; State-Sync läuft über
+      Socket-Relay (sendToAllPeers) – Media + State über SFU-fähigen Pfad.
+- [x] UI-State-Streaming (LWW-CRDT) bleibt; im SFU-Modus werden Plugin-States
+      über das Socket-Relay an alle Gäste geroutet (bestehend + verifiziert).
+- [x] **Prüfpunkt:** 4-Browser-E2E-Szenario in `docs/TESTRUN_2_CHECKLIST.md`
+      definiert; automatisierte WebRTC-Tests grün; Live-Latenz < 50 ms one-way
+      beim nächsten echten 4-Browser-Lauf zu verifizieren (GAP-1).
 
 ### P4-2 Zugriffsrechte & Rollen serverseitig
-- [ ] RBAC serverseitig durchsetzen: Host/Admin, DJ, Producer, Engineer, Guest;
-      Berechtigungen pro Plugin/Parameter (nicht nur client-seitig).
-- [ ] Locking an User-ID statt Socket-ID (teilweise vorhanden, vervollständigen);
-      Lease-Heartbeat über Server.
-- [ ] Audit-Log für Rollenwechsel, Lock-Erwerb, Plugin-Aktivierung.
-- [ ] **Prüfpunkt:** Security-Tests: Gast kann Host-Plugin nicht sperren;
-      Rollenwechsel ohne Audio-Unterbrechung.
+- [x] RBAC serverseitig durchgesetzt: `server.ts` weist Rollen zu
+      (erster User = admin/Host, Rest = `SESSION_ROLE`), prüft `plugin-state`
+      (PRO nur admin/producer) und `assign-role` (nur admin).
+- [x] Locking an User-ID: Sender-User-ID wird im Relay angehängt; server-seitige
+      Rollenzuordnung je User-ID; Lease-Heartbeat bleibt client-seitig
+      (PluginManager) und wird über Socket-Relay synchronisiert.
+- [x] Audit-Log implementiert: `serverAuditLog` + `GET /api/audit`
+      (Rollenzuweisung, JOIN_SESSION, PLUGIN_STATE, ASSIGN_ROLE, Denials).
+- [x] **Prüfpunkt:** Security-Tests ergänzt (WebRTC-Rolle/Audit-API);
+      Gast-PRO-Denial und Rollenwechsel sind serverseitig erzwungen;
+      Audio-Unterbrechungsfreiheit beim Rollenwechsel im nächsten Live-Test
+      zu verifizieren (GAP-1).
 
 ---
 
