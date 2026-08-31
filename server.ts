@@ -966,6 +966,9 @@ function parseMultipartStream(
     let settled = false;
     const fields: Record<string, string> = {};
     const files: { name: string; filename: string; contentType: string; data: Buffer }[] = [];
+    // FA-P0-3 / D14: 1 Datei + Summenlimit (Defense-in-Depth gegen RAM-Exploit).
+    let totalFileBytes = 0;
+    let fileCount = 0;
 
     // busboy v1 exportiert eine Factory-Funktion (keinen Konstruktor).
     const BusboyFactory = ((BusboyModule as any).default ?? BusboyModule) as unknown as (opts: {
@@ -978,7 +981,7 @@ function parseMultipartStream(
     };
     const bb = BusboyFactory({
       headers: req.headers as import('http').IncomingHttpHeaders,
-      limits: { fileSize: maxFileBytes, files: 5, fields: 20, fieldSize: 64 * 1024 },
+      limits: { fileSize: maxFileBytes, files: 1, fields: 20, fieldSize: 64 * 1024 },
     });
 
     bb.on('field', (name: string, value: string) => {
@@ -986,8 +989,28 @@ function parseMultipartStream(
     });
 
     bb.on('file', (name: string, stream: import('stream').Readable, info: { filename: string; mimeType: string }) => {
+      fileCount += 1;
+      if (fileCount > 1) {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Nur 1 Audio-Datei pro Upload erlaubt.'));
+          req.destroy();
+        }
+        return;
+      }
       const chunks: Buffer[] = [];
-      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('data', (c: Buffer) => {
+        totalFileBytes += c.length;
+        if (totalFileBytes > maxFileBytes) {
+          if (!settled) {
+            settled = true;
+            reject(new Error(`Datei zu groß (max. ${Math.round(maxFileBytes / 1024 / 1024)} MB).`));
+            req.destroy();
+          }
+          return;
+        }
+        chunks.push(c);
+      });
       stream.on('limit', () => {
         if (!settled) {
           settled = true;
@@ -996,6 +1019,7 @@ function parseMultipartStream(
         }
       });
       stream.on('end', () => {
+        if (settled) return;
         files.push({
           name,
           filename: info.filename || 'upload.bin',

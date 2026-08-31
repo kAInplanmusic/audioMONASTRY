@@ -21,7 +21,8 @@
     "build:sfu-test": "esbuild scripts/hetzner/sfu-rtp-entry.js --bundle --platform=browser --format=iife --outfile=public/sfu-rtp-test.js",
     "generate:golden": "tsx scripts/generate-golden-wav.ts",
     "check:bundle": "node scripts/check-bundle-size.mjs",
-    "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs"
+    "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs",
+    "verify:boundary": "node scripts/validate-interface-boundaries.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
