@@ -260,13 +260,14 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 - [✓] Dockerfile + pyproject/lock + startup.sh + runtime_config.yaml
 - [✓] Dependency-Locking (deterministisch), CUDA-kompatibel dokumentiert
 - [✓✓] Lokaler CPU-Smoke-Test der Runtime (simulated, /health /ready /status /models /mcp /infer 503)
-- [!] Docker-Build/GPU-Test: in Sandbox ohne Docker/GPU nicht ausführbar
+- [~] Docker-Build/GPU-Test: Sandbox blockiert; CI baut/pusht das Image automatisch
 
 ## Phase 3 – Hugging Face Endpoint
 
 - [✓] Endpoint-Konfigurations-Artefakt (`hf_endpoint.example.json`)
 - [✓] Idle-Timeout ~20 min, minReplicas 0, maxReplicas 1, scale-to-zero dokumentiert
-- [!] Endpoint-Anlage im HF-Dashboard: externer Account-Schritt (Betreiber)
+- [x] Pilot-Endpoint live angelegt (samplemonk-ai-pilot, AST, A100 us-east-1, scale-to-zero)
+- [x] Custom-Endpoint via CI-Workflow hf-endpoint.yml (Image-Build+Push, create/update)
 
 ## Phase 4 – Model Registry
 

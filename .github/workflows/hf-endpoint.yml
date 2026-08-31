@@ -1,0 +1,92 @@
+name: hf-endpoint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/samplemonk-ai-runtime/**'
+      - '.github/workflows/hf-endpoint.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: samplemonk-ai-runtime
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: GHCR Login
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image-URL bestimmen
+        id: meta
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Image: ${IMAGE}"
+
+      - name: Build & Push (Custom Container)
+        uses: docker/build-push-action@v5
+        with:
+          context: services/samplemonk-ai-runtime
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:latest
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: GHCR-Paket öffentlich machen (für HF-Pull)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method PATCH \
+            "/user/packages/container/${{ env.IMAGE_NAME }}/visibility" \
+            -f visibility=public \
+          || echo "WARN: Sichtbarkeit konnte nicht geändert werden – ggf. Docker-Hub-Fallback verwenden."
+
+  create-or-update-endpoint:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    concurrency: hf-endpoint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: huggingface_hub installieren
+        run: pip install --quiet huggingface_hub
+
+      - name: HF-Endpoint anlegen/aktualisieren (A100, scale-to-zero)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          IMAGE: ${{ needs.build-and-push.outputs.image }}:${{ github.sha }}
+          HF_ENDPOINT_NAME: samplemonk-ai
+          HF_NAMESPACE: AnunnakiTools
+          HF_REGION: us-east-1
+          HF_INSTANCE_TYPE: nvidia-a100
+          HF_INSTANCE_SIZE: x1
+          HF_SCALE_TO_ZERO_TIMEOUT: '20'
+        run: python services/samplemonk-ai-runtime/hf_manage_endpoint.py update
+
+      - name: Endpoint-Status ausgeben
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: python services/samplemonk-ai-runtime/hf_manage_endpoint.py status
