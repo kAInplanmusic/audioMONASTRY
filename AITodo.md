@@ -272,7 +272,8 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 - [✓] Idle-Timeout ~20 min, minReplicas 0, maxReplicas 1, scale-to-zero dokumentiert
 - [✓] Standard-Endpoints live: `samplemonk-ai-pilot` (Whisper, running/scaledToZero) + `samplemonk-ai-clap` (CLAP, running)
 - [x] Custom-Endpoint via CI-Workflow hf-endpoint.yml (Image-Build+Push grün, GHCR-Paket vorhanden)
-- [!] Custom-Container-Endpoint: HF-API liefert 500 INTERNAL_ERROR bei jedem Custom-Image-Create (auch `nginx:latest`, GPU+CPU, trotz PRO + `inference.endpoints.write`) → HF-Support nötig; bis dahin Standard-Endpoints + Serverless als Fallback
+- [✓✓] Custom-Container-Endpoint `samplemonk-ai` LIVE VERIFIZIERT: A100 80GB cuda, CORE+FREQUENT geladen, /health ok, /ready 200, /status running
+- [x] Ursachen-Fixes: repository muss existierendes HF-Repo im Namespace sein (AnunnakiTools/samplemonk-ai-runtime), uvicorn ohne --graceful-timeout, Modell-Preload im Hintergrund, GHCR-Credentials (ALL_ACCESS-PAT)
 
 ## Phase 4 – Model Registry
 
