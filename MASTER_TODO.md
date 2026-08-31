@@ -107,10 +107,13 @@ Quellen, die ausgewertet wurden:
       „Session merken"-Feature hinter einem expliziten Button (siehe P1-4).
 - [ ] `rolePresets`: Rollen-Presets werden **nur** bei expliziter Auswahl im
       Header angewendet, nie automatisch.
-- [ ] aiMONK ist beim Start zu; kein Modul wird unten „fest offen" gerendert.
-- [ ] **Alternative:** Wenn ein festes Hardware-Mischpult (DJMixer) gewünscht
-      ist, dann als reine Hardware-Sektion (kein Plugin-Terminal) behandeln;
-      das Plugin `mixer` (MischpultTerminal) bleibt trotzdem OFF-fähig.
+- [ ] aiMONK als Bottom-Dock für alle User **immer offen**; außer aiMONK-Dock
+      ist beim Start kein Plugin-Terminal offen.
+- [x] **Alternative (D1):** Festes Hardware-Mischpult (DJMixer) bleibt als
+      reine Hardware-Sektion; Plugin `mixer` (MischpultTerminal) bleibt
+      OFF-fähig. **Entscheidung:** mixerMONK-Plugin ist die **einzige** Instanz,
+      die andere Plugins in MAIN einspeisen darf; nur der Halter entscheidet
+      über MAIN. masterplayerMONK ist Plugin 0 (nur Visualisierung/Infos).
 - [ ] **Prüfpunkt:** E2E „Studio betreten" → 0 ModuleContainer sichtbar, alle
       Grid-Icons gedimmt, Main-RMS < -60 dBFS, kein aiMONK/Mixer-Terminal.
 
@@ -126,10 +129,10 @@ Quellen, die ausgewertet wurden:
       Router auf (OFF → deactivate, AUTO_AI/PRO → activate je nach Quelle).
 - [ ] Alle 21 Plugin-IDs (inkl. masterplayer, ai, synthesizer, mixer) im Router
       registrieren; unbekannte IDs loggen und ignorieren.
-- [ ] **Alternative A (sanft):** statt harter Disconnects nur Gain-Rampe auf
-      -∞ + Stop aller Player – schneller, aber nicht „aus der Kette getrennt".
-      **Alternative B (hart):** echte Disconnects/Dispose – erfüllt die
-      Anforderung, aber höhere Aktivierungs-Latenz; Lazy-Init nutzen.
+- [x] **Alternative (D2 – hybrid):** **Sanft** (Gain-Rampe auf -∞ + Stop), wenn
+      das Plugin mit der **Main-Signalkette verbunden** ist; **hart**
+      (Disconnect/Dispose), wenn das Plugin inaktiv ist oder nur im
+      **Monitor-Signal** läuft. Lazy-Init bei Aktivierung.
 - [ ] **Prüfpunkt:** Graph-Snapshot-Test: bei OFF existiert keine Verbindung
       Plugin→GLOBAL_MASTER; bei PRO existiert genau eine; OFF während Play
       stoppt den Klang sofort (< 50 ms).
@@ -141,8 +144,8 @@ Quellen, die ausgewertet wurden:
       Terminal-Selects schreiben in den globalen State; keine zwei Wahrheiten.
 - [ ] Jedes Terminal bekommt sichtbaren Status (OFF/AUTO_AI/PRO) und der
       Zustand wird über WebRTC repliziert (bestehende LWW-Nachricht reicht).
-- [ ] **Alternative:** `usePluginState` komplett entfernen und nur
-      `ModuleStateContext` + `usePluginManager` nutzen (weniger Duplikat).
+- [x] **Alternative (D3):** `usePluginState` **komplett entfernen**; nur
+      `ModuleStateContext` + `usePluginManager` nutzen (eine State-Quelle).
 - [ ] **Prüfpunkt:** Plugin im Terminal auf OFF stellen → Grid-Icon dunkel,
       Audio weg, Lock frei; Reload → Zustand bleibt wie gespeichert (bzw.
       Start-OFF-Regel P0-1).
@@ -165,8 +168,8 @@ Quellen, die ausgewertet wurden:
 - [ ] Routing-Ziel-Button/Select im Synth-Terminal: „An Kanal/Plugin senden"
       (CH1–CH8 oder Ziel-Plugin drum/sequencer/instrument/…).
 - [ ] Preview-Keyboard (Noten) direkt hörbar auf gewähltem Ziel.
-- [ ] **Alternative:** Synth über V2-AudioGraph (`GraphPlaybackEngine`) statt
-      Worklet – erst wenn V1-Pfad stabil läuft.
+- [x] **Alternative (D4):** **V1-Worklet zuerst produktiv**; **V2-AudioGraph
+      parallel weiterentwickeln** – beide hohe Priorität (V2 nicht einfrieren).
 - [ ] **Prüfpunkt:** E2E: Synth aktivieren → Note spielen → Signal auf
       gewähltem Mixer-Kanal/Main messbar.
 
@@ -180,9 +183,10 @@ Quellen, die ausgewertet wurden:
       dessen Ausgang geht standardmäßig auf MAIN; nur expliziter Cue geht auf
       MON/PLUGIN.
 - [ ] `PLUGIN_SOLO_CHANNEL`-Map in `App.tsx` durch Router-Auskunft ersetzen.
-- [ ] **Alternative:** Host-Main-Streaming über WebRTC an Gäste (P4-1); lokal
-      bleibt jeder User sein eigener AudioContext – Gäste hören Main via
-      Stream, nicht via gemeinsamem Context.
+- [x] **Alternative (D5/D12):** Host-Main-Streaming über WebRTC an Gäste
+      **später (P4-1)**; lokal bleibt jeder User sein eigener AudioContext.
+      Entscheidung: 1 AudioContext pro User + Host-Main-Stream für 4 User;
+      Server-Mixing erst > 4 User.
 - [ ] **Prüfpunkt:** 4-User-E2E: User2 aktiviert Drum → auf MAIN hörbar;
       User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN bleibt unverändert;
       zurück auf MAIN → sofort Gesamtmix.
@@ -192,8 +196,10 @@ Quellen, die ausgewertet wurden:
       Master-Pegel immer sichtbar (auch auf iPhone).
 - [ ] `MasterPlayerTerminal` (Analyse/Master/Mixdown) bleibt als Werkzeug
       darunter, ist aber nicht der einzige Transport.
-- [ ] **Alternative:** Transport in Header integrieren vs. eigene
-      Master-Player-Leiste unter dem Header – Entscheidung nach UI-Test.
+- [x] **Alternative (D6):** masterplayerMONK ist **Plugin 0** – bei allen
+      4 Usern **fest ganz oben unter Header/Plugin-Buttons**; nur
+      Visualisierung + Infos, **keine Eingabe**, kein An/Aus/KI-Button.
+      Transport (Play/Stop/BPM) gehört in diese feste Leiste.
 - [ ] **Prüfpunkt:** Scroll-Position egal → Play/Stop erreichbar; E2E
       Keyboard-Space + Button funktionieren.
 
@@ -202,12 +208,12 @@ Quellen, die ausgewertet wurden:
       Dauer) statt nur Konsolen-Log.
 - [ ] `/api/ai/complete`-Fehler normalisieren und als nutzbare Meldung anzeigen
       (Timeout/Wake/Quota/Provider-Down).
-- [ ] aiMONK nicht automatisch öffnen; optional per Grid; „letztes Modul unten"
-      entfernen.
+- [ ] aiMONK als **Bottom-Dock für alle User immer offen** umsetzen (kein
+      normales Grid-Modul; „letztes Modul unten" durch Dock ersetzen).
 - [ ] `moaAgent.executePlan` mit PluginAudioRouter verbinden, damit KI-Aktionen
       wirklich Plugins aktivieren/deaktivieren/routen.
-- [ ] **Alternative:** AI-Terminal als Bottom-Dock nur nach explizitem Klick
-      (Feature-Flag), nicht als normales Grid-Modul.
+- [x] **Alternative (D7):** aiMONK wird als **Bottom-Dock für alle User immer
+      offen** umgesetzt (Feature-Flag für Ausblenden optional).
 - [ ] **Prüfpunkt:** Testbefehl „Tempo auf 128, Sequencer an, Pattern laden"
       läuft durch und erzeugt hörbares Ergebnis; Fehlerfall zeigt verständliche
       Meldung.
@@ -237,15 +243,16 @@ Quellen, die ausgewertet wurden:
       `masteringMONK` TC/Massey, `spatialMONK` 3D-Panner wie High-End-Controller.
 - [ ] Design-Tokens zentral in `index.css` (`--monk-*`) erweitern; keine
       plugin-lokalen Hex-Werte-Duplikate.
-- [ ] **Alternative:** Skins als CSS-Variablen-Themes je Plugin vs. komplette
-      Komponenten-Neubauten; erst Themes, dann bei Bedarf Komponenten.
+- [x] **Alternative (D8):** **Erst CSS-Variablen-Themes komplett & sauber
+      umsetzen**; danach mit **mittlerer Priorität** Komponenten-Neubau je
+      Plugin (ggf. mit Bild-/Text-Infos vom User je Plugin).
 - [ ] **Prüfpunkt:** Screenshot-Tests (`visual.spec.ts`) für alle 21 Plugins;
       Vergleich mit Referenz-Hardware-Look.
 
 ### P1-3 Einstellungen & Geräte-Defaults
-- [ ] `SettingsDialog`: Default-Ausgabe = **erste USB-Audio-Soundkarte**
-      (Label enthält `USB`/`Xonar`/`Audio Interface`), sonst System-Default;
-      Nutzer-Override wird als `outputOverride` persistiert.
+- [ ] `SettingsDialog`: Default-Ausgabe = **erst Xonar-U7-Label bevorzugen**,
+      sonst erste USB-Audio-Soundkarte (Label enthält `USB`/`Audio Interface`);
+      sonst System-Default; Nutzer-Override wird als `outputOverride` persistiert.
 - [ ] `stereoMode` um `2.1` erweitern (siehe P2-3).
 - [ ] Einstellungen gruppieren: Audio-Gerät, Latenz-Profil, Routing, Monitor,
       MIDI/HID, Kollaboration; jede Gruppe mit Erklärtext.
@@ -262,8 +269,8 @@ Quellen, die ausgewertet wurden:
       aus dem Scratchpad per Drop auf ein Plugin/Modul laden.
 - [ ] Jedes Plugin (ModuleContainer) bekommt „⧉ In Zwischenablage senden":
       kopiert Plugin-State/Preset/Config als JSON in die Zwischenablage.
-- [ ] **Alternative:** Scratchpad als Sidebar vs. Bottom-Dock; Farbe/Position
-      per Setting.
+- [x] **Alternative (D9):** Scratchpad als **halbtransparente Overlay-Sidebar**
+      (Desktop) bzw. Overlay auf Mobile; Farbe/Position per Setting.
 - [ ] **Prüfpunkt:** Speichern/Laden überlebt Reload; DnD funktioniert;
       Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON.
 
@@ -314,8 +321,12 @@ Quellen, die ausgewertet wurden:
       Sub auf dritten Kanal, falls Gerät 2.1 unterstützt; sonst Sub phantom in
       L/R mischen (Fallback).
 - [ ] Routing in `audioEngine`/`OutputConfig` erweitern; UI-Anzeige im Settings.
-- [ ] **Alternative:** OS-Aggregation/Subwoofer-Hardware-Setup dokumentieren;
-      WebAudio kann nur ein Ziel-Gerät ansteuern.
+- [ ] **Neu (D10):** Ausgabe-Layouts **2.0 / 2.1 / 2.2 / 12.0 / 12.1 / 12.2 /
+      18.0 / 18.1 / 18.2 / 24.0 / 24.1 / 24.2** unterstützen; aktuell Xonar U7
+      (7.1) angeschlossen → **reale 2.1 als Standard** hinterlegen.
+- [x] **Alternative (D10):** **Beides** – echter dritter Kanal falls Gerät 2.1
+      kann, sonst Phantom-Sub; OS-Aggregation/Subwoofer-Hardware-Setup zusätzlich
+      dokumentieren (WebAudio kann nur ein Ziel-Gerät ansteuern).
 - [ ] **Prüfpunkt:** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält
       keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.
 
@@ -420,13 +431,12 @@ Quellen, die ausgewertet wurden:
       AI-Fallback-Kette funktioniert bei Provider-Ausfall.
 
 ### P5-3 Architektur-Hinterfragen (Dokumentiert entscheiden)
-- [ ] Browser-First vs. Native-Runtime: für den 4-User-Studio-Betrieb
-      Browser-First beibehalten; native Runtime (cpal/ASIO) als optionalen
-      Desktop-Pfad dokumentieren.
-- [ ] Ein AudioContext pro User vs. Server-Mixing: für 4 User pro User
-      beibehalten, Main-Stream vom Host (P4-1); Server-Mixing erst > 4 User.
-- [ ] `setMonitorSource`-Modell durch klares Bus-Modell ersetzen (MAIN, CUE1-4,
-      PLUGIN-Pre-Fader).
+- [x] **D11:** Browser-First für den 4-User-Studio-Betrieb; native Runtime
+      (cpal/ASIO) als optionaler Desktop-Pfad dokumentieren.
+- [x] **D12:** 1 AudioContext pro User + Host-Main-Stream vom Host (P4-1);
+      Server-Mixing erst > 4 User.
+- [ ] **D13:** `setMonitorSource`-Modell durch klares Bus-Modell ersetzen
+      (MAIN, CUE1-4, PLUGIN-Pre-Fader) – Entscheidung getroffen, Umsetzung offen.
 - [ ] **Prüfpunkt:** Architektur-Entscheidungen in `docs/ARCHITEKTUR_EVOLUTION.md`
       festgehalten und mit den Audits konsistent.
 
@@ -547,6 +557,8 @@ Quellen, die ausgewertet wurden:
       vollständig abgehakt oder hat einen offenen Task
 
 ### GAP-5 Prompt-/Trainings-Matrix je Plugin
+- [x] **D18 (Sprache):** Systemprompts/Few-Shots **Deutsch** + englische
+      Keywords (für Agent-Erkennung).
 - [ ] `docs/PLUGIN_PROMPT_MATRIX.md` anlegen: 21 Plugins ×
       (Systemprompt, Few-Shots, MCP-Tools, Eval-Datensatz, Iterationsstatus,
       Score)
@@ -618,9 +630,9 @@ Quellen, die ausgewertet wurden:
 - [ ] **FA-P0-2** `model_manager.py`: echte Modell-Instanzen laden/cachen,
       Handler nutzen geladene Instanz statt `from_pretrained` je Request;
       VRAM real tracken (FA-5)
-- [ ] **FA-P0-3** `server.ts` Upload: Gesamtlimit statt `files:5` (entweder nur
-      1 Datei oder Summenlimit); Streams auf Temp/disk statt `Buffer.concat`
-      (FA-7)
+- [ ] **FA-P0-3** `server.ts` Upload (**D14 – Entscheidung:** **1 Datei** +
+      Summenlimit als Defense-in-Depth); Streams auf Temp/disk statt
+      `Buffer.concat` (FA-7)
 - [ ] **FA-P0-4** `handlers.py` `hf_generate`: `_definition` → `definition`
       fixen + MusicGen-Smoke-Test (FA-16)
 - [ ] **FA-P1-1** `database/ai_migration_001.sql`: RLS + Policies für alle
@@ -633,8 +645,10 @@ Quellen, die ausgewertet wurden:
       `bitSize` auf 1..32 clamps, Sign-Berechnung für 32 Bit korrigieren (FA-9)
 - [ ] **FA-P1-5** `oscCodec.ts`: Bounds-Checks vor jedem Lesen, negative
       Blob-Längen abfangen, `decodeOscMessage` try/catch (FA-10)
-- [ ] **FA-P1-6** `providerRouter.ts`: Kandidaten nach `estimateCostUsd()`
-      sortieren (billigster zuerst), GPU-Endpoint nur als Fallback (FA-11)
+- [ ] **FA-P1-6** `providerRouter.ts` (**D15 – Entscheidung:** **A100/HF-Endpoint
+      bevorzugt**, da AI nur damit richtig läuft; kein Kosten-Sort). Zusätzlich
+      DevSettings-Reiter „AI Server Shutdown" → bei Shutdown automatisch
+      Fallbacks aktivieren (FA-11)
 - [ ] **FA-P1-7** `HfEndpointProvider.run`: Gesamt-Timeout (z. B. 120 s) über
       alle Versuche, AbortSignal durchreichen, Backoff-Deckel (FA-12)
 - [ ] **FA-P1-8** `circuitBreaker.ts`: HALF_OPEN mit Probe-Lock (nur 1 Call),
@@ -792,6 +806,64 @@ Quellen, die ausgewertet wurden:
 
 ---
 
+## 9f. ENTSCHEIDUNGEN 2026-08-31 (User-Antworten) & daraus abgeleitete Tasks
+
+> Alle D-Entscheidungen sind hier dokumentiert; die zugehörigen
+> Alternative-Checkboxen in P0–P2/P5/FA/GAP sind abgehakt. Neue Tasks aus den
+> Entscheidungen stehen als `NEW-D*` offen.
+
+### Entscheidungs-Log (D1–D23)
+
+| # | Entscheidung |
+|---|---|
+| D1 | mixerMONK ist das **einzige** Plugin mit MAIN-Einspeiserecht; nur Halter entscheidet MAIN. masterplayerMONK = Plugin 0 (nur Visualisierung/Infos). DJMixer bleibt feste Hardware-Sektion. |
+| D2 | Hybrid-Lifecycle: **sanft** bei MAIN-Verbindung, **hart** bei inaktiv/Monitor-only |
+| D3 | `usePluginState` entfernen |
+| D4 | Synth: **V1-Worklet zuerst produktiv**, V2 parallel, beide hohe Priorität |
+| D5 | Host-Main-Streaming **später** (P4-1) |
+| D6 | masterplayerMONK fest ganz oben unter Header/Buttons, keine Eingabe, kein An/Aus/KI |
+| D7 | aiMONK **Bottom-Dock für alle User immer offen** |
+| D8 | Skins: erst **CSS-Variablen-Themes komplett**, später Komponenten-Neubau (mittlere Prio) |
+| D9 | Scratchpad als **halbtransparente Overlay-Sidebar** |
+| D10 | Output-Layouts **2.0/2.1/2.2/12.x/18.x/24.x**; aktuell Xonar U7 → **reale 2.1 als Standard** |
+| D11 | **Browser-First** für 4-User-Studio; Native optional |
+| D12 | **1 AudioContext pro User** + Host-Main-Stream; Server-Mixing erst > 4 User |
+| D13 | Monitor-Modell: klares Bus-Modell MAIN/CUE1-4/PLUGIN-Pre-Fader |
+| D14 | Upload: **1 Datei + Summenlimit** |
+| D15 | AI-Provider: **A100/HF-Endpoint bevorzugt**; DevSettings „AI Server Shutdown" aktiviert Fallbacks |
+| D16 | Retry-Gesamt-Timeout **120 s** (Standard) |
+| D17 | CostTracker-Retention **30 Tage** + Index (Standard) |
+| D18 | Prompt-Sprache: **Deutsch + englische Keywords** |
+| D19 | Adaptive Puffer: **automatisch + manuell überschreibbar** (Standard) |
+| D20 | Crossover **80 Hz** (Standard) |
+| D21 | USB-Default: **Xonar bevorzugen**, sonst erste USB-Karte |
+| D22 | Stem-Test-Fix: **schneller 502** + Timeout 10 s Schutz |
+| D23 | Alternativen-Katalog: **P0/P1 zuerst** |
+
+### Neue Tasks aus den Entscheidungen
+
+- [ ] **NEW-D1-1** masterplayerMONK als Plugin 0: bei allen 4 Usern fest ganz
+      oben unter Header/Plugin-Buttons; nur Visualisierung + Infos, keine
+      Eingabe, kein An/Aus/KI-Button
+- [ ] **NEW-D1-2** mixerMONK als einzige MAIN-Einspeiseinstanz: andere Plugins
+      können nur über mixerMONK auf MAIN; wenn Halter mixerMONK OFF schaltet →
+      **Main-Ausgabe + MainClock/Tick stoppen**
+- [ ] **NEW-D1-3** Halter-Wechsel nur im **AI-Modus**; dort wird mixerMONK für
+      andere User freigegeben (Lock-/Role-Logik)
+- [ ] **NEW-D7-1** aiMONK-Bottom-Dock-Komponente (immer offen, ausblendbar per
+      Feature-Flag), ersetzt „letztes Modul unten"
+- [ ] **NEW-D10-1** `OutputConfig`/`layouts.ts` um 2.0/2.1/2.2/12.x/18.x/24.x
+      erweitern; Xonar-U7-7.1 → reale 2.1 als Standardprofil
+- [ ] **NEW-D15-1** DevSettings-Reiter „AI Server Shutdown": Button stoppt
+      A100-Endpoint/Job; Fallbacks werden automatisch aktiviert; Standard beim
+      Start: A100-Pfad komplett ausrollen
+- [ ] **NEW-D15-2** ProviderRouter-Reihenfolge auf A100/HF-Endpoint zuerst
+      umstellen (kein Kosten-Sort); Fallback nur bei DevSettings-Shutdown/Fehler
+- [ ] **NEW-D4-1** V2-AudioGraph als eigenes Arbeitspaket mit hoher Priorität
+      weiterführen (nicht einfrieren); Meilenstein „V2-Minimum hörbar"
+
+---
+
 ## 10. ✅ VERKNÜPFTE PRÜFPUNKTE / GATES (vor jedem Release)
 
 | Gate | Prüfung | Verknüpfte Tasks |
@@ -812,6 +884,7 @@ Quellen, die ausgewertet wurden:
 | G14 Vollständigkeits-Gate | GAP-1…GAP-8 abgeschlossen: Fehler-Register, Plugin-Matrix, Prompt-Matrix, Alternativen- & Konfig-Matrix vorhanden; keine offene Checkbox außerhalb MASTER_TODO | GAP-1…GAP-8 |
 | G15 Fremdaudit-Regression | Alle FA-P0/FA-P1/FA-P2 erledigt; FA-1/FA-4 durch Tests abgesichert; keine offenen Kritisch-Findings aus 9d | FA-P0-1…FA-P2-2 |
 | G16 AUDIOMORPH-Gate | AM-E1…AM-E6 Kernziele: 0 Allokationen/Closures pro Sample, Locking deterministisch, 0 Xruns/24 h, CPU < 80 %, Memory < 5 % Fragmentierung | AM-E1-1…AM-E6-6 |
+| G17 Entscheidungen-Gate | D1–D23 dokumentiert; NEW-D1-1…NEW-D4-1 umgesetzt; Master-Player/mixerMONK-Halter-Logik & aiMONK-Dock funktionieren | NEW-D1-1…NEW-D4-1 |
 
 ---
 
