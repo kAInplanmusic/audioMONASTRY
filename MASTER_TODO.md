@@ -174,10 +174,10 @@ Quellen, die ausgewertet wurden:
       gewähltem Mixer-Kanal/Main messbar.
 
 ### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
-- [ ] `setMonitorSource` überarbeiten: `MAIN` ist der einzige Pfad, der den
+- [x] `setMonitorSource` überarbeiten: `MAIN` ist der einzige Pfad, der den
       `analyzerNode` mit dem Ausgang verbindet; `MON`/`PLUGIN` werden als
       **parallele Cue-Busse** geführt und trennen MAIN **nie**.
-- [ ] Pro User Monitor-/Cue-Mix (`MON1..MON4`) beibehalten, aber unabhängig
+- [x] Pro User Monitor-/Cue-Mix (`MON1..MON4`) beibehalten, aber unabhängig
       vom Main.
 - [ ] Jedes Plugin bekommt einen echten Ziel-Kanal (PluginAudioRouter) und
       dessen Ausgang geht standardmäßig auf MAIN; nur expliziter Cue geht auf
@@ -492,7 +492,7 @@ Quellen, die ausgewertet wurden:
       (verknüpft: P0-3, AUD-3)
 - [ ] **AUD-P0-4** `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend`
       verdrahten (verknüpft: P0-5, AUD-4)
-- [ ] **AUD-P0-5** `setMonitorSource()` als paralleler Cue-Bus ohne MAIN-Trennung
+- [x] **AUD-P0-5** `setMonitorSource()` als paralleler Cue-Bus ohne MAIN-Trennung
       (verknüpft: P0-6, AUD-7)
 - [x] **AUD-P1-1** Stem-Failure-Injection-Test gefixt (D22): `STEM_AI_URL`
       runtime statt Modul-Konstante → schneller 502; Regressionstest grün (AUD-1)

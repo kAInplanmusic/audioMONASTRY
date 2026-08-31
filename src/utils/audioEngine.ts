@@ -1313,37 +1313,25 @@ class AudioEngine {
     track?: TrackType,
   ): void {
     this.ensureInitialized();
-    const out: any = this.outputGain ?? this.ctx?.destination;
-    if (!out) return;
     this.monitorSource = mode;
 
-    // Bestehende Routings zum Ausgang trennen (MAIN + Monitor)
-    try { (this.analyzerNode as any)?.disconnect(out); } catch { /* noop */ }
-    try { this.monitorGains[mon]?.disconnect(out); } catch { /* noop */ }
+    // P0-6/D13: MAIN wird NIE vom Ausgang getrennt. MON/PLUGIN sind reine
+    // Cue-Wege (per-User-Mix) und verändern ausschließlich die Cue-Matrix
+    // `monitorTrackGain` – die Master-Kette bleibt unangetastet.
+    const mix = this.monitorTrackGain[mon];
+    if (!mix) return;
 
-    // Channel-Solo zurücksetzen (alle zuvor gesicherten Gains wiederherstellen)
-    (Object.keys(this.savedChannelGains) as TrackType[]).forEach((t) => {
-      const g = this.channelGains[t];
-      const v = this.savedChannelGains[t];
-      if (g && typeof v === 'number') g.volume.value = v;
-    });
-    this.savedChannelGains = {};
+    const setMix = (t: TrackType, v: number) => {
+      const m = mix[t];
+      if (typeof m === 'number') mix[t] = v;
+    };
 
-    if (mode === 'MON') {
-      // Eigener kompletter Mix: Monitor-Bus (post-MasterVolume, PDC-verzögert)
-      try { this.monitorGains[mon]?.connect(out); } catch { /* noop */ }
+    if (mode === 'PLUGIN' && track) {
+      // Cue-Solo: nur der Ziel-Kanal ist im Cue hörbar (Main bleibt voll).
+      (Object.keys(mix) as TrackType[]).forEach((t) => setMix(t, t === track ? 1 : 0));
     } else {
-      // MAIN (Default) und PLUGIN: Master-Kette auf den Ausgang
-      try { (this.analyzerNode as any)?.connect(out); } catch { /* noop */ }
-      if (mode === 'PLUGIN' && track) {
-        // Solo: alle Kanäle stumm, Ziel-Kanal hörbar
-        (Object.keys(this.channelGains) as TrackType[]).forEach((t) => {
-          const g = this.channelGains[t];
-          if (!g) return;
-          this.savedChannelGains[t] = g.volume.value;
-          g.volume.value = t === track ? Math.max(g.volume.value, -6) : -Infinity;
-        });
-      }
+      // MAIN und MON folgen der vollen Mischung (Rollen-Mix bleibt erhalten).
+      (Object.keys(mix) as TrackType[]).forEach((t) => setMix(t, 1));
     }
   }
 
