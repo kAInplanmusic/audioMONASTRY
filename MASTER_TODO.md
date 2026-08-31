@@ -648,6 +648,150 @@ Quellen, die ausgewertet wurden:
 
 ---
 
+## 9e. AUDIOMORPH-∞ ATOMAR-ANALYSE (2026-08-31) – Ebene 1–6
+
+> Analyse-Modus: Quanten-Debugger / Sandbox-Simulator / Signalpfad-Archäologe /
+> Echtzeit-Optimierer / Selbstheilungs-Agent. Alle Befunde mit Datei:Zeile:Symbol.
+> Zielwerte: Audio-Thread-Latenz < 1 ms (p99.99), 0 Xruns/24 h, CPU < 80 %
+> (48 kHz/32 bit), Memory-Fragmentierung < 5 %, 0 Race-Conditions,
+> Plugin-Recovery < 50 ms, Cache-Miss L3 < 2 %.
+
+### Ebene 1 – Atomare Code-Analyse (Hot-Paths)
+
+- [ ] **AM-E1-1** `src/audio/worklets/dspProcessor.ts:setLowpass` → `this.filterCo =
+      [...]` wird **pro Sample** neu allokiert (Array im Audio-Render-Thread).
+      Fix: Koeffizienten als skalare Felder (`b0,b1,b2,a1,a2`) oder vorberechneter
+      Block; keine Allokation im Hot-Path.
+- [ ] **AM-E1-2** `masteringProcessor.stepRamps()` / `effectProcessor.stepRamps()` /
+      `dspProcessor.stepRamps()` erzeugen **pro Sample eine Closure**
+      (`const step = (…) => …`). Fix: Parameter-Rampen als flache Felder oder
+      inline-Schritte ohne Funktionsallokation.
+- [ ] **AM-E1-3** `masteringProcessor.process()` ruft pro Sample
+      `Math.log10`, `Math.pow`, `Math.exp`-Koeffizient (releaseCoeff ist ok, aber
+      `gr = Math.pow(10, -grDb/20)` pro Sample). Fix: Block-Envelope oder
+      Lookup/Approximation; messen mit `goldenAudio`.
+- [ ] **AM-E1-4** `effectProcessor.crush()` ruft `Math.pow(2, bits)` pro Sample.
+      Fix: `levels` nur bei Parameter-Änderung berechnen.
+- [ ] **AM-E1-5** `dspProcessor.setLowpass()` berechnet `Math.sin/cos` pro Sample
+      pro Kanal. Fix: State-Variable-Filter (Chamberlin) oder Koeffizienten nur
+      bei Cutoff-/Resonanz-Änderung neu berechnen (Control-Rate).
+- [ ] **AM-E1-6** Hot-Path-Audit-Skript erweitern:
+      `scripts/audit-audio-realtime.sh` soll zusätzlich `new Array`, `.push`,
+      Closure-Konstruktion, `Math.pow/log` pro Sample in `src/audio/worklets/*.ts`
+      erkennen und als Fehler melden.
+- [ ] **AM-E1-7** Float-Präzisions-Audit DSP: alle Biquad/Allpass-Pfade auf
+      Denormal-/NaN-Risiken prüfen (FTZ/DAZ nicht verfügbar; Noise-Gating bzw.
+      Flush-to-Zero-Guards ergänzen), insbesondere `dspProcessor.filterZ` und
+      `effectProcessor`-Delay-Lines.
+
+### Ebene 2 – Multi-Plugin-Orchestrierung
+
+- [ ] **AM-E2-1** `src/core/pluginAudioRouter.ts` (geplant in P0-2): zusätzlich
+      Isolation-Level definieren – pro Plugin Audio-Quelle, Insert/Send-Bus,
+      Crash-Containment (SafeModuleBoundary ≠ Audio-Isolation), Staggered
+      Recovery (< 50 ms).
+- [ ] **AM-E2-2** Inter-Plugin-Kommunikation: aktuelle
+      `window.dispatchEvent(new CustomEvent('monk:*'))`-Steuerung (z. B.
+      `pluginCommandRegistry.ts`) messen (Latenz, Event-Flooding) und durch
+      typisierten Control-Bus/Event-Bus ersetzen; kein JSON über `CustomEvent`
+      im Audio-Pfad.
+- [ ] **AM-E2-3** Parameter-Automation-Smoothing: vorhandene Rampen (AM-E1-2)
+      auf z-transform-Stabilität prüfen; für alle Worklets einheitliches
+      `automate`-Muster ohne Allokationen.
+- [ ] **AM-E2-4** Plugin-Load-Balancing: Web-Browser = 1 AudioContext → kein
+      NUMA; dokumentieren. Für native Runtime (Rust/cpal) NUMA-/Core-Pinning
+      als Option vorbereiten (`services/audio-runtime`).
+- [ ] **AM-E2-5** Versionierungs-/Side-by-Side-Konflikte: `plugin-manifest.json`
+      + `registry.ts` auf doppelte IDs/Metamodul-Kollisionen testen; Registry-
+      Validierung als Unit-Test (`tests/registryConflict.test.ts`).
+
+### Ebene 3 – Multiuser-Echtzeit-Architektur
+
+- [ ] **AM-E3-1** `src/context/PluginManagerContext.tsx:requestLock` –
+      `setPluginLocks(prev => { granted = …; return … })` ist ein
+      **Seiteneffekt im State-Updater**; `granted` wird in React 18/StrictMode
+      nicht zuverlässig synchron zurückgegeben (Lock kann fälschlich fehlschlagen
+      oder doppelt vergeben werden). Fix: Lock-Entscheidung außerhalb des
+      Updaters treffen (Ref/Map als Source of Truth), Updater nur Zustand
+      schreiben.
+- [ ] **AM-E3-2** RBAC-Latenz: Auth-Check vom Audio-Thread entkoppeln (kein
+      `fetch`/Token-Refresh im Audio-Pfad); Berechtigungs-Cache mit Lease.
+- [ ] **AM-E3-3** Konkurrierende Edit-Resolution: LWW-CRDT
+      (`src/core/session/stateReplication.ts`) auf atomare Objektfelder prüfen;
+      Fuzz-Test mit 4 Usern × 1000 Edits (Interleaving-Explosion).
+- [ ] **AM-E3-4** Netzwerk-Jitter-Kompensation: SFU/WebRTC-Pfad um adaptiven
+      Jitter-Buffer erweitern (aktuell nur Opus + Standard-JitterBuffer);
+      QoS-Tagging für Audio-Pakete dokumentieren.
+- [ ] **AM-E3-5** Prioritäts-Inversion: `WebRTCManager`-DataChannel-State-Sync
+      (~60 Hz) darf den Audio-Thread nicht blockieren; Messung
+      `audioEngine.getAudioHealth()` während State-Bursts.
+
+### Ebene 4 – High-Quality DSP-Kernel
+
+- [ ] **AM-E4-1** Sample-Raten-Konvertierung: Browser macht SRC unsichtbar;
+      für native Runtime Polyphase/Farrow-Struktur spezifizieren
+      (`services/audio-runtime`), 44.1↔48 kHz Roundtrip-Test.
+- [ ] **AM-E4-2** FFT/iFFT: aktuell keine eigene FFT im Audio-Pfad; wenn
+      Spektral-Features kommen, cache-oblivious Mixed-Radix evaluieren (kein
+      Naive-DFT).
+- [ ] **AM-E4-3** Biquad-Stabilität: `dspProcessor.setLowpass()` (TF2/DF1-Mischung)
+      auf Koeffizienten-Sprung bei `freq=0`/`freq=sampleRate/2` prüfen; Denormal-
+      Guards für `filterZ`; einheitliche DF1-Implementierung.
+- [ ] **AM-E4-4** Dynamik-Prozessoren: `masteringProcessor` Lookahead 5 ms + True-
+      Peak-Approximation validieren (Golden-Audio-Referenz); Release-Kurve als
+      segmentierte Lookup-Tabelle statt `Math.exp`-Koeffizient je Block.
+- [ ] **AM-E4-5** Reverb: `effectProcessor` FDN-artiges Netz (2 Comb + 2 Allpass)
+      ist minimal; als High-Quality-Reverb Convolution-Partitioning oder größeres
+      FDN dokumentieren/optional implementieren.
+- [ ] **AM-E4-6** Oversampling: aktuell nur 2×-True-Peak-Schätzung linear; für
+      Sättigung (Soft-Clipper) Half-Band-Oversampling evaluieren (Qualität vs.
+      CPU).
+- [ ] **AM-E4-7** SIMD/NEON/AVX: im Browser nicht direkt verfügbar; native
+      Runtime (Rust) mit `std::simd`/`wide`-Crates vorbereiten; JS-Worklets auf
+      Block-Verarbeitung (128 Samples) optimieren, damit V8 auto-vektorisieren
+      kann.
+
+### Ebene 5 – Sandbox-Simulation & Stress-Testing
+
+- [ ] **AM-E5-1** `tests/e2e/stress.spec.ts` erweitern: 256 simulierte
+      Plugin-Instanzen (UI-State + Worklet-Budget) unter 95 % CPU-Last messen
+      (Ziel: < 80 % CPU, 0 Xruns).
+- [ ] **AM-E5-2** Memory-Pressure-Test: OOM-Prophylaxe (IndexedDB/largeStore,
+      Sample-Cache) mit 2-GB-Limit simulieren; Memory-Leak-Detection über
+      `performance.memory`/Heap-Snapshots.
+- [ ] **AM-E5-3** Race-Condition-Fuzzing: `PluginManagerContext`, `LockManager`,
+      `stateReplication` mit Thread-Interleaving-Explosion testen
+      (Property-Based / Vitest-Injection).
+- [ ] **AM-E5-4** Real-Time-Deadline-Test: Xrun-/Dropout-Zähler
+      (`analyzerProcessor`) als Gate: 0 Dropouts/24 h bei 4-User-Last;
+      CI-Langtest (Nightly) anstoßen.
+- [ ] **AM-E5-5** Malformed-Chunk-Injection: `oscCodec`, `hidReport`, Upload-Pfad
+      mit korrupten/feindlichen Binärdaten fuzzen (siehe auch FA-10/FA-9).
+- [ ] **AM-E5-6** Cross-Platform-Divergenz: Worklet-Verhalten in Chromium/
+      Firefox/WebKit + iOS/Android testen (Sample-Rate, Buffer, `setSinkId`).
+
+### Ebene 6 – Lebendige Selbstevolution
+
+- [ ] **AM-E6-1** Kontinuierliches Profiling: `PerformanceMonitorTerminal` +
+      `/api/telemetry` um Worklet-CPU-Budgets, Per-Sample-Allokationen,
+      Xrun-Histogramm erweitern; perf/VTune nur für native Runtime dokumentieren.
+- [ ] **AM-E6-2** Adaptive Puffergrößen: `bufferHint`/`latencyHint` nicht nur
+      speichern, sondern tatsächlich beim Context-Aufbau anwenden und bei
+      Xruns automatisch erhöhen (Latenz vs. Durchsatz).
+- [ ] **AM-E6-3** Algorithmen-Substitution: FFT-/Filter-Benchmarks als
+      `scripts/dsp-benchmark.ts` anlegen; Ergebnisse in `docs/DSP_BENCHMARKS.md`
+      versionieren.
+- [ ] **AM-E6-4** Selbstlernende Parameter-Vorhersage: MOA/MCP-Historie
+      (`MoaHistory`, `ai_evaluations`) als Datensatz für Automation-Vorschläge
+      nutzen (ML optional; zunächst heuristisch).
+- [ ] **AM-E6-5** Energie-Optimierung: Audio-Context nur bei Bedarf aktiv,
+      Worklet-Idle-Detection, Display-Sleep-Verhalten auf iOS/Android testen.
+- [ ] **AM-E6-6** A/B-Validierung: für kritische DSP-Änderungen Golden-Audio
+      (`tests/goldenAudio.test.ts`) als Regressions-Gate; jede Optimierung mit
+      vorher/nachher-Messung in MASTER_TODO dokumentieren.
+
+---
+
 ## 10. ✅ VERKNÜPFTE PRÜFPUNKTE / GATES (vor jedem Release)
 
 | Gate | Prüfung | Verknüpfte Tasks |
@@ -667,6 +811,7 @@ Quellen, die ausgewertet wurden:
 | G13 Audit-Regression | `npm run verify` 348/348 grün + Boundary-Scan 0 (AUD-1 fix) | AUD-P1-1, AUD-P1-4 |
 | G14 Vollständigkeits-Gate | GAP-1…GAP-8 abgeschlossen: Fehler-Register, Plugin-Matrix, Prompt-Matrix, Alternativen- & Konfig-Matrix vorhanden; keine offene Checkbox außerhalb MASTER_TODO | GAP-1…GAP-8 |
 | G15 Fremdaudit-Regression | Alle FA-P0/FA-P1/FA-P2 erledigt; FA-1/FA-4 durch Tests abgesichert; keine offenen Kritisch-Findings aus 9d | FA-P0-1…FA-P2-2 |
+| G16 AUDIOMORPH-Gate | AM-E1…AM-E6 Kernziele: 0 Allokationen/Closures pro Sample, Locking deterministisch, 0 Xruns/24 h, CPU < 80 %, Memory < 5 % Fragmentierung | AM-E1-1…AM-E6-6 |
 
 ---
 
