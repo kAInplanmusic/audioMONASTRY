@@ -375,12 +375,12 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 
 ## Phase 21/22/23 – Cold/Warm Start & Benchmarks
 
-- [~] Messpunkte/Logging vorhanden (durationMs); Benchmark-Skript (`scripts/ai-benchmark.ts`) ausstehend
-- [!] GPU-Messwerte: ohne GPU in Sandbox nicht messbar (nur Mock/CPU-Pfade)
+- [~] Messpunkte/Logging vorhanden (durationMs); GPU-Benchmarks stehen aus (Endpoint läuft an)
+- [!] GPU-Messwerte: ohne GPU in Sandbox nicht messbar
 
 ## Phase 24–26 – Test Suite
 
-- [✓✓] Unit-Tests alle neuen Module (18 Tests in `tests/aiOrchestrator.test.ts`, 338 gesamt grün)
+- [✓✓] Unit-Tests alle neuen Module (20 Orchestrator-Tests, 8 Eval-Tests, Gesamt-Suite grün)
 - [~] Integrationstests Routen/E2E/Failure/Load ausstehend
 
 ## Phase 27–29 – Deployment, Env, CI/CD
