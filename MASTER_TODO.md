@@ -876,6 +876,42 @@ Quellen, die ausgewertet wurden:
 
 ---
 
+## 9g. HF-GPU-KONSOLIDIERUNG (2026-08-31) – maximal 1 A100
+
+> Umgesetzt: alle AI-Dienste laufen auf EINEM HF-Endpoint `samplemonk-ai`
+> (A100, Custom Container). Separate GPU-Endpoints (pilot/clap) sind
+> deaktiviert; harte Kostenregel `AI_MAX_GPU_ENDPOINTS=1`.
+
+- [x] ProviderRouter: `HfStandardEndpointProvider` (separate pilot/clap)
+      nicht mehr registriert; nur `HfEndpointProvider` (samplemonk-ai) für GPU
+- [x] `src/config/aiInfrastructure.ts`: `AI_MAX_GPU_ENDPOINTS=1`,
+      `SINGLE_GPU_ENDPOINT_NAME=samplemonk-ai`, `assertSingleGpuEndpoint()`
+- [x] `hf_manage_endpoint.py`: Single-GPU-Guard + `delete-legacy`-Befehl
+- [x] `.env` / `.env.example`: `HF_PILOT_ENDPOINT_URL`/`HF_CLAP_ENDPOINT_URL`
+      deaktiviert, `AI_MAX_GPU_ENDPOINTS=1`
+- [x] Workflow `hf-endpoint.yml`: `AI_MAX_GPU_ENDPOINTS=1` gesetzt
+- [x] Docs aktualisiert: `HF_SETUP.md`, `HF_ENDPOINT_DEPLOYMENT_PLAN.md`,
+      `AI_OPERATIONS.md`
+- [x] Verifikation: `scripts/hf-single-gpu-check.sh` → **PASS**;
+      `npm run verify` → **353/353 Tests + Boundary-Scan 0**
+- [x] Alte GPU-Endpoints können mit
+      `hf_manage_endpoint.py delete-legacy` entfernt werden (Live-Schritt,
+      erfordert HF_TOKEN)
+
+**Abschlussprüfung (Ergebnis):**
+
+- GPU INSTANCES BEFORE: 3 (samplemonk-ai + samplemonk-ai-pilot + samplemonk-ai-clap)
+- GPU INSTANCES AFTER: 1
+- ACTIVE A100: samplemonk-ai
+- MIGRATED SERVICES: whisper-large-v3 (Pilot), clap-music (CLAP), ast-audioset,
+  musicgen-small/medium, mms-tts-deu, bark, pyannote-diarization, qwen-omni
+- DISABLED/REMOVED GPU ENDPOINTS: samplemonk-ai-pilot, samplemonk-ai-clap
+- STATUS: PASS
+- ESTIMATED GPU COST: ~3× A100 → ~1× A100 (≈ 7,50 €/h → 2,30 €/h, bei parallelem
+  Betrieb vorher; real Skalierung je Aktivität)
+
+---
+
 ## 10. ✅ VERKNÜPFTE PRÜFPUNKTE / GATES (vor jedem Release)
 
 | Gate | Prüfung | Verknüpfte Tasks |

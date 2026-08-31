@@ -9,6 +9,7 @@
  */
 import { llmRouter } from '../LlmRouter';
 import { aiLogger } from './aiLogger';
+import { assertSingleGpuEndpoint } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
@@ -20,8 +21,11 @@ function env(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// HF Standard Endpoint Provider (Whisper + CLAP – live, Scale-to-Zero)
+// HF Standard Endpoint Provider – DEPRECATED / DEAKTIVIERT (GPU-Konsolidierung)
 // ---------------------------------------------------------------------------
+// Diese Klasse wird NICHT mehr im ProviderRouter registriert: Whisper/CLAP
+// laufen auf dem gemeinsamen Custom-Container `samplemonk-ai` (HfEndpointProvider).
+// Nur für Diagnose/Alt-Code aufbewahrt – keine Instanz erzeugen.
 export class HfStandardEndpointProvider implements IAiProvider {
   readonly id = 'hf-standard-endpoint' as const;
 
@@ -270,14 +274,21 @@ export class LocalProvider implements IAiProvider {
 // Router
 // ---------------------------------------------------------------------------
 export class ProviderRouter {
+  // GPU-Konsolidierung: NUR der Custom-Container-Endpoint `samplemonk-ai`
+  // (HfEndpointProvider) darf GPU nutzen. HfStandardEndpointProvider
+  // (separate pilot/clap-Endpoints) ist bewusst NICHT mehr registriert.
   private providers: IAiProvider[] = [
-    new HfStandardEndpointProvider(),
     new HfEndpointProvider(),
     new HfServerlessProvider(),
     new ReplicateProvider(),
     new LocalProvider(),
   ];
   private breakers = new Map<string, CircuitBreaker>();
+
+  constructor() {
+    // Harte Kostenregel: niemals mehr als 1 GPU-Endpoint.
+    assertSingleGpuEndpoint();
+  }
 
   register(provider: IAiProvider): void {
     this.providers = [provider, ...this.providers.filter((p) => p.id !== provider.id)];

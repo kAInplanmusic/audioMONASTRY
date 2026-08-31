@@ -1,8 +1,12 @@
 # HF Endpoint Deployment Plan – audioMONASTRY / SampleMONK
 
-> Phase-0-Dokument (2026-08-31). Ziel: Hugging Face als **AI-Power-Layer** über
-> einen eigenen, reproduzierbaren HF-Inference-Endpoint betreiben – **ohne** die
-> bestehende Infrastruktur zu ersetzen:
+> Phase-0-Dokument (2026-08-31). **UPDATE GPU-Konsolidierung:** Umgesetzt –
+> es existiert nur noch EIN GPU-Endpoint (`samplemonk-ai`, A100). Die früheren
+> Einzel-GPU-Endpoints `samplemonk-ai-pilot` (Whisper) und `samplemonk-ai-clap`
+> (CLAP) sind deaktiviert und laufen im gemeinsamen Custom-Container.
+> Ziel: Hugging Face als **AI-Power-Layer** über einen eigenen, reproduzierbaren
+> HF-Inference-Endpoint betreiben – **ohne** die bestehende Infrastruktur zu
+> ersetzen:
 >
 > - **Hetzner** bleibt App-/Backend-/SFU-/Mastering-Flotte
 > - **Supabase + R2** bleiben Datenbank-/Persistenz-Schicht

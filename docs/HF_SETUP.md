@@ -57,3 +57,23 @@ Repository-Secret hinterlegt sein:
 1. GitHub → Repo `audioMONASTRY` → **Settings → Secrets and variables → Actions**
 2. **New repository secret** → Name: `HF_TOKEN` → Wert: das HF-Token
 3. Speichern. Danach Workflow `hf-endpoint` ausführen (Actions → Run workflow).
+
+## GPU-Konsolidierung (2026-08-31) – maximal 1 A100
+
+**Harte Kostenregel:** NIEMALS mehr als eine A100 gleichzeitig.
+
+- **Einziger GPU-Endpoint:** `samplemonk-ai` (Custom Container,
+  `services/samplemonk-ai-runtime`) – alle Modelle laufen dort über den
+  gemeinsamen Model Manager.
+- **Migrierte Services:** Whisper (ehem. `samplemonk-ai-pilot`), CLAP
+  (ehem. `samplemonk-ai-clap`), AST, MusicGen-small/medium, MMS-TTS, Bark,
+  PyAnnote, Qwen-Omni.
+- **Deaktivierte GPU-Endpoints:** `samplemonk-ai-pilot`, `samplemonk-ai-clap`
+  – entfernen mit:
+  ```bash
+  HF_TOKEN=hf_... python services/samplemonk-ai-runtime/hf_manage_endpoint.py delete-legacy
+  ```
+- **Guard:** `hf_manage_endpoint.py` erlaubt nur noch `samplemonk-ai`
+  (`AI_MAX_GPU_ENDPOINTS=1`); ProviderRouter registriert
+  `HfStandardEndpointProvider` nicht mehr.
+- **Verifikation:** `scripts/hf-single-gpu-check.sh`
