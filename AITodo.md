@@ -270,8 +270,9 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 
 - [✓] Endpoint-Konfigurations-Artefakt (`hf_endpoint.example.json`)
 - [✓] Idle-Timeout ~20 min, minReplicas 0, maxReplicas 1, scale-to-zero dokumentiert
-- [x] Pilot-Endpoint live angelegt (samplemonk-ai-pilot, AST, A100 us-east-1, scale-to-zero)
-- [x] Custom-Endpoint via CI-Workflow hf-endpoint.yml (Image-Build+Push, create/update)
+- [✓] Standard-Endpoints live: `samplemonk-ai-pilot` (Whisper, running/scaledToZero) + `samplemonk-ai-clap` (CLAP, running)
+- [x] Custom-Endpoint via CI-Workflow hf-endpoint.yml (Image-Build+Push grün, GHCR-Paket vorhanden)
+- [!] Custom-Container-Endpoint: HF-API liefert 500 INTERNAL_ERROR bei jedem Custom-Image-Create (auch `nginx:latest`, GPU+CPU, trotz PRO + `inference.endpoints.write`) → HF-Support nötig; bis dahin Standard-Endpoints + Serverless als Fallback
 
 ## Phase 4 – Model Registry
 
