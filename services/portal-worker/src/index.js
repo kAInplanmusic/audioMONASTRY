@@ -596,7 +596,9 @@ export default {
         return json(await stopFleet(env));
       }
 
-      return json({ error: 'not found' }, 404);
+      // Unbekannte /api/*-Routen NICHT blockieren – sie gehören der App
+      // (z. B. /api/health, /api/ai/*, /api/metrics) und werden unten
+      // durch den Proxy an den Origin weitergereicht.
     }
 
     // Portal-Seite immer unter /portal erreichbar
