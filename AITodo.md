@@ -465,10 +465,10 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 
 ## CRITICAL REMAINING ISSUES
 
-- [ ] **Revision-Pinning:** `REVISION_PENDING` in Manifest/Registry vor dem
-      ersten Produktions-Deployment durch echte Commit-Hashes ersetzen.
-- [ ] **Lizenz-Verifikation:** MusicGen/Bark/MERT (CC-BY-NC) vor kommerziellem
-      Betrieb klären.
+- [x] **Revision-Pinning:** echte Commit-Hashes am 2026-08-31 per HF-API aufgelöst
+      und in Manifest + TS-Registry gepinnt (9 Modelle).
+- [x] **Lizenz-Verifikation:** Projekt ist **privat/Forschung (kein kommerzieller
+      Zweck)** – CC-BY-NC/NC-SA-Nutzung damit geklärt (Betreiber-Entscheidung).
 
 ## HIGH PRIORITY
 
