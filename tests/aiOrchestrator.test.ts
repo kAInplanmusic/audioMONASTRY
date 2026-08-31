@@ -246,10 +246,11 @@ describe('Circuit Breaker', () => {
 
   it('schließt nach Erfolg und HALF_OPEN nach Reset-Timeout', async () => {
     const { CircuitBreaker } = await import('../src/core/ai/orchestrator/circuitBreaker');
-    const cb = new CircuitBreaker('test2', { failureThreshold: 1, resetTimeoutMs: 1 });
+    const cb = new CircuitBreaker('test2', { failureThreshold: 1, resetTimeoutMs: 60_000 });
     await expect(cb.call(() => Promise.reject(new Error('x')))).rejects.toThrow();
     expect(cb.getState()).toBe('OPEN');
-    await new Promise((r) => setTimeout(r, 5));
+    // Reset-Timeout überspringen, ohne echte Zeit zu verbrauchen.
+    (cb as unknown as { openedAt: number }).openedAt = Date.now() - 61_000;
     expect(cb.getState()).toBe('HALF_OPEN');
     await expect(cb.call(() => Promise.resolve('ok'))).resolves.toBe('ok');
     expect(cb.getState()).toBe('CLOSED');

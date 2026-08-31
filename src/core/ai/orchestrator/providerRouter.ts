@@ -20,6 +20,64 @@ function env(name: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// HF Standard Endpoint Provider (Whisper + CLAP – live, Scale-to-Zero)
+// ---------------------------------------------------------------------------
+export class HfStandardEndpointProvider implements IAiProvider {
+  readonly id = 'hf-standard-endpoint' as const;
+
+  private endpoints: Partial<Record<AiTask, string>> = {};
+
+  constructor() {
+    const pilot = env('HF_PILOT_ENDPOINT_URL');
+    const clap = env('HF_CLAP_ENDPOINT_URL');
+    if (pilot) this.endpoints['audio.transcribe'] = pilot;
+    if (clap) this.endpoints['audio.embed'] = clap;
+  }
+
+  get available(): boolean {
+    return Object.values(this.endpoints).some(Boolean);
+  }
+
+  canRun(task: AiTask): boolean {
+    return Boolean(this.endpoints[task]);
+  }
+
+  estimateCostUsd(): number {
+    const perHour = Number(process.env.AI_COST_A100_USD_PER_HOUR ?? 2.5);
+    return (10_000 / 3_600_000) * perHour;
+  }
+
+  async run(task: AiTask, _model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+    const url = this.endpoints[task];
+    if (!url) throw new AiProviderError(this.id, 'NO_ENDPOINT', `kein Standard-Endpoint für Task ${task}`, false);
+    const key = env('HF_API_KEY') || env('HF_TOKEN');
+    if (!key) throw new AiProviderError(this.id, 'NO_KEY', 'HF_TOKEN fehlt', false);
+    const payload = input as { audioBase64?: string; audioDataUri?: string; audio?: string; text?: string; language?: string };
+    const audio = payload.audioDataUri ?? payload.audioBase64 ?? payload.audio ?? '';
+    const body: Record<string, unknown> = {};
+    if (task === 'audio.transcribe') {
+      body.inputs = audio;
+      if (payload.language) body.parameters = { language: payload.language };
+    } else if (task === 'audio.embed') {
+      body.inputs = audio;
+    }
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: signal ?? AbortSignal.timeout(120_000),
+    });
+    if (resp.status === 503 || resp.status === 502) {
+      throw new AiProviderError(this.id, 'ENDPOINT_WAKING', 'Standard-Endpoint wacht auf (Scale-to-Zero)', true);
+    }
+    if (!resp.ok) {
+      throw new AiProviderError(this.id, `HTTP_${resp.status}`, (await resp.text().catch(() => '')).slice(0, 200), resp.status >= 500);
+    }
+    return await resp.json();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // HF Endpoint Provider (Custom Container)
 // ---------------------------------------------------------------------------
 export class HfEndpointProvider implements IAiProvider {
@@ -213,6 +271,7 @@ export class LocalProvider implements IAiProvider {
 // ---------------------------------------------------------------------------
 export class ProviderRouter {
   private providers: IAiProvider[] = [
+    new HfStandardEndpointProvider(),
     new HfEndpointProvider(),
     new HfServerlessProvider(),
     new ReplicateProvider(),
