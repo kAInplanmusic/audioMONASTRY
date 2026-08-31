@@ -9,6 +9,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Pre-Flight: Docker-Gate ist ein Host-Test – in Sandboxen ohne Docker
+# sauber abbrechen statt kryptisch zu scheitern.
+if ! command -v docker >/dev/null 2>&1; then
+  echo "FEHLER: docker nicht installiert – Docker-Gate nur auf Docker-Host ausführbar." >&2
+  exit 2
+fi
+if ! docker compose version >/dev/null 2>&1; then
+  echo "FEHLER: docker compose nicht verfügbar." >&2
+  exit 2
+fi
+
 echo "==> Docker-Build (docker compose build)"
 docker compose -f docker-compose.yml build
 

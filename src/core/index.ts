@@ -183,6 +183,7 @@ export { MediasoupTransport, sfuTransport } from './transport/MediasoupTransport
 // instrumentMONK: Instrumenten-Engine (Plugin #5)
 export type { IInstrumentBackend } from './instrument/IInstrumentBackend';
 export { InstrumentBackend, instrumentBackend } from './instrument/InstrumentBackend';
+export { dispatchInstrumentControl, velocityToMidi } from './instrument/instrumentControl';
 export {
   INSTRUMENT_CATALOG, getInstrument, listByCategory, catalogStats,
   ACOUSTIC_INSTRUMENTS, SYNTHESIS_INSTRUMENTS,

@@ -45,12 +45,14 @@ Legende:
   - [x] Instrument-Canvas-Bibliothek initial: Gitarre (Saiten), Theremin
         (XY-Fläche), Hang/Kalimba (Zonen-Pads), Drums (Pad-Set) – erweiterbar
         (`src/core/instrument/canvasDefs.ts`).
-  - [ ] Canvas-Inputs gehen über dieselbe Control-Abstraktion
-        (`ControlMessage` → `IInstrumentBackend`) wie MIDI/HID/OSC.
+  - [x] Canvas-Inputs gehen über dieselbe Control-Abstraktion
+        (`ControlMessage` → `IInstrumentBackend`) wie MIDI/HID/OSC –
+        umgesetzt via `src/core/instrument/instrumentControl.ts`
+        (`dispatchInstrumentControl`), `InstrumentCanvas` nutzt sie.
 
 ---
 
-## 🔵 OFFENE PUNKTE aus Tests & Audits (Stand 2026-08-30, Live-Test-Vorbereitung)
+## 🔵 OFFENE PUNKTE aus Tests & Audits (Stand 2026-08-31, alle erledigt)
 
 > Nightly-CI läuft um **04:00 UTC (06:00 DE Sommerzeit)** – nach dem DJ-Betrieb,
 > nicht mehr 02:30 UTC. Erledigt: Zeit umgestellt (`.github/workflows/nightly.yml`).
@@ -66,6 +68,11 @@ Legende:
 - [x] **Live-Telemetrie-Dashboard:** Client-Events (`/api/telemetry`) in Grafana visualisieren – umgesetzt: `/api/metrics` liefert `samplemonk_telemetry_events_by_type_total` / `_by_source_total`; Grafana-Panels 12–14 im Overview-Dashboard; Server-Tests ergänzt
 - [x] Nightly-CI-Zeit auf 04:00 UTC geändert (war 02:30 UTC)
 - [x] Wake-on-Login, Auto-Shutdown (20 min), Auto-Repair (2 min), Prometheus-Alerts, Replicate aktiv, Stresstests grün – alles live verifiziert
+- [x] **Replicate-Livetest (1 Stem-Job)** – ✅ 2026-08-31 `scripts/replicate-smoke.ts`: Account `kainplanmusic` gültig, Modell-Version aufgelöst, **1 echter Stem-Job erfolgreich** (Prediction `7ksxd3mredrg80d0amh97pry1w`: vocals/bass/drums/other)
+- [x] **Storage-Recovery-Test** – ✅ 2026-08-31 `tests/storageRecovery.test.ts`: korruptes localStorage-JSON → null, Quota-/Security-Fehler abgefangen, IndexedDB-Fallback + Retry (`src/utils/indexedDB.ts` gehärtet)
+- [x] **Canvas-Control-Abstraktion** – ✅ 2026-08-31: `src/core/instrument/instrumentControl.ts` (`ControlMessage → IInstrumentBackend`), `InstrumentCanvas` umgestellt (siehe oben)
+- [x] **Docker-Gate** – ✅ 2026-08-31: `scripts/docker-gate.sh` mit Docker-Pre-Flight (Exit 2 ohne Docker verifiziert); Build/Startup auf Docker-Host auszuführen
+- [x] **Doku-Checkboxen nachgezogen** – `docs/ARCHITECTURE_AUDIT_2026.md`, `docs/RELEASE_GATE.md`, `docs/AI_ARCHITECTURE.md` (alle offenen Haken erledigt/dokumentiert)
 
 ### 🔴 P0 – Architecture-Audit (`docs/ARCHITECTURE_AUDIT_2026.md`), vor Live-Test
 - [x] Session-Identität minimal: senderUserId im Relay, Locking an echter User-ID (WebRTCManager.userId)

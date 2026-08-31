@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { canvasDefForInstrument, hitZone, zoneNote } from '../../core/instrument/canvasDefs';
 import type { CanvasDef } from '../../core/instrument/canvasDefs';
-import { instrumentBackend } from '../../core/instrument/InstrumentBackend';
+import { dispatchInstrumentControl, velocityToMidi } from '../../core/instrument/instrumentControl';
 
 interface Props {
   instrumentName: string;
@@ -11,8 +11,8 @@ interface Props {
 /**
  * InstrumentCanvas – spielbare Canvas-Darstellung (View 3).
  * Gitarre (Saiten/Bünde), Theremin (XY), Hang/Kalimba (Zonen), Drums (Pads).
- * Zeichnet die Zonen aus den Canvas-Definitionen und spielt über den
- * instrumentBackend (Control-Abstraktion).
+ * Zeichnet die Zonen aus den Canvas-Definitionen und spielt über die
+ * Control-Abstraktion (ControlMessage → IInstrumentBackend).
  */
 export const InstrumentCanvas: React.FC<Props> = ({ instrumentName, onNote }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -78,7 +78,7 @@ export const InstrumentCanvas: React.FC<Props> = ({ instrumentName, onNote }) =>
           const note = zoneNote(zone, x);
           const velocity = def.kind === 'theremin' ? Math.max(0.2, Math.min(1, 1 - y)) : 0.9;
           setLastNote(note);
-          instrumentBackend.noteOn(note, velocity);
+          dispatchInstrumentControl({ kind: 'noteOn', idNum: note, value: velocityToMidi(velocity), channel: 1 });
           onNote?.(note, velocity);
         }}
         onPointerMove={(e) => {
@@ -88,19 +88,19 @@ export const InstrumentCanvas: React.FC<Props> = ({ instrumentName, onNote }) =>
           if (!zone) return;
           const note = zoneNote(zone, x);
           if (note !== lastNote) {
-            instrumentBackend.noteOff();
+            dispatchInstrumentControl({ kind: 'noteOff', idNum: lastNote ?? 0, value: 0, channel: 1 });
             const velocity = def.kind === 'theremin' ? Math.max(0.2, Math.min(1, 1 - y)) : 0.9;
             setLastNote(note);
-            instrumentBackend.noteOn(note, velocity);
+            dispatchInstrumentControl({ kind: 'noteOn', idNum: note, value: velocityToMidi(velocity), channel: 1 });
             onNote?.(note, velocity);
           }
         }}
         onPointerUp={() => {
-          instrumentBackend.noteOff();
+          dispatchInstrumentControl({ kind: 'noteOff', idNum: lastNote ?? 0, value: 0, channel: 1 });
           setLastNote(null);
         }}
         onPointerLeave={() => {
-          instrumentBackend.noteOff();
+          dispatchInstrumentControl({ kind: 'noteOff', idNum: lastNote ?? 0, value: 0, channel: 1 });
           setLastNote(null);
         }}
       />
