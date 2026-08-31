@@ -16,6 +16,7 @@ import json
 import os
 import signal
 import sys
+import threading
 import time
 import traceback
 from contextlib import asynccontextmanager
@@ -52,6 +53,7 @@ class State:
         self.manager = ModelManager()
         self.startup_errors: List[str] = []
         self.ready = False
+        self.models_ready = False
         self.shutting_down = False
 
     def status_payload(self) -> Dict[str, Any]:
@@ -60,6 +62,7 @@ class State:
             "endpoint": "running" if not self.shutting_down else "shutting_down",
             "gpu": self.manager.gpu_state(),
             "runtime": "ready" if self.ready else "starting",
+            "models_ready": self.models_ready,
             "models": {
                 "core": models["core"],
                 "frequent": models["frequent"],
@@ -72,6 +75,22 @@ class State:
 STATE = State()
 
 
+def _preload_models_background() -> None:
+    """Lädt CORE/FREQUENT-Modelle im Hintergrund, damit /health sofort antwortet.
+
+    HF markiert den Endpoint als laufend, sobald /health 200 liefert. Während
+    der (teils minutenlange) Gewichte-Download läuft, liefert /ready 503 –
+    so kann kein Startup-Timeout durch blockierendes Laden entstehen.
+    """
+    try:
+        STATE.manager.preload()
+        STATE.models_ready = True
+        log_event("INFO", "models ready")
+    except Exception as exc:  # noqa: BLE001 – Fehler sauber im Status führen
+        STATE.startup_errors.append(str(exc))
+        log_event("ERROR", "model preload failed", error=str(exc))
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
@@ -81,9 +100,9 @@ async def lifespan(_app: FastAPI):
         STATE.startup_errors.append(str(exc))
         log_event("FATAL", "startup failed", error=str(exc))
         raise
-    STATE.manager.preload()  # CORE laden, FREQUENT nach Priorität
-    STATE.ready = True
-    log_event("INFO", "runtime ready", version=RUNTIME_VERSION)
+    STATE.ready = True  # API ist sofort erreichbar
+    log_event("INFO", "runtime api ready", version=RUNTIME_VERSION)
+    threading.Thread(target=_preload_models_background, daemon=True).start()
     yield
     # Graceful Shutdown: keine harte Unterbrechung aktiver Inferenz.
     STATE.shutting_down = True
@@ -97,17 +116,19 @@ app = FastAPI(title="SampleMONK AI Runtime", version=RUNTIME_VERSION, lifespan=l
 
 @app.get("/health")
 def health() -> JSONResponse:
-    """Prozess lebt (immer 200, solange der Prozess antwortet)."""
+    """Liveness: Prozess lebt (immer 200, solange der Prozess antwortet)."""
     return JSONResponse({"status": "ok", "version": RUNTIME_VERSION})
 
 
 @app.get("/ready")
 def ready() -> JSONResponse:
-    """Runtime ist tatsächlich einsatzbereit (Startup + CORE-Modelle ok)."""
+    """Readiness: Runtime + CORE-Modelle tatsächlich einsatzbereit."""
     if STATE.shutting_down:
         return JSONResponse({"status": "shutting_down"}, status_code=503)
     if not STATE.ready:
         return JSONResponse({"status": "starting", "errors": STATE.startup_errors}, status_code=503)
+    if not STATE.models_ready:
+        return JSONResponse({"status": "loading_models", "models": STATE.manager.get_status()}, status_code=503)
     return JSONResponse({"status": "ready", "version": RUNTIME_VERSION})
 
 
