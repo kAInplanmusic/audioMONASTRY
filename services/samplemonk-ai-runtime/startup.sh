@@ -19,4 +19,3 @@ exec uvicorn app:app \
   --port "${PORT:-8000}" \
   --workers 1 \
   --timeout-keep-alive 30 \
-  --graceful-timeout 30
