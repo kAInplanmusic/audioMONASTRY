@@ -38,13 +38,12 @@ INSTANCE_SIZE = os.environ.get("HF_INSTANCE_SIZE", "x1")
 SCALE_TO_ZERO_TIMEOUT = int(os.environ.get("HF_SCALE_TO_ZERO_TIMEOUT", "20"))
 
 
-def build_kwargs(create: bool):
-    kwargs: dict = {
+def _common_kwargs() -> dict:
+    """Kwargs, die create und update akzeptieren."""
+    return {
         "accelerator": "gpu",
         "instance_size": INSTANCE_SIZE,
         "instance_type": INSTANCE_TYPE,
-        "region": REGION,
-        "vendor": VENDOR,
         "min_replica": 0,
         "max_replica": 1,
         "scale_to_zero_timeout": SCALE_TO_ZERO_TIMEOUT,
@@ -62,30 +61,40 @@ def build_kwargs(create: bool):
         "type": "authenticated",
         "namespace": NAMESPACE,
     }
-    if create:
-        kwargs["name"] = ENDPOINT_NAME
+
+
+def _create_kwargs() -> dict:
+    """Create akzeptiert zusätzlich region/vendor."""
+    kwargs = _common_kwargs()
+    kwargs["region"] = REGION
+    kwargs["vendor"] = VENDOR
     return kwargs
 
 
 def main() -> int:
     command = sys.argv[1] if len(sys.argv) > 1 else "status"
-    api = HfApi()
     if command == "status":
-        ep = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
-        print(f"status={ep.status} url={ep.url}")
+        try:
+            ep = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
+            print(f"status={ep.status} url={ep.url}")
+        except Exception as exc:  # noqa: BLE001 – 404 = existiert nicht
+            print(f"status=not-found ({type(exc).__name__}: {exc})")
+            return 1
         return 0
     if not IMAGE:
         print("FEHLER: IMAGE env ist erforderlich (z. B. ghcr.io/<owner>/samplemonk-ai-runtime:latest)")
         return 2
+    if not os.environ.get("HF_TOKEN", "").strip():
+        print("FEHLER: HF_TOKEN env ist erforderlich (Gated-Gewichte + Endpoint-Secret)")
+        return 2
 
-    kwargs = build_kwargs(create=False)
     try:
         existing = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
         print(f"Endpoint existiert (status={existing.status}) -> update")
-        ep = update_inference_endpoint(ENDPOINT_NAME, **kwargs)
-    except Exception:
-        print("Endpoint existiert nicht -> create")
-        ep = create_inference_endpoint(ENDPOINT_NAME, **build_kwargs(create=True))
+        ep = update_inference_endpoint(ENDPOINT_NAME, **_common_kwargs())
+    except Exception as get_error:
+        print(f"Endpoint existiert nicht ({type(get_error).__name__}) -> create")
+        ep = create_inference_endpoint(ENDPOINT_NAME, **_create_kwargs())
 
     print(f"OK name={ep.name} status={ep.status} url={ep.url}")
     return 0
