@@ -272,7 +272,8 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 - [✓] Idle-Timeout ~20 min, minReplicas 0, maxReplicas 1, scale-to-zero dokumentiert
 - [✓] Standard-Endpoints live: `samplemonk-ai-pilot` (Whisper, running/scaledToZero) + `samplemonk-ai-clap` (CLAP, running)
 - [x] Custom-Endpoint via CI-Workflow hf-endpoint.yml (Image-Build+Push grün, GHCR-Paket vorhanden)
-- [✓✓] Custom-Container-Endpoint `samplemonk-ai` LIVE VERIFIZIERT: A100 80GB cuda, CORE+FREQUENT geladen, /health ok, /ready 200, /status running
+- [✓✓] Custom-Container-Endpoint `samplemonk-ai` LIVE VERIFIZIERT: A100 80GB cuda, CORE+FREQUENT geladen, /health ok, /ready 200
+- [✓✓] ECHTE INFERENZ verifiziert: AST classify auf 440-Hz-Sinus → "Sine wave" 0.991 (HTTP 200, durationMs 7669)
 - [x] Ursachen-Fixes: repository muss existierendes HF-Repo im Namespace sein (AnunnakiTools/samplemonk-ai-runtime), uvicorn ohne --graceful-timeout, Modell-Preload im Hintergrund, GHCR-Credentials (ALL_ACCESS-PAT)
 
 ## Phase 4 – Model Registry
