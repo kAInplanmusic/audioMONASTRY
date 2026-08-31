@@ -11,6 +11,16 @@ from typing import Any, Dict
 
 from model_manager import ModelDefinition, ModelUnavailableError
 
+# FA-P0-2: Echte Modell-Instanzen pro Modell-ID cachen – ein Modell wird nur
+# einmal geladen und danach wiederverwendet (kein from_pretrained je Request).
+_MODEL_CACHE: Dict[str, Any] = {}
+
+
+def _cached(key: str, loader: Any) -> Any:
+    if key not in _MODEL_CACHE:
+        _MODEL_CACHE[key] = loader()
+    return _MODEL_CACHE[key]
+
 
 def run_inference(task: str, model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     handler = HANDLERS.get(task)
@@ -50,8 +60,8 @@ def hf_classify(_model_id: str, definition: ModelDefinition, payload: Dict[str, 
     from io import BytesIO
 
     audio = _audio_bytes(payload)
-    model = transformers.AutoModelForAudioClassification.from_pretrained(definition.repository, revision=definition.revision)
-    processor = transformers.AutoFeatureExtractor.from_pretrained(definition.repository, revision=definition.revision)
+    model = _cached(f'{_model_id}:classify:model', lambda: transformers.AutoModelForAudioClassification.from_pretrained(definition.repository, revision=definition.revision))
+    processor = _cached(f'{_model_id}:classify:fe', lambda: transformers.AutoFeatureExtractor.from_pretrained(definition.repository, revision=definition.revision))
     import soundfile as sf  # type: ignore
 
     samples, sr = sf.read(BytesIO(audio))
@@ -74,7 +84,7 @@ def hf_transcribe(_model_id: str, definition: ModelDefinition, payload: Dict[str
     from io import BytesIO
 
     audio = _audio_bytes(payload)
-    pipeline = transformers.pipeline("automatic-speech-recognition", model=definition.repository, revision=definition.revision)
+    pipeline = _cached(f'{_model_id}:transcribe', lambda: transformers.pipeline("automatic-speech-recognition", model=definition.repository, revision=definition.revision))
     language = payload.get("language") or None
     result = pipeline(BytesIO(audio), generate_kwargs={"language": language} if language else {})
     return {"text": result["text"]}
@@ -91,8 +101,8 @@ def hf_embed(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any
     if "clap" in model_id.lower():
         from transformers import ClapModel, ClapProcessor  # type: ignore
 
-        processor = ClapProcessor.from_pretrained(definition.repository, revision=definition.revision)
-        model = ClapModel.from_pretrained(definition.repository, revision=definition.revision)
+        processor = _cached(f'{_model_id}:clap:proc', lambda: ClapProcessor.from_pretrained(definition.repository, revision=definition.revision))
+        model = _cached(f'{_model_id}:clap:model', lambda: ClapModel.from_pretrained(definition.repository, revision=definition.revision))
         import soundfile as sf
 
         samples, sr = sf.read(BytesIO(audio))
@@ -102,8 +112,8 @@ def hf_embed(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any
         return {"embedding": [round(float(x), 6) for x in emb.tolist()], "dim": emb.shape[0]}
     from transformers import AutoModel, Wav2Vec2FeatureExtractor  # type: ignore
 
-    extractor = Wav2Vec2FeatureExtractor.from_pretrained(definition.repository, revision=definition.revision)
-    model = AutoModel.from_pretrained(definition.repository, revision=definition.revision)
+    extractor = _cached(f'{_model_id}:embed:fe', lambda: Wav2Vec2FeatureExtractor.from_pretrained(definition.repository, revision=definition.revision))
+    model = _cached(f'{_model_id}:embed:model', lambda: AutoModel.from_pretrained(definition.repository, revision=definition.revision))
     import soundfile as sf
 
     samples, sr = sf.read(BytesIO(audio))
@@ -121,8 +131,8 @@ def hf_generate(_model_id: str, definition: ModelDefinition, payload: Dict[str, 
     import torch
     from transformers import AutoProcessor, MusicgenForConditionalGeneration  # type: ignore
 
-    processor = AutoProcessor.from_pretrained(definition.repository, revision=definition.revision)
-    model = MusicgenForConditionalGeneration.from_pretrained(definition.repository, revision=definition.revision)
+    processor = _cached(f'{_model_id}:musicgen:proc', lambda: AutoProcessor.from_pretrained(definition.repository, revision=definition.revision))
+    model = _cached(f'{_model_id}:musicgen:model', lambda: MusicgenForConditionalGeneration.from_pretrained(definition.repository, revision=definition.revision))
     prompt = str(payload.get("prompt", "electronic techno loop"))
     max_seconds = min(float(payload.get("maxDuration", 10)), float(definition.maxDuration))
     inputs = processor(text=[prompt], return_tensors="pt")
