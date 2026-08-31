@@ -37,7 +37,7 @@ Nur mit Betreiber-Freigabe. Trigger:
 | Dienst | Konfiguration | Status |
 |---|---|---|
 | Ollama (ai-1) | `OLLAMA_URL`, `OLLAMA_MODEL` | dokumentiert in `.env.example` |
-| HF-Endpoint (samplemonk-ai) | `HF_ENDPOINT_URL`, `HF_TOKEN`, `HF_API_KEY` | A100 bevorzugt (D15); DevSettings „AI Server Shutdown“ geplant |
+| HF-Endpoint (samplemonk-ai) | `HF_ENDPOINT_URL`, `HF_TOKEN`, `HF_API_KEY`, `AI_MAX_GPU_ENDPOINTS=1` | **Einziger GPU-Endpoint (Konsolidierung)**; Whisper+CLAP migriert; pilot/clap deaktiviert |
 | Replicate | `REPLICATE_API_TOKEN`, `REPLICATE_STEM_MODEL` | Token/Credit Live-Check bei nächstem Zugang |
 | Supabase | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `VITE_SUPABASE_ANON_PUB` | RLS für AI-Tabellen offen (FA-P1-1) |
 | Cloudflare R2 | `CFR2_*` | dokumentiert |

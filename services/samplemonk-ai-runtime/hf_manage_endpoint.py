@@ -10,9 +10,12 @@ Legt den Custom-Container-Endpoint `samplemonk-ai` an bzw. aktualisiert ihn:
 
 Aufruf (lokal oder CI):
   HF_TOKEN=hf_... IMAGE=ghcr.io/<owner>/samplemonk-ai-runtime:latest \
-  python3 hf_manage_endpoint.py [create|update|status]
+  python3 hf_manage_endpoint.py [create|update|status|delete-legacy]
 
-Regeln:
+Regeln (GPU-Konsolidierung):
+- MAXIMAL 1 A100: nur der Endpoint `samplemonk-ai` darf GPU betreiben.
+- Alte Einzel-GPU-Endpoints (samplemonk-ai-pilot, samplemonk-ai-clap) sind
+  deaktiviert; `delete-legacy` entfernt sie aus der HF-Infrastruktur.
 - GPU-Wechsel nur mit Betreiber-Freigabe (aktuell A100 fixiert).
 - Kein minReplicas=1 (24/7-Billing vermeiden).
 """
@@ -24,11 +27,16 @@ import sys
 from huggingface_hub import (
     HfApi,
     create_inference_endpoint,
+    delete_inference_endpoint,
     get_inference_endpoint,
     update_inference_endpoint,
 )
 
-ENDPOINT_NAME = os.environ.get("HF_ENDPOINT_NAME", "samplemonk-ai")
+# Harte Kostenregel: genau EIN GPU-Endpoint.
+SINGLE_GPU_ENDPOINT_NAME = "samplemonk-ai"
+LEGACY_GPU_ENDPOINT_NAMES = ["samplemonk-ai-pilot", "samplemonk-ai-clap"]
+
+ENDPOINT_NAME = os.environ.get("HF_ENDPOINT_NAME", SINGLE_GPU_ENDPOINT_NAME)
 NAMESPACE = os.environ.get("HF_NAMESPACE", "AnunnakiTools")
 IMAGE = os.environ.get("IMAGE", "").strip()
 REGION = os.environ.get("HF_REGION", "us-east-1")
@@ -84,8 +92,36 @@ def _create_kwargs() -> dict:
     return kwargs
 
 
+def _guard_single_gpu_endpoint() -> int:
+    """Verhindert, dass versehentlich ein zweiter GPU-Endpoint angelegt wird."""
+    allowed_override = os.environ.get("ALLOW_GPU_ENDPOINT_NAME", "").strip()
+    if ENDPOINT_NAME != SINGLE_GPU_ENDPOINT_NAME and ENDPOINT_NAME != allowed_override:
+        print(
+            f"FEHLER: HF_ENDPOINT_NAME={ENDPOINT_NAME} ist nicht erlaubt. "
+            f"GPU-Konsolidierung erlaubt nur {SINGLE_GPU_ENDPOINT_NAME} "
+            "(maximal 1 A100).",
+            file=sys.stderr,
+        )
+        return 2
+    return 0
+
+
 def main() -> int:
     command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if command == "delete-legacy":
+        if not os.environ.get("HF_TOKEN", "").strip():
+            print("FEHLER: HF_TOKEN env ist erforderlich", file=sys.stderr)
+            return 2
+        for name in LEGACY_GPU_ENDPOINT_NAMES:
+            try:
+                delete_inference_endpoint(name, namespace=NAMESPACE)
+                print(f"deleted legacy endpoint: {name}")
+            except Exception as exc:  # noqa: BLE001 – Endpoint evtl. schon weg
+                print(f"legacy endpoint {name} nicht gelöscht ({type(exc).__name__}: {exc})")
+        return 0
+    guard = _guard_single_gpu_endpoint()
+    if guard:
+        return guard
     if command == "status":
         try:
             ep = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
