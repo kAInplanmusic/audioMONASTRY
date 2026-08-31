@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useState  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useRef, useState  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { usePluginManager } from './context/PluginManagerContext';
@@ -64,12 +64,38 @@ function AppComponent() {
   const [sessionFull, setSessionFull] = useState(false);
 
   // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
+  // P4-1/P4-2: Host sendet Master-Stream an Peers/SFU; Gäste spielen Main ab.
+  const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   useEffect(() => {
+    webRTCManager.onMainStream = (stream) => {
+      try {
+        const audio = new Audio();
+        audio.srcObject = stream;
+        void audio.play().catch(() => { /* Autoplay-Fehler ignorieren */ });
+      } catch { /* kein Audio-Element verfügbar */ }
+    };
+    const startHostMain = () => {
+      if (!webRTCManager.isHost || mainDestRef.current) return;
+      const dest = audioEngine.createMasterStreamDestination();
+      if (dest) {
+        mainDestRef.current = dest;
+        webRTCManager.startMainStream(dest.stream);
+      }
+    };
+    if (webRTCManager.isHost) startHostMain();
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionFull(info.full);
+      if (webRTCManager.isHost) startHostMain();
     };
-    return () => { webRTCManager.onSessionUpdate = () => {}; };
+    return () => {
+      webRTCManager.onSessionUpdate = () => {};
+      webRTCManager.onMainStream = () => {};
+      if (mainDestRef.current) {
+        try { audioEngine.disconnectMasterStreamDestination(mainDestRef.current); } catch { /* noop */ }
+        mainDestRef.current = null;
+      }
+    };
   }, []);
 
   // Sequencer: zwischen 16 und 32 Steps umschalten (Patterns werden gepolstert).
