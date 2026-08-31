@@ -40,6 +40,15 @@ SCALE_TO_ZERO_TIMEOUT = int(os.environ.get("HF_SCALE_TO_ZERO_TIMEOUT", "20"))
 
 def _common_kwargs() -> dict:
     """Kwargs, die create und update akzeptieren."""
+    image: dict = {
+        "url": IMAGE,
+        "health_route": "/health",
+    }
+    # Private Registry (z. B. GHCR): optionale Credentials für den HF-Pull.
+    reg_user = os.environ.get("HF_REGISTRY_USERNAME", "").strip()
+    reg_pass = os.environ.get("HF_REGISTRY_PASSWORD", "").strip()
+    if reg_user and reg_pass:
+        image["credentials"] = {"username": reg_user, "password": reg_pass}
     return {
         "accelerator": "gpu",
         "instance_size": INSTANCE_SIZE,
@@ -48,10 +57,7 @@ def _common_kwargs() -> dict:
         "max_replica": 1,
         "scale_to_zero_timeout": SCALE_TO_ZERO_TIMEOUT,
         "task": "custom",
-        "custom_image": {
-            "url": IMAGE,
-            "health_route": "/health",
-        },
+        "custom_image": image,
         "env": {
             "AI_RUNTIME_DEVICE": "cuda",
             "AI_MODEL_MANIFEST": "/opt/samplemonk-ai/model_manifest.json",
