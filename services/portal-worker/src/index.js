@@ -335,10 +335,12 @@ async function computeStatus(env) {
         const healthUrl = `https://${PORTAL_DOMAIN}/api/health`;
         const res = await fetch(healthUrl, { cf: { resolveOverride: ip } });
         if (res.ok) {
-          return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/' };
+          return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/', appIp: ip };
         }
-      } catch {
+        return { state: 'starting-app', created: existing.length, total: FLEET.length, running, appIp: ip, healthError: `HTTP ${res.status}` };
+      } catch (err) {
         /* App antwortet noch nicht */
+        return { state: 'starting-app', created: existing.length, total: FLEET.length, running, appIp: ip, healthError: String((err && err.message) || err) };
       }
     }
     return { state: 'starting-app', created: existing.length, total: FLEET.length, running };
