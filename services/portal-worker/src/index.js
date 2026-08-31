@@ -26,6 +26,7 @@ const FLEET = [
 const LOCATION = 'fsn1';
 const IMAGE = 'ubuntu-24.04';
 const REPO_URL = 'https://github.com/kAInplanmusic/audioMONASTRY.git';
+const PORTAL_DOMAIN = 'anunnakitools.de';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -328,7 +329,11 @@ async function computeStatus(env) {
     const ip = app.public_net?.ipv4?.ip;
     if (ip) {
       try {
-        const res = await fetch(`http://${ip}/api/health`);
+        // Health-Check über die Domain (Host/SNI = Domain, Origin-Zertifikat)
+        // und resolveOverride direkt auf die Origin-IP – kein Host=IP,
+        // kein HTTP-Redirect auf https://IP.
+        const healthUrl = `https://${PORTAL_DOMAIN}/api/health`;
+        const res = await fetch(healthUrl, { cf: { resolveOverride: ip } });
         if (res.ok) {
           return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/' };
         }
