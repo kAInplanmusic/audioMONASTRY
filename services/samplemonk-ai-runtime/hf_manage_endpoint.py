@@ -79,7 +79,7 @@ def _create_kwargs() -> dict:
     kwargs["region"] = REGION
     kwargs["vendor"] = VENDOR
     kwargs["repository"] = None
-    kwargs["framework"] = None
+    kwargs["framework"] = "pytorch"  # Custom-Container: framework muss gesetzt sein
     return kwargs
 
 
