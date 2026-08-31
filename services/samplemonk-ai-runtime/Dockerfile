@@ -15,8 +15,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PORT=8000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.11 python3.11-venv python3-pip \
-    ffmpeg libsndfile1 sox \
+    python3 python3-venv python3-pip \
+    ffmpeg libsndfile1 sox curl passwd \
     && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
@@ -26,7 +26,7 @@ FROM runtime-base AS deps
 
 WORKDIR /opt/samplemonk-ai
 COPY requirements.lock ./requirements.lock
-RUN python3.11 -m venv /opt/venv \
+RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.lock
 
 # ---------------------------------------------------------------------------

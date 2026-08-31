@@ -2,7 +2,7 @@
 name = "samplemonk-ai-runtime"
 version = "1.0.0"
 description = "SampleMONK AI Runtime (Hugging Face Custom Container)"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 
 dependencies = [
   "fastapi>=0.115,<1",
