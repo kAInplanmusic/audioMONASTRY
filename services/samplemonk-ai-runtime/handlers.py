@@ -44,14 +44,14 @@ def _audio_bytes(payload: Dict[str, Any]) -> bytes:
     return raw
 
 
-def hf_classify(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+def hf_classify(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     transformers = _require_lib("transformers", "transformers")
     _require_lib("torch", "torch")
     from io import BytesIO
 
     audio = _audio_bytes(payload)
-    model = transformers.AutoModelForAudioClassification.from_pretrained(model_id)
-    processor = transformers.AutoFeatureExtractor.from_pretrained(model_id)
+    model = transformers.AutoModelForAudioClassification.from_pretrained(definition.repository, revision=definition.revision)
+    processor = transformers.AutoFeatureExtractor.from_pretrained(definition.repository, revision=definition.revision)
     import soundfile as sf  # type: ignore
 
     samples, sr = sf.read(BytesIO(audio))
@@ -68,19 +68,19 @@ def hf_classify(model_id: str, _definition: ModelDefinition, payload: Dict[str, 
     }
 
 
-def hf_transcribe(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+def hf_transcribe(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     transformers = _require_lib("transformers", "transformers")
     _require_lib("torch", "torch")
     from io import BytesIO
 
     audio = _audio_bytes(payload)
-    pipeline = transformers.pipeline("automatic-speech-recognition", model=model_id)
+    pipeline = transformers.pipeline("automatic-speech-recognition", model=definition.repository, revision=definition.revision)
     language = payload.get("language") or None
     result = pipeline(BytesIO(audio), generate_kwargs={"language": language} if language else {})
     return {"text": result["text"]}
 
 
-def hf_embed(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+def hf_embed(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     _require_lib("torch", "torch")
     _require_lib("transformers", "transformers")
     from io import BytesIO
@@ -91,8 +91,8 @@ def hf_embed(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any
     if "clap" in model_id.lower():
         from transformers import ClapModel, ClapProcessor  # type: ignore
 
-        processor = ClapProcessor.from_pretrained(model_id)
-        model = ClapModel.from_pretrained(model_id)
+        processor = ClapProcessor.from_pretrained(definition.repository, revision=definition.revision)
+        model = ClapModel.from_pretrained(definition.repository, revision=definition.revision)
         import soundfile as sf
 
         samples, sr = sf.read(BytesIO(audio))
@@ -102,8 +102,8 @@ def hf_embed(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any
         return {"embedding": [round(float(x), 6) for x in emb.tolist()], "dim": emb.shape[0]}
     from transformers import AutoModel, Wav2Vec2FeatureExtractor  # type: ignore
 
-    extractor = Wav2Vec2FeatureExtractor.from_pretrained(model_id)
-    model = AutoModel.from_pretrained(model_id)
+    extractor = Wav2Vec2FeatureExtractor.from_pretrained(definition.repository, revision=definition.revision)
+    model = AutoModel.from_pretrained(definition.repository, revision=definition.revision)
     import soundfile as sf
 
     samples, sr = sf.read(BytesIO(audio))
@@ -113,7 +113,7 @@ def hf_embed(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any
     return {"embedding": [round(float(x), 6) for x in out.tolist()], "dim": out.shape[0]}
 
 
-def hf_generate(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+def hf_generate(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     _require_lib("torch", "torch")
     _require_lib("transformers", "transformers")
     import io
@@ -121,8 +121,8 @@ def hf_generate(model_id: str, _definition: ModelDefinition, payload: Dict[str, 
     import torch
     from transformers import AutoProcessor, MusicgenForConditionalGeneration  # type: ignore
 
-    processor = AutoProcessor.from_pretrained(model_id)
-    model = MusicgenForConditionalGeneration.from_pretrained(model_id)
+    processor = AutoProcessor.from_pretrained(definition.repository, revision=definition.revision)
+    model = MusicgenForConditionalGeneration.from_pretrained(definition.repository, revision=definition.revision)
     prompt = str(payload.get("prompt", "electronic techno loop"))
     max_seconds = min(float(payload.get("maxDuration", 10)), float(_definition.maxDuration))
     inputs = processor(text=[prompt], return_tensors="pt")
@@ -138,7 +138,7 @@ def hf_generate(model_id: str, _definition: ModelDefinition, payload: Dict[str, 
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": 32000}
 
 
-def hf_tts(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+def hf_tts(_model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     _require_lib("torch", "torch")
     _require_lib("transformers", "transformers")
     import base64
@@ -147,8 +147,8 @@ def hf_tts(model_id: str, _definition: ModelDefinition, payload: Dict[str, Any])
     import torch
     from transformers import VitsModel, VitsTokenizer  # type: ignore
 
-    tokenizer = VitsTokenizer.from_pretrained(model_id)
-    model = VitsModel.from_pretrained(model_id)
+    tokenizer = VitsTokenizer.from_pretrained(definition.repository, revision=definition.revision)
+    model = VitsModel.from_pretrained(definition.repository, revision=definition.revision)
     text = str(payload.get("text", ""))[:500]
     inputs = tokenizer(text, return_tensors="pt")
     with torch.no_grad():
