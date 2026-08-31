@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Database, Play, Download, Clipboard, GripVertical, ChevronLeft, ChevronRight, Cloud, CloudOff, Upload } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
-import { MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
+import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
 import { fetchCloudMusic, CloudMusicRow, pushMusicToCloud } from '../lib/supabaseClient';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
@@ -28,14 +28,14 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
 
   // Musik-Bibliothek: lokal vorbefüllt aus den eingebauten Tracks, nach dem
   // Mount um Cloud-Tracks von Supabase ergänzt (falls verfügbar).
-  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>(MUSIC_LIBRARY);
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>(SORTED_MUSIC_LIBRARY);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       const result = await fetchCloudMusic();
       if (cancelled || !result.ok || result.data.length === 0) return;
       const merged = new Map<string, MusicTrack>();
-      MUSIC_LIBRARY.forEach((t) => merged.set(t.id, t));
+      SORTED_MUSIC_LIBRARY.forEach((t) => merged.set(t.id, t));
       result.data.forEach((t) => merged.set(t.id, cloudRowToTrack(t)));
       setMusicTracks(Array.from(merged.values()));
     })();

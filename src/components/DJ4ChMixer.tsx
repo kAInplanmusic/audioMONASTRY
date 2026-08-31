@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { audioEngine } from '../utils/audioEngine';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { ALL_TRACKS, TrackRole, TrackType, TRACK_ROLE_MAP } from '../types';
-import { MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
+import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
 
 /**
  * audioMONASTRY DJ-Mischpult — Optik wie ein Pioneer DJM-A9.
@@ -327,7 +327,7 @@ export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { in
                     <select
                       value={c.loaded ? c.loadName : ''}
                       onChange={(e) => {
-                        const t = MUSIC_LIBRARY.find((x) => x.name === e.target.value);
+                        const t = SORTED_MUSIC_LIBRARY.find((x) => x.name === e.target.value);
                         if (t) loadSong(i, t);
                       }}
                       className={`w-full text-[7px] rounded-sm border px-0.5 py-1 bg-black/70 ${
@@ -336,7 +336,7 @@ export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { in
                     >
                       <option value="">{c.loaded ? c.loadName : '+ TRACK'}</option>
                       <option disabled>── MUSIK ──</option>
-                      {MUSIC_LIBRARY.map((t) => (
+                      {SORTED_MUSIC_LIBRARY.map((t) => (
                         <option key={t.id} value={t.name} className="text-neutral-300">{t.name}</option>
                       ))}
                     </select>

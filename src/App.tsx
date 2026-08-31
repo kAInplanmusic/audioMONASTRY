@@ -123,6 +123,21 @@ function AppComponent() {
   // (Input/Textarea/Select/ContentEditable), damit Tippen nicht unterbrochen wird.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // P1-6: Ctrl/Cmd+1..9 = Plugin-Toggle (kein Konflikt mit Eingabefeldern).
+      if ((e.ctrlKey || e.metaKey) && !e.repeat) {
+        const n = Number.parseInt(e.key, 10);
+        if (Number.isFinite(n) && n >= 1 && n <= 9) {
+          e.preventDefault();
+          const plugins = getPluginRegistry();
+          const target = plugins[n];
+          if (target) {
+            const current = moduleStates[target.id] || 'OFF';
+            releaseLock(target.id, webRTCManager.userId);
+            setModuleState(target.id, current === 'OFF' ? 'AUTO_AI' : 'OFF');
+          }
+        }
+        return;
+      }
       if (e.code !== 'Space' || e.repeat) return;
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName ?? '';
@@ -138,7 +153,7 @@ function AppComponent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPlaying]);
+  }, [isPlaying, moduleStates, releaseLock, setModuleState]);
 
   // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
   useEffect(() => {
