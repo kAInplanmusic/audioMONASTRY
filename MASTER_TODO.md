@@ -154,7 +154,7 @@ Quellen, die ausgewertet wurden:
 - [ ] Rausch-Quellen identifizieren: `clapSynth` (Noise), `synthWorklet`,
       `itSynthNode`, Effekt-Worklet-Defaults; mit `AudioGraphSnapshot`-Test
       alle aktiven Quellen auf MAIN auflisten.
-- [ ] Silence-Gate am Master: Wenn kein Plugin aktiv ist, ist der Master
+- [x] Silence-Gate am Master: Wenn kein Plugin aktiv ist, ist der Master
       garantiert stumm (Master-Gain -∞ oder keine Verbindungen).
 - [ ] NaN/Inf-Guards an Master-Kette prüfen (bereits vorhanden, aber erneut
       durch `goldenAudio`-Test mit allen Worklets).
@@ -192,7 +192,7 @@ Quellen, die ausgewertet wurden:
       zurück auf MAIN → sofort Gesamtmix.
 
 ### P0-7 Master-Player fest oben mit Transport
-- [ ] Sticky-Top-Bar: Play/Stop, BPM, BeatVisualizer, Session-Status und
+- [x] Sticky-Top-Bar: Play/Stop, BPM, BeatVisualizer, Session-Status und
       Master-Pegel immer sichtbar (auch auf iPhone).
 - [ ] `MasterPlayerTerminal` (Analyse/Master/Mixdown) bleibt als Werkzeug
       darunter, ist aber nicht der einzige Transport.

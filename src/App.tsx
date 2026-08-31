@@ -455,7 +455,7 @@ function AppComponent() {
       </div>
 
       {/* 3. Master-Player + Waveform (BPM-Anzeige) */}
-      <section className="monk-panel edge-inset p-5 short-landscape:p-3 mb-8 short-landscape:mb-3">
+      <section className="monk-panel edge-inset p-5 short-landscape:p-3 mb-8 short-landscape:mb-3 sticky top-[76px] z-20 bg-[#0a0a0a]/95 backdrop-blur">
         <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
           <div className="flex items-center gap-3">
             <h3 className="text-[11px] font-bold tracking-[0.35em] text-neutral-500 uppercase">Master Player</h3>
