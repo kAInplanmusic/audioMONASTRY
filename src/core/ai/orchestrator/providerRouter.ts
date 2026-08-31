@@ -9,6 +9,7 @@
  */
 import { llmRouter } from '../LlmRouter';
 import { aiLogger } from './aiLogger';
+import { CircuitBreaker } from './circuitBreaker';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
 const HF_ROUTER = 'https://router.huggingface.co/hf-inference/models';
@@ -217,6 +218,7 @@ export class ProviderRouter {
     new ReplicateProvider(),
     new LocalProvider(),
   ];
+  private breakers = new Map<string, CircuitBreaker>();
 
   register(provider: IAiProvider): void {
     this.providers = [provider, ...this.providers.filter((p) => p.id !== provider.id)];
@@ -239,8 +241,10 @@ export class ProviderRouter {
     if (ranked.length === 0) throw new AiProviderError('local', 'NO_PROVIDER', `kein Provider für Task ${task}`, false);
     let lastError: Error | null = null;
     for (const provider of ranked) {
+      const breaker = this.breakers.get(provider.id) ?? new CircuitBreaker(provider.id);
+      this.breakers.set(provider.id, breaker);
       try {
-        const result = await provider.run(task, model, input, signal);
+        const result = await breaker.call(() => provider.run(task, model, input, signal));
         return { provider: provider.id, result };
       } catch (error) {
         lastError = error as Error;

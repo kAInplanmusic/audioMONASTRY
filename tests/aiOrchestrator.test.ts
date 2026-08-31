@@ -230,3 +230,28 @@ describe('AiLogger redactSecrets', () => {
     expect(text).toContain('[REDACTED');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Circuit Breaker (Phase 3 Hardening)
+// ---------------------------------------------------------------------------
+describe('Circuit Breaker', () => {
+  it('öffnet nach failureThreshold und lehnt fail-fast ab', async () => {
+    const { CircuitBreaker } = await import('../src/core/ai/orchestrator/circuitBreaker');
+    const cb = new CircuitBreaker('test', { failureThreshold: 2, resetTimeoutMs: 60_000 });
+    await expect(cb.call(() => Promise.reject(new Error('e1')))).rejects.toThrow('e1');
+    await expect(cb.call(() => Promise.reject(new Error('e2')))).rejects.toThrow('e2');
+    expect(cb.getState()).toBe('OPEN');
+    await expect(cb.call(() => Promise.resolve('ok'))).rejects.toThrow(/circuit breaker open/);
+  });
+
+  it('schließt nach Erfolg und HALF_OPEN nach Reset-Timeout', async () => {
+    const { CircuitBreaker } = await import('../src/core/ai/orchestrator/circuitBreaker');
+    const cb = new CircuitBreaker('test2', { failureThreshold: 1, resetTimeoutMs: 1 });
+    await expect(cb.call(() => Promise.reject(new Error('x')))).rejects.toThrow();
+    expect(cb.getState()).toBe('OPEN');
+    await new Promise((r) => setTimeout(r, 5));
+    expect(cb.getState()).toBe('HALF_OPEN');
+    await expect(cb.call(() => Promise.resolve('ok'))).resolves.toBe('ok');
+    expect(cb.getState()).toBe('CLOSED');
+  });
+});
