@@ -34,7 +34,8 @@ jobs:
       - name: Image-URL bestimmen
         id: meta
         run: |
-          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner | downcase }}/${{ env.IMAGE_NAME }}"
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="${{ env.REGISTRY }}/${OWNER_LOWER}/${{ env.IMAGE_NAME }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Image: ${IMAGE}"
 
