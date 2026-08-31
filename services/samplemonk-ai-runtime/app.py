@@ -192,7 +192,9 @@ async def infer(request: Request) -> JSONResponse:
         return JSONResponse({"status": "success", "task": task, "model": model, "result": result, "durationMs": duration_ms})
     except ModelUnavailableError as exc:
         duration_ms = int((time.time() - started) * 1000)
-        log_event("WARN", "model unavailable", task=task, model=model, error=str(exc), durationMs=duration_ms)
+        # Grund in die WARN-Message schreiben, damit er im HF-Dashboard sichtbar ist
+        # (das Dashboard zeigt nur msg, nicht das error-Feld). Client bleibt generisch.
+        log_event("WARN", f"model unavailable: {exc}", task=task, model=model, error=str(exc), durationMs=duration_ms)
         raise HTTPException(status_code=503, detail={"code": "MODEL_UNAVAILABLE", "model": model, "message": "model unavailable"})
     except Exception as exc:  # noqa: BLE001 – zentrale Fehlerbehandlung
         duration_ms = int((time.time() - started) * 1000)
