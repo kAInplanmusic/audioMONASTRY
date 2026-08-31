@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""
+SampleMONK AI Runtime – HF Endpoint Manager (create-or-update)
+===============================================================
+Legt den Custom-Container-Endpoint `samplemonk-ai` an bzw. aktualisiert ihn:
+  - Custom Image (ghcr.io), Task `custom`, A100 x1 (us-east-1, AWS)
+  - minReplicas 0 / maxReplicas 1 / Scale-to-Zero-Timeout 20 min
+  - Secret `HF_TOKEN` für Gated-Gewichte (wird NIE ins Image geschrieben)
+  - Health `/health`, Readiness `/ready`
+
+Aufruf (lokal oder CI):
+  HF_TOKEN=hf_... IMAGE=ghcr.io/<owner>/samplemonk-ai-runtime:latest \
+  python3 hf_manage_endpoint.py [create|update|status]
+
+Regeln:
+- GPU-Wechsel nur mit Betreiber-Freigabe (aktuell A100 fixiert).
+- Kein minReplicas=1 (24/7-Billing vermeiden).
+"""
+from __future__ import annotations
+
+import os
+import sys
+
+from huggingface_hub import (
+    HfApi,
+    create_inference_endpoint,
+    get_inference_endpoint,
+    update_inference_endpoint,
+)
+
+ENDPOINT_NAME = os.environ.get("HF_ENDPOINT_NAME", "samplemonk-ai")
+NAMESPACE = os.environ.get("HF_NAMESPACE", "AnunnakiTools")
+IMAGE = os.environ.get("IMAGE", "").strip()
+REGION = os.environ.get("HF_REGION", "us-east-1")
+VENDOR = os.environ.get("HF_VENDOR", "aws")
+INSTANCE_TYPE = os.environ.get("HF_INSTANCE_TYPE", "nvidia-a100")
+INSTANCE_SIZE = os.environ.get("HF_INSTANCE_SIZE", "x1")
+SCALE_TO_ZERO_TIMEOUT = int(os.environ.get("HF_SCALE_TO_ZERO_TIMEOUT", "20"))
+
+
+def build_kwargs(create: bool):
+    kwargs: dict = {
+        "accelerator": "gpu",
+        "instance_size": INSTANCE_SIZE,
+        "instance_type": INSTANCE_TYPE,
+        "region": REGION,
+        "vendor": VENDOR,
+        "min_replica": 0,
+        "max_replica": 1,
+        "scale_to_zero_timeout": SCALE_TO_ZERO_TIMEOUT,
+        "task": "custom",
+        "custom_image": {
+            "url": IMAGE,
+            "health_route": "/health",
+        },
+        "env": {
+            "AI_RUNTIME_DEVICE": "cuda",
+            "AI_MODEL_MANIFEST": "/opt/samplemonk-ai/model_manifest.json",
+            "HF_HOME": "/data/hf-cache",
+        },
+        "secrets": {"HF_TOKEN": os.environ.get("HF_TOKEN", "")},
+        "type": "authenticated",
+        "namespace": NAMESPACE,
+    }
+    if create:
+        kwargs["name"] = ENDPOINT_NAME
+    return kwargs
+
+
+def main() -> int:
+    command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    api = HfApi()
+    if command == "status":
+        ep = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
+        print(f"status={ep.status} url={ep.url}")
+        return 0
+    if not IMAGE:
+        print("FEHLER: IMAGE env ist erforderlich (z. B. ghcr.io/<owner>/samplemonk-ai-runtime:latest)")
+        return 2
+
+    kwargs = build_kwargs(create=False)
+    try:
+        existing = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
+        print(f"Endpoint existiert (status={existing.status}) -> update")
+        ep = update_inference_endpoint(ENDPOINT_NAME, **kwargs)
+    except Exception:
+        print("Endpoint existiert nicht -> create")
+        ep = create_inference_endpoint(ENDPOINT_NAME, **build_kwargs(create=True))
+
+    print(f"OK name={ep.name} status={ep.status} url={ep.url}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
