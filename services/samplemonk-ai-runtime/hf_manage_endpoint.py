@@ -43,7 +43,7 @@ def _common_kwargs() -> dict:
     image: dict = {
         "url": IMAGE,
         "port": 8000,
-        "health_route": "/health",
+        "healthRoute": "/health",
     }
     # Private Registry (z. B. GHCR): optionale Credentials für den HF-Pull.
     reg_user = os.environ.get("HF_REGISTRY_USERNAME", "").strip()
