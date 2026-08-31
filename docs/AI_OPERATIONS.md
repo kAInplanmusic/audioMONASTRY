@@ -31,3 +31,18 @@ Nur mit Betreiber-Freigabe. Trigger:
 - `npm run verify` vor jedem Deployment.
 - `scripts/deploy-ai.sh` für lokalen/Hetzner Runtime-Smoke.
 - Manifest-Revisionen bei Modell-Updates pinnen und testen.
+
+## Drittanbieter-Konfigurationsstand (2026-08-31)
+
+| Dienst | Konfiguration | Status |
+|---|---|---|
+| Ollama (ai-1) | `OLLAMA_URL`, `OLLAMA_MODEL` | dokumentiert in `.env.example` |
+| HF-Endpoint (samplemonk-ai) | `HF_ENDPOINT_URL`, `HF_TOKEN`, `HF_API_KEY` | A100 bevorzugt (D15); DevSettings „AI Server Shutdown“ geplant |
+| Replicate | `REPLICATE_API_TOKEN`, `REPLICATE_STEM_MODEL` | Token/Credit Live-Check bei nächstem Zugang |
+| Supabase | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `VITE_SUPABASE_ANON_PUB` | RLS für AI-Tabellen offen (FA-P1-1) |
+| Cloudflare R2 | `CFR2_*` | dokumentiert |
+| Caddy/SFU/master-player | Compose-Definitionen | Health-Check bei Deployment |
+| Stem-ai | `STEM_AI_URL` (runtime, D22), `STEM_AI_PROVIDER` | Provider-Ausfall → schneller 502 verifiziert |
+
+**Regel:** `npm run verify` vor jedem Deployment; `scripts/hetzner/smoke-test.sh`
+als externer Health-Gate.

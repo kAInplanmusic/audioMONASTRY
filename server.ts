@@ -703,7 +703,7 @@ app.post('/api/ai/mcp/tools/:name', async (req, res) => {
 
 // --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---
 // P11: Proxy zum separaten stem-ai (FastAPI/Demucs) Container, falls aktiviert.
-const STEM_AI_URL = (process.env.STEM_AI_URL || '').trim() || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
+const getStemAiUrl = () => (process.env.STEM_AI_URL || '').trim() || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
   metrics.stemRequests += 1;
   // Runtime-Check (nicht nur Modul-Konstante), damit Tests/Deploys den Pfad
@@ -806,7 +806,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
         fd.append(name, value);
       }
 
-      const resp = await fetch(STEM_AI_URL + '/separate-stems', {
+      const resp = await fetch(getStemAiUrl() + '/separate-stems', {
         method: 'POST',
         body: fd,
         signal: AbortSignal.timeout(STEM_JOB_TIMEOUT_MS),

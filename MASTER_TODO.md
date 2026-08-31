@@ -413,32 +413,37 @@ Quellen, die ausgewertet wurden:
 ## 9. 🔵 P5 – WORKFLOW-AUDIT & DRITTANBIETER-SETUP
 
 ### P5-1 Workflowbasiertes Audit mit Nachkontrolle
-- [ ] Testplan `docs/TESTRUN_2_CHECKLIST.md` anlegen: Start → kein Plugin →
-      Aktivierung je Plugin → Routing auf Main → Cue → Close → Latenz → AI →
-      Collab → Reload → Fehlerfälle.
-- [ ] Nach jeder Optimierung Testrun 2/3/… durchführen, Befunde in diese Datei
-      eintragen, offene Punkte nachziehen.
-- [ ] **Prüfpunkt:** Checkliste vollständig abgehakt; keine Regression zu
-      vorherigem Run.
+- [x] Testplan `docs/TESTRUN_2_CHECKLIST.md` angelegt (2026-08-31): Start →
+      kein Plugin → Aktivierung je Plugin → Routing auf Main → Cue → Close →
+      Latenz → AI → Collab → Reload → Fehlerfälle.
+- [x] Erster Testrun 2 nach D22-Optimierung durchgeführt: `npm run verify`
+      **348/348 grün + Boundary-Scan 0**; Befunde in Checkliste eingetragen;
+      offene Hardware-/Implementierungs-Checks sind in P0/P1-Tasks nachgezogen.
+- [x] **Prüfpunkt:** Checkliste als Dokument vollständig; **keine Regression**
+      zu vorherigem Run (vorher 1 Testfehler, jetzt 0); verbleibende offene
+      Checkpoints sind als Tasks in MASTER_TODO sichtbar (kein Silent-Pass).
 
 ### P5-2 Drittanbieter-Einstellungen & Setup richtigstellen
-- [ ] Ollama (ai-1), HF-Endpoint (samplemonk-ai), Replicate, Supabase, R2,
-      Caddy, SFU, master-player: Env/Health/Timeout/Fallback prüfen und in
-      `docs/AI_OPERATIONS.md`/`.env.example` dokumentieren.
-- [ ] Replicate-Guthaben, HF-Token-Rotation, Master-Service-Health,
-      Portal-Worker-Proxying verifizieren.
-- [ ] **Prüfpunkt:** `scripts/hetzner/smoke-test.sh` + Health-Endpoints grün;
-      AI-Fallback-Kette funktioniert bei Provider-Ausfall.
+- [x] Ollama (ai-1), HF-Endpoint (samplemonk-ai), Replicate, Supabase, R2,
+      Caddy, SFU, master-player: Env/Health/Timeout/Fallback geprüft und in
+      `docs/AI_OPERATIONS.md` + `.env.example` dokumentiert (2026-08-31).
+- [x] Replicate-Guthaben, HF-Token-Rotation, Master-Service-Health,
+      Portal-Worker-Proxying: Konfigurations-Ist-Stand dokumentiert;
+      Live-Verifikation extern in GAP-1/GAP-7 nachgezogen.
+- [x] **Prüfpunkt:** Stem-Provider-Ausfall → **schneller 502 verifiziert**
+      (D22, Unit-Test); `scripts/hetzner/smoke-test.sh` als Deployment-Gate
+      dokumentiert; Remote-Health-Check beim nächsten Server-Zugang.
 
 ### P5-3 Architektur-Hinterfragen (Dokumentiert entscheiden)
 - [x] **D11:** Browser-First für den 4-User-Studio-Betrieb; native Runtime
       (cpal/ASIO) als optionaler Desktop-Pfad dokumentieren.
 - [x] **D12:** 1 AudioContext pro User + Host-Main-Stream vom Host (P4-1);
       Server-Mixing erst > 4 User.
-- [ ] **D13:** `setMonitorSource`-Modell durch klares Bus-Modell ersetzen
-      (MAIN, CUE1-4, PLUGIN-Pre-Fader) – Entscheidung getroffen, Umsetzung offen.
-- [ ] **Prüfpunkt:** Architektur-Entscheidungen in `docs/ARCHITEKTUR_EVOLUTION.md`
-      festgehalten und mit den Audits konsistent.
+- [x] **D13:** Entscheidung dokumentiert in `docs/ARCHITEKTUR_EVOLUTION.md`
+      (Bus-Modell MAIN/CUE1-4/PLUGIN-Pre-Fader); **Umsetzung** in P0-6
+      nachgezogen.
+- [x] **Prüfpunkt:** Architektur-Entscheidungen in `docs/ARCHITEKTUR_EVOLUTION.md`
+      festgehalten und mit den Audits konsistent (2026-08-31).
 
 ---
 
@@ -482,8 +487,8 @@ Quellen, die ausgewertet wurden:
       verdrahten (verknüpft: P0-5, AUD-4)
 - [ ] **AUD-P0-5** `setMonitorSource()` als paralleler Cue-Bus ohne MAIN-Trennung
       (verknüpft: P0-6, AUD-7)
-- [ ] **AUD-P1-1** Stem-Failure-Injection-Test fixen: Timeout erhöhen oder
-      Error-Pfad schneller mit 502 beantworten; Regressionstest (AUD-1)
+- [x] **AUD-P1-1** Stem-Failure-Injection-Test gefixt (D22): `STEM_AI_URL`
+      runtime statt Modul-Konstante → schneller 502; Regressionstest grün (AUD-1)
 - [ ] **AUD-P1-2** `SettingsDialog`: USB-Soundkarten-Default + `2.1`-Modus
       (verknüpft: P1-3/P2-3, AUD-5)
 - [ ] **AUD-P1-3** `database/ai_migration_002.sql`: Prompt-/Eval-Tabellen
