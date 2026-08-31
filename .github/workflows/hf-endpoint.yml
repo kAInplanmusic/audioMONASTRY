@@ -56,16 +56,15 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
-      - name: GHCR-Paket öffentlich machen (für HF-Pull)
+      - name: GHCR-Paket öffentlich machen (best effort; sonst Registry-Credentials)
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh api --method PATCH \
             "/user/packages/container/${{ env.IMAGE_NAME }}/visibility" \
             -f visibility=public \
-          || { echo "FEHLER: GHCR-Paket ist nicht öffentlich."; \
-               echo "Manuell: GitHub -> Packages -> samplemonk-ai-runtime -> Package settings -> Change visibility -> Public"; \
-               exit 1; }
+          || echo "INFO: Paket bleibt privat – HF erhält Registry-Credentials (GHCR_USERNAME/GHCR_PASSWORD)."
 
   create-or-update-endpoint:
     needs: build-and-push
