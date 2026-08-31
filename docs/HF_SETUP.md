@@ -42,6 +42,7 @@ ON_DEMAND (MusicGen-medium, Bark, PyAnnote), RARE (Qwen-Omni).
   - Modell: `MIT/ast-finetuned-audioset-10-10-0.4593` (Revision `f826b80d…`)
   - A100 ×1, `minReplicas 0`, `maxReplicas 1`, Scale-to-Zero 20 min, type `authenticated`
   - (eu-central-1 A100 war nicht verfügbar → us-east-1 gewählt; GPU unverändert A100)
+  - (AST-Standard-Endpoint scheiterte am HF-Toolkit → durch Whisper ersetzt; AST läuft später im Custom Container)
 - **Custom-Container-Endpoint:** wird über GitHub Actions gebaut und angelegt:
   - Workflow: `.github/workflows/hf-endpoint.yml`
   - Image: `ghcr.io/<owner>/samplemonk-ai-runtime` (öffentlich, damit HF pullen kann)
