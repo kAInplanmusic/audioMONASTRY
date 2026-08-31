@@ -25,3 +25,4 @@
 
 - FA-P0-1 (MCP-Permission serverseitig), FA-P0-2 (ModelManager echtes Laden)
 - FA-P2-2 (Regressionstests repository/revision) – Python-Smoke, nächster CI-Lauf
+| FR-016 | HF live | Hoch | Endpoint samplemonk-ai nach AST-Test auf `failed` zurückgefallen (Orchestrator: BAD_REQUEST „endpoint is in error") | ⬜ Offen – Update neu angestoßen, CI baut aktuelles Image | 9g / hf-endpoint.yml |
