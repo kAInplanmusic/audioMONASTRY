@@ -108,9 +108,13 @@ export class HfEndpointProvider implements IAiProvider {
     let lastError: Error | null = null;
     // FA-P1-7: Gesamt-Deadline über alle Versuche (kein 10,5-Minuten-Hänger).
     const totalTimeoutMs = Number(process.env.AI_TIMEOUT_MS ?? 120_000);
-    const deadline = Date.now() + totalTimeoutMs;
-    // Endpoint-Wake: Scale-to-Zero liefert 502, bis die Replica bereit ist.
-    for (let attempt = 0; attempt < 5; attempt++) {
+    let deadline = Date.now() + totalTimeoutMs;
+    // Kaltstart kann 2–5 min dauern: bei ENDPOINT_WAKING (503) wird die
+    // Deadline einmalig auf AI_WAKE_TIMEOUT_MS (Default 300 s) verlängert.
+    const wakeTimeoutMs = Number(process.env.AI_WAKE_TIMEOUT_MS ?? 300_000);
+    let wakeExtended = false;
+    // Endpoint-Wake: Scale-to-Zero liefert 502/503, bis die Replica bereit ist.
+    for (let attempt = 0; attempt < 10; attempt++) {
       if (Date.now() >= deadline) throw new AiProviderError(this.id, 'TIMEOUT', `HF-Endpoint-Gesamt-Timeout (${totalTimeoutMs} ms) überschritten`, true);
       const remaining = deadline - Date.now();
       try {
@@ -121,8 +125,12 @@ export class HfEndpointProvider implements IAiProvider {
           signal: signal ?? AbortSignal.timeout(Math.min(120_000, remaining)),
         });
         if (resp.status === 503) {
+          if (!wakeExtended) {
+            wakeExtended = true;
+            deadline = Math.max(deadline, Date.now() + wakeTimeoutMs);
+          }
           lastError = new AiProviderError(this.id, 'ENDPOINT_WAKING', 'HF-Endpoint wacht auf (Scale-to-Zero)', true);
-          await new Promise((r) => setTimeout(r, 2000 * 2 ** attempt));
+          await new Promise((r) => setTimeout(r, 2000 * 2 ** Math.min(attempt, 6)));
           continue;
         }
         if (resp.status === 429) throw new AiProviderError(this.id, 'RATE_LIMITED', 'HF-Endpoint 429', true);
@@ -141,7 +149,7 @@ export class HfEndpointProvider implements IAiProvider {
         } else {
           lastError = error as Error;
         }
-        if (attempt < 4) await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+        if (attempt < 9) await new Promise((r) => setTimeout(r, 1000 * 2 ** Math.min(attempt, 6)));
       }
     }
     throw lastError instanceof Error ? lastError : new AiProviderError(this.id, 'ENDPOINT_FAILED', 'HF-Endpoint nicht erreichbar', true);
