@@ -37,12 +37,17 @@ class McpRuntime:
             for name, spec in sorted(TOOLS.items())
         ]
 
-    def invoke(self, tool_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    def invoke(self, tool_name: str, payload: Dict[str, Any], server_permission: str = "") -> Dict[str, Any]:
         spec = TOOLS.get(tool_name)
         if spec is None:
             return {"ok": False, "error": f"unknown tool: {tool_name}"}
         required = spec["permission"]
-        granted = str(payload.get("permission", "READ")).upper()
+        # FA-P0-1: Permission kommt NIE aus dem Client-Body, sondern aus dem
+        # serverseitigen Trust-Context (Env AI_MCP_PERMISSION, Default READ).
+        import os
+        granted = (server_permission or os.environ.get("AI_MCP_PERMISSION") or "READ").strip().upper()
+        if granted not in PERMISSION_LEVELS:
+            granted = "READ"
         if PERMISSION_LEVELS.get(granted, 0) < PERMISSION_LEVELS[required]:
             return {"ok": False, "error": f"permission denied: {tool_name} requires {required}"}
         if required == "DESTRUCTIVE" and granted != "DESTRUCTIVE":
