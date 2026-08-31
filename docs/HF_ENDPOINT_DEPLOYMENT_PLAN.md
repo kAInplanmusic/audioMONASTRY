@@ -31,25 +31,33 @@
 
 ### 1.1 Entscheidung (Betreiber-Freigabe 2026-08-31)
 
-> **1× A100 (80 GB, AWS, $2.50/h ≈ 2,30 €/h)** als Standard-Endpoint.
+> **1× A100 (80 GB, AWS, $2.50/h ≈ 2,30 €/h) inkl. CPU der Instanz** als Standard-Endpoint.
 > **Kein Scaling nach oben, solange die A100 nicht nachweislich nicht reicht.**
 
 Begründung:
-- Betreiber-Schätzung: **~53 GB** für alle gewünschten Modelle gleichzeitig
+- Betreiber-Schätzung: **~53 GB** für alle gewünschten GPU-Modelle gleichzeitig
   (manche häufiger, manche seltener genutzt – aber alle resident). Das passt
   **ohne Probleme in 80 GB** (inkl. Aktivierungs-/Overhead-Puffer).
 - **2×L40S + CPU gibt es bei HF Endpoints nicht** (L40S nur 1× 48 GB / 4× 192 GB /
   8× 384 GB). 1×L40S (48 GB) wäre zu knapp unter 53 GB.
 - A100 liegt mit 2,30 €/h deutlich unter dem Budget (4–5 €/h) und ist die
   günstigste Karte mit ≥ 80 GB.
+- **CPU-Erweiterung:** HF-GPU-Instanzen bringen CPU + System-RAM mit. Die
+  CPU-Modelle der ersten Liste (MERT, CLAP, AST, MMS-TTS, Whisper-/MusicGen-
+  CPU-Fallback) laufen im selben Container auf der Instanz-CPU.
+  Falls der System-RAM nicht reicht: **optionaler HF-CPU-Endpoint**
+  (`intel-spr`, ~$0.033/h ≈ 0,03 €/h) oder Hetzner `ai-1`.
+- **Gesamtkosten A100 + CPU:** **$2.50/h + $0.033/h ≈ $2.53/h ≈ 2,33 €/h**
+  → weiterhin deutlich unter dem Budget.
 - Fallback nur für den Beschaffungsfall (A100 im Ziel-Cloud-Anbieter nicht
   verfügbar): **A10G ×4** (96 GB, 4,60 €/h).
 
 ### 1.2 Alle Modelle gleichzeitig – kein Einzeltest-Betrieb
 
 - **Kein L4-/Einzelmodell-Pilot.** Der Endpoint startet direkt mit A100 und
-  lädt **alle** Modelle der Capability Matrix beim Hochfahren (Eager-Load).
-- **Model Manager** hält alle Modelle resident; entladen wird nur bei
+  lädt **alle** GPU-Modelle der Capability Matrix beim Hochfahren (Eager-Load);
+  die CPU-Modelle laufen auf der Instanz-CPU (siehe Matrix §5).
+- **Model Manager** hält alle GPU-Modelle resident; entladen wird nur bei
   echtem VRAM-Druck (Unload-Strategie `on-pressure`), nicht nach Idle.
 - **Quantisierung:** kleine Modelle FP16; große (Bark, MusicGen-medium,
   Qwen-Omni) INT8, damit die ~53 GB sicher in 80 GB bleiben.
@@ -190,26 +198,31 @@ AI-Jobs verallgemeinert:
 
 ---
 
-## 7. Kostenbeispiele (A100, Scale-to-Zero)
+## 7. Kostenbeispiele (A100 + CPU, Scale-to-Zero)
 
-| Szenario | GPU | Aktive Zeit | Monatskosten ca. |
+| Szenario | GPU/CPU | Aktive Zeit | Monatskosten ca. |
 |---|---|---|---|
-| Wenig Betrieb (alle Modelle resident, 1 h/Tag aktiv) | A100 | ~30 h/Monat | ~69 € + PRO 9 € |
-| Regelbetrieb (4 h/Tag aktiv) | A100 | ~120 h/Monat | ~276 € + PRO |
-| Dauerbetrieb Tagsüber (12 h/Tag) | A100 | ~365 h/Monat | ~840 € + PRO |
-| 24/7 (minReplicas 1, NICHT empfohlen) | A100 | 730 h | ~1.680 € |
+| Wenig Betrieb (alle Modelle resident, 1 h/Tag aktiv) | A100 + CPU | ~30 h/Monat | ~70 € + PRO 9 € |
+| Regelbetrieb (4 h/Tag aktiv) | A100 + CPU | ~120 h/Monat | ~280 € + PRO |
+| Dauerbetrieb Tagsüber (12 h/Tag) | A100 + CPU | ~365 h/Monat | ~845 € + PRO |
+| 24/7 (minReplicas 1, NICHT empfohlen) | A100 + CPU | 730 h | ~1.700 € |
 
-Budget-Regel: **max. 4–5 €/h** bei aktiver Inferenz. Die A100 liegt mit
-**2,30 €/h** darunter; mit Scale-to-Zero (0 Replicas bei Inaktivität) entstehen
-Kosten nur für tatsächlich aktive Minuten.
+**Stundensatz bei aktiver Inferenz:**
+- A100 (GPU): $2.50/h ≈ **2,30 €/h**
+- Optionaler HF-CPU-Endpoint (`intel-spr`, falls Instanz-RAM nicht reicht): $0.033/h ≈ **0,03 €/h**
+- **Gesamt: ~2,33 €/h** → unter dem Budget (max. 4–5 €/h).
+
+Mit Scale-to-Zero (0 Replicas bei Inaktivität) entstehen Kosten nur für
+tatsächlich aktive Minuten; die CPU-Modelle laufen bevorzugt auf der
+Instanz-CPU der A100 (kein separater Endpoint nötig).
 
 ---
 
 ## 8. Offene Punkte / nächste Schritte
 
 1. [ ] Lizenz-Verifikation (MusicGen/Bark/MMS/MERT) abschließen
-2. [ ] Live-Preis-Check im HF-Dashboard (A100-Verfügbarkeit im Ziel-Cloud-Anbieter AWS)
+2. [ ] Live-Preis-Check im HF-Dashboard (A100-Verfügbarkeit inkl. CPU/RAM-Spezifikation der Instanz, Ziel-Cloud AWS)
 3. [ ] Phase 1 (Code): AI Orchestrator + Model Manager + ConcurrencyGuard
-4. [ ] Phase 2: Custom Container `services/samplemonk-ai-runtime` (Eager-Load aller Modelle)
-5. [ ] Phase 3: Endpoint mit **1× A100 (80 GB)** anlegen, Scale-to-Zero, Idle-Timeout
+4. [ ] Phase 2: Custom Container `services/samplemonk-ai-runtime` (Eager-Load aller GPU-Modelle, CPU-Modelle auf Instanz-CPU)
+5. [ ] Phase 3: Endpoint mit **1× A100 (80 GB) inkl. CPU** anlegen, Scale-to-Zero, Idle-Timeout; optional HF-CPU-Endpoint falls RAM nicht reicht
 6. [ ] Phase 4: MCP-Tool-Schema über `pluginCommandRegistry`

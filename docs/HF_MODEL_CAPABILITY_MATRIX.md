@@ -27,6 +27,25 @@
 kommerzielle Nutzung UND Produktions-Risiko ≤ 4. Modelle darunter → „Beobachten"
 (nicht integrieren).
 
+### 1.1 Lizenz-Legende (was die Kürzel bedeuten)
+
+| Kürzel | Bedeutung | Kommerzielle Nutzung? |
+|---|---|---|
+| **MIT** | Sehr freizügig: nutzen, ändern, verkaufen erlaubt; nur Lizenztext/Namensnennung beibehalten | ✅ ja |
+| **Apache-2.0** | Wie MIT, zusätzlich Patentklausel; Namensnennung + Lizenztext | ✅ ja |
+| **CC-BY** | Creative Commons: Nutzung erlaubt, Urheber muss genannt werden | ✅ ja (mit Namensnennung) |
+| **CC-BY-NC** | Creative Commons **Non-Commercial**: nur nicht-kommerzielle Nutzung | ⛔ nein |
+| **CC-BY-NC-SA** | Non-Commercial + **Share-Alike** (Weitergabe unter gleicher Lizenz) | ⛔ nein |
+| **HF-Gate / Gated** | Modell im HF-Hub gesperrt; erfordert Annahme der Modell-Lizenz im HF-Account | je nach Modell-Lizenz |
+| **Code vs. Gewichte** | Oft ist der **Code** MIT/Apache, aber die trainierten **Gewichte** NC-lizenziert – entscheidend sind die **Gewichte**, die wir ausliefern | → immer Gewichte prüfen |
+
+### 1.2 Score-Legende (letzte Tabellenspalte)
+
+Die Zahlen am Zeilenende (`8·7·8·8·9·2`) sind die sechs Bewertungen in fester
+Reihenfolge **U·Q·P·V·I·R** (jeweils 0–10), z. B. `8·7·8·8·9·2` =
+USEFULNESS 8 · QUALITY 7 · PERFORMANCE 8 · VRAM-EFF 8 · INTEGRATION 9 ·
+PRODUCTION-RISK 2.
+
 ---
 
 ## 2. Kandidaten-Matrix (Ersteinschätzung, vor Integration live verifizieren)
@@ -144,18 +163,40 @@ Multimodal-Anforderungen existieren (z. B. „beschreibe diese Session").
 
 ---
 
-## 5. VRAM-Summe „alle Modelle gleichzeitig" (Betriebsentscheidung)
+## 5. VRAM-/CPU-Summe „alle Modelle gleichzeitig" (Betriebsentscheidung)
 
 **Betriebsmodus (Betreiber-Freigabe 2026-08-31):** Es gibt **keinen
 Einzelmodell-Test**. Es laufen immer **alle** Modelle gleichzeitig – manche
 öfter, manche seltener genutzt, aber alle resident.
 
+**GPU-Modelle (auf A100):**
 - Betreiber-Schätzung: **~53 GB** für alle gewünschten Modelle gleichzeitig.
 - Eigene Ersteinschätzung: FP16-Summe ~65–80 GB; mit INT8/FP16-Mix ~35–50 GB.
 - **Entscheidung:** **1× A100 (80 GB)** – die ~53 GB passen mit Puffer in 80 GB,
   auch ohne aggressive Quantisierung.
 - **2×L40S existiert bei HF Endpoints nicht** (L40S nur 1× 48 GB / 4× / 8×);
   1×L40S (48 GB) wäre zu knapp unter 53 GB.
+
+**CPU-Modelle (aus der ersten Liste, laufen auf CPU der A100-Instanz):**
+
+| Modell | CPU-RAM-Bedarf ca. | Anmerkung |
+|---|---|---|
+| `m-a-p/MERT-v1-95M` (Music Understanding) | ~2 GB | CPU-geeignet, sehr klein |
+| `laion/larger-clap-music` (Audio Embeddings) | ~6 GB | CPU-geeignet |
+| `MIT/ast-finetuned-audioset-...` (Audio Classification) | ~4 GB | CPU-geeignet, Batch ok |
+| `facebook/mms-tts-deu` (TTS, bestehend) | ~3 GB | CPU-geeignet |
+| `openai/whisper-large-v3` (STT) | ~6 GB | GPU bevorzugt, CPU als Fallback |
+| `facebook/musicgen-small` (Music Gen) | ~4 GB | GPU bevorzugt, CPU als Fallback |
+| **Summe CPU-RAM** | **~25 GB** | muss auf der A100-Instanz verfügbar sein (live verifizieren) |
+
+- HF-Endpoints-GPU-Instanzen bringen **CPU + System-RAM mit** – die CPU-Modelle
+  laufen dort im selben Container (kein separater Endpoint nötig).
+- Falls der System-RAM der A100-Instanz nicht reicht oder CPU-Contention
+  entsteht: **optionaler HF-CPU-Endpoint** (`intel-spr`, ~$0.033/h ≈ 0,03 €/h)
+  oder Verlagerung auf die bestehende Hetzner-CPU-Instanz `ai-1` (Ollama).
+
+**Gesamtkosten (A100 + CPU):** **$2.50/h + $0.033/h ≈ $2.53/h ≈ 2,33 €/h**
+→ weiterhin deutlich unter dem Budget (max. 4–5 €/h).
 
 → **Kein Modell wird weggelassen.** Kein Scaling nach oben, solange die A100
 nicht nachweislich nicht reicht (siehe `HF_ENDPOINT_DEPLOYMENT_PLAN.md`).
