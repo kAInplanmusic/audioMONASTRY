@@ -42,6 +42,7 @@ def _common_kwargs() -> dict:
     """Kwargs, die create und update akzeptieren."""
     image: dict = {
         "url": IMAGE,
+        "port": 8000,
         "health_route": "/health",
     }
     # Private Registry (z. B. GHCR): optionale Credentials für den HF-Pull.
@@ -78,7 +79,7 @@ def _create_kwargs() -> dict:
     kwargs = _common_kwargs()
     kwargs["region"] = REGION
     kwargs["vendor"] = VENDOR
-    kwargs["repository"] = None
+    kwargs["repository"] = "AnunnakiTools/samplemonk-ai-runtime"  # API verlangt string (Custom-Container)
     kwargs["framework"] = "pytorch"  # Custom-Container: framework muss gesetzt sein
     return kwargs
 
