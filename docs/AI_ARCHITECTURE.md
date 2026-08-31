@@ -70,3 +70,30 @@ Kosten: **≈ 0,36 €/h** + API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
 - [x] HF-PRO-Entscheidung nach Free-Tier-Beobachtung – Entscheidung: **Free-Tier beibehalten** (DeepSeek + Hugging Face live verifiziert); PRO erst bei Limit-Erreichen
 - [x] Mistral-Account optional (Function-Calling für MOA-Tools) – **bewusst zurückgestellt**: DeepSeek V4 deckt MOA/MCP-Planung ab
 - [x] Groq-Alternative evaluieren (nur wenn HF/DPS-Limits erreicht werden) – **bewusst zurückgestellt**: Limits noch nicht erreicht
+
+---
+
+## Implementierungsstand 2026-08-31 (AI Orchestrator)
+
+Die obige Rollenverteilung ist unverändert gültig. Neu implementiert:
+
+- **AI Orchestrator** (`src/core/ai/orchestrator/`): JobManager (Dedup +
+  Concurrency), SessionManager (Lifecycle/Idle→Scale-to-Zero), ModelManager
+  (VRAM-Guard/LRU/Eviction), McpRuntime (Permissions), ProviderRouter
+  (HF-Endpoint/Serverless/Replicate/Local), CostTracker, AiLogger
+  (strukturiert + Secret-Redaction), aiPersistence (Supabase).
+- **Server-Routen** (`/api/ai/*`): orchestrate, jobs, session, models, mcp/tools.
+- **Custom Container** (`services/samplemonk-ai-runtime/`): FastAPI-Runtime mit
+  `/health`, `/ready`, `/status`, `/models`, `/metrics`, `/infer`, `/mcp/tools`,
+  Model Manager + Manifest (Revision-Pinning), Dockerfile, startup.sh.
+- **Supabase-Migration** `database/ai_migration_001.sql` (Sessions/Jobs/Usage/
+  Errors/Costs/MCP-Audit).
+- **Deployment/CI**: `docker-compose.ai.yml`, `scripts/deploy-ai.sh`,
+  `.github/workflows/ai.yml`.
+- **Tests**: `tests/aiOrchestrator.test.ts` (18 Tests); Verify grün
+  (tsc + 338 Tests + Boundary-Scan 0). Python-Runtime-Smoke verifiziert
+  (simulated-Modus).
+
+Details: `AITodo.md`, `docs/AI_DEPLOYMENT_GUIDE.md`, `docs/MODEL_REGISTRY_GUIDE.md`,
+`docs/MCP_TOOL_GUIDE.md`, `docs/AI_OPERATIONS.md`, `docs/AI_COST_GUIDE.md`,
+`docs/AI_SECURITY_GUIDE.md`.
