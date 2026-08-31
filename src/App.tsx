@@ -205,9 +205,9 @@ function AppComponent() {
   }, []);
 
   // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
+  // P0-1: mixer ist kein Sonderfall mehr – jedes Plugin (auch mixerMONK) ist
+  // OFF-fähig und wird erst bei Aktivierung in die Signalkette eingespeist.
   const togglePlugin = useCallback((id: string) => {
-    if (id === 'mixer') return;
-
     const currentState = moduleStates[id] || 'OFF';
     const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
     releaseLock(id, webRTCManager.userId);
@@ -215,7 +215,6 @@ function AppComponent() {
   }, [moduleStates, releaseLock, setModuleState]);
 
   const promotePlugin = useCallback((id: string) => {
-    if (id === 'mixer') return;
     const currentState = moduleStates[id] || 'OFF';
     if (currentState === 'OFF') return;
     const lockGranted = requestLock(id, webRTCManager.userId);
@@ -494,9 +493,17 @@ function AppComponent() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {getPluginRegistry()
           .filter(p => p.id !== 'masterplayer')
-          .filter(p => (p.id === 'mixer' ? true : (moduleStates[p.id] && moduleStates[p.id] !== 'OFF')))
+          .filter(p => moduleStates[p.id] && moduleStates[p.id] !== 'OFF')
           .map(plugin => (
-            <ModuleContainer key={plugin.id} id={plugin.id} name={plugin.name} state={moduleStates[plugin.id]}>
+            <ModuleContainer
+              key={plugin.id}
+              id={plugin.id}
+              name={plugin.name}
+              state={moduleStates[plugin.id]}
+              onClose={() => {
+                releaseLock(plugin.id, webRTCManager.userId);
+                setModuleState(plugin.id, 'OFF');
+              }}>
 
                               <SafeModuleBoundary>
                                 {plugin.id === 'sequencer' ? (

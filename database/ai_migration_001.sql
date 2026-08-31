@@ -112,6 +112,49 @@ create table if not exists public.mcp_audit_events (
 );
 
 -- ============================================================================
+-- Row Level Security (FA-P1-1): public-Tabellen sind ohne RLS mit dem anon-Key
+-- les-/schreibbar. Daher werden RLS + Policies analog schema.sql aktiviert:
+--   anon = lesen, service_role = schreiben.
+-- ============================================================================
+alter table public.ai_migrations enable row level security;
+alter table public.ai_sessions enable row level security;
+alter table public.ai_jobs enable row level security;
+alter table public.ai_model_usage enable row level security;
+alter table public.ai_errors enable row level security;
+alter table public.ai_cost_estimates enable row level security;
+alter table public.mcp_audit_events enable row level security;
+
+drop policy if exists "anon_read_ai_migrations" on public.ai_migrations;
+create policy "anon_read_ai_migrations" on public.ai_migrations for select to anon using (true);
+drop policy if exists "anon_read_ai_sessions" on public.ai_sessions;
+create policy "anon_read_ai_sessions" on public.ai_sessions for select to anon using (true);
+drop policy if exists "anon_read_ai_jobs" on public.ai_jobs;
+create policy "anon_read_ai_jobs" on public.ai_jobs for select to anon using (true);
+drop policy if exists "anon_read_ai_model_usage" on public.ai_model_usage;
+create policy "anon_read_ai_model_usage" on public.ai_model_usage for select to anon using (true);
+drop policy if exists "anon_read_ai_errors" on public.ai_errors;
+create policy "anon_read_ai_errors" on public.ai_errors for select to anon using (true);
+drop policy if exists "anon_read_ai_cost" on public.ai_cost_estimates;
+create policy "anon_read_ai_cost" on public.ai_cost_estimates for select to anon using (true);
+drop policy if exists "anon_read_mcp_audit" on public.mcp_audit_events;
+create policy "anon_read_mcp_audit" on public.mcp_audit_events for select to anon using (true);
+
+drop policy if exists "service_write_ai_migrations" on public.ai_migrations;
+create policy "service_write_ai_migrations" on public.ai_migrations for all to service_role using (true) with check (true);
+drop policy if exists "service_write_ai_sessions" on public.ai_sessions;
+create policy "service_write_ai_sessions" on public.ai_sessions for all to service_role using (true) with check (true);
+drop policy if exists "service_write_ai_jobs" on public.ai_jobs;
+create policy "service_write_ai_jobs" on public.ai_jobs for all to service_role using (true) with check (true);
+drop policy if exists "service_write_ai_model_usage" on public.ai_model_usage;
+create policy "service_write_ai_model_usage" on public.ai_model_usage for all to service_role using (true) with check (true);
+drop policy if exists "service_write_ai_errors" on public.ai_errors;
+create policy "service_write_ai_errors" on public.ai_errors for all to service_role using (true) with check (true);
+drop policy if exists "service_write_ai_cost" on public.ai_cost_estimates;
+create policy "service_write_ai_cost" on public.ai_cost_estimates for all to service_role using (true) with check (true);
+drop policy if exists "service_write_mcp_audit" on public.mcp_audit_events;
+create policy "service_write_mcp_audit" on public.mcp_audit_events for all to service_role using (true) with check (true);
+
+-- ============================================================================
 -- ROLLBACK (nur manuell und bewusst ausführen – niemals automatisch):
 --   drop table if exists public.mcp_audit_events;
 --   drop table if exists public.ai_cost_estimates;

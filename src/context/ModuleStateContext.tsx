@@ -15,10 +15,9 @@ interface ModuleContextType {
 const ModuleStateContext = createContext<ModuleContextType | undefined>(undefined);
 
 const loadPersistedStates = (): Record<string, ModuleState> => {
-  try {
-    const raw = storageGet(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore corrupt data */ }
+  // P0-1 (Start-Silence): Beim Start sind ALLE Module OFF – persistierte
+  // Zustände werden bewusst ignoriert (Session-Scratchpad ersetzt das,
+  // siehe P1-4/NEW-D-Maßnahmen).
   return {};
 };
 

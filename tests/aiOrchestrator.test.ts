@@ -249,10 +249,21 @@ describe('Circuit Breaker', () => {
     const cb = new CircuitBreaker('test2', { failureThreshold: 1, resetTimeoutMs: 60_000 });
     await expect(cb.call(() => Promise.reject(new Error('x')))).rejects.toThrow();
     expect(cb.getState()).toBe('OPEN');
-    // Reset-Timeout überspringen, ohne echte Zeit zu verbrauchen.
+    // Reset-Timeout überspringen – getState ist jetzt REIN (keine Mutation, FA-P1-8).
     (cb as unknown as { openedAt: number }).openedAt = Date.now() - 61_000;
-    expect(cb.getState()).toBe('HALF_OPEN');
+    expect(cb.getState()).toBe('OPEN');
     await expect(cb.call(() => Promise.resolve('ok'))).resolves.toBe('ok');
+    expect(cb.getState()).toBe('CLOSED');
+  });
+
+  it('HALF_OPEN erlaubt nur einen Probe-Call (kein Thundering Herd)', async () => {
+    const { CircuitBreaker } = await import('../src/core/ai/orchestrator/circuitBreaker');
+    const cb = new CircuitBreaker('test3', { failureThreshold: 1, resetTimeoutMs: 0 });
+    await expect(cb.call(() => Promise.reject(new Error('x')))).rejects.toThrow();
+    (cb as unknown as { openedAt: number }).openedAt = 0;
+    const slow = cb.call(() => new Promise((r) => setTimeout(() => r('ok'), 20)));
+    await expect(cb.call(() => Promise.resolve('ok2'))).rejects.toThrow(/probe busy/);
+    await expect(slow).resolves.toBe('ok');
     expect(cb.getState()).toBe('CLOSED');
   });
 });

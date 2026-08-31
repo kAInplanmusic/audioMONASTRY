@@ -106,7 +106,8 @@ export function parseHidReportDescriptor(descriptor: ArrayLike<number>): HidRepo
     const isRelative = (flags & 0x04) !== 0;
     const isVariable = (flags & 0x02) !== 0;
     const count = Math.max(1, reportCount);
-    const size = Math.max(1, reportSize);
+    // FA-P1-4: 32-Bit-Grenze – Bit-Operationen arbeiten mit Number (safe bis 2^53).
+    const size = Math.max(1, Math.min(32, reportSize));
 
     if (!isVariable) {
       // Array-Feld: Usage-Bereich (z. B. Button 1..8), ein Feld pro Bit.
@@ -220,11 +221,12 @@ export function extractHidReportValues(report: ArrayLike<number>, descriptor: Hi
       const absBit = field.bitOffset + bit;
       const byteIndex = dataOffset + Math.floor(absBit / 8);
       const b = data[byteIndex] ?? 0;
-      if ((b >> (absBit % 8)) & 0x01) raw |= 1 << bit;
+      if ((b >> (absBit % 8)) & 0x01) raw += 2 ** bit; // 2**n ist für n<=31 vorzeichenfrei
     }
     // Vorzeichenbehaftete Werte (z. B. relative Encoder: -1/0/+1).
-    if (field.logicalMin < 0 && (raw & (1 << (field.bitSize - 1)))) {
-      raw -= 1 << field.bitSize;
+    const signMask = 2 ** (field.bitSize - 1);
+    if (field.logicalMin < 0 && (raw & (signMask - 1) + signMask) === raw && raw >= signMask) {
+      raw -= 2 ** field.bitSize;
     }
 
     const span = field.logicalMax - field.logicalMin;

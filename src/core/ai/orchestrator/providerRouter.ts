@@ -106,14 +106,19 @@ export class HfEndpointProvider implements IAiProvider {
     const body = JSON.stringify({ task, model, input });
     const started = Date.now();
     let lastError: Error | null = null;
+    // FA-P1-7: Gesamt-Deadline über alle Versuche (kein 10,5-Minuten-Hänger).
+    const totalTimeoutMs = Number(process.env.AI_TIMEOUT_MS ?? 120_000);
+    const deadline = Date.now() + totalTimeoutMs;
     // Endpoint-Wake: Scale-to-Zero liefert 502, bis die Replica bereit ist.
     for (let attempt = 0; attempt < 5; attempt++) {
+      if (Date.now() >= deadline) throw new AiProviderError(this.id, 'TIMEOUT', `HF-Endpoint-Gesamt-Timeout (${totalTimeoutMs} ms) überschritten`, true);
+      const remaining = deadline - Date.now();
       try {
         const resp = await fetch(`${this.endpointUrl.replace(/\/$/, '')}/infer`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env('HF_TOKEN')}` },
           body,
-          signal: signal ?? AbortSignal.timeout(120_000),
+          signal: signal ?? AbortSignal.timeout(Math.min(120_000, remaining)),
         });
         if (resp.status === 503) {
           lastError = new AiProviderError(this.id, 'ENDPOINT_WAKING', 'HF-Endpoint wacht auf (Scale-to-Zero)', true);

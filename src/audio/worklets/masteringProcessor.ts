@@ -63,17 +63,25 @@ class MasteringProcessor extends AudioWorkletProcessor {
   private rampSteps: Record<string, number> = {};
 
   private stepRamps(): void {
-    const step = (p: string, cur: number, write: (v: number) => void) => {
-      if (this.rampSteps[p] === undefined || this.rampSteps[p] <= 0) return;
-      this.rampSteps[p] -= 1;
-      const target = this.rampTargets[p];
-      const delta = this.rampDeltas[p] ?? 0;
-      if (this.rampSteps[p] <= 0) write(target);
-      else write(cur + delta);
-    };
-    step('threshold', this.threshold, (v) => { this.threshold = v; });
-    step('makeup', this.makeup, (v) => { this.makeup = Math.max(0, Math.min(4, v)); });
-    step('ceiling', this.limiterCeiling, (v) => { this.limiterCeiling = Math.max(0.1, Math.min(1, v)); });
+    // AM-E1-2: Inline-Schritte statt Closure-Allokation pro Sample.
+    if (this.rampSteps['threshold'] !== undefined && this.rampSteps['threshold'] > 0) {
+      this.rampSteps['threshold'] -= 1;
+      const t = this.rampTargets['threshold'];
+      const d = this.rampDeltas['threshold'] ?? 0;
+      this.threshold = this.rampSteps['threshold'] <= 0 ? t : this.threshold + d;
+    }
+    if (this.rampSteps['makeup'] !== undefined && this.rampSteps['makeup'] > 0) {
+      this.rampSteps['makeup'] -= 1;
+      const t = this.rampTargets['makeup'];
+      const d = this.rampDeltas['makeup'] ?? 0;
+      this.makeup = Math.max(0, Math.min(4, this.rampSteps['makeup'] <= 0 ? t : this.makeup + d));
+    }
+    if (this.rampSteps['ceiling'] !== undefined && this.rampSteps['ceiling'] > 0) {
+      this.rampSteps['ceiling'] -= 1;
+      const t = this.rampTargets['ceiling'];
+      const d = this.rampDeltas['ceiling'] ?? 0;
+      this.limiterCeiling = Math.max(0.1, Math.min(1, this.rampSteps['ceiling'] <= 0 ? t : this.limiterCeiling + d));
+    }
   }
 
   /** Soft-Knee-Kompression: liefert Gain-Reduction in dB für einen dBFS-Peak. */

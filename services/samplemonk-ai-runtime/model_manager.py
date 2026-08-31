@@ -200,19 +200,19 @@ class ModelManager:
 
     def get_status(self) -> Dict[str, Any]:
         with self._lock:
-            by_class: Dict[str, str] = {}
+            # FA-P1-2: Alle Klassen IMMER liefern (kein KeyError, kein toter on_demand-Key).
+            by_class: Dict[str, str] = {"core": "available", "frequent": "available", "onDemand": "available", "rare": "available"}
             for definition in self._models.values():
                 state = "loaded" if definition.id in self._loaded else (
                     "error" if definition.id in self._errors else "available")
-                by_class.setdefault(definition.loadClass.lower(), "available")
                 if definition.loadClass == "CORE":
-                    by_class["core"] = self._worst(by_class.get("core", "available"), state)
+                    by_class["core"] = self._worst(by_class["core"], state)
                 elif definition.loadClass == "FREQUENT":
-                    by_class["frequent"] = self._worst(by_class.get("frequent", "available"), state)
+                    by_class["frequent"] = self._worst(by_class["frequent"], state)
                 elif definition.loadClass == "RARE":
-                    by_class["rare"] = self._worst(by_class.get("rare", "available"), state)
+                    by_class["rare"] = self._worst(by_class["rare"], state)
                 else:
-                    by_class["onDemand"] = self._worst(by_class.get("onDemand", "available"), state)
+                    by_class["onDemand"] = self._worst(by_class["onDemand"], state)
             return by_class
 
     @staticmethod
