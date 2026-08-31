@@ -1,12 +1,8 @@
 # SampleMONK AI Runtime – HF Custom Container
 # ==========================================
-# Multi-Stage: deterministischer Build, keine Secrets im Image.
-# Gewichte werden NIE ins Image gebacken (HF-Hub + persistenter Cache).
-
-# ---------------------------------------------------------------------------
-# Stage 1: CUDA-Basis + System-Abhängigkeiten (Audio/FFmpeg)
-# ---------------------------------------------------------------------------
-FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS runtime-base
+# Basis: pytorch/pytorch (torch+cu124 vorinstalliert) → spart ~4 GB Build-Disk
+# und Buildzeit. Keine Secrets im Image, Gewichte kommen aus dem HF-Hub-Cache.
+FROM pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
@@ -15,28 +11,14 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PORT=8000
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-venv python3-pip \
     ffmpeg libsndfile1 sox curl passwd \
     && rm -rf /var/lib/apt/lists/*
 
-# ---------------------------------------------------------------------------
-# Stage 2: Python-Dependencies (deterministisch via requirements.lock)
-# ---------------------------------------------------------------------------
-FROM runtime-base AS deps
-
 WORKDIR /opt/samplemonk-ai
-COPY requirements.lock ./requirements.lock
-RUN python3 -m venv /opt/venv \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.lock
 
-# ---------------------------------------------------------------------------
-# Stage 3: App (Code + Konfiguration, keine Gewichte, keine Secrets)
-# ---------------------------------------------------------------------------
-FROM runtime-base AS app
-
-WORKDIR /opt/samplemonk-ai
-COPY --from=deps /opt/venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+# Deterministische Dependencies (torch kommt aus dem Basisimage, wird NICHT neu geladen)
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py ./
 COPY model_manifest.json runtime_config.yaml startup.sh ./
