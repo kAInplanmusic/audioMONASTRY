@@ -771,7 +771,18 @@ class AudioEngine {
     if (!this.masterVolume) return;
     const v = Number.isFinite(gain01) ? Math.max(0, Math.min(1.5, gain01)) : 0;
     const db = v <= 0.001 ? -Infinity : 20 * Math.log10(v);
+    this.lastMasterVolumeDb = db;
     this.masterVolume.volume.rampTo(db, 0.03);
+  }
+
+  private lastMasterVolumeDb = -6;
+
+  /** P0-4: Silence-Gate – bei 0 aktiven Plugins wird der Master weich stummgeschaltet. */
+  public setIdleSilence(silent: boolean): void {
+    this.ensureInitialized();
+    if (!this.masterVolume) return;
+    const db = silent ? -Infinity : this.lastMasterVolumeDb;
+    this.masterVolume.volume.setTargetAtTime(db, Tone.now(), 0.05);
   }
 
   /** Echtes Kanal-Gain (Fader): volume 0..1 → dB. */

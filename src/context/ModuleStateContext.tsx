@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { storageGet, storageSet } from '../utils/storage';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { audioEngine } from '../utils/audioEngine';
 import { can, roleForUser, readSessionConfig } from '../utils/rbac';
 
 export type ModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
@@ -42,7 +43,13 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const now = Date.now();
     const sender = webRTCManager.userId;
     lastSeen.current[id] = { t: now, sender };
-    setModuleStates(prev => ({ ...prev, [id]: state }));
+    setModuleStates(prev => {
+      const next = { ...prev, [id]: state };
+      // P0-4: Silence-Gate – Master stumm, wenn kein Plugin aktiv ist.
+      const activeCount = Object.values(next).filter((s) => s !== 'OFF').length;
+      try { audioEngine.setIdleSilence(activeCount === 0); } catch { /* Audio nicht initialisiert */ }
+      return next;
+    });
     // Replikation an alle Peers (bestehender Kollaborations-Kanal).
     webRTCManager.sendToAllPeers({
       type: 'PLUGIN_STATE_UPDATE',
