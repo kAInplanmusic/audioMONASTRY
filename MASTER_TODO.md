@@ -7,11 +7,530 @@ Legende:
 
 ---
 
+# 🔴 TESTRUN 1 – KATASTROPHEN-ANALYSE & OPTIMIERUNGSPLAN (2026-08-31)
+
+> **WICHTIG:** Die älteren Abschnitte dieser Datei waren auf „alles erledigt"
+> markiert. Der erste echte Testrun hat gezeigt, dass die App im
+> Zusammenspiel **nicht produktionsreif** ist. Dieser neue Abschnitt hat
+> **Vorrang** vor allen älteren Haken und ist der verbindliche Arbeitsplan.
+> Alle Änderungen werden erst nach bestandener Prüfung abgehakt.
+
+---
+
+## 1. BEFUNDLAGE – aus Code, Logs & Session-Daten verifiziert
+
+Quellen, die ausgewertet wurden:
+
+- `src/App.tsx` – Start-Ablauf, Modul-Grid, Mixer-Sonderfall, Master-Player
+- `src/context/ModuleStateContext.tsx` – persistierte Modul-States, LWW-Sync
+- `src/context/PluginManagerContext.tsx` – Locking ohne Server-Durchsetzung
+- `src/components/ModuleContainer.tsx` – **kein Close-Button**, kein OFF
+- `src/components/MischpultTerminal.tsx` – „PRO-MIX 9000" ohne Engine-Routing
+- `src/components/DJ4ChMixer.tsx` – festes DJM-A9-Mischpult, immer sichtbar
+- `src/components/SynthesizerTerminal.tsx` – WASM-Host ohne AudioEngine-Anbindung
+- `src/components/AiMonkTerminal.tsx` – AI-Terminal als normales Plugin
+- `src/components/MasterPlayerTerminal.tsx` – Master-Engine (Analyse/Master/Mix)
+- `src/components/SettingsDialog.tsx` – Defaults ohne USB-Soundkarten-Autodetect
+- `src/utils/audioEngine.ts` – alle Synths/Worklets werden bei `init()` sofort
+  erzeugt und auf `GLOBAL_MASTER` verbunden (auch wenn Plugin OFF)
+- `src/utils/audioEngine.ts` `setMonitorSource()` – trennt bei `MON`/`PLUGIN`
+  den `analyzerNode` vom Ausgang → andere User hören nicht mehr MAIN
+- `src/config/rolePresets.ts` – Rollen-Presets aktivieren viele Module sofort
+- `database/schema.sql` / `database/ai_migration_001.sql` – **keine Tabellen**
+  für Systemprompts & Evaluierung
+- `docs/UIUX_AUDIT_2026.md`, `docs/HARDWARE_AUDIT_2026.md`,
+  `docs/ARCHITECTURE_AUDIT_2026.md`, `docs/PERFORMANCE_AUDIT.md`,
+  `docs/AI_TROUBLESHOOTING.md` – bekannte Lücken (Identität, Mapping, Hotplug,
+  Latenz-Messung, UI-Persistenz)
+- `~/.continue/sessions/*.json`, `~/.deepcode/audit.log`,
+  `~/.deepcode/agent-sessions.json`, `~/.deepcode/logs/error.log`,
+  `~/.xsession-errors*`, `~/.npm/_logs/*` – Vorgänger-Sessions &
+  Fehlerbilder (DNS/Connection-Fehler, UI-Debug-Logs, Hetzner-Testlauf)
+
+---
+
+## 2. SYMPTOM → URSACHE → TASK-MATRIX
+
+| # | Symptom aus Testrun 1 | Verifizierte Ursache (Code/Log) | Task |
+|---|---|---|---|
+| S1 | mixerMONK spielt nur ab und an | Sequencer/Synths sind unabhängig vom Plugin-State immer in der Kette; Lookahead-Scheduler auf Main-Thread (25 ms); Plugin-State beeinflusst Audio nicht | P0-2, P0-4, P2-1, P2-2 |
+| S2 | Übertriebenes Rauschen auf Main | Alle Synth-/Noise-Knoten (`clapSynth`, Worklets) werden bei `init()` verbunden; kein Silence-Gate bei inaktiven Plugins | P0-4, P0-2 |
+| S3 | Plugins schließen nicht richtig / bleiben konsistent | `ModuleContainer` hat keinen Close-Button; `usePluginState` (lokal) und `ModuleStateContext` (global) sind getrennt; `togglePlugin` blockiert `mixer` | P0-1, P0-3 |
+| S4 | Beim Ausschalten läuft Plugin manchmal weiter | OFF ändert nur UI-State, nicht den Audio-Graph; Nodes bleiben verbunden | P0-2, P0-3 |
+| S5 | AI funktioniert nicht | aiMONK ist zu, Provider/Endpoint-Fehler nicht sichtbar; keine per-Plugin-MCP-Verdrahtung; Fehler nur in Konsole | P0-8, P3-2, P3-3 |
+| S6 | Synthesizer geht nichts | `SynthesizerTerminal` steuert nur optionalen WASM-Host, **keine** Verbindung zu `audioEngine`/`itSynthProcessor` | P0-5 |
+| S7 | Lieder für Mixer völlig unsortiert | `data/musicLibrary.ts` + Supabase `music_tracks` ohne Sortierung/Filter; Dropdown unsortiert | P1-5 |
+| S8 | Keine sinnvolle Maske / Skin | Mischpult-Terminal „PRO-MIX 9000" wirkt generisch; Design nicht an High-End-Klassiker angelehnt | P1-2 |
+| S9 | Latenz furchtbar | `lookahead=25ms` + Browser-BaseLatency + keine echte Puffer-Konfiguration; `bufferHint` wird nur gespeichert, nicht angewendet | P2-1 |
+| S10 | iPhone schwer nutzbar, UI persistent & nicht aus | Feste Breiten (`w-[128px]`, `max-w-5xl`), keine Touch-Optimierung, Panels bleiben offen | P1-1, P0-1 |
+| S11 | Master-Player nicht fest oben, nur Info | Master-Player-Sektion liegt unter Mixer; Transport-Buttons vorhanden, aber nicht als fester Top-Header | P0-7 |
+| S12 | Nur DJ/mixerMONK-User bringt Töne auf Main | Andere Plugins sind UI-only oder nur an Monitor/Cue gebunden; `setMonitorSource()` trennt MAIN bei MON/PLUGIN | P0-6 |
+| S13 | aiMONK immer fest offen, letztes Modul unten | Persistierte `audiomonastry_module_states` + kein Start-Reset; aiMONK wird wie jedes aktive Modul gerendert | P0-1, P0-8 |
+| S14 | Start: kein Plugin offen / erster User startet mit offenem Mixer | `App.tsx` rendert Mixer immer (`p.id === 'mixer' ? true`), `togglePlugin/promotePlugin` ignorieren `mixer` | P0-1 |
+| S15 | Kein USB-Soundkarten-Default, kein 2.1 | `DEFAULT_SETTINGS.outputDeviceId=''`; `stereoMode` kennt nur STEREO/DAW/SPATIAL, kein 2.1 | P1-3, P2-3 |
+| S16 | Kein Ablageort für Systemprompts/Evaluierung | DB-Schema hat keine Prompt-/Eval-Tabellen | P3-1 |
+| S17 | Session-Zwischenspeicher fehlt / kein DnD / kein Clipboard | Kein Scratchpad, kein Plugin-„In Zwischenablage senden"-Button | P1-4 |
+| S18 | Routing/Falschverkabelung, Bottlenecks | `routing.json` vs. echter Graph nicht validiert; `setMonitorSource`-Solo manipuliert Kanal-Gains global | P0-6, P2-4 |
+| S19 | Clock/Timing unzuverlässig | Lookahead-Scheduler + `clockProcessor` nicht als einzige Timing-Quelle; kein Multi-User-Clock-Sync-Test | P2-2 |
+| S20 | MOA/MCP nicht tief genug verdrahtet | `MoaAgent`/`pluginCommandRegistry` decken nur Teile ab; keine per-Plugin-Prompts, kein Eval-Loop | P3-2, P3-3 |
+
+---
+
+## 3. LEITLINIEN FÜR ALLE UMSETZUNGEN
+
+1. **Start-Silence:** Beim Start ist kein Plugin offen, kein Modul in der
+   Signalkette, Main ist stumm.
+2. **Aktivierung = Einspeisung:** Erst wenn ein Plugin aktiviert wird
+   (OFF → AUTO_AI/PRO), wird seine Quelle an der richtigen Stelle in die
+   Signalkette eingespeist; Deaktivierung trennt und disposet.
+3. **Main ist heilig:** Der Main-Bus (2.1, USB-Soundkarte default) gehört dem
+   Host/DJ; Monitor-/PLUGIN-Modi sind **nur** Cue-Wege für einzelne User und
+   dürfen Main nie abtrennen.
+4. **Latenz zuerst:** Jede Änderung misst Latenz (lokal < 15 ms, Netz < 50 ms).
+5. **Jedes Plugin hat ein Gesicht:** High-End-Klassiker-Skin + Close-Button +
+   „In Zwischenablage senden" + Routing-Ziel.
+6. **KI wird pro Plugin trainiert:** Systemprompts, Few-Shots, Eval-Datensätze
+   in der DB; nichts wird „blind" als funktionierend abgehakt.
+7. **Alles hat einen Prüfpunkt:** Jede Aufgabe endet mit messbarem Checkpoint;
+   kein „done" ohne Test.
+
+---
+
+## 4. 🔴 P0 – KRITISCH: Stabilität, Signalfluss, Start-Zustand
+*(Blockiert jeden weiteren Testrun – zuerst abarbeiten)*
+
+### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
+- [ ] `src/App.tsx`: `togglePlugin`/`promotePlugin` dürfen `mixer` **nicht**
+      mehr ignorieren; `filter(p => p.id === 'mixer' ? true : …)` entfernen.
+- [ ] `ModuleStateContext`: Beim ersten Start (kein gespeicherter State) sind
+      **alle** Module `OFF`; persistierte States nur als optionales
+      „Session merken"-Feature hinter einem expliziten Button (siehe P1-4).
+- [ ] `rolePresets`: Rollen-Presets werden **nur** bei expliziter Auswahl im
+      Header angewendet, nie automatisch.
+- [ ] aiMONK ist beim Start zu; kein Modul wird unten „fest offen" gerendert.
+- [ ] **Alternative:** Wenn ein festes Hardware-Mischpult (DJMixer) gewünscht
+      ist, dann als reine Hardware-Sektion (kein Plugin-Terminal) behandeln;
+      das Plugin `mixer` (MischpultTerminal) bleibt trotzdem OFF-fähig.
+- [ ] **Prüfpunkt:** E2E „Studio betreten" → 0 ModuleContainer sichtbar, alle
+      Grid-Icons gedimmt, Main-RMS < -60 dBFS, kein aiMONK/Mixer-Terminal.
+
+### P0-2 Plugin-Lifecycle: OFF = raus aus der Signalkette
+- [ ] Neue zentrale Schicht `src/core/pluginAudioRouter.ts`:
+      `pluginId → { source, mixerChannel, insertBus, activate(), deactivate() }`.
+- [ ] `audioEngine.init()` erzeugt **keine** Plugin-Synth-/Noise-/Worklet-Nodes
+      mehr global; nur Master-Kette, Mixer-Kanäle, Monitor-Busse.
+- [ ] `audioEngine.activatePlugin(id)` verbindet die Quelle auf den
+      konfigurierten Mixer-Kanal; `deactivatePlugin(id)` trennt, ramp-down auf
+      -∞ und disposet (kein Leak).
+- [ ] `ModuleStateContext.setModuleState()` ruft bei jedem Zustandswechsel den
+      Router auf (OFF → deactivate, AUTO_AI/PRO → activate je nach Quelle).
+- [ ] Alle 21 Plugin-IDs (inkl. masterplayer, ai, synthesizer, mixer) im Router
+      registrieren; unbekannte IDs loggen und ignorieren.
+- [ ] **Alternative A (sanft):** statt harter Disconnects nur Gain-Rampe auf
+      -∞ + Stop aller Player – schneller, aber nicht „aus der Kette getrennt".
+      **Alternative B (hart):** echte Disconnects/Dispose – erfüllt die
+      Anforderung, aber höhere Aktivierungs-Latenz; Lazy-Init nutzen.
+- [ ] **Prüfpunkt:** Graph-Snapshot-Test: bei OFF existiert keine Verbindung
+      Plugin→GLOBAL_MASTER; bei PRO existiert genau eine; OFF während Play
+      stoppt den Klang sofort (< 50 ms).
+
+### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
+- [ ] `ModuleContainer` bekommt Header-Button „✕ / OFF" →
+      `setModuleState(id,'OFF')` + `releaseLock` + `deactivatePlugin`.
+- [ ] `usePluginState` und `ModuleStateContext` zusammenführen: lokale
+      Terminal-Selects schreiben in den globalen State; keine zwei Wahrheiten.
+- [ ] Jedes Terminal bekommt sichtbaren Status (OFF/AUTO_AI/PRO) und der
+      Zustand wird über WebRTC repliziert (bestehende LWW-Nachricht reicht).
+- [ ] **Alternative:** `usePluginState` komplett entfernen und nur
+      `ModuleStateContext` + `usePluginManager` nutzen (weniger Duplikat).
+- [ ] **Prüfpunkt:** Plugin im Terminal auf OFF stellen → Grid-Icon dunkel,
+      Audio weg, Lock frei; Reload → Zustand bleibt wie gespeichert (bzw.
+      Start-OFF-Regel P0-1).
+
+### P0-4 Rauschen auf Main beseitigen
+- [ ] Rausch-Quellen identifizieren: `clapSynth` (Noise), `synthWorklet`,
+      `itSynthNode`, Effekt-Worklet-Defaults; mit `AudioGraphSnapshot`-Test
+      alle aktiven Quellen auf MAIN auflisten.
+- [ ] Silence-Gate am Master: Wenn kein Plugin aktiv ist, ist der Master
+      garantiert stumm (Master-Gain -∞ oder keine Verbindungen).
+- [ ] NaN/Inf-Guards an Master-Kette prüfen (bereits vorhanden, aber erneut
+      durch `goldenAudio`-Test mit allen Worklets).
+- [ ] **Prüfpunkt:** 60 s Dauerlauf ohne aktives Plugin → RMS ≤ -60 dBFS;
+      mit aktivem Sequencer → nur erwartete Steps hörbar.
+
+### P0-5 Synthesizer richtig verdrahten
+- [ ] `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend` anbinden:
+      Parameter (Cutoff/Decay/Engine) → `automateItSynthParam` /
+      `playSynthesisInstrument`; WASM-Host nur als optionaler Zusatz.
+- [ ] Routing-Ziel-Button/Select im Synth-Terminal: „An Kanal/Plugin senden"
+      (CH1–CH8 oder Ziel-Plugin drum/sequencer/instrument/…).
+- [ ] Preview-Keyboard (Noten) direkt hörbar auf gewähltem Ziel.
+- [ ] **Alternative:** Synth über V2-AudioGraph (`GraphPlaybackEngine`) statt
+      Worklet – erst wenn V1-Pfad stabil läuft.
+- [ ] **Prüfpunkt:** E2E: Synth aktivieren → Note spielen → Signal auf
+      gewähltem Mixer-Kanal/Main messbar.
+
+### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
+- [ ] `setMonitorSource` überarbeiten: `MAIN` ist der einzige Pfad, der den
+      `analyzerNode` mit dem Ausgang verbindet; `MON`/`PLUGIN` werden als
+      **parallele Cue-Busse** geführt und trennen MAIN **nie**.
+- [ ] Pro User Monitor-/Cue-Mix (`MON1..MON4`) beibehalten, aber unabhängig
+      vom Main.
+- [ ] Jedes Plugin bekommt einen echten Ziel-Kanal (PluginAudioRouter) und
+      dessen Ausgang geht standardmäßig auf MAIN; nur expliziter Cue geht auf
+      MON/PLUGIN.
+- [ ] `PLUGIN_SOLO_CHANNEL`-Map in `App.tsx` durch Router-Auskunft ersetzen.
+- [ ] **Alternative:** Host-Main-Streaming über WebRTC an Gäste (P4-1); lokal
+      bleibt jeder User sein eigener AudioContext – Gäste hören Main via
+      Stream, nicht via gemeinsamem Context.
+- [ ] **Prüfpunkt:** 4-User-E2E: User2 aktiviert Drum → auf MAIN hörbar;
+      User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN bleibt unverändert;
+      zurück auf MAIN → sofort Gesamtmix.
+
+### P0-7 Master-Player fest oben mit Transport
+- [ ] Sticky-Top-Bar: Play/Stop, BPM, BeatVisualizer, Session-Status und
+      Master-Pegel immer sichtbar (auch auf iPhone).
+- [ ] `MasterPlayerTerminal` (Analyse/Master/Mixdown) bleibt als Werkzeug
+      darunter, ist aber nicht der einzige Transport.
+- [ ] **Alternative:** Transport in Header integrieren vs. eigene
+      Master-Player-Leiste unter dem Header – Entscheidung nach UI-Test.
+- [ ] **Prüfpunkt:** Scroll-Position egal → Play/Stop erreichbar; E2E
+      Keyboard-Space + Button funktionieren.
+
+### P0-8 AI-Pfad debuggen & aiMONK optional machen
+- [ ] `AiMonkTerminal`: sichtbares Fehler-/Log-Panel (Provider, Status, HTTP,
+      Dauer) statt nur Konsolen-Log.
+- [ ] `/api/ai/complete`-Fehler normalisieren und als nutzbare Meldung anzeigen
+      (Timeout/Wake/Quota/Provider-Down).
+- [ ] aiMONK nicht automatisch öffnen; optional per Grid; „letztes Modul unten"
+      entfernen.
+- [ ] `moaAgent.executePlan` mit PluginAudioRouter verbinden, damit KI-Aktionen
+      wirklich Plugins aktivieren/deaktivieren/routen.
+- [ ] **Alternative:** AI-Terminal als Bottom-Dock nur nach explizitem Klick
+      (Feature-Flag), nicht als normales Grid-Modul.
+- [ ] **Prüfpunkt:** Testbefehl „Tempo auf 128, Sequencer an, Pattern laden"
+      läuft durch und erzeugt hörbares Ergebnis; Fehlerfall zeigt verständliche
+      Meldung.
+
+---
+
+## 5. 🟠 P1 – HOCH: UX/UI/GUI, Cross-Platform, Bibliothek, Zwischenspeicher
+
+### P1-1 Responsive Shell für iOS/Android/Windows/Linux/macOS
+- [ ] Feste Breiten ersetzen: Mixer-Kanäle (`w-[128px]`), Grid
+      (`max-w-5xl`), Header etc. auf `min-w-0`/`w-full`/fluid umstellen;
+      Breite passt sich an OS/Viewport an.
+- [ ] Touch: Zielgrößen ≥ 44 px, `touch-action`, Safe-Area-Insets
+      (`env(safe-area-inset-*)`), kein Hover-only, verhindere Zoom bei
+      Doppeltipp, Pointer-Events für Knobs/Fader auf Touch testen.
+- [ ] Plattform-Matrix: Chromium (Win/Linux/macOS/Android), Safari (iOS),
+      Firefox (Desktop) – dokumentiert in `docs/HARDWARE_TEST_MATRIX_2026.md`.
+- [ ] **Prüfpunkt:** Playwright-Responsive-Tests (iPhone SE/14, Pixel 7,
+      Desktop 1920) grün; manueller iPhone-Test (UI nicht persistent, Panels
+      schließbar).
+
+### P1-2 High-End-Klassiker-Skins pro Plugin
+- [ ] `mixerMONK` (MischpultTerminal) im Stil Pioneer DJM-A9 / Allen & Heath
+      XONE; farbliche Kanal-Accents, Fader/Knobs wie Hardware.
+- [ ] `synthesizerMONK` im Stil klassischer Analog-Synths (MiniMoog/Prophet/
+      Juno), `drumMONK` TR-808/Dirtywave M8, `eqMONK` API/SSL,
+      `masteringMONK` TC/Massey, `spatialMONK` 3D-Panner wie High-End-Controller.
+- [ ] Design-Tokens zentral in `index.css` (`--monk-*`) erweitern; keine
+      plugin-lokalen Hex-Werte-Duplikate.
+- [ ] **Alternative:** Skins als CSS-Variablen-Themes je Plugin vs. komplette
+      Komponenten-Neubauten; erst Themes, dann bei Bedarf Komponenten.
+- [ ] **Prüfpunkt:** Screenshot-Tests (`visual.spec.ts`) für alle 21 Plugins;
+      Vergleich mit Referenz-Hardware-Look.
+
+### P1-3 Einstellungen & Geräte-Defaults
+- [ ] `SettingsDialog`: Default-Ausgabe = **erste USB-Audio-Soundkarte**
+      (Label enthält `USB`/`Xonar`/`Audio Interface`), sonst System-Default;
+      Nutzer-Override wird als `outputOverride` persistiert.
+- [ ] `stereoMode` um `2.1` erweitern (siehe P2-3).
+- [ ] Einstellungen gruppieren: Audio-Gerät, Latenz-Profil, Routing, Monitor,
+      MIDI/HID, Kollaboration; jede Gruppe mit Erklärtext.
+- [ ] `bufferHint`/`sampleRate` tatsächlich anwenden (AudioContext-Optionen,
+      siehe P2-1).
+- [ ] **Prüfpunkt:** USB-Gerät angeschlossen → wird automatisch ausgewählt;
+      Einstellungen nach Reload stabil; 2.1 sichtbar.
+
+### P1-4 Session-Zwischenspeicher (Scratchpad) + Drag & Drop + Clipboard
+- [ ] `SessionScratchpad` in IndexedDB: Button im Header „ZWISCHENSPEICHER"
+      mit eigener Farbe (z. B. amber/orange) zum Ein-/Ausschalten; speichert
+      Session-Snapshot (Patterns, BPM, Mixer, Plugin-States, Routing).
+- [ ] Drag & Drop: Einträge/Plugins/Tracks in den Scratchpad-Bereich ziehen;
+      aus dem Scratchpad per Drop auf ein Plugin/Modul laden.
+- [ ] Jedes Plugin (ModuleContainer) bekommt „⧉ In Zwischenablage senden":
+      kopiert Plugin-State/Preset/Config als JSON in die Zwischenablage.
+- [ ] **Alternative:** Scratchpad als Sidebar vs. Bottom-Dock; Farbe/Position
+      per Setting.
+- [ ] **Prüfpunkt:** Speichern/Laden überlebt Reload; DnD funktioniert;
+      Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON.
+
+### P1-5 Lieder-Datenbank automatisch sortieren
+- [ ] `MUSIC_LIBRARY` + Supabase `music_tracks`: Sortierung nach BPM, Key
+      (Camelot), Style, Artist, Duration; Filter im LibraryTerminal und im
+      DJ-Mixer-Track-Dropdown.
+- [ ] Duplikate/IDs bereinigen; fehlende BPM/Key nachziehen (Analyse).
+- [ ] **Prüfpunkt:** Dropdown zeigt sortierte, gruppierte Liste; Sortierung
+      überlebt Reload.
+
+### P1-6 Key-/MIDI-Handling optimieren
+- [ ] Globale Hotkeys: Space (Play/Stop), `Ctrl/Cmd+1..9` Plugin-Toggle,
+      `Ctrl/Cmd+Enter` Ausführen, Escape schließt Panels – mit Input-Guard.
+- [ ] MIDI: F8-Clock, Start/Stop/Continue, Song Position, SysEx-Empfang,
+      RPN-Parser, `send()` für LEDs/Motorfader (bereits teils vorhanden,
+      verdrahten).
+- [ ] **Prüfpunkt:** Keyboard-E2E + MIDI-Codec-Tests grün; kein Hotkey bricht
+      Eingabefelder.
+
+---
+
+## 6. 🟡 P2 – MITTEL: Latenz, Qualität, Clock, Signalfluss
+
+### P2-1 Latenz & Audio-Qualität
+- [ ] `AudioSettings`-Optionen wirklich anwenden: `latencyHint`, Sample-Rate,
+      Puffergröße beim Context-Aufbau (`audioContextFactory`).
+- [ ] Lookahead von 25 ms auf adaptiven Wert (8–15 ms) senken; Scheduling
+      zunehmend über `clockProcessor`/Worklet statt `setTimeout`.
+- [ ] End-to-End-Latenz persistieren und im `PerformanceMonitorTerminal`
+      anzeigen (bestehende Telemetrie nutzen); Ziel lokal < 15 ms, Netz < 50 ms.
+- [ ] Qualität: Resampling-Strategie prüfen, hochwertige Filter für EQ/Master,
+      keine hörbaren Zipper (generische Worklet-Rampen).
+- [ ] **Prüfpunkt:** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne
+      Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb.
+
+### P2-2 Clock prüfen & synchronisieren
+- [ ] `clockProcessor`, `ClockSync`, `PhaseLockedLoop` auditen; eine einzige
+      Timing-Quelle festlegen (Worklet-Clock).
+- [ ] BPM-Wechsel sample-genau; 16/32-Step-Wechsel ohne Timing-Sprung.
+- [ ] Multi-User-Clock-Sync: Host-Clock wird an Gäste verteilt, Drift-
+      Kompensation (PLL).
+- [ ] **Prüfpunkt:** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten
+      gleichzeitig und bleiben < 5 ms zueinander.
+
+### P2-3 2.1-Ausgabe für Main
+- [ ] `stereoMode='2.1'`: Master → Crossover (Sub < 80–120 Hz, L/R High-Pass);
+      Sub auf dritten Kanal, falls Gerät 2.1 unterstützt; sonst Sub phantom in
+      L/R mischen (Fallback).
+- [ ] Routing in `audioEngine`/`OutputConfig` erweitern; UI-Anzeige im Settings.
+- [ ] **Alternative:** OS-Aggregation/Subwoofer-Hardware-Setup dokumentieren;
+      WebAudio kann nur ein Ziel-Gerät ansteuern.
+- [ ] **Prüfpunkt:** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält
+      keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.
+
+### P2-4 Signalfluss-/Pipeline-Audit
+- [ ] `routing.json` gegen echten Audio-Graph validieren (Test:
+      `audioEngine.exportGraphState()` vs. `routing.json`).
+- [ ] Falschverkabelungen korrigieren (z. B. `bassFilter`/`channel7`-Pfad,
+      `effectNode`-Insert, Monitor-PDC).
+- [ ] Bottlenecks: Main-Thread-Scheduler, Tone.js-Node-Anzahl, Worklet-CPU;
+      wo sinnvoll V2-Graph/Worklet-Pfad verwenden.
+- [ ] **Prüfpunkt:** Graph-Validierung grün; kein ungenutzter/doppelter
+      Verbindungs-Pfad; Performance-Messung zeigt < 70 % CPU.
+
+### P2-5 Performance & Rendering
+- [ ] `React.memo`/stabile Handler für alle Terminals prüfen (UI-Audit
+      nachziehen); Bundle-Diät (lucide tree-shaken, Tone-Chunks).
+- [ ] Worklet-CPU-Budgets im PerformanceMonitor; unter 4-User-Last keine
+      Dropouts.
+- [ ] **Prüfpunkt:** Playwright-Stress-Test grün; Bundle < 1,5 MB JS.
+
+---
+
+## 7. 🔵 P3 – STRATEGISCH: KI/MOA/MCP, Prompt-DB, Evaluierung
+
+### P3-1 Datenbank-Migration 002: Systemprompts & Evaluierung
+- [ ] `database/ai_migration_002.sql`:
+      - `system_prompts` (id, plugin_id, role, version, content, enabled, meta)
+      - `plugin_prompt_versions` (plugin_id, version, prompt_id, changelog)
+      - `ai_evaluations` (id, plugin_id, task, prompt_version, model, provider,
+        input, output, score, metrics jsonb, created_at)
+      - `ai_eval_runs` (run_id, plugin_id, status, summary, created_at)
+      - RLS: anon read (Prompts), service_role write.
+- [ ] CRUD-Helfer in `src/core/ai/orchestrator/promptStore.ts` +
+      `evaluationStore.ts`; Tests.
+- [ ] **Prüfpunkt:** Migration idempotent; CRUD-Tests grün; Daten in Supabase
+      sichtbar.
+
+### P3-2 MOA/MCP pro Plugin anlernen, prompten, iterieren
+- [ ] Prompt-Bibliothek je Plugin (21 Plugins): Systemprompt (Rolle, Kontext,
+      Parameter, Routing-Ziel, erlaubte Aktionen), Few-Shot-Beispiele (deutsche
+      Kommandos), Fehlerbehandlung.
+- [ ] `pluginCommandRegistry` auf alle 21 IDs erweitern und mit
+      `PluginAudioRouter` verbinden (Aktivierung, Routing, Parameter).
+- [ ] MCP-Tools serverseitig je Plugin ergänzen (mixer.set_channel,
+      synth.play_note, sequencer.load_pattern, …) in `mcpRuntime.ts`; Permissions
+      READ/WRITE/EXECUTION/DESTRUCTIVE beibehalten.
+- [ ] Iterations-Loop: pro Plugin → Prompt-Version anlegen → Eval-Suite laufen
+      lassen → Score → Prompt optimieren → neue Version.
+- [ ] **Prüfpunkt:** `aiEvaluation.test.ts` je Plugin; 100 % der Kern-Kommandos
+      werden von MOA korrekt geplant und ausgeführt; Scores in DB.
+
+### P3-3 Evaluierungs-Framework & Regression
+- [ ] Bestehendes `evaluation.ts` an DB anbinden; `npm run eval:ai` schreibt
+      Ergebnisse nach `ai_evaluations`.
+- [ ] Nightly-CI: Eval-Run je Plugin, Report in `ai_eval_runs`, Gate bei
+      Score-Abfall.
+- [ ] **Prüfpunkt:** CI grün; Report enthält je Plugin Score, Dauer, Fehler.
+
+---
+
+## 8. 🔵 P4 – STRATEGISCH: 4-User-Workflow, Streaming, Zugriffsrechte
+
+### P4-1 Frontend-Streaming & Audio für 4 User
+- [ ] Host-Main-Stream: Host sendet Main (2.1→Stereo-Downmix für Stream) via
+      WebRTC/SFU an Gäste; Gäste hören Main + optional eigenen Cue.
+- [ ] Opus 48 kHz Stereo, Jitter-Buffer, Paketverlust-Masking; SFU-Modus
+      vollständig für Media + State (nicht nur Media).
+- [ ] UI-State-Streaming (LWW-CRDT) bleibt; bei SFU auch über Server routen,
+      damit Gäste ohne P2P funktionieren.
+- [ ] **Prüfpunkt:** 4 Browser: alle sehen identischen State; Gäste hören Main;
+      Latenz < 50 ms one-way.
+
+### P4-2 Zugriffsrechte & Rollen serverseitig
+- [ ] RBAC serverseitig durchsetzen: Host/Admin, DJ, Producer, Engineer, Guest;
+      Berechtigungen pro Plugin/Parameter (nicht nur client-seitig).
+- [ ] Locking an User-ID statt Socket-ID (teilweise vorhanden, vervollständigen);
+      Lease-Heartbeat über Server.
+- [ ] Audit-Log für Rollenwechsel, Lock-Erwerb, Plugin-Aktivierung.
+- [ ] **Prüfpunkt:** Security-Tests: Gast kann Host-Plugin nicht sperren;
+      Rollenwechsel ohne Audio-Unterbrechung.
+
+---
+
+## 9. 🔵 P5 – WORKFLOW-AUDIT & DRITTANBIETER-SETUP
+
+### P5-1 Workflowbasiertes Audit mit Nachkontrolle
+- [ ] Testplan `docs/TESTRUN_2_CHECKLIST.md` anlegen: Start → kein Plugin →
+      Aktivierung je Plugin → Routing auf Main → Cue → Close → Latenz → AI →
+      Collab → Reload → Fehlerfälle.
+- [ ] Nach jeder Optimierung Testrun 2/3/… durchführen, Befunde in diese Datei
+      eintragen, offene Punkte nachziehen.
+- [ ] **Prüfpunkt:** Checkliste vollständig abgehakt; keine Regression zu
+      vorherigem Run.
+
+### P5-2 Drittanbieter-Einstellungen & Setup richtigstellen
+- [ ] Ollama (ai-1), HF-Endpoint (samplemonk-ai), Replicate, Supabase, R2,
+      Caddy, SFU, master-player: Env/Health/Timeout/Fallback prüfen und in
+      `docs/AI_OPERATIONS.md`/`.env.example` dokumentieren.
+- [ ] Replicate-Guthaben, HF-Token-Rotation, Master-Service-Health,
+      Portal-Worker-Proxying verifizieren.
+- [ ] **Prüfpunkt:** `scripts/hetzner/smoke-test.sh` + Health-Endpoints grün;
+      AI-Fallback-Kette funktioniert bei Provider-Ausfall.
+
+### P5-3 Architektur-Hinterfragen (Dokumentiert entscheiden)
+- [ ] Browser-First vs. Native-Runtime: für den 4-User-Studio-Betrieb
+      Browser-First beibehalten; native Runtime (cpal/ASIO) als optionalen
+      Desktop-Pfad dokumentieren.
+- [ ] Ein AudioContext pro User vs. Server-Mixing: für 4 User pro User
+      beibehalten, Main-Stream vom Host (P4-1); Server-Mixing erst > 4 User.
+- [ ] `setMonitorSource`-Modell durch klares Bus-Modell ersetzen (MAIN, CUE1-4,
+      PLUGIN-Pre-Fader).
+- [ ] **Prüfpunkt:** Architektur-Entscheidungen in `docs/ARCHITEKTUR_EVOLUTION.md`
+      festgehalten und mit den Audits konsistent.
+
+---
+
+## 9b. 🔴 AUDIT-RUN 2026-08-31 (audioaudit-Skill) – Ergebnisbasierte Maßnahmen
+
+> Durchgeführter Audit-Lauf: `npm run verify` + gezielte Code-Checks gemäß
+> audioaudit-Skill (Modus A/D). Ergebnis: **1 Test-Fehler**, 8 bestätigte
+> Schwachstellen, Boundary-Scan wurde durch Testabbruch nicht erreicht.
+
+### Audit-Zusammenfassung
+
+| Check | Ergebnis |
+|---|---|
+| `tsc --noEmit` | ✅ bestanden |
+| `vitest run` | ❌ **347/348 bestanden, 1 Fehler** |
+| Boundary-Scan | ⏳ nicht erreicht (Verify bricht nach Testfehler ab) |
+| Code-Checks (grep/Struktur) | ⚠️ 8 bestätigte Befunde |
+
+### Befunde mit Beweis
+
+| ID | Severity | Ort | Befund | Beweis |
+|---|---|---|---|---|
+| AUD-1 | 🟠 Hoch | `tests/server.test.ts:246` | Failure-Injection `/api/separate-stems` (stem-ai down) endet im Timeout (5 s) statt 502 | `npm run verify` → `Test timed out in 5000ms` |
+| AUD-2 | 🔴 Kritisch | `src/App.tsx:183,192,471` | `mixer` ist hardcoded immer aktiv/offen, OFF nicht möglich | grep `id === 'mixer'` |
+| AUD-3 | 🔴 Kritisch | `src/components/ModuleContainer.tsx` | kein Close-/OFF-Button vorhanden | grep `Close|✕|setModuleState` leer |
+| AUD-4 | 🔴 Kritisch | `src/components/SynthesizerTerminal.tsx` | kein `audioEngine`-/`InstrumentBackend`-Import → kein hörbarer Synth | grep leer |
+| AUD-5 | 🟠 Hoch | `src/components/SettingsDialog.tsx:37,41,316` | Default `outputDeviceId=''` (kein USB-Auto), kein `2.1`-Modus | grep |
+| AUD-6 | 🔴 Kritisch | `src/utils/audioEngine.ts:461-465,1375,1414` | Synths/Worklets werden global auf Kanal-/Master-Bus verbunden – auch bei OFF | grep `connect(GLOBAL_MASTER)` |
+| AUD-7 | 🔴 Kritisch | `src/utils/audioEngine.ts:1321-1337` | `setMonitorSource()` trennt `analyzerNode` vom Ausgang bei MON/PLUGIN | grep `disconnect(out)` |
+| AUD-8 | 🟠 Hoch | `database/schema.sql`, `database/ai_migration_001.sql` | keine `system_prompts`/`ai_evaluations`-Tabellen | grep `prompt` leer |
+
+### Priorisierte Maßnahmen (aus dem Audit-Lauf abgeleitet)
+
+- [ ] **AUD-P0-1** `audioEngine`-Plugin-Lifecycle: OFF = Signalkette trennen,
+      Synths/Worklets lazy erzeugen (verknüpft: P0-2, AUD-2/6)
+- [ ] **AUD-P0-2** `App.tsx`: Mixer-Hardcode entfernen, Start-Zustand OFF
+      (verknüpft: P0-1, AUD-2)
+- [ ] **AUD-P0-3** `ModuleContainer`: Close-/OFF-Button + State-Sync
+      (verknüpft: P0-3, AUD-3)
+- [ ] **AUD-P0-4** `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend`
+      verdrahten (verknüpft: P0-5, AUD-4)
+- [ ] **AUD-P0-5** `setMonitorSource()` als paralleler Cue-Bus ohne MAIN-Trennung
+      (verknüpft: P0-6, AUD-7)
+- [ ] **AUD-P1-1** Stem-Failure-Injection-Test fixen: Timeout erhöhen oder
+      Error-Pfad schneller mit 502 beantworten; Regressionstest (AUD-1)
+- [ ] **AUD-P1-2** `SettingsDialog`: USB-Soundkarten-Default + `2.1`-Modus
+      (verknüpft: P1-3/P2-3, AUD-5)
+- [ ] **AUD-P1-3** `database/ai_migration_002.sql`: Prompt-/Eval-Tabellen
+      (verknüpft: P3-1, AUD-8)
+- [ ] **AUD-P1-4** `npm run verify` erweitern: separater `verify:boundary`-Lauf,
+      damit Boundary-Scan auch bei Testfehler ausführbar ist (AUD-9)
+- [ ] **AUD-P2-1** Testrun-2-Checkliste mit den AUD-Befunden abgleichen (P5-1)
+
+---
+
+## 10. ✅ VERKNÜPFTE PRÜFPUNKTE / GATES (vor jedem Release)
+
+| Gate | Prüfung | Verknüpfte Tasks |
+|---|---|---|
+| G1 Start-Silence | 0 Plugins offen, Main-RMS < -60 dBFS | P0-1, P0-2, P0-4 |
+| G2 Plugin-Lifecycle | OFF trennt Audio, PRO speist ein, kein Leak | P0-2, P0-3 |
+| G3 Synth hörbar | Note auf gewähltem Kanal/Main messbar | P0-5 |
+| G4 Main-Routing | Nicht-DJ-User können auf Main hören; Cue unabhängig | P0-6, P4-1 |
+| G5 Latenz | lokal < 15 ms, Netz < 50 ms, Dropouts 0 | P2-1, P2-2 |
+| G6 Cross-Platform | iOS/Android/Win/Linux/macOS Matrix grün | P1-1 |
+| G7 KI-Funktion | aiMONK führt echte Aktionen aus, Fehler sichtbar | P0-8, P3-2 |
+| G8 Prompt/Eval-DB | Migration 002, CRUD, Eval-Run | P3-1, P3-3 |
+| G9 Scratchpad/Clipboard | Speichern/Laden/DnD/Clipboard-Roundtrip | P1-4 |
+| G10 2.1/USB-Default | USB-Soundkarte auto, 2.1-Sub korrekt | P1-3, P2-3 |
+| G11 Workflow-Audit | Testrun-2-Checkliste komplett, keine Regression | P5-1 |
+| G12 Verify | `npm run verify` (tsc + Tests + Boundary-Scan) grün | alle |
+| G13 Audit-Regression | `npm run verify` 348/348 grün + Boundary-Scan 0 (AUD-1 fix) | AUD-P1-1, AUD-P1-4 |
+
+---
+
+## 11. REFERENZEN / QUELLEN (Stand 2026-08-31)
+
+- `src/App.tsx`, `src/context/ModuleStateContext.tsx`,
+  `src/context/PluginManagerContext.tsx`, `src/components/ModuleContainer.tsx`
+- `src/components/MischpultTerminal.tsx`, `DJ4ChMixer.tsx`,
+  `SynthesizerTerminal.tsx`, `AiMonkTerminal.tsx`, `MasterPlayerTerminal.tsx`,
+  `SettingsDialog.tsx`
+- `src/utils/audioEngine.ts` (init, setMonitorSource, setOutputDevice,
+  tryInitSynthWorklet, tryInitItSynthWorklet)
+- `src/config/rolePresets.ts`, `src/plugins/registry.ts`,
+  `public/plugin-manifest.json`, `public/routing.json`
+- `database/schema.sql`, `database/ai_migration_001.sql`
+- `docs/UIUX_AUDIT_2026.md`, `docs/HARDWARE_AUDIT_2026.md`,
+  `docs/HARDWARE_TEST_MATRIX_2026.md`, `docs/ARCHITECTURE_AUDIT_2026.md`,
+  `docs/PERFORMANCE_AUDIT.md`, `docs/AI_TROUBLESHOOTING.md`
+- Session-/Log-Daten: `~/.continue/sessions/`, `~/.deepcode/audit.log`,
+  `~/.deepcode/agent-sessions.json`, `~/.deepcode/logs/error.log`,
+  `~/.xsession-errors*`, `~/.npm/_logs/`
+
+---
+
 ## 📦 Release-Stand: audioMONASTRY V. 1|001|420 Codename „AnunnakiDNA" (2026-08-30)
 
 > Neues privates Repo „audioMONASTRY“ mit Initial-Commit dieses Standes.
 > `package.json` = `1.1.420`, Branding = `V. 1|001|420 CODENAME AnunnakiDNA`.
-> MASTER_TODO ist **vollständig abgearbeitet** (Stand 2026-08-30):
+> MASTER_TODO war **vollständig abgearbeitet** markiert (Stand 2026-08-30) –
+> **inzwischen durch die Testrun-1-Befunde überholt** (siehe neuer Abschnitt oben):
 > - Live-2-Browser-WebRTC: 2 unabhängige Browser-Prozesse verifiziert
 >   (`tests/e2e/live2browser.spec.ts`, DataChannel+ICE; Glare-Race gefixt)
 > - Sample-Raten-Wechsel: Xonar U7 nativ verifiziert (44.1/48/96/192 kHz,
