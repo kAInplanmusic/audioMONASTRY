@@ -75,6 +75,19 @@ class State:
 STATE = State()
 
 
+def _check_core_dependencies() -> None:
+    """Startup-Selbsttest: fehlende Python-Dependencies SOFORT im Log sichtbar machen.
+
+    Der HF-Dashboard-Log zeigt nur `msg` – deshalb wird der fehlende Modulname
+    direkt in die Meldung geschrieben (nicht nur ins `error`-Feld).
+    """
+    for mod, pip in (("torch", "torch"), ("transformers", "transformers"), ("soundfile", "soundfile"), ("scipy", "scipy")):
+        try:
+            __import__(mod)
+        except Exception as exc:  # noqa: BLE001
+            log_event("FATAL", f"dependency missing for {mod} (pip install {pip}): {exc}")
+
+
 def _preload_models_background() -> None:
     """Lädt CORE/FREQUENT-Modelle im Hintergrund, damit /health sofort antwortet.
 
@@ -102,6 +115,7 @@ async def lifespan(_app: FastAPI):
         raise
     STATE.ready = True  # API ist sofort erreichbar
     log_event("INFO", "runtime api ready", version=RUNTIME_VERSION)
+    _check_core_dependencies()
     threading.Thread(target=_preload_models_background, daemon=True).start()
     yield
     # Graceful Shutdown: keine harte Unterbrechung aktiver Inferenz.
