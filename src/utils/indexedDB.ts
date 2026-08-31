@@ -14,6 +14,11 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 
 export const openDB = (): Promise<IDBDatabase> => {
   if (dbPromise) return dbPromise;
+  if (typeof indexedDB === 'undefined') {
+    // Storage-Recovery: Umgebungen ohne IndexedDB (Node/SSR/Privacy-Mode)
+    // sauber ablehnen statt synchron zu werfen.
+    return Promise.reject(new Error('IndexedDB nicht verfügbar'));
+  }
   dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open('AudioMonastryDB', 2);
     request.onupgradeneeded = () => {
@@ -35,9 +40,14 @@ export const openDB = (): Promise<IDBDatabase> => {
 };
 
 export const saveToDB = async (item: unknown): Promise<void> => {
-  const db = await openDB();
-  const tx = db.transaction('scratchpad', 'readwrite');
-  tx.objectStore('scratchpad').put({ ...(item as Record<string, unknown>), lastModified: Date.now() });
+  if (typeof indexedDB === 'undefined') return;
+  try {
+    const db = await openDB();
+    const tx = db.transaction('scratchpad', 'readwrite');
+    tx.objectStore('scratchpad').put({ ...(item as Record<string, unknown>), lastModified: Date.now() });
+  } catch {
+    /* Storage-Recovery: Quota/Fehler – fire-and-forget, nie Audio-Pfad blockieren */
+  }
 };
 
 /** Große JSON-States asynchron laden (nie im Audio-Callback aufrufen). */

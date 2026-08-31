@@ -153,22 +153,22 @@ Marketing-Ziel „<3 ms end-to-end" ist für diese Architektur **nicht seriös**
 
 ## 13. Priorisierte Verbesserungen (Nutzen vs. Aufwand)
 
-**P0 – vor Live-Test**
-- [ ] Session-Identität minimal: Server-Token beim Join + Locking an User-ID (nicht Socket-ID)
-- [ ] Generische AudioParam-Rampen für eq/dsp/effect/mastering-Worklets (Zipper-Schutz vervollständigen)
-- [ ] Underrun-/Dropout-Zähler im Audio-Thread → `/api/telemetry` + UI
+**P0 – vor Live-Test** (Stand 2026-08-31: alle umgesetzt, siehe MASTER_TODO)
+- [x] Session-Identität minimal: senderUserId im Relay, Locking an echter User-ID (WebRTCManager.userId)
+- [x] Generische AudioParam-Rampen für eq/dsp/effect/mastering-Worklets (automate, zipper-frei)
+- [x] Underrun-/Dropout-Zähler im Audio-Thread → `/api/telemetry` + UI (analyzerProcessor → onDropout)
 
-**P1 – kurz danach**
-- [ ] End-to-End-Latenz-Messung persistieren (LatencyMonitor → Telemetrie/Grafana)
-- [ ] Lazy-Worklet-Konstruktionen auditen (Muster aus `setEffectParam`-Fix überall anwenden)
-- [ ] OPFS-Sample-Cache für große Bibliotheken aktivieren
-- [ ] Live-2-Browser-WebRTC- und SFU-RTP-Echtpfad-Tests (bereits in MASTER_TODO)
+**P1 – kurz danach** (Stand 2026-08-31: alle umgesetzt, siehe MASTER_TODO)
+- [x] End-to-End-Latenz-Messung persistieren (LatencyMonitor → 30s-Snapshot an `/api/telemetry`)
+- [x] Lazy-Worklet-Konstruktionen auditen (alle `new AudioWorkletNode` abgesichert; `setEffectParam`-Fix war letzte Lücke)
+- [x] OPFS-Sample-Cache für große Bibliotheken aktivieren (SampleContext `persistFile/listSamples` verifiziert)
+- [x] Live-2-Browser-WebRTC- und SFU-RTP-Echtpfad-Tests (`tests/e2e/live2browser.spec.ts`, `sfu-rtp-run.mjs` gegen sfu-1)
 
-**P2 – strategisch**
-- [ ] WASM-Kernel entweder als Offline-Render-Backend fertig verdrahten oder klar als Referenz markieren
-- [ ] WebGPU erst mit echtem Workload (ONNX-Inferenz/Spektral) aktivieren
-- [ ] Binärprotokoll (CBOR/Protobuf) erst bei >10 Usern
-- [ ] Alerting-Webhook (Discord/Slack/Telegram)
+**P2 – strategisch** (Stand 2026-08-31: alle entschieden/umgesetzt, siehe MASTER_TODO)
+- [x] WASM-Kernel: als optionaler Offline-Render-Referenzpfad markiert (nicht als Produktiv-WASM beworben)
+- [x] WebGPU: defer bis echter Workload (ONNX-Inferenz/Spektral) – dokumentiert
+- [x] Binärprotokoll (CBOR/Protobuf): YAGNI bis >10 User – dokumentiert
+- [x] Alerting-Webhook (Discord/Slack/Telegram): `scripts/hetzner/alert-webhook.sh` + `POST /api/alerts/webhook`
 
 **Bewusst NICHT tun (Premature/Oversized):** WebTransport, OpenTelemetry, Yjs/CRDT-Framework, WebCodecs, „<3 ms"-Marketing, WebGPU für per-Sample-DSP.
 
@@ -176,4 +176,4 @@ Marketing-Ziel „<3 ms end-to-end" ist für diese Architektur **nicht seriös**
 
 ## 14. Fazit
 
-Die Architektur ist für eine browserbasierte 4-User-Audio-Workstation **technisch solide und überwiegend standardkonform**. Die Audio-Thread-Disziplin ist überdurchschnittlich (Worklets, SAB, RingBuffer, PDC, deterministisches Noise). Die größten Lücken sind **Identität/AuthZ**, **vollständige Zipper-freie Parameter-Automation über alle Worklets** und **fehlende End-to-End-Latenz-/Dropout-Telemetrie**. WASM/WebGPU/WebTransport sind korrekt als optional/deferred eingeordnet und dürfen nicht erzwungen werden.
+Die Architektur ist für eine browserbasierte 4-User-Audio-Workstation **technisch solide und überwiegend standardkonform**. Die Audio-Thread-Disziplin ist überdurchschnittlich (Worklets, SAB, RingBuffer, PDC, deterministisches Noise). Die im Audit identifizierten Lücken (Identität/AuthZ, Zipper-freie Parameter-Automation, E2E-Latenz-/Dropout-Telemetrie) sind **inzwischen geschlossen** (siehe §13, Stand 2026-08-31). WASM/WebGPU/WebTransport sind korrekt als optional/deferred eingeordnet und dürfen nicht erzwungen werden.

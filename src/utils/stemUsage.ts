@@ -5,6 +5,7 @@
  * Ehrliche Schätzung (keine Abrechnungsgarantie): Replicate-Preise sind
  * Durchschnittswerte inkl. Kaltstart-Overhead, lokal = 0.
  */
+import { storageGet, storageSet } from './storage';
 
 export type StemProvider = 'local' | 'stem-ai' | 'replicate' | 'fallback';
 
@@ -40,10 +41,10 @@ export function emptyUsage(): StemUsageRecord {
   return { count: 0, estimatedCostUsd: 0, lastProvider: null, lastAt: null };
 }
 
-/** Liest den Zähler (localStorage-Fallback für Node/SSR). */
+/** Liest den Zähler (Storage-Adapter kapselt localStorage inkl. Fallback). */
 export function loadStemUsage(): StemUsageRecord {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+    const raw = storageGet(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<StemUsageRecord>;
       return {
@@ -66,9 +67,7 @@ export function recordStemExtraction(provider: StemProvider, now = Date.now()): 
     lastProvider: provider,
     lastAt: now,
   };
-  try {
-    if (typeof localStorage !== 'undefined') localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  } catch { /* Persistenz optional */ }
+  storageSet(STORAGE_KEY, JSON.stringify(next));
   return next;
 }
 

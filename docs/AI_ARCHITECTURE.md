@@ -66,7 +66,7 @@ Kosten: **≈ 0,36 €/h** + API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
 
 ## Offene AI-Punkte
 
-- [ ] Replicate-Token live testen (1 Stem-Job)
-- [ ] HF-PRO-Entscheidung nach Free-Tier-Beobachtung
-- [ ] Mistral-Account optional (Function-Calling für MOA-Tools)
-- [ ] Groq-Alternative evaluieren (nur wenn HF/DPS-Limits erreicht werden)
+- [x] Replicate-Token live testen (1 Stem-Job) – ✅ 2026-08-31 via `scripts/replicate-smoke.ts`: Account `kainplanmusic` gültig, Modell `cjwbw/demucs` (Version aufgelöst), **1 echter Stem-Job erfolgreich** (Prediction `7ksxd3mredrg80d0amh97pry1w`, Outputs: vocals/bass/drums/other)
+- [x] HF-PRO-Entscheidung nach Free-Tier-Beobachtung – Entscheidung: **Free-Tier beibehalten** (DeepSeek + Hugging Face live verifiziert); PRO erst bei Limit-Erreichen
+- [x] Mistral-Account optional (Function-Calling für MOA-Tools) – **bewusst zurückgestellt**: DeepSeek V4 deckt MOA/MCP-Planung ab
+- [x] Groq-Alternative evaluieren (nur wenn HF/DPS-Limits erreicht werden) – **bewusst zurückgestellt**: Limits noch nicht erreicht
