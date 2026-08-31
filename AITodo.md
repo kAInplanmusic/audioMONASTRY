@@ -253,6 +253,10 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 - [✓] AITodo.md erstellt (diese Datei)
 - [~] AITodo.md nach jedem Task aktualisiert (Live-Regel)
 
+## Phase 1b – README-Architektur-Audit
+
+- [✓] README.md vollständig neu aufgebaut (10 Abschnitte: Übersicht, Architektur, Services, Konfiguration, Plugins, AI-Modelle, Infrastruktur, Datenformate, Sicherheit, Monitoring)
+
 ## Phase 2 – Docker / AI Runtime
 
 - [✓] Custom-Container-Artefakte (`services/samplemonk-ai-runtime/`) erstellt
