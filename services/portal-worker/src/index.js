@@ -600,13 +600,11 @@ export default {
     const servers = await fleetServers(env);
     const app = servers['samplemonk-app-1'];
     if (app && app.status === 'running' && app.public_net?.ipv4?.ip) {
-      const upstream = new URL(request.url);
-      // P-7b: Origin-TLS – app-1 dient HTTPS (Cloudflare-Origin-Zertifikat).
-      upstream.protocol = 'https:';
-      upstream.host = app.public_net.ipv4.ip;
-      upstream.port = '443';
-      const proxied = new Request(upstream.toString(), request);
-      return fetch(proxied);
+      // Proxy mit ORIGINAL-URL (Host + SNI = Domain, kein Host=IP → kein
+      // Cloudflare-Fehler 1003). resolveOverride lenkt die Verbindung auf die
+      // Hetzner-Origin-IP, ohne Host/SNI zu verändern.
+      const proxied = new Request(request.url, request);
+      return fetch(proxied, { cf: { resolveOverride: app.public_net.ipv4.ip } });
     }
 
     return new Response(PAGE_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });

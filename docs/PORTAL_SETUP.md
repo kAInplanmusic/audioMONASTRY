@@ -75,3 +75,20 @@ wrangler deploy
   Server-IP – Cloudflare proxyt nur HTTP/WebSocket.
 - Der lokale Weg funktioniert weiterhin:
   `bash scripts/hetzner/bring-up-fleet.sh` bzw. `delete-fleet.sh`.
+
+---
+
+## Fehler 1003 (Direct IP access not allowed) – Checkliste
+
+Ursache: Der Browser erreicht Cloudflare mit einer **IP als Host** (oder die
+DNS-/Worker-Route-Konfiguration passt nicht). Reihenfolge der Prüfung:
+
+1. **URL:** immer `https://anunnakitools.de` verwenden – niemals die Hetzner-IP.
+2. **DNS (Cloudflare → DNS):** A-Record `@` auf die **Hetzner-app-1-IP** zeigen,
+   **Proxy-Status = Orange (proxied)**. Kein Cloudflare-Anycast-IP eintragen.
+3. **Worker-Route:** Cloudflare → Workers & Pages → Portal-Worker → Settings →
+   **Routes** muss `anunnakitools.de/*` (und `anunnakitools.de`) enthalten –
+   sonst läuft der Worker nie und Cloudflare geht direkt zum Origin.
+4. **Worker-Code (Proxy):** Proxy nutzt jetzt Original-Host + `resolveOverride`
+   auf die Origin-IP (kein Host=IP mehr) – nach dem Deploy des Workers
+   (`wrangler deploy`) verschwindet 1003.
