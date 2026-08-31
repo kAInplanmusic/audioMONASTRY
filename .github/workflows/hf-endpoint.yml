@@ -89,7 +89,7 @@ jobs:
           HF_REGION: us-east-1
           HF_INSTANCE_TYPE: nvidia-a100
           HF_REGISTRY_USERNAME: ${{ secrets.GHCR_USERNAME }}
-          HF_REGISTRY_PASSWORD: ${{ secrets.GHCR_PASSWORD }}
+          HF_REGISTRY_PASSWORD: ${{ secrets.GHCR_PAT_ALL_ACCESS || secrets.GHCR_PASSWORD }}
           HF_INSTANCE_SIZE: x1
           HF_SCALE_TO_ZERO_TIMEOUT: '20'
           AI_MAX_GPU_ENDPOINTS: '1'
