@@ -9,6 +9,9 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
 import { syncR2ToSupabase, ingestAudioObject } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
+import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
+import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
+import type { AiTask } from './src/core/ai/orchestrator/types';
 import type { AudioSample } from './src/data/samples';
 
 // Task 14: Echte Demucs-Stems optional via env-Flag ENABLE_STEMS=1 aktivieren.
@@ -614,6 +617,88 @@ app.post('/api/ai/complete', async (req, res) => {
     const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
     return res.status(502).json({ error: 'ai complete fehlgeschlagen', detail });
   }
+});
+
+// ===========================================================================
+// AI Orchestrator – zentrale AI-Infrastruktur (Hetzner ↔ HF/Replicate/Supabase)
+// ===========================================================================
+
+// --- POST /api/ai/orchestrate  → AI-Job über den Orchestrator ---
+app.post('/api/ai/orchestrate', async (req, res) => {
+  const { userId, task, model, input, sessionId } = (req.body ?? {}) as {
+    userId?: string; task?: AiTask; model?: string; input?: unknown; sessionId?: string;
+  };
+  const safeTask = String(task ?? '').trim() as AiTask;
+  const safeModel = String(model ?? '').trim().slice(0, 200);
+  if (!safeTask || !safeModel) {
+    return res.status(422).json({ error: 'task and model are required' });
+  }
+  metrics.aiRequests += 1;
+  try {
+    const result = await aiOrchestrator.orchestrate({
+      userId: String(userId ?? 'localUser').slice(0, 64),
+      task: safeTask,
+      model: safeModel,
+      input: input ?? {},
+      sessionId: sessionId ? String(sessionId).slice(0, 128) : undefined,
+    });
+    void aiPersistence.saveJob(result.job);
+    void aiPersistence.saveSession(aiOrchestrator.sessions.get());
+    return res.json(result);
+  } catch (err) {
+    metrics.aiFailures += 1;
+    const message = err instanceof Error ? err.message : 'AI-Orchestrierung fehlgeschlagen';
+    const status = message.includes('INSUFFICIENT_CREDIT') ? 402 : message.includes('RATE_LIMITED') ? 429 : 502;
+    return res.status(status).json({ error: message });
+  }
+});
+
+// --- GET /api/ai/orchestrator/status ---
+app.get('/api/ai/orchestrator/status', (_req, res) => {
+  return res.json(aiOrchestrator.getStatus());
+});
+
+// --- GET /api/ai/jobs + /api/ai/jobs/:jobId ---
+app.get('/api/ai/jobs', (req, res) => {
+  const sessionId = String(req.query.sessionId ?? '').trim();
+  return res.json({ jobs: aiOrchestrator.jobs.list(sessionId || undefined) });
+});
+
+app.get('/api/ai/jobs/:jobId', (req, res) => {
+  const job = aiOrchestrator.jobs.get(String(req.params.jobId));
+  if (!job) return res.status(404).json({ error: 'job not found' });
+  return res.json(job);
+});
+
+// --- Session-Lifecycle ---
+app.get('/api/ai/session', (_req, res) => res.json(aiOrchestrator.sessions.get()));
+
+app.post('/api/ai/session/heartbeat', (_req, res) => {
+  aiOrchestrator.sessions.heartbeat();
+  return res.json(aiOrchestrator.sessions.get());
+});
+
+app.post('/api/ai/session/shutdown', async (_req, res) => {
+  await aiOrchestrator.sessions.shutdown();
+  return res.json(aiOrchestrator.sessions.get());
+});
+
+// --- Model Registry / Status ---
+app.get('/api/ai/models', (_req, res) => {
+  return res.json({ models: aiOrchestrator.models.getModelInfo() });
+});
+
+// --- MCP Runtime (Permission-geschützt) ---
+app.get('/api/ai/mcp/tools', (_req, res) => {
+  return res.json({ tools: aiOrchestrator.mcp.listTools() });
+});
+
+app.post('/api/ai/mcp/tools/:name', async (req, res) => {
+  const name = String(req.params.name).trim().slice(0, 120);
+  if (!aiOrchestrator.mcp.hasTool(name)) return res.status(404).json({ error: 'unknown tool' });
+  const result = await aiOrchestrator.mcp.invoke(name, (req.body ?? {}) as Record<string, unknown>);
+  void aiPersistence.auditMcp(name, 'localUser', aiOrchestrator.sessions.get().sessionId, result.ok, String((req.body as { permission?: string } | undefined)?.permission ?? 'READ'));
+  return res.json(result);
 });
 
 // --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---

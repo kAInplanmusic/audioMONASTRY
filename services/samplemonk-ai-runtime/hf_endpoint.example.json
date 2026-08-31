@@ -1,0 +1,31 @@
+{
+  "name": "samplemonk-ai",
+  "provider": {
+    "vendor": "aws",
+    "region": "eu-central-1",
+    "instanceType": "nvidia-a100",
+    "instanceSize": "x1"
+  },
+  "replicas": {
+    "min": 0,
+    "max": 1
+  },
+  "scaleToZero": {
+    "enabled": true,
+    "idleTimeoutMinutes": 20
+  },
+  "container": {
+    "healthRoute": "/health",
+    "readinessRoute": "/ready",
+    "port": 8000
+  },
+  "env": {
+    "AI_RUNTIME_DEVICE": "cuda",
+    "AI_MODEL_MANIFEST": "/opt/samplemonk-ai/model_manifest.json",
+    "HF_HOME": "/data/hf-cache"
+  },
+  "secrets": [
+    "HF_TOKEN"
+  ],
+  "note": "Konfiguration im HF-Dashboard/CLI live verifizieren. GPU-Wechsel nur mit Betreiber-Freigabe. Kein minReplicas=1 (24/7-Billing)."
+}

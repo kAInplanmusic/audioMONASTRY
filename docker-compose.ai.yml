@@ -1,0 +1,29 @@
+# audioMONASTRY – AI Runtime (lokal/Hetzner-Test ohne HF-Endpoint)
+# =================================================================
+# Baut und startet den Custom Container lokal (CPU/Simulationsmodus) für
+# Smoke-Tests. Produktion läuft als HF-Inference-Endpoint (siehe
+# hf_endpoint.example.json), NICHT dauerhaft auf Hetzner.
+services:
+  ai-runtime:
+    build:
+      context: ./services/samplemonk-ai-runtime
+    container_name: samplemonk-ai-runtime
+    environment:
+      AI_RUNTIME_DEVICE: simulated   # cuda auf GPU-Host, simulated für Smoke-Tests
+      HF_HOME: /data/hf-cache
+      HF_TOKEN: ${HF_TOKEN:-}
+      AI_MODEL_MANIFEST: /opt/samplemonk-ai/model_manifest.json
+    volumes:
+      - ai-model-cache:/data/hf-cache
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  ai-model-cache:

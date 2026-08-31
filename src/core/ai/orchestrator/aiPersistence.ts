@@ -1,0 +1,131 @@
+/**
+ * audioMONASTRY · AI Orchestrator – Supabase-Persistenz
+ * ======================================================
+ * Persistiert AI-Sessions, Jobs, Model-Usage, Errors, Kosten und MCP-Audit-Events
+ * in der bestehenden Supabase-Datenbank (keine neue DB). Ohne konfiguriertes
+ * Supabase degradiert das Modul zu No-Ops (Offline-Betrieb bleibt möglich).
+ *
+ * Schema: database/ai_migration_001.sql (versioniert, nicht-destruktiv).
+ */
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { aiLogger } from './aiLogger';
+import type { AiJob, AiSession } from './types';
+
+let client: SupabaseClient | null = null;
+
+function getClient(): SupabaseClient | null {
+  if (client) return client;
+  const url = (process.env.SUPABASE_URL ?? '').trim();
+  const key = (process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
+  if (!url || !key) return null;
+  try {
+    client = createClient(url, key, { auth: { persistSession: false } });
+  } catch {
+    return null;
+  }
+  return client;
+}
+
+export const aiPersistence = {
+  async saveSession(session: AiSession): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('ai_sessions').upsert({
+        session_id: session.sessionId,
+        state: session.state,
+        last_activity: new Date(session.lastActivity).toISOString(),
+        active_jobs: session.activeJobs,
+        loaded_models: session.loadedModels,
+        endpoint_state: session.endpointState,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase saveSession failed', { sessionId: session.sessionId, error: (error as Error).message });
+    }
+  },
+
+  async saveJob(job: AiJob): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('ai_jobs').upsert({
+        job_id: job.jobId,
+        session_id: job.sessionId,
+        user_id: job.userId,
+        task: job.task,
+        model: job.model,
+        provider: job.provider,
+        status: job.status,
+        started_at: job.startedAt ? new Date(job.startedAt).toISOString() : null,
+        completed_at: job.completedAt ? new Date(job.completedAt).toISOString() : null,
+        duration_ms: job.durationMs,
+        error: job.error,
+        dedupe_key: job.dedupeKey,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase saveJob failed', { jobId: job.jobId, error: (error as Error).message });
+    }
+  },
+
+  async saveModelUsage(sessionId: string, model: string, task: string, provider: string, inferenceMs: number): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('ai_model_usage').insert({
+        session_id: sessionId,
+        model,
+        task,
+        provider,
+        inference_ms: inferenceMs,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase saveModelUsage failed', { sessionId, model, error: (error as Error).message });
+    }
+  },
+
+  async saveError(job: AiJob): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('ai_errors').insert({
+        job_id: job.jobId,
+        session_id: job.sessionId,
+        model: job.model,
+        provider: job.provider,
+        error: job.error,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase saveError failed', { jobId: job.jobId, error: (error as Error).message });
+    }
+  },
+
+  async saveCostEstimate(jobId: string, sessionId: string, estimatedCostUsd: number): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('ai_cost_estimates').insert({
+        job_id: jobId,
+        session_id: sessionId,
+        estimated_cost_usd: estimatedCostUsd,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase saveCostEstimate failed', { jobId, error: (error as Error).message });
+    }
+  },
+
+  async auditMcp(tool: string, userId: string, sessionId: string, ok: boolean, permission: string): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('mcp_audit_events').insert({
+        tool,
+        user_id: userId,
+        session_id: sessionId,
+        ok,
+        permission,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase auditMcp failed', { tool, error: (error as Error).message });
+    }
+  },
+};

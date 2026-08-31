@@ -1,0 +1,40 @@
+name: ai
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/core/ai/**'
+      - 'services/samplemonk-ai-runtime/**'
+      - 'server.ts'
+      - 'tests/aiOrchestrator.test.ts'
+  pull_request:
+    paths:
+      - 'src/core/ai/**'
+      - 'services/samplemonk-ai-runtime/**'
+      - 'server.ts'
+      - 'tests/aiOrchestrator.test.ts'
+
+jobs:
+  ai-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: AI-Unit-Tests
+        run: npx vitest run tests/aiOrchestrator.test.ts
+      - name: Boundary-Scan
+        run: node scripts/validate-interface-boundaries.mjs
+      - name: Python-Smoke (Runtime ohne GPU, simulated)
+        run: |
+          pip install --target /tmp/smoke-ai-deps fastapi uvicorn
+          cd services/samplemonk-ai-runtime
+          PYTHONPATH=/tmp/smoke-ai-deps:. AI_RUNTIME_DEVICE=simulated python3 -c "import app; print('app import ok')"
+      - name: Security-Check (npm audit)
+        run: npm audit --omit=dev --audit-level=high
