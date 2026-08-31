@@ -639,7 +639,7 @@ Quellen, die ausgewertet wurden:
 - [x] **FA-P0-1** `mcp_runtime.py`: Permission nicht aus Request-Body übernehmen,
       sondern aus serverseitigem Auth-/Trust-Context ableiten; DESTRUCTIVE nur
       mit expliziter Server-Freigabe (FA-3)
-- [x] **FA-P0-2** `model_manager.py`: echte Modell-Instanzen laden/cachen,
+- [ ] **FA-P0-2** `model_manager.py`: echte Modell-Instanzen laden/cachen,
       Handler nutzen geladene Instanz statt `from_pretrained` je Request;
       VRAM real tracken (FA-5)
 - [x] **FA-P0-3** `server.ts` Upload (**D14 – Entscheidung:** **1 Datei** +
