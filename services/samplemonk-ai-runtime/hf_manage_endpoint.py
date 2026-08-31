@@ -70,10 +70,16 @@ def _common_kwargs() -> dict:
 
 
 def _create_kwargs() -> dict:
-    """Create akzeptiert zusätzlich region/vendor."""
+    """Create akzeptiert zusätzlich region/vendor.
+
+    repository/framework sind in create_inference_endpoint Pflicht-Keywords,
+    für Custom-Container aber None (Modell kommt aus dem Image).
+    """
     kwargs = _common_kwargs()
     kwargs["region"] = REGION
     kwargs["vendor"] = VENDOR
+    kwargs["repository"] = None
+    kwargs["framework"] = None
     return kwargs
 
 
