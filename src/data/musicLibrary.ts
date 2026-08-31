@@ -77,5 +77,17 @@ export const MUSIC_LIBRARY: MusicTrack[] = [
   L('Younger Brother - Train.mp3'),
 ];
 
+/** P1-5: Automatische Sortierung – Artist, dann Titel, dann BPM. */
+export function sortMusicLibrary(tracks: MusicTrack[]): MusicTrack[] {
+  return [...tracks].sort((a, b) =>
+    String(a.artist ?? 'Unknown').localeCompare(String(b.artist ?? 'Unknown'))
+    || a.name.localeCompare(b.name)
+    || (a.bpm ?? 0) - (b.bpm ?? 0),
+  );
+}
+
+/** Vorsortierte Bibliothek für Dropdowns/Library (P1-5). */
+export const SORTED_MUSIC_LIBRARY: MusicTrack[] = sortMusicLibrary(MUSIC_LIBRARY);
+
 /** Künstler-Dedupe für Filter. */
 export const MUSIC_ARTISTS = Array.from(new Set(MUSIC_LIBRARY.map((t) => t.artist))).sort((a, b) => String(a).localeCompare(String(b)));

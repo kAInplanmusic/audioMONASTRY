@@ -275,15 +275,15 @@ Quellen, die ausgewertet wurden:
       Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON.
 
 ### P1-5 Lieder-Datenbank automatisch sortieren
-- [ ] `MUSIC_LIBRARY` + Supabase `music_tracks`: Sortierung nach BPM, Key
+- [x] `MUSIC_LIBRARY` + Supabase `music_tracks`: Sortierung nach BPM, Key
       (Camelot), Style, Artist, Duration; Filter im LibraryTerminal und im
       DJ-Mixer-Track-Dropdown.
-- [ ] Duplikate/IDs bereinigen; fehlende BPM/Key nachziehen (Analyse).
+- [x] Duplikate/IDs bereinigen; fehlende BPM/Key nachziehen (Analyse).
 - [ ] **Prüfpunkt:** Dropdown zeigt sortierte, gruppierte Liste; Sortierung
       überlebt Reload.
 
 ### P1-6 Key-/MIDI-Handling optimieren
-- [ ] Globale Hotkeys: Space (Play/Stop), `Ctrl/Cmd+1..9` Plugin-Toggle,
+- [x] Globale Hotkeys: Space (Play/Stop), `Ctrl/Cmd+1..9` Plugin-Toggle,
       `Ctrl/Cmd+Enter` Ausführen, Escape schließt Panels – mit Input-Guard.
 - [ ] MIDI: F8-Clock, Start/Stop/Continue, Song Position, SysEx-Empfang,
       RPN-Parser, `send()` für LEDs/Motorfader (bereits teils vorhanden,
