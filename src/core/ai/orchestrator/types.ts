@@ -20,7 +20,7 @@ export type AiTask =
   | 'multimodal';
 
 /** Provider-IDs des Orchestrators. */
-export type AiProviderId = 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'local' | 'deterministic';
+export type AiProviderId = 'hf-standard-endpoint' | 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'local' | 'deterministic';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */
 export type ModelLoadClass = 'CORE' | 'FREQUENT' | 'ON_DEMAND' | 'RARE';
