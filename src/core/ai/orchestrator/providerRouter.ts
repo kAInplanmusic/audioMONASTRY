@@ -124,7 +124,8 @@ export class HfEndpointProvider implements IAiProvider {
           body,
           signal: signal ?? AbortSignal.timeout(Math.min(120_000, remaining)),
         });
-        if (resp.status === 503) {
+        if (resp.status === 503 || resp.status === 502) {
+          // Scale-to-Zero: HF-Gateway liefert 502/503, bis die Replica bereit ist.
           if (!wakeExtended) {
             wakeExtended = true;
             deadline = Math.max(deadline, Date.now() + wakeTimeoutMs);
