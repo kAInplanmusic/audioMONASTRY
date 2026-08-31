@@ -1,0 +1,16 @@
+# SampleMONK AI Runtime – Runtime-Konfiguration
+# Wird beim Container-Start von startup.sh gelesen; env hat Vorrang.
+runtime:
+  device: cuda              # cuda | cpu | simulated
+  vram_budget_gb: 80
+  vram_safety_margin_gb: 6
+  idle_timeout_minutes: 20
+  max_concurrent_inference: 2
+  log_level: INFO
+
+health:
+  readiness_model: ast-audioset   # Readiness erst, wenn dieses CORE-Modell geladen ist
+
+model_cache:
+  hf_home: /data/hf-cache          # persistenter Gewichte-Cache (Volume)
+  revision_pinning: true

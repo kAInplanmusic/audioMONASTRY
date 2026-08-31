@@ -1,0 +1,14 @@
+# SampleMONK AI Runtime – deterministisches Dependency-Lock
+# Installiert im Dockerfile via: pip install -r requirements.lock
+# CUDA-12.4-Wheels (falls verfügbar) über den PyTorch-Index beziehen:
+#   --extra-index-url https://download.pytorch.org/whl/cu124
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+torch==2.4.1+cu124
+transformers==4.46.3
+soundfile==0.12.1
+scipy==1.14.1
+pyannote.audio==3.3.2
