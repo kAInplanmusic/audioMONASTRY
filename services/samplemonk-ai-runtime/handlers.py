@@ -12,8 +12,16 @@ from typing import Any, Dict
 from model_manager import ModelDefinition, ModelUnavailableError
 
 
+def _normalize_task(task: str) -> str:
+    """Orchestrator-Tasks (`audio.classify`) auf Runtime-Handler (`classify`) mappen."""
+    norm = task.strip().replace(' ', '.')
+    if norm.startswith('audio.'):
+        norm = norm.split('.', 1)[1]
+    return norm
+
+
 def run_inference(task: str, model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
-    handler = HANDLERS.get(task)
+    handler = HANDLERS.get(_normalize_task(task))
     if handler is None:
         raise ModelUnavailableError(f"no handler for task: {task}")
     return handler(model_id, definition, payload)
