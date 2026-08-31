@@ -65,7 +65,6 @@ def _common_kwargs() -> dict:
             "HF_HOME": "/data/hf-cache",
         },
         "secrets": {"HF_TOKEN": os.environ.get("HF_TOKEN", "")},
-        "type": "authenticated",
         "namespace": NAMESPACE,
     }
 
@@ -81,6 +80,7 @@ def _create_kwargs() -> dict:
     kwargs["vendor"] = VENDOR
     kwargs["repository"] = "AnunnakiTools/samplemonk-ai-runtime"  # eigenes HF-Repo (Custom-Container verlangt existierendes Repo im Namespace)
     kwargs["framework"] = "pytorch"  # Custom-Container: framework muss gesetzt sein
+    kwargs["type"] = "authenticated"  # nur create akzeptiert type (update nicht!)
     return kwargs
 
 
