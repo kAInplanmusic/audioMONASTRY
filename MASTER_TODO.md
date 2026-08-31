@@ -100,9 +100,9 @@ Quellen, die ausgewertet wurden:
 *(Blockiert jeden weiteren Testrun – zuerst abarbeiten)*
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
-- [ ] `src/App.tsx`: `togglePlugin`/`promotePlugin` dürfen `mixer` **nicht**
+- [x] `src/App.tsx`: `togglePlugin`/`promotePlugin` dürfen `mixer` **nicht**
       mehr ignorieren; `filter(p => p.id === 'mixer' ? true : …)` entfernen.
-- [ ] `ModuleStateContext`: Beim ersten Start (kein gespeicherter State) sind
+- [x] `ModuleStateContext`: Beim ersten Start (kein gespeicherter State) sind
       **alle** Module `OFF`; persistierte States nur als optionales
       „Session merken"-Feature hinter einem expliziten Button (siehe P1-4).
 - [ ] `rolePresets`: Rollen-Presets werden **nur** bei expliziter Auswahl im
@@ -138,7 +138,7 @@ Quellen, die ausgewertet wurden:
       stoppt den Klang sofort (< 50 ms).
 
 ### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
-- [ ] `ModuleContainer` bekommt Header-Button „✕ / OFF" →
+- [x] `ModuleContainer` bekommt Header-Button „✕ / OFF" →
       `setModuleState(id,'OFF')` + `releaseLock` + `deactivatePlugin`.
 - [ ] `usePluginState` und `ModuleStateContext` zusammenführen: lokale
       Terminal-Selects schreiben in den globalen State; keine zwei Wahrheiten.
@@ -486,9 +486,9 @@ Quellen, die ausgewertet wurden:
 
 - [ ] **AUD-P0-1** `audioEngine`-Plugin-Lifecycle: OFF = Signalkette trennen,
       Synths/Worklets lazy erzeugen (verknüpft: P0-2, AUD-2/6)
-- [ ] **AUD-P0-2** `App.tsx`: Mixer-Hardcode entfernen, Start-Zustand OFF
+- [x] **AUD-P0-2** `App.tsx`: Mixer-Hardcode entfernen, Start-Zustand OFF
       (verknüpft: P0-1, AUD-2)
-- [ ] **AUD-P0-3** `ModuleContainer`: Close-/OFF-Button + State-Sync
+- [x] **AUD-P0-3** `ModuleContainer`: Close-/OFF-Button + State-Sync
       (verknüpft: P0-3, AUD-3)
 - [ ] **AUD-P0-4** `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend`
       verdrahten (verknüpft: P0-5, AUD-4)
@@ -645,29 +645,29 @@ Quellen, die ausgewertet wurden:
 - [ ] **FA-P0-3** `server.ts` Upload (**D14 – Entscheidung:** **1 Datei** +
       Summenlimit als Defense-in-Depth); Streams auf Temp/disk statt
       `Buffer.concat` (FA-7)
-- [ ] **FA-P0-4** `handlers.py` `hf_generate`: `_definition` → `definition`
+- [x] **FA-P0-4** `handlers.py` `hf_generate`: `_definition` → `definition`
       fixen + MusicGen-Smoke-Test (FA-16)
-- [ ] **FA-P1-1** `database/ai_migration_001.sql`: RLS + Policies für alle
+- [x] **FA-P1-1** `database/ai_migration_001.sql`: RLS + Policies für alle
       8 Tabellen (anon read, service_role write), analog `schema.sql` (FA-2)
-- [ ] **FA-P1-2** `model_manager.get_status()`/`app.status_payload()`:
+- [x] **FA-P1-2** `model_manager.get_status()`/`app.status_payload()`:
       immer alle Klassen liefern, `onDemand`-Key korrekt, kein KeyError (FA-6)
-- [ ] **FA-P1-3** `hf_manage_endpoint.py`: nur 404/Not-Found → create; andere
+- [x] **FA-P1-3** `hf_manage_endpoint.py`: nur 404/Not-Found → create; andere
       Fehler (401/429/500/Timeout) hart fehlschlagen lassen (FA-8)
-- [ ] **FA-P1-4** `hidReport.ts`: 32-Bit-feste Bit-Extraktion (Number/BigInt),
+- [x] **FA-P1-4** `hidReport.ts`: 32-Bit-feste Bit-Extraktion (Number/BigInt),
       `bitSize` auf 1..32 clamps, Sign-Berechnung für 32 Bit korrigieren (FA-9)
-- [ ] **FA-P1-5** `oscCodec.ts`: Bounds-Checks vor jedem Lesen, negative
+- [x] **FA-P1-5** `oscCodec.ts`: Bounds-Checks vor jedem Lesen, negative
       Blob-Längen abfangen, `decodeOscMessage` try/catch (FA-10)
-- [ ] **FA-P1-6** `providerRouter.ts` (**D15 – Entscheidung:** **A100/HF-Endpoint
+- [x] **FA-P1-6** `providerRouter.ts` (**D15 – Entscheidung:** **A100/HF-Endpoint
       bevorzugt**, da AI nur damit richtig läuft; kein Kosten-Sort). Zusätzlich
       DevSettings-Reiter „AI Server Shutdown" → bei Shutdown automatisch
       Fallbacks aktivieren (FA-11)
-- [ ] **FA-P1-7** `HfEndpointProvider.run`: Gesamt-Timeout (z. B. 120 s) über
+- [x] **FA-P1-7** `HfEndpointProvider.run`: Gesamt-Timeout (z. B. 120 s) über
       alle Versuche, AbortSignal durchreichen, Backoff-Deckel (FA-12)
-- [ ] **FA-P1-8** `circuitBreaker.ts`: HALF_OPEN mit Probe-Lock (nur 1 Call),
+- [x] **FA-P1-8** `circuitBreaker.ts`: HALF_OPEN mit Probe-Lock (nur 1 Call),
       `getState()` ohne Mutation, Erfolg/Failure korrekt zählen (FA-13)
-- [ ] **FA-P1-9** `app.py` `/infer`: Fehlerdetails nur ins Log, Client erhält
+- [x] **FA-P1-9** `app.py` `/infer`: Fehlerdetails nur ins Log, Client erhält
       generische Meldung ohne Pfade/Traceback (FA-15)
-- [ ] **FA-P2-1** `costTracker.ts`: Pruning/Fenster (z. B. 30 Tage), Index
+- [x] **FA-P2-1** `costTracker.ts`: Pruning/Fenster (z. B. 30 Tage), Index
       `Map<sessionId, entries>` / `Map<jobId, entries>` statt O(n)-Filter (FA-14)
 - [ ] **FA-P2-2** Regressionstests für FA-1/FA-4: sicherstellen, dass
       `repository` + `revision` aus Manifest verwendet werden (FA-1, FA-4)
@@ -684,11 +684,11 @@ Quellen, die ausgewertet wurden:
 
 ### Ebene 1 – Atomare Code-Analyse (Hot-Paths)
 
-- [ ] **AM-E1-1** `src/audio/worklets/dspProcessor.ts:setLowpass` → `this.filterCo =
+- [x] **AM-E1-1** `src/audio/worklets/dspProcessor.ts:setLowpass` → `this.filterCo =
       [...]` wird **pro Sample** neu allokiert (Array im Audio-Render-Thread).
       Fix: Koeffizienten als skalare Felder (`b0,b1,b2,a1,a2`) oder vorberechneter
       Block; keine Allokation im Hot-Path.
-- [ ] **AM-E1-2** `masteringProcessor.stepRamps()` / `effectProcessor.stepRamps()` /
+- [x] **AM-E1-2** `masteringProcessor.stepRamps()` / `effectProcessor.stepRamps()` /
       `dspProcessor.stepRamps()` erzeugen **pro Sample eine Closure**
       (`const step = (…) => …`). Fix: Parameter-Rampen als flache Felder oder
       inline-Schritte ohne Funktionsallokation.
@@ -696,9 +696,9 @@ Quellen, die ausgewertet wurden:
       `Math.log10`, `Math.pow`, `Math.exp`-Koeffizient (releaseCoeff ist ok, aber
       `gr = Math.pow(10, -grDb/20)` pro Sample). Fix: Block-Envelope oder
       Lookup/Approximation; messen mit `goldenAudio`.
-- [ ] **AM-E1-4** `effectProcessor.crush()` ruft `Math.pow(2, bits)` pro Sample.
+- [x] **AM-E1-4** `effectProcessor.crush()` ruft `Math.pow(2, bits)` pro Sample.
       Fix: `levels` nur bei Parameter-Änderung berechnen.
-- [ ] **AM-E1-5** `dspProcessor.setLowpass()` berechnet `Math.sin/cos` pro Sample
+- [x] **AM-E1-5** `dspProcessor.setLowpass()` berechnet `Math.sin/cos` pro Sample
       pro Kanal. Fix: State-Variable-Filter (Chamberlin) oder Koeffizienten nur
       bei Cutoff-/Resonanz-Änderung neu berechnen (Control-Rate).
 - [ ] **AM-E1-6** Hot-Path-Audit-Skript erweitern:
@@ -733,7 +733,7 @@ Quellen, die ausgewertet wurden:
 
 ### Ebene 3 – Multiuser-Echtzeit-Architektur
 
-- [ ] **AM-E3-1** `src/context/PluginManagerContext.tsx:requestLock` –
+- [x] **AM-E3-1** `src/context/PluginManagerContext.tsx:requestLock` –
       `setPluginLocks(prev => { granted = …; return … })` ist ein
       **Seiteneffekt im State-Updater**; `granted` wird in React 18/StrictMode
       nicht zuverlässig synchron zurückgegeben (Lock kann fälschlich fehlschlagen
@@ -869,7 +869,7 @@ Quellen, die ausgewertet wurden:
 - [ ] **NEW-D15-1** DevSettings-Reiter „AI Server Shutdown": Button stoppt
       A100-Endpoint/Job; Fallbacks werden automatisch aktiviert; Standard beim
       Start: A100-Pfad komplett ausrollen
-- [ ] **NEW-D15-2** ProviderRouter-Reihenfolge auf A100/HF-Endpoint zuerst
+- [x] **NEW-D15-2** ProviderRouter-Reihenfolge auf A100/HF-Endpoint zuerst
       umstellen (kein Kosten-Sort); Fallback nur bei DevSettings-Shutdown/Fehler
 - [ ] **NEW-D4-1** V2-AudioGraph als eigenes Arbeitspaket mit hoher Priorität
       weiterführen (nicht einfrieren); Meilenstein „V2-Minimum hörbar"

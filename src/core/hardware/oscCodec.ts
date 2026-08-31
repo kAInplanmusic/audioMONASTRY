@@ -137,11 +137,17 @@ export function decodeOscString(bytes: Uint8Array, offset: number): { value: str
 }
 
 function decodeOscArg(bytes: Uint8Array, type: string, offset: number, view: DataView): { arg: OscArgument; next: number } {
+  // FA-P1-5: Bounds-Checks – abgeschnittene/feindliche Pakete dürfen keinen RangeError auslösen.
+  const need = (n: number): void => {
+    if (n < 0 || offset + n > bytes.length) throw new Error(`OSC-Paket abgeschnitten (benötigt ${n} Bytes an Offset ${offset}).`);
+  };
+
   switch (type) {
-    case 'i': return { arg: { type: 'i', value: view.getInt32(offset, false) }, next: offset + 4 };
-    case 'f': return { arg: { type: 'f', value: view.getFloat32(offset, false) }, next: offset + 4 };
-    case 'd': return { arg: { type: 'd', value: view.getFloat64(offset, false) }, next: offset + 8 };
+    case 'i': need(4); return { arg: { type: 'i', value: view.getInt32(offset, false) }, next: offset + 4 };
+    case 'f': need(4); return { arg: { type: 'f', value: view.getFloat32(offset, false) }, next: offset + 4 };
+    case 'd': need(8); return { arg: { type: 'd', value: view.getFloat64(offset, false) }, next: offset + 8 };
     case 't': {
+      need(8);
       const seconds = view.getUint32(offset, false);
       const fraction = view.getUint32(offset + 4, false);
       return { arg: { type: 't', value: { seconds, fraction } }, next: offset + 8 };
@@ -151,7 +157,9 @@ function decodeOscArg(bytes: Uint8Array, type: string, offset: number, view: Dat
       return { arg: { type: 's', value }, next };
     }
     case 'b': {
+      need(4);
       const len = view.getInt32(offset, false);
+      if (len < 0 || offset + 4 + len > bytes.length) throw new Error('OSC-Blob-Länge ungültig.');
       const start = offset + 4;
       return { arg: { type: 'b', value: bytes.slice(start, start + len) }, next: start + len + PAD(len) };
     }

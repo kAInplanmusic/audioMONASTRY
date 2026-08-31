@@ -27,6 +27,7 @@ class EffectProcessor extends AudioWorkletProcessor {
   private chorusDepth = 0.5;
 
   private crushBits = 8;
+  private crushLevels = Math.pow(2, 8); // AM-E1-4: vorberechnet, kein Math.pow pro Sample
   private crushHold = 0;
   private crushReduction = 1;   // Sample-Rate-Reduktion (Hold-Samples)
   private crushCounter = 0;     // Zähler für Hold
@@ -54,7 +55,10 @@ class EffectProcessor extends AudioWorkletProcessor {
       if (typeof m.feedback === 'number') this.combFeedback = Math.max(0, Math.min(0.9, m.feedback));
       if (typeof m.rate === 'number') this.chorusRate = m.rate;
       if (typeof m.depth === 'number') this.chorusDepth = Math.max(0, Math.min(1, m.depth));
-      if (typeof m.bits === 'number') this.crushBits = Math.max(2, Math.min(16, m.bits));
+      if (typeof m.bits === 'number') {
+        this.crushBits = Math.max(2, Math.min(16, m.bits));
+        this.crushLevels = Math.pow(2, Math.round(this.crushBits));
+      }
       if (typeof m.sampleReduction === 'number') this.crushReduction = Math.max(1, Math.min(64, m.sampleReduction)); this.crushCounter = 0;
     };
   }
@@ -66,17 +70,25 @@ class EffectProcessor extends AudioWorkletProcessor {
 
   /** Pro Sample aufrufen: bewegt laufende Rampen einen Schritt Richtung Ziel. */
   private stepRamps(): void {
-    const step = (p: string, cur: number, write: (v: number) => void) => {
-      if (this.rampSteps[p] === undefined || this.rampSteps[p] <= 0) return;
-      this.rampSteps[p] -= 1;
-      const target = this.rampTargets[p];
-      const delta = this.rampDeltas[p] ?? 0;
-      if (this.rampSteps[p] <= 0) write(target);
-      else write(cur + delta);
-    };
-    step('wet', this.wet, (v) => { this.wet = v; });
-    step('feedback', this.combFeedback, (v) => { this.combFeedback = v; });
-    step('depth', this.chorusDepth, (v) => { this.chorusDepth = v; });
+    // AM-E1-2: Inline-Schritte statt Closure-Allokation pro Sample.
+    if (this.rampSteps['wet'] !== undefined && this.rampSteps['wet'] > 0) {
+      this.rampSteps['wet'] -= 1;
+      const t = this.rampTargets['wet'];
+      const d = this.rampDeltas['wet'] ?? 0;
+      this.wet = this.rampSteps['wet'] <= 0 ? t : this.wet + d;
+    }
+    if (this.rampSteps['feedback'] !== undefined && this.rampSteps['feedback'] > 0) {
+      this.rampSteps['feedback'] -= 1;
+      const t = this.rampTargets['feedback'];
+      const d = this.rampDeltas['feedback'] ?? 0;
+      this.combFeedback = this.rampSteps['feedback'] <= 0 ? t : this.combFeedback + d;
+    }
+    if (this.rampSteps['depth'] !== undefined && this.rampSteps['depth'] > 0) {
+      this.rampSteps['depth'] -= 1;
+      const t = this.rampTargets['depth'];
+      const d = this.rampDeltas['depth'] ?? 0;
+      this.chorusDepth = this.rampSteps['depth'] <= 0 ? t : this.chorusDepth + d;
+    }
   }
 
   private reverb(x: number): number {
@@ -111,8 +123,7 @@ class EffectProcessor extends AudioWorkletProcessor {
       this.crushCounter = this.crushReduction;
       this.crushHold = x;
     }
-    const levels = Math.pow(2, Math.round(this.crushBits));
-    return Math.round(this.crushHold * levels) / levels;
+    return Math.round(this.crushHold * this.crushLevels) / this.crushLevels;
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern

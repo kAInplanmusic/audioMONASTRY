@@ -64,10 +64,10 @@ class State:
             "runtime": "ready" if self.ready else "starting",
             "models_ready": self.models_ready,
             "models": {
-                "core": models["core"],
-                "frequent": models["frequent"],
-                "onDemand": models["onDemand"],
-                "rare": models["rare"],
+                "core": models.get("core", "available"),
+                "frequent": models.get("frequent", "available"),
+                "onDemand": models.get("onDemand", "available"),
+                "rare": models.get("rare", "available"),
             },
         }
 
@@ -179,11 +179,12 @@ async def infer(request: Request) -> JSONResponse:
     except ModelUnavailableError as exc:
         duration_ms = int((time.time() - started) * 1000)
         log_event("WARN", "model unavailable", task=task, model=model, error=str(exc), durationMs=duration_ms)
-        raise HTTPException(status_code=503, detail={"code": "MODEL_UNAVAILABLE", "model": model, "message": str(exc)})
+        raise HTTPException(status_code=503, detail={"code": "MODEL_UNAVAILABLE", "model": model, "message": "model unavailable"})
     except Exception as exc:  # noqa: BLE001 – zentrale Fehlerbehandlung
         duration_ms = int((time.time() - started) * 1000)
+        # FA-P1-9: Details nur ins Log; Client erhält generische Meldung ohne Pfade/Traceback.
         log_event("ERROR", "inference failed", task=task, model=model, error=str(exc), durationMs=duration_ms)
-        raise HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "model": model, "message": str(exc)})
+        raise HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "model": model, "message": "inference failed"})
 
 
 @app.post("/mcp/tools/{tool_name}")

@@ -124,7 +124,7 @@ def hf_generate(_model_id: str, definition: ModelDefinition, payload: Dict[str, 
     processor = AutoProcessor.from_pretrained(definition.repository, revision=definition.revision)
     model = MusicgenForConditionalGeneration.from_pretrained(definition.repository, revision=definition.revision)
     prompt = str(payload.get("prompt", "electronic techno loop"))
-    max_seconds = min(float(payload.get("maxDuration", 10)), float(_definition.maxDuration))
+    max_seconds = min(float(payload.get("maxDuration", 10)), float(definition.maxDuration))
     inputs = processor(text=[prompt], return_tensors="pt")
     with torch.no_grad():
         out = model.generate(**inputs, max_new_tokens=int(max_seconds * 50))

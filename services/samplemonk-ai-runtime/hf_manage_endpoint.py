@@ -141,8 +141,17 @@ def main() -> int:
         existing = get_inference_endpoint(ENDPOINT_NAME, namespace=NAMESPACE)
         print(f"Endpoint existiert (status={existing.status}) -> update")
         ep = update_inference_endpoint(ENDPOINT_NAME, **_common_kwargs())
-    except Exception as get_error:
-        print(f"Endpoint existiert nicht ({type(get_error).__name__}) -> create")
+    except Exception as get_error:  # noqa: BLE001 – FA-P1-3: nur 404/Not-Found → create
+        text = str(get_error)
+        not_found = "404" in text or "not found" in text.lower() or "does not exist" in text.lower()
+        if not not_found:
+            print(
+                f"FEHLER: get_inference_endpoint fehlgeschlagen ({type(get_error).__name__}: {text}). "
+                "Kein Create – Netz-/Auth-/Rate-Fehler müssen manuell geklärt werden.",
+                file=sys.stderr,
+            )
+            return 3
+        print(f"Endpoint existiert nicht (404) -> create")
         ep = create_inference_endpoint(ENDPOINT_NAME, **_create_kwargs())
 
     print(f"OK name={ep.name} status={ep.status} url={ep.url}")

@@ -21,8 +21,10 @@ class DspProcessor extends AudioWorkletProcessor {
   private envAttack = 0.02;
   private envRelease = 0.08;
   // Dynamisches Filter
-  private filterCo = [1,0,0,0,0]; // lowpass biquad
+  private filterCo = [1,0,0,0,0]; // lowpass biquad (In-Place-Update, keine Allokation im Hot-Path)
   private filterZ = [0,0];
+  private lastCutoff = -1;
+  private lastQ = -1;
   private baseCutoff = 1000;
   private resonance = 0.5;
   private depth = 0.4;
@@ -59,28 +61,49 @@ class DspProcessor extends AudioWorkletProcessor {
   private rampDeltas: Record<string, number> = {};
   private rampSteps: Record<string, number> = {};
 
+  // AM-E1-2: keine Closure-Allokation pro Sample – Inline-Schritte.
   private stepRamps(): void {
-    const step = (p: string, cur: number, write: (v: number) => void) => {
-      if (this.rampSteps[p] === undefined || this.rampSteps[p] <= 0) return;
-      this.rampSteps[p] -= 1;
-      const target = this.rampTargets[p];
-      const delta = this.rampDeltas[p] ?? 0;
-      if (this.rampSteps[p] <= 0) write(target);
-      else write(cur + delta);
-    };
-    step('drive', this.drive, (v) => { this.drive = Math.max(0, Math.min(1, v)); });
-    step('depth', this.depth, (v) => { this.depth = Math.max(0, Math.min(1, v)); });
-    step('resonance', this.resonance, (v) => { this.resonance = Math.max(0.1, Math.min(1, v)); });
-    step('phase', this.apCoef, (v) => { this.apCoef = v; });
+    if (this.rampSteps['drive'] !== undefined && this.rampSteps['drive'] > 0) {
+      this.rampSteps['drive'] -= 1;
+      const t = this.rampTargets['drive'];
+      const d = this.rampDeltas['drive'] ?? 0;
+      this.drive = Math.max(0, Math.min(1, this.rampSteps['drive'] <= 0 ? t : this.drive + d));
+    }
+    if (this.rampSteps['depth'] !== undefined && this.rampSteps['depth'] > 0) {
+      this.rampSteps['depth'] -= 1;
+      const t = this.rampTargets['depth'];
+      const d = this.rampDeltas['depth'] ?? 0;
+      this.depth = Math.max(0, Math.min(1, this.rampSteps['depth'] <= 0 ? t : this.depth + d));
+    }
+    if (this.rampSteps['resonance'] !== undefined && this.rampSteps['resonance'] > 0) {
+      this.rampSteps['resonance'] -= 1;
+      const t = this.rampTargets['resonance'];
+      const d = this.rampDeltas['resonance'] ?? 0;
+      this.resonance = Math.max(0.1, Math.min(1, this.rampSteps['resonance'] <= 0 ? t : this.resonance + d));
+    }
+    if (this.rampSteps['phase'] !== undefined && this.rampSteps['phase'] > 0) {
+      this.rampSteps['phase'] -= 1;
+      const t = this.rampTargets['phase'];
+      const d = this.rampDeltas['phase'] ?? 0;
+      this.apCoef = this.rampSteps['phase'] <= 0 ? t : this.apCoef + d;
+    }
   }
 
   private setLowpass(freq: number, q: number) {
+    // AM-E1-1/E1-5: nur bei Parameter-Änderung neu berechnen; In-Place-Update.
+    if (freq === this.lastCutoff && q === this.lastQ) return;
+    this.lastCutoff = freq;
+    this.lastQ = q;
     const w = 2*Math.PI*freq/sampleRate;
     const alpha = Math.sin(w)/(2*q);
     const cw = Math.cos(w);
     const b0 = (1-cw)/2, b1 = 1-cw, b2 = b0;
     const a0 = 1+alpha, a1 = -2*cw, a2 = 1-alpha;
-    this.filterCo = [b0/a0, b1/a0, b2/a0, a1/a0, a2/a0];
+    this.filterCo[0] = b0/a0;
+    this.filterCo[1] = b1/a0;
+    this.filterCo[2] = b2/a0;
+    this.filterCo[3] = a1/a0;
+    this.filterCo[4] = a2/a0;
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern

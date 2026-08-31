@@ -44,6 +44,10 @@ const TASK_COST_USD: Partial<Record<AiTask, number>> = {
 
 export class CostTracker {
   private entries: CostEntry[] = [];
+  private bySession = new Map<string, CostEntry[]>();
+  private byJob = new Map<string, CostEntry>();
+  // FA-P2-1: Retention-Fenster (Default 30 Tage) gegen unbegrenztes Wachstum.
+  private readonly retentionMs = Number(process.env.AI_COST_RETENTION_MS ?? 30 * 24 * 3_600_000);
   private gpuType = process.env.AI_GPU_TYPE ?? 'A100';
 
   setGpuType(gpuType: string): void {
@@ -66,9 +70,28 @@ export class CostTracker {
     return 0;
   }
 
+  private prune(now = Date.now()): void {
+    const cutoff = now - this.retentionMs;
+    while (this.entries.length > 0 && this.entries[0].createdAt < cutoff) {
+      const old = this.entries.shift()!;
+      const sessionList = this.bySession.get(old.sessionId);
+      if (sessionList) {
+        const idx = sessionList.indexOf(old);
+        if (idx >= 0) sessionList.splice(idx, 1);
+        if (sessionList.length === 0) this.bySession.delete(old.sessionId);
+      }
+      if (this.byJob.get(old.jobId) === old) this.byJob.delete(old.jobId);
+    }
+  }
+
   record(entry: Omit<CostEntry, 'createdAt'>): CostEntry {
     const full: CostEntry = { ...entry, createdAt: Date.now() };
     this.entries.push(full);
+    this.prune();
+    const sessionList = this.bySession.get(full.sessionId) ?? [];
+    sessionList.push(full);
+    this.bySession.set(full.sessionId, sessionList);
+    this.byJob.set(full.jobId, full);
     aiLogger.info('cost recorded', {
       jobId: entry.jobId,
       provider: entry.provider,
@@ -79,11 +102,11 @@ export class CostTracker {
   }
 
   costForSession(sessionId: string): number {
-    return this.entries.filter((e) => e.sessionId === sessionId).reduce((sum, e) => sum + e.estimatedCostUsd, 0);
+    return (this.bySession.get(sessionId) ?? []).reduce((sum, e) => sum + e.estimatedCostUsd, 0);
   }
 
   costForJob(jobId: string): number {
-    return this.entries.filter((e) => e.jobId === jobId).reduce((sum, e) => sum + e.estimatedCostUsd, 0);
+    return this.byJob.get(jobId)?.estimatedCostUsd ?? 0;
   }
 
   /** Durchschnittskosten pro Stunde (über die letzten `windowMs`). */
