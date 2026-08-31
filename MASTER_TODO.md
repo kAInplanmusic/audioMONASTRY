@@ -352,14 +352,14 @@ Quellen, die ausgewertet wurden:
 ## 7. 🔵 P3 – STRATEGISCH: KI/MOA/MCP, Prompt-DB, Evaluierung
 
 ### P3-1 Datenbank-Migration 002: Systemprompts & Evaluierung
-- [ ] `database/ai_migration_002.sql`:
+- [x] `database/ai_migration_002.sql`:
       - `system_prompts` (id, plugin_id, role, version, content, enabled, meta)
       - `plugin_prompt_versions` (plugin_id, version, prompt_id, changelog)
       - `ai_evaluations` (id, plugin_id, task, prompt_version, model, provider,
         input, output, score, metrics jsonb, created_at)
       - `ai_eval_runs` (run_id, plugin_id, status, summary, created_at)
       - RLS: anon read (Prompts), service_role write.
-- [ ] CRUD-Helfer in `src/core/ai/orchestrator/promptStore.ts` +
+- [x] CRUD-Helfer in `src/core/ai/orchestrator/promptStore.ts` +
       `evaluationStore.ts`; Tests.
 - [ ] **Prüfpunkt:** Migration idempotent; CRUD-Tests grün; Daten in Supabase
       sichtbar.
@@ -500,7 +500,7 @@ Quellen, die ausgewertet wurden:
       (verknüpft: P1-3/P2-3, AUD-5)
 - [ ] **AUD-P1-3** `database/ai_migration_002.sql`: Prompt-/Eval-Tabellen
       (verknüpft: P3-1, AUD-8)
-- [ ] **AUD-P1-4** `npm run verify` erweitern: separater `verify:boundary`-Lauf,
+- [x] **AUD-P1-4** `npm run verify` erweitern: separater `verify:boundary`-Lauf,
       damit Boundary-Scan auch bei Testfehler ausführbar ist (AUD-9)
 - [ ] **AUD-P2-1** Testrun-2-Checkliste mit den AUD-Befunden abgleichen (P5-1)
 
@@ -514,15 +514,15 @@ Quellen, die ausgewertet wurden:
 > gilt die MASTER_TODO als „vollständig analysiert“.
 
 ### GAP-1 Systematische Log-/Session-Vollauswertung
-- [ ] Alle Log-/Session-Quellen parsen und in `docs/LOGS_AUDIT_2026.md` als
+- [x] Alle Log-/Session-Quellen parsen und in `docs/LOGS_AUDIT_2026.md` als
       Fehler-Register überführen (Quelle, Zeit, Severity, Task-Link):
       - `~/.continue/sessions/*.json` (bee9c73f… ≈ 325 MB, d4f1192d… ≈ 174 MB)
       - `~/.deepcode/logs/error.log`, `~/.deepcode/audit.log`,
         `~/.deepcode/agent-sessions.json`
       - `~/.xsession-errors*`, `~/.npm/_logs/*debug-0.log`
       - `test-results/`, Playwright-Results
-- [ ] Aus dem Fehler-Register fehlende Tasks in MASTER_TODO nachziehen
-- [ ] **Prüfpunkt:** 100 % der 158 gefundenen Log-Fehler-/Fail-Treffer sind
+- [x] Aus dem Fehler-Register fehlende Tasks in MASTER_TODO nachziehen
+- [x] **Prüfpunkt:** 100 % der 158 gefundenen Log-Fehler-/Fail-Treffer sind
       klassifiziert (ignoriert, bekannt, Task) und kein neuer Fehler taucht
       unklassifiziert auf
 
@@ -541,12 +541,12 @@ Quellen, die ausgewertet wurden:
       (Single-Root-Output-Regel)
 
 ### GAP-3 Atomarer Plugin-Audit – alle 21 Plugins einzeln
-- [ ] Pro Plugin eine atomare Checkliste anlegen (Datei
+- [x] Pro Plugin eine atomare Checkliste anlegen (Datei
       `docs/PLUGIN_AUDIT_MATRIX.md`):
       ID/Name, Komponente, State-Lifecycle (OFF/AUTO_AI/PRO), Audio-Quelle,
       Routing-Ziel, Parameter, Locking, Close/OFF, Clipboard, Skin,
       MOA-Prompt, Eval-Datensatz, Fehlerfälle
-- [ ] Checkliste für **masterplayer**, **instrument**, **synthesizer**,
+- [x] Checkliste für **masterplayer**, **instrument**, **synthesizer**,
       **drum**, **sampler**, **sequencer**, **voice**, **sound**, **mixer**,
       **controller**, **effect**, **drop**, **library**, **eq**, **dsp**,
       **mastering**, **stem**, **spatial**, **recording**, **performance**,
@@ -571,7 +571,7 @@ Quellen, die ausgewertet wurden:
 ### GAP-5 Prompt-/Trainings-Matrix je Plugin
 - [x] **D18 (Sprache):** Systemprompts/Few-Shots **Deutsch** + englische
       Keywords (für Agent-Erkennung).
-- [ ] `docs/PLUGIN_PROMPT_MATRIX.md` anlegen: 21 Plugins ×
+- [x] `docs/PLUGIN_PROMPT_MATRIX.md` anlegen: 21 Plugins ×
       (Systemprompt, Few-Shots, MCP-Tools, Eval-Datensatz, Iterationsstatus,
       Score)
 - [ ] Je Plugin Prompt-Version in `system_prompts` (DB) anlegen
@@ -581,16 +581,16 @@ Quellen, die ausgewertet wurden:
       DB; Score-Abfall blockiert Release (G13)
 
 ### GAP-6 Alternativen-Katalog
-- [ ] `docs/ALTERNATIVEN_2026.md` anlegen: für jede kritische Entscheidung
+- [x] `docs/ALTERNATIVEN_2026.md` anlegen: für jede kritische Entscheidung
       Alternativen mit Vor-/Nachteilen und Empfehlung dokumentieren:
       Plugin-Routing, Mixer-Sichtbarkeit (fix vs. Plugin), Monitor-Modell,
       2.1-Ausgabe, Synth-Backend (Tone/Worklet/WASM/V2-Graph), AI-Provider,
       Transport (P2P/SFU), Native Runtime, Scratchpad-UI
-- [ ] Jede Alternative mit verknüpftem Task/Gate in MASTER_TODO
-- [ ] **Prüfpunkt:** Kein P0/P1-Task ohne dokumentierte Alternative
+- [x] Jede Alternative mit verknüpftem Task/Gate in MASTER_TODO
+- [x] **Prüfpunkt:** Kein P0/P1-Task ohne dokumentierte Alternative
 
 ### GAP-7 Konfigurations-Matrix
-- [ ] `docs/KONFIGURATIONS_MATRIX_2026.md` anlegen: Ist/Soll/Status je
+- [x] `docs/KONFIGURATIONS_MATRIX_2026.md` anlegen: Ist/Soll/Status je
       Konfiguration:
       `.env.example`, `.env.portal`, `docker-compose*.yml`, `Caddyfile`,
       `SettingsDialog`-Defaults (USB-Soundkarte, 2.1, Sample-Rate,
@@ -600,8 +600,8 @@ Quellen, die ausgewertet wurden:
 - [ ] **Prüfpunkt:** Matrix vollständig; jeder Default hat Ist- und Soll-Wert
 
 ### GAP-8 Zentrales Fehler-Register
-- [ ] `docs/FEHLER_REGISTER_2026.md` als Single Source of Truth anlegen
-- [ ] Jede Fehlermeldung bekommt ID, Quelle, Severity, Status, Task-Link
+- [x] `docs/FEHLER_REGISTER_2026.md` als Single Source of Truth anlegen
+- [x] Jede Fehlermeldung bekommt ID, Quelle, Severity, Status, Task-Link
 - [ ] CI/Logs speisen das Register automatisch (Script oder manuell je Audit)
 - [ ] **Prüfpunkt:** Register ist aktuell; keine Fehler ohne Task-Link
 
@@ -642,7 +642,7 @@ Quellen, die ausgewertet wurden:
 - [ ] **FA-P0-2** `model_manager.py`: echte Modell-Instanzen laden/cachen,
       Handler nutzen geladene Instanz statt `from_pretrained` je Request;
       VRAM real tracken (FA-5)
-- [ ] **FA-P0-3** `server.ts` Upload (**D14 – Entscheidung:** **1 Datei** +
+- [x] **FA-P0-3** `server.ts` Upload (**D14 – Entscheidung:** **1 Datei** +
       Summenlimit als Defense-in-Depth); Streams auf Temp/disk statt
       `Buffer.concat` (FA-7)
 - [x] **FA-P0-4** `handlers.py` `hf_generate`: `_definition` → `definition`
@@ -727,7 +727,7 @@ Quellen, die ausgewertet wurden:
 - [ ] **AM-E2-4** Plugin-Load-Balancing: Web-Browser = 1 AudioContext → kein
       NUMA; dokumentieren. Für native Runtime (Rust/cpal) NUMA-/Core-Pinning
       als Option vorbereiten (`services/audio-runtime`).
-- [ ] **AM-E2-5** Versionierungs-/Side-by-Side-Konflikte: `plugin-manifest.json`
+- [x] **AM-E2-5** Versionierungs-/Side-by-Side-Konflikte: `plugin-manifest.json`
       + `registry.ts` auf doppelte IDs/Metamodul-Kollisionen testen; Registry-
       Validierung als Unit-Test (`tests/registryConflict.test.ts`).
 
@@ -791,7 +791,7 @@ Quellen, die ausgewertet wurden:
 - [ ] **AM-E5-4** Real-Time-Deadline-Test: Xrun-/Dropout-Zähler
       (`analyzerProcessor`) als Gate: 0 Dropouts/24 h bei 4-User-Last;
       CI-Langtest (Nightly) anstoßen.
-- [ ] **AM-E5-5** Malformed-Chunk-Injection: `oscCodec`, `hidReport`, Upload-Pfad
+- [x] **AM-E5-5** Malformed-Chunk-Injection: `oscCodec`, `hidReport`, Upload-Pfad
       mit korrupten/feindlichen Binärdaten fuzzen (siehe auch FA-10/FA-9).
 - [ ] **AM-E5-6** Cross-Platform-Divergenz: Worklet-Verhalten in Chromium/
       Firefox/WebKit + iOS/Android testen (Sample-Rate, Buffer, `setSinkId`).
