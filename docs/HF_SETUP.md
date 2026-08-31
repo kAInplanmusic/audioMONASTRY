@@ -23,8 +23,7 @@ Backoff (1/2/4/8/16 s).
 ## 4. Gewichte-Cache
 
 - `HF_HOME=/data/hf-cache` (persistentes Volume).
-- Revision-Pinning im `model_manifest.json` (`REVISION_PENDING` vor Produktion
-  durch echte Commit-Hashes ersetzen).
+- Revision-Pinning im `model_manifest.json`: echte Commit-Hashes gepinnt (2026-08-31).
 - Keine Gewichte ins Image backen; keine manuelle Installation.
 
 ## 5. Modelle

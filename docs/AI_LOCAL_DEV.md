@@ -40,5 +40,4 @@ HF_ENDPOINT_URL=          # leer lassen → Serverless/Local-Provider
 ## Wichtig
 
 - `AI_RUNTIME_DEVICE=cuda` nur auf GPU-Host (A100).
-- Revision-Pinning: Manifest-Einträge mit `REVISION_PENDING` müssen vor dem
-  ersten Produktions-Deployment auf echte Commit-Hashes gepinnt werden.
+- Revision-Pinning: echte Commit-Hashes sind gepinnt (2026-08-31).

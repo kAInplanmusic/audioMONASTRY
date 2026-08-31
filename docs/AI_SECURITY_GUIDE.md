@@ -24,4 +24,4 @@
 
 - [ ] HF-Token-Rotation dokumentieren (Endpoint-Secret)
 - [ ] Pen-Test der neuen Routen (`/api/ai/*`)
-- [ ] Lizenz-Verifikation MusicGen/Bark/MERT (CC-BY-NC)
+- [x] Lizenz-Verifikation: privat/Forschung, CC-BY-NC ok (2026-08-31)
