@@ -484,6 +484,105 @@ Quellen, die ausgewertet wurden:
 
 ---
 
+## 9c. GAP-ANALYSE & VERVOLLSTÄNDIGUNG (2026-08-31) – Fehler, Logs, TODOs, Plugins, Security, Prompt-Training
+
+> **Vollständigkeits-Check:** Die bisherigen Abschnitte decken die Hauptbefunde
+> ab, aber **nicht** alle geforderten Bereiche auf atomarer Ebene. Dieser
+> Abschnitt schließt die Lücken. Erst wenn GAP-1 bis GAP-8 abgearbeitet sind,
+> gilt die MASTER_TODO als „vollständig analysiert“.
+
+### GAP-1 Systematische Log-/Session-Vollauswertung
+- [ ] Alle Log-/Session-Quellen parsen und in `docs/LOGS_AUDIT_2026.md` als
+      Fehler-Register überführen (Quelle, Zeit, Severity, Task-Link):
+      - `~/.continue/sessions/*.json` (bee9c73f… ≈ 325 MB, d4f1192d… ≈ 174 MB)
+      - `~/.deepcode/logs/error.log`, `~/.deepcode/audit.log`,
+        `~/.deepcode/agent-sessions.json`
+      - `~/.xsession-errors*`, `~/.npm/_logs/*debug-0.log`
+      - `test-results/`, Playwright-Results
+- [ ] Aus dem Fehler-Register fehlende Tasks in MASTER_TODO nachziehen
+- [ ] **Prüfpunkt:** 100 % der 158 gefundenen Log-Fehler-/Fail-Treffer sind
+      klassifiziert (ignoriert, bekannt, Task) und kein neuer Fehler taucht
+      unklassifiziert auf
+
+### GAP-2 Alte TODO-Dateien & verwaiste Punkte abgleichen
+- [ ] `AITodo.md` offene Punkte als Tasks übernehmen:
+      HF-Endpoint (A100) anlegen, Orchestrator-Metriken in `/api/metrics`,
+      Integrationstests `/api/ai/*`, E2E Cold/Warm-Start, Failure-Tests,
+      `scripts/ai-benchmark.ts`, HF-Token-Rotation, Warm-Keep-Option,
+      INT8-Kalibrierung, Modell-Splitting
+- [ ] `docs/AI_SECURITY_GUIDE.md` offene Checkboxen übernehmen:
+      HF-Token-Rotation dokumentieren, Pen-Test `/api/ai/*`
+- [ ] `deepcodetodo.json` (DCT-101…130) auf verwaiste/verschobene Punkte prüfen
+- [ ] `VISIONS_TODO.md`, `wayplan analysis.md`, `wayplan implementation.md`
+      auf noch offene/überholte Aufgaben prüfen
+- [ ] **Prüfpunkt:** Keine offene Checkbox außerhalb von `MASTER_TODO.md`
+      (Single-Root-Output-Regel)
+
+### GAP-3 Atomarer Plugin-Audit – alle 21 Plugins einzeln
+- [ ] Pro Plugin eine atomare Checkliste anlegen (Datei
+      `docs/PLUGIN_AUDIT_MATRIX.md`):
+      ID/Name, Komponente, State-Lifecycle (OFF/AUTO_AI/PRO), Audio-Quelle,
+      Routing-Ziel, Parameter, Locking, Close/OFF, Clipboard, Skin,
+      MOA-Prompt, Eval-Datensatz, Fehlerfälle
+- [ ] Checkliste für **masterplayer**, **instrument**, **synthesizer**,
+      **drum**, **sampler**, **sequencer**, **voice**, **sound**, **mixer**,
+      **controller**, **effect**, **drop**, **library**, **eq**, **dsp**,
+      **mastering**, **stem**, **spatial**, **recording**, **performance**,
+      **ai**
+- [ ] Je Plugin Ergebnis: PASS/WARN/FAIL + verknüpfte Tasks in MASTER_TODO
+- [ ] **Prüfpunkt:** Jedes Plugin hat mindestens einen Test (Unit oder E2E),
+      der Aktivierung → Routing → Deaktivierung abdeckt
+
+### GAP-4 Sicherheitslücken-Audit vervollständigen
+- [ ] `docs/SECURITY_AUDIT.md`, `docs/SECURITY_REMEDIATION_PLAN.md`,
+      `docs/AI_SECURITY_GUIDE.md`, `docs/HARDWARE_AUDIT_2026.md` abgleichen;
+      alle offenen/ungelösten Punkte als Tasks übernehmen
+- [ ] Server-seitiges RBAC durchsetzen (Host/Admin/DJ/Producer/Engineer/Guest)
+- [ ] Locking an User-ID statt Socket-ID server-seitig absichern
+- [ ] HF-Token-Rotation dokumentieren + Endpoint-Secret rotieren
+- [ ] Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF)
+- [ ] Supabase RLS prüfen (Prompts/Evals: anon read, service_role write)
+- [ ] Secret-Scan im CI (z. B. gitleaks) ergänzen
+- [ ] **Prüfpunkt:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` ist
+      vollständig abgehakt oder hat einen offenen Task
+
+### GAP-5 Prompt-/Trainings-Matrix je Plugin
+- [ ] `docs/PLUGIN_PROMPT_MATRIX.md` anlegen: 21 Plugins ×
+      (Systemprompt, Few-Shots, MCP-Tools, Eval-Datensatz, Iterationsstatus,
+      Score)
+- [ ] Je Plugin Prompt-Version in `system_prompts` (DB) anlegen
+- [ ] Je Plugin Eval-Suite (`ai_evaluations`) mit Mindest-Score definieren
+- [ ] Iterations-Loop: Prompt → Eval → Score → Optimierung → neue Version
+- [ ] **Prüfpunkt:** Jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score in der
+      DB; Score-Abfall blockiert Release (G13)
+
+### GAP-6 Alternativen-Katalog
+- [ ] `docs/ALTERNATIVEN_2026.md` anlegen: für jede kritische Entscheidung
+      Alternativen mit Vor-/Nachteilen und Empfehlung dokumentieren:
+      Plugin-Routing, Mixer-Sichtbarkeit (fix vs. Plugin), Monitor-Modell,
+      2.1-Ausgabe, Synth-Backend (Tone/Worklet/WASM/V2-Graph), AI-Provider,
+      Transport (P2P/SFU), Native Runtime, Scratchpad-UI
+- [ ] Jede Alternative mit verknüpftem Task/Gate in MASTER_TODO
+- [ ] **Prüfpunkt:** Kein P0/P1-Task ohne dokumentierte Alternative
+
+### GAP-7 Konfigurations-Matrix
+- [ ] `docs/KONFIGURATIONS_MATRIX_2026.md` anlegen: Ist/Soll/Status je
+      Konfiguration:
+      `.env.example`, `.env.portal`, `docker-compose*.yml`, `Caddyfile`,
+      `SettingsDialog`-Defaults (USB-Soundkarte, 2.1, Sample-Rate,
+      BufferHint, Monitor), `services/*` (Ollama, HF, Replicate, SFU,
+      master-player, stem-ai), `runtime_config.yaml`
+- [ ] Fehlende/fehlerhafte Defaults korrigieren (USB-Auto, 2.1)
+- [ ] **Prüfpunkt:** Matrix vollständig; jeder Default hat Ist- und Soll-Wert
+
+### GAP-8 Zentrales Fehler-Register
+- [ ] `docs/FEHLER_REGISTER_2026.md` als Single Source of Truth anlegen
+- [ ] Jede Fehlermeldung bekommt ID, Quelle, Severity, Status, Task-Link
+- [ ] CI/Logs speisen das Register automatisch (Script oder manuell je Audit)
+- [ ] **Prüfpunkt:** Register ist aktuell; keine Fehler ohne Task-Link
+
+---
+
 ## 10. ✅ VERKNÜPFTE PRÜFPUNKTE / GATES (vor jedem Release)
 
 | Gate | Prüfung | Verknüpfte Tasks |
@@ -501,6 +600,7 @@ Quellen, die ausgewertet wurden:
 | G11 Workflow-Audit | Testrun-2-Checkliste komplett, keine Regression | P5-1 |
 | G12 Verify | `npm run verify` (tsc + Tests + Boundary-Scan) grün | alle |
 | G13 Audit-Regression | `npm run verify` 348/348 grün + Boundary-Scan 0 (AUD-1 fix) | AUD-P1-1, AUD-P1-4 |
+| G14 Vollständigkeits-Gate | GAP-1…GAP-8 abgeschlossen: Fehler-Register, Plugin-Matrix, Prompt-Matrix, Alternativen- & Konfig-Matrix vorhanden; keine offene Checkbox außerhalb MASTER_TODO | GAP-1…GAP-8 |
 
 ---
 
