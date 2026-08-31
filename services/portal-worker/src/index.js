@@ -27,6 +27,7 @@ const LOCATION = 'fsn1';
 const IMAGE = 'ubuntu-24.04';
 const REPO_URL = 'https://github.com/kAInplanmusic/audioMONASTRY.git';
 const PORTAL_DOMAIN = 'anunnakitools.de';
+const ORIGIN_HOST = 'origin.anunnakitools.de';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -333,7 +334,7 @@ async function computeStatus(env) {
         // und resolveOverride direkt auf die Origin-IP – kein Host=IP,
         // kein HTTP-Redirect auf https://IP.
         const healthUrl = `https://${PORTAL_DOMAIN}/api/health`;
-        const res = await fetch(healthUrl, { cf: { resolveOverride: ip } });
+        const res = await fetch(healthUrl, { cf: { resolveOverride: ORIGIN_HOST } });
         if (res.ok) {
           return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/', appIp: ip };
         }
@@ -611,7 +612,7 @@ export default {
       // Cloudflare-Fehler 1003). resolveOverride lenkt die Verbindung auf die
       // Hetzner-Origin-IP, ohne Host/SNI zu verändern.
       const proxied = new Request(request.url, request);
-      return fetch(proxied, { cf: { resolveOverride: app.public_net.ipv4.ip } });
+      return fetch(proxied, { cf: { resolveOverride: ORIGIN_HOST } });
     }
 
     return new Response(PAGE_HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } });
