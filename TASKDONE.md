@@ -882,3 +882,4 @@
 - [x] **AM-E2-2** ControlBus: Voice-/MOA-Kommandos (mcp/drum/stem/recording/visualizer) auf typisierten Bus migriert
 - [x] **AM-E3-5** Prioritäts-Inversion: ControlBus-Burst-Test + Handler-Isolation
 - [x] **P3-2** Prompt-/Kommando-Katalog-Test für alle 21 Plugins (`tests/promptCatalog.test.ts`)
+- [x] **P1-4** Session-Zwischenspeicher: `src/core/session/sessionScratchpad.ts` (IndexedDB-Snapshots: Patterns, BPM, Mixer, Plugin-States, Routing) + Tests
