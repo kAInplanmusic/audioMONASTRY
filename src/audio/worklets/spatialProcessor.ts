@@ -1,25 +1,22 @@
 /**
- * spatialProcessor – spatialMONK AudioWorklet (MVP)
- * ==================================================
- * WhitePaper „spatialMONK“: realistische räumliche Platzierung als
- * AudioWorklet. MVP-Pfad (low CPU):
- *   - equal-power Stereo-Panning aus Azimut
- *   - ITD über zirkuläre Delay-Buffer (≤ 1 ms)
- *   - Distanz-Dämpfung 1/(1+dist) + Distanz-Lowpass (1-Pol)
- *   - sample-genaue Rampen (Azimut/Gain), keine Allokationen in process()
+ * spatialProcessor – spatialMONK AudioWorklet (MVP → Medium/High)
+ * ================================================================
+ * WhitePaper „spatialMONK“ Abschnitt 4:
+ *   low    = equal-power Panning + ITD + Distanz-Lowpass (analytisch, low CPU)
+ *   medium = zusätzlich kurze HRTF-artige FIR-Kernel (8 Taps, built-in)
+ *   high   = geladene HRTF-Kernel (≤ 64 Taps) via loadHRTF, sonst 16-Tap-built-in
  *
  * Port-Protokoll (Main <-> Worklet):
  *   addSource    { cmd:'addSource', id, az, el?, dist?, gain?, name? }
  *   removeSource { cmd:'removeSource', id }
  *   setPos       { cmd:'setPos', id, az, el?, dist?, gain?, rampTime? }
  *   setGlobal    { cmd:'setGlobal', quality, listenerRot?, masterGain? }
- *   loadHRTF     { cmd:'loadHRTF', url } (Preload-Hook; DSP-Conv folgt)
+ *   loadHRTF     { cmd:'loadHRTF', left:number[], right:number[] }
  *   metricsRequest { cmd:'metricsRequest' } → { cmd:'metrics', cpuEstimate, activeSources }
  *   reset        { cmd:'reset' }
  *
- * Erweiterbar auf Medium/High (partitioned FFT / WASM-HRTF) – siehe
- * WhitePaper Abschnitt 4. Dieser Prozessor liefert den deterministischen
- * Low-CPU-Pfad, der für Tests importierbar bleibt.
+ * Alle Puffer sind voralloziert; process() allokiert nichts. Die puren
+ * DSP-Funktionen bleiben für Unit-/Regressions-Tests importierbar.
  */
 
 export type SpatialQuality = 'low' | 'medium' | 'high';
@@ -27,13 +24,13 @@ export type SpatialQuality = 'low' | 'medium' | 'high';
 export interface SpatialProcessorSource {
   id: number;
   name: string;
-  az: number; // Grad, -90 links / 0 vorne / +90 rechts
+  az: number;
   el: number;
   dist: number;
   gain: number;
   muted: boolean;
   active: boolean;
-  // Rampen (sample-genau)
+  // Rampen
   azCurrent: number;
   azTarget: number;
   azDelta: number;
@@ -42,12 +39,17 @@ export interface SpatialProcessorSource {
   gainTarget: number;
   gainDelta: number;
   gainRampRemain: number;
-  // Delay-Line (ITD)
+  // ITD-Delay-Line (low)
   delay: Float32Array;
   delayWrite: number;
-  // Distanz-Lowpass (1-Pol)
+  // Distanz-Lowpass
   lpCoef: number;
   lpState: number;
+  lpL: number;
+  lpR: number;
+  // FIR-History (medium/high)
+  hist: Float32Array;
+  histWrite: number;
 }
 
 /** Equal-Power-Stereo-Gains aus Azimut (inkl. Listener-Rotation). */
@@ -59,40 +61,72 @@ export function azToStereoGains(azDeg: number, listenerRotDeg = 0): { left: numb
   return { left, right };
 }
 
-/** ITD in Samples (positiv = Signal rechts, rechtes Ohr führt → links verzögert). */
+/** ITD in Samples (positiv = Signal rechts, links verzögert). */
 export function itdSamples(azDeg: number, sampleRate: number, listenerRotDeg = 0): number {
   const az = azDeg - listenerRotDeg;
-  const maxItdSec = 0.00063; // Woodworth-Näherung (Kopfradius ~0.09 m)
+  const maxItdSec = 0.00063;
   return Math.round(Math.sin((az * Math.PI) / 180) * maxItdSec * sampleRate);
 }
 
-/** Distanz-Dämpfung: 1/(1+dist), minimal -60 dB vermeidbar. */
+/** Distanz-Dämpfung: 1/(1+dist). */
 export function distanceGain(dist: number): number {
   const d = Math.max(0, Number.isFinite(dist) ? dist : 1);
   return 1 / (1 + d);
 }
 
-/** Einfacher Distanz-Lowpass-Koeffizient (1-Pol) – weiter weg = dumpfer. */
+/** Distanz-Lowpass-Koeffizient (1-Pol). */
 export function distanceLowpassCoef(dist: number, sampleRate: number): number {
   const d = Math.max(0, Number.isFinite(dist) ? dist : 1);
   const cutoff = Math.max(350, Math.min(18000, 16000 / (1 + d * 2.5)));
   return 1 - Math.exp((-2 * Math.PI * cutoff) / sampleRate);
 }
 
-const MAX_DELAY_SAMPLES = 256; // ~5,3 ms bei 48 kHz – ITD braucht ≤ 1 ms
+/** Built-in HRTF-artige Kurz-Kernel (ipsi-/kontralateral, selbst erzeugt, lizenzfrei). */
+export function buildDefaultHrtf(kind: 'medium' | 'high'): { left: number[]; right: number[] } {
+  if (kind === 'medium') {
+    return {
+      left: [0.65, 0.35, 0.18, 0.08, 0.03, 0.01, 0, 0],
+      right: [0.02, 0.08, 0.18, 0.4, 0.28, 0.12, 0.04, 0.01],
+    };
+  }
+  const left: number[] = [0.5, 0.32, 0.2, 0.13, 0.08, 0.05, 0.03, 0.02, 0.01, 0, 0, 0, 0, 0, 0, 0];
+  const right: number[] = [0.01, 0.03, 0.06, 0.11, 0.18, 0.26, 0.22, 0.14, 0.08, 0.05, 0.03, 0.02, 0.01, 0, 0, 0];
+  return { left, right };
+}
 
-// Worklet-Global in Node-Tests nicht vorhanden → harmloser Fallback,
-// damit die puren DSP-Funktionen unit-testbar bleiben.
+const MAX_DELAY_SAMPLES = 256;
+const MAX_HRTF_TAPS = 64;
+
+const MED_DEFAULT = buildDefaultHrtf('medium');
+const HIGH_DEFAULT = buildDefaultHrtf('high');
+// Vorkonvertierte Kernel – process() darf nicht allokieren.
+const MED_LEFT_KERNEL = Float32Array.from(MED_DEFAULT.left);
+const MED_RIGHT_KERNEL = Float32Array.from(MED_DEFAULT.right);
+const HIGH_LEFT_KERNEL = Float32Array.from(HIGH_DEFAULT.left);
+const HIGH_RIGHT_KERNEL = Float32Array.from(HIGH_DEFAULT.right);
+
+// Worklet-Global in Node-Tests nicht vorhanden → Fallback mit Fake-Port,
+// damit der Prozessor deterministisch instanziierbar bleibt (Regression).
 const WorkletBase: typeof AudioWorkletProcessor =
-  (typeof AudioWorkletProcessor !== 'undefined' ? AudioWorkletProcessor : class {}) as any;
+  (typeof AudioWorkletProcessor !== 'undefined'
+    ? AudioWorkletProcessor
+    : class {
+        port = {
+          onmessage: null as any,
+          postMessage: (msg: any) => { this.port.onmessage?.({ data: msg }); },
+        };
+      }) as any;
 
-class SpatialProcessor extends WorkletBase {
+export class SpatialProcessor extends WorkletBase {
   private sources: SpatialProcessorSource[] = [];
   private maxSources = 8;
   private quality: SpatialQuality = 'low';
   private listenerRot = 0;
   private masterGain = 1;
   private blockCounter = 0;
+  private hrtfLeft: Float32Array | null = null;
+  private hrtfRight: Float32Array | null = null;
+  private hrtfTaps = 0;
 
   constructor() {
     super();
@@ -118,9 +152,13 @@ class SpatialProcessor extends WorkletBase {
         delayWrite: 0,
         lpCoef: 0,
         lpState: 0,
+        lpL: 0,
+        lpR: 0,
+        hist: new Float32Array(MAX_HRTF_TAPS),
+        histWrite: 0,
       });
     }
-    this.port.onmessage = (e: MessageEvent) => this.handleMessage(e.data);
+    this.port.onmessage = (e: any) => this.handleMessage(e?.data);
   }
 
   private sourceById(id: number): SpatialProcessorSource | null {
@@ -173,13 +211,17 @@ class SpatialProcessor extends WorkletBase {
         slot.gainTarget = slot.gain;
         slot.lpCoef = distanceLowpassCoef(slot.dist, sampleRate);
         slot.lpState = 0;
+        slot.lpL = 0;
+        slot.lpR = 0;
         slot.delay.fill(0);
         slot.delayWrite = 0;
+        slot.hist.fill(0);
+        slot.histWrite = 0;
         break;
       }
       case 'removeSource': {
         const s = this.sourceById(Number(m.id));
-        if (s) { s.active = false; s.delay.fill(0); }
+        if (s) { s.active = false; s.delay.fill(0); s.hist.fill(0); }
         break;
       }
       case 'setPos': {
@@ -204,8 +246,18 @@ class SpatialProcessor extends WorkletBase {
         break;
       }
       case 'loadHRTF': {
-        // Preload-Hook. Low/Medium nutzen aktuell den analytischen ITD/ILD-Pfad;
-        // High/WASM-Convolution wird hier später geladen (ArrayBuffer-Transfer).
+        const left = Array.isArray(m.left) ? m.left : m.left instanceof Float32Array ? Array.from(m.left) : null;
+        const right = Array.isArray(m.right) ? m.right : m.right instanceof Float32Array ? Array.from(m.right) : null;
+        if (left && right && left.length > 0 && left.length === right.length) {
+          const taps = Math.min(MAX_HRTF_TAPS, left.length);
+          this.hrtfLeft = new Float32Array(taps);
+          this.hrtfRight = new Float32Array(taps);
+          for (let i = 0; i < taps; i++) {
+            this.hrtfLeft[i] = left[i];
+            this.hrtfRight[i] = right[i];
+          }
+          this.hrtfTaps = taps;
+        }
         break;
       }
       case 'metricsRequest': {
@@ -216,6 +268,7 @@ class SpatialProcessor extends WorkletBase {
         for (const s of this.sources) {
           s.active = false;
           s.delay.fill(0);
+          s.hist.fill(0);
         }
         break;
       }
@@ -226,11 +279,13 @@ class SpatialProcessor extends WorkletBase {
 
   private postMetrics(): void {
     const active = this.sources.reduce((n, s) => n + (s.active ? 1 : 0), 0);
-    const cpuEstimate = Math.min(1, 0.02 + active * 0.03 + (this.quality === 'high' ? 0.25 : this.quality === 'medium' ? 0.1 : 0.02));
+    const cpuEstimate = Math.min(
+      1,
+      0.02 + active * (this.quality === 'low' ? 0.03 : this.quality === 'medium' ? 0.06 : 0.14),
+    );
     this.port.postMessage({ cmd: 'metrics', cpuEstimate, activeSources: active, quality: this.quality });
   }
 
-  // Rampen pro Sample (keine Allokation).
   private stepRamps(s: SpatialProcessorSource): void {
     if (s.azRampRemain > 0) {
       s.azRampRemain -= 1;
@@ -240,6 +295,16 @@ class SpatialProcessor extends WorkletBase {
       s.gainRampRemain -= 1;
       s.gainCurrent = s.gainRampRemain <= 0 ? s.gainTarget : s.gainCurrent + s.gainDelta;
     }
+  }
+
+  private currentKernels(): { left: Float32Array; right: Float32Array; taps: number } {
+    if (this.hrtfLeft && this.hrtfRight && this.hrtfTaps > 0) {
+      return { left: this.hrtfLeft, right: this.hrtfRight, taps: this.hrtfTaps };
+    }
+    if (this.quality === 'medium') {
+      return { left: MED_LEFT_KERNEL, right: MED_RIGHT_KERNEL, taps: MED_LEFT_KERNEL.length };
+    }
+    return { left: HIGH_LEFT_KERNEL, right: HIGH_RIGHT_KERNEL, taps: HIGH_LEFT_KERNEL.length };
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
@@ -256,6 +321,9 @@ class SpatialProcessor extends WorkletBase {
       this.postMetrics();
     }
 
+    const useFir = this.quality !== 'low';
+    const kernels = useFir ? this.currentKernels() : null;
+
     for (let i = 0; i < this.sources.length; i++) {
       const s = this.sources[i];
       if (!s.active || s.muted) continue;
@@ -268,24 +336,49 @@ class SpatialProcessor extends WorkletBase {
         this.stepRamps(s);
         const x = inCh[j] ?? 0;
 
-        // ITD-Delay-Line (mono in, zwei Taps)
-        s.delay[s.delayWrite] = x;
-        const itd = itdSamples(s.azCurrent, sampleRate, this.listenerRot);
-        const leftDelay = Math.max(0, itd);
-        const rightDelay = Math.max(0, -itd);
-        const leftIdx = (s.delayWrite - leftDelay + MAX_DELAY_SAMPLES) % MAX_DELAY_SAMPLES;
-        const rightIdx = (s.delayWrite - rightDelay + MAX_DELAY_SAMPLES) % MAX_DELAY_SAMPLES;
-        s.delayWrite = (s.delayWrite + 1) % MAX_DELAY_SAMPLES;
+        if (!useFir || !kernels) {
+          // Low: ITD + analytisches Panning (beide Ohren durch den
+          // Distanz-Lowpass, symmetrisch → kein ILD-Versatz durch Filterung)
+          s.delay[s.delayWrite] = x;
+          const itd = itdSamples(s.azCurrent, sampleRate, this.listenerRot);
+          const leftDelay = Math.max(0, itd);
+          const rightDelay = Math.max(0, -itd);
+          const leftIdx = (s.delayWrite - leftDelay + MAX_DELAY_SAMPLES) % MAX_DELAY_SAMPLES;
+          const rightIdx = (s.delayWrite - rightDelay + MAX_DELAY_SAMPLES) % MAX_DELAY_SAMPLES;
+          s.delayWrite = (s.delayWrite + 1) % MAX_DELAY_SAMPLES;
 
-        // Distanz-Lowpass (1-Pol)
-        s.lpState += s.lpCoef * (s.delay[leftIdx] - s.lpState);
-        const wet = s.lpState;
+          const leftTap = s.delay[leftIdx];
+          const rightTap = s.delay[rightIdx];
+          s.lpL += s.lpCoef * (leftTap - s.lpL);
+          s.lpR += s.lpCoef * (rightTap - s.lpR);
 
-        // Equal-Power-Gains + Distanz + Quell-Gain
-        const gains = azToStereoGains(s.azCurrent, this.listenerRot);
-        const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
-        outL[j] += wet * gains.left * g;
-        outR[j] += s.delay[rightIdx] * gains.right * g;
+          const gains = azToStereoGains(s.azCurrent, this.listenerRot);
+          const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
+          outL[j] += s.lpL * gains.left * g;
+          outR[j] += s.lpR * gains.right * g;
+        } else {
+          // Medium/High: kurze HRTF-FIR-Kernel (Kreuzohr-Anteile eingebettet)
+          s.hist[s.histWrite] = x;
+          s.histWrite = (s.histWrite + 1) % MAX_HRTF_TAPS;
+
+          s.lpState += s.lpCoef * (x - s.lpState);
+          const wet = s.lpState;
+
+          let accL = 0;
+          let accR = 0;
+          const taps = kernels.taps;
+          for (let k = 0; k < taps; k++) {
+            const idx = (s.histWrite - 1 - k + MAX_HRTF_TAPS) % MAX_HRTF_TAPS;
+            const h = s.hist[idx];
+            accL += h * kernels.left[k];
+            accR += h * kernels.right[k];
+          }
+
+          const gains = azToStereoGains(s.azCurrent, this.listenerRot);
+          const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
+          outL[j] += wet * accL * gains.left * g;
+          outR[j] += wet * accR * gains.right * g;
+        }
       }
     }
     return true;

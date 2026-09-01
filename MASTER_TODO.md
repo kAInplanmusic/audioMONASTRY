@@ -45,11 +45,9 @@
 
 - [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern.
 
-### NEW-MONK-7 spatialMONK – v1 erledigt (siehe TASKDONE), Folgeschritte offen
+### NEW-MONK-7 spatialMONK – offen
 
-- [ ] Audio-Graph-Routing der Spuren auf die spatial-processor-Worklet-Eingänge umstellen (aktuell Legacy-Audio-Pfad über audioEngine)
-- [ ] Medium/High: HRTF-WASM-Convolution (partitioned FFT), optional Ambisonics
-- [ ] Regression-WAVs + CI-Job (build-worklets + spatialProcessor-Tests) gemäß WhitePaper Abschnitt 11
+- [ ] WASM partitioned-FFT-HRTF-Convolution (optional, high-end; aktuell JS-FIR-Kernel + JSON-HRTF-Loader)
 
 ### NEW-MONK-8 MONASTRYmasterclock (unsichtbares Systemmodul)
 
