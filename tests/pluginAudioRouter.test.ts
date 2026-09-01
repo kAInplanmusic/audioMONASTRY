@@ -12,7 +12,17 @@ vi.mock('../src/utils/audioEngine', () => ({
     activatePlugin: engineSpies.activate,
     deactivatePlugin: engineSpies.deactivate,
   },
-  pluginAudioChannels: (id: string) => (id === 'mcp' ? ['channel5'] : []),
+  pluginAudioChannels: (id: string) => {
+    const map: Record<string, string[]> = {
+      masterplayer: [], ai: [], controller: [], library: [], mastering: [],
+      stem: [], recording: [], performance: [],
+      spatial: ['channel7'], mixer: ['channel1'], mcp: ['channel5'],
+      drum: ['channel2'], sampler: ['channel5'], synthesizer: ['channel4'],
+      instrument: ['channel8'], voice: ['channel5'], sound: ['channel5'],
+      drop: ['channel5'], effect: ['channel1'], eq: ['channel1'], dsp: ['channel1'],
+    };
+    return (map[id] ?? []) as never;
+  },
 }));
 
 import {
@@ -21,6 +31,7 @@ import {
   getPluginRoute,
   listPluginRoutes,
   routeModuleState,
+  validateRoutingMatrix,
 } from '../src/core/pluginAudioRouter';
 
 describe('pluginAudioRouter (P0-2)', () => {
@@ -59,5 +70,16 @@ describe('pluginAudioRouter (P0-2)', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('AM-E2-1: Isolation-Level sind korrekt abgeleitet', () => {
+    expect(getPluginRoute('synthesizer')?.isolation).toBe('insert');
+    expect(getPluginRoute('mixer')?.isolation).toBe('send');
+    expect(getPluginRoute('library')?.isolation).toBe('ui-only');
+  });
+
+  it('AM-E2-1: Routing-Matrix validiert alle 21 IDs ohne Verstöße', () => {
+    expect(validateRoutingMatrix(PLUGIN_ROUTE_IDS)).toEqual([]);
+    expect(validateRoutingMatrix(['kaputt'])).toContain('kaputt: nicht registriert');
   });
 });

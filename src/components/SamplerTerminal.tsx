@@ -37,10 +37,15 @@ export const SamplerTerminal = React.memo(() => {
   const [pads, setPads] = useState<Pad[]>(emptyPads);
   const [capturing, setCapturing] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
-  // NEW-MONK-2: 16-Step-Sequencer je Pad + Quantize.
-  const [seqs, setSeqs] = useState<Record<number, boolean[]>>({});
+  // NEW-MONK-2: 16/32-Step-Sequencer je Pad + Bank A/B + Quantize + Step-Pitch.
+  const [seqs, setSeqs] = useState<Record<string, boolean[]>>({});
+  const [stepPitches, setStepPitches] = useState<Record<string, Record<number, number>>>({});
   const [curStep, setCurStep] = useState(0);
   const [quantize, setQuantize] = useState(true);
+  const [seqCount, setSeqCount] = useState<16 | 32>(16);
+  const [bank, setBank] = useState<'A' | 'B'>('A');
+
+  const seqKey = (padIdx: number) => `${bank}:${padIdx}`;
 
   const updatePad = (i: number, patch: Partial<Pad>) =>
     setPads((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
@@ -63,12 +68,13 @@ export const SamplerTerminal = React.memo(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [takeoverRequest]);
 
-  const triggerPad = (i: number) => {
+  const triggerPad = (i: number, stepPitch = 0) => {
     const pad = pads[i];
     if (!pad.filled) return;
     const t = SAMPLE_TRACKS[i % SAMPLE_TRACKS.length];
     audioEngine.triggerEvent(t, 0.9);
-    if (pad.pitch !== 0) audioEngine.setChannelPan(t, Math.max(-1, Math.min(1, pad.pitch / 12)));
+    const pitch = (pad.pitch ?? 0) + stepPitch;
+    if (pitch !== 0) audioEngine.setChannelPan(t, Math.max(-1, Math.min(1, pitch / 12)));
   };
 
   // Step-Anzeige vom Master-Transport.
@@ -77,21 +83,27 @@ export const SamplerTerminal = React.memo(() => {
   // Sequencer: aktive Steps triggern das zugehörige Pad (quantisiert).
   useEffect(() => {
     if (!quantize) return;
-    const step = curStep % 16;
-    Object.entries(seqs).forEach(([padIdx, arr]) => {
+    const step = curStep % seqCount;
+    Object.entries(seqs).forEach(([key, arr]) => {
       if (!arr[step]) return;
-      const i = Number(padIdx);
-      if (pads[i]?.filled) triggerPad(i);
+      const i = Number(key.split(':')[1]);
+      if (pads[i]?.filled) triggerPad(i, stepPitches[key]?.[step] ?? 0);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [curStep, quantize, seqs, pads]);
+  }, [curStep, quantize, seqs, pads, seqCount, stepPitches]);
 
   const toggleSeq = (padIdx: number, step: number) => {
+    const key = seqKey(padIdx);
     setSeqs((prev) => {
-      const arr = prev[padIdx] ? [...prev[padIdx]] : Array(16).fill(false);
+      const arr = prev[key] ? [...prev[key]] : Array(seqCount).fill(false);
       arr[step] = !arr[step];
-      return { ...prev, [padIdx]: arr };
+      return { ...prev, [key]: arr };
     });
+  };
+
+  const setStepPitch = (padIdx: number, step: number, pitch: number) => {
+    const key = seqKey(padIdx);
+    setStepPitches((prev) => ({ ...prev, [key]: { ...(prev[key] ?? {}), [step]: pitch } }));
   };
 
   const capture = () => {
@@ -163,27 +175,53 @@ export const SamplerTerminal = React.memo(() => {
         ))}
       </div>
 
-      {/* NEW-MONK-2: Step-Sequencer für das gewählte Pad */}
+      {/* NEW-MONK-2: Step-Sequencer für das gewählte Pad (16/32, Bank A/B) */}
       <div className="px-4 pb-3">
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-[8px] font-mono tracking-[0.25em] text-indigo-500">
-            STEP SEQ · PAD {sel !== null ? String(sel + 1).padStart(2, '0') : '—'} · {curStep + 1}/16
+            STEP SEQ · PAD {sel !== null ? String(sel + 1).padStart(2, '0') : '—'} · BANK {bank} · {curStep + 1}/{seqCount}
           </span>
           <button type="button" onClick={() => setQuantize(!quantize)}
             className={`text-[8px] font-bold px-2 py-0.5 rounded border ${quantize ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'border-neutral-700 text-neutral-500'}`}>
             QUANT {quantize ? 'ON' : 'OFF'}
           </button>
+          {(['A', 'B'] as const).map((b) => (
+            <button type="button" key={b} onClick={() => setBank(b)}
+              className={`text-[8px] font-bold px-2 py-0.5 rounded border ${bank === b ? 'bg-indigo-500 text-white border-indigo-300' : 'border-neutral-700 text-neutral-400'}`}>
+              BANK {b}
+            </button>
+          ))}
+          {([16, 32] as const).map((n) => (
+            <button type="button" key={n} onClick={() => setSeqCount(n)}
+              className={`text-[8px] font-bold px-2 py-0.5 rounded border ${seqCount === n ? 'bg-indigo-500 text-white border-indigo-300' : 'border-neutral-700 text-neutral-400'}`}>
+              {n} STEPS
+            </button>
+          ))}
         </div>
         <div className="grid grid-cols-16 gap-1">
-          {[...Array(16)].map((_, i) => {
-            const on = sel !== null && (seqs[sel]?.[i] ?? false);
+          {[...Array(seqCount)].map((_, i) => {
+            const on = sel !== null && (seqs[seqKey(sel)]?.[i] ?? false);
             return (
               <button type="button" key={i}
                 onClick={() => sel !== null && toggleSeq(sel, i)}
-                className={`h-6 rounded-[2px] border transition-all ${on ? 'bg-indigo-500 border-indigo-300' : 'bg-black/60 border-neutral-800 hover:border-indigo-500/50'} ${curStep % 16 === i ? 'ring-1 ring-white/70' : ''}`} />
+                className={`h-6 rounded-[2px] border transition-all ${on ? 'bg-indigo-500 border-indigo-300' : 'bg-black/60 border-neutral-800 hover:border-indigo-500/50'} ${curStep % seqCount === i ? 'ring-1 ring-white/70' : ''}`} />
             );
           })}
         </div>
+        {sel !== null && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-[8px] font-mono text-neutral-500">STEP PITCH (Step {(curStep % seqCount) + 1})</span>
+            <input
+              type="range" min={-12} max={12}
+              value={stepPitches[seqKey(sel)]?.[curStep % seqCount] ?? 0}
+              onChange={(e) => setStepPitch(sel, curStep % seqCount, Number(e.target.value))}
+              className="w-28 accent-indigo-500"
+            />
+            <span className="text-[9px] font-mono text-indigo-300 w-8">
+              {stepPitches[seqKey(sel)]?.[curStep % seqCount] ?? 0}st
+            </span>
+          </div>
+        )}
       </div>
 
       {sel !== null && (

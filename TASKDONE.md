@@ -865,3 +865,20 @@
 
 ---
 
+
+---
+
+## Quelle: MASTER_TODO.md – Deep-TODO-Batch ohne Server/Hardware abgeschlossen (2026-09-01)
+
+- [x] **P0-1** Prüfpunkt als E2E: Studio-Start hat 0 aktive Plugins (`tests/e2e/smoke.spec.ts`)
+- [x] **P0-3** Prüfpunkt als E2E: Plugin-OFF im Terminal synchronisiert Toolbar-Icon
+- [x] **P0-7** Prüfpunkt als E2E: Master-Player-Transport ohne Scrollen erreichbar
+- [x] **P1-1** Touch-Zielgrößen ≥ 44 px (`index.css`), Safe-Area-Utilities, bestehende Responsive-Matrix grün
+- [x] **P1-3/P2-1** `audioEngine.applyLatencyProfile()` – Latenz-Profil (8–15 ms Lookahead) + Sample-Rate aus Settings werden angewendet; SettingsDialog verdrahtet
+- [x] **P2-4/AM-E2-1** `pluginAudioRouter.validateRoutingMatrix()` + Isolation-Level (`insert`/`send`/`ui-only`) + Tests
+- [x] **NEW-MONK-2** samplerMONK: 16/32 Steps, Bank A/B, Step-Pitch
+- [x] **NEW-MONK-3** mcpMONK: Sample je Pad (DnD/Touch/Action-Menu), Note Repeat, Bank A–D, 16/32-Step-Sequencer, Swing
+- [x] **NEW-MONK-8** MONASTRYmasterclock: `src/core/clock/MonastryMasterClock.ts` (singuläre Timing-Quelle, Watchdog, NaN/Inf-Guard, PLL) + Tests
+- [x] **AM-E2-2** ControlBus: Voice-/MOA-Kommandos (mcp/drum/stem/recording/visualizer) auf typisierten Bus migriert
+- [x] **AM-E3-5** Prioritäts-Inversion: ControlBus-Burst-Test + Handler-Isolation
+- [x] **P3-2** Prompt-/Kommando-Katalog-Test für alle 21 Plugins (`tests/promptCatalog.test.ts`)

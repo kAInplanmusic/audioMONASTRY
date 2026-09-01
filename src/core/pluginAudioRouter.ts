@@ -11,6 +11,7 @@ import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';
 import type { TrackType } from '../types';
 
 export type PluginActiveState = 'AUTO_AI' | 'PRO';
+export type PluginIsolationLevel = 'insert' | 'send' | 'ui-only';
 
 export interface PluginRouteConfig {
   id: string;
@@ -20,6 +21,13 @@ export interface PluginRouteConfig {
   source: 'synth' | 'drum' | 'sampler' | 'voice' | 'channel' | 'ui-only';
   /** TRUE wenn dieses Plugin Audio auf MAIN einspeisen darf. */
   mainFeeder: boolean;
+  /**
+   * AM-E2-1: Audio-Isolation-Level des Plugins.
+   *   insert  = eigene Quelle → Kanalzug → MAIN (z. B. synth/drum/sampler)
+   *   send    = Kanalweg-/Bus-Einspeisung (z. B. mixer/effect/eq/dsp/spatial)
+   *   ui-only = kein Audio-Graph (z. B. library/mastering/controller)
+   */
+  isolation: PluginIsolationLevel;
 }
 
 const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> = [
@@ -49,9 +57,43 @@ const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> =
 const ROUTES: Record<string, PluginRouteConfig> = Object.fromEntries(
   PLUGIN_ROUTE_DEFS.map(([id, source, mainFeeder]) => [
     id,
-    { id, channels: pluginAudioChannels(id), source, mainFeeder },
+    {
+      id,
+      channels: pluginAudioChannels(id),
+      source,
+      mainFeeder,
+      isolation: isolationFor(source),
+    },
   ]),
 );
+
+/** AM-E2-1: Isolation-Level aus der Quellklasse ableiten. */
+function isolationFor(source: PluginRouteConfig['source']): PluginIsolationLevel {
+  if (source === 'ui-only') return 'ui-only';
+  if (source === 'channel') return 'send';
+  return 'insert';
+}
+
+/** AM-E2-1: Routing-Matrix validieren (P2-4-Vorprüfung, serverlos). */
+export function validateRoutingMatrix(ids: readonly string[]): string[] {
+  const violations: string[] = [];
+  for (const id of ids) {
+    const route = ROUTES[id];
+    if (!route) {
+      violations.push(`${id}: nicht registriert`);
+      continue;
+    }
+    if (route.isolation !== 'ui-only' && route.channels.length === 0) {
+      violations.push(`${id}: Audio-Quelle ohne Kanalziel (isolation=${route.isolation})`);
+    }
+    for (const ch of route.channels) {
+      if (!/^channel[1-8]$/.test(ch)) {
+        violations.push(`${id}: ungültiges Kanalziel ${ch}`);
+      }
+    }
+  }
+  return violations;
+}
 
 export const PLUGIN_ROUTE_IDS: readonly string[] = Object.freeze(Object.keys(ROUTES));
 

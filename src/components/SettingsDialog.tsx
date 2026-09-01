@@ -274,19 +274,28 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             <select
               className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
               value={settings.sampleRate}
-              onChange={e => update({ ...settings, sampleRate: Number(e.target.value) })}
+              onChange={e => {
+                const sampleRate = Number(e.target.value);
+                update({ ...settings, sampleRate });
+                audioEngine.applyLatencyProfile(settings.bufferHint, sampleRate);
+              }}
             >
               <option value={44100}>44,1 kHz (Standard)</option>
               <option value={48000}>48 kHz (Film/DAW)</option>
               <option value={96000}>96 kHz (High-End)</option>
             </select>
+            <p className="text-[9px] text-neutral-500 mt-1 font-mono">Wird beim nächsten Audio-Init übernommen.</p>
           </div>
           <div>
             <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Latenz-Profil</label>
             <select
               className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
               value={settings.bufferHint}
-              onChange={e => update({ ...settings, bufferHint: e.target.value as SettingsStore['bufferHint'] })}
+              onChange={e => {
+                const bufferHint = e.target.value as SettingsStore['bufferHint'];
+                update({ ...settings, bufferHint });
+                audioEngine.applyLatencyProfile(bufferHint, settings.sampleRate);
+              }}
             >
               <option value="interactive">Niedrig (Live/DJ)</option>
               <option value="balanced">Ausgeglichen</option>

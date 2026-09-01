@@ -90,6 +90,7 @@ const trackNames: Record<TrackType, string> = {
 const SUITABLE_PLUGIN_TARGETS: { id: string; label: string; hint: string }[] = [
   { id: 'sampler', label: 'samplerMONK', hint: 'gewähltes Pad' },
   { id: 'drum', label: 'drumMONK', hint: 'nächster freier Step' },
+  { id: 'mcp', label: 'mcpMONK', hint: 'gewähltes Pad' },
 ];
 
 export const AudioActionMenuHost: React.FC = () => {

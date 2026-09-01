@@ -11,6 +11,7 @@
  * Core-Module ohne Tone/Web-Audio laden (Interface-Boundary-Regel).
  */
 import { voiceControlService } from './VoiceControlService';
+import { controlBus } from '../events/ControlBus';
 
 let registered = false;
 
@@ -52,9 +53,7 @@ export function registerDefaultVoiceCommands(): void {
 
   // --- mcpMONK ----------------------------------------------------------------
   const dispatchMcpPattern = (preset: 'four' | 'break' | 'random') => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:mcp-pattern', { detail: { preset } }));
-    }
+    controlBus.emit('monk:mcp-pattern', { preset });
   };
   voiceControlService.registerPluginCommand('mcp', 'pattern_four', async () => {
     dispatchMcpPattern('four');
@@ -74,9 +73,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['kit', 'drum']);
   voiceControlService.registerPluginCommand('drum', 'pattern_random', async () => {
     // DrumMachine hört auf dieses Event und würfelt sichtbare Patterns für das aktive Kit.
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:drum-pattern-random'));
-    }
+    controlBus.emit('monk:drum-pattern-random', undefined);
   }, ['random', 'zufall', 'pattern']);
 
   // --- mixerMONK --------------------------------------------------------------
@@ -136,9 +133,7 @@ export function registerDefaultVoiceCommands(): void {
   // --- visualizer (Katalog-Alias auf performance/visualizer-mode) ------------
   voiceControlService.registerPluginCommand('visualizer', 'mode', async (ctx) => {
     const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:visualizer-mode', { detail: mode }));
-    }
+    controlBus.emit('monk:visualizer-mode', mode);
   }, ['mode', 'visual', 'visualizer', 'scope']);
 
   // --- effectMONK (Katalog-Alias auf fx.automate) -----------------------------
@@ -180,21 +175,15 @@ export function registerDefaultVoiceCommands(): void {
 
   // --- stemMONK ----------------------------------------------------------------
   voiceControlService.registerPluginCommand('stem', 'separate', async () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:stem-pick-file'));
-    }
+    controlBus.emit('monk:stem-pick-file', undefined);
   }, ['separate', 'stem', 'trennen', 'datei']);
 
   // --- recordingMONK -----------------------------------------------------------
   voiceControlService.registerPluginCommand('recording', 'start', async () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:recorder-start'));
-    }
+    controlBus.emit('monk:recorder-start', undefined);
   }, ['start', 'record', 'aufnahme']);
   voiceControlService.registerPluginCommand('recording', 'stop', async () => {
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:recorder-stop'));
-    }
+    controlBus.emit('monk:recorder-stop', undefined);
   }, ['stop', 'halt']);
 
   // --- masteringMONK -----------------------------------------------------------
@@ -214,9 +203,7 @@ export function registerDefaultVoiceCommands(): void {
   // --- performanceMONK (inkl. ehem. visualMONK-Signalmodus) ---------------------
   voiceControlService.registerPluginCommand('performance', 'mode', async (ctx) => {
     const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:visualizer-mode', { detail: mode }));
-    }
+    controlBus.emit('monk:visualizer-mode', mode);
   }, ['mode', 'visual', 'visualizer', 'scope']);
 
   voiceControlService.registerPluginCommand('performance', 'reset', async () => {

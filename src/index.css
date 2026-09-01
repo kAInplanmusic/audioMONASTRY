@@ -120,9 +120,9 @@ body {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
-  /* Mindest-Trefferfläche 44px für Touch-Geräte */
-  button, select {
-    min-height: 40px;
+  /* Mindest-Trefferfläche 44px für Touch-Geräte (P1-1) */
+  button, [role="button"], select {
+    min-height: 44px;
   }
   input[type="range"] {
     min-height: 44px;
