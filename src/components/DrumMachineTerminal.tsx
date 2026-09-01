@@ -39,7 +39,7 @@ interface DrumMachineProps {
 }
 
 export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isPlaying = false, bpm = 128 }) => {
-  const { addSample, pendingSample, setPendingSample } = useSamples();
+  const { addSample, pendingSample, setPendingSample, takeoverRequest, clearTakeoverRequest } = useSamples();
   const { state, lockStatus, updateState } = usePluginState('drum', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
 
@@ -191,6 +191,18 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
       return { ...prev, [key]: arr };
     });
   }, [lockedByOther, patternKey, selectedSound, emptyPattern]);
+
+  // Einheitliche Action-Menu-Übernahme: Sample auf den nächsten freien Step
+  // des gewählten Sounds legen (bestehender One-Shot-Drop-Pfad).
+  useEffect(() => {
+    if (!takeoverRequest || takeoverRequest.pluginId !== 'drum') return;
+    const key = patternKey(selectedSound?.id ?? '');
+    const arr = patterns[key] ?? emptyPattern();
+    const step = arr.findIndex((on) => !on);
+    if (step >= 0) handleSampleDrop(takeoverRequest.sample, step);
+    clearTakeoverRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [takeoverRequest]);
 
   const clearSelected = () => {
     const key = patternKey(selectedSound?.id ?? '');

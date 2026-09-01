@@ -8,6 +8,7 @@ import { ModuleStateProvider } from './context/ModuleStateContext';
 import { PluginManagerProvider } from './context/PluginManagerContext';
 import { SessionProvider } from './context/SessionContext';
 import { AccessProvider } from './context/AccessContext';
+import { ProjectProvider } from './context/ProjectContext';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
 // Registriert die Standard-Sprach-/KI-Kommandos für die Plugin-Steuerung.
@@ -33,11 +34,13 @@ createRoot(document.getElementById('root')!).render(
         <SessionProvider>
             <ModuleStateProvider>
             <PluginManagerProvider>
+                <ProjectProvider>
                 <SampleProvider>
                 <AudioProvider>
                     <App />
                 </AudioProvider>
                 </SampleProvider>
+                </ProjectProvider>
             </PluginManagerProvider>
             </ModuleStateProvider>
         </SessionProvider>
