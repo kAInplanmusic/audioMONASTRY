@@ -12,8 +12,15 @@ import { aiLogger } from './aiLogger';
 import type { AiJob, AiSession } from './types';
 
 let client: SupabaseClient | null = null;
+let testClient: SupabaseClient | null = null;
+
+/** Nur für Tests: injiziert einen Mock-Supabase-Client (serverlos). */
+export function setAiPersistenceClientForTests(mock: SupabaseClient | null): void {
+  testClient = mock;
+}
 
 function getClient(): SupabaseClient | null {
+  if (testClient !== null) return testClient;
   if (client) return client;
   const url = (process.env.SUPABASE_URL ?? '').trim();
   const key = (process.env.SUPABASE_SERVICE_ROLE ?? '').trim();

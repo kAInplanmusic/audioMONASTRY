@@ -11,6 +11,7 @@ import { syncR2ToSupabase, ingestAudioObject } from './server/cloudAutomation.ts
 import { llmRouter } from './src/core/ai/LlmRouter';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
+import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import type { AiTask } from './src/core/ai/orchestrator/types';
 import type { AudioSample } from './src/data/samples';
 
@@ -133,6 +134,8 @@ app.use((_req, res, next) => {
 // --- Security: Rate limiting (per Env konfigurierbar fuer Lasttests) ---
 const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60 * 1000);
 const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 60);
+// AITodo Phase 18: explizite AI_RATE_*-Limits (Kostenbremse für KI-Routen).
+const AI_RATE = resolveAiRateLimits(process.env as Record<string, string | undefined>);
 
 // P-1: Studio-Zugangstoken. Wird vom Portal (Cloudflare Worker) gesetzt und
 // als HttpOnly-Cookie `studio` an den Browser gegeben. Leer = lokaler
@@ -185,9 +188,11 @@ const apiLimiter = rateLimit({
 });
 
 // Teure KI-/Cloud-/Upload-Routen: enges Limit pro Studio-Token (Kostenbremse).
+// Legacy-Env API_EXPENSIVE_RATE_LIMIT_MAX bleibt respektiert (Server-Tests/Lasttests).
+const legacyExpensiveMax = Number(process.env.API_EXPENSIVE_RATE_LIMIT_MAX || 0);
 const expensiveLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: Number(process.env.API_EXPENSIVE_RATE_LIMIT_MAX || 10),
+  windowMs: AI_RATE.expensiveWindowMs,
+  max: legacyExpensiveMax > 0 ? legacyExpensiveMax : AI_RATE.expensiveMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many expensive requests, please try again later.' },

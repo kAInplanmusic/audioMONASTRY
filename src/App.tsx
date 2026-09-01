@@ -531,6 +531,16 @@ function AppComponent() {
               lockedByOther={lockedByOther}
               onToggle={() => togglePlugin(id)}
               onPromote={() => rackPromote(id)}
+              onCopy={() => {
+                try {
+                  void navigator.clipboard?.writeText(JSON.stringify({
+                    pluginId: id,
+                    name: plugin.name,
+                    state: moduleStates[id] || 'OFF',
+                    ts: Date.now(),
+                  }, null, 2));
+                } catch { /* Clipboard nicht verfügbar */ }
+              }}
             >
               {state !== 'OFF' && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>

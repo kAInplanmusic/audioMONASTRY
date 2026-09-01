@@ -13,8 +13,8 @@ import path from 'node:path';
 
 const DIST = path.resolve(process.cwd(), 'dist');
 const ASSETS = path.join(DIST, 'assets');
-const WARN_BYTES = 1_500_000;
-const FAIL_BYTES = 2_000_000;
+const WARN_BYTES = 1.5 * 1024 * 1024;
+const FAIL_BYTES = 2.0 * 1024 * 1024; // Doku: „FAIL ab 2.0 MB“ – hier korrekt als MiB
 
 const jsFiles = [];
 function scan(dir) {

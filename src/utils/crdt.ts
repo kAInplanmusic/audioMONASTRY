@@ -60,8 +60,8 @@ export class CrdtLwwMap<V> {
  * rückwärtige Springer durch verspätet ankommende Pakete.
  */
 export class CrdtClockMerger {
-  private lastAccepted = -Infinity;
-  private lastApplied = -Infinity;
+  private lastAccepted = 0;
+  private lastApplied = 0;
   private pending: number | null = null;
 
   constructor(
@@ -99,8 +99,8 @@ export class CrdtClockMerger {
     return this.pending !== null;
   }
   reset(): void {
-    this.lastAccepted = -Infinity;
-    this.lastApplied = -Infinity;
+    this.lastAccepted = 0;
+    this.lastApplied = 0;
     this.pending = null;
   }
 }

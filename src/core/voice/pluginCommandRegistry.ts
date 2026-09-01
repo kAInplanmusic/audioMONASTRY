@@ -226,7 +226,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['reset', 'performance', 'monitor']);
 
   // --- UI-only Plugins (Status-Meldung, Folgeschritte verdrahten) ---------------
-  for (const id of ['stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {
+  for (const id of ['masterplayer', 'stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {
     voiceControlService.registerPluginCommand(id, 'status', async () => {
       // Zusätzlicher Status-Handler (Kommandos wie "Status").
     }, ['status', 'bereit', 'ready']);

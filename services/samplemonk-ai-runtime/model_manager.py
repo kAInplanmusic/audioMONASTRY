@@ -90,6 +90,10 @@ class ModelManager:
         self._device = os_env_device()
         self._used_vram_gb = 0.0
         self._inference_count = 0
+        # FA-P0-2: echte Modell-Instanzen cachen; Handler nutzen diese Instanz
+        # statt pro Request `from_pretrained` aufzurufen.
+        self._instances: Dict[str, Any] = {}
+        self._loader = None  # Callable(model_id, definition) -> instance
 
     # ------------------------------------------------------------------ Config
     def configure(self, manifest: Dict[str, Any]) -> None:
@@ -147,8 +151,26 @@ class ModelManager:
             self._loading.add(model_id)
             try:
                 self._load_locked(definition, attempt=0)
+                if self._loader is not None:
+                    instance = self._loader(definition.id, definition)
+                    self._instances[definition.id] = instance
+            except Exception:
+                # Lade-Fehler hinterlassen keinen halb geladenen Zustand.
+                self._loaded.pop(model_id, None)
+                self._instances.pop(model_id, None)
+                raise
             finally:
                 self._loading.discard(model_id)
+
+    def set_loader(self, loader) -> None:
+        """Injizierbaren Modell-Loader setzen (FA-P0-2, testbar ohne GPU)."""
+        with self._lock:
+            self._loader = loader
+
+    def get_instance(self, model_id: str):
+        """Gibt die gecachte Modell-Instanz zurück (oder None)."""
+        with self._lock:
+            return self._instances.get(model_id)
 
     def _load_locked(self, definition: ModelDefinition, attempt: int) -> None:
         required = definition.estimatedVRAM
@@ -190,6 +212,7 @@ class ModelManager:
             definition = self._models.get(model_id)
             self._used_vram_gb = max(0.0, self._used_vram_gb - (definition.estimatedVRAM if definition else 0.0))
             del self._loaded[model_id]
+            self._instances.pop(model_id, None)
             if _HAS_TORCH and torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()  # CUDA Memory sauber freigeben
 
