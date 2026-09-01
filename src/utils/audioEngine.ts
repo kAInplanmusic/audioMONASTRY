@@ -2345,6 +2345,32 @@ class AudioEngine {
     return this.lastSpatialChannels_;
   }
 
+  /**
+   * spatialMONK-Folgeschritt: Kanal-Pan wahlweise in den spatial-processor-
+   * Worklet-Eingang umhängen (target) oder zurück auf GLOBAL_MASTER (null).
+   * Ermöglicht echtes Worklet-Routing ohne die bestehende Kette zu verbiegen.
+   */
+  public routeChannelToSpatialInput(track: TrackType, target: AudioNode | null): boolean {
+    this.ensureInitialized();
+    this.ensureChannelNode(track);
+    const pan = this.channelPans[track];
+    const bus = this.masterBuses['GLOBAL_MASTER'];
+    if (!pan || !bus) return false;
+    try {
+      pan.disconnect(bus);
+      if (target) pan.connect(target);
+      else pan.connect(bus);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Liefert den Eingang des GLOBAL_MASTER-Busses (für Worklet-Ausgang). */
+  public getMasterBusInput(): AudioNode | null {
+    return (this.masterBuses['GLOBAL_MASTER'] as any)?.input ?? this.masterBuses['GLOBAL_MASTER'] ?? null;
+  }
+
   /** Legt die Mehrkanal-Konfiguration um (z.B. '10.0', '18.2'). */
   public setSpatialSetup(setupId: string) {
     this.spatialSetupId = SPATIAL_SETUPS.some((s) => s.id === setupId) ? setupId : '10.0';

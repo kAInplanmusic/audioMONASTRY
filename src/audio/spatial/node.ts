@@ -94,6 +94,20 @@ export class SpatialNode {
     try { this.node.disconnect(); } catch { /* noop */ }
   }
 
+  /** Lädt HRTF-Kernel (JSON {left:[], right:[]}) und überträgt sie ins Worklet. */
+  async loadHrtf(url: string): Promise<boolean> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return false;
+      const data = await res.json();
+      if (!Array.isArray(data?.left) || !Array.isArray(data?.right)) return false;
+      this.node.port.postMessage({ cmd: 'loadHRTF', left: data.left, right: data.right });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   freeSlot(): number {
     const idx = this.slotTaken.indexOf(false);
     return idx;
@@ -301,6 +315,22 @@ export class SpatialCluster {
 
   requestMetrics(): void {
     for (const inst of this.instances) inst.requestMetrics();
+  }
+
+  /** Verbindet alle Instanz-Ausgänge auf ein Ziel (z. B. GLOBAL_MASTER). */
+  connect(destination: AudioNode): void {
+    for (const inst of this.instances) inst.connect(destination);
+  }
+
+  /** Trennt alle Instanz-Ausgänge. */
+  disconnect(): void {
+    for (const inst of this.instances) inst.disconnect();
+  }
+
+  /** Lädt HRTF-Kernel auf alle Instanzen. */
+  async loadHrtf(url: string): Promise<boolean> {
+    const results = await Promise.all(this.instances.map((i) => i.loadHrtf(url)));
+    return results.some(Boolean);
   }
 
   /** Setzt alle Instanzen zurück (Quellen entfernt, DSP-State geleert). */

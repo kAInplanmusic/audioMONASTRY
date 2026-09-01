@@ -63,6 +63,17 @@ jobs:
       - name: Interface-Boundary-Scan
         run: node scripts/validate-interface-boundaries.mjs
 
+      - name: spatialMONK Audio-Regression
+        run: npx tsx scripts/spatial-regression.ts
+
+      - name: Upload spatial regression WAVs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spatial-regression-wavs
+          path: test-results/spatial-regression/
+          retention-days: 7
+
       - name: Stress-/SFU-Skripte Syntax-Check
         run: |
           node --check scripts/hetzner/stress-test.mjs

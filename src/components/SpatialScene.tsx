@@ -49,6 +49,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
   const [metrics, setMetrics] = useState<Metrics>({ cpuEstimate: 0, activeSources: 0, instances: 1 });
   const [status, setStatus] = useState('');
   const [listenerRot, setListenerRot] = useState(scene.global.listenerRot);
+  const [routingEnabled, setRoutingEnabled] = useState(false);
 
   const clusterRef = useRef<SpatialCluster | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -147,8 +148,12 @@ export const SpatialScene = React.memo(function SpatialScene() {
     setScene((prev) => ({ ...prev, sources: [...prev.sources, source] }));
     clusterRef.current?.addSource(source);
     syncLegacy(source);
+    if (routingEnabled && source.track) {
+      const input = clusterRef.current?.sourceInput(source.id);
+      if (input) audioEngine.routeChannelToSpatialInput(source.track, input);
+    }
     setSelectedId(id);
-  }, [lockedByOther, sources, syncLegacy]);
+  }, [lockedByOther, sources, syncLegacy, routingEnabled]);
 
   const removeSelected = useCallback(() => {
     if (selectedId == null) return;
@@ -163,6 +168,38 @@ export const SpatialScene = React.memo(function SpatialScene() {
       clusterRef.current?.setGlobal(nextGlobal.quality, nextGlobal.listenerRot, nextGlobal.masterGain);
       return { ...prev, global: nextGlobal };
     });
+  }, []);
+
+  /**
+   * Folgeschritt 1: echtes Audio-Graph-Routing der Spuren auf die
+   * spatial-processor-Worklet-Eingänge (opt-in, Legacy-Pfad bleibt Standard).
+   */
+  const applyRouting = useCallback((enabled: boolean) => {
+    const cluster = clusterRef.current;
+    if (!cluster) return;
+    const master = audioEngine.getMasterBusInput();
+    if (enabled) {
+      if (master) cluster.connect(master);
+      scene.sources.forEach((s) => {
+        if (!s.track) return;
+        const input = cluster.sourceInput(s.id);
+        if (input) audioEngine.routeChannelToSpatialInput(s.track, input);
+      });
+      setStatus('Worklet-Routing aktiv');
+    } else {
+      cluster.disconnect();
+      scene.sources.forEach((s) => {
+        if (s.track) audioEngine.routeChannelToSpatialInput(s.track, null);
+      });
+      setStatus('Worklet-Routing deaktiviert (Legacy-Pfad)');
+    }
+    setRoutingEnabled(enabled);
+  }, [scene.sources]);
+
+  /** Folgeschritt 2: HRTF-Kernel laden (JSON {left:[], right:[]}). */
+  const loadDefaultHrtf = useCallback(async () => {
+    const ok = await clusterRef.current?.loadHrtf('/hrtf/default.json');
+    setStatus(ok ? 'HRTF-Kernel geladen' : 'HRTF nicht verfügbar – Built-in-Kernel aktiv');
   }, []);
 
   const snapshot = useCallback(() => {
@@ -258,6 +295,14 @@ export const SpatialScene = React.memo(function SpatialScene() {
           <button type="button" onClick={() => clusterRef.current?.splitNow()}
             className="px-2 py-1 rounded border border-lime-500/40 bg-lime-500/10 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/20 cursor-pointer">
             SPLIT
+          </button>
+          <button type="button" onClick={() => applyRouting(!routingEnabled)}
+            className={`px-2 py-1 rounded border text-[9px] font-bold tracking-widest cursor-pointer ${routingEnabled ? 'bg-lime-500/20 border-lime-400 text-lime-200' : 'border-neutral-700 text-neutral-400 hover:text-lime-300 hover:border-lime-500/40'}`}>
+            {routingEnabled ? 'WORKLET ROUTING ON' : 'WORKLET ROUTING OFF'}
+          </button>
+          <button type="button" onClick={loadDefaultHrtf}
+            className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer">
+            HRTF
           </button>
           <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
             <option value="OFF">OFF</option>
