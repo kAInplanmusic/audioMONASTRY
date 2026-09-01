@@ -12,6 +12,18 @@ Legende:
 > **Dieser Abschnitt ist die aktuelle, verbindliche Arbeitsgrundlage.**
 > Alles darunter ist Historie/Detailplan.
 
+## 🔌 SHUTDOWN-STATUS 2026-09-01 (Kostenkontrolle)
+
+| Ressource | Status | Kosten |
+|---|---|---|
+| HF `samplemonk-ai` (A100) | **paused** (readyReplica=0) | 0 € |
+| Hetzner-Server | **0 Server** (Flotte gelöscht) | 0 € |
+| Hetzner Floating-IP `159.69.102.29` | reserviert (bewusst, für DNS) | ~3 €/Monat |
+| Lokale Prozesse | keine | – |
+
+> Floating-IP entfernen (falls gewünscht):
+> `curl -X DELETE -H "Authorization: Bearer $HCLOUD_TOKEN" https://api.hetzner.cloud/v1/floating_ips/<ID>`
+
 ## ✅ Was jetzt LIVE funktioniert (verifiziert)
 
 | Bereich | Status |
