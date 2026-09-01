@@ -799,3 +799,17 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – AM-E2-4/AM-E4-5/AM-E6-3 abgeschlossen (2026-09-01)
+
+- [x] **AM-E2-4** Plugin-Load-Balancing dokumentiert – Browser 1 AudioContext (kein NUMA), native Runtime: NUMA-/Core-Pinning als Option in `docs/PERFORMANCE_AUDIT.md`
+- [x] **AM-E4-5** Reverb-Strategie dokumentiert – FDN minimal jetzt, Convolution-Partitioning als optionaler High-Quality-Pfad in `docs/PERFORMANCE_AUDIT.md`
+- [x] **AM-E6-3** DSP-Benchmarks angelegt – `scripts/dsp-benchmark.ts` + `docs/DSP_BENCHMARKS.md` mit Messwerten (LUT ~1,8–2,5× schneller)
+
+---
+
+## Quelle: AI-Infrastruktur – AI-Benchmark-Skript abgeschlossen (2026-09-01)
+
+- [x] **AI-Benchmark-Skript:** `scripts/ai-benchmark.ts` für Cold/Warm/Switch-Messungen angelegt und mit lokalem Provider verifiziert (Cold 0,6 ms / Warm 0,1 ms)
+
+---
+

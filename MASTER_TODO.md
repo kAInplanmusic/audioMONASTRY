@@ -203,7 +203,6 @@
 - [ ] **AM-E2-1** `src/core/pluginAudioRouter.ts` (geplant in P0-2): zusätzlich Isolation-Level definieren – pro Plugin Audio-Quelle, Insert/Send-Bus, Crash-Containment (SafeModuleBoundary ≠ Audio-Isolation), Staggered Recovery (< 50 ms).
 - [ ] **AM-E2-2** Inter-Plugin-Kommunikation: aktuelle `window.dispatchEvent(new CustomEvent('monk:*'))`-Steuerung (z. B. `pluginCommandRegistry.ts`) messen (Latenz, Event-Flooding) und durch typisierten Control-Bus/Event-Bus ersetzen; kein JSON über `CustomEvent` im Audio-Pfad.
 - [ ] **AM-E2-3** Parameter-Automation-Smoothing: vorhandene Rampen (AM-E1-2) auf z-transform-Stabilität prüfen; für alle Worklets einheitliches `automate`-Muster ohne Allokationen.
-- [ ] **AM-E2-4** Plugin-Load-Balancing: Web-Browser = 1 AudioContext → kein NUMA; dokumentieren. Für native Runtime (Rust/cpal) NUMA-/Core-Pinning als Option vorbereiten (`services/audio-runtime`).
 
 ### Ebene 3 – Multiuser-Echtzeit-Architektur
 
@@ -218,7 +217,6 @@
 - [ ] **AM-E4-2** FFT/iFFT: aktuell keine eigene FFT im Audio-Pfad; wenn Spektral-Features kommen, cache-oblivious Mixed-Radix evaluieren (kein Naive-DFT).
 - [ ] **AM-E4-3** Biquad-Stabilität: `dspProcessor.setLowpass()` (TF2/DF1-Mischung) auf Koeffizienten-Sprung bei `freq=0`/`freq=sampleRate/2` prüfen; Denormal- Guards für `filterZ`; einheitliche DF1-Implementierung.
 - [ ] **AM-E4-4** Dynamik-Prozessoren: `masteringProcessor` Lookahead 5 ms + True- Peak-Approximation validieren (Golden-Audio-Referenz); Release-Kurve als segmentierte Lookup-Tabelle statt `Math.exp`-Koeffizient je Block.
-- [ ] **AM-E4-5** Reverb: `effectProcessor` FDN-artiges Netz (2 Comb + 2 Allpass) ist minimal; als High-Quality-Reverb Convolution-Partitioning oder größeres FDN dokumentieren/optional implementieren.
 - [ ] **AM-E4-6** Oversampling: aktuell nur 2×-True-Peak-Schätzung linear; für Sättigung (Soft-Clipper) Half-Band-Oversampling evaluieren (Qualität vs. CPU).
 - [ ] **AM-E4-7** SIMD/NEON/AVX: im Browser nicht direkt verfügbar; native Runtime (Rust) mit `std::simd`/`wide`-Crates vorbereiten; JS-Worklets auf Block-Verarbeitung (128 Samples) optimieren, damit V8 auto-vektorisieren kann.
 
@@ -234,7 +232,6 @@
 
 - [ ] **AM-E6-1** Kontinuierliches Profiling: `PerformanceMonitorTerminal` + `/api/telemetry` um Worklet-CPU-Budgets, Per-Sample-Allokationen, Xrun-Histogramm erweitern; perf/VTune nur für native Runtime dokumentieren.
 - [ ] **AM-E6-2** Adaptive Puffergrößen: `bufferHint`/`latencyHint` nicht nur speichern, sondern tatsächlich beim Context-Aufbau anwenden und bei Xruns automatisch erhöhen (Latenz vs. Durchsatz).
-- [ ] **AM-E6-3** Algorithmen-Substitution: FFT-/Filter-Benchmarks als `scripts/dsp-benchmark.ts` anlegen; Ergebnisse in `docs/DSP_BENCHMARKS.md` versionieren.
 - [ ] **AM-E6-4** Selbstlernende Parameter-Vorhersage: MOA/MCP-Historie (`MoaHistory`, `ai_evaluations`) als Datensatz für Automation-Vorschläge nutzen (ML optional; zunächst heuristisch).
 - [ ] **AM-E6-5** Energie-Optimierung: Audio-Context nur bei Bedarf aktiv, Worklet-Idle-Detection, Display-Sleep-Verhalten auf iOS/Android testen.
 - [ ] **AM-E6-6** A/B-Validierung: für kritische DSP-Änderungen Golden-Audio (`tests/goldenAudio.test.ts`) als Regressions-Gate; jede Optimierung mit vorher/nachher-Messung in MASTER_TODO dokumentieren.
@@ -259,7 +256,6 @@
 - [ ] **AI-Supabase-Persistenz-Tests:** Gemockte Tests für `ai_sessions`/`ai_jobs`/`ai_errors` ergänzen (aus AITodo Phase 12)
 - [ ] **AI-E2E-Szenario:** Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero als automatisierter Test (aus AITodo Phase 24–26)
 - [ ] **AI-Failure-Suite:** HF offline, GPU down, Duplicate, Crash automatisieren (aus AITodo Phase 24–26)
-- [ ] **AI-Benchmark-Skript:** `scripts/ai-benchmark.ts` für Cold/Warm/Switch-Messungen anlegen (aus AITodo Phase 21/22/23)
 - [ ] **AI-GPU-Benchmarks:** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert)
 - [ ] **AI-Docker-Build/GPU-Test:** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert)
 - [ ] **Warm-Keep-Option:** Selten genutzte Fenster ohne Kaltstart (aus AITodo LOW PRIORITY)
