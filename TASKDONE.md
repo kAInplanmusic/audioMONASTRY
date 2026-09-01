@@ -764,3 +764,10 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – P1-Teilpunkte abgeschlossen (2026-09-01)
+
+- [x] P1-1: Feste Breiten ersetzen – `max-w-5xl` Grid → `w-full max-w-screen-2xl`, Mixer-Kanäle `w-[128px]` → `w-32/w-24`, keine harten Breiten mehr in `src`
+- [x] P1-3: Einstellungen gruppieren – `SettingsDialog` hat Gruppen für Audio-Gerät, Latenz-Profil, Kollaboration, MIDI, Routing/Ausgang, Monitor inkl. Erklärtexten
+
+---
+

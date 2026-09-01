@@ -49,7 +49,6 @@
 
 ### P1-1 Responsive Shell für iOS/Android/Windows/Linux/macOS
 
-- [ ] Feste Breiten ersetzen: Mixer-Kanäle (`w-[128px]`), Grid (`max-w-5xl`), Header etc. auf `min-w-0`/`w-full`/fluid umstellen; Breite passt sich an OS/Viewport an.
 - [ ] Touch: Zielgrößen ≥ 44 px, `touch-action`, Safe-Area-Insets (`env(safe-area-inset-*)`), kein Hover-only, verhindere Zoom bei Doppeltipp, Pointer-Events für Knobs/Fader auf Touch testen.
 - [ ] Plattform-Matrix: Chromium (Win/Linux/macOS/Android), Safari (iOS), Firefox (Desktop) – dokumentiert in `docs/HARDWARE_TEST_MATRIX_2026.md`.
 - [ ] **Prüfpunkt:** Playwright-Responsive-Tests (iPhone SE/14, Pixel 7, Desktop 1920) grün; manueller iPhone-Test (UI nicht persistent, Panels schließbar).
@@ -63,7 +62,6 @@
 
 ### P1-3 Einstellungen & Geräte-Defaults
 
-- [ ] Einstellungen gruppieren: Audio-Gerät, Latenz-Profil, Routing, Monitor, MIDI/HID, Kollaboration; jede Gruppe mit Erklärtext.
 - [ ] `bufferHint`/`sampleRate` tatsächlich anwenden (AudioContext-Optionen, siehe P2-1).
 - [ ] **Prüfpunkt:** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen nach Reload stabil; 2.1 sichtbar.
 

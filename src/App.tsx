@@ -23,6 +23,7 @@ import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePrese
 import { Settings } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
+import { Scratchpad } from './components/Scratchpad';
 import { getPluginRoute } from './core/pluginAudioRouter';
 const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
 const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
@@ -418,6 +419,7 @@ function AppComponent() {
               ))}
             </select>
           </div>
+          <Scratchpad />
           <MasterStreamToggle />
           <button type="button"
             onClick={() => setSettingsOpen(true)}
