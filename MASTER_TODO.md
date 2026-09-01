@@ -16,7 +16,6 @@
 - [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
 - [ ] **P2-4**: `routing.json` vs. `exportGraphState()` Validierung + Bottleneck-Fix
 - [ ] **P3-2/P3-3**: 21 Plugin-Prompts + Eval-Suiten + `npm run eval:ai`
-- [ ] **GAP-3**: Plugin-Audit-Matrix mit PASS/WARN/FAIL je Plugin füllen
 
 ---
 
@@ -159,7 +158,6 @@
 
 ### GAP-3 Atomarer Plugin-Audit – alle 21 Plugins einzeln
 
-- [ ] Je Plugin Ergebnis: PASS/WARN/FAIL + verknüpfte Tasks in MASTER_TODO
 - [ ] **Prüfpunkt:** Jedes Plugin hat mindestens einen Test (Unit oder E2E), der Aktivierung → Routing → Deaktivierung abdeckt
 
 ### GAP-4 Sicherheitslücken-Audit vervollständigen
@@ -180,15 +178,9 @@
 - [ ] Iterations-Loop: Prompt → Eval → Score → Optimierung → neue Version
 - [ ] **Prüfpunkt:** Jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score in der DB; Score-Abfall blockiert Release (G13)
 
-### GAP-7 Konfigurations-Matrix
-
-- [ ] Fehlende/fehlerhafte Defaults korrigieren (USB-Auto, 2.1)
-- [ ] **Prüfpunkt:** Matrix vollständig; jeder Default hat Ist- und Soll-Wert
-
 ### GAP-8 Zentrales Fehler-Register
 
 - [ ] CI/Logs speisen das Register automatisch (Script oder manuell je Audit)
-- [ ] **Prüfpunkt:** Register ist aktuell; keine Fehler ohne Task-Link
 
 ---
 
