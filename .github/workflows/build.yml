@@ -40,6 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Secret-Scan (gitleaks)
+        uses: gitleaks/gitleaks@v8.18.4
+        with:
+          args: 'detect --source . --no-banner --redact'
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:

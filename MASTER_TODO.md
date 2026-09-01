@@ -162,13 +162,11 @@
 
 ### GAP-4 Sicherheitslücken-Audit vervollständigen
 
-- [ ] `docs/SECURITY_AUDIT.md`, `docs/SECURITY_REMEDIATION_PLAN.md`, `docs/AI_SECURITY_GUIDE.md`, `docs/HARDWARE_AUDIT_2026.md` abgleichen; alle offenen/ungelösten Punkte als Tasks übernehmen
 - [ ] Server-seitiges RBAC durchsetzen (Host/Admin/DJ/Producer/Engineer/Guest)
 - [ ] Locking an User-ID statt Socket-ID server-seitig absichern
-- [ ] HF-Token-Rotation dokumentieren + Endpoint-Secret rotieren
+- [ ] HF-Token-Rotation dokumentiert ✅ – **Endpoint-Secret rotieren** (Betreiber-Schritt, offen)
 - [ ] Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF)
 - [ ] Supabase RLS prüfen (Prompts/Evals: anon read, service_role write)
-- [ ] Secret-Scan im CI (z. B. gitleaks) ergänzen
 - [ ] **Prüfpunkt:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` ist vollständig abgehakt oder hat einen offenen Task
 
 ### GAP-5 Prompt-/Trainings-Matrix je Plugin
