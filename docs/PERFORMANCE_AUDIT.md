@@ -20,3 +20,19 @@ Stand: 2026-08-27 · lokal gemessen in der Sandbox.
 1. Route-basiertes Code-Splitting (selten genutzte Terminals lazy laden).
 2. `onnxruntime-web` + Demucs-Modell weiter aus dem Haupt-Bundle herauslösen (bereits dynamisch).
 3. Worklet-CPU-Budgets in `PerformanceMonitorTerminal` um Underrun-Zähler ergänzen.
+
+## AM-E2-4 Plugin-Load-Balancing / NUMA (dokumentiert 2026-09-01)
+
+- **Browser:** 1 `AudioContext` pro User → kein NUMA, keine Core-Pinning-Thematik.
+  Worklets laufen im Browser-Audio-Thread; Lastverteilung macht der Browser.
+- **Native Runtime (`services/audio-runtime`, Rust/cpal):** NUMA-/Core-Pinning als
+  Option vorbereiten – geplant: `core_affinity`/`thread-priority` als experimentelle
+  Runtime-Config (`runtime_config.yaml`), Standard bleibt „OS-scheduled“.
+
+## AM-E4-5 Reverb-Strategie (dokumentiert 2026-09-01)
+
+- **Aktuell:** `effectProcessor` nutzt ein minimales FDN-artiges Netz
+  (2 Comb + 2 Allpass) – CPU-schonend, gut für Live-Betrieb.
+- **High-Quality-Pfad (optional):** Convolution-Partitioning (partitionierte
+  Faltung) für realistische Räume; erst sinnvoll, wenn Spektral-Features/IR-Loader
+  kommen. Nicht im Produktivpfad, solange CPU-Budget < 70 % nicht gefährdet ist.
