@@ -52,9 +52,24 @@ class State:
     def __init__(self) -> None:
         self.manager = ModelManager()
         self.startup_errors: List[str] = []
+        self.last_errors: List[Dict[str, Any]] = []
         self.ready = False
         self.models_ready = False
         self.shutting_down = False
+
+    def record_error(self, kind: str, task: str, model: str, message: str) -> None:
+        """Hält die letzten Inferenz-Fehler für /status bereit (Observability)."""
+        self.last_errors.append(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "kind": kind,
+                "task": task,
+                "model": model,
+                "message": message[:500],
+            }
+        )
+        if len(self.last_errors) > 5:
+            self.last_errors = self.last_errors[-5:]
 
     def status_payload(self) -> Dict[str, Any]:
         models = self.manager.get_status()
@@ -69,6 +84,7 @@ class State:
                 "onDemand": models.get("onDemand", "available"),
                 "rare": models.get("rare", "available"),
             },
+            "last_errors": self.last_errors,
         }
 
 
@@ -195,11 +211,13 @@ async def infer(request: Request) -> JSONResponse:
         # Grund in die WARN-Message schreiben, damit er im HF-Dashboard sichtbar ist
         # (das Dashboard zeigt nur msg, nicht das error-Feld). Client bleibt generisch.
         log_event("WARN", f"model unavailable: {exc}", task=task, model=model, error=str(exc), durationMs=duration_ms)
+        STATE.record_error("MODEL_UNAVAILABLE", task, model, str(exc))
         raise HTTPException(status_code=503, detail={"code": "MODEL_UNAVAILABLE", "model": model, "message": "model unavailable"})
     except Exception as exc:  # noqa: BLE001 – zentrale Fehlerbehandlung
         duration_ms = int((time.time() - started) * 1000)
         # FA-P1-9: Details nur ins Log; Client erhält generische Meldung ohne Pfade/Traceback.
         log_event("ERROR", "inference failed", task=task, model=model, error=str(exc), durationMs=duration_ms)
+        STATE.record_error("INFERENCE_FAILED", task, model, f"{type(exc).__name__}: {exc}")
         raise HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "model": model, "message": "inference failed"})
 
 
