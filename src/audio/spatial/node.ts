@@ -8,6 +8,7 @@
  *   Kommando-Protokoll (schrittweises Rollout, alte UIs/Automationen laufen weiter)
  */
 import type { SpatialSource, TrackType } from '../../types';
+import { compileHrtfConvWasm } from './wasmHrtf';
 
 export type SpatialQuality = 'low' | 'medium' | 'high';
 
@@ -102,6 +103,17 @@ export class SpatialNode {
       const data = await res.json();
       if (!Array.isArray(data?.left) || !Array.isArray(data?.right)) return false;
       this.node.port.postMessage({ cmd: 'loadHRTF', left: data.left, right: data.right });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Kompiliert das WASM-partitioned-FFT-Modul und übergibt es dem Worklet. */
+  async loadHrtfWasm(url: string): Promise<boolean> {
+    try {
+      const module = await compileHrtfConvWasm(url);
+      this.node.port.postMessage({ cmd: 'loadHRTFWasm', module });
       return true;
     } catch {
       return false;
@@ -330,6 +342,12 @@ export class SpatialCluster {
   /** Lädt HRTF-Kernel auf alle Instanzen. */
   async loadHrtf(url: string): Promise<boolean> {
     const results = await Promise.all(this.instances.map((i) => i.loadHrtf(url)));
+    return results.some(Boolean);
+  }
+
+  /** Lädt das WASM-HRTF-Modul auf alle Instanzen. */
+  async loadHrtfWasm(url: string): Promise<boolean> {
+    const results = await Promise.all(this.instances.map((i) => i.loadHrtfWasm(url)));
     return results.some(Boolean);
   }
 

@@ -30,6 +30,7 @@
 - [x] **spatialMONK Folgeschritt 1 – Worklet-Audio-Routing**: `audioEngine.routeChannelToSpatialInput()` + `getMasterBusInput()`; `SpatialCluster.connect/disconnect/loadHrtf`; UI-Toggle „WORKLET ROUTING ON/OFF“ in `SpatialScene.tsx` (opt-in, Legacy-Pfad bleibt Standard; neue Quellen werden bei aktivem Routing automatisch eingehängt).
 - [x] **spatialMONK Folgeschritt 2 – Medium/High-HRTF**: Worklet mit kurzen HRTF-artigen FIR-Kerneln (medium 8 Taps, high 16 Taps, voralloziert) + `loadHRTF` (JSON-Kernel ≤ 64 Taps); `public/hrtf/default.json` (synthetisch, lizenzfrei); UI-Button „HRTF“.
 - [x] **spatialMONK Folgeschritt 3 – Regression + CI**: `scripts/spatial-regression.ts` (deterministischer Offline-Render, ILD/ITD-Asserts, WAV-Ausgabe nach `test-results/spatial-regression/`); CI-Job in `.github/workflows/build.yml` (Regressionslauf + WAV-Artefakt-Upload).
+- [x] **spatialMONK Folgeschritt 4 – WASM partitioned-FFT-HRTF**: Rust-Kernel `src/audio/wasm/hrtf_conv` (UPOLS, Block 128, IR ≤ 1024, rustfft, voralloziert) → `public/hrtf/hrtf_conv.wasm`; Loader `src/audio/spatial/wasmHrtf.ts` (`HrtfConvolverWasm` + `JsHrtfConvolver`-Fallback); Worklet-Integration `loadHRTFWasm` (Modul-Transfer/URL-Fallback, high-Quality-Blockpfad); UI-HRTF-Button lädt JSON-Kernel + WASM; `npm run build:wasm-hrtf`; Node-Tests `tests/wasmHrtf.test.ts` (WASM vs. JS-Referenz + Worklet-Integration).
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 

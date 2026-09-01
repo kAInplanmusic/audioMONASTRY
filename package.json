@@ -19,6 +19,7 @@
     "stress:sfu-rtp": "node scripts/hetzner/sfu-rtp-run.mjs",
     "stress:sfu-rtp-multi": "node scripts/hetzner/sfu-rtp-multi-run.mjs",
     "build:sfu-test": "esbuild scripts/hetzner/sfu-rtp-entry.js --bundle --platform=browser --format=iife --outfile=public/sfu-rtp-test.js",
+    "build:wasm-hrtf": "cd src/audio/wasm/hrtf_conv && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/hrtf_conv.wasm ../../../../public/hrtf/hrtf_conv.wasm",
     "generate:golden": "tsx scripts/generate-golden-wav.ts",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs",
