@@ -17,7 +17,7 @@ export interface PluginRouteConfig {
   /** Kanal(e), auf die das Plugin seine Quelle einspeist. */
   channels: TrackType[];
   /** Audio-Quellklasse des Plugins. */
-  source: 'synth' | 'drum' | 'sampler' | 'sequencer' | 'voice' | 'channel' | 'ui-only';
+  source: 'synth' | 'drum' | 'sampler' | 'voice' | 'channel' | 'ui-only';
   /** TRUE wenn dieses Plugin Audio auf MAIN einspeisen darf. */
   mainFeeder: boolean;
 }
@@ -28,7 +28,7 @@ const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> =
   ['synthesizer', 'synth', true],
   ['drum', 'drum', true],
   ['sampler', 'sampler', true],
-  ['sequencer', 'sequencer', true],
+  ['mcp', 'sampler', true],
   ['voice', 'voice', true],
   ['sound', 'sampler', true],
   ['mixer', 'channel', true],

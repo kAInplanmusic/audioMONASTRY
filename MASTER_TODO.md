@@ -19,6 +19,44 @@
 
 ---
 
+## 🟠 P1 – HOCH: MONK-Ausbau (2026-09-01)
+
+### NEW-MONK-1 drumMONK – Sequencer vervollständigen (TR-8S)
+
+- [ ] 32 Steps, Swing (MasterClock), Pattern-Chain A/B, Velocity/Akzent pro Step, Flam/Roll; MIDI-Out/Clock-Ausgabe.
+
+### NEW-MONK-2 samplerMONK – Sequencer ergänzen
+
+- [ ] 16/32-Step-Sequencer je Pad/Bank, Quantize, Pitch/Slice pro Step, Sync zur MasterClock.
+
+### NEW-MONK-3 mcpMONK – MPC + Sequencer voll ausbauen
+
+- [ ] Sample je Pad (Library-DnD), 16-Level-Velocity, Note Repeat, Bank A–D, 16/32-Step-Sequencer mit Swing, Audio-Routing auf MAIN via mixerMONK.
+
+### NEW-MONK-4 synthMONK – Synth + Sequencer + Pads
+
+- [ ] Step-Sequencer (Noten/Chords, Parameter-Automation je Step), Pads-Synth-UI im Minilogue-Stil, Beatstep-Pro-MIDI-Profil.
+
+### NEW-MONK-5 instrumentMONK – Spiel-UI
+
+- [ ] Pad-/Klavier-Eingabe als Standard-Spielansicht priorisieren; danach Echtbild-UI mit Touch (spielbares Instrumentenbild, GarageBand-artig) je Instrument.
+
+### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
+
+- [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern.
+
+### NEW-MONK-7 spatialMONK – v1 erledigt (siehe TASKDONE), Folgeschritte offen
+
+- [ ] Audio-Graph-Routing der Spuren auf die spatial-processor-Worklet-Eingänge umstellen (aktuell Legacy-Audio-Pfad über audioEngine)
+- [ ] Medium/High: HRTF-WASM-Convolution (partitioned FFT), optional Ambisonics
+- [ ] Regression-WAVs + CI-Job (build-worklets + spatialProcessor-Tests) gemäß WhitePaper Abschnitt 11
+
+### NEW-MONK-8 MONASTRYmasterclock (unsichtbares Systemmodul)
+
+- [ ] Singuläre Timing-Quelle (clockProcessor-Worklet), BPM/Start/Stop/Swing systemweit; Latenz-Management (Lookahead 8–15 ms, adaptive Puffergröße bei Xruns); Dropout-/Soundfehler-Prävention (NaN/Inf-Guards, Silence-Gate, Watchdog mit Auto-Recovery); Multi-User-Sync (Host-Clock + PLL); Diagnose nur in perfMONK.
+
+---
+
 ## 🔴 P0 – KRITISCH: Stabilität, Signalfluss, Start-Zustand
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen

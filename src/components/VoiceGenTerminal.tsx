@@ -14,7 +14,7 @@ import { requestUserMedia } from '../utils/mediaDevices';
 export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
   const { addSample } = useSamples();
   const { generateVoice } = useAudioAI();
-  const { state, lockStatus, updateState } = usePluginState('voice_gen', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('voice', 'PRO');
   const [prompt, setPrompt] = useState('Dark warehouse techno vocals saying "Are you ready to lose control"');
 
   const [style, setStyle] = useState('SPOKEN'); // SPOKEN, CHANT, SINGING

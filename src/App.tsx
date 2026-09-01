@@ -5,9 +5,7 @@ import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { ModuleContainer } from './components/ModuleContainer';
 import { BeatVisualizer } from './components/BeatVisualizer';
-const SequencerPluginTerminal = lazy(() => import('./components/SequencerPluginTerminal').then(m => ({ default: m.SequencerPluginTerminal })));
 import { TECHNO_PRESETS } from './presets';
-import { TrackType, Patterns } from './types';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
 import { PluginButton } from './components/PluginButton';
 import { FEATURE_FLAGS } from './config/featureFlags';
@@ -48,8 +46,6 @@ function AppComponent() {
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [bpm, setBpm] = useState(128);
-  const [patterns, setPatterns] = useState(TECHNO_PRESETS[0].patterns);
-  const [stepCount, setStepCount] = useState<16 | 32>(16);
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [masteringOpen, setMasteringOpen] = useState(false);
@@ -92,20 +88,6 @@ function AppComponent() {
       }
     };
   }, []);
-
-  // Sequencer: zwischen 16 und 32 Steps umschalten (Patterns werden gepolstert).
-  const handleSetStepCount = useCallback((n: 16 | 32) => {
-    if (n === stepCount) return;
-    setStepCount(n);
-    audioEngine.setStepCount(n);
-    const next: Patterns = { ...patterns };
-    (Object.keys(next) as TrackType[]).forEach((t) => {
-      const arr = next[t] ?? [];
-      next[t] = arr.length >= n ? arr.slice(0, n) : [...arr, ...Array(n - arr.length).fill(false)];
-    });
-    setPatterns(next);
-    audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
-  }, [stepCount, patterns]);
 
   // Task 22: Rollen-Start-Presets – wendet das Modul-Profil einer Rolle an.
   const applyRole = (role: StudioRole) => {
@@ -195,25 +177,6 @@ function AppComponent() {
     return () => clearInterval(interval);
   }, []);
 
-  // MOA-Kommando (Sequencer-Registry): Patterns + BPM sichtbar übernehmen.
-  // WICHTIG: Hook MUSS vor dem Early-Return des Start-Screens stehen (Rules of Hooks).
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { patterns?: Patterns; bpm?: number } | undefined;
-      if (!detail?.patterns) return;
-      // Partielle Patterns MERGEN (nicht ersetzen), sonst crasht das
-      // Sequencer-Terminal bei fehlenden Tracks (undefined.map).
-      setPatterns(prev => {
-        const merged = { ...prev, ...detail.patterns };
-        audioEngine.loadPatterns(merged as unknown as Record<string, boolean[]>);
-        return merged;
-      });
-      if (typeof detail.bpm === 'number' && Number.isFinite(detail.bpm)) setBpm(detail.bpm);
-    };
-    window.addEventListener('monk:apply-patterns', handler);
-    return () => window.removeEventListener('monk:apply-patterns', handler);
-  }, []);
-
   // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
   // P0-1: mixer ist kein Sonderfall mehr – jedes Plugin (auch mixerMONK) ist
   // OFF-fähig und wird erst bei Aktivierung in die Signalkette eingespeist.
@@ -231,24 +194,6 @@ function AppComponent() {
     if (!lockGranted) return;
     setModuleState(id, 'PRO');
   }, [moduleStates, requestLock, setModuleState]);
-
-  const handleToggleStep = useCallback((track: TrackType, stepIndex: number) => {
-    setPatterns(prev => {
-      const nextArr = [...prev[track]];
-      nextArr[stepIndex] = !nextArr[stepIndex];
-      const next = { ...prev, [track]: nextArr };
-      // AudioEngine unmittelbar nachschieben, damit die Klinge hörbar synchron ist.
-      audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
-      return next;
-    });
-  }, []);
-
-  const handleApplyPatterns = useCallback((next: Patterns, nextBpm: number) => {
-    setPatterns(next);
-    setBpm(nextBpm);
-    audioEngine.loadPatterns(next as unknown as Record<string, boolean[]>);
-    audioEngine.setBpm(nextBpm);
-  }, []);
 
   const startApp = async () => {
       // UX-Debug: markiert den Start-Ablauf sichtbar in der Konsole.
@@ -280,11 +225,10 @@ function AppComponent() {
       console.log('[startApp] discoverPlugins done');
       // KEIN Autoplay: Es darf erst klingen, wenn im Plugin ein Ton gestartet
       // oder im Master-Player Play gedrückt wird.
-      // Sequenzer-Pattern synchron in die AudioEngine laden, damit der geladene
-      // Tech-Preset beim ersten Play sofort hörbar ist.
+      // Start-BPM aus dem Default-Preset in die AudioEngine übernehmen.
       try {
         const initialPreset = TECHNO_PRESETS[0];
-        audioEngine.loadPatterns(initialPreset.patterns as unknown as Record<string, boolean[]>, initialPreset.synthNotes, initialPreset.bpm);
+        audioEngine.setBpm(initialPreset.bpm);
         setBpm(initialPreset.bpm);
       } catch (e) {
         console.warn('[startApp] Preset-Sync fehlgeschlagen:', (e as Error).message);
@@ -373,7 +317,7 @@ function AppComponent() {
                 setMonitorMode(mode);
                 const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
                   ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
-                  ?? 'sequencer';
+                  ?? 'mixer';
                 audioEngine.setMonitorSource(mode, monitorUser, getPluginRoute(activeId)?.channels[0] ?? 'channel1');
               }}
               className="appearance-none pl-3 pr-8 py-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-xs hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
@@ -517,20 +461,7 @@ function AppComponent() {
               }}>
 
                               <SafeModuleBoundary>
-                                {plugin.id === 'sequencer' ? (
-                                  <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Sequencer…</div>}><SequencerPluginTerminal
-                                      isPlaying={isPlaying}
-                                      tracks={patterns}
-                                      bpm={bpm}
-                                      setBpm={setBpm}
-                                      stepCount={stepCount}
-                                      onSetStepCount={handleSetStepCount}
-                                      onPlay={() => { audioEngine.play(); setIsPlaying(true); }}
-                                      onStop={() => { audioEngine.stop(); setIsPlaying(false); }}
-                                      onToggleStep={handleToggleStep}
-                                      onApplyPatterns={handleApplyPatterns}
-                                  /></Suspense>
-                                  ) : plugin.id === 'voice' ? (
+                                {plugin.id === 'voice' ? (
                                     <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Voice-Modul…</div>}><div className="flex flex-col gap-4">
                                       <VoiceGenTerminal enabled={FEATURE_FLAGS.VOICE_GENERATOR_ENABLED} />
                                       <VoiceMonkPanel userId="localUser" />

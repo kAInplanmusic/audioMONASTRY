@@ -1,0 +1,416 @@
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Box, Plus, Trash2, Camera, RotateCcw, Gauge, Volume2 } from 'lucide-react';
+import * as Tone from 'tone';
+import { usePluginState } from '../hooks/usePluginState';
+import { MoaAssistant } from './MoaAssistant';
+import { audioEngine } from '../utils/audioEngine';
+import { storageGetJson, storageSetJson } from '../utils/storage';
+import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
+import { SpatialSourceIcon } from './SpatialSourceIcon';
+import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
+import type { SpatialQuality, SpatialSceneState, SpatialSource } from '../types';
+
+/**
+ * spatialMONK – neue schlichte 2D-Scene-UI (WhitePaper Abschnitt 6)
+ * =================================================================
+ * Top-Down-Scene: Mitte = Listener, Quellen dragbar, Inspector rechts,
+ * Qualität/CPU oben, Quick-Actions unten. Positionen laufen über den
+ * neuen SpatialCluster (Worklet-Protokoll) UND – als Übergang – über die
+ * bestehende audioEngine (Legacy-Audio-Pfad, Adapter-Rollout).
+ */
+
+const SNAPSHOT_KEY = 'spatialmonk-scene-snapshot';
+const SOURCE_COLORS = ['#f43f5e', '#f97316', '#fbbf24', '#34d399', '#22d3ee', '#3b82f6', '#a855f7', '#ec4899'];
+
+interface Metrics {
+  cpuEstimate: number;
+  activeSources: number;
+  instances: number;
+}
+
+const cloneScene = (s: SpatialSceneState): SpatialSceneState => JSON.parse(JSON.stringify(s));
+
+function azDistFromPointer(nx: number, ny: number): { az: number; dist: number } {
+  const az = Math.atan2(nx, ny) * (180 / Math.PI);
+  const dist = Math.max(0.2, Math.min(4, Math.hypot(nx, ny) * 2));
+  return { az: Math.round(az), dist: Math.round(dist * 10) / 10 };
+}
+
+export const SpatialScene = React.memo(function SpatialScene() {
+  const { state, lockStatus, updateState } = usePluginState('spatial', 'PRO');
+  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
+
+  const [scene, setScene] = useState<SpatialSceneState>(() => {
+    const saved = storageGetJson<SpatialSceneState>('spatialmonk-scene');
+    return saved?.version === 'spatialMONK-v1' ? saved : cloneScene(DEFAULT_SPATIAL_SCENE);
+  });
+  const [selectedId, setSelectedId] = useState<number | null>(scene.sources[0]?.id ?? null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [metrics, setMetrics] = useState<Metrics>({ cpuEstimate: 0, activeSources: 0, instances: 1 });
+  const [status, setStatus] = useState('');
+  const [listenerRot, setListenerRot] = useState(scene.global.listenerRot);
+
+  const clusterRef = useRef<SpatialCluster | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const lastDragRef = useRef(0);
+  const lastSnapshotRef = useRef<SpatialSceneState>(cloneScene(scene));
+
+  const sources = scene.sources;
+  const global = scene.global;
+  const selected = useMemo(() => sources.find((s) => s.id === selectedId) ?? null, [sources, selectedId]);
+
+  // Scene persistieren (Presets & State, WhitePaper Abschnitt 7).
+  useEffect(() => {
+    storageSetJson('spatialmonk-scene', scene);
+  }, [scene]);
+
+  const syncLegacy = useCallback((s: SpatialSource) => {
+    if (!s.track) return;
+    try {
+      const x = Math.max(-1, Math.min(1, s.az / 90));
+      const y = Math.max(-1, Math.min(1, (1.2 - s.dist) / 0.6));
+      audioEngine.setSpatialPosition(s.track, x, y);
+    } catch { /* Audio noch nicht initialisiert */ }
+  }, []);
+
+  const syncCluster = useCallback((s: SpatialSource) => {
+    clusterRef.current?.setSourcePos(s.id, { az: s.az, el: s.el, dist: s.dist, gain: s.gain, muted: s.muted }, 40);
+  }, []);
+
+  const addSourceToCluster = useCallback((cluster: SpatialCluster, s: SpatialSource) => {
+    cluster.addSource(s);
+  }, []);
+
+  // Cluster initialisieren (eine Instanz für maxSources Quellen, Auto-Split bei 65% CPU).
+  useEffect(() => {
+    const ctx = (Tone.getContext().rawContext as unknown as AudioContext) ?? null;
+    if (!ctx || !ctx.audioWorklet) return;
+    let disposed = false;
+    (async () => {
+      try {
+        const cluster = await SpatialCluster.create(ctx, { maxSources: 8, autoSplitCpuThreshold: 0.65, maxInstances: 4 });
+        if (disposed) { cluster.dispose(); return; }
+        clusterRef.current = cluster;
+        spatialAdapter.attach(cluster);
+        cluster.onMetrics = (m) => setMetrics({ cpuEstimate: m.cpuEstimate, activeSources: m.activeSources, instances: m.instances });
+        cluster.setGlobal(global.quality, global.listenerRot, global.masterGain);
+        scene.sources.forEach((s) => addSourceToCluster(cluster, s));
+        cluster.requestMetrics();
+      } catch (e) {
+        console.warn('[spatialMONK] Worklet-Cluster nicht verfügbar – Legacy-Audio-Pfad aktiv:', (e as Error).message);
+      }
+    })();
+    return () => {
+      disposed = true;
+      clusterRef.current?.dispose();
+      clusterRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const patchSource = useCallback((id: number, patch: Partial<SpatialSource>) => {
+    setScene((prev) => ({
+      ...prev,
+      sources: prev.sources.map((s) => {
+        if (s.id !== id) return s;
+        const next = { ...s, ...patch };
+        syncCluster(next);
+        syncLegacy(next);
+        return next;
+      }),
+    }));
+  }, [syncCluster, syncLegacy]);
+
+  const moveFromPointer = useCallback((id: number, nx: number, ny: number) => {
+    const now = performance.now();
+    if (now - lastDragRef.current < 25) return; // ~40 Hz Throttle
+    lastDragRef.current = now;
+    const { az, dist } = azDistFromPointer(nx, ny);
+    patchSource(id, { az, dist });
+  }, [patchSource]);
+
+  const addSourceAt = useCallback((nx: number, ny: number) => {
+    if (lockedByOther) return;
+    const { az, dist } = azDistFromPointer(nx, ny);
+    const id = Math.max(0, ...sources.map((s) => s.id)) + 1;
+    const source: SpatialSource = {
+      id,
+      name: `Quelle ${id}`,
+      az,
+      el: 0,
+      dist,
+      gain: 0.9,
+      muted: false,
+      color: SOURCE_COLORS[id % SOURCE_COLORS.length],
+      track: `channel${((id - 1) % 8) + 1}` as SpatialSource['track'],
+    };
+    setScene((prev) => ({ ...prev, sources: [...prev.sources, source] }));
+    clusterRef.current?.addSource(source);
+    syncLegacy(source);
+    setSelectedId(id);
+  }, [lockedByOther, sources, syncLegacy]);
+
+  const removeSelected = useCallback(() => {
+    if (selectedId == null) return;
+    clusterRef.current?.removeSource(selectedId);
+    setScene((prev) => ({ ...prev, sources: prev.sources.filter((s) => s.id !== selectedId) }));
+    setSelectedId(null);
+  }, [selectedId]);
+
+  const applyGlobal = useCallback((patch: Partial<SpatialSceneState['global']>) => {
+    setScene((prev) => {
+      const nextGlobal = { ...prev.global, ...patch };
+      clusterRef.current?.setGlobal(nextGlobal.quality, nextGlobal.listenerRot, nextGlobal.masterGain);
+      return { ...prev, global: nextGlobal };
+    });
+  }, []);
+
+  const snapshot = useCallback(() => {
+    lastSnapshotRef.current = cloneScene(scene);
+    storageSetJson(SNAPSHOT_KEY, scene);
+    setStatus('Snapshot gespeichert');
+  }, [scene]);
+
+  const undo = useCallback(() => {
+    const saved = lastSnapshotRef.current ?? storageGetJson<SpatialSceneState>(SNAPSHOT_KEY);
+    if (!saved?.sources) return;
+    setScene(cloneScene(saved));
+    setSelectedId(null);
+    setStatus('Snapshot wiederhergestellt');
+  }, []);
+
+  const exportScene = useCallback(() => {
+    const json = JSON.stringify(scene, null, 2);
+    void navigator.clipboard?.writeText(json).then(() => setStatus('Scene-JSON in Zwischenablage'));
+  }, [scene]);
+
+  const loadPreset = useCallback((idx: number) => {
+    const preset = SPATIAL_SCENE_PRESETS[idx];
+    if (!preset) return;
+    const next = cloneScene(preset);
+    clusterRef.current?.reset();
+    setScene(next);
+    setListenerRot(next.global.listenerRot);
+    next.sources.forEach((s) => { clusterRef.current?.addSource(s); syncLegacy(s); });
+    setSelectedId(next.sources[0]?.id ?? null);
+    setStatus(`Preset geladen: ${idx + 1}`);
+  }, [syncLegacy]);
+
+  const posStyle = (s: SpatialSource) => {
+    const r = Math.min(0.9, s.dist / 2);
+    const rad = (s.az * Math.PI) / 180;
+    return {
+      left: `${50 + Math.sin(rad) * r * 50}%`,
+      top: `${50 - Math.cos(rad) * r * 50}%`,
+    };
+  };
+
+  const handleStagePointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (lockedByOther) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+    if (Math.hypot(nx, ny) > 1) return;
+    setSelectedId(null);
+    addSourceAt(nx, ny);
+  };
+
+  return (
+    <div className={`w-full h-full flex flex-col bg-[#0a0a0a] rounded-xl border ${lockedByOther ? 'border-red-500 opacity-60 grayscale' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative`}>
+      <div className="px-4 py-2 border-b border-neutral-800 bg-black/20">
+        <MoaAssistant pluginId="spatial" placeholder="MOA: z. B. 'Quelle links vorne platzieren'" />
+      </div>
+
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 bg-linear-to-r from-lime-900/20 to-[#0a0a0a] border-b border-lime-900/30 gap-2 flex-wrap">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-lime-500/20 flex items-center justify-center border border-lime-500/50 shadow-[0_0_15px_rgba(132,204,22,0.3)]">
+            <Box className="w-5 h-5 text-lime-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-black tracking-widest text-neutral-100 uppercase leading-none">spatialMONK</h2>
+            <p className="text-[9px] font-mono text-lime-400/80 tracking-widest mt-0.5">2D SCENE · WORKLET · {metrics.instances} INSTANZ</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={global.quality}
+            onChange={(e) => applyGlobal({ quality: e.target.value as SpatialQuality })}
+            className="bg-black text-white text-xs p-1 rounded border border-neutral-700"
+            title="Qualität: IR-Länge/FFT-Block/Interpolation"
+          >
+            <option value="low">LOW</option>
+            <option value="medium">MEDIUM</option>
+            <option value="high">HIGH</option>
+          </select>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[9px] font-mono text-neutral-500">HEAD</span>
+            <input type="range" min={-180} max={180} value={listenerRot}
+              onChange={(e) => { const v = Number(e.target.value); setListenerRot(v); applyGlobal({ listenerRot: v }); }}
+              className="w-20 accent-lime-500" />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Volume2 className="w-3 h-3 text-neutral-500" />
+            <input type="range" min={0} max={1.5} step={0.01} value={global.masterGain}
+              onChange={(e) => applyGlobal({ masterGain: Number(e.target.value) })}
+              className="w-20 accent-lime-500" />
+          </div>
+          <button type="button" onClick={() => clusterRef.current?.splitNow()}
+            className="px-2 py-1 rounded border border-lime-500/40 bg-lime-500/10 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/20 cursor-pointer">
+            SPLIT
+          </button>
+          <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
+            <option value="OFF">OFF</option>
+            <option value="AUTO_AI">AI</option>
+            <option value="PRO">ACTIVE</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Hauptbereich */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Scene Canvas */}
+        <div className="flex-1 flex items-center justify-center p-4 relative">
+          <div
+            ref={stageRef}
+            onDoubleClick={handleStagePointer}
+            className="relative w-full max-w-[520px] aspect-square rounded-full bg-[radial-gradient(circle_at_50%_50%,#101418_0%,#0a0c0e_70%,#060708_100%)] border border-neutral-800 shadow-[0_0_60px_rgba(0,0,0,0.6),inset_0_0_60px_rgba(0,0,0,0.55)] select-none touch-none"
+            title="Doppelklick = Quelle hinzufügen"
+          >
+            {/* Distanz-Ringe */}
+            {[0.33, 0.66, 1].map((r) => (
+              <div key={r} className="absolute rounded-full border border-neutral-800/60 pointer-events-none"
+                style={{ left: `${50 - r * 50}%`, top: `${50 - r * 50}%`, width: `${r * 100}%`, height: `${r * 100}%` }} />
+            ))}
+            <span className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-mono tracking-[0.35em] text-neutral-600 pointer-events-none">VORNE</span>
+            <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] font-mono tracking-[0.35em] text-neutral-600 pointer-events-none">HINTEN</span>
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-mono tracking-[0.25em] text-neutral-600 pointer-events-none">LINKS</span>
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-mono tracking-[0.25em] text-neutral-600 pointer-events-none">RECHTS</span>
+
+            {/* Listener Mitte + Orientierung */}
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
+              <div className="w-6 h-6 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center">
+                <div className="w-1 h-3 rounded-full bg-lime-400 origin-top"
+                  style={{ transform: `rotate(${listenerRot}deg) translateY(2px)` }} />
+              </div>
+            </div>
+
+            {sources.map((s) => (
+              <div key={s.id} className="absolute" style={posStyle(s)}>
+                <SpatialSourceIcon
+                  source={s}
+                  selected={selectedId === s.id}
+                  onSelect={setSelectedId}
+                  onDragMove={moveFromPointer}
+                  onDoubleClick={(id) => setRenamingId(id)}
+                />
+                {renamingId === s.id && (
+                  <input
+                    autoFocus
+                    defaultValue={s.name}
+                    onBlur={(e) => { patchSource(s.id, { name: e.target.value || s.name }); setRenamingId(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="absolute -top-6 left-1/2 -translate-x-1/2 w-24 bg-black border border-lime-500/50 rounded px-1 py-0.5 text-[9px] text-white z-10"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Inspector */}
+        <div className="w-64 short-landscape:w-52 shrink-0 border-l border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-3 overflow-y-auto">
+          <h3 className="text-[10px] font-mono tracking-[0.25em] text-lime-500 uppercase">Inspector</h3>
+          {selected ? (
+            <>
+              <div>
+                <span className="text-[9px] font-mono text-neutral-500">NAME</span>
+                <input value={selected.name} onChange={(e) => patchSource(selected.id, { name: e.target.value })}
+                  className="w-full bg-black border border-neutral-800 rounded px-2 py-1 text-xs text-white mt-0.5" />
+              </div>
+              <div>
+                <span className="text-[9px] font-mono text-neutral-500">AZIMUT · {Math.round(selected.az)}°</span>
+                <input type="range" min={-180} max={180} value={selected.az}
+                  onChange={(e) => patchSource(selected.id, { az: Number(e.target.value) })}
+                  className="w-full accent-lime-500" />
+              </div>
+              <div>
+                <span className="text-[9px] font-mono text-neutral-500">DISTANZ · {selected.dist.toFixed(1)}</span>
+                <input type="range" min={0} max={4} step={0.1} value={selected.dist}
+                  onChange={(e) => patchSource(selected.id, { dist: Number(e.target.value) })}
+                  className="w-full accent-lime-500" />
+              </div>
+              <div>
+                <span className="text-[9px] font-mono text-neutral-500">GAIN · {selected.gain.toFixed(2)}</span>
+                <input type="range" min={0} max={1.5} step={0.01} value={selected.gain}
+                  onChange={(e) => patchSource(selected.id, { gain: Number(e.target.value) })}
+                  className="w-full accent-lime-500" />
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => patchSource(selected.id, { muted: !selected.muted })}
+                  className={`flex-1 py-1.5 rounded border text-[9px] font-bold tracking-widest cursor-pointer ${selected.muted ? 'bg-red-500/20 border-red-500/50 text-red-300' : 'border-neutral-700 text-neutral-400 hover:text-lime-300'}`}>
+                  {selected.muted ? 'MUTED' : 'MUTE'}
+                </button>
+                <button type="button" onClick={removeSelected}
+                  className="flex-1 py-1.5 rounded border border-red-500/40 text-red-400 text-[9px] font-bold tracking-widest hover:bg-red-500/10 cursor-pointer">
+                  ENTFERNEN
+                </button>
+              </div>
+              <p className="text-[9px] font-mono text-neutral-600 leading-relaxed">
+                Pfeiltasten ±1°, Shift ±5°, Ctrl ±15°. Doppelklick auf Quelle = Umbenennen.
+              </p>
+            </>
+          ) : (
+            <p className="text-[10px] font-mono text-neutral-600">Keine Quelle gewählt. Doppelklick in die Scene = neue Quelle.</p>
+          )}
+
+          {/* Diagnose-Overlay */}
+          <div className="mt-auto pt-2 border-t border-neutral-800">
+            <div className="flex items-center gap-1.5 text-[9px] font-mono text-neutral-500 mb-1">
+              <Gauge className="w-3 h-3" /> CPU SCHÄTZUNG
+            </div>
+            <div className="h-2 rounded bg-black border border-neutral-800 overflow-hidden">
+              <div className={`h-full ${metrics.cpuEstimate > 0.65 ? 'bg-red-500' : 'bg-lime-500'}`} style={{ width: `${Math.min(100, metrics.cpuEstimate * 100)}%` }} />
+            </div>
+            <div className="text-[9px] font-mono text-neutral-500 mt-1">
+              {Math.round(metrics.cpuEstimate * 100)}% · {metrics.activeSources} QUELLEN · {metrics.instances} INSTANZ
+            </div>
+            {metrics.cpuEstimate > 0.65 && (
+              <div className="text-[9px] font-mono text-amber-400 mt-1">CPU hoch — Qualität umstellen oder Quellen splitten.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Bar / Quick Actions */}
+      <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-2 flex-wrap">
+        <button type="button" onClick={() => stageRef.current && (() => { const r = stageRef.current.getBoundingClientRect(); addSourceAt(0, 0.4); })()}
+          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer">
+          <Plus className="w-3 h-3" /> QUELLE
+        </button>
+        <button type="button" onClick={removeSelected} disabled={selectedId == null}
+          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-red-300 disabled:opacity-40 cursor-pointer">
+          <Trash2 className="w-3 h-3" /> ENTFERNEN
+        </button>
+        <button type="button" onClick={snapshot}
+          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
+          <Camera className="w-3 h-3" /> SNAPSHOT
+        </button>
+        <button type="button" onClick={undo}
+          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
+          <RotateCcw className="w-3 h-3" /> UNDO
+        </button>
+        <select defaultValue="" onChange={(e) => e.target.value && loadPreset(Number(e.target.value))}
+          className="bg-black text-neutral-400 text-[9px] p-1 rounded border border-neutral-700">
+          <option value="" disabled>Preset…</option>
+          {SPATIAL_SCENE_PRESETS.map((p, i) => <option key={i} value={i}>{i === 0 ? 'Default' : 'Lead+Pad'}</option>)}
+        </select>
+        <button type="button" onClick={exportScene}
+          className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
+          JSON KOPIEREN
+        </button>
+        {status && <span className="text-[9px] font-mono text-lime-400">{status}</span>}
+      </div>
+    </div>
+  );
+});
