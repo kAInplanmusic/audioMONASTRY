@@ -28,7 +28,7 @@ abstract class BaseNode implements IAudioNode {
 
 /** Statische Quelle (z.B. Sample/Pattern). */
 export class SourceNode extends BaseNode {
-  constructor(id: string, public readonly sourceBuffer: Float32Array[], public readonly sourceSampleRate = 48000) {
+  constructor(id: string, public sourceBuffer: Float32Array[], public readonly sourceSampleRate = 48000) {
     super(id, 'source', 0, 1);
   }
 
@@ -135,6 +135,51 @@ export class ThreeBandEqNode extends BaseNode {
     this.lowGain.reset();
     this.midGain.reset();
     this.highGain.reset();
+    this.outputs[0].buffer = null;
+  }
+}
+
+/** Master-Summe: N Mono-Eingänge → Stereo-Ausgang (NaN/Inf-sicher, Soft-Clip). */
+export class MasterSumNode extends BaseNode {
+  readonly masterGain: AudioParameter;
+
+  constructor(id: string, inputs = 8) {
+    super(id, 'master', inputs, 1);
+    this.masterGain = new AudioParameter('masterGain', 0, 2, 1);
+    this.parameters.push(this.masterGain);
+  }
+
+  process(ctx: IProcessingContext): void {
+    const len = ctx.bufferSize;
+    const out = audioBufferPool.acquire(2, len);
+    out[0].fill(0);
+    out[1].fill(0);
+    const g = this.masterGain.getValueAtTime(ctx.currentTime);
+    for (const input of this.inputs) {
+      const src = input.connections[0]?.buffer;
+      if (!src) continue;
+      const left = src[0];
+      const right = src[1] ?? src[0];
+      if (!left) continue;
+      for (let i = 0; i < len; i++) {
+        out[0][i] += left[i] * g;
+        out[1][i] += (right[i] ?? left[i]) * g;
+      }
+    }
+    // P0-4/AM-E1-7: NaN/Inf-Guards + Soft-Clip.
+    for (let ch = 0; ch < 2; ch++) {
+      for (let i = 0; i < len; i++) {
+        let v = out[ch][i];
+        if (!Number.isFinite(v)) v = 0;
+        v = Math.tanh(v) * 0.98;
+        out[ch][i] = v;
+      }
+    }
+    this.outputs[0].buffer = out;
+  }
+
+  reset(): void {
+    this.masterGain.reset();
     this.outputs[0].buffer = null;
   }
 }

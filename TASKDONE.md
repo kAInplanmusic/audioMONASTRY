@@ -70,6 +70,7 @@
 - [x] **AM-E3-2**: `src/utils/RbacCache.ts` (Lease/Sliding-Window) + Tests.
 - [x] **AM-E3-4**: `src/utils/JitterBufferEstimator.ts` + Tests.
 - [x] **AM-E4-3**: `src/audio/dsp/biquad.ts` (stabile Lowpass-Koeffizienten an den Rändern) + Tests.
+- [x] **NEW-D4-1 V2-AudioGraph**: `src/core/audio/V2StudioGraph.ts` (8-Kanal Source→Gain→Pan→MasterSum, Soft-Clip/NaN-Guard), `MasterSumNode` in `basicNodes.ts`, `audioEngine.v2Studio`/`renderV2Block()`/`syncV2FromV1()`; Tests `tests/v2AudioGraph.test.ts` (8 Tests: Zyklusfreiheit, Stereo-Pan, Master-Gain, NaN-Glättung, EngineAdapter, PlaybackEngine, WorkletGraphRuntime).
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 
