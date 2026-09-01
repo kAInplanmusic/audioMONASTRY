@@ -196,7 +196,6 @@
 ### Ebene 1 – Atomare Code-Analyse (Hot-Paths)
 
 - [ ] **AM-E1-3** `masteringProcessor.process()` ruft pro Sample `Math.log10`, `Math.pow`, `Math.exp`-Koeffizient (releaseCoeff ist ok, aber `gr = Math.pow(10, -grDb/20)` pro Sample). Fix: Block-Envelope oder Lookup/Approximation; messen mit `goldenAudio`.
-- [ ] **AM-E1-6** Hot-Path-Audit-Skript erweitern: `scripts/audit-audio-realtime.sh` soll zusätzlich `new Array`, `.push`, Closure-Konstruktion, `Math.pow/log` pro Sample in `src/audio/worklets/*.ts` erkennen und als Fehler melden.
 - [ ] **AM-E1-7** Float-Präzisions-Audit DSP: alle Biquad/Allpass-Pfade auf Denormal-/NaN-Risiken prüfen (FTZ/DAZ nicht verfügbar; Noise-Gating bzw. Flush-to-Zero-Guards ergänzen), insbesondere `dspProcessor.filterZ` und `effectProcessor`-Delay-Lines.
 
 ### Ebene 2 – Multi-Plugin-Orchestrierung
