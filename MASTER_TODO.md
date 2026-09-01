@@ -7,6 +7,47 @@ Legende:
 
 ---
 
+# 🟢 AKTUELLER STAND & NÄCHSTE TODOS (PRIORITÄT 1, 2026-09-01)
+
+> **Dieser Abschnitt ist die aktuelle, verbindliche Arbeitsgrundlage.**
+> Alles darunter ist Historie/Detailplan.
+
+## ✅ Was jetzt LIVE funktioniert (verifiziert)
+
+| Bereich | Status |
+|---|---|
+| Hetzner-Flotte (app/sfu/master/edge/ai) | ✅ 5/5 running |
+| App `https://anunnakitools.de` | ✅ Health 200, Deploy ok |
+| **AI end-to-end** (`/api/ai/orchestrate` → HF A100) | ✅ **200 COMPLETED**, AST „Sine wave“ 0.977, $0.0011/Call |
+| HF `samplemonk-ai` (1× A100) | ✅ running, alle Modelle konsolidiert |
+| Legacy-GPU-Endpoints | ✅ gelöscht (pilot/clap) |
+| SFU-RTP-Echtpfad | ✅ Producer+Consumer, RTP-Pakete |
+| `npm run verify` | ✅ 362/362 + Boundary-Scan 0 |
+| P4/P5 (Streaming, RBAC, Audit, Testrun-Checkliste) | ✅ abgeschlossen |
+| P0-1/P0-3/P0-4/P0-6/P0-7, FA-1…16, AM-E1/E3, P1-5/P1-6 | ✅ abgeschlossen |
+
+## 🎯 Nächste TODOs (in dieser Reihenfolge)
+
+- [ ] **AI-Modelle einzeln verifizieren** über `/api/ai/orchestrate`:
+      Whisper (`audio.transcribe`), CLAP (`audio.embed`), MusicGen (`audio.generate`)
+- [ ] **aiMONK-Bottom-Dock** (D7/NEW-D7-1): immer offen, ausblendbar, Fehler-/Log-Panel
+- [ ] **MOA/MCP plugin-bewusst verdrahten**: `moaAgent.executePlan` ↔ `pluginAudioRouter`
+- [ ] **P0-2 `pluginAudioRouter`**: OFF=Disconnect, Aktivierung=Signalkette, alle 21 IDs
+- [ ] **P0-5 Synth-Verdrahtung**: `SynthesizerTerminal` → `audioEngine`/`InstrumentBackend`
+- [ ] **NEW-D1-1/D1-2**: masterplayerMONK Plugin 0 fest oben; mixerMONK einzige MAIN-Einspeisung; Halter OFF stoppt Main+Clock
+- [ ] **NEW-D10-1/P2-3**: Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x, Xonar U7 → reale 2.1
+- [ ] **P1-1 Responsive**: feste Breiten raus, Touch ≥44px, Safe-Areas, Plattform-Matrix
+- [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
+- [ ] **P1-3 Settings**: Xonar-first USB-Default + 2.1 + DevSettings „AI Server Shutdown“
+- [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden“
+- [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
+- [ ] **P2-4**: `routing.json` vs. `exportGraphState()` Validierung + Bottleneck-Fix
+- [ ] **P3-2/P3-3**: 21 Plugin-Prompts + Eval-Suiten + `npm run eval:ai`
+- [ ] **GAP-3**: Plugin-Audit-Matrix mit PASS/WARN/FAIL je Plugin füllen
+- [ ] **AUD-P1-2/P1-3**: Settings-Defaults + Migration-002-CRUD verifizieren
+
+---
+
 # 🔴 TESTRUN 1 – KATASTROPHEN-ANALYSE & OPTIMIERUNGSPLAN (2026-08-31)
 
 > **WICHTIG:** Die älteren Abschnitte dieser Datei waren auf „alles erledigt"
