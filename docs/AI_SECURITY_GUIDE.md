@@ -20,8 +20,20 @@
 | Resource-Exhaustion | Job-Concurrency-Limits, Dedup, Timeouts, 25-MB-Audio-Deckel, VRAM-Guard |
 | Logging | Keine privaten Audio-Daten in Logs; Fehlertexte gekürzt |
 
+## HF-Token-Rotation (GAP-4, dokumentiert 2026-09-01)
+
+Ziel: Kompromittierte HF-Tokens regelmäßig ersetzen (Empfehlung: alle 90 Tage).
+
+1. Neues Token im HF-Dashboard erzeugen: **Settings → Access Tokens → Create token** (fein granular, z. B. `read` für Hub + `inference`/`manage` für Endpoint).
+2. Auf allen Hetzner-Hosts/Containern aktualisieren:
+   - `.env` → `HF_TOKEN=…` (bzw. `HF_API_KEY` falls verwendet)
+   - Docker-Secrets/Compose-Umgebungen nicht committen
+3. Runtime-Neustart: `docker compose up -d app ai` bzw. betroffene Services neu starten.
+4. Altes Token im HF-Dashboard **revoken** und in `docs/FEHLER_REGISTER_2026.md` als FR-Eintrag mit Datum dokumentieren.
+5. CI-Secret (`HF_TOKEN` in GitHub Actions) ebenfalls rotieren, falls dort hinterlegt.
+
 ## Offene Punkte (vor Produktion)
 
-- HF-Token-Rotation dokumentieren (Endpoint-Secret) → getrackt in `MASTER_TODO.md` GAP-4
+- HF-Token-Rotation dokumentiert ✅; **Rotation selbst** (Secret ersetzen) noch offen → getrackt in `MASTER_TODO.md` GAP-4
 - Pen-Test der neuen Routen (`/api/ai/*`) → getrackt in `MASTER_TODO.md` GAP-4
 - [x] Lizenz-Verifikation: privat/Forschung, CC-BY-NC ok (2026-08-31)

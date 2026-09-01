@@ -785,3 +785,11 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – GAP-4 Teilpunkte abgeschlossen (2026-09-01)
+
+- [x] GAP-4: `docs/SECURITY_AUDIT.md`, `SECURITY_REMEDIATION_PLAN.md`, `AI_SECURITY_GUIDE.md`, `HARDWARE_AUDIT_2026.md` abgleichen – keine offenen Checkboxen außer den bereits getrackten Punkten
+- [x] GAP-4: HF-Token-Rotation dokumentieren – `docs/AI_SECURITY_GUIDE.md` um Abschnitt „HF-Token-Rotation“ erweitert (Rotation selbst bleibt Betreiber-Schritt)
+- [x] GAP-4: Secret-Scan im CI ergänzen – `gitleaks`-Step in `.github/workflows/build.yml` (verify-Job)
+
+---
+
