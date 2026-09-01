@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Activity, Power, CircleDot as Rec } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
@@ -35,6 +35,10 @@ export const SamplerTerminal = React.memo(() => {
   const [pads, setPads] = useState<Pad[]>(emptyPads);
   const [capturing, setCapturing] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
+  // NEW-MONK-2: 16-Step-Sequencer je Pad + Quantize.
+  const [seqs, setSeqs] = useState<Record<number, boolean[]>>({});
+  const [curStep, setCurStep] = useState(0);
+  const [quantize, setQuantize] = useState(true);
 
   const updatePad = (i: number, patch: Partial<Pad>) =>
     setPads((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
@@ -45,6 +49,29 @@ export const SamplerTerminal = React.memo(() => {
     const t = SAMPLE_TRACKS[i % SAMPLE_TRACKS.length];
     audioEngine.triggerEvent(t, 0.9);
     if (pad.pitch !== 0) audioEngine.setChannelPan(t, Math.max(-1, Math.min(1, pad.pitch / 12)));
+  };
+
+  // Step-Anzeige vom Master-Transport.
+  useEffect(() => audioEngine.addStepListener(setCurStep), []);
+
+  // Sequencer: aktive Steps triggern das zugehörige Pad (quantisiert).
+  useEffect(() => {
+    if (!quantize) return;
+    const step = curStep % 16;
+    Object.entries(seqs).forEach(([padIdx, arr]) => {
+      if (!arr[step]) return;
+      const i = Number(padIdx);
+      if (pads[i]?.filled) triggerPad(i);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curStep, quantize, seqs, pads]);
+
+  const toggleSeq = (padIdx: number, step: number) => {
+    setSeqs((prev) => {
+      const arr = prev[padIdx] ? [...prev[padIdx]] : Array(16).fill(false);
+      arr[step] = !arr[step];
+      return { ...prev, [padIdx]: arr };
+    });
   };
 
   const capture = () => {
@@ -114,6 +141,29 @@ export const SamplerTerminal = React.memo(() => {
             )}
           </div>
         ))}
+      </div>
+
+      {/* NEW-MONK-2: Step-Sequencer für das gewählte Pad */}
+      <div className="px-4 pb-3">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-[8px] font-mono tracking-[0.25em] text-indigo-500">
+            STEP SEQ · PAD {sel !== null ? String(sel + 1).padStart(2, '0') : '—'} · {curStep + 1}/16
+          </span>
+          <button type="button" onClick={() => setQuantize(!quantize)}
+            className={`text-[8px] font-bold px-2 py-0.5 rounded border ${quantize ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'border-neutral-700 text-neutral-500'}`}>
+            QUANT {quantize ? 'ON' : 'OFF'}
+          </button>
+        </div>
+        <div className="grid grid-cols-16 gap-1">
+          {[...Array(16)].map((_, i) => {
+            const on = sel !== null && (seqs[sel]?.[i] ?? false);
+            return (
+              <button type="button" key={i}
+                onClick={() => sel !== null && toggleSeq(sel, i)}
+                className={`h-6 rounded-[2px] border transition-all ${on ? 'bg-indigo-500 border-indigo-300' : 'bg-black/60 border-neutral-800 hover:border-indigo-500/50'} ${curStep % 16 === i ? 'ring-1 ring-white/70' : ''}`} />
+            );
+          })}
+        </div>
       </div>
 
       {sel !== null && (

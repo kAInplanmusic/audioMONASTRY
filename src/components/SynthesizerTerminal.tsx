@@ -34,6 +34,10 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
   const [decay, setDecay] = useState(DEFAULT_SYNTH_PARAMS.decay);
   const [engine, setEngine] = useState(DEFAULT_SYNTH_PARAMS.engine);
   const [targetChannel, setTargetChannel] = useState<TrackType>('channel4');
+  // NEW-MONK-4: 16-Step-Notensequencer (C4 + Halbtöne).
+  const [seq, setSeq] = useState<number[]>(Array(16).fill(0));
+  const [seqSemi, setSeqSemi] = useState(0);
+  const [curStep, setCurStep] = useState(0);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -57,6 +61,13 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
       try { host.dispose(); } catch { /* best-effort */ }
     };
   }, []);
+
+  // NEW-MONK-4: Sequencer triggert aktive Steps am Master-Transport.
+  useEffect(() => audioEngine.addStepListener(setCurStep), []);
+  useEffect(() => {
+    const f = seq[curStep % 16];
+    if (f > 0) audioEngine.noteOnWorklet(f, 0.7, 'saw');
+  }, [curStep, seq]);
 
   const validateAndSetParameter = (param: string, value: number | string) => {
     const host = hostRef.current;
@@ -175,6 +186,32 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
               {note.label}
             </button>
           ))}
+        </div>
+
+        {/* NEW-MONK-4: 16-Step-Notensequencer */}
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Step-Seq</span>
+            <span className="text-[9px] font-mono text-neutral-600">{curStep + 1}/16</span>
+            <input type="range" min={0} max={12} value={seqSemi}
+              onChange={(e) => setSeqSemi(Number(e.target.value))}
+              className="w-20 accent-violet-500" />
+            <span className="text-[9px] font-mono text-violet-300">+{seqSemi} HT</span>
+          </div>
+          <div className="grid grid-cols-16 gap-1">
+            {[...Array(16)].map((_, i) => {
+              const on = seq[i] > 0;
+              return (
+                <button type="button" key={i}
+                  onClick={() => setSeq((prev) => {
+                    const next = [...prev];
+                    next[i] = next[i] > 0 ? 0 : 261.63 * Math.pow(2, seqSemi / 12);
+                    return next;
+                  })}
+                  className={`h-7 rounded-[3px] border transition-all cursor-pointer ${on ? 'bg-violet-500 border-violet-300' : 'bg-black/60 border-neutral-800 hover:border-violet-500/50'} ${curStep % 16 === i ? 'ring-1 ring-white/70' : ''}`} />
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
