@@ -18,6 +18,8 @@ const rawLayouts: Array<[string, string, string[]]> = [
   ['2.1', '2.1 Stereo + Sub', ['L', 'R', 'LFE']],
   ['2.2', '2.2 Stereo + 2 Sub', ['L', 'R', 'LFE1', 'LFE2']],
   ['4.0', 'Quad', ['L', 'R', 'Ls', 'Rs']],
+  ['4.1', '4.1 Quad + Sub', ['L', 'R', 'Ls', 'Rs', 'LFE']],
+  ['4.2', '4.2 Quad + 2 Sub', ['L', 'R', 'Ls', 'Rs', 'LFE1', 'LFE2']],
   ['5.1', '5.1 Surround', ['L', 'C', 'R', 'Ls', 'Rs', 'LFE']],
   ['7.1', '7.1 Surround', ['L', 'C', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'LFE']],
   ['10.0', '10.0 (monkMONASTRY)', ['L', 'R', 'Ls', 'Rs', 'Lb', 'Rb', 'Lw', 'Rw', 'Lh', 'Rh']],

@@ -6,6 +6,8 @@ import { enumerateMediaDevices } from '../utils/mediaDevices';
 import { isXonarU7 } from '../core/spatial/roomPlanner';
 import { audioDeviceManager } from '../utils/audioDeviceManager';
 import { aggregationStatus } from '../utils/audioAggregator';
+import { SPATIAL_SETUPS } from '../utils/spatialMath';
+import { audioEngine } from '../utils/audioEngine';
 import { sfuTransport } from '../core/transport/MediasoupTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { isWebMidiSupported, requestWebMidiAccess } from '../utils/midiAccess';
@@ -29,6 +31,8 @@ interface SettingsStore {
   sampleRate: number;
   bufferHint: 'interactive' | 'balanced' | 'playback';
   stereoMode: 'STEREO' | '2.1' | 'DAW' | 'SPATIAL';
+  /** P2-3/D10: konkretes Master-Ausgabe-Layout (2.0/2.2/4.0/4.1/4.2 …). */
+  masterLayout: string;
   monitorGain: number;
   transportMode: 'p2p' | 'sfu';
   midiEnabled: boolean;
@@ -42,6 +46,7 @@ const DEFAULT_SETTINGS: SettingsStore = {
   sampleRate: 48000,
   bufferHint: 'interactive',
   stereoMode: 'STEREO',
+  masterLayout: '2.0',
   monitorGain: 0.8,
   transportMode: 'p2p',
   midiEnabled: false,
@@ -341,20 +346,24 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* Routing / Ausgang */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgangsmodus</label>
-          <div className="grid grid-cols-4 gap-2">
-            {(['STEREO', '2.1', 'DAW', 'SPATIAL'] as const).map(mode => (
-              <button type="button"
-                key={mode}
-                onClick={() => update({ ...settings, stereoMode: mode })}
-                className={`p-2 rounded border text-xs font-bold tracking-wider uppercase ${
-                  settings.stereoMode === mode ? 'bg-cyan-900/30 border-cyan-500/60 text-cyan-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
-                }`}
-              >
-                {mode}
-              </button>
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgabe-Layout</label>
+          <select
+            className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
+            value={settings.masterLayout}
+            onChange={(e) => {
+              const masterLayout = e.target.value;
+              update({ ...settings, masterLayout });
+              try { audioEngine.setSpatialSetup(masterLayout); } catch { /* Audio nicht initialisiert */ }
+            }}
+            title="Ausgabe-Layout: 2.0 / 2.1 / 2.2 / 4.0 / 4.1 / 4.2 …"
+          >
+            {SPATIAL_SETUPS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
             ))}
-          </div>
+          </select>
+          <p className="text-[10px] text-neutral-500 mt-1 font-mono">
+            Modus: {settings.stereoMode} · Layout wird als Spatial-Bus-Konfiguration angewendet.
+          </p>
         </div>
 
         {/* DevSettings: AI Server Shutdown (NEW-D15-1) */}

@@ -8,6 +8,7 @@ import { storageGetJson, storageSetJson } from '../utils/storage';
 import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
 import { SpatialSourceIcon } from './SpatialSourceIcon';
 import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
+import { SPATIAL_SETUPS } from '../utils/spatialMath';
 import type { SpatialQuality, SpatialSceneState, SpatialSource } from '../types';
 
 /**
@@ -273,6 +274,20 @@ export const SpatialScene = React.memo(function SpatialScene() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={global.layout ?? '10.0'}
+            onChange={(e) => {
+              const layout = e.target.value;
+              applyGlobal({ layout } as any);
+              audioEngine.setSpatialSetup(layout);
+            }}
+            className="bg-black text-white text-xs p-1 rounded border border-neutral-700"
+            title="Ausgabe-Layout (2.0 / 2.2 / 4.0 / 4.1 / 4.2 …)"
+          >
+            {SPATIAL_SETUPS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
           <select
             value={global.quality}
             onChange={(e) => applyGlobal({ quality: e.target.value as SpatialQuality })}

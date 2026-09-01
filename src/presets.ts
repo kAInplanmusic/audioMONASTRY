@@ -193,7 +193,7 @@ export const TECHNO_PRESETS: TrackPreset[] = [
 
 export const DEFAULT_SPATIAL_SCENE: SpatialSceneState = {
   version: 'spatialMONK-v1',
-  global: { quality: 'medium', listenerRot: 0, masterGain: 1, hrtf: 'default' },
+  global: { quality: 'medium', listenerRot: 0, masterGain: 1, hrtf: 'default', layout: '10.0' },
   sources: [
     { id: 1, name: 'Kick', az: 0, el: 0, dist: 0.8, gain: 0.9, muted: false, color: '#f43f5e', track: 'channel1' },
     { id: 2, name: 'Hats', az: 35, el: 0, dist: 1.2, gain: 0.7, muted: false, color: '#10b981', track: 'channel2' },
@@ -207,7 +207,7 @@ export const SPATIAL_SCENE_PRESETS: SpatialSceneState[] = [
   DEFAULT_SPATIAL_SCENE,
   {
     version: 'spatialMONK-v1',
-    global: { quality: 'low', listenerRot: 0, masterGain: 1, hrtf: 'default' },
+    global: { quality: 'low', listenerRot: 0, masterGain: 1, hrtf: 'default', layout: '2.0' },
     sources: [
       { id: 1, name: 'Lead', az: -25, el: 0, dist: 1.1, gain: 0.95, muted: false, color: '#f97316', track: 'channel8' },
       { id: 2, name: 'Pad', az: 90, el: 0, dist: 2.5, gain: 0.6, muted: false, color: '#a78bfa', track: 'channel4' },

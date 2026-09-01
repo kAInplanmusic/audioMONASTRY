@@ -160,6 +160,8 @@ export interface SpatialGlobalState {
   listenerRot: number;
   masterGain: number;
   hrtf: string;
+  /** Ausgabe-Layout (SPATIAL_SETUPS-ID, z. B. '2.0', '4.1', '24.2'). */
+  layout?: string;
 }
 
 export interface SpatialSceneState {
@@ -188,6 +190,7 @@ export function migrateLegacySpatialPreset(old: any): SpatialSceneState {
       listenerRot: Number(old?.global?.listenerRot ?? 0),
       masterGain: Number(old?.global?.masterGain ?? old?.masterGain ?? 1),
       hrtf: String(old?.global?.hrtf ?? 'default'),
+      layout: String(old?.global?.layout ?? old?.setup ?? '10.0'),
     },
     sources,
   };
