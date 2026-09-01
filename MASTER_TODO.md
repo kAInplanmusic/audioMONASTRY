@@ -206,7 +206,7 @@ Quellen, die ausgewertet wurden:
 ### P0-8 AI-Pfad debuggen & aiMONK optional machen
 - [ ] `AiMonkTerminal`: sichtbares Fehler-/Log-Panel (Provider, Status, HTTP,
       Dauer) statt nur Konsolen-Log.
-- [ ] `/api/ai/complete`-Fehler normalisieren und als nutzbare Meldung anzeigen
+- [x] `/api/ai/complete`-Fehler normalisieren und als nutzbare Meldung anzeigen
       (Timeout/Wake/Quota/Provider-Down).
 - [ ] aiMONK als **Bottom-Dock für alle User immer offen** umsetzen (kein
       normales Grid-Modul; „letztes Modul unten" durch Dock ersetzen).
