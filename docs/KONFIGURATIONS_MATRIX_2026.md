@@ -9,8 +9,8 @@
 | `docker-compose.ai.yml` | AI-Runtime simulated/CPU | lokaler Smoke | ✅ |
 | `docker-compose.hetzner.yml` | App/Caddy/Redis/master-player | unverändert | ✅ |
 | `Caddyfile` | TLS/Reverse-Proxy | unverändert | ✅ |
-| `SettingsDialog` Defaults | `outputDeviceId=''` | Xonar-first, sonst USB | ⬜ P1-3 |
-| `stereoMode` | STEREO/DAW/SPATIAL | + 2.1 | ⬜ P2-3 |
+| `SettingsDialog` Defaults | Xonar-first, sonst USB, `outputOverride` | Xonar-first, sonst USB | ✅ P1-3/D21 | 
+| `stereoMode` | STEREO/2.1/DAW/SPATIAL | + 2.1 | ✅ P2-3/D10 |
 | Sample-Rate | 48 kHz Default | U7: 44,1/48/96/192 | ✅ U7 verifiziert |
 | BufferHint | interactive | interactive + Auto-Anpassung | ⬜ AM-E6-2 |
 | `runtime_config.yaml` | cuda/simulated, VRAM 80 GB | unverändert | ✅ |

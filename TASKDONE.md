@@ -771,3 +771,17 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – GAP-7/GAP-8 abgeschlossen (2026-09-01)
+
+- [x] GAP-7: Fehlende/fehlerhafte Defaults korrigieren (USB-Auto, 2.1) – `SettingsDialog` Xonar-first/USB-Auto + `2.1`-Modus umgesetzt, Matrix aktualisiert
+- [x] GAP-7 Prüfpunkt: Matrix vollständig; jeder Default hat Ist- und Soll-Wert – `docs/KONFIGURATIONS_MATRIX_2026.md` aktualisiert
+- [x] GAP-8 Prüfpunkt: Register ist aktuell; keine Fehler ohne Task-Link – `docs/FEHLER_REGISTER_2026.md` bereinigt (FR-016 in Tabelle integriert, alle Einträge mit Task-Link)
+
+---
+
+## Quelle: MASTER_TODO.md – GAP-3 Teilpunkt abgeschlossen (2026-09-01)
+
+- [x] GAP-3: Je Plugin Ergebnis PASS/WARN/FAIL + verknüpfte Tasks – `docs/PLUGIN_AUDIT_MATRIX.md` auf PASS/WARN/FAIL umgestellt (synthesizer PASS, Rest WARN, verknüpfte Tasks in MASTER_TODO)
+
+---
+

@@ -20,9 +20,9 @@
 | FR-013 | Fremdaudit FA-16 | Kritisch | `hf_generate` NameError | ✅ Gefixt | FA-P0-4 |
 | FR-014 | AM-E3-1 | Kritisch | Locking-Seiteneffekt im setState-Updater | ✅ Gefixt (Ref Source of Truth) | AM-E3-1 |
 | FR-015 | AM-E1-1/2/4/5 | Hoch | Worklet-Hot-Path-Allokationen/Closures | ✅ Gefixt | AM-E1-1/2/4/5 |
+| FR-016 | HF live | Hoch | Endpoint samplemonk-ai nach AST-Test auf `failed` zurückgefallen (Orchestrator: BAD_REQUEST) | ✅ Gefixt (GHCR-PAT + Task-Normalisierung) | 9g / hf-endpoint.yml |
 
 ## Verbleibend offen
 
 - FA-P0-1 (MCP-Permission serverseitig), FA-P0-2 (ModelManager echtes Laden)
 - FA-P2-2 (Regressionstests repository/revision) – Python-Smoke, nächster CI-Lauf
-| FR-016 | HF live | Hoch | Endpoint samplemonk-ai nach AST-Test auf `failed` zurückgefallen (Orchestrator: BAD_REQUEST) | ✅ Gefixt (GHCR-PAT + Task-Normalisierung) | 9g / hf-endpoint.yml |
