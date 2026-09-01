@@ -293,7 +293,7 @@ export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { in
             const deckMix = xfMode === 'THRU' ? 1 : xfGain(s.deck, xfd);
             const level = c.mute ? 0 : c.trim * c.gain * deckMix;
             return (
-              <div key={s.track} className="w-[128px] short-landscape:w-[108px] shrink-0 bg-[#222226] rounded-md border border-black/70 p-2 short-landscape:p-1.5 flex flex-col gap-1.5 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
+              <div key={s.track} className="w-32 short-landscape:w-24 shrink-0 bg-[#222226] rounded-md border border-black/70 p-2 short-landscape:p-1.5 flex flex-col gap-1.5 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
                 {/* Kanal-Kopf mit CUE */}
                 <div className="flex items-center justify-between px-0.5">
                   <span className="text-[9px] font-black tracking-widest text-zinc-200">{s.label}</span>
