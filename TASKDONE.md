@@ -793,3 +793,9 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – AM-E1-6 abgeschlossen (2026-09-01)
+
+- [x] **AM-E1-6** Hot-Path-Audit-Skript erweitert – `scripts/audit-audio-realtime.sh` erkennt jetzt `new Array`, `.push(`, `Math.pow`, `Math.log`, `Math.exp` in `src/audio/worklets` + `src/core/workers` als Verstöße (Closure-Erkennung bleibt manuell, da nicht generisch automatisierbar)
+
+---
+
