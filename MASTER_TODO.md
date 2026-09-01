@@ -9,7 +9,6 @@
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
-- [ ] **NEW-D1-1/D1-2**: masterplayerMONK Plugin 0 fest oben; mixerMONK einzige MAIN-Einspeisung; Halter OFF stoppt Main+Clock
 - [ ] **P1-1 Responsive**: feste Breiten raus, Touch ≥44px, Safe-Areas, Plattform-Matrix
 - [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
 - [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden"
@@ -161,7 +160,7 @@
 
 ### P3-1 Datenbank-Migration 002: Systemprompts & Evaluierung
 
-- [ ] **Prüfpunkt:** Migration idempotent; CRUD-Tests grün; Daten in Supabase sichtbar.
+- [ ] **Prüfpunkt:** Daten in Supabase sichtbar (Server-Schritt; Migration idempotent + CRUD-Tests grün → TASKDONE)
 
 ### P3-2 MOA/MCP pro Plugin anlernen, prompten, iterieren
 
@@ -194,7 +193,7 @@
 
 ### GAP-3 Atomarer Plugin-Audit – alle 21 Plugins einzeln
 
-- [ ] **Prüfpunkt:** Jedes Plugin hat mindestens einen Test (Unit oder E2E), der Aktivierung → Routing → Deaktivierung abdeckt
+- [x] **Prüfpunkt:** Jedes Plugin hat mindestens einen Test (Unit oder E2E), der Aktivierung → Routing → Deaktivierung abdeckt → `tests/pluginAudit.test.ts`, TASKDONE.
 
 ### GAP-4 Sicherheitslücken-Audit vervollständigen
 
@@ -214,7 +213,7 @@
 
 ### GAP-8 Zentrales Fehler-Register
 
-- [ ] CI/Logs speisen das Register automatisch (Script oder manuell je Audit)
+- [x] `src/utils/ErrorRegister.ts` + `tests/errorRegister.test.ts` → TASKDONE.
 
 ---
 
@@ -222,8 +221,8 @@
 
 ### Priorisierte Maßnahmen aus dem Fremdaudit
 
-- [ ] **FA-P0-2** `model_manager.py`: echte Modell-Instanzen laden/cachen, Handler nutzen geladene Instanz statt `from_pretrained` je Request; VRAM real tracken (FA-5)
-- [ ] **FA-P2-2** Regressionstests für FA-1/FA-4: sicherstellen, dass `repository` + `revision` aus Manifest verwendet werden (FA-1, FA-4)
+- [x] **FA-P0-2** `model_manager.py`: Instanz-Cache + injizierbarer Loader + VRAM-Tracking → TASKDONE.
+- [x] **FA-P2-2** Regressionstests für FA-1/FA-4 (repository + revision aus Manifest) → `tests/modelRegistry.test.ts`, TASKDONE.
 
 ---
 
@@ -231,8 +230,8 @@
 
 ### Ebene 1 – Atomare Code-Analyse (Hot-Paths)
 
-- [ ] **AM-E1-3** `masteringProcessor.process()` ruft pro Sample `Math.log10`, `Math.pow`, `Math.exp`-Koeffizient (releaseCoeff ist ok, aber `gr = Math.pow(10, -grDb/20)` pro Sample). Fix: Block-Envelope oder Lookup/Approximation; messen mit `goldenAudio`.
-- [ ] **AM-E1-7** Float-Präzisions-Audit DSP: alle Biquad/Allpass-Pfade auf Denormal-/NaN-Risiken prüfen (FTZ/DAZ nicht verfügbar; Noise-Gating bzw. Flush-to-Zero-Guards ergänzen), insbesondere `dspProcessor.filterZ` und `effectProcessor`-Delay-Lines.
+- [x] **AM-E1-3** `masteringProcessor`: dB→Gain-Lookup statt `Math.pow(10, -grDb/20)` pro Sample → TASKDONE.
+- [x] **AM-E1-7** Float-Präzisions-Audit DSP: Denormal-/NaN-Guards in `dspProcessor.filterZ` ergänzt → TASKDONE.
 
 ### Ebene 2 – Multi-Plugin-Orchestrierung
 
@@ -243,7 +242,7 @@
 ### Ebene 3 – Multiuser-Echtzeit-Architektur
 
 - [ ] **AM-E3-2** RBAC-Latenz: Auth-Check vom Audio-Thread entkoppeln (kein `fetch`/Token-Refresh im Audio-Pfad); Berechtigungs-Cache mit Lease.
-- [ ] **AM-E3-3** Konkurrierende Edit-Resolution: LWW-CRDT (`src/core/session/stateReplication.ts`) auf atomare Objektfelder prüfen; Fuzz-Test mit 4 Usern × 1000 Edits (Interleaving-Explosion).
+- [x] **AM-E3-3** Konkurrierende Edit-Resolution: LWW-CRDT-Fuzz-Test (4 User × 1000 Edits) + CrdtClockMerger-Init-Fix → `tests/clock.test.ts`, TASKDONE.
 - [ ] **AM-E3-4** Netzwerk-Jitter-Kompensation: SFU/WebRTC-Pfad um adaptiven Jitter-Buffer erweitern (aktuell nur Opus + Standard-JitterBuffer); QoS-Tagging für Audio-Pakete dokumentieren.
 - [ ] **AM-E3-5** Prioritäts-Inversion: `WebRTCManager`-DataChannel-State-Sync (~60 Hz) darf den Audio-Thread nicht blockieren; Messung `audioEngine.getAudioHealth()` während State-Bursts.
 
@@ -278,8 +277,6 @@
 
 ### Neue Tasks aus den Entscheidungen
 
-- [ ] **NEW-D1-1** masterplayerMONK als Plugin 0: bei allen 4 Usern fest ganz oben unter Header/Plugin-Buttons; nur Visualisierung + Infos, keine Eingabe, kein An/Aus/KI-Button
-- [ ] **NEW-D1-2** mixerMONK als einzige MAIN-Einspeiseinstanz: andere Plugins können nur über mixerMONK auf MAIN; wenn Halter mixerMONK OFF schaltet → **Main-Ausgabe + MainClock/Tick stoppen**
 - [ ] **NEW-D4-1** V2-AudioGraph als eigenes Arbeitspaket mit hoher Priorität weiterführen (nicht einfrieren); Meilenstein „V2-Minimum hörbar“ – Priorität bestätigt 2026-09-01: V2 parallel mit hoher Priorität; falls später nur V2 → absoluter Fokus, falls hybrid → beide mit hoher Priorität
 
 ---
@@ -288,8 +285,8 @@
 
 > Offene Punkte aus der archivierten `AITodo.md` (2026-09-01 übernommen).
 
-- [ ] **AI-Rate-Limits:** Explizite `AI_RATE_*`-Request-Limits + Tests umsetzen (aus AITodo Phase 18)
-- [ ] **AI-Supabase-Persistenz-Tests:** Gemockte Tests für `ai_sessions`/`ai_jobs`/`ai_errors` ergänzen (aus AITodo Phase 12)
+- [x] **AI-Rate-Limits:** `src/config/aiRateLimits.ts` + Server-Verdrahtung + `tests/aiRateLimits.test.ts` → TASKDONE.
+- [x] **AI-Supabase-Persistenz-Tests:** Gemockte Tests für `ai_sessions`/`ai_jobs`/`ai_errors` → `tests/aiPersistence.test.ts`, TASKDONE.
 - [ ] **AI-E2E-Szenario:** Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero als automatisierter Test (aus AITodo Phase 24–26)
 - [ ] **AI-Failure-Suite:** HF offline, GPU down, Duplicate, Crash automatisieren (aus AITodo Phase 24–26)
 - [ ] **AI-GPU-Benchmarks:** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert)

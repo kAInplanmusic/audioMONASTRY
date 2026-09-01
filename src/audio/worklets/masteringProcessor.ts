@@ -27,10 +27,15 @@ class MasteringProcessor extends AudioWorkletProcessor {
   private delayPos = 0;
   // Wiederverwendbarer Kanal-Scratch (keine Allokation im Hot-Path)
   private scratch: Float32Array | null = null;
+  // AM-E1-3: dB→Gain-Lookup statt Math.pow(10, -grDb/20) pro Sample.
+  private grLookup = new Float32Array(241); // 0..48 dB in 0.2-dB-Schritten
 
   constructor() {
     super();
     this.peak = this.limiterCeiling;
+    for (let i = 0; i < this.grLookup.length; i++) {
+      this.grLookup[i] = Math.pow(10, -(i * 0.2) / 20);
+    }
     this.port.onmessage = (e) => {
       const m = e.data; if (!m) return;
       if (m.reset) { this.peak = this.limiterCeiling; this.delayPos = 0; this.delayLine = []; this.scratch = null; }
@@ -140,7 +145,7 @@ class MasteringProcessor extends AudioWorkletProcessor {
       // 2) Soft-Knee-Kompression auf den (verzögerten) True-Peak.
       const dbPeak = 20 * Math.log10(Math.max(truePeak, 1e-8));
       const grDb = this.compressDb(dbPeak);
-      const gr = Math.pow(10, -grDb / 20);
+      const gr = this.grLookup[Math.max(0, Math.min(240, Math.round(grDb * 5)))] ?? 1;
 
       // 3) Lookahead-Limiter mit exponentieller Release-Hüllkurve.
       if (truePeak > this.peak) {

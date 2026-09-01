@@ -136,12 +136,14 @@ class DspProcessor extends AudioWorkletProcessor {
         this.ap1Z = s - this.apCoef * this.ap1Z;
         s = y1;
 
-        // 2) Dynamisches Lowpass
+        // 2) Dynamisches Lowpass (AM-E1-7: Denormal-/NaN-Guard)
         const [b0,b1,b2,a1,a2] = this.filterCo;
         const yf = b0*s + this.filterZ[0];
-        this.filterZ[0] = b1*s - a1*yf + this.filterZ[1];
-        this.filterZ[1] = b2*s - a2*yf;
-        s = yf;
+        const z0 = b1*s - a1*yf + this.filterZ[1];
+        const z1 = b2*s - a2*yf;
+        this.filterZ[0] = Number.isFinite(z0) ? (Math.abs(z0) < 1e-20 ? 0 : z0) : 0;
+        this.filterZ[1] = Number.isFinite(z1) ? (Math.abs(z1) < 1e-20 ? 0 : z1) : 0;
+        s = Number.isFinite(yf) ? yf : 0;
 
         // 3) Optionaler Soft-Clipper (harmonische Sättigung)
         if (this.drive > 0) {

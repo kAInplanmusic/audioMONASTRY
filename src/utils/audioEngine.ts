@@ -876,7 +876,16 @@ class AudioEngine {
       this.allNotesOffItSynth();
       this.noteOffWorklet();
     }
+    // NEW-D1-2: mixerMONK ist die einzige MAIN-Einspeisung. Schaltet der
+    // Halter mixerMONK OFF, stoppen Main-Ausgabe + MainClock.
+    if (id === 'mixer') this.stopMainAndClock();
     this.setIdleSilence(this.activePluginIds.size === 0);
+  }
+
+  /** NEW-D1-2: Main-Ausgabe stummschalten und Transport-Clock stoppen. */
+  public stopMainAndClock(): void {
+    try { Tone.Transport.stop(); } catch { /* Transport nicht initialisiert */ }
+    try { this.masterVolume?.volume.rampTo(-Infinity, 0.05); } catch { /* ignore */ }
   }
 
   public isPluginActive(id: string): boolean {

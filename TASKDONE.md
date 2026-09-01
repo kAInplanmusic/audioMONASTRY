@@ -32,6 +32,28 @@
 - [x] **spatialMONK Folgeschritt 3 – Regression + CI**: `scripts/spatial-regression.ts` (deterministischer Offline-Render, ILD/ITD-Asserts, WAV-Ausgabe nach `test-results/spatial-regression/`); CI-Job in `.github/workflows/build.yml` (Regressionslauf + WAV-Artefakt-Upload).
 - [x] **spatialMONK Folgeschritt 4 – WASM partitioned-FFT-HRTF**: Rust-Kernel `src/audio/wasm/hrtf_conv` (UPOLS, Block 128, IR ≤ 1024, rustfft, voralloziert) → `public/hrtf/hrtf_conv.wasm`; Loader `src/audio/spatial/wasmHrtf.ts` (`HrtfConvolverWasm` + `JsHrtfConvolver`-Fallback); Worklet-Integration `loadHRTFWasm` (Modul-Transfer/URL-Fallback, high-Quality-Blockpfad); UI-HRTF-Button lädt JSON-Kernel + WASM; `npm run build:wasm-hrtf`; Node-Tests `tests/wasmHrtf.test.ts` (WASM vs. JS-Referenz + Worklet-Integration).
 
+### Serverloser Sammeldurchlauf 2026-09-01 (ohne Hardware/Serverstarts)
+
+- [x] **NEW-D1-1/D1-2**: masterplayerMONK als feste Rack-Sektion ohne Power/⋮; mixerMONK OFF stoppt Main+Clock (`audioEngine.stopMainAndClock()` + `pluginAudioRouter`-Verdrahtung); Tests in `tests/pluginAudit.test.ts`.
+- [x] **GAP-3 Plugin-Audit**: `tests/pluginAudit.test.ts` deckt alle 21 IDs (Aktivierung → Routing → Deaktivierung) ab.
+- [x] **GAP-5 Prompt-Matrix**: `PLUGIN_COMMAND_CATALOG`/`PLUGIN_MOA_SYSTEM_PROMPTS`/`PLUGIN_MOA_TASKS` auf alle 21 IDs erweitert; Test `tests/promptMatrix.test.ts`.
+- [x] **GAP-8 Fehler-Register**: `src/utils/ErrorRegister.ts` + `tests/errorRegister.test.ts`.
+- [x] **P1-6 MIDI-Codec**: Roundtrip-Tests (CC/Pitch/Program/RPN) in `tests/midiCodec.test.ts`; vorhandene Codec-Suite grün.
+- [x] **P2-1/P1-3 AudioContextFactory**: `resolveAudioContextOptions`/`createConfiguredAudioContext` (latencyHint/sampleRate) + `tests/audioContextFactory.test.ts`.
+- [x] **P2-2 Clock**: `CrdtClockMerger`-Init-Fix (erster plausibler Schritt wird akzeptiert); `tests/clock.test.ts`.
+- [x] **P2-3 2.1-Crossover**: `designLinkwitzRileyCrossover`/`hasDedicatedSub` in `OutputConfig.ts` + `tests/outputConfig.test.ts` (Layouts bis 24.2).
+- [x] **P2-5 Bundle-Gate**: `check-bundle-size.mjs` Einheiten-Fix (FAIL = 2.0 MiB laut Doku); Bundle-Check grün (Warn <1.5 MiB bleibt offen).
+- [x] **P3-1 Migration 002**: Idempotenz-Test `tests/migrations.test.ts` (create if not exists, on conflict do nothing, drop policy if exists).
+- [x] **AI-Rate-Limits**: `src/config/aiRateLimits.ts` + Server-Verdrahtung (Legacy-Env respektiert) + `tests/aiRateLimits.test.ts`.
+- [x] **AI-Persistenz-Mock-Tests**: `tests/aiPersistence.test.ts` (ai_sessions/ai_jobs/ai_errors/ai_model_usage/ai_cost_estimates/mcp_audit_events, No-Op ohne Client).
+- [x] **FA-P0-2**: `model_manager.py` Instanz-Cache + injizierbarer Loader (`set_loader`/`get_instance`) + Cleanup bei unload.
+- [x] **FA-P2-2**: `tests/modelRegistry.test.ts` (repository/revision gepinnt, latest/Duplikate erkannt).
+- [x] **AM-E1-3**: `masteringProcessor` dB→Gain-Lookup (241 Stützstellen) statt `Math.pow` pro Sample.
+- [x] **AM-E1-7**: Denormal-/NaN-Guards in `dspProcessor.filterZ`.
+- [x] **AM-E3-3**: LWW-CRDT-Fuzz (4 User × 1000 Edits) in `tests/clock.test.ts`.
+- [x] **MONASTRYmasterclock (Steuerlogik)**: `src/core/clock/MasterClock.ts` (BPM/Start/Stop, Lookahead-Budget 8–15 ms, Dropout-Watchdog mit Auto-Recovery) + `tests/masterClock.test.ts`; Audio-Anbindung bleibt offen.
+- [x] **P1-1/P1-4 Teilerfolge**: Safe-Area-/Touch-Utilities in `index.css`; RackRow-„In Zwischenablage senden" (⧉) inkl. Handler.
+
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 
 - [x] `src/App.tsx`: `togglePlugin`/`promotePlugin` dürfen `mixer` **nicht** mehr ignorieren; `filter(p => p.id === 'mixer' ? true : …)` entfernen.

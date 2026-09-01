@@ -1,5 +1,5 @@
 import React from 'react';
-import { Power } from 'lucide-react';
+import { Power, Copy } from 'lucide-react';
 import { ModuleState } from '../context/ModuleStateContext';
 
 interface RackRowProps {
@@ -11,6 +11,8 @@ interface RackRowProps {
   lockedByOther: boolean;
   onToggle: () => void;
   onPromote: () => void;
+  /** P1-4: „In Zwischenablage senden" – kopiert Plugin-State/Config als JSON. */
+  onCopy?: () => void;
   children?: React.ReactNode;
 }
 
@@ -28,6 +30,7 @@ export const RackRow = React.memo(function RackRow({
   lockedByOther,
   onToggle,
   onPromote,
+  onCopy,
   children,
 }: RackRowProps) {
   const active = state !== 'OFF';
@@ -97,6 +100,17 @@ export const RackRow = React.memo(function RackRow({
         >
           ⋮
         </button>
+        {onCopy && (
+          <button
+            type="button"
+            onClick={onCopy}
+            title={`${short} in Zwischenablage senden`}
+            aria-label={`${name} in Zwischenablage senden`}
+            className="w-9 h-9 shrink-0 rounded-full border border-neutral-700 text-neutral-400 hover:text-amber-300 hover:border-amber-400/40 flex items-center justify-center transition-colors cursor-pointer"
+          >
+            <Copy size={13} />
+          </button>
+        )}
       </div>
 
       {active && children && (

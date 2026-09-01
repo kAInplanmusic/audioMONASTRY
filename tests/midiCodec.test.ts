@@ -3,6 +3,7 @@ import {
   MidiStreamParser, RpnParser, ParameterNumberParser,
   midiClock, midiStart, midiStop, midiContinue, midiSongPosition,
   midiPolyAftertouch, midiChannelAftertouch, rpn, nrpn,
+  midiEventToControlMessage, encodeControlMessage,
 } from '../src/core/hardware/midiCodec';
 
 describe('MIDI-Streaming-Parser: Channel Voice', () => {
@@ -116,5 +117,16 @@ describe('MIDI-Encoder', () => {
     pn.push(6, 3);
     const r = pn.push(38, 4);
     expect(r).toEqual({ kind: 'rpn', parameter: 0, value: 0x0184 });
+  });
+
+  it('ControlMessage-Roundtrip ist verlustfrei (CC/Pitch/Program/RPN)', () => {
+    const cc = midiEventToControlMessage({ type: 'cc', channel: 3, controller: 7, value: 100 });
+    expect(encodeControlMessage(cc)).toEqual([0xb2, 7, 100]);
+    const pitch = midiEventToControlMessage({ type: 'pitchBend', channel: 1, value: 0x1234 });
+    expect(encodeControlMessage(pitch)).toEqual([0xe0, 0x34, 0x24]);
+    const prog = midiEventToControlMessage({ type: 'program', channel: 1, program: 42 });
+    expect(encodeControlMessage(prog)).toEqual([0xc0, 42]);
+    const rpnMsg = midiEventToControlMessage({ type: 'rpn', channel: 1, parameter: 0, value: 0x2000 });
+    expect(encodeControlMessage(rpnMsg)).toEqual(rpn(1, 0, 0x2000));
   });
 });

@@ -91,6 +91,8 @@ export function deactivatePlugin(id: string): void {
   }
   try {
     audioEngine.deactivatePlugin(id);
+    // NEW-D1-2: mixerMONK ist die einzige MAIN-Einspeisung – OFF stoppt Main+Clock.
+    if (id === 'mixer') (audioEngine as any).stopMainAndClock?.();
   } catch (e) {
     console.warn('[pluginAudioRouter] deactivate fehlgeschlagen:', id, (e as Error).message);
   }
