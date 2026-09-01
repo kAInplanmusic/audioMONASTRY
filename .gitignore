@@ -34,3 +34,6 @@ services/audio-runtime/target/
 
 # NAPI-Rust-Binary wird aus Quellcode gebaut (Dockerfile.multistage)
 services/mixer/*.node
+
+# Rust/WASM build artifacts
+src/audio/wasm/hrtf_conv/target/
