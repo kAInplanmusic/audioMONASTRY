@@ -83,3 +83,43 @@ test('Plugin-Toggle öffnet mcpMONK ohne React-Crash', async ({ page }) => {
 
   expect(errors.pageErrors).toEqual([]);
 });
+
+test('P0-1: Studio-Start hat 0 aktive Plugins (alle Toolbar-Icons gedimmt)', async ({ page }) => {
+  const errors = collectErrors(page);
+  await enterStudio(page);
+
+  const toolbar = page.locator('nav[aria-label="Plugin-Toolbar"]');
+  const buttons = toolbar.locator('button[aria-pressed]');
+  const count = await buttons.count();
+  expect(count).toBeGreaterThanOrEqual(19);
+  for (let i = 0; i < count; i++) {
+    await expect(buttons.nth(i)).toHaveAttribute('aria-pressed', 'false');
+  }
+  expect(errors.pageErrors).toEqual([]);
+});
+
+test('P0-3: Plugin-OFF im Terminal synchronisiert Toolbar-Icon', async ({ page }) => {
+  const errors = collectErrors(page);
+  await enterStudio(page);
+
+  await page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MCP').first().click();
+  const rack = page.locator('#rack-mcp');
+  await expect(rack.getByText('mcpMONK').first()).toBeVisible({ timeout: 10_000 });
+  await rack.locator('select').selectOption('OFF');
+  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MCP').first()).toHaveAttribute('aria-pressed', 'false');
+
+  expect(errors.pageErrors).toEqual([]);
+});
+
+test('P0-7: Master-Player-Transport ist ohne Scrollen erreichbar', async ({ page }) => {
+  const errors = collectErrors(page);
+  await enterStudio(page);
+
+  // masterplayerMONK ist der erste feste Rack-Block direkt unter dem Header.
+  const master = page.locator('section').filter({ has: page.getByText('masterplayerMONK') }).first();
+  await expect(master).toBeVisible();
+  await page.keyboard.press('Space');
+  await expect(page.getByText('132 BPM').first()).toBeVisible();
+
+  expect(errors.pageErrors).toEqual([]);
+});

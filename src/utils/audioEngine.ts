@@ -234,6 +234,32 @@ class AudioEngine {
     this.lookahead = Math.min(15, this.lookahead + 2);
   }
 
+  /**
+   * P1-3/P2-1: Gespeicherte Audio-Settings tatsächlich anwenden.
+   * - Latency-Profil steuert das Scheduler-Lookahead adaptiv (8–15 ms).
+   * - Die Sample-Rate wird als Präferenz gespeichert und beim nächsten
+   *   AudioContext-Aufbau (bzw. Tone.Context) berücksichtigt.
+   */
+  public applyLatencyProfile(hint: 'interactive' | 'balanced' | 'playback', sampleRate?: number): void {
+    const budget = hint === 'interactive' ? 8 : hint === 'balanced' ? 12 : 15;
+    this.lookahead = Math.max(8, Math.min(15, budget));
+    try {
+      const toneCtx = Tone.getContext() as unknown as { lookAhead?: number; latencyHint?: string };
+      if (toneCtx && Number.isFinite(toneCtx.lookAhead as number)) {
+        toneCtx.lookAhead = this.lookahead / 1000;
+      }
+      if (toneCtx && typeof toneCtx.latencyHint === 'string') {
+        toneCtx.latencyHint = hint;
+      }
+    } catch { /* Tone-Context noch nicht verfügbar */ }
+    if (Number.isFinite(sampleRate as number) && (sampleRate as number) > 0) {
+      this.preferredSampleRate = sampleRate as number;
+    }
+  }
+
+  /** P1-3: Vom Nutzer gewünschte Sample-Rate (wird beim Context-Aufbau genutzt). */
+  public preferredSampleRate = 48000;
+
   /** NEW-MONK-8/P2-2: Swing systemweit setzen (Worklet-Clock + Scheduler). */
   public setSwing(swing: number): void {
     this.swing = Math.max(0, Math.min(1, swing));
