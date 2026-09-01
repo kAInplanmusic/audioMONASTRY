@@ -752,3 +752,15 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – P0-Code-Teilpunkte abgeschlossen (2026-09-01)
+
+- [x] P0-3: `usePluginState` und `ModuleStateContext` zusammenführen – `usePluginState` nutzt jetzt ausschließlich den globalen `ModuleStateContext` (D3), keine zwei State-Quellen mehr
+- [x] P0-3: Jedes Terminal bekommt sichtbaren Status (OFF/AUTO_AI/PRO) und der Zustand wird über WebRTC repliziert – Status/Ring/Badge in `ModuleContainer`, Replikation zentral via `ModuleStateContext`
+- [x] P0-4: Rausch-Quellen identifizieren / AudioGraphSnapshot – OFF→Deactivate-Pfad durch `tests/pluginAudioRouter.test.ts` abgesichert, Silence-Gate vorhanden
+- [x] P0-6: Jedes Plugin hat echten Ziel-Kanal über `PluginAudioRouter` (channels/mainFeeder), Ausgang standardmäßig MAIN
+- [x] P0-6: `PLUGIN_SOLO_CHANNEL`-Map in `App.tsx` durch Router-Auskunft `getPluginRoute()` ersetzt
+- [x] P0-7: `MasterPlayerTerminal` bleibt als Werkzeug darunter, ist aber nicht der einzige Transport – verifiziert in `App.tsx` (Sticky-Top-Bar + Terminal darunter)
+- [x] P0-8: `AiMonkTerminal`/aiMONK-Dock: sichtbares Fehler-/Log-Panel mit Provider, Status/HTTP (Fehlertext) und Dauer – in `AiMonkDock` erweitert (Provider + Dauer-Meta, Fehler sichtbar)
+
+---
+

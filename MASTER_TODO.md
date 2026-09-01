@@ -28,30 +28,20 @@
 
 ### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
 
-- [ ] `usePluginState` und `ModuleStateContext` zusammenführen: lokale Terminal-Selects schreiben in den globalen State; keine zwei Wahrheiten.
-- [ ] Jedes Terminal bekommt sichtbaren Status (OFF/AUTO_AI/PRO) und der Zustand wird über WebRTC repliziert (bestehende LWW-Nachricht reicht).
 - [ ] **Prüfpunkt:** Plugin im Terminal auf OFF stellen → Grid-Icon dunkel, Audio weg, Lock frei; Reload → Zustand bleibt wie gespeichert (bzw. Start-OFF-Regel P0-1).
 
 ### P0-4 Rauschen auf Main beseitigen
 
-- [ ] Rausch-Quellen identifizieren: `clapSynth` (Noise), `synthWorklet`, `itSynthNode`, Effekt-Worklet-Defaults; mit `AudioGraphSnapshot`-Test alle aktiven Quellen auf MAIN auflisten.
 - [ ] NaN/Inf-Guards an Master-Kette prüfen (bereits vorhanden, aber erneut durch `goldenAudio`-Test mit allen Worklets).
 - [ ] **Prüfpunkt:** 60 s Dauerlauf ohne aktives Plugin → RMS ≤ -60 dBFS; mit aktivem Sequencer → nur erwartete Steps hörbar.
 
 ### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
 
-- [ ] Jedes Plugin bekommt einen echten Ziel-Kanal (PluginAudioRouter) und dessen Ausgang geht standardmäßig auf MAIN; nur expliziter Cue geht auf MON/PLUGIN.
-- [ ] `PLUGIN_SOLO_CHANNEL`-Map in `App.tsx` durch Router-Auskunft ersetzen.
 - [ ] **Prüfpunkt:** 4-User-E2E: User2 aktiviert Drum → auf MAIN hörbar; User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN bleibt unverändert; zurück auf MAIN → sofort Gesamtmix.
 
 ### P0-7 Master-Player fest oben mit Transport
 
-- [ ] `MasterPlayerTerminal` (Analyse/Master/Mixdown) bleibt als Werkzeug darunter, ist aber nicht der einzige Transport.
 - [ ] **Prüfpunkt:** Scroll-Position egal → Play/Stop erreichbar; E2E Keyboard-Space + Button funktionieren.
-
-### P0-8 AI-Pfad debuggen & aiMONK optional machen
-
-- [ ] `AiMonkTerminal`: sichtbares Fehler-/Log-Panel (Provider, Status, HTTP, Dauer) statt nur Konsolen-Log.
 
 ---
 

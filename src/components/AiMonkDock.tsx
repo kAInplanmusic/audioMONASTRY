@@ -17,11 +17,13 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
   const [task, setTask] = useState('');
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState<string[]>([]);
+  const [meta, setMeta] = useState('');
 
   const run = useCallback(async (input: string) => {
     const clean = input.trim();
     if (!clean || busy) return;
     setBusy(true);
+    const started = Date.now();
     try {
       const plan = await moaAgent.plan(clean);
       const steps: MoaStep[] = plan.steps.length
@@ -37,9 +39,11 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
         }
         return `${r.handled ? '✓' : '✗'} ${r.pluginId || r.step.pluginId}: ${r.step.command}${r.error ? ` (${r.error})` : ''}`;
       });
+      setMeta(`Provider: ${plan.provider} · Dauer: ${Date.now() - started} ms`);
       setResults((prev) => [...lines, ...prev].slice(0, 30));
       moaHistory.add({ pluginId: 'ai', task: clean, provider: plan.provider, results: lines, at: Date.now() });
     } catch (e) {
+      setMeta(`Provider: FEHLER · Dauer: ${Date.now() - started} ms`);
       setResults((prev) => [`✗ ${e instanceof Error ? e.message : String(e)}`, ...prev].slice(0, 30));
     } finally {
       setBusy(false);
@@ -105,6 +109,7 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
       {results.length > 0 && (
         <div className="max-w-[1600px] mx-auto px-4 pb-2 max-h-28 overflow-y-auto border-t border-white/5">
           <div className="pt-1.5 space-y-0.5 font-mono text-[10px]">
+            {meta && <div className="text-cyan-400">{meta}</div>}
             {results.map((line, i) => (
               <div key={i} className={line.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}>{line}</div>
             ))}

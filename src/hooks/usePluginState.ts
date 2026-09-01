@@ -1,27 +1,32 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { PluginState } from '../plugins/types';
-import { webRTCManager } from '../utils/WebRTCManager';
 import { usePluginManager } from '../context/PluginManagerContext';
+import { useModuleState } from '../context/ModuleStateContext';
 import { logAuditEvent } from '../utils/AuditLogger';
 
+/**
+ * P0-3/D3: Einheitliche Plugin-State-Quelle.
+ * -----------------------------------------
+ * Früher hielt dieser Hook einen LOKALEN State – das führte zu zwei Wahrheiten
+ * (Terminal lokal vs. ModuleStateContext global). Jetzt liest/schreibt der Hook
+ * ausschließlich in den globalen ModuleStateContext; WebRTC-Replikation,
+ * Audio-Routing (PluginAudioRouter) und Silence-Gate laufen dort zentral.
+ */
 export const usePluginState = (pluginId: string, initialState: PluginState = 'OFF') => {
-  const [state, setState] = useState<PluginState>(initialState);
+  const { moduleStates, setModuleState } = useModuleState();
   const { pluginLocks } = usePluginManager();
-  
-  const lockStatus = useMemo(() => pluginLocks[pluginId] || { lockedBy: null, timestamp: 0, active: false }, [pluginLocks, pluginId]);
+
+  const state: PluginState = moduleStates[pluginId] ?? initialState;
+
+  const lockStatus = useMemo(
+    () => pluginLocks[pluginId] || { lockedBy: null, timestamp: 0, active: false },
+    [pluginLocks, pluginId],
+  );
 
   const updateState = (newState: PluginState) => {
     if (!lockStatus.active) {
-      setState(newState);
+      setModuleState(pluginId, newState);
       logAuditEvent('localUser', 'PLUGIN_STATE', { pluginId, state: newState });
-      // Sync via WebRTC DataChannel
-      webRTCManager.sendToAllPeers({
-        type: 'PLUGIN_STATE_UPDATE',
-        pluginId,
-        state: newState,
-        senderId: 'localUser',
-        timestamp: Date.now(),
-      });
     }
   };
 

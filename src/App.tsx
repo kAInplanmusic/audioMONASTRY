@@ -23,19 +23,12 @@ import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePrese
 import { Settings } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
+import { getPluginRoute } from './core/pluginAudioRouter';
 const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
 const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
-
-// Monitor-Solo: welcher Mixer-Kanal gehört zu welchem Plugin (best effort).
-const PLUGIN_SOLO_CHANNEL: Record<string, TrackType> = {
-  mixer: 'channel1', masterplayer: 'channel1', sequencer: 'channel1', drum: 'channel2', sampler: 'channel5',
-  synthesizer: 'channel4', instrument: 'channel4', effect: 'channel6', dsp: 'channel6',
-  eq: 'channel6', voice: 'channel8', spatial: 'channel7', mastering: 'channel1',
-  sound: 'channel5', drop: 'channel5', ai: 'channel1',
-};
 
 
 export default function App() {
@@ -380,7 +373,7 @@ function AppComponent() {
                 const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
                   ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
                   ?? 'sequencer';
-                audioEngine.setMonitorSource(mode, monitorUser, PLUGIN_SOLO_CHANNEL[activeId] ?? 'channel1');
+                audioEngine.setMonitorSource(mode, monitorUser, getPluginRoute(activeId)?.channels[0] ?? 'channel1');
               }}
               className="appearance-none pl-3 pr-8 py-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-xs hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
               title="Monitor-Quelle: MAIN / eigener User-Mix / aktuelles Plugin"
