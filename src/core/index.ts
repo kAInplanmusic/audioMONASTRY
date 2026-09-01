@@ -197,3 +197,10 @@ export type {
   InstrumentCategory, SynthKind, NoteInput,
   SynthDef, FmDef, DrumDef, FxDef, AcousticDef,
 } from './instrument/types';
+
+// P0-2 – PluginAudioRouter (OFF = Signalkette trennen, Aktivierung = Einspeisung)
+export {
+  activatePlugin, deactivatePlugin, routeModuleState,
+  getPluginRoute, listPluginRoutes, assertAllPluginIdsRegistered, PLUGIN_ROUTE_IDS,
+} from './pluginAudioRouter';
+export type { PluginActiveState, PluginRouteConfig } from './pluginAudioRouter';

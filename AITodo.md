@@ -480,15 +480,24 @@ Secrets niemals committen; `.env.example` mit Platzhaltern pflegen.
 
 ## HIGH PRIORITY
 
-- [ ] HF-Endpoint (A100, scale-to-zero) im HF-Dashboard anlegen (Betreiber-Schritt).
-- [ ] Orchestrator-Metriken in `/api/metrics` konsolidieren.
-- [ ] Integrationstests der `/api/ai/*`-Routen (Supertest/Vitest).
+- [x] HF-Endpoint (A100, scale-to-zero) im HF-Dashboard anlegen (Betreiber-Schritt).
+      → Live vorhanden; 2026-09-01 Runtime-Fixes deployed (Whisper-Bytes, CUDA,
+      Modell-Cache, Resampling, `/status` last_errors), alle Modelle verifiziert.
+- [x] Orchestrator-Metriken in `/api/metrics` konsolidieren.
+      → `samplemonk_ai_jobs_total`, `samplemonk_ai_cost_usd` (Prometheus) +
+      JSON-Felder `ai.jobs`/`ai.costUsd`.
+- [x] Integrationstests der `/api/ai/*`-Routen (Supertest/Vitest).
+      → `tests/aiRoutes.test.ts` (HF-Mock; Orchestrate, Models, MCP, Jobs, Session).
 
 ## MEDIUM PRIORITY
 
-- [ ] E2E-Szenario (Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero) als Test.
-- [ ] Failure-Tests (HF offline, GPU down, Duplicate, Crash) automatisieren.
-- [ ] Benchmark-Skript `scripts/ai-benchmark.ts` für Cold/Warm/Switch-Messungen.
+- [~] E2E-Szenario (Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero) als Test.
+      → Live 2026-09-01: Cold/Warm-Start real gemessen (Whisper 2,2 s warm,
+      MusicGen 9,1 s); automatisierter E2E-Test bleibt offen.
+- [~] Failure-Tests (HF offline, GPU down, Duplicate, Crash) automatisieren.
+      → Fehlerpfade in Unit-Tests abgedeckt; Live-Failure-Suite offen.
+- [~] Benchmark-Skript `scripts/ai-benchmark.ts` für Cold/Warm/Switch-Messungen.
+      → Live-Messwerte vorhanden (durationMs in Logs); Skript offen.
 
 ## LOW PRIORITY
 

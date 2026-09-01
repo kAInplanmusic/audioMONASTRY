@@ -27,10 +27,12 @@ interface SettingsStore {
   inputDeviceId: string;
   sampleRate: number;
   bufferHint: 'interactive' | 'balanced' | 'playback';
-  stereoMode: 'STEREO' | 'DAW' | 'SPATIAL';
+  stereoMode: 'STEREO' | '2.1' | 'DAW' | 'SPATIAL';
   monitorGain: number;
   transportMode: 'p2p' | 'sfu';
   midiEnabled: boolean;
+  /** P1-3: true sobald der Nutzer manuell ein Gerät gewählt hat (kein Auto-Override mehr). */
+  outputOverride: boolean;
 }
 
 const DEFAULT_SETTINGS: SettingsStore = {
@@ -42,6 +44,7 @@ const DEFAULT_SETTINGS: SettingsStore = {
   monitorGain: 0.8,
   transportMode: 'p2p',
   midiEnabled: false,
+  outputOverride: false,
 };
 
 const getStored = (): SettingsStore => {
@@ -86,6 +89,18 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           setInputDevices(devs.filter(d => d.kind === 'audioinput'));
           setXonarCount(outs.filter(d => isXonarU7(d.label || d.deviceId)).length);
           setLatency(audioDeviceManager.getLatencySnapshot());
+          // P1-3/D21: Default-Ausgabe automatisch wählen – erst Xonar U7,
+          // sonst erste USB-/Audio-Interface-Soundkarte, sonst System-Default.
+          // Nur wenn der Nutzer noch kein Gerät manuell gewählt hat.
+          if (!settings.outputOverride && !settings.outputDeviceId && outs.length > 0) {
+            const xonar = outs.find(d => isXonarU7(d.label || d.deviceId));
+            const usb = outs.find(d => /usb|audio interface|soundflower|blackhole/i.test(d.label || ''));
+            const preferred = xonar ?? usb;
+            if (preferred) {
+              update({ ...settings, outputDeviceId: preferred.deviceId });
+              void audioDeviceManager.applyOutput(preferred.deviceId).catch(() => { /* Browser-Default bleibt */ });
+            }
+          }
         })
         .catch(() => { /* Permission/Hardware nicht verfügbar */ });
     };
@@ -99,7 +114,7 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   }, [open]);
 
   const applyOutput = async (deviceId: string) => {
-    update({ ...settings, outputDeviceId: deviceId });
+    update({ ...settings, outputDeviceId: deviceId, outputOverride: true });
     try {
       await audioDeviceManager.applyOutput(deviceId);
     } catch (e) {
@@ -309,8 +324,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
         {/* Routing / Ausgang */}
         <div className="mb-5">
           <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgangsmodus</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['STEREO', 'DAW', 'SPATIAL'] as const).map(mode => (
+          <div className="grid grid-cols-4 gap-2">
+            {(['STEREO', '2.1', 'DAW', 'SPATIAL'] as const).map(mode => (
               <button type="button"
                 key={mode}
                 onClick={() => update({ ...settings, stereoMode: mode })}

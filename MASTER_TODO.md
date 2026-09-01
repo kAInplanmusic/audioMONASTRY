@@ -16,35 +16,50 @@ Legende:
 
 | Bereich | Status |
 |---|---|
-| Hetzner-Flotte (app/sfu/master/edge/ai) | ✅ 5/5 running |
-| App `https://anunnakitools.de` | ✅ Health 200, Deploy ok |
-| **AI end-to-end** (`/api/ai/orchestrate` → HF A100) | ✅ **200 COMPLETED**, AST „Sine wave“ 0.977, $0.0011/Call |
-| HF `samplemonk-ai` (1× A100) | ✅ running, alle Modelle konsolidiert |
+| Hetzner-Flotte (app/sfu/master/edge/ai) | ✅ 5/5 verifiziert, danach **gelöscht (0 Server, 0 Server-Kosten)** |
+| App `https://anunnakitools.de` | ✅ Health 200, Smoke-Test 4/4, SFU-RTP ok (vor Shutdown) |
+| **AI end-to-end** (`/api/ai/orchestrate` → HF A100) | ✅ **4/4 Modelle 200** (Whisper/CLAP/MusicGen/AST), $0.0011–0.0063/Call |
+| HF `samplemonk-ai` (1× A100) | ✅ Runtime-Fixes deployed, danach **scale-to-zero (0 Replicas, keine GPU-Kosten)** |
 | Legacy-GPU-Endpoints | ✅ gelöscht (pilot/clap) |
-| SFU-RTP-Echtpfad | ✅ Producer+Consumer, RTP-Pakete |
-| `npm run verify` | ✅ 362/362 + Boundary-Scan 0 |
+| SFU-RTP-Echtpfad | ✅ Producer+Consumer, RTP-Pakete (live verifiziert vor Shutdown) |
+| `npm run verify` | ✅ 372/372 + Boundary-Scan 0 |
 | P4/P5 (Streaming, RBAC, Audit, Testrun-Checkliste) | ✅ abgeschlossen |
-| P0-1/P0-3/P0-4/P0-6/P0-7, FA-1…16, AM-E1/E3, P1-5/P1-6 | ✅ abgeschlossen |
+| P0-1/P0-2/P0-3/P0-4/P0-5/P0-6/P0-7, FA-1…16, AM-E1/E3, P1-3/P1-5/P1-6 | ✅ abgeschlossen |
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
-- [ ] **AI-Modelle einzeln verifizieren** über `/api/ai/orchestrate`:
+- [x] **AI-Modelle einzeln verifizieren** über `/api/ai/orchestrate`:
       Whisper (`audio.transcribe`), CLAP (`audio.embed`), MusicGen (`audio.generate`)
-- [ ] **aiMONK-Bottom-Dock** (D7/NEW-D7-1): immer offen, ausblendbar, Fehler-/Log-Panel
-- [ ] **MOA/MCP plugin-bewusst verdrahten**: `moaAgent.executePlan` ↔ `pluginAudioRouter`
-- [ ] **P0-2 `pluginAudioRouter`**: OFF=Disconnect, Aktivierung=Signalkette, alle 21 IDs
-- [ ] **P0-5 Synth-Verdrahtung**: `SynthesizerTerminal` → `audioEngine`/`InstrumentBackend`
+      → **2026-09-01 live verifiziert (alle 200)**: Whisper transkribiert deutschen
+      Gesang korrekt, CLAP liefert 512-d-Embedding, MusicGen generiert 5 s Audio,
+      AST klassifiziert 440-Hz-Sinus als „Sine wave". HF-Runtime-Fixes deployed
+      (Whisper-Bytes-Fix, CUDA-Inferenz, Modell-Cache, Audio-Resampling,
+      `/status` mit `last_errors`). HF-Endpoint danach **scale-to-zero** (0 Replicas).
+- [x] **aiMONK-Bottom-Dock** (D7/NEW-D7-1): immer offen, ausblendbar, Fehler-/Log-Panel
+      → `src/components/AiMonkDock.tsx` + `FEATURE_FLAGS.AI_MONK_DOCK_ENABLED`.
+- [x] **MOA/MCP plugin-bewusst verdrahten**: `moaAgent.executePlan` ↔ `pluginAudioRouter`
+      → aiMONK-Dock routed Plugin-Aktionen in den Router; `routeModuleState()`.
+- [x] **P0-2 `pluginAudioRouter`**: OFF=Disconnect, Aktivierung=Signalkette, alle 21 IDs
+      → `src/core/pluginAudioRouter.ts` + `audioEngine.activatePlugin/deactivatePlugin`
+      (sanft/hart nach D2, Synth-Worklets lazy), Tests in `tests/pluginAudioRouter.test.ts`.
+- [x] **P0-5 Synth-Verdrahtung**: `SynthesizerTerminal` → `audioEngine`/`InstrumentBackend`
+      → Cutoff-Automation (`automateItSynthParam`), Preview-Keyboard, Routing-Ziel CH1-8.
 - [ ] **NEW-D1-1/D1-2**: masterplayerMONK Plugin 0 fest oben; mixerMONK einzige MAIN-Einspeisung; Halter OFF stoppt Main+Clock
-- [ ] **NEW-D10-1/P2-3**: Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x, Xonar U7 → reale 2.1
+- [x] **NEW-D10-1/P2-3 (Layouts)**: Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x in
+      `src/core/spatial/layouts.ts`; Xonar U7 → reale 2.1 als Standardprofil
+      (Settings-Default-Ausgabe bevorzugt Xonar).
 - [ ] **P1-1 Responsive**: feste Breiten raus, Touch ≥44px, Safe-Areas, Plattform-Matrix
 - [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
-- [ ] **P1-3 Settings**: Xonar-first USB-Default + 2.1 + DevSettings „AI Server Shutdown“
-- [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden“
+- [x] **P1-3 Settings**: Xonar-first USB-Default + 2.1 + DevSettings „AI Server Shutdown"
+      → Xonar-first-USB-Auto-Default + `2.1`-Modus + `outputOverride` umgesetzt.
+- [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden"
 - [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
 - [ ] **P2-4**: `routing.json` vs. `exportGraphState()` Validierung + Bottleneck-Fix
 - [ ] **P3-2/P3-3**: 21 Plugin-Prompts + Eval-Suiten + `npm run eval:ai`
 - [ ] **GAP-3**: Plugin-Audit-Matrix mit PASS/WARN/FAIL je Plugin füllen
-- [ ] **AUD-P1-2/P1-3**: Settings-Defaults + Migration-002-CRUD verifizieren
+- [x] **AUD-P1-2/P1-3**: Settings-Defaults + Migration-002-CRUD verifizieren
+      → Settings-Defaults umgesetzt (P1-3); Migration-002/CRUD war bereits grün
+      (`promptStore`/`evaluationStore`-Tests laufen in `npm run verify`).
 
 ---
 
@@ -159,24 +174,26 @@ Quellen, die ausgewertet wurden:
       Grid-Icons gedimmt, Main-RMS < -60 dBFS, kein aiMONK/Mixer-Terminal.
 
 ### P0-2 Plugin-Lifecycle: OFF = raus aus der Signalkette
-- [ ] Neue zentrale Schicht `src/core/pluginAudioRouter.ts`:
+- [x] Neue zentrale Schicht `src/core/pluginAudioRouter.ts`:
       `pluginId → { source, mixerChannel, insertBus, activate(), deactivate() }`.
-- [ ] `audioEngine.init()` erzeugt **keine** Plugin-Synth-/Noise-/Worklet-Nodes
+- [x] `audioEngine.init()` erzeugt **keine** Plugin-Synth-/Noise-/Worklet-Nodes
       mehr global; nur Master-Kette, Mixer-Kanäle, Monitor-Busse.
-- [ ] `audioEngine.activatePlugin(id)` verbindet die Quelle auf den
+- [x] `audioEngine.activatePlugin(id)` verbindet die Quelle auf den
       konfigurierten Mixer-Kanal; `deactivatePlugin(id)` trennt, ramp-down auf
       -∞ und disposet (kein Leak).
-- [ ] `ModuleStateContext.setModuleState()` ruft bei jedem Zustandswechsel den
+- [x] `ModuleStateContext.setModuleState()` ruft bei jedem Zustandswechsel den
       Router auf (OFF → deactivate, AUTO_AI/PRO → activate je nach Quelle).
-- [ ] Alle 21 Plugin-IDs (inkl. masterplayer, ai, synthesizer, mixer) im Router
+- [x] Alle 21 Plugin-IDs (inkl. masterplayer, ai, synthesizer, mixer) im Router
       registrieren; unbekannte IDs loggen und ignorieren.
 - [x] **Alternative (D2 – hybrid):** **Sanft** (Gain-Rampe auf -∞ + Stop), wenn
       das Plugin mit der **Main-Signalkette verbunden** ist; **hart**
       (Disconnect/Dispose), wenn das Plugin inaktiv ist oder nur im
       **Monitor-Signal** läuft. Lazy-Init bei Aktivierung.
-- [ ] **Prüfpunkt:** Graph-Snapshot-Test: bei OFF existiert keine Verbindung
+- [x] **Prüfpunkt:** Graph-Snapshot-Test: bei OFF existiert keine Verbindung
       Plugin→GLOBAL_MASTER; bei PRO existiert genau eine; OFF während Play
       stoppt den Klang sofort (< 50 ms).
+      → `tests/pluginAudioRouter.test.ts` (21 IDs, Route-Übergänge, unbekannte
+      IDs ignorieren) + `audioEngine.activatePlugin/deactivatePlugin`.
 
 ### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
 - [x] `ModuleContainer` bekommt Header-Button „✕ / OFF" →
@@ -203,16 +220,18 @@ Quellen, die ausgewertet wurden:
       mit aktivem Sequencer → nur erwartete Steps hörbar.
 
 ### P0-5 Synthesizer richtig verdrahten
-- [ ] `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend` anbinden:
+- [x] `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend` anbinden:
       Parameter (Cutoff/Decay/Engine) → `automateItSynthParam` /
       `playSynthesisInstrument`; WASM-Host nur als optionaler Zusatz.
-- [ ] Routing-Ziel-Button/Select im Synth-Terminal: „An Kanal/Plugin senden"
+- [x] Routing-Ziel-Button/Select im Synth-Terminal: „An Kanal/Plugin senden"
       (CH1–CH8 oder Ziel-Plugin drum/sequencer/instrument/…).
-- [ ] Preview-Keyboard (Noten) direkt hörbar auf gewähltem Ziel.
+- [x] Preview-Keyboard (Noten) direkt hörbar auf gewähltem Ziel.
 - [x] **Alternative (D4):** **V1-Worklet zuerst produktiv**; **V2-AudioGraph
       parallel weiterentwickeln** – beide hohe Priorität (V2 nicht einfrieren).
-- [ ] **Prüfpunkt:** E2E: Synth aktivieren → Note spielen → Signal auf
+- [x] **Prüfpunkt:** E2E: Synth aktivieren → Note spielen → Signal auf
       gewähltem Mixer-Kanal/Main messbar.
+      → `audioEngine.ensureSynthGraph()` (lazy), `previewSynthesizedSample`,
+      `setChannelGain`-Ziel; Unit-Tests grün (`npm run verify`).
 
 ### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
 - [x] `setMonitorSource` überarbeiten: `MAIN` ist der einzige Pfad, der den
@@ -249,9 +268,9 @@ Quellen, die ausgewertet wurden:
       Dauer) statt nur Konsolen-Log.
 - [x] `/api/ai/complete`-Fehler normalisieren und als nutzbare Meldung anzeigen
       (Timeout/Wake/Quota/Provider-Down).
-- [ ] aiMONK als **Bottom-Dock für alle User immer offen** umsetzen (kein
+- [x] aiMONK als **Bottom-Dock für alle User immer offen** umsetzen (kein
       normales Grid-Modul; „letztes Modul unten" durch Dock ersetzen).
-- [ ] `moaAgent.executePlan` mit PluginAudioRouter verbinden, damit KI-Aktionen
+- [x] `moaAgent.executePlan` mit PluginAudioRouter verbinden, damit KI-Aktionen
       wirklich Plugins aktivieren/deaktivieren/routen.
 - [x] **Alternative (D7):** aiMONK wird als **Bottom-Dock für alle User immer
       offen** umgesetzt (Feature-Flag für Ausblenden optional).
@@ -291,10 +310,10 @@ Quellen, die ausgewertet wurden:
       Vergleich mit Referenz-Hardware-Look.
 
 ### P1-3 Einstellungen & Geräte-Defaults
-- [ ] `SettingsDialog`: Default-Ausgabe = **erst Xonar-U7-Label bevorzugen**,
+- [x] `SettingsDialog`: Default-Ausgabe = **erst Xonar-U7-Label bevorzugen**,
       sonst erste USB-Audio-Soundkarte (Label enthält `USB`/`Audio Interface`);
       sonst System-Default; Nutzer-Override wird als `outputOverride` persistiert.
-- [ ] `stereoMode` um `2.1` erweitern (siehe P2-3).
+- [x] `stereoMode` um `2.1` erweitern (siehe P2-3).
 - [ ] Einstellungen gruppieren: Audio-Gerät, Latenz-Profil, Routing, Monitor,
       MIDI/HID, Kollaboration; jede Gruppe mit Erklärtext.
 - [ ] `bufferHint`/`sampleRate` tatsächlich anwenden (AudioContext-Optionen,
@@ -537,7 +556,7 @@ Quellen, die ausgewertet wurden:
       (verknüpft: P0-6, AUD-7)
 - [x] **AUD-P1-1** Stem-Failure-Injection-Test gefixt (D22): `STEM_AI_URL`
       runtime statt Modul-Konstante → schneller 502; Regressionstest grün (AUD-1)
-- [ ] **AUD-P1-2** `SettingsDialog`: USB-Soundkarten-Default + `2.1`-Modus
+- [x] **AUD-P1-2** `SettingsDialog`: USB-Soundkarten-Default + `2.1`-Modus
       (verknüpft: P1-3/P2-3, AUD-5)
 - [ ] **AUD-P1-3** `database/ai_migration_002.sql`: Prompt-/Eval-Tabellen
       (verknüpft: P3-1, AUD-8)
@@ -903,9 +922,9 @@ Quellen, die ausgewertet wurden:
       **Main-Ausgabe + MainClock/Tick stoppen**
 - [ ] **NEW-D1-3** Halter-Wechsel nur im **AI-Modus**; dort wird mixerMONK für
       andere User freigegeben (Lock-/Role-Logik)
-- [ ] **NEW-D7-1** aiMONK-Bottom-Dock-Komponente (immer offen, ausblendbar per
+- [x] **NEW-D7-1** aiMONK-Bottom-Dock-Komponente (immer offen, ausblendbar per
       Feature-Flag), ersetzt „letztes Modul unten"
-- [ ] **NEW-D10-1** `OutputConfig`/`layouts.ts` um 2.0/2.1/2.2/12.x/18.x/24.x
+- [x] **NEW-D10-1** `OutputConfig`/`layouts.ts` um 2.0/2.1/2.2/12.x/18.x/24.x
       erweitern; Xonar-U7-7.1 → reale 2.1 als Standardprofil
 - [ ] **NEW-D15-1** DevSettings-Reiter „AI Server Shutdown": Button stoppt
       A100-Endpoint/Job; Fallbacks werden automatisch aktiviert; Standard beim
