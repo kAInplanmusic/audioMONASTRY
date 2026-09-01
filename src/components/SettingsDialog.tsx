@@ -10,6 +10,7 @@ import { sfuTransport } from '../core/transport/MediasoupTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { isWebMidiSupported, requestWebMidiAccess } from '../utils/midiAccess';
 import { CloudStatusBadge } from './CloudStatusBadge';
+import { isAiShutdownMode, setAiShutdownMode } from '../core/ai/orchestrator/providerRouter';
 
 /**
  * SettingsDialog – Audio-I/O & Device-Auswahl
@@ -75,6 +76,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   const [midiOutputCount, setMidiOutputCount] = useState(0);
   const [midiError, setMidiError] = useState<string | null>(null);
   const [latency, setLatency] = useState(() => audioDeviceManager.getLatencySnapshot());
+  // NEW-D15-1: DevSettings „AI Server Shutdown“ – A100-Endpoint aus dem Router nehmen.
+  const [aiShutdown, setAiShutdown] = useState(() => isAiShutdownMode());
 
   useEffect(() => {
     if (!open) return;
@@ -156,6 +159,21 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
       }
     } catch (e) {
       console.warn('SFU-Transport nicht verfügbar:', (e as Error).message);
+    }
+  };
+
+  const toggleAiShutdown = async () => {
+    const next = !aiShutdown;
+    setAiShutdownMode(next);
+    setAiShutdown(next);
+    if (next) {
+      // A100/Session kontrolliert herunterfahren; der ProviderRouter hat den
+      // HF-Endpoint bereits deaktiviert, sodass Fallbacks automatisch greifen.
+      try {
+        await fetch('/api/ai/session/shutdown', { method: 'POST' });
+      } catch (e) {
+        console.warn('AI-Shutdown-Endpoint nicht erreichbar:', (e as Error).message);
+      }
     }
   };
 
@@ -337,6 +355,32 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
               </button>
             ))}
           </div>
+        </div>
+
+        {/* DevSettings: AI Server Shutdown (NEW-D15-1) */}
+        <div className="mb-5 border border-red-900/50 rounded-lg p-3 bg-red-950/10">
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-red-500" /> DevSettings: AI Server Shutdown
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void toggleAiShutdown()}
+              aria-pressed={aiShutdown}
+              className={`px-3 py-2 rounded border text-xs font-bold uppercase tracking-wider ${
+                aiShutdown ? 'bg-red-900/40 border-red-500/70 text-red-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
+              }`}
+            >
+              {aiShutdown ? 'A100 GESTOPPT · FALLBACK AKTIV' : 'A100 STOPPEN'}
+            </button>
+            <span className="text-[10px] text-neutral-500 font-mono">
+              {aiShutdown ? 'HF-Endpoint deaktiviert, Router nutzt Fallbacks' : 'HF-A100-Endpoint aktiv (sofern konfiguriert)'}
+            </span>
+          </div>
+          <p className="text-[10px] text-neutral-500 mt-1">
+            Stoppt die AI-Session/Scale-to-Zero und nimmt den A100-Endpoint aus dem Provider-Router.
+            Fallback-Kette: Serverless → Replicate → Local.
+          </p>
         </div>
 
         {/* Monitor-Gain */}

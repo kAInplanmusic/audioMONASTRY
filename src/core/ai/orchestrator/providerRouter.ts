@@ -16,6 +16,22 @@ import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } fro
 const HF_ROUTER = 'https://router.huggingface.co/hf-inference/models';
 const HF_ROUTER_LEGACY = 'https://api-inference.huggingface.co/models';
 
+/**
+ * NEW-D15-1: "AI Server Shutdown" – wenn aktiv, wird der teure HF-A100-Endpoint
+ * nicht mehr als Provider angeboten. Der Router fällt dann automatisch auf
+ * Serverless/Replicate/Local zurück.
+ */
+let aiShutdownMode = false;
+
+export function setAiShutdownMode(value: boolean): void {
+  aiShutdownMode = value;
+  aiLogger.info('ai shutdown mode changed', { aiShutdownMode: value });
+}
+
+export function isAiShutdownMode(): boolean {
+  return aiShutdownMode;
+}
+
 function env(name: string): string {
   return (process.env[name] ?? '').trim();
 }
@@ -89,7 +105,9 @@ export class HfEndpointProvider implements IAiProvider {
   private endpointUrl = env('HF_ENDPOINT_URL');
 
   get available(): boolean {
-    return Boolean(this.endpointUrl);
+    // NEW-D15-1: Bei aktivem "AI Server Shutdown" wird der A100-Endpoint
+    // übersprungen, damit die Fallback-Kette automatisch greift.
+    return !aiShutdownMode && Boolean(this.endpointUrl);
   }
 
   canRun(task: AiTask): boolean {

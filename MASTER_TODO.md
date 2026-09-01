@@ -24,8 +24,6 @@
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 
-- [ ] `rolePresets`: Rollen-Presets werden **nur** bei expliziter Auswahl im Header angewendet, nie automatisch.
-- [ ] aiMONK als Bottom-Dock für alle User **immer offen**; außer aiMONK-Dock ist beim Start kein Plugin-Terminal offen.
 - [ ] **Prüfpunkt:** E2E „Studio betreten" → 0 ModuleContainer sichtbar, alle Grid-Icons gedimmt, Main-RMS < -60 dBFS, kein aiMONK/Mixer-Terminal.
 
 ### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
@@ -54,7 +52,6 @@
 ### P0-8 AI-Pfad debuggen & aiMONK optional machen
 
 - [ ] `AiMonkTerminal`: sichtbares Fehler-/Log-Panel (Provider, Status, HTTP, Dauer) statt nur Konsolen-Log.
-- [ ] **Prüfpunkt:** Testbefehl „Tempo auf 128, Sequencer an, Pattern laden" läuft durch und erzeugt hörbares Ergebnis; Fehlerfall zeigt verständliche Meldung.
 
 ---
 
@@ -172,14 +169,6 @@
 
 ## GAP – Vollständigkeits-Analyse & Vervollständigung (2026-08-31)
 
-### GAP-2 Alte TODO-Dateien & verwaiste Punkte abgleichen
-
-- [ ] `AITodo.md` offene Punkte als Tasks übernehmen: HF-Endpoint (A100) anlegen, Orchestrator-Metriken in `/api/metrics`, Integrationstests `/api/ai/*`, E2E Cold/Warm-Start, Failure-Tests, `scripts/ai-benchmark.ts`, HF-Token-Rotation, Warm-Keep-Option, INT8-Kalibrierung, Modell-Splitting
-- [ ] `docs/AI_SECURITY_GUIDE.md` offene Checkboxen übernehmen: HF-Token-Rotation dokumentieren, Pen-Test `/api/ai/*`
-- [ ] `deepcodetodo.json` (DCT-101…130) auf verwaiste/verschobene Punkte prüfen
-- [ ] `VISIONS_TODO.md`, `wayplan analysis.md`, `wayplan implementation.md` auf noch offene/überholte Aufgaben prüfen
-- [ ] **Prüfpunkt:** Keine offene Checkbox außerhalb von `MASTER_TODO.md` (Single-Root-Output-Regel)
-
 ### GAP-3 Atomarer Plugin-Audit – alle 21 Plugins einzeln
 
 - [ ] Je Plugin Ergebnis: PASS/WARN/FAIL + verknüpfte Tasks in MASTER_TODO
@@ -281,9 +270,24 @@
 
 - [ ] **NEW-D1-1** masterplayerMONK als Plugin 0: bei allen 4 Usern fest ganz oben unter Header/Plugin-Buttons; nur Visualisierung + Infos, keine Eingabe, kein An/Aus/KI-Button
 - [ ] **NEW-D1-2** mixerMONK als einzige MAIN-Einspeiseinstanz: andere Plugins können nur über mixerMONK auf MAIN; wenn Halter mixerMONK OFF schaltet → **Main-Ausgabe + MainClock/Tick stoppen**
-- [ ] **NEW-D1-3** Halter-Wechsel nur im **AI-Modus**; dort wird mixerMONK für andere User freigegeben (Lock-/Role-Logik)
-- [ ] **NEW-D15-1** DevSettings-Reiter „AI Server Shutdown": Button stoppt A100-Endpoint/Job; Fallbacks werden automatisch aktiviert; Standard beim Start: A100-Pfad komplett ausrollen
-- [ ] **NEW-D4-1** V2-AudioGraph als eigenes Arbeitspaket mit hoher Priorität weiterführen (nicht einfrieren); Meilenstein „V2-Minimum hörbar"
+- [ ] **NEW-D4-1** V2-AudioGraph als eigenes Arbeitspaket mit hoher Priorität weiterführen (nicht einfrieren); Meilenstein „V2-Minimum hörbar“ – Priorität bestätigt 2026-09-01: V2 parallel mit hoher Priorität; falls später nur V2 → absoluter Fokus, falls hybrid → beide mit hoher Priorität
+
+---
+
+## AI-Infrastruktur – aus AITodo.md übernommen (GAP-2)
+
+> Offene Punkte aus der archivierten `AITodo.md` (2026-09-01 übernommen).
+
+- [ ] **AI-Rate-Limits:** Explizite `AI_RATE_*`-Request-Limits + Tests umsetzen (aus AITodo Phase 18)
+- [ ] **AI-Supabase-Persistenz-Tests:** Gemockte Tests für `ai_sessions`/`ai_jobs`/`ai_errors` ergänzen (aus AITodo Phase 12)
+- [ ] **AI-E2E-Szenario:** Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero als automatisierter Test (aus AITodo Phase 24–26)
+- [ ] **AI-Failure-Suite:** HF offline, GPU down, Duplicate, Crash automatisieren (aus AITodo Phase 24–26)
+- [ ] **AI-Benchmark-Skript:** `scripts/ai-benchmark.ts` für Cold/Warm/Switch-Messungen anlegen (aus AITodo Phase 21/22/23)
+- [ ] **AI-GPU-Benchmarks:** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert)
+- [ ] **AI-Docker-Build/GPU-Test:** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert)
+- [ ] **Warm-Keep-Option:** Selten genutzte Fenster ohne Kaltstart (aus AITodo LOW PRIORITY)
+- [ ] **INT8-Kalibrierung:** Je Modell vorab messen (aus AITodo OPTIONAL OPTIMIZATIONS)
+- [ ] **Modell-Splitting:** Bei dauerhafter Überlast, erst mit Freigabe (aus AITodo OPTIONAL OPTIMIZATIONS)
 
 ---
 
