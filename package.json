@@ -22,6 +22,8 @@
     "build:wasm-hrtf": "cd src/audio/wasm/hrtf_conv && cargo build --release --target wasm32-unknown-unknown && cp target/wasm32-unknown-unknown/release/hrtf_conv.wasm ../../../../public/hrtf/hrtf_conv.wasm",
     "generate:golden": "tsx scripts/generate-golden-wav.ts",
     "check:bundle": "node scripts/check-bundle-size.mjs",
+    "check:memo": "node scripts/check-react-memo.mjs",
+    "eval:ai": "tsx scripts/eval-ai.ts",
     "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs",
     "verify:boundary": "node scripts/validate-interface-boundaries.mjs"
   },

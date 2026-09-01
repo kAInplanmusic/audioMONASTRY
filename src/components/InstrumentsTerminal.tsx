@@ -116,8 +116,8 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const [droppedSample, setDroppedSample] = useState<AudioSample | null>(null);
   // Task 2: MIDI-Program-Change – zuletzt empfangene Programmnummer (UI-Spiegelung).
   const [midiProgram, setMidiProgram] = useState<number | null>(null);
-  // Spielansichten: Vorschau-Keyboard, Universalkeyboard, Pads, Instrument-Canvas.
-  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas'>('preview');
+  // Spielansichten: Pad-/Klavier-Eingabe als Standard (NEW-MONK-5).
+  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas'>('keys');
 
   // MIDI-Program-Change via WebMIDIAdapter (controllerMONK) → instrumentBackend.
   useEffect(() => {

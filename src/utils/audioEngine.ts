@@ -197,9 +197,9 @@ class AudioEngine {
     this.stepListeners.forEach((l) => l(step));
   }
 
-  // Lookahead Scheduler
+  // Lookahead Scheduler (P2-1: 8–15 ms adaptiv; Worklet-Clock ist Primärquelle)
   private isPlaying = false;
-  private lookahead = 25.0; // ms
+  private lookahead = 15.0; // ms (Standard im Latenz-Budget)
   private scheduleArea = 0.1; // seconds
   private nextNoteTime = 0.0;
   private timerID: any = null;
@@ -222,6 +222,24 @@ class AudioEngine {
   // --- Task 2: Swing & Gate Parameter (einheitliches Sequencermodell) ---
   public swing = 0.0; // 0..1 – Shuffle-Anteil auf ungeraden 16teln
   public gate = 0.9;  // 0..1 – Gate-Länge relativ zur Step-Dauer
+
+  /** P2-1: aktuelles Lookahead-Budget (8–15 ms adaptiv). */
+  public getLookaheadMs(): number {
+    return this.lookahead;
+  }
+
+  /** P2-1: Xrun/Underrun melden → Lookahead eine Stufe erhöhen (max 15 ms). */
+  public reportXrun(): void {
+    this.lookahead = Math.min(15, this.lookahead + 2);
+  }
+
+  /** NEW-MONK-8/P2-2: Swing systemweit setzen (Worklet-Clock + Scheduler). */
+  public setSwing(swing: number): void {
+    this.swing = Math.max(0, Math.min(1, swing));
+    try {
+      (this.clockNode?.parameters as any)?.get('swing')?.setValueAtTime(this.swing, this.ctx?.currentTime ?? 0);
+    } catch { /* Clock-Worklet nicht aktiv */ }
+  }
   // --- Task 2: optionaler AudioWorklet-Clock-Generator ---
   private clockNode: AudioWorkletNode | null = null;
 

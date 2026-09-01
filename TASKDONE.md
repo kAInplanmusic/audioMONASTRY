@@ -54,6 +54,23 @@
 - [x] **MONASTRYmasterclock (Steuerlogik)**: `src/core/clock/MasterClock.ts` (BPM/Start/Stop, Lookahead-Budget 8–15 ms, Dropout-Watchdog mit Auto-Recovery) + `tests/masterClock.test.ts`; Audio-Anbindung bleibt offen.
 - [x] **P1-1/P1-4 Teilerfolge**: Safe-Area-/Touch-Utilities in `index.css`; RackRow-„In Zwischenablage senden" (⧉) inkl. Handler.
 
+### MONK-Ausbau-Runde 2 (2026-09-01, serverlos)
+
+- [x] **NEW-MONK-1 drumMONK**: 32 Steps, Pattern-Bank A/B + Chain, Flam/Roll, Swing (`audioEngine.setSwing`).
+- [x] **NEW-MONK-2 samplerMONK**: 16-Step-Sequencer je Pad + Quantize.
+- [x] **NEW-MONK-4 synthMONK**: 16-Step-Notensequencer (C4 + Halbtöne).
+- [x] **NEW-MONK-5 instrumentMONK**: Pad-/Klavier-Ansicht (`keys`) als Standard.
+- [x] **NEW-MONK-8/P2-2**: `audioEngine.setSwing`, Lookahead-Standard 15 ms, `getLookaheadMs`, `reportXrun`.
+- [x] **P1-5**: `tests/musicLibrarySorted.test.ts` (Artist→Name→BPM, Stabilität).
+- [x] **P1-6**: `src/utils/midiOut.ts` (LED/Motorfader/Encoder-Ring) + Tests.
+- [x] **P2-4**: `src/core/routing/validateRouting.ts` + Tests.
+- [x] **P2-5**: `scripts/check-react-memo.mjs` + `npm run check:memo`; Bundle-Gate 2.0-MiB-Fix.
+- [x] **P3-3**: `scripts/eval-ai.ts` + `npm run eval:ai` (offline Report → `test-results/ai-eval.json`).
+- [x] **AM-E2-2**: `src/core/events/ControlBus.ts` (typisierter Bus + window-Fallback) + Tests.
+- [x] **AM-E3-2**: `src/utils/RbacCache.ts` (Lease/Sliding-Window) + Tests.
+- [x] **AM-E3-4**: `src/utils/JitterBufferEstimator.ts` + Tests.
+- [x] **AM-E4-3**: `src/audio/dsp/biquad.ts` (stabile Lowpass-Koeffizienten an den Rändern) + Tests.
+
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 
 - [x] `src/App.tsx`: `togglePlugin`/`promotePlugin` dürfen `mixer` **nicht** mehr ignorieren; `filter(p => p.id === 'mixer' ? true : …)` entfernen.

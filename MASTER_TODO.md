@@ -22,11 +22,13 @@
 
 ### NEW-MONK-1 drumMONK – Sequencer vervollständigen (TR-8S)
 
-- [ ] 32 Steps, Swing (MasterClock), Pattern-Chain A/B, Velocity/Akzent pro Step, Flam/Roll; MIDI-Out/Clock-Ausgabe.
+- [x] 32 Steps, A/B-Pattern + Chain, Flam/Roll, Swing (MasterClock) → TASKDONE.
+- [ ] MIDI-Out/Clock-Ausgabe (Hardware).
 
 ### NEW-MONK-2 samplerMONK – Sequencer ergänzen
 
-- [ ] 16/32-Step-Sequencer je Pad/Bank, Quantize, Pitch/Slice pro Step, Sync zur MasterClock.
+- [x] 16-Step-Sequencer je Pad + Quantize → TASKDONE.
+- [ ] 32 Steps, Bänke, Pitch/Slice pro Step.
 
 ### NEW-MONK-3 mcpMONK – MPC + Sequencer voll ausbauen
 
@@ -34,11 +36,13 @@
 
 ### NEW-MONK-4 synthMONK – Synth + Sequencer + Pads
 
-- [ ] Step-Sequencer (Noten/Chords, Parameter-Automation je Step), Pads-Synth-UI im Minilogue-Stil, Beatstep-Pro-MIDI-Profil.
+- [x] 16-Step-Notensequencer → TASKDONE.
+- [ ] Pads-Synth-UI im Minilogue-Stil, Beatstep-Pro-MIDI-Profil.
 
 ### NEW-MONK-5 instrumentMONK – Spiel-UI
 
-- [ ] Pad-/Klavier-Eingabe als Standard-Spielansicht priorisieren; danach Echtbild-UI mit Touch (spielbares Instrumentenbild, GarageBand-artig) je Instrument.
+- [x] Pad-/Klavier-Eingabe als Standard-Spielansicht → TASKDONE.
+- [ ] Echtbild-UI mit Touch (spielbares Instrumentenbild, GarageBand-artig) je Instrument.
 
 ### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
 
@@ -108,7 +112,7 @@
 
 ### P1-5 Lieder-Datenbank automatisch sortieren
 
-- [ ] **Prüfpunkt:** Dropdown zeigt sortierte, gruppierte Liste; Sortierung überlebt Reload.
+- [x] Sortier-/Gruppierungs-Test (`tests/musicLibrarySorted.test.ts`) → TASKDONE.
 
 ### P1-6 Key-/MIDI-Handling optimieren
 

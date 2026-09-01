@@ -49,6 +49,13 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   const [stepSamples, setStepSamples] = useState<Record<string, Record<number, AudioSample>>>({});
   const [flashId, setFlashId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
+  // NEW-MONK-1: 16/32 Steps, Pattern-Bank A/B + Chain, Flam/Roll, Swing.
+  const [stepCount, setStepCount] = useState<16 | 32>(16);
+  const [bank, setBank] = useState<'A' | 'B'>('A');
+  const [chain, setChain] = useState(false);
+  const [flam, setFlam] = useState(false);
+  const [roll, setRoll] = useState(false);
+  const [swing, setSwing] = useState(0);
   const lastStepRef = useRef(-1);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,8 +65,9 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
 
   const activeDrumKit = DRUM_KITS.find((k) => k.id === activeKit) ?? DRUM_KITS[0];
   const selectedSound = activeDrumKit.sounds.find((s) => s.id === selectedSoundId) ?? activeDrumKit.sounds[0];
-  const patternKey = useCallback((soundId: string) => `${activeKit}:${soundId}`, [activeKit]);
-  const selectedPattern = patterns[patternKey(selectedSound?.id ?? '')] ?? EMPTY_16();
+  const emptyPattern = useCallback(() => Array(stepCount).fill(false), [stepCount]);
+  const patternKey = useCallback((soundId: string) => `${bank}:${activeKit}:${soundId}`, [activeKit, bank]);
+  const selectedPattern = patterns[patternKey(selectedSound?.id ?? '')] ?? emptyPattern();
   const selectedSamples = stepSamples[patternKey(selectedSound?.id ?? '')] ?? {};
 
   // Persistenz laden.
@@ -92,7 +100,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
       setPatterns((prev) => {
         const next = { ...prev };
         for (const sound of activeDrumKit.sounds) {
-          next[patternKey(sound.id)] = Array.from({ length: 16 }, () => random() < 0.5);
+          next[patternKey(sound.id)] = Array.from({ length: stepCount }, () => random() < 0.5);
         }
         return next;
       });
@@ -124,25 +132,31 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     if (match) void audioEngine.triggerDrumSound(activeDrumKit.id, match.id, 1);
   }, [activeDrumKit]);
 
-  // Transport: aktive Steps am Step-Edge triggern.
+  // Transport: aktive Steps am Step-Edge triggern (16/32 Steps, A/B-Chain, Flam/Roll).
   useEffect(() => {
     if (!isPlaying) {
       lastStepRef.current = -1;
       return;
     }
-    const step = currentStep % 16;
+    const step = currentStep % stepCount;
     if (step === lastStepRef.current) return;
     lastStepRef.current = step;
 
+    const playBank = chain ? (Math.floor(currentStep / 16) % 2 === 0 ? 'A' : 'B') : bank;
     const accent = step % 4 === 0 ? 1 : 0.72;
+    const trigger = (soundId: string, velocity: number) => {
+      void audioEngine.triggerDrumSound(activeKit, soundId, velocity);
+      if (flam) setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.6), 30);
+      if (roll) [40, 80].forEach((ms) => setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.5), ms));
+    };
     activeDrumKit.sounds.forEach((s) => {
-      const key = `${activeKit}:${s.id}`;
+      const key = `${playBank}:${activeKit}:${s.id}`;
       if (!patterns[key]?.[step]) return;
       const sample = stepSamples[key]?.[step];
       if (sample) playStepSample(sample);
-      else void audioEngine.triggerDrumSound(activeKit, s.id, accent);
+      else trigger(s.id, accent);
     });
-  }, [isPlaying, currentStep, patterns, stepSamples, activeKit, activeDrumKit, playStepSample]);
+  }, [isPlaying, currentStep, patterns, stepSamples, activeKit, activeDrumKit, playStepSample, stepCount, bank, chain, flam, roll]);
 
   const flash = (id: string) => {
     setFlashId(id);
@@ -161,7 +175,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     if (lockedByOther) return;
     const key = patternKey(selectedSound?.id ?? '');
     setPatterns((prev) => {
-      const arr = prev[key] ? [...prev[key]] : EMPTY_16();
+      const arr = prev[key] ? [...prev[key]] : emptyPattern();
       arr[step] = !arr[step];
       return { ...prev, [key]: arr };
     });
@@ -172,24 +186,25 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     const key = patternKey(selectedSound?.id ?? '');
     setStepSamples((prev) => ({ ...prev, [key]: { ...(prev[key] ?? {}), [step]: sample } }));
     setPatterns((prev) => {
-      const arr = prev[key] ? [...prev[key]] : EMPTY_16();
+      const arr = prev[key] ? [...prev[key]] : emptyPattern();
       arr[step] = true;
       return { ...prev, [key]: arr };
     });
-  }, [lockedByOther, patternKey, selectedSound]);
+  }, [lockedByOther, patternKey, selectedSound, emptyPattern]);
 
   const clearSelected = () => {
     const key = patternKey(selectedSound?.id ?? '');
-    setPatterns((prev) => ({ ...prev, [key]: EMPTY_16() }));
+    setPatterns((prev) => ({ ...prev, [key]: emptyPattern() }));
     setStepSamples((prev) => ({ ...prev, [key]: {} }));
   };
 
   const applyPatternPreset = (preset: 'FOUR' | 'OFF' | 'FILL' | 'RANDOM') => {
-    const arr = EMPTY_16();
-    if (preset === 'FOUR') [0, 4, 8, 12].forEach((i) => { arr[i] = true; });
-    if (preset === 'OFF') [2, 6, 10, 14].forEach((i) => { arr[i] = true; });
+    const arr = emptyPattern();
+    const total = stepCount;
+    if (preset === 'FOUR') { for (let i = 0; i < total; i += 4) arr[i] = true; }
+    if (preset === 'OFF') { for (let i = 2; i < total; i += 4) arr[i] = true; }
     if (preset === 'FILL') arr.fill(true);
-    if (preset === 'RANDOM') { for (let i = 0; i < 16; i++) arr[i] = random() < 0.4; }
+    if (preset === 'RANDOM') { for (let i = 0; i < total; i++) arr[i] = random() < 0.4; }
     const key = patternKey(selectedSound?.id ?? '');
     setPatterns((prev) => ({ ...prev, [key]: arr }));
   };
@@ -212,7 +227,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
           </div>
           <div className="flex items-center gap-2">
             <span className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border ${isPlaying ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10' : 'text-neutral-500 border-neutral-700'}`}>
-              {isPlaying ? `RUN · STEP ${currentStep % 16 + 1}/16` : `STOP · ${bpm} BPM`}
+              {isPlaying ? `RUN · STEP ${currentStep % stepCount + 1}/${stepCount}` : `STOP · ${bpm} BPM`}
             </span>
             <select value={state} onChange={(e) => updateState(e.target.value as any)} disabled={lockedByOther} className="bg-black text-emerald-300 text-xs p-1 rounded border border-neutral-700 cursor-pointer">
               <option value="OFF">OFF</option>
@@ -255,14 +270,14 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
           {activeDrumKit.sounds.map((s) => {
             const color = TYPE_COLORS[s.type] ?? '#34d399';
             const selected = selectedSound?.id === s.id;
-            const padPattern = patterns[patternKey(s.id)] ?? EMPTY_16();
+            const padPattern = patterns[patternKey(s.id)] ?? emptyPattern();
             const stepsCount = padPattern.filter(Boolean).length;
             return (
               <button type="button"
                 key={s.id}
                 onClick={() => handlePad(s)}
                 disabled={lockedByOther}
-                title={`${s.name} (${s.type}) – Steps: ${stepsCount}/16`}
+                title={`${s.name} (${s.type}) – Steps: ${stepsCount}/${stepCount}`}
                 className={`aspect-square rounded-[4px] border flex flex-col items-center justify-center gap-1 transition-all duration-75 active:scale-95 cursor-pointer disabled:opacity-40 shadow-[0_3px_8px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.12)] ${
                   selected ? 'border-white ring-2 ring-white/70' : 'border-black/80'
                 } ${flashId === s.id ? 'brightness-150' : ''}`}
@@ -273,7 +288,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
                   {s.name.length > 10 ? s.name.slice(0, 10) : s.name}
                 </span>
                 <span className="text-[6px] font-mono text-black/70 uppercase tracking-widest">{s.type}</span>
-                <span className="text-[7px] font-mono text-black/80 font-bold">{stepsCount}/16</span>
+                <span className="text-[7px] font-mono text-black/80 font-bold">{stepsCount}/{stepCount}</span>
               </button>
             );
           })}
@@ -299,20 +314,50 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
           >
             CLEAR
           </button>
-          <span className="ml-auto text-[8px] font-mono text-neutral-600">{activeSteps}/16 STEPS · DOWNBEAT = ACCENT</span>
+          {(['A', 'B'] as const).map((b) => (
+            <button type="button" key={b} onClick={() => setBank(b)} disabled={lockedByOther}
+              className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${bank === b ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
+              {b}
+            </button>
+          ))}
+          <button type="button" onClick={() => setChain(!chain)} disabled={lockedByOther}
+            className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${chain ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
+            CHAIN
+          </button>
+          {([16, 32] as const).map((n) => (
+            <button type="button" key={n} onClick={() => setStepCount(n)} disabled={lockedByOther}
+              className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${stepCount === n ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
+              {n}
+            </button>
+          ))}
+          <button type="button" onClick={() => setFlam(!flam)} disabled={lockedByOther}
+            className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${flam ? 'bg-amber-500 text-black border-amber-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
+            FLAM
+          </button>
+          <button type="button" onClick={() => setRoll(!roll)} disabled={lockedByOther}
+            className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${roll ? 'bg-amber-500 text-black border-amber-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
+            ROLL
+          </button>
+          <div className="flex items-center gap-1">
+            <span className="text-[8px] font-mono text-neutral-600">SWING</span>
+            <input type="range" min={0} max={100} value={Math.round(swing * 100)}
+              onChange={(e) => { const v = Number(e.target.value) / 100; setSwing(v); audioEngine.setSwing(v); }}
+              className="w-16 accent-emerald-500" />
+          </div>
+          <span className="ml-auto text-[8px] font-mono text-neutral-600">{activeSteps}/{stepCount} STEPS · DOWNBEAT = ACCENT</span>
         </div>
 
         {/* 16 Step-Pads (TR-8S: 2×8) */}
         <div className="rounded-md bg-black/40 border border-neutral-800 p-2">
           <div className="flex items-center justify-between mb-1.5 px-1">
-            <span className="text-[8px] font-mono tracking-[0.25em] text-emerald-500">STEP SEQUENCER · 16 STEPS</span>
+            <span className="text-[8px] font-mono tracking-[0.25em] text-emerald-500">STEP SEQUENCER · {stepCount} STEPS</span>
             <span className="text-[8px] font-mono text-neutral-600">SAMPLE-DROP AUF STEP = ONE-SHOT</span>
           </div>
-          <div className="grid grid-cols-8 gap-1.5">
-            {[...Array(16)].map((_, i) => {
+          <div className={`grid gap-1.5 ${stepCount === 16 ? 'grid-cols-8' : 'grid-cols-8'}`}>
+            {[...Array(stepCount)].map((_, i) => {
               const isOn = selectedPattern[i] ?? false;
               const sample = selectedSamples[i];
-              const isCurrent = isPlaying && (currentStep % 16) === i;
+              const isCurrent = isPlaying && (currentStep % stepCount) === i;
               return (
                 <DropTarget
                   key={i}
