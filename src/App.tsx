@@ -442,7 +442,7 @@ function AppComponent() {
           <h2 className="text-[11px] font-bold tracking-[0.4em] text-neutral-400 uppercase">Module Selection</h2>
           <span className="h-px flex-1 bg-linear-to-l from-transparent to-neutral-800" />
         </div>
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 max-w-5xl mx-auto">
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 w-full max-w-screen-2xl mx-auto">
         {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
           const isActive = state !== 'OFF';
