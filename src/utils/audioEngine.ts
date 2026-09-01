@@ -37,6 +37,37 @@ function makeSafeArrayBuffer(byteLength: number): ArrayBuffer {
   return new ArrayBuffer(byteLength);
 }
 
+/**
+ * P0-2: Kanal-Zuordnung der Audio-einspeisenden Plugins (PluginAudioRouter-Kern).
+ * UI-only-Plugins liefern ein leeres Array (kein eigener Audio-Graph).
+ */
+export function pluginAudioChannels(pluginId: string): TrackType[] {
+  const map: Record<string, TrackType[]> = {
+    masterplayer: [],
+    ai: [],
+    controller: [],
+    library: [],
+    mastering: [],
+    stem: [],
+    recording: [],
+    performance: [],
+    spatial: ['channel7'],
+    mixer: ['channel1'],
+    sequencer: ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'],
+    drum: ['channel2'],
+    sampler: ['channel5'],
+    synthesizer: ['channel4'],
+    instrument: ['channel4'],
+    voice: ['channel8'],
+    sound: ['channel5'],
+    drop: ['channel5'],
+    effect: ['channel6'],
+    dsp: ['channel6'],
+    eq: ['channel6'],
+  };
+  return map[pluginId] ?? [];
+}
+
 class AudioEngine {
   public initialized = false;
   private clockSync = new ClockSync();
@@ -201,6 +232,14 @@ class AudioEngine {
   private itSynthNode: AudioWorkletNode | null = null;
   private itSynthReady = false;
   private itSynthCurrentDefId = -1;
+  /** Gain-Knoten des it-synth-Worklets (lazy erzeugt, P0-2). */
+  private itSynthGain: Tone.Gain | null = null;
+  /** Lädt den Synth-Graph nur bei erster Aktivierung (kein globaler Noise bei OFF). */
+  private synthGraphPromise: Promise<void> | null = null;
+  /** P0-2: Aktive Plugin-IDs (Audio-Einspeisung). */
+  private activePluginIds = new Set<string>();
+  /** Letzte Nutzer-Gains je Kanal – für sanftes OFF/ON (D2-hybrid). */
+  private channelRestoreGain: Partial<Record<TrackType, number>> = {};
 
   // Dropout-/Underrun-Zähler aus dem Audio-Thread (analyzerProcessor).
   public dropoutCount = 0;
@@ -466,10 +505,10 @@ class AudioEngine {
     this.bassDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.25, wet: 0.3 }).connect(this.bassFilter);
     this.bassSynth = new Tone.MonoSynth().connect(this.bassDelay);
 
-    // --- Task 7: optionaler PolyBLEP-Synth-Worklet (führt zur Lead-/Pad-Stimme) ---
-    this.tryInitSynthWorklet();
-    // --- instrumentMONK: optionaler sample-genauer Instrumenten-Synthesizer ---
-    this.tryInitItSynthWorklet();
+    // --- P0-2: Synth-Worklets werden LAZY bei erster Plugin-Aktivierung erzeugt
+    // (kein global verbundenes Synth-/Noise-Rauschen bei Start-Silence).
+    // this.tryInitSynthWorklet();   → jetzt in ensureSynthGraph()
+    // this.tryInitItSynthWorklet(); → jetzt in ensureSynthGraph()
     // Apply routing.json only now that all audio nodes exist.
     await this.applyRoutingConfig();
 
@@ -783,6 +822,69 @@ class AudioEngine {
     if (!this.masterVolume) return;
     const db = silent ? -Infinity : this.lastMasterVolumeDb;
     this.masterVolume.volume.setTargetAtTime(db, Tone.now(), 0.05);
+  }
+
+  /**
+   * P0-2: Plugin in die Signalkette einspeisen (Aktivierung = Einspeisung).
+   * Bekannte Audio-Quellen werden erst hier verdrahtet bzw. laut geschaltet.
+   */
+  public activatePlugin(id: string, _state: 'AUTO_AI' | 'PRO'): void {
+    this.ensureInitialized();
+    if (this.activePluginIds.has(id)) return;
+    this.activePluginIds.add(id);
+    this.setIdleSilence(false);
+    const channels = pluginAudioChannels(id);
+    if (channels.length > 0) {
+      channels.forEach((ch) => {
+        this.ensureChannelNode(ch);
+        const restore = this.channelRestoreGain[ch] ?? 1;
+        const db = restore <= 0.001 ? -Infinity : 20 * Math.log10(restore);
+        try { this.channelGains[ch]!.volume.rampTo(db, 0.03); } catch { /* ignore */ }
+      });
+    }
+    if (id === 'synthesizer' || id === 'instrument') {
+      void this.ensureSynthGraph();
+      try { this.itSynthGain?.gain.rampTo(1, 0.03); } catch { /* ignore */ }
+    }
+    if (id === 'mixer') {
+      // mixerMONK ist die einzige MAIN-Einspeiseinstanz (D1): alle Kanalwege
+      // bleiben hörbar, solange der Halter mixerMONK aktiv hat.
+      ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'].forEach((ch) => {
+        this.ensureChannelNode(ch as TrackType);
+      });
+    }
+  }
+
+  /**
+   * P0-2: Plugin aus der Signalkette nehmen. MAIN-verbundene Quellen werden
+   * sanft (Gain-Rampe auf -∞) stummgeschaltet (D2-hybrid); der Graph bleibt
+   * für schnelles Re-Activate bestehen. Bei 0 aktiven Plugins greift das
+   * Silence-Gate zusätzlich.
+   */
+  public deactivatePlugin(id: string): void {
+    this.ensureInitialized();
+    this.activePluginIds.delete(id);
+    const channels = pluginAudioChannels(id);
+    channels.forEach((ch) => {
+      if (!this.channelGains[ch]) return;
+      const current = this.channelGains[ch]!.volume.value;
+      if (current > 0.001) this.channelRestoreGain[ch] = Math.pow(10, current / 20);
+      try { this.channelGains[ch]!.volume.rampTo(-Infinity, 0.05); } catch { /* ignore */ }
+    });
+    if (id === 'synthesizer' || id === 'instrument') {
+      try { this.itSynthGain?.gain.rampTo(0.0001, 0.05); } catch { /* ignore */ }
+      this.allNotesOffItSynth();
+      this.noteOffWorklet();
+    }
+    this.setIdleSilence(this.activePluginIds.size === 0);
+  }
+
+  public isPluginActive(id: string): boolean {
+    return this.activePluginIds.has(id);
+  }
+
+  public getActivePluginIds(): string[] {
+    return [...this.activePluginIds];
   }
 
   /** Echtes Kanal-Gain (Fader): volume 0..1 → dB. */
@@ -1379,6 +1481,19 @@ class AudioEngine {
     }
   }
 
+  /** P0-2: Synth-Graph (PolyBLEP + it-synth) erst bei erster Aktivierung aufbauen. */
+  public ensureSynthGraph(): Promise<void> {
+    if (!this.synthGraphPromise) {
+      this.synthGraphPromise = (async () => {
+        await this.tryInitSynthWorklet();
+        await this.tryInitItSynthWorklet();
+      })().catch((e) => {
+        console.warn('[audio] Synth-Graph konnte nicht geladen werden:', (e as Error).message);
+      });
+    }
+    return this.synthGraphPromise;
+  }
+
   /**
    * Erstellt den sample-genauen Instrumenten-Synthesizer (`it-synth-processor`).
    * Erzeugt die Worklet-Node und verbindet sie auf den GLOBAL_MASTER-Bus. Die
@@ -1411,6 +1526,7 @@ class AudioEngine {
       const g = new Tone.Gain(1);
       (this.itSynthNode as any).connect(g);
       g.connect(this.masterBuses['GLOBAL_MASTER']);
+      this.itSynthGain = g;
       this.itSynthReady = true;
       console.info('it-synth-processor (instrumentMONK, sample-genau) aktiviert.');
     } catch (e) {

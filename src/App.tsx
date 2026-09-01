@@ -22,6 +22,7 @@ import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
 import { Settings } from 'lucide-react';
 import { Logo } from './components/Logo';
+import { AiMonkDock } from './components/AiMonkDock';
 const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
 const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
@@ -338,7 +339,7 @@ function AppComponent() {
   }
 
   return (
-    <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 short-landscape:p-2">
+    <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2">
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
       {/* 1. Header: STICKY, Logo schwarz, Titel-4-Farben, Steuerung rechts */}
       <header className="flex items-center justify-between gap-4 mb-8 short-landscape:mb-3 sticky top-0 z-30 -mx-6 px-6 short-landscape:px-3 py-4 short-landscape:py-2 bg-black/70 backdrop-blur-xl [box-shadow:0_1px_0_rgba(34,211,238,0.06),0_20px_40px_-24px_rgba(0,0,0,0.9)]">
@@ -449,7 +450,7 @@ function AppComponent() {
           <span className="h-px flex-1 bg-linear-to-l from-transparent to-neutral-800" />
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 max-w-5xl mx-auto">
-        {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer').map(plugin => {
+        {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
           const isActive = state !== 'OFF';
 
@@ -507,7 +508,7 @@ function AppComponent() {
       {/* 4. Active Modules */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {getPluginRegistry()
-          .filter(p => p.id !== 'masterplayer')
+          .filter(p => p.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? p.id !== 'ai' : true))
           .filter(p => moduleStates[p.id] && moduleStates[p.id] !== 'OFF')
           .map(plugin => (
             <ModuleContainer
@@ -578,6 +579,10 @@ function AppComponent() {
           </button>
         </div>
       )}
+
+      {/* D7: aiMONK-Bottom-Dock (immer offen, ausblendbar) – ersetzt das
+          „letzte Modul unten" für alle User. */}
+      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { storageGet, storageSet } from '../utils/storage';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
+import { routeModuleState } from '../core/pluginAudioRouter';
 import { can, roleForUser, readSessionConfig } from '../utils/rbac';
 
 export type ModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
@@ -50,6 +51,9 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       try { audioEngine.setIdleSilence(activeCount === 0); } catch { /* Audio nicht initialisiert */ }
       return next;
     });
+    // P0-2: Audio-Routing an den PluginAudioRouter delegieren
+    // (OFF = Signalkette trennen, AUTO_AI/PRO = Einspeisung).
+    routeModuleState(id, state);
     // Replikation an alle Peers (bestehender Kollaborations-Kanal).
     webRTCManager.sendToAllPeers({
       type: 'PLUGIN_STATE_UPDATE',
@@ -86,6 +90,8 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (last && (t < last.t || (t === last.t && (senderId ?? '') <= last.sender))) return; // stale/duplicate
       lastSeen.current[pluginId] = { t, sender: senderId ?? '' };
       setModuleStates(prev => (prev[pluginId] === state ? prev : { ...prev, [pluginId]: state }));
+      // P0-2: Auch fremde Zustandswechsel im Audio-Routing nachziehen.
+      routeModuleState(pluginId, state);
     });
   }, []);
 

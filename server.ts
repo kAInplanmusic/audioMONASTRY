@@ -245,6 +245,12 @@ app.get('/api/metrics', (req, res) => {
       '# HELP samplemonk_telemetry_events_total Client-Telemetrie-Events (kumulativ).',
       '# TYPE samplemonk_telemetry_events_total counter',
       `samplemonk_telemetry_events_total ${metrics.telemetryEvents ?? 0}`,
+      '# HELP samplemonk_ai_jobs_total Anzahl AI-Orchestrator-Jobs (kumulativ).',
+      '# TYPE samplemonk_ai_jobs_total counter',
+      `samplemonk_ai_jobs_total ${aiOrchestrator.jobs.list().length}`,
+      '# HELP samplemonk_ai_cost_usd Geschätzte AI-Kosten (USD, kumulativ).',
+      '# TYPE samplemonk_ai_cost_usd gauge',
+      `samplemonk_ai_cost_usd ${aiOrchestrator.costs.summary().totalUsd ?? 0}`,
     ];
     // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
     const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -271,7 +277,12 @@ app.get('/api/metrics', (req, res) => {
     requests: metrics.requests,
     errors: metrics.errors,
     avgLatencyMs: metrics.requests ? Math.round(metrics.latencyMsSum / metrics.requests) : 0,
-    ai: { requests: metrics.aiRequests, failures: metrics.aiFailures },
+    ai: {
+      requests: metrics.aiRequests,
+      failures: metrics.aiFailures,
+      jobs: aiOrchestrator.jobs.list().length,
+      costUsd: aiOrchestrator.costs.summary().totalUsd ?? 0,
+    },
     stem: { requests: metrics.stemRequests, failures: metrics.stemFailures, active: stemActiveJobs, max: STEM_MAX_JOBS },
     telemetryEvents: metrics.telemetryEvents ?? 0,
     telemetryByType: metrics.telemetryByType ?? {},
