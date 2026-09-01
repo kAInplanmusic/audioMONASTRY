@@ -3,7 +3,7 @@ import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
-import { ModuleContainer } from './components/ModuleContainer';
+import { RackRow } from './components/RackRow';
 import { BeatVisualizer } from './components/BeatVisualizer';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
@@ -18,7 +18,7 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
-import { Settings } from 'lucide-react';
+import { Settings, Sliders, Activity } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
@@ -28,6 +28,13 @@ const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTermina
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
+
+// Rack-Reihenfolge laut Designvorlage (masterplayer + mixer-Hardware sind feste Sektionen).
+const RACK_ORDER = [
+  'mixer', 'drop', 'instrument', 'synthesizer', 'voice', 'sound', 'mcp', 'drum', 'sampler',
+  'controller', 'effect', 'library', 'stem', 'spatial', 'eq', 'dsp', 'mastering',
+  'recording', 'performance', 'ai',
+];
 
 
 export default function App() {
@@ -41,7 +48,7 @@ export default function App() {
 function AppComponent() {
   const { startAudio } = useAudio();
   const { moduleStates, setModuleState } = useModuleState();
-  const { requestLock, releaseLock } = usePluginManager();
+  const { requestLock, releaseLock, pluginLocks } = usePluginManager();
   const { pendingSample, setPendingSample } = useSamples();
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -195,6 +202,19 @@ function AppComponent() {
     setModuleState(id, 'PRO');
   }, [moduleStates, requestLock, setModuleState]);
 
+  // Rack-Promote (⋮): OFF → AUTO_AI → PRO, PRO → OFF (freigeben).
+  const rackPromote = useCallback((id: string) => {
+    const currentState = moduleStates[id] || 'OFF';
+    if (currentState === 'PRO') {
+      releaseLock(id, webRTCManager.userId);
+      setModuleState(id, 'OFF');
+      return;
+    }
+    if (currentState === 'OFF') setModuleState(id, 'AUTO_AI');
+    requestLock(id, webRTCManager.userId);
+    setModuleState(id, 'PRO');
+  }, [moduleStates, requestLock, releaseLock, setModuleState]);
+
   const startApp = async () => {
       // UX-Debug: markiert den Start-Ablauf sichtbar in der Konsole.
       console.log('[startApp] Aktion ausgelöst – Audio-Init beginnt');
@@ -237,6 +257,46 @@ function AppComponent() {
       console.log('[startApp] isStarted=true setzen');
       setIsStarted(true);
       setIsPlaying(false);
+  };
+
+  /** Rendert den Terminal-Inhalt eines Rack-Streifens (Special-Cases wie bisher). */
+  const renderRackContent = (plugin: any) => {
+    if (plugin.id === 'voice') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Voice-Modul…</div>}>
+          <div className="flex flex-col gap-4">
+            <VoiceGenTerminal enabled={FEATURE_FLAGS.VOICE_GENERATOR_ENABLED} />
+            <VoiceMonkPanel userId="localUser" />
+          </div>
+        </Suspense>
+      );
+    }
+    if (plugin.id === 'drum') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Machine…</div>}>
+          <DrumMachineTerminal isPlaying={isPlaying} bpm={bpm} />
+        </Suspense>
+      );
+    }
+    if (plugin.id === 'mastering') {
+      return (
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
+          <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />
+          <button
+            type="button"
+            onClick={() => setMasteringOpen(true)}
+            className="w-full px-4 py-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-200 text-xs font-mono tracking-widest hover:bg-sky-500/15 transition-all cursor-pointer"
+          >
+            NEXUS KONTROL ÖFFNEN
+          </button>
+        </Suspense>
+      );
+    }
+    return (
+      <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Modul…</div>}>
+        <plugin.component />
+      </Suspense>
+    );
   };
 
   if (!isStarted) {
@@ -376,19 +436,61 @@ function AppComponent() {
         </div>
       </header>
 
-      {/* 1b. FESTES DJ-MISCHPULT (oberstes Plugin, immer sichtbar) – Allen & Heath XONE-Style, 4/8 Kanäle umschaltbar */}
-      <div className="mb-8 short-landscape:mb-3 -mx-6">
-        <Suspense fallback={<div className="h-24 flex items-center justify-center text-neutral-500 text-xs">Lade DJ-Mixer…</div>}><DJMixer /></Suspense>
-      </div>
-
-      {/* 2. Module Selection + Icon Grid (2 x 8) */}
-      <div className="mb-8">
-        <div className="flex items-center gap-4 mb-4">
-          <span className="h-px flex-1 bg-linear-to-r from-transparent to-neutral-800" />
-          <h2 className="text-[11px] font-bold tracking-[0.4em] text-neutral-400 uppercase">Module Selection</h2>
-          <span className="h-px flex-1 bg-linear-to-l from-transparent to-neutral-800" />
+      {/* Rack: masterplayerMONK (fester Transport, immer sichtbar) */}
+      <section className="rounded-xl border border-cyan-400/60 bg-cyan-950/10 shadow-[0_0_24px_-8px_rgba(34,211,238,0.45)] mb-4">
+        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
+          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+            <Activity size={18} />
+          </div>
+          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
+          <span className={`font-mono text-lg font-bold tracking-tight ${isPlaying ? 'text-cyan-300' : 'text-neutral-600'}`}>
+            {isPlaying ? <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse mr-1" /> : null}
+            {bpm} BPM
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <button type="button"
+              disabled={isPlaying}
+              onClick={() => { audioEngine.play(); setIsPlaying(true); }}
+              aria-label={isPlaying ? 'Wiedergabe läuft' : 'Wiedergabe starten'}
+              className="px-4 py-1.5 rounded-full bg-cyan-500/12 border border-cyan-500/50 text-cyan-200 text-xs font-bold tracking-widest uppercase hover:bg-cyan-500/25 hover:shadow-[0_0_20px_-6px_var(--monk-glow-teal)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
+            >
+              {isPlaying ? '▶ Läuft' : '▶ Play'}
+            </button>
+            <button type="button"
+              onClick={() => { audioEngine.stop(); setIsPlaying(false); }}
+              disabled={!isPlaying}
+              aria-label="Wiedergabe stoppen"
+              className="px-4 py-1.5 rounded-full bg-fuchsia-500/12 border border-fuchsia-500/50 text-fuchsia-200 text-xs font-bold tracking-widest uppercase hover:bg-fuchsia-500/25 hover:shadow-[0_0_20px_-6px_rgba(217,70,239,0.5)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
+            >
+              ⏹ Stop
+            </button>
+          </div>
         </div>
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-3 w-full max-w-screen-2xl mx-auto">
+        <div className="px-3 pb-3 border-t border-white/5">
+          <BeatVisualizer isPlaying={isPlaying} />
+          <div className="mt-4 pt-4 border-t border-neutral-800/80">
+            <Suspense fallback={<div className="h-12 text-neutral-500 text-xs">Lade Master-Player…</div>}><MasterPlayerTerminal /></Suspense>
+          </div>
+        </div>
+      </section>
+
+      {/* Rack: mixerMONK (festes DJ-Mischpult, immer sichtbar) */}
+      <section className="rounded-xl border border-cyan-400/60 bg-cyan-950/10 shadow-[0_0_24px_-8px_rgba(34,211,238,0.45)] mb-4">
+        <div className="flex items-center gap-3 px-3 py-2">
+          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+            <Sliders size={18} />
+          </div>
+          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">mixerMONK</h3>
+          <span className="text-[9px] font-mono text-cyan-400 tracking-widest">HARDWARE · DJM-A9</span>
+        </div>
+        <div className="px-3 pb-3 border-t border-white/5">
+          <Suspense fallback={<div className="h-24 flex items-center justify-center text-neutral-500 text-xs">Lade DJ-Mixer…</div>}><DJMixer /></Suspense>
+        </div>
+      </section>
+
+      {/* Icon-Toolbar (Designvorlage: Modul-Kacheln) */}
+      <nav className="sticky top-[76px] z-20 -mx-6 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
+        <div className="flex flex-wrap gap-2 justify-center max-w-screen-2xl mx-auto">
         {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
           const isActive = state !== 'OFF';
@@ -407,85 +509,33 @@ function AppComponent() {
           );
         })}
       </div>
-      </div>
+      </nav>
 
-      {/* 3. Master-Player + Waveform (BPM-Anzeige) */}
-      <section className="monk-panel edge-inset p-5 short-landscape:p-3 mb-8 short-landscape:mb-3 sticky top-[76px] z-20 bg-[#0a0a0a]/95 backdrop-blur">
-        <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <h3 className="text-[11px] font-bold tracking-[0.35em] text-neutral-500 uppercase">Master Player</h3>
-            <span className={`font-mono text-lg font-bold tracking-tight ${isPlaying ? 'text-cyan-300' : 'text-neutral-600'}`}>
-              {isPlaying ? <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse mr-1" /> : null}
-              {bpm} BPM
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button"
-              disabled={isPlaying}
-              onClick={() => { audioEngine.play(); setIsPlaying(true); }}
-              aria-label={isPlaying ? 'Wiedergabe läuft' : 'Wiedergabe starten'}
-              className="px-5 py-2 rounded-full bg-cyan-500/12 border border-cyan-500/50 text-cyan-200 text-xs font-bold tracking-widest uppercase hover:bg-cyan-500/25 hover:shadow-[0_0_20px_-6px_var(--monk-glow-teal)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
-            >
-              {isPlaying ? '▶ Läuft' : '▶ Play'}
-            </button>
-            <button type="button"
-              onClick={() => { audioEngine.stop(); setIsPlaying(false); }}
-              disabled={!isPlaying}
-              aria-label="Wiedergabe stoppen"
-              className="px-5 py-2 rounded-full bg-fuchsia-500/12 border border-fuchsia-500/50 text-fuchsia-200 text-xs font-bold tracking-widest uppercase hover:bg-fuchsia-500/25 hover:shadow-[0_0_20px_-6px_rgba(217,70,239,0.5)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
-            >
-              ⏹ Stop
-            </button>
-          </div>
-        </div>
-        <BeatVisualizer isPlaying={isPlaying} />
-        <div className="mt-4 pt-4 border-t border-neutral-800/80">
-          <Suspense fallback={<div className="h-12 text-neutral-500 text-xs">Lade Master-Player…</div>}><MasterPlayerTerminal /></Suspense>
-        </div>
-      </section>
-
-      {/* 4. Active Modules */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {getPluginRegistry()
-          .filter(p => p.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? p.id !== 'ai' : true))
-          .filter(p => moduleStates[p.id] && moduleStates[p.id] !== 'OFF')
-          .map(plugin => (
-            <ModuleContainer
-              key={plugin.id}
-              id={plugin.id}
+      {/* Rack-Liste: alle Module als Streifen */}
+      <div className="flex flex-col gap-3 max-w-screen-xl mx-auto">
+        {RACK_ORDER.map(id => {
+          const plugin = getPluginRegistry().find(p => p.id === id);
+          if (!plugin) return null;
+          if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
+          const state = moduleStates[id] || 'OFF';
+          const lockStatus = pluginLocks[id];
+          const lockedByOther = !!lockStatus?.active && lockStatus.lockedBy !== 'localUser';
+          return (
+            <RackRow
+              key={id}
+              id={id}
               name={plugin.name}
-              state={moduleStates[plugin.id]}
-              onClose={() => {
-                releaseLock(plugin.id, webRTCManager.userId);
-                setModuleState(plugin.id, 'OFF');
-              }}>
-
-                              <SafeModuleBoundary>
-                                {plugin.id === 'voice' ? (
-                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Voice-Modul…</div>}><div className="flex flex-col gap-4">
-                                      <VoiceGenTerminal enabled={FEATURE_FLAGS.VOICE_GENERATOR_ENABLED} />
-                                      <VoiceMonkPanel userId="localUser" />
-                                    </div></Suspense>
-                                  ) : plugin.id === 'drum' ? (
-                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Machine…</div>}><DrumMachineTerminal isPlaying={isPlaying} bpm={bpm} /></Suspense>
-                                  ) : plugin.id === 'mastering' ? (
-                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
-                                      <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />
-                                      <button
-                                        type="button"
-                                        onClick={() => setMasteringOpen(true)}
-                                        className="w-full px-4 py-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-200 text-xs font-mono tracking-widest hover:bg-sky-500/15 transition-all cursor-pointer"
-                                      >
-                                        NEXUS KONTROL ÖFFNEN
-                                      </button>
-                                    </Suspense>
-                                  ) : (
-                                    <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Modul…</div>}><plugin.component /></Suspense>
-                                  )}
-                              </SafeModuleBoundary>
-                            </ModuleContainer>
-
-        ))}
+              short={plugin.short}
+              icon={plugin.icon}
+              state={state}
+              lockedByOther={lockedByOther}
+              onToggle={() => togglePlugin(id)}
+              onPromote={() => rackPromote(id)}
+            >
+              {state !== 'OFF' && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
+            </RackRow>
+          );
+        })}
       </div>
 
       <MoaHistoryPanel />

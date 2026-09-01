@@ -7,7 +7,9 @@
 // ============================================================================
 
 /** Harte Obergrenze aktiver GPU-Endpoints (Kostenregel). */
-export const AI_MAX_GPU_ENDPOINTS = Number(process.env.AI_MAX_GPU_ENDPOINTS ?? 1);
+export const AI_MAX_GPU_ENDPOINTS = (typeof process !== 'undefined' && process.env)
+  ? Number(process.env.AI_MAX_GPU_ENDPOINTS ?? 1)
+  : 1;
 
 /** Einziger erlaubter HF-Endpoint-Name für GPU-Inferenz. */
 export const SINGLE_GPU_ENDPOINT_NAME = 'samplemonk-ai';
