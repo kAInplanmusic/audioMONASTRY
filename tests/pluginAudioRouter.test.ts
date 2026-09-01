@@ -12,7 +12,7 @@ vi.mock('../src/utils/audioEngine', () => ({
     activatePlugin: engineSpies.activate,
     deactivatePlugin: engineSpies.deactivate,
   },
-  pluginAudioChannels: (id: string) => (id === 'sequencer' ? ['channel1'] : []),
+  pluginAudioChannels: (id: string) => (id === 'mcp' ? ['channel5'] : []),
 }));
 
 import {
@@ -28,7 +28,7 @@ describe('pluginAudioRouter (P0-2)', () => {
     expect(PLUGIN_ROUTE_IDS).toHaveLength(21);
     expect(listPluginRoutes()).toHaveLength(21);
     const expected = [
-      'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'sequencer',
+      'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
       'voice', 'sound', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
       'dsp', 'mastering', 'stem', 'spatial', 'recording', 'performance', 'ai',
     ];
@@ -42,12 +42,12 @@ describe('pluginAudioRouter (P0-2)', () => {
   });
 
   it('OFF deaktiviert Audio, AUTO_AI/PRO aktiviert Audio (audioEngine-Verdrahtung)', () => {
-    routeModuleState('sequencer', 'AUTO_AI');
-    expect(engineSpies.activate).toHaveBeenCalledWith('sequencer', 'AUTO_AI');
-    routeModuleState('sequencer', 'PRO');
-    expect(engineSpies.activate).toHaveBeenCalledWith('sequencer', 'PRO');
-    routeModuleState('sequencer', 'OFF');
-    expect(engineSpies.deactivate).toHaveBeenCalledWith('sequencer');
+    routeModuleState('mcp', 'AUTO_AI');
+    expect(engineSpies.activate).toHaveBeenCalledWith('mcp', 'AUTO_AI');
+    routeModuleState('mcp', 'PRO');
+    expect(engineSpies.activate).toHaveBeenCalledWith('mcp', 'PRO');
+    routeModuleState('mcp', 'OFF');
+    expect(engineSpies.deactivate).toHaveBeenCalledWith('mcp');
   });
 
   it('aktiviert/deaktiviert unbekannte IDs ohne Fehler (nur Log)', () => {

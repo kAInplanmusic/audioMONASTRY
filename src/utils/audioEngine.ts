@@ -53,7 +53,7 @@ export function pluginAudioChannels(pluginId: string): TrackType[] {
     performance: [],
     spatial: ['channel7'],
     mixer: ['channel1'],
-    sequencer: ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'],
+    mcp: ['channel5'],
     drum: ['channel2'],
     sampler: ['channel5'],
     synthesizer: ['channel4'],

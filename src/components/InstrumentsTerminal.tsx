@@ -107,7 +107,7 @@ const SYNTH_PRESET_INSTRUMENTS: Instrument[] = SYNTHESIS_INSTRUMENTS.map(d => ({
 }));
 
 export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('instruments', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('instrument', 'PRO');
   const [activeCategory, setActiveCategory] = useState('Alle');
   const [search, setSearch] = useState('');
   const [instruments] = useState<Instrument[]>([...PRESET_INSTRUMENTS, ...SYNTH_PRESET_INSTRUMENTS]);

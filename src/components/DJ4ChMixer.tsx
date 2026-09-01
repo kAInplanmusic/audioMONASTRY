@@ -3,6 +3,7 @@ import { audioEngine } from '../utils/audioEngine';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { ALL_TRACKS, TrackRole, TrackType, TRACK_ROLE_MAP } from '../types';
 import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
+import { DeckPanel, loadDeckSkins, saveDeckSkins, type MixerSkinId } from './mixer/DeckSkins';
 
 /**
  * audioMONASTRY DJ-Mischpult — Optik wie ein Pioneer DJM-A9.
@@ -185,6 +186,25 @@ export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { in
   const [xfd, setXfd] = useState(0.5);
   const [xfMode, setXfMode] = useState<XfMode>('THRU');
   const [master, setMaster] = useState(0.8);
+  const [deckSkins, setDeckSkins] = useState<Record<'A' | 'B', MixerSkinId>>(loadDeckSkins);
+  const [deckLabels, setDeckLabels] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
+
+  const deckChannels = useMemo(() => ({
+    A: strips.filter((s) => s.deck === 'A').map((s) => s.track),
+    B: strips.filter((s) => s.deck === 'B').map((s) => s.track),
+  }), [strips]);
+
+  const handleDeckSkinChange = (deck: 'A' | 'B', skin: MixerSkinId) => {
+    setDeckSkins((prev) => {
+      const next = { ...prev, [deck]: skin };
+      saveDeckSkins(next);
+      return next;
+    });
+  };
+
+  const handleDeckLoad = (deck: 'A' | 'B', label: string) => {
+    setDeckLabels((prev) => ({ ...prev, [deck]: label }));
+  };
 
   const db = (v: number) => (v - 1) * 18; // 0..2 -> -18 .. +18 dB (1 = neutral)
 
@@ -283,6 +303,26 @@ export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { in
             >{n} CH</button>
           ))}
         </div>
+      </div>
+
+      {/* Deck A/B mit frei wählbaren Skins (mixerMONK) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-3 pt-3">
+        <DeckPanel
+          deck="A"
+          channels={deckChannels.A}
+          skin={deckSkins.A}
+          onSkinChange={handleDeckSkinChange}
+          loadedLabel={deckLabels.A || ch[0]?.loadName || undefined}
+          onLoad={(label) => handleDeckLoad('A', label)}
+        />
+        <DeckPanel
+          deck="B"
+          channels={deckChannels.B}
+          skin={deckSkins.B}
+          onSkinChange={handleDeckSkinChange}
+          loadedLabel={deckLabels.B || ch[channelCount / 2]?.loadName || undefined}
+          onLoad={(label) => handleDeckLoad('B', label)}
+        />
       </div>
 
       {/* Kanalzüge + Master */}

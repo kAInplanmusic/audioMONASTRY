@@ -2,7 +2,7 @@
  * audioMONASTRY · Plugin-Kommando-Registry (Voice-/KI-/MOA-Steuerung)
  * ===================================================================
  * Verdrahtet ALLE 17 Plugins mit dem VoiceControlService:
- *   - transport/sequencer/drum/mixer/spatial/instrument/fx/eq/dsp/synth/
+ *   - transport/mcp/drum/mixer/spatial/instrument/fx/eq/dsp/synth/
  *     voice/library/controller haben echte Engine-Handler,
  *   - sampler/stem/recording/mastering/visualizer/performance melden
  *     ihren Status (UI-only, werden in Folgeschritten verdrahtet).
@@ -13,16 +13,6 @@
 import { voiceControlService } from './VoiceControlService';
 
 let registered = false;
-
-const sixteen = (steps: number[]): boolean[] => {
-  const a = Array<boolean>(16).fill(false);
-  for (const s of steps) a[s % 16] = true;
-  return a;
-};
-
-const FOUR_ON_FLOOR = sixteen([0, 4, 8, 12]);
-const OFFBEAT = sixteen([2, 6, 10, 14]);
-const BREAK = sixteen([0, 3, 6, 8, 11, 14]);
 
 export function registerDefaultVoiceCommands(): void {
   if (registered) return;
@@ -60,26 +50,20 @@ export function registerDefaultVoiceCommands(): void {
     audioEngine.stop();
   }, ['stop', 'halt']);
 
-  // --- sequencerMONK ----------------------------------------------------------
-  const applyPatterns = async (patterns: Record<string, boolean[]>, bpm?: number) => {
-    const { audioEngine } = await import('../../utils/audioEngine');
-    audioEngine.loadPatterns(patterns);
-    if (bpm) audioEngine.setBpm(bpm);
-    // UI-State-Sync: App/Sequencer hören auf dieses Event und übernehmen die Patterns sichtbar.
+  // --- mcpMONK ----------------------------------------------------------------
+  const dispatchMcpPattern = (preset: 'four' | 'break' | 'random') => {
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('monk:apply-patterns', { detail: { patterns, bpm } }));
+      window.dispatchEvent(new CustomEvent('monk:mcp-pattern', { detail: { preset } }));
     }
   };
-  voiceControlService.registerPluginCommand('sequencer', 'pattern_four', async () => {
-    await applyPatterns({ channel1: FOUR_ON_FLOOR, channel2: OFFBEAT, channel3: sixteen([4, 12]), channel4: sixteen([0, 3, 6, 9, 12, 15]) });
+  voiceControlService.registerPluginCommand('mcp', 'pattern_four', async () => {
+    dispatchMcpPattern('four');
   }, ['four', 'floor', 'viertel']);
-  voiceControlService.registerPluginCommand('sequencer', 'pattern_random', async () => {
-    const { random } = await import('../../utils/random');
-    const gen = () => sixteen(Array.from({ length: 8 }, () => Math.floor(random() * 16)));
-    await applyPatterns({ channel1: gen(), channel2: gen(), channel3: gen(), channel4: gen() });
+  voiceControlService.registerPluginCommand('mcp', 'pattern_random', async () => {
+    dispatchMcpPattern('random');
   }, ['random', 'zufall']);
-  voiceControlService.registerPluginCommand('sequencer', 'pattern_break', async () => {
-    await applyPatterns({ channel1: BREAK, channel2: sixteen([2, 5, 7, 10, 13, 15]), channel3: sixteen([4, 12]), channel4: sixteen([0, 2, 6, 9, 12, 14]) });
+  voiceControlService.registerPluginCommand('mcp', 'pattern_break', async () => {
+    dispatchMcpPattern('break');
   }, ['break', 'drum', 'beat']);
 
   // --- drumMONK ---------------------------------------------------------------

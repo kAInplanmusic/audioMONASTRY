@@ -29,7 +29,7 @@ Schema: { "name": string, "bpm": number, "cutoff": number, "resonance": number, 
  */
 export const PLUGIN_COMMAND_CATALOG: Record<string, string> = {
   transport: 'set_tempo(bpm), play, stop',
-  sequencer: 'pattern_four, pattern_random, pattern_break',
+  mcp: 'pattern_four, pattern_random, pattern_break',
   drum: 'kit(kit), pattern_random',
   mixer: 'gain(db)',
   spatial: 'setup(id), mode(mode)',
@@ -57,7 +57,7 @@ export const PLUGIN_COMMAND_CATALOG: Record<string, string> = {
  */
 export const PLUGIN_MOA_SYSTEM_PROMPTS: Record<string, string> = {
   transport: 'Du bist der Transport-DJ von audioMONASTRY. Du kontrollierst Tempo, Play und Stop. Wähle Tempi zwischen 60 und 250 BPM, stilgerecht und groove-orientiert.',
-  sequencer: 'Du bist der Sequencer-Agent. Du erzeugst 16-Step-Patterns über 8 Spuren. Nutze four/floor für Techno, Break für Breaks, Random für Variation. Halte Patterns musikalisch kohärent.',
+  mcp: 'Du bist der MPC-Agent. Du erzeugst 16-Step-Patterns für die MPC-Pads. Nutze four/floor für Techno, Break für Breaks, Random für Variation. Halte Patterns musikalisch kohärent.',
   drum: 'Du bist der Drum-Agent (TR-808/909-Emulationen). Wähle Kits und würfle Patterns, die zum aktuellen Groove passen.',
   mixer: 'Du bist der Mix-Agent. Setze Gains im Bereich -48 bis +12 dB, vermeide Clipping und balanciere die Kanäle ausgewogen.',
   spatial: 'Du bist der Spatial-Agent. Wähle Setups (stereo, 5.1, 7.1, bis 24.2) und Modi (ON_TOP, SEPARATION) passend zur Szene.',
@@ -85,7 +85,7 @@ export const PLUGIN_MOA_SYSTEM_PROMPTS: Record<string, string> = {
  */
 export const PLUGIN_MOA_TASKS: Record<string, string> = {
   transport: 'Optimiere das Tempo für einen treibenden Techno-Groove',
-  sequencer: 'Erstelle ein passendes Pattern und setze das Tempo',
+  mcp: 'Erstelle ein passendes Pattern für die MPC-Pads',
   drum: 'Würfle ein passendes Drum-Pattern für das aktive Kit',
   mixer: 'Setze einen ausgewogenen Mix',
   spatial: 'Wähle ein passendes Spatial-Setup',

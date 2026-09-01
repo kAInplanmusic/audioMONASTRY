@@ -20,6 +20,14 @@
 - [x] **P1-3 Settings**: Xonar-first USB-Default + 2.1 + DevSettings „AI Server Shutdown" → Xonar-first-USB-Auto-Default + `2.1`-Modus + `outputOverride` umgesetzt.
 - [x] **AUD-P1-2/P1-3**: Settings-Defaults + Migration-002-CRUD verifizieren → Settings-Defaults umgesetzt (P1-3); Migration-002/CRUD war bereits grün (`promptStore`/`evaluationStore`-Tests laufen in `npm run verify`).
 
+### MONK-Ausbau 2026-09-01 (Mixer-Skins, sequenzer→mcp, biblioMONK, spatialMONK)
+
+- [x] **mixerMONK Deck-Skins**: `src/components/mixer/DeckSkins.tsx` + Deck-A/B-Panels im festen DJMixer; Skins TURNTABLE/PAD/LIBRARY pro Deck frei wählbar, persistiert (`audiomonastry_deck_skins`); Tests `tests/mixerSkins.test.ts`.
+- [x] **sequenzerMONK entfernt, mcpMONK als Slot-Ersatz**: `SequencerPluginTerminal` + `src/plugins/sequenzer` gelöscht; `McpTerminal` (v1: MPC-Pads + 16-Step-Grid) registriert; Router/Registry/Manifeste/prompts/rolePresets/collab auf `mcp` umgestellt; Plugin-Anzahl bleibt 21; Tests angepasst.
+- [x] **biblioMONK v1**: Suchfeld, Ordnerbaum (Favoriten/Samples/Musik), Favoriten-Herzen mit Persistenz (`src/utils/libraryFavorites.ts`), Mindest-Schriftgrößen (`--monk-font-min/label`); Tests `tests/libraryFavorites.test.ts`.
+- [x] **Plugin-ID-Korrekturen**: `synth→synthesizer`, `instruments→instrument`, `midi→controller`, `recorder→recording`, `voice_gen→voice`, `stem_extractor→stem` (usePluginState/MoaAssistant).
+- [x] **spatialMONK v1 nach WhitePaper**: Branch `replace/spatialmonk`; `src/audio/worklets/spatialProcessor.ts` (ILD/ITD/Distanz-Lowpass/Rampen/Metriken, Port-Protokoll addSource/removeSource/setPos/setGlobal/loadHRTF/metricsRequest/reset); `src/audio/spatial/node.ts` (SpatialNode/SpatialCluster mit Auto-Split bei 65 % CPU + Legacy-Adapter); neue 2D-Scene-UI `SpatialScene.tsx` + `SpatialSourceIcon.tsx`; Types/Presets (`SpatialSource`, `SpatialSceneState`, `DEFAULT_SPATIAL_SCENE`, `migrateLegacySpatialPreset`); Registry ersetzt alte `SpatialPluginTerminal`; alte Dateien + `src/plugins/spatial-surround` gelöscht; Manifest um `spatial-processor` erweitert; DSP-/Migrations-Tests in `tests/spatialProcessor.test.ts` (390 Tests gesamt grün).
+
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 
 - [x] `src/App.tsx`: `togglePlugin`/`promotePlugin` dürfen `mixer` **nicht** mehr ignorieren; `filter(p => p.id === 'mixer' ? true : …)` entfernen.

@@ -35,7 +35,7 @@ function detectTouchLimited(): boolean {
 }
 
 export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('midi', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('controller', 'PRO');
   const {
     midiAccess, inputs, detected, error: midiError, rescan, lastMessage,
     lastControlEvent: midiLastControlEvent,

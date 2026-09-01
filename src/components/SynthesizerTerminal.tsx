@@ -27,7 +27,7 @@ const TARGET_CHANNELS: TrackType[] = ['channel1', 'channel2', 'channel3', 'chann
  * die Preview-Noten sind direkt hörbar. Der WASM-Host bleibt optionaler Zusatz.
  */
 export const SynthesizerTerminal: React.FC = React.memo(() => {
-  const { lockStatus } = usePluginState('synth', 'PRO');
+  const { lockStatus } = usePluginState('synthesizer', 'PRO');
   const hostRef = React.useRef(new WasmPluginHost());
   const [isLoaded, setIsLoaded] = useState(false);
   const [cutoff, setCutoff] = useState(DEFAULT_SYNTH_PARAMS.cutoff);
@@ -125,7 +125,7 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
   return (
     <div className={`p-6 bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-mono shadow-2xl`}>
       <div className="mb-4 -mt-2">
-        <MoaAssistant pluginId="synth" placeholder="MOA: z. B. 'Spiele Note 440 Hz'" />
+        <MoaAssistant pluginId="synthesizer" placeholder="MOA: z. B. 'Spiele Note 440 Hz'" />
       </div>
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-sm font-black uppercase tracking-widest text-neutral-400 flex items-center gap-2">
