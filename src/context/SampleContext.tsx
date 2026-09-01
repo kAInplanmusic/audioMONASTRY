@@ -17,6 +17,14 @@ interface SampleContextType {
   /** Touch-Fallback: angetipptes Sample, das als Nächstes in eine Drop-Zone gesetzt wird. */
   pendingSample: AudioSample | null;
   setPendingSample: (sample: AudioSample | null) => void;
+  /**
+   * Einheitliche Action-Menu-Übernahme: Ein geöffnetes Plugin (sampler/drum)
+   * wird aufgefordert, dieses Sample in seinen vorhandenen Audio-Eingang
+   * (Pad/Step) zu übernehmen.
+   */
+  takeoverRequest: { pluginId: string; sample: AudioSample; token: number } | null;
+  requestTakeover: (pluginId: string, sample: AudioSample) => void;
+  clearTakeoverRequest: () => void;
 }
 
 const SampleContext = createContext<SampleContextType | undefined>(undefined);
@@ -40,6 +48,13 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
   const [selectedSample, setSelectedSample] = useState<AudioSample | null>(null);
   const [cloudEnabled, setCloudEnabled] = useState(false);
   const [pendingSample, setPendingSample] = useState<AudioSample | null>(null);
+  const [takeoverRequest, setTakeoverRequest] = useState<{ pluginId: string; sample: AudioSample; token: number } | null>(null);
+
+  const requestTakeover = useCallback((pluginId: string, sample: AudioSample) => {
+    setTakeoverRequest({ pluginId, sample, token: Date.now() });
+  }, []);
+
+  const clearTakeoverRequest = useCallback(() => setTakeoverRequest(null), []);
 
   // Cloud: externe Sample-Metadaten von Supabase laden und mit den eingebauten
   // Presets zusammenführen. Fällt bei Nicht-Konfiguration/Fehler auf Presets zurück.
@@ -139,7 +154,10 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
     syncCloudDatabase,
     pendingSample,
     setPendingSample,
-  }), [samples, selectedSample, getSampleById, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample]);
+    takeoverRequest,
+    requestTakeover,
+    clearTakeoverRequest,
+  }), [samples, selectedSample, getSampleById, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample, takeoverRequest, requestTakeover, clearTakeoverRequest]);
 
   return (
     <SampleContext.Provider value={value}>

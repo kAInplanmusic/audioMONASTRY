@@ -12,6 +12,7 @@ import { FEATURE_FLAGS } from './config/featureFlags';
 const VoiceGenTerminal = lazy(() => import('./components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m => ({ default: m.VoiceMonkPanel })));
 import { MoaHistoryPanel } from './components/MoaHistoryPanel';
+import { AudioActionMenuHost } from './components/AudioActionMenuHost';
 import { MasteringOverlay } from './components/MasteringOverlay';
 import { useAudio } from './context/AudioContext';
 import { useSamples } from './context/SampleContext';
@@ -537,6 +538,9 @@ function AppComponent() {
       </div>
 
       <MoaHistoryPanel />
+
+      {/* Einheitliche Audio-Kontextaktion (Click/Touch) – globaler Host. */}
+      <AudioActionMenuHost />
 
       {/* Touch-Fallback: armiertes Sample global anzeigen */}
       {pendingSample && (

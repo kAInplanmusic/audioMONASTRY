@@ -12,6 +12,8 @@ import { Scratchpad } from './Scratchpad';
 import { CloudStatusBadge } from './CloudStatusBadge';
 import { SampleUploadPanel } from './SampleUploadPanel';
 import { loadFavorites, saveFavorites, toggleFavoriteId, type FavoritesState } from '../utils/libraryFavorites';
+import { openAudioActionMenu } from './AudioActionMenuHost';
+import { musicToContent, sampleToContent } from '../core/audio/audioContent';
 
 const ITEMS_PER_PAGE = 9;
 
@@ -31,7 +33,7 @@ const FOLDERS: { id: FolderId; label: string; group: string }[] = [
 ];
 
 export const LibraryTerminal = React.memo(function LibraryTerminal() {
-  const { samples, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample, setPendingSample } = useSamples();
+  const { samples, addSample, cloudEnabled, pushSampleToCloud, syncCloudDatabase, pendingSample } = useSamples();
   const [folder, setFolder] = useState<FolderId>('all');
   const [query, setQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -183,7 +185,19 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
   const renderMusicCard = (t: MusicTrack) => {
     const isFav = favorites.music.includes(t.id);
     return (
-      <div key={t.id} className="bg-[#161616] border border-neutral-800 rounded-lg p-4 flex flex-col gap-2 hover:border-amber-500/50 transition-colors group">
+      <div
+        key={t.id}
+        role="button"
+        tabIndex={0}
+        onClick={(e) => openAudioActionMenu(musicToContent(t), e.currentTarget)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openAudioActionMenu(musicToContent(t), e.currentTarget as HTMLElement);
+          }
+        }}
+        className="bg-[#161616] border border-neutral-800 rounded-lg p-4 flex flex-col gap-2 hover:border-amber-500/50 transition-colors group cursor-pointer"
+      >
         <div className="flex justify-between items-start">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
@@ -193,7 +207,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
             </div>
           </div>
           <button type="button"
-            onClick={() => toggleFavoriteMusic(t.id)}
+            onClick={(e) => { e.stopPropagation(); toggleFavoriteMusic(t.id); }}
             title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
             className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${isFav ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-[#111] text-neutral-500 hover:text-rose-400 border border-neutral-800'}`}
           >
@@ -213,17 +227,17 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
           <span className="text-[11px] font-mono text-neutral-600 bg-black px-2 py-1 rounded truncate">{t.url}</span>
           <div className="flex gap-2">
             <button type="button"
-              onClick={() => audioEngine.previewSample('channel5', undefined, t.url)}
+              onClick={(e) => { e.stopPropagation(); audioEngine.previewSample('channel5', undefined, t.url); }}
               className="text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer"
             >LOAD</button>
             <button type="button"
-              onClick={() => handlePushMusic(t)}
+              onClick={(e) => { e.stopPropagation(); handlePushMusic(t); }}
               disabled={cloudBusy}
               title="In externe Musik-Datenbank (Supabase) pushen"
               className="text-[11px] font-bold text-neutral-400 hover:text-emerald-300 disabled:opacity-40 cursor-pointer"
             >PUSH</button>
             <button type="button"
-              onClick={() => audioEngine.loadTrackSample('channel1', t.url)}
+              onClick={(e) => { e.stopPropagation(); audioEngine.loadTrackSample('channel1', t.url); }}
               title="In Mischpult-Kanal 1 laden"
               className="text-[11px] font-bold text-neutral-400 hover:text-amber-300 cursor-pointer"
             >ADD</button>
@@ -242,19 +256,14 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
         tabIndex={0}
         draggable
         onDragStart={(e) => handleDragStart(e, sample)}
-        onClick={() => {
-          // Touch-Fallback: Sample "armieren" – danach Drop-Zone antippen.
-          if (pendingSample?.id === sample.id) setPendingSample(null);
-          else setPendingSample(sample);
-        }}
+        onClick={(e) => openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            if (pendingSample?.id === sample.id) setPendingSample(null);
-            else setPendingSample(sample);
+            openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget as HTMLElement);
           }
         }}
-        className={`bg-[#161616] border rounded-lg p-4 flex flex-col gap-2 transition-colors group cursor-grab active:cursor-grabbing ${
+        className={`bg-[#161616] border rounded-lg p-4 flex flex-col gap-2 transition-colors group cursor-pointer ${
           pendingSample?.id === sample.id
             ? 'border-fuchsia-500 ring-2 ring-fuchsia-500/50 shadow-[0_0_18px_-4px_rgba(217,70,239,0.5)]'
             : 'border-neutral-800 hover:border-fuchsia-500/50'
@@ -282,13 +291,13 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
           <span className="text-[11px] font-mono text-neutral-600 bg-black px-2 py-1 rounded">ID: {sample.id}</span>
           <div className="flex gap-2">
             <button type="button"
-              onClick={() => handleCopy(sample)}
+              onClick={(e) => { e.stopPropagation(); handleCopy(sample); }}
               className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-fuchsia-300 cursor-pointer"
             >
               <Clipboard className="w-3 h-3" /> COPY
             </button>
             <button type="button"
-              onClick={() => handlePushSample(sample)}
+              onClick={(e) => { e.stopPropagation(); handlePushSample(sample); }}
               disabled={cloudBusy}
               title="In externe Sample-Datenbank (Supabase) pushen"
               className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-emerald-300 disabled:opacity-40 cursor-pointer"
@@ -296,7 +305,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
               <Upload className="w-3 h-3" /> PUSH
             </button>
             <button type="button"
-              onClick={() => { if (sample.url) audioEngine.loadTrackSample('channel5', sample.url); }}
+              onClick={(e) => { e.stopPropagation(); if (sample.url) audioEngine.loadTrackSample('channel5', sample.url); }}
               title={sample.url ? 'Sample in Mischpult-Kanal 5 laden' : 'Synthetisches Sample – über Instrumente spielbar'}
               className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer"
             >

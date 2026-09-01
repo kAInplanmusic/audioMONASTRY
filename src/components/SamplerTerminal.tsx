@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Power, CircleDot as Rec } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
+import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 import { TrackType } from '../types';
@@ -32,6 +33,7 @@ const emptyPads = (): Pad[] =>
 
 export const SamplerTerminal = React.memo(() => {
   const { state, lockStatus, updateState } = usePluginState('sampler', 'PRO');
+  const { takeoverRequest, clearTakeoverRequest } = useSamples();
   const [pads, setPads] = useState<Pad[]>(emptyPads);
   const [capturing, setCapturing] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
@@ -42,6 +44,24 @@ export const SamplerTerminal = React.memo(() => {
 
   const updatePad = (i: number, patch: Partial<Pad>) =>
     setPads((prev) => prev.map((p, idx) => (idx === i ? { ...p, ...patch } : p)));
+
+  // Einheitliche Action-Menu-Übernahme: Sample in das gewählte (oder erste
+  // freie) Pad übernehmen. Nutzt den vorhandenen Pad-Audio-Eingang (Trigger-
+  // Track je Pad), keine neue Audio-Funktion.
+  useEffect(() => {
+    if (!takeoverRequest || takeoverRequest.pluginId !== 'sampler') return;
+    const { sample } = takeoverRequest;
+    const idx = sel ?? pads.findIndex((p) => !p.filled);
+    if (idx >= 0) {
+      updatePad(idx, { filled: true, name: sample.name });
+      if (sample.url) {
+        const t = SAMPLE_TRACKS[idx % SAMPLE_TRACKS.length];
+        void audioEngine.loadTrackSample(t, sample.url).catch(() => { /* URL optional */ });
+      }
+    }
+    clearTakeoverRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [takeoverRequest]);
 
   const triggerPad = (i: number) => {
     const pad = pads[i];

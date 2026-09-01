@@ -2322,6 +2322,16 @@ class AudioEngine {
     }
   }
 
+  /** Liefert die aktuell auf einem Track geladene Sample-URL (null = frei). */
+  public getTrackSampleUrl(track: TrackType): string | null {
+    return this.trackSampleUrl[track] ?? null;
+  }
+
+  /** True, wenn auf dem Track bereits ein Sample geladen ist. */
+  public isTrackLoaded(track: TrackType): boolean {
+    return !!this.trackSampleUrl[track];
+  }
+
   public async loadTrackSample(track: TrackType, url: string | null) {
     // If there's an existing player for this track, dispose of it.
     // De-Klick: erst weich ausblenden (Volume-Rampe), dann nach kurzer Zeit

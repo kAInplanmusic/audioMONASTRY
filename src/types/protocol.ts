@@ -7,7 +7,10 @@ export type ProtocolMessageType =
   | 'CLOCK_PONG'
   | 'LATENCY_PING'
   | 'LATENCY_PONG'
-  | 'SCRATCHPAD_UPDATE';
+  | 'SCRATCHPAD_UPDATE'
+  | 'PROJECT_CLIPBOARD_UPDATE'
+  | 'TRACK_ASSIGNMENT_UPDATE'
+  | 'SPATIAL_ASSIGNMENT_UPDATE';
 
 export interface BaseMessage {
   type: ProtocolMessageType;
@@ -32,6 +35,14 @@ export type WebRTCMessage =
   | PluginStateMessage
   | FXUpdateMessage
   | {
-      type: 'CLOCK_PING' | 'CLOCK_PONG' | 'LATENCY_PING' | 'LATENCY_PONG' | 'SCRATCHPAD_UPDATE';
+      type:
+        | 'CLOCK_PING'
+        | 'CLOCK_PONG'
+        | 'LATENCY_PING'
+        | 'LATENCY_PONG'
+        | 'SCRATCHPAD_UPDATE'
+        | 'PROJECT_CLIPBOARD_UPDATE'
+        | 'TRACK_ASSIGNMENT_UPDATE'
+        | 'SPATIAL_ASSIGNMENT_UPDATE';
       [key: string]: any;
     };

@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Plus, Trash2, Camera, RotateCcw, Gauge, Volume2 } from 'lucide-react';
+import { Box, Plus, Trash2, Camera, RotateCcw, Gauge, Volume2, Radio } from 'lucide-react';
 import * as Tone from 'tone';
 import { usePluginState } from '../hooks/usePluginState';
+import { useProject } from '../context/ProjectContext';
+import { useSamples } from '../context/SampleContext';
 import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { storageGetJson, storageSetJson } from '../utils/storage';
@@ -9,7 +11,20 @@ import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
 import { SpatialSourceIcon } from './SpatialSourceIcon';
 import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
 import { SPATIAL_SETUPS } from '../utils/spatialMath';
-import type { SpatialQuality, SpatialSceneState, SpatialSource } from '../types';
+import type { SpatialQuality, SpatialSceneState, SpatialSource, TrackType } from '../types';
+import { ALL_TRACKS } from '../types';
+import { openAudioActionMenu } from './AudioActionMenuHost';
+import {
+  isStreamContent,
+  masterStreamContent,
+  mixerChannelContent,
+  sampleToContent,
+} from '../core/audio/audioContent';
+import {
+  spatialChannelTrack,
+  SPATIAL_CHANNEL_IDS,
+  type AudioContentRef,
+} from '../core/session/projectState';
 
 /**
  * spatialMONK – neue schlichte 2D-Scene-UI (WhitePaper Abschnitt 6)
@@ -40,6 +55,16 @@ function azDistFromPointer(nx: number, ny: number): { az: number; dist: number }
 export const SpatialScene = React.memo(function SpatialScene() {
   const { state, lockStatus, updateState } = usePluginState('spatial', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
+  const {
+    spatialAssignments,
+    assignSpatialChannel,
+    releaseSpatialChannel,
+    resetSpatialAssignments,
+    spatialTakeoverRequest,
+    clearSpatialTakeoverRequest,
+  } = useProject();
+  const { samples } = useSamples();
+  const stemSamples = useMemo(() => samples.filter((s) => s.type === 'Stem' && s.url), [samples]);
 
   const [scene, setScene] = useState<SpatialSceneState>(() => {
     const saved = storageGetJson<SpatialSceneState>('spatialmonk-scene');
@@ -51,15 +76,26 @@ export const SpatialScene = React.memo(function SpatialScene() {
   const [status, setStatus] = useState('');
   const [listenerRot, setListenerRot] = useState(scene.global.listenerRot);
   const [routingEnabled, setRoutingEnabled] = useState(false);
+  const [stemPick, setStemPick] = useState('');
 
   const clusterRef = useRef<SpatialCluster | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const lastDragRef = useRef(0);
   const lastSnapshotRef = useRef<SpatialSceneState>(cloneScene(scene));
+  /** Master-Stream-Taps je Spatial-Quelle (from = Master-Bus, to = Worklet-Eingang). */
+  const masterTapRef = useRef<Map<number, { from: AudioNode; to: AudioNode }>>(new Map());
+  /** Monoton steigende Quell-IDs für Übernahmen (auch bei Stem-Batch). */
+  const nextSourceIdRef = useRef(1);
 
   const sources = scene.sources;
   const global = scene.global;
   const selected = useMemo(() => sources.find((s) => s.id === selectedId) ?? null, [sources, selectedId]);
+
+  // Source-ID-Generator oberhalb vorhandener IDs halten (Stem-Batch, Presets).
+  useEffect(() => {
+    const maxId = sources.reduce((m, s) => Math.max(m, s.id), 0);
+    nextSourceIdRef.current = Math.max(nextSourceIdRef.current, maxId + 1);
+  }, [sources]);
 
   // Scene persistieren (Presets & State, WhitePaper Abschnitt 7).
   useEffect(() => {
@@ -158,10 +194,126 @@ export const SpatialScene = React.memo(function SpatialScene() {
 
   const removeSelected = useCallback(() => {
     if (selectedId == null) return;
+    releaseSpatialSource(selectedId);
     clusterRef.current?.removeSource(selectedId);
     setScene((prev) => ({ ...prev, sources: prev.sources.filter((s) => s.id !== selectedId) }));
     setSelectedId(null);
-  }, [selectedId]);
+  }, [selectedId, releaseSpatialSource]);
+
+  /**
+   * Trennt Audio-Routing/Taps einer Spatial-Quelle und gibt eine ggf.
+   * vorhandene geteilte Kanal-Belegung frei.
+   */
+  function releaseSpatialSource(sourceId: number) {
+    const source = scene.sources.find((s) => s.id === sourceId);
+    if (source?.track) {
+      try { audioEngine.routeChannelToSpatialInput(source.track, null); } catch { /* noop */ }
+      const assigned = Object.entries(spatialAssignments).find(
+        ([, a]) => a && spatialChannelTrack(a.channelId) === source.track,
+      );
+      if (assigned) releaseSpatialChannel(Number(assigned[0]));
+    }
+    const tap = masterTapRef.current.get(sourceId);
+    if (tap) {
+      try { tap.from.disconnect(tap.to); } catch { /* noop */ }
+      masterTapRef.current.delete(sourceId);
+    }
+  }
+
+  /**
+   * Übernimmt einen Audioinhalt auf einen freien Spatial-Kanal (1..8).
+   * 1) geteilter Claim (Race-safe), 2) lokale Quelle anlegen, 3) vorhandenes
+   * Audio-Routing nutzen (mixer-Kanal → Worklet-Eingang bzw. Master-Tap).
+   */
+  const applySpatialTakeover = useCallback(
+    (channelId: number, content: AudioContentRef): boolean => {
+      if (lockedByOther) {
+        setStatus('spatialMONK gesperrt');
+        return false;
+      }
+      const track = spatialChannelTrack(channelId);
+      if (scene.sources.some((s) => s.track === track)) {
+        setStatus(`Spatial-Kanal ${channelId} ist lokal belegt`);
+        return false;
+      }
+      const res = assignSpatialChannel(channelId, content);
+      if (!res.ok) {
+        setStatus(`Spatial-Kanal ${channelId} wurde inzwischen belegt`);
+        return false;
+      }
+
+      const id = nextSourceIdRef.current++;
+      const source: SpatialSource = {
+        id,
+        name: content.name,
+        az: 0,
+        el: 0,
+        dist: 1.2,
+        gain: 0.9,
+        muted: false,
+        color: SOURCE_COLORS[(channelId - 1) % SOURCE_COLORS.length],
+        track,
+      };
+      setScene((prev) => ({ ...prev, sources: [...prev.sources, source] }));
+      clusterRef.current?.addSource(source);
+      syncLegacy(source);
+
+      if (routingEnabled && source.track) {
+        const input = clusterRef.current?.sourceInput(source.id);
+        if (input) audioEngine.routeChannelToSpatialInput(source.track, input);
+      }
+
+      if (content.url) {
+        void audioEngine.loadTrackSample(track, content.url).catch(() => { /* URL optional */ });
+      } else if (isStreamContent(content) && content.kind === 'master-stream') {
+        const input = clusterRef.current?.sourceInput(source.id);
+        const master = audioEngine.getMasterBusInput();
+        if (input && master) {
+          try {
+            master.connect(input);
+            masterTapRef.current.set(source.id, { from: master, to: input });
+          } catch { /* Tap nicht möglich */ }
+        }
+      }
+
+      setSelectedId(id);
+      setStatus(`Spatial-Kanal ${channelId} ← ${content.name}`);
+      return true;
+    },
+    [lockedByOther, scene.sources, assignSpatialChannel, routingEnabled, syncLegacy],
+  );
+
+  // Action-Menu-Übernahmeauftrag konsumieren (Master-Stream, Mixer-Kanal,
+  // Samples/Stems über das einheitliche Menü).
+  useEffect(() => {
+    if (!spatialTakeoverRequest) return;
+    applySpatialTakeover(spatialTakeoverRequest.channelId, spatialTakeoverRequest.content);
+    clearSpatialTakeoverRequest();
+  }, [spatialTakeoverRequest, applySpatialTakeover, clearSpatialTakeoverRequest]);
+
+  /** Übernimmt alle vorhandenen Stems auf je einen eigenen freien Spatial-Kanal. */
+  const takeAllStems = useCallback(() => {
+    if (stemSamples.length === 0) {
+      setStatus('Keine Stems vorhanden');
+      return;
+    }
+    const claimed = new Set<number>();
+    let placed = 0;
+    for (const stem of stemSamples) {
+      const free = SPATIAL_CHANNEL_IDS.find(
+        (n) => !claimed.has(n) && !spatialAssignments[n] && !scene.sources.some((s) => s.track === spatialChannelTrack(n)),
+      );
+      if (!free) {
+        setStatus(`Nur ${placed}/${stemSamples.length} Stems platziert – keine freien Kanäle mehr`);
+        return;
+      }
+      if (applySpatialTakeover(free, sampleToContent(stem, 'stem'))) {
+        claimed.add(free);
+        placed++;
+      }
+    }
+    setStatus(`${placed} Stem(s) auf freie Spatial-Kanäle übernommen`);
+  }, [stemSamples, spatialAssignments, scene.sources, applySpatialTakeover]);
 
   const applyGlobal = useCallback((patch: Partial<SpatialSceneState['global']>) => {
     setScene((prev) => {
@@ -215,10 +367,13 @@ export const SpatialScene = React.memo(function SpatialScene() {
   const undo = useCallback(() => {
     const saved = lastSnapshotRef.current ?? storageGetJson<SpatialSceneState>(SNAPSHOT_KEY);
     if (!saved?.sources) return;
+    masterTapRef.current.forEach((tap) => { try { tap.from.disconnect(tap.to); } catch { /* noop */ } });
+    masterTapRef.current.clear();
+    resetSpatialAssignments();
     setScene(cloneScene(saved));
     setSelectedId(null);
     setStatus('Snapshot wiederhergestellt');
-  }, []);
+  }, [resetSpatialAssignments]);
 
   const exportScene = useCallback(() => {
     const json = JSON.stringify(scene, null, 2);
@@ -230,12 +385,15 @@ export const SpatialScene = React.memo(function SpatialScene() {
     if (!preset) return;
     const next = cloneScene(preset);
     clusterRef.current?.reset();
+    masterTapRef.current.forEach((tap) => { try { tap.from.disconnect(tap.to); } catch { /* noop */ } });
+    masterTapRef.current.clear();
+    resetSpatialAssignments();
     setScene(next);
     setListenerRot(next.global.listenerRot);
     next.sources.forEach((s) => { clusterRef.current?.addSource(s); syncLegacy(s); });
     setSelectedId(next.sources[0]?.id ?? null);
     setStatus(`Preset geladen: ${idx + 1}`);
-  }, [syncLegacy]);
+  }, [syncLegacy, resetSpatialAssignments]);
 
   const posStyle = (s: SpatialSource) => {
     const r = Math.min(0.9, s.dist / 2);
@@ -471,6 +629,59 @@ export const SpatialScene = React.memo(function SpatialScene() {
         <button type="button" onClick={exportScene}
           className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
           JSON KOPIEREN
+        </button>
+      </div>
+
+      {/* Takeover-Leiste: vorhandene Live-Streams + Stems über das einheitliche
+          Action-Menu auf freie Spatial-Kanäle übernehmen (kein 3D, kein neues
+          Engine-Feature – nutzt routeChannelToSpatialInput + Master-Bus-Tap). */}
+      <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-1.5 flex-wrap">
+        <Radio className="w-3 h-3 text-lime-400" />
+        <span className="text-[8px] font-mono tracking-[0.2em] text-lime-500">ÜBERNEHMEN</span>
+        <button type="button"
+          onClick={(e) => openAudioActionMenu(masterStreamContent(), e.currentTarget)}
+          className="px-2 py-1 rounded border border-lime-500/40 bg-lime-500/10 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/20 cursor-pointer"
+          title="Master-Player-Stream auf einen freien Spatial-Kanal übernehmen"
+        >
+          MASTER
+        </button>
+        {ALL_TRACKS.map((t) => (
+          <button type="button"
+            key={t}
+            onClick={(e) => openAudioActionMenu(mixerChannelContent(t), e.currentTarget)}
+            className="px-1.5 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer"
+            title={`MixerMONK ${t.toUpperCase().replace('CHANNEL', 'K')} auf freien Spatial-Kanal übernehmen`}
+          >
+            {t.replace('channel', 'K')}
+          </button>
+        ))}
+        <select
+          value={stemPick}
+          onChange={(e) => setStemPick(e.target.value)}
+          className="bg-black text-neutral-400 text-[9px] p-1 rounded border border-neutral-700 max-w-[140px]"
+          title="Vorhandenen Stem wählen (aus stemMONK/Library)"
+        >
+          <option value="">Stem…</option>
+          {stemSamples.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <button type="button"
+          disabled={!stemPick}
+          onClick={(e) => {
+            const stem = stemSamples.find((s) => s.id === stemPick);
+            if (stem) openAudioActionMenu(sampleToContent(stem, 'stem'), e.currentTarget);
+          }}
+          className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 disabled:opacity-40 cursor-pointer"
+          title="Einzelnen Stem über das Action-Menu übernehmen"
+        >
+          STEM
+        </button>
+        <button type="button"
+          onClick={takeAllStems}
+          disabled={stemSamples.length === 0}
+          className="px-2 py-1 rounded border border-lime-500/40 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/10 disabled:opacity-40 cursor-pointer"
+          title="Alle vorhandenen Stems auf je einen eigenen freien Spatial-Kanal legen"
+        >
+          ALLE STEMS
         </button>
         {status && <span className="text-[9px] font-mono text-lime-400">{status}</span>}
       </div>
