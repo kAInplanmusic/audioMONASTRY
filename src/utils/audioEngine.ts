@@ -21,6 +21,7 @@ import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
 import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
+import { V2StudioGraph } from '../core/audio/V2StudioGraph';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
@@ -1859,6 +1860,30 @@ class AudioEngine {
   public setPlaybackMode(mode: 'v1' | 'v2'): void {
     this.playbackMode = mode;
     if (mode === 'v2') this.stop();
+  }
+
+  // NEW-D4-1: V2-StudioGraph (backend-unabhängiger 8-Kanal-Mischpfad).
+  public v2Studio = new V2StudioGraph();
+
+  /** Rendert einen V2-Block (128 Samples Stereo) durch den Graph. */
+  public renderV2Block(): Float32Array[] | null {
+    try {
+      const sr = this.ctx?.sampleRate ?? 48000;
+      return this.v2Studio.render({ sampleRate: sr, bufferSize: 128, quantum: 128 / sr, currentTime: Tone.now() });
+    } catch {
+      return null;
+    }
+  }
+
+  /** V1-Zustand in den V2-Graph spiegeln (Hybrid-Betrieb, Meilenstein hörbar). */
+  public syncV2FromV1(): void {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
+      const db = this.channelGains[t]?.volume.value ?? 0;
+      const pan = this.channelPans[t]?.pan.value ?? 0;
+      this.v2Studio.setGainDb(t, db);
+      this.v2Studio.setPan(t, pan);
+    });
+    this.v2Studio.setMasterGain(Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20));
   }
 
   /** Exportiert den kompletten hörbaren Zustand als JSON-fähiges Objekt. */

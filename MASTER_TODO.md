@@ -281,7 +281,7 @@
 
 ### Neue Tasks aus den Entscheidungen
 
-- [ ] **NEW-D4-1** V2-AudioGraph als eigenes Arbeitspaket mit hoher Priorität weiterführen (nicht einfrieren); Meilenstein „V2-Minimum hörbar“ – Priorität bestätigt 2026-09-01: V2 parallel mit hoher Priorität; falls später nur V2 → absoluter Fokus, falls hybrid → beide mit hoher Priorität
+- [x] **NEW-D4-1** V2-AudioGraph: `V2StudioGraph` (Source→Gain→Pan→MasterSum, 8 Kanäle, NaN/Soft-Clip), `MasterSumNode`, Hybrid-Anbindung an `audioEngine` (`renderV2Block`, `syncV2FromV1`), Tests `tests/v2AudioGraph.test.ts` → TASKDONE.
 
 ---
 
