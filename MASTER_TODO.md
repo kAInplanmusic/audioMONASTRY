@@ -45,9 +45,9 @@
 
 - [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern.
 
-### NEW-MONK-7 spatialMONK – offen
+### NEW-MONK-7 spatialMONK
 
-- [ ] WASM partitioned-FFT-HRTF-Convolution (optional, high-end; aktuell JS-FIR-Kernel + JSON-HRTF-Loader)
+- [x] komplett erledigt inkl. WASM-FFT-HRTF → siehe TASKDONE.md
 
 ### NEW-MONK-8 MONASTRYmasterclock (unsichtbares Systemmodul)
 

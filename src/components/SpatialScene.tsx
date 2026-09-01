@@ -196,10 +196,13 @@ export const SpatialScene = React.memo(function SpatialScene() {
     setRoutingEnabled(enabled);
   }, [scene.sources]);
 
-  /** Folgeschritt 2: HRTF-Kernel laden (JSON {left:[], right:[]}). */
+  /** Folgeschritt 2: HRTF-Kernel + WASM-partitioned-FFT-Konvolver laden. */
   const loadDefaultHrtf = useCallback(async () => {
-    const ok = await clusterRef.current?.loadHrtf('/hrtf/default.json');
-    setStatus(ok ? 'HRTF-Kernel geladen' : 'HRTF nicht verfügbar – Built-in-Kernel aktiv');
+    const cluster = clusterRef.current;
+    if (!cluster) return;
+    await cluster.loadHrtf('/hrtf/default.json');
+    const wasmOk = await cluster.loadHrtfWasm('/hrtf/hrtf_conv.wasm');
+    setStatus(wasmOk ? 'WASM-FFT-HRTF aktiv (high)' : 'WASM nicht verfügbar – JS-FIR-Kernel aktiv');
   }, []);
 
   const snapshot = useCallback(() => {

@@ -127,6 +127,15 @@ export class SpatialProcessor extends WorkletBase {
   private hrtfLeft: Float32Array | null = null;
   private hrtfRight: Float32Array | null = null;
   private hrtfTaps = 0;
+  // WASM partitioned-FFT-HRTF (high quality)
+  private wasm: any = null;
+  private wasmReady = false;
+  private wasmInL: Float32Array | null = null;
+  private wasmInR: Float32Array | null = null;
+  private wasmOutL: Float32Array | null = null;
+  private wasmOutR: Float32Array | null = null;
+  private wasmIrL: Float32Array | null = null;
+  private wasmIrR: Float32Array | null = null;
 
   constructor() {
     super();
@@ -257,6 +266,23 @@ export class SpatialProcessor extends WorkletBase {
             this.hrtfRight[i] = right[i];
           }
           this.hrtfTaps = taps;
+          this.applyHrtfToWasm();
+        }
+        break;
+      }
+      case 'loadHRTFWasm': {
+        const module = m.module;
+        if (module) {
+          void WebAssembly.instantiate(module, {}).then((inst) => this.initWasm(inst)).catch((e) => {
+            console.warn('[spatialProcessor] WASM-HRTF-Instanziierung fehlgeschlagen:', e);
+          });
+        } else if (typeof m.url === 'string') {
+          void fetch(m.url)
+            .then((r) => (typeof WebAssembly.instantiateStreaming === 'function'
+              ? WebAssembly.instantiateStreaming(r, {})
+              : r.arrayBuffer().then((b) => WebAssembly.instantiate(b, {}))))
+            .then((res) => this.initWasm(res.instance ?? res))
+            .catch((e) => console.warn('[spatialProcessor] WASM-HRTF-Laden fehlgeschlagen:', e));
         }
         break;
       }
@@ -284,6 +310,48 @@ export class SpatialProcessor extends WorkletBase {
       0.02 + active * (this.quality === 'low' ? 0.03 : this.quality === 'medium' ? 0.06 : 0.14),
     );
     this.port.postMessage({ cmd: 'metrics', cpuEstimate, activeSources: active, quality: this.quality });
+  }
+
+  /** Initialisiert den WASM-partitioned-FFT-Konvolver (Block 128, IR ≤ 1024). */
+  private initWasm(instance: any): void {
+    const e = instance?.exports;
+    if (!e || typeof e.hrtf_init !== 'function') return;
+    if (e.hrtf_init(128, 1024) !== 0) return;
+    const mem: ArrayBuffer = (e.memory as WebAssembly.Memory).buffer;
+    // Statische Puffer: IN_L/IN_R/OUT_L/OUT_R je 128 f32 (512 Bytes).
+    this.wasmInL = new Float32Array(mem, e.in_l_ptr(), 128);
+    this.wasmInR = new Float32Array(mem, e.in_r_ptr(), 128);
+    this.wasmOutL = new Float32Array(mem, e.out_l_ptr(), 128);
+    this.wasmOutR = new Float32Array(mem, e.out_r_ptr(), 128);
+    // IR-Puffer nach den statischen Puffern (16-Byte-aligned).
+    const irBase = (e.out_r_ptr() + 512 + 15) & ~15;
+    const needed = irBase + 1024 * 4 * 2;
+    const pages = Math.ceil(needed / 65536);
+    const currentPages = mem.byteLength / 65536;
+    if (pages > currentPages) e.memory.grow(pages - currentPages);
+    const memAfter: ArrayBuffer = (e.memory as WebAssembly.Memory).buffer;
+    this.wasmInL = new Float32Array(memAfter, e.in_l_ptr(), 128);
+    this.wasmInR = new Float32Array(memAfter, e.in_r_ptr(), 128);
+    this.wasmOutL = new Float32Array(memAfter, e.out_l_ptr(), 128);
+    this.wasmOutR = new Float32Array(memAfter, e.out_r_ptr(), 128);
+    this.wasmIrL = new Float32Array(memAfter, irBase, 1024);
+    this.wasmIrR = new Float32Array(memAfter, irBase + 1024 * 4, 1024);
+    this.wasm = instance;
+    this.wasmReady = true;
+    this.applyHrtfToWasm();
+    this.port.postMessage({ cmd: 'metrics', wasmReady: true });
+  }
+
+  /** Kopiert geladene HRTF-Kernel in den WASM-Speicher. */
+  private applyHrtfToWasm(): void {
+    if (!this.wasmReady || !this.wasm || !this.wasmIrL || !this.wasmIrR || !this.hrtfLeft || !this.hrtfRight) return;
+    const taps = Math.min(1024, this.hrtfTaps);
+    this.wasmIrL.fill(0);
+    this.wasmIrR.fill(0);
+    this.wasmIrL.set(this.hrtfLeft.subarray(0, taps));
+    this.wasmIrR.set(this.hrtfRight.subarray(0, taps));
+    const e = this.wasm.exports;
+    e.hrtf_set_ir(this.wasmIrL.byteOffset, this.wasmIrR.byteOffset, taps);
   }
 
   private stepRamps(s: SpatialProcessorSource): void {
@@ -323,6 +391,8 @@ export class SpatialProcessor extends WorkletBase {
 
     const useFir = this.quality !== 'low';
     const kernels = useFir ? this.currentKernels() : null;
+    const useWasm = this.quality === 'high' && this.wasmReady && n === 128
+      && this.wasmInL && this.wasmInR && this.wasmOutL && this.wasmOutR && this.wasm;
 
     for (let i = 0; i < this.sources.length; i++) {
       const s = this.sources[i];
@@ -331,6 +401,26 @@ export class SpatialProcessor extends WorkletBase {
       if (!input || input.length === 0) continue;
       const inCh = input[0];
       if (!inCh) continue;
+
+      if (useWasm) {
+        // High + WASM: partitioned-FFT-HRTF-Faltung pro Block
+        const mem: ArrayBuffer = this.wasm.exports.memory.buffer;
+        const wInL = new Float32Array(mem, this.wasm.exports.in_l_ptr(), 128);
+        const wInR = new Float32Array(mem, this.wasm.exports.in_r_ptr(), 128);
+        const wOutL = new Float32Array(mem, this.wasm.exports.out_l_ptr(), 128);
+        const wOutR = new Float32Array(mem, this.wasm.exports.out_r_ptr(), 128);
+        wInL.set(inCh.length === 128 ? inCh : inCh.subarray(0, 128));
+        wInR.set(wInL);
+        this.wasm.exports.hrtf_process(128);
+        for (let j = 0; j < n; j++) {
+          this.stepRamps(s);
+          const gains = azToStereoGains(s.azCurrent, this.listenerRot);
+          const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
+          outL[j] += wOutL[j] * gains.left * g;
+          outR[j] += wOutR[j] * gains.right * g;
+        }
+        continue;
+      }
 
       for (let j = 0; j < n; j++) {
         this.stepRamps(s);
