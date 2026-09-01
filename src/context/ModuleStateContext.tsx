@@ -4,6 +4,7 @@ import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
 import { routeModuleState } from '../core/pluginAudioRouter';
 import { can, roleForUser, readSessionConfig } from '../utils/rbac';
+import { setAiModeActive } from '../core/ai/aiMode';
 
 export type ModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
 
@@ -54,6 +55,8 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // P0-2: Audio-Routing an den PluginAudioRouter delegieren
     // (OFF = Signalkette trennen, AUTO_AI/PRO = Einspeisung).
     routeModuleState(id, state);
+    // NEW-D1-3: AI-Modus-Flag für Halter-Wechsel (mixerMONK) synchron halten.
+    if (id === 'ai') setAiModeActive(state !== 'OFF');
     // Replikation an alle Peers (bestehender Kollaborations-Kanal).
     webRTCManager.sendToAllPeers({
       type: 'PLUGIN_STATE_UPDATE',
@@ -92,6 +95,8 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setModuleStates(prev => (prev[pluginId] === state ? prev : { ...prev, [pluginId]: state }));
       // P0-2: Auch fremde Zustandswechsel im Audio-Routing nachziehen.
       routeModuleState(pluginId, state);
+      // NEW-D1-3: AI-Modus-Flag auch für fremde Updates synchron halten.
+      if (pluginId === 'ai') setAiModeActive(state !== 'OFF');
     });
   }, []);
 

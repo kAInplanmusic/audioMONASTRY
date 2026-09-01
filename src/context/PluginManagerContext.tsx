@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { LockStatus } from '../plugins/types';
+import { isAiModeActive } from '../core/ai/aiMode';
 
 /** Default lock TTL: 5 minutes */
 const DEFAULT_LOCK_TTL = 5 * 60 * 1000;
@@ -48,6 +49,15 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     const now = Date.now();
     const prev = locksRef.current;
     const lock = prev[pluginId];
+    // NEW-D1-3: Halter-Wechsel für mixerMONK nur im AI-Modus erlaubt.
+    // In diesem Fall darf ein anderer User den Mixer-Lock übernehmen.
+    if (pluginId === 'mixer' && isAiModeActive() && lock && lock.active && lock.lockedBy !== userId) {
+      commit({
+        ...prev,
+        [pluginId]: { lockedBy: userId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
+      });
+      return true;
+    }
     if (lock && lock.active && lock.lockedBy !== userId) {
       const ttl = lock.ttl ?? DEFAULT_LOCK_TTL;
       if (now - lock.timestamp <= ttl) {

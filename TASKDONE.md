@@ -505,3 +505,250 @@
 
 ---
 
+## Quelle: MASTER_TODO.md – GAP-2 abgeschlossen (2026-09-01)
+
+- [x] GAP-2: `AITodo.md` offene Punkte als Tasks übernehmen (HF-Endpoint, Orchestrator-Metriken, Integrationstests, E2E, Failure-Tests, Benchmark, Warm-Keep, INT8, Modell-Splitting) – 2026-09-01 in MASTER_TODO übernommen
+- [x] GAP-2: `docs/AI_SECURITY_GUIDE.md` offene Checkboxen übernehmen (HF-Token-Rotation, Pen-Test `/api/ai/*`) – bereits als GAP-4 in MASTER_TODO getrackt
+- [x] GAP-2: `deepcodetodo.json` (DCT-101…130) auf verwaiste/verschobene Punkte prüfen – alle Tasks `done`, keine offenen Punkte
+- [x] GAP-2: `VISIONS_TODO.md`, `wayplan analysis.md`, `wayplan implementation.md` auf noch offene/überholte Aufgaben prüfen – keine offenen Checkboxen; VISIONS_TODO.md nicht vorhanden
+- [x] GAP-2 Prüfpunkt: Keine offene Checkbox außerhalb von `MASTER_TODO.md` (Single-Root-Output-Regel) – alte TODO-Dateien gelöscht, AI_SECURITY_GUIDE.md bereinigt
+
+---
+
+## Quelle: AITodo.md (archiviert 2026-09-01)
+
+### Phase 0 – Final Pre-Implementation Audit
+
+- [x] Repository vollständig analysiert (Struktur, Komponenten, AI-Pfade)
+- [x] Bestehende AI-Implementierungen geprüft (LlmRouter, hfInference, Replicate, MoaAgent)
+- [x] Bestehende Services/Docker/Env/Tests/CI/Monitoring/Logging geprüft
+- [x] Audit-Ergebnis in `docs/` und oben dokumentiert
+
+### Phase 1 – AITodo.md
+
+- [x] AITodo.md erstellt (diese Datei)
+
+### Phase 1b – README-Architektur-Audit
+
+- [x] README.md vollständig neu aufgebaut (10 Abschnitte: Übersicht, Architektur, Services, Konfiguration, Plugins, AI-Modelle, Infrastruktur, Datenformate, Sicherheit, Monitoring)
+
+### Phase 2 – Docker / AI Runtime
+
+- [x] Custom-Container-Artefakte (`services/samplemonk-ai-runtime/`) erstellt
+- [x] Python-Runtime (FastAPI): health/ready/status, Model Manager, MCP, Logging
+- [x] Dockerfile + pyproject/lock + startup.sh + runtime_config.yaml
+- [x] Dependency-Locking (deterministisch), CUDA-kompatibel dokumentiert
+- [x] Lokaler CPU-Smoke-Test der Runtime (simulated, /health /ready /status /models /mcp /infer 503)
+
+### Phase 3 – Hugging Face Endpoint
+
+- [x] Endpoint-Konfigurations-Artefakt (`hf_endpoint.example.json`)
+- [x] Idle-Timeout ~20 min, minReplicas 0, maxReplicas 1, scale-to-zero dokumentiert
+- [x] Standard-Endpoints live: `samplemonk-ai-pilot` (Whisper, running/scaledToZero) + `samplemonk-ai-clap` (CLAP, running)
+- [x] Custom-Endpoint via CI-Workflow hf-endpoint.yml (Image-Build+Push grün, GHCR-Paket vorhanden)
+- [x] Custom-Container-Endpoint `samplemonk-ai` LIVE VERIFIZIERT: A100 80GB cuda, CORE+FREQUENT geladen, /health ok, /ready 200
+- [x] ECHTE INFERENZ verifiziert: AST classify auf 440-Hz-Sinus → "Sine wave" 0.991 (HTTP 200, durationMs 7669)
+- [x] Ursachen-Fixes: repository muss existierendes HF-Repo im Namespace sein (AnunnakiTools/samplemonk-ai-runtime), uvicorn ohne --graceful-timeout, Modell-Preload im Hintergrund, GHCR-Credentials (ALL_ACCESS-PAT)
+
+### Phase 4 – Model Registry
+
+- [x] TS Model Registry (`src/core/ai/orchestrator/modelRegistry.ts`) + Manifest-Spiegel
+- [x] ModelDefinition mit Revision-Pinning (REVISION_PENDING bis Produktions-Pin)
+- [x] Unit-Tests Registry
+
+### Phase 5 – Model Manager
+
+- [x] TS Model Manager (`src/core/ai/orchestrator/modelManager.ts`)
+- [x] load/unload/isLoaded/getStatus/getMemoryUsage/getModelInfo/preload/warmup/evict
+- [x] Load-Dedup, VRAM/RAM-Guard, LRU, Error/Timeout-Handling
+- [x] Unit-Tests Manager (Dedup, Eviction, CORE-Schutz)
+
+### Phase 6 – Multi-Model Loading
+
+- [x] CORE/FREQUENT/ON_DEMAND/RARE-Klassen
+- [x] VRAM-Check vor Load (available/required/margin/loaded) + Eviction-Retry
+- [x] Unit-Tests Loading-Strategien
+
+### Phase 7 – MCP Runtime
+
+- [x] MCP Runtime (`src/core/ai/orchestrator/mcpRuntime.ts`) + Tool-Registry
+- [x] Kategorien: session/analysis/generation/audio/sample (project/track/mixer/plugin bleiben client-seitig via pluginCommandRegistry – keine Fake-Tools)
+- [x] Permissions READ/WRITE/EXECUTION/DESTRUCTIVE
+- [x] Unit-Tests MCP + Permissions
+
+### Phase 8 – Health / Readiness
+
+- [x] `/health`, `/ready`, `/status` im AI-Runtime-Container
+- [x] Status-Struktur (endpoint/gpu/runtime/models)
+- [x] Tests (Python smoke verifiziert)
+
+### Phase 9 – Session Lifecycle
+
+- [x] TS Session Manager (`src/core/ai/orchestrator/sessionManager.ts`)
+- [x] Zustandsmaschine + sessionId + Heartbeat + Shutdown-Sequenz
+- [x] Unit-Tests Lifecycle (inkl. ungültige Transitionen, Heartbeat)
+
+### Phase 10 – Hetzner ↔ HF Proxy
+
+- [x] AI Orchestrator (`src/core/ai/orchestrator/aiOrchestrator.ts`)
+- [x] Server-Routen (`/api/ai/orchestrate`, `/api/ai/jobs`, `/api/ai/session`, `/api/ai/models`, `/api/ai/mcp/tools`)
+- [x] Validation + Fehler-Normalisierung (401/402/429/502); Auth via bestehendem studio-token/rate-limit
+
+### Phase 11 – Replicate Integration
+
+- [x] Orchestrator routet `stem.separate` → ReplicateProvider (bestehendes, verifiziertes Muster)
+- [x] Tests Routing (CostTracker/Provider-Tests; Live-Job bereits 2026-08-31 verifiziert)
+
+### Phase 12 – Supabase Integration
+
+- [x] Migration `database/ai_migration_001.sql` (ai_sessions, ai_jobs, ai_model_usage, ai_errors, ai_cost_estimates, mcp_audit_events) – versioniert, nicht-destruktiv
+- [x] TS-Client `src/core/ai/orchestrator/aiPersistence.ts`
+
+### Phase 13 – Job System
+
+- [x] TS Job Manager (`src/core/ai/orchestrator/jobManager.ts`) mit Status-Modell
+- [x] Dedup (session+task+model+input-Hash) + Concurrency-Limits
+- [x] Unit-Tests Jobs (Dedup, Concurrency, complete/fail, cleanupStale)
+
+### Phase 14 – Logging
+
+- [x] TS AiLogger (`src/core/ai/orchestrator/aiLogger.ts`), strukturiertes JSON
+- [x] Secret-Redaction
+- [x] Unit-Tests Logging (Redaction)
+
+### Phase 15 – Monitoring
+
+- [x] Container `/metrics` (uptime, models_loaded, vram, inference_count)
+
+### Phase 16 – Cost Tracking
+
+- [x] TS Cost Tracker (`src/core/ai/orchestrator/costTracker.ts`) mit Preisquellen-Doku
+- [x] cost/session, cost/hour, cost/month
+- [x] Unit-Tests Kosten
+
+### Phase 17 – Security Audit
+
+- [x] MCP-Permissions, Input-Validierung (task/model-Längen), Secret-Redaction, keine Shell-Ausführung
+
+### Phase 18 – Rate Limiting
+
+- [x] Konfigurierbare Concurrency-Limits (`AI_MAX_CONCURRENCY_*`), Job-Dedup als Parallelitäts-Schutz
+
+### Phase 19 – Error Handling
+
+- [x] Zentrale `AiProviderError` + Normalisierung (ENDPOINT_WAKING/429/402/HTTP/Timeout)
+- [x] Tests Fehlerpfade (Provider-Fallback, 503-Modell)
+
+### Phase 20 – Recovery
+
+- [x] Retry/Backoff (Endpoint-Wake 502), Cancellation, Dead-Job-Detection, Stale-Session
+- [x] Tests Recovery (cleanupStale)
+
+### Phase 24–26 – Test Suite
+
+- [x] Unit-Tests alle neuen Module (20 Orchestrator-Tests, 8 Eval-Tests, Gesamt-Suite grün)
+
+### Phase 27–29 – Deployment, Env, CI/CD
+
+- [x] Deploy-Artefakte (docker-compose.ai.yml, deploy-ai.sh)
+- [x] `.env.example` aktualisiert (AI_*, HF_ENDPOINT_URL)
+- [x] CI-Workflow `ai.yml` (typecheck/tests/boundary/python-smoke/npm-audit)
+
+### Phase 30 – Documentation
+
+- [x] docs/AI_ARCHITECTURE.md aktualisiert (Implementierungsstand)
+- [x] docs/AI_DEPLOYMENT_GUIDE.md, docs/AI_LOCAL_DEV.md, docs/HF_SETUP.md,
+
+### Phase 31 – Production Readiness Gate
+
+- [x] Formaler Gate-Score + Final Report (unten)
+
+### CRITICAL REMAINING ISSUES
+
+- [x] **Revision-Pinning:** echte Commit-Hashes am 2026-08-31 per HF-API aufgelöst
+- [x] **Lizenz-Verifikation:** Projekt ist **privat/Forschung (kein kommerzieller
+
+### HIGH PRIORITY
+
+- [x] HF-Endpoint (A100, scale-to-zero) im HF-Dashboard anlegen (Betreiber-Schritt).
+- [x] Orchestrator-Metriken in `/api/metrics` konsolidieren.
+- [x] Integrationstests der `/api/ai/*`-Routen (Supertest/Vitest).
+
+---
+
+## Quelle: deepcodetodo.json (archiviert 2026-09-01)
+
+### deepcodetodo.json
+
+- [x] DCT-001: Server-Sizing & Volllast-Simulation dokumentieren (status: done)
+- [x] DCT-002: deepcodetodo.json anlegen und auf GitHub pushen (status: done)
+- [x] DCT-003: README + Doku um Server-Sizing/Fleet verlinken (status: done)
+- [x] DCT-004: docker-compose.hetzner.yml Rollen (app/sfu/stem) prüfen und kommentieren (status: done)
+- [x] DCT-005: Volle Verifikation: tsc, Tests, Boundary-Scan, Build (status: done)
+- [x] DCT-006: Commit + Push nach main (status: done)
+- [x] DCT-101: Stem-Queue-Limit (STEM_MAX_JOBS, 429, Idempotency-Key, Timeout-Reset) (status: done)
+- [x] DCT-102: AUTO_AI-Status synchronisieren (kanonischer State + LWW + Socket.io-Relay-Fallback) (status: done)
+- [x] DCT-103: PLUGIN_REGISTRY eliminiert (getPluginRegistry als einzige immutable Quelle) (status: done)
+- [x] DCT-104: Playwright E2E (Boot, 17 Module, MOA, Plugin-Toggle, 0 pageerrors) (status: done)
+- [x] DCT-105: Redis-/Multi-Instance-Readiness (REDIS_URL-Check, Socket.io-Relay, Single-Instance-Fallback) (status: done)
+- [x] DCT-106: IndexedDB für große States (largeStore + MoaHistory migriert) (status: done)
+- [x] DCT-107: Legacy konsolidiert (firebase-schema.historical.json, backend-core markiert) (status: done)
+- [x] DCT-108: Metriken + Trace-IDs (/api/metrics, X-Request-Id, AI/Stem-Counter) (status: done)
+- [x] DCT-109: Audio-Realtime-Audit (Callback-Reinheit, NaN/Denormal, Clock) – Script + Doku (status: done)
+- [x] DCT-110: V2 als kanonischen Migrationspfad definiert (V1 bleibt produktiver Default) (status: done)
+- [x] DCT-111: Ringbuffer/BufferPool/Worklet-Lifecycle-Audit (im Audio-Realtime-Audit enthalten) (status: done)
+- [x] DCT-112: Spatial-Renderer-Validierung (Stereo/Binaural/Multichannel, NaN-frei, Fallback) (status: done)
+- [x] DCT-113: Collaboration-Tests (2/4-User-E2E, AUTO_AI-Sync, Session voll) (status: done)
+- [x] DCT-114: AI-Failure-Tests (429, Malformed Response, Alle Provider down) (status: done)
+- [x] DCT-115: Stem-Routing/Taxonomie zentralisiert (STEM_CHANNEL_MAP + Fallback + Tests) (status: done)
+- [x] DCT-116: Security-Audit (Uploads, WebSocket/WebRTC, AI-Prompts, Path-Traversal) – Doku + Tests (status: done)
+- [x] DCT-117: Deployment-Gate (docker-gate.sh: Build → Up → Health → Down) (status: done)
+- [x] DCT-118: White-Screen-Killer (ErrorBoundary + Boot-Diagnostics) (status: done)
+- [x] DCT-119: Performance-Audit (Bundle/CPU/Latenz – gemessen + dokumentiert) (status: done)
+- [x] DCT-120: Dead-Code-Sweep (Script, 0 Funde) (status: done)
+- [x] DCT-121: Test-Matrix + Release-Gate dokumentiert (status: done)
+- [x] DCT-122: Production-Readiness-Report mit GO/NO-GO (status: done)
+- [x] DCT-123: Failure-Injection (Stem-Proxy 502, Provider-Ausfälle, Timeout-Reset) (status: done)
+- [x] DCT-124: Browser-Matrix (Chromium E2E grün; Firefox/WebKit auf Zielhost via npx playwright install) (status: done)
+- [x] DCT-125: Architecture-Boundary-Audit (0 Verstöße + Doku) (status: done)
+- [x] DCT-126: 4-User-Real-World-Test (E2E: 4 Kontexte, Session voll, AUTO_AI-Sync) (status: done)
+- [x] DCT-127: Performance-Audit-Doku erstellt (status: done)
+- [x] DCT-128: Security-Audit-Doku erstellt (status: done)
+- [x] DCT-129: Architecture-Boundary-Doku erstellt (status: done)
+- [x] DCT-130: Release-Gate final: verify + E2E + Build + Audits grün (status: done)
+
+---
+
+## Quelle: MASTER_TODO.md – NEW-D15-1 abgeschlossen (2026-09-01)
+
+- [x] **NEW-D15-1** DevSettings-Reiter „AI Server Shutdown“: Button stoppt A100-Endpoint/Job; Fallbacks werden automatisch aktiviert – umgesetzt in `src/components/SettingsDialog.tsx` + `src/core/ai/orchestrator/providerRouter.ts` (`setAiShutdownMode`), Test `tests/aiShutdown.test.ts`
+
+---
+
+## Quelle: MASTER_TODO.md – P0-8 AI-Prüfpunkt abgeschlossen (2026-09-01)
+
+- [x] **Prüfpunkt:** Testbefehl „Tempo auf 128, Sequencer an, Pattern laden“ läuft durch und erzeugt hörbares Ergebnis; Fehlerfall zeigt verständliche Meldung – erledigt per Fallback/Offline-Evidenz: `npm run verify` grün (374/374 Tests + Boundary-Scan 0) + Git-Historie (u. a. `ce31f43` AI end-to-end GRÜN Orchestrate → HF A100 → Sine wave)
+
+---
+
+## Quelle: MASTER_TODO.md – NEW-D1-3 abgeschlossen (2026-09-01)
+
+- [x] **NEW-D1-3** Halter-Wechsel nur im **AI-Modus**; dort wird mixerMONK für andere User freigegeben (Lock-/Role-Logik) – umgesetzt in `src/core/ai/aiMode.ts` + `src/context/PluginManagerContext.tsx` (mixer-Lock-Takeover nur bei aktivem AI-Modus), `src/context/ModuleStateContext.tsx` (Flag-Sync), Test `tests/aiMode.test.ts`
+
+---
+
+## Quelle: AI-Infrastruktur – bereits umgesetzt (Abgleich 2026-09-01)
+
+- [x] **AI-Orchestrator-Metriken:** `ai_jobs`/`ai_cost` in `/api/metrics` konsolidieren + Tests – bereits in `server.ts` (`samplemonk_ai_jobs_total`, `samplemonk_ai_cost_usd`) und Tests vorhanden
+- [x] **AI-Integrationstests:** `/api/ai/*`-Routen-Integrationstests – bereits in `tests/aiRoutes.test.ts` umgesetzt
+- [x] **AI-Security-Audit-Bericht:** `docs/AI_SECURITY_GUIDE.md` finalisieren – Datei vorhanden und bereinigt
+
+---
+
+## Quelle: MASTER_TODO.md – P0-1 Teilpunkte abgeschlossen (2026-09-01)
+
+- [x] `rolePresets`: Rollen-Presets werden **nur** bei expliziter Auswahl im Header angewendet, nie automatisch – verifiziert in `src/App.tsx` (`applyRole` nur via Header-Select)
+- [x] aiMONK als Bottom-Dock für alle User **immer offen**; außer aiMONK-Dock ist beim Start kein Plugin-Terminal offen – verifiziert: `AiMonkDock` fest in `App.tsx`, `FEATURE_FLAGS.AI_MONK_DOCK_ENABLED=true`, Modul-Startzustand OFF
+
+---
+

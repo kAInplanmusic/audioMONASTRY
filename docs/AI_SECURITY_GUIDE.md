@@ -22,6 +22,6 @@
 
 ## Offene Punkte (vor Produktion)
 
-- [ ] HF-Token-Rotation dokumentieren (Endpoint-Secret)
-- [ ] Pen-Test der neuen Routen (`/api/ai/*`)
+- HF-Token-Rotation dokumentieren (Endpoint-Secret) → getrackt in `MASTER_TODO.md` GAP-4
+- Pen-Test der neuen Routen (`/api/ai/*`) → getrackt in `MASTER_TODO.md` GAP-4
 - [x] Lizenz-Verifikation: privat/Forschung, CC-BY-NC ok (2026-08-31)
