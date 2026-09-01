@@ -447,24 +447,12 @@ function AppComponent() {
             {isPlaying ? <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse mr-1" /> : null}
             {bpm} BPM
           </span>
-          <div className="ml-auto flex items-center gap-2">
-            <button type="button"
-              disabled={isPlaying}
-              onClick={() => { audioEngine.play(); setIsPlaying(true); }}
-              aria-label={isPlaying ? 'Wiedergabe läuft' : 'Wiedergabe starten'}
-              className="px-4 py-1.5 rounded-full bg-cyan-500/12 border border-cyan-500/50 text-cyan-200 text-xs font-bold tracking-widest uppercase hover:bg-cyan-500/25 hover:shadow-[0_0_20px_-6px_var(--monk-glow-teal)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
-            >
-              {isPlaying ? '▶ Läuft' : '▶ Play'}
-            </button>
-            <button type="button"
-              onClick={() => { audioEngine.stop(); setIsPlaying(false); }}
-              disabled={!isPlaying}
-              aria-label="Wiedergabe stoppen"
-              className="px-4 py-1.5 rounded-full bg-fuchsia-500/12 border border-fuchsia-500/50 text-fuchsia-200 text-xs font-bold tracking-widest uppercase hover:bg-fuchsia-500/25 hover:shadow-[0_0_20px_-6px_rgba(217,70,239,0.5)] transition-all duration-200 disabled:opacity-40 enabled:cursor-pointer disabled:cursor-not-allowed active:scale-95"
-            >
-              ⏹ Stop
-            </button>
-          </div>
+          <span className="text-[9px] font-mono tracking-widest text-neutral-400 border border-white/10 rounded px-2 py-0.5">
+            KEY {TECHNO_PRESETS[0]?.key ?? '—'}
+          </span>
+          <span className="text-[9px] font-mono tracking-widest text-neutral-400 border border-white/10 rounded px-2 py-0.5">
+            4/4 · SOUND MAIN
+          </span>
         </div>
         <div className="px-3 pb-3 border-t border-white/5">
           <BeatVisualizer isPlaying={isPlaying} />

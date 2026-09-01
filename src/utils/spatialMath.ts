@@ -15,7 +15,10 @@ export interface SpatialSetup {
 
 export const SPATIAL_SETUPS: SpatialSetup[] = [
   { id: '2.0',   label: '2.0 (Stereo)',         numChannels: 2, lfe: 0 },
+  { id: '2.2',   label: '2.2 (Stereo + 2×LFE)', numChannels: 2, lfe: 2 },
   { id: '4.0',   label: '4.0 (Quad)',           numChannels: 4, lfe: 0 },
+  { id: '4.1',   label: '4.1 (Quad + LFE)',     numChannels: 4, lfe: 1 },
+  { id: '4.2',   label: '4.2 (Quad + 2×LFE)',   numChannels: 4, lfe: 2 },
   { id: '6.0',   label: '6.0 (5.1 ohne LFE)',   numChannels: 6, lfe: 0 },
   { id: '8.0',   label: '8.0',                  numChannels: 8, lfe: 0 },
   { id: '10.0',  label: '10.0',                 numChannels: 10, lfe: 0 },
