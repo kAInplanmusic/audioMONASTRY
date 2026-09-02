@@ -188,7 +188,7 @@
 
 - [ ] `React.memo`/stabile Handler für alle Terminals prüfen (UI-Audit nachziehen); Bundle-Diät (lucide tree-shaken, Tone-Chunks).
 - [ ] Worklet-CPU-Budgets im PerformanceMonitor; unter 4-User-Last keine Dropouts.
-- [ ] **Prüfpunkt:** Playwright-Stress-Test grün; Bundle < 1,5 MB JS.
+- [x] **Prüfpunkt:** Playwright-Stress-Test grün; Bundle < 1,5 MB JS → Stress-Test grün (`npm run test:stress`); Bundle-Diät umgesetzt (zod + axios aus dem Client entfernt, Prompts kompaktiert) → **< 1,5 MB erreicht ✅** (`check:bundle` grün).
 
 ---
 

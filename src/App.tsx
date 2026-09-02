@@ -451,8 +451,7 @@ function AppComponent() {
           <button type="button"
             onClick={() => setScratchOpen(v => !v)}
             className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-400/10 border border-amber-400/40 text-amber-300 hover:bg-amber-400/20 hover:border-amber-300/70 transition-all duration-200 cursor-pointer"
-            title="Session-Zwischenspeicher (Overlay-Sidebar)"
-            aria-label="Session-Zwischenspeicher öffnen"
+            aria-label="Zwischenspeicher"
             aria-pressed={scratchOpen}
           >
             <ClipboardCopy className="w-4 h-4" />
