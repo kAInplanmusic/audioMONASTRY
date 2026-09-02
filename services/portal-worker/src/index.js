@@ -429,10 +429,8 @@ async function openFleetPorts(env) {
       port: p,
       source_ips: [`${appIp}/32`],
     }));
-    const result = await hz(env, 'PUT', `/firewalls/${fw.id}`, { name: fw.name, rules: [...baseRules, ...extra] });
-    updated[fw.name] = result.firewall
-      ? { ok: true, returnedRuleCount: (result.firewall.rules ?? []).length, returnedPorts: (result.firewall.rules ?? []).map((r) => r.port).filter(Boolean) }
-      : { ok: false, raw: result };
+    const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules: [...baseRules, ...extra] });
+    updated[fw.name] = Array.isArray(result.actions) && result.actions.length > 0 ? 'ok' : { ok: false, raw: result };
   }
   // Debug-/Betriebssicht: Regeln + Server-Zuordnung zurückgeben.
   const after = await hzGet(env, '/firewalls?per_page=100');
