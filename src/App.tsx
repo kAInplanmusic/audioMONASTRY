@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useRef, useState  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { usePluginManager } from './context/PluginManagerContext';
@@ -19,10 +19,7 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
-import {
-  Settings, Sliders, Activity, ClipboardCopy, LayoutGrid, AudioLines, Gauge,
-  FolderOpen, Mic, Sparkles, Waves, Wrench, Workflow, UserRound, Play, Square,
-} from 'lucide-react';
+import { Settings, Sliders, Activity, ClipboardCopy, UserRound, Play, Square } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
@@ -30,7 +27,6 @@ import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
 import { getPluginRoute } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
-const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
@@ -42,20 +38,15 @@ const RACK_ORDER = [
   'recording', 'performance', 'ai',
 ];
 
-// Header-Navigation (Designvorlage uioben.jpg): 10 Auswahl-Icons.
-// `target` = Modul im Rack, zu dem gescrollt wird; null = Dashboard/Studio-Start.
-const NAV_ITEMS = [
-  { id: 'dashboard', label: 'DASHBOARD', icon: LayoutGrid, target: null },
-  { id: 'sequencer', label: 'SEQUENCER', icon: AudioLines, target: 'instrument' },
-  { id: 'sampler', label: 'SAMPLER', icon: Gauge, target: 'sampler' },
-  { id: 'browser', label: 'BROWSER', icon: FolderOpen, target: 'library' },
-  { id: 'mic', label: 'MIC', icon: Mic, target: 'voice' },
-  { id: 'effects', label: 'EFFECTS', icon: Sparkles, target: 'effect' },
-  { id: 'synth', label: 'SYNTH', icon: Waves, target: 'synthesizer' },
-  { id: 'tools', label: 'TOOLS', icon: Wrench, target: 'controller' },
-  { id: 'tools2', label: 'TOOLS', icon: Sliders, target: 'dsp' },
-  { id: 'iconmapper', label: 'ICON MAPPER', icon: Workflow, target: 'mcp' },
-] as const;
+// Header-Navigation: 18 Plugin-Icons in ZWEI Reihen – jedes Rack-Plugin
+// außer ai/mixer/masterplayer bekommt genau ein Icon.
+const NAV_EXCLUDED = new Set(['ai', 'mixer', 'masterplayer']);
+
+const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
+type MonUser = (typeof MON_USERS)[number];
+type MonMix = 'MAIN_PLUGIN' | 'PLUGIN_ONLY';
+
+const pluginNavLabel = (name: string) => name.replace(/MONK$/i, '').toUpperCase();
 
 
 export default function App() {
@@ -78,23 +69,42 @@ function AppComponent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [masteringOpen, setMasteringOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
-  const [monitorMode, setMonitorMode] = useState<'MAIN' | 'MON' | 'PLUGIN'>('MAIN');
-  const [monitorUser, setMonitorUser] = useState<'MON1' | 'MON2' | 'MON3' | 'MON4'>('MON1');
+  const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
+  const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
+    MON1: 'MAIN_PLUGIN', MON2: 'MAIN_PLUGIN', MON3: 'MAIN_PLUGIN', MON4: 'MAIN_PLUGIN',
+  });
   const [sessionMembers, setSessionMembers] = useState(0);
   const [sessionFull, setSessionFull] = useState(false);
-  const [activeNav, setActiveNav] = useState<string>('dashboard');
+  const [activeNav, setActiveNav] = useState<string>('instrument');
   const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
 
-  // Header-Auswahl: scrollt zum gewählten Rack-Modul (Designvorlage uioben.jpg).
-  const handleNavSelect = useCallback((navId: string, target: string | null) => {
+  // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
+  const navPlugins = useMemo(
+    () => getPluginRegistry().filter(p => !NAV_EXCLUDED.has(p.id)),
+    [],
+  );
+
+  // Header-Auswahl: scrollt zum gewählten Rack-Modul.
+  const handleNavSelect = useCallback((navId: string) => {
     setActiveNav(navId);
-    if (!target) {
-      document.getElementById('studio-main')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      return;
-    }
-    document.getElementById(`rack-${target}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
+
+  // Monitor-Ausgabe pro User: MAIN + PLUGIN (volle Mischung) oder NUR PLUGIN
+  // (Cue-Solo auf das aktive Plugin). Wirkt ausschließlich auf den Cue-Weg
+  // `monitorTrackGain` des jeweiligen Users – die Master-Kette bleibt unberührt.
+  const applyMonitorMix = useCallback((user: MonUser, mix: MonMix) => {
+    const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
+      ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
+      ?? 'mixer';
+    const track = getPluginRoute(activeId)?.channels[0] ?? 'channel1';
+    audioEngine.setMonitorSource(mix === 'PLUGIN_ONLY' ? 'PLUGIN' : 'MAIN', user, track);
+  }, [moduleStates]);
+
+  const setMonitorMixForUser = useCallback((user: MonUser, mix: MonMix) => {
+    setMonitorMixes(prev => ({ ...prev, [user]: mix }));
+    applyMonitorMix(user, mix);
+  }, [applyMonitorMix]);
 
   // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
   // P4-1/P4-2: Host sendet Master-Stream an Peers/SFU; Gäste spielen Main ab.
@@ -403,13 +413,13 @@ function AppComponent() {
   return (
     <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2">
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
-      {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 10 Auswahl-Icons + Avatar */}
-      <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-14 short-landscape:h-12 bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
+      {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 18 Plugin-Icons in zwei Reihen + Avatar */}
+      <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-20 short-landscape:h-16 bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
         <div className="mx-auto flex h-full items-stretch max-w-[1800px]">
           {/* Logo-Block */}
           <a
             href="#studio-main"
-            onClick={(e) => { e.preventDefault(); handleNavSelect('dashboard', null); }}
+            onClick={(e) => { e.preventDefault(); setActiveNav(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
             className="flex items-center gap-2.5 shrink-0 pl-3 pr-3 border-r border-[#16242e]"
             aria-label="audioMONASTRY Dashboard"
           >
@@ -425,34 +435,49 @@ function AppComponent() {
             </div>
           </a>
 
-          {/* Mitte: Auswahl-Icons (DASHBOARD … ICON MAPPER) */}
-          <nav className="flex-1 min-w-0 flex items-stretch overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
-            {NAV_ITEMS.map((item) => {
-              const Icon = item.icon;
-              const active = activeNav === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => handleNavSelect(item.id, item.target)}
-                  aria-current={active ? 'page' : undefined}
-                  title={item.label}
-                  className={`relative flex flex-col items-center justify-center gap-1 px-1.5 sm:px-2 flex-1 min-w-[52px] lg:min-w-[58px] max-w-[104px] text-center transition-colors cursor-pointer shrink-0 overflow-hidden ${
-                    active ? 'bg-[#0f1a22]' : 'hover:bg-white/[0.03]'
-                  }`}
-                >
-                  <Icon
-                    size={20}
-                    strokeWidth={active ? 2 : 1.6}
-                    className={`transition-colors ${active ? 'text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.45)]' : 'text-[#5fc9dc]'}`}
-                  />
-                  <span className={`text-[8px] font-bold tracking-[0.08em] uppercase leading-none truncate max-w-full ${active ? 'text-cyan-100' : 'text-[#8b9aa5]'}`}>
-                    {item.label}
-                  </span>
-                  <span className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] bg-cyan-400 rounded-full transition-all duration-300 ${active ? 'w-8 sm:w-10' : 'w-0'}`} />
-                </button>
-              );
-            })}
+          {/* Mitte: 18 Auswahl-Icons (zwei Reihen à 9) – ein Icon pro Plugin außer ai/mixer/masterplayer */}
+          <nav className="flex-1 min-w-0 overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
+            <div className="grid grid-rows-2 grid-cols-9 min-w-[540px] h-full">
+              {navPlugins.map((plugin) => {
+                const Icon = plugin.icon;
+                const state = moduleStates[plugin.id] || 'OFF';
+                const pluginOn = state !== 'OFF';
+                const active = activeNav === plugin.id;
+                return (
+                  <button
+                    key={plugin.id}
+                    type="button"
+                    onClick={() => handleNavSelect(plugin.id)}
+                    aria-current={active ? 'page' : undefined}
+                    title={plugin.name}
+                    className={`relative flex flex-col items-center justify-center gap-0.5 px-1 min-h-0 overflow-hidden text-center transition-colors cursor-pointer ${
+                      active ? 'bg-[#0f1a22]' : 'hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    <Icon
+                      size={16}
+                      strokeWidth={active || pluginOn ? 2 : 1.6}
+                      className={`transition-colors ${
+                        active
+                          ? 'text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.45)]'
+                          : pluginOn
+                            ? 'text-cyan-300/90'
+                            : 'text-[#5fc9dc]'
+                      }`}
+                    />
+                    <span className={`text-[7px] font-bold tracking-[0.08em] uppercase leading-none truncate max-w-full ${
+                      active ? 'text-cyan-100' : pluginOn ? 'text-cyan-200' : 'text-[#8b9aa5]'
+                    }`}>
+                      {pluginNavLabel(plugin.name)}
+                    </span>
+                    <span className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] bg-cyan-400 rounded-full transition-all duration-300 ${active ? 'w-6 sm:w-8' : 'w-0'}`} />
+                    {pluginOn && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </nav>
 
           {/* Rechts: Session + kompakte Steuerung + Avatar */}
@@ -470,46 +495,6 @@ function AppComponent() {
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
               {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
             </div>
-            <div className="relative hidden xl:block">
-              <select
-                value={monitorMode}
-                onChange={(e) => {
-                  const mode = e.target.value as 'MAIN' | 'MON' | 'PLUGIN';
-                  setMonitorMode(mode);
-                  const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
-                    ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
-                    ?? 'mixer';
-                  audioEngine.setMonitorSource(mode, monitorUser, getPluginRoute(activeId)?.channels[0] ?? 'channel1');
-                }}
-                className="appearance-none pl-2.5 pr-6 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
-                title="Monitor-Quelle: MAIN / eigener User-Mix / aktuelles Plugin"
-                aria-label="Monitor-Quelle wählen"
-              >
-                <option value="MAIN">🎧 MAIN</option>
-                <option value="MON">🎧 USER-MIX</option>
-                <option value="PLUGIN">🎧 PLUGIN</option>
-              </select>
-            </div>
-            {monitorMode === 'MON' && (
-              <div className="relative hidden xl:block">
-                <select
-                  value={monitorUser}
-                  onChange={(e) => {
-                    const mon = e.target.value as 'MON1' | 'MON2' | 'MON3' | 'MON4';
-                    setMonitorUser(mon);
-                    audioEngine.setMonitorSource('MON', mon);
-                  }}
-                  className="appearance-none pl-2.5 pr-6 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
-                  title="Eigener Monitor-Bus (User 1-4)"
-                  aria-label="Monitor-Bus wählen"
-                >
-                  <option value="MON1">USER 1</option>
-                  <option value="MON2">USER 2</option>
-                  <option value="MON3">USER 3</option>
-                  <option value="MON4">USER 4</option>
-                </select>
-              </div>
-            )}
             <div className="relative hidden xl:block">
               <select
                 defaultValue=""
@@ -553,7 +538,7 @@ function AppComponent() {
       {/* 2. MasterplazerMONK: fester Transport (Designvorlage uioben.jpg) – auf Desktop beim Scrollen oben */}
       <section
         id="rack-masterplayer"
-        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 xl:sticky xl:top-14 xl:z-30"
+        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 xl:sticky xl:top-20 short-landscape:xl:top-16 xl:z-30"
       >
         <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
           <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
@@ -561,6 +546,39 @@ function AppComponent() {
           </div>
           <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">MasterplazerMONK</h3>
           <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · TRANSPORT</span>
+
+          {/* Monitor-Ausgabe pro User: MAIN + PLUGIN oder NUR PLUGIN */}
+          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+            <span className="hidden lg:inline text-[9px] font-mono text-neutral-500 tracking-widest">MONITOR</span>
+            <select
+              value={monitorUser}
+              onChange={(e) => {
+                const user = e.target.value as MonUser;
+                setMonitorUser(user);
+                applyMonitorMix(user, monitorMixes[user]);
+              }}
+              className="appearance-none pl-2 pr-5 py-1 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
+              title="Monitor-User wählen (User 1-4)"
+              aria-label="Monitor-User wählen"
+            >
+              {MON_USERS.map(u => (
+                <option key={u} value={u}>{u.replace('MON', 'USER ')}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setMonitorMixForUser(monitorUser, monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? 'MAIN_PLUGIN' : 'PLUGIN_ONLY')}
+              aria-pressed={monitorMixes[monitorUser] === 'PLUGIN_ONLY'}
+              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN + PLUGIN oder NUR PLUGIN`}
+              className={`px-2.5 py-1 rounded-full border text-[9px] font-bold tracking-widest transition-all cursor-pointer ${
+                monitorMixes[monitorUser] === 'PLUGIN_ONLY'
+                  ? 'bg-fuchsia-600/20 border-fuchsia-400/60 text-fuchsia-200'
+                  : 'bg-cyan-500/10 border-cyan-400/50 text-cyan-200 hover:bg-cyan-500/20'
+              }`}
+            >
+              {monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? '🎧 NUR PLUGIN' : '🎧 MAIN + PLUGIN'}
+            </button>
+          </div>
         </div>
         <div className="px-3 pb-3 border-t border-white/5">
           <BeatVisualizer isPlaying={isPlaying} />
@@ -617,23 +635,8 @@ function AppComponent() {
         </div>
       </section>
 
-      {/* 3b. Master Engine (Analyse/Mastering/Mixdown) – bewusst UNTER dem Mixer,
-          damit die fixe MasterplazerMONK-Sektion kompakt bleibt. */}
-      <section id="rack-masterengine" className="rounded-xl border border-neutral-800 bg-black/40 mb-4">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-neutral-700 bg-neutral-900/60 text-cyan-300 flex items-center justify-center">
-            <Activity size={18} />
-          </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">Master Engine</h3>
-          <span className="text-[9px] font-mono text-neutral-500 tracking-widest">NATIV · FFmpeg+NumPy</span>
-        </div>
-        <div className="px-3 pb-3 border-t border-white/5">
-          <Suspense fallback={<div className="h-10 text-neutral-500 text-xs">Lade Master-Player…</div>}><MasterPlayerTerminal /></Suspense>
-        </div>
-      </section>
-
       {/* Icon-Toolbar (Designvorlage: Modul-Kacheln) */}
-      <nav className="md:sticky md:top-14 short-landscape:md:top-12 z-20 -mx-6 short-landscape:-mx-2 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
+      <nav className="md:sticky md:top-20 short-landscape:md:top-16 z-20 -mx-6 short-landscape:-mx-2 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
         <div className="flex flex-wrap gap-2 justify-center max-w-screen-2xl mx-auto">
         {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
