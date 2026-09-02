@@ -211,9 +211,21 @@ button, select, input[type="range"] {
   display: none;
 }
 
+/* Header-Auswahl-Icons: Touch-Mindesthöhe (44px) gilt dort nicht – die zwei
+   Icon-Reihen müssen in den Header passen. */
+nav[aria-label="Studio-Navigation"] button {
+  min-height: 0;
+}
+
 #studio-main,
 [id^="rack-"] {
   scroll-margin-top: 132px;
+}
+/* Desktop: sticky Header (80px) + sticky MasterplazerMONK freihalten. */
+@media (min-width: 1280px) {
+  [id^="rack-"] {
+    scroll-margin-top: 320px;
+  }
 }
 
 /* ============================================================================

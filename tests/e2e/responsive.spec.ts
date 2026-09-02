@@ -53,6 +53,9 @@ async function toggleMixerOnTouch(page: Page) {
   // Präziser Toolbar-Selektor: getByTitle('MIX') würde auch die Monitor-Quelle
   // (title="Monitor-Quelle: MAIN / eigener User-Mix …") treffen.
   const mix = page.locator(`${TOOLBAR} button[aria-label^="MIX "]`);
+  await mix.scrollIntoViewIfNeeded();
+  // Layout-Settling abwarten (lazy DJ-Mixer/Header), damit der Tap sicher trifft.
+  await page.waitForTimeout(250);
   await mix.tap();
   await expect(mix).toHaveAttribute('aria-pressed', 'true');
 }
@@ -136,7 +139,8 @@ test.describe('Responsive/Touch-Matrix', () => {
       await startStudio(page);
       await expectNoHorizontalOverflow(page);
       await expect(page.locator('nav[aria-label="Studio-Navigation"]')).toBeVisible();
-      await expect(page.locator('nav[aria-label="Studio-Navigation"] button')).toHaveCount(10);
+      // 18 Plugin-Icons (alle außer ai/mixer/masterplayer), zwei Reihen à 9.
+      await expect(page.locator('nav[aria-label="Studio-Navigation"] button')).toHaveCount(18);
     });
   });
 
