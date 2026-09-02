@@ -16,6 +16,19 @@
 - Bekannt: `collab.spec.ts` schlägt auch auf dem Basis-Commit fehl (Signaling
   über mehrere Browser-Kontexte lokal) → kein Regressionsbefund, bleibt Live-Punkt.
 
+## Live verifiziert (Flotte läuft, 2026-09-02)
+
+- **Flotte READY:** app `49.13.142.5` · sfu `49.13.0.226` · ai `49.13.65.150` ·
+  master `167.233.22.157` · edge `167.233.214.220` (`/api/health` ok, `/api/fleet-map` ok)
+- **Master-Player:** `/api/master/health` ok · `/api/master/selftest` ok (530 ms)
+- **LLM live:** `/api/ai/complete` → `deepseek-flash`, 1,7 s (P0-8/aiMONK-Pfad real verifiziert)
+- **Browser live:** smoke **7/7** · responsive **9/9** · keyboard **2/2** gegen
+  `https://anunnakitools.de` (P0-1/P0-3/P0-7/P1-1/P1-6 automatisiert bestätigt)
+- **Supabase P3-1:** Tabellen `system_prompts`/`plugin_prompt_versions`/
+  `ai_evaluations`/`ai_eval_runs` **fehlen noch** → Migration 002 muss im
+  Supabase-Dashboard/psql angewendet werden (DB-Passwort fehlt lokal,
+  Betreiber-Schritt).
+
 ## 1 · Flotte / OPS
 
 - [ ] **OPS-Snapshot (Wake-Zeit):** Flotten-Start (wake→ready) vorher/nachher messen.
