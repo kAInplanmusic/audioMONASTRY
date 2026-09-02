@@ -9,7 +9,7 @@
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
-- [ ] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready (Live-Messung beim nächsten Flotten-Start)
+- [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
 - [ ] **OPS-Load-Balancer**: Hetzner LB11 erst ab ≥2 App-Knoten (stündlich 0,012 €/h netto, 7,49 €/Monat netto) – aktuell bewusst NICHT
 - [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8) + `visual.spec.ts`-Screenshot-Tests
 - [ ] **P1-4 Scratchpad Prüfpunkt**: Reload/DnD/Clipboard-Roundtrip im Browser verifizieren (Code + Helper-Tests grün)
@@ -29,7 +29,7 @@
 > Umsetzung 2026-09-02: Portal-Worker nutzt Rollen-Snapshots, Refresh-Endpoint
 > + Auto-Retention sind umgesetzt → TASKDONE. Offen ist nur die Live-Messung.
 
-- [ ] **Prüfpunkt:** Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready.
+- [x] **Prüfpunkt:** Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready → gemessen 2026-09-02: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s** → TASKDONE.
 
 ---
 
