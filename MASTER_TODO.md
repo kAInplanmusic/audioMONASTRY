@@ -15,7 +15,7 @@
 - [ ] **P1-4 Scratchpad Prüfpunkt**: Reload/DnD/Clipboard-Roundtrip im Browser verifizieren (Code + Helper-Tests grün)
 - [ ] **P2-1/P2-2 Rest**: Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte
 - [ ] **P2-4 Prüfpunkt**: Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt)
-- [ ] **P3-2/P3-3 Rest**: Iterations-Loop + `aiEvaluation.test.ts` je Plugin + Nightly-Eval-Lauf verifizieren
+- [ ] **P3-2/P3-3 Rest**: `aiEvaluation.test.ts` je Plugin + Nightly-Eval-Lauf verifizieren
 - [ ] **Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)
 
 ---
@@ -203,7 +203,7 @@
 - [x] Prompt-Bibliothek je Plugin (21 Plugins): Systemprompt (Rolle, Kontext, Parameter, Routing-Ziel, erlaubte Aktionen), Few-Shot-Beispiele (deutsche Kommandos), Fehlerbehandlung.
 - [x] `pluginCommandRegistry` auf alle 21 IDs erweitert und mit `PluginAudioRouter` verbunden (Aktivierung, Routing, Parameter) → generische `activate`/`deactivate`/`route`-Kommandos je ID, neue Kern-Kommandos für masterplayer/sound/drop/ai, `mixer.channel`; Tests `tests/pluginCommandRegistry.test.ts`.
 - [x] MCP-Tools serverseitig je Plugin ergänzt (mixer.set_channel, synth.play_note, sequencer.load_pattern, …) in `mcpRuntime.ts`; Permissions READ/WRITE/EXECUTION/DESTRUCTIVE beibehalten → Katalog-Tools je Plugin (`<plugin>.<action>`, WRITE), Aliase + `plugin.command`; Tests `tests/mcpPluginTools.test.ts`.
-- [ ] Iterations-Loop: pro Plugin → Prompt-Version anlegen → Eval-Suite laufen lassen → Score → Prompt optimieren → neue Version.
+- [x] Iterations-Loop: pro Plugin → Prompt-Version anlegen → Eval-Suite laufen lassen → Score → Prompt optimieren → neue Version → `src/core/ai/orchestrator/promptIteration.ts` (`runPromptIteration`, `evaluatePromptCoverage`, `optimizePromptContent`), CLI `npm run iterate:prompts` (21 Plugins, 41 Iterationen, 0 nicht konvergiert), Tests `tests/promptIteration.test.ts`, Nightly-Gate.
 - [ ] **Prüfpunkt:** `aiEvaluation.test.ts` je Plugin; 100 % der Kern-Kommandos werden von MOA korrekt geplant und ausgeführt; Scores in DB.
 
 ### P3-3 Evaluierungs-Framework & Regression

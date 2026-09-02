@@ -34,11 +34,17 @@ jobs:
       - name: AI-Eval-Run (Gate bei Score-Abfall)
         run: npm run eval:ai
 
+      # P3-2: Prompt-Iterations-Loop je Plugin (Konvergenz-Gate).
+      - name: Prompt-Iterations-Loop (Gate bei Nicht-Konvergenz)
+        run: npm run iterate:prompts
+
       - name: Eval-Artefakte hochladen
         uses: actions/upload-artifact@v4
         with:
           name: ai-eval-results
-          path: test-results/ai-eval*.json
+          path: |
+            test-results/ai-eval*.json
+            test-results/prompt-iterations.json
           if-no-files-found: error
 
       - name: Auto-Issue bei Fehler (Erkennung -> Reparatur-Route)

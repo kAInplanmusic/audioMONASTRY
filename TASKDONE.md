@@ -54,8 +54,9 @@
 
 - [x] **Registry vollständig:** `PLUGIN_COMMAND_IDS` (21), generische `activate`/`deactivate`/`route`-Kommandos je ID über `pluginAudioRouter`; neue Kern-Kommandos für masterplayer (play/stop/tempo), sound (trigger), drop (pattern), ai (plan); `mixer.channel` (gain/pan je Kanal).
 - [x] **Server-MCP-Tools:** `mcpRuntime.ts` registriert je Katalog-Eintrag ein `<plugin>.<action>`-Tool (WRITE) + Aliase (`mixer.set_channel`, `synth.play_note`, `synthesizer.play_note`, `sequencer.load_pattern`, `mcp.load_pattern`) + generisches `plugin.command` mit Validierung; Planung wird über `recordPluginCommand` an den Client-Pfad durchgereicht (keine Fake-Audio-Tools).
-- [x] **Tests:** `tests/pluginCommandRegistry.test.ts` (3), `tests/mcpPluginTools.test.ts` (5).
-- [ ] **Offen:** Iterations-Loop (Prompt-Version → Eval → Score → Optimierung) + `aiEvaluation.test.ts` je Plugin.
+- [x] **Iterations-Loop:** `src/core/ai/orchestrator/promptIteration.ts` – `runPromptIteration` (Prompt-Version → Eval → Score → heuristische Optimierung → neue Version), `evaluatePromptCoverage` (deterministisch), `optimizePromptContent` (hängt Kommando-Katalog an); CLI `npm run iterate:prompts` (21 Plugins, 41 Iterationen, 0 nicht konvergiert) schreibt `test-results/prompt-iterations.json`; Nightly-Gate ergänzt.
+- [x] **Tests:** `tests/pluginCommandRegistry.test.ts` (3), `tests/mcpPluginTools.test.ts` (5), `tests/promptIteration.test.ts` (5).
+- [ ] **Offen:** `aiEvaluation.test.ts` je Plugin (MOA-E2E-Planung) + Scores in DB (Live).
 
 ### P3-3 – Eval-Framework an DB + Nightly-Gate (2026-09-02)
 
