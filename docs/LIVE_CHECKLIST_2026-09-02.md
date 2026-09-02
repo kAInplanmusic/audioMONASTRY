@@ -5,6 +5,17 @@
 > Ziel: kein offener Prüfpunkt bleibt „still" offen – jeder bekommt Messwert oder
 > wird bewusst auf später verschoben.
 
+## Automatisiert grün (lokal, 2026-09-02)
+
+- `npm run verify` → **535 Tests + Boundary-Scan 0**
+- `npm run build` → ok · `check:memo` → ok · `check:bundle` → **grün** (1,62 MB,
+  Warn <1,5 MB bleibt offen; lazy onnxruntime-web zählt nicht zum UI-Budget)
+- `npm run eval:ai` → **21/21 PASS** · `npm run iterate:prompts` → **21 Plugins, 0 nicht konvergiert**
+- Playwright: smoke **7/7** · responsive **9/9** (7 skipped Firefox-Mobile) ·
+  keyboard+visual **5/5** · audioAction **2/2**
+- Bekannt: `collab.spec.ts` schlägt auch auf dem Basis-Commit fehl (Signaling
+  über mehrere Browser-Kontexte lokal) → kein Regressionsbefund, bleibt Live-Punkt.
+
 ## 1 · Flotte / OPS
 
 - [ ] **OPS-Snapshot (Wake-Zeit):** Flotten-Start (wake→ready) vorher/nachher messen.
