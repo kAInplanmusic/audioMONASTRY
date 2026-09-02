@@ -32,7 +32,16 @@ export DEBIAN_FRONTEND=noninteractive
 if ! command -v ollama >/dev/null 2>&1; then
   curl -fsSL https://ollama.com/install.sh | sh
 fi
+# FLEET-WIRING: Ollama muss von app-1 aus erreichbar sein (Firewall begrenzt
+# den Zugriff auf die app-1-IP, siehe Portal /api/wire-fleet).
+mkdir -p /etc/systemd/system/ollama.service.d
+cat > /etc/systemd/system/ollama.service.d/override.conf <<'OLLAMA'
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+OLLAMA
+systemctl daemon-reload
 systemctl enable --now ollama >/dev/null 2>&1 || true
+systemctl restart ollama >/dev/null 2>&1 || true
 if ! ollama list 2>/dev/null | grep -q "qwen2.5:7b"; then
   echo "[ai-1] qwen2.5:7b wird geladen (einmalig, ~4.7 GB) …"
   ollama pull qwen2.5:7b

@@ -40,6 +40,46 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
 
+// ---------------------------------------------------------------------------
+// FLEET-WIRING: Ziel-URLs der Flotten-Knoten (master-player, Ollama, stem-ai)
+// ---------------------------------------------------------------------------
+// Die Hetzner-IPs werden erst bei der Flotten-Erstellung vergeben. Deshalb
+// holt die App sie beim Start vom Portal-Worker (/api/fleet-map, geschützt
+// über den Studio-Token) und überschreibt damit die Default-/Env-Ziele.
+// Direkte Env-Variablen (MASTER_PLAYER_URL, OLLAMA_URL, STEM_AI_URL) haben
+// weiterhin Vorrang (explizit gesetzt > Flotten-Map > interner Default).
+// ---------------------------------------------------------------------------
+const FLEET_MAP_URL = (process.env.FLEET_MAP_URL || '').trim() || 'https://anunnakitools.de/api/fleet-map';
+const fleetTargets: { masterPlayer: string; ollama: string; stemAi: string } = {
+  masterPlayer: '',
+  ollama: '',
+  stemAi: '',
+};
+
+async function wireFleetFromPortal(): Promise<void> {
+  const token = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
+  if (!token) return; // Lokal/Test: keine Flotten-Verdrahtung.
+  try {
+    const resp = await fetch(FLEET_MAP_URL, {
+      headers: { 'x-studio-token': token },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return;
+    const data = (await resp.json()) as { fleet?: Record<string, string> };
+    const f = data.fleet ?? {};
+    if (f['samplemonk-master-1']) fleetTargets.masterPlayer = `http://${f['samplemonk-master-1']}:8000`;
+    if (f['samplemonk-ai-1']) {
+      fleetTargets.ollama = `http://${f['samplemonk-ai-1']}:11434`;
+      fleetTargets.stemAi = `http://${f['samplemonk-ai-1']}:8000`;
+    }
+    console.log('[fleet] Knoten verdrahtet:', JSON.stringify({ masterPlayer: fleetTargets.masterPlayer, ollama: fleetTargets.ollama, stemAi: fleetTargets.stemAi }));
+  } catch (e) {
+    console.warn('[fleet] Fleet-Map nicht erreichbar:', (e as Error).message);
+  }
+}
+void wireFleetFromPortal();
+
+
 // DCT-108: In-Process-Metriken (keine neuen Dependencies, keine Secrets/Samples).
 const metrics = {
   requests: 0,
@@ -549,7 +589,7 @@ app.post('/api/ai/compose', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function ollamaGenerate(promptText: string): Promise<string | null> {
-  const url = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+  const url = (process.env.OLLAMA_URL || '').trim() || fleetTargets.ollama || 'http://127.0.0.1:11434';
   const model = process.env.OLLAMA_MODEL || 'qwen2.5:7b';
   try {
     const resp = await fetch(`${url}/api/generate`, {
@@ -745,12 +785,12 @@ app.post('/api/ai/mcp/tools/:name', async (req, res) => {
 
 // --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---
 // P11: Proxy zum separaten stem-ai (FastAPI/Demucs) Container, falls aktiviert.
-const getStemAiUrl = () => (process.env.STEM_AI_URL || '').trim() || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
+const getStemAiUrl = () => (process.env.STEM_AI_URL || '').trim() || fleetTargets.stemAi || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
   metrics.stemRequests += 1;
   // Runtime-Check (nicht nur Modul-Konstante), damit Tests/Deploys den Pfad
   // per Env togglen können und die Queue-Logik deterministisch greifbar ist.
-  const stemAiActive = (process.env.ENABLE_STEMS || '').trim() === '1' && !!(process.env.STEM_AI_URL);
+  const stemAiActive = (process.env.ENABLE_STEMS || '').trim() === '1' && !!(process.env.STEM_AI_URL || fleetTargets.stemAi);
   const replicateStemsActive = (process.env.STEM_AI_PROVIDER || '').trim() === 'replicate'
     && !!(process.env.REPLICATE_API_TOKEN || '').trim();
 
@@ -906,11 +946,14 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
 //   GET  /api/master/health  → Service-Healthcheck
 // Der Dienst läuft separat (docker-compose: master-player, Port 8000 intern).
 // ===========================================================================
-const MASTER_PLAYER_URL = (process.env.MASTER_PLAYER_URL || '').trim() || 'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
+const getMasterPlayerUrl = () =>
+  (process.env.MASTER_PLAYER_URL || '').trim() ||
+  fleetTargets.masterPlayer ||
+  'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 
 async function proxyMasterPlayer(pathName: string, req: express.Request, res: express.Response) {
   try {
-    const resp = await fetch(MASTER_PLAYER_URL + pathName, {
+    const resp = await fetch(getMasterPlayerUrl() + pathName, {
       method: req.method,
       headers: { 'Content-Type': 'application/json' },
       body: req.method === 'GET' ? undefined : JSON.stringify(req.body ?? {}),
@@ -1094,7 +1137,7 @@ app.post('/api/upload/sample', async (req, res) => {
     // --- Scan (best effort über master-player, fällt bei Ausfall weich aus) ---
     let scan: any = null;
     try {
-      const scanResp = await fetch(MASTER_PLAYER_URL + '/analyze', {
+      const scanResp = await fetch(getMasterPlayerUrl() + '/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: file.data.toString('base64') }),
@@ -1549,7 +1592,7 @@ async function startServer() {
       socket.on('offer', (data: any) => {
         refreshIdleTimer();
         if (!data.target || !data.offer) return;
-        socket.to(data.target).emit('offer', { offer: data.offer, sender: socket.id });
+        socket.to(data.target).emit('offer', { offer: data.offer, sender: socket.id, senderMode: socket.data?.sessionMode ?? 'member' });
       });
       socket.on('answer', (data: any) => {
         refreshIdleTimer();
@@ -1579,7 +1622,8 @@ async function startServer() {
           for (const sid of sockets) {
             if (sid === socket.id) continue;
             const s = io.sockets.sockets.get(sid);
-            if (s?.data?.sessionUserId) {
+            // Master-Out-Listener zählen NICHT als Session-Mitglieder.
+            if (s?.data?.sessionUserId && s?.data?.sessionMode !== 'master-out') {
               members.push({ socketId: sid, userId: s.data.sessionUserId, role: s.data.sessionRole ?? 'guest' });
             }
           }
@@ -1590,17 +1634,36 @@ async function startServer() {
       socket.on('join-session', (data: any) => {
         refreshIdleTimer();
         const userId = String(data?.userId ?? socket.id).trim();
+        // MASTEROUTMAINSTREAM: eigener Listen-Modus – zählt nicht zu den 4 Usern,
+        // sendet selbst nichts und bekommt die Mitgliederliste, um den Host zu
+        // finden (Szenario: 4 iPads + 1 Laptop am Verstärker).
+        const mode = String(data?.mode ?? 'member') === 'master-out' ? 'master-out' : 'member';
         const room = `session:${SESSION_ROOM_ID}`;
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
+        socket.data.sessionMode = mode;
         // P4-2: Server-seitige Rolle – erster User ist Host/Admin, Rest lt. SESSION_ROLE.
         const role = roleForSessionUser(userId);
         socket.data.sessionRole = role;
         if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
-        addServerAudit(userId, role, 'JOIN_SESSION', true, SESSION_ROOM_ID);
+        addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
 
         const members = sessionMembers(room);
+        if (mode === 'master-out') {
+          // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
+          // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
+          // initiiert seine Verbindung selbst zum Host.
+          socket.emit('session-members', {
+            roomId: SESSION_ROOM_ID,
+            members,
+            selfRole: 'guest',
+            selfMode: 'master-out',
+            hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? '',
+          });
+          return;
+        }
+
         if (members.length >= MAX_SESSION_USERS) {
           socket.emit('session-full', { roomId: SESSION_ROOM_ID, max: MAX_SESSION_USERS });
           socket.leave(room);
