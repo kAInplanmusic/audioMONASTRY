@@ -123,6 +123,14 @@
 - [x] `moaAgent.executePlan` mit PluginAudioRouter verbinden, damit KI-Aktionen wirklich Plugins aktivieren/deaktivieren/routen.
 - [x] **Alternative (D7):** aiMONK wird als **Bottom-Dock für alle User immer offen** umgesetzt (Feature-Flag für Ausblenden optional).
 
+### P1-1 Responsive Shell – Plattform-Matrix (2026-09-02)
+
+- [x] **Feste Breiten/Overflow-Fixes:** Studio-Header `flex-wrap` (Steuerzeile bricht auf Mobile um), Session-Badge ab `md` ausgeblendet; Plugin-Toolbar nur noch ab `md` sticky (`md:sticky md:top-[76px]`); Master-Player-Modus-Tabs `flex-wrap max-w-full`; `short-landscape`-Negativ-Margins korrigiert (`-mx-2` statt `-mx-6`).
+- [x] **Responsive-Suite erweitert:** `tests/e2e/responsive.spec.ts` – iPhone SE (Portrait/Landscape), iPhone 14 (Portrait/Landscape + Plugin-Toggle), Pixel 7 (Portrait/Landscape + Plugin-Toggle), iPad Gen 7 Landscape, Desktop 1920; Messkriterium `scrollWidth − clientWidth ≤ 1px`, Toolbar-Touch-Ziele ≥ 44 px.
+- [x] **Cross-Browser-Config:** `playwright.responsive.config.ts` (Projekte Chromium + Firefox; WebKit/Safari-iOS in CI via `playwright install-deps`), npm-Script `test:e2e:responsive`.
+- [x] **Prüfpunkt automatisiert:** `npm run test:e2e:responsive` → **9 passed, 7 skipped (Firefox-Mobile by design), 0 failed** (2026-09-02); `npx tsc --noEmit` grün.
+- [x] **Plattform-Matrix dokumentiert:** `docs/HARDWARE_TEST_MATRIX_2026.md` (Geräte/Viewports/Browser/Ergebnis; WebKit-Einschränkung lokal ehrlich vermerkt).
+
 ### P1-2 High-End-Klassiker-Skins pro Plugin
 
 - [x] **Alternative (D8):** **Erst CSS-Variablen-Themes komplett & sauber umsetzen**; danach mit **mittlerer Priorität** Komponenten-Neubau je Plugin (ggf. mit Bild-/Text-Infos vom User je Plugin).
