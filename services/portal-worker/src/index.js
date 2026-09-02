@@ -229,9 +229,52 @@ function firewallRules(role, cloudflareIps = []) {
 
 async function ensureFirewall(env, name, rules) {
   const list = await hzGet(env, `/firewalls?name=${encodeURIComponent(name)}`);
-  if ((list.firewalls ?? []).length > 0) return list.firewalls[0].id;
+  if ((list.firewalls ?? []).length > 0) {
+    // Firewall existiert bereits → Regeln aktualisieren (Cloudflare-IP-Listen
+    // ändern sich; sonst kann Cloudflare den Origin nicht mehr erreichen).
+    const fw = list.firewalls[0];
+    await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
+    return fw.id;
+  }
   const created = await hzPost(env, '/firewalls', { name, rules });
   return created.firewall?.id ?? null;
+}
+
+/**
+ * Synchronisiert den DNS-Record `origin.anunnakitools.de` auf die aktuelle
+ * app-1-IP. Die Hetzner-IPs wechseln bei jedem Wake; der Worker-Proxy nutzt
+ * ORIGIN_HOST als resolveOverride, daher muss der DNS-Record stimmen.
+ */
+async function syncOriginDns(env, appIp) {
+  const token = (env.CLOUDFLARE_API_TOKEN ?? '').trim();
+  if (!token) return { ok: false, message: 'CLOUDFLARE_API_TOKEN fehlt im Worker' };
+  const headers = { Authorization: `Bearer ${token}` };
+  const zonesRes = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${PORTAL_DOMAIN}`, { headers });
+  const zones = await zonesRes.json();
+  const zoneId = zones.result?.[0]?.id;
+  if (!zoneId) return { ok: false, message: 'Cloudflare-Zone nicht gefunden' };
+  const recsRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?name=${ORIGIN_HOST}`, { headers });
+  const recs = await recsRes.json();
+  const rec = recs.result?.[0];
+  if (!rec) return { ok: false, message: `DNS-Record ${ORIGIN_HOST} fehlt` };
+  const updRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records/${rec.id}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: appIp }),
+  });
+  const upd = await updRes.json();
+  return { ok: !!upd.success, recordId: rec.id, content: appIp };
+}
+
+/** Aktualisiert die app-Firewall auf die aktuellen Cloudflare-IP-Ranges. */
+async function syncAppFirewall(env) {
+  const cfIps = await cloudflareIpRanges();
+  const list = await hzGet(env, '/firewalls?name=samplemonk-app');
+  const fw = (list.firewalls ?? [])[0];
+  if (!fw) return { ok: false, message: 'app-Firewall nicht gefunden' };
+  const rules = firewallRules('app', cfIps);
+  const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
+  return { ok: Array.isArray(result.actions), appFirewallId: fw.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -443,8 +486,7 @@ async function computeStatus(env) {
     if (ip) {
       try {
         // Health-Check über die Domain (Host/SNI = Domain, Origin-Zertifikat)
-        // und resolveOverride direkt auf die Origin-IP – kein Host=IP,
-        // kein HTTP-Redirect auf https://IP.
+        // und resolveOverride über den origin-Host (DNS zeigt auf app-1).
         const healthUrl = `https://${PORTAL_DOMAIN}/api/health`;
         const res = await fetch(healthUrl, { cf: { resolveOverride: ORIGIN_HOST } });
         if (res.ok) {
@@ -481,6 +523,7 @@ async function startFleet(env) {
   const created = [];
   const usedSnapshots = {};
   const fallbackRoles = [];
+  const failed = [];
 
   for (const item of FLEET) {
     const fwName = `samplemonk-${item.role}`;
@@ -504,16 +547,37 @@ async function startFleet(env) {
     }
     if (sshKeyId) payload.ssh_keys = [sshKeyId];
     const result = await hzPost(env, '/servers', payload);
-    if (result.server?.id) created.push(item.name);
+    if (result.server?.id) {
+      created.push(item.name);
+    } else {
+      failed.push({
+        name: item.name,
+        role: item.role,
+        error: result.error?.message ?? result.message ?? null,
+        http: result.__http ?? (result.error ? (result.error.code ?? null) : null),
+      });
+    }
   }
 
-  // FLEET-WIRING: Sobald alle Server angelegt sind (app-1-IP bekannt), die
-  // Firewalls für master/ai um app-IP-beschränkte Service-Ports ergänzen.
+  // FLEET-WIRING: Auf die app-1-IP warten (bis ~30 s), dann DNS + Firewalls
+  // synchronisieren (master/ai-Ports, origin-DNS, app-Firewall).
   if (created.length === FLEET.length) {
-    try { await openFleetPorts(env); } catch (e) { console.warn('[portal] openFleetPorts:', e?.message ?? e); }
+    try {
+      let appIp = '';
+      for (let i = 0; i < 15 && !appIp; i++) {
+        const m = await fleetServers(env);
+        appIp = m['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+        if (!appIp) await new Promise((r) => setTimeout(r, 2000));
+      }
+      await syncAppFirewall(env);
+      if (appIp) await syncOriginDns(env, appIp);
+      await openFleetPorts(env);
+    } catch (e) {
+      console.warn('[portal] fleet-wiring:', e?.message ?? e);
+    }
   }
 
-  return { started: true, created, usedSnapshots, fallbackRoles };
+  return { started: true, created, usedSnapshots, fallbackRoles, failed };
 }
 
 /**
@@ -798,7 +862,12 @@ export default {
       // verdrahten (master-player 8000, stem-ai 8000, Ollama 11434).
       if (url.pathname === '/api/wire-fleet' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
-        return json(await openFleetPorts(env));
+        const servers = await fleetServers(env);
+        const appIp = servers['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+        const appFirewall = await syncAppFirewall(env);
+        const dns = appIp ? await syncOriginDns(env, appIp) : { ok: false, message: 'app-1 hat noch keine IP.' };
+        const ports = await openFleetPorts(env);
+        return json({ appFirewall, dns, ports });
       }
 
       // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot
@@ -841,8 +910,8 @@ export default {
     const app = servers['samplemonk-app-1'];
     if (app && app.status === 'running' && app.public_net?.ipv4?.ip) {
       // Proxy mit ORIGINAL-URL (Host + SNI = Domain, kein Host=IP → kein
-      // Cloudflare-Fehler 1003). resolveOverride lenkt die Verbindung auf die
-      // Hetzner-Origin-IP, ohne Host/SNI zu verändern.
+      // Cloudflare-Fehler 1003). resolveOverride über den origin-Host
+      // (DNS wird bei jedem Wake auf die aktuelle app-1-IP synchronisiert).
       const proxied = new Request(request.url, request);
       return fetch(proxied, { cf: { resolveOverride: ORIGIN_HOST } });
     }
