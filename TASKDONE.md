@@ -131,6 +131,13 @@
 - [x] **Prüfpunkt automatisiert:** `npm run test:e2e:responsive` → **9 passed, 7 skipped (Firefox-Mobile by design), 0 failed** (2026-09-02); `npx tsc --noEmit` grün.
 - [x] **Plattform-Matrix dokumentiert:** `docs/HARDWARE_TEST_MATRIX_2026.md` (Geräte/Viewports/Browser/Ergebnis; WebKit-Einschränkung lokal ehrlich vermerkt).
 
+### MASTEROUTMAINSTREAM + Flotten-Verdrahtung (2026-09-02)
+
+- [x] **MASTEROUTMAINSTREAM:** eigene Route `/master-out` (`src/pages/MasterOutPage.tsx`) – gibt ausschließlich das Main-Signal des Session-Hosts aus (4 iPads + 1 Laptop an der PA). Server-Listen-Modus (`join-session { mode: 'master-out' }`) zählt nicht zu den 4 Session-Usern; Listener verbindet sich nur zum Host, sendet selbst nichts (Host schickt an ihn kein Mikrofon, nur Main).
+- [x] **Portal-Worker:** `GET /api/fleet-map` (Studio-Token-geschützt) + `POST /api/wire-fleet` (Firewall-Ports master 8000 / ai 8000+11434 nur für die app-1-IP, per `set_rules`-Action idempotent); `startFleet` verdrahtet die Firewalls automatisch nach der Erstellung.
+- [x] **App-Fleet-Wiring (`server.ts`):** beim Start Fleet-Map abrufen und Master-Player/Ollama/Stem-AI-Ziele zur Laufzeit setzen (explizite Env-Variablen haben Vorrang); `docker-compose.hetzner.yml` publiziert master-player 8000; ai-Bootstrap + `install-ai1.sh` setzen `OLLAMA_HOST=0.0.0.0:11434`.
+- [x] **Live verifiziert:** app-1 → master-1:8000 `/health` ok, `/api/master/selftest` ok (656 ms); app-1 → ai-1:11434 Ollama `{"version":"0.33.2"}`, ai-1:8000 stem-ai `{"status":"ok","device":"cpu"}`; `/api/master/health` über die App liefert die master-player-Antwort.
+
 ### P1-2 High-End-Klassiker-Skins pro Plugin
 
 - [x] **Alternative (D8):** **Erst CSS-Variablen-Themes komplett & sauber umsetzen**; danach mit **mittlerer Priorität** Komponenten-Neubau je Plugin (ggf. mit Bild-/Text-Infos vom User je Plugin).
