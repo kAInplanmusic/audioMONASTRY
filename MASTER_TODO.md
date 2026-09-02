@@ -10,6 +10,7 @@
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
 - [ ] **OPS-Snapshot**: Hetzner-Snapshots je Rolle für schnellen Flotten-Start (wake nutzt Snapshot-Image, Fallback cloud-init)
+- [ ] **OPS-Load-Balancer**: Hetzner LB11 erst ab ≥2 App-Knoten (stündlich 0,012 €/h netto, 7,49 €/Monat netto) – aktuell bewusst NICHT
 - [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
 - [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden"
 - [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
@@ -29,6 +30,22 @@
 - [ ] **Snapshot-Refresh:** nach Deploy-Änderungen Snapshots gezielt erneuern (z. B. `POST /api/refresh-snapshots`, nur mit Session-Cookie).
 - [ ] **Kosten/Retention dokumentieren:** Snapshots werden pro GB abgerechnet; alte Versionen löschen (Auto-Retention, z. B. letzte 2 je Rolle).
 - [ ] **Prüfpunkt:** Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready.
+
+---
+
+## 🟠 OPS – Hetzner Load Balancer (LB11) erst bei Skalierung (2026-09-02)
+
+> Check: Hetzner LB11 ist **stundenbasiert** abgerechnet (Europa netto
+> **0,012 €/h**, Deckel **7,49 €/Monat**, 20 TB Traffic inkl., Stand 04/2026).
+> Für den aktuellen Betrieb (1× app-1 hinter Cloudflare, max. 4 User/Session)
+> macht ein Load Balancer **keinen** Sinn – Cloudflare übernimmt Edge/TLS und
+> die Session läuft auf genau einem Knoten. Sinnvoll wird er erst bei
+> horizontaler Skalierung auf **≥ 2 App-Knoten**.
+
+- [ ] **Trigger definieren:** LB11 erst installieren, wenn ≥ 2 App-Knoten laufen (Multi-Session, > 4 User/Session oder HA/Zero-Downtime-Deploys).
+- [ ] **Architektur:** Cloudflare → Hetzner LB11 (sticky WebSocket-Sessions) → app-1/app-2; Socket.io-Räume über Redis-Adapter teilen (`REDIS_URL`), Mediasoup/SFU nur auf dediziertem Knoten.
+- [ ] **Kosten dokumentieren:** 0,012 €/h netto bzw. 7,49 €/Monat netto (LB11, Europa, Stand 04/2026); stündlich → nur zahlen, solange er existiert.
+- [ ] **Prüfpunkt:** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).
 
 ---
 
