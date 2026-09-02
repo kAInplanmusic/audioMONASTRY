@@ -9,11 +9,26 @@
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
+- [ ] **OPS-Snapshot**: Hetzner-Snapshots je Rolle für schnellen Flotten-Start (wake nutzt Snapshot-Image, Fallback cloud-init)
 - [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
 - [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden"
 - [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
 - [ ] **P2-4**: `routing.json` vs. `exportGraphState()` Validierung + Bottleneck-Fix
 - [ ] **P3-2/P3-3**: 21 Plugin-Prompts + Eval-Suiten + `npm run eval:ai`
+
+---
+
+## 🟠 OPS – Flotten-Start per Snapshot beschleunigen (2026-09-02)
+
+> Ausgangslage: Der Flotten-Wake baut aktuell pro Knoten das Docker-Image aus
+> dem Repo (Dauer: mehrere Minuten). Hetzner-Snapshots kosten ca. 0,01 €/GB/
+> Monat (Cent-Beträge) und machen den Start deutlich schneller.
+
+- [ ] **Snapshot je Rolle anlegen:** nach erfolgreichem Bootstrap (app/sfu/ai/master/edge) je Knoten einen Snapshot erzeugen (`POST /servers/{id}/actions/create_image`), Name/Label `samplemonk-snapshot-<role>`.
+- [ ] **Portal-Wake nutzt Snapshot:** `startFleet` versucht zuerst das passende Snapshot-Image (`image: <snapshot-id>` statt `ubuntu-24.04`); Fallback auf cloud-init-Bootstrap, wenn kein Snapshot existiert.
+- [ ] **Snapshot-Refresh:** nach Deploy-Änderungen Snapshots gezielt erneuern (z. B. `POST /api/refresh-snapshots`, nur mit Session-Cookie).
+- [ ] **Kosten/Retention dokumentieren:** Snapshots werden pro GB abgerechnet; alte Versionen löschen (Auto-Retention, z. B. letzte 2 je Rolle).
+- [ ] **Prüfpunkt:** Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready.
 
 ---
 
