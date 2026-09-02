@@ -6,7 +6,7 @@
 
 /* Querformat mit wenig Höhe (Tablet/Handy landscape): kompaktere Regler. */
 @custom-variant short-landscape {
-  @media (orientation: landscape) and (max-height: 620px) {
+  @media (orientation: landscape) and (max-height: 700px) {
     @slot;
   }
 }
@@ -195,4 +195,62 @@ button, select, input[type="range"] {
 }
 @utility touch-action-pan-y {
   touch-action: pan-y;
+}
+
+/* ============================================================================
+   Header-Navigation (Designvorlage uioben.jpg)
+   ----------------------------------------------------------------------------
+   Auswahl-Icons ohne sichtbare Scrollbar; Rack-Anker berücksichtigen den
+   sticky Header + sticky MasterplazerMONK beim Anspringen.
+   ========================================================================== */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+#studio-main,
+[id^="rack-"] {
+  scroll-margin-top: 132px;
+}
+
+/* ============================================================================
+   iPhone/iPad 16:9 (Breitbild) – Optimierungen
+   ----------------------------------------------------------------------------
+   - short-landscape (max-height 620px) macht Regler/Header kompakt.
+   - iPad-Querformat (1024–1400 px breit, ≤ 800 px hoch): Studio füllt die
+     Fläche, Panels bleiben dicht beieinander (keine Lücken wie im Portrait).
+   ========================================================================== */
+/* Querformat mit wenig Höhe: Visualizer deutlich flacher. */
+@media (orientation: landscape) and (max-height: 700px) {
+  #visualizer-container {
+    height: 3rem;
+  }
+}
+
+@media (orientation: landscape) and (min-width: 1024px) and (max-width: 1400px) and (max-height: 800px) {
+  #studio-main {
+    padding: 0.5rem 0.75rem 6rem;
+  }
+  #studio-main > header,
+  #studio-main > nav[aria-label="Plugin-Toolbar"] {
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+  }
+  #studio-main > header {
+    margin-top: -0.5rem;
+  }
+  /* iPad 16:9: Visualizer flacher, damit MixerMONK mehr Raum bekommt. */
+  #visualizer-container {
+    height: 3.5rem;
+  }
+}
+
+/* Hochformat-Hinweis: nur Touch-Geräte, die hochkant starten. */
+@media (orientation: portrait) and (pointer: coarse) {
+  body {
+    overscroll-behavior-y: contain;
+  }
 }
