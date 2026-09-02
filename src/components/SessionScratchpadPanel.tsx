@@ -86,11 +86,11 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 pointer-events-none" role="dialog" aria-label="Session-Zwischenspeicher">
+    <div className="fixed inset-0 z-50 pointer-events-none" role="dialog" aria-label="Zwischenspeicher">
       {/* Overlay (Mobile/Desktop) – halbtransparent, Klick schließt */}
       <button
         type="button"
-        aria-label="Zwischenspeicher schließen"
+        aria-label="X"
         onClick={onClose}
         className="absolute inset-0 bg-black/40 backdrop-blur-sm pointer-events-auto cursor-default"
       />
@@ -103,7 +103,7 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Zwischenspeicher schließen"
+            aria-label="Schließen"
             className="p-1.5 rounded-md text-neutral-400 hover:text-amber-300 hover:bg-amber-400/10 cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -113,7 +113,7 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {/* Session-Snapshot speichern */}
           <section>
-            <h3 className="text-[10px] font-bold text-amber-300/90 uppercase tracking-widest mb-2">Session-Snapshot</h3>
+            <h3 className="text-[10px] font-bold text-amber-300/90 uppercase tracking-widest mb-2">Snapshot</h3>
             <div className="flex gap-2">
               <input
                 value={name}
@@ -121,7 +121,7 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') void handleSave();
                 }}
-                placeholder="Name (z. B. Dark Warehouse Set)"
+                placeholder="Name"
                 className="flex-1 px-3 py-2 rounded-lg bg-black/60 border border-neutral-800 text-neutral-200 text-xs placeholder:text-neutral-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/60"
               />
               <button
@@ -135,7 +135,7 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
             </div>
             <div className="mt-2 space-y-1.5">
               {snapshots.length === 0 && (
-                <p className="text-[10px] font-mono text-neutral-600">Noch keine Snapshots gespeichert.</p>
+                <p className="text-[10px] font-mono text-neutral-600">Keine Snapshots.</p>
               )}
               {snapshots.map((item) => (
                 <div key={item.id} className="flex items-center gap-2 bg-black/40 border border-neutral-800 rounded-lg p-2">
@@ -143,7 +143,6 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
                     type="button"
                     onClick={() => handleLoad(item)}
                     className="flex-1 text-left min-w-0 cursor-pointer"
-                    title={`${item.name} laden (BPM ${item.snapshot.bpm})`}
                   >
                     <div className="text-[11px] font-bold text-neutral-200 truncate">{item.name}</div>
                     <div className="text-[9px] font-mono text-neutral-500">
@@ -165,7 +164,7 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
 
           {/* DnD-Einträge */}
           <section>
-            <h3 className="text-[10px] font-bold text-amber-300/90 uppercase tracking-widest mb-2">Ablage (Drag &amp; Drop)</h3>
+            <h3 className="text-[10px] font-bold text-amber-300/90 uppercase tracking-widest mb-2">Ablage</h3>
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -174,11 +173,11 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
               onDrop={(e) => void handleDrop(e)}
               className="border-2 border-dashed border-amber-400/30 rounded-lg p-3 text-center text-[10px] text-neutral-500 hover:border-amber-400/70 hover:bg-amber-400/5 transition-colors"
             >
-              PLUGIN / TRACK HIERHER ZIEHEN
+              HIERHER ZIEHEN
             </div>
             <div className="mt-2 space-y-1.5">
               {entries.length === 0 && (
-                <p className="text-[10px] font-mono text-neutral-600">Noch keine Einträge abgelegt.</p>
+                <p className="text-[10px] font-mono text-neutral-600">Keine Einträge.</p>
               )}
               {entries.map((entry) => (
                 <div
@@ -189,7 +188,7 @@ export const SessionScratchpadPanel: React.FC<SessionScratchpadPanelProps> = ({
                     e.dataTransfer.effectAllowed = 'copy';
                   }}
                   className="flex items-center gap-2 bg-black/40 border border-neutral-800 rounded-lg p-2 cursor-grab active:cursor-grabbing"
-                  title={`${entry.name} auf ein Modul ziehen`}
+                  
                 >
                   <div className="flex-1 min-w-0">
                     <div className="text-[11px] font-bold text-amber-100 truncate">{entry.name}</div>

@@ -73,7 +73,6 @@ export const RackRow = React.memo(function RackRow({
             e.dataTransfer.setData(MONK_DRAG_MIME, JSON.stringify({ type: 'module', id, name, state } satisfies ScratchpadDragItem));
             e.dataTransfer.effectAllowed = 'copy';
           }}
-          title={`${name} in den Zwischenspeicher ziehen`}
           aria-label={`${name} in den Zwischenspeicher ziehen`}
           className="shrink-0 text-neutral-700 hover:text-neutral-400 cursor-grab active:cursor-grabbing p-0.5"
         >
@@ -111,7 +110,6 @@ export const RackRow = React.memo(function RackRow({
         <button
           type="button"
           onClick={onToggle}
-          title={`${short} Power`}
           aria-label={`${name} Power`}
           className={`w-9 h-9 shrink-0 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
             active
@@ -125,7 +123,6 @@ export const RackRow = React.memo(function RackRow({
         <button
           type="button"
           onClick={onPromote}
-          title={`${short} Menü (PRO/OFF)`}
           aria-label={`${name} Menü`}
           className={`w-9 h-9 shrink-0 rounded-full border flex items-center justify-center text-lg font-black transition-colors cursor-pointer ${
             pro
@@ -139,7 +136,6 @@ export const RackRow = React.memo(function RackRow({
           <button
             type="button"
             onClick={onCopy}
-            title={`${short} in Zwischenablage senden`}
             aria-label={`${name} in Zwischenablage senden`}
             className="w-9 h-9 shrink-0 rounded-full border border-neutral-700 text-neutral-400 hover:text-amber-300 hover:border-amber-400/40 flex items-center justify-center transition-colors cursor-pointer"
           >

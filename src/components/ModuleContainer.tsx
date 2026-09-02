@@ -45,7 +45,6 @@ export const ModuleContainer = React.memo(({ id, name, state, children, onClose,
               type="button"
               onClick={onCopyToClipboard}
               aria-label={`${name} in Zwischenablage senden`}
-              title="In Zwischenablage senden"
               className="px-2 py-0.5 rounded-md border border-neutral-700 text-neutral-400 text-[10px] font-bold uppercase tracking-wider hover:text-amber-300 hover:border-amber-400/60 hover:bg-amber-500/10 transition-colors cursor-pointer"
             >
               ⧉ JSON
@@ -56,7 +55,6 @@ export const ModuleContainer = React.memo(({ id, name, state, children, onClose,
               type="button"
               onClick={onClose}
               aria-label={`${name} schließen (OFF)`}
-              title="Schließen (OFF)"
               className="px-2 py-0.5 rounded-md border border-neutral-700 text-neutral-400 text-[10px] font-bold uppercase tracking-wider hover:text-red-300 hover:border-red-500/60 hover:bg-red-500/10 transition-colors cursor-pointer"
             >
               ✕ OFF
