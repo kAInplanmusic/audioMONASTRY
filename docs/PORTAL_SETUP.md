@@ -65,6 +65,43 @@ wrangler deploy
 3. **Admin-Login:** `ADMIN_USER` / `ADMIN_PASSWORD` (Werte liegen in `.env.portal`,
    Passwort wurde separat mitgeteilt).
 
+## OPS-Snapshots – Flotten-Start beschleunigen (2026-09-02)
+
+> Hetzner-Snapshots kosten ca. **0,01 €/GB/Monat** (Cent-Beträge). Sie machen
+> den Flotten-Wake deutlich schneller, weil kein cloud-init-Bootstrap (Docker
+> installieren, Repo klonen, Images bauen) mehr je Knoten läuft.
+
+**Ablauf:**
+
+1. Flotte normal starten (einmalig per cloud-init) und warten bis `ready`.
+2. `POST /api/refresh-snapshots` (eingeloggt, Session-Cookie) aufrufen – das
+   erzeugt je **laufendem** Flotten-Server einen Snapshot:
+   - `POST /servers/{id}/actions/create_image` mit Label `role=<app|sfu|ai|master|edge>`
+   - Name/Label `samplemonk-snapshot-<role>`
+   - Auto-Retention: es bleiben je Rolle die **letzten 2** Snapshots erhalten,
+     ältere werden automatisch gelöscht.
+3. Beim nächsten Wake versucht `startFleet` zuerst das passende
+   Snapshot-Image (`image: <snapshot-id>` statt `ubuntu-24.04`). Gibt es für
+   eine Rolle keinen Snapshot, greift der bisherige cloud-init-Bootstrap.
+4. `GET /api/snapshots` listet die aktuellen Snapshots (eingeloggt).
+
+**Refresh-Regel:** Nach Deploy-/Konfigurations-Änderungen (neue Secrets, neuer
+Stand im Repo) `POST /api/refresh-snapshots` erneut aufrufen – Snapshots sind
+eingefrorene Stände inkl. `.env` und gebautem Docker-Image.
+
+**Kosten/Retention:**
+
+| Position | Wert |
+|---|---|
+| Snapshot-Preis | ca. 0,01 €/GB/Monat (Hetzner, Stand 04/2026) |
+| Retention | automatisch letzte 2 je Rolle (`SNAPSHOT_RETENTION = 2`) |
+| Löschung | `DELETE /images/{id}` im `refresh-snapshots`-Lauf |
+| Sicherheit | Snapshot-Erzeugung/-Liste nur mit signiertem Session-Cookie |
+
+**Prüfpunkt:** Flotten-Start (wake → ready) vorher/nachher messen und
+dokumentieren; Ziel **< 90 s** bis ready. (Live-Messung beim nächsten
+Flotten-Start durchführen.)
+
 ## Sicherheit & Hinweise
 
 - Session-Cookie ist HMAC-signiert (24 h gültig, `HttpOnly`, `Secure`).

@@ -2,12 +2,38 @@
 
 > Erledigte Punkte aus `MASTER_TODO.md` werden hierher verschoben und
 > aus der `MASTER_TODO.md` gelöscht. Dies ist das zentrale Archiv.
-> Stand: 2026-09-01
+> Stand: 2026-09-02
 > Quellen: `audioMONASTRY/MASTER_TODO.md` + `samplemonk/MASTER_TODO.md`
 
 ---
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
+
+### OPS-Snapshot – Rollen-Snapshots für schnellen Flotten-Start (2026-09-02)
+
+- [x] **Snapshot je Rolle:** `POST /servers/{id}/actions/create_image` mit Description/Label `samplemonk-snapshot-<role>` + `role`-Label – in `services/portal-worker/src/index.js` (`createServerSnapshot`, `listSnapshots`, `findSnapshot`).
+- [x] **Portal-Wake nutzt Snapshot:** `startFleet` versucht zuerst das Rollen-Snapshot-Image (`image: <snapshot-id>` statt `ubuntu-24.04`, ohne cloud-init); Fallback auf cloud-init-Bootstrap, wenn kein Snapshot existiert (`fallbackRoles`).
+- [x] **Snapshot-Refresh:** `POST /api/refresh-snapshots` (nur signiertes Session-Cookie) erzeugt je laufendem Flotten-Server einen Snapshot und löscht alte Snapshots; `GET /api/snapshots` listet sie.
+- [x] **Kosten/Retention dokumentiert:** `docs/PORTAL_SETUP.md` – ca. 0,01 €/GB/Monat, Auto-Retention `SNAPSHOT_RETENTION = 2` je Rolle (`DELETE /images/{id}`).
+- [x] **Tests:** `tests/portalWorkerSnapshots.test.ts` (6 Tests: Snapshot-Image-Wahl, cloud-init-Fallback, Refresh + Retention, Auth-Pflicht, Listing); `npm run verify` → **483 Tests + Boundary-Scan 0** grün.
+- [ ] **Prüfpunkt (bleibt offen):** Flotten-Start (wake→ready) vorher/nachher messen; Ziel < 90 s – Live-Messung beim nächsten Flotten-Start.
+
+### P1-2 Design-Tokens / CSS-Variablen-Themes je Plugin (2026-09-02, D8)
+
+- [x] **Zentrale Tokens:** `src/index.css` – `--monk-accent`/`--monk-accent-rgb`/`--monk-glow-accent` im `:root` (Brand-Default) + `.monk-theme-<id>`-Klassen für alle **21** Plugins; keine plugin-lokalen Hex-Werte.
+- [x] **Theme-Modul:** `src/utils/pluginTheme.ts` (`PLUGIN_THEME_IDS`, `PLUGIN_SKIN_REFERENCES`, `getPluginThemeClass`, `getPluginSkinReference`) – bewusst ohne Farbwerte.
+- [x] **Anwendung:** `ModuleContainer` (Akzent-Hairline + Status-Dot via `var(--monk-accent)`), `RackRow` (Rahmen/Icon/Power im Plugin-Akzent), `PluginButton` (aktive Buttons im Plugin-Akzent; PRO bleibt Fuchsia).
+- [x] **Tests:** `tests/pluginTheme.test.ts` (5 Tests: 21 IDs = Manifest, CSS-Tokens vorhanden, Fallback, Referenz-Looks, keine Hex-Werte im TS); `npm run verify` → **488 Tests + Boundary-Scan 0** grün.
+- [ ] **Offen:** Komponenten-Neubau im Hardware-Look (DJM-A9/XONE, MiniMoog/Prophet, TR-808, API/SSL …) + `visual.spec.ts`-Screenshot-Tests – mittlere Priorität nach D8.
+
+### P1-4 Scratchpad – Overlay-Sidebar, DnD + Clipboard (2026-09-02)
+
+- [x] **Overlay-Sidebar (D9):** `src/components/SessionScratchpadPanel.tsx` – halbtransparente Sidebar (amber), Header-Button „ZWISCHENSPEICHER" in `App.tsx`; Snapshot-Liste (speichern/laden/löschen) + Ablage-Liste in IndexedDB.
+- [x] **Snapshot-Kern erweitert:** `src/core/session/sessionScratchpad.ts` – `buildSessionSnapshot` (pure), `createScratchpadSnapshot`, Snapshots-Liste (`loadScratchpadSnapshots`/`add`/`remove`), DnD-Entries + `MONK_DRAG_MIME`/`MONK_SCRATCH_MIME` (`writeMonkDragItem`/`writeMonkScratchItem`/`readMonkDragItem`).
+- [x] **DnD:** Drag-Handle in `RackRow` zieht Module in den Scratchpad (`MONK_DRAG_MIME`); Scratchpad-Einträge sind per Drag auf Module ablegbar (`MONK_SCRATCH_MIME`, `onLoadScratch` → Modul aktivieren/State übernehmen).
+- [x] **Clipboard:** `RackRow`-Copy kopiert jetzt Plugin-State inkl. vollem Session-Snapshot (`buildSessionSnapshot`); `ModuleContainer` hat neuen Prop `onCopyToClipboard` („⧉ JSON"-Button).
+- [x] **Tests:** `tests/sessionScratchpad.test.ts` auf 7 Tests erweitert (Snapshot-Builder pur, Snapshot-Item, DnD-Roundtrip, kaputte Daten defensiv); `npm run verify` → **492 Tests + Boundary-Scan 0** grün.
+- [ ] **Prüfpunkt (offen):** Reload/DnD/Clipboard-Roundtrip im echten Browser verifizieren.
 
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)
 

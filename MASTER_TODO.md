@@ -1,6 +1,6 @@
 # MASTERTODO – Offene Punkte (zusammengeführt)
 
-> Stand: 2026-09-01
+> Stand: 2026-09-02
 > Quellen: `audioMONASTRY/MASTER_TODO.md` + `samplemonk/MASTER_TODO.md`
 > Legende: `[ ]` offen · `[x]` erledigt → wird nach `TASKDONE.md` verschoben und hier gelöscht.
 > Prioritäten: 🔴 Kritisch · 🟠 Hoch · 🟡 Mittel · 🔵 Strategisch
@@ -9,10 +9,10 @@
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
-- [ ] **OPS-Snapshot**: Hetzner-Snapshots je Rolle für schnellen Flotten-Start (wake nutzt Snapshot-Image, Fallback cloud-init)
+- [ ] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready (Live-Messung beim nächsten Flotten-Start)
 - [ ] **OPS-Load-Balancer**: Hetzner LB11 erst ab ≥2 App-Knoten (stündlich 0,012 €/h netto, 7,49 €/Monat netto) – aktuell bewusst NICHT
-- [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
-- [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden"
+- [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8) + `visual.spec.ts`-Screenshot-Tests
+- [ ] **P1-4 Scratchpad Prüfpunkt**: Reload/DnD/Clipboard-Roundtrip im Browser verifizieren (Code + Helper-Tests grün)
 - [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
 - [ ] **P2-4**: `routing.json` vs. `exportGraphState()` Validierung + Bottleneck-Fix
 - [ ] **P3-2/P3-3**: 21 Plugin-Prompts + Eval-Suiten + `npm run eval:ai`
@@ -24,11 +24,10 @@
 > Ausgangslage: Der Flotten-Wake baut aktuell pro Knoten das Docker-Image aus
 > dem Repo (Dauer: mehrere Minuten). Hetzner-Snapshots kosten ca. 0,01 €/GB/
 > Monat (Cent-Beträge) und machen den Start deutlich schneller.
+>
+> Umsetzung 2026-09-02: Portal-Worker nutzt Rollen-Snapshots, Refresh-Endpoint
+> + Auto-Retention sind umgesetzt → TASKDONE. Offen ist nur die Live-Messung.
 
-- [ ] **Snapshot je Rolle anlegen:** nach erfolgreichem Bootstrap (app/sfu/ai/master/edge) je Knoten einen Snapshot erzeugen (`POST /servers/{id}/actions/create_image`), Name/Label `samplemonk-snapshot-<role>`.
-- [ ] **Portal-Wake nutzt Snapshot:** `startFleet` versucht zuerst das passende Snapshot-Image (`image: <snapshot-id>` statt `ubuntu-24.04`); Fallback auf cloud-init-Bootstrap, wenn kein Snapshot existiert.
-- [ ] **Snapshot-Refresh:** nach Deploy-Änderungen Snapshots gezielt erneuern (z. B. `POST /api/refresh-snapshots`, nur mit Session-Cookie).
-- [ ] **Kosten/Retention dokumentieren:** Snapshots werden pro GB abgerechnet; alte Versionen löschen (Auto-Retention, z. B. letzte 2 je Rolle).
 - [ ] **Prüfpunkt:** Flotten-Start (wake→ready) vorher/nachher messen und dokumentieren; Ziel < 90 s bis ready.
 
 ---
@@ -127,7 +126,7 @@
 
 - [ ] `mixerMONK` (MischpultTerminal) im Stil Pioneer DJM-A9 / Allen & Heath XONE; farbliche Kanal-Accents, Fader/Knobs wie Hardware.
 - [ ] `synthesizerMONK` im Stil klassischer Analog-Synths (MiniMoog/Prophet/ Juno), `drumMONK` TR-808/Dirtywave M8, `eqMONK` API/SSL, `masteringMONK` TC/Massey, `spatialMONK` 3D-Panner wie High-End-Controller.
-- [ ] Design-Tokens zentral in `index.css` (`--monk-*`) erweitern; keine plugin-lokalen Hex-Werte-Duplikate.
+- [x] Design-Tokens zentral in `index.css` (`--monk-*`) erweitern; keine plugin-lokalen Hex-Werte-Duplikate → `src/utils/pluginTheme.ts` + `.monk-theme-*`-Klassen (21), angewandt in `ModuleContainer`/`RackRow`/`PluginButton`, Tests `tests/pluginTheme.test.ts`.
 - [ ] **Prüfpunkt:** Screenshot-Tests (`visual.spec.ts`) für alle 21 Plugins; Vergleich mit Referenz-Hardware-Look.
 
 ### P1-3 Einstellungen & Geräte-Defaults
@@ -138,9 +137,9 @@
 ### P1-4 Session-Zwischenspeicher (Scratchpad) + Drag & Drop + Clipboard
 
 - [x] `SessionScratchpad` in IndexedDB: Button im Header „ZWISCHENSPEICHER" mit eigener Farbe (z. B. amber/orange) zum Ein-/Ausschalten; speichert Session-Snapshot (Patterns, BPM, Mixer, Plugin-States, Routing).
-- [ ] Drag & Drop: Einträge/Plugins/Tracks in den Scratchpad-Bereich ziehen; aus dem Scratchpad per Drop auf ein Plugin/Modul laden.
-- [ ] Jedes Plugin (ModuleContainer) bekommt „⧉ In Zwischenablage senden": kopiert Plugin-State/Preset/Config als JSON in die Zwischenablage.
-- [ ] **Prüfpunkt:** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON.
+- [x] Drag & Drop: Einträge/Plugins/Tracks in den Scratchpad-Bereich ziehen; aus dem Scratchpad per Drop auf ein Plugin/Modul laden → `SessionScratchpadPanel` (Overlay-Sidebar, D9), Drag-Handle in `RackRow` (`MONK_DRAG_MIME`), Drop aufs Modul (`MONK_SCRATCH_MIME`), IndexedDB-Einträge.
+- [x] Jedes Plugin (ModuleContainer) bekommt „⧉ In Zwischenablage senden": kopiert Plugin-State/Preset/Config als JSON in die Zwischenablage → `RackRow`-Copy (voller Snapshot via `buildSessionSnapshot`) + `ModuleContainer`-Prop `onCopyToClipboard`.
+- [ ] **Prüfpunkt:** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON → Helper-Tests grün (`tests/sessionScratchpad.test.ts`); Browser-Verifikation offen.
 
 ### P1-5 Lieder-Datenbank automatisch sortieren
 

@@ -25,6 +25,11 @@ const FLEET = [
 
 const LOCATION = 'fsn1';
 const IMAGE = 'ubuntu-24.04';
+// OPS-Snapshot: Basis-Image-Name, von dem die Rollen-Snapshots abgeleitet werden.
+// Snapshots kosten ~0,01 €/GB/Monat (Cent-Beträge) und beschleunigen den
+// Flotten-Start deutlich (kein Docker-Build/cloud-init-Bootstrap je Knoten).
+const SNAPSHOT_PREFIX = 'samplemonk-snapshot-';
+const SNAPSHOT_RETENTION = 2; // je Rolle die letzten 2 Snapshots behalten
 const REPO_URL = 'https://github.com/kAInplanmusic/audioMONASTRY.git';
 const PORTAL_DOMAIN = 'anunnakitools.de';
 const ORIGIN_HOST = 'origin.anunnakitools.de';
@@ -66,6 +71,107 @@ async function fleetServers(env) {
     if (FLEET.some((f) => f.name === s.name)) map[s.name] = s;
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// OPS-Snapshot: Rollen-Snapshots für schnellen Flotten-Start
+// ---------------------------------------------------------------------------
+function isFleetSnapshot(img) {
+  return (
+    img?.labels?.app === 'audioMONASTRY' ||
+    String(img?.name ?? '').startsWith(SNAPSHOT_PREFIX) ||
+    String(img?.description ?? '').startsWith(SNAPSHOT_PREFIX)
+  );
+}
+
+function snapshotRoleOf(img) {
+  return img?.labels?.role ?? null;
+}
+
+async function listSnapshots(env) {
+  const data = await hzGet(env, '/images?type=snapshot&per_page=100&sort=created:desc');
+  return (data.images ?? []).filter(isFleetSnapshot);
+}
+
+/** Neuesten verfügbaren Snapshot einer Rolle finden (oder null). */
+function findSnapshot(images, role) {
+  return (
+    images.find(
+      (img) =>
+        img.status === 'available' &&
+        snapshotRoleOf(img) === role &&
+        (String(img.name ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`) ||
+          String(img.description ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`)),
+    ) ?? null
+  );
+}
+
+async function createServerSnapshot(env, server, role) {
+  const payload = {
+    description: `${SNAPSHOT_PREFIX}${role}-${new Date().toISOString().slice(0, 10)}`,
+    type: 'snapshot',
+    labels: { app: 'audioMONASTRY', role, 'snapshot-of': server.name },
+  };
+  const result = await hzPost(env, `/servers/${server.id}/actions/create_image`, payload);
+  return {
+    server: server.name,
+    role,
+    description: payload.description,
+    action: result.action?.id ?? null,
+    error: result.__http ? `HTTP ${result.__http}` : null,
+  };
+}
+
+/**
+ * Auto-Retention: pro Rolle nur die letzten `keepPerRole` Snapshots behalten.
+ * Ältere Snapshots werden gelöscht (Snapshots kosten ~0,01 €/GB/Monat).
+ */
+async function pruneSnapshots(env, keepPerRole = SNAPSHOT_RETENTION) {
+  const images = await listSnapshots(env);
+  const byRole = {};
+  for (const img of images) {
+    const role = snapshotRoleOf(img);
+    if (!role) continue;
+    (byRole[role] ??= []).push(img);
+  }
+  const deleted = [];
+  for (const [role, list] of Object.entries(byRole)) {
+    const sorted = list.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
+    for (const img of sorted.slice(keepPerRole)) {
+      const res = await hzDelete(env, `/images/${img.id}`);
+      deleted.push({
+        image: img.id,
+        role,
+        description: img.description ?? img.name ?? '',
+        ok: !res.__http,
+        ...(res.__http ? { http: res.__http } : {}),
+      });
+    }
+  }
+  return deleted;
+}
+
+async function refreshSnapshots(env) {
+  const servers = await fleetServers(env);
+  const running = Object.values(servers).filter((s) => s.status === 'running');
+  if (running.length === 0) {
+    return { ok: false, message: 'Keine laufenden Flotten-Server – Snapshots werden von laufenden Servern erzeugt.' };
+  }
+
+  const created = [];
+  for (const server of running) {
+    const role = server.labels?.role ?? null;
+    if (!role) continue;
+    created.push(await createServerSnapshot(env, server, role));
+  }
+
+  const deleted = await pruneSnapshots(env);
+  return {
+    ok: created.length > 0,
+    created,
+    deleted,
+    retention: { keepPerRole: SNAPSHOT_RETENTION, hint: 'Letzte 2 Snapshots je Rolle bleiben erhalten.' },
+  };
 }
 
 async function ensureSshKey(env) {
@@ -371,20 +477,31 @@ async function startFleet(env) {
 
   const sshKeyId = await ensureSshKey(env);
   const cfIps = await cloudflareIpRanges();
+  const snapshots = await listSnapshots(env);
   const created = [];
+  const usedSnapshots = {};
+  const fallbackRoles = [];
 
   for (const item of FLEET) {
     const fwName = `samplemonk-${item.role}`;
     const fwId = await ensureFirewall(env, fwName, firewallRules(item.role, item.role === 'app' ? cfIps : []));
+    // OPS-Snapshot: zuerst das Rollen-Snapshot-Image verwenden (schneller
+    // Start, kein cloud-init-Bootstrap). Fallback: Basis-Image + cloud-init.
+    const snap = findSnapshot(snapshots, item.role);
     const payload = {
       name: item.name,
       server_type: item.type,
-      image: IMAGE,
+      image: snap ? snap.id : IMAGE,
       location: LOCATION,
       firewalls: fwId ? [{ firewall: fwId }] : [],
-      user_data: userData(env, item.role),
       labels: { app: 'audioMONASTRY', 'managed-by': 'portal-worker', role: item.role },
     };
+    if (snap) {
+      usedSnapshots[item.role] = { image: snap.id, description: snap.description ?? snap.name ?? '' };
+    } else {
+      payload.user_data = userData(env, item.role);
+      fallbackRoles.push(item.role);
+    }
     if (sshKeyId) payload.ssh_keys = [sshKeyId];
     const result = await hzPost(env, '/servers', payload);
     if (result.server?.id) created.push(item.name);
@@ -396,7 +513,7 @@ async function startFleet(env) {
     try { await openFleetPorts(env); } catch (e) { console.warn('[portal] openFleetPorts:', e?.message ?? e); }
   }
 
-  return { started: true, created };
+  return { started: true, created, usedSnapshots, fallbackRoles };
 }
 
 /**
@@ -682,6 +799,31 @@ export default {
       if (url.pathname === '/api/wire-fleet' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
         return json(await openFleetPorts(env));
+      }
+
+      // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot
+      // (POST /servers/{id}/actions/create_image) und löscht alte Snapshots
+      // (Auto-Retention: letzte 2 je Rolle). Nur mit Session-Cookie.
+      if (url.pathname === '/api/refresh-snapshots' && request.method === 'POST') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        return json(await refreshSnapshots(env));
+      }
+
+      // OPS-Snapshot: aktuelle Rollen-Snapshots auflisten (Session-Cookie).
+      if (url.pathname === '/api/snapshots') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        const images = await listSnapshots(env);
+        return json({
+          snapshots: images.map((img) => ({
+            id: img.id,
+            name: img.name ?? '',
+            description: img.description ?? '',
+            created: img.created ?? '',
+            status: img.status ?? '',
+            disk_size: img.disk_size ?? null,
+            role: snapshotRoleOf(img),
+          })),
+        });
       }
 
       // Unbekannte /api/*-Routen NICHT blockieren – sie gehören der App
