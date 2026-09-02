@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:e2e:responsive": "playwright test tests/e2e/responsive.spec.ts --config=playwright.responsive.config.ts",
     "test:stress": "playwright test tests/e2e/stress.spec.ts",
     "stress:hetzner": "node scripts/hetzner/stress-test.mjs",
     "stress:sfu": "node scripts/hetzner/sfu-stress-test.mjs",

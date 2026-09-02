@@ -41,6 +41,34 @@
 | Instrument-Canvas | `tests/canvasDefs.test.ts` | virtuell (Geometrie/Noten) | ✅ 5 Tests grün |
 | MOA-Abdeckung | `tests/moaCoverage.test.ts` | Registry-Audit | ✅ 2 Tests grün |
 
+## Responsive-/Plattform-Matrix (P1-1, Stand 2026-09-02)
+
+> Automatisierte Viewport-/Browser-Matrix. Lauf:
+> `npm run test:e2e:responsive` (Chromium + Firefox, Dev-Server wird automatisch
+> gestartet). WebKit/Safari-iOS ist vorbereitet, benötigt aber in der lokalen
+> VM fehlende System-Pakete (`sudo npx playwright install-deps` bzw. CI).
+
+| Gerät | Viewport (CSS px) | Browser/Emulation | Prüfung | Ergebnis |
+|---|---|---|---|---|
+| iPhone SE (1. Gen) | 320×568 (Portrait) | Chromium (iOS-Profil) | kein Dokument-Overflow, Toolbar-Touch-Ziele ≥ 44px | ✅ automatisiert |
+| iPhone SE (1. Gen) | 568×320 (Landscape) | Chromium (iOS-Profil) | kein Dokument-Overflow | ✅ automatisiert |
+| iPhone 14 | 390×844 (Portrait) | Chromium (iOS-Profil) | kein Dokument-Overflow | ✅ automatisiert |
+| iPhone 14 | 844×390 (Landscape) | Chromium (iOS-Profil) | kein Dokument-Overflow, Plugin-Toggle (MIX) | ✅ automatisiert |
+| Pixel 7 | 412×915 (Portrait) | Chromium (Android-Profil) | kein Dokument-Overflow | ✅ automatisiert |
+| Pixel 7 | 915×412 (Landscape) | Chromium (Android-Profil) | kein Dokument-Overflow, Plugin-Toggle (MIX) | ✅ automatisiert |
+| iPad (Gen 7) | 1080×810 (Landscape) | Chromium (iOS-Profil) | kein Dokument-Overflow | ✅ automatisiert |
+| Desktop | 1920×1080 | Chromium + Firefox | kein Dokument-Overflow, 18 Plugin-Icons sichtbar | ✅ automatisiert |
+| iPhone 14 (Safari/iOS) | 390×844 | WebKit | wie Chromium-iOS-Fälle | ⬜ lokal blockiert (System-Dependencies), CI vorbereitet |
+
+**Messkriterium Overflow:** `document.documentElement.scrollWidth − clientWidth ≤ 1px`.
+Interne Scroll-Container (z. B. DJ-Mixer-Kanalzüge) sind erlaubt und werden nicht
+als Dokument-Overflow gewertet.
+
+**P1-1-UI-Fixes (2026-09-02):** Studio-Header `flex-wrap` + Session-Badge ab
+`md` ausgeblendet; Plugin-Toolbar nur noch ab `md` sticky (`md:sticky`,
+`md:top-[76px]`); Master-Player-Modus-Tabs `flex-wrap max-w-full`;
+`short-landscape`-Negativ-Margins korrigiert (`-mx-2` statt `-mx-6`).
+
 ## Hardware-Testmatrix
 
 Legende: ✅ getestet und funktioniert · ⚠️ getestet mit Einschränkung · ❌ getestet, fehlgeschlagen · ⬜ NOT TESTED

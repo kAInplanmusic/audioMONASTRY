@@ -341,8 +341,8 @@ function AppComponent() {
     <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2">
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
       {/* 1. Header: STICKY, Logo schwarz, Titel-4-Farben, Steuerung rechts */}
-      <header className="flex items-center justify-between gap-4 mb-8 short-landscape:mb-3 sticky top-0 z-30 -mx-6 px-6 short-landscape:px-3 py-4 short-landscape:py-2 bg-black/70 backdrop-blur-xl [box-shadow:0_1px_0_rgba(34,211,238,0.06),0_20px_40px_-24px_rgba(0,0,0,0.9)]">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-8 short-landscape:mb-3 sticky top-0 z-30 -mx-6 short-landscape:-mx-2 px-6 short-landscape:px-3 py-4 short-landscape:py-2 bg-black/70 backdrop-blur-xl [box-shadow:0_1px_0_rgba(34,211,238,0.06),0_20px_40px_-24px_rgba(0,0,0,0.9)]">
+        <div className="flex items-center gap-3 shrink-0">
           <div className="relative shrink-0">
             <div className="absolute -inset-1 rounded-xl bg-cyan-400/15 blur-lg" />
             <div className="relative overflow-hidden rounded-lg ring-1 ring-cyan-400/15">
@@ -356,9 +356,9 @@ function AppComponent() {
             <p className="text-[9px] text-neutral-500 font-mono tracking-[0.3em] uppercase mt-1">4-Person Studio</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           <div
-            className={`flex items-center gap-2 px-3 py-2 rounded-full border text-[9px] font-mono tracking-widest ${
+            className={`hidden md:flex items-center gap-2 px-3 py-2 rounded-full border text-[9px] font-mono tracking-widest ${
               sessionFull
                 ? 'border-red-500/40 bg-red-500/10 text-red-300'
                 : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300'
@@ -478,7 +478,7 @@ function AppComponent() {
       </section>
 
       {/* Icon-Toolbar (Designvorlage: Modul-Kacheln) */}
-      <nav className="sticky top-[76px] z-20 -mx-6 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
+      <nav className="md:sticky md:top-[76px] z-20 -mx-6 short-landscape:-mx-2 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
         <div className="flex flex-wrap gap-2 justify-center max-w-screen-2xl mx-auto">
         {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';

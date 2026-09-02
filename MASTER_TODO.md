@@ -9,7 +9,6 @@
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
-- [ ] **P1-1 Responsive**: feste Breiten raus, Touch ≥44px, Safe-Areas, Plattform-Matrix
 - [ ] **P1-2 Skins**: CSS-Variablen-Themes je Plugin (D8)
 - [ ] **P1-4 Scratchpad**: Overlay-Sidebar, DnD, „In Zwischenablage senden"
 - [ ] **P2-1/P2-2**: Latenz-Budget anwenden, Clock auditen, Lookahead 8–15 ms
@@ -88,8 +87,9 @@
 ### P1-1 Responsive Shell für iOS/Android/Windows/Linux/macOS
 
 - [x] Touch: Zielgrößen ≥ 44 px, `touch-action`, Safe-Area-Insets (`env(safe-area-inset-*)`), kein Hover-only, verhindere Zoom bei Doppeltipp, Pointer-Events für Knobs/Fader auf Touch testen.
-- [ ] Plattform-Matrix: Chromium (Win/Linux/macOS/Android), Safari (iOS), Firefox (Desktop) – dokumentiert in `docs/HARDWARE_TEST_MATRIX_2026.md`.
-- [ ] **Prüfpunkt:** Playwright-Responsive-Tests (iPhone SE/14, Pixel 7, Desktop 1920) grün; manueller iPhone-Test (UI nicht persistent, Panels schließbar).
+- [x] Plattform-Matrix: Chromium (Win/Linux/macOS/Android), Safari (iOS), Firefox (Desktop) – dokumentiert in `docs/HARDWARE_TEST_MATRIX_2026.md` (2026-09-02).
+- [x] **Prüfpunkt (automatisiert):** Playwright-Responsive-Tests (iPhone SE/14, Pixel 7, Desktop 1920) grün – 9 Tests, Chromium + Firefox (2026-09-02).
+- [ ] **Prüfpunkt (manuell):** iPhone-Test vor Ort (UI nicht persistent, Panels schließbar).
 
 ### P1-2 High-End-Klassiker-Skins pro Plugin
 
