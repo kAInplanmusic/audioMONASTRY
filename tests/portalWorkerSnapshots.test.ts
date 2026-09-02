@@ -68,6 +68,7 @@ interface FetchMockOptions {
 
 function setupFetchMock(opts: FetchMockOptions = {}) {
   const serverPayloads: Record<string, unknown>[] = [];
+  let serverGetCount = 0;
   const imageActions: { serverId: string; payload: Record<string, unknown> }[] = [];
   const deletedImages: string[] = [];
 
@@ -82,7 +83,15 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
     const path = url.pathname;
 
     if (path === '/v1/servers' && method === 'GET') {
-      return Response.json({ servers: opts.servers ?? [] });
+      // 1. Aufruf = Existenz-Check (leer), danach liefert Hetzner die
+      // erstellte app-1 mit IP (startFleet pollt darauf).
+      serverGetCount += 1;
+      const servers = serverGetCount === 1
+        ? (opts.servers ?? [])
+        : (opts.servers && opts.servers.length > 0
+            ? opts.servers
+            : [{ id: 1, name: 'samplemonk-app-1', status: 'running', labels: { role: 'app' }, public_net: { ipv4: { ip: '1.2.3.4' } } }]);
+      return Response.json({ servers });
     }
     if (path === '/v1/servers' && method === 'POST') {
       const payload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;

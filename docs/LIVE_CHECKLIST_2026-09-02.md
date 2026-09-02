@@ -18,6 +18,11 @@
 
 ## Live verifiziert (Flotte läuft, 2026-09-02)
 
+- **Flotten-Update durchgeführt:** Branch `replace/spatialmonk` (08d5d79) per Tarball auf app-1 + sfu-1 ausgerollt, Container neu gebaut; Snapshots danach erneuert (`refresh-snapshots`, alle 5 Rollen ok).
+- **Portal-Worker-Fix:** `startFleet` synchronisiert jetzt automatisch origin-DNS (Cloudflare API) + app-Firewall (aktuelle Cloudflare-IPs) + master/ai-Ports; `failed`-Diagnose im Wake-Response; `CLOUDFLARE_API_TOKEN` als Worker-Secret gesetzt. Verhindert 521/522 nach IP-Wechsel.
+- **Live-E2E gegen neuen Stand:** smoke **7/7**, keyboard **2/2**, responsive **9/9** (7 skipped Firefox-Mobile) grün.
+
+
 - **Flotte READY:** app `49.13.142.5` · sfu `49.13.0.226` · ai `49.13.65.150` ·
   master `167.233.22.157` · edge `167.233.214.220` (`/api/health` ok, `/api/fleet-map` ok)
 - **Master-Player:** `/api/master/health` ok · `/api/master/selftest` ok (530 ms)
