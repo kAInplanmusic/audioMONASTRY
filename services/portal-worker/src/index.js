@@ -451,7 +451,15 @@ async function stopFleet(env) {
     await hzDelete(env, `/servers/${s.id}`);
     deleted.push(s.name);
   }
-  return { deleted };
+  // Auch Floating-IPs löschen, damit wirklich 0 € Kosten entstehen
+  // (Floating-IPs werden sonst weiter reserviert und abgerechnet).
+  const fips = await hzGet(env, '/floating_ips?per_page=100');
+  const fipDeleted = [];
+  for (const fip of fips.floating_ips ?? []) {
+    await hzDelete(env, `/floating_ips/${fip.id}`);
+    fipDeleted.push(fip.name ?? fip.ip);
+  }
+  return { deleted, fipDeleted };
 }
 
 // ---------------------------------------------------------------------------
