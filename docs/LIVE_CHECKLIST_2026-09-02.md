@@ -21,9 +21,12 @@
 - [ ] **OPS-Snapshot (Wake-Zeit):** Flotten-Start (wake→ready) vorher/nachher messen.
       Ziel **< 90 s**. Messung: Portal-Ladebildschirm-Zeit bzw. `/api/status`-Polling
       bis `state: 'ready'`.
-- [ ] **OPS-Snapshot (Refresh):** Einmal `POST /api/refresh-snapshots` nach
-      erfolgreichem Bootstrap ausführen; `GET /api/snapshots` zeigt je Rolle
-      `samplemonk-snapshot-<role>`; danach Wake mit Snapshot-Image prüfen.
+      **Vorher (2026-09-02, cloud-init ohne Snapshot): ≈ 8,2 min** (Wake 13:16:47 UTC → ready 13:25:0x UTC).
+      Nachher-Messung steht aus (Stop + Wake mit Snapshot-Image).
+- [x] **OPS-Snapshot (Refresh):** `POST /api/refresh-snapshots` ausgeführt (2026-09-02);
+      `GET /api/snapshots` zeigt je Rolle `available`:
+      app `427253639` · sfu `427253640` · ai `427253641` · master `427253642` · edge `427253643`.
+      Portal-Worker mit Snapshot-Code deployed (Version `d96cabaa`).
 - [ ] **LB11 (bewusst später):** Erst bei ≥ 2 App-Knoten – Trigger dokumentiert,
       derzeit **NICHT** installieren. Prüfpunkt (erst bei Skalierung):
       2 App-Knoten hinter LB, 4-User-E2E grün, Failover-Test.
@@ -90,6 +93,7 @@
 
 | Prüfpunkt | Datum | Messwert | Ergebnis |
 |---|---|---|---|
+| Wake→ready (cloud-init, ohne Snapshot) | 2026-09-02 | ≈ 8,2 min | gemessen (vorher) |
 | Wake→ready (Snapshot) | | s | |
 | RMS ohne Plugin (60 s) | | dBFS | |
 | Jitter 120 BPM / 10 min | | ms | |
