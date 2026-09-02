@@ -43,6 +43,28 @@
 - [x] **Tests:** `tests/clockAudit.test.ts` (4 Tests) + bestehende `masterClock`/`clock`-Tests grün.
 - [ ] **Offen (P2-1/P2-2):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL-Verteilung, Live-Prüfpunkte (Jitter < 1 ms, < 5 ms zwischen Browsern).
 
+### P2-4 – Signalfluss-Korrekturen + Graph-Validierung (2026-09-02)
+
+- [x] **effectNode-Insert gefixt:** `audioEngine.init()` erzeugt den `effect-processor` mit den anderen Worklets und verdrahtet ihn fest zwischen `toneShiftTilt` und `eqNode` (Fallback direkt ohne Insert); neues `isEffectInsertReady()`, `setEffectParam` nutzt den vorerzeugten Knoten.
+- [x] **Verkabelung verifiziert:** `bassSynth → bassDelay → bassFilter → channel7` (Bass-Kette) und Monitor-PDC (`masterVolume → monitorLimiter → pdcMonitorDelay → MON1..4`, paralleler Cue) sind korrekt verdrahtet.
+- [x] **Graph-Validierung gestärkt:** `tests/routingValidator.test.ts` um `validateRoutingAgainstGraph`-Fälle erweitert (fehlende Nodes/Verbindungen, doppelte Pfade).
+- [ ] **Prüfpunkt (offen):** Performance-Messung < 70 % CPU (Live).
+
+### P3-2 – pluginCommandRegistry + MCP-Tools für alle 21 Plugins (2026-09-02)
+
+- [x] **Registry vollständig:** `PLUGIN_COMMAND_IDS` (21), generische `activate`/`deactivate`/`route`-Kommandos je ID über `pluginAudioRouter`; neue Kern-Kommandos für masterplayer (play/stop/tempo), sound (trigger), drop (pattern), ai (plan); `mixer.channel` (gain/pan je Kanal).
+- [x] **Server-MCP-Tools:** `mcpRuntime.ts` registriert je Katalog-Eintrag ein `<plugin>.<action>`-Tool (WRITE) + Aliase (`mixer.set_channel`, `synth.play_note`, `synthesizer.play_note`, `sequencer.load_pattern`, `mcp.load_pattern`) + generisches `plugin.command` mit Validierung; Planung wird über `recordPluginCommand` an den Client-Pfad durchgereicht (keine Fake-Audio-Tools).
+- [x] **Tests:** `tests/pluginCommandRegistry.test.ts` (3), `tests/mcpPluginTools.test.ts` (5).
+- [ ] **Offen:** Iterations-Loop (Prompt-Version → Eval → Score → Optimierung) + `aiEvaluation.test.ts` je Plugin.
+
+### P3-3 – Eval-Framework an DB + Nightly-Gate (2026-09-02)
+
+- [x] **DB-Anbindung:** `aiPersistence.saveEvaluation`/`saveEvalRun` schreiben in `ai_evaluations`/`ai_eval_runs` (Migration 002, Supabase sonst No-Op).
+- [x] **eval:ai erweitert:** `scripts/eval-ai.ts` läuft jetzt 21 deterministische Plugin-Kern-Cases, schreibt `test-results/ai-eval.json`, `ai-evaluations.json` (DB-ready) und `ai-eval-runs.json` (Runs mit PASS/FAIL-Gate) und persistiert bei konfiguriertem Supabase.
+- [x] **Nightly-CI:** `nightly.yml` um `npm run eval:ai` + `actions/upload-artifact` für `test-results/ai-eval*.json` erweitert; FAIL → Exit 1 (Auto-Issue bei failure).
+- [x] **Tests:** `tests/aiPersistence.test.ts` um saveEvaluation/saveEvalRun ergänzt; `npm run eval:ai` → 21 Cases, Accuracy 100 %, 21 Plugin-Runs (0 FAIL).
+- [ ] **Prüfpunkt (offen):** CI-Lauf grün; Report enthält je Plugin Score, Dauer, Fehler.
+
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)
 
 - [x] **AI-Modelle einzeln verifizieren** über `/api/ai/orchestrate`: Whisper (`audio.transcribe`), CLAP (`audio.embed`), MusicGen (`audio.generate`) → **2026-09-01 live verifiziert (alle 200)**: Whisper transkribiert deutschen Gesang korrekt, CLAP liefert 512-d-Embedding, MusicGen generiert 5 s Audio, AST klassifiziert 440-Hz-Sinus als „Sine wave". HF-Runtime-Fixes deployed (Whisper-Bytes-Fix, CUDA-Inferenz, Modell-Cache, Audio-Resampling, `/status` mit `last_errors`). HF-Endpoint danach **scale-to-zero** (0 Replicas).

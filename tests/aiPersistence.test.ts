@@ -52,4 +52,23 @@ describe('AI-Supabase-Persistenz (AITodo Phase 12, gemockt)', () => {
     await expect(aiPersistence.saveSession({} as any)).resolves.toBeUndefined();
     await expect(aiPersistence.saveError({} as any)).resolves.toBeUndefined();
   });
+
+  it('P3-3: saveEvaluation/saveEvalRun schreiben in ai_evaluations/ai_eval_runs', async () => {
+    const calls: Call[] = [];
+    setAiPersistenceClientForTests(createMockClient(calls));
+
+    await aiPersistence.saveEvaluation({
+      pluginId: 'mixer', task: 'plan', promptVersion: 1, model: 'mock', provider: 'offline',
+      input: 'mixer gain', output: 'mixer:gain', score: 5, metrics: { latencyMs: 5 },
+    });
+    await aiPersistence.saveEvalRun({
+      runId: 'run-1', pluginId: 'mixer', status: 'PASS', summary: { avgScore: 5, count: 1 },
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ table: 'ai_evaluations', op: 'insert' });
+    expect(calls[0].data).toMatchObject({ plugin_id: 'mixer', score: 5, prompt_version: 1 });
+    expect(calls[1]).toMatchObject({ table: 'ai_eval_runs', op: 'insert' });
+    expect(calls[1].data).toMatchObject({ run_id: 'run-1', plugin_id: 'mixer', status: 'PASS' });
+  });
 });
