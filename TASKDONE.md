@@ -35,6 +35,14 @@
 - [x] **Tests:** `tests/sessionScratchpad.test.ts` auf 7 Tests erweitert (Snapshot-Builder pur, Snapshot-Item, DnD-Roundtrip, kaputte Daten defensiv); `npm run verify` → **492 Tests + Boundary-Scan 0** grün.
 - [ ] **Prüfpunkt (offen):** Reload/DnD/Clipboard-Roundtrip im echten Browser verifizieren.
 
+### P2-1/P2-2 – Latenz-Anzeige + Clock-Audit (2026-09-02)
+
+- [x] **P2-1 AudioSettings anwenden:** `resolveAudioContextOptions`/`createConfiguredAudioContext` + `audioEngine.applyLatencyProfile()` waren bereits umgesetzt (TASKDONE) – MASTER_TODO nachgezogen.
+- [x] **P2-1 Latenz anzeigen:** `PerformanceMonitorTerminal` zeigt jetzt LOCAL (Audio, Ziel < 15 ms), NET/RTT (WebRTC, Ziel < 50 ms) und DROPOUTS live an; Persistenz läuft weiter über den 30s-Telemetrie-Snapshot in `App.tsx`.
+- [x] **P2-2 Clock-Audit/Single-Source:** `audioEngine.init()` bindet `masterClock.attach(this)` an; neue `audioEngine.getClockDiagnostics()`; Audit-Modul `src/core/clock/clockAudit.ts` (`auditClockSystem`: Lookahead-Budget 8–15 ms, BPM-Validierung, PLL-/Sync-Offsets endlich).
+- [x] **Tests:** `tests/clockAudit.test.ts` (4 Tests) + bestehende `masterClock`/`clock`-Tests grün.
+- [ ] **Offen (P2-1/P2-2):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL-Verteilung, Live-Prüfpunkte (Jitter < 1 ms, < 5 ms zwischen Browsern).
+
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)
 
 - [x] **AI-Modelle einzeln verifizieren** über `/api/ai/orchestrate`: Whisper (`audio.transcribe`), CLAP (`audio.embed`), MusicGen (`audio.generate`) → **2026-09-01 live verifiziert (alle 200)**: Whisper transkribiert deutschen Gesang korrekt, CLAP liefert 512-d-Embedding, MusicGen generiert 5 s Audio, AST klassifiziert 440-Hz-Sinus als „Sine wave". HF-Runtime-Fixes deployed (Whisper-Bytes-Fix, CUDA-Inferenz, Modell-Cache, Audio-Resampling, `/status` mit `last_errors`). HF-Endpoint danach **scale-to-zero** (0 Replicas).

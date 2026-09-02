@@ -12,6 +12,7 @@ import type {
 } from '../core/instrument/types';
 import { ClockSync } from './ClockSync';
 import { PhaseLockedLoop } from './PhaseLockedLoop';
+import { masterClock } from '../core/clock/MonastryMasterClock';
 import { AudioGraphState, isAudioGraphState } from './audioGraphSerialization';
 import { GraphStateBridge } from '../core/audio/GraphStateBridge';
 import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '../core/audio/WorkletGraphRuntime';
@@ -564,10 +565,23 @@ class AudioEngine {
 
     this.initialized = true;
 
+    // P2-2: MONASTRYmasterclock als singulären Timing-Regler an die Engine
+    // binden (Worklet-Clock bleibt die einzige Timing-Quelle im Audio-Pfad).
+    try {
+      masterClock.attach(this);
+    } catch (e) {
+      console.warn('masterClock konnte nicht angebunden werden:', e);
+    }
+
     // Sicherstellen, dass beim ersten Start ein hörbarer Drum-Loop aktiv ist
     // (falls keine Patterns gesetzt wurden). So liefert "Play" sofort Musik,
     // ohne dass externe Sample-Dateien vorhanden sein müssen.
     this.ensureDemoPattern();
+  }
+
+  /** P2-2: Diagnose-Snapshot der singulären Master-Clock (für perfMONK/Audit). */
+  public getClockDiagnostics() {
+    return masterClock.getDiagnostics();
   }
 
   /**
