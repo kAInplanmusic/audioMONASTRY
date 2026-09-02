@@ -132,4 +132,6 @@ test('Engine-/UI-Stresstest: 17 Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen', 
   const isHeadless = test.info().project.use.headless !== false;
   const fpsMin = isHeadless ? 10 : 20; // Headless rendert ohne GPU → weichere Schwelle
   expect(fps).toBeGreaterThanOrEqual(fpsMin);
+  // AM-E5-2 (Memory-Pressure-Anteil): kein ungebremstes Heap-Wachstum unter Last.
+  expect(report.heapDeltaMb, `Heap-Wachstum: ${report.heapDeltaMb} MB`).toBeLessThan(512);
 });

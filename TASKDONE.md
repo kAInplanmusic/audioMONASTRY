@@ -75,6 +75,8 @@
 - [x] **AM-E5-3:** `tests/lockFuzz.test.ts` – LockManager Race-Fuzzing (4 User × 1000 Ops gegen Referenzmodell, Lease-Expiry ohne Deadlock).
 - [x] **Fix:** `localDemucs.ts` setzt `wasm.proxy` nur bei `crossOriginIsolated` (verhindert onnxruntime-Blob-Worker mit `export`-Token).
 - [x] **MASTER_TODO nachgezogen:** AUD-P0-1/AUD-P0-4/AUD-P1-3, GAP-4 RBAC+Locking, AM-E3-2, AM-E4-3 als erledigt markiert (Belege aus TASKDONE/Code).
+- [x] **AM-E2-3:** `tests/workletRampAudit.test.ts` – statischer Automations-Audit (automate-Handler, keine per-Sample-Allokationen in dsp/eq/effect/mastering).
+- [x] **AM-E5-2 (anteilig):** Heap-Wachstums-Gate (< 512 MB Delta) im Stress-Test ergänzt und grün; volle 2-GB-Simulation bleibt offen.
 - [x] `npm run verify` → **538 Tests + Boundary-Scan 0** grün.
 
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)
