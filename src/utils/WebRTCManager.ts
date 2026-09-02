@@ -40,6 +40,9 @@ class WebRTCManager {
   private sessionFull = false;
   private sessionJoined = false;
   private localAudioStarted = false;
+  // MASTEROUTMAINSTREAM: eigener Listen-Modus für /master-out – zählt nicht zu
+  // den 4 Session-Usern, sendet selbst nichts und verbindet sich nur zum Host.
+  private masterOutMode = false;
   private sfuMode = false;
   private sfu: MediasoupTransport | null = null;
   private sfuSubscribed = new Set<string>();
@@ -189,6 +192,16 @@ class WebRTCManager {
     return this.sfuMode;
   }
 
+  /** MASTEROUTMAINSTREAM: Seite /master-out aktiviert den reinen Listen-Modus. */
+  public setMasterOutMode(enabled: boolean): void {
+    this.masterOutMode = enabled;
+  }
+
+  /** MASTEROUTMAINSTREAM: Ist dieser Client ein reiner Main-Listener? */
+  public get isMasterOutMode(): boolean {
+    return this.masterOutMode;
+  }
+
   /**
    * Schaltet den Transport-Modus um:
    *   p2p  – Full-Mesh-WebRTC (DataChannels + Media), bisheriges Verhalten.
@@ -255,7 +268,7 @@ class WebRTCManager {
     // Ein Raum pro Sitzung: Nach dem Connect automatisch der festen
     // Studio-Session beitreten (kein Raum-Erstellen im UI).
     this.socket.on('connect', () => {
-      this.socket?.emit('join-session', { userId: this.sessionUserId });
+      this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.masterOutMode ? 'master-out' : 'member' });
     });
 
     this.socket.on('session-members', (data: any) => {
@@ -266,6 +279,12 @@ class WebRTCManager {
       if (typeof data?.selfRole === 'string') this.localRole = data.selfRole;
       if (typeof data?.hostUserId === 'string') this.hostUserId = data.hostUserId;
       this.emitSessionUpdate();
+      if (this.masterOutMode) {
+        // MASTEROUTMAINSTREAM: nur mit dem Host verbinden (Main-Signal).
+        const host = this.sessionMembers.find((m) => m.userId === this.hostUserId);
+        if (host) void this.connectToPeer(host.socketId);
+        return;
+      }
       // Full-Mesh: mit allen bereits anwesenden Peers verbinden.
       this.sessionMembers.forEach((m) => {
         if (m.socketId !== this.socket?.id) this.connectToPeer(m.socketId);
@@ -294,6 +313,11 @@ class WebRTCManager {
         this.emitSessionUpdate();
       }
       if (data?.role === 'admin') this.hostUserId = String(data.userId ?? this.hostUserId);
+      if (this.masterOutMode) {
+        // MASTEROUTMAINSTREAM: nur auf den Host reagieren.
+        if (data?.role === 'admin' || peer.userId === this.hostUserId) void this.connectToPeer(peer.socketId);
+        return;
+      }
       this.connectToPeer(peer.socketId);
     });
 
@@ -314,7 +338,7 @@ class WebRTCManager {
     });
 
     this.socket.on('offer', async (data) => {
-      const pc = this.createPeerConnection(data.sender);
+      const pc = this.createPeerConnection(data.sender, { remoteIsMasterOut: data?.senderMode === 'master-out' });
       // Race-Guard: Bei simultanem Beitritt kann ein zweites Offer eintreffen,
       // während bereits ein Offer verarbeitet wird. Nur im Zustand 'stable'
       // darf ein Remote-Offer gesetzt werden.
@@ -372,19 +396,23 @@ class WebRTCManager {
     });
   }
 
-  private createPeerConnection(targetId: string): RTCPeerConnection {
+  private createPeerConnection(targetId: string, opts?: { remoteIsMasterOut?: boolean }): RTCPeerConnection {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.services.mozilla.com'] }
       ]
     });
 
-    // Add local tracks
-    if (this.localStream) {
+    // MASTEROUTMAINSTREAM: Listen-Client sendet nie eigene Tracks; Host schickt
+    // an einen Listener keinen Mikrofon-Track, sondern nur den Main-Stream.
+    const isMasterOut = this.masterOutMode || !!opts?.remoteIsMasterOut;
+
+    // Add local tracks (Mikrofon) – nicht für Master-Out-Peers.
+    if (!isMasterOut && this.localStream) {
         this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
     }
     // P4-1: Host-Main-Stream direkt in neue Peer-Verbindungen aufnehmen.
-    if (this.mainStream) {
+    if (!this.masterOutMode && this.mainStream) {
         this.mainStream.getTracks().forEach(track => pc.addTrack(track, this.mainStream!));
     }
 
@@ -445,12 +473,16 @@ class WebRTCManager {
     // KLEINEREN Socket-ID erstellt das Offer (deterministischer Initiator).
     // Der größere Peer wartet auf das eingehende Offer und beantwortet es;
     // der DataChannel wird dort über ondatachannel übernommen.
+    // MASTEROUTMAINSTREAM: der Listener ist der alleinige Initiator (der Host
+    // kennt ihn nicht), deshalb die Glare-Regel hier überspringen.
     const selfId = this.socket?.id ?? '';
-    if (selfId && targetId < selfId) return;
+    if (!this.masterOutMode && selfId && targetId < selfId) return;
 
     const pc = this.createPeerConnection(targetId);
-    const dc = pc.createDataChannel('plugin-sync');
-    this.dataChannels.set(targetId, dc);
+    if (!this.masterOutMode) {
+      const dc = pc.createDataChannel('plugin-sync');
+      this.dataChannels.set(targetId, dc);
+    }
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);

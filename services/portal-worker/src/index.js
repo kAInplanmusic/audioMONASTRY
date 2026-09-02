@@ -215,7 +215,13 @@ case "${role}" in
     ;;
   ai)
     curl -fsSL https://ollama.com/install.sh | sh || true
+    # FLEET-WIRING: Ollama muss von app-1 aus erreichbar sein (Firewall
+    # begrenzt den Zugriff auf die app-1-IP, siehe /api/wire-fleet).
+    mkdir -p /etc/systemd/system/ollama.service.d
+    printf '[Service]\\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"\\n' > /etc/systemd/system/ollama.service.d/override.conf
+    systemctl daemon-reload
     systemctl enable --now ollama || true
+    systemctl restart ollama || true
     ollama pull qwen2.5:7b || true
     cd services/stem-ai
     python3 -m venv .venv 2>/dev/null || { apt-get install -y -qq python3.12-venv; python3 -m venv .venv; }
@@ -384,7 +390,60 @@ async function startFleet(env) {
     if (result.server?.id) created.push(item.name);
   }
 
+  // FLEET-WIRING: Sobald alle Server angelegt sind (app-1-IP bekannt), die
+  // Firewalls für master/ai um app-IP-beschränkte Service-Ports ergänzen.
+  if (created.length === FLEET.length) {
+    try { await openFleetPorts(env); } catch (e) { console.warn('[portal] openFleetPorts:', e?.message ?? e); }
+  }
+
   return { started: true, created };
+}
+
+/**
+ * Öffnet die Flotten-Service-Ports (master-player 8000, stem-ai 8000,
+ * Ollama 11434) NUR für die aktuelle app-1-IP – idempotent und bei
+ * IP-Wechsel aktualisierend.
+ */
+async function openFleetPorts(env) {
+  const servers = await fleetServers(env);
+  const appIp = servers['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+  if (!appIp) return { ok: false, message: 'app-1 hat noch keine IP.' };
+
+  const portsByRole = {
+    'samplemonk-master': ['8000'],
+    'samplemonk-ai': ['8000', '11434'],
+  };
+  const list = await hzGet(env, '/firewalls?per_page=100');
+  const updated = {};
+  for (const fw of list.firewalls ?? []) {
+    const ports = portsByRole[fw.name];
+    if (!ports || ports.length === 0) continue;
+    // Vorhandene Regeln ohne unsere Service-Ports behalten; Service-Ports
+    // werden mit der aktuellen app-1-IP ersetzt (IP-Wechsel-sicher).
+    const baseRules = (fw.rules ?? []).filter(
+      (r) => !(r?.protocol === 'tcp' && ports.includes(String(r?.port ?? ''))),
+    );
+    const extra = ports.map((p) => ({
+      direction: 'in',
+      protocol: 'tcp',
+      port: p,
+      source_ips: [`${appIp}/32`],
+    }));
+    const result = await hz(env, 'PUT', `/firewalls/${fw.id}`, { name: fw.name, rules: [...baseRules, ...extra] });
+    updated[fw.name] = result.firewall
+      ? { ok: true, returnedRuleCount: (result.firewall.rules ?? []).length, returnedPorts: (result.firewall.rules ?? []).map((r) => r.port).filter(Boolean) }
+      : { ok: false, raw: result };
+  }
+  // Debug-/Betriebssicht: Regeln + Server-Zuordnung zurückgeben.
+  const after = await hzGet(env, '/firewalls?per_page=100');
+  const detail = {};
+  for (const fw of after.firewalls ?? []) {
+    detail[fw.name] = {
+      applied_to: (fw.applied_to ?? []).map((a) => a.server?.id ?? a.label_selector?.selector ?? '?'),
+      rules: (fw.rules ?? []).map((r) => `${r.direction}/${r.protocol}/${r.port}→${(r.source_ips ?? []).join(',')}`),
+    };
+  }
+  return { ok: Object.keys(updated).length > 0, updated, appIp, detail };
 }
 
 async function stopFleet(env) {
@@ -594,6 +653,29 @@ export default {
       if (url.pathname === '/api/stop' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
         return json(await stopFleet(env));
+      }
+
+      // FLEET-MAP: liefert die öffentlichen IPv4-Adressen aller Flotten-Knoten.
+      // Geschützt über den Studio-Token – die App (app-1) ruft das beim Start
+      // auf und verdrahtet master-player/ollama/stem-ai damit zur Laufzeit.
+      if (url.pathname === '/api/fleet-map') {
+        const token = (request.headers.get('x-studio-token') ?? '').trim();
+        if (!token || token !== env.STUDIO_ACCESS_TOKEN) {
+          return json({ error: 'nicht autorisiert' }, 401);
+        }
+        const servers = await fleetServers(env);
+        const fleet = {};
+        for (const [name, s] of Object.entries(servers)) {
+          fleet[name] = s.public_net?.ipv4?.ip ?? '';
+        }
+        return json({ fleet });
+      }
+
+      // FLEET-WIRING: Firewalls für master/ai auf die aktuelle app-1-IP
+      // verdrahten (master-player 8000, stem-ai 8000, Ollama 11434).
+      if (url.pathname === '/api/wire-fleet' && request.method === 'POST') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        return json(await openFleetPorts(env));
       }
 
       // Unbekannte /api/*-Routen NICHT blockieren – sie gehören der App

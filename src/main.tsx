@@ -2,6 +2,7 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { MasterOutPage } from './pages/MasterOutPage';
 import { AudioProvider } from './context/AudioContext';
 import { SampleProvider } from './context/SampleContext';
 import { ModuleStateProvider } from './context/ModuleStateContext';
@@ -27,9 +28,14 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 // ...
 
+const isMasterOutPage = window.location.pathname.startsWith('/master-out');
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
+      {isMasterOutPage ? (
+        <MasterOutPage />
+      ) : (
         <AccessProvider>
         <SessionProvider>
             <ModuleStateProvider>
@@ -45,6 +51,7 @@ createRoot(document.getElementById('root')!).render(
             </ModuleStateProvider>
         </SessionProvider>
         </AccessProvider>
+      )}
     </ErrorBoundary>
   </StrictMode>,
 );
