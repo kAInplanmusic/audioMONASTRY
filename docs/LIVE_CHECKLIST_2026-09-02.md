@@ -31,11 +31,12 @@
 
 ## 1 · Flotte / OPS
 
-- [ ] **OPS-Snapshot (Wake-Zeit):** Flotten-Start (wake→ready) vorher/nachher messen.
+- [x] **OPS-Snapshot (Wake-Zeit):** Flotten-Start (wake→ready) vorher/nachher messen.
       Ziel **< 90 s**. Messung: Portal-Ladebildschirm-Zeit bzw. `/api/status`-Polling
       bis `state: 'ready'`.
-      **Vorher (2026-09-02, cloud-init ohne Snapshot): ≈ 8,2 min** (Wake 13:16:47 UTC → ready 13:25:0x UTC).
-      Nachher-Messung steht aus (Stop + Wake mit Snapshot-Image).
+      **Vorher (cloud-init ohne Snapshot): ≈ 8,2 min.**
+      **Nachher (mit Snapshot): 72,4 s → Ziel < 90 s erreicht ✅** (Wake 13:34:06 UTC → ready 13:35:19 UTC,
+      alle 5 Rollen aus `usedSnapshots` gestartet, `fallbackRoles` leer).
 - [x] **OPS-Snapshot (Refresh):** `POST /api/refresh-snapshots` ausgeführt (2026-09-02);
       `GET /api/snapshots` zeigt je Rolle `available`:
       app `427253639` · sfu `427253640` · ai `427253641` · master `427253642` · edge `427253643`.
@@ -107,7 +108,7 @@
 | Prüfpunkt | Datum | Messwert | Ergebnis |
 |---|---|---|---|
 | Wake→ready (cloud-init, ohne Snapshot) | 2026-09-02 | ≈ 8,2 min | gemessen (vorher) |
-| Wake→ready (Snapshot) | | s | |
+| Wake→ready (Snapshot) | 2026-09-02 | 72,4 s | ✅ Ziel < 90 s |
 | RMS ohne Plugin (60 s) | | dBFS | |
 | Jitter 120 BPM / 10 min | | ms | |
 | 2-Browser-Clock-Offset | | ms | |
