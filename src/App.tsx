@@ -471,7 +471,7 @@ function AppComponent() {
       </header>
 
       {/* Rack: masterplayerMONK (fester Transport, immer sichtbar) */}
-      <section className="rounded-xl border border-cyan-400/60 bg-cyan-950/10 shadow-[0_0_24px_-8px_rgba(34,211,238,0.45)] mb-4">
+      <section id="rack-masterplayer" className="rounded-xl border border-cyan-400/60 bg-cyan-950/10 shadow-[0_0_24px_-8px_rgba(34,211,238,0.45)] mb-4">
         <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
           <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
             <Activity size={18} />

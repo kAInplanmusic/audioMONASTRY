@@ -78,6 +78,7 @@
 - [x] **AM-E2-3:** `tests/workletRampAudit.test.ts` – statischer Automations-Audit (automate-Handler, keine per-Sample-Allokationen in dsp/eq/effect/mastering).
 - [x] **AM-E5-2 (anteilig):** Heap-Wachstums-Gate (< 512 MB Delta) im Stress-Test ergänzt und grün; volle 2-GB-Simulation bleibt offen.
 - [x] **P2-5 Bundle-Diät:** zod + axios aus dem Client entfernt (manuelle Validatoren in `validation.ts`/`presetValidator.ts`/`composition.ts`, fetch statt axios in `useAudioAI`/`useAIComposition`), MOA-Prompts kompaktiert → Client-Bundle **< 1,5 MB** (vorher 1,62 MB), `check:bundle` grün.
+- [x] **P1-2 Prüfpunkt (Screenshots):** `visual.spec.ts` deckt alle **21 Plugins** ab (19 Rack-Terminals + masterplayer + aiMONK-Dock), Viewport-Baselines mit Masken für animierte Bereiche (Canvas/Scroll-Listen/Logs), Toleranz 6 %; 2× hintereinander grün. Hardware-Look-Vergleich bleibt Teil des Komponenten-Neubaus.
 - [x] `npm run verify` → **542 Tests + Boundary-Scan 0** grün.
 
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)

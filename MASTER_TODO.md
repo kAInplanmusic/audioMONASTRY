@@ -11,7 +11,7 @@
 
 - [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
 - [ ] **OPS-Load-Balancer**: Hetzner LB11 erst ab ≥2 App-Knoten (stündlich 0,012 €/h netto, 7,49 €/Monat netto) – aktuell bewusst NICHT
-- [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8) + `visual.spec.ts`-Screenshot-Tests
+- [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8)
 - [ ] **P1-4 Scratchpad Prüfpunkt**: Reload/DnD/Clipboard-Roundtrip im Browser verifizieren (Code + Helper-Tests grün)
 - [ ] **P2-1/P2-2 Rest**: Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte
 - [ ] **P2-4 Prüfpunkt**: Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt)
@@ -128,7 +128,7 @@
 - [ ] `mixerMONK` (MischpultTerminal) im Stil Pioneer DJM-A9 / Allen & Heath XONE; farbliche Kanal-Accents, Fader/Knobs wie Hardware.
 - [ ] `synthesizerMONK` im Stil klassischer Analog-Synths (MiniMoog/Prophet/ Juno), `drumMONK` TR-808/Dirtywave M8, `eqMONK` API/SSL, `masteringMONK` TC/Massey, `spatialMONK` 3D-Panner wie High-End-Controller.
 - [x] Design-Tokens zentral in `index.css` (`--monk-*`) erweitern; keine plugin-lokalen Hex-Werte-Duplikate → `src/utils/pluginTheme.ts` + `.monk-theme-*`-Klassen (21), angewandt in `ModuleContainer`/`RackRow`/`PluginButton`, Tests `tests/pluginTheme.test.ts`.
-- [ ] **Prüfpunkt:** Screenshot-Tests (`visual.spec.ts`) für alle 21 Plugins; Vergleich mit Referenz-Hardware-Look.
+- [x] **Prüfpunkt:** Screenshot-Tests (`visual.spec.ts`) für alle 21 Plugins; Vergleich mit Referenz-Hardware-Look → `visual.spec.ts` deckt jetzt alle 21 Plugins ab (19 Rack-Terminals + masterplayer + aiMONK-Dock) mit committeten Baselines; animierte Bereiche werden maskiert (Canvas/Scroll-Listen/Logs), Toleranz 6 % für animierte Terminals. Hardware-Look-Vergleich bleibt Teil des Komponenten-Neubaus (mittlere Priorität).
 
 ### P1-3 Einstellungen & Geräte-Defaults
 
