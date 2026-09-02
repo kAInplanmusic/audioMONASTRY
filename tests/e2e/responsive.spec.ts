@@ -128,6 +128,28 @@ test.describe('Responsive/Touch-Matrix', () => {
     });
   });
 
+  test.describe('iPad 16:9 Breitbild (1180×664)', () => {
+    test.use({ viewport: { width: 1180, height: 664 }, hasTouch: true, isMobile: true });
+    test.skip(({ browserName }) => browserName === 'firefox', 'iOS/Android-Matrix nur Chromium (WebKit in CI)');
+
+    test('Studio lädt ohne Overflow, Header-Auswahl-Icons sichtbar', async ({ page }) => {
+      await startStudio(page);
+      await expectNoHorizontalOverflow(page);
+      await expect(page.locator('nav[aria-label="Studio-Navigation"]')).toBeVisible();
+      await expect(page.locator('nav[aria-label="Studio-Navigation"] button')).toHaveCount(10);
+    });
+  });
+
+  test.describe('iPad Pro 16:9 Breitbild (1366×768)', () => {
+    test.use({ viewport: { width: 1366, height: 768 }, hasTouch: true, isMobile: true });
+    test.skip(({ browserName }) => browserName === 'firefox', 'iOS/Android-Matrix nur Chromium (WebKit in CI)');
+
+    test('Studio lädt ohne Overflow', async ({ page }) => {
+      await startStudio(page);
+      await expectNoHorizontalOverflow(page);
+    });
+  });
+
   test.describe('Desktop 1920×1080', () => {
     test.use({ viewport: { width: 1920, height: 1080 } });
 
