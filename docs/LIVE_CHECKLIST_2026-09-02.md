@@ -58,8 +58,9 @@
 
 - [ ] **P3-1:** Daten in Supabase sichtbar (Migration 002: `system_prompts`,
       `plugin_prompt_versions`, `ai_evaluations`, `ai_eval_runs`).
-- [ ] **P3-2:** `aiEvaluation.test.ts` je Plugin; 100 % der Kern-Kommandos werden
-      von MOA korrekt geplant und ausgeführt; Scores in DB.
+- [ ] **P3-2:** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos
+      werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar.
+      (Automatisierte Mock-Variante grün: `tests/aiEvaluation.test.ts`, 21 Plugins.)
 - [ ] **P3-3:** Nightly-CI-Lauf grün; Report enthält je Plugin Score, Dauer, Fehler;
       `ai_eval_runs` in Supabase gefüllt.
 - [ ] **GAP-5:** Jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score in der DB;
