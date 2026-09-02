@@ -19,11 +19,13 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
-import { Settings, Sliders, Activity } from 'lucide-react';
+import { Settings, Sliders, Activity, ClipboardCopy } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
+import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
 import { getPluginRoute } from './core/pluginAudioRouter';
+import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
 const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
@@ -57,6 +59,7 @@ function AppComponent() {
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [masteringOpen, setMasteringOpen] = useState(false);
+  const [scratchOpen, setScratchOpen] = useState(false);
   const [monitorMode, setMonitorMode] = useState<'MAIN' | 'MON' | 'PLUGIN'>('MAIN');
   const [monitorUser, setMonitorUser] = useState<'MON1' | 'MON2' | 'MON3' | 'MON4'>('MON1');
   const [sessionMembers, setSessionMembers] = useState(0);
@@ -215,6 +218,27 @@ function AppComponent() {
     requestLock(id, webRTCManager.userId);
     setModuleState(id, 'PRO');
   }, [moduleStates, requestLock, releaseLock, setModuleState]);
+
+  // P1-4: Session-Zwischenspeicher – Snapshot aus aktuellem Zustand bauen bzw. anwenden.
+  const handleSaveScratchSnapshot = useCallback((name: string) => {
+    let extra: Partial<SessionScratchpadItem['snapshot']> = {};
+    try {
+      const graph = audioEngine.exportGraphState();
+      extra = { patterns: graph.patterns ?? {}, mixer: {}, routing: {} };
+    } catch { /* Audio noch nicht initialisiert – leerer Snapshot-Zusatz */ }
+    return createScratchpadSnapshot(name, moduleStates, bpm, isPlaying, extra);
+  }, [moduleStates, bpm, isPlaying]);
+
+  const handleLoadScratchSnapshot = useCallback((item: SessionScratchpadItem) => {
+    const snap = item.snapshot;
+    if (Number.isFinite(snap.bpm)) {
+      try { audioEngine.setBpm(snap.bpm); } catch { /* noop */ }
+      setBpm(snap.bpm);
+    }
+    Object.entries(snap.moduleStates ?? {}).forEach(([id, s]) => {
+      if (s === 'OFF' || s === 'AUTO_AI' || s === 'PRO') setModuleState(id, s);
+    });
+  }, [setModuleState]);
 
   const startApp = async () => {
       // UX-Debug: markiert den Start-Ablauf sichtbar in der Konsole.
@@ -424,6 +448,16 @@ function AppComponent() {
               ))}
             </select>
           </div>
+          <button type="button"
+            onClick={() => setScratchOpen(v => !v)}
+            className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-400/10 border border-amber-400/40 text-amber-300 hover:bg-amber-400/20 hover:border-amber-300/70 transition-all duration-200 cursor-pointer"
+            title="Session-Zwischenspeicher (Overlay-Sidebar)"
+            aria-label="Session-Zwischenspeicher öffnen"
+            aria-pressed={scratchOpen}
+          >
+            <ClipboardCopy className="w-4 h-4" />
+            <span className="text-[10px] font-bold tracking-widest hidden sm:inline">ZWISCHENSPEICHER</span>
+          </button>
           <Scratchpad />
           <MasterStreamToggle />
           <button type="button"
@@ -522,13 +556,26 @@ function AppComponent() {
               onPromote={() => rackPromote(id)}
               onCopy={() => {
                 try {
+                  // P1-4: Plugin-State inkl. aktuellem Session-Snapshot in die
+                  // Zwischenablage kopieren (gültiges JSON für Clipboard-Roundtrip).
+                  const snapshot = buildSessionSnapshot(moduleStates, bpm, isPlaying);
                   void navigator.clipboard?.writeText(JSON.stringify({
                     pluginId: id,
                     name: plugin.name,
                     state: moduleStates[id] || 'OFF',
+                    snapshot,
                     ts: Date.now(),
                   }, null, 2));
                 } catch { /* Clipboard nicht verfügbar */ }
+              }}
+              onLoadScratch={(entry) => {
+                // Scratchpad-Eintrag auf dieses Modul gezogen: Modul aktivieren;
+                // passt der Eintrag zum Modul, wird dessen State übernommen.
+                const apply = (entry.id === id && (entry.state === 'AUTO_AI' || entry.state === 'PRO'))
+                  ? entry.state
+                  : 'AUTO_AI';
+                if (apply === 'PRO') requestLock(id, webRTCManager.userId);
+                setModuleState(id, apply as ModuleState);
               }}
             >
               {state !== 'OFF' && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
@@ -564,6 +611,14 @@ function AppComponent() {
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* P1-4 (D9): Session-Zwischenspeicher – Overlay-Sidebar */}
+      <SessionScratchpadPanel
+        open={scratchOpen}
+        onClose={() => setScratchOpen(false)}
+        onSaveSnapshot={handleSaveScratchSnapshot}
+        onLoadSnapshot={handleLoadScratchSnapshot}
+      />
     </div>
   );
 }
