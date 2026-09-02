@@ -56,7 +56,8 @@
 - [x] **Server-MCP-Tools:** `mcpRuntime.ts` registriert je Katalog-Eintrag ein `<plugin>.<action>`-Tool (WRITE) + Aliase (`mixer.set_channel`, `synth.play_note`, `synthesizer.play_note`, `sequencer.load_pattern`, `mcp.load_pattern`) + generisches `plugin.command` mit Validierung; Planung wird über `recordPluginCommand` an den Client-Pfad durchgereicht (keine Fake-Audio-Tools).
 - [x] **Iterations-Loop:** `src/core/ai/orchestrator/promptIteration.ts` – `runPromptIteration` (Prompt-Version → Eval → Score → heuristische Optimierung → neue Version), `evaluatePromptCoverage` (deterministisch), `optimizePromptContent` (hängt Kommando-Katalog an); CLI `npm run iterate:prompts` (21 Plugins, 41 Iterationen, 0 nicht konvergiert) schreibt `test-results/prompt-iterations.json`; Nightly-Gate ergänzt.
 - [x] **Tests:** `tests/pluginCommandRegistry.test.ts` (3), `tests/mcpPluginTools.test.ts` (5), `tests/promptIteration.test.ts` (5).
-- [ ] **Offen:** `aiEvaluation.test.ts` je Plugin (MOA-E2E-Planung) + Scores in DB (Live).
+- [x] **Prüfpunkt (automatisiert):** `tests/aiEvaluation.test.ts` plant + führt für alle 21 Plugins das jeweilige Kern-Kommando aus (deterministischer Mock-LLM, 100 % handled) und legt Scores im `evaluationStore` ab; Supabase-Pfad (`aiPersistence.saveEvaluation`) separat getestet.
+- [ ] **Offen:** Echter MOA-LLM-Lauf (DeepSeek) je Plugin + Scores in Supabase – Live-Check laut `docs/LIVE_CHECKLIST_2026-09-02.md`.
 
 ### P3-3 – Eval-Framework an DB + Nightly-Gate (2026-09-02)
 
