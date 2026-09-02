@@ -104,7 +104,7 @@
 - [ ] **GAP-4:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` vollständig
       abgehakt oder mit offenem Task verknüpft.
 - [ ] **GAP-4:** HF-Endpoint-Secret rotieren (Betreiber-Schritt).
-- [ ] **GAP-4:** Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF).
+- [x] **GAP-4 (anteilig):** Pen-Test `/api/ai/*` live: ohne/falscher Token → 401, leerer Prompt → 400, `/api/ai/mcp/tools` ohne Token → 401. Rate-Limit/SSRF bleiben dokumentiert (Unit-Tests vorhanden).
 - [ ] **GAP-4:** Supabase RLS prüfen (Prompts/Evals: anon read, service_role write).
 - [ ] **AUD-P2-1:** `docs/TESTRUN_2_CHECKLIST.md` mit den AUD-Befunden abgleichen.
 
