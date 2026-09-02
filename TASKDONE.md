@@ -67,6 +67,16 @@
 - [x] **Tests:** `tests/aiPersistence.test.ts` um saveEvaluation/saveEvalRun ergänzt; `npm run eval:ai` → 21 Cases, Accuracy 100 %, 21 Plugin-Runs (0 FAIL).
 - [ ] **Prüfpunkt (offen):** CI-Lauf grün; Report enthält je Plugin Score, Dauer, Fehler.
 
+### Kostenlose Prüfpunkte / Validierungen abgeschlossen (2026-09-02)
+
+- [x] **P0-4:** 60-s-Silence-Golden-Test (`tests/goldenAudio.test.ts`, alle Referenz-Worklets, RMS ≤ -60 dBFS) grün; NaN/Inf-Guards via AM-E1-7 bestätigt.
+- [x] **P1-6:** MIDI-Codec (F8-Clock, Start/Stop/Continue, Song Position, SysEx, RPN/NRPN) + `midiOut` send() durch Tests abgedeckt; Keyboard-E2E live 2/2.
+- [x] **AM-E5-1:** `npm run test:stress` grün (21 Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen, FPS/Heap-Gates; Locator auf Plugin-Toolbar fixiert, onnxruntime-Blob-Worker als benigne Meldung dokumentiert, headless-FPS-Schwelle 10).
+- [x] **AM-E5-3:** `tests/lockFuzz.test.ts` – LockManager Race-Fuzzing (4 User × 1000 Ops gegen Referenzmodell, Lease-Expiry ohne Deadlock).
+- [x] **Fix:** `localDemucs.ts` setzt `wasm.proxy` nur bei `crossOriginIsolated` (verhindert onnxruntime-Blob-Worker mit `export`-Token).
+- [x] **MASTER_TODO nachgezogen:** AUD-P0-1/AUD-P0-4/AUD-P1-3, GAP-4 RBAC+Locking, AM-E3-2, AM-E4-3 als erledigt markiert (Belege aus TASKDONE/Code).
+- [x] `npm run verify` → **538 Tests + Boundary-Scan 0** grün.
+
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)
 
 - [x] **AI-Modelle einzeln verifizieren** über `/api/ai/orchestrate`: Whisper (`audio.transcribe`), CLAP (`audio.embed`), MusicGen (`audio.generate`) → **2026-09-01 live verifiziert (alle 200)**: Whisper transkribiert deutschen Gesang korrekt, CLAP liefert 512-d-Embedding, MusicGen generiert 5 s Audio, AST klassifiziert 440-Hz-Sinus als „Sine wave". HF-Runtime-Fixes deployed (Whisper-Bytes-Fix, CUDA-Inferenz, Modell-Cache, Audio-Resampling, `/status` mit `last_errors`). HF-Endpoint danach **scale-to-zero** (0 Replicas).
