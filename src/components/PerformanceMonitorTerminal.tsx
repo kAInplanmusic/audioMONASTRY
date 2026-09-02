@@ -3,6 +3,7 @@ import { Activity, Cpu, Gauge, Network, Waves } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { audioEngine } from '../utils/audioEngine';
+import { webRTCManager } from '../utils/WebRTCManager';
 import { MoaAssistant } from './MoaAssistant';
 import { telemetry } from '../utils/telemetry';
 
@@ -49,13 +50,21 @@ function spectrum(arr: Float32Array): number[] {
 export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitorTerminal() {
   const { state, updateState } = usePluginState('performance', 'PRO');
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
+  const [net, setNet] = useState({ rttMs: 0, dropouts: 0 });
   const [signalMode, setSignalMode] = useState<SignalMode>('OSCILLOSCOPE');
   const signalCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     performanceMonitor.setAudioStateProvider(() => audioEngine.getAudioHealth());
     performanceMonitor.start();
-    const timer = setInterval(() => setPerf(performanceMonitor.snapshot()), 1000);
+    const timer = setInterval(() => {
+      setPerf(performanceMonitor.snapshot());
+      // P2-1: End-to-End-Latenz live anzeigen (lokal = Audio, Netz = WebRTC).
+      setNet({
+        rttMs: Math.round(webRTCManager.lastRttMs * 10) / 10,
+        dropouts: audioEngine.dropoutCount,
+      });
+    }, 1000);
     return () => { clearInterval(timer); performanceMonitor.stop(); };
   }, []);
 
@@ -165,6 +174,23 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
               <Network className="w-4 h-4" /> LATENCY BUDGETS
             </h3>
             <div className="space-y-2 text-[11px] font-mono">
+              {/* P2-1: End-to-End-Latenz-Ziele: lokal < 15 ms, Netz < 50 ms. */}
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">LOCAL (Audio)</span>
+                <span className={perf.audioBaseLatencyMs < 15 ? 'text-emerald-400' : 'text-amber-400'}>
+                  {perf.audioBaseLatencyMs} / 15 ms
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">NET (RTT)</span>
+                <span className={net.rttMs > 0 && net.rttMs < 50 ? 'text-emerald-400' : 'text-amber-400'}>
+                  {net.rttMs} / 50 ms
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">DROPOUTS</span>
+                <span className={net.dropouts === 0 ? 'text-emerald-400' : 'text-amber-400'}>{net.dropouts}</span>
+              </div>
               {budgets.map((b) => (
                 <div key={b.pipeline} className="flex justify-between">
                   <span className="text-neutral-500 uppercase">{b.pipeline}</span>
