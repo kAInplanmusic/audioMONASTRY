@@ -4,6 +4,7 @@
 > Quellen: `audioMONASTRY/MASTER_TODO.md` + `samplemonk/MASTER_TODO.md`
 > Legende: `[ ]` offen · `[x]` erledigt → wird nach `TASKDONE.md` verschoben und hier gelöscht.
 > Prioritäten: 🔴 Kritisch · 🟠 Hoch · 🟡 Mittel · 🔵 Strategisch
+> **Hardware-Spezialfälle** (>5 User-Geräte, >4.2-Layouts, MIDI-Controller/Interfaces/USB-Mischpulte) liegen in **`SPECIAL_TODO.md`**.
 
 ---
 
@@ -68,7 +69,7 @@
 ### NEW-MONK-4 synthMONK – Synth + Sequencer + Pads
 
 - [x] 16-Step-Notensequencer → TASKDONE.
-- [ ] Pads-Synth-UI im Minilogue-Stil, Beatstep-Pro-MIDI-Profil.
+- _Umgezogen nach `SPECIAL_TODO.md`:_ Pads-Synth-UI im Minilogue-Stil + Beatstep-Pro-MIDI-Profil (braucht MIDI-Controller-Hardware).
 
 ### NEW-MONK-5 instrumentMONK – Spiel-UI
 
@@ -78,7 +79,7 @@
 ### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
 
 - [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern.
-- [ ] **Prüfpunkt (Live):** Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät prüfen (siehe `docs/HARDWARE_AUDIT_2026.md`).
+- _Umgezogen nach `SPECIAL_TODO.md`:_ Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät (siehe `docs/HARDWARE_AUDIT_2026.md`).
 
 ### NEW-MONK-7 spatialMONK
 
@@ -179,9 +180,9 @@
 
 - [ ] `stereoMode='2.1'`: Master → Crossover (Sub < 80–120 Hz, L/R High-Pass); Sub auf dritten Kanal, falls Gerät 2.1 unterstützt; sonst Sub phantom in L/R mischen (Fallback).
 - [ ] Routing in `audioEngine`/`OutputConfig` erweitern; UI-Anzeige im Settings.
-- [ ] **Neu (D10):** Ausgabe-Layouts **2.0 / 2.1 / 2.2 / 12.0 / 12.1 / 12.2 / 18.0 / 18.1 / 18.2 / 24.0 / 24.1 / 24.2** unterstützen; aktuell Xonar U7 (7.1) angeschlossen → **reale 2.1 als Standard** hinterlegen.
+- [ ] **Neu (D10):** Ausgabe-Layouts **2.0 / 2.1 / 2.2 / 3.0 / 3.1 / 3.2 / 4.0 / 4.1 / 4.2** unterstützen; Xonar U7 (8 Kanäle, Verstärker max. 6) → **reale 2.1 als Standard** hinterlegen. (Layouts > 4.2: siehe `SPECIAL_TODO.md`.)
 - [ ] **Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.
-- [ ] **Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x konfigurierbar.
+- [ ] **Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.)
 
 ### P2-4 Signalfluss-/Pipeline-Audit
 
@@ -472,7 +473,7 @@
 - Scratchpad Reload/DnD/Clipboard-Roundtrip
 - Latenz-Messung vorher/nachher; 120 BPM / 10 min Jitter < 1 ms; 2-Browser-Offset < 5 ms
 - 4-User-Livelauf (Cue/Main, Rollenwechsel, Latenz < 50 ms one-way)
-- MIDI-Out/Clock mit echter Hardware (TR-8S/Beatstep Pro)
+- MIDI-Out/Clock mit echter Hardware (TR-8S/Beatstep Pro) → umgezogen nach `SPECIAL_TODO.md`
 - Drop-Hörprobe am laufenden Mix
 - 2 App-Knoten hinter LB11 + Failover
 
