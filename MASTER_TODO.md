@@ -93,15 +93,15 @@
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
 
-- [x] **Prüfpunkt:** E2E „Studio betreten" → 0 ModuleContainer sichtbar, alle Grid-Icons gedimmt, Main-RMS < -60 dBFS, kein aiMONK/Mixer-Terminal.
+- [x] **Prüfpunkt:** E2E „Studio betreten" → 0 ModuleContainer sichtbar, alle Grid-Icons gedimmt, Main-RMS < -60 dBFS, kein aiMONK/Mixer-Terminal. → Mixer-Sonderfall (Host-Seed `seedHostMixer`) aus `src/App.tsx` entfernt, `audioEngine.init()` startet im Silence-Gate; Prüfpunkt automatisiert in `tests/e2e/startState.spec.ts` (2026-09-03) → TASKDONE.
 
 ### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
 
-- [x] **Prüfpunkt:** Plugin im Terminal auf OFF stellen → Grid-Icon dunkel, Audio weg, Lock frei; Reload → Zustand bleibt wie gespeichert (bzw. Start-OFF-Regel P0-1).
+- [x] **Prüfpunkt:** Plugin im Terminal auf OFF stellen → Grid-Icon dunkel, Audio weg, Lock frei; Reload → Zustand bleibt wie gespeichert (bzw. Start-OFF-Regel P0-1). → automatisiert in `tests/e2e/pluginCloseSync.spec.ts` (Terminal-OFF, Rack-Power, Reload) (2026-09-03) → TASKDONE.
 
 ### P0-4 Rauschen auf Main beseitigen
 
-- [x] NaN/Inf-Guards an Master-Kette prüfen (bereits vorhanden, aber erneut durch `goldenAudio`-Test mit allen Worklets) → Guards vorhanden (AM-E1-7), `goldenAudio`-Suite grün.
+- [x] NaN/Inf-Guards an Master-Kette prüfen (bereits vorhanden, aber erneut durch `goldenAudio`-Test mit allen Worklets) → Guards vorhanden (AM-E1-7), `goldenAudio`-Suite grün. `fallbackProcessor` zusätzlich mit Sample-Sanitizing (NaN/Inf → 0, Stille bei fehlendem Eingangskanal) gehärtet (2026-09-03) → TASKDONE.
 - [x] **Prüfpunkt:** 60 s Dauerlauf ohne aktives Plugin → RMS ≤ -60 dBFS → automatisierter Golden-Test (`tests/goldenAudio.test.ts`, 60 s Stille durch alle Referenz-Worklets) grün; „mit aktivem Sequencer → nur erwartete Steps hörbar" bleibt Live-Hörprobe.
 
 ### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
@@ -110,7 +110,7 @@
 
 ### P0-7 Master-Player fest oben mit Transport
 
-- [x] **Prüfpunkt:** Scroll-Position egal → Play/Stop erreichbar; E2E Keyboard-Space + Button funktionieren.
+- [x] **Prüfpunkt:** Scroll-Position egal → Play/Stop erreichbar; E2E Keyboard-Space + Button funktionieren. → defekten Smoke-Prüfpunkt repariert (Heading `masterplayerMONK`, BPM-Assertion) + neuer Sticky-/Scroll-Test `tests/e2e/masterPlayerFixed.spec.ts` (2026-09-03) → TASKDONE.
 
 ---
 
