@@ -28,6 +28,10 @@ import { validatePreset } from './presetValidator';
 import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatency';
 import { telemetry } from './telemetry';
 import { AudioIdleDetector } from './idleDetection';
+import {
+  defaultMonitorPlan, planMonitorRouting,
+  type MonitorRoutingPlan, type MonitorSource, type MonitorUser,
+} from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 
 // Firefox liefert ohne crossOriginIsolated (COOP/COEP) kein SharedArrayBuffer.
@@ -132,6 +136,14 @@ class AudioEngine {
   // Finaler Ausgangs-Gain (zwischen Analyzer und Destination) für de-klickte
   // Spatial-Mode-Wechsel (SEPARATION blendet den Stereo-Master weich aus).
   private outputGain: GainNode | null = null;
+  // P0-6: Lokaler MAIN-Abhörpegel (NACH outputGain, vor der Destination).
+  // Nur dieser Knoten wird beim Cue-Wechsel gefahren – der MAIN-Bus und der
+  // Master-Stream (Abgriff an masterVolume) bleiben unverändert.
+  private mainMonitorGain: GainNode | null = null;
+  // P0-6: Cue-Bus des lokalen Users (parallel zu MAIN, pre-Master abgegriffen).
+  private cueBus: GainNode | null = null;
+  private cueOutGain: GainNode | null = null;
+  private cueTrackGains: Partial<Record<TrackType, GainNode>> = {};
   private spatialRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Synthesizers & FX Nodes
@@ -461,8 +473,8 @@ class AudioEngine {
     // P2-4: effectProcessor als fester Insert in der Master-Kette erzeugen
     // (nicht erst lazy in setEffectParam) – sonst wird er nie verdrahtet.
     this.effectNode = makeWorklet('effect-processor');
-    // A-Klasse Audio-Audit: dynamicsProcessor (Kompressor/Gate/DynEQ) als
-    // weiterer Insert zwischen effectNode und eqNode.
+    // P1-Dynamik: Kompressor/Gate/Dynamic-EQ als Insert (Default = Bypass,
+    // d. h. bit-genauer Durchgang ohne zusätzliche Latenz).
     this.dynamicsNode = makeWorklet('dynamics-processor');
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
@@ -553,19 +565,17 @@ class AudioEngine {
     };
     // P2-4: effectNode als Insert zwischen toneShift und EQ hängen, sofern das
     // Worklet existiert; sonst direkter Fallback (toneShiftTilt → eqNode).
-    // A-Klasse Audio-Audit: dynamicsProcessor als zweiter Insert (effect → dynamics → eq).
     const effectReady = !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
     const dynamicsReady = !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
-    if (effectReady && dynamicsReady) {
+    // Dynamik-Insert liegt zwischen effectNode und eqNode (P1-Dynamik).
+    const preEq: unknown = dynamicsReady ? this.dynamicsNode : this.eqNode;
+    if (effectReady) {
       connectSafe(this.toneShiftTilt, this.effectNode);
-      connectSafe(this.effectNode, this.dynamicsNode);
-      connectSafe(this.dynamicsNode, this.eqNode);
-    } else if (effectReady) {
-      connectSafe(this.toneShiftTilt, this.effectNode);
-      connectSafe(this.effectNode, this.eqNode);
+      connectSafe(this.effectNode, preEq);
     } else {
-      connectSafe(this.toneShiftTilt, this.eqNode);
+      connectSafe(this.toneShiftTilt, preEq);
     }
+    if (dynamicsReady) connectSafe(this.dynamicsNode, this.eqNode);
     connectSafe(this.eqNode, this.masteringNode);
     connectSafe(this.masteringNode, this.dspNode);
     connectSafe(this.dspNode, this.lufsNode);
@@ -576,7 +586,15 @@ class AudioEngine {
       this.outputGain = this.ctx.createGain();
       this.outputGain.gain.value = 1;
       connectSafe(this.analyzerNode, this.outputGain);
-      connectSafe(this.outputGain, this.ctx.destination);
+      // P0-6: Lokaler MAIN-Abhörpegel als letzter Knoten vor der Destination.
+      // Beim Cue-Wechsel wird ausschließlich dieser Gain gefahren – der Graph
+      // bleibt verbunden (kein Disconnect-Modell, D13) und der Master-Stream
+      // (Abgriff an masterVolume) bleibt für die anderen User unverändert.
+      this.mainMonitorGain = this.ctx.createGain();
+      this.mainMonitorGain.gain.value = 1;
+      connectSafe(this.outputGain, this.mainMonitorGain);
+      connectSafe(this.mainMonitorGain, this.ctx.destination);
+      this.buildCueBus();
     } else {
       connectSafe(this.analyzerNode, this.ctx?.destination);
     }
@@ -638,6 +656,14 @@ class AudioEngine {
     // (falls keine Patterns gesetzt wurden). So liefert "Play" sofort Musik,
     // ohne dass externe Sample-Dateien vorhanden sein müssen.
     this.ensureDemoPattern();
+
+    // P0-1/P0-4: Start-Silence – beim Studio-Eintritt ist kein Plugin aktiv,
+    // deshalb startet der Master stumm. `activatePlugin()` hebt das Gate auf.
+    try {
+      this.setIdleSilence(this.activePluginIds.size === 0);
+    } catch (e) {
+      console.warn('Start-Silence konnte nicht gesetzt werden:', (e as Error).message);
+    }
   }
 
   /** P2-2: Diagnose-Snapshot der singulären Master-Clock (für perfMONK/Audit). */
@@ -712,6 +738,28 @@ class AudioEngine {
     } catch { /* Clock-Worklet nicht verfügbar */ }
   }
 
+  /** Aktuelles Transport-Tempo (BPM). */
+  public getBpm(): number {
+    return Tone.Transport.bpm.value;
+  }
+
+  /** Läuft der Transport gerade? */
+  public getIsPlaying(): boolean {
+    return this.isPlaying;
+  }
+
+  /** Kanal-Fader als lineares Gain (0..1.5) zurücklesen. */
+  public getChannelGain(track: TrackType): number {
+    const db = this.channelGains[track]?.volume.value;
+    if (db === undefined || db === -Infinity) return 0;
+    return Math.pow(10, db / 20);
+  }
+
+  /** Kanal-Pan (-1..1) zurücklesen. */
+  public getChannelPan(track: TrackType): number {
+    return this.channelPans[track]?.pan.value ?? 0;
+  }
+
   /** Setzt einen einzelnen Drum-Step. */
   public setStep(track: TrackType, step: number, on: boolean): void {
     if (step < 0 || step >= this.stepCount) return;
@@ -747,7 +795,7 @@ class AudioEngine {
       this.synthNotes = this.normalizeNotes(synthNotes, this.stepCount);
     }
     if (bpm && Number.isFinite(bpm) && bpm > 20 && bpm < 300) {
-      this.setBpm(bpm);
+      Tone.Transport.bpm.value = bpm;
     }
   }
 
@@ -792,7 +840,7 @@ class AudioEngine {
       }
 
       if (routingConfig.global) {
-        if (routingConfig.global.tempo) this.setBpm(routingConfig.global.tempo);
+        if (routingConfig.global.tempo) Tone.Transport.bpm.value = routingConfig.global.tempo;
         if (routingConfig.global.masterVolume !== undefined) this.masterVolume.volume.value = routingConfig.global.masterVolume;
       }
       if (routingConfig.tracks && Array.isArray(routingConfig.tracks)) {
@@ -827,26 +875,32 @@ class AudioEngine {
   /** Effekt-Engine (effectProcessor) steuern – Insert/Send. */
   private effectNode: AudioWorkletNode | null = null;
 
-  /** A-Klasse Audio-Audit: Echtzeit-Dynamik (Kompressor/Gate/DynEQ). */
+  /** Echtzeit-Dynamik (Kompressor + Gate + Dynamic EQ) als Master-Insert. */
   private dynamicsNode: AudioWorkletNode | null = null;
 
-  /** Ist der dynamicsProcessor als Insert verdrahtet? */
+  /** Ist der Dynamik-Insert tatsächlich in der Master-Kette? */
   public isDynamicsInsertReady(): boolean {
     return !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
   }
 
-  /** Dynamik-Parameter setzen (Kompressor/Gate/DynEQ). */
-  public setDynamicsParam(p: {
-    threshold?: number; ratio?: number; knee?: number; attack?: number; release?: number; makeup?: number;
-    gateEnabled?: boolean; gateThreshold?: number; gateRange?: number; gateHold?: number; gateAttack?: number; gateRelease?: number;
-    dynEqEnabled?: boolean; dynEqFreq?: number; dynEqGain?: number; dynEqQ?: number; dynEqThreshold?: number;
-  }) {
-    this.ensureInitialized();
-    try { this.dynamicsNode?.port?.postMessage({ ...p }); } catch { /* Worklet nicht verfügbar */ }
+  /**
+   * Dynamik-Parameter setzen (Kompressor/Gate/Dynamic EQ).
+   * Ohne `enabled: true` bleibt der Insert im Bypass (Signal unverändert).
+   */
+  public setDynamicsParams(params: {
+    enabled?: boolean;
+    compressor?: { threshold?: number; ratio?: number; attack?: number; release?: number; knee?: number; makeup?: number };
+    gate?: { enabled?: boolean; threshold?: number; range?: number; attack?: number; hold?: number; release?: number; hysteresis?: number };
+    dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
+  }): void {
+    try { this.dynamicsNode?.port?.postMessage({ ...params }); } catch { /* noop */ }
   }
 
-  /** Sample-genaue Dynamik-Rampe (dynamicsProcessor automate). */
-  public automateDynamics(param: 'threshold' | 'makeup' | 'gateThreshold' | 'dynEqGain', value: number, rampTime = 0.05) {
+  /** Sample-genaue Dynamik-Parameter-Rampe (zipper-frei). */
+  public automateDynamicsParam(
+    param: 'threshold' | 'ratio' | 'makeup' | 'gateThreshold' | 'dynEqRange',
+    value: number, rampTime = 0.02,
+  ): void {
     try { this.dynamicsNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
   }
 
@@ -949,7 +1003,52 @@ class AudioEngine {
       p.connect(this.masterBuses['GLOBAL_MASTER']);
       this.channelGains[track] = g;
       this.channelPans[track] = p;
+      // P0-6: Kanal zusätzlich (parallel) auf den lokalen Cue-Bus legen.
+      this.tapChannelToCue(track);
     }
+  }
+
+  /**
+   * P0-6: Baut den lokalen Cue-Bus auf (parallel zum MAIN-Weg).
+   *
+   *   channelPan → cueTrackGain(0..2) → cueBus → cueOutGain → destination
+   *
+   * Der Cue greift **vor** der Master-/Mastering-Kette ab und ist damit der
+   * kürzeste Weg zum Ausgang (kein zusätzliches Latenz-Budget auf MAIN). Der
+   * MAIN-Bus wird nicht angefasst: Er läuft unverändert weiter zum
+   * Master-Stream der Session und zu den übrigen Usern.
+   */
+  private buildCueBus(): void {
+    if (this.cueBus || !this.ctx || typeof this.ctx.createGain !== 'function') return;
+    try {
+      this.cueBus = this.ctx.createGain();
+      this.cueBus.gain.value = 1;
+      this.cueOutGain = this.ctx.createGain();
+      // Start: MAIN hören, Cue stumm (P0-1-Start-Silence bleibt erhalten).
+      this.cueOutGain.gain.value = 0;
+      this.cueBus.connect(this.cueOutGain);
+      this.cueOutGain.connect(this.ctx.destination);
+    } catch {
+      this.cueBus = null;
+      this.cueOutGain = null;
+      return;
+    }
+    // Bereits existierende Kanäle nachträglich abgreifen.
+    (Object.keys(this.channelGains) as TrackType[]).forEach((t) => this.tapChannelToCue(t));
+  }
+
+  /** P0-6: Einzelnen Kanal auf den Cue-Bus abgreifen (idempotent). */
+  private tapChannelToCue(track: TrackType): void {
+    if (!this.cueBus || this.cueTrackGains[track]) return;
+    const pan = this.channelPans[track];
+    if (!pan) return;
+    try {
+      const tap = this.ctx.createGain();
+      tap.gain.value = this.monitorPlan.cueTracks[track] ?? 1;
+      pan.connect(tap);
+      tap.connect(this.cueBus);
+      this.cueTrackGains[track] = tap;
+    } catch { /* Cue-Abgriff optional – MAIN bleibt unberührt */ }
   }
 
   /** #DJ: Pro-Kanal 3-Band-EQ. gain in dB, band: 'low'|'mid'|'high'. */
@@ -1549,16 +1648,22 @@ class AudioEngine {
   // ------------------------------------------------------------------ //
   /** Gesamtpegel eines Monitors (0..1, 0 = stumm). */
   public setMonitorGain(mon: 'MON1'|'MON2'|'MON3'|'MON4', gain: number) {
-    const v = Math.max(0, Math.min(1, gain));
+    const v = Number.isFinite(gain) ? Math.max(0, Math.min(1, gain)) : 0;
+    this.monitorLevels[mon] = v;
     if (this.monitorGains[mon]) {
       // Gain in dB relativ (0..1 Fader-Anteil) umrechnen: stumm bei 0, voll bei 0dB.
       this.monitorGains[mon].volume.rampTo(v <= 0 ? -Infinity : 20 * Math.log10(v), 0.05);
     }
+    // P0-6: Läuft der lokale User gerade auf diesem Cue-Bus, wirkt der Pegel sofort.
+    if (mon === this.monitorPlan.mon) this.applyMonitorPlan();
   }
 
   /** Setzt den individuellen Spur-Pegel (0..2) eines Tracks in einem Monitor-Cue. */
   public setMonitorTrackGain(mon: 'MON1'|'MON2'|'MON3'|'MON4', track: TrackType, gain: number) {
-    if (this.monitorTrackGain[mon]) this.monitorTrackGain[mon][track] = Math.max(0, Math.min(2, gain));
+    const v = Number.isFinite(gain) ? Math.max(0, Math.min(2, gain)) : 0;
+    if (this.monitorTrackGain[mon]) this.monitorTrackGain[mon][track] = v;
+    // P0-6: Rollen-/Cue-Änderungen des eigenen Busses sofort hörbar machen.
+    if (mon === this.monitorPlan.mon) this.applyMonitorPlan();
   }
 
   /** Liest den Track-Pegel eines Monitors aus (für UI-Darstellung). */
@@ -1578,46 +1683,90 @@ class AudioEngine {
   // ------------------------------------------------------------------ //
   //  Monitor-Quelle (pro User): MAIN | USER-MIX (MON1..MON4) | PLUGIN  //
   // ------------------------------------------------------------------ //
-  private monitorSource: 'MAIN' | 'MON' | 'PLUGIN' = 'MAIN';
-  private savedChannelGains: Partial<Record<TrackType, number>> = {};
+  /** Aktueller Abhörplan des lokalen Users (P0-6). */
+  private monitorPlan: MonitorRoutingPlan = defaultMonitorPlan('MON1');
+  /** Zuletzt angeforderte Abhör-Auswahl (Quelle/Bus/Solo-Kanal). */
+  private monitorRequest: { source: MonitorSource; mon: MonitorUser; track?: TrackType } =
+    { source: 'MAIN', mon: 'MON1' };
+  /** Cue-Pegel je Monitor-Bus (0..1, aus `setMonitorGain`). */
+  private monitorLevels: Record<string, number> = { MON1: 1, MON2: 1, MON3: 1, MON4: 1 };
 
   /** Liefert die aktuell gewählte Monitor-Quelle des lokalen Users. */
-  public getMonitorSource(): 'MAIN' | 'MON' | 'PLUGIN' {
-    return this.monitorSource;
+  public getMonitorSource(): MonitorSource {
+    return this.monitorPlan.source;
+  }
+
+  /**
+   * P0-6-Prüfpunkt: Abhör-Snapshot des lokalen Users (Plan + verdrahtete
+   * Knotenwerte). `wired` zeigt an, ob der Cue-Bus real im Audio-Graph hängt
+   * (im Silent-/Test-Modus ohne AudioContext bleibt nur der Plan).
+   */
+  public getMonitorRouting(): MonitorRoutingPlan & { wired: boolean; nodeGains: { main: number; cue: number } } {
+    return {
+      ...this.monitorPlan,
+      cueTracks: { ...this.monitorPlan.cueTracks },
+      wired: !!this.cueBus && !!this.mainMonitorGain,
+      nodeGains: {
+        main: this.mainMonitorGain?.gain.value ?? 1,
+        cue: this.cueOutGain?.gain.value ?? 0,
+      },
+    };
   }
 
   /**
    * Wählt die Monitor-Quelle des lokalen Users:
    *  - 'MAIN'    -> fertige Master-Summe (Default)
    *  - 'MON'     -> eigener kompletter User-Mix (MON1..MON4, PDC-kompensiert)
-   *  - 'PLUGIN'  -> MAIN-Summe, aber Solo des aktuell aktiven Plugin-Kanals
+   *  - 'PLUGIN'  -> Cue-Solo auf den Kanal des eigenen Plugins
+   *
+   * P0-6/D13: MAIN wird NIE vom Ausgang getrennt und der MAIN-Bus (inkl.
+   * Master-Stream für die anderen User) bleibt unverändert – umgeschaltet
+   * wird ausschließlich der lokale Abhörweg (Main-Monitor-Gain ↔ Cue-Gain).
    */
   public setMonitorSource(
-    mode: 'MAIN' | 'MON' | 'PLUGIN',
-    mon: 'MON1' | 'MON2' | 'MON3' | 'MON4' = 'MON1',
+    mode: MonitorSource,
+    mon: MonitorUser = 'MON1',
     track?: TrackType,
   ): void {
     this.ensureInitialized();
-    this.monitorSource = mode;
+    this.monitorRequest = { source: mode, mon, track };
+    this.applyMonitorPlan();
+  }
 
-    // P0-6/D13: MAIN wird NIE vom Ausgang getrennt. MON/PLUGIN sind reine
-    // Cue-Wege (per-User-Mix) und verändern ausschließlich die Cue-Matrix
-    // `monitorTrackGain` – die Master-Kette bleibt unangetastet.
-    const mix = this.monitorTrackGain[mon];
-    if (!mix) return;
+  /**
+   * Berechnet den Abhörplan neu (reine Policy in `core/audio/monitorRouting`)
+   * und überträgt ihn auf die Audio-Knoten. Die Umschaltung läuft als kurze
+   * Rampe (10 ms) – klickfrei, aber ohne hörbare Verzögerung
+   * („zurück auf MAIN → sofort Gesamtmix").
+   */
+  private applyMonitorPlan(): void {
+    const req = this.monitorRequest;
+    const plan = planMonitorRouting({
+      source: req.source,
+      mon: req.mon,
+      track: req.track,
+      baseMix: this.monitorTrackGain[req.mon] ?? {},
+      cueLevel: this.monitorLevels[req.mon] ?? 1,
+    });
+    this.monitorPlan = plan;
 
-    const setMix = (t: TrackType, v: number) => {
-      const m = mix[t];
-      if (typeof m === 'number') mix[t] = v;
+    const now = this.ctx?.currentTime ?? 0;
+    const ramp = 0.01;
+    const setGain = (node: GainNode | null | undefined, value: number) => {
+      if (!node) return;
+      try {
+        node.gain.cancelScheduledValues(now);
+        node.gain.setTargetAtTime(value, now, ramp);
+      } catch {
+        try { node.gain.value = value; } catch { /* Knoten nicht steuerbar */ }
+      }
     };
 
-    if (mode === 'PLUGIN' && track) {
-      // Cue-Solo: nur der Ziel-Kanal ist im Cue hörbar (Main bleibt voll).
-      (Object.keys(mix) as TrackType[]).forEach((t) => setMix(t, t === track ? 1 : 0));
-    } else {
-      // MAIN und MON folgen der vollen Mischung (Rollen-Mix bleibt erhalten).
-      (Object.keys(mix) as TrackType[]).forEach((t) => setMix(t, 1));
-    }
+    setGain(this.mainMonitorGain, plan.mainMonitorGain);
+    setGain(this.cueOutGain, plan.cueGain);
+    (Object.keys(plan.cueTracks) as TrackType[]).forEach((t) => {
+      setGain(this.cueTrackGains[t], plan.cueTracks[t]);
+    });
   }
 
   /** Wandelt einen MIDI-Noten-String (z. B. 'C5') in eine Frequenz um. */
@@ -1821,6 +1970,18 @@ class AudioEngine {
     // Finaler Output-Gain abräumen.
     try { this.outputGain?.disconnect(); } catch { /* ignore */ }
     this.outputGain = null;
+
+    // P0-6: Lokalen Abhör-/Cue-Weg abräumen.
+    try { this.mainMonitorGain?.disconnect(); } catch { /* ignore */ }
+    this.mainMonitorGain = null;
+    Object.values(this.cueTrackGains).forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
+    this.cueTrackGains = {};
+    try { this.cueBus?.disconnect(); } catch { /* ignore */ }
+    try { this.cueOutGain?.disconnect(); } catch { /* ignore */ }
+    this.cueBus = null;
+    this.cueOutGain = null;
+    this.monitorRequest = { source: 'MAIN', mon: 'MON1' };
+    this.monitorPlan = defaultMonitorPlan('MON1');
 
     // PDC-Delay abräumen.
     try { this.pdcMonitorDelay?.dispose(); } catch { /* ignore */ }
@@ -2162,7 +2323,7 @@ class AudioEngine {
     if (!isAudioGraphState(state)) return false;
     try {
       if (Number.isFinite(state.bpm) && state.bpm >= 20 && state.bpm <= 300) {
-        this.setBpm(state.bpm);
+        Tone.Transport.bpm.value = state.bpm;
       }
       this.swing = Math.max(0, Math.min(1, state.swing));
       this.gate = Math.max(0.05, Math.min(1, state.gate));
@@ -2606,11 +2767,8 @@ class AudioEngine {
 
   // ---------------------------------------------------------------------------
   // P2-3/D10: 2.1-Crossover für den Master-Ausgang.
-  // Die DSP-Verarbeitung (Linkwitz-Riley 2. Ordnung, Sub < crossoverHz) ist in
-  // `src/core/output/crossover.ts` implementiert und durch
-  // `tests/crossover.test.ts` (Frequenzanalyse) verifiziert. Hier wird der
-  // Live-Graph umgeschaltet: 2.0 = Stereo-Durchgriff, 2.1 = Splitter/Filter/
-  // Merger auf L/R + LFE, sofern das Zielgerät ≥ 3 Kanäle hat (z. B. Xonar U7).
+  // DSP-Verarbeitung in `src/core/output/crossover.ts` (Linkwitz-Riley 2. Ordnung),
+  // verifiziert durch `tests/crossover.test.ts`. Hier nur der Live-Graph-Umschalter.
   // ---------------------------------------------------------------------------
   /** Master-Ausgabemodus: 2.0 (Stereo) oder 2.1 (Sub getrennt, Xonar U7). */
   public stereoMode: '2.0' | '2.1' = '2.0';

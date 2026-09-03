@@ -22,6 +22,16 @@ beforeAll(async () => {
   process.env.VITEST = 'true';
   delete process.env.STUDIO_ACCESS_TOKEN;
   process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
+  // LLM-Fallback deterministisch halten: Provider-Keys leeren (dotenv.config()
+  // in server.ts würde gelöschte Keys sonst wieder einspielen), Ollama auf
+  // einen sofort abweisenden Port zeigen.
+  process.env.DEEPSEEK_API_KEY = '';
+  process.env.OPENAI_API_KEY = '';
+  process.env.MISTRAL_API_KEY = '';
+  process.env.GEMINI_API_KEY = '';
+  process.env.HF_API_KEY = '';
+  process.env.REPLICATE_API_TOKEN = '';
+  process.env.OLLAMA_URL = 'http://127.0.0.1:1';
 
   // HF-Mock: /health, /ready und /infer.
   hfMock = http.createServer((req, res) => {
@@ -88,6 +98,42 @@ describe('/api/ai/*-Routen (Integration)', () => {
     const body = await res.json() as { job?: { status?: string }; result?: { text?: string } };
     expect(body.job?.status).toBe('COMPLETED');
     expect(body.result?.text).toBe('test transcription');
+  });
+
+  it('POST /api/ai/generate-drop verlangt einen Prompt', async () => {
+    const res = await fetch(`${baseUrl}/api/ai/generate-drop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/ai/generate-drop liefert ohne LLM einen validen lokalen Drop', async () => {
+    const res = await fetch(`${baseUrl}/api/ai/generate-drop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userPrompt: 'Techno buildup mit Bass-Drop',
+        context: { bpm: 128, activePlugins: ['synthesizer', 'effect'], currentEnergy: 0.7 },
+        style: 'extreme',
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      name?: string;
+      parameterSequence?: Array<{ pluginId: string; parameterId: string; startValue: number; endValue: number }>;
+      confidence?: number;
+      provider?: string;
+    };
+    expect(typeof body.name).toBe('string');
+    expect((body.parameterSequence ?? []).length).toBeGreaterThan(0);
+    for (const step of body.parameterSequence ?? []) {
+      expect(step.startValue).toBeGreaterThanOrEqual(0);
+      expect(step.endValue).toBeLessThanOrEqual(1);
+    }
+    expect(body.confidence).toBeGreaterThan(0);
+    expect(body.provider).toBeTruthy();
   });
 
   it('GET /api/ai/models liefert die Registry', async () => {

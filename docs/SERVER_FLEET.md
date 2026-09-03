@@ -164,10 +164,27 @@ docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up
 | master-1 | **CAX21** (ARM) | 10,49 € ≈ 0,0168 €/h |
 | edge-1 | **CAX21** (ARM) | 10,49 € ≈ 0,0168 €/h |
 | Floating-IP | – | 3 € |
+| **Summe (alle 5, stündlich)** | **≈ 0,096 €/h** |
 
 > Hinweis: CCX33 ist 2026 auf 138,49 €/Monat gestiegen (+122 %) und lohnt nur
 > noch bei garantiert dedizierter CPU. Die CAX-Serie ist die neue
 > Preis-Leistungs-Empfehlung für alles außer dem SFU-Knoten (mediasoup-worker
 > hat offizielle x86_64-Prebuilds; ARM erfordert Source-Build).
-| **Summe (alle 5, stündlich)** | **≈ 0,096 €/h** |
+
+## Load Balancer (LB11) – bewusst noch nicht im Einsatz
+
+> Entscheidung (2026-09-02): Der aktuelle Betrieb läuft mit **einem** App-Knoten
+> hinter Cloudflare; eine Session lebt auf genau diesem Knoten. Ein Load
+> Balancer bringt dort keinen Nutzen und kostet nur zusätzlich.
+
+| Punkt | Festlegung |
+|---|---|
+| Kosten | **0,012 €/h netto**, Deckel **7,49 €/Monat netto** (LB11, Standort Europa, Stand 04/2026), 20 TB Traffic inklusive |
+| Abrechnung | **stündlich** – es wird nur gezahlt, solange der LB existiert (wie bei den Servern: löschen = 0 €) |
+| Trigger | Erst installieren, wenn **≥ 2 App-Knoten** laufen, d. h. bei Multi-Session-Betrieb, > 4 Usern pro Session oder HA-/Zero-Downtime-Deploys |
+| Architektur | Cloudflare → Hetzner LB11 (**sticky Sessions** für WebSocket) → `app-1`/`app-2`; Socket.io-Räume über den Redis-Adapter teilen (`REDIS_URL`); Mediasoup/SFU bleibt auf dem dedizierten Knoten (UDP/RTP darf **nicht** über den LB laufen) |
+| Prüfpunkt (offen) | 2 App-Knoten hinter dem LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil) + Failover-Test (ein Knoten entfernen) |
+
+Solange nur `app-1` läuft, bleibt die Kette **Cloudflare → Floating-IP → app-1**
+unverändert; es ist keine Konfigurationsänderung nötig.
 
