@@ -433,6 +433,9 @@ class AudioEngine {
     // P2-4: effectProcessor als fester Insert in der Master-Kette erzeugen
     // (nicht erst lazy in setEffectParam) – sonst wird er nie verdrahtet.
     this.effectNode = makeWorklet('effect-processor');
+    // P1-Dynamik: Kompressor/Gate/Dynamic-EQ als Insert (Default = Bypass,
+    // d. h. bit-genauer Durchgang ohne zusätzliche Latenz).
+    this.dynamicsNode = makeWorklet('dynamics-processor');
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
     // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer),
@@ -522,12 +525,16 @@ class AudioEngine {
     // P2-4: effectNode als Insert zwischen toneShift und EQ hängen, sofern das
     // Worklet existiert; sonst direkter Fallback (toneShiftTilt → eqNode).
     const effectReady = !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
+    const dynamicsReady = !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
+    // Dynamik-Insert liegt zwischen effectNode und eqNode (P1-Dynamik).
+    const preEq: unknown = dynamicsReady ? this.dynamicsNode : this.eqNode;
     if (effectReady) {
       connectSafe(this.toneShiftTilt, this.effectNode);
-      connectSafe(this.effectNode, this.eqNode);
+      connectSafe(this.effectNode, preEq);
     } else {
-      connectSafe(this.toneShiftTilt, this.eqNode);
+      connectSafe(this.toneShiftTilt, preEq);
     }
+    if (dynamicsReady) connectSafe(this.dynamicsNode, this.eqNode);
     connectSafe(this.eqNode, this.masteringNode);
     connectSafe(this.masteringNode, this.dspNode);
     connectSafe(this.dspNode, this.lufsNode);
@@ -786,6 +793,35 @@ class AudioEngine {
 
   /** Effekt-Engine (effectProcessor) steuern – Insert/Send. */
   private effectNode: AudioWorkletNode | null = null;
+
+  /** Echtzeit-Dynamik (Kompressor + Gate + Dynamic EQ) als Master-Insert. */
+  private dynamicsNode: AudioWorkletNode | null = null;
+
+  /** Ist der Dynamik-Insert tatsächlich in der Master-Kette? */
+  public isDynamicsInsertReady(): boolean {
+    return !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
+  }
+
+  /**
+   * Dynamik-Parameter setzen (Kompressor/Gate/Dynamic EQ).
+   * Ohne `enabled: true` bleibt der Insert im Bypass (Signal unverändert).
+   */
+  public setDynamicsParams(params: {
+    enabled?: boolean;
+    compressor?: { threshold?: number; ratio?: number; attack?: number; release?: number; knee?: number; makeup?: number };
+    gate?: { enabled?: boolean; threshold?: number; range?: number; attack?: number; hold?: number; release?: number; hysteresis?: number };
+    dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
+  }): void {
+    try { this.dynamicsNode?.port?.postMessage({ ...params }); } catch { /* noop */ }
+  }
+
+  /** Sample-genaue Dynamik-Parameter-Rampe (zipper-frei). */
+  public automateDynamicsParam(
+    param: 'threshold' | 'ratio' | 'makeup' | 'gateThreshold' | 'dynEqRange',
+    value: number, rampTime = 0.02,
+  ): void {
+    try { this.dynamicsNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
+  }
 
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
   public isEffectInsertReady(): boolean {
@@ -1895,10 +1931,12 @@ class AudioEngine {
     this.synthWorklet?.disconnect();
     this.clockNode?.disconnect();
     this.effectNode?.disconnect();
+    this.dynamicsNode?.disconnect();
     this.itSynthNode = null;
     this.synthWorklet = null;
     this.clockNode = null;
     this.effectNode = null;
+    this.dynamicsNode = null;
     this.itSynthReady = false;
 
     this.initialized = false;
