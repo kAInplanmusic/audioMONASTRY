@@ -9,6 +9,15 @@
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
 
+### P3-3 / GAP-4 / GAP-5 / AUD-P2-1 · Prio-3-Abschluss (2026-09-03)
+
+- [x] **P3-3 Prüfpunkt – Report je Plugin (Score, Dauer, Fehler):** `src/core/ai/orchestrator/evalMatrix.ts` definiert die verbindlichen 21 Plugin-IDs, den Mindest-Score je Plugin (4.0; 4.5 für MAIN-kritische Plugins masterplayer/mixer/eq/dsp/mastering) und ein Laufzeit-Budget. `npm run eval:ai` misst je Plugin Score und Dauer, sammelt Fehler und schreibt `test-results/ai-eval-report.json` + `ai-eval-report.md`; Score-Abfall oder Budget-Überschreitung → Exit 1. Nightly lädt die Reports als Artefakt hoch und schreibt den Markdown-Report in die Job-Summary. Tests: `tests/evalMatrix.test.ts`.
+- [x] **GAP-5 Prompt-/Trainings-Matrix je Plugin:** `npm run iterate:prompts` legt je Plugin eine Prompt-Version an (21 Plugins, 41 Versionen, 0 nicht konvergiert), exportiert DB-ready Zeilen nach `test-results/system-prompts.json` und persistiert über die neuen `aiPersistence.saveSystemPrompt`/`savePromptVersion` in `system_prompts`/`plugin_prompt_versions`. Fehlt einem Plugin die Prompt-Version, bricht das Skript ab. `docs/PLUGIN_PROMPT_MATRIX.md` wird aus den Reports erzeugt (Prompt-Version, MCP-Tools, Min-Score, Score, Status).
+- [x] **GAP-4 Pen-Test `/api/ai/*`:** `tests/aiSecurityPenTest.test.ts` (11 Fälle) prüft Auth (Token per Header/Cookie, falscher Token gleicher Länge → 401, `/api/health` offen), Rate-Limit (429 auf der teuren KI-Route), Input-Validierung (fehlende/typfremde Felder, 200 000-Zeichen-Prompt, Path-Traversal im Tool-Namen, SQLi-artige Job-ID → 400/404/422 ohne Stacktrace) und SSRF (Sentinel-Server erhält 0 Requests, Outbound nur an `HF_ENDPOINT_URL`). Ergebnisse in `docs/SECURITY_AUDIT.md`.
+- [x] **AUD-P2-1 (P5-1) Testrun-2-Abgleich:** `docs/TESTRUN_2_CHECKLIST.md` Abschnitt 11 spiegelt AUD-P0-1, AUD-P0-4, AUD-P1-1, AUD-P1-3, GAP-4 und GAP-5 mit Test-Nachweis; automatisiert abgedeckte Checklisten-Punkte sind abgehakt und referenzieren den jeweiligen Test.
+- [x] **CI-Reparatur:** `package-lock.json` enthielt `react-is` nicht → `npm ci` (Nightly/Build-Workflow) brach ab; Lockfile ergänzt, `npm ci` läuft wieder.
+- [ ] **Offen (Betreiber-Schritte):** Bestätigung des nächtlichen CI-Laufs auf GitHub, Anwenden der Migration 002 in der Live-Supabase (P3-1), Rotation des HF-Endpoint-Secrets, echter DeepSeek-Lauf je Plugin.
+
 ### dropMONK Phase 4 · MVP-Fertigstellung (2026-09-03)
 
 - [x] **Interface-Grenze:** `src/core/drop/DropAudioAdapter.ts` – der Drop-Core kennt weder audioEngine noch Browser-APIs; `src/utils/dropAudioBridge.ts` (`attachDropBridges()`) registriert den Adapter und liefert eine Detach-Funktion für Plugin-OFF/Unmount.
