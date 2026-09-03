@@ -12,10 +12,13 @@
  * Aufruf:  npx tsx scripts/seed-sample-embeddings.ts
  * Bzw.:    npm run supabase:seed-embeddings
  */
+import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { PRESET_SAMPLE_DATABASE } from '../src/data/samples';
 import { orchestralSamples } from '../src/data/orchestralLibrary';
 import { embedText } from '../src/core/ai/orchestrator/textEmbedding';
+
+dotenv.config();
 
 async function main(): Promise<void> {
   const url = (process.env.SUPABASE_URL ?? '').trim();

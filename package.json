@@ -29,7 +29,9 @@
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
     "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs",
     "verify:boundary": "node scripts/validate-interface-boundaries.mjs",
-    "supabase:seed-embeddings": "tsx scripts/seed-sample-embeddings.ts"
+    "supabase:seed-embeddings": "tsx scripts/seed-sample-embeddings.ts",
+    "supabase:apply": "tsx scripts/apply-supabase-migrations.ts",
+    "supabase:verify": "tsx scripts/verify-supabase.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
