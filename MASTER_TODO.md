@@ -9,6 +9,8 @@
 
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
+- [x] **NEW-MONK-1 MIDI-Out/Clock**: drumMONK sendet 24-PPQN-Clock, Transport und Noten an externe Hardware → TASKDONE.
+- [x] **[DSP][EFFECTS] Echtzeit-Dynamik**: Kompressor + Gate + Dynamic EQ als Worklet-Insert → TASKDONE.
 - [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
 - [ ] **OPS-Load-Balancer Prüfpunkt**: Trigger/Architektur/Kosten dokumentiert (`docs/SERVER_FLEET.md`); offen bleibt nur der Live-Test mit 2 App-Knoten hinter dem LB
 - [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8)
@@ -52,7 +54,7 @@
 ### NEW-MONK-1 drumMONK – Sequencer vervollständigen (TR-8S)
 
 - [x] 32 Steps, A/B-Pattern + Chain, Flam/Roll, Swing (MasterClock) → TASKDONE.
-- [ ] MIDI-Out/Clock-Ausgabe (Hardware).
+- [x] MIDI-Out/Clock-Ausgabe (Hardware): `src/core/hardware/midiClockOut.ts` (24 PPQN, Start/Stop/Continue, Song Position, GM-Note-Out, All-Notes-Off), Hook `src/hooks/useMidiClockOut.ts`, Schalter „MIDI OUT" + Portwahl im drumMONK; Tests `tests/midiClockOut.test.ts` → TASKDONE.
 
 ### NEW-MONK-2 samplerMONK – Sequencer ergänzen
 
@@ -376,7 +378,8 @@
   - Dependencies: keine neuen; optional `sfz-parser`-Eigenbau.
   - Acceptance criteria: SFZ mit Velocity-Layer/Round-Robin lädt und spielt; Reload-Persistenz; Cache-Eviction-Test.
 
-- [ ] **[DSP][EFFECTS] Echtzeit-Dynamik: Kompressor + Gate + Dynamic EQ als Worklet** (Referenz: LSP Plugins, ZL Equalizer 2; MONK hat bislang nur Backend-Mastering/FFmpeg und tanh-Softclip, keinen Echtzeit-Kompressor/Gate).
+- [x] **[DSP][EFFECTS] Echtzeit-Dynamik: Kompressor + Gate + Dynamic EQ als Worklet** – umgesetzt in `src/audio/worklets/dynamicsProcessor.ts` (Insert `effectNode`↔`eqNode`, Default = Bypass, kein Lookahead → keine Zusatzlatenz), UI im `DSPTerminal`, Tests `tests/dynamicsProcessor.test.ts` → TASKDONE. Ursprüngliche Spezifikation:
+  - **[DSP][EFFECTS] Echtzeit-Dynamik: Kompressor + Gate + Dynamic EQ als Worklet** (Referenz: LSP Plugins, ZL Equalizer 2; MONK hat bislang nur Backend-Mastering/FFmpeg und tanh-Softclip, keinen Echtzeit-Kompressor/Gate).
   - Target: `public/worklets/dspProcessor.js` bzw. neues `dynamicsProcessor.js`; Insert-Punkt `effectNode`↔`eqNode` (`isEffectInsertReady()` in `src/utils/audioEngine.ts`); UI in `FXEngineTerminal`/`DSPTerminal`.
   - Integration: Port der Algorithmen (Detektor mit Smoothing, Knee, Program-Dependency; Gate mit Hysterese; DynEQ = peaking-Filter mit level-abhängigem Gain auf Basis des bestehenden 12-Band-Biquads).
   - Wiring: `Insert → DynamicsProcessor → EQ → … → MASTER`; Sidechain optional aus `pluginAudioRouter`-Kanal.

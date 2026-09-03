@@ -9,6 +9,24 @@
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
 
+### NEW-MONK-1 · MIDI-Out/Clock-Ausgabe an Hardware (2026-09-03)
+
+- [x] **Steuerlogik:** `src/core/hardware/midiClockOut.ts` – `MidiClockOut` mit 24 PPQN (6 Pulse je 16th-Step), Transport Start/Stop/**Continue**, Song Position Pointer, GM-Percussion-Note-Out (Note-On + zeitversetztes Note-Off) und All-Notes-Off; Nachrichten werden mit absolutem Zeitstempel vorgeplant (Web-MIDI-Queue) → kein Timer im Hot-Path, keine zusätzliche Audio-Latenz.
+- [x] **Mapping:** `drumNoteFor()` bildet Kit-Sound-IDs/-Typen auf GM-Percussion ab (Kick 36, Snare 38, Clap 39, CHH 42, OHH 46, Toms 45/47/50, Rim 37, Cowbell 56, Claves 75, Maracas 70, Conga 64).
+- [x] **Plattform-Anbindung:** `src/hooks/useMidiClockOut.ts` bindet `MIDIOutput.send(data, timestamp)`; Portwahl (AUTO = erster Ausgang), Hotplug-sicher, Unmount stoppt Transport + sendet All-Notes-Off. Boundary-Scan bleibt bei 0 Verstößen (kein direkter `requestMIDIAccess` außerhalb der Adapter).
+- [x] **UI:** drumMONK-Kopfzeile mit Schalter „MIDI OUT ON/OFF" (deaktiviert ohne Port) und Portauswahl; Step-Kante sendet Clock + Noten synchron zum internen Trigger.
+- [x] **Tests:** `tests/midiClockOut.test.ts` (12 Tests: PPQN, Start/Continue/Stop, Pulse-Zeitraster @120 BPM, Note-On/Off auf Kanal 10, kein Senden ohne Port/Enable/Transport, Portwechsel stoppt, Hotplug-Fehler, GM-Mapping, NaN-Clamping, All-Notes-Off). `npm run verify` → 600 Tests + Boundary-Scan 0 grün.
+- [ ] **Offen (Live-Schritt):** Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät prüfen.
+
+### [DSP][EFFECTS] · Echtzeit-Dynamik: Kompressor + Gate + Dynamic EQ (2026-09-03)
+
+- [x] **Worklet:** `src/audio/worklets/dynamicsProcessor.ts` (`dynamics-processor`) – Peak-Detektor mit Instant-Attack/Release-Follower, Soft-Knee-Kompressor (Threshold/Ratio/Knee/Attack/Release/Makeup), Gate mit Hysterese + Hold und begrenzter Dämpfung (`range`), Dynamic EQ (Bandpass-Detektor + Peaking-Biquad, Gain greift erst über Threshold). **Kein Lookahead** → keine zusätzliche Latenz in der Master-Kette; Default = Bypass (bit-genauer Durchgang).
+- [x] **Insert:** `audioEngine` hängt den Knoten zwischen `effectNode` und `eqNode` (`isDynamicsInsertReady()`), Parameter über `setDynamicsParams()`, sample-genaue Rampen über `automateDynamicsParam()`; Registrierung in `public/plugin-manifest.json`.
+- [x] **UI:** `DSPTerminal` – Sektion „DYNAMICS · COMP / GATE / DYN-EQ" mit Insert-/Gate-/DynEQ-Schaltern und 11 Reglern.
+- [x] **Stabilität:** NaN/Inf-Guards je Sample, Denormal-/Ausreißer-Clamp (|s| ≤ 4), Koeffizienten nur bei Parameteränderung neu berechnet (keine Allokation im Hot-Path).
+- [x] **Tests:** `tests/dynamicsProcessor.test.ts` (13 Tests: dB-Helfer, Soft-Knee-Stetigkeit, Bypass bit-genau, Kompression eines -20-dBFS-Sinus auf ≈ -27,5 dBFS, kein Eingriff unter Threshold, Make-up, Gate öffnet/schließt inkl. Hysterese, Dynamic EQ senkt nur bei Pegelüberschreitung, NaN/Inf-Robustheit, Parameter-Rampen, Reset/Leer-Input). `npm run verify` → 600 Tests grün.
+- [ ] **Offen (Live-Schritt):** Hörprobe im 4-User-Livelauf (Pump-/Zipper-Freiheit unter Last).
+
 ### OPS-Snapshot – Rollen-Snapshots für schnellen Flotten-Start (2026-09-02)
 
 - [x] **Snapshot je Rolle:** `POST /servers/{id}/actions/create_image` mit Description/Label `samplemonk-snapshot-<role>` + `role`-Label – in `services/portal-worker/src/index.js` (`createServerSnapshot`, `listSnapshots`, `findSnapshot`).
