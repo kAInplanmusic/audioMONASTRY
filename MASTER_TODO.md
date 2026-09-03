@@ -188,12 +188,12 @@
 - [x] `routing.json` gegen echten Audio-Graph validieren (Test: `audioEngine.exportGraphState()` vs. `routing.json`).
 - [x] Falschverkabelungen korrigieren (z. B. `bassFilter`/`channel7`-Pfad, `effectNode`-Insert, Monitor-PDC) → `effectNode` wird jetzt in `init()` erzeugt und als fester Insert zwischen `toneShiftTilt` und `eqNode` verdrahtet (`isEffectInsertReady()`); `bassFilter`→`channel7` (Bass-Kette) und Monitor-PDC (paralleler Cue mit Delay) als korrekt verifiziert.
 - [x] Bottlenecks: Main-Thread-Scheduler, Tone.js-Node-Anzahl, Worklet-CPU; wo sinnvoll V2-Graph/Worklet-Pfad verwenden → V2-Hybrid (`V2StudioGraph`, NEW-D4-1) vorhanden; Graph-Validierungs-Tests erweitert (`tests/routingValidator.test.ts`: fehlende Nodes/Verbindungen, doppelte Pfade).
-- [ ] **Prüfpunkt (automatisiert):** Graph-Validierung grün; kein ungenutzter/doppelter Verbindungs-Pfad.
+- [x] **Prüfpunkt (automatisiert):** Graph-Validierung grün; kein ungenutzter/doppelter Verbindungs-Pfad → `validateRoutingAgainstGraph` + neues `findUnusedGraphPaths` (ungenutzte Nodes, unbekannte Endpunkte, doppelte Kanten) in `src/core/routing/validateRouting.ts`, Tests `tests/routingValidator.test.ts` → TASKDONE.
 - [ ] **Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU.
 
 ### P2-5 Performance & Rendering
 
-- [ ] `React.memo`/stabile Handler für alle Terminals prüfen (UI-Audit nachziehen); Bundle-Diät (lucide tree-shaken, Tone-Chunks).
+- [x] `React.memo`/stabile Handler für alle Terminals prüfen (UI-Audit nachziehen); Bundle-Diät (lucide tree-shaken, Tone-Chunks) → letzte Lücke `DropTerminal.tsx` geschlossen, `npm run check:memo` grün und als CI-Gate in `.github/workflows/build.yml` verdrahtet → TASKDONE.
 - [ ] Worklet-CPU-Budgets im PerformanceMonitor; unter 4-User-Last keine Dropouts.
 - [x] **Prüfpunkt (automatisiert):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS → Stress-Test grün (`npm run test:stress`); Bundle-Diät umgesetzt (zod + axios aus dem Client entfernt, Prompts kompaktiert) → **< 1,5 MB erreicht ✅** (`check:bundle` grün).
 - [ ] **Prüfpunkt (Live):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS (aktuell nur Warn-Schwelle; 2.0-MiB-Gate ist grün).
@@ -460,7 +460,6 @@
 
 - AI-E2E-Szenario (Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero)
 - AI-Failure-Suite (HF offline, GPU down, Duplicate, Crash)
-- `React.memo`/stabile Handler für alle Terminals (UI-Audit nachziehen)
 - Worklet-CPU-Budgets im PerformanceMonitor
 - Kontinuierliches Profiling (Worklet-CPU, Per-Sample-Allokationen, Xrun-Histogramm)
 - Adaptive Puffergrößen bei Xruns
