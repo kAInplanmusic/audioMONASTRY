@@ -1126,3 +1126,10 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
   Abgrenzung zu GPL-Code-Referenzen und Release-Checkliste.
 
 **Nachweis:** `npm run verify` (tsc + Vitest + Interface-Boundary-Scan) grün.
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 11 abgeschlossen (2026-09-03)
+
+- [x] **Granular-Engine (produktionsreif):** `src/core/instrument/granularEngine.ts` (deterministischer Grain-Scheduler, Hann-Fenster, Position/Pitch/Jitter/Direction/Freeze, Peak-Normalisierung) + Echtzeit-Worklet `src/audio/worklets/granularProcessor.ts` (64-Slot-Pool, Fenster-LUT, SAB-Source, keine Allocs im Hot-Path) + Manifest-Eintrag; Tests: `tests/granularEngine.test.ts` (5, inkl. 1-kHz-Reproduzierbarkeit) + `tests/granularProcessorWorklet.test.ts` (2) grün. UI-Verdrahtung (SynthesizerTerminal/SampleContext) bleibt Folgeschritt
+- [x] **6-Op-FM + DX7-SysEx (produktionsreif):** `src/core/instrument/fmEngine.ts` (6 Operatoren, 32 Algorithmen, DX7-Hüllkurven R1–R4/L1–L4, Feedback, Detune, Velocity-/Key-Scaling, LFO), `dx7Algorithms.ts` (32 Topologien + Struktur-Validierung), `dx7Sysex.ts` (156-Byte-unpacked Import/Export + Roundtrip), `dx7Presets.ts` (10 Referenz-Patches); Tests `tests/fmEngine.test.ts` (6) + `tests/dx7Sysex.test.ts` (4) grün. Worklet-Integration in itSynthProcessor + MIDI-UI bleibt Folgeschritt
