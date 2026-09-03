@@ -1006,3 +1006,49 @@
 - [x] **AM-E3-5** Prioritäts-Inversion: ControlBus-Burst-Test + Handler-Isolation
 - [x] **P3-2** Prompt-/Kommando-Katalog-Test für alle 21 Plugins (`tests/promptCatalog.test.ts`)
 - [x] **P1-4** Session-Zwischenspeicher: `src/core/session/sessionScratchpad.ts` (IndexedDB-Snapshots: Patterns, BPM, Mixer, Plugin-States, Routing) + Tests
+
+---
+
+## Quelle: COPILOTTODO.md – P0-Verifikation abgeschlossen (2026-09-03)
+
+Alle Items der `COPILOTTODO.md` (P0-1/3/4/6/7) wurden Punkt für Punkt geprüft,
+Lücken geschlossen und mit automatisierten Prüfpunkten hinterlegt.
+
+- [x] **P0-1 Start-Zustand / Mixer-Sonderfall:** Der Host-Seed (`seedHostMixer`, öffnete
+  mixerMONK für den ersten User) ist aus `src/App.tsx` entfernt – jetzt starten für alle
+  4 User **alle** Plugins auf `OFF`. Persistierte States werden weiterhin ignoriert
+  (`ModuleStateContext.loadPersistedStates()`). Neuer Prüfpunkt:
+  `tests/e2e/startState.spec.ts` (0 aufgeklappte Terminals, alle Toolbar-Icons
+  `aria-pressed="false"`, mixerMONK OFF, Silence-Gate aktiv).
+- [x] **P0-1/P0-4 Start-Silence im Audio-Graph:** `audioEngine.init()` schaltet den Master
+  am Ende der Initialisierung über `setIdleSilence(activePlugins === 0)` stumm
+  (50-ms-Rampe, `-Infinity` dB). Vorher lief der Master ab Start auf -6 dB, obwohl kein
+  Plugin aktiv war; `activatePlugin()` hebt das Gate wie bisher auf.
+- [x] **P0-3 Close-Button + State-Sync:** Terminal-`select` (OFF/AI/ACTIVE), Rack-Power-Button
+  und `ModuleContainer`-„✕ OFF" sind vorhanden und schließen das Terminal inkl. Lock-Freigabe.
+  Neuer Prüfpunkt: `tests/e2e/pluginCloseSync.spec.ts` (OFF im Terminal, Power-Button,
+  Reload → bleibt OFF). Peer-Replikation bleibt durch `tests/e2e/collab.spec.ts` abgedeckt.
+- [x] **P0-4 Rauschen auf Main:** `goldenAudio`-Suite (60 s Stille, RMS ≤ -60 dBFS) grün;
+  Guards in `masteringProcessor`, `spatialProcessor`, `dspProcessor`, `dynamicsProcessor`,
+  `eqProcessor`, `effectProcessor`, `synthProcessor`, `itSynthProcessor` verifiziert.
+  `analyzerProcessor`/`lufsProcessor`/`clockProcessor` schreiben keine Outputs.
+  `fallbackProcessor` sanitisiert jetzt jeden Sample-Wert (NaN/Inf → 0) und liefert Stille
+  für fehlende Eingangskanäle, kann also kein Rauschen mehr auf den Main-Bus schicken.
+- [x] **P0-6 Main-/Monitor-Routing:** Ohne Codeänderung verifiziert –
+  `tests/monitorRouting.test.ts` (4-User-Matrix + „MAIN unverändert" über `exportGraphState`)
+  und `tests/e2e/monitorCue.spec.ts` (Cue-Gains auf Web-Audio-Ebene, 10-ms-Rampe) grün.
+- [x] **P0-7 Master-Player fest oben:** Der Prüfpunkt in `tests/e2e/smoke.spec.ts` war defekt
+  (suchte „masterplayerMONK" + „132 BPM", das UI zeigte „MasterplazerMONK" und „132.00").
+  Heading auf den Registry-Namen `masterplayerMONK` korrigiert, Assertion angepasst; neuer
+  Prüfpunkt `tests/e2e/masterPlayerFixed.spec.ts` (Sticky bleibt nach 1500 px Scroll im
+  Viewport, Play-Button + Leertaste, keine Space-Auslösung in Eingabefeldern).
+
+**Nachweis:** `npm run verify` → 106 Test-Dateien / 600 Tests grün, Interface-Boundary-Scan
+0 Verstöße. Playwright (Chromium): `startState`, `pluginCloseSync`, `masterPlayerFixed`,
+`monitorCue`, `smoke`, `keyboard`, `audioAction`, `responsive` grün.
+
+**Offen (umgebungsbedingt, schon vor dieser Änderung rot):** `collab.spec.ts`,
+`live2browser.spec.ts` (echte WebRTC-Peers), `hardware.spec.ts` (virtuelle MIDI-Geräte) und
+die Linux-Screenshot-Baselines in `visual.spec.ts` – Letztere müssen im CI-Referenz-Container
+neu erzeugt werden (Studio-Baseline zeigt jetzt korrekt kein offenes mixerMONK-Terminal).
+Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
