@@ -1,7 +1,9 @@
 /**
  * dropMONK – Clock Synchronization Bridge
  * ======================================
- * Synchronize drops with master clock for quantized recall
+ * Synchronisiert Drops mit der Master-Clock (taktgenauer Recall).
+ * Die App-Schicht speist updateClock() aus dem Transport/Step-Listener,
+ * ohne dass der Core Plattform-APIs kennt.
  */
 
 /**
@@ -21,6 +23,16 @@ export interface ClockState {
  */
 export type QuantizationLevel = '1beat' | '2beat' | '1bar' | '2bar' | '4bar' | '8bar';
 
+/** Beats pro Quantisierungsraster (4/4). */
+const QUANTIZATION_BEATS: Record<QuantizationLevel, number> = {
+  '1beat': 1,
+  '2beat': 2,
+  '1bar': 4,
+  '2bar': 8,
+  '4bar': 16,
+  '8bar': 32,
+};
+
 /**
  * Clock Synchronization Bridge
  * Schedules drops to align with bar/beat boundaries
@@ -38,36 +50,39 @@ export class ClockBridge {
   private callbacks: Map<string, (state: ClockState) => void> = new Map();
   private scheduledDrops: Array<{
     id: string;
-    targetBar: number;
+    targetSample: number;
     callback: () => void;
   }> = [];
 
   /**
-   * Initialize clock bridge
-   * TODO: Connect to masterClock from audioEngine
+   * Initialize clock bridge (BPM/SampleRate vom Transport).
    */
   initialize(bpm: number, sampleRate: number): void {
-    this.clockState.bpm = bpm;
-    this.clockState.sampleRate = sampleRate;
+    if (Number.isFinite(bpm) && bpm > 0) this.clockState.bpm = bpm;
+    if (Number.isFinite(sampleRate) && sampleRate > 0) this.clockState.sampleRate = sampleRate;
+  }
+
+  /** Tempo-Änderung übernehmen. */
+  setBpm(bpm: number): void {
+    if (Number.isFinite(bpm) && bpm > 0) this.clockState.bpm = bpm;
   }
 
   /**
    * Update clock state
-   * Called frequently (e.g., from audio worklet)
+   * Called frequently (e.g., from audio worklet / step listener)
    */
   updateClock(currentSample: number, isRunning: boolean): void {
     this.clockState.isRunning = isRunning;
-    this.clockState.currentSample = currentSample;
+    this.clockState.currentSample = Math.max(0, currentSample);
 
-    const samplesPerBeat = this.clockState.sampleRate / (this.clockState.bpm / 60);
-    const currentBeat = Math.floor(currentSample / samplesPerBeat);
-    const currentBar = Math.floor(currentBeat / 4); // 4/4 time
+    const samplesPerBeat = this.getSamplesPerBeat();
+    const currentBeat = Math.floor(this.clockState.currentSample / samplesPerBeat);
 
     this.clockState.currentBeat = currentBeat % 4;
-    this.clockState.currentBar = currentBar;
+    this.clockState.currentBar = Math.floor(currentBeat / 4); // 4/4 time
 
-    // Check scheduled drops
     this._processScheduledDrops();
+    this._broadcastClockUpdate();
   }
 
   /**
@@ -77,69 +92,56 @@ export class ClockBridge {
     return { ...this.clockState };
   }
 
+  /** Samples pro Beat beim aktuellen Tempo. */
+  getSamplesPerBeat(): number {
+    return (this.clockState.sampleRate * 60) / this.clockState.bpm;
+  }
+
   /**
    * Get samples to next beat
    */
   getSamplesToNextBeat(): number {
-    const samplesPerBeat = this.clockState.sampleRate / (this.clockState.bpm / 60);
-    const samplesInCurrentBeat = this.clockState.currentSample % samplesPerBeat;
-    return Math.ceil(samplesPerBeat - samplesInCurrentBeat);
+    return this.getSamplesToQuantization('1beat');
   }
 
   /**
    * Get samples to next bar
    */
   getSamplesToNextBar(): number {
-    const samplesPerBeat = this.clockState.sampleRate / (this.clockState.bpm / 60);
-    const samplesPerBar = samplesPerBeat * 4;
-    const samplesInCurrentBar = this.clockState.currentSample % samplesPerBar;
-    return Math.ceil(samplesPerBar - samplesInCurrentBar);
+    return this.getSamplesToQuantization('1bar');
   }
 
   /**
-   * Calculate delay until quantization point
+   * Samples bis zum nächsten Quantisierungspunkt
    */
-  getDelayToQuantization(quantization: QuantizationLevel): number {
-    const samplesPerBeat = this.clockState.sampleRate / (this.clockState.bpm / 60);
-
-    const quantizationMap: Record<QuantizationLevel, number> = {
-      '1beat': samplesPerBeat,
-      '2beat': samplesPerBeat * 2,
-      '1bar': samplesPerBeat * 4,
-      '2bar': samplesPerBeat * 8,
-      '4bar': samplesPerBeat * 16,
-      '8bar': samplesPerBeat * 32,
-    };
-
-    const samplesPerQuantum = quantizationMap[quantization];
+  getSamplesToQuantization(quantization: QuantizationLevel): number {
+    const samplesPerQuantum = this.getSamplesPerBeat() * QUANTIZATION_BEATS[quantization];
     const samplesInCurrent = this.clockState.currentSample % samplesPerQuantum;
     return Math.ceil(samplesPerQuantum - samplesInCurrent);
+  }
+
+  /**
+   * Verzögerung bis zum Quantisierungspunkt (Samples).
+   * Beibehalten für Abwärtskompatibilität.
+   */
+  getDelayToQuantization(quantization: QuantizationLevel): number {
+    return this.getSamplesToQuantization(quantization);
+  }
+
+  /**
+   * Verzögerung bis zum Quantisierungspunkt in Millisekunden.
+   */
+  getDelayToQuantizationMs(quantization: QuantizationLevel): number {
+    return (this.getSamplesToQuantization(quantization) / this.clockState.sampleRate) * 1000;
   }
 
   /**
    * Schedule a drop on next quantization point
    */
   scheduleDrop(callback: () => void, quantization: QuantizationLevel = '4bar'): string {
-    const samplesPerBeat = this.clockState.sampleRate / (this.clockState.bpm / 60);
-
-    const quantizationMap: Record<QuantizationLevel, number> = {
-      '1beat': samplesPerBeat,
-      '2beat': samplesPerBeat * 2,
-      '1bar': samplesPerBeat * 4,
-      '2bar': samplesPerBeat * 8,
-      '4bar': samplesPerBeat * 16,
-      '8bar': samplesPerBeat * 32,
-    };
-
-    const samplesPerQuantum = quantizationMap[quantization];
-    const samplesInCurrent = this.clockState.currentSample % samplesPerQuantum;
-    const samplesUntilQuantum = Math.ceil(samplesPerQuantum - samplesInCurrent);
-    const targetSample = this.clockState.currentSample + samplesUntilQuantum;
-    const targetBar = Math.floor(targetSample / (samplesPerBeat * 4));
-
+    const targetSample = this.clockState.currentSample + this.getSamplesToQuantization(quantization);
     const id = `drop_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    this.scheduledDrops.push({ id, targetBar, callback });
-
+    this.scheduledDrops.push({ id, targetSample, callback });
     return id;
   }
 
@@ -150,17 +152,31 @@ export class ClockBridge {
     this.scheduledDrops = this.scheduledDrops.filter((d) => d.id !== id);
   }
 
+  /** Anzahl wartender Drops (Diagnose/Tests). */
+  getScheduledCount(): number {
+    return this.scheduledDrops.length;
+  }
+
   /**
    * Process scheduled drops
    */
   private _processScheduledDrops(): void {
-    this.scheduledDrops = this.scheduledDrops.filter((drop) => {
-      if (this.clockState.currentBar >= drop.targetBar) {
+    if (this.scheduledDrops.length === 0) return;
+
+    const due = this.scheduledDrops.filter((d) => this.clockState.currentSample >= d.targetSample);
+    if (due.length === 0) return;
+
+    this.scheduledDrops = this.scheduledDrops.filter(
+      (d) => this.clockState.currentSample < d.targetSample
+    );
+
+    for (const drop of due) {
+      try {
         drop.callback();
-        return false; // Remove from queue
+      } catch (err) {
+        console.error('[ClockBridge] scheduled drop failed:', err);
       }
-      return true;
-    });
+    }
   }
 
   /**
@@ -181,9 +197,23 @@ export class ClockBridge {
    * Broadcast clock update
    */
   private _broadcastClockUpdate(): void {
+    if (this.callbacks.size === 0) return;
     for (const callback of this.callbacks.values()) {
-      callback(this.clockState);
+      try {
+        callback(this.getClockState());
+      } catch (err) {
+        console.error('[ClockBridge] clock listener failed:', err);
+      }
     }
+  }
+
+  /** Reset (Tests/Transport-Stop). */
+  reset(): void {
+    this.clockState.currentSample = 0;
+    this.clockState.currentBar = 0;
+    this.clockState.currentBeat = 0;
+    this.clockState.isRunning = false;
+    this.scheduledDrops = [];
   }
 
   /**

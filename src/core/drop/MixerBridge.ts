@@ -1,108 +1,149 @@
 /**
  * dropMONK – Mixer Integration Bridge
  * ==================================
- * Connect dropMONK to existing Mixer channels & state
+ * Verbindet dropMONK mit den Mixer-Kanälen der audioEngine (via
+ * DropAudioAdapter). Ohne registrierten Adapter arbeitet die Bridge gegen
+ * einen internen State – so bleiben Tests und der OFF-Zustand deterministisch.
  */
 
-import type { DropProfile } from '../drop';
+import { getDropAudioAdapter } from './DropAudioAdapter';
+import type { DropMixerChannelSnapshot } from './DropAudioAdapter';
 
 /**
  * Mixer Channel State (read from audioEngine)
  */
-export interface MixerChannelState {
-  id: string; // 'channel1', 'channel2', etc.
-  label: string; // 'CH1', 'CH2', etc.
-  level: number; // 0..1
-  pan: number; // -1..1
-  muted: boolean;
-  soloed: boolean;
-}
+export type MixerChannelState = DropMixerChannelSnapshot;
+
+const DEFAULT_CHANNELS: MixerChannelState[] = [
+  { id: 'channel1', label: 'CH1', level: 0, pan: 0, muted: false, soloed: false },
+  { id: 'channel2', label: 'CH2', level: 0, pan: 0, muted: false, soloed: false },
+  { id: 'channel3', label: 'CH3', level: 0, pan: 0, muted: false, soloed: false },
+  { id: 'channel4', label: 'CH4', level: 0, pan: 0, muted: false, soloed: false },
+  { id: 'channel5', label: 'CH5', level: 0, pan: 0, muted: false, soloed: false },
+];
+
+const clamp = (v: number, min: number, max: number): number =>
+  Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : min;
 
 /**
  * Mixer Integration Bridge
  * Bridges dropMONK drop engine to mixer channels
  */
 export class MixerBridge {
+  /** Fallback-State, falls kein Audio-Adapter registriert ist. */
+  private fallbackChannels: Map<string, MixerChannelState> = new Map(
+    DEFAULT_CHANNELS.map((ch) => [ch.id, { ...ch }])
+  );
+
   /**
-   * Get current mixer state
-   * TODO: Integrate with audioEngine.getMixerState()
+   * Aktueller Mixer-State (Adapter oder Fallback)
    */
   getCurrentMixerState(): MixerChannelState[] {
-    // Placeholder: will connect to audioEngine
-    // audioEngine should expose: getMixerChannels(), getMixerLevel(ch), etc.
-    return [
-      { id: 'channel1', label: 'CH1', level: 0.8, pan: 0, muted: false, soloed: false },
-      { id: 'channel2', label: 'CH2', level: 0.6, pan: 0, muted: false, soloed: false },
-      { id: 'channel3', label: 'CH3', level: 0.5, pan: 0, muted: false, soloed: false },
-      { id: 'channel4', label: 'CH4', level: 0.7, pan: 0, muted: false, soloed: false },
-      { id: 'channel5', label: 'CH5 (Master)', level: 1.0, pan: 0, muted: false, soloed: false },
-    ];
+    const adapter = getDropAudioAdapter();
+    if (adapter) {
+      try {
+        return adapter.getChannels().map((ch) => ({ ...ch }));
+      } catch {
+        /* Adapter-Fehler → Fallback */
+      }
+    }
+    return Array.from(this.fallbackChannels.values()).map((ch) => ({ ...ch }));
   }
 
   /**
-   * Set mixer level (crossfade)
-   * TODO: Integrate with audioEngine.setMixerLevel()
+   * Kanal-Fader setzen (0..1)
    */
-  setMixerLevel(channelId: string, level: number): void {
-    if (level < 0 || level > 1) {
+  setMixerLevel(channelId: string, level: number): boolean {
+    if (!Number.isFinite(level) || level < 0 || level > 1) {
       console.error('Invalid mixer level:', level);
-      return;
+      return false;
     }
-    // audioEngine.setMixerLevel(channelId, level);
-    console.log(`[MixerBridge] Set ${channelId} level to ${level}`);
+
+    const adapter = getDropAudioAdapter();
+    if (adapter) {
+      adapter.setChannelLevel(channelId, level);
+      return true;
+    }
+
+    this.updateFallback(channelId, { level });
+    return true;
   }
 
   /**
-   * Set mixer pan
+   * Kanal-Pan setzen (-1..1)
    */
-  setMixerPan(channelId: string, pan: number): void {
-    if (pan < -1 || pan > 1) {
+  setMixerPan(channelId: string, pan: number): boolean {
+    if (!Number.isFinite(pan) || pan < -1 || pan > 1) {
       console.error('Invalid pan value:', pan);
-      return;
+      return false;
     }
-    // audioEngine.setMixerPan(channelId, pan);
-    console.log(`[MixerBridge] Set ${channelId} pan to ${pan}`);
+
+    const adapter = getDropAudioAdapter();
+    if (adapter) {
+      adapter.setChannelPan(channelId, pan);
+      return true;
+    }
+
+    this.updateFallback(channelId, { pan });
+    return true;
   }
 
   /**
    * Mute/unmute channel
    */
   setMixerMute(channelId: string, muted: boolean): void {
-    // audioEngine.setMixerMute(channelId, muted);
-    console.log(`[MixerBridge] Set ${channelId} mute to ${muted}`);
+    const adapter = getDropAudioAdapter();
+    if (adapter) {
+      adapter.setChannelMute(channelId, muted);
+      return;
+    }
+    this.updateFallback(channelId, { muted });
   }
 
   /**
-   * Crossfade between two channels
-   * Used for DJ Transitions
+   * Crossfade zwischen zwei Kanälen (Equal-Power, DJ-Transition).
+   * Läuft nicht im Audio-Thread: die eigentlichen Fader-Rampen erledigt
+   * die audioEngine, hier wird nur die Kurve gestuft geschrieben.
    */
   async crossfade(
     fromChannel: string,
     toChannel: string,
-    duration: number = 2000
+    duration: number = 2000,
+    steps: number = 50
   ): Promise<void> {
-    const steps = 50; // Number of interpolation steps
-    const stepDuration = duration / steps;
+    const safeSteps = Math.max(1, Math.round(steps));
+    const stepDuration = Math.max(0, duration) / safeSteps;
 
-    for (let i = 0; i <= steps; i++) {
-      const progress = i / steps;
-      const fromLevel = Math.max(0, 1 - progress);
-      const toLevel = Math.min(1, progress);
+    for (let i = 0; i <= safeSteps; i++) {
+      const progress = i / safeSteps;
+      const { from, to } = MixerBridge.equalPowerGains(progress);
 
-      this.setMixerLevel(fromChannel, fromLevel);
-      this.setMixerLevel(toChannel, toLevel);
+      this.setMixerLevel(fromChannel, from);
+      this.setMixerLevel(toChannel, to);
 
-      await new Promise((resolve) => setTimeout(resolve, stepDuration));
+      if (i < safeSteps && stepDuration > 0) {
+        await new Promise((resolve) => setTimeout(resolve, stepDuration));
+      }
     }
 
-    // Ensure final state
+    // Endzustand garantieren
     this.setMixerLevel(fromChannel, 0);
     this.setMixerLevel(toChannel, 1);
   }
 
   /**
-   * Get energy level from mixer (used for context analysis)
-   * Simple: average of unmuted channel levels
+   * Equal-Power-Crossfade-Kurve (Summe der Leistungen bleibt konstant)
+   */
+  static equalPowerGains(progress: number): { from: number; to: number } {
+    const p = clamp(progress, 0, 1);
+    return {
+      from: Math.cos((p * Math.PI) / 2),
+      to: Math.sin((p * Math.PI) / 2),
+    };
+  }
+
+  /**
+   * Energie-Level des Mixes (0..1) für die Kontext-Analyse
    */
   getEnergyLevel(): number {
     const channels = this.getCurrentMixerState();
@@ -110,15 +151,29 @@ export class MixerBridge {
 
     if (unmutedChannels.length === 0) return 0;
 
-    const avgLevel = unmutedChannels.reduce((sum, ch) => sum + ch.level, 0) / unmutedChannels.length;
-    return Math.min(1, avgLevel * 1.2); // Slight boost for better detection
+    const avgLevel =
+      unmutedChannels.reduce((sum, ch) => sum + ch.level, 0) / unmutedChannels.length;
+    return Math.min(1, avgLevel * 1.2); // leichter Boost für bessere Erkennung
   }
 
   /**
-   * Get active channels (not muted, non-zero level)
+   * Aktive Kanäle (nicht gemutet, Level > 0)
    */
   getActiveChannels(): MixerChannelState[] {
     return this.getCurrentMixerState().filter((ch) => !ch.muted && ch.level > 0.01);
+  }
+
+  /** Fallback-State aktualisieren (nur ohne Adapter relevant). */
+  private updateFallback(channelId: string, patch: Partial<MixerChannelState>): void {
+    const existing = this.fallbackChannels.get(channelId) ?? {
+      id: channelId,
+      label: channelId.toUpperCase(),
+      level: 0,
+      pan: 0,
+      muted: false,
+      soloed: false,
+    };
+    this.fallbackChannels.set(channelId, { ...existing, ...patch });
   }
 }
 

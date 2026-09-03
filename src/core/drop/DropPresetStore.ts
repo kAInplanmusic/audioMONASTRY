@@ -1,13 +1,14 @@
 /**
  * dropMONK – Drop Preset Store
  * ===========================
- * Persistiere Presets in OPFS/IndexedDB
+ * Persistiere Presets über den IndexedDB-Adapter (localStorage als Fallback)
  */
 
 import type { DropProfile, DropPreset, DropCategory } from './types/DropProfile';
+import { largeGetJson, largeSetJson } from '../../utils/indexedDB';
+import { storageGetJson, storageSetJson } from '../../utils/storage';
 
 const STORAGE_KEY = 'dropmonk_presets';
-const OPFS_DIR = 'dropmonk';
 
 /**
  * Drop Preset Store
@@ -19,19 +20,18 @@ export class DropPresetStore {
 
   /**
    * Initialize Store
-   * Laden aus IndexedDB oder OPFS
+   * Laden über IndexedDB-Adapter, Fallback localStorage
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
     try {
-      // Versuche aus IndexedDB zu laden
-      await this.loadFromIndexedDb();
+      const loaded = await this.loadFromIndexedDb();
+      if (!loaded) this.loadFromLocalStorage();
     } catch (err) {
       console.warn('IndexedDB loading failed, trying localStorage:', err);
       try {
-        // Fallback zu localStorage
-        await this.loadFromLocalStorage();
+        this.loadFromLocalStorage();
       } catch (err2) {
         console.warn('All persistence methods failed:', err2);
         // Leer starten, keine gespeicherten Presets verfügbar
@@ -223,128 +223,40 @@ export class DropPresetStore {
 
   /**
    * Persist to Storage
+   * Große Preset-States gehören laut DCT-106 in IndexedDB; localStorage ist
+   * nur Fallback. Beide Zugriffe laufen über die Plattform-Adapter.
    */
   private async persistToStorage(): Promise<void> {
+    const presets = Array.from(this.presets.values());
+
     try {
-      const data = JSON.stringify(Array.from(this.presets.values()));
-
-      // Versuche IndexedDB
-      if ('indexedDB' in globalThis) {
-        await this.saveToIndexedDb(data);
-      } else {
-        // Fallback zu localStorage
-        await this.saveToLocalStorage(data);
-      }
+      await largeSetJson(STORAGE_KEY, presets);
     } catch (err) {
-      console.error('Failed to persist presets:', err);
-      // Non-critical: Presets werden zur Runtime behalten,
-      // aber beim Reload verloren
+      console.error('Failed to persist presets to IndexedDB:', err);
     }
+
+    // Fallback/Spiegel: kleiner JSON-State in localStorage.
+    storageSetJson(STORAGE_KEY, presets);
   }
 
   /**
-   * Save to IndexedDB
+   * Load from IndexedDB (Adapter)
    */
-  private async saveToIndexedDb(data: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('audiomonastry', 1);
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-
-        // Stelle sicher, dass object store existiert
-        if (!db.objectStoreNames.contains(STORAGE_KEY)) {
-          const version = db.version + 1;
-          db.close();
-
-          const upgradeRequest = indexedDB.open('audiomonastry', version);
-          upgradeRequest.onupgradeneeded = () => {
-            upgradeRequest.result.createObjectStore(STORAGE_KEY);
-          };
-          upgradeRequest.onsuccess = () => {
-            this.saveToIndexedDb(data).then(resolve).catch(reject);
-          };
-          upgradeRequest.onerror = () => reject(upgradeRequest.error);
-          return;
-        }
-
-        const tx = db.transaction(STORAGE_KEY, 'readwrite');
-        const store = tx.objectStore(STORAGE_KEY);
-        store.put(data, 'presets');
-
-        tx.oncomplete = () => {
-          db.close();
-          resolve();
-        };
-        tx.onerror = () => reject(tx.error);
-      };
-    });
+  private async loadFromIndexedDb(): Promise<boolean> {
+    const stored = await largeGetJson<DropPreset[]>(STORAGE_KEY);
+    if (!Array.isArray(stored)) return false;
+    this.presets = new Map(stored.map((p) => [p.id, p]));
+    return true;
   }
 
   /**
-   * Load from IndexedDB
+   * Load from LocalStorage (Fallback-Adapter)
    */
-  private async loadFromIndexedDb(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const request = indexedDB.open('audiomonastry', 1);
-
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-
-        if (!db.objectStoreNames.contains(STORAGE_KEY)) {
-          resolve(); // Keine Daten vorhanden
-          return;
-        }
-
-        const tx = db.transaction(STORAGE_KEY, 'readonly');
-        const store = tx.objectStore(STORAGE_KEY);
-        const getRequest = store.get('presets');
-
-        getRequest.onsuccess = () => {
-          const data = getRequest.result;
-          if (data) {
-            try {
-              const presets = JSON.parse(data) as DropPreset[];
-              this.presets = new Map(presets.map((p) => [p.id, p]));
-            } catch (err) {
-              console.error('Failed to parse stored presets:', err);
-            }
-          }
-          resolve();
-        };
-
-        getRequest.onerror = () => reject(getRequest.error);
-      };
-    });
-  }
-
-  /**
-   * Save to LocalStorage (Fallback)
-   */
-  private async saveToLocalStorage(data: string): Promise<void> {
-    try {
-      localStorage.setItem(STORAGE_KEY, data);
-    } catch (err) {
-      throw new Error(`localStorage save failed: ${err}`);
-    }
-  }
-
-  /**
-   * Load from LocalStorage (Fallback)
-   */
-  private async loadFromLocalStorage(): Promise<void> {
-    try {
-      const data = localStorage.getItem(STORAGE_KEY);
-      if (data) {
-        const presets = JSON.parse(data) as DropPreset[];
-        this.presets = new Map(presets.map((p) => [p.id, p]));
-      }
-    } catch (err) {
-      console.error('localStorage load failed:', err);
-      throw err;
-    }
+  private loadFromLocalStorage(): boolean {
+    const stored = storageGetJson<DropPreset[]>(STORAGE_KEY);
+    if (!Array.isArray(stored)) return false;
+    this.presets = new Map(stored.map((p) => [p.id, p]));
+    return true;
   }
 
   /**
