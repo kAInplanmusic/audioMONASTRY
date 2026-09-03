@@ -79,3 +79,20 @@ export function getPluginSkinReference(id: string | undefined | null): string {
   }
   return 'Eigenes Theme';
 }
+
+/**
+ * P1-2 Hardware-Skins: pro Plugin eine Hardware-Look-Klasse, die in
+ * `src/index.css` (`.hw-skin-*`) Material-/Knob-/Fader-Optik nachzieht.
+ * Die konkreten Farben kommen weiterhin aus den `.monk-theme-*`-Variablen –
+ * die Skin-Klasse steuert nur Textur/Stil (Panel-Kante, Knob-Ring, Fader).
+ */
+const HARDWARE_SKIN_IDS: readonly string[] = [
+  'mixer', 'synthesizer', 'drum', 'eq', 'mastering', 'spatial', 'mcp', 'sampler',
+];
+
+export function getHardwareSkinClass(id: string | undefined | null): string {
+  if (id && HARDWARE_SKIN_IDS.includes(id)) {
+    return `hw-skin-${id}`;
+  }
+  return '';
+}

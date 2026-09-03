@@ -1,7 +1,7 @@
 import React from 'react';
 import { ModuleState } from '../context/ModuleStateContext';
 import { usePluginManager } from '../context/PluginManagerContext';
-import { getPluginThemeClass } from '../utils/pluginTheme';
+import { getPluginThemeClass, getHardwareSkinClass } from '../utils/pluginTheme';
 
 interface ModuleContainerProps {
   id: string;
@@ -21,7 +21,7 @@ export const ModuleContainer = React.memo(({ id, name, state, children, onClose,
   if (state === 'OFF') return null;
 
   return (
-    <div className={`monk-panel relative overflow-hidden transition-all duration-300 edge-inset ${getPluginThemeClass(id)} ${
+    <div className={`monk-panel relative overflow-hidden transition-all duration-300 edge-inset ${getPluginThemeClass(id)} ${getHardwareSkinClass(id)} ${
       state === 'AUTO_AI' ? 'ring-1 ring-orange-400/30 animate-pulse' : state === 'PRO' ? 'ring-1 ring-purple-500/20' : ''
     }`}>
       {/* P1-2: Akzent-Hairline oben, folgt dem Plugin-Skin (--monk-accent). */}

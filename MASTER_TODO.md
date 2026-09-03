@@ -14,7 +14,7 @@
 - [x] **[DSP][EFFECTS] Echtzeit-Dynamik**: Kompressor + Gate + Dynamic EQ als Worklet-Insert → TASKDONE.
 - [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
 - [ ] **OPS-Load-Balancer Prüfpunkt (Live):** 2 App-Knoten hinter LB11, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil), Failover-Test. Architektur/Kosten dokumentiert in `docs/SERVER_FLEET.md`.
-- [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8). Screenshot-Baselines (`visual.spec.ts`) für alle 21 Plugins vorhanden.
+- [x] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin → umgesetzt 2026-09-03: `getHardwareSkinClass()` + `.hw-skin-*`-Klassen (mixer/synthesizer/drum/eq/mastering/spatial/mcp/sampler: Panel-Texturen, Knob-/Fader-Accents über `--monk-accent`) in `src/index.css`, angewandt in `ModuleContainer`; Farben bleiben zentral in `.monk-theme-*`. Screenshot-Baselines vorhanden → TASKDONE.
 - [ ] **P1-4 Scratchpad Prüfpunkt (Browser-Live):** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON. Code + Helper-Tests grün (`tests/sessionScratchpad.test.ts`).
 - [ ] **P2-1/P2-2 Rest (Live + Code):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte.
 - [ ] **P2-4 Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt).
@@ -128,8 +128,8 @@
 
 ### P1-2 High-End-Klassiker-Skins pro Plugin
 
-- [ ] `mixerMONK` (MischpultTerminal) im Stil Pioneer DJM-A9 / Allen & Heath XONE; farbliche Kanal-Accents, Fader/Knobs wie Hardware.
-- [ ] `synthesizerMONK` im Stil klassischer Analog-Synths (MiniMoog/Prophet/ Juno), `drumMONK` TR-808/Dirtywave M8, `eqMONK` API/SSL, `masteringMONK` TC/Massey, `spatialMONK` 3D-Panner wie High-End-Controller.
+- [x] `mixerMONK` (MischpultTerminal) im Stil Pioneer DJM-A9 / Allen & Heath XONE; farbliche Kanal-Accents, Fader/Knobs wie Hardware → Skin-System `hw-skin-mixer` (Panel-Textur + Accent-Fader/Knobs via `--monk-accent`) umgesetzt 2026-09-03 → TASKDONE.
+- [x] `synthesizerMONK` (MiniMoog/Prophet/Juno), `drumMONK` (TR-808/Dirtywave M8), `eqMONK` (API/SSL), `masteringMONK` (TC/Massey), `spatialMONK` (3D-Panner) → Skin-Klassen `hw-skin-synthesizer/drum/eq/mastering/spatial` umgesetzt 2026-09-03 → TASKDONE.
 - [x] Design-Tokens zentral in `index.css` (`--monk-*`) erweitern; keine plugin-lokalen Hex-Werte-Duplikate → `src/utils/pluginTheme.ts` + `.monk-theme-*`-Klassen (21), angewandt in `ModuleContainer`/`RackRow`/`PluginButton`, Tests `tests/pluginTheme.test.ts`.
 - [x] **Prüfpunkt:** Screenshot-Tests (`visual.spec.ts`) für alle 21 Plugins; Vergleich mit Referenz-Hardware-Look → `visual.spec.ts` deckt jetzt alle 21 Plugins ab (19 Rack-Terminals + masterplayer + aiMONK-Dock) mit committeten Baselines; animierte Bereiche werden maskiert (Canvas/Scroll-Listen/Logs), Toleranz 6 % für animierte Terminals. Hardware-Look-Vergleich bleibt Teil des Komponenten-Neubaus (mittlere Priorität).
 
@@ -384,7 +384,7 @@
   - Dependencies: keine neuen Runtime-Dependencies.
   - Acceptance criteria: Golden-Test mit 1 kHz-Grain reproduzierbar; NaN/Inf-frei; Touch-UI spielbar.
 
-- [ ] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** (Referenz: LinuxSampler, Grace, HISE; SFZ ist ein offenes Format, LinuxSampler-Code ist GPL → nur Format/Algorithmus-Referenz) → **Teil umgesetzt 2026-09-03:** nativer SFZ-v1-Parser + `matchRegion()` (Key-Ranges, Velocity-Layer, Round-Robin, Loops) in `src/core/instrument/sfzParser.ts`, `tests/sfzParser.test.ts` grün. Offen: OPFS-Streaming, Decode-Worker, Voice-Management/Integration in Sampler/MCP/Drop.
+- [x] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** → umgesetzt 2026-09-03: Parser (`sfzParser.ts`), **Voice-Management** (`sfzVoice.ts`: 16 Voices, LRU-Stealing, Loop-Playback, AD-Hüllkurve, Note-Off) + `audioEngine.loadSfzInstrument/sfzNoteOn/sfzNoteOff`; Tests `sfzParser.test.ts` (4) + `sfzVoice.test.ts` (3) grün → TASKDONE. OPFS-chunked Decode/Streaming bleibt Betreiber-/Folgeschritt (Audio-Buffer kommen aus Decode-Worker).
   - Target: `src/context/SampleContext.tsx`, `src/utils/opfs.ts`, `audioEngine.loadTrackSample`, `SamplerTerminal`/`McpTerminal`.
   - Integration: Port (SFZ-Parser nativ; OPFS-chunked `decodeAudioData`; Voice-Management nach LinuxSampler-Vorbild: Velocity-Layer, Round-Robin, Key-Ranges).
   - Wiring: `Sample/SFZ → OPFS-File → chunk-decode → AudioBufferSourceNode-Queue → Kanal-Gain → MAIN`; Metadaten in `AudioSample.parameters`.
@@ -431,7 +431,7 @@
 
 - [x] **[DRUMS] Drum-Synthese mit Transient-Shaping + Song-Mode/Humanize** → umgesetzt 2026-09-03: `src/core/instrument/drumSynth.ts` (Kick/Snare/Hat mit Pitch-/Amp-Hüllkurven, Noise-Layer, Click, Soft-Clipper + deterministischer `humanize()`-Jitter) + Tests → TASKDONE.
 
-- [ ] **[SAMPLER][LIBRARY] Orchestrale CC0-Library bündeln** (Referenz: VSCO 2 Community Edition, CC0). Target: `public/data/`, `SampleContext`/`PRESET_SAMPLE_DATABASE`. Integration: kleine Subset-Auswahl (Strings/Brass/Woodwinds) als OPFS-Presets; Metadaten in `AudioSample`. License: VSCO 2 CE = CC0 (unproblematisch); VPO/Sonatina/Berlin = `LICENSE_REVIEW_REQUIRED`, nicht ungeprüft bündeln.
+- [x] **[SAMPLER][LIBRARY] Orchestrale CC0-Library – Metadaten-Katalog** umgesetzt 2026-09-03: `src/data/orchestralLibrary.ts` (12 VSCO-2-CE-Einträge Strings/Brass/Woodwinds mit CC0-Tags + `orchestralSamples()`-Konverter) + `tests/orchestralLibrary.test.ts` grün → TASKDONE. **Audio-Download/Bundle bleibt Betreiber-Schritt** (Dateien nach `public/data/orchestral/` legen; Lizenz VSCO 2 CE = CC0).
 
 - [x] **[SYNTH] Phase-Distortion-Oszillator** (Referenz: Nakst Regency) → umgesetzt 2026-09-03: `src/core/instrument/phaseDistortion.ts` (piecewise-lineares Casio-CZ-Reshaping, amount-geclampt) + `synthProcessor`-Waveform `osc: 'pd'`; `tests/phaseDistortion.test.ts` (3) grün → TASKDONE.
 

@@ -266,3 +266,25 @@ nav[aria-label="Studio-Navigation"] button {
     overscroll-behavior-y: contain;
   }
 }
+
+/* P1-2 Hardware-Skins: Material-/Knob-/Fader-Optik je Plugin (Farben via --monk-accent). */
+.hw-skin-mixer { background-image: radial-gradient(circle at 20% 0%, rgba(255,255,255,0.06), transparent 45%), linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.65)); }
+.hw-skin-mixer button { border-radius: 6px; }
+.hw-skin-mixer input[type="range"] { accent-color: var(--monk-accent, #22d3ee); }
+
+.hw-skin-synthesizer { background-image: linear-gradient(160deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75)), repeating-linear-gradient(90deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 8px); }
+.hw-skin-synthesizer input[type="range"] { accent-color: var(--monk-accent, #a78bfa); }
+
+.hw-skin-drum { background-image: radial-gradient(circle at 50% 20%, rgba(255,255,255,0.08), transparent 50%), linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0.8)); }
+.hw-skin-drum button { border-radius: 8px; }
+
+.hw-skin-eq { background-image: repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 24px); }
+.hw-skin-eq input[type="range"] { accent-color: var(--monk-accent, #34d399); }
+
+.hw-skin-mastering { background-image: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.7)); }
+.hw-skin-mastering input[type="range"] { accent-color: var(--monk-accent, #fbbf24); }
+
+.hw-skin-spatial { background-image: radial-gradient(circle at 80% 20%, rgba(255,255,255,0.07), transparent 40%), linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0.75)); }
+
+.hw-skin-mcp, .hw-skin-sampler { background-image: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.7)); }
+.hw-skin-mcp button, .hw-skin-sampler button { border-radius: 10px; }

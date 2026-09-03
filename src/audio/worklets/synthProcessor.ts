@@ -12,7 +12,7 @@
  *   { release }            → Note-Off (ADSR-Release)
  */
 import { createMorphWavetables, sampleWavetable } from '../../core/instrument/wavetable';
-import { createTonewheelTable } from '../../core/instrument/tonewheel';
+import { createTonewheelTable, LeslieSim } from '../../core/instrument/tonewheel';
 
 // Vorberechnete Wavetables (Modul-Load, keine Allokation im Hot-Path).
 const WT = createMorphWavetables(2048);
@@ -112,6 +112,8 @@ class SynthProcessor extends AudioWorkletProcessor {
   private gain = 1.0;
 
   private filter = new MoogLadder();
+  // Leslie (nur für tonewheel hörbar – aber immer verfügbar).
+  private leslie = new LeslieSim(48000, { slowHz: 0.8, fastHz: 6.2, rampSec: 0.8, amDepth: 0.5, fmDepth: 0.012 });
 
   constructor() {
     super();
@@ -128,6 +130,7 @@ class SynthProcessor extends AudioWorkletProcessor {
       if (typeof m.sustain === 'number') this.sustain = Math.max(0, Math.min(1, m.sustain));
       if (typeof m.release === 'number') this.release = Math.max(0.001, m.release);
       if (typeof m.resetFilter === 'boolean') this.filter.reset();
+      if (typeof m.leslieFast === 'boolean') this.leslie.setFast(m.leslieFast);
       if (typeof m.trigger === 'number') {   // Note-On mit Velocity
         this.envStage = 'attack';
       }
@@ -153,6 +156,9 @@ class SynthProcessor extends AudioWorkletProcessor {
 
       // Filter
       s = this.filter.process(s, this.cutoff, this.resonance, sr);
+
+      // Leslie-Rotor nur für die Tonewheel-Orgel.
+      if (this.osc === 'tonewheel') s = this.leslie.process(s);
 
       // ADSR
       const dtSec = 1 / sr;

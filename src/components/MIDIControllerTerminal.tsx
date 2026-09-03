@@ -342,6 +342,27 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
              >
                <RefreshCw className="w-4 h-4" /> ALLE PORTS RESCANNEN
              </button>
+
+             {/* DX7-SysEx-Drop (6-Op-FM): .syx-Datei → fm6Processor */}
+             <div className="pt-3 border-t border-neutral-800">
+               <span className="text-[10px] font-mono text-pink-400 uppercase tracking-widest">DX7-SysEx-Import</span>
+               <input
+                 type="file"
+                 accept=".syx,.SYX"
+                 onChange={async (e) => {
+                   const file = e.target.files?.[0];
+                   if (!file) return;
+                   try {
+                     const bytes = new Uint8Array(await file.arrayBuffer());
+                     audioEngine.loadFm6Sysex(bytes);
+                   } catch (err) {
+                     console.warn('[midi] SysEx-Import fehlgeschlagen:', err);
+                   }
+                 }}
+                 className="mt-2 w-full text-[10px] text-neutral-400 file:mr-2 file:rounded file:border-0 file:bg-pink-900/40 file:px-2 file:py-1 file:text-pink-200"
+               />
+               <p className="text-[8px] text-neutral-600 mt-1">156-Byte-unpacked Voice (.syx) → lädt den Patch in den 6-Op-FM-Worklet.</p>
+             </div>
            </div>
         </div>
 
