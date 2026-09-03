@@ -111,6 +111,10 @@ function addServerAudit(userId: string, role: string, action: string, ok: boolea
 // P4-2: Server-seitige Rollenzuordnung je User-ID (Host = admin, Rest = SESSION_ROLE).
 const sessionRoles = new Map<string, string>();
 function roleForSessionUser(userId: string): string {
+  // Reconnect-sicher: Ein bereits bekannter User behält seine Rolle
+  // (sonst würde der Host bei jedem Socket-Reconnect zum Guest degradiert).
+  const existing = sessionRoles.get(userId);
+  if (existing) return existing;
   if (sessionRoles.size === 0) return 'admin'; // Erster User = Host/Admin
   if (process.env.SESSION_HOST_USER && userId === process.env.SESSION_HOST_USER) return 'admin';
   const r = (process.env.SESSION_ROLE || '').trim();

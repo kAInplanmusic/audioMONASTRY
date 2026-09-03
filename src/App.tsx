@@ -108,7 +108,20 @@ function AppComponent() {
 
   // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
   // P4-1/P4-2: Host sendet Master-Stream an Peers/SFU; Gäste spielen Main ab.
+  // Login-Regel: ALLE Plugins starten geschlossen. Nur der ERSTE User (Host)
+  // bekommt mixerMONK einmalig geöffnet – masterplayer (oben) und aiMONK (unten)
+  // sind für alle 4 User immer fest.
   const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  const mixerSeededRef = useRef(false);
+  const audioStartedRef = useRef(false);
+
+  const seedHostMixer = useCallback(() => {
+    if (!audioStartedRef.current || !webRTCManager.isHost || mixerSeededRef.current) return;
+    mixerSeededRef.current = true;
+    // Nur lokal: Die übrigen User starten bewusst mit geschlossenen Plugins.
+    setModuleState('mixer', 'AUTO_AI', { replicate: false });
+  }, [setModuleState]);
+
   useEffect(() => {
     webRTCManager.onMainStream = (stream) => {
       try {
@@ -125,11 +138,17 @@ function AppComponent() {
         webRTCManager.startMainStream(dest.stream);
       }
     };
-    if (webRTCManager.isHost) startHostMain();
+    if (webRTCManager.isHost) {
+      startHostMain();
+      seedHostMixer();
+    }
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionFull(info.full);
-      if (webRTCManager.isHost) startHostMain();
+      if (webRTCManager.isHost) {
+        startHostMain();
+        seedHostMixer();
+      }
     };
     return () => {
       webRTCManager.onSessionUpdate = () => {};
@@ -139,7 +158,7 @@ function AppComponent() {
         mainDestRef.current = null;
       }
     };
-  }, []);
+  }, [seedHostMixer]);
 
   // Task 22: Rollen-Start-Presets – wendet das Modul-Profil einer Rolle an.
   const applyRole = (role: StudioRole) => {
@@ -321,8 +340,11 @@ function AppComponent() {
       }
       // IMMER in den App-Screen wechseln – Backend/Worklet-Defizite brechen die App nicht.
       console.log('[startApp] isStarted=true setzen');
+      audioStartedRef.current = true;
       setIsStarted(true);
       setIsPlaying(false);
+      // Login-Regel: Nur der erste User (Host) bekommt mixerMONK geöffnet.
+      seedHostMixer();
       // iPad/Phone: Querformat anstreben (nur möglich im Fullscreen/PWA-Kontext;
       // im normalen Browser-Tab wird der Versuch still ignoriert).
       try {
