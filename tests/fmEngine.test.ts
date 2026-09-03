@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DX7_ALGORITHMS, validateDx7Algorithms } from '../src/core/instrument/dx7Algorithms';
-import { dx7LevelToGain, dx7RateToSeconds, renderFmPatch, type Dx7Patch } from '../src/core/instrument/fmEngine';
+import { dx7LevelToGain, dx7RateToSeconds, Fm6Synth, renderFmPatch, type Dx7Patch } from '../src/core/instrument/fmEngine';
 import { DX7_REFERENCE_PATCHES } from '../src/core/instrument/dx7Presets';
 
 function rms(buf: Float32Array): number {
@@ -65,5 +65,32 @@ describe('6-Op-FM-Engine (produktionsreif)', () => {
     let diff = 0;
     for (let i = 0; i < dry.length; i++) diff += Math.abs(dry[i] - fb[i]);
     expect(diff).toBeGreaterThan(0.01);
+  });
+});
+
+describe('Fm6Synth (polyphone Block-Engine)', () => {
+  it('noteOn rendert hörbar, noteOff lässt ausklingen', () => {
+    const synth = new Fm6Synth(DX7_REFERENCE_PATCHES[0], 48000, 16);
+    const block = new Float32Array(128);
+    synth.noteOn(261.63, 0.8);
+    synth.renderBlock(block, 128);
+    expect(rms(block)).toBeGreaterThan(1e-4);
+
+    synth.noteOff(261.63);
+    const tail = new Float32Array(24000);
+    synth.renderBlock(tail, 24000);
+    // Nach dem Release klingt das Ende aus (letzte 1000 Samples leise).
+    let sum = 0;
+    for (let i = tail.length - 1000; i < tail.length; i++) sum += tail[i] * tail[i];
+    expect(Math.sqrt(sum / 1000)).toBeLessThan(0.05);
+  });
+
+  it('16 Voices: LRU-Stealing hält die Stimmenzahl begrenzt', () => {
+    const synth = new Fm6Synth(DX7_REFERENCE_PATCHES[1], 48000, 16);
+    for (let i = 0; i < 32; i++) synth.noteOn(110 + i * 7, 0.8);
+    const block = new Float32Array(128);
+    synth.renderBlock(block, 128);
+    for (let i = 0; i < block.length; i++) expect(Number.isFinite(block[i])).toBe(true);
+    expect(rms(block)).toBeGreaterThan(1e-4);
   });
 });

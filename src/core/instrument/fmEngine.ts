@@ -207,3 +207,160 @@ export function renderFmPatch(patch: Dx7Patch, opts: FmRenderOptions): Float32Ar
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Fm6Synth – polyphone Echtzeit-Block-Engine (für Worklet/Live-Pfad)
+// ---------------------------------------------------------------------------
+
+interface Fm6Voice {
+  states: ReturnType<typeof createFmVoice>['states'];
+  noteHz: number;
+  releasing: boolean;
+  age: number;
+}
+
+/** Polyphone 6-Op-FM-Stimme (16 Voices, LRU-Stealing, deterministisch). */
+export class Fm6Synth {
+  private patch: Dx7Patch;
+  private sampleRate: number;
+  private readonly maxVoices: number;
+  private voices: Fm6Voice[] = [];
+  private algIndex = 0;
+  private feedbackGain = 0;
+  private fbOp = 0;
+  private lfoPhase = 0;
+  private lfoPhaseIncr = 0;
+  private lfoPitchDepth = 0;
+  private lfoAmpDepth = 0;
+  private ageCounter = 0;
+  /** Master-Gain für die Summe (Kopfraum). */
+  public masterGain = 0.8;
+
+  constructor(patch: Dx7Patch, sampleRate = 48000, maxVoices = 16) {
+    this.patch = patch;
+    this.sampleRate = Math.max(8000, sampleRate);
+    this.maxVoices = Math.max(1, Math.min(32, maxVoices));
+    this.rebuild(patch);
+  }
+
+  private rebuild(patch: Dx7Patch): void {
+    this.patch = patch;
+    this.algIndex = Math.max(0, Math.min(31, patch.algorithm - 1));
+    const alg = DX7_ALGORITHMS[this.algIndex] ?? DX7_ALGORITHMS[0];
+    this.fbOp = alg.feedbackOp;
+    this.feedbackGain = Math.max(0, Math.min(7, patch.feedback)) / 7;
+    this.lfoPhaseIncr = (2 * Math.PI * Math.max(0, patch.lfo.speedHz)) / this.sampleRate;
+    this.lfoPitchDepth = Math.max(0, Math.min(99, patch.lfo.pitchModDepth)) / 99;
+    this.lfoAmpDepth = Math.max(0, Math.min(99, patch.lfo.ampModDepth)) / 99;
+    // Bestehende Stimmen auf das neue Patch umbauen (Tonhöhe bleibt).
+    for (const v of this.voices) {
+      v.states = createFmVoice(patch, {
+        sampleRate: this.sampleRate,
+        noteHz: v.noteHz,
+        velocity: 0.8,
+        durationSeconds: 1,
+      }).states;
+      v.releasing = false;
+    }
+  }
+
+  setPatch(patch: Dx7Patch): void {
+    this.rebuild(patch);
+  }
+
+  noteOn(noteHz: number, velocity = 0.8): void {
+    let voice = this.voices.find((v) => !v.releasing && v.states.every((s) => s.seg >= 4));
+    if (!voice) voice = this.voices.find((v) => v.releasing);
+    if (!voice && this.voices.length >= this.maxVoices) {
+      // LRU: älteste aktive Stimme stehlen.
+      let oldest = this.voices[0];
+      for (const v of this.voices) if (v.age < oldest.age) oldest = v;
+      voice = oldest;
+    }
+    if (voice) {
+      voice.states = createFmVoice(this.patch, {
+        sampleRate: this.sampleRate,
+        noteHz,
+        velocity,
+        durationSeconds: 1,
+      }).states;
+      voice.noteHz = noteHz;
+      voice.releasing = false;
+      voice.age = ++this.ageCounter;
+    } else {
+      this.voices.push({
+        states: createFmVoice(this.patch, {
+          sampleRate: this.sampleRate,
+          noteHz,
+          velocity,
+          durationSeconds: 1,
+        }).states,
+        noteHz,
+        releasing: false,
+        age: ++this.ageCounter,
+      });
+    }
+  }
+
+  noteOff(noteHz: number): void {
+    for (const v of this.voices) {
+      if (Math.abs(v.noteHz - noteHz) < 0.5 && !v.releasing) {
+        v.releasing = true;
+        for (const st of v.states) {
+          st.seg = 3; // Release-Segment (R4 → 0)
+          st.envPos = 0;
+        }
+      }
+    }
+  }
+
+  /** Rendert einen Block in `out` (wird zuerst genullt). */
+  renderBlock(out: Float32Array, blockLen: number): void {
+    out.fill(0);
+    const alg = DX7_ALGORITHMS[this.algIndex] ?? DX7_ALGORITHMS[0];
+    for (let i = 0; i < blockLen; i++) {
+      const lfo = Math.sin(this.lfoPhase);
+      this.lfoPhase += this.lfoPhaseIncr;
+      let mix = 0;
+      for (const v of this.voices) {
+        let sample = 0;
+        for (let op = 0; op < 6; op++) {
+          const st = v.states[op];
+          let modIn = 0;
+          for (let src = 0; src < 6; src++) {
+            if (alg.dest[src] === op) modIn += v.states[src].out;
+          }
+          if (op === this.fbOp) modIn += st.fb * this.feedbackGain;
+
+          if (st.seg < 4) {
+            const segNow = st.segs[st.seg];
+            st.envPos += 1;
+            if (st.envPos >= segNow.dur) {
+              st.seg += 1;
+              st.envPos = 0;
+            }
+          }
+          const segIdx = Math.min(st.seg, 3);
+          const env = st.seg >= 4
+            ? 0
+            : Math.max(0, Math.min(1, st.segs[segIdx].start + st.segs[segIdx].delta * st.envPos));
+
+          st.phase += st.phaseIncr * (1 + lfo * this.lfoPitchDepth * 0.02);
+          if (st.phase > 2 * Math.PI) st.phase -= 2 * Math.PI;
+          const osc = Math.sin(st.phase + modIn * Math.PI);
+          st.out = osc * st.level * env;
+          st.fb = st.out;
+          if (!Number.isFinite(st.out)) st.out = 0;
+        }
+        for (let op = 0; op < 6; op++) {
+          if (alg.dest[op] === 6) sample += v.states[op].out;
+        }
+        if (Number.isFinite(sample)) mix += sample;
+      }
+      const ampLfo = 1 - this.lfoAmpDepth * 0.5 * (1 - lfo);
+      mix *= Math.max(0, Math.min(1, ampLfo)) * this.masterGain;
+      if (!Number.isFinite(mix)) mix = 0;
+      out[i] = Math.max(-1, Math.min(1, mix));
+    }
+  }
+}
