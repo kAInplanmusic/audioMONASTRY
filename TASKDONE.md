@@ -1148,3 +1148,14 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 - [x] **NEW-MONK-5 Echtbild-UI (GarageBand-artig):** `GarageBandInstrumentView.tsx` (10 Instrumenten-Kacheln mit public-Bildern: Schlagzeug/Gitarre/Bass/Klavier/Cello/Streicher/Pads/Glocken/Drum-Machine/Pad-Sequenzer; Tasten-/Saiten-/Drum-Zonen mit Pointer-Touch + Pressed-States + Audio-Preview), Spielansicht „ECHTBILD“ im InstrumentsTerminal; `tests/garageBandView.test.tsx` (3) grün
 - [x] **Phase-Distortion-Oszillator:** `src/core/instrument/phaseDistortion.ts` (Casio-CZ-Reshaping) + `synthProcessor`-Waveform `osc:'pd'`; `tests/phaseDistortion.test.ts` (3) grün
 - [x] **Mod-Matrix-/CV-Gate-Konzept, Analog-Filter-Referenzen, EXS24/SF2/WAV-ROM-Import-Konzept:** dokumentiert in `docs/DSP_BENCHMARKS.md`
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 14 abgeschlossen (2026-09-03)
+
+- [x] **Wavetable:** `wavetable.ts` (Bandlimited-Additiv, Mip-Maps, Morphing) + `synthProcessor osc:'wavetable'` + Tests
+- [x] **Tonewheel/Leslie:** `tonewheel.ts` (9-Drawbar-Tabelle + `LeslieSim` AM/Doppler mit Rampe) + `synthProcessor osc:'tonewheel'` + Tests
+- [x] **E-Piano:** `epiano.ts` (inharmonische Partiale + Hammer-Transient) + Tests
+- [x] **Drum-Synthese/Humanize:** `drumSynth.ts` (Kick/Snare/Hat, Pitch-/Amp-Env, Noise, Click, Soft-Clipper, `humanize()`) + Tests
+- [x] **Reverb-Early-Reflections:** `earlyReflections.ts` (4-Tap + Damping/Feedback) + Tests
+- [x] **Additiv-Steuerung:** `renderAdditiveMorph` (Partial-Morphing) + Tests

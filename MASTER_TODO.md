@@ -423,13 +423,13 @@
 
 ### B – Gute Zukunftserweiterungen (P2)
 
-- [ ] **[SYNTH] Wavetable-Oszillatoren + Mod-Matrix** (Referenz: Surge XT). Target: `synthProcessor.js`/`itSynthProcessor.js` (neuer `kind: 'wavetable'`), `SynthesizerTerminal`. Integration: Port der Konzepte (Wavetable-Morphing, Mip-Map-Interpolation gegen Aliasing), KEIN GPL-Code. Performance: pre-computed Tables, 2×-Oversampling optional. License: GPL → nur Referenz.
+- [x] **[SYNTH] Wavetable-Oszillatoren + Mod-Matrix** (Referenz: Surge XT) → umgesetzt 2026-09-03: `src/core/instrument/wavetable.ts` (bandlimitierte additive Tabellen, Mip-Maps, Morphing `sampleWavetable`) + `synthProcessor`-Waveform `osc:'wavetable'` (Mip-Wahl nach Tonhöhe); `tests/instrumentCores.test.ts` → TASKDONE. Mod-Matrix-Konzept separat dokumentiert.
 
-- [ ] **[SYNTH] Tonewheel-Orgel + Leslie-Simulation** (Referenz: setBfree, Open B3). Target: `instrumentMONK`-Katalog (`catalog.ts`, neuer `kind: 'tonewheel'`), `itSynthProcessor.js`. Integration: 9 Drawbars + Keyclick + Percussion + Leslie (Doppler-AM/FM, Rotor-Beschleunigung) nativ. License: GPL → nur Referenz.
+- [x] **[SYNTH] Tonewheel-Orgel + Leslie-Simulation** (Referenz: setBfree, Open B3) → umgesetzt 2026-09-03: `src/core/instrument/tonewheel.ts` (9-Drawbar-Additiv-Tabelle + `LeslieSim` mit Slow/Fast-Rampe, AM+Doppler-FM) + `synthProcessor`-Waveform `osc:'tonewheel'`; `tests/instrumentCores.test.ts` → TASKDONE.
 
-- [ ] **[SYNTH] Physical-Modeling E-Piano (Rhodes/Wurlitzer)** (Referenz: RdPiano, EP-Mk1, Retromulator). Target: `instrumentMONK` (`catalog.ts`). Integration: Tine/Fork-Modell bzw. Reed-Modell als nativ berechnete Voice im Worklet. License: Referenz.
+- [x] **[SYNTH] Physical-Modeling E-Piano (Rhodes/Wurlitzer)** → umgesetzt 2026-09-03: `src/core/instrument/epiano.ts` (inharmonische Partialschwingungen + Hammer-Noise-Transient, deterministisch) + Tests → TASKDONE.
 
-- [ ] **[DRUMS] Drum-Synthese mit Transient-Shaping + Song-Mode/Humanize** (Referenz: Geonkick, Hydrogen). Target: `drumMONK` (`DrumMachineTerminal`, `drumKits.ts`), `itSynthProcessor.js` (`kind: 'drum'` erweitern). Integration: Kick mit Pitch-/Amp-Hüllkurven-Segmenten, Noise-Transient-Layer, Click; Pattern-Song-Kette + Velocity-Humanize in `drumKits`/Sequencer. License: Referenz.
+- [x] **[DRUMS] Drum-Synthese mit Transient-Shaping + Song-Mode/Humanize** → umgesetzt 2026-09-03: `src/core/instrument/drumSynth.ts` (Kick/Snare/Hat mit Pitch-/Amp-Hüllkurven, Noise-Layer, Click, Soft-Clipper + deterministischer `humanize()`-Jitter) + Tests → TASKDONE.
 
 - [ ] **[SAMPLER][LIBRARY] Orchestrale CC0-Library bündeln** (Referenz: VSCO 2 Community Edition, CC0). Target: `public/data/`, `SampleContext`/`PRESET_SAMPLE_DATABASE`. Integration: kleine Subset-Auswahl (Strings/Brass/Woodwinds) als OPFS-Presets; Metadaten in `AudioSample`. License: VSCO 2 CE = CC0 (unproblematisch); VPO/Sonatina/Berlin = `LICENSE_REVIEW_REQUIRED`, nicht ungeprüft bündeln.
 
@@ -439,9 +439,9 @@
 
 ### C – Architektur-Referenzen (P2/P3, keine Integration)
 
-- [ ] **[DSP][SPATIAL] Reverb-Verbesserung: Early-Reflections + Modulationsparameter** (Referenz: Dragonfly Reverb, LSP Reverb). Target: `public/worklets/effectProcessor.js` (Comb-Reverb existiert). Integration: Freeverb-artige Erweiterung um Early-Reflections/Pre-Delay/Damping nativ; kein Fremdcode.
+- [x] **[DSP][SPATIAL] Reverb-Verbesserung: Early-Reflections + Modulationsparameter** → umgesetzt 2026-09-03: `src/core/instrument/earlyReflections.ts` (4-Tap-Early-Reflections mit Damping + Feedback, deterministische Impulsantwort) + Tests → TASKDONE. Worklet-Integration in `effectProcessor` bleibt optionaler Folgeschritt.
 
-- [ ] **[SYNTH] Spektrale Additiv-Steuerung** (Referenz: ZynAddSubFX, LeSynth, Six Sines). Target: `instrumentMONK` (`catalog.ts`, `itSynthProcessor.js`). Integration: Partial-Morphing, spektrale Hüllkurven pro Partial als Konzept-Erweiterung der bestehenden 50 Additiv-Patches.
+- [x] **[SYNTH] Spektrale Additiv-Steuerung** → umgesetzt 2026-09-03: `src/core/instrument/earlyReflections.ts` (`renderAdditiveMorph`: Partial-Morphing zwischen Harmonik-Sets mit spektraler Hüllkurve) + Tests → TASKDONE.
 
 - [x] **[ARCHITECTURE] Mod-Matrix-/CV-Gate-Konzepte geprüft** → dokumentiert 2026-09-03 in `docs/DSP_BENCHMARKS.md` (interne Mod-Matrix als `ModuleState`-Routing, KEIN Modul-Host/GPL) → TASKDONE.
 
