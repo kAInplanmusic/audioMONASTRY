@@ -12,7 +12,7 @@ const STORAGE_KEY = 'audiomonastry_module_states';
 
 interface ModuleContextType {
   moduleStates: Record<string, ModuleState>;
-  /** `replicate: false` = nur lokal setzen (z. B. Login-Seed des Hosts). */
+  /** `replicate: false` = nur lokal setzen (kein Peer-Broadcast). */
   setModuleState: (id: string, state: ModuleState, opts?: { replicate?: boolean }) => void;
 }
 
@@ -59,8 +59,7 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // NEW-D1-3: AI-Modus-Flag für Halter-Wechsel (mixerMONK) synchron halten.
     if (id === 'ai') setAiModeActive(state !== 'OFF');
     // Replikation an alle Peers (bestehender Kollaborations-Kanal).
-    // Login-Seed des Hosts (mixerMONK) bleibt bewusst lokal – nur der erste
-    // User soll mixerMONK offen haben, alle anderen starten geschlossen.
+    // P0-1: Es gibt keinen Login-Seed mehr – alle User starten mit OFF.
     if (opts?.replicate === false) return;
     webRTCManager.sendToAllPeers({
       type: 'PLUGIN_STATE_UPDATE',
