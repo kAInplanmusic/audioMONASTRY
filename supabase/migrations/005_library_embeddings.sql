@@ -14,6 +14,9 @@ insert into public.ai_migrations (version, description)
 values ('005', 'Semantische Bibliotheks-Suche: sample_embeddings + match_samples-RPC')
 on conflict (version) do nothing;
 
+-- pgvector sicherstellen (falls Migration 004 noch nicht gelaufen ist)
+create extension if not exists vector with schema extensions;
+
 -- Embedding-Tabelle (256-dim Vektor, pgvector im extensions-Schema)
 create table if not exists public.sample_embeddings (
   id         uuid primary key default gen_random_uuid(),
