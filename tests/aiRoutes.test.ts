@@ -166,4 +166,24 @@ describe('/api/ai/*-Routen (Integration)', () => {
     const body = await res.json() as { sessionId?: string };
     expect(typeof body.sessionId).toBe('string');
   });
+
+  it('POST /api/library/search liefert Ergebnisse mit Score (lokaler Fallback)', async () => {
+    const ok = await fetch(`${baseUrl}/api/library/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: 'kick', limit: 5 }),
+    });
+    expect(ok.status).toBe(200);
+    const body = await ok.json() as { results?: Array<{ id: string; name: string; score: number }> };
+    expect(Array.isArray(body.results)).toBe(true);
+    expect(body.results!.length).toBeGreaterThan(0);
+    expect(body.results![0].score).toBeGreaterThan(0);
+
+    const empty = await fetch(`${baseUrl}/api/library/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(empty.status).toBe(400);
+  });
 });

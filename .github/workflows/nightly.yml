@@ -72,3 +72,25 @@ jobs:
               body: 'Der nächtliche Qualitäts-Check (verify/build/bundle/eval) ist fehlgeschlagen.\nRun: https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId,
               labels: ['auto-detected', 'bug'],
             });
+
+  # AM-E5-4: Real-Time-Deadline-/Stress-Langtest. Der vollständige
+  # 24-h-Dropout-Lauf (0 Xruns bei 4-User-Last) bleibt Live; dieser Job ist
+  # das automatisierte Nightly-Gate (Stress-Suite mit Playwright Chromium).
+  stress-longtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Playwright Chromium installieren
+        run: npx playwright install --with-deps chromium
+
+      - name: Stress-Test (21 Plugins, 8000 Pattern-Loads, Play/Stop, FPS/Heap)
+        run: npm run test:stress

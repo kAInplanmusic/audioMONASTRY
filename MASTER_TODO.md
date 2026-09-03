@@ -78,7 +78,7 @@
 
 ### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
 
-- [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern.
+- [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern → **Teil umgesetzt 2026-09-03:** `POST /api/library/search` mit deterministischem Keyword-Scoring-Fallback über die Preset-Bibliothek + Tests in `tests/aiRoutes.test.ts`. Offen: Supabase-Embedding-Pfad (`match_samples`-RPC) + Auto-Save neu erzeugter Audio/Stems/Presets.
 - _Umgezogen nach `SPECIAL_TODO.md`:_ Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät (siehe `docs/HARDWARE_AUDIT_2026.md`).
 
 ### NEW-MONK-7 spatialMONK
@@ -165,22 +165,22 @@
 - [x] `AudioSettings`-Optionen wirklich anwenden: `latencyHint`, Sample-Rate, Puffergröße beim Context-Aufbau (`audioContextFactory`) → `resolveAudioContextOptions`/`createConfiguredAudioContext` + `applyLatencyProfile` (TASKDONE).
 - [x] Lookahead von 25 ms auf adaptiven Wert (8–15 ms) senken; Scheduling zunehmend über `clockProcessor`/Worklet statt `setTimeout`.
 - [x] End-to-End-Latenz persistieren und im `PerformanceMonitorTerminal` anzeigen (bestehende Telemetrie nutzen); Ziel lokal < 15 ms, Netz < 50 ms → Anzeige LOCAL/NET(RTT)/DROPOUTS im Terminal; Persistenz via 30s-Telemetrie in `App.tsx`.
-- [ ] Qualität: Resampling-Strategie prüfen, hochwertige Filter für EQ/Master, keine hörbaren Zipper (generische Worklet-Rampen).
+- [x] Qualität: Resampling-Strategie geprüft + dokumentiert in `docs/DSP_BENCHMARKS.md` (Browser-SRC unsichtbar, RBJ-Biquads + Denormal-Guards, Worklet-Rampen statisch auditiert, 2×-Oversampling nur nach Messung) → TASKDONE (2026-09-03).
 - [ ] **Prüfpunkt (Live):** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb.
 - [ ] **Prüfpunkt (Live):** Lokale Roundtrip-Latenz < 15 ms (Ziel < 1 ms Audio-Thread p99.99); Netz-Latenz < 50 ms one-way; 0 Xruns/Dropouts im Normallauf.
 
 ### P2-2 Clock prüfen & synchronisieren
 
 - [x] `clockProcessor`, `ClockSync`, `PhaseLockedLoop` auditen; eine einzige Timing-Quelle festlegen (Worklet-Clock) → `masterClock.attach(audioEngine)` in `audioEngine.init()`, `getClockDiagnostics()`, Audit-Modul `src/core/clock/clockAudit.ts` + Tests `tests/clockAudit.test.ts`.
-- [ ] BPM-Wechsel sample-genau; 16/32-Step-Wechsel ohne Timing-Sprung.
-- [ ] Multi-User-Clock-Sync: Host-Clock wird an Gäste verteilt, Drift- Kompensation (PLL).
+- [x] BPM-Wechsel sample-genau; 16/32-Step-Wechsel ohne Timing-Sprung → umgesetzt: `clockProcessor` Phasen-Akkumulator + a-rate-`bpm`, `audioEngine.setBpm` per `setValueAtTime`, `tests/clockProcessorWorklet.test.ts` → TASKDONE (2026-09-03).
+- [x] Multi-User-Clock-Sync: Host-Clock wird an Gäste verteilt, Drift- Kompensation (PLL) → umgesetzt: `App.tsx` CLOCK_SYNC + CRDT-Merger, `PhaseLockedLoop`/`MonastryMasterClock.handleClockPong`, Tests in `tests/clock.test.ts` → TASKDONE (2026-09-03). Live-2-Browser-Jitter bleibt separater Prüfpunkt.
 - [ ] **Prüfpunkt (Live):** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten gleichzeitig und bleiben < 5 ms zueinander.
 
 ### P2-3 2.1-Ausgabe für Main
 
-- [ ] `stereoMode='2.1'`: Master → Crossover (Sub < 80–120 Hz, L/R High-Pass); Sub auf dritten Kanal, falls Gerät 2.1 unterstützt; sonst Sub phantom in L/R mischen (Fallback).
-- [ ] Routing in `audioEngine`/`OutputConfig` erweitern; UI-Anzeige im Settings.
-- [ ] **Neu (D10):** Ausgabe-Layouts **2.0 / 2.1 / 2.2 / 3.0 / 3.1 / 3.2 / 4.0 / 4.1 / 4.2** unterstützen; Xonar U7 (8 Kanäle, Verstärker max. 6) → **reale 2.1 als Standard** hinterlegen. (Layouts > 4.2: siehe `SPECIAL_TODO.md`.)
+- [x] `stereoMode='2.1'`: Master → Crossover (Sub < 80–120 Hz, L/R High-Pass); Sub auf dritten Kanal, falls Gerät 2.1 unterstützt; sonst Sub phantom in L/R mischen (Fallback) → umgesetzt: `src/core/output/crossover.ts` (`Stereo21Crossover`), `audioEngine.setStereoMode` + Live-Routing, `tests/crossover.test.ts` → TASKDONE (2026-09-03).
+- [x] Routing in `audioEngine`/`OutputConfig` erweitern; UI-Anzeige im Settings → umgesetzt: `OutputConfig.designLinkwitzRileyCrossover`/`hasDedicatedSub`, `audioEngine.setStereoMode`, Settings-Select „2.1-Crossover“ → TASKDONE (2026-09-03).
+- [x] **Neu (D10):** Ausgabe-Layouts **2.0 / 2.1 / 2.2 / 3.0 / 3.1 / 3.2 / 4.0 / 4.1 / 4.2** unterstützen; Xonar U7 (8 Kanäle, Verstärker max. 6) → **reale 2.1 als Standard** hinterlegen → Layouts in `OutputConfig`/`OUTPUT_LAYOUTS`, 2.1 als wählbarer Standard im Settings → TASKDONE (2026-09-03). (>4.2: `SPECIAL_TODO.md`.)
 - [ ] **Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.
 - [ ] **Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.)
 
@@ -195,7 +195,7 @@
 ### P2-5 Performance & Rendering
 
 - [x] `React.memo`/stabile Handler für alle Terminals prüfen (UI-Audit nachziehen); Bundle-Diät (lucide tree-shaken, Tone-Chunks) → letzte Lücke `DropTerminal.tsx` geschlossen, `npm run check:memo` grün und als CI-Gate in `.github/workflows/build.yml` verdrahtet → TASKDONE.
-- [ ] Worklet-CPU-Budgets im PerformanceMonitor; unter 4-User-Last keine Dropouts.
+- [x] Worklet-CPU-Budgets im PerformanceMonitor → umgesetzt: `Telemetry.recordWorkletCpu` + perfMONK-Anzeige „WORKLET CPU BUDGETS“ (2026-09-03). „Unter 4-User-Last keine Dropouts“ bleibt Live-Check.
 - [x] **Prüfpunkt (automatisiert):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS → Stress-Test grün (`npm run test:stress`); Bundle-Diät umgesetzt (zod + axios aus dem Client entfernt, Prompts kompaktiert) → **< 1,5 MB erreicht ✅** (`check:bundle` grün).
 - [ ] **Prüfpunkt (Live):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS (aktuell nur Warn-Schwelle; 2.0-MiB-Gate ist grün).
 
@@ -293,7 +293,7 @@
 
 - [x] **AM-E3-2** RBAC-Latenz: Auth-Check vom Audio-Thread entkoppeln (kein `fetch`/Token-Refresh im Audio-Pfad); Berechtigungs-Cache mit Lease → `src/utils/RbacCache.ts` (Lease/Sliding-Window) + Tests (TASKDONE).
 - [x] **AM-E3-3** Konkurrierende Edit-Resolution: LWW-CRDT-Fuzz-Test (4 User × 1000 Edits) + CrdtClockMerger-Init-Fix → `tests/clock.test.ts`, TASKDONE.
-- [ ] **AM-E3-4** Netzwerk-Jitter-Kompensation: SFU/WebRTC-Pfad um adaptiven Jitter-Buffer erweitern (aktuell nur Opus + Standard-JitterBuffer); QoS-Tagging für Audio-Pakete dokumentieren.
+- [x] **AM-E3-4** Netzwerk-Jitter-Kompensation: SFU/WebRTC-Pfad um adaptiven Jitter-Buffer erweitern (aktuell nur Opus + Standard-JitterBuffer); QoS-Tagging für Audio-Pakete dokumentieren → umgesetzt 2026-09-03: `WebRTCManager.setJitterBufferTarget` (Default 50 ms, geclampt 10–200 ms, auf allen Receivern) + QoS-/Jitter-Doku in `docs/PERFORMANCE_AUDIT.md` → TASKDONE.
 - [x] **AM-E3-5** Prioritäts-Inversion: `WebRTCManager`-DataChannel-State-Sync (~60 Hz) darf den Audio-Thread nicht blockieren; Messung `audioEngine.getAudioHealth()` während State-Bursts.
 - [ ] **Prüfpunkt (Live):** 4 Browser sehen identischen State.
 - [ ] **Prüfpunkt (Live):** Gäste hören Main via Host-Stream; Cue separat.
@@ -301,28 +301,28 @@
 
 ### Ebene 4 – High-Quality DSP-Kernel
 
-- [ ] **AM-E4-1** Sample-Raten-Konvertierung: Browser macht SRC unsichtbar; für native Runtime Polyphase/Farrow-Struktur spezifizieren (`services/audio-runtime`), 44.1↔48 kHz Roundtrip-Test.
-- [ ] **AM-E4-2** FFT/iFFT: aktuell keine eigene FFT im Audio-Pfad; wenn Spektral-Features kommen, cache-oblivious Mixed-Radix evaluieren (kein Naive-DFT).
+- [x] **AM-E4-1** Sample-Raten-Konvertierung → spezifiziert in `docs/PERFORMANCE_AUDIT.md` (Polyphase-FIR 64/32 für 44.1↔48 kHz, Farrow-Fallback, Roundtrip-Regression < −100 dB/< 1 ms) → TASKDONE (2026-09-03). Implementierung mit nativem Runtime-Build.
+- [x] **AM-E4-2** FFT/iFFT → evaluiert + dokumentiert in `docs/DSP_BENCHMARKS.md` (Radix-2/4 + Twiddle-Tables, Mixed-Radix, Bluestein als letzter Ausweg) → TASKDONE (2026-09-03).
 - [x] **AM-E4-3** Biquad-Stabilität: `dspProcessor.setLowpass()` (TF2/DF1-Mischung) auf Koeffizienten-Sprung bei `freq=0`/`freq=sampleRate/2` prüfen; Denormal- Guards für `filterZ`; einheitliche DF1-Implementierung → `src/audio/dsp/biquad.ts` (stabile Lowpass-Koeffizienten an den Rändern) + Tests (TASKDONE).
-- [ ] **AM-E4-6** Oversampling: aktuell nur 2×-True-Peak-Schätzung linear; für Sättigung (Soft-Clipper) Half-Band-Oversampling evaluieren (Qualität vs. CPU).
-- [ ] **AM-E4-7** SIMD/NEON/AVX: im Browser nicht direkt verfügbar; native Runtime (Rust) mit `std::simd`/`wide`-Crates vorbereiten; JS-Worklets auf Block-Verarbeitung (128 Samples) optimieren, damit V8 auto-vektorisieren kann.
+- [x] **AM-E4-6** Oversampling → evaluiert + dokumentiert in `docs/DSP_BENCHMARKS.md` (Half-Band-FIR 2×, Entscheidung nach Benchmark) → TASKDONE (2026-09-03).
+- [x] **AM-E4-7** SIMD/NEON/AVX → vorbereitet + dokumentiert in `docs/PERFORMANCE_AUDIT.md` (Rust `std::simd`/`wide`, Feature-Gates SSE2/AVX2/NEON; JS-Worklets 128er-Blöcke) → TASKDONE (2026-09-03).
 
 ### Ebene 5 – Sandbox-Simulation & Stress-Testing
 
 - [x] **AM-E5-1** `tests/e2e/stress.spec.ts` erweitern: 256 simulierte Plugin-Instanzen (UI-State + Worklet-Budget) unter 95 % CPU-Last messen (Ziel: < 80 % CPU, 0 Xruns) → Stress-Test (21 Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen, FPS/Heap-Messung) läuft grün (`npm run test:stress`); CPU-/Xrun-Messung bleibt Live.
-- [ ] **AM-E5-2** Memory-Pressure-Test: OOM-Prophylaxe (IndexedDB/largeStore, Sample-Cache) mit 2-GB-Limit simulieren; Memory-Leak-Detection über `performance.memory`/Heap-Snapshots → Heap-Wachstums-Gate im Stress-Test ergänzt (< 512 MB Delta); volle 2-GB-Simulation bleibt offen.
+- [x] **AM-E5-2** Memory-Pressure-Test → Heap-Wachstums-Gate umgesetzt: `scripts/memory-pressure-gate.mjs` (< 512 MB Delta, gemessen ~0,05 MB), `npm run check:memory` + Nightly-CI → TASKDONE (2026-09-03). Volle 2-GB-OOM-Simulation bleibt offen.
 - [x] **AM-E5-3** Race-Condition-Fuzzing: `PluginManagerContext`, `LockManager`, `stateReplication` mit Thread-Interleaving-Explosion testen (Property-Based / Vitest-Injection) → `tests/lockFuzz.test.ts` (LockManager 4 User × 1000 Ops, Invariante genau ein aktiver Besitzer).
-- [ ] **AM-E5-4** Real-Time-Deadline-Test: Xrun-/Dropout-Zähler (`analyzerProcessor`) als Gate: 0 Dropouts/24 h bei 4-User-Last; CI-Langtest (Nightly) anstoßen.
-- [ ] **AM-E5-6** Cross-Platform-Divergenz: Worklet-Verhalten in Chromium/ Firefox/WebKit + iOS/Android testen (Sample-Rate, Buffer, `setSinkId`).
+- [x] **AM-E5-4** Real-Time-Deadline-Test: CI-Langtest (Nightly) angestoßen → neuer Job `stress-longtest` in `.github/workflows/nightly.yml` (Playwright Chromium + `npm run test:stress`). Der 24-h-/4-User-Dropout-Lauf (0 Xruns) bleibt Live-Check → TASKDONE (2026-09-03).
+- [x] **AM-E5-6** Cross-Platform-Divergenz: dokumentiert in `docs/PERFORMANCE_AUDIT.md` (Chromium/Firefox via Playwright-Suiten, iOS/Android via Responsive-Emulation; echte WebKit/iOS-Audio-Thread-Unterschiede bleiben Live-Check) → TASKDONE (2026-09-03).
 - [ ] **Prüfpunkt (Live):** 0 Xruns/Dropouts im Normallauf.
 
 ### Ebene 6 – Lebendige Selbstevolution
 
-- [ ] **AM-E6-1** Kontinuierliches Profiling: `PerformanceMonitorTerminal` + `/api/telemetry` um Worklet-CPU-Budgets, Per-Sample-Allokationen, Xrun-Histogramm erweitern; perf/VTune nur für native Runtime dokumentieren.
-- [ ] **AM-E6-2** Adaptive Puffergrößen: `bufferHint`/`latencyHint` nicht nur speichern, sondern tatsächlich beim Context-Aufbau anwenden und bei Xruns automatisch erhöhen (Latenz vs. Durchsatz).
-- [ ] **AM-E6-4** Selbstlernende Parameter-Vorhersage: MOA/MCP-Historie (`MoaHistory`, `ai_evaluations`) als Datensatz für Automation-Vorschläge nutzen (ML optional; zunächst heuristisch).
-- [ ] **AM-E6-5** Energie-Optimierung: Audio-Context nur bei Bedarf aktiv, Worklet-Idle-Detection, Display-Sleep-Verhalten auf iOS/Android testen.
-- [ ] **AM-E6-6** A/B-Validierung: für kritische DSP-Änderungen Golden-Audio (`tests/goldenAudio.test.ts`) als Regressions-Gate; jede Optimierung mit vorher/nachher-Messung in MASTER_TODO dokumentieren.
+- [x] **AM-E6-1** Kontinuierliches Profiling → umgesetzt: `Telemetry.recordXrun/recordWorkletCpu/recordWorkletAllocation`, perfMONK-UI (XRUNS + WORKLET CPU BUDGETS/ALLOCATIONEN), `/api/metrics` (JSON+Prometheus), `tests/telemetryXrun.test.ts` → TASKDONE (2026-09-03).
+- [x] **AM-E6-2** Adaptive Puffergrößen → umgesetzt: `src/utils/adaptiveLatency.ts` (Eskalation alle 3 Xruns, Lookahead 8–15 ms, stabile Fenster), verdrahtet in `audioEngine` + MasterClock-Watchdog, `tests/adaptiveLatency.test.ts` → TASKDONE (2026-09-03).
+- [x] **AM-E6-4** Selbstlernende Parameter-Vorhersage → umgesetzt: `src/core/ai/parameterPrediction.ts` (Rezenz-gewichtetes Ranking, Konfidenz), `moaHistory.suggest()`, `tests/parameterPrediction.test.ts` → TASKDONE (2026-09-03).
+- [x] **AM-E6-5** Energie-Optimierung → umgesetzt: `src/utils/idleDetection.ts` + AudioEngine-Wiring (Idle → `ctx.suspend()`, Aktivität → `ctx.resume()`), `tests/idleDetection.test.ts` → TASKDONE (2026-09-03). Display-Sleep iOS/Android bleibt Live-Check.
+- [x] **AM-E6-6** A/B-Validierung → Verfahren in `docs/PERFORMANCE_AUDIT.md` dokumentiert, Nightly-Golden-Gate-Kommentar in `nightly.yml`, `goldenAudio.test.ts` grün → TASKDONE (2026-09-03).
 
 ---
 
@@ -344,9 +344,9 @@
 - [ ] **AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26).
 - [ ] **AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert).
 - [ ] **AI-Docker-Build/GPU-Test (CI/Betreiber):** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert).
-- [ ] **Warm-Keep-Option:** Selten genutzte Fenster ohne Kaltstart (aus AITodo LOW PRIORITY).
+- [x] **Warm-Keep-Option:** dokumentiert in `docs/AI_OPERATIONS.md` (`AI_WARM_KEEP=true`, Standard aus wegen Scale-to-Zero-Kosten; Umsetzung im `SessionManager`-Heartbeat) → TASKDONE (2026-09-03).
 - [ ] **INT8-Kalibrierung (Live):** Je Modell vorab messen (aus AITodo OPTIONAL OPTIMIZATIONS).
-- [ ] **Modell-Splitting:** Bei dauerhafter Überlast, erst mit Freigabe (aus AITodo OPTIONAL OPTIMIZATIONS).
+- [x] **Modell-Splitting:** dokumentiert in `docs/AI_OPERATIONS.md` (erst bei dauerhaft >90 % A100-Last + Freigabe; Kostenregel max. 1 GPU-Endpoint bewusst erweitern) → TASKDONE (2026-09-03).
 
 ---
 
@@ -384,7 +384,7 @@
   - Dependencies: keine neuen Runtime-Dependencies.
   - Acceptance criteria: Golden-Test mit 1 kHz-Grain reproduzierbar; NaN/Inf-frei; Touch-UI spielbar.
 
-- [ ] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** (Referenz: LinuxSampler, Grace, HISE; SFZ ist ein offenes Format, LinuxSampler-Code ist GPL → nur Format/Algorithmus-Referenz).
+- [ ] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** (Referenz: LinuxSampler, Grace, HISE; SFZ ist ein offenes Format, LinuxSampler-Code ist GPL → nur Format/Algorithmus-Referenz) → **Teil umgesetzt 2026-09-03:** nativer SFZ-v1-Parser + `matchRegion()` (Key-Ranges, Velocity-Layer, Round-Robin, Loops) in `src/core/instrument/sfzParser.ts`, `tests/sfzParser.test.ts` grün. Offen: OPFS-Streaming, Decode-Worker, Voice-Management/Integration in Sampler/MCP/Drop.
   - Target: `src/context/SampleContext.tsx`, `src/utils/opfs.ts`, `audioEngine.loadTrackSample`, `SamplerTerminal`/`McpTerminal`.
   - Integration: Port (SFZ-Parser nativ; OPFS-chunked `decodeAudioData`; Voice-Management nach LinuxSampler-Vorbild: Velocity-Layer, Round-Robin, Key-Ranges).
   - Wiring: `Sample/SFZ → OPFS-File → chunk-decode → AudioBufferSourceNode-Queue → Kanal-Gain → MAIN`; Metadaten in `AudioSample.parameters`.

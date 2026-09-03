@@ -19,6 +19,7 @@ import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import type { AiTask } from './src/core/ai/orchestrator/types';
+import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import type { AudioSample } from './src/data/samples';
 
 // Task 14: Echte Demucs-Stems optional via env-Flag ENABLE_STEMS=1 aktivieren.
@@ -910,6 +911,37 @@ app.post('/api/ai/mcp/tools/:name', async (req, res) => {
   const result = await aiOrchestrator.mcp.invoke(name, (req.body ?? {}) as Record<string, unknown>);
   void aiPersistence.auditMcp(name, 'localUser', aiOrchestrator.sessions.get().sessionId, result.ok, String((req.body as { permission?: string } | undefined)?.permission ?? 'READ'));
   return res.json(result);
+});
+
+// --- POST /api/library/search → semantische Bibliotheks-Suche (NEW-MONK-6) ---
+// Deterministic local fallback (Keyword-Scoring über die Preset-Bibliothek).
+// Supabase-Embedding-Pfad: sobald `match_samples`-RPC + Embeddings konfiguriert
+// sind, hier vor dem Fallback aufrufen (siehe docs/AI_OPERATIONS.md).
+app.post('/api/library/search', (req, res) => {
+  const { query, limit } = (req.body ?? {}) as { query?: string; limit?: number };
+  const q = String(query ?? '').trim().toLowerCase().slice(0, 200);
+  if (!q) return res.status(400).json({ error: 'query fehlt' });
+  const max = Math.max(1, Math.min(50, Number(limit) || 10));
+  const results = PRESET_SAMPLE_DATABASE
+    .map((s) => {
+      const name = s.name.toLowerCase();
+      const category = s.category.toLowerCase();
+      const tokens = q.split(/\s+/).filter(Boolean);
+      let score = 0;
+      for (const t of tokens) {
+        if (name === t) score += 8;
+        else if (name.includes(t)) score += 4;
+        else if (category.includes(t)) score += 2;
+        else if (name.includes(t[0] ?? '')) score += 1;
+      }
+      if (tokens.length === 0) score = 1;
+      return { sample: s, score };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score || a.sample.name.localeCompare(b.sample.name))
+    .slice(0, max)
+    .map((r) => ({ id: r.sample.id, name: r.sample.name, category: r.sample.category, score: r.score }));
+  return res.json({ query: q, results });
 });
 
 // --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---
