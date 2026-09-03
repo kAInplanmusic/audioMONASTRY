@@ -1159,3 +1159,14 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 - [x] **Drum-Synthese/Humanize:** `drumSynth.ts` (Kick/Snare/Hat, Pitch-/Amp-Env, Noise, Click, Soft-Clipper, `humanize()`) + Tests
 - [x] **Reverb-Early-Reflections:** `earlyReflections.ts` (4-Tap + Damping/Feedback) + Tests
 - [x] **Additiv-Steuerung:** `renderAdditiveMorph` (Partial-Morphing) + Tests
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 15 abgeschlossen (2026-09-03)
+
+- [x] **P1-2 Hardware-Skins:** `getHardwareSkinClass()` + `.hw-skin-*`-Klassen (mixer/synthesizer/drum/eq/mastering/spatial/mcp/sampler) in `index.css`, angewandt in `ModuleContainer`
+- [x] **SFZ-Voice-Management:** `sfzVoice.ts` (16 Voices, LRU-Stealing, Loop, AD-Env) + `audioEngine.loadSfzInstrument/sfzNoteOn/sfzNoteOff`; Tests grün
+- [x] **Orchester-CC0-Metadaten:** `orchestralLibrary.ts` (12 VSCO-2-CE-Einträge) + Test; Audio-Download bleibt Betreiber
+- [x] **Leslie-Live:** `LeslieSim` in `synthProcessor` (`leslieFast`-Message, tonewheel-only)
+- [x] **Drum-Synth-Worklet:** `drumSynthProcessor.ts` (kick/snare/hat) + Manifest + `audioEngine.triggerDrumSynth`; Worklet-Test grün
+- [x] **DX7-SysEx-Drop-UI:** Datei-Input (.syx) im MIDIControllerTerminal → `audioEngine.loadFm6Sysex`

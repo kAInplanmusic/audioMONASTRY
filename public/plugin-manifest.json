@@ -66,6 +66,11 @@
       "hash": "placeholder_hash_fm6"
     },
     {
+      "id": "drumsynth-processor",
+      "url": "/worklets/drumSynthProcessor.js",
+      "hash": "placeholder_hash_drumsynth"
+    },
+    {
       "id": "spatial-processor",
       "url": "/worklets/spatialProcessor.js",
       "hash": "placeholder_hash_spatial"

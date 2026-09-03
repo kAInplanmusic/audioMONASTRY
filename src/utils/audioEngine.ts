@@ -7,6 +7,7 @@ import { TrackType, TRACK_ROLE_MAP, MUSIC_SCALES } from '../types';
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
 import { getPatch, INSTRUMENT_PATCHES, InstrumentPatch } from '../data/instrumentSynths';
 import { dx7SysexToPatch } from '../core/instrument/dx7Sysex';
+import { SfzVoiceBank } from '../core/instrument/sfzVoice';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
 import type {
   InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
@@ -481,12 +482,16 @@ class AudioEngine {
     // auf den GLOBAL_MASTER-Bus (Instrument-Einspeisung).
     this.granularNode = makeWorklet('granular-processor');
     this.fm6Node = makeWorklet('fm6-processor');
+    this.drumSynthNode = makeWorklet('drumsynth-processor');
     const masterBusInput = (this.masterBuses['GLOBAL_MASTER'] as any)?.input ?? this.masterBuses['GLOBAL_MASTER'];
     if (this.granularNode && typeof (this.granularNode as any).connect === 'function') {
       try { (this.granularNode as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
     }
     if (this.fm6Node && typeof (this.fm6Node as any).connect === 'function') {
       try { (this.fm6Node as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
+    }
+    if (this.drumSynthNode && typeof (this.drumSynthNode as any).connect === 'function') {
+      try { (this.drumSynthNode as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
     }
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
@@ -966,6 +971,41 @@ class AudioEngine {
 
   public isFm6Ready(): boolean {
     return !!(this.fm6Node && typeof (this.fm6Node as any).connect === 'function');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Drum-Synth-Worklet + SFZ-Voice-Management (A-Klasse)
+  // ---------------------------------------------------------------------------
+  private drumSynthNode: AudioWorkletNode | null = null;
+  private sfzBank: SfzVoiceBank | null = null;
+
+  /** Synthetische Drums triggern (kick/snare/hat). */
+  public triggerDrumSynth(kind: 'kick' | 'snare' | 'hat'): void {
+    try { this.drumSynthNode?.port?.postMessage({ type: kind }); } catch { /* noop */ }
+  }
+
+  public isDrumSynthReady(): boolean {
+    return !!(this.drumSynthNode && typeof (this.drumSynthNode as any).connect === 'function');
+  }
+
+  /** SFZ-Instrument laden (Text + Sample-Buffer-Map). */
+  public loadSfzInstrument(sfzText: string, sources: Record<string, Float32Array>): string[] {
+    try {
+      const bank = new SfzVoiceBank(this.ctx?.sampleRate ?? 48000);
+      const errors = bank.load(sfzText, sources);
+      this.sfzBank = bank;
+      return errors;
+    } catch {
+      return ['SFZ konnte nicht geladen werden'];
+    }
+  }
+
+  public sfzNoteOn(note: number, velocity = 100): void {
+    this.sfzBank?.noteOn(note, velocity);
+  }
+
+  public sfzNoteOff(note: number): void {
+    this.sfzBank?.noteOff(note);
   }
 
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
@@ -2080,6 +2120,7 @@ class AudioEngine {
     this.dynamicsNode?.disconnect();
     this.granularNode?.disconnect();
     this.fm6Node?.disconnect();
+    this.drumSynthNode?.disconnect();
     this.itSynthNode = null;
     this.synthWorklet = null;
     this.clockNode = null;
@@ -2087,6 +2128,7 @@ class AudioEngine {
     this.dynamicsNode = null;
     this.granularNode = null;
     this.fm6Node = null;
+    this.drumSynthNode = null;
     this.itSynthReady = false;
 
     this.initialized = false;
