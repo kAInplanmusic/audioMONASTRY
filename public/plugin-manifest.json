@@ -56,6 +56,11 @@
       "hash": "placeholder_hash_dynamics"
     },
     {
+      "id": "granular-processor",
+      "url": "/worklets/granularProcessor.js",
+      "hash": "placeholder_hash_granular"
+    },
+    {
       "id": "spatial-processor",
       "url": "/worklets/spatialProcessor.js",
       "hash": "placeholder_hash_spatial"
