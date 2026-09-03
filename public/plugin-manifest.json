@@ -61,6 +61,11 @@
       "hash": "placeholder_hash_granular"
     },
     {
+      "id": "fm6-processor",
+      "url": "/worklets/fm6Processor.js",
+      "hash": "placeholder_hash_fm6"
+    },
+    {
       "id": "spatial-processor",
       "url": "/worklets/spatialProcessor.js",
       "hash": "placeholder_hash_spatial"

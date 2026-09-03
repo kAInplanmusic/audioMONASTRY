@@ -6,6 +6,7 @@ import { TrackType, TRACK_ROLE_MAP, MUSIC_SCALES } from '../types';
 
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
 import { getPatch, INSTRUMENT_PATCHES, InstrumentPatch } from '../data/instrumentSynths';
+import { dx7SysexToPatch } from '../core/instrument/dx7Sysex';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
 import type {
   InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
@@ -476,6 +477,17 @@ class AudioEngine {
     // P1-Dynamik: Kompressor/Gate/Dynamic-EQ als Insert (Default = Bypass,
     // d. h. bit-genauer Durchgang ohne zusätzliche Latenz).
     this.dynamicsNode = makeWorklet('dynamics-processor');
+    // Granular + 6-Op-FM (A-Klasse Audio-Audit): eigene Worklets, geroutet
+    // auf den GLOBAL_MASTER-Bus (Instrument-Einspeisung).
+    this.granularNode = makeWorklet('granular-processor');
+    this.fm6Node = makeWorklet('fm6-processor');
+    const masterBusInput = (this.masterBuses['GLOBAL_MASTER'] as any)?.input ?? this.masterBuses['GLOBAL_MASTER'];
+    if (this.granularNode && typeof (this.granularNode as any).connect === 'function') {
+      try { (this.granularNode as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
+    }
+    if (this.fm6Node && typeof (this.fm6Node as any).connect === 'function') {
+      try { (this.fm6Node as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
+    }
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
     // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer),
@@ -904,6 +916,58 @@ class AudioEngine {
     try { this.dynamicsNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
   }
 
+  // ---------------------------------------------------------------------------
+  // Granular-Engine (A-Klasse) + 6-Op-FM (DX7) – Worklet-Anbindung
+  // ---------------------------------------------------------------------------
+  private granularNode: AudioWorkletNode | null = null;
+  private fm6Node: AudioWorkletNode | null = null;
+
+  /** Granular-Source setzen (Float32Array wird als Kopie an das Worklet gepostet). */
+  public loadGranularSource(buffer: Float32Array): void {
+    try { this.granularNode?.port?.postMessage({ buffer }); } catch { /* Worklet nicht verfügbar */ }
+  }
+
+  /** Granular-Parameter setzen. */
+  public setGranularParams(p: {
+    grainSize?: number; density?: number; position?: number; positionJitter?: number;
+    pitch?: number; pitchJitter?: number; direction?: 1 | -1; freeze?: boolean; gain?: number;
+  }): void {
+    try { this.granularNode?.port?.postMessage({ ...p }); } catch { /* noop */ }
+  }
+
+  public isGranularReady(): boolean {
+    return !!(this.granularNode && typeof (this.granularNode as any).connect === 'function');
+  }
+
+  /** 6-Op-FM-Patch setzen. */
+  public setFm6Patch(patch: unknown): void {
+    try { this.fm6Node?.port?.postMessage({ type: 'patch', patch }); } catch { /* noop */ }
+  }
+
+  /** DX7-SysEx (156-Byte-unpacked) laden und als Patch setzen. */
+  public loadFm6Sysex(bytes: Uint8Array): void {
+    try {
+      const patch = dx7SysexToPatch(bytes);
+      this.setFm6Patch(patch);
+    } catch { /* ungültige SysEx – Worklet bleibt unverändert */ }
+  }
+
+  public fm6NoteOn(noteHz: number, velocity = 0.8): void {
+    try { this.fm6Node?.port?.postMessage({ type: 'noteOn', noteHz, velocity }); } catch { /* noop */ }
+  }
+
+  public fm6NoteOff(noteHz: number): void {
+    try { this.fm6Node?.port?.postMessage({ type: 'noteOff', noteHz }); } catch { /* noop */ }
+  }
+
+  public setFm6Gain(gain: number): void {
+    try { this.fm6Node?.port?.postMessage({ type: 'gain', value: gain }); } catch { /* noop */ }
+  }
+
+  public isFm6Ready(): boolean {
+    return !!(this.fm6Node && typeof (this.fm6Node as any).connect === 'function');
+  }
+
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
   public isEffectInsertReady(): boolean {
     return !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
@@ -1188,10 +1252,6 @@ class AudioEngine {
       { stop: 'channel7', name: 'BASS',   color: 'bg-cyan-500' },
       { stop: 'channel8', name: 'LEAD',   color: 'bg-fuchsia-500' },
     ];
-  }
-
-  public setGranularParams(_params: { grainSize: number; density: number; position: number }) {
-    // console.log("AudioEngine: Applying Granular Params", _params);
   }
 
   // --- Drum-Kits: maschinengetreue Presets (808/909/606/707/CR-78/Linn/DMX/Drumtraks) ---
@@ -2018,11 +2078,15 @@ class AudioEngine {
     this.clockNode?.disconnect();
     this.effectNode?.disconnect();
     this.dynamicsNode?.disconnect();
+    this.granularNode?.disconnect();
+    this.fm6Node?.disconnect();
     this.itSynthNode = null;
     this.synthWorklet = null;
     this.clockNode = null;
     this.effectNode = null;
     this.dynamicsNode = null;
+    this.granularNode = null;
+    this.fm6Node = null;
     this.itSynthReady = false;
 
     this.initialized = false;

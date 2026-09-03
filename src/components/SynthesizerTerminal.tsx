@@ -4,6 +4,7 @@ import { usePluginState } from '../hooks/usePluginState';
 import { WasmPluginHost } from '../audio/wasm/WasmPluginHost';
 import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
+import { DX7_REFERENCE_PATCHES } from '../core/instrument/dx7Presets';
 import type { TrackType } from '../types';
 
 const DEFAULT_SYNTH_PARAMS = {
@@ -38,6 +39,29 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
   const [seq, setSeq] = useState<number[]>(Array(16).fill(0));
   const [seqSemi, setSeqSemi] = useState(0);
   const [curStep, setCurStep] = useState(0);
+  // 6-Op-FM (DX7) + Granular-Preview
+  const [fm6PatchIdx, setFm6PatchIdx] = useState(0);
+  const [grainSize, setGrainSize] = useState(480);
+  const [grainDensity, setGrainDensity] = useState(20);
+  const [grainPitch, setGrainPitch] = useState(1);
+  const [grainFreeze, setGrainFreeze] = useState(false);
+
+  const loadFm6Patch = (idx: number) => {
+    setFm6PatchIdx(idx);
+    try {
+      audioEngine.setFm6Patch(DX7_REFERENCE_PATCHES[idx]);
+      audioEngine.fm6NoteOn(261.63, 0.8);
+    } catch (e) { console.warn('[synth] FM6-Patch fehlgeschlagen:', e); }
+  };
+
+  const loadGranularPreview = () => {
+    try {
+      const src = new Float32Array(48000);
+      for (let i = 0; i < src.length; i++) src[i] = Math.sin((2 * Math.PI * 440 * i) / 48000) * 0.5;
+      audioEngine.loadGranularSource(src);
+      audioEngine.setGranularParams({ grainSize, density: grainDensity, pitch: grainPitch, freeze: grainFreeze, gain: 0.8 });
+    } catch (e) { console.warn('[synth] Granular-Source fehlgeschlagen:', e); }
+  };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -212,6 +236,52 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
               );
             })}
           </div>
+        </div>
+
+        {/* 6-Op-FM (DX7) + Granular – Worklet-Preview */}
+        <div className="mt-4 pt-4 border-t border-neutral-800">
+          <div className="text-[10px] text-neutral-500 uppercase tracking-widest mb-2">6-Op-FM / DX7</div>
+          <div className="flex items-center gap-2">
+            <select
+              value={fm6PatchIdx}
+              onChange={(e) => loadFm6Patch(Number(e.target.value))}
+              className="bg-black text-white text-xs p-1 rounded flex-1"
+            >
+              {DX7_REFERENCE_PATCHES.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}
+            </select>
+            <button type="button" onClick={() => audioEngine.fm6NoteOn(261.63, 0.8)}
+              className="px-2 py-1 rounded border border-violet-500/40 text-violet-200 text-xs hover:bg-violet-500/25 cursor-pointer">
+              ▶ Note
+            </button>
+          </div>
+
+          <div className="text-[10px] text-neutral-500 uppercase tracking-widest mt-3 mb-2">Granular</div>
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            <label className="text-neutral-500">Grain {grainSize}
+              <input type="range" min={64} max={4096} step={64} value={grainSize}
+                onChange={(e) => { setGrainSize(Number(e.target.value)); audioEngine.setGranularParams({ grainSize: Number(e.target.value) }); }}
+                className="w-full accent-violet-500" />
+            </label>
+            <label className="text-neutral-500">Density {grainDensity}
+              <input type="range" min={1} max={100} value={grainDensity}
+                onChange={(e) => { setGrainDensity(Number(e.target.value)); audioEngine.setGranularParams({ density: Number(e.target.value) }); }}
+                className="w-full accent-violet-500" />
+            </label>
+            <label className="text-neutral-500">Pitch {grainPitch.toFixed(2)}
+              <input type="range" min={25} max={400} value={Math.round(grainPitch * 100)}
+                onChange={(e) => { const v = Number(e.target.value) / 100; setGrainPitch(v); audioEngine.setGranularParams({ pitch: v }); }}
+                className="w-full accent-violet-500" />
+            </label>
+            <label className="text-neutral-500 flex items-center gap-1 mt-1">
+              <input type="checkbox" checked={grainFreeze}
+                onChange={(e) => { setGrainFreeze(e.target.checked); audioEngine.setGranularParams({ freeze: e.target.checked }); }} />
+              Freeze
+            </label>
+          </div>
+          <button type="button" onClick={loadGranularPreview}
+            className="mt-2 px-2 py-1 rounded border border-violet-500/40 text-violet-200 text-xs hover:bg-violet-500/25 cursor-pointer">
+            ▶ Granular-Source laden
+          </button>
         </div>
       </div>
     </div>
