@@ -10,6 +10,9 @@ import { storageGetJson, storageSetJson } from '../utils/storage';
 import { SampleModuleWrapper } from './SampleModuleWrapper';
 import { MoaAssistant } from './MoaAssistant';
 import { DRUM_KITS } from '../data/drumKits';
+import { useMIDI } from '../hooks/useMIDI';
+import { useMidiClockOut } from '../hooks/useMidiClockOut';
+import { drumNoteFor } from '../core/hardware/midiClockOut';
 
 /**
  * audioMONASTRY drumMONK – TR-8S-Optik + echter 16-Step-Sequencer.
@@ -58,6 +61,10 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   const [swing, setSwing] = useState(0);
   const lastStepRef = useRef(-1);
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // NEW-MONK-1: MIDI-Out/Clock an externe Hardware (24 PPQN + Note-Out).
+  const { outputs } = useMIDI();
+  const midiOut = useMidiClockOut(outputs);
 
   // Eigener Step-Subscriber (Mehrfach-Listener statt Single-Slot): Das Terminal
   // aktualisiert seinen Step unabhängig vom App-Shell-Render (UI-Performance).
@@ -136,6 +143,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   useEffect(() => {
     if (!isPlaying) {
       lastStepRef.current = -1;
+      midiOut.clockOut.stop();
       return;
     }
     const step = currentStep % stepCount;
@@ -149,14 +157,23 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
       if (flam) setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.6), 30);
       if (roll) [40, 80].forEach((ms) => setTimeout(() => void audioEngine.triggerDrumSound(activeKit, soundId, velocity * 0.5), ms));
     };
+    // NEW-MONK-1: Noten dieses Steps für die Hardware sammeln (GM-Percussion).
+    const midiNotes: Array<{ note: number; velocity: number }> = [];
     activeDrumKit.sounds.forEach((s) => {
       const key = `${playBank}:${activeKit}:${s.id}`;
       if (!patterns[key]?.[step]) return;
       const sample = stepSamples[key]?.[step];
       if (sample) playStepSample(sample);
       else trigger(s.id, accent);
+      midiNotes.push({ note: drumNoteFor(s.id, s.type), velocity: accent });
     });
-  }, [isPlaying, currentStep, patterns, stepSamples, activeKit, activeDrumKit, playStepSample, stepCount, bank, chain, flam, roll]);
+
+    // Hardware-Sync: Clock (6 Pulse/Step) + Note-Out am selben Step-Raster.
+    const now = performance.now();
+    midiOut.clockOut.setBpm(bpm);
+    if (!midiOut.clockOut.isRunning()) midiOut.clockOut.start(step, now);
+    midiOut.clockOut.emitStep({ notes: midiNotes, timestampMs: now, bpm });
+  }, [isPlaying, currentStep, patterns, stepSamples, activeKit, activeDrumKit, playStepSample, stepCount, bank, chain, flam, roll, bpm, midiOut.clockOut]);
 
   const flash = (id: string) => {
     setFlashId(id);
@@ -241,6 +258,32 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
             <span className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border ${isPlaying ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10' : 'text-neutral-500 border-neutral-700'}`}>
               {isPlaying ? `RUN · STEP ${currentStep % stepCount + 1}/${stepCount}` : `STOP · ${bpm} BPM`}
             </span>
+            {/* NEW-MONK-1: MIDI-Out/Clock an externe Hardware (24 PPQN). */}
+            <button
+              type="button"
+              onClick={() => midiOut.setEnabled(!midiOut.enabled)}
+              disabled={lockedByOther || !midiOut.connected}
+              title={midiOut.connected ? 'MIDI-Clock (24 PPQN) + Note-Out an Hardware senden' : 'Kein MIDI-Ausgang gefunden'}
+              className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border cursor-pointer disabled:opacity-40 ${
+                midiOut.enabled ? 'text-amber-300 border-amber-500/50 bg-amber-500/10' : 'text-neutral-500 border-neutral-700'
+              }`}
+            >
+              MIDI OUT {midiOut.enabled ? 'ON' : 'OFF'}
+            </button>
+            {midiOut.ports.length > 1 && (
+              <select
+                value={midiOut.portId}
+                onChange={(e) => midiOut.selectPort(e.target.value)}
+                disabled={lockedByOther}
+                title="MIDI-Ausgabeport"
+                className="bg-black text-amber-300 text-[9px] p-1 rounded border border-neutral-700 cursor-pointer max-w-[120px]"
+              >
+                <option value="">AUTO</option>
+                {midiOut.ports.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
             <select value={state} onChange={(e) => updateState(e.target.value as any)} disabled={lockedByOther} className="bg-black text-emerald-300 text-xs p-1 rounded border border-neutral-700 cursor-pointer">
               <option value="OFF">OFF</option>
               <option value="AUTO_AI">AI</option>
