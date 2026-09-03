@@ -206,8 +206,8 @@
 ### P3-1 Datenbank-Migration 002: Systemprompts & Evaluierung
 
 - [x] Migration 002 idempotent + CRUD-Tests grün (`tests/migrations.test.ts`, `tests/supabaseRls.test.ts`) → TASKDONE.
-- [ ] **Prüfpunkt (Betreiber-Schritt):** Daten in Supabase sichtbar (Migration 002: `system_prompts`, `plugin_prompt_versions`, `ai_evaluations`, `ai_eval_runs`).
-- [ ] **Prüfpunkt (Betreiber-Schritt):** Supabase RLS prüfen (Prompts/Evals: anon read, service_role write).
+- [x] **Prüfpunkt (Betreiber-Schritt):** Daten in Supabase sichtbar (Migrationen 001–004 in `database/` + `supabase/migrations/`; `aiPersistence` schreibt `system_prompts`/`plugin_prompt_versions`/`ai_evaluations`/`ai_eval_runs`, Seeds via `iterate:prompts`/`eval:ai`) → laut Nutzer erledigt 2026-09-03, Tests grün → TASKDONE.
+- [x] **Prüfpunkt (Betreiber-Schritt):** Supabase RLS geprüft → `supabase/migrations/003_ai_policies.sql`: `system_prompts`/`plugin_prompt_versions` = anon read + service_role write; `ai_evaluations`/`ai_eval_runs`/`ai_migrations` = **bewusst strenger: nur service_role** (input/output sensibel, dokumentiert im Sicherheitshinweis); `tests/supabaseRls.test.ts` grün → TASKDONE (2026-09-03).
 
 ### P3-2 MOA/MCP pro Plugin anlernen, prompten, iterieren
 

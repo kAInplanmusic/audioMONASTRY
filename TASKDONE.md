@@ -1170,3 +1170,10 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 - [x] **Leslie-Live:** `LeslieSim` in `synthProcessor` (`leslieFast`-Message, tonewheel-only)
 - [x] **Drum-Synth-Worklet:** `drumSynthProcessor.ts` (kick/snare/hat) + Manifest + `audioEngine.triggerDrumSynth`; Worklet-Test grün
 - [x] **DX7-SysEx-Drop-UI:** Datei-Input (.syx) im MIDIControllerTerminal → `audioEngine.loadFm6Sysex`
+
+---
+
+## Quelle: MASTER_TODO.md – Supabase-Abgleich (2026-09-03)
+
+- [x] **P3-1 Daten in Supabase sichtbar:** Migrationen 001–004 (`database/` + `supabase/migrations/`), `aiPersistence` schreibt alle 4 Tabellen, Seeds über `iterate:prompts`/`eval:ai` → laut Nutzer erledigt, Tests grün
+- [x] **Supabase RLS geprüft:** `003_ai_policies.sql` – prompts/versions anon read + service_role write; evaluations/runs/migrations bewusst nur service_role (Sicherheitshinweis dokumentiert); `tests/supabaseRls.test.ts` grün
