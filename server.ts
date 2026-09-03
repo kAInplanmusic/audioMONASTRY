@@ -21,6 +21,7 @@ import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { embedText } from './src/core/ai/orchestrator/textEmbedding';
 import type { AiTask } from './src/core/ai/orchestrator/types';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
+import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
 
 // Task 14: Echte Demucs-Stems optional via env-Flag ENABLE_STEMS=1 aktivieren.
@@ -923,7 +924,7 @@ app.post('/api/library/search', async (req, res) => {
   if (!q) return res.status(400).json({ error: 'query fehlt' });
   const max = Math.max(1, Math.min(50, Number(limit) || 10));
 
-  // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst sofort Fallback).
+  // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst lokaler Embedding-Pfad).
   const supabaseConfigured = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE);
   if (supabaseConfigured) {
     const matches = await aiPersistence.rpcMatchSamples(embedText(q), max);
@@ -937,6 +938,33 @@ app.post('/api/library/search', async (req, res) => {
       }));
       return res.json({ query: q, results, provider: 'supabase-embeddings' });
     }
+  }
+
+  // Lokaler semantischer Pfad: Kosinus-Ähnlichkeit über deterministische
+  // Embeddings (funktioniert komplett ohne Supabase-DDL).
+  const queryVec = embedText(q);
+  const samples = [...PRESET_SAMPLE_DATABASE, ...orchestralSamples()];
+  const dot = (a: number[], b: number[]) => a.reduce((sum, v, i) => sum + v * b[i], 0);
+  const semantic = samples
+    .map((s) => {
+      const vec = embedText(`${s.name} ${s.description}`);
+      return { sample: s, score: dot(queryVec, vec) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max);
+
+  // Fallback auf Keyword-Scoring, falls keine sinnvolle Ähnlichkeit gefunden.
+  if (semantic.length > 0 && semantic[0].score >= 0.15) {
+    return res.json({
+      query: q,
+      results: semantic.map((r) => ({
+        id: r.sample.id,
+        name: r.sample.name,
+        category: r.sample.category,
+        score: Number(r.score.toFixed(4)),
+      })),
+      provider: 'local-embeddings',
+    });
   }
 
   const qLower = q.toLowerCase();
