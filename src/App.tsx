@@ -108,19 +108,10 @@ function AppComponent() {
 
   // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
   // P4-1/P4-2: Host sendet Master-Stream an Peers/SFU; Gäste spielen Main ab.
-  // Login-Regel: ALLE Plugins starten geschlossen. Nur der ERSTE User (Host)
-  // bekommt mixerMONK einmalig geöffnet – masterplayer (oben) und aiMONK (unten)
-  // sind für alle 4 User immer fest.
+  // P0-1 Login-Regel: ALLE Plugins starten geschlossen – auch mixerMONK
+  // (Mixer-Sonderfall entfernt). Nur masterplayer (oben) und aiMONK (unten)
+  // sind als feste Sektionen für alle 4 User immer sichtbar.
   const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
-  const mixerSeededRef = useRef(false);
-  const audioStartedRef = useRef(false);
-
-  const seedHostMixer = useCallback(() => {
-    if (!audioStartedRef.current || !webRTCManager.isHost || mixerSeededRef.current) return;
-    mixerSeededRef.current = true;
-    // Nur lokal: Die übrigen User starten bewusst mit geschlossenen Plugins.
-    setModuleState('mixer', 'AUTO_AI', { replicate: false });
-  }, [setModuleState]);
 
   useEffect(() => {
     webRTCManager.onMainStream = (stream) => {
@@ -140,14 +131,12 @@ function AppComponent() {
     };
     if (webRTCManager.isHost) {
       startHostMain();
-      seedHostMixer();
     }
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionFull(info.full);
       if (webRTCManager.isHost) {
         startHostMain();
-        seedHostMixer();
       }
     };
     return () => {
@@ -158,7 +147,7 @@ function AppComponent() {
         mainDestRef.current = null;
       }
     };
-  }, [seedHostMixer]);
+  }, []);
 
   // Task 22: Rollen-Start-Presets – wendet das Modul-Profil einer Rolle an.
   const applyRole = (role: StudioRole) => {
@@ -340,11 +329,8 @@ function AppComponent() {
       }
       // IMMER in den App-Screen wechseln – Backend/Worklet-Defizite brechen die App nicht.
       console.log('[startApp] isStarted=true setzen');
-      audioStartedRef.current = true;
       setIsStarted(true);
       setIsPlaying(false);
-      // Login-Regel: Nur der erste User (Host) bekommt mixerMONK geöffnet.
-      seedHostMixer();
       // iPad/Phone: Querformat anstreben (nur möglich im Fullscreen/PWA-Kontext;
       // im normalen Browser-Tab wird der Versuch still ignoriert).
       try {
@@ -557,7 +543,7 @@ function AppComponent() {
         </div>
       </header>
 
-      {/* 2. MasterplazerMONK: fester Transport (Designvorlage uioben.jpg) – auf Desktop beim Scrollen oben */}
+      {/* 2. masterplayerMONK: fester Transport (Designvorlage uioben.jpg) – auf Desktop beim Scrollen oben */}
       <section
         id="rack-masterplayer"
         className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 xl:sticky xl:top-20 short-landscape:xl:top-16 xl:z-30"
@@ -566,7 +552,7 @@ function AppComponent() {
           <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
             <Activity size={18} />
           </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">MasterplazerMONK</h3>
+          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
           <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · TRANSPORT</span>
 
           {/* Monitor-Ausgabe pro User: MAIN + PLUGIN oder NUR PLUGIN */}
@@ -643,7 +629,7 @@ function AppComponent() {
         </div>
       </section>
 
-      {/* 3. MixerMONK: festes DJ-Mischpult direkt unter dem Masterplazer (Designvorlage uioben.jpg) */}
+      {/* 3. MixerMONK: festes DJ-Mischpult direkt unter dem masterplayerMONK (Designvorlage uioben.jpg) */}
       <section className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 shadow-[0_0_24px_-8px_rgba(34,211,238,0.45)] mb-4">
         <div className="flex items-center gap-3 px-3 py-2">
           <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">

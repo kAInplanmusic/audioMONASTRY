@@ -615,6 +615,14 @@ class AudioEngine {
     // (falls keine Patterns gesetzt wurden). So liefert "Play" sofort Musik,
     // ohne dass externe Sample-Dateien vorhanden sein müssen.
     this.ensureDemoPattern();
+
+    // P0-1/P0-4: Start-Silence – beim Studio-Eintritt ist kein Plugin aktiv,
+    // deshalb startet der Master stumm. `activatePlugin()` hebt das Gate auf.
+    try {
+      this.setIdleSilence(this.activePluginIds.size === 0);
+    } catch (e) {
+      console.warn('Start-Silence konnte nicht gesetzt werden:', (e as Error).message);
+    }
   }
 
   /** P2-2: Diagnose-Snapshot der singulären Master-Clock (für perfMONK/Audit). */
