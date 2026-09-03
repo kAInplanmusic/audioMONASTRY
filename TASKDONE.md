@@ -142,6 +142,7 @@
 - [x] **AM-E3-2**: `src/utils/RbacCache.ts` (Lease/Sliding-Window) + Tests.
 - [x] **AM-E3-4**: `src/utils/JitterBufferEstimator.ts` + Tests.
 - [x] **AM-E4-3**: `src/audio/dsp/biquad.ts` (stabile Lowpass-Koeffizienten an den Rändern) + Tests.
+- [x] **AM-E4-4** (2026-09-03): `masteringProcessor` – Release-Koeffizient aus segmentierter Lookup-Tabelle (`releaseCoefficient`, 128 log-Segmente, linear interpoliert, max. rel. Fehler < 0,1 % für 5 ms…1 s) statt `Math.exp` je Block; Prozessor in Node testbar gemacht (`WorkletBase`-Fallback wie `spatialProcessor`, `currentSampleRate()`, `getLookaheadSamples()`). Validierung: `tests/masteringDynamics.test.ts` (7 Tests: LUT-Genauigkeit/Monotonie/NaN-Guard, Lookahead = 5 ms = PDC-Wert, Impuls-Verzögerung, Ceiling-Einhaltung bei 0,99-Sinus, Stille bleibt Stille). `npm run verify` grün (102 Dateien, 549 Tests, Boundary-Scan 0).
 - [x] **NEW-D4-1 V2-AudioGraph**: `src/core/audio/V2StudioGraph.ts` (8-Kanal Source→Gain→Pan→MasterSum, Soft-Clip/NaN-Guard), `MasterSumNode` in `basicNodes.ts`, `audioEngine.v2Studio`/`renderV2Block()`/`syncV2FromV1()`; Tests `tests/v2AudioGraph.test.ts` (8 Tests: Zyklusfreiheit, Stereo-Pan, Master-Gain, NaN-Glättung, EngineAdapter, PlaybackEngine, WorkletGraphRuntime).
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
