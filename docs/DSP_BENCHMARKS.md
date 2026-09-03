@@ -46,3 +46,15 @@ Sättigung) wird **Half-Band-Oversampling** evaluiert:
   (< 70 % Gesamt) zu gefährden.
 - Solange keine Sättigungsstufe im Produktivpfad liegt, bleibt es bei der
   linearen True-Peak-Schätzung (kein unnötiges Oversampling).
+
+## P2-1 Resampling-Strategie & Filter-Qualität (dokumentiert 2026-09-03)
+
+- **Browser:** Resampling macht der AudioContext (unsichtbar). Sample-Rate wird
+  beim Context-Aufbau gesetzt (`createConfiguredAudioContext`); keine eigene
+  SRC-Stufe im Audio-Pfad nötig.
+- **EQ/Master-Filter:** Biquads (RBJ) mit Denormal-Guards; Worklet-Rampen sind
+  statisch auditiert (`tests/workletRampAudit.test.ts`) – keine `Math.pow`/
+  `new Array`/unerwartete `.push` im Hot-Path → zipper-frei.
+- **Offen für später:** 2×-Oversampling in EQ/Master nur, falls Messungen
+  (THD/CPU) das rechtfertigen; bis dahin bleiben die 12-Band-EQ-Kaskaden
+  blockweise mit Rampen (kein hörbarer Zipper).

@@ -80,3 +80,25 @@ Interface-Boundary-Scan. Ein DSP-Regress bricht den Nightly-Lauf (Exit 1).
   in Biquad/Oversampling-Cores vorbereiten; Feature-Gates je CPU
   (SSE2/AVX2/NEON), skalare Referenz bleibt für Tests.
 - Status: Vorbereitung/Doku; Implementierung mit nativem Runtime-Build.
+
+## AM-E3-4 Netzwerk-Jitter-Kompensation / QoS (umgesetzt 2026-09-03)
+
+- **Adaptiver Jitter-Buffer:** `WebRTCManager` setzt `jitterBufferTarget = 50 ms`
+  auf allen eingehenden Audio-Receivern (Chromium; Firefox/Safari nutzen ihren
+  Standard-JitterBuffer). Einstellbar über `webRTCManager.setJitterBufferTarget(ms)`
+  (geclampt 10–200 ms).
+- **QoS-Tagging (Doku):** Audio-Pakete im SFU/P2P-Pfad laufen über den
+  Standard-WebRTC-Stack (Opus, DSCP-EF ist browserabhängig). Für den
+  SFU-Betrieb (mediasoup) wird empfohlen, im Router/Transport DSCP `EF` (46)
+  für Audio-RTP zu markieren, sobald die Infrastruktur es erlaubt – Umsetzung
+  im `docker-compose.sfu.yml`/Mediasoup-Transport, nicht im Browser-Code.
+
+## AM-E5-6 Cross-Platform-Divergenz (dokumentiert 2026-09-03)
+
+- **Abgedeckt:** Chromium (Desktop/Android), Firefox (Desktop) über die
+  Playwright-Suiten (`responsive.spec.ts`, `visual.spec.ts`, `stress.spec.ts`);
+  iOS/Android-Verhalten über die Responsive-Emulation (iPhone SE/14, Pixel 7).
+- **Offen für Live-Geräte:** echte WebKit/iOS-Audio-Thread-Unterschiede
+  (Sample-Rate 44.1/48, Buffer, `setSinkId`) – verbleibt als Live-Check in
+  `docs/HARDWARE_TEST_MATRIX_2026.md`; Worklet-Code ist auf 128er-Blöcke und
+  `sampleRate`-Fallbacks ausgelegt (`currentSampleRate()`-Muster).

@@ -55,6 +55,30 @@ class WebRTCManager {
   /** Letzte gemessene One-Way-Netzlatenz (RTT/2) in ms – für Telemetrie. */
   public lastRttMs = 0;
 
+  /**
+   * AM-E3-4: Adaptiver Jitter-Buffer für eingehende Audio-Receiver (Chromium).
+   * `jitterBufferTarget` gibt dem Browser ein Ziel vor (50 ms = stabil bei
+   * 4-User-Last, ohne die Sprach-/Cue-Latenz unnötig zu sprengen). Firefox/
+   * Safari ignorieren die Eigenschaft (Standard-JitterBuffer bleibt aktiv).
+   */
+  public jitterBufferTargetMs = 50;
+
+  public setJitterBufferTarget(ms: number): void {
+    this.jitterBufferTargetMs = Math.max(10, Math.min(200, ms));
+    for (const pc of this.peerConnections.values()) {
+      for (const receiver of pc.getReceivers()) this.applyJitterBuffer(receiver);
+    }
+  }
+
+  private applyJitterBuffer(receiver: RTCRtpReceiver): void {
+    try {
+      const r = receiver as RTCRtpReceiver & { jitterBufferTarget?: number };
+      if ('jitterBufferTarget' in r) {
+        r.jitterBufferTarget = this.jitterBufferTargetMs;
+      }
+    } catch { /* Browser ohne jitterBufferTarget (Firefox/Safari) */ }
+  }
+
   // State-Sync-Coalescing: Hochfrequente Parameter-Updates (Slider/Automation)
   // werden pro Typ gebündelt und einmal pro Frame geflusht. Das senkt die
   // Message-Rate auf ~60 Hz und reduziert Jitter für alle 4 User.
@@ -448,6 +472,7 @@ class WebRTCManager {
     };
 
     pc.ontrack = (e) => {
+        this.applyJitterBuffer(e.receiver); // AM-E3-4
         this.onRemoteStream(e.streams[0], targetId);
     };
 

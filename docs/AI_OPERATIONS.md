@@ -46,3 +46,18 @@ Nur mit Betreiber-Freigabe. Trigger:
 
 **Regel:** `npm run verify` vor jedem Deployment; `scripts/hetzner/smoke-test.sh`
 als externer Health-Gate.
+
+## Warm-Keep-Option (LOW PRIORITY, dokumentiert 2026-09-03)
+
+Selten genutzte Fenster ohne Kaltstart: `AI_WARM_KEEP=true` aktiviert einen
+15-minütigen Keep-Alive-Heartbeat der AI-Session, solange der Endpoint läuft.
+Standard bleibt **aus** (Scale-to-Zero spart Kosten). Umsetzung im
+`SessionManager` (Heartbeat-Timer), Config über Env – keine UI nötig.
+
+## Modell-Splitting (OPTIONAL, dokumentiert 2026-09-03)
+
+Erst bei **dauerhafter Überlast** und nur **mit Freigabe**:
+- Modell-Splitting = ein Modell auf mehrere GPUs/Worker verteilen.
+- Voraussetzung: VRAM-Benchmarks (AI-GPU-Benchmarks) zeigen dauerhaft > 90 %
+  Auslastung eines A100, und die Kostenregel „max. 1 GPU-Endpoint“ wird
+  bewusst erweitert. Vorher NICHT umsetzen.
