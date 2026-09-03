@@ -35,6 +35,16 @@ function waveform(type: string, phase: number, dt: number): number {
       return raw;
     }
     case 'sine':
+      return Math.sin(2 * Math.PI * phase);
+    case 'pd': {
+      // Phase-Distortion (Casio-CZ): piecewise-lineares Reshaping, Cosinus.
+      const amount = 0.4;
+      const p = phase < 0 ? 0 : phase > 1 ? 1 : phase;
+      const reshaped = p < amount
+        ? (p / amount) * 0.5
+        : 0.5 + ((p - amount) / (1 - amount)) * 0.5;
+      return Math.cos(2 * Math.PI * reshaped);
+    }
     default:
       return Math.sin(2 * Math.PI * phase);
   }

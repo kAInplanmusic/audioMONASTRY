@@ -58,3 +58,16 @@ Sättigung) wird **Half-Band-Oversampling** evaluiert:
 - **Offen für später:** 2×-Oversampling in EQ/Master nur, falls Messungen
   (THD/CPU) das rechtfertigen; bis dahin bleiben die 12-Band-EQ-Kaskaden
   blockweise mit Rampen (kein hörbarer Zipper).
+
+## Audio-Audit C-Klasse: Konzept-Dokumentationen (2026-09-03)
+
+- **Mod-Matrix/CV-Gate (Cardinal/VCV-Referenz):** NUR UI-/Datenmodell-Referenz.
+  Eine interne Mod-Matrix wird als `ModuleState`-Routing (Quelle→Ziel mit
+  Betrag) modelliert, KEIN Modul-Host (würde MONK-Pluginvertrag + GPL verletzen).
+  CV/Gate bleibt Konzept; Umsetzung frühestens mit der nativen Runtime.
+- **Analoge Filter-/Oszillator-Referenzen (Helm/amsynth/JS80P):** Drift/
+  Sättigung als native Koeffizienten-Variationen übernehmen; kein GPL-Code.
+  Biquad-Stabilität bleibt über `src/audio/dsp/biquad.ts` abgesichert.
+- **EXS24/SF2/WAV-ROM-Import:** Format-Parser als Worker-Task (Metadaten-/
+  Mapping-Konzepte, kein ROMPlayer-Code). SFZ-Parser existiert bereits
+  (`src/core/instrument/sfzParser.ts`); EXS24/SF2 folgen demselben Muster.

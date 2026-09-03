@@ -1140,3 +1140,11 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 
 - [x] **Granular-Integration:** `audioEngine.loadGranularSource/setGranularParams/isGranularReady` (granularProcessor auf GLOBAL_MASTER), SynthesizerTerminal-UI (Grain/Density/Pitch/Freeze + Source-Load-Preview)
 - [x] **6-Op-FM-Integration:** `Fm6Synth` (polyphone 16-Voice-Block-Engine mit LRU-Stealing), `fm6Processor`-Worklet (bundled Import aus fmEngine) + Manifest, `audioEngine.setFm6Patch/loadFm6Sysex/fm6NoteOn/fm6NoteOff/setFm6Gain`, SynthesizerTerminal-UI (10 DX7-Patches + Note-Preview); Tests `tests/fm6ProcessorWorklet.test.ts` (2) + Fm6Synth-Tests in `tests/fmEngine.test.ts` (8 gesamt)
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 13 abgeschlossen (2026-09-03)
+
+- [x] **NEW-MONK-5 Echtbild-UI (GarageBand-artig):** `GarageBandInstrumentView.tsx` (10 Instrumenten-Kacheln mit public-Bildern: Schlagzeug/Gitarre/Bass/Klavier/Cello/Streicher/Pads/Glocken/Drum-Machine/Pad-Sequenzer; Tasten-/Saiten-/Drum-Zonen mit Pointer-Touch + Pressed-States + Audio-Preview), Spielansicht „ECHTBILD“ im InstrumentsTerminal; `tests/garageBandView.test.tsx` (3) grün
+- [x] **Phase-Distortion-Oszillator:** `src/core/instrument/phaseDistortion.ts` (Casio-CZ-Reshaping) + `synthProcessor`-Waveform `osc:'pd'`; `tests/phaseDistortion.test.ts` (3) grün
+- [x] **Mod-Matrix-/CV-Gate-Konzept, Analog-Filter-Referenzen, EXS24/SF2/WAV-ROM-Import-Konzept:** dokumentiert in `docs/DSP_BENCHMARKS.md`
