@@ -75,10 +75,14 @@ export const barsToMs = (bars: number, bpm: number): number => (bars * 240000) /
 export const intensityForStyle = (style: DropStyle = 'moderate'): number =>
   style === 'subtle' ? 0.3 : style === 'extreme' ? 0.95 : 0.65;
 
+const MAX_SEED_INPUT_LENGTH = 2000;
+
 /** Stabiler Seed aus dem Prompt (deterministischer Fallback). */
 export function promptSeed(prompt: string): number {
   let hash = 2166136261;
-  for (let i = 0; i < prompt.length; i++) {
+  // Harte Obergrenze: verhindert unbegrenzte Schleifen bei fremd gesteuerten Eingaben.
+  const len = Math.min(String(prompt ?? '').length, MAX_SEED_INPUT_LENGTH);
+  for (let i = 0; i < len; i++) {
     hash ^= prompt.charCodeAt(i);
     hash = Math.imul(hash, 16777619);
   }
