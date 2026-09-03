@@ -120,6 +120,26 @@ export const aiPersistence = {
     }
   },
 
+  /**
+   * Semantische Bibliotheks-Suche: ruft die `match_samples`-RPC (pgvector,
+   * Kosinus-Ähnlichkeit) auf. Liefert [] bei fehlendem Client/Fehler, damit
+   * der Server auf den Keyword-Fallback zurückfallen kann.
+   */
+  async rpcMatchSamples(embedding: number[], matchCount = 10): Promise<Array<{ sample_id: string; similarity: number }>> {
+    const db = getClient();
+    if (!db) return [];
+    try {
+      const { data, error } = await db.rpc('match_samples', {
+        query_embedding: embedding,
+        match_count: matchCount,
+      });
+      if (error) return [];
+      return Array.isArray(data) ? (data as Array<{ sample_id: string; similarity: number }>) : [];
+    } catch {
+      return [];
+    }
+  },
+
   async auditMcp(tool: string, userId: string, sessionId: string, ok: boolean, permission: string): Promise<void> {
     const db = getClient();
     if (!db) return;

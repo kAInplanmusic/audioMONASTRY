@@ -1177,3 +1177,9 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 
 - [x] **P3-1 Daten in Supabase sichtbar:** Migrationen 001–004 (`database/` + `supabase/migrations/`), `aiPersistence` schreibt alle 4 Tabellen, Seeds über `iterate:prompts`/`eval:ai` → laut Nutzer erledigt, Tests grün
 - [x] **Supabase RLS geprüft:** `003_ai_policies.sql` – prompts/versions anon read + service_role write; evaluations/runs/migrations bewusst nur service_role (Sicherheitshinweis dokumentiert); `tests/supabaseRls.test.ts` grün
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 16 abgeschlossen (2026-09-03)
+
+- [x] **Semantische Suche (Supabase-Embedding-Pfad):** `textEmbedding.ts` (deterministisch, 256-dim, L2-normalisiert) + `aiPersistence.rpcMatchSamples()` + Migration 005 (`sample_embeddings` mit `extensions.vector(256)`, HNSW-Index, `match_samples`-RPC, RLS service_role-only); `/api/library/search` nutzt RPC bei konfiguriertem Supabase, sonst Keyword-Fallback; Tests grün
