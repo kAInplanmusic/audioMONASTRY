@@ -333,6 +333,108 @@
 
 ---
 
+## 🎛️ Open-Source Audio Technology Audit (2026-09-03)
+
+> Architektur-Audit des bestehenden MONK-Systems gegen den Katalog
+> quelloffener/freier Audio-Instrumente & Tools. **Nur Roadmap, keine Umsetzung.**
+> Klassifikation: A = hoher Wert / umsetzen · B = gute Zukunftserweiterung ·
+> C = Architektur-Referenz · D = optionale externe Ressource · E = Duplikat ·
+> F = inkompatibel · G = Lizenzproblem · H = Reject.
+
+### Klassifikationsübersicht (34 bewertete Projekte)
+
+| Klasse | Projekte |
+|---|---|
+| A – hoher Wert | Actuate (Granular), LinuxSampler/SFZ-Format, LSP Plugins + ZL Equalizer 2 (Dynamik), Dexed (6-Op-FM/DX7) |
+| B – Zukunft | Surge XT (Wavetable), setBfree/Open B3 (Tonewheel/Leslie), RdPiano (EP-Modeling), Hydrogen (Song/Humanize), Geonkick (Drum-Synth), VSCO 2 CE (Orchester CC0), Nakst (Phase Distortion), AudioKit ROMPlayer (EXS/SF2/WAV-Formate) |
+| C – Referenz | ZynAddSubFX, Six Sines, LeSynth, JS80P, Helm, amsynth, Grace, HISE, Dragonfly Reverb, Tiagolr Effects, Cardinal, Retromulator, EP-Mk1, MDA Piano, Aeolus, SamplerBox, Just a Sample, Drumlabooh |
+| D – extern | BBC SO Discover, Spitfire LABS, Virtual Playing Orchestra, Sonatina Symphonic Orchestra, Berlin Free Orchestra |
+| E – Duplikat | Carla (Plugin-Host = MONK-Registry/Rack), FreeEQ8 (12-Band-EQ existiert), Helm/amsynth (subtraktiv existiert), SamplerBox (Player) |
+| F – inkompatibel | Cardinal als direkter Modular-Host (widerspricht MONK-Pluginvertrag, GPL, CV/Gate-Ökosystem) |
+| G – Lizenz | The Alpine Project (CC-BY-ND), Pacific Percussion (unklar), direkte GPL-Code-Einbettung (Surge XT/Dexed/…) |
+
+### A – Hoher Wert (P1)
+
+- [ ] **[AUDIO][SYNTH] Granular-Engine als neuer Synthese-Modus** (Referenz: Actuate; MONK hat bislang nur „Glitch Granulator" als LFO-Chop, keinen echten Grain-Scheduler).
+  - Target: `public/worklets/itSynthProcessor.js` (neuer `kind: 'granular'` bzw. eigener `granularProcessor`), `src/core/instrument/catalog.ts` (`InstrumentDefinition`/`FxDef`), `SynthesizerTerminal`-UI.
+  - Integration: Port/Adaption des Algorithmus (Grain-Scheduler, Hüllkurven-Fenster, Position/Density/Pitch/Reverse), KEIN Fremdcode (Actuate-Lizenz prüfen).
+  - Wiring: `NoteOn/MIDI → GranularVoice (Worklet) → bestehender Filter → Output-Bus → Kanalzug → MAIN`; Grain-Quelle aus `SampleContext`/OPFS (`src/utils/opfs.ts`) oder `audioEngine.loadTrackSample`.
+  - Parameter: grainSize, density, position, positionJitter, pitch, pitchJitter, direction, window, spray, freeze.
+  - State/Presets: `InstrumentDefinition`-Schema erweitern; Automation über bestehende `automate`-Rampen des Worklets.
+  - Worklet/WASM: AudioWorklet (real-time); Pre-Allocation aller Grain-Puffer, keine Allocs im `process`.
+  - Performance: 8–16 aktive Grains/Voice, 16 Voices Polyphonie-Deckel wie bestehend; CPU-Budget < 20 % eines Kerns.
+  - License: Actuate-Lizenz prüfen → `LICENSE_REVIEW_REQUIRED`; Algorithmus nativ nachbauen.
+  - Dependencies: keine neuen Runtime-Dependencies.
+  - Acceptance criteria: Golden-Test mit 1 kHz-Grain reproduzierbar; NaN/Inf-frei; Touch-UI spielbar.
+
+- [ ] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** (Referenz: LinuxSampler, Grace, HISE; SFZ ist ein offenes Format, LinuxSampler-Code ist GPL → nur Format/Algorithmus-Referenz).
+  - Target: `src/context/SampleContext.tsx`, `src/utils/opfs.ts`, `audioEngine.loadTrackSample`, `SamplerTerminal`/`McpTerminal`.
+  - Integration: Port (SFZ-Parser nativ; OPFS-chunked `decodeAudioData`; Voice-Management nach LinuxSampler-Vorbild: Velocity-Layer, Round-Robin, Key-Ranges).
+  - Wiring: `Sample/SFZ → OPFS-File → chunk-decode → AudioBufferSourceNode-Queue → Kanal-Gain → MAIN`; Metadaten in `AudioSample.parameters`.
+  - Parameter: rootKey, keyRange, velocityLayer, roundRobin, loopMode, offset, release.
+  - State: `AudioSample`-Typ um SFZ-Metadaten erweitern; Presets als JSON.
+  - Worklet/WASM: Decode im Worker (`WorkerPool`/`AsyncSandbox`), Playback über bestehende BufferSource-Kette; Disk-Streaming nur für große Dateien.
+  - Performance: Speicherbudget (z. B. 64 MB Sample-Cache), LRU-Eviction über OPFS; keine Main-Thread-Decodes.
+  - License: SFZ-Format offen; LinuxSampler GPL → kein Code-Embedding.
+  - Dependencies: keine neuen; optional `sfz-parser`-Eigenbau.
+  - Acceptance criteria: SFZ mit Velocity-Layer/Round-Robin lädt und spielt; Reload-Persistenz; Cache-Eviction-Test.
+
+- [ ] **[DSP][EFFECTS] Echtzeit-Dynamik: Kompressor + Gate + Dynamic EQ als Worklet** (Referenz: LSP Plugins, ZL Equalizer 2; MONK hat bislang nur Backend-Mastering/FFmpeg und tanh-Softclip, keinen Echtzeit-Kompressor/Gate).
+  - Target: `public/worklets/dspProcessor.js` bzw. neues `dynamicsProcessor.js`; Insert-Punkt `effectNode`↔`eqNode` (`isEffectInsertReady()` in `src/utils/audioEngine.ts`); UI in `FXEngineTerminal`/`DSPTerminal`.
+  - Integration: Port der Algorithmen (Detektor mit Smoothing, Knee, Program-Dependency; Gate mit Hysterese; DynEQ = peaking-Filter mit level-abhängigem Gain auf Basis des bestehenden 12-Band-Biquads).
+  - Wiring: `Insert → DynamicsProcessor → EQ → … → MASTER`; Sidechain optional aus `pluginAudioRouter`-Kanal.
+  - Parameter: threshold, ratio, attack, release, knee, makeup, range, hold (Gate); dynEQ: freq, gain, Q, threshold je Band.
+  - State: `ModuleState`-Kontext + Worklet-Messages wie `eqProcessor` (`automate`-Rampen).
+  - Worklet/WASM: AudioWorklet; One-Pole-Smoothing, Lookahead nur wenn nötig; keine Allocs.
+  - Performance: < 5 % CPU pro Instanz; parameter-ramped, zipper-frei.
+  - License: LSP (LGPL/GPL gemischt) → nur Algorithmus-Referenz, eigener Code.
+  - Dependencies: keine.
+  - Acceptance criteria: Golden-Test (Kompression −20 dBFS Sinus); Gate schließt unterhalb Threshold; DynEQ senkt Resonanz nur bei Pegelüberschreitung.
+
+- [ ] **[SYNTH][MIDI] 6-Operator-FM + DX7-SysEx-Import** (Referenz: Dexed; MONK-FM ist aktuell 2-Op mit `modIndex`).
+  - Target: `public/worklets/itSynthProcessor.js` (`kind: 'fm'` auf 6 Op + 32 Algorithmen erweitern), `src/core/instrument/catalog.ts` (`FmDef`), `src/core/instrument/midiProgramMap.ts`, `MIDIControllerTerminal`.
+  - Integration: Port/Algo-Referenz (Operator-Architektur, DX7-Envelope-Raten, Feedback, Algorithmen); DX7-SysEx ist ein offenes Format, kein Dexed-Code.
+  - Wiring: `MIDI (inkl. SysEx) → 6-Op-Matrix → Filter → Output → MAIN`; Patch-Import über `biblioMONK`/Drop.
+  - Parameter: op{1..6}(ratio, level, envR1..R4), algorithm, feedback, lfo.
+  - State/Presets: `FmDef`-Schema erweitern; DX7-Patches als JSON-Presets.
+  - Worklet/WASM: AudioWorklet; 6 Oszillatoren/Voice pre-allocated.
+  - Performance: 16 Voices × 6 Op; < 25 % CPU; DX7-SysEx-Parse im Main-Thread (klein).
+  - License: Dexed GPLv3 → kein Code-Embedding; `LICENSE_REVIEW_REQUIRED` nur bei Code-Übernahme.
+  - Dependencies: keine.
+  - Acceptance criteria: 10 Referenz-DX7-Patches klingen konsistent; SysEx-Import-Roundtrip; Golden-Test.
+
+### B – Gute Zukunftserweiterungen (P2)
+
+- [ ] **[SYNTH] Wavetable-Oszillatoren + Mod-Matrix** (Referenz: Surge XT). Target: `synthProcessor.js`/`itSynthProcessor.js` (neuer `kind: 'wavetable'`), `SynthesizerTerminal`. Integration: Port der Konzepte (Wavetable-Morphing, Mip-Map-Interpolation gegen Aliasing), KEIN GPL-Code. Performance: pre-computed Tables, 2×-Oversampling optional. License: GPL → nur Referenz.
+
+- [ ] **[SYNTH] Tonewheel-Orgel + Leslie-Simulation** (Referenz: setBfree, Open B3). Target: `instrumentMONK`-Katalog (`catalog.ts`, neuer `kind: 'tonewheel'`), `itSynthProcessor.js`. Integration: 9 Drawbars + Keyclick + Percussion + Leslie (Doppler-AM/FM, Rotor-Beschleunigung) nativ. License: GPL → nur Referenz.
+
+- [ ] **[SYNTH] Physical-Modeling E-Piano (Rhodes/Wurlitzer)** (Referenz: RdPiano, EP-Mk1, Retromulator). Target: `instrumentMONK` (`catalog.ts`). Integration: Tine/Fork-Modell bzw. Reed-Modell als nativ berechnete Voice im Worklet. License: Referenz.
+
+- [ ] **[DRUMS] Drum-Synthese mit Transient-Shaping + Song-Mode/Humanize** (Referenz: Geonkick, Hydrogen). Target: `drumMONK` (`DrumMachineTerminal`, `drumKits.ts`), `itSynthProcessor.js` (`kind: 'drum'` erweitern). Integration: Kick mit Pitch-/Amp-Hüllkurven-Segmenten, Noise-Transient-Layer, Click; Pattern-Song-Kette + Velocity-Humanize in `drumKits`/Sequencer. License: Referenz.
+
+- [ ] **[SAMPLER][LIBRARY] Orchestrale CC0-Library bündeln** (Referenz: VSCO 2 Community Edition, CC0). Target: `public/data/`, `SampleContext`/`PRESET_SAMPLE_DATABASE`. Integration: kleine Subset-Auswahl (Strings/Brass/Woodwinds) als OPFS-Presets; Metadaten in `AudioSample`. License: VSCO 2 CE = CC0 (unproblematisch); VPO/Sonatina/Berlin = `LICENSE_REVIEW_REQUIRED`, nicht ungeprüft bündeln.
+
+- [ ] **[SYNTH] Phase-Distortion-Oszillator** (Referenz: Nakst Regency). Target: `synthProcessor.js` (`osc: 'pd'`). Integration: Casio-CZ-artige Phasenverzerrung als Oszillator-Modus. License: Referenz.
+
+- [ ] **[SAMPLER] EXS24/SF2/WAV-ROM-Import-Konzept** (Referenz: AudioKit ROMPlayer). Target: `SampleContext`, `dropMONK`/`biblioMONK`-Import. Integration: Format-Parser als Worker-Task; nur Metadaten-/Mapping-Konzepte. License: Formate offen; ROMPlayer-Code nicht einbetten.
+
+### C – Architektur-Referenzen (P2/P3, keine Integration)
+
+- [ ] **[DSP][SPATIAL] Reverb-Verbesserung: Early-Reflections + Modulationsparameter** (Referenz: Dragonfly Reverb, LSP Reverb). Target: `public/worklets/effectProcessor.js` (Comb-Reverb existiert). Integration: Freeverb-artige Erweiterung um Early-Reflections/Pre-Delay/Damping nativ; kein Fremdcode.
+
+- [ ] **[SYNTH] Spektrale Additiv-Steuerung** (Referenz: ZynAddSubFX, LeSynth, Six Sines). Target: `instrumentMONK` (`catalog.ts`, `itSynthProcessor.js`). Integration: Partial-Morphing, spektrale Hüllkurven pro Partial als Konzept-Erweiterung der bestehenden 50 Additiv-Patches.
+
+- [ ] **[ARCHITECTURE] Mod-Matrix-/CV-Gate-Konzepte prüfen** (Referenz: Cardinal/VCV Rack). Target: `synthesizerMONK`-Modulation, `ModuleState`-Routing. Integration: NUR als UI-/Datenmodell-Referenz für eine interne Mod-Matrix; KEIN Modul-Host (würde MONK-Pluginvertrag widersprechen, GPL).
+
+- [ ] **[SYNTH] Analoge Filter-/Oszillator-Referenzen** (Referenz: Helm, amsynth, JS80P). Target: `synthProcessor.js`-Filter (`src/core/instrument`). Integration: Filterkoeffizienten-/Drift-Konzepte nativ; kein Code (GPL).
+
+### Lizenz-Hinweise (G)
+
+- [ ] **[LICENSE] Externe Library-Ressourcen dokumentieren**: BBC SO Discover, Spitfire LABS, Berlin Free Orchestra, The Alpine Project (CC-BY-ND), Pacific Percussion. Als reine User-seitige externe Ressourcen behandeln; **keine** Redistribution ohne Prüfung. `LICENSE_REVIEW_REQUIRED`.
+
+---
+
 ## Hinweis für die Zukunft
 
 Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
