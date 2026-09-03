@@ -89,3 +89,26 @@ describe('AI-Supabase-Persistenz (AITodo Phase 12, gemockt)', () => {
     expect(calls[1].data).toMatchObject({ plugin_id: 'mixer', version: 2 });
   });
 });
+
+  it('rpcMatchSamples ruft die match_samples-RPC mit Embedding auf', async () => {
+    const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+    const mock = {
+      rpc: async (fn: string, args: Record<string, unknown>) => {
+        rpcCalls.push({ fn, args });
+        return { data: [{ sample_id: 'bass-909-kick', similarity: 0.98 }], error: null };
+      },
+    } as any;
+    setAiPersistenceClientForTests(mock);
+
+    const matches = await aiPersistence.rpcMatchSamples([0.1, 0.2], 5);
+    expect(matches).toEqual([{ sample_id: 'bass-909-kick', similarity: 0.98 }]);
+    expect(rpcCalls[0]).toMatchObject({ fn: 'match_samples' });
+    expect(rpcCalls[0].args.match_count).toBe(5);
+  });
+
+  it('rpcMatchSamples liefert [] bei RPC-Fehler', async () => {
+    setAiPersistenceClientForTests({
+      rpc: async () => ({ data: null, error: { message: 'kaputt' } }),
+    } as any);
+    await expect(aiPersistence.rpcMatchSamples([0.1], 3)).resolves.toEqual([]);
+  });

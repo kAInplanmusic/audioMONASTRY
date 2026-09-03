@@ -32,6 +32,9 @@ beforeAll(async () => {
   process.env.HF_API_KEY = '';
   process.env.REPLICATE_API_TOKEN = '';
   process.env.OLLAMA_URL = 'http://127.0.0.1:1';
+  // Supabase-RPC im Test deaktivieren → /api/library/search nutzt Keyword-Fallback.
+  process.env.SUPABASE_URL = '';
+  process.env.SUPABASE_SERVICE_ROLE = '';
 
   // HF-Mock: /health, /ready und /infer.
   hfMock = http.createServer((req, res) => {

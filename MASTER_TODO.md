@@ -78,7 +78,7 @@
 
 ### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
 
-- [ ] Server-seitige semantische Suche (Embeddings/Supabase); neu erzeugtes Audio/Stems/Presets automatisch in die Library speichern → **Teil umgesetzt 2026-09-03:** `POST /api/library/search` mit deterministischem Keyword-Scoring-Fallback über die Preset-Bibliothek + Tests in `tests/aiRoutes.test.ts`. Offen: Supabase-Embedding-Pfad (`match_samples`-RPC) + Auto-Save neu erzeugter Audio/Stems/Presets.
+- [x] Server-seitige semantische Suche (Embeddings/Supabase) → umgesetzt 2026-09-03: `POST /api/library/search` mit **Supabase-Embedding-Pfad** (`embedText()` 256-dim + `aiPersistence.rpcMatchSamples()` → `match_samples`-RPC, Migration 005 `sample_embeddings` + pgvector-HNSW) und Keyword-Fallback; Tests `textEmbedding.test.ts` (4) + `aiPersistence.test.ts` (RPC) + `aiRoutes.test.ts` grün → TASKDONE. Offen: Auto-Save neu erzeugter Audio/Stems/Presets in die Library.
 - _Umgezogen nach `SPECIAL_TODO.md`:_ Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät (siehe `docs/HARDWARE_AUDIT_2026.md`).
 
 ### NEW-MONK-7 spatialMONK

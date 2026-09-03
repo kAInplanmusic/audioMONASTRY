@@ -18,6 +18,7 @@ import type { DropGenerationRequest, DropStyle } from './src/core/drop/DropTempl
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
+import { embedText } from './src/core/ai/orchestrator/textEmbedding';
 import type { AiTask } from './src/core/ai/orchestrator/types';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import type { AudioSample } from './src/data/samples';
@@ -914,19 +915,36 @@ app.post('/api/ai/mcp/tools/:name', async (req, res) => {
 });
 
 // --- POST /api/library/search → semantische Bibliotheks-Suche (NEW-MONK-6) ---
-// Deterministic local fallback (Keyword-Scoring über die Preset-Bibliothek).
-// Supabase-Embedding-Pfad: sobald `match_samples`-RPC + Embeddings konfiguriert
-// sind, hier vor dem Fallback aufrufen (siehe docs/AI_OPERATIONS.md).
-app.post('/api/library/search', (req, res) => {
+// 1) Supabase-Embedding-Pfad: match_samples-RPC (pgvector, Kosinus) – sobald
+//    Supabase konfiguriert ist (Migration 005). 2) Lokaler Keyword-Fallback.
+app.post('/api/library/search', async (req, res) => {
   const { query, limit } = (req.body ?? {}) as { query?: string; limit?: number };
-  const q = String(query ?? '').trim().toLowerCase().slice(0, 200);
+  const q = String(query ?? '').trim().slice(0, 200);
   if (!q) return res.status(400).json({ error: 'query fehlt' });
   const max = Math.max(1, Math.min(50, Number(limit) || 10));
+
+  // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst sofort Fallback).
+  const supabaseConfigured = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE);
+  if (supabaseConfigured) {
+    const matches = await aiPersistence.rpcMatchSamples(embedText(q), max);
+    if (matches.length > 0) {
+      const byId = new Map(PRESET_SAMPLE_DATABASE.map((s) => [s.id, s]));
+      const results = matches.map((m) => ({
+        id: m.sample_id,
+        name: byId.get(m.sample_id)?.name ?? m.sample_id,
+        category: byId.get(m.sample_id)?.category ?? 'mids',
+        score: Number(m.similarity.toFixed(4)),
+      }));
+      return res.json({ query: q, results, provider: 'supabase-embeddings' });
+    }
+  }
+
+  const qLower = q.toLowerCase();
   const results = PRESET_SAMPLE_DATABASE
     .map((s) => {
       const name = s.name.toLowerCase();
       const category = s.category.toLowerCase();
-      const tokens = q.split(/\s+/).filter(Boolean);
+      const tokens = qLower.split(/\s+/).filter(Boolean);
       let score = 0;
       for (const t of tokens) {
         if (name === t) score += 8;
@@ -941,7 +959,7 @@ app.post('/api/library/search', (req, res) => {
     .sort((a, b) => b.score - a.score || a.sample.name.localeCompare(b.sample.name))
     .slice(0, max)
     .map((r) => ({ id: r.sample.id, name: r.sample.name, category: r.sample.category, score: r.score }));
-  return res.json({ query: q, results });
+  return res.json({ query: q, results, provider: 'keyword-fallback' });
 });
 
 // --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---
