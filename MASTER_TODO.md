@@ -10,7 +10,7 @@
 ## 🎯 Nächste TODOs (in dieser Reihenfolge)
 
 - [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
-- [ ] **OPS-Load-Balancer**: Hetzner LB11 erst ab ≥2 App-Knoten (stündlich 0,012 €/h netto, 7,49 €/Monat netto) – aktuell bewusst NICHT
+- [ ] **OPS-Load-Balancer Prüfpunkt**: Trigger/Architektur/Kosten dokumentiert (`docs/SERVER_FLEET.md`); offen bleibt nur der Live-Test mit 2 App-Knoten hinter dem LB
 - [ ] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin (mittlere Priorität nach D8)
 - [ ] **P1-4 Scratchpad Prüfpunkt**: Reload/DnD/Clipboard-Roundtrip im Browser verifizieren (Code + Helper-Tests grün)
 - [ ] **P2-1/P2-2 Rest**: Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte
@@ -42,9 +42,7 @@
 > die Session läuft auf genau einem Knoten. Sinnvoll wird er erst bei
 > horizontaler Skalierung auf **≥ 2 App-Knoten**.
 
-- [ ] **Trigger definieren:** LB11 erst installieren, wenn ≥ 2 App-Knoten laufen (Multi-Session, > 4 User/Session oder HA/Zero-Downtime-Deploys).
-- [ ] **Architektur:** Cloudflare → Hetzner LB11 (sticky WebSocket-Sessions) → app-1/app-2; Socket.io-Räume über Redis-Adapter teilen (`REDIS_URL`), Mediasoup/SFU nur auf dediziertem Knoten.
-- [ ] **Kosten dokumentieren:** 0,012 €/h netto bzw. 7,49 €/Monat netto (LB11, Europa, Stand 04/2026); stündlich → nur zahlen, solange er existiert.
+- [x] **Trigger, Architektur & Kosten dokumentiert:** `docs/SERVER_FLEET.md` → Abschnitt „Load Balancer (LB11) – bewusst noch nicht im Einsatz" (Trigger ≥ 2 App-Knoten, Cloudflare → LB11 sticky → app-1/app-2 + Redis-Adapter, SFU/UDP nicht über LB, 0,012 €/h bzw. 7,49 €/Monat netto, stündliche Abrechnung) → TASKDONE.
 - [ ] **Prüfpunkt:** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).
 
 ---
@@ -237,7 +235,7 @@
 - [x] Locking an User-ID statt Socket-ID server-seitig absichern → erledigt in P4-2 (Sender-User-ID im Relay, Rollenzuordnung je User-ID, Audit-Log).
 - [ ] HF-Token-Rotation dokumentiert ✅ – **Endpoint-Secret rotieren** (Betreiber-Schritt, offen)
 - [ ] Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF)
-- [ ] Supabase RLS prüfen (Prompts/Evals: anon read, service_role write)
+- [x] Supabase RLS geprüft (Prompts/Evals + Samples/Music: anon read, service_role write) → statisches Audit-Gate `tests/supabaseRls.test.ts` über alle `database/*.sql` → TASKDONE.
 - [ ] **Prüfpunkt:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` ist vollständig abgehakt oder hat einen offenen Task
 
 ### GAP-5 Prompt-/Trainings-Matrix je Plugin
@@ -287,7 +285,6 @@
 - [ ] **AM-E4-1** Sample-Raten-Konvertierung: Browser macht SRC unsichtbar; für native Runtime Polyphase/Farrow-Struktur spezifizieren (`services/audio-runtime`), 44.1↔48 kHz Roundtrip-Test.
 - [ ] **AM-E4-2** FFT/iFFT: aktuell keine eigene FFT im Audio-Pfad; wenn Spektral-Features kommen, cache-oblivious Mixed-Radix evaluieren (kein Naive-DFT).
 - [x] **AM-E4-3** Biquad-Stabilität: `dspProcessor.setLowpass()` (TF2/DF1-Mischung) auf Koeffizienten-Sprung bei `freq=0`/`freq=sampleRate/2` prüfen; Denormal- Guards für `filterZ`; einheitliche DF1-Implementierung → `src/audio/dsp/biquad.ts` (stabile Lowpass-Koeffizienten an den Rändern) + Tests (TASKDONE).
-- [ ] **AM-E4-4** Dynamik-Prozessoren: `masteringProcessor` Lookahead 5 ms + True- Peak-Approximation validieren (Golden-Audio-Referenz); Release-Kurve als segmentierte Lookup-Tabelle statt `Math.exp`-Koeffizient je Block.
 - [ ] **AM-E4-6** Oversampling: aktuell nur 2×-True-Peak-Schätzung linear; für Sättigung (Soft-Clipper) Half-Band-Oversampling evaluieren (Qualität vs. CPU).
 - [ ] **AM-E4-7** SIMD/NEON/AVX: im Browser nicht direkt verfügbar; native Runtime (Rust) mit `std::simd`/`wide`-Crates vorbereiten; JS-Worklets auf Block-Verarbeitung (128 Samples) optimieren, damit V8 auto-vektorisieren kann.
 

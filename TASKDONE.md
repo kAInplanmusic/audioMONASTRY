@@ -18,6 +18,21 @@
 - [x] **Tests:** `tests/portalWorkerSnapshots.test.ts` (6 Tests: Snapshot-Image-Wahl, cloud-init-Fallback, Refresh + Retention, Auth-Pflicht, Listing); `npm run verify` → **483 Tests + Boundary-Scan 0** grün.
 - [ ] **Prüfpunkt (bleibt offen):** Flotten-Start (wake→ready) vorher/nachher messen; Ziel < 90 s – Live-Messung beim nächsten Flotten-Start.
 
+### GAP-4 · Supabase-RLS-Audit als Regressions-Gate (2026-09-03)
+
+- [x] **Prüfung:** Alle 15 Tabellen aus `database/schema.sql`, `ai_migration_001.sql` und `ai_migration_002.sql` haben RLS aktiviert; `anon` besitzt je Tabelle genau eine SELECT-Policy, Schreibrechte ausschließlich für `service_role`.
+- [x] **Gate:** `tests/supabaseRls.test.ts` (18 Tests) prüft je SQL-Datei statisch: RLS-Aktivierung je angelegter Tabelle, genau eine anon-SELECT-Policy, Schreib-Policies nur für `service_role`, keine `authenticated`/`public`-Rollen, `drop policy if exists` je Policy (Wiederholbarkeit). Kommentarzeilen werden ausgefiltert, damit auskommentierte Statements nicht als vorhanden zählen.
+- [x] **Negativprobe:** Entfernte RLS-Aktivierung bzw. `to authenticated` lassen das Gate rot werden (verifiziert, danach zurückgesetzt).
+- [ ] **Offen:** Live-Abgleich gegen die tatsächliche Supabase-Instanz (Betreiber-Schritt).
+
+### OPS-Load-Balancer – LB11-Entscheidung dokumentiert (2026-09-03)
+
+- [x] **Trigger:** LB11 erst ab **≥ 2 App-Knoten** (Multi-Session, > 4 User/Session, HA/Zero-Downtime-Deploys) – festgehalten in `docs/SERVER_FLEET.md`.
+- [x] **Architektur:** Cloudflare → Hetzner LB11 (sticky Sessions für WebSocket) → `app-1`/`app-2`; Socket.io-Räume über Redis-Adapter (`REDIS_URL`); Mediasoup/SFU-UDP läuft **nicht** über den LB.
+- [x] **Kosten:** 0,012 €/h netto, Deckel 7,49 €/Monat netto (Europa, Stand 04/2026), 20 TB Traffic inkl.; stündliche Abrechnung → löschen = 0 €.
+- [x] **Nebenbefund behoben:** kaputte Markdown-Tabelle im Kostenabschnitt von `docs/SERVER_FLEET.md` (Summenzeile stand hinter dem Hinweis-Blockquote).
+- [ ] **Prüfpunkt (bleibt offen):** 2 App-Knoten hinter LB, 4-User-E2E + Failover-Test – Live-Schritt.
+
 ### P1-2 Design-Tokens / CSS-Variablen-Themes je Plugin (2026-09-02, D8)
 
 - [x] **Zentrale Tokens:** `src/index.css` – `--monk-accent`/`--monk-accent-rgb`/`--monk-glow-accent` im `:root` (Brand-Default) + `.monk-theme-<id>`-Klassen für alle **21** Plugins; keine plugin-lokalen Hex-Werte.
@@ -142,6 +157,7 @@
 - [x] **AM-E3-2**: `src/utils/RbacCache.ts` (Lease/Sliding-Window) + Tests.
 - [x] **AM-E3-4**: `src/utils/JitterBufferEstimator.ts` + Tests.
 - [x] **AM-E4-3**: `src/audio/dsp/biquad.ts` (stabile Lowpass-Koeffizienten an den Rändern) + Tests.
+- [x] **AM-E4-4** (2026-09-03): `masteringProcessor` – Release-Koeffizient aus segmentierter Lookup-Tabelle (`releaseCoefficient`, 128 log-Segmente, linear interpoliert, max. rel. Fehler < 0,1 % für 5 ms…1 s) statt `Math.exp` je Block; Prozessor in Node testbar gemacht (`WorkletBase`-Fallback wie `spatialProcessor`, `currentSampleRate()`, `getLookaheadSamples()`). Validierung: `tests/masteringDynamics.test.ts` (7 Tests: LUT-Genauigkeit/Monotonie/NaN-Guard, Lookahead = 5 ms = PDC-Wert, Impuls-Verzögerung, Ceiling-Einhaltung bei 0,99-Sinus, Stille bleibt Stille). `npm run verify` grün (102 Dateien, 549 Tests, Boundary-Scan 0).
 - [x] **NEW-D4-1 V2-AudioGraph**: `src/core/audio/V2StudioGraph.ts` (8-Kanal Source→Gain→Pan→MasterSum, Soft-Clip/NaN-Guard), `MasterSumNode` in `basicNodes.ts`, `audioEngine.v2Studio`/`renderV2Block()`/`syncV2FromV1()`; Tests `tests/v2AudioGraph.test.ts` (8 Tests: Zyklusfreiheit, Stereo-Pan, Master-Gain, NaN-Glättung, EngineAdapter, PlaybackEngine, WorkletGraphRuntime).
 
 ### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
