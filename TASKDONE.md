@@ -970,3 +970,68 @@
 - [x] **AM-E3-5** Prioritäts-Inversion: ControlBus-Burst-Test + Handler-Isolation
 - [x] **P3-2** Prompt-/Kommando-Katalog-Test für alle 21 Plugins (`tests/promptCatalog.test.ts`)
 - [x] **P1-4** Session-Zwischenspeicher: `src/core/session/sessionScratchpad.ts` (IndexedDB-Snapshots: Patterns, BPM, Mixer, Plugin-States, Routing) + Tests
+
+---
+
+## Quelle: MASTER_TODO.md – Automatisierbare Punkte abgeschlossen (2026-09-03)
+
+- [x] **AM-E4-4** `masteringProcessor`: Release-Kurve als segmentierte Lookup-Tabelle (200 Stufen à 5 ms) statt `Math.exp`-Koeffizient je Block; funktionaler Worklet-Test `tests/masteringProcessorWorklet.test.ts` validiert Lookahead 5 ms (240 Samples @ 48 kHz), Ceiling, Release-Äquivalenz, NaN/Inf-Guards und Determinismus (6 Tests grün); `goldenAudio`-Suite unverändert grün
+- [x] **AM-E6-2** Adaptive Latenz/Puffergrößen: `src/utils/adaptiveLatency.ts` (AdaptiveLatencyController: Xrun-Eskalation alle 3 Xruns interactive→balanced→playback, Lookahead 8–15 ms, stabile Fenster bauen Xrun-Zähler ab); verdrahtet in `audioEngine.reportXrun`/`applyLatencyProfile`/`reportStableWindow` + `MonastryMasterClock`-Watchdog; `tests/adaptiveLatency.test.ts` (8 Tests grün)
+- [x] **GAP-4** Pen-Test `/api/ai/*` (automatisierter Teil): Task-/Modell-Validierung in `server.ts` (422 bei unbekanntem Task, URL-/Pfadtraversal-/Whitespace-Modell-IDs, Prompt-Längen-Caps); `tests/aiSecurity.test.ts` (Auth 401/200 Token+Cookie, 10 Tests) + `tests/aiRateLimitRoutes.test.ts` (expensiveLimiter 429, 2 Tests) grün
+- [x] **P3-3 Prüfpunkt**: `eval:ai`-Report enthält je Plugin Score, Dauer, Fehler (`evaluationStore.finishRun` berechnet `durationMs`/`errors`, `scripts/eval-ai.ts` schreibt sie in `ai-eval-runs.json` + DB-Summary); lokal verifiziert: `npm run verify` + `npm run build` + `npm run eval:ai` (21 Runs, 0 FAIL, 0 Errors) + `npm run iterate:prompts` (41 Iterationen, 0 nicht konvergiert) grün
+- [x] **P2-5 Bundle-Diät**: `vite.config.ts` auf `build.target: 'esnext'` (Plattform-Matrix: moderne Chrome/Edge/Firefox/Safari) → Client-Bundle von 1,51 MB auf **1,49 MB**; `check:bundle` wieder grün; `check:memo` (23 Terminal-/Panel-Komponenten) grün
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 2 abgeschlossen (2026-09-03)
+
+- [x] **AI-E2E-Szenario** (AITodo Phase 24–26): `tests/aiE2EScenario.test.ts` – Wake (Session CREATED→ACTIVE), Load (ModelManager), Cold-/Warm-Request (Mock-GPU-Provider mit Wake-Zähler), Switch (zweiter Provider/Task), Scale-to-Zero (shutdown → onScaleToZero) – deterministisch, serverlos (2 Tests grün)
+- [x] **AI-Failure-Suite** (AITodo Phase 24–26): `tests/aiFailureSuite.test.ts` – HF offline → Fallback auf nächsten Provider, GPU down → Circuit-Breaker öffnet fail-fast (Provider wird nicht mehr aufgerufen), Duplicate → SingleFlight-Dedup (1 Provider-Call), Crash → Job FAILED + Recovery (4 Tests grün)
+- [x] **AM-E6-1** Kontinuierliches Profiling: `Telemetry` um `recordXrun` (Ringpuffer max. 100), `recordWorkletCpu` (Worklet-CPU-Budgets) und `recordWorkletAllocation` (Per-Sample-Allokationen) erweitert; verdrahtet in `audioEngine.reportXrun` + analyzerProcessor-Dropout; perfMONK-UI zeigt XRUNS + WORKLET CPU BUDGETS/ALLOCATIONEN; Server aggregiert `telemetryXruns`/`telemetryXrunsBySource` in `/api/metrics` (JSON + Prometheus); `tests/telemetryXrun.test.ts` (5 Tests grün)
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 3 abgeschlossen (2026-09-03)
+
+- [x] **P2-2** BPM-Wechsel sample-genau: `clockProcessor` auf Phasen-Akkumulator mit a-rate-`bpm`-AudioParam umgestellt (ein Wert pro Sample, sample-genaue BPM-Wechsel); `audioEngine.setBpm` terminiert Tempo-Wechsel per `setValueAtTime` auf der AudioParam-Timeline (kein setTimeout-Jitter); alle direkten `Tone.Transport.bpm.value`-Zuweisungen laufen jetzt über `setBpm`; 16/32-Step-Wechsel (`setStepCount`) war bereits timing-sprungfrei und bleibt durch `tests/audioEngine.test.ts` abgedeckt; neuer funktionaler Worklet-Test `tests/clockProcessorWorklet.test.ts` (5 Tests: 120/240-BPM-Raster, sample-genauer a-rate-Wechsel vs. Referenz-Simulation, Port-Fallback, reset)
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 4 abgeschlossen (2026-09-03)
+
+- [x] **P2-3 2.1-Ausgabe**: `src/core/output/crossover.ts` (`Stereo21Crossover`, Linkwitz-Riley 2. Ordnung, 2.1 + Phantom-Fallback); `audioEngine.setStereoMode`/`stereoMode` mit Live-Routing (Splitter/Biquad/Merger auf L/R+LFE bei ≥3 Zielkanälen, Xonar U7); Settings-Select „2.1-Crossover (Sub-Trennung)“; D10-Layouts (2.0–24.2) + Xonar-Auto-Auswahl bereits vorhanden; Frequenzanalyse-Prüfpunkt `tests/crossover.test.ts` (Goertzel: 40 Hz → LFE, 1 kHz → L/R, Phantom ohne Bass-Einbuße, 5 Tests grün)
+- [x] **AM-E6-6** A/B-Validierung: Golden-Audio-Gate-Verfahren in `docs/PERFORMANCE_AUDIT.md` dokumentiert; `nightly.yml` mit Golden-Gate-Kommentar (DSP-Regress bricht CI); `tests/goldenAudio.test.ts` grün
+- [x] **GAP-5** Prompt-/Eval-Matrix: DB-ready Seed `src/core/ai/orchestrator/promptSeed.ts` + `scripts/seed-prompt-evals.ts` (21 system_prompts + 21 plugin_prompt_versions → `test-results/system-prompts-seed.json`); `tests/promptMatrix.test.ts` verifiziert je Plugin ≥1 Eval-Datensatz + Score ≥ 4 (PASS) und Seed-Vollständigkeit; Iterations-Loop + Score-Gate vorhanden (`eval-ai.ts`/`iterate-prompts.ts`)
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 5 abgeschlossen (2026-09-03)
+
+- [x] **AM-E6-4** Selbstlernende Parameter-Vorhersage (heuristisch): `src/core/ai/parameterPrediction.ts` (Rezenz-gewichtetes Frequenz-Ranking mit exponentieller Halbwertszeit, Konfidenz, Top-Kandidat je Plugin/Task), integriert als `MoaHistoryStore.suggest(pluginId)`; `tests/parameterPrediction.test.ts` (5 Tests grün)
+- [x] **P2-2 Multi-User-Clock-Sync**: Host→Gast-Verteilung (`App.tsx` CLOCK_SYNC via DataChannel + CRDT-Merger) + PLL-Drift-Kompensation (`PhaseLockedLoop`/`MonastryMasterClock.handleClockPong`); `tests/clock.test.ts` erweitert (exakter NTP-Offset via performance.now-Mock, PLL-Konvergenz < 5 ms, CRDT-Merger-Schritte) – 7 Tests grün. Live-2-Browser-Jitter bleibt eigener Prüfpunkt (10 min Lauf)
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 6 abgeschlossen (2026-09-03)
+
+- [x] **AM-E6-5** Energie-Optimierung: `src/utils/idleDetection.ts` (`AudioIdleDetector` mit activity/arm/idleNow, onIdle/onActive); verdrahtet in `audioEngine` (Plugin-Aktivierung/-Deaktivierung + Play melden Aktivität; 0 aktive Plugins starten Idle-Timer; bei Idle `ctx.suspend()`, bei Aktivität `ctx.resume()`); `tests/idleDetection.test.ts` (5 Tests grün). Display-Sleep iOS/Android bleibt Live-Check
+- [x] **AUD-P2-1** Testrun-2-Checkliste abgeglichen: `docs/TESTRUN_2_CHECKLIST.md` mit Abgleich-Vermerk (2026-09-03); automatisierbare Punkte (GAP-5-Prompt/Eval, 2.1-Layout, Output-Layouts, OSC/HID-Malformed, MCP-Permission) als ✅ mit Test-Nachweis markiert; übrige Punkte bleiben bewusste Live-/Hardware-Checks für den nächsten echten Testrun
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 7 abgeschlossen (2026-09-03)
+
+- [x] **AM-E5-2** Heap-Wachstums-Gate: `scripts/memory-pressure-gate.mjs` (deterministische Arbeitslast: Worklet-artige Biquad-Blöcke, Snapshot-Serialisierung, Telemetrie-Ringpuffer; GC-basiertes Heap-Delta, Gate 512 MB, gemessen 0,03 MB), `npm run check:memory` + Nightly-CI-Step. Volle 2-GB-OOM-Simulation bleibt offen
+- [x] **AM-E4-2** FFT/iFFT-Evaluierung in `docs/DSP_BENCHMARKS.md` (Radix-2/4 + Twiddle-Tables, Mixed-Radix, Bluestein als letzter Ausweg)
+- [x] **AM-E4-6** Oversampling-Evaluierung in `docs/DSP_BENCHMARKS.md` (Half-Band-FIR 2×, Entscheidung erst nach Benchmark)
+- [x] **OPS-LB** Trigger/Architektur/Kosten dokumentiert in `docs/HETZNER_DEPLOY.md` (LB11 erst ab ≥2 App-Knoten, 0,012 €/h bzw. 7,49 €/Monat); 2-Knoten-E2E-Prüfpunkt bleibt offen
+- [x] **P2-5** Worklet-CPU-Budgets im perfMONK (aus AM-E6-1); „unter 4-User-Last keine Dropouts“ bleibt Live-Check
+
+---
+
+## Quelle: MASTER_TODO.md – Batch 8 + 9 abgeschlossen (2026-09-03)
+
+- [x] **[LICENSE]** Externe Library-Ressourcen dokumentiert in `docs/ALTERNATIVEN_2026.md` (BBC SO/Spitfire/Berlin/Alpine CC-BY-ND/Pacific; Regel: User-Download statt Redistribution, CC0-Bündelung nur VSCO 2 CE)
+- [x] **AM-E4-1** SRC-Spezifikation in `docs/PERFORMANCE_AUDIT.md` (Polyphase-FIR 64/32 für 44.1↔48 kHz, Farrow-Fallback, Roundtrip-Regression < −100 dB/< 1 ms)
+- [x] **AM-E4-7** SIMD-Vorbereitung in `docs/PERFORMANCE_AUDIT.md` (Rust `std::simd`/`wide`, Feature-Gates SSE2/AVX2/NEON; JS-Worklets 128er-Blöcke + Allokations-Audit)
+- [x] **[DSP][EFFECTS] Echtzeit-Dynamik als Worklet**: `src/audio/worklets/dynamicsProcessor.ts` (Soft-Knee-Kompressor + Gate + DynEQ, automate-Rampen, NaN/Inf-Guards); Manifest-Eintrag; Insert `effectNode → dynamicsNode → eqNode` in `audioEngine` (`setDynamicsParam`/`automateDynamics`/`isDynamicsInsertReady`); `tests/dynamicsProcessorWorklet.test.ts` (5 Tests: Kompressor-GR, Gate zu/offen, DynEQ nur bei Pegelüberschreitung, Determinismus/NaN) grün

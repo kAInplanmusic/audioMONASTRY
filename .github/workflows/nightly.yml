@@ -20,10 +20,16 @@ jobs:
         run: npm ci
 
       - name: Typecheck + Tests + Boundary-Scan
+        # AM-E6-6: enthält tests/goldenAudio.test.ts als A/B-Regressions-Gate
+        # (bit-genauer Fixture-Vergleich + P0-4-Stille-Test). DSP-Regress = FAIL.
         run: npm run verify
 
       - name: Production Build
         run: npm run build
+
+      # AM-E5-2: Heap-Wachstums-Gate (< 512 MB Delta) gegen schleichende Leaks.
+      - name: Memory-Pressure-Gate (< 512 MB Heap-Delta)
+        run: npm run check:memory
 
       - name: Bundle-Budget-Check
         run: node scripts/check-bundle-size.mjs || true

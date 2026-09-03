@@ -29,12 +29,22 @@ class MasteringProcessor extends AudioWorkletProcessor {
   private scratch: Float32Array | null = null;
   // AM-E1-3: dB→Gain-Lookup statt Math.pow(10, -grDb/20) pro Sample.
   private grLookup = new Float32Array(241); // 0..48 dB in 0.2-dB-Schritten
+  // AM-E4-4: Release-Koeffizienten als segmentierte Lookup-Tabelle statt
+  // Math.exp pro Block. Release wird auf 0.005..1.0 s begrenzt (wie im
+  // Message-Handler), daher decken 200 Stufen à 5 ms den gesamten Bereich ab.
+  private static readonly RELEASE_MIN = 0.005;
+  private static readonly RELEASE_STEP = 0.005;
+  private releaseLookup = new Float32Array(200);
 
   constructor() {
     super();
     this.peak = this.limiterCeiling;
     for (let i = 0; i < this.grLookup.length; i++) {
       this.grLookup[i] = Math.pow(10, -(i * 0.2) / 20);
+    }
+    for (let i = 0; i < this.releaseLookup.length; i++) {
+      const releaseSec = MasteringProcessor.RELEASE_MIN + i * MasteringProcessor.RELEASE_STEP;
+      this.releaseLookup[i] = 1 - Math.exp(-1 / (sampleRate * releaseSec));
     }
     this.port.onmessage = (e) => {
       const m = e.data; if (!m) return;
@@ -114,8 +124,11 @@ class MasteringProcessor extends AudioWorkletProcessor {
       this.scratch = new Float32Array(Math.max(channels, 8));
     }
 
-    // Exponential-Release-Koeffizient (pro Sample).
-    const releaseCoeff = 1 - Math.exp(-1 / (sampleRate * this.limiterRelease));
+    // AM-E4-4: Exponential-Release-Koeffizient aus segmentierter Lookup-Tabelle
+    // (kein Math.exp im Hot-Path; Release ist auf 0.005..1.0 s begrenzt).
+    const releaseIdx = Math.max(0, Math.min(this.releaseLookup.length - 1,
+      Math.round((this.limiterRelease - MasteringProcessor.RELEASE_MIN) / MasteringProcessor.RELEASE_STEP)));
+    const releaseCoeff = this.releaseLookup[releaseIdx] ?? 0;
     const depth = this.lookaheadSamples;
 
     for (let i = 0; i < output[0].length; i++) {

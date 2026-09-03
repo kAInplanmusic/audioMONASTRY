@@ -25,6 +25,9 @@ import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
 import { V2StudioGraph } from '../core/audio/V2StudioGraph';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
+import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatency';
+import { telemetry } from './telemetry';
+import { AudioIdleDetector } from './idleDetection';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 
 // Firefox liefert ohne crossOriginIsolated (COOP/COEP) kein SharedArrayBuffer.
@@ -205,6 +208,14 @@ class AudioEngine {
   private scheduleArea = 0.1; // seconds
   private nextNoteTime = 0.0;
   private timerID: any = null;
+  // AM-E6-2: Adaptive Latenz-Policy (Xrun-Eskalation + stabile Fenster).
+  private latencyPolicy = new AdaptiveLatencyController('playback');
+  // AM-E6-5: Audio-Idle-Detection (Context suspend/resume zur Energie-Optimierung).
+  private idleDetector = new AudioIdleDetector({
+    timeoutMs: 5 * 60 * 1000,
+    onIdle: () => this.suspendForIdle(),
+    onActive: () => this.resumeFromIdle(),
+  });
 
   private scheduleTick(time: number) {
     this.tick(time);
@@ -230,9 +241,38 @@ class AudioEngine {
     return this.lookahead;
   }
 
-  /** P2-1: Xrun/Underrun melden → Lookahead eine Stufe erhöhen (max 15 ms). */
+  /** P2-1/AM-E6-2: Xrun/Underrun melden → Lookahead adaptiv erhöhen (max 15 ms). */
   public reportXrun(): void {
-    this.lookahead = Math.min(15, this.lookahead + 2);
+    this.lookahead = this.latencyPolicy.recordXrun();
+    telemetry.recordXrun('audio-engine');
+  }
+
+  /** AM-E6-2: Stabiles Audio-Fenster → Xrun-Zähler langsam abbauen (Latenz vs. Durchsatz). */
+  public reportStableWindow(): void {
+    this.lookahead = this.latencyPolicy.recordStableWindow();
+  }
+
+  /** AM-E6-5: Audio-Context bei Idle suspendieren (Energie sparen). */
+  public getAudioIdleState(): boolean {
+    return this.idleDetector.isIdle();
+  }
+
+  private suspendForIdle(): void {
+    try {
+      const ctx = this.ctx as unknown as { suspend?: () => Promise<void>; state?: string } | null;
+      if (ctx && typeof ctx.suspend === 'function' && ctx.state === 'running') {
+        void ctx.suspend().catch(() => { /* bereits geschlossen */ });
+      }
+    } catch { /* Context nicht verfügbar */ }
+  }
+
+  private resumeFromIdle(): void {
+    try {
+      const ctx = this.ctx as unknown as { resume?: () => Promise<void>; state?: string } | null;
+      if (ctx && typeof ctx.resume === 'function' && ctx.state === 'suspended') {
+        void ctx.resume().catch(() => { /* bereits geschlossen */ });
+      }
+    } catch { /* Context nicht verfügbar */ }
   }
 
   /**
@@ -241,9 +281,9 @@ class AudioEngine {
    * - Die Sample-Rate wird als Präferenz gespeichert und beim nächsten
    *   AudioContext-Aufbau (bzw. Tone.Context) berücksichtigt.
    */
-  public applyLatencyProfile(hint: 'interactive' | 'balanced' | 'playback', sampleRate?: number): void {
-    const budget = hint === 'interactive' ? 8 : hint === 'balanced' ? 12 : 15;
-    this.lookahead = Math.max(8, Math.min(15, budget));
+  public applyLatencyProfile(hint: LatencyProfile, sampleRate?: number): void {
+    this.latencyPolicy.applyProfile(hint);
+    this.lookahead = this.latencyPolicy.snapshot().lookaheadMs;
     try {
       const toneCtx = Tone.getContext() as unknown as { lookAhead?: number; latencyHint?: string };
       if (toneCtx && Number.isFinite(toneCtx.lookAhead as number)) {
@@ -421,6 +461,9 @@ class AudioEngine {
     // P2-4: effectProcessor als fester Insert in der Master-Kette erzeugen
     // (nicht erst lazy in setEffectParam) – sonst wird er nie verdrahtet.
     this.effectNode = makeWorklet('effect-processor');
+    // A-Klasse Audio-Audit: dynamicsProcessor (Kompressor/Gate/DynEQ) als
+    // weiterer Insert zwischen effectNode und eqNode.
+    this.dynamicsNode = makeWorklet('dynamics-processor');
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
     // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer),
@@ -442,6 +485,7 @@ class AudioEngine {
           if (d?.type === 'dropout' && typeof d.count === 'number') {
             this.dropoutCount = d.count;
             this.onDropout?.(d.count);
+            telemetry.recordXrun('analyzer-processor');
           }
         };
       } catch { /* Port nicht verfügbar – Dropout-Telemetrie entfällt */ }
@@ -509,8 +553,14 @@ class AudioEngine {
     };
     // P2-4: effectNode als Insert zwischen toneShift und EQ hängen, sofern das
     // Worklet existiert; sonst direkter Fallback (toneShiftTilt → eqNode).
+    // A-Klasse Audio-Audit: dynamicsProcessor als zweiter Insert (effect → dynamics → eq).
     const effectReady = !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
-    if (effectReady) {
+    const dynamicsReady = !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
+    if (effectReady && dynamicsReady) {
+      connectSafe(this.toneShiftTilt, this.effectNode);
+      connectSafe(this.effectNode, this.dynamicsNode);
+      connectSafe(this.dynamicsNode, this.eqNode);
+    } else if (effectReady) {
       connectSafe(this.toneShiftTilt, this.effectNode);
       connectSafe(this.effectNode, this.eqNode);
     } else {
@@ -649,7 +699,17 @@ class AudioEngine {
   /** Globales Transport-Tempo setzen (clamped, z. B. für Sprach-/KI-Steuerung). */
   public setBpm(bpm: number): void {
     if (!Number.isFinite(bpm)) return;
-    Tone.Transport.bpm.value = Math.max(30, Math.min(300, bpm));
+    const value = Math.max(30, Math.min(300, bpm));
+    Tone.Transport.bpm.value = value;
+    // P2-2: BPM-Wechsel sample-genau im Clock-Worklet terminieren (AudioParam-
+    // Timeline statt setTimeout). Fallback: Worklet nicht aktiv → nur Tone.
+    try {
+      const bpmParam = (this.clockNode?.parameters as any)?.get?.('bpm');
+      if (bpmParam && typeof bpmParam.setValueAtTime === 'function') {
+        const now = this.ctx?.currentTime ?? Tone.context?.currentTime ?? 0;
+        bpmParam.setValueAtTime(value, now);
+      }
+    } catch { /* Clock-Worklet nicht verfügbar */ }
   }
 
   /** Setzt einen einzelnen Drum-Step. */
@@ -687,7 +747,7 @@ class AudioEngine {
       this.synthNotes = this.normalizeNotes(synthNotes, this.stepCount);
     }
     if (bpm && Number.isFinite(bpm) && bpm > 20 && bpm < 300) {
-      Tone.Transport.bpm.value = bpm;
+      this.setBpm(bpm);
     }
   }
 
@@ -732,7 +792,7 @@ class AudioEngine {
       }
 
       if (routingConfig.global) {
-        if (routingConfig.global.tempo) Tone.Transport.bpm.value = routingConfig.global.tempo;
+        if (routingConfig.global.tempo) this.setBpm(routingConfig.global.tempo);
         if (routingConfig.global.masterVolume !== undefined) this.masterVolume.volume.value = routingConfig.global.masterVolume;
       }
       if (routingConfig.tracks && Array.isArray(routingConfig.tracks)) {
@@ -766,6 +826,29 @@ class AudioEngine {
 
   /** Effekt-Engine (effectProcessor) steuern – Insert/Send. */
   private effectNode: AudioWorkletNode | null = null;
+
+  /** A-Klasse Audio-Audit: Echtzeit-Dynamik (Kompressor/Gate/DynEQ). */
+  private dynamicsNode: AudioWorkletNode | null = null;
+
+  /** Ist der dynamicsProcessor als Insert verdrahtet? */
+  public isDynamicsInsertReady(): boolean {
+    return !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
+  }
+
+  /** Dynamik-Parameter setzen (Kompressor/Gate/DynEQ). */
+  public setDynamicsParam(p: {
+    threshold?: number; ratio?: number; knee?: number; attack?: number; release?: number; makeup?: number;
+    gateEnabled?: boolean; gateThreshold?: number; gateRange?: number; gateHold?: number; gateAttack?: number; gateRelease?: number;
+    dynEqEnabled?: boolean; dynEqFreq?: number; dynEqGain?: number; dynEqQ?: number; dynEqThreshold?: number;
+  }) {
+    this.ensureInitialized();
+    try { this.dynamicsNode?.port?.postMessage({ ...p }); } catch { /* Worklet nicht verfügbar */ }
+  }
+
+  /** Sample-genaue Dynamik-Rampe (dynamicsProcessor automate). */
+  public automateDynamics(param: 'threshold' | 'makeup' | 'gateThreshold' | 'dynEqGain', value: number, rampTime = 0.05) {
+    try { this.dynamicsNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
+  }
 
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
   public isEffectInsertReady(): boolean {
@@ -908,6 +991,7 @@ class AudioEngine {
     this.ensureInitialized();
     if (this.activePluginIds.has(id)) return;
     this.activePluginIds.add(id);
+    this.idleDetector.activity(); // AM-E6-5: Plugin-Aktivierung = Audio-Aktivität
     this.setIdleSilence(false);
     const channels = pluginAudioChannels(id);
     if (channels.length > 0) {
@@ -956,6 +1040,9 @@ class AudioEngine {
     // Halter mixerMONK OFF, stoppen Main-Ausgabe + MainClock.
     if (id === 'mixer') this.stopMainAndClock();
     this.setIdleSilence(this.activePluginIds.size === 0);
+    // AM-E6-5: keine aktiven Plugins mehr → Idle-Timer für Context-Suspend starten.
+    if (this.activePluginIds.size === 0) this.idleDetector.arm();
+    else this.idleDetector.activity();
   }
 
   /** NEW-D1-2: Main-Ausgabe stummschalten und Transport-Clock stoppen. */
@@ -1649,6 +1736,7 @@ class AudioEngine {
   }
 
   public async play() {
+    this.idleDetector.activity(); // AM-E6-5: Play beendet Idle-Suspend
     if (this.playbackMode === 'v2') {
       this.graphPlayback.start();
       return;
@@ -1768,10 +1856,12 @@ class AudioEngine {
     this.synthWorklet?.disconnect();
     this.clockNode?.disconnect();
     this.effectNode?.disconnect();
+    this.dynamicsNode?.disconnect();
     this.itSynthNode = null;
     this.synthWorklet = null;
     this.clockNode = null;
     this.effectNode = null;
+    this.dynamicsNode = null;
     this.itSynthReady = false;
 
     this.initialized = false;
@@ -2072,7 +2162,7 @@ class AudioEngine {
     if (!isAudioGraphState(state)) return false;
     try {
       if (Number.isFinite(state.bpm) && state.bpm >= 20 && state.bpm <= 300) {
-        Tone.Transport.bpm.value = state.bpm;
+        this.setBpm(state.bpm);
       }
       this.swing = Math.max(0, Math.min(1, state.swing));
       this.gate = Math.max(0.05, Math.min(1, state.gate));
@@ -2512,6 +2602,82 @@ class AudioEngine {
 
   public getSpatialSetups(): SpatialSetup[] {
     return SPATIAL_SETUPS;
+  }
+
+  // ---------------------------------------------------------------------------
+  // P2-3/D10: 2.1-Crossover für den Master-Ausgang.
+  // Die DSP-Verarbeitung (Linkwitz-Riley 2. Ordnung, Sub < crossoverHz) ist in
+  // `src/core/output/crossover.ts` implementiert und durch
+  // `tests/crossover.test.ts` (Frequenzanalyse) verifiziert. Hier wird der
+  // Live-Graph umgeschaltet: 2.0 = Stereo-Durchgriff, 2.1 = Splitter/Filter/
+  // Merger auf L/R + LFE, sofern das Zielgerät ≥ 3 Kanäle hat (z. B. Xonar U7).
+  // ---------------------------------------------------------------------------
+  /** Master-Ausgabemodus: 2.0 (Stereo) oder 2.1 (Sub getrennt, Xonar U7). */
+  public stereoMode: '2.0' | '2.1' = '2.0';
+  private master21: { splitter: any; merger: any; hpL: any; hpR: any; lpSub: any; sum: any } | null = null;
+
+  public setStereoMode(mode: '2.0' | '2.1'): void {
+    this.stereoMode = mode === '2.1' ? '2.1' : '2.0';
+    this.applyMasterOutputRouting();
+  }
+
+  public getStereoMode(): '2.0' | '2.1' {
+    return this.stereoMode;
+  }
+
+  /** Baut den 2.1-Master-Ausgang (best effort, live verifiziert auf Xonar U7). */
+  private applyMasterOutputRouting(): void {
+    if (!this.initialized || !this.ctx || typeof this.ctx.createChannelSplitter !== 'function') return;
+    try {
+      const dest = this.ctx.destination as any;
+      const supportsLfe = typeof dest.maxChannelCount === 'number' && dest.maxChannelCount >= 3;
+
+      if (this.stereoMode === '2.0' || !supportsLfe) {
+        // Stereo-/Phantom-Betrieb: zurück auf den direkten Output-Gain-Pfad.
+        if (this.master21 && this.outputGain) {
+          try { this.master21.merger?.disconnect?.(dest); } catch { /* ignore */ }
+          this.master21 = null;
+          try { this.outputGain.connect(dest); } catch { /* ignore */ }
+        }
+        return;
+      }
+
+      if (this.master21 || !this.outputGain) return; // bereits verdrahtet
+      const splitter = this.ctx.createChannelSplitter(2);
+      const merger = this.ctx.createChannelMerger(3);
+      const hpL = this.ctx.createBiquadFilter();
+      const hpR = this.ctx.createBiquadFilter();
+      const lpSub = this.ctx.createBiquadFilter();
+      const sum = this.ctx.createGain();
+      const fc = 90;
+      for (const f of [hpL, hpR]) {
+        f.type = 'highpass';
+        f.frequency.value = fc;
+        f.Q.value = 0.7071;
+      }
+      lpSub.type = 'lowpass';
+      lpSub.frequency.value = fc;
+      lpSub.Q.value = 0.7071;
+      sum.gain.value = 0.5;
+
+      const wire = (from: any, to: any, outIdx = 0, inIdx = 0): void => {
+        try { from?.connect?.(to, outIdx, inIdx); } catch { /* ignore */ }
+      };
+      try { this.outputGain.disconnect(dest); } catch { /* ignore */ }
+      wire(this.outputGain, splitter);
+      wire(splitter, hpL, 0);
+      wire(splitter, hpR, 1);
+      wire(splitter, sum, 0);
+      wire(splitter, sum, 1);
+      wire(sum, lpSub);
+      wire(hpL, merger, 0, 0);
+      wire(hpR, merger, 0, 1);
+      wire(lpSub, merger, 0, 2);
+      wire(merger, dest);
+      this.master21 = { splitter, merger, hpL, hpR, lpSub, sum };
+    } catch (err) {
+      console.warn('2.1-Routing nicht verfügbar – Stereo-Fallback aktiv.', err);
+    }
   }
 
   /**

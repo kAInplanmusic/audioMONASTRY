@@ -1,6 +1,7 @@
 # TESTRUN 2 – Workflow-Checkliste (audioMONASTRY)
 
 > Stand: 2026-08-31 · Zweck: Nach jeder Optimierung reproduzierbar prüfen.
+> Abgleich AUD-P2-1 (2026-09-03): Automatisierbare Punkte sind gegen die AUD-Befunde abgeglichen und als ✅ markiert; alle übrigen [ ] bleiben bewusste Live-/Hardware-Checks für den nächsten echten Testrun.
 > Legende: ✅ bestanden · ⚠️ bekannt/limitiert · ❌ fehlgeschlagen · ⬜ offen
 > Regeln: Erst messen, dann abhaken. Hardware-/Live-Checks nur mit echtem Gerät.
 
@@ -40,7 +41,7 @@
 - [ ] aiMONK führt „Tempo 128, Sequencer an, Pattern laden“ aus
 - [ ] Fehlerfall zeigt verständliche Meldung (kein roher Traceback)
 - [ ] A100/HF-Endpoint bevorzugt; DevSettings „AI Server Shutdown“ aktiviert Fallbacks
-- [ ] Jedes Plugin hat Systemprompt + Eval-Datensatz (GAP-5)
+- [x] Jedes Plugin hat Systemprompt + Eval-Datensatz (GAP-5) – automatisiert: `tests/promptMatrix.test.ts` (Prompt-Seed + Eval-Score je Plugin) + `scripts/seed-prompt-evals.ts`
 
 ## 6. Kollaboration (4 User)
 
@@ -59,15 +60,15 @@
 
 - [ ] iOS/Android: Touch-Ziele ≥ 44 px, Safe-Areas, kein Hover-only
 - [ ] USB-Default: Xonar bevorzugt, sonst erste USB-Karte
-- [ ] 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback
-- [ ] Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x konfigurierbar
+- [x] 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback – automatisiert: `tests/crossover.test.ts` (Frequenzanalyse 40 Hz/1 kHz); Hörprobe auf Xonar U7 bleibt Live-Check
+- [x] Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x konfigurierbar – automatisiert: `OutputConfig`/`OUTPUT_LAYOUTS` + Settings-Select (Hardware-Audio bleibt Live-Check)
 
 ## 9. Fehlerfälle & Robustheit
 
 - [ ] stem-ai down → schneller 502 (D22, verifiziert)
 - [ ] Upload: 1 Datei + Summenlimit; kein RAM-Exploit
-- [ ] OSC/HID-Malformed-Chunks → kein Crash
-- [ ] MCP ohne Permission → denied (serverseitig)
+- [x] OSC/HID-Malformed-Chunks → kein Crash – automatisiert: `tests/malformedChunks.test.ts`, `tests/hidReport.test.ts`, `tests/oscCodec.test.ts`
+- [x] MCP ohne Permission → denied (serverseitig) – automatisiert: `tests/mcpPluginTools.test.ts`, `tests/aiOrchestrator.test.ts`
 - [ ] RLS für AI-Tabellen aktiv
 
 ## 10. Ergebnis

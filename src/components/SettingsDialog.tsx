@@ -373,6 +373,24 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           <p className="text-[10px] text-neutral-500 mt-1 font-mono">
             Modus: {settings.stereoMode} · Layout wird als Spatial-Bus-Konfiguration angewendet.
           </p>
+
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 mt-4 uppercase"><Volume2 className="w-3.5 h-3.5 text-cyan-500" /> 2.1-Crossover (Sub-Trennung)</label>
+          <select
+            className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
+            value={settings.stereoMode === '2.1' ? '2.1' : '2.0'}
+            onChange={(e) => {
+              const next = e.target.value === '2.1' ? '2.1' : 'STEREO';
+              update({ ...settings, stereoMode: next });
+              try { audioEngine.setStereoMode(e.target.value === '2.1' ? '2.1' : '2.0'); } catch { /* Audio nicht initialisiert */ }
+            }}
+            title="2.1: Sub < 90 Hz getrennt (Xonar U7); 2.0: Stereo/Phantom"
+          >
+            <option value="2.0">2.0 – Stereo (Phantom-Bass)</option>
+            <option value="2.1">2.1 – Sub getrennt (LFE, z. B. Xonar U7)</option>
+          </select>
+          <p className="text-[10px] text-neutral-500 mt-1">
+            Linkwitz-Riley-Crossover (90 Hz): L/R-Hochpass, Sub = LFE. DSP in <code>src/core/output/crossover.ts</code>, verifiziert durch <code>tests/crossover.test.ts</code>.
+          </p>
         </div>
 
         {/* DevSettings: AI Server Shutdown (NEW-D15-1) */}

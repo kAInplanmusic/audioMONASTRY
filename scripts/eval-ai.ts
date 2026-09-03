@@ -81,11 +81,17 @@ async function main(): Promise<void> {
       metrics: record.metrics,
     });
     const finished = evaluationStore.getRun(run.runId);
+    const runSummary = {
+      avgScore: finished?.avgScore ?? 0,
+      count: finished?.count ?? 0,
+      durationMs: finished?.durationMs ?? 0,
+      errors: finished?.errors ?? 0,
+    };
     runs.push({
       run_id: finished?.runId ?? run.runId,
       plugin_id: pluginId,
       status: finished?.status ?? 'FAIL',
-      summary: { avgScore: finished?.avgScore ?? 0, count: finished?.count ?? 0 },
+      summary: runSummary,
     });
 
     // P3-3: Bei konfiguriertem Supabase in die DB schreiben (sonst No-Op).
@@ -104,7 +110,7 @@ async function main(): Promise<void> {
       runId: finished?.runId ?? run.runId,
       pluginId,
       status: finished?.status ?? 'FAIL',
-      summary: { avgScore: finished?.avgScore ?? 0, count: finished?.count ?? 0 },
+      summary: runSummary,
     });
   }
 
@@ -112,9 +118,11 @@ async function main(): Promise<void> {
   writeFileSync(path.join(outDir, 'ai-eval-runs.json'), JSON.stringify(runs, null, 2));
 
   const failed = runs.filter((r) => r.status === 'FAIL').length;
+  const totalDurationMs = runs.reduce((sum, r) => sum + ((r.summary as { durationMs?: number }).durationMs ?? 0), 0);
+  const totalErrors = runs.reduce((sum, r) => sum + ((r.summary as { errors?: number }).errors ?? 0), 0);
   console.log(
     `eval:ai ok – ${report.summary.count} Cases, Accuracy ${(report.summary.accuracy * 100).toFixed(0)} %, ` +
-    `${runs.length} Plugin-Runs (${failed} FAIL) → test-results/ai-eval*.json`,
+    `${runs.length} Plugin-Runs (${failed} FAIL, ${totalErrors} Errors, ${totalDurationMs} ms gesamt) → test-results/ai-eval*.json`,
   );
   if (failed > 0) process.exitCode = 1;
 }

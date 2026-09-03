@@ -26,6 +26,10 @@ export interface EvalRunSummary {
   count: number;
   avgScore: number;
   createdAt: number;
+  /** P3-3: Laufzeit des Runs in ms (Score-Report-Anforderung „Dauer“). */
+  durationMs?: number;
+  /** P3-3: Anzahl der Records unterhalb des Mindest-Scores („Fehler“). */
+  errors?: number;
 }
 
 function makeId(prefix: string): string {
@@ -70,10 +74,13 @@ export class EvaluationStore {
   finishRun(runId: string, minScore = 4): EvalRunSummary {
     const run = this.runs.get(runId);
     if (!run) throw new Error(`unknown run: ${runId}`);
-    const avg = this.averageScore(run.pluginId);
-    run.count = this.listByPlugin(run.pluginId).length;
+    const items = this.listByPlugin(run.pluginId);
+    const avg = items.length > 0 ? this.averageScore(run.pluginId) : 0;
+    run.count = items.length;
     run.avgScore = Number(avg.toFixed(3));
     run.status = avg >= minScore ? 'PASS' : 'FAIL';
+    run.durationMs = Math.max(0, Date.now() - run.createdAt);
+    run.errors = items.filter((e) => e.score < minScore).length;
     this.runs.set(runId, run);
     return run;
   }
