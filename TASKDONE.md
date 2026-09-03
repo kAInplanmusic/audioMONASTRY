@@ -18,6 +18,14 @@
 - [x] **Tests:** `tests/portalWorkerSnapshots.test.ts` (6 Tests: Snapshot-Image-Wahl, cloud-init-Fallback, Refresh + Retention, Auth-Pflicht, Listing); `npm run verify` → **483 Tests + Boundary-Scan 0** grün.
 - [ ] **Prüfpunkt (bleibt offen):** Flotten-Start (wake→ready) vorher/nachher messen; Ziel < 90 s – Live-Messung beim nächsten Flotten-Start.
 
+### OPS-Load-Balancer – LB11-Entscheidung dokumentiert (2026-09-03)
+
+- [x] **Trigger:** LB11 erst ab **≥ 2 App-Knoten** (Multi-Session, > 4 User/Session, HA/Zero-Downtime-Deploys) – festgehalten in `docs/SERVER_FLEET.md`.
+- [x] **Architektur:** Cloudflare → Hetzner LB11 (sticky Sessions für WebSocket) → `app-1`/`app-2`; Socket.io-Räume über Redis-Adapter (`REDIS_URL`); Mediasoup/SFU-UDP läuft **nicht** über den LB.
+- [x] **Kosten:** 0,012 €/h netto, Deckel 7,49 €/Monat netto (Europa, Stand 04/2026), 20 TB Traffic inkl.; stündliche Abrechnung → löschen = 0 €.
+- [x] **Nebenbefund behoben:** kaputte Markdown-Tabelle im Kostenabschnitt von `docs/SERVER_FLEET.md` (Summenzeile stand hinter dem Hinweis-Blockquote).
+- [ ] **Prüfpunkt (bleibt offen):** 2 App-Knoten hinter LB, 4-User-E2E + Failover-Test – Live-Schritt.
+
 ### P1-2 Design-Tokens / CSS-Variablen-Themes je Plugin (2026-09-02, D8)
 
 - [x] **Zentrale Tokens:** `src/index.css` – `--monk-accent`/`--monk-accent-rgb`/`--monk-glow-accent` im `:root` (Brand-Default) + `.monk-theme-<id>`-Klassen für alle **21** Plugins; keine plugin-lokalen Hex-Werte.
