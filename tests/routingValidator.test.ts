@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateRouting } from '../src/utils/routingValidator';
-import { validateRoutingAgainstGraph } from '../src/core/routing/validateRouting';
+import { findUnusedGraphPaths, validateRoutingAgainstGraph } from '../src/core/routing/validateRouting';
 
 const baseConfig = {
   tracks: [
@@ -85,5 +85,33 @@ describe('P2-4: validateRoutingAgainstGraph (routing.json vs. Audio-Graph)', () 
       ],
     };
     expect(validateRoutingAgainstGraph(routing, graph)).toContain("doppelte Verbindung 'channel1->bus-a' in routing.json");
+  });
+});
+
+describe('P2-4: findUnusedGraphPaths (kein ungenutzter/doppelter Pfad)', () => {
+  it('meldet nichts für einen sauber verdrahteten Graph', () => {
+    expect(
+      findUnusedGraphPaths({
+        nodes: [{ id: 'channel1' }, { id: 'bus-a' }, { id: 'masterBus' }],
+        connections: [
+          { source: 'channel1', target: 'bus-a' },
+          { source: 'bus-a', target: 'masterBus' },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it('erkennt ungenutzte Nodes, unbekannte Endpunkte und doppelte Pfade', () => {
+    const problems = findUnusedGraphPaths({
+      nodes: [{ id: 'channel1' }, { id: 'bus-a' }, { id: 'waise' }],
+      connections: [
+        { source: 'channel1', target: 'bus-a' },
+        { source: 'channel1', target: 'bus-a' },
+        { source: 'channel1', target: 'unbekannt' },
+      ],
+    });
+    expect(problems).toContain("doppelter Verbindungs-Pfad 'channel1->bus-a' im Audio-Graph");
+    expect(problems).toContain("Verbindung 'channel1->unbekannt' zeigt auf unbekannten Ziel-Node 'unbekannt'");
+    expect(problems).toContain("ungenutzter Node 'waise' im Audio-Graph (keine Verbindung)");
   });
 });

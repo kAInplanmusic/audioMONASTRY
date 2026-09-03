@@ -1074,3 +1074,24 @@ Lücken geschlossen und mit automatisierten Prüfpunkten hinterlegt.
 die Linux-Screenshot-Baselines in `visual.spec.ts` – Letztere müssen im CI-Referenz-Container
 neu erzeugt werden (Studio-Baseline zeigt jetzt korrekt kein offenes mixerMONK-Terminal).
 Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
+
+---
+
+## Kleine schnelle TODOs (2026-09-03)
+
+**Quelle:** MASTER_TODO.md – P2-5, P2-4 (automatisierter Prüfpunkt), CI-Gates.
+
+- [x] **P2-5 React.memo-Audit:** `DropTerminal.tsx` (inkl. `DropTerminalContent`) auf
+  `React.memo(function …)` umgestellt – `npm run check:memo` ist grün
+  (23 Terminal-/Panel-Komponenten geprüft).
+- [x] **CI-Gate `check:memo`:** In `.github/workflows/build.yml` als Schritt
+  „React.memo-Audit (Terminals)" nach dem Bundle-Budget verdrahtet, damit die
+  Regel nicht wieder still verletzt wird.
+- [x] **P2-4 Prüfpunkt (automatisiert):** `findUnusedGraphPaths()` in
+  `src/core/routing/validateRouting.ts` ergänzt (ungenutzte Nodes, Verbindungen auf
+  unbekannte Endpunkte, doppelte Kanten) + Tests in `tests/routingValidator.test.ts`;
+  zusammen mit `validateRoutingAgainstGraph` ist „Graph-Validierung grün, kein
+  ungenutzter/doppelter Verbindungs-Pfad" jetzt vollständig automatisiert.
+
+**Nachweis:** `npm run verify` (tsc + Vitest + Interface-Boundary-Scan) grün,
+`npm run check:memo` grün.

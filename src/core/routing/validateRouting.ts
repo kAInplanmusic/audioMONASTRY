@@ -47,3 +47,31 @@ export function validateRoutingAgainstGraph(routing: RoutingJsonLike, graph: Gra
   }
   return errors;
 }
+
+/**
+ * P2-4-Prüfpunkt: findet ungenutzte bzw. doppelte Pfade im Audio-Graph selbst –
+ * Knoten ohne jede Verbindung, Verbindungen auf unbekannte Knoten und
+ * mehrfach vorhandene Kanten.
+ */
+export function findUnusedGraphPaths(graph: GraphStateLike): string[] {
+  const problems: string[] = [];
+  const nodeIds = new Set((graph.nodes ?? []).map((n) => n.id));
+  const connected = new Set<string>();
+  const seen = new Set<string>();
+
+  for (const c of graph.connections ?? []) {
+    const key = `${c.source}->${c.target}`;
+    if (seen.has(key)) problems.push(`doppelter Verbindungs-Pfad '${key}' im Audio-Graph`);
+    seen.add(key);
+    if (!nodeIds.has(c.source)) problems.push(`Verbindung '${key}' zeigt auf unbekannten Quell-Node '${c.source}'`);
+    if (!nodeIds.has(c.target)) problems.push(`Verbindung '${key}' zeigt auf unbekannten Ziel-Node '${c.target}'`);
+    connected.add(c.source);
+    connected.add(c.target);
+  }
+
+  for (const id of nodeIds) {
+    if (!connected.has(id)) problems.push(`ungenutzter Node '${id}' im Audio-Graph (keine Verbindung)`);
+  }
+
+  return problems;
+}
