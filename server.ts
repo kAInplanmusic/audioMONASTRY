@@ -925,7 +925,7 @@ app.post('/api/library/search', async (req, res) => {
   const max = Math.max(1, Math.min(50, Number(limit) || 10));
 
   // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst lokaler Embedding-Pfad).
-  const supabaseConfigured = !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE);
+  const supabaseConfigured = !!(process.env.SUPABASE_URL && (process.env.SUPABASE_LEGACY_PAT || process.env.SUPABASE_SERVICE_ROLE));
   if (supabaseConfigured) {
     const matches = await aiPersistence.rpcMatchSamples(embedText(q), max);
     if (matches.length > 0) {
