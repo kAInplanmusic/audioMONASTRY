@@ -15,18 +15,18 @@ values ('005', 'Semantische Bibliotheks-Suche: sample_embeddings + match_samples
 on conflict (version) do nothing;
 
 -- pgvector sicherstellen (falls Migration 004 noch nicht gelaufen ist)
-create extension if not exists vector with schema extensions;
+create extension if not exists vector;
 
 -- Embedding-Tabelle (256-dim Vektor, pgvector im extensions-Schema)
 create table if not exists public.sample_embeddings (
   id         uuid primary key default gen_random_uuid(),
   sample_id  text not null unique,
-  embedding  extensions.vector(256) not null
+  embedding  vector(256) not null
 );
 
 create index if not exists sample_embeddings_hnsw_idx
   on public.sample_embeddings
-  using hnsw (embedding extensions.vector_cosine_ops);
+  using hnsw (embedding vector_cosine_ops);
 
 alter table public.sample_embeddings enable row level security;
 
@@ -36,7 +36,7 @@ create policy "service_all_sample_embeddings" on public.sample_embeddings
 
 -- match_samples-RPC: Kosinus-Ähnlichkeit (<=> = cosine distance)
 create or replace function public.match_samples(
-  query_embedding extensions.vector,
+  query_embedding vector,
   match_count integer default 10
 )
 returns table (sample_id text, similarity double precision)
@@ -50,7 +50,7 @@ as $$
   limit match_count;
 $$;
 
-revoke all on function public.match_samples(extensions.vector, integer) from public;
-grant execute on function public.match_samples(extensions.vector, integer) to service_role;
+revoke all on function public.match_samples(vector, integer) from public;
+grant execute on function public.match_samples(vector, integer) to service_role;
 
 commit;
