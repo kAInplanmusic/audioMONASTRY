@@ -1,17 +1,26 @@
 /**
  * audioMONASTRY · Plugin-Kommando-Registry (Voice-/KI-/MOA-Steuerung)
  * ===================================================================
- * Verdrahtet ALLE 17 Plugins mit dem VoiceControlService:
+ * Verdrahtet ALLE 21 Plugins mit dem VoiceControlService:
  *   - transport/mcp/drum/mixer/spatial/instrument/fx/eq/dsp/synth/
  *     voice/library/controller haben echte Engine-Handler,
- *   - sampler/stem/recording/mastering/visualizer/performance melden
- *     ihren Status (UI-only, werden in Folgeschritten verdrahtet).
+ *   - sampler/stem/recording/mastering/performance/sound/drop/ai haben
+ *     echte Handler (Trigger/Events/Status),
+ *   - zusätzlich gibt es für JEDE Plugin-ID die generischen Kommandos
+ *     activate/deactivate/route (über pluginAudioRouter, P3-2).
  *
  * Die Audio-Engine/Backends werden bewusst lazy importiert, damit die
  * Core-Module ohne Tone/Web-Audio laden (Interface-Boundary-Regel).
  */
 import { voiceControlService } from './VoiceControlService';
 import { controlBus } from '../events/ControlBus';
+
+/** Verbindliche 21 Plugin-IDs (P3-2: Registry muss alle abdecken). */
+export const PLUGIN_COMMAND_IDS: readonly string[] = Object.freeze([
+  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
+  'spatial', 'recording', 'performance', 'ai',
+]);
 
 let registered = false;
 
@@ -211,6 +220,75 @@ export function registerDefaultVoiceCommands(): void {
     performanceMonitor.stop();
     performanceMonitor.start();
   }, ['reset', 'performance', 'monitor']);
+
+  // --- masterplayerMONK (Transport-Alias, Plugin 0) ----------------------------
+  voiceControlService.registerPluginCommand('masterplayer', 'play', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    await audioEngine.play();
+  }, ['play', 'start']);
+  voiceControlService.registerPluginCommand('masterplayer', 'stop', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.stop();
+  }, ['stop', 'halt']);
+  voiceControlService.registerPluginCommand('masterplayer', 'tempo', async (ctx) => {
+    const bpm = Number(ctx.intent.parameters.bpm);
+    if (!Number.isFinite(bpm)) return;
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.setBpm(bpm);
+  }, ['tempo', 'bpm']);
+
+  // --- soundMONK ---------------------------------------------------------------
+  voiceControlService.registerPluginCommand('sound', 'trigger', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.triggerEvent('channel8', 0.8);
+  }, ['trigger', 'sound', 'pad', 'spiele']);
+
+  // --- dropMONK ----------------------------------------------------------------
+  voiceControlService.registerPluginCommand('drop', 'pattern', async (ctx) => {
+    const preset = String(ctx.intent.parameters.preset ?? 'build');
+    controlBus.emit('monk:drop-pattern', { preset });
+  }, ['drop', 'pattern', 'build', 'clip']);
+
+  // --- aiMONK ------------------------------------------------------------------
+  voiceControlService.registerPluginCommand('ai', 'plan', async (ctx) => {
+    const text = String(ctx.intent.parameters.text ?? ctx.intent.raw ?? '');
+    if (text) controlBus.emit('monk:ai-plan', { text });
+  }, ['plan', 'ki', 'ai', 'mache']);
+
+  // --- P3-2: generische Router-Kommandos für ALLE 21 Plugin-IDs ----------------
+  // Aktivierung/Routing/Parameter laufen über den PluginAudioRouter (OFF/An,
+  // Ziel-Kanal, Parameter). Dadurch ist die Registry vollständig mit dem
+  // Audio-Router verdrahtet – kein Plugin bleibt ohne Aktivierungs-Kommando.
+  for (const id of PLUGIN_COMMAND_IDS) {
+    voiceControlService.registerPluginCommand(id, 'activate', async () => {
+      const { activatePlugin } = await import('../../core/pluginAudioRouter');
+      activatePlugin(id, 'AUTO_AI');
+    }, ['an', 'aktivieren', 'on', 'start']);
+    voiceControlService.registerPluginCommand(id, 'deactivate', async () => {
+      const { deactivatePlugin } = await import('../../core/pluginAudioRouter');
+      deactivatePlugin(id);
+    }, ['aus', 'deaktivieren', 'off', 'stop']);
+    voiceControlService.registerPluginCommand(id, 'route', async () => {
+      const { getPluginRoute } = await import('../../core/pluginAudioRouter');
+      const route = getPluginRoute(id);
+      controlBus.emit('monk:plugin-route', { pluginId: id, route });
+    }, ['route', 'ziel', 'kanal']);
+  }
+
+  // --- mixerMONK: Kanal-Parameter (P3-2) ----------------------------------------
+  const CHANNEL_IDS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'];
+  voiceControlService.registerPluginCommand('mixer', 'channel', async (ctx) => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    const channel = String(ctx.intent.parameters.channel ?? 'channel1');
+    if (!CHANNEL_IDS.includes(channel)) return;
+    const track = channel as 'channel1' | 'channel2' | 'channel3' | 'channel4' | 'channel5' | 'channel6' | 'channel7' | 'channel8';
+    if (typeof ctx.intent.parameters.gain === 'number') {
+      audioEngine.setChannelGain(track, Math.max(0, Math.min(1.5, Number(ctx.intent.parameters.gain))));
+    }
+    if (typeof ctx.intent.parameters.pan === 'number') {
+      audioEngine.setChannelPan(track, Math.max(-1, Math.min(1, Number(ctx.intent.parameters.pan))));
+    }
+  }, ['kanal', 'channel', 'gain', 'pan', 'volume']);
 
   // --- UI-only Plugins (Status-Meldung, Folgeschritte verdrahten) ---------------
   for (const id of ['masterplayer', 'stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {

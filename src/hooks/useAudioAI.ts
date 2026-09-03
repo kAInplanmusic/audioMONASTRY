@@ -1,6 +1,17 @@
-import axios from 'axios';
 import { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config/runtime';
+
+/** fetch mit Timeout (ersetzt axios – Bundle-Diät P2-5). */
+async function fetchJson(url: string, init: RequestInit = {}, timeoutMs = 10_000): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const useAIStatus = () => {
     const [isOnline, setIsOnline] = useState<boolean | null>(null);
@@ -8,7 +19,7 @@ export const useAIStatus = () => {
     useEffect(() => {
         const checkStatus = async () => {
             try {
-                await axios.get(`${API_BASE_URL}/health`, { timeout: 2000 });
+                await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) });
                 setIsOnline(true);
             } catch (e) {
                 setIsOnline(false);
@@ -119,11 +130,11 @@ export const useAudioAI = () => {
     // Browser-Web-Speech zurück (kein Cloud-TTS nötig).
     try {
       const data = await fetchWithRetry(async () => {
-          const response = await axios.post(`${API_BASE_URL}/generate-voice`, {
-            text,
-            voicePreset
+          return fetchJson(`${API_BASE_URL}/generate-voice`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, voicePreset }),
           });
-          return response.data;
       });
 
       const status: string = data?.status ?? 'local';

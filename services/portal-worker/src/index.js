@@ -25,6 +25,11 @@ const FLEET = [
 
 const LOCATION = 'fsn1';
 const IMAGE = 'ubuntu-24.04';
+// OPS-Snapshot: Basis-Image-Name, von dem die Rollen-Snapshots abgeleitet werden.
+// Snapshots kosten ~0,01 €/GB/Monat (Cent-Beträge) und beschleunigen den
+// Flotten-Start deutlich (kein Docker-Build/cloud-init-Bootstrap je Knoten).
+const SNAPSHOT_PREFIX = 'samplemonk-snapshot-';
+const SNAPSHOT_RETENTION = 2; // je Rolle die letzten 2 Snapshots behalten
 const REPO_URL = 'https://github.com/kAInplanmusic/audioMONASTRY.git';
 const PORTAL_DOMAIN = 'anunnakitools.de';
 const ORIGIN_HOST = 'origin.anunnakitools.de';
@@ -66,6 +71,107 @@ async function fleetServers(env) {
     if (FLEET.some((f) => f.name === s.name)) map[s.name] = s;
   }
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// OPS-Snapshot: Rollen-Snapshots für schnellen Flotten-Start
+// ---------------------------------------------------------------------------
+function isFleetSnapshot(img) {
+  return (
+    img?.labels?.app === 'audioMONASTRY' ||
+    String(img?.name ?? '').startsWith(SNAPSHOT_PREFIX) ||
+    String(img?.description ?? '').startsWith(SNAPSHOT_PREFIX)
+  );
+}
+
+function snapshotRoleOf(img) {
+  return img?.labels?.role ?? null;
+}
+
+async function listSnapshots(env) {
+  const data = await hzGet(env, '/images?type=snapshot&per_page=100&sort=created:desc');
+  return (data.images ?? []).filter(isFleetSnapshot);
+}
+
+/** Neuesten verfügbaren Snapshot einer Rolle finden (oder null). */
+function findSnapshot(images, role) {
+  return (
+    images.find(
+      (img) =>
+        img.status === 'available' &&
+        snapshotRoleOf(img) === role &&
+        (String(img.name ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`) ||
+          String(img.description ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`)),
+    ) ?? null
+  );
+}
+
+async function createServerSnapshot(env, server, role) {
+  const payload = {
+    description: `${SNAPSHOT_PREFIX}${role}-${new Date().toISOString().slice(0, 10)}`,
+    type: 'snapshot',
+    labels: { app: 'audioMONASTRY', role, 'snapshot-of': server.name },
+  };
+  const result = await hzPost(env, `/servers/${server.id}/actions/create_image`, payload);
+  return {
+    server: server.name,
+    role,
+    description: payload.description,
+    action: result.action?.id ?? null,
+    error: result.__http ? `HTTP ${result.__http}` : null,
+  };
+}
+
+/**
+ * Auto-Retention: pro Rolle nur die letzten `keepPerRole` Snapshots behalten.
+ * Ältere Snapshots werden gelöscht (Snapshots kosten ~0,01 €/GB/Monat).
+ */
+async function pruneSnapshots(env, keepPerRole = SNAPSHOT_RETENTION) {
+  const images = await listSnapshots(env);
+  const byRole = {};
+  for (const img of images) {
+    const role = snapshotRoleOf(img);
+    if (!role) continue;
+    (byRole[role] ??= []).push(img);
+  }
+  const deleted = [];
+  for (const [role, list] of Object.entries(byRole)) {
+    const sorted = list.sort((a, b) => String(b.created ?? '').localeCompare(String(a.created ?? '')));
+    for (const img of sorted.slice(keepPerRole)) {
+      const res = await hzDelete(env, `/images/${img.id}`);
+      deleted.push({
+        image: img.id,
+        role,
+        description: img.description ?? img.name ?? '',
+        ok: !res.__http,
+        ...(res.__http ? { http: res.__http } : {}),
+      });
+    }
+  }
+  return deleted;
+}
+
+async function refreshSnapshots(env) {
+  const servers = await fleetServers(env);
+  const running = Object.values(servers).filter((s) => s.status === 'running');
+  if (running.length === 0) {
+    return { ok: false, message: 'Keine laufenden Flotten-Server – Snapshots werden von laufenden Servern erzeugt.' };
+  }
+
+  const created = [];
+  for (const server of running) {
+    const role = server.labels?.role ?? null;
+    if (!role) continue;
+    created.push(await createServerSnapshot(env, server, role));
+  }
+
+  const deleted = await pruneSnapshots(env);
+  return {
+    ok: created.length > 0,
+    created,
+    deleted,
+    retention: { keepPerRole: SNAPSHOT_RETENTION, hint: 'Letzte 2 Snapshots je Rolle bleiben erhalten.' },
+  };
 }
 
 async function ensureSshKey(env) {
@@ -123,9 +229,52 @@ function firewallRules(role, cloudflareIps = []) {
 
 async function ensureFirewall(env, name, rules) {
   const list = await hzGet(env, `/firewalls?name=${encodeURIComponent(name)}`);
-  if ((list.firewalls ?? []).length > 0) return list.firewalls[0].id;
+  if ((list.firewalls ?? []).length > 0) {
+    // Firewall existiert bereits → Regeln aktualisieren (Cloudflare-IP-Listen
+    // ändern sich; sonst kann Cloudflare den Origin nicht mehr erreichen).
+    const fw = list.firewalls[0];
+    await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
+    return fw.id;
+  }
   const created = await hzPost(env, '/firewalls', { name, rules });
   return created.firewall?.id ?? null;
+}
+
+/**
+ * Synchronisiert den DNS-Record `origin.anunnakitools.de` auf die aktuelle
+ * app-1-IP. Die Hetzner-IPs wechseln bei jedem Wake; der Worker-Proxy nutzt
+ * ORIGIN_HOST als resolveOverride, daher muss der DNS-Record stimmen.
+ */
+async function syncOriginDns(env, appIp) {
+  const token = (env.CLOUDFLARE_API_TOKEN ?? '').trim();
+  if (!token) return { ok: false, message: 'CLOUDFLARE_API_TOKEN fehlt im Worker' };
+  const headers = { Authorization: `Bearer ${token}` };
+  const zonesRes = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${PORTAL_DOMAIN}`, { headers });
+  const zones = await zonesRes.json();
+  const zoneId = zones.result?.[0]?.id;
+  if (!zoneId) return { ok: false, message: 'Cloudflare-Zone nicht gefunden' };
+  const recsRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?name=${ORIGIN_HOST}`, { headers });
+  const recs = await recsRes.json();
+  const rec = recs.result?.[0];
+  if (!rec) return { ok: false, message: `DNS-Record ${ORIGIN_HOST} fehlt` };
+  const updRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records/${rec.id}`, {
+    method: 'PATCH',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: appIp }),
+  });
+  const upd = await updRes.json();
+  return { ok: !!upd.success, recordId: rec.id, content: appIp };
+}
+
+/** Aktualisiert die app-Firewall auf die aktuellen Cloudflare-IP-Ranges. */
+async function syncAppFirewall(env) {
+  const cfIps = await cloudflareIpRanges();
+  const list = await hzGet(env, '/firewalls?name=samplemonk-app');
+  const fw = (list.firewalls ?? [])[0];
+  if (!fw) return { ok: false, message: 'app-Firewall nicht gefunden' };
+  const rules = firewallRules('app', cfIps);
+  const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
+  return { ok: Array.isArray(result.actions), appFirewallId: fw.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -337,8 +486,7 @@ async function computeStatus(env) {
     if (ip) {
       try {
         // Health-Check über die Domain (Host/SNI = Domain, Origin-Zertifikat)
-        // und resolveOverride direkt auf die Origin-IP – kein Host=IP,
-        // kein HTTP-Redirect auf https://IP.
+        // und resolveOverride über den origin-Host (DNS zeigt auf app-1).
         const healthUrl = `https://${PORTAL_DOMAIN}/api/health`;
         const res = await fetch(healthUrl, { cf: { resolveOverride: ORIGIN_HOST } });
         if (res.ok) {
@@ -371,32 +519,65 @@ async function startFleet(env) {
 
   const sshKeyId = await ensureSshKey(env);
   const cfIps = await cloudflareIpRanges();
+  const snapshots = await listSnapshots(env);
   const created = [];
+  const usedSnapshots = {};
+  const fallbackRoles = [];
+  const failed = [];
 
   for (const item of FLEET) {
     const fwName = `samplemonk-${item.role}`;
     const fwId = await ensureFirewall(env, fwName, firewallRules(item.role, item.role === 'app' ? cfIps : []));
+    // OPS-Snapshot: zuerst das Rollen-Snapshot-Image verwenden (schneller
+    // Start, kein cloud-init-Bootstrap). Fallback: Basis-Image + cloud-init.
+    const snap = findSnapshot(snapshots, item.role);
     const payload = {
       name: item.name,
       server_type: item.type,
-      image: IMAGE,
+      image: snap ? snap.id : IMAGE,
       location: LOCATION,
       firewalls: fwId ? [{ firewall: fwId }] : [],
-      user_data: userData(env, item.role),
       labels: { app: 'audioMONASTRY', 'managed-by': 'portal-worker', role: item.role },
     };
+    if (snap) {
+      usedSnapshots[item.role] = { image: snap.id, description: snap.description ?? snap.name ?? '' };
+    } else {
+      payload.user_data = userData(env, item.role);
+      fallbackRoles.push(item.role);
+    }
     if (sshKeyId) payload.ssh_keys = [sshKeyId];
     const result = await hzPost(env, '/servers', payload);
-    if (result.server?.id) created.push(item.name);
+    if (result.server?.id) {
+      created.push(item.name);
+    } else {
+      failed.push({
+        name: item.name,
+        role: item.role,
+        error: result.error?.message ?? result.message ?? null,
+        http: result.__http ?? (result.error ? (result.error.code ?? null) : null),
+      });
+    }
   }
 
-  // FLEET-WIRING: Sobald alle Server angelegt sind (app-1-IP bekannt), die
-  // Firewalls für master/ai um app-IP-beschränkte Service-Ports ergänzen.
+  // FLEET-WIRING: Auf die app-1-IP warten (bis ~30 s), dann DNS + Firewalls
+  // synchronisieren (master/ai-Ports, origin-DNS, app-Firewall).
   if (created.length === FLEET.length) {
-    try { await openFleetPorts(env); } catch (e) { console.warn('[portal] openFleetPorts:', e?.message ?? e); }
+    try {
+      let appIp = '';
+      for (let i = 0; i < 15 && !appIp; i++) {
+        const m = await fleetServers(env);
+        appIp = m['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+        if (!appIp) await new Promise((r) => setTimeout(r, 2000));
+      }
+      await syncAppFirewall(env);
+      if (appIp) await syncOriginDns(env, appIp);
+      await openFleetPorts(env);
+    } catch (e) {
+      console.warn('[portal] fleet-wiring:', e?.message ?? e);
+    }
   }
 
-  return { started: true, created };
+  return { started: true, created, usedSnapshots, fallbackRoles, failed };
 }
 
 /**
@@ -681,7 +862,37 @@ export default {
       // verdrahten (master-player 8000, stem-ai 8000, Ollama 11434).
       if (url.pathname === '/api/wire-fleet' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
-        return json(await openFleetPorts(env));
+        const servers = await fleetServers(env);
+        const appIp = servers['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+        const appFirewall = await syncAppFirewall(env);
+        const dns = appIp ? await syncOriginDns(env, appIp) : { ok: false, message: 'app-1 hat noch keine IP.' };
+        const ports = await openFleetPorts(env);
+        return json({ appFirewall, dns, ports });
+      }
+
+      // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot
+      // (POST /servers/{id}/actions/create_image) und löscht alte Snapshots
+      // (Auto-Retention: letzte 2 je Rolle). Nur mit Session-Cookie.
+      if (url.pathname === '/api/refresh-snapshots' && request.method === 'POST') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        return json(await refreshSnapshots(env));
+      }
+
+      // OPS-Snapshot: aktuelle Rollen-Snapshots auflisten (Session-Cookie).
+      if (url.pathname === '/api/snapshots') {
+        if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
+        const images = await listSnapshots(env);
+        return json({
+          snapshots: images.map((img) => ({
+            id: img.id,
+            name: img.name ?? '',
+            description: img.description ?? '',
+            created: img.created ?? '',
+            status: img.status ?? '',
+            disk_size: img.disk_size ?? null,
+            role: snapshotRoleOf(img),
+          })),
+        });
       }
 
       // Unbekannte /api/*-Routen NICHT blockieren – sie gehören der App
@@ -699,8 +910,8 @@ export default {
     const app = servers['samplemonk-app-1'];
     if (app && app.status === 'running' && app.public_net?.ipv4?.ip) {
       // Proxy mit ORIGINAL-URL (Host + SNI = Domain, kein Host=IP → kein
-      // Cloudflare-Fehler 1003). resolveOverride lenkt die Verbindung auf die
-      // Hetzner-Origin-IP, ohne Host/SNI zu verändern.
+      // Cloudflare-Fehler 1003). resolveOverride über den origin-Host
+      // (DNS wird bei jedem Wake auf die aktuelle app-1-IP synchronisiert).
       const proxied = new Request(request.url, request);
       return fetch(proxied, { cf: { resolveOverride: ORIGIN_HOST } });
     }
