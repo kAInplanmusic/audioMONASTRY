@@ -74,7 +74,7 @@
 ### NEW-MONK-5 instrumentMONK – Spiel-UI
 
 - [x] Pad-/Klavier-Eingabe als Standard-Spielansicht → TASKDONE.
-- [ ] Echtbild-UI mit Touch (spielbares Instrumentenbild, GarageBand-artig) je Instrument.
+- [x] Echtbild-UI mit Touch (spielbares Instrumentenbild, GarageBand-artig) je Instrument → umgesetzt 2026-09-03: `src/components/instrument/GarageBandInstrumentView.tsx` (10 Instrumenten-Kacheln mit `public/`-Bildern: Schlagzeug, Gitarre, Bass, Klavier, Cello, Streicher, Pads, Glocken, Drum-Machine, Pad-Sequenzer; Spielfläche mit Tasten-/Saiten-/Drum-Zonen, Pointer-Touch, Pressed-States, Audio-Preview), integriert als Spielansicht „ECHTBILD“ im InstrumentsTerminal; `tests/garageBandView.test.tsx` (3) grün → TASKDONE.
 
 ### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
 
@@ -433,9 +433,9 @@
 
 - [ ] **[SAMPLER][LIBRARY] Orchestrale CC0-Library bündeln** (Referenz: VSCO 2 Community Edition, CC0). Target: `public/data/`, `SampleContext`/`PRESET_SAMPLE_DATABASE`. Integration: kleine Subset-Auswahl (Strings/Brass/Woodwinds) als OPFS-Presets; Metadaten in `AudioSample`. License: VSCO 2 CE = CC0 (unproblematisch); VPO/Sonatina/Berlin = `LICENSE_REVIEW_REQUIRED`, nicht ungeprüft bündeln.
 
-- [ ] **[SYNTH] Phase-Distortion-Oszillator** (Referenz: Nakst Regency). Target: `synthProcessor.js` (`osc: 'pd'`). Integration: Casio-CZ-artige Phasenverzerrung als Oszillator-Modus. License: Referenz.
+- [x] **[SYNTH] Phase-Distortion-Oszillator** (Referenz: Nakst Regency) → umgesetzt 2026-09-03: `src/core/instrument/phaseDistortion.ts` (piecewise-lineares Casio-CZ-Reshaping, amount-geclampt) + `synthProcessor`-Waveform `osc: 'pd'`; `tests/phaseDistortion.test.ts` (3) grün → TASKDONE.
 
-- [ ] **[SAMPLER] EXS24/SF2/WAV-ROM-Import-Konzept** (Referenz: AudioKit ROMPlayer). Target: `SampleContext`, `dropMONK`/`biblioMONK`-Import. Integration: Format-Parser als Worker-Task; nur Metadaten-/Mapping-Konzepte. License: Formate offen; ROMPlayer-Code nicht einbetten.
+- [x] **[SAMPLER] EXS24/SF2/WAV-ROM-Import-Konzept** → dokumentiert 2026-09-03 in `docs/DSP_BENCHMARKS.md` (Parser als Worker-Task nach SFZ-Muster, kein ROMPlayer-Code) → TASKDONE.
 
 ### C – Architektur-Referenzen (P2/P3, keine Integration)
 
@@ -443,9 +443,9 @@
 
 - [ ] **[SYNTH] Spektrale Additiv-Steuerung** (Referenz: ZynAddSubFX, LeSynth, Six Sines). Target: `instrumentMONK` (`catalog.ts`, `itSynthProcessor.js`). Integration: Partial-Morphing, spektrale Hüllkurven pro Partial als Konzept-Erweiterung der bestehenden 50 Additiv-Patches.
 
-- [ ] **[ARCHITECTURE] Mod-Matrix-/CV-Gate-Konzepte prüfen** (Referenz: Cardinal/VCV Rack). Target: `synthesizerMONK`-Modulation, `ModuleState`-Routing. Integration: NUR als UI-/Datenmodell-Referenz für eine interne Mod-Matrix; KEIN Modul-Host (würde MONK-Pluginvertrag widersprechen, GPL).
+- [x] **[ARCHITECTURE] Mod-Matrix-/CV-Gate-Konzepte geprüft** → dokumentiert 2026-09-03 in `docs/DSP_BENCHMARKS.md` (interne Mod-Matrix als `ModuleState`-Routing, KEIN Modul-Host/GPL) → TASKDONE.
 
-- [ ] **[SYNTH] Analoge Filter-/Oszillator-Referenzen** (Referenz: Helm, amsynth, JS80P). Target: `synthProcessor.js`-Filter (`src/core/instrument`). Integration: Filterkoeffizienten-/Drift-Konzepte nativ; kein Code (GPL).
+- [x] **[SYNTH] Analoge Filter-/Oszillator-Referenzen** → dokumentiert 2026-09-03 in `docs/DSP_BENCHMARKS.md` (Drift/Sättigung als native Koeffizienten-Variation, Biquad-Stabilität via `src/audio/dsp/biquad.ts`) → TASKDONE.
 
 ### Lizenz-Hinweise (G)
 
