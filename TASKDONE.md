@@ -1095,3 +1095,34 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 
 **Nachweis:** `npm run verify` (tsc + Vitest + Interface-Boundary-Scan) grün,
 `npm run check:memo` grün.
+
+---
+
+## Drei schnellste TODOs (2026-09-03)
+
+**Quelle:** MASTER_TODO.md – „AI-Infrastruktur (GAP-2)" und „Lizenz-Hinweise (G)".
+
+- [x] **AI-E2E-Szenario (Code-Teil):** `tests/aiE2eScenario.test.ts` fährt den
+  kompletten Lebenszyklus gemockt durch: Wake (`STARTING`→`WAKING_GPU`) →
+  Cold-Start (HF-Gateway antwortet erst 503, dann 200; Backoff über Fake-Timer)
+  → Model-Load (CORE zuerst) → Request (Job + `HfEndpointProvider`) →
+  Model-Switch (LRU-Eviction, CORE bleibt geladen) → Scale-to-Zero
+  (`shutdown()` und Idle-Timeout). Kein Netz, keine GPU nötig.
+- [x] **AI-Failure-Suite (Code-Teil):** `tests/aiFailureSuite.test.ts` mit
+  HF offline (Fallback-Kette + „kein Provider"-Fehler), GPU down
+  (CUDA-Fehler beim Load, VRAM-Guard statt OOM), Duplicate (SingleFlight-
+  Dedup, Freigabe nach Abschluss) und Crash (Circuit Breaker öffnet nach
+  3 Fehlern, Job wird FAILED und gibt den Concurrency-Slot frei).
+  - **Dabei gefundener Bug:** `JobManager.release()` prüfte den Job-Status
+    *nach* dem Statuswechsel – der Concurrency-Slot wurde bei
+    `complete()`/`fail()`/`cancel()` nie freigegeben (Task-Limit blieb
+    dauerhaft belegt). Fix: `wasRunning` wird vor dem Statuswechsel ermittelt
+    und an `release()` übergeben.
+- [x] **[LICENSE] Externe Library-Ressourcen dokumentiert:**
+  `docs/LICENSE_EXTERNAL_RESOURCES.md` – Register für BBC SO Discover,
+  Spitfire LABS, Virtual Playing Orchestra, Sonatina, Berlin Free Orchestra,
+  The Alpine Project (CC-BY-ND), Pacific Percussion und VSCO 2 CE (CC0) mit
+  Grundregeln (keine Redistribution, keine Derivate aus ND-Material),
+  Abgrenzung zu GPL-Code-Referenzen und Release-Checkliste.
+
+**Nachweis:** `npm run verify` (tsc + Vitest + Interface-Boundary-Scan) grün.
