@@ -9,6 +9,12 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
 import { syncR2ToSupabase, ingestAudioObject } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
+import {
+  buildDropPrompt,
+  sanitizeAiDropResponse,
+  generateDeterministicDrop,
+} from './src/core/drop/DropTemplateGenerator';
+import type { DropGenerationRequest, DropStyle } from './src/core/drop/DropTemplateGenerator';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
@@ -712,6 +718,72 @@ app.post('/api/ai/describe', async (req, res) => {
     return res.json({ ai: raw.trim() });
   }
   return res.json({ ai: 'Ollama nicht erreichbar. (Lokaler Fallback: keine KI-Antwort verfügbar)' });
+});
+
+// --- POST /api/ai/generate-drop  → dropMONK Drop-Generator (LLM + Fallback) ---
+// Request:  { userPrompt|prompt, context?: { bpm, activePlugins, currentEnergy }, style?, duration? }
+// Response: { name, description, category, parameterSequence, buildupTime,
+//             dropDuration, quantization, intensity, confidence, tags, source }
+app.post('/api/ai/generate-drop', async (req, res) => {
+  metrics.aiRequests += 1;
+
+  const body = (req.body ?? {}) as {
+    userPrompt?: string;
+    prompt?: string;
+    context?: { bpm?: number; activePlugins?: unknown; currentEnergy?: number };
+    style?: string;
+    duration?: number;
+  };
+
+  const userPrompt = String(body.userPrompt ?? body.prompt ?? '').trim().slice(0, 2000);
+  if (!userPrompt) return res.status(400).json({ error: 'userPrompt fehlt' });
+
+  const rawBpm = Number(body.context?.bpm);
+  const rawEnergy = Number(body.context?.currentEnergy);
+  const rawDuration = Number(body.duration);
+  const style: DropStyle =
+    body.style === 'subtle' || body.style === 'extreme' ? body.style : 'moderate';
+
+  const dropRequest: DropGenerationRequest = {
+    userPrompt,
+    bpm: Number.isFinite(rawBpm) ? Math.max(40, Math.min(220, rawBpm)) : 128,
+    activePlugins: Array.isArray(body.context?.activePlugins)
+      ? (body.context!.activePlugins as unknown[]).map((p) => String(p).slice(0, 40)).slice(0, 20)
+      : [],
+    currentEnergy: Number.isFinite(rawEnergy) ? Math.max(0, Math.min(1, rawEnergy)) : 0.5,
+    style,
+    duration: Number.isFinite(rawDuration) ? Math.max(100, Math.min(32000, rawDuration)) : undefined,
+  };
+
+  const llmPrompt = buildDropPrompt(dropRequest);
+
+  // 1) LLM-Router (API-Keys bleiben serverseitig)
+  try {
+    const completion = await llmRouter.complete({
+      prompt: llmPrompt,
+      complexity: 'moderate',
+      maxTokens: 900,
+      temperature: 0.7,
+      reasoningEffort: 'low',
+    });
+    return res.json({ ...sanitizeAiDropResponse(completion.text, dropRequest), provider: completion.provider });
+  } catch (err) {
+    console.warn('[generate-drop] LLM-Router nicht nutzbar:', (err as Error).message);
+  }
+
+  // 2) Lokales Ollama
+  const raw = await ollamaGenerate(llmPrompt);
+  if (raw) {
+    try {
+      return res.json({ ...sanitizeAiDropResponse(raw, dropRequest), provider: 'ollama' });
+    } catch (err) {
+      console.warn('[generate-drop] ungültige Ollama-Antwort, Fallback.', (err as Error).message);
+    }
+  }
+
+  // 3) Deterministischer lokaler Fallback (kein Netz, immer verfügbar)
+  metrics.aiFailures += 1;
+  return res.json({ ...generateDeterministicDrop(dropRequest), provider: 'local' });
 });
 
 // --- POST /api/ai/complete  → LLM-Router (Keys bleiben serverseitig) ---

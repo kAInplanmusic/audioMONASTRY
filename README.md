@@ -1,7 +1,8 @@
 # audioMONASTRY · SampleMONK
 
 > Browser-basierte kollaborative Audio-Workstation für bis zu 4 Nutzer.
-> Version: **V. 1|010|001** · Codename „HyperAudioWorkstation" · Stand 2026-08-31.
+> Version: **1.10.1** (`V. 1|010|001`) · Codename „HyperAudioWorkstation" · Stand 2026-09-03.
+> Hauptzweig: `main` · Release-Gate: `npm run verify` muss grün sein.
 > Projektzweck: **privat / Forschung** (kein kommerzieller Zweck).
 
 ---
@@ -16,18 +17,56 @@ ohne Abhängigkeit von einem einzelnen Cloud-Anbieter.
 viert gleichzeitig an derselben Session arbeiten wollen.
 
 **Kernfunktionalität:**
-- 17 Plugins (Mixer, Sequencer, Library, Drum/Synth, Instrumente, Spatial, EQ,
-  Mastering, MIDI-Profile, FX, Stem-Extractor, Voice, Extension-Slot, Recorder,
-  DSP-Engine, Visualizer, Performance-Monitor)
+- 21 Plugin-Module („MONKs") in einer Top-Bar-Leiste – Mixer, Instrumente,
+  Synth, Drum, Sampler, MCP, Voice, Sound, Controller, FX, Drop, Library, EQ,
+  DSP, Mastering, Stem-Extractor, Spatial, Recorder, Performance-Monitor,
+  aiMONK, Master-Player (vollständige Liste in Abschnitt 5)
 - Echtzeit-Kollaboration bis 4 Nutzer mit identischem State (WebRTC DataChannels
   + Socket.io), B2B-Locking pro Plugin
 - Audio-Engine V1 (Tone.js) + V2 (AudioGraph/Worklets), SAB/RingBuffer,
-  deterministisches Noise, PDC-fähiges Mastering
+  deterministisches Noise, PDC-fähiges Mastering, Dynamics-Worklet-Insert
+  (Kompressor/Gate/Dynamic-EQ), MIDI-Clock/Note-Out für externe Hardware
 - KI: MOA/MCP-Planung (DeepSeek), Voice/TTS (HF), Stems (Replicate),
   Audio-Analyse (HF-Endpoint-Custom-Container), lokale Fallbacks (Ollama,
   WebSpeech, deterministisch)
 - Persistenz: Supabase (Metadaten) + Cloudflare R2 (Audio-Blobs) + OPFS/IndexedDB
   (lokal)
+
+### 1.1 Schnellstart
+
+```bash
+npm ci                      # Abhängigkeiten (package-lock.json ist maßgeblich)
+cp .env.example .env        # Secrets ergänzen – .env wird NIE committet
+node build-worklets.mjs     # AudioWorklets bauen (public/worklets ist gitignored)
+npm run dev                 # tsx server.ts: Express + Vite-Middleware auf :8080
+```
+
+Ohne Cloud-Keys läuft die App vollständig offline (eingebaute Presets,
+lokale Fallbacks). Produktion:
+
+```bash
+npm run build               # Vite-Client + AudioWorklets + esbuild-Server-Bundle
+npm start                   # node dist/server.cjs
+```
+
+**Wichtige npm-Skripte** (vollständig in `package.json`):
+
+| Skript | Zweck |
+|---|---|
+| `npm run dev` | Dev-Server (API + Frontend, Port 8080) |
+| `npm run worker` | Datei-Queue-Worker (`services/taskWorker.ts`) |
+| `npm run build` / `npm start` | Produktions-Build / -Start |
+| `npm run lint` | `tsc --noEmit` (Typprüfung, es gibt keinen ESLint-Schritt) |
+| `npm test`, `npm run test:coverage` | Vitest (Unit/Integration, aktuell 107 Dateien) |
+| `npm run test:e2e`, `test:e2e:responsive`, `test:stress` | Playwright (13 Specs, u. a. smoke/collab/hardware/keyboard/visual/responsive/stress/live2browser) |
+| `npm run verify` | **Release-Gate:** tsc + Vitest + Interface-Boundary-Scan |
+| `npm run verify:boundary` | nur `scripts/validate-interface-boundaries.mjs` |
+| `npm run check:bundle` | Bundle-Größe (< 2,0 MiB FAIL-Gate, Warnung < 1,5 MiB) |
+| `npm run check:memo` | React-Memo-Heuristik für Terminal-Komponenten |
+| `npm run generate:golden` | Golden-WAV-Referenzen für DSP-Tests |
+| `npm run eval:ai`, `iterate:prompts` | AI-Evaluation / Prompt-Iteration (21 Plugins) |
+| `npm run stress:hetzner`, `stress:sfu*` | Last-/SFU-Tests gegen die Flotte |
+| `npm run build:wasm-hrtf` | Rust→WASM-HRTF-Faltung (`src/audio/wasm/hrtf_conv`) |
 
 ## 2. Systemarchitektur
 
@@ -89,6 +128,23 @@ CostTracker → Supabase-Persistenz → Response.
 | **turn** | `services/turn/` | 3478/5349 | TURN (WebRTC-Relay) |
 | **SFU** | `docker-compose.sfu.yml` | 40000–40099 UDP/TCP | Mediasoup Selective Forwarding |
 
+### 3.1 HTTP-API (Auszug aus `server.ts`)
+
+| Bereich | Endpunkte |
+|---|---|
+| Health/Status | `GET /api/health`, `/api/online`, `/api/cloud/health`, `/api/master/health`, `/api/master/selftest` |
+| AI-Orchestrator | `POST /api/ai/orchestrate`, `/api/ai/complete`, `/api/ai/compose`, `/api/ai/describe`, `/api/ai/generate`, `/api/ai/generate-drop`; `GET /api/ai/jobs`, `/api/ai/jobs/:jobId`, `/api/ai/models`, `/api/ai/orchestrator/status` |
+| AI-Session | `GET /api/ai/session`, `POST /api/ai/session/heartbeat`, `POST /api/ai/session/shutdown` |
+| MCP | `GET /api/ai/mcp/tools`, `POST /api/ai/mcp/tools/:name` |
+| Voice | `POST /api/voice/tts`, `/api/voice/sing`, `/api/voice/song`, `/api/generate-voice` |
+| Stems | `POST /api/separate-stems` (SSE-Progress), `GET /api/stem/status` |
+| Mastering | `POST /api/master/mix`, `/api/master/master`, `/api/master/analyze` |
+| Cloud/Assets | `POST /api/cloud/sync`, `/api/cloud/upload`, `/api/cloud/samples`, `/api/cloud/music`, `/api/upload/sample` |
+| Betrieb | `GET /api/metrics`, `/api/audit`, `/api/admin/debug`, `POST /api/telemetry`, `POST /api/alerts/webhook` |
+
+Zusätzlich bedient `server.ts` das Socket.io-Signaling (Session-Join, State-Sync,
+Plugin-Leases) und liefert im Produktionsbetrieb das SPA-Bundle (`GET *`).
+
 ## 4. Konfigurationsmanagement
 
 **Konfigurationsdateien:**
@@ -102,7 +158,8 @@ CostTracker → Supabase-Persistenz → Response.
 - `services/samplemonk-ai-runtime/model_manifest.json` – Model Registry
   (Revision-Pinning)
 - `services/samplemonk-ai-runtime/hf_endpoint.example.json` – HF-Endpoint-Konfig
-- `database/schema.sql` + `database/ai_migration_001.sql` – Supabase-Schema
+- `database/schema.sql` + `database/ai_migration_001.sql` +
+  `database/ai_migration_002.sql` – Supabase-Schema & Prompt-/Eval-Tabellen
 - `deploy/helm/audioMONASTRY/values.yaml` – Helm (optional)
 
 **Secrets-Strategie:**
@@ -115,32 +172,50 @@ CostTracker → Supabase-Persistenz → Response.
 
 ## 5. Plugin-Ökosystem
 
-**Registry:** `src/plugins/registry.ts` – 17 Plugin-IDs, Zustände `OFF` |
-`AUTO_AI` | `PRO`, B2B-Locking via `src/core/session/locking.ts`.
+**Registry:** `src/plugins/registry.ts` – 21 Module (`EXPECTED_PLUGIN_COUNT = 21`),
+Zustände `OFF` | `AUTO_AI` | `PRO`, B2B-Locking via `src/core/session/locking.ts`.
+Die Registry wird zur Laufzeit aus `public/plugin-manifest.json` geladen
+(`discoverPlugins()`); stimmt die Anzahl nicht, greift die eingebaute
+Fallback-Registry. Alle Terminals werden per `React.lazy` code-gesplittet.
 
-| # | Plugin | Verzeichnis | Schnittstelle |
-|---|---|---|---|
-| 0 | Master Player | `src/plugins/…` | `usePluginState`, Master-Transport |
-| 1 | Mischpult | `mischpult/` | 5 Kanäle (A/B), MIDI-Mapping |
-| 2 | Sequenzer | `sequenzer/` | 16 Steps × 8 Spuren |
-| 3 | Library | LibraryTerminal | Supabase/R2, Auto-Save |
-| 4 | Junket (Drum/Synth) | DrumMachine/SoundTerminal | Pattern-Engine |
-| 5 | Instrumente | `instrumente/` | `IInstrumentBackend`, 100 Instrumente |
-| 6 | Spatial Surround | `spatial-surround/` | 2D-Panning-Array |
-| 7 | EQ | DSP-Plugin | AudioWorklet-Parameter |
-| 8 | Mastering | Mastering-Kette | PDC, LUFS |
-| 9 | MIDI-Profile | `MIDIControllerTerminal` | `IHardwareAdapter`, ControlMessage |
-| 10 | FX | DSP-Engine | Worklet-Automation |
-| 11 | Stem-Extractor | `StemExtractorTerminal` | `/api/separate-stems` (Replicate/lokal) |
-| 12 | Voice | VoiceMONK | `/api/voice/*` (HF/Replicate/WebSpeech) |
-| 13 | Extension-Slot | Registry | offen |
-| 14 | Recorder | MasterStream | Bit-perfect Export |
-| 15 | DSP-Engine | Worklets | Cutoff/Reso/LFO |
-| 16 | Visualizer | OffscreenCanvas | Waveform im Worker |
-| 17 | Performance-Monitor | `PerformanceMonitorTerminal` | FPS/Jitter/Latenz-Budgets |
+| # | ID | Name | Terminal-Komponente | Schnittstelle / Kern |
+|---|---|---|---|---|
+| 0 | `masterplayer` | masterplayerMONK (MPR) | `MasterPlayerTerminal` | Master-Transport, feste Kopfzeile, Sticky-Player |
+| 1 | `instrument` | instrumentMONK (INS) | `InstrumentsTerminal` | `IInstrumentBackend`, Instrumenten-Pool, Pad-/Keys-Ansicht |
+| 2 | `synthesizer` | synthesizerMONK (SYN) | `SynthesizerTerminal` | Worklet-Synthese, 16-Step-Notensequencer |
+| 3 | `drum` | drumMONK (DRM) | `DrumMachineTerminal` | Pattern-Engine (TR-808/M8), 32 Steps, A/B/Chain, MIDI-Clock/Note-Out |
+| 4 | `sampler` | samplerMONK (SAM) | `SamplerTerminal` | Sample-Playback/Slicing, 16-Step-Sequencer je Pad |
+| 5 | `mcp` | mcpMONK (MCP) | `McpTerminal` | MPC-Pads (4×4, Bank A–D) + 16/32-Step-Sequencer |
+| 6 | `voice` | voiceMONK (VOX) | `VoiceGenTerminal` | `/api/voice/*` (HF/Replicate/WebSpeech/Ollama) |
+| 7 | `sound` | soundMONK (SND) | `SoundTerminal` | KI-/regelbasierte Beat-, Bass-, Atmo-, One-Shot-Generierung |
+| 8 | `mixer` | mixerMONK (MIX) | `MischpultTerminal` | 5 Kanäle (A/B), Deck-Skins, MIDI-Mapping, DJ-Crossfade |
+| 9 | `controller` | controllerMONK (CTRL) | `MIDIControllerTerminal` | `IHardwareAdapter`, ControlMessage, MIDI-Out für Motorfader/LEDs |
+| 10 | `effect` | effectMONK (FX) | `FXEngineTerminal` | Multi-FX-Routing |
+| 11 | `drop` | dropMONK (DRP) | `DropTerminal` | KI-Auto-Drop: BPM/Key-Analyse + taktgenaue One-Shots, quantisierte Bridges |
+| 12 | `library` | biblioMONK (LIB) | `LibraryTerminal` | Supabase/R2, Favoriten, Ordnerbaum, Auto-Save |
+| 13 | `eq` | eqMONK (EQ) | `EQPluginTerminal` | AudioWorklet-Parameter |
+| 14 | `dsp` | dspMONK (DSP) | `DSPTerminal` | Cutoff/Reso/ModIndex/Gain/LFO + Dynamics-Insert (Comp/Gate/Dyn-EQ) |
+| 15 | `mastering` | masteringMONK (MST) | `MasteringOverlay` | PDC, LUFS, Release-LUT |
+| 16 | `stem` | stemMONK (RMX) | `StemExtractorTerminal` | `/api/separate-stems` (Replicate/lokal/ONNX) |
+| 17 | `spatial` | spatialMONK (3D) | `SpatialScene` | 2D-Panning-Array, HRTF (JSON/WASM), ILD/ITD/Metriken |
+| 18 | `recording` | recordingMONK (REC) | `RecorderTerminal` | Bit-perfect Export |
+| 19 | `performance` | perfMONK (PRF) | `PerformanceMonitorTerminal` | FPS/Jitter/Latenz-Budgets (LOCAL/NET/DROPOUTS), Signal-Anzeige |
+| 20 | `ai` | aiMONK (AI) | `AiMonkTerminal` + `AiMonkDock` | Orchestrator-UI, Auto-AI-Steuerung, Bottom-Dock |
+
+> Hinweis: Das frühere `visMONK` (Visualizer) wurde entfernt; seine Signal-Anzeige
+> ist in `perfMONK` integriert.
+
+**Metamodule:** `METAMODULE_GROUPS` fasst Module zu einem Terminal zusammen –
+`process` (dsp+eq+effect → `effect`), `sound` (synthesizer+instrument →
+`instrument`), `source` (recording+voice → `recording`). `resolveComponent(id)`
+rendert dabei nur das primäre Modul.
 
 **Aktivierungslogik:** Top-Bar-Icons → `ModuleStateContext`; `AUTO_AI` =
 periodische MOA-Vorschläge; `PRO` = volles Terminal; Locking pro Lease.
+
+**Start-Zustand (P0-1):** Beim Studio-Eintritt starten **alle** Plugins auf
+`OFF`. `audioEngine.init()` aktiviert das Silence-Gate (`setIdleSilence`), sodass
+Main im Leerlauf stumm bleibt.
 
 ## 6. AI-Modell-Integration
 
@@ -229,11 +304,64 @@ Container `/metrics` (uptime, models_loaded, vram_used, inference_count).
 **Kosten:** `CostTracker` (cost/session, cost/hour, cost/month, Preisquellen
 dokumentiert in `docs/AI_COST_GUIDE.md`).
 
+## 11. Projektstruktur
+
+```
+server.ts                 Express + Socket.io + AI-Proxy (Single-Entry-Backend)
+src/
+  App.tsx, main.tsx       React-19-Einstieg, Stream-Screen-Layout
+  components/             Terminal-UIs je Plugin (lazy geladen)
+  context/                Session-, Module-, Audio-, Project-, Access-Context
+  core/                   Engine-Kern: audio, clock, routing, session (Locking,
+                          State-Replikation), ai/orchestrator, hardware, spatial,
+                          instrument, voice, gpu, workers, interfaces.ts
+  plugins/                registry.ts + plugin-eigene Module (mischpult,
+                          instrumente, dsp-engine)
+  audio/, workers/        Worklets, WASM-HRTF, Web-Worker
+  utils/, hooks/, types/  RBAC, Prompts, Themes, geteilte Typen
+services/                 Micro-Services (siehe Abschnitt 3)
+scripts/                  Build-, Deploy-, Benchmark- und Hetzner-Automation
+tests/                    Vitest-Suites (101 Dateien) + tests/e2e (Playwright)
+public/                   Statische Assets, plugin-manifest.json, routing.json
+docs/                     Architektur-, AI-, Security-, Hardware- und Ops-Doku
+database/                 Supabase-Schema & Migrationen
+deploy/                   Helm-Charts (optional)
+```
+
+## 12. Tests, Qualität & CI
+
+**Lokale Gates:**
+- `npm run lint` – TypeScript-Typprüfung (`tsc --noEmit`)
+- `npm test` – Vitest (Unit/Integration, aktuell 107 Dateien, u. a.
+  `architecture.test.ts`, `lockFuzz.test.ts`, `goldenAudio.test.ts`,
+  `aiOrchestrator.test.ts`, `pluginAudioRouter.test.ts`, `midiClockOut.test.ts`,
+  `dynamicsProcessor.test.ts`, `spatialProcessor.test.ts`, `wasmHrtf.test.ts`)
+- `npm run verify:boundary` – Interface-Boundary-Scan: Plattform-APIs dürfen nur
+  in den dafür vorgesehenen Adaptern verwendet werden
+- `npm run verify` – Pflicht vor jedem PR (tsc + Vitest + Boundary-Scan)
+- `npm run check:bundle` – Bundle-Budget-Gate (< 2,0 MiB)
+- `npm run check:memo` – React-Memo-Heuristik für Terminal-Komponenten
+- `npm run test:e2e` – Playwright (`smoke`, `collab`, `hardware`, `keyboard`,
+  `visual`, `responsive`, `stress`, `live2browser`, `startState`,
+  `pluginCloseSync`, `monitorCue`, `masterPlayerFixed`)
+- `npx tsx scripts/spatial-regression.ts` – spatialMONK Audio-Regression
+  (ILD/ITD-Asserts + WAV-Artefakte)
+
+**GitHub Actions** (`.github/workflows/`): `build.yml` (Build, Bundle, Memo-Audit,
+Google-frei-Check), `verify.yml` (tsc, Vitest, Boundary-Scan, spatial-regression),
+`e2e.yml` (Chromium/Firefox/WebKit, ohne visuelle Baselines), `nightly.yml`
+(verify + build + AI-Eval + Prompt-Iteration + Auto-Issue bei Fehler), `ai.yml`,
+`hf-endpoint.yml` (Endpoint-Verwaltung), `live-stress.yml`, `sonarcloud.yml`
+(Konfiguration in `sonar-project.properties`).
+
 ---
 
 ## Weiterführende Dokumente
 
-- `AITodo.md` – zentrales Implementierungs-Live-Dokument (Status je Phase)
+- `AGENTS.md` / `.cursorrules` – verbindliche Architektur- und Workflow-Regeln
 - `docs/` – AI-Architektur, HF-Setup, Deployment, Registry, MCP, Security,
-  Operations, Troubleshooting, Cost, Hardware-Matrizen
-- `MASTER_TODO.md` – Produkt-/Release-Historie
+  Operations, Troubleshooting, Cost, Hardware-Matrizen, Release-Gate
+- `MASTER_TODO.md` – Produkt-/Release-Historie und offene Aufgaben
+- `TASKDONE.md` – abgeschlossene Arbeitspakete (Änderungsjournal)
+- `docs/HANDOVER.md` – Übergabe-/Statusdokument
+- `docs/LIVE_CHECKLIST_2026-09-02.md` – verbleibende Live-/Hörprobe-Prüfpunkte

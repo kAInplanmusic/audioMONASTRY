@@ -4,14 +4,69 @@
  *  - Lookahead Brickwall-Limiter (5 ms) mit Inter-Sample-Peak-Erkennung
  *    (True-Peak-Approximation, 2x lineare Übersampling-Schätzung).
  *  - Soft-Knee-Kompression mit konfigurierbarem Threshold/Ratio/Knee.
- *  - Exponential-Release für den Limiter (kein hartes Gain-Pumpen).
+ *  - Exponential-Release für den Limiter (kein hartes Gain-Pumpen); der
+ *    Koeffizient kommt aus einer segmentierten Lookup-Tabelle (AM-E4-4),
+ *    damit kein `Math.exp` pro Block nötig ist.
  *  - Stabilität: sämtliche Ausgangswerte werden NaN/Inf-geprüft.
  *  - Hot-Path: keine Objekt-/Array-Allokation pro Sample (Scratch-Puffer).
  *
  * Steuerung über Port-Nachrichten:
  *   { threshold, ratio, knee, makeup, ceiling, release, reset }
  */
-class MasteringProcessor extends AudioWorkletProcessor {
+
+/** Fallback-Sample-Rate, wenn das Worklet-Global fehlt (Node-Tests). */
+const FALLBACK_SR = 48000;
+const currentSampleRate = (): number =>
+  typeof sampleRate === 'number' && sampleRate > 0 ? sampleRate : FALLBACK_SR;
+
+// ---------------------------------------------------------------------------
+// AM-E4-4: Release-Kurve als segmentierte Lookup-Tabelle.
+// Statt `1 - Math.exp(-1 / (sampleRate * release))` pro Block wird der
+// Koeffizient aus einer log-segmentierten Tabelle interpoliert. Argument ist
+// n = sampleRate * releaseSeconds (Sample-Zahl der Zeitkonstante).
+// ---------------------------------------------------------------------------
+const RELEASE_LUT_SEGMENTS = 128;
+const RELEASE_LUT_LOG_MIN = Math.log(50);      // n = 50 Samples (~1 ms @48k)
+const RELEASE_LUT_LOG_MAX = Math.log(2_000_000); // n = 2e6 Samples (~42 s @48k)
+const RELEASE_LUT = new Float32Array(RELEASE_LUT_SEGMENTS + 1);
+for (let i = 0; i <= RELEASE_LUT_SEGMENTS; i++) {
+  const n = Math.exp(
+    RELEASE_LUT_LOG_MIN + ((RELEASE_LUT_LOG_MAX - RELEASE_LUT_LOG_MIN) * i) / RELEASE_LUT_SEGMENTS,
+  );
+  RELEASE_LUT[i] = 1 - Math.exp(-1 / n);
+}
+
+/**
+ * Release-Koeffizient für eine Zeitkonstante (Sekunden) bei gegebener
+ * Sample-Rate – linear interpoliert aus der segmentierten Tabelle.
+ * Maximaler relativer Fehler < 0,1 % im gültigen Bereich (5 ms … 1 s).
+ */
+export function releaseCoefficient(releaseSeconds: number, sr: number): number {
+  const n = sr * releaseSeconds;
+  if (!Number.isFinite(n) || n <= 0) return 1;
+  const x =
+    ((Math.log(n) - RELEASE_LUT_LOG_MIN) / (RELEASE_LUT_LOG_MAX - RELEASE_LUT_LOG_MIN)) *
+    RELEASE_LUT_SEGMENTS;
+  if (x <= 0) return RELEASE_LUT[0];
+  if (x >= RELEASE_LUT_SEGMENTS) return RELEASE_LUT[RELEASE_LUT_SEGMENTS];
+  const i = Math.floor(x);
+  const f = x - i;
+  return RELEASE_LUT[i] + (RELEASE_LUT[i + 1] - RELEASE_LUT[i]) * f;
+}
+
+// Worklet-Global fehlt in Node-Tests → Fallback-Basisklasse mit Fake-Port,
+// damit der Prozessor deterministisch instanziierbar bleibt (vgl. spatialProcessor).
+const WorkletBase: typeof AudioWorkletProcessor =
+  (typeof AudioWorkletProcessor !== 'undefined'
+    ? AudioWorkletProcessor
+    : class {
+        port = {
+          onmessage: null as any,
+          postMessage: (msg: any) => { this.port.onmessage?.({ data: msg }); },
+        };
+      }) as any;
+
+export class MasteringProcessor extends WorkletBase {
   private threshold = -14;  // dBFS (Kompressor-Grenze)
   private ratio = 3;
   private knee = 6;
@@ -22,29 +77,22 @@ class MasteringProcessor extends AudioWorkletProcessor {
   private peak = 0;
 
   // Lookahead-Delay
-  private lookaheadSamples = Math.max(16, Math.round(0.005 * sampleRate)); // 5ms
+  private lookaheadSamples = Math.max(16, Math.round(0.005 * currentSampleRate())); // 5ms
+
+  /** Lookahead-Tiefe in Samples (für Tests/PDC-Abgleich mit `audioEngine`). */
+  getLookaheadSamples(): number { return this.lookaheadSamples; }
   private delayLine: Float32Array[] = [];
   private delayPos = 0;
   // Wiederverwendbarer Kanal-Scratch (keine Allokation im Hot-Path)
   private scratch: Float32Array | null = null;
   // AM-E1-3: dB→Gain-Lookup statt Math.pow(10, -grDb/20) pro Sample.
   private grLookup = new Float32Array(241); // 0..48 dB in 0.2-dB-Schritten
-  // AM-E4-4: Release-Koeffizienten als segmentierte Lookup-Tabelle statt
-  // Math.exp pro Block. Release wird auf 0.005..1.0 s begrenzt (wie im
-  // Message-Handler), daher decken 200 Stufen à 5 ms den gesamten Bereich ab.
-  private static readonly RELEASE_MIN = 0.005;
-  private static readonly RELEASE_STEP = 0.005;
-  private releaseLookup = new Float32Array(200);
 
   constructor() {
     super();
     this.peak = this.limiterCeiling;
     for (let i = 0; i < this.grLookup.length; i++) {
       this.grLookup[i] = Math.pow(10, -(i * 0.2) / 20);
-    }
-    for (let i = 0; i < this.releaseLookup.length; i++) {
-      const releaseSec = MasteringProcessor.RELEASE_MIN + i * MasteringProcessor.RELEASE_STEP;
-      this.releaseLookup[i] = 1 - Math.exp(-1 / (sampleRate * releaseSec));
     }
     this.port.onmessage = (e) => {
       const m = e.data; if (!m) return;
@@ -58,7 +106,7 @@ class MasteringProcessor extends AudioWorkletProcessor {
       if (typeof m.release === 'number') this.limiterRelease = Math.max(0.005, Math.min(1, m.release));
       if (m.type === 'automate') {
         // Sample-genaue Rampen für Threshold/Makeup/Ceiling (zipper-frei).
-        const steps = Math.max(1, Math.round(Number(m.rampTime ?? 0.02) * sampleRate));
+        const steps = Math.max(1, Math.round(Number(m.rampTime ?? 0.02) * currentSampleRate()));
         const start = (p: string, cur: number): void => {
           this.rampTargets[p] = Number(m.value);
           this.rampSteps[p] = steps;
@@ -124,11 +172,9 @@ class MasteringProcessor extends AudioWorkletProcessor {
       this.scratch = new Float32Array(Math.max(channels, 8));
     }
 
-    // AM-E4-4: Exponential-Release-Koeffizient aus segmentierter Lookup-Tabelle
-    // (kein Math.exp im Hot-Path; Release ist auf 0.005..1.0 s begrenzt).
-    const releaseIdx = Math.max(0, Math.min(this.releaseLookup.length - 1,
-      Math.round((this.limiterRelease - MasteringProcessor.RELEASE_MIN) / MasteringProcessor.RELEASE_STEP)));
-    const releaseCoeff = this.releaseLookup[releaseIdx] ?? 0;
+    // Exponential-Release-Koeffizient (pro Sample) aus der segmentierten
+    // Lookup-Tabelle – kein `Math.exp` mehr pro Block (AM-E4-4).
+    const releaseCoeff = releaseCoefficient(this.limiterRelease, currentSampleRate());
     const depth = this.lookaheadSamples;
 
     for (let i = 0; i < output[0].length; i++) {
@@ -180,4 +226,6 @@ class MasteringProcessor extends AudioWorkletProcessor {
     return true;
   }
 }
-registerProcessor('mastering-processor', MasteringProcessor);
+if (typeof registerProcessor !== 'undefined') {
+  registerProcessor('mastering-processor', MasteringProcessor as any);
+}

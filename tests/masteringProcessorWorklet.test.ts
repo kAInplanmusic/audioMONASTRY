@@ -60,16 +60,14 @@ function runBlock(
 }
 
 describe('masteringProcessor (echter Worklet-Code)', () => {
-  it('AM-E4-4: Release-Lookup-Tabelle ist äquivalent zur Math.exp-Referenz', () => {
-    const p = createProcessor();
-    const lookup = (p as unknown as { releaseLookup: Float32Array }).releaseLookup;
-    expect(lookup).toBeInstanceOf(Float32Array);
-    expect(lookup.length).toBe(200);
-
-    for (let i = 0; i < lookup.length; i++) {
-      const releaseSec = 0.005 + i * 0.005;
+  it('AM-E4-4: Release-Lookup ist äquivalent zur Math.exp-Referenz', async () => {
+    const mod = await import('../src/audio/worklets/masteringProcessor.ts');
+    const rc = (mod as unknown as { releaseCoefficient: (s: number, sr: number) => number }).releaseCoefficient;
+    expect(typeof rc).toBe('function');
+    for (const releaseSec of [0.005, 0.05, 0.5, 1.0]) {
       const expected = 1 - Math.exp(-1 / (48000 * releaseSec));
-      expect(Math.abs(lookup[i] - expected)).toBeLessThan(1e-6);
+      // Segmentierte LUT mit linearer Interpolation: < 0,1 % Fehler im Bereich.
+      expect(Math.abs(rc(releaseSec, 48000) - expected)).toBeLessThan(expected * 0.001 + 1e-6);
     }
   });
 

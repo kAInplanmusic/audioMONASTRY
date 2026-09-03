@@ -27,6 +27,9 @@ jobs:
       - name: UI-Bundle-Budget prüfen
         run: npm run check:bundle
 
+      - name: React.memo-Audit (Terminals)
+        run: npm run check:memo
+
       - name: Verify no Google/Firebase imports remain
         run: |
           if grep -rniE "from ['\"]@google|from ['\"]firebase|firebase-admin|google-genai|@google-cloud" src server.ts --include='*.ts' --include='*.tsx' --include='*.js'; then

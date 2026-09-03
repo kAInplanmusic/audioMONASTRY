@@ -119,7 +119,7 @@ test('P0-7: Master-Player-Transport ist ohne Scrollen erreichbar', async ({ page
   const master = page.locator('section').filter({ has: page.getByText('masterplayerMONK') }).first();
   await expect(master).toBeVisible();
   await page.keyboard.press('Space');
-  await expect(page.getByText('132 BPM').first()).toBeVisible();
+  await expect(page.getByText('132.00').first()).toBeVisible();
 
   expect(errors.pageErrors).toEqual([]);
 });

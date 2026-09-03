@@ -136,6 +136,46 @@ export const aiPersistence = {
     }
   },
 
+  /** GAP-5: Systemprompt-Version in `system_prompts` schreiben (Migration 002). */
+  async saveSystemPrompt(prompt: {
+    pluginId: string;
+    role: string;
+    version: number;
+    content: string;
+    enabled: boolean;
+    meta: Record<string, unknown>;
+  }): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('system_prompts').insert({
+        plugin_id: prompt.pluginId,
+        role: prompt.role,
+        version: prompt.version,
+        content: prompt.content,
+        enabled: prompt.enabled,
+        meta: prompt.meta,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase saveSystemPrompt failed', { pluginId: prompt.pluginId, error: (error as Error).message });
+    }
+  },
+
+  /** GAP-5: Prompt-Version + Changelog in `plugin_prompt_versions` schreiben. */
+  async savePromptVersion(entry: { pluginId: string; version: number; changelog: string }): Promise<void> {
+    const db = getClient();
+    if (!db) return;
+    try {
+      await db.from('plugin_prompt_versions').insert({
+        plugin_id: entry.pluginId,
+        version: entry.version,
+        changelog: entry.changelog,
+      });
+    } catch (error) {
+      aiLogger.warn('supabase savePromptVersion failed', { pluginId: entry.pluginId, error: (error as Error).message });
+    }
+  },
+
   /** P3-3: Eval-Ergebnis in `ai_evaluations` schreiben (Migration 002). */
   async saveEvaluation(record: {
     pluginId: string;
