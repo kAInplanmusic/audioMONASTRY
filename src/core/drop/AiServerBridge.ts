@@ -96,7 +96,7 @@ export class AiServerBridge {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(this.apiKey && { Authorization: `****** }),
+          ...(this.apiKey && { Authorization: this.apiKey }),
         },
         body: JSON.stringify(payload),
       });
@@ -142,7 +142,7 @@ Return ONLY valid JSON (no markdown, no code block) with this exact structure:
       "startValue": 0.0,
       "endValue": 1.0,
       "duration": 4000,
-      "curve": "linear" | "exponential" | "logarithmic" | "s-curve" | "stepped"
+      "curve": "linear"
     }
   ],
   "confidence": 0.85,
