@@ -51,6 +51,11 @@
       "hash": "placeholder_hash_effect"
     },
     {
+      "id": "dynamics-processor",
+      "url": "/worklets/dynamicsProcessor.js",
+      "hash": "placeholder_hash_dynamics"
+    },
+    {
       "id": "spatial-processor",
       "url": "/worklets/spatialProcessor.js",
       "hash": "placeholder_hash_spatial"

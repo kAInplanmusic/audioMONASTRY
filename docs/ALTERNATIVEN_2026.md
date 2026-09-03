@@ -17,3 +17,22 @@
 | GPU-Konsolidierung | 1 Runtime, mehrere Modelle | 1 Endpoint je Modell | 1 Runtime (Kostenregel) | 9g ✅ |
 
 Regel: kein P0/P1-Task ohne dokumentierte Alternative.
+
+## Externe Library-Ressourcen (Lizenz-Hinweise, dokumentiert 2026-09-03)
+
+Reine **User-seitige externe Ressourcen** – **keine Redistribution** ohne Prüfung
+(`LICENSE_REVIEW_REQUIRED`):
+
+| Ressource | Lizenz | Behandlung |
+|---|---|---|
+| BBC SO Discover | kostenlos, eigene Lizenz | Nur User-Download/Link; nicht bündeln |
+| Spitfire LABS | kostenlos, eigene Lizenz | Nur User-Download/Link; nicht bündeln |
+| Berlin Free Orchestra | kostenlos, eigene Lizenz | Nur User-Download/Link; nicht bündeln |
+| The Alpine Project | **CC-BY-ND** | keine Bearbeitung/Redistribution; nur Referenz |
+| Pacific Percussion | unklar | nicht bündeln bis Lizenz geklärt |
+| VSCO 2 Community Edition | **CC0** | Bündelung unproblematisch (Orchester-Subset, Audio-Audit B-Klasse) |
+| VPO / Sonatina / Berlin (Orchestral) | gemischt | `LICENSE_REVIEW_REQUIRED`, nicht ungeprüft bündeln |
+
+Regel: Externe Libraries werden in der UI als Link/Download angeboten, niemals
+als Teil des Repos/Images redistributiert, solange die Lizenz nicht CC0/klar
+freigegeben ist.

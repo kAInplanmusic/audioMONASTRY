@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ClockSync } from '../src/utils/ClockSync';
+import { PhaseLockedLoop } from '../src/utils/PhaseLockedLoop';
 import { CrdtClock, CrdtLwwMap, CrdtClockMerger, crdtCmp } from '../src/utils/crdt';
 
 describe('ClockSync (P2-2)', () => {
@@ -11,6 +12,37 @@ describe('ClockSync (P2-2)', () => {
     // getSyncedTime() = performance.now() + offset; nur Plausibilität prüfen
     const t = sync.getSyncedTime();
     expect(Number.isFinite(t)).toBe(true);
+  });
+
+  it('berechnet Offset exakt (NTP-Handshake: offset = pong - ping - rtt/2)', () => {
+    const sync = new ClockSync();
+    const spy = vi.spyOn(performance, 'now').mockReturnValue(1030);
+    sync.handlePong(1020, 1000); // rtt = 1030 - 1000 = 30, offset = (1020-1000) - 15 = 5
+    expect(sync.getSyncedTime()).toBe(1035); // performance.now() + 5
+    spy.mockRestore();
+  });
+});
+
+describe('P2-2: Multi-User-Clock-Sync (PLL-Drift-Kompensation)', () => {
+  it('PLL konvergiert einen konstanten Host-Gast-Offset auf < 5 ms', () => {
+    const pll = new PhaseLockedLoop();
+    // Gast hinkt dem Host konstant 20 ms hinterher. Nach mehreren Updates
+    // baut der Integrator den Drift auf und kompensiert den Offset.
+    const hostOffset = 20;
+    let compensated = 0;
+    for (let i = 0; i < 200; i++) {
+      compensated = pll.update(hostOffset - compensated);
+    }
+    expect(Math.abs(hostOffset - compensated)).toBeLessThan(5);
+  });
+
+  it('Host-Clock-Verteilung über CRDT-Merger akzeptiert plausible Schritte', () => {
+    const merger = new CrdtClockMerger();
+    // 10-Hz-Sync: erster Wert 0.0 wird nur vorgemerkt (Delta < 2 ms),
+    // danach werden 100-ms-Schritte als plausibel angewendet.
+    expect(merger.proposed(0.0)).toBe(false);
+    for (const t of [0.1, 0.2, 0.3, 0.4]) expect(merger.proposed(t)).toBe(true);
+    expect(merger.value).toBe(0.4);
   });
 });
 

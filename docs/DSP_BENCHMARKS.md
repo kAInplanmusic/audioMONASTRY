@@ -20,3 +20,29 @@
 2. **Block-Verarbeitung allein** bringt in V8 keinen messbaren Vorteil –
    entscheidend ist die Vermeidung von Allokationen/Closures im Block.
 3. Weitere Benchmarks (FFT/Filter) folgen, sobald Spektral-Features eingeführt werden.
+
+## AM-E4-2 FFT/iFFT-Evaluierung (dokumentiert 2026-09-03)
+
+**Status:** Im Audio-Pfad existiert aktuell **keine eigene FFT** – FFTs laufen
+nur UI-seitig (`PerformanceMonitorTerminal.simpleFft`, Radix-2, für Oszilloskop/
+Spektrogramm). Für künftige Spektral-Features (Spektral-Analyse, Phase-Vocoder,
+Convolution-Partitioning) gilt:
+- **Kein Naive-DFT** in den Audio-Pfad. Für Power-of-2-Längen Radix-2/Radix-4
+  mit Pre-Computed-Twiddle-Tables (keine `Math.cos`/`sin` im Hot-Path).
+- Für Nicht-Power-of-2-Längen **cache-oblivious Mixed-Radix** (Bluestein nur
+  als letzter Ausweg). Referenz: FFTW-Ansatz, KEIN Fremdcode.
+- Evaluierung erfolgt erst mit Einführung des jeweiligen Features
+  (Benchmark dann hier ergänzen, analog LUT-Tabelle oben).
+
+## AM-E4-6 Oversampling-Evaluierung (dokumentiert 2026-09-03)
+
+**Status:** `masteringProcessor` nutzt aktuell eine **2×-True-Peak-Schätzung
+(linear)** – kein echtes Oversampling. Für nichtlineare Stufen (Soft-Clipper/
+Sättigung) wird **Half-Band-Oversampling** evaluiert:
+- Half-Band-FIR (2×) vor der Nichtlinearität, komplementärer Half-Band danach
+  (Anti-Aliasing der erzeugten Harmonischen). CPU-Kosten ~2–3× des Kerns.
+- Entscheidungskriterium: erst messen (`scripts/dsp-benchmark.ts`), dann
+  einschalten. Ziel: THD-Verbesserung bei Sättigung, ohne CPU-Budget
+  (< 70 % Gesamt) zu gefährden.
+- Solange keine Sättigungsstufe im Produktivpfad liegt, bleibt es bei der
+  linearen True-Peak-Schätzung (kein unnötiges Oversampling).

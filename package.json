@@ -24,6 +24,7 @@
     "generate:golden": "tsx scripts/generate-golden-wav.ts",
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "check:memo": "node scripts/check-react-memo.mjs",
+    "check:memory": "node --expose-gc scripts/memory-pressure-gate.mjs",
     "eval:ai": "tsx scripts/eval-ai.ts",
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
     "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs",

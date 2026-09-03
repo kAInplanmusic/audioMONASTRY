@@ -32,6 +32,7 @@ interface AudioEngineLike {
   play(): Promise<void> | void;
   stop(): void;
   reportXrun(): void;
+  reportStableWindow?(): void;
   setIdleSilence(silent: boolean): void;
   getLookaheadMs?(): number;
   getAudioHealth?(): { state?: string; sampleRate?: number; baseLatencyMs?: number; outputLatencyMs?: number };
@@ -135,6 +136,9 @@ export class MonastryMasterClock {
       if (this.playing && health && health.state !== 'running') {
         this.watchdogs++;
         try { void this.engine.play(); } catch { /* Auto-Recovery best effort */ }
+      } else if (this.playing && health && health.state === 'running') {
+        // AM-E6-2: stabile Fenster bauen Xrun-Eskalation langsam wieder ab.
+        try { this.engine.reportStableWindow?.(); } catch { /* optional */ }
       }
     }, 10_000);
   }

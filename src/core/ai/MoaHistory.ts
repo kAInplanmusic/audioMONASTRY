@@ -6,6 +6,7 @@
  * fire-and-forget – der Audio-Pfad wartet niemals darauf.
  */
 import { largeGetJson, largeSetJson } from '../../utils/indexedDB';
+import { suggestNextForPlugin, type AutomationSuggestion } from './parameterPrediction';
 
 export interface MoaHistoryEntry {
   pluginId: string;
@@ -52,6 +53,11 @@ export class MoaHistoryStore {
   subscribe(cb: () => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
+  }
+
+  /** AM-E6-4: Heuristischer Automation-Vorschlag aus der Historie. */
+  suggest(pluginId: string): AutomationSuggestion | null {
+    return suggestNextForPlugin(this.entries, pluginId);
   }
 }
 

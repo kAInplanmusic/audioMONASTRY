@@ -95,6 +95,10 @@ const metrics = {
   // P2 Live-Telemetrie-Dashboard: Client-Events nach type/source aufgeschlüsselt.
   telemetryByType: {} as Record<string, number>,
   telemetryBySource: {} as Record<string, number>,
+  // AM-E6-1: Xrun-/Dropout-Telemetrie (Histogramm-Quelle ist der Client;
+  // der Server aggregiert für Prometheus/JSON-Metriken).
+  telemetryXruns: 0,
+  telemetryXrunsBySource: {} as Record<string, number>,
 };
 
 // Aktive Socket.io-Verbindungen (User-Sessions) für /api/online + Idle-Shutdown.
@@ -294,6 +298,9 @@ app.get('/api/metrics', (req, res) => {
       '# HELP samplemonk_telemetry_events_total Client-Telemetrie-Events (kumulativ).',
       '# TYPE samplemonk_telemetry_events_total counter',
       `samplemonk_telemetry_events_total ${metrics.telemetryEvents ?? 0}`,
+      '# HELP samplemonk_telemetry_xruns_total Xrun-/Dropout-Telemetrie-Events (kumulativ).',
+      '# TYPE samplemonk_telemetry_xruns_total counter',
+      `samplemonk_telemetry_xruns_total ${metrics.telemetryXruns ?? 0}`,
       '# HELP samplemonk_ai_jobs_total Anzahl AI-Orchestrator-Jobs (kumulativ).',
       '# TYPE samplemonk_ai_jobs_total counter',
       `samplemonk_ai_jobs_total ${aiOrchestrator.jobs.list().length}`,
@@ -317,6 +324,13 @@ app.get('/api/metrics', (req, res) => {
         `samplemonk_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
       );
     }
+    for (const [source, count] of Object.entries(metrics.telemetryXrunsBySource ?? {})) {
+      lines.push(
+        '# HELP samplemonk_telemetry_xruns_by_source_total Xrun-/Dropout-Events nach Quelle.',
+        '# TYPE samplemonk_telemetry_xruns_by_source_total counter',
+        `samplemonk_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
+      );
+    }
     res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     res.send(lines.join('\n') + '\n');
     return;
@@ -336,6 +350,8 @@ app.get('/api/metrics', (req, res) => {
     telemetryEvents: metrics.telemetryEvents ?? 0,
     telemetryByType: metrics.telemetryByType ?? {},
     telemetryBySource: metrics.telemetryBySource ?? {},
+    telemetryXruns: metrics.telemetryXruns ?? 0,
+    telemetryXrunsBySource: metrics.telemetryXrunsBySource ?? {},
     lastRequestId: metrics.lastRequestId,
   });
 });
@@ -376,6 +392,11 @@ app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
     metrics.telemetryEvents = (metrics.telemetryEvents ?? 0) + 1;
     metrics.telemetryByType[type] = (metrics.telemetryByType[type] ?? 0) + 1;
     metrics.telemetryBySource[source] = (metrics.telemetryBySource[source] ?? 0) + 1;
+    // AM-E6-1: Xrun-/Dropout-Events separat aggregieren (Prometheus/Grafana).
+    if (type === 'xrun' || type === 'dropout') {
+      metrics.telemetryXruns = (metrics.telemetryXruns ?? 0) + 1;
+      metrics.telemetryXrunsBySource[source] = (metrics.telemetryXrunsBySource[source] ?? 0) + 1;
+    }
     accepted += 1;
     console.log(JSON.stringify({ t: 'telemetry', type, source, message, ctx, ts: ev.ts ?? Date.now() }));
   }
@@ -558,10 +579,36 @@ app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', '
 // mit eigenem Host) betrieben wird, kann hier ein Proxy eingebaut werden.
 // ===========================================================================
 
+// ===========================================================================
+// GAP-4: Eingangs-Validierung für /api/ai/* (Auth/Rate-Limit siehe Middleware)
+// ===========================================================================
+
+const AI_TASK_IDS = new Set<string>([
+  'llm', 'tts', 'sing', 'song', 'stem.separate',
+  'audio.classify', 'audio.transcribe', 'audio.embed',
+  'audio.analyze', 'audio.generate', 'multimodal',
+]);
+
+/** Task muss aus der zulässigen AiTask-Menge stammen (kein freies Routing). */
+function isValidAiTask(task: string): boolean {
+  return AI_TASK_IDS.has(task);
+}
+
+/**
+ * Modell-IDs werden in Provider-URLs eingesetzt. Erlaubt sind kurze
+ * HuggingFace-artige IDs (owner/name), nicht aber URLs, Pfadtraversal,
+ * Whitespace oder Steuerzeichen (SSRF-/Injection-Härtung).
+ */
+function isValidModelId(model: string): boolean {
+  if (model.length === 0 || model.length > 200) return false;
+  if (model.includes('://') || model.includes('..')) return false;
+  return /^[A-Za-z0-9._/-]+$/.test(model);
+}
+
 // --- POST /api/ai/compose  → deterministischer lokaler Preset-Generator ---
 app.post('/api/ai/compose', async (req, res) => {
   const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const seed = (prompt || 'techno').length;
+  const seed = (String(prompt ?? 'techno').trim().slice(0, 4000) || 'techno').length;
 
   // Deterministische Patterns aus dem Prompt-Seed ableiten (kein Netz).
   const kick = Array.from({ length: 16 }, (_, i) => (i + seed) % 4 === 0);
@@ -621,7 +668,7 @@ function sanitizeJsonBlock(raw: string): string {
 // --- POST /api/ai/compose  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
 app.post('/api/ai/generate', async (req, res) => {
   const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const query = (prompt || 'Dark warehouse techno drums').trim();
+  const query = (String(prompt ?? '').trim().slice(0, 4000) || 'Dark warehouse techno drums');
 
   const llmPrompt =
     'Generiere ein valides JSON (nur JSON, keine Erklärung) mit Feldern ' +
@@ -655,7 +702,7 @@ app.post('/api/ai/generate', async (req, res) => {
 // --- POST /api/ai/describe  → Ollama-gestützte Beschreibung (Style/Mix-Empfehlung) ---
 app.post('/api/ai/describe', async (req, res) => {
   const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const query = (prompt || 'Was ist ein guter Mix-Vorschlag ?').trim();
+  const query = (String(prompt ?? '').trim().slice(0, 4000) || 'Was ist ein guter Mix-Vorschlag ?');
 
   const llmPrompt =
     'Beantworte kurz (max 2 Sätze), auf Deutsch, fachlich für einen Musik-Produzenten: ' + query;
@@ -718,6 +765,12 @@ app.post('/api/ai/orchestrate', async (req, res) => {
   const safeModel = String(model ?? '').trim().slice(0, 200);
   if (!safeTask || !safeModel) {
     return res.status(422).json({ error: 'task and model are required' });
+  }
+  if (!isValidAiTask(safeTask)) {
+    return res.status(422).json({ error: 'unknown task', task: safeTask.slice(0, 80) });
+  }
+  if (!isValidModelId(safeModel)) {
+    return res.status(422).json({ error: 'invalid model id' });
   }
   metrics.aiRequests += 1;
   try {
