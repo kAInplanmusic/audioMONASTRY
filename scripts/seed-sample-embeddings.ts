@@ -19,7 +19,7 @@ import { embedText } from '../src/core/ai/orchestrator/textEmbedding';
 
 async function main(): Promise<void> {
   const url = (process.env.SUPABASE_URL ?? '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
+  const key = (process.env.SUPABASE_LEGACY_PAT ?? process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
   if (!url || !key) {
     console.error('❌ SUPABASE_URL / SUPABASE_SERVICE_ROLE fehlen in der .env.');
     process.exit(1);

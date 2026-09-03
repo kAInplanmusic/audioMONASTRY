@@ -23,7 +23,7 @@ function getClient(): SupabaseClient | null {
   if (testClient !== null) return testClient;
   if (client) return client;
   const url = (process.env.SUPABASE_URL ?? '').trim();
-  const key = (process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
+  const key = (process.env.SUPABASE_LEGACY_PAT ?? process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
   if (!url || !key) return null;
   try {
     client = createClient(url, key, { auth: { persistSession: false } });
