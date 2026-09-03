@@ -29,8 +29,9 @@ jobs:
         run: node scripts/check-bundle-size.mjs || true
 
       # P3-3: Eval-Run je Plugin (21 deterministische Kern-Kommandos),
-      # schreibt ai-evaluations.json/ai-eval-runs.json und bricht bei
-      # Score-Abfall (FAIL-Gate) mit Exit 1 ab.
+      # schreibt ai-evaluations.json/ai-eval-runs.json + ai-eval-report.md
+      # (Score, Dauer, Fehler je Plugin) und bricht bei Score-Abfall oder
+      # Laufzeit-Überschreitung (Gate aus evalMatrix) mit Exit 1 ab.
       - name: AI-Eval-Run (Gate bei Score-Abfall)
         run: npm run eval:ai
 
@@ -44,8 +45,14 @@ jobs:
           name: ai-eval-results
           path: |
             test-results/ai-eval*.json
+            test-results/ai-eval-report.md
             test-results/prompt-iterations.json
+            test-results/system-prompts.json
           if-no-files-found: error
+
+      - name: Eval-Report in die Job-Summary schreiben
+        if: always()
+        run: cat test-results/ai-eval-report.md >> "$GITHUB_STEP_SUMMARY" || true
 
       - name: Auto-Issue bei Fehler (Erkennung -> Reparatur-Route)
         if: failure()
