@@ -7,6 +7,10 @@
 // Types & Constants
 export * from './types/DropProfile';
 
+// Audio-Adapter (Interface-Boundary zur App-Schicht)
+export { setDropAudioAdapter, getDropAudioAdapter } from './DropAudioAdapter';
+export type { DropAudioAdapter, DropMixerChannelSnapshot } from './DropAudioAdapter';
+
 // Core Services
 export { DropContextAnalyzer, dropContextAnalyzer } from './DropContextAnalyzer';
 export type { AudioContext, MixerChannel, SuggestionScoring } from './DropContextAnalyzer';
@@ -31,3 +35,16 @@ export type { AiGenerationRequest, AiGenerationResponse } from './AiServerBridge
 
 export { ClockBridge, clockBridge } from './ClockBridge';
 export type { ClockState, QuantizationLevel } from './ClockBridge';
+
+// Server-/Fallback-Generator (rein, ohne Plattform-APIs)
+export {
+  buildDropPrompt,
+  sanitizeAiDropResponse,
+  generateDeterministicDrop,
+  extractJsonBlock,
+  promptSeed,
+  barsToMs,
+  intensityForStyle,
+  SUPPORTED_DROP_PARAMETERS,
+} from './DropTemplateGenerator';
+export type { DropGenerationRequest, DropGenerationResult, DropStyle } from './DropTemplateGenerator';
