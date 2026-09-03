@@ -339,8 +339,8 @@
 
 - [x] **AI-Rate-Limits:** `src/config/aiRateLimits.ts` + Server-Verdrahtung + `tests/aiRateLimits.test.ts` → TASKDONE.
 - [x] **AI-Supabase-Persistenz-Tests:** Gemockte Tests für `ai_sessions`/`ai_jobs`/`ai_errors` → `tests/aiPersistence.test.ts`, TASKDONE.
-- [ ] **AI-E2E-Szenario (Code + Live):** Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero als automatisierter Test (aus AITodo Phase 24–26).
-- [ ] **AI-Failure-Suite (Code + Live):** HF offline, GPU down, Duplicate, Crash automatisieren (aus AITodo Phase 24–26).
+- [ ] **AI-E2E-Szenario (Live):** Code-Teil erledigt – `tests/aiE2eScenario.test.ts` fährt Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero gemockt durch → TASKDONE. Offen bleibt der Lauf gegen den echten HF-Endpoint (aus AITodo Phase 24–26).
+- [ ] **AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26).
 - [ ] **AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert).
 - [ ] **AI-Docker-Build/GPU-Test (CI/Betreiber):** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert).
 - [ ] **Warm-Keep-Option:** Selten genutzte Fenster ohne Kaltstart (aus AITodo LOW PRIORITY).
@@ -448,7 +448,7 @@
 
 ### Lizenz-Hinweise (G)
 
-- [ ] **[LICENSE] Externe Library-Ressourcen dokumentieren**: BBC SO Discover, Spitfire LABS, Berlin Free Orchestra, The Alpine Project (CC-BY-ND), Pacific Percussion. Als reine User-seitige externe Ressourcen behandeln; **keine** Redistribution ohne Prüfung. `LICENSE_REVIEW_REQUIRED`.
+- [x] **[LICENSE] Externe Library-Ressourcen dokumentiert**: `docs/LICENSE_EXTERNAL_RESOURCES.md` (BBC SO Discover, Spitfire LABS, Virtual Playing Orchestra, Sonatina, Berlin Free Orchestra, The Alpine Project (CC-BY-ND), Pacific Percussion, VSCO 2 CE = CC0) – keine Redistribution, keine Derivate aus ND-Material, Abgrenzung zu GPL-Code-Referenzen, Release-Checkliste → TASKDONE.
 
 ---
 
@@ -458,8 +458,6 @@
 
 ### Nur Code/Tests (automatisiert umsetzbar)
 
-- AI-E2E-Szenario (Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero)
-- AI-Failure-Suite (HF offline, GPU down, Duplicate, Crash)
 - Worklet-CPU-Budgets im PerformanceMonitor
 - Kontinuierliches Profiling (Worklet-CPU, Per-Sample-Allokationen, Xrun-Histogramm)
 - Adaptive Puffergrößen bei Xruns
