@@ -104,7 +104,7 @@
 
 ### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
 
-- [ ] **Prüfpunkt:** 4-User-E2E: User2 aktiviert Drum → auf MAIN hörbar; User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN bleibt unverändert; zurück auf MAIN → sofort Gesamtmix.
+- [x] **Prüfpunkt:** 4-User-E2E: User2 aktiviert Drum → auf MAIN hörbar; User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN bleibt unverändert; zurück auf MAIN → sofort Gesamtmix. → Cue-Weg real verdrahtet (`src/core/audio/monitorRouting.ts` + `audioEngine`: per-Kanal-Cue-Abgriff pre-Master, lokaler MAIN-/CUE-Umschalter mit 10-ms-Rampe, MAIN-Bus/Master-Stream unangetastet); automatisiert durch `tests/monitorRouting.test.ts` (4-User-Matrix + „MAIN unverändert"-Beweis über `exportGraphState`) und `tests/e2e/monitorCue.spec.ts` (Chromium, Cue-Gains auf Web-Audio-Ebene) → TASKDONE. Reine Hörprobe im 4-Browser-Livelauf bleibt in `docs/LIVE_CHECKLIST_2026-09-02.md`.
 
 ### P0-7 Master-Player fest oben mit Transport
 
