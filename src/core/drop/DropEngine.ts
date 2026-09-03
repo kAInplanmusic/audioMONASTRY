@@ -6,12 +6,16 @@
 
 import type { DropProfile, ParameterTransformation, QuantizationType } from './types/DropProfile';
 import { interpolateValue } from './types/DropProfile';
+import { pluginParameterBridge } from './PluginParameterBridge';
+import { mixerBridge } from './MixerBridge';
+import { clockBridge } from './ClockBridge';
+import type { QuantizationLevel } from './ClockBridge';
 
 export interface ParameterAnimation {
   targetId: string; // plugin_param_id
-  envelope: Float32Array | ((progress: number) => number); // Pre-computed oder Runtime-Curve
-  startSample: number;
-  duration: number;
+  envelope: (progress: number) => number; // Runtime-Curve (normalisiert 0..1)
+  startTime: number; // absolute ms (Date.now-Basis)
+  duration: number; // ms
   startValue: number;
   endValue: number;
 }
@@ -28,6 +32,8 @@ export interface DropExecution {
 export interface DropEngineConfig {
   audioSampleRate?: number; // default 48000
   scheduleAheadTime?: number; // ms, default 100
+  /** Parameter direkt über die PluginParameterBridge schreiben (default true). */
+  applyParameters?: boolean;
 }
 
 export interface DropEngineEvents {
@@ -38,6 +44,27 @@ export interface DropEngineEvents {
   onError?: (error: Error) => void;
 }
 
+/** Mapping der Profil-Quantisierung auf die Clock-Raster. */
+const QUANTIZATION_MAP: Record<Exclude<QuantizationType, 'instant'>, QuantizationLevel> = {
+  '1/8bar': '1beat',
+  '1/4bar': '1beat',
+  '1/2bar': '2beat',
+  '1bar': '1bar',
+  '2bar': '2bar',
+  '4bar': '4bar',
+};
+
+/** rAF mit Node-Fallback (Tests/SSR laufen ohne Browser-Loop). */
+const requestFrame = (cb: () => void): number => {
+  if (typeof requestAnimationFrame === 'function') return requestAnimationFrame(() => cb());
+  return setTimeout(cb, 16) as unknown as number;
+};
+
+const cancelFrame = (id: number): void => {
+  if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(id);
+  else clearTimeout(id as unknown as ReturnType<typeof setTimeout>);
+};
+
 /**
  * Drop Engine – Execution
  * Führt Drop-Profile aus und animiert Parameter
@@ -47,12 +74,13 @@ export class DropEngine {
   private animationFrameId: number | null = null;
   private config: Required<DropEngineConfig>;
   private events: DropEngineEvents = {};
-  private lastUpdateTime: number = 0;
+  private pendingScheduleIds: string[] = [];
 
   constructor(config?: DropEngineConfig) {
     this.config = {
       audioSampleRate: config?.audioSampleRate || 48000,
       scheduleAheadTime: config?.scheduleAheadTime || 100,
+      applyParameters: config?.applyParameters ?? true,
     };
   }
 
@@ -73,14 +101,29 @@ export class DropEngine {
     startTime?: number
   ): Promise<void> {
     try {
-      if (mode === 'immediate') {
+      const quant = quantization ?? profile.quantization;
+
+      if (mode === 'immediate' || quant === 'instant') {
         this.executeDrop(profile, startTime || Date.now());
-      } else if (mode === 'quantized' && quantization) {
-        // TODO: Nutze masterClock + QuantizedScheduler
-        // Für MVP: Simple Verzögerung
-        const delay = this.calculateQuantizationDelay(quantization);
-        setTimeout(() => this.executeDrop(profile, Date.now()), delay);
+        return;
       }
+
+      const level = QUANTIZATION_MAP[quant as Exclude<QuantizationType, 'instant'>] ?? '4bar';
+      const clock = clockBridge.getClockState();
+
+      if (clock.isRunning) {
+        // Taktgenaue Ausführung über die Master-Clock
+        const scheduleId = clockBridge.scheduleDrop(() => {
+          this.pendingScheduleIds = this.pendingScheduleIds.filter((id) => id !== scheduleId);
+          this.executeDrop(profile, Date.now());
+        }, level);
+        this.pendingScheduleIds.push(scheduleId);
+        return;
+      }
+
+      // Transport steht: Fallback über die reale BPM (kein 120-BPM-Hardcode)
+      const delay = this.calculateQuantizationDelay(quant);
+      setTimeout(() => this.executeDrop(profile, Date.now()), delay);
     } catch (err) {
       if (this.events.onError) {
         this.events.onError(err instanceof Error ? err : new Error(String(err)));
@@ -92,30 +135,35 @@ export class DropEngine {
    * Execute Drop sofort
    */
   private executeDrop(profile: DropProfile, startTime: number): void {
-    const endTime = startTime + profile.dropDuration;
-
-    // Baue Parameter-Animationen
     const animations = this.buildParameterAnimations(profile, startTime);
+
+    // Drop endet, wenn die letzte Parameterfahrt beendet ist.
+    const animationEnd = animations.reduce(
+      (max, anim) => Math.max(max, anim.startTime + anim.duration),
+      startTime + profile.dropDuration
+    );
 
     const execution: DropExecution = {
       profileId: profile.id,
       startTime,
-      endTime,
+      endTime: animationEnd,
       parameterAnimations: animations,
       isActive: true,
       progress: 0,
     };
 
-    // Speichern
     const executionId = `${profile.id}_${startTime}`;
     this.activeDrops.set(executionId, execution);
 
-    // Event
     if (this.events.onDropStarted) {
       this.events.onDropStarted(profile.id);
     }
 
-    // Start Animation Loop
+    // Startwerte sofort setzen (kein Sprung beim ersten Frame)
+    for (const anim of animations) {
+      if (anim.startTime <= startTime) this.applyParameterAnimation(anim, 0);
+    }
+
     this.ensureAnimationLoop();
   }
 
@@ -129,29 +177,25 @@ export class DropEngine {
     const animations: ParameterAnimation[] = [];
 
     for (const transform of profile.parameterSequence) {
-      const paramStartTime = startTime + (transform.delay || 0);
-      const paramDuration = transform.duration;
-
-      const animation: ParameterAnimation = {
-        targetId: `${transform.pluginId}:${transform.parameterId}`,
-        envelope: (progress: number) => {
-          return interpolateValue(
-            transform.startValue,
-            transform.endValue,
-            progress,
-            transform.curve
-          );
-        },
-        startSample: (paramStartTime * this.config.audioSampleRate) / 1000,
-        duration: (paramDuration * this.config.audioSampleRate) / 1000,
-        startValue: transform.startValue,
-        endValue: transform.endValue,
-      };
-
-      animations.push(animation);
+      animations.push(this.buildAnimation(transform, startTime));
     }
 
     return animations;
+  }
+
+  private buildAnimation(
+    transform: ParameterTransformation,
+    startTime: number
+  ): ParameterAnimation {
+    return {
+      targetId: `${transform.pluginId}:${transform.parameterId}`,
+      envelope: (progress: number) =>
+        interpolateValue(transform.startValue, transform.endValue, progress, transform.curve),
+      startTime: startTime + (transform.delay || 0),
+      duration: Math.max(1, transform.duration),
+      startValue: transform.startValue,
+      endValue: transform.endValue,
+    };
   }
 
   /**
@@ -161,147 +205,130 @@ export class DropEngine {
     if (this.animationFrameId !== null) return;
 
     const loop = () => {
-      const now = Date.now();
-      const deltaTime = now - this.lastUpdateTime;
-      this.lastUpdateTime = now;
-
-      this.updateActiveDrops(now);
+      this.updateActiveDrops(Date.now());
 
       if (this.activeDrops.size > 0) {
-        this.animationFrameId = requestAnimationFrame(loop);
+        this.animationFrameId = requestFrame(loop);
       } else {
         this.animationFrameId = null;
       }
     };
 
-    this.animationFrameId = requestAnimationFrame(loop);
+    this.animationFrameId = requestFrame(loop);
   }
 
   /**
    * Update alle aktiven Drops
    */
-  private updateActiveDrops(now: number): void {
+  updateActiveDrops(now: number): void {
     const completed: string[] = [];
 
     for (const [id, execution] of this.activeDrops.entries()) {
       if (now >= execution.endTime) {
-        // Drop fertig
         completed.push(id);
         execution.progress = 1;
+        execution.isActive = false;
 
-        // Finale Parameter-Updates
+        // Finale Parameter-Werte garantiert schreiben
         for (const anim of execution.parameterAnimations) {
-          this.applyParameterAnimation(anim, 1.0);
+          this.applyParameterAnimation(anim, 1);
         }
 
         if (this.events.onDropFinished) {
           this.events.onDropFinished(execution.profileId);
         }
       } else if (now >= execution.startTime) {
-        // Drop läuft
-        execution.progress = (now - execution.startTime) / (execution.endTime - execution.startTime);
+        execution.progress =
+          (now - execution.startTime) / Math.max(1, execution.endTime - execution.startTime);
 
-        // Update alle Animationen
         for (const anim of execution.parameterAnimations) {
-          const animProgress = this.calculateAnimationProgress(
-            now,
-            anim.startSample,
-            anim.duration
-          );
-
+          const animProgress = this.calculateAnimationProgress(now, anim);
           if (animProgress >= 0 && animProgress <= 1) {
             this.applyParameterAnimation(anim, animProgress);
           }
         }
 
-        // Progress Event
         if (this.events.onDropProgress) {
           this.events.onDropProgress(execution.progress, execution.profileId);
         }
       }
     }
 
-    // Entferne abgeschlossene Drops
     for (const id of completed) {
       this.activeDrops.delete(id);
     }
   }
 
   /**
-   * Kalkuliere Animation-Progress (0..1)
+   * Kalkuliere Animation-Progress (0..1; <0 = noch nicht gestartet)
    */
-  private calculateAnimationProgress(
-    now: number,
-    startSample: number,
-    durationSamples: number
-  ): number {
-    const currentSample = (now * this.config.audioSampleRate) / 1000;
-    const relativePosition = currentSample - startSample;
-
-    if (relativePosition < 0) return -1; // Not started
-    if (relativePosition > durationSamples) return 1.1; // Finished
-
-    return relativePosition / durationSamples;
+  private calculateAnimationProgress(now: number, anim: ParameterAnimation): number {
+    const relative = now - anim.startTime;
+    if (relative < 0) return -1;
+    if (relative > anim.duration) return 1.1;
+    return relative / anim.duration;
   }
 
   /**
-   * Apply Parameter Animation
-   * Ruft onParameterUpdate Callback auf
+   * Parameter-Animation anwenden:
+   * schreibt über die PluginParameterBridge und meldet das Update.
    */
   private applyParameterAnimation(anim: ParameterAnimation, progress: number): void {
-    const value = typeof anim.envelope === 'function' ? anim.envelope(progress) : 0.5;
-
+    const normalized = anim.envelope(progress);
     const [pluginId, parameterId] = anim.targetId.split(':');
 
+    if (this.config.applyParameters) {
+      if (pluginId === 'mixer' && parameterId === 'channel_fade') {
+        // Mixer-Fades laufen über die Mixer-Bridge (Kanal-Fader).
+        for (const ch of mixerBridge.getActiveChannels()) {
+          mixerBridge.setMixerLevel(ch.id, Math.max(0, Math.min(1, normalized)));
+        }
+      } else {
+        pluginParameterBridge.setNormalizedParameter(anim.targetId, normalized);
+      }
+    }
+
     if (this.events.onParameterUpdate) {
-      this.events.onParameterUpdate(pluginId, parameterId, value);
+      this.events.onParameterUpdate(pluginId, parameterId, normalized);
     }
   }
 
   /**
    * DJ Transition: von Channel A zu Channel B
+   * Crossfade (Equal-Power) läuft parallel zum Drop.
    */
   async triggerChannelTransition(
     fromChannelId: string,
     toChannelId: string,
     transitionProfile: DropProfile
   ): Promise<void> {
-    // Sequenz:
-    // 1. Current Channel fade-out (mit fromChannel Parameter)
-    // 2. DROP execute
-    // 3. New Channel fade-in
+    const fadeDuration = Math.max(500, transitionProfile.dropDuration);
 
-    // TODO: Nutze Mixer-Bridge für Fader-Automation
-    // Für MVP: Nur Drop-Part ausführen
-
-    await this.triggerDrop(transitionProfile, 'immediate');
+    await Promise.all([
+      this.triggerDrop(transitionProfile, 'immediate'),
+      mixerBridge.crossfade(fromChannelId, toChannelId, fadeDuration),
+    ]);
   }
 
   /**
-   * Kalkuliere Verzögerung für Quantization
+   * Kalkuliere Verzögerung für Quantization (ms) anhand der realen BPM.
    */
-  private calculateQuantizationDelay(quantization: QuantizationType): number {
-    // Basis: 120 BPM = 500ms pro Beat
-    const baseMs = 500;
+  calculateQuantizationDelay(quantization: QuantizationType): number {
+    if (quantization === 'instant') return 0;
 
-    switch (quantization) {
-      case 'instant':
-        return 0;
-      case '1/8bar':
-        return baseMs * 2;
-      case '1/4bar':
-        return baseMs * 4;
-      case '1/2bar':
-        return baseMs * 8;
-      case '1bar':
-        return baseMs * 16;
-      case '2bar':
-        return baseMs * 32;
-      case '4bar':
-        return baseMs * 64;
-      default:
-        return baseMs * 16;
-    }
+    const bpm = clockBridge.getClockState().bpm || 120;
+    const msPerBeat = 60000 / bpm;
+
+    const beats: Record<Exclude<QuantizationType, 'instant'>, number> = {
+      '1/8bar': 0.5,
+      '1/4bar': 1,
+      '1/2bar': 2,
+      '1bar': 4,
+      '2bar': 8,
+      '4bar': 16,
+    };
+
+    return msPerBeat * (beats[quantization as Exclude<QuantizationType, 'instant'>] ?? 16);
   }
 
   /**
@@ -309,8 +336,10 @@ export class DropEngine {
    */
   stopAll(): void {
     this.activeDrops.clear();
+    for (const id of this.pendingScheduleIds) clockBridge.cancelScheduledDrop(id);
+    this.pendingScheduleIds = [];
     if (this.animationFrameId !== null) {
-      cancelAnimationFrame(this.animationFrameId);
+      cancelFrame(this.animationFrameId);
       this.animationFrameId = null;
     }
   }
@@ -321,10 +350,12 @@ export class DropEngine {
   getStatus(): {
     activeDrops: number;
     profiles: string[];
+    scheduled: number;
   } {
     return {
       activeDrops: this.activeDrops.size,
       profiles: Array.from(this.activeDrops.values()).map((e) => e.profileId),
+      scheduled: this.pendingScheduleIds.length,
     };
   }
 }
