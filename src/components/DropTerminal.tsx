@@ -14,7 +14,7 @@ import { AiChatPanel } from './drop/AiChatPanel';
 import { DropPresetBrowser } from './drop/DropPresetBrowser';
 import type { DropMode } from '../context/DropContext';
 
-const DropTerminalContent: React.FC = () => {
+const DropTerminalContent = React.memo(function DropTerminalContent() {
   const { mode, setMode } = useDropContext();
   const [showPresets, setShowPresets] = useState(false);
 
@@ -88,16 +88,16 @@ const DropTerminalContent: React.FC = () => {
       </div>
     </div>
   );
-};
+});
 
 /**
  * Main DropTerminal Component
  * Wrapped with DropProvider
  */
-export const DropTerminal: React.FC = () => {
+export const DropTerminal = React.memo(function DropTerminal() {
   return (
     <DropProvider>
       <DropTerminalContent />
     </DropProvider>
   );
-};
+});
