@@ -18,6 +18,13 @@
 - [x] **Tests:** `tests/portalWorkerSnapshots.test.ts` (6 Tests: Snapshot-Image-Wahl, cloud-init-Fallback, Refresh + Retention, Auth-Pflicht, Listing); `npm run verify` → **483 Tests + Boundary-Scan 0** grün.
 - [ ] **Prüfpunkt (bleibt offen):** Flotten-Start (wake→ready) vorher/nachher messen; Ziel < 90 s – Live-Messung beim nächsten Flotten-Start.
 
+### GAP-4 · Supabase-RLS-Audit als Regressions-Gate (2026-09-03)
+
+- [x] **Prüfung:** Alle 15 Tabellen aus `database/schema.sql`, `ai_migration_001.sql` und `ai_migration_002.sql` haben RLS aktiviert; `anon` besitzt je Tabelle genau eine SELECT-Policy, Schreibrechte ausschließlich für `service_role`.
+- [x] **Gate:** `tests/supabaseRls.test.ts` (18 Tests) prüft je SQL-Datei statisch: RLS-Aktivierung je angelegter Tabelle, genau eine anon-SELECT-Policy, Schreib-Policies nur für `service_role`, keine `authenticated`/`public`-Rollen, `drop policy if exists` je Policy (Wiederholbarkeit). Kommentarzeilen werden ausgefiltert, damit auskommentierte Statements nicht als vorhanden zählen.
+- [x] **Negativprobe:** Entfernte RLS-Aktivierung bzw. `to authenticated` lassen das Gate rot werden (verifiziert, danach zurückgesetzt).
+- [ ] **Offen:** Live-Abgleich gegen die tatsächliche Supabase-Instanz (Betreiber-Schritt).
+
 ### OPS-Load-Balancer – LB11-Entscheidung dokumentiert (2026-09-03)
 
 - [x] **Trigger:** LB11 erst ab **≥ 2 App-Knoten** (Multi-Session, > 4 User/Session, HA/Zero-Downtime-Deploys) – festgehalten in `docs/SERVER_FLEET.md`.

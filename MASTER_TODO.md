@@ -235,7 +235,7 @@
 - [x] Locking an User-ID statt Socket-ID server-seitig absichern → erledigt in P4-2 (Sender-User-ID im Relay, Rollenzuordnung je User-ID, Audit-Log).
 - [ ] HF-Token-Rotation dokumentiert ✅ – **Endpoint-Secret rotieren** (Betreiber-Schritt, offen)
 - [ ] Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF)
-- [ ] Supabase RLS prüfen (Prompts/Evals: anon read, service_role write)
+- [x] Supabase RLS geprüft (Prompts/Evals + Samples/Music: anon read, service_role write) → statisches Audit-Gate `tests/supabaseRls.test.ts` über alle `database/*.sql` → TASKDONE.
 - [ ] **Prüfpunkt:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` ist vollständig abgehakt oder hat einen offenen Task
 
 ### GAP-5 Prompt-/Trainings-Matrix je Plugin
