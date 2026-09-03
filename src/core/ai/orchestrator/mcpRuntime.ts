@@ -13,6 +13,7 @@ import { aiLogger } from './aiLogger';
 import { listModels } from './modelRegistry';
 import type { AiTask, McpPermission } from './types';
 import { MCP_PERMISSION_LEVEL } from './types';
+import { PLUGIN_COMMAND_CATALOG } from '../../../utils/prompts';
 
 export interface McpToolSpec {
   name: string;
@@ -75,6 +76,8 @@ export function createDefaultMcpRuntime(deps: {
   getRuntimeStatus: () => Record<string, unknown>;
   loadModel: (modelId: string) => Promise<void>;
   unloadModel: (modelId: string) => Promise<void>;
+  /** P3-2: geplantes Plugin-Kommando an den Client-Pfad durchreichen. */
+  recordPluginCommand?: (cmd: { pluginId: string; action: string; parameters: Record<string, unknown> }) => void;
 }): McpRuntime {
   const runtime = new McpRuntime();
 
@@ -91,6 +94,74 @@ export function createDefaultMcpRuntime(deps: {
   runtime.register({ name: 'audio.generate', category: 'generation', permission: 'EXECUTION', description: 'Audio-/Musik-Generierung' }, (p) => deps.runTask('audio.generate', String(p.model ?? 'musicgen-small'), p));
   runtime.register({ name: 'stem.separate', category: 'audio', permission: 'EXECUTION', description: 'Stem-Separation (Replicate)' }, (p) => deps.runTask('stem.separate', String(p.model ?? 'cjwbw/demucs'), p));
   runtime.register({ name: 'sample.search', category: 'sample', permission: 'READ', description: 'Sample-Suche in der lokalen Bibliothek' }, (p) => deps.searchSamples(String(p.query ?? '')));
+
+  // ---------------------------------------------------------------------------
+  // P3-2: Plugin-MCP-Tools (serverseitige Planung, client-seitige Ausführung).
+  // Der Server kennt den kanonischen Kommando-Katalog (src/utils/prompts.ts) und
+  // validiert pluginId/action. Die tatsächliche Audio-Ausführung passiert im
+  // Client über die pluginCommandRegistry – hier wird das Kommando nur geplant
+  // und an den Client-Pfad durchgereicht (keine Fake-Audio-Tools).
+  // ---------------------------------------------------------------------------
+  const catalogCommands = Object.entries(PLUGIN_COMMAND_CATALOG).flatMap(([pluginId, cmds]) =>
+    cmds.split(',').map((part) => ({ pluginId, action: part.trim().split('(')[0].trim() })).filter((c) => c.action),
+  );
+
+  for (const { pluginId, action } of catalogCommands) {
+    runtime.register(
+      {
+        name: `${pluginId}.${action}`,
+        category: 'plugin',
+        permission: 'WRITE',
+        description: `Plant ${pluginId}:${action} (Ausführung client-seitig via pluginCommandRegistry)`,
+      },
+      (p) => {
+        deps.recordPluginCommand?.({ pluginId, action, parameters: { ...p, permission: undefined } });
+        return { pluginId, action, planned: true };
+      },
+    );
+  }
+
+  // Explizite Tool-Aliase aus P3-2 (mixer.set_channel, synth.play_note, …).
+  const PLUGIN_TOOL_ALIASES: Record<string, { pluginId: string; action: string }> = {
+    'mixer.set_channel': { pluginId: 'mixer', action: 'channel' },
+    'synth.play_note': { pluginId: 'synthesizer', action: 'note' },
+    'synthesizer.play_note': { pluginId: 'synthesizer', action: 'note' },
+    'sequencer.load_pattern': { pluginId: 'mcp', action: 'pattern_four' },
+    'mcp.load_pattern': { pluginId: 'mcp', action: 'pattern_four' },
+  };
+  for (const [toolName, target] of Object.entries(PLUGIN_TOOL_ALIASES)) {
+    runtime.register(
+      {
+        name: toolName,
+        category: 'plugin',
+        permission: 'WRITE',
+        description: `Alias für ${target.pluginId}.${target.action}`,
+      },
+      (p) => {
+        deps.recordPluginCommand?.({ pluginId: target.pluginId, action: target.action, parameters: { ...p, permission: undefined } });
+        return { pluginId: target.pluginId, action: target.action, planned: true };
+      },
+    );
+  }
+
+  runtime.register(
+    {
+      name: 'plugin.command',
+      category: 'plugin',
+      permission: 'WRITE',
+      description: 'Plugin-Kommando planen (pluginId, action, parameters)',
+    },
+    (p) => {
+      const pluginId = String(p.pluginId ?? '');
+      const action = String(p.action ?? '');
+      const known = catalogCommands.some((c) => c.pluginId === pluginId && c.action === action);
+      if (!pluginId || !action || !known) {
+        throw new Error(`unknown plugin command: ${pluginId}:${action}`);
+      }
+      deps.recordPluginCommand?.({ pluginId, action, parameters: { ...p, permission: undefined } });
+      return { pluginId, action, planned: true };
+    },
+  );
 
   return runtime;
 }

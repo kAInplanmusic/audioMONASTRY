@@ -12,6 +12,7 @@ import type {
 } from '../core/instrument/types';
 import { ClockSync } from './ClockSync';
 import { PhaseLockedLoop } from './PhaseLockedLoop';
+import { masterClock } from '../core/clock/MonastryMasterClock';
 import { AudioGraphState, isAudioGraphState } from './audioGraphSerialization';
 import { GraphStateBridge } from '../core/audio/GraphStateBridge';
 import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '../core/audio/WorkletGraphRuntime';
@@ -417,6 +418,9 @@ class AudioEngine {
     this.eqNode = makeWorklet('eq-processor');
     this.masteringNode = makeWorklet('mastering-processor');
     this.analyzerNode = makeWorklet('analyzer-processor');
+    // P2-4: effectProcessor als fester Insert in der Master-Kette erzeugen
+    // (nicht erst lazy in setEffectParam) – sonst wird er nie verdrahtet.
+    this.effectNode = makeWorklet('effect-processor');
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
     // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer),
@@ -503,7 +507,15 @@ class AudioEngine {
         try { f.connect(t); } catch { /* Worklet-Fallback – Kette bleibt offen */ }
       }
     };
-    connectSafe(this.toneShiftTilt, this.eqNode);
+    // P2-4: effectNode als Insert zwischen toneShift und EQ hängen, sofern das
+    // Worklet existiert; sonst direkter Fallback (toneShiftTilt → eqNode).
+    const effectReady = !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
+    if (effectReady) {
+      connectSafe(this.toneShiftTilt, this.effectNode);
+      connectSafe(this.effectNode, this.eqNode);
+    } else {
+      connectSafe(this.toneShiftTilt, this.eqNode);
+    }
     connectSafe(this.eqNode, this.masteringNode);
     connectSafe(this.masteringNode, this.dspNode);
     connectSafe(this.dspNode, this.lufsNode);
@@ -564,10 +576,23 @@ class AudioEngine {
 
     this.initialized = true;
 
+    // P2-2: MONASTRYmasterclock als singulären Timing-Regler an die Engine
+    // binden (Worklet-Clock bleibt die einzige Timing-Quelle im Audio-Pfad).
+    try {
+      masterClock.attach(this);
+    } catch (e) {
+      console.warn('masterClock konnte nicht angebunden werden:', e);
+    }
+
     // Sicherstellen, dass beim ersten Start ein hörbarer Drum-Loop aktiv ist
     // (falls keine Patterns gesetzt wurden). So liefert "Play" sofort Musik,
     // ohne dass externe Sample-Dateien vorhanden sein müssen.
     this.ensureDemoPattern();
+  }
+
+  /** P2-2: Diagnose-Snapshot der singulären Master-Clock (für perfMONK/Audit). */
+  public getClockDiagnostics() {
+    return masterClock.getDiagnostics();
   }
 
   /**
@@ -741,12 +766,18 @@ class AudioEngine {
 
   /** Effekt-Engine (effectProcessor) steuern – Insert/Send. */
   private effectNode: AudioWorkletNode | null = null;
+
+  /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
+  public isEffectInsertReady(): boolean {
+    return !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
+  }
+
   public setEffectParam(p: { wet?: number; feedback?: number; rate?: number; depth?: number; bits?: number; sampleReduction?: number }) {
     this.ensureInitialized();
     if (!this.effectNode) {
+      // Fallback, falls setEffectParam vor Abschluss von init() aufgerufen
+      // wurde (ensureInitialized wird nicht awaited).
       try {
-        // Raw-Context-Fallback: setEffectParam kann vor Abschluss der async
-        // init() aufgerufen werden (ensureInitialized wird nicht awaited).
         const rawCtx: any = (this.ctx && typeof (this.ctx as any).createGain === 'function')
           ? this.ctx
           : (Tone.context as any)?.rawContext;

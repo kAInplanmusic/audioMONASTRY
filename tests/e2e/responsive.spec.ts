@@ -53,6 +53,9 @@ async function toggleMixerOnTouch(page: Page) {
   // Präziser Toolbar-Selektor: getByTitle('MIX') würde auch die Monitor-Quelle
   // (title="Monitor-Quelle: MAIN / eigener User-Mix …") treffen.
   const mix = page.locator(`${TOOLBAR} button[aria-label^="MIX "]`);
+  await mix.scrollIntoViewIfNeeded();
+  // Layout-Settling abwarten (lazy DJ-Mixer/Header), damit der Tap sicher trifft.
+  await page.waitForTimeout(250);
   await mix.tap();
   await expect(mix).toHaveAttribute('aria-pressed', 'true');
 }
@@ -123,6 +126,29 @@ test.describe('Responsive/Touch-Matrix', () => {
     test.skip(({ browserName }) => browserName === 'firefox', 'iOS/Android-Matrix nur Chromium (WebKit in CI)');
 
     test('Studio lädt ohne horizontalen Overflow', async ({ page }) => {
+      await startStudio(page);
+      await expectNoHorizontalOverflow(page);
+    });
+  });
+
+  test.describe('iPad 16:9 Breitbild (1180×664)', () => {
+    test.use({ viewport: { width: 1180, height: 664 }, hasTouch: true, isMobile: true });
+    test.skip(({ browserName }) => browserName === 'firefox', 'iOS/Android-Matrix nur Chromium (WebKit in CI)');
+
+    test('Studio lädt ohne Overflow, Header-Auswahl-Icons sichtbar', async ({ page }) => {
+      await startStudio(page);
+      await expectNoHorizontalOverflow(page);
+      await expect(page.locator('nav[aria-label="Studio-Navigation"]')).toBeVisible();
+      // 18 Plugin-Icons (alle außer ai/mixer/masterplayer), zwei Reihen à 9.
+      await expect(page.locator('nav[aria-label="Studio-Navigation"] button')).toHaveCount(18);
+    });
+  });
+
+  test.describe('iPad Pro 16:9 Breitbild (1366×768)', () => {
+    test.use({ viewport: { width: 1366, height: 768 }, hasTouch: true, isMobile: true });
+    test.skip(({ browserName }) => browserName === 'firefox', 'iOS/Android-Matrix nur Chromium (WebKit in CI)');
+
+    test('Studio lädt ohne Overflow', async ({ page }) => {
       await startStudio(page);
       await expectNoHorizontalOverflow(page);
     });

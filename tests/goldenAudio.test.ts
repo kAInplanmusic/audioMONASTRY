@@ -111,3 +111,27 @@ describe('DSP-Spec-Erweiterung: state-behaftete Tail-Tests', () => {
     expect(sha256(a.output[0])).toBe(sha256(b.output[0]));
   });
 });
+
+describe('P0-4 Prüfpunkt: 60 s ohne aktives Plugin → RMS ≤ -60 dBFS (Master-Kette)', () => {
+  it('rendert 60 s Stille durch alle Referenz-Worklets ohne Restrauschen', () => {
+    const SR48 = 48000;
+    const seconds = 60;
+    const silence = [new Float32Array(SR48 * seconds), new Float32Array(SR48 * seconds)];
+    const engine = new OfflineBounceEngine(SR48);
+    const render = engine.bounce(
+      silence,
+      [...REFERENCE_WORKLET_IDS, ...STATEFUL_REFERENCE_IDS],
+      { tailSeconds: 0 },
+    );
+
+    expect(render.renderedFrames).toBe(SR48 * seconds);
+    for (const ch of render.output) {
+      let sum = 0;
+      for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
+      const rms = Math.sqrt(sum / ch.length);
+      const dbfs = 20 * Math.log10(Math.max(rms, 1e-12));
+      expect(Number.isFinite(dbfs)).toBe(true);
+      expect(dbfs).toBeLessThanOrEqual(-60);
+    }
+  });
+});

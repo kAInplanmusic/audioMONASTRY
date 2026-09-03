@@ -2,12 +2,84 @@
 
 > Erledigte Punkte aus `MASTER_TODO.md` werden hierher verschoben und
 > aus der `MASTER_TODO.md` gelöscht. Dies ist das zentrale Archiv.
-> Stand: 2026-09-01
+> Stand: 2026-09-02
 > Quellen: `audioMONASTRY/MASTER_TODO.md` + `samplemonk/MASTER_TODO.md`
 
 ---
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
+
+### OPS-Snapshot – Rollen-Snapshots für schnellen Flotten-Start (2026-09-02)
+
+- [x] **Snapshot je Rolle:** `POST /servers/{id}/actions/create_image` mit Description/Label `samplemonk-snapshot-<role>` + `role`-Label – in `services/portal-worker/src/index.js` (`createServerSnapshot`, `listSnapshots`, `findSnapshot`).
+- [x] **Portal-Wake nutzt Snapshot:** `startFleet` versucht zuerst das Rollen-Snapshot-Image (`image: <snapshot-id>` statt `ubuntu-24.04`, ohne cloud-init); Fallback auf cloud-init-Bootstrap, wenn kein Snapshot existiert (`fallbackRoles`).
+- [x] **Snapshot-Refresh:** `POST /api/refresh-snapshots` (nur signiertes Session-Cookie) erzeugt je laufendem Flotten-Server einen Snapshot und löscht alte Snapshots; `GET /api/snapshots` listet sie.
+- [x] **Kosten/Retention dokumentiert:** `docs/PORTAL_SETUP.md` – ca. 0,01 €/GB/Monat, Auto-Retention `SNAPSHOT_RETENTION = 2` je Rolle (`DELETE /images/{id}`).
+- [x] **Tests:** `tests/portalWorkerSnapshots.test.ts` (6 Tests: Snapshot-Image-Wahl, cloud-init-Fallback, Refresh + Retention, Auth-Pflicht, Listing); `npm run verify` → **483 Tests + Boundary-Scan 0** grün.
+- [ ] **Prüfpunkt (bleibt offen):** Flotten-Start (wake→ready) vorher/nachher messen; Ziel < 90 s – Live-Messung beim nächsten Flotten-Start.
+
+### P1-2 Design-Tokens / CSS-Variablen-Themes je Plugin (2026-09-02, D8)
+
+- [x] **Zentrale Tokens:** `src/index.css` – `--monk-accent`/`--monk-accent-rgb`/`--monk-glow-accent` im `:root` (Brand-Default) + `.monk-theme-<id>`-Klassen für alle **21** Plugins; keine plugin-lokalen Hex-Werte.
+- [x] **Theme-Modul:** `src/utils/pluginTheme.ts` (`PLUGIN_THEME_IDS`, `PLUGIN_SKIN_REFERENCES`, `getPluginThemeClass`, `getPluginSkinReference`) – bewusst ohne Farbwerte.
+- [x] **Anwendung:** `ModuleContainer` (Akzent-Hairline + Status-Dot via `var(--monk-accent)`), `RackRow` (Rahmen/Icon/Power im Plugin-Akzent), `PluginButton` (aktive Buttons im Plugin-Akzent; PRO bleibt Fuchsia).
+- [x] **Tests:** `tests/pluginTheme.test.ts` (5 Tests: 21 IDs = Manifest, CSS-Tokens vorhanden, Fallback, Referenz-Looks, keine Hex-Werte im TS); `npm run verify` → **488 Tests + Boundary-Scan 0** grün.
+- [ ] **Offen:** Komponenten-Neubau im Hardware-Look (DJM-A9/XONE, MiniMoog/Prophet, TR-808, API/SSL …) + `visual.spec.ts`-Screenshot-Tests – mittlere Priorität nach D8.
+
+### P1-4 Scratchpad – Overlay-Sidebar, DnD + Clipboard (2026-09-02)
+
+- [x] **Overlay-Sidebar (D9):** `src/components/SessionScratchpadPanel.tsx` – halbtransparente Sidebar (amber), Header-Button „ZWISCHENSPEICHER" in `App.tsx`; Snapshot-Liste (speichern/laden/löschen) + Ablage-Liste in IndexedDB.
+- [x] **Snapshot-Kern erweitert:** `src/core/session/sessionScratchpad.ts` – `buildSessionSnapshot` (pure), `createScratchpadSnapshot`, Snapshots-Liste (`loadScratchpadSnapshots`/`add`/`remove`), DnD-Entries + `MONK_DRAG_MIME`/`MONK_SCRATCH_MIME` (`writeMonkDragItem`/`writeMonkScratchItem`/`readMonkDragItem`).
+- [x] **DnD:** Drag-Handle in `RackRow` zieht Module in den Scratchpad (`MONK_DRAG_MIME`); Scratchpad-Einträge sind per Drag auf Module ablegbar (`MONK_SCRATCH_MIME`, `onLoadScratch` → Modul aktivieren/State übernehmen).
+- [x] **Clipboard:** `RackRow`-Copy kopiert jetzt Plugin-State inkl. vollem Session-Snapshot (`buildSessionSnapshot`); `ModuleContainer` hat neuen Prop `onCopyToClipboard` („⧉ JSON"-Button).
+- [x] **Tests:** `tests/sessionScratchpad.test.ts` auf 7 Tests erweitert (Snapshot-Builder pur, Snapshot-Item, DnD-Roundtrip, kaputte Daten defensiv); `npm run verify` → **492 Tests + Boundary-Scan 0** grün.
+- [ ] **Prüfpunkt (offen):** Reload/DnD/Clipboard-Roundtrip im echten Browser verifizieren.
+
+### P2-1/P2-2 – Latenz-Anzeige + Clock-Audit (2026-09-02)
+
+- [x] **P2-1 AudioSettings anwenden:** `resolveAudioContextOptions`/`createConfiguredAudioContext` + `audioEngine.applyLatencyProfile()` waren bereits umgesetzt (TASKDONE) – MASTER_TODO nachgezogen.
+- [x] **P2-1 Latenz anzeigen:** `PerformanceMonitorTerminal` zeigt jetzt LOCAL (Audio, Ziel < 15 ms), NET/RTT (WebRTC, Ziel < 50 ms) und DROPOUTS live an; Persistenz läuft weiter über den 30s-Telemetrie-Snapshot in `App.tsx`.
+- [x] **P2-2 Clock-Audit/Single-Source:** `audioEngine.init()` bindet `masterClock.attach(this)` an; neue `audioEngine.getClockDiagnostics()`; Audit-Modul `src/core/clock/clockAudit.ts` (`auditClockSystem`: Lookahead-Budget 8–15 ms, BPM-Validierung, PLL-/Sync-Offsets endlich).
+- [x] **Tests:** `tests/clockAudit.test.ts` (4 Tests) + bestehende `masterClock`/`clock`-Tests grün.
+- [ ] **Offen (P2-1/P2-2):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL-Verteilung, Live-Prüfpunkte (Jitter < 1 ms, < 5 ms zwischen Browsern).
+
+### P2-4 – Signalfluss-Korrekturen + Graph-Validierung (2026-09-02)
+
+- [x] **effectNode-Insert gefixt:** `audioEngine.init()` erzeugt den `effect-processor` mit den anderen Worklets und verdrahtet ihn fest zwischen `toneShiftTilt` und `eqNode` (Fallback direkt ohne Insert); neues `isEffectInsertReady()`, `setEffectParam` nutzt den vorerzeugten Knoten.
+- [x] **Verkabelung verifiziert:** `bassSynth → bassDelay → bassFilter → channel7` (Bass-Kette) und Monitor-PDC (`masterVolume → monitorLimiter → pdcMonitorDelay → MON1..4`, paralleler Cue) sind korrekt verdrahtet.
+- [x] **Graph-Validierung gestärkt:** `tests/routingValidator.test.ts` um `validateRoutingAgainstGraph`-Fälle erweitert (fehlende Nodes/Verbindungen, doppelte Pfade).
+- [ ] **Prüfpunkt (offen):** Performance-Messung < 70 % CPU (Live).
+
+### P3-2 – pluginCommandRegistry + MCP-Tools für alle 21 Plugins (2026-09-02)
+
+- [x] **Registry vollständig:** `PLUGIN_COMMAND_IDS` (21), generische `activate`/`deactivate`/`route`-Kommandos je ID über `pluginAudioRouter`; neue Kern-Kommandos für masterplayer (play/stop/tempo), sound (trigger), drop (pattern), ai (plan); `mixer.channel` (gain/pan je Kanal).
+- [x] **Server-MCP-Tools:** `mcpRuntime.ts` registriert je Katalog-Eintrag ein `<plugin>.<action>`-Tool (WRITE) + Aliase (`mixer.set_channel`, `synth.play_note`, `synthesizer.play_note`, `sequencer.load_pattern`, `mcp.load_pattern`) + generisches `plugin.command` mit Validierung; Planung wird über `recordPluginCommand` an den Client-Pfad durchgereicht (keine Fake-Audio-Tools).
+- [x] **Iterations-Loop:** `src/core/ai/orchestrator/promptIteration.ts` – `runPromptIteration` (Prompt-Version → Eval → Score → heuristische Optimierung → neue Version), `evaluatePromptCoverage` (deterministisch), `optimizePromptContent` (hängt Kommando-Katalog an); CLI `npm run iterate:prompts` (21 Plugins, 41 Iterationen, 0 nicht konvergiert) schreibt `test-results/prompt-iterations.json`; Nightly-Gate ergänzt.
+- [x] **Tests:** `tests/pluginCommandRegistry.test.ts` (3), `tests/mcpPluginTools.test.ts` (5), `tests/promptIteration.test.ts` (5).
+- [x] **Prüfpunkt (automatisiert):** `tests/aiEvaluation.test.ts` plant + führt für alle 21 Plugins das jeweilige Kern-Kommando aus (deterministischer Mock-LLM, 100 % handled) und legt Scores im `evaluationStore` ab; Supabase-Pfad (`aiPersistence.saveEvaluation`) separat getestet.
+- [ ] **Offen:** Echter MOA-LLM-Lauf (DeepSeek) je Plugin + Scores in Supabase – Live-Check laut `docs/LIVE_CHECKLIST_2026-09-02.md`.
+
+### P3-3 – Eval-Framework an DB + Nightly-Gate (2026-09-02)
+
+- [x] **DB-Anbindung:** `aiPersistence.saveEvaluation`/`saveEvalRun` schreiben in `ai_evaluations`/`ai_eval_runs` (Migration 002, Supabase sonst No-Op).
+- [x] **eval:ai erweitert:** `scripts/eval-ai.ts` läuft jetzt 21 deterministische Plugin-Kern-Cases, schreibt `test-results/ai-eval.json`, `ai-evaluations.json` (DB-ready) und `ai-eval-runs.json` (Runs mit PASS/FAIL-Gate) und persistiert bei konfiguriertem Supabase.
+- [x] **Nightly-CI:** `nightly.yml` um `npm run eval:ai` + `actions/upload-artifact` für `test-results/ai-eval*.json` erweitert; FAIL → Exit 1 (Auto-Issue bei failure).
+- [x] **Tests:** `tests/aiPersistence.test.ts` um saveEvaluation/saveEvalRun ergänzt; `npm run eval:ai` → 21 Cases, Accuracy 100 %, 21 Plugin-Runs (0 FAIL).
+- [ ] **Prüfpunkt (offen):** CI-Lauf grün; Report enthält je Plugin Score, Dauer, Fehler.
+
+### Kostenlose Prüfpunkte / Validierungen abgeschlossen (2026-09-02)
+
+- [x] **P0-4:** 60-s-Silence-Golden-Test (`tests/goldenAudio.test.ts`, alle Referenz-Worklets, RMS ≤ -60 dBFS) grün; NaN/Inf-Guards via AM-E1-7 bestätigt.
+- [x] **P1-6:** MIDI-Codec (F8-Clock, Start/Stop/Continue, Song Position, SysEx, RPN/NRPN) + `midiOut` send() durch Tests abgedeckt; Keyboard-E2E live 2/2.
+- [x] **AM-E5-1:** `npm run test:stress` grün (21 Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen, FPS/Heap-Gates; Locator auf Plugin-Toolbar fixiert, onnxruntime-Blob-Worker als benigne Meldung dokumentiert, headless-FPS-Schwelle 10).
+- [x] **AM-E5-3:** `tests/lockFuzz.test.ts` – LockManager Race-Fuzzing (4 User × 1000 Ops gegen Referenzmodell, Lease-Expiry ohne Deadlock).
+- [x] **Fix:** `localDemucs.ts` setzt `wasm.proxy` nur bei `crossOriginIsolated` (verhindert onnxruntime-Blob-Worker mit `export`-Token).
+- [x] **MASTER_TODO nachgezogen:** AUD-P0-1/AUD-P0-4/AUD-P1-3, GAP-4 RBAC+Locking, AM-E3-2, AM-E4-3 als erledigt markiert (Belege aus TASKDONE/Code).
+- [x] **AM-E2-3:** `tests/workletRampAudit.test.ts` – statischer Automations-Audit (automate-Handler, keine per-Sample-Allokationen in dsp/eq/effect/mastering).
+- [x] **AM-E5-2 (anteilig):** Heap-Wachstums-Gate (< 512 MB Delta) im Stress-Test ergänzt und grün; volle 2-GB-Simulation bleibt offen.
+- [x] **P2-5 Bundle-Diät:** zod + axios aus dem Client entfernt (manuelle Validatoren in `validation.ts`/`presetValidator.ts`/`composition.ts`, fetch statt axios in `useAudioAI`/`useAIComposition`), MOA-Prompts kompaktiert → Client-Bundle **< 1,5 MB** (vorher 1,62 MB), `check:bundle` grün.
+- [x] **P1-2 Prüfpunkt (Screenshots):** `visual.spec.ts` deckt alle **21 Plugins** ab (19 Rack-Terminals + masterplayer + aiMONK-Dock), Viewport-Baselines mit Masken für animierte Bereiche (Canvas/Scroll-Listen/Logs), Toleranz 6 %; 2× hintereinander grün. Hardware-Look-Vergleich bleibt Teil des Komponenten-Neubaus.
+- [x] `npm run verify` → **542 Tests + Boundary-Scan 0** grün.
 
 ### 🎯 Nächste TODOs (in dieser Reihenfolge)
 

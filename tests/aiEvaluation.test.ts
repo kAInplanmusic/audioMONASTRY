@@ -8,6 +8,21 @@ import {
   rougeL,
   tokenUsage,
 } from '../src/core/ai/orchestrator/evaluation';
+import { MoaAgent } from '../src/core/ai/MoaAgent';
+import { evaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
+import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
+
+/** Verbindliche 21 Plugin-IDs (siehe src/plugins/registry.ts). */
+const PLUGIN_IDS = [
+  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
+  'spatial', 'recording', 'performance', 'ai',
+];
+
+function firstCommand(pluginId: string): string {
+  const catalog = PLUGIN_COMMAND_CATALOG[pluginId] ?? 'status';
+  return catalog.split(',')[0].trim().split('(')[0].trim();
+}
 
 describe('AI Evaluation – Token/Accuracy', () => {
   it('schätzt Tokens als ceil(chars/4)', () => {
@@ -68,5 +83,61 @@ describe('AI Evaluation – evaluateCase', () => {
     expect(metrics.rougeL).toBeCloseTo(1, 4);
     expect(metrics.tokenUsage.total).toBeGreaterThan(0);
     expect(metrics.latencyMs).toBe(42);
+  });
+});
+
+describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (21 Plugins)', () => {
+  for (const pluginId of PLUGIN_IDS) {
+    it(`plant und führt ${pluginId}:${firstCommand(pluginId)} korrekt aus`, async () => {
+      const action = firstCommand(pluginId);
+      const expected = `${pluginId}:${action}`;
+
+      // Deterministischer MOA-Planer (Mock-LLM liefert genau den Kern-Schritt).
+      const agent = new MoaAgent(
+        async () => ({
+          text: JSON.stringify([{ pluginId, command: action, prompt: `${pluginId} ${action}` }]),
+          provider: 'deepseek-flash',
+          latencyMs: 1,
+        }),
+        {
+          execute: async () => ({ handled: true, pluginId }),
+          executePluginCommand: async (_userId, pid, cmd) => ({
+            handled: pid === pluginId && cmd === action,
+            pluginId: pid,
+          }),
+        },
+      );
+
+      const plan = await agent.plan(`Aktiviere ${pluginId} und führe ${action} aus`, pluginId);
+      expect(plan.steps.length).toBeGreaterThan(0);
+      expect(plan.steps[0].pluginId).toBe(pluginId);
+      expect(plan.steps[0].command).toBe(action);
+
+      const results = await agent.executePlan(plan);
+      expect(results).toHaveLength(plan.steps.length);
+      expect(results.every((r) => r.handled)).toBe(true);
+
+      // Score in der Eval-DB-Struktur ablegen (evaluationStore = In-Memory-Referenz;
+      // Supabase-Persistenz läuft über aiPersistence.saveEvaluation).
+      const record = evaluationStore.record({
+        pluginId,
+        task: 'plan+execute',
+        promptVersion: 1,
+        model: 'mock',
+        provider: 'offline',
+        input: `${pluginId} ${action}`,
+        output: expected,
+        score: 5,
+        metrics: { handled: results.every((r) => r.handled), command: action },
+      });
+      expect(record.pluginId).toBe(pluginId);
+      expect(evaluationStore.listByPlugin(pluginId).some((e) => e.metrics.command === action)).toBe(true);
+    });
+  }
+
+  it('hat für alle 21 Plugins einen Eval-Datensatz im Store', () => {
+    for (const pluginId of PLUGIN_IDS) {
+      expect(evaluationStore.listByPlugin(pluginId).length).toBeGreaterThanOrEqual(1);
+    }
   });
 });
