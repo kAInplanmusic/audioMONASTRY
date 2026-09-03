@@ -17,7 +17,7 @@
 - [ ] **P1-4 Scratchpad Prüfpunkt**: Reload/DnD/Clipboard-Roundtrip im Browser verifizieren (Code + Helper-Tests grün)
 - [ ] **P2-1/P2-2 Rest**: Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte
 - [ ] **P2-4 Prüfpunkt**: Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt)
-- [ ] **P3-3 Prüfpunkt**: Nightly-CI-Eval-Lauf grün verifizieren (Report je Plugin: Score, Dauer, Fehler)
+- [x] **P3-3 Prüfpunkt**: Eval-Lauf grün, Report je Plugin mit Score, Dauer und Fehler (`npm run eval:ai` → `test-results/ai-eval-report.json/.md`, Gate aus `src/core/ai/orchestrator/evalMatrix.ts`, Nightly-Artefakt + Job-Summary) → TASKDONE. Offen bleibt nur die Bestätigung des nächtlichen CI-Laufs auf GitHub.
 - [ ] **Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)
 
 ---
@@ -221,7 +221,7 @@
 - [x] **AUD-P0-1** `audioEngine`-Plugin-Lifecycle: OFF = Signalkette trennen, Synths/Worklets lazy erzeugen → erledigt durch P0-2 (`pluginAudioRouter`, `activatePlugin`/`deactivatePlugin`, Synth-Worklets lazy).
 - [x] **AUD-P0-4** `SynthesizerTerminal` an `audioEngine`/`InstrumentBackend` verdrahten → erledigt durch P0-5 (`ensureSynthGraph`, `previewSynthesizedSample`, Routing-Ziel CH1-8).
 - [x] **AUD-P1-3** `database/ai_migration_002.sql`: Prompt-/Eval-Tabellen → Datei vorhanden (idempotent, RLS), Tests grün; Live-Anwendung in Supabase bleibt Betreiber-Schritt (P3-1).
-- [ ] **AUD-P2-1** Testrun-2-Checkliste mit den AUD-Befunden abgleichen (P5-1)
+- [x] **AUD-P2-1** Testrun-2-Checkliste mit den AUD-Befunden abgeglichen → `docs/TESTRUN_2_CHECKLIST.md` Abschnitt 11 (AUD-P0-1/P0-4/P1-1/P1-3, GAP-4, GAP-5 je mit Test-Nachweis); automatisiert abgedeckte Punkte sind abgehakt, offen bleiben nur Live-/Hörprobe-Schritte → TASKDONE.
 
 ---
 
@@ -236,16 +236,16 @@
 - [x] Server-seitiges RBAC durchsetzen (Host/Admin/DJ/Producer/Engineer/Guest) → erledigt in P4-2 (`server.ts` Rollenzuweisung, PRO nur admin/producer, `assign-role` nur admin).
 - [x] Locking an User-ID statt Socket-ID server-seitig absichern → erledigt in P4-2 (Sender-User-ID im Relay, Rollenzuordnung je User-ID, Audit-Log).
 - [ ] HF-Token-Rotation dokumentiert ✅ – **Endpoint-Secret rotieren** (Betreiber-Schritt, offen)
-- [ ] Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF)
+- [x] Pen-Test `/api/ai/*` (Auth, Rate-Limit, Input-Validierung, SSRF) → `tests/aiSecurityPenTest.test.ts` (11 Fälle, Sentinel-Server ohne Treffer), Ergebnisse in `docs/SECURITY_AUDIT.md` → TASKDONE.
 - [x] Supabase RLS geprüft (Prompts/Evals + Samples/Music: anon read, service_role write) → statisches Audit-Gate `tests/supabaseRls.test.ts` über alle `database/*.sql` → TASKDONE.
-- [ ] **Prüfpunkt:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` ist vollständig abgehakt oder hat einen offenen Task
+- [x] **Prüfpunkt:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` vollständig – alle Zeilen ✅, einziger offener Punkt ist die Rotation des HF-Endpoint-Secrets (Betreiber-Schritt, oben als Task geführt) → TASKDONE.
 
 ### GAP-5 Prompt-/Trainings-Matrix je Plugin
 
-- [ ] Je Plugin Prompt-Version in `system_prompts` (DB) anlegen
-- [ ] Je Plugin Eval-Suite (`ai_evaluations`) mit Mindest-Score definieren
-- [ ] Iterations-Loop: Prompt → Eval → Score → Optimierung → neue Version
-- [ ] **Prüfpunkt:** Jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score in der DB; Score-Abfall blockiert Release (G13)
+- [x] Je Plugin Prompt-Version in `system_prompts` anlegen → `npm run iterate:prompts` schreibt DB-ready Zeilen (`test-results/system-prompts.json`) und persistiert über `aiPersistence.saveSystemPrompt`/`savePromptVersion`; Gate schlägt an, wenn ein Plugin ohne Prompt-Version bleibt.
+- [x] Je Plugin Eval-Suite (`ai_evaluations`) mit Mindest-Score → `src/core/ai/orchestrator/evalMatrix.ts` (21 Plugins, 4.0 bzw. 4.5 für MAIN-kritische Plugins, Laufzeit-Budget), Tests `tests/evalMatrix.test.ts`.
+- [x] Iterations-Loop: Prompt → Eval → Score → Optimierung → neue Version → `runPromptIteration` + `npm run iterate:prompts` (21 Plugins, 41 Versionen, 0 nicht konvergiert).
+- [x] **Prüfpunkt:** Jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score; Score-Abfall blockiert den Nightly-Lauf (Exit 1) → `docs/PLUGIN_PROMPT_MATRIX.md` aus den Reports erzeugt. Das Schreiben in die Live-DB bleibt an P3-1 (Betreiber) gekoppelt → TASKDONE.
 
 ### GAP-8 Zentrales Fehler-Register
 

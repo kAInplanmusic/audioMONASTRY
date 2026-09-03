@@ -71,4 +71,21 @@ describe('AI-Supabase-Persistenz (AITodo Phase 12, gemockt)', () => {
     expect(calls[1]).toMatchObject({ table: 'ai_eval_runs', op: 'insert' });
     expect(calls[1].data).toMatchObject({ run_id: 'run-1', plugin_id: 'mixer', status: 'PASS' });
   });
+
+  it('GAP-5: saveSystemPrompt/savePromptVersion schreiben in system_prompts/plugin_prompt_versions', async () => {
+    const calls: Call[] = [];
+    setAiPersistenceClientForTests(createMockClient(calls));
+
+    await aiPersistence.saveSystemPrompt({
+      pluginId: 'mixer', role: 'system', version: 2, content: 'Du steuerst den Mischpult-MONK.',
+      enabled: true, meta: { source: 'iteration' },
+    });
+    await aiPersistence.savePromptVersion({ pluginId: 'mixer', version: 2, changelog: 'Kommando-Katalog ergänzt' });
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ table: 'system_prompts', op: 'insert' });
+    expect(calls[0].data).toMatchObject({ plugin_id: 'mixer', version: 2, enabled: true });
+    expect(calls[1]).toMatchObject({ table: 'plugin_prompt_versions', op: 'insert' });
+    expect(calls[1].data).toMatchObject({ plugin_id: 'mixer', version: 2 });
+  });
 });
