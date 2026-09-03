@@ -1,5 +1,5 @@
 # dropMONK – MVP Integration Summary
-## Status: Phase 1–3 Complete (Ready for Phase 4 Testing)
+## Status: Phase 1–4 Complete (MVP fertiggestellt, 2026-09-03)
 
 ---
 
@@ -122,7 +122,12 @@ src/core/drop/
 ├── MixerBridge.ts (mixer integration)
 ├── PluginParameterBridge.ts (plugin control)
 ├── AiServerBridge.ts (AI API)
-└── ClockBridge.ts (quantization)
+├── ClockBridge.ts (quantization)
+├── DropAudioAdapter.ts (Interface-Grenze zur audioEngine)
+└── DropTemplateGenerator.ts (Server-Prompt, Validierung, lokaler Fallback)
+
+src/utils/
+└── dropAudioBridge.ts (attachDropBridges: Adapter + Clock-Speisung)
 
 src/context/
 └── DropContext.tsx (React state + hooks)
@@ -140,83 +145,88 @@ src/components/
 
 ---
 
-## 🔌 Integration Points (Requires audioEngine Wiring)
+## 🔌 Integration Points (verdrahtet in Phase 4)
 
-### 1. Mixer Integration
-**Bridge**: `MixerBridge`
-**Requires**: audioEngine to expose
-- `getMixerChannels()` → array of channels with level/mute state
-- `setMixerLevel(channelId, level)` → atomic parameter write
-- Clock sync for crossfade timing
-
-### 2. Plugin Parameter Control
-**Bridge**: `PluginParameterBridge`
-**Requires**: audioEngine to expose
-- `discoverPlugins()` → plugin registry with available parameters
-- `setPluginParameter(pluginId, parameterId, value)` → atomic write
-- Parameter specs (min/max/type)
-
-### 3. AI Server Endpoint
-**Bridge**: `AiServerBridge`
-**Requires**: Backend service
-- `POST /api/ai/generate-drop` endpoint
-- Request: `{ context, prompt, style }`
-- Response: `{ name, description, parameterSequence, confidence }`
-
-### 4. Clock Synchronization
-**Bridge**: `ClockBridge`
-**Requires**: audioEngine to call
-- `clockBridge.updateClock(currentSample, isRunning)` from audio worklet
-- Provides bar-boundary scheduling for quantized drops
+| Bridge | Anbindung | Engine-API |
+|--------|-----------|------------|
+| `MixerBridge` | `DropAudioAdapter.getChannels/setChannelLevel/setChannelPan/setChannelMute` | `getChannelGain/getChannelPan/setChannelGain/setChannelPan/getChannelStripInfo` |
+| `PluginParameterBridge` | `DropAudioAdapter.setPluginParameter` (Spec-Registry mit min/max) | `automateItSynthParam`, `automateEffect`, `automateDsp`, `automateMastering`, `setChannelGain/Pan` |
+| `AiServerBridge` / `AiDropGenerator` | `POST /api/ai/generate-drop` | LLM-Router (serverseitige Keys) → Ollama → lokaler Fallback |
+| `ClockBridge` | `attachDropBridges()` speist `updateClock(sample, isRunning)` | `addStepListener`, `getBpm`, `getIsPlaying`, `getAudioHealth().sampleRate` |
 
 ---
 
-## 🚀 MVP Feature Set (Ready to Test)
+## 🚀 MVP Feature Set
 
 ### ✅ Implemented & Ready
 - [x] Drop button (immediate execution)
 - [x] 5 preset profiles (Energy, Ambient, Techno, Breakdown, Transition)
 - [x] AI chat input (if server endpoint available)
 - [x] DJ Transition (channel select + style + UI)
-- [x] Mixer state reading (placeholder)
+- [x] Mixer state reading (live über die audioEngine)
 - [x] Execution log (in UI)
 - [x] Preset save/load
 - [x] Plugin state OFF/AI/PRO
 
-### ⏳ Pending (Phase 4)
-- [ ] Wire MixerBridge to audioEngine
-- [ ] Wire PluginParameterBridge to audioEngine
-- [ ] Deploy `/api/ai/generate-drop` endpoint
-- [ ] Wire ClockBridge to audio worklet
-- [ ] Unit tests + E2E tests
-- [ ] Create icon (24×24, rose/pink)
-- [ ] Register in plugin registry
+### ✅ Phase 4 – abgeschlossen (2026-09-03)
+- [x] MixerBridge an die audioEngine verdrahtet (`DropAudioAdapter`)
+- [x] PluginParameterBridge an die Engine-Automation verdrahtet
+- [x] `/api/ai/generate-drop` implementiert (LLM-Router → Ollama → lokaler Fallback)
+- [x] ClockBridge an den Transport/Step-Listener gekoppelt (taktgenaue Drops)
+- [x] Unit-/Integrationstests (`tests/dropMonk.test.ts`, `tests/aiRoutes.test.ts`)
+- [x] Registry-Eintrag (`src/plugins/registry.ts`, `public/plugin-manifest.json`, Icon `Zap`, Rose/Pink)
 
 ---
 
-## 📋 Phase 4: Testing & MVP Integration Checklist
+## 🔗 Phase-4-Architektur (Verdrahtung)
 
 ```
-Phase 4a – audioEngine Wiring (3 tasks)
-  [ ] Connect MixerBridge to audioEngine.getMixerChannels() + setMixerLevel()
-  [ ] Connect PluginParameterBridge to audioEngine.discoverPlugins() + setPluginParameter()
-  [ ] Connect ClockBridge to audio worklet + masterClock
-
-Phase 4b – Testing (6 tasks)
-  [ ] Unit tests: DropProfile interpolation curves
-  [ ] Unit tests: DropContextAnalyzer scoring algorithm
-  [ ] Unit tests: DropEngine animation timing
-  [ ] Unit tests: ClockBridge quantization
-  [ ] E2E test: DropTerminal → DropEngine → audioEngine
-  [ ] Integration test: DropContext state synchronization
-
-Phase 4c – Backend Setup (1 task)
-  [ ] Implement /api/ai/generate-drop endpoint (DeepSeek/HF integration)
-
-Phase 4d – Icon & Registry (2 tasks)
-  [ ] Create dropMONK icon (24×24px, SVG, rose/pink color)
-  [ ] Register in src/plugins/registry.ts
+DropTerminal → DropContext → dropEngine
+                                │
+                                ├─ pluginParameterBridge ─┐
+                                ├─ mixerBridge ───────────┤→ DropAudioAdapter → audioEngine
+                                └─ clockBridge ←──────────┘   (src/utils/dropAudioBridge.ts)
 ```
+
+- **`src/core/drop/DropAudioAdapter.ts`** – Interface-Grenze: der Core kennt weder
+  audioEngine noch Browser-APIs. Ohne Adapter laufen die Bridges gegen einen
+  internen State (Tests, Plugin OFF).
+- **`src/utils/dropAudioBridge.ts`** – `attachDropBridges()` registriert den Adapter,
+  bildet Drop-Parameter auf `automateItSynthParam`/`automateEffect`/`automateDsp`/
+  `setChannelGain`/`setChannelPan` ab und speist die ClockBridge aus dem Step-Listener
+  (16tel-Raster → monotoner Sample-Zähler). Der Rückgabewert löst die Verdrahtung
+  beim Plugin-OFF/Unmount wieder.
+- **Quantisierung:** läuft der Transport, plant `clockBridge.scheduleDrop()` den Drop
+  auf die nächste Taktgrenze; sonst greift eine BPM-korrekte Verzögerung
+  (kein 120-BPM-Hardcode mehr).
+- **DJ-Transition:** Equal-Power-Crossfade (`MixerBridge.equalPowerGains`) läuft
+  parallel zum Drop.
+- **Persistenz:** `DropPresetStore` schreibt über die Plattform-Adapter
+  (`utils/indexedDB.ts`, `utils/storage.ts`) → Interface-Boundary-Scan: 0 Verstöße.
+
+---
+
+## 🌐 API: `POST /api/ai/generate-drop`
+
+Request:
+```json
+{ "userPrompt": "Techno buildup mit Bass-Drop",
+  "context": { "bpm": 128, "activePlugins": ["synthesizer","effect"], "currentEnergy": 0.7 },
+  "style": "extreme" }
+```
+
+Response: `{ name, description, category, parameterSequence, buildupTime, dropDuration,
+quantization, intensity, confidence, tags, source, provider }`
+
+Ablauf (`server.ts`): LLM-Router (Keys bleiben serverseitig) → lokales Ollama →
+deterministischer Fallback (`src/core/drop/DropTemplateGenerator.ts`). Antworten werden
+gegen eine Parameter-Whitelist validiert und auf 0..1 bzw. 4 Takte geclamped.
+
+---
+
+## ⏳ Offen (Live-Schritte)
+- [ ] Hörprobe im Studio: Drop auf laufendem Mix (Filter-Sweep, Crossfade, Timing)
+- [ ] Latenz-Messung des Drop-Pfads unter Last (perfMONK-Budget)
 
 ---
 
@@ -253,56 +263,22 @@ Phase 4d – Icon & Registry (2 tasks)
 
 ---
 
-## 🐛 Known Placeholders / TODOs
+## 🐛 Verbleibende Platzhalter
 
 ### DropContextAnalyzer.ts
-- `TODO: Real frequency analysis (FFT)` – currently uses simple level average
-
-### DropEngine.ts
-- `TODO: Wire to ClockBridge for quantized scheduling`
-- `TODO: Integrate with pluginParameterBridge for real parameter writes`
-
-### MixerBridge.ts
-- `TODO: Connect to audioEngine.getMixerChannels()`
-- `TODO: Connect to audioEngine.setMixerLevel()`
-
-### PluginParameterBridge.ts
-- `TODO: Connect to audioEngine.discoverPlugins()`
-- `TODO: Connect to audioEngine.setPluginParameter()`
+- `TODO: Real frequency analysis (FFT)` – Energie kommt aktuell aus den Kanal-Levels
 
 ### AiServerBridge.ts
-- `TODO: Implement /api/ai/generate-drop endpoint`
-- `TODO: Add rate limiting + caching on server`
-
-### ClockBridge.ts
-- `TODO: Connect updateClock() calls from audio worklet`
-- `TODO: Test quantization accuracy at various BPMs`
+- Rate-Limiting/Caching für `/api/ai/generate-drop` läuft über den globalen
+  `expensiveLimiter`; ein Drop-spezifischer Server-Cache fehlt noch
 
 ---
 
-## 🎬 Next Steps (Phase 4)
+## 🎬 Next Steps
 
-1. **Wire audioEngine Integration**
-   - Connect MixerBridge, PluginParameterBridge, ClockBridge
-   - Verify parameter writes reach audio graph
-
-2. **Implement Server Endpoint**
-   - `/api/ai/generate-drop` with DeepSeek/HF
-   - Response validation & error handling
-
-3. **Run Unit Tests**
-   - Curve interpolation
-   - Scoring algorithm
-   - Quantization math
-
-4. **Create Icon**
-   - 24×24px SVG
-   - Rose/pink gradient with waveform or lightning bolt
-
-5. **Final Polish**
-   - UI animations & feedback
-   - Error handling & user messaging
-   - Plugin registry entry
+1. Hörprobe + Latenzmessung im Studio (siehe „Offen")
+2. Optionaler Server-Cache für wiederkehrende Prompts
+3. FFT-basierte Energie-Analyse im DropContextAnalyzer
 
 ---
 
@@ -322,22 +298,22 @@ Phase 4d – Icon & Registry (2 tasks)
 | SamplerTopPanel.tsx | 140 | ✅ Done | 2 |
 | AiChatPanel.tsx | 180 | ✅ Done | 2 |
 | DropPresetBrowser.tsx | 200 | ✅ Done | 2 |
-| MixerBridge.ts | 150 | ✅ Done | 3 |
-| PluginParameterBridge.ts | 200 | ✅ Done | 3 |
+| MixerBridge.ts | 175 | ✅ Done | 3/4 |
+| PluginParameterBridge.ts | 200 | ✅ Done | 3/4 |
 | AiServerBridge.ts | 200 | ✅ Done | 3 |
-| ClockBridge.ts | 200 | ✅ Done | 3 |
-| **TOTAL** | **3730** | ✅ Done | 1–3 |
+| ClockBridge.ts | 220 | ✅ Done | 3/4 |
+| DropAudioAdapter.ts | 50 | ✅ Done | 4 |
+| DropTemplateGenerator.ts | 270 | ✅ Done | 4 |
+| utils/dropAudioBridge.ts | 175 | ✅ Done | 4 |
+| tests/dropMonk.test.ts | 400 | ✅ Done | 4 |
+| **TOTAL** | **~4600** | ✅ Done | 1–4 |
 
 ---
 
 ## 🏁 Conclusion
 
-**dropMONK is 80% feature-complete as of Phase 3.**
+**dropMONK ist mit Phase 4 funktional fertiggestellt.**
 
-All business logic, UI, and integration architecture is in place. Remaining work is:
-1. Wire bridges to audioEngine (straightforward mapping)
-2. Implement AI server endpoint (requires backend setup)
-3. Run test suite & polish
-4. Create icon & register plugin
-
-**Estimated time to MVP**: 1–2 days (Phase 4)
+Engine, UI, Bridges, Persistenz und der AI-Endpoint sind verdrahtet und durch Tests
+abgesichert (`npm run verify`: tsc + Vitest + Interface-Boundary-Scan grün).
+Offen bleiben nur die Live-Hörproben/Latenzmessungen im Studio.

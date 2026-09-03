@@ -6,7 +6,17 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { DropProfile, GeneratedDropProfile, DropPreset } from '../core/drop';
-import { dropPresetStore, dropContextAnalyzer, dropEngine, aiDropGenerator } from '../core/drop';
+import type { AudioContext as DropAudioContextState } from '../core/drop';
+import {
+  dropPresetStore,
+  dropContextAnalyzer,
+  dropEngine,
+  aiDropGenerator,
+  mixerBridge,
+  clockBridge,
+  getDropAudioAdapter,
+} from '../core/drop';
+import { attachDropBridges } from '../utils/dropAudioBridge';
 
 export type DropMode = 'generator' | 'dj_transition' | 'sampler_top';
 
@@ -64,14 +74,39 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [presets, setPresets] = useState<DropPreset[]>([]);
   const [favorites, setFavorites] = useState<DropPreset[]>([]);
 
+  /** Realer Mix-Zustand (BPM, aktive Plugins, Kanäle, Energie). */
+  const captureMixContext = useCallback((): DropAudioContextState => {
+    const channels = mixerBridge.getCurrentMixerState().map((ch) => ({
+      id: ch.id,
+      level: ch.level,
+      isMuted: ch.muted,
+      isPanned: ch.pan,
+      isSoloed: ch.soloed,
+    }));
+
+    return dropContextAnalyzer.analyzeCurrentMix(
+      clockBridge.getClockState().bpm,
+      getDropAudioAdapter()?.getActivePluginIds() ?? [],
+      channels,
+      mixerBridge.getEnergyLevel()
+    );
+  }, []);
+
   // Initialize
   useEffect(() => {
+    // Bridges an die audioEngine hängen (Mixer/Parameter/Clock).
+    const detachBridges = attachDropBridges();
+
     const init = async () => {
       await dropPresetStore.initialize();
       const allPresets = await dropPresetStore.listPresets();
       const favs = await dropPresetStore.getFavorites();
       setPresets(allPresets);
       setFavorites(favs);
+
+      // Vorschläge aus dem realen Mix-Zustand ableiten.
+      const scored = dropContextAnalyzer.suggestDropProfiles(captureMixContext(), 5);
+      setSuggestedProfiles(scored.map((s) => s.profile));
     };
 
     init().catch(console.error);
@@ -90,7 +125,12 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsExecuting(false);
       setExecutionProgress(1);
     });
-  }, []);
+
+    return () => {
+      dropEngine.stopAll();
+      detachBridges();
+    };
+  }, [captureMixContext]);
 
   const selectProfile = useCallback((profile: DropProfile) => {
     setSelectedProfile(profile);
@@ -98,15 +138,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const generateDrop = useCallback(async (prompt: string) => {
     try {
-      // TODO: Nutze aktuelle Audio Context vom audioEngine
-      const context = {
-        bpm: 128,
-        activePlugins: ['synthesizer', 'effect', 'drum'],
-        mixerChannels: [],
-        currentEnergy: 0.6,
-        timeSignature: '4/4',
-        analysisTimestamp: Date.now(),
-      };
+      const context = captureMixContext();
 
       const generated = await aiDropGenerator.generateDropProfile({
         context,
@@ -133,7 +165,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'ai'
       );
     }
-  }, []);
+  }, [captureMixContext]);
 
   const executeDrop = useCallback(async (profile: DropProfile, quantized = false) => {
     try {
@@ -157,19 +189,19 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         setTransitionInProgress(true);
 
-        const transitionProfile =
-          profile ||
-          selectedProfile ||
-          suggestedProfiles[0] ||
-          (await dropContextAnalyzer.analyzeCurrentMix(
-            128,
-            ['mixer'],
-            [],
-            0.5,
-            undefined,
-            '4/4'
-          ),
-          { id: 'dj_transition', name: 'DJ Transition' } as any);
+        const context = captureMixContext();
+        const suggestion = dropContextAnalyzer.suggestTransitionProfiles(
+          context.currentEnergy,
+          Math.min(1, context.currentEnergy + 0.3),
+          context
+        )[0]?.profile;
+
+        const transitionProfile = profile || selectedProfile || suggestion || suggestedProfiles[0];
+
+        if (!transitionProfile) {
+          addChatMessage('Kein Transition-Profil verfügbar.', 'ai');
+          return;
+        }
 
         await dropEngine.triggerChannelTransition(fromCh, toCh, transitionProfile);
       } catch (err) {
@@ -178,7 +210,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTransitionInProgress(false);
       }
     },
-    [selectedProfile, suggestedProfiles]
+    [captureMixContext, selectedProfile, suggestedProfiles]
   );
 
   const savePreset = useCallback(async (profile: DropProfile, name: string, tags?: string[]) => {

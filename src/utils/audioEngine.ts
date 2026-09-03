@@ -687,6 +687,28 @@ class AudioEngine {
     Tone.Transport.bpm.value = Math.max(30, Math.min(300, bpm));
   }
 
+  /** Aktuelles Transport-Tempo (BPM). */
+  public getBpm(): number {
+    return Tone.Transport.bpm.value;
+  }
+
+  /** Läuft der Transport gerade? */
+  public getIsPlaying(): boolean {
+    return this.isPlaying;
+  }
+
+  /** Kanal-Fader als lineares Gain (0..1.5) zurücklesen. */
+  public getChannelGain(track: TrackType): number {
+    const db = this.channelGains[track]?.volume.value;
+    if (db === undefined || db === -Infinity) return 0;
+    return Math.pow(10, db / 20);
+  }
+
+  /** Kanal-Pan (-1..1) zurücklesen. */
+  public getChannelPan(track: TrackType): number {
+    return this.channelPans[track]?.pan.value ?? 0;
+  }
+
   /** Setzt einen einzelnen Drum-Step. */
   public setStep(track: TrackType, step: number, on: boolean): void {
     if (step < 0 || step >= this.stepCount) return;

@@ -9,6 +9,19 @@
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
 
+### dropMONK Phase 4 · MVP-Fertigstellung (2026-09-03)
+
+- [x] **Interface-Grenze:** `src/core/drop/DropAudioAdapter.ts` – der Drop-Core kennt weder audioEngine noch Browser-APIs; `src/utils/dropAudioBridge.ts` (`attachDropBridges()`) registriert den Adapter und liefert eine Detach-Funktion für Plugin-OFF/Unmount.
+- [x] **MixerBridge:** liest/schreibt echte Kanäle (`getChannelGain/Pan`, `setChannelGain/Pan`, Mute mit Level-Restore) und nutzt eine Equal-Power-Kurve für DJ-Crossfades.
+- [x] **PluginParameterBridge:** Spec-Registry für alle Parameter der Built-in-Profile; Writes gehen geclamped über den Adapter auf `automateItSynthParam`/`automateEffect`/`automateDsp`/`automateMastering`/Kanal-Fader.
+- [x] **ClockBridge:** tempoabhängige Sample-Mathematik, Quantisierung 1beat…8bar, Scheduler feuert am Sample-Ziel, Listener-Broadcast; gespeist aus `audioEngine.addStepListener` (16tel-Raster).
+- [x] **DropEngine:** schreibt Parameter real über die Bridges, quantisiert bei laufendem Transport über die Master-Clock (sonst BPM-korrekte Verzögerung statt 120-BPM-Hardcode), DJ-Transition fährt den Crossfade parallel, rAF-Fallback für Node/Tests.
+- [x] **Persistenz:** `DropPresetStore` nutzt die Plattform-Adapter (`utils/indexedDB.ts`, `utils/storage.ts`) → Interface-Boundary-Scan von 5 auf **0 Verstöße**.
+- [x] **Server:** `POST /api/ai/generate-drop` (server.ts) mit LLM-Router → Ollama → deterministischem Fallback (`src/core/drop/DropTemplateGenerator.ts`); Antworten werden gegen eine Parameter-Whitelist validiert, Werte auf 0..1 und 4 Takte geclamped. Keys bleiben serverseitig.
+- [x] **UI-State:** `DropContext` speist Kontext (BPM/aktive Plugins/Kanäle/Energie) aus dem echten Mix, erzeugt Vorschläge beim Öffnen und räumt Bridges beim Unmount auf.
+- [x] **Tests:** `tests/dropMonk.test.ts` (31 Tests: Kurven, Analyzer-Scoring, Clock-Quantisierung, Mixer/Parameter-Bridges, Engine-Timing, Preset-Store, Server-Generator) + 2 Route-Tests in `tests/aiRoutes.test.ts`. `npm run verify` → 107 Dateien / 633 Tests grün, Boundary-Scan 0.
+- [ ] **Offen (Live-Schritt):** Hörprobe am laufenden Mix (Sweep/Crossfade-Timing) und Latenzmessung des Drop-Pfads unter Last.
+
 ### NEW-MONK-1 · MIDI-Out/Clock-Ausgabe an Hardware (2026-09-03)
 
 - [x] **Steuerlogik:** `src/core/hardware/midiClockOut.ts` – `MidiClockOut` mit 24 PPQN (6 Pulse je 16th-Step), Transport Start/Stop/**Continue**, Song Position Pointer, GM-Percussion-Note-Out (Note-On + zeitversetztes Note-Off) und All-Notes-Off; Nachrichten werden mit absolutem Zeitstempel vorgeplant (Web-MIDI-Queue) → kein Timer im Hot-Path, keine zusätzliche Audio-Latenz.

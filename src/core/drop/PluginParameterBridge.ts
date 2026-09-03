@@ -1,10 +1,13 @@
 /**
  * dropMONK – Plugin Parameter Bridge
  * =================================
- * Connect drop parameter sequences to plugin instances
+ * Schreibt Drop-Parameter-Sequenzen auf die realen Plugin-Parameter.
+ * Der eigentliche Write geht über den DropAudioAdapter an die audioEngine;
+ * ohne Adapter werden die Werte nur im Registry-State gehalten (Tests/OFF).
  */
 
-import type { ParameterTransformation } from '../drop/types/DropProfile';
+import type { ParameterTransformation } from './types/DropProfile';
+import { getDropAudioAdapter } from './DropAudioAdapter';
 
 /**
  * Plugin Parameter Registry Entry
@@ -21,85 +24,47 @@ export interface ParameterSpec {
   unit?: string;
 }
 
+/** Parameter, die von den Built-in-Drop-Profilen adressiert werden. */
+const BUILT_IN_PARAMETERS: ParameterSpec[] = [
+  { id: 'synthesizer:cutoff', pluginId: 'synthesizer', name: 'Filter Cutoff', type: 'number', min: 0, max: 1, defaultValue: 0.5 },
+  { id: 'synthesizer:resonance', pluginId: 'synthesizer', name: 'Resonance', type: 'number', min: 0, max: 1, defaultValue: 0.2 },
+  { id: 'effect:mix', pluginId: 'effect', name: 'Wet Mix', type: 'number', min: 0, max: 1, defaultValue: 0.3 },
+  { id: 'effect:size', pluginId: 'effect', name: 'Room Size / Depth', type: 'number', min: 0, max: 1, defaultValue: 0.4 },
+  { id: 'effect:cutoff', pluginId: 'effect', name: 'FX Filter Cutoff', type: 'number', min: 0, max: 1, defaultValue: 0.5 },
+  { id: 'effect:feedback', pluginId: 'effect', name: 'Feedback', type: 'number', min: 0, max: 1, defaultValue: 0.3 },
+  { id: 'drum:drive', pluginId: 'drum', name: 'Drive/Saturation', type: 'number', min: 0, max: 1, defaultValue: 0 },
+  { id: 'drum:density', pluginId: 'drum', name: 'Pattern Density', type: 'number', min: 0, max: 1, defaultValue: 0.5 },
+  { id: 'drum:cymbal_level', pluginId: 'drum', name: 'Cymbal Level', type: 'number', min: 0, max: 1, defaultValue: 0.5 },
+  { id: 'drum:pan', pluginId: 'drum', name: 'Pan', type: 'number', min: -1, max: 1, defaultValue: 0 },
+  { id: 'mixer:bass_gain', pluginId: 'mixer', name: 'Bass Gain', type: 'number', min: 0, max: 1, defaultValue: 0.8 },
+  { id: 'mixer:channel_fade', pluginId: 'mixer', name: 'Channel Fade', type: 'number', min: 0, max: 1, defaultValue: 1 },
+  { id: 'dsp:drive', pluginId: 'dsp', name: 'DSP Drive', type: 'number', min: 0, max: 1, defaultValue: 0.2 },
+  { id: 'dsp:resonance', pluginId: 'dsp', name: 'DSP Resonance', type: 'number', min: 0, max: 1, defaultValue: 0.2 },
+  { id: 'dsp:depth', pluginId: 'dsp', name: 'DSP Depth', type: 'number', min: 0, max: 1, defaultValue: 0.3 },
+  { id: 'mastering:makeup', pluginId: 'mastering', name: 'Makeup Gain', type: 'number', min: 0, max: 1, defaultValue: 0.5 },
+];
+
 /**
  * Plugin Parameter Bridge
  * Maps drop profile parameters to actual plugin controls
  */
 export class PluginParameterBridge {
   private parameterRegistry: Map<string, ParameterSpec> = new Map();
+  private lastValues: Map<string, number> = new Map();
 
   constructor() {
     this.initializeRegistry();
   }
 
   /**
-   * Initialize parameter registry
-   * TODO: Discover plugins from audioEngine + expose their parameters
+   * Registry mit den Built-in-Parametern füllen.
+   * Weitere Parameter können über registerParameter() aus den Plugins
+   * nachgemeldet werden (Discovery zur Laufzeit).
    */
   private initializeRegistry(): void {
-    // Placeholder: will be populated from audioEngine.discoverPlugins()
-    // For now, register common parameters
-    this.registerParameter({
-      id: 'synth:cutoff',
-      pluginId: 'synthesizer',
-      name: 'Filter Cutoff',
-      type: 'number',
-      min: 0,
-      max: 1,
-      defaultValue: 0.5,
-      unit: 'Hz',
-    });
-
-    this.registerParameter({
-      id: 'synth:resonance',
-      pluginId: 'synthesizer',
-      name: 'Resonance',
-      type: 'number',
-      min: 0,
-      max: 1,
-      defaultValue: 0.2,
-    });
-
-    this.registerParameter({
-      id: 'reverb:mix',
-      pluginId: 'reverb',
-      name: 'Wet Mix',
-      type: 'number',
-      min: 0,
-      max: 1,
-      defaultValue: 0.3,
-    });
-
-    this.registerParameter({
-      id: 'reverb:decay',
-      pluginId: 'reverb',
-      name: 'Decay',
-      type: 'number',
-      min: 0.1,
-      max: 5,
-      defaultValue: 2,
-      unit: 's',
-    });
-
-    this.registerParameter({
-      id: 'drum:drive',
-      pluginId: 'drum',
-      name: 'Drive/Saturation',
-      type: 'number',
-      min: 0,
-      max: 1,
-      defaultValue: 0,
-    });
-
-    this.registerParameter({
-      id: 'drum:pan',
-      pluginId: 'drum',
-      name: 'Pan',
-      type: 'number',
-      min: -1,
-      max: 1,
-      defaultValue: 0,
-    });
+    for (const spec of BUILT_IN_PARAMETERS) {
+      this.registerParameter(spec);
+    }
   }
 
   /**
@@ -110,31 +75,57 @@ export class PluginParameterBridge {
   }
 
   /**
-   * Discover parameters from audioEngine
-   * TODO: Connect to audioEngine.discoverPlugins()
+   * Parameter eines Plugins auflisten
    */
   discoverParameters(pluginId: string): ParameterSpec[] {
     return Array.from(this.parameterRegistry.values()).filter((p) => p.pluginId === pluginId);
   }
 
   /**
-   * Set plugin parameter
-   * TODO: Connect to audioEngine.setPluginParameter()
+   * Parameter setzen. `value` ist bereits auf den Spec-Bereich skaliert.
+   * Rückgabe: tatsächlich geschriebener (geclampter) Wert oder null.
    */
-  setParameter(parameterId: string, value: number): void {
+  setParameter(parameterId: string, value: number): number | null {
     const spec = this.parameterRegistry.get(parameterId);
     if (!spec) {
       console.error(`Parameter not found: ${parameterId}`);
-      return;
+      return null;
     }
 
-    // Clamp value to min/max
-    const clampedValue = Math.max(spec.min, Math.min(spec.max, value));
+    if (!Number.isFinite(value)) return null;
 
-    // TODO: Call audioEngine.setPluginParameter(spec.pluginId, spec.id, clampedValue)
-    console.log(
-      `[PluginBridge] Set ${parameterId} to ${clampedValue} (${spec.name})`
-    );
+    const clampedValue = Math.max(spec.min, Math.min(spec.max, value));
+    this.lastValues.set(parameterId, clampedValue);
+
+    const adapter = getDropAudioAdapter();
+    if (adapter) {
+      const [pluginId, paramName] = parameterId.split(':');
+      try {
+        adapter.setPluginParameter(pluginId, paramName, clampedValue);
+      } catch (err) {
+        console.error(`Parameter write failed for ${parameterId}:`, err);
+      }
+    }
+
+    return clampedValue;
+  }
+
+  /**
+   * Normalisierten Wert (0..1) auf den Spec-Bereich skalieren und schreiben.
+   */
+  setNormalizedParameter(parameterId: string, normalized: number): number | null {
+    const spec = this.parameterRegistry.get(parameterId);
+    if (!spec) {
+      console.warn(`Unknown parameter: ${parameterId}`);
+      return null;
+    }
+    const n = Math.max(0, Math.min(1, normalized));
+    return this.setParameter(parameterId, spec.min + (spec.max - spec.min) * n);
+  }
+
+  /** Zuletzt geschriebener Wert (Diagnose/Tests). */
+  getLastValue(parameterId: string): number | undefined {
+    return this.lastValues.get(parameterId);
   }
 
   /**
@@ -151,17 +142,14 @@ export class PluginParameterBridge {
       return;
     }
 
-    const steps = Math.ceil(duration / 16.67); // ~60fps
+    const steps = Math.max(1, Math.ceil(duration / 16.67)); // ~60fps
     const stepDuration = duration / steps;
 
     for (let i = 0; i <= steps; i++) {
       const progress = i / steps;
-      const normalizedValue = envelope(progress);
-      const scaledValue = spec.min + (spec.max - spec.min) * normalizedValue;
+      this.setNormalizedParameter(parameterId, envelope(progress));
 
-      this.setParameter(parameterId, scaledValue);
-
-      if (i < steps) {
+      if (i < steps && stepDuration > 0) {
         await new Promise((resolve) => setTimeout(resolve, stepDuration));
       }
     }
