@@ -5,8 +5,8 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import type { DropProfile, GeneratedDropProfile, DropPreset } from '../drop';
-import { dropPresetStore, dropContextAnalyzer, dropEngine, aiDropGenerator } from '../drop';
+import type { DropProfile, GeneratedDropProfile, DropPreset } from '../core/drop';
+import { dropPresetStore, dropContextAnalyzer, dropEngine, aiDropGenerator } from '../core/drop';
 
 export type DropMode = 'generator' | 'dj_transition' | 'sampler_top';
 
