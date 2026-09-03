@@ -81,9 +81,12 @@
 
 ## 4 · Kollaboration / 4-User
 
-- [ ] **P0-6:** 4-User-E2E: User2 aktiviert Drum → auf MAIN hörbar; User3 wählt
-      PLUGIN-Cue → hört nur sein Plugin, MAIN unverändert; zurück auf MAIN →
-      sofort Gesamtmix.
+- [ ] **P0-6 (Hörprobe):** 4-User-Livelauf: User2 aktiviert Drum → auf MAIN hörbar;
+      User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN unverändert; zurück auf
+      MAIN → sofort Gesamtmix. *Routing + Cue-Gains sind seit 2026-09-03
+      automatisiert abgesichert (`tests/monitorRouting.test.ts`,
+      `tests/e2e/monitorCue.spec.ts`); hier bleibt nur die echte Hörprobe an
+      4 Browsern.*
 - [ ] **P4-1:** Live-Latenz < 50 ms one-way beim echten 4-Browser-Lauf verifizieren.
 - [ ] **P4-2:** Audio-Unterbrechungsfreiheit beim Rollenwechsel im Live-Test.
 
