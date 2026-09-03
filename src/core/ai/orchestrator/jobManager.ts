@@ -119,22 +119,24 @@ export class JobManager {
   complete(jobId: string, result?: unknown): void {
     const job = this.jobs.get(jobId);
     if (!job) return;
+    const wasRunning = this.isRunning(job);
     job.status = 'COMPLETED';
     job.completedAt = this.now();
     job.durationMs = job.completedAt - (job.startedAt ?? job.createdAt);
     job.result = result;
-    this.release(job);
+    this.release(job, wasRunning);
     aiLogger.info('ai job completed', { jobId, task: job.task, model: job.model, durationMs: job.durationMs });
   }
 
   fail(jobId: string, error: Error, status: JobStatus = 'FAILED'): void {
     const job = this.jobs.get(jobId);
     if (!job) return;
+    const wasRunning = this.isRunning(job);
     job.status = status;
     job.completedAt = this.now();
     job.durationMs = job.completedAt - (job.startedAt ?? job.createdAt);
     job.error = error.message;
-    this.release(job);
+    this.release(job, wasRunning);
     aiLogger.warn('ai job finished with error', { jobId, task: job.task, model: job.model, status, error: error.message });
   }
 
@@ -142,9 +144,10 @@ export class JobManager {
     const job = this.jobs.get(jobId);
     if (!job) return;
     if (job.status === 'COMPLETED' || job.status === 'FAILED' || job.status === 'CANCELLED' || job.status === 'TIMEOUT') return;
+    const wasRunning = this.isRunning(job);
     job.status = 'CANCELLED';
     job.completedAt = this.now();
-    this.release(job);
+    this.release(job, wasRunning);
   }
 
   /** Dead-Job-Detection: hängende Jobs nach Timeout automatisch beenden. */
@@ -160,8 +163,17 @@ export class JobManager {
     return stale;
   }
 
-  private release(job: AiJob): void {
-    if (job.status === 'STARTING' || job.status === 'RUNNING' || job.status === 'QUEUED') {
+  /** Belegt der Job aktuell einen Concurrency-Slot? (nur nach `start()`). */
+  private isRunning(job: AiJob): boolean {
+    return job.status === 'STARTING' || job.status === 'RUNNING';
+  }
+
+  /**
+   * Gibt Concurrency-Slot und Dedupe-Key frei. `wasRunning` muss VOR dem
+   * Statuswechsel ermittelt werden – sonst bliebe der Slot dauerhaft belegt.
+   */
+  private release(job: AiJob, wasRunning: boolean): void {
+    if (wasRunning) {
       this.runningByTask.set(job.task, Math.max(0, (this.runningByTask.get(job.task) ?? 1) - 1));
     }
     if (job.dedupeKey && this.dedupe.get(job.dedupeKey) === job.jobId) {
