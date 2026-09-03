@@ -2,6 +2,7 @@
 
 > Browser-basierte kollaborative Audio-Workstation für bis zu 4 Nutzer.
 > Version: **1.10.1** (`V. 1|010|001`) · Codename „HyperAudioWorkstation" · Stand 2026-09-03.
+> Hauptzweig: `main` · Release-Gate: `npm run verify` muss grün sein.
 > Projektzweck: **privat / Forschung** (kein kommerzieller Zweck).
 
 ---
@@ -23,7 +24,8 @@ viert gleichzeitig an derselben Session arbeiten wollen.
 - Echtzeit-Kollaboration bis 4 Nutzer mit identischem State (WebRTC DataChannels
   + Socket.io), B2B-Locking pro Plugin
 - Audio-Engine V1 (Tone.js) + V2 (AudioGraph/Worklets), SAB/RingBuffer,
-  deterministisches Noise, PDC-fähiges Mastering
+  deterministisches Noise, PDC-fähiges Mastering, Dynamics-Worklet-Insert
+  (Kompressor/Gate/Dynamic-EQ), MIDI-Clock/Note-Out für externe Hardware
 - KI: MOA/MCP-Planung (DeepSeek), Voice/TTS (HF), Stems (Replicate),
   Audio-Analyse (HF-Endpoint-Custom-Container), lokale Fallbacks (Ollama,
   WebSpeech, deterministisch)
@@ -33,8 +35,9 @@ viert gleichzeitig an derselben Session arbeiten wollen.
 ### 1.1 Schnellstart
 
 ```bash
-npm install                 # Abhängigkeiten (package-lock.json ist maßgeblich)
+npm ci                      # Abhängigkeiten (package-lock.json ist maßgeblich)
 cp .env.example .env        # Secrets ergänzen – .env wird NIE committet
+node build-worklets.mjs     # AudioWorklets bauen (public/worklets ist gitignored)
 npm run dev                 # tsx server.ts: Express + Vite-Middleware auf :8080
 ```
 
@@ -54,13 +57,14 @@ npm start                   # node dist/server.cjs
 | `npm run worker` | Datei-Queue-Worker (`services/taskWorker.ts`) |
 | `npm run build` / `npm start` | Produktions-Build / -Start |
 | `npm run lint` | `tsc --noEmit` (Typprüfung, es gibt keinen ESLint-Schritt) |
-| `npm test`, `npm run test:coverage` | Vitest (Unit/Integration) |
-| `npm run test:e2e`, `test:e2e:responsive`, `test:stress` | Playwright |
+| `npm test`, `npm run test:coverage` | Vitest (Unit/Integration, aktuell 107 Dateien) |
+| `npm run test:e2e`, `test:e2e:responsive`, `test:stress` | Playwright (13 Specs, u. a. smoke/collab/hardware/keyboard/visual/responsive/stress/live2browser) |
 | `npm run verify` | **Release-Gate:** tsc + Vitest + Interface-Boundary-Scan |
 | `npm run verify:boundary` | nur `scripts/validate-interface-boundaries.mjs` |
-| `npm run check:bundle`, `check:memo` | Bundle-Größe / React-Memo-Heuristik |
+| `npm run check:bundle` | Bundle-Größe (< 2,0 MiB FAIL-Gate, Warnung < 1,5 MiB) |
+| `npm run check:memo` | React-Memo-Heuristik für Terminal-Komponenten |
 | `npm run generate:golden` | Golden-WAV-Referenzen für DSP-Tests |
-| `npm run eval:ai`, `iterate:prompts` | AI-Evaluation / Prompt-Iteration |
+| `npm run eval:ai`, `iterate:prompts` | AI-Evaluation / Prompt-Iteration (21 Plugins) |
 | `npm run stress:hetzner`, `stress:sfu*` | Last-/SFU-Tests gegen die Flotte |
 | `npm run build:wasm-hrtf` | Rust→WASM-HRTF-Faltung (`src/audio/wasm/hrtf_conv`) |
 
@@ -154,7 +158,8 @@ Plugin-Leases) und liefert im Produktionsbetrieb das SPA-Bundle (`GET *`).
 - `services/samplemonk-ai-runtime/model_manifest.json` – Model Registry
   (Revision-Pinning)
 - `services/samplemonk-ai-runtime/hf_endpoint.example.json` – HF-Endpoint-Konfig
-- `database/schema.sql` + `database/ai_migration_001.sql` – Supabase-Schema
+- `database/schema.sql` + `database/ai_migration_001.sql` +
+  `database/ai_migration_002.sql` – Supabase-Schema & Prompt-/Eval-Tabellen
 - `deploy/helm/audioMONASTRY/values.yaml` – Helm (optional)
 
 **Secrets-Strategie:**
@@ -175,27 +180,27 @@ Fallback-Registry. Alle Terminals werden per `React.lazy` code-gesplittet.
 
 | # | ID | Name | Terminal-Komponente | Schnittstelle / Kern |
 |---|---|---|---|---|
-| 0 | `masterplayer` | masterplayerMONK (MPR) | `MasterPlayerTerminal` | Master-Transport, `usePluginState` |
-| 1 | `instrument` | instrumentMONK (INS) | `InstrumentsTerminal` | `IInstrumentBackend`, Instrumenten-Pool |
-| 2 | `synthesizer` | synthesizerMONK (SYN) | `SynthesizerTerminal` | Worklet-Synthese |
-| 3 | `drum` | drumMONK (DRM) | `DrumMachineTerminal` | Pattern-Engine (TR-808/M8-Emulationen) |
-| 4 | `sampler` | samplerMONK (SAM) | `SamplerTerminal` | Sample-Playback/Slicing |
+| 0 | `masterplayer` | masterplayerMONK (MPR) | `MasterPlayerTerminal` | Master-Transport, feste Kopfzeile, Sticky-Player |
+| 1 | `instrument` | instrumentMONK (INS) | `InstrumentsTerminal` | `IInstrumentBackend`, Instrumenten-Pool, Pad-/Keys-Ansicht |
+| 2 | `synthesizer` | synthesizerMONK (SYN) | `SynthesizerTerminal` | Worklet-Synthese, 16-Step-Notensequencer |
+| 3 | `drum` | drumMONK (DRM) | `DrumMachineTerminal` | Pattern-Engine (TR-808/M8), 32 Steps, A/B/Chain, MIDI-Clock/Note-Out |
+| 4 | `sampler` | samplerMONK (SAM) | `SamplerTerminal` | Sample-Playback/Slicing, 16-Step-Sequencer je Pad |
 | 5 | `mcp` | mcpMONK (MCP) | `McpTerminal` | MPC-Pads (4×4, Bank A–D) + 16/32-Step-Sequencer |
-| 6 | `voice` | voiceMONK (VOX) | `VoiceGenTerminal` | `/api/voice/*` (HF/Replicate/WebSpeech) |
+| 6 | `voice` | voiceMONK (VOX) | `VoiceGenTerminal` | `/api/voice/*` (HF/Replicate/WebSpeech/Ollama) |
 | 7 | `sound` | soundMONK (SND) | `SoundTerminal` | KI-/regelbasierte Beat-, Bass-, Atmo-, One-Shot-Generierung |
-| 8 | `mixer` | mixerMONK (MIX) | `MischpultTerminal` | 5 Kanäle (A/B), MIDI-Mapping |
-| 9 | `controller` | controllerMONK (CTRL) | `MIDIControllerTerminal` | `IHardwareAdapter`, ControlMessage |
+| 8 | `mixer` | mixerMONK (MIX) | `MischpultTerminal` | 5 Kanäle (A/B), Deck-Skins, MIDI-Mapping, DJ-Crossfade |
+| 9 | `controller` | controllerMONK (CTRL) | `MIDIControllerTerminal` | `IHardwareAdapter`, ControlMessage, MIDI-Out für Motorfader/LEDs |
 | 10 | `effect` | effectMONK (FX) | `FXEngineTerminal` | Multi-FX-Routing |
-| 11 | `drop` | dropMONK (DRP) | `DropTerminal` | KI-Auto-Drop: BPM/Key-Analyse + taktgenaue One-Shots |
-| 12 | `library` | biblioMONK (LIB) | `LibraryTerminal` | Supabase/R2, Auto-Save |
+| 11 | `drop` | dropMONK (DRP) | `DropTerminal` | KI-Auto-Drop: BPM/Key-Analyse + taktgenaue One-Shots, quantisierte Bridges |
+| 12 | `library` | biblioMONK (LIB) | `LibraryTerminal` | Supabase/R2, Favoriten, Ordnerbaum, Auto-Save |
 | 13 | `eq` | eqMONK (EQ) | `EQPluginTerminal` | AudioWorklet-Parameter |
-| 14 | `dsp` | dspMONK (DSP) | `DSPTerminal` | Cutoff/Reso/ModIndex/Gain/LFO |
-| 15 | `mastering` | masteringMONK (MST) | `MasteringOverlay` | PDC, LUFS |
-| 16 | `stem` | stemMONK (RMX) | `StemExtractorTerminal` | `/api/separate-stems` (Replicate/lokal) |
-| 17 | `spatial` | spatialMONK (3D) | `SpatialScene` | 2D-Panning-Array, HRTF |
+| 14 | `dsp` | dspMONK (DSP) | `DSPTerminal` | Cutoff/Reso/ModIndex/Gain/LFO + Dynamics-Insert (Comp/Gate/Dyn-EQ) |
+| 15 | `mastering` | masteringMONK (MST) | `MasteringOverlay` | PDC, LUFS, Release-LUT |
+| 16 | `stem` | stemMONK (RMX) | `StemExtractorTerminal` | `/api/separate-stems` (Replicate/lokal/ONNX) |
+| 17 | `spatial` | spatialMONK (3D) | `SpatialScene` | 2D-Panning-Array, HRTF (JSON/WASM), ILD/ITD/Metriken |
 | 18 | `recording` | recordingMONK (REC) | `RecorderTerminal` | Bit-perfect Export |
-| 19 | `performance` | perfMONK (PRF) | `PerformanceMonitorTerminal` | FPS/Jitter/Latenz-Budgets, Signal-Anzeige |
-| 20 | `ai` | aiMONK (AI) | `AiMonkTerminal` | Orchestrator-UI, Auto-AI-Steuerung |
+| 19 | `performance` | perfMONK (PRF) | `PerformanceMonitorTerminal` | FPS/Jitter/Latenz-Budgets (LOCAL/NET/DROPOUTS), Signal-Anzeige |
+| 20 | `ai` | aiMONK (AI) | `AiMonkTerminal` + `AiMonkDock` | Orchestrator-UI, Auto-AI-Steuerung, Bottom-Dock |
 
 > Hinweis: Das frühere `visMONK` (Visualizer) wurde entfernt; seine Signal-Anzeige
 > ist in `perfMONK` integriert.
@@ -207,6 +212,10 @@ rendert dabei nur das primäre Modul.
 
 **Aktivierungslogik:** Top-Bar-Icons → `ModuleStateContext`; `AUTO_AI` =
 periodische MOA-Vorschläge; `PRO` = volles Terminal; Locking pro Lease.
+
+**Start-Zustand (P0-1):** Beim Studio-Eintritt starten **alle** Plugins auf
+`OFF`. `audioEngine.init()` aktiviert das Silence-Gate (`setIdleSilence`), sodass
+Main im Leerlauf stumm bleibt.
 
 ## 6. AI-Modell-Integration
 
@@ -323,17 +332,27 @@ deploy/                   Helm-Charts (optional)
 
 **Lokale Gates:**
 - `npm run lint` – TypeScript-Typprüfung (`tsc --noEmit`)
-- `npm test` – Vitest (Unit/Integration, u. a. `architecture.test.ts`,
-  `lockFuzz.test.ts`, `goldenAudio.test.ts`, `aiOrchestrator.test.ts`)
+- `npm test` – Vitest (Unit/Integration, aktuell 107 Dateien, u. a.
+  `architecture.test.ts`, `lockFuzz.test.ts`, `goldenAudio.test.ts`,
+  `aiOrchestrator.test.ts`, `pluginAudioRouter.test.ts`, `midiClockOut.test.ts`,
+  `dynamicsProcessor.test.ts`, `spatialProcessor.test.ts`, `wasmHrtf.test.ts`)
 - `npm run verify:boundary` – Interface-Boundary-Scan: Plattform-APIs dürfen nur
   in den dafür vorgesehenen Adaptern verwendet werden
 - `npm run verify` – Pflicht vor jedem PR (tsc + Vitest + Boundary-Scan)
+- `npm run check:bundle` – Bundle-Budget-Gate (< 2,0 MiB)
+- `npm run check:memo` – React-Memo-Heuristik für Terminal-Komponenten
 - `npm run test:e2e` – Playwright (`smoke`, `collab`, `hardware`, `keyboard`,
-  `visual`, `responsive`, `stress`, `live2browser`)
+  `visual`, `responsive`, `stress`, `live2browser`, `startState`,
+  `pluginCloseSync`, `monitorCue`, `masterPlayerFixed`)
+- `npx tsx scripts/spatial-regression.ts` – spatialMONK Audio-Regression
+  (ILD/ITD-Asserts + WAV-Artefakte)
 
-**GitHub Actions** (`.github/workflows/`): `main.yml` (Haupt-CI), `build.yml`,
-`ai.yml`, `hf-endpoint.yml` (Endpoint-Verwaltung), `live-stress.yml`,
-`nightly.yml`, `sonarcloud.yml` (Konfiguration in `sonar-project.properties`).
+**GitHub Actions** (`.github/workflows/`): `build.yml` (Build, Bundle, Memo-Audit,
+Google-frei-Check), `verify.yml` (tsc, Vitest, Boundary-Scan, spatial-regression),
+`e2e.yml` (Chromium/Firefox/WebKit, ohne visuelle Baselines), `nightly.yml`
+(verify + build + AI-Eval + Prompt-Iteration + Auto-Issue bei Fehler), `ai.yml`,
+`hf-endpoint.yml` (Endpoint-Verwaltung), `live-stress.yml`, `sonarcloud.yml`
+(Konfiguration in `sonar-project.properties`).
 
 ---
 
@@ -345,3 +364,4 @@ deploy/                   Helm-Charts (optional)
 - `MASTER_TODO.md` – Produkt-/Release-Historie und offene Aufgaben
 - `TASKDONE.md` – abgeschlossene Arbeitspakete (Änderungsjournal)
 - `docs/HANDOVER.md` – Übergabe-/Statusdokument
+- `docs/LIVE_CHECKLIST_2026-09-02.md` – verbleibende Live-/Hörprobe-Prüfpunkte
