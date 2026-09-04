@@ -36,6 +36,7 @@ interface ChannelState {
   gain: number;
   pan: number;
   mute: boolean;
+  cue: boolean;
   loadName: string;
   loaded: boolean;
   bpm?: number;
@@ -84,7 +85,7 @@ function buildStrips(count: MixerChannelCount): StripConfig[] {
 
 function freshChannel(): ChannelState {
   return {
-    trim: 1, low: 1, mid: 1, high: 1, gain: 0.85, pan: 0.5, mute: false,
+    trim: 1, low: 1, mid: 1, high: 1, gain: 0.85, pan: 0.5, mute: false, cue: false,
     loadName: '', loaded: false, analyzing: false,
   };
 }
@@ -339,9 +340,13 @@ export const DJMixer = React.memo(function DJMixer({ initialChannels = 8 }: { in
                   <span className="text-[9px] font-black tracking-widest text-zinc-200">{s.label}</span>
                   <span className="text-[6px] font-mono text-zinc-500">{ROLE_LABELS[s.role]}</span>
                   <button type="button"
-                    onClick={() => apply(i, { mute: !c.mute })}
+                    onClick={() => {
+                      const next = !c.cue;
+                      apply(i, { cue: next });
+                      audioEngine.setChannelPfl(s.track, next);
+                    }}
                     className={`w-6 h-4 rounded-[2px] border text-[6px] font-black tracking-widest cursor-pointer transition-colors ${
-                      c.mute ? 'bg-orange-500 border-orange-400 text-black' : 'bg-black border-zinc-700 text-zinc-500 hover:border-orange-500/50 hover:text-orange-300'
+                      c.cue ? 'bg-orange-500 border-orange-400 text-black' : 'bg-black border-zinc-700 text-zinc-500 hover:border-orange-500/50 hover:text-orange-300'
                     }`}
                   >CUE</button>
                 </div>
