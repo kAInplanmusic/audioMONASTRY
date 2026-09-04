@@ -440,6 +440,7 @@ function AppComponent() {
                 <span className="font-light text-neutral-300">audio</span>MONASTRY
               </p>
               <p className="text-[7px] font-mono tracking-[0.4em] text-neutral-500 uppercase mt-1">4-Person Studio</p>
+              <p className="text-[7px] font-mono tracking-[0.25em] text-cyan-300/80 uppercase mt-0.5 whitespace-nowrap">V. 1.210.001 · HYPERDAW</p>
             </div>
           </a>
 
