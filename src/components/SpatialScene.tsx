@@ -632,6 +632,20 @@ export const SpatialScene = React.memo(function SpatialScene() {
         </button>
       </div>
 
+      {/* Setup-Referenzen: 12.2 / 18.2 / 24.2 (Bilder aus public/) */}
+      <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-2 overflow-x-auto">
+        <span className="text-[8px] font-mono tracking-widest text-neutral-500">SETUPS</span>
+        {[
+          { src: '/12-2-setup.png', label: '12.2' },
+          { src: '/18-2-setup.png', label: '18.2' },
+          { src: '/24-2-setup.png', label: '24.2' },
+        ].map((s) => (
+          <img key={s.src} src={s.src} alt={s.label} title={`${s.label} Setup (Referenz)`}
+            className="h-12 rounded border border-neutral-800 hover:border-lime-500/60 transition-colors cursor-zoom-in object-cover" />
+        ))}
+        <span className="text-[8px] font-mono text-neutral-600">Referenzbilder · Kanalrechnung in docs/SPATIAL_BRIDGE_SPEC.md</span>
+      </div>
+
       {/* Takeover-Leiste: vorhandene Live-Streams + Stems über das einheitliche
           Action-Menu auf freie Spatial-Kanäle übernehmen (kein 3D, kein neues
           Engine-Feature – nutzt routeChannelToSpatialInput + Master-Bus-Tap). */}

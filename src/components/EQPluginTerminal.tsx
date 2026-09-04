@@ -6,7 +6,7 @@ import { storageGetJson, storageSetJson } from '../utils/storage';
 import { MoaAssistant } from './MoaAssistant';
 
 /**
- * audioMONASTRY 12-Band-Equalizer (Para-EQ) – UX-Aufwertung
+ * audioMONASTRY 36-Band-Equalizer (Para-EQ) – UX-Aufwertung
  * ---------------------------------------------------------
  * - ECHTE Frequenzgang-Kurve (RBJ-Biquad-Magnitude, analytisch berechnet)
  * - Präzise Vertikal-Fader (Drag/Wheel/Pfeiltasten/Doppelklick-Reset)
@@ -14,22 +14,15 @@ import { MoaAssistant } from './MoaAssistant';
  * - Presets, Bypass (wirkt auf die Engine), Persistenz (localStorage)
  */
 
-const BANDS = [
-  { freq: 30,   label: '30Hz',  type: 'SUB' },
-  { freq: 60,   label: '60Hz',  type: 'BASS' },
-  { freq: 120,  label: '120Hz', type: 'LOW MID' },
-  { freq: 250,  label: '250Hz', type: 'MID LOW' },
-  { freq: 500,  label: '500Hz', type: 'MID' },
-  { freq: 1000, label: '1kHz',  type: 'MID HIGH' },
-  { freq: 2000, label: '2kHz',  type: 'PRESENCE' },
-  { freq: 4000, label: '4kHz',  type: 'HIGH MID' },
-  { freq: 6000, label: '6kHz',  type: 'HIGH' },
-  { freq: 8000, label: '8kHz',  type: 'BRILL' },
-  { freq: 12000, label: '12kHz', type: 'AIR' },
-  { freq: 16000, label: '16kHz', type: 'TOP' },
-];
+const BAND_COUNT = 36;
 
-const PRESETS: Record<string, { label: string; gains: number[] }> = {
+const BANDS = Array.from({ length: BAND_COUNT }, (_, i) => {
+  const freq = Math.round(20 * Math.pow(10, (i * 3) / 35));
+  const label = freq < 1000 ? `${freq}Hz` : `${(freq / 1000).toFixed(1).replace(/\.0$/, '')}kHz`;
+  return { freq, label, type: 'BAND' };
+});
+
+const PRESETS_12: Record<string, { label: string; gains: number[] }> = {
   FLAT:    { label: 'Flat',      gains: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
   'BASS+': { label: 'Bass+',     gains: [6, 5, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0] },
   SUB:     { label: 'Sub',       gains: [8, 4, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0] },
@@ -39,6 +32,14 @@ const PRESETS: Record<string, { label: string; gains: number[] }> = {
   LOUD:    { label: 'Loudness',  gains: [4, 3, 2, 1, 1, 1, 2, 3, 3, 2, 1, 1] },
   SMART:   { label: 'AI-Smart',  gains: [1, 2, 2, 1, 0, -1, 0, 1, 2, 2, 1, 1] },
 };
+
+/** Expandiert ein 12-Punkt-Preset auf 36 Bänder (nächster Nachbar). */
+const expandGains = (g12: number[]): number[] =>
+  BANDS.map((_, i) => g12[Math.min(g12.length - 1, Math.round((i * (g12.length - 1)) / (BAND_COUNT - 1)))]);
+
+const PRESETS: Record<string, { label: string; gains: number[] }> = Object.fromEntries(
+  Object.entries(PRESETS_12).map(([k, v]) => [k, { label: v.label, gains: expandGains(v.gains) }]),
+);
 
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
 const round01 = (v: number) => Math.round(v * 10) / 10;
@@ -248,8 +249,8 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
     try {
       const parsed = storageGetJson<{ gains?: number[]; qs?: number[]; power?: boolean }>('eq-state');
       if (parsed) {
-        const gains = Array.isArray(parsed.gains) && parsed.gains.length === 12 ? parsed.gains.map(Number) : BANDS.map(() => 0);
-        const qs = Array.isArray(parsed.qs) && parsed.qs.length === 12 ? parsed.qs.map(Number) : BANDS.map(() => 1);
+        const gains = Array.isArray(parsed.gains) && parsed.gains.length === BAND_COUNT ? parsed.gains.map(Number) : BANDS.map(() => 0);
+        const qs = Array.isArray(parsed.qs) && parsed.qs.length === BAND_COUNT ? parsed.qs.map(Number) : BANDS.map(() => 1);
         setGainValues(gains);
         setQValues(qs);
         lastGainsRef.current = gains;
