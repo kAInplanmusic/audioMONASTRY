@@ -53,6 +53,23 @@ export function openAudioActionMenu(content: AudioContentRef, anchor?: AnchorInp
   openHandler({ content, x: rect.x, y: rect.y });
 }
 
+/**
+ * Ein-Klick-Wiedergabe für Audio-Karten: URL vorhanden → abspielen; gleiche
+ * URL nochmal → stoppen. Ohne URL wird das Aktionsmenü geöffnet (Fallback).
+ */
+export function toggleAudioPreview(content: AudioContentRef, anchor?: AnchorInput): void {
+  if (hasAudioUrl(content)) {
+    const url = content.url as string;
+    if (audioEngine.getPreviewUrl() === url) {
+      audioEngine.stopPreview();
+    } else {
+      audioEngine.previewSample('channel5', undefined, url);
+    }
+    return;
+  }
+  openAudioActionMenu(content, anchor);
+}
+
 function toRect(anchor: AnchorInput): { x: number; y: number } {
   if (!anchor) return { x: 120, y: 120 };
   if ('left' in anchor && 'top' in anchor && 'width' in anchor) {
