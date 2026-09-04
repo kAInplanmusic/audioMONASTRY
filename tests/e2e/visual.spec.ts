@@ -59,7 +59,7 @@ const PLUGIN_ROWS: { short: string; id: string }[] = [
   { short: 'PRF', id: 'performance' },
 ];
 
-test('P1-2: Screenshot-Baselines für alle 21 Plugins', async ({ page }) => {
+test('P1-2: Screenshot-Baselines für alle 20 Plugin-/Sektions-Ansichten', async ({ page }) => {
   test.setTimeout(300_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');

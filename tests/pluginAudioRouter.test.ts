@@ -14,7 +14,7 @@ vi.mock('../src/utils/audioEngine', () => ({
   },
   pluginAudioChannels: (id: string) => {
     const map: Record<string, string[]> = {
-      masterplayer: [], ai: [], controller: [], library: [], mastering: [],
+      ai: [], controller: [], library: [], mastering: [],
       stem: [], recording: [], performance: [],
       spatial: ['channel7'], mixer: ['channel1'], mcp: ['channel5'],
       drum: ['channel2'], sampler: ['channel5'], synthesizer: ['channel4'],
@@ -35,11 +35,11 @@ import {
 } from '../src/core/pluginAudioRouter';
 
 describe('pluginAudioRouter (P0-2)', () => {
-  it('registriert alle 21 Plugin-IDs', () => {
-    expect(PLUGIN_ROUTE_IDS).toHaveLength(21);
-    expect(listPluginRoutes()).toHaveLength(21);
+  it('registriert alle 20 Plugin-IDs', () => {
+    expect(PLUGIN_ROUTE_IDS).toHaveLength(20);
+    expect(listPluginRoutes()).toHaveLength(20);
     const expected = [
-      'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
+      'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
       'voice', 'sound', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
       'dsp', 'mastering', 'stem', 'spatial', 'recording', 'performance', 'ai',
     ];
@@ -48,7 +48,7 @@ describe('pluginAudioRouter (P0-2)', () => {
 
   it('liefert Routing-Infos für bekannte IDs und ignoriert unbekannte', () => {
     expect(getPluginRoute('synthesizer')?.mainFeeder).toBe(true);
-    expect(getPluginRoute('masterplayer')?.source).toBe('ui-only');
+    expect(getPluginRoute('masterplayer')).toBeUndefined();
     expect(assertAllPluginIdsRegistered(['kaputt'])).toEqual(['kaputt']);
   });
 
@@ -78,7 +78,7 @@ describe('pluginAudioRouter (P0-2)', () => {
     expect(getPluginRoute('library')?.isolation).toBe('ui-only');
   });
 
-  it('AM-E2-1: Routing-Matrix validiert alle 21 IDs ohne Verstöße', () => {
+  it('AM-E2-1: Routing-Matrix validiert alle 20 IDs ohne Verstöße', () => {
     expect(validateRoutingMatrix(PLUGIN_ROUTE_IDS)).toEqual([]);
     expect(validateRoutingMatrix(['kaputt'])).toContain('kaputt: nicht registriert');
   });

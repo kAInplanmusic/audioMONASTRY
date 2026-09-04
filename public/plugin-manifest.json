@@ -78,12 +78,6 @@
   ],
   "ui_plugins": [
     {
-      "id": "masterplayer",
-      "name": "masterplayerMONK",
-      "short": "MPR",
-      "icon": "Activity"
-    },
-    {
       "id": "instrument",
       "name": "instrumentMONK",
       "short": "INS",

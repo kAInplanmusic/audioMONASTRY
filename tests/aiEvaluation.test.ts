@@ -12,9 +12,9 @@ import { MoaAgent } from '../src/core/ai/MoaAgent';
 import { evaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
 
-/** Verbindliche 21 Plugin-IDs (siehe src/plugins/registry.ts). */
+/** Verbindliche 20 Plugin-IDs (siehe src/plugins/registry.ts). */
 const PLUGIN_IDS = [
-  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
   'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
   'spatial', 'recording', 'performance', 'ai',
 ];
@@ -86,7 +86,7 @@ describe('AI Evaluation – evaluateCase', () => {
   });
 });
 
-describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (21 Plugins)', () => {
+describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (20 Plugins)', () => {
   for (const pluginId of PLUGIN_IDS) {
     it(`plant und führt ${pluginId}:${firstCommand(pluginId)} korrekt aus`, async () => {
       const action = firstCommand(pluginId);
@@ -135,7 +135,7 @@ describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (21 P
     });
   }
 
-  it('hat für alle 21 Plugins einen Eval-Datensatz im Store', () => {
+  it('hat für alle 20 Plugins einen Eval-Datensatz im Store', () => {
     for (const pluginId of PLUGIN_IDS) {
       expect(evaluationStore.listByPlugin(pluginId).length).toBeGreaterThanOrEqual(1);
     }

@@ -2,7 +2,7 @@
  * P1-2 Plugin-Theme-Tests (CSS-Variablen-Themes je Plugin, D8).
  *
  * Stellt sicher, dass:
- *  - jede der 21 Plugin-IDs eine Theme-Klasse bekommt,
+ *  - jede der 20 Plugin-IDs eine Theme-Klasse bekommt,
  *  - jede Theme-Klasse in `src/index.css` die Akzent-Tokens definiert,
  *  - die Referenz-Looks vollständig gepflegt sind,
  *  - die Theme-Zuordnung keine plugin-lokalen Hex-Werte enthält.
@@ -28,11 +28,11 @@ const manifest = JSON.parse(
 const indexCss = readFileSync(resolve(__dirname, '../src/index.css'), 'utf8');
 
 describe('pluginTheme (P1-2) – CSS-Variablen-Themes je Plugin', () => {
-  it('deckt exakt die 21 Plugins aus dem Manifest ab', () => {
+  it('deckt exakt die 20 Plugins aus dem Manifest ab', () => {
     const manifestIds = manifest.ui_plugins.map((p) => p.id).sort();
-    expect(PLUGIN_THEME_IDS).toHaveLength(21);
+    expect(PLUGIN_THEME_IDS).toHaveLength(20);
     expect([...PLUGIN_THEME_IDS].sort()).toEqual(manifestIds);
-    expect(new Set(PLUGIN_THEME_IDS).size).toBe(21);
+    expect(new Set(PLUGIN_THEME_IDS).size).toBe(20);
   });
 
   it('liefert für jede Plugin-ID eine Theme-Klasse mit CSS-Tokens in index.css', () => {
@@ -52,7 +52,7 @@ describe('pluginTheme (P1-2) – CSS-Variablen-Themes je Plugin', () => {
     expect(getPluginThemeClass(undefined)).toBe(DEFAULT_THEME_CLASS);
   });
 
-  it('hat für alle 21 Plugins einen Referenz-Hardware-Look', () => {
+  it('hat für alle 20 Plugins einen Referenz-Hardware-Look', () => {
     for (const id of PLUGIN_THEME_IDS) {
       const ref = getPluginSkinReference(id);
       expect(ref.length).toBeGreaterThan(0);

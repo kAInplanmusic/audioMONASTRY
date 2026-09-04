@@ -1,13 +1,14 @@
 /**
  * audioMONASTRY · Plugin-Kommando-Registry (Voice-/KI-/MOA-Steuerung)
  * ===================================================================
- * Verdrahtet ALLE 21 Plugins mit dem VoiceControlService:
+ * Verdrahtet ALLE 20 Plugins mit dem VoiceControlService:
  *   - transport/mcp/drum/mixer/spatial/instrument/fx/eq/dsp/synth/
  *     voice/library/controller haben echte Engine-Handler,
  *   - sampler/stem/recording/mastering/performance/sound/drop/ai haben
  *     echte Handler (Trigger/Events/Status),
  *   - zusätzlich gibt es für JEDE Plugin-ID die generischen Kommandos
  *     activate/deactivate/route (über pluginAudioRouter, P3-2).
+ * masterplayerMONK ist KEIN Plugin, sondern feste View-only-Leiste.
  *
  * Die Audio-Engine/Backends werden bewusst lazy importiert, damit die
  * Core-Module ohne Tone/Web-Audio laden (Interface-Boundary-Regel).
@@ -15,9 +16,9 @@
 import { voiceControlService } from './VoiceControlService';
 import { controlBus } from '../events/ControlBus';
 
-/** Verbindliche 21 Plugin-IDs (P3-2: Registry muss alle abdecken). */
+/** Verbindliche 20 Plugin-IDs (P3-2: Registry muss alle abdecken). */
 export const PLUGIN_COMMAND_IDS: readonly string[] = Object.freeze([
-  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
   'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
   'spatial', 'recording', 'performance', 'ai',
 ]);
@@ -221,7 +222,7 @@ export function registerDefaultVoiceCommands(): void {
     performanceMonitor.start();
   }, ['reset', 'performance', 'monitor']);
 
-  // --- masterplayerMONK (Transport-Alias, Plugin 0) ----------------------------
+  // --- masterplayerMONK (Transport-Alias der festen Kopfzeile) ------------------
   voiceControlService.registerPluginCommand('masterplayer', 'play', async () => {
     const { audioEngine } = await import('../../utils/audioEngine');
     await audioEngine.play();
@@ -255,7 +256,7 @@ export function registerDefaultVoiceCommands(): void {
     if (text) controlBus.emit('monk:ai-plan', { text });
   }, ['plan', 'ki', 'ai', 'mache']);
 
-  // --- P3-2: generische Router-Kommandos für ALLE 21 Plugin-IDs ----------------
+  // --- P3-2: generische Router-Kommandos für ALLE 20 Plugin-IDs ----------------
   // Aktivierung/Routing/Parameter laufen über den PluginAudioRouter (OFF/An,
   // Ziel-Kanal, Parameter). Dadurch ist die Registry vollständig mit dem
   // Audio-Router verdrahtet – kein Plugin bleibt ohne Aktivierungs-Kommando.
@@ -291,7 +292,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['kanal', 'channel', 'gain', 'pan', 'volume']);
 
   // --- UI-only Plugins (Status-Meldung, Folgeschritte verdrahten) ---------------
-  for (const id of ['masterplayer', 'stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {
+  for (const id of ['stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {
     voiceControlService.registerPluginCommand(id, 'status', async () => {
       // Zusätzlicher Status-Handler (Kommandos wie "Status").
     }, ['status', 'bereit', 'ready']);

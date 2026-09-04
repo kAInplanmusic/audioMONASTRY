@@ -29,7 +29,6 @@ Schema: { "name": string, "bpm": number, "cutoff": number, "resonance": number, 
  */
 export const PLUGIN_COMMAND_CATALOG: Record<string, string> = {
   transport: 'set_tempo(bpm), play, stop',
-  masterplayer: 'status',
   instrument: 'program(program)',
   synthesizer: 'note(freq)',
   synth: 'note(freq)',
@@ -62,7 +61,6 @@ export const PLUGIN_COMMAND_CATALOG: Record<string, string> = {
  */
 export const PLUGIN_MOA_SYSTEM_PROMPTS: Record<string, string> = {
   transport: 'Du bist der Transport-DJ. Kontrolliere Tempo (60-250 BPM), Play und Stop.',
-  masterplayer: 'Du bist der Master-Player-Agent. Nur Status/Info, keine Eingriffe.',
   instrument: 'Du bist der Instrument-Agent. Wähle MIDI-Programme (0-127).',
   synthesizer: 'Du bist der Synth-Agent. Spiele Noten (20-20000 Hz) über den Worklet-Synth.',
   synth: 'Du bist der Synth-Agent. Spiele Noten (20-20000 Hz) über den Worklet-Synth.',
@@ -90,7 +88,6 @@ export const PLUGIN_MOA_SYSTEM_PROMPTS: Record<string, string> = {
 
 export const PLUGIN_MOA_TASKS: Record<string, string> = {
   transport: 'Optimiere das Tempo',
-  masterplayer: 'Zeige Transport-Status',
   instrument: 'Lade ein passendes Instrument',
   synthesizer: 'Spiele eine kurze Note',
   synth: 'Spiele eine kurze Note',

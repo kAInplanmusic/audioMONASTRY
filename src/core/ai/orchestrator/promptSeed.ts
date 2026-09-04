@@ -12,9 +12,9 @@
  */
 import { PLUGIN_COMMAND_CATALOG, PLUGIN_MOA_SYSTEM_PROMPTS } from '../../../utils/prompts';
 
-/** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
-export const PLUGIN_IDS_21 = [
-  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+/** Verbindliche 20 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
+export const PLUGIN_IDS = [
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
   'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
   'spatial', 'recording', 'performance', 'ai',
 ] as const;
@@ -39,9 +39,9 @@ export interface PromptEvalSeed {
   plugin_prompt_versions: PluginPromptVersionSeed[];
 }
 
-/** Liefert für alle 21 Plugins je eine Prompt-Version (Version 1, aktiv). */
+/** Liefert für alle 20 Plugins je eine Prompt-Version (Version 1, aktiv). */
 export function buildPromptEvalSeed(): PromptEvalSeed {
-  const system_prompts: SystemPromptSeed[] = PLUGIN_IDS_21.map((pluginId) => ({
+  const system_prompts: SystemPromptSeed[] = PLUGIN_IDS.map((pluginId) => ({
     plugin_id: pluginId,
     role: 'system',
     version: 1,
@@ -50,7 +50,7 @@ export function buildPromptEvalSeed(): PromptEvalSeed {
     enabled: true,
   }));
 
-  const plugin_prompt_versions: PluginPromptVersionSeed[] = PLUGIN_IDS_21.map((pluginId) => ({
+  const plugin_prompt_versions: PluginPromptVersionSeed[] = PLUGIN_IDS.map((pluginId) => ({
     plugin_id: pluginId,
     version: 1,
     prompt: system_prompts.find((p) => p.plugin_id === pluginId)?.content ?? '',
