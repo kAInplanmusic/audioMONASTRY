@@ -1,0 +1,124 @@
+# LIVE-CHECKLISTE 2026-09-02 – Offene Prüfpunkte
+
+> Alle Punkte aus `MASTER_TODO.md`, die erst mit echter Flotte/Browser/Hardware
+> verifiziert werden können. Vor Ort abhaken und Ergebnis (Wert + Datum) eintragen.
+> Ziel: kein offener Prüfpunkt bleibt „still" offen – jeder bekommt Messwert oder
+> wird bewusst auf später verschoben.
+
+## Automatisiert grün (lokal, 2026-09-02)
+
+- `npm run verify` → **535 Tests + Boundary-Scan 0**
+- `npm run build` → ok · `check:memo` → ok · `check:bundle` → **grün** (1,62 MB,
+  Warn <1,5 MB bleibt offen; lazy onnxruntime-web zählt nicht zum UI-Budget)
+- `npm run eval:ai` → **21/21 PASS** · `npm run iterate:prompts` → **21 Plugins, 0 nicht konvergiert**
+- Playwright: smoke **7/7** · responsive **9/9** (7 skipped Firefox-Mobile) ·
+  keyboard+visual **5/5** · audioAction **2/2**
+- Bekannt: `collab.spec.ts` schlägt auch auf dem Basis-Commit fehl (Signaling
+  über mehrere Browser-Kontexte lokal) → kein Regressionsbefund, bleibt Live-Punkt.
+
+## Live verifiziert (Flotte läuft, 2026-09-02)
+
+- **Flotten-Update durchgeführt:** Branch `replace/spatialmonk` (08d5d79) per Tarball auf app-1 + sfu-1 ausgerollt, Container neu gebaut; Snapshots danach erneuert (`refresh-snapshots`, alle 5 Rollen ok).
+- **Portal-Worker-Fix:** `startFleet` synchronisiert jetzt automatisch origin-DNS (Cloudflare API) + app-Firewall (aktuelle Cloudflare-IPs) + master/ai-Ports; `failed`-Diagnose im Wake-Response; `CLOUDFLARE_API_TOKEN` als Worker-Secret gesetzt. Verhindert 521/522 nach IP-Wechsel.
+- **Live-E2E gegen neuen Stand:** smoke **7/7**, keyboard **2/2**, responsive **9/9** (7 skipped Firefox-Mobile) grün.
+
+
+- **Flotte READY:** app `49.13.142.5` · sfu `49.13.0.226` · ai `49.13.65.150` ·
+  master `167.233.22.157` · edge `167.233.214.220` (`/api/health` ok, `/api/fleet-map` ok)
+- **Master-Player:** `/api/master/health` ok · `/api/master/selftest` ok (530 ms)
+- **LLM live:** `/api/ai/complete` → `deepseek-flash`, 1,7 s (P0-8/aiMONK-Pfad real verifiziert)
+- **Browser live:** smoke **7/7** · responsive **9/9** · keyboard **2/2** gegen
+  `https://anunnakitools.de` (P0-1/P0-3/P0-7/P1-1/P1-6 automatisiert bestätigt)
+- **Supabase P3-1:** Tabellen `system_prompts`/`plugin_prompt_versions`/
+  `ai_evaluations`/`ai_eval_runs` **fehlen noch** → Migration 002 muss im
+  Supabase-Dashboard/psql angewendet werden (DB-Passwort fehlt lokal,
+  Betreiber-Schritt).
+
+## 1 · Flotte / OPS
+
+- [x] **OPS-Snapshot (Wake-Zeit):** Flotten-Start (wake→ready) vorher/nachher messen.
+      Ziel **< 90 s**. Messung: Portal-Ladebildschirm-Zeit bzw. `/api/status`-Polling
+      bis `state: 'ready'`.
+      **Vorher (cloud-init ohne Snapshot): ≈ 8,2 min.**
+      **Nachher (mit Snapshot): 72,4 s → Ziel < 90 s erreicht ✅** (Wake 13:34:06 UTC → ready 13:35:19 UTC,
+      alle 5 Rollen aus `usedSnapshots` gestartet, `fallbackRoles` leer).
+- [x] **OPS-Snapshot (Refresh):** `POST /api/refresh-snapshots` ausgeführt (2026-09-02);
+      `GET /api/snapshots` zeigt je Rolle `available`:
+      app `427253639` · sfu `427253640` · ai `427253641` · master `427253642` · edge `427253643`.
+      Portal-Worker mit Snapshot-Code deployed (Version `d96cabaa`).
+- [ ] **LB11 (bewusst später):** Erst bei ≥ 2 App-Knoten – Trigger dokumentiert,
+      derzeit **NICHT** installieren. Prüfpunkt (erst bei Skalierung):
+      2 App-Knoten hinter LB, 4-User-E2E grün, Failover-Test.
+
+## 2 · Browser / UI / Geräte
+
+- [ ] **P1-1 (manuell):** iPhone vor Ort – UI nicht persistent, Panels schließbar,
+      keine Zoom-/Overflow-Probleme (Safe-Area, Touch-Ziele ≥ 44 px).
+- [ ] **P1-2:** `visual.spec.ts` für alle 21 Plugins anlegen; Screenshots mit
+      Referenz-Hardware-Look vergleichen (Komponenten-Neubau mittlere Priorität).
+- [ ] **P1-3:** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen
+      nach Reload stabil; 2.1-Modus sichtbar (Xonar U7).
+- [ ] **P1-4:** Zwischenspeicher: Speichern/Laden überlebt Reload; DnD (Modul →
+      Ablage → Modul) funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert
+      gültiges JSON.
+- [ ] **P1-6:** Keyboard-E2E (Space, Ctrl/Cmd+1..9, Escape) – kein Hotkey bricht
+      Eingabefelder; MIDI-Codec-Tests grün (Unit-Suite läuft lokal).
+
+## 3 · Audio / DSP / Clock
+
+- [ ] **P0-4:** 60 s Dauerlauf ohne aktives Plugin → RMS ≤ -60 dBFS; mit aktivem
+      Sequencer → nur erwartete Steps hörbar.
+- [ ] **P2-1:** Latenz-Messung vorher/nachher dokumentieren; `goldenAudio`-Tests
+      ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb.
+- [ ] **P2-2:** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten
+      gleichzeitig und bleiben < 5 ms zueinander.
+- [ ] **P2-3:** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R ohne volle
+      Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R (Xonar U7 2.1).
+- [ ] **P2-4:** Performance-Messung zeigt < 70 % CPU (Graph-Validierung + Insert
+      sind grün).
+- [ ] **P2-5:** Playwright-Stress-Test grün; Bundle < 1,5 MB JS (aktuell nur
+      Warn-Schwelle; 2.0-MiB-Gate ist grün).
+
+## 4 · Kollaboration / 4-User
+
+- [ ] **P0-6 (Hörprobe):** 4-User-Livelauf: User2 aktiviert Drum → auf MAIN hörbar;
+      User3 wählt PLUGIN-Cue → hört nur sein Plugin, MAIN unverändert; zurück auf
+      MAIN → sofort Gesamtmix. *Routing + Cue-Gains sind seit 2026-09-03
+      automatisiert abgesichert (`tests/monitorRouting.test.ts`,
+      `tests/e2e/monitorCue.spec.ts`); hier bleibt nur die echte Hörprobe an
+      4 Browsern.*
+- [ ] **P4-1:** Live-Latenz < 50 ms one-way beim echten 4-Browser-Lauf verifizieren.
+- [ ] **P4-2:** Audio-Unterbrechungsfreiheit beim Rollenwechsel im Live-Test.
+
+## 5 · KI / Eval / Datenbank
+
+- [ ] **P3-1:** Daten in Supabase sichtbar (Migration 002: `system_prompts`,
+      `plugin_prompt_versions`, `ai_evaluations`, `ai_eval_runs`).
+- [ ] **P3-2:** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos
+      werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar.
+      (Automatisierte Mock-Variante grün: `tests/aiEvaluation.test.ts`, 21 Plugins.)
+- [ ] **P3-3:** Nightly-CI-Lauf grün; Report enthält je Plugin Score, Dauer, Fehler;
+      `ai_eval_runs` in Supabase gefüllt.
+- [ ] **GAP-5:** Jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score in der DB;
+      Score-Abfall blockiert Release.
+
+## 6 · Sicherheit / Betrieb
+
+- [ ] **GAP-4:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` vollständig
+      abgehakt oder mit offenem Task verknüpft.
+- [ ] **GAP-4:** HF-Endpoint-Secret rotieren (Betreiber-Schritt).
+- [x] **GAP-4 (anteilig):** Pen-Test `/api/ai/*` live: ohne/falscher Token → 401, leerer Prompt → 400, `/api/ai/mcp/tools` ohne Token → 401. Rate-Limit/SSRF bleiben dokumentiert (Unit-Tests vorhanden).
+- [ ] **GAP-4:** Supabase RLS prüfen (Prompts/Evals: anon read, service_role write).
+- [ ] **AUD-P2-1:** `docs/TESTRUN_2_CHECKLIST.md` mit den AUD-Befunden abgleichen.
+
+## Messwerte (eintragen)
+
+| Prüfpunkt | Datum | Messwert | Ergebnis |
+|---|---|---|---|
+| Wake→ready (cloud-init, ohne Snapshot) | 2026-09-02 | ≈ 8,2 min | gemessen (vorher) |
+| Wake→ready (Snapshot) | 2026-09-02 | 72,4 s | ✅ Ziel < 90 s |
+| RMS ohne Plugin (60 s) | | dBFS | |
+| Jitter 120 BPM / 10 min | | ms | |
+| 2-Browser-Clock-Offset | | ms | |
+| 4-Browser-Latenz (one-way) | | ms | |
+| CPU-Last (4 User) | | % | |

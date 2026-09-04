@@ -27,6 +27,9 @@ jobs:
       - name: UI-Bundle-Budget prüfen
         run: npm run check:bundle
 
+      - name: React.memo-Audit (Terminals)
+        run: npm run check:memo
+
       - name: Verify no Google/Firebase imports remain
         run: |
           if grep -rniE "from ['\"]@google|from ['\"]firebase|firebase-admin|google-genai|@google-cloud" src server.ts --include='*.ts' --include='*.tsx' --include='*.js'; then
@@ -39,6 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Secret-Scan (gitleaks)
+        uses: gitleaks/gitleaks@v8.18.4
+        with:
+          args: 'detect --source . --no-banner --redact'
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -57,6 +65,17 @@ jobs:
 
       - name: Interface-Boundary-Scan
         run: node scripts/validate-interface-boundaries.mjs
+
+      - name: spatialMONK Audio-Regression
+        run: npx tsx scripts/spatial-regression.ts
+
+      - name: Upload spatial regression WAVs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spatial-regression-wavs
+          path: test-results/spatial-regression/
+          retention-days: 7
 
       - name: Stress-/SFU-Skripte Syntax-Check
         run: |

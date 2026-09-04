@@ -74,10 +74,10 @@ describe('MOA Event-Handler (jsdom)', () => {
     expect(res.handled).toBe(true);
   });
 
-  it('sampler trigger und sequencer pattern_random sind registriert', () => {
+  it('sampler trigger und mcp pattern_random sind registriert', () => {
     const commands = voiceControlService.listPluginCommands();
     expect(commands.some((c) => c.pluginId === 'sampler' && c.action === 'trigger')).toBe(true);
-    expect(commands.some((c) => c.pluginId === 'sequencer' && c.action === 'pattern_random')).toBe(true);
+    expect(commands.some((c) => c.pluginId === 'mcp' && c.action === 'pattern_random')).toBe(true);
   });
 
   it('alle Registry-Kommandos sind aufrufbar (Handler-Pfade)', async () => {

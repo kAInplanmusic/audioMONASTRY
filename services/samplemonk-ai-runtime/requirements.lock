@@ -1,0 +1,9 @@
+# SampleMONK AI Runtime – deterministisches Dependency-Lock
+# torch ist NICHT enthalten: kommt aus dem Basisimage pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime.
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+transformers==4.46.3
+soundfile==0.12.1
+scipy==1.14.1
+pyannote.audio==3.3.2

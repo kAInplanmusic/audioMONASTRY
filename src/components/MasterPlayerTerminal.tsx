@@ -391,7 +391,7 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
       </div>
 
       {/* Modus-Tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-neutral-900/70 border border-neutral-800 w-fit" role="tablist" aria-label="Master Engine Modus">
+      <div className="flex flex-wrap items-center gap-1 p-1 rounded-lg bg-neutral-900/70 border border-neutral-800 w-fit max-w-full" role="tablist" aria-label="Master Engine Modus">
         {([['analyze', 'Analyse', 'Lautheit & Metriken'], ['master', 'Mastering', 'EQ · Kompressor · LUFS'], ['mix', 'Mixdown', '2 Tracks mischen']] as [Mode, string, string][]).map(([m, label, hint]) => (
           <button type="button"
             key={m}

@@ -158,9 +158,9 @@ describe('LlmRouter Notfall-Provider + clientLlm + env', () => {
 
 describe('MoaAgent (DeepSeek-V4-Flash als Planer)', () => {
   it('parseMoaSteps toleriert Markdown-Fences und parsed JSON', () => {
-    const steps = parseMoaSteps('```json\n[{"pluginId":"sequencer","command":"Tempo 128","prompt":"Setze BPM"}]\n```');
+    const steps = parseMoaSteps('```json\n[{"pluginId":"mcp","command":"Tempo 128","prompt":"Setze BPM"}]\n```');
     expect(steps).toHaveLength(1);
-    expect(steps[0].pluginId).toBe('sequencer');
+    expect(steps[0].pluginId).toBe('mcp');
     expect(steps[0].command).toBe('Tempo 128');
   });
 
@@ -249,7 +249,7 @@ describe('VoiceControlService (alle 4 User, alle Plugins)', () => {
   it('Registry deckt alle Plugin-IDs ab (Side-Effect-Registrierung)', () => {
     const ids = voiceControlService.listPlugins();
     for (const id of [
-      'sequencer', 'drum', 'mixer', 'spatial', 'instrument', 'fx', 'eq', 'dsp',
+      'mcp', 'drum', 'mixer', 'spatial', 'instrument', 'fx', 'eq', 'dsp',
       'synthesizer', 'voice', 'library', 'controller', 'sampler', 'stem', 'recording',
       'mastering', 'performance', 'sound', 'drop', 'ai',
     ]) {

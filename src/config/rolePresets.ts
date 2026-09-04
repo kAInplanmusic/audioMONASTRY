@@ -27,14 +27,14 @@ export const ROLE_PRESETS: RolePreset[] = [
   {
     role: 'DJ',
     startPresetId: 'psy',
-    activeModules: ['sequencer','drum','synthesizer','controller','mixer'],
+    activeModules: ['mcp','drum','synthesizer','controller','mixer'],
     monitor: 'MON1',
-    hint: 'Fokus: Loops + Cue-Mixe live. Drum- u. Sequencer-Module aktiv.',
+    hint: 'Fokus: Loops + Cue-Mixe live. Drum- u. MPC-Module aktiv.',
   },
   {
     role: 'PRODUCER',
     startPresetId: 'goa',
-    activeModules: ['sequencer', 'drum', 'synthesizer', 'instrument', 'effect', 'mixer', 'recording'],
+    activeModules: ['mcp', 'drum', 'synthesizer', 'instrument', 'effect', 'mixer', 'recording'],
     monitor: 'MON2',
     hint: 'Fokus: Sounddesign + Arrangement. Instrument/synth + Effekte aktiv.',
   },

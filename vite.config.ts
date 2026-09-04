@@ -6,6 +6,12 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      // P2-5 Bundle-Diät: modernes Browser-Target (Chrome/Edge/Firefox/Safari
+      // der Plattform-Matrix) statt ES2020-Downleveling. Spart Transpilierungs-
+      // Helfer und hält das UI-Budget < 1,5 MB.
+      target: 'esnext',
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

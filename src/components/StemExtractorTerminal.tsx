@@ -13,7 +13,7 @@ import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } fro
 export const StemExtractorTerminal = React.memo(function StemExtractorTerminal() {
   const { addSample } = useSamples();
   const { streamStems } = useAudioAI();
-  const { state, lockStatus, updateState } = usePluginState('stem_extractor', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('stem', 'PRO');
   const [isExtracting, setIsExtracting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [file, setFile] = useState<File | null>(null);

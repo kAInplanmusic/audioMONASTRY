@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Browser, type BrowserContext } from '@playwright/test';
 
 /**
  * Collaboration-Smoke (DCT-113 Basis): Mehrere Browser-Kontexte treten dem
@@ -13,9 +13,25 @@ async function enterStudio(page: Page): Promise<void> {
   await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 15_000 });
 }
 
+/**
+ * Erzeugt einen Browser-Kontext mit Studio-Cookie, wenn gegen eine entfernte
+ * Instanz getestet wird (BASE_URL). Der Live-Server verlangt den
+ * STUDIO_ACCESS_TOKEN sonst auch für den Socket.io-Handshake.
+ */
+async function newStudioContext(browser: Browser): Promise<BrowserContext> {
+  const ctx = await browser.newContext();
+  const baseUrl = (process.env.BASE_URL ?? '').trim().replace(/\/$/, '');
+  const studioToken = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
+  if (baseUrl && studioToken) {
+    const domain = new URL(baseUrl).hostname;
+    await ctx.addCookies([{ name: 'studio', value: studioToken, domain, path: '/', secure: true }]);
+  }
+  return ctx;
+}
+
 test('2 Browser-Kontexte synchronisieren die Session (2/4)', async ({ browser }) => {
-  const ctxA = await browser.newContext();
-  const ctxB = await browser.newContext();
+  const ctxA = await newStudioContext(browser);
+  const ctxB = await newStudioContext(browser);
   const pageA = await ctxA.newPage();
   const pageB = await ctxB.newPage();
 
@@ -30,7 +46,7 @@ test('2 Browser-Kontexte synchronisieren die Session (2/4)', async ({ browser })
 });
 
 test('4 Browser-Kontexte → Session voll (VOLL/4)', async ({ browser }) => {
-  const contexts = await Promise.all([1, 2, 3, 4].map(() => browser.newContext()));
+  const contexts = await Promise.all([1, 2, 3, 4].map(() => newStudioContext(browser)));
   const pages = await Promise.all(contexts.map((c) => c.newPage()));
 
   for (const page of pages) {

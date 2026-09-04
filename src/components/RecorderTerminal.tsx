@@ -6,6 +6,19 @@ import { usePluginState } from '../hooks/usePluginState';
 import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
 import { MoaAssistant } from './MoaAssistant';
+import { audioEngine } from '../utils/audioEngine';
+import { openAudioActionMenu } from './AudioActionMenuHost';
+import { sampleToContent } from '../core/audio/audioContent';
+
+interface Take {
+  id: number;
+  name: string;
+  duration: string;
+  size: string;
+  date: string;
+  /** Blob-URL der fertigen Aufnahme (für die einheitliche Audio-Interaktion). */
+  url?: string;
+}
 
 
 
@@ -13,10 +26,10 @@ import { MoaAssistant } from './MoaAssistant';
 export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const { addSample } = useSamples();
   const { audioContext } = useAudio();
-  const { state, lockStatus, updateState } = usePluginState('recorder', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('recording', 'PRO');
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
-  const [takes, setTakes] = useState([
+  const [takes, setTakes] = useState<Take[]>([
     { id: 1, name: 'Main_Mix_Take_01.wav', duration: '03:45', size: '38 MB', date: '2026-07-18' }
   ]);
   const [inputSource, setInputSource] = useState('MASTER_OUT');
@@ -38,6 +51,17 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
     const s = (seconds % 60).toString().padStart(2, '0');
     return `${m}:${s}`;
   };
+
+  /** Take → AudioSample-Hülle (referenziert nur die vorhandene Blob-URL). */
+  const takeToSample = (take: Take): AudioSample => ({
+    id: `take-${take.id}`,
+    name: take.name,
+    category: 'mids',
+    type: 'Recording',
+    url: take.url,
+    description: `Aufnahme vom ${take.date} · ${take.duration}`,
+    parameters: {},
+  });
 
   const startRecording = useCallback(async () => {
     if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
@@ -71,12 +95,13 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
         const url = URL.createObjectURL(blob);
         const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
 
-        const newTake = {
-          id: takes.length + 1,
-          name: `${inputSource}_Take_0${takes.length + 1}.webm`,
+        const newTake: Take = {
+          id: Date.now(),
+          name: `${inputSource}_Take_${new Date().toISOString().replace(/[:.]/g, '-')}.webm`,
           duration: formatTime(recordTime),
           size: `${sizeMB} MB`,
-          date: new Date().toISOString().split('T')[0]
+          date: new Date().toISOString().split('T')[0],
+          url,
         };
         setTakes(prev => [newTake, ...prev]);
 
@@ -200,9 +225,25 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
 
           <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-3 scrollbar-thin scrollbar-thumb-neutral-800">
             {takes.map(take => (
-              <div key={take.id} className="p-4 rounded-lg bg-[#111] border border-neutral-800 flex items-center justify-between group hover:border-indigo-500/50 transition-colors">
+              <div
+                key={take.id}
+                role="button"
+                tabIndex={0}
+                onClick={(e) => openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget as HTMLElement);
+                  }
+                }}
+                className="p-4 rounded-lg bg-[#111] border border-neutral-800 flex items-center justify-between group hover:border-indigo-500/50 transition-colors cursor-pointer"
+              >
                 <div className="flex items-center gap-4">
-                  <button type="button" className="w-8 h-8 rounded-full bg-[#222] flex items-center justify-center group-hover:bg-indigo-600 transition-colors">
+                  <button type="button"
+                    onClick={(e) => { e.stopPropagation(); if (take.url) audioEngine.previewSample('channel5', undefined, take.url); }}
+                    title="Take anhören"
+                    className="w-8 h-8 rounded-full bg-[#222] flex items-center justify-center group-hover:bg-indigo-600 transition-colors cursor-pointer"
+                  >
                     <Play className="w-4 h-4 text-neutral-400 group-hover:text-white ml-0.5 fill-current" />
                   </button>
                   <div>
@@ -210,8 +251,12 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
                     <div className="text-[10px] font-mono text-neutral-500 mt-1">{take.duration} • {take.size} • {take.date}</div>
                   </div>
                 </div>
-                <button type="button" className="px-3 py-1.5 rounded bg-[#222] border border-neutral-700 text-[10px] font-bold text-neutral-400 flex items-center gap-1 hover:bg-[#333] transition-colors">
-                  <Download className="w-3 h-3" /> LIB
+                <button type="button"
+                  onClick={(e) => { e.stopPropagation(); openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget); }}
+                  className="px-3 py-1.5 rounded bg-[#222] border border-neutral-700 text-[10px] font-bold text-neutral-400 flex items-center gap-1 hover:bg-[#333] transition-colors cursor-pointer"
+                  title="Aktionen für diesen Take öffnen"
+                >
+                  <Download className="w-3 h-3" /> AKTIONEN
                 </button>
               </div>
             ))}

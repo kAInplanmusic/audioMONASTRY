@@ -58,7 +58,7 @@ export class VoiceControlService {
     this.parser = parser;
   }
 
-  /** Registriert einen Befehl für ein Plugin (z.B. 'fx', 'sequencer', 'mixer'). */
+  /** Registriert einen Befehl für ein Plugin (z.B. 'fx', 'mcp', 'mixer'). */
   registerCommand(pluginId: string, intent: VoiceIntent['action'], handler: VoiceCommandHandler): void {
     this.commands.push({ pluginId, intent, handler });
   }

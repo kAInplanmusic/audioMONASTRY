@@ -9,6 +9,19 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
 import { syncR2ToSupabase, ingestAudioObject } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
+import {
+  buildDropPrompt,
+  sanitizeAiDropResponse,
+  generateDeterministicDrop,
+} from './src/core/drop/DropTemplateGenerator';
+import type { DropGenerationRequest, DropStyle } from './src/core/drop/DropTemplateGenerator';
+import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
+import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
+import { resolveAiRateLimits } from './src/config/aiRateLimits';
+import { embedText } from './src/core/ai/orchestrator/textEmbedding';
+import type { AiTask } from './src/core/ai/orchestrator/types';
+import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
+import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
 
 // Task 14: Echte Demucs-Stems optional via env-Flag ENABLE_STEMS=1 aktivieren.
@@ -36,6 +49,46 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
 
+// ---------------------------------------------------------------------------
+// FLEET-WIRING: Ziel-URLs der Flotten-Knoten (master-player, Ollama, stem-ai)
+// ---------------------------------------------------------------------------
+// Die Hetzner-IPs werden erst bei der Flotten-Erstellung vergeben. Deshalb
+// holt die App sie beim Start vom Portal-Worker (/api/fleet-map, geschützt
+// über den Studio-Token) und überschreibt damit die Default-/Env-Ziele.
+// Direkte Env-Variablen (MASTER_PLAYER_URL, OLLAMA_URL, STEM_AI_URL) haben
+// weiterhin Vorrang (explizit gesetzt > Flotten-Map > interner Default).
+// ---------------------------------------------------------------------------
+const FLEET_MAP_URL = (process.env.FLEET_MAP_URL || '').trim() || 'https://anunnakitools.de/api/fleet-map';
+const fleetTargets: { masterPlayer: string; ollama: string; stemAi: string } = {
+  masterPlayer: '',
+  ollama: '',
+  stemAi: '',
+};
+
+async function wireFleetFromPortal(): Promise<void> {
+  const token = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
+  if (!token) return; // Lokal/Test: keine Flotten-Verdrahtung.
+  try {
+    const resp = await fetch(FLEET_MAP_URL, {
+      headers: { 'x-studio-token': token },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!resp.ok) return;
+    const data = (await resp.json()) as { fleet?: Record<string, string> };
+    const f = data.fleet ?? {};
+    if (f['samplemonk-master-1']) fleetTargets.masterPlayer = `http://${f['samplemonk-master-1']}:8000`;
+    if (f['samplemonk-ai-1']) {
+      fleetTargets.ollama = `http://${f['samplemonk-ai-1']}:11434`;
+      fleetTargets.stemAi = `http://${f['samplemonk-ai-1']}:8000`;
+    }
+    console.log('[fleet] Knoten verdrahtet:', JSON.stringify({ masterPlayer: fleetTargets.masterPlayer, ollama: fleetTargets.ollama, stemAi: fleetTargets.stemAi }));
+  } catch (e) {
+    console.warn('[fleet] Fleet-Map nicht erreichbar:', (e as Error).message);
+  }
+}
+void wireFleetFromPortal();
+
+
 // DCT-108: In-Process-Metriken (keine neuen Dependencies, keine Secrets/Samples).
 const metrics = {
   requests: 0,
@@ -51,10 +104,39 @@ const metrics = {
   // P2 Live-Telemetrie-Dashboard: Client-Events nach type/source aufgeschlüsselt.
   telemetryByType: {} as Record<string, number>,
   telemetryBySource: {} as Record<string, number>,
+  // AM-E6-1: Xrun-/Dropout-Telemetrie (Histogramm-Quelle ist der Client;
+  // der Server aggregiert für Prometheus/JSON-Metriken).
+  telemetryXruns: 0,
+  telemetryXrunsBySource: {} as Record<string, number>,
 };
 
 // Aktive Socket.io-Verbindungen (User-Sessions) für /api/online + Idle-Shutdown.
 let activeSocketConnections = 0;
+
+// P4-2: Server-seitiges Audit-Log (Rollenwechsel, Lock-/State-Events, RBAC-Denials).
+const serverAuditLog: { ts: string; userId: string; role: string; action: string; target?: string; ok: boolean }[] = [];
+const MAX_SERVER_AUDIT = 1000;
+function addServerAudit(userId: string, role: string, action: string, ok: boolean, target?: string): void {
+  serverAuditLog.push({ ts: new Date().toISOString(), userId, role, action, target, ok });
+  if (serverAuditLog.length > MAX_SERVER_AUDIT) serverAuditLog.splice(0, serverAuditLog.length - MAX_SERVER_AUDIT);
+}
+
+// P4-2: Server-seitige Rollenzuordnung je User-ID (Host = admin, Rest = SESSION_ROLE).
+const sessionRoles = new Map<string, string>();
+function roleForSessionUser(userId: string): string {
+  // Reconnect-sicher: Ein bereits bekannter User behält seine Rolle
+  // (sonst würde der Host bei jedem Socket-Reconnect zum Guest degradiert).
+  const existing = sessionRoles.get(userId);
+  if (existing) return existing;
+  if (sessionRoles.size === 0) return 'admin'; // Erster User = Host/Admin
+  if (process.env.SESSION_HOST_USER && userId === process.env.SESSION_HOST_USER) return 'admin';
+  const r = (process.env.SESSION_ROLE || '').trim();
+  return r === 'admin' || r === 'producer' || r === 'engineer' || r === 'guest' ? r : 'guest';
+}
+function roleCanState(role: string, state: string): boolean {
+  if (state !== 'PRO') return true; // OFF/AUTO_AI = state-Aktion für alle
+  return role === 'admin' || role === 'producer';
+}
 
 // DCT-108: Request/Trace-ID-Middleware (Korrelation User-Action → HTTP → AI).
 app.use((req, res, next) => {
@@ -109,6 +191,8 @@ app.use((_req, res, next) => {
 // --- Security: Rate limiting (per Env konfigurierbar fuer Lasttests) ---
 const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60 * 1000);
 const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 60);
+// AITodo Phase 18: explizite AI_RATE_*-Limits (Kostenbremse für KI-Routen).
+const AI_RATE = resolveAiRateLimits(process.env as Record<string, string | undefined>);
 
 // P-1: Studio-Zugangstoken. Wird vom Portal (Cloudflare Worker) gesetzt und
 // als HttpOnly-Cookie `studio` an den Browser gegeben. Leer = lokaler
@@ -161,9 +245,11 @@ const apiLimiter = rateLimit({
 });
 
 // Teure KI-/Cloud-/Upload-Routen: enges Limit pro Studio-Token (Kostenbremse).
+// Legacy-Env API_EXPENSIVE_RATE_LIMIT_MAX bleibt respektiert (Server-Tests/Lasttests).
+const legacyExpensiveMax = Number(process.env.API_EXPENSIVE_RATE_LIMIT_MAX || 0);
 const expensiveLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: Number(process.env.API_EXPENSIVE_RATE_LIMIT_MAX || 10),
+  windowMs: AI_RATE.expensiveWindowMs,
+  max: legacyExpensiveMax > 0 ? legacyExpensiveMax : AI_RATE.expensiveMax,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many expensive requests, please try again later.' },
@@ -221,6 +307,15 @@ app.get('/api/metrics', (req, res) => {
       '# HELP samplemonk_telemetry_events_total Client-Telemetrie-Events (kumulativ).',
       '# TYPE samplemonk_telemetry_events_total counter',
       `samplemonk_telemetry_events_total ${metrics.telemetryEvents ?? 0}`,
+      '# HELP samplemonk_telemetry_xruns_total Xrun-/Dropout-Telemetrie-Events (kumulativ).',
+      '# TYPE samplemonk_telemetry_xruns_total counter',
+      `samplemonk_telemetry_xruns_total ${metrics.telemetryXruns ?? 0}`,
+      '# HELP samplemonk_ai_jobs_total Anzahl AI-Orchestrator-Jobs (kumulativ).',
+      '# TYPE samplemonk_ai_jobs_total counter',
+      `samplemonk_ai_jobs_total ${aiOrchestrator.jobs.list().length}`,
+      '# HELP samplemonk_ai_cost_usd Geschätzte AI-Kosten (USD, kumulativ).',
+      '# TYPE samplemonk_ai_cost_usd gauge',
+      `samplemonk_ai_cost_usd ${aiOrchestrator.costs.summary().totalUsd ?? 0}`,
     ];
     // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
     const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -238,6 +333,13 @@ app.get('/api/metrics', (req, res) => {
         `samplemonk_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
       );
     }
+    for (const [source, count] of Object.entries(metrics.telemetryXrunsBySource ?? {})) {
+      lines.push(
+        '# HELP samplemonk_telemetry_xruns_by_source_total Xrun-/Dropout-Events nach Quelle.',
+        '# TYPE samplemonk_telemetry_xruns_by_source_total counter',
+        `samplemonk_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
+      );
+    }
     res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     res.send(lines.join('\n') + '\n');
     return;
@@ -247,11 +349,18 @@ app.get('/api/metrics', (req, res) => {
     requests: metrics.requests,
     errors: metrics.errors,
     avgLatencyMs: metrics.requests ? Math.round(metrics.latencyMsSum / metrics.requests) : 0,
-    ai: { requests: metrics.aiRequests, failures: metrics.aiFailures },
+    ai: {
+      requests: metrics.aiRequests,
+      failures: metrics.aiFailures,
+      jobs: aiOrchestrator.jobs.list().length,
+      costUsd: aiOrchestrator.costs.summary().totalUsd ?? 0,
+    },
     stem: { requests: metrics.stemRequests, failures: metrics.stemFailures, active: stemActiveJobs, max: STEM_MAX_JOBS },
     telemetryEvents: metrics.telemetryEvents ?? 0,
     telemetryByType: metrics.telemetryByType ?? {},
     telemetryBySource: metrics.telemetryBySource ?? {},
+    telemetryXruns: metrics.telemetryXruns ?? 0,
+    telemetryXrunsBySource: metrics.telemetryXrunsBySource ?? {},
     lastRequestId: metrics.lastRequestId,
   });
 });
@@ -259,6 +368,11 @@ app.get('/api/metrics', (req, res) => {
 // --- Aktive User (Socket.io-Verbindungen) für Idle-Auto-Shutdown ------------
 app.get('/api/online', (_req, res) => {
   res.json({ online: Math.max(0, activeSocketConnections) });
+});
+
+// --- P4-2: Server-Audit-Log (Rollenzuweisung, Plugin-State, RBAC-Denials) ----
+app.get('/api/audit', (_req, res) => {
+  res.json({ entries: serverAuditLog.slice(-500).reverse(), total: serverAuditLog.length });
 });
 
 // --- Live-Telemetrie: Client-Events/Fehler einsammeln (auto-logging) --------
@@ -287,6 +401,11 @@ app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
     metrics.telemetryEvents = (metrics.telemetryEvents ?? 0) + 1;
     metrics.telemetryByType[type] = (metrics.telemetryByType[type] ?? 0) + 1;
     metrics.telemetryBySource[source] = (metrics.telemetryBySource[source] ?? 0) + 1;
+    // AM-E6-1: Xrun-/Dropout-Events separat aggregieren (Prometheus/Grafana).
+    if (type === 'xrun' || type === 'dropout') {
+      metrics.telemetryXruns = (metrics.telemetryXruns ?? 0) + 1;
+      metrics.telemetryXrunsBySource[source] = (metrics.telemetryXrunsBySource[source] ?? 0) + 1;
+    }
     accepted += 1;
     console.log(JSON.stringify({ t: 'telemetry', type, source, message, ctx, ts: ev.ts ?? Date.now() }));
   }
@@ -469,10 +588,36 @@ app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', '
 // mit eigenem Host) betrieben wird, kann hier ein Proxy eingebaut werden.
 // ===========================================================================
 
+// ===========================================================================
+// GAP-4: Eingangs-Validierung für /api/ai/* (Auth/Rate-Limit siehe Middleware)
+// ===========================================================================
+
+const AI_TASK_IDS = new Set<string>([
+  'llm', 'tts', 'sing', 'song', 'stem.separate',
+  'audio.classify', 'audio.transcribe', 'audio.embed',
+  'audio.analyze', 'audio.generate', 'multimodal',
+]);
+
+/** Task muss aus der zulässigen AiTask-Menge stammen (kein freies Routing). */
+function isValidAiTask(task: string): boolean {
+  return AI_TASK_IDS.has(task);
+}
+
+/**
+ * Modell-IDs werden in Provider-URLs eingesetzt. Erlaubt sind kurze
+ * HuggingFace-artige IDs (owner/name), nicht aber URLs, Pfadtraversal,
+ * Whitespace oder Steuerzeichen (SSRF-/Injection-Härtung).
+ */
+function isValidModelId(model: string): boolean {
+  if (model.length === 0 || model.length > 200) return false;
+  if (model.includes('://') || model.includes('..')) return false;
+  return /^[A-Za-z0-9._/-]+$/.test(model);
+}
+
 // --- POST /api/ai/compose  → deterministischer lokaler Preset-Generator ---
 app.post('/api/ai/compose', async (req, res) => {
   const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const seed = (prompt || 'techno').length;
+  const seed = (String(prompt ?? 'techno').trim().slice(0, 4000) || 'techno').length;
 
   // Deterministische Patterns aus dem Prompt-Seed ableiten (kein Netz).
   const kick = Array.from({ length: 16 }, (_, i) => (i + seed) % 4 === 0);
@@ -504,7 +649,7 @@ app.post('/api/ai/compose', async (req, res) => {
 // ---------------------------------------------------------------------------
 
 async function ollamaGenerate(promptText: string): Promise<string | null> {
-  const url = process.env.OLLAMA_URL || 'http://127.0.0.1:11434';
+  const url = (process.env.OLLAMA_URL || '').trim() || fleetTargets.ollama || 'http://127.0.0.1:11434';
   const model = process.env.OLLAMA_MODEL || 'qwen2.5:7b';
   try {
     const resp = await fetch(`${url}/api/generate`, {
@@ -532,7 +677,7 @@ function sanitizeJsonBlock(raw: string): string {
 // --- POST /api/ai/compose  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
 app.post('/api/ai/generate', async (req, res) => {
   const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const query = (prompt || 'Dark warehouse techno drums').trim();
+  const query = (String(prompt ?? '').trim().slice(0, 4000) || 'Dark warehouse techno drums');
 
   const llmPrompt =
     'Generiere ein valides JSON (nur JSON, keine Erklärung) mit Feldern ' +
@@ -566,7 +711,7 @@ app.post('/api/ai/generate', async (req, res) => {
 // --- POST /api/ai/describe  → Ollama-gestützte Beschreibung (Style/Mix-Empfehlung) ---
 app.post('/api/ai/describe', async (req, res) => {
   const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const query = (prompt || 'Was ist ein guter Mix-Vorschlag ?').trim();
+  const query = (String(prompt ?? '').trim().slice(0, 4000) || 'Was ist ein guter Mix-Vorschlag ?');
 
   const llmPrompt =
     'Beantworte kurz (max 2 Sätze), auf Deutsch, fachlich für einen Musik-Produzenten: ' + query;
@@ -576,6 +721,72 @@ app.post('/api/ai/describe', async (req, res) => {
     return res.json({ ai: raw.trim() });
   }
   return res.json({ ai: 'Ollama nicht erreichbar. (Lokaler Fallback: keine KI-Antwort verfügbar)' });
+});
+
+// --- POST /api/ai/generate-drop  → dropMONK Drop-Generator (LLM + Fallback) ---
+// Request:  { userPrompt|prompt, context?: { bpm, activePlugins, currentEnergy }, style?, duration? }
+// Response: { name, description, category, parameterSequence, buildupTime,
+//             dropDuration, quantization, intensity, confidence, tags, source }
+app.post('/api/ai/generate-drop', async (req, res) => {
+  metrics.aiRequests += 1;
+
+  const body = (req.body ?? {}) as {
+    userPrompt?: string;
+    prompt?: string;
+    context?: { bpm?: number; activePlugins?: unknown; currentEnergy?: number };
+    style?: string;
+    duration?: number;
+  };
+
+  const userPrompt = String(body.userPrompt ?? body.prompt ?? '').trim().slice(0, 2000);
+  if (!userPrompt) return res.status(400).json({ error: 'userPrompt fehlt' });
+
+  const rawBpm = Number(body.context?.bpm);
+  const rawEnergy = Number(body.context?.currentEnergy);
+  const rawDuration = Number(body.duration);
+  const style: DropStyle =
+    body.style === 'subtle' || body.style === 'extreme' ? body.style : 'moderate';
+
+  const dropRequest: DropGenerationRequest = {
+    userPrompt,
+    bpm: Number.isFinite(rawBpm) ? Math.max(40, Math.min(220, rawBpm)) : 128,
+    activePlugins: Array.isArray(body.context?.activePlugins)
+      ? (body.context!.activePlugins as unknown[]).map((p) => String(p).slice(0, 40)).slice(0, 20)
+      : [],
+    currentEnergy: Number.isFinite(rawEnergy) ? Math.max(0, Math.min(1, rawEnergy)) : 0.5,
+    style,
+    duration: Number.isFinite(rawDuration) ? Math.max(100, Math.min(32000, rawDuration)) : undefined,
+  };
+
+  const llmPrompt = buildDropPrompt(dropRequest);
+
+  // 1) LLM-Router (API-Keys bleiben serverseitig)
+  try {
+    const completion = await llmRouter.complete({
+      prompt: llmPrompt,
+      complexity: 'moderate',
+      maxTokens: 900,
+      temperature: 0.7,
+      reasoningEffort: 'low',
+    });
+    return res.json({ ...sanitizeAiDropResponse(completion.text, dropRequest), provider: completion.provider });
+  } catch (err) {
+    console.warn('[generate-drop] LLM-Router nicht nutzbar:', (err as Error).message);
+  }
+
+  // 2) Lokales Ollama
+  const raw = await ollamaGenerate(llmPrompt);
+  if (raw) {
+    try {
+      return res.json({ ...sanitizeAiDropResponse(raw, dropRequest), provider: 'ollama' });
+    } catch (err) {
+      console.warn('[generate-drop] ungültige Ollama-Antwort, Fallback.', (err as Error).message);
+    }
+  }
+
+  // 3) Deterministischer lokaler Fallback (kein Netz, immer verfügbar)
+  metrics.aiFailures += 1;
+  return res.json({ ...generateDeterministicDrop(dropRequest), provider: 'local' });
 });
 
 // --- POST /api/ai/complete  → LLM-Router (Keys bleiben serverseitig) ---
@@ -616,14 +827,177 @@ app.post('/api/ai/complete', async (req, res) => {
   }
 });
 
+// ===========================================================================
+// AI Orchestrator – zentrale AI-Infrastruktur (Hetzner ↔ HF/Replicate/Supabase)
+// ===========================================================================
+
+// --- POST /api/ai/orchestrate  → AI-Job über den Orchestrator ---
+app.post('/api/ai/orchestrate', async (req, res) => {
+  const { userId, task, model, input, sessionId } = (req.body ?? {}) as {
+    userId?: string; task?: AiTask; model?: string; input?: unknown; sessionId?: string;
+  };
+  const safeTask = String(task ?? '').trim() as AiTask;
+  const safeModel = String(model ?? '').trim().slice(0, 200);
+  if (!safeTask || !safeModel) {
+    return res.status(422).json({ error: 'task and model are required' });
+  }
+  if (!isValidAiTask(safeTask)) {
+    return res.status(422).json({ error: 'unknown task', task: safeTask.slice(0, 80) });
+  }
+  if (!isValidModelId(safeModel)) {
+    return res.status(422).json({ error: 'invalid model id' });
+  }
+  metrics.aiRequests += 1;
+  try {
+    const result = await aiOrchestrator.orchestrate({
+      userId: String(userId ?? 'localUser').slice(0, 64),
+      task: safeTask,
+      model: safeModel,
+      input: input ?? {},
+      sessionId: sessionId ? String(sessionId).slice(0, 128) : undefined,
+    });
+    void aiPersistence.saveJob(result.job);
+    void aiPersistence.saveSession(aiOrchestrator.sessions.get());
+    return res.json(result);
+  } catch (err) {
+    metrics.aiFailures += 1;
+    const message = err instanceof Error ? err.message : 'AI-Orchestrierung fehlgeschlagen';
+    const status = message.includes('INSUFFICIENT_CREDIT') ? 402 : message.includes('RATE_LIMITED') ? 429 : 502;
+    return res.status(status).json({ error: message });
+  }
+});
+
+// --- GET /api/ai/orchestrator/status ---
+app.get('/api/ai/orchestrator/status', (_req, res) => {
+  return res.json(aiOrchestrator.getStatus());
+});
+
+// --- GET /api/ai/jobs + /api/ai/jobs/:jobId ---
+app.get('/api/ai/jobs', (req, res) => {
+  const sessionId = String(req.query.sessionId ?? '').trim();
+  return res.json({ jobs: aiOrchestrator.jobs.list(sessionId || undefined) });
+});
+
+app.get('/api/ai/jobs/:jobId', (req, res) => {
+  const job = aiOrchestrator.jobs.get(String(req.params.jobId));
+  if (!job) return res.status(404).json({ error: 'job not found' });
+  return res.json(job);
+});
+
+// --- Session-Lifecycle ---
+app.get('/api/ai/session', (_req, res) => res.json(aiOrchestrator.sessions.get()));
+
+app.post('/api/ai/session/heartbeat', (_req, res) => {
+  aiOrchestrator.sessions.heartbeat();
+  return res.json(aiOrchestrator.sessions.get());
+});
+
+app.post('/api/ai/session/shutdown', async (_req, res) => {
+  await aiOrchestrator.sessions.shutdown();
+  return res.json(aiOrchestrator.sessions.get());
+});
+
+// --- Model Registry / Status ---
+app.get('/api/ai/models', (_req, res) => {
+  return res.json({ models: aiOrchestrator.models.getModelInfo() });
+});
+
+// --- MCP Runtime (Permission-geschützt) ---
+app.get('/api/ai/mcp/tools', (_req, res) => {
+  return res.json({ tools: aiOrchestrator.mcp.listTools() });
+});
+
+app.post('/api/ai/mcp/tools/:name', async (req, res) => {
+  const name = String(req.params.name).trim().slice(0, 120);
+  if (!aiOrchestrator.mcp.hasTool(name)) return res.status(404).json({ error: 'unknown tool' });
+  const result = await aiOrchestrator.mcp.invoke(name, (req.body ?? {}) as Record<string, unknown>);
+  void aiPersistence.auditMcp(name, 'localUser', aiOrchestrator.sessions.get().sessionId, result.ok, String((req.body as { permission?: string } | undefined)?.permission ?? 'READ'));
+  return res.json(result);
+});
+
+// --- POST /api/library/search → semantische Bibliotheks-Suche (NEW-MONK-6) ---
+// 1) Supabase-Embedding-Pfad: match_samples-RPC (pgvector, Kosinus) – sobald
+//    Supabase konfiguriert ist (Migration 005). 2) Lokaler Keyword-Fallback.
+app.post('/api/library/search', async (req, res) => {
+  const { query, limit } = (req.body ?? {}) as { query?: string; limit?: number };
+  const q = String(query ?? '').trim().slice(0, 200);
+  if (!q) return res.status(400).json({ error: 'query fehlt' });
+  const max = Math.max(1, Math.min(50, Number(limit) || 10));
+
+  // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst lokaler Embedding-Pfad).
+  const supabaseConfigured = !!(process.env.SUPABASE_URL && (process.env.SUPABASE_LEGACY_PAT || process.env.SUPABASE_SERVICE_ROLE));
+  if (supabaseConfigured) {
+    const matches = await aiPersistence.rpcMatchSamples(embedText(q), max);
+    if (matches.length > 0) {
+      const byId = new Map(PRESET_SAMPLE_DATABASE.map((s) => [s.id, s]));
+      const results = matches.map((m) => ({
+        id: m.sample_id,
+        name: byId.get(m.sample_id)?.name ?? m.sample_id,
+        category: byId.get(m.sample_id)?.category ?? 'mids',
+        score: Number(m.similarity.toFixed(4)),
+      }));
+      return res.json({ query: q, results, provider: 'supabase-embeddings' });
+    }
+  }
+
+  // Lokaler semantischer Pfad: Kosinus-Ähnlichkeit über deterministische
+  // Embeddings (funktioniert komplett ohne Supabase-DDL).
+  const queryVec = embedText(q);
+  const samples = [...PRESET_SAMPLE_DATABASE, ...orchestralSamples()];
+  const dot = (a: number[], b: number[]) => a.reduce((sum, v, i) => sum + v * b[i], 0);
+  const semantic = samples
+    .map((s) => {
+      const vec = embedText(`${s.name} ${s.description}`);
+      return { sample: s, score: dot(queryVec, vec) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max);
+
+  // Fallback auf Keyword-Scoring, falls keine sinnvolle Ähnlichkeit gefunden.
+  if (semantic.length > 0 && semantic[0].score >= 0.15) {
+    return res.json({
+      query: q,
+      results: semantic.map((r) => ({
+        id: r.sample.id,
+        name: r.sample.name,
+        category: r.sample.category,
+        score: Number(r.score.toFixed(4)),
+      })),
+      provider: 'local-embeddings',
+    });
+  }
+
+  const qLower = q.toLowerCase();
+  const results = PRESET_SAMPLE_DATABASE
+    .map((s) => {
+      const name = s.name.toLowerCase();
+      const category = s.category.toLowerCase();
+      const tokens = qLower.split(/\s+/).filter(Boolean);
+      let score = 0;
+      for (const t of tokens) {
+        if (name === t) score += 8;
+        else if (name.includes(t)) score += 4;
+        else if (category.includes(t)) score += 2;
+        else if (name.includes(t[0] ?? '')) score += 1;
+      }
+      if (tokens.length === 0) score = 1;
+      return { sample: s, score };
+    })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score || a.sample.name.localeCompare(b.sample.name))
+    .slice(0, max)
+    .map((r) => ({ id: r.sample.id, name: r.sample.name, category: r.sample.category, score: r.score }));
+  return res.json({ query: q, results, provider: 'keyword-fallback' });
+});
+
 // --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---
 // P11: Proxy zum separaten stem-ai (FastAPI/Demucs) Container, falls aktiviert.
-const STEM_AI_URL = (process.env.STEM_AI_URL || '').trim() || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
+const getStemAiUrl = () => (process.env.STEM_AI_URL || '').trim() || fleetTargets.stemAi || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
   metrics.stemRequests += 1;
   // Runtime-Check (nicht nur Modul-Konstante), damit Tests/Deploys den Pfad
   // per Env togglen können und die Queue-Logik deterministisch greifbar ist.
-  const stemAiActive = (process.env.ENABLE_STEMS || '').trim() === '1' && !!(process.env.STEM_AI_URL);
+  const stemAiActive = (process.env.ENABLE_STEMS || '').trim() === '1' && !!(process.env.STEM_AI_URL || fleetTargets.stemAi);
   const replicateStemsActive = (process.env.STEM_AI_PROVIDER || '').trim() === 'replicate'
     && !!(process.env.REPLICATE_API_TOKEN || '').trim();
 
@@ -721,7 +1095,7 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
         fd.append(name, value);
       }
 
-      const resp = await fetch(STEM_AI_URL + '/separate-stems', {
+      const resp = await fetch(getStemAiUrl() + '/separate-stems', {
         method: 'POST',
         body: fd,
         signal: AbortSignal.timeout(STEM_JOB_TIMEOUT_MS),
@@ -779,11 +1153,14 @@ app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komple
 //   GET  /api/master/health  → Service-Healthcheck
 // Der Dienst läuft separat (docker-compose: master-player, Port 8000 intern).
 // ===========================================================================
-const MASTER_PLAYER_URL = (process.env.MASTER_PLAYER_URL || '').trim() || 'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
+const getMasterPlayerUrl = () =>
+  (process.env.MASTER_PLAYER_URL || '').trim() ||
+  fleetTargets.masterPlayer ||
+  'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 
 async function proxyMasterPlayer(pathName: string, req: express.Request, res: express.Response) {
   try {
-    const resp = await fetch(MASTER_PLAYER_URL + pathName, {
+    const resp = await fetch(getMasterPlayerUrl() + pathName, {
       method: req.method,
       headers: { 'Content-Type': 'application/json' },
       body: req.method === 'GET' ? undefined : JSON.stringify(req.body ?? {}),
@@ -855,6 +1232,9 @@ function parseMultipartStream(
     let settled = false;
     const fields: Record<string, string> = {};
     const files: { name: string; filename: string; contentType: string; data: Buffer }[] = [];
+    // FA-P0-3 / D14: 1 Datei + Summenlimit (Defense-in-Depth gegen RAM-Exploit).
+    let totalFileBytes = 0;
+    let fileCount = 0;
 
     // busboy v1 exportiert eine Factory-Funktion (keinen Konstruktor).
     const BusboyFactory = ((BusboyModule as any).default ?? BusboyModule) as unknown as (opts: {
@@ -867,7 +1247,7 @@ function parseMultipartStream(
     };
     const bb = BusboyFactory({
       headers: req.headers as import('http').IncomingHttpHeaders,
-      limits: { fileSize: maxFileBytes, files: 5, fields: 20, fieldSize: 64 * 1024 },
+      limits: { fileSize: maxFileBytes, files: 1, fields: 20, fieldSize: 64 * 1024 },
     });
 
     bb.on('field', (name: string, value: string) => {
@@ -875,8 +1255,28 @@ function parseMultipartStream(
     });
 
     bb.on('file', (name: string, stream: import('stream').Readable, info: { filename: string; mimeType: string }) => {
+      fileCount += 1;
+      if (fileCount > 1) {
+        if (!settled) {
+          settled = true;
+          reject(new Error('Nur 1 Audio-Datei pro Upload erlaubt.'));
+          req.destroy();
+        }
+        return;
+      }
       const chunks: Buffer[] = [];
-      stream.on('data', (c: Buffer) => chunks.push(c));
+      stream.on('data', (c: Buffer) => {
+        totalFileBytes += c.length;
+        if (totalFileBytes > maxFileBytes) {
+          if (!settled) {
+            settled = true;
+            reject(new Error(`Datei zu groß (max. ${Math.round(maxFileBytes / 1024 / 1024)} MB).`));
+            req.destroy();
+          }
+          return;
+        }
+        chunks.push(c);
+      });
       stream.on('limit', () => {
         if (!settled) {
           settled = true;
@@ -885,6 +1285,7 @@ function parseMultipartStream(
         }
       });
       stream.on('end', () => {
+        if (settled) return;
         files.push({
           name,
           filename: info.filename || 'upload.bin',
@@ -943,7 +1344,7 @@ app.post('/api/upload/sample', async (req, res) => {
     // --- Scan (best effort über master-player, fällt bei Ausfall weich aus) ---
     let scan: any = null;
     try {
-      const scanResp = await fetch(MASTER_PLAYER_URL + '/analyze', {
+      const scanResp = await fetch(getMasterPlayerUrl() + '/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: file.data.toString('base64') }),
@@ -1398,7 +1799,7 @@ async function startServer() {
       socket.on('offer', (data: any) => {
         refreshIdleTimer();
         if (!data.target || !data.offer) return;
-        socket.to(data.target).emit('offer', { offer: data.offer, sender: socket.id });
+        socket.to(data.target).emit('offer', { offer: data.offer, sender: socket.id, senderMode: socket.data?.sessionMode ?? 'member' });
       });
       socket.on('answer', (data: any) => {
         refreshIdleTimer();
@@ -1422,14 +1823,15 @@ async function startServer() {
       const MAX_SESSION_USERS = 4;
 
       const sessionMembers = (room: string) => {
-        const members: { socketId: string; userId: string }[] = [];
+        const members: { socketId: string; userId: string; role: string }[] = [];
         const sockets = io.sockets.adapter.rooms.get(room);
         if (sockets) {
           for (const sid of sockets) {
             if (sid === socket.id) continue;
             const s = io.sockets.sockets.get(sid);
-            if (s?.data?.sessionUserId) {
-              members.push({ socketId: sid, userId: s.data.sessionUserId });
+            // Master-Out-Listener zählen NICHT als Session-Mitglieder.
+            if (s?.data?.sessionUserId && s?.data?.sessionMode !== 'master-out') {
+              members.push({ socketId: sid, userId: s.data.sessionUserId, role: s.data.sessionRole ?? 'guest' });
             }
           }
         }
@@ -1439,20 +1841,67 @@ async function startServer() {
       socket.on('join-session', (data: any) => {
         refreshIdleTimer();
         const userId = String(data?.userId ?? socket.id).trim();
+        // MASTEROUTMAINSTREAM: eigener Listen-Modus – zählt nicht zu den 4 Usern,
+        // sendet selbst nichts und bekommt die Mitgliederliste, um den Host zu
+        // finden (Szenario: 4 iPads + 1 Laptop am Verstärker).
+        const mode = String(data?.mode ?? 'member') === 'master-out' ? 'master-out' : 'member';
         const room = `session:${SESSION_ROOM_ID}`;
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
+        socket.data.sessionMode = mode;
+        // P4-2: Server-seitige Rolle – erster User ist Host/Admin, Rest lt. SESSION_ROLE.
+        const role = roleForSessionUser(userId);
+        socket.data.sessionRole = role;
+        if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
+        addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
 
         const members = sessionMembers(room);
+        if (mode === 'master-out') {
+          // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
+          // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
+          // initiiert seine Verbindung selbst zum Host.
+          socket.emit('session-members', {
+            roomId: SESSION_ROOM_ID,
+            members,
+            selfRole: 'guest',
+            selfMode: 'master-out',
+            hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? '',
+          });
+          return;
+        }
+
         if (members.length >= MAX_SESSION_USERS) {
           socket.emit('session-full', { roomId: SESSION_ROOM_ID, max: MAX_SESSION_USERS });
           socket.leave(room);
           return;
         }
 
-        socket.emit('session-members', { roomId: SESSION_ROOM_ID, members });
-        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
+        socket.emit('session-members', { roomId: SESSION_ROOM_ID, members, selfRole: role, hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? userId });
+        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId, role });
+      });
+
+      // P4-2: Admin kann einem User eine neue Rolle zuweisen (server-erzwungen).
+      socket.on('assign-role', (data: any) => {
+        refreshIdleTimer();
+        const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        if (senderRole !== 'admin') {
+          addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', false, String(data?.userId ?? ''));
+          socket.emit('rbac-denied', { action: 'assign-role', reason: 'admin required' });
+          return;
+        }
+        const targetUserId = String(data?.userId ?? '').trim();
+        const newRole = String(data?.role ?? '').trim();
+        if (!targetUserId || !['admin', 'producer', 'engineer', 'guest'].includes(newRole)) return;
+        sessionRoles.set(targetUserId, newRole);
+        // Alle Sockets dieses Users aktualisieren.
+        for (const [, s] of io.sockets.sockets as any) {
+          if (s?.data?.sessionUserId === targetUserId) s.data.sessionRole = newRole;
+        }
+        addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', true, `${targetUserId}->${newRole}`);
+        const roomId = socket.data?.sessionRoom;
+        if (roomId) socket.to(`session:${roomId}`).emit('role-changed', { userId: targetUserId, role: newRole });
+        socket.emit('role-changed', { userId: targetUserId, role: newRole });
       });
 
       // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
@@ -1461,10 +1910,20 @@ async function startServer() {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        // P4-2: Server-seitige RBAC – PRO-Promotion nur für admin/producer.
+        const state = (data as any)?.state;
+        if (state && !roleCanState(senderRole, String(state))) {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, String((data as any)?.pluginId ?? ''));
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId: (data as any)?.pluginId, state, role: senderRole });
+          return;
+        }
+        addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, String((data as any)?.pluginId ?? ''));
         // Session-Identität: Sender-User-ID anhängen, damit Empfänger
         // Änderungen einem User zuordnen können (Locking/Audit).
         const payload = data && typeof data === 'object'
-          ? { ...data, senderUserId: socket.data?.sessionUserId ?? socket.id }
+          ? { ...data, senderUserId, senderRole }
           : data;
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
       });

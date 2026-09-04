@@ -19,10 +19,12 @@ interface BandState {
   z: [number, number];
 }
 
-const NUM_BANDS = 12;
+const NUM_BANDS = 36;
 
-/** Standard-Frequenzen, falls eine Band-Message ohne freq kommt. */
-const DEFAULT_FREQS = [30, 60, 120, 250, 500, 1000, 2000, 4000, 6000, 8000, 12000, 16000];
+/** Standard-Frequenzen (1/3-Oktav-Raster 20 Hz–20 kHz), falls eine Band-Message ohne freq kommt. */
+const DEFAULT_FREQS = Array.from({ length: NUM_BANDS }, (_, i) =>
+  Math.round(20 * Math.pow(10, (i * 3) / 35)),
+);
 
 class EqProcessor extends AudioWorkletProcessor {
   private bands: BandState[] = [];

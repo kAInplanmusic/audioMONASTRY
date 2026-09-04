@@ -53,10 +53,6 @@ export interface CollabSession {
     isPlaying: boolean;
     bpm: number;
   };
-  sequencer: {
-    patterns: any;
-    synthNotes: number[];
-  };
   mastering: {
     cutoff: number;
     resonance: number;
@@ -69,19 +65,6 @@ export interface CollabSession {
 const DEFAULT_SESSION: CollabSession = {
   locks: {},
   playback: { isPlaying: false, bpm: 130 },
-  sequencer: {
-    patterns: {
-      kick: Array(16).fill(false),
-      hat: Array(16).fill(false),
-      clap: Array(16).fill(false),
-      synth: Array(16).fill(false),
-      snare: Array(16).fill(false),
-      tom: Array(16).fill(false),
-      perc: Array(16).fill(false),
-      bass: Array(16).fill(false)
-    },
-    synthNotes: Array(16).fill(0)
-  },
   mastering: {
     cutoff: 800,
     resonance: 8,
@@ -132,10 +115,6 @@ export function useCollabSession(_sessionId: string = 'main_studio') {
     setSession(prev => ({ ...prev, playback: { ...prev.playback, ...updates } }));
   }, []);
 
-  const updateSequencer = useCallback((updates: Partial<CollabSession['sequencer']>) => {
-    setSession(prev => ({ ...prev, sequencer: { ...prev.sequencer, ...updates } }));
-  }, []);
-
   const updateMastering = useCallback((updates: Partial<CollabSession['mastering']>) => {
     setSession(prev => ({ ...prev, mastering: { ...prev.mastering, ...updates } }));
   }, []);
@@ -147,7 +126,6 @@ export function useCollabSession(_sessionId: string = 'main_studio') {
     acquireLock,
     releaseLock,
     updatePlayback,
-    updateSequencer,
     updateMastering,
     isLocked: (moduleId: string) => !!(session.locks[moduleId] && session.locks[moduleId] !== localUser.id),
     getLockOwner: (moduleId: string) =>

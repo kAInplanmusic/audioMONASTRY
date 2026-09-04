@@ -35,7 +35,7 @@ function detectTouchLimited(): boolean {
 }
 
 export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('midi', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('controller', 'PRO');
   const {
     midiAccess, inputs, detected, error: midiError, rescan, lastMessage,
     lastControlEvent: midiLastControlEvent,
@@ -167,6 +167,10 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
             </h2>
           </div>
         </div>
+
+        {/* Digitakt-USB-Ansicht (uidigitakt.png) */}
+        <img src="/uidigitakt.png" alt="Digitakt-USB-Ansicht" title="USB-Anschluss-Ansicht (Referenz Digitakt II)"
+          className="h-16 rounded border border-neutral-800 hover:border-pink-500/60 transition-colors object-cover" />
 
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
             <option value="OFF">OFF</option>
@@ -342,6 +346,27 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
              >
                <RefreshCw className="w-4 h-4" /> ALLE PORTS RESCANNEN
              </button>
+
+             {/* DX7-SysEx-Drop (6-Op-FM): .syx-Datei → fm6Processor */}
+             <div className="pt-3 border-t border-neutral-800">
+               <span className="text-[10px] font-mono text-pink-400 uppercase tracking-widest">DX7-SysEx-Import</span>
+               <input
+                 type="file"
+                 accept=".syx,.SYX"
+                 onChange={async (e) => {
+                   const file = e.target.files?.[0];
+                   if (!file) return;
+                   try {
+                     const bytes = new Uint8Array(await file.arrayBuffer());
+                     audioEngine.loadFm6Sysex(bytes);
+                   } catch (err) {
+                     console.warn('[midi] SysEx-Import fehlgeschlagen:', err);
+                   }
+                 }}
+                 className="mt-2 w-full text-[10px] text-neutral-400 file:mr-2 file:rounded file:border-0 file:bg-pink-900/40 file:px-2 file:py-1 file:text-pink-200"
+               />
+               <p className="text-[8px] text-neutral-600 mt-1">156-Byte-unpacked Voice (.syx) → lädt den Patch in den 6-Op-FM-Worklet.</p>
+             </div>
            </div>
         </div>
 

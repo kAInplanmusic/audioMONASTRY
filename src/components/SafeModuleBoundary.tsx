@@ -4,7 +4,7 @@ interface Props {
   children: ReactNode;
 }
 
-// Extrahiert einen lesbaren Namen des gerenderten Moduls (z.B. 'SequencerPluginTerminal'),
+// Extrahiert einen lesbaren Namen des gerenderten Moduls (z.B. 'McpTerminal'),
 // damit ein Crash eindeutig zuzuordnen ist.
 function resolveElementName(children: ReactNode): string {
   if (Array.isArray(children)) {

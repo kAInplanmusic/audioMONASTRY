@@ -86,7 +86,10 @@ export async function separateStemsWithDemucs( // NOSONAR: bewusst komplexe Audi
       const cores = (globalThis as unknown as { navigator?: { hardwareConcurrency?: number } }).navigator?.hardwareConcurrency ?? 2;
       wasm.numThreads = isolated ? Math.max(1, Math.min(4, cores)) : 1;
       wasm.simd = true;
-      wasm.proxy = true;
+      // Proxy-Worker nur bei COOP/COEP aktivieren. Ohne crossOriginIsolated
+      // erzeugt onnxruntime im Vite-Dev-Bundle einen Blob-Worker mit
+      // `export`-Token → „Unexpected token 'export'“ (Page-Error).
+      wasm.proxy = isolated;
     }
   } catch { /* Threading-Konfiguration optional */ }
 

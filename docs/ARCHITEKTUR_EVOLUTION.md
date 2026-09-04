@@ -63,3 +63,28 @@ AudioDeviceManager (src/core/hardware) → ASIO/CoreAudio/PipeWire, generisches 
 - Source → Extraction → AudioObject Pipeline
 - OpenAI-Control-Layer-Anbindung
 - Rust-Runtime-Prozess bauen
+
+## Entscheidungen 2026-08-31 (D1–D23, aus MASTER_TODO 9f)
+
+- **D1/D6:** masterplayerMONK = Plugin 0 (fest oben, nur Visualisierung/Infos,
+  keine Eingabe). mixerMONK ist die einzige MAIN-Einspeiseinstanz; nur der
+  Halter entscheidet über MAIN. DJMixer bleibt feste Hardware-Sektion.
+- **D2:** Plugin-Lifecycle hybrid – sanftes Ramp-Down bei MAIN-Verbindung,
+  harter Disconnect/Dispose bei inaktiv/Monitor-only.
+- **D3:** `usePluginState` entfernen; eine State-Quelle
+  (`ModuleStateContext` + `PluginManager`).
+- **D4:** Synth V1-Worklet zuerst produktiv, V2-AudioGraph parallel (beide
+  hohe Priorität).
+- **D5/D12:** 1 AudioContext pro User + Host-Main-Stream (P4-1); Server-Mixing
+  erst > 4 User.
+- **D7:** aiMONK als Bottom-Dock für alle User immer offen.
+- **D8:** Skins: erst CSS-Variablen-Themes, später Komponenten-Neubau.
+- **D9:** Session-Scratchpad als halbtransparente Overlay-Sidebar.
+- **D10:** Output-Layouts 2.0/2.1/2.2/12.x/18.x/24.x; Xonar U7 (7.1) → reale
+  2.1 als Standard.
+- **D11:** Browser-First für 4 User; Native (cpal/ASIO) optional.
+- **D13:** Bus-Modell MAIN / CUE1–4 / PLUGIN-Pre-Fader.
+- **D15:** AI-Provider A100/HF-Endpoint bevorzugt; DevSettings „AI Server
+  Shutdown“ aktiviert Fallbacks.
+- **D22:** `STEM_AI_URL` runtime statt Modul-Konstante → schneller 502 bei
+  Provider-Ausfall (umgesetzt in `server.ts`).

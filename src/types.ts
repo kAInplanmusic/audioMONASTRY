@@ -131,3 +131,67 @@ export const MUSIC_SCALES = {
   'C Minor (Acid)': ['C2', 'Eb2', 'F2', 'G2', 'Bb2', 'C3', 'Eb3', 'F3'],
   'F# Phrygian': ['F#2', 'G2', 'A#2', 'B2', 'C#3', 'D3', 'E3', 'F#3'],
 };
+
+// --- spatialMONK (WhitePaper: Abschnitt 7 Presets & State) ---
+
+export type SpatialQuality = 'low' | 'medium' | 'high';
+
+/** Eine räumlich platzierbare Quelle im spatialMONK-Scene-Modell. */
+export interface SpatialSource {
+  id: number;
+  name: string;
+  /** Azimut in Grad: -90 links, 0 vorne, +90 rechts. */
+  az: number;
+  /** Elevation in Grad (aktuell analytisch, HRTF folgt). */
+  el: number;
+  /** Distanz (≥ 0), steuert Dämpfung + Distanz-Lowpass. */
+  dist: number;
+  /** Quell-Gain 0..1.5. */
+  gain: number;
+  muted: boolean;
+  /** UI-Farbe (optional, sonst automatisch). */
+  color?: string;
+  /** Optionale Spur-Kopplung für den Legacy-Audio-Pfad. */
+  track?: TrackType;
+}
+
+export interface SpatialGlobalState {
+  quality: SpatialQuality;
+  listenerRot: number;
+  masterGain: number;
+  hrtf: string;
+  /** Ausgabe-Layout (SPATIAL_SETUPS-ID, z. B. '2.0', '4.1', '24.2'). */
+  layout?: string;
+}
+
+export interface SpatialSceneState {
+  version: 'spatialMONK-v1';
+  global: SpatialGlobalState;
+  sources: SpatialSource[];
+}
+
+/** Migriert ein altes Spatial-Monk-Preset auf das neue Scene-Format. */
+export function migrateLegacySpatialPreset(old: any): SpatialSceneState {
+  const legacySources = Array.isArray(old?.sources) ? old.sources : Array.isArray(old?.nodes) ? old.nodes : [];
+  const sources: SpatialSource[] = legacySources.map((s: any, i: number) => ({
+    id: Number(s?.id ?? i + 1),
+    name: String(s?.name ?? s?.label ?? `Quelle ${i + 1}`),
+    az: Number(s?.az ?? (typeof s?.x === 'number' ? s.x * 90 : 0)),
+    el: Number(s?.el ?? 0),
+    dist: Number(s?.dist ?? (typeof s?.y === 'number' ? Math.max(0.2, 1.2 - s.y * 0.6) : 1.2)),
+    gain: Number(s?.gain ?? s?.volume ?? 0.9),
+    muted: Boolean(s?.muted ?? !s?.active),
+    color: s?.color,
+  }));
+  return {
+    version: 'spatialMONK-v1',
+    global: {
+      quality: old?.global?.quality === 'high' || old?.global?.quality === 'medium' ? old.global.quality : 'medium',
+      listenerRot: Number(old?.global?.listenerRot ?? 0),
+      masterGain: Number(old?.global?.masterGain ?? old?.masterGain ?? 1),
+      hrtf: String(old?.global?.hrtf ?? 'default'),
+      layout: String(old?.global?.layout ?? old?.setup ?? '10.0'),
+    },
+    sources,
+  };
+}

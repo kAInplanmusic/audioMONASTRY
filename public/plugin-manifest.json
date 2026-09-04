@@ -49,6 +49,31 @@
       "id": "effect-processor",
       "url": "/worklets/effectProcessor.js",
       "hash": "placeholder_hash_effect"
+    },
+    {
+      "id": "dynamics-processor",
+      "url": "/worklets/dynamicsProcessor.js",
+      "hash": "placeholder_hash_dynamics"
+    },
+    {
+      "id": "granular-processor",
+      "url": "/worklets/granularProcessor.js",
+      "hash": "placeholder_hash_granular"
+    },
+    {
+      "id": "fm6-processor",
+      "url": "/worklets/fm6Processor.js",
+      "hash": "placeholder_hash_fm6"
+    },
+    {
+      "id": "drumsynth-processor",
+      "url": "/worklets/drumSynthProcessor.js",
+      "hash": "placeholder_hash_drumsynth"
+    },
+    {
+      "id": "spatial-processor",
+      "url": "/worklets/spatialProcessor.js",
+      "hash": "placeholder_hash_spatial"
     }
   ],
   "ui_plugins": [
@@ -83,9 +108,9 @@
       "icon": "Speaker"
     },
     {
-      "id": "sequencer",
-      "name": "sequencerMONK",
-      "short": "SEQ",
+      "id": "mcp",
+      "name": "mcpMONK",
+      "short": "MCP",
       "icon": "Grid3X3"
     },
     {

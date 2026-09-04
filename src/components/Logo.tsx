@@ -21,6 +21,7 @@ export function Logo({
       width={size}
       height={size}
       alt="audioMONASTRY"
+      onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/logofullsize.png'; }}
       className={`object-contain bg-black ${rounded ? 'rounded-xl' : ''} ${glow ? 'teal-glow' : 'shadow-[0_4px_20px_-6px_rgba(20,184,201,0.4)]'} ${className}`}
       style={{ width: size, height: size }}
       draggable={false}

@@ -6,10 +6,13 @@ import { enumerateMediaDevices } from '../utils/mediaDevices';
 import { isXonarU7 } from '../core/spatial/roomPlanner';
 import { audioDeviceManager } from '../utils/audioDeviceManager';
 import { aggregationStatus } from '../utils/audioAggregator';
+import { SPATIAL_SETUPS } from '../utils/spatialMath';
+import { audioEngine } from '../utils/audioEngine';
 import { sfuTransport } from '../core/transport/MediasoupTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { isWebMidiSupported, requestWebMidiAccess } from '../utils/midiAccess';
 import { CloudStatusBadge } from './CloudStatusBadge';
+import { isAiShutdownMode, setAiShutdownMode } from '../core/ai/orchestrator/providerRouter';
 
 /**
  * SettingsDialog – Audio-I/O & Device-Auswahl
@@ -27,10 +30,14 @@ interface SettingsStore {
   inputDeviceId: string;
   sampleRate: number;
   bufferHint: 'interactive' | 'balanced' | 'playback';
-  stereoMode: 'STEREO' | 'DAW' | 'SPATIAL';
+  stereoMode: 'STEREO' | '2.1' | 'DAW' | 'SPATIAL';
+  /** P2-3/D10: konkretes Master-Ausgabe-Layout (2.0/2.2/4.0/4.1/4.2 …). */
+  masterLayout: string;
   monitorGain: number;
   transportMode: 'p2p' | 'sfu';
   midiEnabled: boolean;
+  /** P1-3: true sobald der Nutzer manuell ein Gerät gewählt hat (kein Auto-Override mehr). */
+  outputOverride: boolean;
 }
 
 const DEFAULT_SETTINGS: SettingsStore = {
@@ -39,9 +46,11 @@ const DEFAULT_SETTINGS: SettingsStore = {
   sampleRate: 48000,
   bufferHint: 'interactive',
   stereoMode: 'STEREO',
+  masterLayout: '2.0',
   monitorGain: 0.8,
   transportMode: 'p2p',
   midiEnabled: false,
+  outputOverride: false,
 };
 
 const getStored = (): SettingsStore => {
@@ -72,6 +81,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   const [midiOutputCount, setMidiOutputCount] = useState(0);
   const [midiError, setMidiError] = useState<string | null>(null);
   const [latency, setLatency] = useState(() => audioDeviceManager.getLatencySnapshot());
+  // NEW-D15-1: DevSettings „AI Server Shutdown“ – A100-Endpoint aus dem Router nehmen.
+  const [aiShutdown, setAiShutdown] = useState(() => isAiShutdownMode());
 
   useEffect(() => {
     if (!open) return;
@@ -86,6 +97,18 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           setInputDevices(devs.filter(d => d.kind === 'audioinput'));
           setXonarCount(outs.filter(d => isXonarU7(d.label || d.deviceId)).length);
           setLatency(audioDeviceManager.getLatencySnapshot());
+          // P1-3/D21: Default-Ausgabe automatisch wählen – erst Xonar U7,
+          // sonst erste USB-/Audio-Interface-Soundkarte, sonst System-Default.
+          // Nur wenn der Nutzer noch kein Gerät manuell gewählt hat.
+          if (!settings.outputOverride && !settings.outputDeviceId && outs.length > 0) {
+            const xonar = outs.find(d => isXonarU7(d.label || d.deviceId));
+            const usb = outs.find(d => /usb|audio interface|soundflower|blackhole/i.test(d.label || ''));
+            const preferred = xonar ?? usb;
+            if (preferred) {
+              update({ ...settings, outputDeviceId: preferred.deviceId });
+              void audioDeviceManager.applyOutput(preferred.deviceId).catch(() => { /* Browser-Default bleibt */ });
+            }
+          }
         })
         .catch(() => { /* Permission/Hardware nicht verfügbar */ });
     };
@@ -99,7 +122,7 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   }, [open]);
 
   const applyOutput = async (deviceId: string) => {
-    update({ ...settings, outputDeviceId: deviceId });
+    update({ ...settings, outputDeviceId: deviceId, outputOverride: true });
     try {
       await audioDeviceManager.applyOutput(deviceId);
     } catch (e) {
@@ -141,6 +164,21 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
       }
     } catch (e) {
       console.warn('SFU-Transport nicht verfügbar:', (e as Error).message);
+    }
+  };
+
+  const toggleAiShutdown = async () => {
+    const next = !aiShutdown;
+    setAiShutdownMode(next);
+    setAiShutdown(next);
+    if (next) {
+      // A100/Session kontrolliert herunterfahren; der ProviderRouter hat den
+      // HF-Endpoint bereits deaktiviert, sodass Fallbacks automatisch greifen.
+      try {
+        await fetch('/api/ai/session/shutdown', { method: 'POST' });
+      } catch (e) {
+        console.warn('AI-Shutdown-Endpoint nicht erreichbar:', (e as Error).message);
+      }
     }
   };
 
@@ -236,19 +274,28 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             <select
               className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
               value={settings.sampleRate}
-              onChange={e => update({ ...settings, sampleRate: Number(e.target.value) })}
+              onChange={e => {
+                const sampleRate = Number(e.target.value);
+                update({ ...settings, sampleRate });
+                audioEngine.applyLatencyProfile(settings.bufferHint, sampleRate);
+              }}
             >
               <option value={44100}>44,1 kHz (Standard)</option>
               <option value={48000}>48 kHz (Film/DAW)</option>
               <option value={96000}>96 kHz (High-End)</option>
             </select>
+            <p className="text-[9px] text-neutral-500 mt-1 font-mono">Wird beim nächsten Audio-Init übernommen.</p>
           </div>
           <div>
             <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><SlidersHorizontal className="w-3.5 h-3.5 text-blue-500" /> Latenz-Profil</label>
             <select
               className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
               value={settings.bufferHint}
-              onChange={e => update({ ...settings, bufferHint: e.target.value as SettingsStore['bufferHint'] })}
+              onChange={e => {
+                const bufferHint = e.target.value as SettingsStore['bufferHint'];
+                update({ ...settings, bufferHint });
+                audioEngine.applyLatencyProfile(bufferHint, settings.sampleRate);
+              }}
             >
               <option value="interactive">Niedrig (Live/DJ)</option>
               <option value="balanced">Ausgeglichen</option>
@@ -308,20 +355,68 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
         {/* Routing / Ausgang */}
         <div className="mb-5">
-          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgangsmodus</label>
-          <div className="grid grid-cols-3 gap-2">
-            {(['STEREO', 'DAW', 'SPATIAL'] as const).map(mode => (
-              <button type="button"
-                key={mode}
-                onClick={() => update({ ...settings, stereoMode: mode })}
-                className={`p-2 rounded border text-xs font-bold tracking-wider uppercase ${
-                  settings.stereoMode === mode ? 'bg-cyan-900/30 border-cyan-500/60 text-cyan-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
-                }`}
-              >
-                {mode}
-              </button>
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase"><MonitorSpeaker className="w-3.5 h-3.5 text-cyan-500" /> Master-Ausgabe-Layout</label>
+          <select
+            className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
+            value={settings.masterLayout}
+            onChange={(e) => {
+              const masterLayout = e.target.value;
+              update({ ...settings, masterLayout });
+              try { audioEngine.setSpatialSetup(masterLayout); } catch { /* Audio nicht initialisiert */ }
+            }}
+            title="Ausgabe-Layout: 2.0 / 2.1 / 2.2 / 4.0 / 4.1 / 4.2 …"
+          >
+            {SPATIAL_SETUPS.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
             ))}
+          </select>
+          <p className="text-[10px] text-neutral-500 mt-1 font-mono">
+            Modus: {settings.stereoMode} · Layout wird als Spatial-Bus-Konfiguration angewendet.
+          </p>
+
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 mt-4 uppercase"><Volume2 className="w-3.5 h-3.5 text-cyan-500" /> 2.1-Crossover (Sub-Trennung)</label>
+          <select
+            className="w-full bg-neutral-800 text-white p-2 rounded border border-neutral-700"
+            value={settings.stereoMode === '2.1' ? '2.1' : '2.0'}
+            onChange={(e) => {
+              const next = e.target.value === '2.1' ? '2.1' : 'STEREO';
+              update({ ...settings, stereoMode: next });
+              try { audioEngine.setStereoMode(e.target.value === '2.1' ? '2.1' : '2.0'); } catch { /* Audio nicht initialisiert */ }
+            }}
+            title="2.1: Sub < 90 Hz getrennt (Xonar U7); 2.0: Stereo/Phantom"
+          >
+            <option value="2.0">2.0 – Stereo (Phantom-Bass)</option>
+            <option value="2.1">2.1 – Sub getrennt (LFE, z. B. Xonar U7)</option>
+          </select>
+          <p className="text-[10px] text-neutral-500 mt-1">
+            Linkwitz-Riley-Crossover (90 Hz): L/R-Hochpass, Sub = LFE. DSP in <code>src/core/output/crossover.ts</code>, verifiziert durch <code>tests/crossover.test.ts</code>.
+          </p>
+        </div>
+
+        {/* DevSettings: AI Server Shutdown (NEW-D15-1) */}
+        <div className="mb-5 border border-red-900/50 rounded-lg p-3 bg-red-950/10">
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+            <SlidersHorizontal className="w-3.5 h-3.5 text-red-500" /> DevSettings: AI Server Shutdown
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void toggleAiShutdown()}
+              aria-pressed={aiShutdown}
+              className={`px-3 py-2 rounded border text-xs font-bold uppercase tracking-wider ${
+                aiShutdown ? 'bg-red-900/40 border-red-500/70 text-red-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
+              }`}
+            >
+              {aiShutdown ? 'A100 GESTOPPT · FALLBACK AKTIV' : 'A100 STOPPEN'}
+            </button>
+            <span className="text-[10px] text-neutral-500 font-mono">
+              {aiShutdown ? 'HF-Endpoint deaktiviert, Router nutzt Fallbacks' : 'HF-A100-Endpoint aktiv (sofern konfiguriert)'}
+            </span>
           </div>
+          <p className="text-[10px] text-neutral-500 mt-1">
+            Stoppt die AI-Session/Scale-to-Zero und nimmt den A100-Endpoint aus dem Provider-Router.
+            Fallback-Kette: Serverless → Replicate → Local.
+          </p>
         </div>
 
         {/* Monitor-Gain */}
