@@ -72,10 +72,40 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
         pushLog(`✓ BEAT erzeugt: 16 Steps × 8 Spuren @ 128 BPM → Sequencer`);
       } else {
         const sample = synthesizeSample(kind);
+        let usedAi = false;
+        try {
+          // soundMONK Server-AI (samplemonk-ai / MusicGen) zuerst, lokale Synthese als Fallback.
+          const resp = await fetch('/api/sound/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              kind,
+              durationSeconds: kind === 'atmosphere' ? 8 : kind === 'bass' ? 3 : 2,
+            }),
+          });
+          if (resp.ok) {
+            const blob = await resp.blob();
+            if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+              sample.url = URL.createObjectURL(blob);
+            }
+            usedAi = true;
+          }
+        } catch {
+          // Netzwerk-/Runtime-Fehler → lokale Synthese.
+        }
+
         addSample(sample);
-        // Sofortige Hörprobe (Parameter-basierte Synthese).
-        audioEngine.previewSynthesizedSample(sample.parameters ?? {});
-        pushLog(`✓ ${KIND_LABEL[kind]} erzeugt → biblioMONK (${sample.name})`);
+        if (sample.url) {
+          // KI-Audio direkt zur Hörprobe abspielen (Browser).
+          try {
+            const audio = new Audio(sample.url);
+            audio.volume = 0.9;
+            void audio.play().catch(() => { /* Autoplay-Block ignorieren */ });
+          } catch { /* Audio-Objekt im Test/Node nicht verfügbar */ }
+        } else {
+          audioEngine.previewSynthesizedSample(sample.parameters ?? {});
+        }
+        pushLog(`✓ ${KIND_LABEL[kind]} erzeugt → biblioMONK (${sample.name}${usedAi ? ', Server-AI' : ', lokal'})`);
       }
     } catch (e) {
       pushLog(`✗ ${KIND_LABEL[kind]}: ${e instanceof Error ? e.message : String(e)}`);

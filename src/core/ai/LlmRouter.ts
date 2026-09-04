@@ -26,6 +26,7 @@ export type LlmProviderId =
   | 'ollama'
   | 'deepseek-flash'
   | 'deepseek-pro'
+  | 'qwen3-coder'
   | 'gemini'
   | 'openai';
 
@@ -56,6 +57,7 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   ollama: 'qwen2.5:7b',
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
+  'qwen3-coder': 'Qwen/Qwen3-Coder-Next',
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
 };
@@ -154,6 +156,32 @@ class HfProvider implements ILlmProvider {
   }
 }
 
+/** Qwen3-Coder (Code-/Plan-Spezialist, OpenAI-kompatibel über HF Router). */
+class QwenCoderProvider implements ILlmProvider {
+  readonly id = 'qwen3-coder' as const;
+
+  get available(): boolean {
+    return Boolean(envKey('HF_API_KEY') || envKey('HF_TOKEN'));
+  }
+
+  async complete(req: LlmRequest): Promise<LlmCompletion> {
+    const started = Date.now();
+    const model = envKey('QWEN3_CODER_MODEL') || DEFAULT_MODELS['qwen3-coder'];
+    const token = envKey('HF_API_KEY') || envKey('HF_TOKEN');
+    const resp = await postJson(
+      'https://router.huggingface.co/v1/chat/completions',
+      { Authorization: `Bearer ${token}` },
+      {
+        model,
+        messages: [{ role: 'user', content: req.prompt }],
+        max_tokens: req.maxTokens ?? 2048,
+        temperature: req.temperature ?? 0.3,
+      },
+    );
+    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+  }
+}
+
 /** Lokaler Ollama-Provider (MOA/Sprachbefehle/TTS-Fallback auf der eigenen Instanz). */
 class OllamaProvider implements ILlmProvider {
   readonly id = 'ollama' as const;
@@ -217,6 +245,7 @@ export class LlmRouter {
 
   constructor() {
     this.register(new HfProvider());
+    this.register(new QwenCoderProvider());
     this.register(new OpenAiCompatibleProvider('mistral', 'https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'));
     this.register(new OllamaProvider());
     this.register(new OpenAiCompatibleProvider('deepseek-flash', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
@@ -242,9 +271,9 @@ export class LlmRouter {
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const order: LlmProviderId[] =
       complexity === 'complex'
-        ? ['deepseek-pro', 'deepseek-flash', 'hf', 'mistral', 'ollama', 'gemini', 'openai']
+        ? ['deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'hf', 'mistral', 'ollama', 'gemini', 'openai']
         : complexity === 'moderate'
-          ? ['deepseek-flash', 'hf', 'mistral', 'deepseek-pro', 'ollama']
+          ? ['deepseek-flash', 'qwen3-coder', 'hf', 'mistral', 'deepseek-pro', 'ollama']
           : ['deepseek-flash', 'hf', 'mistral', 'ollama'];
     return order
       .map((id) => this.providers.get(id))

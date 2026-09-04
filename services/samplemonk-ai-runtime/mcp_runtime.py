@@ -31,13 +31,38 @@ class McpRuntime:
     def __init__(self, manager) -> None:
         self._manager = manager
 
+    # Tool-Namen, die ein nicht-leeres "model"-Feld im Payload benötigen.
+    _MODEL_REQUIRED_TOOLS = frozenset({
+        "model.load",
+        "model.unload",
+        "audio.analyze",
+        "audio.classify",
+        "audio.transcribe",
+        "audio.embed",
+        "audio.generate",
+        "sample.search",
+    })
+
+    @staticmethod
+    def _validate_payload(tool_name: str, payload: Dict[str, Any]) -> str:
+        """Gibt eine Fehlermeldung zurück oder einen leeren String bei gültigem Payload."""
+        if not isinstance(payload, dict):
+            return "payload must be a JSON object"
+        if tool_name in McpRuntime._MODEL_REQUIRED_TOOLS:
+            model_id = str(payload.get("model", "")).strip()
+            if not model_id:
+                return "payload.model is required and must be a non-empty string"
+            if len(model_id) > 512:
+                return "payload.model is too long"
+        return ""
+
     def list_tools(self) -> List[Dict[str, Any]]:
         return [
             {"name": name, "category": spec["category"], "permission": spec["permission"], "description": spec["description"]}
             for name, spec in sorted(TOOLS.items())
         ]
 
-    def invoke(self, tool_name: str, payload: Dict[str, Any], server_permission: str = "") -> Dict[str, Any]:
+    def invoke(self, tool_name: str, payload: Any, server_permission: str = "") -> Dict[str, Any]:
         spec = TOOLS.get(tool_name)
         if spec is None:
             return {"ok": False, "error": f"unknown tool: {tool_name}"}
@@ -52,6 +77,10 @@ class McpRuntime:
             return {"ok": False, "error": f"permission denied: {tool_name} requires {required}"}
         if required == "DESTRUCTIVE" and granted != "DESTRUCTIVE":
             return {"ok": False, "error": "destructive action requires explicit DESTRUCTIVE permission"}
+
+        validation_error = self._validate_payload(tool_name, payload)
+        if validation_error:
+            return {"ok": False, "error": f"invalid payload: {validation_error}"}
 
         handler = getattr(self, f"_tool_{tool_name.replace('.', '_')}", None)
         if handler is None:

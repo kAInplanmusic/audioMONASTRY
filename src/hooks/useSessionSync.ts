@@ -11,18 +11,22 @@ export const useSessionSync = () => {
   useEffect(() => {
     return webRTCManager.addDataChannelListener((message) => {
       if (message?.type === 'SCRATCHPAD_UPDATE') {
-        // F4-Fix: Peer-Samples nur mit vertrauenswürdiger URL annehmen.
         if (message.action === 'ADD') {
           const sample = message.sample;
           if (
             sample &&
             typeof sample === 'object' &&
-            (!sample.url || isTrustedMediaUrl(sample.url))
+            typeof (sample as { id?: unknown }).id === 'string' &&
+            String((sample as { id: unknown }).id).length > 0 &&
+            typeof (sample as { name?: unknown }).name === 'string' &&
+            ((sample as { url?: unknown }).url === undefined || isTrustedMediaUrl(String((sample as { url: unknown }).url)))
           ) {
-            addToScratchpad(sample);
+            addToScratchpad(sample as never);
           }
         }
-        if (message.action === 'REMOVE') removeFromScratchpad(message.id);
+        if (message.action === 'REMOVE' && typeof message.id === 'string' && message.id.length > 0) {
+          removeFromScratchpad(message.id);
+        }
       }
     });
   }, [addToScratchpad, removeFromScratchpad]);

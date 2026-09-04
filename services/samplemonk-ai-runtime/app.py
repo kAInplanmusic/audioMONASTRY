@@ -12,8 +12,11 @@ Grundsätze:
 """
 from __future__ import annotations
 
+import asyncio
+import hmac
 import json
 import os
+import re
 import signal
 import sys
 import threading
@@ -31,6 +34,10 @@ from registry import load_manifest
 
 RUNTIME_VERSION = "1.0.0"
 STARTED_AT = time.time()
+
+_SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_SAFE_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
+MCP_API_TOKEN = os.environ.get("AI_MCP_API_TOKEN", "").strip()
 
 # ---------------------------------------------------------------------------
 # Strukturiertes JSON-Logging (keine Secrets)
@@ -193,15 +200,30 @@ async def infer(request: Request) -> JSONResponse:
     """
     if STATE.shutting_down:
         raise HTTPException(status_code=503, detail="shutting_down")
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001 – ungültiges JSON sauber ablehnen
+        raise HTTPException(status_code=422, detail="invalid JSON body") from exc
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="request body must be an object")
     task = str(body.get("task", "")).strip()
     model = str(body.get("model", "")).strip()
     payload = body.get("input", {})
-    if not task or not model:
-        raise HTTPException(status_code=422, detail="task and model are required")
+    if not _SAFE_TASK_RE.fullmatch(task):
+        raise HTTPException(status_code=422, detail="invalid task")
+    if not _SAFE_MODEL_RE.fullmatch(model):
+        raise HTTPException(status_code=422, detail="invalid model")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="input must be an object")
 
     started = time.time()
     try:
+        # ON_DEMAND/RARE-Modelle (z. B. Bark, MusicGen-Medium, Qwen3-TTS) erst
+        # beim ersten Request laden. Default aktiv; Abschaltbar für Tests.
+        auto_load = (os.environ.get("AI_AUTO_LOAD_ON_DEMAND", "1").strip() not in ("0", "false", "False"))
+        if auto_load and not STATE.manager.is_loaded(model):
+            log_event("INFO", "model auto-load on demand", model=model)
+            STATE.manager.load(model)
         result = STATE.manager.infer(task, model, payload)
         duration_ms = int((time.time() - started) * 1000)
         log_event("INFO", "inference completed", task=task, model=model, durationMs=duration_ms)
@@ -223,10 +245,24 @@ async def infer(request: Request) -> JSONResponse:
 
 @app.post("/mcp/tools/{tool_name}")
 async def mcp_tool(tool_name: str, request: Request) -> JSONResponse:
-    """MCP-Tool-Aufruf mit Permission-Check (READ/WRITE/EXECUTION/DESTRUCTIVE)."""
+    """MCP-Tool-Aufruf mit Permission-Check (READ/WRITE/EXECUTION/DESTRUCTIVE).
+
+    Wenn AI_MCP_API_TOKEN gesetzt ist, wird der Aufruf zusätzlich per
+    Bearer-/x-api-key-Token authentifiziert (Vergleich in konstanter Zeit).
+    """
+    if MCP_API_TOKEN:
+        auth = request.headers.get("authorization", "")
+        supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else request.headers.get("x-api-key", "").strip()
+        if not supplied or not hmac.compare_digest(supplied, MCP_API_TOKEN):
+            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+
     from mcp_runtime import McpRuntime
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception as exc:  # noqa: BLE001 – ungültiges JSON sauber ablehnen
+        log_event("WARN", "invalid mcp json body", error=str(exc))
+        return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
     result = McpRuntime(STATE.manager).invoke(tool_name, body)
     return JSONResponse(result)
 

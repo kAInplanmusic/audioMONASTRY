@@ -22,6 +22,7 @@ Regeln (GPU-Konsolidierung):
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 from huggingface_hub import (
@@ -43,7 +44,40 @@ REGION = os.environ.get("HF_REGION", "us-east-1")
 VENDOR = os.environ.get("HF_VENDOR", "aws")
 INSTANCE_TYPE = os.environ.get("HF_INSTANCE_TYPE", "nvidia-a100")
 INSTANCE_SIZE = os.environ.get("HF_INSTANCE_SIZE", "x1")
-SCALE_TO_ZERO_TIMEOUT = int(os.environ.get("HF_SCALE_TO_ZERO_TIMEOUT", "20"))
+SCALE_TO_ZERO_TIMEOUT_RAW = os.environ.get("HF_SCALE_TO_ZERO_TIMEOUT", "20").strip()
+try:
+    SCALE_TO_ZERO_TIMEOUT = int(SCALE_TO_ZERO_TIMEOUT_RAW)
+except ValueError:
+    SCALE_TO_ZERO_TIMEOUT = -1
+
+_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,63}$")
+_IMAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*(?::[A-Za-z0-9._-]{1,128})?$")
+_NO_CONTROL_RE = re.compile(r"^[^\x00-\x1f\x7f]{1,512}$")
+
+
+def _validate_config() -> str:
+    """Validiert Umgebungsvariablen vor HF-API-Aufrufen (keine Secrets im Log)."""
+    if not _NAME_RE.fullmatch(ENDPOINT_NAME):
+        return f"invalid HF_ENDPOINT_NAME: {ENDPOINT_NAME!r}"
+    if not _NAME_RE.fullmatch(NAMESPACE):
+        return f"invalid HF_NAMESPACE: {NAMESPACE!r}"
+    if not _NAME_RE.fullmatch(REGION):
+        return f"invalid HF_REGION: {REGION!r}"
+    if not _NAME_RE.fullmatch(VENDOR):
+        return f"invalid HF_VENDOR: {VENDOR!r}"
+    if IMAGE and not _IMAGE_RE.fullmatch(IMAGE):
+        return "invalid IMAGE: expected registry/image:tag"
+    try:
+        timeout = int(SCALE_TO_ZERO_TIMEOUT)
+        if timeout < 0 or timeout > 1440:
+            return "invalid HF_SCALE_TO_ZERO_TIMEOUT: must be 0..1440"
+    except ValueError:
+        return "invalid HF_SCALE_TO_ZERO_TIMEOUT: must be an integer"
+    reg_user = os.environ.get("HF_REGISTRY_USERNAME", "").strip()
+    reg_pass = os.environ.get("HF_REGISTRY_PASSWORD", "").strip()
+    if (reg_user and not _NO_CONTROL_RE.fullmatch(reg_user)) or (reg_pass and not _NO_CONTROL_RE.fullmatch(reg_pass)):
+        return "invalid HF_REGISTRY_USERNAME/PASSWORD: must not contain control characters"
+    return ""
 
 
 def _common_kwargs() -> dict:
@@ -108,6 +142,10 @@ def _guard_single_gpu_endpoint() -> int:
 
 def main() -> int:
     command = sys.argv[1] if len(sys.argv) > 1 else "status"
+    config_error = _validate_config()
+    if config_error:
+        print(f"FEHLER: {config_error}", file=sys.stderr)
+        return 2
     if command == "delete-legacy":
         if not os.environ.get("HF_TOKEN", "").strip():
             print("FEHLER: HF_TOKEN env ist erforderlich", file=sys.stderr)

@@ -5,6 +5,9 @@ import { audioEngine } from '../utils/audioEngine';
 import { routeModuleState } from '../core/pluginAudioRouter';
 import { can, roleForUser, readSessionConfig } from '../utils/rbac';
 import { setAiModeActive } from '../core/ai/aiMode';
+import { EVAL_PLUGIN_IDS } from '../core/ai/orchestrator/evalMatrix';
+
+const VALID_PLUGIN_IDS = new Set<string>(EVAL_PLUGIN_IDS);
 
 export type ModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
 
@@ -81,7 +84,11 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
         timestamp?: number;
       };
       if (!pluginId || !state) return;
+      if (typeof pluginId !== 'string' || !VALID_PLUGIN_IDS.has(pluginId)) return;
+      if (typeof senderId !== 'string' || senderId.length === 0) return;
       if (state !== 'OFF' && state !== 'AUTO_AI' && state !== 'PRO') return;
+      const t = Number(timestamp);
+      if (!Number.isFinite(t) || t < 0) return;
       // F1-Fix: Empfangs-RBAC – PRO-Promotion nur durch Producer+ (Lock-Aktion),
       // OFF/AUTO_AI durch alle Rollen (State-Aktion). Client-RBAC bleibt UX,
       // aber fremde States werden nicht mehr blind übernommen.
@@ -91,7 +98,6 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
         console.warn('[module-state] RBAC: Update verworfen', { senderId, state, senderRole });
         return;
       }
-      const t = Number(timestamp) || 0;
       const last = lastSeen.current[pluginId];
       if (last && (t < last.t || (t === last.t && (senderId ?? '') <= last.sender))) return; // stale/duplicate
       lastSeen.current[pluginId] = { t, sender: senderId ?? '' };

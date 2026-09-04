@@ -1,0 +1,104 @@
+name: Deep Audit 300
+
+on:
+  workflow_dispatch:
+    inputs:
+      ai_review:
+        description: 'KI-Review (DeepSeek + HF) auf Diff ausführen'
+        type: boolean
+        default: false
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  static-audit:
+    name: Static Deep Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Semgrep
+        run: python3 -m pip install --user semgrep
+
+      - name: Deep Audit Static (offline)
+        run: npm run audit:deep:static -- --fail-on high
+        env:
+          PATH: ${{ runner.home }}/.local/bin:${{ runner.home }}/.local/usr/bin:$PATH
+
+      - name: Upload Deep Audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-audit-static
+          path: |
+            AUDIT_DEEP.md
+            test-results/deep-audit/
+          if-no-files-found: warn
+
+      - name: Write Step Summary
+        if: always()
+        run: |
+          echo "## Deep Audit Static" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 60 AUDIT_DEEP.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  ai-diff-review:
+    name: AI Diff Review (optional)
+    if: github.event.inputs.ai_review == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deep Audit AI Diff Review
+        run: |
+          if [ -n "$DEEPSEEK_API_KEY" ] || [ -n "$API_KEY" ]; then
+            npx tsx scripts/deep-audit/run.ts --mode diff --providers all --fail-on high
+          else
+            echo "Kein DeepSeek/HF-Secret konfiguriert – KI-Review übersprungen."
+          fi
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          API_KEY: ${{ secrets.API_KEY }}
+          HF_API_KEY: ${{ secrets.HF_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_API_KEY }}
+
+      - name: Upload AI Deep Audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-audit-ai
+          path: |
+            AUDIT_DEEP.md
+            test-results/deep-audit/
+          if-no-files-found: warn
+
+      - name: Write Step Summary
+        if: always()
+        run: |
+          echo "## Deep Audit AI Diff Review" >> "$GITHUB_STEP_SUMMARY"
+          tail -n 80 AUDIT_DEEP.md >> "$GITHUB_STEP_SUMMARY" || true

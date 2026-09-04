@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { PluginState } from '../plugins/types';
 import { usePluginManager } from '../context/PluginManagerContext';
 import { useModuleState } from '../context/ModuleStateContext';
+import { webRTCManager } from '../utils/WebRTCManager';
 import { logAuditEvent } from '../utils/AuditLogger';
 
 /**
@@ -24,7 +25,8 @@ export const usePluginState = (pluginId: string, initialState: PluginState = 'OF
   );
 
   const updateState = (newState: PluginState) => {
-    if (!lockStatus.active) {
+    const isOwner = lockStatus.active && lockStatus.lockedBy === webRTCManager.userId;
+    if (!lockStatus.active || isOwner) {
       setModuleState(pluginId, newState);
       logAuditEvent('localUser', 'PLUGIN_STATE', { pluginId, state: newState });
     }

@@ -25,6 +25,11 @@
     "check:bundle": "node scripts/check-bundle-size.mjs",
     "check:memo": "node scripts/check-react-memo.mjs",
     "check:memory": "node --expose-gc scripts/memory-pressure-gate.mjs",
+    "audit:deep": "tsx scripts/deep-audit/run.ts --mode full --update-todo",
+    "audit:deep:diff": "tsx scripts/deep-audit/run.ts --mode diff",
+    "audit:deep:static": "tsx scripts/deep-audit/run.ts --mode full --offline",
+    "audit:deep:smoke": "tsx scripts/deep-audit/run.ts --mode files --files server.ts src/context/PluginManagerContext.tsx --smoke",
+    "audit:deep:help": "tsx scripts/deep-audit/run.ts --help",
     "eval:ai": "tsx scripts/eval-ai.ts",
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
     "verify": "tsc --noEmit && vitest run && node scripts/validate-interface-boundaries.mjs",
@@ -77,17 +82,23 @@
     "@webgpu/types": "^0.1.72",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "jscpd": "^5.1.2",
     "jsdom": "^30.0.1",
+    "knip": "^6.34.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.69.0",
     "vite": "^6.2.3",
     "vitest": "^4.1.11"
   },
   "overrides": {
     "uuid": "^11.1.1",
     "brace-expansion": "^5.0.8",
-    "glob": "^11.0.0"
+    "glob": "^11.0.0",
+    "qs": "6.16.0"
   },
   "allowScripts": {
     "mediasoup@3.26.0": true,

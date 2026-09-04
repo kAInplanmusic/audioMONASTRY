@@ -16,4 +16,4 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = []
+py-modules = ["app", "handlers", "model_manager", "registry", "mcp_runtime"]

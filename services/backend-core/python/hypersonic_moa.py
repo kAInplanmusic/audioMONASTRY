@@ -97,6 +97,9 @@ class HyperSonicMOA:
         DeepSeek/HuggingFace nutzt sie Ollama (falls erreichbar) oder den
         deterministischen lokalen Template-Generator.
         """
+        report_text = (report_text or "").strip()
+        if not report_text:
+            report_text = "Ein analoger Polysynth mit vier Stimmen und charakteristischem Filter."
         # 1) Versuche lokales LLM
         prompt = (
             "Generiere ein valides JSON-Modul fuer ein Vintage-Synthesizer-Effektgeraet. "
@@ -112,9 +115,12 @@ class HyperSonicMOA:
             if cleaned.endswith("```"):
                 cleaned = cleaned[:-3]
             try:
-                # Validieren, dass es valides JSON ist
+                # Validieren, dass es valides JSON und ein Objekt ist
                 parsed = json.loads(cleaned)
-                return json.dumps(parsed, ensure_ascii=False)
+                if not isinstance(parsed, dict):
+                    print("[HyperSonicMOA] Ollama-Antwort war kein JSON-Objekt; nutze Fallback.")
+                else:
+                    return json.dumps(parsed, ensure_ascii=False)
             except json.JSONDecodeError:
                 print("[HyperSonicMOA] Ollama-Antwort war kein valides JSON; nutze Fallback.")
 

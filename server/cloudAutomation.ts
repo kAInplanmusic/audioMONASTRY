@@ -11,6 +11,15 @@ const env = process.env;
 
 const AUDIO_EXT = /\.(mp3|wav|flac|ogg|m4a|aiff?|webm|opus)$/i;
 
+const SAFE_KEY = /^[A-Za-z0-9][A-Za-z0-9/._ -]{0,1023}$/;
+
+function isSafeR2Key(key: string): boolean {
+  if (!key || key.length > 1024) return false;
+  if (key.startsWith('/') || key.includes('\\') || key.includes('\0')) return false;
+  if (key.split('/').some((segment) => segment === '..' || segment === '.')) return false;
+  return SAFE_KEY.test(key);
+}
+
 export interface AudioMetadata {
   kind: 'sample' | 'music';
   name: string;
@@ -49,11 +58,16 @@ function trimTrailingSlash(value: string): string {
 }
 
 function r2PublicUrl(key: string): string {
+  const safeKey = isSafeR2Key(key) ? key : 'invalid';
+  const encodedKey = safeKey
+    .split('/')
+    .map((segment) => encodeURIComponent(segment))
+    .join('/');
   const bucket = env.CFR2_BUCKET?.trim() || 'audiomonastrysamples';
   const accountId = env.CFR2_ACCOUNT_ID?.trim() || '';
   const publicBase = env.CFR2_PUBLIC_URL ? trimTrailingSlash(env.CFR2_PUBLIC_URL.trim()) : '';
-  if (publicBase) return `${publicBase}/${key}`;
-  return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${key}`;
+  if (publicBase) return `${publicBase}/${encodedKey}`;
+  return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${encodedKey}`;
 }
 
 function cleanBaseName(key: string): string {
@@ -91,6 +105,7 @@ function detectArtistTitle(key: string): { artist: string; title: string } {
 
 /** Analysiert einen R2-Objekt-Key regelbasiert (kostenlos, offline). */
 export function analyzeAudioKey(key: string, fileSize?: number): AudioMetadata | null {
+  if (!isSafeR2Key(key)) return null;
   const ext = (key.match(/\.[^.]+$/) ?? [''])[0];
   if (!AUDIO_EXT.test(key)) return null;
 
@@ -124,7 +139,7 @@ export async function listR2Audio(): Promise<{ key: string; size?: number }[]> {
     const cmd = new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token });
     const res = await s3.send(cmd);
     for (const obj of res.Contents ?? []) {
-      if (obj.Key && AUDIO_EXT.test(obj.Key)) out.push({ key: obj.Key, size: obj.Size });
+      if (obj.Key && AUDIO_EXT.test(obj.Key) && isSafeR2Key(obj.Key)) out.push({ key: obj.Key, size: obj.Size });
     }
     token = res.IsTruncated ? res.NextContinuationToken : undefined;
   } while (token);
@@ -147,7 +162,10 @@ export async function ingestAudioObject(key: string, fileSize?: number): Promise
       style: meta.style,
       tags: meta.tags,
     });
-    if (error) return { key, ok: false, error: error.message };
+    if (error) {
+      console.error('[cloud-automation] music_tracks upsert fehlgeschlagen:', error);
+      return { key, ok: false, error: 'cloud-automation-music-upsert-failed' };
+    }
     return { key, ok: true };
   }
 
@@ -164,12 +182,28 @@ export async function ingestAudioObject(key: string, fileSize?: number): Promise
     file_size: meta.fileSize,
     source: 'r2',
   });
-  if (error) return { key, ok: false, error: error.message };
+  if (error) {
+    console.error('[cloud-automation] samples upsert fehlgeschlagen:', error);
+    return { key, ok: false, error: 'cloud-automation-sample-upsert-failed' };
+  }
 
   // Tags normalisiert in sample_tags spiegeln.
-  await db.from('sample_tags').delete().eq('sample_id', key);
-  for (const tag of meta.tags) {
-    await db.from('sample_tags').upsert({ sample_id: key, tag });
+  try {
+    const { error: deleteError } = await db.from('sample_tags').delete().eq('sample_id', key);
+    if (deleteError) {
+      console.error('[cloud-automation] sample_tags delete fehlgeschlagen:', deleteError);
+      return { key, ok: false, error: 'cloud-automation-tag-sync-failed' };
+    }
+    for (const tag of meta.tags) {
+      const { error: tagError } = await db.from('sample_tags').upsert({ sample_id: key, tag });
+      if (tagError) {
+        console.error('[cloud-automation] sample_tags upsert fehlgeschlagen:', tagError);
+        return { key, ok: false, error: 'cloud-automation-tag-sync-failed' };
+      }
+    }
+  } catch (tagSyncError) {
+    console.error('[cloud-automation] Tag-Sync fehlgeschlagen:', tagSyncError);
+    return { key, ok: false, error: 'cloud-automation-tag-sync-failed' };
   }
   return { key, ok: true };
 }

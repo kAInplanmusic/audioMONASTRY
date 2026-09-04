@@ -2,8 +2,8 @@
 # Wird beim Container-Start von startup.sh gelesen; env hat Vorrang.
 runtime:
   device: cuda              # cuda | cpu | simulated
-  vram_budget_gb: 80
-  vram_safety_margin_gb: 6
+  vram_budget_gb: 80          # physikalisches GPU-Gesamtbudget (A100/H100 80 GB)
+  vram_safety_margin_gb: 6    # wird im ModelManager vom Budget abgezogen (nutzbar ≈ 74 GB)
   idle_timeout_minutes: 20
   max_concurrent_inference: 2
   log_level: INFO

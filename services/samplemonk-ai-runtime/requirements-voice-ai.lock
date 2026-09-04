@@ -1,0 +1,12 @@
+# Optional – Qwen3-TTS für voiceMONK (Apache-2.0, inkl. Deutsch)
+# ==============================================================
+# Nicht im Basis-Lock enthalten, weil qwen-tts transformers exakt auf 4.57.3
+# pinnt (Basis-Lock nutzt 4.46.3). Nur aktivieren, wenn voiceMONK den
+# Qwen3-TTS-Handler im samplemonk-ai-runtime wirklich nutzen soll:
+#
+#   docker build --build-arg AI_INSTALL_VOICE_AI=1 -t samplemonk-ai-runtime .
+#
+# Achtung: Die Installation hebt transformers im Container auf 4.57.3 an.
+qwen-tts==0.1.1
+transformers==4.57.3
+accelerate==1.12.0
