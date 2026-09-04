@@ -57,3 +57,24 @@
      aktuell 5/5 belegt → betroffene Instanz skalieren oder Instanz ergänzen)
      **oder** via **Replicate (GPU, Pay-per-Use)**
      **oder** über einen **kostenlosen bzw. stundenbasierten Zusatzhost**
+
+---
+
+## 📌 Bereits in `main` als optionaler Pfad (Benchmark/Entscheid ausstehend)
+
+> Diese Experimente liegen aktuell in `main`, sind dort aber nur **optional
+> mit JS-Fallback** verdrahtet. Sie gehören konzeptionell hierher (Sandbox),
+> bis die Aufnahme-Kriterien oben erfüllt sind. Entscheidung 2026-09-04:
+> dokumentieren statt verschieben (kein Umbau-Risiko).
+
+| # | Modul in main | VISIONS-Punkt | Offener Benchmark/Entscheid |
+|---|---|---|---|
+| 1 | `src/core/gpu/WebGPUKernel.ts`, `SpatialConvKernel.ts`, `src/webgpu/webgpu_adapter.ts` | V1.4 WebGPU-Spektral-Effekte | GPU-Transfer < CPU-Ersparnis bei ≥8192-FFT |
+| 2 | `services/audio-runtime/` (Rust/cpal), `src/core/audio/runtime/`, `NativeBackend.ts` | V1.9 Native Client | ASIO/CoreAudio-Mehrgeräte-Bedarf messen |
+| 3 | `services/mixer/` (Rust-Mixer) | R3 Server-Side Mixer | Lasttest >4 User |
+| 4 | `src/core/audio/V2StudioGraph.ts`, `OfflineBounceEngine.ts` | V1.5 Hybride Engine | Dropouts Mastering/Reverb unter Last |
+| 5 | `src/audio/wasm/dspKernel.c`, `WasmPluginHost.ts`, `WasmBackend.ts` | V1.1 WASM-SIMD-DSP | ≥1,5× schneller als JS-Worklet bei 8+ Kanälen |
+| 6 | `src/audio/wasm/hrtf_conv/`, `src/audio/spatial/wasmHrtf.ts` | V2 Binaural/HRTF High-Quality | Qualitäts-/CPU-Vergleich JS-Kernel |
+| 7 | `src/ai/localDemucs.ts` (onnxruntime-web lazy) | V2 Eigene Modell-Runtime | Latenz <100 ms / Qualität vs. Replicate |
+| 8 | `src/utils/opfs.ts` + SampleContext-Integration | V1.6 OPFS-Sample-Cache | >2-GB-Benchmark (Laden <50 ms) |
+
