@@ -6,9 +6,8 @@
 #   1. check      – zeigt lokalen Commit/Version, Flotten-Status und ob die
 #                   Rollen-Snapshots den aktuellen Commit tragen.
 #   2. apply      – weckt die Flotte falls nötig, deployed den aktuellen Stand
-#                   auf app-1, erneuert die Rollen-Snapshots (mit Commit-/
-#                   Versions-Label) und macht optional einen Screenshot.
-#   3. screenshot – nur Screenshot (setzt eine laufende Flotte voraus).
+#                   auf app-1 und erneuert die Rollen-Snapshots (mit Commit-/
+#                   Versions-Label).
 #
 # Konfiguration (env oder .env.deploy im Repo-Root):
 #   PORTAL_URL         https://anunnakitools.de
@@ -20,7 +19,7 @@
 #
 # Aufruf:
 #   bash scripts/hetzner/fleet-preflight.sh check
-#   bash scripts/hetzner/fleet-preflight.sh apply --screenshot
+#   bash scripts/hetzner/fleet-preflight.sh apply
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -160,21 +159,11 @@ cmd_apply() {
     refresh_snapshots
   fi
 
-  if [[ "${1:-}" == "--screenshot" || "${2:-}" == "--screenshot" ]]; then
-    bash scripts/hetzner/fleet-preflight.sh screenshot
-  fi
   echo "✅ Preflight abgeschlossen. Nächster Flotten-Start nutzt den aktuellen Stand."
-}
-
-cmd_screenshot() {
-  need_login_env
-  ADMIN_USER="$ADMIN_USER" ADMIN_PASSWORD="$ADMIN_PASSWORD" PORTAL_URL="$PORTAL_URL" \
-    node scripts/hetzner/fleet-screenshot.mjs
 }
 
 case "${1:-check}" in
   check) cmd_check ;;
-  apply) cmd_apply "${2:-}" ;;
-  screenshot) cmd_screenshot ;;
-  *) echo "Nutzung: $0 {check|apply [--screenshot]|screenshot}" >&2; exit 1 ;;
+  apply) cmd_apply ;;
+  *) echo "Nutzung: $0 {check|apply}" >&2; exit 1 ;;
 esac
