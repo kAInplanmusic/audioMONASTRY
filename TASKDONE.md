@@ -9,6 +9,22 @@
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
 
+### V. 1.210.001 HYPERDAW · Struktur-, Routing- & Asset-Arbeiten (2026-09-04)
+
+- [x] **Version:** `V. 1.210.001 – audioMONASTRY HYPERDAW` (package.json, metadata.json, index.html, UI-Header + Startseite) – Commits `83d5333`.
+- [x] **Bundle-Diät:** Supabase-Client auf `@supabase/postgrest-js` verschlankt → Client-Bundle **1,57 → 1,38 MB** (unter 1,5-MB-Warnschwelle) – `e4791c3`; P2-5-Prüfpunkt lokal verifiziert.
+- [x] **Flotten-Preflight:** Portal-Worker labelt Snapshots mit `commit`/`version`; `scripts/hetzner/fleet-preflight.sh` (check/apply) + Worker-Deploy via Workers-API – `d3e478f`, `509380f`, `bddceef` (Assets).
+- [x] **Struktur 3 FIX / 18 VARIABEL:** masterplayer = feste View-only-Leiste (keine Eingaben), perfMONK + aiMONK fest unten (ai ohne Play/Stop), mixerMONK nur noch variabel – `c42da79`; Smoke/masterPlayerFixed angepasst.
+- [x] **Klick-Logik:** Klick/Touch öffnet das Aktionsmenü (Clipboard → Mixer/Track → eigenes Plugin); MAIN-Schutz – nur der mixerMONK-Halter ändert MAIN (Play/Stop/Load/Trigger); DJ-Kanalfreigabe `FREI` erlaubt anderen das Hineinladen – `cd0fa1c`, `565fe9a`.
+- [x] **Audio-Routing:** pro User MAIN / MIX (MAIN+Plugins) / NUR PLUGIN; DJ-PFL (`audioEngine.setChannelPfl`); WebMainOut (`/master-out`) als reiner Main-Signal-Pfad verifiziert – `da3fefa`, `472b3ed`.
+- [x] **mixerMONK:** 6 Kanäle CH1–CH6, 3 Fader (links 1·2, Crossfader 1-2-3 ↔ 4-5-6, rechts 5·6), Controller links/rechts mit 3 austauschbaren Skins, CUE=PFL, FREI je Kanal – `ba0320e`.
+- [x] **Asset-UIs:** EQ auf 36 Bänder (Worklet + UI + Presets), Spatial-Setup-Referenzen 12/18/24, GarageBand-Bildpfade repariert, Logo-Fallback, Referenzbilder in DSP/FX/MIDI/drum/mcp – `34c5706`, `e82eef2`.
+- [x] **Supabase (Schreibfreigabe):** Migrationen 002–005 angewendet, `supabase:verify` grün, 41 Sample-Embeddings geseedet (`match_samples`-RPC funktioniert) – `e82eef2`.
+- [x] **Library-Performance:** Musik-Pagination (9/Seite) + BPM/Key-Analyse nur für sichtbare Seite – `e82eef2`.
+- [x] **SFZ/OPFS-Streaming (#3):** `src/core/sampler/sfzStreaming.ts` (`planChunkRanges` + `SfzSampleCache` 64-MB-LRU) an `audioEngine` verdrahtet, 4 Tests – `4040ec1`, `5277d47`.
+- [x] **Orchester-CC0 (#6):** `npm run download:orchestral` (streaming, >2-GiB-fähig) lädt VSCO 2 CE und entpackt 3249 Dateien nach `public/data/orchestral/` (gitignored) – `5277d47`.
+- [x] **Auto-Save (#1):** verifiziert – Recorder-Takes und Stem-Extractor-Ergebnisse speichern automatisch über `SampleContext.addSample` in die Library.
+
 ### P3-3 / GAP-4 / GAP-5 / AUD-P2-1 · Prio-3-Abschluss (2026-09-03)
 
 - [x] **P3-3 Prüfpunkt – Report je Plugin (Score, Dauer, Fehler):** `src/core/ai/orchestrator/evalMatrix.ts` definiert die verbindlichen 21 Plugin-IDs, den Mindest-Score je Plugin (4.0; 4.5 für MAIN-kritische Plugins masterplayer/mixer/eq/dsp/mastering) und ein Laufzeit-Budget. `npm run eval:ai` misst je Plugin Score und Dauer, sammelt Fehler und schreibt `test-results/ai-eval-report.json` + `ai-eval-report.md`; Score-Abfall oder Budget-Überschreitung → Exit 1. Nightly lädt die Reports als Artefakt hoch und schreibt den Markdown-Report in die Job-Summary. Tests: `tests/evalMatrix.test.ts`.
