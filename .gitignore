@@ -14,6 +14,9 @@ deepcode/
 # ONNX-Modelle (gross, separat via scripts/download-models.sh)
 public/models/
 
+# Orchester-CC0-Audiodateien (gross, via npm run download:orchestral)
+public/data/orchestral/
+
 # Python
 __pycache__/
 *.pyc
