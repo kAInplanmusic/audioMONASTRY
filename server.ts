@@ -65,6 +65,28 @@ const fleetTargets: { masterPlayer: string; ollama: string; stemAi: string } = {
   stemAi: '',
 };
 
+/** Validiert einen Fleet-Knoten (Hostname/IP, optional :port) gegen SSRF-/Injection-Werte. */
+function buildFleetTarget(raw: unknown, defaultPort: number): string {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!value || value.length > 255) return '';
+  if (/[\s/@\\?&#]/.test(value)) return '';
+  const withoutScheme = value.replace(/^https?:\/\//i, '');
+  const portIndex = withoutScheme.lastIndexOf(':');
+  let host = withoutScheme;
+  let port = defaultPort;
+  if (portIndex !== -1) {
+    const portPart = withoutScheme.slice(portIndex + 1);
+    if (!/^\d{1,5}$/.test(portPart)) return '';
+    host = withoutScheme.slice(0, portIndex);
+    port = Number(portPart);
+  }
+  if (!host || host.length > 253) return '';
+  // Hostname oder IPv4, keine Wildcards/Unterstriche/Pfade.
+  if (!/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(host) && !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return '';
+  if (port < 1 || port > 65535) return '';
+  return `http://${host}:${port}`;
+}
+
 async function wireFleetFromPortal(): Promise<void> {
   const token = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
   if (!token) return; // Lokal/Test: keine Flotten-Verdrahtung.
@@ -76,10 +98,14 @@ async function wireFleetFromPortal(): Promise<void> {
     if (!resp.ok) return;
     const data = (await resp.json()) as { fleet?: Record<string, string> };
     const f = data.fleet ?? {};
-    if (f['samplemonk-master-1']) fleetTargets.masterPlayer = `http://${f['samplemonk-master-1']}:8000`;
-    if (f['samplemonk-ai-1']) {
-      fleetTargets.ollama = `http://${f['samplemonk-ai-1']}:11434`;
-      fleetTargets.stemAi = `http://${f['samplemonk-ai-1']}:8000`;
+    const masterTarget = buildFleetTarget(f['samplemonk-master-1'], 8000);
+    if (masterTarget) fleetTargets.masterPlayer = masterTarget;
+    const aiTarget = buildFleetTarget(f['samplemonk-ai-1'], 8000);
+    if (aiTarget) {
+      const ollamaPort = Number(process.env.FLEET_OLLAMA_PORT || 11434);
+      const ollamaTarget = buildFleetTarget(f['samplemonk-ai-1'], Number.isFinite(ollamaPort) ? ollamaPort : 11434);
+      fleetTargets.ollama = ollamaTarget || '';
+      fleetTargets.stemAi = aiTarget;
     }
     console.log('[fleet] Knoten verdrahtet:', JSON.stringify({ masterPlayer: fleetTargets.masterPlayer, ollama: fleetTargets.ollama, stemAi: fleetTargets.stemAi }));
   } catch (e) {
@@ -257,7 +283,7 @@ const expensiveLimiter = rateLimit({
 });
 
 app.use('/api', apiLimiter);
-app.use(['/api/ai', '/api/voice', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload'], expensiveLimiter);
+app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload'], expensiveLimiter);
 
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
@@ -476,7 +502,8 @@ app.get('/api/cloud/health', async (_req, res) => {
     const health = await cloudHealth();
     res.json(health);
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    console.error('[cloud] /api/cloud/health fehlgeschlagen:', e);
+    res.status(500).json({ error: 'cloud-health-failed' });
   }
 });
 
@@ -487,11 +514,13 @@ app.post('/api/cloud/sync', async (_req, res) => {
     try {
       r2 = await syncR2ToSupabase();
     } catch (e) {
-      r2 = { total: 0, ok: 0, failed: 0, errors: [(e as Error).message] };
+      console.error('[cloud] syncR2ToSupabase fehlgeschlagen:', e);
+      r2 = { total: 0, ok: 0, failed: 0, errors: ['r2-sync-failed'] };
     }
     res.status(result.ok ? 200 : 502).json({ ...result, r2 });
   } catch (e) {
-    res.status(500).json({ error: (e as Error).message });
+    console.error('[cloud] /api/cloud/sync fehlgeschlagen:', e);
+    res.status(500).json({ error: 'cloud-sync-failed' });
   }
 });
 
@@ -517,7 +546,8 @@ app.post('/api/cloud/samples', async (req, res) => {
     });
     res.status(result.ok ? 200 : 502).json(result);
   } catch (e) {
-    res.status(500).json({ ok: false, error: (e as Error).message });
+    console.error('[cloud] /api/cloud/samples fehlgeschlagen:', e);
+    res.status(500).json({ ok: false, error: 'cloud-sample-upload-failed' });
   }
 });
 
@@ -537,7 +567,8 @@ app.post('/api/cloud/music', async (req, res) => {
     });
     res.status(result.ok ? 200 : 502).json(result);
   } catch (e) {
-    res.status(500).json({ ok: false, error: (e as Error).message });
+    console.error('[cloud] /api/cloud/music fehlgeschlagen:', e);
+    res.status(500).json({ ok: false, error: 'cloud-music-upload-failed' });
   }
 });
 
@@ -575,7 +606,8 @@ app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', '
     const ingest = await ingestAudioObject(key, buf.byteLength);
     res.json({ ok: true, ...result, ingest });
   } catch (e) {
-    res.status(502).json({ ok: false, error: (e as Error).message });
+    console.error('[cloud] /api/cloud/upload fehlgeschlagen:', e);
+    res.status(502).json({ ok: false, error: 'cloud-upload-failed' });
   }
 });
 
@@ -1551,14 +1583,63 @@ async function sendHfBlob(res: Response, upstream: globalThis.Response): Promise
   res.send(buf);
 }
 
+/** Eigenen samplemonk-ai-runtime-Endpoint bevorzugen, falls konfiguriert. */
+function voiceRuntimeUrl(): string {
+  return (process.env.VOICE_AI_RUNTIME_URL || process.env.HF_ENDPOINT_URL || '').trim();
+}
+
+/**
+ * Ruft den eigenen Custom-Container (samplemonk-ai-runtime) über POST /infer auf.
+ * Liefert das fertige WAV als Buffer zurück. Der Runtime-Handler muss
+ * `{ audioBase64, sampleRate }` zurückgeben.
+ */
+async function voiceRuntimeInference(
+  task: string,
+  model: string,
+  input: Record<string, unknown>,
+  timeoutMs = 180_000,
+): Promise<Buffer> {
+  const base = voiceRuntimeUrl();
+  if (!base) throw new Error('VOICE_AI_RUNTIME_URL/HF_ENDPOINT_URL fehlt');
+  const token = (process.env.HF_TOKEN || process.env.HF_API_KEY || '').trim();
+  const resp = await fetch(`${base.replace(/\/+$/, '')}/infer`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ task, model, input }),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!resp.ok) {
+    const detail = await resp.text().catch(() => '');
+    throw new Error(`AI-Runtime ${model} HTTP ${resp.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = (await resp.json()) as { result?: { audioBase64?: string; sampleRate?: number } };
+  if (!data.result?.audioBase64) throw new Error(`AI-Runtime ${model}: audioBase64 fehlt`);
+  return Buffer.from(data.result.audioBase64, 'base64');
+}
+
+function sendWavBuffer(res: Response, buf: Buffer): void {
+  res.setHeader('Content-Type', 'audio/wav');
+  res.setHeader('Cache-Control', 'no-store');
+  res.send(buf);
+}
+
 /** Sanitisiert Text/Prompts (kein Prompt-Injection-Rauschen, Länge begrenzt). */
 function cleanVoiceText(raw: unknown, max = 500): string {
   return String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 }
 
-// --- POST /api/voice/tts  → Text → Stimme (HF MMS-TTS) ---
+// --- POST /api/voice/tts  → Text → Stimme (Qwen3-TTS/MMS via eigener Runtime oder HF) ---
 app.post('/api/voice/tts', async (req, res) => {
-  const { text, model } = (req.body ?? {}) as { text?: string; model?: string };
+  const { text, model, language, speaker, instruct } = (req.body ?? {}) as {
+    text?: string;
+    model?: string;
+    language?: string;
+    speaker?: string;
+    instruct?: string;
+  };
   const clean = cleanVoiceText(text);
   if (!clean) return res.status(400).json({ error: 'text fehlt' });
   const selected = hfModelFor('tts', model);
@@ -1570,6 +1651,21 @@ app.post('/api/voice/tts', async (req, res) => {
       const upstream = await replicateAudio(ttsModel, { prompt: clean });
       await sendHfBlob(res, upstream);
     } else {
+      // Eigene Runtime (samplemonk-ai, Qwen3-TTS) zuerst – HF-Serverless nur Fallback.
+      if (voiceRuntimeUrl()) {
+        const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
+        try {
+          const runtimeBuf = await voiceRuntimeInference('tts', runtimeModel, {
+            text: clean,
+            language: cleanVoiceText(language, 50) || 'German',
+            speaker: cleanVoiceText(speaker, 64) || 'Ryan',
+            instruct: cleanVoiceText(instruct, 500),
+          });
+          return sendWavBuffer(res, runtimeBuf);
+        } catch (runtimeErr) {
+          console.warn(`[voice] Runtime-TTS (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, runtimeErr instanceof Error ? runtimeErr.message : runtimeErr);
+        }
+      }
       const upstream = await hfInference(selected, clean);
       await sendHfBlob(res, upstream);
     }
@@ -1593,6 +1689,16 @@ app.post('/api/voice/sing', async (req, res) => {
       const upstream = await replicateAudio(singModel, { prompt: `♪ ${clean} ♪` });
       await sendHfBlob(res, upstream);
     } else {
+      // Eigene Runtime (Bark) zuerst – HF-Serverless nur Fallback.
+      if (voiceRuntimeUrl()) {
+        const runtimeModel = (process.env.VOICE_AI_RUNTIME_SING_MODEL || 'bark').trim();
+        try {
+          const runtimeBuf = await voiceRuntimeInference('sing', runtimeModel, { text: `♪ ${clean} ♪` });
+          return sendWavBuffer(res, runtimeBuf);
+        } catch (runtimeErr) {
+          console.warn(`[voice] Runtime-Sing (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, runtimeErr instanceof Error ? runtimeErr.message : runtimeErr);
+        }
+      }
       // Bark singt am zuverlässigsten mit ♪-Noten-Prompt.
       const upstream = await hfInference(selected, `♪ ${clean} ♪`);
       await sendHfBlob(res, upstream);
@@ -1632,6 +1738,24 @@ app.post('/api/voice/song', async (req, res) => {
   const fallback = model ? '' : hfModelFor('musicFallback');
   const candidates = [primary, fallback].filter((m) => m.length > 0);
   let lastError = '';
+
+  // Eigene Runtime (MusicGen im samplemonk-ai) zuerst – HF-Serverless Fallback.
+  if (voiceRuntimeUrl()) {
+    const runtimeModel = (process.env.VOICE_AI_RUNTIME_SONG_MODEL || 'musicgen-small').trim();
+    try {
+      const runtimeBuf = await voiceRuntimeInference(
+        'song',
+        runtimeModel,
+        { prompt: inputs, maxDuration: duration },
+        240_000,
+      );
+      return sendWavBuffer(res, runtimeBuf);
+    } catch (runtimeErr) {
+      lastError = runtimeErr instanceof Error ? runtimeErr.message : 'Unbekannter Fehler';
+      console.warn(`[voice] Runtime-Song (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, lastError);
+    }
+  }
+
   for (const candidate of candidates) {
     try {
       const upstream = await hfInference(candidate, inputs, parameters, 120000);
@@ -1642,6 +1766,98 @@ app.post('/api/voice/song', async (req, res) => {
     }
   }
   return res.status(502).json({ error: 'song fehlgeschlagen', detail: lastError || 'Kein Modell verfügbar' });
+});
+
+// ===========================================================================
+// soundMONK: Server-AI-Generierung (MusicGen/Runtime) – Browser-Fallback lokal
+// ===========================================================================
+const SOUND_DEFAULT_PROMPTS: Record<string, string> = {
+  beat: 'electronic techno beat, 128 BPM, driving drums, acid bassline',
+  bass: 'deep electronic bass one-shot, sub-heavy, punchy, short decay',
+  atmosphere: 'dark ambient pad, wide reverb, evolving textures, cinematic',
+  oneshot: 'electronic percussion one-shot, tight, clean transient, studio quality',
+};
+
+app.post('/api/sound/generate', async (req, res) => {
+  const { kind, prompt, durationSeconds } = (req.body ?? {}) as {
+    kind?: string;
+    prompt?: string;
+    durationSeconds?: number;
+  };
+  const kindClean = String(kind ?? 'beat').replace(/[^a-z]/gi, '').toLowerCase().slice(0, 20);
+  const promptClean = cleanVoiceText(prompt, 300);
+  const inputs = promptClean || SOUND_DEFAULT_PROMPTS[kindClean] || SOUND_DEFAULT_PROMPTS.beat;
+  const duration = Math.max(2, Math.min(20, Number(durationSeconds) || 6));
+
+  if (!voiceRuntimeUrl()) {
+    return res.status(503).json({ error: 'soundMONK: keine AI-Runtime konfiguriert', hint: 'VOICE_AI_RUNTIME_URL oder HF_ENDPOINT_URL setzen' });
+  }
+  try {
+    const runtimeModel = (process.env.SOUND_AI_RUNTIME_MODEL || 'musicgen-small').trim();
+    const runtimeBuf = await voiceRuntimeInference('song', runtimeModel, { prompt: inputs, maxDuration: duration }, 240_000);
+    return sendWavBuffer(res, runtimeBuf);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'Unbekannter Fehler';
+    console.warn('[sound] AI-Generierung fehlgeschlagen:', detail);
+    return res.status(502).json({ error: 'sound generation fehlgeschlagen', detail });
+  }
+});
+
+// ===========================================================================
+// songMONK: eigener Song-Endpoint (aus VoiceMONK entkoppelt)
+// Nutzt die Runtime (MusicGen) zuerst; HF-Serverless als Fallback.
+// Später: ACE-Step/DiffRhythm als echte Vocal-Song-Modelle ergänzen.
+// ===========================================================================
+app.post('/api/song/generate', async (req, res) => {
+  const { prompt, model, durationSeconds, style, bpm } = (req.body ?? {}) as {
+    prompt?: string;
+    model?: string;
+    durationSeconds?: number;
+    style?: string;
+    bpm?: number;
+  };
+  const clean = cleanVoiceText(prompt);
+  if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
+
+  const duration = Math.max(1, Math.min(30, Number(durationSeconds) || 8));
+  const maxTokens = Math.max(64, Math.round(duration * 50 / 8));
+  const parameters = { max_new_tokens: maxTokens };
+
+  const styleClean = String(style ?? '').replace(/[^\p{L}\p{N}\s\-]/gu, '').trim().slice(0, 80);
+  const bpmClean = Number.isFinite(Number(bpm)) && Number(bpm) > 0 ? Math.round(Number(bpm)) : 0;
+  const inputs = [
+    clean,
+    styleClean ? `Style: ${styleClean}` : '',
+    bpmClean ? `BPM: ${bpmClean}` : '',
+  ].filter(Boolean).join(', ');
+
+  const primary = hfModelFor('music', model);
+  const fallback = model ? '' : hfModelFor('musicFallback');
+  const candidates = [primary, fallback].filter((m) => m.length > 0);
+  let lastError = '';
+
+  // Eigene Runtime zuerst (MusicGen small als Default, Medium/ACE-Step später per Env).
+  if (voiceRuntimeUrl()) {
+    const runtimeModel = (process.env.SONG_AI_RUNTIME_MODEL || 'musicgen-small').trim();
+    try {
+      const runtimeBuf = await voiceRuntimeInference('song', runtimeModel, { prompt: inputs, maxDuration: duration }, 240_000);
+      return sendWavBuffer(res, runtimeBuf);
+    } catch (runtimeErr) {
+      lastError = runtimeErr instanceof Error ? runtimeErr.message : 'Unbekannter Fehler';
+      console.warn(`[song] Runtime-Song (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, lastError);
+    }
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const upstream = await hfInference(candidate, inputs, parameters, 120000);
+      return await sendHfBlob(res, upstream);
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : 'Unbekannter Fehler';
+      console.warn(`[song] ${candidate} fehlgeschlagen:`, lastError);
+    }
+  }
+  return res.status(502).json({ error: 'songMONK fehlgeschlagen', detail: lastError || 'Kein Modell verfügbar' });
 });
 
 // ===========================================================================

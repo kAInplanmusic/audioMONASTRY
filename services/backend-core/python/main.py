@@ -8,6 +8,8 @@ master-player). Robustheit:
   * Status-/Body-Durchreichung statt pauschalem 200
   * CORS nur für konfigurierte Origins
 """
+import asyncio
+import logging
 import os
 from typing import Any
 
@@ -18,6 +20,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from celery_app import celery_app, render_project_task
+
+logger = logging.getLogger("samplemonk.gateway")
 
 app = FastAPI(title="sampleMONK Backend-Core", version="2.0.0")
 
@@ -39,15 +43,45 @@ SERVICES = {
 }
 
 PROXY_TIMEOUT = float(os.environ.get("GATEWAY_PROXY_TIMEOUT_SEC", "120"))
+GATEWAY_API_TOKEN = os.environ.get("GATEWAY_API_TOKEN", "").strip()
 _client: httpx.AsyncClient | None = None
+_client_lock: asyncio.Lock | None = None
 
 
-def get_client() -> httpx.AsyncClient:
-    """Liefert den globalen httpx-Client (lazy, mit Timeout)."""
+def _get_client_lock() -> asyncio.Lock:
+    global _client_lock
+    if _client_lock is None:
+        _client_lock = asyncio.Lock()
+    return _client_lock
+
+
+async def get_client() -> httpx.AsyncClient:
+    """Liefert den globalen httpx-Client (lazy, thread-/task-sicher mit Lock)."""
     global _client
-    if _client is None or _client.is_closed:
-        _client = httpx.AsyncClient(timeout=PROXY_TIMEOUT)
-    return _client
+    if _client is not None and not _client.is_closed:
+        return _client
+    async with _get_client_lock():
+        if _client is None or _client.is_closed:
+            _client = httpx.AsyncClient(timeout=PROXY_TIMEOUT)
+        return _client
+
+
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    """Optionale Gateway-Authentifizierung: aktiv nur wenn GATEWAY_API_TOKEN gesetzt ist."""
+    if GATEWAY_API_TOKEN and request.url.path != "/health":
+        auth = request.headers.get("authorization", "")
+        supplied = ""
+        if auth.lower().startswith("bearer "):
+            supplied = auth[7:].strip()
+        else:
+            supplied = request.headers.get("x-api-key", "").strip()
+        if supplied != GATEWAY_API_TOKEN:
+            return JSONResponse(
+                {"status": "error", "message": "unauthorized"},
+                status_code=401,
+            )
+    return await call_next(request)
 
 
 @app.on_event("shutdown")
@@ -60,8 +94,10 @@ async def _shutdown() -> None:
 async def get_render_status(task_id: str) -> dict[str, Any]:
     res = AsyncResult(task_id, app=celery_app)
     try:
-        result = res.result
+        # Celery-Result-Abruf kann Redis/Backend blockieren → Threadpool.
+        result = await asyncio.to_thread(lambda: res.result)
     except Exception:  # pragma: no cover - Ergebnis evtl. nicht (mehr) verfügbar
+        logger.exception("render status abruf fehlgeschlagen task_id=%s", task_id)
         result = None
     return {"task_id": task_id, "status": res.status, "result": result}
 
@@ -75,10 +111,11 @@ async def proxy_request(service_name: str, path: str, request: Request):
     except Exception:
         raise HTTPException(status_code=400, detail="Ungültiger JSON-Body")
     try:
-        response = await get_client().post(f"{SERVICES[service_name]}{path}", json=body)
+        response = await (await get_client()).post(f"{SERVICES[service_name]}{path}", json=body)
     except httpx.HTTPError as exc:
+        logger.warning("service %s nicht erreichbar: %s", service_name, exc)
         return JSONResponse(
-            {"status": "error", "message": f"Service {service_name} nicht erreichbar: {exc}"},
+            {"status": "error", "message": f"Service {service_name} nicht erreichbar"},
             status_code=502,
         )
     try:
@@ -116,7 +153,12 @@ async def apply_fx(request: Request):
 
 @app.post("/api/render")
 async def render_project(request: Request):
-    project_data = await request.json()
+    try:
+        project_data = await request.json()
+    except Exception as exc:  # noqa: BLE001 – ungültiges JSON sauber ablehnen
+        raise HTTPException(status_code=400, detail="Ungültiger JSON-Body") from exc
+    if not isinstance(project_data, dict):
+        raise HTTPException(status_code=400, detail="project data must be an object")
     task = render_project_task.delay(project_data)
     return {"task_id": task.id, "status": "Render started"}
 

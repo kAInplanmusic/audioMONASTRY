@@ -97,7 +97,28 @@ class WebRTCManager {
     return () => { this.dataChannelListeners.delete(cb); };
   }
 
-  private dispatchDataMessage(data: any): void {
+  private dispatchDataMessage(data: any, sourceSocketId?: string): void {
+    if (!data || typeof data !== 'object') return;
+    if (typeof data.type !== 'string' || data.type.length === 0 || data.type.length > 128) return;
+    // Von einem konkreten DataChannel stammende Nachrichten dürfen senderId
+    // nicht spoofen: der Server-/Session-Context bestimmt den echten Absender.
+    if (sourceSocketId) {
+      const peer = this.sessionMembers.find((m) => m.socketId === sourceSocketId);
+      if (!peer) {
+        console.warn('[webrtc] DataChannel-Nachricht von unbekanntem Peer verworfen.', { sourceSocketId, type: data.type });
+        return;
+      }
+      if (data.senderId !== undefined && String(data.senderId) !== peer.userId) {
+        console.warn('[webrtc] DataChannel-Nachricht mit gespoofter senderId verworfen.', {
+          sourceSocketId,
+          claimedSender: data.senderId,
+          actualUser: peer.userId,
+          type: data.type,
+        });
+        return;
+      }
+      data = { ...data, senderId: peer.userId };
+    }
     this.onDataChannelMessage(data);
     this.dataChannelListeners.forEach((l) => l(data));
   }
@@ -466,7 +487,7 @@ class WebRTCManager {
             // One-Way-Latenz für die Telemetrie (RTT/2).
             this.lastRttMs = Math.max(0, (performance.now() - data.timestamp) / 2);
         }
-        this.dispatchDataMessage(data);
+        this.dispatchDataMessage(data, targetId);
         // console.log('Data from', targetId, data);
       };
     };

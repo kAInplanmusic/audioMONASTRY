@@ -130,6 +130,12 @@ def _normalize_task(task: str) -> str:
 
 
 def run_inference(task: str, model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    if not isinstance(task, str) or len(task) > 64 or not task.strip():
+        raise ModelUnavailableError("invalid task")
+    if not isinstance(model_id, str) or len(model_id) > 256 or not model_id.strip():
+        raise ModelUnavailableError("invalid model id")
+    if not isinstance(payload, dict):
+        raise ModelUnavailableError("payload must be an object")
     handler = HANDLERS.get(_normalize_task(task))
     if handler is None:
         raise ModelUnavailableError(f"no handler for task: {task}")
@@ -251,6 +257,68 @@ def hf_generate(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": 32000}
 
 
+def qwen3_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """Qwen3-TTS (CustomVoice): Apache-2.0, multilingual inkl. Deutsch.
+
+    Optional package: `pip install qwen-tts` (bringt transformers 4.57.x mit).
+    Wenn das Paket nicht installiert ist, liefert der Handler einen klaren
+    ModelUnavailableError statt einer Fake-Antwort.
+    """
+    qwen_tts = _require_lib("qwen_tts", "qwen-tts")  # noqa: F841 – Importprüfung
+    torch = _require_lib("torch", "torch")
+    numpy = _require_lib("numpy", "numpy")
+
+    text = str(payload.get("text", ""))[:2000].strip()
+    if not text:
+        raise ModelUnavailableError("text required for qwen3-tts")
+    language = str(payload.get("language") or "German")[:50]
+    speaker = str(payload.get("speaker") or "Ryan")[:64]
+    instruct_raw = payload.get("instruct")
+    instruct = str(instruct_raw)[:500].strip() if instruct_raw else ""
+    device = _device()
+    device_str = f"cuda:{torch.cuda.current_device()}" if device.type == "cuda" else "cpu"
+    dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+
+    def factory() -> Any:
+        from qwen_tts import Qwen3TTSModel  # type: ignore
+
+        return Qwen3TTSModel.from_pretrained(
+            definition.repository,
+            revision=definition.revision,
+            device_map=device_str,
+            dtype=dtype,
+        )
+
+    model = _cache_get(f"qwen3tts:{model_id}", factory)
+    try:
+        # 0.6B CustomVoice ignoriert/unterstützt kein instruct; 1.7B schon.
+        if "1.7B" in definition.repository:
+            wavs, sr = model.generate_custom_voice(
+                text=text,
+                language=language,
+                speaker=speaker,
+                instruct=instruct or "",
+                non_streaming_mode=True,
+            )
+        else:
+            wavs, sr = model.generate_custom_voice(
+                text=text,
+                language=language,
+                speaker=speaker,
+                non_streaming_mode=True,
+            )
+    except Exception as exc:  # noqa: BLE001 – API-Fehler kontrolliert weiterreichen
+        raise ModelUnavailableError(f"qwen3-tts inference failed: {exc}") from exc
+
+    if not wavs:
+        raise ModelUnavailableError("qwen3-tts returned no audio")
+    scipy = _require_lib("scipy", "scipy")
+    audio = numpy.asarray(wavs[0], dtype=numpy.float32)
+    buf = io.BytesIO()
+    scipy.io.wavfile.write(buf, int(sr), audio)
+    return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": int(sr)}
+
+
 def hf_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     torch = _require_lib("torch", "torch")
 
@@ -274,10 +342,51 @@ def hf_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) 
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": 16000}
 
 
+def hf_bark_sing(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """Suno Bark (Gesang/Stimme) – task `sing`.
+
+    Der Server schickt den Text bereits als ♪-Prompt, damit Bark eine
+    gesangsartige Ausgabe erzeugt. Liefert WAV (24 kHz) als audioBase64.
+    """
+    torch = _require_lib("torch", "torch")
+
+    text = str(payload.get("text", ""))[:600].strip()
+    if not text:
+        raise ModelUnavailableError("text required for bark sing")
+
+    def factory() -> Tuple[Any, Any, int]:
+        from transformers import AutoProcessor, BarkModel  # type: ignore
+
+        processor = AutoProcessor.from_pretrained(definition.repository, revision=definition.revision)
+        model = BarkModel.from_pretrained(definition.repository, revision=definition.revision).to(_device())
+        sr = int(getattr(model.generation_config, "sample_rate", 24000))
+        return model, processor, sr
+
+    model, processor, sr = _cache_get(f"bark:{model_id}", factory)
+    inputs = processor(text, return_tensors="pt")
+    inputs = {k: v.to(_device()) for k, v in inputs.items()}
+    with torch.no_grad():
+        out = model.generate(**inputs, do_sample=True)
+    scipy = _require_lib("scipy", "scipy")
+    audio = out[0].cpu().numpy()
+    buf = io.BytesIO()
+    scipy.io.wavfile.write(buf, sr, audio)
+    return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": sr}
+
+
+def tts_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """tts-Dispatch: Qwen3-TTS nutzt Custom-Handler, alles andere VITS/hf_tts."""
+    if model_id.startswith("qwen3-tts") or "Qwen3-TTS" in definition.repository:
+        return qwen3_tts(model_id, definition, payload)
+    return hf_tts(model_id, definition, payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": hf_transcribe,
     "embed": hf_embed,
     "generate": hf_generate,
-    "tts": hf_tts,
+    "song": hf_generate,
+    "sing": hf_bark_sing,
+    "tts": tts_dispatch,
 }

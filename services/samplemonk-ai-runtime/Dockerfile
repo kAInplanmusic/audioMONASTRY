@@ -10,6 +10,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     HF_HOME=/data/hf-cache \
     PORT=8000
 
+# voiceMONK Qwen3-TTS optional aktivieren:
+#   docker build --build-arg AI_INSTALL_VOICE_AI=1 ...
+ARG AI_INSTALL_VOICE_AI=0
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 sox curl passwd \
     && rm -rf /var/lib/apt/lists/*
@@ -19,6 +23,12 @@ WORKDIR /opt/samplemonk-ai
 # Deterministische Dependencies (torch kommt aus dem Basisimage, wird NICHT neu geladen)
 COPY requirements.lock ./
 RUN pip install --no-cache-dir -r requirements.lock
+
+# Optional: Qwen3-TTS (hebt transformers auf 4.57.3 an – siehe requirements-voice-ai.lock)
+COPY requirements-voice-ai.lock ./
+RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-voice-ai.lock; \
+    fi
 
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py ./
 COPY model_manifest.json runtime_config.yaml startup.sh ./

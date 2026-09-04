@@ -23,6 +23,15 @@ export function trimTrailingSlash(value: string): string {
   return value.slice(0, end);
 }
 
+const SAFE_OBJECT_KEY = /^[A-Za-z0-9][A-Za-z0-9/._ -]{0,1023}$/;
+
+function isSafeObjectKey(key: string): boolean {
+  if (!key || key.length > 1024) return false;
+  if (key.startsWith('/') || key.includes('\\') || key.includes('\0')) return false;
+  if (key.split('/').some((segment) => segment === '..' || segment === '.')) return false;
+  return SAFE_OBJECT_KEY.test(key);
+}
+
 /** Liefert einen gültigen Supabase-Key oder `null` (erkennt Platzhalter). */
 function validSupabaseKey(key: string | undefined): string | null {
   const k = key?.trim() ?? '';
@@ -222,12 +231,14 @@ export async function pushSampleToCloud(sample: AudioSample, extras: SampleMetaE
   if (error) {
     // Häufigster Fall: live DB hat noch das alte Schema (vor artist/style/...).
     if (/Could not find the .* column/i.test(error.message)) {
+      console.error('[cloud] Supabase-Schema nicht aktuell:', error.message);
       return {
         ok: false,
-        error: 'Supabase-Schema nicht aktuell – bitte `database/schema.sql` einmalig im Supabase SQL Editor ausführen. Details: ' + error.message,
+        error: 'supabase-schema-outdated',
       };
     }
-    return { ok: false, error: error.message };
+    console.error('[cloud] pushSampleToCloud fehlgeschlagen:', error);
+    return { ok: false, error: 'cloud-upload-failed' };
   }
 
   const tags = sample.tags ?? [];
@@ -236,7 +247,10 @@ export async function pushSampleToCloud(sample: AudioSample, extras: SampleMetaE
     const { error: tagError } = await client
       .from('sample_tags')
       .upsert(tagRows, { onConflict: 'sample_id,tag' });
-    if (tagError) return { ok: false, error: tagError.message };
+    if (tagError) {
+      console.error('[cloud] sample_tags upsert fehlgeschlagen:', tagError);
+      return { ok: false, error: 'cloud-tag-upload-failed' };
+    }
   }
 
   return { ok: true, id: sample.id };
@@ -262,7 +276,10 @@ export async function pushMusicTrackToCloud(
     tags: extras.tags ?? [],
   };
   const { error } = await client.from('music_tracks').upsert(row, { onConflict: 'id' });
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    console.error('[cloud] pushMusicTrackToCloud fehlgeschlagen:', error);
+    return { ok: false, error: 'cloud-upload-failed' };
+  }
   return { ok: true, id: track.id };
 }
 
@@ -321,6 +338,7 @@ export async function uploadSampleToR2(
   const bucket = env.CFR2_BUCKET?.trim();
   if (!r2) throw new Error('R2 not configured (check CFR2_ACCOUNT_ID / CFR2_ACCESS_KEY_ID / CFR2_SECRET_ACCESS_KEY)');
   if (!bucket) throw new Error('CFR2_BUCKET missing');
+  if (!isSafeObjectKey(objectKey)) throw new Error('invalid objectKey');
 
   await r2.send(new PutObjectCommand({
     Bucket: bucket,
@@ -334,11 +352,12 @@ export async function uploadSampleToR2(
   // oder eigene Domain). Ohne CFR2_PUBLIC_URL fallback auf die S3-Endpoint-URL
   // (nur mit signierten Requests erreichbar).
   const publicBase = env.CFR2_PUBLIC_URL ? trimTrailingSlash(env.CFR2_PUBLIC_URL.trim()) : undefined;
+  const encodedKey = objectKey.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   return {
     key: objectKey,
     bucket,
     url: publicBase
-      ? `${publicBase}/${objectKey}`
-      : `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${objectKey}`,
+      ? `${publicBase}/${encodedKey}`
+      : `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${encodedKey}`,
   };
 }

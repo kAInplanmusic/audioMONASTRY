@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { LockStatus } from '../plugins/types';
 import { isAiModeActive } from '../core/ai/aiMode';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 /** Default lock TTL: 5 minutes */
 const DEFAULT_LOCK_TTL = 5 * 60 * 1000;
@@ -46,19 +47,25 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
   }, [commit]);
 
   const requestLock = useCallback((pluginId: string, userId: string) => {
+    // Identität niemals aus dem Aufruf übernehmen: maßgeblich ist der
+    // WebRTC-Manager (lokale Session-Identität des Browsers).
+    const localUserId = webRTCManager.userId;
+    if (userId !== localUserId) return false;
+
     const now = Date.now();
     const prev = locksRef.current;
     const lock = prev[pluginId];
     // NEW-D1-3: Halter-Wechsel für mixerMONK nur im AI-Modus erlaubt.
-    // In diesem Fall darf ein anderer User den Mixer-Lock übernehmen.
-    if (pluginId === 'mixer' && isAiModeActive() && lock && lock.active && lock.lockedBy !== userId) {
+    // Nur Producer/Admin dürfen einen aktiven Fremd-Lock übernehmen.
+    if (pluginId === 'mixer' && isAiModeActive() && lock && lock.active && lock.lockedBy !== localUserId) {
+      if (webRTCManager.role !== 'admin' && webRTCManager.role !== 'producer') return false;
       commit({
         ...prev,
-        [pluginId]: { lockedBy: userId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
+        [pluginId]: { lockedBy: localUserId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
       });
       return true;
     }
-    if (lock && lock.active && lock.lockedBy !== userId) {
+    if (lock && lock.active && lock.lockedBy !== localUserId) {
       const ttl = lock.ttl ?? DEFAULT_LOCK_TTL;
       if (now - lock.timestamp <= ttl) {
         return false; // Already locked by someone else
@@ -67,12 +74,16 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     }
     commit({
       ...prev,
-      [pluginId]: { lockedBy: userId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
+      [pluginId]: { lockedBy: localUserId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
     });
     return true;
   }, [commit]);
 
-  const releaseLock = useCallback((pluginId: string, _userId: string) => {
+  const releaseLock = useCallback((pluginId: string, userId: string) => {
+    const localUserId = webRTCManager.userId;
+    if (userId !== localUserId) return;
+    const lock = locksRef.current[pluginId];
+    if (lock?.active && lock.lockedBy && lock.lockedBy !== localUserId) return;
     commit({
       ...locksRef.current,
       [pluginId]: { lockedBy: null, timestamp: 0, active: false }

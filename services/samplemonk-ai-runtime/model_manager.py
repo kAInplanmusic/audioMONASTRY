@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import os
+import re
 
 try:  # CUDA ist optional – der Manager degradiert kontrolliert ohne torch.
     import torch  # type: ignore
@@ -31,6 +32,30 @@ except Exception:  # pragma: no cover – Umgebungsabhängig
 
 class ModelUnavailableError(RuntimeError):
     """Modell ist nicht geladen bzw. kann nicht geladen werden."""
+
+
+_ALLOWED_LOAD_CLASSES = {"CORE", "FREQUENT", "ON_DEMAND", "RARE"}
+_ALLOWED_FRAMEWORKS = {"transformers", "ctranslate2", "vllm", "sentence-transformers", "custom"}
+_ALLOWED_QUANTIZATIONS = {"fp16", "bf16", "fp32", "int8", "int4", "none"}
+_SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_SAFE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$")
+_SAFE_REVISION_RE = re.compile(r"^[A-Za-z0-9._/-]{1,128}$")
+
+
+def _finite_float(value: Any, default: float, field_name: str) -> float:
+    import math
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"invalid {field_name}: expected number") from exc
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ValueError(f"invalid {field_name}: must be a finite positive number")
+    return parsed
+
+
+def _finite_int(value: Any, default: int, field_name: str) -> int:
+    parsed = _finite_float(value, float(default), field_name)
+    return int(parsed)
 
 
 @dataclass
@@ -56,25 +81,53 @@ class ModelDefinition:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ModelDefinition":
+        if not isinstance(data, dict):
+            raise ValueError("model definition must be an object")
+        model_id = str(data.get("id", "")).strip()
+        repository = str(data.get("repository", "")).strip()
+        revision = str(data.get("revision", "")).strip()
+        load_class = str(data.get("loadClass", "ON_DEMAND")).strip().upper()
+        framework = str(data.get("framework", "transformers")).strip().lower()
+        quantization = str(data.get("quantization", "fp16")).strip().lower()
+
+        if not _SAFE_ID_RE.fullmatch(model_id):
+            raise ValueError(f"invalid model id: {model_id!r}")
+        if not _SAFE_REPOSITORY_RE.fullmatch(repository):
+            raise ValueError(f"invalid repository: {repository!r}")
+        if revision and not _SAFE_REVISION_RE.fullmatch(revision):
+            raise ValueError("invalid revision: only letters, digits, . _ / - are allowed")
+        if load_class not in _ALLOWED_LOAD_CLASSES:
+            raise ValueError(f"invalid loadClass: {load_class!r}")
+        if framework not in _ALLOWED_FRAMEWORKS:
+            raise ValueError(f"invalid framework: {framework!r}")
+        if quantization not in _ALLOWED_QUANTIZATIONS:
+            raise ValueError(f"invalid quantization: {quantization!r}")
+        if not isinstance(data.get("dependencies", []), list):
+            raise ValueError("dependencies must be a list")
+        if not isinstance(data.get("inputFormats", []), list):
+            raise ValueError("inputFormats must be a list")
+        if not isinstance(data.get("outputFormats", []), list):
+            raise ValueError("outputFormats must be a list")
+
         return cls(
-            id=str(data["id"]),
-            repository=str(data["repository"]),
-            revision=str(data.get("revision", "")),
-            task=str(data.get("task", "unknown")),
-            framework=str(data.get("framework", "transformers")),
-            estimatedVRAM=float(data.get("estimatedVRAM", 2.0)),
-            estimatedRAM=float(data.get("estimatedRAM", 4.0)),
-            loadPriority=int(data.get("loadPriority", 10)),
+            id=model_id,
+            repository=repository,
+            revision=revision,
+            task=str(data.get("task", "unknown")).strip()[:64],
+            framework=framework,
+            estimatedVRAM=_finite_float(data.get("estimatedVRAM", 2.0), 2.0, "estimatedVRAM"),
+            estimatedRAM=_finite_float(data.get("estimatedRAM", 4.0), 4.0, "estimatedRAM"),
+            loadPriority=_finite_int(data.get("loadPriority", 10), 10, "loadPriority"),
             preload=bool(data.get("preload", False)),
-            loadClass=str(data.get("loadClass", "ON_DEMAND")).upper(),
-            quantization=str(data.get("quantization", "fp16")),
+            loadClass=load_class,
+            quantization=quantization,
             dependencies=list(data.get("dependencies", [])),
             inputFormats=list(data.get("inputFormats", [])),
             outputFormats=list(data.get("outputFormats", [])),
-            maxDuration=float(data.get("maxDuration", 30.0)),
-            concurrency=int(data.get("concurrency", 1)),
-            timeout=float(data.get("timeout", 120.0)),
-            license=str(data.get("license", "unknown")),
+            maxDuration=_finite_float(data.get("maxDuration", 30.0), 30.0, "maxDuration"),
+            concurrency=_finite_int(data.get("concurrency", 1), 1, "concurrency"),
+            timeout=_finite_float(data.get("timeout", 120.0), 120.0, "timeout"),
+            license=str(data.get("license", "unknown")).strip()[:128],
         )
 
 
@@ -213,8 +266,15 @@ class ModelManager:
             self._used_vram_gb = max(0.0, self._used_vram_gb - (definition.estimatedVRAM if definition else 0.0))
             del self._loaded[model_id]
             self._instances.pop(model_id, None)
-            if _HAS_TORCH and torch is not None and torch.cuda.is_available():
-                torch.cuda.empty_cache()  # CUDA Memory sauber freigeben
+            if (
+                os.environ.get("AI_CUDA_EMPTY_CACHE_ON_UNLOAD", "0") == "1"
+                and _HAS_TORCH
+                and torch is not None
+                and torch.cuda.is_available()
+            ):
+                # Optional: CUDA-Cache bewusst NICHT im Standard-Unload leeren,
+                # weil empty_cache() Latenzspitzen verursachen kann (Echtzeit).
+                torch.cuda.empty_cache()
 
     # ------------------------------------------------------------------ Query
     def is_loaded(self, model_id: str) -> bool:

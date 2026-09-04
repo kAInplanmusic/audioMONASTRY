@@ -10,11 +10,36 @@ Stattdessen:
 """
 import logging
 import os
+import re
+import secrets
 import threading
 
 from celery import Celery
 
 logger = logging.getLogger("samplemonk.celery")
+
+_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif", ".webm", ".opus"}
+
+
+def _validate_audio_file(file_path: str) -> str:
+    """Stellt sicher, dass nur echte, erlaubte Audio-Dateien verarbeitet werden."""
+    if not isinstance(file_path, str) or not file_path.strip():
+        raise ValueError("file_path is required")
+    if "\x00" in file_path or len(file_path) > 4096:
+        raise ValueError("invalid file_path")
+    path = os.path.abspath(file_path)
+    if not os.path.isfile(path):
+        raise ValueError("audio file does not exist")
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in _AUDIO_EXTENSIONS:
+        raise ValueError(f"unsupported audio extension: {ext or '(none)'}")
+    upload_root = os.environ.get("AI_UPLOAD_ROOT", "").strip()
+    if upload_root:
+        real_root = os.path.realpath(upload_root)
+        real_path = os.path.realpath(path)
+        if real_path != real_root and not real_path.startswith(real_root + os.sep):
+            raise ValueError("audio file is outside the allowed upload root")
+    return path
 
 celery_app = Celery(
     "tasks",
@@ -117,10 +142,11 @@ def _load_musicgen():
         from transformers import AutoProcessor, MusicgenForConditionalGeneration
         device = resolve_device()
         torch_dtype = "float16" if half_precision_compatible() else "auto"
-        logger.info("Lade MusicGen small auf %s (dtype=%s) ...", device, torch_dtype)
-        proc = AutoProcessor.from_pretrained("facebook/musicgen-small")
+        model_name = os.environ.get("AI_MUSICGEN_MODEL", "facebook/musicgen-small").strip()
+        logger.info("Lade MusicGen (%s) auf %s (dtype=%s) ...", model_name, device, torch_dtype)
+        proc = AutoProcessor.from_pretrained(model_name)
         model = MusicgenForConditionalGeneration.from_pretrained(
-            "facebook/musicgen-small",
+            model_name,
             torch_dtype=torch_dtype if torch_dtype != "auto" else None,
         )
         model.to(device)
@@ -136,6 +162,7 @@ def _load_musicgen():
 def separate_stems_task(file_path: str):
     """Trennt eine Audiodatei in 5 Stems (vocals, drums, bass, other)."""
     try:
+        file_path = _validate_audio_file(file_path)
         import torchaudio
         sep = _load_demucs()
         device = resolve_device()
@@ -170,7 +197,8 @@ def generate_sample_task(prompt: str):
     with torch.no_grad():
         audio_values = model.generate(**inputs, max_new_tokens=256)
     audio = audio_values[0].cpu()
-    output_path = f"generated_{__import__('re').sub(r'[^a-z0-9]', '', prompt[:10])}.wav"
+    safe_prompt = re.sub(r"[^a-z0-9]", "", prompt.lower())[:20]
+    output_path = f"generated_{secrets.token_hex(4)}_{safe_prompt or 'sample'}.wav"
     torchaudio.save(output_path, audio, 32000)
     return {"status": "ok", "path": output_path}
 
