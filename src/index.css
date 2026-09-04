@@ -58,6 +58,7 @@
 .monk-theme-mcp { --monk-accent: #a855f7; --monk-accent-rgb: 168, 85, 247; --monk-glow-accent: rgba(168, 85, 247, 0.35); }
 .monk-theme-voice { --monk-accent: #ec4899; --monk-accent-rgb: 236, 72, 153; --monk-glow-accent: rgba(236, 72, 153, 0.35); }
 .monk-theme-sound { --monk-accent: #22c55e; --monk-accent-rgb: 34, 197, 94; --monk-glow-accent: rgba(34, 197, 94, 0.35); }
+.monk-theme-song { --monk-accent: #f59e0b; --monk-accent-rgb: 245, 158, 11; --monk-glow-accent: rgba(245, 158, 11, 0.35); }
 .monk-theme-mixer { --monk-accent: #fb923c; --monk-accent-rgb: 251, 146, 60; --monk-glow-accent: rgba(251, 146, 60, 0.35); }
 .monk-theme-controller { --monk-accent: #38bdf8; --monk-accent-rgb: 56, 189, 248; --monk-glow-accent: rgba(56, 189, 248, 0.35); }
 .monk-theme-effect { --monk-accent: #e879f9; --monk-accent-rgb: 232, 121, 249; --monk-glow-accent: rgba(232, 121, 249, 0.35); }

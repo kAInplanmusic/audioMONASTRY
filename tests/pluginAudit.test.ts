@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// GAP-3: Atomarer Plugin-Audit – jede der 20 IDs durchläuft
+// GAP-3: Atomarer Plugin-Audit – jede der 21 IDs durchläuft
 // Aktivierung → Routing → Deaktivierung. AudioEngine wird gemockt.
 const engineSpies = vi.hoisted(() => ({
   activate: vi.fn(),
@@ -19,9 +19,9 @@ vi.mock('../src/utils/audioEngine', () => ({
 
 import { PLUGIN_ROUTE_IDS, routeModuleState } from '../src/core/pluginAudioRouter';
 
-describe('GAP-3: 20-Plugin-Audit (Aktivierung → Routing → Deaktivierung)', () => {
-  it('alle 20 Plugin-IDs sind im Router registriert', () => {
-    expect(PLUGIN_ROUTE_IDS).toHaveLength(20);
+describe('GAP-3: 21-Plugin-Audit (Aktivierung → Routing → Deaktivierung)', () => {
+  it('alle 21 Plugin-IDs sind im Router registriert', () => {
+    expect(PLUGIN_ROUTE_IDS).toHaveLength(21);
   });
 
   it('jede Plugin-ID kann aktiviert und deaktiviert werden', () => {

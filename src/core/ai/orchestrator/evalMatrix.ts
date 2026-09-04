@@ -2,16 +2,16 @@
 // evalMatrix – Eval-Suite je Plugin mit Mindest-Score (P3-3 / GAP-5)
 // ----------------------------------------------------------------------------
 // Verbindliche Quelle für
-//   * die 20 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts),
+//   * die 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts),
 //   * den Mindest-Score je Plugin (Gate für `npm run eval:ai` und Nightly-CI),
 //   * die Eval-Task-Zuordnung.
 // Bewusst frei von React-/Browser-Importen, damit Node-Skripte (scripts/*.ts)
 // und Vitest dieselbe Matrix nutzen können.
 // ============================================================================
 
-/** Verbindliche 20 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
+/** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
 export const EVAL_PLUGIN_IDS = [
-  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound', 'song',
   'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
   'spatial', 'recording', 'performance', 'ai',
 ] as const;

@@ -12,9 +12,9 @@
  */
 import { PLUGIN_COMMAND_CATALOG, PLUGIN_MOA_SYSTEM_PROMPTS } from '../../../utils/prompts';
 
-/** Verbindliche 20 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
+/** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
 export const PLUGIN_IDS = [
-  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound', 'song',
   'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
   'spatial', 'recording', 'performance', 'ai',
 ] as const;
@@ -39,7 +39,7 @@ export interface PromptEvalSeed {
   plugin_prompt_versions: PluginPromptVersionSeed[];
 }
 
-/** Liefert für alle 20 Plugins je eine Prompt-Version (Version 1, aktiv). */
+/** Liefert für alle 21 Plugins je eine Prompt-Version (Version 1, aktiv). */
 export function buildPromptEvalSeed(): PromptEvalSeed {
   const system_prompts: SystemPromptSeed[] = PLUGIN_IDS.map((pluginId) => ({
     plugin_id: pluginId,

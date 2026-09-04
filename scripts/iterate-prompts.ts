@@ -1,5 +1,5 @@
 /**
- * P3-2 / GAP-5: Prompt-Iterations-Loop über alle 20 Plugins (offline,
+ * P3-2 / GAP-5: Prompt-Iterations-Loop über alle 21 Plugins (offline,
  * deterministisch) inklusive DB-ready Export der Systemprompt-Versionen.
  * Aufruf: npx tsx scripts/iterate-prompts.ts
  * Schreibt test-results/prompt-iterations.json und test-results/system-prompts.json

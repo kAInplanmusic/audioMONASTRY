@@ -36,7 +36,7 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   });
 });
 
-/** Toolbar-Kürzel → Plugin-ID (Reihenfolge laut Registry, ohne masterplayer/ai). */
+/** Toolbar-Kürzel → Plugin-ID (Reihenfolge laut Registry, ohne ai; masterplayer ist Kopfzeile). */
 const PLUGIN_ROWS: { short: string; id: string }[] = [
   { short: 'INS', id: 'instrument' },
   { short: 'SYN', id: 'synthesizer' },
@@ -45,6 +45,7 @@ const PLUGIN_ROWS: { short: string; id: string }[] = [
   { short: 'MCP', id: 'mcp' },
   { short: 'VOX', id: 'voice' },
   { short: 'SND', id: 'sound' },
+  { short: 'SNG', id: 'song' },
   { short: 'MIX', id: 'mixer' },
   { short: 'CTRL', id: 'controller' },
   { short: 'FX', id: 'effect' },
@@ -59,7 +60,7 @@ const PLUGIN_ROWS: { short: string; id: string }[] = [
   { short: 'PRF', id: 'performance' },
 ];
 
-test('P1-2: Screenshot-Baselines für alle 20 Plugin-/Sektions-Ansichten', async ({ page }) => {
+test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async ({ page }) => {
   test.setTimeout(300_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');

@@ -12,6 +12,7 @@ const SamplerTerminal = lazy(() => import('../components/SamplerTerminal').then(
 const McpTerminal = lazy(() => import('../components/McpTerminal').then(m => ({ default: m.McpTerminal })));
 const VoiceGenTerminal = lazy(() => import('../components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const SoundTerminal = lazy(() => import('../components/SoundTerminal').then(m => ({ default: m.SoundTerminal })));
+const SongMonkTerminal = lazy(() => import('../components/SongMonkTerminal').then(m => ({ default: m.SongMonkTerminal })));
 const DJ4ChMixer = lazy(() => import('../components/DJ4ChMixer').then(m => ({ default: m.DJ4ChMixer })));
 const MIDIControllerTerminal = lazy(() => import('../components/MIDIControllerTerminal').then(m => ({ default: m.MIDIControllerTerminal })));
 const FXEngineTerminal = lazy(() => import('../components/FXEngineTerminal').then(m => ({ default: m.FXEngineTerminal })));
@@ -34,9 +35,9 @@ const ICON_MAP: Record<string, any> = {
 // ============================================================================
 // Plugin-Reihenfolge (verbindlich):
 //   0 instrument · 1 synthesizer · 2 drum · 3 sampler
-//   4 mcp · 5 voice · 6 sound · 7 mixer · 8 controller · 9 effect
-//   10 drop · 11 library · 12 eq · 13 dsp · 14 mastering · 15 stem
-//   16 spatial · 17 recording · 18 performance · 19 ai
+//   4 mcp · 5 voice · 6 sound · 7 song · 8 mixer · 9 controller · 10 effect
+//   11 drop · 12 library · 13 eq · 14 dsp · 15 mastering · 16 stem
+//   17 spatial · 18 recording · 19 performance · 20 ai
 // masterplayerMONK ist KEIN Plugin, sondern feste View-only-Leiste (App.tsx).
 // visMONK wurde entfernt; seine Signal-Anzeige ist in perfMONK integriert.
 // ============================================================================
@@ -48,6 +49,7 @@ const COMPONENT_MAP: Record<string, any> = {
   mcp: McpTerminal,
   voice: VoiceGenTerminal,
   sound: SoundTerminal,
+  song: SongMonkTerminal,
   mixer: DJ4ChMixer,
   controller: MIDIControllerTerminal,
   effect: FXEngineTerminal,
@@ -100,6 +102,7 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
   mcp: { name: 'mcpMONK', short: 'MCP', icon: 'Grid3X3' },
   voice: { name: 'voiceMONK', short: 'VOX', icon: 'Mic' },
   sound: { name: 'soundMONK', short: 'SND', icon: 'AudioLines' },
+  song: { name: 'songMONK', short: 'SNG', icon: 'Music' },
   mixer: { name: 'mixerMONK', short: 'MIX', icon: 'Sliders' },
   controller: { name: 'controllerMONK', short: 'CTRL', icon: 'Keyboard' },
   effect: { name: 'effectMONK', short: 'FX', icon: 'Sparkles' },
@@ -115,7 +118,7 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
   ai: { name: 'aiMONK', short: 'AI', icon: 'Bot' },
 };
 
-const EXPECTED_PLUGIN_COUNT = 20;
+const EXPECTED_PLUGIN_COUNT = 21;
 
 const createFallbackRegistry = () =>
   Object.keys(COMPONENT_MAP).map((id) => {

@@ -120,6 +120,12 @@
       "icon": "AudioLines"
     },
     {
+      "id": "song",
+      "name": "songMONK",
+      "short": "SNG",
+      "icon": "Music"
+    },
+    {
       "id": "mixer",
       "name": "mixerMONK",
       "short": "MIX",
