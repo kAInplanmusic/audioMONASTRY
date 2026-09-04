@@ -1707,6 +1707,84 @@ async function aceStepGenerateSong(input: {
   throw new Error(`ACE-Step Task ${taskId} Timeout nach ${timeoutMs} ms`);
 }
 
+// ---------------------------------------------------------------------------
+// DiffRhythm 2 (Apache-2.0) – optionaler zweiter SongMONK-Backend
+// Offiziell gibt es noch keine REST-API; der Anschluss erfolgt über einen
+// kleinen ACE-Step-kompatiblen Wrapper (release_task/query_result/audio).
+// ---------------------------------------------------------------------------
+function diffRhythmBaseUrl(): string {
+  return (process.env.SONG_AI_DIFF_RHYTHM_URL || '').trim();
+}
+
+function diffRhythmHeaders(): Record<string, string> {
+  const token = (process.env.SONG_AI_DIFF_RHYTHM_TOKEN || '').trim();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+async function diffRhythmGenerateSong(input: {
+  prompt: string;
+  lyrics?: string;
+  bpm?: number;
+  durationSeconds: number;
+  timeoutMs?: number;
+}): Promise<Buffer> {
+  const base = diffRhythmBaseUrl().replace(/\/+$/, '');
+  if (!base) throw new Error('SONG_AI_DIFF_RHYTHM_URL fehlt');
+  const timeoutMs = input.timeoutMs ?? 300_000;
+  const deadline = Date.now() + timeoutMs;
+
+  const releaseBody: Record<string, unknown> = {
+    prompt: input.prompt.slice(0, 2000),
+    lyrics: input.lyrics?.slice(0, 2000) ?? '',
+    audio_format: 'wav',
+    audio_duration: Math.max(10, Math.min(600, Math.round(input.durationSeconds || 30))),
+  };
+  if (input.bpm && Number.isFinite(input.bpm)) releaseBody.bpm = Math.max(30, Math.min(300, Math.round(input.bpm)));
+
+  const releaseResp = await fetch(`${base}/release_task`, {
+    method: 'POST',
+    headers: diffRhythmHeaders(),
+    body: JSON.stringify(releaseBody),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!releaseResp.ok) throw new Error(`DiffRhythm release_task HTTP ${releaseResp.status}`);
+  const releaseData = (await releaseResp.json()) as { data?: unknown; code?: number; error?: string | null };
+  const data = releaseData.data as { task_id?: string; taskId?: string } | string | undefined;
+  const taskId = typeof data === 'string' ? data : (data?.task_id ?? data?.taskId ?? '');
+  if (!taskId) throw new Error('DiffRhythm release_task ohne task_id');
+
+  while (Date.now() < deadline) {
+    const queryResp = await fetch(`${base}/query_result`, {
+      method: 'POST',
+      headers: diffRhythmHeaders(),
+      body: JSON.stringify({ task_id_list: [taskId] }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (queryResp.ok) {
+      const queryData = (await queryResp.json()) as {
+        data?: Array<{ task_id?: string; status?: number; result?: string }>;
+      };
+      const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
+      if (entry?.status === 1 && entry.result) {
+        const parsed = JSON.parse(entry.result) as Array<{ file?: string }>;
+        const fileUrl = parsed?.[0]?.file;
+        if (!fileUrl) throw new Error('DiffRhythm Ergebnis ohne Audio-URL');
+        const audioResp = await fetch(fileUrl.startsWith('http') ? fileUrl : `${base}${fileUrl}`, {
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!audioResp.ok) throw new Error(`DiffRhythm Audio-Download HTTP ${audioResp.status}`);
+        return Buffer.from(await audioResp.arrayBuffer());
+      }
+      if (entry?.status === 2) throw new Error(`DiffRhythm Task ${taskId} fehlgeschlagen`);
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`DiffRhythm Task ${taskId} Timeout nach ${timeoutMs} ms`);
+}
+
 /** Sanitisiert Text/Prompts (kein Prompt-Injection-Rauschen, Länge begrenzt). */
 function cleanVoiceText(raw: unknown, max = 500): string {
   return String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
@@ -1869,9 +1947,25 @@ app.post('/api/sound/generate', async (req, res) => {
   const promptClean = cleanVoiceText(prompt, 300);
   const inputs = promptClean || SOUND_DEFAULT_PROMPTS[kindClean] || SOUND_DEFAULT_PROMPTS.beat;
   const duration = Math.max(2, Math.min(20, Number(durationSeconds) || 6));
+  let lastError = '';
+
+  // soundMONK-Upgrade: ACE-Step 1.5 (MIT) kann Beats/Loops/Atmo/One-Shots erzeugen.
+  if (aceStepBaseUrl()) {
+    try {
+      const aceBuf = await aceStepGenerateSong({
+        prompt: inputs,
+        durationSeconds: duration,
+        timeoutMs: 300_000,
+      });
+      return sendWavBuffer(res, aceBuf);
+    } catch (aceErr) {
+      lastError = aceErr instanceof Error ? aceErr.message : 'Unbekannter Fehler';
+      console.warn('[sound] ACE-Step fehlgeschlagen, Fallback auf Runtime:', lastError);
+    }
+  }
 
   if (!voiceRuntimeUrl()) {
-    return res.status(503).json({ error: 'soundMONK: keine AI-Runtime konfiguriert', hint: 'VOICE_AI_RUNTIME_URL oder HF_ENDPOINT_URL setzen' });
+    return res.status(503).json({ error: 'soundMONK: keine AI-Runtime konfiguriert', hint: 'VOICE_AI_RUNTIME_URL/HF_ENDPOINT_URL oder SONG_AI_ACE_STEP_URL setzen' });
   }
   try {
     const runtimeModel = (process.env.SOUND_AI_RUNTIME_MODEL || 'musicgen-small').trim();
@@ -1931,6 +2025,23 @@ app.post('/api/song/generate', async (req, res) => {
     } catch (aceErr) {
       lastError = aceErr instanceof Error ? aceErr.message : 'Unbekannter Fehler';
       console.warn('[song] ACE-Step fehlgeschlagen, Fallback auf Runtime/HF:', lastError);
+    }
+  }
+
+  // DiffRhythm 2 (Apache-2.0) – optionaler zweiter Vocal-Song-Backend.
+  if (diffRhythmBaseUrl()) {
+    try {
+      const diffBuf = await diffRhythmGenerateSong({
+        prompt: acePrompt,
+        lyrics: clean,
+        bpm: bpmClean || undefined,
+        durationSeconds: duration,
+        timeoutMs: 300_000,
+      });
+      return sendWavBuffer(res, diffBuf);
+    } catch (diffErr) {
+      lastError = diffErr instanceof Error ? diffErr.message : 'Unbekannter Fehler';
+      console.warn('[song] DiffRhythm fehlgeschlagen, Fallback auf Runtime/HF:', lastError);
     }
   }
 
