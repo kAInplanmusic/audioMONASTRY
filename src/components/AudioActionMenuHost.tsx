@@ -314,12 +314,13 @@ export const AudioActionMenuHost: React.FC = () => {
               const shared = trackAssignments[t];
               const localUrl = audioEngine.isTrackLoaded(t) ? audioEngine.getTrackSampleUrl(t) : null;
               const occName = shared?.name ?? (localUrl ? (localUrl.length > 40 ? localUrl.slice(0, 40) + '…' : localUrl) : null);
+              const allowed = audioEngine.canLoadTrack(t);
               return (
                 <MenuItem
                   key={t}
                   label={`CH ${t.replace('channel', '')} · ${trackNames[t]}`}
-                  sub={occName ? `belegt: ${occName}` : 'frei'}
-                  disabled={!!occName}
+                  sub={occName ? `belegt: ${occName}` : allowed ? 'frei' : 'nur DJ / Freigabe'}
+                  disabled={!!occName || !allowed}
                   onClick={() => handleTrack(t)}
                 />
               );
