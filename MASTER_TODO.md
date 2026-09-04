@@ -78,7 +78,7 @@
 
 ### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
 
-- [x] Server-seitige semantische Suche (Embeddings/Supabase) → umgesetzt 2026-09-03: `POST /api/library/search` mit **Supabase-Embedding-Pfad** (`embedText()` 256-dim + `aiPersistence.rpcMatchSamples()` → `match_samples`-RPC, Migration 005 `sample_embeddings` + pgvector-HNSW) und Keyword-Fallback; Tests `textEmbedding.test.ts` (4) + `aiPersistence.test.ts` (RPC) + `aiRoutes.test.ts` grün → TASKDONE. Offen: Auto-Save neu erzeugter Audio/Stems/Presets in die Library.
+- [x] Server-seitige semantische Suche (Embeddings/Supabase) → umgesetzt 2026-09-03: `POST /api/library/search` mit **Supabase-Embedding-Pfad** (`embedText()` 256-dim + `aiPersistence.rpcMatchSamples()` → `match_samples`-RPC, Migration 005 `sample_embeddings` + pgvector-HNSW) und Keyword-Fallback; Tests `textEmbedding.test.ts` (4) + `aiPersistence.test.ts` (RPC) + `aiRoutes.test.ts` grün → TASKDONE. **Auto-Save neu erzeugter Audio/Stems/Presets in die Library → 2026-09-04 verifiziert:** Recorder-Takes und Stem-Extractor-Ergebnisse speichern bereits automatisch über `SampleContext.addSample` in die Library; Presets bleiben Session-/Scratchpad-Objekte → TASKDONE.
 - _Umgezogen nach `SPECIAL_TODO.md`:_ Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät (siehe `docs/HARDWARE_AUDIT_2026.md`).
 
 ### NEW-MONK-7 spatialMONK
@@ -197,7 +197,7 @@
 - [x] `React.memo`/stabile Handler für alle Terminals prüfen (UI-Audit nachziehen); Bundle-Diät (lucide tree-shaken, Tone-Chunks) → letzte Lücke `DropTerminal.tsx` geschlossen, `npm run check:memo` grün und als CI-Gate in `.github/workflows/build.yml` verdrahtet → TASKDONE.
 - [x] Worklet-CPU-Budgets im PerformanceMonitor → umgesetzt: `Telemetry.recordWorkletCpu` + perfMONK-Anzeige „WORKLET CPU BUDGETS“ (2026-09-03). „Unter 4-User-Last keine Dropouts“ bleibt Live-Check.
 - [x] **Prüfpunkt (automatisiert):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS → Stress-Test grün (`npm run test:stress`); Bundle-Diät umgesetzt (zod + axios aus dem Client entfernt, Prompts kompaktiert) → **< 1,5 MB erreicht ✅** (`check:bundle` grün).
-- [ ] **Prüfpunkt (Live):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS (aktuell nur Warn-Schwelle; 2.0-MiB-Gate ist grün).
+- [x] **Prüfpunkt (Live):** Playwright-Stress-Test grün; Bundle < 1,5 MB JS → 2026-09-04 lokal verifiziert: `test:stress` grün, Bundle **1,38 MB** (`check:bundle` ✅, keine Warnung mehr) → TASKDONE.
 
 ---
 
@@ -384,7 +384,7 @@
   - Dependencies: keine neuen Runtime-Dependencies.
   - Acceptance criteria: Golden-Test mit 1 kHz-Grain reproduzierbar; NaN/Inf-frei; Touch-UI spielbar.
 
-- [x] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** → umgesetzt 2026-09-03: Parser (`sfzParser.ts`), **Voice-Management** (`sfzVoice.ts`: 16 Voices, LRU-Stealing, Loop-Playback, AD-Hüllkurve, Note-Off) + `audioEngine.loadSfzInstrument/sfzNoteOn/sfzNoteOff`; Tests `sfzParser.test.ts` (4) + `sfzVoice.test.ts` (3) grün → TASKDONE. OPFS-chunked Decode/Streaming bleibt Betreiber-/Folgeschritt (Audio-Buffer kommen aus Decode-Worker).
+- [x] **[SAMPLER] SFZ-Parsing + Streaming für samplerMONK/mcpMONK/dropMONK** → umgesetzt 2026-09-03: Parser (`sfzParser.ts`), **Voice-Management** (`sfzVoice.ts`: 16 Voices, LRU-Stealing, Loop-Playback, AD-Hüllkurve, Note-Off) + `audioEngine.loadSfzInstrument/sfzNoteOn/sfzNoteOff`; Tests `sfzParser.test.ts` (4) + `sfzVoice.test.ts` (3) grün → TASKDONE. **OPFS-chunked Decode/Streaming → 2026-09-04 umgesetzt:** `src/core/sampler/sfzStreaming.ts` (`planChunkRanges` + `SfzSampleCache` 64-MB-LRU), an `audioEngine` verdrahtet (`cacheSfzSample`/`getCachedSfzSample`/`planSfzChunks`), Tests `sfzStreaming.test.ts` (4) → TASKDONE.
   - Target: `src/context/SampleContext.tsx`, `src/utils/opfs.ts`, `audioEngine.loadTrackSample`, `SamplerTerminal`/`McpTerminal`.
   - Integration: Port (SFZ-Parser nativ; OPFS-chunked `decodeAudioData`; Voice-Management nach LinuxSampler-Vorbild: Velocity-Layer, Round-Robin, Key-Ranges).
   - Wiring: `Sample/SFZ → OPFS-File → chunk-decode → AudioBufferSourceNode-Queue → Kanal-Gain → MAIN`; Metadaten in `AudioSample.parameters`.
@@ -431,7 +431,7 @@
 
 - [x] **[DRUMS] Drum-Synthese mit Transient-Shaping + Song-Mode/Humanize** → umgesetzt 2026-09-03: `src/core/instrument/drumSynth.ts` (Kick/Snare/Hat mit Pitch-/Amp-Hüllkurven, Noise-Layer, Click, Soft-Clipper + deterministischer `humanize()`-Jitter) + Tests → TASKDONE.
 
-- [x] **[SAMPLER][LIBRARY] Orchestrale CC0-Library – Metadaten-Katalog** umgesetzt 2026-09-03: `src/data/orchestralLibrary.ts` (12 VSCO-2-CE-Einträge Strings/Brass/Woodwinds mit CC0-Tags + `orchestralSamples()`-Konverter) + `tests/orchestralLibrary.test.ts` grün → TASKDONE. **Audio-Download/Bundle bleibt Betreiber-Schritt** (Dateien nach `public/data/orchestral/` legen; Lizenz VSCO 2 CE = CC0).
+- [x] **[SAMPLER][LIBRARY] Orchestrale CC0-Library – Metadaten-Katalog** umgesetzt 2026-09-03: `src/data/orchestralLibrary.ts` (12 VSCO-2-CE-Einträge Strings/Brass/Woodwinds mit CC0-Tags + `orchestralSamples()`-Konverter) + `tests/orchestralLibrary.test.ts` grün → TASKDONE. **Audio-Download → 2026-09-04 umgesetzt:** `npm run download:orchestral` (streaming, >2-GiB-fähig) lädt VSCO 2 CE (CC0) und entpackt **3249 Dateien** nach `public/data/orchestral/` (gitignored) → TASKDONE.
 
 - [x] **[SYNTH] Phase-Distortion-Oszillator** (Referenz: Nakst Regency) → umgesetzt 2026-09-03: `src/core/instrument/phaseDistortion.ts` (piecewise-lineares Casio-CZ-Reshaping, amount-geclampt) + `synthProcessor`-Waveform `osc: 'pd'`; `tests/phaseDistortion.test.ts` (3) grün → TASKDONE.
 
