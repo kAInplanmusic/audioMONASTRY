@@ -36,6 +36,9 @@ import {
   type MonitorRoutingPlan, type MonitorSource, type MonitorUser,
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
+import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
+
+export { pluginAudioChannels };
 
 // Firefox liefert ohne crossOriginIsolated (COOP/COEP) kein SharedArrayBuffer.
 // makeSafeArrayBuffer liefert dann ein reguläres ArrayBuffer, damit die App in
@@ -51,34 +54,8 @@ function makeSafeArrayBuffer(byteLength: number): ArrayBuffer {
 
 /**
  * P0-2: Kanal-Zuordnung der Audio-einspeisenden Plugins (PluginAudioRouter-Kern).
- * UI-only-Plugins liefern ein leeres Array (kein eigener Audio-Graph).
+ * Implementierung jetzt in `src/core/audio/pluginChannelMap.ts` (Tone-frei).
  */
-export function pluginAudioChannels(pluginId: string): TrackType[] {
-  const map: Record<string, TrackType[]> = {
-    masterplayer: [],
-    ai: [],
-    controller: [],
-    library: [],
-    mastering: [],
-    stem: [],
-    recording: [],
-    performance: [],
-    spatial: ['channel7'],
-    mixer: ['channel1'],
-    mcp: ['channel5'],
-    drum: ['channel2'],
-    sampler: ['channel5'],
-    synthesizer: ['channel4'],
-    instrument: ['channel4'],
-    voice: ['channel8'],
-    sound: ['channel5'],
-    drop: ['channel5'],
-    effect: ['channel6'],
-    dsp: ['channel6'],
-    eq: ['channel6'],
-  };
-  return map[pluginId] ?? [];
-}
 
 class AudioEngine {
   public initialized = false;
@@ -133,16 +110,18 @@ class AudioEngine {
   // PDC: Der masteringProcessor hat 5 ms Lookahead-Latenz. Monitor-/Cue-Pfade
   // werden um denselben Betrag verzögert, damit Cue und Main-Mix phasenrichtig sind.
   private readonly PDC_MASTERING_LOOKAHEAD_SEC = 0.005;
-  private pdcMonitorDelay: Tone.Delay | null = null;
+  /** Nativer PDC-Delay für den lokalen Cue-Pfad (5 ms Mastering-Lookahead). */
+  private cuePdcDelay: DelayNode | null = null;
   private spatialMode: 'ON_TOP' | 'SEPARATION' = 'ON_TOP';
-  private masterToDestinationConnected = true;
-  // Finaler Ausgangs-Gain (zwischen Analyzer und Destination) für de-klickte
-  // Spatial-Mode-Wechsel (SEPARATION blendet den Stereo-Master weich aus).
+  // Finaler Ausgangs-Gain (zwischen mainMonitorGain und Destination) für
+  // de-klickte Spatial-Mode-Wechsel (SEPARATION blendet den Stereo-Master
+  // weich aus) und als einziger Quellknoten des 2.1-Splitters.
   private outputGain: GainNode | null = null;
-  // P0-6: Lokaler MAIN-Abhörpegel (NACH outputGain, vor der Destination).
-  // Nur dieser Knoten wird beim Cue-Wechsel gefahren – der MAIN-Bus und der
-  // Master-Stream (Abgriff an masterVolume) bleiben unverändert.
+  // P0-6: Lokaler MAIN-Abhörpegel VOR outputGain, damit er in 2.0 UND 2.1
+  // wirkt. Der Master-Stream (Abgriff an masterStreamTap) bleibt unverändert.
   private mainMonitorGain: GainNode | null = null;
+  /** Post-Mastering-Abgriff für den Master-Stream (SFU/Recording), pre-local-monitor. */
+  private masterStreamTap: GainNode | null = null;
   // P0-6: Cue-Bus des lokalen Users (parallel zu MAIN, pre-Master abgegriffen).
   private cueBus: GainNode | null = null;
   private cueOutGain: GainNode | null = null;
@@ -173,6 +152,9 @@ class AudioEngine {
   private channelPans: Partial<Record<TrackType, Tone.Panner>> = {};
   // #DJ: Pro-Kanal 3-Band-EQ (Low/Mid/High) für DJ-Mischpult-Regler.
   private channelEQs: Partial<Record<TrackType, { low: Tone.Filter; mid: Tone.Filter; high: Tone.Filter }>> = {};
+  /** F1: Pre-Fader-Eingang je Kanal – alle Quellen speisen hier ein, damit
+   *  Fader/EQ/Pan und Cue/PFL real wirken. */
+  private channelInputs: Partial<Record<TrackType, Tone.Gain>> = {};
 
   private samplePlayers: Record<string, Tone.Player> = {};
   /** Einzelner, wiederverwendeter Preview-Player (kein Leak bei schnellem Klicken). */
@@ -355,18 +337,17 @@ class AudioEngine {
 
   // --- Task 4: Monitor/Cue-Busse (1..4 Personen, je Mitarbeiter ein eigener Mix) ---
   public monitorCount = 4;
-  private monitorGains: Record<string, Tone.Volume> = {};
   // Welche Spur (TrackType) hört welcher Monitor? (individuelle Cue-Mix-Matrix)
   private monitorTrackGain: Record<string, Record<string, number>> = {};
 
 
   constructor() {
-    ['GLOBAL_MASTER', 'USER_1', 'USER_2', 'USER_3', 'USER_4', 'MON1', 'MON2', 'MON3', 'MON4'].forEach(bus => {
-      this.masterBuses[bus] = new Tone.Volume(0);
-    });
+    // Nur der echte Main-Bus wird als Audio-Node vorgehalten. USER_1..4/MON1..4
+    // waren tote Tone.Volume-Knoten ohne Ausgang – die Cue-Matrix lebt rein als
+    // Zustand in `monitorTrackGain` und wird von `planMonitorRouting` verdrahtet.
+    this.masterBuses['GLOBAL_MASTER'] = new Tone.Volume(0);
         // Cue-Mix-Matrix: jeder Monitor (1..4) hat pro Spur (channel1..8) einen Pegel 0..1.
     ['MON1', 'MON2', 'MON3', 'MON4'].forEach(mon => {
-      this.monitorGains[mon] = new Tone.Volume(0);
       this.monitorTrackGain[mon] = {
         channel1: 1, channel2: 1, channel3: 1, channel4: 1,
         channel5: 1, channel6: 1, channel7: 1, channel8: 1,
@@ -486,21 +467,23 @@ class AudioEngine {
     // P1-Dynamik: Kompressor/Gate/Dynamic-EQ als Insert (Default = Bypass,
     // d. h. bit-genauer Durchgang ohne zusätzliche Latenz).
     this.dynamicsNode = makeWorklet('dynamics-processor');
-    // Granular + 6-Op-FM (A-Klasse Audio-Audit): eigene Worklets, geroutet
-    // auf den GLOBAL_MASTER-Bus (Instrument-Einspeisung).
+    // Granular + 6-Op-FM (A-Klasse Audio-Audit): eigene Worklets. F1: statt
+    // direkt in GLOBAL_MASTER zu speisen, laufen sie über den Kanalzug
+    // (Pre-Fader-Eingang → Fader → EQ → Pan → Master), damit die Mischpult-Regler
+    // real auf sie wirken.
     this.granularNode = makeWorklet('granular-processor');
     this.fm6Node = makeWorklet('fm6-processor');
     this.drumSynthNode = makeWorklet('drumsynth-processor');
-    const masterBusInput = (this.masterBuses['GLOBAL_MASTER'] as any)?.input ?? this.masterBuses['GLOBAL_MASTER'];
-    if (this.granularNode && typeof (this.granularNode as any).connect === 'function') {
-      try { (this.granularNode as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
-    }
-    if (this.fm6Node && typeof (this.fm6Node as any).connect === 'function') {
-      try { (this.fm6Node as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
-    }
-    if (this.drumSynthNode && typeof (this.drumSynthNode as any).connect === 'function') {
-      try { (this.drumSynthNode as any).connect(masterBusInput); } catch { /* Worklet-Fallback */ }
-    }
+    const connectWorkletToChannel = (node: unknown, track: TrackType): void => {
+      if (!node || typeof (node as any).connect !== 'function') return;
+      this.ensureChannelNode(track);
+      const channelInput = (this.channelInputs[track] as any)?.input ?? this.channelInputs[track];
+      if (!channelInput) return;
+      try { (node as any).connect(channelInput); } catch { /* Worklet-Fallback */ }
+    };
+    connectWorkletToChannel(this.granularNode, 'channel4');
+    connectWorkletToChannel(this.fm6Node, 'channel4');
+    connectWorkletToChannel(this.drumSynthNode, 'channel2');
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
     // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer),
@@ -549,22 +532,10 @@ class AudioEngine {
     this.masterVolume = new Tone.Volume(-6);
     this.masterBuses['GLOBAL_MASTER'].connect(this.masterVolume);
 
-    // --- Task 4: Monitor/Cue-Busse (paralleler Cue-Mix vom GLOBAL_MASTER) ---
-    // Jeder Monitor (MON1..MON4) erhält einen eigenen Volume-Knoten; dieser kann
-    // später als separater Kopfhörer-/Cue-Ausgang (WebRTC-Session) genutzt werden.
-    const monitorLimiter = new Tone.Limiter(-1); // entkoppelt + Clip-Schutz
-    this.masterVolume.connect(monitorLimiter);
-    // PDC: Monitor-Pfad um die Mastering-Lookahead-Latenz verzögern, damit Cue
-    // und Main-Mix kohärent sind (kein Kammfilter beim parallelen Abhören).
-    // Tone.Delay ist ein reines Wet-Delay (kein Dry-Anteil) – ideal als PDC.
-    this.pdcMonitorDelay = new Tone.Delay(this.PDC_MASTERING_LOOKAHEAD_SEC, 0.1);
-    monitorLimiter.connect(this.pdcMonitorDelay);
-    const monitorFeed = (this.pdcMonitorDelay ?? monitorLimiter);
-    ['MON1', 'MON2', 'MON3', 'MON4'].forEach(mon => {
-      monitorFeed.connect(this.monitorGains[mon]);
-    });
+    // PDC: Der lokale Cue-Pfad (pre-fader) wird um die Mastering-Lookahead-Latenz
+    // verzögert, damit Cue und Main-Mix beim parallelen Abhören phasenrichtig
+    // liegen (kein Kammfilter). Der native DelayNode wird in buildCueBus verdrahtet.
 
-    
     this.masterVolume.connect(this.masterMePreGain);
     this.masterMePreGain.connect(this.masterMeHighpass);
     this.masterMeHighpass.connect(this.masterMeCompressor);
@@ -608,17 +579,25 @@ class AudioEngine {
     // Use raw destination for AudioWorkletNode – über einen finalen Gain,
     // damit Spatial-Mode-Wechsel (SEPARATION) weich ausgeblendet werden kann.
     if (this.ctx && typeof this.ctx.createGain === 'function') {
+      this.masterStreamTap = this.ctx.createGain();
+      this.masterStreamTap.gain.value = 1;
       this.outputGain = this.ctx.createGain();
       this.outputGain.gain.value = 1;
-      connectSafe(this.analyzerNode, this.outputGain);
-      // P0-6: Lokaler MAIN-Abhörpegel als letzter Knoten vor der Destination.
-      // Beim Cue-Wechsel wird ausschließlich dieser Gain gefahren – der Graph
-      // bleibt verbunden (kein Disconnect-Modell, D13) und der Master-Stream
-      // (Abgriff an masterVolume) bleibt für die anderen User unverändert.
+      // Kette: analyzerNode → masterStreamTap (Post-Mastering-Abgriff für den
+      // Master-Stream) → mainMonitorGain (lokaler MAIN-Abhörpegel) → outputGain
+      // (Spatial-Blende) → destination. So wirkt der lokale Cue-Umschalter in
+      // 2.0 UND 2.1, und der Master-Stream bleibt von lokalem Monitoring getrennt.
+      connectSafe(this.analyzerNode, this.masterStreamTap);
       this.mainMonitorGain = this.ctx.createGain();
       this.mainMonitorGain.gain.value = 1;
-      connectSafe(this.outputGain, this.mainMonitorGain);
-      connectSafe(this.mainMonitorGain, this.ctx.destination);
+      connectSafe(this.masterStreamTap, this.mainMonitorGain);
+      connectSafe(this.mainMonitorGain, this.outputGain);
+      connectSafe(this.outputGain, this.ctx.destination);
+      // Nativer PDC-Delay für den Cue-Pfad (5 ms Mastering-Lookahead).
+      if (typeof this.ctx.createDelay === 'function') {
+        this.cuePdcDelay = this.ctx.createDelay(0.1);
+        this.cuePdcDelay.delayTime.value = this.PDC_MASTERING_LOOKAHEAD_SEC;
+      }
       this.buildCueBus();
     } else {
       connectSafe(this.analyzerNode, this.ctx?.destination);
@@ -647,11 +626,11 @@ class AudioEngine {
     this.channelGains.channel3!.volume.value = 0.7;
     this.channelGains.channel7!.volume.value = 0.8;
 
-    this.kickSynth = new Tone.MembraneSynth({ octaves: 8, envelope: { attack: 0.005, decay: 0.1, sustain: 0.02, release: 0.3 } }).connect(this.channelGains.channel1!);
-    this.hatSynth = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.1, sustain: 0.05, release: 0.05 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(this.channelGains.channel2!);
-    this.clapFilter = new Tone.Filter(1800, 'bandpass', -12).connect(this.channelGains.channel3!);
+    this.kickSynth = new Tone.MembraneSynth({ octaves: 8, envelope: { attack: 0.005, decay: 0.1, sustain: 0.02, release: 0.3 } }).connect(this.channelInputs.channel1!);
+    this.hatSynth = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.1, sustain: 0.05, release: 0.05 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(this.channelInputs.channel2!);
+    this.clapFilter = new Tone.Filter(1800, 'bandpass', -12).connect(this.channelInputs.channel3!);
     this.clapSynth = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.2, sustain: 0.0, release: 0.05 }, volume: -10 }).connect(this.clapFilter);
-    this.bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 600, Q: 1.0 }).connect(this.channelGains.channel7!);
+    this.bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 600, Q: 1.0 }).connect(this.channelInputs.channel7!);
     this.bassDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.25, wet: 0.3 }).connect(this.bassFilter);
     this.bassSynth = new Tone.MonoSynth().connect(this.bassDelay);
 
@@ -868,6 +847,7 @@ class AudioEngine {
         if (routingConfig.global.tempo) Tone.Transport.bpm.value = routingConfig.global.tempo;
         if (routingConfig.global.masterVolume !== undefined) this.masterVolume.volume.value = routingConfig.global.masterVolume;
       }
+      // F7: Track-Params UND Pattern aus routing.json anwenden.
       if (routingConfig.tracks && Array.isArray(routingConfig.tracks)) {
         routingConfig.tracks.forEach(trackConfig => {
           if (trackConfig.params) {
@@ -878,10 +858,74 @@ class AudioEngine {
               case "bassSynth": this.bassSynth.set(trackConfig.params); break;
             }
           }
+          const ch = this.routingTrackToChannel(trackConfig.id);
+          if (ch && Array.isArray(trackConfig.patterns)) {
+            this.patterns[ch] = this.normalizeSteps(trackConfig.patterns as boolean[], this.stepCount);
+          }
         });
+      }
+      // F7: Bus-Effekte auf die realen Mastering-Nodes anwenden.
+      if (routingConfig.buses && Array.isArray(routingConfig.buses)) {
+        for (const bus of routingConfig.buses) {
+          if (!bus.effects || !Array.isArray(bus.effects)) continue;
+          for (const fx of bus.effects) this.applyRoutingBusEffect(fx.type, fx.params);
+        }
+      }
+      // Connections sind im Live-Graph fest verdrahtet (Kanalzug → GLOBAL_MASTER).
+      // Wir validieren sie hier gegen die bekannten Bus-/Track-IDs und loggen
+      // Abweichungen, statt eine zweite, divergente Graph-Quelle aufzubauen.
+      if (routingConfig.connections && Array.isArray(routingConfig.connections)) {
+        const trackIds = new Set((routingConfig.tracks ?? []).map((t) => t.id));
+        const busIds = new Set((routingConfig.buses ?? []).map((b) => b.id));
+        for (const c of routingConfig.connections) {
+          const validSource = trackIds.has(c.source) || busIds.has(c.source);
+          const validDest = busIds.has(c.destination) || c.destination === 'destination';
+          if (!validSource || !validDest) {
+            console.warn('[routing.json] ignorierte Verbindung:', c, { validSource, validDest });
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load or parse routing.json:', error);
+    }
+  }
+
+  /** F7: routing.json-Track-ID → interner Kanal. */
+  private routingTrackToChannel(id: string): TrackType | null {
+    const map: Record<string, TrackType> = {
+      'track-kick': 'channel1',
+      'track-hat': 'channel2',
+      'track-clap': 'channel3',
+      'track-bass': 'channel7',
+    };
+    return map[id] ?? null;
+  }
+
+  /** F7: routing.json-Bus-Effekt auf die reale Mastering-Kette anwenden. */
+  private applyRoutingBusEffect(type: string, params?: Record<string, unknown>): void {
+    const num = (v: unknown): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+    try {
+      switch (type) {
+        case 'masterMePreGain':
+          if (this.masterMePreGain && num(params?.gain) !== undefined) this.masterMePreGain.volume.value = num(params!.gain)!;
+          break;
+        case 'masterMeHighpass':
+          if (this.masterMeHighpass && num(params?.frequency) !== undefined) this.masterMeHighpass.frequency.value = num(params!.frequency)!;
+          break;
+        case 'masterMeCompressor':
+          if (this.masterMeCompressor) {
+            const threshold = num(params?.threshold);
+            const ratio = num(params?.ratio);
+            if (threshold !== undefined) this.masterMeCompressor.threshold.value = threshold;
+            if (ratio !== undefined) this.masterMeCompressor.ratio.value = ratio;
+          }
+          break;
+        default:
+          console.warn('[routing.json] unbekannter Bus-Effekt ignoriert:', type);
+      }
+    } catch (e) {
+      console.warn('[routing.json] Bus-Effekt nicht anwendbar:', type, e);
     }
   }
 
@@ -1097,15 +1141,22 @@ class AudioEngine {
     try { this.eqNode?.port?.postMessage({ band, gain, freq, q }); } catch { /* Gain-Fallback */ }
   }
 
-  /** Task 8: Glatte Fader-/Panner-Übergänge (Zipper-frei via setTargetAtTime). */
-  public setMixChannelParam(target: 'gain'|'pan'|'monitor'|'master', value: number, rampSec = 0.02) {
-    let node: { param: any; } | null = null;
-    if (target === 'master') node = this.masterVolume ? { param: this.masterVolume.volume } : null;
-    if (node && node.param) {
-      node.param.setTargetAtTime(value, Tone.now(), rampSec);
+  /** Master-Lautstärke direkt in dB setzen (glatter Übergang). */
+  public setMixChannelParam(target: 'master', value: number, rampSec = 0.02): void {
+    if (target === 'master' && this.masterVolume) {
+      const v = Number.isFinite(value) ? Math.max(-80, Math.min(12, value)) : -Infinity;
+      this.lastMasterVolumeDb = v;
+      this.masterVolume.volume.setTargetAtTime(v, Tone.now(), rampSec);
     }
-    // Für Channel-/Monitor-Wege geben wir den Wert zurück (UI-synergistisch).
-    return value;
+  }
+
+  /** Master-Lautstärke in dB (Voice-/Routing-Befehle). */
+  public setMasterVolumeDb(db: number, rampSec = 0.05): void {
+    this.ensureInitialized();
+    if (!this.masterVolume) return;
+    const v = Number.isFinite(db) ? Math.max(-80, Math.min(12, db)) : -Infinity;
+    this.lastMasterVolumeDb = v;
+    this.masterVolume.volume.rampTo(v, rampSec);
   }
 
   /**
@@ -1116,6 +1167,9 @@ class AudioEngine {
   private ensureChannelNode(track: TrackType): void {
     if (!this.channelGains[track]) {
       const rawCtx = (this.ctx || (Tone.context as any)?.rawContext) as AudioContext;
+      // F1: Pre-Fader-Eingang. Alle Quellen verbinden sich hierher, damit
+      // Fader/EQ/Pan und der Cue-Abgriff (pre-fader) real wirken.
+      const input = new Tone.Gain(1);
       const g = new Tone.Volume(0);
       // Pro-Kanal-EQ nach dem Gain, vor dem Pan.
       const low = new Tone.Filter(220, 'lowshelf');
@@ -1128,12 +1182,14 @@ class AudioEngine {
       // verlangt in Firefox einen echten BaseAudioContext (Realm-Check) und
       // schlug mit 'does not implement BaseAudioContext' fehl.
       const p = new Tone.Panner(0);
-      g.connect(low);        // Gain -> EQ
-      high.connect(p);       // EQ -> Pan
+      input.connect(g);     // Pre-Fader -> Fader
+      g.connect(low);       // Gain -> EQ
+      high.connect(p);      // EQ -> Pan
       p.connect(this.masterBuses['GLOBAL_MASTER']);
+      this.channelInputs[track] = input;
       this.channelGains[track] = g;
       this.channelPans[track] = p;
-      // P0-6: Kanal zusätzlich (parallel) auf den lokalen Cue-Bus legen.
+      // P0-6: Kanal zusätzlich (parallel, pre-fader) auf den lokalen Cue-Bus legen.
       this.tapChannelToCue(track);
     }
   }
@@ -1141,12 +1197,13 @@ class AudioEngine {
   /**
    * P0-6: Baut den lokalen Cue-Bus auf (parallel zum MAIN-Weg).
    *
-   *   channelPan → cueTrackGain(0..2) → cueBus → cueOutGain → destination
+   *   channelInput(pre-fader) → cueTrackGain(0..2) → cueBus → PDC-Delay
+   *   → cueOutGain → destination
    *
-   * Der Cue greift **vor** der Master-/Mastering-Kette ab und ist damit der
-   * kürzeste Weg zum Ausgang (kein zusätzliches Latenz-Budget auf MAIN). Der
-   * MAIN-Bus wird nicht angefasst: Er läuft unverändert weiter zum
-   * Master-Stream der Session und zu den übrigen Usern.
+   * Der Cue greift **vor** Fader/Mastering-Kette ab (echtes PFL) und ist damit
+   * der kürzeste Weg zum Ausgang (kein zusätzliches Latenz-Budget auf MAIN).
+   * Das PDC-Delay gleicht die 5-ms-Mastering-Lookahead-Latenz aus, damit Cue
+   * und Main beim MIX-Hören phasenrichtig liegen.
    */
   private buildCueBus(): void {
     if (this.cueBus || !this.ctx || typeof this.ctx.createGain !== 'function') return;
@@ -1156,7 +1213,12 @@ class AudioEngine {
       this.cueOutGain = this.ctx.createGain();
       // Start: MAIN hören, Cue stumm (P0-1-Start-Silence bleibt erhalten).
       this.cueOutGain.gain.value = 0;
-      this.cueBus.connect(this.cueOutGain);
+      if (this.cuePdcDelay) {
+        this.cueBus.connect(this.cuePdcDelay);
+        this.cuePdcDelay.connect(this.cueOutGain);
+      } else {
+        this.cueBus.connect(this.cueOutGain);
+      }
       this.cueOutGain.connect(this.ctx.destination);
     } catch {
       this.cueBus = null;
@@ -1167,15 +1229,15 @@ class AudioEngine {
     (Object.keys(this.channelGains) as TrackType[]).forEach((t) => this.tapChannelToCue(t));
   }
 
-  /** P0-6: Einzelnen Kanal auf den Cue-Bus abgreifen (idempotent). */
+  /** P0-6: Einzelnen Kanal pre-fader auf den Cue-Bus abgreifen (idempotent). */
   private tapChannelToCue(track: TrackType): void {
     if (!this.cueBus || this.cueTrackGains[track]) return;
-    const pan = this.channelPans[track];
-    if (!pan) return;
+    const source = this.channelInputs[track];
+    if (!source) return;
     try {
       const tap = this.ctx.createGain();
       tap.gain.value = this.monitorPlan.cueTracks[track] ?? 1;
-      pan.connect(tap);
+      source.connect(tap);
       tap.connect(this.cueBus);
       this.cueTrackGains[track] = tap;
     } catch { /* Cue-Abgriff optional – MAIN bleibt unberührt */ }
@@ -1402,15 +1464,17 @@ class AudioEngine {
 
     if (!buffer || !this.ctx) return;
 
-    // Reines WebAudio: AudioBufferSourceNode → Gain (Velocity) → GLOBAL_MASTER.
+    // F1: Drum-Preview über den Kanalzug (channel2) statt direkt in den Master.
+    const drumChannel = pluginAudioChannels('drum')[0] ?? 'channel2';
+    this.ensureChannelNode(drumChannel);
+    const drumInput = (this.channelInputs[drumChannel] as any)?.input ?? this.channelInputs[drumChannel];
     const t = this.ctx.currentTime + 0.002;
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
     const g = this.ctx.createGain();
     g.gain.value = Math.max(0, Math.min(1.5, velocity));
     src.connect(g);
-    const masterInput = (this.masterBuses['GLOBAL_MASTER'] as any)?.input;
-    g.connect(masterInput || this.ctx.destination);
+    g.connect(drumInput || this.ctx.destination);
     src.start(t);
     src.stop(t + buffer.duration + 0.05);
     src.onended = () => {
@@ -1778,10 +1842,6 @@ class AudioEngine {
   public setMonitorGain(mon: 'MON1'|'MON2'|'MON3'|'MON4', gain: number) {
     const v = Number.isFinite(gain) ? Math.max(0, Math.min(1, gain)) : 0;
     this.monitorLevels[mon] = v;
-    if (this.monitorGains[mon]) {
-      // Gain in dB relativ (0..1 Fader-Anteil) umrechnen: stumm bei 0, voll bei 0dB.
-      this.monitorGains[mon].volume.rampTo(v <= 0 ? -Infinity : 20 * Math.log10(v), 0.05);
-    }
     // P0-6: Läuft der lokale User gerade auf diesem Cue-Bus, wirkt der Pegel sofort.
     if (mon === this.monitorPlan.mon) this.applyMonitorPlan();
   }
@@ -1803,7 +1863,7 @@ class AudioEngine {
   public getMonitorConfig() {
     return {
       count: this.monitorCount,
-      gains: Object.fromEntries(Object.entries(this.monitorGains).map(([k, v]) => [k, v.volume.value])),
+      gains: { ...this.monitorLevels },
       tracks: Object.fromEntries(Object.entries(this.monitorTrackGain)),
     };
   }
@@ -1958,12 +2018,14 @@ class AudioEngine {
         numberOfOutputs: 1,
         outputChannelCount: [2],
       });
-      // Verbinde den Worklet-Synth auf einen Lead-Bus (hier direkt auf Master mit eigener Lautstaerke)
+      // F1: Worklet-Synth über den Kanalzug (channel4) führen, damit Fader/EQ/Pan wirken.
+      this.ensureChannelNode('channel4');
+      const synthChannel = this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER'];
       const leadGain = new Tone.Volume(-8);
       // @ts-ignore Tone-Node-Kompatibilitaet fuer Web-Audio-Worklet
       this.synthWorklet.connect(leadGain.input ? leadGain.input : this.ctx.destination);
       // @ts-ignore Tone-Node-Kompatibilitaet
-      leadGain.connect(this.masterBuses['GLOBAL_MASTER']);
+      leadGain.connect(synthChannel);
       console.info('synth-processor (PolyBLEP) aktiviert.');
     } catch (e) {
       this.synthWorklet = null;
@@ -2015,7 +2077,9 @@ class AudioEngine {
       };
       const g = new Tone.Gain(1);
       (this.itSynthNode as any).connect(g);
-      g.connect(this.masterBuses['GLOBAL_MASTER']);
+      // F1: instrumentMONK-Worklet über den Kanalzug (channel4) führen.
+      this.ensureChannelNode('channel4');
+      g.connect(this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER']);
       this.itSynthGain = g;
       this.itSynthReady = true;
       console.info('it-synth-processor (instrumentMONK, sample-genau) aktiviert.');
@@ -2119,17 +2183,17 @@ class AudioEngine {
       channel5: null, channel6: null, channel7: null, channel8: null,
     };
 
-    // Kanalzuege (Gain/EQ/Pan) und Monitor-Busse entsorgen.
+    // Kanalzuege (Pre-Fader/Gain/EQ/Pan) entsorgen.
+    Object.values(this.channelInputs).forEach((n) => { try { n?.dispose(); } catch { /* ignore */ } });
     Object.values(this.channelGains).forEach((n) => { try { n?.dispose(); } catch { /* ignore */ } });
     Object.values(this.channelPans).forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
     Object.values(this.channelEQs).forEach((eq) => {
       try { eq.low.dispose(); eq.mid.dispose(); eq.high.dispose(); } catch { /* ignore */ }
     });
+    this.channelInputs = {};
     this.channelGains = {};
     this.channelPans = {};
     this.channelEQs = {};
-    Object.values(this.monitorGains).forEach((n) => { try { n?.dispose(); } catch { /* ignore */ } });
-    this.monitorGains = {};
 
     // Spatial-Bus abräumen.
     if (this.spatialRebuildTimer) { clearTimeout(this.spatialRebuildTimer); this.spatialRebuildTimer = null; }
@@ -2142,6 +2206,8 @@ class AudioEngine {
     // Finaler Output-Gain abräumen.
     try { this.outputGain?.disconnect(); } catch { /* ignore */ }
     this.outputGain = null;
+    try { this.masterStreamTap?.disconnect(); } catch { /* ignore */ }
+    this.masterStreamTap = null;
 
     // P0-6: Lokalen Abhör-/Cue-Weg abräumen.
     try { this.mainMonitorGain?.disconnect(); } catch { /* ignore */ }
@@ -2156,8 +2222,8 @@ class AudioEngine {
     this.monitorPlan = defaultMonitorPlan('MON1');
 
     // PDC-Delay abräumen.
-    try { this.pdcMonitorDelay?.dispose(); } catch { /* ignore */ }
-    this.pdcMonitorDelay = null;
+    try { this.cuePdcDelay?.disconnect(); } catch { /* ignore */ }
+    this.cuePdcDelay = null;
 
     // Drum-Buffer-Cache freigeben.
     this.drumBufferCache.clear();
@@ -2280,9 +2346,14 @@ class AudioEngine {
    */
   public createMasterStreamDestination(): MediaStreamAudioDestinationNode | null {
     try {
-      if (!this.ctx || typeof this.ctx.createMediaStreamDestination !== 'function' || !this.masterVolume) return null;
+      if (!this.ctx || typeof this.ctx.createMediaStreamDestination !== 'function') return null;
+      // F2: Master-Stream NACH der Mastering-Kette abgreifen (masterStreamTap),
+      // nicht pre-Mastering an masterVolume. Fallback, falls der Tap noch nicht
+      // existiert (Silent-Modus): masterVolume.
+      const tap = this.masterStreamTap ?? this.masterVolume;
+      if (!tap) return null;
       const dest = this.ctx.createMediaStreamDestination();
-      this.masterVolume.connect(dest);
+      tap.connect(dest);
       return dest;
     } catch {
       return null;
@@ -2292,7 +2363,8 @@ class AudioEngine {
   /** Trennt eine zuvor erzeugte Master-Stream-Destination sauber. */
   public disconnectMasterStreamDestination(dest: MediaStreamAudioDestinationNode): void {
     try {
-      this.masterVolume?.disconnect(dest);
+      const tap = this.masterStreamTap ?? this.masterVolume;
+      tap?.disconnect(dest);
       dest.disconnect();
     } catch { /* bereits getrennt */ }
   }
@@ -2331,13 +2403,15 @@ class AudioEngine {
   // --- Task 2.1.4 / F4: JSON-serialisierbarer Audio-Graph (Export/Import) ---
   private graphStateBridge = new GraphStateBridge();
 
-  /** V1→V2-Migrationsbrücke: hält Engine (V1) und AudioGraph (V2) synchron. */
+  /** V1→V2-Migrationsbrücke: hält Engine (V1) und AudioGraph (V2) synchron.
+   *  @deprecated Prototyp – nicht im Live-Audiopfad. */
   public graphAdapter = new GraphEngineAdapter({
     exportState: () => this.exportGraphState(),
     importState: (state) => this.importGraphState(state),
   });
 
-  /** V2-Playback-Engine (voller Ersatzpfad für den V1-Transport). */
+  /** V2-Playback-Engine (voller Ersatzpfad für den V1-Transport).
+   *  @deprecated Prototyp – aktuell nicht im Live-Audiopfad. */
   public playbackMode: 'v1' | 'v2' = 'v1';
   public graphPlayback = new GraphPlaybackEngine((source, _ctx) =>
     this.buildWorkletChain(['it-synth', 'eq3', 'mastering'], source).output,
@@ -2349,6 +2423,7 @@ class AudioEngine {
   }
 
   // NEW-D4-1: V2-StudioGraph (backend-unabhängiger 8-Kanal-Mischpfad).
+  // @deprecated Prototyp – aktuell nicht im Live-Audiopfad verdrahtet.
   public v2Studio = new V2StudioGraph();
 
   /** Rendert einen V2-Block (128 Samples Stereo) durch den Graph. */
@@ -2531,8 +2606,9 @@ class AudioEngine {
   private async buildInstrumentSynth(patch: InstrumentPatch) {
     try {
       const vol = new Tone.Gain(0);
-      // Finaler Ausgangs-Gain -> Haupt-Master (Vor der FX) nutzen.
-      vol.connect(this.masterBuses['GLOBAL_MASTER']);
+      // F1: Instrument-Stimmen über den Kanalzug (channel4) führen.
+      this.ensureChannelNode('channel4');
+      vol.connect(this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER']);
 
       const [a, d, s, r] = patch.env;
       const baseEnv = new Tone.AmplitudeEnvelope(a, d, s, r).connect(vol);
@@ -2638,7 +2714,10 @@ class AudioEngine {
       ? Tone.Frequency(note, 'midi').toFrequency()
       : Tone.Frequency(note).toFrequency();
     const t = this.ctx?.currentTime ?? 0;
-    const master = this.masterBuses['GLOBAL_MASTER'];
+    // F1: Tone.js-Fallback-Stimmen über den Kanalzug führen (Drum→channel2, Rest→channel4).
+    const instChannel: TrackType = def.kind === 'drum' ? 'channel2' : 'channel4';
+    this.ensureChannelNode(instChannel);
+    const outBus = this.channelInputs[instChannel] ?? this.masterBuses['GLOBAL_MASTER'];
 
     try {
       switch (def.kind) {
@@ -2650,7 +2729,7 @@ class AudioEngine {
           (filt as any).Q.value = d.resonance;
           const out = new Tone.Gain(velocity * 0.8);
           osc.connect(env).connect(filt).connect(out);
-          out.connect(master);
+          out.connect(outBus);
           env.triggerAttackRelease(0.5, t);
           osc.start(t);
           osc.stop(t + d.attack + 0.5 + d.release + 0.1);
@@ -2669,7 +2748,7 @@ class AudioEngine {
           const out = new Tone.Gain(velocity * 0.7);
           modulator.connect(modGain).connect(carrier.frequency);
           carrier.connect(env).connect(filt).connect(out);
-          out.connect(master);
+          out.connect(outBus);
           env.triggerAttackRelease(0.5, t);
           modulator.start(t); carrier.start(t);
           const stop = t + d.attack + 0.5 + d.release + 0.1;
@@ -2686,7 +2765,7 @@ class AudioEngine {
             const filt = new Tone.Filter(d.filterFreq ?? 2000, 'bandpass', -12);
             const env = new Tone.Gain(velocity);
             noise.connect(filt).connect(env);
-            env.connect(master);
+            env.connect(outBus);
             env.gain.setValueAtTime(velocity, t);
             env.gain.exponentialRampToValueAtTime(0.001, t + (d.decay ?? 0.2));
             noise.start(t);
@@ -2700,7 +2779,7 @@ class AudioEngine {
             osc.frequency.setValueAtTime(startF, t);
             osc.frequency.exponentialRampToValueAtTime(Math.max(30, endF), t + (d.decay ?? 0.3));
             const env = new Tone.Gain(velocity);
-            env.connect(master);
+            env.connect(outBus);
             env.gain.setValueAtTime(velocity, t);
             env.gain.exponentialRampToValueAtTime(0.001, t + (d.decay ?? 0.3));
             osc.connect(env);
@@ -2717,7 +2796,7 @@ class AudioEngine {
           const filt = new Tone.Filter(d.resonance ? 3000 : 1200, 'lowpass');
           (filt as any).Q.value = d.resonance ?? 1;
           osc.connect(filt).connect(out);
-          out.connect(master);
+          out.connect(outBus);
           // Frequency-Sweep falls definiert.
           if (d.freqStart && d.freqEnd) {
             osc.frequency.setValueAtTime(d.freqStart, t);
@@ -2750,7 +2829,7 @@ class AudioEngine {
           const partialNodes: Tone.Oscillator[] = [];
           const ratios: number[] = [];
           const out = new Tone.Gain(velocity * 0.8);
-          out.connect(master);
+          out.connect(outBus);
           d.partials.forEach((p) => {
             const o = new Tone.Oscillator(freq * (p.ratio || 1), d.osc);
             const g = new Tone.Gain(p.amp / Math.max(1, d.partials.length));
@@ -2799,8 +2878,13 @@ class AudioEngine {
     return this.previewUrl;
   }
 
-  /** Einmalige Hörprobe eines synthetischen Samples (biblioMONK Play-Button). */
-  public previewSynthesizedSample(params: { frequency?: number; decay?: number; pitchDecay?: number; oscillatorType?: string }): void {
+  /** Einmalige Hörprobe eines synthetischen Samples (biblioMONK Play-Button).
+   *  F1: läuft über den Kanalzug des Ziel-Kanals (Default channel4), damit auch
+   *  Vorschauen Fader/EQ/Pan respektieren. */
+  public previewSynthesizedSample(
+    params: { frequency?: number; decay?: number; pitchDecay?: number; oscillatorType?: string },
+    track: TrackType = 'channel4',
+  ): void {
     this.ensureInitialized();
     try {
       const freq = Math.max(20, Math.min(20000, params.frequency ?? 220));
@@ -2811,7 +2895,8 @@ class AudioEngine {
         oscillator: { type },
         envelope: { attack: 0.005, decay, sustain: 0.02, release: 0.12 },
       });
-      const bus = this.masterBuses['GLOBAL_MASTER'];
+      this.ensureChannelNode(track);
+      const bus = this.channelInputs[track] ?? this.masterBuses['GLOBAL_MASTER'];
       if (bus) synth.connect(bus);
       else synth.toDestination();
       synth.triggerAttackRelease(freq, '8n');
@@ -2854,11 +2939,11 @@ class AudioEngine {
       await this.ensureInitialized();
 
       // #DJ: Kanalzug sicherstellen und Player DURCH die Kette
-      // Gain -> 3-Band-EQ -> Pan -> GLOBAL_MASTER routen, damit die
+      // Pre-Fader → Gain → 3-Band-EQ → Pan → GLOBAL_MASTER routen, damit die
       // Mischpult-Regler (Fader/EQ/Pan/Mute) tatsächlich auf geladene
       // Tracks wirken – vorher ging der Player direkt auf den Master.
       this.ensureChannelNode(track);
-      const player = new Tone.Player(url).connect(this.channelGains[track]!);
+      const player = new Tone.Player(url).connect(this.channelInputs[track]!);
       // player.autostart = true; // Or player.start() when needed
       this.samplePlayers[track] = player;
       this.trackSampleUrl[track] = url;
@@ -2878,11 +2963,10 @@ class AudioEngine {
     this.ensureInitialized();
     const hrtf = calculateHRTF(x, y, this.ctx?.sampleRate || 48000);
 
-    // HRTF-basiertes Stereo-Cue (Kopfhörer/Engineer).
+    // HRTF-basiertes Stereo-Cue (Kopfhörer/Engineer). F1/F6: echtes Kanal-Pan
+    // statt No-op-setWorkletParam/setMixChannelParam.
     const stereoPan = Math.max(-1, Math.min(1, (hrtf.azimuth || 0) / 90));
-    const channelStr = track.replace('channel', '');
-    this.setWorkletParam(`ch${channelStr}_volume`, -hrtf.ildDb);
-    this.setMixChannelParam('pan', stereoPan, 0.03);
+    this.setChannelPan(track, stereoPan);
 
     // Mehrkanal-Konfigurationspanning (VBAP-artig auf 360°-Ring).
     const pan = calculateChannelPan(x, y, this.spatialSetupId);
@@ -2976,24 +3060,29 @@ class AudioEngine {
     return this.stereoMode;
   }
 
-  /** Baut den 2.1-Master-Ausgang (best effort, live verifiziert auf Xonar U7). */
+  /** Baut den 2.1-Master-Ausgang (best effort, live verifiziert auf Xonar U7).
+   *  F3: outputGain ist der EINZIGE Ausgangsknoten – in 2.0 geht er auf die
+   *  Destination, in 2.1 auf Splitter/Merger. Es gibt keinen zweiten Stereo-Pfad
+   *  mehr, der den lokalen mainMonitorGain (davor) umgehen könnte. */
   private applyMasterOutputRouting(): void {
-    if (!this.initialized || !this.ctx || typeof this.ctx.createChannelSplitter !== 'function') return;
+    if (!this.initialized || !this.ctx || typeof this.ctx.createChannelSplitter !== 'function' || !this.outputGain) return;
     try {
       const dest = this.ctx.destination as any;
       const supportsLfe = typeof dest.maxChannelCount === 'number' && dest.maxChannelCount >= 3;
 
       if (this.stereoMode === '2.0' || !supportsLfe) {
-        // Stereo-/Phantom-Betrieb: zurück auf den direkten Output-Gain-Pfad.
-        if (this.master21 && this.outputGain) {
+        // Stereo-/Phantom-Betrieb: exakt ein Pfad outputGain → destination.
+        if (this.master21) {
           try { this.master21.merger?.disconnect?.(dest); } catch { /* ignore */ }
+          try { this.master21.splitter?.disconnect?.(); } catch { /* ignore */ }
           this.master21 = null;
-          try { this.outputGain.connect(dest); } catch { /* ignore */ }
         }
+        try { this.outputGain.disconnect(); } catch { /* ignore */ }
+        try { this.outputGain.connect(dest); } catch { /* ignore */ }
         return;
       }
 
-      if (this.master21 || !this.outputGain) return; // bereits verdrahtet
+      if (this.master21) return; // bereits verdrahtet
       const splitter = this.ctx.createChannelSplitter(2);
       const merger = this.ctx.createChannelMerger(3);
       const hpL = this.ctx.createBiquadFilter();
@@ -3014,7 +3103,8 @@ class AudioEngine {
       const wire = (from: any, to: any, outIdx = 0, inIdx = 0): void => {
         try { from?.connect?.(to, outIdx, inIdx); } catch { /* ignore */ }
       };
-      try { this.outputGain.disconnect(dest); } catch { /* ignore */ }
+      // Alten Stereo-Pfad vollständig trennen, dann 2.1-Pfad aufbauen.
+      try { this.outputGain.disconnect(); } catch { /* ignore */ }
       wire(this.outputGain, splitter);
       wire(splitter, hpL, 0);
       wire(splitter, hpR, 1);
@@ -3047,12 +3137,6 @@ class AudioEngine {
       if (this.outputGain) {
         this.outputGain.gain.cancelScheduledValues(t);
         this.outputGain.gain.setTargetAtTime(mode === 'SEPARATION' ? 0.0001 : 1, t, 0.02);
-      } else if (mode === 'SEPARATION' && this.masterToDestinationConnected) {
-        this.analyzerNode.disconnect(this.ctx.destination);
-        this.masterToDestinationConnected = false;
-      } else if (mode === 'ON_TOP' && !this.masterToDestinationConnected) {
-        this.analyzerNode.connect(this.ctx.destination);
-        this.masterToDestinationConnected = true;
       }
     } catch { /* ignore */ }
   }
@@ -3114,8 +3198,11 @@ class AudioEngine {
       this.spatialMerger = merger;
       this.spatialEnabled = true;
 
-      // Verbindung: Master-Signal in den Splitter einspeisen.
-      const masterOut: any = this.masterMeLimiter || this.masterVolume || this.analyzerNode;
+      // Verbindung: Master-Signal in den Splitter einspeisen. F3: Nutze den
+      // post-Mastering-Tap, damit auch der Spatial-Bus den fertigen Master
+      // erhält. Der Merger-Ausgang ist ein bewusster Hardware-Pfad zur
+      // Surround-Device-Destination (nicht der lokale Kopfhörer-/Cue-Weg).
+      const masterOut: any = this.masterStreamTap || this.masterMeLimiter || this.masterVolume;
       try { masterOut.connect(splitter); } catch { /* ignore */ }
 
       // Merger-Ausgang an Destination (für echte Surround-Geräte/Devices).

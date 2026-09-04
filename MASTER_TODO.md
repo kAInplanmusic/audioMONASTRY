@@ -20,6 +20,7 @@
 - [x] **P2-4 Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt). → automatisiert 2026-09-04: `tests/e2e/performance.spec.ts` misst via CDP `Performance.getMetrics` (TaskDuration/Wanduhr) unter Studio-Last **20,6 % CPU** → TASKDONE.
 - [x] **P3-3 Prüfpunkt**: Eval-Lauf grün, Report je Plugin mit Score, Dauer und Fehler (`npm run eval:ai` → `test-results/ai-eval-report.json/.md`, Gate aus `src/core/ai/orchestrator/evalMatrix.ts`, Nightly-Artefakt + Job-Summary) → TASKDONE. Offen bleibt nur die Bestätigung des nächtlichen CI-Laufs auf GitHub (Betreiber-Schritt).
 - [ ] **Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)
+- [x] **Audiokanalfluss-Audit (2026-09-05):** F1 Plugin-/Worklet-Quellen laufen jetzt über den Kanalzug (Pre-Fader→Fader→EQ→Pan→GLOBAL_MASTER); F2 Master-Stream wird post-Mastering abgegriffen (`masterStreamTap`); F3 2.1-Routing ohne mainMonitorGain-Bypass; F4/F5 Cue/PFL pre-fader + tote MON/USER-Busse entfernt + PDC-Delay im Cue-Pfad; F6 `setMixChannelParam('gain'/'pan')`-No-op beseitigt, neuer `setMasterVolumeDb()`; F7 `routing.json` wendet Pattern/Bus-Effekte an; tote Mischpult-Altlasten gelöscht; V2/Native-Backends als `@deprecated` markiert. Neu: `src/core/audio/pluginChannelMap.ts` + `tests/channelFlow.test.ts`; `npm run verify` grün (793 Tests, Boundary-Scan 344 Dateien). → TASKDONE.
 
 ---
 

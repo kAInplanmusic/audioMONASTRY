@@ -22,7 +22,11 @@ export function listBackends(): IAudioGraphBackend[] {
   return [...registry.values()];
 }
 
-/** Standard-Backends registrieren (WebAudio, WASM, Native). */
+/** Standard-Backends registrieren (WebAudio, WASM, Native).
+ *  @deprecated Prototyp-Pfad: Der Live-Audiopfad der App läuft über
+ *  `audioEngine` (Tone/WebAudio). Diese Backends sind ausschließlich für
+ *  Offline-/Migrationstests vorgesehen und werden aktuell nirgends live
+ *  registriert oder gerendert. */
 export function registerDefaultBackends(): void {
   registerBackend(new WebAudioBackend());
   registerBackend(new WasmBackend());

@@ -103,7 +103,7 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
             void audio.play().catch(() => { /* Autoplay-Block ignorieren */ });
           } catch { /* Audio-Objekt im Test/Node nicht verfügbar */ }
         } else {
-          audioEngine.previewSynthesizedSample(sample.parameters ?? {});
+          audioEngine.previewSynthesizedSample(sample.parameters ?? {}, 'channel5');
         }
         pushLog(`✓ ${KIND_LABEL[kind]} erzeugt → biblioMONK (${sample.name}${usedAi ? ', Server-AI' : ', lokal'})`);
       }
