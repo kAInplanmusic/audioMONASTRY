@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * ============================================================================
  * Angepasst an die Web-Audio-Architektur (AudioWorklets statt VST/AAX/CLAP):
  *   1. Boot in Studio (Start-Screen -> App) + Boot-Zeit messen
- *   2. Alle 17 Plugins aktivieren (AUTO_AI), danach Hot-Swap (an/aus) unter Play
+ *   2. Alle Plugin-Buttons der Toolbar aktivieren (AUTO_AI), danach Hot-Swap (an/aus) unter Play
  *   3. Play/Stop-Zyklen (10x) mit BPM-Rapid (60-250 BPM)
  *   4. 2 x 500 Pattern-Loads = 8000 Kanal-Pattern-Updates über die Engine
  *      (entspricht 1000+ automatisierten Parametern; loadPatterns schreibt
@@ -24,8 +24,8 @@ const PATTERN_LOADS_PER_ROUND = 500;
 const PLAY_STOP_CYCLES = 10;
 const BENIGN_CONSOLE = ['Signaling connection failed', 'WebSocket', 'websocket error', 'Failed to load resource'];
 
-test('Engine-/UI-Stresstest: 17 Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen', async ({ page }) => {
-  test.setTimeout(180_000); // 21 Plugins + 8000 Pattern-Loads brauchen mehr als 30 s.
+test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop-Zyklen', async ({ page }) => {
+  test.setTimeout(180_000); // Plugin-Last + 8000 Pattern-Loads brauchen mehr als 30 s.
   const pageErrors: string[] = [];
   const consoleErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));

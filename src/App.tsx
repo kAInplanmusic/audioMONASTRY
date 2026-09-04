@@ -41,8 +41,9 @@ const RACK_ORDER = [
 ];
 
 // Header-Navigation: 18 Plugin-Icons in ZWEI Reihen – jedes variable Plugin
-// bekommt genau ein Icon. Fixe Racks (masterplayer/performance/ai) haben kein Icon.
-const NAV_EXCLUDED = new Set(['ai', 'performance', 'masterplayer']);
+// bekommt genau ein Icon. Fixe Racks (performance/ai) haben kein Icon;
+// masterplayerMONK ist die feste Kopfzeile oberhalb der Toolbar.
+const NAV_EXCLUDED = new Set(['ai', 'performance']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
@@ -583,7 +584,7 @@ function AppComponent() {
       {/* Icon-Toolbar (Designvorlage: Modul-Kacheln) */}
       <nav className="md:sticky md:top-20 short-landscape:md:top-16 z-20 -mx-6 short-landscape:-mx-2 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
         <div className="flex flex-wrap gap-2 justify-center max-w-screen-2xl mx-auto">
-        {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && plugin.id !== 'performance' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
+        {getPluginRegistry().filter(plugin => plugin.id !== 'performance' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
           const isActive = state !== 'OFF';
 

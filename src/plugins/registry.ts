@@ -5,7 +5,6 @@ import {
 // Lazy-Code-Splitting: Jedes Terminal wird erst beim Aktivieren geladen
 // (reduziert das Hauptbundle erheblich; Vite erzeugt eigene Chunks).
 import { lazy } from 'react';
-const MasterPlayerTerminal = lazy(() => import('../components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 const InstrumentsTerminal = lazy(() => import('../components/InstrumentsTerminal').then(m => ({ default: m.InstrumentsTerminal })));
 const SynthesizerTerminal = lazy(() => import('../components/SynthesizerTerminal').then(m => ({ default: m.SynthesizerTerminal })));
 const DrumMachineTerminal = lazy(() => import('../components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
@@ -34,14 +33,14 @@ const ICON_MAP: Record<string, any> = {
 
 // ============================================================================
 // Plugin-Reihenfolge (verbindlich):
-//   0 masterplayer · 1 instrument · 2 synthesizer · 3 drum · 4 sampler
-//   5 mcp · 6 voice · 7 sound · 8 mixer · 9 controller · 10 effect
-//   11 drop · 12 library · 13 eq · 14 dsp · 15 mastering · 16 stem
-//   17 spatial · 18 recording · 19 performance · 20 ai
+//   0 instrument · 1 synthesizer · 2 drum · 3 sampler
+//   4 mcp · 5 voice · 6 sound · 7 mixer · 8 controller · 9 effect
+//   10 drop · 11 library · 12 eq · 13 dsp · 14 mastering · 15 stem
+//   16 spatial · 17 recording · 18 performance · 19 ai
+// masterplayerMONK ist KEIN Plugin, sondern feste View-only-Leiste (App.tsx).
 // visMONK wurde entfernt; seine Signal-Anzeige ist in perfMONK integriert.
 // ============================================================================
 const COMPONENT_MAP: Record<string, any> = {
-  masterplayer: MasterPlayerTerminal,
   instrument: InstrumentsTerminal,
   synthesizer: SynthesizerTerminal,
   drum: DrumMachineTerminal,
@@ -94,7 +93,6 @@ export function resolveComponent(id: string): any {
 }
 
 const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; icon: string }> = {
-  masterplayer: { name: 'masterplayerMONK', short: 'MPR', icon: 'Activity' },
   instrument: { name: 'instrumentMONK', short: 'INS', icon: 'Music' },
   synthesizer: { name: 'synthesizerMONK', short: 'SYN', icon: 'Waves' },
   drum: { name: 'drumMONK', short: 'DRM', icon: 'Speaker' },
@@ -117,7 +115,7 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
   ai: { name: 'aiMONK', short: 'AI', icon: 'Bot' },
 };
 
-const EXPECTED_PLUGIN_COUNT = 21;
+const EXPECTED_PLUGIN_COUNT = 20;
 
 const createFallbackRegistry = () =>
   Object.keys(COMPONENT_MAP).map((id) => {

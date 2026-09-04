@@ -16,7 +16,7 @@ import {
 import { getPluginRegistry } from '../src/plugins/registry';
 import { PLUGIN_ROUTE_IDS } from '../src/core/pluginAudioRouter';
 
-describe('P3-2: Prompt-/Kommando-Katalog für alle 21 Plugins', () => {
+describe('P3-2: Prompt-/Kommando-Katalog für alle 20 Plugins', () => {
   it('jedes registrierte Plugin hat Kommando-Katalog + System-Prompt + Default-Task', () => {
     for (const id of PLUGIN_ROUTE_IDS) {
       expect(PLUGIN_COMMAND_CATALOG[id] ?? PLUGIN_COMMAND_CATALOG[id === 'synthesizer' ? 'synth' : id] ?? undefined).toBeTruthy();
@@ -30,7 +30,7 @@ describe('P3-2: Prompt-/Kommando-Katalog für alle 21 Plugins', () => {
     expect(registryIds).toEqual([...PLUGIN_ROUTE_IDS].sort());
   });
 
-  it('Katalog-Text enthält alle 21 Plugin-IDs', () => {
+  it('Katalog-Text enthält alle 20 Plugin-IDs', () => {
     const catalog = moaCommandCatalog();
     for (const id of PLUGIN_ROUTE_IDS) {
       expect(catalog).toContain(id === 'synthesizer' ? 'synthesizer' : id);

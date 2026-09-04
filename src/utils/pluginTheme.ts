@@ -12,7 +12,6 @@
 
 /** Verbindliche Reihenfolge (siehe `src/plugins/registry.ts`). */
 export const PLUGIN_THEME_IDS = [
-  'masterplayer',
   'instrument',
   'synthesizer',
   'drum',
@@ -39,7 +38,6 @@ export type PluginThemeId = (typeof PLUGIN_THEME_IDS)[number];
 
 /** Hardware-/Referenz-Look je Plugin (für Skin-Ausbau und Screenshot-Vergleich). */
 export const PLUGIN_SKIN_REFERENCES: Record<PluginThemeId, string> = {
-  masterplayer: 'Master-Transport (Brand: Teal/Cyan)',
   instrument: 'Instrument-Canvas (GarageBand-artig, Touch)',
   synthesizer: 'MiniMoog / Prophet / Juno (Analog-Synth)',
   drum: 'TR-808 / Dirtywave M8',

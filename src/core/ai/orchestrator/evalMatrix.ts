@@ -2,16 +2,16 @@
 // evalMatrix – Eval-Suite je Plugin mit Mindest-Score (P3-3 / GAP-5)
 // ----------------------------------------------------------------------------
 // Verbindliche Quelle für
-//   * die 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts),
+//   * die 20 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts),
 //   * den Mindest-Score je Plugin (Gate für `npm run eval:ai` und Nightly-CI),
 //   * die Eval-Task-Zuordnung.
 // Bewusst frei von React-/Browser-Importen, damit Node-Skripte (scripts/*.ts)
 // und Vitest dieselbe Matrix nutzen können.
 // ============================================================================
 
-/** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
+/** Verbindliche 20 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
 export const EVAL_PLUGIN_IDS = [
-  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound',
   'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
   'spatial', 'recording', 'performance', 'ai',
 ] as const;
@@ -37,7 +37,7 @@ export const DEFAULT_MAX_DURATION_MS = 5000;
  */
 export const PLUGIN_EVAL_MATRIX: Record<string, PluginEvalSpec> = Object.freeze(
   EVAL_PLUGIN_IDS.reduce<Record<string, PluginEvalSpec>>((acc, pluginId) => {
-    const critical = ['mixer', 'mastering', 'masterplayer', 'eq', 'dsp'].includes(pluginId);
+    const critical = ['mixer', 'mastering', 'eq', 'dsp'].includes(pluginId);
     acc[pluginId] = {
       task: 'plan',
       minScore: critical ? 4.5 : DEFAULT_MIN_SCORE,

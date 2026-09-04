@@ -4,18 +4,18 @@ import {
   PLUGIN_MOA_SYSTEM_PROMPTS,
   PLUGIN_MOA_TASKS,
 } from '../src/utils/prompts';
-import { buildPromptEvalSeed, PLUGIN_IDS_21 } from '../src/core/ai/orchestrator/promptSeed';
+import { buildPromptEvalSeed, PLUGIN_IDS } from '../src/core/ai/orchestrator/promptSeed';
 import { EvaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
 
-const ALL_21 = [
-  'masterplayer', 'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
+const ALL_PLUGINS = [
+  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
   'voice', 'sound', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
   'dsp', 'mastering', 'stem', 'spatial', 'recording', 'performance', 'ai',
 ];
 
 describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {
-  it('alle 21 Plugins haben Kommando-Katalog, System-Prompt und Default-Task', () => {
-    for (const id of ALL_21) {
+  it('alle 20 Plugins haben Kommando-Katalog, System-Prompt und Default-Task', () => {
+    for (const id of ALL_PLUGINS) {
       expect(PLUGIN_COMMAND_CATALOG[id], `catalog:${id}`).toBeTruthy();
       expect(PLUGIN_MOA_SYSTEM_PROMPTS[id], `prompt:${id}`).toBeTruthy();
       expect(PLUGIN_MOA_TASKS[id], `task:${id}`).toBeTruthy();
@@ -33,9 +33,9 @@ describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {
 
   it('DB-Seed: jedes Plugin hat eine aktive Prompt-Version (system_prompts + plugin_prompt_versions)', () => {
     const seed = buildPromptEvalSeed();
-    expect(seed.system_prompts).toHaveLength(21);
-    expect(seed.plugin_prompt_versions).toHaveLength(21);
-    for (const id of PLUGIN_IDS_21) {
+    expect(seed.system_prompts).toHaveLength(20);
+    expect(seed.plugin_prompt_versions).toHaveLength(20);
+    for (const id of PLUGIN_IDS) {
       const prompt = seed.system_prompts.find((p) => p.plugin_id === id);
       const version = seed.plugin_prompt_versions.find((v) => v.plugin_id === id);
       expect(prompt, `system_prompts:${id}`).toBeTruthy();
@@ -47,7 +47,7 @@ describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {
 
   it('Eval-Suite: jedes Plugin hat ≥ 1 Eval-Datensatz und ≥ 1 Score (Mindest-Score 4)', () => {
     const store = new EvaluationStore();
-    for (const id of PLUGIN_IDS_21) {
+    for (const id of PLUGIN_IDS) {
       const run = store.startRun(id);
       store.record({
         pluginId: id,

@@ -11,13 +11,13 @@ import {
 
 /**
  * P3-3 / GAP-5: Die Eval-Matrix ist das Gate der Nightly-CI.
- * Sie muss alle 21 Plugins abdecken und Score/Dauer/Fehler bewerten.
+ * Sie muss alle 20 Plugins abdecken und Score/Dauer/Fehler bewerten.
  */
 describe('evalMatrix – Mindest-Score je Plugin (GAP-5)', () => {
-  it('deckt genau die 21 Plugins ab', () => {
-    expect(EVAL_PLUGIN_IDS).toHaveLength(21);
-    expect(new Set(EVAL_PLUGIN_IDS).size).toBe(21);
-    expect(Object.keys(PLUGIN_EVAL_MATRIX)).toHaveLength(21);
+  it('deckt genau die 20 Plugins ab', () => {
+    expect(EVAL_PLUGIN_IDS).toHaveLength(20);
+    expect(new Set(EVAL_PLUGIN_IDS).size).toBe(20);
+    expect(Object.keys(PLUGIN_EVAL_MATRIX)).toHaveLength(20);
   });
 
   it('definiert je Plugin einen Mindest-Score ≥ Default und ein Laufzeit-Budget', () => {
