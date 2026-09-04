@@ -494,3 +494,41 @@
 Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 `TASKDONE.md` verschoben und aus dieser Datei gelöscht.
 
+---
+
+## 🔷 SSOT – Konsolidierte offene Punkte (2026-09-04)
+
+> `MASTER_TODO.md` ist die **einzige Quelle offener Arbeit** in `main`.
+> `COPILOTTODO.md` und `SPECIAL_TODO.md` wurden aufgelöst und gelöscht;
+> `TASKDONE.md` bleibt reines Erledigt-Archiv (offene Punkte stehen hier).
+> `VISIONS_TODO.md` lebt nur im Branch `visions` (Zukunft/Experimente).
+
+### Aus TASKDONE.md übernommen (waren dort noch offen)
+- Betreiber: Nightly-CI-Lauf auf GitHub bestätigen · HF-Endpoint-Secret rotieren · echter DeepSeek/MOA-Lauf je Plugin (Scores in Supabase) · Live-Supabase-Abgleich
+- Live-Hörproben: Drop-Sweep/Crossfade am laufenden Mix · TR-8S/Beatstep-Pro (Clock-Lock, Notenzuordnung) · 4-User-Livelauf (Pump-/Zipper-Freiheit) · Scratchpad Reload/DnD/Clipboard im Browser
+- Live-Messungen: Flotten-Wake < 90 s (erneut messen) · CPU < 70 % · Jitter < 1 ms / < 5 ms zwischen Browsern · Resampling-/Filter-Qualität
+- LB11: 2 App-Knoten + Failover (erst bei Skalierung)
+- Komponenten-Neubau Hardware-Look (DJM-A9/XONE, MiniMoog/Prophet, TR-808, API/SSL) – mittlere Priorität
+
+### Aus SPECIAL_TODO.md übernommen (Hardware-Sonderfälle)
+- Beatstep-Pro-MIDI-Profil + Pads-Synth-UI (Minilogue-Stil) – braucht Beatstep Pro
+- MIDI-Out/Clock-Hörprobe mit echter Hardware (TR-8S/Beatstep Pro)
+- Audio-Layouts 12.x/18.x/24.x konfigurierbar + hörbar – braucht > 4.2-Lautsprecher-Setup
+
+### Aus docs/LIVE_CHECKLIST_2026-09-02.md (zusammengefasst)
+- iPhone/iOS/Android manuell: Safe-Areas, Touch-Ziele ≥ 44 px, kein Hover-only, kein Zoom/Overflow
+- Xonar-U7-Default + 2.1 sichtbar, Einstellungen nach Reload stabil
+- Keyboard-E2E live (Space, Ctrl/Cmd+1..9, Escape – kein Hotkey bricht Eingabefelder)
+- 60-s-Stille → Main-RMS ≤ −60 dBFS (Hörprobe) · 4-User-Cue/Main-Hörprobe · Rollenwechsel ohne Unterbrechung · 0 Xruns/Dropouts
+- Supabase-Daten sichtbar (P3-1) · Nightly-Report je Plugin · Security-Checkliste vollständig
+
+### Aus AUDIT.md (Commit `7b22c18`, 2026-09-03 – ggf. durch spätere Fixes veraltet, verifizieren!)
+- 🔴 Locking netzwerkweit verifizieren: Locks werden laut Audit nicht repliziert; Lock-Owner-Vergleich `'localUser'` vs. `webRTCManager.userId` in ~20 Komponenten prüfen (spätere P4-2-Fixes gegenzuprüfen)
+- 🟡 Server-Error-Leaks: `(e as Error).message` 1:1 an Clients prüfen/bereinigen
+- 🟡 Toter Code: `useWebRTC.ts`/parallel Lock-Implementierungen aufräumen · 160× `any` reduzieren
+- 🟡 `qs`-CVEs / Dependency-Audit erneut ausführen
+- 🟡 Test-Abdeckung (32,6 % Statements) gezielt für Kernpfade erhöhen
+
+### Experimentelles in `main` (optional, laut VISIONS-Regel dokumentiert)
+- WebGPU-Kernel (`src/core/gpu/`), Rust-Runtime (`services/audio-runtime`), Rust-Mixer (`services/mixer`), V2-AudioGraph, WASM-DSP/HRTF-Kernel, `localDemucs` → Benchmarks/Entscheid offen, Details in `VISIONS_TODO.md` (Branch `visions`)
+
