@@ -1,9 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * P0-7-Prüfpunkt (Master-Player fest oben mit Transport):
- *  - masterplayerMONK bleibt beim Scrollen im Viewport (sticky unter dem Header),
- *  - Play/Stop per Button und per Leertaste erreichbar – auch weit unten,
+ * P0-7-Prüfpunkt (masterplayerMONK fest oben, View-only):
+ *  - bleibt beim Scrollen im Viewport (sticky unter dem Header),
+ *  - hat KEINE Eingabeelemente (keine Buttons/Selects) – nur Anzeige,
  *  - Leertaste wirkt nicht in Eingabefeldern (kein Transport-Fehlauslöser).
  */
 async function enterStudio(page: Page): Promise<void> {
@@ -15,7 +15,7 @@ async function enterStudio(page: Page): Promise<void> {
 
 const masterSection = (page: Page) => page.locator('#rack-masterplayer');
 
-test('P0-7: Master-Player bleibt beim Scrollen sichtbar', async ({ page }) => {
+test('P0-7: masterplayerMONK bleibt beim Scrollen sichtbar', async ({ page }) => {
   await enterStudio(page);
 
   const master = masterSection(page);
@@ -33,21 +33,15 @@ test('P0-7: Master-Player bleibt beim Scrollen sichtbar', async ({ page }) => {
   expect(box!.y).toBeLessThan(200);
 });
 
-test('P0-7: Transport per Button und Leertaste erreichbar', async ({ page }) => {
+test('P0-7: masterplayerMONK ist View-only (keine Buttons, BPM sichtbar)', async ({ page }) => {
   await enterStudio(page);
 
-  const play = masterSection(page).getByRole('button', { name: /play|stop/i }).first();
-  await expect(play).toBeVisible();
-  await play.click();
-  await page.waitForTimeout(200);
-
-  // Nach dem Scrollen bleibt die Leertaste global gültig.
-  await page.mouse.wheel(0, 1500);
-  await page.keyboard.press('Space');
-  await page.waitForTimeout(200);
-
-  await expect(masterSection(page)).toBeInViewport();
-  await expect(page.getByText(/BPM/).first()).toBeVisible();
+  const master = masterSection(page);
+  await expect(master.getByText('FIXED · VIEW ONLY')).toBeVisible();
+  await expect(master.locator('button')).toHaveCount(0);
+  await expect(master.locator('select')).toHaveCount(0);
+  await expect(master.getByText(/BPM/)).toBeVisible();
+  await expect(master.getByText(/TRANSPORT/)).toBeVisible();
 });
 
 test('P0-7: Leertaste in Eingabefeldern löst keinen Transport aus', async ({ page }) => {

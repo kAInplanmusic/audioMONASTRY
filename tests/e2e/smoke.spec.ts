@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * E2E-Smoke: App lädt, Entry-Gate passieren, alle 20 Plugin-Buttons sind da,
+ * E2E-Smoke: App lädt, Entry-Gate passieren, alle 18 Plugin-Buttons sind da,
  * Mixer-Terminal + MOA-Leiste rendern, Plugin-Toggle funktioniert und es gibt
  * keine uncaught pageerrors (White-Screen-Killer, DCT-104/118).
  *
@@ -13,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 const PLUGIN_SHORTS = [
   'INS', 'SYN', 'DRM', 'SAM', 'MCP', 'VOX', 'SND',
   'MIX', 'CTRL', 'FX', 'DRP', 'LIB', 'EQ', 'DSP',
-  'MST', 'RMX', '3D', 'REC', 'PRF',
+  'MST', 'RMX', '3D', 'REC',
 ];
 
 /** Startseite öffnen und das „Studio betreten"-Gate passieren. */
@@ -44,7 +44,7 @@ function collectErrors(page: Page): { pageErrors: string[]; consoleErrors: strin
   return { pageErrors, consoleErrors };
 }
 
-test('App lädt mit korrektem Titel und 20 Plugin-Buttons', async ({ page }) => {
+test('App lädt mit korrektem Titel und 18 Plugin-Buttons', async ({ page }) => {
   const errors = collectErrors(page);
   await enterStudio(page);
 
@@ -91,7 +91,7 @@ test('P0-1: Studio-Start hat 0 aktive Plugins (alle Toolbar-Icons gedimmt)', asy
   const toolbar = page.locator('nav[aria-label="Plugin-Toolbar"]');
   const buttons = toolbar.locator('button[aria-pressed]');
   const count = await buttons.count();
-  expect(count).toBeGreaterThanOrEqual(19);
+  expect(count).toBeGreaterThanOrEqual(18);
   for (let i = 0; i < count; i++) {
     await expect(buttons.nth(i)).toHaveAttribute('aria-pressed', 'false');
   }
@@ -111,15 +111,16 @@ test('P0-3: Plugin-OFF im Terminal synchronisiert Toolbar-Icon', async ({ page }
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('P0-7: Master-Player-Transport ist ohne Scrollen erreichbar', async ({ page }) => {
+test('P0-7: masterplayerMONK ist fest oben sichtbar und View-only', async ({ page }) => {
   const errors = collectErrors(page);
   await enterStudio(page);
 
   // masterplayerMONK ist der erste feste Rack-Block direkt unter dem Header.
   const master = page.locator('section').filter({ has: page.getByText('masterplayerMONK') }).first();
   await expect(master).toBeVisible();
-  await page.keyboard.press('Space');
-  await expect(page.getByText('132.00').first()).toBeVisible();
+  await expect(master.getByText('FIXED · VIEW ONLY')).toBeVisible();
+  // Keine Eingaben: es gibt im masterplayer-Rack keine Buttons.
+  await expect(master.locator('button')).toHaveCount(0);
 
   expect(errors.pageErrors).toEqual([]);
 });
