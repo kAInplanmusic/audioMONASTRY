@@ -140,6 +140,13 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
           </div>
         </div>
 
+        {/* DSP-Referenz-Looks (uibspdsp1-5) */}
+        <div className="flex items-center gap-2 overflow-x-auto px-1">
+          {['/uibspdsp1.jpg', '/uibspdsp2.jpg', '/uibspdsp3.WEBP', '/uibspdsp4.PNG', '/uibspdsp5.WEBP'].map((src) => (
+            <img key={src} src={src} alt="DSP-Referenz" className="h-12 rounded border border-neutral-800 hover:border-violet-500/60 transition-colors object-cover" />
+          ))}
+        </div>
+
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
             <option value="OFF">OFF</option>
             <option value="AUTO_AI">AI</option>

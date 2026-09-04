@@ -37,6 +37,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
   const [folder, setFolder] = useState<FolderId>('all');
   const [query, setQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [musicPage, setMusicPage] = useState(1);
   // Cloud-Schreibpfad-Status (einzelner Push / Sync), für Mini-Feedback im Header.
   const [cloudStatus, setCloudStatus] = useState<string>('');
   const [cloudBusy, setCloudBusy] = useState(false);
@@ -112,6 +113,14 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
     safePage * ITEMS_PER_PAGE,
   );
 
+  // Musik ebenfalls paginieren (48+ Tracks → deutlich schnelleres Rendering).
+  const musicTotalPages = Math.max(1, Math.ceil(filteredMusic.length / ITEMS_PER_PAGE));
+  const safeMusicPage = Math.min(musicPage, musicTotalPages);
+  const paginatedMusic = filteredMusic.slice(
+    (safeMusicPage - 1) * ITEMS_PER_PAGE,
+    safeMusicPage * ITEMS_PER_PAGE,
+  );
+
   const handleCopy = (sample: AudioSample) => {
     navigator.clipboard.writeText(JSON.stringify(sample, null, 2));
   };
@@ -167,7 +176,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
       setAnalysis((prev) => ({ ...prev, [url]: { bpm: a.bpm, key: a.key } }));
     };
 
-    filteredMusic.forEach((t) => {
+    paginatedMusic.forEach((t) => {
       if (analysisCache.current.has(t.url)) {
         apply(t.url, analysisCache.current.get(t.url) ?? null);
         return;
@@ -180,7 +189,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
     });
     return () => { cancelled = true; };
 
-  }, [filteredMusic, showMusic, showFavorites]);
+  }, [paginatedMusic, showMusic, showFavorites]);
 
   const renderMusicCard = (t: MusicTrack) => {
     const isFav = favorites.music.includes(t.id);
@@ -434,7 +443,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
 
           {showMusic ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredMusic.map(renderMusicCard)}
+              {paginatedMusic.map(renderMusicCard)}
             </div>
           ) : (
             <>
@@ -451,11 +460,31 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
       <div className="px-6 py-4 bg-[#111] border-t border-neutral-800 flex justify-between items-center">
         <div className="text-[11px] text-neutral-500 font-mono">
           {showMusic
-            ? `SHOWING ${filteredMusic.length} MUSIC TRACKS`
+            ? `SHOWING ${paginatedMusic.length} OF ${filteredMusic.length} MUSIC TRACKS`
             : `SHOWING ${paginatedSamples.length} OF ${filteredSamples.length} SAMPLES`}
         </div>
         <div className="flex items-center gap-4">
-          {!showMusic && (
+          {showMusic ? (
+            <>
+              <button type="button"
+                onClick={() => setMusicPage((p) => Math.max(1, p - 1))}
+                disabled={safeMusicPage === 1}
+                className={`p-1 rounded ${safeMusicPage === 1 ? 'text-neutral-700' : 'text-amber-400 hover:bg-amber-900/20 cursor-pointer'}`}
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <span className="text-xs font-bold font-mono">
+                PAGE <span className="text-amber-400">{safeMusicPage}</span> / {musicTotalPages}
+              </span>
+              <button type="button"
+                onClick={() => setMusicPage((p) => Math.min(musicTotalPages, p + 1))}
+                disabled={safeMusicPage === musicTotalPages}
+                className={`p-1 rounded ${safeMusicPage === musicTotalPages ? 'text-neutral-700' : 'text-amber-400 hover:bg-amber-900/20 cursor-pointer'}`}
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </>
+          ) : (
             <>
               <button type="button"
                 onClick={() => changePage(currentPage - 1)}

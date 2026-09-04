@@ -195,6 +195,8 @@ export const McpTerminal = React.memo(function McpTerminal() {
             <h2 className="text-sm font-black tracking-widest uppercase">mcpMONK</h2>
             <p className="text-[9px] font-mono text-amber-400 tracking-widest">MPC PADS · {seqCount} STEPS · BANK {bank}</p>
           </div>
+          <img src="/uipadsequenzer.jpg" alt="Pad-Sequenzer-Referenz" title="Pad-Sequenzer-Referenz (uipadsequenzer.jpg)"
+            className="h-10 rounded border border-neutral-800 hover:border-amber-500/60 transition-colors object-cover" />
         </div>
         <div className="flex items-center gap-2">
           <span className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border ${currentStep >= 0 ? 'text-amber-300 border-amber-500/40 bg-amber-500/10' : 'text-neutral-500 border-neutral-700'}`}>
