@@ -31,16 +31,16 @@ const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal'
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
 
-// Rack-Reihenfolge: 18 VARIABLE Plugins. FIX sind nur:
+// Rack-Reihenfolge: 19 VARIABLE Plugins. FIX sind nur:
 //   oben  = masterplayer (View-only)
 //   unten = performance (perfMONK) + ai (aiMONK-Dock), untereinander fest.
 const RACK_ORDER = [
-  'mixer', 'drop', 'instrument', 'synthesizer', 'voice', 'sound', 'mcp', 'drum', 'sampler',
+  'mixer', 'drop', 'instrument', 'synthesizer', 'voice', 'sound', 'song', 'mcp', 'drum', 'sampler',
   'controller', 'effect', 'library', 'stem', 'spatial', 'eq', 'dsp', 'mastering',
   'recording',
 ];
 
-// Header-Navigation: 18 Plugin-Icons in ZWEI Reihen – jedes variable Plugin
+// Header-Navigation: 19 Plugin-Icons in ZWEI Reihen – jedes variable Plugin
 // bekommt genau ein Icon. Fixe Racks (performance/ai) haben kein Icon;
 // masterplayerMONK ist die feste Kopfzeile oberhalb der Toolbar.
 const NAV_EXCLUDED = new Set(['ai', 'performance']);

@@ -5,10 +5,10 @@ import {
   listRegisteredPluginCommands,
 } from '../src/core/voice/pluginCommandRegistry';
 
-describe('P3-2: pluginCommandRegistry deckt alle 20 Plugin-IDs ab', () => {
-  it('hat exakt die 20 kanonischen IDs', () => {
-    expect(PLUGIN_COMMAND_IDS).toHaveLength(20);
-    expect(new Set(PLUGIN_COMMAND_IDS).size).toBe(20);
+describe('P3-2: pluginCommandRegistry deckt alle 21 Plugin-IDs ab', () => {
+  it('hat exakt die 21 kanonischen IDs', () => {
+    expect(PLUGIN_COMMAND_IDS).toHaveLength(21);
+    expect(new Set(PLUGIN_COMMAND_IDS).size).toBe(21);
   });
 
   it('registriert für jede Plugin-ID mindestens ein Kommando (inkl. activate/deactivate/route)', () => {

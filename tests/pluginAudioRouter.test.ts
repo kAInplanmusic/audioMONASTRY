@@ -35,12 +35,12 @@ import {
 } from '../src/core/pluginAudioRouter';
 
 describe('pluginAudioRouter (P0-2)', () => {
-  it('registriert alle 20 Plugin-IDs', () => {
-    expect(PLUGIN_ROUTE_IDS).toHaveLength(20);
-    expect(listPluginRoutes()).toHaveLength(20);
+  it('registriert alle 21 Plugin-IDs', () => {
+    expect(PLUGIN_ROUTE_IDS).toHaveLength(21);
+    expect(listPluginRoutes()).toHaveLength(21);
     const expected = [
       'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
-      'voice', 'sound', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
+      'voice', 'sound', 'song', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
       'dsp', 'mastering', 'stem', 'spatial', 'recording', 'performance', 'ai',
     ];
     expect(assertAllPluginIdsRegistered(expected)).toEqual([]);
@@ -78,7 +78,7 @@ describe('pluginAudioRouter (P0-2)', () => {
     expect(getPluginRoute('library')?.isolation).toBe('ui-only');
   });
 
-  it('AM-E2-1: Routing-Matrix validiert alle 20 IDs ohne Verstöße', () => {
+  it('AM-E2-1: Routing-Matrix validiert alle 21 IDs ohne Verstöße', () => {
     expect(validateRoutingMatrix(PLUGIN_ROUTE_IDS)).toEqual([]);
     expect(validateRoutingMatrix(['kaputt'])).toContain('kaputt: nicht registriert');
   });

@@ -4,7 +4,7 @@
  * Zentrale Schicht `pluginId → { source, mixerChannel, insertBus, activate(),
  * deactivate() }`. OFF = raus aus der Signalkette, AUTO_AI/PRO = Einspeisung.
  *
- * Alle 20 Plugin-IDs sind registriert (masterplayerMONK ist feste UI-Leiste,
+ * Alle 21 Plugin-IDs sind registriert (masterplayerMONK ist feste UI-Leiste,
  * kein Plugin). Unbekannte IDs werden geloggt und ignoriert (kein Crash).
  */
 import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';
@@ -38,6 +38,7 @@ const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> =
   ['mcp', 'sampler', true],
   ['voice', 'voice', true],
   ['sound', 'sampler', true],
+  ['song', 'ui-only', false],
   ['mixer', 'channel', true],
   ['controller', 'ui-only', false],
   ['effect', 'channel', true],

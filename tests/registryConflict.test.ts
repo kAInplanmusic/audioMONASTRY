@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { getPluginRegistry, METAMODULE_GROUPS, resolvePrimaryModule } from '../src/plugins/registry';
 
 describe('Plugin-Registry (Konflikt-/Versionierungs-Check, AM-E2-5)', () => {
-  it('hat 20 eindeutige Plugin-IDs', () => {
+  it('hat 21 eindeutige Plugin-IDs', () => {
     const registry = getPluginRegistry();
-    expect(registry.length).toBe(20);
+    expect(registry.length).toBe(21);
     const ids = registry.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
