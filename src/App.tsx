@@ -109,6 +109,14 @@ function AppComponent() {
     applyMonitorMix(user, mix);
   }, [applyMonitorMix]);
 
+  // MAIN-Berechtigung: NUR der mixerMONK-Halter (PRO + Lock) darf MAIN verändern
+  // (Play/Stop, Kanal-Load, Trigger). Die 6 Mixer-Kanäle sind der einzige MAIN-Weg.
+  const mainHolder = (moduleStates['mixer'] || 'OFF') === 'PRO'
+    && (!pluginLocks['mixer']?.active || pluginLocks['mixer']?.lockedBy === 'localUser');
+  useEffect(() => {
+    audioEngine.setMainHolderActive(mainHolder);
+  }, [mainHolder]);
+
   // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
   // P4-1/P4-2: Host sendet Master-Stream an Peers/SFU; Gäste spielen Main ab.
   // P0-1 Login-Regel: ALLE Plugins starten geschlossen – auch mixerMONK

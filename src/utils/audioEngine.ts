@@ -148,6 +148,10 @@ class AudioEngine {
   private cueTrackGains: Partial<Record<TrackType, GainNode>> = {};
   /** DJ-PFL: Kanäle, deren Vorhören (pre-fader) gerade aktiv ist. */
   private pflTracks = new Set<TrackType>();
+  /** MAIN-Berechtigung: nur der mixerMONK-Halter darf MAIN verändern (Play/Stop/Load/Trigger). */
+  private mainHolderActive = true;
+  /** Vom DJ freigegebene MAIN-Kanäle (andere User dürfen hineinladen). */
+  private releasedMainTracks = new Set<TrackType>();
   private spatialRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Synthesizers & FX Nodes
@@ -1711,6 +1715,8 @@ class AudioEngine {
   }
 
   public triggerEvent(track: TrackType, velocity: number = 1.0) {
+    // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
+    if (!this.mainHolderActive) return;
     if (this.playbackMode === 'v2') {
       this.graphPlayback.trigger(velocity);
       return;
@@ -1852,6 +1858,22 @@ class AudioEngine {
   /** Liefert die aktuell vorgehörten Kanäle (leer = kein PFL aktiv). */
   public getPflTracks(): TrackType[] {
     return [...this.pflTracks];
+  }
+
+  /** MAIN-Berechtigung setzen (App ruft das je Lock-Status des mixerMONK-Halters). */
+  public setMainHolderActive(active: boolean): void { this.mainHolderActive = active; }
+  public isMainHolderActive(): boolean { return this.mainHolderActive; }
+
+  /** DJ gibt einen MAIN-Kanal frei (andere User dürfen hineinladen). */
+  public setTrackReleased(track: TrackType, released: boolean): void {
+    if (released) this.releasedMainTracks.add(track);
+    else this.releasedMainTracks.delete(track);
+  }
+  public isTrackReleased(track: TrackType): boolean { return this.releasedMainTracks.has(track); }
+
+  /** Darf dieser lokale User den Track laden? (DJ immer, andere nur bei Freigabe.) */
+  public canLoadTrack(track: TrackType): boolean {
+    return this.mainHolderActive || this.releasedMainTracks.has(track);
   }
 
   /**
@@ -2013,6 +2035,8 @@ class AudioEngine {
   }
 
   public async play() {
+    // MAIN-Schutz: Transport startet nur beim mixerMONK-Halter.
+    if (!this.mainHolderActive) return;
     this.idleDetector.activity(); // AM-E6-5: Play beendet Idle-Suspend
     if (this.playbackMode === 'v2') {
       this.graphPlayback.start();
@@ -2037,6 +2061,7 @@ class AudioEngine {
   }
 
   public stop() {
+    if (!this.mainHolderActive) return;
     if (this.playbackMode === 'v2') {
       this.graphPlayback.stop();
       return;
@@ -2788,6 +2813,8 @@ class AudioEngine {
   }
 
   public async loadTrackSample(track: TrackType, url: string | null) {
+    // MAIN-Schutz: laden darf nur der Halter oder ein freigegebener Kanal.
+    if (!this.canLoadTrack(track)) return;
     // If there's an existing player for this track, dispose of it.
     // De-Klick: erst weich ausblenden (Volume-Rampe), dann nach kurzer Zeit
     // disconnect/dispose – ein harter dispose() während der Wiedergabe knackst.

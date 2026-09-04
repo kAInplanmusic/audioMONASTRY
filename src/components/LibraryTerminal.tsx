@@ -12,7 +12,7 @@ import { Scratchpad } from './Scratchpad';
 import { CloudStatusBadge } from './CloudStatusBadge';
 import { SampleUploadPanel } from './SampleUploadPanel';
 import { loadFavorites, saveFavorites, toggleFavoriteId, type FavoritesState } from '../utils/libraryFavorites';
-import { openAudioActionMenu, toggleAudioPreview } from './AudioActionMenuHost';
+import { openAudioActionMenu } from './AudioActionMenuHost';
 import { musicToContent, sampleToContent } from '../core/audio/audioContent';
 
 const ITEMS_PER_PAGE = 9;
@@ -189,11 +189,11 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
         key={t.id}
         role="button"
         tabIndex={0}
-        onClick={(e) => toggleAudioPreview(musicToContent(t), e.currentTarget)}
+        onClick={(e) => openAudioActionMenu(musicToContent(t), e.currentTarget)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            toggleAudioPreview(musicToContent(t), e.currentTarget as HTMLElement);
+            openAudioActionMenu(musicToContent(t), e.currentTarget as HTMLElement);
           }
         }}
         className="bg-[#161616] border border-neutral-800 rounded-lg p-4 flex flex-col gap-2 hover:border-amber-500/50 transition-colors group cursor-pointer"
@@ -261,11 +261,11 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
         tabIndex={0}
         draggable
         onDragStart={(e) => handleDragStart(e, sample)}
-        onClick={(e) => toggleAudioPreview(sampleToContent(sample, 'library'), e.currentTarget)}
+        onClick={(e) => openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            toggleAudioPreview(sampleToContent(sample, 'library'), e.currentTarget as HTMLElement);
+            openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget as HTMLElement);
           }
         }}
         className={`bg-[#161616] border rounded-lg p-4 flex flex-col gap-2 transition-colors group cursor-pointer ${

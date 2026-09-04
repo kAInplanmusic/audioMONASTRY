@@ -188,6 +188,16 @@ export const DJMixer = React.memo(function DJMixer() {
   const [deckLabels, setDeckLabels] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
   // Gruppen-Fader: links CH1+2, rechts CH5+6 (CH3+4 laufen direkt).
   const [group, setGroup] = useState({ left: 0.8, right: 0.8 });
+  // Vom DJ freigegebene MAIN-Kanäle (andere User dürfen hineinladen).
+  const [released, setReleased] = useState<Set<TrackType>>(new Set());
+
+  const toggleRelease = (track: TrackType) => {
+    const next = new Set(released);
+    if (next.has(track)) next.delete(track);
+    else next.add(track);
+    setReleased(next);
+    audioEngine.setTrackReleased(track, next.has(track));
+  };
 
   const deckChannels = useMemo(() => ({
     A: strips.filter((s) => s.deck === 'A').map((s) => s.track),
@@ -310,10 +320,17 @@ export const DJMixer = React.memo(function DJMixer() {
               const level = c.mute ? 0 : c.trim * c.gain * deckMix * groupFactor(s);
               return (
                 <div key={s.track} className="w-28 short-landscape:w-24 shrink-0 bg-[#222226] rounded-md border border-black/70 p-2 short-landscape:p-1.5 flex flex-col gap-1.5 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
-                  {/* Kanal-Kopf mit CUE */}
-                  <div className="flex items-center justify-between px-0.5">
+                  {/* Kanal-Kopf mit CUE + FREI */}
+                  <div className="flex items-center justify-between px-0.5 gap-1">
                     <span className="text-[9px] font-black tracking-widest text-zinc-200">{s.label}</span>
                     <span className="text-[6px] font-mono text-zinc-500">{ROLE_LABELS[s.role]}</span>
+                    <button type="button"
+                      onClick={() => toggleRelease(s.track)}
+                      title={released.has(s.track) ? 'Kanal-Freigabe zurücknehmen' : 'Kanal für andere User freigeben (Laden erlaubt)'}
+                      className={`w-7 h-4 rounded-[2px] border text-[5px] font-black tracking-wider cursor-pointer transition-colors ${
+                        released.has(s.track) ? 'bg-cyan-500 border-cyan-400 text-black' : 'bg-black border-zinc-700 text-zinc-500 hover:border-cyan-500/50 hover:text-cyan-300'
+                      }`}
+                    >FREI</button>
                     <button type="button"
                       onClick={() => {
                         const next = !c.cue;
