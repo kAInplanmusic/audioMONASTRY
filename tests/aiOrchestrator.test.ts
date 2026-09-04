@@ -11,9 +11,9 @@ import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
 // Model Registry
 // ---------------------------------------------------------------------------
 describe('Model Registry', () => {
-  it('enthält alle 10 Modelle mit gültigen Definitionen', () => {
+  it('enthält alle 11 Modelle mit gültigen Definitionen', () => {
     expect(validateRegistry()).toEqual([]);
-    expect(listModels().length).toBe(10);
+    expect(listModels().length).toBe(11);
   });
 
   it('lehnt latest-Revisionen ab', () => {

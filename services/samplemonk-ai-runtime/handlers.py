@@ -257,6 +257,49 @@ def hf_generate(model_id: str, definition: ModelDefinition, payload: Dict[str, A
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": 32000}
 
 
+def hf_stable_audio(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """Stable Audio Open (Stability AI, Community License) – Beats/One-Shots/SFX.
+
+    Optional package: `pip install diffusers`. Der Handler erwartet einen
+    Text-Prompt und erzeugt WAV über die Diffusers StableAudioPipeline.
+    """
+    torch = _require_lib("torch", "torch")
+    numpy = _require_lib("numpy", "numpy")
+
+    prompt = str(payload.get("prompt", ""))[:500].strip()
+    if not prompt:
+        raise ModelUnavailableError("prompt required for stable-audio")
+    negative_prompt = str(payload.get("negativePrompt", ""))[:300] or None
+    max_seconds = float(payload.get("maxDuration", 10) or 10)
+    device = _device()
+    dtype = torch.float16 if device.type == "cuda" else torch.float32
+
+    def factory() -> Any:
+        from diffusers import StableAudioPipeline  # type: ignore
+
+        pipe = StableAudioPipeline.from_pretrained(
+            definition.repository,
+            revision=definition.revision,
+            torch_dtype=dtype,
+        )
+        pipe = pipe.to(device)
+        return pipe
+
+    pipe = _cache_get(f"stableaudio:{model_id}", factory)
+    with torch.no_grad():
+        result = pipe(
+            prompt,
+            negative_prompt=negative_prompt,
+            audio_end_in_s=float(min(max_seconds, 47.0)),
+            num_inference_steps=100,
+        )
+    scipy = _require_lib("scipy", "scipy")
+    audio = numpy.asarray(result.audios[0], dtype=numpy.float32)
+    buf = io.BytesIO()
+    scipy.io.wavfile.write(buf, 44100, audio)
+    return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": 44100}
+
+
 def qwen3_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """Qwen3-TTS (CustomVoice): Apache-2.0, multilingual inkl. Deutsch.
 
@@ -381,12 +424,19 @@ def tts_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, 
     return hf_tts(model_id, definition, payload)
 
 
+def generate_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """generate/song-Dispatch: Stable Audio nutzt Diffusers, alles andere MusicGen."""
+    if model_id.startswith("stable-audio") or "stable-audio" in definition.repository:
+        return hf_stable_audio(model_id, definition, payload)
+    return hf_generate(model_id, definition, payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": hf_transcribe,
     "embed": hf_embed,
-    "generate": hf_generate,
-    "song": hf_generate,
+    "generate": generate_dispatch,
+    "song": generate_dispatch,
     "sing": hf_bark_sing,
     "tts": tts_dispatch,
 }
