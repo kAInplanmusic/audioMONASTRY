@@ -31,7 +31,8 @@
     "verify:boundary": "node scripts/validate-interface-boundaries.mjs",
     "supabase:seed-embeddings": "tsx scripts/seed-sample-embeddings.ts",
     "supabase:apply": "tsx scripts/apply-supabase-migrations.ts",
-    "supabase:verify": "tsx scripts/verify-supabase.ts"
+    "supabase:verify": "tsx scripts/verify-supabase.ts",
+    "download:orchestral": "node scripts/download-orchestral.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
