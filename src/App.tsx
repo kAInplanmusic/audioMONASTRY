@@ -19,28 +19,30 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
-import { Settings, Sliders, Activity, ClipboardCopy, UserRound, Play, Square } from 'lucide-react';
+import { Settings, Sliders, Activity, ClipboardCopy, UserRound, Play, Square, Gauge } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
 import { getPluginRoute } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
-const DJMixer = lazy(() => import('./components/DJ4ChMixer').then(m => ({ default: m.DJMixer })));
+const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
 
-// Rack-Reihenfolge laut Designvorlage (masterplayer + mixer-Hardware sind feste Sektionen).
+// Rack-Reihenfolge: 18 VARIABLE Plugins. FIX sind nur:
+//   oben  = masterplayer (View-only)
+//   unten = performance (perfMONK) + ai (aiMONK-Dock), untereinander fest.
 const RACK_ORDER = [
   'mixer', 'drop', 'instrument', 'synthesizer', 'voice', 'sound', 'mcp', 'drum', 'sampler',
   'controller', 'effect', 'library', 'stem', 'spatial', 'eq', 'dsp', 'mastering',
-  'recording', 'performance', 'ai',
+  'recording',
 ];
 
-// Header-Navigation: 18 Plugin-Icons in ZWEI Reihen – jedes Rack-Plugin
-// außer ai/mixer/masterplayer bekommt genau ein Icon.
-const NAV_EXCLUDED = new Set(['ai', 'mixer', 'masterplayer']);
+// Header-Navigation: 18 Plugin-Icons in ZWEI Reihen – jedes variable Plugin
+// bekommt genau ein Icon. Fixe Racks (masterplayer/performance/ai) haben kein Icon.
+const NAV_EXCLUDED = new Set(['ai', 'performance', 'masterplayer']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
@@ -545,7 +547,7 @@ function AppComponent() {
         </div>
       </header>
 
-      {/* 2. masterplayerMONK: fester Transport (Designvorlage uioben.jpg) – auf Desktop beim Scrollen oben */}
+      {/* 2. masterplayerMONK: feste View-only-Leiste (oben). KEINE Eingaben. */}
       <section
         id="rack-masterplayer"
         className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 xl:sticky xl:top-20 short-landscape:xl:top-16 xl:z-30"
@@ -555,100 +557,24 @@ function AppComponent() {
             <Activity size={18} />
           </div>
           <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
-          <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · TRANSPORT</span>
+          <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
 
-          {/* Monitor-Ausgabe pro User: MAIN + PLUGIN oder NUR PLUGIN */}
-          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
-            <span className="hidden lg:inline text-[9px] font-mono text-neutral-500 tracking-widest">MONITOR</span>
-            <select
-              value={monitorUser}
-              onChange={(e) => {
-                const user = e.target.value as MonUser;
-                setMonitorUser(user);
-                applyMonitorMix(user, monitorMixes[user]);
-              }}
-              className="appearance-none pl-2 pr-5 py-1 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-cyan-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
-              title="Monitor-User wählen (User 1-4)"
-              aria-label="Monitor-User wählen"
-            >
-              {MON_USERS.map(u => (
-                <option key={u} value={u}>{u.replace('MON', 'USER ')}</option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setMonitorMixForUser(monitorUser, monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? 'MAIN_PLUGIN' : 'PLUGIN_ONLY')}
-              aria-pressed={monitorMixes[monitorUser] === 'PLUGIN_ONLY'}
-              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN + PLUGIN oder NUR PLUGIN`}
-              className={`px-2.5 py-1 rounded-full border text-[9px] font-bold tracking-widest transition-all cursor-pointer ${
-                monitorMixes[monitorUser] === 'PLUGIN_ONLY'
-                  ? 'bg-fuchsia-600/20 border-fuchsia-400/60 text-fuchsia-200'
-                  : 'bg-cyan-500/10 border-cyan-400/50 text-cyan-200 hover:bg-cyan-500/20'
-              }`}
-            >
-              {monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? '🎧 NUR PLUGIN' : '🎧 MAIN + PLUGIN'}
-            </button>
+          <div className="ml-auto flex items-center gap-4 text-center">
+            <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
+            <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
+            <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
+            <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
           </div>
         </div>
         <div className="px-3 pb-3 border-t border-white/5">
           <BeatVisualizer isPlaying={isPlaying} />
-          {/* Transport-Leiste wie Vorlage: Play + Zeit + CUE/LOOP/SYNC + BPM/TIME/KEY */}
-          <div className="mt-3 pt-3 border-t border-neutral-800/80 flex items-center gap-3 flex-wrap short-landscape:mt-2 short-landscape:pt-2">
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  if (isPlaying) { audioEngine.stop(); setIsPlaying(false); }
-                  else { audioEngine.play(); setIsPlaying(true); }
-                }}
-                aria-label={isPlaying ? 'Play stoppen' : 'Play starten'}
-                aria-pressed={isPlaying}
-                className={`w-12 h-12 short-landscape:w-10 short-landscape:h-10 rounded-full flex items-center justify-center border-2 transition-all cursor-pointer ${
-                  isPlaying
-                    ? 'border-cyan-300 bg-cyan-400/15 text-cyan-200 shadow-[0_0_18px_rgba(34,211,238,0.5)]'
-                    : 'border-cyan-500/60 bg-cyan-400/5 text-cyan-300 hover:bg-cyan-400/15 hover:shadow-[0_0_18px_rgba(34,211,238,0.45)]'
-                }`}
-              >
-                {isPlaying ? <Square size={15} fill="currentColor" /> : <Play size={17} fill="currentColor" className="ml-0.5" />}
-              </button>
-              <div className="leading-none">
-                <div className="font-mono text-lg text-white font-bold">02:34<span className="text-cyan-400/70 text-xs">.889</span></div>
-                <div className="font-mono text-[9px] text-neutral-500">06:47.218</div>
-              </div>
-            </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-[8px] font-mono tracking-widest text-neutral-400">
-              <button type="button" className="px-2 py-1 rounded border border-neutral-700 hover:border-cyan-400/50 hover:text-cyan-200 cursor-pointer" title="Zum Anfang">⏮</button>
-              <button type="button" className="px-2 py-1 rounded border border-neutral-700 hover:border-cyan-400/50 hover:text-cyan-200 cursor-pointer">CUE</button>
-              <button type="button" className="px-2 py-1 rounded border border-neutral-700 hover:border-cyan-400/50 hover:text-cyan-200 cursor-pointer">LOOP</button>
-              <button type="button" className="px-2 py-1 rounded border border-neutral-700 hover:border-cyan-400/50 hover:text-cyan-200 cursor-pointer">SYNC</button>
-            </div>
-            <div className="hidden lg:grid grid-cols-3 gap-3 ml-auto text-center">
-              <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
-              <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
-              <div><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 3. MixerMONK: festes DJ-Mischpult direkt unter dem masterplayerMONK (Designvorlage uioben.jpg) */}
-      <section className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 shadow-[0_0_24px_-8px_rgba(34,211,238,0.45)] mb-4">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
-            <Sliders size={18} />
-          </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">MixerMONK</h3>
-          <span className="text-[9px] font-mono text-cyan-400 tracking-widest">HARDWARE · DJM-A9</span>
-        </div>
-        <div className="px-3 pb-3 border-t border-white/5">
-          <Suspense fallback={<div className="h-24 flex items-center justify-center text-neutral-500 text-xs">Lade DJ-Mixer…</div>}><DJMixer /></Suspense>
         </div>
       </section>
 
       {/* Icon-Toolbar (Designvorlage: Modul-Kacheln) */}
       <nav className="md:sticky md:top-20 short-landscape:md:top-16 z-20 -mx-6 short-landscape:-mx-2 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
         <div className="flex flex-wrap gap-2 justify-center max-w-screen-2xl mx-auto">
-        {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
+        {getPluginRegistry().filter(plugin => plugin.id !== 'masterplayer' && plugin.id !== 'performance' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
           const state = moduleStates[plugin.id] || 'OFF';
           const isActive = state !== 'OFF';
 
@@ -738,6 +664,59 @@ function AppComponent() {
           </button>
         </div>
       )}
+
+      {/* FIX BOTTOM: perfMONK (oben) + aiMONK (unten) – fest für alle User.
+          Die Monitor-Wahl (User + MAIN/PLUGIN-Mix) liegt hier bei perfMONK. */}
+      <section
+        id="rack-performance"
+        className="rounded-xl border border-emerald-400/60 bg-[#0a0f15]/95 shadow-[0_0_24px_-8px_rgba(52,211,153,0.35)] mb-4"
+      >
+        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
+          <div className="w-10 h-10 shrink-0 rounded-lg border border-emerald-400/70 bg-emerald-900/40 text-emerald-300 flex items-center justify-center shadow-[0_0_12px_rgba(52,211,153,0.35)]">
+            <Gauge size={18} />
+          </div>
+          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">perfMONK</h3>
+          <span className="hidden sm:inline text-[9px] font-mono text-emerald-400 tracking-widest">FIXED · MONITOR</span>
+
+          {/* Monitor-Ausgabe pro User: MAIN + PLUGIN oder NUR PLUGIN */}
+          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
+            <span className="hidden lg:inline text-[9px] font-mono text-neutral-500 tracking-widest">MONITOR</span>
+            <select
+              value={monitorUser}
+              onChange={(e) => {
+                const user = e.target.value as MonUser;
+                setMonitorUser(user);
+                applyMonitorMix(user, monitorMixes[user]);
+              }}
+              className="appearance-none pl-2 pr-5 py-1 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-emerald-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 transition-colors cursor-pointer"
+              title="Monitor-User wählen (User 1-4)"
+              aria-label="Monitor-User wählen"
+            >
+              {MON_USERS.map(u => (
+                <option key={u} value={u}>{u.replace('MON', 'USER ')}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => setMonitorMixForUser(monitorUser, monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? 'MAIN_PLUGIN' : 'PLUGIN_ONLY')}
+              aria-pressed={monitorMixes[monitorUser] === 'PLUGIN_ONLY'}
+              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN + PLUGIN oder NUR PLUGIN`}
+              className={`px-2.5 py-1 rounded-full border text-[9px] font-bold tracking-widest transition-all cursor-pointer ${
+                monitorMixes[monitorUser] === 'PLUGIN_ONLY'
+                  ? 'bg-fuchsia-600/20 border-fuchsia-400/60 text-fuchsia-200'
+                  : 'bg-emerald-500/10 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/20'
+              }`}
+            >
+              {monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? '🎧 NUR PLUGIN' : '🎧 MAIN + PLUGIN'}
+            </button>
+          </div>
+        </div>
+        <div className="px-3 pb-3 border-t border-white/5">
+          <Suspense fallback={<div className="h-16 flex items-center justify-center text-neutral-500 text-xs">Lade perfMONK…</div>}>
+            <PerformanceMonitorTerminal />
+          </Suspense>
+        </div>
+      </section>
 
       {/* D7: aiMONK-Bottom-Dock (immer offen, ausblendbar) – ersetzt das
           „letzte Modul unten" für alle User. */}
