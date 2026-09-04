@@ -1626,6 +1626,87 @@ function sendWavBuffer(res: Response, buf: Buffer): void {
   res.send(buf);
 }
 
+// ---------------------------------------------------------------------------
+// ACE-Step 1.5 (MIT, Vocal-Songs) – optionaler externer SongMONK-Backend
+// ---------------------------------------------------------------------------
+function aceStepBaseUrl(): string {
+  return (process.env.SONG_AI_ACE_STEP_URL || '').trim();
+}
+
+function aceStepHeaders(): Record<string, string> {
+  const token = (process.env.SONG_AI_ACE_STEP_TOKEN || process.env.ACESTEP_API_KEY || '').trim();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** ACE-Step REST (uv run acestep-api): async release_task → query_result → download. */
+async function aceStepGenerateSong(input: {
+  prompt: string;
+  bpm?: number;
+  durationSeconds: number;
+  timeoutMs?: number;
+}): Promise<Buffer> {
+  const base = aceStepBaseUrl().replace(/\/+$/, '');
+  if (!base) throw new Error('SONG_AI_ACE_STEP_URL fehlt');
+  const timeoutMs = input.timeoutMs ?? 300_000;
+  const deadline = Date.now() + timeoutMs;
+
+  const releaseBody: Record<string, unknown> = {
+    prompt: input.prompt.slice(0, 2000),
+    thinking: true,
+    audio_format: 'wav',
+    // ACE-Step unterstützt 10–600 s; kürzere Wünsche werden auf 10 s angehoben.
+    audio_duration: Math.max(10, Math.min(600, Math.round(input.durationSeconds || 30))),
+  };
+  if (input.bpm && Number.isFinite(input.bpm)) releaseBody.bpm = Math.max(30, Math.min(300, Math.round(input.bpm)));
+
+  const releaseResp = await fetch(`${base}/release_task`, {
+    method: 'POST',
+    headers: aceStepHeaders(),
+    body: JSON.stringify(releaseBody),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!releaseResp.ok) throw new Error(`ACE-Step release_task HTTP ${releaseResp.status}`);
+  const releaseData = (await releaseResp.json()) as { data?: unknown; code?: number; error?: string | null };
+  if (releaseData.code !== undefined && releaseData.code !== 200) {
+    throw new Error(`ACE-Step release_task code ${releaseData.code}: ${releaseData.error ?? ''}`);
+  }
+  const data = releaseData.data as { task_id?: string; taskId?: string } | string | undefined;
+  const taskId = typeof data === 'string' ? data : (data?.task_id ?? data?.taskId ?? '');
+  if (!taskId) throw new Error('ACE-Step release_task ohne task_id');
+
+  // Poll bis Status 1 (ok) oder 2 (failed).
+  while (Date.now() < deadline) {
+    const queryResp = await fetch(`${base}/query_result`, {
+      method: 'POST',
+      headers: aceStepHeaders(),
+      body: JSON.stringify({ task_id_list: [taskId] }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (queryResp.ok) {
+      const queryData = (await queryResp.json()) as {
+        data?: Array<{ task_id?: string; status?: number; result?: string }>;
+      };
+      const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
+      if (entry?.status === 1 && entry.result) {
+        const parsed = JSON.parse(entry.result) as Array<{ file?: string }>;
+        const fileUrl = parsed?.[0]?.file;
+        if (!fileUrl) throw new Error('ACE-Step Ergebnis ohne Audio-URL');
+        const audioResp = await fetch(fileUrl.startsWith('http') ? fileUrl : `${base}${fileUrl}`, {
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!audioResp.ok) throw new Error(`ACE-Step Audio-Download HTTP ${audioResp.status}`);
+        return Buffer.from(await audioResp.arrayBuffer());
+      }
+      if (entry?.status === 2) throw new Error(`ACE-Step Task ${taskId} fehlgeschlagen`);
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`ACE-Step Task ${taskId} Timeout nach ${timeoutMs} ms`);
+}
+
 /** Sanitisiert Text/Prompts (kein Prompt-Injection-Rauschen, Länge begrenzt). */
 function cleanVoiceText(raw: unknown, max = 500): string {
   return String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
@@ -1805,8 +1886,8 @@ app.post('/api/sound/generate', async (req, res) => {
 
 // ===========================================================================
 // songMONK: eigener Song-Endpoint (aus VoiceMONK entkoppelt)
-// Nutzt die Runtime (MusicGen) zuerst; HF-Serverless als Fallback.
-// Später: ACE-Step/DiffRhythm als echte Vocal-Song-Modelle ergänzen.
+// Backend-Reihenfolge: ACE-Step 1.5 (optional, Vocal-Songs) → eigene
+// Runtime (MusicGen) → HF-Serverless.
 // ===========================================================================
 app.post('/api/song/generate', async (req, res) => {
   const { prompt, model, durationSeconds, style, bpm } = (req.body ?? {}) as {
@@ -1830,13 +1911,30 @@ app.post('/api/song/generate', async (req, res) => {
     styleClean ? `Style: ${styleClean}` : '',
     bpmClean ? `BPM: ${bpmClean}` : '',
   ].filter(Boolean).join(', ');
+  const acePrompt = [clean, styleClean].filter(Boolean).join(', ');
 
   const primary = hfModelFor('music', model);
   const fallback = model ? '' : hfModelFor('musicFallback');
   const candidates = [primary, fallback].filter((m) => m.length > 0);
   let lastError = '';
 
-  // Eigene Runtime zuerst (MusicGen small als Default, Medium/ACE-Step später per Env).
+  // ACE-Step 1.5 (MIT, komplette Vocal-Songs) – optional per Env aktivierbar.
+  if (aceStepBaseUrl()) {
+    try {
+      const aceBuf = await aceStepGenerateSong({
+        prompt: acePrompt,
+        bpm: bpmClean || undefined,
+        durationSeconds: duration,
+        timeoutMs: 300_000,
+      });
+      return sendWavBuffer(res, aceBuf);
+    } catch (aceErr) {
+      lastError = aceErr instanceof Error ? aceErr.message : 'Unbekannter Fehler';
+      console.warn('[song] ACE-Step fehlgeschlagen, Fallback auf Runtime/HF:', lastError);
+    }
+  }
+
+  // Eigene Runtime zuerst (MusicGen small als Default, Medium später per Env).
   if (voiceRuntimeUrl()) {
     const runtimeModel = (process.env.SONG_AI_RUNTIME_MODEL || 'musicgen-small').trim();
     try {
