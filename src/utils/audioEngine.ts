@@ -8,6 +8,7 @@ import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from
 import { getPatch, INSTRUMENT_PATCHES, InstrumentPatch } from '../data/instrumentSynths';
 import { dx7SysexToPatch } from '../core/instrument/dx7Sysex';
 import { SfzVoiceBank } from '../core/instrument/sfzVoice';
+import { SfzSampleCache, planChunkRanges } from '../core/sampler/sfzStreaming';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
 import type {
   InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
@@ -1013,6 +1014,24 @@ class AudioEngine {
 
   public sfzNoteOff(note: number): void {
     this.sfzBank?.noteOff(note);
+  }
+
+  // Task #3: SFZ/OPFS-Streaming-Kern, verdrahtet an die Engine.
+  private sfzStreamCache = new SfzSampleCache<Float32Array>(64 * 1024 * 1024);
+
+  /** Legt dekomprimierte SFZ-Sample-Daten in den 64-MB-LRU-Cache. */
+  public cacheSfzSample(key: string, data: Float32Array, bytes: number): void {
+    this.sfzStreamCache.put(key, data, bytes);
+  }
+
+  /** Holt gecachte SFZ-Sample-Daten (LRU-Reihenfolge wird aufgefrischt). */
+  public getCachedSfzSample(key: string): Float32Array | undefined {
+    return this.sfzStreamCache.get(key);
+  }
+
+  /** Chunk-Plan für große SFZ-Samples (HTTP-Range + Worker-Decode). */
+  public planSfzChunks(totalBytes: number, chunkBytes?: number) {
+    return planChunkRanges(totalBytes, chunkBytes);
   }
 
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
