@@ -46,7 +46,7 @@ const NAV_EXCLUDED = new Set(['ai', 'performance', 'masterplayer']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
-type MonMix = 'MAIN_PLUGIN' | 'PLUGIN_ONLY';
+type MonMix = 'MAIN' | 'MIX' | 'PLUGIN_ONLY';
 
 const pluginNavLabel = (name: string) => name.replace(/MONK$/i, '').toUpperCase();
 
@@ -73,7 +73,7 @@ function AppComponent() {
   const [scratchOpen, setScratchOpen] = useState(false);
   const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
   const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
-    MON1: 'MAIN_PLUGIN', MON2: 'MAIN_PLUGIN', MON3: 'MAIN_PLUGIN', MON4: 'MAIN_PLUGIN',
+    MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
   });
   const [sessionMembers, setSessionMembers] = useState(0);
   const [sessionFull, setSessionFull] = useState(false);
@@ -92,15 +92,16 @@ function AppComponent() {
     document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  // Monitor-Ausgabe pro User: MAIN + PLUGIN (volle Mischung) oder NUR PLUGIN
-  // (Cue-Solo auf das aktive Plugin). Wirkt ausschließlich auf den Cue-Weg
-  // `monitorTrackGain` des jeweiligen Users – die Master-Kette bleibt unberührt.
+  // Monitor-Ausgabe pro User: MAIN (nur Gesamtmix), MIX (MAIN + eigene
+  // Plugins) oder NUR PLUGIN (Cue-Solo). Wirkt ausschließlich auf den
+  // lokalen Cue-/Monitor-Weg – die Master-Kette bleibt unberührt.
   const applyMonitorMix = useCallback((user: MonUser, mix: MonMix) => {
     const activeId = Object.entries(moduleStates).find(([, s]) => s === 'PRO')?.[0]
       ?? getPluginRegistry().find(p => (moduleStates[p.id] && moduleStates[p.id] !== 'OFF'))?.id
       ?? 'mixer';
     const track = getPluginRoute(activeId)?.channels[0] ?? 'channel1';
-    audioEngine.setMonitorSource(mix === 'PLUGIN_ONLY' ? 'PLUGIN' : 'MAIN', user, track);
+    const source = mix === 'MAIN' ? 'MAIN' : mix === 'MIX' ? 'MIX' : 'PLUGIN';
+    audioEngine.setMonitorSource(source, user, track);
   }, [moduleStates]);
 
   const setMonitorMixForUser = useCallback((user: MonUser, mix: MonMix) => {
@@ -678,7 +679,7 @@ function AppComponent() {
           <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">perfMONK</h3>
           <span className="hidden sm:inline text-[9px] font-mono text-emerald-400 tracking-widest">FIXED · MONITOR</span>
 
-          {/* Monitor-Ausgabe pro User: MAIN + PLUGIN oder NUR PLUGIN */}
+          {/* Monitor-Ausgabe pro User: MAIN → MIX (MAIN+PLUGIN) → NUR PLUGIN */}
           <div className="ml-auto flex items-center gap-1.5 flex-wrap">
             <span className="hidden lg:inline text-[9px] font-mono text-neutral-500 tracking-widest">MONITOR</span>
             <select
@@ -698,16 +699,22 @@ function AppComponent() {
             </select>
             <button
               type="button"
-              onClick={() => setMonitorMixForUser(monitorUser, monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? 'MAIN_PLUGIN' : 'PLUGIN_ONLY')}
-              aria-pressed={monitorMixes[monitorUser] === 'PLUGIN_ONLY'}
-              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN + PLUGIN oder NUR PLUGIN`}
+              onClick={() => {
+                const cur = monitorMixes[monitorUser];
+                const next: MonMix = cur === 'MAIN' ? 'MIX' : cur === 'MIX' ? 'PLUGIN_ONLY' : 'MAIN';
+                setMonitorMixForUser(monitorUser, next);
+              }}
+              aria-pressed={monitorMixes[monitorUser] !== 'MAIN'}
+              title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN → MIX → NUR PLUGIN`}
               className={`px-2.5 py-1 rounded-full border text-[9px] font-bold tracking-widest transition-all cursor-pointer ${
                 monitorMixes[monitorUser] === 'PLUGIN_ONLY'
                   ? 'bg-fuchsia-600/20 border-fuchsia-400/60 text-fuchsia-200'
-                  : 'bg-emerald-500/10 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/20'
+                  : monitorMixes[monitorUser] === 'MIX'
+                    ? 'bg-amber-500/15 border-amber-400/60 text-amber-200'
+                    : 'bg-emerald-500/10 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/20'
               }`}
             >
-              {monitorMixes[monitorUser] === 'PLUGIN_ONLY' ? '🎧 NUR PLUGIN' : '🎧 MAIN + PLUGIN'}
+              {monitorMixes[monitorUser] === 'MAIN' ? '🎧 MAIN' : monitorMixes[monitorUser] === 'MIX' ? '🎧 MAIN + PLUGIN' : '🎧 NUR PLUGIN'}
             </button>
           </div>
         </div>

@@ -18,7 +18,7 @@
  */
 import { ALL_TRACKS, type TrackType } from '../../types';
 
-export type MonitorSource = 'MAIN' | 'MON' | 'PLUGIN';
+export type MonitorSource = 'MAIN' | 'MON' | 'PLUGIN' | 'MIX';
 export type MonitorUser = 'MON1' | 'MON2' | 'MON3' | 'MON4';
 
 export const MONITOR_USERS: readonly MonitorUser[] = ['MON1', 'MON2', 'MON3', 'MON4'];
@@ -62,7 +62,9 @@ const clampLevel = (value: unknown): number =>
 export function planMonitorRouting(input: MonitorRoutingInput): MonitorRoutingPlan {
   const mon = MONITOR_USERS.includes(input.mon) ? input.mon : 'MON1';
   const cueLevel = clampLevel(input.cueLevel ?? 1);
-  const soloTrack = input.source === 'PLUGIN' && input.track ? input.track : null;
+  // PLUGIN = Cue-Solo (nur eigener Kanal), MIX = MAIN + eigener Kanal.
+  const soloTrack =
+    (input.source === 'PLUGIN' || input.source === 'MIX') && input.track ? input.track : null;
 
   const cueTracks = {} as Record<TrackType, number>;
   for (const track of ALL_TRACKS) {
@@ -76,16 +78,18 @@ export function planMonitorRouting(input: MonitorRoutingInput): MonitorRoutingPl
     }
   }
 
-  // Nur der lokale Abhörweg wird umgeschaltet: MAIN-Monitor aus, Cue an
-  // (und umgekehrt). Der MAIN-Bus selbst behält immer seinen Pegel.
-  const listensToCue = input.source === 'MON' || input.source === 'PLUGIN';
+  // Nur der lokale Abhörweg wird umgeschaltet. Der MAIN-Bus selbst behält
+  // immer seinen Pegel. MIX lässt den MAIN-Monitor an und blendet den
+  // Plugin-Kanal über den Cue-Bus dazu.
+  const cueOnly = input.source === 'MON' || input.source === 'PLUGIN';
+  const blended = input.source === 'MIX';
 
   return {
     source: input.source,
     mon,
     soloTrack,
-    mainMonitorGain: listensToCue ? 0 : 1,
-    cueGain: listensToCue ? cueLevel : 0,
+    mainMonitorGain: cueOnly ? 0 : 1,
+    cueGain: cueOnly || blended ? cueLevel : 0,
     cueTracks,
   };
 }

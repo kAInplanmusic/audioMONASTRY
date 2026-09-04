@@ -111,6 +111,16 @@ describe('P0-6 · Main-/Monitor-Routing (4-User-Prüfpunkt)', () => {
     }
   });
 
+  it('MIX-Modus blendet MAIN + eigenes Plugin (Main-Monitor bleibt an)', () => {
+    const base = fullMix();
+    const mix = planMonitorRouting({ source: 'MIX', mon: 'MON1', track: 'channel3', baseMix: base });
+    expect(mix.mainMonitorGain).toBe(1);      // MAIN bleibt hörbar
+    expect(mix.cueGain).toBeGreaterThan(0);   // Plugin-Kanal wird dazugemischt
+    expect(mix.soloTrack).toBe('channel3');
+    expect(mix.cueTracks.channel3).toBeGreaterThan(0);
+    expect(mix.cueTracks.channel1).toBe(0);   // nur der eigene Kanal im Cue
+  });
+
   it('zurück auf MAIN → sofort wieder Gesamtmix (kein Rest-Solo)', () => {
     const base = fullMix();
     const cue = planMonitorRouting({ source: 'PLUGIN', mon: 'MON3', track: drumChannel, baseMix: base });
