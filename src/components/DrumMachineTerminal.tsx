@@ -254,6 +254,8 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
             <span className="text-[9px] font-mono text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded-sm tracking-widest">TR-8S</span>
             <span className="text-[8px] font-mono text-neutral-500 border border-neutral-700 px-1.5 py-0.5 rounded-sm hidden sm:inline">STEP SEQ · BUFFER SOURCE</span>
           </div>
+          <img src="/uisequenzer.jpg" alt="Sequencer-Referenz" title="Sequencer-Referenz (uisequenzer.jpg)"
+            className="h-10 rounded border border-neutral-800 hover:border-emerald-500/60 transition-colors object-cover" />
           <div className="flex items-center gap-2">
             <span className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border ${isPlaying ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10' : 'text-neutral-500 border-neutral-700'}`}>
               {isPlaying ? `RUN · STEP ${currentStep % stepCount + 1}/${stepCount}` : `STOP · ${bpm} BPM`}
