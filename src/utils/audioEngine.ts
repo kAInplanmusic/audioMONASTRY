@@ -170,6 +170,7 @@ class AudioEngine {
   private samplePlayers: Record<string, Tone.Player> = {};
   /** Einzelner, wiederverwendeter Preview-Player (kein Leak bei schnellem Klicken). */
   private previewPlayer: Tone.Player | null = null;
+  private previewUrl: string | null = null;
   private trackSampleUrl: Record<TrackType, string | null> = {
     channel1: null, channel2: null, channel3: null, channel4: null,
     channel5: null, channel6: null, channel7: null, channel8: null
@@ -2709,9 +2710,22 @@ class AudioEngine {
       const player = new Tone.Player(url).toDestination();
       player.autostart = true;
       this.previewPlayer = player;
+      this.previewUrl = url;
     } else if (this.samplePlayers[track]) {
       this.samplePlayers[track].start(time);
     }
+  }
+
+  /** Stoppt die laufende Hörprobe (falls aktiv) und gibt den Player frei. */
+  public stopPreview(): void {
+    try { this.previewPlayer?.dispose(); } catch { /* ignore */ }
+    this.previewPlayer = null;
+    this.previewUrl = null;
+  }
+
+  /** URL der aktuell laufenden Hörprobe (null = keine aktiv). */
+  public getPreviewUrl(): string | null {
+    return this.previewUrl;
   }
 
   /** Einmalige Hörprobe eines synthetischen Samples (biblioMONK Play-Button). */
