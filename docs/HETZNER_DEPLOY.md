@@ -312,3 +312,26 @@ Aktivität messbar ist (offene WebSockets, SSH, CPU-Load, aktive Container-Jobs)
 | master-player offline | `docker compose ... ps` → Container-Logs; Healthcheck wartet 20 s nach Start |
 | stem-ai OOM | Nicht auf CX23 betreiben; erst auf CX33 oder eigener Instanz aktivieren |
 | Docker-Build OOM auf CX23 | `DEPLOY_MODE=node` testen oder auf CX33 resizen |
+
+## OPS – Hetzner Load Balancer (LB11) erst bei Skalierung (dokumentiert 2026-09-03)
+
+**Trigger:** LB11 erst installieren, wenn **≥ 2 App-Knoten** laufen
+(Multi-Session, > 4 User/Session oder HA/Zero-Downtime-Deploys). Für den
+aktuellen Betrieb (1× app-1 hinter Cloudflare, max. 4 User/Session) bewusst
+NICHT aktiv.
+
+**Architektur (Zielbild):**
+```
+Cloudflare → Hetzner LB11 (sticky WebSocket-Sessions) → app-1 / app-2
+```
+- Socket.io-Räume über Redis-Adapter teilen (`REDIS_URL`)
+- Mediasoup/SFU nur auf einem dedizierten Knoten
+- Session-State/Locking bleiben über den bestehenden Server-Pfad synchron
+
+**Kosten (Stand 04/2026, Europa netto):**
+- **0,012 €/h** stundenbasiert, Deckel **7,49 €/Monat**
+- 20 TB Traffic inklusive
+- Stundenabrechnung → Kosten entstehen nur, solange der LB existiert
+
+**Prüfpunkt (offen, Live):** 2 App-Knoten hinter LB, 4-User-E2E grün
+(State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).

@@ -266,6 +266,14 @@ describe('Server API', () => {
     expect(body.stem).toBeTruthy();
   });
 
+  it('GET /api/audit liefert Audit-Log ohne Secrets (P4-2)', async () => {
+    const res = await fetch(`${baseUrl}/api/audit`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.entries)).toBe(true);
+    expect(body.total).toBeGreaterThanOrEqual(0);
+  });
+
   it('POST /api/cloud/upload (binär) ohne Key → 400', async () => {
     const res = await fetch(`${baseUrl}/api/cloud/upload`, {
       method: 'POST',

@@ -33,6 +33,17 @@ describe('WebRTCManager (jsdom)', () => {
     expect(() => webRTCManager.sendToAllPeers({ type: 'test' } as never)).not.toThrow();
   });
 
+  it('P4-1: startMainStream speichert Main-Stream ohne Peers (kein Throw)', () => {
+    const fakeStream = { getTracks: () => [], getAudioTracks: () => [] } as unknown as MediaStream;
+    webRTCManager.startMainStream(fakeStream);
+    expect(webRTCManager.getMainStream()).toBe(fakeStream);
+  });
+
+  it('P4-2: isHost/role default guest, bis Server-Rolle eintrifft', () => {
+    expect(webRTCManager.isHost).toBe(false);
+    expect(webRTCManager.role).toBe('guest');
+  });
+
   it('addDataChannelListener unterstützt mehrere Listener (F2-Fix)', () => {
     const seen: string[] = [];
     const off1 = webRTCManager.addDataChannelListener((m: any) => seen.push('a:' + m.type));

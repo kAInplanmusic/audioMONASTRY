@@ -1,7 +1,7 @@
 {
   "name": "audioMONASTRY",
-  "version": "1.1.420",
-  "codename": "AnunnakiDNA",
+  "version": "1.210.001",
+  "codename": "HYPERDAW",
   "description": "Kollaborative, objektbasierte Pro-Audio-Workstation: 17 Plugins, AudioWorklets, KI (MOA/MCP, TTS/Gesang/Song), Spatial bis 24.2, WebRTC/SFU.",
   "requestFramePermissions": [],
   "majorCapabilities": [

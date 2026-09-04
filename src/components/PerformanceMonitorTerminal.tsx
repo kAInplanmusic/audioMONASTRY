@@ -3,6 +3,7 @@ import { Activity, Cpu, Gauge, Network, Waves } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { audioEngine } from '../utils/audioEngine';
+import { webRTCManager } from '../utils/WebRTCManager';
 import { MoaAssistant } from './MoaAssistant';
 import { telemetry } from '../utils/telemetry';
 
@@ -49,13 +50,25 @@ function spectrum(arr: Float32Array): number[] {
 export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitorTerminal() {
   const { state, updateState } = usePluginState('performance', 'PRO');
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
+  const [net, setNet] = useState({ rttMs: 0, dropouts: 0 });
+  const [tel, setTel] = useState(() => telemetry.snapshot());
   const [signalMode, setSignalMode] = useState<SignalMode>('OSCILLOSCOPE');
   const signalCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     performanceMonitor.setAudioStateProvider(() => audioEngine.getAudioHealth());
     performanceMonitor.start();
-    const timer = setInterval(() => setPerf(performanceMonitor.snapshot()), 1000);
+    const timer = setInterval(() => {
+      setPerf(performanceMonitor.snapshot());
+      // AM-E6-1: Kontinuierliches Profiling – Xruns, Worklet-CPU-Budgets,
+      // Per-Sample-Allokationen aus der Telemetrie-Registry anzeigen.
+      setTel(telemetry.snapshot());
+      // P2-1: End-to-End-Latenz live anzeigen (lokal = Audio, Netz = WebRTC).
+      setNet({
+        rttMs: Math.round(webRTCManager.lastRttMs * 10) / 10,
+        dropouts: audioEngine.dropoutCount,
+      });
+    }, 1000);
     return () => { clearInterval(timer); performanceMonitor.stop(); };
   }, []);
 
@@ -109,7 +122,9 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
     return () => cancelAnimationFrame(animationId);
   }, [signalMode]);
 
-  const budgets = telemetry.snapshot().budgets;
+  const budgets = tel.budgets;
+  const worklets = tel.worklets;
+  const xruns = tel.xruns;
 
   return (
     <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans">
@@ -165,6 +180,23 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
               <Network className="w-4 h-4" /> LATENCY BUDGETS
             </h3>
             <div className="space-y-2 text-[11px] font-mono">
+              {/* P2-1: End-to-End-Latenz-Ziele: lokal < 15 ms, Netz < 50 ms. */}
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">LOCAL (Audio)</span>
+                <span className={perf.audioBaseLatencyMs < 15 ? 'text-emerald-400' : 'text-amber-400'}>
+                  {perf.audioBaseLatencyMs} / 15 ms
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">NET (RTT)</span>
+                <span className={net.rttMs > 0 && net.rttMs < 50 ? 'text-emerald-400' : 'text-amber-400'}>
+                  {net.rttMs} / 50 ms
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">DROPOUTS</span>
+                <span className={net.dropouts === 0 ? 'text-emerald-400' : 'text-amber-400'}>{net.dropouts}</span>
+              </div>
               {budgets.map((b) => (
                 <div key={b.pipeline} className="flex justify-between">
                   <span className="text-neutral-500 uppercase">{b.pipeline}</span>
@@ -173,6 +205,45 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
                   </span>
                 </div>
               ))}
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">XRUNS</span>
+                <span className={xruns.count === 0 ? 'text-emerald-400' : 'text-amber-400'}>{xruns.count}</span>
+              </div>
+              {xruns.history.slice(-4).reverse().map((x, i) => (
+                <div key={`${x.ts}-${i}`} className="flex justify-between">
+                  <span className="text-neutral-600">{x.source}</span>
+                  <span className="text-neutral-600">{new Date(x.ts).toLocaleTimeString()}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* AM-E6-1: Worklet-CPU-Budgets + Per-Sample-Allokationen */}
+        <div className="col-span-12">
+          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
+            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-3">
+              <Activity className="w-4 h-4" /> WORKLET CPU BUDGETS / ALLOCATIONEN
+            </h3>
+            <div className="grid grid-cols-4 gap-3 text-[11px] font-mono">
+              {worklets.length === 0 && (
+                <div className="text-neutral-600 col-span-4">Noch keine Worklet-Messungen – Budgets erscheinen nach dem ersten Render-Quantum.</div>
+              )}
+              {worklets.map((w) => (
+                <div key={w.worklet} className="bg-black/40 rounded border border-neutral-800 p-2">
+                  <div className="text-neutral-400 uppercase truncate">{w.worklet}</div>
+                  <div className={w.violations > 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                    {w.lastMs} / {w.budgetMs} ms
+                  </div>
+                  <div className="text-neutral-600">Verletzungen: {w.violations}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 text-[11px] font-mono flex justify-between">
+              <span className="text-neutral-500 uppercase">PER-SAMPLE-ALLOKATIONEN (Worklets)</span>
+              <span className={tel.counters['worklet.allocations'] > 0 ? 'text-amber-400' : 'text-emerald-400'}>
+                {tel.counters['worklet.allocations'] ?? 0}
+              </span>
             </div>
           </div>
         </div>

@@ -1,15 +1,30 @@
 /**
  * synthProcessor – PolyBLEP-Synthesizer im AudioWorklet
  * ------------------------------------------------------
- * Erzeugt bandlimitierte Oszillator-Wellenformen (Saw, Square, Triangle, Sine)
- * ohne Aliasing mit der PolyBLEP-Methode, plus ADSR-Hüllkurve und einem
- * resonanten Moog-Ladder-4-Pol-Tiefpassfilter.
+ * Erzeugt bandlimitierte Oszillator-Wellenformen (Saw, Square, Triangle, Sine,
+ * PD, Wavetable, Tonewheel) ohne Aliasing (PolyBLEP bzw. Mip-Map-Wavetables),
+ * plus ADSR-Hüllkurve und einem resonanten Moog-Ladder-4-Pol-Tiefpassfilter.
  *
  * Steuerung über Port-Nachrichten:
- *   { osc: 'saw'|'square'|'triangle'|'sine', freq, cutoff, resonance, gain }
+ *   { osc: 'saw'|'square'|'triangle'|'sine'|'pd'|'wavetable'|'tonewheel',
+ *     freq, cutoff, resonance, gain }
  *   { trigger: velocity }  → neues Note-On
  *   { release }            → Note-Off (ADSR-Release)
  */
+import { createMorphWavetables, sampleWavetable } from '../../core/instrument/wavetable';
+import { createTonewheelTable, LeslieSim } from '../../core/instrument/tonewheel';
+
+// Vorberechnete Wavetables (Modul-Load, keine Allokation im Hot-Path).
+const WT = createMorphWavetables(2048);
+const TONEWHEEL_TABLE = createTonewheelTable([8, 0, 8, 4, 0, 2, 0, 0, 1], 2048);
+
+function readTable(table: Float32Array, phase01: number): number {
+  const x = Math.max(0, Math.min(1, phase01)) * table.length;
+  const i0 = Math.floor(x) % table.length;
+  const i1 = (i0 + 1) % table.length;
+  const f = x - Math.floor(x);
+  return table[i0] + (table[i1] - table[i0]) * f;
+}
 
 // --- PolyBLEP (Anti-Aliasing) ---
 function polyBLEP(t: number, dt: number): number {
@@ -35,6 +50,22 @@ function waveform(type: string, phase: number, dt: number): number {
       return raw;
     }
     case 'sine':
+      return Math.sin(2 * Math.PI * phase);
+    case 'pd': {
+      // Phase-Distortion (Casio-CZ): piecewise-lineares Reshaping, Cosinus.
+      const amount = 0.4;
+      const p = phase < 0 ? 0 : phase > 1 ? 1 : phase;
+      const reshaped = p < amount
+        ? (p / amount) * 0.5
+        : 0.5 + ((p - amount) / (1 - amount)) * 0.5;
+      return Math.cos(2 * Math.PI * reshaped);
+    }
+    case 'wavetable': {
+      const mip = Math.max(0, Math.min(5, Math.floor(Math.log2(1 / Math.max(dt, 1e-6)) - 8)));
+      return sampleWavetable(WT.sine, WT.saw, 0.5, phase, mip);
+    }
+    case 'tonewheel':
+      return readTable(TONEWHEEL_TABLE, phase);
     default:
       return Math.sin(2 * Math.PI * phase);
   }
@@ -81,6 +112,8 @@ class SynthProcessor extends AudioWorkletProcessor {
   private gain = 1.0;
 
   private filter = new MoogLadder();
+  // Leslie (nur für tonewheel hörbar – aber immer verfügbar).
+  private leslie = new LeslieSim(48000, { slowHz: 0.8, fastHz: 6.2, rampSec: 0.8, amDepth: 0.5, fmDepth: 0.012 });
 
   constructor() {
     super();
@@ -97,6 +130,7 @@ class SynthProcessor extends AudioWorkletProcessor {
       if (typeof m.sustain === 'number') this.sustain = Math.max(0, Math.min(1, m.sustain));
       if (typeof m.release === 'number') this.release = Math.max(0.001, m.release);
       if (typeof m.resetFilter === 'boolean') this.filter.reset();
+      if (typeof m.leslieFast === 'boolean') this.leslie.setFast(m.leslieFast);
       if (typeof m.trigger === 'number') {   // Note-On mit Velocity
         this.envStage = 'attack';
       }
@@ -122,6 +156,9 @@ class SynthProcessor extends AudioWorkletProcessor {
 
       // Filter
       s = this.filter.process(s, this.cutoff, this.resonance, sr);
+
+      // Leslie-Rotor nur für die Tonewheel-Orgel.
+      if (this.osc === 'tonewheel') s = this.leslie.process(s);
 
       // ADSR
       const dtSec = 1 / sr;

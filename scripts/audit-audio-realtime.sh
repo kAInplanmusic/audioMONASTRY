@@ -21,6 +21,12 @@ FORBIDDEN_PATTERNS=(
   'document\.'
   'window\.'
   'RTCPeerConnection'
+  # AM-E1-6: Hot-Path-Verbote im Audio-Thread
+  'new Array'
+  '\.push\('
+  'Math\.pow'
+  'Math\.log'
+  'Math\.exp'
 )
 
 violations=0

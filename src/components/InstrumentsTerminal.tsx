@@ -12,6 +12,7 @@ import { getProgramForInstrument } from '../core/instrument/midiProgramMap';
 import { UniversalKeyboard } from './instrument/UniversalKeyboard';
 import { PadGrid } from './instrument/PadGrid';
 import { InstrumentCanvas } from './instrument/InstrumentCanvas';
+import { GarageBandInstrumentView } from './instrument/GarageBandInstrumentView';
 
 // --- WAM2 / Instrument Standards ---
 type InstrumentType = 'sampler' | 'synth' | 'soundfont' | 'synth2';
@@ -107,7 +108,7 @@ const SYNTH_PRESET_INSTRUMENTS: Instrument[] = SYNTHESIS_INSTRUMENTS.map(d => ({
 }));
 
 export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('instruments', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('instrument', 'PRO');
   const [activeCategory, setActiveCategory] = useState('Alle');
   const [search, setSearch] = useState('');
   const [instruments] = useState<Instrument[]>([...PRESET_INSTRUMENTS, ...SYNTH_PRESET_INSTRUMENTS]);
@@ -116,8 +117,8 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const [droppedSample, setDroppedSample] = useState<AudioSample | null>(null);
   // Task 2: MIDI-Program-Change – zuletzt empfangene Programmnummer (UI-Spiegelung).
   const [midiProgram, setMidiProgram] = useState<number | null>(null);
-  // Spielansichten: Vorschau-Keyboard, Universalkeyboard, Pads, Instrument-Canvas.
-  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas'>('preview');
+  // Spielansichten: Pad-/Klavier-Eingabe als Standard (NEW-MONK-5).
+  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas' | 'garageband'>('keys');
 
   // MIDI-Program-Change via WebMIDIAdapter (controllerMONK) → instrumentBackend.
   useEffect(() => {
@@ -242,7 +243,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
                     </span>
                 </div>
                 <div className="flex gap-1 mb-3" role="tablist" aria-label="Spielansicht">
-                    {([['preview', 'PREVIEW'], ['keys', 'KEYS'], ['pads', 'PADS'], ['canvas', 'CANVAS']] as const).map(([v, label]) => (
+                    {([['preview', 'PREVIEW'], ['keys', 'KEYS'], ['pads', 'PADS'], ['canvas', 'CANVAS'], ['garageband', 'ECHTBILD']] as const).map(([v, label]) => (
                         <button type="button" key={v} role="tab" aria-selected={playView === v}
                             onClick={() => setPlayView(v)}
                             className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest border ${
@@ -274,6 +275,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
                 {playView === 'canvas' && (
                     <InstrumentCanvas instrumentName={activeInstrument?.name ?? 'Guitar'} />
                 )}
+                {playView === 'garageband' && <GarageBandInstrumentView />}
             </div>
         </div>
       </div>

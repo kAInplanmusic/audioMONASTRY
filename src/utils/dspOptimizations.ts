@@ -31,7 +31,7 @@ export function softClip(out: Float32Array, input: Float32Array, drive: number):
   }
 }
 
-/** Timing-Quantisierung (Sample-genaue Event-Platzierung) – sequencerMONK. */
+/** Timing-Quantisierung (Sample-genaue Event-Platzierung) – mcpMONK/Step-Sequencer. */
 export function quantizeSample(timeMs: number, sampleRate: number, stepMs: number): number {
   const stepSamples = Math.max(1, Math.round((stepMs / 1000) * sampleRate));
   const raw = Math.round((timeMs / 1000) * sampleRate);

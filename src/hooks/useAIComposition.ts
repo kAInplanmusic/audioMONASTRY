@@ -1,22 +1,26 @@
-// src/hooks/useAIComposition.ts
-import axios from 'axios';
+// src/hooks/useAIComposition.ts – ohne axios (Bundle-Diät P2-5)
 import { CompositionResponse, ArrangementSchema } from '../types/composition';
 import { API_BASE_URL } from '../config/runtime';
 
 export const useAIComposition = () => {
   
   const generateArrangement = async (prompt: string): Promise<CompositionResponse> => {
-    const response = await axios.post(`${API_BASE_URL}/ai/compose`, { prompt });
+    const response = await fetch(`${API_BASE_URL}/ai/compose`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+    const data = (await response.json()) as CompositionResponse;
     
-    // Validate with Zod
+    // Validate (manuelles Schema, kein zod)
     const validatedData = ArrangementSchema.parse({
-        patterns: response.data.patterns,
-        synthNotes: response.data.synthNotes,
-        bpm: response.data.bpm,
-        genre: response.data.genre
+        patterns: data.patterns,
+        synthNotes: data.synthNotes,
+        bpm: data.bpm,
+        genre: data.genre
     });
     
-    return { ...response.data, ...validatedData };
+    return { ...data, ...validatedData };
   };
 
   return { generateArrangement };

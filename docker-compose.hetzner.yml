@@ -79,7 +79,7 @@ services:
       NODE_ENV: production
       PORT: 8080
       SIGNALING_IDLE_TIMEOUT_MS: ${SIGNALING_IDLE_TIMEOUT_MS:-1200000}
-      MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-http://master-player:8000}
+      MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-}
       UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-100}
     read_only: true
     tmpfs:
@@ -110,8 +110,10 @@ services:
     image: samplemonk-master-player:hetzner
     container_name: samplemonk-master
     <<: *default-runtime
-    expose:
-      - "8000"
+    # FLEET-WIRING: auf Hetzner-Knoten öffentlich publizieren (Firewall
+    # beschränkt den Zugriff auf die app-1-IP, siehe Portal /api/wire-fleet).
+    ports:
+      - "8000:8000"
     environment:
       PORT: 8000
     read_only: true

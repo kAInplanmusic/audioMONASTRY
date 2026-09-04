@@ -1,5 +1,5 @@
 import React, {  useState, useEffect, useRef  } from 'react';
-import { Activity, Power, Cpu, Zap, SlidersHorizontal } from 'lucide-react';
+import { Activity, Power, Cpu, Zap, SlidersHorizontal, Gauge } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
@@ -14,6 +14,15 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
     cutoff: 1200, resonance: 0.4, modIndex: 5, gain: 0.8, lfoRate: 0, lfoDepth: 0,
   });
   const [activeVoices, setActiveVoices] = useState(0);
+  // P1-Dynamik: Kompressor/Gate/Dynamic-EQ-Insert (Default = Bypass).
+  const [dynamics, setDynamics] = useState({
+    enabled: false,
+    gateEnabled: false,
+    dynEqEnabled: false,
+    threshold: -18, ratio: 3, attack: 0.01, release: 0.12, makeup: 0,
+    gateThreshold: -60, gateRange: 40,
+    dynEqFreq: 3000, dynEqQ: 4, dynEqThreshold: -24, dynEqRange: 12,
+  });
   // Echtzeit-Performance-Snapshot (FPS, Jitter, Audio-Health).
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
 
@@ -28,6 +37,26 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
     const timer = setInterval(() => setPerf(performanceMonitor.snapshot()), 1000);
     return () => { clearInterval(timer); performanceMonitor.stop(); };
   }, []);
+
+  /** Dynamik-Parameter setzen und an den Worklet-Insert schicken. */
+  const updateDynamics = (patch: Partial<typeof dynamics>) => {
+    setDynamics((prev) => {
+      const next = { ...prev, ...patch };
+      audioEngine.setDynamicsParams({
+        enabled: next.enabled,
+        compressor: {
+          threshold: next.threshold, ratio: next.ratio,
+          attack: next.attack, release: next.release, makeup: next.makeup,
+        },
+        gate: { enabled: next.gateEnabled, threshold: next.gateThreshold, range: next.gateRange },
+        dynEq: {
+          enabled: next.dynEqEnabled, freq: next.dynEqFreq, q: next.dynEqQ,
+          threshold: next.dynEqThreshold, range: next.dynEqRange,
+        },
+      });
+      return next;
+    });
+  };
 
   const handleAutomate = (param: 'cutoff' | 'resonance' | 'modIndex' | 'gain' | 'lfoRate' | 'lfoDepth', value: number, rampTime = 0.02) => {
     setAutoParams(prev => ({ ...prev, [param]: value }));
@@ -109,6 +138,13 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
               DSP Engine <span className="text-[10px] font-mono text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-sm">ZERO JITTER</span>
             </h2>
           </div>
+        </div>
+
+        {/* DSP-Referenz-Looks (uibspdsp1-5) */}
+        <div className="flex items-center gap-2 overflow-x-auto px-1">
+          {['/uibspdsp1.jpg', '/uibspdsp2.jpg', '/uibspdsp3.WEBP', '/uibspdsp4.PNG', '/uibspdsp5.WEBP'].map((src) => (
+            <img key={src} src={src} alt="DSP-Referenz" className="h-12 rounded border border-neutral-800 hover:border-violet-500/60 transition-colors object-cover" />
+          ))}
         </div>
 
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
@@ -250,6 +286,64 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
                   />
                   <span className="text-[9px] font-mono font-bold text-neutral-500">{c.label}</span>
                   <span className="text-[10px] font-black text-violet-400">{c.fmt(autoParams[c.param])}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* P1-Dynamik: Kompressor + Gate + Dynamic EQ (dynamicsProcessor) */}
+          <div className="bg-[#1a1a1a] rounded-xl border border-violet-500/30 p-4 shadow-inner">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2">
+                <Gauge className="w-4 h-4" /> DYNAMICS · COMP / GATE / DYN-EQ
+              </h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => updateDynamics({ enabled: !dynamics.enabled })}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${dynamics.enabled ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}
+                >
+                  INSERT {dynamics.enabled ? 'ON' : 'BYPASS'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateDynamics({ gateEnabled: !dynamics.gateEnabled })}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${dynamics.gateEnabled ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}
+                >
+                  GATE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateDynamics({ dynEqEnabled: !dynamics.dynEqEnabled })}
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${dynamics.dynEqEnabled ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}
+                >
+                  DYN-EQ
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-6 gap-4">
+              {([
+                { label: 'THRESHOLD', key: 'threshold' as const, min: -60, max: 0, step: 0.5, fmt: (v: number) => `${v.toFixed(1)} dB` },
+                { label: 'RATIO', key: 'ratio' as const, min: 1, max: 20, step: 0.1, fmt: (v: number) => `${v.toFixed(1)}:1` },
+                { label: 'ATTACK', key: 'attack' as const, min: 0.001, max: 0.1, step: 0.001, fmt: (v: number) => `${(v * 1000).toFixed(0)} ms` },
+                { label: 'RELEASE', key: 'release' as const, min: 0.01, max: 1, step: 0.01, fmt: (v: number) => `${(v * 1000).toFixed(0)} ms` },
+                { label: 'MAKEUP', key: 'makeup' as const, min: -12, max: 24, step: 0.5, fmt: (v: number) => `${v.toFixed(1)} dB` },
+                { label: 'GATE THR', key: 'gateThreshold' as const, min: -100, max: 0, step: 1, fmt: (v: number) => `${v.toFixed(0)} dB` },
+                { label: 'GATE RANGE', key: 'gateRange' as const, min: 0, max: 90, step: 1, fmt: (v: number) => `${v.toFixed(0)} dB` },
+                { label: 'EQ FREQ', key: 'dynEqFreq' as const, min: 40, max: 16000, step: 10, fmt: (v: number) => `${Math.round(v)} Hz` },
+                { label: 'EQ Q', key: 'dynEqQ' as const, min: 0.3, max: 18, step: 0.1, fmt: (v: number) => v.toFixed(1) },
+                { label: 'EQ THR', key: 'dynEqThreshold' as const, min: -80, max: 0, step: 1, fmt: (v: number) => `${v.toFixed(0)} dB` },
+                { label: 'EQ RANGE', key: 'dynEqRange' as const, min: 0, max: 24, step: 0.5, fmt: (v: number) => `${v.toFixed(1)} dB` },
+              ]).map((c) => (
+                <div key={c.key} className="flex flex-col items-center gap-1">
+                  <input
+                    type="range"
+                    min={c.min} max={c.max} step={c.step}
+                    value={dynamics[c.key]}
+                    onChange={(e) => updateDynamics({ [c.key]: Number.parseFloat(e.target.value) })}
+                    className="w-full h-2 accent-violet-500 cursor-pointer"
+                  />
+                  <span className="text-[9px] font-mono font-bold text-neutral-500">{c.label}</span>
+                  <span className="text-[10px] font-black text-violet-400">{c.fmt(dynamics[c.key])}</span>
                 </div>
               ))}
             </div>

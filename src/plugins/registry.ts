@@ -10,10 +10,10 @@ const InstrumentsTerminal = lazy(() => import('../components/InstrumentsTerminal
 const SynthesizerTerminal = lazy(() => import('../components/SynthesizerTerminal').then(m => ({ default: m.SynthesizerTerminal })));
 const DrumMachineTerminal = lazy(() => import('../components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 const SamplerTerminal = lazy(() => import('../components/SamplerTerminal').then(m => ({ default: m.SamplerTerminal })));
-const SequencerPluginTerminal = lazy(() => import('../components/SequencerPluginTerminal').then(m => ({ default: m.SequencerPluginTerminal })));
+const McpTerminal = lazy(() => import('../components/McpTerminal').then(m => ({ default: m.McpTerminal })));
 const VoiceGenTerminal = lazy(() => import('../components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const SoundTerminal = lazy(() => import('../components/SoundTerminal').then(m => ({ default: m.SoundTerminal })));
-const MischpultTerminal = lazy(() => import('../components/MischpultTerminal').then(m => ({ default: m.MischpultTerminal })));
+const DJ4ChMixer = lazy(() => import('../components/DJ4ChMixer').then(m => ({ default: m.DJ4ChMixer })));
 const MIDIControllerTerminal = lazy(() => import('../components/MIDIControllerTerminal').then(m => ({ default: m.MIDIControllerTerminal })));
 const FXEngineTerminal = lazy(() => import('../components/FXEngineTerminal').then(m => ({ default: m.FXEngineTerminal })));
 const DropTerminal = lazy(() => import('../components/DropTerminal').then(m => ({ default: m.DropTerminal })));
@@ -22,7 +22,7 @@ const EQPluginTerminal = lazy(() => import('../components/EQPluginTerminal').the
 const DSPTerminal = lazy(() => import('../components/DSPTerminal').then(m => ({ default: m.DSPTerminal })));
 const MasteringOverlay = lazy(() => import('../components/MasteringOverlay').then(m => ({ default: m.MasteringOverlay })));
 const StemExtractorTerminal = lazy(() => import('../components/StemExtractorTerminal').then(m => ({ default: m.StemExtractorTerminal })));
-const SpatialPluginTerminal = lazy(() => import('../components/SpatialPluginTerminal').then(m => ({ default: m.SpatialPluginTerminal })));
+const SpatialScene = lazy(() => import('../components/SpatialScene').then(m => ({ default: m.SpatialScene })));
 const RecorderTerminal = lazy(() => import('../components/RecorderTerminal').then(m => ({ default: m.RecorderTerminal })));
 const PerformanceMonitorTerminal = lazy(() => import('../components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const AiMonkTerminal = lazy(() => import('../components/AiMonkTerminal').then(m => ({ default: m.AiMonkTerminal })));
@@ -35,7 +35,7 @@ const ICON_MAP: Record<string, any> = {
 // ============================================================================
 // Plugin-Reihenfolge (verbindlich):
 //   0 masterplayer · 1 instrument · 2 synthesizer · 3 drum · 4 sampler
-//   5 sequencer · 6 voice · 7 sound · 8 mixer · 9 controller · 10 effect
+//   5 mcp · 6 voice · 7 sound · 8 mixer · 9 controller · 10 effect
 //   11 drop · 12 library · 13 eq · 14 dsp · 15 mastering · 16 stem
 //   17 spatial · 18 recording · 19 performance · 20 ai
 // visMONK wurde entfernt; seine Signal-Anzeige ist in perfMONK integriert.
@@ -46,10 +46,10 @@ const COMPONENT_MAP: Record<string, any> = {
   synthesizer: SynthesizerTerminal,
   drum: DrumMachineTerminal,
   sampler: SamplerTerminal,
-  sequencer: SequencerPluginTerminal,
+  mcp: McpTerminal,
   voice: VoiceGenTerminal,
   sound: SoundTerminal,
-  mixer: MischpultTerminal,
+  mixer: DJ4ChMixer,
   controller: MIDIControllerTerminal,
   effect: FXEngineTerminal,
   drop: DropTerminal,
@@ -58,7 +58,7 @@ const COMPONENT_MAP: Record<string, any> = {
   dsp: DSPTerminal,
   mastering: MasteringOverlay,
   stem: StemExtractorTerminal,
-  spatial: SpatialPluginTerminal,
+  spatial: SpatialScene,
   recording: RecorderTerminal,
   performance: PerformanceMonitorTerminal,
   ai: AiMonkTerminal,
@@ -99,7 +99,7 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
   synthesizer: { name: 'synthesizerMONK', short: 'SYN', icon: 'Waves' },
   drum: { name: 'drumMONK', short: 'DRM', icon: 'Speaker' },
   sampler: { name: 'samplerMONK', short: 'SAM', icon: 'Speaker' },
-  sequencer: { name: 'sequencerMONK', short: 'SEQ', icon: 'Grid3X3' },
+  mcp: { name: 'mcpMONK', short: 'MCP', icon: 'Grid3X3' },
   voice: { name: 'voiceMONK', short: 'VOX', icon: 'Mic' },
   sound: { name: 'soundMONK', short: 'SND', icon: 'AudioLines' },
   mixer: { name: 'mixerMONK', short: 'MIX', icon: 'Sliders' },
