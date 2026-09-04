@@ -106,17 +106,25 @@ function findSnapshot(images, role) {
   );
 }
 
-async function createServerSnapshot(env, server, role) {
+async function createServerSnapshot(env, server, role, meta = {}) {
   const payload = {
     description: `${SNAPSHOT_PREFIX}${role}-${new Date().toISOString().slice(0, 10)}`,
     type: 'snapshot',
-    labels: { app: 'audioMONASTRY', role, 'snapshot-of': server.name },
+    labels: {
+      app: 'audioMONASTRY',
+      role,
+      'snapshot-of': server.name,
+      ...(meta.commit ? { commit: String(meta.commit).slice(0, 40) } : {}),
+      ...(meta.version ? { version: String(meta.version).slice(0, 40) } : {}),
+    },
   };
   const result = await hzPost(env, `/servers/${server.id}/actions/create_image`, payload);
   return {
     server: server.name,
     role,
     description: payload.description,
+    commit: meta.commit ?? null,
+    version: meta.version ?? null,
     action: result.action?.id ?? null,
     error: result.__http ? `HTTP ${result.__http}` : null,
   };
@@ -151,7 +159,7 @@ async function pruneSnapshots(env, keepPerRole = SNAPSHOT_RETENTION) {
   return deleted;
 }
 
-async function refreshSnapshots(env) {
+async function refreshSnapshots(env, meta = {}) {
   const servers = await fleetServers(env);
   const running = Object.values(servers).filter((s) => s.status === 'running');
   if (running.length === 0) {
@@ -162,7 +170,7 @@ async function refreshSnapshots(env) {
   for (const server of running) {
     const role = server.labels?.role ?? null;
     if (!role) continue;
-    created.push(await createServerSnapshot(env, server, role));
+    created.push(await createServerSnapshot(env, server, role, meta));
   }
 
   const deleted = await pruneSnapshots(env);
@@ -873,9 +881,17 @@ export default {
       // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot
       // (POST /servers/{id}/actions/create_image) und löscht alte Snapshots
       // (Auto-Retention: letzte 2 je Rolle). Nur mit Session-Cookie.
+      // Optionaler Body { commit, version } wird als Label am Snapshot
+      // gespeichert – so kann ein Preflight prüfen, ob der Snapshot den
+      // aktuellen Release-Stand enthält.
       if (url.pathname === '/api/refresh-snapshots' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
-        return json(await refreshSnapshots(env));
+        const body = await request.json().catch(() => ({}));
+        const meta = {
+          commit: String(body?.commit ?? '').trim(),
+          version: String(body?.version ?? '').trim(),
+        };
+        return json(await refreshSnapshots(env, meta));
       }
 
       // OPS-Snapshot: aktuelle Rollen-Snapshots auflisten (Session-Cookie).
@@ -891,6 +907,8 @@ export default {
             status: img.status ?? '',
             disk_size: img.disk_size ?? null,
             role: snapshotRoleOf(img),
+            commit: img.labels?.commit ?? null,
+            version: img.labels?.version ?? null,
           })),
         });
       }

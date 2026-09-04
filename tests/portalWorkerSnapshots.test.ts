@@ -224,7 +224,8 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const res = await worker.fetch(
       new Request('https://anunnakitools.de/api/refresh-snapshots', {
         method: 'POST',
-        headers: { cookie },
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ commit: 'abc123def', version: '1.210.001' }),
       }),
       env,
     );
@@ -232,7 +233,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       ok: boolean;
-      created: { role: string; description: string; action: number | null }[];
+      created: { role: string; description: string; action: number | null; commit: string | null; version: string | null }[];
       deleted: { image: number; role: string }[];
       retention: { keepPerRole: number };
     };
@@ -240,6 +241,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     expect(body.created).toHaveLength(5);
     expect(imageActions).toHaveLength(5);
     expect(body.created.map((c) => c.role)).toEqual(FLEET_ROLES);
+    expect(body.created.every((c) => c.commit === 'abc123def' && c.version === '1.210.001')).toBe(true);
 
     // Retention: app hat 3 Snapshots → der älteste (203) wird gelöscht.
     expect(body.retention.keepPerRole).toBe(2);
@@ -247,11 +249,13 @@ describe('Portal-Worker OPS-Snapshot', () => {
     expect(body.deleted[0].image).toBe(203);
     expect(deletedImages).toEqual(['203']);
 
-    // create_image-Payload enthält Rollen-Label + description-Präfix.
+    // create_image-Payload enthält Rollen-Label + description-Präfix + Commit/Version.
     for (const action of imageActions) {
       const labels = action.payload.labels as Record<string, string>;
       expect(labels.app).toBe('audioMONASTRY');
       expect(FLEET_ROLES).toContain(labels.role);
+      expect(labels.commit).toBe('abc123def');
+      expect(labels.version).toBe('1.210.001');
       expect(action.payload.description).toMatch(/^samplemonk-snapshot-/);
       expect(action.payload.type).toBe('snapshot');
     }
@@ -297,7 +301,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
 
   it('GET /api/snapshots listet die Rollen-Snapshots', async () => {
     const images = [
-      { id: 301, name: 'samplemonk-snapshot-app-20260902', description: 'samplemonk-snapshot-app-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', disk_size: 40, labels: { app: 'audioMONASTRY', role: 'app' } },
+      { id: 301, name: 'samplemonk-snapshot-app-20260902', description: 'samplemonk-snapshot-app-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', disk_size: 40, labels: { app: 'audioMONASTRY', role: 'app', commit: 'abc123', version: '1.210.001' } },
     ];
     setupFetchMock({ images });
 
@@ -311,8 +315,8 @@ describe('Portal-Worker OPS-Snapshot', () => {
     );
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { snapshots: { id: number; role: string }[] };
+    const body = (await res.json()) as { snapshots: { id: number; role: string; commit: string | null; version: string | null }[] };
     expect(body.snapshots).toHaveLength(1);
-    expect(body.snapshots[0]).toMatchObject({ id: 301, role: 'app' });
+    expect(body.snapshots[0]).toMatchObject({ id: 301, role: 'app', commit: 'abc123', version: '1.210.001' });
   });
 });
