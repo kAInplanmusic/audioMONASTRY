@@ -7,26 +7,29 @@
  *
  * Schema: database/ai_migration_001.sql (versioniert, nicht-destruktiv).
  */
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { PostgrestClient } from '@supabase/postgrest-js';
 import { aiLogger } from './aiLogger';
 import type { AiJob, AiSession } from './types';
 
-let client: SupabaseClient | null = null;
-let testClient: SupabaseClient | null = null;
+let client: PostgrestClient | null = null;
+let testClient: PostgrestClient | null = null;
 
 /** Nur für Tests: injiziert einen Mock-Supabase-Client (serverlos). */
-export function setAiPersistenceClientForTests(mock: SupabaseClient | null): void {
+export function setAiPersistenceClientForTests(mock: PostgrestClient | null): void {
   testClient = mock;
 }
 
-function getClient(): SupabaseClient | null {
+function getClient(): PostgrestClient | null {
   if (testClient !== null) return testClient;
   if (client) return client;
   const url = (process.env.SUPABASE_URL ?? '').trim();
   const key = (process.env.SUPABASE_LEGACY_PAT ?? process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
   if (!url || !key) return null;
   try {
-    client = createClient(url, key, { auth: { persistSession: false } });
+    client = new PostgrestClient(`${url.replace(/\/+$/, '')}/rest/v1`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+      schema: 'public',
+    });
   } catch {
     return null;
   }

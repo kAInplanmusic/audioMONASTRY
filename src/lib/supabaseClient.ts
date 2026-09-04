@@ -8,7 +8,7 @@
  *
  * Sicherheit: Niemals service_role-/secret-Keys hier (Client-seitig).
  */
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { PostgrestClient } from '@supabase/postgrest-js';
 import { SUPABASE_URL, SUPABASE_ANON_PUB, cloudEnabled } from './cloudConfig';
 
 export interface CloudSampleRow {
@@ -30,10 +30,10 @@ export interface CloudMusicRow {
   bpm: number | null;
 }
 
-let cached: SupabaseClient | null | undefined;
+let cached: PostgrestClient | null | undefined;
 
-/** Liefert den (lazy) Supabase-Client oder `null`, wenn nicht verfügbar. */
-export function getSupabaseClient(): SupabaseClient | null {
+/** Liefert den (lazy) Supabase-REST-Client oder `null`, wenn nicht verfügbar. */
+export function getSupabaseClient(): PostgrestClient | null {
   if (cached !== undefined) return cached;
 
   if (!cloudEnabled || !SUPABASE_URL || !SUPABASE_ANON_PUB) {
@@ -42,8 +42,13 @@ export function getSupabaseClient(): SupabaseClient | null {
   }
 
   try {
-    cached = createClient(SUPABASE_URL, SUPABASE_ANON_PUB, {
-      auth: { persistSession: false, autoRefreshToken: false },
+    const restUrl = `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1`;
+    cached = new PostgrestClient(restUrl, {
+      headers: {
+        apikey: SUPABASE_ANON_PUB,
+        Authorization: `Bearer ${SUPABASE_ANON_PUB}`,
+      },
+      schema: 'public',
     });
   } catch {
     cached = null;
