@@ -56,8 +56,7 @@ portal_status() { curl -fsS -b "$COOKIE_JAR" "$PORTAL_URL/api/status" 2>/dev/nul
 list_snapshots() { curl -fsS -b "$COOKIE_JAR" "$PORTAL_URL/api/snapshots" 2>/dev/null || echo '{"snapshots":[]}'; }
 
 snapshot_is_current() {
-  python3 - "$1" <<'PY'
-import json, sys
+  python3 -c 'import json, sys
 try:
     data = json.load(sys.stdin)
 except Exception:
@@ -67,9 +66,7 @@ app = [s for s in data.get("snapshots", []) if s.get("role") == "app"]
 if not app:
     print("missing")
 else:
-    newest = app[0]
-    print("current" if newest.get("commit") == target else "stale")
-PY
+    print("current" if app[0].get("commit") == target else "stale")' "$1"
 }
 
 wake_and_wait() {
@@ -91,14 +88,12 @@ wake_and_wait() {
 }
 
 app_ip_from_status() {
-  python3 - <<'PY'
-import json, sys
+  python3 -c 'import json, sys
 try:
     data = json.load(sys.stdin)
 except Exception:
     print(""); sys.exit(0)
-print(data.get("appIp") or "")
-PY
+print(data.get("appIp") or "")'
 }
 
 apply_update() {
@@ -132,7 +127,7 @@ cmd_check() {
   if [[ -n "${ADMIN_USER:-}" && -n "${ADMIN_PASSWORD:-}" ]]; then
     login
     echo "Snapshots (app):"
-    list_snapshots | python3 -c 'import json,sys; d=json.load(sys.stdin); [print(f"  {s.get(\"role\")}: {s.get(\"commit\") or \"-\"} · {s.get(\"version\") or \"-\"} · {s.get(\"description\")} · {s.get(\"status\")}") for s in d.get("snapshots", [])]' || true
+    list_snapshots | python3 -c 'import json,sys; d=json.load(sys.stdin); [print("  %s: %s · %s · %s · %s" % (s.get("role"), s.get("commit") or "-", s.get("version") or "-", s.get("description"), s.get("status"))) for s in d.get("snapshots", [])]' || true
     echo "App-Snapshot ist: $(list_snapshots | snapshot_is_current "$LOCAL_COMMIT")"
   else
     echo "Hinweis: ohne ADMIN_USER/ADMIN_PASSWORD (.env.deploy) kann der Snapshot-Abgleich nicht geprüft werden."
