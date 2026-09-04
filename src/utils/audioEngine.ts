@@ -146,6 +146,8 @@ class AudioEngine {
   private cueBus: GainNode | null = null;
   private cueOutGain: GainNode | null = null;
   private cueTrackGains: Partial<Record<TrackType, GainNode>> = {};
+  /** DJ-PFL: Kanäle, deren Vorhören (pre-fader) gerade aktiv ist. */
+  private pflTracks = new Set<TrackType>();
   private spatialRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Synthesizers & FX Nodes
@@ -1835,6 +1837,24 @@ class AudioEngine {
   }
 
   /**
+   * DJ-PFL (mixerMONK): Kanal-Vorhearen pre-fader auf dem lokalen Cue-Bus.
+   * `active = true` → Kanal solo aufs Vorhören; `false` → PFL für den Kanal
+   * aus. Solange mindestens ein PFL aktiv ist, überschreibt das Vorhören den
+   * lokalen Monitor-Weg (MAIN-Bus/Master-Stream bleiben unverändert).
+   */
+  public setChannelPfl(track: TrackType, active: boolean): void {
+    this.ensureInitialized();
+    if (active) this.pflTracks.add(track);
+    else this.pflTracks.delete(track);
+    this.applyMonitorPlan();
+  }
+
+  /** Liefert die aktuell vorgehörten Kanäle (leer = kein PFL aktiv). */
+  public getPflTracks(): TrackType[] {
+    return [...this.pflTracks];
+  }
+
+  /**
    * Berechnet den Abhörplan neu (reine Policy in `core/audio/monitorRouting`)
    * und überträgt ihn auf die Audio-Knoten. Die Umschaltung läuft als kurze
    * Rampe (10 ms) – klickfrei, aber ohne hörbare Verzögerung
@@ -1842,12 +1862,19 @@ class AudioEngine {
    */
   private applyMonitorPlan(): void {
     const req = this.monitorRequest;
+    // DJ-PFL hat Vorrang: solange mindestens ein Kanal vorgehört wird, hört
+    // der lokale User NUR diese Kanäle (pre-fader) auf dem Cue-Bus. MAIN-Bus
+    // und Master-Stream bleiben unverändert.
+    const pflMix: Partial<Record<TrackType, number>> = {};
+    if (this.pflTracks.size > 0) {
+      this.pflTracks.forEach((t) => { pflMix[t] = 1; });
+    }
     const plan = planMonitorRouting({
-      source: req.source,
+      source: this.pflTracks.size > 0 ? 'MON' : req.source,
       mon: req.mon,
       track: req.track,
-      baseMix: this.monitorTrackGain[req.mon] ?? {},
-      cueLevel: this.monitorLevels[req.mon] ?? 1,
+      baseMix: this.pflTracks.size > 0 ? pflMix : (this.monitorTrackGain[req.mon] ?? {}),
+      cueLevel: this.pflTracks.size > 0 ? 1 : (this.monitorLevels[req.mon] ?? 1),
     });
     this.monitorPlan = plan;
 
