@@ -90,7 +90,7 @@ export function registerDefaultVoiceCommands(): void {
   voiceControlService.registerPluginCommand('mixer', 'gain', async (ctx) => {
     const { audioEngine } = await import('../../utils/audioEngine');
     const db = Number(ctx.intent.parameters.gain ?? -6);
-    audioEngine.setMixChannelParam('gain', Math.max(-48, Math.min(12, db)), 0.05);
+    audioEngine.setMasterVolumeDb(Math.max(-48, Math.min(12, db)), 0.05);
   }, ['gain', 'lautstärke', 'pegel', 'volume']);
 
   // --- spatialMONK ------------------------------------------------------------
