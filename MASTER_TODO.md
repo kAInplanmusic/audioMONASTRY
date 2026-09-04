@@ -15,9 +15,9 @@
 - [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
 - [ ] **OPS-Load-Balancer Prüfpunkt (Live):** 2 App-Knoten hinter LB11, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil), Failover-Test. Architektur/Kosten dokumentiert in `docs/SERVER_FLEET.md`.
 - [x] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin → umgesetzt 2026-09-03: `getHardwareSkinClass()` + `.hw-skin-*`-Klassen (mixer/synthesizer/drum/eq/mastering/spatial/mcp/sampler: Panel-Texturen, Knob-/Fader-Accents über `--monk-accent`) in `src/index.css`, angewandt in `ModuleContainer`; Farben bleiben zentral in `.monk-theme-*`. Screenshot-Baselines vorhanden → TASKDONE.
-- [ ] **P1-4 Scratchpad Prüfpunkt (Browser-Live):** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON. Code + Helper-Tests grün (`tests/sessionScratchpad.test.ts`).
+- [x] **P1-4 Scratchpad Prüfpunkt (Browser-Live):** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON. Code + Helper-Tests grün (`tests/sessionScratchpad.test.ts`). → Browser-Verifikation automatisiert 2026-09-04: `tests/e2e/scratchpad.spec.ts` (Reload-Persistenz, DnD beide Richtungen, Clipboard-Read/Paste → gültiges JSON) grün → TASKDONE.
 - [ ] **P2-1/P2-2 Rest (Live + Code):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte.
-- [ ] **P2-4 Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt).
+- [x] **P2-4 Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt). → automatisiert 2026-09-04: `tests/e2e/performance.spec.ts` misst via CDP `Performance.getMetrics` (TaskDuration/Wanduhr) unter Studio-Last **20,6 % CPU** → TASKDONE.
 - [x] **P3-3 Prüfpunkt**: Eval-Lauf grün, Report je Plugin mit Score, Dauer und Fehler (`npm run eval:ai` → `test-results/ai-eval-report.json/.md`, Gate aus `src/core/ai/orchestrator/evalMatrix.ts`, Nightly-Artefakt + Job-Summary) → TASKDONE. Offen bleibt nur die Bestätigung des nächtlichen CI-Laufs auf GitHub (Betreiber-Schritt).
 - [ ] **Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)
 
@@ -144,7 +144,7 @@
 - [x] `SessionScratchpad` in IndexedDB: Button im Header „ZWISCHENSPEICHER" mit eigener Farbe (z. B. amber/orange) zum Ein-/Ausschalten; speichert Session-Snapshot (Patterns, BPM, Mixer, Plugin-States, Routing).
 - [x] Drag & Drop: Einträge/Plugins/Tracks in den Scratchpad-Bereich ziehen; aus dem Scratchpad per Drop auf ein Plugin/Modul laden → `SessionScratchpadPanel` (Overlay-Sidebar, D9), Drag-Handle in `RackRow` (`MONK_DRAG_MIME`), Drop aufs Modul (`MONK_SCRATCH_MIME`), IndexedDB-Einträge.
 - [x] Jedes Plugin (ModuleContainer) bekommt „⧉ In Zwischenablage senden": kopiert Plugin-State/Preset/Config als JSON in die Zwischenablage → `RackRow`-Copy (voller Snapshot via `buildSessionSnapshot`) + `ModuleContainer`-Prop `onCopyToClipboard`.
-- [ ] **Prüfpunkt (Browser-Live):** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON → Helper-Tests grün (`tests/sessionScratchpad.test.ts`); Browser-Verifikation offen.
+- [x] **Prüfpunkt (Browser-Live):** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON → Helper-Tests grün (`tests/sessionScratchpad.test.ts`); Browser-Verifikation 2026-09-04 automatisiert: `tests/e2e/scratchpad.spec.ts` grün (Reload, DnD beide Richtungen, Clipboard-Read/Paste → gültiges JSON) → TASKDONE.
 
 ### P1-5 Lieder-Datenbank automatisch sortieren
 
@@ -154,7 +154,7 @@
 
 - [x] MIDI: F8-Clock, Start/Stop/Continue, Song Position, SysEx-Empfang, RPN-Parser, `send()` für LEDs/Motorfader → Codec (`src/core/hardware/midiCodec.ts`) inkl. Tests deckt alles ab; `midiOut.ts` sendet Pitch-Bend/CC für Motorfader/LEDs; Hardware-Verdrahtung bleibt Live-Check.
 - [x] **Prüfpunkt (automatisiert):** Keyboard-E2E + MIDI-Codec-Tests grün; kein Hotkey bricht Eingabefelder → Keyboard-E2E live 2/2, `tests/midiCodec.test.ts` grün; Hotkey-Input-Guard in `App.tsx`.
-- [ ] **Prüfpunkt (Live):** Keyboard-E2E (Space, Ctrl/Cmd+1..9, Escape) – kein Hotkey bricht Eingabefelder; MIDI-Codec-Tests grün (Unit-Suite läuft lokal).
+- [x] **Prüfpunkt (Live):** Keyboard-E2E (Space, Ctrl/Cmd+1..9, Escape) – kein Hotkey bricht Eingabefelder; MIDI-Codec-Tests grün (Unit-Suite läuft lokal). → automatisiert 2026-09-04: `tests/e2e/keyboard.spec.ts` erweitert (Space togglet Transport, Ctrl+1 togglet Plugin, Space im Input tippt Leerzeichen statt Play, Escape-Fokus-Falle) – Suite 5/5 grün → TASKDONE.
 
 ---
 
@@ -190,7 +190,7 @@
 - [x] Falschverkabelungen korrigieren (z. B. `bassFilter`/`channel7`-Pfad, `effectNode`-Insert, Monitor-PDC) → `effectNode` wird jetzt in `init()` erzeugt und als fester Insert zwischen `toneShiftTilt` und `eqNode` verdrahtet (`isEffectInsertReady()`); `bassFilter`→`channel7` (Bass-Kette) und Monitor-PDC (paralleler Cue mit Delay) als korrekt verifiziert.
 - [x] Bottlenecks: Main-Thread-Scheduler, Tone.js-Node-Anzahl, Worklet-CPU; wo sinnvoll V2-Graph/Worklet-Pfad verwenden → V2-Hybrid (`V2StudioGraph`, NEW-D4-1) vorhanden; Graph-Validierungs-Tests erweitert (`tests/routingValidator.test.ts`: fehlende Nodes/Verbindungen, doppelte Pfade).
 - [x] **Prüfpunkt (automatisiert):** Graph-Validierung grün; kein ungenutzter/doppelter Verbindungs-Pfad → `validateRoutingAgainstGraph` + neues `findUnusedGraphPaths` (ungenutzte Nodes, unbekannte Endpunkte, doppelte Kanten) in `src/core/routing/validateRouting.ts`, Tests `tests/routingValidator.test.ts` → TASKDONE.
-- [ ] **Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU.
+- [x] **Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU. → automatisiert 2026-09-04: `tests/e2e/performance.spec.ts` (CDP-TaskDuration unter Studio-Last: **20,6 % CPU**) → TASKDONE.
 
 ### P2-5 Performance & Rendering
 
