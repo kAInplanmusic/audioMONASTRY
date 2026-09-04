@@ -9,6 +9,12 @@
 
 ## Quelle: audioMONASTRY/MASTER_TODO.md
 
+### P1-4 / P1-6 / P2-4 · Browser-Prüfpunkte automatisiert (2026-09-04)
+
+- [x] **P1-4 Scratchpad Prüfpunkt (Browser-Live):** `tests/e2e/scratchpad.spec.ts` – IndexedDB-Snapshot überlebt Reload (Speichern → Reload → Laden schließt Panel), DnD in beide Richtungen (Modul-Grip → „HIERHER ZIEHEN" via `MONK_DRAG_MIME`; Ablage-Eintrag → `#rack-mixer` via `MONK_SCRATCH_MIME` aktiviert das Modul), Clipboard-Roundtrip (RackRow-Copy → `navigator.clipboard.readText()` + echter Paste in ein Textfeld → gültiges JSON mit `pluginId`/`snapshot`). Grün im Headless-Chromium.
+- [x] **P1-6 Prüfpunkt (Live → automatisiert):** `tests/e2e/keyboard.spec.ts` erweitert – Space togglet Transport (PLAY/STOP im masterplayer), Ctrl/Cmd+1 togglet das erste Toolbar-Plugin (instrumentMONK), Hotkeys brechen Eingabefelder nicht (Space im Input tippt Leerzeichen statt Play; Ctrl+1 togglet, ohne den Input-Wert zu verändern); Escape-Fokus-Falle war bereits abgedeckt. Suite 5/5 grün.
+- [x] **P2-4 Prüfpunkt (Live → automatisiert):** `tests/e2e/performance.spec.ts` – alle 18 Plugins aktiv + Transport läuft + 8 s kontinuierliche 8-Kanal-Pattern-Last; CPU-Messung über CDP `Performance.getMetrics` (TaskDuration-Delta / Wanduhr) muss < 70 % liegen. Gemessen: **20,6 % CPU** (TaskDuration 1,73 s / 8,42 s Wanduhr, 0 Navigationen; inkl. Kaltstart-Warm-up-Runde gegen Vite-Reloads).
+
 ### V. 1.210.001 HYPERDAW · Struktur-, Routing- & Asset-Arbeiten (2026-09-04)
 
 - [x] **Version:** `V. 1.210.001 – audioMONASTRY HYPERDAW` (package.json, metadata.json, index.html, UI-Header + Startseite) – Commits `83d5333`.
