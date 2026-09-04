@@ -13,7 +13,7 @@ const SamplerTerminal = lazy(() => import('../components/SamplerTerminal').then(
 const McpTerminal = lazy(() => import('../components/McpTerminal').then(m => ({ default: m.McpTerminal })));
 const VoiceGenTerminal = lazy(() => import('../components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const SoundTerminal = lazy(() => import('../components/SoundTerminal').then(m => ({ default: m.SoundTerminal })));
-const MischpultTerminal = lazy(() => import('../components/MischpultTerminal').then(m => ({ default: m.MischpultTerminal })));
+const DJ4ChMixer = lazy(() => import('../components/DJ4ChMixer').then(m => ({ default: m.DJ4ChMixer })));
 const MIDIControllerTerminal = lazy(() => import('../components/MIDIControllerTerminal').then(m => ({ default: m.MIDIControllerTerminal })));
 const FXEngineTerminal = lazy(() => import('../components/FXEngineTerminal').then(m => ({ default: m.FXEngineTerminal })));
 const DropTerminal = lazy(() => import('../components/DropTerminal').then(m => ({ default: m.DropTerminal })));
@@ -49,7 +49,7 @@ const COMPONENT_MAP: Record<string, any> = {
   mcp: McpTerminal,
   voice: VoiceGenTerminal,
   sound: SoundTerminal,
-  mixer: MischpultTerminal,
+  mixer: DJ4ChMixer,
   controller: MIDIControllerTerminal,
   effect: FXEngineTerminal,
   drop: DropTerminal,

@@ -61,7 +61,7 @@ test('Mixer-Terminal rendert und MOA-Leiste ist sichtbar', async ({ page }) => {
   await enterStudio(page);
 
   await page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MIX').first().click();
-  await expect(page.getByText('PRO-MIX 9000')).toBeVisible();
+  await expect(page.getByText('mixerMONK · 6 CH')).toBeVisible();
   await expect(page.getByPlaceholder(/MOA/).first()).toBeVisible();
 
   expect(errors.pageErrors).toEqual([]);
