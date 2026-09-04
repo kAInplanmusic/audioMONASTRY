@@ -1,0 +1,8 @@
+# Optional – Stable Audio Open (Stability AI, Community License) für soundMONK
+# ============================================================================
+# Aktivierung im Dockerfile:
+#   docker build --build-arg AI_INSTALL_AUDIO_AI=1 -t samplemonk-ai-runtime .
+#
+# Achtung: Das Modell `stabilityai/stable-audio-open-1.0` ist gated – der
+# HF-Account muss die Nutzungsbedingungen akzeptiert haben.
+diffusers>=0.30,<1

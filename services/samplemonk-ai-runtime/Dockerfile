@@ -13,6 +13,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # voiceMONK Qwen3-TTS optional aktivieren:
 #   docker build --build-arg AI_INSTALL_VOICE_AI=1 ...
 ARG AI_INSTALL_VOICE_AI=0
+# soundMONK Stable Audio Open optional aktivieren (gated Model):
+#   docker build --build-arg AI_INSTALL_AUDIO_AI=1 ...
+ARG AI_INSTALL_AUDIO_AI=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 sox curl passwd \
@@ -28,6 +31,12 @@ RUN pip install --no-cache-dir -r requirements.lock
 COPY requirements-voice-ai.lock ./
 RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-voice-ai.lock; \
+    fi
+
+# Optional: Stable Audio Open für soundMONK (siehe requirements-audio-ai.lock)
+COPY requirements-audio-ai.lock ./
+RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-audio-ai.lock; \
     fi
 
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py ./
