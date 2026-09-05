@@ -29,9 +29,10 @@
       "maxTokens": 8192
     },
     "#3": {
-      "name": "GLM-5.3",
+      "name": "GLM-5.3 (HF), Fallback PublicAI",
       "model": "zai-org/GLM-5.3",
-      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
+      "chatUrl": "publicai",
+      "apiKeyEnv": ["PUBLICAI_KEY"],
       "temperature": 0.1,
       "maxTokens": 8192
     },
