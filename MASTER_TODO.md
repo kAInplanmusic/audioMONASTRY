@@ -1248,3 +1248,17 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)
   - In `syncSfuSubscriptions` wird bei einem Fehler beim Erstellen eines Tracks nur eine Warnung ausgegeben. Es gibt keine Mechanismen zur Wiederholung oder Fehlerbehandlung, was zu fehlenden Streams führen kann.
   - Vorschlag: Implementiere eine Retry-Logik oder eine Wiederherstellungsmethode, um sicherzustellen, dass fehlgeschlagene Subscriptions später wieder versucht werden.
+
+---
+
+## 🔬 Softwareaudit 2026-09-05 (offline deterministisch, 19 Niedrig)
+
+> Quelle: `npm run audit:deep:static` (Commit `5ad2a91`). AUDIT_DEEP.md danach wieder gelöscht (Single-Root-Output).
+
+- [ ] **AUD-2026-09-05-D1 · NIEDRIG · Code-Duplikate WAV/PCM** – `ai/localDemucs.ts` ↔ `utils/stemSplitter.ts`, `core/voice/melody.ts`, `core/voice/VoiceMonkService.ts`: RIFF/WAVE-Encoder in gemeinsame Funktion extrahieren.
+- [ ] **AUD-2026-09-05-D2 · NIEDRIG · Code-Duplikat audio-runtime** – `services/audio-runtime/src/main.rs` interne Device-Config-Blöcke zusammenfassen.
+- [ ] **AUD-2026-09-05-D3 · NIEDRIG · Code-Duplikat EQ** – `src/audio/worklets/eqProcessor.ts` Biquad-/Shelving-Berechnung deduplizieren.
+- [ ] **AUD-2026-09-05-D4 · NIEDRIG · Code-Duplikat Python** – `services/backend-core/python/celery_app.py` ↔ `services/stem-ai/main.py`: Device-Detect/Init teilen.
+- [ ] **AUD-2026-09-05-D5 · NIEDRIG · Code-Duplikate UI** – `AiMonkDock.tsx` ↔ `AiMonkTerminal.tsx`, `RecorderTerminal.tsx` ↔ `VoiceGenTerminal.tsx`: gemeinsame Terminals/Handlers extrahieren.
+- [ ] **AUD-2026-09-05-D6 · NIEDRIG · Code-Duplikate DSP/Synth** – `computeLocal.ts` ↔ `computeWorker.ts`, `midiCodec.ts` intern, `drumSynth.ts` (mulberry32 mehrfach), `fmEngine.ts` intern, `DspEnginePlugin.tsx` ↔ `InstrumentePlugin.tsx`, `presets.ts` intern, `aiRhythmGenerator.ts` ↔ `audioEngine.ts`, SFU-RTP-Skripte: Gemeinsame Helfer/Seeds/Routing-Definitionen extrahieren.
+

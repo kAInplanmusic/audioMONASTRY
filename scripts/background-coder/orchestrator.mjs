@@ -117,10 +117,12 @@ function main() {
 
   const ordered = { LEICHT: [], MITTEL: [], SCHWER: [], BACKLOG: [] };
   const counters = { LEICHT: 0, MITTEL: 0, SCHWER: 0 };
+  let backlogN = 0;
   for (const task of tasks) {
     const cls = task.class;
     if (!task.ready) {
-      ordered.BACKLOG.push({ ...task, status: 'BLOCKED' });
+      backlogN += 1;
+      ordered.BACKLOG.push({ ...task, status: 'BLOCKED', taskId: `BLOCK-${String(backlogN).padStart(3, '0')}` });
       continue;
     }
     counters[cls] += 1;
@@ -129,7 +131,8 @@ function main() {
       const idBase = cls === 'LEICHT' ? 0 : cls === 'MITTEL' ? 12 : 24;
       ordered[cls].push({ ...task, status: 'PENDING', taskId: `TASK-${String(idBase + n).padStart(3, '0')}` });
     } else {
-      ordered.BACKLOG.push({ ...task, status: 'BLOCKED' });
+      backlogN += 1;
+      ordered.BACKLOG.push({ ...task, status: 'PENDING', taskId: `BACKLOG-${String(backlogN).padStart(3, '0')}` });
     }
   }
 
