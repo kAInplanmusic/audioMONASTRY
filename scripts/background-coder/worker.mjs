@@ -39,6 +39,30 @@ function modelFor(task) {
   return CONFIG.agents[task.agent];
 }
 
+/** PublicAI / OpenAI-kompatibler Direkt-Chat (für Agents mit chatUrl="publicai"). */
+async function directChat(provider, messages, { maxTokens } = {}) {
+  const baseUrl = (process.env.PUBLICAI_BASE_URL || 'https://api.publicai.co/v1').replace(/\/+$/, '');
+  const apiKey = process.env.PUBLICAI_KEY?.trim();
+  if (!apiKey) throw new Error('PUBLICAI_KEY fehlt');
+  const modelId = process.env.PUBLICAI_MODEL?.trim() || provider.model;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+      body: JSON.stringify({ model: modelId, messages, temperature: provider.temperature ?? 0.1, max_tokens: maxTokens ?? provider.maxTokens ?? 4096 }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`PublicAI ${res.status}: ${text.slice(0, 300)}`);
+    const data = JSON.parse(text);
+    return { content: data.choices?.[0]?.message?.content ?? '' };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseModelJson(content) {
   try {
     const start = content.indexOf('{');
@@ -192,10 +216,13 @@ Regeln:
 
   let content;
   try {
-    const res = await hfRouter.chat({ modelId: provider.model, messages: [
+    const messages = [
       { role: 'system', content: 'Coding-Pipeline. Präzise JSON-Antworten.' },
       { role: 'user', content: prompt },
-    ]});
+    ];
+    const res = provider.chatUrl === 'publicai'
+      ? await directChat(provider, messages)
+      : await hfRouter.chat({ modelId: provider.model, messages });
     content = res.content;
   } catch (e) {
     if (e instanceof QuotaPausedError) {
