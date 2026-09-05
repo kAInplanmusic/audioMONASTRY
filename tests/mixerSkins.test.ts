@@ -17,10 +17,10 @@ describe('mixerMONK Deck-Skins', () => {
     localStorage.clear();
   });
 
-  it('liefert Defaults A=TURNTABLE / B=LIBRARY ohne Persistenz', () => {
+  it('liefert Defaults A=TURNTABLE(CDJ) / B=PAD(DJS) ohne Persistenz', () => {
     const skins = loadDeckSkins();
     expect(skins.A).toBe('TURNTABLE');
-    expect(skins.B).toBe('LIBRARY');
+    expect(skins.B).toBe('PAD');
   });
 
   it('persistiert und lädt die Auswahl pro Deck', () => {
@@ -31,11 +31,11 @@ describe('mixerMONK Deck-Skins', () => {
 
   it('fällt bei ungültigem JSON auf Defaults zurück', () => {
     localStorage.setItem(DECK_SKIN_STORAGE_KEY, '{kaputt');
-    expect(loadDeckSkins()).toEqual({ A: 'TURNTABLE', B: 'LIBRARY' });
+    expect(loadDeckSkins()).toEqual({ A: 'TURNTABLE', B: 'PAD' });
   });
 
   it('ignoriert ungültige Skin-IDs und nutzt Defaults', () => {
     localStorage.setItem(DECK_SKIN_STORAGE_KEY, JSON.stringify({ A: 'KAPUTT', B: 'TURNTABLE' }));
-    expect(loadDeckSkins()).toEqual({ A: 'TURNTABLE', B: 'LIBRARY' });
+    expect(loadDeckSkins()).toEqual({ A: 'TURNTABLE', B: 'PAD' });
   });
 });
