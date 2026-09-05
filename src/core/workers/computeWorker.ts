@@ -7,37 +7,15 @@
  * reducer" ausgeführt, damit das Pool-System nie einen Task ablehnen muss.
  */
 
-// Rechenintensive Implementierungen, die gefahrlos in einen Worker dürfen.
-const HANDLERS: Record<string, (input: any) => any> = {
-  // Deterministischer Fallback für beliebige JSON-Jobs (Analyse, Aggregation).
-  'reduce': (input: { values: number[]; op?: 'sum' | 'avg' | 'max' }) => {
-    const v = input.values ?? [];
-    const op = input.op ?? 'sum';
-    if (op === 'avg') return v.reduce((a, b) => a + b, 0) / (v.length || 1);
-    if (op === 'max') return v.length ? Math.max(...v) : 0;
-    return v.reduce((a, b) => a + b, 0);
-  },
-  // Beispiel: simuliert eine schwere Analyseschleife (segmentierte Energie).
-  'segment-energy': (input: { samples: number[]; window: number }) => {
-    const s = input.samples ?? [];
-    const win = Math.max(1, input.window ?? 256);
-    const out: number[] = [];
-    for (let i = 0; i < s.length; i += win) {
-      let e = 0, n = 0;
-      for (let k = i; k < i + win && k < s.length; k++) { e += s[k] * s[k]; n++; }
-      out.push(n ? Math.sqrt(e / n) : 0);
-    }
-    return out;
-  },
-};
+import { COMPUTE_HANDLERS, type ComputeHandler } from '../computeHandlers';
 
-type Handler = (input: any) => unknown;
+type Handler = ComputeHandler;
 
 self.onmessage = async (e: MessageEvent) => {
   const { id, task, input } = e.data || {};
   try {
     const handler: Handler | undefined =
-      (self as any).__taskFn || HANDLERS[String(task)];
+      (self as any).__taskFn || COMPUTE_HANDLERS[String(task)];
     if (typeof handler !== 'function') {
       (self as any).postMessage({ id, ok: false, error: `Unbekannter Task: ${task}` });
       return;
