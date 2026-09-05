@@ -1,6 +1,6 @@
 # AGENT_TODO – Background-Coder Pipeline
 
-Erzeugt: 2026-09-05T07:19:31.583Z
+Erzeugt: 2026-09-05T07:31:06.419Z
 
 LEICHT: 12 · MITTEL: 9 · SCHWER: 2 · BLOCKED: 200
 

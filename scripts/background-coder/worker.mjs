@@ -44,10 +44,19 @@ function log(msg) {
   } catch { /* Logging best-effort */ }
 }
 
+function resolveChatUrl(provider) {
+  if (provider.chatUrl === 'hf-endpoint') {
+    const base = (process.env.HF_ENDPOINT_URL || 'https://router.huggingface.co/v1').replace(/\/+$/, '');
+    return `${base}/chat/completions`;
+  }
+  return provider.chatUrl;
+}
+
 async function chat(provider, messages, { maxTokens } = {}) {
   const cred = envKey(provider);
   if (!cred) throw new Error(`Kein API-Key für ${provider.name} (${provider.apiKeyEnv.join(' oder ')})`);
-  const res = await fetch(provider.chatUrl, {
+  const chatUrl = resolveChatUrl(provider);
+  const res = await fetch(chatUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
