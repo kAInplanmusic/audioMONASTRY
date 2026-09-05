@@ -354,11 +354,11 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "RETRY",
+      "status": "BLOCKED",
       "taskId": "TASK-025",
-      "lastSummary": "Sicherheitsfixes für AI-Runtime: Uvicorn auf 127.0.0.1 binden, startup.sh so anpassen, dass die AI-Runtime nur auf localhost lauscht, torch auf aktuelle stabile Version 2.5.1 aktualisieren und Hash-Pins/Lockfile-Hinweis ergänzen. Da keine eindeutigen Dateipfade erkannt wurden, werden die wahrscheinl",
-      "reworkCount": 0,
-      "lastError": "",
+      "lastSummary": "AD-M4 AI-Runtime-Security/Architektur: Uvicorn auf 127.0.0.1 binden statt 0.0.0.0, startup.sh so anpassen, dass AI-Runtime nur auf localhost lauscht, pyproject.toml Hash-Pins/Lockfile ergänzen und torch auf aktuelle stabile Version 2.5.1 heben. Keine eindeutigen Dateipfade erkannt, daher Bearbeitung",
+      "reworkCount": 1,
+      "lastError": "Manuell teilfixiert: Bind-Host ok; pyproject/torch-Upgrade benötigt Betriebsentscheidung",
       "retryCount": 0
     },
     {
@@ -3598,5 +3598,5 @@
       "taskId": "BLOCK-206"
     }
   ],
-  "updated": "2026-09-05T10:53:26.510Z"
+  "updated": "2026-09-05T10:56:02.052Z"
 }
