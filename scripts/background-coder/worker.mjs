@@ -126,7 +126,7 @@ function runTsc() {
 }
 
 function renderTodo(payload) {
-  let md = `# AGENT_TODO – Background-Coder Pipeline (Cerebras Direct)\n\nAktualisiert: ${new Date().toISOString()}\n\n`;
+  let md = `# AGENT_TODO – Background-Coder Pipeline (HF + Cerebras #7)\n\nAktualisiert: ${new Date().toISOString()}\n\n`;
   for (const t of payload.tasks) {
     md += `\n${t.taskId ?? 'TASK'}\nCLASS: ${t.class}\nDOMAIN: ${t.domain}\nDESCRIPTION: ${t.raw}\nIMPLEMENTATION_AGENT: ${t.agent}\nMODEL: ${modelFor(t)?.model ?? '-'}\nREVIEW_AGENT: ${t.reviewAgent ?? '-'}\nSERVER_REQUIRED: ${t.serverRequired ? 'YES' : 'NO'}\nHARDWARE_REQUIRED: ${t.hardwareRequired ? 'YES' : 'NO'}\nSTATUS: ${t.status}\n`;
     if (t.lastError) md += `ERROR: ${t.lastError}\n`;

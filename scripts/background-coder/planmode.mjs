@@ -90,6 +90,12 @@ const PLAN_AGENTS = [
     model: CONFIG.agents['#6'],
     focus: 'Unabhängiger Sicherheits-/Compliance-/Hotfix-Review-Plan und End-to-End-Prüfplan (gegen die Pläne von #2..#5).',
   },
+  {
+    key: '#7',
+    role: 'Cerebras GPT-OSS-120B (Partner: schnelle/komplexe Tasks)',
+    model: CONFIG.agents['#7'],
+    focus: 'Komplexe/zeitkritische Architektur- und Code-Reviews: schnelle Beurteilung von heißen Pfaden, Risiko-Clustern und Umsetzbarkeit.',
+  },
 ];
 
 function statusSummary() {

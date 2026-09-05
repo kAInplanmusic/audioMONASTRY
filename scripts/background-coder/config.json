@@ -1,6 +1,6 @@
 {
   "pipeline": "background-coder",
-  "hfRouter": false,
+  "hfRouter": true,
   "directChat": "cerebras",
   "budget": {
     "maxRetries": 3,
@@ -14,20 +14,18 @@
     "quotaPauseMs": 600000
   },
   "orchestrator": {
-    "name": "Cerebras GPT-OSS-120B (Orchestrator)",
-    "model": "gpt-oss-120b",
-    "chatUrl": "cerebras",
-    "apiKeyEnv": ["CB_API_KEY"],
+    "name": "MoA / DeepSeek V4 Flash Visionary (max thinking)",
+    "model": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+    "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
     "thinking": "max",
     "temperature": 0.2,
     "maxTokens": 8192
   },
   "agents": {
     "#2": {
-      "name": "Cerebras GPT-OSS-120B",
-      "model": "gpt-oss-120b",
-      "chatUrl": "cerebras",
-      "apiKeyEnv": ["CB_API_KEY"],
+      "name": "Kimi K2.7-Code",
+      "model": "moonshotai/Kimi-K2.7-Code",
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
       "temperature": 0.1,
       "maxTokens": 8192
     },
@@ -40,27 +38,32 @@
       "maxTokens": 8192
     },
     "#4": {
-      "name": "Cerebras GPT-OSS-120B (Code-Eleganz)",
-      "model": "gpt-oss-120b",
-      "chatUrl": "cerebras",
-      "apiKeyEnv": ["CB_API_KEY"],
+      "name": "Qwen3-Coder-Next",
+      "model": "Qwen/Qwen3-Coder-Next",
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
       "temperature": 0.1,
       "maxTokens": 8192
     },
     "#5": {
-      "name": "Cerebras GPT-OSS-120B (Flash)",
-      "model": "gpt-oss-120b",
-      "chatUrl": "cerebras",
-      "apiKeyEnv": ["CB_API_KEY"],
+      "name": "GLM-5.3-Flash",
+      "model": "zai-org/GLM-5.3-Flash",
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
       "temperature": 0.2,
       "maxTokens": 4096
     },
     "#6": {
-      "name": "Cerebras GPT-OSS-120B (Final Review)",
+      "name": "DeepSeek V4 Pro (Final Review)",
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
+      "temperature": 0.05,
+      "maxTokens": 8192
+    },
+    "#7": {
+      "name": "Cerebras GPT-OSS-120B (Partner: schnelle/komplexe Tasks)",
       "model": "gpt-oss-120b",
       "chatUrl": "cerebras",
       "apiKeyEnv": ["CB_API_KEY"],
-      "temperature": 0.05,
+      "temperature": 0.1,
       "maxTokens": 8192
     }
   },
