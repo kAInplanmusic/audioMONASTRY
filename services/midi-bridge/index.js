@@ -37,7 +37,6 @@ const log = (...a) => console.log(`[midi-bridge ${new Date().toISOString()}]`, .
 // --- MIDI (native RtMidi-Binding; auf Systemen ohne Ports deaktiviert) --------
 let midi = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- optionales natives Binding, bewusst lazy im try/catch (CommonJS-Sidecar)
   midi = require('midi');
 } catch (e) {
   log('midi-Paket nicht verfügbar – Bridge läuft nur als WS/OSC-Relay:', e.message);
@@ -78,7 +77,6 @@ if (output && midiOutPort !== null) {
 let oscClient = null;
 if (OSC_HOST && OSC_PORT) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optionales Paket, bewusst lazy im try/catch (CommonJS-Sidecar)
     const { Client } = require('osc');
     oscClient = new Client(OSC_HOST, OSC_PORT);
     log(`OSC aktiv: ${OSC_HOST}:${OSC_PORT}`);
@@ -99,7 +97,6 @@ function sendOsc(address, ...args) {
 let oscServer = null;
 if (OSC_LISTEN_PORT > 0) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- optionales Paket, bewusst lazy im try/catch (CommonJS-Sidecar)
     const { UDPPort } = require('osc');
     oscServer = new UDPPort({ localAddress: '0.0.0.0', localPort: OSC_LISTEN_PORT, metadata: true });
     oscServer.on('message', (oscMsg) => {

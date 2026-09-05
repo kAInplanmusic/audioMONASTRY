@@ -26,9 +26,6 @@ import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
 
-// Task 14: Echte Demucs-Stems optional via env-Flag ENABLE_STEMS=1 aktivieren.
-const ENABLE_STEMS = (process.env.ENABLE_STEMS || '').trim() === '1';
-
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
 const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
 const STEM_JOB_TIMEOUT_MS = Math.max(10_000, Number(process.env.STEM_JOB_TIMEOUT_MS ?? 300_000));
