@@ -4,7 +4,14 @@
 # - startet Uvicorn mit graceful shutdown
 # - klare Startup-Fehler über strukturierte Logs
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1 && pwd)"
 cd "$SCRIPT_DIR"
 
 export HF_HOME="${HF_HOME:-/data/hf-cache}"
@@ -23,7 +30,7 @@ echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"level\":\"INFO\",\"service\":
 # Modelle werden NICHT manuell installiert – Gewichte kommen aus dem HF-Hub
 # in den persistenten HF_HOME-Cache (Revision-Pinning im Manifest).
 exec uvicorn app:app \
-  --host 0.0.0.0 \
+  --host 127.0.0.1 \
   --port "${PORT:-8000}" \
   --workers 1 \
   --timeout-keep-alive 30
