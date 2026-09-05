@@ -38,6 +38,8 @@ STARTED_AT = time.time()
 _SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _SAFE_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
 MCP_API_TOKEN = os.environ.get("AI_MCP_API_TOKEN", "").strip()
+# AD-H4: Erlaubte Modell-IDs werden im Lifespan aus dem Manifest befüllt.
+KNOWN_MODEL_IDS: set[str] = set()
 
 # ---------------------------------------------------------------------------
 # Strukturiertes JSON-Logging (keine Secrets)
@@ -123,8 +125,8 @@ def _preload_models_background() -> None:
         STATE.models_ready = True
         log_event("INFO", "models ready")
     except Exception as exc:  # noqa: BLE001 – Fehler sauber im Status führen
-        STATE.startup_errors.append(str(exc))
-        log_event("ERROR", "model preload failed", error=str(exc))
+        STATE.startup_errors.append(f"{type(exc).__name__}: {exc}")
+        log_event("ERROR", "model preload failed", error=type(exc).__name__)
 
 
 @asynccontextmanager
@@ -132,9 +134,12 @@ async def lifespan(_app: FastAPI):
     try:
         manifest = load_manifest()
         STATE.manager.configure(manifest)
+        # AD-H4: Whitelist der bekannten Modell-IDs aus dem Manifest.
+        KNOWN_MODEL_IDS.update(str(m.get("id", "")).strip() for m in manifest.get("models", []) if isinstance(m, dict))
+        KNOWN_MODEL_IDS.discard("")
     except Exception as exc:  # Startup-Fehler eindeutig melden
-        STATE.startup_errors.append(str(exc))
-        log_event("FATAL", "startup failed", error=str(exc))
+        STATE.startup_errors.append(f"{type(exc).__name__}: {exc}")
+        log_event("FATAL", "startup failed", error=type(exc).__name__)
         raise
     STATE.ready = True  # API ist sofort erreichbar
     log_event("INFO", "runtime api ready", version=RUNTIME_VERSION)
@@ -213,6 +218,9 @@ async def infer(request: Request) -> JSONResponse:
         raise HTTPException(status_code=422, detail="invalid task")
     if not _SAFE_MODEL_RE.fullmatch(model):
         raise HTTPException(status_code=422, detail="invalid model")
+    # AD-H4: Modell nur erlauben, wenn es im Manifest/Whitelist existiert.
+    if KNOWN_MODEL_IDS and model not in KNOWN_MODEL_IDS:
+        raise HTTPException(status_code=422, detail="unknown model")
     if not isinstance(payload, dict):
         raise HTTPException(status_code=422, detail="input must be an object")
 
@@ -237,8 +245,8 @@ async def infer(request: Request) -> JSONResponse:
         raise HTTPException(status_code=503, detail={"code": "MODEL_UNAVAILABLE", "model": model, "message": "model unavailable"})
     except Exception as exc:  # noqa: BLE001 – zentrale Fehlerbehandlung
         duration_ms = int((time.time() - started) * 1000)
-        # FA-P1-9: Details nur ins Log; Client erhält generische Meldung ohne Pfade/Traceback.
-        log_event("ERROR", "inference failed", task=task, model=model, error=str(exc), durationMs=duration_ms)
+        # AD-H5/FA-P1-9: keine Raw-Exceptions/Pfade in Logs; Client generisch.
+        log_event("ERROR", "inference failed", task=task, model=model, error=type(exc).__name__, durationMs=duration_ms)
         STATE.record_error("INFERENCE_FAILED", task, model, f"{type(exc).__name__}: {exc}")
         raise HTTPException(status_code=500, detail={"code": "INFERENCE_FAILED", "model": model, "message": "inference failed"})
 
@@ -247,21 +255,22 @@ async def infer(request: Request) -> JSONResponse:
 async def mcp_tool(tool_name: str, request: Request) -> JSONResponse:
     """MCP-Tool-Aufruf mit Permission-Check (READ/WRITE/EXECUTION/DESTRUCTIVE).
 
-    Wenn AI_MCP_API_TOKEN gesetzt ist, wird der Aufruf zusätzlich per
-    Bearer-/x-api-key-Token authentifiziert (Vergleich in konstanter Zeit).
+    AD-K2: Ohne AI_MCP_API_TOKEN ist der MCP-Pfad deaktiviert (503). Mit Token
+    wird jeder Aufruf per Bearer-/x-api-key authentifiziert (konstante Zeit).
     """
-    if MCP_API_TOKEN:
-        auth = request.headers.get("authorization", "")
-        supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else request.headers.get("x-api-key", "").strip()
-        if not supplied or not hmac.compare_digest(supplied, MCP_API_TOKEN):
-            return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
+    if not MCP_API_TOKEN:
+        return JSONResponse({"ok": False, "error": "mcp disabled (AI_MCP_API_TOKEN not set)"}, status_code=503)
+    auth = request.headers.get("authorization", "")
+    supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else request.headers.get("x-api-key", "").strip()
+    if not supplied or not hmac.compare_digest(supplied, MCP_API_TOKEN):
+        return JSONResponse({"ok": False, "error": "unauthorized"}, status_code=401)
 
     from mcp_runtime import McpRuntime
 
     try:
         body = await request.json()
     except Exception as exc:  # noqa: BLE001 – ungültiges JSON sauber ablehnen
-        log_event("WARN", "invalid mcp json body", error=str(exc))
+        log_event("WARN", "invalid mcp json body", error=type(exc).__name__)
         return JSONResponse({"ok": False, "error": "invalid JSON body"}, status_code=400)
     result = McpRuntime(STATE.manager).invoke(tool_name, body)
     return JSONResponse(result)

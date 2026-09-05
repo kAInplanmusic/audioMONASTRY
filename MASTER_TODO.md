@@ -90,20 +90,20 @@
 
 ### Kritisch (3)
 
-- [ ] **AD-K1 `server/cloudAutomation.ts:122`** – Supabase-Fehlermeldungen gehen an den Client (`error: error.message`). Fix: serverseitig loggen, generische Meldung nach außen.
-- [ ] **AD-K2 `services/samplemonk-ai-runtime/app.py:150`** – `/mcp/tools/{tool_name}` ohne Auth/RBAC. Fix: Authentifizierung + RBAC vor Tool-Invocation.
-- [ ] **AD-K3 `services/samplemonk-ai-runtime/model_manager.py:170`** – `torch.cuda.empty_cache()` im `unload()` verursacht Latenzspitzen. Fix: entfernen oder asynchron/außerhalb des kritischen Pfads.
+- [x] **AD-K1 `server/cloudAutomation.ts:122`** – verifiziert (2026-09-05): `ingestAudioObject` nutzt generische Codes, keine `error.message`.
+- [x] **AD-K2 `services/samplemonk-ai-runtime/app.py:150`** – MCP-Tools ohne `AI_MCP_API_TOKEN` deaktiviert (503); sonst `hmac.compare_digest` (2026-09-05).
+- [x] **AD-K3 `services/samplemonk-ai-runtime/model_manager.py:170`** – `empty_cache()` nur noch bei `AI_CUDA_EMPTY_CACHE_ON_UNLOAD/EVICT=1` (2026-09-05).
 
 ### Hoch (11)
 
 - [ ] **AD-H1 `server/cloudAutomation.ts:76`** – R2-Key-Validierung (`isSafeR2Key`) härten (Whitelist, Segmentlängen).
 - [ ] **AD-H2 `services/backend-core/python/celery_app.py:33`** – `_validate_audio_file` gegen Symlinks/relative Pfade härten.
 - [ ] **AD-H3 `services/backend-core/python/hypersonic_moa.py:57`** – JSON-Validierung vor `json.loads` (erlaubte Schlüssel/Typen/Größen).
-- [ ] **AD-H4 `services/samplemonk-ai-runtime/app.py:107`** – `/infer` task/model zusätzlich gegen Whitelist/Registry prüfen.
-- [ ] **AD-H5 `services/samplemonk-ai-runtime/app.py:140`** – Error-Logging sanitieren (keine Raw-Exceptions/Traces).
-- [ ] **AD-H6 `services/samplemonk-ai-runtime/handlers.py:105`** – `task` gegen Whitelist validieren.
-- [ ] **AD-H7 `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104`** – Secrets (`HF_TOKEN`) beim Logging maskieren.
-- [ ] **AD-H8 `services/samplemonk-ai-runtime/model_manager.py:107`** – Manifest-Felder (`repository`, `revision`, `dependencies`) streng validieren.
+- [x] **AD-H4 `services/samplemonk-ai-runtime/app.py:107`** – `/infer` prüft Modell gegen Manifest-Whitelist `KNOWN_MODEL_IDS` (2026-09-05).
+- [x] **AD-H5 `services/samplemonk-ai-runtime/app.py:140`** – Error-Logging nutzt nur noch `type(exc).__name__` (2026-09-05).
+- [x] **AD-H6 `services/samplemonk-ai-runtime/handlers.py:105`** – verifiziert: `run_inference` validiert task und nutzt `HANDLERS`-Whitelist (2026-09-05).
+- [x] **AD-H7 `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104`** – verifiziert: kein `HF_TOKEN`-Logging; Token nur im `secrets`-Feld (2026-09-05).
+- [x] **AD-H8 `services/samplemonk-ai-runtime/model_manager.py:107`** – verifiziert: `_SAFE_REPOSITORY_RE`/`_SAFE_REVISION_RE` vorhanden (2026-09-05).
 - [x] **AD-H9 `services/samplemonk-ai-runtime/startup.sh:13`** – `AI_RUNTIME_DEVICE` Allowlist (`cpu|cuda|mps|auto`), Default auto (2026-09-05).
 - [x] **AD-H10 `src/hooks/usePluginState.ts:29`** – Lock-Prüfung jetzt auch serverseitig erzwungen (`plugin-lock`/`plugin-state`-RBAC) (2026-09-05).
 - [x] **AD-H11 `src/utils/WebRTCManager.ts:109`** – `senderId` wird durch `peer.userId` ersetzt (bestehende Validierung bestätigt) (2026-09-05).
