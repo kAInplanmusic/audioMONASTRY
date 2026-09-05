@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 from collections import OrderedDict
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -50,13 +51,16 @@ def _cache_get(model_id: str, factory: Callable[[], Any]) -> Any:
     _MODEL_CACHE[model_id] = value
     while len(_MODEL_CACHE) > _CACHE_MAX_ENTRIES:
         evicted_id, _ = _MODEL_CACHE.popitem(last=False)
-        try:
-            import torch  # type: ignore
+        # AD-K3: CUDA-Cache nur bei explizitem Opt-in leeren (empty_cache kann
+        # Latenzspitzen verursachen).
+        if os.environ.get("AI_CUDA_EMPTY_CACHE_ON_EVICT", "0") == "1":
+            try:
+                import torch  # type: ignore
 
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:  # noqa: BLE001 – Best-Effort-Freigabe
-            pass
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            except Exception:  # noqa: BLE001 – Best-Effort-Freigabe
+                pass
         # Eviction als strukturierter Log sichtbar machen (Dashboard zeigt msg).
         print(
             '{"level":"INFO","service":"samplemonk-ai-runtime","msg":"model cache evicted","model":"' + str(evicted_id) + '"}',
