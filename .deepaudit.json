@@ -1,5 +1,5 @@
 {
-  "$comment": "Deep-Audit-300-Konfiguration für audioMONASTRY. Pfad-Muster sind relativ zum Repo-Root.",
+  "$comment": "Deep-Audit-300-Konfiguration für audioMONASTRY. Pfad-Muster sind relativ zum Repo-Root. Alle LLM-Provider laufen über den offiziellen HF Router (kein Dedicated Endpoint).",
   "exclusions": [
     "node_modules/**",
     "dist/**",
@@ -60,22 +60,22 @@
   "providers": {
     "deepseekFlash": {
       "baseUrl": "https://router.huggingface.co/v1",
-      "model": "Qwen/Qwen3-Coder-Next",
-      "apiKeyEnv": ["HF_API_KEY", "HF_TOKEN"],
+      "model": "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
       "temperature": 0.1,
       "maxTokens": 8192
     },
     "deepseekPro": {
       "baseUrl": "https://router.huggingface.co/v1",
-      "model": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-      "apiKeyEnv": ["HF_API_KEY", "HF_TOKEN"],
+      "model": "deepseek-ai/DeepSeek-V4-Pro",
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
       "temperature": 0.05,
       "maxTokens": 8192
     },
     "hfQwen": {
       "baseUrl": "https://router.huggingface.co/v1",
       "model": "Qwen/Qwen3-Coder-Next",
-      "apiKeyEnv": ["HF_API_KEY", "HF_TOKEN"],
+      "apiKeyEnv": ["HF_TOKEN", "HF_API_KEY"],
       "temperature": 0.1,
       "maxTokens": 8192
     }
