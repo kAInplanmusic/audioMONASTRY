@@ -299,7 +299,16 @@ class WebRTCManager {
         .then((track) => {
           if (track) this.onRemoteStream(new MediaStream([track]), p.producerId);
         })
-        .catch((e) => console.warn('SFU consume fehlgeschlagen:', e));
+        .catch((e) => {
+          // DA-221: Fehlgeschlagene Subscription wieder versuchen (nicht ewig blockieren).
+          this.sfuSubscribed.delete(p.producerId);
+          console.warn('SFU consume fehlgeschlagen, Retry geplant:', e);
+          setTimeout(() => {
+            if (this.sfu && !this.sfuSubscribed.has(p.producerId)) {
+              this.syncSfuSubscriptions(this.sfu.knownRemoteProducers());
+            }
+          }, 2000);
+        });
     }
   }
 
