@@ -78,7 +78,7 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // P7: OPFS-basierte Samples beim Provider-Mount laden und in den State

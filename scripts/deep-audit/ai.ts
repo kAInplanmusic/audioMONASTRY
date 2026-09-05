@@ -119,7 +119,7 @@ export async function runAiPass(
   const existingFiles = collectExistingFiles(batches);
   const findings: Finding[] = [];
   let batchesDone = 0;
-  let errors: string[] = [];
+  const errors: string[] = [];
   for (const batch of batches) {
     const batchFiles = batch.files.map((file) => file.path).join(', ');
     const userContent = `${extraContext}\n\nAudit-Batch (${batchesDone + 1}/${batches.length}) – Dateien: ${batchFiles}\n\n${batch.content}\n\nPrüfe jetzt diesen Batch.`;

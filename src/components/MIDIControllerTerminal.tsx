@@ -87,7 +87,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
     if (detected.length === 0) return;
     const known = detected.find(d => d.profile !== 'UNKNOWN');
     if (known) setActiveProfile(known.profile);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [detected]);
 
   // MIDI-Nachrichten → AudioEngine.

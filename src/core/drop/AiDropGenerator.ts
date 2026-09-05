@@ -166,7 +166,7 @@ export class AiDropGenerator {
    */
   private generateFallbackDrop(request: AiDropRequest): GeneratedDropProfile {
     // Versuche bestehendes Profile zu finden, das zum Prompt passt
-    let baseProfile =
+    const baseProfile =
       DROP_PROFILES.find((p) =>
         request.userPrompt.toLowerCase().includes(p.name.toLowerCase())
       ) || DROP_PROFILES[Math.floor(Math.random() * DROP_PROFILES.length)];

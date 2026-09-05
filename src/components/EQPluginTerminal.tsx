@@ -258,7 +258,7 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
         pushEq(gains, qs);
       }
     } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Persistenz speichern.

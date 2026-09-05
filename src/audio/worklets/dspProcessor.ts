@@ -132,7 +132,7 @@ class DspProcessor extends AudioWorkletProcessor {
         let s = inCh[i] ?? 0;
 
         // 1) Tilt: Phasenkorrektur (schneller 1.Ordnung Allpass in Serie)
-        let y1 = this.apCoef * s + this.ap1Z;
+        const y1 = this.apCoef * s + this.ap1Z;
         this.ap1Z = s - this.apCoef * this.ap1Z;
         s = y1;
 

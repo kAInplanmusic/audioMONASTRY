@@ -92,7 +92,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
         if (parsed.stepSamples) setStepSamples(parsed.stepSamples);
       }
     } catch { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Persistenz speichern.
