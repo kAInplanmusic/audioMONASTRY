@@ -4,6 +4,7 @@ import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 export const DSPTerminal = React.memo(function DSPTerminal() {
   const { state, lockStatus, updateState } = usePluginState('dsp', 'PRO');
@@ -124,7 +125,7 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
   ];
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-4 py-2 border-b border-neutral-800 bg-black/20">
         <MoaAssistant pluginId="dsp" placeholder="MOA: z. B. 'Filter-Sweep automatisieren'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>

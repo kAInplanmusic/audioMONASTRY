@@ -27,6 +27,46 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     setPluginLocks(next);
   }, []);
 
+  // K-2/K-5: Server-autoritative Lock-Replikation übernehmen.
+  useEffect(() => {
+    const offLock = webRTCManager.onPluginLock((msg: any) => {
+      const pluginId = String(msg?.pluginId ?? '');
+      const lockedBy = String(msg?.lockedBy ?? '');
+      if (!pluginId || !lockedBy) return;
+      commit({
+        ...locksRef.current,
+        [pluginId]: {
+          lockedBy,
+          timestamp: Number(msg?.timestamp ?? Date.now()),
+          active: true,
+          ttl: Number(msg?.ttl ?? DEFAULT_LOCK_TTL),
+        },
+      });
+    });
+    const offUnlock = webRTCManager.onPluginUnlock((msg: any) => {
+      const pluginId = String(msg?.pluginId ?? '');
+      if (!pluginId) return;
+      commit({ ...locksRef.current, [pluginId]: { lockedBy: null, timestamp: 0, active: false } });
+    });
+    const offSync = webRTCManager.onPluginLocksSync((msg: any) => {
+      const raw = msg?.locks;
+      if (!raw || typeof raw !== 'object') return;
+      const next: Record<string, LockStatus> = {};
+      for (const [id, lock] of Object.entries<any>(raw)) {
+        if (lock?.active && lock?.lockedBy) {
+          next[id] = {
+            lockedBy: String(lock.lockedBy),
+            timestamp: Number(lock.timestamp ?? Date.now()),
+            active: true,
+            ttl: Number(lock.ttl ?? DEFAULT_LOCK_TTL),
+          };
+        }
+      }
+      commit(next);
+    });
+    return () => { offLock(); offUnlock(); offSync(); };
+  }, [commit]);
+
   // Sweep expired locks periodically
   useEffect(() => {
     const interval = setInterval(() => {
@@ -63,6 +103,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
         ...prev,
         [pluginId]: { lockedBy: localUserId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
       });
+      webRTCManager.sendPluginLock(pluginId);
       return true;
     }
     if (lock && lock.active && lock.lockedBy !== localUserId) {
@@ -76,6 +117,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       ...prev,
       [pluginId]: { lockedBy: localUserId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
     });
+    webRTCManager.sendPluginLock(pluginId);
     return true;
   }, [commit]);
 
@@ -88,6 +130,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       ...locksRef.current,
       [pluginId]: { lockedBy: null, timestamp: 0, active: false }
     });
+    webRTCManager.sendPluginUnlock(pluginId);
   }, [commit]);
 
   return (

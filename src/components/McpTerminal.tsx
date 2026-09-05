@@ -7,6 +7,7 @@ import { MoaAssistant } from './MoaAssistant';
 import { storageGetJson, storageSetJson } from '../utils/storage';
 import { random } from '../utils/random';
 import type { AudioSample } from '../data/samples';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 /**
  * mcpMONK – MPC + Sequencer (NEW-MONK-3: voller MPC-Ausbau)
@@ -41,7 +42,7 @@ const emptyPattern = (n: number): boolean[] => Array(n).fill(false);
 
 export const McpTerminal = React.memo(function McpTerminal() {
   const { state, lockStatus, updateState } = usePluginState('mcp', 'PRO');
-  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
+  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   const { pendingSample, setPendingSample, takeoverRequest, clearTakeoverRequest } = useSamples();
 
   const [bank, setBank] = useState<Bank>('A');

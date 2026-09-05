@@ -14,6 +14,7 @@ import { MidiDeviceType } from '../config/midiDevices';
 import { useControlHub } from '../hooks/useControlHub';
 import { applyMappedParameter } from '../hooks/useMappingApply';
 import { mappingStore } from '../core/mapping/MappingStore';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 /**
  * audioMONASTRY Hardware-Dashboard (controllerMONK)
@@ -150,7 +151,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
   const isTouchLimited = detectTouchLimited();
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
         <MoaAssistant pluginId="controller" placeholder="MOA: z. B. 'Controller neu scannen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>

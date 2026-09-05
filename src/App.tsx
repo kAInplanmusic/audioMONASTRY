@@ -121,7 +121,7 @@ function AppComponent() {
   // MAIN-Berechtigung: NUR der mixerMONK-Halter (PRO + Lock) darf MAIN verändern
   // (Play/Stop, Kanal-Load, Trigger). Die 6 Mixer-Kanäle sind der einzige MAIN-Weg.
   const mainHolder = (moduleStates['mixer'] || 'OFF') === 'PRO'
-    && (!pluginLocks['mixer']?.active || pluginLocks['mixer']?.lockedBy === 'localUser');
+    && (!pluginLocks['mixer']?.active || pluginLocks['mixer']?.lockedBy === webRTCManager.userId);
   useEffect(() => {
     audioEngine.setMainHolderActive(mainHolder);
   }, [mainHolder]);
@@ -620,7 +620,7 @@ function AppComponent() {
           if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
           const state = moduleStates[id] || 'OFF';
           const lockStatus = pluginLocks[id];
-          const lockedByOther = !!lockStatus?.active && lockStatus.lockedBy !== 'localUser';
+          const lockedByOther = !!lockStatus?.active && lockStatus.lockedBy !== webRTCManager.userId;
           return (
             <RackRow
               key={id}

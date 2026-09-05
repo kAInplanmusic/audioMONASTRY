@@ -9,6 +9,7 @@ import { splitStemsLocally, LocalStemUrls } from '../utils/stemSplitter';
 import { separateStemsWithDemucs } from '../ai/localDemucs';
 import { MoaAssistant } from './MoaAssistant';
 import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } from '../utils/stemUsage';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 export const StemExtractorTerminal = React.memo(function StemExtractorTerminal() {
   const { addSample } = useSamples();
@@ -67,7 +68,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   };
 
   const startExtraction = async () => { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
-    if (!file || (lockStatus.active && lockStatus.lockedBy !== 'localUser')) return;
+    if (!file || (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId)) return;
 
     abortRef.current = new AbortController();
     setIsExtracting(true);
@@ -191,7 +192,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   };
 
   return (
-    <div className={`p-6 bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-mono shadow-2xl ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`p-6 bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-mono shadow-2xl ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="mb-4 -mt-2">
         <MoaAssistant pluginId="stem" placeholder="MOA: z. B. 'Datei trennen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>

@@ -13,6 +13,7 @@ import { DRUM_KITS } from '../data/drumKits';
 import { useMIDI } from '../hooks/useMIDI';
 import { useMidiClockOut } from '../hooks/useMidiClockOut';
 import { drumNoteFor } from '../core/hardware/midiClockOut';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 /**
  * audioMONASTRY drumMONK – TR-8S-Optik + echter 16-Step-Sequencer.
@@ -44,7 +45,7 @@ interface DrumMachineProps {
 export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isPlaying = false, bpm = 128 }) => {
   const { addSample, pendingSample, setPendingSample, takeoverRequest, clearTakeoverRequest } = useSamples();
   const { state, lockStatus, updateState } = usePluginState('drum', 'PRO');
-  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
+  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
   const [activeKit, setActiveKit] = useState('tr-808');
   const [selectedSoundId, setSelectedSoundId] = useState<string>(DRUM_KITS[0]?.sounds[0]?.id ?? '');

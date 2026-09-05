@@ -13,6 +13,7 @@ import { UniversalKeyboard } from './instrument/UniversalKeyboard';
 import { PadGrid } from './instrument/PadGrid';
 import { InstrumentCanvas } from './instrument/InstrumentCanvas';
 import { GarageBandInstrumentView } from './instrument/GarageBandInstrumentView';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 // --- WAM2 / Instrument Standards ---
 type InstrumentType = 'sampler' | 'synth' | 'soundfont' | 'synth2';
@@ -124,7 +125,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   useEffect(() => {
     webMIDIAdapter.onControl((msg) => {
       if (msg.kind !== 'program') return;
-      if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
+      if (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId) return;
       const program = msg.idNum;
       void instrumentBackend.handleProgramChange(program, msg.channel).then(() => {
         const def = instrumentBackend.current();
@@ -141,7 +142,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   }, []);
 
   const handleSampleDrop = (sample: AudioSample) => {
-    if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
+    if (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId) return;
     setDroppedSample(sample);
     // Tell audioEngine to map this sample to the active instrument slot
     if (sample.url) {
@@ -179,7 +180,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   });
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-sans shadow-2xl ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`w-full h-full flex flex-col bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-sans shadow-2xl ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
         <MoaAssistant pluginId="instrument" placeholder="MOA: z. B. 'Program 25 laden'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>

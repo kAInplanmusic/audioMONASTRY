@@ -30,19 +30,19 @@
 
 ### K – Kritisch: Multi-User/B2B-Locking
 
-- [ ] **K-1 Lock-Owner-Vergleich gegen falsches Literal** – ~20 Dateien prüfen `lockedBy !== 'localUser'`, tatsächliche ID ist `webRTCManager.userId` (`user-<random>`). Fix: zentraler Helfer `isLockedByOther(lock, userId)` + alle Literale ersetzen; Regressionstest analog `tests/lockFuzz.test.ts`.
-- [ ] **K-2 Plugin-Locks werden nicht netzwerkweit repliziert** – `PluginManagerContext` ist lokaler State; B2B-Locked-Mode existiert netzwerkseitig nicht. Fix: serverseitig autoritative `plugin-lock`-Nachricht über den Session-Room; Client nur optimistisch.
-- [ ] **K-3 `releaseLock()` prüft den Halter nicht** – `_userId` wird ignoriert, jeder kann fremde Locks brechen. Fix: Owner-Check vor Commit + serverseitige Autorisierung.
-- [ ] **K-4 Lock-Halter kann eigenen State nicht ändern** – `usePluginState.updateState()` prüft nur `lockStatus.active`, nicht den Owner. Fix: `if (!lockStatus.active || lockStatus.lockedBy === webRTCManager.userId)`.
-- [ ] **K-5 Keine Lock-Freigabe bei Disconnect** – TTL 5 min, sonst nichts. Fix: serverseitige Lock-Tabelle mit Freigabe im `disconnect`-Handler; TTL kürzer (z. B. 60 s + Heartbeat).
+- [x] **K-1 Lock-Owner-Vergleich gegen falsches Literal** – 14 Komponenten ersetzen `'localUser'` durch `webRTCManager.userId` (2026-09-05); `usePluginState` auditiert mit echter User-ID.
+- [x] **K-2 Plugin-Locks werden nicht netzwerkweit repliziert** – Server `plugin-lock`/`plugin-unlock`/`plugin-locks-sync` + Client-Replikation in `PluginManagerContext`/`WebRTCManager` (2026-09-05).
+- [x] **K-3 `releaseLock()` prüft den Halter nicht** – Owner-Check im Client + Server akzeptiert nur Owner (`plugin-unlock`) (2026-09-05).
+- [x] **K-4 Lock-Halter kann eigenen State nicht ändern** – `usePluginState.updateState()` prüft Owner korrekt (2026-09-05).
+- [x] **K-5 Keine Lock-Freigabe bei Disconnect** – Server-TTL 60 s + Release im `disconnect`-Handler (2026-09-05).
 
 ### S – Backend & Security
 
-- [ ] **S-1 Rohe Exception-Messages an Client (Hoch)** – `server.ts` u. a. 455/470/496/516/554. Fix: generische Fehlercodes, Details nur serverseitig loggen.
-- [ ] **S-2 Socket.io-Relay ohne Ziel-Validierung (Hoch)** – `server.ts:1668-1682` leitet an `data.target` weiter. Fix: Ziel-Socket auflösen + Session-Room vergleichen.
-- [ ] **S-3 `assign-role` ohne Session-Zugehörigkeitsprüfung (Hoch)** – Ziel-User gegen Room-Mitglieder validieren.
-- [ ] **S-4 Admin-Token-Vergleich nicht konstantzeitig (Mittel)** – `safeTokenEqual()` auch für `x-admin-token` nutzen; engeres Rate-Limit.
-- [ ] **S-5 SFU-`sessionId` ungeprüft (Mittel)** – Whitelist `/^[a-zA-Z0-9_-]{1,64}$/`, sonst disconnect.
+- [x] **S-1 Rohe Exception-Messages an Client (Hoch)** – SFU-Callbacks generisch (`'internal'`) + `cloudAutomation` nutzt Codes (2026-09-05).
+- [x] **S-2 Socket.io-Relay ohne Ziel-Validierung (Hoch)** – `relayToSessionPeer` prüft Ziel-Socket + Session-Room (2026-09-05).
+- [x] **S-3 `assign-role` ohne Session-Zugehörigkeitsprüfung (Hoch)** – Ziel-User gegen Room-Mitglieder + self validiert (2026-09-05).
+- [x] **S-4 Admin-Token-Vergleich nicht konstantzeitig (Mittel)** – `safeTokenEqual()` für `x-admin-token` (2026-09-05).
+- [x] **S-5 SFU-`sessionId` ungeprüft (Mittel)** – Whitelist `/^[a-zA-Z0-9_-]{1,64}$/`, sonst disconnect (2026-09-05).
 - [ ] **S-6 `VOICE_CLI` ungeprüft (Mittel)** – Pfad-Allowlist + `crypto.randomBytes` im Dateinamen.
 - [ ] **S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.
 - [x] **S-8 `qs`-Kette verwundbar (Niedrig)** – `npm audit fix` durchgeführt (2026-09-05, 0 Vulnerabilities).
