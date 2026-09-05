@@ -1,6 +1,6 @@
 {
-  "created": "2026-09-05T05:44:00.543Z",
-  "total": 224,
+  "created": "2026-09-05T05:50:47.819Z",
+  "total": 223,
   "tasks": [
     {
       "id": "T-0001",
@@ -34,1091 +34,1086 @@
     },
     {
       "id": "T-0007",
-      "line": 56,
-      "text": "**A-4 Mastering-Lookahead nicht per API abfragbar (Mittel)** – `audioEngine.getLatencyBudgetMs()` mit Stufen-Aufschlüsselung; in perfMONK anzeigen."
-    },
-    {
-      "id": "T-0008",
       "line": 57,
       "text": "**A-5 Allokationen im `process()`-Pfad bei Kanal-/Quantum-Wechsel (Niedrig)** – im Konstruktor auf Maximalkanäle/-quantum vorallozieren."
     },
     {
-      "id": "T-0009",
+      "id": "T-0008",
       "line": 64,
       "text": "**F-2 Vier parallele Lock-Modelle (Mittel)** – auf ein serverseitig autoritatives Modell konsolidieren."
     },
     {
-      "id": "T-0010",
+      "id": "T-0009",
       "line": 67,
       "text": "**F-5 160× `any` (Mittel)** – Zod-Schemas für alle Peer-Payloads; Feature-Detection eng typisieren."
     },
     {
-      "id": "T-0011",
+      "id": "T-0010",
       "line": 68,
       "text": "**F-6 Non-null-Assertions ohne Guard (Niedrig)** – explizite Guards mit sprechender Meldung."
     },
     {
-      "id": "T-0012",
+      "id": "T-0011",
       "line": 69,
       "text": "**F-7 Handler-Zuweisung statt Subscription (Niedrig)** – `onMainStream`/`onSessionUpdate` auf `addDataChannelListener`-Muster mit Unsubscribe."
     },
     {
-      "id": "T-0013",
+      "id": "T-0012",
       "line": 70,
       "text": "**F-8 Accessibility (Niedrig)** – Slider-Rollen, `aria-pressed`, `aria-disabled`/`aria-label` für Lock-Zustand."
     },
     {
-      "id": "T-0014",
+      "id": "T-0013",
       "line": 74,
       "text": "**Q-1 `check:memo` und `npm audit` fehlen als CI-Gates.**"
     },
     {
-      "id": "T-0015",
+      "id": "T-0014",
       "line": 75,
       "text": "**Q-2 Bundle 1.56 MB > 1.50 MB Warnschwelle** – `tone`/`lucide-react` splitten/tree-shaken."
     },
     {
-      "id": "T-0016",
+      "id": "T-0015",
       "line": 76,
       "text": "**Q-3 Coverage 32,6 %; untertestete Risiko-Dateien:** `audioEngine.ts` 26,7 %, `WebRTCManager.ts` 26,0 %, `rbac.ts` 0 %, `AuditLogger.ts` 0 %, `dropAudioBridge.ts` 0 %, `audioAnalyzer.ts` 0 %, `presetStore.ts`/`opfs.ts` 0 %."
     },
     {
-      "id": "T-0017",
+      "id": "T-0016",
       "line": 77,
       "text": "**Q-4 `rbac.ts` (sicherheitsrelevant) mit Tests abdecken.**"
     },
     {
-      "id": "T-0018",
+      "id": "T-0017",
       "line": 113,
       "text": "**AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`."
     },
     {
-      "id": "T-0019",
+      "id": "T-0018",
       "line": 114,
       "text": "**AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`."
     },
     {
-      "id": "T-0020",
+      "id": "T-0019",
       "line": 115,
       "text": "**AD-M3 Backend-Bugs:** `cloudAutomation.ts:100` Regex-Logik; `cloudAutomation.ts:132` Env-Zugriffe; `celery_app.py:104/120` Race Conditions `_load_demucs`/`_load_musicgen`; `hypersonic_moa.py:67` leerer Prompt; `app.py:124` + `handlers.py:105` Race Conditions Model-Loading; `handlers.py:130` Resampling-Fehlerbehandlung; `hf_manage_endpoint.py:122/130` Fehlerbehandlung/Trennung Konfiguration-Logik; `model_manager.py:130/190` Race/Load + VRAM-Fehlerfall; `registry.py:26` Revision-Pinning via `null`; `startup.sh:9/10` Symlink-Pfad + HF_HOME-Space-Check."
     },
     {
-      "id": "T-0021",
+      "id": "T-0020",
       "line": 116,
       "text": "**AD-M4 AI-Runtime-Security/Architektur:** `backend-core/package.json:8` Uvicorn 0.0.0.0 ohne Auth; `startup.sh:18/21` AI-Runtime ungeschützt auf allen Interfaces; `pyproject.toml:7/11` fehlende Hash-Pins/Lockfile + veraltetes `torch==2.4.1`."
     },
     {
-      "id": "T-0022",
+      "id": "T-0021",
       "line": 117,
       "text": "**AD-M5 React/State:** `usePluginState.ts:28` stale lockStatus; `useSessionSync.ts:35` `syncAdd` sendet unvalidierte Samples an Peers."
     },
     {
-      "id": "T-0023",
+      "id": "T-0022",
       "line": 118,
       "text": "**AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung."
     },
     {
-      "id": "T-0024",
+      "id": "T-0023",
       "line": 122,
       "text": "**AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen."
     },
     {
-      "id": "T-0025",
+      "id": "T-0024",
       "line": 123,
       "text": "**AD-N2 ESLint-Low-Hänger** – `scripts/**` teilgefixt (2026-09-05). Offen: `server.ts`, `ai/localDemucs.ts`, `audio-runtime/src/main.rs`."
     },
     {
-      "id": "T-0026",
+      "id": "T-0025",
       "line": 124,
       "text": "**AD-N3 160× `any`/`as any` + 3× ts-ignore reduzieren** (deckungsgleich mit F-5/AUDIT.md)."
     },
     {
-      "id": "T-0027",
+      "id": "T-0026",
       "line": 141,
       "text": "**P1-1 Statische V1-Verkabelung verifizieren:** Importe/Initialisierung, alle `connect()`-Aufrufe, Fehlerbehandlung – als Test-/Audit-Schritt dokumentieren."
     },
     {
-      "id": "T-0028",
+      "id": "T-0027",
       "line": 142,
       "text": "**P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen."
     },
     {
-      "id": "T-0029",
+      "id": "T-0028",
       "line": 143,
       "text": "**P1-3 Laufzeit-Prüfungen:** `audioContext.state`, `sampleRate`, `baseLatency`, `outputLatency` sichtbar machen (perfMONK nutzt `getAudioHealth()` bereits)."
     },
     {
-      "id": "T-0030",
+      "id": "T-0029",
       "line": 144,
       "text": "**P1-4 Debug-/Analyser-Pfad:** `analyzerNode` → Visualisierung als fester Debug-Schritt dokumentieren/testen."
     },
     {
-      "id": "T-0031",
+      "id": "T-0030",
       "line": 145,
       "text": "**P1-5 Offline-Integrationstest:** `OfflineAudioContext`-Roundtrip (V1-Quelle → Kanalzug → Master → Bounce) automatisiert (goldenAudio/bounceGraph erweitern)."
     },
     {
-      "id": "T-0032",
+      "id": "T-0031",
       "line": 146,
       "text": "**P1-6 PerformanceObserver:** Audio-Verarbeitungsdauer messen und in perfMONK anbinden."
     },
     {
-      "id": "T-0033",
+      "id": "T-0032",
       "line": 147,
       "text": "**P1-7 100-%-Checkliste als Gate:** die 8 Punkte (Imports, Verkabelung, Fehlerbehandlung, Unit, Integration, Konsolenfehler, hörbar, Performance) in `npm run verify` oder CI aufnehmen."
     },
     {
-      "id": "T-0034",
+      "id": "T-0033",
       "line": 155,
       "text": "**P2-1 Core-Engine-Audit nach dem 4-Schritte-Schema** (Bestandsaufnahme → Abgleich → Bewertung umgesetzt/teilweise/nicht → Maßnahmen) einmalig für die Audio-Engine durchführen; Ergebnis als Abschnitt in MASTER_TODO/TASKDONE."
     },
     {
-      "id": "T-0035",
+      "id": "T-0034",
       "line": 156,
       "text": "**P2-2 Methodik als wiederholbares Skript/Checkliste** in `scripts/` (z. B. `core-engine-abgleich.md`) ablegen, damit künftige Audits identisch ablaufen."
     },
     {
-      "id": "T-0036",
+      "id": "T-0035",
       "line": 162,
       "text": "**P3-1 Routing-Dynamik prüfen:** V1 ist fest verdrahtet, `routing.json` wird nur teilweise angewendet. Machbarkeitsstudie: dynamisch rekonfigurierbarer Graph auf `AudioGraph` (V2) mit variablen Ports; Feedback-Schleifen nur nach Stabilitäts-/Phasentests."
     },
     {
-      "id": "T-0037",
+      "id": "T-0036",
       "line": 163,
       "text": "**P3-2 Einheitliche Port-API:** `IAudioPort`/`AudioPort` als verbindliche Schnittstelle für alle Module etablieren; variable Port-Anzahl erlauben."
     },
     {
-      "id": "T-0038",
+      "id": "T-0037",
       "line": 164,
       "text": "**P3-3 Clock & Synchronisation messen:** Jitter < ±1 Sample bei 48 kHz verifizieren; parallele Verteilung vs. Kaskade dokumentieren; Hot-Plug-Verhalten testen (deckt P2-1/P2-2 Rest)."
     },
     {
-      "id": "T-0039",
+      "id": "T-0038",
       "line": 165,
       "text": "**P3-4 Latenzkompensation:** `getLatencyBudgetMs()` einführen und je Modul automatische Delay-Compensation vorbereiten (deckt A-4)."
     },
     {
-      "id": "T-0040",
+      "id": "T-0039",
       "line": 166,
       "text": "**P3-5 Proprietäre Mathematik:** DSP-Modell-Versionierung einführen (z. B. `Compressor_v2.3`); LUT vs. Echtzeitberechnung je Algorithmus dokumentieren (Release-LUT ist schon da)."
     },
     {
-      "id": "T-0041",
+      "id": "T-0040",
       "line": 167,
       "text": "**P3-6 Schutz der Algorithmenkerne:** TEE/geschützter Speicher im Browser/Node als **nicht sinnvoll** markieren; stattdessen Build-/Bundle-Schutz und Objekt-Code-Review prüfen."
     },
     {
-      "id": "T-0042",
+      "id": "T-0041",
       "line": 196,
       "text": "**Prüfpunkt (Live):** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg)."
     },
     {
-      "id": "T-0043",
+      "id": "T-0042",
       "line": 273,
       "text": "**Prüfpunkt (manuell/Live):** iPhone-Test vor Ort (UI nicht persistent, Panels schließbar, keine Zoom-/Overflow-Probleme; Safe-Area, Touch-Ziele ≥ 44 px)."
     },
     {
-      "id": "T-0044",
+      "id": "T-0043",
       "line": 274,
       "text": "**Prüfpunkt (manuell/Live):** iOS/Android: Touch-Ziele ≥ 44 px, Safe-Areas, kein Hover-only."
     },
     {
-      "id": "T-0045",
+      "id": "T-0044",
       "line": 286,
       "text": "**Prüfpunkt (Live):** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen nach Reload stabil; 2.1 sichtbar (Xonar U7)."
     },
     {
-      "id": "T-0046",
+      "id": "T-0045",
       "line": 287,
       "text": "**Prüfpunkt (Live):** USB-Default: Xonar bevorzugt, sonst erste USB-Karte."
     },
     {
-      "id": "T-0047",
+      "id": "T-0046",
       "line": 316,
       "text": "**Prüfpunkt (Live):** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb."
     },
     {
-      "id": "T-0048",
+      "id": "T-0047",
       "line": 317,
       "text": "**Prüfpunkt (Live):** Lokale Roundtrip-Latenz < 15 ms (Ziel < 1 ms Audio-Thread p99.99); Netz-Latenz < 50 ms one-way; 0 Xruns/Dropouts im Normallauf."
     },
     {
-      "id": "T-0049",
+      "id": "T-0048",
       "line": 324,
       "text": "**Prüfpunkt (Live):** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten gleichzeitig und bleiben < 5 ms zueinander."
     },
     {
-      "id": "T-0050",
+      "id": "T-0049",
       "line": 331,
       "text": "**Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R."
     },
     {
-      "id": "T-0051",
+      "id": "T-0050",
       "line": 332,
       "text": "**Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.)"
     },
     {
-      "id": "T-0052",
+      "id": "T-0051",
       "line": 366,
       "text": "**Prüfpunkt (Live):** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar."
     },
     {
-      "id": "T-0053",
+      "id": "T-0052",
       "line": 367,
       "text": "**Prüfpunkt (Live):** Fehlerfall zeigt verständliche Meldung (kein roher Traceback)."
     },
     {
-      "id": "T-0054",
+      "id": "T-0053",
       "line": 368,
       "text": "**Prüfpunkt (Live):** A100/HF-Endpoint bevorzugt; DevSettings „AI Server Shutdown\" aktiviert Fallbacks."
     },
     {
-      "id": "T-0055",
+      "id": "T-0054",
       "line": 374,
       "text": "**Prüfpunkt (Betreiber-Schritt):** CI-Lauf auf GitHub grün; Report enthält je Plugin Score, Dauer, Fehler."
     },
     {
-      "id": "T-0056",
+      "id": "T-0055",
       "line": 399,
       "text": "**Prüfpunkt (Betreiber-Schritt):** HF-Endpoint-Secret rotieren (dokumentiert in `docs/AI_SECURITY_GUIDE.md`)."
     },
     {
-      "id": "T-0057",
+      "id": "T-0056",
       "line": 445,
       "text": "**Prüfpunkt (Live):** 4 Browser sehen identischen State."
     },
     {
-      "id": "T-0058",
+      "id": "T-0057",
       "line": 446,
       "text": "**Prüfpunkt (Live):** Gäste hören Main via Host-Stream; Cue separat."
     },
     {
-      "id": "T-0059",
+      "id": "T-0058",
       "line": 447,
       "text": "**Prüfpunkt (Live):** Rollenwechsel ohne Audio-Unterbrechung."
     },
     {
-      "id": "T-0060",
+      "id": "T-0059",
       "line": 464,
       "text": "**Prüfpunkt (Live):** 0 Xruns/Dropouts im Normallauf."
     },
     {
-      "id": "T-0061",
+      "id": "T-0060",
       "line": 490,
       "text": "**AI-E2E-Szenario (Live):** Code-Teil erledigt – `tests/aiE2eScenario.test.ts` fährt Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero gemockt durch → TASKDONE. Offen bleibt der Lauf gegen den echten HF-Endpoint (aus AITodo Phase 24–26)."
     },
     {
-      "id": "T-0062",
+      "id": "T-0061",
       "line": 491,
       "text": "**AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26)."
     },
     {
-      "id": "T-0063",
+      "id": "T-0062",
       "line": 492,
       "text": "**AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert)."
     },
     {
-      "id": "T-0064",
+      "id": "T-0063",
       "line": 493,
       "text": "**AI-Docker-Build/GPU-Test (CI/Betreiber):** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert)."
     },
     {
-      "id": "T-0065",
+      "id": "T-0064",
       "line": 495,
       "text": "**INT8-Kalibrierung (Live):** Je Modell vorab messen (aus AITodo OPTIONAL OPTIMIZATIONS)."
     },
     {
-      "id": "T-0066",
+      "id": "T-0065",
       "line": 687,
       "text": "**DA-2026-09-04-001 · MEDIUM · @typescript-eslint/no-unused-vars** – `build-worklets.mjs:4` (eslint)"
     },
     {
-      "id": "T-0067",
+      "id": "T-0066",
       "line": 689,
       "text": "**DA-2026-09-04-002 · MEDIUM · Verwundbarkeit: body-parser** – `package-lock.json` (npm-audit)"
     },
     {
-      "id": "T-0068",
+      "id": "T-0067",
       "line": 692,
       "text": "**DA-2026-09-04-003 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/check-react-memo.mjs:6` (eslint)"
     },
     {
-      "id": "T-0069",
+      "id": "T-0068",
       "line": 694,
       "text": "**DA-2026-09-04-004 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/download-orchestral.mjs:17` (eslint)"
     },
     {
-      "id": "T-0070",
+      "id": "T-0069",
       "line": 696,
       "text": "**DA-2026-09-04-005 · MEDIUM · prefer-const** – `scripts/dsp-benchmark.ts:67` (eslint)"
     },
     {
-      "id": "T-0071",
+      "id": "T-0070",
       "line": 698,
       "text": "**DA-2026-09-04-006 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:66` (eslint)"
     },
     {
-      "id": "T-0072",
+      "id": "T-0071",
       "line": 700,
       "text": "**DA-2026-09-04-007 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:84` (eslint)"
     },
     {
-      "id": "T-0073",
+      "id": "T-0072",
       "line": 702,
       "text": "**DA-2026-09-04-008 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:101` (eslint)"
     },
     {
-      "id": "T-0074",
+      "id": "T-0073",
       "line": 704,
       "text": "**DA-2026-09-04-009 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/stress-test.mjs:76` (eslint)"
     },
     {
-      "id": "T-0075",
+      "id": "T-0074",
       "line": 706,
       "text": "**DA-2026-09-04-010 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:147` (eslint)"
     },
     {
-      "id": "T-0076",
+      "id": "T-0075",
       "line": 708,
       "text": "**DA-2026-09-04-011 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:167` (eslint)"
     },
     {
-      "id": "T-0077",
+      "id": "T-0076",
       "line": 731,
       "text": "**DA-2026-09-04-019 · MEDIUM · Race Condition in Stem-Job-Management** – `server.ts:430` (hf-qwen)"
     },
     {
-      "id": "T-0078",
+      "id": "T-0077",
       "line": 734,
       "text": "**DA-2026-09-04-020 · MEDIUM · Potenzieller Zustandsverlust bei Stem-Jobs** – `server.ts:440` (hf-qwen)"
     },
     {
-      "id": "T-0079",
+      "id": "T-0078",
       "line": 737,
       "text": "**DA-2026-09-04-021 · MEDIUM · Unvollständige Fehlerbehandlung in parseMultipartStream** – `server.ts:470` (hf-qwen)"
     },
     {
-      "id": "T-0080",
+      "id": "T-0079",
       "line": 740,
       "text": "**DA-2026-09-04-022 · MEDIUM · @typescript-eslint/no-require-imports** – `server.ts:1422` (eslint)"
     },
     {
-      "id": "T-0081",
+      "id": "T-0080",
       "line": 751,
       "text": "**DA-2026-09-04-026 · MEDIUM · Unzureichende Validierung von Umgebungsvariablen** – `server/cloud.ts:159` (hf-qwen)"
     },
     {
-      "id": "T-0082",
+      "id": "T-0081",
       "line": 757,
       "text": "**DA-2026-09-04-028 · MEDIUM · Möglicher Fehler bei fehlenden Supabase-Konfiguration** – `server/cloudAutomation.ts:104` (hf-qwen)"
     },
     {
-      "id": "T-0083",
+      "id": "T-0082",
       "line": 760,
       "text": "**DA-2026-09-04-029 · MEDIUM · Potenzielle Race Condition bei Tag-Synchronisation** – `server/cloudAutomation.ts:119` (hf-qwen)"
     },
     {
-      "id": "T-0084",
+      "id": "T-0083",
       "line": 772,
       "text": "**DA-2026-09-04-033 · MEDIUM · @typescript-eslint/no-require-imports** – `services/backend-core/node/index.js:1` (eslint)"
     },
     {
-      "id": "T-0085",
+      "id": "T-0084",
       "line": 774,
       "text": "**DA-2026-09-04-034 · MEDIUM · Race Condition bei Client-Verwaltung** – `services/backend-core/node/index.js:14` (hf-qwen)"
     },
     {
-      "id": "T-0086",
+      "id": "T-0085",
       "line": 786,
       "text": "**DA-2026-09-04-038 · MEDIUM · Unbegrenztes Wachstum der clients-Map durch wiederholte init mit verschiedenen userId** – `services/backend-core/node/index.js:45` (deepseek-pro)"
     },
     {
-      "id": "T-0087",
+      "id": "T-0086",
       "line": 789,
       "text": "**DA-2026-09-04-039 · MEDIUM · Unvollständige Lock-Cleanup-Logik** – `services/backend-core/node/index.js:47` (hf-qwen)"
     },
     {
-      "id": "T-0088",
+      "id": "T-0087",
       "line": 810,
       "text": "**DA-2026-09-04-046 · MEDIUM · Race Condition in Lazy Loading** – `services/backend-core/python/celery_app.py:123` (hf-qwen)"
     },
     {
-      "id": "T-0089",
+      "id": "T-0088",
       "line": 828,
       "text": "**DA-2026-09-04-052 · MEDIUM · Mögliche Injection in Service-URLs durch Umgebungsvariablen** – `services/backend-core/python/main.py:79` (hf-qwen)"
     },
     {
-      "id": "T-0090",
+      "id": "T-0089",
       "line": 834,
       "text": "**DA-2026-09-04-054 · MEDIUM · Unnötige JSON-Konvertierung bei Fehlerfällen** – `services/backend-core/python/main.py:100` (hf-qwen)"
     },
     {
-      "id": "T-0091",
+      "id": "T-0090",
       "line": 867,
       "text": "**DA-2026-09-04-065 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:27` (eslint)"
     },
     {
-      "id": "T-0092",
+      "id": "T-0091",
       "line": 869,
       "text": "**DA-2026-09-04-066 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:28` (eslint)"
     },
     {
-      "id": "T-0093",
+      "id": "T-0092",
       "line": 871,
       "text": "**DA-2026-09-04-067 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:40` (eslint)"
     },
     {
-      "id": "T-0094",
+      "id": "T-0093",
       "line": 873,
       "text": "**DA-2026-09-04-068 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:80` (eslint)"
     },
     {
-      "id": "T-0095",
+      "id": "T-0094",
       "line": 875,
       "text": "**DA-2026-09-04-069 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:100` (eslint)"
     },
     {
-      "id": "T-0096",
+      "id": "T-0095",
       "line": 877,
       "text": "**DA-2026-09-04-070 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:7` (eslint)"
     },
     {
-      "id": "T-0097",
+      "id": "T-0096",
       "line": 879,
       "text": "**DA-2026-09-04-071 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:8` (eslint)"
     },
     {
-      "id": "T-0098",
+      "id": "T-0097",
       "line": 881,
       "text": "**DA-2026-09-04-072 · MEDIUM · @typescript-eslint/no-unused-vars** – `services/mixer/index.js:23` (eslint)"
     },
     {
-      "id": "T-0099",
+      "id": "T-0098",
       "line": 883,
       "text": "**DA-2026-09-04-073 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:39` (eslint)"
     },
     {
-      "id": "T-0100",
+      "id": "T-0099",
       "line": 885,
       "text": "**DA-2026-09-04-074 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:41` (eslint)"
     },
     {
-      "id": "T-0101",
+      "id": "T-0100",
       "line": 887,
       "text": "**DA-2026-09-04-075 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:51` (eslint)"
     },
     {
-      "id": "T-0102",
+      "id": "T-0101",
       "line": 889,
       "text": "**DA-2026-09-04-076 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:53` (eslint)"
     },
     {
-      "id": "T-0103",
+      "id": "T-0102",
       "line": 891,
       "text": "**DA-2026-09-04-077 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:71` (eslint)"
     },
     {
-      "id": "T-0104",
+      "id": "T-0103",
       "line": 893,
       "text": "**DA-2026-09-04-078 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:73` (eslint)"
     },
     {
-      "id": "T-0105",
+      "id": "T-0104",
       "line": 895,
       "text": "**DA-2026-09-04-079 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:85` (eslint)"
     },
     {
-      "id": "T-0106",
+      "id": "T-0105",
       "line": 897,
       "text": "**DA-2026-09-04-080 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:87` (eslint)"
     },
     {
-      "id": "T-0107",
+      "id": "T-0106",
       "line": 899,
       "text": "**DA-2026-09-04-081 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:99` (eslint)"
     },
     {
-      "id": "T-0108",
+      "id": "T-0107",
       "line": 901,
       "text": "**DA-2026-09-04-082 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:101` (eslint)"
     },
     {
-      "id": "T-0109",
+      "id": "T-0108",
       "line": 903,
       "text": "**DA-2026-09-04-083 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:115` (eslint)"
     },
     {
-      "id": "T-0110",
+      "id": "T-0109",
       "line": 905,
       "text": "**DA-2026-09-04-084 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:117` (eslint)"
     },
     {
-      "id": "T-0111",
+      "id": "T-0110",
       "line": 907,
       "text": "**DA-2026-09-04-085 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:126` (eslint)"
     },
     {
-      "id": "T-0112",
+      "id": "T-0111",
       "line": 909,
       "text": "**DA-2026-09-04-086 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:128` (eslint)"
     },
     {
-      "id": "T-0113",
+      "id": "T-0112",
       "line": 911,
       "text": "**DA-2026-09-04-087 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:140` (eslint)"
     },
     {
-      "id": "T-0114",
+      "id": "T-0113",
       "line": 913,
       "text": "**DA-2026-09-04-088 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:142` (eslint)"
     },
     {
-      "id": "T-0115",
+      "id": "T-0114",
       "line": 915,
       "text": "**DA-2026-09-04-089 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:159` (eslint)"
     },
     {
-      "id": "T-0116",
+      "id": "T-0115",
       "line": 917,
       "text": "**DA-2026-09-04-090 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:161` (eslint)"
     },
     {
-      "id": "T-0117",
+      "id": "T-0116",
       "line": 919,
       "text": "**DA-2026-09-04-091 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:176` (eslint)"
     },
     {
-      "id": "T-0118",
+      "id": "T-0117",
       "line": 921,
       "text": "**DA-2026-09-04-092 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:178` (eslint)"
     },
     {
-      "id": "T-0119",
+      "id": "T-0118",
       "line": 923,
       "text": "**DA-2026-09-04-093 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:189` (eslint)"
     },
     {
-      "id": "T-0120",
+      "id": "T-0119",
       "line": 925,
       "text": "**DA-2026-09-04-094 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:191` (eslint)"
     },
     {
-      "id": "T-0121",
+      "id": "T-0120",
       "line": 927,
       "text": "**DA-2026-09-04-095 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:205` (eslint)"
     },
     {
-      "id": "T-0122",
+      "id": "T-0121",
       "line": 929,
       "text": "**DA-2026-09-04-096 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:207` (eslint)"
     },
     {
-      "id": "T-0123",
+      "id": "T-0122",
       "line": 931,
       "text": "**DA-2026-09-04-097 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:218` (eslint)"
     },
     {
-      "id": "T-0124",
+      "id": "T-0123",
       "line": 933,
       "text": "**DA-2026-09-04-098 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:220` (eslint)"
     },
     {
-      "id": "T-0125",
+      "id": "T-0124",
       "line": 935,
       "text": "**DA-2026-09-04-099 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:234` (eslint)"
     },
     {
-      "id": "T-0126",
+      "id": "T-0125",
       "line": 937,
       "text": "**DA-2026-09-04-100 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:236` (eslint)"
     },
     {
-      "id": "T-0127",
+      "id": "T-0126",
       "line": 939,
       "text": "**DA-2026-09-04-101 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:247` (eslint)"
     },
     {
-      "id": "T-0128",
+      "id": "T-0127",
       "line": 941,
       "text": "**DA-2026-09-04-102 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:249` (eslint)"
     },
     {
-      "id": "T-0129",
+      "id": "T-0128",
       "line": 943,
       "text": "**DA-2026-09-04-103 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:263` (eslint)"
     },
     {
-      "id": "T-0130",
+      "id": "T-0129",
       "line": 945,
       "text": "**DA-2026-09-04-104 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:265` (eslint)"
     },
     {
-      "id": "T-0131",
+      "id": "T-0130",
       "line": 947,
       "text": "**DA-2026-09-04-105 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:276` (eslint)"
     },
     {
-      "id": "T-0132",
+      "id": "T-0131",
       "line": 949,
       "text": "**DA-2026-09-04-106 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:278` (eslint)"
     },
     {
-      "id": "T-0133",
+      "id": "T-0132",
       "line": 951,
       "text": "**DA-2026-09-04-107 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:291` (eslint)"
     },
     {
-      "id": "T-0134",
+      "id": "T-0133",
       "line": 953,
       "text": "**DA-2026-09-04-108 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:293` (eslint)"
     },
     {
-      "id": "T-0135",
+      "id": "T-0134",
       "line": 955,
       "text": "**DA-2026-09-04-109 · MEDIUM · @typescript-eslint/no-unused-vars** – `services/portal-worker/src/index.js:33` (eslint)"
     },
     {
-      "id": "T-0136",
+      "id": "T-0135",
       "line": 960,
       "text": "**DA-2026-09-04-111 · MEDIUM · Race Condition in Model Loading** – `services/samplemonk-ai-runtime/app.py:117` (hf-qwen)"
     },
     {
-      "id": "T-0137",
+      "id": "T-0136",
       "line": 969,
       "text": "**DA-2026-09-04-114 · MEDIUM · Potential Race Condition in Cache Eviction** – `services/samplemonk-ai-runtime/handlers.py:125` (hf-qwen)"
     },
     {
-      "id": "T-0138",
+      "id": "T-0137",
       "line": 975,
       "text": "**DA-2026-09-04-116 · MEDIUM · Potential Integer Overflow in Audio Resampling** – `services/samplemonk-ai-runtime/handlers.py:160` (hf-qwen)"
     },
     {
-      "id": "T-0139",
+      "id": "T-0138",
       "line": 981,
       "text": "**DA-2026-09-04-118 · MEDIUM · Fehlende Fehlerbehandlung bei Legacy-Endpoint-Löschung** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:109` (hf-qwen)"
     },
     {
-      "id": "T-0140",
+      "id": "T-0139",
       "line": 984,
       "text": "**DA-2026-09-04-119 · MEDIUM · Mögliche Race Condition bei Statusabfrage** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:124` (hf-qwen)"
     },
     {
-      "id": "T-0141",
+      "id": "T-0140",
       "line": 990,
       "text": "**DA-2026-09-04-121 · MEDIUM · Mögliche Race Condition bei Modell-Laden/Entladen** – `services/samplemonk-ai-runtime/mcp_runtime.py:69` (hf-qwen)"
     },
     {
-      "id": "T-0142",
+      "id": "T-0141",
       "line": 999,
       "text": "**DA-2026-09-04-124 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:139` (hf-qwen)"
     },
     {
-      "id": "T-0143",
+      "id": "T-0142",
       "line": 1017,
       "text": "**DA-2026-09-04-130 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:1` (eslint)"
     },
     {
-      "id": "T-0144",
+      "id": "T-0143",
       "line": 1019,
       "text": "**DA-2026-09-04-131 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:2` (eslint)"
     },
     {
-      "id": "T-0145",
+      "id": "T-0144",
       "line": 1021,
       "text": "**DA-2026-09-04-132 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:3` (eslint)"
     },
     {
-      "id": "T-0146",
+      "id": "T-0145",
       "line": 1023,
       "text": "**DA-2026-09-04-133 · MEDIUM · prefer-const** – `src/audio/worklets/dspProcessor.ts:135` (eslint)"
     },
     {
-      "id": "T-0147",
+      "id": "T-0146",
       "line": 1025,
       "text": "**DA-2026-09-04-134 · MEDIUM · react-hooks/use-memo** – `src/components/DJ4ChMixer.tsx:182` (eslint)"
     },
     {
-      "id": "T-0148",
+      "id": "T-0147",
       "line": 1027,
       "text": "**DA-2026-09-04-135 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/drop/DropGeneratorPanel.tsx:27` (eslint)"
     },
     {
-      "id": "T-0149",
+      "id": "T-0148",
       "line": 1029,
       "text": "**DA-2026-09-04-136 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:86` (eslint)"
     },
     {
-      "id": "T-0150",
+      "id": "T-0149",
       "line": 1031,
       "text": "**DA-2026-09-04-137 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:126` (eslint)"
     },
     {
-      "id": "T-0151",
+      "id": "T-0150",
       "line": 1033,
       "text": "**DA-2026-09-04-138 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:140` (eslint)"
     },
     {
-      "id": "T-0152",
+      "id": "T-0151",
       "line": 1035,
       "text": "**DA-2026-09-04-139 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:201` (eslint)"
     },
     {
-      "id": "T-0153",
+      "id": "T-0152",
       "line": 1037,
       "text": "**DA-2026-09-04-140 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:210` (eslint)"
     },
     {
-      "id": "T-0154",
+      "id": "T-0153",
       "line": 1039,
       "text": "**DA-2026-09-04-141 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:219` (eslint)"
     },
     {
-      "id": "T-0155",
+      "id": "T-0154",
       "line": 1041,
       "text": "**DA-2026-09-04-142 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/EQPluginTerminal.tsx:254` (eslint)"
     },
     {
-      "id": "T-0156",
+      "id": "T-0155",
       "line": 1043,
       "text": "**DA-2026-09-04-143 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasteringOverlay.tsx:60` (eslint)"
     },
     {
-      "id": "T-0157",
+      "id": "T-0156",
       "line": 1045,
       "text": "**DA-2026-09-04-144 · MEDIUM · react-hooks/refs** – `src/components/MasterPlayerTerminal.tsx:120` (eslint)"
     },
     {
-      "id": "T-0158",
+      "id": "T-0157",
       "line": 1047,
       "text": "**DA-2026-09-04-145 · MEDIUM · react-hooks/refs** – `src/components/MasterPlayerTerminal.tsx:130` (eslint)"
     },
     {
-      "id": "T-0159",
+      "id": "T-0158",
       "line": 1049,
       "text": "**DA-2026-09-04-146 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasterPlayerTerminal.tsx:194` (eslint)"
     },
     {
-      "id": "T-0160",
+      "id": "T-0159",
       "line": 1051,
       "text": "**DA-2026-09-04-147 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasterPlayerTerminal.tsx:272` (eslint)"
     },
     {
-      "id": "T-0161",
+      "id": "T-0160",
       "line": 1053,
       "text": "**DA-2026-09-04-148 · MEDIUM · react-hooks/refs** – `src/components/midi/MappingLearnPanel.tsx:28` (eslint)"
     },
     {
-      "id": "T-0162",
+      "id": "T-0161",
       "line": 1055,
       "text": "**DA-2026-09-04-149 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SemanticSampleSearch.tsx:71` (eslint)"
     },
     {
-      "id": "T-0163",
+      "id": "T-0162",
       "line": 1057,
       "text": "**DA-2026-09-04-150 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SettingsDialog.tsx:90` (eslint)"
     },
     {
-      "id": "T-0164",
+      "id": "T-0163",
       "line": 1059,
       "text": "**DA-2026-09-04-151 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:103` (eslint)"
     },
     {
-      "id": "T-0165",
+      "id": "T-0164",
       "line": 1061,
       "text": "**DA-2026-09-04-152 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:104` (eslint)"
     },
     {
-      "id": "T-0166",
+      "id": "T-0165",
       "line": 1063,
       "text": "**DA-2026-09-04-153 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:105` (eslint)"
     },
     {
-      "id": "T-0167",
+      "id": "T-0166",
       "line": 1065,
       "text": "**DA-2026-09-04-154 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:343` (eslint)"
     },
     {
-      "id": "T-0168",
+      "id": "T-0167",
       "line": 1067,
       "text": "**DA-2026-09-04-155 · MEDIUM · react-hooks/immutability** – `src/context/DropContext.tsx:150` (eslint)"
     },
     {
-      "id": "T-0169",
+      "id": "T-0168",
       "line": 1069,
       "text": "**DA-2026-09-04-156 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/context/DropContext.tsx:249` (eslint)"
     },
     {
-      "id": "T-0170",
+      "id": "T-0169",
       "line": 1074,
       "text": "**DA-2026-09-04-158 · MEDIUM · Fehlende Fehlerbehandlung bei RBAC-Prüfung** – `src/context/ModuleStateContext.tsx:59` (hf-qwen)"
     },
     {
-      "id": "T-0171",
+      "id": "T-0170",
       "line": 1077,
       "text": "**DA-2026-09-04-159 · MEDIUM · Potenzielle Race Condition bei Zustandsaktualisierung** – `src/context/ModuleStateContext.tsx:67` (hf-qwen)"
     },
     {
-      "id": "T-0172",
+      "id": "T-0171",
       "line": 1080,
       "text": "**DA-2026-09-04-160 · MEDIUM · Zugriff auf ref-Variable außerhalb von Callbacks** – `src/context/PluginManagerContext.tsx:32` (hf-qwen)"
     },
     {
-      "id": "T-0173",
+      "id": "T-0172",
       "line": 1086,
       "text": "**DA-2026-09-04-162 · MEDIUM · Möglicher Race Condition bei Lock-Abfrage** – `src/context/PluginManagerContext.tsx:58` (hf-qwen)"
     },
     {
-      "id": "T-0174",
+      "id": "T-0173",
       "line": 1089,
       "text": "**DA-2026-09-04-163 · MEDIUM · prefer-const** – `src/core/drop/AiDropGenerator.ts:169` (eslint)"
     },
     {
-      "id": "T-0175",
+      "id": "T-0174",
       "line": 1091,
       "text": "**DA-2026-09-04-164 · MEDIUM · @typescript-eslint/no-unused-expressions** – `src/core/workers/WorkerPool.ts:83` (eslint)"
     },
     {
-      "id": "T-0176",
+      "id": "T-0175",
       "line": 1093,
       "text": "**DA-2026-09-04-165 · MEDIUM · prefer-const** – `src/data/musicLibrary.ts:20` (eslint)"
     },
     {
-      "id": "T-0177",
+      "id": "T-0176",
       "line": 1095,
       "text": "**DA-2026-09-04-166 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useControlHub.ts:23` (eslint)"
     },
     {
-      "id": "T-0178",
+      "id": "T-0177",
       "line": 1097,
       "text": "**DA-2026-09-04-167 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useHID.ts:72` (eslint)"
     },
     {
-      "id": "T-0179",
+      "id": "T-0178",
       "line": 1099,
       "text": "**DA-2026-09-04-168 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMIDI.ts:175` (eslint)"
     },
     {
-      "id": "T-0180",
+      "id": "T-0179",
       "line": 1101,
       "text": "**DA-2026-09-04-169 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:43` (eslint)"
     },
     {
-      "id": "T-0181",
+      "id": "T-0180",
       "line": 1103,
       "text": "**DA-2026-09-04-170 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:46` (eslint)"
     },
     {
-      "id": "T-0182",
+      "id": "T-0181",
       "line": 1105,
       "text": "**DA-2026-09-04-171 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMidiClockOut.ts:62` (eslint)"
     },
     {
-      "id": "T-0183",
+      "id": "T-0182",
       "line": 1107,
       "text": "**DA-2026-09-04-172 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:86` (eslint)"
     },
     {
-      "id": "T-0184",
+      "id": "T-0183",
       "line": 1109,
       "text": "**DA-2026-09-04-173 · MEDIUM · Möglicher Race Condition bei Zustandsabfrage** – `src/hooks/usePluginState.ts:20` (hf-qwen)"
     },
     {
-      "id": "T-0185",
+      "id": "T-0184",
       "line": 1115,
       "text": "**DA-2026-09-04-175 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useRoom.ts:28` (eslint)"
     },
     {
-      "id": "T-0186",
+      "id": "T-0185",
       "line": 1126,
       "text": "**DA-2026-09-04-179 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:25` (eslint)"
     },
     {
-      "id": "T-0187",
+      "id": "T-0186",
       "line": 1128,
       "text": "**DA-2026-09-04-180 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:27` (eslint)"
     },
     {
-      "id": "T-0188",
+      "id": "T-0187",
       "line": 1130,
       "text": "**DA-2026-09-04-181 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:29` (eslint)"
     },
     {
-      "id": "T-0189",
+      "id": "T-0188",
       "line": 1132,
       "text": "**DA-2026-09-04-182 · MEDIUM · prefer-const** – `src/utils/audioEngine.ts:1946` (eslint)"
     },
     {
-      "id": "T-0190",
+      "id": "T-0189",
       "line": 1134,
       "text": "**DA-2026-09-04-183 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1963` (eslint)"
     },
     {
-      "id": "T-0191",
+      "id": "T-0190",
       "line": 1136,
       "text": "**DA-2026-09-04-184 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1965` (eslint)"
     },
     {
-      "id": "T-0192",
+      "id": "T-0191",
       "line": 1138,
       "text": "**DA-2026-09-04-185 · MEDIUM · import/no-dynamic-require** – `src/utils/LocalEmbeddingProvider.ts:41` (eslint)"
     },
     {
-      "id": "T-0193",
+      "id": "T-0192",
       "line": 1140,
       "text": "**DA-2026-09-04-186 · MEDIUM · prefer-const** – `src/utils/usageAnalytics.ts:16` (eslint)"
     },
     {
-      "id": "T-0194",
+      "id": "T-0193",
       "line": 1145,
       "text": "**DA-2026-09-04-188 · MEDIUM · Race Condition bei Peer-Verbindungen** – `src/utils/WebRTCManager.ts:170` (hf-qwen)"
     },
     {
-      "id": "T-0195",
+      "id": "T-0194",
       "line": 1156,
       "text": "**DA-2026-09-04-190 · MEDIUM · @typescript-eslint/no-require-imports** – `server.ts:1454` (eslint)"
     },
     {
-      "id": "T-0196",
+      "id": "T-0195",
       "line": 1158,
       "text": "**DA-2026-09-04-191 · MEDIUM · Fehlerhafte Regex-Logik bei Kategorisierung** – `server/cloudAutomation.ts:100` (hf-qwen)"
     },
     {
-      "id": "T-0197",
+      "id": "T-0196",
       "line": 1164,
       "text": "**DA-2026-09-04-193 · MEDIUM · Zugriff auf Umgebungsvariablen ohne Sicherheitsprüfungen** – `server/cloudAutomation.ts:132` (hf-qwen)"
     },
     {
-      "id": "T-0198",
+      "id": "T-0197",
       "line": 1167,
       "text": "**DA-2026-09-04-194 · MEDIUM · Uvicorn bindet ohne sichtbare Authentifizierung an 0.0.0.0** – `services/backend-core/package.json:8` (deepseek-pro)"
     },
     {
-      "id": "T-0199",
+      "id": "T-0198",
       "line": 1170,
       "text": "**DA-2026-09-04-195 · HIGH · Unvalidated File Path in `_validate_audio_file`** – `services/backend-core/python/celery_app.py:33` (hf-qwen)"
     },
     {
-      "id": "T-0200",
+      "id": "T-0199",
       "line": 1173,
       "text": "**DA-2026-09-04-196 · MEDIUM · Race Condition in `_load_demucs`** – `services/backend-core/python/celery_app.py:104` (hf-qwen)"
     },
     {
-      "id": "T-0201",
+      "id": "T-0200",
       "line": 1176,
       "text": "**DA-2026-09-04-197 · MEDIUM · Race Condition in `_load_musicgen`** – `services/backend-core/python/celery_app.py:120` (hf-qwen)"
     },
     {
-      "id": "T-0202",
+      "id": "T-0201",
       "line": 1179,
       "text": "**DA-2026-09-04-198 · HIGH · Ungeprüfte Benutzereingabe in JSON-Validierung** – `services/backend-core/python/hypersonic_moa.py:57` (hf-qwen)"
     },
     {
-      "id": "T-0203",
+      "id": "T-0202",
       "line": 1182,
       "text": "**DA-2026-09-04-199 · MEDIUM · Potential Race Condition in Model Loading** – `services/samplemonk-ai-runtime/app.py:124` (hf-qwen)"
     },
     {
-      "id": "T-0204",
+      "id": "T-0203",
       "line": 1185,
       "text": "**DA-2026-09-04-200 · HIGH · Sensitive Data Exposure in Error Logging** – `services/samplemonk-ai-runtime/app.py:140` (hf-qwen)"
     },
     {
-      "id": "T-0205",
+      "id": "T-0204",
       "line": 1191,
       "text": "**DA-2026-09-04-202 · HIGH · Unvalidated User Input in Model ID and Task** – `services/samplemonk-ai-runtime/handlers.py:105` (hf-qwen)"
     },
     {
-      "id": "T-0206",
+      "id": "T-0205",
       "line": 1194,
       "text": "**DA-2026-09-04-203 · MEDIUM · Fehlende Fehlerbehandlung bei Audio-Resampling** – `services/samplemonk-ai-runtime/handlers.py:130` (hf-qwen)"
     },
     {
-      "id": "T-0207",
+      "id": "T-0206",
       "line": 1197,
       "text": "**DA-2026-09-04-204 · HIGH · Potenzielle Exposition von Secrets in Logs** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104` (hf-qwen)"
     },
     {
-      "id": "T-0208",
+      "id": "T-0207",
       "line": 1200,
       "text": "**DA-2026-09-04-205 · MEDIUM · Unsichere Fehlerbehandlung bei `get_inference_endpoint`** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:122` (hf-qwen)"
     },
     {
-      "id": "T-0209",
+      "id": "T-0208",
       "line": 1203,
       "text": "**DA-2026-09-04-206 · MEDIUM · Mangelnde Trennung von Konfiguration und Logik** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:130` (hf-qwen)"
     },
     {
-      "id": "T-0210",
+      "id": "T-0209",
       "line": 1206,
       "text": "**DA-2026-09-04-207 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:130` (hf-qwen)"
     },
     {
-      "id": "T-0211",
+      "id": "T-0210",
       "line": 1209,
       "text": "**DA-2026-09-04-208 · MEDIUM · Nicht expliziter Fehlerfall bei fehlender VRAM** – `services/samplemonk-ai-runtime/model_manager.py:190` (hf-qwen)"
     },
     {
-      "id": "T-0212",
+      "id": "T-0211",
       "line": 1212,
       "text": "**DA-2026-09-04-209 · MEDIUM · Fehlende Hash-Pins und kein Lockfile für Supply-Chain-Sicherheit** – `services/samplemonk-ai-runtime/pyproject.toml:7` (deepseek-pro)"
     },
     {
-      "id": "T-0213",
+      "id": "T-0212",
       "line": 1215,
       "text": "**DA-2026-09-04-210 · MEDIUM · Veraltete und exakt gepinnte PyTorch-Version (torch==2.4.1)** – `services/samplemonk-ai-runtime/pyproject.toml:11` (deepseek-pro)"
     },
     {
-      "id": "T-0214",
+      "id": "T-0213",
       "line": 1218,
       "text": "**DA-2026-09-04-211 · MEDIUM · Revision-Pinning kann durch explizites `null` umgangen werden** – `services/samplemonk-ai-runtime/registry.py:26` (deepseek-flash)"
     },
     {
-      "id": "T-0215",
+      "id": "T-0214",
       "line": 1221,
       "text": "**DA-2026-09-04-212 · MEDIUM · Working-directory change via dirname $0 breaks when invoked through symlink** – `services/samplemonk-ai-runtime/startup.sh:9` (deepseek-flash)"
     },
     {
-      "id": "T-0216",
+      "id": "T-0215",
       "line": 1224,
       "text": "**DA-2026-09-04-213 · MEDIUM · No write/space verification for HF_HOME persistent cache** – `services/samplemonk-ai-runtime/startup.sh:10` (deepseek-flash)"
     },
     {
-      "id": "T-0217",
+      "id": "T-0216",
       "line": 1227,
       "text": "**DA-2026-09-04-214 · HIGH · AI_RUNTIME_DEVICE defaults to cuda with no validation** – `services/samplemonk-ai-runtime/startup.sh:13` (deepseek-flash)"
     },
     {
-      "id": "T-0218",
+      "id": "T-0217",
       "line": 1230,
       "text": "**DA-2026-09-04-215 · MEDIUM · AI-Runtime lauscht ungeschützt auf allen Interfaces** – `services/samplemonk-ai-runtime/startup.sh:18` (deepseek-pro)"
     },
     {
-      "id": "T-0219",
+      "id": "T-0218",
       "line": 1233,
       "text": "**DA-2026-09-04-216 · MEDIUM · Server binds 0.0.0.0 with no authentication or proxy boundary check** – `services/samplemonk-ai-runtime/startup.sh:21` (deepseek-flash)"
     },
     {
-      "id": "T-0220",
+      "id": "T-0219",
       "line": 1236,
       "text": "**DA-2026-09-04-217 · MEDIUM · updateState ist nicht stabil und kann stale lockStatus verwenden** – `src/hooks/usePluginState.ts:28` (deepseek-pro)"
     },
     {
-      "id": "T-0221",
+      "id": "T-0220",
       "line": 1239,
       "text": "**DA-2026-09-04-218 · HIGH · Autorisierung nur clientseitig – Lock-Prüfung nicht im Backend erzwungen** – `src/hooks/usePluginState.ts:29` (deepseek-pro)"
     },
     {
-      "id": "T-0222",
+      "id": "T-0221",
       "line": 1242,
       "text": "**DA-2026-09-04-219 · MEDIUM · syncAdd sends arbitrary unvalidated sample to remote peers** – `src/hooks/useSessionSync.ts:35` (deepseek-pro)"
     },
     {
-      "id": "T-0223",
+      "id": "T-0222",
       "line": 1245,
       "text": "**DA-2026-09-04-220 · MEDIUM · Race Condition bei SFU-Modus-Umschaltung** – `src/utils/WebRTCManager.ts:150` (hf-qwen)"
     },
     {
-      "id": "T-0224",
+      "id": "T-0223",
       "line": 1248,
       "text": "**DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)"
     }
