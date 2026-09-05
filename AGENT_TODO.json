@@ -429,8 +429,8 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "YES",
-      "ready": false,
-      "status": "BLOCKED",
+      "ready": true,
+      "status": "COMPLETED",
       "taskId": "BLOCK-004"
     },
     {
@@ -3499,8 +3499,8 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
+      "ready": true,
+      "status": "COMPLETED",
       "taskId": "BLOCK-200"
     },
     {

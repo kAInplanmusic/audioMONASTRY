@@ -1032,7 +1032,6 @@
 
 ---
 
-
 ---
 
 ## Quelle: MASTER_TODO.md – Deep-TODO-Batch ohne Server/Hardware abgeschlossen (2026-09-01)
@@ -1205,3 +1204,527 @@ Reine Hörproben bleiben in `docs/LIVE_CHECKLIST_2026-09-02.md` offen.
 ## Quelle: MASTER_TODO.md – Batch 16 abgeschlossen (2026-09-03)
 
 - [x] **Semantische Suche (Supabase-Embedding-Pfad):** `textEmbedding.ts` (deterministisch, 256-dim, L2-normalisiert) + `aiPersistence.rpcMatchSamples()` + Migration 005 (`sample_embeddings` mit `extensions.vector(256)`, HNSW-Index, `match_samples`-RPC, RLS service_role-only); `/api/library/search` nutzt RPC bei konfiguriertem Supabase, sonst Keyword-Fallback; Tests grün
+
+---
+
+## Abgleich 2026-09-05 – aus MASTER_TODO verschoben (laut AGENT-Pipeline COMPLETED)
+
+> 172 Eintraege wurden am 2026-09-05 aus `MASTER_TODO.md` entfernt und hier archiviert.
+> Zuordnung ueber `AGENT_TODO.json` (Status `COMPLETED`) und `AGENT_TODO.md`.
+
+- [x] (Pipeline: TASK-013) **A-2 `audioEngine.ts` 2814-Zeilen-Monolith (Mittel)** – in Graph-Aufbau/Worklet-Factory/Routing/Monitoring schneiden; Kernpfad-Coverage (26,7 %) erhöhen.
+
+- [x] (Pipeline: TASK-014) **A-3 Fehlgeschlagene Worklets nicht entsorgt (Mittel)** – `makeWorklet`-Fallbacks disconnecten und im Teardown führen.
+
+- [x] (Pipeline: TASK-001) **A-5 Allokationen im `process()`-Pfad bei Kanal-/Quantum-Wechsel (Niedrig)** – im Konstruktor auf Maximalkanäle/-quantum vorallozieren.
+
+- [x] (Pipeline: TASK-015) **F-2 Vier parallele Lock-Modelle (Mittel)** – auf ein serverseitig autoritatives Modell konsolidieren.
+
+- [x] (Pipeline: TASK-016) **F-5 160× `any` (Mittel)** – Zod-Schemas für alle Peer-Payloads; Feature-Detection eng typisieren.
+
+- [x] (Pipeline: TASK-002) **F-6 Non-null-Assertions ohne Guard (Niedrig)** – explizite Guards mit sprechender Meldung.
+
+- [x] (Pipeline: TASK-003) **F-7 Handler-Zuweisung statt Subscription (Niedrig)** – `onMainStream`/`onSessionUpdate` auf `addDataChannelListener`-Muster mit Unsubscribe.
+
+- [x] (Pipeline: TASK-004) **F-8 Accessibility (Niedrig)** – Slider-Rollen, `aria-pressed`, `aria-disabled`/`aria-label` für Lock-Zustand.
+
+- [x] (Pipeline: TASK-005) **Q-1 `check:memo` und `npm audit` fehlen als CI-Gates.**
+
+- [x] (Pipeline: TASK-006) **Q-2 Bundle 1.56 MB > 1.50 MB Warnschwelle** – `tone`/`lucide-react` splitten/tree-shaken.
+
+- [x] (Pipeline: TASK-007) **Q-3 Coverage 32,6 %; untertestete Risiko-Dateien:** `audioEngine.ts` 26,7 %, `WebRTCManager.ts` 26,0 %, `rbac.ts` 0 %, `AuditLogger.ts` 0 %, `dropAudioBridge.ts` 0 %, `audioAnalyzer.ts` 0 %, `presetStore.ts`/`opfs.ts` 0 %.
+
+- [x] (Pipeline: TASK-008) **Q-4 `rbac.ts` (sicherheitsrelevant) mit Tests abdecken.**
+
+- [x] (Pipeline: TASK-017) **AD-M3 Backend-Bugs:** `cloudAutomation.ts:100` Regex-Logik; `cloudAutomation.ts:132` Env-Zugriffe; `celery_app.py:104/120` Race Conditions `_load_demucs`/`_load_musicgen`; `hypersonic_moa.py:67` leerer Prompt; `app.py:124` + `handlers.py:105` Race Conditions Model-Loading; `handlers.py:130` Resampling-Fehlerbehandlung; `hf_manage_endpoint.py:122/130` Fehlerbehandlung/Trennung Konfiguration-Logik; `model_manager.py:130/190` Race/Load + VRAM-Fehlerfall; `registry.py:26` Revision-Pinning via `null`; `startup.sh:9/10` Symlink-Pfad + HF_HOME-Space-Check.
+
+- [x] (Pipeline: TASK-009) **AD-N2 ESLint-Low-Hänger** – `scripts/**` teilgefixt (2026-09-05). Offen: `server.ts`, `ai/localDemucs.ts`, `audio-runtime/src/main.rs`.
+
+- [x] (Pipeline: TASK-010) **AD-N3 160× `any`/`as any` + 3× ts-ignore reduzieren** (deckungsgleich mit F-5/AUDIT.md).
+
+- [x] (Pipeline: TASK-011) **P1-1 Statische V1-Verkabelung verifizieren:** Importe/Initialisierung, alle `connect()`-Aufrufe, Fehlerbehandlung – als Test-/Audit-Schritt dokumentieren.
+
+- [x] (Pipeline: TASK-012) **P1-3 Laufzeit-Prüfungen:** `audioContext.state`, `sampleRate`, `baseLatency`, `outputLatency` sichtbar machen (perfMONK nutzt `getAudioHealth()` bereits).
+
+- [x] (Pipeline: BACKLOG-010) **P1-4 Debug-/Analyser-Pfad:** `analyzerNode` → Visualisierung als fester Debug-Schritt dokumentieren/testen.
+
+- [x] (Pipeline: BACKLOG-011) **P1-5 Offline-Integrationstest:** `OfflineAudioContext`-Roundtrip (V1-Quelle → Kanalzug → Master → Bounce) automatisiert (goldenAudio/bounceGraph erweitern).
+
+- [x] (Pipeline: BACKLOG-012) **P1-6 PerformanceObserver:** Audio-Verarbeitungsdauer messen und in perfMONK anbinden.
+
+- [x] (Pipeline: BACKLOG-013) **P1-7 100-%-Checkliste als Gate:** die 8 Punkte (Imports, Verkabelung, Fehlerbehandlung, Unit, Integration, Konsolenfehler, hörbar, Performance) in `npm run verify` oder CI aufnehmen.
+
+- [x] (Pipeline: TASK-019) **P2-1 Core-Engine-Audit nach dem 4-Schritte-Schema** (Bestandsaufnahme → Abgleich → Bewertung umgesetzt/teilweise/nicht → Maßnahmen) einmalig für die Audio-Engine durchführen; Ergebnis als Abschnitt in MASTER_TODO/TASKDONE.
+
+- [x] (Pipeline: TASK-020) **P2-2 Methodik als wiederholbares Skript/Checkliste** in `scripts/` (z. B. `core-engine-abgleich.md`) ablegen, damit künftige Audits identisch ablaufen.
+
+- [x] (Pipeline: BACKLOG-014) **P3-1 Routing-Dynamik prüfen:** V1 ist fest verdrahtet, `routing.json` wird nur teilweise angewendet. Machbarkeitsstudie: dynamisch rekonfigurierbarer Graph auf `AudioGraph` (V2) mit variablen Ports; Feedback-Schleifen nur nach Stabilitäts-/Phasentests.
+
+- [x] (Pipeline: BACKLOG-015) **P3-2 Einheitliche Port-API:** `IAudioPort`/`AudioPort` als verbindliche Schnittstelle für alle Module etablieren; variable Port-Anzahl erlauben.
+
+- [x] (Pipeline: TASK-021) **P3-3 Clock & Synchronisation messen:** Jitter < ±1 Sample bei 48 kHz verifizieren; parallele Verteilung vs. Kaskade dokumentieren; Hot-Plug-Verhalten testen (deckt P2-1/P2-2 Rest).
+
+- [x] (Pipeline: BACKLOG-016) **P3-4 Latenzkompensation:** `getLatencyBudgetMs()` einführen und je Modul automatische Delay-Compensation vorbereiten (deckt A-4).
+
+- [x] (Pipeline: BACKLOG-017) **P3-5 Proprietäre Mathematik:** DSP-Modell-Versionierung einführen (z. B. `Compressor_v2.3`); LUT vs. Echtzeitberechnung je Algorithmus dokumentieren (Release-LUT ist schon da).
+
+- [x] (Pipeline: BACKLOG-032) **Prüfpunkt (Betreiber-Schritt):** CI-Lauf auf GitHub grün; Report enthält je Plugin Score, Dauer, Fehler.
+
+- [x] (Pipeline: TASK-026) **Prüfpunkt (Betreiber-Schritt):** HF-Endpoint-Secret rotieren (dokumentiert in `docs/AI_SECURITY_GUIDE.md`).
+
+- [x] (Pipeline: BACKLOG-040) **AI-Docker-Build/GPU-Test (CI/Betreiber):** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert).
+
+- [x] (Pipeline: BACKLOG-042) **DA-2026-09-04-001 · MEDIUM · @typescript-eslint/no-unused-vars** – `build-worklets.mjs:4` (eslint)
+  - 'copyFile' is defined but never used.
+
+- [x] (Pipeline: BACKLOG-043) **DA-2026-09-04-002 · MEDIUM · Verwundbarkeit: body-parser** – `package-lock.json` (npm-audit)
+  - qs
+  - Vorschlag: npm audit fix ausführen
+
+- [x] (Pipeline: BACKLOG-044) **DA-2026-09-04-003 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/check-react-memo.mjs:6` (eslint)
+  - 'existsSync' is defined but never used.
+
+- [x] (Pipeline: BACKLOG-045) **DA-2026-09-04-004 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/download-orchestral.mjs:17` (eslint)
+  - 'createReadStream' is defined but never used.
+
+- [x] (Pipeline: BACKLOG-046) **DA-2026-09-04-005 · MEDIUM · prefer-const** – `scripts/dsp-benchmark.ts:67` (eslint)
+  - 'b0' is never reassigned. Use 'const' instead.
+
+- [x] (Pipeline: BACKLOG-051) **DA-2026-09-04-010 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:147` (eslint)
+  - 'e' is defined but never used.
+
+- [x] (Pipeline: BACKLOG-052) **DA-2026-09-04-011 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:167` (eslint)
+  - 'e' is defined but never used.
+
+- [x] (Pipeline: BACKLOG-053) **DA-2026-09-04-019 · MEDIUM · Race Condition in Stem-Job-Management** – `server.ts:430` (hf-qwen)
+  - Die stemActiveJobs Variable wird inkrementiert und dekrementiert, aber es gibt keine Mutex- oder Lock-Mechanismus, was zu Race Conditions führen kann.
+  - Vorschlag: Verwende eine atomare Operation oder einen Mutex für den Zugriff auf stemActiveJobs, um Race Conditions zu verhindern.
+
+- [x] (Pipeline: BACKLOG-054) **DA-2026-09-04-020 · MEDIUM · Potenzieller Zustandsverlust bei Stem-Jobs** – `server.ts:440` (hf-qwen)
+  - Die stemJobStatus Map wird nicht synchronisiert, was zu Zustandsverlusten führen kann, wenn Jobs parallel verarbeitet werden.
+  - Vorschlag: Verwende eine synchronisierte Datenstruktur oder einen Lock-Mechanismus für den Zugriff auf stemJobStatus.
+
+- [x] (Pipeline: BACKLOG-055) **DA-2026-09-04-021 · MEDIUM · Unvollständige Fehlerbehandlung in parseMultipartStream** – `server.ts:470` (hf-qwen)
+  - Die parseMultipartStream Funktion kann nicht sicherstellen, dass alle Streams korrekt geschlossen werden, was zu Speicherlecks führen kann.
+  - Vorschlag: Stelle sicher, dass alle Streams korrekt geschlossen werden und Speicher freigegeben wird, auch bei Fehlern.
+
+- [x] (Pipeline: BACKLOG-056) **DA-2026-09-04-022 · MEDIUM · @typescript-eslint/no-require-imports** – `server.ts:1422` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-057) **DA-2026-09-04-026 · MEDIUM · Unzureichende Validierung von Umgebungsvariablen** – `server/cloud.ts:159` (hf-qwen)
+  - Die Funktion `r2Client()` akzeptiert Umgebungsvariablen ohne ausreichende Prüfung auf Gültigkeit und Sicherheit.
+  - Vorschlag: Füge zusätzliche Validierungen hinzu, um sicherzustellen, dass die Umgebungsvariablen korrekt formatiert sind und keine gefährlichen Werte enthalten.
+
+- [x] (Pipeline: BACKLOG-058) **DA-2026-09-04-028 · MEDIUM · Möglicher Fehler bei fehlenden Supabase-Konfiguration** – `server/cloudAutomation.ts:104` (hf-qwen)
+  - In `ingestAudioObject` wird geprüft, ob `db` existiert, aber es gibt keine explizite Fehlerbehandlung, falls die Supabase-Instanz nicht korrekt initialisiert wurde. Dies kann zu unerwarteten Fehlern führen, wenn die Umgebungsvariablen fehlen.
+  - Vorschlag: Füge Logging hinzu, um das Fehlen der Supabase-Konfiguration zu protokollieren, und prüfe, ob die Umgebungsvariablen wirklich leer sind oder nur nicht gesetzt wurden.
+
+- [x] (Pipeline: BACKLOG-059) **DA-2026-09-04-029 · MEDIUM · Potenzielle Race Condition bei Tag-Synchronisation** – `server/cloudAutomation.ts:119` (hf-qwen)
+  - In `ingestAudioObject` wird zunächst `sample_tags` gelöscht und dann neu eingefügt. Falls zwischen diesen beiden Operationen ein anderer Prozess auf dieselben Daten zugreift, kann dies zu inkonsistenten Zuständen führen.
+  - Vorschlag: Nutze Transaktionen oder eine atomare Operation, um sicherzustellen, dass die Tags-Synchronisation konsistent bleibt.
+
+- [x] (Pipeline: BACKLOG-060) **DA-2026-09-04-033 · MEDIUM · @typescript-eslint/no-require-imports** – `services/backend-core/node/index.js:1` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-061) **DA-2026-09-04-034 · MEDIUM · Race Condition bei Client-Verwaltung** – `services/backend-core/node/index.js:14` (hf-qwen)
+  - Es besteht eine Race Condition zwischen dem Setzen des 'userId' und dem Empfang weiterer Nachrichten. Ein Client kann Nachrichten senden, bevor er initialisiert wurde, was zu Fehlern oder inkonsistentem Zustand führen kann.
+  - Vorschlag: Verzögere die Verarbeitung von Nicht-'init'-Nachrichten, bis der 'userId' gesetzt wurde, oder implementiere eine Warteschlange für uninitialisierte Clients.
+
+- [x] (Pipeline: BACKLOG-063) **DA-2026-09-04-039 · MEDIUM · Unvollständige Lock-Cleanup-Logik** – `services/backend-core/node/index.js:47` (hf-qwen)
+  - Beim Schließen der Verbindung werden nur Locks entfernt, wenn der Nutzer der Besitzer war. Es gibt keine Prüfung, ob der Nutzer tatsächlich noch verbunden ist, was zu verwaisten Locks führen kann.
+  - Vorschlag: Überprüfe zusätzlich, ob der Besitzer noch verbunden ist, bevor du den Lock freigibst, um verwaiste Locks zu verhindern.
+
+- [x] (Pipeline: BACKLOG-064) **DA-2026-09-04-046 · MEDIUM · Race Condition in Lazy Loading** – `services/backend-core/python/celery_app.py:123` (hf-qwen)
+  - There's a potential race condition in `_load_demucs()` and `_load_musicgen()` where two threads might attempt to load the same module simultaneously, leading to redundant loading or inconsistent state.
+  - Vorschlag: Use double-checked locking pattern correctly by checking again inside the lock to avoid redundant initialization.
+
+- [x] (Pipeline: BACKLOG-066) **DA-2026-09-04-054 · MEDIUM · Unnötige JSON-Konvertierung bei Fehlerfällen** – `services/backend-core/python/main.py:100` (hf-qwen)
+  - Bei Fehlern wird versucht, den Response-Body als JSON zu parsen, obwohl der Service möglicherweise keinen gültigen JSON-Body zurückgibt. Dies kann zu unnötigen Fehlern führen.
+  - Vorschlag: Prüfe vorher, ob der Content-Type des Responses 'application/json' ist, bevor du `.json()` aufrufst.
+
+- [x] (Pipeline: BACKLOG-072) **DA-2026-09-04-070 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:7` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-073) **DA-2026-09-04-071 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:8` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-074) **DA-2026-09-04-072 · MEDIUM · @typescript-eslint/no-unused-vars** – `services/mixer/index.js:23` (eslint)
+  - 'e' is defined but never used.
+
+- [x] (Pipeline: BACKLOG-075) **DA-2026-09-04-073 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:39` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-076) **DA-2026-09-04-074 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:41` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-077) **DA-2026-09-04-075 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:51` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-078) **DA-2026-09-04-076 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:53` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-079) **DA-2026-09-04-077 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:71` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-080) **DA-2026-09-04-078 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:73` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-081) **DA-2026-09-04-079 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:85` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-082) **DA-2026-09-04-080 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:87` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-083) **DA-2026-09-04-081 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:99` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-084) **DA-2026-09-04-082 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:101` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-085) **DA-2026-09-04-083 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:115` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-086) **DA-2026-09-04-084 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:117` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-087) **DA-2026-09-04-085 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:126` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-088) **DA-2026-09-04-086 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:128` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-089) **DA-2026-09-04-087 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:140` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-090) **DA-2026-09-04-088 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:142` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-091) **DA-2026-09-04-089 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:159` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-092) **DA-2026-09-04-090 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:161` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-093) **DA-2026-09-04-091 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:176` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-094) **DA-2026-09-04-092 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:178` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-095) **DA-2026-09-04-093 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:189` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-096) **DA-2026-09-04-094 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:191` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-097) **DA-2026-09-04-095 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:205` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-098) **DA-2026-09-04-096 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:207` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-099) **DA-2026-09-04-097 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:218` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-100) **DA-2026-09-04-098 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:220` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-101) **DA-2026-09-04-099 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:234` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-102) **DA-2026-09-04-100 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:236` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-103) **DA-2026-09-04-101 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:247` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-104) **DA-2026-09-04-102 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:249` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-105) **DA-2026-09-04-103 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:263` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-106) **DA-2026-09-04-104 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:265` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-107) **DA-2026-09-04-105 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:276` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-108) **DA-2026-09-04-106 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:278` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-109) **DA-2026-09-04-107 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:291` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-110) **DA-2026-09-04-108 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:293` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-111) **DA-2026-09-04-109 · MEDIUM · @typescript-eslint/no-unused-vars** – `services/portal-worker/src/index.js:33` (eslint)
+  - 'REPO_URL' is assigned a value but never used.
+
+- [x] (Pipeline: BACKLOG-112) **DA-2026-09-04-111 · MEDIUM · Race Condition in Model Loading** – `services/samplemonk-ai-runtime/app.py:117` (hf-qwen)
+  - There's a potential race condition between model loading in the background thread and inference requests. The STATE.models_ready flag is set after preloading but there's no synchronization mechanism to ensure all models are actually available before allowing inference.
+  - Vorschlag: Add proper synchronization mechanisms such as locks or atomic flags to ensure model availability before allowing inference requests.
+
+- [x] (Pipeline: BACKLOG-113) **DA-2026-09-04-114 · MEDIUM · Potential Race Condition in Cache Eviction** – `services/samplemonk-ai-runtime/handlers.py:125` (hf-qwen)
+  - The cache eviction logic in `_cache_get` uses `popitem(last=False)` which may lead to race conditions if multiple threads access the cache simultaneously during eviction. This could cause inconsistent behavior or loss of cached models.
+  - Vorschlag: Use thread-safe operations or locks around cache access during eviction to prevent race conditions. Alternatively, consider using a dedicated thread-safe cache implementation like `collections.OrderedDict` with proper locking mechanisms.
+
+- [x] (Pipeline: BACKLOG-114) **DA-2026-09-04-116 · MEDIUM · Potential Integer Overflow in Audio Resampling** – `services/samplemonk-ai-runtime/handlers.py:160` (hf-qwen)
+  - In `_read_audio`, when calculating `new_len` for resampling, there's no explicit check for integer overflow or underflow. If `duration` or `target_sr` are extremely large or small, it could lead to incorrect resampled lengths or errors.
+  - Vorschlag: Validate that `duration * target_sr` results in a reasonable integer value before casting to int. Add bounds checking to prevent potential overflows.
+
+- [x] (Pipeline: BACKLOG-116) **DA-2026-09-04-119 · MEDIUM · Mögliche Race Condition bei Statusabfrage** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:124` (hf-qwen)
+  - Die Statusabfrage (`get_inference_endpoint`) kann unter bestimmten Bedingungen zu einer Race Condition führen, wenn der Endpoint kurzzeitig nicht verfügbar ist. Die Abfrage erfolgt ohne Retry-Mechanismus.
+  - Vorschlag: Implementiere einen Retry-Mechanismus mit Exponential Backoff für die Statusabfrage, um temporäre Netzwerkprobleme oder API-Latenz zu berücksichtigen.
+
+- [x] (Pipeline: BACKLOG-117) **DA-2026-09-04-121 · MEDIUM · Mögliche Race Condition bei Modell-Laden/Entladen** – `services/samplemonk-ai-runtime/mcp_runtime.py:69` (hf-qwen)
+  - Die Methoden `_tool_model_load` und `_tool_model_unload` rufen direkt Methoden des Managers auf, ohne Synchronisation. Bei parallelen Anfragen kann dies zu inkonsistentem Zustand führen.
+  - Vorschlag: Implementiere eine Mutex/Sperre um sicherzustellen, dass Modelloperationen atomar ablaufen.
+
+- [x] (Pipeline: BACKLOG-118) **DA-2026-09-04-124 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:139` (hf-qwen)
+  - Obwohl ein `_loading`-Set zur Deduplikation verwendet wird, gibt es einen potenziellen Race Condition, wenn zwei Threads gleichzeitig prüfen, ob ein Modell geladen ist und beide gleichzeitig versuchen es zu laden.
+  - Vorschlag: Stelle sicher, dass die Prüfung auf `_loaded` und `_loading` atomar erfolgt. Alternativ: Verwende eine Lock-Strategie, die alle Zugriffe auf `model_id` synchronisiert, um Race Conditions vollständig zu vermeiden.
+
+- [x] (Pipeline: BACKLOG-119) **DA-2026-09-04-130 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:1` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-120) **DA-2026-09-04-131 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:2` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-121) **DA-2026-09-04-132 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:3` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-122) **DA-2026-09-04-133 · MEDIUM · prefer-const** – `src/audio/worklets/dspProcessor.ts:135` (eslint)
+  - 'y1' is never reassigned. Use 'const' instead.
+
+- [x] (Pipeline: BACKLOG-123) **DA-2026-09-04-134 · MEDIUM · react-hooks/use-memo** – `src/components/DJ4ChMixer.tsx:182` (eslint)
+  - Error: Expected the first argument to be an inline function expression  Expected the first argument to be an inline function expression.  /home/patrick/audioMONASTRY/src/components/DJ4ChMixer.tsx:182:26   180 |   181 | export const DJMixer = React.memo(function DJMixer() { > 182 |   const strips = useMemo(buildStrips, []);       |                          ^^^^^^^^^^^ Expected the first argument to
+
+- [x] (Pipeline: BACKLOG-125) **DA-2026-09-04-136 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:86` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-126) **DA-2026-09-04-137 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:126` (eslint)
+  - Compilation Skipped: Existing memoization could not be preserved  React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.  /home/patrick/audioMONASTRY/src/components/DrumMachineTerminal.tsx:126:38   124 |   }, []);   125 | > 126 |   const playStepSample = useCallback((sampl
+
+- [x] (Pipeline: BACKLOG-127) **DA-2026-09-04-138 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:140` (eslint)
+  - Compilation Skipped: Existing memoization could not be preserved  React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.  /home/patrick/audioMONASTRY/src/components/DrumMachineTerminal.tsx:140:7   138 |     const match = activeDrumKit.sounds.find((
+
+- [x] (Pipeline: BACKLOG-128) **DA-2026-09-04-139 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:201` (eslint)
+  - Compilation Skipped: Existing memoization could not be preserved  React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.  /home/patrick/audioMONASTRY/src/components/DrumMachineTerminal.tsx:201:40   199 |   };   200 | > 201 |   const handleSampleDrop = useCallback((sample:
+
+- [x] (Pipeline: BACKLOG-129) **DA-2026-09-04-140 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:210` (eslint)
+  - Compilation Skipped: Existing memoization could not be preserved  React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This dependency may be mutated later, which could cause the value to change unexpectedly.  /home/patrick/audioMONASTRY/src/components/DrumMachineTerminal.tsx:210:34   208 |       return { ...prev, [key]: arr };   209
+
+- [x] (Pipeline: BACKLOG-130) **DA-2026-09-04-141 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:219` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-131) **DA-2026-09-04-142 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/EQPluginTerminal.tsx:254` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-132) **DA-2026-09-04-143 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasteringOverlay.tsx:60` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-133) **DA-2026-09-04-144 · MEDIUM · react-hooks/refs** – `src/components/MasterPlayerTerminal.tsx:120` (eslint)
+  - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/components/MasterPlayerTerm
+
+- [x] (Pipeline: BACKLOG-134) **DA-2026-09-04-145 · MEDIUM · react-hooks/refs** – `src/components/MasterPlayerTerminal.tsx:130` (eslint)
+  - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/components/MasterPlayerTerm
+
+- [x] (Pipeline: BACKLOG-135) **DA-2026-09-04-146 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasterPlayerTerminal.tsx:194` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-136) **DA-2026-09-04-147 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasterPlayerTerminal.tsx:272` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-138) **DA-2026-09-04-149 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SemanticSampleSearch.tsx:71` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-139) **DA-2026-09-04-150 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SettingsDialog.tsx:90` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-140) **DA-2026-09-04-151 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:103` (eslint)
+  - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/context/AudioContext.tsx:10
+
+- [x] (Pipeline: BACKLOG-141) **DA-2026-09-04-152 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:104` (eslint)
+  - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/context/AudioContext.tsx:10
+
+- [x] (Pipeline: BACKLOG-142) **DA-2026-09-04-153 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:105` (eslint)
+  - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/context/AudioContext.tsx:10
+
+- [x] (Pipeline: BACKLOG-143) **DA-2026-09-04-154 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:343` (eslint)
+  - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/context/AudioContext.tsx:34
+
+- [x] (Pipeline: BACKLOG-144) **DA-2026-09-04-155 · MEDIUM · react-hooks/immutability** – `src/context/DropContext.tsx:150` (eslint)
+  - Error: Cannot access variable before it is declared  `addChatMessage` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.  /home/patrick/audioMONASTRY/src/context/DropContext.tsx:150:7   148 |   149 |       setAiSuggestions((prev) => [...prev.slice(-2), generated]); > 150 |       addChatMessage(       |       ^^^^^^^^^^^^^^ `addChat
+
+- [x] (Pipeline: BACKLOG-145) **DA-2026-09-04-156 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/context/DropContext.tsx:249` (eslint)
+  - Compilation Skipped: Existing memoization could not be preserved  React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.  /home/patrick/audioMONASTRY/src/context/DropContext.tsx:249:5   247 |   248 |   const addChatMessage = useCallback( > 249 |     (text: string, sender:
+
+- [x] (Pipeline: BACKLOG-146) **DA-2026-09-04-158 · MEDIUM · Fehlende Fehlerbehandlung bei RBAC-Prüfung** – `src/context/ModuleStateContext.tsx:59` (hf-qwen)
+  - Wenn `roleForUser` oder `readSessionConfig` fehlschlagen, wird die RBAC-Prüfung nicht durchgeführt, was zu einer möglichen Sicherheitslücke führen kann.
+  - Vorschlag: Implementiere eine sichere Default-Rolle oder eine explizite Fehlerbehandlung, falls `roleForUser` oder `readSessionConfig` keine gültigen Werte zurückgeben.
+
+- [x] (Pipeline: BACKLOG-147) **DA-2026-09-04-159 · MEDIUM · Potenzielle Race Condition bei Zustandsaktualisierung** – `src/context/ModuleStateContext.tsx:67` (hf-qwen)
+  - Die Aktualisierung von `lastSeen.current` und `setModuleStates` erfolgt getrennt. Bei parallelen Updates kann dies zu inkonsistenten Zuständen führen.
+  - Vorschlag: Verwende atomare Zustandsoperationen oder eine Mutex-Struktur, um sicherzustellen, dass `lastSeen` und `moduleStates` immer synchron aktualisiert werden.
+
+- [x] (Pipeline: BACKLOG-148) **DA-2026-09-04-160 · MEDIUM · Zugriff auf ref-Variable außerhalb von Callbacks** – `src/context/PluginManagerContext.tsx:32` (hf-qwen)
+  - Die `commit`-Funktion greift direkt auf `locksRef.current` zu, was potenziell zu Fehlern führen kann, wenn andere Teile des Codes den Ref-Wert ändern, ohne dass `setPluginLocks` aufgerufen wird.
+  - Vorschlag: Stelle sicher, dass alle Zustandsänderungen über `commit` erfolgen und dass `locksRef.current` nur innerhalb von Callbacks oder synchronen Kontexten gelesen wird.
+
+- [x] (Pipeline: BACKLOG-149) **DA-2026-09-04-162 · MEDIUM · Möglicher Race Condition bei Lock-Abfrage** – `src/context/PluginManagerContext.tsx:58` (hf-qwen)
+  - In der `requestLock`-Funktion wird `locksRef.current` verwendet, um den aktuellen Zustand abzurufen, aber es gibt keinen Mechanismus, um sicherzustellen, dass der Zustand während der Verarbeitung nicht verändert wurde. Dies kann zu inkonsistenten Lock-Statusen führen.
+  - Vorschlag: Verwende atomare Zustandsoperationen oder eine Mutex-ähnliche Struktur, um sicherzustellen, dass die Lock-Logik konsistent bleibt.
+
+- [x] (Pipeline: BACKLOG-150) **DA-2026-09-04-163 · MEDIUM · prefer-const** – `src/core/drop/AiDropGenerator.ts:169` (eslint)
+  - 'baseProfile' is never reassigned. Use 'const' instead.
+
+- [x] (Pipeline: BACKLOG-151) **DA-2026-09-04-164 · MEDIUM · @typescript-eslint/no-unused-expressions** – `src/core/workers/WorkerPool.ts:83` (eslint)
+  - Expected an assignment or function call and instead saw an expression.
+
+- [x] (Pipeline: BACKLOG-152) **DA-2026-09-04-165 · MEDIUM · prefer-const** – `src/data/musicLibrary.ts:20` (eslint)
+  - 'title' is never reassigned. Use 'const' instead.
+
+- [x] (Pipeline: BACKLOG-153) **DA-2026-09-04-166 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useControlHub.ts:23` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-154) **DA-2026-09-04-167 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useHID.ts:72` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-160) **DA-2026-09-04-173 · MEDIUM · Möglicher Race Condition bei Zustandsabfrage** – `src/hooks/usePluginState.ts:20` (hf-qwen)
+  - Der Zugriff auf `moduleStates[pluginId]` kann zwischen dem Lesen des Zustands und dem Aufruf von `setModuleState` durch einen anderen Thread oder Event veraltet sein. Dies kann zu inkonsistenten Zuständen führen.
+  - Vorschlag: Verwende eine atomare Zustandsaktualisierungsmethode, z.B. eine Reducer-Funktion, um sicherzustellen, dass alle Zustandsänderungen konsistent sind.
+
+- [x] (Pipeline: BACKLOG-161) **DA-2026-09-04-175 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useRoom.ts:28` (eslint)
+  - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for
+
+- [x] (Pipeline: BACKLOG-162) **DA-2026-09-04-179 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:25` (eslint)
+  - Error: Cannot access variable before it is declared  `handleOffer` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.  /home/patrick/audioMONASTRY/src/hooks/useWebRTC.ts:25:9   23 |   24 |       if (type === 'sdp_offer') { > 25 |         handleOffer(sender, payload);      |         ^^^^^^^^^^^ `handleOffer` accessed before it is de
+
+- [x] (Pipeline: BACKLOG-163) **DA-2026-09-04-180 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:27` (eslint)
+  - Error: Cannot access variable before it is declared  `handleAnswer` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.  /home/patrick/audioMONASTRY/src/hooks/useWebRTC.ts:27:9   25 |         handleOffer(sender, payload);   26 |       } else if (type === 'sdp_answer') { > 27 |         handleAnswer(sender, payload);      |         ^^
+
+- [x] (Pipeline: BACKLOG-164) **DA-2026-09-04-181 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:29` (eslint)
+  - Error: Cannot access variable before it is declared  `handleCandidate` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.  /home/patrick/audioMONASTRY/src/hooks/useWebRTC.ts:29:9   27 |         handleAnswer(sender, payload);   28 |       } else if (type === 'ice_candidate') { > 29 |         handleCandidate(sender, payload);      |
+
+- [x] (Pipeline: BACKLOG-165) **DA-2026-09-04-182 · MEDIUM · prefer-const** – `src/utils/audioEngine.ts:1946` (eslint)
+  - 'semitone' is never reassigned. Use 'const' instead.
+
+- [x] (Pipeline: BACKLOG-167) **DA-2026-09-04-184 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1965` (eslint)
+  - Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free.
+
+- [x] (Pipeline: BACKLOG-168) **DA-2026-09-04-185 · MEDIUM · import/no-dynamic-require** – `src/utils/LocalEmbeddingProvider.ts:41` (eslint)
+  - Definition for rule 'import/no-dynamic-require' was not found.
+
+- [x] (Pipeline: BACKLOG-169) **DA-2026-09-04-186 · MEDIUM · prefer-const** – `src/utils/usageAnalytics.ts:16` (eslint)
+  - 'state' is never reassigned. Use 'const' instead.
+
+- [x] (Pipeline: BACKLOG-170) **DA-2026-09-04-188 · MEDIUM · Race Condition bei Peer-Verbindungen** – `src/utils/WebRTCManager.ts:170` (hf-qwen)
+  - In der Methode `setupSignaling` wird bei Empfang eines 'offer'-Events geprüft, ob der Signaling-Zustand des PeerConnections 'stable' ist. Es besteht jedoch ein potenzieller Race-Zustand, da zwischen dem Prüfen des Zustands und dem Setzen der Remote-Description weitere Ereignisse auftreten könnten.
+  - Vorschlag: Verwende eine Mutex- oder Queue-Mechanismus, um sicherzustellen, dass nur ein Thread gleichzeitig mit der Verarbeitung von Offers beschäftigt ist. Alternativ: Speichere das Offer in einer Warteschlange und verarbeite es später, sobald der Zustand stabil ist.
+
+- [x] (Pipeline: BACKLOG-171) **DA-2026-09-04-190 · MEDIUM · @typescript-eslint/no-require-imports** – `server.ts:1454` (eslint)
+  - A `require()` style import is forbidden.
+
+- [x] (Pipeline: BACKLOG-172) **DA-2026-09-04-191 · MEDIUM · Fehlerhafte Regex-Logik bei Kategorisierung** – `server/cloudAutomation.ts:100` (hf-qwen)
+  - In `detectCategoryType` wird der Typ basierend auf dem Dateinamen bestimmt, aber es gibt keine explizite Prüfung, ob der Typ korrekt zugeordnet wird. Dies könnte zu inkonsistenten Kategorisierungen führen.
+  - Vorschlag: Implementiere eine Priorisierung der Regex-Muster, um sicherzustellen, dass spezifische Begriffe wie 'kick' vor allgemeinen Mustern wie 'loop' geprüft werden. Alternativ: Füge Tests hinzu, um die Zuordnung zu validieren.
+
+- [x] (Pipeline: BACKLOG-173) **DA-2026-09-04-193 · MEDIUM · Zugriff auf Umgebungsvariablen ohne Sicherheitsprüfungen** – `server/cloudAutomation.ts:132` (hf-qwen)
+  - Die Funktion `r2Client()` und `supabaseAdmin()` greifen direkt auf Umgebungsvariablen zu, ohne diese auf Gültigkeit zu prüfen. Dies kann zu Laufzeitfehlern führen, wenn Variablen fehlen oder leer sind.
+  - Vorschlag: Füge explizite Prüfungen hinzu, ob alle erforderlichen Umgebungsvariablen gesetzt sind, bevor ein Client erstellt wird. Gibt eine klare Fehlermeldung zurück, falls nicht.
+
+- [x] (Pipeline: BACKLOG-175) **DA-2026-09-04-195 · HIGH · Unvalidated File Path in `_validate_audio_file`** – `services/backend-core/python/celery_app.py:33` (hf-qwen)
+  - Die Funktion `_validate_audio_file` akzeptiert einen Dateipfad ohne ausreichende Validierung gegen Path Traversal Angriffe. Obwohl `os.path.abspath` verwendet wird, fehlt eine strenge Prüfung, ob der Pfad innerhalb eines erlaubten Root-Verzeichnisses liegt.
+  - Vorschlag: Füge zusätzliche Sicherheitsprüfungen hinzu, um sicherzustellen, dass der Dateipfad nicht durch symbolische Links oder andere Mechanismen manipuliert werden kann. Überprüfe auch, ob `upload_root` selbst gültig ist und keine relativen Pfade enthält.
+
+- [x] (Pipeline: BACKLOG-177) **DA-2026-09-04-197 · MEDIUM · Race Condition in `_load_musicgen`** – `services/backend-core/python/celery_app.py:120` (hf-qwen)
+  - Ähnlich wie bei `_load_demucs`, gibt es eine Race Condition in `_load_musicgen`. Der Cache-Check vor dem Lock kann zu parallelen Ladevorgängen führen.
+  - Vorschlag: Wende dieselbe Strategie wie bei `_load_demucs` an: Prüfe den Cache innerhalb des Locks, um Race Conditions zu vermeiden.
+
+- [x] (Pipeline: BACKLOG-178) **DA-2026-09-04-198 · HIGH · Ungeprüfte Benutzereingabe in JSON-Validierung** – `services/backend-core/python/hypersonic_moa.py:57` (hf-qwen)
+  - Die Ausgabe von `raw.strip()` wird direkt an `json.loads()` übergeben, ohne vorherige Prüfung auf gefährliche Inhalte oder unerwartete Strukturen. Dies könnte zu einer Deserialisierungsangriffsszene führen, wenn externe Daten manipuliert werden können.
+  - Vorschlag: Fügen Sie zusätzliche Validierungen hinzu, z.B. Prüfung auf erlaubte Schlüsselnamen, Typen und Größenbeschränkungen vor dem Parsen des JSON-Strings.
+
+- [x] (Pipeline: BACKLOG-179) **DA-2026-09-04-199 · MEDIUM · Potential Race Condition in Model Loading** – `services/samplemonk-ai-runtime/app.py:124` (hf-qwen)
+  - The background thread `_preload_models_background()` may attempt to access the ModelManager instance while it's still being configured in the main thread during startup, leading to race conditions.
+  - Vorschlag: Add synchronization mechanisms such as locks or ensure that the ModelManager is fully initialized and configured before starting the background loading thread.
+
+- [x] (Pipeline: BACKLOG-180) **DA-2026-09-04-200 · HIGH · Sensitive Data Exposure in Error Logging** – `services/samplemonk-ai-runtime/app.py:140` (hf-qwen)
+  - The error logging function logs exception details directly into the 'error' field which could expose internal implementation details or paths to clients through structured logs.
+  - Vorschlag: Avoid logging raw exceptions or stack traces in production environments. Instead, log only sanitized error messages and use structured logging to capture metadata without exposing sensitive information.
+
+- [x] (Pipeline: BACKLOG-181) **DA-2026-09-04-202 · HIGH · Unvalidated User Input in Model ID and Task** – `services/samplemonk-ai-runtime/handlers.py:105` (hf-qwen)
+  - Die Funktion `run_inference` akzeptiert `model_id` und `task` direkt aus dem Payload ohne ausreichende Validierung. Dies könnte zu einer unerwarteten Ausführung von Handler-Funktionen führen, wenn `task` manipuliert wird.
+  - Vorschlag: Validiere `task` gegen eine whitelist von erlaubten Tasks, um sicherzustellen, dass nur bekannte Handler aufgerufen werden können.
+
+- [x] (Pipeline: BACKLOG-182) **DA-2026-09-04-203 · MEDIUM · Fehlende Fehlerbehandlung bei Audio-Resampling** – `services/samplemonk-ai-runtime/handlers.py:130` (hf-qwen)
+  - In `_read_audio` wird bei fehlendem `torchaudio` als Fallback auf lineare Interpolation zurückgegriffen, aber es wird keine explizite Fehlermeldung ausgegeben, falls diese auch fehlschlägt.
+  - Vorschlag: Füge eine zusätzliche Fehlerbehandlung hinzu, um sicherzustellen, dass auch der Fallback fehlerhaft abgefangen wird.
+
+- [x] (Pipeline: BACKLOG-183) **DA-2026-09-04-204 · HIGH · Potenzielle Exposition von Secrets in Logs** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104` (hf-qwen)
+  - Die Funktion `_validate_config()` validiert Umgebungsvariablen, aber keine Secrets wie `HF_TOKEN` werden explizit aus dem Log entfernt. Obwohl das Skript selbst keine Secrets direkt loggt, könnte bei Fehlern oder Debugging-Output durch andere Teile des Systems (z. B. Exceptions) ein Token in Logs landen.
+  - Vorschlag: Stelle sicher, dass alle Secrets (insbesondere `HF_TOKEN`) bei Logging oder Fehlerausgaben nicht ausgegeben werden. Verwende z. B. Logging-Filter oder Wrapper, die sensible Daten maskieren.
+
+- [x] (Pipeline: BACKLOG-184) **DA-2026-09-04-205 · MEDIUM · Unsichere Fehlerbehandlung bei `get_inference_endpoint`** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:122` (hf-qwen)
+  - Die Fehlerbehandlung in `main()` prüft nur auf spezifische Textmuster ('404', 'not found') zur Unterscheidung zwischen Nichtvorhandensein und anderen Fehlern. Dies ist anfällig für Änderungen in der API-Antwort und kann zu unerwartetem Verhalten führen.
+  - Vorschlag: Nutze stattdessen spezifische Exceptions (z. B. `HfHubHTTPError` mit Statuscode 404) statt String-Prüfung, um sicherzustellen, dass nur wirklich nicht vorhandene Endpunkte als solche behandelt werden.
+
+- [x] (Pipeline: BACKLOG-185) **DA-2026-09-04-206 · MEDIUM · Mangelnde Trennung von Konfiguration und Logik** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:130` (hf-qwen)
+  - Die Konfiguration des Endpoints (`_common_kwargs`, `_create_kwargs`) wird direkt in der Hauptlogik definiert. Dies erschwert Wartung, Testbarkeit und mögliche Wiederverwendung.
+  - Vorschlag: Trenne Konfiguration und Logik durch eine Klasse oder Modul, das die Endpoint-Konfiguration kapselt. Dies verbessert die Testbarkeit und Wartbarkeit.
+
+- [x] (Pipeline: BACKLOG-187) **DA-2026-09-04-208 · MEDIUM · Nicht expliziter Fehlerfall bei fehlender VRAM** – `services/samplemonk-ai-runtime/model_manager.py:190` (hf-qwen)
+  - Wenn `required > self._available_vram_gb()` und keine Eviction möglich ist, wird ein `ModelUnavailableError` geworfen. Es fehlt eine explizite Strategie zur Behandlung dieses Falls, was zu unerwarteten Ausfällen führen kann.
+  - Vorschlag: Implementiere eine Logging-Strategie oder eine Callback-Funktion, die auf VRAM-Überlastung reagiert, um z.B. eine Notfallstrategie wie 'Fallback auf CPU' oder 'Benachrichtigung an Admin' zu aktivieren.
+
+- [x] (Pipeline: BACKLOG-188) **DA-2026-09-04-209 · MEDIUM · Fehlende Hash-Pins und kein Lockfile für Supply-Chain-Sicherheit** – `services/samplemonk-ai-runtime/pyproject.toml:7` (deepseek-pro)
+  - Die Dependencies sind ohne Hash-Verifikation deklariert und es existiert kein sichtbares Lockfile (z. B. poetry.lock oder pip-tools requirements.txt). Dadurch können bei Installation kompromittierte oder bösartige Paketversionen innerhalb der erlaubten Bereiche (z. B. >=4.44,<5) eingespielt werden, ohne dass der Integritätscheck dies verhindert.
+  - Vorschlag: Ergänze ein Lockfile mit Hash-Pins (z. B. poetry.lock oder pip-tools mit --generate-hashes) und binde es in den Build/Deployment-Prozess ein. Prüfe außerdem regelmäßig auf bekannte Schwachstellen (z. B. via Dependabot oder pip-audit).
+
+- [x] (Pipeline: BACKLOG-189) **DA-2026-09-04-210 · MEDIUM · Veraltete und exakt gepinnte PyTorch-Version (torch==2.4.1)** – `services/samplemonk-ai-runtime/pyproject.toml:11` (deepseek-pro)
+  - Die exakte Pin auf torch==2.4.1 (veröffentlicht Juli 2024) führt dazu, dass bekannte Sicherheitslücken und Stabilitätsprobleme, die in neueren PyTorch-Versionen behoben wurden, dauerhaft im Projekt verbleiben. Da keine automatische Update-Strategie erkennbar ist, bleibt das Risiko bestehen, bis die Version manuell aktualisiert wird.
+  - Vorschlag: Aktualisiere auf die neueste stabile PyTorch-Version (z. B. 2.7.x) und prüfe anschließend die Kompatibilität mit den anderen Abhängigkeiten. Erwäge, einen Bereich mit Obergrenze (z. B. >=2.5,<3) zu verwenden, oder behalte die exakte Pin, aber plane regelmäßige Updates und Security-Audits.
+
+- [x] (Pipeline: BACKLOG-191) **DA-2026-09-04-212 · MEDIUM · Working-directory change via dirname $0 breaks when invoked through symlink** – `services/samplemonk-ai-runtime/startup.sh:9` (deepseek-flash)
+  - The script cd's to "$(dirname "$0")". If startup.sh is invoked via a symlink (e.g., from /usr/local/bin or a container entrypoint), the working directory becomes the symlink's location, making the subsequent relative default for AI_MODEL_MANIFEST incorrect.
+  - Vorschlag: Resolve the script location robustly: SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; cd "$SCRIPT_DIR"
+
+- [x] (Pipeline: BACKLOG-192) **DA-2026-09-04-213 · MEDIUM · No write/space verification for HF_HOME persistent cache** – `services/samplemonk-ai-runtime/startup.sh:10` (deepseek-flash)
+  - HF_HOME defaults to /data/hf-cache but the script never creates or checks writability/free space. If the volume is read-only or not mounted, the app starts successfully and model loading fails later at request time, obscuring the configuration error.
+  - Vorschlag: After export, add a guard: mkdir -p "$HF_HOME" && [ -w "$HF_HOME" ] || { log structured startup error; exit 1; }
+
+- [x] (Pipeline: BACKLOG-194) **DA-2026-09-04-215 · MEDIUM · AI-Runtime lauscht ungeschützt auf allen Interfaces** – `services/samplemonk-ai-runtime/startup.sh:18` (deepseek-pro)
+  - Uvicorn wird mit --host 0.0.0.0 gestartet und akzeptiert Verbindungen auf allen Netzwerkinterfaces. Das Skript selbst konfiguriert weder TLS noch Authentifizierung. Jeder mit Netzwerkzugriff kann die AI-Runtime unautorisiert nutzen (Inferenz, Ressourcenverbrauch, möglicherweise Datenabfluss). Wenn der Dienst nur vom Orchestrator-Backend konsumiert wird, ist dies eine unnötige Exposition.
+  - Vorschlag: Begrenze den Host auf das interne Netzwerk, z.B. --host 127.0.0.1 bei gleicher Pod-/Container-Netzwerknutzung, oder erzwinge Applikations-Auth/mTLS und sichere Firewall-Regeln.
+
+- [x] (Pipeline: BACKLOG-195) **DA-2026-09-04-216 · MEDIUM · Server binds 0.0.0.0 with no authentication or proxy boundary check** – `services/samplemonk-ai-runtime/startup.sh:21` (deepseek-flash)
+  - Uvicorn is started with --host 0.0.0.0. If the service is reachable outside an internal Docker network without an auth gateway, the AI runtime can be called directly. The script does not verify it is behind an authenticated orchestrator/proxy.
+  - Vorschlag: Bind to 127.0.0.1 when the service is only meant to be reached through the orchestrator, or document/require a secure internal network with an auth boundary.
+
+- [x] (Pipeline: BACKLOG-197) **DA-2026-09-04-218 · HIGH · Autorisierung nur clientseitig – Lock-Prüfung nicht im Backend erzwungen** – `src/hooks/usePluginState.ts:29` (deepseek-pro)
+  - Die Berechtigungsprüfung (nur Owner darf State ändern) findet ausschließlich im Frontend-Hook statt. Dieser Hook ruft setModuleState auf, nachdem er lokal geprüft hat. In einer Multi-User-Architektur mit WebRTC-Replikation kann ein manipulierter Client den Check umgehen und unautorisiert Plugin-State setzen. Es muss serverseitig validiert werden.
+  - Vorschlag: Serverseitige Validierung der Lock-Eigentümerschaft im Orchestrator oder im zentralen State-Service erzwingen; der Client-Check dient nur als UX-Sperre.
+
+- [x] (Pipeline: BACKLOG-201) **AUD-2026-09-05-D1 · NIEDRIG · Code-Duplikate WAV/PCM** – `ai/localDemucs.ts` ↔ `utils/stemSplitter.ts`, `core/voice/melody.ts`, `core/voice/VoiceMonkService.ts`: RIFF/WAVE-Encoder in gemeinsame Funktion extrahieren.
+
+- [x] (Pipeline: BACKLOG-202) **AUD-2026-09-05-D2 · NIEDRIG · Code-Duplikat audio-runtime** – `services/audio-runtime/src/main.rs` interne Device-Config-Blöcke zusammenfassen.
+
+- [x] (Pipeline: BACKLOG-203) **AUD-2026-09-05-D3 · NIEDRIG · Code-Duplikat EQ** – `src/audio/worklets/eqProcessor.ts` Biquad-/Shelving-Berechnung deduplizieren.
+
+- [x] (Pipeline: BACKLOG-204) **AUD-2026-09-05-D4 · NIEDRIG · Code-Duplikat Python** – `services/backend-core/python/celery_app.py` ↔ `services/stem-ai/main.py`: Device-Detect/Init teilen.
+
+- [x] (Pipeline: BACKLOG-205) **AUD-2026-09-05-D5 · NIEDRIG · Code-Duplikate UI** – `AiMonkDock.tsx` ↔ `AiMonkTerminal.tsx`, `RecorderTerminal.tsx` ↔ `VoiceGenTerminal.tsx`: gemeinsame Terminals/Handlers extrahieren.
+
+- [x] (Pipeline: AUDIT-PLAN-MOA) **AUDIT-PLAN-MOA** – Gesamt-Tiefen-Audit laut Orchestrator-Plan durchführen (Architektur/Abhängigkeiten/Risiko-Cluster).
+
+- [x] (Pipeline: AUDIT-PLAN-2) **AUDIT-PLAN-2** – Backend/Security/Datenbank-Audit laut Kimi-K2.7-Plan durchführen.
+
+- [x] (Pipeline: AUDIT-PLAN-3) **AUDIT-PLAN-3** – Performance/Audio/Lasttest-Audit laut GLM-5.3/PublicAI-Plan durchführen.
+
+- [x] (Pipeline: AUDIT-PLAN-4) **AUDIT-PLAN-4** – UI/UX/Rendering/Accessibility/Code-Eleganz-Audit laut Qwen3-Coder-Plan durchführen.
+
+- [x] (Pipeline: AUDIT-PLAN-5) **AUDIT-PLAN-5** – CI/CD/Backups/Runbooks-Audit laut GLM-5.3-Flash-Plan durchführen.
+
+- [x] (Pipeline: AUDIT-PLAN-6) **AUDIT-PLAN-6** – Final-Review-/Compliance-Plan von DeepSeek V4 Pro prüfen.
