@@ -1,10 +1,10 @@
 {
-  "created": "2026-09-05T08:07:44.336Z",
+  "created": "2026-09-05T08:25:39.097Z",
   "counts": {
     "LEICHT": 12,
     "MITTEL": 9,
     "SCHWER": 2,
-    "BLOCKED": 200
+    "BLOCKED": 206
   },
   "tasks": [
     {
@@ -340,7 +340,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-001"
     },
     {
       "raw": "**P2-1/P2-2 Rest (Live + Code):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte.",
@@ -353,7 +354,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-002"
     },
     {
       "raw": "**Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)",
@@ -366,7 +368,8 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-003"
     },
     {
       "raw": "**S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.",
@@ -379,7 +382,8 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-004"
     },
     {
       "raw": "**AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`.",
@@ -392,7 +396,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-005"
     },
     {
       "raw": "**AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.",
@@ -405,7 +410,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-006"
     },
     {
       "raw": "**AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung.",
@@ -418,7 +424,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-007"
     },
     {
       "raw": "**AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen.",
@@ -431,7 +438,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-008"
     },
     {
       "raw": "**P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.",
@@ -444,7 +452,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-009"
     },
     {
       "raw": "**P1-4 Debug-/Analyser-Pfad:** `analyzerNode` → Visualisierung als fester Debug-Schritt dokumentieren/testen.",
@@ -457,7 +466,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-010"
     },
     {
       "raw": "**P1-5 Offline-Integrationstest:** `OfflineAudioContext`-Roundtrip (V1-Quelle → Kanalzug → Master → Bounce) automatisiert (goldenAudio/bounceGraph erweitern).",
@@ -470,7 +480,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-011"
     },
     {
       "raw": "**P1-6 PerformanceObserver:** Audio-Verarbeitungsdauer messen und in perfMONK anbinden.",
@@ -483,7 +494,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-012"
     },
     {
       "raw": "**P1-7 100-%-Checkliste als Gate:** die 8 Punkte (Imports, Verkabelung, Fehlerbehandlung, Unit, Integration, Konsolenfehler, hörbar, Performance) in `npm run verify` oder CI aufnehmen.",
@@ -496,7 +508,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-013"
     },
     {
       "raw": "**P3-1 Routing-Dynamik prüfen:** V1 ist fest verdrahtet, `routing.json` wird nur teilweise angewendet. Machbarkeitsstudie: dynamisch rekonfigurierbarer Graph auf `AudioGraph` (V2) mit variablen Ports; Feedback-Schleifen nur nach Stabilitäts-/Phasentests.",
@@ -509,7 +522,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-014"
     },
     {
       "raw": "**P3-2 Einheitliche Port-API:** `IAudioPort`/`AudioPort` als verbindliche Schnittstelle für alle Module etablieren; variable Port-Anzahl erlauben.",
@@ -522,7 +536,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-015"
     },
     {
       "raw": "**P3-4 Latenzkompensation:** `getLatencyBudgetMs()` einführen und je Modul automatische Delay-Compensation vorbereiten (deckt A-4).",
@@ -535,7 +550,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-016"
     },
     {
       "raw": "**P3-5 Proprietäre Mathematik:** DSP-Modell-Versionierung einführen (z. B. `Compressor_v2.3`); LUT vs. Echtzeitberechnung je Algorithmus dokumentieren (Release-LUT ist schon da).",
@@ -548,7 +564,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-017"
     },
     {
       "raw": "**P3-6 Schutz der Algorithmenkerne:** TEE/geschützter Speicher im Browser/Node als **nicht sinnvoll** markieren; stattdessen Build-/Bundle-Schutz und Objekt-Code-Review prüfen.",
@@ -561,7 +578,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-018"
     },
     {
       "raw": "**Prüfpunkt (Live):** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).",
@@ -574,7 +592,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-019"
     },
     {
       "raw": "**Prüfpunkt (manuell/Live):** iPhone-Test vor Ort (UI nicht persistent, Panels schließbar, keine Zoom-/Overflow-Probleme; Safe-Area, Touch-Ziele ≥ 44 px).",
@@ -587,7 +606,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-020"
     },
     {
       "raw": "**Prüfpunkt (manuell/Live):** iOS/Android: Touch-Ziele ≥ 44 px, Safe-Areas, kein Hover-only.",
@@ -600,7 +620,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-021"
     },
     {
       "raw": "**Prüfpunkt (Live):** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen nach Reload stabil; 2.1 sichtbar (Xonar U7).",
@@ -613,7 +634,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-022"
     },
     {
       "raw": "**Prüfpunkt (Live):** USB-Default: Xonar bevorzugt, sonst erste USB-Karte.",
@@ -626,7 +648,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-023"
     },
     {
       "raw": "**Prüfpunkt (Live):** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb.",
@@ -639,7 +662,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-024"
     },
     {
       "raw": "**Prüfpunkt (Live):** Lokale Roundtrip-Latenz < 15 ms (Ziel < 1 ms Audio-Thread p99.99); Netz-Latenz < 50 ms one-way; 0 Xruns/Dropouts im Normallauf.",
@@ -652,7 +676,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-025"
     },
     {
       "raw": "**Prüfpunkt (Live):** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten gleichzeitig und bleiben < 5 ms zueinander.",
@@ -665,7 +690,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-026"
     },
     {
       "raw": "**Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.",
@@ -678,7 +704,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-027"
     },
     {
       "raw": "**Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.)",
@@ -691,7 +718,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-028"
     },
     {
       "raw": "**Prüfpunkt (Live):** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar.",
@@ -704,7 +732,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-029"
     },
     {
       "raw": "**Prüfpunkt (Live):** Fehlerfall zeigt verständliche Meldung (kein roher Traceback).",
@@ -717,7 +746,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-030"
     },
     {
       "raw": "**Prüfpunkt (Live):** A100/HF-Endpoint bevorzugt; DevSettings „AI Server Shutdown\" aktiviert Fallbacks.",
@@ -730,7 +760,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-031"
     },
     {
       "raw": "**Prüfpunkt (Betreiber-Schritt):** CI-Lauf auf GitHub grün; Report enthält je Plugin Score, Dauer, Fehler.",
@@ -743,7 +774,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-032"
     },
     {
       "raw": "**Prüfpunkt (Live):** 4 Browser sehen identischen State.",
@@ -756,7 +788,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-033"
     },
     {
       "raw": "**Prüfpunkt (Live):** Gäste hören Main via Host-Stream; Cue separat.",
@@ -769,7 +802,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-034"
     },
     {
       "raw": "**Prüfpunkt (Live):** Rollenwechsel ohne Audio-Unterbrechung.",
@@ -782,7 +816,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-035"
     },
     {
       "raw": "**Prüfpunkt (Live):** 0 Xruns/Dropouts im Normallauf.",
@@ -795,7 +830,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-036"
     },
     {
       "raw": "**AI-E2E-Szenario (Live):** Code-Teil erledigt – `tests/aiE2eScenario.test.ts` fährt Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero gemockt durch → TASKDONE. Offen bleibt der Lauf gegen den echten HF-Endpoint (aus AITodo Phase 24–26).",
@@ -808,7 +844,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-037"
     },
     {
       "raw": "**AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26).",
@@ -821,7 +858,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-038"
     },
     {
       "raw": "**AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert).",
@@ -834,7 +872,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-039"
     },
     {
       "raw": "**AI-Docker-Build/GPU-Test (CI/Betreiber):** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert).",
@@ -847,7 +886,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-040"
     },
     {
       "raw": "**INT8-Kalibrierung (Live):** Je Modell vorab messen (aus AITodo OPTIONAL OPTIMIZATIONS).",
@@ -860,7 +900,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-041"
     },
     {
       "raw": "**DA-2026-09-04-001 · MEDIUM · @typescript-eslint/no-unused-vars** – `build-worklets.mjs:4` (eslint)",
@@ -873,7 +914,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-042"
     },
     {
       "raw": "**DA-2026-09-04-002 · MEDIUM · Verwundbarkeit: body-parser** – `package-lock.json` (npm-audit)",
@@ -886,7 +928,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-043"
     },
     {
       "raw": "**DA-2026-09-04-003 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/check-react-memo.mjs:6` (eslint)",
@@ -899,7 +942,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-044"
     },
     {
       "raw": "**DA-2026-09-04-004 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/download-orchestral.mjs:17` (eslint)",
@@ -912,7 +956,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-045"
     },
     {
       "raw": "**DA-2026-09-04-005 · MEDIUM · prefer-const** – `scripts/dsp-benchmark.ts:67` (eslint)",
@@ -925,7 +970,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-046"
     },
     {
       "raw": "**DA-2026-09-04-006 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:66` (eslint)",
@@ -938,7 +984,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-047"
     },
     {
       "raw": "**DA-2026-09-04-007 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:84` (eslint)",
@@ -951,7 +998,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-048"
     },
     {
       "raw": "**DA-2026-09-04-008 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:101` (eslint)",
@@ -964,7 +1012,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-049"
     },
     {
       "raw": "**DA-2026-09-04-009 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/stress-test.mjs:76` (eslint)",
@@ -977,7 +1026,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-050"
     },
     {
       "raw": "**DA-2026-09-04-010 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:147` (eslint)",
@@ -990,7 +1040,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-051"
     },
     {
       "raw": "**DA-2026-09-04-011 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:167` (eslint)",
@@ -1003,7 +1054,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-052"
     },
     {
       "raw": "**DA-2026-09-04-019 · MEDIUM · Race Condition in Stem-Job-Management** – `server.ts:430` (hf-qwen)",
@@ -1016,7 +1068,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-053"
     },
     {
       "raw": "**DA-2026-09-04-020 · MEDIUM · Potenzieller Zustandsverlust bei Stem-Jobs** – `server.ts:440` (hf-qwen)",
@@ -1029,7 +1082,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-054"
     },
     {
       "raw": "**DA-2026-09-04-021 · MEDIUM · Unvollständige Fehlerbehandlung in parseMultipartStream** – `server.ts:470` (hf-qwen)",
@@ -1042,7 +1096,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-055"
     },
     {
       "raw": "**DA-2026-09-04-022 · MEDIUM · @typescript-eslint/no-require-imports** – `server.ts:1422` (eslint)",
@@ -1055,7 +1110,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-056"
     },
     {
       "raw": "**DA-2026-09-04-026 · MEDIUM · Unzureichende Validierung von Umgebungsvariablen** – `server/cloud.ts:159` (hf-qwen)",
@@ -1068,7 +1124,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-057"
     },
     {
       "raw": "**DA-2026-09-04-028 · MEDIUM · Möglicher Fehler bei fehlenden Supabase-Konfiguration** – `server/cloudAutomation.ts:104` (hf-qwen)",
@@ -1081,7 +1138,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-058"
     },
     {
       "raw": "**DA-2026-09-04-029 · MEDIUM · Potenzielle Race Condition bei Tag-Synchronisation** – `server/cloudAutomation.ts:119` (hf-qwen)",
@@ -1094,7 +1152,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-059"
     },
     {
       "raw": "**DA-2026-09-04-033 · MEDIUM · @typescript-eslint/no-require-imports** – `services/backend-core/node/index.js:1` (eslint)",
@@ -1107,7 +1166,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-060"
     },
     {
       "raw": "**DA-2026-09-04-034 · MEDIUM · Race Condition bei Client-Verwaltung** – `services/backend-core/node/index.js:14` (hf-qwen)",
@@ -1120,7 +1180,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-061"
     },
     {
       "raw": "**DA-2026-09-04-038 · MEDIUM · Unbegrenztes Wachstum der clients-Map durch wiederholte init mit verschiedenen userId** – `services/backend-core/node/index.js:45` (deepseek-pro)",
@@ -1133,7 +1194,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-062"
     },
     {
       "raw": "**DA-2026-09-04-039 · MEDIUM · Unvollständige Lock-Cleanup-Logik** – `services/backend-core/node/index.js:47` (hf-qwen)",
@@ -1146,7 +1208,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-063"
     },
     {
       "raw": "**DA-2026-09-04-046 · MEDIUM · Race Condition in Lazy Loading** – `services/backend-core/python/celery_app.py:123` (hf-qwen)",
@@ -1159,7 +1222,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-064"
     },
     {
       "raw": "**DA-2026-09-04-052 · MEDIUM · Mögliche Injection in Service-URLs durch Umgebungsvariablen** – `services/backend-core/python/main.py:79` (hf-qwen)",
@@ -1172,7 +1236,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-065"
     },
     {
       "raw": "**DA-2026-09-04-054 · MEDIUM · Unnötige JSON-Konvertierung bei Fehlerfällen** – `services/backend-core/python/main.py:100` (hf-qwen)",
@@ -1185,7 +1250,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-066"
     },
     {
       "raw": "**DA-2026-09-04-065 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:27` (eslint)",
@@ -1198,7 +1264,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-067"
     },
     {
       "raw": "**DA-2026-09-04-066 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:28` (eslint)",
@@ -1211,7 +1278,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-068"
     },
     {
       "raw": "**DA-2026-09-04-067 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:40` (eslint)",
@@ -1224,7 +1292,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-069"
     },
     {
       "raw": "**DA-2026-09-04-068 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:80` (eslint)",
@@ -1237,7 +1306,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-070"
     },
     {
       "raw": "**DA-2026-09-04-069 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:100` (eslint)",
@@ -1250,7 +1320,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-071"
     },
     {
       "raw": "**DA-2026-09-04-070 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:7` (eslint)",
@@ -1263,7 +1334,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-072"
     },
     {
       "raw": "**DA-2026-09-04-071 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:8` (eslint)",
@@ -1276,7 +1348,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-073"
     },
     {
       "raw": "**DA-2026-09-04-072 · MEDIUM · @typescript-eslint/no-unused-vars** – `services/mixer/index.js:23` (eslint)",
@@ -1289,7 +1362,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-074"
     },
     {
       "raw": "**DA-2026-09-04-073 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:39` (eslint)",
@@ -1302,7 +1376,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-075"
     },
     {
       "raw": "**DA-2026-09-04-074 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:41` (eslint)",
@@ -1315,7 +1390,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-076"
     },
     {
       "raw": "**DA-2026-09-04-075 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:51` (eslint)",
@@ -1328,7 +1404,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-077"
     },
     {
       "raw": "**DA-2026-09-04-076 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:53` (eslint)",
@@ -1341,7 +1418,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-078"
     },
     {
       "raw": "**DA-2026-09-04-077 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:71` (eslint)",
@@ -1354,7 +1432,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-079"
     },
     {
       "raw": "**DA-2026-09-04-078 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:73` (eslint)",
@@ -1367,7 +1446,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-080"
     },
     {
       "raw": "**DA-2026-09-04-079 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:85` (eslint)",
@@ -1380,7 +1460,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-081"
     },
     {
       "raw": "**DA-2026-09-04-080 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:87` (eslint)",
@@ -1393,7 +1474,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-082"
     },
     {
       "raw": "**DA-2026-09-04-081 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:99` (eslint)",
@@ -1406,7 +1488,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-083"
     },
     {
       "raw": "**DA-2026-09-04-082 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:101` (eslint)",
@@ -1419,7 +1502,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-084"
     },
     {
       "raw": "**DA-2026-09-04-083 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:115` (eslint)",
@@ -1432,7 +1516,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-085"
     },
     {
       "raw": "**DA-2026-09-04-084 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:117` (eslint)",
@@ -1445,7 +1530,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-086"
     },
     {
       "raw": "**DA-2026-09-04-085 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:126` (eslint)",
@@ -1458,7 +1544,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-087"
     },
     {
       "raw": "**DA-2026-09-04-086 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:128` (eslint)",
@@ -1471,7 +1558,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-088"
     },
     {
       "raw": "**DA-2026-09-04-087 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:140` (eslint)",
@@ -1484,7 +1572,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-089"
     },
     {
       "raw": "**DA-2026-09-04-088 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:142` (eslint)",
@@ -1497,7 +1586,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-090"
     },
     {
       "raw": "**DA-2026-09-04-089 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:159` (eslint)",
@@ -1510,7 +1600,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-091"
     },
     {
       "raw": "**DA-2026-09-04-090 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:161` (eslint)",
@@ -1523,7 +1614,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-092"
     },
     {
       "raw": "**DA-2026-09-04-091 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:176` (eslint)",
@@ -1536,7 +1628,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-093"
     },
     {
       "raw": "**DA-2026-09-04-092 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:178` (eslint)",
@@ -1549,7 +1642,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-094"
     },
     {
       "raw": "**DA-2026-09-04-093 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:189` (eslint)",
@@ -1562,7 +1656,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-095"
     },
     {
       "raw": "**DA-2026-09-04-094 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:191` (eslint)",
@@ -1575,7 +1670,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-096"
     },
     {
       "raw": "**DA-2026-09-04-095 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:205` (eslint)",
@@ -1588,7 +1684,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-097"
     },
     {
       "raw": "**DA-2026-09-04-096 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:207` (eslint)",
@@ -1601,7 +1698,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-098"
     },
     {
       "raw": "**DA-2026-09-04-097 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:218` (eslint)",
@@ -1614,7 +1712,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-099"
     },
     {
       "raw": "**DA-2026-09-04-098 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:220` (eslint)",
@@ -1627,7 +1726,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-100"
     },
     {
       "raw": "**DA-2026-09-04-099 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:234` (eslint)",
@@ -1640,7 +1740,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-101"
     },
     {
       "raw": "**DA-2026-09-04-100 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:236` (eslint)",
@@ -1653,7 +1754,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-102"
     },
     {
       "raw": "**DA-2026-09-04-101 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:247` (eslint)",
@@ -1666,7 +1768,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-103"
     },
     {
       "raw": "**DA-2026-09-04-102 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:249` (eslint)",
@@ -1679,7 +1782,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-104"
     },
     {
       "raw": "**DA-2026-09-04-103 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:263` (eslint)",
@@ -1692,7 +1796,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-105"
     },
     {
       "raw": "**DA-2026-09-04-104 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:265` (eslint)",
@@ -1705,7 +1810,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-106"
     },
     {
       "raw": "**DA-2026-09-04-105 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:276` (eslint)",
@@ -1718,7 +1824,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-107"
     },
     {
       "raw": "**DA-2026-09-04-106 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:278` (eslint)",
@@ -1731,7 +1838,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-108"
     },
     {
       "raw": "**DA-2026-09-04-107 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:291` (eslint)",
@@ -1744,7 +1852,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-109"
     },
     {
       "raw": "**DA-2026-09-04-108 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:293` (eslint)",
@@ -1757,7 +1866,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-110"
     },
     {
       "raw": "**DA-2026-09-04-109 · MEDIUM · @typescript-eslint/no-unused-vars** – `services/portal-worker/src/index.js:33` (eslint)",
@@ -1770,7 +1880,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-111"
     },
     {
       "raw": "**DA-2026-09-04-111 · MEDIUM · Race Condition in Model Loading** – `services/samplemonk-ai-runtime/app.py:117` (hf-qwen)",
@@ -1783,7 +1894,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-112"
     },
     {
       "raw": "**DA-2026-09-04-114 · MEDIUM · Potential Race Condition in Cache Eviction** – `services/samplemonk-ai-runtime/handlers.py:125` (hf-qwen)",
@@ -1796,7 +1908,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-113"
     },
     {
       "raw": "**DA-2026-09-04-116 · MEDIUM · Potential Integer Overflow in Audio Resampling** – `services/samplemonk-ai-runtime/handlers.py:160` (hf-qwen)",
@@ -1809,7 +1922,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-114"
     },
     {
       "raw": "**DA-2026-09-04-118 · MEDIUM · Fehlende Fehlerbehandlung bei Legacy-Endpoint-Löschung** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:109` (hf-qwen)",
@@ -1822,7 +1936,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-115"
     },
     {
       "raw": "**DA-2026-09-04-119 · MEDIUM · Mögliche Race Condition bei Statusabfrage** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:124` (hf-qwen)",
@@ -1835,7 +1950,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-116"
     },
     {
       "raw": "**DA-2026-09-04-121 · MEDIUM · Mögliche Race Condition bei Modell-Laden/Entladen** – `services/samplemonk-ai-runtime/mcp_runtime.py:69` (hf-qwen)",
@@ -1848,7 +1964,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-117"
     },
     {
       "raw": "**DA-2026-09-04-124 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:139` (hf-qwen)",
@@ -1861,7 +1978,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-118"
     },
     {
       "raw": "**DA-2026-09-04-130 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:1` (eslint)",
@@ -1874,7 +1992,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-119"
     },
     {
       "raw": "**DA-2026-09-04-131 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:2` (eslint)",
@@ -1887,7 +2006,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-120"
     },
     {
       "raw": "**DA-2026-09-04-132 · MEDIUM · @typescript-eslint/no-require-imports** – `services/signaling/index.js:3` (eslint)",
@@ -1900,7 +2020,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-121"
     },
     {
       "raw": "**DA-2026-09-04-133 · MEDIUM · prefer-const** – `src/audio/worklets/dspProcessor.ts:135` (eslint)",
@@ -1913,7 +2034,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-122"
     },
     {
       "raw": "**DA-2026-09-04-134 · MEDIUM · react-hooks/use-memo** – `src/components/DJ4ChMixer.tsx:182` (eslint)",
@@ -1926,7 +2048,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-123"
     },
     {
       "raw": "**DA-2026-09-04-135 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/drop/DropGeneratorPanel.tsx:27` (eslint)",
@@ -1939,7 +2062,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-124"
     },
     {
       "raw": "**DA-2026-09-04-136 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:86` (eslint)",
@@ -1952,7 +2076,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-125"
     },
     {
       "raw": "**DA-2026-09-04-137 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:126` (eslint)",
@@ -1965,7 +2090,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-126"
     },
     {
       "raw": "**DA-2026-09-04-138 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:140` (eslint)",
@@ -1978,7 +2104,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-127"
     },
     {
       "raw": "**DA-2026-09-04-139 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:201` (eslint)",
@@ -1991,7 +2118,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-128"
     },
     {
       "raw": "**DA-2026-09-04-140 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/components/DrumMachineTerminal.tsx:210` (eslint)",
@@ -2004,7 +2132,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-129"
     },
     {
       "raw": "**DA-2026-09-04-141 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:219` (eslint)",
@@ -2017,7 +2146,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-130"
     },
     {
       "raw": "**DA-2026-09-04-142 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/EQPluginTerminal.tsx:254` (eslint)",
@@ -2030,7 +2160,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-131"
     },
     {
       "raw": "**DA-2026-09-04-143 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasteringOverlay.tsx:60` (eslint)",
@@ -2043,7 +2174,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-132"
     },
     {
       "raw": "**DA-2026-09-04-144 · MEDIUM · react-hooks/refs** – `src/components/MasterPlayerTerminal.tsx:120` (eslint)",
@@ -2056,7 +2188,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-133"
     },
     {
       "raw": "**DA-2026-09-04-145 · MEDIUM · react-hooks/refs** – `src/components/MasterPlayerTerminal.tsx:130` (eslint)",
@@ -2069,7 +2202,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-134"
     },
     {
       "raw": "**DA-2026-09-04-146 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasterPlayerTerminal.tsx:194` (eslint)",
@@ -2082,7 +2216,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-135"
     },
     {
       "raw": "**DA-2026-09-04-147 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/MasterPlayerTerminal.tsx:272` (eslint)",
@@ -2095,7 +2230,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-136"
     },
     {
       "raw": "**DA-2026-09-04-148 · MEDIUM · react-hooks/refs** – `src/components/midi/MappingLearnPanel.tsx:28` (eslint)",
@@ -2108,7 +2244,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-137"
     },
     {
       "raw": "**DA-2026-09-04-149 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SemanticSampleSearch.tsx:71` (eslint)",
@@ -2121,7 +2258,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-138"
     },
     {
       "raw": "**DA-2026-09-04-150 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SettingsDialog.tsx:90` (eslint)",
@@ -2134,7 +2272,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-139"
     },
     {
       "raw": "**DA-2026-09-04-151 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:103` (eslint)",
@@ -2147,7 +2286,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-140"
     },
     {
       "raw": "**DA-2026-09-04-152 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:104` (eslint)",
@@ -2160,7 +2300,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-141"
     },
     {
       "raw": "**DA-2026-09-04-153 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:105` (eslint)",
@@ -2173,7 +2314,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-142"
     },
     {
       "raw": "**DA-2026-09-04-154 · MEDIUM · react-hooks/refs** – `src/context/AudioContext.tsx:343` (eslint)",
@@ -2186,7 +2328,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-143"
     },
     {
       "raw": "**DA-2026-09-04-155 · MEDIUM · react-hooks/immutability** – `src/context/DropContext.tsx:150` (eslint)",
@@ -2199,7 +2342,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-144"
     },
     {
       "raw": "**DA-2026-09-04-156 · MEDIUM · react-hooks/preserve-manual-memoization** – `src/context/DropContext.tsx:249` (eslint)",
@@ -2212,7 +2356,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-145"
     },
     {
       "raw": "**DA-2026-09-04-158 · MEDIUM · Fehlende Fehlerbehandlung bei RBAC-Prüfung** – `src/context/ModuleStateContext.tsx:59` (hf-qwen)",
@@ -2225,7 +2370,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-146"
     },
     {
       "raw": "**DA-2026-09-04-159 · MEDIUM · Potenzielle Race Condition bei Zustandsaktualisierung** – `src/context/ModuleStateContext.tsx:67` (hf-qwen)",
@@ -2238,7 +2384,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-147"
     },
     {
       "raw": "**DA-2026-09-04-160 · MEDIUM · Zugriff auf ref-Variable außerhalb von Callbacks** – `src/context/PluginManagerContext.tsx:32` (hf-qwen)",
@@ -2251,7 +2398,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-148"
     },
     {
       "raw": "**DA-2026-09-04-162 · MEDIUM · Möglicher Race Condition bei Lock-Abfrage** – `src/context/PluginManagerContext.tsx:58` (hf-qwen)",
@@ -2264,7 +2412,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-149"
     },
     {
       "raw": "**DA-2026-09-04-163 · MEDIUM · prefer-const** – `src/core/drop/AiDropGenerator.ts:169` (eslint)",
@@ -2277,7 +2426,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-150"
     },
     {
       "raw": "**DA-2026-09-04-164 · MEDIUM · @typescript-eslint/no-unused-expressions** – `src/core/workers/WorkerPool.ts:83` (eslint)",
@@ -2290,7 +2440,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-151"
     },
     {
       "raw": "**DA-2026-09-04-165 · MEDIUM · prefer-const** – `src/data/musicLibrary.ts:20` (eslint)",
@@ -2303,7 +2454,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-152"
     },
     {
       "raw": "**DA-2026-09-04-166 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useControlHub.ts:23` (eslint)",
@@ -2316,7 +2468,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-153"
     },
     {
       "raw": "**DA-2026-09-04-167 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useHID.ts:72` (eslint)",
@@ -2329,7 +2482,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-154"
     },
     {
       "raw": "**DA-2026-09-04-168 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMIDI.ts:175` (eslint)",
@@ -2342,7 +2496,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-155"
     },
     {
       "raw": "**DA-2026-09-04-169 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:43` (eslint)",
@@ -2355,7 +2510,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-156"
     },
     {
       "raw": "**DA-2026-09-04-170 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:46` (eslint)",
@@ -2368,7 +2524,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-157"
     },
     {
       "raw": "**DA-2026-09-04-171 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMidiClockOut.ts:62` (eslint)",
@@ -2381,7 +2538,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-158"
     },
     {
       "raw": "**DA-2026-09-04-172 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:86` (eslint)",
@@ -2394,7 +2552,8 @@
       "hardwareRequired": true,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-159"
     },
     {
       "raw": "**DA-2026-09-04-173 · MEDIUM · Möglicher Race Condition bei Zustandsabfrage** – `src/hooks/usePluginState.ts:20` (hf-qwen)",
@@ -2407,7 +2566,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-160"
     },
     {
       "raw": "**DA-2026-09-04-175 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useRoom.ts:28` (eslint)",
@@ -2420,7 +2580,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-161"
     },
     {
       "raw": "**DA-2026-09-04-179 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:25` (eslint)",
@@ -2433,7 +2594,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-162"
     },
     {
       "raw": "**DA-2026-09-04-180 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:27` (eslint)",
@@ -2446,7 +2608,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-163"
     },
     {
       "raw": "**DA-2026-09-04-181 · MEDIUM · react-hooks/immutability** – `src/hooks/useWebRTC.ts:29` (eslint)",
@@ -2459,7 +2622,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-164"
     },
     {
       "raw": "**DA-2026-09-04-182 · MEDIUM · prefer-const** – `src/utils/audioEngine.ts:1946` (eslint)",
@@ -2472,7 +2636,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-165"
     },
     {
       "raw": "**DA-2026-09-04-183 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1963` (eslint)",
@@ -2485,7 +2650,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-166"
     },
     {
       "raw": "**DA-2026-09-04-184 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1965` (eslint)",
@@ -2498,7 +2664,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-167"
     },
     {
       "raw": "**DA-2026-09-04-185 · MEDIUM · import/no-dynamic-require** – `src/utils/LocalEmbeddingProvider.ts:41` (eslint)",
@@ -2511,7 +2678,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-168"
     },
     {
       "raw": "**DA-2026-09-04-186 · MEDIUM · prefer-const** – `src/utils/usageAnalytics.ts:16` (eslint)",
@@ -2524,7 +2692,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-169"
     },
     {
       "raw": "**DA-2026-09-04-188 · MEDIUM · Race Condition bei Peer-Verbindungen** – `src/utils/WebRTCManager.ts:170` (hf-qwen)",
@@ -2537,7 +2706,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-170"
     },
     {
       "raw": "**DA-2026-09-04-190 · MEDIUM · @typescript-eslint/no-require-imports** – `server.ts:1454` (eslint)",
@@ -2550,7 +2720,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-171"
     },
     {
       "raw": "**DA-2026-09-04-191 · MEDIUM · Fehlerhafte Regex-Logik bei Kategorisierung** – `server/cloudAutomation.ts:100` (hf-qwen)",
@@ -2563,7 +2734,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-172"
     },
     {
       "raw": "**DA-2026-09-04-193 · MEDIUM · Zugriff auf Umgebungsvariablen ohne Sicherheitsprüfungen** – `server/cloudAutomation.ts:132` (hf-qwen)",
@@ -2576,7 +2748,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-173"
     },
     {
       "raw": "**DA-2026-09-04-194 · MEDIUM · Uvicorn bindet ohne sichtbare Authentifizierung an 0.0.0.0** – `services/backend-core/package.json:8` (deepseek-pro)",
@@ -2589,7 +2762,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-174"
     },
     {
       "raw": "**DA-2026-09-04-195 · HIGH · Unvalidated File Path in `_validate_audio_file`** – `services/backend-core/python/celery_app.py:33` (hf-qwen)",
@@ -2602,7 +2776,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-175"
     },
     {
       "raw": "**DA-2026-09-04-196 · MEDIUM · Race Condition in `_load_demucs`** – `services/backend-core/python/celery_app.py:104` (hf-qwen)",
@@ -2615,7 +2790,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-176"
     },
     {
       "raw": "**DA-2026-09-04-197 · MEDIUM · Race Condition in `_load_musicgen`** – `services/backend-core/python/celery_app.py:120` (hf-qwen)",
@@ -2628,7 +2804,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-177"
     },
     {
       "raw": "**DA-2026-09-04-198 · HIGH · Ungeprüfte Benutzereingabe in JSON-Validierung** – `services/backend-core/python/hypersonic_moa.py:57` (hf-qwen)",
@@ -2641,7 +2818,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-178"
     },
     {
       "raw": "**DA-2026-09-04-199 · MEDIUM · Potential Race Condition in Model Loading** – `services/samplemonk-ai-runtime/app.py:124` (hf-qwen)",
@@ -2654,7 +2832,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-179"
     },
     {
       "raw": "**DA-2026-09-04-200 · HIGH · Sensitive Data Exposure in Error Logging** – `services/samplemonk-ai-runtime/app.py:140` (hf-qwen)",
@@ -2667,7 +2846,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-180"
     },
     {
       "raw": "**DA-2026-09-04-202 · HIGH · Unvalidated User Input in Model ID and Task** – `services/samplemonk-ai-runtime/handlers.py:105` (hf-qwen)",
@@ -2680,7 +2860,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-181"
     },
     {
       "raw": "**DA-2026-09-04-203 · MEDIUM · Fehlende Fehlerbehandlung bei Audio-Resampling** – `services/samplemonk-ai-runtime/handlers.py:130` (hf-qwen)",
@@ -2693,7 +2874,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-182"
     },
     {
       "raw": "**DA-2026-09-04-204 · HIGH · Potenzielle Exposition von Secrets in Logs** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104` (hf-qwen)",
@@ -2706,7 +2888,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-183"
     },
     {
       "raw": "**DA-2026-09-04-205 · MEDIUM · Unsichere Fehlerbehandlung bei `get_inference_endpoint`** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:122` (hf-qwen)",
@@ -2719,7 +2902,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-184"
     },
     {
       "raw": "**DA-2026-09-04-206 · MEDIUM · Mangelnde Trennung von Konfiguration und Logik** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:130` (hf-qwen)",
@@ -2732,7 +2916,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-185"
     },
     {
       "raw": "**DA-2026-09-04-207 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:130` (hf-qwen)",
@@ -2745,7 +2930,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-186"
     },
     {
       "raw": "**DA-2026-09-04-208 · MEDIUM · Nicht expliziter Fehlerfall bei fehlender VRAM** – `services/samplemonk-ai-runtime/model_manager.py:190` (hf-qwen)",
@@ -2758,7 +2944,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-187"
     },
     {
       "raw": "**DA-2026-09-04-209 · MEDIUM · Fehlende Hash-Pins und kein Lockfile für Supply-Chain-Sicherheit** – `services/samplemonk-ai-runtime/pyproject.toml:7` (deepseek-pro)",
@@ -2771,7 +2958,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-188"
     },
     {
       "raw": "**DA-2026-09-04-210 · MEDIUM · Veraltete und exakt gepinnte PyTorch-Version (torch==2.4.1)** – `services/samplemonk-ai-runtime/pyproject.toml:11` (deepseek-pro)",
@@ -2784,7 +2972,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-189"
     },
     {
       "raw": "**DA-2026-09-04-211 · MEDIUM · Revision-Pinning kann durch explizites `null` umgangen werden** – `services/samplemonk-ai-runtime/registry.py:26` (deepseek-flash)",
@@ -2797,7 +2986,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-190"
     },
     {
       "raw": "**DA-2026-09-04-212 · MEDIUM · Working-directory change via dirname $0 breaks when invoked through symlink** – `services/samplemonk-ai-runtime/startup.sh:9` (deepseek-flash)",
@@ -2810,7 +3000,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-191"
     },
     {
       "raw": "**DA-2026-09-04-213 · MEDIUM · No write/space verification for HF_HOME persistent cache** – `services/samplemonk-ai-runtime/startup.sh:10` (deepseek-flash)",
@@ -2823,7 +3014,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-192"
     },
     {
       "raw": "**DA-2026-09-04-214 · HIGH · AI_RUNTIME_DEVICE defaults to cuda with no validation** – `services/samplemonk-ai-runtime/startup.sh:13` (deepseek-flash)",
@@ -2836,7 +3028,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-193"
     },
     {
       "raw": "**DA-2026-09-04-215 · MEDIUM · AI-Runtime lauscht ungeschützt auf allen Interfaces** – `services/samplemonk-ai-runtime/startup.sh:18` (deepseek-pro)",
@@ -2849,7 +3042,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-194"
     },
     {
       "raw": "**DA-2026-09-04-216 · MEDIUM · Server binds 0.0.0.0 with no authentication or proxy boundary check** – `services/samplemonk-ai-runtime/startup.sh:21` (deepseek-flash)",
@@ -2862,7 +3056,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-195"
     },
     {
       "raw": "**DA-2026-09-04-217 · MEDIUM · updateState ist nicht stabil und kann stale lockStatus verwenden** – `src/hooks/usePluginState.ts:28` (deepseek-pro)",
@@ -2875,7 +3070,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-196"
     },
     {
       "raw": "**DA-2026-09-04-218 · HIGH · Autorisierung nur clientseitig – Lock-Prüfung nicht im Backend erzwungen** – `src/hooks/usePluginState.ts:29` (deepseek-pro)",
@@ -2888,7 +3084,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-197"
     },
     {
       "raw": "**DA-2026-09-04-219 · MEDIUM · syncAdd sends arbitrary unvalidated sample to remote peers** – `src/hooks/useSessionSync.ts:35` (deepseek-pro)",
@@ -2901,7 +3098,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "BLOCKED"
+      "status": "PENDING",
+      "taskId": "BACKLOG-198"
     },
     {
       "raw": "**DA-2026-09-04-220 · MEDIUM · Race Condition bei SFU-Modus-Umschaltung** – `src/utils/WebRTCManager.ts:150` (hf-qwen)",
@@ -2914,7 +3112,8 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-199"
     },
     {
       "raw": "**DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)",
@@ -2927,7 +3126,92 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
-      "status": "BLOCKED"
+      "status": "BLOCKED",
+      "taskId": "BLOCK-200"
+    },
+    {
+      "raw": "**AUD-2026-09-05-D1 · NIEDRIG · Code-Duplikate WAV/PCM** – `ai/localDemucs.ts` ↔ `utils/stemSplitter.ts`, `core/voice/melody.ts`, `core/voice/VoiceMonkService.ts`: RIFF/WAVE-Encoder in gemeinsame Funktion extrahieren.",
+      "priority": "P3",
+      "class": "LEICHT",
+      "domain": "BACKEND",
+      "agent": "#5",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "BACKLOG-201"
+    },
+    {
+      "raw": "**AUD-2026-09-05-D2 · NIEDRIG · Code-Duplikat audio-runtime** – `services/audio-runtime/src/main.rs` interne Device-Config-Blöcke zusammenfassen.",
+      "priority": "P3",
+      "class": "LEICHT",
+      "domain": "AUDIO",
+      "agent": "#5",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "BACKLOG-202"
+    },
+    {
+      "raw": "**AUD-2026-09-05-D3 · NIEDRIG · Code-Duplikat EQ** – `src/audio/worklets/eqProcessor.ts` Biquad-/Shelving-Berechnung deduplizieren.",
+      "priority": "P3",
+      "class": "LEICHT",
+      "domain": "AUDIO",
+      "agent": "#5",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "BACKLOG-203"
+    },
+    {
+      "raw": "**AUD-2026-09-05-D4 · NIEDRIG · Code-Duplikat Python** – `services/backend-core/python/celery_app.py` ↔ `services/stem-ai/main.py`: Device-Detect/Init teilen.",
+      "priority": "P3",
+      "class": "LEICHT",
+      "domain": "BACKEND",
+      "agent": "#5",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "BACKLOG-204"
+    },
+    {
+      "raw": "**AUD-2026-09-05-D5 · NIEDRIG · Code-Duplikate UI** – `AiMonkDock.tsx` ↔ `AiMonkTerminal.tsx`, `RecorderTerminal.tsx` ↔ `VoiceGenTerminal.tsx`: gemeinsame Terminals/Handlers extrahieren.",
+      "priority": "P3",
+      "class": "LEICHT",
+      "domain": "UI",
+      "agent": "#5",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "BACKLOG-205"
+    },
+    {
+      "raw": "**AUD-2026-09-05-D6 · NIEDRIG · Code-Duplikate DSP/Synth** – `computeLocal.ts` ↔ `computeWorker.ts`, `midiCodec.ts` intern, `drumSynth.ts` (mulberry32 mehrfach), `fmEngine.ts` intern, `DspEnginePlugin.tsx` ↔ `InstrumentePlugin.tsx`, `presets.ts` intern, `aiRhythmGenerator.ts` ↔ `audioEngine.ts`, SFU-RTP-Skripte: Gemeinsame Helfer/Seeds/Routing-Definitionen extrahieren.",
+      "priority": "P3",
+      "class": "LEICHT",
+      "domain": "AUDIO",
+      "agent": "#5",
+      "reviewAgent": null,
+      "serverRequired": true,
+      "hardwareRequired": true,
+      "reviewRequired": "NO",
+      "ready": false,
+      "status": "BLOCKED",
+      "taskId": "BLOCK-206"
     }
   ]
 }
