@@ -2,7 +2,7 @@
 # ==========================================
 # Basis: pytorch/pytorch (torch+cu124 vorinstalliert) → spart ~4 GB Build-Disk
 # und Buildzeit. Keine Secrets im Image, Gewichte kommen aus dem HF-Hub-Cache.
-FROM pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \

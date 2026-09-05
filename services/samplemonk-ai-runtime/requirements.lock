@@ -1,9 +1,17 @@
 # SampleMONK AI Runtime – deterministisches Dependency-Lock
-# torch ist NICHT enthalten: kommt aus dem Basisimage pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime.
-fastapi==0.115.6
-uvicorn[standard]==0.32.1
-pydantic==2.10.4
-transformers==4.46.3
-soundfile==0.12.1
-scipy==1.14.1
-pyannote.audio==3.3.2
+# torch ist NICHT enthalten: kommt aus dem Basisimage pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime.
+# Direkte Dependencies inkl. sha256-Pins (Transitive werden weiterhin von pip aufgelöst).
+fastapi==0.115.6 \
+    --hash=sha256:e9240b29e36fa8f4bb7290316988e90c381e5092e0cbe84e7818cc3713bcf305
+uvicorn[standard]==0.32.1 \
+    --hash=sha256:82ad92fd58da0d12af7482ecdb5f2470a04c9c9a53ced65b9bbb4a205377602e
+pydantic==2.10.4 \
+    --hash=sha256:597e135ea68be3a37552fb524bc7d0d66dcf93d395acd93a00682f1efcb8ee3d
+transformers==4.46.3 \
+    --hash=sha256:a12ef6f52841fd190a3e5602145b542d03507222f2c64ebb7ee92e8788093aef
+soundfile==0.12.1 \
+    --hash=sha256:074247b771a181859d2bc1f98b5ebf6d5153d2c397b86ee9e29ba602a8dfe2a6
+scipy==1.14.1 \
+    --hash=sha256:8f9ea80f2e65bdaa0b7627fb00cbeb2daf163caa015e59b7516395fe3bd1e066
+pyannote.audio==3.3.2 \
+    --hash=sha256:23e0dcedda920cb2e154e146bcd9663289ee7942d0e012663dad76f2e571ebeb
