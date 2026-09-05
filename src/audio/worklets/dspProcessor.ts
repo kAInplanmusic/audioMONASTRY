@@ -12,6 +12,8 @@
  *   { filterCutoff, resonance, depth }      → dynamisches Filter
  *   { drive: <0..1> }                       → Soft-Clipping
  */
+import { computeLowpassCoefficients } from '../dsp/biquad';
+
 class DspProcessor extends AudioWorkletProcessor {
   // Allpass (1. Ordnung)
   private apCoef = 0.2;
@@ -94,16 +96,13 @@ class DspProcessor extends AudioWorkletProcessor {
     if (freq === this.lastCutoff && q === this.lastQ) return;
     this.lastCutoff = freq;
     this.lastQ = q;
-    const w = 2*Math.PI*freq/sampleRate;
-    const alpha = Math.sin(w)/(2*q);
-    const cw = Math.cos(w);
-    const b0 = (1-cw)/2, b1 = 1-cw, b2 = b0;
-    const a0 = 1+alpha, a1 = -2*cw, a2 = 1-alpha;
-    this.filterCo[0] = b0/a0;
-    this.filterCo[1] = b1/a0;
-    this.filterCo[2] = b2/a0;
-    this.filterCo[3] = a1/a0;
-    this.filterCo[4] = a2/a0;
+    // Gemeinsame Biquad-Koeffizientenberechnung (kein Duplikat mehr).
+    const co = computeLowpassCoefficients(freq, q, sampleRate);
+    this.filterCo[0] = co[0];
+    this.filterCo[1] = co[1];
+    this.filterCo[2] = co[2];
+    this.filterCo[3] = co[3];
+    this.filterCo[4] = co[4];
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern
