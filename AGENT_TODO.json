@@ -3609,7 +3609,8 @@
       "reviewRequired": "NO",
       "retryCount": 0,
       "reworkCount": 0,
-      "lastError": ""
+      "lastError": "",
+      "status": "PENDING"
     },
     {
       "taskId": "AUDIT-PLAN-2",
@@ -3623,7 +3624,8 @@
       "reviewRequired": "NO",
       "retryCount": 0,
       "reworkCount": 0,
-      "lastError": ""
+      "lastError": "",
+      "status": "PENDING"
     },
     {
       "taskId": "AUDIT-PLAN-3",
@@ -3637,7 +3639,8 @@
       "reviewRequired": "NO",
       "retryCount": 0,
       "reworkCount": 0,
-      "lastError": ""
+      "lastError": "",
+      "status": "PENDING"
     },
     {
       "taskId": "AUDIT-PLAN-4",
@@ -3651,7 +3654,8 @@
       "reviewRequired": "NO",
       "retryCount": 0,
       "reworkCount": 0,
-      "lastError": ""
+      "lastError": "",
+      "status": "PENDING"
     },
     {
       "taskId": "AUDIT-PLAN-5",
@@ -3665,7 +3669,8 @@
       "reviewRequired": "NO",
       "retryCount": 0,
       "reworkCount": 0,
-      "lastError": ""
+      "lastError": "",
+      "status": "PENDING"
     },
     {
       "taskId": "AUDIT-PLAN-6",
@@ -3679,7 +3684,8 @@
       "hardwareRequired": false,
       "retryCount": 0,
       "reworkCount": 0,
-      "lastError": ""
+      "lastError": "",
+      "status": "PENDING"
     }
   ],
   "updated": "2026-09-05T10:56:02.052Z"
