@@ -42,7 +42,7 @@ export function trackError(
   const list = storageGetJson<TrackedError[]>(KEY) ?? [];
   list.unshift(entry);
   storageSetJson(KEY, list.slice(0, 200));
-  console.error(`[error-tracker] ${entry.severity.toUpperCase()} [${source}]`, message, context);
+  console.error('[error-tracker] %s [%s]', entry.severity.toUpperCase(), source, message, context);
   reportErrorToServer(entry);
   return entry;
 }

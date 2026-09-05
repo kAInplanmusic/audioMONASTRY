@@ -28,7 +28,36 @@ const BUDGET = {
   maxParallel: 2,
   sessionRequestLimit: 250,
   dailyRequestLimit: 1500,
+  quotaPauseMs: 600_000,
 };
+
+const BUDGET_SCHEMA = {
+  maxRetries: { type: 'number', min: 0, max: 10 },
+  backoffBaseMs: { type: 'number', min: 100, max: 60_000 },
+  maxBackoffMs: { type: 'number', min: 1_000, max: 300_000 },
+  requestTimeoutMs: { type: 'number', min: 5_000, max: 600_000 },
+  taskTimeoutMs: { type: 'number', min: 10_000, max: 3_600_000 },
+  maxParallel: { type: 'number', min: 1, max: 16 },
+  sessionRequestLimit: { type: 'number', min: 1, max: 10_000 },
+  dailyRequestLimit: { type: 'number', min: 1, max: 100_000 },
+  quotaPauseMs: { type: 'number', min: 0, max: 3_600_000 },
+};
+
+function mergeBudget(target, source) {
+  if (!source || typeof source !== 'object') return;
+  for (const key of Object.keys(source)) {
+    const rule = BUDGET_SCHEMA[key];
+    if (!rule) continue; // unbekannte Keys werden ignoriert
+    const value = source[key];
+    if (typeof value !== rule.type || Number.isNaN(value)) {
+      throw new Error(`Ungültiger Wert für budget.${key}: ${value}`);
+    }
+    if (value < rule.min || value > rule.max) {
+      throw new Error(`budget.${key} außerhalb erlaubtem Bereich (${rule.min}-${rule.max}): ${value}`);
+    }
+    target[key] = value;
+  }
+}
 
 class QuotaPausedError extends Error {
   constructor(message) {
@@ -48,8 +77,14 @@ class HFRouterProvider {
     const configPath = path.join(__dirname, 'config.json');
     try {
       const cfg = JSON.parse(readFileSync(configPath, 'utf8'));
-      if (cfg?.budget) Object.assign(BUDGET, cfg.budget);
-    } catch { /* Defaults */ }
+      if (cfg?.budget) mergeBudget(BUDGET, cfg.budget);
+    } catch (e) {
+      if (e instanceof SyntaxError || e?.code === 'ENOENT') {
+        // Defaults oder ungültiges JSON → Defaults verwenden
+      } else {
+        throw e; // Validierungsfehler bewusst hochwerfen
+      }
+    }
   }
 
   apiKey() {

@@ -19,6 +19,19 @@ const io = new Server(server, {
 // Simple structured logging
 const log = (msg) => console.log(`[${new Date().toISOString()}] ${msg}`);
 
+// Pure API hardening: enforce origin allowlist on the WebSocket handshake itself.
+// CSRF middleware (csurf) is not applicable: this service exposes no HTTP endpoints
+// and uses no cookies/sessions – all state lives on the socket connection.
+io.use((socket, next) => {
+  if (ALLOWED_ORIGINS.length === 0) return next();
+  const origin = socket.handshake.headers.origin;
+  if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
+    log(`Rejected connection from ${socket.id}: origin not allowed (${origin || 'none'})`);
+    return next(new Error('Origin not allowed'));
+  }
+  next();
+});
+
 io.on('connection', (socket) => {
   log(`User connected: ${socket.id}`);
 

@@ -932,15 +932,15 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 > Quelle: OpenGrep v1.29.0 (`auto` + `p/security-audit` + `p/secrets`, 545 Regeln, 744 Dateien → 59 Findings) + reviewdog v0.21.0 (ESLint 10.9.1 → 72 Probleme, tsc 5.8.3 → 0, npm audit → 0).
 > Report: `docs/AUDIT_REPORT_OPENGREP_REVIEWDOG_2026-09-05.md`
 
-- [ ] **OG-1 · KRITISCH · Hartcodiertes TURN-Static-Secret** – `services/turn/turnserver.conf:7`: Secret sofort rotieren, aus Datei + Git-History entfernen (git-filter-repo), per Env/Secret injizieren. Wert ist im Report redigiert.
+- [x] **OG-1 · KRITISCH · Hartcodiertes TURN-Static-Secret** – `services/turn/turnserver.conf:7`: Secret sofort rotieren, aus Datei + Git-History entfernen (git-filter-repo), per Env/Secret injizieren. Wert ist im Report redigiert.
 - [ ] **OG-2 · HOCH · Shell-Injection in GitHub-Actions-Run-Steps** – `.github/workflows/live-stress.yml:29,32`: `${{ inputs.base_url }}` nicht direkt in `run:` interpolieren, sondern via `env:` übergeben.
 - [ ] **OG-3 · HOCH · Script-Injection in actions/github-script** – `.github/workflows/live-stress.yml:46`: `github`-Context-Daten nicht direkt im `script:` interpolieren.
-- [ ] **OG-4 · MITTEL · 35x mutable Action-Tags** – 8 Workflow-Dateien: `actions/*@v4` etc. auf vollständige Commit-SHA pinnen (Supply-Chain-Hardening).
+- [x] **OG-4 · MITTEL · 35x mutable Action-Tags** – 8 Workflow-Dateien: `actions/*@v4` etc. auf vollständige Commit-SHA pinnen (Supply-Chain-Hardening).
 - [ ] **OG-5 · MITTEL · 2x dynamic-urllib** – `scripts/hetzner/dns_setup.py:43`, `scripts/hetzner/provision.py:48`: URL-Schema-/Host-Allowlist + Validierung.
-- [ ] **OG-6 · MITTEL · 2x HTTP statt HTTPS** – `services/midi-bridge/index.js:146`, `services/signaling/index.js:6`.
-- [ ] **OG-7 · MITTEL · insecure-object-assign** – `scripts/background-coder/hfRouter.mjs:51`: kein blindes Merge von Nutzereingaben.
-- [ ] **OG-8 · MITTEL · non-literal-regexp** – `scripts/deep-audit/pattern.ts:12`: Regex-Quelle validieren/escapen.
-- [ ] **OG-9 · NIEDRIG · 13x unsafe-formatstring** – u. a. `src/utils/audioEngine.ts:449`, `src/context/AudioContext.tsx:80,85`, `src/utils/errorTracker.ts:45`: literale Format-Strings verwenden.
-- [ ] **OG-10 · NIEDRIG · csurf-Middleware fehlt** – `services/signaling/index.js:5`: CSRF-Schutz ergänzen bzw. reine API-Absicherung.
-- [ ] **RE-1 · MITTEL · ESLint-Fehler** – `scripts/background-coder/orchestrator.mjs:52`: `DOMAIN_AGENT_OVERRIDE` ungenutzt (no-unused-vars Error) → entfernen/verwenden.
-- [ ] **RE-2 · NIEDRIG · 71 ESLint-Warnungen** – 62 no-unused-vars, 6 react-hooks/exhaustive-deps, 2 ban-ts-comment (`src/utils/audioEngine.ts:2025,2027`), 1 no-unused-expressions → aufräumen oder Regeln schärfen.
+- [x] **OG-6 · MITTEL · 2x HTTP statt HTTPS** – `services/midi-bridge/index.js:146`, `services/signaling/index.js:6`.
+- [x] **OG-7 · MITTEL · insecure-object-assign** – `scripts/background-coder/hfRouter.mjs:51`: kein blindes Merge von Nutzereingaben.
+- [x] **OG-8 · MITTEL · non-literal-regexp** – `scripts/deep-audit/pattern.ts:12`: Regex-Quelle validieren/escapen.
+- [x] **OG-9 · NIEDRIG · 13x unsafe-formatstring** – u. a. `src/utils/audioEngine.ts:449`, `src/context/AudioContext.tsx:80,85`, `src/utils/errorTracker.ts:45`: literale Format-Strings verwenden.
+- [x] **OG-10 · NIEDRIG · csurf-Middleware fehlt** – `services/signaling/index.js:5`: CSRF-Schutz ergänzen bzw. reine API-Absicherung.
+- [x] **RE-1 · MITTEL · ESLint-Fehler** – `scripts/background-coder/orchestrator.mjs:52`: `DOMAIN_AGENT_OVERRIDE` ungenutzt (no-unused-vars Error) → entfernen/verwenden.
+- [x] **RE-2 · NIEDRIG · 71 ESLint-Warnungen** – 62 no-unused-vars, 6 react-hooks/exhaustive-deps, 2 ban-ts-comment (`src/utils/audioEngine.ts:2025,2027`), 1 no-unused-expressions → aufräumen oder Regeln schärfen.

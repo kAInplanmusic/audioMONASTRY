@@ -48,8 +48,6 @@ const ROUTING = {
     SECURITY: '#2', COMPLIANCE: '#2', HOTFIX: '#2',
   },
 };
-// Backups gehören laut Spezifikation zu CI/CD/Backups/Runbooks → #5.
-const DOMAIN_AGENT_OVERRIDE = { BACKUPS: '#5' };
 
 function detectDomain(text) {
   for (const [re, domain] of DOMAIN_RULES) {
