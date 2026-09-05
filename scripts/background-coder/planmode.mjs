@@ -21,6 +21,38 @@ dotenv.config({ path: path.join(ROOT, '.env'), quiet: true });
 const CONFIG = JSON.parse(readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
 const OUT = path.join(ROOT, 'logs', 'background-coder', 'audit-plans.md');
 
+/** OpenAI-kompatibler Direkt-Chat für Agents mit chatUrl="cerebras" bzw. "publicai". */
+async function directChat(provider, messages, { maxTokens, temperature } = {}) {
+  const isCerebras = provider.chatUrl === 'cerebras';
+  const baseUrl = isCerebras
+    ? 'https://api.cerebras.ai/v1'
+    : (process.env.PUBLICAI_BASE_URL || 'https://api.publicai.co/v1').replace(/\/+$/, '');
+  const apiKey = isCerebras
+    ? process.env.CB_API_KEY?.trim()
+    : process.env.PUBLICAI_KEY?.trim();
+  if (!apiKey) throw new Error(isCerebras ? 'CB_API_KEY fehlt' : 'PUBLICAI_KEY fehlt');
+  const modelId = isCerebras
+    ? (process.env.CEREBRAS_MODEL?.trim() || provider.model)
+    : (process.env.PUBLICAI_MODEL?.trim() || provider.model);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const res = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+      body: JSON.stringify({ model: modelId, messages, temperature: temperature ?? provider.temperature ?? 0.1, max_tokens: maxTokens ?? provider.maxTokens ?? 4096 }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`${isCerebras ? 'Cerebras' : 'PublicAI'} ${res.status}: ${text.slice(0, 300)}`);
+    const data = JSON.parse(text);
+    const msg = data.choices?.[0]?.message ?? {};
+    return { content: (msg.content ?? '').trim() || (msg.reasoning ?? '') };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 const PLAN_AGENTS = [
   {
     key: 'MOA',
@@ -77,7 +109,7 @@ Schwerpunkt: ${agent.focus}
 
 Kontext:
 - AGENT_TODO-Status: ${statusSummary()}
-- Queue läuft über HF Router / Inference Providers (provider=auto)
+- Queue läuft über Cerebras Direct (CB_API_KEY) / PublicAI / HF-Fallback
 - Keine Implementierung jetzt – nur Planung.
 
 Liefere als Markdown:
@@ -89,15 +121,20 @@ Liefere als Markdown:
 5. Erwartete Findings-Kategorien (Security/Code-Eleganz/RT/Architektur/UI)
 6. Akzeptanzkriterien für einen sauberen Audit-Lauf`;
 
-  const res = await hfRouter.chat({
-    modelId: agent.model.model,
-    messages: [
-      { role: 'system', content: 'Du bist ein Audit-Planer. Keine Code-Änderungen, keine JSON-Pflicht.' },
-      { role: 'user', content: prompt },
-    ],
-    maxTokens: 4096,
-    temperature: 0.1,
-  });
+  const res = agent.model.chatUrl
+    ? await directChat(agent.model, [
+        { role: 'system', content: 'Du bist ein Audit-Planer. Keine Code-Änderungen, keine JSON-Pflicht.' },
+        { role: 'user', content: prompt },
+      ], { maxTokens: 4096, temperature: 0.1 })
+    : await hfRouter.chat({
+        modelId: agent.model.model,
+        messages: [
+          { role: 'system', content: 'Du bist ein Audit-Planer. Keine Code-Änderungen, keine JSON-Pflicht.' },
+          { role: 'user', content: prompt },
+        ],
+        maxTokens: 4096,
+        temperature: 0.1,
+      });
   return res.content.trim();
 }
 
@@ -108,7 +145,12 @@ async function main() {
 
   for (const agent of PLAN_AGENTS) {
     if (only.length > 0 && !only.includes(agent.key)) continue;
-    if (!hfRouter.apiKey()) {
+    const keyName = agent.model.chatUrl === 'cerebras' ? 'CB_API_KEY' : agent.model.chatUrl === 'publicai' ? 'PUBLICAI_KEY' : null;
+    if (keyName && !(process.env[keyName] || '').trim()) {
+      sections.push(`\n## ${agent.role}\n\n**BLOCKED:** ${keyName} fehlt.\n`);
+      continue;
+    }
+    if (!keyName && !hfRouter.apiKey()) {
       sections.push(`\n## ${agent.role}\n\n**BLOCKED:** Kein HF-Token.\n`);
       continue;
     }

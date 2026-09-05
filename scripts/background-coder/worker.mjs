@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * Background-Coder WORKER (Hugging-Face-Router-basiert)
+ * Background-Coder WORKER (Cerebras-/PublicAI-direkt, HF-Router optional)
  *
  * - Liest AGENT_TODO.json (von Orchestrator erzeugt)
  * - Verarbeitet PENDING/RETRY-Aufgaben sequenziell (keine blinde Parallelisierung)
- * - Alle LLM-Aufrufe laufen über hfRouter (HF Router / Inference Providers, provider=auto)
+ * - LLM-Aufrufe: Agents mit chatUrl="cerebras" → Cerebras-API (CB_API_KEY),
+ *   chatUrl="publicai" → PublicAI (PUBLICAI_KEY), sonst hfRouter (HF Router)
  * - Sichere Patch-Anwendung: exakte Snippets, genau 1 Treffer, sonst Revert
  * - tsc-Gate nach Änderungen, Review für SECURITY/COMPLIANCE/HOTFIX
- * - Quota/Billing-Fehler → PAUSED/BLOCKED, keine Endlosschleifen
+ * - Quota/Billing-Fehler (402/429) → BLOCKED, keine Endlosschleifen
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync, execSync } from 'node:child_process';
@@ -39,12 +40,19 @@ function modelFor(task) {
   return CONFIG.agents[task.agent];
 }
 
-/** PublicAI / OpenAI-kompatibler Direkt-Chat (für Agents mit chatUrl="publicai"). */
+/** OpenAI-kompatibler Direkt-Chat für Agents mit chatUrl="cerebras" bzw. "publicai". */
 async function directChat(provider, messages, { maxTokens } = {}) {
-  const baseUrl = (process.env.PUBLICAI_BASE_URL || 'https://api.publicai.co/v1').replace(/\/+$/, '');
-  const apiKey = process.env.PUBLICAI_KEY?.trim();
-  if (!apiKey) throw new Error('PUBLICAI_KEY fehlt');
-  const modelId = process.env.PUBLICAI_MODEL?.trim() || provider.model;
+  const isCerebras = provider.chatUrl === 'cerebras';
+  const baseUrl = isCerebras
+    ? 'https://api.cerebras.ai/v1'
+    : (process.env.PUBLICAI_BASE_URL || 'https://api.publicai.co/v1').replace(/\/+$/, '');
+  const apiKey = isCerebras
+    ? process.env.CB_API_KEY?.trim()
+    : process.env.PUBLICAI_KEY?.trim();
+  if (!apiKey) throw new Error(isCerebras ? 'CB_API_KEY fehlt' : 'PUBLICAI_KEY fehlt');
+  const modelId = isCerebras
+    ? (process.env.CEREBRAS_MODEL?.trim() || provider.model)
+    : (process.env.PUBLICAI_MODEL?.trim() || provider.model);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 120_000);
   try {
@@ -55,9 +63,16 @@ async function directChat(provider, messages, { maxTokens } = {}) {
       body: JSON.stringify({ model: modelId, messages, temperature: provider.temperature ?? 0.1, max_tokens: maxTokens ?? provider.maxTokens ?? 4096 }),
     });
     const text = await res.text();
-    if (!res.ok) throw new Error(`PublicAI ${res.status}: ${text.slice(0, 300)}`);
+    if (!res.ok) {
+      const err = new Error(`${isCerebras ? 'Cerebras' : 'PublicAI'} ${res.status}: ${text.slice(0, 300)}`);
+      err.status = res.status;
+      throw err;
+    }
     const data = JSON.parse(text);
-    return { content: data.choices?.[0]?.message?.content ?? '' };
+    const msg = data.choices?.[0]?.message ?? {};
+    // Reasoning-Modelle (z. B. qwen) liefern manchmal leeren content;
+    // dann auf den Reasoning-Text zurückfallen.
+    return { content: (msg.content ?? '').trim() || (msg.reasoning ?? '') };
   } finally {
     clearTimeout(timeout);
   }
@@ -111,7 +126,7 @@ function runTsc() {
 }
 
 function renderTodo(payload) {
-  let md = `# AGENT_TODO – Background-Coder Pipeline (HF Router)\n\nAktualisiert: ${new Date().toISOString()}\n\n`;
+  let md = `# AGENT_TODO – Background-Coder Pipeline (Cerebras Direct)\n\nAktualisiert: ${new Date().toISOString()}\n\n`;
   for (const t of payload.tasks) {
     md += `\n${t.taskId ?? 'TASK'}\nCLASS: ${t.class}\nDOMAIN: ${t.domain}\nDESCRIPTION: ${t.raw}\nIMPLEMENTATION_AGENT: ${t.agent}\nMODEL: ${modelFor(t)?.model ?? '-'}\nREVIEW_AGENT: ${t.reviewAgent ?? '-'}\nSERVER_REQUIRED: ${t.serverRequired ? 'YES' : 'NO'}\nHARDWARE_REQUIRED: ${t.hardwareRequired ? 'YES' : 'NO'}\nSTATUS: ${t.status}\n`;
     if (t.lastError) md += `ERROR: ${t.lastError}\n`;
@@ -140,15 +155,15 @@ async function reviewWithModel(diffText, task) {
   const agent = CONFIG.agents[task.reviewAgent];
   if (!agent) return { approved: false, reason: `Review-Agent ${task.reviewAgent} fehlt` };
   try {
-    const content = await hfRouter.chat({
-      modelId: agent.model,
-      messages: [
-        { role: 'system', content: 'Du bist unabhängiger Reviewer. Antworte NUR mit APPROVED oder REJECTED und einem kurzen Grund.' },
-        { role: 'user', content: `Aufgabe: ${task.raw}\n\nDiff/Änderungen:\n${diffText}\n\nAPPROVED oder REJECTED?` },
-      ],
-    });
-    const approved = /APPROVED/i.test(content.content);
-    const reason = content.content.replace(/APPROVED|REJECTED/gi, '').trim().slice(0, 300);
+    const messages = [
+      { role: 'system', content: 'Du bist unabhängiger Reviewer. Antworte NUR mit APPROVED oder REJECTED und einem kurzen Grund.' },
+      { role: 'user', content: `Aufgabe: ${task.raw}\n\nDiff/Änderungen:\n${diffText}\n\nAPPROVED oder REJECTED?` },
+    ];
+    const res = agent.chatUrl
+      ? await directChat(agent, messages)
+      : await hfRouter.chat({ modelId: agent.model, messages });
+    const approved = /APPROVED/i.test(res.content);
+    const reason = res.content.replace(/APPROVED|REJECTED/gi, '').trim().slice(0, 300);
     return { approved, reason: reason || (approved ? 'ok' : 'review abgelehnt') };
   } catch (e) {
     return { approved: false, reason: `Review fehlgeschlagen: ${e.message}` };
@@ -179,15 +194,24 @@ async function processTask(task, dryRun) {
     task.lastError = `Unbekannter Agent/Modell: ${task.agent}`;
     return;
   }
-  if (!hfRouter.apiKey()) {
-    task.status = 'BLOCKED';
-    task.lastError = 'HF_TOKEN/HF_API_KEY fehlt';
-    return;
-  }
-  if (hfRouter.isPaused()) {
-    task.status = 'BLOCKED';
-    task.lastError = `HF-Pipeline pausiert: ${hfRouter.pausedReason}`;
-    return;
+  if (provider.chatUrl) {
+    const keyName = provider.chatUrl === 'cerebras' ? 'CB_API_KEY' : 'PUBLICAI_KEY';
+    if (!(process.env[keyName] || '').trim()) {
+      task.status = 'BLOCKED';
+      task.lastError = `${keyName} fehlt`;
+      return;
+    }
+  } else {
+    if (!hfRouter.apiKey()) {
+      task.status = 'BLOCKED';
+      task.lastError = 'HF_TOKEN/HF_API_KEY fehlt';
+      return;
+    }
+    if (hfRouter.isPaused()) {
+      task.status = 'BLOCKED';
+      task.lastError = `HF-Pipeline pausiert: ${hfRouter.pausedReason}`;
+      return;
+    }
   }
   task.status = 'RUNNING';
   if (dryRun) {
@@ -220,7 +244,7 @@ Regeln:
       { role: 'system', content: 'Coding-Pipeline. Präzise JSON-Antworten.' },
       { role: 'user', content: prompt },
     ];
-    const res = provider.chatUrl === 'publicai'
+    const res = provider.chatUrl
       ? await directChat(provider, messages)
       : await hfRouter.chat({ modelId: provider.model, messages });
     content = res.content;
@@ -229,6 +253,11 @@ Regeln:
       task.status = 'BLOCKED';
       task.lastError = e.message;
       hfRouter.pause(e.message);
+      return;
+    }
+    if (e?.status === 402 || e?.status === 429) {
+      task.status = 'BLOCKED';
+      task.lastError = e.message;
       return;
     }
     task.status = task.retryCount >= 2 ? 'FAILED' : 'RETRY';
