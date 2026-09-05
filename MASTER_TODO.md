@@ -1233,7 +1233,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-216 · MEDIUM · Server binds 0.0.0.0 with no authentication or proxy boundary check** – `services/samplemonk-ai-runtime/startup.sh:21` (deepseek-flash)
   - Uvicorn is started with --host 0.0.0.0. If the service is reachable outside an internal Docker network without an auth gateway, the AI runtime can be called directly. The script does not verify it is behind an authenticated orchestrator/proxy.
   - Vorschlag: Bind to 127.0.0.1 when the service is only meant to be reached through the orchestrator, or document/require a secure internal network with an auth boundary.
-- [ ] **DA-2026-09-04-217 · MEDIUM · updateState ist nicht stabil und kann stale lockStatus verwenden** – `src/hooks/usePluginState.ts:28` (deepseek-pro)
+- [x] **DA-2026-09-04-217 · MEDIUM · updateState ist nicht stabil und kann stale lockStatus verwenden** – `src/hooks/usePluginState.ts:28` (deepseek-pro)
   - updateState wird bei jedem Render neu erstellt und schließt den aktuellen lockStatus ein. Wenn der Rückgabewert in memoized Children oder Effects mit leeren Dependencies verwendet wird, kann eine veraltete Lock-Entscheidung getroffen werden. Zudem ist webRTCManager.userId eine externe nicht-reaktive Quelle, deren Änderung keinen Re-Render auslöst.
   - Vorschlag: updateState mit useCallback stabilisieren (Dependencies: [lockStatus.active, lockStatus.lockedBy, pluginId, setModuleState, userId]); userId über React-Context bereitstellen.
 - [ ] **DA-2026-09-04-218 · HIGH · Autorisierung nur clientseitig – Lock-Prüfung nicht im Backend erzwungen** – `src/hooks/usePluginState.ts:29` (deepseek-pro)
