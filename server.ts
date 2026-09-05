@@ -3,6 +3,8 @@ import * as BusboyModule from 'busboy';
 import { random } from './src/utils/random';
 import http from 'http';
 import path from 'path';
+import { execFile } from 'child_process';
+import { randomBytes } from 'crypto';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
@@ -1487,8 +1489,6 @@ app.post('/api/generate-voice', async (req, res) => {
     || (voiceCli.startsWith('/') && !voiceCli.includes('..') && /^[\x20-\x7E]+$/.test(voiceCli) && voiceCli.includes('/'));
   if (engine && voiceCli && voiceCliAllowed && query) {
     try {
-      const { execFile } = require('child_process');
-      const { randomBytes } = require('crypto');
       const audioUrl = await new Promise<string>((resolve, reject) => {
         const stamp = `${Date.now()}-${randomBytes(4).toString('hex')}`;
         const outFile = `dist/voices/voice_${stamp}.wav`;

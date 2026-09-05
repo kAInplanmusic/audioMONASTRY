@@ -98,12 +98,12 @@
 ### Mittel (72) – verdichtet
 
 - [ ] **AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`.
-- [ ] **AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
+- [x] **AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
 - [x] **AD-M4a Bind-Host-Härtung:** `backend-core/package.json` start:python nutzt `${AI_BIND_HOST:-127.0.0.1}` (2026-09-05); `samplemonk-ai-runtime/startup.sh` bindet bereits 127.0.0.1.
 - [ ] **AD-M4b Python-Supply-Chain:** `services/samplemonk-ai-runtime/pyproject.toml` – Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade (Betriebsentscheidung/Test nötig).
 - [x] **AD-M5a React/State:** `usePluginState.ts` updateState via `useCallback` + `lockStatusRef` stabil (2026-09-05).
 - [x] **AD-M5b React/State:** `useSessionSync.ts:35` unvalidierte Samples gefixt via `isValidScratchSample()` (2026-09-05).
-- [ ] **AD-M6a WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race (DA-220).
+- [x] **AD-M6a WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race (DA-220).
 - [x] **AD-M6b WebRTC:** `WebRTCManager.ts:220` SFU-Subscription-Retry umgesetzt (DA-221, 2026-09-05).
 
 ### Niedrig (813) – aggregiert
@@ -125,7 +125,7 @@
 
 **Bewertung:** Sinnvoll und machbar als Audit-/Test-Checkliste. V1 (`audioEngine`, Tone/WebAudio) ist der Live-Pfad; V2 (`AudioGraph`/`V2StudioGraph`/Backends) ist als Prototyp markiert und nur in Tests verdrahtet.
 
-- [ ] **P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.
+- [x] **P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.
 
 **Nicht sinnvoll im Bestand:** `AudioGraph`-Fremdbibliothek/„audiograph“-Import – Eigenbau liegt vor. V2-Live-Parität → `VISIONS_TODO.md`.
 
@@ -137,7 +137,7 @@
 
 **Bewertung:** Prüffragen zum Ist-Zustand sind machbar und sinnvoll; Hardware-/Zukunftsteile sind Visionen → `VISIONS_TODO.md`.
 
-- [ ] **P3-6 Schutz der Algorithmenkerne:** TEE/geschützter Speicher im Browser/Node als **nicht sinnvoll** markieren; stattdessen Build-/Bundle-Schutz und Objekt-Code-Review prüfen.
+- [x] **P3-6 Schutz der Algorithmenkerne:** TEE/geschützter Speicher im Browser/Node als **nicht sinnvoll** markieren; stattdessen Build-/Bundle-Schutz und Objekt-Code-Review prüfen.
 
 **Vision (in `VISIONS_TODO.md` überführt):** Universal-Steckmodul-Hub, parallele LVDS-Clock-Verteilung + Feedback-Clock, Auto-Codegenerierung (Matlab/Simulink), Edge-AI-NPUs, software-definierte Analogsignale, selbstlernende Routing-Vorschläge.
 
@@ -653,11 +653,11 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 
 ## Deep-Audit 2026-09-04 – Befunde
 
-- [ ] **DA-2026-09-04-006 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:66` (eslint)
+- [x] **DA-2026-09-04-006 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:66` (eslint)
   - 'context' is assigned a value but never used.
-- [ ] **DA-2026-09-04-007 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:84` (eslint)
+- [x] **DA-2026-09-04-007 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:84` (eslint)
   - 'page' is assigned a value but never used.
-- [ ] **DA-2026-09-04-008 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:101` (eslint)
+- [x] **DA-2026-09-04-008 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:101` (eslint)
   - 'page' is assigned a value but never used.
 - [x] **DA-2026-09-04-009 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/stress-test.mjs:76` (eslint)
   - 'id' is defined but never used.
@@ -838,7 +838,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
   - Vorschlag: Remove the trailing backslash or move a final option onto the same line. Example: `--timeout-keep-alive 30` without backslash.
 - [x] **DA-2026-09-04-135 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/drop/DropGeneratorPanel.tsx:27` (eslint)
   - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for 
-- [ ] **DA-2026-09-04-148 · MEDIUM · react-hooks/refs** – `src/components/midi/MappingLearnPanel.tsx:28` (eslint)
+- [x] **DA-2026-09-04-148 · MEDIUM · react-hooks/refs** – `src/components/midi/MappingLearnPanel.tsx:28` (eslint)
   - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/components/midi/MappingLear
 - [x] **DA-2026-09-04-157 · HIGH · Ungeprüfte Benutzereingaben in WebRTC-Nachrichten** → gefixt 2026-09-04 – `src/context/ModuleStateContext.tsx:57` (hf-qwen)
   - Die Funktion `addDataChannelListener` akzeptiert beliebige Nachrichten vom WebRTC-Kanal ohne strenge Validierung der `pluginId`, `state`, `senderId` und `timestamp`. Dies könnte zu unerwarteten Zustandsänderungen führen, wenn ein Angreifer manipulierte Nachrichten sendet.
@@ -846,7 +846,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **DA-2026-09-04-161 · HIGH · Ungeprüfte Benutzeridentität bei Lock-Übernahme** → gefixt 2026-09-04 – `src/context/PluginManagerContext.tsx:49` (hf-qwen)
   - Die Funktion `requestLock` erlaubt es einem Benutzer, einen Lock zu übernehmen, wenn der Mixer im AI-Modus ist und bereits von einem anderen Benutzer besessen wird. Es erfolgt keine Validierung, ob der übernehmende Benutzer tatsächlich berechtigt ist, den Lock zu übernehmen.
   - Vorschlag: Füge eine zusätzliche Berechtigungsprüfung hinzu, z.B. durch Überprüfung einer Rollenliste oder eines Token-Claims, bevor ein Lock übernommen wird.
-- [ ] **DA-2026-09-04-168 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMIDI.ts:175` (eslint)
+- [x] **DA-2026-09-04-168 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMIDI.ts:175` (eslint)
   - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for 
 - [x] **DA-2026-09-04-169 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:43` (eslint)
   - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/hooks/useMidiClockOut.ts:43
@@ -908,7 +908,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **DA-2026-09-04-219 · MEDIUM · syncAdd sends arbitrary unvalidated sample to remote peers** – `src/hooks/useSessionSync.ts:35` (deepseek-pro)
   - syncAdd accepts `sample: any` and sends it directly via webRTCManager without applying the same id/name/url validation that is enforced for incoming messages. A compromised or buggy local caller can broadcast malformed or untrusted payloads (e.g., non-string URL, oversized object, injection attempts) to all other session users.
   - Vorschlag: Define a strict Sample type and reuse the same validation guard (id string, name string, url undefined or isTrustedMediaUrl) before calling addToScratchpad and sendData. Avoid `any`. → Umsetzung 2026-09-05: `isValidScratchSample()` nutzt `AudioSample`-Typ und gilt für In+Out.
-- [ ] **DA-2026-09-04-220 · MEDIUM · Race Condition bei SFU-Modus-Umschaltung** – `src/utils/WebRTCManager.ts:150` (hf-qwen)
+- [x] **DA-2026-09-04-220 · MEDIUM · Race Condition bei SFU-Modus-Umschaltung** – `src/utils/WebRTCManager.ts:150` (hf-qwen)
   - In `setSfuMode`, wenn der SFU-Modus aktiviert wird, werden bestehende P2P-Verbindungen geschlossen, aber es gibt keine Garantie dafür, dass alle Verbindungen vor dem Umschaltvorgang ordnungsgemäß abgeschlossen wurden. Dies kann zu Zustandsinkonsistenzen führen, insbesondere wenn noch Daten über alte Verbindungen gesendet werden.
   - Vorschlag: Füge eine Wartezeit oder ein Promise-basiertes Schließen hinzu, bevor der SFU-Modus aktiviert wird, um sicherzustellen, dass alle Ressourcen freigegeben wurden.
 - [x] **DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)

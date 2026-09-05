@@ -172,20 +172,27 @@ export const useMIDI = () => {
   }, [refreshDevices, requestAccess]);
 
   useEffect(() => {
-    requestAccess();
+    let cancelled = false;
+    // requestAccess asynchron starten: keine synchronen setState-Aufrufe im Effect-Body.
+    void (async () => {
+      await Promise.resolve();
+      if (!cancelled) await requestAccess();
+    })();
+    const boundInputsSnapshot = boundInputs.current;
+    const parsersSnapshot = parsers.current;
     return () => {
+      cancelled = true;
       if (stateChangeTimer.current !== null) window.clearTimeout(stateChangeTimer.current);
       const access = accessRef.current;
       if (access) {
         access.onstatechange = null;
         Array.from(access.inputs.values()).forEach((i) => { i.onmidimessage = null; });
       }
-      for (const id of [...boundInputs.current]) hotplugManager.detach(`midi:${id}`);
-      boundInputs.current.clear();
-      parsers.current.clear();
+      for (const id of [...boundInputsSnapshot]) hotplugManager.detach(`midi:${id}`);
+      boundInputsSnapshot.clear();
+      parsersSnapshot.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [requestAccess]);
 
   return {
     midiAccess, inputs, outputs, detected, lastMessage, error, rescan,
