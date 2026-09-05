@@ -60,10 +60,10 @@
 
 ### F – Frontend, React & Architektur
 
-- [ ] **F-1 `src/hooks/useWebRTC.ts` toter Code (Mittel)** – löschen oder als Referenz-Implementierung für K-2 verdrahten.
+- [x] **F-1 `src/hooks/useWebRTC.ts` toter Code (Mittel)** – gelöscht (2026-09-05).
 - [ ] **F-2 Vier parallele Lock-Modelle (Mittel)** – auf ein serverseitig autoritatives Modell konsolidieren.
 - [x] **F-3 Memo-Gate rot (Mittel)** – `DropTerminal.tsx` nutzt bereits `React.memo`; `check:memo` grün (2026-09-05). Offen: CI-Pflicht-Step.
-- [ ] **F-4 LWW-Merge ohne Payload-Validierung (Mittel)** – `pluginId` gegen `EVAL_PLUGIN_IDS`/Registry whitelisten.
+- [x] **F-4 LWW-Merge ohne Payload-Validierung (Mittel)** – `VALID_PLUGIN_IDS.has(pluginId)` verifiziert (2026-09-05).
 - [ ] **F-5 160× `any` (Mittel)** – Zod-Schemas für alle Peer-Payloads; Feature-Detection eng typisieren.
 - [ ] **F-6 Non-null-Assertions ohne Guard (Niedrig)** – explizite Guards mit sprechender Meldung.
 - [ ] **F-7 Handler-Zuweisung statt Subscription (Niedrig)** – `onMainStream`/`onSessionUpdate` auf `addDataChannelListener`-Muster mit Unsubscribe.
@@ -96,9 +96,9 @@
 
 ### Hoch (11)
 
-- [ ] **AD-H1 `server/cloudAutomation.ts:76`** – R2-Key-Validierung (`isSafeR2Key`) härten (Whitelist, Segmentlängen).
-- [ ] **AD-H2 `services/backend-core/python/celery_app.py:33`** – `_validate_audio_file` gegen Symlinks/relative Pfade härten.
-- [ ] **AD-H3 `services/backend-core/python/hypersonic_moa.py:57`** – JSON-Validierung vor `json.loads` (erlaubte Schlüssel/Typen/Größen).
+- [x] **AD-H1 `server/cloudAutomation.ts:76`** – `isSafeR2Key` härter: Colon-Block, Segmentlängen 1..255 (2026-09-05).
+- [x] **AD-H2 `services/backend-core/python/celery_app.py:33`** – verifiziert: `realpath`-Root-Check vorhanden (2026-09-05).
+- [x] **AD-H3 `services/backend-core/python/hypersonic_moa.py:57`** – verifiziert: Datei nutzt keine `json.loads(raw)`-Strecke mehr (2026-09-05).
 - [x] **AD-H4 `services/samplemonk-ai-runtime/app.py:107`** – `/infer` prüft Modell gegen Manifest-Whitelist `KNOWN_MODEL_IDS` (2026-09-05).
 - [x] **AD-H5 `services/samplemonk-ai-runtime/app.py:140`** – Error-Logging nutzt nur noch `type(exc).__name__` (2026-09-05).
 - [x] **AD-H6 `services/samplemonk-ai-runtime/handlers.py:105`** – verifiziert: `run_inference` validiert task und nutzt `HANDLERS`-Whitelist (2026-09-05).
