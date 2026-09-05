@@ -24,6 +24,112 @@
 
 ---
 
+## 🔴 Übernahme aus `AUDIT.md` (Tiefen-Audit 2026-09-03, Commit 7b22c18)
+
+> Die Datei AUDIT.md wurde am 2026-09-05 vollständig in diese Liste überführt und anschließend gelöscht.
+
+### K – Kritisch: Multi-User/B2B-Locking
+
+- [ ] **K-1 Lock-Owner-Vergleich gegen falsches Literal** – ~20 Dateien prüfen `lockedBy !== 'localUser'`, tatsächliche ID ist `webRTCManager.userId` (`user-<random>`). Fix: zentraler Helfer `isLockedByOther(lock, userId)` + alle Literale ersetzen; Regressionstest analog `tests/lockFuzz.test.ts`.
+- [ ] **K-2 Plugin-Locks werden nicht netzwerkweit repliziert** – `PluginManagerContext` ist lokaler State; B2B-Locked-Mode existiert netzwerkseitig nicht. Fix: serverseitig autoritative `plugin-lock`-Nachricht über den Session-Room; Client nur optimistisch.
+- [ ] **K-3 `releaseLock()` prüft den Halter nicht** – `_userId` wird ignoriert, jeder kann fremde Locks brechen. Fix: Owner-Check vor Commit + serverseitige Autorisierung.
+- [ ] **K-4 Lock-Halter kann eigenen State nicht ändern** – `usePluginState.updateState()` prüft nur `lockStatus.active`, nicht den Owner. Fix: `if (!lockStatus.active || lockStatus.lockedBy === webRTCManager.userId)`.
+- [ ] **K-5 Keine Lock-Freigabe bei Disconnect** – TTL 5 min, sonst nichts. Fix: serverseitige Lock-Tabelle mit Freigabe im `disconnect`-Handler; TTL kürzer (z. B. 60 s + Heartbeat).
+
+### S – Backend & Security
+
+- [ ] **S-1 Rohe Exception-Messages an Client (Hoch)** – `server.ts` u. a. 455/470/496/516/554. Fix: generische Fehlercodes, Details nur serverseitig loggen.
+- [ ] **S-2 Socket.io-Relay ohne Ziel-Validierung (Hoch)** – `server.ts:1668-1682` leitet an `data.target` weiter. Fix: Ziel-Socket auflösen + Session-Room vergleichen.
+- [ ] **S-3 `assign-role` ohne Session-Zugehörigkeitsprüfung (Hoch)** – Ziel-User gegen Room-Mitglieder validieren.
+- [ ] **S-4 Admin-Token-Vergleich nicht konstantzeitig (Mittel)** – `safeTokenEqual()` auch für `x-admin-token` nutzen; engeres Rate-Limit.
+- [ ] **S-5 SFU-`sessionId` ungeprüft (Mittel)** – Whitelist `/^[a-zA-Z0-9_-]{1,64}$/`, sonst disconnect.
+- [ ] **S-6 `VOICE_CLI` ungeprüft (Mittel)** – Pfad-Allowlist + `crypto.randomBytes` im Dateinamen.
+- [ ] **S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.
+- [ ] **S-8 `qs`-Kette verwundbar (Niedrig)** – `npm audit fix` (Express-4-Patch-Level).
+- [ ] **S-9 Redis-/Fleet-Map-URL ungeprüft (Niedrig)** – `new URL()` mit Protokoll-Whitelist (`redis:`/`rediss:`/`https:`).
+
+### A – Audio-Engine & DSP
+
+- [ ] **A-1 LUFS `log10(0)` → -Infinity (Hoch)** – `lufsProcessor.ts:21-25`. Fix: `20 * Math.log10(Math.max(rms, 1e-8)) - 0.691` + Clamp −70 dB.
+- [ ] **A-2 `audioEngine.ts` 2814-Zeilen-Monolith (Mittel)** – in Graph-Aufbau/Worklet-Factory/Routing/Monitoring schneiden; Kernpfad-Coverage (26,7 %) erhöhen.
+- [ ] **A-3 Fehlgeschlagene Worklets nicht entsorgt (Mittel)** – `makeWorklet`-Fallbacks disconnecten und im Teardown führen.
+- [ ] **A-4 Mastering-Lookahead nicht per API abfragbar (Mittel)** – `audioEngine.getLatencyBudgetMs()` mit Stufen-Aufschlüsselung; in perfMONK anzeigen.
+- [ ] **A-5 Allokationen im `process()`-Pfad bei Kanal-/Quantum-Wechsel (Niedrig)** – im Konstruktor auf Maximalkanäle/-quantum vorallozieren.
+- [ ] **A-6 Quantum-Annahme 128 im EQ-Ramping (Niedrig)** – aus tatsächlicher Blocklänge ableiten.
+- [ ] **A-7 Keine Denormal-Clamps im Reverb-Feedback (Niedrig)** – analog `dspProcessor.ts:144-145`.
+
+### F – Frontend, React & Architektur
+
+- [ ] **F-1 `src/hooks/useWebRTC.ts` toter Code (Mittel)** – löschen oder als Referenz-Implementierung für K-2 verdrahten.
+- [ ] **F-2 Vier parallele Lock-Modelle (Mittel)** – auf ein serverseitig autoritatives Modell konsolidieren.
+- [ ] **F-3 Memo-Gate rot (Mittel)** – `DropTerminal.tsx` mit `React.memo`; `check:memo` als CI-Pflicht-Step.
+- [ ] **F-4 LWW-Merge ohne Payload-Validierung (Mittel)** – `pluginId` gegen `EVAL_PLUGIN_IDS`/Registry whitelisten.
+- [ ] **F-5 160× `any` (Mittel)** – Zod-Schemas für alle Peer-Payloads; Feature-Detection eng typisieren.
+- [ ] **F-6 Non-null-Assertions ohne Guard (Niedrig)** – explizite Guards mit sprechender Meldung.
+- [ ] **F-7 Handler-Zuweisung statt Subscription (Niedrig)** – `onMainStream`/`onSessionUpdate` auf `addDataChannelListener`-Muster mit Unsubscribe.
+- [ ] **F-8 Accessibility (Niedrig)** – Slider-Rollen, `aria-pressed`, `aria-disabled`/`aria-label` für Lock-Zustand.
+
+### Q – Build, CI & Qualität
+
+- [ ] **Q-1 `check:memo` und `npm audit` fehlen als CI-Gates.**
+- [ ] **Q-2 Bundle 1.56 MB > 1.50 MB Warnschwelle** – `tone`/`lucide-react` splitten/tree-shaken.
+- [ ] **Q-3 Coverage 32,6 %; untertestete Risiko-Dateien:** `audioEngine.ts` 26,7 %, `WebRTCManager.ts` 26,0 %, `rbac.ts` 0 %, `AuditLogger.ts` 0 %, `dropAudioBridge.ts` 0 %, `audioAnalyzer.ts` 0 %, `presetStore.ts`/`opfs.ts` 0 %.
+- [ ] **Q-4 `rbac.ts` (sicherheitsrelevant) mit Tests abdecken.**
+
+### Empfohlene Reihenfolge (AUDIT.md)
+
+1. Sofort P0: K-1 → K-4 → K-3 → K-2 → K-5 + Regressionstests.
+2. Kurzfristig P1: S-1, S-2, S-3, S-4; A-1; F-3 + CI; `npm audit fix`; F-1.
+3. Mittelfristig P2: F-4/F-5 Zod; A-2 Modularisierung + Coverage; Bundle; S-7/S-5/S-6/S-9; A-3…A-7; F-6…F-8.
+
+---
+
+## 🔴 Übernahme aus `AUDIT_DEEP.md` (Deep Audit 300)
+
+> Die Datei AUDIT_DEEP.md wurde am 2026-09-05 vollständig in diese Liste überführt und anschließend gelöscht.
+
+### Kritisch (3)
+
+- [ ] **AD-K1 `server/cloudAutomation.ts:122`** – Supabase-Fehlermeldungen gehen an den Client (`error: error.message`). Fix: serverseitig loggen, generische Meldung nach außen.
+- [ ] **AD-K2 `services/samplemonk-ai-runtime/app.py:150`** – `/mcp/tools/{tool_name}` ohne Auth/RBAC. Fix: Authentifizierung + RBAC vor Tool-Invocation.
+- [ ] **AD-K3 `services/samplemonk-ai-runtime/model_manager.py:170`** – `torch.cuda.empty_cache()` im `unload()` verursacht Latenzspitzen. Fix: entfernen oder asynchron/außerhalb des kritischen Pfads.
+
+### Hoch (11)
+
+- [ ] **AD-H1 `server/cloudAutomation.ts:76`** – R2-Key-Validierung (`isSafeR2Key`) härten (Whitelist, Segmentlängen).
+- [ ] **AD-H2 `services/backend-core/python/celery_app.py:33`** – `_validate_audio_file` gegen Symlinks/relative Pfade härten.
+- [ ] **AD-H3 `services/backend-core/python/hypersonic_moa.py:57`** – JSON-Validierung vor `json.loads` (erlaubte Schlüssel/Typen/Größen).
+- [ ] **AD-H4 `services/samplemonk-ai-runtime/app.py:107`** – `/infer` task/model zusätzlich gegen Whitelist/Registry prüfen.
+- [ ] **AD-H5 `services/samplemonk-ai-runtime/app.py:140`** – Error-Logging sanitieren (keine Raw-Exceptions/Traces).
+- [ ] **AD-H6 `services/samplemonk-ai-runtime/handlers.py:105`** – `task` gegen Whitelist validieren.
+- [ ] **AD-H7 `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104`** – Secrets (`HF_TOKEN`) beim Logging maskieren.
+- [ ] **AD-H8 `services/samplemonk-ai-runtime/model_manager.py:107`** – Manifest-Felder (`repository`, `revision`, `dependencies`) streng validieren.
+- [ ] **AD-H9 `services/samplemonk-ai-runtime/startup.sh:13`** – `AI_RUNTIME_DEVICE` Default auf cpu/auto + Allowlist (`cpu|cuda|mps`).
+- [ ] **AD-H10 `src/hooks/usePluginState.ts:29`** – Lock-Prüfung nur clientseitig; serverseitige Eigentümer-Validierung erzwingen.
+- [ ] **AD-H11 `src/utils/WebRTCManager.ts:109`** – `senderId` gegen signierte Quelle prüfen bzw. ganz aus Payload entfernen (wird durch `peer.userId` ersetzt).
+
+### Mittel (72) – verdichtet
+
+- [ ] **AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`.
+- [ ] **AD-M2 ESLint-Scripts:** no-unused-vars in `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`; `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
+- [ ] **AD-M3 Backend-Bugs:** `cloudAutomation.ts:100` Regex-Logik; `cloudAutomation.ts:132` Env-Zugriffe; `celery_app.py:104/120` Race Conditions `_load_demucs`/`_load_musicgen`; `hypersonic_moa.py:67` leerer Prompt; `app.py:124` + `handlers.py:105` Race Conditions Model-Loading; `handlers.py:130` Resampling-Fehlerbehandlung; `hf_manage_endpoint.py:122/130` Fehlerbehandlung/Trennung Konfiguration-Logik; `model_manager.py:130/190` Race/Load + VRAM-Fehlerfall; `registry.py:26` Revision-Pinning via `null`; `startup.sh:9/10` Symlink-Pfad + HF_HOME-Space-Check.
+- [ ] **AD-M4 AI-Runtime-Security/Architektur:** `backend-core/package.json:8` Uvicorn 0.0.0.0 ohne Auth; `startup.sh:18/21` AI-Runtime ungeschützt auf allen Interfaces; `pyproject.toml:7/11` fehlende Hash-Pins/Lockfile + veraltetes `torch==2.4.1`.
+- [ ] **AD-M5 React/State:** `usePluginState.ts:28` stale lockStatus; `useSessionSync.ts:35` `syncAdd` sendet unvalidierte Samples an Peers.
+- [ ] **AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung.
+
+### Niedrig (813) – aggregiert
+
+- [ ] **AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen.
+- [ ] **AD-N2 ESLint-Low-Hänger** (no-unused-vars, prefer-const) in `server.ts`, `scripts/**`, `ai/localDemucs.ts`, `audio-runtime/src/main.rs`.
+- [ ] **AD-N3 160× `any`/`as any` + 3× ts-ignore reduzieren** (deckungsgleich mit F-5/AUDIT.md).
+
+### Info (2)
+
+- [ ] **AD-I1 `services/samplemonk-ai-runtime/startup.sh:17`** – `AI_MODEL_MANIFEST`-Default über `${BASH_SOURCE[0]}` script-dir-stabil machen.
+- [ ] **AD-I2 `src/hooks/useSessionSync.ts:37`** – `SCRATCHPAD_UPDATE` braucht Version/Sequenznummer gegen Out-of-Order-Desync.
+
+---
+
 ## 🟠 OPS – Flotten-Start per Snapshot beschleunigen (2026-09-02)
 
 > Ausgangslage: Der Flotten-Wake baut aktuell pro Knoten das Docker-Image aus
