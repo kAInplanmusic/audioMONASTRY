@@ -1,6 +1,6 @@
 # AGENT_TODO – Background-Coder Pipeline (HF Router)
 
-Aktualisiert: 2026-09-05T10:56:02.049Z
+Aktualisiert: 2026-09-05T12:20:18.915Z
 
 
 TASK-001
@@ -243,8 +243,8 @@ MODEL: moonshotai/Kimi-K2.7-Code
 REVIEW_AGENT: #6
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in backend-core/package.json
+STATUS: BLOCKED
+ERROR: Manuell teilfixiert: Bind-Host ok; pyproject/torch-Upgrade benötigt Betriebsentscheidung
 
 TASK-026
 CLASS: SCHWER
@@ -2522,3 +2522,69 @@ REVIEW_AGENT: -
 SERVER_REQUIRED: YES
 HARDWARE_REQUIRED: YES
 STATUS: BLOCKED
+
+AUDIT-PLAN-MOA
+CLASS: SCHWER
+DOMAIN: ARCHITECTURE
+DESCRIPTION: Führe Gesamt-Tiefen-Audit laut Plan aus und liefere Findings (Architektur, Abhängigkeiten, Datenfluss, Risiko-Cluster).
+IMPLEMENTATION_AGENT: MOA
+MODEL: deepseek-ai/DeepSeek-V4-Flash-Vision-Exp
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
+
+AUDIT-PLAN-2
+CLASS: SCHWER
+DOMAIN: SECURITY
+DESCRIPTION: Führe Backend/Security/Datenbank-Audit laut Plan aus und liefere Findings.
+IMPLEMENTATION_AGENT: #2
+MODEL: moonshotai/Kimi-K2.7-Code
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
+
+AUDIT-PLAN-3
+CLASS: SCHWER
+DOMAIN: PERFORMANCE
+DESCRIPTION: Führe Performance/Audio/Lasttest-Audit laut Plan aus und liefere Findings.
+IMPLEMENTATION_AGENT: #3
+MODEL: zai-org/GLM-5.3
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
+
+AUDIT-PLAN-4
+CLASS: MITTEL
+DOMAIN: UI
+DESCRIPTION: Führe UI/UX/Rendering/Accessibility/Code-Eleganz-Audit laut Plan aus und liefere Findings.
+IMPLEMENTATION_AGENT: #4
+MODEL: Qwen/Qwen3-Coder-Next
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
+
+AUDIT-PLAN-5
+CLASS: MITTEL
+DOMAIN: CI/CD
+DESCRIPTION: Führe CI/CD/Backups/Runbooks-Audit laut Plan aus und liefere Findings.
+IMPLEMENTATION_AGENT: #5
+MODEL: zai-org/GLM-5.3-Flash
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
+
+AUDIT-PLAN-6
+CLASS: SCHWER
+DOMAIN: COMPLIANCE
+DESCRIPTION: Prüfe Final-Review-/Compliance-Plan und liefere unabhängige Findings.
+IMPLEMENTATION_AGENT: #6
+MODEL: deepseek-ai/DeepSeek-V4-Pro
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
