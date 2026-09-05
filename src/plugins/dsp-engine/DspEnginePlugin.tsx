@@ -1,13 +1,10 @@
 import React from 'react';
 import { PluginBase } from '../PluginBase';
-import { PluginState, LockStatus, Plugin } from '../types';
-import { hubConnector } from '../../hubConnector';
+import { PluginLockable } from '../PluginLockable';
 
-export class DspEnginePlugin implements Plugin {
+export class DspEnginePlugin extends PluginLockable {
   config = { id: 'dsp-engine', name: 'DSP Engine', colorScheme: 'orange' };
-  state: PluginState = 'OFF';
   autoMode: boolean = true; // Default: Automatikmodus an
-  lockStatus: LockStatus = { lockedBy: null, timestamp: 0, active: false };
 
   private audioCtx: AudioContext | null = null;
   private filter: BiquadFilterNode | null = null;
@@ -32,23 +29,6 @@ export class DspEnginePlugin implements Plugin {
   toggleAutoMode() {
     this.autoMode = !this.autoMode;
     // console.log(`DSP AutoMode: ${this.autoMode ? 'ON' : 'OFF'}`);
-  }
-
-  async requestLock(userId: string): Promise<boolean> {
-    const success = await hubConnector.lockPlugin(this.config.id, userId);
-    if (success) {
-      this.lockStatus = { lockedBy: userId, timestamp: Date.now(), active: true };
-    }
-    return success;
-  }
-
-  async releaseLock(userId: string): Promise<void> {
-    await hubConnector.unlockPlugin(this.config.id, userId);
-    this.lockStatus = { lockedBy: null, timestamp: 0, active: false };
-  }
-
-  async updateState(newState: PluginState): Promise<void> {
-    this.state = newState;
   }
 }
 
