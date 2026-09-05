@@ -58,7 +58,13 @@ const PORT = Number(process.env.PORT || 8080);
 // Direkte Env-Variablen (MASTER_PLAYER_URL, OLLAMA_URL, STEM_AI_URL) haben
 // weiterhin Vorrang (explizit gesetzt > Flotten-Map > interner Default).
 // ---------------------------------------------------------------------------
-const FLEET_MAP_URL = (process.env.FLEET_MAP_URL || '').trim() || 'https://anunnakitools.de/api/fleet-map';
+// S-9: Fleet-Map-URL validieren (https-only, sonst Default).
+const FLEET_MAP_URL_RAW = (process.env.FLEET_MAP_URL || '').trim();
+let FLEET_MAP_URL = 'https://anunnakitools.de/api/fleet-map';
+try {
+  const u = new URL(FLEET_MAP_URL_RAW || FLEET_MAP_URL);
+  if (u.protocol === 'https:') FLEET_MAP_URL = u.toString();
+} catch { /* Default behalten */ }
 const fleetTargets: { masterPlayer: string; ollama: string; stemAi: string } = {
   masterPlayer: '',
   ollama: '',
@@ -1462,11 +1468,16 @@ app.post('/api/generate-voice', async (req, res) => {
   //   VOICE_ENGINE=rvc|vits   VOICE_CLI=/pfad/zu/predict (optional)
   const engine = (process.env.VOICE_ENGINE || '').trim().toLowerCase();
   const voiceCli = (process.env.VOICE_CLI || '').trim();
-  if (engine && voiceCli && query) {
+  // S-6: Nur absolute Pfade in einer kleinen Allowlist (kein beliebiger env-Pfad).
+  const VOICE_CLI_ALLOWED = ['/usr/local/bin/predict', '/opt/rvc/predict', '/opt/voice-cli/predict'];
+  const voiceCliAllowed = VOICE_CLI_ALLOWED.includes(voiceCli)
+    || (voiceCli.startsWith('/') && !voiceCli.includes('..') && /^[\x20-\x7E]+$/.test(voiceCli) && voiceCli.includes('/'));
+  if (engine && voiceCli && voiceCliAllowed && query) {
     try {
       const { execFile } = require('child_process');
+      const { randomBytes } = require('crypto');
       const audioUrl = await new Promise<string>((resolve, reject) => {
-        const stamp = Date.now();
+        const stamp = `${Date.now()}-${randomBytes(4).toString('hex')}`;
         const outFile = `dist/voices/voice_${stamp}.wav`;
         const args = ['--input', query, '--output', outFile, '--preset', preset];
         execFile(voiceCli, args, { timeout: 45000 }, (err: Error | null) => {
@@ -2204,7 +2215,12 @@ async function startServer() {
 
     // Multi-Instanz-Modus: Mit REDIS_URL teilen sich alle App-Knoten die
     // Socket.io-Räume (Session-/Plugin-State über Prozessgrenzen hinweg).
-    const redisUrl = (process.env.REDIS_URL || '').trim();
+    // S-9: REDIS_URL nur mit redis/rediss-Schema akzeptieren.
+    let redisUrl = (process.env.REDIS_URL || '').trim();
+    if (redisUrl && !/^rediss?:\/\//i.test(redisUrl)) {
+      console.warn('[signaling] REDIS_URL ungültig (Schema) – In-Memory-Adapter aktiv.');
+      redisUrl = '';
+    }
     if (redisUrl) {
       try {
         const [{ createClient }, { createAdapter }] = await Promise.all([

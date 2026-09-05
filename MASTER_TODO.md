@@ -43,10 +43,10 @@
 - [x] **S-3 `assign-role` ohne Session-Zugehörigkeitsprüfung (Hoch)** – Ziel-User gegen Room-Mitglieder + self validiert (2026-09-05).
 - [x] **S-4 Admin-Token-Vergleich nicht konstantzeitig (Mittel)** – `safeTokenEqual()` für `x-admin-token` (2026-09-05).
 - [x] **S-5 SFU-`sessionId` ungeprüft (Mittel)** – Whitelist `/^[a-zA-Z0-9_-]{1,64}$/`, sonst disconnect (2026-09-05).
-- [ ] **S-6 `VOICE_CLI` ungeprüft (Mittel)** – Pfad-Allowlist + `crypto.randomBytes` im Dateinamen.
+- [x] **S-6 `VOICE_CLI` ungeprüft (Mittel)** – Pfad-Allowlist + `crypto.randomBytes` im Dateinamen (2026-09-05).
 - [ ] **S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.
 - [x] **S-8 `qs`-Kette verwundbar (Niedrig)** – `npm audit fix` durchgeführt (2026-09-05, 0 Vulnerabilities).
-- [ ] **S-9 Redis-/Fleet-Map-URL ungeprüft (Niedrig)** – `new URL()` mit Protokoll-Whitelist (`redis:`/`rediss:`/`https:`).
+- [x] **S-9 Redis-/Fleet-Map-URL ungeprüft (Niedrig)** – `new URL()` https-only + redis/rediss-Schema-Whitelist (2026-09-05).
 
 ### A – Audio-Engine & DSP
 
@@ -104,9 +104,9 @@
 - [ ] **AD-H6 `services/samplemonk-ai-runtime/handlers.py:105`** – `task` gegen Whitelist validieren.
 - [ ] **AD-H7 `services/samplemonk-ai-runtime/hf_manage_endpoint.py:104`** – Secrets (`HF_TOKEN`) beim Logging maskieren.
 - [ ] **AD-H8 `services/samplemonk-ai-runtime/model_manager.py:107`** – Manifest-Felder (`repository`, `revision`, `dependencies`) streng validieren.
-- [ ] **AD-H9 `services/samplemonk-ai-runtime/startup.sh:13`** – `AI_RUNTIME_DEVICE` Default auf cpu/auto + Allowlist (`cpu|cuda|mps`).
-- [ ] **AD-H10 `src/hooks/usePluginState.ts:29`** – Lock-Prüfung nur clientseitig; serverseitige Eigentümer-Validierung erzwingen.
-- [ ] **AD-H11 `src/utils/WebRTCManager.ts:109`** – `senderId` gegen signierte Quelle prüfen bzw. ganz aus Payload entfernen (wird durch `peer.userId` ersetzt).
+- [x] **AD-H9 `services/samplemonk-ai-runtime/startup.sh:13`** – `AI_RUNTIME_DEVICE` Allowlist (`cpu|cuda|mps|auto`), Default auto (2026-09-05).
+- [x] **AD-H10 `src/hooks/usePluginState.ts:29`** – Lock-Prüfung jetzt auch serverseitig erzwungen (`plugin-lock`/`plugin-state`-RBAC) (2026-09-05).
+- [x] **AD-H11 `src/utils/WebRTCManager.ts:109`** – `senderId` wird durch `peer.userId` ersetzt (bestehende Validierung bestätigt) (2026-09-05).
 
 ### Mittel (72) – verdichtet
 
@@ -125,8 +125,8 @@
 
 ### Info (2)
 
-- [ ] **AD-I1 `services/samplemonk-ai-runtime/startup.sh:17`** – `AI_MODEL_MANIFEST`-Default über `${BASH_SOURCE[0]}` script-dir-stabil machen.
-- [ ] **AD-I2 `src/hooks/useSessionSync.ts:37`** – `SCRATCHPAD_UPDATE` braucht Version/Sequenznummer gegen Out-of-Order-Desync.
+- [x] **AD-I1 `services/samplemonk-ai-runtime/startup.sh:17`** – `AI_MODEL_MANIFEST`-Default jetzt `$SCRIPT_DIR/model_manifest.json` (2026-09-05).
+- [x] **AD-I2 `src/hooks/useSessionSync.ts:37`** – `SCRATCHPAD_UPDATE` mit `seq`/`ts` je Sender (2026-09-05).
 
 ---
 
