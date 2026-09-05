@@ -68,8 +68,10 @@ function detectClass(text) {
 
 function detectBlockers(text) {
   const t = text.toLowerCase();
-  const server = /live|browser|hörprobe|hoerprobe|playwright|e2e|lasttest|load.test|flotte|fleet|hetzner|sfu|webrtc-session/.test(t);
-  const hardware = /hardware|usb|midi|controller|xonar|audio-interface|externe/.test(t);
+  // Nur echte Live-/Server-/Infrastruktur-Pflicht blocken; bloße Erwähnung
+  // von sfu/webrtc in Code-Duplikat-Tasks ist KEIN Blocker.
+  const server = /live|browser|hörprobe|hoerprobe|playwright|e2e|lasttest|load\.test|flotte|fleet|hetzner|dedicated/.test(t);
+  const hardware = /hardware|usb|midi-interface|controller-hardware|xonar|audio-interface|externe/.test(t);
   return { serverRequired: server, hardwareRequired: hardware };
 }
 
