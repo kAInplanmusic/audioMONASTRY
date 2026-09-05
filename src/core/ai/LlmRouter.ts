@@ -27,6 +27,7 @@ export type LlmProviderId =
   | 'deepseek-flash'
   | 'deepseek-pro'
   | 'qwen3-coder'
+  | 'publicai'
   | 'gemini'
   | 'openai';
 
@@ -58,6 +59,7 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
   'qwen3-coder': 'Qwen/Qwen3-Coder-Next',
+  publicai: 'swiss-ai/apertus-v1.5-70b-thinking',
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
 };
@@ -110,6 +112,7 @@ class OpenAiCompatibleProvider implements ILlmProvider {
     private baseUrl: string,
     private envName: string,
     private model?: string,
+    private modelEnvName?: string,
   ) {}
 
   get available(): boolean {
@@ -118,7 +121,7 @@ class OpenAiCompatibleProvider implements ILlmProvider {
 
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const started = Date.now();
-    const model = this.model?.trim() || envKey(`${this.envName}_MODEL`) || DEFAULT_MODELS[this.id];
+    const model = this.model?.trim() || envKey(this.modelEnvName ?? `${this.envName}_MODEL`) || DEFAULT_MODELS[this.id];
     const body: Record<string, unknown> = {
       model,
       messages: [{ role: 'user', content: req.prompt }],
@@ -250,6 +253,9 @@ export class LlmRouter {
     this.register(new OllamaProvider());
     this.register(new OpenAiCompatibleProvider('deepseek-flash', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
     this.register(new OpenAiCompatibleProvider('deepseek-pro', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
+    // PublicAI: OpenAI-kompatibel, Modell aus PUBLICAI_MODEL.
+    const publicaiBase = (envKey('PUBLICAI_BASE_URL') || 'https://api.publicai.co/v1').replace(/\/+$/, '');
+    this.register(new OpenAiCompatibleProvider('publicai', `${publicaiBase}/chat/completions`, 'PUBLICAI_KEY', undefined, 'PUBLICAI_MODEL'));
 
     // Notfall-Provider (bezahlt) nur bei explizitem Enable registrieren.
     if (envKey('AI_EMERGENCY_PROVIDERS') === 'true') {

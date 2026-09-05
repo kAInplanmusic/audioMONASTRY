@@ -1264,3 +1264,12 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **AUD-2026-09-05-D5 · NIEDRIG · Code-Duplikate UI** – `AiMonkDock.tsx` ↔ `AiMonkTerminal.tsx`, `RecorderTerminal.tsx` ↔ `VoiceGenTerminal.tsx`: gemeinsame Terminals/Handlers extrahieren.
 - [ ] **AUD-2026-09-05-D6 · NIEDRIG · Code-Duplikate DSP/Synth** – `computeLocal.ts` ↔ `computeWorker.ts`, `midiCodec.ts` intern, `drumSynth.ts` (mulberry32 mehrfach), `fmEngine.ts` intern, `DspEnginePlugin.tsx` ↔ `InstrumentePlugin.tsx`, `presets.ts` intern, `aiRhythmGenerator.ts` ↔ `audioEngine.ts`, SFU-RTP-Skripte: Gemeinsame Helfer/Seeds/Routing-Definitionen extrahieren.
 
+
+## 🔭 Tiefen-Audit Plan-Modus 2026-09-05 (Agent-Pläne in logs/background-coder/audit-plans.md)
+
+- [ ] **AUDIT-PLAN-MOA** – Gesamt-Tiefen-Audit laut Orchestrator-Plan durchführen (Architektur/Abhängigkeiten/Risiko-Cluster).
+- [ ] **AUDIT-PLAN-2** – Backend/Security/Datenbank-Audit laut Kimi-K2.7-Plan durchführen.
+- [ ] **AUDIT-PLAN-3** – Performance/Audio/Lasttest-Audit laut GLM-5.3/PublicAI-Plan durchführen.
+- [ ] **AUDIT-PLAN-4** – UI/UX/Rendering/Accessibility/Code-Eleganz-Audit laut Qwen3-Coder-Plan durchführen.
+- [ ] **AUDIT-PLAN-5** – CI/CD/Backups/Runbooks-Audit laut GLM-5.3-Flash-Plan durchführen.
+- [ ] **AUDIT-PLAN-6** – Final-Review-/Compliance-Plan von DeepSeek V4 Pro prüfen.
