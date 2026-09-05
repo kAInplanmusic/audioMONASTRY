@@ -8,9 +8,9 @@ import { buildPromptEvalSeed, PLUGIN_IDS } from '../src/core/ai/orchestrator/pro
 import { EvaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
 
 const ALL_PLUGINS = [
-  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
-  'voice', 'sound', 'song', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
-  'dsp', 'mastering', 'stem', 'spatial', 'recording', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
+  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq',
+  'dsp', 'mastering', 'recording', 'controller', 'performance', 'ai',
 ];
 
 describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {

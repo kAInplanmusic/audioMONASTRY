@@ -78,22 +78,34 @@
   ],
   "ui_plugins": [
     {
+      "id": "mixer",
+      "name": "mixerMONK",
+      "short": "MIX",
+      "icon": "Sliders"
+    },
+    {
+      "id": "drop",
+      "name": "dropMONK",
+      "short": "DRP",
+      "icon": "Zap"
+    },
+    {
+      "id": "song",
+      "name": "songMONK",
+      "short": "SNG",
+      "icon": "Music"
+    },
+    {
+      "id": "effect",
+      "name": "effectMONK",
+      "short": "FX",
+      "icon": "Sparkles"
+    },
+    {
       "id": "instrument",
       "name": "instrumentMONK",
       "short": "INS",
       "icon": "Music"
-    },
-    {
-      "id": "synthesizer",
-      "name": "synthesizerMONK",
-      "short": "SYN",
-      "icon": "Waves"
-    },
-    {
-      "id": "drum",
-      "name": "drumMONK",
-      "short": "DRM",
-      "icon": "Speaker"
     },
     {
       "id": "sampler",
@@ -102,10 +114,28 @@
       "icon": "Speaker"
     },
     {
+      "id": "drum",
+      "name": "drumMONK",
+      "short": "DRM",
+      "icon": "Speaker"
+    },
+    {
       "id": "mcp",
       "name": "mcpMONK",
       "short": "MCP",
       "icon": "Grid3X3"
+    },
+    {
+      "id": "synthesizer",
+      "name": "synthesizerMONK",
+      "short": "SYN",
+      "icon": "Waves"
+    },
+    {
+      "id": "stem",
+      "name": "stemMONK",
+      "short": "RMX",
+      "icon": "Radio"
     },
     {
       "id": "voice",
@@ -120,34 +150,10 @@
       "icon": "AudioLines"
     },
     {
-      "id": "song",
-      "name": "songMONK",
-      "short": "SNG",
-      "icon": "Music"
-    },
-    {
-      "id": "mixer",
-      "name": "mixerMONK",
-      "short": "MIX",
-      "icon": "Sliders"
-    },
-    {
-      "id": "controller",
-      "name": "controllerMONK",
-      "short": "CTRL",
-      "icon": "Keyboard"
-    },
-    {
-      "id": "effect",
-      "name": "effectMONK",
-      "short": "FX",
-      "icon": "Sparkles"
-    },
-    {
-      "id": "drop",
-      "name": "dropMONK",
-      "short": "DRP",
-      "icon": "Zap"
+      "id": "spatial",
+      "name": "spatialMONK",
+      "short": "3D",
+      "icon": "Box"
     },
     {
       "id": "library",
@@ -174,22 +180,16 @@
       "icon": "Square"
     },
     {
-      "id": "stem",
-      "name": "stemMONK",
-      "short": "RMX",
-      "icon": "Radio"
-    },
-    {
-      "id": "spatial",
-      "name": "spatialMONK",
-      "short": "3D",
-      "icon": "Box"
-    },
-    {
       "id": "recording",
       "name": "recordingMONK",
       "short": "REC",
       "icon": "Activity"
+    },
+    {
+      "id": "controller",
+      "name": "controllerMONK",
+      "short": "CTRL",
+      "icon": "Keyboard"
     },
     {
       "id": "performance",

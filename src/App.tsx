@@ -31,19 +31,27 @@ const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal'
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
 
-// Rack-Reihenfolge: 19 VARIABLE Plugins. FIX sind nur:
+// Rack-Reihenfolge laut uiubersicht.png/uirollen.png (18 nummerierte Plugins):
+//   DJ:  mixer(1), drop(2), song(3), effect(4)
+//   PD:  instrument(5), sampler(6), drum(7), mcp(8), synthesizer(9)
+//   AI:  stem(10), voice(11), sound(12), spatial(13), library(14)
+//   MS:  eq(15), dsp(16), mastering(17), recording(18)
+// controllerMONK ist Zusatzmodul (kein Header-Icon). FIX sind nur:
 //   oben  = masterplayer (View-only)
 //   unten = performance (perfMONK) + ai (aiMONK-Dock), untereinander fest.
 const RACK_ORDER = [
-  'mixer', 'drop', 'instrument', 'synthesizer', 'voice', 'sound', 'song', 'mcp', 'drum', 'sampler',
-  'controller', 'effect', 'library', 'stem', 'spatial', 'eq', 'dsp', 'mastering',
-  'recording',
+  'mixer', 'drop', 'song', 'effect',
+  'instrument', 'sampler', 'drum', 'mcp', 'synthesizer',
+  'stem', 'voice', 'sound', 'spatial', 'library',
+  'eq', 'dsp', 'mastering', 'recording',
+  'controller',
 ];
 
-// Header-Navigation: 19 Plugin-Icons in ZWEI Reihen – jedes variable Plugin
-// bekommt genau ein Icon. Fixe Racks (performance/ai) haben kein Icon;
+// Header-Navigation: 18 Plugin-Icons in ZWEI Reihen à 9 – ein Icon pro
+// nummeriertem Plugin (laut uiubersicht). Fixe Racks (performance/ai) und
+// controllerMONK (Zusatzmodul ohne Header-Icon) haben kein Icon;
 // masterplayerMONK ist die feste Kopfzeile oberhalb der Toolbar.
-const NAV_EXCLUDED = new Set(['ai', 'performance']);
+const NAV_EXCLUDED = new Set(['ai', 'performance', 'controller']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
