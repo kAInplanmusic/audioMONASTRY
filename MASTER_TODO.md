@@ -45,24 +45,24 @@
 - [ ] **S-5 SFU-`sessionId` ungeprüft (Mittel)** – Whitelist `/^[a-zA-Z0-9_-]{1,64}$/`, sonst disconnect.
 - [ ] **S-6 `VOICE_CLI` ungeprüft (Mittel)** – Pfad-Allowlist + `crypto.randomBytes` im Dateinamen.
 - [ ] **S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.
-- [ ] **S-8 `qs`-Kette verwundbar (Niedrig)** – `npm audit fix` (Express-4-Patch-Level).
+- [x] **S-8 `qs`-Kette verwundbar (Niedrig)** – `npm audit fix` durchgeführt (2026-09-05, 0 Vulnerabilities).
 - [ ] **S-9 Redis-/Fleet-Map-URL ungeprüft (Niedrig)** – `new URL()` mit Protokoll-Whitelist (`redis:`/`rediss:`/`https:`).
 
 ### A – Audio-Engine & DSP
 
-- [ ] **A-1 LUFS `log10(0)` → -Infinity (Hoch)** – `lufsProcessor.ts:21-25`. Fix: `20 * Math.log10(Math.max(rms, 1e-8)) - 0.691` + Clamp −70 dB.
+- [x] **A-1 LUFS `log10(0)` → -Infinity (Hoch)** – `lufsProcessor.ts:21-25` gefixt (2026-09-05): `Math.max(rms, 1e-8)` + Clamp −70 dB.
 - [ ] **A-2 `audioEngine.ts` 2814-Zeilen-Monolith (Mittel)** – in Graph-Aufbau/Worklet-Factory/Routing/Monitoring schneiden; Kernpfad-Coverage (26,7 %) erhöhen.
 - [ ] **A-3 Fehlgeschlagene Worklets nicht entsorgt (Mittel)** – `makeWorklet`-Fallbacks disconnecten und im Teardown führen.
 - [ ] **A-4 Mastering-Lookahead nicht per API abfragbar (Mittel)** – `audioEngine.getLatencyBudgetMs()` mit Stufen-Aufschlüsselung; in perfMONK anzeigen.
 - [ ] **A-5 Allokationen im `process()`-Pfad bei Kanal-/Quantum-Wechsel (Niedrig)** – im Konstruktor auf Maximalkanäle/-quantum vorallozieren.
-- [ ] **A-6 Quantum-Annahme 128 im EQ-Ramping (Niedrig)** – aus tatsächlicher Blocklänge ableiten.
-- [ ] **A-7 Keine Denormal-Clamps im Reverb-Feedback (Niedrig)** – analog `dspProcessor.ts:144-145`.
+- [x] **A-6 Quantum-Annahme 128 im EQ-Ramping (Niedrig)** – gefixt (2026-09-05): `blockSize` aus `input[0].length`.
+- [x] **A-7 Keine Denormal-Clamps im Reverb-Feedback (Niedrig)** – gefixt (2026-09-05) in `effectProcessor.ts:94-121`.
 
 ### F – Frontend, React & Architektur
 
 - [ ] **F-1 `src/hooks/useWebRTC.ts` toter Code (Mittel)** – löschen oder als Referenz-Implementierung für K-2 verdrahten.
 - [ ] **F-2 Vier parallele Lock-Modelle (Mittel)** – auf ein serverseitig autoritatives Modell konsolidieren.
-- [ ] **F-3 Memo-Gate rot (Mittel)** – `DropTerminal.tsx` mit `React.memo`; `check:memo` als CI-Pflicht-Step.
+- [x] **F-3 Memo-Gate rot (Mittel)** – `DropTerminal.tsx` nutzt bereits `React.memo`; `check:memo` grün (2026-09-05). Offen: CI-Pflicht-Step.
 - [ ] **F-4 LWW-Merge ohne Payload-Validierung (Mittel)** – `pluginId` gegen `EVAL_PLUGIN_IDS`/Registry whitelisten.
 - [ ] **F-5 160× `any` (Mittel)** – Zod-Schemas für alle Peer-Payloads; Feature-Detection eng typisieren.
 - [ ] **F-6 Non-null-Assertions ohne Guard (Niedrig)** – explizite Guards mit sprechender Meldung.
@@ -111,7 +111,7 @@
 ### Mittel (72) – verdichtet
 
 - [ ] **AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`.
-- [ ] **AD-M2 ESLint-Scripts:** no-unused-vars in `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`; `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
+- [ ] **AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
 - [ ] **AD-M3 Backend-Bugs:** `cloudAutomation.ts:100` Regex-Logik; `cloudAutomation.ts:132` Env-Zugriffe; `celery_app.py:104/120` Race Conditions `_load_demucs`/`_load_musicgen`; `hypersonic_moa.py:67` leerer Prompt; `app.py:124` + `handlers.py:105` Race Conditions Model-Loading; `handlers.py:130` Resampling-Fehlerbehandlung; `hf_manage_endpoint.py:122/130` Fehlerbehandlung/Trennung Konfiguration-Logik; `model_manager.py:130/190` Race/Load + VRAM-Fehlerfall; `registry.py:26` Revision-Pinning via `null`; `startup.sh:9/10` Symlink-Pfad + HF_HOME-Space-Check.
 - [ ] **AD-M4 AI-Runtime-Security/Architektur:** `backend-core/package.json:8` Uvicorn 0.0.0.0 ohne Auth; `startup.sh:18/21` AI-Runtime ungeschützt auf allen Interfaces; `pyproject.toml:7/11` fehlende Hash-Pins/Lockfile + veraltetes `torch==2.4.1`.
 - [ ] **AD-M5 React/State:** `usePluginState.ts:28` stale lockStatus; `useSessionSync.ts:35` `syncAdd` sendet unvalidierte Samples an Peers.
@@ -120,7 +120,7 @@
 ### Niedrig (813) – aggregiert
 
 - [ ] **AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen.
-- [ ] **AD-N2 ESLint-Low-Hänger** (no-unused-vars, prefer-const) in `server.ts`, `scripts/**`, `ai/localDemucs.ts`, `audio-runtime/src/main.rs`.
+- [ ] **AD-N2 ESLint-Low-Hänger** – `scripts/**` teilgefixt (2026-09-05). Offen: `server.ts`, `ai/localDemucs.ts`, `audio-runtime/src/main.rs`.
 - [ ] **AD-N3 160× `any`/`as any` + 3× ts-ignore reduzieren** (deckungsgleich mit F-5/AUDIT.md).
 
 ### Info (2)

@@ -59,17 +59,19 @@ async function openPage(url) {
 }
 
 const summary = { baseUrl: BASE_URL, producers: [], consumers: [], echo: null };
+// Produzenten-Kontexte bewusst offen halten (RTP läuft weiter).
+const producerContexts = [];
 
 // 1) Produzenten starten (bleiben offen)
 for (let i = 0; i < PRODUCERS; i++) {
   const url = `http://127.0.0.1:${LOCAL_PORT}/sfu-rtp-test.html?server=${encodeURIComponent(BASE_URL)}&mode=producer`;
-  const { context, page, result } = await openPage(url);
+  const { context, result } = await openPage(url);
+  producerContexts.push(context);
   if (!result.ok || !result.producerId) {
     console.log(`[producer ${i}] FEHLER: ${JSON.stringify(result)}`);
   }
   summary.producers.push({ index: i, producerId: result.producerId, ok: result.ok, error: result.error });
   console.log(`[producer ${i}] producerId=${result.producerId} ok=${result.ok}`);
-  // context/page offen lassen -> RTP laeuft weiter
 }
 
 // 2) Konsumenten ueber Kreuz
@@ -81,7 +83,7 @@ for (let i = 0; i < CONSUMERS; i++) {
     continue;
   }
   const url = `http://127.0.0.1:${LOCAL_PORT}/sfu-rtp-test.html?server=${encodeURIComponent(BASE_URL)}&mode=consumer&producerId=${producerId}`;
-  const { context, page, result } = await openPage(url);
+  const { context, result } = await openPage(url);
   summary.consumers.push({
     index: i,
     producerIndex,
@@ -98,7 +100,7 @@ for (let i = 0; i < CONSUMERS; i++) {
 // 3) Echo-Test (eigener Producer -> eigener Consumer)
 {
   const url = `http://127.0.0.1:${LOCAL_PORT}/sfu-rtp-test.html?server=${encodeURIComponent(BASE_URL)}&mode=echo`;
-  const { context, page, result } = await openPage(url);
+  const { context, result } = await openPage(url);
   summary.echo = {
     ok: result.ok,
     bytesReceived: result.bytesReceived,

@@ -64,7 +64,7 @@ function main(): void {
   });
 
   // 3) Biquad Direct-Form I (Referenzstruktur) – pro Sample
-  let b0 = 0.0495, b1 = 0.099, b2 = 0.0495, a1 = -1.2796, a2 = 0.4776;
+  const b0 = 0.0495, b1 = 0.099, b2 = 0.0495, a1 = -1.2796, a2 = 0.4776;
   let x1 = 0, x2 = 0, y1 = 0, y2 = 0;
   bench('Biquad DF1 (5 Mul/4 Add pro Sample)', () => {
     for (let i = 0; i < N; i++) {

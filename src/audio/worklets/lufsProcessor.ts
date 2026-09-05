@@ -18,8 +18,9 @@ class LufsProcessor extends AudioWorkletProcessor {
       for (let i = 0; i < input[0].length; i++) {
         sum += input[0][i] * input[0][i];
       }
-      const rms = Math.sqrt(sum / input[0].length);
-      const lufs = 20 * Math.log10(rms) - 0.691;
+      const rms = Math.sqrt(sum / Math.max(1, input[0].length));
+      // A-1: Floor verhindert log10(0) → -Infinity im Shared-Buffer.
+      const lufs = Math.max(-70, 20 * Math.log10(Math.max(rms, 1e-8)) - 0.691);
       
       // Store scaled value (multiply by 100 to preserve 2 decimal places)
       Atomics.store(this.lufsBuffer, 0, Math.round(lufs * 100));

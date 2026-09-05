@@ -144,7 +144,7 @@ export default {
         return new Response(JSON.stringify({ error: 'Zu viele Versuche. 5 min warten.' }), { status: 429, headers: { 'Content-Type': 'application/json' } });
       }
       let body = {};
-      try { body = await request.json(); } catch (e) { /* noop */ }
+      try { body = await request.json(); } catch { /* noop */ }
       const hash = await sha256Hex(String(body.password || ''));
       if (hash !== PASSWORD_SHA256) {
         return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
@@ -164,7 +164,7 @@ export default {
         const text = await r.text();
         const ready = r.ok && text.includes('"ok"');
         return new Response(JSON.stringify({ ready, note: ready ? 'ready' : 'Server booten …' }), { headers: { 'Content-Type': 'application/json' } });
-      } catch (e) {
+      } catch {
         return new Response(JSON.stringify({ ready: false, note: 'Server noch nicht erreichbar …' }), { headers: { 'Content-Type': 'application/json' } });
       }
     }

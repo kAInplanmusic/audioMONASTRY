@@ -3,7 +3,7 @@
  * P2-5: UI-Audit – prüft, dass alle Terminal-Komponenten React.memo nutzen.
  * Aufruf: node scripts/check-react-memo.mjs
  */
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 

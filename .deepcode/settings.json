@@ -1,0 +1,6 @@
+{
+  "model": "deepseek-v4-flash",
+  "thinkingEnabled": true,
+  "reasoningEffort": "max",
+  "temperature": 0.1
+}
