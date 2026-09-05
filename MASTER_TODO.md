@@ -825,7 +825,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **DA-2026-09-04-051 · HIGH · Keine Authentifizierung/RBAC am API-Gateway** → gefixt 2026-09-04 – `services/backend-core/python/main.py:59` (deepseek-pro)
   - Die FastAPI-App definiert keine Authentifizierung, API-Key-Prüfung oder Session-/JWT-Middleware. Sämtliche Routen (`/api/render-status`, `/api/separate-stems`, `/api/generate-voice`, `/api/apply-fx`, `/api/render`) sind ohne Credentials aufrufbar und erlauben anonymen Zugriff auf teure KI-/DSP-Verarbeitung und Task-Ergebnisse.
   - Vorschlag: Authentifizierung und RBAC als FastAPI-Dependency/Middleware einführen; vor jedem Proxying/Rendering die Berechtigung und ggf. Limits prüfen.
-- [ ] **DA-2026-09-04-052 · MEDIUM · Mögliche Injection in Service-URLs durch Umgebungsvariablen** – `services/backend-core/python/main.py:79` (hf-qwen)
+- [x] **DA-2026-09-04-052 · MEDIUM · Mögliche Injection in Service-URLs durch Umgebungsvariablen** – `services/backend-core/python/main.py:79` (hf-qwen)
   - Die Service-URLs werden direkt aus Umgebungsvariablen gelesen (`os.environ.get(...)`), ohne Validierung oder Sanitization. Falls diese von externen Quellen stammen, könnten sie schädliche URLs enthalten.
   - Vorschlag: Validiere die URLs mit `urllib.parse.urlparse()` und prüfe auf erlaubte Schemes und Hostnamen.
 - [x] **DA-2026-09-04-053 · HIGH · Race Condition bei Client-Instanzierung** → gefixt 2026-09-04 – `services/backend-core/python/main.py:89` (hf-qwen)
@@ -978,7 +978,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **DA-2026-09-04-117 · HIGH · Ungeprüfte Benutzereingaben in Umgebungsvariablen** → gefixt 2026-09-04 – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:95` (hf-qwen)
   - Die Funktion `_common_kwargs()` verwendet ungeprüfte Umgebungsvariablen wie `HF_TOKEN`, `HF_REGISTRY_USERNAME` und `HF_REGISTRY_PASSWORD`, um Secrets zu setzen. Diese Werte könnten gefährliche Inhalte enthalten, ohne Validierung.
   - Vorschlag: Validiere und sanitisiere alle Umgebungsvariablen vor dem Einsatz. Insbesondere `HF_TOKEN`, `HF_REGISTRY_USERNAME` und `HF_REGISTRY_PASSWORD`. Verwende z. B. regex-basierte Prüfungen oder eine Whitelist.
-- [ ] **DA-2026-09-04-118 · MEDIUM · Fehlende Fehlerbehandlung bei Legacy-Endpoint-Löschung** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:109` (hf-qwen)
+- [x] **DA-2026-09-04-118 · MEDIUM · Fehlende Fehlerbehandlung bei Legacy-Endpoint-Löschung** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:109` (hf-qwen)
   - In der `delete-legacy`-Logik wird bei Fehlern beim Löschen eines alten Endpoints lediglich eine Warnung ausgegeben, aber das Skript setzt nicht explizit auf einen Fehlercode, was zu unerwartetem Verhalten führen kann.
   - Vorschlag: Setze nach jedem Fehler beim Löschen eines Legacy-Endpoints einen Fehlercode zurück, um sicherzustellen, dass das Skript korrekt abbricht, falls ein Fehler auftritt.
 - [ ] **DA-2026-09-04-119 · MEDIUM · Mögliche Race Condition bei Statusabfrage** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:124` (hf-qwen)
@@ -1024,7 +1024,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
   - 'y1' is never reassigned. Use 'const' instead.
 - [ ] **DA-2026-09-04-134 · MEDIUM · react-hooks/use-memo** – `src/components/DJ4ChMixer.tsx:182` (eslint)
   - Error: Expected the first argument to be an inline function expression  Expected the first argument to be an inline function expression.  /home/patrick/audioMONASTRY/src/components/DJ4ChMixer.tsx:182:26   180 |   181 | export const DJMixer = React.memo(function DJMixer() { > 182 |   const strips = useMemo(buildStrips, []);       |                          ^^^^^^^^^^^ Expected the first argument to
-- [ ] **DA-2026-09-04-135 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/drop/DropGeneratorPanel.tsx:27` (eslint)
+- [x] **DA-2026-09-04-135 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/drop/DropGeneratorPanel.tsx:27` (eslint)
   - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for 
 - [ ] **DA-2026-09-04-136 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/DrumMachineTerminal.tsx:86` (eslint)
   - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for 
@@ -1131,7 +1131,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
   - Error: Cannot access variable before it is declared  `handleCandidate` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.  /home/patrick/audioMONASTRY/src/hooks/useWebRTC.ts:29:9   27 |         handleAnswer(sender, payload);   28 |       } else if (type === 'ice_candidate') { > 29 |         handleCandidate(sender, payload);      | 
 - [ ] **DA-2026-09-04-182 · MEDIUM · prefer-const** – `src/utils/audioEngine.ts:1946` (eslint)
   - 'semitone' is never reassigned. Use 'const' instead.
-- [ ] **DA-2026-09-04-183 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1963` (eslint)
+- [x] **DA-2026-09-04-183 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1963` (eslint)
   - Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free.
 - [ ] **DA-2026-09-04-184 · MEDIUM · @typescript-eslint/ban-ts-comment** – `src/utils/audioEngine.ts:1965` (eslint)
   - Use "@ts-expect-error" instead of "@ts-ignore", as "@ts-ignore" will do nothing if the following line is error-free.

@@ -43,3 +43,4 @@ src/audio/wasm/hrtf_conv/target/
 
 # Manuell gespeicherte Live-Test-Logs (lokal, koennen Secrets enthalten)
 logs/
+.background-coder.pid

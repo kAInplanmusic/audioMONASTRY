@@ -11,7 +11,9 @@ master-player). Robustheit:
 import asyncio
 import logging
 import os
+import re
 from typing import Any
+from urllib.parse import urlunparse, urlparse
 
 import httpx
 from celery.result import AsyncResult
@@ -34,12 +36,45 @@ app.add_middleware(
 )
 
 # Base-URLs der Fach-Services (docker-compose Netzwerk).
+_SAFE_HOST_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?(?::\d{1,5})?$")
+
+
+def _validate_service_url(name: str, url: str) -> str:
+    """Validiert eine Service-Base-URL (DA-2026-09-04-052).
+
+    Erlaubt sind ausschließlich absolute http(s)-URLs ohne Userinfo und
+    ohne Pfad-/Query-/Fragment-Anteile. Dadurch kann eine manipulierte
+    Umgebungsvariable keine Injection in die Proxy-Ziel-URLs bewirken.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise RuntimeError(
+            f"Ungültige Service-URL für {name!r} (nur absolute http/https-URLs erlaubt): {url!r}"
+        )
+    if parsed.username or parsed.password:
+        raise RuntimeError(f"Userinfo in Service-URL nicht erlaubt ({name!r}): {url!r}")
+    if parsed.path not in ("", "/") or parsed.params or parsed.query or parsed.fragment:
+        raise RuntimeError(
+            f"Service-URL darf keinen Pfad/Query/Fragment enthalten ({name!r}): {url!r}"
+        )
+    hostport = parsed.netloc
+    if not _SAFE_HOST_RE.match(hostport):
+        raise RuntimeError(f"Ungültiger Host in Service-URL ({name!r}): {url!r}")
+    # Normalisierte URL ohne Pfad-Anteile zurückgeben.
+    return urlunparse((parsed.scheme, parsed.netloc, "", "", "", ""))
+
+
+def _service_url(name: str, env_var: str, default: str) -> str:
+    raw = os.environ.get(env_var, "").strip()
+    return _validate_service_url(name, raw or default)
+
+
 SERVICES = {
-    "stem": os.environ.get("STEM_AI_URL", "http://stem-ai:8000"),
-    "voice": os.environ.get("VOICE_AI_URL", "http://voice-ai:8000"),
-    "dsp": os.environ.get("DSP_URL", "http://dsp-processor:8000"),
-    "seq": os.environ.get("SEQ_URL", "http://sequencer-engine:8000"),
-    "master": os.environ.get("MASTER_PLAYER_URL", "http://master-player:8000"),
+    "stem": _service_url("stem", "STEM_AI_URL", "http://stem-ai:8000"),
+    "voice": _service_url("voice", "VOICE_AI_URL", "http://voice-ai:8000"),
+    "dsp": _service_url("dsp", "DSP_URL", "http://dsp-processor:8000"),
+    "seq": _service_url("seq", "SEQ_URL", "http://sequencer-engine:8000"),
+    "master": _service_url("master", "MASTER_PLAYER_URL", "http://master-player:8000"),
 }
 
 PROXY_TIMEOUT = float(os.environ.get("GATEWAY_PROXY_TIMEOUT_SEC", "120"))

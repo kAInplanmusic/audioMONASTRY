@@ -1,6 +1,6 @@
 # AGENT_TODO – Background-Coder Pipeline (HF Router)
 
-Aktualisiert: 2026-09-05T10:06:47.380Z
+Aktualisiert: 2026-09-05T10:48:26.036Z
 
 
 TASK-001
@@ -244,9 +244,7 @@ REVIEW_AGENT: #6
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
 STATUS: FAILED
-ERROR: Review: - Uvicorn auf 0.0.0.0 ohne Authentifizierung exponiert die AI-Runtime ungeschützt im Netzwerk
-- Fehlende Hash-Pins und kein Lockfile in pyproject.toml ermöglichen Supply-Chain-Angriffe
-- Veraltetes torch==2.4.1 kann bekannte Sicherheitslücken enthalten
+ERROR: Edit fehlgeschlagen: Datei fehlt: backend-core/package.json
 
 TASK-026
 CLASS: SCHWER
@@ -939,8 +937,8 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/backend-core/node/index.js
+STATUS: RETRY
+ERROR: Modell lieferte kein gültiges JSON
 
 BACKLOG-063
 CLASS: LEICHT
@@ -973,8 +971,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/backend-core/python/main.py
+STATUS: COMPLETED
 
 BACKLOG-066
 CLASS: LEICHT
@@ -1524,8 +1521,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/samplemonk-ai-runtime/hf_manage_endpoint.py
+STATUS: COMPLETED
 
 BACKLOG-116
 CLASS: LEICHT
@@ -1624,8 +1620,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in src/components/drop/DropGeneratorPanel.tsx
+STATUS: COMPLETED
 
 BACKLOG-125
 CLASS: LEICHT
@@ -2087,8 +2082,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 2x vor (erwartet 1x) in src/utils/audioEngine.ts
+STATUS: COMPLETED
 
 BACKLOG-167
 CLASS: LEICHT
@@ -2176,8 +2170,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/backend-core/package.json
+STATUS: RETRY
 
 BACKLOG-175
 CLASS: LEICHT
@@ -2199,8 +2192,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/backend-core/python/celery_app.py
+STATUS: RETRY
 
 BACKLOG-177
 CLASS: LEICHT
@@ -2310,8 +2302,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/samplemonk-ai-runtime/model_manager.py
+STATUS: RETRY
 
 BACKLOG-187
 CLASS: LEICHT
@@ -2355,8 +2346,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/samplemonk-ai-runtime/registry.py
+STATUS: RETRY
 
 BACKLOG-191
 CLASS: LEICHT
@@ -2389,8 +2379,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in services/samplemonk-ai-runtime/startup.sh
+STATUS: RETRY
 
 BACKLOG-194
 CLASS: LEICHT
@@ -2423,8 +2412,7 @@ MODEL: zai-org/GLM-5.3-Flash
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Edit fehlgeschlagen: find kommt 0x vor (erwartet 1x) in src/hooks/usePluginState.ts
+STATUS: RETRY
 
 BACKLOG-197
 CLASS: LEICHT
