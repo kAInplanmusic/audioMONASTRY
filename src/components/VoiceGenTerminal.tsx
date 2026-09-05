@@ -7,10 +7,10 @@ import { usePluginState } from '../hooks/usePluginState';
 import { useAudioAI } from '../hooks/useAudioAI';
 import { PitchDetector } from '../utils/PitchDetector';
 import { audioEngine } from '../utils/audioEngine';
-import { MoaAssistant } from './MoaAssistant';
 import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { TerminalFrame } from './terminalShared';
 
 export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
   const { addSample } = useSamples();
@@ -118,31 +118,17 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
   };
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="voice" placeholder="MOA: z. B. 'Singe Hallo meine Freunde'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-orange-900/20 to-[#111] border-b border-orange-900/30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center border border-orange-500/50 shadow-[0_0_15px_rgba(249,115,22,0.3)]">
-            <Mic className="w-5 h-5 text-orange-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase flex items-center gap-2">
-              Voice Generator <span className="text-[10px] font-mono text-orange-400 border border-orange-500/30 px-2 py-0.5 rounded-sm">AI VOCALIST</span>
-            </h2>
-          </div>
-        </div>
-
-        <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
-        </select>
-      </div>
-
+    <TerminalFrame
+      pluginId="voice"
+      moaPlaceholder="MOA: z. B. 'Singe Hallo meine Freunde'"
+      title="Voice Generator"
+      badge="AI VOCALIST"
+      icon={Mic}
+      accent="orange"
+      lockStatus={lockStatus}
+      state={state}
+      updateState={updateState}
+    >
       <div className="flex-1 flex overflow-hidden">
 
         {/* Left Side: Input & Settings */}
@@ -266,6 +252,6 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
         </div>
 
       </div>
-    </div>
+    </TerminalFrame>
   );
 });
