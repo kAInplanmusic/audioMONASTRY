@@ -93,7 +93,7 @@ async function httpPhase() {
     }
   }
 
-  await Promise.all(Array.from({ length: HTTP_CLIENTS }, (_, i) => client(i)));
+  await Promise.all(Array.from({ length: HTTP_CLIENTS }, () => client()));
   const totalMs = Date.now() - started;
   const totalOk = [...perEndpoint.values()].reduce((s, r) => s + r.ok, 0);
   const totalFail = [...perEndpoint.values()].reduce((s, r) => s + r.fail, 0);

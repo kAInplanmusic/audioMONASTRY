@@ -12,7 +12,7 @@
 // Audio-Pfad zu belasten.
 // ============================================================================
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MidiClockOut, type MidiOutSink } from '../core/hardware/midiClockOut';
 
 export interface MidiClockOutHandle {
@@ -39,36 +39,41 @@ export function useMidiClockOut(
   options: { drumChannel?: number; noteLengthMs?: number } = {},
 ): MidiClockOutHandle {
   const { drumChannel, noteLengthMs } = options;
-  const clockOutRef = useRef<MidiClockOut | null>(null);
-  if (!clockOutRef.current) {
-    clockOutRef.current = new MidiClockOut({ drumChannel, noteLengthMs });
-  }
-  const clockOut = clockOutRef.current;
+  // Lazy-Init via useState (kein ref.current-Zugriff während des Renderings,
+  // vgl. eslint react-hooks/refs). Instanz wird genau einmal erzeugt.
+  const [clockOut] = useState(
+    () => new MidiClockOut({ drumChannel, noteLengthMs }),
+  );
 
   const [portId, setPortId] = useState('');
   const [enabled, setEnabledState] = useState(false);
-  const [connected, setConnected] = useState(false);
 
   const ports = useMemo(
     () => outputs.map((o) => ({ id: o.id, name: o.name ?? o.id })),
     [outputs],
   );
 
+  // Zielport ableiten (statt setState im Effect, vgl. eslint
+  // react-hooks/set-state-in-effect): erster verfügbarer Port als Fallback.
+  const target = useMemo(
+    () => outputs.find((o) => o.id === portId) ?? outputs[0] ?? null,
+    [outputs, portId],
+  );
+  /** Ist ein Port angebunden? */
+  const connected = target !== null;
+
   // Port anbinden bzw. bei Hotplug-Verlust wieder lösen.
   useEffect(() => {
-    const target = outputs.find((o) => o.id === portId) ?? outputs[0] ?? null;
     if (!target) {
       clockOut.setSink(null);
-      setConnected(false);
       return;
     }
     const sink: MidiOutSink = {
       send: (data, timestampMs) => target.send(data, timestampMs),
     };
     clockOut.setSink(sink);
-    setConnected(true);
     return () => { clockOut.setSink(null); };
-  }, [outputs, portId, clockOut]);
+  }, [target, clockOut]);
 
   const setEnabled = useCallback((on: boolean) => {
     clockOut.setEnabled(on);
@@ -77,10 +82,16 @@ export function useMidiClockOut(
   }, [clockOut]);
 
   // Beim Unmount: laufenden externen Transport sauber beenden.
-  useEffect(() => () => {
-    clockOut.stop();
-    clockOut.allNotesOff();
-    clockOut.setSink(null);
+  // Cleanup als expliziter Block mit lokaler Instanz-Bindung (vgl. eslint
+  // react-hooks/refs: keine Methodenaufrufe auf die Hook-Instanz innerhalb
+  // einer direkt zurückgegebenen Doppel-Pfeilfunktion).
+  useEffect(() => {
+    const instance = clockOut;
+    return () => {
+      instance.stop();
+      instance.allNotesOff();
+      instance.setSink(null);
+    };
   }, [clockOut]);
 
   return {
