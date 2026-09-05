@@ -11,9 +11,9 @@
 
 /** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
 export const EVAL_PLUGIN_IDS = [
-  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound', 'song',
-  'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
-  'spatial', 'recording', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
+  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
+  'mastering', 'recording', 'controller', 'performance', 'ai',
 ] as const;
 
 export type EvalPluginId = (typeof EVAL_PLUGIN_IDS)[number];

@@ -39,9 +39,9 @@ describe('pluginAudioRouter (P0-2)', () => {
     expect(PLUGIN_ROUTE_IDS).toHaveLength(21);
     expect(listPluginRoutes()).toHaveLength(21);
     const expected = [
-      'instrument', 'synthesizer', 'drum', 'sampler', 'mcp',
-      'voice', 'sound', 'song', 'mixer', 'controller', 'effect', 'drop', 'library', 'eq',
-      'dsp', 'mastering', 'stem', 'spatial', 'recording', 'performance', 'ai',
+      'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
+      'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq',
+      'dsp', 'mastering', 'recording', 'controller', 'performance', 'ai',
     ];
     expect(assertAllPluginIdsRegistered(expected)).toEqual([]);
   });

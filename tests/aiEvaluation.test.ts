@@ -14,9 +14,9 @@ import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
 
 /** Verbindliche 21 Plugin-IDs (siehe src/plugins/registry.ts). */
 const PLUGIN_IDS = [
-  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound', 'song',
-  'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
-  'spatial', 'recording', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
+  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
+  'mastering', 'recording', 'controller', 'performance', 'ai',
 ];
 
 function firstCommand(pluginId: string): string {

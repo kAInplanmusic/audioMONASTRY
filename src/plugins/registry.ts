@@ -33,34 +33,35 @@ const ICON_MAP: Record<string, any> = {
 };
 
 // ============================================================================
-// Plugin-Reihenfolge (verbindlich):
-//   0 instrument · 1 synthesizer · 2 drum · 3 sampler
-//   4 mcp · 5 voice · 6 sound · 7 song · 8 mixer · 9 controller · 10 effect
-//   11 drop · 12 library · 13 eq · 14 dsp · 15 mastering · 16 stem
-//   17 spatial · 18 recording · 19 performance · 20 ai
+// Plugin-Reihenfolge (verbindlich, laut uiubersicht.png/uirollen.png):
+//   01 mixer · 02 drop · 03 song · 04 effect
+//   05 instrument · 06 sampler · 07 drum · 08 mcp · 09 synthesizer
+//   10 stem · 11 voice · 12 sound · 13 spatial · 14 library
+//   15 eq · 16 dsp · 17 mastering · 18 recording
+//   controller ist Zusatzmodul (19) – performance/ai sind unten fixiert.
 // masterplayerMONK ist KEIN Plugin, sondern feste View-only-Leiste (App.tsx).
 // visMONK wurde entfernt; seine Signal-Anzeige ist in perfMONK integriert.
 // ============================================================================
 const COMPONENT_MAP: Record<string, any> = {
+  mixer: DJ4ChMixer,
+  drop: DropTerminal,
+  song: SongMonkTerminal,
+  effect: FXEngineTerminal,
   instrument: InstrumentsTerminal,
-  synthesizer: SynthesizerTerminal,
-  drum: DrumMachineTerminal,
   sampler: SamplerTerminal,
+  drum: DrumMachineTerminal,
   mcp: McpTerminal,
+  synthesizer: SynthesizerTerminal,
+  stem: StemExtractorTerminal,
   voice: VoiceGenTerminal,
   sound: SoundTerminal,
-  song: SongMonkTerminal,
-  mixer: DJ4ChMixer,
-  controller: MIDIControllerTerminal,
-  effect: FXEngineTerminal,
-  drop: DropTerminal,
+  spatial: SpatialScene,
   library: LibraryTerminal,
   eq: EQPluginTerminal,
   dsp: DSPTerminal,
   mastering: MasteringOverlay,
-  stem: StemExtractorTerminal,
-  spatial: SpatialScene,
   recording: RecorderTerminal,
+  controller: MIDIControllerTerminal,
   performance: PerformanceMonitorTerminal,
   ai: AiMonkTerminal,
 };

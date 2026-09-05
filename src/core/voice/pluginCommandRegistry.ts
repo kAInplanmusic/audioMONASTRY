@@ -18,9 +18,9 @@ import { controlBus } from '../events/ControlBus';
 
 /** Verbindliche 21 Plugin-IDs (P3-2: Registry muss alle abdecken). */
 export const PLUGIN_COMMAND_IDS: readonly string[] = Object.freeze([
-  'instrument', 'synthesizer', 'drum', 'sampler', 'mcp', 'voice', 'sound', 'song',
-  'mixer', 'controller', 'effect', 'drop', 'library', 'eq', 'dsp', 'mastering', 'stem',
-  'spatial', 'recording', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
+  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
+  'mastering', 'recording', 'controller', 'performance', 'ai',
 ]);
 
 let registered = false;
