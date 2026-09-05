@@ -197,11 +197,15 @@ services:
   # --- OPTIONAL: stem-ai (Demucs) – GROSS/GPU empfohlen ------------------------
   # Bei Bedarf einkommentieren und STEM_AI_URL=http://stem-ai:8000 setzen.
   # stem-ai:
-  #   build: ./services/stem-ai
+  #   build:
+  #     context: ./services
+  #     dockerfile: stem-ai/Dockerfile
   #   container_name: samplemonk-stem
   #   <<: *default-runtime
   #   expose:
   #     - "8000"
+  #   volumes:
+  #     - ./services/backend-core/python/device_utils.py:/app/device_utils.py:ro
   #   env_file:
   #     - .env
   #   read_only: true

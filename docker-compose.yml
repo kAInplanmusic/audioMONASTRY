@@ -42,11 +42,15 @@ services:
   # Setzt ENABLE_STEMS=1 im Hauptcontainer, damit server.ts das echte
   # /api/separate-stems an diesen Service weiterreicht (statt dem Stub).
   stem-ai:
-    build: ./services/stem-ai
+    build:
+      context: ./services
+      dockerfile: stem-ai/Dockerfile
     ports:
       - "8000:8000"
     volumes:
       - ./services/stem-ai:/app
+      # Gemeinsames Modul (Device-Detect) aus backend-core/python einblenden.
+      - ./services/backend-core/python/device_utils.py:/app/device_utils.py
     environment:
       - AI_DEVICE=cpu        # auf GPU-Hosts: auf "cuda" setzen
       - AI_DEMUCS_MODEL=htdemucs
