@@ -354,11 +354,11 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "FAILED",
+      "status": "RETRY",
       "taskId": "TASK-025",
       "lastSummary": "Sicherheitsfixes für AI-Runtime: Uvicorn auf 127.0.0.1 binden, startup.sh so anpassen, dass die AI-Runtime nur auf localhost lauscht, torch auf aktuelle stabile Version 2.5.1 aktualisieren und Hash-Pins/Lockfile-Hinweis ergänzen. Da keine eindeutigen Dateipfade erkannt wurden, werden die wahrscheinl",
       "reworkCount": 0,
-      "lastError": "Edit fehlgeschlagen: Datei fehlt: backend-core/package.json",
+      "lastError": "",
       "retryCount": 0
     },
     {
@@ -3436,9 +3436,9 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "RETRY",
+      "status": "COMPLETED",
       "taskId": "BACKLOG-196",
-      "lastSummary": "updateState in src/hooks/usePluginState.ts wurde so umgestellt, dass sie via useCallback stabil ist (leere Dependency-Liste) und den vorherigen State über den funktionalen setState-Aufruf (prev => ...) liest. Dadurch wird kein stale lockStatus bzw. stale State mehr verwendet, wenn mehrere Updates in",
+      "lastSummary": "updateState war (a) nicht identitätsstabil (neue Funktion bei jedem Render) und (b) schloss über lockStatus aus useMemo, wodurch bei verzögerter Ausführung (z. B. in Callbacks/Timeouts) ein veralteter Lock-Status gelesen werden konnte. Fix: lockStatus wird zusätzlich in einem Ref gespiegelt, der bei",
       "lastError": "",
       "retryCount": 0,
       "reworkCount": 0
@@ -3598,5 +3598,5 @@
       "taskId": "BLOCK-206"
     }
   ],
-  "updated": "2026-09-05T10:52:19.481Z"
+  "updated": "2026-09-05T10:53:26.510Z"
 }

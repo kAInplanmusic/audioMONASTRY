@@ -50,9 +50,23 @@ function parseModelJson(content) {
   }
 }
 
+function resolveRepoFile(rel) {
+  const candidates = [
+    rel,
+    path.join('services', rel),
+    path.join('src', rel),
+    path.join('public', rel),
+  ];
+  for (const cand of candidates) {
+    const abs = path.join(ROOT, cand);
+    if (existsSync(abs)) return abs;
+  }
+  return null;
+}
+
 function applyEdit(edit, changedFiles) {
-  const file = path.join(ROOT, edit.path);
-  if (!existsSync(file)) throw new Error(`Datei fehlt: ${edit.path}`);
+  const file = resolveRepoFile(edit.path);
+  if (!file) throw new Error(`Datei fehlt: ${edit.path}`);
   const src = readFileSync(file, 'utf8');
   const find = String(edit.find ?? '');
   if (!find) throw new Error('edit ohne find');

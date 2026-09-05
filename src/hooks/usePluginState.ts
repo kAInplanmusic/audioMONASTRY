@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { PluginState } from '../plugins/types';
 import { usePluginManager } from '../context/PluginManagerContext';
 import { useModuleState } from '../context/ModuleStateContext';
@@ -24,13 +24,24 @@ export const usePluginState = (pluginId: string, initialState: PluginState = 'OF
     [pluginLocks, pluginId],
   );
 
-  const updateState = (newState: PluginState) => {
-    const isOwner = lockStatus.active && lockStatus.lockedBy === webRTCManager.userId;
-    if (!lockStatus.active || isOwner) {
-      setModuleState(pluginId, newState);
-      logAuditEvent(webRTCManager.userId, 'PLUGIN_STATE', { pluginId, state: newState });
-    }
-  };
+  // DA-2026-09-04-217: Ref-Spiegel des aktuellen Lock-Status, damit updateState
+  // zur Ausführungszeit (nicht zur Closure-Erzeugungszeit) den frischen Wert liest
+  // und kein stale lockStatus verwendet wird.
+  const lockStatusRef = useRef(lockStatus);
+  lockStatusRef.current = lockStatus;
+
+  // Identitätsstabil: useCallback verhindert neue Funktionsinstanzen pro Render.
+  const updateState = useCallback(
+    (newState: PluginState) => {
+      const current = lockStatusRef.current;
+      const isOwner = current.active && current.lockedBy === webRTCManager.userId;
+      if (!current.active || isOwner) {
+        setModuleState(pluginId, newState);
+        logAuditEvent(webRTCManager.userId, 'PLUGIN_STATE', { pluginId, state: newState });
+      }
+    },
+    [pluginId, setModuleState],
+  );
 
   return { state, lockStatus, updateState };
 };
