@@ -98,55 +98,38 @@ class EqProcessor extends AudioWorkletProcessor {
     this.bandFreq[i] = f;
     this.bandQ[i] = qq;
     switch (type) {
-      case 'highpass': this.setHighpass(b, f, qq); break;
-      case 'lowpass': this.setLowpass(b, f, qq); break;
-      case 'lowshelf': this.setLowshelf(b, g, f, qq); break;
-      case 'highshelf': this.setHighshelf(b, g, f, qq); break;
+      case 'highpass': this.setPass(b, f, qq, true); break;
+      case 'lowpass': this.setPass(b, f, qq, false); break;
+      case 'lowshelf': this.setShelf(b, g, f, qq, true); break;
+      case 'highshelf': this.setShelf(b, g, f, qq, false); break;
       default: this.setPeaking(b, g, f, qq);
     }
   }
 
   // --- Biquad-Setups (RBJ Cookbook) ---
-  private setHighpass(f: BandState, freq: number, q: number) {
+  /** Highpass (high=true) / Lowpass (high=false): gleiche Struktur, nur cw-Vorzeichen im Zähler. */
+  private setPass(f: BandState, freq: number, q: number, high: boolean) {
     const w = 2 * Math.PI * freq / sampleRate;
     const alpha = Math.sin(w) / (2 * q);
     const cw = Math.cos(w);
-    const b0 = (1 + cw) / 2, b1 = -(1 + cw), b2 = b0;
+    const cwTerm = high ? cw : -cw;
+    const b0 = (1 + cwTerm) / 2, b1 = (high ? -1 : 1) * (1 + cwTerm), b2 = b0;
     const a0 = 1 + alpha, a1 = -2 * cw, a2 = 1 - alpha;
     f.co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
   }
-  private setLowpass(f: BandState, freq: number, q: number) {
-    const w = 2 * Math.PI * freq / sampleRate;
-    const alpha = Math.sin(w) / (2 * q);
-    const cw = Math.cos(w);
-    const b0 = (1 - cw) / 2, b1 = 1 - cw, b2 = (1 - cw) / 2;
-    const a0 = 1 + alpha, a1 = -2 * cw, a2 = 1 - alpha;
-    f.co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
-  }
-  private setLowshelf(f: BandState, gain: number, freq: number, q: number) {
+  /** Lowshelf (low=true) / Highshelf (low=false): gleiche Struktur, nur Vorzeichen der cw-Terme. */
+  private setShelf(f: BandState, gain: number, freq: number, q: number, low: boolean) {
     const w = 2 * Math.PI * freq / sampleRate; const a = Math.pow(10, gain / 40);
     const cw = Math.cos(w), sn = Math.sin(w);
     const alpha = sn / 2 * Math.sqrt((a + 1 / a) * (1 / q - 1) + 2);
     const twoSA = 2 * Math.sqrt(a) * alpha;
-    const b0 = a * ((a + 1) - (a - 1) * cw + twoSA);
-    const b1 = 2 * a * ((a - 1) - (a + 1) * cw);
-    const b2 = a * ((a + 1) - (a - 1) * cw - twoSA);
-    const a0 = (a + 1) + (a - 1) * cw + twoSA;
-    const a1 = -2 * ((a - 1) + (a + 1) * cw);
-    const a2 = (a + 1) + (a - 1) * cw - twoSA;
-    f.co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
-  }
-  private setHighshelf(f: BandState, gain: number, freq: number, q: number) {
-    const w = 2 * Math.PI * freq / sampleRate; const a = Math.pow(10, gain / 40);
-    const cw = Math.cos(w), sn = Math.sin(w);
-    const alpha = sn / 2 * Math.sqrt((a + 1 / a) * (1 / q - 1) + 2);
-    const twoSA = 2 * Math.sqrt(a) * alpha;
-    const b0 = a * ((a + 1) + (a - 1) * cw + twoSA);
-    const b1 = -2 * a * ((a - 1) + (a + 1) * cw);
-    const b2 = a * ((a + 1) + (a - 1) * cw - twoSA);
-    const a0 = (a + 1) - (a - 1) * cw + twoSA;
-    const a1 = 2 * ((a - 1) - (a + 1) * cw);
-    const a2 = (a + 1) - (a - 1) * cw - twoSA;
+    const sign = low ? -1 : 1;
+    const b0 = a * ((a + 1) + sign * (a - 1) * cw + twoSA);
+    const b1 = low ? 2 * a * ((a - 1) - (a + 1) * cw) : -2 * a * ((a - 1) + (a + 1) * cw);
+    const b2 = a * ((a + 1) + sign * (a - 1) * cw - twoSA);
+    const a0 = (a + 1) - sign * (a - 1) * cw + twoSA;
+    const a1 = low ? -2 * ((a - 1) + (a + 1) * cw) : 2 * ((a - 1) - (a + 1) * cw);
+    const a2 = (a + 1) - sign * (a - 1) * cw - twoSA;
     f.co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
   }
   private setPeaking(f: BandState, gain: number, freq: number, q: number) {
@@ -177,10 +160,10 @@ class EqProcessor extends AudioWorkletProcessor {
       // Koeffizienten mit geramptem Gain neu berechnen (nur aktive Bänder).
       const b = this.bands[i];
       switch (b.type) {
-        case 'highpass': this.setHighpass(b, this.bandFreq[i], this.bandQ[i]); break;
-        case 'lowpass': this.setLowpass(b, this.bandFreq[i], this.bandQ[i]); break;
-        case 'lowshelf': this.setLowshelf(b, this.bandGain[i], this.bandFreq[i], this.bandQ[i]); break;
-        case 'highshelf': this.setHighshelf(b, this.bandGain[i], this.bandFreq[i], this.bandQ[i]); break;
+        case 'highpass': this.setPass(b, this.bandFreq[i], this.bandQ[i], true); break;
+        case 'lowpass': this.setPass(b, this.bandFreq[i], this.bandQ[i], false); break;
+        case 'lowshelf': this.setShelf(b, this.bandGain[i], this.bandFreq[i], this.bandQ[i], true); break;
+        case 'highshelf': this.setShelf(b, this.bandGain[i], this.bandFreq[i], this.bandQ[i], false); break;
         default: this.setPeaking(b, this.bandGain[i], this.bandFreq[i], this.bandQ[i]);
       }
     }
