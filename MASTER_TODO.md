@@ -659,7 +659,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
   - 'page' is assigned a value but never used.
 - [ ] **DA-2026-09-04-008 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:101` (eslint)
   - 'page' is assigned a value but never used.
-- [ ] **DA-2026-09-04-009 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/stress-test.mjs:76` (eslint)
+- [x] **DA-2026-09-04-009 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/stress-test.mjs:76` (eslint)
   - 'id' is defined but never used.
 - [x] **DA-2026-09-04-012 · HIGH · Ungeprüfte Socket.io-Verbindungsziele** → gefixt 2026-09-04 – `server.ts:104` (hf-qwen)
   - Die fleetTargets werden dynamisch aus einer externen API geladen, ohne Validierung oder Sanitization. Dies könnte zu SSRF oder unerwünschten Zieladressen führen.
@@ -784,15 +784,15 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **DA-2026-09-04-064 · MEDIUM · Fehlende Sequenz-/Versionsnummer in lock_status führt zu State-Desync bei Out-of-order Delivery** → gefixt 2026-09-04 – `services/backend-core/SIGNALING_PROTOCOL.md:28` (deepseek-pro)
   - 'lock_status' überträgt nur moduleId, userId und status, aber keine monoton steigende Version oder Sequenznummer. Bei Transporten, die keine strikte Reihenfolge garantieren (z. B. DataChannel/WebSocket unter Last), können Clients veraltete Lock-Updates nach einem neueren Update verarbeiten und so einen falschen Sperrzustand anzeigen.
   - Vorschlag: Füge eine sequenzielle Versionsnummer oder Lamport-/Server-Timestamp in lock_status ein. Clients verwerfen Updates mit niedrigerer Version als dem zuletzt akzeptierten Zustand.
-- [ ] **DA-2026-09-04-065 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:27` (eslint)
+- [x] **DA-2026-09-04-065 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:27` (eslint)
   - A `require()` style import is forbidden.
-- [ ] **DA-2026-09-04-066 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:28` (eslint)
+- [x] **DA-2026-09-04-066 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:28` (eslint)
   - A `require()` style import is forbidden.
-- [ ] **DA-2026-09-04-067 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:40` (eslint)
+- [x] **DA-2026-09-04-067 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:40` (eslint)
   - A `require()` style import is forbidden.
-- [ ] **DA-2026-09-04-068 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:80` (eslint)
+- [x] **DA-2026-09-04-068 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:80` (eslint)
   - A `require()` style import is forbidden.
-- [ ] **DA-2026-09-04-069 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:100` (eslint)
+- [x] **DA-2026-09-04-069 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:100` (eslint)
   - A `require()` style import is forbidden.
 - [x] **DA-2026-09-04-110 · HIGH · Potential Command Injection via Model Name** → gefixt 2026-09-04 – `services/samplemonk-ai-runtime/app.py:107` (hf-qwen)
   - The model parameter in the /infer endpoint is directly used in logging and error messages without sanitization. If an attacker can control the model name, they could inject malicious content into logs or error messages.
@@ -848,13 +848,13 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
   - Vorschlag: Füge eine zusätzliche Berechtigungsprüfung hinzu, z.B. durch Überprüfung einer Rollenliste oder eines Token-Claims, bevor ein Lock übernommen wird.
 - [ ] **DA-2026-09-04-168 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMIDI.ts:175` (eslint)
   - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for 
-- [ ] **DA-2026-09-04-169 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:43` (eslint)
+- [x] **DA-2026-09-04-169 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:43` (eslint)
   - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/hooks/useMidiClockOut.ts:43
-- [ ] **DA-2026-09-04-170 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:46` (eslint)
+- [x] **DA-2026-09-04-170 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:46` (eslint)
   - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/hooks/useMidiClockOut.ts:46
-- [ ] **DA-2026-09-04-171 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMidiClockOut.ts:62` (eslint)
+- [x] **DA-2026-09-04-171 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMidiClockOut.ts:62` (eslint)
   - Error: Calling setState synchronously within an effect can trigger cascading renders  Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following: * Update external systems with the latest state from React. * Subscribe for 
-- [ ] **DA-2026-09-04-172 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:86` (eslint)
+- [x] **DA-2026-09-04-172 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:86` (eslint)
   - Error: Cannot access refs during render  React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).  /home/patrick/audioMONASTRY/src/hooks/useMidiClockOut.ts:86
 - [x] **DA-2026-09-04-174 · HIGH · Ungeprüfte Zustandsaktualisierung bei Plugin-Sperre** → gefixt 2026-09-04 – `src/hooks/usePluginState.ts:27` (hf-qwen)
   - Die Funktion `updateState` erlaubt es Benutzern, den Plugin-Zustand zu ändern, auch wenn das Plugin gesperrt ist. Dies könnte zu Zustandsinkonsistenzen führen, da andere Benutzer nicht wissen, ob der Zustand tatsächlich geändert wurde.

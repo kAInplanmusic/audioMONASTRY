@@ -441,11 +441,12 @@
       "agent": "#2",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-005"
+      "taskId": "BLOCK-005",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.",
@@ -454,12 +455,13 @@
       "domain": "AUDIO",
       "agent": "#2",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-006"
+      "taskId": "BLOCK-006",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung.",
@@ -468,12 +470,13 @@
       "domain": "BACKEND",
       "agent": "#2",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-007"
+      "taskId": "BLOCK-007",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen.",
@@ -482,12 +485,13 @@
       "domain": "AUDIO",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
-      "hardwareRequired": true,
+      "serverRequired": false,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-008"
+      "taskId": "BLOCK-008",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.",
@@ -497,11 +501,13 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-009"
+      "taskId": "BLOCK-009",
+      "retryCount": 1,
+      "lastError": "Worker-Tests rot (2 Assertions) -> manuell zurueck auf BLOCKED"
     },
     {
       "raw": "**P1-4 Debug-/Analyser-Pfad:** `analyzerNode` → Visualisierung als fester Debug-Schritt dokumentieren/testen.",
@@ -638,12 +644,13 @@
       "domain": "PERFORMANCE",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-018"
+      "taskId": "BLOCK-018",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**Prüfpunkt (Live):** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).",
@@ -1058,12 +1065,14 @@
       "domain": "BACKEND",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-047"
+      "taskId": "BLOCK-047",
+      "retryCount": 2,
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**DA-2026-09-04-007 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:84` (eslint)",
@@ -1072,12 +1081,14 @@
       "domain": "BACKEND",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-048"
+      "taskId": "BLOCK-048",
+      "retryCount": 3,
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**DA-2026-09-04-008 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/sfu-rtp-multi-run.mjs:101` (eslint)",
@@ -1086,12 +1097,14 @@
       "domain": "BACKEND",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-049"
+      "taskId": "BLOCK-049",
+      "retryCount": 1,
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**DA-2026-09-04-009 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/hetzner/stress-test.mjs:76` (eslint)",
@@ -1100,12 +1113,13 @@
       "domain": "LASTTESTS",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-050"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-050",
+      "lastSummary": "DA-2026-09-04-009: Der Callback-Parameter `i` in `Array.from({ length: HTTP_CLIENTS }, (_, i) => client(i))` wird nicht verwendet (die Funktion `client()` nimmt keine Argumente entgegen) und löst @typescript-eslint/no-unused-vars aus. Fix: Parameter und Argument entfernt."
     },
     {
       "raw": "**DA-2026-09-04-010 · MEDIUM · @typescript-eslint/no-unused-vars** – `scripts/wake-on-login/worker.js:147` (eslint)",
@@ -1375,11 +1389,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-067"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-067",
+      "lastSummary": "DA-2026-09-04-065: Der optionale require('midi') in services/midi-bridge/index.js (Zeile 27) ist bewusst in einem try/catch gekapselt, da das native RtMidi-Binding auf Systemen ohne MIDI-Ports fehlen kann. Eine Umstellung auf ESM-Import ist hier nicht sinnvoll (CommonJS-Sidecar, optional dependency,"
     },
     {
       "raw": "**DA-2026-09-04-066 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:28` (eslint)",
@@ -1389,11 +1404,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-068"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-068",
+      "lastSummary": "DA-2026-09-04-066: Der require('midi')-Aufruf in services/midi-bridge/index.js (Zeile 28) ist ein bewusst lazy geladenes, optionales natives Binding innerhalb eines try/catch – eine Umstellung auf statisches import() ist hier nicht sinnvoll, da das Paket optional fehlen darf und die Datei bewusst al"
     },
     {
       "raw": "**DA-2026-09-04-067 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:40` (eslint)",
@@ -1403,11 +1419,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-069"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-069",
+      "lastSummary": "DA-2026-09-04-067: In services/midi-bridge/index.js steht vor `midi = require('midi')` derselbe eslint-disable-Kommentar (@typescript-eslint/no-require-imports) doppelt hintereinander. Die erste Direktive deaktiviert die Regel nur für die darauffolgende Kommentarzeile (kein Code) und wird daher als "
     },
     {
       "raw": "**DA-2026-09-04-068 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:80` (eslint)",
@@ -1417,11 +1434,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-070"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-070",
+      "lastSummary": "DA-2026-09-04-068: @typescript-eslint/no-require-imports in services/midi-bridge/index.js behoben. Das 'osc'-Paket wird wie das optionale native 'midi'-Binding bewusst lazy im try/catch geladen (CommonJS-Sidecar, optional dependency), daher wurde das bestehende Muster (eslint-disable-next-line mit B"
     },
     {
       "raw": "**DA-2026-09-04-069 · MEDIUM · @typescript-eslint/no-require-imports** – `services/midi-bridge/index.js:100` (eslint)",
@@ -1431,11 +1449,13 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-071"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-071",
+      "retryCount": 2,
+      "lastSummary": "Die gemeldete Verletzung @typescript-eslint/no-require-imports bei services/midi-bridge/index.js:100 (Region des UDPPort-require im OSC-UDP-Listener) ist im aktuellen Dateistand bereits behoben: Sämtliche drei require-Aufrufe ('midi' bei ~Zeile 41, 'osc'/Client bei ~Zeile 82, 'osc'/UDPPort bei ~Zeil"
     },
     {
       "raw": "**DA-2026-09-04-070 · MEDIUM · @typescript-eslint/no-require-imports** – `services/mixer/index.js:7` (eslint)",
@@ -2489,11 +2509,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-137"
+      "taskId": "BLOCK-137",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**DA-2026-09-04-149 · MEDIUM · react-hooks/set-state-in-effect** – `src/components/SemanticSampleSearch.tsx:71` (eslint)",
@@ -2775,11 +2796,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-155"
+      "taskId": "BLOCK-155",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**DA-2026-09-04-169 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:43` (eslint)",
@@ -2789,11 +2811,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-156"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-156",
+      "lastSummary": "DA-2026-09-04-169: eslint react-hooks/refs meldet den Lesezugriff auf clockOutRef.current während des Renderings (Zeile 43, Lazy-Init über useRef). Behoben durch Ersatz des Ref-Musters durch einen lazy useState-Initialisierer, der die MidiClockOut-Instanz genau einmal erzeugt (gleiches Verhalten, ke"
     },
     {
       "raw": "**DA-2026-09-04-170 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:46` (eslint)",
@@ -2803,11 +2826,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-157"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-157",
+      "lastSummary": "Die Datei src/hooks/useMidiClockOut.ts enthält die Warnung react-hooks/refs (Zugriff auf ref.current während des Renderings) bereits nicht mehr: Die MidiClockOut-Instanz wird bereits per Lazy-Init über useState(() => new MidiClockOut(...)) erzeugt (Zeilen ~44–48), inklusive Kommentarverweis auf die "
     },
     {
       "raw": "**DA-2026-09-04-171 · MEDIUM · react-hooks/set-state-in-effect** – `src/hooks/useMidiClockOut.ts:62` (eslint)",
@@ -2817,11 +2841,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-158"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-158",
+      "lastSummary": "Fix für DA-2026-09-04-171 (react-hooks/set-state-in-effect): Der Effekt in useMidiClockOut.ts rief setConnected() synchron im Effect-Body auf. Der 'connected'-Zustand ist vollständig aus outputs und portId ableitbar und wurde daher in einen useMemo-basierten Zielport plus boolesche Ableitung umgewan"
     },
     {
       "raw": "**DA-2026-09-04-172 · MEDIUM · react-hooks/refs** – `src/hooks/useMidiClockOut.ts:86` (eslint)",
@@ -2831,11 +2856,12 @@
       "agent": "#5",
       "reviewAgent": null,
       "serverRequired": false,
-      "hardwareRequired": true,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-159"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-159",
+      "lastSummary": "DA-2026-09-04-172: Die eslint-Regel react-hooks/refs meldet in useMidiClockOut.ts (Zeile 86) den Zugriff auf die Instanz innerhalb der als Doppel-Pfeilfunktion (`() => () => {...}`) direkt zurückgegebenen Unmount-Cleanup-Funktion. Der Compiler-basierte Linter kann bei diesem Muster die Alias-Analyse"
     },
     {
       "raw": "**DA-2026-09-04-173 · MEDIUM · Möglicher Race Condition bei Zustandsabfrage** – `src/hooks/usePluginState.ts:20` (hf-qwen)",
@@ -3482,12 +3508,13 @@
       "domain": "BACKEND",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
+      "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-199"
+      "taskId": "BLOCK-199",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "raw": "**DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)",
@@ -3590,12 +3617,13 @@
       "domain": "AUDIO",
       "agent": "#5",
       "reviewAgent": null,
-      "serverRequired": true,
-      "hardwareRequired": true,
+      "serverRequired": false,
+      "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": false,
       "status": "BLOCKED",
-      "taskId": "BLOCK-206"
+      "taskId": "BLOCK-206",
+      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
     },
     {
       "taskId": "AUDIT-PLAN-MOA",
@@ -3694,5 +3722,5 @@
       "lastSummary": "Es wurde kein Final-Review-/Compliance-Plan im Repository gefunden. Ohne konkrete Vorgaben oder Dateipfade kann keine automatisierte Prüfung durchgeführt werden. Bitte stellen Sie den Plan oder die zu prüfenden Dateien bereit."
     }
   ],
-  "updated": "2026-09-05T12:20:18.917Z"
+  "updated": "2026-09-05T14:32:31.335Z"
 }
