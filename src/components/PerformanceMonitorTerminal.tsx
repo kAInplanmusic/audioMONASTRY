@@ -51,6 +51,7 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
   const { state, updateState } = usePluginState('performance', 'PRO');
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
   const [net, setNet] = useState({ rttMs: 0, dropouts: 0 });
+  const [latencyBudget, setLatencyBudget] = useState(() => audioEngine.getLatencyBudgetMs());
   const [tel, setTel] = useState(() => telemetry.snapshot());
   const [signalMode, setSignalMode] = useState<SignalMode>('OSCILLOSCOPE');
   const signalCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,6 +69,8 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
         rttMs: Math.round(webRTCManager.lastRttMs * 10) / 10,
         dropouts: audioEngine.dropoutCount,
       });
+      // A-4: Latenz-Budget inkl. Mastering-Lookahead/PDC.
+      setLatencyBudget(audioEngine.getLatencyBudgetMs());
     }, 1000);
     return () => { clearInterval(timer); performanceMonitor.stop(); };
   }, []);
@@ -196,6 +199,14 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
               <div className="flex justify-between">
                 <span className="text-neutral-500 uppercase">DROPOUTS</span>
                 <span className={net.dropouts === 0 ? 'text-emerald-400' : 'text-amber-400'}>{net.dropouts}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">MASTERING LOOKAHEAD</span>
+                <span className="text-emerald-400">{latencyBudget.masteringLookaheadMs.toFixed(1)} ms</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-neutral-500 uppercase">CUE PDC</span>
+                <span className="text-emerald-400">{latencyBudget.cuePdcMs.toFixed(1)} ms</span>
               </div>
               {budgets.map((b) => (
                 <div key={b.pipeline} className="flex justify-between">

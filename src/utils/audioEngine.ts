@@ -2383,6 +2383,18 @@ class AudioEngine {
     };
   }
 
+  /** A-4: Latenz-Budget inkl. Mastering-Lookahead/PDC je Stufe. */
+  public getLatencyBudgetMs(): { masteringLookaheadMs: number; cuePdcMs: number; outputLatencyMs: number; totalMs: number } {
+    const health = this.getAudioHealth();
+    const masteringLookaheadMs = this.PDC_MASTERING_LOOKAHEAD_SEC * 1000;
+    return {
+      masteringLookaheadMs,
+      cuePdcMs: this.cuePdcDelay ? this.PDC_MASTERING_LOOKAHEAD_SEC * 1000 : 0,
+      outputLatencyMs: health.outputLatencyMs,
+      totalMs: health.baseLatencyMs + health.outputLatencyMs + masteringLookaheadMs,
+    };
+  }
+
   /** App-weites Ausgabegerät setzen (setSinkId, z. B. ASUS Xonar U7). */
   public async setOutputDevice(deviceId: string): Promise<void> {
     if (!this.ctx) return;

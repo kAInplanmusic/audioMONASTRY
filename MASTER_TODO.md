@@ -53,7 +53,7 @@
 - [x] **A-1 LUFS `log10(0)` → -Infinity (Hoch)** – `lufsProcessor.ts:21-25` gefixt (2026-09-05): `Math.max(rms, 1e-8)` + Clamp −70 dB.
 - [ ] **A-2 `audioEngine.ts` 2814-Zeilen-Monolith (Mittel)** – in Graph-Aufbau/Worklet-Factory/Routing/Monitoring schneiden; Kernpfad-Coverage (26,7 %) erhöhen.
 - [ ] **A-3 Fehlgeschlagene Worklets nicht entsorgt (Mittel)** – `makeWorklet`-Fallbacks disconnecten und im Teardown führen.
-- [ ] **A-4 Mastering-Lookahead nicht per API abfragbar (Mittel)** – `audioEngine.getLatencyBudgetMs()` mit Stufen-Aufschlüsselung; in perfMONK anzeigen.
+- [x] **A-4 Mastering-Lookahead nicht per API abfragbar (Mittel)** – `getLatencyBudgetMs()` + perfMONK-Anzeige (2026-09-05).
 - [ ] **A-5 Allokationen im `process()`-Pfad bei Kanal-/Quantum-Wechsel (Niedrig)** – im Konstruktor auf Maximalkanäle/-quantum vorallozieren.
 - [x] **A-6 Quantum-Annahme 128 im EQ-Ramping (Niedrig)** – gefixt (2026-09-05): `blockSize` aus `input[0].length`.
 - [x] **A-7 Keine Denormal-Clamps im Reverb-Feedback (Niedrig)** – gefixt (2026-09-05) in `effectProcessor.ts:94-121`.
