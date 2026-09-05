@@ -81,7 +81,8 @@ function agentFor(cls, domain) {
     const agent = ROUTING.MITTEL[domain] ?? '#2';
     return { agent, review: null };
   }
-  const agent = ROUTING.SCHWER[domain] ?? '#2';
+  // SCHWER → Cerebras GPT-OSS-120B als starker Partner für komplexe Tasks.
+  const agent = '#7';
   const review = CONFIG.reviewRequiredDomains.includes(domain) ? CONFIG.reviewAgent : null;
   return { agent, review };
 }
@@ -154,7 +155,7 @@ function main() {
     `# AGENT_TODO – Background-Coder Pipeline`,
     `\nErzeugt: ${new Date().toISOString()}`,
     `\nLEICHT: ${ordered.LEICHT.length} · MITTEL: ${ordered.MITTEL.length} · SCHWER: ${ordered.SCHWER.length} · BLOCKED: ${ordered.BACKLOG.length}`,
-    `\nFestes Modell-Routing: Orchestrator=DeepSeek V4 Flash Visionary (max thinking) · #2 Kimi K2.7-Code · #3 GLM-5.3 · #4 Qwen3-Coder-Next · #5 GLM-5.3-Flash · #6 DeepSeek V4 Pro`,
+    `\nFestes Modell-Routing: Orchestrator=DeepSeek V4 Flash Visionary (max thinking) · #2 Kimi K2.7-Code · #3 GLM-5.3 · #4 Qwen3-Coder-Next · #5 GLM-5.3-Flash · #6 DeepSeek V4 Pro · #7 Cerebras GPT-OSS-120B (SCHWER/komplex)`,
   ].join('\n');
 
   const md = summary + blocks.join('\n');
