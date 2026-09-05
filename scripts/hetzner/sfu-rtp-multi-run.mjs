@@ -13,50 +13,17 @@
 //   BASE_URL=http://49.13.65.150 PRODUCERS=2 CONSUMERS=2 \
 //     node scripts/hetzner/sfu-rtp-multi-run.mjs
 // =============================================================================
-import { chromium } from 'playwright';
-import http from 'node:http';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createSfuRtpServer, launchRtpBrowser, openRtpPage } from './sfu-rtp-helpers.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PUBLIC_DIR = path.resolve(__dirname, '../../public');
 const LOCAL_PORT = Number(process.env.LOCAL_PORT || 8123);
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
 const PRODUCERS = Number(process.env.PRODUCERS || 2);
 const CONSUMERS = Number(process.env.CONSUMERS || 2);
 
-const server = http.createServer(async (req, res) => {
-  try {
-    const file = req.url === '/' ? '/sfu-rtp-test.html' : req.url.split('?')[0];
-    const data = await readFile(path.join(PUBLIC_DIR, file));
-    res.writeHead(200, { 'content-type': file.endsWith('.js') ? 'text/javascript' : 'text/html' });
-    res.end(data);
-  } catch {
-    res.writeHead(404);
-    res.end('not found');
-  }
-});
-await new Promise((resolve) => server.listen(LOCAL_PORT, '127.0.0.1', resolve));
+const server = await createSfuRtpServer(LOCAL_PORT);
+const browser = await launchRtpBrowser();
 
-const browser = await chromium.launch({
-  headless: true,
-  args: [
-    '--use-fake-ui-for-media-stream',
-    '--use-fake-device-for-media-stream',
-    '--autoplay-policy=no-user-gesture-required',
-  ],
-});
-
-async function openPage(url) {
-  const context = await browser.newContext({ permissions: ['microphone'] });
-  const page = await context.newPage();
-  page.on('pageerror', (e) => console.log('[pageerror]', e.message));
-  await page.goto(url);
-  await page.waitForFunction(() => window.__SFU_RTP_RESULT !== undefined, null, { timeout: 45_000 });
-  const result = await page.evaluate(() => window.__SFU_RTP_RESULT);
-  return { context, page, result };
-}
+const openPage = (url) => openRtpPage(browser, url);
 
 const summary = { baseUrl: BASE_URL, producers: [], consumers: [], echo: null };
 // Produzenten-Kontexte bewusst offen halten (RTP läuft weiter).
