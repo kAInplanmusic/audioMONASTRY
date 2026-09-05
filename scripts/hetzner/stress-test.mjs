@@ -80,7 +80,12 @@ async function httpPhase() {
       try {
         const res = await fetch(BASE_URL + ep.path, {
           method: ep.method,
-          headers: ep.body ? { 'content-type': 'application/json' } : undefined,
+          headers: {
+            ...(ep.body ? { 'content-type': 'application/json' } : {}),
+            ...(process.env.STUDIO_ACCESS_TOKEN
+              ? { 'x-studio-token': process.env.STUDIO_ACCESS_TOKEN }
+              : {}),
+          },
           body: ep.body ? JSON.stringify(ep.body) : undefined,
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
@@ -127,6 +132,10 @@ function connectSocket(id) {
       transports: ['websocket'],
       reconnection: false,
       timeout: 10_000,
+      // Auth-Token aus .env (STUDIO_ACCESS_TOKEN), falls gesetzt.
+      ...(process.env.STUDIO_ACCESS_TOKEN
+        ? { auth: { token: process.env.STUDIO_ACCESS_TOKEN } }
+        : {}),
     });
     const timer = setTimeout(() => {
       socket.disconnect();
