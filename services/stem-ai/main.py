@@ -22,10 +22,12 @@ import shutil
 import tempfile
 import threading
 import time
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
+
+from device_utils import resolve_device
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("samplemonk.stem-ai")
@@ -40,37 +42,8 @@ STAGE_NAMES = {"vocals", "bass", "drums", "other"}
 # --------------------------------------------------------------------------- #
 # Geräte-Detektion + Lazy-Loading
 # --------------------------------------------------------------------------- #
-_device_lock = threading.Lock()
-_device: Optional[str] = None
 _separator_lock = threading.Lock()
 _separator = None
-
-
-def resolve_device() -> str:
-    global _device
-    if _device is not None:
-        return _device
-    with _device_lock:
-        if _device is not None:
-            return _device
-        env_dev = os.environ.get("AI_DEVICE", "").strip().lower()
-        if env_dev in ("cuda", "mps", "cpu"):
-            _device = env_dev
-            logger.info("AI_DEVICE aus ENV: %s", _device)
-            return _device
-        try:
-            import torch
-            if torch.cuda.is_available():
-                _device = "cuda"
-            elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-                _device = "mps"
-            else:
-                _device = "cpu"
-        except Exception as exc:  # pragma: no cover
-            logger.warning("torch fehlt/%s; force cpu", exc)
-            _device = "cpu"
-        logger.info("GPU-Auto-Detect: %s", _device)
-        return _device
 
 
 def get_separator():

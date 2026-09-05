@@ -16,6 +16,8 @@ import threading
 
 from celery import Celery
 
+from device_utils import half_precision_compatible, resolve_device
+
 logger = logging.getLogger("samplemonk.celery")
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif", ".webm", ".opus"}
@@ -58,46 +60,6 @@ celery_app.conf.update(
     task_soft_time_limit=int(os.environ.get("AI_TASK_SOFT_TIME_LIMIT_SEC", "1080")),
     result_expires=int(os.environ.get("AI_RESULT_EXPIRES_SEC", "3600")),
 )
-
-# --------------------------------------------------------------------------- #
-# Geräte-Detektion (einmalig, gecacht)
-# --------------------------------------------------------------------------- #
-_device_lock = threading.Lock()
-_device = None
-
-
-def resolve_device() -> str:
-    """Bestimmt das Inferenz-Gerät. Priorität: env > cuda > mps > cpu."""
-    global _device
-    if _device is not None:
-        return _device
-    with _device_lock:
-        if _device is not None:
-            return _device
-        env_dev = os.environ.get("AI_DEVICE", "").strip().lower()
-        if env_dev in ("cuda", "mps", "cpu"):
-            _device = env_dev
-            logger.info("AI_DEVICE aus ENV: %s", _device)
-            return _device
-        try:
-            import torch
-            if torch.cuda.is_available():
-                _device = "cuda"
-            elif getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-                _device = "mps"
-            else:
-                _device = "cpu"
-        except Exception as exc:  # pragma: no cover
-            logger.warning("torch nicht verfügbar (%s); force cpu", exc)
-            _device = "cpu"
-        logger.info("GPU-Auto-Detect ergab: %s", _device)
-        return _device
-
-
-def half_precision_compatible() -> bool:
-    """Nutzt fp16 nur auf cuda (und 'nice' Backends), nie auf cpu."""
-    return resolve_device() == "cuda"
-
 
 # --------------------------------------------------------------------------- #
 # Lazy-Loading-Caches
