@@ -34,8 +34,6 @@ const TYPE_COLORS: Record<string, string> = {
   perc: '#34d399',
 };
 
-const EMPTY_16 = (): boolean[] => Array(16).fill(false);
-
 interface DrumMachineProps {
   isPlaying?: boolean;
   currentStep?: number;
@@ -47,10 +45,27 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   const { state, lockStatus, updateState } = usePluginState('drum', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
-  const [activeKit, setActiveKit] = useState('tr-808');
-  const [selectedSoundId, setSelectedSoundId] = useState<string>(DRUM_KITS[0]?.sounds[0]?.id ?? '');
-  const [patterns, setPatterns] = useState<Record<string, boolean[]>>({});
-  const [stepSamples, setStepSamples] = useState<Record<string, Record<number, AudioSample>>>({});
+  // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.
+  const [loadedDrumState] = useState(() => {
+    try {
+      const parsed = storageGetJson<{ kit?: string; patterns?: Record<string, boolean[]>; stepSamples?: Record<string, Record<number, AudioSample>> }>('drum-state');
+      if (parsed) {
+        const kit = parsed.kit && DRUM_KITS.some((k) => k.id === parsed.kit) ? parsed.kit : 'tr-808';
+        const kitDef = DRUM_KITS.find((k) => k.id === kit) ?? DRUM_KITS[0];
+        return {
+          kit,
+          soundId: kitDef?.sounds[0]?.id ?? '',
+          patterns: parsed.patterns ?? {},
+          stepSamples: parsed.stepSamples ?? {},
+        };
+      }
+    } catch { /* ignore */ }
+    return { kit: 'tr-808', soundId: DRUM_KITS[0]?.sounds[0]?.id ?? '', patterns: {}, stepSamples: {} };
+  });
+  const [activeKit, setActiveKit] = useState(loadedDrumState.kit);
+  const [selectedSoundId, setSelectedSoundId] = useState<string>(loadedDrumState.soundId);
+  const [patterns, setPatterns] = useState<Record<string, boolean[]>>(loadedDrumState.patterns);
+  const [stepSamples, setStepSamples] = useState<Record<string, Record<number, AudioSample>>>(loadedDrumState.stepSamples);
   const [flashId, setFlashId] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
   // NEW-MONK-1: 16/32 Steps, Pattern-Bank A/B + Chain, Flam/Roll, Swing.
@@ -78,23 +93,13 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   const selectedPattern = patterns[patternKey(selectedSound?.id ?? '')] ?? emptyPattern();
   const selectedSamples = stepSamples[patternKey(selectedSound?.id ?? '')] ?? {};
 
-  // Persistenz laden.
+  // Geladenes Kit genau einmal an die Engine pushen (Side-Effekt, kein setState).
+  const didInitKitRef = useRef(false);
   useEffect(() => {
-    try {
-      const parsed = storageGetJson<{ kit?: string; patterns?: Record<string, boolean[]>; stepSamples?: Record<string, Record<number, AudioSample>> }>('drum-state');
-      if (parsed) {
-        if (parsed.kit && DRUM_KITS.some((k) => k.id === parsed.kit)) {
-          setActiveKit(parsed.kit);
-          audioEngine.setDrumKit(parsed.kit);
-          const kit = DRUM_KITS.find((k) => k.id === parsed.kit)!;
-          setSelectedSoundId(kit.sounds[0]?.id ?? '');
-        }
-        if (parsed.patterns) setPatterns(parsed.patterns);
-        if (parsed.stepSamples) setStepSamples(parsed.stepSamples);
-      }
-    } catch { /* ignore */ }
-     
-  }, []);
+    if (didInitKitRef.current) return;
+    didInitKitRef.current = true;
+    audioEngine.setDrumKit(activeKit);
+  }, [activeKit]);
 
   // Persistenz speichern.
   useEffect(() => {
@@ -115,7 +120,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     };
     window.addEventListener('monk:drum-pattern-random', onRandom);
     return () => window.removeEventListener('monk:drum-pattern-random', onRandom);
-  }, [activeDrumKit, patternKey]);
+  }, [activeDrumKit, patternKey, stepCount]);
 
   const handleKitChange = useCallback((kitId: string) => {
     setActiveKit(kitId);
@@ -217,7 +222,8 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
     const key = patternKey(selectedSound?.id ?? '');
     const arr = patterns[key] ?? emptyPattern();
     const step = arr.findIndex((on) => !on);
-    if (step >= 0) handleSampleDrop(takeoverRequest.sample, step);
+    // Asynchron anwenden: kein synchroner setState-Aufruf im Effect-Body.
+    if (step >= 0) void Promise.resolve().then(() => handleSampleDrop(takeoverRequest.sample, step));
     clearTakeoverRequest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [takeoverRequest]);

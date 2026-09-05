@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import React, { useCallback, useEffect, useState, type DragEvent } from 'react';
 import { random } from '../utils/random';
 import { Activity, Download, RefreshCw, Upload, X } from 'lucide-react';
 
@@ -73,7 +73,7 @@ function FileSlot({ label, file, onFile, onClear }: {
   onFile: (f: File) => void;
   onClear: () => void;
 }) {
-  const id = useRef(`mp-file-${label.replace(/\W/g, '')}-${random().toString(36).slice(2, 8)}`);
+  const [id] = useState(() => `mp-file-${label.replace(/\W/g, '')}-${random().toString(36).slice(2, 8)}`);
   const [drag, setDrag] = useState(false);
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
@@ -117,7 +117,7 @@ function FileSlot({ label, file, onFile, onClear }: {
         </div>
       ) : (
         <label
-          htmlFor={id.current}
+          htmlFor={id}
           className="flex flex-col items-center justify-center gap-1.5 px-3 py-4 cursor-pointer hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-colors text-center"
         >
           <Upload className={`w-4 h-4 ${drag ? 'text-cyan-300' : 'text-neutral-500'}`} />
@@ -127,7 +127,7 @@ function FileSlot({ label, file, onFile, onClear }: {
         </label>
       )}
       <input
-        id={id.current}
+        id={id}
         type="file"
         accept="audio/*"
         className="hidden"
@@ -186,13 +186,19 @@ function Metric({ label, value, unit, tone }: {
   );
 }
 
+const PROGRESS_STEPS = ['DECODE', 'FFmpeg-DSP', 'ENCODE'];
+
 function ProgressBar({ busy }: { busy: boolean }) {
-  const steps = ['DECODE', 'FFmpeg-DSP', 'ENCODE'];
   const [idx, setIdx] = useState(0);
+  // Reset bei Übergang von idle → busy (state during render statt setState im Effect).
+  const [wasBusy, setWasBusy] = useState(busy);
+  if (busy !== wasBusy) {
+    setWasBusy(busy);
+    if (busy) setIdx(0);
+  }
   useEffect(() => {
     if (!busy) return;
-    setIdx(0);
-    const t = setInterval(() => setIdx((i) => (i + 1) % steps.length), 900);
+    const t = setInterval(() => setIdx((i) => (i + 1) % PROGRESS_STEPS.length), 900);
     return () => clearInterval(t);
   }, [busy]);
   if (!busy) return null;
@@ -202,7 +208,7 @@ function ProgressBar({ busy }: { busy: boolean }) {
         <div className="h-full w-1/3 rounded-full bg-cyan-400/80 animate-pulse" />
       </div>
       <span className="text-[9px] font-mono text-cyan-300/80 tracking-[0.3em] animate-pulse">
-        {steps[idx]} …
+        {PROGRESS_STEPS[idx]} …
       </span>
     </div>
   );
@@ -269,14 +275,17 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
   }, [revokeFileUrl, revokeResultUrl]);
 
   useEffect(() => {
-    checkHealth();
+    // Kein synchroner setState-Aufruf im Effect-Body: Health-Check asynchron starten.
+    void (async () => {
+      await Promise.resolve();
+      await checkHealth();
+    })();
     return () => {
       setTrackA((prev) => { revokeFileUrl(prev); return null; });
       setTrackB((prev) => { revokeFileUrl(prev); return null; });
       revokeResultUrl();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [checkHealth, revokeFileUrl, revokeResultUrl]);
 
   const onFileA = useCallback(async (f: File) => {
     if (!f.type.startsWith('audio') && !/\.(wav|mp3|flac|ogg|aac|m4a)$/i.test(f.name)) {

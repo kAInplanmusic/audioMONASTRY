@@ -179,7 +179,7 @@ function A9MasterMeter({ level }: { level: number }) {
 }
 
 export const DJMixer = React.memo(function DJMixer() {
-  const strips = useMemo(buildStrips, []);
+  const strips = useMemo(() => buildStrips(), []);
   const [ch, setCh] = useState<ChannelState[]>(() => buildStrips().map(freshChannel));
   const [xfd, setXfd] = useState(0.5);
   const [xfMode, setXfMode] = useState<XfMode>('THRU');

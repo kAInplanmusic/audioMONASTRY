@@ -66,11 +66,6 @@ export const SemanticSampleSearch: React.FC<SemanticSampleSearchProps> = ({ onSe
 
   const totalPages = Math.ceil(filteredSamples.length / itemsPerPage);
 
-  // Reset page when query changes
-  React.useEffect(() => {
-      setPage(1);
-  }, [query]);
-
   return (
     <div className="relative z-50">
       <div className="flex items-center gap-2 bg-[#1a1a1a] border not-focus-within:border-neutral-800 rounded-lg p-2 focus-within:border-fuchsia-500 transition-colors">
@@ -79,7 +74,7 @@ export const SemanticSampleSearch: React.FC<SemanticSampleSearchProps> = ({ onSe
             type="text"
             placeholder="Suche..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setPage(1); }}
             className="bg-transparent border-none text-[10px] text-white focus:outline-none w-full"
         />
         <Filter className="w-3 h-3 text-neutral-600" />

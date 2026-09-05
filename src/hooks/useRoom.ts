@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { random } from '../utils/random';
 import { assertCan, roleForUser, Role, logAuditEvent } from '../utils/rbac';
 
@@ -23,10 +23,13 @@ export function useRoom(roomId: string | null, userId: string | null) {
     roomId ? localRooms[roomId] ?? null : null
   );
 
-  useEffect(() => {
-    if (!roomId) return;
-    setRoom(localRooms[roomId] ?? null);
-  }, [roomId]);
+  // Bei roomId-Wechsel den Room-Status angleichen (state during render statt
+  // setState im Effect, vgl. react-hooks/set-state-in-effect).
+  const [lastRoomId, setLastRoomId] = useState(roomId);
+  if (lastRoomId !== roomId) {
+    setLastRoomId(roomId);
+    setRoom(roomId ? localRooms[roomId] ?? null : null);
+  }
 
   // RBAC-gestützter Kick: nur admin (Host) darf entfernen; Audit-Event.
   const kickUser = async (targetUserId: string) => {

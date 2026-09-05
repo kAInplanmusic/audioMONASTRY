@@ -92,24 +92,22 @@ const loadAllAudioWorklets = async () => {
 
 export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
     const isInitialized = useRef(false);
-    const audioContextRef = useRef<globalThis.AudioContext | null>(null);
+    const [audioContext, setAudioContext] = useState<globalThis.AudioContext | null>(null);
     const peerConnectionRef = useRef<RTCPeerConnection | null>(null); // To store RTCPeerConnection
     const syncDataChannelRef = useRef<RTCDataChannel | null>(null); // To store RTCDataChannel
 
     // P8: CRDT-bewusster Clock-Sender (Lamport-Uhr + deterministische Sicht).
-    const crdtClockRef = useRef<CrdtClock | null>(null);
-    const clockMergerRef = useRef<CrdtClockMerger | null>(null);
-    const pluginLwwRef = useRef<CrdtLwwMap<unknown> | null>(null);
-    if (!crdtClockRef.current) crdtClockRef.current = new CrdtClock(0);
-    if (!clockMergerRef.current) clockMergerRef.current = new CrdtClockMerger();
-    if (!pluginLwwRef.current) pluginLwwRef.current = new CrdtLwwMap<unknown>();
+    // Einmalig erzeugte Instanzen über useState-Lazy-Initializer (kein ref.current im Render).
+    const [crdtClock] = useState(() => new CrdtClock(0));
+    const [clockMerger] = useState(() => new CrdtClockMerger());
+    const [pluginLww] = useState(() => new CrdtLwwMap<unknown>());
 
     // Clock sync broadcaster (mit CRDT-Stamp; Empfänger merge über Merger).
     useEffect(() => {
         const interval = setInterval(() => {
             const ch = syncDataChannelRef.current;
             if (ch && ch.readyState === 'open') {
-                const stamp = crdtClockRef.current!.tick();
+                const stamp = crdtClock.tick();
                 const msg: CrdtSyncMessage = {
                     type: 'CLOCK_SYNC',
                     stamp: [stamp.t, stamp.peer],
@@ -120,7 +118,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
             }
         }, 100); // 10Hz sync
         return () => clearInterval(interval);
-    }, []);
+    }, [crdtClock]);
 
     // State to hold the handleNetworkChange function so it can be removed
     const [networkChangeHandler, setNetworkChangeHandler] = useState<(() => Promise<void>) | null>(null);
@@ -128,7 +126,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
     const startAudio = async () => {
         if (!isInitialized.current) {
             await Tone.start();
-            audioContextRef.current = Tone.context.rawContext as globalThis.AudioContext;
+            setAudioContext(Tone.context.rawContext as globalThis.AudioContext);
 
             // Load all necessary Worklets
             await loadAllAudioWorklets();
@@ -166,15 +164,15 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
                     try {
                         const msgData = JSON.parse(msg.data);
                         // Empfängerseite: Lamport wird über die empfangene Stamp fortgeschrieben.
-                        if (crdtClockRef.current && Array.isArray(msgData.stamp)) {
-                            crdtClockRef.current.tick({ t: msgData.stamp[0], peer: msgData.stamp[1] });
+                        if (Array.isArray(msgData.stamp)) {
+                            crdtClock.tick({ t: msgData.stamp[0], peer: msgData.stamp[1] });
                         }
 
                         switch (msgData.type) {
                             case 'CLOCK_SYNC': {
                                 // CRDT-merge: akzeptiert nur plausible Vorwärts-Schritte.
                                 // Verhindert 10Hz-Desync-/Positionsspringe.
-                                const merger = clockMergerRef.current!;
+                                const merger = clockMerger;
                                 if (merger.proposed(msgData.masterTime)) {
                                     Tone.Transport.bpm.value = msgData.masterBpm ?? Tone.Transport.bpm.value;
                                     // Nur anwenden, wenn BPM wirklich geändert hat; Position glätten.
@@ -191,7 +189,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
                             }
                             case 'PLUGIN_STATE_UPDATE': {
                                 // LWW-Merge über Lamport-Uhr.
-                                const lww = pluginLwwRef.current!;
+                                const lww = pluginLww;
                                 lww.set(msgData.pluginId, msgData.state, {
                                     t: msgData.stamp[0],
                                     peer: msgData.stamp[1],
@@ -340,7 +338,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
     }, [networkChangeHandler]);
 
     return (
-        <AudioContext.Provider value={{ startAudio, audioContext: audioContextRef.current }}>
+        <AudioContext.Provider value={{ startAudio, audioContext }}>
             {children}
         </AudioContext.Provider>
     );

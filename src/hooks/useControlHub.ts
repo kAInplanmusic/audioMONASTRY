@@ -20,7 +20,8 @@ export const useControlHub = () => {
     controlHub.register(webMIDIAdapter);
     controlHub.register(hidAdapter);
     controlHub.register(oscAdapter);
-    setStatus(controlHub.listStatus());
+    // Status-Update asynchron, damit kein setState synchron im Effect-Body läuft.
+    void Promise.resolve().then(() => setStatus(controlHub.listStatus()));
 
     const offEvent = controlHub.onControlEvent((ev) => setLastEvent(ev));
     const refresh = () => setStatus(controlHub.listStatus());

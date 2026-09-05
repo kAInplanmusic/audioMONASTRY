@@ -4,8 +4,8 @@
  * Main interface für Drop-Generierung
  */
 
-import React, { useEffect, useState } from 'react';
-import { Zap, RefreshCw, Play } from 'lucide-react';
+import React, { useState } from 'react';
+import { Play } from 'lucide-react';
 import { useDropContext } from '../../context/DropContext';
 import type { DropProfile } from '../../core/drop';
 import { DROP_PROFILES } from '../../core/drop';
@@ -14,18 +14,13 @@ export const DropGeneratorPanel: React.FC = () => {
   const {
     selectedProfile,
     selectProfile,
-    suggestedProfiles,
     isExecuting,
     executionProgress,
     executeDrop,
   } = useDropContext();
 
-  const [suggestions, setSuggestions] = useState<DropProfile[]>([]);
-
-  // Load initial suggestions
-  useEffect(() => {
-    setSuggestions(DROP_PROFILES.slice(0, 4));
-  }, []);
+  // Initiale Vorschläge direkt aus dem State-Initializer (kein setState im Effect).
+  const [suggestions] = useState<DropProfile[]>(() => DROP_PROFILES.slice(0, 4));
 
   return (
     <div className="space-y-6">
@@ -112,7 +107,7 @@ export const DropGeneratorPanel: React.FC = () => {
           <input
             type="checkbox"
             className="w-4 h-4 rounded border-neutral-700"
-            onChange={(e) => {
+            onChange={() => {
               // TODO: Handle quantized mode toggle
             }}
           />
