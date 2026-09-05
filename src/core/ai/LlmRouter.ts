@@ -2,15 +2,18 @@
  * audioMONASTRY · App-weiter AI Control Layer (LLM-Router)
  * ========================================================
  * Kosten-/Qualitäts-Priorität (Stand 2026-08, angepasst):
- *   1. GÜNSTIG:    DeepSeek V4 Flash (MOA/MCP-Planer, reasoning-fähig,
+ *   1. SCHNELL:    Cerebras (OpenAI-kompatibel, CB_API_KEY; sehr schnelle
+ *                  Inference, z.B. llama-3.3-70b – Primär für Standard-Aufgaben)
+ *   2. GÜNSTIG:    DeepSeek V4 Flash (MOA/MCP-Planer, reasoning-fähig,
  *                  $0.22–0.44/M in, $0.66–1.32/M out, Peak/Off-Peak)
- *   2. KOSTENLOS:  Hugging Face Inference (HF_API_KEY)
- *   3. GÜNSTIG:    Mistral (mistral-small-latest, EU, starkes Function-
+ *   3. KOSTENLOS:  Hugging Face Inference (HF_API_KEY)
+ *   4. GÜNSTIG:    Mistral (mistral-small-latest, EU, starkes Function-
  *                  Calling & Deutsch – MISTRAL_API_KEY)
- *   4. LOKAL:      Ollama (MOA/Sprachbefehle/TTS-Fallback auf der eigenen
+ *   5. FALLBACK:   OpenRouter (OpenAI-kompatibel, OR_API_KEY)
+ *   6. LOKAL:      Ollama (MOA/Sprachbefehle/TTS-Fallback auf der eigenen
  *                  CPU-Instanz – OLLAMA_URL/OLLAMA_MODEL)
- *   5. KOMPLEX:    DeepSeek V4 Pro
- *   6. NOTFALL:    Gemini / OpenAI (bezahlt; nur bei explizitem Enable,
+ *   7. KOMPLEX:    DeepSeek V4 Pro
+ *   8. NOTFALL:    Gemini / OpenAI (bezahlt; nur bei explizitem Enable,
  *                  z.B. AI_EMERGENCY_PROVIDERS=true – nicht im Default)
  *   (Groq ist bewusst entfernt – Pay-as-you-go/Freemium-Umstellung offen.)
  *
@@ -28,6 +31,8 @@ export type LlmProviderId =
   | 'deepseek-pro'
   | 'qwen3-coder'
   | 'publicai'
+  | 'cerebras'
+  | 'openrouter'
   | 'gemini'
   | 'openai';
 
@@ -60,6 +65,8 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   'deepseek-pro': 'deepseek-v4-pro',
   'qwen3-coder': 'Qwen/Qwen3-Coder-Next',
   publicai: 'swiss-ai/apertus-v1.5-70b-thinking',
+  cerebras: 'qwen-3.8-27b',
+  openrouter: 'meta-llama/llama-3.3-70b-instruct',
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
 };
@@ -257,6 +264,11 @@ export class LlmRouter {
     const publicaiBase = (envKey('PUBLICAI_BASE_URL') || 'https://api.publicai.co/v1').replace(/\/+$/, '');
     this.register(new OpenAiCompatibleProvider('publicai', `${publicaiBase}/chat/completions`, 'PUBLICAI_KEY', undefined, 'PUBLICAI_MODEL'));
 
+    // Cerebras: sehr schnelle Inference, OpenAI-kompatibel (Primär für Standard-Aufgaben).
+    this.register(new OpenAiCompatibleProvider('cerebras', 'https://api.cerebras.ai/v1/chat/completions', 'CB_API_KEY', undefined, 'CEREBRAS_MODEL'));
+    // OpenRouter: bezahlter Multi-Model-Fallback, OpenAI-kompatibel.
+    this.register(new OpenAiCompatibleProvider('openrouter', 'https://openrouter.ai/api/v1/chat/completions', 'OR_API_KEY', undefined, 'OPENROUTER_MODEL'));
+
     // Notfall-Provider (bezahlt) nur bei explizitem Enable registrieren.
     if (envKey('AI_EMERGENCY_PROVIDERS') === 'true') {
       this.register(new GeminiProvider());
@@ -277,10 +289,10 @@ export class LlmRouter {
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const order: LlmProviderId[] =
       complexity === 'complex'
-        ? ['deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'hf', 'mistral', 'publicai', 'ollama', 'gemini', 'openai']
+        ? ['cerebras', 'deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'openrouter', 'hf', 'mistral', 'publicai', 'ollama', 'gemini', 'openai']
         : complexity === 'moderate'
-          ? ['deepseek-flash', 'qwen3-coder', 'hf', 'mistral', 'publicai', 'deepseek-pro', 'ollama']
-          : ['deepseek-flash', 'hf', 'mistral', 'publicai', 'ollama'];
+          ? ['cerebras', 'deepseek-flash', 'qwen3-coder', 'openrouter', 'hf', 'mistral', 'publicai', 'deepseek-pro', 'ollama']
+          : ['cerebras', 'deepseek-flash', 'hf', 'mistral', 'openrouter', 'publicai', 'ollama'];
     return order
       .map((id) => this.providers.get(id))
       .filter((p): p is ILlmProvider => Boolean(p) && p.available);
