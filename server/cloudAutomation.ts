@@ -15,8 +15,9 @@ const SAFE_KEY = /^[A-Za-z0-9][A-Za-z0-9/._ -]{0,1023}$/;
 
 function isSafeR2Key(key: string): boolean {
   if (!key || key.length > 1024) return false;
-  if (key.startsWith('/') || key.includes('\\') || key.includes('\0')) return false;
-  if (key.split('/').some((segment) => segment === '..' || segment === '.')) return false;
+  if (key.startsWith('/') || key.includes('\\') || key.includes('\0') || key.includes(':')) return false;
+  const segments = key.split('/');
+  if (segments.some((segment) => segment === '..' || segment === '.' || segment.length === 0 || segment.length > 255)) return false;
   return SAFE_KEY.test(key);
 }
 
