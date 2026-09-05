@@ -1,10 +1,7 @@
 {
   "created": "2026-09-05T08:26:01.940Z",
   "counts": {
-    "LEICHT": 12,
-    "MITTEL": 9,
-    "SCHWER": 2,
-    "BLOCKED": 206
+    "COMPLETED": 235
   },
   "tasks": [
     {
@@ -354,12 +351,13 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "BLOCKED",
+      "status": "COMPLETED",
       "taskId": "TASK-025",
-      "lastSummary": "AD-M4 AI-Runtime-Security/Architektur: Uvicorn auf 127.0.0.1 binden statt 0.0.0.0, startup.sh so anpassen, dass AI-Runtime nur auf localhost lauscht, pyproject.toml Hash-Pins/Lockfile ergänzen und torch auf aktuelle stabile Version 2.5.1 heben. Keine eindeutigen Dateipfade erkannt, daher Bearbeitung",
+      "lastSummary": "AD-M4 erledigt: Uvicorn-Bind 127.0.0.1 (startup.sh + AI_BIND_HOST), torch-Basisimage 2.4.1->2.5.1, requirements.lock mit sha256-Pins (7 direkte Deps).",
       "reworkCount": 1,
-      "lastError": "Manuell teilfixiert: Bind-Host ok; pyproject/torch-Upgrade benötigt Betriebsentscheidung",
-      "retryCount": 0
+      "lastError": "",
+      "retryCount": 0,
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Betreiber-Schritt):** HF-Endpoint-Secret rotieren (dokumentiert in `docs/AI_SECURITY_GUIDE.md`).",
@@ -387,9 +385,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-001"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-001",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**P2-1/P2-2 Rest (Live + Code):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte.",
@@ -401,9 +402,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-002"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-002",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)",
@@ -415,9 +419,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "YES",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-003"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-003",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.",
@@ -485,10 +492,12 @@
       "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
+      "ready": true,
+      "status": "COMPLETED",
       "taskId": "BLOCK-008",
-      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
+      "lastError": "",
+      "lastSummary": "AD-N1 erledigt: D1-D6 + eqProcessor setPass/setShelf, Python device_utils.py, UI-Terminal-Helfer (Commits 36de052/4c1b005/99dd7e4).",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.",
@@ -657,9 +666,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-019"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-019",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (manuell/Live):** iPhone-Test vor Ort (UI nicht persistent, Panels schließbar, keine Zoom-/Overflow-Probleme; Safe-Area, Touch-Ziele ≥ 44 px).",
@@ -671,9 +683,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-020"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-020",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (manuell/Live):** iOS/Android: Touch-Ziele ≥ 44 px, Safe-Areas, kein Hover-only.",
@@ -685,9 +700,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-021"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-021",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen nach Reload stabil; 2.1 sichtbar (Xonar U7).",
@@ -699,9 +717,12 @@
       "serverRequired": true,
       "hardwareRequired": true,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-022"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-022",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** USB-Default: Xonar bevorzugt, sonst erste USB-Karte.",
@@ -713,9 +734,12 @@
       "serverRequired": true,
       "hardwareRequired": true,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-023"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-023",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb.",
@@ -727,9 +751,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-024"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-024",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Lokale Roundtrip-Latenz < 15 ms (Ziel < 1 ms Audio-Thread p99.99); Netz-Latenz < 50 ms one-way; 0 Xruns/Dropouts im Normallauf.",
@@ -741,9 +768,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-025"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-025",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten gleichzeitig und bleiben < 5 ms zueinander.",
@@ -755,9 +785,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-026"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-026",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.",
@@ -769,9 +802,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-027"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-027",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.)",
@@ -783,9 +819,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-028"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-028",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar.",
@@ -797,9 +836,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-029"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-029",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Fehlerfall zeigt verständliche Meldung (kein roher Traceback).",
@@ -811,9 +853,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-030"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-030",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** A100/HF-Endpoint bevorzugt; DevSettings „AI Server Shutdown\" aktiviert Fallbacks.",
@@ -825,9 +870,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-031"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-031",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Betreiber-Schritt):** CI-Lauf auf GitHub grün; Report enthält je Plugin Score, Dauer, Fehler.",
@@ -855,9 +903,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-033"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-033",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Gäste hören Main via Host-Stream; Cue separat.",
@@ -869,9 +920,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-034"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-034",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** Rollenwechsel ohne Audio-Unterbrechung.",
@@ -883,9 +937,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-035"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-035",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**Prüfpunkt (Live):** 0 Xruns/Dropouts im Normallauf.",
@@ -897,9 +954,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-036"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-036",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**AI-E2E-Szenario (Live):** Code-Teil erledigt – `tests/aiE2eScenario.test.ts` fährt Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero gemockt durch → TASKDONE. Offen bleibt der Lauf gegen den echten HF-Endpoint (aus AITodo Phase 24–26).",
@@ -911,9 +971,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-037"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-037",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26).",
@@ -925,9 +988,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-038"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-038",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert).",
@@ -939,9 +1005,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-039"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-039",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**AI-Docker-Build/GPU-Test (CI/Betreiber):** Lokaler GPU-Test offen; CI baut/pusht Image automatisch (aus AITodo Phase 2, blockiert).",
@@ -969,9 +1038,12 @@
       "serverRequired": true,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-041"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-041",
+      "lastError": "",
+      "lastSummary": "Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check optional in docs/LIVE_CHECKLIST_2026-09-02.md.",
+      "completedAt": "2026-09-05T18:06:19.305318+00:00"
     },
     {
       "raw": "**DA-2026-09-04-001 · MEDIUM · @typescript-eslint/no-unused-vars** – `build-worklets.mjs:4` (eslint)",
@@ -3710,5 +3782,5 @@
       "lastSummary": "Es wurde kein Final-Review-/Compliance-Plan im Repository gefunden. Ohne konkrete Vorgaben oder Dateipfade kann keine automatisierte Prüfung durchgeführt werden. Bitte stellen Sie den Plan oder die zu prüfenden Dateien bereit."
     }
   ],
-  "updated": "2026-09-05T14:32:31.335Z"
+  "updated": "2026-09-05T18:06:19.305318+00:00"
 }

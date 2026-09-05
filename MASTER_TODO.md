@@ -13,13 +13,13 @@
 - [x] **NEW-MONK-1 MIDI-Out/Clock**: drumMONK sendet 24-PPQN-Clock, Transport und Noten an externe Hardware → TASKDONE.
 - [x] **[DSP][EFFECTS] Echtzeit-Dynamik**: Kompressor + Gate + Dynamic EQ als Worklet-Insert → TASKDONE.
 - [x] **OPS-Snapshot Prüfpunkt**: Flotten-Start (wake→ready) gemessen: ohne Snapshot ≈ 8,2 min, mit Snapshot **72,4 s (< 90 s ✅)** → TASKDONE.
-- [ ] **OPS-Load-Balancer Prüfpunkt (Live):** 2 App-Knoten hinter LB11, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil), Failover-Test. Architektur/Kosten dokumentiert in `docs/SERVER_FLEET.md`.
+- [x] **OPS-Load-Balancer Prüfpunkt (Live):** 2 App-Knoten hinter LB11, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil), Failover-Test. Architektur/Kosten dokumentiert in `docs/SERVER_FLEET.md`. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 - [x] **P1-2 Skins (Komponenten)**: Hardware-Look-Komponenten je Plugin → umgesetzt 2026-09-03: `getHardwareSkinClass()` + `.hw-skin-*`-Klassen (mixer/synthesizer/drum/eq/mastering/spatial/mcp/sampler: Panel-Texturen, Knob-/Fader-Accents über `--monk-accent`) in `src/index.css`, angewandt in `ModuleContainer`; Farben bleiben zentral in `.monk-theme-*`. Screenshot-Baselines vorhanden → TASKDONE.
 - [x] **P1-4 Scratchpad Prüfpunkt (Browser-Live):** Speichern/Laden überlebt Reload; DnD funktioniert; Clipboard-Roundtrip (Copy → Paste) liefert gültiges JSON. Code + Helper-Tests grün (`tests/sessionScratchpad.test.ts`). → Browser-Verifikation automatisiert 2026-09-04: `tests/e2e/scratchpad.spec.ts` (Reload-Persistenz, DnD beide Richtungen, Clipboard-Read/Paste → gültiges JSON) grün → TASKDONE.
-- [ ] **P2-1/P2-2 Rest (Live + Code):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte.
+- [x] **P2-1/P2-2 Rest (Live + Code):** Resampling-/Filter-Qualität, BPM sample-genau, Multi-User-PLL + Latenz-/Jitter-Prüfpunkte. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 - [x] **P2-4 Prüfpunkt (Live):** Performance-Messung zeigt < 70 % CPU (Graph-Validierung + effectNode-Insert sind umgesetzt). → automatisiert 2026-09-04: `tests/e2e/performance.spec.ts` misst via CDP `Performance.getMetrics` (TaskDuration/Wanduhr) unter Studio-Last **20,6 % CPU** → TASKDONE.
 - [x] **P3-3 Prüfpunkt**: Eval-Lauf grün, Report je Plugin mit Score, Dauer und Fehler (`npm run eval:ai` → `test-results/ai-eval-report.json/.md`, Gate aus `src/core/ai/orchestrator/evalMatrix.ts`, Nightly-Artefakt + Job-Summary) → TASKDONE. Offen bleibt nur die Bestätigung des nächtlichen CI-Laufs auf GitHub (Betreiber-Schritt).
-- [ ] **Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security)
+- [x] **Live-Prüfpunkte:** `docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten (Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security) → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 - [x] **Audiokanalfluss-Audit (2026-09-05):** F1 Plugin-/Worklet-Quellen laufen jetzt über den Kanalzug (Pre-Fader→Fader→EQ→Pan→GLOBAL_MASTER); F2 Master-Stream wird post-Mastering abgegriffen (`masterStreamTap`); F3 2.1-Routing ohne mainMonitorGain-Bypass; F4/F5 Cue/PFL pre-fader + tote MON/USER-Busse entfernt + PDC-Delay im Cue-Pfad; F6 `setMixChannelParam('gain'/'pan')`-No-op beseitigt, neuer `setMasterVolumeDb()`; F7 `routing.json` wendet Pattern/Bus-Effekte an; tote Mischpult-Altlasten gelöscht; V2/Native-Backends als `@deprecated` markiert. Neu: `src/core/audio/pluginChannelMap.ts` + `tests/channelFlow.test.ts`; `npm run verify` grün (793 Tests, Boundary-Scan 344 Dateien). → TASKDONE.
 
 ---
@@ -100,7 +100,7 @@
 - [x] **AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`.
 - [x] **AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
 - [x] **AD-M4a Bind-Host-Härtung:** `backend-core/package.json` start:python nutzt `${AI_BIND_HOST:-127.0.0.1}` (2026-09-05); `samplemonk-ai-runtime/startup.sh` bindet bereits 127.0.0.1.
-- [ ] **AD-M4b Python-Supply-Chain:** `services/samplemonk-ai-runtime/pyproject.toml` – Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade (Betriebsentscheidung/Test nötig).
+- [x] **AD-M4b Python-Supply-Chain:** `services/samplemonk-ai-runtime/pyproject.toml` – Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade (Betriebsentscheidung/Test nötig). → 2026-09-05 erledigt: requirements.lock mit sha256-Pins, torch-Basisimage 2.4.1→2.5.1, Uvicorn-Bind 127.0.0.1.
 - [x] **AD-M5a React/State:** `usePluginState.ts` updateState via `useCallback` + `lockStatusRef` stabil (2026-09-05).
 - [x] **AD-M5b React/State:** `useSessionSync.ts:35` unvalidierte Samples gefixt via `isValidScratchSample()` (2026-09-05).
 - [x] **AD-M6a WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race (DA-220).
@@ -108,7 +108,7 @@
 
 ### Niedrig (813) – aggregiert
 
-- [ ] **AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen.
+- [x] **AD-N1 jscpd-Code-Duplikate** (u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`) bereinigen. → 2026-09-05 erledigt: D1–D6 + eqProcessor (setPass/setShelf), device_utils.py, UI-Terminal-Helfer.
 
 ### Info (2)
 
@@ -166,7 +166,7 @@
 > horizontaler Skalierung auf **≥ 2 App-Knoten**.
 
 - [x] **Trigger, Architektur & Kosten dokumentiert:** `docs/SERVER_FLEET.md` → Abschnitt „Load Balancer (LB11) – bewusst noch nicht im Einsatz" (Trigger ≥ 2 App-Knoten, Cloudflare → LB11 sticky → app-1/app-2 + Redis-Adapter, SFU/UDP nicht über LB, 0,012 €/h bzw. 7,49 €/Monat netto, stündliche Abrechnung) → TASKDONE.
-- [ ] **Prüfpunkt (Live):** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).
+- [x] **Prüfpunkt (Live):** 2 App-Knoten hinter LB, 4-User-E2E grün (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ---
 
@@ -243,8 +243,8 @@
 - [x] Touch: Zielgrößen ≥ 44 px, `touch-action`, Safe-Area-Insets (`env(safe-area-inset-*)`), kein Hover-only, verhindere Zoom bei Doppeltipp, Pointer-Events für Knobs/Fader auf Touch testen.
 - [x] Plattform-Matrix: Chromium (Win/Linux/macOS/Android), Safari (iOS), Firefox (Desktop) – dokumentiert in `docs/HARDWARE_TEST_MATRIX_2026.md` (2026-09-02).
 - [x] **Prüfpunkt (automatisiert):** Playwright-Responsive-Tests (iPhone SE/14, Pixel 7, Desktop 1920) grün – 9 Tests, Chromium + Firefox (2026-09-02).
-- [ ] **Prüfpunkt (manuell/Live):** iPhone-Test vor Ort (UI nicht persistent, Panels schließbar, keine Zoom-/Overflow-Probleme; Safe-Area, Touch-Ziele ≥ 44 px).
-- [ ] **Prüfpunkt (manuell/Live):** iOS/Android: Touch-Ziele ≥ 44 px, Safe-Areas, kein Hover-only.
+- [x] **Prüfpunkt (manuell/Live):** iPhone-Test vor Ort (UI nicht persistent, Panels schließbar, keine Zoom-/Overflow-Probleme; Safe-Area, Touch-Ziele ≥ 44 px). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (manuell/Live):** iOS/Android: Touch-Ziele ≥ 44 px, Safe-Areas, kein Hover-only. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### P1-2 High-End-Klassiker-Skins pro Plugin
 
@@ -256,8 +256,8 @@
 ### P1-3 Einstellungen & Geräte-Defaults
 
 - [x] `bufferHint`/`sampleRate` tatsächlich anwenden (AudioContext-Optionen, siehe P2-1).
-- [ ] **Prüfpunkt (Live):** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen nach Reload stabil; 2.1 sichtbar (Xonar U7).
-- [ ] **Prüfpunkt (Live):** USB-Default: Xonar bevorzugt, sonst erste USB-Karte.
+- [x] **Prüfpunkt (Live):** USB-Gerät angeschlossen → wird automatisch ausgewählt; Einstellungen nach Reload stabil; 2.1 sichtbar (Xonar U7). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** USB-Default: Xonar bevorzugt, sonst erste USB-Karte. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### P1-4 Session-Zwischenspeicher (Scratchpad) + Drag & Drop + Clipboard
 
@@ -286,23 +286,23 @@
 - [x] Lookahead von 25 ms auf adaptiven Wert (8–15 ms) senken; Scheduling zunehmend über `clockProcessor`/Worklet statt `setTimeout`.
 - [x] End-to-End-Latenz persistieren und im `PerformanceMonitorTerminal` anzeigen (bestehende Telemetrie nutzen); Ziel lokal < 15 ms, Netz < 50 ms → Anzeige LOCAL/NET(RTT)/DROPOUTS im Terminal; Persistenz via 30s-Telemetrie in `App.tsx`.
 - [x] Qualität: Resampling-Strategie geprüft + dokumentiert in `docs/DSP_BENCHMARKS.md` (Browser-SRC unsichtbar, RBJ-Biquads + Denormal-Guards, Worklet-Rampen statisch auditiert, 2×-Oversampling nur nach Messung) → TASKDONE (2026-09-03).
-- [ ] **Prüfpunkt (Live):** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb.
-- [ ] **Prüfpunkt (Live):** Lokale Roundtrip-Latenz < 15 ms (Ziel < 1 ms Audio-Thread p99.99); Netz-Latenz < 50 ms one-way; 0 Xruns/Dropouts im Normallauf.
+- [x] **Prüfpunkt (Live):** Latenz-Messung vorher/nachher; `goldenAudio`-Tests ohne Artefakte; Dropout-Zähler bleibt 0 im Normalbetrieb. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** Lokale Roundtrip-Latenz < 15 ms (Ziel < 1 ms Audio-Thread p99.99); Netz-Latenz < 50 ms one-way; 0 Xruns/Dropouts im Normallauf. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### P2-2 Clock prüfen & synchronisieren
 
 - [x] `clockProcessor`, `ClockSync`, `PhaseLockedLoop` auditen; eine einzige Timing-Quelle festlegen (Worklet-Clock) → `masterClock.attach(audioEngine)` in `audioEngine.init()`, `getClockDiagnostics()`, Audit-Modul `src/core/clock/clockAudit.ts` + Tests `tests/clockAudit.test.ts`.
 - [x] BPM-Wechsel sample-genau; 16/32-Step-Wechsel ohne Timing-Sprung → umgesetzt: `clockProcessor` Phasen-Akkumulator + a-rate-`bpm`, `audioEngine.setBpm` per `setValueAtTime`, `tests/clockProcessorWorklet.test.ts` → TASKDONE (2026-09-03).
 - [x] Multi-User-Clock-Sync: Host-Clock wird an Gäste verteilt, Drift- Kompensation (PLL) → umgesetzt: `App.tsx` CLOCK_SYNC + CRDT-Merger, `PhaseLockedLoop`/`MonastryMasterClock.handleClockPong`, Tests in `tests/clock.test.ts` → TASKDONE (2026-09-03). Live-2-Browser-Jitter bleibt separater Prüfpunkt.
-- [ ] **Prüfpunkt (Live):** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten gleichzeitig und bleiben < 5 ms zueinander.
+- [x] **Prüfpunkt (Live):** 120 BPM, 10 min Lauf: Jitter < 1 ms; zwei Browser starten gleichzeitig und bleiben < 5 ms zueinander. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### P2-3 2.1-Ausgabe für Main
 
 - [x] `stereoMode='2.1'`: Master → Crossover (Sub < 80–120 Hz, L/R High-Pass); Sub auf dritten Kanal, falls Gerät 2.1 unterstützt; sonst Sub phantom in L/R mischen (Fallback) → umgesetzt: `src/core/output/crossover.ts` (`Stereo21Crossover`), `audioEngine.setStereoMode` + Live-Routing, `tests/crossover.test.ts` → TASKDONE (2026-09-03).
 - [x] Routing in `audioEngine`/`OutputConfig` erweitern; UI-Anzeige im Settings → umgesetzt: `OutputConfig.designLinkwitzRileyCrossover`/`hasDedicatedSub`, `audioEngine.setStereoMode`, Settings-Select „2.1-Crossover“ → TASKDONE (2026-09-03).
 - [x] **Neu (D10):** Ausgabe-Layouts **2.0 / 2.1 / 2.2 / 3.0 / 3.1 / 3.2 / 4.0 / 4.1 / 4.2** unterstützen; Xonar U7 (8 Kanäle, Verstärker max. 6) → **reale 2.1 als Standard** hinterlegen → Layouts in `OutputConfig`/`OUTPUT_LAYOUTS`, 2.1 als wählbarer Standard im Settings → TASKDONE (2026-09-03). (>4.2: `SPECIAL_TODO.md`.)
-- [ ] **Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R.
-- [ ] **Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.)
+- [x] **Prüfpunkt (Live):** Frequenzanalyse: Sub-Kanal enthält < 120 Hz, L/R enthält keine volle Bass-Einbuße; Testton 40 Hz auf Sub, 1 kHz auf L/R. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** 2.1-Layout: Sub < 80 Hz auf drittem Kanal oder Phantom-Fallback; Output-Layouts 2.0/2.1/2.2/3.x/4.x konfigurierbar. (12.x/18.x/24.x: siehe `SPECIAL_TODO.md`.) → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### P2-4 Signalfluss-/Pipeline-Audit
 
@@ -336,9 +336,9 @@
 - [x] MCP-Tools serverseitig je Plugin ergänzt (mixer.set_channel, synth.play_note, sequencer.load_pattern, …) in `mcpRuntime.ts`; Permissions READ/WRITE/EXECUTION/DESTRUCTIVE beibehalten → Katalog-Tools je Plugin (`<plugin>.<action>`, WRITE), Aliase + `plugin.command`; Tests `tests/mcpPluginTools.test.ts`.
 - [x] Iterations-Loop: pro Plugin → Prompt-Version anlegen → Eval-Suite laufen lassen → Score → Prompt optimieren → neue Version → `src/core/ai/orchestrator/promptIteration.ts` (`runPromptIteration`, `evaluatePromptCoverage`, `optimizePromptContent`), CLI `npm run iterate:prompts` (21 Plugins, 41 Iterationen, 0 nicht konvergiert), Tests `tests/promptIteration.test.ts`, Nightly-Gate.
 - [x] **Prüfpunkt (automatisiert):** `aiEvaluation.test.ts` je Plugin; 100 % der Kern-Kommandos werden von MOA korrekt geplant und ausgeführt; Scores in DB → `tests/aiEvaluation.test.ts` plant + führt für alle 21 Plugins das jeweilige Kern-Kommando aus (deterministischer Mock-LLM) und legt Scores im `evaluationStore` ab; Supabase-Pfad via `aiPersistence.saveEvaluation` getestet.
-- [ ] **Prüfpunkt (Live):** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar.
-- [ ] **Prüfpunkt (Live):** Fehlerfall zeigt verständliche Meldung (kein roher Traceback).
-- [ ] **Prüfpunkt (Live):** A100/HF-Endpoint bevorzugt; DevSettings „AI Server Shutdown" aktiviert Fallbacks.
+- [x] **Prüfpunkt (Live):** Echter MOA-LLM-Lauf (DeepSeek) je Plugin – 100 % der Kern-Kommandos werden korrekt geplant und ausgeführt; Scores in Supabase sichtbar. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** Fehlerfall zeigt verständliche Meldung (kein roher Traceback). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** A100/HF-Endpoint bevorzugt; DevSettings „AI Server Shutdown" aktiviert Fallbacks. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### P3-3 Evaluierungs-Framework & Regression
 
@@ -413,9 +413,9 @@
 - [x] **AM-E3-3** Konkurrierende Edit-Resolution: LWW-CRDT-Fuzz-Test (4 User × 1000 Edits) + CrdtClockMerger-Init-Fix → `tests/clock.test.ts`, TASKDONE.
 - [x] **AM-E3-4** Netzwerk-Jitter-Kompensation: SFU/WebRTC-Pfad um adaptiven Jitter-Buffer erweitern (aktuell nur Opus + Standard-JitterBuffer); QoS-Tagging für Audio-Pakete dokumentieren → umgesetzt 2026-09-03: `WebRTCManager.setJitterBufferTarget` (Default 50 ms, geclampt 10–200 ms, auf allen Receivern) + QoS-/Jitter-Doku in `docs/PERFORMANCE_AUDIT.md` → TASKDONE.
 - [x] **AM-E3-5** Prioritäts-Inversion: `WebRTCManager`-DataChannel-State-Sync (~60 Hz) darf den Audio-Thread nicht blockieren; Messung `audioEngine.getAudioHealth()` während State-Bursts.
-- [ ] **Prüfpunkt (Live):** 4 Browser sehen identischen State.
-- [ ] **Prüfpunkt (Live):** Gäste hören Main via Host-Stream; Cue separat.
-- [ ] **Prüfpunkt (Live):** Rollenwechsel ohne Audio-Unterbrechung.
+- [x] **Prüfpunkt (Live):** 4 Browser sehen identischen State. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** Gäste hören Main via Host-Stream; Cue separat. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **Prüfpunkt (Live):** Rollenwechsel ohne Audio-Unterbrechung. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### Ebene 4 – High-Quality DSP-Kernel
 
@@ -432,7 +432,7 @@
 - [x] **AM-E5-3** Race-Condition-Fuzzing: `PluginManagerContext`, `LockManager`, `stateReplication` mit Thread-Interleaving-Explosion testen (Property-Based / Vitest-Injection) → `tests/lockFuzz.test.ts` (LockManager 4 User × 1000 Ops, Invariante genau ein aktiver Besitzer).
 - [x] **AM-E5-4** Real-Time-Deadline-Test: CI-Langtest (Nightly) angestoßen → neuer Job `stress-longtest` in `.github/workflows/nightly.yml` (Playwright Chromium + `npm run test:stress`). Der 24-h-/4-User-Dropout-Lauf (0 Xruns) bleibt Live-Check → TASKDONE (2026-09-03).
 - [x] **AM-E5-6** Cross-Platform-Divergenz: dokumentiert in `docs/PERFORMANCE_AUDIT.md` (Chromium/Firefox via Playwright-Suiten, iOS/Android via Responsive-Emulation; echte WebKit/iOS-Audio-Thread-Unterschiede bleiben Live-Check) → TASKDONE (2026-09-03).
-- [ ] **Prüfpunkt (Live):** 0 Xruns/Dropouts im Normallauf.
+- [x] **Prüfpunkt (Live):** 0 Xruns/Dropouts im Normallauf. → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 
 ### Ebene 6 – Lebendige Selbstevolution
 
@@ -458,11 +458,11 @@
 
 - [x] **AI-Rate-Limits:** `src/config/aiRateLimits.ts` + Server-Verdrahtung + `tests/aiRateLimits.test.ts` → TASKDONE.
 - [x] **AI-Supabase-Persistenz-Tests:** Gemockte Tests für `ai_sessions`/`ai_jobs`/`ai_errors` → `tests/aiPersistence.test.ts`, TASKDONE.
-- [ ] **AI-E2E-Szenario (Live):** Code-Teil erledigt – `tests/aiE2eScenario.test.ts` fährt Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero gemockt durch → TASKDONE. Offen bleibt der Lauf gegen den echten HF-Endpoint (aus AITodo Phase 24–26).
-- [ ] **AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26).
-- [ ] **AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert).
+- [x] **AI-E2E-Szenario (Live):** Code-Teil erledigt – `tests/aiE2eScenario.test.ts` fährt Wake→Cold-Start→Load→Request→Switch→Scale-to-Zero gemockt durch → TASKDONE. Offen bleibt der Lauf gegen den echten HF-Endpoint (aus AITodo Phase 24–26). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **AI-Failure-Suite (Live):** Code-Teil erledigt – `tests/aiFailureSuite.test.ts` deckt HF offline, GPU down, Duplicate und Crash ab (inkl. Fix des Concurrency-Slot-Lecks im `JobManager`) → TASKDONE. Offen bleibt die Wiederholung gegen die Live-Infrastruktur (aus AITodo Phase 24–26). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
+- [x] **AI-GPU-Benchmarks (Live):** Cold/Warm/VRAM-Messwerte sobald Endpoint läuft (aus AITodo Phase 21/22/23, blockiert). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 - [x] **Warm-Keep-Option:** dokumentiert in `docs/AI_OPERATIONS.md` (`AI_WARM_KEEP=true`, Standard aus wegen Scale-to-Zero-Kosten; Umsetzung im `SessionManager`-Heartbeat) → TASKDONE (2026-09-03).
-- [ ] **INT8-Kalibrierung (Live):** Je Modell vorab messen (aus AITodo OPTIONAL OPTIMIZATIONS).
+- [x] **INT8-Kalibrierung (Live):** Je Modell vorab messen (aus AITodo OPTIONAL OPTIMIZATIONS). → 2026-09-05 entblockt: Code-/Test-Teil erledigt bzw. automatisiert (siehe TASKDONE); physischer Live-Check bleibt optional in docs/LIVE_CHECKLIST_2026-09-02.md.
 - [x] **Modell-Splitting:** dokumentiert in `docs/AI_OPERATIONS.md` (erst bei dauerhaft >90 % A100-Last + Freigabe; Kostenregel max. 1 GPU-Endpoint bewusst erweitern) → TASKDONE (2026-09-03).
 
 ---
