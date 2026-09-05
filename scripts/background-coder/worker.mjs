@@ -101,6 +101,23 @@ async function reviewWithModel(diffText, task) {
   }
 }
 
+function taskFileContext(task) {
+  const re = /([A-Za-z0-9_./-]+\.(?:ts|tsx|js|mjs|cjs|py|rs|json|sh|sql|md))/g;
+  const found = new Set();
+  let m;
+  while ((m = re.exec(task.raw)) !== null) found.add(m[1]);
+  let ctx = '';
+  for (const rel of [...found].slice(0, 6)) {
+    const abs = path.join(ROOT, rel);
+    if (!existsSync(abs)) continue;
+    try {
+      const content = readFileSync(abs, 'utf8').slice(0, 6000);
+      ctx += `\n===== Datei: ${rel} =====\n${content}\n`;
+    } catch { /* ignore */ }
+  }
+  return ctx;
+}
+
 async function processTask(task, dryRun) {
   const provider = modelFor(task);
   if (!provider) {
@@ -129,6 +146,9 @@ async function processTask(task, dryRun) {
   const prompt = `Du bist der Implementierungs-Agent "${provider.name}" in einer Coding-Pipeline.
 Führe folgende Aufgabe im Repo audioMONASTRY aus:
 ${task.raw}
+
+Repo-Kontext der betroffenen Dateien:
+${taskFileContext(task) || '(keine eindeutigen Dateipfade erkannt)'}
 
 Antworte AUSSCHLIESSLICH als JSON-Objekt:
 {"summary":"...","edits":[{"path":"relative/datei","find":"exakter alter Code (kommt genau 1x vor)","replace":"neuer Code"}]}
