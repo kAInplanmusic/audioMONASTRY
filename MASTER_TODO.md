@@ -921,6 +921,6 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 
 > Quelle: `npm run audit:deep:static` (Commit `5ad2a91`). AUDIT_DEEP.md danach wieder gelöscht (Single-Root-Output).
 
-- [ ] **AUD-2026-09-05-D6 · NIEDRIG · Code-Duplikate DSP/Synth** – `computeLocal.ts` ↔ `computeWorker.ts`, `midiCodec.ts` intern, `drumSynth.ts` (mulberry32 mehrfach), `fmEngine.ts` intern, `DspEnginePlugin.tsx` ↔ `InstrumentePlugin.tsx`, `presets.ts` intern, `aiRhythmGenerator.ts` ↔ `audioEngine.ts`, SFU-RTP-Skripte: Gemeinsame Helfer/Seeds/Routing-Definitionen extrahieren.
+- [x] **AUD-2026-09-05-D6 · NIEDRIG · Code-Duplikate DSP/Synth** – `computeLocal.ts` ↔ `computeWorker.ts`, `midiCodec.ts` intern, `drumSynth.ts` (mulberry32 mehrfach), `fmEngine.ts` intern, `DspEnginePlugin.tsx` ↔ `InstrumentePlugin.tsx`, `presets.ts` intern, `aiRhythmGenerator.ts` ↔ `audioEngine.ts`, SFU-RTP-Skripte: Gemeinsame Helfer/Seeds/Routing-Definitionen extrahieren.
 
 ## 🔭 Tiefen-Audit Plan-Modus 2026-09-05 (Agent-Pläne in logs/background-coder/audit-plans.md)
