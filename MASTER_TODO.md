@@ -1,445 +1,179 @@
-# MASTERTODO – Offene Punkte (zusammengeführt)
+# MASTER_TODO – audioMONASTRY
 
-> Stand: 2026-09-02
-> Quellen: `audioMONASTRY/MASTER_TODO.md` + `samplemonk/MASTER_TODO.md`
-> Legende: `[ ]` offen · `[x]` erledigt → wird nach `TASKDONE.md` verschoben und hier gelöscht.
-> Prioritäten: 🔴 Kritisch · 🟠 Hoch · 🟡 Mittel · 🔵 Strategisch
-> **Hardware-Spezialfälle** (>5 User-Geräte, >4.2-Layouts, MIDI-Controller/Interfaces/USB-Mischpulte) liegen in **`SPECIAL_TODO.md`**.
+> Deep Audit 2026-09-05 · autonome Ausführung (Phase 0–7) · Cerebras/Backgroundcoder/deepcode-Methodik
 
 ---
 
-## 🎯 Nächste TODOs (in dieser Reihenfolge)
+## Audit-Zusammenfassung
 
-
----
-
-## 🔴 Übernahme aus `AUDIT.md` (Tiefen-Audit 2026-09-03, Commit 7b22c18)
-
-> Die Datei AUDIT.md wurde am 2026-09-05 vollständig in diese Liste überführt und anschließend gelöscht.
-
-### K – Kritisch: Multi-User/B2B-Locking
-
-
-### S – Backend & Security
-
-
-### A – Audio-Engine & DSP
-
-
-### F – Frontend, React & Architektur
-
-
-### Q – Build, CI & Qualität
-
-### Empfohlene Reihenfolge (AUDIT.md)
-
-1. Sofort P0: K-1 → K-4 → K-3 → K-2 → K-5 + Regressionstests.
-2. Kurzfristig P1: S-1, S-2, S-3, S-4; A-1; F-3 + CI; `npm audit fix`; F-1.
-3. Mittelfristig P2: F-4/F-5 Zod; A-2 Modularisierung + Coverage; Bundle; S-7/S-5/S-6/S-9; A-3…A-7; F-6…F-8.
-
----
-
-## 🔴 Übernahme aus `AUDIT_DEEP.md` (Deep Audit 300)
-
-> Die Datei AUDIT_DEEP.md wurde am 2026-09-05 vollständig in diese Liste überführt und anschließend gelöscht.
-
-### Kritisch (3)
-
-
-### Hoch (11)
-
-
-### Mittel (72) – verdichtet
-
-
-### Niedrig (813) – aggregiert
-
-
-### Info (2)
-
-
----
-
-## 🔵 Prüfung eingereichter Punkte (2026-09-05)
-
-> Bewertet auf Machbarkeit und Sinn im **Bestand**. Umsetzbare Bestands-Punkte stehen hier in MASTER_TODO; Zukunftsvisionen in `VISIONS_TODO.md` auf dem Branch `visions`.
-
-### P-1 · V1 & V2 Audiograph-Verifikation
-
-**Bewertung:** Sinnvoll und machbar als Audit-/Test-Checkliste. V1 (`audioEngine`, Tone/WebAudio) ist der Live-Pfad; V2 (`AudioGraph`/`V2StudioGraph`/Backends) ist als Prototyp markiert und nur in Tests verdrahtet.
-
-
-**Nicht sinnvoll im Bestand:** `AudioGraph`-Fremdbibliothek/„audiograph“-Import – Eigenbau liegt vor. V2-Live-Parität → `VISIONS_TODO.md`.
-
-### P-2 · Core-Engine-Abgleich (Agenten-Prompt)
-
-**Bewertung:** Sinnvoll als wiederkehrende Audit-Methodik (Ist/Soll-Abgleich + Maßnahmen), kein Code-Feature. Die enthaltenen Schritte passen auf das bestehende System.
-
-### P-3 · PluginSystem-Briefing
-
-**Bewertung:** Prüffragen zum Ist-Zustand sind machbar und sinnvoll; Hardware-/Zukunftsteile sind Visionen → `VISIONS_TODO.md`.
-
-
-**Vision (in `VISIONS_TODO.md` überführt):** Universal-Steckmodul-Hub, parallele LVDS-Clock-Verteilung + Feedback-Clock, Auto-Codegenerierung (Matlab/Simulink), Edge-AI-NPUs, software-definierte Analogsignale, selbstlernende Routing-Vorschläge.
-
----
-
-## 🟠 OPS – Flotten-Start per Snapshot beschleunigen (2026-09-02)
-
-> Ausgangslage: Der Flotten-Wake baut aktuell pro Knoten das Docker-Image aus
-> dem Repo (Dauer: mehrere Minuten). Hetzner-Snapshots kosten ca. 0,01 €/GB/
-> Monat (Cent-Beträge) und machen den Start deutlich schneller.
->
-> Umsetzung 2026-09-02: Portal-Worker nutzt Rollen-Snapshots, Refresh-Endpoint
-> + Auto-Retention sind umgesetzt → TASKDONE. Offen ist nur die Live-Messung.
-
-
----
-
-## 🟠 OPS – Hetzner Load Balancer (LB11) erst bei Skalierung (2026-09-02)
-
-> Check: Hetzner LB11 ist **stundenbasiert** abgerechnet (Europa netto
-> **0,012 €/h**, Deckel **7,49 €/Monat**, 20 TB Traffic inkl., Stand 04/2026).
-> Für den aktuellen Betrieb (1× app-1 hinter Cloudflare, max. 4 User/Session)
-> macht ein Load Balancer **keinen** Sinn – Cloudflare übernimmt Edge/TLS und
-> die Session läuft auf genau einem Knoten. Sinnvoll wird er erst bei
-> horizontaler Skalierung auf **≥ 2 App-Knoten**.
-
-
----
-
-## 🟠 P1 – HOCH: MONK-Ausbau (2026-09-01)
-
-### NEW-MONK-1 drumMONK – Sequencer vervollständigen (TR-8S)
-
-
-### NEW-MONK-2 samplerMONK – Sequencer ergänzen
-
-
-### NEW-MONK-3 mcpMONK – MPC + Sequencer voll ausbauen
-
-
-### NEW-MONK-4 synthMONK – Synth + Sequencer + Pads
-
-- _Umgezogen nach `SPECIAL_TODO.md`:_ Pads-Synth-UI im Minilogue-Stil + Beatstep-Pro-MIDI-Profil (braucht MIDI-Controller-Hardware).
-
-### NEW-MONK-5 instrumentMONK – Spiel-UI
-
-
-### NEW-MONK-6 biblioMONK – Semantik & Auto-Save
-
-- _Umgezogen nach `SPECIAL_TODO.md`:_ Hörprobe mit echter Hardware (TR-8S/Beatstep Pro) – Clock-Lock und Notenzuordnung am Gerät (siehe `docs/HARDWARE_AUDIT_2026.md`).
-
-### NEW-MONK-7 spatialMONK
-
-
-### NEW-MONK-8 MONASTRYmasterclock (unsichtbares Systemmodul)
-
-
----
-
-## 🔴 P0 – KRITISCH: Stabilität, Signalfluss, Start-Zustand
-
-### P0-1 Start-Zustand „Kein Plugin offen" + Mixer-Sonderfall entfernen
-
-
-### P0-3 Plugin-Terminals: Close-Button + State-Synchronisation
-
-
-### P0-4 Rauschen auf Main beseitigen
-
-
-### P0-6 Main-/Monitor-Routing & Mehrbenutzer-Fix
-
-
-### P0-7 Master-Player fest oben mit Transport
-
-
----
-
-## 🟠 P1 – HOCH: UX/UI/GUI, Cross-Platform, Bibliothek, Zwischenspeicher
-
-### P1-1 Responsive Shell für iOS/Android/Windows/Linux/macOS
-
-
-### P1-2 High-End-Klassiker-Skins pro Plugin
-
-
-### P1-3 Einstellungen & Geräte-Defaults
-
-
-### P1-4 Session-Zwischenspeicher (Scratchpad) + Drag & Drop + Clipboard
-
-
-### P1-5 Lieder-Datenbank automatisch sortieren
-
-
-### P1-6 Key-/MIDI-Handling optimieren
-
-
----
-
-## 🟡 P2 – MITTEL: Latenz, Qualität, Clock, Signalfluss
-
-### P2-1 Latenz & Audio-Qualität
-
-
-### P2-2 Clock prüfen & synchronisieren
-
-
-### P2-3 2.1-Ausgabe für Main
-
-
-### P2-4 Signalfluss-/Pipeline-Audit
-
-
-### P2-5 Performance & Rendering
-
-
----
-
-## 🔵 P3 – STRATEGISCH: KI/MOA/MCP, Prompt-DB, Evaluierung
-
-### P3-1 Datenbank-Migration 002: Systemprompts & Evaluierung
-
-
-### P3-2 MOA/MCP pro Plugin anlernen, prompten, iterieren
-
-
-### P3-3 Evaluierungs-Framework & Regression
-
-
----
-
-## 🔴 AUD-P – Maßnahmen aus dem Audit-Run (2026-08-31)
-
-### Priorisierte Maßnahmen (aus dem Audit-Lauf abgeleitet)
-
-
----
-
-## GAP – Vollständigkeits-Analyse & Vervollständigung (2026-08-31)
-
-### GAP-3 Atomarer Plugin-Audit – alle 21 Plugins einzeln
-
-
-### GAP-4 Sicherheitslücken-Audit vervollständigen
-
-
-### GAP-5 Prompt-/Trainings-Matrix je Plugin
-
-
-### GAP-8 Zentrales Fehler-Register
-
-
----
-
-## FA-P – Maßnahmen aus dem Fremdaudit
-
-### Priorisierte Maßnahmen aus dem Fremdaudit
-
-
----
-
-## AM-E – AUDIOMORPH-Atomar-Analyse (Ebene 1–6)
-
-### Ebene 1 – Atomare Code-Analyse (Hot-Paths)
-
-
-### Ebene 2 – Multi-Plugin-Orchestrierung
-
-
-### Ebene 3 – Multiuser-Echtzeit-Architektur
-
-
-### Ebene 4 – High-Quality DSP-Kernel
-
-
-### Ebene 5 – Sandbox-Simulation & Stress-Testing
-
-
-### Ebene 6 – Lebendige Selbstevolution
-
-
----
-
-## NEW-D – Tasks aus Entscheidungen (D1–D23)
-
-### Neue Tasks aus den Entscheidungen
-
-
----
-
-## AI-Infrastruktur – aus AITodo.md übernommen (GAP-2)
-
-> Offene Punkte aus der archivierten `AITodo.md` (2026-09-01 übernommen).
-
-
----
-
-## 🎛️ Open-Source Audio Technology Audit (2026-09-03)
-
-> Architektur-Audit des bestehenden MONK-Systems gegen den Katalog
-> quelloffener/freier Audio-Instrumente & Tools. **Nur Roadmap, keine Umsetzung.**
-> Klassifikation: A = hoher Wert / umsetzen · B = gute Zukunftserweiterung ·
-> C = Architektur-Referenz · D = optionale externe Ressource · E = Duplikat ·
-> F = inkompatibel · G = Lizenzproblem · H = Reject.
-
-### Klassifikationsübersicht (34 bewertete Projekte)
-
-| Klasse | Projekte |
+| Kennzahl | Wert |
 |---|---|
-| A – hoher Wert | Actuate (Granular), LinuxSampler/SFZ-Format, LSP Plugins + ZL Equalizer 2 (Dynamik), Dexed (6-Op-FM/DX7) |
-| B – Zukunft | Surge XT (Wavetable), setBfree/Open B3 (Tonewheel/Leslie), RdPiano (EP-Modeling), Hydrogen (Song/Humanize), Geonkick (Drum-Synth), VSCO 2 CE (Orchester CC0), Nakst (Phase Distortion), AudioKit ROMPlayer (EXS/SF2/WAV-Formate) |
-| C – Referenz | ZynAddSubFX, Six Sines, LeSynth, JS80P, Helm, amsynth, Grace, HISE, Dragonfly Reverb, Tiagolr Effects, Cardinal, Retromulator, EP-Mk1, MDA Piano, Aeolus, SamplerBox, Just a Sample, Drumlabooh |
-| D – extern | BBC SO Discover, Spitfire LABS, Virtual Playing Orchestra, Sonatina Symphonic Orchestra, Berlin Free Orchestra |
-| E – Duplikat | Carla (Plugin-Host = MONK-Registry/Rack), FreeEQ8 (12-Band-EQ existiert), Helm/amsynth (subtraktiv existiert), SamplerBox (Player) |
-| F – inkompatibel | Cardinal als direkter Modular-Host (widerspricht MONK-Pluginvertrag, GPL, CV/Gate-Ökosystem) |
-| G – Lizenz | The Alpine Project (CC-BY-ND), Pacific Percussion (unklar), direkte GPL-Code-Einbettung (Surge XT/Dexed/…) |
-
-### A – Hoher Wert (P1)
-
-
-
-
-
-### B – Gute Zukunftserweiterungen (P2)
-
-
-
-
-
-
-
-
-### C – Architektur-Referenzen (P2/P3, keine Integration)
-
-
-
-
-
-### Lizenz-Hinweise (G)
-
+| Datum | 2026-09-05 |
+| Scope | Gesamtes Repo (git-tracked): 21 Plugins, 12 Services, 7 DB-Migrationen, 40+ Skripte, CI/Workflows, Infra (Hetzner/Cloudflare/Supabase) |
+| Phase 0 Flotte | 5/5 Server running, `https://anunnakitools.de/api/health` → HTTP 200 |
+| Statische Analyse | OpenGrep 545 Regeln / 744 Dateien → **53 Findings (0 ERROR)**, ESLint → 76 Warnungen (0 Errors), tsc → 0 Fehler, npm audit → 0 Vulnerabilities |
+| Live-Tests | Replicate Demucs-Job **real gelaufen (OK)**, Supabase-Migrationen 002–005 + `match_samples` **OK**, Hetzner-Stresstest HTTP-Pfad **OK**, Socket.io-Session-Test **unvollständig** (unauthorized, siehe H-1) |
+| Findings | CRITICAL: 0 · HIGH: 2 · MEDIUM: 7 · LOW: 6 |
+| Gegenprüfung | Cerebras (Backgroundcoder #7) für SCHWER-Analysen; übrige Befunde statisch/durch Live-Test verifiziert |
 
 ---
 
-## Zusammenfassung offener Punkte (nach Kategorie)
+## Bereits im Audit behoben (Phase 6)
 
-> Extrahiert aus `COPILOTTODO.md`, `docs/TESTRUN_2_CHECKLIST.md`, `docs/LIVE_CHECKLIST_2026-09-02.md`, `TASKDONE.md`, `docs/HARDWARE_AUDIT_2026.md` und den Audit-Dokumenten.
+- **TURN-Secret-Leak (CRITICAL):** hartcodiertes Secret entfernt, per `TURN_STATIC_AUTH_SECRET`/Env injiziert, Git-History via `git-filter-repo` gesäubert (alle 4 Branches), coturn auf sfu-1 deployt (`lt-cred-mech` + statischer User), `VITE_TURN_*` in `.env.deploy`.
+- **Shell-Injection in `live-stress.yml` (HIGH):** `${{ inputs.base_url }}` läuft jetzt ausschließlich über `env:`.
+- **Script-Injection in `live-stress.yml` (HIGH):** `github-script` bekommt `STRESS_BASE_URL` als Env.
+- **dynamic-urllib (MEDIUM):** `scripts/hetzner/dns_setup.py` + `provision.py` mit `_safe_url()`-Allowlist.
+- **insecure-object-assign (MEDIUM):** `hfRouter.mjs` Budget-Merge mit Schema-Validierung.
+- **non-literal-regexp (MEDIUM):** `scripts/deep-audit/pattern.ts` mit statischer `VALID_GLOB_RE`.
+- **ESLint-Error `DOMAIN_AGENT_OVERRIDE` (LOW):** entfernt.
+- **MixerMONK-UI:** nach `uimixerMONK.PNG` + `uimixercontroller1/2.jpg` neu gebaut (CDJ/DJS/LIB-Controller, 6-Kanal-Konsole, größere Schrift, Breitbild, dynamische Breite).
+- **App-UX:** doppelte Toolbar entfernt, masterplayerMONK sticky + PLAY/STOP, Header öffnet Module (Touch), Auflösungsanzeige, Logo auf `logofullsize.png`.
+
+---
+
+## Offene TODOs
+
+### [HIGH]
+
+#### H-1 Socket.io-Stresstest kann Session-Pfad nicht prüfen (unauthorized)
+- **Kategorie:** Testing / Infra-Deployment
+- **Betroffene Dateien/Module:** `scripts/hetzner/stress-test.mjs`, `services/signaling/index.js`, `server.ts`
+- **Beschreibung:** Live-Lasttest gegen `anunnakitools.de` lief im HTTP-Pfad durch; der Socket.io-Session-Test bekam für alle Clients `connect_error: unauthorized` → „zu wenige Verbindungen (0 < 5)“. Gefunden per echtem Live-Test (Phase 4). Die Ablehnung ist sicherheitstechnisch korrekt (Auth greift), aber der Test kann den Mehr-User-Pfad damit nicht validieren.
+- **Auswirkung:** Session-/Multi-User-Verhalten unter Last bleibt ungetestet; Regressionen im Kollaborationspfad fallen erst im Betrieb auf.
+- **Empfohlener Fix:** Test-Fixture mit gültigen Session-Tokens (Dev-Credential aus `.env`/Test-User) ausstatten oder separaten „unauthorized expected“-Assert einbauen; anschließend Session-Test erneut gegen Flotte fahren.
+- **Aufwand:** M
+- **Status:** Offen
+- **Gegenprüfung:** Nur von einer Instanz geprüft (Live-Test)
+
+#### H-2 Workflow-Actions nur mit mutablem Tag gepinnt (Supply-Chain)
+- **Kategorie:** Security
+- **Betroffene Dateien/Module:** 8 Workflows (`build.yml`, `deep-audit.yml`, `nightly.yml`, `live-stress.yml`, `hf-endpoint.yml`, `ai.yml`, `main.yml`, `sonarcloud.yml`)
+- **Beschreibung:** OpenGrep meldet 35 Stellen mit `actions/*@v4`-Pinning (mutable Tags). Statischer Fund (Phase 2).
+- **Auswirkung:** Kompromittierte Action-Release-Tags könnten Code/Secrets im CI-Runner ausführen.
+- **Empfohlener Fix:** Alle Actions auf vollständige Commit-SHA pinnen (Renovate/Dependabot für Updates konfigurieren).
+- **Aufwand:** M
+- **Status:** Offen
+- **Gegenprüfung:** Bestätigt (OpenGrep + manuelle Sichtung)
+
+### [MEDIUM]
+
+#### M-1 Interne Services ohne HTTPS-Bindung (midi-bridge, signaling)
+- **Kategorie:** Security / Infra-Deployment
+- **Betroffene Dateien/Module:** `services/midi-bridge/index.js:146`, `services/signaling/index.js:6`
+- **Beschreibung:** Beide Services starten `http.createServer` (Klartext). Statischer Fund. Sofern sie nur intern/über Caddy-TLS erreichbar sind, akzeptabel.
+- **Auswirkung:** Bei direkter Exposition sind MIDI-/Signaling-Verkehr und ggf. Credentials abhörbar.
+- **Empfohlener Fix:** Bindung an `127.0.0.1` (oder internes Netz) erzwingen, TLS-Terminierung dokumentieren.
+- **Aufwand:** S
+- **Status:** Offen
+- **Gegenprüfung:** Bestätigt (OpenGrep + manuelle Sichtung)
+
+#### M-2 aiMONK-Kommando „fade-in in MAIN“ nicht als atomarer Befehl vorhanden
+- **Kategorie:** AI-Integration
+- **Betroffene Dateien/Module:** `src/core/voice/pluginCommandRegistry.ts`, `src/core/ai/orchestrator/aiOrchestrator.ts`
+- **Beschreibung:** `setBpm` und Kanal-Load/Trigger sind im Command-Registry vorhanden, ein zeitgesteuerter **Fade-in auf MAIN** („Lied von Len Faki auf Kanal 1, BPM 100, langsam in MAIN faden“) existiert nicht als einzelner Befehl. Gefunden per Trace-Simulation des Nutzerkommandos (Phase 4).
+- **Auswirkung:** Natürlichsprachliche Mix-Anweisungen mit Fades laufen ins Leere oder werden nur teilweise ausgeführt.
+- **Empfohlener Fix:** `fadeChannelToMain(channel, ms)`-Kommando (Ramp via `setChannelGain`) in Registry + Orchestrator-Mapping ergänzen; Test in `tests/` ergänzen.
+- **Aufwand:** M
+- **Status:** Offen
+- **Gegenprüfung:** Nur von einer Instanz geprüft (Trace-Simulation)
+
+#### M-3 dropMONK-Auto-Drop („passendes Lied aus biblioMONK, Drop erstellen, automatisch ausführen“) nicht end-to-end verdrahtet
+- **Kategorie:** AI-Integration / UX-Flow
+- **Betroffene Dateien/Module:** `src/components/drop/DropGeneratorPanel.tsx`, `src/components/drop/DJTransitionPanel.tsx`, `src/core/voice/pluginCommandRegistry.ts` (dropMONK-Sektion), `src/data/musicLibrary.ts`
+- **Beschreibung:** dropMONK hat Generator-/Preset-/Transition-Komponenten, aber die Kette „aktuellen Kanal analysieren → passenden Track aus biblioMONK wählen → Drop generieren → automatisch triggern“ ist nicht als ein Aufruf verdrahtet. Trace-Simulation (Phase 4).
+- **Auswirkung:** Der beschriebene Assistenten-Flow funktioniert nicht auf Zuruf.
+- **Empfohlener Fix:** Orchestrator-Kommando `autoDrop(channel)` implementieren (BPM/Key-Match gegen `SORTED_MUSIC_LIBRARY`, Drop-Preset laden, Trigger zur nächsten Phrase); Test ergänzen.
+- **Aufwand:** L
+- **Status:** Offen
+- **Gegenprüfung:** Nur von einer Instanz geprüft (Trace-Simulation)
+
+#### M-4 Socket.io-Auth abgelehnte Stress-Clients ohne Log-Korrelation
+- **Kategorie:** Infra-Deployment
+- **Betroffene Dateien/Module:** `services/signaling/index.js`, `server.ts`
+- **Beschreibung:** Live-Test zeigte 39× `connect_error: unauthorized`. Serverseitige Logs/Telemetrie zu abgelehnten Handshakes sind nicht systematisch (Rate/Quelle/IP). Live-Fund (Phase 4).
+- **Auswirkung:** Missbrauch/Fehlkonfiguration ist schwer nachvollziehbar.
+- **Empfohlener Fix:** Strukturiertes Logging für abgelehnte Handshakes (Session-Room, IP-gehasht) + Metrik in `/api/telemetry`.
+- **Aufwand:** S
+- **Status:** Offen
+- **Gegenprüfung:** Nur von einer Instanz geprüft (Live-Test)
+
+#### M-5 ESLint-Warnungen (76) nicht aufgeräumt
+- **Kategorie:** Code-Qualität
+- **Betroffene Dateien/Module:** 67× `no-unused-vars` (u. a. `src/core/adapters.ts`, `src/App.tsx`, `src/core/instrument/catalog.ts`, `src/utils/audioEngine.ts`), 6× `react-hooks/exhaustive-deps`, 2× `ban-ts-comment`, 1× `no-unused-expressions`
+- **Beschreibung:** ESLint meldet 76 Warnungen, 0 Fehler. Statischer Fund (Phase 2).
+- **Auswirkung:** Toter Code, potenziell stale Closures in Hooks, sinkende Wartbarkeit.
+- **Empfohlener Fix:** Ungenutzte Symbole entfernen oder Regel schärfen; Hook-Dependencies korrigieren; `@ts-ignore` → `@ts-expect-error`.
+- **Aufwand:** M
+- **Status:** Offen
+- **Gegenprüfung:** Bestätigt (ESLint-Lauf)
+
+### [LOW]
+
+#### L-1 Unsichere Format-Strings (12×)
+- **Kategorie:** Code-Qualität
+- **Betroffene Dateien/Module:** u. a. `src/utils/audioEngine.ts:449`, `src/context/AudioContext.tsx:80,85`, `services/taskWorker.ts:81`, `services/midi-bridge/index.js:35`
+- **Beschreibung:** `console.*`/printf-artige Aufrufe mit variablem Format-String. OpenGrep INFO.
+- **Empfohlener Fix:** Literale Format-Strings verwenden.
+- **Aufwand:** S · **Status:** Offen · **Gegenprüfung:** Bestätigt (OpenGrep)
+
+#### L-2 csurf/CSRF-Schutz in signaling fehlt
+- **Kategorie:** Security
+- **Betroffene Dateien/Module:** `services/signaling/index.js:5`
+- **Beschreibung:** Express ohne CSRF-Middleware (OpenGrep).
+- **Empfohlener Fix:** CSRF-Middleware oder reine API-Absicherung (kein Cookie-Auth) dokumentieren/ergänzen.
+- **Aufwand:** S · **Status:** Offen · **Gegenprüfung:** Bestätigt (OpenGrep)
+
+#### L-3 CI-Gate für Replicate/Eval fehlt
+- **Kategorie:** Testing
+- **Betroffene Dateien/Module:** `scripts/replicate-smoke.ts`, `scripts/eval-ai.ts`, `.github/workflows/`
+- **Beschreibung:** Replicate-Smoke lief manuell OK (echter Demucs-Job); es existiert kein regelmäßiger CI-Smoke/Gate.
+- **Empfohlener Fix:** Wöchentlichen `replicate-smoke` + `eval:ai` als Nightly-Job einplanen.
+- **Aufwand:** S · **Status:** Offen · **Gegenprüfung:** Nur von einer Instanz geprüft
+
+#### L-4 HF-Fallback-Pfad nicht aktiv durchgespielt
+- **Kategorie:** AI-Integration
+- **Betroffene Dateien/Module:** `scripts/background-coder/hfRouter.mjs`
+- **Beschreibung:** HF wurde laut Vorgabe nicht aktiv aufgerufen; Fallback-Logik (Budget-/Quota-/Fehlerpfad) nur statisch geprüft.
+- **Empfohlener Fix:** Gezielter Fallback-Test (HF-Simulation offline) als Unit-Test ergänzen.
+- **Aufwand:** S · **Status:** Offen · **Gegenprüfung:** Nur von einer Instanz geprüft
+
+#### L-5 Vite-Bundle-Chunks > 500 kB
+- **Kategorie:** Performance
+- **Betroffene Dateien/Module:** `vite.config.*`, Lazy-Loading in `src/plugins/registry.ts`
+- **Beschreibung:** `vite build` meldet große Chunks (Build-Log).
+- **Empfohlener Fix:** `manualChunks` / stärkeres Code-Splitting der schweren Audio-Module.
+- **Aufwand:** M · **Status:** Offen · **Gegenprüfung:** Bestätigt (Build-Log)
+
+#### L-6 AudioHealth `STATE: CLOSED` im Ruhezustand ohne sichtbaren Resume-Hinweis
+- **Kategorie:** UX/Flow
+- **Betroffene Dateien/Module:** `src/App.tsx` (masterplayerMONK), `src/utils/audioEngine.ts` (`resumeFromIdle`)
+- **Beschreibung:** Im Browser-Test zeigte perfMONK `STATE: CLOSED`/0 Hz, bis Play gedrückt wird; für Nutzer nicht erklärt.
+- **Empfohlener Fix:** Hinweis-Badge „▶ PLAY drücken, um Audio zu starten“ im masterplayer.
+- **Aufwand:** S · **Status:** Offen · **Gegenprüfung:** Nur von einer Instanz geprüft (Browser-Test)
+
+---
+
+## Bestehende offene Punkte (Live-/Betreiber-/Hardware-Prüfungen)
+
+> Aus früheren Audits übernommen (nicht automatisiert lösbar – vor Ort / Konsole erforderlich).
 
 ### Nur Code/Tests (automatisiert umsetzbar)
-
-- Worklet-CPU-Budgets im PerformanceMonitor
-- Kontinuierliches Profiling (Worklet-CPU, Per-Sample-Allokationen, Xrun-Histogramm)
-- Adaptive Puffergrößen bei Xruns
-- Energie-Optimierung (Audio-Context Idle, Display-Sleep)
-- Granular-Engine, SFZ-Parsing, 6-Op-FM, Wavetable, Tonewheel, E-Piano, Drum-Synthese, Orchester-Library, Phase-Distortion, EXS24/SF2/WAV-Import-Konzept, Reverb-Verbesserung, Spektrale Additiv-Steuerung, Mod-Matrix-Konzept, Analoge Filter-Referenzen
+- Worklet-CPU-Budgets im PerformanceMonitor · kontinuierliches Profiling · adaptive Puffergrößen bei Xruns · Energie-Optimierung (Audio-Context Idle)
+- Granular-Engine, SFZ-Parsing, 6-Op-FM, Wavetable, Tonewheel, E-Piano, Drum-Synthese, Orchester-Library, Phase-Distortion, EXS24/SF2/WAV-Import-Konzept, Reverb-Verbesserung, spektrale Additiv-Steuerung, Mod-Matrix-Konzept
 
 ### Live-/Hardware-/Browser-Prüfpunkte (vor Ort)
-
-- Main-RMS < -60 dBFS (60 s Dauerlauf ohne aktives Plugin)
-- iPhone/iOS-Test (Responsive, Panels, Safe-Area, Touch-Ziele)
-- USB-Gerät automatisch auswählen; 2.1-Layout sichtbar
-- Scratchpad Reload/DnD/Clipboard-Roundtrip
-- Latenz-Messung vorher/nachher; 120 BPM / 10 min Jitter < 1 ms; 2-Browser-Offset < 5 ms
-- 4-User-Livelauf (Cue/Main, Rollenwechsel, Latenz < 50 ms one-way)
-- MIDI-Out/Clock mit echter Hardware (TR-8S/Beatstep Pro) → umgezogen nach `SPECIAL_TODO.md`
-- Drop-Hörprobe am laufenden Mix
-- 2 App-Knoten hinter LB11 + Failover
+- Main-RMS < -60 dBFS (60 s Dauerlauf) · iPhone/iOS-Test · USB-Gerät automatisch wählen · 2.1-Layout sichtbar · Scratchpad Reload/DnD/Clipboard · Latenz < 15 ms lokal / < 50 ms Netz · 4-User-Livelauf (Cue/Main, Rollenwechsel) · Drop-Hörprobe am laufenden Mix · 2 App-Knoten hinter LB11 + Failover
+- MIDI-Out/Clock mit echter Hardware (TR-8S/Beatstep Pro) · Beatstep-Pro-MIDI-Profil + Pads-Synth-UI · Audio-Layouts 12.x/18.x/24.x (braucht Hardware)
 
 ### Betreiber-Schritte (externe Konsole/Cloud)
+- Migration 002+ in Live-Supabase anwenden + RLS-Abgleich · HF-Endpoint-Secret rotieren · Nightly-CI-Lauf auf GitHub bestätigen · echter DeepSeek/MOA-LLM-Lauf je Plugin + Scores in Supabase · AI-GPU-Benchmarks + AI-Docker-Build/GPU-Test · Flotten-Wake < 90 s erneut messen · LB11 erst bei Skalierung
 
-- Migration 002 in Live-Supabase anwenden + RLS-Abgleich
-- HF-Endpoint-Secret rotieren
-- Nightly-CI-Lauf auf GitHub bestätigen
-- Echter DeepSeek/MOA-LLM-Lauf je Plugin + Scores in Supabase
-- AI-GPU-Benchmarks + AI-Docker-Build/GPU-Test
-
----
-
----
-
-## Hinweis für die Zukunft
-
-Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
-`TASKDONE.md` verschoben und aus dieser Datei gelöscht.
-
----
-
-## 🔷 SSOT – Konsolidierte offene Punkte (2026-09-04)
-
-> `MASTER_TODO.md` ist die **einzige Quelle offener Arbeit** in `main`.
-> `COPILOTTODO.md` und `SPECIAL_TODO.md` wurden aufgelöst und gelöscht;
-> `TASKDONE.md` bleibt reines Erledigt-Archiv (offene Punkte stehen hier).
-> `VISIONS_TODO.md` lebt nur im Branch `visions` (Zukunft/Experimente).
-
-### Aus TASKDONE.md übernommen (waren dort noch offen)
-- Betreiber: Nightly-CI-Lauf auf GitHub bestätigen · HF-Endpoint-Secret rotieren · echter DeepSeek/MOA-Lauf je Plugin (Scores in Supabase) · Live-Supabase-Abgleich
-- Live-Hörproben: Drop-Sweep/Crossfade am laufenden Mix · TR-8S/Beatstep-Pro (Clock-Lock, Notenzuordnung) · 4-User-Livelauf (Pump-/Zipper-Freiheit) · Scratchpad Reload/DnD/Clipboard im Browser
-- Live-Messungen: Flotten-Wake < 90 s (erneut messen) · CPU < 70 % · Jitter < 1 ms / < 5 ms zwischen Browsern · Resampling-/Filter-Qualität
-- LB11: 2 App-Knoten + Failover (erst bei Skalierung)
-- Komponenten-Neubau Hardware-Look (DJM-A9/XONE, MiniMoog/Prophet, TR-808, API/SSL) – mittlere Priorität
-
-### Aus SPECIAL_TODO.md übernommen (Hardware-Sonderfälle)
-- Beatstep-Pro-MIDI-Profil + Pads-Synth-UI (Minilogue-Stil) – braucht Beatstep Pro
-- MIDI-Out/Clock-Hörprobe mit echter Hardware (TR-8S/Beatstep Pro)
-- Audio-Layouts 12.x/18.x/24.x konfigurierbar + hörbar – braucht > 4.2-Lautsprecher-Setup
-
-### Aus docs/LIVE_CHECKLIST_2026-09-02.md (zusammengefasst)
-- iPhone/iOS/Android manuell: Safe-Areas, Touch-Ziele ≥ 44 px, kein Hover-only, kein Zoom/Overflow
-- Xonar-U7-Default + 2.1 sichtbar, Einstellungen nach Reload stabil
-- Keyboard-E2E live (Space, Ctrl/Cmd+1..9, Escape – kein Hotkey bricht Eingabefelder)
-- 60-s-Stille → Main-RMS ≤ −60 dBFS (Hörprobe) · 4-User-Cue/Main-Hörprobe · Rollenwechsel ohne Unterbrechung · 0 Xruns/Dropouts
-- Supabase-Daten sichtbar (P3-1) · Nightly-Report je Plugin · Security-Checkliste vollständig
-
-### Aus AUDIT.md (Commit `7b22c18`, 2026-09-03 – ggf. durch spätere Fixes veraltet, verifizieren!)
-- 🔴 Locking netzwerkweit verifizieren: Locks werden laut Audit nicht repliziert; Lock-Owner-Vergleich `'localUser'` vs. `webRTCManager.userId` in ~20 Komponenten prüfen (spätere P4-2-Fixes gegenzuprüfen)
-- 🟡 Server-Error-Leaks: `(e as Error).message` 1:1 an Clients prüfen/bereinigen
-- 🟡 Toter Code: `useWebRTC.ts`/parallel Lock-Implementierungen aufräumen · 160× `any` reduzieren
-- 🟡 `qs`-CVEs / Dependency-Audit erneut ausführen
-- 🟡 Test-Abdeckung (32,6 % Statements) gezielt für Kernpfade erhöhen
-
-### Experimentelles in `main` (optional, laut VISIONS-Regel dokumentiert)
+### Experimentelles in `main` (optional, laut VISIONS-Regel)
 - WebGPU-Kernel (`src/core/gpu/`), Rust-Runtime (`services/audio-runtime`), Rust-Mixer (`services/mixer`), V2-AudioGraph, WASM-DSP/HRTF-Kernel, `localDemucs` → Benchmarks/Entscheid offen, Details in `VISIONS_TODO.md` (Branch `visions`)
 
 ---
 
-## Deep-Audit 2026-09-04 – Befunde
+## Historie
 
-
----
-
-## Deep-Audit 2026-09-04 – Befunde
-
-
----
-
-## 🔬 Softwareaudit 2026-09-05 (offline deterministisch, 19 Niedrig)
-
-> Quelle: `npm run audit:deep:static` (Commit `5ad2a91`). AUDIT_DEEP.md danach wieder gelöscht (Single-Root-Output).
-
-
-## 🔭 Tiefen-Audit Plan-Modus 2026-09-05 (Agent-Pläne in logs/background-coder/audit-plans.md)
-
----
-
-## 🔬 OpenGrep + reviewdog Audit 2026-09-05
-
-> Quelle: OpenGrep v1.29.0 (`auto` + `p/security-audit` + `p/secrets`, 545 Regeln, 744 Dateien → 59 Findings) + reviewdog v0.21.0 (ESLint 10.9.1 → 72 Probleme, tsc 5.8.3 → 0, npm audit → 0).
-> Report: `docs/AUDIT_REPORT_OPENGREP_REVIEWDOG_2026-09-05.md`
-
-
----
-
-## 🧠 Cerebras-Tiefenaufträge 2026-09-05 (Routing: SCHWER → #7 Cerebras GPT-OSS-120B)
-
-> Quelle: User-Anweisung „große tiefe zurückgestellte Sachen → Cerebras“. Diese Punkte sind bewusst HOCH/SCHWER markiert, damit der Orchestrator sie an Agent #7 (Cerebras) routet.
-
-
-
----
-
-## 🤖 Delegationsaufträge 2026-09-05 (Background-Coder/Cerebras)
-
-> Quelle: User-Anweisung „Aufgaben klug an Background-Coder, Cerebras und dich übergeben“. Routing: HOCH→SCHWER→#7, MITTEL→#2/#4.
-
+> Ältere Abschnitte (AUDIT.md 2026-09-03, AUDIT_DEEP.md 2026-09-04, Softwareaudit/OpenGrep+reviewdog 2026-09-05, Cerebras-Tiefenaufträge, Delegationsaufträge) wurden konsolidiert: alle dortigen Punkte sind **erledigt** und wurden am 2026-09-05 entfernt (Details in `TASKDONE.md` bzw. Git-History). Dieses Dokument enthält nur noch offene Punkte aus dem Deep Audit 2026-09-05 sowie weiterhin gültige Live-/Betreiber-Prüfpunkte.
