@@ -258,6 +258,15 @@ class WebRTCManager {
    *          Media über den Mediasoup-SFU-Transport (Producer/Consumer).
    */
   public setSfuMode(enabled: boolean, sfu?: MediasoupTransport | null): void {
+    // DA-220: Laufende P2P-State-Flushes vor dem Moduswechsel stoppen, damit keine
+    // verspäteten Nachrichten mehr über alte DataChannels gesendet werden, während
+    // die PeerConnections geschlossen/geleert werden.
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    this.pendingState.clear();
+
     this.sfuMode = enabled;
     this.sfu = enabled ? (sfu ?? null) : null;
     this.sfuSubscribed.clear();

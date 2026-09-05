@@ -88,3 +88,8 @@ AudioDeviceManager (src/core/hardware) → ASIO/CoreAudio/PipeWire, generisches 
   Shutdown“ aktiviert Fallbacks.
 - **D22:** `STEM_AI_URL` runtime statt Modul-Konstante → schneller 502 bei
   Provider-Ausfall (umgesetzt in `server.ts`).
+- **D24 (P3-6, 2026-09-05):** Schutz der Algorithmenkerne. TEE/geschützter
+  Speicher ist im Browser/Node nicht sinnvoll (kein verlässlicher Enclave-
+  Zugriff in WebAssembly/JS-Laufzeitumgebungen). Stattdessen gelten
+  Build-/Bundle-Schutz (Obfuskation optional, Source-Maps im Produktions-Build
+  deaktiviert) und regelmäßiger Objekt-Code-Review der DSP-Kernel als Maßnahme.

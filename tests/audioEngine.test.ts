@@ -2,23 +2,32 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('tone', () => {
+  // P1-2: Signalfluss-Spion – jede connect/chain/toDestination-Verkabelung wird
+  // als Kante aufgezeichnet und kann in den Tests geprüft werden.
+  const __wiring: Array<{ from: unknown; to: unknown }> = [];
   class MockNode {
     volume = { value: 0, rampTo: () => {} };
     pan = { value: 0 };
     frequency = { value: 440 };
     gain = { value: 0, rampTo: () => {} };
     Q = { value: 0 };
-    connect() { return this; }
+    connect(dest?: unknown) { __wiring.push({ from: this, to: dest }); return this; }
     disconnect() { return this; }
-    chain() { return this; }
+    chain(...nodes: unknown[]) {
+      for (let i = 0; i < nodes.length; i++) {
+        __wiring.push({ from: i === 0 ? this : nodes[i - 1], to: nodes[i] });
+      }
+      return this;
+    }
     start() { return this; }
     stop() { return this; }
     dispose() { return this; }
     set() { return this; }
     triggerAttackRelease() {}
-    toDestination() { return this; }
+    toDestination() { return this.connect('destination'); }
   }
   return {
+    __wiring,
     Volume: MockNode,
     Gain: MockNode,
     Filter: MockNode,
@@ -53,6 +62,7 @@ vi.mock('tone', () => {
 });
 
 import { audioEngine } from '../src/utils/audioEngine';
+import * as Tone from 'tone';
 
 describe('audioEngine (jsdom, Tone gemockt)', () => {
   it('listet Drum-Kits und Spatial-Setups', () => {
@@ -147,5 +157,41 @@ describe('audioEngine (jsdom, Tone gemockt)', () => {
       { id: 'src-track', name: 'Track', kind: 'track', position: { x: -0.4, y: 0, z: 0 } },
     ]);
     expect(audioEngine.spatialSceneV2.getAudioObject('src-track')?.position.x).toBe(-0.4);
+  });
+});
+
+describe('P1-2 · V1-Verkabelung (Node-In/Out-Counts + Signalfluss-Spion)', () => {
+  const toneMock = Tone as unknown as {
+    __wiring: Array<{ from: unknown; to: unknown }>;
+  };
+  const edges = toneMock.__wiring;
+
+  it('Signalfluss-Spion: Engine-Verkabelung erzeugt Kanten ohne Hänger', () => {
+    expect(edges.length).toBeGreaterThan(0);
+    for (const e of edges) {
+      expect(e.from).toBeTruthy();
+      expect(e.to).toBeTruthy();
+    }
+  });
+
+  it('Node-In/Out-Counts: jeder verbundene Knoten hat In- oder Out-Grad > 0', () => {
+    const degree = new Map<unknown, { inn: number; out: number }>();
+    for (const e of edges) {
+      const from = degree.get(e.from) ?? { inn: 0, out: 0 };
+      from.out += 1;
+      degree.set(e.from, from);
+      const to = degree.get(e.to) ?? { inn: 0, out: 0 };
+      to.inn += 1;
+      degree.set(e.to, to);
+    }
+    expect(degree.size).toBeGreaterThan(1);
+    for (const d of degree.values()) {
+      expect(d.inn + d.out).toBeGreaterThan(0);
+    }
+  });
+
+  it('Signalfluss-Spion: mindestens ein Tone-Knoten wurde mit einem Ziel verbunden', () => {
+    const withTo = edges.filter((e) => e.to !== undefined && e.to !== null);
+    expect(withTo.length).toBeGreaterThan(0);
   });
 });

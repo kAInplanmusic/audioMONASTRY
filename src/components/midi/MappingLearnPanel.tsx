@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { Zap, Trash2, Radio } from 'lucide-react';
 import type { ControlEvent } from '../../core/interfaces';
 import { useMapping } from '../../hooks/useMapping';
@@ -23,9 +23,6 @@ export const MappingLearnPanel: React.FC<{ lastEvent: ControlEvent | null }> = (
     rules, learning, setLearning, target, setTarget, kind, setKind,
     addFrom, remove, lastLearned, error,
   } = useMapping();
-
-  const lastEventRef = useRef(lastEvent);
-  lastEventRef.current = lastEvent;
 
   useEffect(() => {
     if (!learning) return;
