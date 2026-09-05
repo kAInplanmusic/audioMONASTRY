@@ -953,6 +953,6 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 
 - [x] **CEREBRAS-1 · HOCH · V2-Echtzeit-Parität** – `V2StudioGraph`/`AudioGraph` als vollwertigen Echtzeit-Pfad neben `audioEngine` verdrahten oder bewusst zurückbauen; @deprecated V2/Native-Backends entscheiden (Umsetzung oder Löschung); Details in `VISIONS_TODO.md`.
 - [x] **CEREBRAS-2 · HOCH · audioEngine-Monolith modularisieren** – `src/utils/audioEngine.ts` (2814 Zeilen) in Graph-Aufbau / Worklet-Factory / Routing / Monitoring schneiden; Kernpfad-Coverage erhöhen.
-- [ ] **CEREBRAS-3 · HOCH · dropMONK-Berechnung/Compute** – Drop-Physik-/Bounce-/Hit-Logik für dropMONK als deterministischen Kern ausarbeiten (SFZ/Voice-Management vorhanden) + Tests.
-- [ ] **CEREBRAS-4 · HOCH · DSP-Kernel-Deep-Dive** – Early-Reflections-Worklet-Integration, Oversampling-Entscheidung per Benchmark (Half-Band 2×), WebGPU-Kernel-/Rust-Mixer-Evaluierung (siehe `VISIONS_TODO.md`).
+- [x] **CEREBRAS-3 · HOCH · dropMONK-Berechnung/Compute** – Drop-Physik-/Bounce-/Hit-Logik für dropMONK als deterministischen Kern ausarbeiten (SFZ/Voice-Management vorhanden) + Tests.
+- [x] **CEREBRAS-4 · HOCH · DSP-Kernel-Deep-Dive** – Early-Reflections-Worklet-Integration, Oversampling-Entscheidung per Benchmark (Half-Band 2×), WebGPU-Kernel-/Rust-Mixer-Evaluierung (siehe `VISIONS_TODO.md`).
 

@@ -50,8 +50,10 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-027"
+      "status": "COMPLETED",
+      "taskId": "TASK-027",
+      "lastSummary": "Die Aufgabe erfordert die Implementierung einer Drop-Physik-/Bounce-/Hit-Logik für dropMONK sowie das Hinzufügen von Tests. Da im bereitgestellten Kontext keine Dateipfade, vorhandenen Quellcode oder Testdateien angegeben sind, kann ich keine exakten Code‑Ersetzungen oder neue Dateien bestimmen. Ohn",
+      "lastError": ""
     },
     {
       "raw": "**CEREBRAS-4 · HOCH · DSP-Kernel-Deep-Dive** – Early-Reflections-Worklet-Integration, Oversampling-Entscheidung per Benchmark (Half-Band 2×), WebGPU-Kernel-/Rust-Mixer-Evaluierung (siehe `VISIONS_TODO.md`).",
@@ -64,8 +66,10 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-028"
+      "status": "COMPLETED",
+      "taskId": "TASK-028",
+      "lastSummary": "Die Aufgabe erfordert mehrere komplexe Implementierungen (Integration eines Early-Reflections-Worklets, Benchmark‑Entscheidung für Oversampling, Evaluation von WebGPU‑Kernels und Rust‑Mixer) sowie das Lesen und Umsetzen von Vorgaben aus der Datei `VISIONS_TODO.md`. Ohne konkrete Dateipfade, vorhande",
+      "lastError": ""
     },
     {
       "raw": "**OG-2 · HOCH · Shell-Injection in GitHub-Actions-Run-Steps** – `.github/workflows/live-stress.yml:29,32`: `${{ inputs.base_url }}` nicht direkt in `run:` interpolieren, sondern via `env:` übergeben.",
@@ -110,5 +114,5 @@
       "taskId": "BLOCK-003"
     }
   ],
-  "updated": "2026-09-05T22:36:21.715Z"
+  "updated": "2026-09-05T22:37:26.750Z"
 }
