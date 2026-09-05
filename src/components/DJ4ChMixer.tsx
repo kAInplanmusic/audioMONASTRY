@@ -133,7 +133,7 @@ function Knob({
             style={{ background: color, boxShadow: `0 0 5px ${color}88` }} />
         </div>
       </div>
-      {label && <span className="text-[10px] font-bold tracking-[0.15em] text-zinc-400">{label}</span>}
+      {label && <span className="text-[11px] font-bold tracking-[0.12em] text-zinc-400 whitespace-nowrap">{label}</span>}
       {sub && <span className="text-[9px] font-mono text-zinc-600 -mt-0.5">{sub}</span>}
     </div>
   );
@@ -233,7 +233,7 @@ function UtilityColumn() {
   const [mic, setMic] = useState({ m1: 0.5, m2: 0.5 });
   const fxList = ['SHORT DELAY', 'DUB ECHO', 'SHORT ECHO'];
   return (
-    <div className="w-32 shrink-0 bg-[#17171a] rounded-md border border-black/70 p-2 flex flex-col gap-2 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
+    <div className="w-28 shrink-0 bg-[#17171a] rounded-md border border-black/70 p-2 flex flex-col gap-2 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
       <div className="text-[10px] font-black tracking-[0.25em] text-orange-400 border-b border-zinc-800 pb-1">BEAT FX</div>
       <div className="flex gap-1">
         <LedButton round={false} active={usb === 'A'} onClick={() => setUsb('A')} label="USB A" />
@@ -265,7 +265,7 @@ function MasterColumn({ master, onMaster }: { master: number; onMaster: (v: numb
   const [phones, setPhones] = useState({ mix: 0.5, level: 0.6 });
   const [ioOn, setIoOn] = useState(true);
   return (
-    <div className="w-36 shrink-0 bg-[#17171a] rounded-md border border-black/70 p-2.5 flex flex-col items-center gap-2 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
+    <div className="w-32 shrink-0 bg-[#17171a] rounded-md border border-black/70 p-2.5 flex flex-col items-center gap-2 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
       <div className="text-[11px] font-black tracking-[0.3em] text-zinc-300">MASTER</div>
       <MasterMeter level={master} />
       <Knob size="lg" value={master} onChange={onMaster} label="LEVEL" color={COPPER} />
@@ -302,7 +302,7 @@ function ChannelStrip({
   onRelease: () => void; released: boolean;
 }) {
   return (
-    <div className="w-[104px] shrink-0 bg-[#222226] rounded-md border border-black/70 p-2 flex flex-col gap-1.5 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
+    <div className="w-[92px] shrink-0 bg-[#222226] rounded-md border border-black/70 p-2 flex flex-col gap-1.5 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
       {/* Kopf: Input-Select + FREI */}
       <div className="flex items-center justify-between px-0.5">
         <span className="text-[10px] font-black tracking-widest" style={{ color: s.accent }}>{s.label}</span>
@@ -330,7 +330,7 @@ function ChannelStrip({
       </div>
 
       {/* FILTER + SEND (Kupfer) */}
-      <div className="flex justify-between px-2">
+      <div className="flex justify-between px-1 gap-3">
         <Knob size="sm" value={c.filter} onChange={(v) => onPatch({ filter: v })} label="FILTER" color={COPPER} />
         <Knob size="sm" value={c.send} onChange={(v) => onPatch({ send: v })} label="SEND" color={COPPER} />
       </div>
@@ -492,7 +492,7 @@ export const DJMixer = React.memo(function DJMixer() {
   };
 
   return (
-    <div className="select-none shrink-0 bg-[#1b1b1e] text-white relative border-t-2 border-b border-zinc-700 rounded-md min-w-[1180px]">
+    <div className="select-none shrink-0 bg-[#1b1b1e] text-white relative border-t-2 border-b border-zinc-700 rounded-md w-full">
       {/* Metallkante oben */}
       <div className="h-[3px] bg-gradient-to-r from-zinc-700 via-zinc-400 to-zinc-700" />
 
@@ -506,19 +506,21 @@ export const DJMixer = React.memo(function DJMixer() {
       </div>
 
       {/* Controller links | 6 Kanalzüge + Utility + Master | Controller rechts */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(260px,1fr)_auto_minmax(260px,1fr)] gap-3 px-4 pt-3">
-        <DeckPanel
-          deck="A"
-          channels={deckChannels.A}
-          skin={deckSkins.A}
-          onSkinChange={handleDeckSkinChange}
-          loadedLabel={deckLabels.A || ch[0]?.loadName || undefined}
-          onLoad={(label) => handleDeckLoad('A', label)}
-        />
+      <div className="grid grid-cols-[240px_minmax(0,1fr)_240px] gap-3 px-4 pt-3">
+        <div className="min-w-0 overflow-hidden">
+          <DeckPanel
+            deck="A"
+            channels={deckChannels.A}
+            skin={deckSkins.A}
+            onSkinChange={handleDeckSkinChange}
+            loadedLabel={deckLabels.A || ch[0]?.loadName || undefined}
+            onLoad={(label) => handleDeckLoad('A', label)}
+          />
+        </div>
 
         {/* Mischpult-Konsole */}
-        <div className="overflow-x-auto">
-          <div className="flex gap-2 min-w-max items-stretch">
+        <div className="overflow-x-auto min-w-0">
+          <div className="flex gap-1.5 min-w-max items-stretch">
             <UtilityColumn />
 
             {strips.map((s, i) => {
@@ -549,14 +551,16 @@ export const DJMixer = React.memo(function DJMixer() {
           </div>
         </div>
 
-        <DeckPanel
-          deck="B"
-          channels={deckChannels.B}
-          skin={deckSkins.B}
-          onSkinChange={handleDeckSkinChange}
-          loadedLabel={deckLabels.B || ch[3]?.loadName || undefined}
-          onLoad={(label) => handleDeckLoad('B', label)}
-        />
+        <div className="min-w-0 overflow-hidden">
+          <DeckPanel
+            deck="B"
+            channels={deckChannels.B}
+            skin={deckSkins.B}
+            onSkinChange={handleDeckSkinChange}
+            loadedLabel={deckLabels.B || ch[3]?.loadName || undefined}
+            onLoad={(label) => handleDeckLoad('B', label)}
+          />
+        </div>
       </div>
 
       {/* 3-Fader-Leiste: links CH1+2 · Mitte Crossfader 1-2-3 ↔ 4-5-6 · rechts CH5+6 */}
