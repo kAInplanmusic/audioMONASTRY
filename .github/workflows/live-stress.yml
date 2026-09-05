@@ -11,6 +11,8 @@ on:
 jobs:
   live-stress:
     runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ inputs.base_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,11 +27,13 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
+      # SECURITY: inputs.base_url wird NUR als Env-Variable übergeben – keine
+      # Inline-Interpolation in run:-Schritten (Shell-Injection-Schutz).
       - name: HTTP/Socket.io-Stresstest
-        run: BASE_URL=${{ inputs.base_url }} node scripts/hetzner/stress-test.mjs
+        run: node scripts/hetzner/stress-test.mjs
 
       - name: Browser-Engine-Stresstest
-        run: BASE_URL=${{ inputs.base_url }} npm run test:stress
+        run: npm run test:stress
 
       - name: Upload Stress-Report
         if: always()
@@ -42,12 +46,15 @@ jobs:
       - name: Auto-Issue bei Fehler (Erkennung -> Reparatur-Route)
         if: failure()
         uses: actions/github-script@v7
+        env:
+          STRESS_BASE_URL: ${{ inputs.base_url }}
         with:
           script: |
+            const baseUrl = process.env.STRESS_BASE_URL;
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: '⚠️ Live-Stresstest fehlgeschlagen – ' + new Date().toISOString().slice(0, 10),
-              body: 'Der Live-Stresstest gegen ${{ inputs.base_url }} ist fehlgeschlagen.\nRun: https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId,
+              body: 'Der Live-Stresstest gegen ' + baseUrl + ' ist fehlgeschlagen.\nRun: https://github.com/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId,
               labels: ['auto-detected', 'bug'],
             });

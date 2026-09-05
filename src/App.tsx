@@ -88,6 +88,18 @@ function AppComponent() {
   const [sessionFull, setSessionFull] = useState(false);
   const [activeNav, setActiveNav] = useState<string>('instrument');
   const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
+  const [viewport, setViewport] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 0, h: typeof window !== 'undefined' ? window.innerHeight : 0 });
+
+  // Auflösung live erkennen (mixerMONK + Racks passen sich dynamisch an).
+  useEffect(() => {
+    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+    };
+  }, []);
 
   // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
   const navPlugins = useMemo(
@@ -95,11 +107,16 @@ function AppComponent() {
     [],
   );
 
-  // Header-Auswahl: scrollt zum gewählten Rack-Modul.
+  // Header-Auswahl: aktiviert das Modul (Touch/Click) und scrollt zum Rack.
   const handleNavSelect = useCallback((navId: string) => {
     setActiveNav(navId);
+    const current = moduleStates[navId] || 'OFF';
+    if (current === 'OFF') {
+      releaseLock(navId, webRTCManager.userId);
+      setModuleState(navId, 'AUTO_AI');
+    }
     document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
+  }, [moduleStates, releaseLock, setModuleState]);
 
   // Monitor-Ausgabe pro User: MAIN (nur Gesamtmix), MIX (MAIN + eigene
   // Plugins) oder NUR PLUGIN (Cue-Solo). Wirkt ausschließlich auf den
@@ -525,6 +542,13 @@ function AppComponent() {
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
               {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
             </div>
+            <div
+              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/5 text-cyan-300 text-[9px] font-mono tracking-widest"
+              title="Aktuelle Viewport-Auflösung"
+              role="status"
+            >
+              {viewport.w}×{viewport.h}
+            </div>
             <div className="relative hidden xl:block">
               <select
                 defaultValue=""
@@ -565,10 +589,10 @@ function AppComponent() {
         </div>
       </header>
 
-      {/* 2. masterplayerMONK: feste View-only-Leiste (oben). KEINE Eingaben. */}
+      {/* 2. masterplayerMONK: feste View-only-Leiste (oben, sticky in der Rack-Scroll-Logik). */}
       <section
         id="rack-masterplayer"
-        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 xl:sticky xl:top-20 short-landscape:xl:top-16 xl:z-30"
+        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 short-landscape:top-16 z-30"
       >
         <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
           <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
@@ -578,6 +602,25 @@ function AppComponent() {
           <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
 
           <div className="ml-auto flex items-center gap-4 text-center">
+            <button
+              type="button"
+              onClick={() => {
+                if (isPlaying) {
+                  void audioEngine.stop();
+                  setIsPlaying(false);
+                } else {
+                  void audioEngine.play().then(() => setIsPlaying(true)).catch(() => { /* Autoplay */ });
+                }
+              }}
+              aria-pressed={isPlaying}
+              className={`px-3 py-1.5 rounded-md border text-[10px] font-black tracking-widest cursor-pointer transition-all active:scale-95 ${
+                isPlaying
+                  ? 'bg-red-600 border-red-400 text-white shadow-[0_0_14px_rgba(239,68,68,0.5)]'
+                  : 'bg-cyan-500 border-cyan-300 text-black shadow-[0_0_14px_rgba(34,211,238,0.5)]'
+              }`}
+            >
+              {isPlaying ? '⏹ STOP' : '▶ PLAY'}
+            </button>
             <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
             <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
             <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
@@ -589,28 +632,7 @@ function AppComponent() {
         </div>
       </section>
 
-      {/* Icon-Toolbar (Designvorlage: Modul-Kacheln) */}
-      <nav className="md:sticky md:top-20 short-landscape:md:top-16 z-20 -mx-6 short-landscape:-mx-2 px-6 py-2 bg-black/70 backdrop-blur border-y border-white/5 mb-4" aria-label="Plugin-Toolbar">
-        <div className="flex flex-wrap gap-2 justify-center max-w-screen-2xl mx-auto">
-        {getPluginRegistry().filter(plugin => plugin.id !== 'performance' && (FEATURE_FLAGS.AI_MONK_DOCK_ENABLED ? plugin.id !== 'ai' : true)).map(plugin => {
-          const state = moduleStates[plugin.id] || 'OFF';
-          const isActive = state !== 'OFF';
-
-          return (
-            <PluginButton
-              key={plugin.id}
-              id={plugin.id}
-              icon={plugin.icon}
-              short={plugin.short}
-              isActive={isActive}
-              state={state}
-              onClick={() => togglePlugin(plugin.id)}
-              onDoubleClick={() => promotePlugin(plugin.id)}
-            />
-          );
-        })}
-      </div>
-      </nav>
+      {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
 
       {/* Rack-Liste: alle Module als Streifen */}
       <div className="flex flex-col gap-3 max-w-screen-xl mx-auto">

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { audioEngine } from '../utils/audioEngine';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { ALL_TRACKS, TrackRole, TrackType, TRACK_ROLE_MAP } from '../types';
@@ -389,6 +389,13 @@ function ChannelStrip({
 
 export const DJMixer = React.memo(function DJMixer() {
   const strips = useMemo(() => buildStrips(), []);
+  const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
+  useEffect(() => {
+    const onResize = () => setVw(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  const deckCol = vw >= 1500 ? '240px' : vw >= 1100 ? '200px' : '168px';
   const [ch, setCh] = useState<ChannelState[]>(() => buildStrips().map(freshChannel));
   const [xfd, setXfd] = useState(0.5);
   const [xfMode, setXfMode] = useState<XfMode>('THRU');
@@ -506,7 +513,7 @@ export const DJMixer = React.memo(function DJMixer() {
       </div>
 
       {/* Controller links | 6 Kanalzüge + Utility + Master | Controller rechts */}
-      <div className="grid grid-cols-[240px_minmax(0,1fr)_240px] gap-3 px-4 pt-3">
+      <div className={`grid grid-cols-[${deckCol}_minmax(0,1fr)_${deckCol}] gap-3 px-4 pt-3`}>
         <div className="min-w-0 overflow-hidden">
           <DeckPanel
             deck="A"

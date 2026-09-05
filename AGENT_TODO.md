@@ -1,51 +1,51 @@
 # AGENT_TODO – Background-Coder Pipeline (HF + Cerebras #7)
 
-Aktualisiert: 2026-09-05T22:37:26.750Z
+Aktualisiert: 2026-09-05T23:00:43.626Z
 
+
+TASK-013
+CLASS: MITTEL
+DOMAIN: UI
+DESCRIPTION: **NET-1 · MITTEL · Senden-an-User/MONK/DJ-Anfrage** – Klick-/Touch-Logik: Plugin/State an bestimmten User senden, an MONK übergeben, DJ-Anfrage stellen (WebRTC-DataChannel) + UI-Elemente.
+IMPLEMENTATION_AGENT: #4
+MODEL: Qwen/Qwen3-Coder-Next
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
 
 TASK-025
 CLASS: SCHWER
 DOMAIN: AUDIO
-DESCRIPTION: **CEREBRAS-1 · HOCH · V2-Echtzeit-Parität** – `V2StudioGraph`/`AudioGraph` als vollwertigen Echtzeit-Pfad neben `audioEngine` verdrahten oder bewusst zurückbauen; @deprecated V2/Native-Backends entscheiden (Umsetzung oder Löschung); Details in `VISIONS_TODO.md`.
+DESCRIPTION: **MIDI-1 · HOCH · midiMONK-Geräte/Routing** – Web-MIDI-Geräteliste (angeschlossene MIDI-Keyboards/Controller), Routing-Konfiguration, Ziel-MONK-Auswahl (welches MONK bekommt Noten/CC); MIDI-Keyboard-Klasse (GM/CC/Notes) an AudioEngine verdrahten.
 IMPLEMENTATION_AGENT: #7
 MODEL: gpt-oss-120b
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
+STATUS: PENDING
 
 TASK-026
 CLASS: SCHWER
-DOMAIN: AUDIO
-DESCRIPTION: **CEREBRAS-2 · HOCH · audioEngine-Monolith modularisieren** – `src/utils/audioEngine.ts` (2814 Zeilen) in Graph-Aufbau / Worklet-Factory / Routing / Monitoring schneiden; Kernpfad-Coverage erhöhen.
+DOMAIN: BACKEND
+DESCRIPTION: **MIDI-2 · HOCH · Digitakt-2-Integration** – Elektron Digitakt 2: Specs/Config/Template in midiMONK vorbereiten (CC/NRPN-Map, Transport-Sync, Pattern-Feed), Geräteprofil speicherbar.
 IMPLEMENTATION_AGENT: #7
 MODEL: gpt-oss-120b
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
+STATUS: PENDING
 
 TASK-027
 CLASS: SCHWER
 DOMAIN: BACKEND
-DESCRIPTION: **CEREBRAS-3 · HOCH · dropMONK-Berechnung/Compute** – Drop-Physik-/Bounce-/Hit-Logik für dropMONK als deterministischen Kern ausarbeiten (SFZ/Voice-Management vorhanden) + Tests.
+DESCRIPTION: **AI-1 · HOCH · aiMONK-/dropMONK-Automation verifizieren + nachbessern** – Kommandos „Lied von Len Faki auf Kanal 1, BPM 100, langsam in MAIN faden“ und „auto-Drop für laufendes Lied auf Kanal 1: passendes Lied aus biblioMONK suchen, Drop erstellen, automatisch ausführen“ end-to-end prüfen; fehlende Schritte (Kanal-Load, BPM-Set, Fade, Drop-Trigger) implementieren + Tests.
 IMPLEMENTATION_AGENT: #7
 MODEL: gpt-oss-120b
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
-
-TASK-028
-CLASS: SCHWER
-DOMAIN: AUDIO
-DESCRIPTION: **CEREBRAS-4 · HOCH · DSP-Kernel-Deep-Dive** – Early-Reflections-Worklet-Integration, Oversampling-Entscheidung per Benchmark (Half-Band 2×), WebGPU-Kernel-/Rust-Mixer-Evaluierung (siehe `VISIONS_TODO.md`).
-IMPLEMENTATION_AGENT: #7
-MODEL: gpt-oss-120b
-REVIEW_AGENT: -
-SERVER_REQUIRED: NO
-HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
+STATUS: PENDING
 
 BLOCK-001
 CLASS: SCHWER

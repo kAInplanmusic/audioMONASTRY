@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import os
 import pathlib
 import subprocess
@@ -39,8 +40,16 @@ def die(msg: str) -> "NoReturn":
     sys.exit(1)
 
 
+
+# Security: URL-Konstruktion strikt auf feste Hetzner-API-Basis + validierte Pfade begrenzen.
+_PATH_RE = re.compile(r'^/[A-Za-z0-9_./-]*$')
+def _safe_url(path: str) -> str:
+    if not isinstance(path, str) or not _PATH_RE.match(path):
+        raise ValueError(f'Ungültiger API-Pfad: {path!r}')
+    return API_BASE + path
+
 def api(token: str, method: str, path: str, payload: dict | None = None) -> dict:
-    req = urllib.request.Request(API_BASE + path, method=method)
+    req = urllib.request.Request(_safe_url(path), method=method)
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Content-Type", "application/json")
     data = json.dumps(payload).encode("utf-8") if payload is not None else None

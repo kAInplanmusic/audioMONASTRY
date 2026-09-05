@@ -1,14 +1,30 @@
 {
-  "created": "2026-09-05T22:35:20.077Z",
+  "created": "2026-09-05T23:00:01.430Z",
   "counts": {
     "LEICHT": 0,
-    "MITTEL": 0,
-    "SCHWER": 4,
+    "MITTEL": 1,
+    "SCHWER": 3,
     "BLOCKED": 3
   },
   "tasks": [
     {
-      "raw": "**CEREBRAS-1 · HOCH · V2-Echtzeit-Parität** – `V2StudioGraph`/`AudioGraph` als vollwertigen Echtzeit-Pfad neben `audioEngine` verdrahten oder bewusst zurückbauen; @deprecated V2/Native-Backends entscheiden (Umsetzung oder Löschung); Details in `VISIONS_TODO.md`.",
+      "raw": "**NET-1 · MITTEL · Senden-an-User/MONK/DJ-Anfrage** – Klick-/Touch-Logik: Plugin/State an bestimmten User senden, an MONK übergeben, DJ-Anfrage stellen (WebRTC-DataChannel) + UI-Elemente.",
+      "priority": "P2",
+      "class": "MITTEL",
+      "domain": "UI",
+      "agent": "#4",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "TASK-013",
+      "lastSummary": "Keine spezifischen Dateipfade oder Code-Snippets im Repo audioMONASTRY bereitgestellt, um die Anforderung NET-1 · MITTEL (Senden-an-User/MONK/DJ-Anfrage mit WebRTC-DataChannel + Klick-/Touch-Logik) zu implementieren. Ohne die exakten Dateien und bestehenden Code-Ausschnitte kann nicht sichergestellt",
+      "lastError": ""
+    },
+    {
+      "raw": "**MIDI-1 · HOCH · midiMONK-Geräte/Routing** – Web-MIDI-Geräteliste (angeschlossene MIDI-Keyboards/Controller), Routing-Konfiguration, Ziel-MONK-Auswahl (welches MONK bekommt Noten/CC); MIDI-Keyboard-Klasse (GM/CC/Notes) an AudioEngine verdrahten.",
       "priority": "P0/P1",
       "class": "SCHWER",
       "domain": "AUDIO",
@@ -18,29 +34,11 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-025",
-      "lastSummary": "Die Aufgabe erfordert das Hinzufügen oder Entfernen von Echtzeit-Pfaden im V2StudioGraph/AudioGraph sowie das Entscheiden über veraltete V2/Native-Backends. Da im aktuellen Kontext keine konkreten Dateipfade, Code‑Snippets oder eindeutige Stellen im Repository identifiziert wurden, kann die Änderung",
-      "lastError": ""
+      "status": "PENDING",
+      "taskId": "TASK-025"
     },
     {
-      "raw": "**CEREBRAS-2 · HOCH · audioEngine-Monolith modularisieren** – `src/utils/audioEngine.ts` (2814 Zeilen) in Graph-Aufbau / Worklet-Factory / Routing / Monitoring schneiden; Kernpfad-Coverage erhöhen.",
-      "priority": "P0/P1",
-      "class": "SCHWER",
-      "domain": "AUDIO",
-      "agent": "#7",
-      "reviewAgent": null,
-      "serverRequired": false,
-      "hardwareRequired": false,
-      "reviewRequired": "NO",
-      "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-026",
-      "lastSummary": "Automatisches Aufteilen von src/utils/audioEngine.ts in mehrere Module (Graph-Aufbau, Worklet-Factory, Routing, Monitoring) erfordert tiefgreifende strukturelle Änderungen, die über einfache Find‑&‑Replace‑Operationen hinausgehen. Der Code ist stark miteinander verwoben, enthält zahlreiche Abhängigk",
-      "lastError": ""
-    },
-    {
-      "raw": "**CEREBRAS-3 · HOCH · dropMONK-Berechnung/Compute** – Drop-Physik-/Bounce-/Hit-Logik für dropMONK als deterministischen Kern ausarbeiten (SFZ/Voice-Management vorhanden) + Tests.",
+      "raw": "**MIDI-2 · HOCH · Digitakt-2-Integration** – Elektron Digitakt 2: Specs/Config/Template in midiMONK vorbereiten (CC/NRPN-Map, Transport-Sync, Pattern-Feed), Geräteprofil speicherbar.",
       "priority": "P0/P1",
       "class": "SCHWER",
       "domain": "BACKEND",
@@ -50,26 +48,22 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-027",
-      "lastSummary": "Die Aufgabe erfordert die Implementierung einer Drop-Physik-/Bounce-/Hit-Logik für dropMONK sowie das Hinzufügen von Tests. Da im bereitgestellten Kontext keine Dateipfade, vorhandenen Quellcode oder Testdateien angegeben sind, kann ich keine exakten Code‑Ersetzungen oder neue Dateien bestimmen. Ohn",
-      "lastError": ""
+      "status": "PENDING",
+      "taskId": "TASK-026"
     },
     {
-      "raw": "**CEREBRAS-4 · HOCH · DSP-Kernel-Deep-Dive** – Early-Reflections-Worklet-Integration, Oversampling-Entscheidung per Benchmark (Half-Band 2×), WebGPU-Kernel-/Rust-Mixer-Evaluierung (siehe `VISIONS_TODO.md`).",
+      "raw": "**AI-1 · HOCH · aiMONK-/dropMONK-Automation verifizieren + nachbessern** – Kommandos „Lied von Len Faki auf Kanal 1, BPM 100, langsam in MAIN faden“ und „auto-Drop für laufendes Lied auf Kanal 1: passendes Lied aus biblioMONK suchen, Drop erstellen, automatisch ausführen“ end-to-end prüfen; fehlende Schritte (Kanal-Load, BPM-Set, Fade, Drop-Trigger) implementieren + Tests.",
       "priority": "P0/P1",
       "class": "SCHWER",
-      "domain": "AUDIO",
+      "domain": "BACKEND",
       "agent": "#7",
       "reviewAgent": null,
       "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-028",
-      "lastSummary": "Die Aufgabe erfordert mehrere komplexe Implementierungen (Integration eines Early-Reflections-Worklets, Benchmark‑Entscheidung für Oversampling, Evaluation von WebGPU‑Kernels und Rust‑Mixer) sowie das Lesen und Umsetzen von Vorgaben aus der Datei `VISIONS_TODO.md`. Ohne konkrete Dateipfade, vorhande",
-      "lastError": ""
+      "status": "PENDING",
+      "taskId": "TASK-027"
     },
     {
       "raw": "**OG-2 · HOCH · Shell-Injection in GitHub-Actions-Run-Steps** – `.github/workflows/live-stress.yml:29,32`: `${{ inputs.base_url }}` nicht direkt in `run:` interpolieren, sondern via `env:` übergeben.",
@@ -114,5 +108,5 @@
       "taskId": "BLOCK-003"
     }
   ],
-  "updated": "2026-09-05T22:37:26.750Z"
+  "updated": "2026-09-05T23:00:43.626Z"
 }
