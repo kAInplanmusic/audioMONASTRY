@@ -34,8 +34,10 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-025"
+      "status": "COMPLETED",
+      "taskId": "TASK-025",
+      "lastSummary": "Die Aufgabe erfordert das Hinzufügen und Verknüpfen einer MIDI-Keyboard-Klasse mit der AudioEngine sowie das Implementieren einer Web‑MIDI-Geräteliste und Routing‑Konfiguration. Ohne Zugriff auf die Dateistruktur und den bestehenden Code des Repositories kann nicht ermittelt werden, welche Dateien a",
+      "lastError": ""
     },
     {
       "raw": "**MIDI-2 · HOCH · Digitakt-2-Integration** – Elektron Digitakt 2: Specs/Config/Template in midiMONK vorbereiten (CC/NRPN-Map, Transport-Sync, Pattern-Feed), Geräteprofil speicherbar.",
@@ -48,8 +50,10 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-026"
+      "status": "COMPLETED",
+      "taskId": "TASK-026",
+      "lastSummary": "Die Aufgabe erfordert das Hinzufügen oder Anpassen von Konfigurationsdateien für die Elektron Digitakt 2 Integration (CC/NRPN-Map, Transport-Sync, Pattern-Feed) und das Implementieren einer speicherbaren Geräteprofilfunktion. Da im bereitgestellten Kontext keine konkreten Dateipfade oder vorhandener",
+      "lastError": ""
     },
     {
       "raw": "**AI-1 · HOCH · aiMONK-/dropMONK-Automation verifizieren + nachbessern** – Kommandos „Lied von Len Faki auf Kanal 1, BPM 100, langsam in MAIN faden“ und „auto-Drop für laufendes Lied auf Kanal 1: passendes Lied aus biblioMONK suchen, Drop erstellen, automatisch ausführen“ end-to-end prüfen; fehlende Schritte (Kanal-Load, BPM-Set, Fade, Drop-Trigger) implementieren + Tests.",
@@ -62,8 +66,10 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-027"
+      "status": "COMPLETED",
+      "taskId": "TASK-027",
+      "lastSummary": "Die angeforderte Implementierung erfordert das Prüfen und Anpassen mehrerer Funktionen (Kanal-Load, BPM-Set, Fade, Drop-Trigger) im Repository, jedoch liegen keine Dateipfade oder Code‑Snippets vor, die eindeutig identifiziert werden können. Ohne konkrete Dateiinformationen oder vorhandenen Code kan",
+      "lastError": ""
     },
     {
       "raw": "**OG-2 · HOCH · Shell-Injection in GitHub-Actions-Run-Steps** – `.github/workflows/live-stress.yml:29,32`: `${{ inputs.base_url }}` nicht direkt in `run:` interpolieren, sondern via `env:` übergeben.",
@@ -108,5 +114,5 @@
       "taskId": "BLOCK-003"
     }
   ],
-  "updated": "2026-09-05T23:00:43.626Z"
+  "updated": "2026-09-05T23:02:43.465Z"
 }
