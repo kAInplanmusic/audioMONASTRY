@@ -65,9 +65,13 @@ describe('Server API', () => {
 
   it('POST /api/ai/complete ohne Keys → 502 mit Fehlerdetails', async () => {
     delete process.env.HF_API_KEY;
+    delete process.env.HF_TOKEN;
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.GROQ_API_KEY;
     delete process.env.MISTRAL_API_KEY;
+    delete process.env.PUBLICAI_KEY;
+    delete process.env.CB_API_KEY;
+    delete process.env.OR_API_KEY;
     delete process.env.OLLAMA_URL;
     delete process.env.OLLAMA_MODEL;
     delete process.env.GEMINI_API_KEY;
@@ -199,6 +203,13 @@ describe('Server API', () => {
   it('POST /api/ai/complete mit gemocktem DeepSeek-Fetch → 200 + Provider', async () => {
     const realFetch = globalThis.fetch.bind(globalThis);
     process.env.DEEPSEEK_API_KEY = 'test-key';
+    // Andere Provider deaktivieren, damit der Router deterministisch
+    // deepseek-flash wählt (CB_API_KEY & Co. können in der .env gesetzt sein).
+    delete process.env.CB_API_KEY;
+    delete process.env.OR_API_KEY;
+    delete process.env.PUBLICAI_KEY;
+    delete process.env.HF_API_KEY;
+    delete process.env.HF_TOKEN;
     vi.stubGlobal('fetch', vi.fn(async () => new Response(
       JSON.stringify({ choices: [{ message: { content: 'Hallo aus DeepSeek' } }] }),
       { status: 200, headers: { 'content-type': 'application/json' } },
