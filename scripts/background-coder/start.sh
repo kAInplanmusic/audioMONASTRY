@@ -11,8 +11,12 @@ if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
   exit 0
 fi
 
-echo "[start] Orchestrator: MASTER_TODO → AGENT_TODO"
-node scripts/background-coder/orchestrator.mjs || { echo "Orchestrator fehlgeschlagen"; exit 1; }
+if [ -f "$REPO/AGENT_TODO.json" ] && [ "${1:-}" != "--reorchestrate" ]; then
+  echo "[start] AGENT_TODO.json vorhanden – Queue fortführen (Orchestrator überspringen)."
+else
+  echo "[start] Orchestrator: MASTER_TODO → AGENT_TODO"
+  node scripts/background-coder/orchestrator.mjs || { echo "Orchestrator fehlgeschlagen"; exit 1; }
+fi
 
 echo "[start] Worker-Daemon starten"
 nohup node scripts/background-coder/worker.mjs --daemon > logs/background-coder/daemon.log 2>&1 &

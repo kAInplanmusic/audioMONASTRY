@@ -82,6 +82,22 @@ function renderTodo(payload) {
   writeFileSync(TODO_JSON, JSON.stringify({ ...payload, updated: new Date().toISOString() }, null, 2));
 }
 
+function markMasterDone(raw) {
+  const masterPath = path.join(ROOT, 'MASTER_TODO.md');
+  try {
+    const lines = readFileSync(masterPath, 'utf8').split(/\r?\n/);
+    let changed = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].startsWith('- [ ] ') && lines[i].slice(6).trim() === raw) {
+        lines[i] = `- [x] ${raw}`;
+        changed = true;
+        break;
+      }
+    }
+    if (changed) writeFileSync(masterPath, lines.join('\n'));
+  } catch { /* MASTER_TODO nicht aktualisierbar */ }
+}
+
 async function reviewWithModel(diffText, task) {
   const agent = CONFIG.agents[task.reviewAgent];
   if (!agent) return { approved: false, reason: `Review-Agent ${task.reviewAgent} fehlt` };
@@ -222,6 +238,7 @@ Regeln:
     if (review.approved) {
       task.status = 'COMPLETED';
       task.lastError = '';
+      markMasterDone(task.raw);
     } else {
       task.reworkCount = (task.reworkCount ?? 0) + 1;
       task.status = task.reworkCount <= 2 ? 'RETRY' : 'FAILED';
@@ -230,6 +247,7 @@ Regeln:
   } else {
     task.status = 'COMPLETED';
     task.lastError = '';
+    markMasterDone(task.raw);
   }
 }
 
