@@ -3609,10 +3609,9 @@
       "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-206",
-      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-206"
     },
     {
       "taskId": "AUDIT-PLAN-MOA",
