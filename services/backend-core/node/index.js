@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 
 const wss = new WebSocket.Server({ port: 8080 });
 const IDLE_TIMEOUT_MS = Number(process.env.SIGNALING_IDLE_TIMEOUT_MS || 20 * 60 * 1000);
+const MAX_CLIENTS = Math.max(1, Number(process.env.SIGNALING_MAX_CLIENTS || 500));
 
 const USER_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const MODULE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
@@ -84,6 +85,12 @@ wss.on('connection', (ws) => {
         const existing = clients.get(candidate);
         if (existing && existing !== ws) {
           existing.close(4001, 'Session replaced by a new connection.');
+        } else if (!existing && clients.size >= MAX_CLIENTS) {
+          // Schutz vor unbegrenztem Wachstum der clients-Map: keine neuen
+          // userIds mehr aufnehmen, wenn die Obergrenze erreicht ist.
+          sendError('server_full', `Maximum number of concurrent clients (${MAX_CLIENTS}) reached.`);
+          ws.close(4002, 'Server full');
+          return;
         }
 
         userId = candidate;
