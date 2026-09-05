@@ -13,7 +13,7 @@ export interface UsageSnapshot {
   sessions: number;
 }
 
-let state: UsageSnapshot = storageGetJson<UsageSnapshot>(KEY) ?? { features: {}, sessions: 0 };
+const state: UsageSnapshot = storageGetJson<UsageSnapshot>(KEY) ?? { features: {}, sessions: 0 };
 
 export function trackFeature(feature: string): void {
   state.features[feature] = (state.features[feature] ?? 0) + 1;

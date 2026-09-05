@@ -2003,7 +2003,7 @@ class AudioEngine {
     const m = /^([A-Ga-g])([#b]?)(-?\d)$/.exec(note);
     if (!m) return 440;
     const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-    let semitone = names.indexOf(m[1].toUpperCase() + m[2]) ;
+    const semitone = names.indexOf(m[1].toUpperCase() + m[2]) ;
     if (semitone < 0) return 440;
     const octave = Number.parseInt(m[3], 10);
     const midi = 12 + (octave + 1) * 12 + semitone; // C4=60

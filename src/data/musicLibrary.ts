@@ -17,7 +17,7 @@ const L = (file: string): MusicTrack => {
   // Interpret = Teil vor erstem ' - ', Rest Titel (best effort)
   const dash = file.indexOf(' - ');
   const artist = dash > 0 ? file.substring(0, dash).trim() : 'Unknown';
-  let title = dash > 0 ? file.substring(dash + 3).replace(/\.mp3$/i, '').trim() : file.replace(/\.mp3$/i, '').trim();
+  const title = dash > 0 ? file.substring(dash + 3).replace(/\.mp3$/i, '').trim() : file.replace(/\.mp3$/i, '').trim();
   return {
     id: fp,
     name: `${artist} - ${title}`,
