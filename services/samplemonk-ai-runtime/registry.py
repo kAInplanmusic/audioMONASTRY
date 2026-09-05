@@ -23,7 +23,10 @@ def load_manifest() -> Dict[str, Any]:
     for model in models:
         if not isinstance(model, dict):
             raise ValueError("manifest model entries must be objects")
-        revision = str(model.get("revision", "")).strip()
+        raw_revision = model.get("revision")
+        if raw_revision is None or not isinstance(raw_revision, str):
+            raise ValueError(f"model {model.get('id')}: revision pinning required (no 'latest', no null)")
+        revision = raw_revision.strip()
         if not revision or revision.lower() == "latest":
             raise ValueError(f"model {model.get('id')}: revision pinning required (no 'latest')")
     return data

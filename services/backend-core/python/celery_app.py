@@ -112,11 +112,11 @@ _musicgen_cache = None
 def _load_demucs():
     """Lazy-Loading für Demucs Header-Transform (einmal pro Worker)."""
     global _demucs_cache
-    if _demucs_cache is not None:
-        return _demucs_cache
     if os.environ.get("AI_USE_DEMUCS", "1") == "0":
         raise RuntimeError("Demucs ist über AI_USE_DEMUCS=0 deaktiviert.")
     with _demucs_lock:
+        # Cache-Check ausschließlich unter Lock (kein ungeschützter
+        # Check-then-Act auf _demucs_cache mehr -> keine Race Condition).
         if _demucs_cache is not None:
             return _demucs_cache
         from demucs.api import Separator

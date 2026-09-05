@@ -783,7 +783,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **DA-2026-09-04-037 · CRITICAL · Fehlende Authentifizierung erlaubt Übernahme beliebiger User-IDs** – `services/backend-core/node/index.js:44` (deepseek-pro) → gefixt 2026-09-04
   - Ein Client kann in der init-Nachricht einen beliebigen `data.sender` angeben. `userId` wird blind übernommen und in die `clients`-Map geschrieben. Dadurch kann ein Angreifer die Signalisierung eines anderen Benutzers umleiten, Locks in dessen Namen anfordern oder bestehende Verbindungen kapern. Es erfolgt keine Authentifizierung oder Autorisierung.
   - Vorschlag: Vor dem Setzen von `userId` die Identität per Token/Session authentifizieren und `data.sender` gegen den authentifizierten Benutzer prüfen. Zusätzlich verhindern, dass eine bereits aktive `userId` überschrieben wird.
-- [ ] **DA-2026-09-04-038 · MEDIUM · Unbegrenztes Wachstum der clients-Map durch wiederholte init mit verschiedenen userId** – `services/backend-core/node/index.js:45` (deepseek-pro)
+- [x] **DA-2026-09-04-038 · MEDIUM · Unbegrenztes Wachstum der clients-Map durch wiederholte init mit verschiedenen userId** – `services/backend-core/node/index.js:45` (deepseek-pro)
   - Ein Client kann mehrfach `init` mit unterschiedlichen `data.sender` senden. Jeder Aufruf fügt einen neuen Schlüssel in die `clients`-Map ein, ohne den vorherigen Eintrag zu entfernen. Da beim Schließen nur der aktuell gespeicherte `userId` gelöscht wird, bleiben alle zuvor registrierten Schlüssel bestehen. Dies führt zu einem Speicherleck und potenziellem Fehlrouting.
   - Vorschlag: Beim erneuten `init` den vorherigen `userId` aus der Map entfernen oder pro Verbindung alle registrierten IDs speichern und beim Schließen bereinigen. Alternativ `init` nur einmal pro Verbindung erlauben.
 - [ ] **DA-2026-09-04-039 · MEDIUM · Unvollständige Lock-Cleanup-Logik** – `services/backend-core/node/index.js:47` (hf-qwen)
@@ -1164,13 +1164,13 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-193 · MEDIUM · Zugriff auf Umgebungsvariablen ohne Sicherheitsprüfungen** – `server/cloudAutomation.ts:132` (hf-qwen)
   - Die Funktion `r2Client()` und `supabaseAdmin()` greifen direkt auf Umgebungsvariablen zu, ohne diese auf Gültigkeit zu prüfen. Dies kann zu Laufzeitfehlern führen, wenn Variablen fehlen oder leer sind.
   - Vorschlag: Füge explizite Prüfungen hinzu, ob alle erforderlichen Umgebungsvariablen gesetzt sind, bevor ein Client erstellt wird. Gibt eine klare Fehlermeldung zurück, falls nicht.
-- [ ] **DA-2026-09-04-194 · MEDIUM · Uvicorn bindet ohne sichtbare Authentifizierung an 0.0.0.0** – `services/backend-core/package.json:8` (deepseek-pro)
+- [x] **DA-2026-09-04-194 · MEDIUM · Uvicorn bindet ohne sichtbare Authentifizierung an 0.0.0.0** – `services/backend-core/package.json:8` (deepseek-pro)
   - Das Startskript für den Python-Teil des Backend-Cores bindet den Uvicorn-Server an alle Netzwerk-Interfaces (0.0.0.0) und exponiert damit die API, die für Audio-Routing, Signaling und AI-Processing zuständig ist, potenziell ungeschützt im gesamten Netzwerk. Ohne eine im Code belegbare Authentifizierungs-/TLS-Schicht oder Netzwerksegmentierung können unbefugte Clients auf Steuerungs- und Verarbeitu
   - Vorschlag: Uvicorn nur an das interne/private Interface binden (z. B. --host 127.0.0.1 oder eine interne Container-Netzwerkadresse), sofern der Dienst nicht explizit öffentlich erreichbar sein muss. Falls externe Erreichbarkeit erforderlich ist, Authentifizierung, Autorisierung und TLS auf Anwendungsebene bzw.
 - [ ] **DA-2026-09-04-195 · HIGH · Unvalidated File Path in `_validate_audio_file`** – `services/backend-core/python/celery_app.py:33` (hf-qwen)
   - Die Funktion `_validate_audio_file` akzeptiert einen Dateipfad ohne ausreichende Validierung gegen Path Traversal Angriffe. Obwohl `os.path.abspath` verwendet wird, fehlt eine strenge Prüfung, ob der Pfad innerhalb eines erlaubten Root-Verzeichnisses liegt.
   - Vorschlag: Füge zusätzliche Sicherheitsprüfungen hinzu, um sicherzustellen, dass der Dateipfad nicht durch symbolische Links oder andere Mechanismen manipuliert werden kann. Überprüfe auch, ob `upload_root` selbst gültig ist und keine relativen Pfade enthält.
-- [ ] **DA-2026-09-04-196 · MEDIUM · Race Condition in `_load_demucs`** – `services/backend-core/python/celery_app.py:104` (hf-qwen)
+- [x] **DA-2026-09-04-196 · MEDIUM · Race Condition in `_load_demucs`** – `services/backend-core/python/celery_app.py:104` (hf-qwen)
   - In `_load_demucs` gibt es eine Race Condition zwischen dem Check auf `_demucs_cache is not None` und dem eigentlichen Laden des Modells. Zwei Threads könnten gleichzeitig in den kritischen Abschnitt eintreten und denselben Cache laden.
   - Vorschlag: Verwende eine einzige atomare Prüfung mit Lock, z.B. `with _demucs_lock: if _demucs_cache is None: ...` um sicherzustellen, dass nur ein Thread das Modell lädt.
 - [ ] **DA-2026-09-04-197 · MEDIUM · Race Condition in `_load_musicgen`** – `services/backend-core/python/celery_app.py:120` (hf-qwen)
@@ -1203,7 +1203,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-206 · MEDIUM · Mangelnde Trennung von Konfiguration und Logik** – `services/samplemonk-ai-runtime/hf_manage_endpoint.py:130` (hf-qwen)
   - Die Konfiguration des Endpoints (`_common_kwargs`, `_create_kwargs`) wird direkt in der Hauptlogik definiert. Dies erschwert Wartung, Testbarkeit und mögliche Wiederverwendung.
   - Vorschlag: Trenne Konfiguration und Logik durch eine Klasse oder Modul, das die Endpoint-Konfiguration kapselt. Dies verbessert die Testbarkeit und Wartbarkeit.
-- [ ] **DA-2026-09-04-207 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:130` (hf-qwen)
+- [x] **DA-2026-09-04-207 · MEDIUM · Race Condition bei parallelen Load-Requests** – `services/samplemonk-ai-runtime/model_manager.py:130` (hf-qwen)
   - Obwohl es einen `loading`-Set gibt, um parallele Requests zu deduplizieren, besteht ein potenzieller Race Condition, wenn zwei Threads gleichzeitig `load()` aufrufen und beide den gleichen `model_id` haben. Der erste Thread setzt `_loading.add(model_id)` und der zweite prüft darauf, aber beide können den gleichen Status haben.
   - Vorschlag: Verwende eine Lock-basierte Warteschlange oder eine Semaphore, um sicherzustellen, dass nur ein Thread pro Modell gleichzeitig lädt. Alternativ: Füge eine Warteschlange hinzu, die auf den Abschluss des Ladevorgangs wartet.
 - [ ] **DA-2026-09-04-208 · MEDIUM · Nicht expliziter Fehlerfall bei fehlender VRAM** – `services/samplemonk-ai-runtime/model_manager.py:190` (hf-qwen)
@@ -1215,7 +1215,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-210 · MEDIUM · Veraltete und exakt gepinnte PyTorch-Version (torch==2.4.1)** – `services/samplemonk-ai-runtime/pyproject.toml:11` (deepseek-pro)
   - Die exakte Pin auf torch==2.4.1 (veröffentlicht Juli 2024) führt dazu, dass bekannte Sicherheitslücken und Stabilitätsprobleme, die in neueren PyTorch-Versionen behoben wurden, dauerhaft im Projekt verbleiben. Da keine automatische Update-Strategie erkennbar ist, bleibt das Risiko bestehen, bis die Version manuell aktualisiert wird.
   - Vorschlag: Aktualisiere auf die neueste stabile PyTorch-Version (z. B. 2.7.x) und prüfe anschließend die Kompatibilität mit den anderen Abhängigkeiten. Erwäge, einen Bereich mit Obergrenze (z. B. >=2.5,<3) zu verwenden, oder behalte die exakte Pin, aber plane regelmäßige Updates und Security-Audits.
-- [ ] **DA-2026-09-04-211 · MEDIUM · Revision-Pinning kann durch explizites `null` umgangen werden** – `services/samplemonk-ai-runtime/registry.py:26` (deepseek-flash)
+- [x] **DA-2026-09-04-211 · MEDIUM · Revision-Pinning kann durch explizites `null` umgangen werden** – `services/samplemonk-ai-runtime/registry.py:26` (deepseek-flash)
   - Die Validierung fordert eine feste Revision, konvertiert aber `null`/None mit `str()` zu "None". Dadurch wird ein Manifest-Eintrag mit `"revision": null` als gültig akzeptiert, obwohl keine Revision gepinnt wurde. Damit kann die Produktionsregel "feste Revisionen (kein `latest`)" umgangen werden und es können ungewollte oder nicht reproduzierbare Modellversionen geladen werden.
   - Vorschlag: Prüfe den Rohwert vor der String-Konvertierung, z.B.: `revision = model.get("revision")`; lehne ab, wenn `revision is None`, kein String, leer, oder `revision.strip().lower() == "latest"` ist.
 - [ ] **DA-2026-09-04-212 · MEDIUM · Working-directory change via dirname $0 breaks when invoked through symlink** – `services/samplemonk-ai-runtime/startup.sh:9` (deepseek-flash)
@@ -1224,7 +1224,7 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-213 · MEDIUM · No write/space verification for HF_HOME persistent cache** – `services/samplemonk-ai-runtime/startup.sh:10` (deepseek-flash)
   - HF_HOME defaults to /data/hf-cache but the script never creates or checks writability/free space. If the volume is read-only or not mounted, the app starts successfully and model loading fails later at request time, obscuring the configuration error.
   - Vorschlag: After export, add a guard: mkdir -p "$HF_HOME" && [ -w "$HF_HOME" ] || { log structured startup error; exit 1; }
-- [ ] **DA-2026-09-04-214 · HIGH · AI_RUNTIME_DEVICE defaults to cuda with no validation** – `services/samplemonk-ai-runtime/startup.sh:13` (deepseek-flash)
+- [x] **DA-2026-09-04-214 · HIGH · AI_RUNTIME_DEVICE defaults to cuda with no validation** – `services/samplemonk-ai-runtime/startup.sh:13` (deepseek-flash)
   - The script defaults AI_RUNTIME_DEVICE to 'cuda'. In a CPU-only environment or one without the CUDA runtime properly configured, this will either crash at startup or fall back unpredictably. There is also no allowlist validation, so a malformed or attacker-influenced AI_RUNTIME_DEVICE (if variables come from a config-injection surface) could cause unexpected device initialization.
   - Vorschlag: Default to 'cpu' or auto-detect available device; validate against an allowlist (cpu, cuda, mps) before exporting.
 - [ ] **DA-2026-09-04-215 · MEDIUM · AI-Runtime lauscht ungeschützt auf allen Interfaces** – `services/samplemonk-ai-runtime/startup.sh:18` (deepseek-pro)
