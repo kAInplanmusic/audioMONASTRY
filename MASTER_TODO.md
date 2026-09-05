@@ -130,6 +130,46 @@
 
 ---
 
+## 🔵 Prüfung eingereichter Punkte (2026-09-05)
+
+> Bewertet auf Machbarkeit und Sinn im **Bestand**. Umsetzbare Bestands-Punkte stehen hier in MASTER_TODO; Zukunftsvisionen in `VISIONS_TODO.md` auf dem Branch `visions`.
+
+### P-1 · V1 & V2 Audiograph-Verifikation
+
+**Bewertung:** Sinnvoll und machbar als Audit-/Test-Checkliste. V1 (`audioEngine`, Tone/WebAudio) ist der Live-Pfad; V2 (`AudioGraph`/`V2StudioGraph`/Backends) ist als Prototyp markiert und nur in Tests verdrahtet.
+
+- [ ] **P1-1 Statische V1-Verkabelung verifizieren:** Importe/Initialisierung, alle `connect()`-Aufrufe, Fehlerbehandlung – als Test-/Audit-Schritt dokumentieren.
+- [ ] **P1-2 Unit-Tests V1-Verkabelung:** Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.
+- [ ] **P1-3 Laufzeit-Prüfungen:** `audioContext.state`, `sampleRate`, `baseLatency`, `outputLatency` sichtbar machen (perfMONK nutzt `getAudioHealth()` bereits).
+- [ ] **P1-4 Debug-/Analyser-Pfad:** `analyzerNode` → Visualisierung als fester Debug-Schritt dokumentieren/testen.
+- [ ] **P1-5 Offline-Integrationstest:** `OfflineAudioContext`-Roundtrip (V1-Quelle → Kanalzug → Master → Bounce) automatisiert (goldenAudio/bounceGraph erweitern).
+- [ ] **P1-6 PerformanceObserver:** Audio-Verarbeitungsdauer messen und in perfMONK anbinden.
+- [ ] **P1-7 100-%-Checkliste als Gate:** die 8 Punkte (Imports, Verkabelung, Fehlerbehandlung, Unit, Integration, Konsolenfehler, hörbar, Performance) in `npm run verify` oder CI aufnehmen.
+
+**Nicht sinnvoll im Bestand:** `AudioGraph`-Fremdbibliothek/„audiograph“-Import – Eigenbau liegt vor. V2-Live-Parität → `VISIONS_TODO.md`.
+
+### P-2 · Core-Engine-Abgleich (Agenten-Prompt)
+
+**Bewertung:** Sinnvoll als wiederkehrende Audit-Methodik (Ist/Soll-Abgleich + Maßnahmen), kein Code-Feature. Die enthaltenen Schritte passen auf das bestehende System.
+
+- [ ] **P2-1 Core-Engine-Audit nach dem 4-Schritte-Schema** (Bestandsaufnahme → Abgleich → Bewertung umgesetzt/teilweise/nicht → Maßnahmen) einmalig für die Audio-Engine durchführen; Ergebnis als Abschnitt in MASTER_TODO/TASKDONE.
+- [ ] **P2-2 Methodik als wiederholbares Skript/Checkliste** in `scripts/` (z. B. `core-engine-abgleich.md`) ablegen, damit künftige Audits identisch ablaufen.
+
+### P-3 · PluginSystem-Briefing
+
+**Bewertung:** Prüffragen zum Ist-Zustand sind machbar und sinnvoll; Hardware-/Zukunftsteile sind Visionen → `VISIONS_TODO.md`.
+
+- [ ] **P3-1 Routing-Dynamik prüfen:** V1 ist fest verdrahtet, `routing.json` wird nur teilweise angewendet. Machbarkeitsstudie: dynamisch rekonfigurierbarer Graph auf `AudioGraph` (V2) mit variablen Ports; Feedback-Schleifen nur nach Stabilitäts-/Phasentests.
+- [ ] **P3-2 Einheitliche Port-API:** `IAudioPort`/`AudioPort` als verbindliche Schnittstelle für alle Module etablieren; variable Port-Anzahl erlauben.
+- [ ] **P3-3 Clock & Synchronisation messen:** Jitter < ±1 Sample bei 48 kHz verifizieren; parallele Verteilung vs. Kaskade dokumentieren; Hot-Plug-Verhalten testen (deckt P2-1/P2-2 Rest).
+- [ ] **P3-4 Latenzkompensation:** `getLatencyBudgetMs()` einführen und je Modul automatische Delay-Compensation vorbereiten (deckt A-4).
+- [ ] **P3-5 Proprietäre Mathematik:** DSP-Modell-Versionierung einführen (z. B. `Compressor_v2.3`); LUT vs. Echtzeitberechnung je Algorithmus dokumentieren (Release-LUT ist schon da).
+- [ ] **P3-6 Schutz der Algorithmenkerne:** TEE/geschützter Speicher im Browser/Node als **nicht sinnvoll** markieren; stattdessen Build-/Bundle-Schutz und Objekt-Code-Review prüfen.
+
+**Vision (in `VISIONS_TODO.md` überführt):** Universal-Steckmodul-Hub, parallele LVDS-Clock-Verteilung + Feedback-Clock, Auto-Codegenerierung (Matlab/Simulink), Edge-AI-NPUs, software-definierte Analogsignale, selbstlernende Routing-Vorschläge.
+
+---
+
 ## 🟠 OPS – Flotten-Start per Snapshot beschleunigen (2026-09-02)
 
 > Ausgangslage: Der Flotten-Wake baut aktuell pro Knoten das Docker-Image aus
