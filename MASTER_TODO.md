@@ -113,8 +113,10 @@
 - [ ] **AD-M1 ESLint-React-Hooks:** `DJ4ChMixer.tsx:182` useMemo; `set-state-in-effect` in `DropGeneratorPanel`, `DrumMachineTerminal`, `EQPluginTerminal`, `MasteringOverlay`, `MasterPlayerTerminal`, `SemanticSampleSearch`, `SettingsDialog`, `useControlHub`, `useHID`, `useMIDI`, `useMidiClockOut`, `useRoom`; `refs`-Warnungen in `MasterPlayerTerminal`, `MappingLearnPanel`, `AudioContext`, `useMidiClockOut`; `immutability` in `DropContext`, `useWebRTC`.
 - [ ] **AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
 - [ ] **AD-M3 Backend-Bugs:** `cloudAutomation.ts:100` Regex-Logik; `cloudAutomation.ts:132` Env-Zugriffe; `celery_app.py:104/120` Race Conditions `_load_demucs`/`_load_musicgen`; `hypersonic_moa.py:67` leerer Prompt; `app.py:124` + `handlers.py:105` Race Conditions Model-Loading; `handlers.py:130` Resampling-Fehlerbehandlung; `hf_manage_endpoint.py:122/130` Fehlerbehandlung/Trennung Konfiguration-Logik; `model_manager.py:130/190` Race/Load + VRAM-Fehlerfall; `registry.py:26` Revision-Pinning via `null`; `startup.sh:9/10` Symlink-Pfad + HF_HOME-Space-Check.
-- [ ] **AD-M4 AI-Runtime-Security/Architektur:** `backend-core/package.json:8` Uvicorn 0.0.0.0 ohne Auth; `startup.sh:18/21` AI-Runtime ungeschützt auf allen Interfaces; `pyproject.toml:7/11` fehlende Hash-Pins/Lockfile + veraltetes `torch==2.4.1`.
-- [ ] **AD-M5 React/State:** `usePluginState.ts:28` stale lockStatus; `useSessionSync.ts:35` `syncAdd` sendet unvalidierte Samples an Peers.
+- [x] **AD-M4a Bind-Host-Härtung:** `backend-core/package.json` start:python nutzt `${AI_BIND_HOST:-127.0.0.1}` (2026-09-05); `samplemonk-ai-runtime/startup.sh` bindet bereits 127.0.0.1.
+- [ ] **AD-M4b Python-Supply-Chain:** `services/samplemonk-ai-runtime/pyproject.toml` – Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade (Betriebsentscheidung/Test nötig).
+- [ ] **AD-M5a React/State:** `usePluginState.ts:28` updateState mit `useCallback` stabilisieren.
+- [x] **AD-M5b React/State:** `useSessionSync.ts:35` unvalidierte Samples gefixt via `isValidScratchSample()` (2026-09-05).
 - [ ] **AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung.
 
 ### Niedrig (813) – aggregiert
