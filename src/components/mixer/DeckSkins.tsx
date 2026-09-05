@@ -81,7 +81,7 @@ function TurntableSkin({ channels, loadedLabel }: { channels: TrackType[]; loade
           </div>
         </div>
         <div className="flex flex-col items-center gap-1">
-          <span className="text-[8px] font-mono text-zinc-500">PITCH</span>
+          <span className="text-[10px] font-mono text-zinc-500">PITCH</span>
           <input
             type="range"
             min={-100}
@@ -90,18 +90,18 @@ function TurntableSkin({ channels, loadedLabel }: { channels: TrackType[]; loade
             onChange={(e) => setPitch(Number(e.target.value))}
             className="h-1 w-20 accent-orange-500"
           />
-          <span className="text-[9px] font-mono text-orange-400">{pitch > 0 ? '+' : ''}{pitch / 10}%</span>
+          <span className="text-[11px] font-mono text-orange-400">{pitch > 0 ? '+' : ''}{pitch / 10}%</span>
         </div>
       </div>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => audioEngine.triggerEvent(channels[0], 0.9)}
-          className="px-3 py-1.5 rounded border border-orange-500/50 bg-orange-500/10 text-orange-300 text-[9px] font-bold tracking-widest hover:bg-orange-500/20 cursor-pointer"
+          className="px-3 py-1.5 rounded border border-orange-500/50 bg-orange-500/10 text-orange-300 text-[11px] font-bold tracking-widest hover:bg-orange-500/20 cursor-pointer"
         >
           ▶ PLAY
         </button>
-        <span className="text-[9px] font-mono text-zinc-400 max-w-[120px] truncate">{loadedLabel ?? 'DECK OHNE TRACK'}</span>
+        <span className="text-[11px] font-mono text-zinc-400 max-w-[160px] truncate">{loadedLabel ?? 'DECK OHNE TRACK'}</span>
       </div>
     </div>
   );
@@ -153,17 +153,17 @@ function LibrarySkin({ channels, loadedLabel, onLoad }: { channels: TrackType[];
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Track suchen…"
-        className="w-full bg-black/70 border border-zinc-800 rounded px-2 py-1 text-[10px] text-zinc-300 focus:outline-none focus:border-orange-500/60"
+        className="w-full bg-black/70 border border-zinc-800 rounded px-2 py-1 text-[12px] text-zinc-300 focus:outline-none focus:border-orange-500/60"
       />
       <div className="flex-1 overflow-y-auto flex flex-col gap-1">
         {tracks.slice(0, 20).map((t) => (
           <div key={t.id} className="flex items-center gap-2 rounded bg-black/40 border border-zinc-800 px-2 py-1">
-            <span className="text-[9px] font-mono text-zinc-300 truncate flex-1">{t.name}</span>
-            <span className="text-[8px] font-mono text-zinc-600 uppercase">{t.artist}</span>
+            <span className="text-[11px] font-mono text-zinc-300 truncate flex-1">{t.name}</span>
+            <span className="text-[10px] font-mono text-zinc-600 uppercase">{t.artist}</span>
             <button
               type="button"
               onClick={() => audioEngine.previewSample('channel5', undefined, t.url)}
-              className="text-[8px] font-bold text-zinc-400 hover:text-orange-300 cursor-pointer"
+              className="text-[10px] font-bold text-zinc-400 hover:text-orange-300 cursor-pointer"
             >
               ▶
             </button>
@@ -173,14 +173,14 @@ function LibrarySkin({ channels, loadedLabel, onLoad }: { channels: TrackType[];
                 audioEngine.loadTrackSample(channels[0], t.url);
                 onLoad(t.name);
               }}
-              className="text-[8px] font-bold text-orange-400 hover:text-orange-200 cursor-pointer"
+              className="text-[10px] font-bold text-orange-400 hover:text-orange-200 cursor-pointer"
             >
               LOAD
             </button>
           </div>
         ))}
       </div>
-      <div className="text-[8px] font-mono text-zinc-600 truncate">{loadedLabel ? `GELADEN: ${loadedLabel}` : 'KEIN TRACK GELADEN'}</div>
+      <div className="text-[10px] font-mono text-zinc-600 truncate">{loadedLabel ? `GELADEN: ${loadedLabel}` : 'KEIN TRACK GELADEN'}</div>
     </div>
   );
 }
@@ -189,14 +189,14 @@ export const DeckPanel: React.FC<DeckPanelProps> = ({ deck, channels, skin, onSk
   return (
     <div className="bg-[#17171a] rounded-md border border-zinc-800 flex flex-col">
       <div className="flex items-center justify-between px-2 pt-1.5 pb-1 border-b border-zinc-800">
-        <span className={`text-[9px] font-black tracking-[0.3em] ${deck === 'A' ? 'text-orange-400' : 'text-cyan-300'}`}>DECK {deck}</span>
+        <span className={`text-[11px] font-black tracking-[0.3em] ${deck === 'A' ? 'text-orange-400' : 'text-cyan-300'}`}>DECK {deck}</span>
         <div className="flex gap-1">
           {SKIN_OPTIONS.map((opt) => (
             <button
               type="button"
               key={opt.id}
               onClick={() => onSkinChange(deck, opt.id)}
-              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] border text-[7px] font-bold tracking-widest cursor-pointer transition-colors ${
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded-[3px] border text-[9px] font-bold tracking-widest cursor-pointer transition-colors ${
                 skin === opt.id
                   ? 'border-orange-500/70 bg-orange-500/10 text-orange-400'
                   : 'border-zinc-800 bg-black/40 text-zinc-500 hover:border-orange-500/40 hover:text-orange-300'

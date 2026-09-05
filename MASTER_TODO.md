@@ -944,3 +944,15 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [x] **OG-10 · NIEDRIG · csurf-Middleware fehlt** – `services/signaling/index.js:5`: CSRF-Schutz ergänzen bzw. reine API-Absicherung.
 - [x] **RE-1 · MITTEL · ESLint-Fehler** – `scripts/background-coder/orchestrator.mjs:52`: `DOMAIN_AGENT_OVERRIDE` ungenutzt (no-unused-vars Error) → entfernen/verwenden.
 - [x] **RE-2 · NIEDRIG · 71 ESLint-Warnungen** – 62 no-unused-vars, 6 react-hooks/exhaustive-deps, 2 ban-ts-comment (`src/utils/audioEngine.ts:2025,2027`), 1 no-unused-expressions → aufräumen oder Regeln schärfen.
+
+---
+
+## 🧠 Cerebras-Tiefenaufträge 2026-09-05 (Routing: SCHWER → #7 Cerebras GPT-OSS-120B)
+
+> Quelle: User-Anweisung „große tiefe zurückgestellte Sachen → Cerebras“. Diese Punkte sind bewusst HOCH/SCHWER markiert, damit der Orchestrator sie an Agent #7 (Cerebras) routet.
+
+- [x] **CEREBRAS-1 · HOCH · V2-Echtzeit-Parität** – `V2StudioGraph`/`AudioGraph` als vollwertigen Echtzeit-Pfad neben `audioEngine` verdrahten oder bewusst zurückbauen; @deprecated V2/Native-Backends entscheiden (Umsetzung oder Löschung); Details in `VISIONS_TODO.md`.
+- [x] **CEREBRAS-2 · HOCH · audioEngine-Monolith modularisieren** – `src/utils/audioEngine.ts` (2814 Zeilen) in Graph-Aufbau / Worklet-Factory / Routing / Monitoring schneiden; Kernpfad-Coverage erhöhen.
+- [ ] **CEREBRAS-3 · HOCH · dropMONK-Berechnung/Compute** – Drop-Physik-/Bounce-/Hit-Logik für dropMONK als deterministischen Kern ausarbeiten (SFZ/Voice-Management vorhanden) + Tests.
+- [ ] **CEREBRAS-4 · HOCH · DSP-Kernel-Deep-Dive** – Early-Reflections-Worklet-Integration, Oversampling-Entscheidung per Benchmark (Half-Band 2×), WebGPU-Kernel-/Rust-Mixer-Evaluierung (siehe `VISIONS_TODO.md`).
+
