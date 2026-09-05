@@ -331,10 +331,15 @@ export const midiContinue = (): number[] => [MIDI_RT.continue];
 /** Transport Stop. */
 export const midiStop = (): number[] => [MIDI_RT.stop];
 
+/** 14-Bit-Wert clampen (MIDI-Parameter, Song Position etc.). */
+const clamp14 = (v: number): number => Math.max(0, Math.min(16383, Math.round(v)));
+/** MSB/LSB-Aufteilung eines 14-Bit-Werts. */
+const msb7 = (v: number): number => (clamp14(v) >> 7) & 0x7f;
+const lsb7 = (v: number): number => clamp14(v) & 0x7f;
+
 /** Song Position Pointer (14-Bit, in 16th-Notes ab Songbeginn). */
 export function midiSongPosition(position14: number): number[] {
-  const v = Math.max(0, Math.min(16383, Math.round(position14)));
-  return [MIDI_SYSTEM.songPosition, v & 0x7f, (v >> 7) & 0x7f];
+  return [MIDI_SYSTEM.songPosition, lsb7(position14), msb7(position14)];
 }
 
 /** Poly Aftertouch (Key Pressure). */
@@ -350,14 +355,13 @@ export function midiChannelAftertouch(channel: number, pressure: number): number
 /** RPN senden (14-Bit-Parameter + 14-Bit-Wert, inkl. RPN-Null). */
 export function rpn(channel: number, parameter: number, value14: number): number[] {
   const ch = clamp7(channel - 1) & 0x0f;
-  const pMsb = (Math.max(0, Math.min(16383, Math.round(parameter))) >> 7) & 0x7f;
-  const pLsb = Math.max(0, Math.min(16383, Math.round(parameter))) & 0x7f;
-  const v = Math.max(0, Math.min(16383, Math.round(value14)));
+  const pMsb = msb7(parameter);
+  const pLsb = lsb7(parameter);
   return [
     0xb0 | ch, 101, pMsb,
     0xb0 | ch, 100, pLsb,
-    0xb0 | ch, 6, (v >> 7) & 0x7f,
-    0xb0 | ch, 38, v & 0x7f,
+    0xb0 | ch, 6, msb7(value14),
+    0xb0 | ch, 38, lsb7(value14),
     0xb0 | ch, 101, 0x7f,
     0xb0 | ch, 100, 0x7f,
   ];
@@ -366,14 +370,13 @@ export function rpn(channel: number, parameter: number, value14: number): number
 /** NRPN senden (14-Bit-Parameter + 14-Bit-Wert, inkl. RPN-Null). */
 export function nrpn(channel: number, parameter: number, value14: number): number[] {
   const ch = clamp7(channel - 1) & 0x0f;
-  const pMsb = (Math.max(0, Math.min(16383, Math.round(parameter))) >> 7) & 0x7f;
-  const pLsb = Math.max(0, Math.min(16383, Math.round(parameter))) & 0x7f;
-  const v = Math.max(0, Math.min(16383, Math.round(value14)));
+  const pMsb = msb7(parameter);
+  const pLsb = lsb7(parameter);
   return [
     0xb0 | ch, 99, pMsb,
     0xb0 | ch, 98, pLsb,
-    0xb0 | ch, 6, (v >> 7) & 0x7f,
-    0xb0 | ch, 38, v & 0x7f,
+    0xb0 | ch, 6, msb7(value14),
+    0xb0 | ch, 38, lsb7(value14),
     0xb0 | ch, 101, 0x7f,
     0xb0 | ch, 100, 0x7f,
   ];
