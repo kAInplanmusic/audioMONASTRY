@@ -277,10 +277,10 @@ export class LlmRouter {
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const order: LlmProviderId[] =
       complexity === 'complex'
-        ? ['deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'hf', 'mistral', 'ollama', 'gemini', 'openai']
+        ? ['deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'hf', 'mistral', 'publicai', 'ollama', 'gemini', 'openai']
         : complexity === 'moderate'
-          ? ['deepseek-flash', 'qwen3-coder', 'hf', 'mistral', 'deepseek-pro', 'ollama']
-          : ['deepseek-flash', 'hf', 'mistral', 'ollama'];
+          ? ['deepseek-flash', 'qwen3-coder', 'hf', 'mistral', 'publicai', 'deepseek-pro', 'ollama']
+          : ['deepseek-flash', 'hf', 'mistral', 'publicai', 'ollama'];
     return order
       .map((id) => this.providers.get(id))
       .filter((p): p is ILlmProvider => Boolean(p) && p.available);
