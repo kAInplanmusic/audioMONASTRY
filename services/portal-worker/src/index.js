@@ -30,7 +30,6 @@ const IMAGE = 'ubuntu-24.04';
 // Flotten-Start deutlich (kein Docker-Build/cloud-init-Bootstrap je Knoten).
 const SNAPSHOT_PREFIX = 'samplemonk-snapshot-';
 const SNAPSHOT_RETENTION = 2; // je Rolle die letzten 2 Snapshots behalten
-const REPO_URL = 'https://github.com/kAInplanmusic/audioMONASTRY.git';
 const PORTAL_DOMAIN = 'anunnakitools.de';
 const ORIGIN_HOST = 'origin.anunnakitools.de';
 

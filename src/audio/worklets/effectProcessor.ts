@@ -92,18 +92,28 @@ class EffectProcessor extends AudioWorkletProcessor {
   }
 
   private reverb(x: number): number {
+    // A-7: Denormal-Clamps nach jedem Delay-Line-Write (Subnormals verursachen CPU-Spitzen).
+    x = Math.abs(x) < 1e-20 ? 0 : x;
     const c1out = this.comb1[this.comb1Pos];
-    this.comb1[this.comb1Pos] = x + c1out * this.combFeedback;
+    let c1 = x + c1out * this.combFeedback;
+    if (Math.abs(c1) < 1e-20) c1 = 0;
+    this.comb1[this.comb1Pos] = c1;
     this.comb1Pos = (this.comb1Pos + 1) % this.comb1.length;
     const c2out = this.comb2[this.comb2Pos];
-    this.comb2[this.comb2Pos] = x + c2out * this.combFeedback;
+    let c2 = x + c2out * this.combFeedback;
+    if (Math.abs(c2) < 1e-20) c2 = 0;
+    this.comb2[this.comb2Pos] = c2;
     this.comb2Pos = (this.comb2Pos + 1) % this.comb2.length;
     const diff = c1out + c2out;
     const a1read = this.all1[this.all1Pos];
-    this.all1[this.all1Pos] = diff + a1read * 0.5;
+    let a1 = diff + a1read * 0.5;
+    if (Math.abs(a1) < 1e-20) a1 = 0;
+    this.all1[this.all1Pos] = a1;
     this.all1Pos = (this.all1Pos + 1) % this.all1.length;
     const a2read = this.all2[this.all2Pos];
-    this.all2[this.all2Pos] = diff + a2read * 0.5;
+    let a2 = diff + a2read * 0.5;
+    if (Math.abs(a2) < 1e-20) a2 = 0;
+    this.all2[this.all2Pos] = a2;
     this.all2Pos = (this.all2Pos + 1) % this.all2.length;
     return (a1read + a2read) * 0.5;
   }

@@ -73,7 +73,7 @@ async function httpPhase() {
 
   const REQUEST_TIMEOUT_MS = Number(process.env.HTTP_TIMEOUT_MS || 15_000);
 
-  async function client(id) {
+  async function client() {
     for (let i = 0; i < HTTP_REQUESTS; i++) {
       const ep = pick();
       const t0 = Date.now();
@@ -174,8 +174,8 @@ async function socketPhase() {
   const connected = sockets.length;
 
   // 2) Session-Join + Relay mit bis zu 4 Clients (Server-Limit)
-  let joinLat = [];
-  let relayLat = [];
+  const joinLat = [];
+  const relayLat = [];
   let sessionFullEnforced = false;
   if (connected >= 5) {
     const joiners = sockets.slice(0, 4);

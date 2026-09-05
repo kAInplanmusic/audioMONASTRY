@@ -28,6 +28,8 @@ const DEFAULT_FREQS = Array.from({ length: NUM_BANDS }, (_, i) =>
 
 class EqProcessor extends AudioWorkletProcessor {
   private bands: BandState[] = [];
+  // A-6: Quantum aus der tatsächlichen Blocklänge ableiten (Default 128).
+  private blockSize = 128;
   // Block-genaue Gain-Rampen (automate): aktueller Gain + Ziel je Band.
   private bandGain = new Float32Array(NUM_BANDS);
   private bandFreq = new Float32Array(NUM_BANDS);
@@ -54,7 +56,7 @@ class EqProcessor extends AudioWorkletProcessor {
     if (m.type === 'automate' && m.param === 'bandGain' && typeof m.value === 'number') {
       // Band-Gain linear über rampTime (block-genau) rampen – zipper-frei.
       const idx = Math.max(0, Math.min(NUM_BANDS - 1, Number(m.band ?? 0) | 0));
-      const steps = Math.max(1, Math.round(Number(m.rampTime ?? 0.02) * sampleRate / 128));
+      const steps = Math.max(1, Math.round(Number(m.rampTime ?? 0.02) * sampleRate / Math.max(1, this.blockSize)));
       this.rampTargets[idx] = Math.max(-24, Math.min(24, m.value));
       this.rampSteps[idx] = steps;
       this.rampDeltas[idx] = (this.rampTargets[idx] - this.bandGain[idx]) / steps;
@@ -188,6 +190,7 @@ class EqProcessor extends AudioWorkletProcessor {
     const input = inputs[0];
     const output = outputs[0];
     if (!input || !input[0]) return true;
+    this.blockSize = input[0].length || this.blockSize; // A-6
     this.stepRamps(); // block-genaue Band-Gain-Rampen (automate)
     for (let ch = 0; ch < output.length; ch++) {
       const inCh = input[ch] || input[0];

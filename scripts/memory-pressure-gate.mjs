@@ -28,7 +28,7 @@ function heapUsed() {
 /** Worklet-artige Biquad-Verarbeitung auf Float32-Blöcken (128 Samples). */
 function runWorkletLikeLoad(blocks) {
   const c = [0.2929, 0.5858, 0.2929, -0.0, 0.1716]; // Butterworth-LP-Beispiel
-  let state = { x1: 0, x2: 0, y1: 0, y2: 0 };
+  const state = { x1: 0, x2: 0, y1: 0, y2: 0 };
   for (let b = 0; b < blocks; b++) {
     const buf = new Float32Array(128);
     buf[0] = (b % 1000) / 1000;

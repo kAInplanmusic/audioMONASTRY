@@ -14,7 +14,7 @@
 // Platte; entpackt wird ebenfalls gestreamt (unzipper), damit auch ZIPs
 // über 2 GiB funktionieren.
 // =============================================================================
-import { createReadStream, createWriteStream, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';

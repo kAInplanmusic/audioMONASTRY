@@ -1,7 +1,7 @@
 import * as esbuild from 'esbuild';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { readdir, mkdir, copyFile } from 'fs/promises';
+import { readdir, mkdir } from 'fs/promises';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
