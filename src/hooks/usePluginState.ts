@@ -28,7 +28,7 @@ export const usePluginState = (pluginId: string, initialState: PluginState = 'OF
     const isOwner = lockStatus.active && lockStatus.lockedBy === webRTCManager.userId;
     if (!lockStatus.active || isOwner) {
       setModuleState(pluginId, newState);
-      logAuditEvent('localUser', 'PLUGIN_STATE', { pluginId, state: newState });
+      logAuditEvent(webRTCManager.userId, 'PLUGIN_STATE', { pluginId, state: newState });
     }
   };
 

@@ -6,6 +6,7 @@ import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
   const { state, lockStatus, updateState } = usePluginState('effect', 'PRO');
@@ -43,7 +44,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
   };
 
   const handleSampleDrop = (sample: AudioSample) => {
-    if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
+    if (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId) return;
     setSourceSample(sample);
     // Logic for loading sample to effect chain if needed
   };
@@ -116,7 +117,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
   }, [power, activeFx, wetDry]);
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-4 py-2 border-b border-neutral-800 bg-black/20 relative z-10">
         <MoaAssistant pluginId="fx" placeholder="MOA: z. B. 'Filter-Sweep automatisieren'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>

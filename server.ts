@@ -149,6 +149,18 @@ function addServerAudit(userId: string, role: string, action: string, ok: boolea
 
 // P4-2: Server-seitige Rollenzuordnung je User-ID (Host = admin, Rest = SESSION_ROLE).
 const sessionRoles = new Map<string, string>();
+// K-2/K-5: Server-autoritative Plugin-Locks (session-global). Werte sind
+// { lockedBy, timestamp, ttl }. Der Client bleibt nur optimistisch.
+const pluginLocks = new Map<string, { lockedBy: string; timestamp: number; ttl: number }>();
+const PLUGIN_LOCK_TTL_MS = 60_000; // 60 s + Heartbeat-Verlängerung (Fallback)
+const PLUGIN_LOCK_SWEEP_MS = 15_000;
+const sweepPluginLocks = (): void => {
+  const now = Date.now();
+  for (const [pluginId, lock] of pluginLocks) {
+    if (now - lock.timestamp > lock.ttl) pluginLocks.delete(pluginId);
+  }
+};
+setInterval(sweepPluginLocks, PLUGIN_LOCK_SWEEP_MS).unref?.();
 function roleForSessionUser(userId: string): string {
   // Reconnect-sicher: Ein bereits bekannter User behält seine Rolle
   // (sonst würde der Host bei jedem Socket-Reconnect zum Guest degradiert).
@@ -1218,7 +1230,8 @@ app.get('/api/stem/status', (_req, res) => {
 // --- Admin/Root-Debug (nur mit ADMIN_TOKEN, z. B. fuer Root-Debugging) -------
 app.get('/api/admin/debug', (req, res) => {
   const adminToken = (process.env.ADMIN_TOKEN || '').trim();
-  if (!adminToken || req.headers['x-admin-token'] !== adminToken) {
+  const supplied = String(req.headers['x-admin-token'] ?? '');
+  if (!adminToken || !safeTokenEqual(supplied, adminToken)) {
     return res.status(401).json({ error: 'unauthorized' });
   }
   res.json({
@@ -2221,20 +2234,33 @@ async function startServer() {
         activeSocketConnections = Math.max(0, activeSocketConnections - 1);
       });
 
+      // S-2: Signaling-Relay mit Ziel-Validierung – es darf nur an Sockets
+      // derselben Session geroutet werden (nie an fremde/ungültige Socket-IDs).
+      const relayToSessionPeer = (event: string, data: any, payload: Record<string, unknown>): void => {
+        const targetId = String(data?.target ?? '').trim();
+        if (!targetId) return;
+        const target = io.sockets.sockets.get(targetId);
+        if (!target) return;
+        const sameRoom = !!socket.data?.sessionRoom
+          && target.data?.sessionRoom === socket.data.sessionRoom;
+        if (!sameRoom) return;
+        target.emit(event, payload);
+      };
+
       socket.on('offer', (data: any) => {
         refreshIdleTimer();
-        if (!data.target || !data.offer) return;
-        socket.to(data.target).emit('offer', { offer: data.offer, sender: socket.id, senderMode: socket.data?.sessionMode ?? 'member' });
+        if (!data.offer) return;
+        relayToSessionPeer('offer', data, { offer: data.offer, sender: socket.id, senderMode: socket.data?.sessionMode ?? 'member' });
       });
       socket.on('answer', (data: any) => {
         refreshIdleTimer();
-        if (!data.target || !data.answer) return;
-        socket.to(data.target).emit('answer', { answer: data.answer, sender: socket.id });
+        if (!data.answer) return;
+        relayToSessionPeer('answer', data, { answer: data.answer, sender: socket.id });
       });
       socket.on('ice-candidate', (data: any) => {
         refreshIdleTimer();
-        if (!data.target || !data.candidate) return;
-        socket.to(data.target).emit('ice-candidate', { candidate: data.candidate, sender: socket.id });
+        if (!data.candidate) return;
+        relayToSessionPeer('ice-candidate', data, { candidate: data.candidate, sender: socket.id });
       });
       socket.on('activity', refreshIdleTimer);
 
@@ -2280,6 +2306,11 @@ async function startServer() {
         if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
         addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
+        // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren.
+        socket.emit('plugin-locks-sync', {
+          roomId: SESSION_ROOM_ID,
+          locks: Object.fromEntries(pluginLocks),
+        });
 
         const members = sessionMembers(room);
         if (mode === 'master-out') {
@@ -2318,15 +2349,57 @@ async function startServer() {
         const targetUserId = String(data?.userId ?? '').trim();
         const newRole = String(data?.role ?? '').trim();
         if (!targetUserId || !['admin', 'producer', 'engineer', 'guest'].includes(newRole)) return;
+        // S-3: Ziel-User muss Mitglied DIESER Session sein (Room-Mitglieder + self).
+        const roomId = socket.data?.sessionRoom;
+        const memberIds = new Set<string>([
+          String(socket.data?.sessionUserId ?? ''),
+          ...(roomId ? sessionMembers(`session:${roomId}`).map((m) => m.userId) : []),
+        ]);
+        if (!memberIds.has(targetUserId)) {
+          addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', false, `${targetUserId}->${newRole}`);
+          socket.emit('rbac-denied', { action: 'assign-role', reason: 'target not in session' });
+          return;
+        }
         sessionRoles.set(targetUserId, newRole);
         // Alle Sockets dieses Users aktualisieren.
         for (const [, s] of io.sockets.sockets as any) {
           if (s?.data?.sessionUserId === targetUserId) s.data.sessionRole = newRole;
         }
         addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', true, `${targetUserId}->${newRole}`);
-        const roomId = socket.data?.sessionRoom;
         if (roomId) socket.to(`session:${roomId}`).emit('role-changed', { userId: targetUserId, role: newRole });
         socket.emit('role-changed', { userId: targetUserId, role: newRole });
+      });
+
+      // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
+      socket.on('plugin-lock', (data: any) => {
+        refreshIdleTimer();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const pluginId = String(data?.pluginId ?? '').trim();
+        if (!pluginId) return;
+        const existing = pluginLocks.get(pluginId);
+        if (existing && existing.lockedBy !== senderUserId && Date.now() - existing.timestamp <= existing.ttl) {
+          socket.emit('plugin-lock-denied', { pluginId, lockedBy: existing.lockedBy });
+          return;
+        }
+        const lock = { lockedBy: senderUserId, timestamp: Date.now(), ttl: PLUGIN_LOCK_TTL_MS };
+        pluginLocks.set(pluginId, lock);
+        socket.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock });
+        socket.emit('plugin-lock', { pluginId, ...lock });
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
+      });
+      socket.on('plugin-unlock', (data: any) => {
+        refreshIdleTimer();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const pluginId = String(data?.pluginId ?? '').trim();
+        const existing = pluginLocks.get(pluginId);
+        if (!existing || existing.lockedBy !== senderUserId) return;
+        pluginLocks.delete(pluginId);
+        socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId });
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_UNLOCK', true, pluginId);
       });
 
       // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
@@ -2337,6 +2410,14 @@ async function startServer() {
         if (!roomId) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        const pluginId = String((data as any)?.pluginId ?? '');
+        // K-2: Lock serverseitig durchsetzen – nur der Halter darf den State ändern.
+        const lock = pluginLocks.get(pluginId);
+        if (lock && lock.lockedBy !== senderUserId && Date.now() - lock.timestamp <= lock.ttl) {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state: (data as any)?.state, role: senderRole, reason: 'locked by other' });
+          return;
+        }
         // P4-2: Server-seitige RBAC – PRO-Promotion nur für admin/producer.
         const state = (data as any)?.state;
         if (state && !roleCanState(senderRole, String(state))) {
@@ -2364,6 +2445,14 @@ async function startServer() {
       socket.on('disconnect', () => {
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const userId = String(socket.data?.sessionUserId ?? '');
+        // K-5: Locks des getrennten Users sofort freigeben und verteilen.
+        for (const [pluginId, lock] of pluginLocks) {
+          if (lock.lockedBy === userId) {
+            pluginLocks.delete(pluginId);
+            socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId });
+          }
+        }
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
       });
     });
@@ -2409,6 +2498,11 @@ async function startServer() {
 
         sfuIo.on('connection', (socket: any) => {
           const sessionId = (socket.handshake?.query?.sessionId || 'main').toString();
+          // S-5: sessionId strikt whitelisten (kein Path/Namespace-Injection in Raumnamen).
+          if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
+            socket.disconnect(true);
+            return;
+          }
           // Mehrere Transports je Socket (send + recv) und lokale Producer-Map.
           const transports = new Map<string, any>();
           const producers = new Map<string, any>();
@@ -2420,7 +2514,7 @@ async function startServer() {
             try {
               const router = await ensureRouter(sessionId);
               cb?.({ rtpCapabilities: router.rtpCapabilities });
-            } catch (e) { cb?.({ error: (e as Error).message }); }
+            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
           });
           socket.on('createTransport', async (data: any, cb: any) => {
             try {
@@ -2438,7 +2532,7 @@ async function startServer() {
                 iceCandidates: transport.iceCandidates,
                 dtlsParameters: transport.dtlsParameters,
               });
-            } catch (e) { cb?.({ error: (e as Error).message }); }
+            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
           });
           socket.on('connectTransport', async (data: any, cb: any) => {
             try {
@@ -2446,7 +2540,7 @@ async function startServer() {
               if (!t) throw new Error('kein transport');
               await t.connect({ dtlsParameters: data.dtlsParameters });
               cb?.({});
-            } catch (e) { cb?.({ error: (e as Error).message }); }
+            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
           });
           socket.on('produce', async (data: any, cb: any) => {
             try {
@@ -2460,7 +2554,7 @@ async function startServer() {
               sessionProducerMap.set(producer.id, producer);
               socket.to(`sfu-session:${sessionId}`).emit('new-producer', { producerId: producer.id, kind: producer.kind });
               cb?.({ id: producer.id });
-            } catch (e) { cb?.({ error: (e as Error).message }); }
+            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
           });
           socket.on('consume', async (data: any, cb: any) => {
             try {
@@ -2476,7 +2570,7 @@ async function startServer() {
                 id: consumer.id, kind: consumer.kind,
                 rtpParameters: consumer.rtpParameters, producerId: producer.id,
               });
-            } catch (e) { cb?.({ error: (e as Error).message }); }
+            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
           });
           socket.on('disconnect', () => {
             for (const t of transports.values()) {

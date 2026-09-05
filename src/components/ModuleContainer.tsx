@@ -2,6 +2,7 @@ import React from 'react';
 import { ModuleState } from '../context/ModuleStateContext';
 import { usePluginManager } from '../context/PluginManagerContext';
 import { getPluginThemeClass, getHardwareSkinClass } from '../utils/pluginTheme';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 interface ModuleContainerProps {
   id: string;
@@ -16,7 +17,7 @@ interface ModuleContainerProps {
 
 export const ModuleContainer = React.memo(({ id, name, state, children, onClose, onCopyToClipboard }: ModuleContainerProps) => {
   const { pluginLocks } = usePluginManager();
-  const isLocked = pluginLocks[id]?.active && pluginLocks[id]?.lockedBy !== 'localUser';
+  const isLocked = pluginLocks[id]?.active && pluginLocks[id]?.lockedBy !== webRTCManager.userId;
 
   if (state === 'OFF') return null;
 

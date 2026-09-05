@@ -13,6 +13,10 @@ class WebRTCManager {
   private dataChannels: Map<string, RTCDataChannel> = new Map();
   private localStream: MediaStream | null = null;
   private lastActivitySentAt = 0;
+  // K-2/K-5: Server-autoritative Plugin-Locks (Client optimistisch, Server siegt).
+  private pluginLockListeners = new Set<(msg: any) => void>();
+  private pluginUnlockListeners = new Set<(msg: any) => void>();
+  private pluginLocksSyncListeners = new Set<(msg: any) => void>();
 
   private sessionUserId = `user-${random().toString(36).slice(2, 8)}`;
 
@@ -350,6 +354,11 @@ class WebRTCManager {
       if (data && typeof data === 'object') this.dispatchDataMessage(data);
     });
 
+    // K-2/K-5: Server-autoritative Lock-Replikation.
+    this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-unlock', (data: any) => this.pluginUnlockListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
+
     this.socket.on('peer-joined', (data: any) => {
       const peer: SessionPeer = { socketId: String(data?.socketId ?? ''), userId: String(data?.userId ?? data?.socketId ?? '') };
       if (!peer.socketId || peer.socketId === this.socket?.id) return;
@@ -547,6 +556,29 @@ class WebRTCManager {
     }
     // Socket.io-Fallback: State-Sync funktioniert auch ohne offene DataChannels.
     this.socket?.emit('plugin-state', data);
+  }
+
+  public sendPluginLock(pluginId: string): void {
+    this.socket?.emit('plugin-lock', { pluginId });
+  }
+
+  public sendPluginUnlock(pluginId: string): void {
+    this.socket?.emit('plugin-unlock', { pluginId });
+  }
+
+  public onPluginLock(cb: (msg: any) => void): () => void {
+    this.pluginLockListeners.add(cb);
+    return () => { this.pluginLockListeners.delete(cb); };
+  }
+
+  public onPluginUnlock(cb: (msg: any) => void): () => void {
+    this.pluginUnlockListeners.add(cb);
+    return () => { this.pluginUnlockListeners.delete(cb); };
+  }
+
+  public onPluginLocksSync(cb: (msg: any) => void): () => void {
+    this.pluginLocksSyncListeners.add(cb);
+    return () => { this.pluginLocksSyncListeners.delete(cb); };
   }
 
   public sendData(data: any) {

@@ -4,6 +4,7 @@ import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { storageGetJson, storageSetJson } from '../utils/storage';
 import { MoaAssistant } from './MoaAssistant';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 /**
  * audioMONASTRY 36-Band-Equalizer (Para-EQ) – UX-Aufwertung
@@ -225,7 +226,7 @@ function QKnob({ value, onChange, disabled }: { value: number; onChange: (v: num
 
 export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   const { state, lockStatus, updateState } = usePluginState('eq', 'PRO');
-  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
+  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
   const [power, setPower] = useState(true);
   const [gainValues, setGainValues] = useState<number[]>(BANDS.map(() => 0));

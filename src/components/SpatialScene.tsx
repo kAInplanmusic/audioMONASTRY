@@ -14,6 +14,7 @@ import { SPATIAL_SETUPS } from '../utils/spatialMath';
 import type { SpatialQuality, SpatialSceneState, SpatialSource, TrackType } from '../types';
 import { ALL_TRACKS } from '../types';
 import { openAudioActionMenu } from './AudioActionMenuHost';
+import { webRTCManager } from '../utils/WebRTCManager';
 import {
   isStreamContent,
   masterStreamContent,
@@ -54,7 +55,7 @@ function azDistFromPointer(nx: number, ny: number): { az: number; dist: number }
 
 export const SpatialScene = React.memo(function SpatialScene() {
   const { state, lockStatus, updateState } = usePluginState('spatial', 'PRO');
-  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== 'localUser';
+  const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   const {
     spatialAssignments,
     assignSpatialChannel,

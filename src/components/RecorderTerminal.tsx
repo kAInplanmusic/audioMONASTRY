@@ -9,6 +9,7 @@ import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { sampleToContent } from '../core/audio/audioContent';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 interface Take {
   id: number;
@@ -64,7 +65,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
   });
 
   const startRecording = useCallback(async () => {
-    if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
+    if (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId) return;
 
     try {
       let stream: MediaStream;
@@ -145,7 +146,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
   }, [startRecording, handleStop]);
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
         <MoaAssistant pluginId="recording" placeholder="MOA: z. B. 'Aufnahme starten'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>
@@ -207,7 +208,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
               {['MASTER_OUT', 'VOCAL_STEM', 'DRUM_BUS', 'SYNTH_GROUP'].map(src => (
                 <button type="button"
                   key={src}
-                  onClick={() => { if (!(lockStatus.active && lockStatus.lockedBy !== 'localUser')) setInputSource(src); }}
+                  onClick={() => { if (!(lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId)) setInputSource(src); }}
                   className={`py-2 px-3 rounded border text-[10px] font-mono font-bold transition-all ${inputSource === src ? 'bg-indigo-900/40 border-indigo-500 text-indigo-400' : 'bg-[#111] border-neutral-800 text-neutral-500 hover:bg-[#222]'}`}
                 >
                   {src}

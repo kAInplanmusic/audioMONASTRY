@@ -3,6 +3,7 @@ import { Puzzle, Lock, Code, Terminal, Play, RefreshCw, Upload, Network } from '
 import { useSamples } from '../context/SampleContext';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
+import { webRTCManager } from '../utils/WebRTCManager';
 
 export const CustomSlotTerminal = React.memo(function CustomSlotTerminal() {
   useSamples();
@@ -14,7 +15,7 @@ export const CustomSlotTerminal = React.memo(function CustomSlotTerminal() {
   // Arpeggio über die AudioEngine (Lead-Stimme channel8) — der Slot ist
   // dadurch nicht nur UI-Deko, sondern erzeugt echten Klang.
   const runCustomModule = () => {
-    if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
+    if (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId) return;
     // Einfaches 8er-Arpeggio in A-Moll-Pentatonik.
     const steps = [0, 3, 5, 7, 10, 7, 5, 3, 12, 10, 7, 5, 3, 0, 3, 7];
     steps.forEach((n, i) => {
@@ -29,7 +30,7 @@ export const CustomSlotTerminal = React.memo(function CustomSlotTerminal() {
   };
 
   const handleCompile = () => {
-    if (lockStatus.active && lockStatus.lockedBy !== 'localUser') return;
+    if (lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId) return;
     setIsCompiling(true);
     // Nach kurzem "Kompilieren" das Modul tatsächlich hörbar starten.
     setTimeout(() => {
@@ -39,7 +40,7 @@ export const CustomSlotTerminal = React.memo(function CustomSlotTerminal() {
   };
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== 'localUser' ? 'opacity-50 grayscale' : ''}`}>
+    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-sky-900/20 to-[#111] border-b border-sky-900/30">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center border border-sky-500/50 shadow-[0_0_15px_rgba(14,165,233,0.3)]">
