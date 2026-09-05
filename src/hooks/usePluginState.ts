@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { PluginState } from '../plugins/types';
 import { usePluginManager } from '../context/PluginManagerContext';
 import { useModuleState } from '../context/ModuleStateContext';
@@ -26,9 +26,11 @@ export const usePluginState = (pluginId: string, initialState: PluginState = 'OF
 
   // DA-2026-09-04-217: Ref-Spiegel des aktuellen Lock-Status, damit updateState
   // zur Ausführungszeit (nicht zur Closure-Erzeugungszeit) den frischen Wert liest
-  // und kein stale lockStatus verwendet wird.
+  // und kein stale lockStatus verwendet wird. Ref-Update im Effect (react-hooks/refs).
   const lockStatusRef = useRef(lockStatus);
-  lockStatusRef.current = lockStatus;
+  useEffect(() => {
+    lockStatusRef.current = lockStatus;
+  }, [lockStatus]);
 
   // Identitätsstabil: useCallback verhindert neue Funktionsinstanzen pro Render.
   const updateState = useCallback(

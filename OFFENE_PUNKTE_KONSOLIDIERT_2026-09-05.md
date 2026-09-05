@@ -35,46 +35,46 @@ Diese sind in Abschnitt 3 weiterhin als offen geführt.
 
 ### 2.1 Einzelaufgaben
 
-- [ ] **AD-M4b Python-Supply-Chain** (Pipeline `TASK-025`)
+- [x] **AD-M4b Python-Supply-Chain** (Pipeline `TASK-025`) → erledigt 2026-09-05
   - `services/samplemonk-ai-runtime/pyproject.toml`: Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade – Betriebsentscheidung/Test nötig.
-- [ ] **AD-M1 React-Hooks-ESLint** (Pipeline `BLOCK-005`)
+- [x] **AD-M1 React-Hooks-ESLint** (Pipeline `BLOCK-005`) → erledigt 2026-09-05
   - `set-state-in-effect`, `refs`, `immutability` in mehreren Terminals/Hooks/Contexts.
-- [ ] **AD-M2 ESLint-Reste** (Pipeline `BLOCK-006`)
+- [x] **AD-M2 ESLint-Reste** (Pipeline `BLOCK-006`) → erledigt 2026-09-05
   - `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.
-- [ ] **AD-M6a / DA-220 SFU-Umschalt-Race** (Pipeline `BLOCK-007` + `BLOCK-199`)
+- [x] **AD-M6a / DA-220 SFU-Umschalt-Race** (Pipeline `BLOCK-007` + `BLOCK-199`) → erledigt 2026-09-05
   - `WebRTCManager.ts:150`: Race bei P2P→SFU-Umschaltung beheben.
-- [ ] **AD-N1 jscpd-Code-Duplikate** (Pipeline `BLOCK-008`)
+- [x] **AD-N1 jscpd-Code-Duplikate** (Pipeline `BLOCK-008`) → erledigt 2026-09-05
   - u. a. `eqProcessor.ts`, `celery_app.py`, `drumSynth.ts`, `fmEngine.ts`, `VoiceMonkService.ts`, `RecorderTerminal.tsx`, `AiMonkDock.tsx`, `midiCodec.ts`, `presets.ts`, `DspEnginePlugin.tsx`, `sfu-rtp-*.js`.
-- [ ] **P1-2 Unit-Tests V1-Verkabelung** (Pipeline `BLOCK-009`)
+- [x] **P1-2 Unit-Tests V1-Verkabelung** (Pipeline `BLOCK-009`) → erledigt 2026-09-05
   - Node-In/Out-Counts + Signalfluss-Spion analog `tests/audioEngine.test.ts` / `tests/monitorRouting.test.ts` ausbauen.
-- [ ] **P3-6 Schutz der Algorithmenkerne** (Pipeline `BLOCK-018`)
+- [x] **P3-6 Schutz der Algorithmenkerne** (Pipeline `BLOCK-018`) → erledigt 2026-09-05
   - Build-/Bundle-Schutz und Objekt-Code-Review prüfen; TEE im Browser als „nicht sinnvoll“ markieren.
-- [ ] **AUD-2026-09-05-D6 Code-Duplikate DSP/Synth** (Pipeline `BLOCK-206`)
+- [x] **AUD-2026-09-05-D6 Code-Duplikate DSP/Synth** (Pipeline `BLOCK-206`) → erledigt 2026-09-05
   - `computeLocal.ts` ↔ `computeWorker.ts`, `midiCodec.ts`, `drumSynth.ts`, `fmEngine.ts`, `DspEnginePlugin.tsx`, `presets.ts`, `aiRhythmGenerator.ts`, SFU-RTP-Skripte.
 
 ### 2.2 ESLint-Detailreste in Hetzner-Skripten
 
-- [ ] `sfu-rtp-multi-run.mjs:66` – no-unused-vars (Pipeline `BLOCK-047`)
-- [ ] `sfu-rtp-multi-run.mjs:84` – no-unused-vars (Pipeline `BLOCK-048`)
-- [ ] `sfu-rtp-multi-run.mjs:101` – no-unused-vars (Pipeline `BLOCK-049`)
-- [ ] `stress-test.mjs:76` – no-unused-vars (Pipeline `BLOCK-050`)
+- [x] `sfu-rtp-multi-run.mjs:66` – no-unused-vars (Pipeline `BLOCK-047`) → erledigt 2026-09-05
+- [x] `sfu-rtp-multi-run.mjs:84` – no-unused-vars (Pipeline `BLOCK-048`) → erledigt 2026-09-05
+- [x] `sfu-rtp-multi-run.mjs:101` – no-unused-vars (Pipeline `BLOCK-049`) → erledigt 2026-09-05
+- [x] `stress-test.mjs:76` – no-unused-vars (Pipeline `BLOCK-050`) → erledigt 2026-09-05
 
 ### 2.3 ESLint no-require-imports in `services/midi-bridge/index.js`
 
-- [ ] Zeile 27 (Pipeline `BLOCK-067`)
-- [ ] Zeile 28 (Pipeline `BLOCK-068`)
-- [ ] Zeile 40 (Pipeline `BLOCK-069`)
-- [ ] Zeile 80 (Pipeline `BLOCK-070`)
-- [ ] Zeile 100 (Pipeline `BLOCK-071`)
+- [x] Zeile 27 (Pipeline `BLOCK-067`) → erledigt 2026-09-05
+- [x] Zeile 28 (Pipeline `BLOCK-068`) → erledigt 2026-09-05
+- [x] Zeile 40 (Pipeline `BLOCK-069`) → erledigt 2026-09-05
+- [x] Zeile 80 (Pipeline `BLOCK-070`) → erledigt 2026-09-05
+- [x] Zeile 100 (Pipeline `BLOCK-071`) → erledigt 2026-09-05
 
 ### 2.4 React-Hooks-ESLint
 
-- [ ] `MappingLearnPanel.tsx:28` – refs (Pipeline `BLOCK-137`)
-- [ ] `useMIDI.ts:175` – set-state-in-effect (Pipeline `BLOCK-155`)
-- [ ] `useMidiClockOut.ts:43` – refs (Pipeline `BLOCK-156`)
-- [ ] `useMidiClockOut.ts:46` – refs (Pipeline `BLOCK-157`)
-- [ ] `useMidiClockOut.ts:62` – set-state-in-effect (Pipeline `BLOCK-158`)
-- [ ] `useMidiClockOut.ts:86` – refs (Pipeline `BLOCK-159`)
+- [x] `MappingLearnPanel.tsx:28` – refs (Pipeline `BLOCK-137`) → erledigt 2026-09-05
+- [x] `useMIDI.ts:175` – set-state-in-effect (Pipeline `BLOCK-155`) → erledigt 2026-09-05
+- [x] `useMidiClockOut.ts:43` – refs (Pipeline `BLOCK-156`) → erledigt 2026-09-05
+- [x] `useMidiClockOut.ts:46` – refs (Pipeline `BLOCK-157`) → erledigt 2026-09-05
+- [x] `useMidiClockOut.ts:62` – set-state-in-effect (Pipeline `BLOCK-158`) → erledigt 2026-09-05
+- [x] `useMidiClockOut.ts:86` – refs (Pipeline `BLOCK-159`) → erledigt 2026-09-05
 
 ---
 

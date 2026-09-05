@@ -21,7 +21,7 @@ export const useAIStatus = () => {
             try {
                 await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) });
                 setIsOnline(true);
-            } catch (e) {
+            } catch {
                 setIsOnline(false);
             }
         };
