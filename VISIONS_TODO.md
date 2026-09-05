@@ -78,3 +78,21 @@
 | 7 | `src/ai/localDemucs.ts` (onnxruntime-web lazy) | V2 Eigene Modell-Runtime | Latenz <100 ms / Qualität vs. Replicate |
 | 8 | `src/utils/opfs.ts` + SampleContext-Integration | V1.6 OPFS-Sample-Cache | >2-GB-Benchmark (Laden <50 ms) |
 
+---
+
+## 🔭 Übernahme aus eingereichtem PluginSystem-Briefing (2026-09-05)
+
+> In `MASTER_TODO.md` bewertet: machbare Bestands-Punkte stehen dort unter
+> P3-1…P3-6. Hier landen nur die Zukunftsvisionen aus dem Briefing.
+
+| # | Idee | Hypothese / Messlatte | Status |
+|---|---|---|---|
+| B1 | **V2-AudioGraph live** als dynamischer Patch-Bay-Router (variable Ports; Feedback-Schleifen erst nach Stabilitäts-/Phasentests) | V1/V2-Paritätstest + A/B-Hörtest, gleiche Latenz/Qualität | 🔵 Sandbox |
+| B2 | **Parallele Hardware-Clock** (LVDS-Master, Feedback-Clock, Hot-Plug) für 20+ Module | Jitter < ±1 Sample @ 48 kHz | 🔵 Sandbox |
+| B3 | **Universal-Steckmodul-Hub** (Base mit Power/Clock/Datenbus, magnetische Module, proprietäres SDK, Plug&Play) | Auslegungsreferenz: ~245 MBit/s @ 20 Module / 192 kHz / 32 Bit | 🔵 Sandbox |
+| B4 | **Auto-Codegenerierung für DSP-Module** (Matlab/Simulink → C/WASM) | Erst sinnvoll, wenn Modulzahl die Handcodierung übersteigt | 🔵 Sandbox |
+| B5 | **Edge-AI-NPUs in Modulen** (Denoise/Separation/Mastering on-device) | Erst nach Cloud-Kosten-/Latenz-Nachweis | 🟣 Fern |
+| B6 | **Software-definierte Analogsignale** (analog/digital umschaltbar) | Reine Hardware-Vision, kein Browser-Bestand | 🟣 Fern |
+| B7 | **Selbstlernende Routing-Vorschläge** („Kompressor A vor EQ B – als Preset?") | Erst nach stabiler Routing-Persistenz + Nutzungs-Tracking | 🟣 Fern |
+| B8 | **V1/V2-Paritätstest** (aus eingereichter V1/V2-Checkliste) | Bounce-/Hörtest identisch zu V1, 0 zusätzliche Dropouts | 🔵 Sandbox |
+
