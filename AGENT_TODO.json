@@ -443,10 +443,9 @@
       "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-005",
-      "lastError": "Zurueckgestuft: Worker ohne echte Aenderung/Verifikation"
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "BLOCK-005"
     },
     {
       "raw": "**AD-M2 ESLint-Scripts:** scripts-Sammlung gefixt (2026-09-05: `build-worklets.mjs`, `check-react-memo.mjs`, `download-orchestral.mjs`, `sfu-rtp-multi-run.mjs`, `stress-test.mjs`, `wake-on-login/worker.js`, `services/mixer/index.js`, `services/portal-worker/src/index.js`). Offen: `no-require-imports` in `server.ts:1454`; `import/no-dynamic-require` in `LocalEmbeddingProvider.ts:41`.",

@@ -136,6 +136,22 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSelectedProfile(profile);
   }, []);
 
+  // Deklaration VOR generateDrop verhindert den Use-before-declare-Fehler.
+  const addChatMessage = useCallback(
+    (text: string, sender: 'user' | 'ai', profile?: GeneratedDropProfile) => {
+      const message: ChatMessage = {
+        id: `msg_${Date.now()}`,
+        sender,
+        text,
+        timestamp: Date.now(),
+        generatedProfile: profile,
+        confidence: profile?.confidence,
+      };
+      setChatHistory((prev) => [...prev.slice(-20), message]); // Keep last 20 messages
+    },
+    []
+  );
+
   const generateDrop = useCallback(async (prompt: string) => {
     try {
       const context = captureMixContext();
@@ -165,7 +181,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'ai'
       );
     }
-  }, [captureMixContext]);
+  }, [captureMixContext, addChatMessage]);
 
   const executeDrop = useCallback(async (profile: DropProfile, quantized = false) => {
     try {
@@ -210,7 +226,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTransitionInProgress(false);
       }
     },
-    [captureMixContext, selectedProfile, suggestedProfiles]
+    [captureMixContext, selectedProfile, suggestedProfiles, addChatMessage]
   );
 
   const savePreset = useCallback(async (profile: DropProfile, name: string, tags?: string[]) => {
@@ -221,7 +237,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err) {
       console.error('Save failed:', err);
     }
-  }, []);
+  }, [addChatMessage]);
 
   const loadPreset = useCallback(async (id: string) => {
     try {
@@ -244,22 +260,6 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Favorite toggle failed:', err);
     }
   }, []);
-
-  const addChatMessage = useCallback(
-    (text: string, sender: 'user' | 'ai', profile?: GeneratedDropProfile) => {
-      const message: ChatMessage = {
-        id: `msg_${Date.now()}`,
-        sender,
-        text,
-        timestamp: Date.now(),
-        generatedProfile: profile,
-        confidence: profile?.confidence,
-      };
-
-      setChatHistory((prev) => [...prev.slice(-20), message]); // Keep last 20 messages
-    },
-    []
-  );
 
   const clearChat = useCallback(() => {
     setChatHistory([]);

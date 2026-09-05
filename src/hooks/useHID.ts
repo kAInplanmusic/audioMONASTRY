@@ -69,15 +69,18 @@ export const useHID = () => {
 
   useEffect(() => {
     if (!supported || !navigator.hid) return;
-    refresh();
+    // Refresh asynchron starten: keine synchronen setState-Aufrufe im Effect-Body.
+    void (async () => {
+      await Promise.resolve();
+      await refresh();
+    })();
     navigator.hid.addEventListener('connect', refresh);
     navigator.hid.addEventListener('disconnect', refresh);
     return () => {
       navigator.hid?.removeEventListener('connect', refresh);
       navigator.hid?.removeEventListener('disconnect', refresh);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supported]);
+  }, [supported, refresh]);
 
   /** Öffnet den Browser-Picker zum Koppeln eines USB/HID-Geräts. */
   const requestDevice = useCallback(async () => {

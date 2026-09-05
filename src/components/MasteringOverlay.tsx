@@ -22,6 +22,13 @@ export function MasteringOverlay({
 }: MasteringOverlayProps) {
   const initialPresetKey = Object.keys(MASTERING_PRESETS)[0] as PresetKey;
   const [activeTab, setActiveTab] = useState<'master_me' | 'tone_shift_eq'>(plugin);
+  // Aktiven Tab an externe plugin-Auswahl angleichen (React-Muster: state during render
+  // statt setState im Effect, vgl. react-hooks/set-state-in-effect).
+  const [lastPlugin, setLastPlugin] = useState(plugin);
+  if (lastPlugin !== plugin) {
+    setLastPlugin(plugin);
+    setActiveTab(plugin);
+  }
   const [lufs, setLufs] = useState(-23);
   const [autoMode, setAutoMode] = useState(false);
   const [targetSample, setTargetSample] = useState<AudioSample | null>(null);
@@ -56,13 +63,10 @@ export function MasteringOverlay({
     // console.log('Sample set for targeted mastering:', sample.name);
   };
 
-  useEffect(() => {
-    if (isOpen) setActiveTab(plugin);
-  }, [isOpen, plugin]);
-
-  // Load initial preset
+  // Load initial preset (bewusst nur einmal beim Mount).
   useEffect(() => {
     applyPreset(activePreset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!isOpen) return null;

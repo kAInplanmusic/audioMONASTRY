@@ -87,7 +87,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   useEffect(() => {
     if (!open) return;
     const ctx = Tone.context.rawContext as AudioContext & { setSinkId?: (id: string) => Promise<void> };
-    setSinkSupported(!!ctx?.setSinkId);
+    // Kein synchroner setState-Aufruf im Effect-Body.
+    void Promise.resolve().then(() => setSinkSupported(!!ctx?.setSinkId));
 
     const refresh = () => {
       enumerateMediaDevices()
@@ -119,6 +120,7 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
       off();
       audioDeviceManager.stopMonitoring();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refresh nutzt absichtlich den aktuellen settings-Snapshot nur beim Öffnen
   }, [open]);
 
   const applyOutput = async (deviceId: string) => {

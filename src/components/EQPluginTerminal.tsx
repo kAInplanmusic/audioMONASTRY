@@ -228,10 +228,22 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   const { state, lockStatus, updateState } = usePluginState('eq', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
-  const [power, setPower] = useState(true);
-  const [gainValues, setGainValues] = useState<number[]>(BANDS.map(() => 0));
-  const [qValues, setQValues] = useState<number[]>(BANDS.map(() => 1));
-  const lastGainsRef = useRef<number[]>(BANDS.map(() => 0));
+  // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.
+  const [loadedEqState] = useState(() => {
+    try {
+      const parsed = storageGetJson<{ gains?: number[]; qs?: number[]; power?: boolean }>('eq-state');
+      if (parsed) {
+        const gains = Array.isArray(parsed.gains) && parsed.gains.length === BAND_COUNT ? parsed.gains.map(Number) : BANDS.map(() => 0);
+        const qs = Array.isArray(parsed.qs) && parsed.qs.length === BAND_COUNT ? parsed.qs.map(Number) : BANDS.map(() => 1);
+        return { gains, qs, power: typeof parsed.power === 'boolean' ? parsed.power : true };
+      }
+    } catch { /* ignore */ }
+    return null;
+  });
+  const [power, setPower] = useState(loadedEqState?.power ?? true);
+  const [gainValues, setGainValues] = useState<number[]>(loadedEqState?.gains ?? BANDS.map(() => 0));
+  const [qValues, setQValues] = useState<number[]>(loadedEqState?.qs ?? BANDS.map(() => 1));
+  const lastGainsRef = useRef<number[]>(loadedEqState?.gains ?? BANDS.map(() => 0));
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const pushEq = (gains: number[], qs: number[]) => {
@@ -245,22 +257,13 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
     });
   };
 
-  // Persistenz laden + initial anwenden.
+  // Geladene Werte genau einmal an die Engine pushen (Side-Effekt, kein setState).
+  const didInitPushRef = useRef(false);
   useEffect(() => {
-    try {
-      const parsed = storageGetJson<{ gains?: number[]; qs?: number[]; power?: boolean }>('eq-state');
-      if (parsed) {
-        const gains = Array.isArray(parsed.gains) && parsed.gains.length === BAND_COUNT ? parsed.gains.map(Number) : BANDS.map(() => 0);
-        const qs = Array.isArray(parsed.qs) && parsed.qs.length === BAND_COUNT ? parsed.qs.map(Number) : BANDS.map(() => 1);
-        setGainValues(gains);
-        setQValues(qs);
-        lastGainsRef.current = gains;
-        if (typeof parsed.power === 'boolean') setPower(parsed.power);
-        pushEq(gains, qs);
-      }
-    } catch { /* ignore */ }
-     
-  }, []);
+    if (didInitPushRef.current) return;
+    didInitPushRef.current = true;
+    pushEq(gainValues, qValues);
+  }, [gainValues, qValues]);
 
   // Persistenz speichern.
   useEffect(() => {
