@@ -1,9 +1,6 @@
-import React, { useCallback, useState } from 'react';
-import { Bot, ChevronDown, ChevronUp, Play, Square, Wand2 } from 'lucide-react';
-import { moaAgent, type MoaStep } from '../core/ai/MoaAgent';
-import { moaHistory } from '../core/ai/MoaHistory';
-import { audioEngine } from '../utils/audioEngine';
-import { routeModuleState } from '../core/pluginAudioRouter';
+import React, { useState } from 'react';
+import { Bot, ChevronDown, ChevronUp } from 'lucide-react';
+import { useMoaRun, useQuickActions } from './terminalShared';
 
 /**
  * aiMONK-Bottom-Dock (D7 / NEW-D7-1)
@@ -15,47 +12,14 @@ import { routeModuleState } from '../core/pluginAudioRouter';
 export const AiMonkDock = React.memo(function AiMonkDock() {
   const [collapsed, setCollapsed] = useState(false);
   const [task, setTask] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<string[]>([]);
-  const [meta, setMeta] = useState('');
-
-  const run = useCallback(async (input: string) => {
-    const clean = input.trim();
-    if (!clean || busy) return;
-    setBusy(true);
-    const started = Date.now();
-    try {
-      const plan = await moaAgent.plan(clean);
-      const steps: MoaStep[] = plan.steps.length
-        ? plan.steps
-        : [{ pluginId: 'ai', command: clean, prompt: clean }];
-      const executed = await moaAgent.executePlan({ ...plan, steps }, 'localUser');
-      const lines = executed.map((r) => {
-        // P0-2/P0-8: geplante Plugin-Aktionen wirklich ins Audio-Routing geben.
-        if (r.handled && r.pluginId) {
-          const cmd = String(r.step.command ?? '');
-          if (/an|ein|aktiv/i.test(cmd)) routeModuleState(r.pluginId, 'AUTO_AI');
-          if (/aus|stopp|deaktiv/i.test(cmd)) routeModuleState(r.pluginId, 'OFF');
-        }
-        return `${r.handled ? '✓' : '✗'} ${r.pluginId || r.step.pluginId}: ${r.step.command}${r.error ? ` (${r.error})` : ''}`;
-      });
-      setMeta(`Provider: ${plan.provider} · Dauer: ${Date.now() - started} ms`);
-      setResults((prev) => [...lines, ...prev].slice(0, 30));
-      moaHistory.add({ pluginId: 'ai', task: clean, provider: plan.provider, results: lines, at: Date.now() });
-    } catch (e) {
-      setMeta(`Provider: FEHLER · Dauer: ${Date.now() - started} ms`);
-      setResults((prev) => [`✗ ${e instanceof Error ? e.message : String(e)}`, ...prev].slice(0, 30));
-    } finally {
-      setBusy(false);
-      setTask('');
-    }
-  }, [busy]);
-
-  const quickActions = [
-    { label: '▶ PLAY', icon: Play, run: () => { void audioEngine.play(); } },
-    { label: '⏹ STOP', icon: Square, run: () => { audioEngine.stop(); } },
-    { label: 'KI-PATTERN', icon: Wand2, run: () => { void run('Erzeuge ein Techno-Pattern für den Sequencer und wende es an'); } },
-  ];
+  const { run, results, meta, busy } = useMoaRun({
+    pluginId: 'ai',
+    withMeta: true,
+    maxResults: 30,
+    withRouting: true,
+    onSettled: () => setTask(''),
+  });
+  const quickActions = useQuickActions(run);
 
   if (collapsed) {
     return (

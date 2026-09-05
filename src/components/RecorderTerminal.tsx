@@ -5,11 +5,11 @@ import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
 import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
-import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { sampleToContent } from '../core/audio/audioContent';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { TerminalFrame } from './terminalShared';
 
 interface Take {
   id: number;
@@ -146,29 +146,17 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
   }, [startRecording, handleStop]);
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="recording" placeholder="MOA: z. B. 'Aufnahme starten'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-      <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-indigo-900/20 to-[#111] border-b border-indigo-900/30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.3)]">
-            <Radio className="w-5 h-5 text-indigo-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase flex items-center gap-2">
-              Master Recorder <span className="text-[10px] font-mono text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-sm">BIT-PERFECT</span>
-            </h2>
-          </div>
-        </div>
-
-        <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
-        </select>
-      </div>
-
+    <TerminalFrame
+      pluginId="recording"
+      moaPlaceholder="MOA: z. B. 'Aufnahme starten'"
+      title="Master Recorder"
+      badge="BIT-PERFECT"
+      icon={Radio}
+      accent="indigo"
+      lockStatus={lockStatus}
+      state={state}
+      updateState={updateState}
+    >
       <div className="flex-1 p-6 flex gap-6 overflow-hidden">
         {/* Left Column: Transport & Source */}
         <div className="w-1/2 flex flex-col gap-6">
@@ -264,6 +252,6 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
           </div>
         </div>
       </div>
-    </div>
+    </TerminalFrame>
   );
 });

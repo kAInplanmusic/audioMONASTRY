@@ -1,10 +1,8 @@
-import React, { useCallback, useState } from 'react';
-import { Bot, Play, Square, Wand2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Bot } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { MoaAssistant } from './MoaAssistant';
-import { moaAgent, type MoaStep } from '../core/ai/MoaAgent';
-import { moaHistory } from '../core/ai/MoaHistory';
-import { audioEngine } from '../utils/audioEngine';
+import { useMoaRun, useQuickActions } from './terminalShared';
 
 /**
  * aiMONK – globaler KI-Assistent
@@ -16,37 +14,12 @@ import { audioEngine } from '../utils/audioEngine';
 export const AiMonkTerminal = React.memo(function AiMonkTerminal() {
   const { state, updateState } = usePluginState('ai', 'PRO');
   const [task, setTask] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [results, setResults] = useState<string[]>([]);
-
-  const run = useCallback(async (input: string) => {
-    const clean = input.trim();
-    if (!clean || busy) return;
-    setBusy(true);
-    try {
-      const plan = await moaAgent.plan(clean);
-      const steps: MoaStep[] = plan.steps.length
-        ? plan.steps
-        : [{ pluginId: 'ai', command: clean, prompt: clean }];
-      const executed = await moaAgent.executePlan({ ...plan, steps }, 'localUser');
-      const lines = executed.map((r) =>
-        `${r.handled ? '✓' : '✗'} ${r.pluginId || r.step.pluginId}: ${r.step.command}${r.error ? ` (${r.error})` : ''}`,
-      );
-      setResults((prev) => [...lines, ...prev].slice(0, 20));
-      moaHistory.add({ pluginId: 'ai', task: clean, provider: plan.provider, results: lines, at: Date.now() });
-    } catch (e) {
-      setResults((prev) => [`✗ ${e instanceof Error ? e.message : String(e)}`, ...prev].slice(0, 20));
-    } finally {
-      setBusy(false);
-      setTask('');
-    }
-  }, [busy]);
-
-  const quickActions = [
-    { label: '▶ PLAY', icon: Play, run: () => { void audioEngine.play(); } },
-    { label: '⏹ STOP', icon: Square, run: () => { audioEngine.stop(); } },
-    { label: 'KI-PATTERN', icon: Wand2, run: () => { void run('Erzeuge ein Techno-Pattern für den Sequencer und wende es an'); } },
-  ];
+  const { run, results, busy } = useMoaRun({
+    pluginId: 'ai',
+    maxResults: 20,
+    onSettled: () => setTask(''),
+  });
+  const quickActions = useQuickActions(run);
 
   return (
     <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans">
