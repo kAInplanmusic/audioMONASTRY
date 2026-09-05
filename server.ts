@@ -223,12 +223,25 @@ app.use((_req, res, next) => {
 });
 
 // P-16: Security-Header (ohne CSP-Bruch – CSP separat, da Worklets/Blob/WebRTC
-// besondere Regeln brauchen).
+// besondere Regeln brauchen). S-7: Report-Only-CSP zum Sammeln von Verstößen.
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  res.setHeader(
+    'Content-Security-Policy-Report-Only',
+    [
+      "default-src 'self'",
+      "script-src 'self' 'wasm-unsafe-eval'",
+      "worker-src 'self' blob:",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "media-src 'self' blob: data:",
+      "connect-src 'self' https://api.deepseek.com https://router.huggingface.co https://api-inference.huggingface.co https://*.endpoints.huggingface.cloud https://api.openai.com wss: https:",
+      "frame-ancestors 'none'",
+    ].join('; '),
+  );
   next();
 });
 

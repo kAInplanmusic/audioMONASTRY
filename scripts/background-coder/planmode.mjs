@@ -103,9 +103,11 @@ Liefere als Markdown:
 
 async function main() {
   mkdirSync(path.dirname(OUT), { recursive: true });
+  const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
   const sections = [`# Background-Coder Tiefen-Audit Plan\n\nErstellt: ${new Date().toISOString()}\n\n> PLAN MODE – keine Codeänderungen.\n`];
 
   for (const agent of PLAN_AGENTS) {
+    if (only.length > 0 && !only.includes(agent.key)) continue;
     if (!hfRouter.apiKey()) {
       sections.push(`\n## ${agent.role}\n\n**BLOCKED:** Kein HF-Token.\n`);
       continue;

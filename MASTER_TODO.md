@@ -44,7 +44,7 @@
 - [x] **S-4 Admin-Token-Vergleich nicht konstantzeitig (Mittel)** – `safeTokenEqual()` für `x-admin-token` (2026-09-05).
 - [x] **S-5 SFU-`sessionId` ungeprüft (Mittel)** – Whitelist `/^[a-zA-Z0-9_-]{1,64}$/`, sonst disconnect (2026-09-05).
 - [x] **S-6 `VOICE_CLI` ungeprüft (Mittel)** – Pfad-Allowlist + `crypto.randomBytes` im Dateinamen (2026-09-05).
-- [ ] **S-7 Keine Content-Security-Policy (Mittel)** – Report-Only starten: `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf Supabase/R2/SFU.
+- [x] **S-7 Keine Content-Security-Policy (Mittel)** – Report-Only-CSP gesetzt (2026-09-05): `worker-src 'self' blob:`, `script-src 'self' 'wasm-unsafe-eval'`, `connect-src` auf DeepSeek/HF/Self/WSS/HTTPS.
 - [x] **S-8 `qs`-Kette verwundbar (Niedrig)** – `npm audit fix` durchgeführt (2026-09-05, 0 Vulnerabilities).
 - [x] **S-9 Redis-/Fleet-Map-URL ungeprüft (Niedrig)** – `new URL()` https-only + redis/rediss-Schema-Whitelist (2026-09-05).
 
@@ -115,7 +115,7 @@
 - [ ] **AD-M3 Backend-Bugs:** `cloudAutomation.ts:100` Regex-Logik; `cloudAutomation.ts:132` Env-Zugriffe; `celery_app.py:104/120` Race Conditions `_load_demucs`/`_load_musicgen`; `hypersonic_moa.py:67` leerer Prompt; `app.py:124` + `handlers.py:105` Race Conditions Model-Loading; `handlers.py:130` Resampling-Fehlerbehandlung; `hf_manage_endpoint.py:122/130` Fehlerbehandlung/Trennung Konfiguration-Logik; `model_manager.py:130/190` Race/Load + VRAM-Fehlerfall; `registry.py:26` Revision-Pinning via `null`; `startup.sh:9/10` Symlink-Pfad + HF_HOME-Space-Check.
 - [x] **AD-M4a Bind-Host-Härtung:** `backend-core/package.json` start:python nutzt `${AI_BIND_HOST:-127.0.0.1}` (2026-09-05); `samplemonk-ai-runtime/startup.sh` bindet bereits 127.0.0.1.
 - [ ] **AD-M4b Python-Supply-Chain:** `services/samplemonk-ai-runtime/pyproject.toml` – Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade (Betriebsentscheidung/Test nötig).
-- [ ] **AD-M5a React/State:** `usePluginState.ts:28` updateState mit `useCallback` stabilisieren.
+- [x] **AD-M5a React/State:** `usePluginState.ts` updateState via `useCallback` + `lockStatusRef` stabil (2026-09-05).
 - [x] **AD-M5b React/State:** `useSessionSync.ts:35` unvalidierte Samples gefixt via `isValidScratchSample()` (2026-09-05).
 - [ ] **AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung.
 
