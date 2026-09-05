@@ -117,7 +117,8 @@
 - [ ] **AD-M4b Python-Supply-Chain:** `services/samplemonk-ai-runtime/pyproject.toml` – Hash-Pins/Lockfile + `torch==2.4.1`-Upgrade (Betriebsentscheidung/Test nötig).
 - [x] **AD-M5a React/State:** `usePluginState.ts` updateState via `useCallback` + `lockStatusRef` stabil (2026-09-05).
 - [x] **AD-M5b React/State:** `useSessionSync.ts:35` unvalidierte Samples gefixt via `isValidScratchSample()` (2026-09-05).
-- [ ] **AD-M6 WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race; `WebRTCManager.ts:220` SFU-Producer-Fehlerbehandlung.
+- [ ] **AD-M6a WebRTC:** `WebRTCManager.ts:150` SFU-Umschalt-Race (DA-220).
+- [x] **AD-M6b WebRTC:** `WebRTCManager.ts:220` SFU-Subscription-Retry umgesetzt (DA-221, 2026-09-05).
 
 ### Niedrig (813) – aggregiert
 
@@ -1247,9 +1248,9 @@ Erledigte Aufgaben werden **nicht** hier abgehakt, sondern nach
 - [ ] **DA-2026-09-04-220 · MEDIUM · Race Condition bei SFU-Modus-Umschaltung** – `src/utils/WebRTCManager.ts:150` (hf-qwen)
   - In `setSfuMode`, wenn der SFU-Modus aktiviert wird, werden bestehende P2P-Verbindungen geschlossen, aber es gibt keine Garantie dafür, dass alle Verbindungen vor dem Umschaltvorgang ordnungsgemäß abgeschlossen wurden. Dies kann zu Zustandsinkonsistenzen führen, insbesondere wenn noch Daten über alte Verbindungen gesendet werden.
   - Vorschlag: Füge eine Wartezeit oder ein Promise-basiertes Schließen hinzu, bevor der SFU-Modus aktiviert wird, um sicherzustellen, dass alle Ressourcen freigegeben wurden.
-- [ ] **DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)
+- [x] **DA-2026-09-04-221 · MEDIUM · Mögliche Fehlerbehandlung bei SFU-Produzenten** – `src/utils/WebRTCManager.ts:220` (hf-qwen)
   - In `syncSfuSubscriptions` wird bei einem Fehler beim Erstellen eines Tracks nur eine Warnung ausgegeben. Es gibt keine Mechanismen zur Wiederholung oder Fehlerbehandlung, was zu fehlenden Streams führen kann.
-  - Vorschlag: Implementiere eine Retry-Logik oder eine Wiederherstellungsmethode, um sicherzustellen, dass fehlgeschlagene Subscriptions später wieder versucht werden.
+  - Vorschlag: Implementiere eine Retry-Logik oder eine Wiederherstellungsmethode, um sicherzustellen, dass fehlgeschlagene Subscriptions später wieder versucht werden. → Umsetzung 2026-09-05: Subscription-Retry mit 2-s-Backoff und `sfuSubscribed`-Cleanup.
 
 ---
 
