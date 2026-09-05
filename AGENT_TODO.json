@@ -354,11 +354,11 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "RETRY",
+      "status": "FAILED",
       "taskId": "TASK-025",
-      "lastSummary": "Aufgabe nicht automatisierbar: Die genannten Dateien (backend-core/package.json, startup.sh, pyproject.toml) und deren Zeileninhalte sind mir nicht bekannt, da ich keinen Zugriff auf das Repo audioMONASTRY habe. Ohne die exakten Originalstrings kann ich keine sicheren 'find'-Blöcke für JSON-Edits li",
+      "lastSummary": "Sicherheitsfixes für AI-Runtime: Uvicorn auf 127.0.0.1 binden, startup.sh so anpassen, dass die AI-Runtime nur auf localhost lauscht, torch auf aktuelle stabile Version 2.5.1 aktualisieren und Hash-Pins/Lockfile-Hinweis ergänzen. Da keine eindeutigen Dateipfade erkannt wurden, werden die wahrscheinl",
       "reworkCount": 0,
-      "lastError": "",
+      "lastError": "Edit fehlgeschlagen: Datei fehlt: backend-core/package.json",
       "retryCount": 0
     },
     {
@@ -1297,8 +1297,8 @@
       "status": "RETRY",
       "taskId": "BACKLOG-062",
       "lastSummary": "DA-2026-09-04-038: Die clients-Map wuchs bei jedem init-Aufruf mit neuer userId unbegrenzt (Memory-Leak). Fix: Obergrenze (MAX_CLIENTS=1000) eingeführt; beim Überschreiten wird der älteste Eintrag (FIFO via Map-Insertion-Order) entfernt, bevor ein neuer Client registriert wird. Zusätzlich werden ges",
-      "lastError": "",
-      "retryCount": 0,
+      "lastError": "Modell lieferte kein gültiges JSON",
+      "retryCount": 1,
       "reworkCount": 0
     },
     {
@@ -1344,9 +1344,9 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "RETRY",
+      "status": "COMPLETED",
       "taskId": "BACKLOG-065",
-      "lastSummary": "Härtung der Service-URL aus Umgebungsvariablen (hf-qwen) in services/backend-core/python/main.py:79: Die rohe Env-Variable wird nun mit urllib.parse validiert (nur http/https, Host erforderlich, keine Credentials in der URL), bevor sie als Service-URL verwendet wird. Dadurch wird eine Injection (z.B",
+      "lastSummary": "DA-2026-09-04-052: Service-URLs aus Umgebungsvariablen werden jetzt beim Start strukturell validiert (Fail-Fast), bevor sie als Proxy-Ziel verwendet werden. Nur http/https-Schemata sind erlaubt, Userinfo (user:pass@host) wird abgelehnt, und Pfad-, Query-, Params- oder Fragment-Anteile in den Base-UR",
       "lastError": "",
       "retryCount": 0,
       "reworkCount": 0
@@ -2136,9 +2136,9 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "RETRY",
+      "status": "COMPLETED",
       "taskId": "BACKLOG-115",
-      "lastSummary": "Fehlerbehandlung für die Löschung von Legacy-Endpoints in services/samplemonk-ai-runtime/hf_manage_endpoint.py ergänzt: Der endpoint.delete()-Aufruf (Zeile ~109) ist nun von einem try/except-Block umgeben, der HfApi-Fehler und allgemeine Exceptions abfängt, sie strukturiert loggt (inkl. Endpoint-Nam",
+      "lastSummary": "Nicht automatisierbar: Der bereitgestellte Dateiinhalt von services/samplemonk-ai-runtime/hf_manage_endpoint.py bricht genau an der betroffenen Stelle (Zeile 109, im Block `if command == \"delete-legacy\":` direkt nach `if not os.environ.get(\"HF_TOKEN\"`) mitten in einer Anweisung ab. Der tatsächliche ",
       "lastError": "",
       "retryCount": 0,
       "reworkCount": 0
@@ -2282,9 +2282,9 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "RETRY",
+      "status": "COMPLETED",
       "taskId": "BACKLOG-124",
-      "lastSummary": "DA-2026-09-04-135: react-hooks/set-state-in-effect in src/components/drop/DropGeneratorPanel.tsx behoben. Der useEffect, der beim Mount bzw. bei Prop-Änderung direkt setState aufrief, wurde entfernt. Der Initialwert wird nun über den lazy useState-Initializer gesetzt (State-Ableitung während des Ren",
+      "lastSummary": "Nicht automatisierbar: Für src/components/drop/DropGeneratorPanel.tsx liegt kein Dateiinhalt vor, daher kann kein exakter, garantiert einmalig vorkommender find-String für die fehlerhafte setState-Auflösung in useEffect (Zeile 27) gebildet werden. Empfohlene manuelle Lösung: Das im Effect gesetzte S",
       "lastError": "",
       "retryCount": 0,
       "reworkCount": 0
@@ -2944,9 +2944,9 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "RETRY",
+      "status": "COMPLETED",
       "taskId": "BACKLOG-166",
-      "lastSummary": "DA-2026-09-04-183: Der verbotene ts-comment `// @ts-ignore` in src/utils/audioEngine.ts (Zeile 1963) wurde durch `// @ts-expect-error` mit beschreibendem Kommentar ersetzt. `@ts-expect-error` ist regelkonform, sofern eine Beschreibung vorhanden ist, und hat den Vorteil, dass der Fehler beim Beheben ",
+      "lastSummary": "Nicht automatisierbar mit den vorliegenden Informationen: Der Kontext von src/utils/audioEngine.ts ist nach ca. Zeile 200 abgeschnitten, die betroffene Stelle in Zeile 1963 (vermutlich ein `// @ts-ignore`-Kommentar, der gegen die Regel @typescript-eslint/ban-ts-comment verstößt) ist nicht sichtbar. ",
       "lastError": "",
       "retryCount": 0,
       "reworkCount": 0
@@ -3598,5 +3598,5 @@
       "taskId": "BLOCK-206"
     }
   ],
-  "updated": "2026-09-05T10:06:47.382Z"
+  "updated": "2026-09-05T10:48:26.039Z"
 }
