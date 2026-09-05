@@ -127,7 +127,7 @@ function main() {
     if (counters[cls] <= CLASS_LIMITS[cls]) {
       const n = counters[cls];
       const idBase = cls === 'LEICHT' ? 0 : cls === 'MITTEL' ? 12 : 24;
-      ordered[cls].push({ ...task, status: 'READY', taskId: `TASK-${String(idBase + n).padStart(3, '0')}` });
+      ordered[cls].push({ ...task, status: 'PENDING', taskId: `TASK-${String(idBase + n).padStart(3, '0')}` });
     } else {
       ordered.BACKLOG.push({ ...task, status: 'BLOCKED' });
     }

@@ -1,5 +1,5 @@
 {
-  "created": "2026-09-05T07:31:06.421Z",
+  "created": "2026-09-05T08:07:44.336Z",
   "counts": {
     "LEICHT": 12,
     "MITTEL": 9,
@@ -18,7 +18,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-001"
     },
     {
@@ -32,7 +32,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-002"
     },
     {
@@ -46,7 +46,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-003"
     },
     {
@@ -60,7 +60,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-004"
     },
     {
@@ -74,7 +74,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-005"
     },
     {
@@ -88,7 +88,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-006"
     },
     {
@@ -102,7 +102,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-007"
     },
     {
@@ -116,7 +116,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-008"
     },
     {
@@ -130,7 +130,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-009"
     },
     {
@@ -144,7 +144,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-010"
     },
     {
@@ -158,7 +158,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-011"
     },
     {
@@ -172,7 +172,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-012"
     },
     {
@@ -186,7 +186,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-013"
     },
     {
@@ -200,7 +200,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-014"
     },
     {
@@ -214,7 +214,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-015"
     },
     {
@@ -228,7 +228,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-016"
     },
     {
@@ -242,7 +242,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-017"
     },
     {
@@ -256,7 +256,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-018"
     },
     {
@@ -270,7 +270,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-019"
     },
     {
@@ -284,7 +284,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-020"
     },
     {
@@ -298,7 +298,7 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-021"
     },
     {
@@ -312,7 +312,7 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-025"
     },
     {
@@ -326,7 +326,7 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "READY",
+      "status": "PENDING",
       "taskId": "TASK-026"
     },
     {
