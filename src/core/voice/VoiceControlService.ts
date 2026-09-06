@@ -133,14 +133,21 @@ export class VoiceControlService {
     const lower = normalized.toLowerCase();
 
     const exact = this.pluginCommands.find((c) => c.pluginId === pluginId && c.action === lower);
-    const keyword = exact
-      ? undefined
-      : this.pluginCommands.find(
-          (c) =>
-            c.pluginId === pluginId &&
-            (c.keywords ?? []).some((k) => lower.includes(k.toLowerCase())),
-        );
-    const match = exact ?? keyword;
+    // Keyword-Match mit Prioritäts-Score: längste/spezifischste Übereinstimmung
+    // gewinnt (z. B. auto_drop mit 'automatisch'+'passend'+'drop' > pattern mit 'drop').
+    let keyword:
+      | { candidate: (typeof this.pluginCommands)[number]; score: number }
+      | undefined;
+    if (!exact) {
+      for (const candidate of this.pluginCommands) {
+        if (candidate.pluginId !== pluginId) continue;
+        const matched = (candidate.keywords ?? []).filter((k) => lower.includes(k.toLowerCase()));
+        if (matched.length === 0) continue;
+        const score = matched.reduce((sum, k) => sum + k.length, 0) + matched.length;
+        if (!keyword || score > keyword.score) keyword = { candidate, score };
+      }
+    }
+    const match = exact ?? keyword?.candidate;
     if (!match) {
       // Cerebras-NLU-Fallback (aiMONK): freie Sprache -> {action, parameters}
       const nlu = await cerebrasNluIntent(command, pluginId);
