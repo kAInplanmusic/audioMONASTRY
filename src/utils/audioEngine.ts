@@ -1162,6 +1162,16 @@ class AudioEngine {
     }
   }
 
+  /** PREP-6: Callback zur nächsten vollen Bar (Tone.Transport) ausführen. */
+  public scheduleAtNextBar(cb: () => void): void {
+    try {
+      const ToneMod = Tone;
+      const now = ToneMod.Transport.seconds;
+      const bar = ToneMod.Time('1m').toSeconds();
+      ToneMod.Transport.scheduleOnce(cb, now + Math.max(0.05, bar));
+    } catch { /* Transport nicht aktiv – sofort ausführen */ cb(); }
+  }
+
   /** M-2: Kanal weich auf MAIN faden (Fade-in zu Ziel-DB, Default 0 dB). */
   public fadeChannelToMain(track: TrackType, rampSec = 4, targetDb = 0): boolean {
     this.ensureInitialized();

@@ -291,6 +291,11 @@ export function registerDefaultVoiceCommands(): void {
       ?? SORTED_MUSIC_LIBRARY[0];
     if (!cand) return;
     await audioEngine.loadTrackSample(track, cand.url);
+    // PREP-6: Drop beat-synced an der nächsten vollen Bar auslösen + langsam einfaden.
+    audioEngine.scheduleAtNextBar(() => {
+      audioEngine.triggerEvent(track, 0.9);
+      audioEngine.fadeChannelToMain(track, 4, 0);
+    });
     controlBus.emit('monk:drop-auto', { track: cand.name, url: cand.url, channel: track });
   }, ['auto', 'drop', 'automatisch', 'überleitung', 'biblio', 'passend']);
 

@@ -228,9 +228,9 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 ```
 
 ### Befunde (Nadelöhre)
-- [x] **WF-1 · HOCH · Kanal 5 ist Nadelöhr umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.
-- [x] **WF-2 · HOCH · Musik-Load ohne Decode-Cache umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
-- [x] **WF-3 · HOCH · Mastering-Insert liegt im Monitorweg umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
+- [x] **WF-1 · HOCH · Kanal 5 ist Nadelöhr umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.
+- [x] **WF-2 · HOCH · Musik-Load ohne Decode-Cache umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
+- [x] **WF-3 · HOCH · Mastering-Insert liegt im Monitorweg umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
 - [x] **WF-4 · NIEDRIG · UI-only-Plugins liefern leeres Array** – `mastering`/`stem`/`recording` sind in `pluginChannelMap` als `[]` markiert, obwohl sie Audio bearbeiten (Insert statt Quelle). Dokumentieren bzw. Insert-Mapping ergänzen.
 - [x] **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen). → umgesetzt 2026-09-06: Migration 006 (Session-/Job-Indizes).
 
@@ -242,7 +242,7 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 > GitHub-Referenzen: 6-Op-FM `asb2m10/dexed` (3.5k★) · Wavetable `surge-synthesizer/surge` (4k★) · Tonewheel `pantherb/setBfree` · Orchester `sgossner/VSCO-2-CE` (672★, CC0) · SFZ/SF2 `sfztools/sfizz` (533★).
 
 - [x] **AUDIO-1 · HOCH · Granular-Engine** – fertig produktionsreif 2026-09-06 (Worklet + Engine + Tests gruen). – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.
-- [x] **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – fertig produktionsreif 2026-09-06 (DX7-Algos/Presets/SysEx + Worklet + Tests gruen). – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
+- [x] **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, fertig produktionsreif 2026-09-06 (DX7-Algos/Presets/SysEx + Worklet + Tests gruen). – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
 - [x] **AUDIO-3 · HOCH · Wavetable-Synthese** – produktionsreif verifiziert 2026-09-06 (MipMap/Interpolation + Tests gruen). – Surge-XT-Referenz: Wavetable-Interpolation, Morphing, Unison/Detune, Mod-Matrix-Anbindung.
 - [x] **AUDIO-4 · MITTEL · Tonewheel/Orgel** – produktionsreif verifiziert 2026-09-06 (Drawbars + LeslieSim + Tests gruen). – setBfree-Referenz: 9 Drawbars, Percussion, Leslie-Simulation (Rotary), Key-Click.
 - [x] **AUDIO-5 · MITTEL · Drum-Synthese** – produktionsreif verifiziert 2026-09-06 (Kick/Snare/Hat + Humanize + Worklet + Tests gruen). – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.
@@ -253,8 +253,8 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 
 ## 🧠 Cerebras-Vorbereitung 2026-09-06 (Themen 1/2/6/7/8)
 
-- [ ] **PREP-1 · HOCH · UI-Regressionstests (Playwright-Snapshots)** – `toHaveScreenshot`-Baselines für Startseite/MixerMONK/Settings/midiMONK + Audio-Health-Assert; GitHub-Action auf PR.
-- [ ] **PREP-2 · HOCH · CI-Gate** – Workflow `ci.yml`: bei jedem PR `npm run verify` + `vite build` als Pflicht-Check.
-- [ ] **PREP-6 · HOCH · Beat-synced aiMONK/dropMONK-Scheduling** – Drop/Fade an nächste Phrase (Tone.Transport-Events/Worklet-Clock) statt sofort.
-- [ ] **PREP-7 · HOCH · midiMONK Mapping-Persistenz + Digitakt-16-Step-Editor** – Routing-Ansicht je Gerät, Pattern-Editor verdrahten.
-- [ ] **PREP-8 · MITTEL · Observability/Security-Betrieb** – Signaler-Logs → /api/telemetry, Alerting, HF-Secret-Rotation als Runbook.
+- [x] **PREP-1 · HOCH · UI-Regressionstests (Playwright-Snapshots)** – umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, umgesetzt 2026-09-06, `toHaveScreenshot`-Baselines für Startseite/MixerMONK/Settings/midiMONK + Audio-Health-Assert; GitHub-Action auf PR.
+- [x] **PREP-2 · HOCH · CI-Gate** – Workflow `ci.yml`: bei jedem PR `npm run verify` + `vite build` als Pflicht-Check.
+- [x] **PREP-6 · HOCH · Beat-synced aiMONK/dropMONK-Scheduling** – Drop/Fade an nächste Phrase (Tone.Transport-Events/Worklet-Clock) statt sofort.
+- [x] **PREP-7 · HOCH · midiMONK Mapping-Persistenz + Digitakt-16-Step-Editor** – Routing-Ansicht je Gerät, Pattern-Editor verdrahten.
+- [x] **PREP-8 · MITTEL · Observability/Security-Betrieb** – Signaler-Logs → /api/telemetry, Alerting, HF-Secret-Rotation als Runbook.

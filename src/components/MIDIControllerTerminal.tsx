@@ -10,6 +10,7 @@ import { MoaAssistant } from './MoaAssistant';
 import { audioDeviceManager, ManagedOutputDevice } from '../utils/audioDeviceManager';
 import { SkinEngine } from './midi/SkinEngine';
 import { MappingLearnPanel } from './midi/MappingLearnPanel';
+import { DigitaktPatternEditor } from './midi/DigitaktPatternEditor';
 import { MidiDeviceType } from '../config/midiDevices';
 import { useControlHub } from '../hooks/useControlHub';
 import { applyMappedParameter } from '../hooks/useMappingApply';
@@ -226,6 +227,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
                      <button type="button" onClick={() => outputs[0]?.send([0xfc])} className="px-2 py-1 rounded border border-red-500/50 text-red-300 text-[9px] font-bold cursor-pointer hover:bg-red-500/10">⏹ STOP</button>
                      <button type="button" onClick={() => outputs[0]?.send([0xf8])} className="px-2 py-1 rounded border border-neutral-700 text-neutral-300 text-[9px] font-bold cursor-pointer hover:bg-white/10">CLOCK</button>
                    </div>
+                   <DigitaktPatternEditor output={outputs[0]} />
                  </div>
                )}
              </div>

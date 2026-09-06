@@ -1,0 +1,36 @@
+name: CI – Verify + Build (Pflicht-Gate)
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript-Check (tsc)
+        run: npx tsc --noEmit
+
+      - name: Unit-/Integration-Tests (vitest)
+        run: npx vitest run
+
+      - name: Interface-Boundary-Scan
+        run: node scripts/validate-interface-boundaries.mjs
+
+      - name: Lint (ESLint, keine Errors)
+        run: npx eslint . --max-warnings=9999
+
+      - name: Production-Build
+        run: npm run build
