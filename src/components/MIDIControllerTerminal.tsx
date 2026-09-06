@@ -38,7 +38,7 @@ function detectTouchLimited(): boolean {
 export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal() {
   const { state, lockStatus, updateState } = usePluginState('controller', 'PRO');
   const {
-    midiAccess, inputs, detected, error: midiError, rescan, lastMessage,
+    midiAccess, inputs, outputs, detected, error: midiError, rescan, lastMessage,
     lastControlEvent: midiLastControlEvent,
   } = useMIDI();
   const { devices: hidDevices, error: hidError, supported: hidSupported, requestDevice: pairHid } = useHID();
@@ -218,6 +218,16 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
                  </div>
                ))}
                {midiError && <div className="mt-2 text-[9px] font-mono text-red-400 leading-snug">{midiError}</div>}
+               {detected.some((d) => d.profile === 'DIGITAKT2') && outputs[0] && (
+                 <div className="mt-2 border-t border-neutral-800 pt-2">
+                   <div className="text-[9px] font-mono text-neutral-500 uppercase">Digitakt 2 Sync</div>
+                   <div className="flex gap-1.5 mt-1">
+                     <button type="button" onClick={() => outputs[0]?.send([0xfa])} className="px-2 py-1 rounded border border-emerald-500/50 text-emerald-300 text-[9px] font-bold cursor-pointer hover:bg-emerald-500/10">▶ START</button>
+                     <button type="button" onClick={() => outputs[0]?.send([0xfc])} className="px-2 py-1 rounded border border-red-500/50 text-red-300 text-[9px] font-bold cursor-pointer hover:bg-red-500/10">⏹ STOP</button>
+                     <button type="button" onClick={() => outputs[0]?.send([0xf8])} className="px-2 py-1 rounded border border-neutral-700 text-neutral-300 text-[9px] font-bold cursor-pointer hover:bg-white/10">CLOCK</button>
+                   </div>
+                 </div>
+               )}
              </div>
            </details>
 

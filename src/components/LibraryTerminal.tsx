@@ -11,6 +11,7 @@ import { SemanticSampleSearch } from './SemanticSampleSearch';
 import { Scratchpad } from './Scratchpad';
 import { CloudStatusBadge } from './CloudStatusBadge';
 import { SampleUploadPanel } from './SampleUploadPanel';
+import { QuickImportPanel } from './QuickImportPanel';
 import { loadFavorites, saveFavorites, toggleFavoriteId, type FavoritesState } from '../utils/libraryFavorites';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { musicToContent, sampleToContent } from '../core/audio/audioContent';
@@ -372,6 +373,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <SampleUploadPanel />
+          <QuickImportPanel />
           <Scratchpad />
           <span
             title="Externe Sample-/Musik-Datenbank (Supabase, Lesen via anon-key)"
