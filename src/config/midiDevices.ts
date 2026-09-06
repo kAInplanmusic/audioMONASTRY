@@ -13,7 +13,8 @@ export type MidiDeviceType =
   | 'MPC'       // Akai MPC / Finger-Drumming
   | 'KEYBOARD'  // Piano-Controller
   | 'MIXER'     // Fader-/Mixing-Controller
-  | 'PAD';      // generische Pads
+  | 'PAD'        // generische Pads
+  | 'GROOVEBOX'; // Elektron Digitakt / Syntakt (Sampler-Groovebox)
 
 export interface MidiDeviceProfile {
   profile: string;      // z. B. 'APC40' (Mapping-Profil-ID)
@@ -46,6 +47,8 @@ export const MIDI_DEVICE_REGISTRY: MidiDeviceProfile[] = [
   { profile: 'INPULSE', type: 'GRID',    vendor: 'Hercules',   name: 'DJControl' },
   // --- Denon ---
   { profile: 'DENON',   type: 'DJ',      vendor: 'Denon',      name: 'Prime' },
+  // --- Elektron ---
+  { profile: 'DIGITAKT2', type: 'GROOVEBOX', vendor: 'Elektron', name: 'Digitakt' },
   // --- Arturia ---
   { profile: 'KEYBOARD', type: 'KEYBOARD', vendor: 'Arturia',  name: 'KeyLab' },
   { profile: 'KEYBOARD', type: 'KEYBOARD', vendor: 'Arturia',  name: 'Minilab' },
@@ -76,4 +79,5 @@ export const MIDI_TYPE_LABEL: Record<MidiDeviceType, string> = {
   KEYBOARD: 'Keyboard-Controller',
   MIXER: 'DAW/Mixer-Controller',
   PAD: 'Pad-Controller',
+  GROOVEBOX: 'Sampler-Groovebox (Elektron)',
 };
