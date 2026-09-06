@@ -27,7 +27,10 @@ async function buildWorklets() {
           entryPoints: [inputPath],
           bundle: true,
           outfile: outputPath,
-          format: 'esm', // Web Worklets sind ES Modules
+          // IIFE statt ESM: AudioWorklets brauchen kein `export`; Tone.js wickelt
+          // addModule in Blob-Loads (classic script) – ein `export {…}` am Ende
+          // führt dort zu "Unexpected token 'export'" und bricht die Audio-Init.
+          format: 'iife',
           platform: 'browser',
           sourcemap: false,
           minify: true,
