@@ -162,13 +162,24 @@ function addServerAudit(userId: string, role: string, action: string, ok: boolea
 const sessionRoles = new Map<string, string>();
 // K-2/K-5: Server-autoritative Plugin-Locks (session-global). Werte sind
 // { lockedBy, timestamp, ttl }. Der Client bleibt nur optimistisch.
+// ARCH-#2: TTL client/server vereinheitlicht (vorher: Server 60s, Client 5min
+// → Client hielt bis zu 4 Minuten einen Lock, den es serverseitig nicht gab).
 const pluginLocks = new Map<string, { lockedBy: string; timestamp: number; ttl: number }>();
 const PLUGIN_LOCK_TTL_MS = 60_000; // 60 s + Heartbeat-Verlängerung (Fallback)
 const PLUGIN_LOCK_SWEEP_MS = 15_000;
+// ARCH-#2: Ablauf broadcasten – Callback wird im Socket.io-Setup gesetzt
+// (io + SESSION_ROOM_ID leben dort im Scope). Null = noch nicht initialisiert.
+let broadcastLockExpiry: ((pluginId: string) => void) | null = null;
 const sweepPluginLocks = (): void => {
   const now = Date.now();
   for (const [pluginId, lock] of pluginLocks) {
-    if (now - lock.timestamp > lock.ttl) pluginLocks.delete(pluginId);
+    if (now - lock.timestamp > lock.ttl) {
+      pluginLocks.delete(pluginId);
+      // ARCH-#2: Ablauf aktiv an ALLE Session-Teilnehmer broadcasten (statt
+      // stillschweigend zu löschen) – sonst bleibt der Lock clientseitig
+      // hängen und das Plugin erscheint für andere weiter als gesperrt.
+      broadcastLockExpiry?.(pluginId);
+    }
   }
 };
 setInterval(sweepPluginLocks, PLUGIN_LOCK_SWEEP_MS).unref?.();
@@ -179,6 +190,13 @@ function roleForSessionUser(userId: string): string {
   if (existing) return existing;
   if (sessionRoles.size === 0) return 'admin'; // Erster User = Host/Admin
   if (process.env.SESSION_HOST_USER && userId === process.env.SESSION_HOST_USER) return 'admin';
+  // ARCH-#9: Im Multi-User-Betrieb entscheidet currently Socket-Reihenfolge
+  // über Admin-Rechte. Ohne SESSION_HOST_USER deutlich warnen – bei
+  // Simultaneous-Join (4-User-Fall) ist das Rennen unbestimmt.
+  if (!process.env.SESSION_HOST_USER && process.env.NODE_ENV === 'production') {
+    console.warn('[security] SESSION_HOST_USER nicht gesetzt – Admin-Rolle fällt auf den ersten Join '
+      + '(Socket-Reihenfolge). Für deterministisches Host-Routing SESSION_HOST_USER setzen.');
+  }
   const r = (process.env.SESSION_ROLE || '').trim();
   return r === 'admin' || r === 'producer' || r === 'engineer' || r === 'guest' ? r : 'guest';
 }
@@ -2421,6 +2439,14 @@ async function startServer() {
         socket.emit('plugin-lock', { pluginId, ...lock });
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
       });
+      // ARCH-#2: Broadcast-Callback für Lock-Ablauf (Sweep im Modul-Scope).
+      broadcastLockExpiry = (pluginId: string) => {
+        io.to(`session:${SESSION_ROOM_ID}`).emit('plugin-unlock', {
+          pluginId,
+          lockedBy: null,
+          reason: 'expired',
+        });
+      };
       socket.on('plugin-unlock', (data: any) => {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;

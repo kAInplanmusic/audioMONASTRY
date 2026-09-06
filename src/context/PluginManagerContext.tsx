@@ -3,7 +3,10 @@ import { LockStatus } from '../plugins/types';
 import { isAiModeActive } from '../core/ai/aiMode';
 import { webRTCManager } from '../utils/WebRTCManager';
 
-/** Default lock TTL: 5 minutes */
+/** Default lock TTL: 5 Minuten clientseitig als Fallback-Obergrenze.
+ * ARCH-#2: Der Server-Sweep läuft mit 60 s TTL (PLUGIN_LOCK_TTL_MS) und
+ * broadcastet den Ablauf jetzt aktiv per plugin-unlock — der lokale Wert
+ * dient nur noch der Anzeige, nicht mehr als Lock-Wahrheit. */
 const DEFAULT_LOCK_TTL = 5 * 60 * 1000;
 /** How often to check for expired locks */
 const LOCK_SWEEP_INTERVAL = 30_000;
@@ -47,6 +50,22 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       const pluginId = String(msg?.pluginId ?? '');
       if (!pluginId) return;
       commit({ ...locksRef.current, [pluginId]: { lockedBy: null, timestamp: 0, active: false } });
+    });
+    // K-2/K-5: Lock-Denial vom Server (Lock wurde von anderem User gehalten).
+    // Ohne diesen Handler bliebe der optimistische Lock des Clients stehen
+    // und desynced von der server-autoritativen Wahrheit.
+    const offDenied = webRTCManager.onPluginLockDenied((msg: any) => {
+      const pluginId = String(msg?.pluginId ?? '');
+      if (!pluginId) return;
+      commit({
+        ...locksRef.current,
+        [pluginId]: {
+          lockedBy: String(msg?.lockedBy ?? ''),
+          timestamp: Date.now(),
+          active: true,
+          ttl: DEFAULT_LOCK_TTL,
+        },
+      });
     });
     const offSync = webRTCManager.onPluginLocksSync((msg: any) => {
       const raw = msg?.locks;

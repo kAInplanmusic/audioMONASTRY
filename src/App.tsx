@@ -293,6 +293,9 @@ function AppComponent() {
   }, [moduleStates, requestLock, setModuleState]);
 
   // Rack-Promote (⋮): OFF → AUTO_AI → PRO, PRO → OFF (freigeben).
+  // ARCH-#6: PRO-Transition nur bei bestätigtem Lock – der Server emittiert
+  // sonst rbac-denied/lock-denied und der Client hätte lokal PRO, während
+  // die Session etwas anderes sieht (Desync).
   const rackPromote = useCallback((id: string) => {
     const currentState = moduleStates[id] || 'OFF';
     if (currentState === 'PRO') {
@@ -301,8 +304,9 @@ function AppComponent() {
       return;
     }
     if (currentState === 'OFF') setModuleState(id, 'AUTO_AI');
-    requestLock(id, webRTCManager.userId);
-    setModuleState(id, 'PRO');
+    if (requestLock(id, webRTCManager.userId)) {
+      setModuleState(id, 'PRO');
+    }
   }, [moduleStates, requestLock, releaseLock, setModuleState]);
 
   // P1-4: Session-Zwischenspeicher – Snapshot aus aktuellem Zustand bauen bzw. anwenden.
@@ -652,10 +656,14 @@ function AppComponent() {
               onLoadScratch={(entry) => {
                 // Scratchpad-Eintrag auf dieses Modul gezogen: Modul aktivieren;
                 // passt der Eintrag zum Modul, wird dessen State übernommen.
+                // ARCH-#6: PRO nur bei bestätigtem Lock, sonst AUTO_AI-Fallback.
                 const apply = (entry.id === id && (entry.state === 'AUTO_AI' || entry.state === 'PRO'))
                   ? entry.state
                   : 'AUTO_AI';
-                if (apply === 'PRO') requestLock(id, webRTCManager.userId);
+                if (apply === 'PRO' && !requestLock(id, webRTCManager.userId)) {
+                  setModuleState(id, 'AUTO_AI' as ModuleState);
+                  return;
+                }
                 setModuleState(id, apply as ModuleState);
               }}
             >

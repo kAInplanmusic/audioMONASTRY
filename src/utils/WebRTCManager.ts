@@ -17,6 +17,9 @@ class WebRTCManager {
   private pluginLockListeners = new Set<(msg: any) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
+  // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
+  // Listener bliebe der lokale Lock aktiv und desynced von der Server-Truth.
+  private pluginLockDeniedListeners = new Set<(msg: any) => void>();
 
   private sessionUserId = `user-${random().toString(36).slice(2, 8)}`;
 
@@ -376,6 +379,8 @@ class WebRTCManager {
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-unlock', (data: any) => this.pluginUnlockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
+    // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
+    this.socket.on('plugin-lock-denied', (data: any) => this.pluginLockDeniedListeners.forEach((l) => l(data)));
 
     this.socket.on('peer-joined', (data: any) => {
       const peer: SessionPeer = { socketId: String(data?.socketId ?? ''), userId: String(data?.userId ?? data?.socketId ?? '') };
@@ -592,6 +597,13 @@ class WebRTCManager {
   public onPluginUnlock(cb: (msg: any) => void): () => void {
     this.pluginUnlockListeners.add(cb);
     return () => { this.pluginUnlockListeners.delete(cb); };
+  }
+
+  // ARCH-#1: Server hat den optimistischen Lock abgelehnt (Plugin von
+  // anderem User gesperrt) — Client muss seinen lokalen Lock rollbacken.
+  public onPluginLockDenied(cb: (msg: any) => void): () => void {
+    this.pluginLockDeniedListeners.add(cb);
+    return () => { this.pluginLockDeniedListeners.delete(cb); };
   }
 
   public onPluginLocksSync(cb: (msg: any) => void): () => void {
