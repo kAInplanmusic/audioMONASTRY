@@ -39,9 +39,16 @@ provision_one() {
   echo "✅ $name fertig: $(grep 'Feste IP:' "$LOG_DIR/$name.log" | sed 's/^ *//' || true)"
 }
 
-provision_one samplemonk-app-1    cx33 app    samplemonk-app    samplemonk-floating
-provision_one samplemonk-sfu-1    cx33 sfu    samplemonk-sfu    none
-provision_one samplemonk-ai-1     cx33 ai     samplemonk-ai     none
+# Servertypen konfigurierbar (Hetzner-Knappheit: cx33/cx43/cx53 oft nicht verfügbar;
+# Fallback cx23 überall, cpx22 für SFU/AI falls mehr Leistung nötig).
+# Override via Env: FLEET_TYPE_APP / FLEET_TYPE_SFU / FLEET_TYPE_AI.
+TYPE_APP="${FLEET_TYPE_APP:-cx23}"
+TYPE_SFU="${FLEET_TYPE_SFU:-cx23}"
+TYPE_AI="${FLEET_TYPE_AI:-cx23}"
+
+provision_one samplemonk-app-1    "$TYPE_APP" app    samplemonk-app    samplemonk-floating
+provision_one samplemonk-sfu-1    "$TYPE_SFU" sfu    samplemonk-sfu    none
+provision_one samplemonk-ai-1     "$TYPE_AI"  ai     samplemonk-ai     none
 provision_one samplemonk-master-1 cx23 master samplemonk-master none
 provision_one samplemonk-edge-1   cx23 app    samplemonk-edge   none
 

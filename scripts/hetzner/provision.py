@@ -42,7 +42,8 @@ def die(msg: str) -> "NoReturn":
 
 
 # Security: URL-Konstruktion strikt auf feste Hetzner-API-Basis + validierte Pfade begrenzen.
-_PATH_RE = re.compile(r'^/[A-Za-z0-9_./-]*$')
+# `?` und `&` sind Teil der Pagination-Query und werden explizit erlaubt.
+_PATH_RE = re.compile(r'^/[A-Za-z0-9_./?=&-]*$')
 def _safe_url(path: str) -> str:
     if not isinstance(path, str) or not _PATH_RE.match(path):
         raise ValueError(f'Ungültiger API-Pfad: {path!r}')

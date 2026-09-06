@@ -11,7 +11,13 @@
 // Aufruf:
 //   BASE_URL=http://49.13.65.150 node scripts/hetzner/stress-test.mjs
 //   BASE_URL=... HTTP_CLIENTS=30 HTTP_REQUESTS=150 WS_CLIENTS=60 node scripts/hetzner/stress-test.mjs
+//
+// Auth (H-1): Ist STUDIO_ACCESS_TOKEN gesetzt, wird es als `x-studio-token`-Header
+// (HTTP) bzw. Handshake-`auth.token` (Socket.io) mitgeschickt. Für Bequemlichkeit
+// wird der Token – falls vorhanden – automatisch aus .env.portal oder .env gelesen
+// (Remote-Flotte: Remote-.env hat denselben Key via deploy.sh-Sync).
 // =============================================================================
+import { readFileSync, existsSync } from 'node:fs';
 import { io } from 'socket.io-client';
 
 const BASE_URL = (process.env.BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -19,6 +25,21 @@ const HTTP_CLIENTS = Number(process.env.HTTP_CLIENTS || 20);
 const HTTP_REQUESTS = Number(process.env.HTTP_REQUESTS || 100);
 const WS_CLIENTS = Number(process.env.WS_CLIENTS || 40);
 const WS_HOLD_MS = Number(process.env.WS_HOLD_MS || 10_000);
+
+// H-1: STUDIO_ACCESS_TOKEN ggf. automatisch aus .env.portal / .env laden.
+if (!process.env.STUDIO_ACCESS_TOKEN) {
+  for (const envFile of ['.env.portal', '.env']) {
+    const path = new URL('../../' + envFile, import.meta.url);
+    if (existsSync(path)) {
+      const m = readFileSync(path, 'utf8').match(/^STUDIO_ACCESS_TOKEN=(.+)$/m);
+      if (m && m[1].trim()) {
+        process.env.STUDIO_ACCESS_TOKEN = m[1].trim();
+        console.log(`[auth] STUDIO_ACCESS_TOKEN aus ${envFile} geladen.`);
+        break;
+      }
+    }
+  }
+}
 
 // --- kleine Statistik-Helfer -------------------------------------------------
 function percentile(sorted, p) {
