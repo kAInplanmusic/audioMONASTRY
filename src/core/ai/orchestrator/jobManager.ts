@@ -37,6 +37,7 @@ export class JobManager {
       'audio.analyze': 1,
       'audio.generate': 1,
       'multimodal': 1,
+      'nlu': 4,
       ...options.maxConcurrency,
     };
   }

@@ -45,7 +45,8 @@
     "download:orchestral": "node scripts/download-orchestral.mjs",
     "fleet:stop": "bash scripts/hetzner/lifecycle.sh stop",
     "fleet:stop:yes": "bash scripts/hetzner/lifecycle.sh stop --yes",
-    "fleet:start": "bash scripts/hetzner/lifecycle.sh start"
+    "fleet:start": "bash scripts/hetzner/lifecycle.sh start",
+    "cerebras:agent": "node scripts/cerebras-agent.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

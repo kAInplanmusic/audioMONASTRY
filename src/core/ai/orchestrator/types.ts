@@ -17,10 +17,11 @@ export type AiTask =
   | 'audio.embed'
   | 'audio.analyze'
   | 'audio.generate'
-  | 'multimodal';
+  | 'multimodal'
+  | 'nlu';
 
 /** Provider-IDs des Orchestrators. */
-export type AiProviderId = 'hf-standard-endpoint' | 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'local' | 'deterministic';
+export type AiProviderId = 'hf-standard-endpoint' | 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'local' | 'deterministic' | 'cerebras';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */
 export type ModelLoadClass = 'CORE' | 'FREQUENT' | 'ON_DEMAND' | 'RARE';
