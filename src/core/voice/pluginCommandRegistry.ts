@@ -14,6 +14,7 @@
  * Core-Module ohne Tone/Web-Audio laden (Interface-Boundary-Regel).
  */
 import { voiceControlService } from './VoiceControlService';
+import type { TrackType } from '../../types';
 import { controlBus } from '../events/ControlBus';
 
 /** Verbindliche 21 Plugin-IDs (P3-2: Registry muss alle abdecken). */
@@ -261,6 +262,37 @@ export function registerDefaultVoiceCommands(): void {
     const text = String(ctx.intent.parameters.text ?? ctx.intent.raw ?? '');
     if (text) controlBus.emit('monk:ai-plan', { text });
   }, ['plan', 'ki', 'ai', 'mache']);
+
+  // --- mixerMONK: Fade-in auf MAIN (M-2) -----------------------------------------
+  const parseChannel = (v: unknown): TrackType | null => {
+    const s = String(v ?? '').toLowerCase().replace(/^ch(?:annel)?/, '').trim();
+    const n = Number.parseInt(s, 10);
+    if (Number.isFinite(n) && n >= 1 && n <= 10) return `channel${n}` as TrackType;
+    if (s.includes('kick')) return 'channel1';
+    if (s.includes('hat')) return 'channel2';
+    if (s.includes('bass')) return 'channel7';
+    if (s.includes('lead')) return 'channel8';
+    return null;
+  };
+  voiceControlService.registerPluginCommand('mixer', 'fade_in_main', async (ctx) => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    const track = parseChannel(ctx.intent.parameters.channel ?? ctx.intent.parameters.track) ?? 'channel1';
+    const secs = Math.max(1, Number(ctx.intent.parameters.seconds) || 4);
+    audioEngine.fadeChannelToMain(track, secs, 0);
+  }, ['fade', 'faden', 'einblenden', 'main', 'hochfahren', 'langsam']);
+
+  // --- dropMONK: Auto-Drop aus biblioMONK (M-3) ---------------------------------
+  voiceControlService.registerPluginCommand('drop', 'auto_drop', async (ctx) => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    const { SORTED_MUSIC_LIBRARY } = await import('../../data/musicLibrary');
+    const track = parseChannel(ctx.intent.parameters.channel ?? ctx.intent.parameters.track) ?? 'channel1';
+    const q = String(ctx.intent.parameters.artist ?? ctx.intent.parameters.lied ?? '').toLowerCase();
+    const cand = SORTED_MUSIC_LIBRARY.find((t) => !q || `${t.name} ${t.artist}`.toLowerCase().includes(q))
+      ?? SORTED_MUSIC_LIBRARY[0];
+    if (!cand) return;
+    await audioEngine.loadTrackSample(track, cand.url);
+    controlBus.emit('monk:drop-auto', { track: cand.name, url: cand.url, channel: track });
+  }, ['auto', 'drop', 'automatisch', 'überleitung', 'biblio', 'passend']);
 
   // --- P3-2: generische Router-Kommandos für ALLE 21 Plugin-IDs ----------------
   // Aktivierung/Routing/Parameter laufen über den PluginAudioRouter (OFF/An,

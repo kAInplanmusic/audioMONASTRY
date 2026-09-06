@@ -1162,6 +1162,15 @@ class AudioEngine {
     }
   }
 
+  /** M-2: Kanal weich auf MAIN faden (Fade-in zu Ziel-DB, Default 0 dB). */
+  public fadeChannelToMain(track: TrackType, rampSec = 4, targetDb = 0): boolean {
+    this.ensureInitialized();
+    const g = this.channelGains[track];
+    if (!g) return false;
+    const v = Number.isFinite(targetDb) ? Math.max(-80, Math.min(12, targetDb)) : 0;
+    try { g.volume.setTargetAtTime(v, Tone.now(), Math.max(0.05, rampSec)); return true; } catch { return false; }
+  }
+
   /** Master-Lautstärke in dB (Voice-/Routing-Befehle). */
   public setMasterVolumeDb(db: number, rampSec = 0.05): void {
     this.ensureInitialized();

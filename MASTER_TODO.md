@@ -75,7 +75,7 @@
 - **Auswirkung:** Natürlichsprachliche Mix-Anweisungen mit Fades laufen ins Leere oder werden nur teilweise ausgeführt.
 - **Empfohlener Fix:** `fadeChannelToMain(channel, ms)`-Kommando (Ramp via `setChannelGain`) in Registry + Orchestrator-Mapping ergänzen; Test in `tests/` ergänzen.
 - **Aufwand:** M
-- **Status:** Offen
+- **Status:** Erledigt (Kommando fade_in_main in pluginCommandRegistry, 2026-09-06)
 - **Gegenprüfung:** Nur von einer Instanz geprüft (Trace-Simulation)
 
 #### M-3 dropMONK-Auto-Drop („passendes Lied aus biblioMONK, Drop erstellen, automatisch ausführen“) nicht end-to-end verdrahtet
@@ -85,7 +85,7 @@
 - **Auswirkung:** Der beschriebene Assistenten-Flow funktioniert nicht auf Zuruf.
 - **Empfohlener Fix:** Orchestrator-Kommando `autoDrop(channel)` implementieren (BPM/Key-Match gegen `SORTED_MUSIC_LIBRARY`, Drop-Preset laden, Trigger zur nächsten Phrase); Test ergänzen.
 - **Aufwand:** L
-- **Status:** Offen
+- **Status:** Erledigt (Kommando auto_drop in pluginCommandRegistry, 2026-09-06)
 - **Gegenprüfung:** Nur von einer Instanz geprüft (Trace-Simulation)
 
 #### M-4 Socket.io-Auth abgelehnte Stress-Clients ohne Log-Korrelation
