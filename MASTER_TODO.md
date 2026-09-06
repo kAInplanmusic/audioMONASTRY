@@ -248,3 +248,13 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 - [x] **AUDIO-5 · MITTEL · Drum-Synthese** – produktionsreif verifiziert 2026-09-06 (Kick/Snare/Hat + Humanize + Worklet + Tests gruen). – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.
 - [x] **AUDIO-6 · HOCH · Orchester-Library** – produktionsreif verifiziert 2026-09-06 (SFZ-Streaming + VSCO-2 + Tests gruen). – VSCO-2-CC0-Referenz: SFZ-Streaming (vorhanden), Artikulationen, Round-Robin, RAM-Budget.
 - [x] **AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – umgesetzt 2026-09-06 (src/core/instrument/sampleImport.ts + tests, 5 Tests gruen). – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.
+
+---
+
+## 🧠 Cerebras-Vorbereitung 2026-09-06 (Themen 1/2/6/7/8)
+
+- [ ] **PREP-1 · HOCH · UI-Regressionstests (Playwright-Snapshots)** – `toHaveScreenshot`-Baselines für Startseite/MixerMONK/Settings/midiMONK + Audio-Health-Assert; GitHub-Action auf PR.
+- [ ] **PREP-2 · HOCH · CI-Gate** – Workflow `ci.yml`: bei jedem PR `npm run verify` + `vite build` als Pflicht-Check.
+- [ ] **PREP-6 · HOCH · Beat-synced aiMONK/dropMONK-Scheduling** – Drop/Fade an nächste Phrase (Tone.Transport-Events/Worklet-Clock) statt sofort.
+- [ ] **PREP-7 · HOCH · midiMONK Mapping-Persistenz + Digitakt-16-Step-Editor** – Routing-Ansicht je Gerät, Pattern-Editor verdrahten.
+- [ ] **PREP-8 · MITTEL · Observability/Security-Betrieb** – Signaler-Logs → /api/telemetry, Alerting, HF-Secret-Rotation als Runbook.

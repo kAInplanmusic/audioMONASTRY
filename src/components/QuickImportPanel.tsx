@@ -71,6 +71,9 @@ export const QuickImportPanel: React.FC = () => {
     }
     setStatus(failed > 0 ? 'partial' : 'done');
     setMessage(`Import fertig: ${ok} neu, ${skipped} übersprungen, ${failed} Fehler.`);
+    window.dispatchEvent(new CustomEvent('monk:library-changed'));
+    // #5: biblioMONK anweisen, die Cloud-/DB-Musikliste neu zu laden.
+    window.dispatchEvent(new CustomEvent('monk:library-changed'));
   };
 
   return (

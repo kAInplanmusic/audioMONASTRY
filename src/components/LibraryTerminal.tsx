@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Database, Play, Download, Clipboard, GripVertical, ChevronLeft, ChevronRight, Cloud, CloudOff, Upload, Heart, Folder, FolderOpen, Search } from 'lucide-react';
+import { Database, Download, Clipboard, GripVertical, ChevronLeft, ChevronRight, Cloud, CloudOff, Upload, Heart, Folder, FolderOpen, Search } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
 import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
@@ -60,18 +60,22 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
   // Musik-Bibliothek: lokal vorbefüllt aus den eingebauten Tracks, nach dem
   // Mount um Cloud-Tracks von Supabase ergänzt (falls verfügbar).
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>(SORTED_MUSIC_LIBRARY);
+  // #5: Cloud-/DB-Musik laden und nach lokalen Imports (QuickImport) aktualisieren.
+  const refreshCloudMusic = React.useCallback(async () => {
+    const result = await fetchCloudMusic();
+    if (!result.ok || result.data.length === 0) return;
+    const merged = new Map<string, MusicTrack>();
+    SORTED_MUSIC_LIBRARY.forEach((t) => merged.set(t.id, t));
+    result.data.forEach((t) => merged.set(t.id, cloudRowToTrack(t)));
+    setMusicTracks(Array.from(merged.values()));
+  }, []);
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const result = await fetchCloudMusic();
-      if (cancelled || !result.ok || result.data.length === 0) return;
-      const merged = new Map<string, MusicTrack>();
-      SORTED_MUSIC_LIBRARY.forEach((t) => merged.set(t.id, t));
-      result.data.forEach((t) => merged.set(t.id, cloudRowToTrack(t)));
-      setMusicTracks(Array.from(merged.values()));
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    void refreshCloudMusic();
+    const onLibraryChanged = () => { if (!cancelled) void refreshCloudMusic(); };
+    window.addEventListener('monk:library-changed', onLibraryChanged);
+    return () => { cancelled = true; window.removeEventListener('monk:library-changed', onLibraryChanged); };
+  }, [refreshCloudMusic]);
 
   const filteredSamples = useMemo(() => {
     let list = samples;

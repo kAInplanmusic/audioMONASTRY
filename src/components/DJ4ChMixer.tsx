@@ -25,9 +25,6 @@ type XfMode = 'A' | 'THRU' | 'B';
 
 const COPPER = '#b98a78';
 const ORANGE = '#f97316';
-const CHASSIS = '#1b1b1e';
-const PANEL = '#222226';
-const GAP = '#26262a';
 
 interface StripConfig {
   index: number;

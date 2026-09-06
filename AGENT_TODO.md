@@ -1,8 +1,8 @@
 # AGENT_TODO – Background-Coder Pipeline
 
-Erzeugt: 2026-09-06T10:24:46.192Z
+Erzeugt: 2026-09-06T13:32:16.634Z
 
-LEICHT: 0 · MITTEL: 2 · SCHWER: 6 · BLOCKED: 1
+LEICHT: 0 · MITTEL: 0 · SCHWER: 4 · BLOCKED: 1
 
 Festes Modell-Routing: Orchestrator=DeepSeek V4 Flash Visionary (max thinking) · #2 Kimi K2.7-Code · #3 GLM-5.3 · #4 Qwen3-Coder-Next · #5 GLM-5.3-Flash · #6 DeepSeek V4 Pro · #7 Cerebras GPT-OSS-120B (SCHWER/komplex)
 ## LEICHT (1-12)
@@ -11,40 +11,27 @@ Festes Modell-Routing: Orchestrator=DeepSeek V4 Flash Visionary (max thinking) �
 ## MITTEL (13-24)
 
 
-TASK-013
-CLASS: MITTEL
-PRIORITY: P2
-DOMAIN: AUDIO
-DESCRIPTION: **AUDIO-4 · MITTEL · Tonewheel/Orgel** – setBfree-Referenz: 9 Drawbars, Percussion, Leslie-Simulation (Rotary), Key-Click.
-IMPLEMENTATION_AGENT: #2
-REVIEW_AGENT: -
-SERVER_REQUIRED: NO
-HARDWARE_REQUIRED: NO
-REVIEW_REQUIRED: NO
-STATUS: PENDING
-
-
-TASK-014
-CLASS: MITTEL
-PRIORITY: P2
-DOMAIN: AUDIO
-DESCRIPTION: **AUDIO-5 · MITTEL · Drum-Synthese** – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.
-IMPLEMENTATION_AGENT: #2
-REVIEW_AGENT: -
-SERVER_REQUIRED: NO
-HARDWARE_REQUIRED: NO
-REVIEW_REQUIRED: NO
-STATUS: PENDING
-
-
 ## SCHWER (25-36)
 
 
 TASK-025
 CLASS: SCHWER
 PRIORITY: P0/P1
+DOMAIN: UX
+DESCRIPTION: **PREP-2 · HOCH · CI-Gate** – Workflow `ci.yml`: bei jedem PR `npm run verify` + `vite build` als Pflicht-Check.
+IMPLEMENTATION_AGENT: #7
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
+
+TASK-026
+CLASS: SCHWER
+PRIORITY: P0/P1
 DOMAIN: SECURITY
-DESCRIPTION: **AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M.
+DESCRIPTION: **PREP-6 · HOCH · Beat-synced aiMONK/dropMONK-Scheduling** – Drop/Fade an nächste Phrase (Tone.Transport-Events/Worklet-Clock) statt sofort.
 IMPLEMENTATION_AGENT: #7
 REVIEW_AGENT: #6
 SERVER_REQUIRED: NO
@@ -53,24 +40,11 @@ REVIEW_REQUIRED: YES
 STATUS: PENDING
 
 
-TASK-026
-CLASS: SCHWER
-PRIORITY: P0/P1
-DOMAIN: AUDIO
-DESCRIPTION: **AUDIO-1 · HOCH · Granular-Engine** – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.
-IMPLEMENTATION_AGENT: #7
-REVIEW_AGENT: -
-SERVER_REQUIRED: NO
-HARDWARE_REQUIRED: NO
-REVIEW_REQUIRED: NO
-STATUS: PENDING
-
-
 TASK-027
 CLASS: SCHWER
 PRIORITY: P0/P1
-DOMAIN: AUDIO
-DESCRIPTION: **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
+DOMAIN: BACKEND
+DESCRIPTION: **PREP-7 · HOCH · midiMONK Mapping-Persistenz + Digitakt-16-Step-Editor** – Routing-Ansicht je Gerät, Pattern-Editor verdrahten.
 IMPLEMENTATION_AGENT: #7
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
@@ -82,39 +56,13 @@ STATUS: PENDING
 TASK-028
 CLASS: SCHWER
 PRIORITY: P0/P1
-DOMAIN: AUDIO
-DESCRIPTION: **AUDIO-3 · HOCH · Wavetable-Synthese** – Surge-XT-Referenz: Wavetable-Interpolation, Morphing, Unison/Detune, Mod-Matrix-Anbindung.
+DOMAIN: SECURITY
+DESCRIPTION: **PREP-8 · MITTEL · Observability/Security-Betrieb** – Signaler-Logs → /api/telemetry, Alerting, HF-Secret-Rotation als Runbook.
 IMPLEMENTATION_AGENT: #7
-REVIEW_AGENT: -
+REVIEW_AGENT: #6
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-REVIEW_REQUIRED: NO
-STATUS: PENDING
-
-
-TASK-029
-CLASS: SCHWER
-PRIORITY: P0/P1
-DOMAIN: ABRECHNUNG
-DESCRIPTION: **AUDIO-6 · HOCH · Orchester-Library** – VSCO-2-CC0-Referenz: SFZ-Streaming (vorhanden), Artikulationen, Round-Robin, RAM-Budget.
-IMPLEMENTATION_AGENT: #7
-REVIEW_AGENT: -
-SERVER_REQUIRED: NO
-HARDWARE_REQUIRED: NO
-REVIEW_REQUIRED: NO
-STATUS: PENDING
-
-
-TASK-030
-CLASS: SCHWER
-PRIORITY: P0/P1
-DOMAIN: AUDIO
-DESCRIPTION: **AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.
-IMPLEMENTATION_AGENT: #7
-REVIEW_AGENT: -
-SERVER_REQUIRED: NO
-HARDWARE_REQUIRED: NO
-REVIEW_REQUIRED: NO
+REVIEW_REQUIRED: YES
 STATUS: PENDING
 
 
@@ -122,9 +70,9 @@ STATUS: PENDING
 
 
 BLOCKED
-CLASS: LEICHT
-DOMAIN: BACKEND
-DESCRIPTION: **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen).
+CLASS: SCHWER
+DOMAIN: AUDIO
+DESCRIPTION: **PREP-1 · HOCH · UI-Regressionstests (Playwright-Snapshots)** – `toHaveScreenshot`-Baselines für Startseite/MixerMONK/Settings/midiMONK + Audio-Health-Assert; GitHub-Action auf PR.
 SERVER_REQUIRED: YES
 HARDWARE_REQUIRED: NO
 STATUS: BLOCKED
