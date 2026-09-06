@@ -16,7 +16,7 @@ jobs:
             sonarsource/sonar-scanner-cli:latest \
             sonar list issues -p DEIN_PROJEKT_KEY --format csv > issues.csv
       - name: Upload CSV as Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sonarqube-issues
           path: issues.csv

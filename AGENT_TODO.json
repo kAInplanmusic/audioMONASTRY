@@ -1,12 +1,40 @@
 {
-  "created": "2026-09-06T09:59:13.039Z",
+  "created": "2026-09-06T10:24:46.192Z",
   "counts": {
     "LEICHT": 0,
-    "MITTEL": 0,
-    "SCHWER": 4,
+    "MITTEL": 2,
+    "SCHWER": 6,
     "BLOCKED": 1
   },
   "tasks": [
+    {
+      "raw": "**AUDIO-4 · MITTEL · Tonewheel/Orgel** – setBfree-Referenz: 9 Drawbars, Percussion, Leslie-Simulation (Rotary), Key-Click.",
+      "priority": "P2",
+      "class": "MITTEL",
+      "domain": "AUDIO",
+      "agent": "#2",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "TASK-013"
+    },
+    {
+      "raw": "**AUDIO-5 · MITTEL · Drum-Synthese** – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.",
+      "priority": "P2",
+      "class": "MITTEL",
+      "domain": "AUDIO",
+      "agent": "#2",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "TASK-014"
+    },
     {
       "raw": "**AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M.",
       "priority": "P0/P1",
@@ -18,14 +46,11 @@
       "hardwareRequired": false,
       "reviewRequired": "YES",
       "ready": true,
-      "status": "FAILED",
-      "taskId": "TASK-025",
-      "lastSummary": "Die Aufgabe erfordert das Ersetzen von 35 Vorkommen von GitHub Actions-Versionen (z.B. actions/*@v4) durch feste Commit‑SHA‑Hashes. Da im aktuellen Kontext keine konkreten Dateipfade oder exakten Code‑Snippets mit den betroffenen Versionsangaben im Repository erkennbar sind, kann die automatische Du",
-      "reworkCount": 3,
-      "lastError": "Review: Der Diff/Änderungen-Teil der Aufgabe ist leer. Es wurden keine tatsächlichen Code-Änderungen bereitgestellt, die ich reviewen könnte. Ohne sichtbare Änderungen kann ich nicht beurteilen, ob die Workflow-Actions korrekt auf Commit-SHA gepinnt wurden oder ob die 35 `actions/*@v4`-Referenzen wie geford"
+      "status": "PENDING",
+      "taskId": "TASK-025"
     },
     {
-      "raw": "**WF-1 · HOCH · Kanal 5 ist Nadelöhr (Cerebras vorbereiten)** – `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.",
+      "raw": "**AUDIO-1 · HOCH · Granular-Engine** – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.",
       "priority": "P0/P1",
       "class": "SCHWER",
       "domain": "AUDIO",
@@ -35,42 +60,64 @@
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-026",
-      "lastSummary": "Die Aufgabe erfordert das Zuordnen von eigenen Kanälen oder Sub-Bussen zu den Plugins `sampler`, `mcp`, `sound` und `drop` im Projekt audioMONASTRY. Da im aktuellen Repository keine eindeutigen Dateipfade oder Code‑Stellen erkennbar sind, die den Kanal‑Zuweisungen entsprechen, kann die notwendige Mo",
-      "lastError": ""
+      "status": "PENDING",
+      "taskId": "TASK-026"
     },
     {
-      "raw": "**WF-2 · HOCH · Musik-Load ohne Decode-Cache (Cerebras vorbereiten)** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.",
+      "raw": "**AUDIO-2 · HOCH · 6-Op-FM (DX7)** – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.",
       "priority": "P0/P1",
       "class": "SCHWER",
-      "domain": "BACKEND",
+      "domain": "AUDIO",
       "agent": "#7",
       "reviewAgent": null,
       "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-027",
-      "lastSummary": "Die Aufgabe erfordert das Hinzufügen eines OPFS-/Buffer-Caches für Musik-URLs, analog zu SfzSampleCache, und die Anpassung von loadTrackSample, um wiederverwendbare Tone.Player-Instanzen zu nutzen. Da im aktuellen Kontext keine Dateipfade oder relevanten Codeabschnitte identifiziert werden können, l",
-      "lastError": ""
+      "status": "PENDING",
+      "taskId": "TASK-027"
     },
     {
-      "raw": "**WF-3 · HOCH · Mastering-Insert liegt im Monitorweg (Cerebras vorbereiten)** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.",
+      "raw": "**AUDIO-3 · HOCH · Wavetable-Synthese** – Surge-XT-Referenz: Wavetable-Interpolation, Morphing, Unison/Detune, Mod-Matrix-Anbindung.",
       "priority": "P0/P1",
       "class": "SCHWER",
-      "domain": "PERFORMANCE",
+      "domain": "AUDIO",
       "agent": "#7",
       "reviewAgent": null,
       "serverRequired": false,
       "hardwareRequired": false,
       "reviewRequired": "NO",
       "ready": true,
-      "status": "COMPLETED",
-      "taskId": "TASK-028",
-      "lastSummary": "Die Aufgabe erfordert das Hinzufügen eines separaten Pre-Mastering-Taps für den Monitor und das Anpassen des bestehenden masterStreamTap, das post-Mastering für den MAIN-Stream verwendet. Da im bereitgestellten Kontext keine konkreten Dateipfade oder Codeausschnitte gefunden wurden, kann die Änderun",
-      "lastError": ""
+      "status": "PENDING",
+      "taskId": "TASK-028"
+    },
+    {
+      "raw": "**AUDIO-6 · HOCH · Orchester-Library** – VSCO-2-CC0-Referenz: SFZ-Streaming (vorhanden), Artikulationen, Round-Robin, RAM-Budget.",
+      "priority": "P0/P1",
+      "class": "SCHWER",
+      "domain": "ABRECHNUNG",
+      "agent": "#7",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "TASK-029"
+    },
+    {
+      "raw": "**AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.",
+      "priority": "P0/P1",
+      "class": "SCHWER",
+      "domain": "AUDIO",
+      "agent": "#7",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "PENDING",
+      "taskId": "TASK-030"
     },
     {
       "raw": "**WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen).",
@@ -86,6 +133,5 @@
       "status": "BLOCKED",
       "taskId": "BLOCK-001"
     }
-  ],
-  "updated": "2026-09-06T10:02:59.282Z"
+  ]
 }

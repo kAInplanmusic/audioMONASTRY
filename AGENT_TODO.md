@@ -1,60 +1,131 @@
-# AGENT_TODO – Background-Coder Pipeline (HF + Cerebras #7)
+# AGENT_TODO – Background-Coder Pipeline
 
-Aktualisiert: 2026-09-06T10:02:59.282Z
+Erzeugt: 2026-09-06T10:24:46.192Z
+
+LEICHT: 0 · MITTEL: 2 · SCHWER: 6 · BLOCKED: 1
+
+Festes Modell-Routing: Orchestrator=DeepSeek V4 Flash Visionary (max thinking) · #2 Kimi K2.7-Code · #3 GLM-5.3 · #4 Qwen3-Coder-Next · #5 GLM-5.3-Flash · #6 DeepSeek V4 Pro · #7 Cerebras GPT-OSS-120B (SCHWER/komplex)
+## LEICHT (1-12)
+
+
+## MITTEL (13-24)
+
+
+TASK-013
+CLASS: MITTEL
+PRIORITY: P2
+DOMAIN: AUDIO
+DESCRIPTION: **AUDIO-4 · MITTEL · Tonewheel/Orgel** – setBfree-Referenz: 9 Drawbars, Percussion, Leslie-Simulation (Rotary), Key-Click.
+IMPLEMENTATION_AGENT: #2
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
+
+TASK-014
+CLASS: MITTEL
+PRIORITY: P2
+DOMAIN: AUDIO
+DESCRIPTION: **AUDIO-5 · MITTEL · Drum-Synthese** – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.
+IMPLEMENTATION_AGENT: #2
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
+
+## SCHWER (25-36)
 
 
 TASK-025
 CLASS: SCHWER
+PRIORITY: P0/P1
 DOMAIN: SECURITY
 DESCRIPTION: **AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M.
 IMPLEMENTATION_AGENT: #7
-MODEL: gpt-oss-120b
 REVIEW_AGENT: #6
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: FAILED
-ERROR: Review: Der Diff/Änderungen-Teil der Aufgabe ist leer. Es wurden keine tatsächlichen Code-Änderungen bereitgestellt, die ich reviewen könnte. Ohne sichtbare Änderungen kann ich nicht beurteilen, ob die Workflow-Actions korrekt auf Commit-SHA gepinnt wurden oder ob die 35 `actions/*@v4`-Referenzen wie geford
+REVIEW_REQUIRED: YES
+STATUS: PENDING
+
 
 TASK-026
 CLASS: SCHWER
+PRIORITY: P0/P1
 DOMAIN: AUDIO
-DESCRIPTION: **WF-1 · HOCH · Kanal 5 ist Nadelöhr (Cerebras vorbereiten)** – `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.
+DESCRIPTION: **AUDIO-1 · HOCH · Granular-Engine** – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.
 IMPLEMENTATION_AGENT: #7
-MODEL: gpt-oss-120b
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
 
 TASK-027
 CLASS: SCHWER
-DOMAIN: BACKEND
-DESCRIPTION: **WF-2 · HOCH · Musik-Load ohne Decode-Cache (Cerebras vorbereiten)** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
+PRIORITY: P0/P1
+DOMAIN: AUDIO
+DESCRIPTION: **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
 IMPLEMENTATION_AGENT: #7
-MODEL: gpt-oss-120b
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
 
 TASK-028
 CLASS: SCHWER
-DOMAIN: PERFORMANCE
-DESCRIPTION: **WF-3 · HOCH · Mastering-Insert liegt im Monitorweg (Cerebras vorbereiten)** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
+PRIORITY: P0/P1
+DOMAIN: AUDIO
+DESCRIPTION: **AUDIO-3 · HOCH · Wavetable-Synthese** – Surge-XT-Referenz: Wavetable-Interpolation, Morphing, Unison/Detune, Mod-Matrix-Anbindung.
 IMPLEMENTATION_AGENT: #7
-MODEL: gpt-oss-120b
 REVIEW_AGENT: -
 SERVER_REQUIRED: NO
 HARDWARE_REQUIRED: NO
-STATUS: COMPLETED
+REVIEW_REQUIRED: NO
+STATUS: PENDING
 
-BLOCK-001
+
+TASK-029
+CLASS: SCHWER
+PRIORITY: P0/P1
+DOMAIN: ABRECHNUNG
+DESCRIPTION: **AUDIO-6 · HOCH · Orchester-Library** – VSCO-2-CC0-Referenz: SFZ-Streaming (vorhanden), Artikulationen, Round-Robin, RAM-Budget.
+IMPLEMENTATION_AGENT: #7
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
+
+TASK-030
+CLASS: SCHWER
+PRIORITY: P0/P1
+DOMAIN: AUDIO
+DESCRIPTION: **AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.
+IMPLEMENTATION_AGENT: #7
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+REVIEW_REQUIRED: NO
+STATUS: PENDING
+
+
+## BACKLOG / BLOCKED
+
+
+BLOCKED
 CLASS: LEICHT
 DOMAIN: BACKEND
 DESCRIPTION: **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen).
-IMPLEMENTATION_AGENT: #5
-MODEL: zai-org/GLM-5.3-Flash
-REVIEW_AGENT: -
 SERVER_REQUIRED: YES
 HARDWARE_REQUIRED: NO
 STATUS: BLOCKED
+

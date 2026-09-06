@@ -204,7 +204,7 @@
 | MCP-Sweep | qwen-coder MCP: **nicht verfügbar** (HF-Credits aufgebraucht, HTTP 402) · Hugging-Face-Hub: erreichbar, keine UI-Tool-Spaces gefunden |
 
 ### Offene Punkte (Priorität)
-- [ ] **AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M.
+- [x] **AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M. → umgesetzt 2026-09-06 (35 Actions auf Commit-SHA gepinnt).
 - [x] **AUD-2609-2 · LOW · 12× unsafe-formatstring** – u. a. `src/utils/audioEngine.ts:449`, `services/taskWorker.ts:81`. Kategorie: Code-Qualität. Aufwand S.
 - [x] **AUD-2609-3 · LOW · 2× HTTP-Server ohne TLS-Bindung** – `services/midi-bridge/index.js:146`, `services/signaling/index.js:6` (intern, dokumentieren/binden). Kategorie: Security. Aufwand S.
 - [x] **AUD-2609-4 · LOW · 76 ESLint-Warnungen** – 67× no-unused-vars, 6× hook-deps, 2× ban-ts-comment, 1× unused-expressions. Kategorie: Code-Qualität. Aufwand M.
@@ -232,4 +232,19 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 - [x] **WF-2 · HOCH · Musik-Load ohne Decode-Cache umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
 - [x] **WF-3 · HOCH · Mastering-Insert liegt im Monitorweg umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
 - [x] **WF-4 · NIEDRIG · UI-only-Plugins liefern leeres Array** – `mastering`/`stem`/`recording` sind in `pluginChannelMap` als `[]` markiert, obwohl sie Audio bearbeiten (Insert statt Quelle). Dokumentieren bzw. Insert-Mapping ergänzen.
-- [ ] **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen).
+- [x] **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen). → umgesetzt 2026-09-06: Migration 006 (Session-/Job-Indizes).
+
+---
+
+## 🎛️ Audio-Ausbau – Vorbereitungsaufträge 2026-09-06 (Plan-/Vorbereitungsmodus)
+
+> User-Anweisung: Alle Background-Coder (inkl. Cerebras #7) bereiten diese 7 Themen in ihrer Spezialstärke vor. **Plan-Modus gelaufen 2026-09-06** – Pläne in `logs/background-coder/audit-plans.md`.
+> GitHub-Referenzen: 6-Op-FM `asb2m10/dexed` (3.5k★) · Wavetable `surge-synthesizer/surge` (4k★) · Tonewheel `pantherb/setBfree` · Orchester `sgossner/VSCO-2-CE` (672★, CC0) · SFZ/SF2 `sfztools/sfizz` (533★).
+
+- [ ] **AUDIO-1 · HOCH · Granular-Engine** – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.
+- [ ] **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
+- [ ] **AUDIO-3 · HOCH · Wavetable-Synthese** – Surge-XT-Referenz: Wavetable-Interpolation, Morphing, Unison/Detune, Mod-Matrix-Anbindung.
+- [ ] **AUDIO-4 · MITTEL · Tonewheel/Orgel** – setBfree-Referenz: 9 Drawbars, Percussion, Leslie-Simulation (Rotary), Key-Click.
+- [ ] **AUDIO-5 · MITTEL · Drum-Synthese** – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.
+- [ ] **AUDIO-6 · HOCH · Orchester-Library** – VSCO-2-CC0-Referenz: SFZ-Streaming (vorhanden), Artikulationen, Round-Robin, RAM-Budget.
+- [ ] **AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.
