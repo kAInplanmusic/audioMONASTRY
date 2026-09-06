@@ -49,6 +49,20 @@ export interface PluginCommandResult {
   error?: string;
 }
 
+/** Cerebras-NLU-Fallback: freie Sprachkommandos in {action, parameters} übersetzen. */
+async function cerebrasNluIntent(command: string, pluginId?: string): Promise<{ action?: string; parameters?: Record<string, string> } | null> {
+  try {
+    const { ProviderRouter } = await import('../ai/orchestrator/providerRouter');
+    const res = await new ProviderRouter().run('nlu', 'gpt-oss-120b', {
+      prompt: JSON.stringify({ command, pluginId }),
+      json: true,
+      complexity: 'complex',
+    });
+    const obj = (res?.result ?? {}) as { action?: string; parameters?: Record<string, string> };
+    return (typeof obj.action === 'string' && obj.action) ? obj : null;
+  } catch { return null; }
+}
+
 export class VoiceControlService {
   private commands: VoiceCommandRegistration[] = [];
   private pluginCommands: PluginCommandRegistration[] = [];
@@ -128,6 +142,27 @@ export class VoiceControlService {
         );
     const match = exact ?? keyword;
     if (!match) {
+      // Cerebras-NLU-Fallback (aiMONK): freie Sprache -> {action, parameters}
+      const nlu = await cerebrasNluIntent(command, pluginId);
+      if (nlu?.action) {
+        const nluMatch = this.pluginCommands.find((c) => c.pluginId === pluginId && c.action === nlu.action);
+        if (nluMatch) {
+          const nluIntent: VoiceIntent = {
+            action: nluMatch.action as VoiceIntent['action'],
+            targets: [pluginId],
+            parameters: { ...parameters, ...(nlu.parameters ?? {}) },
+            confidence: 0.92,
+            raw: command,
+          };
+          try {
+            await nluMatch.handler({ userId, pluginId: nluMatch.pluginId, intent: nluIntent });
+            return { userId, pluginId: nluMatch.pluginId, action: nluMatch.action, command: normalized, handled: true };
+          } catch (error) {
+            return { userId, pluginId, action: nluMatch.action, command: normalized, handled: false,
+              error: error instanceof Error ? error.message : String(error) };
+          }
+        }
+      }
       return { userId, pluginId, action: '', command: normalized, handled: false, error: 'Kein Plugin-Kommando' };
     }
 
