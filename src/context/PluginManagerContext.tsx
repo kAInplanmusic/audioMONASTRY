@@ -83,7 +83,7 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       }
       commit(next);
     });
-    return () => { offLock(); offUnlock(); offSync(); };
+    return () => { offLock(); offUnlock(); offDenied(); offSync(); };
   }, [commit]);
 
   // Sweep expired locks periodically
