@@ -1,81 +1,10 @@
 {
-  "created": "2026-09-06T13:32:16.634Z",
+  "created": "2026-09-06T15:55:57.149Z",
   "counts": {
     "LEICHT": 0,
     "MITTEL": 0,
-    "SCHWER": 4,
-    "BLOCKED": 1
+    "SCHWER": 0,
+    "BLOCKED": 0
   },
-  "tasks": [
-    {
-      "raw": "**PREP-2 · HOCH · CI-Gate** – Workflow `ci.yml`: bei jedem PR `npm run verify` + `vite build` als Pflicht-Check.",
-      "priority": "P0/P1",
-      "class": "SCHWER",
-      "domain": "UX",
-      "agent": "#7",
-      "reviewAgent": null,
-      "serverRequired": false,
-      "hardwareRequired": false,
-      "reviewRequired": "NO",
-      "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-025"
-    },
-    {
-      "raw": "**PREP-6 · HOCH · Beat-synced aiMONK/dropMONK-Scheduling** – Drop/Fade an nächste Phrase (Tone.Transport-Events/Worklet-Clock) statt sofort.",
-      "priority": "P0/P1",
-      "class": "SCHWER",
-      "domain": "SECURITY",
-      "agent": "#7",
-      "reviewAgent": "#6",
-      "serverRequired": false,
-      "hardwareRequired": false,
-      "reviewRequired": "YES",
-      "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-026"
-    },
-    {
-      "raw": "**PREP-7 · HOCH · midiMONK Mapping-Persistenz + Digitakt-16-Step-Editor** – Routing-Ansicht je Gerät, Pattern-Editor verdrahten.",
-      "priority": "P0/P1",
-      "class": "SCHWER",
-      "domain": "BACKEND",
-      "agent": "#7",
-      "reviewAgent": null,
-      "serverRequired": false,
-      "hardwareRequired": false,
-      "reviewRequired": "NO",
-      "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-027"
-    },
-    {
-      "raw": "**PREP-8 · MITTEL · Observability/Security-Betrieb** – Signaler-Logs → /api/telemetry, Alerting, HF-Secret-Rotation als Runbook.",
-      "priority": "P0/P1",
-      "class": "SCHWER",
-      "domain": "SECURITY",
-      "agent": "#7",
-      "reviewAgent": "#6",
-      "serverRequired": false,
-      "hardwareRequired": false,
-      "reviewRequired": "YES",
-      "ready": true,
-      "status": "PENDING",
-      "taskId": "TASK-028"
-    },
-    {
-      "raw": "**PREP-1 · HOCH · UI-Regressionstests (Playwright-Snapshots)** – `toHaveScreenshot`-Baselines für Startseite/MixerMONK/Settings/midiMONK + Audio-Health-Assert; GitHub-Action auf PR.",
-      "priority": "P0/P1",
-      "class": "SCHWER",
-      "domain": "AUDIO",
-      "agent": "#7",
-      "reviewAgent": null,
-      "serverRequired": true,
-      "hardwareRequired": false,
-      "reviewRequired": "NO",
-      "ready": false,
-      "status": "BLOCKED",
-      "taskId": "BLOCK-001"
-    }
-  ]
+  "tasks": []
 }
