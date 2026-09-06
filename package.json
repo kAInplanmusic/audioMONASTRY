@@ -42,7 +42,10 @@
     "supabase:seed-embeddings": "tsx scripts/seed-sample-embeddings.ts",
     "supabase:apply": "tsx scripts/apply-supabase-migrations.ts",
     "supabase:verify": "tsx scripts/verify-supabase.ts",
-    "download:orchestral": "node scripts/download-orchestral.mjs"
+    "download:orchestral": "node scripts/download-orchestral.mjs",
+    "fleet:stop": "bash scripts/hetzner/lifecycle.sh stop",
+    "fleet:stop:yes": "bash scripts/hetzner/lifecycle.sh stop --yes",
+    "fleet:start": "bash scripts/hetzner/lifecycle.sh start"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
