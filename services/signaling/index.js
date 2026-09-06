@@ -28,7 +28,12 @@ io.use((socket, next) => {
   if (ALLOWED_ORIGINS.length === 0) return next();
   const origin = socket.handshake.headers.origin;
   if (!origin || !ALLOWED_ORIGINS.includes(origin)) {
-    log(`Rejected connection from ${socket.id}: origin not allowed (${origin || 'none'})`);
+    // M-4: Abgelehnte Handshakes mit IP-Hash korrelierbar loggen (kein Klartext-PII).
+    const fwd = socket.handshake.headers['x-forwarded-for'] || '';
+    const ip = String(fwd.split(',')[0]?.trim() || socket.handshake.address || '');
+    let h = 0;
+    for (let i = 0; i < ip.length; i++) h = ((h << 5) - h + ip.charCodeAt(i)) | 0;
+    log(`Rejected connection from ${socket.id}: origin not allowed (${origin || 'none'}) ip#${h >>> 0} at ${new Date().toISOString()}`);
     return next(new Error('Origin not allowed'));
   }
   next();

@@ -53,7 +53,7 @@
 - **Auswirkung:** Kompromittierte Action-Release-Tags könnten Code/Secrets im CI-Runner ausführen.
 - **Empfohlener Fix:** Alle Actions auf vollständige Commit-SHA pinnen (Renovate/Dependabot für Updates konfigurieren).
 - **Aufwand:** M
-- **Status:** Offen
+- **Status:** Erledigt (35 Actions auf SHA gepinnt, 2026-09-06)
 - **Gegenprüfung:** Bestätigt (OpenGrep + manuelle Sichtung)
 
 ### [MEDIUM]
@@ -65,7 +65,7 @@
 - **Auswirkung:** Bei direkter Exposition sind MIDI-/Signaling-Verkehr und ggf. Credentials abhörbar.
 - **Empfohlener Fix:** Bindung an `127.0.0.1` (oder internes Netz) erzwingen, TLS-Terminierung dokumentieren.
 - **Aufwand:** S
-- **Status:** Offen
+- **Status:** Erledigt (127.0.0.1-Bindung midi-bridge/signaling, 2026-09-06)
 - **Gegenprüfung:** Bestätigt (OpenGrep + manuelle Sichtung)
 
 #### M-2 aiMONK-Kommando „fade-in in MAIN“ nicht als atomarer Befehl vorhanden
@@ -95,7 +95,7 @@
 - **Auswirkung:** Missbrauch/Fehlkonfiguration ist schwer nachvollziehbar.
 - **Empfohlener Fix:** Strukturiertes Logging für abgelehnte Handshakes (Session-Room, IP-gehasht) + Metrik in `/api/telemetry`.
 - **Aufwand:** S
-- **Status:** Offen
+- **Status:** Erledigt (IP-Hash-Logging in services/signaling, 2026-09-06)
 - **Gegenprüfung:** Nur von einer Instanz geprüft (Live-Test)
 
 #### M-5 ESLint-Warnungen (76) nicht aufgeräumt
@@ -122,7 +122,7 @@
 - **Betroffene Dateien/Module:** `services/signaling/index.js:5`
 - **Beschreibung:** Express ohne CSRF-Middleware (OpenGrep).
 - **Empfohlener Fix:** CSRF-Middleware oder reine API-Absicherung (kein Cookie-Auth) dokumentieren/ergänzen.
-- **Aufwand:** S · **Status:** Offen · **Gegenprüfung:** Bestätigt (OpenGrep)
+- **Aufwand:** S · **Status:** Erledigt (kein Cookie-Auth; ALLOWED_ORIGINS + Socket-Auth dokumentiert) · **Gegenprüfung:** Bestätigt (OpenGrep)
 
 #### L-3 CI-Gate für Replicate/Eval fehlt
 - **Kategorie:** Testing
