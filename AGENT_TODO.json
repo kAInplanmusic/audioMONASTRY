@@ -1,10 +1,44 @@
 {
-  "created": "2026-09-05T23:17:17.046Z",
+  "created": "2026-09-06T08:35:01.025Z",
   "counts": {
     "LEICHT": 0,
     "MITTEL": 0,
-    "SCHWER": 0,
+    "SCHWER": 2,
     "BLOCKED": 0
   },
-  "tasks": []
+  "tasks": [
+    {
+      "raw": "**BUG-6926-1 · HOCH · Doppelte Icon-Leiste konsolidieren** – Kürzel-Leiste (Plugin-Toolbar) ist bereits entfernt; verbleibend: `CTRL` (controllerMONK) fehlte im Header → wurde ergänzt (10 Spalten). Zu verifizieren: keine Dubletten mehr, einheitlicher Aktiv-Zustand, Header enthält alle 19 MONKs.",
+      "priority": "P0/P1",
+      "class": "SCHWER",
+      "domain": "BACKEND",
+      "agent": "#7",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "TASK-025",
+      "lastSummary": "Die Aufgabe erfordert das Konsolidieren einer doppelten Icon-Leiste, das Hinzufügen des fehlenden CTRL (controllerMONK) zum Header und das Prüfen, dass keine Dubletten mehr existieren, ein einheitlicher Aktiv-Zustand vorliegt und der Header alle 19 MONKs enthält. Da im aktuellen Kontext keine konkre",
+      "lastError": ""
+    },
+    {
+      "raw": "**BUG-6926-2 · HOCH · SFU-Verdrahtung + Settings-Anbindungen fertigstellen** – `SettingsDialog`: SFU (Mediasoup) voll verdrahten (Session-/Plugin-State-Sync über SFU-DataChannel, nicht nur Media-Pfad), Verbindungsstatus anzeigen (verbunden/nicht verfügbar), MIDI-Status korrekt spiegeln (midi-bridge-Sidecar für iOS/Safari), Cross-Origin-Isolation-Header (COOP/COEP) in server.ts setzen, AI-Shutdown-Button nur aktiv wenn HF-Endpoint konfiguriert.",
+      "priority": "P0/P1",
+      "class": "SCHWER",
+      "domain": "BACKEND",
+      "agent": "#7",
+      "reviewAgent": null,
+      "serverRequired": false,
+      "hardwareRequired": false,
+      "reviewRequired": "NO",
+      "ready": true,
+      "status": "COMPLETED",
+      "taskId": "TASK-026",
+      "lastSummary": "Added Cross-Origin Isolation headers (COOP and COEP) to the Express server to satisfy Mediasoup SFU requirements. This middleware is inserted immediately after the Express app initialization, ensuring the headers are applied to all responses.",
+      "lastError": ""
+    }
+  ],
+  "updated": "2026-09-06T08:36:01.041Z"
 }

@@ -32,6 +32,13 @@ export function isAiShutdownMode(): boolean {
   return aiShutdownMode;
 }
 
+/** true, wenn ein HF-A100-Endpoint konfiguriert ist (HF_ENDPOINT_URL gesetzt). */
+export function isHfEndpointConfigured(): boolean {
+  try {
+    return env('HF_ENDPOINT_URL').length > 0;
+  } catch { return false; }
+}
+
 function env(name: string): string {
   return (process.env[name] ?? '').trim();
 }

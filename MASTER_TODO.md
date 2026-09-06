@@ -177,3 +177,12 @@
 ## Historie
 
 > Ältere Abschnitte (AUDIT.md 2026-09-03, AUDIT_DEEP.md 2026-09-04, Softwareaudit/OpenGrep+reviewdog 2026-09-05, Cerebras-Tiefenaufträge, Delegationsaufträge) wurden konsolidiert: alle dortigen Punkte sind **erledigt** und wurden am 2026-09-05 entfernt (Details in `TASKDONE.md` bzw. Git-History). Dieses Dokument enthält nur noch offene Punkte aus dem Deep Audit 2026-09-05 sowie weiterhin gültige Live-/Betreiber-Prüfpunkte.
+
+---
+
+## 🧠 Cerebras-Aufträge 2026-09-06 (User-Bugs 6926)
+
+> Quelle: Screenshots `public/BUGS/Bug6926doppelteicons.png` + `Bug6926einstellungen.png`. Routing: HOCH → SCHWER → #7 (Cerebras).
+
+- [x] **BUG-6926-1 · HOCH · Doppelte Icon-Leiste konsolidieren** – Kürzel-Leiste (Plugin-Toolbar) ist bereits entfernt; verbleibend: `CTRL` (controllerMONK) fehlte im Header → wurde ergänzt (10 Spalten). Zu verifizieren: keine Dubletten mehr, einheitlicher Aktiv-Zustand, Header enthält alle 19 MONKs.
+- [x] **BUG-6926-2 · HOCH · SFU-Verdrahtung + Settings-Anbindungen fertigstellen** – `SettingsDialog`: SFU (Mediasoup) voll verdrahten (Session-/Plugin-State-Sync über SFU-DataChannel, nicht nur Media-Pfad), Verbindungsstatus anzeigen (verbunden/nicht verfügbar), MIDI-Status korrekt spiegeln (midi-bridge-Sidecar für iOS/Safari), Cross-Origin-Isolation-Header (COOP/COEP) in server.ts setzen, AI-Shutdown-Button nur aktiv wenn HF-Endpoint konfiguriert.

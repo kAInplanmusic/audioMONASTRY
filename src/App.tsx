@@ -51,7 +51,7 @@ const RACK_ORDER = [
 // nummeriertem Plugin (laut uiubersicht). Fixe Racks (performance/ai) und
 // controllerMONK (Zusatzmodul ohne Header-Icon) haben kein Icon;
 // masterplayerMONK ist die feste Kopfzeile oberhalb der Toolbar.
-const NAV_EXCLUDED = new Set(['ai', 'performance', 'controller']);
+const NAV_EXCLUDED = new Set(['ai', 'performance']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
@@ -484,7 +484,7 @@ function AppComponent() {
 
           {/* Mitte: 18 Auswahl-Icons (zwei Reihen à 9) – ein Icon pro Plugin außer ai/mixer/masterplayer */}
           <nav className="flex-1 min-w-0 overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
-            <div className="grid grid-rows-2 grid-cols-9 min-w-[540px] h-full">
+            <div className="grid grid-rows-2 grid-cols-10 min-w-[600px] h-full">
               {navPlugins.map((plugin) => {
                 const Icon = plugin.icon;
                 const state = moduleStates[plugin.id] || 'OFF';

@@ -46,6 +46,12 @@ const stemJobStatus = new Map<string, 'active' | 'pending' | 'success' | 'failed
 dotenv.config();
 
 const app = express();
+// Enable COOP and COEP for cross‑origin isolation required by Mediasoup SFU
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  next();
+});
 const PORT = Number(process.env.PORT || 8080);
 
 // ---------------------------------------------------------------------------

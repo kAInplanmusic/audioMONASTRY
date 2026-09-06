@@ -1,18 +1,26 @@
-# AGENT_TODO – Background-Coder Pipeline
+# AGENT_TODO – Background-Coder Pipeline (HF + Cerebras #7)
 
-Erzeugt: 2026-09-05T23:17:17.046Z
-
-LEICHT: 0 · MITTEL: 0 · SCHWER: 0 · BLOCKED: 0
-
-Festes Modell-Routing: Orchestrator=DeepSeek V4 Flash Visionary (max thinking) · #2 Kimi K2.7-Code · #3 GLM-5.3 · #4 Qwen3-Coder-Next · #5 GLM-5.3-Flash · #6 DeepSeek V4 Pro · #7 Cerebras GPT-OSS-120B (SCHWER/komplex)
-## LEICHT (1-12)
+Aktualisiert: 2026-09-06T08:36:01.041Z
 
 
-## MITTEL (13-24)
+TASK-025
+CLASS: SCHWER
+DOMAIN: BACKEND
+DESCRIPTION: **BUG-6926-1 · HOCH · Doppelte Icon-Leiste konsolidieren** – Kürzel-Leiste (Plugin-Toolbar) ist bereits entfernt; verbleibend: `CTRL` (controllerMONK) fehlte im Header → wurde ergänzt (10 Spalten). Zu verifizieren: keine Dubletten mehr, einheitlicher Aktiv-Zustand, Header enthält alle 19 MONKs.
+IMPLEMENTATION_AGENT: #7
+MODEL: gpt-oss-120b
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED
 
-
-## SCHWER (25-36)
-
-
-## BACKLOG / BLOCKED
-
+TASK-026
+CLASS: SCHWER
+DOMAIN: BACKEND
+DESCRIPTION: **BUG-6926-2 · HOCH · SFU-Verdrahtung + Settings-Anbindungen fertigstellen** – `SettingsDialog`: SFU (Mediasoup) voll verdrahten (Session-/Plugin-State-Sync über SFU-DataChannel, nicht nur Media-Pfad), Verbindungsstatus anzeigen (verbunden/nicht verfügbar), MIDI-Status korrekt spiegeln (midi-bridge-Sidecar für iOS/Safari), Cross-Origin-Isolation-Header (COOP/COEP) in server.ts setzen, AI-Shutdown-Button nur aktiv wenn HF-Endpoint konfiguriert.
+IMPLEMENTATION_AGENT: #7
+MODEL: gpt-oss-120b
+REVIEW_AGENT: -
+SERVER_REQUIRED: NO
+HARDWARE_REQUIRED: NO
+STATUS: COMPLETED

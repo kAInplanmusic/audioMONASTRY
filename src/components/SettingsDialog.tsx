@@ -12,7 +12,7 @@ import { sfuTransport } from '../core/transport/MediasoupTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { isWebMidiSupported, requestWebMidiAccess } from '../utils/midiAccess';
 import { CloudStatusBadge } from './CloudStatusBadge';
-import { isAiShutdownMode, setAiShutdownMode } from '../core/ai/orchestrator/providerRouter';
+import { isAiShutdownMode, setAiShutdownMode, isHfEndpointConfigured } from '../core/ai/orchestrator/providerRouter';
 
 /**
  * SettingsDialog – Audio-I/O & Device-Auswahl
@@ -83,6 +83,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   const [latency, setLatency] = useState(() => audioDeviceManager.getLatencySnapshot());
   // NEW-D15-1: DevSettings „AI Server Shutdown“ – A100-Endpoint aus dem Router nehmen.
   const [aiShutdown, setAiShutdown] = useState(() => isAiShutdownMode());
+  const [hfConfigured] = useState(() => { try { return isHfEndpointConfigured(); } catch { return false; } });
+  const [sfuStatus, setSfuStatus] = useState<'off' | 'connecting' | 'connected' | 'error'>('off');
 
   useEffect(() => {
     if (!open) return;
@@ -154,18 +156,23 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
 
   const applyTransportMode = async (mode: 'p2p' | 'sfu') => {
     update({ ...settings, transportMode: mode });
-    try {
-      if (mode === 'sfu') {
+    if (mode === 'sfu') {
+      setSfuStatus('connecting');
+      try {
         await sfuTransport.connect('studio-session', 'local-user');
         // Session-/Plugin-State-Sync laeuft weiter ueber den Signaling-Socket,
         // nur der Media-Pfad wechselt auf die SFU (Producer/Consumer).
         webRTCManager.setSfuMode(true, sfuTransport);
-      } else {
-        webRTCManager.setSfuMode(false, sfuTransport);
-        sfuTransport.disconnect();
+        setSfuStatus(sfuTransport.connected ? 'connected' : 'error');
+      } catch (e) {
+        console.warn('SFU-Transport nicht verfügbar:', (e as Error).message);
+        setSfuStatus('error');
+        update({ ...settings, transportMode: 'p2p' });
       }
-    } catch (e) {
-      console.warn('SFU-Transport nicht verfügbar:', (e as Error).message);
+    } else {
+      webRTCManager.setSfuMode(false, sfuTransport);
+      sfuTransport.disconnect();
+      setSfuStatus('off');
     }
   };
 
@@ -326,7 +333,15 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             ))}
           </div>
           <p className="text-[10px] text-neutral-500 mt-1">
-            SFU verbindet den Mediasoup-Transport (10+-User-skalierbar). Session-Sync läuft aktuell noch über P2P – volle SFU-Verdrahtung folgt.
+            SFU verbindet den Mediasoup-Transport (10+-User-skalierbar). Media-Pfad läuft über die SFU; Session-/Plugin-State-Sync bleibt auf dem Signaling-Kanal.
+          </p>
+          <p className={`text-[10px] font-mono mt-1 ${
+            sfuStatus === 'connected' ? 'text-emerald-400' : sfuStatus === 'error' ? 'text-red-400' : sfuStatus === 'connecting' ? 'text-amber-300' : 'text-neutral-600'
+          }`}>
+            {sfuStatus === 'connected' ? '● SFU verbunden (Producer/Consumer aktiv)'
+              : sfuStatus === 'error' ? '● SFU nicht erreichbar – zurück auf P2P'
+              : sfuStatus === 'connecting' ? '● verbinde mit SFU …'
+              : '● SFU inaktiv (P2P aktiv)'}
           </p>
         </div>
 
@@ -344,10 +359,10 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
                 settings.midiEnabled ? 'bg-lime-900/30 border-lime-500/60 text-lime-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
               } disabled:opacity-40`}
             >
-              {settings.midiEnabled ? 'MIDI AN' : 'MIDI AUS'}
+              {settings.midiEnabled ? 'MIDI AN' : midiSupported ? 'MIDI AUS' : 'NICHT VERFÜGBAR'}
             </button>
             <span className="text-[10px] text-neutral-500 font-mono">
-              {midiError ?? (settings.midiEnabled ? `${midiInputCount} In / ${midiOutputCount} Out` : 'nicht verbunden')}
+              {midiError ?? (!midiSupported ? 'Browser unterstützt kein Web MIDI – midi-bridge-Sidecar verwenden' : settings.midiEnabled ? `${midiInputCount} In / ${midiOutputCount} Out` : 'nicht verbunden')}
             </span>
           </div>
           <p className="text-[10px] text-neutral-500 mt-1">
@@ -404,15 +419,16 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
             <button
               type="button"
               onClick={() => void toggleAiShutdown()}
+              disabled={!hfConfigured}
               aria-pressed={aiShutdown}
-              className={`px-3 py-2 rounded border text-xs font-bold uppercase tracking-wider ${
+              className={`px-3 py-2 rounded border text-xs font-bold uppercase tracking-wider disabled:opacity-40 ${
                 aiShutdown ? 'bg-red-900/40 border-red-500/70 text-red-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
               }`}
             >
-              {aiShutdown ? 'A100 GESTOPPT · FALLBACK AKTIV' : 'A100 STOPPEN'}
+              {aiShutdown ? 'A100 GESTOPPT · FALLBACK AKTIV' : hfConfigured ? 'A100 STOPPEN' : 'KEIN HF-ENDPOINT'}
             </button>
             <span className="text-[10px] text-neutral-500 font-mono">
-              {aiShutdown ? 'HF-Endpoint deaktiviert, Router nutzt Fallbacks' : 'HF-A100-Endpoint aktiv (sofern konfiguriert)'}
+              {aiShutdown ? 'HF-Endpoint deaktiviert, Router nutzt Fallbacks' : hfConfigured ? 'HF-A100-Endpoint aktiv' : 'HF_ENDPOINT_URL nicht konfiguriert'}
             </span>
           </div>
           <p className="text-[10px] text-neutral-500 mt-1">

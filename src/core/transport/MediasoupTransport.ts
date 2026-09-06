@@ -33,6 +33,11 @@ export class MediasoupTransport implements ITransport {
   private _onMessage: (payload: unknown, fromPeerId: string) => void = () => {};
   private _onPeerJoin: (peerId: string) => void = () => {};
   private _onPeerLeave: (peerId: string) => void = () => {};
+
+  /** true, wenn der SFU-Signaling-Socket aktuell verbunden ist. */
+  get connected(): boolean {
+    return this.socket?.connected ?? false;
+  }
   /** Wird gerufen, wenn sich die Liste fremder Producer der Session ändert. */
   public onProducersChanged: (producers: { producerId: string; kind: string }[]) => void = () => {};
 
