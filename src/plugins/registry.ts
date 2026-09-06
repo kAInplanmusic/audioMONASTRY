@@ -105,7 +105,7 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
   sound: { name: 'soundMONK', short: 'SND', icon: 'AudioLines' },
   song: { name: 'songMONK', short: 'SNG', icon: 'Music' },
   mixer: { name: 'mixerMONK', short: 'MIX', icon: 'Sliders' },
-  controller: { name: 'controllerMONK', short: 'CTRL', icon: 'Keyboard' },
+  controller: { name: 'midiMONK', short: 'MIDI', icon: 'Keyboard' },
   effect: { name: 'effectMONK', short: 'FX', icon: 'Sparkles' },
   drop: { name: 'dropMONK', short: 'DRP', icon: 'Zap' },
   library: { name: 'biblioMONK', short: 'LIB', icon: 'Database' },

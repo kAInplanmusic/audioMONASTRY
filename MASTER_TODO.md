@@ -186,3 +186,27 @@
 
 - [x] **BUG-6926-1 · HOCH · Doppelte Icon-Leiste konsolidieren** – Kürzel-Leiste (Plugin-Toolbar) ist bereits entfernt; verbleibend: `CTRL` (controllerMONK) fehlte im Header → wurde ergänzt (10 Spalten). Zu verifizieren: keine Dubletten mehr, einheitlicher Aktiv-Zustand, Header enthält alle 19 MONKs.
 - [x] **BUG-6926-2 · HOCH · SFU-Verdrahtung + Settings-Anbindungen fertigstellen** – `SettingsDialog`: SFU (Mediasoup) voll verdrahten (Session-/Plugin-State-Sync über SFU-DataChannel, nicht nur Media-Pfad), Verbindungsstatus anzeigen (verbunden/nicht verfügbar), MIDI-Status korrekt spiegeln (midi-bridge-Sidecar für iOS/Safari), Cross-Origin-Isolation-Header (COOP/COEP) in server.ts setzen, AI-Shutdown-Button nur aktiv wenn HF-Endpoint konfiguriert.
+
+---
+
+## 🔬 Audit 2026-09-06 (Folge-Audit nach BUG-6926)
+
+> Quelle: User-Anweisung „nochmal ein Audit starten“. Tools: OpenGrep 545 Regeln/744 Dateien, ESLint, tsc, npm audit, Hetzner-Flotte, MCP-Sweep.
+
+### Zusammenfassung
+| Check | Ergebnis |
+|---|---|
+| Flotte | 5/5 Server running, Health grün |
+| OpenGrep | 53 Findings (0 ERROR · 40 WARNING · 13 INFO) |
+| ESLint | 76 Warnungen (0 Errors) |
+| tsc | 0 Fehler |
+| npm audit | 0 Vulnerabilities |
+| MCP-Sweep | qwen-coder MCP: **nicht verfügbar** (HF-Credits aufgebraucht, HTTP 402) · Hugging-Face-Hub: erreichbar, keine UI-Tool-Spaces gefunden |
+
+### Offene Punkte (Priorität)
+- [ ] **AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M.
+- [ ] **AUD-2609-2 · LOW · 12× unsafe-formatstring** – u. a. `src/utils/audioEngine.ts:449`, `services/taskWorker.ts:81`. Kategorie: Code-Qualität. Aufwand S.
+- [ ] **AUD-2609-3 · LOW · 2× HTTP-Server ohne TLS-Bindung** – `services/midi-bridge/index.js:146`, `services/signaling/index.js:6` (intern, dokumentieren/binden). Kategorie: Security. Aufwand S.
+- [ ] **AUD-2609-4 · LOW · 76 ESLint-Warnungen** – 67× no-unused-vars, 6× hook-deps, 2× ban-ts-comment, 1× unused-expressions. Kategorie: Code-Qualität. Aufwand M.
+- [ ] **AUD-2609-5 · LOW · csurf fehlt in signaling** – `services/signaling/index.js:5`. Kategorie: Security. Aufwand S.
+- [ ] **AUD-2609-6 · INFO · MCP-Credits wieder aufladen** – qwen-coder/Gegenprüfung via HF-Inference ist aktuell gesperrt (402). Betreiber-Schritt.
