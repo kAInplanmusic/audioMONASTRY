@@ -602,25 +602,6 @@ function AppComponent() {
           <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
 
           <div className="ml-auto flex items-center gap-4 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                if (isPlaying) {
-                  void audioEngine.stop();
-                  setIsPlaying(false);
-                } else {
-                  void audioEngine.play().then(() => setIsPlaying(true)).catch(() => { /* Autoplay */ });
-                }
-              }}
-              aria-pressed={isPlaying}
-              className={`px-3 py-1.5 rounded-md border text-[10px] font-black tracking-widest cursor-pointer transition-all active:scale-95 ${
-                isPlaying
-                  ? 'bg-red-600 border-red-400 text-white shadow-[0_0_14px_rgba(239,68,68,0.5)]'
-                  : 'bg-cyan-500 border-cyan-300 text-black shadow-[0_0_14px_rgba(34,211,238,0.5)]'
-              }`}
-            >
-              {isPlaying ? '⏹ STOP' : '▶ PLAY'}
-            </button>
             <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
             <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
             <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
