@@ -19,7 +19,9 @@ export type TrackType =
   | 'channel5'
   | 'channel6'
   | 'channel7'
-  | 'channel8';
+  | 'channel8'
+  | 'channel9'
+  | 'channel10';
 
 // Semantische Rollen – legen fest, WELCHE Klangerzeugung pro Spur läuft.
 export type TrackRole =
@@ -41,6 +43,8 @@ export const TRACK_ROLE_MAP: Record<TrackType, TrackRole> = {
   channel6: 'tom',
   channel7: 'bass',
   channel8: 'lead',
+  channel9: 'perc',
+  channel10: 'lead',
 };
 
 export const ROLE_TO_TRACK: Record<TrackRole, TrackType> = {
@@ -54,7 +58,7 @@ export const ROLE_TO_TRACK: Record<TrackRole, TrackType> = {
   lead: 'channel8',
 };
 
-export const ALL_TRACKS: TrackType[] = ['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'];
+export const ALL_TRACKS: TrackType[] = ['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'];
 export const ALL_ROLES: TrackRole[] = ['kick','hat','clap','perc','snare','tom','bass','lead'];
 
 /** Liefert die Rolle einer Spur. */

@@ -87,7 +87,7 @@ export function validateRoutingMatrix(ids: readonly string[]): string[] {
       violations.push(`${id}: Audio-Quelle ohne Kanalziel (isolation=${route.isolation})`);
     }
     for (const ch of route.channels) {
-      if (!/^channel[1-8]$/.test(ch)) {
+      if (!/^channel([1-9]|10)$/.test(ch)) {
         violations.push(`${id}: ungültiges Kanalziel ${ch}`);
       }
     }

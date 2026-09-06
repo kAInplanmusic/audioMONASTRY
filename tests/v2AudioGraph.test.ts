@@ -14,11 +14,11 @@ function tone(freq: number, len = 128, sr = 48000): Float32Array {
 }
 
 describe('V2StudioGraph (NEW-D4-1)', () => {
-  it('baut 8 Kanäle Source→Gain→Pan→Master und kompiliert ohne Zyklus', () => {
+  it('baut 10 Kanäle Source→Gain→Pan→Master und kompiliert ohne Zyklus', () => {
     const studio = new V2StudioGraph();
     const plan = studio.graph.compile();
     expect(plan.validated).toBe(true);
-    expect(plan.order.length).toBe(1 + 8 * 3); // Master + (Source, Gain, Pan) × 8
+    expect(plan.order.length).toBe(1 + 10 * 3); // Master + (Source, Gain, Pan) × 10
   });
 
   it('rendert hörbaren Stereoblock (Sinus auf Channel 1)', () => {
@@ -70,8 +70,8 @@ describe('V2-Hybrid-Pfad (GraphEngineAdapter + GraphPlaybackEngine)', () => {
       exportState: () => ({
         version: 1, bpm: 128, swing: 0, gate: 0.9, scale: 'C Minor (Acid)',
         patterns: {}, synthNotes: [], masterVolumeDb: -6, spatialSetupId: '10.0',
-        channelGainsDb: { channel1: -6, channel2: 0, channel3: 0, channel4: 0, channel5: 0, channel6: 0, channel7: 0, channel8: 0 },
-        channelPans: { channel1: -0.5, channel2: 0, channel3: 0, channel4: 0, channel5: 0, channel6: 0, channel7: 0, channel8: 0 },
+        channelGainsDb: { channel1: -6, channel2: 0, channel3: 0, channel4: 0, channel5: 0, channel6: 0, channel7: 0, channel8: 0, channel9: 0, channel10: 0 },
+        channelPans: { channel1: -0.5, channel2: 0, channel3: 0, channel4: 0, channel5: 0, channel6: 0, channel7: 0, channel8: 0, channel9: 0, channel10: 0 },
       }),
       importState: () => true,
     };

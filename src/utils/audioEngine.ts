@@ -122,6 +122,8 @@ class AudioEngine {
   private mainMonitorGain: GainNode | null = null;
   /** Post-Mastering-Abgriff für den Master-Stream (SFU/Recording), pre-local-monitor. */
   private masterStreamTap: GainNode | null = null;
+  /** WF-3: Pre-Mastering-Abgriff für das lokale Monitoring (ohne Mastering-Latenz). */
+  private monitorTap: GainNode | null = null;
   // P0-6: Cue-Bus des lokalen Users (parallel zu MAIN, pre-Master abgegriffen).
   private cueBus: GainNode | null = null;
   private cueOutGain: GainNode | null = null;
@@ -160,9 +162,11 @@ class AudioEngine {
   /** Einzelner, wiederverwendeter Preview-Player (kein Leak bei schnellem Klicken). */
   private previewPlayer: Tone.Player | null = null;
   private previewUrl: string | null = null;
+  private musicBufferCache = new Map<string, Tone.ToneAudioBuffer>();
   private trackSampleUrl: Record<TrackType, string | null> = {
     channel1: null, channel2: null, channel3: null, channel4: null,
-    channel5: null, channel6: null, channel7: null, channel8: null
+    channel5: null, channel6: null, channel7: null, channel8: null,
+    channel9: null, channel10: null
   };
 
   private masterMePreGain!: Tone.Volume;
@@ -178,11 +182,13 @@ class AudioEngine {
     channel1: Array(16).fill(false), channel2: Array(16).fill(false),
     channel3: Array(16).fill(false), channel4: Array(16).fill(false),
     channel5: Array(16).fill(false), channel6: Array(16).fill(false),
-    channel7: Array(16).fill(false), channel8: Array(16).fill(false)
+    channel7: Array(16).fill(false), channel8: Array(16).fill(false),
+    channel9: Array(16).fill(false), channel10: Array(16).fill(false)
   };
   private mutedStems: Record<TrackType, boolean> = {
     channel1: false, channel2: false, channel3: false, channel4: false,
-    channel5: false, channel6: false, channel7: false, channel8: false
+    channel5: false, channel6: false, channel7: false, channel8: false,
+    channel9: false, channel10: false
   };
 
   private synthNotes: number[] = Array(16).fill(0);
@@ -581,6 +587,12 @@ class AudioEngine {
     if (this.ctx && typeof this.ctx.createGain === 'function') {
       this.masterStreamTap = this.ctx.createGain();
       this.masterStreamTap.gain.value = 1;
+      // WF-3: Lokaler Monitor hängt PRE-Mastering (direkt nach masterVolume),
+      // damit der DJ ohne Mastering-Lookahead/Limiter-Latenz abhört. Der
+      // masterStreamTap bleibt POST-Mastering für den WebRTC-Master-Stream.
+      this.monitorTap = this.ctx.createGain();
+      this.monitorTap.gain.value = 1;
+      connectSafe(this.masterVolume, this.monitorTap);
       this.outputGain = this.ctx.createGain();
       this.outputGain.gain.value = 1;
       // Kette: analyzerNode → masterStreamTap (Post-Mastering-Abgriff für den
@@ -590,7 +602,7 @@ class AudioEngine {
       connectSafe(this.analyzerNode, this.masterStreamTap);
       this.mainMonitorGain = this.ctx.createGain();
       this.mainMonitorGain.gain.value = 1;
-      connectSafe(this.masterStreamTap, this.mainMonitorGain);
+      connectSafe(this.monitorTap, this.mainMonitorGain);
       connectSafe(this.mainMonitorGain, this.outputGain);
       connectSafe(this.outputGain, this.ctx.destination);
       // Nativer PDC-Delay für den Cue-Pfad (5 ms Mastering-Lookahead).
@@ -699,7 +711,7 @@ class AudioEngine {
 
   /** Bringt alle Patterns + synthNotes auf die aktuelle Schrittanzahl. */
   private normalizeAllPatterns(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
       this.patterns[t] = this.normalizeSteps(this.patterns[t] ?? [], this.stepCount);
     });
     this.synthNotes = this.normalizeNotes(this.synthNotes, this.stepCount);
@@ -2181,6 +2193,7 @@ class AudioEngine {
     this.trackSampleUrl = {
       channel1: null, channel2: null, channel3: null, channel4: null,
       channel5: null, channel6: null, channel7: null, channel8: null,
+      channel9: null, channel10: null,
     };
 
     // Kanalzuege (Pre-Fader/Gain/EQ/Pan) entsorgen.
@@ -2450,7 +2463,7 @@ class AudioEngine {
 
   /** V1-Zustand in den V2-Graph spiegeln (Hybrid-Betrieb, Meilenstein hörbar). */
   public syncV2FromV1(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
       const db = this.channelGains[t]?.volume.value ?? 0;
       const pan = this.channelPans[t]?.pan.value ?? 0;
       this.v2Studio.setGainDb(t, db);
@@ -2463,7 +2476,7 @@ class AudioEngine {
   public exportGraphState(): AudioGraphState {
     const gains: Record<string, number> = {};
     const pans: Record<string, number> = {};
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
       gains[t] = this.channelGains[t]?.volume.value ?? 0;
       pans[t] = this.channelPans[t]?.pan.value ?? 0;
     });
@@ -2928,6 +2941,18 @@ class AudioEngine {
     return !!this.trackSampleUrl[track];
   }
 
+  /** WF-2: Lädt/decodiert eine Musik-URL genau einmal und cached den Buffer. */
+  private async getMusicBuffer(url: string): Promise<Tone.ToneAudioBuffer> {
+    const cached = this.musicBufferCache.get(url);
+    if (cached) return cached;
+    const buffer = await new Promise<Tone.ToneAudioBuffer>((resolve, reject) => {
+      // Konstruktor-Callbacks: onload -> resolve, onerror -> reject.
+      const b = new Tone.ToneAudioBuffer(url, () => resolve(b), (e) => reject(e ?? new Error(`Audio-Decode fehlgeschlagen: ${url}`)));
+    });
+    this.musicBufferCache.set(url, buffer);
+    return buffer;
+  }
+
   public async loadTrackSample(track: TrackType, url: string | null) {
     // MAIN-Schutz: laden darf nur der Halter oder ein freigegebener Kanal.
     if (!this.canLoadTrack(track)) return;
@@ -2955,7 +2980,10 @@ class AudioEngine {
       // Mischpult-Regler (Fader/EQ/Pan/Mute) tatsächlich auf geladene
       // Tracks wirken – vorher ging der Player direkt auf den Master.
       this.ensureChannelNode(track);
-      const player = new Tone.Player(url).connect(this.channelInputs[track]!);
+      // WF-2: Decode-Cache – identische URL wird nur einmal dekodiert und
+      // als ToneAudioBuffer wiederverwendet (kein Decode-Spike beim Reload).
+      const buffer = await this.getMusicBuffer(url);
+      const player = new Tone.Player(buffer).connect(this.channelInputs[track]!);
       // player.autostart = true; // Or player.start() when needed
       this.samplePlayers[track] = player;
       this.trackSampleUrl[track] = url;

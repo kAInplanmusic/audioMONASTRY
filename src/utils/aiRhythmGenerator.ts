@@ -11,6 +11,8 @@ export const generateRhythmicPattern = (genre: string): Record<TrackType, boolea
     channel6: Array(16).fill(false),
     channel7: Array(16).fill(false),
     channel8: Array(16).fill(false),
+    channel9: Array(16).fill(false),
+    channel10: Array(16).fill(false),
   };
 
   // Simple rule-based generation based on genre

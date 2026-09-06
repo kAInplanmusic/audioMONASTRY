@@ -228,8 +228,8 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 ```
 
 ### Befunde (Nadelöhre)
-- [ ] **WF-1 · HOCH · Kanal 5 ist Nadelöhr** – `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.
-- [ ] **WF-2 · MITTEL · Musik-Load ohne Decode-Cache** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
-- [ ] **WF-3 · MITTEL · Mastering-Insert liegt im Monitorweg** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
+- [x] **WF-1 · HOCH · Kanal 5 ist Nadelöhr umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.
+- [x] **WF-2 · HOCH · Musik-Load ohne Decode-Cache umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
+- [x] **WF-3 · HOCH · Mastering-Insert liegt im Monitorweg umgesetzt 2026-09-06 (Kanal 9/10, Decode-Cache, Pre-Mastering-MonitorTap)** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
 - [x] **WF-4 · NIEDRIG · UI-only-Plugins liefern leeres Array** – `mastering`/`stem`/`recording` sind in `pluginChannelMap` als `[]` markiert, obwohl sie Audio bearbeiten (Insert statt Quelle). Dokumentieren bzw. Insert-Mapping ergänzen.
 - [ ] **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen).

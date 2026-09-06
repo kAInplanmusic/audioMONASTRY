@@ -18,8 +18,8 @@ vi.mock('../src/utils/audioEngine', () => ({
       stem: [], recording: [], performance: [],
       spatial: ['channel7'], mixer: ['channel1'], mcp: ['channel5'],
       drum: ['channel2'], sampler: ['channel5'], synthesizer: ['channel4'],
-      instrument: ['channel8'], voice: ['channel5'], sound: ['channel5'],
-      drop: ['channel5'], effect: ['channel1'], eq: ['channel1'], dsp: ['channel1'],
+      instrument: ['channel4'], voice: ['channel8'], sound: ['channel9'],
+      drop: ['channel10'], effect: ['channel6'], eq: ['channel6'], dsp: ['channel6'],
     };
     return (map[id] ?? []) as never;
   },

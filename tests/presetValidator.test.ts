@@ -21,7 +21,7 @@ describe('presetValidator', () => {
 
   it('prüft Track-Patterns', () => {
     const good = Object.fromEntries(
-      ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8']
+      ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8', 'channel9', 'channel10']
         .map((k) => [k, Array(16).fill(false)]),
     );
     expect(validateTrackPreset(good)).toBe(true);

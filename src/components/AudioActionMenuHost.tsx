@@ -101,6 +101,8 @@ const trackNames: Record<TrackType, string> = {
   channel6: 'SAMPLE',
   channel7: 'BASS',
   channel8: 'LEAD',
+  channel9: 'SOUND',
+  channel10: 'DROP',
 };
 
 /** Plugins, die bereits geöffnet sind und einen vorhandenen Audio-Eingang besitzen. */
