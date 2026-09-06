@@ -221,7 +221,7 @@ export class DropContextAnalyzer {
   suggestTransitionProfiles(
     fromEnergy: number,
     toEnergy: number,
-    context: AudioContext
+    _context: AudioContext
   ): SuggestionScoring[] {
     // Bevorzuge Transition- und Breakdown-Profile
     const candidates = [

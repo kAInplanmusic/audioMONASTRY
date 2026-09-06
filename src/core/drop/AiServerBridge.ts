@@ -4,7 +4,7 @@
  * Connect to DeepSeek/HF Inference API for drop generation
  */
 
-import type { GeneratedDropProfile, DropProfile } from '../drop';
+import type { GeneratedDropProfile } from '../drop';
 
 /**
  * AI Request/Response Types

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import type { AuditConfig, Finding, Severity, StageResult } from './types.js';
 import { normalizeSeverity } from './types.js';
-import { fingerprintFinding, matchesAny } from './pattern.js';
+import { fingerprintFinding } from './pattern.js';
 import { parseJsonLoose, runCommand } from './process.js';
 import type { SelectedFile } from './files.js';
 

@@ -19,8 +19,7 @@ import {
   IHardwareAdapter, ISpatialRenderer, SpatialSource, ITransport, TransportMode,
 } from './interfaces';
 import {
-  MidiStreamParser, ParsedMidiEvent, rpn, nrpn, midiClock, midiStart,
-  midiContinue, midiStop, midiSongPosition, midiEventToControlMessage,
+  MidiStreamParser, midiEventToControlMessage,
   encodeControlMessage,
 } from './hardware/midiCodec';
 // Rückwärtskompatibler Re-Export (Funktionen liegen jetzt im MIDI-Codec).

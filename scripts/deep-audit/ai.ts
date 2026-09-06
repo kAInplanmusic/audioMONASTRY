@@ -1,7 +1,7 @@
 // Deep-Audit-System – KI-Review-Pässe (DeepSeek + Hugging Face).
 
 import { existsSync, readFileSync } from 'node:fs';
-import type { AuditConfig, Finding, ProviderConfig, RawAiFinding, Severity, StageResult } from './types.js';
+import type { AuditConfig, Finding, ProviderConfig, RawAiFinding, StageResult } from './types.js';
 import { normalizeSeverity } from './types.js';
 import { fingerprintFinding } from './pattern.js';
 import { findEnvKey } from './config.js';

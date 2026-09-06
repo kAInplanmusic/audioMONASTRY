@@ -60,7 +60,7 @@ export class CostTracker {
   }
 
   /** Schätzung für einen Job (vor Ausführung). */
-  estimateJobCostUsd(task: AiTask, provider: AiProviderId, model: string): number {
+  estimateJobCostUsd(task: AiTask, provider: AiProviderId, _model: string): number {
     if (provider === 'replicate' && task === 'stem.separate') return TASK_COST_USD['stem.separate'] ?? 0.05;
     if (provider === 'hf-endpoint') {
       const gpuMs = 10_000; // konservativ: 10 s aktive GPU inkl. Anteil Kaltstart

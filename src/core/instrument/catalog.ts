@@ -13,7 +13,7 @@ import {
 } from '../../data/instrumentSynths';
 import {
   AcousticDef, InstrumentCategory, InstrumentDefinition,
-  SynthDef, FmDef, DrumDef, FxDef, categoryOf,
+  categoryOf,
 } from './types';
 
 // ---------------------------------------------------------------------------

@@ -82,7 +82,7 @@ export class SessionManager {
     }
   }
 
-  jobFinished(modelId?: string): void {
+  jobFinished(_modelId?: string): void {
     this.session.activeJobs = Math.max(0, this.session.activeJobs - 1);
     if (this.session.activeJobs === 0 && this.session.state === 'ACTIVE') {
       this.transition('IDLE');
