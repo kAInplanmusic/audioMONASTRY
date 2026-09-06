@@ -2053,9 +2053,8 @@ class AudioEngine {
       this.ensureChannelNode('channel4');
       const synthChannel = this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER'];
       const leadGain = new Tone.Volume(-8);
-      // @ts-ignore Tone-Node-Kompatibilitaet fuer Web-Audio-Worklet
+      // @ts-expect-error Tone-Node-Kompatibilitaet fuer Web-Audio-Worklet
       this.synthWorklet.connect(leadGain.input ? leadGain.input : this.ctx.destination);
-      // @ts-ignore Tone-Node-Kompatibilitaet
       leadGain.connect(synthChannel);
       console.info('synth-processor (PolyBLEP) aktiviert.');
     } catch (e) {
