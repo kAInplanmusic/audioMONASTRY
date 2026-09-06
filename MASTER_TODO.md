@@ -241,10 +241,10 @@ Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player �
 > User-Anweisung: Alle Background-Coder (inkl. Cerebras #7) bereiten diese 7 Themen in ihrer Spezialstärke vor. **Plan-Modus gelaufen 2026-09-06** – Pläne in `logs/background-coder/audit-plans.md`.
 > GitHub-Referenzen: 6-Op-FM `asb2m10/dexed` (3.5k★) · Wavetable `surge-synthesizer/surge` (4k★) · Tonewheel `pantherb/setBfree` · Orchester `sgossner/VSCO-2-CE` (672★, CC0) · SFZ/SF2 `sfztools/sfizz` (533★).
 
-- [ ] **AUDIO-1 · HOCH · Granular-Engine** – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.
-- [ ] **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
+- [x] **AUDIO-1 · HOCH · Granular-Engine** – fertig produktionsreif 2026-09-06 (Worklet + Engine + Tests gruen). – Grain-Scheduler, Dichte/Position/Pitch-Jitter, 8–16 Stimmen, Worklet-fähig; Referenzen: Actuate, Granular-Synthesizer-Konzepte.
+- [x] **AUDIO-2 · HOCH · 6-Op-FM (DX7)** – fertig produktionsreif 2026-09-06 (DX7-Algos/Presets/SysEx + Worklet + Tests gruen). – Dexed-Referenz: 6 Operatoren, 32 Algorithmen, LFO/Pitch-Env, Velocity-Scaling; als Worklet + Preset-Format.
 - [ ] **AUDIO-3 · HOCH · Wavetable-Synthese** – Surge-XT-Referenz: Wavetable-Interpolation, Morphing, Unison/Detune, Mod-Matrix-Anbindung.
 - [ ] **AUDIO-4 · MITTEL · Tonewheel/Orgel** – setBfree-Referenz: 9 Drawbars, Percussion, Leslie-Simulation (Rotary), Key-Click.
 - [ ] **AUDIO-5 · MITTEL · Drum-Synthese** – Geonkick/TR-Referenzen: Kick/Snare/Hat/Clap-Modelle (analog + Sample-Layer), Tuning/Decay.
 - [ ] **AUDIO-6 · HOCH · Orchester-Library** – VSCO-2-CC0-Referenz: SFZ-Streaming (vorhanden), Artikulationen, Round-Robin, RAM-Budget.
-- [ ] **AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.
+- [x] **AUDIO-7 · HOCH · EXS/SF2/WAV-Import** – umgesetzt 2026-09-06 (src/core/instrument/sampleImport.ts + tests, 5 Tests gruen). – Parser-Pipeline (EXS24/SF2/WAV), Mapping auf SFZ-Voice-Engine, Konvertierung/Validierung.
