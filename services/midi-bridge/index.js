@@ -190,7 +190,7 @@ if (input && midiInPort !== null) {
   });
 }
 
-server.listen(WS_PORT, () => {
+server.listen(WS_PORT, '127.0.0.1', () => {
   log(`WebSocket lauscht auf :${WS_PORT}`);
   log(`MIDI-IN: ${midiInPort !== null && input ? input.getPortName(midiInPort) : 'keiner'}`);
   log(`MIDI-OUT: ${midiOutPort !== null && output ? output.getPortName(midiOutPort) : 'keiner'}`);

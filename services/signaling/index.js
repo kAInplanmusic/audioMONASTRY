@@ -3,6 +3,8 @@ const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
+// Kein Cookie-Auth: csurf entfällt bewusst. Absicherung läuft über
+// ALLOWED_ORIGINS + Socket.io-Auth (Handshake-Token), TLS via Caddy.
 const server = http.createServer(app);
 const IDLE_TIMEOUT_MS = Number(process.env.SIGNALING_IDLE_TIMEOUT_MS || 20 * 60 * 1000);
 const ALLOWED_ORIGINS = process.env.SIGNALING_ALLOWED_ORIGINS
@@ -95,6 +97,6 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   log(`Signaling server running on port ${PORT}`);
 });

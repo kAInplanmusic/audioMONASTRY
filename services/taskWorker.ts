@@ -49,7 +49,7 @@ async function processTasks() {
 
   task.status = 'processing';
   writeQueue(data);
-  console.log(`Worker: Verarbeite ${task.type} - ${task.id}`);
+  console.log('Worker: Verarbeite', task.type, '-', task.id);
 
   try {
     let response;
@@ -73,12 +73,12 @@ async function processTasks() {
     task.status = 'completed';
     task.processedAt = Date.now();
     task.result = response.data;
-    console.log(`Worker: Fertig ${task.type} - ${task.id}`);
+    console.log('Worker: Fertig', task.type, '-', task.id);
   } catch (error) {
     task.status = 'failed';
     task.processedAt = Date.now();
     task.error = error instanceof Error ? error.message : String(error);
-    console.error(`Worker: Fehler bei ${task.type} - ${task.id}:`, task.error);
+    console.error('Worker: Fehler bei', task.type, '-', task.id, ':', task.error);
   }
 
   writeQueue(data);

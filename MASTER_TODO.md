@@ -205,8 +205,31 @@
 
 ### Offene Punkte (Priorität)
 - [ ] **AUD-2609-1 · MEDIUM · Workflow-Actions auf Commit-SHA pinnen** – 35× `actions/*@v4` (Supply-Chain). Kategorie: Security. Aufwand M.
-- [ ] **AUD-2609-2 · LOW · 12× unsafe-formatstring** – u. a. `src/utils/audioEngine.ts:449`, `services/taskWorker.ts:81`. Kategorie: Code-Qualität. Aufwand S.
-- [ ] **AUD-2609-3 · LOW · 2× HTTP-Server ohne TLS-Bindung** – `services/midi-bridge/index.js:146`, `services/signaling/index.js:6` (intern, dokumentieren/binden). Kategorie: Security. Aufwand S.
-- [ ] **AUD-2609-4 · LOW · 76 ESLint-Warnungen** – 67× no-unused-vars, 6× hook-deps, 2× ban-ts-comment, 1× unused-expressions. Kategorie: Code-Qualität. Aufwand M.
-- [ ] **AUD-2609-5 · LOW · csurf fehlt in signaling** – `services/signaling/index.js:5`. Kategorie: Security. Aufwand S.
-- [ ] **AUD-2609-6 · INFO · MCP-Credits wieder aufladen** – qwen-coder/Gegenprüfung via HF-Inference ist aktuell gesperrt (402). Betreiber-Schritt.
+- [x] **AUD-2609-2 · LOW · 12× unsafe-formatstring** – u. a. `src/utils/audioEngine.ts:449`, `services/taskWorker.ts:81`. Kategorie: Code-Qualität. Aufwand S.
+- [x] **AUD-2609-3 · LOW · 2× HTTP-Server ohne TLS-Bindung** – `services/midi-bridge/index.js:146`, `services/signaling/index.js:6` (intern, dokumentieren/binden). Kategorie: Security. Aufwand S.
+- [x] **AUD-2609-4 · LOW · 76 ESLint-Warnungen** – 67× no-unused-vars, 6× hook-deps, 2× ban-ts-comment, 1× unused-expressions. Kategorie: Code-Qualität. Aufwand M.
+- [x] **AUD-2609-5 · LOW · csurf fehlt in signaling** – `services/signaling/index.js:5`. Kategorie: Security. Aufwand S.
+- [x] **AUD-2609-6 · INFO · MCP-Credits wieder aufladen** – qwen-coder/Gegenprüfung via HF-Inference ist aktuell gesperrt (402). Betreiber-Schritt.
+
+---
+
+## 🔌 Verkabelungs-/Tonfluss-Audit 2026-09-06 (User-Auftrag)
+
+> Manuelle Tiefenprüfung: Quellen → Kanalzug → Master → Ausgang, inkl. Nadelöhranalyse.
+
+### Ist-Verdrahtung (Tonfluss)
+```
+Plugins: instrument/synth→CH4 · drum→CH2 · sampler/mcp/sound/drop→CH5 · effect/eq/dsp→CH6 · spatial→CH7 · voice→CH8 · mixer→CH1
+Kanalzug: Pre-Fader → Fader → 3-Band-EQ → Pan → GLOBAL_MASTER
+Master:   GLOBAL_MASTER → masterVolume → analyzerNode → masterStreamTap (post-Mastering) → mainMonitorGain → Destination
+Quellen:  Musik: SORTED_MUSIC_LIBRARY → loadTrackSample(url) → Tone.Player → Kanalzug
+          Sound: samples.ts / drumKits.ts / instrumentSynths.ts
+          DB:    Supabase (ai_sessions/ai_jobs/ai_model_usage + sample_embeddings/match_samples für /api/library/search)
+```
+
+### Befunde (Nadelöhre)
+- [ ] **WF-1 · HOCH · Kanal 5 ist Nadelöhr** – `sampler`, `mcp`, `sound`, `drop` teilen sich `channel5`. Bei paralleler Nutzung konkurrieren 4 Plugins um einen Kanalzug (Gain/EQ/Fader überschreiben sich). Fix: eigene Kanäle (z. B. drop→CH9, sound→CH10) oder Sub-Bus je Plugin.
+- [ ] **WF-2 · MITTEL · Musik-Load ohne Decode-Cache** – `loadTrackSample` erzeugt pro Ladung einen neuen `Tone.Player` (Decode-Spike beim Trackwechsel). Fix: OPFS-/Buffer-Cache analog `SfzSampleCache` für Musik-URLs.
+- [ ] **WF-3 · MITTEL · Mastering-Insert liegt im Monitorweg** – `masterStreamTap` hängt post-Mastering: Monitor hört die Mastering-Latenz (Lookahead). Fix: separaten Pre-Mastering-Tap für Monitor, Post-Mastering nur für MAIN-Stream.
+- [x] **WF-4 · NIEDRIG · UI-only-Plugins liefern leeres Array** – `mastering`/`stem`/`recording` sind in `pluginChannelMap` als `[]` markiert, obwohl sie Audio bearbeiten (Insert statt Quelle). Dokumentieren bzw. Insert-Mapping ergänzen.
+- [ ] **WF-5 · NIEDRIG · DB-RLS/Indizes** – `sample_embeddings` hat HNSW-Index + RLS; `ai_jobs`/`ai_sessions` ohne sichtbaren Index auf session_id (EXPLAIN in Live-DB prüfen).
