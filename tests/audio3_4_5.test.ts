@@ -52,6 +52,7 @@ describe('AUDIO-4 Tonewheel-Orgel + Leslie (produktionsreif)', () => {
     expect(l.getSpeed()).toBeCloseTo(0.8, 3);
     l.setFast(true);
     let prev = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
     for (let i = 0; i < 12000; i++) prev = l.process(0.5);
     expect(l.getSpeed()).toBeGreaterThan(3); // hat fast erreicht
     // Modulation verändert den Pegel (AM) bzw. liefert gültige Werte

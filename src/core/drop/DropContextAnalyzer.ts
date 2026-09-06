@@ -8,9 +8,7 @@ import type { DropProfile, DropCategory } from './types/DropProfile';
 import {
   DROP_PROFILES,
   getDropProfilesByCategory,
-  getDropProfilesForPlugins,
-  getDropProfilesByIntensity,
-} from './types/DropProfile';
+  getDropProfilesByIntensity} from './types/DropProfile';
 
 export interface MixerChannel {
   id: string;

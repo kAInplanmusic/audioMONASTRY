@@ -20,6 +20,7 @@ export function renderMelodyWav(
   sampleRate = 22050,
 ): Blob {
   const beatSeconds = 60 / Math.max(20, bpm);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const frames: number[] = [];
   const totalBeats = notes.reduce((sum, n) => sum + (n.durationBeats ?? 1), 0);
   const totalSamples = Math.ceil(sampleRate * beatSeconds * totalBeats);

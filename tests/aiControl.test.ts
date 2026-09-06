@@ -165,6 +165,7 @@ describe('MoaAgent (DeepSeek-V4-Flash als Planer)', () => {
   });
 
   it('plan nutzt den injizierten Router und liefert Schritte + Provider', async () => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
     const agent = new MoaAgent(async (req) => ({
       provider: 'deepseek-flash',
       text: '[{"pluginId":"mixer","command":"Tempo 128","prompt":"x"}]',

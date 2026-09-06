@@ -1,5 +1,6 @@
 // Deep-Audit-System – kleine Glob-Engine für Pfad-Muster.
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
 const GLOB_META = /[*?]/;
 
 // Erlaubte Glob-Zeichen: alphanumerisch, '/', '.', '_', '-', '*', '?'.

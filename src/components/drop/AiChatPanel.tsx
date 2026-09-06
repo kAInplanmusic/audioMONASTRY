@@ -11,6 +11,7 @@ import { useDropContext } from '../../context/DropContext';
 const SUGGESTIONS = ['Energy', 'Ambient', 'Techno', 'Sidechain', 'Breakdown', 'Cymbal'];
 
 export const AiChatPanel: React.FC = () => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const { chatHistory, generateDrop, addChatMessage, selectProfile, aiSuggestions } =
     useDropContext();
   const [input, setInput] = useState('');

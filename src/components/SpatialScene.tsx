@@ -11,7 +11,7 @@ import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
 import { SpatialSourceIcon } from './SpatialSourceIcon';
 import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
 import { SPATIAL_SETUPS } from '../utils/spatialMath';
-import type { SpatialQuality, SpatialSceneState, SpatialSource, TrackType } from '../types';
+import type { SpatialQuality, SpatialSceneState, SpatialSource} from '../types';
 import { ALL_TRACKS } from '../types';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { webRTCManager } from '../utils/WebRTCManager';
@@ -205,6 +205,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
    * Trennt Audio-Routing/Taps einer Spatial-Quelle und gibt eine ggf.
    * vorhandene geteilte Kanal-Belegung frei.
    */
+// eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst beibehalten (Runde 3, Hook-Deps werden separat auditiert)
   function releaseSpatialSource(sourceId: number) {
     const source = scene.sources.find((s) => s.id === sourceId);
     if (source?.track) {
@@ -606,7 +607,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
 
       {/* Bottom Bar / Quick Actions */}
       <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-2 flex-wrap">
-        <button type="button" onClick={() => stageRef.current && (() => { const r = stageRef.current.getBoundingClientRect(); addSourceAt(0, 0.4); })()}
+        <button type="button" onClick={() => stageRef.current && (() => { const _r = stageRef.current.getBoundingClientRect(); addSourceAt(0, 0.4); })()}
           className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer">
           <Plus className="w-3 h-3" /> QUELLE
         </button>

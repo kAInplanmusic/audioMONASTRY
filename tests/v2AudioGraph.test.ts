@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AudioGraph } from '../src/core/audio/AudioGraph';
+import {  } from '../src/core/audio/AudioGraph';
 import { V2StudioGraph } from '../src/core/audio/V2StudioGraph';
 import { GraphEngineAdapter } from '../src/core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../src/core/audio/compat/GraphPlaybackEngine';
@@ -83,6 +83,7 @@ describe('V2-Hybrid-Pfad (GraphEngineAdapter + GraphPlaybackEngine)', () => {
 
   it('GraphPlaybackEngine rendert Blöcke deterministisch und trigger Impuls', () => {
     let rendered = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
     const engine = new GraphPlaybackEngine((src, ctx) => {
       rendered++;
       return [src[0].slice()];

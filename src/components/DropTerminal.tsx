@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react';
-import { Power, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { useDropContext, DropProvider } from '../context/DropContext';
 import { DropGeneratorPanel } from './drop/DropGeneratorPanel';
 import { DJTransitionPanel } from './drop/DJTransitionPanel';

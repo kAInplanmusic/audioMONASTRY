@@ -7,7 +7,6 @@
 import React, { useState } from 'react';
 import { Play } from 'lucide-react';
 import { useDropContext } from '../../context/DropContext';
-import type { DropProfile } from '../../core/drop';
 import { DROP_PROFILES } from '../../core/drop';
 
 const OUTPUT_CHANNELS = ['CH1', 'CH2', 'CH3', 'CH4', 'CH5 (Master)'];

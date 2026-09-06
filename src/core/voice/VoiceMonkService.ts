@@ -10,7 +10,7 @@
 import { sessionMediaStore, type SessionMediaItem, type ISessionMediaStore } from '../session/SessionMediaStore';
 import { random } from '../../utils/random';
 import { WebSpeechTtsProvider, type ILiveSpeechProvider } from './WebSpeechTtsProvider';
-import { renderMelodyWav, renderVocalWav } from './melody';
+import { renderVocalWav } from './melody';
 import { SongGeneratorService, type ISongGenerator, type SongOptions } from './SongGenerator';
 import { type ISongOutputSink, songItemToAudioSource, V2EngineSongSink } from './SongOutputBridge';
 import { hfVoiceRequest, isBrowser } from './hfApi';

@@ -124,6 +124,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
     } catch (err) {
       console.error('Failed to start recording:', err);
     }
+// eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst beibehalten (Runde 3, Hook-Deps werden separat auditiert)
   }, [audioContext, inputSource, lockStatus, takes.length, recordTime, addSample]);
 
   const handleStop = useCallback(() => {

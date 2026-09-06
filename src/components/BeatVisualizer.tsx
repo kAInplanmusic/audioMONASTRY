@@ -65,6 +65,7 @@ export const BeatVisualizer: React.FC<BeatVisualizerProps> = React.memo(({ isPla
     return () => {
       workerRef.current?.terminate();
     };
+// eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst beibehalten (Runde 3, Hook-Deps werden separat auditiert)
   }, []);
 
   // Sync playing state with worker

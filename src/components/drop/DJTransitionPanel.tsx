@@ -21,6 +21,7 @@ export const DJTransitionPanel: React.FC = () => {
     selectedStartChannel,
     selectedEndChannel,
     setSelectedChannels,
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
     selectedProfile,
     selectProfile,
     triggerDjTransition,

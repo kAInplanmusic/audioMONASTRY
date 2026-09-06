@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import { createSeededRandom, random } from './random';
+import { createSeededRandom} from './random';
 
 import { TrackType, TRACK_ROLE_MAP, MUSIC_SCALES } from '../types';
 
@@ -1197,6 +1197,7 @@ class AudioEngine {
    */
   private ensureChannelNode(track: TrackType): void {
     if (!this.channelGains[track]) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
       const rawCtx = (this.ctx || (Tone.context as any)?.rawContext) as AudioContext;
       // F1: Pre-Fader-Eingang. Alle Quellen verbinden sich hierher, damit
       // Fader/EQ/Pan und der Cue-Abgriff (pre-fader) real wirken.

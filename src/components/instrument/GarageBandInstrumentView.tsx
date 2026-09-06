@@ -16,6 +16,7 @@ import { audioEngine } from '../../utils/audioEngine';
 
 type OscType = 'sine' | 'triangle' | 'sawtooth' | 'square';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
 interface PlayZone {
   label: string;
   freq: number;

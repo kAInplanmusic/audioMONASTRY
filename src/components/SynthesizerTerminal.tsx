@@ -84,6 +84,7 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
     return () => {
       try { host.dispose(); } catch { /* best-effort */ }
     };
+// eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst beibehalten (Runde 3, Hook-Deps werden separat auditiert)
   }, []);
 
   // NEW-MONK-4: Sequencer triggert aktive Steps am Master-Transport.

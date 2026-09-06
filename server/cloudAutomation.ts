@@ -4,7 +4,7 @@
  * - Bestehende R2-Audio-Objekte in Supabase einpflegen (Kategorien/Tags)
  * - Neue Audio-Objekte automatisch analysieren, ablegen und verschlagworten
  */
-import { S3Client, ListObjectsV2Command, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, ListObjectsV2Command} from '@aws-sdk/client-s3';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const env = process.env;

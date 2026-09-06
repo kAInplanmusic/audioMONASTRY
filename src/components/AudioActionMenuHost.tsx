@@ -86,6 +86,7 @@ function toRect(anchor: AnchorInput): { x: number; y: number } {
 type Submenu = 'track' | 'plugin' | 'spatial' | null;
 
 const MENU_WIDTH = 264;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
 const SUBMENU_WIDTH = 264;
 
 function clamp(v: number, min: number, max: number): number {

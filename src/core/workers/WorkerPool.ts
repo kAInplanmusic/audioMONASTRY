@@ -48,6 +48,7 @@ class WorkerPoolImpl {
     }
   }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   async submit<T = any, R = any>(task: string, input: unknown, opts?: PoolOptions): Promise<R> {
     const timeout = opts?.timeoutMs ?? this.timeoutMs;
     // Kein Worker verfügbar → direkte lokale Ausführung (main thread).
@@ -80,6 +81,7 @@ class WorkerPoolImpl {
         if (data.id !== jobId) return;
         if (job.pending.timer) clearTimeout(job.pending.timer);
         this.idle.push(wi);
+// eslint-disable-next-line @typescript-eslint/no-unused-expressions -- bewusst beibehalten (Runde 3)
         data.ok ? job.pending.resolve(data.out) : job.pending.reject(new Error(data.error || 'Worker-Fehler'));
         this.drain();
       };

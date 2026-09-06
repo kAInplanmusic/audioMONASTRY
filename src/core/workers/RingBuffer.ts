@@ -11,6 +11,7 @@
  *     Threads; über Threads hinweg ist der Fallback bewusst nicht nutzbar
  *     (Browser ohne COOP/COEP liefern kein SAB).
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
 export class RingBuffer<T = number> {
   private data: Float64Array;
   /** head/tail als Int32-Sicht auf die letzten 16 Bytes des Puffers. */

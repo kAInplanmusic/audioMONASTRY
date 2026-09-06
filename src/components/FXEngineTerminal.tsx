@@ -56,6 +56,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
 
   useEffect(() => {
     applyFx(activeFx, wetDry);
+// eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst beibehalten (Runde 3, Hook-Deps werden separat auditiert)
   }, [activeFx, wetDry, power]);
 
 

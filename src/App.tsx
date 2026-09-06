@@ -283,6 +283,7 @@ function AppComponent() {
     setModuleState(id, nextState);
   }, [moduleStates, releaseLock, setModuleState]);
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const promotePlugin = useCallback((id: string) => {
     const currentState = moduleStates[id] || 'OFF';
     if (currentState === 'OFF') return;

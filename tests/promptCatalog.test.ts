@@ -8,11 +8,9 @@ vi.mock('../src/utils/audioEngine', () => ({
 
 import {
   PLUGIN_COMMAND_CATALOG,
-  PLUGIN_MOA_TASKS,
   moaCommandCatalog,
   moaSystemPromptForPlugin,
-  moaTaskForPlugin,
-} from '../src/utils/prompts';
+  moaTaskForPlugin} from '../src/utils/prompts';
 import { getPluginRegistry } from '../src/plugins/registry';
 import { PLUGIN_ROUTE_IDS } from '../src/core/pluginAudioRouter';
 

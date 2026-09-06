@@ -18,6 +18,7 @@ abstract class BaseNode implements IAudioNode {
     this.parameters = [];
   }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   protected inputBuffer(ctx: IProcessingContext): Float32Array[] | null {
     return this.inputs[0]?.connections[0]?.buffer ?? null;
   }

@@ -8,6 +8,7 @@ describe('ClockSync (P2-2)', () => {
     const sync = new ClockSync();
     // Ping bei t=1000, Pong bei t=1020, Antwort nach 30 ms → rtt 30, offset 5
     sync.handlePong(1020, 1000);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
     const now = 1030;
     // getSyncedTime() = performance.now() + offset; nur Plausibilität prüfen
     const t = sync.getSyncedTime();
@@ -49,6 +50,7 @@ describe('P2-2: Multi-User-Clock-Sync (PLL-Drift-Kompensation)', () => {
 describe('CRDT (AM-E3-3)', () => {
   it('Lamport-Uhr ist streng monoton und schlichtet Gleichstand per peer', () => {
     const a = new CrdtClock(1);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
     const b = new CrdtClock(2);
     const s1 = a.tick();
     const s2 = a.tick();

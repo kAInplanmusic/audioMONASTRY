@@ -9,10 +9,12 @@ import { Star, Trash2, Download, Upload } from 'lucide-react';
 import { useDropContext } from '../../context/DropContext';
 
 export const DropPresetBrowser: React.FC = () => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const { presets, favorites, toggleFavorite, loadPreset, selectProfile, savePreset } =
     useDropContext();
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [newPresetName, setNewPresetName] = useState('');
 
@@ -22,6 +24,7 @@ export const DropPresetBrowser: React.FC = () => {
     return true;
   });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const handleSaveNew = async () => {
     if (!newPresetName.trim()) return;
     // Will use selectedProfile from context

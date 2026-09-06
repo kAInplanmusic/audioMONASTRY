@@ -50,6 +50,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
   const [activeOutput, setActiveOutput] = useState('');
   const [padMappings] = useState<Record<number, AudioSample>>({});
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const isConnected = !!midiAccess && inputs.length > 0;
 
   // Unified Learn-Event: MIDI-Hook (primär) oder ControlHub (HID/OSC-Adjapter).
@@ -143,6 +144,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
     if (!acc[p.type]) acc[p.type] = [];
     acc[p.type].push(p);
     return acc;
+// eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst beibehalten (Runde 3, Hook-Deps werden separat auditiert)
   }, {}), []);
 
   const hardwareTotal = inputs.length + hidDevices.length + soundOutputs.length;

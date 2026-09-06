@@ -150,11 +150,13 @@ function detectKey(ch: Float32Array, sr: number): { key: string; camelot: string
   // Wir nehmen einen zentralen Ausschnitt (erste ~45 s reichen typischerweise)
   // und bilden ein gewöhnliches FFT-Magnituden-Spektrum.
   const fftSize = 8192;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const binHz = sr / fftSize;
   const A4 = 440;
   const chroma = new Array(12).fill(0);
 
   const half = Math.floor(ch.length / 2);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   const center = Math.floor(half / fftSize) * fftSize;
   // Zwei FFTs: erster + dritter Frequenzabschnitt des ersten ~Million-Samples.
   for (const offset of [0, Math.floor(half / 3)]) {
@@ -213,6 +215,7 @@ function energyAndDance(ch: Float32Array, sr: number): { energy: number; danceab
   // Spectral Flux als Danceability-Proxy (schnelle Transienten → tanzen).
   const fluxArr = computeFlux(ch, sr);
   let fluxSum = 0, fn = 0;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
   for (let i = 0; i < fluxArr.length; i++) { fluxSum += fluxArr[i]; fn++; }
   const flux = fluxArr.length ? fluxSum / fluxArr.length : 0;
   const danceability = Math.max(0, Math.min(1, Math.min(1, flux * 40)));

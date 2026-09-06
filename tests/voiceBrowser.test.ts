@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemorySessionMediaStore } from '../src/core/session/SessionMediaStore';
-import { DeterministicTtsProvider, VoiceMonkService } from '../src/core/voice/VoiceMonkService';
+import { VoiceMonkService } from '../src/core/voice/VoiceMonkService';
 
 afterEach(() => {
   vi.unstubAllGlobals();

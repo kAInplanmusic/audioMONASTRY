@@ -252,6 +252,7 @@ describe('stemSplitter.ts (lokaler DSP-Fallback)', () => {
       constructor(public channels: number, public length: number, public sampleRate: number) {
         FakeCtx.created.push(this);
       }
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
       createBuffer(channels: number, length: number, _sr: number) {
         return makeBuffer(channels);
       }
