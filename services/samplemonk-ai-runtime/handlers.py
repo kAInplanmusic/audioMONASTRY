@@ -435,6 +435,74 @@ def generate_dispatch(model_id: str, definition: ModelDefinition, payload: Dict[
     return hf_generate(model_id, definition, payload)
 
 
+def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """Deterministische Audio-Analyse über Essentia (CPU).
+
+    Liefert BPM/Beat-Confidence, Key/Scale, RMS, Loudness-Näherung sowie
+    Spectral Centroid/Rolloff. Läuft primär auf CPU – kein VRAM-Budget nötig.
+    """
+    import tempfile
+
+    numpy = _require_lib("numpy", "numpy")
+    soundfile = _require_lib("soundfile", "soundfile")
+    es = _require_lib("essentia.standard", "essentia")
+
+    audio = _audio_bytes(payload)
+    samples, sr = soundfile.read(io.BytesIO(audio), dtype="float32", always_2d=False)
+    samples = numpy.asarray(samples, dtype=numpy.float32)
+    if samples.ndim > 1:
+        samples = samples.mean(axis=1)
+
+    tmp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+            soundfile.write(tmp.name, samples, sr)
+            tmp_path = tmp.name
+
+        loader = es.MonoLoader(filename=tmp_path)
+        x = loader()
+
+        result: Dict[str, Any] = {"sampleRate": int(sr), "model": model_id}
+
+        try:
+            rhythm = es.RhythmExtractor2013()
+            bpm, _beats, beats_confidence, _beats_interval, _beats_stddev = rhythm(x)
+            result["bpm"] = round(float(bpm), 2)
+            result["beatsConfidence"] = round(float(beats_confidence), 4)
+        except Exception:  # noqa: BLE001 – Feature optional
+            pass
+
+        try:
+            key, scale, strength = es.KeyExtractor()(x)
+            result["key"] = str(key)
+            result["scale"] = str(scale)
+            result["keyStrength"] = round(float(strength), 4)
+        except Exception:  # noqa: BLE001
+            pass
+
+        try:
+            result["rms"] = round(float(es.RMS()(x)), 6)
+            result["zeroCrossingRate"] = round(float(es.ZeroCrossingRate()(x)), 6)
+        except Exception:  # noqa: BLE001
+            pass
+
+        try:
+            spectrum = es.Spectrum()(x)
+            result["spectralCentroid"] = round(float(es.Centroid()(spectrum)), 2)
+            result["spectralRolloff"] = round(float(es.RollOff()(spectrum)), 2)
+        except Exception:  # noqa: BLE001
+            pass
+
+        return result
+    finally:
+        if tmp_path:
+            import os as _os
+            try:
+                _os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": hf_transcribe,
@@ -443,4 +511,5 @@ HANDLERS = {
     "song": generate_dispatch,
     "sing": hf_bark_sing,
     "tts": tts_dispatch,
+    "analyze": essentia_analyze,
 }

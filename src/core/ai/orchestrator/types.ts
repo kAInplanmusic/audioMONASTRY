@@ -16,6 +16,8 @@ export type AiTask =
   | 'audio.transcribe'
   | 'audio.embed'
   | 'audio.analyze'
+  | 'audio.diarize'
+  | 'audio.understand'
   | 'audio.generate'
   | 'multimodal'
   | 'nlu';

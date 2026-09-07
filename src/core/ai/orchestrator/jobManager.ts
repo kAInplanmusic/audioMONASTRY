@@ -35,6 +35,8 @@ export class JobManager {
       'audio.transcribe': 2,
       'audio.embed': 2,
       'audio.analyze': 1,
+      'audio.diarize': 1,
+      'audio.understand': 1,
       'audio.generate': 1,
       'multimodal': 1,
       'nlu': 4,

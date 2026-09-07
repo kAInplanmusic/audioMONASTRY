@@ -31,6 +31,8 @@ const RUNPOD_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
   'audio.transcribe',
   'audio.embed',
   'audio.analyze',
+  'audio.diarize',
+  'audio.understand',
   'audio.generate',
   'multimodal',
   'nlu',
