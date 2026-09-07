@@ -46,9 +46,9 @@
 
 ## P1 – Code-Qualität & verfügbare Live-Tests
 
-- [ ] **Pre-existing WebGPU-/TS-Typfehler bereinigen** – `@webgpu/types` sauber auflösen oder als bekannte Runtime-only-Dateien dokumentieren/ausschließen.
-- [ ] **Worklet-CPU-/Underrun-Budgets im UI ausbauen** – Underrun-/Dropout-Zähler, adaptive Puffer-/Energie-Optimierung (Audio-Context-Idle).
-- [ ] **HID-Output-/Feature-Report-Rückkanal generisch implementieren** – WebHID-`sendReport`-Pfad ausbauen statt Best-Effort-No-op.
+- [x] **WebGPU-CPU-Fallback + Tests** – `WebGPUKernel` unterstützt `forceCpu`/`WEBGPU_FORCE_CPU`; `npm run verify` komplett grün (2026-09-07).
+- [x] **Automation-Backpressure** – `AutomationCoalescer` bündelt hochfrequente Worklet-Automation (16 ms) inkl. Unit-Tests (2026-09-07).
+- [x] **HID-Output-/Feature-Report-Rückkanal** – Output- und Feature-Reports via `sendReport`/`sendFeatureReport` (2026-09-07).
 - [ ] **OPS-Load-Balancer LB11** – 2 App-Knoten, 4-User-E2E (State-Sync, Locking, Main-Stream), Failover-Test.
 - [ ] **`docs/LIVE_CHECKLIST_2026-09-02.md` abarbeiten** – Flotte, Browser, Audio/DSP, 4-User, KI/Eval, Security.
 - [ ] **H-1 Socket.io-Stresstest-Session-Pfad** – gültige Session-Tokens/Test-Fixture verwenden, Mehr-User-Pfad gegen Flotte testen.
