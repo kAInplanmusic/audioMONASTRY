@@ -12,6 +12,6 @@ transformers==4.46.3 \
 soundfile==0.12.1 \
     --hash=sha256:074247b771a181859d2bc1f98b5ebf6d5153d2c397b86ee9e29ba602a8dfe2a6
 scipy==1.14.1 \
-    --hash=sha256:8f9ea80f2e65bdaa0b7627fb00cbeb2daf163caa015e59b7516395fe3bd1e066
+    --hash=sha256:fef8c87f8abfb884dac04e97824b61299880c43f4ce675dd2cbeadd3c9b466d2
 pyannote.audio==3.3.2 \
     --hash=sha256:23e0dcedda920cb2e154e146bcd9663289ee7942d0e012663dad76f2e571ebeb
