@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * E2E-Hardware (ohne echte Geräte): mocked Web MIDI + WebHID via
@@ -46,11 +47,11 @@ async function mockWebMidi(page: Page): Promise<void> {
 }
 
 /** Startseite öffnen und ins Studio wechseln. */
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 
 test('Hardware-Terminal zeigt virtuelle MIDI-Geräte und bleibt stabil', async ({ page }) => {
@@ -58,10 +59,10 @@ test('Hardware-Terminal zeigt virtuelle MIDI-Geräte und bleibt stabil', async (
   page.on('pageerror', (e) => pageErrors.push(e.message));
 
   await mockWebMidi(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   // Hardware-Terminal öffnen.
-  await page.getByTitle('CTRL').first().click();
+  await page.getByTitle('midiMONK').first().click();
   await expect(page.getByText('Virtual Keyboard')).toBeVisible({ timeout: 10_000 });
 
   // Soundkarten-Panel öffnen: Engine-Metriken sichtbar.

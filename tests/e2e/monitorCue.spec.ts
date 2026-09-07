@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio, navButton, collectErrors } from './helpers/studioNav';
 
 /**
  * P0-6-Prüfpunkt (Main-/Monitor-Routing): Der Cue-Weg eines Users schaltet
@@ -15,11 +16,8 @@ import { test, expect, type Page } from '@playwright/test';
  */
 const CUE_RAMP = 0.01;
 
-async function enterStudio(page: Page): Promise<void> {
-  await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MIX').first())
-    .toBeVisible({ timeout: 15_000 });
+async function openStudio(page: Page): Promise<void> {
+  await openStudio(page);
 }
 
 /** Zeichnet alle Cue-Rampen (10 ms) des lokalen Abhörwegs auf. */
@@ -43,12 +41,13 @@ const readRamps = (page: Page) => page.evaluate(() => {
 
 test('P0-6: PLUGIN-Cue solo, MAIN unverändert, zurück auf MAIN = sofort Gesamtmix', async ({ page }) => {
   await instrumentCueRamps(page, CUE_RAMP);
-  await enterStudio(page);
+  await openStudio(page);
 
   // Plugin aktivieren (drumMONK speist MAIN über seinen Kanal).
-  await page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('DRM').first().click();
-  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('DRM').first())
-    .toHaveAttribute('aria-pressed', 'true');
+  await navButton(page, 'DRM').click();
+  // Neuer Nav-Semantik: aktiv = aria-current="page".
+  await expect(navButton(page, 'DRM'))
+    .toHaveAttribute('aria-current', 'page');
 
   // Abhörweg von User 3 wählen; Startzustand ist MAIN + PLUGIN.
   await page.getByLabel('Monitor-User wählen').selectOption('MON3');
@@ -79,7 +78,7 @@ test('P0-6: PLUGIN-Cue solo, MAIN unverändert, zurück auf MAIN = sofort Gesamt
 });
 
 test('P0-6: Cue-Auswahl bleibt pro User getrennt (kein State-Übergriff)', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
 
   await page.getByLabel('Monitor-User wählen').selectOption('MON3');
   await page.getByTitle(/Monitor-Mix für USER 3/).click();

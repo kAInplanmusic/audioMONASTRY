@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * audioMONASTRY – Audio-Engine-/UI-Stresstest (Playwright, headless Chromium)
@@ -45,7 +46,7 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   // --- 2) Alle Plugins aktivieren (Klick = AUTO_AI) ---
   // Nur die Plugin-Toolbar-Buttons (nicht Header-/Overlay-Buttons mit
   // aria-pressed, z. B. ZWISCHENSPEICHER).
-  const pluginButtons = page.locator('nav[aria-label="Plugin-Toolbar"] button[aria-pressed]');
+  const pluginButtons = page.locator('nav[aria-label="Studio-Navigation"] button');
   const pluginCount = await pluginButtons.count();
   for (let i = 0; i < pluginCount; i++) {
     await pluginButtons.nth(i).click({ delay: 8, force: true });

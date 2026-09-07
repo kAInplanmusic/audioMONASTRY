@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
 
 /**
  * E2E für die neue einheitliche Click/Touch-Audio-Interaktion.
@@ -6,20 +7,20 @@ import { test, expect, type Page } from '@playwright/test';
  * Project Clipboard (gemeinsamer Eintrag) → Send to Track (freies Ziel).
  */
 
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]')).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(STUDIO_NAV)).toBeVisible({ timeout: 15_000 });
 }
 
 async function openLibrary(page: Page): Promise<void> {
-  await page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('LIB').first().click();
+  await page.locator(STUDIO_NAV).getByTitle('biblioMONK').first().click();
   await expect(page.getByText('biblioMONK').first()).toBeVisible({ timeout: 10_000 });
 }
 
 test('Library-Sample → Action Menu → Project Clipboard → Send to Track', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
   await openLibrary(page);
 
   // Preset-Sample anklicken (Mouse Click) → einheitliches Action Menu.
@@ -63,7 +64,7 @@ test.describe('Touch', () => {
   test.use({ hasTouch: true });
 
   test('Touch-Tap auf ein Library-Sample öffnet dasselbe Action Menu', async ({ page }) => {
-    await enterStudio(page);
+    await openStudio(page);
     await openLibrary(page);
 
     await page.getByRole('heading', { name: 'TR-909 Classic Kick' }).first().tap();

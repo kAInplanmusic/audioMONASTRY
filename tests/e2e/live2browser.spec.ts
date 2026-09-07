@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 import { chromium } from 'playwright';
 
 /**
@@ -22,11 +23,11 @@ const FAKE_MEDIA_ARGS = [
   '--autoplay-policy=no-user-gesture-required',
 ];
 
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 
 test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
@@ -55,8 +56,8 @@ test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
       if (m.text().includes('Mikrofon nicht verfügbar')) micErrorsB.push(m.text());
     });
 
-    await enterStudio(pageA);
-    await enterStudio(pageB);
+    await openStudio(pageA);
+    await openStudio(pageB);
 
     // Session: beide Browser sind Mitglieder derselben festen Session.
     await expect(pageA.getByText(/SESSION 2\/4/)).toBeVisible({ timeout: 20_000 });
@@ -72,9 +73,9 @@ test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
 
     // Offer/Answer + DataChannel: PLUGIN_STATE_UPDATE (AUTO_AI) muss von A nach B
     // über den WebRTC-DataChannel ankommen (ohne DataChannel keine State-Sync).
-    await pageA.getByTitle('SEQ').click();
-    await expect(pageB.getByTitle('SEQ')).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
-    await expect(pageA.getByTitle('SEQ')).toHaveAttribute('aria-pressed', 'true');
+    await pageA.getByTitle('eqMONK').click();
+    await expect(pageB.getByTitle('eqMONK')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+    await expect(pageA.getByTitle('eqMONK')).toHaveAttribute('aria-current', 'page');
 
     // Harte WebRTC-Assertion: Beide Browser haben mindestens einen Peer mit
     // offenem DataChannel und verbundenem ICE (Offer/Answer wirklich gelaufen).

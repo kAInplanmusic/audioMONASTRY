@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * Visuelle Regression (A/B-Baseline): Playwright `toHaveScreenshot` mit
@@ -28,7 +29,7 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
   await expect(page).toHaveScreenshot('02-studio.png', {
     fullPage: true,
     animations: 'disabled',
@@ -36,36 +37,35 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   });
 });
 
-/** Toolbar-Kürzel → Plugin-ID (Reihenfolge laut Registry, ohne ai; masterplayer ist Kopfzeile). */
-const PLUGIN_ROWS: { short: string; id: string }[] = [
-  { short: 'INS', id: 'instrument' },
-  { short: 'SYN', id: 'synthesizer' },
-  { short: 'DRM', id: 'drum' },
-  { short: 'SAM', id: 'sampler' },
-  { short: 'MCP', id: 'mcp' },
-  { short: 'VOX', id: 'voice' },
-  { short: 'SND', id: 'sound' },
-  { short: 'SNG', id: 'song' },
-  { short: 'MIX', id: 'mixer' },
-  { short: 'CTRL', id: 'controller' },
-  { short: 'FX', id: 'effect' },
-  { short: 'DRP', id: 'drop' },
-  { short: 'LIB', id: 'library' },
-  { short: 'EQ', id: 'eq' },
-  { short: 'DSP', id: 'dsp' },
-  { short: 'MST', id: 'mastering' },
-  { short: 'RMX', id: 'stem' },
-  { short: '3D', id: 'spatial' },
-  { short: 'REC', id: 'recording' },
-  { short: 'PRF', id: 'performance' },
-];
+/** Nav-title (Plugin-Name) → Plugin-ID (Reihenfolge laut Registry, ohne ai; masterplayer ist Kopfzeile). */
+const PLUGIN_ROWS: { title: string; id: string }[] = [
+  { title: 'instrumentMONK', id: 'instrument' },
+  { title: 'synthesizerMONK', id: 'synthesizer' },
+  { title: 'drumMONK', id: 'drum' },
+  { title: 'samplerMONK', id: 'sampler' },
+  { title: 'mcpMONK', id: 'mcp' },
+  { title: 'voiceMONK', id: 'voice' },
+  { title: 'soundMONK', id: 'sound' },
+  { title: 'songMONK', id: 'song' },
+  { title: 'mixerMONK', id: 'mixer' },
+  { title: 'midiMONK', id: 'controller' },
+  { title: 'effectMONK', id: 'effect' },
+  { title: 'dropMONK', id: 'drop' },
+  { title: 'biblioMONK', id: 'library' },
+  { title: 'eqMONK', id: 'eq' },
+  { title: 'dspMONK', id: 'dsp' },
+  { title: 'masteringMONK', id: 'mastering' },
+  { title: 'stemMONK', id: 'stem' },
+  { title: 'spatialMONK', id: 'spatial' },
+  { title: 'recordingMONK', id: 'recording' },
+  ];
 
 test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async ({ page }) => {
   test.setTimeout(300_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
   // masterplayer (feste Sektion) + aiMONK (Bottom-Dock) sind immer sichtbar.
   await page.locator('#rack-masterplayer').evaluate((el) => el.scrollIntoView({ block: 'start' }));
@@ -77,9 +77,9 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
     mask: [page.locator('canvas')],
   });
 
-  const toolbar = page.locator('nav[aria-label="Plugin-Toolbar"]');
-  for (const { short, id } of PLUGIN_ROWS) {
-    const btn = toolbar.getByTitle(short).first();
+  const toolbar = page.locator(STUDIO_NAV);
+  for (const { title, id } of PLUGIN_ROWS) {
+    const btn = toolbar.getByTitle(title).first();
     await btn.click();
     const rack = page.locator(`#rack-${id}`);
     await expect(rack).toBeVisible({ timeout: 20_000 });

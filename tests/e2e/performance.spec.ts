@@ -1,4 +1,5 @@
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * P2-4 Prüfpunkt (Live, automatisiert im Headless-Chromium):
@@ -12,17 +13,17 @@ import { test, expect, type Page, type CDPSession } from '@playwright/test';
  * Audio-Thread und sind bewusst nicht Teil dieser Main-Thread-Kennzahl.
  */
 
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 30_000 });
 }
 
 /** Studio vorbereiten: alle Toolbar-Plugins aktivieren und Transport starten. */
 async function prepareStudio(page: Page): Promise<number> {
-  await enterStudio(page);
-  const pluginButtons = page.locator('nav[aria-label="Plugin-Toolbar"] button[aria-pressed]');
+  await openStudio(page);
+  const pluginButtons = page.locator('nav[aria-label="Studio-Navigation"] button');
   const pluginCount = await pluginButtons.count();
   for (let i = 0; i < pluginCount; i++) {
     await pluginButtons.nth(i).click({ delay: 6, force: true });
@@ -51,7 +52,7 @@ test('P2-4 Performance-Prüfpunkt: CPU < 70 % unter Studio-Last', async ({ page,
   page.on('framenavigated', (f) => navLog.push(f.url()));
   page.on('pageerror', (e) => console.log('[P2-4] pageerror:', e.message.slice(0, 160)));
 
-  await enterStudio(page);
+  await openStudio(page);
   navLog.length = 0; // Initial-Navigation (page.goto) zählt nicht.
 
   // Kaltstart-Warm-up: Beim ersten Aktivieren aller Plugins optimiert Vite ggf.

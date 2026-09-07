@@ -41,7 +41,7 @@ const SHORT_TO_NAME: Record<string, string> = {
 };
 
 /** Startseite öffnen und das „Studio betreten"-Gate passieren. */
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
@@ -70,7 +70,7 @@ function collectErrors(page: Page): { pageErrors: string[]; consoleErrors: strin
 
 test('App lädt mit korrektem Titel und 18 Plugin-Buttons', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   const nav = page.locator(STUDIO_NAV);
   for (const short of Object.keys(SHORT_TO_NAME)) {
@@ -82,7 +82,7 @@ test('App lädt mit korrektem Titel und 18 Plugin-Buttons', async ({ page }) => 
 
 test('Mixer-Terminal rendert und MOA-Leiste ist sichtbar', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   await page.locator(STUDIO_NAV).getByTitle('mixerMONK').first().click();
   await expect(page.getByText('mixerMONK · 6 CH')).toBeVisible();
@@ -93,14 +93,14 @@ test('Mixer-Terminal rendert und MOA-Leiste ist sichtbar', async ({ page }) => {
 
 test('Session-Anzeige zeigt 1/4', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
   await expect(page.getByText(/SESSION 1\/4/)).toBeVisible();
   expect(errors.pageErrors).toEqual([]);
 });
 
 test('Plugin-Toggle öffnet mcpMONK ohne React-Crash', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   await page.locator(STUDIO_NAV).getByTitle('mcpMONK').first().click();
   await expect(page.getByText('mcpMONK').first()).toBeVisible({ timeout: 10_000 });
@@ -110,7 +110,7 @@ test('Plugin-Toggle öffnet mcpMONK ohne React-Crash', async ({ page }) => {
 
 test('P0-1: Studio-Start hat alle Nav-Buttons ohne aria-current (kein Modul aktiv)', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   const nav = page.locator(STUDIO_NAV);
   const buttons = nav.locator('button');
@@ -125,7 +125,7 @@ test('P0-1: Studio-Start hat alle Nav-Buttons ohne aria-current (kein Modul akti
 
 test('P0-3: Plugin-OFF im Terminal synchronisiert Nav-Icon (aria-current entfernt)', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   const navButton = page.locator(STUDIO_NAV).getByTitle('mcpMONK').first();
   await navButton.click();
@@ -139,7 +139,7 @@ test('P0-3: Plugin-OFF im Terminal synchronisiert Nav-Icon (aria-current entfern
 
 test('P0-7: masterplayerMONK ist fest oben sichtbar und View-only', async ({ page }) => {
   const errors = collectErrors(page);
-  await enterStudio(page);
+  await openStudio(page);
 
   // masterplayerMONK ist der erste feste Rack-Block direkt unter dem Header.
   const master = page.locator('section').filter({ has: page.getByText('masterplayerMONK') }).first();

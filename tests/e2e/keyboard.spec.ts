@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
 
 /**
  * Tastatur-Navigation: Skip-Link, Fokus-Falle im Settings-Dialog und
@@ -8,7 +9,7 @@ test.describe('Tastatur-Navigation', () => {
   test('Skip-Link springt zum Studio-Inhalt', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     await page.keyboard.press('Tab');
     const skipText = await page.evaluate(() => document.activeElement?.textContent ?? '');
@@ -22,7 +23,7 @@ test.describe('Tastatur-Navigation', () => {
   test('Settings-Dialog hält den Fokus gefangen und schließt per Escape', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
     // autoFocus setzt den Fokus auf den Schließen-Button.
@@ -46,7 +47,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
   test('Space togglet den Transport (Play/Stop)', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     const transport = page.locator('#rack-masterplayer');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
@@ -56,24 +57,30 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
   });
 
-  test('Ctrl/Cmd+1 togglet das erste Toolbar-Plugin (instrumentMONK)', async ({ page }) => {
+  test('Ctrl/Cmd+1 togglet das erste Registry-Plugin (dropMONK, Index 1)', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
-    const firstPlugin = page.locator('nav[aria-label="Plugin-Toolbar"] button[aria-pressed]').first();
-    await expect(firstPlugin).toHaveAttribute('aria-pressed', 'false');
+    // Hotkey-Mapping (App.tsx P1-6): Ctrl+N togglet getPluginRegistry()[n].
+    // Registry-Reihenfolge (COMPONENT_MAP): Index 0 = mixer, Index 1 = drop.
+    // Die Nav blendet ai/performance aus, behält aber die Registry-Indizes.
+    // Der Nav-Button mit aria-posinset 1 ist mixerMONK (Index 0) — Ctrl+1
+    // togglet dagegen Registry-Index 1 (dropMONK). Wir prüfen daher das
+    // dropMONK-Nav-Icon auf aria-current (aktiv nach Toggle).
+    const dropNav = page.locator('nav[aria-label="Studio-Navigation"]').getByTitle('dropMONK').first();
+    await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
     await page.keyboard.press('Control+Digit1');
-    await expect(firstPlugin).toHaveAttribute('aria-pressed', 'true');
+    await expect(dropNav).toHaveAttribute('aria-current', 'page');
     await page.keyboard.press('Control+Digit1');
-    await expect(firstPlugin).toHaveAttribute('aria-pressed', 'false');
+    await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
   });
 
   test('Hotkeys brechen Eingabefelder nicht (Space tippt Leerzeichen, Ctrl+1 togglet ohne die Eingabe zu verändern)', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 }); // ZWISCHENSPEICHER-Button ist xl-only.
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
-    await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole('button', { name: 'Zwischenspeicher' }).click();
     const nameInput = page.getByPlaceholder('Name');
@@ -88,9 +95,9 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
 
     // Ctrl+1 im Eingabefeld: togglet das Plugin, verändert aber die Eingabe nicht.
-    const firstPlugin = page.locator('nav[aria-label="Plugin-Toolbar"] button[aria-pressed]').first();
+    const dropNav = page.locator('nav[aria-label="Studio-Navigation"]').getByTitle('dropMONK').first();
     await page.keyboard.press('Control+Digit1');
     await expect(nameInput).toHaveValue('abc ');
-    await expect(firstPlugin).toHaveAttribute('aria-pressed', 'true');
+    await expect(dropNav).toHaveAttribute('aria-current', 'page');
   });
 });

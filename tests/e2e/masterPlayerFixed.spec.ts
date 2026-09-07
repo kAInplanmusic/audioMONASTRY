@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * P0-7-Prüfpunkt (masterplayerMONK fest oben, View-only):
@@ -6,17 +7,17 @@ import { test, expect, type Page } from '@playwright/test';
  *  - hat KEINE Eingabeelemente (keine Buttons/Selects) – nur Anzeige,
  *  - Leertaste wirkt nicht in Eingabefeldern (kein Transport-Fehlauslöser).
  */
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MIX').first())
+  await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .toBeVisible({ timeout: 15_000 });
 }
 
 const masterSection = (page: Page) => page.locator('#rack-masterplayer');
 
 test('P0-7: masterplayerMONK bleibt beim Scrollen sichtbar', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
 
   const master = masterSection(page);
   await expect(master).toBeVisible();
@@ -34,7 +35,7 @@ test('P0-7: masterplayerMONK bleibt beim Scrollen sichtbar', async ({ page }) =>
 });
 
 test('P0-7: masterplayerMONK ist View-only (keine Buttons, BPM sichtbar)', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
 
   const master = masterSection(page);
   await expect(master.getByText('FIXED · VIEW ONLY')).toBeVisible();
@@ -45,7 +46,7 @@ test('P0-7: masterplayerMONK ist View-only (keine Buttons, BPM sichtbar)', async
 });
 
 test('P0-7: Leertaste in Eingabefeldern löst keinen Transport aus', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
 
   const scrollBefore = await page.evaluate(() => window.scrollY);
   const input = page.locator('input[type="text"], textarea').first();

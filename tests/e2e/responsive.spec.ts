@@ -1,4 +1,5 @@
 import { test, expect, devices, type Page } from '@playwright/test';
+import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
 
 /**
  * P1-1 Responsive-/Touch-Matrix
@@ -15,7 +16,7 @@ import { test, expect, devices, type Page } from '@playwright/test';
  *               blockiert, siehe docs/HARDWARE_TEST_MATRIX_2026.md
  */
 
-const TOOLBAR = 'nav[aria-label="Plugin-Toolbar"]';
+const TOOLBAR = 'nav[aria-label="Studio-Navigation"]';
 
 /** Playwright-Geräteprofil ohne `defaultBrowserType` (Browser kommt aus dem Project). */
 function mobileProfile(name: keyof typeof devices) {
@@ -50,14 +51,14 @@ async function toolbarMinHeight(page: Page): Promise<number> {
 }
 
 async function toggleMixerOnTouch(page: Page) {
-  // Präziser Toolbar-Selektor: getByTitle('MIX') würde auch die Monitor-Quelle
-  // (title="Monitor-Quelle: MAIN / eigener User-Mix …") treffen.
-  const mix = page.locator(`${TOOLBAR} button[aria-label^="MIX "]`);
+  // Nav-Icon per exaktem title selektieren (Playwright getByTitle matcht exakt,
+  // die Monitor-Quelle-Buttons haben title="Monitor-Quelle: …" und treffen nicht).
+  const mix = page.locator(`${TOOLBAR}`).getByTitle('mixerMONK');
   await mix.scrollIntoViewIfNeeded();
   // Layout-Settling abwarten (lazy DJ-Mixer/Header), damit der Tap sicher trifft.
   await page.waitForTimeout(250);
   await mix.tap();
-  await expect(mix).toHaveAttribute('aria-pressed', 'true');
+  await expect(mix).toHaveAttribute('aria-current', 'page');
 }
 
 test.describe('Responsive/Touch-Matrix', () => {

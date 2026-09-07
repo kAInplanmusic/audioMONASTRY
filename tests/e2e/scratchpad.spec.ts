@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * P1-4 Prüfpunkt (Browser-Live, automatisiert):
@@ -15,11 +16,11 @@ test.use({ viewport: { width: 1600, height: 900 }, permissions: ['clipboard-read
 const MONK_DRAG_MIME = 'application/x-monk-item';
 const MONK_SCRATCH_MIME = 'application/x-monk-scratchpad';
 
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.getByTitle('MIX').first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 30_000 });
 }
 
 async function openScratchpad(page: Page): Promise<void> {
@@ -31,7 +32,7 @@ test('P1-4 Scratchpad: Snapshot überlebt Reload, DnD beide Richtungen, Clipboar
   test.setTimeout(150_000);
 
   // ---------------------------------------------------------------- 1) Boot
-  await enterStudio(page);
+  await openStudio(page);
 
   // --------------------------------- 2) Snapshot speichern (IndexedDB-Pfad)
   await openScratchpad(page);
@@ -42,7 +43,7 @@ test('P1-4 Scratchpad: Snapshot überlebt Reload, DnD beide Richtungen, Clipboar
 
   // ------------------------------------------------- 3) Reload: Snapshot überlebt
   await page.reload();
-  await enterStudio(page);
+  await openStudio(page);
   await openScratchpad(page);
   const dialogAfterReload = page.getByRole('dialog', { name: 'Zwischenspeicher' });
   const snapshotButton = dialogAfterReload.getByRole('button', { name: /Test-Snapshot \d+ BPM/ });

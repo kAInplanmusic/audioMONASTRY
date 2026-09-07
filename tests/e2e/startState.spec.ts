@@ -1,9 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
+import { enterStudio } from './helpers/studioNav';
 
 /**
  * P0-1-Prüfpunkt („Kein Plugin offen" beim Studio-Eintritt):
  *  - 0 sichtbare Plugin-Terminals (kein Rack-Streifen ist aufgeklappt),
- *  - alle Grid-Icons gedimmt (`aria-pressed="false"`),
+ *  - alle Grid-Icons inaktiv (kein `aria-current`),
  *  - Mixer-Sonderfall entfernt: auch mixerMONK startet OFF,
  *  - Master läuft ins Silence-Gate (`-Infinity` dB, 50-ms-Rampe) → Stille.
  *
@@ -11,10 +12,10 @@ import { test, expect, type Page } from '@playwright/test';
  */
 const SILENCE_RAMP = 0.05;
 
-async function enterStudio(page: Page): Promise<void> {
+async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
-  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MIX').first())
+  await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .toBeVisible({ timeout: 15_000 });
 }
 
@@ -31,7 +32,7 @@ async function instrumentSilenceGate(page: Page, ramp: number): Promise<void> {
 }
 
 test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
 
   // Kein Rack-Streifen ist aktiv → kein Terminal-Inhalt gerendert.
   const racks = page.locator('section[id^="rack-"]');
@@ -44,27 +45,27 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
     await expect(rack.getByText('OFF', { exact: true }).first()).toBeVisible();
   }
 
-  // Toolbar-Icons sind alle gedimmt.
-  const buttons = page.locator('nav[aria-label="Plugin-Toolbar"] button[aria-pressed]');
+  // Nav-Icons: Startzustand = kein Modul aktiv (kein aria-current gesetzt).
+  const buttons = page.locator('nav[aria-label="Studio-Navigation"] button');
   const count = await buttons.count();
   expect(count).toBeGreaterThanOrEqual(19);
   for (let i = 0; i < count; i++) {
-    await expect(buttons.nth(i)).toHaveAttribute('aria-pressed', 'false');
+    await expect(buttons.nth(i)).not.toHaveAttribute('aria-current', /.+/);
   }
 });
 
 test('P0-1: Mixer-Sonderfall entfernt – mixerMONK startet OFF', async ({ page }) => {
-  await enterStudio(page);
+  await openStudio(page);
 
   const mixerRack = page.locator('#rack-mixer');
   await expect(mixerRack.getByText('OFF', { exact: true }).first()).toBeVisible();
-  await expect(page.locator('nav[aria-label="Plugin-Toolbar"]').getByTitle('MIX').first())
-    .toHaveAttribute('aria-pressed', 'false');
+  await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
+    .not.toHaveAttribute('aria-current', /.+/);
 });
 
 test('P0-1: Master startet im Silence-Gate (kein Rauschen auf Main)', async ({ page }) => {
   await instrumentSilenceGate(page, SILENCE_RAMP);
-  await enterStudio(page);
+  await openStudio(page);
 
   const ramps = await page.evaluate(() => (window as { __silenceRamps?: number[] }).__silenceRamps ?? []);
   test.skip(ramps.length === 0, 'Kein Audio-Graph in dieser Browser-Umgebung');
