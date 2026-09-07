@@ -13,14 +13,48 @@
 
 export interface GPUTensor { dims: number[]; data: Float32Array; }
 
+export interface WebGPUKernelOptions {
+  /** CPU-Software-Fallback erzwingen (Tests, Offline, fehlendes WebGPU). */
+  forceCpu?: boolean;
+}
+
 /** Simplifizierter GEMM + Aktivierung auf der GPU. */
 export class WebGPUKernel {
   private device: GPUDevice | null = null;
   private readyP: Promise<GPUDevice> | null = null;
   readonly supported: boolean;
+  private readonly forceCpu: boolean;
 
-  constructor() {
-    this.supported = typeof navigator !== 'undefined' && !!(navigator as any).gpu;
+  constructor(options: WebGPUKernelOptions = {}) {
+    this.forceCpu = options.forceCpu === true
+      || (typeof process !== 'undefined' && process.env?.WEBGPU_FORCE_CPU === '1');
+    this.supported = !this.forceCpu && typeof navigator !== 'undefined' && !!(navigator as any).gpu;
+  }
+
+  private activateCpu(data: Float32Array, kind: 'relu' | 'sigmoid' | 'tanh'): Float32Array {
+    const out = new Float32Array(data.length);
+    for (let i = 0; i < data.length; i++) {
+      const x = data[i];
+      out[i] = kind === 'sigmoid' ? 1 / (1 + Math.exp(-x))
+        : kind === 'tanh' ? Math.tanh(x)
+          : Math.max(0, x);
+    }
+    return out;
+  }
+
+  private matMulCpu(a: Float32Array, b: Float32Array, M: number, K: number, N: number): Float32Array {
+    const out = new Float32Array(M * N);
+    if (M === 0 || K === 0 || N === 0) return out;
+    for (let m = 0; m < M; m++) {
+      for (let n = 0; n < N; n++) {
+        let sum = 0;
+        for (let k = 0; k < K; k++) {
+          sum += a[m * K + k] * b[k * N + n];
+        }
+        out[m * N + n] = sum;
+      }
+    }
+    return out;
   }
 
   async getDevice(): Promise<GPUDevice> {
@@ -39,6 +73,7 @@ export class WebGPUKernel {
 
   /** ReLU / Sigmoid / Tanh Aktivierung auf einem Tensor (in-place via GPU). */
   async activate(data: Float32Array, kind: 'relu' | 'sigmoid' | 'tanh' = 'relu'): Promise<Float32Array> {
+    if (this.forceCpu || !this.supported) return this.activateCpu(data, kind);
     const device = await this.getDevice();
     const n = data.length;
     const byteLen = Math.max(4, n * 4);
@@ -83,6 +118,7 @@ export class WebGPUKernel {
    * A: [M,K], B: [K,N] → C: [M,N].
    */
   async matMul(a: Float32Array, b: Float32Array, M: number, K: number, N: number): Promise<Float32Array> {
+    if (this.forceCpu || !this.supported) return this.matMulCpu(a, b, M, K, N);
     const device = await this.getDevice();
     const sA = device.createBuffer({ size: a.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(sA, 0, a as any);
