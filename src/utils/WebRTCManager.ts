@@ -10,19 +10,19 @@ export type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boole
 // Server-Quelle: server.ts join-session/peer-joined/peer-left/session-full-Handler.
 export type SessionRole = 'admin' | 'producer' | 'engineer' | 'guest' | string;
 export type SessionMembersPayload = {
-  members?: Array<{ socketId?: unknown; userId?: unknown }>;
-  selfRole?: unknown;
-  hostUserId?: unknown;
-  max?: unknown;
+  members?: Array<{ socketId: string; userId: string }>;
+  selfRole?: SessionRole;
+  hostUserId?: string;
+  max?: number;
 };
 export type PeerJoinedPayload = {
-  socketId?: unknown;
-  userId?: unknown;
+  socketId: string;
+  userId: string;
   role?: unknown;
 };
-export type PeerLeftPayload = { socketId?: unknown };
-export type SessionFullPayload = { max?: unknown };
-export type RoleChangedPayload = { userId?: unknown; role?: unknown };
+export type PeerLeftPayload = { socketId: string };
+export type SessionFullPayload = { max?: number };
+export type RoleChangedPayload = { userId: string; role?: unknown };
 export type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
 export type PluginLockPayload = { pluginId?: unknown; lockedBy?: unknown; timestamp?: unknown; ttl?: unknown };
 
