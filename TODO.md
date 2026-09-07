@@ -18,6 +18,23 @@
 
 ---
 
+## RunPod-Migration – aktueller Stand (2026-09-07)
+
+- [x] Spezifikation: `docs/RUNPOD_AI_V1_SPEC.md` + `docs/RUNPOD_MODEL_HANDLERS.md`
+- [x] RunPod Serverless Worker-Wrapper (`services/samplemonk-ai-runtime/runpod_worker.py`)
+- [x] `RunPodProvider` (runsync) + `AiProviderId=runpod`
+- [x] Deployment: `Dockerfile.runpod`, `scripts/runpod-deploy.py`, `.github/workflows/runpod-deploy.yml`
+- [x] Handler-Code: Qwen3-14B, Qwen2-Audio, XTTS, ACE-Step, Demucs, PyAnnote, Essentia
+- [x] Manifest auf H200 (141 GB VRAM) erweitert
+- [x] GHCR-Image Build/Push erfolgreich
+- [x] RunPod-Serverless-Template erstellt (ID: `9fious2yy9`)
+- [ ] **RunPod-Endpoint anlegen** – blockiert: RunPod-Kontoguthaben < $0.01; nach Aufladung Workflow erneut ausführen
+- [ ] BS-RoFormer-Handler auf GPU verifizieren/fixieren
+- [ ] Replicate/HF-Code entfernen (erst nach RunPod-Cutover)
+- [ ] HF-Endpoint/Repo/Space löschen (erst nach RunPod-Cutover)
+
+---
+
 ## P0 – Betreiber-/Live-Gates (als Nächstes ausführen)
 
 - [ ] **HF-Endpoint-Secret rotieren** – Token in HF-/Hetzner-Konsole ersetzen, `.env`/Docker-Secrets/CI-Secret aktualisieren, altes Token revoken.
