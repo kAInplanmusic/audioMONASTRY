@@ -66,6 +66,9 @@ jobs:
             -f visibility=public \
           || echo "INFO: Paket bleibt privat – GHCR_USERNAME/GHCR_PASSWORD werden benötigt."
 
+      - name: RunPod SDK installieren
+        run: python3 -m pip install --quiet runpod==1.12.0
+
       - name: RunPod Serverless Endpoint deployen
         env:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
