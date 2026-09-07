@@ -22,12 +22,17 @@
 
 | Thema | Entscheidung |
 |---|---|
-| RunPod Deployment | egal – muss laufen, 0 $ wenn aus/abgeschaltet, schnell hochfahrbar → Ziel: RunPod Serverless oder Pod mit Network Volume/Scale-to-Zero-Praxis |
+| RunPod Deployment | **Serverless Endpoint** mit Worker-Wrapper (`runpod.serverless.start`) |
+| GPU | **H200** (Template `audio-multimodel-h200-agent`, ID `c0xdrua0mz`) |
 | AI auf RunPod | „alles was AI angeht“, inkl. LLM |
 | Stem | Demucs + BS-RoFormer auf derselben GPU |
+| Singing | bestmögliche EN/DE-Qualität – Kandidaten: ACE-Step 1.5 / Bark / Fish Speech (Benchmark vor Fixierung) |
+| Audio Understanding | Qwen2-Audio-7B neu; Qwen-Omni entfernen |
+| Essentia | auf RunPod als CPU-Handler |
+| LLM | ein LLM auf RunPod, soll alles abdecken; Basis Qwen3-14B, ggf. Qwen3-30B-A3B benchmarken |
 | Replicate | komplett entfernen |
 | HF löschen | Endpoint + Model-Repo + Space `spatialMONK` |
-| Deployment | GitHub Actions: Image bauen + RunPod aktualisieren |
+| Deployment | GitHub Actions: Image bauen + RunPod-Serverless-Endpoint aktualisieren |
 | Architektur | eine GPU, ein Model Manager, dynamisches Laden – keine Multi-Container-GPU-Zerstückelung |
 
 ---
@@ -58,21 +63,24 @@ audioMONASTRY Web/Frontend
         ▼
 server.ts (Node/Express API Gateway – bleibt)
         │
-        ├── /api/ai/*           → RunPod AI Runtime
-        ├── /api/voice/*        → RunPod AI Runtime
-        ├── /api/sound/*        → RunPod AI Runtime
-        ├── /api/song/*         → RunPod AI Runtime
-        └── /api/separate-stems → RunPod AI Runtime
+        ├── Audio-Upload → Cloudflare R2 (Signed URL)
+        ├── /api/ai/*           → RunPod Serverless API (runsync/run)
+        ├── /api/voice/*        → RunPod Serverless API
+        ├── /api/sound/*        → RunPod Serverless API
+        ├── /api/song/*         → RunPod Serverless API
+        └── /api/separate-stems → RunPod Serverless API
         │
         ▼
-RunPod GPU (A6000 48 GB o. ä.)
+RunPod Serverless Endpoint (H200, Template `audio-multimodel-h200-agent`)
         │
         ▼
-samplemonk-ai-runtime (ein Container/Worker)
+Worker-Wrapper (`runpod.serverless.start`)
         │
-        ├── API Gateway (FastAPI): /health /ready /status /infer /jobs /ws
+        ▼
+samplemonk-ai-runtime (eine Worker-Runtime)
+        │
         ├── Model Manager (LRU, VRAM-Budget, UNLOADED/CPU_CACHE/GPU_ACTIVE)
-        ├── Job Queue / Scheduler (intern, optional Redis)
+        ├── Handler-Dispatch (Job-Input aus RunPod-Queue)
         └── Handler:
               TTS (XTTS-v2)
               SFX (Stable Audio Open)
@@ -89,7 +97,11 @@ samplemonk-ai-runtime (ein Container/Worker)
 Cloudflare R2 (Audio) + Supabase (Metadaten/Jobs) – bleibt
 ```
 
-**Wichtig:** Keine 6 Container mit eigenem CUDA-Zugriff. Eine Runtime, ein Model Manager, eine GPU.
+**Wichtig:**
+- Keine 6 Container mit eigenem CUDA-Zugriff. Eine Runtime, ein Model Manager, eine GPU.
+- **RunPod Serverless = Worker-Modell:** Die App spricht nicht direkt HTTP `/infer` an, sondern submitted Jobs an die RunPod-API (`runsync`/`run`).
+- Große Audiodateien liegen vorher in **R2**; der Worker bekommt URLs, lädt sie herunter und schreibt Ergebnisse zurück nach R2.
+- Der bisherige FastAPI-`/infer`-Pfad kann für Pod-/Lokal-Tests erhalten bleiben, ist aber nicht der Serverless-Produktivpfad.
 
 ---
 
@@ -99,7 +111,7 @@ Cloudflare R2 (Audio) + Supabase (Metadaten/Jobs) – bleibt
 |---|---|---|---|---|
 | TTS | XTTS-v2 | Coqui | MMS-TTS/Qwen3-TTS | ✅ neu |
 | TTS expressiv (optional) | Fish Speech 1.5 | Fish Audio | – | optional, Lizenz prüfen |
-| Singing | ACE-Step 1.5 oder Bark | Stability/Meta | Bark vorhanden | Entscheidung offen |
+| Singing | bestmögliche EN/DE-Qualität (ACE-Step 1.5 / Bark / Fish Speech) | div. | Bark vorhanden | Benchmark vor Fixierung |
 | Sound FX | Stable Audio Open 1.0 | Stability AI | bereits im Manifest | Handler prüfen |
 | Song/Music | ACE-Step 1.5 (Turbo + XL/SFT) | ACE-Step | MusicGen + ACE-Step-Client | ✅ neu als Runtime-Handler |
 | Stem (Vocal) | BS-RoFormer | diverse HF-Checkpoints | – | ✅ neu |
@@ -221,34 +233,41 @@ Task im Orchestrator → Runtime-Handler:
 
 ## 9. API-Gateway-Anbindung (`server.ts`)
 
-### 9.1 Neue RunPod-URL-Config
+### 9.1 Neue RunPod-Config
 ```env
-RUNPOD_AI_URL=https://<pod-or-endpoint>.runpod.ai
-RUNPOD_AI_TOKEN=<token>
+RUNPOD_ENDPOINT_ID=xxxxxxxxxxxxxxxx
+RUNPOD_API_KEY=rp_...   # entspricht RP_API_KEY
 RUNPOD_AI_TASK_TIMEOUT_MS=600000
+R2_BUCKET=...           # bestehende R2-Anbindung für Audio-Upload/Download
 ```
 
-### 9.2 Änderungen
-- `voiceRuntimeUrl()` → nutzt `RUNPOD_AI_URL`
-- `voiceRuntimeInference()` → gleiche `/infer`-Signatur, Auth via `RUNPOD_AI_TOKEN`
+### 9.2 Änderungen (Serverless-Job-Modell)
+- Große Audiodateien vor dem Job in R2 ablegen und Signed-URLs übergeben.
+- Neuer Client `RunPodServerlessClient`:
+  - `POST https://api.runpod.io/v1/{endpoint_id}/runsync` oder `/run`
+  - Auth: `Authorization: Bearer {RUNPOD_API_KEY}`
+  - Job-Input: `{ task, model, input: { audioUrl?, prompt?, ... } }`
+  - Output enthält Ergebnis-URL(s) in R2 oder direkt JSON/Base64 für kleine Ergebnisse
 - `/api/separate-stems`:
   - Replicate-Branch entfernen
   - stem-ai-Fallback entfernen (kein Fallback)
-  - Aufruf: `POST {RUNPOD_AI_URL}/infer` mit `task: stem.separate`
+  - Upload → R2 → `task: stem.separate` an RunPod → Ergebnis-URLs zurückgeben
+- `/api/voice/*`, `/api/sound/*`, `/api/song/*`:
+  - Upload/Prompt → RunPod-Job → WAV aus R2 laden und an UI ausliefern
 - `/api/ai/orchestrate` → ProviderRouter nutzt `RunPodProvider`
-- `/api/sound/generate`, `/api/song/generate` → RunPod statt HF-Serverless
 
 ### 9.3 `providerRouter.ts`
 - `HfEndpointProvider` entfernen oder durch `RunPodProvider` ersetzen
 - `HfServerlessProvider` entfernen (LLM/Voice laufen über RunPod)
 - `ReplicateProvider` entfernen
 - Neue Provider-ID: `runpod`
+- `RunPodProvider` nutzt `RunPodServerlessClient` und mapped alle Tasks
 
 ### 9.4 `LlmRouter.ts`
-- Neuer Provider: `runpod` mit Base URL `{RUNPOD_AI_URL}/v1/chat/completions`
-- Modell: `qwen3-14b`
+- Neuer Provider: `runpod` über `RunPodServerlessClient` (`task: llm`) oder separaten OpenAI-kompatiblen Worker-Endpoint
+- Modell: `qwen3-14b` (Basis), ggf. `qwen3-30b-a3b` nach Benchmark
 - HF/Qwen-Coder-Provider entfernen/deaktivieren
-- DeepSeek/Cerebras/Ollama optional behalten oder entfernen (Entscheidung)
+- DeepSeek/Cerebras/Ollama optional behalten (Entscheidung: Qwen3-RunPod primär)
 
 ---
 
@@ -276,16 +295,17 @@ Geplante neue Variablen:
 
 | Variable | Zweck |
 |---|---|
-| `RUNPOD_AI_URL` | Basis-URL der RunPod-Instanz/des Endpoints |
-| `RUNPOD_AI_TOKEN` | Auth-Token für die RunPod-Instanz |
+| `RUNPOD_ENDPOINT_ID` | Serverless-Endpoint-ID (wird beim ersten Deploy erzeugt) |
+| `RUNPOD_API_KEY` | RunPod API Key = `RP_API_KEY` |
 | `RUNPOD_AI_TASK_TIMEOUT_MS` | Timeout |
 | `RUNPOD_MODEL_CACHE_VOLUME` | Network-Volume-Pfad für HF_HOME/Modelle |
 | `RP_API_KEY` | RunPod Personal Access Token (CI/Deployment) |
 | `RPS3_ACCESS_KEY` / `RPS3_SECRET_KEY` | RunPod S3-kompatible Storage-Zugänge (optional) |
+| `R2_BUCKET` + bestehende `CFR2_*` | Audio-Upload/Download für Worker-Jobs |
 
 GitHub Secrets für Actions:
 - `RP_API_KEY`
-- optional `RUNPOD_ENDPOINT_ID` / Template-ID / Pod-ID
+- `RUNPOD_ENDPOINT_ID` (nach erstem Deploy)
 - `HF_TOKEN` (nur falls Modelle von HF Hub geladen werden)
 
 ---
@@ -293,13 +313,14 @@ GitHub Secrets für Actions:
 ## 12. RunPod Deployment
 
 ### 12.1 Zielbild
-- GitHub Actions baut `services/samplemonk-ai-runtime` als Image
+- GitHub Actions baut **Worker-Image** (inkl. `runpod_worker.py` + Runtime)
 - Push nach GHCR
-- RunPod wird per API aktualisiert:
-  - Serverless Endpoint: Worker-Image austauschen
-  - Pod: Template/Image aktualisieren und ggf. Pod neu starten
+- RunPod **Serverless Endpoint** wird per API erstellt/aktualisiert:
+  - GPU: H200
+  - Template/Container: `audio-multimodel-h200-agent` (`c0xdrua0mz`) als Basis
+  - Worker-Image austauschen
 - Network Volume für `/data/hf-cache` und `/data/models`
-- Healthcheck `/health`, Readiness `/ready`
+- Worker-Health: RunPod-eigener Worker-Start + Modell-`/ready`-Zustand intern
 
 ### 12.2 Workflow-Ersatz
 `.github/workflows/hf-endpoint.yml` → `.github/workflows/runpod-deploy.yml`
@@ -307,14 +328,19 @@ GitHub Secrets für Actions:
 Schritte:
 1. Checkout
 2. Docker Login GHCR
-3. Build & Push `samplemonk-ai-runtime`
-4. RunPod-Update per API/Skript (`scripts/runpod-deploy.mjs` o. Ä.)
-5. Status/Health abfragen
+3. Build & Push `samplemonk-ai-runtime` (mit `runpod_worker.py`)
+4. RunPod-Serverless-Endpoint per API erzeugen/aktualisieren:
+   - Name: `samplemonk-ai-runpod` (Vorschlag)
+   - GPU: H200
+   - Image: GHCR-Image
+   - Template-ID: `c0xdrua0mz`
+5. Endpoint-Status abfragen (`RUNPOD_ENDPOINT_ID`)
+6. Smoke-Job `runsync` senden
 
 ### 12.3 Schnellstart/Kosten
-- **Serverless:** Scale-to-Zero → keine Kosten bei Inaktivität; Kaltstart akzeptabel, wenn Network Volume + warme Worker
-- **Pod:** stoppen bei Inaktivität → keine Compute-Kosten; schneller Start über Template + Network Volume
-- Empfehlung: zuerst Pod/Serverless testen, dann für Produktion die kostengünstigste Variante fixieren
+- **Serverless Endpoint:** Scale-to-Zero → keine Kosten bei Inaktivität
+- Kaltstart minimieren: Network Volume + ggf. warme Worker/FlashBoot
+- H200 ist großzügig für Multi-Modell-Betrieb; Kosten/Verfügbarkeit vor Produktions-Deploy prüfen
 
 ---
 
@@ -330,8 +356,8 @@ Schritte:
 ## 14. Test-/Cutover-Plan
 
 1. `npm run verify` grün
-2. Python-Runtime lokal mit `AI_RUNTIME_DEVICE=simulated` importieren
-3. RunPod-Instanz starten, `/health` + `/ready` prüfen
+2. Python-Runtime lokal mit `AI_RUNTIME_DEVICE=simulated` importieren inkl. `runpod_worker.py`
+3. RunPod Serverless Endpoint erstellen, Worker-Start prüfen, `runsync`-Smoke-Job senden
 4. Je Task Smoke-Test:
    - TTS (XTTS)
    - Song (ACE-Step Turbo)
@@ -372,24 +398,22 @@ Danach:
 
 ## 16. Offene Entscheidungen
 
-1. RunPod **Pod vs. Serverless Endpoint** final festlegen
-2. **Singing-Modell:** Bark behalten / ACE-Step / Fish Speech?
-3. **Qwen2-Audio vs. Qwen-Omni** (ersetzen oder parallel)
-4. **Essentia:** auf RunPod (CPU) oder separater Hetzner-Service?
-5. **DeepSeek/Cerebras/Ollama** im LLM-Router behalten oder nur Qwen3-RunPod?
-6. **XTTS/Stable-Audio-Lizenzen** für späteren kommerziellen Betrieb prüfen
-7. **BS-RoFormer-Checkpoint/Lizenz** konkret festlegen
-8. Redis-Queue nur bei Bedarf oder sofort?
+1. **Singing-Modell:** Benchmark EN/DE zwischen ACE-Step 1.5, Bark und Fish Speech – danach fixieren
+2. **LLM-Endmodell:** Qwen3-14B vs. Qwen3-30B-A3B auf H200 benchmarken
+3. **XTTS/Stable-Audio-Lizenzen** für späteren kommerziellen Betrieb prüfen
+4. **BS-RoFormer-Checkpoint/Lizenz** konkret festlegen
+5. Redis-Queue nur bei Bedarf oder sofort?
+6. **DeepSeek/Cerebras/Ollama** bleiben optional im LLM-Router oder werden entfernt (Qwen3-RunPod primär)
 
 ---
 
 ## 17. Risiken
 
-- Mehrere große Modelle auf einer 48-GB-GPU → LRU/VRAM-Management kritisch
+- Mehrere große Modelle auf einer H200 → LRU/VRAM-Management weiterhin kritisch (aber mehr Luft als 48 GB)
 - ACE-Step braucht je nach Qualität 20–24 GB; nicht parallel zu Qwen2-Audio erzwingen
 - Lizenzrisiken (XTTS, Stable Audio, BS-RoFormer, Fish Speech)
 - HF Hub als Downloadquelle bleibt Abhängigkeit, solange Gewichte nicht im Volume/Image liegen
-- RunPod-Preise/Verfügbarkeit schwanken; A6000-48GB ist Startempfehlung, aber L40S/RTX-6000-Ada/Serverless-Angebote vergleichen
+- RunPod Serverless-Preise/Verfügbarkeit schwanken; H200-Kosten vor Produktions-Deploy prüfen
 
 ---
 
