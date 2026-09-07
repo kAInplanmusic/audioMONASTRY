@@ -118,12 +118,28 @@ function Knob({
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', () => window.removeEventListener('pointermove', move), { once: true });
   };
+  // F-8/T-12: Slider-Rolle + Tastatur (Pfeiltasten) + aria-Label.
+  const nudge = (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 0.01 : 0.05;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { onChange(clamp01(value + step)); e.preventDefault(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { onChange(clamp01(value - step)); e.preventDefault(); }
+    else if (e.key === 'Home') { onChange(0); e.preventDefault(); }
+    else if (e.key === 'End') { onChange(1); e.preventDefault(); }
+  };
   return (
     <div className="flex flex-col items-center gap-1 select-none">
       <div
+        role="slider"
+        tabIndex={0}
+        aria-label={label ?? 'Drehregler'}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(value * 100)}
+        aria-valuetext={`${Math.round(value * 100)} %`}
         onPointerDown={drag}
+        onKeyDown={nudge}
         onDoubleClick={() => onChange(0.5)}
-        className={`${w} relative rounded-full cursor-ns-resize border border-black touch-none bg-[radial-gradient(circle_at_35%_30%,#4a4a50,#2b2b30_60%,#141417)] shadow-[0_2px_6px_rgba(0,0,0,0.7)]`}
+        className={`${w} relative rounded-full cursor-ns-resize border border-black touch-none bg-[radial-gradient(circle_at_35%_30%,#4a4a50,#2b2b30_60%,#141417)] shadow-[0_2px_6px_rgba(0,0,0,0.7)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400`}
       >
         <div className="absolute inset-0 rounded-full" style={{ transform: `rotate(${deg}deg)` }}>
           <div className="absolute left-1/2 top-[6%] h-[28%] w-[2px] -translate-x-1/2 rounded-full"
@@ -136,8 +152,8 @@ function Knob({
   );
 }
 
-function Fader({ value, onChange, tall = false, color = ORANGE }: {
-  value: number; onChange: (v: number) => void; tall?: boolean; color?: string;
+function Fader({ value, onChange, tall = false, color = ORANGE, label }: {
+  value: number; onChange: (v: number) => void; tall?: boolean; color?: string; label?: string;
 }) {
   const h = tall ? 'h-40' : 'h-36';
   const drag = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -146,11 +162,28 @@ function Fader({ value, onChange, tall = false, color = ORANGE }: {
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', () => window.removeEventListener('pointermove', move), { once: true });
   };
+  // F-8/T-12: Slider-Rolle + Tastatur (Pfeiltasten) + aria-Label.
+  const nudge = (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 0.01 : 0.05;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { onChange(clamp01(value + step)); e.preventDefault(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { onChange(clamp01(value - step)); e.preventDefault(); }
+    else if (e.key === 'Home') { onChange(0); e.preventDefault(); }
+    else if (e.key === 'End') { onChange(1); e.preventDefault(); }
+  };
   return (
     <div
+      role="slider"
+      tabIndex={0}
+      aria-label={label ?? 'Fader'}
+      aria-orientation="vertical"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(value * 100)}
+      aria-valuetext={`${Math.round(value * 100)} %`}
       onPointerDown={drag}
+      onKeyDown={nudge}
       onDoubleClick={() => onChange(0.85)}
-      className={`relative ${h} w-4 rounded-full bg-black border border-zinc-700 shadow-inner select-none touch-none cursor-ns-resize`}
+      className={`relative ${h} w-4 rounded-full bg-black border border-zinc-700 shadow-inner select-none touch-none cursor-ns-resize focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-400`}
     >
       {[0.2, 0.4, 0.6, 0.8].map((p) => (
         <div key={p} className="absolute left-1/2 w-2.5 h-px -translate-x-1/2 bg-zinc-700" style={{ bottom: `${p * 100}%` }} />
@@ -206,6 +239,8 @@ function LedButton({ active, onClick, label, color = ORANGE, round = false }: {
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
+      aria-label={label}
       className={`${round ? 'w-9 h-9 rounded-full' : 'px-2 py-1 rounded-[3px] border'} text-[10px] font-black tracking-widest cursor-pointer transition-colors flex items-center justify-center ${
         active
           ? 'bg-black text-black border-transparent'
@@ -334,7 +369,8 @@ function ChannelStrip({
 
       {/* CUE */}
       <div className="flex justify-center">
-        <button type="button" onClick={onCue}
+        <button type="button" onClick={onCue} aria-pressed={c.cue}
+          aria-label={`CUE Kanal ${s.index + 1}${c.cue ? ' aktiv' : ''}`}
           className={`w-9 h-9 rounded-full border-2 text-[10px] font-black tracking-widest cursor-pointer transition-all ${
             c.cue ? 'border-orange-400 text-black bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.6)]' : 'border-zinc-700 text-zinc-400 bg-black hover:border-orange-500/60'
           }`}
@@ -344,13 +380,14 @@ function ChannelStrip({
       {/* Meter + Fader */}
       <div className="flex items-end justify-center gap-2 pt-0.5">
         <Meter level={level} />
-        <Fader value={c.gain} onChange={(v) => onPatch({ gain: v })} />
+        <Fader value={c.gain} onChange={(v) => onPatch({ gain: v })} label={`Kanalfader ${s.index + 1}`} />
       </div>
 
       {/* Footer: LOAD · PLAY · MUTE */}
       <div className="flex flex-col gap-1 pt-0.5">
         <select
           value={c.loaded ? c.loadName : ''}
+          aria-label={`Track laden auf Kanal ${s.index + 1}${s.label ? ` (${s.label})` : ''}`}
           onChange={(e) => {
             const t = SORTED_MUSIC_LIBRARY.find((x) => x.name === e.target.value);
             if (t) onLoad(t);
@@ -367,9 +404,11 @@ function ChannelStrip({
         </select>
         <div className="flex gap-1">
           <button type="button" onClick={onTrigger}
+            aria-label={`Track auf Kanal ${s.index + 1} abspielen`}
             className="flex-1 h-7 rounded-[3px] bg-orange-600 hover:bg-orange-500 text-black text-[10px] font-black tracking-widest active:scale-[0.98] cursor-pointer shadow-[0_0_10px_rgba(249,115,22,0.35)]"
           >▶ PLAY</button>
-          <button type="button" onClick={() => onPatch({ mute: !c.mute })}
+          <button type="button" onClick={() => onPatch({ mute: !c.mute })} aria-pressed={c.mute}
+            aria-label={`Mute Kanal ${s.index + 1}${c.mute ? ' aktiv' : ''}`}
             className={`w-12 h-7 rounded-[3px] border text-[9px] font-black tracking-widest cursor-pointer transition-colors ${
               c.mute ? 'bg-red-600 border-red-500 text-white' : 'bg-black border-zinc-700 text-zinc-500 hover:border-red-500/50 hover:text-red-300'
             }`}
@@ -570,18 +609,32 @@ export const DJMixer = React.memo(function DJMixer() {
       {/* 3-Fader-Leiste: links CH1+2 · Mitte Crossfader 1-2-3 ↔ 4-5-6 · rechts CH5+6 */}
       <div className="mt-3 flex items-end justify-center gap-8 rounded-md bg-[#17171a] border border-black/70 px-5 py-3">
         <div className="flex flex-col items-center gap-1.5">
-          <Fader tall value={group.left} onChange={(v) => applyGroup('left', v)} />
+          <Fader tall value={group.left} onChange={(v) => applyGroup('left', v)} label="Gruppenfader 1 und 2 (Deck A)" />
           <span className="text-[10px] font-mono tracking-widest text-zinc-400">1 · 2</span>
         </div>
 
         <div className="flex-1 max-w-3xl flex flex-col items-center gap-1.5">
-          <div className="text-[10px] font-black tracking-[0.3em] text-zinc-500">CROSSFADER ASSIGN</div>
+          <div className="text-[10px] font-black tracking-[0.3em] text-zinc-500" id="xf-label">CROSSFADER ASSIGN</div>
           <div className="relative w-full h-10 rounded-full bg-black border border-zinc-800 shadow-inner touch-none"
+            role="slider"
+            tabIndex={0}
+            aria-labelledby="xf-label"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(xfd * 100)}
+            aria-valuetext={`Deck A ${Math.round((1 - xfd) * 100)} % / Deck B ${Math.round(xfd * 100)} %`}
             onPointerDown={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
               const move = (ev: PointerEvent) => applyCross(clamp01((ev.clientX - r.left) / r.width));
               window.addEventListener('pointermove', move);
               window.addEventListener('pointerup', () => window.removeEventListener('pointermove', move), { once: true });
+            }}
+            onKeyDown={(e) => {
+              const step = e.shiftKey ? 0.01 : 0.05;
+              if (e.key === 'ArrowRight') { applyCross(clamp01(xfd + step)); e.preventDefault(); }
+              else if (e.key === 'ArrowLeft') { applyCross(clamp01(xfd - step)); e.preventDefault(); }
+              else if (e.key === 'Home') { applyCross(0); e.preventDefault(); }
+              else if (e.key === 'End') { applyCross(1); e.preventDefault(); }
             }}>
             <div className="absolute top-0 bottom-0 left-0 w-[45%] rounded-l-full bg-orange-500/10" />
             <div className="absolute top-0 bottom-0 right-0 w-[45%] rounded-r-full bg-orange-500/10" />
@@ -599,7 +652,8 @@ export const DJMixer = React.memo(function DJMixer() {
           </div>
           <div className="flex gap-1.5">
             {(['A', 'THRU', 'B'] as XfMode[]).map((m) => (
-              <button type="button" key={m} onClick={() => applyXfMode(m)}
+              <button type="button" key={m} onClick={() => applyXfMode(m)} aria-pressed={xfMode === m}
+                aria-label={`Crossfader-Zuweisung ${m === 'THRU' ? 'THRU (alle Kanäle unabhängig)' : m === 'A' ? 'Deck A (Kanäle 1-3)' : 'Deck B (Kanäle 4-6)'}`}
                 className={`px-2.5 py-1 rounded-[3px] border text-[10px] font-black tracking-widest cursor-pointer transition-colors ${
                   xfMode === m ? 'bg-orange-500 border-orange-400 text-black' : 'bg-black border-zinc-700 text-zinc-500 hover:border-orange-500/50 hover:text-orange-300'
                 }`}
@@ -609,7 +663,7 @@ export const DJMixer = React.memo(function DJMixer() {
         </div>
 
         <div className="flex flex-col items-center gap-1.5">
-          <Fader tall value={group.right} onChange={(v) => applyGroup('right', v)} />
+          <Fader tall value={group.right} onChange={(v) => applyGroup('right', v)} label="Gruppenfader 5 und 6 (Deck B)" />
           <span className="text-[10px] font-mono tracking-widest text-zinc-400">5 · 6</span>
         </div>
       </div>
