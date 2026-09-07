@@ -21,7 +21,7 @@ export type AiTask =
   | 'nlu';
 
 /** Provider-IDs des Orchestrators. */
-export type AiProviderId = 'hf-standard-endpoint' | 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'local' | 'deterministic' | 'cerebras';
+export type AiProviderId = 'hf-standard-endpoint' | 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'runpod' | 'local' | 'deterministic' | 'cerebras';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */
 export type ModelLoadClass = 'CORE' | 'FREQUENT' | 'ON_DEMAND' | 'RARE';

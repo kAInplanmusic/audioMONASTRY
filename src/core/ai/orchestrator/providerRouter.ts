@@ -12,6 +12,7 @@ import { aiLogger } from './aiLogger';
 import { assertSingleGpuEndpoint } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
 import { CerebrasProvider } from './cerebrasProvider';
+import { RunPodProvider } from './runpodProvider';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
 const HF_ROUTER = 'https://router.huggingface.co/hf-inference/models';
@@ -318,6 +319,8 @@ export class ProviderRouter {
   // (HfEndpointProvider) darf GPU nutzen. HfStandardEndpointProvider
   // (separate pilot/clap-Endpoints) ist bewusst NICHT mehr registriert.
   private providers: IAiProvider[] = [
+    // RunPod ist erster Kandidat, sobald ein Endpoint konfiguriert ist.
+    new RunPodProvider(),
     new CerebrasProvider(), // NLU/Struktur – schnell & kostengestaffelt
     new HfEndpointProvider(),
     new HfServerlessProvider(),
