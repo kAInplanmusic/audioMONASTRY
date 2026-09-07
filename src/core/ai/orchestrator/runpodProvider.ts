@@ -11,7 +11,7 @@
  * Solange kein Endpoint existiert, bleibt er inaktiv und ändert das
  * bestehende Routing nicht.
  */
-import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
+import { AiProviderError, type AiTask, type IAiProvider } from './types';
 import { aiLogger } from './aiLogger';
 
 const RUNPOD_API_BASE = 'https://api.runpod.io/v1';

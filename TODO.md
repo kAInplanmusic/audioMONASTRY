@@ -41,7 +41,8 @@
 - [ ] **Supabase-Live-Abgleich** – Migrationen (inkl. 002) anwenden/prüfen, RLS/Indizes bestätigen, Daten sichtbar.
 - [ ] **Echter LLM-/MOA-Lauf je Plugin + Nightly-CI bestätigen** – 100 % Kern-Kommandos, Scores/Dauer/Fehler in Supabase; CI-Lauf auf GitHub grün.
 - [ ] **AI-Docker-Build/GPU-Test lokal ausführen** – GPU-Container bauen und Inferenz/Health testen.
-- [ ] **Gate-Verifikation** – keine Secrets im Repo/History, `npm audit` 0, ESLint ohne Errors, CI-Hardening (Actions-SHA) dauerhaft grün.
+- [x] **Gate-Verifikation (Code-Gates)** – `npm audit` 0, `tsc` 0, ESLint 0 Errors/Warnings, Actions auf SHA gepinnt (geprüft 2026-09-07).
+- [ ] **Secret-History-Scan** – zusätzlich Git-History/Repos systematisch nach alten Secrets durchsuchen (z. B. TURN/HF/API-Keys).
 
 ## P1 – Code-Qualität & verfügbare Live-Tests
 
