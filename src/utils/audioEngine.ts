@@ -44,6 +44,7 @@ import {
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
+import { normalizeNotes, normalizeSteps, noteToFreq } from '../core/audio/state/sequenceUtils';
 
 export { pluginAudioChannels };
 
@@ -699,21 +700,9 @@ class AudioEngine {
   /** Bringt alle Patterns + synthNotes auf die aktuelle Schrittanzahl. */
   private normalizeAllPatterns(): void {
     (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      this.patterns[t] = this.normalizeSteps(this.patterns[t] ?? [], this.stepCount);
+      this.patterns[t] = normalizeSteps(this.patterns[t] ?? [], this.stepCount);
     });
-    this.synthNotes = this.normalizeNotes(this.synthNotes, this.stepCount);
-  }
-
-  private normalizeSteps(steps: boolean[], count: number): boolean[] {
-    if (steps.length === count) return [...steps];
-    if (steps.length > count) return steps.slice(0, count);
-    return [...steps, ...Array(count - steps.length).fill(false)];
-  }
-
-  private normalizeNotes(notes: number[], count: number): number[] {
-    if (notes.length === count) return [...notes];
-    if (notes.length > count) return notes.slice(0, count);
-    return [...notes, ...Array(count - notes.length).fill(0)];
+    this.synthNotes = normalizeNotes(this.synthNotes, this.stepCount);
   }
 
   /** Schaltet den Sequencer zwischen 16 und 32 Steps um (Patterns werden gepolstert). */
@@ -772,7 +761,7 @@ class AudioEngine {
   /** Setzt das Muster eines Kanals (16 oder 32 Steps). */
   public setPattern(track: TrackType, steps: boolean[]): void {
     if (!steps || (steps.length !== 16 && steps.length !== 32)) return;
-    this.patterns[track] = this.normalizeSteps(steps, this.stepCount);
+    this.patterns[track] = normalizeSteps(steps, this.stepCount);
   }
 
   /**
@@ -791,11 +780,11 @@ class AudioEngine {
     for (const k of keys) {
       const arr = patterns?.[k];
       if (arr && Array.isArray(arr) && (arr.length === 16 || arr.length === 32)) {
-        this.patterns[k] = this.normalizeSteps(arr, this.stepCount);
+        this.patterns[k] = normalizeSteps(arr, this.stepCount);
       }
     }
     if (synthNotes && Array.isArray(synthNotes) && (synthNotes.length === 16 || synthNotes.length === 32)) {
-      this.synthNotes = this.normalizeNotes(synthNotes, this.stepCount);
+      this.synthNotes = normalizeNotes(synthNotes, this.stepCount);
     }
     if (bpm && Number.isFinite(bpm) && bpm > 20 && bpm < 300) {
       Tone.Transport.bpm.value = bpm;
@@ -847,7 +836,7 @@ class AudioEngine {
           }
           const ch = routingTrackToChannel(trackConfig.id);
           if (ch && Array.isArray(trackConfig.patterns)) {
-            this.patterns[ch] = this.normalizeSteps(trackConfig.patterns as boolean[], this.stepCount);
+            this.patterns[ch] = normalizeSteps(trackConfig.patterns as boolean[], this.stepCount);
           }
         });
       }
@@ -1748,7 +1737,7 @@ class AudioEngine {
         } else if (track === 'channel8' && this.synthWorklet) {
           // Kein Sample auf Lead => PolyBLEP-Synth-Worklet als Stimme verwenden.
           const note = MUSIC_SCALES[this.currentScaleName as keyof typeof MUSIC_SCALES]?.[this.synthNotes[step] % 8] || 'C5';
-          const freq = this.noteToFreq(note);
+          const freq = noteToFreq(note);
           this.synthWorklet.port.postMessage({ osc: 'saw', freq, trigger: 1, gain: 0.7 });
           this.synthWorklet.port.postMessage({ noteOff: true }); // kurze Gate-Emulation
         }
@@ -1991,18 +1980,6 @@ class AudioEngine {
     (Object.keys(plan.cueTracks) as TrackType[]).forEach((t) => {
       setGain(this.cueTrackGains[t], plan.cueTracks[t]);
     });
-  }
-
-  /** Wandelt einen MIDI-Noten-String (z. B. 'C5') in eine Frequenz um. */
-  private noteToFreq(note: string): number {
-    const m = /^([A-Ga-g])([#b]?)(-?\d)$/.exec(note);
-    if (!m) return 440;
-    const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-    const semitone = names.indexOf(m[1].toUpperCase() + m[2]) ;
-    if (semitone < 0) return 440;
-    const octave = Number.parseInt(m[3], 10);
-    const midi = 12 + (octave + 1) * 12 + semitone; // C4=60
-    return 440 * Math.pow(2, (midi - 69) / 12);
   }
 
   /** Erstellt den PolyBLEP-Synth-Worklet (falls geladen) und verdrahtet ihn. */
