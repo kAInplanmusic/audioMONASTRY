@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
+import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
 
 /**
  * Visuelle Regression (A/B-Baseline): Playwright `toHaveScreenshot` mit

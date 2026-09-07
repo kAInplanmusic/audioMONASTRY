@@ -4,7 +4,7 @@
 **Cloudflare R2 live (2026-08-31): Bucket `audiomonastrysamples` · `ListBuckets`/`PutObject`/Public-URL real verifiziert · Upload-Pfad vollständig (R2 + Supabase).**
 **KI live (2026-08-31): DeepSeek (`deepseek-v4-flash`) und Hugging Face (`Qwen/Qwen2.5-72B-Instruct` via HF-Router) real durch den LlmRouter verifiziert.**
 
-> Implementierungs-Audit auf Basis von `docs/HARDWARE_AUDIT_2026.md` (Commit d71759e).
+> Implementierungs-Audit auf Basis des Hardware-Audits (Commit d71759e).
 > Stand: Commit nach der Implementierung. Alle Aussagen sind code-verifiziert;
 > Hardware-Funktionsbehauptungen nur dort, wo tatsächlich getestet wurde.
 

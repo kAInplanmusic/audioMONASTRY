@@ -289,7 +289,7 @@ Secrets ausschließlich serverseitig, Secret-Redaction in Logs.
 Datei-Limit), Stem-Queue-Limits (429+Retry-After, Idempotency→409),
 Audio-Deckel 25 MB im AI-Container, keine Shell-Ausführung durch AI,
 Input-Validierung (task/model-Längen, Modell-Regex).
-Details: `docs/SECURITY_AUDIT.md`, `docs/AI_SECURITY_GUIDE.md`.
+Details: `docs/AI_SECURITY_GUIDE.md`.
 
 ## 10. Monitoring & Observability
 
@@ -361,7 +361,6 @@ Google-frei-Check), `verify.yml` (tsc, Vitest, Boundary-Scan, spatial-regression
 - `AGENTS.md` / `.cursorrules` – verbindliche Architektur- und Workflow-Regeln
 - `docs/` – AI-Architektur, HF-Setup, Deployment, Registry, MCP, Security,
   Operations, Troubleshooting, Cost, Hardware-Matrizen, Release-Gate
-- `MASTER_TODO.md` – Produkt-/Release-Historie und offene Aufgaben
-- `TASKDONE.md` – abgeschlossene Arbeitspakete (Änderungsjournal)
+- `TODO.md` – die einzige offene Aufgabenliste
 - `docs/HANDOVER.md` – Übergabe-/Statusdokument
 - `docs/LIVE_CHECKLIST_2026-09-02.md` – verbleibende Live-/Hörprobe-Prüfpunkte

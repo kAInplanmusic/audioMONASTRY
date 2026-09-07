@@ -1,6 +1,6 @@
 ---
 name: deep-audit
-description: Führt das Deep-Audit-300-System für audioMONASTRY aus (deterministische Gates + DeepSeek/HF-KI-Review-Pässe), interpretiert AUDIT_DEEP.md und trägt neue Befunde in MASTER_TODO.md ein. Use when the user asks for a deep audit, code review, validation, security scan, 300% check, or audit report of this repository.
+description: Führt das Deep-Audit-300-System für audioMONASTRY aus (deterministische Gates + DeepSeek/HF-KI-Review-Pässe), interpretiert den Audit-Report und trägt neue Befunde in TODO.md ein. Use when the user asks for a deep audit, code review, validation, security scan, 300% check, or audit report of this repository.
 ---
 
 # Deep Audit 300 – Skill
@@ -11,7 +11,7 @@ Dieser Skill startet und interpretiert das eingebaute Tiefen-Audit-System des Re
 
 - Nutzer bittet um „Deep Audit", „300% prüfen", „Code-Review", „Validierung", „Security-Scan" oder „Audit-Report".
 - Es sollen mehrere unabhängige Verfahren (Linter, SAST, Dependencies, Architektur-Gates, KI-Review) auf das Repo oder einen Diff angewendet werden.
-- Befunde sollen nach `MASTER_TODO.md` übernommen und in `AUDIT_DEEP.md` dokumentiert werden.
+- Offene Befunde sollen nach `TODO.md` übernommen werden.
 
 ## Ablauf
 
@@ -28,17 +28,17 @@ Dieser Skill startet und interpretiert das eingebaute Tiefen-Audit-System des Re
    - Wenn keine Keys gewünscht sind, `--offline` oder `npm run audit:deep:static` verwenden.
 
 3. **Ergebnisse lesen**
-   - Hauptreport: `AUDIT_DEEP.md`
+   - Hauptreport: `test-results/deep-audit/audit-report.md`
    - Rohdaten: `test-results/deep-audit/findings.json` und `test-results/deep-audit/report.md`
    - Exit-Code: `0` = Gate bestanden, `1` = Gate nicht bestanden (`--fail-on high|critical|none` steuerbar).
 
 4. **Befunde verarbeiten**
-   - Findings nur in `MASTER_TODO.md` eintragen, wenn der Nutzer das möchte oder `--update-todo` aktiv ist.
+   - Findings nur in `TODO.md` eintragen, wenn der Nutzer das möchte oder `--update-todo` aktiv ist.
    - Keine Codeänderungen allein aus einem Audit-Finding vornehmen; erst mit dem Nutzer priorisieren.
    - Bei Audio-/Worklet-/DSP-Findings den `audioaudit`-Skill hinzuziehen.
    - Beweise immer gegen Datei/Zeile prüfen; KI-Findings niemals ungeprüft als Fakt behandeln.
 
 5. **Kontextregeln**
    - `AGENTS.md` enthält verbindliche Architekturregeln (B2B-Locking, Low-Latency, Plugin-Grenzen).
-   - `AUDIT.md`, `MASTER_TODO.md` und `docs/*AUDIT*` sind bestehende Audit-Quellen; neue Befunde ergänzen, nicht widersprechen.
+   - `TODO.md` ist die einzige offene Aufgabenliste; neue Befunde dort als offene Punkte ergänzen, nicht widersprechen.
    - Keine Secrets in Reports oder Nachrichten schreiben.

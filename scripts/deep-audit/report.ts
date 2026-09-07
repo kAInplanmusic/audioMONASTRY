@@ -130,7 +130,7 @@ export function renderMarkdown(report: AuditReport): string {
 export function writeReport(root: string, report: AuditReport): { auditPath: string; jsonPath: string; detailPath: string } {
   const outputDir = path.join(root, 'test-results', 'deep-audit');
   mkdirSync(outputDir, { recursive: true });
-  const auditPath = path.join(root, 'AUDIT_DEEP.md');
+  const auditPath = path.join(outputDir, 'audit-report.md');
   const jsonPath = path.join(outputDir, 'findings.json');
   const detailPath = path.join(outputDir, 'report.md');
   const markdown = renderMarkdown(report);
@@ -158,7 +158,7 @@ export function findNextTodoId(masterTodo: string, dateTag: string): string {
 }
 
 export function appendToMasterTodo(root: string, report: AuditReport, findings: Finding[]): string | null {
-  const todoPath = path.join(root, 'MASTER_TODO.md');
+  const todoPath = path.join(root, 'TODO.md');
   if (!existsSync(todoPath)) return null;
   const content = readFileSync(todoPath, 'utf8');
   const today = report.generatedAt.slice(0, 10);

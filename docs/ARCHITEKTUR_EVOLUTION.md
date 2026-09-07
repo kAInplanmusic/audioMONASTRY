@@ -64,7 +64,7 @@ AudioDeviceManager (src/core/hardware) → ASIO/CoreAudio/PipeWire, generisches 
 - OpenAI-Control-Layer-Anbindung
 - Rust-Runtime-Prozess bauen
 
-## Entscheidungen 2026-08-31 (D1–D23, aus MASTER_TODO 9f)
+## Entscheidungen 2026-08-31 (D1–D23)
 
 - **D1/D6:** masterplayerMONK = Plugin 0 (fest oben, nur Visualisierung/Infos,
   keine Eingabe). mixerMONK ist die einzige MAIN-Einspeiseinstanz; nur der

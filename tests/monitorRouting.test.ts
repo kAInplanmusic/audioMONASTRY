@@ -2,7 +2,7 @@
 /**
  * P0-6-Prüfpunkt (Main-/Monitor-Routing & Mehrbenutzer-Fix)
  * =========================================================
- * Automatisierte 4-User-Abnahme des Szenarios aus `MASTER_TODO.md`:
+ * Automatisierte 4-User-Abnahme des Szenarios aus `TODO.md`:
  *
  *   „User2 aktiviert Drum → auf MAIN hörbar; User3 wählt PLUGIN-Cue → hört nur
  *    sein Plugin, MAIN bleibt unverändert; zurück auf MAIN → sofort Gesamtmix."

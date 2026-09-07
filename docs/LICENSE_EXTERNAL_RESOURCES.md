@@ -1,7 +1,7 @@
 # Externe Library-Ressourcen – Lizenz-Register
 
 > Stand: 2026-09-03 · Quelle: „Open-Source Audio Technology Audit (2026-09-03)"
-> in `MASTER_TODO.md` (Klasse D = externe Ressource, Klasse G = Lizenzproblem).
+> (Klasse D = externe Ressource, Klasse G = Lizenzproblem).
 
 Dieses Register dokumentiert alle im Audit bewerteten **externen** Sample-/
 Instrument-Bibliotheken. Sie sind **keine** Bestandteile von audioMONASTRY:
@@ -36,15 +36,15 @@ ausgeliefert.
 | Berlin Free Orchestra | Orchestral Tools | Proprietäre EULA (SINE-Player-gebunden) | `LICENSE_REVIEW_REQUIRED` | Nur externer Player; keine Integration, kein Bündeln |
 | The Alpine Project | Versilian/Community | CC-BY-**ND** (keine Bearbeitung) | Blockiert für Derivate | Keine Stems/Slices/Presets daraus; kein Bündeln |
 | Pacific Percussion | Community | Lizenz unklar/nicht eindeutig dokumentiert | `LICENSE_REVIEW_REQUIRED` | Nicht verwenden, bis die Lizenz belegt ist |
-| VSCO 2 Community Edition | Versilian Studios | CC0 (Public Domain Dedication) | Frei | Einzige Library, die als CC0-Subset gebündelt werden darf (siehe MASTER_TODO „B – Orchestrale CC0-Library") |
+| VSCO 2 Community Edition | Versilian Studios | CC0 (Public Domain Dedication) | Frei | Einzige Library, die als CC0-Subset gebündelt werden darf (Orchestral-CC0-Library) |
 
 ## Abgrenzung zu Code-Referenzen (Klasse G)
 
 Für quelloffene **Software** (Surge XT, Dexed, LSP Plugins, LinuxSampler,
 ZynAddSubFX u. a.) gilt zusätzlich: GPL/LGPL-Code wird **nicht** eingebettet.
 Diese Projekte dienen ausschließlich als Algorithmus-/Architektur-Referenz;
-jede Umsetzung in audioMONASTRY ist Eigencode (siehe Audit-Abschnitte A–C in
-`MASTER_TODO.md`). Offene **Formate** (SFZ, DX7-SysEx, SF2, EXS24) sind davon
+jede Umsetzung in audioMONASTRY ist Eigencode (siehe Audit-Abschnitte A–C).
+Offene **Formate** (SFZ, DX7-SysEx, SF2, EXS24) sind davon
 nicht betroffen und dürfen nativ implementiert werden.
 
 ## Prüf-Checkliste vor jedem Release

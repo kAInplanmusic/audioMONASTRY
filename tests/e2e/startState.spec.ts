@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
+import { enterStudio, navButton, collectErrors, STUDIO_NAV } from './helpers/studioNav';
 
 /**
  * P0-1-Prüfpunkt („Kein Plugin offen" beim Studio-Eintritt):

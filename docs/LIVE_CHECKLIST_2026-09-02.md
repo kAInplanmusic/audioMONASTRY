@@ -1,6 +1,6 @@
 # LIVE-CHECKLISTE 2026-09-02 – Offene Prüfpunkte
 
-> Alle Punkte aus `MASTER_TODO.md`, die erst mit echter Flotte/Browser/Hardware
+> Alle Punkte aus `TODO.md`, die erst mit echter Flotte/Browser/Hardware
 > verifiziert werden können. Vor Ort abhaken und Ergebnis (Wert + Datum) eintragen.
 > Ziel: kein offener Prüfpunkt bleibt „still" offen – jeder bekommt Messwert oder
 > wird bewusst auf später verschoben.
@@ -104,7 +104,7 @@
 
 ## 6 · Sicherheit / Betrieb
 
-- [ ] **GAP-4:** Security-Checkliste aus `docs/SECURITY_AUDIT.md` vollständig
+- [ ] **GAP-4:** Security-Checkliste aus `docs/AI_SECURITY_GUIDE.md` vollständig
       abgehakt oder mit offenem Task verknüpft.
 - [ ] **GAP-4:** HF-Endpoint-Secret rotieren (Betreiber-Schritt).
 - [x] **GAP-4 (anteilig):** Pen-Test `/api/ai/*` live: ohne/falscher Token → 401, leerer Prompt → 400, `/api/ai/mcp/tools` ohne Token → 401. Rate-Limit/SSRF bleiben dokumentiert (Unit-Tests vorhanden).

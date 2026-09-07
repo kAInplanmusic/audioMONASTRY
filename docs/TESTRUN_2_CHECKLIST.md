@@ -76,7 +76,7 @@
 ## 10. Ergebnis
 
 - [ ] Alle kritischen (P0) und hohen (P1) Punkte grün
-- [ ] Befunde in `MASTER_TODO.md` eingetragen, Checkboxen aktualisiert
+- [ ] Befunde in `TODO.md` eingetragen, Checkboxen aktualisiert
 
 ---
 

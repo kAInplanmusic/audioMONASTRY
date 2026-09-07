@@ -6,7 +6,7 @@
  * Alle Farbwerte liegen AUSSCHLIESSLICH in `src/index.css` unter
  * `.monk-theme-<id> { --monk-accent: …; --monk-accent-rgb: …; }`.
  * Dieses Modul enthält bewusst KEINE Hex-Werte, damit keine plugin-lokalen
- * Farb-Duplikate entstehen (Design-Token-Regel aus MASTER_TODO P1-2).
+ * Farb-Duplikate entstehen (Design-Token-Regel aus TODO.md P1-2).
  * ============================================================================
  */
 

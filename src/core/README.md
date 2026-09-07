@@ -141,7 +141,7 @@ instrumentBackend.noteOn('C4', 0.9);
 instrumentBackend.noteOff();
 ```
 
-## Status in MASTER_TODO
+## Status
 
 - 1.1.1 – ✔ Interface + WebAudioBackend-Referenz
 - 1.1.2 – ✔ Interface + AIRuntime-Referenz (deterministischer Fallback)

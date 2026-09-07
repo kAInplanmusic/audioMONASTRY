@@ -45,7 +45,6 @@ jobs:
         with:
           name: deep-audit-static
           path: |
-            AUDIT_DEEP.md
             test-results/deep-audit/
           if-no-files-found: warn
 
@@ -53,7 +52,7 @@ jobs:
         if: always()
         run: |
           echo "## Deep Audit Static" >> "$GITHUB_STEP_SUMMARY"
-          tail -n 60 AUDIT_DEEP.md >> "$GITHUB_STEP_SUMMARY" || true
+          tail -n 60 test-results/deep-audit/audit-report.md >> "$GITHUB_STEP_SUMMARY" || true
 
   ai-diff-review:
     name: AI Diff Review (optional)
@@ -93,7 +92,6 @@ jobs:
         with:
           name: deep-audit-ai
           path: |
-            AUDIT_DEEP.md
             test-results/deep-audit/
           if-no-files-found: warn
 
@@ -101,4 +99,4 @@ jobs:
         if: always()
         run: |
           echo "## Deep Audit AI Diff Review" >> "$GITHUB_STEP_SUMMARY"
-          tail -n 80 AUDIT_DEEP.md >> "$GITHUB_STEP_SUMMARY" || true
+          tail -n 80 test-results/deep-audit/audit-report.md >> "$GITHUB_STEP_SUMMARY" || true

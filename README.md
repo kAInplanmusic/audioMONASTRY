@@ -240,7 +240,7 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 **Authorization:** RBAC (`src/utils/rbac.ts`), plugin locking (lease per user), MCP permissions `READ < WRITE < EXECUTION < DESTRUCTIVE`, Supabase RLS (anon = read, service_role = write).
 **Data Encryption:** TLS (Caddy), R2 objects via signed URLs, secrets exclusively server-side, secret redaction in logs.
 **Hardening:** express-rate-limit per route, upload limits (busboy streaming, file limit), stem queue limits (429 + retry-after, idempotency → 409), audio cap 25 MB in AI container, no shell execution via AI, input validation (task/model lengths, model regex).
-Details: `docs/SECURITY_AUDIT.md`, `docs/AI_SECURITY_GUIDE.md`.
+Details: `docs/AI_SECURITY_GUIDE.md`.
 
 ## 10. Monitoring & Observability
 
@@ -294,7 +294,6 @@ deploy/                   Helm charts (optional)
 
 - `AGENTS.md` / `.cursorrules` – binding architecture and workflow rules
 - `docs/` – AI architecture, HF setup, deployment, registry, MCP, security, operations, troubleshooting, cost, hardware matrices, release gate
-- `MASTER_TODO.md` – product/release history and open tasks
-- `TASKDONE.md` – completed work packages (change log)
+- `TODO.md` – the single open task list
 - `docs/HANDOVER.md` – handover/status document
 - `docs/LIVE_CHECKLIST_2026-09-02.md` – remaining live/listen-through check points

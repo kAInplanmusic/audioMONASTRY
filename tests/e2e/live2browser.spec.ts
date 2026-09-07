@@ -3,7 +3,7 @@ import { enterStudio } from './helpers/studioNav';
 import { chromium } from 'playwright';
 
 /**
- * Live-2-Browser-WebRTC-Test (automatisierter Teil der MASTER_TODO).
+ * Live-2-Browser-WebRTC-Test (automatisierter Teil der TODO.md).
  * ----------------------------------------------------------------
  * Zwei UNABHÄNGIGE Chromium-Browserprozesse (jeweils eigener WebRTC-Stack,
  * eigenes Fake-Mikrofon) treten derselben Session bei:

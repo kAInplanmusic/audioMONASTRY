@@ -6,47 +6,50 @@
  *         support detection (mit und ohne WebGPU)
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, beforeEach } from 'vitest';
 import { WebGPUKernel, GPUTensor } from '../src/core/gpu/WebGPUKernel';
 
 // Mock WebGPU für Test-Umgebung (Node.js ohne GPU)
 function mockWebGPU() {
   if (typeof window === 'undefined') {
-    (globalThis as any).navigator = {
-      gpu: {
-        requestAdapter: async () => ({
-          requestDevice: async () => ({
-            createBuffer: () => ({}),
-            queue: {
-              writeBuffer: () => {},
-              submit: () => {},
-            },
-            createShaderModule: () => ({}),
-            createComputePipeline: () => ({
-              getBindGroupLayout: () => ({}),
-            }),
-            createBindGroup: () => ({}),
-            createCommandEncoder: () => ({
-              beginComputePass: () => ({
-                setPipeline: () => {},
-                setBindGroup: () => {},
-                dispatchWorkgroups: () => {},
-                end: () => {},
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        gpu: {
+          requestAdapter: async () => ({
+            requestDevice: async () => ({
+              createBuffer: () => ({}),
+              queue: {
+                writeBuffer: () => {},
+                submit: () => {},
+              },
+              createShaderModule: () => ({}),
+              createComputePipeline: () => ({
+                getBindGroupLayout: () => ({}),
               }),
-              finish: () => [],
+              createBindGroup: () => ({}),
+              createCommandEncoder: () => ({
+                beginComputePass: () => ({
+                  setPipeline: () => {},
+                  setBindGroup: () => {},
+                  dispatchWorkgroups: () => {},
+                  end: () => {},
+                }),
+                finish: () => [],
+              }),
             }),
           }),
-        }),
+        },
       },
-    };
+      writable: true,
+      configurable: true,
+    });
   }
 }
 
 describe('WebGPUKernel', () => {
   let kernel: WebGPUKernel;
 
-  // beforeEach not needed: mock in each test
-  mockWebGPU();
+  beforeEach(() => {
     mockWebGPU();
     kernel = new WebGPUKernel();
   });
