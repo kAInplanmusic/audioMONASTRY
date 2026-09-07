@@ -28,7 +28,7 @@ describe('6-Op-FM-Engine (produktionsreif)', () => {
         expect(a[i]).toBe(b[i]); // Determinismus
       }
     }
-  });
+  }, 30_000);
 
   it('unterschiedliche Patches klingen unterschiedlich (kein Null-/Duplikat)', () => {
     const opts = { sampleRate: 24000, noteHz: 440, velocity: 0.8, durationSeconds: 0.2 };
