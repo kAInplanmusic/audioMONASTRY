@@ -300,6 +300,8 @@ interface WebHidLikeDevice {
   close?: () => void;
   collections?: WebHidCollection[];
   oninputreport?: ((e: { data?: Uint8Array | DataView }) => void) | null;
+  sendReport?: (reportId: number, data: Uint8Array) => Promise<void>;
+  sendFeatureReport?: (reportId: number, data: Uint8Array) => Promise<void>;
 }
 
 interface WebHidCollection {
@@ -454,11 +456,10 @@ export class HIDAdapter implements IHardwareAdapter {
   }
 
   send(msg: ControlMessage): void {
-    // HID-Rückkanal (LEDs/Motorfader): schreibt Output-Reports, wenn der
-    // Descriptor passende Output-Felder enthält. Die Adresse folgt der
+    // HID-Rückkanal (LEDs/Motorfader): schreibt Output- oder Feature-Reports,
+    // wenn der Descriptor passende Felder enthält. Die Adresse folgt der
     // emitHidValue-Kodierung: usagePage in den oberen, usage in den unteren
-    // 16 Bit von `idNum`. Ohne Output-Deskriptor bleibt der Aufruf no-op
-    // (dokumentierter Best-Effort, kein Fake).
+    // 16 Bit von `idNum`. Ohne passenden Report bleibt der Aufruf no-op.
     if (!Number.isFinite(msg.idNum) || msg.idNum < 0) return;
     const usagePage = Math.floor(msg.idNum / 65536) & 0xffff;
     const usage = msg.idNum % 65536;
@@ -466,25 +467,34 @@ export class HIDAdapter implements IHardwareAdapter {
     for (const device of this.devices) {
       const descriptor = this.descriptors.get(device);
       if (!descriptor) continue;
-      const outputFields = descriptor.fields.filter((f) => f.reportType === 'output');
-      if (outputFields.length === 0) continue;
 
-      const field = outputFields.find((f) => f.usagePage === usagePage && f.usage === usage);
-      if (!field) continue;
+      const outputFields = descriptor.fields.filter((f) => f.reportType === 'output');
+      const featureFields = descriptor.fields.filter((f) => f.reportType === 'feature');
+      const candidates = outputFields.length > 0
+        ? outputFields.map((f) => ({ field: f, reportType: 'output' as const }))
+        : featureFields.map((f) => ({ field: f, reportType: 'feature' as const }));
+      if (candidates.length === 0) continue;
+
+      const match = candidates.find((c) => c.field.usagePage === usagePage && c.field.usage === usage);
+      if (!match) continue;
+      const { field, reportType } = match;
 
       const span = field.logicalMax - field.logicalMin;
       const raw = span > 0
         ? field.logicalMin + (Math.max(0, Math.min(127, msg.value)) / 127) * span
         : msg.value > 0 ? field.logicalMax : field.logicalMin;
 
-      const data = encodeHidOutputReport(descriptor.fields, 'output', field.reportId, [
+      const data = encodeHidOutputReport(descriptor.fields, reportType, field.reportId, [
         { usagePage, usage, raw },
       ]);
       if (data.length === 0) continue;
 
-      const out = device as WebHidLikeDevice & { sendReport?: (reportId: number, data: Uint8Array) => Promise<void> };
       try {
-        void out.sendReport?.(field.reportId, data);
+        if (reportType === 'feature') {
+          void device.sendFeatureReport?.(field.reportId, data);
+        } else {
+          void device.sendReport?.(field.reportId, data);
+        }
       } catch { /* Gerät getrennt – Best Effort */ }
     }
   }
