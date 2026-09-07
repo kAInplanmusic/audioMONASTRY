@@ -2277,11 +2277,23 @@ class AudioEngine {
     this.analyser?.dispose();
 
     // Worklets don't have a direct dispose() but they should be disconnected
-    this.dspNode?.disconnect();
-    this.eqNode?.disconnect();
-    this.masteringNode?.disconnect();
-    this.lufsNode?.disconnect();
-    this.analyzerNode?.disconnect();
+    // T-0006: auch die Worklets selbst nullen (nicht nur die Synth-Klassen),
+    // damit nach dispose()+init() keine Zombie-Nodes aus dem Fallback-Pfad
+    // (neutraler Gain-Stand-in) weiterlaufen.
+    const workletNodes: Array<{ node: AudioWorkletNode | null; set: (n: null) => void }> = [];
+    void workletNodes; // Referenzliste bewusst ungenutzt – Cleanup unten direkt.
+    for (const key of ['dspNode', 'eqNode', 'masteringNode', 'lufsNode', 'analyzerNode',
+      'itSynthNode', 'synthWorklet', 'clockNode', 'effectNode', 'dynamicsNode',
+      'granularNode', 'fm6Node', 'drumSynthNode'] as const) {
+      try {
+        (this as unknown as Record<string, { disconnect: () => void } | null>)[key]?.disconnect();
+      } catch { /* bereits getrennt */ }
+    }
+    this.dspNode = null as unknown as typeof this.dspNode;
+    this.eqNode = null as unknown as typeof this.eqNode;
+    this.masteringNode = null as unknown as typeof this.masteringNode;
+    this.lufsNode = null as unknown as typeof this.lufsNode;
+    this.analyzerNode = null as unknown as typeof this.analyzerNode;
     // instrumentMONK-/Synth-/Clock-/Effekt-Worklets ebenfalls trennen.
     this.itSynthNode?.disconnect();
     this.synthWorklet?.disconnect();

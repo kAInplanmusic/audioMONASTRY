@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Activity, Cpu, Gauge, Network, Waves } from 'lucide-react';
+import { Activity, Cpu, Gauge, Network, Waves, Play } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { audioEngine } from '../utils/audioEngine';
@@ -174,6 +174,13 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
               <div className="flex justify-between"><span className="text-neutral-500">SAMPLE RATE</span><span className="text-teal-400">{perf.audioSampleRate} Hz</span></div>
               <div className="flex justify-between"><span className="text-neutral-500">BASE LATENCY</span><span className="text-teal-400">{perf.audioBaseLatencyMs} ms</span></div>
             </div>
+            {/* L-6: Browser-Richtlinie — AudioContext startet erst nach User-Geste.
+                Ohne Hinweis wirkt STATE: CLOSED wie ein Fehler. */}
+            {perf.audioState === 'closed' && (
+              <div className="mt-3 flex items-center gap-2 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-[10px] font-bold text-orange-300">
+                <Play className="h-3.5 w-3.5" /> PLAY drücken, um Audio zu starten
+              </div>
+            )}
           </div>
         </div>
 

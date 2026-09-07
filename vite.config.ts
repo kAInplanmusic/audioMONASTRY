@@ -20,6 +20,14 @@ export default defineConfig(() => {
             if (id.includes('node_modules/tone') || id.includes('node_modules/@tonejs')) return 'tone';
             if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/scheduler')) return 'react';
             if (id.includes('node_modules/lucide')) return 'icons';
+            // L-5/T-0014: Schwergewichte aus dem vendor-Chunk herauslösen –
+            // jeder dieser Blöcke ist >100 kB und wird nur in bestimmten
+            // Flows gebraucht (bessere Cache-Hit-Rate, paralleler Ladevorgang).
+            if (id.includes('node_modules/onnxruntime-web') || id.includes('node_modules/onnxruntime-common')) return 'onnx';
+            if (id.includes('node_modules/mediasoup-client')) return 'mediasoup';
+            if (id.includes('node_modules/@supabase') || id.includes('node_modules/@supabase/postgrest-js')) return 'supabase';
+            if (id.includes('node_modules/motion') || id.includes('node_modules/framer-motion')) return 'motion';
+            if (id.includes('node_modules/socket.io')) return 'socketio';
             if (id.includes('node_modules')) return 'vendor';
             if (id.includes('/src/utils/audioEngine') || id.includes('/src/core/audio') || id.includes('/src/core/instrument') || id.includes('/src/audio/')) return 'audio-core';
             if (id.includes('/src/core/ai') || id.includes('/src/core/voice')) return 'ai-core';
