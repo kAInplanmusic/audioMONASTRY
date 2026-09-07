@@ -206,6 +206,58 @@ UPLOAD_MAX_MB=100
 > Ohne HTTPS (nur `http://IP:8080`) funktioniert die App zwar im Browser,
 > aber **getUserMedia (Mikrofon/WebRTC) wird auf iPhone/iPad blockiert**.
 
+### 4a. Fleet-Wake & Cloudflare-Portal (Produktionssetup anunnakitools.de)
+
+Die Produktionsdomain läuft **hinter dem Cloudflare-Portal-Worker** (`audiomonastry-portal`).
+Der Worker bedient `anunnakitools.de/*` und proxied App-Traffic an `origin.anunnakitools.de`
+(DNS-Record, der auf die **app-1-Floating-IP** zeigen muss). Zwei Fallstricke und ihre
+Lösung – beide am 2026-09-06 live verifiziert:
+
+**1) LE-ACME (http-01) kann hinter dem Worker nicht validieren:**
+Der Worker fängt `/.well-known/acme-challenge/*` ab und liefert 521/525 → Let's Encrypt
+bricht ab. Caddy loggt `acme_client … challenge failed … 521`.
+
+**Lösung: Cloudflare-Origin-Zertifikat statt LE.** Die Secrets dafür liegen im
+Worker-Store (`ORIGIN_CERT`/`ORIGIN_KEY`, base64-kodiert, siehe `.env.portal`).
+Installation auf app-1 (manuell oder automatisch – der Worker macht genau das in
+`userData()` für neue Knoten):
+
+```bash
+# Zertifikate aus .env.portal dekodieren und auf app-1 legen:
+ssh root@<app-1-ip> 'mkdir -p /opt/samplemonk/certs'
+echo "$ORIGIN_CERT" | base64 -d | ssh root@<app-1-ip> 'cat > /opt/samplemonk/certs/origin.crt'
+echo "$ORIGIN_KEY"  | base64 -d | ssh root@<app-1-ip> 'cat > /opt/samplemonk/certs/origin.key && chmod 600 /opt/samplemonk/certs/origin.key'
+# Caddyfile.origin installieren (tls-Direktive auf das CF-Origin-Paar) + Caddy neu starten:
+ssh root@<app-1-ip> 'cp /opt/samplemonk/scripts/hetzner/Caddyfile.origin /opt/samplemonk/Caddyfile && cd /opt/samplemonk && docker compose -f docker-compose.hetzner.yml up -d caddy && docker compose -f docker-compose.hetzner.yml restart caddy'
+```
+
+**2) origin.anunnakitools.de zeigt nach Fleet-Neuaufbau auf eine alte IP:**
+Der Worker löst `ORIGIN_HOST` per DNS auf. Nach jedem provision-Wurf (neue IPs)
+muss der A-Record `origin` auf die neue app-1-IP gesetzt werden – das macht
+normalerweise `POST /api/wire-fleet` am Portal (Login + „ANMELDEN & STARTEN"),
+alternativ manuell über die Cloudflare-API:
+
+```bash
+# Zone-ID via /zones?name=anunnakitools.de, dann:
+curl -X PATCH "https://api.cloudflare.com/client/v4/zones/<zone>/dns_records/<rec-id>" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" -d '{"content": "<neue-app-1-ip>"}'
+```
+
+Nach dem Wake: `curl https://anunnakitools.de/api/health` → `{"status":"ok"}`
+(mit Token-Header für geschützte Pfade, siehe Stress-/Smoke-Tests).
+
+**SFU-Knoten (sfu-1) zusätzlich:** Damit der Browser→SFU-Media-Pfad hinter
+Cloudflare/NAT funktioniert, stehen in der Remote-`.env` auf sfu-1:
+
+```text
+SIGNALING_ALLOWED_ORIGINS=*     # Browser-Test-Clients aus beliebigen Kontexten
+SFU_ANNOUNCED_IP=<öffentliche-IP-von-sfu-1>   # Mediasoup ICE-Kandidaten
+```
+
+Verifikation des RTP-Pfads: `BASE_URL=http://<sfu-1-ip> node scripts/hetzner/sfu-rtp-run.mjs`
+→ erwartet `"ok": true` mit `packetsReceived > 0`.
+
 ---
 
 ## 5. Start & Betrieb

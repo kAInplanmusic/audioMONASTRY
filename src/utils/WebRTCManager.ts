@@ -6,6 +6,25 @@ import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
 
 export type SessionPeer = { socketId: string; userId: string };
 export type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
+// T-0009/AD-N3 (Tropfen 1): Socket.io-Session-Payloads typisiert (statt `any`).
+// Server-Quelle: server.ts join-session/peer-joined/peer-left/session-full-Handler.
+export type SessionRole = 'admin' | 'producer' | 'engineer' | 'guest' | string;
+export type SessionMembersPayload = {
+  members?: Array<{ socketId?: unknown; userId?: unknown }>;
+  selfRole?: unknown;
+  hostUserId?: unknown;
+  max?: unknown;
+};
+export type PeerJoinedPayload = {
+  socketId?: unknown;
+  userId?: unknown;
+  role?: unknown;
+};
+export type PeerLeftPayload = { socketId?: unknown };
+export type SessionFullPayload = { max?: unknown };
+export type RoleChangedPayload = { userId?: unknown; role?: unknown };
+export type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
+export type PluginLockPayload = { pluginId?: unknown; lockedBy?: unknown; timestamp?: unknown; ttl?: unknown };
 
 class WebRTCManager {
   private socket: Socket | null = null;
@@ -341,10 +360,14 @@ class WebRTCManager {
       this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.masterOutMode ? 'master-out' : 'member' });
     });
 
-    this.socket.on('session-members', (data: any) => {
+    this.socket.on('session-members', (data: SessionMembersPayload) => {
       this.sessionFull = false;
       this.sessionJoined = true;
-      this.sessionMembers = Array.isArray(data?.members) ? data.members : [];
+      this.sessionMembers = Array.isArray(data?.members)
+        ? data.members
+            .map((m) => ({ socketId: String(m?.socketId ?? ''), userId: String(m?.userId ?? '') }))
+            .filter((m) => m.socketId.length > 0)
+        : [];
       // P4-2: Server-seitige Rolle + Host-ID übernehmen.
       if (typeof data?.selfRole === 'string') this.localRole = data.selfRole;
       if (typeof data?.hostUserId === 'string') this.hostUserId = data.hostUserId;
@@ -362,7 +385,7 @@ class WebRTCManager {
     });
 
     // P4-2: Rollenwechsel (vom Admin ausgelöst) lokal übernehmen.
-    this.socket.on('role-changed', (data: any) => {
+    this.socket.on('role-changed', (data: RoleChangedPayload) => {
       if (!data || typeof data !== 'object') return;
       if (String(data.userId ?? '') === this.sessionUserId && typeof data.role === 'string') {
         this.localRole = data.role;
@@ -371,7 +394,7 @@ class WebRTCManager {
     });
 
     // DCT-102: Socket.io-Relay-Fallback für Plugin-/AUTO_AI-State.
-    this.socket.on('plugin-state', (data: any) => {
+    this.socket.on('plugin-state', (data: PluginStatePayload) => {
       if (data && typeof data === 'object') this.dispatchDataMessage(data);
     });
 
@@ -382,7 +405,7 @@ class WebRTCManager {
     // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
     this.socket.on('plugin-lock-denied', (data: any) => this.pluginLockDeniedListeners.forEach((l) => l(data)));
 
-    this.socket.on('peer-joined', (data: any) => {
+    this.socket.on('peer-joined', (data: PeerJoinedPayload) => {
       const peer: SessionPeer = { socketId: String(data?.socketId ?? ''), userId: String(data?.userId ?? data?.socketId ?? '') };
       if (!peer.socketId || peer.socketId === this.socket?.id) return;
       if (!this.sessionMembers.some((m) => m.socketId === peer.socketId)) {
@@ -398,7 +421,7 @@ class WebRTCManager {
       this.connectToPeer(peer.socketId);
     });
 
-    this.socket.on('peer-left', (data: any) => {
+    this.socket.on('peer-left', (data: PeerLeftPayload) => {
       const socketId = String(data?.socketId ?? '');
       if (!socketId) return;
       this.closePeerConnection(socketId);
@@ -406,7 +429,7 @@ class WebRTCManager {
       this.emitSessionUpdate();
     });
 
-    this.socket.on('session-full', (data: any) => {
+    this.socket.on('session-full', (data: SessionFullPayload) => {
       this.sessionFull = true;
       this.sessionJoined = false;
       this.sessionMembers = [];
