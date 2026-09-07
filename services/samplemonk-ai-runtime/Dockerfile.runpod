@@ -1,0 +1,46 @@
+# SampleMONK AI Runtime – RunPod Serverless Worker
+# =================================================
+# Gleiche Basis wie der HF-Custom-Container, startet aber den RunPod-Worker
+# (`runpod_worker.py`) statt Uvicorn/FastAPI.
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/data/hf-cache
+
+ARG AI_INSTALL_VOICE_AI=0
+ARG AI_INSTALL_AUDIO_AI=0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg libsndfile1 sox curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /opt/samplemonk-ai
+
+COPY requirements.lock ./
+RUN pip install --no-cache-dir -r requirements.lock
+
+COPY requirements-voice-ai.lock ./
+RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-voice-ai.lock; \
+    fi
+
+COPY requirements-audio-ai.lock ./
+RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
+      pip install --no-cache-dir -r requirements-audio-ai.lock; \
+    fi
+
+# RunPod Serverless SDK (Worker + API)
+RUN pip install --no-cache-dir runpod==1.12.0
+
+COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py runpod_worker.py ./
+COPY model_manifest.json runtime_config.yaml ./
+RUN mkdir -p /data/hf-cache \
+    && useradd --system --uid 10001 samplemonk \
+    && chown -R samplemonk:samplemonk /opt/samplemonk-ai /data
+
+USER samplemonk
+
+# RunPod Serverless Worker
+ENTRYPOINT ["python", "runpod_worker.py"]
