@@ -43,6 +43,7 @@ import {
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
+import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
 
 export { pluginAudioChannels };
 
@@ -844,7 +845,7 @@ class AudioEngine {
               case "bassSynth": this.bassSynth.set(trackConfig.params); break;
             }
           }
-          const ch = this.routingTrackToChannel(trackConfig.id);
+          const ch = routingTrackToChannel(trackConfig.id);
           if (ch && Array.isArray(trackConfig.patterns)) {
             this.patterns[ch] = this.normalizeSteps(trackConfig.patterns as boolean[], this.stepCount);
           }
@@ -864,8 +865,7 @@ class AudioEngine {
         const trackIds = new Set((routingConfig.tracks ?? []).map((t) => t.id));
         const busIds = new Set((routingConfig.buses ?? []).map((b) => b.id));
         for (const c of routingConfig.connections) {
-          const validSource = trackIds.has(c.source) || busIds.has(c.source);
-          const validDest = busIds.has(c.destination) || c.destination === 'destination';
+          const { validSource, validDest } = checkRoutingConnection(c, trackIds, busIds);
           if (!validSource || !validDest) {
             console.warn('[routing.json] ignorierte Verbindung:', c, { validSource, validDest });
           }
@@ -874,17 +874,6 @@ class AudioEngine {
     } catch (error) {
       console.error('Failed to load or parse routing.json:', error);
     }
-  }
-
-  /** F7: routing.json-Track-ID → interner Kanal. */
-  private routingTrackToChannel(id: string): TrackType | null {
-    const map: Record<string, TrackType> = {
-      'track-kick': 'channel1',
-      'track-hat': 'channel2',
-      'track-clap': 'channel3',
-      'track-bass': 'channel7',
-    };
-    return map[id] ?? null;
   }
 
   /** F7: routing.json-Bus-Effekt auf die reale Mastering-Kette anwenden. */
