@@ -22,6 +22,11 @@ import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '
 import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
 import { WebAudioWorkletBridge } from '../core/audio/backends/WebAudioWorkletBridge';
 import { createAudioWorkletNode } from '../core/audio/worklets/createWorkletNode';
+import {
+  createClockWorkletNode,
+  createItSynthWorkletNode,
+  createSynthWorkletNode,
+} from '../core/audio/worklets/workletInitializers';
 import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
 import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
@@ -798,23 +803,11 @@ class AudioEngine {
 
   /** Erstellt den Clock-Worklet (falls geladen) als präzise Step-Quelle. */
   private async initClockWorklet() {
-    try {
-      this.clockNode = new AudioWorkletNode(this.ctx, 'clock-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 0,
-        parameterData: { bpm: Tone.Transport.bpm.value, swing: this.swing, gate: this.gate },
-      });
-      // Clock-Worklet liefert 'step'-Impulse von der Audio-Clock (kein JS-Timer-Jitter).
-      this.clockNode.port.onmessage = (e) => {
-        const msg = e.data;
-        if (!msg || msg.type !== 'step') return;
-        this.tickAt(msg.time, msg.gate, msg.swing);
-      };
-    } catch (e) {
-      // Clock-Worklet nicht verfügbar → Fallback auf bestehende setTimeout-Schleife.
-      this.clockNode = null;
-      console.warn('clock-processor not loaded; using setTimeout scheduler.', (e as Error).message);
-    }
+    this.clockNode = createClockWorkletNode(
+      this.ctx,
+      { bpm: Tone.Transport.bpm.value, swing: this.swing, gate: this.gate },
+      (msg) => this.tickAt(msg.time, msg.gate, msg.swing),
+    );
   }
 
   /** Applies public/routing.json to the audio graph after nodes are created. */
@@ -2025,24 +2018,16 @@ class AudioEngine {
 
   /** Erstellt den PolyBLEP-Synth-Worklet (falls geladen) und verdrahtet ihn. */
   private async tryInitSynthWorklet() {
-    try {
-      this.synthWorklet = new AudioWorkletNode(this.ctx, 'synth-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
-      });
-      // F1: Worklet-Synth über den Kanalzug (channel4) führen, damit Fader/EQ/Pan wirken.
-      this.ensureChannelNode('channel4');
-      const synthChannel = this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER'];
-      const leadGain = new Tone.Volume(-8);
-      // @ts-expect-error Tone-Node-Kompatibilitaet fuer Web-Audio-Worklet
-      this.synthWorklet.connect(leadGain.input ? leadGain.input : this.ctx.destination);
-      leadGain.connect(synthChannel);
-      console.info('synth-processor (PolyBLEP) aktiviert.');
-    } catch (e) {
-      this.synthWorklet = null;
-      console.warn('synth-processor nicht geladen; Statistik-Fallback auf Sampler.', (e as Error).message);
-    }
+    this.synthWorklet = createSynthWorkletNode(this.ctx);
+    if (!this.synthWorklet) return;
+    // F1: Worklet-Synth über den Kanalzug (channel4) führen, damit Fader/EQ/Pan wirken.
+    this.ensureChannelNode('channel4');
+    const synthChannel = this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER'];
+    const leadGain = new Tone.Volume(-8);
+    // @ts-expect-error Tone-Node-Kompatibilitaet fuer Web-Audio-Worklet
+    this.synthWorklet.connect(leadGain.input ? leadGain.input : this.ctx.destination);
+    leadGain.connect(synthChannel);
+    console.info('synth-processor (PolyBLEP) aktiviert.');
   }
 
   /** P0-2: Synth-Graph (PolyBLEP + it-synth) erst bei erster Aktivierung aufbauen. */
@@ -2065,41 +2050,27 @@ class AudioEngine {
    * Note-On gesendet, so dass das Worklet ohne Initial-Instrukt aktive ist.
    */
   private async tryInitItSynthWorklet() {
-    try {
-      if (!this.ctx || typeof (this.ctx as any).audioWorklet?.addModule !== 'function') return;
-      // Falls das Modul (noch) nicht über den Manifest-Pfad geladen wurde,
-      // versuchen wir es nachzuladen; idempotent via registerProcessor-Check im Add.
-      try {
-        new AudioWorkletNode(this.ctx, 'it-synth-processor', { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
-      } catch {
-        await (this.ctx as any).audioWorklet.addModule('/worklets/itSynthProcessor.js');
-      }
-      this.itSynthNode = new AudioWorkletNode(this.ctx, 'it-synth-processor', {
-        numberOfInputs: 0,
-        numberOfOutputs: 1,
-        outputChannelCount: [2],
-      });
-      // Stimmen-Status des Worklets an die UI spiegeln (Task 3).
-      this.itSynthNode.port.onmessage = (e) => {
-        const msg = e.data;
-        if (msg?.type === 'states') {
-          this.itSynthActiveVoices = Number(msg.active ?? 0);
-          this.onItSynthStates(this.itSynthActiveVoices);
-        }
-      };
-      const g = new Tone.Gain(1);
-      (this.itSynthNode as any).connect(g);
-      // F1: instrumentMONK-Worklet über den Kanalzug (channel4) führen.
-      this.ensureChannelNode('channel4');
-      g.connect(this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER']);
-      this.itSynthGain = g;
-      this.itSynthReady = true;
-      console.info('it-synth-processor (instrumentMONK, sample-genau) aktiviert.');
-    } catch (e) {
-      this.itSynthNode = null;
+    this.itSynthNode = await createItSynthWorkletNode(this.ctx);
+    if (!this.itSynthNode) {
       this.itSynthReady = false;
-      console.warn('it-synth-processor nicht verfügbar – instrumentMONK nutzt Tone.js-Fallback.', (e as Error).message);
+      return;
     }
+    // Stimmen-Status des Worklets an die UI spiegeln (Task 3).
+    this.itSynthNode.port.onmessage = (e) => {
+      const msg = e.data as { type?: string; active?: number } | undefined;
+      if (msg?.type === 'states') {
+        this.itSynthActiveVoices = Number(msg.active ?? 0);
+        this.onItSynthStates(this.itSynthActiveVoices);
+      }
+    };
+    const g = new Tone.Gain(1);
+    (this.itSynthNode as any).connect(g);
+    // F1: instrumentMONK-Worklet über den Kanalzug (channel4) führen.
+    this.ensureChannelNode('channel4');
+    g.connect(this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER']);
+    this.itSynthGain = g;
+    this.itSynthReady = true;
+    console.info('it-synth-processor (instrumentMONK, sample-genau) aktiviert.');
   }
 
   /** Wandelt eine instrumentMONK-Definition in ein worklet-taugliches PitchDef um. */
