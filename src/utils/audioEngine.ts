@@ -21,6 +21,7 @@ import { GraphStateBridge } from '../core/audio/GraphStateBridge';
 import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '../core/audio/WorkletGraphRuntime';
 import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
 import { WebAudioWorkletBridge } from '../core/audio/backends/WebAudioWorkletBridge';
+import { createAudioWorkletNode } from '../core/audio/worklets/createWorkletNode';
 import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
 import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
@@ -442,44 +443,24 @@ class AudioEngine {
     // Worklets robust erzeugen: Fehlt eine module-Registrierung (oder der
     // Context ist nicht nutzbar), liefert der Helfer einen neutralen Gain-Knoten
     // als Platzhalter, damit die Audio-Kette durchgängig bleibt (kein harter
-    // Reject von init()).
-    const makeWorklet = (
-      name: string, opts?: AudioWorkletNodeOptions,
-    ): AudioWorkletNode => {
-      try {
-        if (!this.ctx || typeof this.ctx.createGain !== 'function') {
-          throw new Error('kein AudioContext');
-        }
-        return new AudioWorkletNode(this.ctx, name, opts);
-      } catch (e) {
-        console.warn(`AudioWorklet '${name}' nicht verfügbar – nutze neutralen Gain-Fallback.`, e);
-        try {
-          if (this.ctx && typeof this.ctx.createGain === 'function') {
-            return this.ctx.createGain() as unknown as AudioWorkletNode;
-          }
-        } catch { /* kontextloses Silent */ }
-        // Minimaler, never-connectbarer Stand-in damit der Rest nicht crasht.
-        return null as unknown as AudioWorkletNode;
-      }
-    };
-
-    this.dspNode = makeWorklet('dsp-processor');
-    this.eqNode = makeWorklet('eq-processor');
-    this.masteringNode = makeWorklet('mastering-processor');
-    this.analyzerNode = makeWorklet('analyzer-processor');
+    // Reject von init()). Factory in `src/core/audio/worklets/createWorkletNode.ts`.
+    this.dspNode = createAudioWorkletNode(this.ctx, 'dsp-processor');
+    this.eqNode = createAudioWorkletNode(this.ctx, 'eq-processor');
+    this.masteringNode = createAudioWorkletNode(this.ctx, 'mastering-processor');
+    this.analyzerNode = createAudioWorkletNode(this.ctx, 'analyzer-processor');
     // P2-4: effectProcessor als fester Insert in der Master-Kette erzeugen
     // (nicht erst lazy in setEffectParam) – sonst wird er nie verdrahtet.
-    this.effectNode = makeWorklet('effect-processor');
+    this.effectNode = createAudioWorkletNode(this.ctx, 'effect-processor');
     // P1-Dynamik: Kompressor/Gate/Dynamic-EQ als Insert (Default = Bypass,
     // d. h. bit-genauer Durchgang ohne zusätzliche Latenz).
-    this.dynamicsNode = makeWorklet('dynamics-processor');
+    this.dynamicsNode = createAudioWorkletNode(this.ctx, 'dynamics-processor');
     // Granular + 6-Op-FM (A-Klasse Audio-Audit): eigene Worklets. F1: statt
     // direkt in GLOBAL_MASTER zu speisen, laufen sie über den Kanalzug
     // (Pre-Fader-Eingang → Fader → EQ → Pan → Master), damit die Mischpult-Regler
     // real auf sie wirken.
-    this.granularNode = makeWorklet('granular-processor');
-    this.fm6Node = makeWorklet('fm6-processor');
-    this.drumSynthNode = makeWorklet('drumsynth-processor');
+    this.granularNode = createAudioWorkletNode(this.ctx, 'granular-processor');
+    this.fm6Node = createAudioWorkletNode(this.ctx, 'fm6-processor');
+    this.drumSynthNode = createAudioWorkletNode(this.ctx, 'drumsynth-processor');
     const connectWorkletToChannel = (node: unknown, track: TrackType): void => {
       if (!node || typeof (node as any).connect !== 'function') return;
       this.ensureChannelNode(track);
@@ -517,7 +498,7 @@ class AudioEngine {
       } catch { /* Port nicht verfügbar – Dropout-Telemetrie entfällt */ }
     }
 
-    this.lufsNode = makeWorklet('lufs-processor');
+    this.lufsNode = createAudioWorkletNode(this.ctx, 'lufs-processor');
     const lufsSab = makeSafeArrayBuffer(Int32Array.BYTES_PER_ELEMENT);
     this.lufsBufferView = new Int32Array(lufsSab);
     try { this.lufsNode.port.postMessage({ buffer: lufsSab }); } catch { /* Gain-Fallback ohne Port */ }
