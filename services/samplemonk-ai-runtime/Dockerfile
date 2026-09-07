@@ -23,9 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /opt/samplemonk-ai
 
-# Deterministische Dependencies (torch kommt aus dem Basisimage, wird NICHT neu geladen)
-COPY requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock
+# Dependencies (torch kommt aus dem Basisimage, wird NICHT neu geladen)
+# Hinweis: requirements.lock ist kein vollständiger Transitiv-Lock; für den
+# Docker-Build wird requirements.in verwendet (kein require-hashes-Konflikt).
+COPY requirements.in ./
+RUN pip install --no-cache-dir -r requirements.in
 
 # Optional: Qwen3-TTS (hebt transformers auf 4.57.3 an – siehe requirements-voice-ai.lock)
 COPY requirements-voice-ai.lock ./

@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /opt/samplemonk-ai
 
-COPY requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock
+COPY requirements.in ./
+RUN pip install --no-cache-dir -r requirements.in
 
 COPY requirements-voice-ai.lock ./
 RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
