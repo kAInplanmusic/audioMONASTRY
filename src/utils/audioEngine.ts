@@ -45,6 +45,7 @@ import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineB
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
 import { normalizeNotes, normalizeSteps, noteToFreq } from '../core/audio/state/sequenceUtils';
+import { AutomationCoalescer } from '../core/audio/state/automationCoalescer';
 
 export { pluginAudioChannels };
 
@@ -67,6 +68,8 @@ function makeSafeArrayBuffer(byteLength: number): ArrayBuffer {
 
 class AudioEngine {
   public initialized = false;
+  /** Engine-seitiges Coalescing für hochfrequente Worklet-Automation. */
+  private automationCoalescer = new AutomationCoalescer((key, payload) => this.flushAutomation(key, payload), 16);
   private clockSync = new ClockSync();
 
   private async ensureInitialized() {
@@ -899,6 +902,21 @@ class AudioEngine {
       Tone.context.lookAhead = oneWayLatency / 1000 + 0.05;
   }
 
+  /** Flusht gesammelte Automation-Messages an den jeweiligen Worklet-Port. */
+  private flushAutomation(key: string, payload: unknown): void {
+    const target = key.split(':')[0];
+    const msg = payload as Record<string, unknown>;
+    try {
+      switch (target) {
+        case 'dynamics': this.dynamicsNode?.port?.postMessage(msg); break;
+        case 'effect': this.effectNode?.port?.postMessage(msg); break;
+        case 'dsp': this.dspNode?.port?.postMessage(msg); break;
+        case 'mastering': this.masteringNode?.port?.postMessage(msg); break;
+        case 'eq': this.eqNode?.port?.postMessage(msg); break;
+      }
+    } catch { /* Worklet nicht verfügbar – Coalescer verwirft den Batch */ }
+  }
+
   public setWorkletParam(name: string, value: number) {
     this.ensureInitialized();
     if (!this.dspNode || typeof (this.dspNode as any).parameters?.get !== 'function') return;
@@ -934,7 +952,7 @@ class AudioEngine {
     param: 'threshold' | 'ratio' | 'makeup' | 'gateThreshold' | 'dynEqRange',
     value: number, rampTime = 0.02,
   ): void {
-    try { this.dynamicsNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
+    this.automationCoalescer.push(`dynamics:${param}`, { type: 'automate', param, value, rampTime });
   }
 
   // ---------------------------------------------------------------------------
@@ -1068,23 +1086,22 @@ class AudioEngine {
 
   /** Sample-genaue Effekt-Parameter-Rampe (effectProcessor automate). */
   public automateEffect(param: 'wet' | 'feedback' | 'depth', value: number, rampTime = 0.05) {
-    if (!this.effectNode) return;
-    try { this.effectNode.port.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
+    this.automationCoalescer.push(`effect:${param}`, { type: 'automate', param, value, rampTime });
   }
 
   /** Sample-genaue DSP-Parameter-Rampe (dspProcessor automate). */
   public automateDsp(param: 'drive' | 'depth' | 'resonance' | 'phase', value: number, rampTime = 0.05) {
-    try { this.dspNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
+    this.automationCoalescer.push(`dsp:${param}`, { type: 'automate', param, value, rampTime });
   }
 
   /** Sample-genaue Mastering-Parameter-Rampe (masteringProcessor automate). */
   public automateMastering(param: 'threshold' | 'makeup' | 'ceiling', value: number, rampTime = 0.05) {
-    try { this.masteringNode?.port?.postMessage({ type: 'automate', param, value, rampTime }); } catch { /* noop */ }
+    this.automationCoalescer.push(`mastering:${param}`, { type: 'automate', param, value, rampTime });
   }
 
   /** Block-genaue EQ-Band-Gain-Rampe (eqProcessor automate, Band 0-11). */
   public automateEqBandGain(band: number, gainDb: number, rampTime = 0.05) {
-    try { this.eqNode?.port?.postMessage({ type: 'automate', param: 'bandGain', band, value: gainDb, rampTime }); } catch { /* noop */ }
+    this.automationCoalescer.push(`eq:${band}`, { type: 'automate', param: 'bandGain', band, value: gainDb, rampTime });
   }
 
   /** Task 11: Mastering-Limiter/Kompression steuern (masteringProcessor). */
