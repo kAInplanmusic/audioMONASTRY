@@ -39,7 +39,7 @@ RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-audio-ai.lock; \
     fi
 
-COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py ./
+COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py ./
 COPY model_manifest.json runtime_config.yaml startup.sh ./
 RUN chmod +x startup.sh \
     && mkdir -p /data/hf-cache \

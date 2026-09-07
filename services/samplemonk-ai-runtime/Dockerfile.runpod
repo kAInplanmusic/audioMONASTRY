@@ -34,7 +34,7 @@ RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
 # RunPod Serverless SDK (Worker + API)
 RUN pip install --no-cache-dir runpod==1.12.0
 
-COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py runpod_worker.py ./
+COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py runpod_worker.py ./
 COPY model_manifest.json runtime_config.yaml ./
 RUN mkdir -p /data/hf-cache \
     && useradd --system --uid 10001 samplemonk \

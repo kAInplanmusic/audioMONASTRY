@@ -503,13 +503,41 @@ def essentia_analyze(model_id: str, definition: ModelDefinition, payload: Dict[s
                 pass
 
 
+from handlers_runpod import (
+    acestep_generate,
+    pyannote_diarize,
+    qwen2_audio_understand,
+    qwen3_llm,
+    stem_separate_dispatch,
+    xtts_tts,
+)
+
+
+def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """tts-Dispatch inkl. XTTS-v2."""
+    if model_id.startswith("xtts") or "XTTS" in definition.repository:
+        return xtts_tts(model_id, definition, payload)
+    return tts_dispatch(model_id, definition, payload)
+
+
+def generate_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    """generate/song-Dispatch inkl. ACE-Step."""
+    if model_id.startswith("acestep") or "acestep" in definition.repository.lower():
+        return acestep_generate(model_id, definition, payload)
+    return generate_dispatch(model_id, definition, payload)
+
+
 HANDLERS = {
     "classify": hf_classify,
     "transcribe": hf_transcribe,
     "embed": hf_embed,
-    "generate": generate_dispatch,
-    "song": generate_dispatch,
+    "generate": generate_dispatch_runpod,
+    "song": generate_dispatch_runpod,
     "sing": hf_bark_sing,
-    "tts": tts_dispatch,
+    "tts": tts_dispatch_runpod,
     "analyze": essentia_analyze,
+    "llm": qwen3_llm,
+    "understand": qwen2_audio_understand,
+    "diarize": pyannote_diarize,
+    "stem.separate": stem_separate_dispatch,
 }
