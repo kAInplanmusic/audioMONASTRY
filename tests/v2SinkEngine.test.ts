@@ -88,6 +88,19 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     const out = renderSeconds(engine, 0.05);
     expect(blockRms(out)).toBeLessThan(1e-6);
   });
+
+  it('Step-Event startet sample-genau innerhalb des Blocks (Phase 2)', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    const ctx: IProcessingContext = { ...CTX, currentTime: 0 };
+    const out = engine.render(ctx, [{ track: 'channel1', startSample: 64, velocity: 1, freq: 440 }]);
+
+    for (let i = 0; i < 64; i++) {
+      expect(out[0][i], `Sample ${i} sollte vor dem Step stumm sein`).toBe(0);
+      expect(out[1][i]).toBe(0);
+    }
+    const after = out[0].subarray(64);
+    expect(after.some((v) => Math.abs(v) > 0.01)).toBe(true);
+  });
 });
 
 describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
@@ -104,6 +117,10 @@ describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
     expect(sink.setChannelGainDb('channel1', -6)).toBe(false);
     expect(sink.setChannelPan('channel1', 0)).toBe(false);
     expect(sink.setMasterGain(1)).toBe(false);
+    expect(sink.startTransport({ bpm: 120 })).toBe(false);
+    expect(sink.updateTransport({ swing: 0.1 })).toBe(false);
+    expect(sink.stopTransport()).toBe(false);
+    expect(sink.setPattern('channel1', Array(16).fill(true))).toBe(false);
     expect(sink.disconnect()).toBeUndefined();
   });
 });

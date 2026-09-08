@@ -12,11 +12,11 @@
  * Die Klasse enthält KEINE WebAudio-/AudioWorklet-API und ist damit sowohl im
  * AudioWorklet (über den v2SinkProcessor) als auch in Node-Tests nutzbar.
  */
-import { V2StudioGraph, V2Channel } from '../V2StudioGraph';
+import { V2StudioGraph, V2Channel, V2_CHANNELS } from '../V2StudioGraph';
 import type { IProcessingContext } from '../types';
 
 export interface V2SinkMessage {
-  type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain';
+  type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern';
   active?: boolean;
   freq?: number;
   amplitude?: number;
@@ -24,11 +24,29 @@ export interface V2SinkMessage {
   db?: number;
   pan?: number;
   value?: number;
+  playing?: boolean;
+  bpm?: number;
+  swing?: number;
+  gate?: number;
+  stepCount?: 16 | 32;
+  steps?: boolean[];
+}
+
+/** Ein sample-genau getriggerter Step-Burst innerhalb eines Render-Blocks. */
+export interface V2StepRenderEvent {
+  track: V2Channel;
+  /** Sample-Offset innerhalb des aktuellen Blocks (0..bufferSize-1). */
+  startSample: number;
+  /** Velocity 0..1 (Amplitude). */
+  velocity: number;
+  /** Grundfrequenz des Bursts in Hz. */
+  freq: number;
 }
 
 const DEFAULT_TEST_FREQ = 440;
 const DEFAULT_TEST_AMPLITUDE = 0.2;
 const SILENCE_CHANNEL_COUNT = 1;
+const STEP_DECAY_PER_SEC = 28; // schneller, nicht-zippernder Step-Burst
 
 export class V2SinkEngine {
   readonly studio: V2StudioGraph;
@@ -77,18 +95,37 @@ export class V2SinkEngine {
 
   /**
    * Rendert genau einen Audio-Block durch den V2-Graph.
-   * Liefert einen Stereo-Output (Float32Array[2]) – auch bei inaktivem
-   * Testton (Stille), damit der Worklet-Output nie `null` ist.
+   * `events` können sample-genaue Step-Bursts auf beliebigen Kanälen auslösen
+   * (Phase 2). Liefert einen Stereo-Output (Float32Array[2]) – auch bei
+   * inaktivem Testton (Stille), damit der Worklet-Output nie `null` ist.
    */
-  render(ctx: IProcessingContext): Float32Array[] {
+  render(ctx: IProcessingContext, events: V2StepRenderEvent[] = []): Float32Array[] {
     this.ensureSourceBlockSize(ctx.bufferSize);
 
-    if (this.testToneActive) {
-      const tone = this.renderToneBlock(ctx.bufferSize, ctx.sampleRate);
-      this.studio.setSourceBuffer('channel1', [tone]);
-    } else {
-      // Immer Stille setzen, damit ein zuvor aktiver Testton nicht weitertönt.
-      this.studio.setSourceBuffer('channel1', [this.silenceBuffer]);
+    const usedChannels = new Set<V2Channel>();
+    for (const event of events) {
+      if (!event || event.startSample < 0 || event.startSample >= ctx.bufferSize) continue;
+      const burst = this.renderStepBurst(event, ctx.bufferSize, ctx.sampleRate);
+      this.studio.setSourceBuffer(event.track, [burst]);
+      usedChannels.add(event.track);
+    }
+
+    if (!usedChannels.has('channel1')) {
+      if (this.testToneActive) {
+        const tone = this.renderToneBlock(ctx.bufferSize, ctx.sampleRate);
+        this.studio.setSourceBuffer('channel1', [tone]);
+        usedChannels.add('channel1');
+      } else {
+        // Immer Stille setzen, damit ein zuvor aktiver Testton/Step nicht weitertönt.
+        this.studio.setSourceBuffer('channel1', [this.silenceBuffer]);
+      }
+    }
+
+    // Alle nicht durch Step-Events belegten Kanäle auf Stille setzen, damit
+    // keine alten Bursts aus früheren Blöcken nachklingen.
+    for (const channel of V2_CHANNELS) {
+      if (usedChannels.has(channel)) continue;
+      this.studio.setSourceBuffer(channel, [this.silenceBuffer]);
     }
 
     const rendered = this.studio.render(ctx);
@@ -108,6 +145,18 @@ export class V2SinkEngine {
     this.currentTime = 0;
   }
 
+  private renderStepBurst(event: V2StepRenderEvent, length: number, sampleRate: number): Float32Array {
+    const buffer = new Float32Array(length);
+    const start = Math.max(0, Math.min(length - 1, event.startSample));
+    const freq = Number.isFinite(event.freq) && event.freq > 0 ? Math.max(20, Math.min(20000, event.freq)) : DEFAULT_TEST_FREQ;
+    const amp = Math.max(0, Math.min(1, event.velocity)) * 0.8;
+    for (let i = start; i < length; i++) {
+      const t = (i - start) / sampleRate;
+      buffer[i] = Math.sin(2 * Math.PI * freq * t) * amp * Math.exp(-t * STEP_DECAY_PER_SEC);
+    }
+    return buffer;
+  }
+
   private renderToneBlock(length: number, sampleRate: number): Float32Array {
     const buffer = new Float32Array(length);
     const dt = this.freq / sampleRate;
@@ -124,7 +173,7 @@ export class V2SinkEngine {
       this.silenceBuffer = new Float32Array(length);
     }
     if (this.lastBlockSize === length) return;
-    for (const channel of Object.keys(this.studio.sources) as V2Channel[]) {
+    for (const channel of V2_CHANNELS) {
       const source = this.studio.sources.get(channel);
       if (!source) continue;
       const current = source.sourceBuffer;

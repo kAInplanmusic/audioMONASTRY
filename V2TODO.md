@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-08 · Phase 1 (V2 hörbar) abgeschlossen
+> Stand: 2026-09-08 · Phase 1 (V2 hörbar) + Phase 2 (sample-genauer Scheduler) abgeschlossen
 
 ---
 
@@ -69,9 +69,9 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] `V2StudioGraph.render()` an echten Audio-Output anbinden
 
 ### Phase 2 – Sample-genauer Scheduler
-- [ ] `GraphPlaybackEngine` von `setInterval` auf AudioWorklet-/Lookahead-Scheduler umstellen
-- [ ] Jitter-/Latenz-Test (8–15 ms lokal)
-- [ ] PDC (Lookahead-Mastering) in V2 abbilden
+- [x] `GraphPlaybackEngine` von `setInterval` auf AudioWorklet-/Lookahead-Scheduler umstellen
+- [x] Jitter-/Latenz-Test (8–15 ms lokal)
+- [x] PDC (Lookahead-Mastering) in V2 abbilden
 
 ### Phase 3 – Quellen nach V2
 - [ ] Sample-Player als V2-Source
@@ -143,4 +143,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 2 beginnen: **GraphPlaybackEngine auf AudioWorklet-/Lookahead-Scheduler umstellen** (V2 sample-genau machen)
+- Phase 3 beginnen: **Quellen nach V2** – Sample-Player/Tone.js-Bridge/Synth-Worklets als V2-Source-Nodes

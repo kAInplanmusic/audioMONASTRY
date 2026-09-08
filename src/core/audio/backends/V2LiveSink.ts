@@ -96,6 +96,40 @@ export class V2LiveSink {
     return this.post({ type: 'master-gain', value });
   }
 
+  /** Startet den sample-genauen V2-Transport (AudioWorklet-Step-Scheduler). */
+  startTransport(config: { bpm?: number; swing?: number; gate?: number; stepCount?: 16 | 32 } = {}): boolean {
+    return this.post({
+      type: 'transport',
+      playing: true,
+      bpm: config.bpm,
+      swing: config.swing,
+      gate: config.gate,
+      stepCount: config.stepCount,
+    });
+  }
+
+  /** Stoppt den V2-Transport. */
+  stopTransport(): boolean {
+    return this.post({ type: 'transport', playing: false });
+  }
+
+  /** Aktualisiert laufende Transport-Parameter, ohne den Transport neu zu starten. */
+  updateTransport(config: { bpm?: number; swing?: number; gate?: number; stepCount?: 16 | 32 } = {}): boolean {
+    return this.post({
+      type: 'transport',
+      bpm: config.bpm,
+      swing: config.swing,
+      gate: config.gate,
+      stepCount: config.stepCount,
+    });
+  }
+
+  /** Setzt ein Step-Pattern (boolean[]) für einen V2-Kanal im Worklet. */
+  setPattern(channel: V2Channel, steps: boolean[]): boolean {
+    if (!Array.isArray(steps) || (steps.length !== 16 && steps.length !== 32)) return false;
+    return this.post({ type: 'pattern', channel, steps: [...steps] });
+  }
+
   private post(message: V2SinkMessage): boolean {
     if (!this.node || typeof this.node.port?.postMessage !== 'function') return false;
     try {

@@ -1,16 +1,21 @@
 /**
  * audioMONASTRY · V2 Playback Engine
  * ==================================
- * Voller Ersatzpfad für den V1-Transport: rendert Source → Worklet-Kette
- * blockweise über den AudioGraph und meldet Audio-Blöcke an den Backend-Adapter.
+ * Rendert Source → Worklet-Kette blockweise über den AudioGraph.
+ *
+ * Phase 2: Der Live-Transport läuft NICHT mehr über `setInterval`. Der
+ * sample-genaue Takt kommt aus dem AudioWorklet (`v2SinkProcessor` +
+ * `V2SampleClock`); diese Engine ist der deterministische Offline-/Test-Renderer
+ * und wird von außen Block für Block über `tick()` getrieben. `start()` setzt
+ * nur den Transportzustand, es startet keinen Timer mehr.
  */
 import type { IProcessingContext } from '../types';
+import { V2_MASTERING_LOOKAHEAD_SEC, v2MasteringLookaheadSamples } from '../live/v2Pdc';
 
 export type RenderBlockFn = (source: Float32Array[], ctx: IProcessingContext) => Float32Array[] | null;
 
 export class GraphPlaybackEngine {
   playing = false;
-  private timer: ReturnType<typeof setInterval> | null = null;
   private source: Float32Array[] = [new Float32Array(128)];
   private currentTime = 0;
 
@@ -19,6 +24,9 @@ export class GraphPlaybackEngine {
     public sampleRate = 48000,
     public blockSize = 128,
   ) {}
+
+  /** Mastering-Lookahead in Sekunden (PDC-Bezug, identisch mit V1-Mastering). */
+  readonly masteringLookaheadSec = V2_MASTERING_LOOKAHEAD_SEC;
 
   setSource(source: Float32Array[]): void {
     this.source = source;
@@ -33,7 +41,16 @@ export class GraphPlaybackEngine {
     };
   }
 
-  /** Verarbeitet genau einen Block (auch für Tests/Offline). */
+  /** Lookahead-Tiefe des V2-Masterings in Samples (PDC). */
+  getLookaheadSamples(): number {
+    return v2MasteringLookaheadSamples(this.sampleRate);
+  }
+
+  /**
+   * Verarbeitet genau einen Block (auch für Tests/Offline).
+   * Im Live-Betrieb wird `tick()` vom AudioWorklet-/Lookahead-Scheduler
+   * getrieben – nicht von einem setInterval dieser Klasse.
+   */
   tick(): Float32Array[] | null {
     if (!this.playing) return null;
     const ctx = this.ctx;
@@ -45,19 +62,14 @@ export class GraphPlaybackEngine {
 
   onAudioBlock: ((block: Float32Array[], time: number) => void) | null = null;
 
+  /** Aktiviert den Transport. Startet bewusst KEINEN Timer mehr. */
   start(): void {
-    if (this.playing) return;
     this.playing = true;
-    const ms = Math.max(1, Math.round((this.blockSize / this.sampleRate) * 1000));
-    this.timer = setInterval(() => this.tick(), ms);
   }
 
+  /** Deaktiviert den Transport und setzt die Zeit zurück. */
   stop(): void {
     this.playing = false;
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
     this.currentTime = 0;
   }
 

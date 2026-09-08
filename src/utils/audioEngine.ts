@@ -329,6 +329,7 @@ class AudioEngine {
     try {
       (this.clockNode?.parameters as any)?.get('swing')?.setValueAtTime(this.swing, this.ctx?.currentTime ?? 0);
     } catch { /* Clock-Worklet nicht aktiv */ }
+    this.v2LiveSink.updateTransport({ swing: this.swing });
   }
   // --- Task 2: optionaler AudioWorklet-Clock-Generator ---
   private clockNode: AudioWorkletNode | null = null;
@@ -715,6 +716,8 @@ class AudioEngine {
     this.stepCount = count;
     this.normalizeAllPatterns();
     this.currentStep = this.currentStep % count;
+    this.v2LiveSink.updateTransport({ stepCount: count });
+    this.syncV2PatternsToLiveSink();
     this.emitStep(this.currentStep);
   }
 
@@ -732,6 +735,7 @@ class AudioEngine {
         bpmParam.setValueAtTime(value, now);
       }
     } catch { /* Clock-Worklet nicht verfügbar */ }
+    this.v2LiveSink.updateTransport({ bpm: value });
   }
 
   /** Aktuelles Transport-Tempo (BPM). */
@@ -760,12 +764,14 @@ class AudioEngine {
   public setStep(track: TrackType, step: number, on: boolean): void {
     if (step < 0 || step >= this.stepCount) return;
     this.patterns[track][step] = on;
+    this.v2LiveSink.setPattern(track, this.patterns[track]);
   }
 
   /** Setzt das Muster eines Kanals (16 oder 32 Steps). */
   public setPattern(track: TrackType, steps: boolean[]): void {
     if (!steps || (steps.length !== 16 && steps.length !== 32)) return;
     this.patterns[track] = normalizeSteps(steps, this.stepCount);
+    this.v2LiveSink.setPattern(track, this.patterns[track]);
   }
 
   /**
@@ -793,6 +799,8 @@ class AudioEngine {
     if (bpm && Number.isFinite(bpm) && bpm > 20 && bpm < 300) {
       Tone.Transport.bpm.value = bpm;
     }
+    this.syncV2PatternsToLiveSink();
+    this.v2LiveSink.updateTransport({ bpm: Tone.Transport.bpm.value, stepCount: this.stepCount });
   }
 
   /** Erstellt den Clock-Worklet (falls geladen) als präzise Step-Quelle. */
@@ -2089,7 +2097,19 @@ class AudioEngine {
     if (!this.mainHolderActive) return;
     this.idleDetector.activity(); // AM-E6-5: Play beendet Idle-Suspend
     if (this.playbackMode === 'v2') {
-      this.graphPlayback.start();
+      // Phase 2: V2-Transport läuft über den sample-genauen AudioWorklet-
+      // Scheduler (v2SinkProcessor/V2SampleClock) – kein graphPlayback.setInterval.
+      await this.ensureInitialized();
+      const connected = await this.connectV2LiveOutput();
+      if (!connected) return;
+      this.syncV2PatternsToLiveSink();
+      this.v2LiveSink.startTransport({
+        bpm: Tone.Transport.bpm.value,
+        swing: this.swing,
+        gate: this.gate,
+        stepCount: this.stepCount,
+      });
+      this.isPlaying = true;
       return;
     }
     try {
@@ -2113,7 +2133,9 @@ class AudioEngine {
   public stop() {
     if (!this.mainHolderActive) return;
     if (this.playbackMode === 'v2') {
-      this.graphPlayback.stop();
+      this.isPlaying = false;
+      this.v2LiveSink.stopTransport();
+      this.v2LiveSink.disconnect();
       return;
     }
     this.isPlaying = false;
@@ -2469,6 +2491,13 @@ class AudioEngine {
     const master = Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20);
     this.v2Studio.setMasterGain(master);
     this.v2LiveSink.setMasterGain(master);
+  }
+
+  /** Spiegelt alle Step-Patterns in den V2-Live-Sink (Phase 2). */
+  public syncV2PatternsToLiveSink(): void {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
+      this.v2LiveSink.setPattern(t, this.patterns[t]);
+    });
   }
 
   /** Exportiert den kompletten hörbaren Zustand als JSON-fähiges Objekt. */
