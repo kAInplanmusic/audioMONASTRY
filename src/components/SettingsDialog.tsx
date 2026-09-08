@@ -84,6 +84,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   // NEW-D15-1: DevSettings „AI Server Shutdown“ – A100-Endpoint aus dem Router nehmen.
   const [aiShutdown, setAiShutdown] = useState(() => isAiShutdownMode());
   const [hfConfigured] = useState(() => { try { return isHfEndpointConfigured(); } catch { return false; } });
+  // Phase-1-V2: hörbarer V2-Testton (V2-Live-Output-Sink).
+  const [v2TestToneActive, setV2TestToneActive] = useState(false);
   const [sfuStatus, setSfuStatus] = useState<'off' | 'connecting' | 'connected' | 'error'>('off');
 
   useEffect(() => {
@@ -189,6 +191,17 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
         console.warn('AI-Shutdown-Endpoint nicht erreichbar:', (e as Error).message);
       }
     }
+  };
+
+  const toggleV2TestTone = async () => {
+    if (v2TestToneActive) {
+      audioEngine.stopV2TestTone();
+      setV2TestToneActive(false);
+      return;
+    }
+    const ok = await audioEngine.playV2TestTone(440, 0.2);
+    setV2TestToneActive(ok);
+    if (!ok) console.warn('[v2] V2-Testton konnte nicht gestartet werden (kein AudioWorklet/Context?).');
   };
 
   if (!open) return null;
@@ -434,6 +447,31 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           <p className="text-[10px] text-neutral-500 mt-1">
             Stoppt die AI-Session/Scale-to-Zero und nimmt den A100-Endpoint aus dem Provider-Router.
             Fallback-Kette: Serverless → Replicate → Local.
+          </p>
+        </div>
+
+        {/* DevSettings: V2-Testton (Phase 1 – V2 hörbar machen) */}
+        <div className="mb-5 border border-cyan-900/50 rounded-lg p-3 bg-cyan-950/10">
+          <label className="text-xs font-bold text-neutral-400 flex items-center gap-1.5 mb-2 uppercase tracking-wider">
+            <Volume2 className="w-3.5 h-3.5 text-cyan-500" /> DevSettings: V2-Testton (Phase 1)
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => void toggleV2TestTone()}
+              aria-pressed={v2TestToneActive}
+              className={`px-3 py-2 rounded border text-xs font-bold uppercase tracking-wider ${
+                v2TestToneActive ? 'bg-cyan-900/40 border-cyan-500/70 text-cyan-300' : 'bg-neutral-800 border-neutral-700 text-neutral-500'
+              }`}
+            >
+              {v2TestToneActive ? 'V2-TESTTON AN · STOPPEN' : 'V2-TESTTON STARTEN'}
+            </button>
+            <span className="text-[10px] text-neutral-500 font-mono">
+              440 Hz über channel1 → kompletter V2-Graph (Gain/Pan/MasterSum) → AudioContext-Destination.
+            </span>
+          </div>
+          <p className="text-[10px] text-neutral-500 mt-1">
+            Lädt <code>v2SinkProcessor.js</code> und verdrahtet den V2-Live-Output-Sink. Falls kein Ton kommt, bitte Console auf Worklet-Fehler prüfen.
           </p>
         </div>
 

@@ -32,6 +32,7 @@ import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial
 import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
 import { V2StudioGraph } from '../core/audio/V2StudioGraph';
+import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
 import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatency';
@@ -2248,6 +2249,9 @@ class AudioEngine {
     this.drumSynthNode = null;
     this.itSynthReady = false;
 
+    // V2-Live-Sink trennen (falls verbunden).
+    this.v2LiveSink.disconnect();
+
     this.initialized = false;
   }
 
@@ -2413,9 +2417,34 @@ class AudioEngine {
     if (mode === 'v2') this.stop();
   }
 
-  // NEW-D4-1: V2-StudioGraph (backend-unabhängiger 8-Kanal-Mischpfad).
-  // @deprecated Prototyp – aktuell nicht im Live-Audiopfad verdrahtet.
+  // NEW-D4-1: V2-StudioGraph (backend-unabhängiger Mischpfad) für Offline-/Tests.
+  // Live-Output läuft über v2LiveSink (V2SinkEngine im AudioWorklet, Phase 1).
   public v2Studio = new V2StudioGraph();
+
+  /** V2-Live-Output-Sink: rendert V2StudioGraph im AudioWorklet zur Destination. */
+  public v2LiveSink = new V2LiveSink();
+
+  /** Verbindet den V2-Live-Output-Sink mit der AudioContext-Destination. */
+  public async connectV2LiveOutput(): Promise<boolean> {
+    await this.ensureInitialized();
+    const ok = await this.v2LiveSink.connect(this.ctx);
+    if (ok) this.syncV2FromV1();
+    return ok;
+  }
+
+  /** Startet einen hörbaren V2-Testton (Phase-1-Nachweis). */
+  public async playV2TestTone(freq = 440, amplitude = 0.2): Promise<boolean> {
+    await this.ensureInitialized();
+    if (!(await this.connectV2LiveOutput())) return false;
+    this.v2LiveSink.setMasterGain(1);
+    return this.v2LiveSink.startTestTone(freq, amplitude);
+  }
+
+  /** Stoppt den V2-Testton und trennt den Live-Sink (kein Leerlauf im Audio-Thread). */
+  public stopV2TestTone(): void {
+    this.v2LiveSink.stopTestTone();
+    this.v2LiveSink.disconnect();
+  }
 
   /** Rendert einen V2-Block (128 Samples Stereo) durch den Graph. */
   public renderV2Block(): Float32Array[] | null {
@@ -2427,15 +2456,19 @@ class AudioEngine {
     }
   }
 
-  /** V1-Zustand in den V2-Graph spiegeln (Hybrid-Betrieb, Meilenstein hörbar). */
+  /** V1-Zustand in den V2-Graph spiegeln (Offline-Graph + Live-Sink). */
   public syncV2FromV1(): void {
     (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
       const db = this.channelGains[t]?.volume.value ?? 0;
       const pan = this.channelPans[t]?.pan.value ?? 0;
       this.v2Studio.setGainDb(t, db);
       this.v2Studio.setPan(t, pan);
+      this.v2LiveSink.setChannelGainDb(t, db);
+      this.v2LiveSink.setChannelPan(t, pan);
     });
-    this.v2Studio.setMasterGain(Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20));
+    const master = Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20);
+    this.v2Studio.setMasterGain(master);
+    this.v2LiveSink.setMasterGain(master);
   }
 
   /** Exportiert den kompletten hörbaren Zustand als JSON-fähiges Objekt. */

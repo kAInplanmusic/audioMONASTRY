@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-07
+> Stand: 2026-09-08 · Phase 1 (V2 hörbar) abgeschlossen
 
 ---
 
@@ -64,9 +64,9 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [ ] VISIONS-/TODO-Abgleich dokumentieren (unten)
 
 ### Phase 1 – V2 hörbar machen (Proof of Audio)
-- [ ] V2-Live-Output-Sink (rendered Float32-Blöcke → AudioContext-Destination)
-- [ ] Test: einfacher V2-Testton hörbar/automatisiert nachweisbar
-- [ ] `V2StudioGraph.render()` an echten Audio-Output anbinden
+- [x] V2-Live-Output-Sink (rendered Float32-Blöcke → AudioContext-Destination)
+- [x] Test: einfacher V2-Testton hörbar/automatisiert nachweisbar
+- [x] `V2StudioGraph.render()` an echten Audio-Output anbinden
 
 ### Phase 2 – Sample-genauer Scheduler
 - [ ] `GraphPlaybackEngine` von `setInterval` auf AudioWorklet-/Lookahead-Scheduler umstellen
@@ -143,4 +143,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 1 beginnen: **V2-Live-Output-Sink + hörbarer Test**
+- Phase 2 beginnen: **GraphPlaybackEngine auf AudioWorklet-/Lookahead-Scheduler umstellen** (V2 sample-genau machen)
