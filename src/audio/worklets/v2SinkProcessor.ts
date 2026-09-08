@@ -26,17 +26,6 @@ import { V2_CHANNELS, type V2Channel } from '../../core/audio/V2StudioGraph';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
 
-function defaultStepFreq(channel: V2Channel): number {
-  switch (channel) {
-    case 'channel1': return 90;   // Kick-artiger Bass-Burst
-    case 'channel2': return 6000; // Hat-artiger Hochton-Burst
-    case 'channel3': return 1500; // Clap-artiger Mittel-Burst
-    case 'channel7': return 110;  // Bass-Rolle
-    case 'channel8': return 440;  // Lead
-    default: return 220;
-  }
-}
-
 function emptyPattern(length: 16 | 32): boolean[] {
   return Array.from({ length }, () => false);
 }
@@ -92,6 +81,24 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.patterns.set(msg.channel, [...msg.steps]);
           }
           break;
+        case 'sample-set':
+          if (msg.channel && msg.left) {
+            this.engine.setSampleBuffer(msg.channel, msg.left, msg.right ?? null, msg.sourceRate ?? sampleRate);
+          }
+          break;
+        case 'sample-trigger':
+          if (msg.channel) {
+            this.engine.triggerSample(msg.channel, { loop: msg.loop, rate: msg.rate, offset: msg.offset });
+          }
+          break;
+        case 'sample-stop':
+          if (msg.channel) this.engine.stopSample(msg.channel);
+          break;
+        case 'synth-source':
+          if (msg.channel && typeof msg.freq === 'number') {
+            this.engine.setSynthSource(msg.channel, { freq: msg.freq });
+          }
+          break;
         default:
           break;
       }
@@ -122,12 +129,18 @@ class V2SinkProcessor extends AudioWorkletProcessor {
         });
 
         for (const channel of V2_CHANNELS) {
-          if (this.patterns.get(channel)?.[step.step]) {
+          if (!this.patterns.get(channel)?.[step.step]) continue;
+          if (this.engine.hasSample(channel)) {
+            // Phase 3: Sample-Player als V2-Source – Step retriggert das Sample.
+            this.engine.triggerSample(channel, { loop: false, rate: 1, offset: 0 });
+          } else {
+            // Synth-/Step-Quelle: registrierte Frequenz oder Rollen-Default.
+            const source = this.engine.getSynthSource(channel);
             events.push({
               track: channel,
               startSample,
               velocity: DEFAULT_STEP_VELOCITY,
-              freq: defaultStepFreq(channel),
+              freq: source.freq,
             });
           }
         }

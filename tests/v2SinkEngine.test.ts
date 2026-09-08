@@ -101,6 +101,39 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     const after = out[0].subarray(64);
     expect(after.some((v) => Math.abs(v) > 0.01)).toBe(true);
   });
+
+  it('Sample-Player spielt einen Buffer als V2-Source und stoppt am Ende (Phase 3)', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    const source = new Float32Array(256);
+    source.fill(0.5);
+    engine.setSampleBuffer('channel1', source, null, 48000);
+    expect(engine.hasSample('channel1')).toBe(true);
+    expect(engine.triggerSample('channel1')).toBe(true);
+    expect(engine.isSamplePlaying('channel1')).toBe(true);
+
+    const b1 = engine.render({ ...CTX, currentTime: 0 });
+    expect(b1[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
+    expect(engine.isSamplePlaying('channel1')).toBe(true);
+
+    engine.render({ ...CTX, currentTime: 128 / 48000 });
+    // Nach zwei vollen Blöcken (256 Samples) ist der One-Shot beendet.
+    expect(engine.isSamplePlaying('channel1')).toBe(false);
+    const after = engine.render({ ...CTX, currentTime: 256 / 48000 });
+    expect(after[0].some((v) => Math.abs(v) > 1e-7)).toBe(false);
+  });
+
+  it('Sample-Player unterstützt Loop als V2-Source (Phase 3)', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    const source = new Float32Array(128);
+    source.fill(0.5);
+    engine.setSampleBuffer('channel2', source, null, 48000);
+    engine.triggerSample('channel2', { loop: true });
+    for (let i = 0; i < 5; i++) {
+      const out = engine.render({ ...CTX, currentTime: i * 128 / 48000 });
+      expect(out[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
+    }
+    expect(engine.isSamplePlaying('channel2')).toBe(true);
+  });
 });
 
 describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
@@ -121,6 +154,10 @@ describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
     expect(sink.updateTransport({ swing: 0.1 })).toBe(false);
     expect(sink.stopTransport()).toBe(false);
     expect(sink.setPattern('channel1', Array(16).fill(true))).toBe(false);
+    expect(sink.setSampleBuffer('channel1', new Float32Array(16))).toBe(false);
+    expect(sink.triggerSample('channel1')).toBe(false);
+    expect(sink.stopSample('channel1')).toBe(false);
+    expect(sink.setSynthSource('channel1', 440)).toBe(false);
     expect(sink.disconnect()).toBeUndefined();
   });
 });

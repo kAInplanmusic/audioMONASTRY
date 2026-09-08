@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-08 · Phase 1 (V2 hörbar) + Phase 2 (sample-genauer Scheduler) abgeschlossen
+> Stand: 2026-09-08 · Phase 1 + 2 abgeschlossen, Phase 3 Sample-/Tone-Bridge abgeschlossen (SFZ offen)
 
 ---
 
@@ -74,9 +74,9 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] PDC (Lookahead-Mastering) in V2 abbilden
 
 ### Phase 3 – Quellen nach V2
-- [ ] Sample-Player als V2-Source
-- [ ] Tone.js-/Browser-Player über V2-Bridge speisen
-- [ ] Sampler/Synth-Worklets als V2-Nodes registrieren
+- [x] Sample-Player als V2-Source
+- [x] Tone.js-/Browser-Player über V2-Bridge speisen
+- [x] Sampler/Synth-Worklets als V2-Nodes registrieren
 - [ ] SFZ-/Instrument-Pfade auf V2 umstellen
 
 ### Phase 4 – Kanal-/Routing-Parität
@@ -143,4 +143,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 3 beginnen: **Quellen nach V2** – Sample-Player/Tone.js-Bridge/Synth-Worklets als V2-Source-Nodes
+- Phase 3 Rest: **SFZ-/Instrument-Pfade auf V2 umstellen** (SfzVoiceBank/Sample-Cache → V2-Sample-/Synth-Sources)

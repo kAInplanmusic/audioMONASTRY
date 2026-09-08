@@ -2103,6 +2103,7 @@ class AudioEngine {
       const connected = await this.connectV2LiveOutput();
       if (!connected) return;
       this.syncV2PatternsToLiveSink();
+      this.syncV2SamplesToLiveSink();
       this.v2LiveSink.startTransport({
         bpm: Tone.Transport.bpm.value,
         swing: this.swing,
@@ -2498,6 +2499,33 @@ class AudioEngine {
     (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
       this.v2LiveSink.setPattern(t, this.patterns[t]);
     });
+  }
+
+  /** Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3). */
+  public syncV2SamplesToLiveSink(): void {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
+      const player = this.samplePlayers[t];
+      const audioBuffer = player?.buffer?.get?.();
+      if (audioBuffer) this.bridgeAudioBufferToV2(t, audioBuffer);
+    });
+  }
+
+  /** Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source. */
+  public bridgeAudioBufferToV2(track: TrackType, audioBuffer: AudioBuffer): boolean {
+    if (!audioBuffer || audioBuffer.numberOfChannels === 0) return false;
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
+    return this.v2LiveSink.setSampleBuffer(track, left, right, audioBuffer.sampleRate);
+  }
+
+  /** Bridge: bereits dekodierte planare Samples (z. B. SFZ-/OPFS-Cache) → V2. */
+  public bridgeDecodedSamplesToV2(
+    track: TrackType,
+    left: Float32Array,
+    right?: Float32Array | null,
+    sourceRate = 48000,
+  ): boolean {
+    return this.v2LiveSink.setSampleBuffer(track, left, right ?? null, sourceRate);
   }
 
   /** Exportiert den kompletten hörbaren Zustand als JSON-fähiges Objekt. */
@@ -3015,6 +3043,10 @@ class AudioEngine {
       // player.autostart = true; // Or player.start() when needed
       this.samplePlayers[track] = player;
       this.trackSampleUrl[track] = url;
+      // Phase 3: Tone.js-Buffer gleichzeitig als V2-Sample-Source registrieren,
+      // damit der V2-Pfad denselben dekodierten Buffer nutzen kann.
+      const audioBuffer = buffer.get?.();
+      if (audioBuffer) this.bridgeAudioBufferToV2(track, audioBuffer);
     } else {
       this.trackSampleUrl[track] = null;
     }

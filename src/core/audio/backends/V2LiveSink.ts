@@ -130,6 +130,34 @@ export class V2LiveSink {
     return this.post({ type: 'pattern', channel, steps: [...steps] });
   }
 
+  /** Lädt eine Sample-Quelle in den V2-Sink (Sample-Player als V2-Source). */
+  setSampleBuffer(channel: V2Channel, left: Float32Array, right?: Float32Array | null, sourceRate = 48000): boolean {
+    if (!left || left.length === 0) return false;
+    return this.post({ type: 'sample-set', channel, left, right: right ?? null, sourceRate });
+  }
+
+  /** Triggert die Sample-Wiedergabe eines Kanals im V2-Sink. */
+  triggerSample(channel: V2Channel, options: { loop?: boolean; rate?: number; offset?: number } = {}): boolean {
+    return this.post({
+      type: 'sample-trigger',
+      channel,
+      loop: options.loop,
+      rate: options.rate,
+      offset: options.offset,
+    });
+  }
+
+  /** Stoppt die Sample-Wiedergabe eines Kanals im V2-Sink. */
+  stopSample(channel: V2Channel): boolean {
+    return this.post({ type: 'sample-stop', channel });
+  }
+
+  /** Registriert eine Synth-/Step-Quelle für einen V2-Kanal. */
+  setSynthSource(channel: V2Channel, freq: number): boolean {
+    if (!Number.isFinite(freq) || freq <= 0) return false;
+    return this.post({ type: 'synth-source', channel, freq });
+  }
+
   private post(message: V2SinkMessage): boolean {
     if (!this.node || typeof this.node.port?.postMessage !== 'function') return false;
     try {
