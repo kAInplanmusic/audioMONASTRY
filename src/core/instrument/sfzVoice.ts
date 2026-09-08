@@ -59,6 +59,11 @@ export class SfzVoiceBank {
     return this.regions.length;
   }
 
+  /** True, wenn aktuell mindestens eine aktive oder ausklingende Stimme läuft. */
+  hasActiveVoices(): boolean {
+    return this.voices.some((v) => v.active);
+  }
+
   noteOn(note: number, velocity = 100): void {
     if (this.regions.length === 0) return;
     const region = matchRegion(this.regions, note, velocity, { roundRobin: this.roundRobin++ });

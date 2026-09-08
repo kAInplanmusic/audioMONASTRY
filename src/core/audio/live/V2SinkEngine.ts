@@ -17,7 +17,8 @@ import type { IProcessingContext } from '../types';
 
 export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
-    | 'sample-set' | 'sample-trigger' | 'sample-stop' | 'synth-source';
+    | 'sample-set' | 'sample-trigger' | 'sample-stop' | 'synth-source'
+    | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off';
   active?: boolean;
   freq?: number;
   amplitude?: number;
@@ -37,6 +38,10 @@ export interface V2SinkMessage {
   loop?: boolean;
   rate?: number;
   offset?: number;
+  sfzText?: string;
+  sources?: Record<string, Float32Array>;
+  note?: number;
+  velocity?: number;
 }
 
 /** Ein sample-genau getriggerter Step-Burst innerhalb eines Render-Blocks. */
@@ -100,6 +105,8 @@ export class V2SinkEngine {
   private readonly samplePlayback = new Map<V2Channel, V2SamplePlaybackState>();
   /** Synth-/Step-Quellen je Kanal (Phase 3, V2-Source-Registry). */
   private readonly synthSources = new Map<V2Channel, V2SynthSourceConfig>();
+  /** Extern erzeugte Blöcke (z. B. SFZ-Voice-Bank) für den aktuellen Render-Block. */
+  private readonly externalSources = new Map<V2Channel, Float32Array[]>();
 
   constructor(sampleRate = 48000, blockSize = 128) {
     this.studio = new V2StudioGraph(sampleRate, blockSize);
@@ -195,6 +202,12 @@ export class V2SinkEngine {
     return this.synthSources.get(channel) ?? { freq: DEFAULT_TEST_FREQ };
   }
 
+  /** Übergibt einen extern erzeugten Audio-Block (z. B. SFZ) für den nächsten Render. */
+  setExternalSource(channel: V2Channel, block: Float32Array[]): void {
+    if (!block || block.length === 0) return;
+    this.externalSources.set(channel, block);
+  }
+
   /**
    * Rendert genau einen Audio-Block durch den V2-Graph.
    * `events` können sample-genaue Step-Bursts auf beliebigen Kanälen auslösen
@@ -206,8 +219,16 @@ export class V2SinkEngine {
 
     const usedChannels = new Set<V2Channel>();
 
+    // Phase 3 Rest: extern erzeugte Quellen (SFZ/Instrument) zuerst übernehmen.
+    for (const [channel, block] of this.externalSources) {
+      this.studio.setSourceBuffer(channel, block);
+      usedChannels.add(channel);
+    }
+    this.externalSources.clear();
+
     // Phase 3: laufende Sample-Quellen zuerst rendern (Sample-Player als V2-Source).
     for (const channel of V2_CHANNELS) {
+      if (usedChannels.has(channel)) continue;
       const state = this.samplePlayback.get(channel);
       if (!state?.playing) continue;
       const block = this.renderSampleBlock(state, ctx.bufferSize, ctx.sampleRate);
@@ -258,6 +279,7 @@ export class V2SinkEngine {
     this.samplePlayback.clear();
     this.sampleBuffers.clear();
     this.synthSources.clear();
+    this.externalSources.clear();
   }
 
   /** Rendert den nächsten Block einer laufenden Sample-Quelle. */

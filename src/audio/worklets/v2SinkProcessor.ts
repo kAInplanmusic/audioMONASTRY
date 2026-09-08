@@ -23,6 +23,7 @@ import { V2SinkEngine } from '../../core/audio/live/V2SinkEngine';
 import type { V2SinkMessage, V2StepRenderEvent } from '../../core/audio/live/V2SinkEngine';
 import { V2SampleClock } from '../../core/audio/live/V2SampleClock';
 import { V2_CHANNELS, type V2Channel } from '../../core/audio/V2StudioGraph';
+import { SfzVoiceBank, type SfzSourceMap } from '../../core/instrument/sfzVoice';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
 
@@ -34,6 +35,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly engine = new V2SinkEngine(sampleRate, 128);
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
+  private readonly sfzBanks = new Map<V2Channel, SfzVoiceBank>();
 
   constructor() {
     super();
@@ -99,6 +101,24 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.engine.setSynthSource(msg.channel, { freq: msg.freq });
           }
           break;
+        case 'sfz-load': {
+          if (msg.channel && typeof msg.sfzText === 'string') {
+            const bank = new SfzVoiceBank(sampleRate, 0.002, 0.08);
+            bank.load(msg.sfzText, (msg.sources ?? {}) as SfzSourceMap);
+            this.sfzBanks.set(msg.channel, bank);
+          }
+          break;
+        }
+        case 'sfz-note-on':
+          if (msg.channel && typeof msg.note === 'number') {
+            this.sfzBanks.get(msg.channel)?.noteOn(msg.note, msg.velocity ?? 100);
+          }
+          break;
+        case 'sfz-note-off':
+          if (msg.channel && typeof msg.note === 'number') {
+            this.sfzBanks.get(msg.channel)?.noteOff(msg.note);
+          }
+          break;
         default:
           break;
       }
@@ -111,6 +131,14 @@ class V2SinkProcessor extends AudioWorkletProcessor {
 
     const length = output[0].length;
     const events: V2StepRenderEvent[] = [];
+
+    // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
+    for (const [channel, bank] of this.sfzBanks) {
+      if (!bank.hasActiveVoices()) continue;
+      const mono = new Float32Array(length);
+      bank.renderBlock(mono, length);
+      this.engine.setExternalSource(channel, [mono]);
+    }
 
     if (this.clock.playing) {
       const steps = this.clock.processBlock(currentFrame, length);

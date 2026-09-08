@@ -134,6 +134,19 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
     }
     expect(engine.isSamplePlaying('channel2')).toBe(true);
   });
+
+  it('External Source (SFZ/Instrument) wird als V2-Quelle übernommen und nicht nachgehalten', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    const block = new Float32Array(128);
+    block.fill(0.4);
+    engine.setExternalSource('channel3', [block]);
+    const out = engine.render({ ...CTX, currentTime: 0 });
+    expect(out[0].some((v) => Math.abs(v) > 0.01)).toBe(true);
+
+    // Im nächsten Block ohne External Source ist der Kanal wieder stumm.
+    const silent = engine.render({ ...CTX, currentTime: 128 / 48000 });
+    expect(silent[0].some((v) => Math.abs(v) > 1e-7)).toBe(false);
+  });
 });
 
 describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
@@ -158,6 +171,9 @@ describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
     expect(sink.triggerSample('channel1')).toBe(false);
     expect(sink.stopSample('channel1')).toBe(false);
     expect(sink.setSynthSource('channel1', 440)).toBe(false);
+    expect(sink.loadSfzBank('channel1', '<region/>', {})).toBe(false);
+    expect(sink.sfzNoteOn('channel1', 60)).toBe(false);
+    expect(sink.sfzNoteOff('channel1', 60)).toBe(false);
     expect(sink.disconnect()).toBeUndefined();
   });
 });

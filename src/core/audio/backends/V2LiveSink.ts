@@ -158,6 +158,24 @@ export class V2LiveSink {
     return this.post({ type: 'synth-source', channel, freq });
   }
 
+  /** Lädt eine SFZ-Instrument-Definition als V2-Quelle auf einen Kanal. */
+  loadSfzBank(channel: V2Channel, sfzText: string, sources: Record<string, Float32Array>): boolean {
+    if (!sfzText) return false;
+    return this.post({ type: 'sfz-load', channel, sfzText, sources });
+  }
+
+  /** SFZ-Note-On an die V2-Quelle des Kanals senden. */
+  sfzNoteOn(channel: V2Channel, note: number, velocity = 100): boolean {
+    if (!Number.isFinite(note)) return false;
+    return this.post({ type: 'sfz-note-on', channel, note, velocity });
+  }
+
+  /** SFZ-Note-Off an die V2-Quelle des Kanals senden. */
+  sfzNoteOff(channel: V2Channel, note: number): boolean {
+    if (!Number.isFinite(note)) return false;
+    return this.post({ type: 'sfz-note-off', channel, note });
+  }
+
   private post(message: V2SinkMessage): boolean {
     if (!this.node || typeof this.node.port?.postMessage !== 'function') return false;
     try {

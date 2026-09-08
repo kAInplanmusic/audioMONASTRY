@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-08 · Phase 1 + 2 abgeschlossen, Phase 3 Sample-/Tone-Bridge abgeschlossen (SFZ offen)
+> Stand: 2026-09-08 · Phase 1–3 (hörbar, Scheduler, Quellen/SFZ) abgeschlossen
 
 ---
 
@@ -77,7 +77,7 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] Sample-Player als V2-Source
 - [x] Tone.js-/Browser-Player über V2-Bridge speisen
 - [x] Sampler/Synth-Worklets als V2-Nodes registrieren
-- [ ] SFZ-/Instrument-Pfade auf V2 umstellen
+- [x] SFZ-/Instrument-Pfade auf V2 umstellen
 
 ### Phase 4 – Kanal-/Routing-Parität
 - [ ] GraphStateBridge auf 10 Kanäle erweitern (aktuell 8)
@@ -143,4 +143,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 3 Rest: **SFZ-/Instrument-Pfade auf V2 umstellen** (SfzVoiceBank/Sample-Cache → V2-Sample-/Synth-Sources)
+- Phase 4 beginnen: **Kanal-/Routing-Parität** – GraphStateBridge auf 10 Kanäle, pluginChannelMap/Monitor-Routing, Cue/Main/Monitor als V2-Graph

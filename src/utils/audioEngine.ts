@@ -1021,6 +1021,8 @@ class AudioEngine {
   // ---------------------------------------------------------------------------
   private drumSynthNode: AudioWorkletNode | null = null;
   private sfzBank: SfzVoiceBank | null = null;
+  /** Kanal, auf dem das SFZ-Instrument als V2-Quelle läuft. */
+  private sfzV2Channel: TrackType = 'channel4';
 
   /** Synthetische Drums triggern (kick/snare/hat). */
   public triggerDrumSynth(kind: 'kick' | 'snare' | 'hat'): void {
@@ -1031,12 +1033,15 @@ class AudioEngine {
     return !!(this.drumSynthNode && typeof (this.drumSynthNode as any).connect === 'function');
   }
 
-  /** SFZ-Instrument laden (Text + Sample-Buffer-Map). */
-  public loadSfzInstrument(sfzText: string, sources: Record<string, Float32Array>): string[] {
+  /** SFZ-Instrument laden (Text + Sample-Buffer-Map) und als V2-Quelle registrieren. */
+  public loadSfzInstrument(sfzText: string, sources: Record<string, Float32Array>, channel: TrackType = 'channel4'): string[] {
     try {
       const bank = new SfzVoiceBank(this.ctx?.sampleRate ?? 48000);
       const errors = bank.load(sfzText, sources);
       this.sfzBank = bank;
+      this.sfzV2Channel = channel;
+      // Phase 3 Rest: SFZ-Bank auch im V2-Sink als Quelle ablegen.
+      this.v2LiveSink.loadSfzBank(channel, sfzText, sources);
       return errors;
     } catch {
       return ['SFZ konnte nicht geladen werden'];
@@ -1045,10 +1050,12 @@ class AudioEngine {
 
   public sfzNoteOn(note: number, velocity = 100): void {
     this.sfzBank?.noteOn(note, velocity);
+    this.v2LiveSink.sfzNoteOn(this.sfzV2Channel, note, velocity);
   }
 
   public sfzNoteOff(note: number): void {
     this.sfzBank?.noteOff(note);
+    this.v2LiveSink.sfzNoteOff(this.sfzV2Channel, note);
   }
 
   // Task #3: SFZ/OPFS-Streaming-Kern, verdrahtet an die Engine.
