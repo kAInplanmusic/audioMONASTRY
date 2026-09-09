@@ -7,7 +7,7 @@ describe('audioGraphSerialization', () => {
     expect(isAudioGraphState(state)).toBe(true);
     expect(state.version).toBe(1);
     expect(state.bpm).toBe(120);
-    expect(Object.keys(state.patterns)).toHaveLength(8);
+    expect(Object.keys(state.patterns)).toHaveLength(10);
     expect(state.synthNotes).toHaveLength(16);
   });
 

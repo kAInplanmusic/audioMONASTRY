@@ -3,22 +3,28 @@
  * =============================
  * Backend-unabhängige Render-Engine für den V2-Live-Output-Sink (Phase 1).
  *
- * Sie kapselt eine V2StudioGraph-Instanz und erzeugt wahlweise einen
- * phasen-kontinuierlichen Testton auf channel1, der durch den kompletten
- * V2-Graph (Source → Gain → Pan → MasterSum) läuft. Der gerenderte Stereo-Block
- * kann anschließend im AudioWorklet direkt auf die AudioContext-Destination
+ * Sie kapselt eine V2MonitorGraph-Instanz (10 Kanäle + Cue/Main/Monitor) und
+ * erzeugt wahlweise einen phasen-kontinuierlichen Testton auf channel1, der
+ * durch den kompletten V2-Graph läuft. Der gerenderte Monitor-Block kann
+ * anschließend im AudioWorklet direkt auf die AudioContext-Destination
  * geschrieben werden.
+ *
+ * Phase 4: Der lokale Monitor-Ausgang folgt einem `MonitorRoutingPlan`
+ * (MAIN/MON/PLUGIN/MIX) – der MAIN-Bus bleibt davon unverändert.
  *
  * Die Klasse enthält KEINE WebAudio-/AudioWorklet-API und ist damit sowohl im
  * AudioWorklet (über den v2SinkProcessor) als auch in Node-Tests nutzbar.
  */
-import { V2StudioGraph, V2Channel, V2_CHANNELS } from '../V2StudioGraph';
+import { V2_CHANNELS, type V2Channel } from '../V2StudioGraph';
+import { V2MonitorGraph } from '../V2MonitorGraph';
+import { V2OutputGraph } from '../V2OutputGraph';
 import type { IProcessingContext } from '../types';
+import type { MonitorRoutingPlan } from '../monitorRouting';
 
 export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
     | 'sample-set' | 'sample-trigger' | 'sample-stop' | 'synth-source'
-    | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off';
+    | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout';
   active?: boolean;
   freq?: number;
   amplitude?: number;
@@ -42,6 +48,8 @@ export interface V2SinkMessage {
   sources?: Record<string, Float32Array>;
   note?: number;
   velocity?: number;
+  plan?: MonitorRoutingPlan;
+  layoutId?: string;
 }
 
 /** Ein sample-genau getriggerter Step-Burst innerhalb eines Render-Blocks. */
@@ -89,7 +97,8 @@ const SILENCE_CHANNEL_COUNT = 1;
 const STEP_DECAY_PER_SEC = 28; // schneller, nicht-zippernder Step-Burst
 
 export class V2SinkEngine {
-  readonly studio: V2StudioGraph;
+  readonly studio: V2MonitorGraph;
+  readonly outputGraph: V2OutputGraph;
 
   private testToneActive = false;
   private freq = DEFAULT_TEST_FREQ;
@@ -97,6 +106,7 @@ export class V2SinkEngine {
   private phase = 0;
   private currentTime = 0;
   private lastBlockSize = 0;
+  private outputLayoutId = 'stereo';
   /** Wiederverwendeter Stille-Buffer (keine Allokation im inaktiven Hot-Path). */
   private silenceBuffer = new Float32Array(0);
   /** Hochgeladene Sample-Quellen je Kanal (Phase 3). */
@@ -109,7 +119,8 @@ export class V2SinkEngine {
   private readonly externalSources = new Map<V2Channel, Float32Array[]>();
 
   constructor(sampleRate = 48000, blockSize = 128) {
-    this.studio = new V2StudioGraph(sampleRate, blockSize);
+    this.studio = new V2MonitorGraph(sampleRate, blockSize);
+    this.outputGraph = new V2OutputGraph(sampleRate);
     this.lastBlockSize = blockSize;
   }
 
@@ -139,6 +150,27 @@ export class V2SinkEngine {
   /** Setzt den Master-Gain (linear, 0..2) auf der V2-Graph-Instanz. */
   setMasterGain(value: number): void {
     this.studio.setMasterGain(value);
+  }
+
+  /** Phase 4: Übernimmt einen MonitorRoutingPlan in den V2-Monitor-Graph. */
+  applyMonitorRouting(plan: MonitorRoutingPlan): void {
+    if (!plan) return;
+    this.studio.applyMonitorPlan(plan);
+  }
+
+  /** Aktueller Monitor-Plan des V2-Graphs (für Sync/Diagnose). */
+  getMonitorRouting(): MonitorRoutingPlan {
+    return this.studio.monitorPlan;
+  }
+
+  /** Phase 4: Ausgabe-Layout (stereo/2.1/N.x) des V2-Output-Graphs setzen. */
+  setOutputLayout(layoutId: string): void {
+    this.outputLayoutId = layoutId || 'stereo';
+    this.outputGraph.setLayout(this.outputLayoutId);
+  }
+
+  getOutputLayout(): string {
+    return this.outputLayoutId;
   }
 
   /** Registriert eine Sample-Quelle für einen Kanal (Phase 3). */
@@ -261,16 +293,24 @@ export class V2SinkEngine {
       this.studio.setSourceBuffer(channel, [this.silenceBuffer]);
     }
 
-    const rendered = this.studio.render(ctx);
+    // Phase 4: Der Live-Output ist der lokale Monitor-Ausgang (MAIN/Cue/Monitor).
+    const rendered = this.studio.renderMonitor(ctx);
+    const stereo = rendered ?? [new Float32Array(ctx.bufferSize), new Float32Array(ctx.bufferSize)];
+    // Phase 4: Ausgangs-Graph für 2.1-/Mehrkanal-Layouts (Stereo bleibt Stereo).
+    this.outputGraph.setInputStereo(stereo[0], stereo[1] ?? stereo[0]);
+    const output = this.outputGraph.render(ctx) ?? stereo;
     this.currentTime += ctx.quantum;
     this.lastBlockSize = ctx.bufferSize;
 
-    return rendered ?? [new Float32Array(ctx.bufferSize), new Float32Array(ctx.bufferSize)];
+    return output;
   }
 
   /** Setzt Engine und V2-Graph in den Ausgangszustand. */
   reset(): void {
     this.studio.reset();
+    this.outputGraph.reset();
+    this.outputLayoutId = 'stereo';
+    this.outputGraph.setLayout('stereo');
     this.testToneActive = false;
     this.freq = DEFAULT_TEST_FREQ;
     this.amplitude = DEFAULT_TEST_AMPLITUDE;

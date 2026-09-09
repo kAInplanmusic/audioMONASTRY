@@ -119,6 +119,16 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             this.sfzBanks.get(msg.channel)?.noteOff(msg.note);
           }
           break;
+        case 'monitor-plan':
+          if (msg.plan) {
+            this.engine.applyMonitorRouting(msg.plan);
+          }
+          break;
+        case 'output-layout':
+          if (typeof msg.layoutId === 'string') {
+            this.engine.setOutputLayout(msg.layoutId);
+          }
+          break;
         default:
           break;
       }

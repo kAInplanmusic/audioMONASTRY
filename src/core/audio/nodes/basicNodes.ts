@@ -5,6 +5,7 @@
  */
 import { AudioParameter, AudioPort } from '../AudioGraph';
 import { audioBufferPool } from '../BufferPool';
+import { Stereo21Crossover } from '../../output/crossover';
 import type { IAudioNode, IAudioPort, IProcessingContext } from '../types';
 
 abstract class BaseNode implements IAudioNode {
@@ -181,6 +182,139 @@ export class MasterSumNode extends BaseNode {
 
   reset(): void {
     this.masterGain.reset();
+    this.outputs[0].buffer = null;
+  }
+}
+
+/**
+ * Summen-/Bus-Knoten für den V2-Routing-Pfad (Phase 4).
+ * Summiert N Eingänge auf `outputChannels` planare Kanäle. Mono-Quellen werden
+ * auf alle Zielkanäle dupliziert, damit Cue-Bus und Monitor-Mischung ohne
+ * Channel-Splitter/merger auskommen.
+ */
+export class StereoSumNode extends BaseNode {
+  readonly gain: AudioParameter;
+
+  constructor(id: string, inputs = 1, gain = 1, public readonly outputChannels = 2) {
+    super(id, 'sum', inputs, 1);
+    this.gain = new AudioParameter(`${id}:gain`, 0, 4, gain);
+    this.parameters.push(this.gain);
+  }
+
+  process(ctx: IProcessingContext): void {
+    const len = ctx.bufferSize;
+    const out = audioBufferPool.acquire(this.outputChannels, len);
+    for (const ch of out) ch.fill(0);
+    const g = this.gain.getValueAtTime(ctx.currentTime);
+    for (const input of this.inputs) {
+      const src = input.connections[0]?.buffer;
+      if (!src || src.length === 0) continue;
+      for (let ch = 0; ch < this.outputChannels; ch++) {
+        const srcCh = src[Math.min(ch, src.length - 1)] ?? src[0];
+        if (!srcCh) continue;
+        for (let i = 0; i < len; i++) out[ch][i] += srcCh[i] * g;
+      }
+    }
+    // NaN/Inf-Schutz analog MasterSumNode – ein defekter Input darf den Bus nicht kippen.
+    for (const ch of out) {
+      for (let i = 0; i < len; i++) {
+        const v = ch[i];
+        if (!Number.isFinite(v)) ch[i] = 0;
+      }
+    }
+    this.outputs[0].buffer = out;
+  }
+
+  reset(): void {
+    this.gain.reset();
+    this.outputs[0].buffer = null;
+  }
+}
+
+/**
+ * 2.1-Master-Ausgangs-Knoten (Phase 4): Stereo-Eingang → L/R/LFE.
+ * Nutzt denselben Linkwitz-Riley-Crossover wie der V1-Pfad (`core/output`).
+ */
+export class Stereo21OutputNode extends BaseNode {
+  private readonly crossover: Stereo21Crossover;
+
+  constructor(id: string, sampleRate = 48000, crossoverHz = 90) {
+    super(id, 'stereo21', 1, 1);
+    this.crossover = new Stereo21Crossover(sampleRate, crossoverHz, '2.1');
+  }
+
+  process(ctx: IProcessingContext): void {
+    const input = this.inputBuffer(ctx);
+    if (!input) {
+      this.outputs[0].buffer = null;
+      return;
+    }
+    const len = input[0]?.length ?? ctx.bufferSize;
+    const left = input[0] ?? new Float32Array(len);
+    const right = input[1] ?? left;
+    const result = this.crossover.process(left, right);
+    this.outputs[0].buffer = [result.left, result.right, result.lfe];
+  }
+
+  reset(): void {
+    this.crossover.reset();
+    this.outputs[0].buffer = null;
+  }
+}
+
+/**
+ * Mehrkanal-Spatial-Bus-Knoten (Phase 4): nimmt einen Stereo-Master entgegen
+ * und verteilt den Mono-Anteil (L+R)/2 über frei konfigurierbare Kanal-Gewichte
+ * auf N Ausgangskanäle. Das entspricht dem V1-Spatial-Bus-Modell
+ * (`buildSpatialBus`) – backend-unabhängig und deterministisch.
+ */
+export class MultichannelBusNode extends BaseNode {
+  readonly channelGains: AudioParameter[] = [];
+
+  constructor(id: string, outputChannels: number) {
+    super(id, 'multichannel', 1, 1);
+    for (let i = 0; i < outputChannels; i++) {
+      const p = new AudioParameter(`${id}:out${i}`, 0, 2, 0);
+      this.channelGains.push(p);
+      this.parameters.push(p);
+    }
+  }
+
+  setChannelGain(channel: number, value: number): void {
+    const p = this.channelGains[channel];
+    if (p) p.setValue(Math.max(0, Math.min(2, value)));
+  }
+
+  setChannelGains(weights: readonly number[]): void {
+    for (let i = 0; i < this.channelGains.length; i++) this.setChannelGain(i, weights[i] ?? 0);
+  }
+
+  get outputChannels(): number {
+    return this.channelGains.length;
+  }
+
+  process(ctx: IProcessingContext): void {
+    const input = this.inputBuffer(ctx);
+    if (!input) {
+      this.outputs[0].buffer = null;
+      return;
+    }
+    const len = input[0]?.length ?? ctx.bufferSize;
+    const left = input[0] ?? new Float32Array(len);
+    const right = input[1] ?? left;
+    const out = audioBufferPool.acquire(this.outputChannels, len);
+    for (const ch of out) ch.fill(0);
+    for (let i = 0; i < len; i++) {
+      const mono = (left[i] + right[i]) * 0.5;
+      for (let ch = 0; ch < this.outputChannels; ch++) {
+        out[ch][i] = mono * this.channelGains[ch].getValueAtTime(ctx.currentTime);
+      }
+    }
+    this.outputs[0].buffer = out;
+  }
+
+  reset(): void {
+    for (const p of this.channelGains) p.reset();
     this.outputs[0].buffer = null;
   }
 }

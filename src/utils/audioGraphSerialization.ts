@@ -28,6 +28,7 @@ export interface AudioGraphState {
 const TRACK_KEYS = [
   'channel1', 'channel2', 'channel3', 'channel4',
   'channel5', 'channel6', 'channel7', 'channel8',
+  'channel9', 'channel10',
 ];
 
 /** Validiert ein unbekanntes Objekt als AudioGraphState (defensiv). */

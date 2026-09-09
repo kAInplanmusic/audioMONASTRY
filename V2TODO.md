@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-08 · Phase 1–3 (hörbar, Scheduler, Quellen/SFZ) abgeschlossen
+> Stand: 2026-09-09 · Phase 1–4 (hörbar, Scheduler, Quellen/SFZ, Kanal-/Routing-Parität) abgeschlossen
 
 ---
 
@@ -19,19 +19,19 @@
 | V2 Studio Graph (10 Kanäle) | `src/core/audio/V2StudioGraph.ts` | ✅ Grundstruktur |
 | AudioGraph + Node-Modell | `src/core/audio/AudioGraph.ts`, `nodes/basicNodes.ts` | ✅ |
 | WorkletGraphRuntime | `src/core/audio/WorkletGraphRuntime.ts` | ✅ |
-| GraphStateBridge | `src/core/audio/GraphStateBridge.ts` | ⚠️ nur 8 Kanäle |
+| GraphStateBridge | `src/core/audio/GraphStateBridge.ts` | ✅ 10 Kanäle |
+| V2MonitorGraph (Cue/Main/Monitor) | `src/core/audio/V2MonitorGraph.ts` | ✅ Phase 4 |
+| V2OutputGraph (2.1/Spatial) | `src/core/audio/V2OutputGraph.ts` | ✅ Phase 4 |
 | GraphEngineAdapter | `src/core/audio/compat/GraphEngineAdapter.ts` | ✅ V1↔V2 Sync |
 | GraphPlaybackEngine | `src/core/audio/compat/GraphPlaybackEngine.ts` | ⚠️ Prototyp, setInterval |
 | V2-Modi in Engine | `src/utils/audioEngine.ts` | ⚠️ vorhanden, default V1 |
 | OfflineBounceEngine | `src/audio/bounce/OfflineBounceEngine.ts` | ✅ offline |
 
 **Kern-Lücken:**
-1. Kein hörbarer Live-Output aus V2
-2. Keine echten Quellen (V1-Instrumente/Player speisen nicht in V2 ein)
-3. Kein sample-genauer Scheduler
-4. Kollaboration/Session/Locking nur V1
-5. UI spielt weiterhin V1
-6. Kein vollständiger Test-Paritätsnachweis V1 ↔ V2
+1. Kollaboration/Session/Locking nur V1
+2. UI spielt weiterhin V1
+3. Kein vollständiger Test-Paritätsnachweis V1 ↔ V2
+4. DSP/Effekt/Mastering noch nicht vollständig als V2-Nodes (Phase 5)
 
 ## 3. Zielarchitektur
 
@@ -80,10 +80,10 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] SFZ-/Instrument-Pfade auf V2 umstellen
 
 ### Phase 4 – Kanal-/Routing-Parität
-- [ ] GraphStateBridge auf 10 Kanäle erweitern (aktuell 8)
-- [ ] `pluginChannelMap`/Monitor-Routing in V2 abbilden
-- [ ] Cue/Main/Monitor-Pfade als V2-Graph
-- [ ] Spatial-Bus/2.1-Mehrkanal in V2
+- [x] GraphStateBridge auf 10 Kanäle erweitern (aktuell 8)
+- [x] `pluginChannelMap`/Monitor-Routing in V2 abbilden
+- [x] Cue/Main/Monitor-Pfade als V2-Graph
+- [x] Spatial-Bus/2.1-Mehrkanal in V2
 
 ### Phase 5 – DSP/Effekt/Mastering
 - [ ] EQ/DSP/Effect/Dynamics/Mastering als V2-Nodes
@@ -143,4 +143,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 4 beginnen: **Kanal-/Routing-Parität** – GraphStateBridge auf 10 Kanäle, pluginChannelMap/Monitor-Routing, Cue/Main/Monitor als V2-Graph
+- Phase 5 beginnen: **DSP/Effekt/Mastering** – EQ/DSP/Dynamics/Mastering als V2-Nodes, Automation an V2-Nodes, WorkletChain produktiv, Offline-Bounce über denselben V2-Graph

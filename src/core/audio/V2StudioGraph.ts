@@ -1,10 +1,11 @@
 /**
  * audioMONASTRY · V2StudioGraph (NEW-D4-1, „V2-Minimum hörbar“)
  * ================================================================
- * Vollständiger, backend-unabhängiger 8-Kanal-Mischpfad auf dem V2-AudioGraph:
+ * Vollständiger, backend-unabhängiger 10-Kanal-Mischpfad auf dem V2-AudioGraph:
  *   Source → Gain (dB) → StereoPan → MasterSum (Soft-Clip/NaN-Guard) → Stereo
  * Realtime (AudioWorklet-Adapter) und Offline (Tests/Bounce) nutzen dieselbe
  * Struktur. Über `GraphEngineAdapter` bleibt der V1-Zustand synchron.
+ * Cue/Main/Monitor-Parität inkl. MonitorRoutingPlan baut `V2MonitorGraph` auf.
  */
 import { AudioGraph } from './AudioGraph';
 import { GainNode, MasterSumNode, SourceNode, StereoPanNode } from './nodes/basicNodes';

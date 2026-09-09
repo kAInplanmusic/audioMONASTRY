@@ -2,12 +2,12 @@
  * audioMONASTRY · Phase 1, Schritt 1 – GraphStateBridge
  * ======================================================
  * Hebt `AudioGraphState` (export/import) auf den backend-unabhängigen Graph.
+ * Phase 4: unterstützt alle 10 V2-Kanäle (channel1..channel10).
  */
 import { AudioGraph } from './AudioGraph';
 import type { AudioGraphState } from '../../utils/audioGraphSerialization';
 import { GainNode, StereoPanNode } from './nodes/basicNodes';
-
-const CHANNELS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'] as const;
+import { V2_CHANNELS } from './V2StudioGraph';
 
 function dbToLinear(db: number): number {
   return Math.pow(10, db / 20);
@@ -24,7 +24,7 @@ export class GraphStateBridge {
 
   /** Importiert einen AudioGraphState in Gain-/Pan-Nodes (Mixer-Kette). */
   importState(state: AudioGraphState): void {
-    for (const track of CHANNELS) {
+    for (const track of V2_CHANNELS) {
       let gain = this.gainNodes.get(track);
       if (!gain) {
         gain = new GainNode(`gain:${track}`, 1);
@@ -49,7 +49,7 @@ export class GraphStateBridge {
   exportState(base: Omit<AudioGraphState, 'channelGainsDb' | 'channelPans'>): AudioGraphState {
     const channelGainsDb: Record<string, number> = {};
     const channelPans: Record<string, number> = {};
-    for (const track of CHANNELS) {
+    for (const track of V2_CHANNELS) {
       const gain = this.gainNodes.get(track);
       const pan = this.panNodes.get(track);
       channelGainsDb[track] = gain ? linearToDb(gain.gain.value) : 0;

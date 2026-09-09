@@ -786,6 +786,7 @@ class AudioEngine {
     const keys: TrackType[] = [
       'channel1','channel2','channel3','channel4',
       'channel5','channel6','channel7','channel8',
+      'channel9','channel10',
     ];
     for (const k of keys) {
       const arr = patterns?.[k];
@@ -2013,6 +2014,9 @@ class AudioEngine {
     (Object.keys(plan.cueTracks) as TrackType[]).forEach((t) => {
       setGain(this.cueTrackGains[t], plan.cueTracks[t]);
     });
+    // Phase 4: Wenn der V2-Live-Sink aktiv ist, bekommt er denselben Plan –
+    // der V2-MonitorGraph bildet MAIN/MON/PLUGIN/MIX backend-unabhängig ab.
+    this.v2LiveSink.setMonitorRouting(plan);
   }
 
   /** Erstellt den PolyBLEP-Synth-Worklet (falls geladen) und verdrahtet ihn. */
@@ -2457,6 +2461,8 @@ class AudioEngine {
   /** Verbindet den V2-Live-Output-Sink mit der AudioContext-Destination. */
   public async connectV2LiveOutput(): Promise<boolean> {
     await this.ensureInitialized();
+    // Phase 4: V2-Sink folgt dem 2.1-/Stereo-Ausgabemodus des Master-Pfads.
+    this.v2LiveSink.setOutputLayout(this.stereoMode === '2.1' ? '2.1' : 'stereo');
     const ok = await this.v2LiveSink.connect(this.ctx);
     if (ok) this.syncV2FromV1();
     return ok;
@@ -2499,6 +2505,8 @@ class AudioEngine {
     const master = Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20);
     this.v2Studio.setMasterGain(master);
     this.v2LiveSink.setMasterGain(master);
+    // Phase 4: Monitor-/Cue-Plan in den V2-Live-Sink spiegeln.
+    this.v2LiveSink.setMonitorRouting(this.monitorPlan);
   }
 
   /** Spiegelt alle Step-Patterns in den V2-Live-Sink (Phase 2). */
@@ -3161,6 +3169,8 @@ class AudioEngine {
   public setStereoMode(mode: '2.0' | '2.1'): void {
     this.stereoMode = mode === '2.1' ? '2.1' : '2.0';
     this.applyMasterOutputRouting();
+    // Phase 4: V2-Output-Graph synchron umschalten (falls V2-Sink aktiv/gewünscht).
+    this.v2LiveSink.setOutputLayout(this.stereoMode === '2.1' ? '2.1' : 'stereo');
   }
 
   public getStereoMode(): '2.0' | '2.1' {

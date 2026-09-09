@@ -13,6 +13,8 @@
  */
 import type { V2Channel } from '../V2StudioGraph';
 import type { V2SinkMessage } from '../live/V2SinkEngine';
+import type { MonitorRoutingPlan } from '../monitorRouting';
+import { v2OutputChannelCount } from '../V2OutputGraph';
 
 const V2_SINK_PROCESSOR_NAME = 'v2-sink-processor';
 const V2_SINK_WORKLET_URL = '/worklets/v2SinkProcessor.js';
@@ -20,6 +22,7 @@ const V2_SINK_WORKLET_URL = '/worklets/v2SinkProcessor.js';
 export class V2LiveSink {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
+  private outputLayoutId = 'stereo';
 
   get isConnected(): boolean {
     return this.node !== null && this.context !== null;
@@ -44,17 +47,33 @@ export class V2LiveSink {
       const node = new AudioWorkletNode(ctx, V2_SINK_PROCESSOR_NAME, {
         numberOfInputs: 0,
         numberOfOutputs: 1,
-        outputChannelCount: [2],
+        outputChannelCount: [Math.max(2, Math.min(24, v2OutputChannelCount(this.outputLayoutId)))],
       });
       node.connect(ctx.destination);
       this.context = ctx;
       this.node = node;
+      this.post({ type: 'output-layout', layoutId: this.outputLayoutId });
       return true;
     } catch (e) {
       console.warn('[v2-sink] V2-Live-Sink nicht verfügbar – V2 bleibt offline.', e);
       this.disconnect();
       return false;
     }
+  }
+
+  /** Phase 4: Ausgabe-Layout setzen (stereo/2.1/N.x). Wirkt live erst nach Reconnect. */
+  setOutputLayout(layoutId: string): boolean {
+    this.outputLayoutId = layoutId || 'stereo';
+    if (this.isConnected && this.context) {
+      this.disconnect();
+      void this.connect(this.context); // asynchron reconnect; Fehler werden intern abgefangen
+      return true;
+    }
+    return false;
+  }
+
+  getOutputLayout(): string {
+    return this.outputLayoutId;
   }
 
   /** Trennt den Sink von der Destination (idempotent). */
@@ -94,6 +113,12 @@ export class V2LiveSink {
   /** Setzt den Master-Gain (linear, 0..2) auf der V2-Graph-Instanz im Worklet. */
   setMasterGain(value: number): boolean {
     return this.post({ type: 'master-gain', value });
+  }
+
+  /** Phase 4: Überträgt den lokalen MonitorRoutingPlan in den V2-Sink. */
+  setMonitorRouting(plan: MonitorRoutingPlan): boolean {
+    if (!plan) return false;
+    return this.post({ type: 'monitor-plan', plan });
   }
 
   /** Startet den sample-genauen V2-Transport (AudioWorklet-Step-Scheduler). */
