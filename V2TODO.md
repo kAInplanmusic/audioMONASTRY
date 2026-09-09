@@ -118,9 +118,14 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 ### Phase 8 – Paritäts-/Hörtests
 - [x] V1↔V2 Paritätstest (VISIONS B8) – automatisiert in `tests/v2Parity.test.ts`
 - [x] A/B-Hörtest-Proxy (deterministisch, Pegel-/Hashing-Vergleich) in `tests/v2Parity.test.ts`
-- [x] `npm run verify` komplett grün (925 Tests, Stand Phase 8)
+- [x] `npm run verify` komplett grün (931 Tests, Stand AP1–AP3)
 - [x] `npm run build` grün
 - [ ] E2E-Live-Gate (Playwright gegen echte Session/Infrastruktur)
+
+### Reale Audio-Verifikation (AP1–AP3)
+- [x] AP1: Live-V2-E2E-Gate angelegt (`tests/e2e/v2-live.spec.ts`, `skip` in Headless; benötigt audio-fähigen Browser/Live-Instanz)
+- [x] AP2: Sample-genauer Scheduler läuft im echten AudioWorklet (`V2SampleClock` + `v2SinkProcessor`); frame-exakte Tests grün
+- [x] AP3: Echte V1-Worklet-Klassen (`EqProcessor`, `DspProcessor`, `EffectProcessor`) exportiert; `tests/v2DspV1Parity.test.ts` vergleicht echte V1-Klassen mit V2-Nodes
 
 ### Phase 9 – V1 entfernen
 - [ ] Tone.js-/V1-Abhängigkeiten entfernen, soweit möglich
