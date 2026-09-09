@@ -51,7 +51,7 @@ npm start                   # node dist/server.cjs
 | `npm run check:bundle` | Bundle size (< 2.0 MiB fail gate, warning < 1.5 MiB) |
 | `npm run check:memo` | React memo heuristic for terminal components |
 | `npm run generate:golden` | Golden WAV references for DSP tests |
-| `npm run eval:ai`, `iterate:prompts` | AI evaluation / prompt iteration (21 plugins) |
+| `npm run eval:ai`, `iterate:prompts` | AI evaluation / prompt iteration (16 plugins) |
 | `npm run stress:hetzner`, `stress:sfu*` | Load/SFU tests against the fleet |
 | `npm run build:wasm-hrtf` | Rust → WASM HRTF convolution (`src/audio/wasm/hrtf_conv`) |
 

@@ -5,6 +5,7 @@ import {
 // Lazy-Code-Splitting: Jedes Terminal wird erst beim Aktivieren geladen
 // (reduziert das Hauptbundle erheblich; Vite erzeugt eigene Chunks).
 import { lazy } from 'react';
+import { createPluginAdapters } from './adapters';
 const SyntiSamplerTerminal = lazy(() => import('../components/SyntiSamplerTerminal').then(m => ({ default: m.SyntiSamplerTerminal })));
 const DrumMachineTerminal = lazy(() => import('../components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 const InstrumentsTerminal = lazy(() => import('../components/InstrumentsTerminal').then(m => ({ default: m.InstrumentsTerminal })));
@@ -102,6 +103,9 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
 
 const EXPECTED_PLUGIN_COUNT = 16;
 
+// Kanonische Adapter (ein Adapter pro kanonischer Plugin-ID).
+const pluginAdapters = createPluginAdapters();
+
 const createFallbackRegistry = () =>
   Object.keys(COMPONENT_MAP).map((id) => {
     const metadata = DEFAULT_PLUGIN_METADATA[id] || {
@@ -115,6 +119,7 @@ const createFallbackRegistry = () =>
       short: metadata.short,
       icon: ICON_MAP[metadata.icon] || Cpu,
       component: COMPONENT_MAP[id],
+      adapter: pluginAdapters[id],
     };
   });
 
@@ -132,8 +137,9 @@ export const discoverPlugins = async () => {
             const discoveredPlugins = manifest.ui_plugins.map((p: any) => ({
                 ...p,
                 icon: ICON_MAP[p.icon] || Cpu,
-                component: COMPONENT_MAP[p.id]
-            })).filter((p: any) => p.component);
+                component: COMPONENT_MAP[p.id],
+                adapter: pluginAdapters[p.id],
+            })).filter((p: any) => p.component && p.adapter);
 
             if (discoveredPlugins.length === EXPECTED_PLUGIN_COUNT) {
                 _pluginRegistry = Object.freeze(discoveredPlugins);

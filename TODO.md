@@ -163,7 +163,7 @@ Regeln: Alte MONKs werden erst entfernt, wenn ihre Funktion im neuen Modul/Syste
 - **Priority:** P1 · **Domain:** Plugin Architecture · **Status:** DONE (2026-09-09, Registry/Manifest/Router/channelMap/evalMatrix/prompts/commandRegistry/App/Settings/Themes umgestellt)
 - **Task:** Plugin-Registry auf exakt 16 echte MONKs in Ziel-Reihenfolge migrieren (Namen, Kategorien, `public/plugin-manifest.json`, `registry.ts`, `App.tsx` RACK_ORDER/NAV).
 - **Location:** `src/plugins/registry.ts`, `public/plugin-manifest.json`, `src/App.tsx`
-- **Current State:** 21 ui_plugins (instrument, sampler, drum, mcp, synthesizer, controller …), `EXPECTED_PLUGIN_COUNT=21`.
+- **Current State:** 16 ui_plugins (mixer, drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record), `EXPECTED_PLUGIN_COUNT=16`; Adapter-Architektur unter `src/plugins/adapters/` eingeführt.
 - **Target State:** 16 IDs: `mixer, drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record`; `EXPECTED_PLUGIN_COUNT=16`; Manifest synchron.
 - **Implementation:** Registry umschreiben; App-RACK_ORDER/NAV_EXCLUDED anpassen; `usePluginState`-IDs migrieren; Komponenten-Aliase (`mastering→master`, `recording→record`, `instrument→instru`).
 - **Acceptance Criteria:** (a) `getPluginRegistry()` liefert exakt 16 in Ziel-Reihenfolge; (b) `plugin-manifest.json` konsistent; (c) Header-Navigation rendert 16 Icons; (d) `registryConflict.test.ts`/`pluginAudit.test.ts` grün.

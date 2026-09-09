@@ -172,7 +172,7 @@ Plugin-Leases) und liefert im Produktionsbetrieb das SPA-Bundle (`GET *`).
 
 ## 5. Plugin-Ökosystem
 
-**Registry:** `src/plugins/registry.ts` – 21 Module (`EXPECTED_PLUGIN_COUNT = 21`),
+**Registry:** `src/plugins/registry.ts` – **exakt 16 Plugins** (`EXPECTED_PLUGIN_COUNT = 16`),
 Zustände `OFF` | `AUTO_AI` | `PRO`, B2B-Locking via `src/core/session/locking.ts`.
 Die Registry wird zur Laufzeit aus `public/plugin-manifest.json` geladen
 (`discoverPlugins()`); stimmt die Anzahl nicht, greift die eingebaute

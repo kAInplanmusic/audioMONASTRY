@@ -120,3 +120,37 @@ Before submitting any Pull Request or completing a code generation task, verify:
 3. Is the plugin locking mechanism (B2B mode) preserved?
 4. `npm run verify` ist grün (tsc + Vitest + Interface-Boundary-Scan = 0 Verstöße).
 5. Keys bleiben serverseitig – keine Secrets in Client-Code oder Bundles.
+
+---
+
+## 5. Canonical Plugin Architecture
+
+audioMONASTRY has exactly 16 canonical plugin adapters:
+
+`mixer`, `drop`, `song`, `effect`, `syntisampler`, `drumsampler`,
+`instru`, `biblio`, `voice`, `sound`, `stem`, `spatial`,
+`eq`, `dsp`, `master`, `record`.
+
+`masterplayer`, `ai`, `performance`/`perfor` and system-level
+controller functionality are not counted as canonical audio plugins.
+
+All canonical plugins must implement the shared runtime contract:
+
+- `initialize(context)`
+- `setState(state)`
+- `setParameter(parameter)`
+- synchronous `process(audioBlock)`
+- asynchronous `handleCommand(command)`
+- `snapshot()`
+- `restore(snapshot)`
+- idempotent `dispose()`
+
+Rules:
+
+- `OFF` must be a transparent bypass.
+- No network, storage, React state update or blocking lock operation inside `process()`.
+- Time-critical DSP must use the existing AudioWorklet/WASM/audio backend boundaries.
+- Plugin UI must not own the canonical audio runtime state.
+- All mutating commands must respect the centralized collaboration lock.
+- Legacy plugin IDs must resolve through explicit aliases (`src/plugins/legacyAliases.ts`).
+- `npm run verify` must remain green.
