@@ -58,7 +58,7 @@ const stemJobStatus = new Map<string, 'active' | 'pending' | 'success' | 'failed
 // ARCH-PERF-001: In Tests (VITEST=true / NODE_ENV=test) keine .env laden –
 // sonst überschreibt dotenv die von den Tests kontrollierte Umgebung
 // (z. B. STUDIO_ACCESS_TOKEN) und Server-Tests schlagen je nach Host-.env fehl.
-if (process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
+if (process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test' && process.env.AUDIOMONASTRY_NO_AUTOSTART !== '1') {
   dotenv.config();
 }
 
@@ -292,17 +292,26 @@ const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 60);
 const AI_RATE = resolveAiRateLimits(process.env as Record<string, string | undefined>);
 
 // P-1: Studio-Zugangstoken. Wird vom Portal (Cloudflare Worker) gesetzt und
-// als HttpOnly-Cookie `studio` an den Browser gegeben. Leer = lokaler
-// Dev-Modus (kein Schutz, wie bisher). Gesetzt = alle /api/* (außer health)
-// und der Socket.io-Handshake verlangen den Token.
+// als HttpOnly-Cookie `studio` an den Browser gegeben.
+//   - Token gesetzt  → alle /api/* (außer health) + Socket.io-Handshake verlangen ihn.
+//   - Token leer     → NUR mit explizitem Dev-/Test-Modus offen:
+//       * NODE_ENV=production: immer geschlossen (fail-closed, 503)
+//       * AUDIOMONASTRY_DEV_NO_AUTH=1 (nur außerhalb Production): lokaler Dev-Modus
+//       * VITEST=true / NODE_ENV=test: Test-Modus
+//     Ohne eine dieser Freigaben ist die API geschlossen (kein stiller Dev-Modus).
 const STUDIO_ACCESS_TOKEN = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
 const studioTokenEnabled = STUDIO_ACCESS_TOKEN.length > 0;
 // P0-Security: Production läuft NIE ungeschützt. Fehlt der Studio-Token in
 // Produktion, bleibt die API fail-closed (nur /api/health offen) statt fail-open.
 const isProductionEnv = process.env.NODE_ENV === 'production';
-const studioTokenMissing = isProductionEnv && !studioTokenEnabled;
+const devNoAuthExplicit = process.env.AUDIOMONASTRY_DEV_NO_AUTH === '1' && !isProductionEnv;
+const testNoAuth = !isProductionEnv && (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
+const studioAuthOpen = !studioTokenEnabled && (devNoAuthExplicit || testNoAuth);
+const studioTokenMissing = !studioTokenEnabled && !studioAuthOpen;
 if (studioTokenMissing) {
-  console.error('[security] FATAL: NODE_ENV=production, aber STUDIO_ACCESS_TOKEN fehlt. API ist bis auf /api/health geschlossen (fail-closed).');
+  console.error('[security] FATAL: STUDIO_ACCESS_TOKEN fehlt und kein expliziter Dev-/Test-Modus aktiv. API ist bis auf /api/health geschlossen (fail-closed).');
+} else if (studioAuthOpen) {
+  console.warn('[security] Unauthentifizierter Modus aktiv (AUDIOMONASTRY_DEV_NO_AUTH=1 bzw. Test).');
 }
 
 /** Konstantzeit-Vergleich zweier Token (Buffer-XOR). */
@@ -327,16 +336,43 @@ if (process.env.TRUST_PROXY === '1') {
   app.set('trust proxy', 1);
 }
 
+// P0-Security: Produktions-Origin-Allowlist für die REST-API. Greift nur,
+// wenn in Produktion explizit Origins konfiguriert sind (kein Breaking für
+// lokale Dev-/Test-Umgebungen ohne Origin-Header).
+const API_ALLOWED_ORIGINS = (
+  process.env.API_ALLOWED_ORIGINS ||
+  process.env.SIGNALING_ALLOWED_ORIGINS ||
+  ''
+)
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use('/api', (req, res, next) => {
+  if (
+    isProductionEnv &&
+    API_ALLOWED_ORIGINS.length > 0 &&
+    !API_ALLOWED_ORIGINS.includes('*')
+  ) {
+    const origin = String(req.headers?.origin ?? '');
+    if (origin && !API_ALLOWED_ORIGINS.includes(origin)) {
+      res.status(403).json({ error: 'origin-not-allowed', code: 'ORIGIN_NOT_ALLOWED' });
+      return;
+    }
+  }
+  next();
+});
+
 // P-1: Auth-Middleware für alle /api/* außer /api/health.
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
-  // P0-Security: Production fail-closed – ohne konfigurierten Studio-Token
-  // ist die API geschlossen (kein stiller Dev-Modus in Produktion).
+  // P0-Security: fail-closed – ohne Studio-Token UND ohne expliziten
+  // Dev-/Test-Modus ist die API geschlossen (kein stiller Dev-Modus).
   if (studioTokenMissing) {
     res.status(503).json({ error: 'server not configured', code: 'STUDIO_TOKEN_MISSING' });
     return;
   }
-  if (!studioTokenEnabled) return next();
+  if (studioAuthOpen) return next();
   const token = studioTokenFromRequest(req);
   if (token && safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) return next();
   res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
@@ -2157,7 +2193,7 @@ app.post('/api/song/generate', async (req, res) => {
 // ===========================================================================
 // Static Asset delivery (Vite dev / production dist)
 // ===========================================================================
-async function startServer() {
+async function startServer(port: number = PORT): Promise<{ httpServer: http.Server; io: unknown } | null> {
   if (process.env.NODE_ENV !== 'production') {
     // Lazy-Import: vite ist eine Dev-Dependency und darf im Produktions-Image
     // (npm prune --omit=dev) fehlen.
@@ -2239,9 +2275,11 @@ async function startServer() {
       ? ALLOWED_ORIGINS
       : false;
 
+  let io: any = null;
+
   try {
     const { Server } = (await import('socket.io')) as any;
-    const io = new Server(server, {
+    io = new Server(server, {
       cors: {
         origin: CORS_ORIGIN,
         methods: ['GET', 'POST'],
@@ -2261,12 +2299,12 @@ async function startServer() {
       ) {
         return next(new Error('origin-not-allowed'));
       }
-      // P0-Security: Production fail-closed – ohne Studio-Token keine
-      // Signalisierung/WebRTC (kein stiller Dev-Modus in Produktion).
+      // P0-Security: fail-closed – ohne Studio-Token und ohne expliziten
+      // Dev-/Test-Modus keine Signalisierung/WebRTC.
       if (studioTokenMissing) {
         return next(new Error('server-not-configured'));
       }
-      if (studioTokenEnabled) {
+      if (!studioAuthOpen) {
         const cookie = String(socket.handshake?.headers?.cookie ?? '');
         const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
         const token = String(socket.handshake?.auth?.token ?? '') ||
@@ -2684,13 +2722,21 @@ async function startServer() {
     console.warn('Socket.io signaling disabled:', (e as Error).message);
   }
 
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`audioMONASTRY running on http://0.0.0.0:${PORT}`);
+  await new Promise<void>((resolve) => {
+    server.listen(port, '0.0.0.0', () => {
+      console.log(`audioMONASTRY running on http://0.0.0.0:${port}`);
+      resolve();
+    });
   });
+  return { httpServer: server, io };
 }
 
-export { app };
+export { app, startServer };
 
-if (process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
+if (
+  process.env.VITEST !== 'true' &&
+  process.env.NODE_ENV !== 'test' &&
+  process.env.AUDIOMONASTRY_NO_AUTOSTART !== '1'
+) {
   startServer();
 }
