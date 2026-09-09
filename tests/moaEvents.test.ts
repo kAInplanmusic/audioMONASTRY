@@ -50,34 +50,34 @@ describe('MOA Event-Handler (jsdom)', () => {
     expect(res.handled).toBe(true);
   });
 
-  it('recording start/stop feuern die Recorder-Events', async () => {
+  it('record start/stop feuern die Recorder-Events', async () => {
     const startPromise = nextEvent('monk:recorder-start');
-    const startRes = await voiceControlService.executePluginCommand('User1', 'recording', 'start');
+    const startRes = await voiceControlService.executePluginCommand('User1', 'record', 'start');
     await startPromise;
     expect(startRes.handled).toBe(true);
 
     const stopPromise = nextEvent('monk:recorder-stop');
-    const stopRes = await voiceControlService.executePluginCommand('User1', 'recording', 'stop');
+    const stopRes = await voiceControlService.executePluginCommand('User1', 'record', 'stop');
     await stopPromise;
     expect(stopRes.handled).toBe(true);
   });
 
-  it('performance mode überträgt den gewünschten Signal-Modus (ex-visMONK)', async () => {
+  it('perfor mode überträgt den gewünschten Signal-Modus (ex-visMONK)', async () => {
     const eventPromise = nextEvent('monk:visualizer-mode');
-    await voiceControlService.executePluginCommand('User1', 'performance', 'mode', { mode: 'SPECTROGRAM' });
+    await voiceControlService.executePluginCommand('User1', 'perfor', 'mode', { mode: 'SPECTROGRAM' });
     const event = await eventPromise;
     expect(event.detail).toBe('SPECTROGRAM');
   });
 
-  it('performance reset startet das Monitoring ohne Fehler neu', async () => {
-    const res = await voiceControlService.executePluginCommand('User1', 'performance', 'reset');
+  it('perfor reset startet das Monitoring ohne Fehler neu', async () => {
+    const res = await voiceControlService.executePluginCommand('User1', 'perfor', 'reset');
     expect(res.handled).toBe(true);
   });
 
-  it('sampler trigger und mcp pattern_random sind registriert', () => {
+  it('syntisampler trigger und pattern_random sind registriert', () => {
     const commands = voiceControlService.listPluginCommands();
-    expect(commands.some((c) => c.pluginId === 'sampler' && c.action === 'trigger')).toBe(true);
-    expect(commands.some((c) => c.pluginId === 'mcp' && c.action === 'pattern_random')).toBe(true);
+    expect(commands.some((c) => c.pluginId === 'syntisampler' && c.action === 'trigger')).toBe(true);
+    expect(commands.some((c) => c.pluginId === 'syntisampler' && c.action === 'pattern_random')).toBe(true);
   });
 
   it('alle Registry-Kommandos sind aufrufbar (Handler-Pfade)', async () => {

@@ -20,12 +20,12 @@ describe('MOA-Kommando-Abdeckung (Audit)', () => {
     expect(missing).toEqual([]);
   });
 
-  it('transport/play/stop und synth/note sind als Plugin-Kommandos registriert', () => {
+  it('transport/play/stop und syntisampler/note sind als Plugin-Kommandos registriert', () => {
     const registered = listRegisteredPluginCommands();
     expect(registered).toContainEqual({ pluginId: 'transport', action: 'play' });
     expect(registered).toContainEqual({ pluginId: 'transport', action: 'stop' });
-    expect(registered).toContainEqual({ pluginId: 'synth', action: 'note' });
-    expect(registered).toContainEqual({ pluginId: 'visualizer', action: 'mode' });
+    expect(registered).toContainEqual({ pluginId: 'syntisampler', action: 'note' });
+    expect(registered).toContainEqual({ pluginId: 'perfor', action: 'mode' });
     expect(registered).toContainEqual({ pluginId: 'effect', action: 'automate' });
   });
 });

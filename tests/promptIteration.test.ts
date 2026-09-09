@@ -29,8 +29,8 @@ describe('P3-2: Prompt-Iterations-Loop', () => {
 
   it('behält einen bereits guten Prompt (KEEP nach einer Iteration)', () => {
     const { prompts, evals } = freshStores();
-    prompts.upsert('drum', 'Drum-Agent mit drum: kit(kit), pattern_random', { version: 1 });
-    const report = runPromptIteration('drum', { prompts, evals });
+    prompts.upsert('drumsampler', 'Drum-Agent mit drumsampler: kit(kit), pattern_random, trigger', { version: 1 });
+    const report = runPromptIteration('drumsampler', { prompts, evals });
     expect(report.status).toBe('KEEP');
     expect(report.iterations).toBe(1);
     expect(report.promptVersion).toBe(1);
@@ -51,15 +51,16 @@ describe('P3-2: Prompt-Iterations-Loop', () => {
 
   it('evaluatePromptCoverage misst die Kommando-Abdeckung deterministisch', () => {
     expect(evaluatePromptCoverage('mixer', 1, 'Du bist der Mix-Agent.')).toBe(0);
-    expect(evaluatePromptCoverage('mixer', 1, 'Nutze gain(db)')).toBe(1);
+    expect(evaluatePromptCoverage('mixer', 1, 'Nutze gain(db)')).toBeCloseTo(1 / 3, 5);
+    expect(evaluatePromptCoverage('mixer', 1, 'Nutze gain(db), fade_in_main und channel')).toBe(1);
     expect(evaluatePromptCoverage('unbekannt', 1, 'egal')).toBe(0);
   });
 
   it('optimizePromptContent hängt den Kommando-Katalog genau einmal an', () => {
-    const once = optimizePromptContent('synth', 'Du bist der Synth-Agent.');
+    const once = optimizePromptContent('syntisampler', 'Du bist der Synth-Agent.');
     expect(once).toContain('## Erlaubte Kommandos');
-    expect(once).toContain('synth: note(freq)');
-    const twice = optimizePromptContent('synth', once);
+    expect(once).toContain('syntisampler: note(freq)');
+    const twice = optimizePromptContent('syntisampler', once);
     expect(twice).toBe(once);
   });
 });

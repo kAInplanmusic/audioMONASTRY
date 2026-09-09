@@ -340,3 +340,31 @@ Regeln: Alte MONKs werden erst entfernt, wenn ihre Funktion im neuen Modul/Syste
 4. GHCR-Image: `python3 scripts/ghcr-check.py` (Entrypoint `runpod_worker` im `…-runpod`-Repo).
 5. RunPod-Smoke: `RP_API_KEY=… RUNPOD_ENDPOINT_ID=uzg7p9lm890ts8 python3 scripts/runpod-smoke.py` (Ergebnis wird automatisch in `logs/` gespeichert).
 6. `npm run verify` grün (957 Tests) vor jedem Deploy.
+
+---
+
+## 10. V2-Final-Migration 2026-09-09 (Phase 9 / 16-MONK)
+
+### Erledigt
+- [x] ARCH-PLUGIN-006: V2-Live-Gate headed grün (Play/Stop real, V2LiveSink verbunden, 12,2s).
+- [x] ARCH-PLUGIN-006: Tone-15-`rawContext`-Unwrap in `audioEngine.init()` (nativer AudioContext für AudioWorkletNode).
+- [x] V1-Feature-Flags entfernt: `resolvePlaybackMode` erzwingt immer `'v2'` (kein V1-Fallback).
+- [x] `GraphEngineAdapter` + Test entfernt (deprecated, nie im Live-Pfad).
+- [x] 16-MONK-Registry verifiziert: `EXPECTED_PLUGIN_COUNT=16`, Manifest exakt 16, System-Module getrennt.
+- [x] `rolePresets.ts` auf 16 Plugin-IDs migriert (mcp/drum/synthesizer/controller/instrument/recording/perfor entfernt).
+- [x] `pluginCommandRegistry.ts` auf 16 IDs + System-Module bereinigt (alte 21-MONK-Aliase entfernt).
+- [x] `App.tsx`: `activeNav`-Default `'instru'`, Header-Kommentar korrigiert.
+
+### Offen (priorisiert)
+| ID | Prio | Domäne | Problem | Ziel |
+|---|---|---|---|---|
+| ARCH-V2-001 | P1 | Audio | `audioEngine.ts`-Monolith enthält weiter 154 Tone-Referenzen (Kanalzüge, Sample-Player, Synths); V2-Modus speist V2-Graph, aber Terminal-API läuft über Tone-Nodes | Tone-Nodes durch V2-Nodes ersetzen, `tone` aus `package.json` entfernen |
+| ARCH-V2-002 | P1 | Audio | V1-Zweige in `play()/stop()/triggerEvent()` sind tot (Mode immer v2), aber noch kompiliert | V1-Zweige entfernen, sobald Terminal-API V2-nativ |
+| ARCH-V2-003 | P1 | Kollaboration | UI/Server-Sync nutzt noch die audioEngine-Facade (V1-State-Modelle) | V2-GraphState als einzige Sync-Quelle |
+| ARCH-V2-004 | P2 | Server | `server.ts` groß; Dependency-Graph fehlt | Zerlegung in `server/` (auth/ai/cloud/collab/uploads/…) |
+| ARCH-V2-005 | P2 | DSP | Parity-Tests nur RMS/Hash; PDC-Impuls-/Latenz-Suite fehlt | mathematische V2-Referenz-Suite + PDC-Impulstest |
+| ARCH-V2-006 | P2 | MIDI | Settings-MIDI vorhanden; MIDI-Runtime-Mapping-Layer weiter ausbauen | Mapping-Layer vollständig dokumentieren/testen |
+| ARCH-V2-007 | P1 | AI | AI-Runtime vom Render-Thread trennen (Queues/Timeouts/Cancellation) | AI-Executor-Worker, keine Blockade des Audio-Threads |
+| ARCH-V2-008 | P1 | Security | Alle externen Payloads Zod-validieren (Uploads, AI, Session, Plugin-State) | Runtime-Validierung statt Casts |
+| ARCH-V2-009 | P2 | CI | SHA-Pinning der Actions, npm audit 0, secret scan | CI-Gates dokumentieren/umsetzen |
+| ARCH-V2-010 | P2 | Docs | README-Version (1.10.1 vs package.json 1.210.001) synchronisieren | Release-Historie festlegen, alle Dateien konsistent |

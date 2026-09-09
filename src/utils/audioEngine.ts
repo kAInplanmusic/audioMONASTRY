@@ -30,7 +30,6 @@ import {
 } from '../core/audio/worklets/workletInitializers';
 import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
-import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
 import { V2StudioGraph } from '../core/audio/V2StudioGraph';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
@@ -2445,15 +2444,8 @@ class AudioEngine {
   // --- Task 2.1.4 / F4: JSON-serialisierbarer Audio-Graph (Export/Import) ---
   private graphStateBridge = new GraphStateBridge();
 
-  /** V1→V2-Migrationsbrücke: hält Engine (V1) und AudioGraph (V2) synchron.
-   *  @deprecated Prototyp – nicht im Live-Audiopfad. */
-  public graphAdapter = new GraphEngineAdapter({
-    exportState: () => this.exportGraphState(),
-    importState: (state) => this.importGraphState(state),
-  });
-
   /** V2-Playback-Engine (voller Ersatzpfad für den V1-Transport).
-   *  Phase 7: Startmodus kommt aus `VITE_V2_AUDIO_MODE`; V1 bleibt Feature-Flag-Fallback. */
+   *  Phase 9: Der Startmodus ist immer 'v2' – es gibt keinen V1-Fallback mehr. */
   public playbackMode: AudioPlaybackMode = initialPlaybackMode();
   public graphPlayback = new GraphPlaybackEngine((source, _ctx) =>
     this.buildWorkletChain(['it-synth', 'eq3', 'mastering'], source).output,

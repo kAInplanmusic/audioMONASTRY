@@ -8,13 +8,13 @@ import { buildPromptEvalSeed, PLUGIN_IDS } from '../src/core/ai/orchestrator/pro
 import { EvaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
 
 const ALL_PLUGINS = [
-  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
-  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq',
-  'dsp', 'mastering', 'recording', 'controller', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'syntisampler', 'drumsampler', 'instru', 'biblio',
+  'voice', 'sound', 'stem', 'spatial', 'eq', 'dsp', 'master', 'record',
+  'ai', 'perfor',
 ];
 
 describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {
-  it('alle 21 Plugins haben Kommando-Katalog, System-Prompt und Default-Task', () => {
+  it('alle finalen Plugins haben Kommando-Katalog, System-Prompt und Default-Task', () => {
     for (const id of ALL_PLUGINS) {
       expect(PLUGIN_COMMAND_CATALOG[id], `catalog:${id}`).toBeTruthy();
       expect(PLUGIN_MOA_SYSTEM_PROMPTS[id], `prompt:${id}`).toBeTruthy();
@@ -33,8 +33,8 @@ describe('GAP-5: Prompt-/Trainings-Matrix je Plugin', () => {
 
   it('DB-Seed: jedes Plugin hat eine aktive Prompt-Version (system_prompts + plugin_prompt_versions)', () => {
     const seed = buildPromptEvalSeed();
-    expect(seed.system_prompts).toHaveLength(21);
-    expect(seed.plugin_prompt_versions).toHaveLength(21);
+    expect(seed.system_prompts).toHaveLength(18);
+    expect(seed.plugin_prompt_versions).toHaveLength(18);
     for (const id of PLUGIN_IDS) {
       const prompt = seed.system_prompts.find((p) => p.plugin_id === id);
       const version = seed.plugin_prompt_versions.find((v) => v.plugin_id === id);

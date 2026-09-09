@@ -5,34 +5,35 @@ import {
 import { V2TerminalBridge, type V2TerminalEngine } from '../src/core/audio/compat/V2TerminalBridge';
 import { planMonitorRouting } from '../src/core/audio/monitorRouting';
 
-describe('Phase 7 · V2 Feature-Flags (V2-Default vorbereiten)', () => {
-  it('startet ohne Flag sicher in v1', () => {
-    expect(initialPlaybackMode({})).toBe('v1');
+describe('Phase 9 · V2-only Feature-Flags (V1-Cutover)', () => {
+  it('startet ohne Flag in v2 (V1 existiert nicht mehr)', () => {
+    expect(initialPlaybackMode({})).toBe('v2');
   });
 
-  it('VITE_V2_AUDIO_MODE=v2 aktiviert den V2-Default', () => {
+  it('VITE_V2_AUDIO_MODE=v2 bleibt der einzige gültige Modus', () => {
     expect(initialPlaybackMode({ VITE_V2_AUDIO_MODE: 'v2' })).toBe('v2');
     expect(initialPlaybackMode({ VITE_V2_AUDIO_MODE: '1' })).toBe('v2');
   });
 
-  it('VITE_V2_AUDIO_ONLY=1 blendet v1 aus; resolvePlaybackMode erzwingt v2', () => {
-    expect(isV1PlaybackAllowed({ VITE_V2_AUDIO_ONLY: '1' })).toBe(false);
-    expect(isV2PlaybackAllowed({ VITE_V2_AUDIO_MODE: 'v2' })).toBe(true);
-    expect(resolvePlaybackMode('v1', { VITE_V2_AUDIO_MODE: 'v2', VITE_V2_AUDIO_ONLY: '1' })).toBe('v2');
+  it('V1 ist nach Phase 9 nie erlaubt; resolvePlaybackMode erzwingt v2', () => {
+    expect(isV1PlaybackAllowed({})).toBe(false);
+    expect(isV1PlaybackAllowed({ VITE_V2_AUDIO_ONLY: '0' })).toBe(false);
+    expect(isV2PlaybackAllowed({})).toBe(true);
+    expect(resolvePlaybackMode('v2', {})).toBe('v2');
   });
 
-  it('resolvePlaybackMode fällt bei unerlaubtem Wunschmodus auf den Flag-Default zurück', () => {
-    expect(resolvePlaybackMode('v2', { VITE_V2_AUDIO_MODE: 'v1' })).toBe('v1');
+  it('resolvePlaybackMode fällt bei jedem Wunschmodus auf v2 zurück', () => {
+    expect(resolvePlaybackMode('v2', { VITE_V2_AUDIO_MODE: 'v1' })).toBe('v2');
   });
 });
 
 describe('Phase 7 · V2TerminalBridge (zentrale Terminal-/Plugin-Bridge)', () => {
   function makeEngine(): V2TerminalEngine & { syncCalls: number; calls: string[] } {
     const engine: V2TerminalEngine & { syncCalls: number; calls: string[] } = {
-      playbackMode: 'v1',
+      playbackMode: 'v2',
       syncCalls: 0,
       calls: [],
-      setPlaybackMode: vi.fn((mode: 'v1' | 'v2') => { engine.playbackMode = mode; }),
+      setPlaybackMode: vi.fn((mode: 'v2') => { engine.playbackMode = mode; }),
       syncV2FromV1: vi.fn(() => { engine.syncCalls++; }),
       play: vi.fn(async () => { engine.calls.push('play'); }),
       stop: vi.fn(() => { engine.calls.push('stop'); }),

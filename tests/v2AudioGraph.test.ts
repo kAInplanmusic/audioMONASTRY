@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {  } from '../src/core/audio/AudioGraph';
 import { V2StudioGraph } from '../src/core/audio/V2StudioGraph';
-import { GraphEngineAdapter } from '../src/core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../src/core/audio/compat/GraphPlaybackEngine';
 import { WorkletGraphRuntime } from '../src/core/audio/WorkletGraphRuntime';
 
@@ -64,23 +63,7 @@ describe('V2StudioGraph (NEW-D4-1)', () => {
   });
 });
 
-describe('V2-Hybrid-Pfad (GraphEngineAdapter + GraphPlaybackEngine)', () => {
-  it('GraphEngineAdapter spiegelt V1-State in den V2-Graph', () => {
-    const engine = {
-      exportState: () => ({
-        version: 1, bpm: 128, swing: 0, gate: 0.9, scale: 'C Minor (Acid)',
-        patterns: {}, synthNotes: [], masterVolumeDb: -6, spatialSetupId: '10.0',
-        channelGainsDb: { channel1: -6, channel2: 0, channel3: 0, channel4: 0, channel5: 0, channel6: 0, channel7: 0, channel8: 0, channel9: 0, channel10: 0 },
-        channelPans: { channel1: -0.5, channel2: 0, channel3: 0, channel4: 0, channel5: 0, channel6: 0, channel7: 0, channel8: 0, channel9: 0, channel10: 0 },
-      }),
-      importState: () => true,
-    };
-    const adapter = new GraphEngineAdapter(engine as any);
-    const state = adapter.syncToGraph();
-    expect(state.channelGainsDb.channel1).toBeCloseTo(-6, 1);
-    expect(state.channelPans.channel1).toBeCloseTo(-0.5, 1);
-  });
-
+describe('V2-Pfad (GraphPlaybackEngine + WorkletGraphRuntime)', () => {
   it('GraphPlaybackEngine rendert Blöcke deterministisch und trigger Impuls', () => {
     let rendered = 0;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)

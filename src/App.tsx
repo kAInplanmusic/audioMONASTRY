@@ -85,7 +85,7 @@ function AppComponent() {
   });
   const [sessionMembers, setSessionMembers] = useState(0);
   const [sessionFull, setSessionFull] = useState(false);
-  const [activeNav, setActiveNav] = useState<string>('instrument');
+  const [activeNav, setActiveNav] = useState<string>('instru');
   const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
   const [viewport, setViewport] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 0, h: typeof window !== 'undefined' ? window.innerHeight : 0 });
 
@@ -463,7 +463,7 @@ function AppComponent() {
   return (
     <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2">
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
-      {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 18 Plugin-Icons in zwei Reihen + Avatar */}
+      {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 16 Plugin-Icons in zwei Reihen + Avatar */}
       <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-20 short-landscape:h-16 bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
         <div className="mx-auto flex h-full items-stretch max-w-[1800px]">
           {/* Logo-Block */}

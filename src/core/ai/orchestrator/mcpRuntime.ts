@@ -121,13 +121,13 @@ export function createDefaultMcpRuntime(deps: {
     );
   }
 
-  // Explizite Tool-Aliase aus P3-2 (mixer.set_channel, synth.play_note, …).
+  // Explizite Tool-Aliase aus P3-2 (mixer.set_channel, syntisampler.play_note, …).
   const PLUGIN_TOOL_ALIASES: Record<string, { pluginId: string; action: string }> = {
     'mixer.set_channel': { pluginId: 'mixer', action: 'channel' },
-    'synth.play_note': { pluginId: 'synthesizer', action: 'note' },
-    'synthesizer.play_note': { pluginId: 'synthesizer', action: 'note' },
-    'sequencer.load_pattern': { pluginId: 'mcp', action: 'pattern_four' },
-    'mcp.load_pattern': { pluginId: 'mcp', action: 'pattern_four' },
+    'synth.play_note': { pluginId: 'syntisampler', action: 'note' },
+    'synthesizer.play_note': { pluginId: 'syntisampler', action: 'note' },
+    'sequencer.load_pattern': { pluginId: 'syntisampler', action: 'pattern_four' },
+    'mcp.load_pattern': { pluginId: 'syntisampler', action: 'pattern_four' },
   };
   for (const [toolName, target] of Object.entries(PLUGIN_TOOL_ALIASES)) {
     runtime.register(

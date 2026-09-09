@@ -1,14 +1,13 @@
 /**
  * audioMONASTRY · Plugin-Kommando-Registry (Voice-/KI-/MOA-Steuerung)
  * ===================================================================
- * Verdrahtet ALLE 21 Plugins mit dem VoiceControlService:
- *   - transport/mcp/drum/mixer/spatial/instrument/fx/eq/dsp/synth/
- *     voice/library/controller haben echte Engine-Handler,
- *   - sampler/stem/recording/mastering/performance/sound/song/drop/ai haben
- *     echte Handler (Trigger/Events/Status),
+ * Verdrahtet die FINALEN 16 Plugins + System-Module mit dem VoiceControlService:
+ *   - transport (global), mixer, spatial, effect, dsp, eq, voice, stem,
+ *     sound, song, drop, ai, masterplayer, midi-controller (Settings-Layer)
+ *   - syntisampler, drumsampler, instru, biblio, master, record, perfor
  *   - zusätzlich gibt es für JEDE Plugin-ID die generischen Kommandos
  *     activate/deactivate/route (über pluginAudioRouter, P3-2).
- * masterplayerMONK ist KEIN Plugin, sondern feste View-only-Leiste.
+ * masterplayerMONK, aiMONK und perforMONK sind System-Module (KEINE Plugins).
  *
  * Die Audio-Engine/Backends werden bewusst lazy importiert, damit die
  * Core-Module ohne Tone/Web-Audio laden (Interface-Boundary-Regel).
@@ -62,30 +61,10 @@ export function registerDefaultVoiceCommands(): void {
     audioEngine.stop();
   }, ['stop', 'halt']);
 
-  // --- mcpMONK ----------------------------------------------------------------
+  // --- MCP-Funktionen sind in syntisamplerMONK integriert (ARCH-PLUGIN-001) -----
   const dispatchMcpPattern = (preset: 'four' | 'break' | 'random') => {
     controlBus.emit('monk:mcp-pattern', { preset });
   };
-  voiceControlService.registerPluginCommand('mcp', 'pattern_four', async () => {
-    dispatchMcpPattern('four');
-  }, ['four', 'floor', 'viertel']);
-  voiceControlService.registerPluginCommand('mcp', 'pattern_random', async () => {
-    dispatchMcpPattern('random');
-  }, ['random', 'zufall']);
-  voiceControlService.registerPluginCommand('mcp', 'pattern_break', async () => {
-    dispatchMcpPattern('break');
-  }, ['break', 'drum', 'beat']);
-
-  // --- drumMONK ---------------------------------------------------------------
-  voiceControlService.registerPluginCommand('drum', 'kit', async (ctx) => {
-    const { audioEngine } = await import('../../utils/audioEngine');
-    const kit = String(ctx.intent.parameters.kit ?? 'tr-808');
-    audioEngine.setDrumKit(kit);
-  }, ['kit', 'drum']);
-  voiceControlService.registerPluginCommand('drum', 'pattern_random', async () => {
-    // DrumMachine hört auf dieses Event und würfelt sichtbare Patterns für das aktive Kit.
-    controlBus.emit('monk:drum-pattern-random', undefined);
-  }, ['random', 'zufall', 'pattern']);
 
   // --- mixerMONK --------------------------------------------------------------
   voiceControlService.registerPluginCommand('mixer', 'gain', async (ctx) => {
@@ -106,13 +85,7 @@ export function registerDefaultVoiceCommands(): void {
     audioEngine.setSpatialMode(mode as 'ON_TOP' | 'SEPARATION');
   }, ['mode', 'modus']);
 
-  // --- instrumentMONK ---------------------------------------------------------
-  voiceControlService.registerPluginCommand('instrument', 'program', async (ctx) => {
-    const program = Number(ctx.intent.parameters.program ?? 0);
-    const { instrumentBackend } = await import('../instrument/InstrumentBackend');
-    instrumentBackend.handleProgramChange(program);
-  }, ['program', 'instrument', 'preset']);
-  // ARCH-PLUGIN-001: instruMONK = instrumentMONK (Alias + eigene ID).
+  // --- instruMONK (ARCH-PLUGIN-001) -------------------------------------------
   voiceControlService.registerPluginCommand('instru', 'program', async (ctx) => {
     const program = Number(ctx.intent.parameters.program ?? 0);
     const { instrumentBackend } = await import('../instrument/InstrumentBackend');
@@ -120,11 +93,11 @@ export function registerDefaultVoiceCommands(): void {
   }, ['program', 'instrument', 'preset']);
 
   // --- effectMONK / dspMONK / eqMONK -------------------------------------------
-  voiceControlService.registerCommand('fx', 'automate', async () => {
+  voiceControlService.registerCommand('effect', 'automate', async () => {
     const { audioEngine } = await import('../../utils/audioEngine');
     audioEngine.automateEffect('depth', 0.8, 0.5); // zipper-frei
   });
-  voiceControlService.registerPluginCommand('fx', 'automate', async () => {
+  voiceControlService.registerPluginCommand('effect', 'automate', async () => {
     const { audioEngine } = await import('../../utils/audioEngine');
     audioEngine.automateEffect('depth', 0.8, 0.5);
   }, ['automat', 'filter', 'sweep']);
@@ -137,27 +110,13 @@ export function registerDefaultVoiceCommands(): void {
     audioEngine.automateEqBandGain(2, 6, 0.5);
   }, ['automat', 'filter', 'sweep']);
 
-  // --- synthesizerMONK --------------------------------------------------------
+  // --- syntisamplerMONK: Synth-Note (ehem. synthesizerMONK) -------------------
   const playSynthNote = async (ctx: { intent: { parameters: Record<string, number | string> } }) => {
     const freq = Number(ctx.intent.parameters.freq ?? 440);
     const { audioEngine } = await import('../../utils/audioEngine');
     audioEngine.noteOnWorklet(Math.max(20, Math.min(20000, freq)), 0.8, 'saw');
   };
-  voiceControlService.registerPluginCommand('synthesizer', 'note', playSynthNote, ['note', 'ton', 'freq']);
-  // Katalog-Alias: MOA plant pluginId='synth'.
-  voiceControlService.registerPluginCommand('synth', 'note', playSynthNote, ['note', 'ton', 'freq']);
-
-  // --- visualizer (Katalog-Alias auf performance/visualizer-mode) ------------
-  voiceControlService.registerPluginCommand('visualizer', 'mode', async (ctx) => {
-    const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
-    controlBus.emit('monk:visualizer-mode', mode);
-  }, ['mode', 'visual', 'visualizer', 'scope']);
-
-  // --- effectMONK (Katalog-Alias auf fx.automate) -----------------------------
-  voiceControlService.registerPluginCommand('effect', 'automate', async () => {
-    const { audioEngine } = await import('../../utils/audioEngine');
-    audioEngine.automateEffect('depth', 0.8, 0.5);
-  }, ['automat', 'filter', 'sweep']);
+  voiceControlService.registerPluginCommand('syntisampler', 'note', playSynthNote, ['note', 'ton', 'freq']);
 
   // --- voiceMONK --------------------------------------------------------------
   voiceControlService.registerPluginCommand('voice', 'speak', async (ctx) => {
@@ -173,61 +132,10 @@ export function registerDefaultVoiceCommands(): void {
     await voiceMonkService.generateSong(ctx.userId, String(ctx.intent.parameters.text ?? 'Dark warehouse techno'));
   }, ['song', 'lied', 'track']);
 
-  // --- libraryMONK ------------------------------------------------------------
-  voiceControlService.registerPluginCommand('library', 'sync', async () => {
-    await fetch('/api/cloud/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
-  }, ['sync', 'cloud', 'bibliothek']);
-
-  // --- controllerMONK ---------------------------------------------------------
-  voiceControlService.registerPluginCommand('controller', 'rescan', async () => {
-    const { audioDeviceManager } = await import('../../utils/audioDeviceManager');
-    await audioDeviceManager.refresh();
-  }, ['rescan', 'scan', 'controller', 'midi']);
-
-  // --- samplerMONK -------------------------------------------------------------
-  voiceControlService.registerPluginCommand('sampler', 'trigger', async () => {
-    const { audioEngine } = await import('../../utils/audioEngine');
-    audioEngine.triggerEvent('channel5', 0.8);
-  }, ['trigger', 'pad', 'sample', 'spiele']);
-
   // --- stemMONK ----------------------------------------------------------------
   voiceControlService.registerPluginCommand('stem', 'separate', async () => {
     controlBus.emit('monk:stem-pick-file', undefined);
   }, ['separate', 'stem', 'trennen', 'datei']);
-
-  // --- recordingMONK -----------------------------------------------------------
-  voiceControlService.registerPluginCommand('recording', 'start', async () => {
-    controlBus.emit('monk:recorder-start', undefined);
-  }, ['start', 'record', 'aufnahme']);
-  voiceControlService.registerPluginCommand('recording', 'stop', async () => {
-    controlBus.emit('monk:recorder-stop', undefined);
-  }, ['stop', 'halt']);
-
-  // --- masteringMONK -----------------------------------------------------------
-  voiceControlService.registerPluginCommand('mastering', 'preset', async (ctx) => {
-    const { MASTERING_PRESETS } = await import('../../data/masteringPresets');
-    const { audioEngine } = await import('../../utils/audioEngine');
-    const wanted = String(ctx.intent.parameters.preset ?? '').toLowerCase();
-    const entries = Object.entries(MASTERING_PRESETS) as [string, { master_me: Record<string, number>; tone_shift: unknown }][];
-    const match = entries.find(([k]) => k.toLowerCase() === wanted) ?? entries[0];
-    if (match) {
-      const preset = match[1];
-      audioEngine.updateMasterMe(preset.master_me);
-      audioEngine.updateToneShiftEQ(preset.tone_shift as never);
-    }
-  }, ['preset', 'master', 'mastering']);
-
-  // --- performanceMONK (inkl. ehem. visualMONK-Signalmodus) ---------------------
-  voiceControlService.registerPluginCommand('performance', 'mode', async (ctx) => {
-    const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
-    controlBus.emit('monk:visualizer-mode', mode);
-  }, ['mode', 'visual', 'visualizer', 'scope']);
-
-  voiceControlService.registerPluginCommand('performance', 'reset', async () => {
-    const { performanceMonitor } = await import('../../utils/PerformanceMonitor');
-    performanceMonitor.stop();
-    performanceMonitor.start();
-  }, ['reset', 'performance', 'monitor']);
 
   // --- masterplayerMONK (Transport-Alias der festen Kopfzeile) ------------------
   voiceControlService.registerPluginCommand('masterplayer', 'play', async () => {
@@ -369,7 +277,11 @@ export function registerDefaultVoiceCommands(): void {
     controlBus.emit('monk:recorder-stop', undefined);
   }, ['stop', 'halt']);
 
-  // perforMONK = performanceMONK.
+  // perforMONK = performanceMONK (System-Modul).
+  voiceControlService.registerPluginCommand('perfor', 'mode', async (ctx) => {
+    const mode = String(ctx.intent.parameters.mode ?? 'OSCILLOSCOPE').toUpperCase();
+    controlBus.emit('monk:visualizer-mode', mode);
+  }, ['mode', 'visual', 'visualizer', 'scope']);
   voiceControlService.registerPluginCommand('perfor', 'reset', async () => {
     const { performanceMonitor } = await import('../../utils/PerformanceMonitor');
     performanceMonitor.stop();
@@ -424,7 +336,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['kanal', 'channel', 'gain', 'pan', 'volume']);
 
   // --- UI-only Plugins (Status-Meldung, Folgeschritte verdrahten) ---------------
-  for (const id of ['song', 'stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai', 'master', 'record', 'perfor']) {
+  for (const id of ['song', 'stem', 'sound', 'drop', 'ai', 'master', 'record', 'perfor', 'effect']) {
     voiceControlService.registerPluginCommand(id, 'status', async () => {
       // Zusätzlicher Status-Handler (Kommandos wie "Status").
     }, ['status', 'bereit', 'ready']);

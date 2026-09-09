@@ -1,16 +1,18 @@
 /**
- * audioMONASTRY · V2 Feature-Flags (Phase 7 – UI-Umstellung)
+ * audioMONASTRY · V2 Feature-Flags (Phase 9 – V1-Cutover)
  * ==========================================================
- * Zentrale Entscheidung, ob die App im V1- oder V2-Audiopfad startet.
+ * Der V1-Audiopfad (Tone.js/audioEngine-Monolith-Scheduler) ist ab
+ * Phase 9 deaktiviert. V2 ist der einzige Produktiv-Audiopfad.
  *
- * Flags (Vite-Env, ohne Plattform-API):
- *   VITE_V2_AUDIO_MODE      = 'v1' | 'v2'   (Default 'v1' – sicherer Fallback)
- *   VITE_V2_AUDIO_ONLY      = '1'            (V1-Pfad vollständig ausblenden)
+ * Die Flags bleiben als dokumentierte, defensive API erhalten:
+ *   VITE_V2_AUDIO_MODE  = 'v2' (einziger gültiger Wert)
+ *   VITE_V2_AUDIO_ONLY  = '1'  (historisch; ohne Wirkung, da V1 entfernt ist)
  *
- * `.env.example` dokumentiert den Produktiv-Umstieg auf `v2`.
+ * `resolvePlaybackMode` erzwingt immer 'v2' – es existiert kein
+ * paralleler V1-Produktionspfad mehr (ARCH-PLUGIN-006).
  */
 
-export type AudioPlaybackMode = 'v1' | 'v2';
+export type AudioPlaybackMode = 'v2';
 
 export interface V2AudioFlagEnv {
   VITE_V2_AUDIO_MODE?: string;
@@ -25,29 +27,25 @@ function readEnv(): V2AudioFlagEnv {
   }
 }
 
-/** Liefert den initialen Audio-Pfad aus der Feature-Flag-Konfiguration. */
-export function initialPlaybackMode(env: V2AudioFlagEnv = readEnv()): AudioPlaybackMode {
-  const mode = String(env.VITE_V2_AUDIO_MODE ?? '').trim().toLowerCase();
-  if (mode === 'v2' || mode === '1' || mode === 'true') return 'v2';
-  return 'v1';
+/** Liefert den initialen Audio-Pfad – nach dem V1-Cutover immer 'v2'. */
+export function initialPlaybackMode(_env: V2AudioFlagEnv = readEnv()): AudioPlaybackMode {
+  return 'v2';
 }
 
-/** V1-Pfad ist nur erlaubt, wenn nicht `VITE_V2_AUDIO_ONLY=1` gesetzt ist. */
-export function isV1PlaybackAllowed(env: V2AudioFlagEnv = readEnv()): boolean {
-  return String(env.VITE_V2_AUDIO_ONLY ?? '').trim() !== '1';
+/** Der V1-Pfad ist nach Phase 9 nicht mehr erlaubt. */
+export function isV1PlaybackAllowed(_env: V2AudioFlagEnv = readEnv()): boolean {
+  return false;
 }
 
-/** V2-Pfad ist erlaubt, solange nicht explizit auf v1 gezwungen wurde. */
-export function isV2PlaybackAllowed(env: V2AudioFlagEnv = readEnv()): boolean {
-  return String(env.VITE_V2_AUDIO_MODE ?? '').trim().toLowerCase() !== 'v1';
+/** Der V2-Pfad ist immer erlaubt. */
+export function isV2PlaybackAllowed(_env: V2AudioFlagEnv = readEnv()): boolean {
+  return true;
 }
 
-/** Setzt einen Wunschmodus gegen die Feature-Flags durch (defensiv). */
+/** Setzt einen Wunschmodus durch (defensiv) – es gewinnt immer V2. */
 export function resolvePlaybackMode(
-  requested: AudioPlaybackMode,
-  env: V2AudioFlagEnv = readEnv(),
+  _requested: AudioPlaybackMode,
+  _env: V2AudioFlagEnv = readEnv(),
 ): AudioPlaybackMode {
-  if (requested === 'v2' && isV2PlaybackAllowed(env)) return 'v2';
-  if (requested === 'v1' && isV1PlaybackAllowed(env)) return 'v1';
-  return initialPlaybackMode(env);
+  return 'v2';
 }

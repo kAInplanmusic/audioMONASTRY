@@ -12,11 +12,11 @@
  */
 import { PLUGIN_COMMAND_CATALOG, PLUGIN_MOA_SYSTEM_PROMPTS } from '../../../utils/prompts';
 
-/** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
+/** Verbindliche Plugin-IDs (16 MONKs + System-Module ai/perfor). */
 export const PLUGIN_IDS = [
-  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
-  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
-  'mastering', 'recording', 'controller', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'syntisampler', 'drumsampler', 'instru', 'biblio',
+  'voice', 'sound', 'stem', 'spatial', 'eq', 'dsp', 'master', 'record',
+  'ai', 'perfor',
 ] as const;
 
 export interface SystemPromptSeed {

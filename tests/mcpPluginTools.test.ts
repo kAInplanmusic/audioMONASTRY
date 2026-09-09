@@ -19,8 +19,8 @@ describe('P3-2: Plugin-MCP-Tools im mcpRuntime', () => {
     const runtime = createRuntime([]);
     const tools = runtime.listTools();
     expect(runtime.hasTool('mixer.gain')).toBe(true);
-    expect(runtime.hasTool('synthesizer.note')).toBe(true);
-    expect(runtime.hasTool('drum.kit')).toBe(true);
+    expect(runtime.hasTool('syntisampler.note')).toBe(true);
+    expect(runtime.hasTool('drumsampler.kit')).toBe(true);
     expect(runtime.hasTool('plugin.command')).toBe(true);
     expect(tools.find((t) => t.name === 'mixer.gain')).toMatchObject({ category: 'plugin', permission: 'WRITE' });
   });

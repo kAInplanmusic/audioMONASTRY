@@ -27,30 +27,30 @@ export const ROLE_PRESETS: RolePreset[] = [
   {
     role: 'DJ',
     startPresetId: 'psy',
-    activeModules: ['mcp','drum','synthesizer','controller','mixer'],
+    activeModules: ['mixer', 'drop', 'song', 'effect'],
     monitor: 'MON1',
-    hint: 'Fokus: Loops + Cue-Mixe live. Drum- u. MPC-Module aktiv.',
+    hint: 'Fokus: DJ-Set live – Mixer, Drops, Song, FX.',
   },
   {
     role: 'PRODUCER',
     startPresetId: 'goa',
-    activeModules: ['mcp', 'drum', 'synthesizer', 'instrument', 'effect', 'mixer', 'recording'],
+    activeModules: ['syntisampler', 'drumsampler', 'instru', 'biblio', 'effect', 'record'],
     monitor: 'MON2',
-    hint: 'Fokus: Sounddesign + Arrangement. Instrument/synth + Effekte aktiv.',
+    hint: 'Fokus: Sounddesign + Arrangement – Synth/Sampler, Drums, Instrumente, Bibliothek.',
   },
   {
     role: 'ENGINEER',
     startPresetId: 'industrial',
-    activeModules: ['eq', 'dsp', 'master', 'mixer', 'perfor', 'spatial'],
+    activeModules: ['eq', 'dsp', 'master', 'spatial', 'mixer', 'record'],
     monitor: 'MON3',
-    hint: 'Fokus: Metering/Summing. EQ, DSP, Mastering, Spatial aktiv.',
+    hint: 'Fokus: Summing/Metering – EQ, DSP, Mastering, Spatial, Mixer.',
   },
   {
     role: 'STEM_HOST',
     startPresetId: 'tekk',
     activeModules: ['stem', 'biblio', 'drumsampler', 'mixer', 'record'],
     monitor: 'MON4',
-    hint: 'Fokus: Stem-Pakete + Bibliothek. Stems/Drum+Samples aktiv.',
+    hint: 'Fokus: Stem-Pakete + Bibliothek – Stems, Drums/Samples, Mixer.',
   },
 ];
 
