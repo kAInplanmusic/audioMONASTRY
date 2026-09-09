@@ -8,7 +8,7 @@ import { audioBufferPool } from '../BufferPool';
 import { Stereo21Crossover } from '../../output/crossover';
 import type { IAudioNode, IAudioPort, IProcessingContext } from '../types';
 
-abstract class BaseNode implements IAudioNode {
+export abstract class BaseNode implements IAudioNode {
   readonly inputs: AudioPort[];
   readonly outputs: AudioPort[];
   readonly parameters: AudioParameter[];

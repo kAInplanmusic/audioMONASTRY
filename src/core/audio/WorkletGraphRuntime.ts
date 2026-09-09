@@ -9,7 +9,7 @@
 import { AudioGraph } from './AudioGraph';
 import { SourceNode } from './nodes/basicNodes';
 import { WorkletProcessorAdapter, type WorkletProcessFn } from './backends/WorkletAdapter';
-import type { IAudioNode, IProcessingContext } from './types';
+import type { IAudioNode, IAudioPort, IProcessingContext } from './types';
 
 export interface WorkletSpec {
   id: string;
@@ -25,6 +25,14 @@ export interface WorkletChainResult {
   graph: AudioGraph;
   nodes: IAudioNode[];
   output: Float32Array[] | null;
+}
+
+export interface WorkletChainGraphResult {
+  graph: AudioGraph;
+  nodes: IAudioNode[];
+  sourceNode: SourceNode;
+  /** Letzter Output-Port der Kette (für weitere Verdrahtung oder Bounce). */
+  output: IAudioPort;
 }
 
 export class WorkletGraphRuntime {
@@ -52,8 +60,12 @@ export class WorkletGraphRuntime {
     for (const spec of this.specs.values()) spec.reset?.();
   }
 
-  /** Baut Source → Worklet1 → Worklet2 → … als kompilierten Graph. */
-  buildChain(workletIds: string[], source: Float32Array[], ctx: IProcessingContext): WorkletChainResult {
+  /**
+   * Baut Source → Worklet1 → Worklet2 → … als kompilierten Graphen, ohne zu
+   * verarbeiten. So kann dieselbe Kette in Realtime-Graphen, Offline-Bouncen
+   * und Tests produktiv weiterverwendet werden.
+   */
+  buildChainGraph(workletIds: string[], source: Float32Array[]): WorkletChainGraphResult {
     const graph = new AudioGraph();
     const sourceNode = new SourceNode('source:chain', source);
     graph.addNode(sourceNode);
@@ -73,9 +85,15 @@ export class WorkletGraphRuntime {
 
     const plan = graph.compile();
     if (!plan.validated) throw new Error('Worklet-Kette enthält einen Zyklus');
-    graph.process(ctx);
 
-    return { graph, nodes, output: previousOutput.buffer };
+    return { graph, nodes, sourceNode, output: previousOutput };
+  }
+
+  /** Baut Source → Worklet1 → Worklet2 → … und verarbeitet genau einen Block. */
+  buildChain(workletIds: string[], source: Float32Array[], ctx: IProcessingContext): WorkletChainResult {
+    const chain = this.buildChainGraph(workletIds, source);
+    chain.graph.process(ctx);
+    return { graph: chain.graph, nodes: chain.nodes, output: chain.output.buffer };
   }
 }
 

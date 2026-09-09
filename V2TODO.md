@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-09 · Phase 1–4 (hörbar, Scheduler, Quellen/SFZ, Kanal-/Routing-Parität) abgeschlossen
+> Stand: 2026-09-09 · Phase 1–5 (hörbar, Scheduler, Quellen/SFZ, Kanal-/Routing-Parität, DSP/Effekt/Mastering) abgeschlossen
 
 ---
 
@@ -25,13 +25,14 @@
 | GraphEngineAdapter | `src/core/audio/compat/GraphEngineAdapter.ts` | ✅ V1↔V2 Sync |
 | GraphPlaybackEngine | `src/core/audio/compat/GraphPlaybackEngine.ts` | ⚠️ Prototyp, setInterval |
 | V2-Modi in Engine | `src/utils/audioEngine.ts` | ⚠️ vorhanden, default V1 |
-| OfflineBounceEngine | `src/audio/bounce/OfflineBounceEngine.ts` | ✅ offline |
+| OfflineBounceEngine | `src/audio/bounce/OfflineBounceEngine.ts` | ✅ WorkletChain + V2-Node-Chain |
+| V2 Processing Nodes (EQ/DSP/FX/Dyn/Master) | `src/core/audio/nodes/processingNodes.ts` | ✅ Phase 5 |
+| V2 Node Automation (Coalescer) | `src/core/audio/state/v2NodeAutomation.ts` | ✅ Phase 5 |
 
 **Kern-Lücken:**
 1. Kollaboration/Session/Locking nur V1
 2. UI spielt weiterhin V1
 3. Kein vollständiger Test-Paritätsnachweis V1 ↔ V2
-4. DSP/Effekt/Mastering noch nicht vollständig als V2-Nodes (Phase 5)
 
 ## 3. Zielarchitektur
 
@@ -86,10 +87,10 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] Spatial-Bus/2.1-Mehrkanal in V2
 
 ### Phase 5 – DSP/Effekt/Mastering
-- [ ] EQ/DSP/Effect/Dynamics/Mastering als V2-Nodes
-- [ ] Parameter-Automation (Coalescer) an V2-Nodes anbinden
-- [ ] WorkletChain in `WorkletGraphRuntime` produktiv nutzen
-- [ ] Offline-Bounce über denselben V2-Graph
+- [x] EQ/DSP/Effect/Dynamics/Mastering als V2-Nodes
+- [x] Parameter-Automation (Coalescer) an V2-Nodes anbinden
+- [x] WorkletChain in `WorkletGraphRuntime` produktiv nutzen
+- [x] Offline-Bounce über denselben V2-Graph
 
 ### Phase 6 – Kollaboration/Session
 - [ ] Session-State aus V2 exportieren/importieren
@@ -138,9 +139,9 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 - **Risiko:** V2-Standard kann vor Parität zu stummem/regressivem Audio führen.
 - **Gate:** erst wenn Phase 8 grün ist, wird V1 entfernt.
-- `npm run verify` muss in jeder Phase grün bleiben (862+ Tests).
+- `npm run verify` muss in jeder Phase grün bleiben (900+ Tests).
 - Audio-Integrität: 0 zusätzliche Dropouts, Latenz 8–15 ms lokal.
 
 ## 7. Nächster Schritt
 
-- Phase 5 beginnen: **DSP/Effekt/Mastering** – EQ/DSP/Dynamics/Mastering als V2-Nodes, Automation an V2-Nodes, WorkletChain produktiv, Offline-Bounce über denselben V2-Graph
+- Phase 6 beginnen: **Kollaboration/Session** – Session-State aus V2 exportieren/importieren, Locking/RBAC mit V2-State synchronisieren, WebRTC/SFU-State mit V2-GraphState koppeln

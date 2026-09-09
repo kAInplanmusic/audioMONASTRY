@@ -47,6 +47,7 @@ import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
 import { normalizeNotes, normalizeSteps, noteToFreq } from '../core/audio/state/sequenceUtils';
 import { AutomationCoalescer } from '../core/audio/state/automationCoalescer';
+import type { IAudioNode } from '../core/audio/types';
 
 export { pluginAudioChannels };
 
@@ -2604,6 +2605,12 @@ class AudioEngine {
     }
     const engine = new OfflineBounceEngine(this.ctx?.sampleRate ?? 48000);
     return engine.bounce(source, workletIds, { tailSeconds: opts?.tailSeconds ?? 2 });
+  }
+
+  /** Phase 5: Offline-Bounce durch echte V2-Processing-Nodes (EQ/DSP/FX/Dynamics/Mastering). */
+  public bounceV2NodeChain(source: Float32Array[], nodes: IAudioNode[], opts?: { tailSeconds?: number }): BounceResult {
+    const engine = new OfflineBounceEngine(this.ctx?.sampleRate ?? 48000);
+    return engine.bounceNodeChain(source, nodes, { tailSeconds: opts?.tailSeconds ?? 2 });
   }
 
   /** Listet alle registrierten Worklet-Prozessoren. */
