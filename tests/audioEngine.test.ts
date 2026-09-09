@@ -7,7 +7,7 @@ vi.mock('tone', () => {
   const __wiring: Array<{ from: unknown; to: unknown }> = [];
   class MockNode {
     volume = { value: 0, rampTo: () => {} };
-    pan = { value: 0 };
+    pan = { value: 0, setTargetAtTime: vi.fn() };
     frequency = { value: 440 };
     gain = { value: 0, rampTo: () => {} };
     Q = { value: 0 };
@@ -58,6 +58,7 @@ vi.mock('tone', () => {
     },
     context: { currentTime: 0, destination: {} },
     start: vi.fn(async () => {}),
+    now: vi.fn(() => 0),
   };
 });
 
@@ -128,6 +129,17 @@ describe('audioEngine (jsdom, Tone gemockt)', () => {
   it('importGraphState lehnt ungültige States ab', () => {
     expect(audioEngine.importGraphState(null as never)).toBe(false);
     expect(audioEngine.importGraphState({ version: 2 } as never)).toBe(false);
+  });
+
+  it('Phase 6: V2-Session-State export/import round-trip (Engine)', () => {
+    const state = audioEngine.exportV2SessionState('session-test', 'user-a');
+    expect(state.sessionId).toBe('session-test');
+    expect(state.version).toBe(1);
+    expect(state.updatedBy).toBe('user-a');
+
+    const serialized = JSON.parse(JSON.stringify(state));
+    expect(audioEngine.importV2SessionState(serialized)).toBe(true);
+    expect(audioEngine.importV2SessionState({ kaputt: true })).toBe(false);
   });
 
   it('V2-Graph-Pfad: Referenz-Worklets sind registriert', () => {

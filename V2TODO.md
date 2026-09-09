@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-09 · Phase 1–5 (hörbar, Scheduler, Quellen/SFZ, Kanal-/Routing-Parität, DSP/Effekt/Mastering) abgeschlossen
+> Stand: 2026-09-09 · Phase 1–6 (hörbar, Scheduler, Quellen/SFZ, Kanal-/Routing-Parität, DSP/Effekt/Mastering, Kollaboration/Session) abgeschlossen
 
 ---
 
@@ -28,9 +28,12 @@
 | OfflineBounceEngine | `src/audio/bounce/OfflineBounceEngine.ts` | ✅ WorkletChain + V2-Node-Chain |
 | V2 Processing Nodes (EQ/DSP/FX/Dyn/Master) | `src/core/audio/nodes/processingNodes.ts` | ✅ Phase 5 |
 | V2 Node Automation (Coalescer) | `src/core/audio/state/v2NodeAutomation.ts` | ✅ Phase 5 |
+| V2 Session State (Export/Import/Merge) | `src/core/session/v2SessionState.ts` | ✅ Phase 6 |
+| V2 Lock/RBAC-Sync | `src/core/session/v2LockSync.ts` | ✅ Phase 6 |
+| V2 SFU/WebRTC-GraphState-Kopplung | `src/core/session/v2SfuSync.ts` | ✅ Phase 6 |
 
 **Kern-Lücken:**
-1. Kollaboration/Session/Locking nur V1
+1. UI/Server-Sync der Kollaboration läuft noch über V1; V2-Session-/Lock-/SFU-State-Module sind vorhanden
 2. UI spielt weiterhin V1
 3. Kein vollständiger Test-Paritätsnachweis V1 ↔ V2
 
@@ -93,9 +96,9 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] Offline-Bounce über denselben V2-Graph
 
 ### Phase 6 – Kollaboration/Session
-- [ ] Session-State aus V2 exportieren/importieren
-- [ ] Locking/RBAC mit V2-State synchronisieren
-- [ ] WebRTC/SFU-State mit V2-GraphState koppeln
+- [x] Session-State aus V2 exportieren/importieren
+- [x] Locking/RBAC mit V2-State synchronisieren
+- [x] WebRTC/SFU-State mit V2-GraphState koppeln
 
 ### Phase 7 – UI-Umstellung
 - [ ] `audioEngine.setPlaybackMode` durch V2-Default ersetzen
@@ -144,4 +147,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 6 beginnen: **Kollaboration/Session** – Session-State aus V2 exportieren/importieren, Locking/RBAC mit V2-State synchronisieren, WebRTC/SFU-State mit V2-GraphState koppeln
+- Phase 7 beginnen: **UI-Umstellung** – `audioEngine.setPlaybackMode` durch V2-Default ersetzen, Plugin-Terminals auf V2-Engine-API umstellen, V1-Pfad hinter Feature-Flag

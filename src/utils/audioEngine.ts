@@ -47,6 +47,7 @@ import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
 import { normalizeNotes, normalizeSteps, noteToFreq } from '../core/audio/state/sequenceUtils';
 import { AutomationCoalescer } from '../core/audio/state/automationCoalescer';
+import { exportV2SessionState, parseV2SessionState, type V2SessionGraphState } from '../core/session/v2SessionState';
 import type { IAudioNode } from '../core/audio/types';
 
 export { pluginAudioChannels };
@@ -2580,6 +2581,55 @@ class AudioEngine {
     if (!isAudioGraphState(state)) return false;
     this.graphStateBridge.importState(state);
     return this.importGraphState(state);
+  }
+
+  /**
+   * Phase 6: Exportiert den vollständigen V2-Session-State
+   * (AudioGraph + MonitorRouting + aktive Plugins + Transport-Metadaten).
+   */
+  public exportV2SessionState(sessionId = 'main-studio', actorId = 'localUser'): V2SessionGraphState {
+    return exportV2SessionState({
+      sessionId,
+      graph: this.exportGraphState(),
+      monitor: this.monitorPlan,
+      activePlugins: [...this.activePluginIds],
+      updatedBy: actorId,
+    });
+  }
+
+  /**
+   * Phase 6: Importiert einen V2-Session-State und wendet Graph/Monitor/Plugins
+   * auf die Engine an. Defensiv: ungültige Zustände werden abgelehnt.
+   */
+  public importV2SessionState(raw: unknown): boolean {
+    const parsed = parseV2SessionState(raw);
+    if (!parsed.ok) return false;
+    const { graph, monitor, activePlugins } = parsed.state;
+
+    if (!this.importGraphStateV2(graph)) return false;
+
+    // Monitor-/Cue-Plan übernehmen (Cue-Matrix des Ziel-Monitors ersetzen).
+    this.monitorRequest = {
+      source: monitor.source,
+      mon: monitor.mon,
+      track: monitor.soloTrack ?? undefined,
+    };
+    if (this.monitorTrackGain[monitor.mon]) {
+      this.monitorTrackGain[monitor.mon] = { ...monitor.cueTracks };
+    }
+    this.applyMonitorPlan();
+
+    // Audio-einspeisende Plugins des Session-Stands aktivieren (idempotent).
+    for (const pluginId of activePlugins) {
+      if (!this.activePluginIds.has(pluginId)) {
+        try {
+          this.activatePlugin(pluginId, 'PRO');
+        } catch {
+          /* Plugin-Aktivierung optional – Graph-Zustand zählt zuerst */
+        }
+      }
+    }
+    return true;
   }
 
   /** Registriert einen Worklet-Prozessor für den graphbasierten Migrationspfad. */
