@@ -4,7 +4,7 @@ import { Play, Square, Wand2 } from 'lucide-react';
 import { moaAgent, type MoaStep } from '../core/ai/MoaAgent';
 import { moaHistory } from '../core/ai/MoaHistory';
 import { routeModuleState } from '../core/pluginAudioRouter';
-import { audioEngine } from '../utils/audioEngine';
+import { audioV2TerminalBridge as audioEngine } from '../utils/audioEngine';
 import { webRTCManager } from '../utils/WebRTCManager';
 import type { PluginState } from '../plugins/types';
 import { MoaAssistant } from './MoaAssistant';

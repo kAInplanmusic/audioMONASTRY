@@ -32,7 +32,6 @@ import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
 import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
-import { V2TerminalBridge } from '../core/audio/compat/V2TerminalBridge';
 import { V2StudioGraph } from '../core/audio/V2StudioGraph';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
@@ -3395,10 +3394,36 @@ class AudioEngine {
   private lastSpatialChannels_: number[] = [];
 }
 
-export const audioEngine = new AudioEngine();
+export type AudioEngineApi = AudioEngine;
 
-/** Phase 7: Zentrale Terminal-/Plugin-Bridge für den V2-Umstieg. */
-export const audioV2TerminalBridge = new V2TerminalBridge(audioEngine);
+/**
+ * Phase 7b: Transparente Terminal-/Plugin-Bridge als Proxy um die AudioEngine.
+ * Bestehende Terminals können `audioEngine` oder `audioV2TerminalBridge`
+ * importieren – beide laufen durch diesen Proxy. Im V2-Modus wird vor jedem
+ * Methodenaufruf `syncV2FromV1()` ausgeführt, damit UI-Aktionen den V2-Graph
+ * aktuell halten (zentrale Umstellung ohne Einzel-Rewrites).
+ */
+const NO_AUTO_SYNC = new Set(['setPlaybackMode', 'syncV2FromV1', 'dispose']);
+function createV2TerminalProxy(engine: AudioEngine): AudioEngineApi {
+  return new Proxy(engine, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (typeof value !== 'function') return value;
+      const methodName = String(prop);
+      return (...args: unknown[]) => {
+        if (target.playbackMode === 'v2' && !NO_AUTO_SYNC.has(methodName)) {
+          target.syncV2FromV1?.();
+        }
+        return (value as (...fnArgs: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  }) as AudioEngineApi;
+}
+
+export const audioEngine = createV2TerminalProxy(new AudioEngine());
+
+/** Phase 7: Zentrale Terminal-/Plugin-Bridge für den V2-Umstieg (Drop-in). */
+export const audioV2TerminalBridge = audioEngine;
 
 // Referenz-Worklets (itSynth/eq/mastering) für den graphbasierten Pfad registrieren.
 registerReferenceWorkletSpecs(workletGraphRuntime);

@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-09 · Phase 1–6 abgeschlossen; Phase 7a (V2-Default-Flag + Terminal-Bridge) vorbereitet
+> Stand: 2026-09-09 · Phase 1–7 (inkl. UI-Bridge-Drop-in) abgeschlossen; V1-Entfernung in Phase 9
 
 ---
 
@@ -108,10 +108,12 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] Zentrale `V2TerminalBridge` (`audioV2TerminalBridge`) als stabile Terminal-/Plugin-API vorbereitet
 - [x] `.env.example` dokumentiert den Produktiv-Umstieg auf `v2`
 
-#### Phase 7b – Einzel-Terminals umstellen (offen)
-- [ ] `audioEngine.setPlaybackMode` durch V2-Default ersetzen (nach 7b-Härtung)
-- [ ] Alle Plugin-Terminals auf V2-Engine-API/Bridge umstellen
-- [ ] V1-Pfad hinter Feature-Flag vollständig ausblenden, dann entfernen
+#### Phase 7b – Terminal-Bridge-Drop-in (umgesetzt)
+- [x] `audioEngine`-Export läuft als transparente V2-Terminal-Bridge (Proxy mit Auto-`syncV2FromV1`); alle bestehenden Plugin-Terminals nutzen damit ohne Einzel-Rewrites die V2-Bridge
+- [x] `audioV2TerminalBridge` als expliziter Drop-in-Alias exportiert
+- [x] `terminalShared` (Play/Stop) explizit auf `audioV2TerminalBridge` umgestellt
+- [x] V2-Default produktiv scharfschalten vorbereitet: `VITE_V2_AUDIO_MODE=v2` in `.env.example` dokumentiert
+- [ ] V1-Pfad hinter Feature-Flag vollständig ausblenden und entfernen (Phase 9)
 
 ### Phase 8 – Paritäts-/Hörtests
 - [ ] V1↔V2 Paritätstest (VISIONS B8)
@@ -155,4 +157,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 7b beginnen: **Einzel-Terminals auf `audioV2TerminalBridge` umstellen** und danach V2-Default produktiv scharf schalten
+- Phase 8 beginnen: **Paritäts-/Hörtests** – V1↔V2 Paritätstest, A/B-Hörtest, `npm run verify` + Build + E2E grün
