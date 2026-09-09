@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Plus, Trash2, Camera, RotateCcw, Gauge, Volume2, Radio } from 'lucide-react';
-import * as Tone from 'tone';
+import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { usePluginState } from '../hooks/usePluginState';
 import { useProject } from '../context/ProjectContext';
 import { useSamples } from '../context/SampleContext';

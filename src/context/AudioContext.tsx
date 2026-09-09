@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useRef, useEffect, useState } from 'react';
-import * as Tone from 'tone';
+import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { SIGNALING_HTTP_URL, SIGNALING_TRANSPORT_URL } from '../config/runtime';
 import { CrdtClock, CrdtLwwMap, CrdtClockMerger, CrdtSyncMessage } from '../utils/crdt';
 

@@ -354,11 +354,11 @@ Regeln: Alte MONKs werden erst entfernt, wenn ihre Funktion im neuen Modul/Syste
 - [x] `rolePresets.ts` auf 16 Plugin-IDs migriert (mcp/drum/synthesizer/controller/instrument/recording/perfor entfernt).
 - [x] `pluginCommandRegistry.ts` auf 16 IDs + System-Module bereinigt (alte 21-MONK-Aliase entfernt).
 - [x] `App.tsx`: `activeNav`-Default `'instru'`, Header-Kommentar korrigiert.
+- [x] ARCH-V2-001: **Tone.js vollständig entfernt** — `nativeAudioKit` (WebAudio-Adapter) ersetzt alle Tone-Imports; `tone` aus `package.json` entfernt; Live-Gate headed grün (11,9 s), 954 Tests grün.
 
 ### Offen (priorisiert)
 | ID | Prio | Domäne | Problem | Ziel |
 |---|---|---|---|---|
-| ARCH-V2-001 | P1 | Audio | `audioEngine.ts`-Monolith enthält weiter 154 Tone-Referenzen (Kanalzüge, Sample-Player, Synths); V2-Modus speist V2-Graph, aber Terminal-API läuft über Tone-Nodes | Tone-Nodes durch V2-Nodes ersetzen, `tone` aus `package.json` entfernen |
 | ARCH-V2-002 | P1 | Audio | V1-Zweige in `play()/stop()/triggerEvent()` sind tot (Mode immer v2), aber noch kompiliert | V1-Zweige entfernen, sobald Terminal-API V2-nativ |
 | ARCH-V2-003 | P1 | Kollaboration | UI/Server-Sync nutzt noch die audioEngine-Facade (V1-State-Modelle) | V2-GraphState als einzige Sync-Quelle |
 | ARCH-V2-004 | P2 | Server | `server.ts` groß; Dependency-Graph fehlt | Zerlegung in `server/` (auth/ai/cloud/collab/uploads/…) |

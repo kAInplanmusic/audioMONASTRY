@@ -1,4 +1,4 @@
-import * as Tone from 'tone';
+import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { createSeededRandom} from './random';
 
 import { TrackType, TRACK_ROLE_MAP, MUSIC_SCALES } from '../types';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, Volume2, Mic, SlidersHorizontal, MonitorSpeaker, X } from 'lucide-react';
-import * as Tone from 'tone';
+import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { storageGet, storageSet } from '../utils/storage';
 import { enumerateMediaDevices } from '../utils/mediaDevices';
 import { isXonarU7 } from '../core/spatial/roomPlanner';

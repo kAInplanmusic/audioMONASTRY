@@ -23,6 +23,7 @@ const SRC = path.join(ROOT, 'src');
 /** Dateien/Verzeichnisse, die die Plattform-APIs kapseln dürfen. */
 const ALLOWED = new Set([
   'utils/audioEngine.ts',          // zentraler Web-Audio-Wrapper (IAudioBackend-Referenz)
+  'core/audio/compat/nativeAudioKit.ts', // Tone-kompatibler WebAudio-Adapter (V1-Ruhestand)
   'utils/WebRTCManager.ts',        // ITransport-Referenz (WebRTC)
   'utils/opfs.ts',                 // Storage-Adapter (OPFS)
   'utils/LocalEmbeddingProvider.ts', // IAIRuntime-lokal (transformers.js)

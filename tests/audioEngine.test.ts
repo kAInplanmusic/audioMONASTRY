@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('tone', () => {
+vi.mock('../src/core/audio/compat/nativeAudioKit', () => {
   // P1-2: Signalfluss-Spion – jede connect/chain/toDestination-Verkabelung wird
   // als Kante aufgezeichnet und kann in den Tests geprüft werden.
   const __wiring: Array<{ from: unknown; to: unknown }> = [];
@@ -63,7 +63,7 @@ vi.mock('tone', () => {
 });
 
 import { audioEngine } from '../src/utils/audioEngine';
-import * as Tone from 'tone';
+import * as Tone from '../src/core/audio/compat/nativeAudioKit';
 
 describe('audioEngine (jsdom, Tone gemockt)', () => {
   it('listet Drum-Kits und Spatial-Setups', () => {

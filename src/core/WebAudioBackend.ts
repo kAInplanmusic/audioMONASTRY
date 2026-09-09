@@ -7,7 +7,7 @@
 import { audioEngine } from '../utils/audioEngine';
 import { TrackType, TRACK_ROLE_MAP } from '../types';
 import { IAudioBackend } from './interfaces';
-import * as Tone from 'tone';
+import * as Tone from '../core/audio/compat/nativeAudioKit';
 
 const LEGAL: TrackType[] = [
   'channel1', 'channel2', 'channel3', 'channel4',

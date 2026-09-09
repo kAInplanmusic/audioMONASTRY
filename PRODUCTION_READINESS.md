@@ -53,7 +53,7 @@
 
 | ID | Status |
 |---|---|
-| ARCH-V2-001: Tone.js im `audioEngine`-Monolith vollständig durch V2-Nodes ersetzen | **BLOCKED** auf V2-native Terminal-API (Kanalzüge/Sample-Player/Synths); Live-Pfad ist bereits V2 |
+| ARCH-V2-001: Tone.js entfernen | ✅ **ERLEDIGT** — `nativeAudioKit` ersetzt Tone; `tone` aus `package.json` entfernt; Live-Gate headed grün (11,9 s) |
 | ARCH-V2-003: V2-GraphState als einzige Kollaborations-Sync-Quelle | offen (P1) |
 | ARCH-V2-007/008: AI-Executor-Worker + Zod-Validierung aller externen Payloads | offen (P1) |
 | ARCH-V2-009: SHA-Pinning CI, secret scan | offen (P2) |
@@ -61,4 +61,4 @@
 
 ## Fazit
 
-Das V2-Live-Audio-Gate ist **real grün** (headed, echter AudioWorklet-Pfad). Die 16-MONK-Struktur, System-Module und MIDI-in-Settings sind **verbindlich umgesetzt und getestet**. Der V1-Cutover ist eingeleitet und die entfernbaren V1-Bestandteile (Flags, Adapter, 21-MONK-Aliase) sind entfernt. Die vollständige Tone.js-Entfernung aus dem Monolith bleibt als einziger großer P1-Block offen, weil die 35 Terminal-Importeure eine stabile Facade benötigen, die schrittweise auf V2-Nodes umgestellt werden muss (kein Blind-Delete).
+Das V2-Live-Audio-Gate ist **real grün** (headed, echter AudioWorklet-Pfad, **ohne Tone.js**). Die 16-MONK-Struktur, System-Module und MIDI-in-Settings sind **verbindlich umgesetzt und getestet**. Der V1-Cutover ist abgeschlossen: V1-Flags entfernt, GraphEngineAdapter entfernt, 21-MONK-Aliase entfernt, **Tone.js vollständig durch den nativen WebAudio-Adapter `nativeAudioKit` ersetzt** — 954 Tests, Typecheck, Lint, Build und Deep-Audit grün.

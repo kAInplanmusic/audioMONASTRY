@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('tone', () => {
+vi.mock('../src/core/audio/compat/nativeAudioKit', () => {
   class MockNode {
     volume = { value: 0, rampTo: () => {} };
     pan = { value: 0 };

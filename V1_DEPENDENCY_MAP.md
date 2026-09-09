@@ -7,18 +7,18 @@
 
 | Kategorie | Anzahl | Status |
 |---|---|---|
-| Dateien mit `Tone.`-Referenzen | 12 (154 Treffer in audioEngine.ts) | MIGRATE / KEEP-BUT-NOT-AUDIO |
-| Dateien mit `from 'tone'`-Import | 5 | MIGRATE / KEEP-BUT-NOT-AUDIO |
+| Dateien mit `Tone.`-Referenzen | 0 (alle auf `nativeAudioKit` migriert) | REMOVE ✅ |
+| Dateien mit `from 'tone'`-Import | 0 | REMOVE ✅ |
 | Dateien mit `utils/audioEngine`-Import | 35 | KEEP (V2-Engine-Facade) |
 | V1-Feature-Flags (`playbackMode 'v1'`, `VITE_V2_AUDIO_ONLY`) | entfernt | REMOVE ✅ |
 | GraphEngineAdapter | entfernt | REMOVE ✅ |
-| V1-Worklet-Direktverdrahtung (audioEngine.init) | 1 (audioEngine.ts) | MIGRATE |
+| V1-Worklet-Direktverdrahtung (audioEngine.init) | 1 (audioEngine.ts) | MIGRATE → nativeAudioKit |
 
 ## 2. Detailtabelle
 
 | Datei | Symbol | Nutzung | Runtime-Relevanz | Ersatz | Status |
 |---|---|---|---|---|---|
-| src/utils/audioEngine.ts | `Tone.Volume/Player/MembraneSynth/Transport/now` (154×) | V1-Monolith: Channel-Gains, Sample-Player, Synths, Transport | **KRITISCH** – Live-Pfad der 35 Importeure | V2StudioGraph + V2LiveSink + GraphPlaybackEngine | MIGRATE (teiloffen) |
+| src/utils/audioEngine.ts | `Tone.*`-Facade via `nativeAudioKit` | Zustands-/Verdrahtungs-Facade; Live-Audio läuft über V2 | keine Tone-Runtime mehr | `nativeAudioKit` (WebAudio-Adapter) | REMOVE ✅ |
 | src/utils/audioEngine.ts | `GraphEngineAdapter` | deprecated V1→V2-State-Sync | keine (nie im Live-Pfad) | `syncV2FromV1()` direkt | REMOVE ✅ |
 | src/utils/audioEngine.ts | `playbackMode === 'v1'`-Zweige | V1-Transport | deaktiviert (Mode immer 'v2') | V2-Zweig | REMOVE (Flag) / MIGRATE (Zweige) |
 | src/utils/v2FeatureFlags.ts | `VITE_V2_AUDIO_MODE='v1'`, `isV1PlaybackAllowed` | V1-Feature-Flag | entfernt | V2-only | REMOVE ✅ |
@@ -43,9 +43,8 @@
 
 ## 4. Fazit
 
-Das V2-Live-Audio-Gate ist **grün** (headed, echter AudioWorklet-Pfad). Der V1-Cutover wurde eingeleitet:
+Das V2-Live-Audio-Gate ist **grün** (headed, echter AudioWorklet-Pfad, ohne Tone). Der V1-Cutover ist abgeschlossen:
 1. V1-Feature-Flags entfernt (Mode ist immer `v2`).
 2. GraphEngineAdapter entfernt.
 3. 16-MONK-Registry und System-Module sind verbindlich.
-
-**Verbleibend (P1):** Tone.js-Abhängigkeit im `audioEngine`-Monolith vollständig durch V2-Nodes ersetzen und `tone` aus `package.json` entfernen, sobald keine Runtime-Nutzung mehr besteht.
+4. **Tone.js vollständig entfernt** — `package.json` ohne `tone`, alle Imports laufen über `src/core/audio/compat/nativeAudioKit.ts` (nativer WebAudio-Adapter), Live-Gate headed grün (11,9 s), 954 Tests grün.
