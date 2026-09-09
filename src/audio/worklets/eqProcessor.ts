@@ -26,7 +26,7 @@ const DEFAULT_FREQS = Array.from({ length: NUM_BANDS }, (_, i) =>
   Math.round(20 * Math.pow(10, (i * 3) / 35)),
 );
 
-class EqProcessor extends AudioWorkletProcessor {
+export class EqProcessor extends AudioWorkletProcessor {
   private bands: BandState[] = [];
   // A-6: Quantum aus der tatsächlichen Blocklänge ableiten (Default 128).
   private blockSize = 128;

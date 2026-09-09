@@ -9,7 +9,7 @@
  * Steuerung über Port-Nachrichten (Insert/Send):
  *   { wet, feedback, time, rate, depth, bits, sampleReduction, reset }
  */
-class EffectProcessor extends AudioWorkletProcessor {
+export class EffectProcessor extends AudioWorkletProcessor {
   private comb1 = new Float32Array(1200);
   private comb2 = new Float32Array(1513);
   private comb1Pos = 0;

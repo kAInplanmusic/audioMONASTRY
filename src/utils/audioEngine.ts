@@ -3427,3 +3427,16 @@ export const audioV2TerminalBridge = audioEngine;
 
 // Referenz-Worklets (itSynth/eq/mastering) für den graphbasierten Pfad registrieren.
 registerReferenceWorkletSpecs(workletGraphRuntime);
+
+// E2E-/Debug-Hook: erlaubt Playwright, den echten Live-Audio-Status zu prüfen
+// (playbackMode, V2LiveSink-Verbindung, Transportzustand).
+try {
+  if (typeof window !== 'undefined') {
+    (window as unknown as Record<string, unknown>).__audioMonastry = {
+      audioEngine,
+      audioV2TerminalBridge,
+    };
+  }
+} catch {
+  /* kein Browser-Kontext (Node-Tests) */
+}

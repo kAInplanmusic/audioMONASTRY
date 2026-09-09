@@ -14,7 +14,7 @@
  */
 import { computeLowpassCoefficients } from '../dsp/biquad';
 
-class DspProcessor extends AudioWorkletProcessor {
+export class DspProcessor extends AudioWorkletProcessor {
   // Allpass (1. Ordnung)
   private apCoef = 0.2;
   private ap1Z = 0;
