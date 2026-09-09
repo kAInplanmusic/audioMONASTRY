@@ -17,6 +17,7 @@ import { ClockSync } from './ClockSync';
 import { PhaseLockedLoop } from './PhaseLockedLoop';
 import { masterClock } from '../core/clock/MonastryMasterClock';
 import { AudioGraphState, isAudioGraphState } from './audioGraphSerialization';
+import { initialPlaybackMode, resolvePlaybackMode, type AudioPlaybackMode } from './v2FeatureFlags';
 import { GraphStateBridge } from '../core/audio/GraphStateBridge';
 import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '../core/audio/WorkletGraphRuntime';
 import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
@@ -31,6 +32,7 @@ import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
 import { GraphEngineAdapter } from '../core/audio/compat/GraphEngineAdapter';
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
+import { V2TerminalBridge } from '../core/audio/compat/V2TerminalBridge';
 import { V2StudioGraph } from '../core/audio/V2StudioGraph';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
@@ -2442,15 +2444,17 @@ class AudioEngine {
   });
 
   /** V2-Playback-Engine (voller Ersatzpfad für den V1-Transport).
-   *  @deprecated Prototyp – aktuell nicht im Live-Audiopfad. */
-  public playbackMode: 'v1' | 'v2' = 'v1';
+   *  Phase 7: Startmodus kommt aus `VITE_V2_AUDIO_MODE`; V1 bleibt Feature-Flag-Fallback. */
+  public playbackMode: AudioPlaybackMode = initialPlaybackMode();
   public graphPlayback = new GraphPlaybackEngine((source, _ctx) =>
     this.buildWorkletChain(['it-synth', 'eq3', 'mastering'], source).output,
   );
 
-  public setPlaybackMode(mode: 'v1' | 'v2'): void {
-    this.playbackMode = mode;
-    if (mode === 'v2') this.stop();
+  public setPlaybackMode(mode: AudioPlaybackMode): void {
+    const resolved = resolvePlaybackMode(mode);
+    if (resolved === this.playbackMode) return;
+    this.playbackMode = resolved;
+    if (resolved === 'v2') this.stop();
   }
 
   // NEW-D4-1: V2-StudioGraph (backend-unabhängiger Mischpfad) für Offline-/Tests.
@@ -3392,6 +3396,9 @@ class AudioEngine {
 }
 
 export const audioEngine = new AudioEngine();
+
+/** Phase 7: Zentrale Terminal-/Plugin-Bridge für den V2-Umstieg. */
+export const audioV2TerminalBridge = new V2TerminalBridge(audioEngine);
 
 // Referenz-Worklets (itSynth/eq/mastering) für den graphbasierten Pfad registrieren.
 registerReferenceWorkletSpecs(workletGraphRuntime);

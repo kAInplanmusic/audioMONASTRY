@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-09 · Phase 1–6 (hörbar, Scheduler, Quellen/SFZ, Kanal-/Routing-Parität, DSP/Effekt/Mastering, Kollaboration/Session) abgeschlossen
+> Stand: 2026-09-09 · Phase 1–6 abgeschlossen; Phase 7a (V2-Default-Flag + Terminal-Bridge) vorbereitet
 
 ---
 
@@ -24,7 +24,9 @@
 | V2OutputGraph (2.1/Spatial) | `src/core/audio/V2OutputGraph.ts` | ✅ Phase 4 |
 | GraphEngineAdapter | `src/core/audio/compat/GraphEngineAdapter.ts` | ✅ V1↔V2 Sync |
 | GraphPlaybackEngine | `src/core/audio/compat/GraphPlaybackEngine.ts` | ⚠️ Prototyp, setInterval |
-| V2-Modi in Engine | `src/utils/audioEngine.ts` | ⚠️ vorhanden, default V1 |
+| V2-Modi in Engine | `src/utils/audioEngine.ts` | ✅ Feature-Flag-Default (`VITE_V2_AUDIO_MODE`) |
+| V2 Feature-Flags | `src/utils/v2FeatureFlags.ts` | ✅ Phase 7a |
+| V2 Terminal Bridge | `src/core/audio/compat/V2TerminalBridge.ts` | ✅ Phase 7a |
 | OfflineBounceEngine | `src/audio/bounce/OfflineBounceEngine.ts` | ✅ WorkletChain + V2-Node-Chain |
 | V2 Processing Nodes (EQ/DSP/FX/Dyn/Master) | `src/core/audio/nodes/processingNodes.ts` | ✅ Phase 5 |
 | V2 Node Automation (Coalescer) | `src/core/audio/state/v2NodeAutomation.ts` | ✅ Phase 5 |
@@ -101,9 +103,15 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] WebRTC/SFU-State mit V2-GraphState koppeln
 
 ### Phase 7 – UI-Umstellung
-- [ ] `audioEngine.setPlaybackMode` durch V2-Default ersetzen
-- [ ] Alle Plugin-Terminals auf V2-Engine-API umstellen
-- [ ] V1-Pfad hinter Feature-Flag, dann entfernen
+#### Phase 7a – V2-Default + Feature-Flag + Terminal-Bridge (umgesetzt)
+- [x] `setPlaybackMode`-Default über `VITE_V2_AUDIO_MODE` steuerbar; V1-Pfad hinter `VITE_V2_AUDIO_ONLY`-Flag
+- [x] Zentrale `V2TerminalBridge` (`audioV2TerminalBridge`) als stabile Terminal-/Plugin-API vorbereitet
+- [x] `.env.example` dokumentiert den Produktiv-Umstieg auf `v2`
+
+#### Phase 7b – Einzel-Terminals umstellen (offen)
+- [ ] `audioEngine.setPlaybackMode` durch V2-Default ersetzen (nach 7b-Härtung)
+- [ ] Alle Plugin-Terminals auf V2-Engine-API/Bridge umstellen
+- [ ] V1-Pfad hinter Feature-Flag vollständig ausblenden, dann entfernen
 
 ### Phase 8 – Paritäts-/Hörtests
 - [ ] V1↔V2 Paritätstest (VISIONS B8)
@@ -147,4 +155,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 7 beginnen: **UI-Umstellung** – `audioEngine.setPlaybackMode` durch V2-Default ersetzen, Plugin-Terminals auf V2-Engine-API umstellen, V1-Pfad hinter Feature-Flag
+- Phase 7b beginnen: **Einzel-Terminals auf `audioV2TerminalBridge` umstellen** und danach V2-Default produktiv scharf schalten
