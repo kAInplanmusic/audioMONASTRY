@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-09 · Phase 1–7 (inkl. UI-Bridge-Drop-in) abgeschlossen; V1-Entfernung in Phase 9
+> Stand: 2026-09-09 · Phase 1–8 (automatisierte Parität/A-B/Verify/Build) umgesetzt; E2E-Live-Gate und V1-Entfernung offen
 
 ---
 
@@ -116,10 +116,11 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [ ] V1-Pfad hinter Feature-Flag vollständig ausblenden und entfernen (Phase 9)
 
 ### Phase 8 – Paritäts-/Hörtests
-- [ ] V1↔V2 Paritätstest (VISIONS B8)
-- [ ] A/B-Hörtest (gleiche Latenz/Qualität)
-- [ ] `npm run verify` komplett grün
-- [ ] `npm run build` + E2E grün
+- [x] V1↔V2 Paritätstest (VISIONS B8) – automatisiert in `tests/v2Parity.test.ts`
+- [x] A/B-Hörtest-Proxy (deterministisch, Pegel-/Hashing-Vergleich) in `tests/v2Parity.test.ts`
+- [x] `npm run verify` komplett grün (925 Tests, Stand Phase 8)
+- [x] `npm run build` grün
+- [ ] E2E-Live-Gate (Playwright gegen echte Session/Infrastruktur)
 
 ### Phase 9 – V1 entfernen
 - [ ] Tone.js-/V1-Abhängigkeiten entfernen, soweit möglich
@@ -157,4 +158,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- Phase 8 beginnen: **Paritäts-/Hörtests** – V1↔V2 Paritätstest, A/B-Hörtest, `npm run verify` + Build + E2E grün
+- E2E-Live-Gate schließen (Playwright gegen echte Session), danach **Phase 9 – V1 entfernen**
