@@ -1,21 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { getPluginRegistry, METAMODULE_GROUPS, resolvePrimaryModule } from '../src/plugins/registry';
+import { getPluginRegistry } from '../src/plugins/registry';
 
-describe('Plugin-Registry (Konflikt-/Versionierungs-Check, AM-E2-5)', () => {
-  it('hat 21 eindeutige Plugin-IDs', () => {
+describe('Plugin-Registry (ARCH-PLUGIN-001: exakt 16 echte MONKs)', () => {
+  it('hat exakt 16 eindeutige Plugin-IDs in Ziel-Reihenfolge', () => {
     const registry = getPluginRegistry();
-    expect(registry.length).toBe(21);
+    expect(registry.length).toBe(16);
     const ids = registry.map((p) => p.id);
     expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual([
+      'mixer', 'drop', 'song', 'effect',
+      'syntisampler', 'drumsampler', 'instru', 'biblio',
+      'voice', 'sound', 'stem', 'spatial',
+      'eq', 'dsp', 'master', 'record',
+    ]);
   });
 
-  it('Metamodul-Gruppen lösen deterministisch auf und haben keine Doppelmitgliedschaft', () => {
-    const members = METAMODULE_GROUPS.flatMap((g) => g.members);
-    expect(new Set(members).size).toBe(members.length);
-    for (const g of METAMODULE_GROUPS) {
-      expect(g.members).toContain(g.primary);
-      expect(resolvePrimaryModule(g.primary)).toBe(g.primary);
-      for (const m of g.members) expect(resolvePrimaryModule(m)).toBe(g.primary);
+  it('jedes Plugin hat Name, Short und Komponente', () => {
+    for (const p of getPluginRegistry()) {
+      expect(typeof p.name).toBe('string');
+      expect(p.name.endsWith('MONK')).toBe(true);
+      expect(typeof p.short).toBe('string');
+      expect(p.component).toBeTruthy();
     }
   });
 });

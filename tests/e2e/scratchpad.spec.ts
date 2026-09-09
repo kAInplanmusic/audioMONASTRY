@@ -1,5 +1,4 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
 
 /**
  * P1-4 Prüfpunkt (Browser-Live, automatisiert):

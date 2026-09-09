@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio, navButton, collectErrors } from './helpers/studioNav';
+import { navButton } from './helpers/studioNav';
 
 /**
  * P0-6-Prüfpunkt (Main-/Monitor-Routing): Der Cue-Weg eines Users schaltet

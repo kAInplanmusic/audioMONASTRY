@@ -72,6 +72,14 @@
 .monk-theme-recording { --monk-accent: #fb7185; --monk-accent-rgb: 251, 113, 133; --monk-glow-accent: rgba(251, 113, 133, 0.35); }
 .monk-theme-performance { --monk-accent: #fbbf24; --monk-accent-rgb: 251, 191, 36; --monk-glow-accent: rgba(251, 191, 36, 0.35); }
 .monk-theme-ai { --monk-accent: #d946ef; --monk-accent-rgb: 217, 70, 239; --monk-glow-accent: rgba(217, 70, 239, 0.35); }
+/* ARCH-PLUGIN-001: 16-MONK-Zielthemes (alte Klassen bleiben als Alias erhalten). */
+.monk-theme-syntisampler { --monk-accent: #f97316; --monk-accent-rgb: 249, 115, 22; --monk-glow-accent: rgba(249, 115, 22, 0.35); }
+.monk-theme-drumsampler { --monk-accent: #ef4444; --monk-accent-rgb: 239, 68, 68; --monk-glow-accent: rgba(239, 68, 68, 0.35); }
+.monk-theme-instru { --monk-accent: #f59e0b; --monk-accent-rgb: 245, 158, 11; --monk-glow-accent: rgba(245, 158, 11, 0.35); }
+.monk-theme-biblio { --monk-accent: #60a5fa; --monk-accent-rgb: 96, 165, 250; --monk-glow-accent: rgba(96, 165, 250, 0.35); }
+.monk-theme-master { --monk-accent: #94a3b8; --monk-accent-rgb: 148, 163, 184; --monk-glow-accent: rgba(148, 163, 184, 0.35); }
+.monk-theme-record { --monk-accent: #fb7185; --monk-accent-rgb: 251, 113, 133; --monk-glow-accent: rgba(251, 113, 133, 0.35); }
+.monk-theme-perfor { --monk-accent: #fbbf24; --monk-accent-rgb: 251, 191, 36; --monk-glow-accent: rgba(251, 191, 36, 0.35); }
 
 /* Seamless hochwertige Basistypo */
 html, body, #root { height: 100%; }

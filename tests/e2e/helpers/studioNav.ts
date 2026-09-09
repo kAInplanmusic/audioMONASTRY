@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 /**
  * E2E-Hilfsmodul: Selektoren + Helfer für die Studio-Navigation
@@ -15,26 +15,24 @@ import { test, expect, type Page } from '@playwright/test';
 
 export const STUDIO_NAV = 'nav[aria-label="Studio-Navigation"]';
 
-/** Short-Code → vollständiger Plugin-Name (title-Attribut im Header-Icon). */
+/** Short-Code → vollständiger Plugin-Name (title-Attribut im Header-Icon, 16-MONK-Ziel). */
 export const SHORT_TO_NAME: Record<string, string> = {
-  INS: 'instrumentMONK',
-  SYN: 'synthesizerMONK',
-  DRM: 'drumMONK',
-  SAM: 'samplerMONK',
-  MCP: 'mcpMONK',
+  INS: 'instruMONK',
+  SYSA: 'syntisamplerMONK',
+  DRSA: 'drumsamplerMONK',
   VOX: 'voiceMONK',
   SND: 'soundMONK',
   MIX: 'mixerMONK',
-  CTRL: 'midiMONK',
   FX: 'effectMONK',
   DRP: 'dropMONK',
   LIB: 'biblioMONK',
   EQ: 'eqMONK',
   DSP: 'dspMONK',
-  MST: 'masteringMONK',
+  MST: 'masterMONK',
   RMX: 'stemMONK',
   '3D': 'spatialMONK',
-  REC: 'recordingMONK',
+  REC: 'recordMONK',
+  SNG: 'songMONK',
 };
 
 /** Nav-Button für einen Short-Code (z. B. 'MIX') lokalisieren. */

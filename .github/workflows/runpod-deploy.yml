@@ -74,7 +74,11 @@ jobs:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
           IMAGE: ${{ steps.meta.outputs.image }}:${{ github.sha }}
           RUNPOD_ENDPOINT_NAME: samplemonk-ai-runpod
-          RUNPOD_GPU_ID: NVIDIA H200
+          # RunPod verlangt GPU-POOL-IDs (H200 = HOPPER_141), keine Marketing-Namen.
+          RUNPOD_GPU_ID: HOPPER_141
+          RUNPOD_WORKERS_MIN: '0'
+          RUNPOD_WORKERS_MAX: '1'
+          RUNPOD_IDLE_TIMEOUT: '5'
           RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_PASSWORD: ${{ secrets.GHCR_PAT_ALL_ACCESS || secrets.GHCR_PASSWORD }}

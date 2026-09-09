@@ -9,11 +9,13 @@
 // und Vitest dieselbe Matrix nutzen können.
 // ============================================================================
 
-/** Verbindliche 21 Plugin-IDs (Reihenfolge aus src/plugins/registry.ts). */
+// Verbindliche Plugin-IDs (ARCH-PLUGIN-001: exakt 16 echte MONKs +
+// System-Module ai/perfor für State-Sync/Validierung). Reihenfolge aus
+// src/plugins/registry.ts.
 export const EVAL_PLUGIN_IDS = [
-  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
-  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
-  'mastering', 'recording', 'controller', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'syntisampler', 'drumsampler', 'instru', 'biblio',
+  'voice', 'sound', 'stem', 'spatial', 'eq', 'dsp', 'master', 'record',
+  'ai', 'perfor',
 ] as const;
 
 export type EvalPluginId = (typeof EVAL_PLUGIN_IDS)[number];
@@ -37,7 +39,7 @@ export const DEFAULT_MAX_DURATION_MS = 5000;
  */
 export const PLUGIN_EVAL_MATRIX: Record<string, PluginEvalSpec> = Object.freeze(
   EVAL_PLUGIN_IDS.reduce<Record<string, PluginEvalSpec>>((acc, pluginId) => {
-    const critical = ['mixer', 'mastering', 'eq', 'dsp'].includes(pluginId);
+    const critical = ['mixer', 'master', 'eq', 'dsp'].includes(pluginId);
     acc[pluginId] = {
       task: 'plan',
       minScore: critical ? 4.5 : DEFAULT_MIN_SCORE,

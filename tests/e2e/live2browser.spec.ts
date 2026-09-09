@@ -1,5 +1,4 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
 import { chromium } from 'playwright';
 
 /**

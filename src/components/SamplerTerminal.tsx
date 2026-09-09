@@ -32,7 +32,7 @@ const emptyPads = (): Pad[] =>
   }));
 
 export const SamplerTerminal = React.memo(() => {
-  const { state, lockStatus, updateState } = usePluginState('sampler', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('syntisampler', 'PRO');
   const { takeoverRequest, clearTakeoverRequest } = useSamples();
   const [pads, setPads] = useState<Pad[]>(emptyPads);
   const [capturing, setCapturing] = useState(false);

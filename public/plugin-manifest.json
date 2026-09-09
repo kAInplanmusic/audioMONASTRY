@@ -102,40 +102,28 @@
       "icon": "Sparkles"
     },
     {
-      "id": "instrument",
-      "name": "instrumentMONK",
+      "id": "syntisampler",
+      "name": "syntisamplerMONK",
+      "short": "SYSA",
+      "icon": "Waves"
+    },
+    {
+      "id": "drumsampler",
+      "name": "drumsamplerMONK",
+      "short": "DRSA",
+      "icon": "Speaker"
+    },
+    {
+      "id": "instru",
+      "name": "instruMONK",
       "short": "INS",
       "icon": "Music"
     },
     {
-      "id": "sampler",
-      "name": "samplerMONK",
-      "short": "SAM",
-      "icon": "Speaker"
-    },
-    {
-      "id": "drum",
-      "name": "drumMONK",
-      "short": "DRM",
-      "icon": "Speaker"
-    },
-    {
-      "id": "mcp",
-      "name": "mcpMONK",
-      "short": "MCP",
-      "icon": "Grid3X3"
-    },
-    {
-      "id": "synthesizer",
-      "name": "synthesizerMONK",
-      "short": "SYN",
-      "icon": "Waves"
-    },
-    {
-      "id": "stem",
-      "name": "stemMONK",
-      "short": "RMX",
-      "icon": "Radio"
+      "id": "biblio",
+      "name": "biblioMONK",
+      "short": "LIB",
+      "icon": "Database"
     },
     {
       "id": "voice",
@@ -150,16 +138,16 @@
       "icon": "AudioLines"
     },
     {
+      "id": "stem",
+      "name": "stemMONK",
+      "short": "RMX",
+      "icon": "Radio"
+    },
+    {
       "id": "spatial",
       "name": "spatialMONK",
       "short": "3D",
       "icon": "Box"
-    },
-    {
-      "id": "library",
-      "name": "biblioMONK",
-      "short": "LIB",
-      "icon": "Database"
     },
     {
       "id": "eq",
@@ -174,34 +162,16 @@
       "icon": "Cpu"
     },
     {
-      "id": "mastering",
-      "name": "masteringMONK",
+      "id": "master",
+      "name": "masterMONK",
       "short": "MST",
       "icon": "Square"
     },
     {
-      "id": "recording",
-      "name": "recordingMONK",
+      "id": "record",
+      "name": "recordMONK",
       "short": "REC",
       "icon": "Activity"
-    },
-    {
-      "id": "controller",
-      "name": "controllerMONK",
-      "short": "CTRL",
-      "icon": "Keyboard"
-    },
-    {
-      "id": "performance",
-      "name": "perfMONK",
-      "short": "PRF",
-      "icon": "Gauge"
-    },
-    {
-      "id": "ai",
-      "name": "aiMONK",
-      "short": "AI",
-      "icon": "Bot"
     }
   ]
 }

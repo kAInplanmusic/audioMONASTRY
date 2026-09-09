@@ -12,7 +12,12 @@ import { collectErrors, navButton } from './helpers/studioNav';
  * BaseAudioContext“). Der Test ist deshalb als Live-Gate markiert und muss auf
  * einem audio-fähigen Browser bzw. gegen die echte Deployment-Instanz laufen.
  */
-test.skip('V2 Live: AudioEngine im V2-Modus, V2LiveSink verbunden, Play/Stop real', async ({ page }) => {
+// Live-Gate nur ausführen, wenn ein echter Audio-fähiger Browser verfügbar ist
+// (DISPLAY gesetzt, kein CI). In Headless-/Container-Umgebungen bleibt der Test
+// bewusst geskippt – genau wie im V2TODO §6 gefordert.
+const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'true' && process.env.V2_LIVE_SKIP !== '1';
+
+(LIVE_GATE_ACTIVE ? test : test.skip)('V2 Live: AudioEngine im V2-Modus, V2LiveSink verbunden, Play/Stop real', async ({ page }) => {
   const { pageErrors, consoleErrors } = collectErrors(page);
 
   // Bundle laden und V2-Modus VOR dem Audio-Start aktivieren.
@@ -31,6 +36,16 @@ test.skip('V2 Live: AudioEngine im V2-Modus, V2LiveSink verbunden, Play/Stop rea
   await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 15_000 });
   await page.getByRole('button', { name: /mixerMONK Power/i }).click();
   await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15_000 });
+
+  // MAIN-Schutz: play() läuft nur, wenn mixerMONK den PRO-Halter hat.
+  // Power aktiviert lediglich (AUTO_AI) – das ⋮-Menü promotet zu PRO (Lock).
+  await page.getByRole('button', { name: /mixerMONK Menü/i }).click();
+  await expect
+    .poll(async () => page.evaluate(() => {
+      const w = window as unknown as { __audioMonastry: { audioEngine: { isMainHolderActive: () => boolean } } };
+      return w.__audioMonastry.audioEngine.isMainHolderActive();
+    }), { timeout: 10_000 })
+    .toBe(true);
 
   // Engine muss im V2-Modus stehen.
   await expect

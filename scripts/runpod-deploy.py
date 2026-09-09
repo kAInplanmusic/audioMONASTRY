@@ -42,7 +42,8 @@ def main() -> int:
     runpod.api_key = api_key
 
     endpoint_name = env("RUNPOD_ENDPOINT_NAME", "samplemonk-ai-runpod")
-    gpu_id = env("RUNPOD_GPU_ID", "NVIDIA H200")
+    # RunPod verlangt GPU-POOL-IDs (nicht Marketing-Namen). H200 = HOPPER_141.
+    gpu_id = env("RUNPOD_GPU_ID", "HOPPER_141")
     network_volume_id = env("RUNPOD_NETWORK_VOLUME_ID") or None
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX", "2"))
@@ -77,15 +78,121 @@ def main() -> int:
         env_vars["HF_TOKEN"] = env("HF_TOKEN")
 
     print(f"[deploy] Erstelle/aktualisiere Serverless-Template '{template_name}' …")
-    template = runpod.create_template(
-        name=template_name,
-        image_name=image,
-        docker_start_cmd=docker_start_cmd,
-        container_disk_in_gb=container_disk_gb,
-        env=env_vars,
-        is_serverless=True,
-        registry_auth_id=registry_auth_id,
-    )
+    # ARCH: Idempotentes Template-Handling. Wenn RUNPOD_TEMPLATE_ID gesetzt ist,
+    # wird das bestehende Template per saveTemplate(id=…) aktualisiert, statt
+    # ein Duplikat anzulegen ("Template name must be unique").
+    existing_template_id = env("RUNPOD_TEMPLATE_ID")
+    if existing_template_id:
+        from runpod.api.graphql import run_graphql_query
+
+        env_items = ", ".join(
+            [f'{{ key: "{key}", value: "{value}" }}' for key, value in env_vars.items()]
+        )
+        mutation = f"""
+        mutation {{
+          saveTemplate(
+            input: {{
+              id: "{existing_template_id}"
+              name: "{template_name}"
+              imageName: "{image}"
+              dockerArgs: "{docker_start_cmd}"
+              containerDiskInGb: {container_disk_gb}
+              volumeInGb: 0
+              ports: ""
+              env: [{env_items}]
+              isServerless: true
+              startSsh: true
+              isPublic: false
+              readme: ""
+            }}
+          ) {{
+            id
+            name
+            imageName
+            isServerless
+          }}
+        }}
+        """
+        try:
+            result = run_graphql_query(mutation)
+            template = result.get("data", {}).get("saveTemplate", {})
+        except Exception as exc:  # noqa: BLE001
+            print(f"[deploy] Template-Update fehlgeschlagen: {exc}", file=sys.stderr)
+            return 4
+    else:
+        # Ohne explizite ID: existierendes Template per podTemplates-Query suchen
+        # (idempotent), sonst neu anlegen.
+        from runpod.api.graphql import run_graphql_query
+
+        list_query = """
+        query {
+          myself {
+            podTemplates {
+              id
+              name
+              imageName
+              isServerless
+            }
+          }
+        }
+        """
+        existing = {}
+        try:
+            result = run_graphql_query(list_query)
+            for tpl in result.get("data", {}).get("myself", {}).get("podTemplates", []) or []:
+                if tpl.get("name") == template_name:
+                    existing = tpl
+                    break
+        except Exception:  # noqa: BLE001
+            existing = {}
+
+        if existing:
+            existing_template_id = existing.get("id", "")
+            print(f"[deploy] Template existiert bereits (id={existing_template_id}) → update …")
+            env_items = ", ".join(
+                [f'{{ key: "{key}", value: "{value}" }}' for key, value in env_vars.items()]
+            )
+            mutation = f"""
+            mutation {{
+              saveTemplate(
+                input: {{
+                  id: "{existing_template_id}"
+                  name: "{template_name}"
+                  imageName: "{image}"
+                  dockerArgs: "{docker_start_cmd}"
+                  containerDiskInGb: {container_disk_gb}
+                  volumeInGb: 0
+                  ports: ""
+                  env: [{env_items}]
+                  isServerless: true
+                  startSsh: true
+                  isPublic: false
+                  readme: ""
+                }}
+              ) {{
+                id
+                name
+                imageName
+                isServerless
+              }}
+            }}
+            """
+            try:
+                result = run_graphql_query(mutation)
+                template = result.get("data", {}).get("saveTemplate", {})
+            except Exception as exc:  # noqa: BLE001
+                print(f"[deploy] Template-Update fehlgeschlagen: {exc}", file=sys.stderr)
+                return 4
+        else:
+            template = runpod.create_template(
+                name=template_name,
+                image_name=image,
+                docker_start_cmd=docker_start_cmd,
+                container_disk_in_gb=container_disk_gb,
+                env=env_vars,
+                is_serverless=True,
+                registry_auth_id=registry_auth_id,
+            )
     template_id = template.get("id", "")
     if not template_id:
         print("FEHLER: Template-Erstellung lieferte keine ID", file=sys.stderr)

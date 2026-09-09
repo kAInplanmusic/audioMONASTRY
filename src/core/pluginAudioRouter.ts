@@ -4,8 +4,9 @@
  * Zentrale Schicht `pluginId → { source, mixerChannel, insertBus, activate(),
  * deactivate() }`. OFF = raus aus der Signalkette, AUTO_AI/PRO = Einspeisung.
  *
- * Alle 21 Plugin-IDs sind registriert (masterplayerMONK ist feste UI-Leiste,
- * kein Plugin). Unbekannte IDs werden geloggt und ignoriert (kein Crash).
+ * ARCH-PLUGIN-001: Exakt die 16 echten MONKs sind registriert. System-Module
+ * (masterplayer/ai/perfor) und der Settings-Layer (MIDI/Controller) sind
+ * bewusst KEINE Plugin-Routen. Unbekannte IDs werden geloggt und ignoriert.
  */
 import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';
 import type { TrackType } from '../types';
@@ -25,7 +26,7 @@ export interface PluginRouteConfig {
    * AM-E2-1: Audio-Isolation-Level des Plugins.
    *   insert  = eigene Quelle → Kanalzug → MAIN (z. B. synth/drum/sampler)
    *   send    = Kanalweg-/Bus-Einspeisung (z. B. mixer/effect/eq/dsp/spatial)
-   *   ui-only = kein Audio-Graph (z. B. library/mastering/controller)
+   *   ui-only = kein Audio-Graph (z. B. biblio/master/record)
    */
   isolation: PluginIsolationLevel;
 }
@@ -35,23 +36,21 @@ const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> =
   ['drop', 'sampler', true],
   ['song', 'ui-only', false],
   ['effect', 'channel', true],
-  ['instrument', 'synth', true],
-  ['sampler', 'sampler', true],
-  ['drum', 'drum', true],
-  ['mcp', 'sampler', true],
-  ['synthesizer', 'synth', true],
-  ['stem', 'ui-only', false],
+  ['syntisampler', 'synth', true],
+  ['drumsampler', 'drum', true],
+  ['instru', 'synth', true],
+  ['biblio', 'ui-only', false],
   ['voice', 'voice', true],
   ['sound', 'sampler', true],
+  ['stem', 'ui-only', false],
   ['spatial', 'channel', true],
-  ['library', 'ui-only', false],
   ['eq', 'channel', true],
   ['dsp', 'channel', true],
-  ['mastering', 'ui-only', false],
-  ['recording', 'ui-only', false],
-  ['controller', 'ui-only', false],
-  ['performance', 'ui-only', false],
+  ['master', 'ui-only', false],
+  ['record', 'ui-only', false],
+  // System-Module (keine Plugin-Slots, aber für State-Sync/Routing bekannt):
   ['ai', 'ui-only', false],
+  ['perfor', 'ui-only', false],
 ];
 
 const ROUTES: Record<string, PluginRouteConfig> = Object.fromEntries(

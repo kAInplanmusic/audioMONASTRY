@@ -7,7 +7,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { cpuSpatialConvolve, SpatialConvJob, spatialConvolve } from '../src/core/gpu/SpatialConvKernel';
+import { cpuSpatialConvolve, spatialConvolve } from '../src/core/gpu/SpatialConvKernel';
 
 describe('cpuSpatialConvolve', () => {
   test('basic mono input', () => {

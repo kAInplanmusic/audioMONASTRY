@@ -9,21 +9,29 @@ import { ALL_TRACKS, type TrackType } from '../../types';
  * gekoppelt ist.
  */
 export function pluginAudioChannels(pluginId: string): TrackType[] {
+  // ARCH-PLUGIN-001: 16-MONK-Zielkanäle. Alte IDs bleiben als dokumentierte
+  // Migrations-Aliase erhalten, bis alle Referenzen umgestellt sind.
   const map: Record<string, TrackType[]> = {
     masterplayer: [],
     ai: [],
-    controller: [],
+    perfor: [],
+    biblio: [],
     library: [],
+    master: [],
     mastering: [],
     stem: [],
+    record: [],
     recording: [],
-    performance: [],
     spatial: ['channel7'],
     mixer: ['channel1'],
+    // syntisamplerMONK: Synth (channel4) + Sampler/MPC (channel5)
+    syntisampler: ['channel4', 'channel5'],
     mcp: ['channel5'],
-    drum: ['channel2'],
     sampler: ['channel5'],
     synthesizer: ['channel4'],
+    drumsampler: ['channel2'],
+    drum: ['channel2'],
+    instru: ['channel4'],
     instrument: ['channel4'],
     voice: ['channel8'],
     sound: ['channel9'],
@@ -31,6 +39,9 @@ export function pluginAudioChannels(pluginId: string): TrackType[] {
     effect: ['channel6'],
     dsp: ['channel6'],
     eq: ['channel6'],
+    // controller/perf sind KEINE Plugin-Slots mehr (Settings/perforMONK).
+    controller: [],
+    performance: [],
   };
   return map[pluginId] ?? [];
 }

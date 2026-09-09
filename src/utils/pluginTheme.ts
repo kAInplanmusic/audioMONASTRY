@@ -10,56 +10,50 @@
  * ============================================================================
  */
 
-/** Verbindliche Reihenfolge (siehe `src/plugins/registry.ts`). */
+/** Verbindliche Reihenfolge (ARCH-PLUGIN-001: 16 MONKs + System-Module). */
 export const PLUGIN_THEME_IDS = [
-  'instrument',
-  'synthesizer',
-  'drum',
-  'sampler',
-  'mcp',
+  'mixer',
+  'drop',
+  'song',
+  'effect',
+  'syntisampler',
+  'drumsampler',
+  'instru',
+  'biblio',
   'voice',
   'sound',
-  'song',
-  'mixer',
-  'controller',
-  'effect',
-  'drop',
-  'library',
-  'eq',
-  'dsp',
-  'mastering',
   'stem',
   'spatial',
-  'recording',
-  'performance',
+  'eq',
+  'dsp',
+  'master',
+  'record',
   'ai',
+  'perfor',
 ] as const;
 
 export type PluginThemeId = (typeof PLUGIN_THEME_IDS)[number];
 
 /** Hardware-/Referenz-Look je Plugin (für Skin-Ausbau und Screenshot-Vergleich). */
 export const PLUGIN_SKIN_REFERENCES: Record<PluginThemeId, string> = {
-  instrument: 'Instrument-Canvas (GarageBand-artig, Touch)',
-  synthesizer: 'MiniMoog / Prophet / Juno (Analog-Synth)',
-  drum: 'TR-808 / Dirtywave M8',
-  sampler: 'SP-404 / MPC-Sampler',
-  mcp: 'Akai MPC (Pads + Step-Sequencer)',
+  mixer: 'Pioneer DJM-A9 / Allen & Heath XONE',
+  drop: 'Drop-/Clip-Launcher',
+  song: 'Song-/Track-Composer (Vocal-Song-Studio)',
+  effect: 'FX-Rack (Multi-Effekt)',
+  syntisampler: 'MiniMoog / Prophet + SP-404 / MPC-Sampler',
+  drumsampler: 'TR-808 / Dirtywave M8',
+  instru: 'Instrument-Canvas (GarageBand-artig, Touch)',
+  biblio: 'biblioMONK-Library',
   voice: 'Mikrofon-/Voice-Chain',
   sound: 'Sound-Design-Pad',
-  song: 'Song-/Track-Composer (Vocal-Song-Studio)',
-  mixer: 'Pioneer DJM-A9 / Allen & Heath XONE',
-  controller: 'MIDI-/HID-Controller',
-  effect: 'FX-Rack (Multi-Effekt)',
-  drop: 'Drop-/Clip-Launcher',
-  library: 'biblioMONK-Library',
-  eq: 'API 550 / SSL (EQ)',
-  dsp: 'DSP-Kern (Filter/Dynamics)',
-  mastering: 'TC Electronic / Massey (Mastering)',
   stem: 'Stem-Separation',
   spatial: '3D-Panner (High-End-Controller)',
-  recording: 'Recorder/Transport',
-  performance: 'Performance-Monitor (Gauges)',
+  eq: 'API 550 / SSL (EQ)',
+  dsp: 'DSP-Kern (Filter/Dynamics)',
+  master: 'TC Electronic / Massey (Mastering)',
+  record: 'Recorder/Transport',
   ai: 'aiMONK (MOA/MCP)',
+  perfor: 'Performance-Monitor (Gauges)',
 };
 
 export const DEFAULT_THEME_CLASS = 'monk-theme-masterplayer';
@@ -87,7 +81,7 @@ export function getPluginSkinReference(id: string | undefined | null): string {
  * die Skin-Klasse steuert nur Textur/Stil (Panel-Kante, Knob-Ring, Fader).
  */
 const HARDWARE_SKIN_IDS: readonly string[] = [
-  'mixer', 'synthesizer', 'drum', 'eq', 'mastering', 'spatial', 'mcp', 'sampler',
+  'mixer', 'syntisampler', 'drumsampler', 'eq', 'master', 'spatial',
 ];
 
 export function getHardwareSkinClass(id: string | undefined | null): string {

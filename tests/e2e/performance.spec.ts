@@ -1,5 +1,4 @@
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
 
 /**
  * P2-4 Prüfpunkt (Live, automatisiert im Headless-Chromium):

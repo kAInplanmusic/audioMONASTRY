@@ -405,6 +405,16 @@ class AudioEngine {
     const Win = typeof window !== 'undefined' ? window : globalThis;
     const AudioContextCtor = (Win as any).AudioContext || (Win as any).webkitAudioContext;
     const rawCtx = Tone.context?.rawContext;
+    // Tone 15 (standardized-audio-context) liefert in `rawContext` einen
+    // Wrapper, KEINEN nativen AudioContext. `new AudioWorkletNode(wrapper)`
+    // scheitert dann mit "parameter 1 is not of type 'BaseAudioContext'".
+    // Der echte native Context liegt in `_nativeContext` (Fallback:
+    // `_nativeAudioContext`). Erst danach duck-typen, damit ältere Tone-
+    // Versionen (rawContext ist bereits nativ) weiter funktionieren.
+    const unwrappedCtx =
+      (rawCtx as any)?._nativeContext ??
+      (rawCtx as any)?._nativeAudioContext ??
+      rawCtx;
     // Firefox-Robustheit: `instanceof AudioContext` schlägt in Firefox fehl,
     // weil Tone den Context in einem anderen Realm/Global erzeugt (constructor
     // name leer). Wir validieren per Duck-Typing: createGain + audioWorklet +
@@ -414,7 +424,7 @@ class AudioEngine {
       typeof (c as any).createGain === 'function' &&
       typeof (c as any).audioWorklet?.addModule === 'function' &&
       typeof (c as any).destination === 'object';
-    const validCtx = looksLikeAudioContext(rawCtx) ? (rawCtx as AudioContext) : null;
+    const validCtx = looksLikeAudioContext(unwrappedCtx) ? (unwrappedCtx as AudioContext) : null;
 
     if (!validCtx) {
       console.error('Kein gültiger AudioContext verfügbar – AudioEngine läuft abgesichert ohne Worklets.');

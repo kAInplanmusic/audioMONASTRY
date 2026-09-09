@@ -2,7 +2,7 @@
 
 > Branch: `v2-complete`
 > Ziel: **V2-AudioGraph ersetzt V1 vollständig** – V1 wird nach erfolgreicher Parität entfernt.
-> Stand: 2026-09-09 · Phase 1–8 (automatisierte Parität/A-B/Verify/Build) umgesetzt; E2E-Live-Gate und V1-Entfernung offen
+> Stand: 2026-09-09 · Phase 1–8 komplett grün (inkl. E2E-Live-Gate headed, 21:20); V1-Entfernung (Phase 9) offen
 
 ---
 
@@ -23,7 +23,7 @@
 | V2MonitorGraph (Cue/Main/Monitor) | `src/core/audio/V2MonitorGraph.ts` | ✅ Phase 4 |
 | V2OutputGraph (2.1/Spatial) | `src/core/audio/V2OutputGraph.ts` | ✅ Phase 4 |
 | GraphEngineAdapter | `src/core/audio/compat/GraphEngineAdapter.ts` | ✅ V1↔V2 Sync |
-| GraphPlaybackEngine | `src/core/audio/compat/GraphPlaybackEngine.ts` | ⚠️ Prototyp, setInterval |
+| GraphPlaybackEngine | `src/core/audio/compat/GraphPlaybackEngine.ts` | ✅ Offline-/Test-Renderer; KEIN setInterval (Live-Transport läuft über `v2SinkProcessor`/`V2SampleClock`) |
 | V2-Modi in Engine | `src/utils/audioEngine.ts` | ✅ Feature-Flag-Default (`VITE_V2_AUDIO_MODE`) |
 | V2 Feature-Flags | `src/utils/v2FeatureFlags.ts` | ✅ Phase 7a |
 | V2 Terminal Bridge | `src/core/audio/compat/V2TerminalBridge.ts` | ✅ Phase 7a |
@@ -120,7 +120,7 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] A/B-Hörtest-Proxy (deterministisch, Pegel-/Hashing-Vergleich) in `tests/v2Parity.test.ts`
 - [x] `npm run verify` komplett grün (931 Tests, Stand AP1–AP3)
 - [x] `npm run build` grün
-- [ ] E2E-Live-Gate (Playwright gegen echte Session/Infrastruktur)
+- [x] E2E-Live-Gate (Playwright headed gegen echten V2-AudioWorklet-Pfad; inkl. Tone-15-`rawContext`-Unwrap-Fix in `audioEngine.init()`)
 
 ### Reale Audio-Verifikation (AP1–AP3)
 - [x] AP1: Live-V2-E2E-Gate angelegt (`tests/e2e/v2-live.spec.ts`, `skip` in Headless; benötigt audio-fähigen Browser/Live-Instanz)
@@ -163,4 +163,4 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 
 ## 7. Nächster Schritt
 
-- E2E-Live-Gate schließen (Playwright gegen echte Session), danach **Phase 9 – V1 entfernen**
+- **Phase 9 – V1 entfernen** (Gate ist zu: E2E-Live-Gate headed grün am 2026-09-09)

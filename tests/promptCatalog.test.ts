@@ -14,24 +14,28 @@ import {
 import { getPluginRegistry } from '../src/plugins/registry';
 import { PLUGIN_ROUTE_IDS } from '../src/core/pluginAudioRouter';
 
-describe('P3-2: Prompt-/Kommando-Katalog für alle 21 Plugins', () => {
-  it('jedes registrierte Plugin hat Kommando-Katalog + System-Prompt + Default-Task', () => {
+describe('P3-2: Prompt-/Kommando-Katalog für 16 MONKs + System-IDs', () => {
+  it('jede Router-ID hat Kommando-Katalog + System-Prompt + Default-Task', () => {
     for (const id of PLUGIN_ROUTE_IDS) {
-      expect(PLUGIN_COMMAND_CATALOG[id] ?? PLUGIN_COMMAND_CATALOG[id === 'synthesizer' ? 'synth' : id] ?? undefined).toBeTruthy();
+      expect(PLUGIN_COMMAND_CATALOG[id]).toBeTruthy();
       expect(moaSystemPromptForPlugin(id).length).toBeGreaterThan(20);
       expect(moaTaskForPlugin(id).length).toBeGreaterThan(5);
     }
   });
 
-  it('Registry-IDs und Plugin-Router-IDs sind deckungsgleich', () => {
+  it('Registry-IDs (16 MONKs) sind vollständig im Router enthalten (System-IDs zusätzlich)', () => {
     const registryIds = getPluginRegistry().map((p) => p.id).sort();
-    expect(registryIds).toEqual([...PLUGIN_ROUTE_IDS].sort());
+    expect(registryIds).toHaveLength(16);
+    const routeSet = new Set(PLUGIN_ROUTE_IDS);
+    for (const id of registryIds) {
+      expect(routeSet.has(id)).toBe(true);
+    }
   });
 
-  it('Katalog-Text enthält alle 21 Plugin-IDs', () => {
+  it('Katalog-Text enthält alle Router-IDs', () => {
     const catalog = moaCommandCatalog();
     for (const id of PLUGIN_ROUTE_IDS) {
-      expect(catalog).toContain(id === 'synthesizer' ? 'synthesizer' : id);
+      expect(catalog).toContain(id);
     }
   });
 });

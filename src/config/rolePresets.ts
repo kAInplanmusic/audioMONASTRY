@@ -41,14 +41,14 @@ export const ROLE_PRESETS: RolePreset[] = [
   {
     role: 'ENGINEER',
     startPresetId: 'industrial',
-    activeModules: ['eq', 'dsp', 'mastering', 'mixer', 'performance', 'spatial'],
+    activeModules: ['eq', 'dsp', 'master', 'mixer', 'perfor', 'spatial'],
     monitor: 'MON3',
     hint: 'Fokus: Metering/Summing. EQ, DSP, Mastering, Spatial aktiv.',
   },
   {
     role: 'STEM_HOST',
     startPresetId: 'tekk',
-    activeModules: ['stem', 'library', 'drum', 'mixer', 'recording'],
+    activeModules: ['stem', 'biblio', 'drumsampler', 'mixer', 'record'],
     monitor: 'MON4',
     hint: 'Fokus: Stem-Pakete + Bibliothek. Stems/Drum+Samples aktiv.',
   },

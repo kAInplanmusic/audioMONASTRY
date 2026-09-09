@@ -1,5 +1,4 @@
 import { test, expect, type Page, type Browser, type BrowserContext } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
 
 /**
  * Collaboration-Smoke (DCT-113 Basis): Mehrere Browser-Kontexte treten dem

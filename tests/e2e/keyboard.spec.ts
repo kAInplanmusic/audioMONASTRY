@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
 
 /**
  * Tastatur-Navigation: Skip-Link, Fokus-Falle im Settings-Dialog und

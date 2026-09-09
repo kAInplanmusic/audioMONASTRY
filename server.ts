@@ -25,6 +25,18 @@ import type { AiTask } from './src/core/ai/orchestrator/types';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
+import {
+  AiCompleteSchema,
+  AiGenerateDropSchema,
+  AiOrchestrateSchema,
+  AiPromptSchema,
+  CloudMusicSchema,
+  CloudSampleSchema,
+  CloudUploadJsonSchema,
+  PluginLockSocketSchema,
+  PluginStateSocketSchema,
+  TelemetryPayloadSchema,
+} from './src/types/zod/schemas';
 
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
 const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
@@ -43,7 +55,12 @@ const stemJobStatus = new Map<string, 'active' | 'pending' | 'success' | 'failed
  * Fuer Hetzner:  PORT=8080, NODE_ENV=production, `node dist/server.cjs`
  */
 
-dotenv.config();
+// ARCH-PERF-001: In Tests (VITEST=true / NODE_ENV=test) keine .env laden –
+// sonst überschreibt dotenv die von den Tests kontrollierte Umgebung
+// (z. B. STUDIO_ACCESS_TOKEN) und Server-Tests schlagen je nach Host-.env fehl.
+if (process.env.VITEST !== 'true' && process.env.NODE_ENV !== 'test') {
+  dotenv.config();
+}
 
 const app = express();
 // Enable COOP and COEP for cross‑origin isolation required by Mediasoup SFU
@@ -280,6 +297,13 @@ const AI_RATE = resolveAiRateLimits(process.env as Record<string, string | undef
 // und der Socket.io-Handshake verlangen den Token.
 const STUDIO_ACCESS_TOKEN = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
 const studioTokenEnabled = STUDIO_ACCESS_TOKEN.length > 0;
+// P0-Security: Production läuft NIE ungeschützt. Fehlt der Studio-Token in
+// Produktion, bleibt die API fail-closed (nur /api/health offen) statt fail-open.
+const isProductionEnv = process.env.NODE_ENV === 'production';
+const studioTokenMissing = isProductionEnv && !studioTokenEnabled;
+if (studioTokenMissing) {
+  console.error('[security] FATAL: NODE_ENV=production, aber STUDIO_ACCESS_TOKEN fehlt. API ist bis auf /api/health geschlossen (fail-closed).');
+}
 
 /** Konstantzeit-Vergleich zweier Token (Buffer-XOR). */
 function safeTokenEqual(a: string, b: string): boolean {
@@ -306,6 +330,12 @@ if (process.env.TRUST_PROXY === '1') {
 // P-1: Auth-Middleware für alle /api/* außer /api/health.
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
+  // P0-Security: Production fail-closed – ohne konfigurierten Studio-Token
+  // ist die API geschlossen (kein stiller Dev-Modus in Produktion).
+  if (studioTokenMissing) {
+    res.status(503).json({ error: 'server not configured', code: 'STUDIO_TOKEN_MISSING' });
+    return;
+  }
   if (!studioTokenEnabled) return next();
   const token = studioTokenFromRequest(req);
   if (token && safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) return next();
@@ -460,13 +490,17 @@ app.get('/api/audit', (_req, res) => {
 // Der Server loggt jede Meldung als JSON-Line (Docker-Log-Rotation greift)
 // und zählt sie in den Prometheus-Metriken (samplemonk_telemetry_events_total).
 app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
-  const events = Array.isArray((req.body ?? {}).events) ? (req.body as any).events : [];
+  // ARCH-SEC-003: Runtime-Validierung statt `as any`-Cast auf externe Nutzdaten.
+  const parsed = TelemetryPayloadSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'invalid telemetry payload', details: parsed.error.issues.slice(0, 5) });
+  }
+  const events = parsed.data.events;
   let accepted = 0;
-  for (const ev of events.slice(0, 50)) {
-    if (!ev || typeof ev !== 'object') continue;
-    const type = String(ev.type ?? 'log').slice(0, 32);
-    const source = String(ev.source ?? 'client').slice(0, 128);
-    const message = String(ev.message ?? '').slice(0, 1000);
+  for (const ev of events) {
+    const type = ev.type;
+    const source = ev.source;
+    const message = ev.message;
     // P-10: Context hart kappen (max. 2 KB im Log), sonst kann ein Client
     // riesige Objekte ins Log schreiben.
     let ctx: unknown = {};
@@ -581,17 +615,16 @@ app.post('/api/cloud/sync', async (_req, res) => {
 // --- POST /api/cloud/samples → einzelnes Sample in Supabase upserten ---
 app.post('/api/cloud/samples', async (req, res) => {
   try {
-    const sample = (req.body ?? {}) as {
-      id?: string; name?: string; category?: string; type?: string;
-      url?: string; description?: string; tags?: string[]; parameters?: Record<string, unknown>;
-    };
-    if (!sample.id || !sample.name || !sample.category || !sample.type) {
-      return res.status(400).json({ ok: false, error: 'sample requires id, name, category, type' });
+    // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
+    const parsed = CloudSampleSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, error: 'invalid sample payload', details: parsed.error.issues.slice(0, 5) });
     }
+    const sample = parsed.data;
     const result = await pushSampleToCloud({
       id: sample.id,
       name: sample.name,
-      category: sample.category as 'bass' | 'mids' | 'highs',
+      category: sample.category,
       type: sample.type,
       url: sample.url,
       description: sample.description ?? '',
@@ -608,10 +641,12 @@ app.post('/api/cloud/samples', async (req, res) => {
 // --- POST /api/cloud/music → einzelnen Musik-Track in Supabase upserten ---
 app.post('/api/cloud/music', async (req, res) => {
   try {
-    const track = (req.body ?? {}) as { id?: string; name?: string; artist?: string; url?: string; bpm?: number };
-    if (!track.id || !track.name || !track.url) {
-      return res.status(400).json({ ok: false, error: 'track requires id, name, url' });
+    // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
+    const parsed = CloudMusicSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ ok: false, error: 'invalid track payload', details: parsed.error.issues.slice(0, 5) });
     }
+    const track = parsed.data;
     const result = await pushMusicTrackToCloud({
       id: track.id,
       name: track.name,
@@ -639,13 +674,14 @@ app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', '
     if (Buffer.isBuffer(req.body)) {
       buf = req.body;
     } else {
-      const body = (req.body ?? {}) as { key?: string; dataBase64?: string; contentType?: string };
-      if (!body.key || !body.dataBase64) {
-        return res.status(400).json({ ok: false, error: 'upload requires key + binary body (?key=…) or JSON { key, dataBase64 }' });
+      // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
+      const parsed = CloudUploadJsonSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ ok: false, error: 'upload requires key + binary body (?key=…) or JSON { key, dataBase64 }', details: parsed.error.issues.slice(0, 5) });
       }
-      key = body.key;
-      contentType = body.contentType ?? contentType;
-      buf = Buffer.from(body.dataBase64, 'base64');
+      key = parsed.data.key;
+      contentType = parsed.data.contentType ?? contentType;
+      buf = Buffer.from(parsed.data.dataBase64, 'base64');
     }
 
     if (!key) return res.status(400).json({ ok: false, error: 'upload requires key' });
@@ -702,8 +738,9 @@ function isValidModelId(model: string): boolean {
 
 // --- POST /api/ai/compose  → deterministischer lokaler Preset-Generator ---
 app.post('/api/ai/compose', async (req, res) => {
-  const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const seed = (String(prompt ?? 'techno').trim().slice(0, 4000) || 'techno').length;
+  const parsed = AiPromptSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid prompt', details: parsed.error.issues.slice(0, 5) });
+  const seed = (parsed.data.prompt?.trim().slice(0, 4000) || 'techno').length;
 
   // Deterministische Patterns aus dem Prompt-Seed ableiten (kein Netz).
   const kick = Array.from({ length: 16 }, (_, i) => (i + seed) % 4 === 0);
@@ -762,8 +799,9 @@ function sanitizeJsonBlock(raw: string): string {
 
 // --- POST /api/ai/compose  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
 app.post('/api/ai/generate', async (req, res) => {
-  const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const query = (String(prompt ?? '').trim().slice(0, 4000) || 'Dark warehouse techno drums');
+  const parsed = AiPromptSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid prompt', details: parsed.error.issues.slice(0, 5) });
+  const query = (parsed.data.prompt?.trim().slice(0, 4000) || 'Dark warehouse techno drums');
 
   const llmPrompt =
     'Generiere ein valides JSON (nur JSON, keine Erklärung) mit Feldern ' +
@@ -796,8 +834,9 @@ app.post('/api/ai/generate', async (req, res) => {
 
 // --- POST /api/ai/describe  → Ollama-gestützte Beschreibung (Style/Mix-Empfehlung) ---
 app.post('/api/ai/describe', async (req, res) => {
-  const { prompt } = (req.body ?? {}) as { prompt?: string };
-  const query = (String(prompt ?? '').trim().slice(0, 4000) || 'Was ist ein guter Mix-Vorschlag ?');
+  const parsed = AiPromptSchema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: 'invalid prompt', details: parsed.error.issues.slice(0, 5) });
+  const query = (parsed.data.prompt?.trim().slice(0, 4000) || 'Was ist ein guter Mix-Vorschlag ?');
 
   const llmPrompt =
     'Beantworte kurz (max 2 Sätze), auf Deutsch, fachlich für einen Musik-Produzenten: ' + query;
@@ -816,22 +855,19 @@ app.post('/api/ai/describe', async (req, res) => {
 app.post('/api/ai/generate-drop', async (req, res) => {
   metrics.aiRequests += 1;
 
-  const body = (req.body ?? {}) as {
-    userPrompt?: string;
-    prompt?: string;
-    context?: { bpm?: number; activePlugins?: unknown; currentEnergy?: number };
-    style?: string;
-    duration?: number;
-  };
+  // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
+  const parsed = AiGenerateDropSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const body = parsed.data;
 
-  const userPrompt = String(body.userPrompt ?? body.prompt ?? '').trim().slice(0, 2000);
-  if (!userPrompt) return res.status(400).json({ error: 'userPrompt fehlt' });
+  const userPrompt = (body.userPrompt ?? body.prompt ?? '').trim().slice(0, 2000);
 
   const rawBpm = Number(body.context?.bpm);
   const rawEnergy = Number(body.context?.currentEnergy);
   const rawDuration = Number(body.duration);
-  const style: DropStyle =
-    body.style === 'subtle' || body.style === 'extreme' ? body.style : 'moderate';
+  const style: DropStyle = body.style ?? 'moderate';
 
   const dropRequest: DropGenerationRequest = {
     userPrompt,
@@ -878,31 +914,22 @@ app.post('/api/ai/generate-drop', async (req, res) => {
 // --- POST /api/ai/complete  → LLM-Router (Keys bleiben serverseitig) ---
 app.post('/api/ai/complete', async (req, res) => {
   metrics.aiRequests += 1;
-  const { prompt, complexity, maxTokens, temperature, reasoningEffort } = (req.body ?? {}) as {
-    prompt?: string;
-    complexity?: 'simple' | 'moderate' | 'complex';
-    maxTokens?: number;
-    temperature?: number;
-    reasoningEffort?: 'low' | 'high' | 'max';
-  };
-  const clean = String(prompt ?? '').trim().slice(0, 8000);
-  if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
+  // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
+  const parsed = AiCompleteSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { prompt: clean, complexity, maxTokens, temperature, reasoningEffort } = parsed.data;
 
-  const safeComplexity: 'simple' | 'moderate' | 'complex' =
-    complexity === 'simple' || complexity === 'moderate' || complexity === 'complex'
-      ? complexity
-      : 'moderate';
-  const safeReasoning: 'low' | 'high' | 'max' | undefined =
-    reasoningEffort === 'high' || reasoningEffort === 'max' || reasoningEffort === 'low'
-      ? reasoningEffort
-      : undefined;
+  const safeComplexity: 'simple' | 'moderate' | 'complex' = complexity ?? 'moderate';
+  const safeReasoning: 'low' | 'high' | 'max' | undefined = reasoningEffort;
 
   try {
     const completion = await llmRouter.complete({
       prompt: clean,
       complexity: safeComplexity,
-      maxTokens: Number.isFinite(Number(maxTokens)) ? Math.max(64, Math.min(4096, Math.round(Number(maxTokens)))) : undefined,
-      temperature: Number.isFinite(Number(temperature)) ? Math.min(2, Math.max(0, Number(temperature))) : undefined,
+      maxTokens,
+      temperature,
       reasoningEffort: safeReasoning,
     });
     return res.json(completion);
@@ -919,14 +946,14 @@ app.post('/api/ai/complete', async (req, res) => {
 
 // --- POST /api/ai/orchestrate  → AI-Job über den Orchestrator ---
 app.post('/api/ai/orchestrate', async (req, res) => {
-  const { userId, task, model, input, sessionId } = (req.body ?? {}) as {
-    userId?: string; task?: AiTask; model?: string; input?: unknown; sessionId?: string;
-  };
-  const safeTask = String(task ?? '').trim() as AiTask;
-  const safeModel = String(model ?? '').trim().slice(0, 200);
-  if (!safeTask || !safeModel) {
-    return res.status(422).json({ error: 'task and model are required' });
+  // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
+  const parsed = AiOrchestrateSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(422).json({ error: 'invalid orchestrate payload', details: parsed.error.issues.slice(0, 5) });
   }
+  const { userId, task, model, input, sessionId } = parsed.data;
+  const safeTask = task as AiTask;
+  const safeModel = model;
   if (!isValidAiTask(safeTask)) {
     return res.status(422).json({ error: 'unknown task', task: safeTask.slice(0, 80) });
   }
@@ -940,7 +967,7 @@ app.post('/api/ai/orchestrate', async (req, res) => {
       task: safeTask,
       model: safeModel,
       input: input ?? {},
-      sessionId: sessionId ? String(sessionId).slice(0, 128) : undefined,
+      sessionId: sessionId,
     });
     void aiPersistence.saveJob(result.job);
     void aiPersistence.saveSession(aiOrchestrator.sessions.get());
@@ -2234,6 +2261,11 @@ async function startServer() {
       ) {
         return next(new Error('origin-not-allowed'));
       }
+      // P0-Security: Production fail-closed – ohne Studio-Token keine
+      // Signalisierung/WebRTC (kein stiller Dev-Modus in Produktion).
+      if (studioTokenMissing) {
+        return next(new Error('server-not-configured'));
+      }
       if (studioTokenEnabled) {
         const cookie = String(socket.handshake?.headers?.cookie ?? '');
         const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
@@ -2425,9 +2457,10 @@ async function startServer() {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const parsed = PluginLockSocketSchema.safeParse(data ?? {});
+        if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const pluginId = String(data?.pluginId ?? '').trim();
-        if (!pluginId) return;
+        const pluginId = parsed.data.pluginId;
         const existing = pluginLocks.get(pluginId);
         if (existing && existing.lockedBy !== senderUserId && Date.now() - existing.timestamp <= existing.ttl) {
           socket.emit('plugin-lock-denied', { pluginId, lockedBy: existing.lockedBy });
@@ -2451,8 +2484,10 @@ async function startServer() {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const parsed = PluginLockSocketSchema.safeParse(data ?? {});
+        if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const pluginId = String(data?.pluginId ?? '').trim();
+        const pluginId = parsed.data.pluginId;
         const existing = pluginLocks.get(pluginId);
         if (!existing || existing.lockedBy !== senderUserId) return;
         pluginLocks.delete(pluginId);
@@ -2466,29 +2501,28 @@ async function startServer() {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const parsed = PluginStateSocketSchema.safeParse(data ?? {});
+        if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const senderRole = String(socket.data?.sessionRole ?? 'guest');
-        const pluginId = String((data as any)?.pluginId ?? '');
+        const { pluginId, state } = parsed.data;
         // K-2: Lock serverseitig durchsetzen – nur der Halter darf den State ändern.
         const lock = pluginLocks.get(pluginId);
         if (lock && lock.lockedBy !== senderUserId && Date.now() - lock.timestamp <= lock.ttl) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
-          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state: (data as any)?.state, role: senderRole, reason: 'locked by other' });
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
           return;
         }
         // P4-2: Server-seitige RBAC – PRO-Promotion nur für admin/producer.
-        const state = (data as any)?.state;
-        if (state && !roleCanState(senderRole, String(state))) {
-          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, String((data as any)?.pluginId ?? ''));
-          socket.emit('rbac-denied', { action: 'plugin-state', pluginId: (data as any)?.pluginId, state, role: senderRole });
+        if (state && !roleCanState(senderRole, state)) {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
+          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole });
           return;
         }
-        addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, String((data as any)?.pluginId ?? ''));
+        addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, pluginId);
         // Session-Identität: Sender-User-ID anhängen, damit Empfänger
         // Änderungen einem User zuordnen können (Locking/Audit).
-        const payload = data && typeof data === 'object'
-          ? { ...data, senderUserId, senderRole }
-          : data;
+        const payload = { ...parsed.data, senderUserId, senderRole };
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
       });
 

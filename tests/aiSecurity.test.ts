@@ -28,6 +28,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => appServer.close(() => resolve()));
+  // ARCH-PERF-001: Env-Leak verhindern – Token-Modus nicht in andere
+  // Testdateien desselben Vitest-Workers übernehmen.
+  delete process.env.STUDIO_ACCESS_TOKEN;
+  delete process.env.HF_ENDPOINT_URL;
 });
 
 describe('GAP-4: /api/ai/* Auth (Studio-Token)', () => {

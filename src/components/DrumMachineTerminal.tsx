@@ -42,7 +42,7 @@ interface DrumMachineProps {
 
 export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isPlaying = false, bpm = 128 }) => {
   const { addSample, pendingSample, setPendingSample, takeoverRequest, clearTakeoverRequest } = useSamples();
-  const { state, lockStatus, updateState } = usePluginState('drum', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('drumsampler', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
 
   // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.

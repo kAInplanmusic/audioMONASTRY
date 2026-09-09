@@ -1,5 +1,4 @@
 import { test, expect, devices, type Page } from '@playwright/test';
-import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
 
 /**
  * P1-1 Responsive-/Touch-Matrix

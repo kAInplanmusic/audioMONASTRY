@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { random } from '../utils/random';
 import { Keyboard, Activity, Link2, RefreshCw, Cpu, Usb, Volume2 } from 'lucide-react';
 import { AudioSample } from '../data/samples';
-import { usePluginState } from '../hooks/usePluginState';
 import { useMIDI } from '../hooks/useMIDI';
 import { useHID } from '../hooks/useHID';
 import { audioEngine } from '../utils/audioEngine';
@@ -37,7 +36,12 @@ function detectTouchLimited(): boolean {
 }
 
 export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal() {
-  const { state, lockStatus, updateState } = usePluginState('controller', 'PRO');
+  // ARCH-PLUGIN-005: controllerMONK ist kein Plugin mehr. MIDI/Controller
+  // läuft als System-Layer (Settings → MIDI / Controllers); der Terminal-State
+  // ist daher lokal und nicht mehr an einen Plugin-Slot/Lock gekoppelt.
+  const [state, setState] = useState<'OFF' | 'AUTO_AI' | 'PRO'>('AUTO_AI');
+  const lockStatus = { active: false, lockedBy: null, timestamp: 0 };
+  const updateState = (s: 'OFF' | 'AUTO_AI' | 'PRO') => setState(s);
   const {
     midiAccess, inputs, outputs, detected, error: midiError, rescan, lastMessage,
     lastControlEvent: midiLastControlEvent,
@@ -156,7 +160,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
   return (
     <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
       <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="controller" placeholder="MOA: z. B. 'Controller neu scannen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+        <MoaAssistant pluginId="midi-controller" placeholder="MOA: z. B. 'Controller neu scannen'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       </div>
 
       {/* Header */}

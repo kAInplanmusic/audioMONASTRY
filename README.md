@@ -1,7 +1,7 @@
 # audioMONASTRY · SampleMONK
 
 > Browser-based collaborative audio workstation for up to 4 users.
-> Version: **1.10.1** (`V. 1|010|001`) · Codename "HyperAudioWorkstation" · Date 2026-09-03.
+> Version: **1.210.001** (`V. 1|210|001`) · Codename "HyperAudioWorkstation" · Stand 2026-09-09.
 > Main branch: `main` · Release gate: `npm run verify` must be green.
 > Project purpose: **private / research** (no commercial purpose).
 

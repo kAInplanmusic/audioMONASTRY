@@ -27,30 +27,29 @@ import { getPluginRoute } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
+const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
 
-// Rack-Reihenfolge laut uiubersicht.png/uirollen.png (18 nummerierte Plugins):
-//   DJ:  mixer(1), drop(2), song(3), effect(4)
-//   PD:  instrument(5), sampler(6), drum(7), mcp(8), synthesizer(9)
-//   AI:  stem(10), voice(11), sound(12), spatial(13), library(14)
-//   MS:  eq(15), dsp(16), mastering(17), recording(18)
-// controllerMONK ist Zusatzmodul (kein Header-Icon). FIX sind nur:
-//   oben  = masterplayer (View-only)
-//   unten = performance (perfMONK) + ai (aiMONK-Dock), untereinander fest.
+// Rack-Reihenfolge (ARCH-PLUGIN-001, 16 echte MONKs):
+//   DJ:        mixer(1) · drop(2) · song(3) · effect(4)
+//   PRODUCING: syntisampler(5) · drumsampler(6) · instru(7) · biblio(8)
+//   AI:        voice(9) · sound(10) · stem(11) · spatial(12)
+//   MASTERING: eq(13) · dsp(14) · master(15) · record(16)
+// System-Module (fix, alle 4 User):
+//   oben  = masterplayerMONK · nach recordMONK = aiMONK · ganz unten = perforMONK
+// MIDI/Controller ist KEIN Plugin (Settings → MIDI / Controllers).
 const RACK_ORDER = [
   'mixer', 'drop', 'song', 'effect',
-  'instrument', 'sampler', 'drum', 'mcp', 'synthesizer',
-  'stem', 'voice', 'sound', 'spatial', 'library',
-  'eq', 'dsp', 'mastering', 'recording',
-  'controller',
+  'syntisampler', 'drumsampler', 'instru', 'biblio',
+  'voice', 'sound', 'stem', 'spatial',
+  'eq', 'dsp', 'master', 'record',
 ];
 
-// Header-Navigation: 18 Plugin-Icons in ZWEI Reihen à 9 – ein Icon pro
-// nummeriertem Plugin (laut uiubersicht). Fixe Racks (performance/ai) und
-// controllerMONK (Zusatzmodul ohne Header-Icon) haben kein Icon;
-// masterplayerMONK ist die feste Kopfzeile oberhalb der Toolbar.
-const NAV_EXCLUDED = new Set(['ai', 'performance']);
+// Header-Navigation: 16 Plugin-Icons in ZWEI Reihen à 8. System-Module
+// (aiMONK/perforMONK) haben kein Header-Icon; masterplayerMONK ist die
+// feste Kopfzeile oberhalb der Toolbar.
+const NAV_EXCLUDED = new Set(['ai']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
@@ -78,6 +77,7 @@ function AppComponent() {
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [masteringOpen, setMasteringOpen] = useState(false);
+  const [masterPlayerOpen, setMasterPlayerOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
   const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
@@ -394,14 +394,14 @@ function AppComponent() {
         </Suspense>
       );
     }
-    if (plugin.id === 'drum') {
+    if (plugin.id === 'drumsampler') {
       return (
-        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Machine…</div>}>
+        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Drum-Sampler…</div>}>
           <DrumMachineTerminal isPlaying={isPlaying} bpm={bpm} />
         </Suspense>
       );
     }
-    if (plugin.id === 'mastering') {
+    if (plugin.id === 'master') {
       return (
         <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
           <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />
@@ -486,9 +486,9 @@ function AppComponent() {
             </div>
           </a>
 
-          {/* Mitte: 18 Auswahl-Icons (zwei Reihen à 9) – ein Icon pro Plugin außer ai/mixer/masterplayer */}
+          {/* Mitte: 16 Auswahl-Icons (zwei Reihen à 8) – ein Icon pro Plugin außer ai/masterplayer/perfor */}
           <nav className="flex-1 min-w-0 overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
-            <div className="grid grid-rows-2 grid-cols-10 min-w-[600px] h-full">
+            <div className="grid grid-rows-2 grid-cols-8 min-w-[600px] h-full">
               {navPlugins.map((plugin) => {
                 const Icon = plugin.icon;
                 const state = moduleStates[plugin.id] || 'OFF';
@@ -615,6 +615,24 @@ function AppComponent() {
         <div className="px-3 pb-3 border-t border-white/5">
           <BeatVisualizer isPlaying={isPlaying} />
         </div>
+        {/* ARCH-PLUGIN-004: masterplayerMONK = Playback-/WaveTable-/Info-Funktion.
+            Das MasterPlayerTerminal (Analyse/Mastering/Mix-Info) wird als
+            View-only-Sektion unter der Transport-Leiste eingeblendet. */}
+        <div className="px-3 pb-3 border-t border-white/5">
+          <button
+            type="button"
+            onClick={() => setMasterPlayerOpen(v => !v)}
+            aria-pressed={masterPlayerOpen}
+            className="w-full px-3 py-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/5 text-cyan-200 text-[9px] font-bold tracking-widest hover:bg-cyan-400/15 transition-all cursor-pointer"
+          >
+            {masterPlayerOpen ? '▾ MASTER PLAYER AUSBLENDEN' : '▸ MASTER PLAYER (WAVEFORM / INFO)'}
+          </button>
+          {masterPlayerOpen && (
+            <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Master-Player…</div>}>
+              <MasterPlayerTerminal />
+            </Suspense>
+          )}
+        </div>
       </section>
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
@@ -694,17 +712,17 @@ function AppComponent() {
         </div>
       )}
 
-      {/* FIX BOTTOM: perfMONK (oben) + aiMONK (unten) – fest für alle User.
-          Die Monitor-Wahl (User + MAIN/PLUGIN-Mix) liegt hier bei perfMONK. */}
+      {/* FIX BOTTOM: aiMONK (nach recordMONK) + perforMONK (ganz unten) – fest
+          für alle User. Die Monitor-Wahl liegt hier bei perforMONK. */}
       <section
-        id="rack-performance"
+        id="rack-perfor"
         className="rounded-xl border border-emerald-400/60 bg-[#0a0f15]/95 shadow-[0_0_24px_-8px_rgba(52,211,153,0.35)] mb-4"
       >
         <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
           <div className="w-10 h-10 shrink-0 rounded-lg border border-emerald-400/70 bg-emerald-900/40 text-emerald-300 flex items-center justify-center shadow-[0_0_12px_rgba(52,211,153,0.35)]">
             <Gauge size={18} />
           </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">perfMONK</h3>
+          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">perforMONK</h3>
           <span className="hidden sm:inline text-[9px] font-mono text-emerald-400 tracking-widest">FIXED · MONITOR</span>
 
           {/* Monitor-Ausgabe pro User: MAIN → MIX (MAIN+PLUGIN) → NUR PLUGIN */}
@@ -747,7 +765,7 @@ function AppComponent() {
           </div>
         </div>
         <div className="px-3 pb-3 border-t border-white/5">
-          <Suspense fallback={<div className="h-16 flex items-center justify-center text-neutral-500 text-xs">Lade perfMONK…</div>}>
+          <Suspense fallback={<div className="h-16 flex items-center justify-center text-neutral-500 text-xs">Lade perforMONK…</div>}>
             <PerformanceMonitorTerminal />
           </Suspense>
         </div>

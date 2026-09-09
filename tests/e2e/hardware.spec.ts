@@ -1,5 +1,4 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
 
 /**
  * E2E-Hardware (ohne echte Geräte): mocked Web MIDI + WebHID via

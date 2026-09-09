@@ -23,3 +23,8 @@ for (const key of [
 ]) {
   delete process.env[key];
 }
+
+// ARCH-PERF-001/ARCH-SEC-001: STUDIO_ACCESS_TOKEN aus der Host-.env darf die
+// Server-Tests nicht in den Auth-Modus schalten. Tests, die Auth prüfen
+// (security.test.ts, securityProductionAuth.test.ts), setzen den Token explizit.
+delete process.env.STUDIO_ACCESS_TOKEN;

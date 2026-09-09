@@ -11,13 +11,14 @@ import {
 
 /**
  * P3-3 / GAP-5: Die Eval-Matrix ist das Gate der Nightly-CI.
- * Sie muss alle 21 Plugins abdecken und Score/Dauer/Fehler bewerten.
+ * Sie muss alle 16 MONKs + System-Module (ai/perfor) abdecken und
+ * Score/Dauer/Fehler bewerten.
  */
 describe('evalMatrix – Mindest-Score je Plugin (GAP-5)', () => {
-  it('deckt genau die 21 Plugins ab', () => {
-    expect(EVAL_PLUGIN_IDS).toHaveLength(21);
-    expect(new Set(EVAL_PLUGIN_IDS).size).toBe(21);
-    expect(Object.keys(PLUGIN_EVAL_MATRIX)).toHaveLength(21);
+  it('deckt exakt 16 MONKs + System-IDs ai/perfor ab', () => {
+    expect(EVAL_PLUGIN_IDS).toHaveLength(18);
+    expect(new Set(EVAL_PLUGIN_IDS).size).toBe(18);
+    expect(Object.keys(PLUGIN_EVAL_MATRIX)).toHaveLength(18);
   });
 
   it('definiert je Plugin einen Mindest-Score ≥ Default und ein Laufzeit-Budget', () => {
@@ -30,8 +31,8 @@ describe('evalMatrix – Mindest-Score je Plugin (GAP-5)', () => {
   });
 
   it('hebt das Gate für audio-kritische Plugins an', () => {
-    expect(minScoreFor('mixer')).toBeGreaterThan(minScoreFor('library'));
-    expect(minScoreFor('mastering')).toBeGreaterThan(DEFAULT_MIN_SCORE);
+    expect(minScoreFor('mixer')).toBeGreaterThan(minScoreFor('biblio'));
+    expect(minScoreFor('master')).toBeGreaterThan(DEFAULT_MIN_SCORE);
   });
 
   it('fällt für unbekannte Plugin-IDs auf den Default zurück', () => {

@@ -17,11 +17,11 @@ import { voiceControlService } from './VoiceControlService';
 import type { TrackType } from '../../types';
 import { controlBus } from '../events/ControlBus';
 
-/** Verbindliche 21 Plugin-IDs (P3-2: Registry muss alle abdecken). */
+/** Verbindliche Plugin-IDs (ARCH-PLUGIN-001: 16 MONKs + System-Module). */
 export const PLUGIN_COMMAND_IDS: readonly string[] = Object.freeze([
-  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
-  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
-  'mastering', 'recording', 'controller', 'performance', 'ai',
+  'mixer', 'drop', 'song', 'effect', 'syntisampler', 'drumsampler', 'instru', 'biblio',
+  'voice', 'sound', 'stem', 'spatial', 'eq', 'dsp', 'master', 'record',
+  'ai', 'perfor',
 ]);
 
 let registered = false;
@@ -108,6 +108,12 @@ export function registerDefaultVoiceCommands(): void {
 
   // --- instrumentMONK ---------------------------------------------------------
   voiceControlService.registerPluginCommand('instrument', 'program', async (ctx) => {
+    const program = Number(ctx.intent.parameters.program ?? 0);
+    const { instrumentBackend } = await import('../instrument/InstrumentBackend');
+    instrumentBackend.handleProgramChange(program);
+  }, ['program', 'instrument', 'preset']);
+  // ARCH-PLUGIN-001: instruMONK = instrumentMONK (Alias + eigene ID).
+  voiceControlService.registerPluginCommand('instru', 'program', async (ctx) => {
     const program = Number(ctx.intent.parameters.program ?? 0);
     const { instrumentBackend } = await import('../instrument/InstrumentBackend');
     instrumentBackend.handleProgramChange(program);
@@ -299,7 +305,90 @@ export function registerDefaultVoiceCommands(): void {
     controlBus.emit('monk:drop-auto', { track: cand.name, url: cand.url, channel: track });
   }, ['auto', 'drop', 'automatisch', 'überleitung', 'biblio', 'passend']);
 
-  // --- P3-2: generische Router-Kommandos für ALLE 21 Plugin-IDs ----------------
+  // --- ARCH-PLUGIN-001: Handler für die 16-MONK-Ziel-IDs ----------------------
+  // syntisamplerMONK = synthesizer + sampler + mcp (Synth/Sampler-Steuerung).
+  voiceControlService.registerPluginCommand('syntisampler', 'note', playSynthNote, ['note', 'ton', 'freq']);
+  voiceControlService.registerPluginCommand('syntisampler', 'trigger', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.triggerEvent('channel5', 0.8);
+  }, ['trigger', 'pad', 'sample', 'spiele']);
+  voiceControlService.registerPluginCommand('syntisampler', 'pattern_four', async () => {
+    dispatchMcpPattern('four');
+  }, ['four', 'floor', 'viertel']);
+  voiceControlService.registerPluginCommand('syntisampler', 'pattern_random', async () => {
+    dispatchMcpPattern('random');
+  }, ['random', 'zufall']);
+  voiceControlService.registerPluginCommand('syntisampler', 'pattern_break', async () => {
+    dispatchMcpPattern('break');
+  }, ['break', 'drum', 'beat']);
+
+  // drumsamplerMONK = drumMONK + Drum-Sampling.
+  voiceControlService.registerPluginCommand('drumsampler', 'kit', async (ctx) => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    const kit = String(ctx.intent.parameters.kit ?? 'tr-808');
+    audioEngine.setDrumKit(kit);
+  }, ['kit', 'drum']);
+  voiceControlService.registerPluginCommand('drumsampler', 'pattern_random', async () => {
+    controlBus.emit('monk:drum-pattern-random', undefined);
+  }, ['random', 'zufall', 'pattern']);
+  voiceControlService.registerPluginCommand('drumsampler', 'trigger', async () => {
+    const { audioEngine } = await import('../../utils/audioEngine');
+    audioEngine.triggerEvent('channel2', 0.8);
+  }, ['trigger', 'pad', 'sample', 'spiele']);
+
+  // biblioMONK = libraryMONK.
+  voiceControlService.registerPluginCommand('biblio', 'sync', async () => {
+    await fetch('/api/cloud/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  }, ['sync', 'cloud', 'bibliothek']);
+  voiceControlService.registerPluginCommand('biblio', 'search', async () => {
+    controlBus.emit('monk:library-search', undefined);
+  }, ['search', 'suche', 'finden']);
+  voiceControlService.registerPluginCommand('biblio', 'load', async () => {
+    controlBus.emit('monk:library-load', undefined);
+  }, ['load', 'laden', 'auswählen']);
+
+  // masterMONK = masteringMONK.
+  voiceControlService.registerPluginCommand('master', 'preset', async (ctx) => {
+    const { MASTERING_PRESETS } = await import('../../data/masteringPresets');
+    const { audioEngine } = await import('../../utils/audioEngine');
+    const wanted = String(ctx.intent.parameters.preset ?? '').toLowerCase();
+    const entries = Object.entries(MASTERING_PRESETS) as [string, { master_me: Record<string, number>; tone_shift: unknown }][];
+    const match = entries.find(([k]) => k.toLowerCase() === wanted) ?? entries[0];
+    if (match) {
+      const preset = match[1];
+      audioEngine.updateMasterMe(preset.master_me);
+      audioEngine.updateToneShiftEQ(preset.tone_shift as never);
+    }
+  }, ['preset', 'master', 'mastering']);
+
+  // recordMONK = recordingMONK.
+  voiceControlService.registerPluginCommand('record', 'start', async () => {
+    controlBus.emit('monk:recorder-start', undefined);
+  }, ['start', 'record', 'aufnahme']);
+  voiceControlService.registerPluginCommand('record', 'stop', async () => {
+    controlBus.emit('monk:recorder-stop', undefined);
+  }, ['stop', 'halt']);
+
+  // perforMONK = performanceMONK.
+  voiceControlService.registerPluginCommand('perfor', 'reset', async () => {
+    const { performanceMonitor } = await import('../../utils/PerformanceMonitor');
+    performanceMonitor.stop();
+    performanceMonitor.start();
+  }, ['reset', 'performance', 'monitor']);
+
+  // MIDI/Controller-Layer (Settings, kein Plugin-Slot).
+  voiceControlService.registerPluginCommand('midi-controller', 'rescan', async () => {
+    const { audioDeviceManager } = await import('../../utils/audioDeviceManager');
+    await audioDeviceManager.refresh();
+  }, ['rescan', 'scan', 'controller', 'midi']);
+  voiceControlService.registerPluginCommand('midi-controller', 'learn', async () => {
+    controlBus.emit('monk:midi-learn', undefined);
+  }, ['learn', 'lernen']);
+  voiceControlService.registerPluginCommand('midi-controller', 'mapping', async () => {
+    controlBus.emit('monk:midi-mapping', undefined);
+  }, ['mapping', 'zuordnung']);
+
+  // --- P3-2: generische Router-Kommandos für ALLE Plugin-IDs -------------------
   // Aktivierung/Routing/Parameter laufen über den PluginAudioRouter (OFF/An,
   // Ziel-Kanal, Parameter). Dadurch ist die Registry vollständig mit dem
   // Audio-Router verdrahtet – kein Plugin bleibt ohne Aktivierungs-Kommando.
@@ -335,7 +424,7 @@ export function registerDefaultVoiceCommands(): void {
   }, ['kanal', 'channel', 'gain', 'pan', 'volume']);
 
   // --- UI-only Plugins (Status-Meldung, Folgeschritte verdrahten) ---------------
-  for (const id of ['song', 'stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai']) {
+  for (const id of ['song', 'stem', 'recording', 'mastering', 'performance', 'sound', 'drop', 'ai', 'master', 'record', 'perfor']) {
     voiceControlService.registerPluginCommand(id, 'status', async () => {
       // Zusätzlicher Status-Handler (Kommandos wie "Status").
     }, ['status', 'bereit', 'ready']);

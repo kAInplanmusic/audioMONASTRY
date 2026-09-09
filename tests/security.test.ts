@@ -18,6 +18,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  // ARCH-PERF-001: Env-Leak verhindern – Token-Modus nicht in andere
+  // Testdateien desselben Vitest-Workers übernehmen.
+  delete process.env.STUDIO_ACCESS_TOKEN;
 });
 
 describe('Security (Studio-Token, P-1/P-9/P-12)', () => {

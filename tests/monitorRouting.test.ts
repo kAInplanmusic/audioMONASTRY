@@ -69,10 +69,10 @@ function makeSession(): Record<MonitorUser, MonitorRoutingPlan> {
 }
 
 describe('P0-6 · Main-/Monitor-Routing (4-User-Prüfpunkt)', () => {
-  const drumChannel = pluginAudioChannels('drum')[0];
+  const drumChannel = pluginAudioChannels('drumsampler')[0];
 
-  it('User2 aktiviert Drum → Drum speist MAIN, alle 4 User hören den Gesamtmix', () => {
-    const route = getPluginRoute('drum');
+  it('User2 aktiviert drumsamplerMONK → Drum speist MAIN, alle 4 User hören den Gesamtmix', () => {
+    const route = getPluginRoute('drumsampler');
     expect(route?.mainFeeder).toBe(true);
     expect(route?.channels).toContain(drumChannel);
 

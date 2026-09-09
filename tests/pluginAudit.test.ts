@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// GAP-3: Atomarer Plugin-Audit – jede der 21 IDs durchläuft
+// GAP-3: Atomarer Plugin-Audit – jede der 16 echten MONK-IDs durchläuft
 // Aktivierung → Routing → Deaktivierung. AudioEngine wird gemockt.
+// System-IDs (ai/perfor) sind ebenfalls im Router bekannt (State-Sync).
 const engineSpies = vi.hoisted(() => ({
   activate: vi.fn(),
   deactivate: vi.fn(),
@@ -14,17 +15,20 @@ vi.mock('../src/utils/audioEngine', () => ({
     deactivatePlugin: engineSpies.deactivate,
     stopMainAndClock: engineSpies.stopMainAndClock,
   },
-  pluginAudioChannels: (id: string) => (id === 'mixer' ? ['channel1'] : id === 'mcp' ? ['channel5'] : []),
+  pluginAudioChannels: (id: string) => (id === 'mixer' ? ['channel1'] : id === 'syntisampler' ? ['channel4', 'channel5'] : []),
 }));
 
 import { PLUGIN_ROUTE_IDS, routeModuleState } from '../src/core/pluginAudioRouter';
 
-describe('GAP-3: 21-Plugin-Audit (Aktivierung → Routing → Deaktivierung)', () => {
-  it('alle 21 Plugin-IDs sind im Router registriert', () => {
-    expect(PLUGIN_ROUTE_IDS).toHaveLength(21);
+describe('GAP-3: 16-MONK-Audit (Aktivierung → Routing → Deaktivierung)', () => {
+  it('alle 16 MONK-IDs + System-IDs (ai/perfor) sind im Router registriert', () => {
+    expect(PLUGIN_ROUTE_IDS).toHaveLength(18);
+    for (const id of ['mixer', 'drop', 'song', 'effect', 'syntisampler', 'drumsampler', 'instru', 'biblio', 'voice', 'sound', 'stem', 'spatial', 'eq', 'dsp', 'master', 'record', 'ai', 'perfor']) {
+      expect(PLUGIN_ROUTE_IDS).toContain(id);
+    }
   });
 
-  it('jede Plugin-ID kann aktiviert und deaktiviert werden', () => {
+  it('jede MONK-ID kann aktiviert und deaktiviert werden', () => {
     for (const id of PLUGIN_ROUTE_IDS) {
       routeModuleState(id, 'AUTO_AI');
       expect(engineSpies.activate).toHaveBeenCalledWith(id, 'AUTO_AI');
@@ -38,9 +42,9 @@ describe('GAP-3: 21-Plugin-Audit (Aktivierung → Routing → Deaktivierung)', (
     expect(engineSpies.stopMainAndClock).toHaveBeenCalled();
   });
 
-  it('andere Plugins lösen keinen MainClock-Stopp aus', () => {
+  it('andere MONKs lösen keinen MainClock-Stopp aus', () => {
     engineSpies.stopMainAndClock.mockClear();
-    routeModuleState('drum', 'OFF');
+    routeModuleState('drumsampler', 'OFF');
     expect(engineSpies.stopMainAndClock).not.toHaveBeenCalled();
   });
 });

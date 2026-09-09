@@ -5,16 +5,13 @@ import {
 // Lazy-Code-Splitting: Jedes Terminal wird erst beim Aktivieren geladen
 // (reduziert das Hauptbundle erheblich; Vite erzeugt eigene Chunks).
 import { lazy } from 'react';
-const InstrumentsTerminal = lazy(() => import('../components/InstrumentsTerminal').then(m => ({ default: m.InstrumentsTerminal })));
-const SynthesizerTerminal = lazy(() => import('../components/SynthesizerTerminal').then(m => ({ default: m.SynthesizerTerminal })));
+const SyntiSamplerTerminal = lazy(() => import('../components/SyntiSamplerTerminal').then(m => ({ default: m.SyntiSamplerTerminal })));
 const DrumMachineTerminal = lazy(() => import('../components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
-const SamplerTerminal = lazy(() => import('../components/SamplerTerminal').then(m => ({ default: m.SamplerTerminal })));
-const McpTerminal = lazy(() => import('../components/McpTerminal').then(m => ({ default: m.McpTerminal })));
+const InstrumentsTerminal = lazy(() => import('../components/InstrumentsTerminal').then(m => ({ default: m.InstrumentsTerminal })));
 const VoiceGenTerminal = lazy(() => import('../components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const SoundTerminal = lazy(() => import('../components/SoundTerminal').then(m => ({ default: m.SoundTerminal })));
 const SongMonkTerminal = lazy(() => import('../components/SongMonkTerminal').then(m => ({ default: m.SongMonkTerminal })));
 const DJ4ChMixer = lazy(() => import('../components/DJ4ChMixer').then(m => ({ default: m.DJ4ChMixer })));
-const MIDIControllerTerminal = lazy(() => import('../components/MIDIControllerTerminal').then(m => ({ default: m.MIDIControllerTerminal })));
 const FXEngineTerminal = lazy(() => import('../components/FXEngineTerminal').then(m => ({ default: m.FXEngineTerminal })));
 const DropTerminal = lazy(() => import('../components/DropTerminal').then(m => ({ default: m.DropTerminal })));
 const LibraryTerminal = lazy(() => import('../components/LibraryTerminal').then(m => ({ default: m.LibraryTerminal })));
@@ -33,93 +30,77 @@ const ICON_MAP: Record<string, any> = {
 };
 
 // ============================================================================
-// Plugin-Reihenfolge (verbindlich, laut uiubersicht.png/uirollen.png):
-//   01 mixer · 02 drop · 03 song · 04 effect
-//   05 instrument · 06 sampler · 07 drum · 08 mcp · 09 synthesizer
-//   10 stem · 11 voice · 12 sound · 13 spatial · 14 library
-//   15 eq · 16 dsp · 17 mastering · 18 recording
-//   controller ist Zusatzmodul (19) – performance/ai sind unten fixiert.
-// masterplayerMONK ist KEIN Plugin, sondern feste View-only-Leiste (App.tsx).
-// visMONK wurde entfernt; seine Signal-Anzeige ist in perfMONK integriert.
+// 16-MONK-REGISTRY (verbindliche Zielarchitektur, ARCH-PLUGIN-001)
+// ----------------------------------------------------------------------------
+// Reihenfolge + Kategorien:
+//   DJ:        mixer(1) · drop(2) · song(3) · effect(4)
+//   PRODUCING: syntisampler(5) · drumsampler(6) · instru(7) · biblio(8)
+//   AI:        voice(9) · sound(10) · stem(11) · spatial(12)
+//   MASTERING: eq(13) · dsp(14) · master(15) · record(16)
+//
+// System-Module (KEINE Plugins, nicht in dieser Registry):
+//   masterplayerMONK (nach Head, fest) · aiMONK (nach recordMONK) ·
+//   perforMONK (ganz unten). MIDI/Controller läuft über Settings.
+//
+// Konsolidierung (Migration-Matrix in TODO.md):
+//   synthesizer + sampler + mcp(Synth/Sampler-Steuerung) → syntisampler
+//   drum (+ Drum-Sampling)                              → drumsampler
+//   instrument                                           → instru
+//   library                                              → biblio
+//   mastering                                            → master
+//   recording                                            → record
+//   controller/perf                                      → Settings/perforMONK (System)
 // ============================================================================
 const COMPONENT_MAP: Record<string, any> = {
   mixer: DJ4ChMixer,
   drop: DropTerminal,
   song: SongMonkTerminal,
   effect: FXEngineTerminal,
-  instrument: InstrumentsTerminal,
-  sampler: SamplerTerminal,
-  drum: DrumMachineTerminal,
-  mcp: McpTerminal,
-  synthesizer: SynthesizerTerminal,
-  stem: StemExtractorTerminal,
+  syntisampler: SyntiSamplerTerminal,
+  drumsampler: DrumMachineTerminal,
+  instru: InstrumentsTerminal,
+  biblio: LibraryTerminal,
   voice: VoiceGenTerminal,
   sound: SoundTerminal,
+  stem: StemExtractorTerminal,
   spatial: SpatialScene,
-  library: LibraryTerminal,
   eq: EQPluginTerminal,
   dsp: DSPTerminal,
-  mastering: MasteringOverlay,
-  recording: RecorderTerminal,
-  controller: MIDIControllerTerminal,
-  performance: PerformanceMonitorTerminal,
-  ai: AiMonkTerminal,
+  master: MasteringOverlay,
+  record: RecorderTerminal,
 };
 
-// ============================================================================
-// Task 21: Modul-Zusammenführung – Aliase für Konsolidierung
-// ----------------------------------------------------------------------------
-// Gruppen, deren Module zu einem "Metamodul" zusammengefasst werden können:
-//  - Verarbeitungskette: dsp + eq + effect  → primärer Kern: 'effect'
-//  - Klangerzeugung:     synth + instrument → primärer Kern: 'instrument'
-//  - Signalquelle:       recorder + voice   → primärer Kern: 'recording'
-// resolveComponent(id) liefert die ERSTE primäre Komponente der Gruppe, sodass
-// beim Zusammenführen nur ein Terminal gerendert wird.
-// ============================================================================
+/** System-Module (bewusst außerhalb der 16er-Registry). */
+export const SYSTEM_MODULES = {
+  masterplayer: { name: 'masterplayerMONK', short: 'MPL', icon: 'Activity', component: null },
+  ai: { name: 'aiMONK', short: 'AI', icon: 'Bot', component: AiMonkTerminal },
+  perfor: { name: 'perforMONK', short: 'PRF', icon: 'Gauge', component: PerformanceMonitorTerminal },
+} as const;
 
-/** Gruppen mit ihren Mitgliedern und dem primären (verbleibenden) Modul. */
-export const METAMODULE_GROUPS: { group: string; members: string[]; primary: string }[] = [
-  { group: 'process', members: ['dsp', 'eq', 'effect'], primary: 'effect' },
-  { group: 'sound',   members: ['synthesizer', 'instrument'],  primary: 'instrument' },
-  { group: 'source',  members: ['recording', 'voice'],   primary: 'recording' },
-];
-
-/** Mappt ein Modul auf seinen primären Gruppenvorsteher. */
-export function resolvePrimaryModule(id: string): string {
-  const g = METAMODULE_GROUPS.find(x => x.members.includes(id));
-  return g ? g.primary : id;
-}
-
-/** Führt für ein Modul die richtige Render-Komponente auf (Merge-bewusst). */
 export function resolveComponent(id: string): any {
-  return COMPONENT_MAP[resolvePrimaryModule(id)] ?? COMPONENT_MAP[id];
+  return COMPONENT_MAP[id];
 }
 
 const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; icon: string }> = {
-  instrument: { name: 'instrumentMONK', short: 'INS', icon: 'Music' },
-  synthesizer: { name: 'synthesizerMONK', short: 'SYN', icon: 'Waves' },
-  drum: { name: 'drumMONK', short: 'DRM', icon: 'Speaker' },
-  sampler: { name: 'samplerMONK', short: 'SAM', icon: 'Speaker' },
-  mcp: { name: 'mcpMONK', short: 'MCP', icon: 'Grid3X3' },
+  mixer: { name: 'mixerMONK', short: 'MIX', icon: 'Sliders' },
+  drop: { name: 'dropMONK', short: 'DRP', icon: 'Zap' },
+  song: { name: 'songMONK', short: 'SNG', icon: 'Music' },
+  effect: { name: 'effectMONK', short: 'FX', icon: 'Sparkles' },
+  syntisampler: { name: 'syntisamplerMONK', short: 'SYSA', icon: 'Waves' },
+  drumsampler: { name: 'drumsamplerMONK', short: 'DRSA', icon: 'Speaker' },
+  instru: { name: 'instruMONK', short: 'INS', icon: 'Music' },
+  biblio: { name: 'biblioMONK', short: 'LIB', icon: 'Database' },
   voice: { name: 'voiceMONK', short: 'VOX', icon: 'Mic' },
   sound: { name: 'soundMONK', short: 'SND', icon: 'AudioLines' },
-  song: { name: 'songMONK', short: 'SNG', icon: 'Music' },
-  mixer: { name: 'mixerMONK', short: 'MIX', icon: 'Sliders' },
-  controller: { name: 'midiMONK', short: 'MIDI', icon: 'Keyboard' },
-  effect: { name: 'effectMONK', short: 'FX', icon: 'Sparkles' },
-  drop: { name: 'dropMONK', short: 'DRP', icon: 'Zap' },
-  library: { name: 'biblioMONK', short: 'LIB', icon: 'Database' },
-  eq: { name: 'eqMONK', short: 'EQ', icon: 'Activity' },
-  dsp: { name: 'dspMONK', short: 'DSP', icon: 'Cpu' },
-  mastering: { name: 'masteringMONK', short: 'MST', icon: 'Square' },
   stem: { name: 'stemMONK', short: 'RMX', icon: 'Radio' },
   spatial: { name: 'spatialMONK', short: '3D', icon: 'Box' },
-  recording: { name: 'recordingMONK', short: 'REC', icon: 'Activity' },
-  performance: { name: 'perfMONK', short: 'PRF', icon: 'Gauge' },
-  ai: { name: 'aiMONK', short: 'AI', icon: 'Bot' },
+  eq: { name: 'eqMONK', short: 'EQ', icon: 'Activity' },
+  dsp: { name: 'dspMONK', short: 'DSP', icon: 'Cpu' },
+  master: { name: 'masterMONK', short: 'MST', icon: 'Square' },
+  record: { name: 'recordMONK', short: 'REC', icon: 'Activity' },
 };
 
-const EXPECTED_PLUGIN_COUNT = 21;
+const EXPECTED_PLUGIN_COUNT = 16;
 
 const createFallbackRegistry = () =>
   Object.keys(COMPONENT_MAP).map((id) => {

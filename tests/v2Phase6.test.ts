@@ -9,7 +9,6 @@ import {
 } from '../src/core/session/v2SessionState';
 import {
   v2Can, v2ObjectId, applyV2GraphStateWithRbac, syncV2Locks, listV2Locks,
-  type V2Role,
 } from '../src/core/session/v2LockSync';
 import {
   fingerprintV2GraphState, addV2SfuConsumer, addV2SfuProducer,

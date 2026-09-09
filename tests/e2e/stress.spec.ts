@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { enterStudio } from './helpers/studioNav';
 
 /**
  * audioMONASTRY – Audio-Engine-/UI-Stresstest (Playwright, headless Chromium)

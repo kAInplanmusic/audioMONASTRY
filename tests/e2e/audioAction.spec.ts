@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio, navButton, STUDIO_NAV, collectErrors } from './helpers/studioNav';
+import { STUDIO_NAV } from './helpers/studioNav';
 
 /**
  * E2E für die neue einheitliche Click/Touch-Audio-Interaktion.

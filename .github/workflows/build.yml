@@ -15,7 +15,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install
         # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
@@ -51,7 +51,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install
         # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt
@@ -101,7 +101,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Install
         # NOSONAR: Lifecycle-Skripte (mediasoup/esbuild) werden für den Build benötigt

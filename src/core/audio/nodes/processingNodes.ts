@@ -71,6 +71,11 @@ export function computeBiquadCoefficients(
   const f = Math.max(5, Math.min(sr / 2 - 1, Number.isFinite(freq) ? freq : 1000));
   const qq = Math.max(0.1, Math.min(18, Number.isFinite(q) ? q : 0.707));
   const g = Math.max(-24, Math.min(24, gainDb));
+  // ARCH-AUDIO-002: Bei 0 dB Gain muss ein Shelf-/Peaking-Filter exakt
+  // transparent sein (RBJ-Formeln degenerieren bei A=1 sonst zu b1≠a1).
+  if (type !== 'highpass' && type !== 'lowpass' && Math.abs(g) < 1e-9) {
+    return [1, 0, 0, 0, 0];
+  }
   const w = (2 * Math.PI * f) / sr;
   const cw = Math.cos(w);
   const sn = Math.sin(w);
@@ -200,7 +205,7 @@ export class ParametricEqNode extends BaseNode implements AutomatableV2Node {
     }
     const len = input[0]?.length ?? ctx.bufferSize;
     const out = copyInput(input, len);
-    const coeffs = this.bands.map((band, i) =>
+    const coeffs = this.bands.map((band) =>
       computeBiquadCoefficients(
         band.type,
         band.freq,

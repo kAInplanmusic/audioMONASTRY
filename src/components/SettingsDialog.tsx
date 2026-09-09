@@ -12,6 +12,7 @@ import { sfuTransport } from '../core/transport/MediasoupTransport';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { isWebMidiSupported, requestWebMidiAccess } from '../utils/midiAccess';
 import { CloudStatusBadge } from './CloudStatusBadge';
+import { MIDIControllerTerminal } from './MIDIControllerTerminal';
 import { isAiShutdownMode, setAiShutdownMode, isHfEndpointConfigured } from '../core/ai/orchestrator/providerRouter';
 
 /**
@@ -80,6 +81,7 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   const [midiInputCount, setMidiInputCount] = useState(0);
   const [midiOutputCount, setMidiOutputCount] = useState(0);
   const [midiError, setMidiError] = useState<string | null>(null);
+  const [controllerOpen, setControllerOpen] = useState(false);
   const [latency, setLatency] = useState(() => audioDeviceManager.getLatencySnapshot());
   // NEW-D15-1: DevSettings „AI Server Shutdown“ – A100-Endpoint aus dem Router nehmen.
   const [aiShutdown, setAiShutdown] = useState(() => isAiShutdownMode());
@@ -381,6 +383,21 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
           <p className="text-[10px] text-neutral-500 mt-1">
             SysEx-fähig (nur Chromium/Edge). Für Safari/iOS den midi-bridge-Sidecar verwenden.
           </p>
+          {/* ARCH-PLUGIN-005: controllerMONK ist kein Plugin mehr. Das
+              Controller-Dashboard (Devices, Mapping, Presets, Transport) läuft
+              als System-Layer hier in Settings → MIDI / Controllers. */}
+          <button type="button"
+            onClick={() => setControllerOpen(v => !v)}
+            aria-pressed={controllerOpen}
+            className="mt-2 w-full px-3 py-2 rounded border border-lime-500/40 bg-lime-500/5 text-lime-300 text-[10px] font-bold tracking-widest hover:bg-lime-500/15 transition-colors cursor-pointer"
+          >
+            {controllerOpen ? '▾ CONTROLLER-DASHBOARD AUSBLENDEN' : '▸ CONTROLLER-DASHBOARD (MIDI LEARN / MAPPING / DEVICES)'}
+          </button>
+          {controllerOpen && (
+            <div className="mt-3 max-h-[60vh] overflow-y-auto rounded-lg border border-neutral-800">
+              <MIDIControllerTerminal />
+            </div>
+          )}
         </div>
 
         {/* Routing / Ausgang */}

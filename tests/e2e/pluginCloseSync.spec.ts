@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { enterStudio, STUDIO_NAV } from './helpers/studioNav';
+import { STUDIO_NAV } from './helpers/studioNav';
 
 /**
  * P0-3-Prüfpunkt (Close-Button + State-Synchronisation):

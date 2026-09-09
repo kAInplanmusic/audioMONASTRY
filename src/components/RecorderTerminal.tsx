@@ -27,7 +27,7 @@ interface Take {
 export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const { addSample } = useSamples();
   const { audioContext } = useAudio();
-  const { state, lockStatus, updateState } = usePluginState('recording', 'PRO');
+  const { state, lockStatus, updateState } = usePluginState('record', 'PRO');
   const [isRecording, setIsRecording] = useState(false);
   const [recordTime, setRecordTime] = useState(0);
   const [takes, setTakes] = useState<Take[]>([

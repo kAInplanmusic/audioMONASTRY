@@ -28,7 +28,7 @@ const TARGET_CHANNELS: TrackType[] = ['channel1', 'channel2', 'channel3', 'chann
  * die Preview-Noten sind direkt hörbar. Der WASM-Host bleibt optionaler Zusatz.
  */
 export const SynthesizerTerminal: React.FC = React.memo(() => {
-  const { lockStatus } = usePluginState('synthesizer', 'PRO');
+  const { lockStatus } = usePluginState('syntisampler', 'PRO');
   const hostRef = React.useRef(new WasmPluginHost());
   const [isLoaded, setIsLoaded] = useState(false);
   const [cutoff, setCutoff] = useState(DEFAULT_SYNTH_PARAMS.cutoff);
