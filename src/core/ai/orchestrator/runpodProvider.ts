@@ -63,7 +63,14 @@ interface RunPodJobResponse {
   executionTime?: number;
 }
 
+/**
+ * Browser-sicher: dieser Wert wird auch aus Client-Bundles erreicht (LlmRouter
+ * exportiert einen Modul-Singleton). Im Browser gibt es kein `process` – ein
+ * direkter Zugriff liess die App beim Laden abstuerzen
+ * (`ReferenceError: process is not defined`).
+ */
 function env(name: string): string {
+  if (typeof process === 'undefined' || !process.env) return '';
   return (process.env[name] ?? '').trim();
 }
 

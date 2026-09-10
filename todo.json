@@ -138,6 +138,14 @@
       "verdict": "CONFIRMED",
       "evidence": "vite.config.ts:20 -> `if (id.includes('node_modules/tone') || id.includes('node_modules/@tonejs')) return 'tone';` – tone ist nicht installiert, der Zweig ist unerreichbar.",
       "impact": "Toter Code, irrefuehrend, kein Laufzeitfehler."
+    },
+    {
+      "id": "F-008",
+      "severity": "P0",
+      "claim": "Die App startet und rendert im Browser",
+      "verdict": "FALSIFIED_THEN_FIXED",
+      "evidence": "Playwright-Ladeversuch gegen den Dev-Server: document.getElementById('root').children === 0, body.innerText leer, pageerror 'ReferenceError: process is not defined'. Stacktrace: env (src/core/ai/orchestrator/endpointRegistry.ts:69) <- resolveGpuRoles (:72) <- new RunPodProvider (runpodProvider.ts:29) <- new RunPodLocalProvider (LlmRouter.ts:190) <- new LlmRouter (:238) <- Modul-Singleton `export const llmRouter = new LlmRouter()` (:295).",
+      "impact": "Die gesamte DAW rendert nichts im Browser. Vom Autor dieses Audits in Commit 1fb8561 selbst eingeschleppt (RunPodLocalProvider bekam ein Klassenfeld `new RunPodProvider('brain')`; wegen des Modul-Singletons lief das schon beim Laden). 1056 Node-/jsdom-Tests blieben dabei GRUEN, weil dort `process` existiert - der Fehler ist ausschliesslich im echten Browser sichtbar. Behoben durch Lazy-Erzeugung + browser-sichere env()-Zugriffe; danach rendert die App wieder (rootChildren=1, 'STUDIO BETRETEN' sichtbar, keine pageErrors)."
     }
   ],
   "tasks": [
@@ -285,7 +293,8 @@
       ],
       "remainingRisks": [
         "Der Gate prueft den Worklet-/Engine-Pfad, nicht den UI-Weg (loadTrackSample -> UI-Button -> Master).",
-        "Es gibt weiterhin KEINEN Gate auf dem App-Bundle selbst; ein UI-Verdrahtungsfehler bliebe unsichtbar."
+        "Es gibt weiterhin KEINEN Gate auf dem App-Bundle selbst; ein UI-Verdrahtungsfehler bliebe unsichtbar.",
+        "UI-Gate-Lauf konnte den Audiographen NICHT aufbauen (hasTap=false, v2Connected=false): der Studio-Start braucht mixerMONK-Power UND den PRO-Halter, sonst laeuft play() nicht. Die Messwerte dieses Laufs sind deshalb NICHT AUSWERTBAR (keine Stille-Beweise)."
       ],
       "testResults": {
         "worklet_pfad": {
@@ -620,7 +629,7 @@
     {
       "id": "UI-001",
       "priority": "P1",
-      "status": "BLOCKED",
+      "status": "IN_PROGRESS",
       "title": "Desktop/Mobile/Touch/Barrierefreiheit verifizieren",
       "files": [
         "src/App.tsx",
@@ -628,7 +637,8 @@
         "tests/e2e/responsive.spec.ts"
       ],
       "implementation": [
-        "Nicht ausgefuehrt"
+        "Nicht ausgefuehrt",
+        "NEU: App-Start im echten Browser geprueft - war durch eine Regression komplett weiss (F-008), jetzt behoben"
       ],
       "tests": [
         "Chromium Desktop",
@@ -828,5 +838,22 @@
     },
     "environment": "headless Chromium (Playwright 1.62.1), AudioContext state=running, 48000 Hz",
     "artifact": "reports/audio-gate.json"
+  },
+  "browserStartGate": {
+    "kind": "app-mount-gate",
+    "command": "node scripts/diag-start-view.cjs (Dev-Server auf :8080)",
+    "before_fix": {
+      "rootChildren": 0,
+      "bodyText": "",
+      "pageErrors": [
+        "ReferenceError: process is not defined"
+      ]
+    },
+    "after_fix": {
+      "rootChildren": 1,
+      "bodyText": "AUDIO WORKSTATION ... ▶ STUDIO BETRETEN",
+      "pageErrors": []
+    },
+    "note": "Dieser Nachweis war vorher NICHT vorhanden: kein Test hat die App je im echten Browser gemountet."
   }
 }

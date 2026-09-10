@@ -287,12 +287,25 @@ class OpenAIProvider implements ILlmProvider {
  */
 class RunPodLocalProvider implements ILlmProvider {
   readonly id = 'runpod-local' as const;
-  private readonly brain = new RunPodProvider('brain');
+
+  /**
+   * WICHTIG: `RunPodProvider` wird LAZY erzeugt, nicht als Klassenfeld.
+   *
+   * `LlmRouter` exportiert einen Modul-Singleton (`export const llmRouter = …`),
+   * und dieses Modul landet ueber Client-Imports im Browser-Bundle. Ein Feld
+   * `new RunPodProvider('brain')` lief daher schon beim Laden, griff in
+   * `resolveGpuRoles()` auf `process.env` zu und liess die App mit
+   * `ReferenceError: process is not defined` komplett leer rendern –
+   * unbemerkt von den Node-Tests, die ein `process` haben.
+   */
+  private brainProvider(): RunPodProvider {
+    return new RunPodProvider('brain');
+  }
 
   get available(): boolean {
     const openAiUrl = envKey('RUNPOD_BRAIN_OPENAI_URL');
     if (openAiUrl) return Boolean(envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY'));
-    return this.brain.available;
+    return this.brainProvider().available;
   }
 
   private apiKey(): string | undefined {
@@ -318,7 +331,7 @@ class RunPodLocalProvider implements ILlmProvider {
       return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
     }
 
-    const result = await this.brain.run('llm', model, {
+    const result = await this.brainProvider().run('llm', model, {
       prompt: req.prompt,
       maxTokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.7,

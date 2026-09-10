@@ -1,0 +1,84 @@
+{
+  "ts": "2026-09-10T23:14:31.331Z",
+  "base": "http://localhost:8080",
+  "thresholds": {
+    "silenceDbfsMax": -60,
+    "audibleDbfsMin": -50,
+    "settleMs": 300,
+    "measureMs": 350
+  },
+  "tap": {
+    "hasTap": false,
+    "connects": 0,
+    "ctxState": null,
+    "sampleRate": null
+  },
+  "flags": {
+    "isPlaying": false,
+    "v2Connected": false,
+    "mode": "v2"
+  },
+  "raw": {
+    "baselineSilence": {
+      "rmsL": 0,
+      "rmsR": 0,
+      "dbfs": null,
+      "peak": 0,
+      "error": "kein Tap"
+    },
+    "afterPlay": {
+      "rmsL": 0,
+      "rmsR": 0,
+      "dbfs": null,
+      "peak": 0,
+      "error": "kein Tap"
+    },
+    "drums": {
+      "kick": {
+        "rmsL": 0,
+        "rmsR": 0,
+        "dbfs": null,
+        "peak": 0,
+        "error": "kein Tap"
+      },
+      "hat": {
+        "rmsL": 0,
+        "rmsR": 0,
+        "dbfs": null,
+        "peak": 0,
+        "error": "kein Tap"
+      },
+      "snare": {
+        "rmsL": 0,
+        "rmsR": 0,
+        "dbfs": null,
+        "peak": 0,
+        "error": "kein Tap"
+      }
+    },
+    "preview": {
+      "rmsL": 0,
+      "rmsR": 0,
+      "dbfs": null,
+      "peak": 0,
+      "error": "kein Tap"
+    },
+    "afterStop": {
+      "rmsL": 0,
+      "rmsR": 0,
+      "dbfs": null,
+      "peak": 0,
+      "error": "kein Tap"
+    }
+  },
+  "checks": {
+    "Baseline ist still": true,
+    "Engine-Play erzeugt messbares Audio": false,
+    "Drum-Trigger kick erzeugt Audio": false,
+    "Drum-Trigger hat erzeugt Audio": false,
+    "Preview erzeugt Audio": false,
+    "Stop fuehrt in Stille": true,
+    "keine pageErrors": true
+  },
+  "pageErrors": []
+}

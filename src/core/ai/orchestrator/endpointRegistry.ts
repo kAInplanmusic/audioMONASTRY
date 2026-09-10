@@ -127,7 +127,9 @@ export function requireRoleForTask(task: AiTask): GpuRoleDefinition {
   return GPU_ROLES[role];
 }
 
+/** Browser-sicher (siehe runpodProvider.env): im Client gibt es kein `process`. */
 function env(name: string): string {
+  if (typeof process === 'undefined' || !process.env) return '';
   return (process.env[name] ?? '').trim();
 }
 
