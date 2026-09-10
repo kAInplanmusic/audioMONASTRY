@@ -58,7 +58,7 @@ jobs:
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Image: ${IMAGE}"
 
-      - name: Build & Push (RunPod Serverless Worker, alle Rollen)
+      - name: Build & Push (shared – ears + voiceGen)
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: services/samplemonk-ai-runtime
@@ -68,12 +68,38 @@ jobs:
             AI_INSTALL_AUDIO_AI=1
             AI_INSTALL_VOICE_AI=1
             AI_INSTALL_VLLM=0
+            AI_BAKE_ROLE=
           tags: |
             ${{ steps.meta.outputs.image }}:latest
             ${{ steps.meta.outputs.image }}:${{ github.sha }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+
+      # Nur der Brain braucht eingebackene Gewichte: Qwen3-14B fp16 sind 29,5 GB,
+      # die sonst bei JEDEM frischen Container erneut geladen werden. ears (4,2 GB)
+      # und voiceGen (2,6 GB) sind in Sekunden gezogen – die bleiben schlank.
+      # Ein Network Volume wäre die Alternative, läuft aber nur in einem der 18
+      # volume-fähigen Rechenzentren – und dort gibt es keinen A40/A6000-Pool.
+      - name: Build & Push (brain – Gewichte eingebacken)
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: services/samplemonk-ai-runtime
+          file: services/samplemonk-ai-runtime/Dockerfile.runpod
+          push: true
+          build-args: |
+            AI_INSTALL_AUDIO_AI=1
+            AI_INSTALL_VOICE_AI=1
+            AI_INSTALL_VLLM=0
+            AI_BAKE_ROLE=brain
+            AI_BAKE_GROUPS=4
+          tags: |
+            ${{ steps.meta.outputs.image }}:brain-latest
+            ${{ steps.meta.outputs.image }}:brain-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=audioMONASTRY brain worker (weights baked)
 
       - name: GHCR-Paket öffentlich machen (best effort)
         continue-on-error: true
@@ -107,6 +133,23 @@ jobs:
       - name: Probe 3b – huggingface-hub Version
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import huggingface_hub; print(huggingface_hub.__version__)"
+
+      # --- Beweis für das eingebackene Brain-Image ------------------------------
+      # Beide Proben sind ohne Log-Zugriff am Step-Status ablesbar.
+      - name: Probe 9 – Brain: Gewichte im Image vorhanden
+        continue-on-error: true
+        run: |
+          docker run --rm --entrypoint sh "${{ needs.build.outputs.image }}:brain-${{ github.sha }}" \
+            -c "du -sh /data/hf-cache && ls /data/hf-cache/hub"
+
+      # Der eigentliche Beweis: derselbe Revision-Pin wie im Manifest, OHNE Netz –
+      # `HF_HUB_OFFLINE=1` erzwingt, dass die Gewichte aus dem Image kommen.
+      - name: Probe 10 – Brain: Qwen3-14B offline auffindbar
+        continue-on-error: true
+        run: |
+          docker run --rm -e HF_HUB_OFFLINE=1 --entrypoint python \
+            "${{ needs.build.outputs.image }}:brain-${{ github.sha }}" \
+            -c "from transformers import AutoConfig; c=AutoConfig.from_pretrained('Qwen/Qwen3-14B', revision='40c069824f4251a91eefaf281ebe4c544efd3e18'); print('offline config ok:', c.model_type)"
 
       - name: Probe 4 – soundfile + scipy importierbar
         continue-on-error: true
@@ -155,6 +198,8 @@ jobs:
         env:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
           IMAGE: ${{ needs.build.outputs.image }}:${{ github.sha }}
+          # Der Brain nutzt das Image mit eingebackenen Qwen3-14B-Gewichten.
+          IMAGE_BRAIN: ${{ needs.build.outputs.image }}:brain-${{ github.sha }}
           RUNPOD_ROLE: ${{ github.event.inputs.role }}
           # RunPod verlangt GPU-POOL-IDs (nicht Marketing-Namen). A6000 48 GB = AMPERE_48.
           RUNPOD_GPU_ID: AMPERE_48

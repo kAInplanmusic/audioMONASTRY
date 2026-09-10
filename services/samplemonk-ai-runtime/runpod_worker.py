@@ -174,7 +174,7 @@ def _handle_predownload(role: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     try:
-        from huggingface_hub import HfApi, snapshot_download
+        import predownload  # gemeinsame Logik mit dem Dockerfile-Baking
     except Exception as exc:  # noqa: BLE001
         return {"status": "error", "code": "HF_HUB_MISSING", "message": f"{type(exc).__name__}: {exc}"[:200]}
 
@@ -203,26 +203,19 @@ def _handle_predownload(role: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     done: Dict[str, float] = {}
     skipped: Dict[str, str] = {}
     failed: Dict[str, str] = {}
-    api = HfApi()
 
     for model_id in targets:
         repo = str(info[model_id].get("repository") or "").strip()
         revision = str(info[model_id].get("revision") or "").strip()
-        if not repo or repo.count("/") != 1:
+        if not predownload.is_hf_repo(repo):
             # z. B. `demucs/demucs` (kein HF-Repo) oder `essentia/essentia` (CPU).
             skipped[model_id] = f"kein HF-Repo: {repo or '-'}"
             continue
         try:
-            names = api.list_repo_files(repo_id=repo, revision=revision)
-        except Exception as exc:  # noqa: BLE001
-            failed[model_id] = f"list_repo_files: {type(exc).__name__}: {exc}"[:160]
-            continue
-
-        ignore: list[str] = ["*.h5", "*.msgpack", "*.onnx", "*.tflite", "*.ot", "*.mlmodel", "*.fp32-*"]
-        if any(n.endswith(".safetensors") for n in names):
-            ignore.append("*.bin")  # .bin-Duplikate sparen (CLAP hat nur .bin → dort greift das nicht)
-        try:
-            snapshot_download(repo_id=repo, revision=revision, ignore_patterns=ignore, max_workers=8)
+            # Gemeinsame Logik mit dem Build (Dockerfile-Baking): gleiche
+            # Format-Auswahl, gleiches Cache-Layout.
+            files = predownload.selected_files(repo, revision)
+            predownload.download_group(repo, revision, files)
             done[model_id] = 0.0
         except Exception as exc:  # noqa: BLE001
             failed[model_id] = f"{type(exc).__name__}: {exc}"[:160]

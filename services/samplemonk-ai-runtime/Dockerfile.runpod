@@ -67,11 +67,42 @@ print('transformers Import-Pfad ok (worker-identisch)')"
 # Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
 RUN python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
 
-COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py runpod_worker.py ./
-COPY model_manifest.json runtime_config.yaml ./
+# ---------------------------------------------------------------------------
+# Rollen-Gewichte einbacken (optional, AI_BAKE_ROLE setzen)
+# ---------------------------------------------------------------------------
+# Warum: ein RunPod Network Volume hilft nur in einem der 18 volume-fähigen
+# Rechenzentren – und dort gibt es keinen A40/A6000-Pool (getestet EU-RO-1,
+# EU-NL-1 → Jobs hängen in der Queue). Die Gewichte stattdessen ins Image zu
+# legen funktioniert mit dem bewährten GPU-Pool und ergänzt sich mit
+# `workersStandby=1` (Image bleibt hostseitig vorgehalten, kein Image-Pull).
+#
+# Zielpfad ist bewusst `/data/hf-cache` (identisch zum `HF_HOME`): wird später
+# doch ein Volume auf `/data` gemountet, überdeckt es den eingebackenen Cache.
+#
+# Wichtig: hier NICHT als root backen und danach `chown -R /data` – ein
+# rekursives chown über 30+ GB erzeugt einen zweiten Riesen-Layer.
+ARG AI_BAKE_ROLE=""
+# Anzahl Layer für die Gewichte (Qwen3-14B: 8 Shards à ~4 GB → 4 Layer à ~8 GB,
+# damit kein Einzel-Layer die Registry-Grenzen sprengt).
+ARG AI_BAKE_GROUPS=4
+
+COPY predownload.py registry.py model_manifest.json ./
 RUN mkdir -p /data/hf-cache \
     && useradd --system --uid 10001 samplemonk \
-    && chown -R samplemonk:samplemonk /opt/samplemonk-ai /data
+    && chown samplemonk:samplemonk /opt/samplemonk-ai /data /data/hf-cache
+USER samplemonk
+RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 0 --groups "$AI_BAKE_GROUPS"; fi
+RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 1 --groups "$AI_BAKE_GROUPS"; fi
+RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 2 --groups "$AI_BAKE_GROUPS"; fi
+RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 3 --groups "$AI_BAKE_GROUPS"; fi
+# Beleg für „ist wirklich drin" – auch ohne Log-Zugriff prüfbar per `docker run`.
+RUN du -sh /data/hf-cache 2>/dev/null || true
+USER root
+
+COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py runpod_worker.py ./
+COPY runtime_config.yaml ./
+# Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
+RUN chown samplemonk:samplemonk /opt/samplemonk-ai/*.py /opt/samplemonk-ai/*.json /opt/samplemonk-ai/*.yaml
 
 USER samplemonk
 

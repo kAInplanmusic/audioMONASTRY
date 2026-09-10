@@ -144,6 +144,16 @@ def save_template(template_name: str, image: str, env_vars: Dict[str, str], cont
     return result.get("data", {}).get("saveTemplate", {})
 
 
+def image_for_role(role: str) -> str:
+    """Bild je Rolle: der Brain nutzt das Image mit eingebackenen Gewichten.
+
+    Setzt `IMAGE_BRAIN` nicht, fällt alles auf `IMAGE` zurück (ein Image für alle).
+    """
+    if role == "brain":
+        return env("IMAGE_BRAIN") or env("IMAGE")
+    return env("IMAGE")
+
+
 def deploy_role(role: str, image: str) -> Optional[str]:
     """Erstellt/aktualisiert den Endpoint einer Rolle; liefert die Endpoint-ID."""
     defaults = ROLE_DEFAULTS.get(role, {})
@@ -153,7 +163,10 @@ def deploy_role(role: str, image: str) -> Optional[str]:
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX") or defaults.get("workersMax", 1))
     idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT", "20"))
-    container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB", "40"))
+    # Das Brain-Image enthält ~30 GB Gewichte → Container-Disk muss größer sein
+    # als das Image, sonst schlägt der Worker-Start fehl.
+    default_disk = "70" if role == "brain" else "30"
+    container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB", default_disk))
     template_name = f"{endpoint_name}-template"
 
     registry_auth_id = ensure_registry_auth(endpoint_name)
@@ -251,7 +264,7 @@ def main() -> int:
     print(f"[deploy] Rollen: {roles or ['(legacy)']}")
     results: Dict[str, str] = {}
     for role in roles:
-        endpoint_id = deploy_role(role, image)
+        endpoint_id = deploy_role(role, image_for_role(role))
         if not endpoint_id:
             print(f"[deploy] ABBRUCH – Rolle {role or 'legacy'} fehlgeschlagen", file=sys.stderr)
             return 5
