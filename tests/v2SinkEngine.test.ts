@@ -149,6 +149,96 @@ describe('V2SinkEngine (Phase 1 – V2 hörbar machen)', () => {
   });
 });
 
+describe('V2SinkEngine · AUDIO-P0-001/003/004 (Drum-Stimmen, Mute, Master-Processing)', () => {
+  function rmsOf(block: Float32Array[]): number {
+    return blockRms(block);
+  }
+
+  function renderBlockWith(engine: V2SinkEngine, event: { track: 'channel1' | 'channel2'; startSample: number; velocity: number; freq: number }): Float32Array[] {
+    return engine.render({ ...CTX, currentTime: 0 }, [event]);
+  }
+
+  it('AUDIO-P0-001: Kick- und Hat-Stimme erzeugen unterschiedliche Signale (kein 440-Hz-Einheits-Sinus)', () => {
+    const kick = new V2SinkEngine(48000, 128);
+    const hat = new V2SinkEngine(48000, 128);
+
+    kick.setSynthSource('channel1', { freq: 50, voice: 'kick' });
+    hat.setSynthSource('channel2', { freq: 6000, voice: 'hat' });
+
+    const kickOut = renderBlockWith(kick, { track: 'channel1', startSample: 0, velocity: 1, freq: 50 });
+    const hatOut = renderBlockWith(hat, { track: 'channel2', startSample: 0, velocity: 1, freq: 6000 });
+
+    expect(rmsOf(kickOut)).toBeGreaterThan(0.01);
+    expect(rmsOf(hatOut)).toBeGreaterThan(0.01);
+
+    let diff = 0;
+    for (let i = 0; i < 128; i++) diff += Math.abs(kickOut[0][i] - hatOut[0][i]);
+    expect(diff / 128).toBeGreaterThan(0.02);
+  });
+
+  it('AUDIO-P0-001: stummgeschalteter Kanal triggert keine Stimme', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    engine.setSynthSource('channel1', { freq: 440, voice: 'lead' });
+    engine.setChannelMuted('channel1', true);
+    const out = engine.render({ ...CTX, currentTime: 0 }, [{ track: 'channel1', startSample: 0, velocity: 1, freq: 440 }]);
+    expect(rmsOf(out)).toBeLessThan(1e-6);
+
+    engine.setChannelMuted('channel1', false);
+    const unmuted = engine.render({ ...CTX, currentTime: 128 / 48000 }, [{ track: 'channel1', startSample: 0, velocity: 1, freq: 440 }]);
+    expect(rmsOf(unmuted)).toBeGreaterThan(0.01);
+  });
+
+  it('AUDIO-P0-003: triggerSynth rendert im nächsten Block hörbaren Output', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    engine.setSynthSource('channel8', { freq: 880, voice: 'lead' });
+    engine.triggerSynth('channel8', 1);
+    const out = engine.render({ ...CTX, currentTime: 0 });
+    expect(rmsOf(out)).toBeGreaterThan(0.01);
+    // Ohne erneuten Trigger ist der nächste Block wieder stumm.
+    const silent = engine.render({ ...CTX, currentTime: 128 / 48000 });
+    expect(rmsOf(silent)).toBeLessThan(1e-6);
+  });
+
+  it('AUDIO-P0-004: Master-EQ-Boost hebt den Pegel eines Tons im Durchlassbereich an', () => {
+    const flat = new V2SinkEngine(48000, 128);
+    const boosted = new V2SinkEngine(48000, 128);
+    flat.setMasterEq(0, 0, 0);
+    boosted.setMasterEq(12, 0, 0);
+
+    // Niedriger Pegel (unter Mastering-Threshold), damit nur der EQ wirkt.
+    const flatOut = renderBlockWith(flat, { track: 'channel1', startSample: 0, velocity: 0.05, freq: 220 });
+    const boostedOut = renderBlockWith(boosted, { track: 'channel1', startSample: 0, velocity: 0.05, freq: 220 });
+    expect(rmsOf(boostedOut)).toBeGreaterThan(rmsOf(flatOut) * 1.5);
+  });
+
+  it('AUDIO-P0-004: Mastering-Limiter hält den Output unter dem Ceiling', () => {
+    const engine = new V2SinkEngine(48000, 128);
+    engine.setMasterGain(2);
+    engine.setMasterMastering(-14, 4, 1.5, 0.5);
+    engine.setTestTone(true, 440, 0.9);
+    const out = renderSeconds(engine, 0.05);
+    let peak = 0;
+    for (const ch of out) for (const v of ch) peak = Math.max(peak, Math.abs(v));
+    expect(peak).toBeGreaterThan(0);
+    expect(peak).toBeLessThanOrEqual(0.5 + 1e-3);
+  });
+
+  it('AUDIO-P0-004: Dynamics-Insert dämpft lautes Material, Bypass lässt es unverändert', () => {
+    const bypass = new V2SinkEngine(48000, 128);
+    const active = new V2SinkEngine(48000, 128);
+    bypass.setMasterDynamics(false, -18, 3, 0);
+    active.setMasterDynamics(true, -35, 8, 0);
+
+    // Dauerton (unter Mastering-Threshold, über Dynamics-Threshold) und
+    // genügend Blöcke rendern, damit der Kompressor einschwingt.
+    bypass.setTestTone(true, 220, 0.05);
+    active.setTestTone(true, 220, 0.05);
+    const bypassOut = renderSeconds(bypass, 0.1);
+    const activeOut = renderSeconds(active, 0.1);
+    expect(rmsOf(activeOut)).toBeLessThan(rmsOf(bypassOut) * 0.8);
+  });
+});
+
 describe('V2LiveSink (Browser-Adapter, Node-No-Op)', () => {
   it('connect() ist ohne AudioContext ein sicherer No-Op', async () => {
     const sink = new V2LiveSink();

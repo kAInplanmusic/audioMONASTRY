@@ -282,6 +282,11 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
     const baseCutoff = this.cutoff.getValueAtTime(ctx.currentTime);
     const q = this.resonance.getValueAtTime(ctx.currentTime);
     const depth = this.depth.getValueAtTime(ctx.currentTime);
+    // AUDIO-P0-004: Tiefe 0 + Drive 0 = bit-transparenter Bypass (kein Filter-Tail).
+    if (drive <= 0 && depth <= 0) {
+      this.outputs[0].buffer = out;
+      return;
+    }
     const driveNorm = Math.tanh(1 + drive * 1.6);
 
     for (let ch = 0; ch < out.length; ch++) {
@@ -375,6 +380,11 @@ export class EffectNode extends BaseNode implements AutomatableV2Node {
     const out = copyInput(input, len);
     const sr = ctx.sampleRate;
     const wetAmt = this.wet.getValueAtTime(ctx.currentTime);
+    // AUDIO-P0-004: Wet 0 = bit-transparenter Bypass (kein Reverb-/Chorus-Tail).
+    if (wetAmt <= 0) {
+      this.outputs[0].buffer = out;
+      return;
+    }
     const fb = this.feedback.getValueAtTime(ctx.currentTime);
     const chorusRate = this.rate.getValueAtTime(ctx.currentTime);
     const chorusDepth = this.depth.getValueAtTime(ctx.currentTime);

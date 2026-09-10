@@ -136,6 +136,9 @@ class AudioEngine {
   private mainMonitorGain: GainNode | null = null;
   /** Post-Mastering-Abgriff für den Master-Stream (SFU/Recording), pre-local-monitor. */
   private masterStreamTap: GainNode | null = null;
+  /** AUDIO-P0-002: Aktive MediaStream-Destination am V2-Ausgang (Master-Stream). */
+  private masterStreamDest: MediaStreamAudioDestinationNode | null = null;
+  private masterStreamDestConnected = false;
   /** WF-3: Pre-Mastering-Abgriff für das lokale Monitoring (ohne Mastering-Latenz). */
   private monitorTap: GainNode | null = null;
   // P0-6: Cue-Bus des lokalen Users (parallel zu MAIN, pre-Master abgegriffen).
@@ -950,6 +953,10 @@ class AudioEngine {
 
   /** Echtzeit-Dynamik (Kompressor + Gate + Dynamic EQ) als Master-Insert. */
   private dynamicsNode: AudioWorkletNode | null = null;
+  /** AUDIO-P0-004: Zuletzt gesetzte Master-EQ-Band-Gains (dB) für den V2-Live-Pfad. */
+  private v2MasterEqLowDb = 0;
+  private v2MasterEqMidDb = 0;
+  private v2MasterEqHighDb = 0;
 
   /** Ist der Dynamik-Insert tatsächlich in der Master-Kette? */
   public isDynamicsInsertReady(): boolean {
@@ -967,6 +974,13 @@ class AudioEngine {
     dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
   }): void {
     try { this.dynamicsNode?.port?.postMessage({ ...params }); } catch { /* noop */ }
+    // AUDIO-P0-004: Dynamik-Insert in den V2-Live-Pfad spiegeln.
+    this.v2LiveSink.setMasterDynamics(
+      Boolean(params.enabled),
+      params.compressor?.threshold ?? -18,
+      params.compressor?.ratio ?? 3,
+      params.compressor?.makeup ?? 0,
+    );
   }
 
   /** Sample-genaue Dynamik-Parameter-Rampe (zipper-frei). */
@@ -1111,6 +1125,8 @@ class AudioEngine {
       }
     }
     try { this.effectNode.port.postMessage({ ...p }); } catch { /* noop */ }
+    // AUDIO-P0-004: Effekt-Parameter in den hörbaren V2-Live-Pfad spiegeln.
+    this.v2LiveSink.setMasterFx(p.wet ?? 0, p.feedback ?? 0.6, p.rate ?? 0.5, p.depth ?? 0.5);
   }
 
   /** Sample-genaue Effekt-Parameter-Rampe (effectProcessor automate). */
@@ -1137,18 +1153,27 @@ class AudioEngine {
   public setMasteringParams(p: { threshold?: number; ratio?: number; knee?: number; attack?: number; release?: number; makeup?: number; ceiling?: number }) {
     this.ensureInitialized();
     try { this.masteringNode?.port?.postMessage({ ...p }); } catch { /* Gain-Fallback */ }
+    // AUDIO-P0-004: Mastering-Parameter in den V2-Live-Pfad spiegeln.
+    this.v2LiveSink.setMasterMastering(p.threshold ?? -14, p.ratio ?? 3, p.makeup ?? 1, p.ceiling ?? 0.98);
   }
 
   /** Task 10: DSP-Engine steuern (Phasenkorrektur, dynamisches Filter, Drive). */
   public setDspParam(p: { phase?: number; filterCutoff?: number; resonance?: number; depth?: number; drive?: number }) {
     this.ensureInitialized();
     try { this.dspNode?.port?.postMessage({ ...p }); } catch { /* Gain-Fallback */ }
+    // AUDIO-P0-004: DSP-Parameter in den V2-Live-Pfad spiegeln.
+    this.v2LiveSink.setMasterDsp(p.filterCutoff ?? 20000, p.resonance ?? 0.5, p.depth ?? 0, p.drive ?? 0);
   }
 
   /** Task 9: EQ-Band parametrisch setzen (eqProcessor). */
   public setEqBand(band: 'low'|'mid'|'high'|'hp', gain: number, freq?: number, q?: number) {
     this.ensureInitialized();
     try { this.eqNode?.port?.postMessage({ band, gain, freq, q }); } catch { /* Gain-Fallback */ }
+    // AUDIO-P0-004: EQ-Band in den V2-Live-Pfad spiegeln (hp wird auf high gemappt).
+    if (band === 'low') this.v2MasterEqLowDb = gain;
+    else if (band === 'mid') this.v2MasterEqMidDb = gain;
+    else this.v2MasterEqHighDb = gain;
+    this.v2LiveSink.setMasterEq(this.v2MasterEqLowDb, this.v2MasterEqMidDb, this.v2MasterEqHighDb);
   }
 
   /** Master-Lautstärke direkt in dB setzen (glatter Übergang). */
@@ -1831,7 +1856,15 @@ class AudioEngine {
     // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
     if (!this.mainHolderActive) return;
     if (this.playbackMode === 'v2') {
-      this.graphPlayback.trigger(velocity);
+      // AUDIO-P0-003: Trigger hörbar in den V2-Sink leiten.
+      const player = this.samplePlayers[track];
+      const buffer = player?.buffer?.get?.();
+      if (buffer && buffer.numberOfChannels > 0) {
+        this.bridgeAudioBufferToV2(track, buffer);
+        this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
+      } else {
+        this.v2LiveSink.synthTrigger(track, Math.max(0.2, Math.min(1, velocity)));
+      }
       return;
     }
     if (!this.initialized) return;
@@ -2127,6 +2160,7 @@ class AudioEngine {
       if (!connected) return;
       this.syncV2PatternsToLiveSink();
       this.syncV2SamplesToLiveSink();
+      this.syncV2SynthSourcesToLiveSink();
       this.v2LiveSink.startTransport({
         bpm: Tone.Transport.bpm.value,
         swing: this.swing,
@@ -2376,13 +2410,21 @@ class AudioEngine {
   public createMasterStreamDestination(): MediaStreamAudioDestinationNode | null {
     try {
       if (!this.ctx || typeof this.ctx.createMediaStreamDestination !== 'function') return null;
-      // F2: Master-Stream NACH der Mastering-Kette abgreifen (masterStreamTap),
-      // nicht pre-Mastering an masterVolume. Fallback, falls der Tap noch nicht
-      // existiert (Silent-Modus): masterVolume.
+      const dest = this.ctx.createMediaStreamDestination();
+      // AUDIO-P0-002: Bevorzugt den hörbaren V2-Ausgang abgreifen.
+      if (this.v2LiveSink.isConnected) {
+        if (this.v2LiveSink.connectExtra(dest)) {
+          this.masterStreamDest = dest;
+          this.masterStreamDestConnected = true;
+          return dest;
+        }
+      }
+      // Fallback (Legacy-Kette), bis der V2-Sink verbunden ist.
       const tap = this.masterStreamTap ?? this.masterVolume;
       if (!tap) return null;
-      const dest = this.ctx.createMediaStreamDestination();
       tap.connect(dest);
+      this.masterStreamDest = dest;
+      this.masterStreamDestConnected = false;
       return dest;
     } catch {
       return null;
@@ -2392,9 +2434,15 @@ class AudioEngine {
   /** Trennt eine zuvor erzeugte Master-Stream-Destination sauber. */
   public disconnectMasterStreamDestination(dest: MediaStreamAudioDestinationNode): void {
     try {
+      // AUDIO-P0-002: V2-Abgriff zuerst trennen, sonst Legacy-Tap.
+      this.v2LiveSink.disconnectExtra(dest);
       const tap = this.masterStreamTap ?? this.masterVolume;
       tap?.disconnect(dest);
       dest.disconnect();
+      if (this.masterStreamDest === dest) {
+        this.masterStreamDest = null;
+        this.masterStreamDestConnected = false;
+      }
     } catch { /* bereits getrennt */ }
   }
 
@@ -2471,7 +2519,13 @@ class AudioEngine {
     // Phase 4: V2-Sink folgt dem 2.1-/Stereo-Ausgabemodus des Master-Pfads.
     this.v2LiveSink.setOutputLayout(this.stereoMode === '2.1' ? '2.1' : 'stereo');
     const ok = await this.v2LiveSink.connect(this.ctx);
-    if (ok) this.syncV2FromV1();
+    if (ok) {
+      this.syncV2FromV1();
+      // AUDIO-P0-002: Master-Stream-Destination an den V2-Ausgang hängen.
+      if (this.masterStreamDest && !this.masterStreamDestConnected) {
+        this.masterStreamDestConnected = this.v2LiveSink.connectExtra(this.masterStreamDest);
+      }
+    }
     return ok;
   }
 
@@ -2514,6 +2568,10 @@ class AudioEngine {
     this.v2LiveSink.setMasterGain(master);
     // Phase 4: Monitor-/Cue-Plan in den V2-Live-Sink spiegeln.
     this.v2LiveSink.setMonitorRouting(this.monitorPlan);
+    // AUDIO-P0-001: Mute-Zustand in den V2-Live-Sink spiegeln.
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
+      this.v2LiveSink.setChannelMuted(t, Boolean(this.mutedStems[t]));
+    });
   }
 
   /** Spiegelt alle Step-Patterns in den V2-Live-Sink (Phase 2). */
@@ -2529,6 +2587,29 @@ class AudioEngine {
       const player = this.samplePlayers[t];
       const audioBuffer = player?.buffer?.get?.();
       if (audioBuffer) this.bridgeAudioBufferToV2(t, audioBuffer);
+    });
+  }
+
+  /**
+   * AUDIO-P0-001: Rollenbasierte Synth-Stimmen (kick/hat/clap/bass/lead) an den
+   * V2-Sink übertragen, damit Pattern-Steps ohne Sample die richtige Stimme spielen.
+   */
+  public syncV2SynthSourcesToLiveSink(): void {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
+      const role = TRACK_ROLE_MAP[t];
+      const voice = role === 'kick' ? 'kick' as const
+        : role === 'hat' ? 'hat' as const
+        : role === 'clap' ? 'clap' as const
+        : role === 'bass' ? 'bass' as const
+        : t === 'channel8' ? 'lead' as const
+        : 'lead' as const;
+      const freq = role === 'kick' ? 50
+        : role === 'hat' ? 6000
+        : role === 'clap' ? 1200
+        : role === 'bass' ? 55
+        : t === 'channel8' ? 880
+        : 440;
+      this.v2LiveSink.setSynthSource(t, freq, voice);
     });
   }
 
@@ -2854,6 +2935,16 @@ class AudioEngine {
   public playSynthesisInstrument(def: InstrumentDefinition, note: string | number, velocity = 1) { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     this.ensureInitialized();
 
+    // AUDIO-P0-003: Instrument hörbar in den V2-Live-Pfad leiten (immer).
+    {
+      const instChannel: TrackType = def.kind === 'drum' ? 'channel2' : 'channel4';
+      const v2Freq = typeof note === 'number'
+        ? Tone.Frequency(note, 'midi').toFrequency()
+        : Tone.Frequency(note).toFrequency();
+      this.v2LiveSink.setSynthSource(instChannel, v2Freq, def.kind === 'drum' ? 'clap' : 'lead');
+      this.v2LiveSink.synthTrigger(instChannel, Math.max(0.2, Math.min(1, velocity)));
+    }
+
     // --- bevorzugter Pfad: sample-genauer AudioWorklet (it-synth-processor) ---
     if (this.itSynthReady && this.itSynthNode) {
       if (this.itSynthCurrentDefId !== def.id) {
@@ -3019,8 +3110,22 @@ class AudioEngine {
       player.autostart = true;
       this.previewPlayer = player;
       this.previewUrl = url;
+      // AUDIO-P0-003: Preview hörbar in den V2-Sink laden und triggern.
+      new Tone.ToneAudioBuffer(url, (buf) => {
+        const audioBuffer = buf.get();
+        if (audioBuffer && audioBuffer.numberOfChannels > 0) {
+          this.bridgeAudioBufferToV2(track, audioBuffer);
+          this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
+        }
+      }, () => { /* Dekodier-Fehler: still ignorieren */ });
     } else if (this.samplePlayers[track]) {
       this.samplePlayers[track].start(time);
+      // AUDIO-P0-003: auch zuvor geladene Track-Samples im V2-Sink triggern.
+      const buffer = this.samplePlayers[track]?.buffer?.get?.();
+      if (buffer && buffer.numberOfChannels > 0) {
+        this.bridgeAudioBufferToV2(track, buffer);
+        this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
+      }
     }
   }
 

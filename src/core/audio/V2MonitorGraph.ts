@@ -16,6 +16,13 @@
  */
 import { AudioGraph } from './AudioGraph';
 import { GainNode, MasterSumNode, SourceNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
+import {
+  DspFilterNode,
+  DynamicsNode,
+  EffectNode,
+  MasteringNode,
+  ParametricEqNode,
+} from './nodes/processingNodes';
 import { V2_CHANNELS, type V2Channel } from './V2StudioGraph';
 import { defaultMonitorPlan, type MonitorRoutingPlan } from './monitorRouting';
 import type { IProcessingContext } from './types';
@@ -40,6 +47,12 @@ export class V2MonitorGraph {
   readonly cueGains = new Map<V2Channel, GainNode>();
   readonly mainBus: MasterSumNode;
   readonly cueBus: StereoSumNode;
+  /** Master-Processing-Kette (AUDIO-P0-004): EQ → DSP → FX → Dynamics → Mastering. */
+  readonly masterEq: ParametricEqNode;
+  readonly masterDsp: DspFilterNode;
+  readonly masterFx: EffectNode;
+  readonly masterDynamics: DynamicsNode;
+  readonly masterMastering: MasteringNode;
   /** Lokaler MAIN-Abhörpegel (0/1 für MAIN/MON-Umschaltung). */
   readonly mainMonitorGainNode: GainNode;
   /** Lokaler Cue-Abhörpegel (0..1, aus MonitorRoutingPlan.cueGain). */
@@ -52,16 +65,39 @@ export class V2MonitorGraph {
     this.routingPlan = defaultMonitorPlan('MON1');
     this.mainBus = new MasterSumNode('main:sum', V2_CHANNELS.length);
     this.cueBus = new StereoSumNode('cue:sum', V2_CHANNELS.length, 1, 2);
+    // AUDIO-P0-004: Master-Inserts im V2-Live-Graph. Defaults sind Bypass bzw.
+    // V1-äquivalent (Mastering immer aktiv, Dynamics als Bypass-Insert).
+    this.masterEq = new ParametricEqNode('master:eq');
+    this.masterDsp = new DspFilterNode('master:dsp');
+    this.masterDsp.cutoff.setValue(20000);
+    this.masterDsp.depth.setValue(0);
+    this.masterDsp.drive.setValue(0);
+    this.masterFx = new EffectNode('master:fx');
+    this.masterFx.wet.setValue(0);
+    this.masterDynamics = new DynamicsNode('master:dynamics');
+    this.masterDynamics.setEnabled(false);
+    this.masterMastering = new MasteringNode('master:mastering');
     this.mainMonitorGainNode = new GainNode('monitor:main-gain', 1);
     this.cueMonitorGainNode = new GainNode('monitor:cue-gain', 0);
     this.monitorBus = new StereoSumNode('monitor:sum', 2, 1, 2);
 
     this.graph.addNode(this.mainBus);
     this.graph.addNode(this.cueBus);
+    this.graph.addNode(this.masterEq);
+    this.graph.addNode(this.masterDsp);
+    this.graph.addNode(this.masterFx);
+    this.graph.addNode(this.masterDynamics);
+    this.graph.addNode(this.masterMastering);
     this.graph.addNode(this.mainMonitorGainNode);
     this.graph.addNode(this.cueMonitorGainNode);
     this.graph.addNode(this.monitorBus);
-    this.graph.connect(this.mainBus.outputs[0], this.mainMonitorGainNode.inputs[0]);
+    // MAIN: Summe → Processing-Kette → lokaler MAIN-Abhörpegel.
+    this.graph.connect(this.mainBus.outputs[0], this.masterEq.inputs[0]);
+    this.graph.connect(this.masterEq.outputs[0], this.masterDsp.inputs[0]);
+    this.graph.connect(this.masterDsp.outputs[0], this.masterFx.inputs[0]);
+    this.graph.connect(this.masterFx.outputs[0], this.masterDynamics.inputs[0]);
+    this.graph.connect(this.masterDynamics.outputs[0], this.masterMastering.inputs[0]);
+    this.graph.connect(this.masterMastering.outputs[0], this.mainMonitorGainNode.inputs[0]);
     this.graph.connect(this.cueBus.outputs[0], this.cueMonitorGainNode.inputs[0]);
     this.graph.connect(this.mainMonitorGainNode.outputs[0], this.monitorBus.inputs[0]);
     this.graph.connect(this.cueMonitorGainNode.outputs[0], this.monitorBus.inputs[1]);
@@ -112,6 +148,49 @@ export class V2MonitorGraph {
     this.mainBus.masterGain.setValue(Math.max(0, Math.min(2, value)));
   }
 
+  // -------------------------------------------------------------------------
+  // AUDIO-P0-004: Master-Processing-Setter (EQ/DSP/FX/Dynamics/Mastering)
+  // -------------------------------------------------------------------------
+
+  /** 3-Band-Master-EQ (lowshelf/peaking/highshelf), Gain in dB. */
+  setMasterEq(lowDb: number, midDb: number, highDb: number): void {
+    this.masterEq.setBandGain('low', lowDb);
+    this.masterEq.setBandGain('mid', midDb);
+    this.masterEq.setBandGain('high', highDb);
+  }
+
+  /** DSP-Filter (dynamisches Lowpass + Drive). */
+  setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): void {
+    if (Number.isFinite(cutoff)) this.masterDsp.cutoff.setValue(cutoff);
+    if (Number.isFinite(resonance)) this.masterDsp.resonance.setValue(resonance);
+    if (Number.isFinite(depth)) this.masterDsp.depth.setValue(depth);
+    if (Number.isFinite(drive)) this.masterDsp.drive.setValue(drive);
+  }
+
+  /** Master-FX (Reverb/Delay/Chorus/Bitcrusher-Mix). */
+  setMasterFx(wet: number, feedback: number, rate: number, depth: number): void {
+    if (Number.isFinite(wet)) this.masterFx.wet.setValue(wet);
+    if (Number.isFinite(feedback)) this.masterFx.feedback.setValue(feedback);
+    if (Number.isFinite(rate)) this.masterFx.rate.setValue(rate);
+    if (Number.isFinite(depth)) this.masterFx.depth.setValue(depth);
+  }
+
+  /** Dynamics-Insert (Soft-Knee-Kompressor). */
+  setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): void {
+    this.masterDynamics.setEnabled(enabled);
+    if (Number.isFinite(threshold)) this.masterDynamics.threshold.setValue(threshold);
+    if (Number.isFinite(ratio)) this.masterDynamics.ratio.setValue(ratio);
+    if (Number.isFinite(makeup)) this.masterDynamics.makeup.setValue(makeup);
+  }
+
+  /** Mastering (Kompression + Limiter). */
+  setMasterMastering(threshold: number, ratio: number, makeup: number, ceiling: number): void {
+    if (Number.isFinite(threshold)) this.masterMastering.threshold.setValue(threshold);
+    if (Number.isFinite(ratio)) this.masterMastering.ratio.setValue(ratio);
+    if (Number.isFinite(makeup)) this.masterMastering.makeup.setValue(makeup);
+    if (Number.isFinite(ceiling)) this.masterMastering.ceiling.setValue(ceiling);
+  }
+
   /** Übernimmt einen MonitorRoutingPlan (MAIN/MON/PLUGIN/MIX) in den V2-Graph. */
   applyMonitorPlan(plan: MonitorRoutingPlan): void {
     if (!plan) return;
@@ -128,7 +207,8 @@ export class V2MonitorGraph {
   render(ctx: IProcessingContext): V2MonitorRenderResult {
     this.graph.process(ctx);
     return {
-      main: this.mainBus.outputs[0].buffer,
+      // AUDIO-P0-004: `main` ist der Post-Processing-Master (nach Mastering/Limiter).
+      main: this.masterMastering.outputs[0].buffer ?? this.mainBus.outputs[0].buffer,
       cue: this.cueBus.outputs[0].buffer,
       monitor: this.monitorBus.outputs[0].buffer,
     };
@@ -142,7 +222,8 @@ export class V2MonitorGraph {
   /** Nur den MAIN-Bus rendern (z. B. Master-Stream / Offline-Bounce). */
   renderMain(ctx: IProcessingContext): Float32Array[] | null {
     this.graph.process(ctx);
-    return this.mainBus.outputs[0].buffer;
+    // AUDIO-P0-004: MAIN nach der kompletten Master-Processing-Kette liefern.
+    return this.masterMastering.outputs[0].buffer ?? this.mainBus.outputs[0].buffer;
   }
 
   /** Nur den Cue-Bus rendern (Diagnose/Tests). */
@@ -153,6 +234,12 @@ export class V2MonitorGraph {
 
   reset(): void {
     this.graph.reset();
+    // AUDIO-P0-004: Bypass-Defaults nach node.reset() wiederherstellen.
+    this.masterDsp.cutoff.setValue(20000);
+    this.masterDsp.depth.setValue(0);
+    this.masterDsp.drive.setValue(0);
+    this.masterFx.wet.setValue(0);
+    this.masterDynamics.setEnabled(false);
     this.routingPlan = defaultMonitorPlan('MON1');
     this.mainMonitorGainNode.gain.setValue(this.routingPlan.mainMonitorGain);
     this.cueMonitorGainNode.gain.setValue(this.routingPlan.cueGain);

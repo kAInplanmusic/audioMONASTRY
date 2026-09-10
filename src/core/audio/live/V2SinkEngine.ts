@@ -24,7 +24,9 @@ import type { MonitorRoutingPlan } from '../monitorRouting';
 export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
     | 'sample-set' | 'sample-trigger' | 'sample-stop' | 'synth-source'
-    | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout';
+    | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
+    | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
+    | 'mute' | 'synth-trigger';
   active?: boolean;
   freq?: number;
   amplitude?: number;
@@ -50,6 +52,24 @@ export interface V2SinkMessage {
   velocity?: number;
   plan?: MonitorRoutingPlan;
   layoutId?: string;
+  // AUDIO-P0-001: Synth-Stimme + Mute
+  voice?: V2SynthVoice;
+  muted?: boolean;
+  // AUDIO-P0-004: Master-Processing-Payloads
+  lowDb?: number;
+  midDb?: number;
+  highDb?: number;
+  cutoff?: number;
+  resonance?: number;
+  depth?: number;
+  drive?: number;
+  wet?: number;
+  feedback?: number;
+  enabled?: boolean;
+  threshold?: number;
+  ratio?: number;
+  makeup?: number;
+  ceiling?: number;
 }
 
 /** Ein sample-genau getriggerter Step-Burst innerhalb eines Render-Blocks. */
@@ -87,14 +107,44 @@ interface V2SamplePlaybackState extends V2LoadedSample {
 }
 
 /** Konfigurierbare Synthese-/Step-Quelle je Kanal (Synth-Source-Registry). */
+export type V2SynthVoice = 'kick' | 'hat' | 'clap' | 'bass' | 'lead';
+
 export interface V2SynthSourceConfig {
   freq: number;
+  /** AUDIO-P0-001: Synthese-Stimme je Kanal (Rollen-Default statt 440-Hz-Sinus). */
+  voice: V2SynthVoice;
 }
+
+/** AUDIO-P0-001: Rollen-Default-Stimmen je V2-Kanal (V1-Parität kick/hat/clap/bass). */
+const ROLE_VOICE: Record<V2Channel, V2SynthVoice> = {
+  channel1: 'kick',
+  channel2: 'hat',
+  channel3: 'clap',
+  channel4: 'lead',
+  channel5: 'lead',
+  channel6: 'lead',
+  channel7: 'bass',
+  channel8: 'lead',
+  channel9: 'lead',
+  channel10: 'lead',
+};
+
+const ROLE_FREQ: Record<V2Channel, number> = {
+  channel1: 50,   // kick
+  channel2: 6000, // hat
+  channel3: 1200, // clap
+  channel4: 440,
+  channel5: 440,
+  channel6: 440,
+  channel7: 55,   // bass
+  channel8: 880,  // lead
+  channel9: 440,
+  channel10: 440,
+};
 
 const DEFAULT_TEST_FREQ = 440;
 const DEFAULT_TEST_AMPLITUDE = 0.2;
 const SILENCE_CHANNEL_COUNT = 1;
-const STEP_DECAY_PER_SEC = 28; // schneller, nicht-zippernder Step-Burst
 
 export class V2SinkEngine {
   readonly studio: V2MonitorGraph;
@@ -115,8 +165,12 @@ export class V2SinkEngine {
   private readonly samplePlayback = new Map<V2Channel, V2SamplePlaybackState>();
   /** Synth-/Step-Quellen je Kanal (Phase 3, V2-Source-Registry). */
   private readonly synthSources = new Map<V2Channel, V2SynthSourceConfig>();
+  /** AUDIO-P0-001: stummgeschaltete Kanäle (V1-Mute-Parität). */
+  private readonly mutedChannels = new Set<V2Channel>();
   /** Extern erzeugte Blöcke (z. B. SFZ-Voice-Bank) für den aktuellen Render-Block. */
   private readonly externalSources = new Map<V2Channel, Float32Array[]>();
+  /** AUDIO-P0-003: manuell getriggerte Synth-Events (z. B. Pads/Instruments). */
+  private readonly pendingSynthTriggers: V2StepRenderEvent[] = [];
 
   constructor(sampleRate = 48000, blockSize = 128) {
     this.studio = new V2MonitorGraph(sampleRate, blockSize);
@@ -150,6 +204,30 @@ export class V2SinkEngine {
   /** Setzt den Master-Gain (linear, 0..2) auf der V2-Graph-Instanz. */
   setMasterGain(value: number): void {
     this.studio.setMasterGain(value);
+  }
+
+  // -------------------------------------------------------------------------
+  // AUDIO-P0-004: Master-Processing-Setter
+  // -------------------------------------------------------------------------
+
+  setMasterEq(lowDb: number, midDb: number, highDb: number): void {
+    this.studio.setMasterEq(lowDb, midDb, highDb);
+  }
+
+  setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): void {
+    this.studio.setMasterDsp(cutoff, resonance, depth, drive);
+  }
+
+  setMasterFx(wet: number, feedback: number, rate: number, depth: number): void {
+    this.studio.setMasterFx(wet, feedback, rate, depth);
+  }
+
+  setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): void {
+    this.studio.setMasterDynamics(enabled, threshold, ratio, makeup);
+  }
+
+  setMasterMastering(threshold: number, ratio: number, makeup: number, ceiling: number): void {
+    this.studio.setMasterMastering(threshold, ratio, makeup, ceiling);
   }
 
   /** Phase 4: Übernimmt einen MonitorRoutingPlan in den V2-Monitor-Graph. */
@@ -225,13 +303,38 @@ export class V2SinkEngine {
   /** Registriert eine Synth-/Step-Quelle für einen Kanal (Source-Registry). */
   setSynthSource(channel: V2Channel, config: V2SynthSourceConfig): void {
     if (config && Number.isFinite(config.freq) && config.freq > 0) {
-      this.synthSources.set(channel, { freq: Math.max(20, Math.min(20000, config.freq)) });
+      this.synthSources.set(channel, {
+        freq: Math.max(20, Math.min(20000, config.freq)),
+        voice: config.voice ?? ROLE_VOICE[channel] ?? 'lead',
+      });
     }
   }
 
-  /** Liefert die registrierte Synth-Quelle (fallback Standard-Frequenz). */
+  /** Liefert die registrierte Synth-Quelle (Rollen-Default statt 440-Hz-Sinus). */
   getSynthSource(channel: V2Channel): V2SynthSourceConfig {
-    return this.synthSources.get(channel) ?? { freq: DEFAULT_TEST_FREQ };
+    return this.synthSources.get(channel) ?? { freq: ROLE_FREQ[channel] ?? 440, voice: ROLE_VOICE[channel] ?? 'lead' };
+  }
+
+  /** AUDIO-P0-001: Stummschaltung eines Kanals im V2-Live-Pfad. */
+  setChannelMuted(channel: V2Channel, muted: boolean): void {
+    if (muted) this.mutedChannels.add(channel);
+    else this.mutedChannels.delete(channel);
+  }
+
+  /** AUDIO-P0-001: Ist der Kanal im V2-Live-Pfad stummgeschaltet? */
+  isChannelMuted(channel: V2Channel): boolean {
+    return this.mutedChannels.has(channel);
+  }
+
+  /** AUDIO-P0-003: Manueller Synth-Trigger (Pads/Instruments) – wird im nächsten Block gerendert. */
+  triggerSynth(channel: V2Channel, velocity = 1): void {
+    const source = this.getSynthSource(channel);
+    this.pendingSynthTriggers.push({
+      track: channel,
+      startSample: 0,
+      velocity: Math.max(0, Math.min(1, velocity)),
+      freq: source.freq,
+    });
   }
 
   /** Übergibt einen extern erzeugten Audio-Block (z. B. SFZ) für den nächsten Render. */
@@ -249,6 +352,12 @@ export class V2SinkEngine {
   render(ctx: IProcessingContext, events: V2StepRenderEvent[] = []): Float32Array[] {
     this.ensureSourceBlockSize(ctx.bufferSize);
 
+    // AUDIO-P0-003: manuelle Synth-Trigger (Pads/Instruments) mit verarbeiten.
+    const allEvents = this.pendingSynthTriggers.length > 0
+      ? [...events, ...this.pendingSynthTriggers]
+      : events;
+    this.pendingSynthTriggers.length = 0;
+
     const usedChannels = new Set<V2Channel>();
 
     // Phase 3 Rest: extern erzeugte Quellen (SFZ/Instrument) zuerst übernehmen.
@@ -261,6 +370,8 @@ export class V2SinkEngine {
     // Phase 3: laufende Sample-Quellen zuerst rendern (Sample-Player als V2-Source).
     for (const channel of V2_CHANNELS) {
       if (usedChannels.has(channel)) continue;
+      // AUDIO-P0-001: stummgeschaltete Kanäle liefern Stille (Mute-Parität).
+      if (this.mutedChannels.has(channel)) continue;
       const state = this.samplePlayback.get(channel);
       if (!state?.playing) continue;
       const block = this.renderSampleBlock(state, ctx.bufferSize, ctx.sampleRate);
@@ -268,9 +379,12 @@ export class V2SinkEngine {
       usedChannels.add(channel);
     }
 
-    for (const event of events) {
+    for (const event of allEvents) {
       if (!event || event.startSample < 0 || event.startSample >= ctx.bufferSize) continue;
-      const burst = this.renderStepBurst(event, ctx.bufferSize, ctx.sampleRate);
+      // AUDIO-P0-001: Mute + rollenbasierte Synthese-Stimme.
+      if (this.mutedChannels.has(event.track)) continue;
+      const voice = this.getSynthSource(event.track).voice;
+      const burst = this.renderStepBurst(event, ctx.bufferSize, ctx.sampleRate, voice);
       this.studio.setSourceBuffer(event.track, [burst]);
       usedChannels.add(event.track);
     }
@@ -319,6 +433,9 @@ export class V2SinkEngine {
     this.samplePlayback.clear();
     this.sampleBuffers.clear();
     this.synthSources.clear();
+    this.mutedChannels.clear();
+    this.bassFilterState = 0;
+    this.pendingSynthTriggers.length = 0;
     this.externalSources.clear();
   }
 
@@ -349,17 +466,76 @@ export class V2SinkEngine {
     return outR ? [outL, outR] : [outL];
   }
 
-  private renderStepBurst(event: V2StepRenderEvent, length: number, sampleRate: number): Float32Array {
+  /**
+   * AUDIO-P0-001: Rollenbasierte Step-Stimme (kick/hat/clap/bass/lead).
+   * Kein 440-Hz-Sinus-Default mehr – jede Rolle hat ihre eigene Synthese.
+   */
+  private renderStepBurst(event: V2StepRenderEvent, length: number, sampleRate: number, voice: V2SynthVoice): Float32Array {
     const buffer = new Float32Array(length);
     const start = Math.max(0, Math.min(length - 1, event.startSample));
-    const freq = Number.isFinite(event.freq) && event.freq > 0 ? Math.max(20, Math.min(20000, event.freq)) : DEFAULT_TEST_FREQ;
+    const freq = Number.isFinite(event.freq) && event.freq > 0 ? Math.max(20, Math.min(20000, event.freq)) : ROLE_FREQ[event.track] ?? 440;
     const amp = Math.max(0, Math.min(1, event.velocity)) * 0.8;
+    const sr = Math.max(8000, sampleRate);
+    const decay = voice === 'kick' ? 14 : voice === 'bass' ? 9 : voice === 'clap' ? 22 : 18;
+    const baseFreq = voice === 'kick' ? Math.min(freq, 120) : voice === 'bass' ? Math.min(freq, 160) : freq;
+    let phase = 0;
+    let noiseState = 1;
+    let noiseHp = 0;
+
+    const nextNoise = (): number => {
+      noiseState = (noiseState * 1664525 + 1013904223) >>> 0;
+      return (noiseState / 4294967296) * 2 - 1;
+    };
+
     for (let i = start; i < length; i++) {
-      const t = (i - start) / sampleRate;
-      buffer[i] = Math.sin(2 * Math.PI * freq * t) * amp * Math.exp(-t * STEP_DECAY_PER_SEC);
+      const t = (i - start) / sr;
+      const env = Math.exp(-t * decay);
+      let s = 0;
+      switch (voice) {
+        case 'kick': {
+          // Sinus mit schnellem Frequenz-Sweep (150 Hz → 40 Hz) + Klick.
+          const f = 40 + 110 * Math.exp(-t * 40);
+          phase += f / sr;
+          s = Math.sin(2 * Math.PI * phase) * env;
+          if (t < 0.004) s += nextNoise() * 0.4 * (1 - t / 0.004);
+          break;
+        }
+        case 'hat': {
+          // Hochpass-gefiltertes Rauschen (Differenzfilter).
+          const n = nextNoise() * 0.6;
+          s = (n - noiseHp) * env;
+          noiseHp = n;
+          break;
+        }
+        case 'clap': {
+          // Mehrfach-Burst-Rauschen (3 schnelle Impulse).
+          const burst = t < 0.012 ? 1 : t < 0.02 ? 0.7 : t < 0.03 ? 0.5 : 0;
+          s = nextNoise() * burst * env;
+          break;
+        }
+        case 'bass': {
+          // Sägezahn mit One-Pole-Lowpass (V1-MonoSynth-Charakter).
+          phase += baseFreq / sr;
+          if (phase >= 1) phase -= 1;
+          const saw = (phase * 2 - 1) * env;
+          s = this.bassFilterState + 0.25 * (saw - this.bassFilterState);
+          this.bassFilterState = s;
+          break;
+        }
+        default: {
+          // Lead: Sinus-Burst (unverändert, aber mit Rollen-Frequenz).
+          phase += freq / sr;
+          s = Math.sin(2 * Math.PI * phase) * env;
+          break;
+        }
+      }
+      buffer[i] = Number.isFinite(s) ? Math.max(-1, Math.min(1, s * amp)) : 0;
     }
     return buffer;
   }
+
+  /** One-Pole-Filter-Zustand für die Bass-Stimme. */
+  private bassFilterState = 0;
 
   private renderToneBlock(length: number, sampleRate: number): Float32Array {
     const buffer = new Float32Array(length);

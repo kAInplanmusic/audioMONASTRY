@@ -28,6 +28,24 @@ export class V2LiveSink {
     return this.node !== null && this.context !== null;
   }
 
+  /** AUDIO-P0-002: Zusätzlichen Abgriff (z. B. MediaStreamDestination) am V2-Ausgang anbinden. */
+  connectExtra(dest: AudioNode): boolean {
+    if (!this.node || !dest || typeof dest.connect !== 'function') return false;
+    try {
+      this.node.connect(dest);
+      return true;
+    } catch (e) {
+      console.warn('[v2-sink] Zusatz-Abgriff fehlgeschlagen:', e);
+      return false;
+    }
+  }
+
+  /** AUDIO-P0-002: Zusatz-Abgriff trennen. */
+  disconnectExtra(dest: AudioNode): void {
+    if (!this.node || !dest) return;
+    try { this.node.disconnect(dest); } catch { /* bereits getrennt */ }
+  }
+
   /**
    * Verbindet den V2-Sink mit der AudioContext-Destination.
    * Lädt das Worklet-Modul bei Bedarf nach (idempotent).
@@ -115,6 +133,35 @@ export class V2LiveSink {
     return this.post({ type: 'master-gain', value });
   }
 
+  // -------------------------------------------------------------------------
+  // AUDIO-P0-004: Master-Processing (EQ/DSP/FX/Dynamics/Mastering)
+  // -------------------------------------------------------------------------
+
+  /** Master-EQ: 3-Band-Gains in dB. */
+  setMasterEq(lowDb: number, midDb: number, highDb: number): boolean {
+    return this.post({ type: 'master-eq', lowDb, midDb, highDb });
+  }
+
+  /** Master-DSP: dynamisches Lowpass + Drive. */
+  setMasterDsp(cutoff: number, resonance: number, depth: number, drive: number): boolean {
+    return this.post({ type: 'master-dsp', cutoff, resonance, depth, drive });
+  }
+
+  /** Master-FX: Reverb/Delay/Chorus-Mix. */
+  setMasterFx(wet: number, feedback: number, rate: number, depth: number): boolean {
+    return this.post({ type: 'master-fx', wet, feedback, rate, depth });
+  }
+
+  /** Master-Dynamics-Insert (Soft-Knee-Kompressor). */
+  setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): boolean {
+    return this.post({ type: 'master-dynamics', enabled, threshold, ratio, makeup });
+  }
+
+  /** Master-Mastering (Kompression + Limiter). */
+  setMasterMastering(threshold: number, ratio: number, makeup: number, ceiling: number): boolean {
+    return this.post({ type: 'master-mastering', threshold, ratio, makeup, ceiling });
+  }
+
   /** Phase 4: Überträgt den lokalen MonitorRoutingPlan in den V2-Sink. */
   setMonitorRouting(plan: MonitorRoutingPlan): boolean {
     if (!plan) return false;
@@ -178,9 +225,20 @@ export class V2LiveSink {
   }
 
   /** Registriert eine Synth-/Step-Quelle für einen V2-Kanal. */
-  setSynthSource(channel: V2Channel, freq: number): boolean {
+  setSynthSource(channel: V2Channel, freq: number, voice?: 'kick' | 'hat' | 'clap' | 'bass' | 'lead'): boolean {
     if (!Number.isFinite(freq) || freq <= 0) return false;
-    return this.post({ type: 'synth-source', channel, freq });
+    return this.post({ type: 'synth-source', channel, freq, voice });
+  }
+
+  /** AUDIO-P0-001: Stummschaltung eines Kanals im V2-Sink. */
+  setChannelMuted(channel: V2Channel, muted: boolean): boolean {
+    return this.post({ type: 'mute', channel, muted });
+  }
+
+  /** AUDIO-P0-003: Manueller Synth-Trigger (Pads/Instruments) auf einem Kanal. */
+  synthTrigger(channel: V2Channel, velocity = 1): boolean {
+    if (!Number.isFinite(velocity)) return false;
+    return this.post({ type: 'synth-trigger', channel, velocity });
   }
 
   /** Lädt eine SFZ-Instrument-Definition als V2-Quelle auf einen Kanal. */

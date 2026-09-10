@@ -98,7 +98,17 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           break;
         case 'synth-source':
           if (msg.channel && typeof msg.freq === 'number') {
-            this.engine.setSynthSource(msg.channel, { freq: msg.freq });
+            this.engine.setSynthSource(msg.channel, { freq: msg.freq, voice: msg.voice ?? 'lead' });
+          }
+          break;
+        case 'mute':
+          if (msg.channel && typeof msg.muted === 'boolean') {
+            this.engine.setChannelMuted(msg.channel, msg.muted);
+          }
+          break;
+        case 'synth-trigger':
+          if (msg.channel) {
+            this.engine.triggerSynth(msg.channel, typeof msg.velocity === 'number' ? msg.velocity : 1);
           }
           break;
         case 'sfz-load': {
@@ -128,6 +138,38 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           if (typeof msg.layoutId === 'string') {
             this.engine.setOutputLayout(msg.layoutId);
           }
+          break;
+        case 'master-eq':
+          if (typeof msg.lowDb === 'number' && typeof msg.midDb === 'number' && typeof msg.highDb === 'number') {
+            this.engine.setMasterEq(msg.lowDb, msg.midDb, msg.highDb);
+          }
+          break;
+        case 'master-dsp':
+          this.engine.setMasterDsp(
+            msg.cutoff ?? 20000,
+            msg.resonance ?? 0.5,
+            msg.depth ?? 0,
+            msg.drive ?? 0,
+          );
+          break;
+        case 'master-fx':
+          this.engine.setMasterFx(msg.wet ?? 0, msg.feedback ?? 0.6, msg.rate ?? 0.5, msg.depth ?? 0.5);
+          break;
+        case 'master-dynamics':
+          this.engine.setMasterDynamics(
+            Boolean(msg.enabled),
+            msg.threshold ?? -18,
+            msg.ratio ?? 3,
+            msg.makeup ?? 0,
+          );
+          break;
+        case 'master-mastering':
+          this.engine.setMasterMastering(
+            msg.threshold ?? -14,
+            msg.ratio ?? 3,
+            msg.makeup ?? 1,
+            msg.ceiling ?? 0.98,
+          );
           break;
         default:
           break;
@@ -168,6 +210,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
 
         for (const channel of V2_CHANNELS) {
           if (!this.patterns.get(channel)?.[step.step]) continue;
+          // AUDIO-P0-001: Mute-Parität – stummgeschaltete Kanäle triggern nicht.
+          if (this.engine.isChannelMuted(channel)) continue;
           if (this.engine.hasSample(channel)) {
             // Phase 3: Sample-Player als V2-Source – Step retriggert das Sample.
             this.engine.triggerSample(channel, { loop: false, rate: 1, offset: 0 });
