@@ -1,7 +1,7 @@
 {
   "runtime": {
-    "vramBudgetGb": 141,
-    "vramSafetyMarginGb": 8,
+    "vramBudgetGb": 48,
+    "vramSafetyMarginGb": 6,
     "device": "cuda",
     "idleTimeoutMinutes": 20,
     "maxConcurrentInference": 2
@@ -19,9 +19,19 @@
       "preload": true,
       "loadClass": "CORE",
       "quantization": "fp16",
-      "dependencies": ["transformers", "torch", "soundfile"],
-      "inputFormats": ["wav", "mp3", "flac"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "wav",
+        "mp3",
+        "flac"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 10,
       "concurrency": 2,
       "timeout": 60,
@@ -39,9 +49,17 @@
       "preload": true,
       "loadClass": "CORE",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch"],
-      "inputFormats": ["wav", "mp3"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "wav",
+        "mp3"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 30,
       "concurrency": 1,
       "timeout": 120,
@@ -59,9 +77,17 @@
       "preload": true,
       "loadClass": "FREQUENT",
       "quantization": "fp16",
-      "dependencies": ["transformers", "torch", "soundfile"],
-      "inputFormats": ["wav"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 10,
       "concurrency": 2,
       "timeout": 60,
@@ -79,9 +105,17 @@
       "preload": true,
       "loadClass": "FREQUENT",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch", "scipy"],
-      "inputFormats": ["text"],
-      "outputFormats": ["wav"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "scipy"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
       "maxDuration": 30,
       "concurrency": 1,
       "timeout": 120,
@@ -99,9 +133,17 @@
       "preload": true,
       "loadClass": "FREQUENT",
       "quantization": "fp16",
-      "dependencies": ["transformers", "torch", "scipy"],
-      "inputFormats": ["text"],
-      "outputFormats": ["wav"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "scipy"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
       "maxDuration": 30,
       "concurrency": 2,
       "timeout": 60,
@@ -119,9 +161,20 @@
       "preload": true,
       "loadClass": "FREQUENT",
       "quantization": "bf16",
-      "dependencies": ["qwen-tts", "transformers", "torch", "accelerate", "scipy", "soundfile"],
-      "inputFormats": ["text"],
-      "outputFormats": ["wav"],
+      "dependencies": [
+        "qwen-tts",
+        "transformers",
+        "torch",
+        "accelerate",
+        "scipy",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
       "maxDuration": 30,
       "concurrency": 1,
       "timeout": 120,
@@ -139,9 +192,17 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch", "scipy"],
-      "inputFormats": ["text"],
-      "outputFormats": ["wav"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "scipy"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
       "maxDuration": 30,
       "concurrency": 1,
       "timeout": 180,
@@ -159,9 +220,19 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "fp16",
-      "dependencies": ["diffusers", "torch", "transformers", "scipy", "soundfile"],
-      "inputFormats": ["text"],
-      "outputFormats": ["wav"],
+      "dependencies": [
+        "diffusers",
+        "torch",
+        "transformers",
+        "scipy",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
       "maxDuration": 47,
       "concurrency": 1,
       "timeout": 300,
@@ -179,9 +250,17 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch", "scipy"],
-      "inputFormats": ["text"],
-      "outputFormats": ["wav"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "scipy"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
       "maxDuration": 14,
       "concurrency": 1,
       "timeout": 180,
@@ -199,9 +278,16 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "fp16",
-      "dependencies": ["torch", "pyannote.audio"],
-      "inputFormats": ["wav"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "torch",
+        "pyannote.audio"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 600,
       "concurrency": 1,
       "timeout": 300,
@@ -219,9 +305,18 @@
       "preload": false,
       "loadClass": "RARE",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch"],
-      "inputFormats": ["audio", "image", "text"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "audio",
+        "image",
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
@@ -239,9 +334,16 @@
       "preload": true,
       "loadClass": "CORE",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch"],
-      "inputFormats": ["text"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
@@ -259,9 +361,17 @@
       "preload": false,
       "loadClass": "FREQUENT",
       "quantization": "int8",
-      "dependencies": ["transformers", "torch"],
-      "inputFormats": ["audio", "text"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "audio",
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
@@ -279,9 +389,17 @@
       "preload": false,
       "loadClass": "FREQUENT",
       "quantization": "fp16",
-      "dependencies": ["TTS", "torch"],
-      "inputFormats": ["text", "speakerWav"],
-      "outputFormats": ["audioBase64"],
+      "dependencies": [
+        "TTS",
+        "torch"
+      ],
+      "inputFormats": [
+        "text",
+        "speakerWav"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
       "maxDuration": 60,
       "concurrency": 1,
       "timeout": 180,
@@ -299,9 +417,17 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "bf16",
-      "dependencies": ["transformers", "torch", "diffusers"],
-      "inputFormats": ["text"],
-      "outputFormats": ["audioBase64"],
+      "dependencies": [
+        "transformers",
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
       "maxDuration": 600,
       "concurrency": 1,
       "timeout": 600,
@@ -319,9 +445,16 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "fp16",
-      "dependencies": ["torch", "audiosep"],
-      "inputFormats": ["audio"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "torch",
+        "audiosep"
+      ],
+      "inputFormats": [
+        "audio"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 300,
       "concurrency": 1,
       "timeout": 300,
@@ -336,12 +469,19 @@
       "estimatedVRAM": 8,
       "estimatedRAM": 8,
       "loadPriority": 6,
-      "preload": false,
+      "preload": true,
       "loadClass": "ON_DEMAND",
       "quantization": "fp32",
-      "dependencies": ["demucs", "torch"],
-      "inputFormats": ["audio"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "demucs",
+        "torch"
+      ],
+      "inputFormats": [
+        "audio"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 300,
       "concurrency": 1,
       "timeout": 300,
@@ -359,13 +499,263 @@
       "preload": false,
       "loadClass": "ON_DEMAND",
       "quantization": "none",
-      "dependencies": ["essentia", "soundfile", "numpy"],
-      "inputFormats": ["audio"],
-      "outputFormats": ["json"],
+      "dependencies": [
+        "essentia",
+        "soundfile",
+        "numpy"
+      ],
+      "inputFormats": [
+        "audio"
+      ],
+      "outputFormats": [
+        "json"
+      ],
       "maxDuration": 60,
       "concurrency": 2,
       "timeout": 120,
       "license": "AGPL-3.0"
+    },
+    {
+      "id": "qwen3-32b",
+      "repository": "Qwen/Qwen3-32B",
+      "revision": "TBD-qwen3-32b",
+      "task": "llm",
+      "framework": "vllm",
+      "estimatedVRAM": 20,
+      "estimatedRAM": 28,
+      "loadPriority": 1,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "int4",
+      "dependencies": [
+        "vllm",
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "status": "planned"
+    },
+    {
+      "id": "qwen3-30b-a3b",
+      "repository": "Qwen/Qwen3-30B-A3B",
+      "revision": "TBD-qwen3-30b-a3b",
+      "task": "llm",
+      "framework": "vllm",
+      "estimatedVRAM": 18,
+      "estimatedRAM": 24,
+      "loadPriority": 2,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "int4",
+      "dependencies": [
+        "vllm",
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "status": "planned"
+    },
+    {
+      "id": "glm-4.5-air",
+      "repository": "zai-org/GLM-4.5-Air",
+      "revision": "TBD-glm-4.5-air",
+      "task": "llm",
+      "framework": "vllm",
+      "estimatedVRAM": 53,
+      "estimatedRAM": 64,
+      "loadPriority": 3,
+      "preload": false,
+      "loadClass": "ON_DEMAND",
+      "quantization": "int4",
+      "dependencies": [
+        "vllm",
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 180,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "MIT",
+      "status": "planned",
+      "note": "Upgrade-Pfad: braucht 2x A6000 (96 GB) via gpuCount=2."
+    },
+    {
+      "id": "mert-v1-95m",
+      "repository": "m-a-p/MERT-v1-95M",
+      "revision": "TBD-mert-v1-95m",
+      "task": "embed",
+      "framework": "transformers",
+      "estimatedVRAM": 1,
+      "estimatedRAM": 2,
+      "loadPriority": 6,
+      "preload": false,
+      "loadClass": "FREQUENT",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch",
+        "soundfile"
+      ],
+      "inputFormats": [
+        "wav"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 10,
+      "concurrency": 2,
+      "timeout": 60,
+      "license": "CC-BY-NC-SA-4.0 (weights) - private/research OK",
+      "status": "planned"
+    },
+    {
+      "id": "fish-speech",
+      "repository": "fishaudio/fish-speech-1.5",
+      "revision": "TBD-fish-speech-1.5",
+      "task": "tts",
+      "framework": "custom",
+      "estimatedVRAM": 6,
+      "estimatedRAM": 8,
+      "loadPriority": 4,
+      "preload": false,
+      "loadClass": "FREQUENT",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "text",
+        "speakerWav"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 180,
+      "license": "check weights (CC-BY-NC-SA)",
+      "status": "planned"
+    },
+    {
+      "id": "rvc",
+      "repository": "RVC-Project/Retrieval-based-Voice-Conversion-WebUI",
+      "revision": "TBD-rvc",
+      "task": "sing",
+      "framework": "custom",
+      "estimatedVRAM": 4,
+      "estimatedRAM": 6,
+      "loadPriority": 8,
+      "preload": false,
+      "loadClass": "ON_DEMAND",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "fairseq"
+      ],
+      "inputFormats": [
+        "audio"
+      ],
+      "outputFormats": [
+        "audioBase64"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "MIT",
+      "status": "planned"
     }
-  ]
+  ],
+  "roles": {
+    "brain": {
+      "label": "aiMONK Gehirn (lokales LLM, MOA-Planung, MCP-Tool-Calls)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "qwen3-14b"
+      ],
+      "models": [
+        "qwen3-14b",
+        "qwen3-32b",
+        "qwen3-30b-a3b",
+        "glm-4.5-air"
+      ]
+    },
+    "ears": {
+      "label": "Audio-Intelligence (STT, Embeddings, Klassifikation, Diarization)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 2,
+      "preloadModels": [
+        "ast-audioset",
+        "whisper-large-v3",
+        "clap-music"
+      ],
+      "models": [
+        "ast-audioset",
+        "whisper-large-v3",
+        "clap-music",
+        "mert-v1-95m",
+        "pyannote-diarization",
+        "qwen2-audio-7b",
+        "qwen-omni",
+        "essentia"
+      ]
+    },
+    "voiceGen": {
+      "label": "Voice & Generierung (TTS, Gesang, Song, SFX, Stem-Separation)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "qwen3-tts-06b",
+        "mms-tts-deu",
+        "demucs"
+      ],
+      "models": [
+        "qwen3-tts-06b",
+        "mms-tts-deu",
+        "bark",
+        "xtts-v2",
+        "fish-speech",
+        "musicgen-small",
+        "musicgen-medium",
+        "stable-audio-open-1.0",
+        "acestep-v15-xl-turbo",
+        "demucs",
+        "bs-roformer"
+      ]
+    }
+  }
 }

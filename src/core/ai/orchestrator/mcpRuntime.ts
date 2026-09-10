@@ -78,11 +78,27 @@ export function createDefaultMcpRuntime(deps: {
   unloadModel: (modelId: string) => Promise<void>;
   /** P3-2: geplantes Plugin-Kommando an den Client-Pfad durchreichen. */
   recordPluginCommand?: (cmd: { pluginId: string; action: string; parameters: Record<string, unknown> }) => void;
+  /** GPU-Flotten-Status (nur registriert, wenn der Aufrufer ihn liefert). */
+  getFleetStatus?: () => Record<string, unknown>;
+  /** Session-Wake der GPU-Flotte (workersMin + Warmup). */
+  wakeFleet?: () => Promise<unknown>;
 }): McpRuntime {
   const runtime = new McpRuntime();
 
   runtime.register({ name: 'session.getState', category: 'session', permission: 'READ', description: 'AI-Session-Zustand' }, () => deps.getSessionState());
   runtime.register({ name: 'runtime.status', category: 'session', permission: 'READ', description: 'GPU/Runtime/Metrik-Status' }, () => deps.getRuntimeStatus());
+  if (deps.getFleetStatus) {
+    runtime.register(
+      { name: 'fleet.status', category: 'session', permission: 'READ', description: 'GPU-Flotten-Rollen (Endpoint, VRAM, Tasks, Preload)' },
+      () => deps.getFleetStatus?.(),
+    );
+  }
+  if (deps.wakeFleet) {
+    runtime.register(
+      { name: 'fleet.wake', category: 'session', permission: 'EXECUTION', description: 'GPU-Flotte wecken (workersMin + Warmup-Jobs)' },
+      () => deps.wakeFleet?.(),
+    );
+  }
   runtime.register({ name: 'models.list', category: 'session', permission: 'READ', description: 'Modell-Registry (geladen/verfügbar)' }, () => listModels().map((m) => ({ id: m.id, task: m.task, loadClass: m.loadClass, license: m.license })));
   runtime.register({ name: 'model.load', category: 'session', permission: 'EXECUTION', description: 'Modell laden' }, (p) => deps.loadModel(String(p.model ?? '')));
   runtime.register({ name: 'model.unload', category: 'session', permission: 'EXECUTION', description: 'Modell entladen' }, (p) => deps.unloadModel(String(p.model ?? '')));

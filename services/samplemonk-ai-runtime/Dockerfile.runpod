@@ -1,16 +1,22 @@
 # SampleMONK AI Runtime – RunPod Serverless Worker
 # =================================================
-# Gleiche Basis wie der HF-Custom-Container, startet aber den RunPod-Worker
-# (`runpod_worker.py`) statt Uvicorn/FastAPI.
+# Ein Image für alle drei Flotten-Rollen (brain | ears | voiceGen). Die Rolle
+# wird zur Laufzeit über AI_ROLE gewählt; der Worker lädt daraus nur die Modelle
+# des Rollen-Manifests (model_manifest.json → "roles"). Die Kernabhängigkeiten
+# (vLLM für brain, TTS-/Audio-Stacks für voiceGen/ears) werden per Build-Arg
+# zugeschaltet.
 FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    HF_HOME=/data/hf-cache
+    HF_HOME=/data/hf-cache \
+    AI_ROLE=""
 
 ARG AI_INSTALL_VOICE_AI=0
 ARG AI_INSTALL_AUDIO_AI=0
+# Brain-Rolle: vLLM für den OpenAI-kompatiblen LLM-Endpoint (/v1/chat/completions).
+ARG AI_INSTALL_VLLM=0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 sox curl \
@@ -29,6 +35,10 @@ RUN if [ "$AI_INSTALL_VOICE_AI" = "1" ]; then \
 COPY requirements-audio-ai.lock ./
 RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
       pip install --no-cache-dir -r requirements-audio-ai.lock; \
+    fi
+
+RUN if [ "$AI_INSTALL_VLLM" = "1" ]; then \
+      pip install --no-cache-dir "vllm>=0.8"; \
     fi
 
 # RunPod Serverless SDK (Worker + API)

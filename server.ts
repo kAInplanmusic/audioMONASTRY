@@ -18,6 +18,7 @@ import {
 } from './src/core/drop/DropTemplateGenerator';
 import type { DropGenerationRequest, DropStyle } from './src/core/drop/DropTemplateGenerator';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
+import { fleetStatus, sleepFleet, wakeFleet } from './src/core/ai/orchestrator/fleetWake';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { embedText } from './src/core/ai/orchestrator/textEmbedding';
@@ -1044,6 +1045,31 @@ app.post('/api/ai/session/heartbeat', (_req, res) => {
 app.post('/api/ai/session/shutdown', async (_req, res) => {
   await aiOrchestrator.sessions.shutdown();
   return res.json(aiOrchestrator.sessions.get());
+});
+
+// --- GPU-Flotte: Status / Session-Wake / Sleep ---
+// Die drei Rollen-Endpoints (brain/ears/voiceGen) skalieren auf 0. Beim
+// Studio-Eintritt weckt der Client die Flotte vorab (workersMin=1 je Endpoint +
+// Warmup-Job, der die Preload-Modelle in VRAM lädt); beim Session-Ende bzw.
+// Idle-Timeout wird sie wieder schlafen gelegt. Statusabfrage ohne Netzwerk.
+app.get('/api/ai/fleet/status', (_req, res) => {
+  return res.json(fleetStatus());
+});
+
+app.post('/api/ai/fleet/wake', async (_req, res) => {
+  try {
+    return res.json(await wakeFleet());
+  } catch (err) {
+    return res.status(502).json({ error: err instanceof Error ? err.message : 'fleet wake failed' });
+  }
+});
+
+app.post('/api/ai/fleet/sleep', async (_req, res) => {
+  try {
+    return res.json(await sleepFleet());
+  } catch (err) {
+    return res.status(502).json({ error: err instanceof Error ? err.message : 'fleet sleep failed' });
+  }
 });
 
 // --- Model Registry / Status ---

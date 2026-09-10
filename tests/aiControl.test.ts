@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { LlmRouter, type ILlmProvider, type LlmRequest } from '../src/core/ai/LlmRouter';
 import { MoaAgent, parseMoaSteps } from '../src/core/ai/MoaAgent';
 import { MemorySessionMediaStore } from '../src/core/session/SessionMediaStore';
@@ -20,7 +20,24 @@ function mockProvider(id: ILlmProvider['id']): ILlmProvider {
   };
 }
 
+/**
+ * Diese Datei prüft die EXTERNEN LLM-Provider (DeepSeek/HF/Gemini/OpenAI).
+ * Seit „AI nur lokal“ ist das lokale Brain der einzige Default-Provider – die
+ * externe Kette muss explizit mit AI_ALLOW_EXTERNAL_LLM=true freigeschaltet
+ * werden (siehe docs/RUNPOD_AI_V1_SPEC.md, Abschnitt 2.1).
+ */
+function allowExternalLlm(): void {
+  process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
+}
+
+function resetExternalLlm(): void {
+  delete process.env.AI_ALLOW_EXTERNAL_LLM;
+}
+
 describe('LlmRouter (Kosten-Priorität)', () => {
+  beforeEach(allowExternalLlm);
+  afterEach(resetExternalLlm);
+
   it('simple: DeepSeek Flash zuerst, HF dahinter, kein Pro', () => {
     const router = new LlmRouter();
     for (const p of ['hf', 'deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
@@ -54,8 +71,10 @@ describe('LlmRouter (Kosten-Priorität)', () => {
 });
 
 describe('LlmRouter Provider (gemocktes fetch)', () => {
+  beforeEach(allowExternalLlm);
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetExternalLlm();
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.HF_API_KEY;
   });
@@ -98,8 +117,10 @@ describe('LlmRouter Provider (gemocktes fetch)', () => {
 });
 
 describe('LlmRouter Notfall-Provider + clientLlm + env', () => {
+  beforeEach(allowExternalLlm);
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetExternalLlm();
     delete process.env.GEMINI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.DEEPSEEK_API_KEY;
@@ -347,8 +368,10 @@ describe('VoiceMonkService (TTS + Gesang in Session-DB)', () => {
 });
 
 describe('AI-Failure-Handling (DCT-114)', () => {
+  beforeEach(allowExternalLlm);
   afterEach(() => {
     vi.unstubAllGlobals();
+    resetExternalLlm();
     delete process.env.DEEPSEEK_API_KEY;
     delete process.env.HF_API_KEY;
   });

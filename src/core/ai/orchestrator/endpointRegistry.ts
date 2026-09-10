@@ -1,0 +1,163 @@
+/**
+ * audioMONASTRY · AI-Orchestrator – GPU-Rollen-Registry
+ * =====================================================
+ * Einzige Quelle der Wahrheit darüber, welche Flotten-Rolle
+ *   - welchen Serverless-Endpoint besitzt,
+ *   - welches VRAM-Budget und welche RunPod-GPU-Pool-ID sie hat,
+ *   - welche AI-Tasks sie bedienen darf,
+ *   - welche Modelle sie vorlädt.
+ *
+ * Die Task-Mengen der Rollen sind DISJUNKT: pro Task gibt es genau eine
+ * zuständige Rolle. Das hält das Routing eindeutig und verhindert, dass ein
+ * Task versehentlich auf einem Endpoint landet, der sein Modell nicht hat.
+ *
+ * Migrationspfad: fehlt eine rollenspezifische Endpoint-ID, fällt JEDE Rolle
+ * auf `RUNPOD_ENDPOINT_ID` zurück (Legacy-Single-Endpoint-Modus, z. B. der
+ * bestehende H200-Endpoint). Der Cutover ist damit ohne Codeänderung möglich.
+ */
+import { GPU_ROLE_IDS, endpointNameForRole, type GpuRoleId } from '../../../config/aiInfrastructure';
+import { aiLogger } from './aiLogger';
+import type { AiTask } from './types';
+
+/** Vollständige Beschreibung einer Flotten-Rolle. */
+export interface GpuRoleDefinition {
+  role: GpuRoleId;
+  /** Menschenlesbares Label (Logs, perforMONK, Doku). */
+  label: string;
+  /** RunPod-Serverless-Endpoint-Name (Deploy-Namenskonvention). */
+  endpointName: string;
+  /** env-Variable, die die Endpoint-ID dieser Rolle hält. */
+  endpointIdEnv: string;
+  /** RunPod-GPU-POOL-ID (z. B. AMPERE_48 = A6000 48 GB). */
+  gpuPoolId: string;
+  /** GPUs pro Worker (1; nur der Brain-Upgrade-Pfad nutzt 2). */
+  gpuCount: number;
+  /** Physisches VRAM-Budget der Rolle in GB (Spiegel des Rollen-Manifests). */
+  vramBudgetGb: number;
+  /** Tasks, die ausschließlich diese Rolle ausführt. */
+  tasks: readonly AiTask[];
+  /** Modelle, die der Rollen-Worker beim Session-Wake vorlädt. */
+  preload: readonly string[];
+  /** Primäres LLM dieser Rolle (nur brain). */
+  brainModel?: string;
+}
+
+/**
+ * Task-Mengen sind disjunkt. `llm`/`nlu` gehören dem Gehirn, `audio.*` den
+ * Ohren, Erzeugung/Trennung der Voice-/Generierungs-Rolle.
+ */
+export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
+  brain: {
+    role: 'brain',
+    label: 'aiMONK Gehirn (lokales LLM)',
+    endpointName: endpointNameForRole('brain'),
+    endpointIdEnv: 'RUNPOD_ENDPOINT_ID_BRAIN',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['llm', 'nlu'],
+    // Upgrade auf qwen3-32b / glm-4.5-air, sobald deren Revision gepinnt ist
+    // (im Rollen-Manifest als status="planned" geführt).
+    preload: ['qwen3-14b'],
+    brainModel: 'qwen3-14b',
+  },
+  ears: {
+    role: 'ears',
+    label: 'Audio-Intelligence (STT, Embeddings, Klassifikation)',
+    endpointName: endpointNameForRole('ears'),
+    endpointIdEnv: 'RUNPOD_ENDPOINT_ID_EARS',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: [
+      'audio.classify',
+      'audio.transcribe',
+      'audio.embed',
+      'audio.analyze',
+      'audio.diarize',
+      'audio.understand',
+      'multimodal',
+    ],
+    preload: ['ast-audioset', 'whisper-large-v3', 'clap-music'],
+  },
+  voiceGen: {
+    role: 'voiceGen',
+    label: 'Voice & Generierung (TTS, Gesang, Song, SFX, Stems)',
+    endpointName: endpointNameForRole('voiceGen'),
+    endpointIdEnv: 'RUNPOD_ENDPOINT_ID_VOICE',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['tts', 'sing', 'song', 'audio.generate', 'stem.separate'],
+    preload: ['qwen3-tts-06b', 'mms-tts-deu', 'demucs'],
+  },
+};
+
+/**
+ * Tasks, die länger als ein `runsync`-Fenster dauern können. Sie laufen über
+ * `POST /run` + Polling auf `GET /status/{id}`.
+ */
+export const LONG_RUNNING_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
+  'song',
+  'sing',
+  'audio.generate',
+  'stem.separate',
+]);
+
+/** Alle Rollen in Anzeige-Reihenfolge. */
+export const GPU_ROLE_LIST: readonly GpuRoleDefinition[] = GPU_ROLE_IDS.map((id) => GPU_ROLES[id]);
+
+/** Zuständige Rolle für einen Task (oder null, wenn keiner Rolle zugeordnet). */
+export function roleForTask(task: AiTask): GpuRoleId | null {
+  for (const role of GPU_ROLE_LIST) {
+    if (role.tasks.includes(task)) return role.role;
+  }
+  return null;
+}
+
+/** Definitionsgemäß zuständige Rolle; wirft, wenn der Task unbekannt ist. */
+export function requireRoleForTask(task: AiTask): GpuRoleDefinition {
+  const role = roleForTask(task);
+  if (!role) throw new Error(`kein GPU-Rollen-Endpoint für Task ${task}`);
+  return GPU_ROLES[role];
+}
+
+function env(name: string): string {
+  return (process.env[name] ?? '').trim();
+}
+
+/** Aufgelöste Rolle mit konkreter Endpoint-ID. */
+export interface ResolvedGpuRole extends GpuRoleDefinition {
+  /** Endpoint-ID oder '' wenn nicht konfiguriert. */
+  endpointId: string;
+  /** true, wenn die Rolle auf RUNPOD_ENDPOINT_ID zurückfällt (Legacy-Modus). */
+  usingLegacyEndpoint: boolean;
+}
+
+/**
+ * Liest für jede Rolle die Endpoint-ID aus der Umgebung. Ohne
+ * rollenspezifische ID wird `RUNPOD_ENDPOINT_ID` als gemeinsamer Fallback
+ * verwendet (bestehender Endpoint bleibt damit lauffähig).
+ */
+export function resolveGpuRoles(): ResolvedGpuRole[] {
+  const legacy = env('RUNPOD_ENDPOINT_ID');
+  return GPU_ROLE_LIST.map((role) => {
+    const own = env(role.endpointIdEnv);
+    const usingLegacy = !own && Boolean(legacy);
+    if (usingLegacy) {
+      aiLogger.warn('gpu role using legacy single endpoint', {
+        role: role.role,
+        env: role.endpointIdEnv,
+        fallback: 'RUNPOD_ENDPOINT_ID',
+      });
+    }
+    return { ...role, endpointId: own || legacy, usingLegacyEndpoint: usingLegacy };
+  });
+}
+
+/** Aufgelöste Rolle für einen einzelnen Task (oder null ohne Zuständigkeit). */
+export function resolveRoleForTask(task: AiTask): ResolvedGpuRole | null {
+  const role = roleForTask(task);
+  if (!role) return null;
+  return resolveGpuRoles().find((r) => r.role === role) ?? null;
+}

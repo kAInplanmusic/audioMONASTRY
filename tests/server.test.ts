@@ -27,6 +27,8 @@ afterAll(async () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // „AI nur lokal“: die externe LLM-Kette nur pro Test freischalten.
+  delete process.env.AI_ALLOW_EXTERNAL_LLM;
 });
 
 describe('Server API', () => {
@@ -203,6 +205,9 @@ describe('Server API', () => {
   it('POST /api/ai/complete mit gemocktem DeepSeek-Fetch → 200 + Provider', async () => {
     const realFetch = globalThis.fetch.bind(globalThis);
     process.env.DEEPSEEK_API_KEY = 'test-key';
+    // Seit „AI nur lokal“ ist das lokale Brain der Default-Provider; dieser Test
+    // prüft die externe Kette und schaltet sie explizit frei.
+    process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
     // Andere Provider deaktivieren, damit der Router deterministisch
     // deepseek-flash wählt (CB_API_KEY & Co. können in der .env gesetzt sein).
     delete process.env.CB_API_KEY;

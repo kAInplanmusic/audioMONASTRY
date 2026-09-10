@@ -2,6 +2,17 @@ name: runpod-deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      role:
+        description: 'Nur eine Rolle deployen (leer = alle drei)'
+        required: false
+        default: ''
+        type: string
+      idle_timeout:
+        description: 'Idle-Timeout in Minuten (Auto-Shutdown bei Untätigkeit)'
+        required: false
+        default: '15'
+        type: string
   push:
     branches: [runpod-migration]
     paths:
@@ -18,8 +29,12 @@ env:
   IMAGE_NAME: samplemonk-ai-runtime-runpod
 
 jobs:
-  build-and-deploy:
+  # Ein Image für alle drei Rollen – die Rolle wird zur Laufzeit über AI_ROLE
+  # und das Rollen-Manifest gewählt (siehe docs/RUNPOD_AI_V1_SPEC.md).
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
@@ -43,12 +58,16 @@ jobs:
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Image: ${IMAGE}"
 
-      - name: Build & Push (RunPod Serverless Worker)
+      - name: Build & Push (RunPod Serverless Worker, alle Rollen)
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
           context: services/samplemonk-ai-runtime
           file: services/samplemonk-ai-runtime/Dockerfile.runpod
           push: true
+          build-args: |
+            AI_INSTALL_AUDIO_AI=1
+            AI_INSTALL_VOICE_AI=1
+            AI_INSTALL_VLLM=0
           tags: |
             ${{ steps.meta.outputs.image }}:latest
             ${{ steps.meta.outputs.image }}:${{ github.sha }}
@@ -66,19 +85,28 @@ jobs:
             -f visibility=public \
           || echo "INFO: Paket bleibt privat – GHCR_USERNAME/GHCR_PASSWORD werden benötigt."
 
+  # Alle drei Rollen-Endpoints. workers_min bleibt 0 (Scale-to-Zero); der
+  # Session-Wake hebt es beim Studio-Eintritt temporär auf 1.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
       - name: RunPod SDK installieren
         run: python3 -m pip install --quiet runpod==1.12.0
 
-      - name: RunPod Serverless Endpoint deployen
+      - name: RunPod Serverless Endpoints deployen
         env:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
-          IMAGE: ${{ steps.meta.outputs.image }}:${{ github.sha }}
-          RUNPOD_ENDPOINT_NAME: samplemonk-ai-runpod
-          # RunPod verlangt GPU-POOL-IDs (H200 = HOPPER_141), keine Marketing-Namen.
-          RUNPOD_GPU_ID: HOPPER_141
+          IMAGE: ${{ needs.build.outputs.image }}:${{ github.sha }}
+          RUNPOD_ROLE: ${{ github.event.inputs.role }}
+          # RunPod verlangt GPU-POOL-IDs (nicht Marketing-Namen). A6000 48 GB = AMPERE_48.
+          RUNPOD_GPU_ID: AMPERE_48
           RUNPOD_WORKERS_MIN: '0'
           RUNPOD_WORKERS_MAX: '1'
-          RUNPOD_IDLE_TIMEOUT: '5'
+          # 15 min Untätigkeit → Worker fährt herunter (Auto-Shutoff).
+          RUNPOD_IDLE_TIMEOUT: ${{ github.event.inputs.idle_timeout || '15' }}
           RUNPOD_NETWORK_VOLUME_ID: ${{ secrets.RUNPOD_NETWORK_VOLUME_ID }}
           GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
           GHCR_PASSWORD: ${{ secrets.GHCR_PAT_ALL_ACCESS || secrets.GHCR_PASSWORD }}

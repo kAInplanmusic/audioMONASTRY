@@ -65,6 +65,8 @@ class State:
         self.ready = False
         self.models_ready = False
         self.shutting_down = False
+        # Flotten-Rolle dieses Containers ('legacy' = alle Modelle des Manifests).
+        self.role = os.environ.get("AI_ROLE", "").strip() or "legacy"
 
     def record_error(self, kind: str, task: str, model: str, message: str) -> None:
         """Hält die letzten Inferenz-Fehler für /status bereit (Observability)."""
@@ -84,6 +86,7 @@ class State:
         models = self.manager.get_status()
         return {
             "endpoint": "running" if not self.shutting_down else "shutting_down",
+            "role": self.role,
             "gpu": self.manager.gpu_state(),
             "runtime": "ready" if self.ready else "starting",
             "models_ready": self.models_ready,
@@ -132,11 +135,21 @@ def _preload_models_background() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
-        manifest = load_manifest()
+        # Flotten-Rolle: AI_ROLE leer = Legacy-Single-Endpoint (alle Modelle).
+        role = os.environ.get("AI_ROLE", "").strip()
+        manifest = load_manifest(role or None)
         STATE.manager.configure(manifest)
+        STATE.role = role or "legacy"
         # AD-H4: Whitelist der bekannten Modell-IDs aus dem Manifest.
         KNOWN_MODEL_IDS.update(str(m.get("id", "")).strip() for m in manifest.get("models", []) if isinstance(m, dict))
         KNOWN_MODEL_IDS.discard("")
+        log_event(
+            "INFO",
+            "manifest loaded",
+            role=STATE.role,
+            models=len(manifest.get("models", [])),
+            skippedPlanned=manifest.get("skippedPlanned", []),
+        )
     except Exception as exc:  # Startup-Fehler eindeutig melden
         STATE.startup_errors.append(f"{type(exc).__name__}: {exc}")
         log_event("FATAL", "startup failed", error=type(exc).__name__)

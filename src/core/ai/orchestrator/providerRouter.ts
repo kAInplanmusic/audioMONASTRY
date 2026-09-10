@@ -9,9 +9,10 @@
  */
 import { llmRouter } from '../LlmRouter';
 import { aiLogger } from './aiLogger';
-import { assertSingleGpuEndpoint } from '../../../config/aiInfrastructure';
+import { assertGpuEndpointBudget } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
 import { CerebrasProvider } from './cerebrasProvider';
+import { GPU_ROLE_LIST } from './endpointRegistry';
 import { RunPodProvider } from './runpodProvider';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
@@ -315,12 +316,12 @@ export class LocalProvider implements IAiProvider {
 // Router
 // ---------------------------------------------------------------------------
 export class ProviderRouter {
-  // GPU-Konsolidierung: NUR der Custom-Container-Endpoint `samplemonk-ai`
-  // (HfEndpointProvider) darf GPU nutzen. HfStandardEndpointProvider
-  // (separate pilot/clap-Endpoints) ist bewusst NICHT mehr registriert.
+  // 3-Rollen-GPU-Flotte: brain (LLM) / ears (Audio-Intelligence) / voiceGen
+  // (TTS, Gesang, Song, SFX, Stems). Jede Rolle ist ein eigener Serverless-
+  // Endpoint mit eigener Endpoint-ID und disjunkter Task-Menge – die Reihenfolge
+  // hier ist die Provider-Priorität, nicht die Rollen-Reihenfolge.
   private providers: IAiProvider[] = [
-    // RunPod ist erster Kandidat, sobald ein Endpoint konfiguriert ist.
-    new RunPodProvider(),
+    ...GPU_ROLE_LIST.map((role) => new RunPodProvider(role.role)),
     new CerebrasProvider(), // NLU/Struktur – schnell & kostengestaffelt
     new HfEndpointProvider(),
     new HfServerlessProvider(),
@@ -330,8 +331,8 @@ export class ProviderRouter {
   private breakers = new Map<string, CircuitBreaker>();
 
   constructor() {
-    // Harte Kostenregel: niemals mehr als 1 GPU-Endpoint.
-    assertSingleGpuEndpoint();
+    // Harte Kostenregel: höchstens so viele GPU-Endpoints wie Flotten-Rollen.
+    assertGpuEndpointBudget();
   }
 
   register(provider: IAiProvider): void {

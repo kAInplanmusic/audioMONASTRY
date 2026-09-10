@@ -208,6 +208,14 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 | htdemucs-ONNX | Stem separation local | `smank/htdemucs-onnx` | local/ONNX | no |
 | LocalEmbeddingProvider | Embeddings local | transformers.js (~80 MB) | browser/Node | no |
 
+**Verbindliche Quelle der Rollen-/Modellzuordnung:** `docs/RUNPOD_AI_V1_SPEC.md`.
+Jedes Modell gehört zu **genau einer** Flotten-Rolle (`brain`/`ears`/`voiceGen`); die
+Task-Mengen sind disjunkt. Maßgeblich ist der `roles`-Block in
+`services/samplemonk-ai-runtime/model_manifest.json`, gespiegelt in
+`src/core/ai/orchestrator/endpointRegistry.ts` und per `tests/manifestRoles.test.ts`
+gegen Drift abgesichert. Modelle mit `status: "planned"` haben noch keinen echten
+Revisions-Pin und werden im Betrieb nicht geladen.
+
 **Model Registry:** `services/samplemonk-ai-runtime/model_manifest.json` + TS mirror `src/core/ai/orchestrator/modelRegistry.ts`. Load classes CORE/FREQUENT/ON_DEMAND/RARE, revision pinning (no `latest`).
 **Evaluation:** `docs/HF_MODEL_CAPABILITY_MATRIX.md` (scores U·Q·P·V·I·R).
 
@@ -215,7 +223,10 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 
 **Deployment Targets:**
 - Hetzner fleet: `app-1` (CPX31), `sfu-1` (CPX31), `master-1` (CX23), `edge-1` (CX23), `ai-1` (CCX33, Ollama/stem-ai CPU)
-- Hugging Face Dedicated Endpoints: `samplemonk-ai` (custom container, A100 ×1, us-east-1, scale-to-zero 20 min), `samplemonk-ai-pilot` (Whisper, running)
+- **RunPod Serverless – 3-Rollen-GPU-Flotte** (Details: `docs/RUNPOD_AI_V1_SPEC.md`):
+  `samplemonk-ai-brain` (A6000 48 GB, lokales LLM), `samplemonk-ai-ears` (A6000 48 GB, STT/Embeddings/Klassifikation), `samplemonk-ai-voice` (A6000 48 GB, TTS/Gesang/Song/SFX/Stems).
+  Alle mit `workers_min=0` (Scale-to-Zero, ≈ 0 $ im Idle) und **Session-Wake** beim Studio-Eintritt.
+  Die früheren HF-Dedicated-Endpoints (`samplemonk-ai`, `samplemonk-ai-pilot`, `samplemonk-ai-clap`) sind abgelöst.
 - Cloudflare Worker (`portal-worker`), Supabase, Cloudflare R2
 
 **Containerization:** `Dockerfile` (app), `Dockerfile.hetzner`, `Dockerfile.multistage`, `services/samplemonk-ai-runtime/Dockerfile` (pytorch/pytorch base, no weights in image, `HF_HOME=/data/hf-cache`), `services/stem-ai/Dockerfile`, `services/master-player/Dockerfile`, `services/midi-bridge/Dockerfile`.

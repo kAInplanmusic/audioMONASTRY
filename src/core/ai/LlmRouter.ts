@@ -24,6 +24,7 @@
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
 export type LlmProviderId =
+  | 'runpod-local'
   | 'hf'
   | 'mistral'
   | 'ollama'
@@ -58,6 +59,9 @@ export interface ILlmProvider {
 }
 
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
+  // Gepinntes, heute lauffähiges Brain-Modell. Upgrade auf qwen3-32b /
+  // glm-4.5-air per RUNPOD_BRAIN_MODEL, sobald die Revision gepinnt ist.
+  'runpod-local': 'qwen3-14b',
   hf: 'Qwen/Qwen2.5-72B-Instruct',
   mistral: 'mistral-small-latest',
   ollama: 'qwen2.5:7b',
@@ -70,6 +74,12 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
 };
+
+/**
+ * Provider, die ohne externen Netzzugriff auskommen (lokal gehostet).
+ * Seit „AI nur lokal“ sind das die einzigen, die per Default erlaubt sind.
+ */
+const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local', 'ollama']);
 
 function envKey(name: string): string | undefined {
   const v = (typeof process !== 'undefined' && process.env ? process.env[name] : undefined)?.trim();
@@ -250,10 +260,58 @@ class OpenAIProvider implements ILlmProvider {
   }
 }
 
+/**
+ * Lokales Brain der GPU-Flotte (Rolle `brain`).
+ *
+ * Der RunPod-Serverless-Worker der Rolle `brain` betreibt vLLM und stellt damit
+ * einen OpenAI-kompatiblen Endpoint bereit. Seit dem Umstieg auf „AI nur lokal“
+ * ist das der PRIMÄRE LLM-Provider – externe APIs sind per Default aus
+ * (`AI_ALLOW_EXTERNAL_LLM=true` schaltet sie wieder zu).
+ */
+class RunPodLocalProvider implements ILlmProvider {
+  readonly id = 'runpod-local' as const;
+
+  get available(): boolean {
+    return Boolean(this.baseUrl() && this.apiKey());
+  }
+
+  private apiKey(): string | undefined {
+    return envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY');
+  }
+
+  /** OpenAI-Basis-URL des Brain-Endpoints (vLLM im Serverless-Worker). */
+  private baseUrl(): string | undefined {
+    const explicit = envKey('RUNPOD_BRAIN_OPENAI_URL');
+    if (explicit) return explicit.replace(/\/+$/, '');
+    const endpointId = envKey('RUNPOD_ENDPOINT_ID_BRAIN') || envKey('RUNPOD_ENDPOINT_ID');
+    if (!endpointId) return undefined;
+    const apiBase = (envKey('RUNPOD_API_BASE') || 'https://api.runpod.ai/v2').replace(/\/+$/, '');
+    return `${apiBase}/${endpointId}/openai/v1`;
+  }
+
+  async complete(req: LlmRequest): Promise<LlmCompletion> {
+    const started = Date.now();
+    const model = envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
+    const resp = await postJson(
+      `${this.baseUrl()}/chat/completions`,
+      { Authorization: `Bearer ${this.apiKey()}` },
+      {
+        model,
+        messages: [{ role: 'user', content: req.prompt }],
+        max_tokens: req.maxTokens ?? 1024,
+        temperature: req.temperature ?? 0.7,
+      },
+    );
+    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+  }
+}
+
 export class LlmRouter {
   private providers = new Map<LlmProviderId, ILlmProvider>();
 
   constructor() {
+    // Lokales Brain zuerst registrieren – es ist der primäre Provider.
+    this.register(new RunPodLocalProvider());
     this.register(new HfProvider());
     this.register(new QwenCoderProvider());
     this.register(new OpenAiCompatibleProvider('mistral', 'https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'));
@@ -285,15 +343,23 @@ export class LlmRouter {
     return [...this.providers.keys()];
   }
 
-  /** Liefert die Provider in der für die Komplexität gültigen Kosten-Reihenfolge. */
+  /**
+   * Liefert die Provider in der gültigen Reihenfolge.
+   *
+   * Das lokale Brain (`runpod-local`) steht immer vorn; `ollama` ist der
+   * wirklich lokale Notfall-Fallback. Externe/bezahlte Provider bleiben
+   * registriert, werden aber nur mit `AI_ALLOW_EXTERNAL_LLM=true` zugelassen.
+   */
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const order: LlmProviderId[] =
       complexity === 'complex'
-        ? ['cerebras', 'deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'openrouter', 'hf', 'mistral', 'publicai', 'ollama', 'gemini', 'openai']
+        ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'openrouter', 'hf', 'mistral', 'publicai', 'gemini', 'openai']
         : complexity === 'moderate'
-          ? ['cerebras', 'deepseek-flash', 'qwen3-coder', 'openrouter', 'hf', 'mistral', 'publicai', 'deepseek-pro', 'ollama']
-          : ['cerebras', 'deepseek-flash', 'hf', 'mistral', 'openrouter', 'publicai', 'ollama'];
+          ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'qwen3-coder', 'openrouter', 'hf', 'mistral', 'publicai', 'deepseek-pro']
+          : ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'hf', 'mistral', 'openrouter', 'publicai'];
+    const allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true';
     return order
+      .filter((id) => allowExternal || LOCAL_LLM_PROVIDERS.has(id))
       .map((id) => this.providers.get(id))
       .filter((p): p is ILlmProvider => Boolean(p) && p.available);
   }

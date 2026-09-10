@@ -8,7 +8,10 @@ Serverless-Endpoint und persistiert das Ergebnis SOFORT nach Abschluss
 
 Verwendung:
   RP_API_KEY=… RUNPOD_ENDPOINT_ID=… python3 scripts/runpod-smoke.py
+  Pro Flotten-Rolle (prüft Rollen-Manifest + Preload):
+    RP_API_KEY=… RUNPOD_SMOKE_ROLE=ears python3 scripts/runpod-smoke.py
   optional: RUNPOD_SMOKE_TASK=classify RUNPOD_SMOKE_MODEL=ast-audioset
+            RUNPOD_SMOKE_ROLE=brain|ears|voiceGen  (Default-Task dann: warmup)
             RUNPOD_SMOKE_WAV=/pfad/zu/test.wav   (Default: generierter 1s/440Hz-Sinus)
             RUNPOD_POLL_SECONDS=30
 
@@ -59,11 +62,24 @@ def api_json(url: str, api_key: str, method: str = "GET", body: dict | None = No
         return json.loads(resp.read().decode())
 
 
+ROLE_ENDPOINT_ENV = {
+    "brain": "RUNPOD_ENDPOINT_ID_BRAIN",
+    "ears": "RUNPOD_ENDPOINT_ID_EARS",
+    "voiceGen": "RUNPOD_ENDPOINT_ID_VOICE",
+}
+
+
 def main() -> int:
     api_key = env("RP_API_KEY") or env("RUNPOD_API_KEY")
-    endpoint_id = env("RUNPOD_ENDPOINT_ID")
-    task = env("RUNPOD_SMOKE_TASK", "classify")
-    model = env("RUNPOD_SMOKE_MODEL", "ast-audioset")
+    role = env("RUNPOD_SMOKE_ROLE")
+    if role and role not in ROLE_ENDPOINT_ENV:
+        print(f"FEHLER: unbekannte RUNPOD_SMOKE_ROLE {role!r}", file=sys.stderr)
+        return 2
+    endpoint_id = (env(ROLE_ENDPOINT_ENV[role]) if role else "") or env("RUNPOD_ENDPOINT_ID")
+    # Ohne expliziten Task ist der Rollen-Smoke ein Warmup-Probe (prüft Worker,
+    # Rollen-Manifest und Preload-Modelle), der Legacy-Smoke ein classify-Job.
+    task = env("RUNPOD_SMOKE_TASK") or ("warmup" if role else "classify")
+    model = env("RUNPOD_SMOKE_MODEL") or ("ast-audioset" if task == "classify" else "")
     wav_path = env("RUNPOD_SMOKE_WAV")
     poll_seconds = max(10, int(env("RUNPOD_POLL_SECONDS", "30")))
 
@@ -71,24 +87,27 @@ def main() -> int:
         print("FEHLER: RP_API_KEY fehlt", file=sys.stderr)
         return 2
     if not endpoint_id:
-        print("FEHLER: RUNPOD_ENDPOINT_ID fehlt (z. B. uzg7p9lm890ts8)", file=sys.stderr)
+        print("FEHLER: RUNPOD_ENDPOINT_ID (oder RUNPOD_ENDPOINT_ID_<ROLLE>) fehlt", file=sys.stderr)
         return 2
 
-    if wav_path and os.path.exists(wav_path):
-        with open(wav_path, "rb") as fh:
-            wav_bytes = fh.read()
-        print(f"[smoke] Nutze WAV: {wav_path} ({len(wav_bytes)} bytes)")
+    if task == "warmup":
+        print(f"[smoke] Rollen-Warmup-Probe (role={role or 'legacy'})")
+        job = {"input": {"task": "warmup", "model": "", "input": {"role": role}}}
     else:
-        wav_bytes = make_test_wav()
-        print(f"[smoke] Generierte Test-WAV ({len(wav_bytes)} bytes, 1s/440Hz/16kHz)")
-
-    job = {
-        "input": {
-            "task": task,
-            "model": model,
-            "input": {"audioBase64": base64.b64encode(wav_bytes).decode()},
+        if wav_path and os.path.exists(wav_path):
+            with open(wav_path, "rb") as fh:
+                wav_bytes = fh.read()
+            print(f"[smoke] Nutze WAV: {wav_path} ({len(wav_bytes)} bytes)")
+        else:
+            wav_bytes = make_test_wav()
+            print(f"[smoke] Generierte Test-WAV ({len(wav_bytes)} bytes, 1s/440Hz/16kHz)")
+        job = {
+            "input": {
+                "task": task,
+                "model": model,
+                "input": {"audioBase64": base64.b64encode(wav_bytes).decode()},
+            }
         }
-    }
 
     base = f"https://api.runpod.ai/v2/{endpoint_id}"
     print(f"[smoke] Sende runsync (task={task}, model={model}) …")

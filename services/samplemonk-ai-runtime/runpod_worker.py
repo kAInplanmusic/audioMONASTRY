@@ -11,6 +11,16 @@ Job-Input:
   "input": { ... modellspezifisch ... }
 }
 
+Flotten-Rolle (`AI_ROLE`):
+  brain     → llm, nlu                (lokales LLM, vLLM)
+  ears      → audio.*                 (STT, Embeddings, Klassifikation)
+  voiceGen  → tts/sing/song/generate/stem.separate
+  (leer)    → Legacy-Single-Endpoint: alle Modelle des Manifests
+
+Sonderaufgabe `warmup` (kein Inferenz-Job): lädt die Preload-Modelle der Rolle
+in VRAM. Wird vom Session-Wake (`src/core/ai/orchestrator/fleetWake.ts`) genutzt,
+damit der erste echte Task keinen Modell-Load mehr bezahlt.
+
 Output (kleine Ergebnisse):
 {
   "status": "success",
@@ -44,7 +54,7 @@ except Exception:  # pragma: no cover
     runpod = None
 
 from model_manager import ModelManager, ModelUnavailableError
-from registry import load_manifest
+from registry import ROLE_IDS, load_manifest
 
 _SAFE_TASK_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _SAFE_MODEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$")
@@ -66,14 +76,29 @@ def log_event(level: str, msg: str, **fields: Any) -> None:
     print(json.dumps(record, ensure_ascii=False), flush=True)
 
 
+def _role() -> str:
+    """Flotten-Rolle dieses Workers ('' = Legacy-Single-Endpoint-Betrieb)."""
+    role = os.environ.get("AI_ROLE", "").strip()
+    if role and role not in ROLE_IDS:
+        raise ValueError(f"unbekannte AI_ROLE {role!r} (erwartet: {', '.join(ROLE_IDS)})")
+    return role
+
+
 def _init_manager() -> None:
-    """Lädt Manifest und konfiguriert den ModelManager einmalig."""
+    """Lädt das Rollen-Manifest und konfiguriert den ModelManager einmalig."""
     global _ready
     try:
-        manifest = load_manifest()
+        role = _role()
+        manifest = load_manifest(role or None)
         manager.configure(manifest)
         _ready = True
-        log_event("INFO", "model manager configured", models=len(manager.get_model_info()))
+        log_event(
+            "INFO",
+            "model manager configured",
+            role=role or "legacy",
+            models=len(manager.get_model_info()),
+            skippedPlanned=manifest.get("skippedPlanned", []),
+        )
     except Exception as exc:  # noqa: BLE001
         _startup_errors.append(f"{type(exc).__name__}: {exc}")
         log_event("FATAL", "model manager init failed", error=type(exc).__name__)
@@ -89,6 +114,34 @@ def _preload_background() -> None:
         log_event("INFO", "preload finished", models_loaded=len(manager.get_status()))
     except Exception as exc:  # noqa: BLE001
         log_event("WARN", "preload failed", error=type(exc).__name__)
+
+
+def _handle_warmup(role: str) -> Dict[str, Any]:
+    """Lädt alle Preload-Modelle der Rolle – Grundlage für den Session-Wake.
+
+    Kein Inferenz-Job: der Aufrufer (fleetWake) will nur sicherstellen, dass der
+    erste echte Task keinen Modell-Load mehr bezahlt.
+    """
+    started = time.time()
+    targets = [info["id"] for info in manager.get_model_info() if info.get("preload")]
+    loaded: list[str] = []
+    failed: list[str] = []
+    for model_id in targets:
+        try:
+            manager.load(model_id)
+            loaded.append(model_id)
+        except ModelUnavailableError as exc:
+            failed.append(model_id)
+            log_event("WARN", "warmup model unavailable", model=model_id, error=str(exc))
+    duration_ms = int((time.time() - started) * 1000)
+    log_event("INFO", "warmup completed", role=role, loaded=loaded, failed=failed, durationMs=duration_ms)
+    return {
+        "status": "success",
+        "task": "warmup",
+        "model": "",
+        "result": {"ready": not failed, "role": role, "loaded": loaded, "failed": failed},
+        "durationMs": duration_ms,
+    }
 
 
 def handler(job: Dict[str, Any]) -> Dict[str, Any]:
@@ -108,6 +161,15 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
 
     if not _SAFE_TASK_RE.fullmatch(task):
         return {"status": "error", "code": "INVALID_TASK", "message": "invalid task"}
+
+    # `warmup` braucht kein Modell – es lädt die Preload-Modelle der eigenen Rolle.
+    if task == "warmup":
+        try:
+            return _handle_warmup(_role() or "legacy")
+        except Exception as exc:  # noqa: BLE001
+            log_event("ERROR", "warmup failed", error=type(exc).__name__)
+            return {"status": "error", "code": "WARMUP_FAILED", "message": "warmup failed"}
+
     if not _SAFE_MODEL_RE.fullmatch(model):
         return {"status": "error", "code": "INVALID_MODEL", "message": "invalid model"}
 
@@ -147,7 +209,7 @@ def main() -> None:
     if os.environ.get("AI_RUNPOD_PRELOAD", "1").strip() not in ("0", "false", "False"):
         threading.Thread(target=_preload_background, daemon=True).start()
 
-    log_event("INFO", "starting runpod serverless worker")
+    log_event("INFO", "starting runpod serverless worker", role=_role() or "legacy")
     runpod.serverless.start({"handler": handler})
 
 

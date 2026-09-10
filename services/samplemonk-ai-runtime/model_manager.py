@@ -179,9 +179,14 @@ class ModelManager:
 
     # ------------------------------------------------------------------ Load
     def preload(self) -> None:
-        """CORE zuerst, dann FREQUENT nach loadPriority – unter VRAM-Budget."""
+        """Lädt die für diese Rolle markierten Modelle – CORE zuerst, dann nach loadPriority.
+
+        Seit der 3-Rollen-Flotte entscheidet das `preload`-Flag des Rollen-
+        Manifests (nicht mehr die Ladeklasse), welche Modelle vorgeladen werden.
+        Jede Rolle hat damit einen anderen residenten Satz.
+        """
         ordered = sorted(
-            (m for m in self._models.values() if m.loadClass in ("CORE", "FREQUENT")),
+            (m for m in self._models.values() if m.preload),
             key=lambda m: (m.loadClass != "CORE", m.loadPriority),
         )
         for definition in ordered:
@@ -312,6 +317,7 @@ class ModelManager:
                     "revision": m.revision,
                     "task": m.task,
                     "loadClass": m.loadClass,
+                    "preload": m.preload,
                     "loaded": m.id in self._loaded,
                     "estimatedVRAM": m.estimatedVRAM,
                     "license": m.license,

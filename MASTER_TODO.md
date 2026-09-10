@@ -135,8 +135,31 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
 - **Problem:** Replicate-/HF-Code darf nicht entfernt werden, bevor RunPod (inkl. BS-RoFormer-GPU, Timeout/Retry/Cost-Limits) nachweislich ersetzt.
 - **Required change:** RunPod-E2E-Smoke, Failover-/Timeout-Tests, Kosten-Limits, Job-Status-Persistenz; danach Provider-Entfernungs-Entscheidung.
 - **Acceptance criteria:** RunPod-Inferenz E2E grün; Replicate/HF-Entfernung als eigener, revertierbarer Schritt.
-- **Verification:** `scripts/runpod-smoke.py`, `tests/ai*.test.ts`.
+- **Verification:** `scripts/runpod-smoke.py` (neu: `RUNPOD_SMOKE_ROLE=<role>`), `tests/ai*.test.ts`.
 - **Risk:** mittel · **Rollback:** Provider-Code bis Cutover behalten.
+- **Update 2026-09-10:** Flotte auf 3 Rollen umgebaut (`docs/RUNPOD_AI_V1_SPEC.md`):
+  brain/ears/voiceGen, `AI_MAX_GPU_ENDPOINTS=3`, rollenfähiger Provider, Session-Wake.
+  Endpoints müssen noch deployt werden; der Alt-H200-Endpoint `uzg7p9lm890ts8` läuft
+  weiter als Legacy-Fallback (`RUNPOD_ENDPOINT_ID`).
+
+### AI-P1-003 — Flotten-Restpakete nach dem 3-Rollen-Umbau
+- **Status:** OPEN · **Area:** AI / GPU-Flotte
+- **Problem:** Der Umbau ist implementiert, aber mehrere Punkte sind bewusst offen gelassen
+  (siehe `docs/RUNPOD_AI_V1_SPEC.md` §6) — ohne sie ist die Flotte betreibbar, aber nicht vollständig.
+- **Required change:**
+  1. **Revisions-Pins** für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` eintragen (derzeit `status: "planned"` → werden nicht geladen).
+  2. **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → Voice-Modell fixieren.
+  3. **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN; bei Durchfall GLM-4.5-Air-Upgrade (2×A6000, `gpuCount=2`).
+  4. **Batch-Indexer** für `public.sample_audio_embeddings` (Migration 007) — ohne ihn bleibt die
+     Ähnlichkeitssuche im dropMONK leer (`sample_audio_embedding_stats()` macht den Grad sichtbar).
+  5. **aiMONK-Agent-Loop**: mehrstufig planen → ausführen → prüfen → korrigieren, Kontext-Assembly
+     (16 Plugin-IDs, `routing.json`, Session-/Projektzustand, Locks/RBAC), Bestätigungspflicht ab `WRITE`.
+  6. `PATCH {RUNPOD_REST_BASE}/endpoints/{id}` (Session-Wake) gegen die echte RunPod-API-Shape verifizieren
+     — fällt bei Fehlschlag auf den Warmup-Job allein zurück (dann kein Warmhalte-Schutz).
+- **Acceptance criteria:** Pins echt (kein `TBD-`), beide Benchmark-Gates dokumentiert, Indexer füllt
+  `sample_audio_embeddings`, Agent-Loop führt eine 3-Schritt-Aufgabe fehlerfrei aus.
+- **Verification:** `tests/manifestRoles.test.ts`, `scripts/runpod-smoke.py --role`, `npm run verify`.
+- **Risk:** mittel · **Rollback:** Rollen bleiben einzeln abschaltbar (`AI_FLEET_WAKE=0`, Legacy-Endpoint).
 
 ### AI-P1-002 — AI-Runtime async/isoliert vom Audio-Thread
 - **Status:** OPEN · **Area:** AI Runtime

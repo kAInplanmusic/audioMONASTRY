@@ -22,8 +22,26 @@ export type AiTask =
   | 'multimodal'
   | 'nlu';
 
-/** Provider-IDs des Orchestrators. */
-export type AiProviderId = 'hf-standard-endpoint' | 'hf-endpoint' | 'hf-serverless' | 'replicate' | 'runpod' | 'local' | 'deterministic' | 'cerebras';
+/**
+ * Provider-IDs des Orchestrators.
+ *
+ * `runpod` ist der Legacy-Single-Endpoint-Provider (ein Endpoint für alle
+ * Tasks). `runpod-brain` / `runpod-ears` / `runpod-voice` sind die drei Rollen
+ * der GPU-Flotte (siehe endpointRegistry.ts) – je mit eigener Endpoint-ID,
+ * eigenem VRAM-Budget und disjunkter Task-Menge.
+ */
+export type AiProviderId =
+  | 'hf-standard-endpoint'
+  | 'hf-endpoint'
+  | 'hf-serverless'
+  | 'replicate'
+  | 'runpod'
+  | 'runpod-brain'
+  | 'runpod-ears'
+  | 'runpod-voice'
+  | 'local'
+  | 'deterministic'
+  | 'cerebras';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */
 export type ModelLoadClass = 'CORE' | 'FREQUENT' | 'ON_DEMAND' | 'RARE';

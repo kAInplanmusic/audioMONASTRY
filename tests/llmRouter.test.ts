@@ -1,9 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { LlmRouter, type ILlmProvider, type LlmProviderId } from '../src/core/ai/LlmRouter';
 
-const AI_ENV_KEYS = [
-  'HF_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY',
-  'OLLAMA_URL', 'OLLAMA_MODEL', 'GEMINI_API_KEY', 'OPENAI_API_KEY',
+const ALL_IDS: LlmProviderId[] = [
+  'runpod-local', 'hf', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro',
+  'cerebras', 'qwen3-coder', 'openrouter', 'publicai',
 ];
 
 function stub(id: LlmProviderId, available: boolean): ILlmProvider {
@@ -14,35 +14,58 @@ function stub(id: LlmProviderId, available: boolean): ILlmProvider {
   };
 }
 
-describe('LlmRouter: Provider-Reihenfolge', () => {
-  it('simple: DeepSeek Flash → HF → Mistral → Ollama', () => {
-    for (const k of AI_ENV_KEYS) delete process.env[k];
-    const router = new LlmRouter();
-    (['hf', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro'] as LlmProviderId[])
-      .forEach((id) => router.register(stub(id, true)));
-
-    const order = router.rankProviders('simple').map((p) => p.id);
-    expect(order).toEqual(['deepseek-flash', 'hf', 'mistral', 'ollama']);
+describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
+  afterEach(() => {
+    delete process.env.AI_ALLOW_EXTERNAL_LLM;
   });
 
-  it('moderate: DeepSeek Flash vorne, DeepSeek Pro vor Ollama', () => {
-    for (const k of AI_ENV_KEYS) delete process.env[k];
+  it('lässt per Default nur die lokalen Provider zu', () => {
+    delete process.env.AI_ALLOW_EXTERNAL_LLM;
     const router = new LlmRouter();
-    (['hf', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro'] as LlmProviderId[])
-      .forEach((id) => router.register(stub(id, true)));
+    ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('moderate').map((p) => p.id);
-    expect(order).toEqual(['deepseek-flash', 'hf', 'mistral', 'deepseek-pro', 'ollama']);
+    expect(order).toEqual(['runpod-local', 'ollama']);
   });
 
-  it('complex: DeepSeek Pro zuerst, SambaNova existiert nicht mehr', () => {
-    for (const k of AI_ENV_KEYS) delete process.env[k];
+  it('lässt unverfügbare Provider weg', () => {
+    delete process.env.AI_ALLOW_EXTERNAL_LLM;
     const router = new LlmRouter();
-    (['hf', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro'] as LlmProviderId[])
-      .forEach((id) => router.register(stub(id, true)));
+    ALL_IDS.forEach((id) => router.register(stub(id, false)));
+
+    expect(router.rankProviders('simple')).toEqual([]);
+  });
+
+  it('simple: lokales Brain vor allen externen Providern', () => {
+    process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
+    const router = new LlmRouter();
+    ALL_IDS.forEach((id) => router.register(stub(id, true)));
+
+    const order = router.rankProviders('simple').map((p) => p.id);
+    expect(order).toEqual([
+      'runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'hf', 'mistral', 'openrouter', 'publicai',
+    ]);
+  });
+
+  it('moderate: lokales Brain vorne, Fallback-Kette bleibt erhalten', () => {
+    process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
+    const router = new LlmRouter();
+    ALL_IDS.forEach((id) => router.register(stub(id, true)));
+
+    const order = router.rankProviders('moderate').map((p) => p.id);
+    expect(order[0]).toBe('runpod-local');
+    expect(order).toContain('deepseek-flash');
+    expect(order.indexOf('deepseek-flash')).toBeLessThan(order.indexOf('deepseek-pro'));
+  });
+
+  it('complex: DeepSeek Pro vor DeepSeek Flash, kein SambaNova', () => {
+    process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
+    const router = new LlmRouter();
+    ALL_IDS.forEach((id) => router.register(stub(id, true)));
 
     const order = router.rankProviders('complex').map((p) => p.id);
-    expect(order[0]).toBe('deepseek-pro');
-    expect(order).not.toContain('sambanova');
+    expect(order[0]).toBe('runpod-local');
+    expect(order.indexOf('deepseek-pro')).toBeLessThan(order.indexOf('deepseek-flash'));
+    expect(order as string[]).not.toContain('sambanova');
   });
 });

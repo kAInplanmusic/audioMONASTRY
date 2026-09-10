@@ -1,425 +1,175 @@
-# audioMONASTRY · RunPod AI V1 – Umsetzungs-Spezifikation
+# audioMONASTRY · RunPod 3-Rollen-GPU-Flotte — Umsetzungs-Spezifikation
 
-> Status: **Plan / Entwurf** – noch keine Code-Änderungen
-> Stand: 2026-09-07
-> Ziel: HF-Inference-Endpoint + HF-Serverless + Replicate ablösen, gesamte AI-Infrastruktur auf RunPod betreiben.
-
----
-
-## 1. Ziel & Scope
-
-- Kompletter Wechsel der AI-Inferenz von Hugging Face auf **RunPod**.
-- **HF-Inference-Endpoint `samplemonk-ai` löschen** (aktuell `paused`).
-- **HF-Serverless-Pfade** (TTS/Sing/Song/LLM) durch RunPod ersetzen.
-- **Replicate komplett entfernen** – kein Fallback.
-- **Stem-Separation läuft mit auf der RunPod-GPU** (Demucs + BS-RoFormer).
-- **LLM läuft ebenfalls auf RunPod** (Qwen3-14B als Orchestrator/Chat).
-- Kein neues separates „ai-infrastructure“-Monorepo von Grund auf; stattdessen vorhandene `services/samplemonk-ai-runtime` zur zentralen RunPod-AI-Runtime ausbauen.
+> Status: **beschlossen & implementiert (Kern)** · Stand: 2026-09-10
+> Ersetzt die Fassung vom 2026-09-07 („eine H200, eine Runtime, ein Model Manager").
 
 ---
 
-## 2. Getroffene Entscheidungen (aus Abstimmung)
+## 1. Entscheidung & Begründung
 
-| Thema | Entscheidung |
-|---|---|
-| RunPod Deployment | **Serverless Endpoint** mit Worker-Wrapper (`runpod.serverless.start`) |
-| GPU | **H200** (Template `audio-multimodel-h200-agent`, ID `c0xdrua0mz`) |
-| AI auf RunPod | „alles was AI angeht“, inkl. LLM |
-| Stem | Demucs + BS-RoFormer auf derselben GPU |
-| Singing | bestmögliche EN/DE-Qualität – Kandidaten: ACE-Step 1.5 / Bark / Fish Speech (Benchmark vor Fixierung) |
-| Audio Understanding | Qwen2-Audio-7B neu; Qwen-Omni entfernen |
-| Essentia | auf RunPod als CPU-Handler |
-| LLM | ein LLM auf RunPod, soll alles abdecken; Basis Qwen3-14B, ggf. Qwen3-30B-A3B benchmarken |
-| Replicate | komplett entfernen |
-| HF löschen | Endpoint + Model-Repo + Space `spatialMONK` |
-| Deployment | GitHub Actions: Image bauen + RunPod-Serverless-Endpoint aktualisieren |
-| Architektur | eine GPU, ein Model Manager, dynamisches Laden – keine Multi-Container-GPU-Zerstückelung |
+Alle AI-Inferenz läuft auf **RunPod Serverless**, verteilt auf **drei Rollen-Endpoints**
+nach Intelligenz-Bedarf statt nach Modell-Liste:
+
+| Endpoint | GPU | Aufgabe | ~$/h (Vollbetrieb) |
+|---|---|---|---|
+| `samplemonk-ai-brain` | A6000 48 GB (`AMPERE_48`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
+| `samplemonk-ai-ears` | A6000 48 GB (`AMPERE_48`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
+| `samplemonk-ai-voice` | A6000 48 GB (`AMPERE_48`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
+
+Summe ≈ **1,17 $/h** bei Vollbetrieb, **≈ 0 $ bei Idle** (Scale-to-Zero + Session-Wake).
+Damit bleibt die dokumentierte Budgetgrenze (4–5 €/h) eingehalten.
+
+**Verworfen und warum:**
+
+- **5 Einzelinstanzen** (Vorschlag vom 2026-09-10): STT (5 GB) und TTS (6 GB) allein
+  auf je 24 GB = ~70 % Leerlauf; 5 Endpoints = 5 Cold-Start-Flächen.
+- **3×/4× 24 GB für das Gehirn**: RunPod-Instanzen gibt es in 1×/2×/4×/8× — **nie 3×**.
+  36-GB-Karten existieren nicht (Stufen: 24/48/80/94–96/141/192). 4×A5000 (96 GB,
+  ~0,88 $/h) ist **teurer als 2×A6000** (96 GB, ~0,78 $/h) und hat **kein NVLink**.
+- **Tensor-Parallel über PCIe ohne NVLink**: bei Batch-Größe 1 (4 User) etwa
+  0,5–0,8× der Tokens/s, weil pro Layer zwei All-Reduces über den Host laufen.
+  TP nur, wenn ein Modell sonst nicht passt.
+- **1× H200 (141 GB, ~3,59 $/h)**: 3× Preis für keinen Mehrwert bei 4 Usern.
+- **L40S (FP8)**: der FP8-Vorteil wird durch AWQ-int4 auf der A6000 ersetzt.
 
 ---
 
-## 3. Ist-Zustand (relevant)
+## 2. Rollen-Vertrag (einzige Quelle der Wahrheit)
 
-| Komponente | Pfad | Rolle |
+**TS:** `src/core/ai/orchestrator/endpointRegistry.ts` (+ `src/config/aiInfrastructure.ts` für die Kostenregel)
+**Python:** `services/samplemonk-ai-runtime/model_manifest.json` → `roles`
+**Drift-Guard:** `tests/manifestRoles.test.ts` erzwingt Gleichheit von Rollen, Budgets und Preload-Sätzen.
+
+Die Task-Mengen sind **disjunkt** – pro Task genau eine zuständige Rolle:
+
+| Rolle | Tasks | Preload (resident) |
 |---|---|---|
-| AI-Runtime (Custom Container) | `services/samplemonk-ai-runtime/` | FastAPI, Model Manager, `/infer`, `/mcp/tools`, `/metrics` |
-| Model-Manifest | `services/samplemonk-ai-runtime/model_manifest.json` | Modell-Registry, Revision-Pinning |
-| Runtime-Config | `services/samplemonk-ai-runtime/runtime_config.yaml` | VRAM-Budget, Device, Cache |
-| HF-Endpoint-Manager | `services/samplemonk-ai-runtime/hf_manage_endpoint.py` | bisher HF create/update/delete |
-| Stem-Service | `services/stem-ai/` | Demucs FastAPI (separater Container) |
-| Master/Analyse | `services/master-player/` | Mixing/Mastering/Analyse (bleibt außerhalb RunPod) |
-| API-Gateway | `server.ts` | Express: `/api/ai/*`, `/api/voice/*`, `/api/sound/*`, `/api/song/*`, `/api/separate-stems` |
-| Provider-Router | `src/core/ai/orchestrator/providerRouter.ts` | HF-Endpoint / HF-Serverless / Replicate / Local |
-| LLM-Router | `src/core/ai/LlmRouter.ts` | DeepSeek, Cerebras, HF, Ollama usw. |
-| HF-Workflow | `.github/workflows/hf-endpoint.yml` | baut Image + deployed HF-Endpoint |
-| Storage | Supabase + Cloudflare R2 | Metadaten + Audiofiles (bleibt) |
+| brain | `llm`, `nlu` | `qwen3-14b` |
+| ears | `audio.classify`, `audio.transcribe`, `audio.embed`, `audio.analyze`, `audio.diarize`, `audio.understand`, `multimodal` | `ast-audioset`, `whisper-large-v3`, `clap-music` |
+| voiceGen | `tts`, `sing`, `song`, `audio.generate`, `stem.separate` | `qwen3-tts-06b`, `mms-tts-deu`, `demucs` |
+
+Der Worker wählt seine Rolle per **`AI_ROLE`** und lädt daraus nur die Modelle seines
+Rollen-Manifests. `AI_ROLE` leer = Legacy-Single-Endpoint (alle Modelle, z. B. der
+bestehende H200-Endpoint `uzg7p9lm890ts8`) — der Cutover ist dadurch unterbrechungsfrei.
+
+### 2.1 Gehirn
+
+- **Heute aktiv:** `qwen3-14b` (Revision gepinnt, Apache-2.0) — ansprechbar über den
+  OpenAI-kompatiblen Pfad des Brain-Workers (vLLM), Provider `runpod-local`.
+- **Ziel (im Manifest als `status: "planned"`):** `qwen3-32b` (int4, ~20 GB, 32k Kontext)
+  bzw. `qwen3-30b-a3b` (MoE, 3B aktiv, Latenz-Variante).
+- **Upgrade-Pfad:** `glm-4.5-air` (106B MoE/12B aktiv, int4 ~53 GB) auf **2×A6000
+  (96 GB, `gpuCount=2`)** — stärkster bilingualer Agent, ~0,78 $/h.
+- `gpt-oss-120b` verworfen: Harmony-Parser-Aufwand, schwächeres Deutsch, 80 GB nötig.
+- **Planung bleibt bei einem Modell:** MCP ist die Werkzeug-Schnittstelle, MOA die
+  Planungsschleife (`McpRuntime`, `MoaAgent`) — „MCP/MOA als Gehirn“ ist kein Modell,
+  sondern das Harness um das Modell.
+
+> **Warum nicht sofort 32B?** Ein Produktions-Pin braucht einen echten Commit-Hash.
+> Die 32B/GLM-Einträge sind deshalb `status: "planned"` und werden vom Runtime-Loader
+> **ausgeschlossen**, solange keine echte Revision eingetragen ist
+> (`registry.py`; `AI_INCLUDE_PLANNED=1` hebt das nur für Benchmarks auf).
 
 ---
 
-## 4. Zielarchitektur
+## 3. Betriebsmodell: Scale-to-Zero + Session-Wake
 
-```text
-audioMONASTRY Web/Frontend
-        │
-        ▼
-server.ts (Node/Express API Gateway – bleibt)
-        │
-        ├── Audio-Upload → Cloudflare R2 (Signed URL)
-        ├── /api/ai/*           → RunPod Serverless API (runsync/run)
-        ├── /api/voice/*        → RunPod Serverless API
-        ├── /api/sound/*        → RunPod Serverless API
-        ├── /api/song/*         → RunPod Serverless API
-        └── /api/separate-stems → RunPod Serverless API
-        │
-        ▼
-RunPod Serverless Endpoint (H200, Template `audio-multimodel-h200-agent`)
-        │
-        ▼
-Worker-Wrapper (`runpod.serverless.start`)
-        │
-        ▼
-samplemonk-ai-runtime (eine Worker-Runtime)
-        │
-        ├── Model Manager (LRU, VRAM-Budget, UNLOADED/CPU_CACHE/GPU_ACTIVE)
-        ├── Handler-Dispatch (Job-Input aus RunPod-Queue)
-        └── Handler:
-              TTS (XTTS-v2)
-              SFX (Stable Audio Open)
-              Music/Song (ACE-Step 1.5)
-              Stem (BS-RoFormer + Demucs)
-              ASR (Whisper large-v3)
-              Diarization (PyAnnote)
-              Audio Analysis (Essentia, CPU)
-              Audio Embedding (CLAP)
-              Audio Understanding (Qwen2-Audio-7B)
-              LLM/Orchestrator (Qwen3-14B)
-        │
-        ▼
-Cloudflare R2 (Audio) + Supabase (Metadaten/Jobs) – bleibt
-```
+1. Alle Endpoints starten mit `workers_min=0` → keine Idle-Kosten.
+2. Beim Studio-Eintritt weckt `POST /api/ai/fleet/wake` die Flotte:
+   `workersMin=1` je Endpoint (best effort, RunPod REST) **plus** ein `warmup`-Job
+   pro Rolle, der die Preload-Modelle in VRAM lädt.
+3. Da die App selbst 5–10 min zum Start braucht, ist der Kaltstart versteckt.
+4. `POST /api/ai/fleet/sleep` bzw. das Idle-Timeout des `SessionManager`
+   (`onScaleToZero`) setzt `workersMin` zurück auf 0.
+5. `GET /api/ai/fleet/status` liefert den Rollen-Status **ohne** Netzwerkaufruf.
 
-**Wichtig:**
-- Keine 6 Container mit eigenem CUDA-Zugriff. Eine Runtime, ein Model Manager, eine GPU.
-- **RunPod Serverless = Worker-Modell:** Die App spricht nicht direkt HTTP `/infer` an, sondern submitted Jobs an die RunPod-API (`runsync`/`run`).
-- Große Audiodateien liegen vorher in **R2**; der Worker bekommt URLs, lädt sie herunter und schreibt Ergebnisse zurück nach R2.
-- Der bisherige FastAPI-`/infer`-Pfad kann für Pod-/Lokal-Tests erhalten bleiben, ist aber nicht der Serverless-Produktivpfad.
+Relevante Env: `AI_FLEET_WAKE=0` / `AI_FLEET_SLEEP=0` deaktivieren die Mechanik
+vollständig (kein Netzwerkverkehr), `RUNPOD_WARMUP_TIMEOUT_MS` deckelt den Warmup.
 
 ---
 
-## 5. Finale Modell-/Service-Liste
+## 4. Abdeckung aller AI-Funktionen
 
-| Task | Modell | Quelle | Bisher vorhanden? | Neu? |
-|---|---|---|---|---|
-| TTS | XTTS-v2 | Coqui | MMS-TTS/Qwen3-TTS | ✅ neu |
-| TTS expressiv (optional) | Fish Speech 1.5 | Fish Audio | – | optional, Lizenz prüfen |
-| Singing | bestmögliche EN/DE-Qualität (ACE-Step 1.5 / Bark / Fish Speech) | div. | Bark vorhanden | Benchmark vor Fixierung |
-| Sound FX | Stable Audio Open 1.0 | Stability AI | bereits im Manifest | Handler prüfen |
-| Song/Music | ACE-Step 1.5 (Turbo + XL/SFT) | ACE-Step | MusicGen + ACE-Step-Client | ✅ neu als Runtime-Handler |
-| Stem (Vocal) | BS-RoFormer | diverse HF-Checkpoints | – | ✅ neu |
-| Stem (4-Stem) | Demucs v4 / htdemucs | Meta | `services/stem-ai` vorhanden | in Runtime integrieren |
-| ASR | Whisper large-v3 | OpenAI | bereits im Manifest | in RunPod übernehmen |
-| Diarization | PyAnnote 3.1 | pyannote | bereits im Manifest | in RunPod übernehmen |
-| Audio Analyse (deterministisch) | Essentia + librosa + NumPy | Essentia | master-player Teil-Analyse | ✅ neu als Analyse-Handler (CPU) |
-| Audio Semantic/Embedding | CLAP | LAION | bereits im Manifest | in RunPod übernehmen |
-| Audio Understanding | Qwen2-Audio-7B-Instruct | Alibaba | Qwen2.5-Omni vorhanden | ✅ neu / ersetzen |
-| Orchestrator/Chat/LLM | Qwen3-14B | Alibaba | externe LLM-Provider | ✅ neu auf RunPod |
-| Text-Embedding/Retrieval | MiniLM / local | transformers.js | lokal vorhanden | bleibt lokal im Browser/Server |
-| NLU / Voice Control | Qwen3-14B | Alibaba | Cerebras/DeepSeek | auf Qwen3-RunPod umstellen |
-
-**Zusätzlich zu deiner Liste ergänzt:**
-1. Whisper / ASR
-2. PyAnnote / Diarization
-3. Singing-Voice-Entscheidung
-4. Essentia als deterministischer Analyse-Service
-5. Text-Embedding/Retrieval (lokal)
-6. CLAP als Semantic-Embedding
-7. Qwen2-Audio statt/neben Qwen-Omni
-8. Job-/WebSocket-Schnittstelle
-9. Monitoring/Health/Metrics
-
----
-
-## 6. Modell-Manifest-Erweiterung
-
-`services/samplemonk-ai-runtime/model_manifest.json` um neue Einträge erweitern. Beispiel-Struktur (Planungswerte):
-
-```json
-{
-  "id": "xtts-v2",
-  "repository": "coqui/XTTS-v2",
-  "revision": "<commit-hash>",
-  "task": "tts",
-  "framework": "custom",
-  "estimatedVRAM": 6000,
-  "loadClass": "FREQUENT",
-  "preload": false,
-  "concurrency": 1,
-  "license": "coqui-public-model-license"
-}
-```
-
-Weitere geplante Einträge:
-
-| id | task | approx VRAM |
+| Fähigkeit | Deckung | Ort |
 |---|---|---|
-| `acestep-v15-turbo` | song | 20–24 GB |
-| `bs-roformer` | stem.separate | 8–12 GB |
-| `demucs` / `htdemucs` | stem.separate | 4–8 GB |
-| `qwen2-audio-7b` | audio.understand | 14–20 GB |
-| `qwen3-14b` | llm / nlu | 10–16 GB (quantisiert) |
-| `stable-audio-open-1.0` | audio.generate | 10–16 GB |
-| `whisper-large-v3` | audio.transcribe | 5–8 GB |
-| `pyannote-diarization` | audio.diarize | 6–8 GB |
-| `clap-music` | audio.embed | 4–6 GB |
-| `essentia` | audio.analyze | CPU |
+| Stem-Separation | BS-RoFormer (Qualität) + Demucs (6-Stem/Fallback) | voiceGen |
+| Liederstellung | ACE-Step 1.5 XL Turbo (~24 GB) | voiceGen |
+| Voice DE/EN | **Benchmark-Gate** (Fish Speech / XTTS-v2 / Qwen3-TTS) | voiceGen |
+| Gesang | ACE-Step Vocals + RVC (gleiche Stimme über Speech+Song) | voiceGen |
+| Ton-/Sounderstellung | Stable Audio Open, MusicGen small/medium | voiceGen |
+| Audio-Erkennung | Whisper-v3, AST (Typ/Instrument), CLAP+MERT (Genre/Energy/Danceability), PyAnnote, Essentia (BPM/Key/LUFS/TruePeak/Transient) | ears |
+| Audio-QA / „beschreibe das" | Qwen2-Audio-7B, on-demand per LRU | ears |
+| LLM versteht App & steuert sie | lokales Brain + bestehende MCP-Tools | brain |
+| dropMONK | DSP + Encoder-Features → `DropAudioAnalyzer` → aiMONK-Reasoning → `sample.search` | ears + brain + pgvector |
+| Übergänge | deterministisch (`DropEngine`, `DJTransitionPanel`) — **kein** GPU-Modell | Client |
+| Vorhersagen/Vorschläge | CLAP/MERT-Embeddings + pgvector-Ähnlichkeit | ears + Supabase |
+| Spatial per Text | HRTF/WASM-DSP; Brain emittiert nur den Tool-Call | Client |
+| MIDI-Routing | MIDI-Runtime/Mapping — deterministisch | Client |
+| Audio-Enhancer / Angleich | FFmpeg/`master-player` DSP (Hetzner) | nicht GPU |
+| Fallback | Client-deterministisch (`htdemucs-ONNX`, `LocalEmbeddingProvider`) + Ollama (ai-1) | Browser/Hetzner |
 
-**Regel:** VRAM-Werte sind Budgets, keine Garantien. Vor dem produktiven Aktivieren je Modell benchmarken und Manifest korrigieren.
+**Konsequenz:** Die Lücken liegen **nicht** in der GPU, sondern in (a) der
+Bibliotheks-Indexierung und (b) dem mehrstufigen Agent-Loop (§6).
 
 ---
 
-## 7. Handler-/Task-Mapping
+## 5. dropMONK-Pipeline
 
-Task im Orchestrator → Runtime-Handler:
+```
+DROP my_808_loop.wav
+   │
+   ├─ essentia/librosa (CPU, deterministisch)  → BPM, Key, LUFS, True Peak, Transient
+   ├─ AST (ears)                               → Typ, Instrument, Vocal-Anteil
+   └─ CLAP/MERT (ears)                         → Genre-Affinität, Energy, Danceability
+   │
+   ▼  DropAudioAnalyzer (src/core/drop/DropAudioAnalyzer.ts)
+DropAudioFeatures  →  deriveDropSuggestions()  →  place / time-stretch / similar-samples
+   │
+   ▼  aiMONK (brain) formuliert + ruft MCP-Tools
+```
 
-| Orchestrator-Task | Runtime-Handler | Modell |
+Fehlende Embedding-Werte werden **nicht erfunden**: `estimated.{energy,danceability,
+genreAffinity}` markiert Schätzungen aus DSP-Werten, und die Empfehlung sagt das dem User.
+
+### 5.1 Retrieval-Voraussetzung
+
+Migration `database/ai_migration_007.sql` legt einen **eigenen Audio-Vektorraum** an:
+
+- `public.sample_embeddings` bleibt der **Text**-Raum (`vector(256)`,
+  `EMBEDDING_DIMS = 256` in `textEmbedding.ts`) — unverändert.
+- Neu: `public.sample_audio_embeddings` (`vector(512)` = CLAP `larger_clap_music`,
+  Spalten `model`/`dims`) + RPC `match_audio_samples()` + `sample_audio_embedding_stats()`.
+  Grund: pgvector erlaubt pro Spalte nur **eine** Dimension – Text- und Audio-Vektoren
+  können sich keine Spalte teilen, und CLAP hat 512 Dimensionen.
+
+⚠️ **Offen:** Es existiert noch **kein Schreiber** für Audio-Embeddings. Ohne einen
+Batch-Indexer über `audio.embed` (R2-Library, einmalig + bei Upload) bleibt
+„ich habe drei passende Samples gefunden" leer. `sample_audio_embedding_stats()` macht
+den Indexierungsgrad abfragbar.
+
+---
+
+## 6. Offene Arbeitspakete
+
+| # | Paket | Status |
 |---|---|---|
-| `llm` / `nlu` | `llm_chat` | Qwen3-14B |
-| `tts` | `xtts` | XTTS-v2 |
-| `sing` | `sing` | Bark oder ACE-Step (Entscheidung offen) |
-| `song` | `acestep` | ACE-Step 1.5 |
-| `audio.generate` | `stable_audio` | Stable Audio Open |
-| `audio.transcribe` | `transcribe` | Whisper large-v3 |
-| `audio.diarize` | `diarize` | PyAnnote |
-| `audio.analyze` | `essentia_analyze` | Essentia (CPU) |
-| `audio.embed` | `clap_embed` | CLAP |
-| `audio.understand` | `qwen_audio_understand` | Qwen2-Audio-7B |
-| `audio.classify` | `classify` | AST (optional) |
-| `stem.separate` | `stem_separate` | BS-RoFormer / Demucs (Router) |
-| `multimodal` | optional Qwen2-Audio/Qwen-Omni | Entscheidung offen |
+| 1 | Echte Revisions-Pins für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` | offen (Manifest `status: "planned"`) |
+| 2 | **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → fixiert das Voice-Modell | offen |
+| 3 | **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN; bei Durchfall → GLM-4.5-Air-Upgrade (2×A6000) | offen |
+| 4 | **Batch-Indexer** für `sample_audio_embeddings` | offen |
+| 5 | **aiMONK-Agent-Loop**: mehrstufig planen → ausführen → prüfen → korrigieren, Kontext-Assembly (16 Plugin-IDs, `routing.json`, Session-/Projektzustand, Locks/RBAC), Bestätigungspflicht ab `WRITE` | offen |
+| 6 | Voice-Handler für `fish-speech`/`rvc`, BS-RoFormer-GPU-Verifikation | offen |
+| 7 | `PATCH /endpoints/{id}` (RunPod REST) gegen die echte API-Shape verifizieren | offen |
 
 ---
 
-## 8. Runtime-Erweiterung `samplemonk-ai-runtime`
+## 7. Risiken
 
-### 8.1 Vorhandene Basis nutzen
-- `app.py` – FastAPI-Routen
-- `model_manager.py` – Laden/Entladen/VRAM
-- `handlers.py` – Inferenz-Handler
-- `registry.py` / `model_manifest.json` – Registry
-- `mcp_runtime.py` – MCP-Tools
-
-### 8.2 Ergänzungen
-1. Neue Handler in `handlers.py`:
-   - `xtts`, `acestep`, `bs_roformer`, `demucs`, `qwen_audio`, `qwen3_llm`, `essentia`
-2. Modell-Loader mit CPU-Cache/GPU-Cache-Stufen:
-   - `UNLOADED`
-   - `CPU_CACHE`
-   - `GPU_ACTIVE`
-3. LRU-Eviction im `model_manager.py`:
-   - VRAM-Budget konfigurierbar (`runtime_config.yaml`)
-   - Safety Margin 15–20 %
-   - bei Bedarf ältestes/geringstpriores Modell entladen
-4. Stem-Router:
-   - Vocals/Instrumental → BS-RoFormer
-   - 4-Stem → Demucs/htdemucs
-5. LLM-Endpoint:
-   - OpenAI-kompatibel (`/v1/chat/completions`) für Qwen3-14B via vLLM/TGI oder direkt im Handler
-6. Essentia:
-   - CPU-Handler oder separater interner Worker im selben Container/System
-7. Job-/WebSocket-Endpunkte:
-   - `POST /jobs`, `GET /jobs/{id}`, `WS /ws/jobs/{id}`
-   - optional Redis-Queue
-
----
-
-## 9. API-Gateway-Anbindung (`server.ts`)
-
-### 9.1 Neue RunPod-Config
-```env
-RUNPOD_ENDPOINT_ID=xxxxxxxxxxxxxxxx
-RUNPOD_API_KEY=rp_...   # entspricht RP_API_KEY
-RUNPOD_AI_TASK_TIMEOUT_MS=600000
-R2_BUCKET=...           # bestehende R2-Anbindung für Audio-Upload/Download
-```
-
-### 9.2 Änderungen (Serverless-Job-Modell)
-- Große Audiodateien vor dem Job in R2 ablegen und Signed-URLs übergeben.
-- Neuer Client `RunPodServerlessClient`:
-  - `POST https://api.runpod.io/v1/{endpoint_id}/runsync` oder `/run`
-  - Auth: `Authorization: Bearer {RUNPOD_API_KEY}`
-  - Job-Input: `{ task, model, input: { audioUrl?, prompt?, ... } }`
-  - Output enthält Ergebnis-URL(s) in R2 oder direkt JSON/Base64 für kleine Ergebnisse
-- `/api/separate-stems`:
-  - Replicate-Branch entfernen
-  - stem-ai-Fallback entfernen (kein Fallback)
-  - Upload → R2 → `task: stem.separate` an RunPod → Ergebnis-URLs zurückgeben
-- `/api/voice/*`, `/api/sound/*`, `/api/song/*`:
-  - Upload/Prompt → RunPod-Job → WAV aus R2 laden und an UI ausliefern
-- `/api/ai/orchestrate` → ProviderRouter nutzt `RunPodProvider`
-
-### 9.3 `providerRouter.ts`
-- `HfEndpointProvider` entfernen oder durch `RunPodProvider` ersetzen
-- `HfServerlessProvider` entfernen (LLM/Voice laufen über RunPod)
-- `ReplicateProvider` entfernen
-- Neue Provider-ID: `runpod`
-- `RunPodProvider` nutzt `RunPodServerlessClient` und mapped alle Tasks
-
-### 9.4 `LlmRouter.ts`
-- Neuer Provider: `runpod` über `RunPodServerlessClient` (`task: llm`) oder separaten OpenAI-kompatiblen Worker-Endpoint
-- Modell: `qwen3-14b` (Basis), ggf. `qwen3-30b-a3b` nach Benchmark
-- HF/Qwen-Coder-Provider entfernen/deaktivieren
-- DeepSeek/Cerebras/Ollama optional behalten (Entscheidung: Qwen3-RunPod primär)
-
----
-
-## 10. Replicate + HF-Endpoint entfernen
-
-### Replicate
-- `ReplicateProvider` in `providerRouter.ts` löschen
-- `/api/separate-stems`-Replicate-Branch löschen
-- `scripts/replicate-smoke.ts` löschen
-- `mcpRuntime.ts`: `stem.separate`-Beschreibung anpassen
-- Env/Templates: `REPLICATE_API_TOKEN`, `REPLICATE_STEM_MODEL`, `VOICE_PROVIDER=replicate`, `REPLICATE_TTS_MODEL` usw. entfernen
-- Doku/README-Referenzen entfernen
-
-### HF-Inference
-- `hf_manage_endpoint.py` nicht mehr im CI verwenden
-- `.github/workflows/hf-endpoint.yml` durch RunPod-Workflow ersetzen
-- `HF_ENDPOINT_URL`, `HF_PILOT_ENDPOINT_URL`, `HF_CLAP_ENDPOINT_URL` aus Env/Templates entfernen
-- `HF_API_KEY`/`HF_TOKEN` nur behalten, wenn Modelle weiterhin von HF Hub geladen werden
-
----
-
-## 11. Env & Secrets
-
-Geplante neue Variablen:
-
-| Variable | Zweck |
-|---|---|
-| `RUNPOD_ENDPOINT_ID` | Serverless-Endpoint-ID (wird beim ersten Deploy erzeugt) |
-| `RUNPOD_API_KEY` | RunPod API Key = `RP_API_KEY` |
-| `RUNPOD_AI_TASK_TIMEOUT_MS` | Timeout |
-| `RUNPOD_MODEL_CACHE_VOLUME` | Network-Volume-Pfad für HF_HOME/Modelle |
-| `RP_API_KEY` | RunPod Personal Access Token (CI/Deployment) |
-| `RPS3_ACCESS_KEY` / `RPS3_SECRET_KEY` | RunPod S3-kompatible Storage-Zugänge (optional) |
-| `R2_BUCKET` + bestehende `CFR2_*` | Audio-Upload/Download für Worker-Jobs |
-
-GitHub Secrets für Actions:
-- `RP_API_KEY`
-- `RUNPOD_ENDPOINT_ID` (nach erstem Deploy)
-- `HF_TOKEN` (nur falls Modelle von HF Hub geladen werden)
-
----
-
-## 12. RunPod Deployment
-
-### 12.1 Zielbild
-- GitHub Actions baut **Worker-Image** (inkl. `runpod_worker.py` + Runtime)
-- Push nach GHCR
-- RunPod **Serverless Endpoint** wird per API erstellt/aktualisiert:
-  - GPU: H200
-  - Template/Container: `audio-multimodel-h200-agent` (`c0xdrua0mz`) als Basis
-  - Worker-Image austauschen
-- Network Volume für `/data/hf-cache` und `/data/models`
-- Worker-Health: RunPod-eigener Worker-Start + Modell-`/ready`-Zustand intern
-
-### 12.2 Workflow-Ersatz
-`.github/workflows/hf-endpoint.yml` → `.github/workflows/runpod-deploy.yml`
-
-Schritte:
-1. Checkout
-2. Docker Login GHCR
-3. Build & Push `samplemonk-ai-runtime` (mit `runpod_worker.py`)
-4. RunPod-Serverless-Endpoint per API erzeugen/aktualisieren:
-   - Name: `samplemonk-ai-runpod` (Vorschlag)
-   - GPU: H200
-   - Image: GHCR-Image
-   - Template-ID: `c0xdrua0mz`
-5. Endpoint-Status abfragen (`RUNPOD_ENDPOINT_ID`)
-6. Smoke-Job `runsync` senden
-
-### 12.3 Schnellstart/Kosten
-- **Serverless Endpoint:** Scale-to-Zero → keine Kosten bei Inaktivität
-- Kaltstart minimieren: Network Volume + ggf. warme Worker/FlashBoot
-- H200 ist großzügig für Multi-Modell-Betrieb; Kosten/Verfügbarkeit vor Produktions-Deploy prüfen
-
----
-
-## 13. Storage & Queue
-
-- **Audio-Dateien:** Cloudflare R2 (`original/`, `generated/`, `stems/`, `previews/`, `cache/`)
-- **Metadaten/Jobs/Scores:** Supabase
-- **Job-Queue:** vorhandene In-Memory-Jobs erweitern; optional Redis nur dann, wenn mehrere RunPod-Worker/Replicas nötig sind
-- **WebSocket:** vorhandenes Socket.io-Gateway kann Job-Status an UI liefern; RunPod-intern optional eigener WS/Redis
-
----
-
-## 14. Test-/Cutover-Plan
-
-1. `npm run verify` grün
-2. Python-Runtime lokal mit `AI_RUNTIME_DEVICE=simulated` importieren inkl. `runpod_worker.py`
-3. RunPod Serverless Endpoint erstellen, Worker-Start prüfen, `runsync`-Smoke-Job senden
-4. Je Task Smoke-Test:
-   - TTS (XTTS)
-   - Song (ACE-Step Turbo)
-   - Sound FX (Stable Audio)
-   - Stem (Demucs + BS-RoFormer)
-   - ASR (Whisper)
-   - Embedding (CLAP)
-   - Audio Understanding (Qwen2-Audio)
-   - LLM/Chat (Qwen3)
-5. API-Gateway auf RunPod-URL umstellen
-6. E2E-Tests gegen RunPod
-7. Replicate-Code entfernen
-8. HF-Endpoint pausiert lassen → erst nach erfolgreichem Betrieb löschen
-
----
-
-## 15. HF-Lösch-Checkliste
-
-Erst nach erfolgreichem RunPod-Cutover:
-
-```bash
-# Endpoint löschen (mit .env-HF_TOKEN möglich)
-python services/samplemonk-ai-runtime/hf_manage_endpoint.py delete  # ggf. erweitern
-
-# oder manuell:
-# HF-Console → Inference Endpoints → samplemonk-ai → Delete
-```
-
-Danach:
-- [ ] Endpoint `samplemonk-ai` löschen
-- [ ] Model-Repo `AnunnakiTools/samplemonk-ai-runtime` löschen
-- [ ] Space `AnunnakiTools/spatialMONK` löschen
-- [ ] GitHub Secrets/Workflows `hf-endpoint.yml` entfernen
-- [ ] `.env`/Templates von HF-Endpoint-Variablen bereinigen
-- [ ] `HF_TOKEN` nur behalten, falls Modell-Downloads von HF Hub weiter nötig
-
----
-
-## 16. Offene Entscheidungen
-
-1. **Singing-Modell:** Benchmark EN/DE zwischen ACE-Step 1.5, Bark und Fish Speech – danach fixieren
-2. **LLM-Endmodell:** Qwen3-14B vs. Qwen3-30B-A3B auf H200 benchmarken
-3. **XTTS/Stable-Audio-Lizenzen** für späteren kommerziellen Betrieb prüfen
-4. **BS-RoFormer-Checkpoint/Lizenz** konkret festlegen
-5. Redis-Queue nur bei Bedarf oder sofort?
-6. **DeepSeek/Cerebras/Ollama** bleiben optional im LLM-Router oder werden entfernt (Qwen3-RunPod primär)
-
----
-
-## 17. Risiken
-
-- Mehrere große Modelle auf einer H200 → LRU/VRAM-Management weiterhin kritisch (aber mehr Luft als 48 GB)
-- ACE-Step braucht je nach Qualität 20–24 GB; nicht parallel zu Qwen2-Audio erzwingen
-- Lizenzrisiken (XTTS, Stable Audio, BS-RoFormer, Fish Speech)
-- HF Hub als Downloadquelle bleibt Abhängigkeit, solange Gewichte nicht im Volume/Image liegen
-- RunPod Serverless-Preise/Verfügbarkeit schwanken; H200-Kosten vor Produktions-Deploy prüfen
-
----
-
-## 18. Nächste Schritte
-
-1. Diese Spezifikation reviewen/ergänzen
-2. Offene Entscheidungen fixieren
-3. RunPod-Zugangsdaten/Template/Endpoint konkretisieren
-4. Danach Umsetzung in Phasen (Runtime → Gateway → Deployment → HF-Löschung)
+- **Preise/Verfügbarkeit** von A6000-Serverless schwanken; Angaben sind Größenordnungen
+  und vor Produktivbetrieb live zu prüfen.
+- **Session-Wake** hängt an `RUNPOD_API_KEY`; ohne Key bleibt nur der Warmup-Job-Weg
+  (kein `workersMin`-Bump) — das ist funktional, aber ohne Warmhalte-Garantie.
+- **„Alle Modelle gleichzeitig resident"** (alte Regel aus `HF_MODEL_CAPABILITY_MATRIX.md` §5)
+  gilt nicht mehr: pro Rolle entscheidet das `preload`-Flag; der Rest lädt per LRU.
+- **Lizenzen**: MusicGen/MERT/Bark/MMS-TTS sind NC-Gewichte → nur privat/Forschung.
+- **Cold-Start** bleibt real, wenn der Wake unterbleibt oder der Endpoint lange idle war.

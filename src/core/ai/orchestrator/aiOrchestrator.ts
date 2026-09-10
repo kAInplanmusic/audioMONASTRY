@@ -9,6 +9,7 @@
  */
 import { aiLogger } from './aiLogger';
 import { CostTracker } from './costTracker';
+import { fleetStatus, sleepFleet, wakeFleet } from './fleetWake';
 import { JobManager } from './jobManager';
 import { McpRuntime, createDefaultMcpRuntime } from './mcpRuntime';
 import { ModelManager, type EndpointClient } from './modelManager';
@@ -50,7 +51,13 @@ export class AiOrchestrator {
 
   constructor(options: AiOrchestratorOptions = {}) {
     this.jobs = new JobManager({ maxConcurrency: options.jobMaxConcurrency });
-    this.sessions = new SessionManager(undefined, { idleTimeoutMs: options.sessionIdleTimeoutMs });
+    this.sessions = new SessionManager(undefined, {
+      idleTimeoutMs: options.sessionIdleTimeoutMs,
+      // Idle-Timeout → Flotte schlafen legen (workersMin=0, keine Idle-GPU-Kosten).
+      onScaleToZero: async () => {
+        await sleepFleet();
+      },
+    });
     this.models = new ModelManager(options.endpointClient ?? noopEndpointClient());
     this.costs = new CostTracker();
     this.providers = new ProviderRouter();
@@ -61,6 +68,8 @@ export class AiOrchestrator {
       getRuntimeStatus: () => ({ models: this.models.getStatus(), memory: this.models.getMemoryUsage(), cost: this.costs.summary() }),
       loadModel: (modelId) => this.models.load(modelId),
       unloadModel: (modelId) => this.models.unload(modelId),
+      getFleetStatus: () => fleetStatus(),
+      wakeFleet: () => wakeFleet(),
     });
   }
 
@@ -133,6 +142,7 @@ export class AiOrchestrator {
       memory: this.models.getMemoryUsage(),
       jobs: this.jobs.list().length,
       cost: this.costs.summary(),
+      fleet: fleetStatus(),
     };
   }
 }

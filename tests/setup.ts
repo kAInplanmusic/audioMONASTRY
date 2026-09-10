@@ -20,6 +20,11 @@ for (const key of [
   'HF_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY', 'OLLAMA_URL', 'OLLAMA_MODEL',
   'GEMINI_API_KEY', 'OPENAI_API_KEY', 'CB_API_KEY', 'OR_API_KEY', 'OPENROUTER_MODEL',
   'PUBLICAI_KEY', 'PUBLICAI_BASE_URL', 'PUBLICAI_MODEL', 'AI_EMERGENCY_PROVIDERS',
+  // GPU-Flotte: RunPod-IDs/Keys aus der Host-Umgebung dürfen die Verfügbarkeit
+  // der Rollen-Provider nicht beeinflussen (server.ts lädt sonst die echte .env).
+  'RUNPOD_API_KEY', 'RP_API_KEY', 'RUNPOD_API_BASE', 'RUNPOD_BRAIN_OPENAI_URL',
+  'RUNPOD_ENDPOINT_ID', 'RUNPOD_ENDPOINT_ID_BRAIN', 'RUNPOD_ENDPOINT_ID_EARS',
+  'RUNPOD_ENDPOINT_ID_VOICE', 'RUNPOD_BRAIN_MODEL', 'AI_ALLOW_EXTERNAL_LLM',
 ]) {
   delete process.env[key];
 }
