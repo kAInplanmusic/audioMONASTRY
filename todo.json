@@ -173,7 +173,8 @@
       ],
       "remainingRisks": [
         "Playwright-E2E wurde NICHT ausgefuehrt (headless, kein Bildschirm/Audiogeraet) -> GATE-AUDIO-CONTENT unerreichbar",
-        "build/security/boundary/bundle zum Auditzeitpunkt noch laufend, nicht abgeschlossen"
+        "build/security/boundary/bundle zum Auditzeitpunkt noch laufend, nicht abgeschlossen",
+        "build/security/boundary/bundle sind nach der Aenderung NICHT abgeschlossen -> GATE-REGRESSION bleibt PARTIAL"
       ],
       "testResults": {
         "tsc": "PASS (exit 0)",
@@ -614,6 +615,9 @@
       ],
       "commands": [
         "npx vitest run tests/workflowYaml.test.ts"
+      ],
+      "remainingRisks": [
+        "Der CI-Build des Brain-Images scheitert weiterhin; Ursache ohne lesbare Logs unbekannt (Plattenplatz ist widerlegt)"
       ]
     },
     {
@@ -689,17 +693,18 @@
       "vitest_audioEngine": "PASS (17 Tests, inkl. neuem AUDIT-AUDIO-006-Regressionstest)"
     },
     "pending": [
-      "npm run build",
-      "npm run security",
-      "npm run verify:boundary",
-      "npm run check:bundle"
+      "npm run build - im Auditlauf NICHT abgeschlossen (nach >10 min abgebrochen; Ursache nicht untersucht)",
+      "npm run security - im Auditlauf nicht ausgefuehrt",
+      "npm run verify:boundary - im Auditlauf nicht ausgefuehrt",
+      "npm run check:bundle - im Auditlauf nicht ausgefuehrt"
     ],
     "notExecuted": [
       "Playwright E2E (headless, kein Bildschirm/Audiogeraet)",
       "4-User-Kollaboration",
       "SFU/TURN",
       "Hardware"
-    ]
+    ],
+    "reference": "Ein vollstaendiges `npm run verify` (typecheck + lint + vitest + security + deep-audit inkl. bundle) lief frueher in derselben Session gruen - jedoch VOR der audioEngine-Aenderung. Nach der Aenderung sind tsc, eslint und vitest erneut gruen; build/security/boundary/bundle sind nach der Aenderung NICHT nachgewiesen."
   },
   "finalReleaseCriteria": [
     "Echtes Song-Playback besteht in headed Chromium",
@@ -726,5 +731,13 @@
       "Build & Push (brain – Gewichte eingebacken)": "failure"
     },
     "conclusion": "Plattenplatz ist NICHT die Ursache des fehlgeschlagenen Back-Builds."
-  }
+  },
+  "knownUnverifiedAfterChange": [
+    "npm run build",
+    "npm run security",
+    "npm run verify:boundary",
+    "npm run check:bundle",
+    "Playwright-E2E",
+    "Browser-Audio-Capture"
+  ]
 }
