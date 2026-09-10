@@ -87,10 +87,30 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
     const provider = new RunPodProvider('brain');
     expect(provider.available).toBe(true);
 
-    const output = await provider.run('llm', 'qwen3-32b', { prompt: 'hi' });
+    // `nlu` ist ein kurzer Brain-Task (llm läuft wegen Kaltstart über run+poll).
+    const output = await provider.run('nlu', 'qwen3-14b', { prompt: 'hi' });
     expect(output).toEqual({ text: 'hallo' });
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toBe('https://api.runpod.ai/v2/brain-ep/runsync');
+  });
+
+  it('nutzt run + Status-Polling auch für llm (Kaltstart-Ladezeit)', async () => {
+    process.env.RUNPOD_API_KEY = 'rp_test';
+    process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
+    mockFetch((url) =>
+      url.endsWith('/run')
+        ? jsonResponse({ id: 'job-9', status: 'IN_QUEUE' })
+        : jsonResponse({ id: 'job-9', status: 'COMPLETED', output: { result: { text: 'ok' } } }),
+    );
+
+    const provider = new RunPodProvider('brain');
+    const output = await provider.run('llm', 'qwen3-14b', { prompt: 'hi' });
+
+    expect(output).toEqual({ result: { text: 'ok' } });
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://api.runpod.ai/v2/brain-ep/run',
+      'https://api.runpod.ai/v2/brain-ep/status/job-9',
+    ]);
   });
 
   it('nutzt run + Status-Polling für lange Tasks', async () => {
@@ -120,7 +140,7 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
     );
 
     const provider = new RunPodProvider('brain');
-    await expect(provider.run('llm', 'qwen3-32b', {})).rejects.toMatchObject({
+    await expect(provider.run('nlu', 'qwen3-14b', {})).rejects.toMatchObject({
       code: 'MODEL_UNAVAILABLE',
       retryable: false,
     });

@@ -76,11 +76,11 @@ describe('GPU-Rollen-Registry', () => {
     expect(GPU_ROLES.voiceGen.vramBudgetGb).toBe(48);
   });
 
-  it('markiert nur die langen Jobs als langlaufend', () => {
+  it('markiert die langlaufenden Jobs (llm wegen Kaltstart-Ladezeit)', () => {
     expect([...LONG_RUNNING_TASKS].sort()).toEqual(
-      ['audio.generate', 'sing', 'song', 'stem.separate'].sort(),
+      ['audio.generate', 'llm', 'sing', 'song', 'stem.separate'].sort(),
     );
-    expect(LONG_RUNNING_TASKS.has('llm')).toBe(false);
+    expect(LONG_RUNNING_TASKS.has('llm')).toBe(true);
     expect(LONG_RUNNING_TASKS.has('audio.transcribe')).toBe(false);
   });
 

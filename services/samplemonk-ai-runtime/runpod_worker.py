@@ -76,6 +76,22 @@ def log_event(level: str, msg: str, **fields: Any) -> None:
     print(json.dumps(record, ensure_ascii=False), flush=True)
 
 
+def _debug_detail() -> bool:
+    return os.environ.get("AI_RUNTIME_DEBUG", "").strip().lower() in ("1", "true", "yes")
+
+
+def _with_detail(payload: Dict[str, Any], exc: BaseException) -> Dict[str, Any]:
+    """Hängt die echte Fehlermeldung an – nur im Debug-Modus.
+
+    Ohne Zugriff auf die Serverless-Container-Logs ist das der einzige Weg, einen
+    Handler-Fehler zu diagnostizieren. Default ist AUS, damit keine internen
+    Details (Pfade, Tokens, Stacktraces) nach außen gelangen.
+    """
+    if _debug_detail():
+        payload["detail"] = f"{type(exc).__name__}: {exc}"[:400]
+    return payload
+
+
 def _role() -> str:
     """Flotten-Rolle dieses Workers ('' = Legacy-Single-Endpoint-Betrieb)."""
     role = os.environ.get("AI_ROLE", "").strip()
@@ -190,10 +206,16 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         }
     except ModelUnavailableError as exc:
         log_event("WARN", f"model unavailable: {exc}", task=task, model=model, error=str(exc))
-        return {"status": "error", "code": "MODEL_UNAVAILABLE", "model": model, "message": "model unavailable"}
+        return _with_detail(
+            {"status": "error", "code": "MODEL_UNAVAILABLE", "model": model, "message": "model unavailable"},
+            exc,
+        )
     except Exception as exc:  # noqa: BLE001 – generischer Fehler, keine Details nach außen
         log_event("ERROR", "inference failed", task=task, model=model, error=type(exc).__name__)
-        return {"status": "error", "code": "INFERENCE_FAILED", "model": model, "message": "inference failed"}
+        return _with_detail(
+            {"status": "error", "code": "INFERENCE_FAILED", "model": model, "message": "inference failed"},
+            exc,
+        )
 
 
 def main() -> None:

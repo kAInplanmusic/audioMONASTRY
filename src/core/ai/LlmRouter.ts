@@ -19,7 +19,12 @@
  *
  * Hinweis: `deepseek-chat`/`deepseek-reasoner` sind seit 2026-07-24 deprecated;
  * wir nutzen `deepseek-v4-flash`/`deepseek-v4-pro` mit `reasoning_effort`.
+ *
+ * Priorität seit „AI nur lokal“ (2026-09-10): `runpod-local` (Brain der
+ * GPU-Flotte) → `ollama` → externe Provider (nur mit `AI_ALLOW_EXTERNAL_LLM=true`).
+ * Details: docs/RUNPOD_AI_V1_SPEC.md.
  */
+import { RunPodProvider } from './orchestrator/runpodProvider';
 
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
@@ -263,47 +268,78 @@ class OpenAIProvider implements ILlmProvider {
 /**
  * Lokales Brain der GPU-Flotte (Rolle `brain`).
  *
- * Der RunPod-Serverless-Worker der Rolle `brain` betreibt vLLM und stellt damit
- * einen OpenAI-kompatiblen Endpoint bereit. Seit dem Umstieg auf „AI nur lokal“
- * ist das der PRIMÄRE LLM-Provider – externe APIs sind per Default aus
- * (`AI_ALLOW_EXTERNAL_LLM=true` schaltet sie wieder zu).
+ * Zwei Betriebsarten:
+ *
+ * 1. **Nativ (Default):** Der Aufruf geht über `RunPodProvider('brain')` an den
+ *    Rollen-Endpoint – `POST /run` + Status-Polling mit `task: "llm"`. Der Worker
+ *    führt darin den `qwen3_llm`-Handler (transformers) aus. Das ist der Pfad,
+ *    den unsere Serverless-Worker tatsächlich bedienen.
+ * 2. **OpenAI-kompatibel (optional):** Ist `RUNPOD_BRAIN_OPENAI_URL` gesetzt,
+ *    wird stattdessen `<url>/chat/completions` aufgerufen. Das ist schneller,
+ *    braucht aber ein Image mit `AI_INSTALL_VLLM=1` (vLLM im Worker).
+ *
+ * Grund für den Default: RunPod stellt `/openai/v1` **nicht** für beliebige
+ * custom Serverless-Worker bereit – nur für vLLM-Integrationen. Der native Weg
+ * funktioniert mit dem vorhandenen Image.
+ *
+ * Seit dem Umstieg auf „AI nur lokal“ ist das der PRIMÄRE LLM-Provider – externe
+ * APIs sind per Default aus (`AI_ALLOW_EXTERNAL_LLM=true` schaltet sie zu).
  */
 class RunPodLocalProvider implements ILlmProvider {
   readonly id = 'runpod-local' as const;
+  private readonly brain = new RunPodProvider('brain');
 
   get available(): boolean {
-    return Boolean(this.baseUrl() && this.apiKey());
+    const openAiUrl = envKey('RUNPOD_BRAIN_OPENAI_URL');
+    if (openAiUrl) return Boolean(envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY'));
+    return this.brain.available;
   }
 
   private apiKey(): string | undefined {
     return envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY');
   }
 
-  /** OpenAI-Basis-URL des Brain-Endpoints (vLLM im Serverless-Worker). */
-  private baseUrl(): string | undefined {
-    const explicit = envKey('RUNPOD_BRAIN_OPENAI_URL');
-    if (explicit) return explicit.replace(/\/+$/, '');
-    const endpointId = envKey('RUNPOD_ENDPOINT_ID_BRAIN') || envKey('RUNPOD_ENDPOINT_ID');
-    if (!endpointId) return undefined;
-    const apiBase = (envKey('RUNPOD_API_BASE') || 'https://api.runpod.ai/v2').replace(/\/+$/, '');
-    return `${apiBase}/${endpointId}/openai/v1`;
-  }
-
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const started = Date.now();
     const model = envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
-    const resp = await postJson(
-      `${this.baseUrl()}/chat/completions`,
-      { Authorization: `Bearer ${this.apiKey()}` },
-      {
-        model,
-        messages: [{ role: 'user', content: req.prompt }],
-        max_tokens: req.maxTokens ?? 1024,
-        temperature: req.temperature ?? 0.7,
-      },
-    );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+    const openAiUrl = envKey('RUNPOD_BRAIN_OPENAI_URL');
+
+    if (openAiUrl) {
+      const resp = await postJson(
+        `${openAiUrl.replace(/\/+$/, '')}/chat/completions`,
+        { Authorization: `Bearer ${this.apiKey()}` },
+        {
+          model,
+          messages: [{ role: 'user', content: req.prompt }],
+          max_tokens: req.maxTokens ?? 1024,
+          temperature: req.temperature ?? 0.7,
+        },
+      );
+      return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+    }
+
+    const result = await this.brain.run('llm', model, {
+      prompt: req.prompt,
+      maxTokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.7,
+    });
+    return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started };
   }
+}
+
+/**
+ * Zieht den generierten Text aus der Worker-Antwort.
+ * Der Worker liefert `{ status, task, model, result: { text } }`.
+ */
+export function extractWorkerText(result: unknown): string {
+  if (typeof result === 'string') return result;
+  if (result && typeof result === 'object') {
+    const record = result as Record<string, unknown>;
+    if (typeof record.text === 'string') return record.text;
+    const nested = record.result as Record<string, unknown> | undefined;
+    if (nested && typeof nested.text === 'string') return nested.text;
+  }
+  return '';
 }
 
 export class LlmRouter {

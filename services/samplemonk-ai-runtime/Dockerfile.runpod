@@ -44,6 +44,18 @@ RUN if [ "$AI_INSTALL_VLLM" = "1" ]; then \
 # RunPod Serverless SDK (Worker + API)
 RUN pip install --no-cache-dir runpod==1.12.0
 
+# ---------------------------------------------------------------------------
+# Build-Time-Smoke der Kernabhängigkeiten
+# ---------------------------------------------------------------------------
+# Ohne diesen Check schlägt ein kaputter Import erst zur Laufzeit als generisches
+# `MODEL_UNAVAILABLE` im Worker zu – und die Serverless-Container-Logs sind über
+# die API nicht lesbar. Hier bricht stattdessen der Build ab.
+RUN python -c "import torch, transformers, soundfile, scipy; print('deps ok:', 'torch', torch.__version__, '| transformers', transformers.__version__)"
+
+# Verifiziert zusätzlich, dass transformers das Brain-Modell kennt (Qwen3 gibt es
+# erst ab transformers >= 4.51) und dass der HF-Hub erreichbar ist.
+RUN python -c "from transformers import AutoConfig; cfg = AutoConfig.from_pretrained('Qwen/Qwen3-14B'); print('qwen3 config ok:', cfg.model_type)"
+
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py runpod_worker.py ./
 COPY model_manifest.json runtime_config.yaml ./
 RUN mkdir -p /data/hf-cache \

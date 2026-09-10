@@ -96,8 +96,13 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
 /**
  * Tasks, die länger als ein `runsync`-Fenster dauern können. Sie laufen über
  * `POST /run` + Polling auf `GET /status/{id}`.
+ *
+ * `llm` gehört dazu: ein kalter Brain-Worker lädt beim ersten Aufruf die
+ * Gewichte (bei 14B fp16 zweistellige GB) – das sprengt das runsync-Fenster.
+ * Warme Worker antworten zwar schneller, aber der Kalte Fall darf nicht brechen.
  */
 export const LONG_RUNNING_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
+  'llm',
   'song',
   'sing',
   'audio.generate',
