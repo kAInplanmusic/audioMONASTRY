@@ -86,6 +86,50 @@ async function setWorkersMin(role: ResolvedGpuRole, workersMin: number, signal?:
   }
 }
 
+/**
+ * Waermt eine Rolle vor – je nach Bauart des Workers unterschiedlich.
+ *
+ * Der Brain laeuft seit 2026-09-10 auf dem **vorgefertigten** RunPod-vLLM-Worker
+ * (`runpod/worker-vllm`, `Qwen/Qwen3-14B-AWQ` mit `QUANTIZATION=awq`). Der kennt
+ * unser `{task, model, input}`-Protokoll NICHT – ein `warmup`-Job wuerde dort als
+ * ungueltiger Request enden. Warmup heisst in diesem Fall: eine minimale
+ * Completion, die vLLM zwingt, die Gewichte tatsaechlich in den VRAM zu laden.
+ *
+ * Ohne `RUNPOD_BRAIN_OPENAI_URL` (eigener Worker) bleibt es beim `warmup`-Task.
+ */
+async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<WarmupResult> {
+  if (role.role !== 'brain') return new RunPodProvider(role.role).warmup(signal);
+
+  const openAiBase = env('RUNPOD_BRAIN_OPENAI_URL').replace(/\/+$/, '');
+  if (!openAiBase) return new RunPodProvider(role.role).warmup(signal);
+
+  const models = new RunPodProvider(role.role).role?.preload ?? [];
+  const started = Date.now();
+  try {
+    const resp = await fetch(`${openAiBase}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env('RUNPOD_API_KEY') || env('RP_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: env('RUNPOD_BRAIN_MODEL') || 'qwen3-14b-awq',
+        messages: [{ role: 'user', content: 'ok' }],
+        max_tokens: 1,
+        temperature: 0,
+      }),
+      signal: signal ?? AbortSignal.timeout(Number(env('RUNPOD_WARMUP_TIMEOUT_MS') || 900_000)),
+    });
+    if (!resp.ok) {
+      return { role: 'brain', ok: false, models, message: `OpenAI-Warmup HTTP ${resp.status}` };
+    }
+    aiLogger.info('brain warmup via openai path', { durationMs: Date.now() - started });
+    return { role: 'brain', ok: true, models };
+  } catch (error) {
+    return { role: 'brain', ok: false, models, message: (error as Error).message };
+  }
+}
+
 let inflightWake: Promise<FleetReport> | null = null;
 
 /**
@@ -134,7 +178,7 @@ async function doWake(signal?: AbortSignal): Promise<FleetReport> {
         };
       }
       const workersMinSet = await setWorkersMin(role, 1, signal);
-      const warmup = await new RunPodProvider(role.role).warmup(signal);
+      const warmup = await warmupRole(role, signal);
       return { role: role.role, endpointId: role.endpointId, configured: true, workersMinSet, warmup };
     }),
   );
