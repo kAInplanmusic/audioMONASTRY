@@ -1,5 +1,5 @@
 {
-  "ts": "2026-09-10T23:14:31.331Z",
+  "ts": "2026-09-10T23:27:40.397Z",
   "base": "http://localhost:8080",
   "thresholds": {
     "silenceDbfsMax": -60,
@@ -27,56 +27,44 @@
       "error": "kein Tap"
     },
     "afterPlay": {
-      "rmsL": 0,
-      "rmsR": 0,
-      "dbfs": null,
+      "rms": 0,
       "peak": 0,
-      "error": "kein Tap"
+      "dbfs": null
     },
     "drums": {
       "kick": {
-        "rmsL": 0,
-        "rmsR": 0,
-        "dbfs": null,
-        "peak": 0,
-        "error": "kein Tap"
+        "rms": 0.008471036522094652,
+        "peak": 0.19870731234550476,
+        "dbfs": -41.44126891668159
       },
       "hat": {
-        "rmsL": 0,
-        "rmsR": 0,
-        "dbfs": null,
-        "peak": 0,
-        "error": "kein Tap"
+        "rms": 0.011187901297153762,
+        "peak": 0.19870731234550476,
+        "dbfs": -39.025027475060185
       },
       "snare": {
-        "rmsL": 0,
-        "rmsR": 0,
-        "dbfs": null,
+        "rms": 0,
         "peak": 0,
-        "error": "kein Tap"
+        "dbfs": null
       }
     },
     "preview": {
-      "rmsL": 0,
-      "rmsR": 0,
-      "dbfs": null,
-      "peak": 0,
-      "error": "kein Tap"
+      "rms": 0.005538661647059799,
+      "peak": 0.19870731234550476,
+      "dbfs": -45.13190329574172
     },
     "afterStop": {
-      "rmsL": 0,
-      "rmsR": 0,
-      "dbfs": null,
+      "rms": 0,
       "peak": 0,
-      "error": "kein Tap"
+      "dbfs": null
     }
   },
   "checks": {
     "Baseline ist still": true,
     "Engine-Play erzeugt messbares Audio": false,
-    "Drum-Trigger kick erzeugt Audio": false,
-    "Drum-Trigger hat erzeugt Audio": false,
-    "Preview erzeugt Audio": false,
+    "Drum-Trigger kick erzeugt Audio": true,
+    "Drum-Trigger hat erzeugt Audio": true,
+    "Preview erzeugt Audio": true,
     "Stop fuehrt in Stille": true,
     "keine pageErrors": true
   },

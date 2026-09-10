@@ -67,9 +67,25 @@ async function main() {
 
   await page.evaluate(() => window.__audioMonastry.audioEngine.setPlaybackMode('v2'));
 
-  // Studio starten (loest echten AudioContext + Worklet-Load aus)
+  // Studio starten (loest echten AudioContext + Worklet-Load aus).
+  //
+  // WICHTIG – sonst ist dieser Gate wertlos: `play()` laeuft nur, wenn mixerMONK
+  // den PRO-Halter hat (MAIN-Schutz). Ein reiner Klick auf „STUDIO BETRETEN"
+  // laesst den Audiographen unverbunden; dann wird nie ein Node an
+  // `ctx.destination` gehaengt, der Master-Tap entsteht nicht, und JEDE
+  // Pegelmessung ist -inf – was faelschlich wie Stille aussieht.
   await page.getByLabel('audioMONASTRY starten').click();
-  await page.waitForTimeout(4000);
+  await page.getByRole('button', { name: 'mixerMONK Power' }).waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByRole('button', { name: /mixerMONK Power/i }).click();
+  await page.getByText(/mixerMONK/i).first().waitFor({ state: 'visible', timeout: 30_000 });
+  await page.getByRole('button', { name: /mixerMONK Menü/i }).click();
+  await page.waitForFunction(
+    () => window.__audioMonastry?.audioEngine?.isMainHolderActive?.() === true,
+    null,
+    { timeout: 20_000 },
+  );
+  await page.waitForTimeout(1500);
+  console.log('Studio gestartet, mixerMONK hat den PRO-Halter');
 
   const tapInfo = await page.evaluate(() => ({
     hasTap: !!window.__masterTap?.analyser,

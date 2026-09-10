@@ -146,6 +146,22 @@
       "verdict": "FALSIFIED_THEN_FIXED",
       "evidence": "Playwright-Ladeversuch gegen den Dev-Server: document.getElementById('root').children === 0, body.innerText leer, pageerror 'ReferenceError: process is not defined'. Stacktrace: env (src/core/ai/orchestrator/endpointRegistry.ts:69) <- resolveGpuRoles (:72) <- new RunPodProvider (runpodProvider.ts:29) <- new RunPodLocalProvider (LlmRouter.ts:190) <- new LlmRouter (:238) <- Modul-Singleton `export const llmRouter = new LlmRouter()` (:295).",
       "impact": "Die gesamte DAW rendert nichts im Browser. Vom Autor dieses Audits in Commit 1fb8561 selbst eingeschleppt (RunPodLocalProvider bekam ein Klassenfeld `new RunPodProvider('brain')`; wegen des Modul-Singletons lief das schon beim Laden). 1056 Node-/jsdom-Tests blieben dabei GRUEN, weil dort `process` existiert - der Fehler ist ausschliesslich im echten Browser sichtbar. Behoben durch Lazy-Erzeugung + browser-sichere env()-Zugriffe; danach rendert die App wieder (rootChildren=1, 'STUDIO BETRETEN' sichtbar, keine pageErrors)."
+    },
+    {
+      "id": "F-009",
+      "severity": "P1",
+      "claim": "triggerDrumSynth('snare') erzeugt einen Snare-Klang",
+      "verdict": "FALSIFIED",
+      "evidence": "GEMESSEN im UI-Gate: kick -41.4 dBFS, hat -39.0 dBFS, snare -inf (peak 0). Ursache: audioEngine.triggerDrumSynth akzeptiert 'kick' | 'snare' | 'hat' und postet `{type: kind}`; die V2-Voice-Menge ist aber V2SynthVoice = 'kick' | 'hat' | 'clap' | 'bass' | 'lead' (V2SinkEngine.ts:110) - 'snare' existiert dort nicht. Der Aufruf bleibt stumm, ohne Fehler.",
+      "impact": "Stiller Erfolg in einer oeffentlichen API: ein Aufruf mit 'snare' verspricht Klang und liefert nichts."
+    },
+    {
+      "id": "F-010",
+      "severity": "P1",
+      "claim": "Der bestehende v2-live-Gate beweist Wiedergabe (er prueft playing===true)",
+      "verdict": "CONFIRMED_UNPROVEN",
+      "evidence": "GEMESSEN im UI-Gate: nach engine.play() ist der Pegel am Master -inf, waehrend isPlaying/playing-Flags true werden koennen. Ohne geladenes Sample/Pattern kann das korrekt sein - der Punkt ist, dass 'playing === true' KEINEN Klang beweist. Genau das behauptet der alte Gate aber.",
+      "impact": "Der Live-Gate kann stumm von hoerbar nicht unterscheiden (bestaetigt F-004, jetzt mit Messwert)."
     }
   ],
   "tasks": [
@@ -855,5 +871,22 @@
       "pageErrors": []
     },
     "note": "Dieser Nachweis war vorher NICHT vorhanden: kein Test hat die App je im echten Browser gemountet."
+  },
+  "uiAudioGate": {
+    "command": "npm run dev + node scripts/audio-ui-gate.cjs",
+    "result": "6 von 7 Zusagen erfuellt",
+    "raw": {
+      "baselineSilence": -1e+308,
+      "afterPlay": -1e+308,
+      "drums": {
+        "kick": -41.4,
+        "hat": -39.0,
+        "snare": -1e+308
+      },
+      "preview": -45.1,
+      "afterStop": -1e+308
+    },
+    "note": "Der Master-Tap wird jetzt erzeugt (Power -> PRO-Halter noetig). -inf bei snare ist F-009; -inf bei play() ist F-010.",
+    "artifact": "reports/audio-ui-gate.json"
   }
 }
