@@ -179,10 +179,17 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
      **Achtung Fehlalarm-Falle:** ein Kurztest nach dem Attach kann von einem noch
      warmen Worker bedient werden — nur der strikte Test (Worker killen, dann neu
      anfordern und Health beobachten) beweist etwas.
-  0d. **Entscheidung Volume vs. Image** (offen, siehe AI-P1-003 oben):
-     (a) restliche Volume-DCs systematisch auf A40/A6000 abklopfen (~16 × 6 min, Erfolg unsicher),
-     (b) in einem Volume-DC einen anderen 48-GB-Typ nehmen (z. B. L40S, ~$1.10/h statt $0.39/h),
-     (c) Gewichte pro Rolle ins Image backen (~35 GB Brain-Image, kein Volume nötig).
+  0d. **Entscheidung Volume vs. Image — getroffen: Image** (Latenz entscheidend).
+     `predownload.py` + `ARG AI_BAKE_ROLE` im Dockerfile sind gebaut; nur der Brain
+     wird gebacken (29,5 GB), ears/voiceGen bleiben schlank.
+     **BLOCKER:** der Brain-Build auf GitHub-Runnern schlägt fehl (Verdacht:
+     Runner-Plattenplatz ~40 GB vs. 7 GB Basis-Image + 30 GB Gewichte). Das
+     shared-Image ist grün (`bb6fd74f`), das Brain-Image existiert nicht.
+     **Nächster Schritt:** Brain-Image auf einer Maschine mit genug Platz bauen —
+     (i) größerer/self-hosted Runner, (ii) Build in einem **RunPod Pod** mit Push
+     nach GHCR, (iii) Back-Schritt auf das größere `/mnt` der GitHub-Runner legen.
+     Vorher eine `df -h`-Probe in den Build einbauen (Logs sind nicht lesbar).
+     Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md` §9.
   1. **Revisions-Pins** für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` eintragen (derzeit `status: "planned"` → werden nicht geladen).
   2. **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → Voice-Modell fixieren.
   3. **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN; bei Durchfall GLM-4.5-Air-Upgrade (2×A6000, `gpuCount=2`).

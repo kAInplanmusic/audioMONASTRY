@@ -81,6 +81,11 @@ jobs:
       # und voiceGen (2,6 GB) sind in Sekunden gezogen – die bleiben schlank.
       # Ein Network Volume wäre die Alternative, läuft aber nur in einem der 18
       # volume-fähigen Rechenzentren – und dort gibt es keinen A40/A6000-Pool.
+      - name: Plattenplatz vor dem Brain-Build protokollieren
+        run: |
+          df -h / /mnt 2>/dev/null || df -h
+          echo "--- freier Platz ist der wahrscheinlichste Grund fuer einen Fehlschlag des Back-Builds (30 GB Gewichte) ---"
+
       - name: Build & Push (brain – Gewichte eingebacken)
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
