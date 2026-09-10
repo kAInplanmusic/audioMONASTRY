@@ -17,7 +17,7 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
 |---|---|
 | Build/Type/Lint/Test | `tsc --noEmit` 0 Fehler · `eslint --max-warnings=0` 0 · Vitest **159 Dateien / 996 Tests grün** · `npm audit` 0 · Boundary-Scan 393 Dateien 0 Verstöße · `npm run build` grün (Vite + 32 Worklets + esbuild-Server) |
 | Live-Audio-Gate | `npx playwright test tests/e2e/v2-live.spec.ts --headed` **1 passed (19,7 s)** – V2LiveSink im echten AudioWorklet verbunden, Play/Stop real (nach AUDIO-P0-001…004) |
-| Audio-Engine | Live-Pfad: `audioEngine.play()` → `V2LiveSink` → `v2-sink-processor` (AudioWorklet) → `V2SinkEngine` (`V2MonitorGraph` + **Master-Kette EQ→DSP→FX→Dynamics→Mastering** + `V2OutputGraph` + `V2SampleClock`). **`tone` ist nicht mehr installiert**; alle `Tone.*`-Referenzen laufen über `src/core/audio/compat/nativeAudioKit.ts` (No-Op-Zustands-Facade, nicht im hörbaren V2-Pfad) |
+| Audio-Engine | Live-Pfad: `audioEngine.play()` → `V2LiveSink` → `v2-sink-processor` (AudioWorklet) → `V2SinkEngine` (`V2MonitorGraph` + **Master-Kette EQ→DSP→FX→Dynamics→Mastering** + `V2OutputGraph` + `V2SampleClock`). **Phase 9 umgesetzt:** kein V1-Transport, keine No-Op-Synth-/Mastering-Kette, kein Legacy-Doppelpfad zur Destination mehr. `nativeAudioKit` dient nur noch als Zustandsträger der Terminal-Facade |
 | MONK-Architektur | 16er-Registry + 3 System-Module **im Code verifiziert** (`registry.ts`, `plugin-manifest.json`, `App.tsx`, `rolePresets.ts`, `legacyAliases.ts`) |
 | MIDI | Kein MIDI-/Controller-Plugin; Settings → MIDI/Controllers (`SettingsDialog` + `MIDIControllerTerminal`) |
 | Security | Fail-closed Auth implementiert (`server.ts` 298–382, 2302–2313), Zod-Validierung der Haupt-Routen, CI-Actions SHA-gepinnt |
@@ -107,7 +107,7 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
 ## P1 — MUST VERIFY / MUST FIX
 
 ### AUDIO-P1-001 — Tote V1-Transport-/Scheduler-Zweige aus `audioEngine` entfernen
-- **Status:** OPEN (erst nach P0-001…004) · **Area:** Audio Cleanup
+- **Status:** DONE (2026-09-10, Phase 9: V1-Transport/Scheduler, No-Op-Synths, Fake-Mastering-Kette und Legacy-Doppelpfad entfernt) · **Area:** Audio Cleanup
 - **Problem:** `play()/stop()/triggerEvent()/tick()/processEvent()` enthalten nicht erreichbare V1-Zweige (Mode ist immer `v2`), inkl. `Tone.Transport`-Scheduler, `kickSynth`-Fallbacks etc.
 - **Required change:** V1-Zweige und tote No-Op-Synth-Felder löschen; `AudioPlaybackMode`-Zweige konsolidieren.
 - **Acceptance criteria:** keine `playbackMode === 'v2'`-else-Zweige mehr; Typecheck/Test grün.
@@ -123,7 +123,7 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
 - **Risk:** mittel · **Rollback:** Commit-Revert.
 
 ### AUDIO-P1-003 — `nativeAudioKit` nur noch dort erlauben, wo es real gebraucht wird
-- **Status:** OPEN · **Area:** Audio Cleanup
+- **Status:** PARTIAL (2026-09-10, Phase 9: keine No-Op-Nodes mehr im Live-Signalweg; verbleibende Klassen sind reine Zustandsträger der Terminal-Facade) · **Area:** Audio Cleanup
 - **Problem:** Die Tone-kompatible No-Op-Facade verschleiert stumme Pfade; nach P0-001…004 dürfen keine No-Op-Nodes mehr im Produktions-Signalweg liegen.
 - **Required change:** No-Op-Klassen aus dem Live-Pfad entfernen; verbleibende Nutzung nur für Zustands-Serialisierung/Tests dokumentieren.
 - **Acceptance criteria:** kein `new Tone.Volume/Gain/Player/Compressor/…` im Live-Audio-Pfad; Boundary-Test.

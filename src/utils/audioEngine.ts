@@ -24,9 +24,7 @@ import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
 import { WebAudioWorkletBridge } from '../core/audio/backends/WebAudioWorkletBridge';
 import { createAudioWorkletNode } from '../core/audio/worklets/createWorkletNode';
 import {
-  createClockWorkletNode,
   createItSynthWorkletNode,
-  createSynthWorkletNode,
 } from '../core/audio/worklets/workletInitializers';
 import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
@@ -45,7 +43,7 @@ import {
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
-import { normalizeNotes, normalizeSteps, noteToFreq } from '../core/audio/state/sequenceUtils';
+import { normalizeNotes, normalizeSteps } from '../core/audio/state/sequenceUtils';
 import { AutomationCoalescer } from '../core/audio/state/automationCoalescer';
 import { exportV2SessionState, parseV2SessionState, type V2SessionGraphState } from '../core/session/v2SessionState';
 import type { IAudioNode } from '../core/audio/types';
@@ -113,7 +111,6 @@ class AudioEngine {
       return 0;
   }
 
-  public analyser!: Tone.Analyser;
   private ctx!: AudioContext;
 
   // P10: Mehrkanal-Spatial-Bus (2/4.0/6/8/10/12/14/16/18.x) via WebAudio.
@@ -153,15 +150,6 @@ class AudioEngine {
   private releasedMainTracks = new Set<TrackType>();
   private spatialRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Synthesizers & FX Nodes
-  private kickSynth!: Tone.MembraneSynth;
-  private hatSynth!: Tone.MetalSynth;
-  private clapSynth!: Tone.NoiseSynth;
-  private clapFilter!: Tone.Filter;
-  private bassSynth!: Tone.MonoSynth;
-  private bassFilter!: Tone.Filter;
-  private bassDelay!: Tone.FeedbackDelay;
-
   /**
    * Echte per-Kanal-Mischung: Jeder Track (channel1..8) hat eine eigene
    * Gain- und Pan-Stufe. Damit steuern die Mischpult-Fader tatsächlich die
@@ -185,15 +173,6 @@ class AudioEngine {
     channel5: null, channel6: null, channel7: null, channel8: null,
     channel9: null, channel10: null
   };
-
-  private masterMePreGain!: Tone.Volume;
-  private masterMeHighpass!: Tone.Filter;
-  private masterMeCompressor!: Tone.Compressor;
-  private masterMeMultiband!: Tone.MultibandCompressor;
-  private masterMeLimiter!: Tone.Limiter;
-
-  private toneShiftEqBands: Tone.Filter[] = [];
-  private toneShiftTilt!: Tone.Filter;
 
   private patterns: Record<TrackType, boolean[]> = {
     channel1: Array(16).fill(false), channel2: Array(16).fill(false),
@@ -232,9 +211,6 @@ class AudioEngine {
   // Lookahead Scheduler (P2-1: 8–15 ms adaptiv; Worklet-Clock ist Primärquelle)
   private isPlaying = false;
   private lookahead = 15.0; // ms (Standard im Latenz-Budget)
-  private scheduleArea = 0.1; // seconds
-  private nextNoteTime = 0.0;
-  private timerID: any = null;
   // AM-E6-2: Adaptive Latenz-Policy (Xrun-Eskalation + stabile Fenster).
   private latencyPolicy = new AdaptiveLatencyController('playback');
   // AM-E6-5: Audio-Idle-Detection (Context suspend/resume zur Energie-Optimierung).
@@ -243,21 +219,6 @@ class AudioEngine {
     onIdle: () => this.suspendForIdle(),
     onActive: () => this.resumeFromIdle(),
   });
-
-  private scheduleTick(time: number) {
-    this.tick(time);
-  }
-
-  private scheduler() {
-    if (!this.isPlaying) return;
-
-    while (this.nextNoteTime < Tone.context.currentTime + this.scheduleArea) {
-      this.scheduleTick(this.nextNoteTime);
-      this.advanceNote();
-    }
-    this.timerID = setTimeout(() => this.scheduler(), this.lookahead);
-  }
-
 
   // --- Task 2: Swing & Gate Parameter (einheitliches Sequencermodell) ---
   public swing = 0.0; // 0..1 – Shuffle-Anteil auf ungeraden 16teln
@@ -331,16 +292,8 @@ class AudioEngine {
   /** NEW-MONK-8/P2-2: Swing systemweit setzen (Worklet-Clock + Scheduler). */
   public setSwing(swing: number): void {
     this.swing = Math.max(0, Math.min(1, swing));
-    try {
-      (this.clockNode?.parameters as any)?.get('swing')?.setValueAtTime(this.swing, this.ctx?.currentTime ?? 0);
-    } catch { /* Clock-Worklet nicht aktiv */ }
     this.v2LiveSink.updateTransport({ swing: this.swing });
   }
-  // --- Task 2: optionaler AudioWorklet-Clock-Generator ---
-  private clockNode: AudioWorkletNode | null = null;
-
-  // --- Task 7: WASM/WAM-Synth-Worklet (Lead/Pads, PolyBLEP) ---
-  private synthWorklet: AudioWorkletNode | null = null;
 
   // --- instrumentMONK: sample-genauer Instrumenten-Synthesizer (AudioWorklet) ---
   private itSynthNode: AudioWorkletNode | null = null;
@@ -444,8 +397,8 @@ class AudioEngine {
     }
 
     // Context-Suspend/Resume beobachten (Autoplay-Gate, OS-Sleep, Device-Wechsel).
-    // Ohne Handler plant der setTimeout-Scheduler in eine suspendierte Timeline
-    // und erzeugt beim Resume Noten-Bursts/Phasenversatz.
+    // Phase 9: Der V2-Transport läuft im AudioWorklet; der Main-Thread steuert
+    // nur noch den Zustand und meldet den Context-State an die UI.
     try {
       this.ctx.onstatechange = () => {
         const state = this.ctx?.state;
@@ -453,15 +406,17 @@ class AudioEngine {
           this.wasPlayingBeforeSuspend = this.isPlaying;
           if (this.isPlaying) {
             this.isPlaying = false;
-            if (this.timerID) { clearTimeout(this.timerID); this.timerID = null; }
-            try { Tone.Transport.pause(); } catch { /* ignore */ }
+            this.v2LiveSink.stopTransport();
           }
         } else if (state === 'running' && this.wasPlayingBeforeSuspend) {
           this.wasPlayingBeforeSuspend = false;
           this.isPlaying = true;
-          this.nextNoteTime = this.ctx.currentTime + 0.1;
-          try { Tone.Transport.start(); } catch { /* ignore */ }
-          if (!this.clockNode) this.scheduler();
+          this.v2LiveSink.startTransport({
+            bpm: Tone.Transport.bpm.value,
+            swing: this.swing,
+            gate: this.gate,
+            stepCount: this.stepCount,
+          });
         }
         this.onStateChange?.(state ?? 'closed');
       };
@@ -469,49 +424,24 @@ class AudioEngine {
 
     // Worklets robust erzeugen: Fehlt eine module-Registrierung (oder der
     // Context ist nicht nutzbar), liefert der Helfer einen neutralen Gain-Knoten
-    // als Platzhalter, damit die Audio-Kette durchgängig bleibt (kein harter
-    // Reject von init()). Factory in `src/core/audio/worklets/createWorkletNode.ts`.
+    // als Platzhalter (kein harter Reject von init()).
     this.dspNode = createAudioWorkletNode(this.ctx, 'dsp-processor');
     this.eqNode = createAudioWorkletNode(this.ctx, 'eq-processor');
     this.masteringNode = createAudioWorkletNode(this.ctx, 'mastering-processor');
     this.analyzerNode = createAudioWorkletNode(this.ctx, 'analyzer-processor');
-    // P2-4: effectProcessor als fester Insert in der Master-Kette erzeugen
-    // (nicht erst lazy in setEffectParam) – sonst wird er nie verdrahtet.
     this.effectNode = createAudioWorkletNode(this.ctx, 'effect-processor');
-    // P1-Dynamik: Kompressor/Gate/Dynamic-EQ als Insert (Default = Bypass,
-    // d. h. bit-genauer Durchgang ohne zusätzliche Latenz).
     this.dynamicsNode = createAudioWorkletNode(this.ctx, 'dynamics-processor');
-    // Granular + 6-Op-FM (A-Klasse Audio-Audit): eigene Worklets. F1: statt
-    // direkt in GLOBAL_MASTER zu speisen, laufen sie über den Kanalzug
-    // (Pre-Fader-Eingang → Fader → EQ → Pan → Master), damit die Mischpult-Regler
-    // real auf sie wirken.
     this.granularNode = createAudioWorkletNode(this.ctx, 'granular-processor');
     this.fm6Node = createAudioWorkletNode(this.ctx, 'fm6-processor');
     this.drumSynthNode = createAudioWorkletNode(this.ctx, 'drumsynth-processor');
-    const connectWorkletToChannel = (node: unknown, track: TrackType): void => {
-      if (!node || typeof (node as any).connect !== 'function') return;
-      this.ensureChannelNode(track);
-      const channelInput = (this.channelInputs[track] as any)?.input ?? this.channelInputs[track];
-      if (!channelInput) return;
-      try { (node as any).connect(channelInput); } catch { /* Worklet-Fallback */ }
-    };
-    connectWorkletToChannel(this.granularNode, 'channel4');
-    connectWorkletToChannel(this.fm6Node, 'channel4');
-    connectWorkletToChannel(this.drumSynthNode, 'channel2');
 
     // SharedArrayBuffer ist ohne crossOriginIsolated (COOP/COEP-Header) in
-    // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer),
-    // damit init() nie an `ReferenceError: SharedArrayBuffer is not defined`
-    // scheitert. Der BeatVisualizer fängt einen leeren Buffer ab.
+    // Firefox NICHT definiert – nutze einen sicheren Fallback (ArrayBuffer).
     const sab = makeSafeArrayBuffer(128 * 4);
     this.sharedWaveformBuffer = new Float32Array(sab);
     try { this.analyzerNode.port.postMessage({ buffer: sab }); } catch { /* Gain-Fallback ohne Port */ }
 
-    // Dropout-/Underrun-Telemetrie aus dem Audio-Thread (analyzerProcessor)
-    // an den Main-Thread durchreichen. App/PerformanceMonitor meldet den
-    // Zähler an /api/telemetry (P0 Architecture-Audit).
-    // Guard: Wenn das Worklet nicht verfügbar ist (Gain-Fallback), existiert
-    // kein MessagePort – dann gibt es auch keine Dropout-Telemetrie (kein Reject).
+    // Dropout-/Underrun-Telemetrie aus dem Audio-Thread (analyzerProcessor).
     if (this.analyzerNode && typeof this.analyzerNode.port?.postMessage === 'function') {
       try {
         this.analyzerNode.port.onmessage = (e: MessageEvent) => {
@@ -530,141 +460,25 @@ class AudioEngine {
     this.lufsBufferView = new Int32Array(lufsSab);
     try { this.lufsNode.port.postMessage({ buffer: lufsSab }); } catch { /* Gain-Fallback ohne Port */ }
 
-    // Mastering Chain
-    this.masterMePreGain = new Tone.Volume(0);
-    this.masterMeHighpass = new Tone.Filter(20, 'highpass');
-    this.masterMeCompressor = new Tone.Compressor({ threshold: -14, ratio: 4, attack: 0.005, release: 0.08, knee: 12 });
-    this.masterMeMultiband = new Tone.MultibandCompressor({
-      lowFrequency: 150, highFrequency: 3000,
-      low: { threshold: -12, ratio: 4 }, mid: { threshold: -14, ratio: 3 }, high: { threshold: -16, ratio: 2 }
-    });
-    this.masterMeLimiter = new Tone.Limiter(-1);
-
-    for (let i = 0; i < 12; i++) this.toneShiftEqBands.push(new Tone.Filter(1000, 'peaking'));
-    this.toneShiftTilt = new Tone.Filter(1000, 'highshelf');
-
+    // Phase 9: KEINE Legacy-Mastering-/Synth-Kette und KEIN zweiter Pfad zur
+    // ctx.destination mehr. Der hörbare Ausgang läuft ausschließlich über
+    // v2LiveSink (AudioWorklet). Die unten gepflegten Zustände (channelGains,
+    // masterVolume, mutedStems, monitorPlan) werden per syncV2FromV1 in den
+    // V2-Graph gespiegelt.
     this.masterVolume = new Tone.Volume(-6);
-    this.masterBuses['GLOBAL_MASTER'].connect(this.masterVolume);
 
-    // PDC: Der lokale Cue-Pfad (pre-fader) wird um die Mastering-Lookahead-Latenz
-    // verzögert, damit Cue und Main-Mix beim parallelen Abhören phasenrichtig
-    // liegen (kein Kammfilter). Der native DelayNode wird in buildCueBus verdrahtet.
-
-    this.masterVolume.connect(this.masterMePreGain);
-    this.masterMePreGain.connect(this.masterMeHighpass);
-    this.masterMeHighpass.connect(this.masterMeCompressor);
-    this.masterMeCompressor.connect(this.masterMeMultiband);
-    this.masterMeMultiband.connect(this.masterMeLimiter);
-
-    let prevNode: any = this.masterMeLimiter;
-    for (let i = 0; i < 12; i++) {
-      prevNode.connect(this.toneShiftEqBands[i]);
-      prevNode = this.toneShiftEqBands[i];
-    }
-    prevNode.connect(this.toneShiftTilt);
-
-    // Worklet-Kette verbindet nur tatsächlich vorhandene Knoten. Ohne
-    // AudioContext/Worklets (Silent-Modus, jsdom-Tests) bleibt die Kette
-    // offen, statt mit `null.connect()` zu rejecten (Error-Recovery).
-    const connectSafe = (from: unknown, to: unknown): void => {
-      const f = from as { connect?: (n: unknown) => unknown } | null | undefined;
-      const t = to as { connect?: (n: unknown) => unknown } | null | undefined;
-      if (f && t && typeof f.connect === 'function') {
-        try { f.connect(t); } catch { /* Worklet-Fallback – Kette bleibt offen */ }
-      }
-    };
-    // P2-4: effectNode als Insert zwischen toneShift und EQ hängen, sofern das
-    // Worklet existiert; sonst direkter Fallback (toneShiftTilt → eqNode).
-    const effectReady = !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
-    const dynamicsReady = !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
-    // Dynamik-Insert liegt zwischen effectNode und eqNode (P1-Dynamik).
-    const preEq: unknown = dynamicsReady ? this.dynamicsNode : this.eqNode;
-    if (effectReady) {
-      connectSafe(this.toneShiftTilt, this.effectNode);
-      connectSafe(this.effectNode, preEq);
-    } else {
-      connectSafe(this.toneShiftTilt, preEq);
-    }
-    if (dynamicsReady) connectSafe(this.dynamicsNode, this.eqNode);
-    connectSafe(this.eqNode, this.masteringNode);
-    connectSafe(this.masteringNode, this.dspNode);
-    connectSafe(this.dspNode, this.lufsNode);
-    connectSafe(this.lufsNode, this.analyzerNode);
-    // Use raw destination for AudioWorkletNode – über einen finalen Gain,
-    // damit Spatial-Mode-Wechsel (SEPARATION) weich ausgeblendet werden kann.
-    if (this.ctx && typeof this.ctx.createGain === 'function') {
-      this.masterStreamTap = this.ctx.createGain();
-      this.masterStreamTap.gain.value = 1;
-      // WF-3: Lokaler Monitor hängt PRE-Mastering (direkt nach masterVolume),
-      // damit der DJ ohne Mastering-Lookahead/Limiter-Latenz abhört. Der
-      // masterStreamTap bleibt POST-Mastering für den WebRTC-Master-Stream.
-      this.monitorTap = this.ctx.createGain();
-      this.monitorTap.gain.value = 1;
-      connectSafe(this.masterVolume, this.monitorTap);
-      this.outputGain = this.ctx.createGain();
-      this.outputGain.gain.value = 1;
-      // Kette: analyzerNode → masterStreamTap (Post-Mastering-Abgriff für den
-      // Master-Stream) → mainMonitorGain (lokaler MAIN-Abhörpegel) → outputGain
-      // (Spatial-Blende) → destination. So wirkt der lokale Cue-Umschalter in
-      // 2.0 UND 2.1, und der Master-Stream bleibt von lokalem Monitoring getrennt.
-      connectSafe(this.analyzerNode, this.masterStreamTap);
-      this.mainMonitorGain = this.ctx.createGain();
-      this.mainMonitorGain.gain.value = 1;
-      connectSafe(this.monitorTap, this.mainMonitorGain);
-      connectSafe(this.mainMonitorGain, this.outputGain);
-      connectSafe(this.outputGain, this.ctx.destination);
-      // Nativer PDC-Delay für den Cue-Pfad (5 ms Mastering-Lookahead).
-      if (typeof this.ctx.createDelay === 'function') {
-        this.cuePdcDelay = this.ctx.createDelay(0.1);
-        this.cuePdcDelay.delayTime.value = this.PDC_MASTERING_LOOKAHEAD_SEC;
-      }
-      this.buildCueBus();
-    } else {
-      connectSafe(this.analyzerNode, this.ctx?.destination);
-    }
-
-    for(let i=0; i<12; i++) { this.toneShiftEqBands[i].gain.value = 0; }
-    this.toneShiftTilt.gain.value = 0;
-
-    this.analyser = new Tone.Analyser('waveform', 256);
-    // PDC: Analyser NACH der Mastering-Kette abgreifen (sonst eilt die
-    // Wellenform dem Main-Out um die Lookahead-Latenz voraus).
-    // lufsNode ist nativ, Tone.Analyser.input ist ein Tone.Gain -> dessen
-    // .input ist der native GainNode (Firefox-safe).
-    // Analyser ist optional: ohne Worklet/Context kein Crash (Error-Recovery).
-    if (this.lufsNode && this.analyser) {
-      connectSafe(this.lufsNode, (this.analyser as any).input?.input ?? (this.analyser as any).input ?? this.analyser);
-    }
-
-    // Synth (jede Stimme über eigene Kanal-Gain/Pan für echtes Mischpult-Routing)
-    this.ensureChannelNode('channel1'); // kick
-    this.ensureChannelNode('channel2'); // hat
-    this.ensureChannelNode('channel3'); // clap
-    this.ensureChannelNode('channel7'); // bass
+    // Kanal-Grundpegel für das Demo-Pattern (Zustand, wird in den V2-Graph gespiegelt).
+    this.ensureChannelNode('channel1');
+    this.ensureChannelNode('channel2');
+    this.ensureChannelNode('channel3');
+    this.ensureChannelNode('channel7');
     this.channelGains.channel1!.volume.value = 0.8;
     this.channelGains.channel2!.volume.value = 0.6;
     this.channelGains.channel3!.volume.value = 0.7;
     this.channelGains.channel7!.volume.value = 0.8;
 
-    this.kickSynth = new Tone.MembraneSynth({ octaves: 8, envelope: { attack: 0.005, decay: 0.1, sustain: 0.02, release: 0.3 } }).connect(this.channelInputs.channel1!);
-    this.hatSynth = new Tone.MetalSynth({ envelope: { attack: 0.001, decay: 0.1, sustain: 0.05, release: 0.05 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(this.channelInputs.channel2!);
-    this.clapFilter = new Tone.Filter(1800, 'bandpass', -12).connect(this.channelInputs.channel3!);
-    this.clapSynth = new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.2, sustain: 0.0, release: 0.05 }, volume: -10 }).connect(this.clapFilter);
-    this.bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 600, Q: 1.0 }).connect(this.channelInputs.channel7!);
-    this.bassDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.25, wet: 0.3 }).connect(this.bassFilter);
-    this.bassSynth = new Tone.MonoSynth().connect(this.bassDelay);
-
-    // --- P0-2: Synth-Worklets werden LAZY bei erster Plugin-Aktivierung erzeugt
-    // (kein global verbundenes Synth-/Noise-Rauschen bei Start-Silence).
-    // this.tryInitSynthWorklet();   → jetzt in ensureSynthGraph()
-    // this.tryInitItSynthWorklet(); → jetzt in ensureSynthGraph()
     // Apply routing.json only now that all audio nodes exist.
     await this.applyRoutingConfig();
-
-    // --- Task 2: optionaler präziser AudioWorklet-Clock-Generator ---
-    this.initClockWorklet();
-
-    this.buildSpatialBus();
 
     this.initialized = true;
 
@@ -676,9 +490,7 @@ class AudioEngine {
       console.warn('masterClock konnte nicht angebunden werden:', e);
     }
 
-    // Sicherstellen, dass beim ersten Start ein hörbarer Drum-Loop aktiv ist
-    // (falls keine Patterns gesetzt wurden). So liefert "Play" sofort Musik,
-    // ohne dass externe Sample-Dateien vorhanden sein müssen.
+    // Sicherstellen, dass beim ersten Start ein hörbarer Drum-Loop aktiv ist.
     this.ensureDemoPattern();
 
     // P0-1/P0-4: Start-Silence – beim Studio-Eintritt ist kein Plugin aktiv,
@@ -741,15 +553,7 @@ class AudioEngine {
     if (!Number.isFinite(bpm)) return;
     const value = Math.max(30, Math.min(300, bpm));
     Tone.Transport.bpm.value = value;
-    // P2-2: BPM-Wechsel sample-genau im Clock-Worklet terminieren (AudioParam-
-    // Timeline statt setTimeout). Fallback: Worklet nicht aktiv → nur Tone.
-    try {
-      const bpmParam = (this.clockNode?.parameters as any)?.get?.('bpm');
-      if (bpmParam && typeof bpmParam.setValueAtTime === 'function') {
-        const now = this.ctx?.currentTime ?? Tone.context?.currentTime ?? 0;
-        bpmParam.setValueAtTime(value, now);
-      }
-    } catch { /* Clock-Worklet nicht verfügbar */ }
+    // Phase 9: BPM sample-genau über den V2-Transport (V2SampleClock).
     this.v2LiveSink.updateTransport({ bpm: value });
   }
 
@@ -819,15 +623,6 @@ class AudioEngine {
     this.v2LiveSink.updateTransport({ bpm: Tone.Transport.bpm.value, stepCount: this.stepCount });
   }
 
-  /** Erstellt den Clock-Worklet (falls geladen) als präzise Step-Quelle. */
-  private async initClockWorklet() {
-    this.clockNode = createClockWorkletNode(
-      this.ctx,
-      { bpm: Tone.Transport.bpm.value, swing: this.swing, gate: this.gate },
-      (msg) => this.tickAt(msg.time, msg.gate, msg.swing),
-    );
-  }
-
   /** Applies public/routing.json to the audio graph after nodes are created. */
   private async applyRoutingConfig() {
     try {
@@ -852,23 +647,17 @@ class AudioEngine {
         if (routingConfig.global.masterVolume !== undefined) this.masterVolume.volume.value = routingConfig.global.masterVolume;
       }
       // F7: Track-Params UND Pattern aus routing.json anwenden.
+      // Phase 9: Synth-Stimmen werden über die V2-Rollen abgebildet; die
+      // Parameter fließen als Synth-Sources in den V2-Sink.
       if (routingConfig.tracks && Array.isArray(routingConfig.tracks)) {
         routingConfig.tracks.forEach(trackConfig => {
-          if (trackConfig.params) {
-            switch(trackConfig.instrument) {
-              case "kickSynth": this.kickSynth.set(trackConfig.params); break;
-              case "hatSynth": this.hatSynth.set(trackConfig.params); break;
-              case "clapSynth": this.clapSynth.set(trackConfig.params); break;
-              case "bassSynth": this.bassSynth.set(trackConfig.params); break;
-            }
-          }
           const ch = routingTrackToChannel(trackConfig.id);
           if (ch && Array.isArray(trackConfig.patterns)) {
             this.patterns[ch] = normalizeSteps(trackConfig.patterns as boolean[], this.stepCount);
           }
         });
       }
-      // F7: Bus-Effekte auf die realen Mastering-Nodes anwenden.
+      // F7: Bus-Effekte auf die V2-Master-Kette anwenden.
       if (routingConfig.buses && Array.isArray(routingConfig.buses)) {
         for (const bus of routingConfig.buses) {
           if (!bus.effects || !Array.isArray(bus.effects)) continue;
@@ -893,25 +682,28 @@ class AudioEngine {
     }
   }
 
-  /** F7: routing.json-Bus-Effekt auf die reale Mastering-Kette anwenden. */
+  /** F7: routing.json-Bus-Effekt auf die V2-Master-Kette anwenden. */
   private applyRoutingBusEffect(type: string, params?: Record<string, unknown>): void {
     const num = (v: unknown): number | undefined =>
       typeof v === 'number' && Number.isFinite(v) ? v : undefined;
     try {
       switch (type) {
         case 'masterMePreGain':
-          if (this.masterMePreGain && num(params?.gain) !== undefined) this.masterMePreGain.volume.value = num(params!.gain)!;
+          if (num(params?.gain) !== undefined) this.v2LiveSink.setMasterGain(Math.pow(10, num(params!.gain)! / 20));
           break;
         case 'masterMeHighpass':
-          if (this.masterMeHighpass && num(params?.frequency) !== undefined) this.masterMeHighpass.frequency.value = num(params!.frequency)!;
+          // V2-Master-EQ besitzt Low-Shelf/Peaking/High-Shelf – Highpass wird als
+          // Low-Shelf-Absenkung approximiert (Routing.json-Kompatibilität).
+          if (num(params?.frequency) !== undefined) this.v2MasterEqLowDb = -6;
+          this.v2LiveSink.setMasterEq(this.v2MasterEqLowDb, this.v2MasterEqMidDb, this.v2MasterEqHighDb);
           break;
         case 'masterMeCompressor':
-          if (this.masterMeCompressor) {
-            const threshold = num(params?.threshold);
-            const ratio = num(params?.ratio);
-            if (threshold !== undefined) this.masterMeCompressor.threshold.value = threshold;
-            if (ratio !== undefined) this.masterMeCompressor.ratio.value = ratio;
-          }
+          this.v2LiveSink.setMasterMastering(
+            num(params?.threshold) ?? -14,
+            num(params?.ratio) ?? 3,
+            1,
+            0.98,
+          );
           break;
         default:
           console.warn('[routing.json] unbekannter Bus-Effekt ignoriert:', type);
@@ -1220,82 +1012,20 @@ class AudioEngine {
    */
   private ensureChannelNode(track: TrackType): void {
     if (!this.channelGains[track]) {
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-      const rawCtx = (this.ctx || (Tone.context as any)?.rawContext) as AudioContext;
-      // F1: Pre-Fader-Eingang. Alle Quellen verbinden sich hierher, damit
-      // Fader/EQ/Pan und der Cue-Abgriff (pre-fader) real wirken.
+      // Phase 9: reine Zustandsträger – die hörbare Verdrahtung (Gain/Pan/EQ)
+      // läuft über den V2-Graph im v2LiveSink. Keine Tone-No-Op-Ketten mehr.
       const input = new Tone.Gain(1);
       const g = new Tone.Volume(0);
-      // Pro-Kanal-EQ nach dem Gain, vor dem Pan.
       const low = new Tone.Filter(220, 'lowshelf');
       const mid = new Tone.Filter(1000, 'peaking');
       const high = new Tone.Filter(4000, 'highshelf');
       low.gain.value = 0; mid.gain.value = 0; high.gain.value = 0;
-      low.connect(mid); mid.connect(high);
-      this.channelEQs[track] = { low, mid, high };
-      // Tone.Panner statt nativem StereoPannerNode: Der native Konstruktor
-      // verlangt in Firefox einen echten BaseAudioContext (Realm-Check) und
-      // schlug mit 'does not implement BaseAudioContext' fehl.
       const p = new Tone.Panner(0);
-      input.connect(g);     // Pre-Fader -> Fader
-      g.connect(low);       // Gain -> EQ
-      high.connect(p);      // EQ -> Pan
-      p.connect(this.masterBuses['GLOBAL_MASTER']);
+      this.channelEQs[track] = { low, mid, high };
       this.channelInputs[track] = input;
       this.channelGains[track] = g;
       this.channelPans[track] = p;
-      // P0-6: Kanal zusätzlich (parallel, pre-fader) auf den lokalen Cue-Bus legen.
-      this.tapChannelToCue(track);
     }
-  }
-
-  /**
-   * P0-6: Baut den lokalen Cue-Bus auf (parallel zum MAIN-Weg).
-   *
-   *   channelInput(pre-fader) → cueTrackGain(0..2) → cueBus → PDC-Delay
-   *   → cueOutGain → destination
-   *
-   * Der Cue greift **vor** Fader/Mastering-Kette ab (echtes PFL) und ist damit
-   * der kürzeste Weg zum Ausgang (kein zusätzliches Latenz-Budget auf MAIN).
-   * Das PDC-Delay gleicht die 5-ms-Mastering-Lookahead-Latenz aus, damit Cue
-   * und Main beim MIX-Hören phasenrichtig liegen.
-   */
-  private buildCueBus(): void {
-    if (this.cueBus || !this.ctx || typeof this.ctx.createGain !== 'function') return;
-    try {
-      this.cueBus = this.ctx.createGain();
-      this.cueBus.gain.value = 1;
-      this.cueOutGain = this.ctx.createGain();
-      // Start: MAIN hören, Cue stumm (P0-1-Start-Silence bleibt erhalten).
-      this.cueOutGain.gain.value = 0;
-      if (this.cuePdcDelay) {
-        this.cueBus.connect(this.cuePdcDelay);
-        this.cuePdcDelay.connect(this.cueOutGain);
-      } else {
-        this.cueBus.connect(this.cueOutGain);
-      }
-      this.cueOutGain.connect(this.ctx.destination);
-    } catch {
-      this.cueBus = null;
-      this.cueOutGain = null;
-      return;
-    }
-    // Bereits existierende Kanäle nachträglich abgreifen.
-    (Object.keys(this.channelGains) as TrackType[]).forEach((t) => this.tapChannelToCue(t));
-  }
-
-  /** P0-6: Einzelnen Kanal pre-fader auf den Cue-Bus abgreifen (idempotent). */
-  private tapChannelToCue(track: TrackType): void {
-    if (!this.cueBus || this.cueTrackGains[track]) return;
-    const source = this.channelInputs[track];
-    if (!source) return;
-    try {
-      const tap = this.ctx.createGain();
-      tap.gain.value = this.monitorPlan.cueTracks[track] ?? 1;
-      source.connect(tap);
-      tap.connect(this.cueBus);
-      this.cueTrackGains[track] = tap;
-    } catch { /* Cue-Abgriff optional – MAIN bleibt unberührt */ }
   }
 
   /** #DJ: Pro-Kanal 3-Band-EQ. gain in dB, band: 'low'|'mid'|'high'. */
@@ -1449,31 +1179,10 @@ class AudioEngine {
     const hat = kit.sounds.find((s) => s.type === 'hat');
     const clap = kit.sounds.find((s) => s.type === 'clap') ?? kit.sounds.find((s) => s.type === 'snare');
 
-    try {
-      if (kick && this.kickSynth) {
-        this.kickSynth.set({
-          pitchDecay: kick.pitchDecay ?? 0.05,
-          octaves: kick.octaves ?? 8,
-          envelope: { attack: 0.005, decay: kick.decay ?? 0.3, sustain: 0.02, release: 0.25 },
-        });
-      }
-      if (hat && this.hatSynth) {
-        this.hatSynth.set({
-          harmonicity: hat.harmonicity ?? 5.1,
-          modulationIndex: hat.modulationIndex ?? 32,
-          resonance: hat.noiseFilter ?? 4000,
-          envelope: { attack: 0.001, decay: hat.decay ?? 0.1, sustain: 0.05, release: 0.05 },
-        });
-      }
-      if (clap) {
-        if (this.clapFilter) this.clapFilter.frequency.value = clap.noiseFilter ?? 1800;
-        this.clapSynth.set({
-          envelope: { attack: 0.001, decay: clap.decay ?? 0.2, sustain: 0, release: 0.05 },
-        });
-      }
-    } catch (e) {
-      console.warn('Drum-Kit nicht vollständig anwendbar:', e);
-    }
+    // Phase 9: Drum-Kit-Parameter als V2-Synth-Sources übernehmen (kick/hat/clap).
+    if (kick) this.v2LiveSink.setSynthSource('channel1', 50, 'kick');
+    if (hat) this.v2LiveSink.setSynthSource('channel2', hat.noiseFilter ?? 6000, 'hat');
+    if (clap) this.v2LiveSink.setSynthSource('channel3', clap.noiseFilter ?? 1200, 'clap');
   }
 
   public getActiveDrumKitId(): string {
@@ -1719,38 +1428,28 @@ class AudioEngine {
     // --- An den eqProcessor-Worklet senden (echte 12-Band-Kette) ---
     try { this.eqNode?.port?.postMessage({ bands }); } catch { /* Gain-Fallback */ }
 
-    // --- Tone-Filter-Kette (12 Bänder) ebenfalls 1:1 setzen – Fallback
-    // bzw. parallele Klangformung, falls der Worklet nicht aktiv ist. ---
-    this.toneShiftEqBands.forEach((f, i) => {
-      try {
-        const b = bands[i];
-        if (b) {
-          const t = (b.type === 'lowshelf' || b.type === 'highshelf' || b.type === 'peaking') ? b.type : 'peaking';
-          (f as any).type = t;
-          f.frequency.value = b.freq;
-          f.Q.value = b.q;
-          f.gain.value = b.gain;
-        } else {
-          f.gain.value = 0;
-        }
-      } catch { /* ignore */ }
-    });
-
-    // Tilt-Shelf aus den Mastering-Presets übernehmen (falls vorhanden).
-    const tilt = Number(params?.tilt_gain ?? 0);
-    if (Number.isFinite(tilt)) {
-      try { this.toneShiftTilt.gain.value = tilt; } catch { /* ignore */ }
-    }
+    // Phase 9: Keine parallele Tone-Filter-Kette mehr – die V2-Master-EQ
+    // übernimmt Low/Mid/High; die 12-Band-Daten bleiben Worklet-Sache.
+    this.v2LiveSink.setMasterEq(
+      bands[0]?.gain ?? 0,
+      bands[5]?.gain ?? 0,
+      bands[11]?.gain ?? 0,
+    );
   }
   public updateMasterMe(params: any) {
     this.ensureInitialized();
-    // console.log("Mastering Updated", params);
-
-    // Apply smoothing
-    if (params.input_gain !== undefined) {
-        this.masterMePreGain.volume.rampTo(params.input_gain, 0.1);
+    // Phase 9: Mastering-Parameter in die V2-Master-Kette spiegeln.
+    const num = (v: unknown): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+    if (num(params?.input_gain) !== undefined) {
+      this.v2LiveSink.setMasterGain(Math.pow(10, num(params!.input_gain)! / 20));
     }
-    // ... add more parameter smoothing as needed
+    this.v2LiveSink.setMasterMastering(
+      num(params?.threshold) ?? -14,
+      num(params?.ratio) ?? 3,
+      num(params?.makeup) ?? 1,
+      num(params?.ceiling) ?? 0.98,
+    );
   }
 
   /** Vereinfachte Effekt-Schnittstelle (Kompatibilität) – reicht an den Worklet weiter. */
@@ -1781,120 +1480,17 @@ class AudioEngine {
       Tone.Transport.seconds += drift;
   }
 
-  private tick(time: number) {
-    const step = this.currentStep;
-
-    // Trigger Synths (semantische Rollen aus dem Track-Role-Modell)
-    //  channel1=kick, channel2=hat, channel3=clap, channel7=bass
-    if (this.patterns.channel1[step] && !this.mutedStems.channel1 && TRACK_ROLE_MAP.channel1 === 'kick') {
-      this.kickSynth.triggerAttackRelease('C1', '8n', time);
-    }
-    if (this.patterns.channel2[step] && !this.mutedStems.channel2 && TRACK_ROLE_MAP.channel2 === 'hat') {
-      this.hatSynth.triggerAttackRelease('16n', time);
-    }
-    if (this.patterns.channel3[step] && !this.mutedStems.channel3 && TRACK_ROLE_MAP.channel3 === 'clap') {
-      this.clapSynth.triggerAttackRelease('16n', time);
-    }
-    if (this.patterns.channel7[step] && !this.mutedStems.channel7 && TRACK_ROLE_MAP.channel7 === 'bass') {
-      const note = MUSIC_SCALES[this.currentScaleName as keyof typeof MUSIC_SCALES]?.[this.synthNotes[step] % 8] || 'C2';
-      this.bassSynth.triggerAttackRelease(note, '16n', time);
-    }
-
-    // Trigger Samplers (Lead-Spur channel8 kann auch über den Worklet-Synth laufen)
-    (['channel4', 'channel5', 'channel6', 'channel8'] as TrackType[]).forEach(track => {
-      if (this.patterns[track][step] && !this.mutedStems[track]) {
-        if (this.samplePlayers[track]) {
-          this.samplePlayers[track].start(time);
-        } else if (track === 'channel8' && this.synthWorklet) {
-          // Kein Sample auf Lead => PolyBLEP-Synth-Worklet als Stimme verwenden.
-          const note = MUSIC_SCALES[this.currentScaleName as keyof typeof MUSIC_SCALES]?.[this.synthNotes[step] % 8] || 'C5';
-          const freq = noteToFreq(note);
-          this.synthWorklet.port.postMessage({ osc: 'saw', freq, trigger: 1, gain: 0.7 });
-          this.synthWorklet.port.postMessage({ noteOff: true }); // kurze Gate-Emulation
-        }
-      }
-    });
-
-    this.currentStep = (this.currentStep + 1) % this.stepCount;
-    this.emitStep(this.currentStep);
-    this.onBeatCallback(this.currentStep);
-  }
-
-  /**
-   * Task 2: Step-Trigger von der Audio-Clock (AudioWorklet) mit Swing & Gate.
-   * Swing wird im Clock-Worklet vorberechnet; hier übernehmen wir nur den
-   * exakten Audio-Zeitstempel und das Gate für die Note-Gesamtlänge.
-   */
-  private tickAt(time: number, gate: number, swing: number) {
-    // Swing in diesem Frame abgezogen (der Clock-Worklet verschiebt ohnehin den Takt);
-    // wir speichern Swing lediglich als Metadaten für EQ/DSP (synchrone Hinweise).
-    this.swing = swing;
-    this.gate = gate;
-
-    // Task 20: PLL-Drift-Kompensation für jitterfreie Sync.
-    // Die Worklet-Zeit ist die Audio-Referenz; Abweichung zur Transportzeit korrigieren.
-    const transportNow = Tone.Transport.seconds;
-    const drift = this.pll.update(time - transportNow);
-    Tone.Transport.seconds += drift;
-
-    // Schritt auf Basis der Audio-Clock ausführen (bestehende tick()-Logik nutzen).
-    this.tick(time);
-  }
-
-  /** Swing-aware Step-Fortschritt für die Main-Thread-Lookahead-Schleife. */
-  private advanceNote() {
-    const secondsPerBeat = 60.0 / Tone.Transport.bpm.value;
-    // 16 Steps = 16tel, 32 Steps = 32tel (Schrittlänge aus stepCount).
-    const baseStep = (4 / this.stepCount) * secondsPerBeat;
-    const isOdd = (this.currentStep % 2) === 1;
-    // Swing: ungerade Steps werden um das Swing-Verhältnis des Step-Abstands verzögert.
-    const swingOffset = isOdd ? baseStep * this.swing * 0.5 : 0;
-    this.nextNoteTime += baseStep + swingOffset;
-  }
-
   public triggerEvent(track: TrackType, velocity: number = 1.0) {
     // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
     if (!this.mainHolderActive) return;
-    if (this.playbackMode === 'v2') {
-      // AUDIO-P0-003: Trigger hörbar in den V2-Sink leiten.
-      const player = this.samplePlayers[track];
-      const buffer = player?.buffer?.get?.();
-      if (buffer && buffer.numberOfChannels > 0) {
-        this.bridgeAudioBufferToV2(track, buffer);
-        this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
-      } else {
-        this.v2LiveSink.synthTrigger(track, Math.max(0.2, Math.min(1, velocity)));
-      }
-      return;
-    }
-    if (!this.initialized) return;
-    this.processEvent({ track, velocity }, Tone.now());
-  }
-
-  private processEvent(event: { track: TrackType; velocity: number }, time: number) {
-    if (this.mutedStems[event.track]) return;
-
-    // #DJ: Geladener Track gewinnt – der DJ-Mixer spielt auf einem belegten
-    // Kanal die geladene Musik statt der synthetischen Rollen-Stimme
-    // (kick/hat/clap/bass). Nur unbelegte Kanäle fallen auf Synth zurück.
-    if (this.samplePlayers[event.track]) {
-      this.samplePlayers[event.track].start(time);
-      return;
-    }
-
-    switch (TRACK_ROLE_MAP[event.track]) {
-      case 'kick': this.kickSynth.triggerAttackRelease('C1', '8n', time, event.velocity); break;
-      case 'hat': this.hatSynth.triggerAttackRelease('16n', time, event.velocity); break;
-      case 'clap': this.clapSynth.triggerAttackRelease('16n', time, event.velocity); break;
-      case 'bass': {
-        const noteM = MUSIC_SCALES[this.currentScaleName as keyof typeof MUSIC_SCALES]?.[0] || 'C2';
-        this.bassSynth.triggerAttackRelease(noteM, '16n', time, event.velocity);
-        break;
-      }
-      default:
-        if (this.samplePlayers[event.track]) {
-          this.samplePlayers[event.track].start(time);
-        }
+    // AUDIO-P0-003/Phase 9: Trigger hörbar in den V2-Sink leiten.
+    const player = this.samplePlayers[track];
+    const buffer = player?.buffer?.get?.();
+    if (buffer && buffer.numberOfChannels > 0) {
+      this.bridgeAudioBufferToV2(track, buffer);
+      this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
+    } else {
+      this.v2LiveSink.synthTrigger(track, Math.max(0.2, Math.min(1, velocity)));
     }
   }
 
@@ -1948,18 +1544,18 @@ class AudioEngine {
   }
 
   /**
-   * P0-6-Prüfpunkt: Abhör-Snapshot des lokalen Users (Plan + verdrahtete
-   * Knotenwerte). `wired` zeigt an, ob der Cue-Bus real im Audio-Graph hängt
-   * (im Silent-/Test-Modus ohne AudioContext bleibt nur der Plan).
+   * P0-6-Prüfpunkt: Abhör-Snapshot des lokalen Users.
+   * Phase 9: Die hörbare Verdrahtung liegt im V2-Sink; `wired` zeigt, ob der
+   * V2-Live-Sink verbunden ist.
    */
   public getMonitorRouting(): MonitorRoutingPlan & { wired: boolean; nodeGains: { main: number; cue: number } } {
     return {
       ...this.monitorPlan,
       cueTracks: { ...this.monitorPlan.cueTracks },
-      wired: !!this.cueBus && !!this.mainMonitorGain,
+      wired: this.v2LiveSink.isConnected,
       nodeGains: {
-        main: this.mainMonitorGain?.gain.value ?? 1,
-        cue: this.cueOutGain?.gain.value ?? 0,
+        main: this.monitorPlan.mainMonitorGain,
+        cue: this.monitorPlan.cueGain,
       },
     };
   }
@@ -2042,47 +1638,14 @@ class AudioEngine {
     });
     this.monitorPlan = plan;
 
-    const now = this.ctx?.currentTime ?? 0;
-    const ramp = 0.01;
-    const setGain = (node: GainNode | null | undefined, value: number) => {
-      if (!node) return;
-      try {
-        node.gain.cancelScheduledValues(now);
-        node.gain.setTargetAtTime(value, now, ramp);
-      } catch {
-        try { node.gain.value = value; } catch { /* Knoten nicht steuerbar */ }
-      }
-    };
-
-    setGain(this.mainMonitorGain, plan.mainMonitorGain);
-    setGain(this.cueOutGain, plan.cueGain);
-    (Object.keys(plan.cueTracks) as TrackType[]).forEach((t) => {
-      setGain(this.cueTrackGains[t], plan.cueTracks[t]);
-    });
-    // Phase 4: Wenn der V2-Live-Sink aktiv ist, bekommt er denselben Plan –
-    // der V2-MonitorGraph bildet MAIN/MON/PLUGIN/MIX backend-unabhängig ab.
+    // Phase 9: Der V2-Live-Sink ist der einzige hörbare Monitor-Weg.
     this.v2LiveSink.setMonitorRouting(plan);
   }
 
-  /** Erstellt den PolyBLEP-Synth-Worklet (falls geladen) und verdrahtet ihn. */
-  private async tryInitSynthWorklet() {
-    this.synthWorklet = createSynthWorkletNode(this.ctx);
-    if (!this.synthWorklet) return;
-    // F1: Worklet-Synth über den Kanalzug (channel4) führen, damit Fader/EQ/Pan wirken.
-    this.ensureChannelNode('channel4');
-    const synthChannel = this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER'];
-    const leadGain = new Tone.Volume(-8);
-    // @ts-expect-error Tone-Node-Kompatibilitaet fuer Web-Audio-Worklet
-    this.synthWorklet.connect(leadGain.input ? leadGain.input : this.ctx.destination);
-    leadGain.connect(synthChannel);
-    console.info('synth-processor (PolyBLEP) aktiviert.');
-  }
-
-  /** P0-2: Synth-Graph (PolyBLEP + it-synth) erst bei erster Aktivierung aufbauen. */
+  /** P0-2: Synth-Graph (it-synth) erst bei erster Aktivierung aufbauen. */
   public ensureSynthGraph(): Promise<void> {
     if (!this.synthGraphPromise) {
       this.synthGraphPromise = (async () => {
-        await this.tryInitSynthWorklet();
         await this.tryInitItSynthWorklet();
       })().catch((e) => {
         console.warn('[audio] Synth-Graph konnte nicht geladen werden:', (e as Error).message);
@@ -2139,70 +1702,41 @@ class AudioEngine {
     return common;
   }
 
-  /** Steuert den Worklet-Synth (Note-On / Parameter). */
-  public noteOnWorklet(freq: number, velocity = 1, osc = 'saw') {
-    if (!this.synthWorklet) return;
-    this.synthWorklet.port.postMessage({ osc, freq, trigger: velocity, gain: velocity });
+  /** Steuert den Synth (Note-On) – Phase 9: hörbar über den V2-Sink. */
+  public noteOnWorklet(freq: number, velocity = 1, _osc = 'saw') {
+    this.v2LiveSink.setSynthSource('channel8', Math.max(20, Math.min(20000, freq)), 'lead');
+    this.v2LiveSink.synthTrigger('channel8', Math.max(0.2, Math.min(1, velocity)));
   }
   public noteOffWorklet() {
-    this.synthWorklet?.port.postMessage({ noteOff: true });
+    this.v2LiveSink.stopSample('channel8');
   }
 
   public async play() {
     // MAIN-Schutz: Transport startet nur beim mixerMONK-Halter.
     if (!this.mainHolderActive) return;
     this.idleDetector.activity(); // AM-E6-5: Play beendet Idle-Suspend
-    if (this.playbackMode === 'v2') {
-      // Phase 2: V2-Transport läuft über den sample-genauen AudioWorklet-
-      // Scheduler (v2SinkProcessor/V2SampleClock) – kein graphPlayback.setInterval.
-      await this.ensureInitialized();
-      const connected = await this.connectV2LiveOutput();
-      if (!connected) return;
-      this.syncV2PatternsToLiveSink();
-      this.syncV2SamplesToLiveSink();
-      this.syncV2SynthSourcesToLiveSink();
-      this.v2LiveSink.startTransport({
-        bpm: Tone.Transport.bpm.value,
-        swing: this.swing,
-        gate: this.gate,
-        stepCount: this.stepCount,
-      });
-      this.isPlaying = true;
-      return;
-    }
-    try {
-      await this.init();
-    } catch (e) {
-      console.error('[audio] init fehlgeschlagen:', (e as Error).message);
-      throw e;
-    }
-    if (this.isPlaying) return;
+    // Phase 9: V2-Transport läuft über den sample-genauen AudioWorklet-
+    // Scheduler (v2SinkProcessor/V2SampleClock) – kein V1-Scheduler mehr.
+    await this.ensureInitialized();
+    const connected = await this.connectV2LiveOutput();
+    if (!connected) return;
+    this.syncV2PatternsToLiveSink();
+    this.syncV2SamplesToLiveSink();
+    this.syncV2SynthSourcesToLiveSink();
+    this.v2LiveSink.startTransport({
+      bpm: Tone.Transport.bpm.value,
+      swing: this.swing,
+      gate: this.gate,
+      stepCount: this.stepCount,
+    });
     this.isPlaying = true;
-    this.nextNoteTime = Tone.context.currentTime + 0.1;
-    // Task 20: Wenn ein AudioWorklet-Clock-Generator läuft, ist er die primäre
-    // Step-Quelle (jitterfrei). Die setTimeout-Lookahead-Schleife ist dann nur
-    // ein redundanter Fallback und wird NICHT zusätzlich gestartet.
-    if (!this.clockNode) {
-      this.scheduler();
-    }
-    Tone.Transport.start();
   }
 
   public stop() {
     if (!this.mainHolderActive) return;
-    if (this.playbackMode === 'v2') {
-      this.isPlaying = false;
-      this.v2LiveSink.stopTransport();
-      this.v2LiveSink.disconnect();
-      return;
-    }
     this.isPlaying = false;
-    if (this.timerID) {
-        clearTimeout(this.timerID);
-        this.timerID = null;
-    }
-    Tone.Transport.stop();
-    this.currentStep = 0;
+    this.v2LiveSink.stopTransport();
+    this.v2LiveSink.disconnect();
   }
 
   public dispose() {
@@ -2213,17 +1747,7 @@ class AudioEngine {
     try { this.previewPlayer?.dispose(); } catch { /* ignore */ }
     this.previewPlayer = null;
 
-    // Dispose all synthesizers
-    this.kickSynth?.dispose();
-    this.hatSynth?.dispose();
-    this.clapSynth?.dispose();
-    this.clapFilter?.dispose();
-    this.bassSynth?.dispose();
-    this.bassFilter?.dispose();
-    this.bassDelay?.dispose();
-
-    // Dispose all sample players
-    Object.values(this.samplePlayers).forEach(p => p.dispose());
+    // Sample-Player-Zustand zurücksetzen.
     this.samplePlayers = {};
     this.trackSampleUrl = {
       channel1: null, channel2: null, channel3: null, channel4: null,
@@ -2231,39 +1755,23 @@ class AudioEngine {
       channel9: null, channel10: null,
     };
 
-    // Kanalzuege (Pre-Fader/Gain/EQ/Pan) entsorgen.
-    Object.values(this.channelInputs).forEach((n) => { try { n?.dispose(); } catch { /* ignore */ } });
-    Object.values(this.channelGains).forEach((n) => { try { n?.dispose(); } catch { /* ignore */ } });
-    Object.values(this.channelPans).forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
-    Object.values(this.channelEQs).forEach((eq) => {
-      try { eq.low.dispose(); eq.mid.dispose(); eq.high.dispose(); } catch { /* ignore */ }
-    });
+    // Kanalzug-Zustand zurücksetzen (keine Audio-Nodes mehr – reine Zustände).
     this.channelInputs = {};
     this.channelGains = {};
     this.channelPans = {};
     this.channelEQs = {};
 
-    // Spatial-Bus abräumen.
+    // Spatial-Zustand zurücksetzen.
     if (this.spatialRebuildTimer) { clearTimeout(this.spatialRebuildTimer); this.spatialRebuildTimer = null; }
-    this.spatialGains.forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
-    try { this.spatialMerger?.disconnect(); } catch { /* ignore */ }
     this.spatialGains = [];
     this.spatialMerger = null;
     this.spatialEnabled = false;
 
-    // Finaler Output-Gain abräumen.
-    try { this.outputGain?.disconnect(); } catch { /* ignore */ }
+    // Legacy-Taps zurücksetzen (V2-Ausgang wird über v2LiveSink abgegriffen).
     this.outputGain = null;
-    try { this.masterStreamTap?.disconnect(); } catch { /* ignore */ }
     this.masterStreamTap = null;
-
-    // P0-6: Lokalen Abhör-/Cue-Weg abräumen.
-    try { this.mainMonitorGain?.disconnect(); } catch { /* ignore */ }
     this.mainMonitorGain = null;
-    Object.values(this.cueTrackGains).forEach((n) => { try { n?.disconnect(); } catch { /* ignore */ } });
     this.cueTrackGains = {};
-    try { this.cueBus?.disconnect(); } catch { /* ignore */ }
-    try { this.cueOutGain?.disconnect(); } catch { /* ignore */ }
     this.cueBus = null;
     this.cueOutGain = null;
     this.monitorRequest = { source: 'MAIN', mon: 'MON1' };
@@ -2277,29 +1785,13 @@ class AudioEngine {
     this.drumBufferCache.clear();
     this.drumBufferPromises.clear();
 
-    // Dispose mastering chain
-    this.masterMePreGain?.dispose();
-    this.masterMeHighpass?.dispose();
-    this.masterMeCompressor?.dispose();
-    this.masterMeMultiband?.dispose();
-    this.masterMeLimiter?.dispose();
-
-    this.toneShiftEqBands.forEach(b => b.dispose());
-    this.toneShiftEqBands = [];
-    this.toneShiftTilt?.dispose();
-
+    // Phase 9: Keine Mastering-No-Op-Kette mehr – nur Zustände zurücksetzen.
     this.masterVolume?.dispose();
     Object.values(this.masterBuses).forEach(b => b.dispose());
-    this.analyser?.dispose();
 
-    // Worklets don't have a direct dispose() but they should be disconnected
-    // T-0006: auch die Worklets selbst nullen (nicht nur die Synth-Klassen),
-    // damit nach dispose()+init() keine Zombie-Nodes aus dem Fallback-Pfad
-    // (neutraler Gain-Stand-in) weiterlaufen.
-    const workletNodes: Array<{ node: AudioWorkletNode | null; set: (n: null) => void }> = [];
-    void workletNodes; // Referenzliste bewusst ungenutzt – Cleanup unten direkt.
+    // Worklets trennen und nullen (keine Zombie-Nodes nach dispose()+init()).
     for (const key of ['dspNode', 'eqNode', 'masteringNode', 'lufsNode', 'analyzerNode',
-      'itSynthNode', 'synthWorklet', 'clockNode', 'effectNode', 'dynamicsNode',
+      'itSynthNode', 'effectNode', 'dynamicsNode',
       'granularNode', 'fm6Node', 'drumSynthNode'] as const) {
       try {
         (this as unknown as Record<string, { disconnect: () => void } | null>)[key]?.disconnect();
@@ -2310,18 +1802,7 @@ class AudioEngine {
     this.masteringNode = null as unknown as typeof this.masteringNode;
     this.lufsNode = null as unknown as typeof this.lufsNode;
     this.analyzerNode = null as unknown as typeof this.analyzerNode;
-    // instrumentMONK-/Synth-/Clock-/Effekt-Worklets ebenfalls trennen.
-    this.itSynthNode?.disconnect();
-    this.synthWorklet?.disconnect();
-    this.clockNode?.disconnect();
-    this.effectNode?.disconnect();
-    this.dynamicsNode?.disconnect();
-    this.granularNode?.disconnect();
-    this.fm6Node?.disconnect();
-    this.drumSynthNode?.disconnect();
     this.itSynthNode = null;
-    this.synthWorklet = null;
-    this.clockNode = null;
     this.effectNode = null;
     this.dynamicsNode = null;
     this.granularNode = null;
@@ -2799,7 +2280,7 @@ class AudioEngine {
    */
   public connectLiveWorkletChain(): boolean {
     if (!this.ctx) return false;
-    const source = (this.itSynthNode ?? this.synthWorklet) as AudioNode | null;
+    const source = this.itSynthNode as AudioNode | null;
     if (!source) return false;
     const bridge = new WebAudioWorkletBridge();
     return bridge.connect({
@@ -3482,11 +2963,9 @@ class AudioEngine {
       this.spatialMerger = merger;
       this.spatialEnabled = true;
 
-      // Verbindung: Master-Signal in den Splitter einspeisen. F3: Nutze den
-      // post-Mastering-Tap, damit auch der Spatial-Bus den fertigen Master
-      // erhält. Der Merger-Ausgang ist ein bewusster Hardware-Pfad zur
-      // Surround-Device-Destination (nicht der lokale Kopfhörer-/Cue-Weg).
-      const masterOut: any = this.masterStreamTap || this.masterMeLimiter || this.masterVolume;
+      // Verbindung: Master-Signal in den Splitter einspeisen (Phase 9: V2-Tap
+      // oder Master-Zustand; der hörbare Spatial-Pfad läuft über V2OutputGraph).
+      const masterOut: any = this.masterStreamTap || this.masterVolume;
       try { masterOut.connect(splitter); } catch { /* ignore */ }
 
       // Merger-Ausgang an Destination (für echte Surround-Geräte/Devices).

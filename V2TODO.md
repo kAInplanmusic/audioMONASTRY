@@ -128,9 +128,9 @@ V1-Elemente werden durch V2-Äquivalente ersetzt:
 - [x] AP3: Echte V1-Worklet-Klassen (`EqProcessor`, `DspProcessor`, `EffectProcessor`) exportiert; `tests/v2DspV1Parity.test.ts` vergleicht echte V1-Klassen mit V2-Nodes
 
 ### Phase 9 – V1 entfernen
-- [ ] Tone.js-/V1-Abhängigkeiten entfernen, soweit möglich
-- [ ] `audioEngine.ts`-Monolith durch V2-Module ersetzen
-- [ ] Doku/README auf V2-only umstellen
+- [x] Tone.js-/V1-Abhängigkeiten entfernen, soweit möglich (2026-09-10: `tone`-Paket bereits entfernt; **V1-Transport-Zweige, No-Op-Synth-Felder, Fake-Mastering-Kette und Legacy-Worklet-Doppelpfad aus `audioEngine.init()` entfernt**; Live-Gate headed grün)
+- [~] `audioEngine.ts`-Monolith durch V2-Module ersetzen (2026-09-10: Facade ist jetzt reine V2-Terminal-Bridge mit Zustandsfeldern; vollständiger Datei-Split bleibt P1 → `MASTER_TODO.md` AUDIO-P1-002)
+- [x] Doku/README auf V2-only umstellen (README/README_DE deklarieren V2 als einzigen Produktiv-Pfad; `MASTER_TODO.md` ist kanonische Ausführungsliste)
 
 ## 5. Gleichzeitig mitnehmen (Visions + bestehende TODOs)
 
