@@ -173,3 +173,24 @@ den Indexierungsgrad abfragbar.
   gilt nicht mehr: pro Rolle entscheidet das `preload`-Flag; der Rest lädt per LRU.
 - **Lizenzen**: MusicGen/MERT/Bark/MMS-TTS sind NC-Gewichte → nur privat/Forschung.
 - **Cold-Start** bleibt real, wenn der Wake unterbleibt oder der Endpoint lange idle war.
+
+---
+
+## 8. Live-Zustand (2026-09-10)
+
+| Rolle | Endpoint-ID | GPU-Pool | Worker | Idle |
+|---|---|---|---|---|
+| brain | `ppxo7wrn599p0q` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
+| ears | `xeax6xrgd0csag` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
+| voiceGen | `gajmangfldpzrk` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
+
+Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@1391e4d2` (Build-Args
+`AI_INSTALL_AUDIO_AI=1 AI_INSTALL_VOICE_AI=1 AI_INSTALL_VLLM=0`).
+Rollen-Smoke je Rolle grün (brain→`qwen3-14b`, ears→`ast-audioset`/`clap-music`/`whisper-large-v3`,
+voiceGen→`demucs`/`mms-tts-deu`/`qwen3-tts-06b`). Kosten der Inbetriebnahme **$0.024**;
+nach dem Test alles auf `$0/h` abgeschaltet.
+Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
+
+⚠️ **CI-Deploy ist rot**, solange das Repo-Secret `RP_API_KEY` fehlt; das lokale Deploy
+funktioniert. Und: **ohne vLLM im Image ist der Brain-LLM-Pfad (`runpod-local`) noch
+funktionslos** — `AI_INSTALL_VLLM=1` + `RUNPOD_BRAIN_OPENAI_URL` sind der nächste Schritt.

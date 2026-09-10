@@ -96,6 +96,18 @@ jobs:
       - name: RunPod SDK installieren
         run: python3 -m pip install --quiet runpod==1.12.0
 
+      - name: Preflight – Pflicht-Secrets prüfen
+        env:
+          RP_API_KEY: ${{ secrets.RP_API_KEY }}
+        run: |
+          if [ -z "${RP_API_KEY:-}" ]; then
+            echo "::error::Repo-Secret RP_API_KEY fehlt oder ist leer – RunPod-Deploy nicht möglich (siehe logs/run-2026-09-10/RUN_PROTOKOLL.md)."
+            echo "Lokal funktioniert das Deploy stattdessen mit:"
+            echo "  IMAGE=<ghcr-image> RUNPOD_GPU_ID=AMPERE_48 RUNPOD_IDLE_TIMEOUT=15 python3 scripts/runpod-deploy.py"
+            exit 1
+          fi
+          echo "RP_API_KEY ist gesetzt."
+
       - name: RunPod Serverless Endpoints deployen
         env:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
