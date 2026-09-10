@@ -81,10 +81,19 @@ jobs:
       # und voiceGen (2,6 GB) sind in Sekunden gezogen – die bleiben schlank.
       # Ein Network Volume wäre die Alternative, läuft aber nur in einem der 18
       # volume-fähigen Rechenzentren – und dort gibt es keinen A40/A6000-Pool.
-      - name: Plattenplatz vor dem Brain-Build protokollieren
+      # Der Back-Build braucht ~30 GB Gewichte ZUSÄTZLICH zum Basis-Image. Ein
+      # Fehlschlag wegen Plattenplatz ist in den Actions-Logs unsichtbar – deshalb
+      # ist dieser Step eine harte Zusage: er FAILT, wenn der Platz nicht reicht.
+      # So ist die Ursache am Step-Status ablesbar, ohne Log-Zugriff.
+      - name: Plattenplatz fuer den Brain-Build pruefen (assert >= 60 GB frei)
         run: |
           df -h / /mnt 2>/dev/null || df -h
-          echo "--- freier Platz ist der wahrscheinlichste Grund fuer einen Fehlschlag des Back-Builds (30 GB Gewichte) ---"
+          FREE_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+          echo "freier Platz auf /: ${FREE_GB} GB"
+          if [ "${FREE_GB:-0}" -lt 60 ]; then
+            echo "::error::Zu wenig Plattenplatz fuer die 30 GB Gewichte (${FREE_GB} GB frei, benoetigt >= 60 GB). Der Back-Build muss auf einer Maschine mit mehr Platz laufen."
+            exit 1
+          fi
 
       - name: Build & Push (brain – Gewichte eingebacken)
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
