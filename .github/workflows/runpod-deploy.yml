@@ -96,13 +96,17 @@ jobs:
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import torch; print(torch.__version__)"
 
-      - name: Probe 2 – transformers importierbar
+      - name: Probe 2 – transformers über den Worker-Pfad (_require_lib)
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import transformers; print(transformers.__version__)"
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "from handlers_runpod import _require_lib; print('require_lib ok', _require_lib('transformers','transformers').__version__)"
 
       - name: Probe 3 – transformers kennt Qwen3-14B
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "from transformers import AutoConfig; print(AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
+
+      - name: Probe 3b – huggingface-hub Version
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import huggingface_hub; print(huggingface_hub.__version__)"
 
       - name: Probe 4 – soundfile + scipy importierbar
         continue-on-error: true

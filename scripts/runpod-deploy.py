@@ -174,19 +174,43 @@ def deploy_role(role: str, image: str) -> Optional[str]:
         runpod.update_endpoint_template(endpoint_id, template_id)
     else:
         print(f"[deploy] {endpoint_name}: anlegen (GPU {gpu_id} x{gpu_count}) …")
-        endpoint = runpod.create_endpoint(
-            name=endpoint_name,
-            template_id=template_id,
-            gpu_ids=gpu_id,
-            network_volume_id=env("RUNPOD_NETWORK_VOLUME_ID") or None,
-            idle_timeout=idle_timeout,
-            scaler_type="QUEUE_DELAY",
-            scaler_value=4,
-            workers_min=workers_min,
-            workers_max=workers_max,
-            flashboot=False,
-            gpu_count=gpu_count,
-        )
+        volume_id = env("RUNPOD_NETWORK_VOLUME_ID") or None
+
+        def create(volume: Optional[str]):
+            return runpod.create_endpoint(
+                name=endpoint_name,
+                template_id=template_id,
+                gpu_ids=gpu_id,
+                network_volume_id=volume,
+                idle_timeout=idle_timeout,
+                scaler_type="QUEUE_DELAY",
+                scaler_value=4,
+                workers_min=workers_min,
+                workers_max=workers_max,
+                flashboot=False,
+                gpu_count=gpu_count,
+            )
+
+        try:
+            endpoint = create(volume_id)
+        except Exception as exc:  # noqa: BLE001
+            # Ein ungültiges/veraltetes RUNPOD_NETWORK_VOLUME_ID darf den Deploy
+            # nicht verhindern: ohne Volume neu versuchen (Gewichte werden dann
+            # pro Kaltstart erneut geladen).
+            if not volume_id:
+                print(f"[deploy] FEHLER {endpoint_name}: {type(exc).__name__}: {exc}", file=sys.stderr)
+                return None
+            print(
+                f"[deploy] WARNUNG {endpoint_name}: Anlegen mit Network-Volume "
+                f"{volume_id[:8]}… fehlgeschlagen ({type(exc).__name__}) → Retry ohne Volume",
+                file=sys.stderr,
+            )
+            try:
+                endpoint = create(None)
+            except Exception as exc2:  # noqa: BLE001
+                print(f"[deploy] FEHLER {endpoint_name}: {type(exc2).__name__}: {exc2}", file=sys.stderr)
+                return None
+
         endpoint_id = endpoint.get("id", "")
         if registry_auth_id:
             print(f"[deploy] {endpoint_name}: Registry-Auth {registry_auth_id} aktiv")

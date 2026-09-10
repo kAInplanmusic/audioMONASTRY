@@ -1,7 +1,14 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
 pydantic==2.10.4
-transformers==4.46.3
+# transformers 4.57.3 ist die Basis für das Brain-Modell (Qwen3 gibt es erst ab
+# 4.51) und entspricht dem Pin in requirements-voice-ai.lock.
+transformers==4.57.3
+# KRITISCH: transformers 4.57.x prüft `huggingface-hub>=0.34,<1.0` und wirft beim
+# Import sonst eine ImportError-Kaskade, die im Worker als generisches
+# MODEL_UNAVAILABLE ankommt. Andere Pakete (qwen-tts/diffusers) ziehen sonst
+# huggingface-hub 1.x herein.
+huggingface-hub>=0.34.0,<1.0
 soundfile==0.12.1
 scipy==1.14.1
 pyannote.audio==3.3.2

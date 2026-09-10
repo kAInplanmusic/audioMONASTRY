@@ -10,3 +10,7 @@
 qwen-tts==0.1.1
 transformers==4.57.3
 accelerate==1.12.0
+
+# transformers 4.57.3 verlangt huggingface-hub<1 – hier explizit mitpinnen,
+# damit der Voice-/Audio-Stack den Pin nicht wieder auf 1.x hebt.
+huggingface-hub>=0.34.0,<1.0

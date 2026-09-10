@@ -45,21 +45,27 @@ RUN if [ "$AI_INSTALL_VLLM" = "1" ]; then \
 RUN pip install --no-cache-dir runpod==1.12.0
 
 # ---------------------------------------------------------------------------
-# Build-Time-Diagnose der Kernabhängigkeiten
+# Abhängigkeits-Erzwingung + harte Prüfung
 # ---------------------------------------------------------------------------
-# Bewusst NICHT fatal: das Ergebnis dient der Dokumentation im Build-Log.
-# Die harten Proben laufen als eigene Workflow-Steps – deren Step-Namen sind
-# auch ohne Log-Zugriff auswertbar (siehe .github/workflows/runpod-deploy.yml).
+# transformers 4.57.x verlangt `huggingface-hub>=0.34,<1.0`. Andere Stacks
+# (qwen-tts / diffusers) ziehen sonst huggingface-hub 1.x herein – die Folge ist
+# ein ImportError-Kaskade, die im Worker nur als generisches MODEL_UNAVAILABLE
+# ankommt (genau so passiert am 2026-09-10). Deshalb hier NACH allen Lock-
+# Installs hart erzwingen und den echten Worker-Pfad prüfen.
+RUN pip install --no-cache-dir "huggingface-hub>=0.34.0,<1.0"
+
+# Importiert die Namen wie der Worker (`_require_lib` nutzt fromlist=["*"]) –
+# ein simples `import transformers` allein löst den Versionscheck NICHT aus und
+# hätte den Fehler übersehen.
 RUN python -c "\
-import importlib; \
-[print('  [dep] %-16s %s' % (n, (lambda m: 'OK ' + getattr(m, '__version__', '?'))(importlib.import_module(n)))) \
- for n in ('torch', 'transformers', 'soundfile', 'scipy')]" || true
+import huggingface_hub, transformers; \
+print('huggingface-hub', huggingface_hub.__version__, '| transformers', transformers.__version__); \
+exec('from transformers import *'); \
+assert huggingface_hub.__version__.split('.')[0] == '0', 'huggingface-hub muss <1.0 sein'; \
+print('transformers Import-Pfad ok (worker-identisch)')"
 
 # Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
-# Schreibt das Ergebnis als Datei ins Image, damit es ohne Log-Zugriff prüfbar ist.
-RUN printf 'transformers=%s\n' "$(python -c 'import transformers;print(transformers.__version__)' 2>&1 | head -1)" > /tmp/depcheck.txt; \
-    python -c "from transformers import AutoConfig; print('qwen3_config_type=' + AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)" >> /tmp/depcheck.txt 2>&1 || echo "qwen3_config_FAILED" >> /tmp/depcheck.txt; \
-    cat /tmp/depcheck.txt
+RUN python -c "from transformers import AutoConfig; print('qwen3 config ok:', AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
 
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py runpod_worker.py ./
 COPY model_manifest.json runtime_config.yaml ./
