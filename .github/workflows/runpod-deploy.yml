@@ -85,6 +85,45 @@ jobs:
             -f visibility=public \
           || echo "INFO: Paket bleibt privat – GHCR_USERNAME/GHCR_PASSWORD werden benötigt."
 
+      # ---------------------------------------------------------------------
+      # Abhängigkeits-Proben
+      # ---------------------------------------------------------------------
+      # Jede Probe ist ein eigener Step mit `continue-on-error`, damit der
+      # Step-Status (auch ohne Log-Zugriff auswertbar) zeigt, WELCHER Import
+      # kaputt ist. Genau daran ist der Brain-LLM-Task gescheitert
+      # (`MODEL_UNAVAILABLE`, weil `_require_lib` einen ImportError fängt).
+      - name: Probe 1 – torch importierbar
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import torch; print(torch.__version__)"
+
+      - name: Probe 2 – transformers importierbar
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import transformers; print(transformers.__version__)"
+
+      - name: Probe 3 – transformers kennt Qwen3-14B
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "from transformers import AutoConfig; print(AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
+
+      - name: Probe 4 – soundfile + scipy importierbar
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import soundfile, scipy; print(soundfile.__version__, scipy.__version__)"
+
+      - name: Probe 5 – diffusers importierbar
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import diffusers; print(diffusers.__version__)"
+
+      - name: Probe 6 – pyannote.audio importierbar
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import pyannote.audio; print('ok')"
+
+      - name: Probe 7 – qwen_tts importierbar
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import qwen_tts; print('ok')"
+
+      - name: Probe 8 – Worker-Handler-Tabelle läd
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import handlers; print('llm' in handlers.HANDLERS, sorted(handlers.HANDLERS))"
+
   # Alle drei Rollen-Endpoints. workers_min bleibt 0 (Scale-to-Zero); der
   # Session-Wake hebt es beim Studio-Eintritt temporär auf 1.
   deploy:

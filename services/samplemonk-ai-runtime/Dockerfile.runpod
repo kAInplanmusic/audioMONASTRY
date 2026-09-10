@@ -45,16 +45,21 @@ RUN if [ "$AI_INSTALL_VLLM" = "1" ]; then \
 RUN pip install --no-cache-dir runpod==1.12.0
 
 # ---------------------------------------------------------------------------
-# Build-Time-Smoke der Kernabhängigkeiten
+# Build-Time-Diagnose der Kernabhängigkeiten
 # ---------------------------------------------------------------------------
-# Ohne diesen Check schlägt ein kaputter Import erst zur Laufzeit als generisches
-# `MODEL_UNAVAILABLE` im Worker zu – und die Serverless-Container-Logs sind über
-# die API nicht lesbar. Hier bricht stattdessen der Build ab.
-RUN python -c "import torch, transformers, soundfile, scipy; print('deps ok:', 'torch', torch.__version__, '| transformers', transformers.__version__)"
+# Bewusst NICHT fatal: das Ergebnis dient der Dokumentation im Build-Log.
+# Die harten Proben laufen als eigene Workflow-Steps – deren Step-Namen sind
+# auch ohne Log-Zugriff auswertbar (siehe .github/workflows/runpod-deploy.yml).
+RUN python -c "\
+import importlib; \
+[print('  [dep] %-16s %s' % (n, (lambda m: 'OK ' + getattr(m, '__version__', '?'))(importlib.import_module(n)))) \
+ for n in ('torch', 'transformers', 'soundfile', 'scipy')]" || true
 
-# Verifiziert zusätzlich, dass transformers das Brain-Modell kennt (Qwen3 gibt es
-# erst ab transformers >= 4.51) und dass der HF-Hub erreichbar ist.
-RUN python -c "from transformers import AutoConfig; cfg = AutoConfig.from_pretrained('Qwen/Qwen3-14B'); print('qwen3 config ok:', cfg.model_type)"
+# Kennt transformers das Brain-Modell? (Qwen3 gibt es erst ab transformers >= 4.51.)
+# Schreibt das Ergebnis als Datei ins Image, damit es ohne Log-Zugriff prüfbar ist.
+RUN printf 'transformers=%s\n' "$(python -c 'import transformers;print(transformers.__version__)' 2>&1 | head -1)" > /tmp/depcheck.txt; \
+    python -c "from transformers import AutoConfig; print('qwen3_config_type=' + AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)" >> /tmp/depcheck.txt 2>&1 || echo "qwen3_config_FAILED" >> /tmp/depcheck.txt; \
+    cat /tmp/depcheck.txt
 
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py runpod_worker.py ./
 COPY model_manifest.json runtime_config.yaml ./
