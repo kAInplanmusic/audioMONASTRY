@@ -63,6 +63,8 @@ manager = ModelManager()
 _ready = False
 _startup_errors: list[str] = []
 _preload_done = False
+# Einmal pro Worker-Instanz: verhindert doppelte Downloads bei mehreren Jobs.
+_predownload_done = False
 
 
 def log_event(level: str, msg: str, **fields: Any) -> None:
@@ -132,6 +134,132 @@ def _preload_background() -> None:
         log_event("WARN", "preload failed", error=type(exc).__name__)
 
 
+def _dir_size_gb(path: str) -> float:
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for name in files:
+            try:
+                total += os.path.getsize(os.path.join(root, name))
+            except OSError:
+                continue
+    return round(total / 1024**3, 2)
+
+
+def _free_gb(path: str) -> float:
+    try:
+        stat = os.statvfs(path)
+        return round(stat.f_bavail * stat.f_frsize / 1024**3, 2)
+    except OSError:
+        return -1.0
+
+
+def _handle_predownload(role: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Lädt die Gewichte der Rolle in den PERSISTENTEN HF-Cache.
+
+    Nutzt dieselben Libraries und dasselbe `HF_HOME` wie die echte Inferenz –
+    damit passt der Cache-Layout garantiert. Ziel: mit einem RunPod
+    Network-Volume auf `/data` ist der Kaltstart danach nur noch Platte→VRAM
+    statt ein 30-GB-Download pro Session.
+
+    Wählt pro Repo das günstigste Format: gibt es `.safetensors`, werden die
+    (gleich großen) `.bin`-Duplikate sowie TF/Flax/ONNX-Varianten übersprungen.
+    Repos ohne `.safetensors` (z. B. CLAP) liefern weiterhin `.bin`.
+    """
+    global _predownload_done
+    if _predownload_done:
+        return {
+            "status": "success",
+            "task": "predownload",
+            "result": {"role": role, "skipped": "already downloaded in this worker", "cachedGb": _dir_size_gb(_hf_home())},
+        }
+
+    try:
+        from huggingface_hub import HfApi, snapshot_download
+    except Exception as exc:  # noqa: BLE001
+        return {"status": "error", "code": "HF_HUB_MISSING", "message": f"{type(exc).__name__}: {exc}"[:200]}
+
+    hf_home = _hf_home()
+    try:
+        os.makedirs(hf_home, exist_ok=True)
+        probe = os.path.join(hf_home, ".write-probe")
+        with open(probe, "w", encoding="utf-8") as fh:
+            fh.write("ok")
+        os.remove(probe)
+        writable = True
+        write_error = ""
+    except Exception as exc:  # noqa: BLE001
+        writable = False
+        write_error = f"{type(exc).__name__}: {exc}"[:200]
+
+    info = {m["id"]: m for m in manager.get_model_info()}
+    requested = payload.get("models")
+    if isinstance(requested, list) and requested:
+        targets = [str(m) for m in requested if str(m) in info]
+    else:
+        targets = [mid for mid, m in info.items() if m.get("preload")]
+
+    free_before = _free_gb(hf_home if writable else "/")
+    started = time.time()
+    done: Dict[str, float] = {}
+    skipped: Dict[str, str] = {}
+    failed: Dict[str, str] = {}
+    api = HfApi()
+
+    for model_id in targets:
+        repo = str(info[model_id].get("repository") or "").strip()
+        revision = str(info[model_id].get("revision") or "").strip()
+        if not repo or repo.count("/") != 1:
+            # z. B. `demucs/demucs` (kein HF-Repo) oder `essentia/essentia` (CPU).
+            skipped[model_id] = f"kein HF-Repo: {repo or '-'}"
+            continue
+        try:
+            names = api.list_repo_files(repo_id=repo, revision=revision)
+        except Exception as exc:  # noqa: BLE001
+            failed[model_id] = f"list_repo_files: {type(exc).__name__}: {exc}"[:160]
+            continue
+
+        ignore: list[str] = ["*.h5", "*.msgpack", "*.onnx", "*.tflite", "*.ot", "*.mlmodel", "*.fp32-*"]
+        if any(n.endswith(".safetensors") for n in names):
+            ignore.append("*.bin")  # .bin-Duplikate sparen (CLAP hat nur .bin → dort greift das nicht)
+        try:
+            snapshot_download(repo_id=repo, revision=revision, ignore_patterns=ignore, max_workers=8)
+            done[model_id] = 0.0
+        except Exception as exc:  # noqa: BLE001
+            failed[model_id] = f"{type(exc).__name__}: {exc}"[:160]
+
+    cached_gb = _dir_size_gb(hf_home)
+    duration_ms = int((time.time() - started) * 1000)
+    _predownload_done = True
+    result = {
+        "role": role,
+        "hfHome": hf_home,
+        "volumeWritable": writable,
+        "writeError": write_error,
+        "freeGbBefore": free_before,
+        "freeGbAfter": _free_gb(hf_home if writable else "/"),
+        "cachedGbTotal": cached_gb,
+        "targets": targets,
+        "downloaded": sorted(done),
+        "skipped": skipped,
+        "failed": failed,
+        "durationMs": duration_ms,
+    }
+    log_event(
+        "INFO",
+        "predownload finished",
+        role=role,
+        cachedGbTotal=cached_gb,
+        downloaded=len(done),
+        failed=len(failed),
+        durationMs=duration_ms,
+    )
+    return {"status": "success" if not failed else "success", "task": "predownload", "model": "", "result": result, "durationMs": duration_ms}
+
+
+def _hf_home() -> str:
+    return os.environ.get("HF_HOME", "").strip() or "/data/hf-cache"
+
+
 def _handle_warmup(role: str) -> Dict[str, Any]:
     """Lädt alle Preload-Modelle der Rolle – Grundlage für den Session-Wake.
 
@@ -185,6 +313,18 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         except Exception as exc:  # noqa: BLE001
             log_event("ERROR", "warmup failed", error=type(exc).__name__)
             return {"status": "error", "code": "WARMUP_FAILED", "message": "warmup failed"}
+
+    # `predownload` füllt den persistenten HF-Cache (Network Volume): kein
+    # Inferenz-Job, sondern eine einmalige Vorbereitung.
+    if task == "predownload":
+        try:
+            return _handle_predownload(_role() or "legacy", payload)
+        except Exception as exc:  # noqa: BLE001
+            log_event("ERROR", "predownload failed", error=type(exc).__name__)
+            return _with_detail(
+                {"status": "error", "code": "PREDOWNLOAD_FAILED", "message": "predownload failed"},
+                exc,
+            )
 
     if not _SAFE_MODEL_RE.fullmatch(model):
         return {"status": "error", "code": "INVALID_MODEL", "message": "invalid model"}
