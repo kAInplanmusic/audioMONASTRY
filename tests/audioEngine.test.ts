@@ -207,3 +207,52 @@ describe('P1-2 · V1-Verkabelung (Node-In/Out-Counts + Signalfluss-Spion)', () =
     expect(withTo.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * AUDIT-AUDIO-006 — Regression gegen einen stillen Erfolg.
+ *
+ * `createMasterStreamDestination()` fiel früher auf `this.masterVolume ?? …`
+ * zurück. `masterVolume` ist eine Zustands-Fassade aus `nativeAudioKit`, deren
+ * `connect()` nur `return this` ist — der Aufrufer bekam also eine gültige
+ * MediaStream-Destination, der Stream blieb aber stumm. Dieser Test hält fest:
+ * ohne verbundenen V2-Sink gibt es KEINE Destination (Nicht-Zustand statt Fake).
+ */
+describe('audioEngine · Master-Stream meldet Nicht-Zustand (AUDIT-AUDIO-006)', () => {
+  type EngineInternals = {
+    ctx: { createMediaStreamDestination: () => { connect: () => void; disconnect: () => void } } | null;
+    v2LiveSink: { isConnected: boolean; connectExtra: (dest: unknown) => boolean };
+  };
+
+  function internals(): EngineInternals {
+    return audioEngine as unknown as EngineInternals;
+  }
+
+  it('liefert null statt einer stummen Fake-Destination, wenn der V2-Sink nicht verbunden ist', () => {
+    const engine = internals();
+    const previousCtx = engine.ctx;
+    try {
+      let streamDestinationsCreated = 0;
+      engine.ctx = {
+        createMediaStreamDestination: () => {
+          streamDestinationsCreated += 1;
+          return { connect: () => {}, disconnect: () => {} };
+        },
+      };
+      // `isConnected` ist ein Getter – auf der Instanz gezielt auf false zwingen.
+      Object.defineProperty(engine.v2LiveSink, 'isConnected', { value: false, configurable: true });
+
+      const dest = audioEngine.createMasterStreamDestination();
+
+      expect(dest).toBeNull();
+      expect(streamDestinationsCreated).toBe(1);
+    } finally {
+      engine.ctx = previousCtx;
+      delete (engine.v2LiveSink as { isConnected?: unknown }).isConnected;
+    }
+  });
+
+  it('trennt eine Destination ohne No-Op-Tap ohne Fehler', () => {
+    const fake = { connect: () => {}, disconnect: () => {} } as unknown as MediaStreamAudioDestinationNode;
+    expect(() => audioEngine.disconnectMasterStreamDestination(fake)).not.toThrow();
+  });
+});

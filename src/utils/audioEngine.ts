@@ -1900,10 +1900,16 @@ class AudioEngine {
           return dest;
         }
       }
-      // Fallback (Legacy-Kette), bis der V2-Sink verbunden ist.
-      const tap = this.masterStreamTap ?? this.masterVolume;
-      if (!tap) return null;
-      tap.connect(dest);
+      // AUDIT-AUDIO-006: Hier gab es einen stillen Erfolg. `masterStreamTap` wird
+      // nirgends als echter Knoten aufgebaut (immer null), deshalb griff immer der
+      // Fallback `?? this.masterVolume` – und `masterVolume` ist eine reine
+      // Zustands-Fassade aus `nativeAudioKit`, deren `connect()` nur `return this`
+      // ist. Folge: der Aufrufer bekam eine gültige MediaStream-Destination zurück,
+      // der Stream blieb aber STUMM, und kein Test hat es bemerkt.
+      // Es gibt keinen No-Op-Fallback mehr: ohne echten Audio-Knoten wird der
+      // Nicht-Zustand explizit gemeldet (null), damit Stille sichtbar ist.
+      if (!this.masterStreamTap) return null;
+      this.masterStreamTap.connect(dest);
       this.masterStreamDest = dest;
       this.masterStreamDestConnected = false;
       return dest;
@@ -1917,8 +1923,8 @@ class AudioEngine {
     try {
       // AUDIO-P0-002: V2-Abgriff zuerst trennen, sonst Legacy-Tap.
       this.v2LiveSink.disconnectExtra(dest);
-      const tap = this.masterStreamTap ?? this.masterVolume;
-      tap?.disconnect(dest);
+      // Kein No-Op-Fallback (siehe createMasterStreamDestination).
+      this.masterStreamTap?.disconnect(dest);
       dest.disconnect();
       if (this.masterStreamDest === dest) {
         this.masterStreamDest = null;

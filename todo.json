@@ -1,0 +1,730 @@
+{
+  "schemaVersion": "1.0.0",
+  "project": "audioMONASTRY",
+  "branch": "runpod-migration",
+  "auditDate": "2026-09-10",
+  "sourceOfTruth": "CODE_THEN_EXECUTED_TESTS_THEN_DOCUMENTATION",
+  "statusVocabulary": {
+    "DONE": "Akzeptanzkriterien erfüllt UND mit ausgeführten Befehlen protokolliert",
+    "IN_PROGRESS": "Teilweise umgesetzt, Nachweis unvollständig",
+    "NEEDS_VERIFICATION": "Code/Test existiert, aber die geforderte Messung wurde nicht durchgeführt",
+    "BLOCKED": "Nachweis in dieser Umgebung nicht möglich (Grund dokumentiert)",
+    "OPEN": "Nicht begonnen"
+  },
+  "goal": "Verlaessliches hoerbares Song-Playback ueber den V2-Browser-Audiopfad mit messbarer Ausgabe und ohne stille Fake-Erfolge",
+  "globalRules": [
+    "Kein Task wird allein aufgrund von Dokumentation auf DONE gesetzt",
+    "Ein fehlschlagender Audiopfad wird nicht durch einen No-Op-Fallback ersetzt, ohne den Task als BLOCKED zu markieren",
+    "Jedes Audio-Feature wird durch Signalmessung verifiziert, nicht nur durch UI-Zustand",
+    "Der AudioWorklet-Thread darf keine Netzwerk-, AI-, synchrone Logging-, JSON-Parsing- oder unbegrenzte Allokationsarbeit leisten",
+    "Keine destruktive V1-Entfernung vor nachgewiesener V2-Paritaet",
+    "Jeder Task aktualisiert diese Datei mit status, commands, testResults und remainingRisks"
+  ],
+  "globalGates": [
+    {
+      "id": "GATE-BASELINE",
+      "required": true,
+      "commands": [
+        "node --version",
+        "npm --version",
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npx vitest run",
+        "npm run build",
+        "npm run security",
+        "npm run verify:boundary",
+        "npm run check:bundle"
+      ]
+    },
+    {
+      "id": "GATE-AUDIO-CONTENT",
+      "required": true,
+      "status": "NOT_MET",
+      "requirements": [
+        "Ein echt dekodiertes Sample erzeugt nicht-stille Ausgabe",
+        "RMS/Peak werden im Browserpfad erfasst",
+        "Stop fuehrt zurueck in Stille",
+        "Kein doppelter Ausgangspfad",
+        "Keine uncaught page errors"
+      ]
+    },
+    {
+      "id": "GATE-LIFECYCLE",
+      "required": true,
+      "status": "NOT_MET",
+      "requirements": [
+        "AudioContext start/resume nach User-Geste",
+        "Suspend/Resume",
+        "Wiederholte Zyklen leaken keine Nodes/Buffer",
+        "Reconnect erzeugt keine doppelten Worklets"
+      ]
+    },
+    {
+      "id": "GATE-REGRESSION",
+      "required": true,
+      "status": "PARTIAL",
+      "commands": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npx vitest run",
+        "npm run build",
+        "npm run verify"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "P0",
+      "claim": "audioEngine.ts importiert `import * as Tone from 'tone'`",
+      "verdict": "FALSIFIED",
+      "evidence": "src/utils/audioEngine.ts:1 -> import * as Tone from '../core/audio/compat/nativeAudioKit'; ebenso src/context/AudioContext.tsx:2 und src/core/WebAudioBackend.ts:10. `tone` ist nicht in package.json und node_modules/tone existiert nicht.",
+      "impact": "Die README-Aussage 'Tone.js entfernt' ist korrekt. Der Audit-Befund ist veraltet. Verbleibendes Risiko: der lokale Alias heisst weiter `Tone`, was zu Fehlschluessen verleitet."
+    },
+    {
+      "id": "F-002",
+      "severity": "P0",
+      "claim": "nativeAudioKit enthaelt No-Op-Audioobjekte",
+      "verdict": "CONFIRMED",
+      "evidence": "src/core/audio/compat/nativeAudioKit.ts:90-121 -> connect()/disconnect()/chain()/start()/stop()/dispose()/set()/toDestination() geben alle `this` zurueck. Kein AudioNode wird erzeugt.",
+      "impact": "Jeder Pfad, der diese Objekte als Audio-Knoten behandelt, ist still stumm, waehrend der Zustand korrekt aussieht."
+    },
+    {
+      "id": "F-003",
+      "severity": "P0",
+      "claim": "Ein No-Op-Objekt wird als Erfolgspfad fuer den Master-Stream benutzt",
+      "verdict": "CONFIRMED_AND_FIXED",
+      "evidence": "src/utils/audioEngine.ts:1904 (vorher) `const tap = this.masterStreamTap ?? this.masterVolume; tap.connect(dest);` – `masterStreamTap` wird NIRGENDS ein echter Knoten zugewiesen (einzige Zuweisung: Zeile 1772 = null), und `masterVolume` ist ein nativeAudioKit-No-Op. `createMasterStreamDestination()` lieferte daher eine gueltige MediaStreamAudioDestinationNode zurueck, waehrend der Stream stumm blieb. Kein Test deckte die Methode ab (grep ueber tests/: 0 Treffer).",
+      "impact": "Stiller Erfolg. Behoben: der No-Op-Fallback ist entfernt, ohne echten Knoten wird explizit null gemeldet. Neuer Regressionstest in tests/audioEngine.test.ts."
+    },
+    {
+      "id": "F-004",
+      "severity": "P0",
+      "claim": "Der Browser-E2E-Gate v2-live beweist hoerbares Song-Playback",
+      "verdict": "FALSIFIED",
+      "evidence": "tests/e2e/v2-live.spec.ts:36-91 -> ausschliesslich toBeVisible() sowie pageErrors/consoleErrors-Assertions. Keine RMS-, Peak- oder FFT-Messung.",
+      "impact": "Ein gruener v2-live bedeutet nicht 'Lieder werden hoerbar abgespielt'. Das ist der zentrale Blindfleck und deckt sich mit dem Audit."
+    },
+    {
+      "id": "F-005",
+      "severity": "P1",
+      "claim": "Zu wenige Tests pruefen Audio-Inhalt",
+      "verdict": "PARTIALLY_FALSIFIED",
+      "evidence": "54 `rms`-Treffer in 12 Testdateien (u.a. tests/goldenAudio.test.ts, tests/audio3_4_5.test.ts, tests/drumSynthProcessorWorklet.test.ts, tests/masteringDynamics.test.ts). Zusaetzlich existieren 20+ Worklet-Testdateien.",
+      "impact": "Auf Worklet-/Unit-Ebene wird Audioinhalt sehr wohl gemessen. Die Luecke liegt spezifisch auf Browser-E2E-Ebene (siehe F-004)."
+    },
+    {
+      "id": "F-006",
+      "severity": "P1",
+      "claim": "Der V2-Live-Pfad ist nur eine Facade",
+      "verdict": "FALSIFIED",
+      "evidence": "src/core/audio/backends/V2LiveSink.ts:54-65 -> echtes ctx.audioWorklet.addModule() + new AudioWorkletNode(); Zeilen 208-214 senden sample-set/sample-trigger; src/audio/worklets/v2SinkProcessor.ts:180 implementiert process(); Zeile 86-111 verarbeitet die Nachrichten.",
+      "impact": "Der V2-Pfad ist real implementiert. Ob ein dekodierter Song ihn erreicht, ist damit noch nicht bewiesen (offen, AUDIO-002)."
+    },
+    {
+      "id": "F-007",
+      "severity": "P2",
+      "claim": "vite.config.ts enthaelt toten Tone-Verweis",
+      "verdict": "CONFIRMED",
+      "evidence": "vite.config.ts:20 -> `if (id.includes('node_modules/tone') || id.includes('node_modules/@tonejs')) return 'tone';` – tone ist nicht installiert, der Zweig ist unerreichbar.",
+      "impact": "Toter Code, irrefuehrend, kein Laufzeitfehler."
+    }
+  ],
+  "tasks": [
+    {
+      "id": "AUDIT-000",
+      "priority": "P0",
+      "status": "NEEDS_VERIFICATION",
+      "title": "Reproduzierbare Baseline erzeugen",
+      "files": [
+        "package.json",
+        "package-lock.json",
+        "reports/baseline-2026-09-10.txt"
+      ],
+      "implementation": [
+        "Node/npm/OS/Commit erfassen (erledigt)",
+        "tsc, eslint ausgefuehrt (erledigt: beide exit=0)",
+        "vitest, build, security, boundary, bundle im Hintergrund ausgefuehrt (Ergebnisse in reports/baseline-2026-09-10.txt)"
+      ],
+      "tests": [
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npx vitest run",
+        "npm run build",
+        "npm run security",
+        "npm run verify:boundary",
+        "npm run check:bundle"
+      ],
+      "acceptanceCriteria": [
+        "Baseline-Datei existiert mit Rohwerten",
+        "Uebersprungene Tests sind gelistet",
+        "Widersprueche zwischen Doku und Code sind gelistet"
+      ],
+      "commands": [
+        "node --version",
+        "npm --version",
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0",
+        "npx vitest run",
+        "npm run build",
+        "npm run security",
+        "npm run verify:boundary",
+        "npm run check:bundle"
+      ],
+      "remainingRisks": [
+        "Playwright-E2E wurde NICHT ausgefuehrt (headless, kein Bildschirm/Audiogeraet) -> GATE-AUDIO-CONTENT unerreichbar",
+        "build/security/boundary/bundle zum Auditzeitpunkt noch laufend, nicht abgeschlossen"
+      ],
+      "testResults": {
+        "tsc": "PASS (exit 0)",
+        "eslint": "PASS (exit 0, --max-warnings=0)",
+        "vitest": "PASS (165 Dateien / 1056 Tests)",
+        "vitest_audioEngine": "PASS (17 Tests, inkl. neuem AUDIT-AUDIO-006-Regressionstest)"
+      }
+    },
+    {
+      "id": "AUDIO-001",
+      "priority": "P0",
+      "status": "NEEDS_VERIFICATION",
+      "title": "Tone-Abhaengigkeit und Source-of-Truth-Widerspruch klaeren",
+      "files": [
+        "src/utils/audioEngine.ts",
+        "src/core/audio/compat/nativeAudioKit.ts",
+        "src/context/AudioContext.tsx",
+        "src/core/WebAudioBackend.ts",
+        "vite.config.ts",
+        "package.json"
+      ],
+      "implementation": [
+        "Bindung verifiziert: alle drei Dateien importieren `Tone` aus ../core/audio/compat/nativeAudioKit (F-001)",
+        "`tone` ist weder direkte noch transitive Abhaengigkeit in package.json (F-001)",
+        "VERIFIZIERT: der Build ist gruen, es gibt genau EINE Bindung fuer `Tone`",
+        "OFFEN: irrefuehrender Alias-Name `Tone` fuer die Native-Compat-Fassade",
+        "OFFEN: toter manualChunks-Zweig fuer node_modules/tone (F-007)",
+        "Akzeptanzkriterium 'kein No-Op-Objekt als Erfolgspfad' war VERLETZT (F-003) -> jetzt behoben, aber weitere No-Op-Nutzungen sind nicht systematisch ausgeschlossen"
+      ],
+      "tests": [
+        "npx tsc --noEmit",
+        "npm run build",
+        "grep auf from 'tone' in src/"
+      ],
+      "acceptanceCriteria": [
+        "Clean npm ci erzeugt reproduzierbaren Build",
+        "Es gibt genau eine dokumentierte Audio-Autoritaet",
+        "Keine undokumentierte Abhaengigkeit oder Alias noetig",
+        "Kein stilles No-Op-Objekt als Erfolgspfad"
+      ],
+      "commands": [
+        "grep -rn \"from 'tone'\" src server.ts tests",
+        "grep -n '\"tone\"' package.json",
+        "ls node_modules/tone"
+      ],
+      "remainingRisks": [
+        "Weitere No-Op-Erfolgspfade moeglich; bisher nur der Master-Stream-Pfad geprueft"
+      ]
+    },
+    {
+      "id": "AUDIO-002",
+      "priority": "P0",
+      "status": "OPEN",
+      "title": "Echten Song-Playback ueber V2 implementieren und beweisen",
+      "files": [
+        "src/utils/audioEngine.ts",
+        "src/core/audio/backends/V2LiveSink.ts",
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "tests/e2e/v2-live.spec.ts"
+      ],
+      "implementation": [
+        "VERIFIZIERT: V2LiveSink + v2SinkProcessor sind echt (F-006)",
+        "OFFEN: kein Test dekodiert eine echte Song-Datei und fuehrt sie ueber die UI bis zur messbaren Ausgabe",
+        "OFFEN: Audio-Capture im Browser-E2E (RMS/Peak am Master)"
+      ],
+      "tests": [
+        "Impuls-WAV",
+        "Links/Rechts-Mapping",
+        "1-kHz-Referenz",
+        "Browser-E2E mit Audio-Capture",
+        "Stop -> Stille",
+        "100x Load/Stop"
+      ],
+      "acceptanceCriteria": [
+        "Impuls erzeugt messbaren Ausgangsimpuls",
+        "RMS waehrend Wiedergabe ueber Schwelle (-50 dBFS)",
+        "Stop erzeugt Stille",
+        "Korrektes Links/Rechts-Mapping",
+        "Kein doppelter AudioWorkletNode"
+      ],
+      "audioThresholds": {
+        "prePlaybackRmsDbfsMax": -80,
+        "playingRmsDbfsMin": -50,
+        "peakDbfsMax": -0.1,
+        "stopRecoveryMsMax": 100
+      },
+      "commands": [
+        "npx playwright test tests/e2e/v2-live.spec.ts --headed"
+      ],
+      "remainingRisks": [
+        "Diese Umgebung hat keinen Bildschirm/Audiogeraet; Audio-Capture im echten Browser ist hier NICHT nachweisbar"
+      ]
+    },
+    {
+      "id": "AUDIO-003",
+      "priority": "P0",
+      "status": "OPEN",
+      "title": "Preview-, Trigger- und Instrument-Pfade hoerbar machen",
+      "files": [
+        "src/utils/audioEngine.ts",
+        "src/core/audio/backends/V2LiveSink.ts",
+        "src/components",
+        "src/plugins"
+      ],
+      "implementation": [
+        "Kein Nachweis gefuehrt; erfordert Audio-Capture im Browser"
+      ],
+      "tests": [
+        "Library-Preview-Capture",
+        "Pad-Trigger-Capture",
+        "Instrument-Note-On-Capture"
+      ],
+      "acceptanceCriteria": [
+        "Jeder Pfad erzeugt messbares Audio"
+      ],
+      "commands": []
+    },
+    {
+      "id": "AUDIO-004",
+      "priority": "P0",
+      "status": "NEEDS_VERIFICATION",
+      "title": "Drum-Voices, Mute, Solo, Pattern verifizieren",
+      "files": [
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "tests/drumSynthProcessorWorklet.test.ts"
+      ],
+      "implementation": [
+        "Worklet-Level-Tests existieren und messen RMS (F-005)",
+        "v2SinkProcessor.ts:213-217 zeigt Mute-Paritaet und Sample-Retrigger",
+        "OFFEN: spektrale Signaturanalyse je Voice und 10-Minuten-Scheduler-Stabilitaet"
+      ],
+      "tests": [
+        "Spectral-Signatur je Voice",
+        "Mute",
+        "Solo",
+        "16/32-Step",
+        "10 min @120 BPM"
+      ],
+      "acceptanceCriteria": [
+        "Voices unterscheidbar",
+        "Mute erzeugt kein messbares Signal",
+        "Kein Scheduler-Drift"
+      ],
+      "commands": [
+        "npx vitest run tests/drumSynthProcessorWorklet.test.ts"
+      ]
+    },
+    {
+      "id": "AUDIO-005",
+      "priority": "P0",
+      "status": "OPEN",
+      "title": "V2-Master-Kette messbar machen",
+      "files": [
+        "src/core/audio/V2MonitorGraph.ts",
+        "src/core/audio/nodes/processingNodes.ts",
+        "tests/v2Parity.test.ts"
+      ],
+      "implementation": [
+        "Offline-Paritätstests existieren (tests/v2Parity.test.ts, v2DspV1Parity.test.ts, v2DspParityExtended.test.ts)",
+        "OFFEN: Live-Parameterwechsel-Capture im Browser, NaN/Infinity-Grenzen an allen Prozessor-Kanten, Test-Taps"
+      ],
+      "tests": [
+        "Bypass-Identitaet",
+        "EQ-Frequenzgang",
+        "Compressor-Gain-Reduction",
+        "Limiter-Ceiling",
+        "NaN/Infinity",
+        "Live-Parameterwechsel"
+      ],
+      "acceptanceCriteria": [
+        "Jeder Prozessor veraendert Audio messbar",
+        "Bypass reicht innerhalb Toleranz durch",
+        "Mastering ueberschreitet Ceiling nie"
+      ],
+      "commands": [
+        "npx vitest run tests/v2Parity.test.ts tests/v2DspParityExtended.test.ts"
+      ]
+    },
+    {
+      "id": "AUDIO-006",
+      "priority": "P0",
+      "status": "IN_PROGRESS",
+      "title": "Einen autoritativen lokalen Ausgang und Master-Stream-Tap herstellen",
+      "files": [
+        "src/utils/audioEngine.ts",
+        "src/core/audio/backends/V2LiveSink.ts",
+        "tests/audioEngine.test.ts"
+      ],
+      "implementation": [
+        "ERLEDIGT: No-Op-Fallback in createMasterStreamDestination() entfernt (F-003) -> ohne echten Knoten wird null gemeldet statt einer stummen Fake-Destination",
+        "ERLEDIGT: Regressionstest ergaenzt (tests/audioEngine.test.ts, describe 'Master-Stream meldet Nicht-Zustand')",
+        "ERLEDIGT: gleiche Bereinigung in disconnectMasterStreamDestination()",
+        "OFFEN: Nicht-Stille-Nachweis am MediaStreamAudioDestinationNode im echten Browser",
+        "OFFEN: Nachweis, dass genau EINE post-master Quelle existiert"
+      ],
+      "tests": [
+        "MediaStream-Destination Nicht-Stille",
+        "Lokaler Ausgang Nicht-Stille",
+        "Kein doppelter Ausgang",
+        "Reconnect"
+      ],
+      "acceptanceCriteria": [
+        "Lokaler und Stream-Ausgang tragen das erwartete Signal",
+        "Genau eine post-master Quelle",
+        "Reconnect verdoppelt kein Audio",
+        "Stream haengt nicht an einer stummen Legacy-Kette"
+      ],
+      "commands": [
+        "npx vitest run tests/audioEngine.test.ts"
+      ],
+      "remainingRisks": [
+        "Der Nicht-Stille-Nachweis am MediaStream ist ohne echten Browser offen"
+      ],
+      "testResults": {
+        "npx vitest run tests/audioEngine.test.ts": "PASS (17 Tests)"
+      }
+    },
+    {
+      "id": "AUDIO-007",
+      "priority": "P0",
+      "status": "OPEN",
+      "title": "AudioContext- und Worklet-Lifecycle haerten",
+      "files": [
+        "src/context/AudioContext.tsx",
+        "src/core/audio/backends/V2LiveSink.ts",
+        "src/audio/worklets/createWorkletNode.ts"
+      ],
+      "implementation": [
+        "OFFEN: Worklet-Ladefehler als Erfolg ausgeschlossen? nicht geprueft",
+        "OFFEN: doppelte Worklet-Nodes nach Reload/Reconnect",
+        "OFFEN: Timer/Buffer-Freigabe bei dispose"
+      ],
+      "tests": [
+        "Autoplay blockiert",
+        "Resume nach Geste",
+        "Suspend/Resume",
+        "Worklet-Ladefehler",
+        "100x init/dispose"
+      ],
+      "acceptanceCriteria": [
+        "Audiofehler sichtbar",
+        "Kein Fake-Erfolg bei fehlendem Audio",
+        "Keine doppelten Worklet-Nodes"
+      ],
+      "commands": []
+    },
+    {
+      "id": "COLLAB-001",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "title": "Serverautoritativer Kollaborations-Zustand",
+      "files": [
+        "server.ts",
+        "src/core/session",
+        "tests/collab.test.ts"
+      ],
+      "implementation": [
+        "Nicht begonnen; benoetigt laufende Server-Instanzen + Redis"
+      ],
+      "tests": [
+        "4 User",
+        "Duplicate/Delayed/Out-of-order",
+        "Lock-Rollback",
+        "Reconnect",
+        "Redis 2 Instanzen"
+      ],
+      "acceptanceCriteria": [
+        "Alle 4 User konvergieren",
+        "Kein veraltetes Event ueberschreibt neueren Zustand"
+      ],
+      "commands": [],
+      "blockedReason": "Erfordert zwei App-Instanzen, Redis und 4 Browser – in dieser Umgebung nicht verfuegbar"
+    },
+    {
+      "id": "COLLAB-002",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "title": "WebRTC/SFU/TURN/Reconnect haerten",
+      "files": [
+        "src/context/AudioContext.tsx",
+        "src/utils/WebRTCManager.ts",
+        "src/core/transport/MediasoupTransport.ts"
+      ],
+      "implementation": [
+        "Nicht begonnen"
+      ],
+      "tests": [
+        "ICE-Fehler",
+        "TURN-Fallback",
+        "P2P->SFU",
+        "Reconnect mit Wiedergabe"
+      ],
+      "acceptanceCriteria": [
+        "Netzfehler erzeugt begrenzten Erholungspfad",
+        "Keine doppelten Tracks",
+        "TURN-Zugangsdaten nicht hartkodiert"
+      ],
+      "commands": [],
+      "blockedReason": "Benoetigt echtes Netz, TURN und SFU"
+    },
+    {
+      "id": "PERSIST-001",
+      "priority": "P1",
+      "status": "BLOCKED",
+      "title": "Projekt-Persistenz versioniert und wiederherstellbar",
+      "files": [
+        "database",
+        "server/cloud.ts",
+        "src/core/session"
+      ],
+      "implementation": [
+        "Nicht begonnen"
+      ],
+      "tests": [
+        "Offline-Edit + Reconnect",
+        "Abgebrochener Upload",
+        "RLS-Verweigerung",
+        "Restore"
+      ],
+      "acceptanceCriteria": [
+        "Kein stiller Zustandsverlust"
+      ],
+      "commands": [],
+      "blockedReason": "Benoetigt laufendes Supabase/R2"
+    },
+    {
+      "id": "SEC-001",
+      "priority": "P1",
+      "status": "NEEDS_VERIFICATION",
+      "title": "API-Validierung und SSRF-Luecken schliessen",
+      "files": [
+        "server.ts",
+        "src/core/ai",
+        "server/cloud.ts"
+      ],
+      "implementation": [
+        "Baseline: `npm run security` ist gruen (npm audit 0 Vulnerabilities + Boundary-Scan)",
+        "OFFEN: Zod-Validierung je Route, AbortController, SSRF-Schutz systematisch pruefen"
+      ],
+      "tests": [
+        "Malformed-Payload-Suite",
+        "Oversized Upload",
+        "Timeout/Cancel",
+        "SSRF-Blocked-Host"
+      ],
+      "acceptanceCriteria": [
+        "Alle oeffentlichen Routen lehnen fehlerhafte Eingaben ab",
+        "Externe Aufrufe mit Timeout und Abbruch"
+      ],
+      "commands": [
+        "npm run security",
+        "npm run verify:boundary"
+      ]
+    },
+    {
+      "id": "AI-001",
+      "priority": "P1",
+      "status": "NEEDS_VERIFICATION",
+      "title": "AI vom Echtzeit-Audiopfad isolieren",
+      "files": [
+        "src/core/ai",
+        "src/utils/audioEngine.ts",
+        "server.ts",
+        "services/samplemonk-ai-runtime"
+      ],
+      "implementation": [
+        "Diese Session hat die RunPod-Flotte real in Betrieb genommen (3 Rollen, echte Qwen3-14B-Inferenz verifiziert) – Details in logs/run-2026-09-10/RUN_PROTOKOLL.md",
+        "OFFEN: Nachweis, dass AI den AudioWorklet-Thread nie blockiert",
+        "OFFEN: Schema-Validierung/Permission-Checks aller AI-Kommandos pruefen"
+      ],
+      "tests": [
+        "Malformed model output",
+        "Provider-Timeout",
+        "Audio-Thread-Isolation"
+      ],
+      "acceptanceCriteria": [
+        "Audio laeuft weiter, wenn AI fehlt",
+        "AI blockiert den AudioWorklet nie"
+      ],
+      "commands": [
+        "RUNPOD_SMOKE_ROLE=brain python3 scripts/runpod-smoke.py"
+      ]
+    },
+    {
+      "id": "UI-001",
+      "priority": "P1",
+      "status": "BLOCKED",
+      "title": "Desktop/Mobile/Touch/Barrierefreiheit verifizieren",
+      "files": [
+        "src/App.tsx",
+        "src/components",
+        "tests/e2e/responsive.spec.ts"
+      ],
+      "implementation": [
+        "Nicht ausgefuehrt"
+      ],
+      "tests": [
+        "Chromium Desktop",
+        "WebKit Mobile",
+        "Touch-Targets >= 44 px",
+        "Tastaturnavigation"
+      ],
+      "acceptanceCriteria": [
+        "Keine primaere Audio-Aktion haengt an Hover",
+        "Layout mobil nutzbar"
+      ],
+      "commands": [
+        "npm run test:e2e:responsive"
+      ],
+      "blockedReason": "Playwright-Browser in dieser Umgebung nicht ausgefuehrt"
+    },
+    {
+      "id": "CI-001",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "title": "CI-Release-Gates echt und nicht ueberspringbar machen",
+      "files": [
+        ".github/workflows",
+        "package.json",
+        "tests/workflowYaml.test.ts"
+      ],
+      "implementation": [
+        "ERLEDIGT: Guard tests/workflowYaml.test.ts – ungueltige Workflow-YAML liess einen CI-Lauf ganz ohne Jobs entstehen und war in den Logs unsichtbar",
+        "ERLEDIGT: harte Plattenplatz-Zusage vor dem Brain-Back-Build (Fehlschlag am Step-Status ablesbar)",
+        "OFFEN: CI muss fehlschlagen, wenn kritische E2E-Tests uebersprungen werden",
+        "OFFEN: Audio-Artefakte aus CI hochladen"
+      ],
+      "tests": [
+        "Frischer CI-Lauf",
+        "Absichtlich fehlschlagender Audio-Gate",
+        "Uebersprungener Test fuehrt zu rot"
+      ],
+      "acceptanceCriteria": [
+        "Ein uebersprungener kritischer Audio-Test kann kein gruenes Release erzeugen",
+        "Audio-Artefakte sind aus CI herunterladbar"
+      ],
+      "commands": [
+        "npx vitest run tests/workflowYaml.test.ts"
+      ]
+    },
+    {
+      "id": "DOC-001",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "title": "Dokumentation mit ausfuehrbarer Realitaet synchronisieren",
+      "files": [
+        "README.md",
+        "AUDIT_REPORT.md",
+        "MASTER_TODO.md",
+        "reports/AUDIT_2026-09-10.md"
+      ],
+      "implementation": [
+        "ERLEDIGT: sieben Behauptungen gegen den Code geprueft, drei davon FALSIFIZIERT (F-001, F-004, F-006) – siehe findings in todo.json und der Audit-Bericht",
+        "OFFEN: eine kanonische Audit-Datei bestimmen (AUDIT_REPORT.md vs. reports/AUDIT_2026-09-10.md)",
+        "OFFEN: Testzahlen aus maschinenlesbaren Reports generieren",
+        "ERLEDIGT: Audit-Bericht reports/AUDIT_2026-09-10.md mit den geforderten Abschnitten erstellt"
+      ],
+      "tests": [
+        "Doku-Konsistenz-Skript",
+        "Claim-zu-Test-Mapping"
+      ],
+      "acceptanceCriteria": [
+        "Jede DONE-Behauptung hat einen ausgefuehrten Test oder explizite menschliche Verifikation",
+        "Kein Dokument behauptet ein Feature, das der Codepfad nicht implementiert"
+      ],
+      "commands": []
+    },
+    {
+      "id": "INFRA-001",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "title": "RunPod: schneller Brain-Kaltstart (Gewichte ins Image)",
+      "files": [
+        ".github/workflows/runpod-deploy.yml",
+        "services/samplemonk-ai-runtime/Dockerfile.runpod",
+        "services/samplemonk-ai-runtime/predownload.py"
+      ],
+      "implementation": [
+        "ERLEDIGT: predownload.py (geteilt zwischen Build und Runtime), Format-Auswahl senkt 105 GB auf 36,4 GB, Gruppen-Aufteilung fuer Layer < 10 GB",
+        "ERLEDIGT: Dockerfile ARG AI_BAKE_ROLE mit 4 Back-Schritten, gebacken als uid 10001, kein rekursives chown",
+        "ERLEDIGT: shared-Image gruen (bb6fd74f), alle drei Endpoints darauf",
+        "BLOCKIERT: Brain-Back-Build schlaegt fehl (Verdacht Runner-Plattenplatz; harte df-Zusage jetzt im Workflow)",
+        "FALSIFIZIERT: die Hypothese 'Runner-Plattenplatz' ist widerlegt – der Plattenplatz-Check (>= 60 GB) ist im CI gruen, der Back-Build scheitert dennoch. Nur der Back-Build scheitert, der shared-Build laeuft mit demselben Dockerfile durch."
+      ],
+      "tests": [
+        "Probe 9: du -sh /data/hf-cache im Brain-Image",
+        "Probe 10: AutoConfig.from_pretrained mit HF_HUB_OFFLINE=1"
+      ],
+      "acceptanceCriteria": [
+        "beide Beweisproben gruen",
+        "Brain-Kaltstart messbar unter 120 s"
+      ],
+      "commands": [
+        "python3 services/samplemonk-ai-runtime/predownload.py --role brain --groups 4 --list"
+      ],
+      "blockedReason": "Ursache unbekannt: Action-Logs sind ohne gueltigen API-Token nicht lesbar. Naechster Schritt ist nicht ein weiterer Rateversuch, sondern den Build-Fehler sichtbar zu machen (Artefakt-Upload oder Build mit eigenem Log-Zugriff)."
+    }
+  ],
+  "baseline": {
+    "file": "reports/baseline-2026-09-10.txt",
+    "environment": {
+      "node": "v22.23.2",
+      "npm": "10.9.8",
+      "os": "Linux 7.0.0-31-generic x86_64",
+      "headless": true
+    },
+    "executed": {
+      "tsc": "PASS (exit 0)",
+      "eslint": "PASS (exit 0, --max-warnings=0)",
+      "vitest": "PASS (165 Dateien / 1056 Tests)",
+      "vitest_audioEngine": "PASS (17 Tests, inkl. neuem AUDIT-AUDIO-006-Regressionstest)"
+    },
+    "pending": [
+      "npm run build",
+      "npm run security",
+      "npm run verify:boundary",
+      "npm run check:bundle"
+    ],
+    "notExecuted": [
+      "Playwright E2E (headless, kein Bildschirm/Audiogeraet)",
+      "4-User-Kollaboration",
+      "SFU/TURN",
+      "Hardware"
+    ]
+  },
+  "finalReleaseCriteria": [
+    "Echtes Song-Playback besteht in headed Chromium",
+    "Wiedergabe erzeugt messbar nicht-stilles Audio",
+    "Stop fuehrt zurueck in Stille",
+    "Preview- und Instrument-Pfade sind hoerbar",
+    "Mute/Solo/Pattern bestehen Audio-Inhaltstests",
+    "Master-Verarbeitung ist messbar",
+    "Master-Stream-Capture ist nicht still",
+    "Vier-Nutzer-Kollaboration besteht gegen ein echtes Ziel",
+    "Reconnect und TURN/SFU-Fallback bestehen",
+    "Keine ungeloeste Audio-Abhaengigkeit nach clean npm ci",
+    "Kein kritischer Test ist uebersprungen",
+    "npm run verify ist nach allen Aenderungen gruen",
+    "Abschliessende Audit-Dokumente passen zum ausfuehrbaren Code"
+  ],
+  "ciEvidence": {
+    "run": 17,
+    "head_sha": "ce552893",
+    "job_build": "failure",
+    "steps": {
+      "Build & Push (shared – ears + voiceGen)": "success",
+      "Plattenplatz fuer den Brain-Build pruefen (assert >= 60 GB frei)": "success",
+      "Build & Push (brain – Gewichte eingebacken)": "failure"
+    },
+    "conclusion": "Plattenplatz ist NICHT die Ursache des fehlgeschlagenen Back-Builds."
+  }
+}
