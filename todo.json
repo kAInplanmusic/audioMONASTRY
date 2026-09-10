@@ -39,13 +39,23 @@
     {
       "id": "GATE-AUDIO-CONTENT",
       "required": true,
-      "status": "NOT_MET",
+      "status": "PARTIAL",
       "requirements": [
         "Ein echt dekodiertes Sample erzeugt nicht-stille Ausgabe",
         "RMS/Peak werden im Browserpfad erfasst",
         "Stop fuehrt zurueck in Stille",
         "Kein doppelter Ausgangspfad",
         "Keine uncaught page errors"
+      ],
+      "metRequirements": [
+        "Ein echt dekodiertes Sample erzeugt nicht-stille Ausgabe (gemessen)",
+        "RMS/Peak werden im Browserpfad erfasst (gemessen, reports/audio-gate.json)",
+        "Stop fuehrt zurueck in Stille (gemessen, -inf)",
+        "Keine uncaught page errors (gemessen)"
+      ],
+      "unmetRequirements": [
+        "Kein doppelter Ausgangspfad – nicht geprueft",
+        "Nachweis ueber die App-UI statt nur ueber den Worklet-Pfad"
       ]
     },
     {
@@ -180,7 +190,8 @@
         "tsc": "PASS (exit 0)",
         "eslint": "PASS (exit 0, --max-warnings=0)",
         "vitest": "PASS (165 Dateien / 1056 Tests)",
-        "vitest_audioEngine": "PASS (17 Tests, inkl. neuem AUDIT-AUDIO-006-Regressionstest)"
+        "vitest_audioEngine": "PASS (17 Tests, inkl. neuem AUDIT-AUDIO-006-Regressionstest)",
+        "npm run test:audio-gate": "PASS (9/9) – headless Chromium"
       }
     },
     {
@@ -227,7 +238,7 @@
     {
       "id": "AUDIO-002",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "title": "Echten Song-Playback ueber V2 implementieren und beweisen",
       "files": [
         "src/utils/audioEngine.ts",
@@ -237,9 +248,16 @@
         "tests/e2e/v2-live.spec.ts"
       ],
       "implementation": [
-        "VERIFIZIERT: V2LiveSink + v2SinkProcessor sind echt (F-006)",
-        "OFFEN: kein Test dekodiert eine echte Song-Datei und fuehrt sie ueber die UI bis zur messbaren Ausgabe",
-        "OFFEN: Audio-Capture im Browser-E2E (RMS/Peak am Master)"
+        "ERLEDIGT + GEMESSEN: neuer Gate scripts/audio-gate.cjs prueft den ECHTEN v2-sink-processor im Browser",
+        "GEMESSEN: echt dekodiertes Stereo-WAV ueber sample-set + sample-trigger -> -14.5 dBFS (L) / -23.8 dBFS (R)",
+        "GEMESSEN: sample-set allein bleibt still (-inf) -> kein Selbststart",
+        "GEMESSEN: sample-stop fuehrt in exakte Stille (-inf)",
+        "GEMESSEN: Kanaltrennung korrekt (9.3 dB Pegeldifferenz bei 0.5:0.15 Amplitude)",
+        "GEMESSEN: test-tone-Pfad -14.5 dBFS, danach wieder -inf",
+        "ERLEDIGT: npm-Skript test:audio-gate",
+        "OFFEN: derselbe Nachweis ueber die App-UI (Song laden -> Play -> Master)",
+        "OFFEN: Loop-Wiederholung ohne Diskontinuitaet",
+        "OFFEN: 100x Load/Play/Stop-Zyklus ohne Speicherwachstum"
       ],
       "tests": [
         "Impuls-WAV",
@@ -266,8 +284,46 @@
         "npx playwright test tests/e2e/v2-live.spec.ts --headed"
       ],
       "remainingRisks": [
-        "Diese Umgebung hat keinen Bildschirm/Audiogeraet; Audio-Capture im echten Browser ist hier NICHT nachweisbar"
-      ]
+        "Der Gate prueft den Worklet-/Engine-Pfad, nicht den UI-Weg (loadTrackSample -> UI-Button -> Master).",
+        "Es gibt weiterhin KEINEN Gate auf dem App-Bundle selbst; ein UI-Verdrahtungsfehler bliebe unsichtbar."
+      ],
+      "testResults": {
+        "worklet_pfad": {
+          "command": "npm run test:audio-gate",
+          "result": "PASS (9/9 Zusagen)",
+          "raw": {
+            "silenceBefore": {
+              "dbfsL": "-inf",
+              "dbfsR": "-inf"
+            },
+            "testTone": {
+              "dbfsL": -14.5,
+              "dbfsR": -14.5
+            },
+            "silenceAfterTone": {
+              "dbfsL": "-inf",
+              "dbfsR": "-inf"
+            },
+            "afterSampleSet": {
+              "dbfsL": "-inf",
+              "dbfsR": "-inf"
+            },
+            "samplePlaying": {
+              "dbfsL": -14.5,
+              "dbfsR": -23.8
+            },
+            "silenceAfterStop": {
+              "dbfsL": "-inf",
+              "dbfsR": "-inf"
+            }
+          },
+          "environment": "headless Chromium (Playwright 1.62.1), AudioContext state=running, 48000 Hz",
+          "artifact": "reports/audio-gate.json"
+        },
+        "ui_pfad": "NICHT getestet (Song ueber die UI bis zum Master nicht gefahren)",
+        "loop_test": "NICHT getestet",
+        "100_ladezyklen": "NICHT getestet"
+      }
     },
     {
       "id": "AUDIO-003",
@@ -391,7 +447,8 @@
         "Der Nicht-Stille-Nachweis am MediaStream ist ohne echten Browser offen"
       ],
       "testResults": {
-        "npx vitest run tests/audioEngine.test.ts": "PASS (17 Tests)"
+        "npx vitest run tests/audioEngine.test.ts": "PASS (17 Tests)",
+        "note": "Der Nicht-Stille-Nachweis am MediaStreamAudioDestinationNode ist noch offen; der Worklet-Ausgang ist gemessen."
       }
     },
     {
@@ -737,7 +794,39 @@
     "npm run security",
     "npm run verify:boundary",
     "npm run check:bundle",
-    "Playwright-E2E",
-    "Browser-Audio-Capture"
-  ]
+    "Song-Playback ueber die App-UI",
+    "MediaStream-Nicht-Stille"
+  ],
+  "audioGate": {
+    "command": "npm run test:audio-gate",
+    "result": "PASS (9/9 Zusagen)",
+    "raw": {
+      "silenceBefore": {
+        "dbfsL": "-inf",
+        "dbfsR": "-inf"
+      },
+      "testTone": {
+        "dbfsL": -14.5,
+        "dbfsR": -14.5
+      },
+      "silenceAfterTone": {
+        "dbfsL": "-inf",
+        "dbfsR": "-inf"
+      },
+      "afterSampleSet": {
+        "dbfsL": "-inf",
+        "dbfsR": "-inf"
+      },
+      "samplePlaying": {
+        "dbfsL": -14.5,
+        "dbfsR": -23.8
+      },
+      "silenceAfterStop": {
+        "dbfsL": "-inf",
+        "dbfsR": "-inf"
+      }
+    },
+    "environment": "headless Chromium (Playwright 1.62.1), AudioContext state=running, 48000 Hz",
+    "artifact": "reports/audio-gate.json"
+  }
 }
