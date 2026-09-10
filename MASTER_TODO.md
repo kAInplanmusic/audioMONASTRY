@@ -143,22 +143,34 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
   weiter als Legacy-Fallback (`RUNPOD_ENDPOINT_ID`).
 
 ### AI-P1-003 — Flotten-Restpakete nach dem 3-Rollen-Umbau
-- **Status:** PARTIAL (Flotte deployt + getestet 2026-09-10; Restpakete offen) · **Area:** AI / GPU-Flotte
-- **Erreicht (2026-09-10):** Image `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@1391e4d2` gebaut;
+- **Status:** PARTIAL (Flotte deployt, Brain aktiv, getestet 2026-09-10; Restpakete offen) · **Area:** AI / GPU-Flotte
+- **Erreicht (2026-09-10):** Image `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@31dc58ea` gebaut;
   Endpoints `samplemonk-ai-brain` (`ppxo7wrn599p0q`), `-ears` (`xeax6xrgd0csag`),
   `-voice` (`gajmangfldpzrk`) mit `AMPERE_48`, `workers 0..1`, `idle 15 min` angelegt;
-  Rollen-Smoke je Rolle grün (jede Rolle lädt **nur** ihre Preload-Modelle); alles wieder
-  abgeschaltet ($0/h). Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
-- **Problem:** Der Umbau ist implementiert und läuft, aber mehrere Punkte sind bewusst
-  offen gelassen (siehe `docs/RUNPOD_AI_V1_SPEC.md` §6).
+  Rollen-Smoke je Rolle grün (jede Rolle lädt **nur** ihre Preload-Modelle);
+  **lokales Brain aktiv** – echte Qwen3-14B-Generierung über `task: "llm"` verifiziert
+  (ohne vLLM, siehe unten); alles wieder abgeschaltet ($0/h, Gesamtkosten ~$0.052).
+  Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
+- **Gelöst:** `huggingface-hub==1.31.0` + `transformers==4.57.3` waren inkompatibel
+  (`transformers` verlangt `hub<1`) → jeder Brain-`llm`-Task endete als generisches
+  `MODEL_UNAVAILABLE`. Fix: Pin in `requirements.in` + Rollen-Locks, `pip install`
+  nach allen Lock-Installs, harte Build-Prüfung über den **Worker-Importpfad**
+  (`exec('from transformers import *')` – ein simples `import transformers` löst den
+  Versionscheck nicht aus).
+- **Problem:** Der Umbau läuft, aber mehrere Punkte sind bewusst offen
+  (siehe `docs/RUNPOD_AI_V1_SPEC.md` §6/§8).
 - **Required change:**
   0. **CI-Deploy reparieren:** Der Actions-`deploy`-Job ist rot (Läufe #6/#7/#8), weil
      vermutlich das Repo-Secret `RP_API_KEY` fehlt. Preflight-Check ist im Workflow
      eingebaut; Secret im Repo setzen. Lokales Deploy funktioniert. Zusätzlich:
      `GHCR_PASSWORD` in `.env` ist ein fine-grained PAT und für GHCR-Push unbrauchbar.
-  0b. **vLLM ins Brain-Image** (`AI_INSTALL_VLLM=1`) und `RUNPOD_BRAIN_OPENAI_URL` setzen —
-     ohne vLLM kann der Brain-Worker keinen OpenAI-kompatiblen LLM-Endpunkt bedienen,
-     d. h. `runpod-local` in `src/core/ai/LlmRouter.ts` bleibt funktionslos.
+  0b. **Qwen3-Thinking im Brain abschalten** — Qwen3 gibt zuerst einen `<think>`-Block aus
+     und verbraucht damit das Token-Budget (im Live-Test sichtbar). Im `qwen3_llm`-Handler
+     `enable_thinking=False` bzw. `/no_think` setzen; erst danach ist Tool-Calling sinnvoll.
+     (vLLM ist **nicht** nötig – der Brain läuft über `task: "llm"`. Ein vLLM-Image
+     `AI_INSTALL_VLLM=1` + `RUNPOD_BRAIN_OPENAI_URL` bleibt optional für Speed.)
+  0c. **RunPod-Network-Volume** mit `HF_HOME` einrichten — ohne Volume lädt ein kalter
+     Brain-Worker jedes Mal ~28 GB Gewichte (Qwen3-14B fp16).
   1. **Revisions-Pins** für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` eintragen (derzeit `status: "planned"` → werden nicht geladen).
   2. **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → Voice-Modell fixieren.
   3. **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN; bei Durchfall GLM-4.5-Air-Upgrade (2×A6000, `gpuCount=2`).

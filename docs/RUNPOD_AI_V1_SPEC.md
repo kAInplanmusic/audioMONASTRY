@@ -184,13 +184,41 @@ den Indexierungsgrad abfragbar.
 | ears | `xeax6xrgd0csag` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
 | voiceGen | `gajmangfldpzrk` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
 
-Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@1391e4d2` (Build-Args
+Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@31dc58ea` (Build-Args
 `AI_INSTALL_AUDIO_AI=1 AI_INSTALL_VOICE_AI=1 AI_INSTALL_VLLM=0`).
 Rollen-Smoke je Rolle grün (brain→`qwen3-14b`, ears→`ast-audioset`/`clap-music`/`whisper-large-v3`,
-voiceGen→`demucs`/`mms-tts-deu`/`qwen3-tts-06b`). Kosten der Inbetriebnahme **$0.024**;
-nach dem Test alles auf `$0/h` abgeschaltet.
+voiceGen→`demucs`/`mms-tts-deu`/`qwen3-tts-06b`). Kosten der Inbetriebnahme inkl.
+Brain-Aktivierung **$0.052**; nach jedem Test alles auf `$0/h` abgeschaltet.
 Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
 
-⚠️ **CI-Deploy ist rot**, solange das Repo-Secret `RP_API_KEY` fehlt; das lokale Deploy
-funktioniert. Und: **ohne vLLM im Image ist der Brain-LLM-Pfad (`runpod-local`) noch
-funktionslos** — `AI_INSTALL_VLLM=1` + `RUNPOD_BRAIN_OPENAI_URL` sind der nächste Schritt.
+### 8.1 Lokales Brain ist aktiv (2026-09-10)
+
+Der Brain-Worker bedient `task: "llm"` mit `qwen3_llm` (transformers). Verifiziert mit
+einer echten Generierung: `status: success`, `model: qwen3-14b`, 58 s / 64 Tokens
+(Kaltstart inkl. Gewichte-Load).
+
+**Zwei Korrekturen am ursprünglichen Plan:**
+
+1. **Kein vLLM nötig.** RunPod stellt `/openai/v1` **nicht** für custom Serverless-Worker
+   bereit (nur für vLLM-Integrationen). `runpod-local` in `src/core/ai/LlmRouter.ts` ruft
+   deshalb jetzt den **nativen** Weg auf: `POST /run` + Status-Polling mit `task: "llm"`
+   (über `RunPodProvider('brain')`, inkl. Fehler-Mapping und Role-Auflösung).
+   `RUNPOD_BRAIN_OPENAI_URL` bleibt als optionaler Override für ein späteres vLLM-Image.
+   `llm` steht dafür in `LONG_RUNNING_TASKS`, weil ein kalter Worker die Gewichte lädt.
+2. **Abhängigkeits-Falle.** Der erste Live-Lauf scheiterte mit `MODEL_UNAVAILABLE`:
+   `transformers==4.57.3` verlangt `huggingface-hub>=0.34,<1.0`, im Image lag aber
+   `huggingface-hub==1.31.0` (von `qwen-tts`/`diffusers` heraufgezogen). Der Import
+   scheitert erst in einer ImportError-Kaskade – ein simples `import transformers`
+   löst den Versionscheck **nicht** aus, deshalb war die erste CI-Probe blind.
+   Jetzt: harter Pin in `requirements.in` + den Rollen-Locks, `pip install` **nach** allen
+   Lock-Installs, und eine Build-Prüfung über denselben Pfad wie der Worker
+   (`exec('from transformers import *')`). Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md` §7.
+
+**Verhaltens-Hinweis:** Qwen3 gibt zuerst einen `<think>`-Block aus. Für Tool-Calling
+sollte der Brain-Handler Thinking abschalten (`enable_thinking=False` bzw.
+`/no_think`), sonst frisst der Denkblock das Token-Budget – offen in `MASTER_TODO.md` AI-P1-003.
+
+⚠️ **CI-Deploy ist rot** (Läufe #8–#12): `build` grün, `deploy` rot, obwohl der Preflight
+zeigt, dass `RP_API_KEY` im Repo gesetzt ist. Das lokale Deploy funktioniert. Da die
+Actions-Logs ohne gültigen Token nicht lesbar sind, läuft die Diagnose über
+Step-Status-Proben im Workflow.
