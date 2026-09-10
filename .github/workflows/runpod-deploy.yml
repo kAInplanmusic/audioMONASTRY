@@ -136,7 +136,7 @@ jobs:
 
       # --- Beweis für das eingebackene Brain-Image ------------------------------
       # Beide Proben sind ohne Log-Zugriff am Step-Status ablesbar.
-      - name: Probe 9 – Brain: Gewichte im Image vorhanden
+      - name: Probe 9 – Brain-Gewichte im Image vorhanden
         continue-on-error: true
         run: |
           docker run --rm --entrypoint sh "${{ needs.build.outputs.image }}:brain-${{ github.sha }}" \
@@ -144,7 +144,7 @@ jobs:
 
       # Der eigentliche Beweis: derselbe Revision-Pin wie im Manifest, OHNE Netz –
       # `HF_HUB_OFFLINE=1` erzwingt, dass die Gewichte aus dem Image kommen.
-      - name: Probe 10 – Brain: Qwen3-14B offline auffindbar
+      - name: Probe 10 – Brain Qwen3-14B offline auffindbar
         continue-on-error: true
         run: |
           docker run --rm -e HF_HUB_OFFLINE=1 --entrypoint python \
