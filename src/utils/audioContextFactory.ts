@@ -52,18 +52,3 @@ export function createAnalysisAudioContext(): AudioContext | null {
   return createConfiguredAudioContext({ latencyHint: 'playback' });
 }
 
-/** Audio-System-Diagnose: Kanal-/Kontext-Check (ohne direkte Plattform-API). */
-export async function checkAudioSystem(): Promise<void> {
-  const ctx = createAnalysisAudioContext();
-  if (!ctx) {
-    console.warn('WARNUNG: Kein AudioContext verfügbar.');
-    return;
-  }
-  try {
-    if (ctx.destination.channelCount < 8) {
-      console.warn('WARNUNG: System unterstützt weniger als 8 Kanäle. Spatial-Surround (8.1/10.1) könnte eingeschränkt sein.');
-    }
-  } finally {
-    await ctx.close().catch(() => { /* ignore */ });
-  }
-}

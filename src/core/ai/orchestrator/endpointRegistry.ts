@@ -169,9 +169,3 @@ export function resolveGpuRoles(): ResolvedGpuRole[] {
   });
 }
 
-/** Aufgelöste Rolle für einen einzelnen Task (oder null ohne Zuständigkeit). */
-export function resolveRoleForTask(task: AiTask): ResolvedGpuRole | null {
-  const role = roleForTask(task);
-  if (!role) return null;
-  return resolveGpuRoles().find((r) => r.role === role) ?? null;
-}

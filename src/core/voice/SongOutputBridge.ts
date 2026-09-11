@@ -26,17 +26,6 @@ export function songItemToAudioSource(item: SessionMediaItem): AudioSourceInput 
   };
 }
 
-/** SongOutputBridge: Session-Medium → Sink. */
-class SongOutputBridge {
-  constructor(private sink: ISongOutputSink) {}
-
-  publishSong(item: SessionMediaItem): AudioSourceInput {
-    const source = songItemToAudioSource(item);
-    this.sink.publish(source);
-    return source;
-  }
-}
-
 /**
  * Browser-Senke: veröffentlicht über die echte V2-Engine (audioEngine).
  * Bewusst lazy importiert, damit Core-Module ohne Tone/Web-Audio ladbar bleiben.
@@ -58,5 +47,3 @@ export class V2EngineSongSink implements ISongOutputSink {
   }
 }
 
-/** Default-Bridge für die aktuelle Session (V2 SpatialScene-Ausgabe). */
-export const songOutputBridge = new SongOutputBridge(new V2EngineSongSink());

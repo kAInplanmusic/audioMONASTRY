@@ -129,5 +129,3 @@ export class OfflineBounceEngine {
   }
 }
 
-/** Standard-Engine für Bounces (kann je Session neu erzeugt werden). */
-export const offlineBounceEngine = new OfflineBounceEngine();

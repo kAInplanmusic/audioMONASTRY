@@ -13,7 +13,6 @@
 //    @xenova/transformers bleibt OPTIONAL (falls installiert) für echte ONNX.
 // ============================================================================
 
-
 const DIM = 512;
 
 // --- Stopwörter (deterministisch) ---
@@ -108,10 +107,3 @@ export const isLocalEmbeddingAvailable = async (): Promise<boolean> => {
 };
 
 // Kosinus-Ähnlichkeit zweier Vektoren
-export function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < Math.min(a.length, b.length); i++) {
-    dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i];
-  }
-  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
-}

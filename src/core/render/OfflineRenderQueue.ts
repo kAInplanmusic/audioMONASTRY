@@ -4,7 +4,7 @@
  * Reiht deterministische Offline-Render-Jobs (Faktoren 1x/4x/20x) und
  * verarbeitet sie sequenziell. Nutzt dieselbe AudioGraph-Struktur wie Realtime.
  */
-import { OfflineRenderer, type OfflineRenderRequest, type OfflineRenderResult, type RenderFactor } from './OfflineRenderer';
+import { OfflineRenderer, type OfflineRenderRequest, type OfflineRenderResult } from './OfflineRenderer';
 import type { IAudioBuffer } from '../audio/types';
 
 type RenderJobStatus = 'queued' | 'running' | 'done' | 'error';
@@ -65,4 +65,3 @@ export class OfflineRenderQueue {
   }
 }
 
-export const RENDER_FACTORS: RenderFactor[] = [1, 4, 20];

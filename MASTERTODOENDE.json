@@ -381,10 +381,10 @@
       "id": "QUAL-P2-004",
       "title": "Nicht angebundene Dateien: anbinden oder loeschen (Datei-fuer-Datei)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Qualitaet / Struktur",
-      "source": "docs/QUALITY_TOOLING_2026.md#4",
-      "note": "Nach QUAL-P2-003 offen: 68 Deklarationen, die sogar innerhalb ihrer Datei ungenutzt sind (Loeschkandidaten), und ~187 Exporte/Typen, die nur deshalb gemeldet werden, weil sie von bewusst behaltenen, nicht angebundenen Dateien (V1-Barrel, Worker/Spatial/Native-Infrastruktur, B2BModal/ModuleContainer/RoomPlannerPanel/SampleMonkLogo/MasterTrackTerminal, EdgeDspClient/FailoverController, HardwareSimulator, State-Replikation, TransportRegistry, webgpu_adapter, firebase/db) importiert werden. Jede dieser Dateien braucht die Entscheidung \"anbinden (mit Test + UI-Pfad) oder loeschen\" - das ist Produkt-/Architekturentscheidung, kein Skript. Messung: npm run check:deadcode."
+      "source": "docs/QUALITY_TOOLING_2026.md#5",
+      "note": "DONE 2026-09-11 (Entscheidungs-Register + AST-Sweep): knip-Ausgabe als JSON gelesen und jede gemeldete Deklaration per TypeScript-AST klassifiziert (DELETE = nirgends extern referenziert UND im eigenen Modul ungenutzt; UNEXPORT = nur im eigenen Modul genutzt; KEEP = extern referenziert). Die externe Referenz wurde per grep -rIl ueber src/server/services/scripts/tests/docs/database und alle *.md geprueft, nicht nur Imports. ERGEBNIS: 43 Deklarationen in 37 Dateien geloescht (u. a. trackOf/isDrumRole/AudioElement/MotionSequence, offlineBounceEngine, songOutputBridge + zugehoerige lokale Klasse, getCachedAnalysis, HRTFProcessingResult(Schema), GPUTensor, UploadMeta, V2StudioState, V2OutputLayoutId, PluginLockPayload, RENDER_FACTORS, MIDI_TYPE_LABEL, cosineSimilarity, useAccess, useAIStatus, isAudioContextLike, noteToFreq, midiClockTick/-Continue, OSC_IMMEDIATE, isNoteOn, cloudAutomationHealth, r2Blocked u. a.), 2 Exporte zurueckgestuft (RenderFactor, ModPolarity). STAND: ungenutzte Exporte 136 -> 106, ungenutzte Typen 53 -> 40, ungenutzte Dateien unveraendert 5 (Worklet-Runtime-Assets). Jede behaltene Deklaration/Datei hat eine Begruendung im Register: Barrels/Re-Exports (kein V1-Abbau vor V2-Paritaet), Payload-Validierung (SEC-P1-001), Konfiguration, Cloud-/Storage-API, Worklet-Init, V1-Kompat, Session-Infra-Paare, Test-/UI-API, Produktinhalt; die bewusst nicht angebundene Infrastruktur bleibt bis nachgewiesener V2-Paritaet (AUDIO-P1-001, per git checkout rueckholbar). BELEGE: npx tsc --noEmit 0, npx eslint . --max-warnings=0 0, Boundary-Scan 404 Dateien/0 Verstoesse, test:ci 1222/1222 ohne Skips. DOKU: docs/QUALITY_TOOLING_2026.md §5."
     },
     {
       "id": "VISUAL-P1-008",

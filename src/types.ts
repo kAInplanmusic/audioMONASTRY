@@ -47,28 +47,10 @@ export const TRACK_ROLE_MAP: Record<TrackType, TrackRole> = {
   channel10: 'lead',
 };
 
-const ROLE_TO_TRACK: Record<TrackRole, TrackType> = {
-  kick: 'channel1',
-  hat: 'channel2',
-  clap: 'channel3',
-  perc: 'channel4',
-  snare: 'channel5',
-  tom: 'channel6',
-  bass: 'channel7',
-  lead: 'channel8',
-};
-
 export const ALL_TRACKS: TrackType[] = ['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'];
-export const ALL_ROLES: TrackRole[] = ['kick','hat','clap','perc','snare','tom','bass','lead'];
 
 /** Liefert die Rolle einer Spur. */
 export const roleOf = (track: TrackType): TrackRole => TRACK_ROLE_MAP[track];
-
-/** Liefert die Spur zu einer Rolle. */
-export const trackOf = (role: TrackRole): TrackType => ROLE_TO_TRACK[role];
-
-/** Ist das eine "Drum-/Perkussions"-Rolle (nicht Bass/Lead)? */
-export const isDrumRole = (r: TrackRole) => r === 'kick' || r === 'hat' || r === 'clap' || r === 'perc' || r === 'snare' || r === 'tom';
 
 // --- Patterns (16 Steps) mit semantischer Kompatibilität ---
 export interface Patterns {
@@ -107,27 +89,6 @@ export interface TrackPreset {
   resonance: number;
   delayTime: number;
   decay: number;
-}
-
-export interface AudioElement {
-  id: string;
-  name: string;
-  type: 'sample' | 'song' | 'noise';
-  source: string;
-  tags: string[];
-  frequency?: number;
-  duration?: number;
-  url?: string;
-  createdAt: string;
-}
-
-export interface MotionSequence {
-  id: string;
-  name: string;
-  type: string; // e.g. 'automation', 'rhythm_pattern'
-  tags: string[];
-  data: any;
-  createdAt: string;
 }
 
 export const MUSIC_SCALES = {

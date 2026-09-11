@@ -15,7 +15,7 @@
  *   * Das Ergebnis je Ziel wird auf `clampMin..clampMax` (Default −1..1) begrenzt.
  */
 
-export type ModPolarity = 'unipolar' | 'bipolar';
+type ModPolarity = 'unipolar' | 'bipolar';
 
 export interface ModRoute {
   id: string;

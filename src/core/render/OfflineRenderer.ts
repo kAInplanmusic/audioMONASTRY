@@ -6,7 +6,7 @@
  */
 import type { IAudioBuffer, IAudioGraph, IProcessingContext } from '../audio/types';
 
-export type RenderFactor = 1 | 4 | 20;
+type RenderFactor = 1 | 4 | 20;
 
 export interface OfflineRenderRequest {
   graph: IAudioGraph;

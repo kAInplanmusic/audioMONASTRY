@@ -17,8 +17,6 @@ import { MultichannelBusNode, SourceNode, Stereo21OutputNode, StereoSumNode } fr
 import type { IAudioNode, IProcessingContext } from './types';
 import { getOutputLayout } from '../spatial/layouts';
 
-export type V2OutputLayoutId = string;
-
 const STEREO_IDS = new Set(['stereo', '2.0']);
 
 /** Ermittelt die Kanalzahl eines Ausgabe-Layouts (2.0/2.1/4.0/…). */

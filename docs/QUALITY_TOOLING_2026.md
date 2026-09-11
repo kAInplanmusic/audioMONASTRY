@@ -131,3 +131,70 @@ ihrer Datei** ungenutzt (Kandidaten für echte Löschung) und ~187 Exporte/Typen
 sind nur deshalb noch offen, weil sie von bewusst behaltenen, nicht angebundenen
 Dateien importiert werden. Beides braucht die Datei-für-Datei-Entscheidung
 „anbinden oder löschen“, kein Skript.
+
+## 5. Entscheidungs-Register „nicht angebundene Dateien“ (QUAL-P2-004)
+
+**Vorgehen statt Bauchgefühl:** Die knip-Ausgabe wird als JSON gelesen und jede
+gemeldete Deklaration per TypeScript-AST klassifiziert:
+
+| Klasse | Bedingung | Aktion |
+|---|---|---|
+| **DELETE** | nirgends extern referenziert (Code/Doku/Tests) **und** im eigenen Modul nicht verwendet | Deklaration entfernt |
+| **UNEXPORT** | nirgends extern referenziert, aber im eigenen Modul verwendet | `export` entfernt (Verhalten unverändert) |
+| **KEEP** | extern referenziert (Barrel, Doku, API) oder kein Top-Level-Decl | bleibt, mit Begründung |
+
+Die externe Referenz wird per `grep -rIl` über `src`, `server`, `services`,
+`scripts`, `tests`, `docs`, `database` und alle `*.md` geprüft (nicht nur
+Imports) — so fällt auch ein Name auf, der nur in einem Plan steht.
+
+| Kennzahl | vor QUAL-P2-004 | nachher |
+|---|---|---|
+| ungenutzte Exporte | 136 | **106** |
+| ungenutzte Typen | 53 | **40** |
+| ungenutzte Dateien | 5 | 5 (Worklet-Runtime-Assets, s. §1) |
+
+**Gelöscht (43 Deklarationen in 37 Dateien, per AST-Sweep, Gates danach grün):**
+`cloudAutomationHealth`, `r2Blocked` (server);
+`useAccess`; `errorStats`; `totalEstimatedVram`, `resolveRoleForTask`,
+`EvalPluginId`, `PromptVersionEntry`; `defaultOutputLayout`; `supports24_2`;
+`trackLabel`; `checkAudioSystem`; `RENDER_FACTORS`; `isNoteOn`; `OSC_IMMEDIATE`;
+`midiClockTick`, `midiClockContinue`; `trackOf`, `isDrumRole`, `AudioElement`,
+`MotionSequence`, `ALL_ROLES`; `TRACK_ROLE_ORDER`; `isV2SessionState`;
+`getDropProfile`, `getDropProfilesForPlugins`; `isAudioContextLike`;
+`noteToFreq`; `useAIStatus`; `MIDI_TYPE_LABEL`; `cosineSimilarity`;
+`GPUTensor`; `AudioEvent`, `AIAudioResult`; `UploadMeta`; `V2StudioState`;
+`V2OutputLayoutId`; `PluginLockPayload`; `offlineBounceEngine`;
+`songOutputBridge` + die nur dafür existierende lokale Klasse; `getCachedAnalysis`;
+`HRTFProcessingResultSchema` + `HRTFProcessingResult`.
+
+**Zurückgestuft (`export` entfernt):** `RenderFactor` (`OfflineRenderer.ts`),
+`ModPolarity` (`modMatrix.ts`).
+
+**Bewusst behalten — mit Grund (jede Datei entschieden, nicht „irgendwie“):**
+
+- **Barrels/Re-Exports** (`src/core/drop/index.ts`, `src/utils/midi.ts`,
+  `src/core/spatial/spatialRenderers.ts`, `src/plugins/registry.ts` u. a.):
+  bewusst behaltene öffentliche Fläche; Löschen wäre V1-Abbau (Projektregel).
+- **Payload-Sicherheit (SEC-P1-001):** `validateSessionMembers`,
+  `validateRoleChanged`, `validatePeerJoined`, `validatePeerLeft`,
+  `validatePluginState`, `validateSessionFull` und `validateGeminiPreset`
+  bleiben als Runtime-Validierung verfügbar.
+- **Konfiguration/Deploy:** `SIGNALING_WS_URL`, `r2PublicBaseUrl`.
+- **Cloud/Storage-API:** `uploadSampleBlobToCloud`, `removeSample`.
+- **Worklet-/Engine-Init:** `createClockWorkletNode`, `createSynthWorkletNode`.
+- **V1-Kompatibilität:** `translateLegacySpatialMessage`.
+- **Session-/Infra-Paare:** `clearSessionScratchpad`, `createSfuTransportState`,
+  `StudioSessionClaims`, `useCollabSession`.
+- **Test-/UI-API:** `enterStudio` (E2E-Helfer), `toggleAudioPreview`.
+- **Produktinhalt:** `HYPERSONIC_MOA_SYSTEM_PROMPTS`.
+- **Bewusst nicht angebundene Infrastruktur** (in `knip.json` mit Begründung
+  gruppiert, z. B. V1-Backends, Native-Runtime, Edge/Failover, Spatial/HRTF,
+  Worker/Sandbox, State-Replikation, WebGPU-Adapter, firebase/db): Entscheidung
+  **behalten bis nachgewiesener V2-Parität** (`AUDIO-P1-001`) — kein stiller
+  Funktionsverlust, Rückholbar per `git checkout <sha> -- <pfad>`.
+
+**Belege (Gates nach dem Sweep):** `npx tsc --noEmit` 0 Fehler ·
+`npx eslint . --max-warnings=0` 0 Findings · Interface-Boundary-Scan 404 Dateien,
+0 Verstöße · `npm run test:ci` 1222/1222 Tests grün, 0 übersprungen ·
+`npm run check:deadcode` 106/40 statt 136/53.
+

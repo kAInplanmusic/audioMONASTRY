@@ -18,8 +18,6 @@ export const EVAL_PLUGIN_IDS = [
   'ai', 'perfor',
 ] as const;
 
-export type EvalPluginId = (typeof EVAL_PLUGIN_IDS)[number];
-
 export interface PluginEvalSpec {
   /** Eval-Task (Planungs-Case über den Plugin-Kommando-Katalog). */
   task: string;

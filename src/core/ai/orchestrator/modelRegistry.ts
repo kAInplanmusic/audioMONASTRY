@@ -264,7 +264,3 @@ export function validateRegistry(models: readonly ModelDefinition[] = MODEL_DEFI
   return errors;
 }
 
-/** Summe estimatedVRAM aller Modelle (für VRAM-Planung). */
-export function totalEstimatedVram(models: readonly ModelDefinition[] = MODEL_DEFINITIONS): number {
-  return models.reduce((sum, m) => sum + m.estimatedVRAM, 0);
-}

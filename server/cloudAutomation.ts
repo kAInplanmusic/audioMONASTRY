@@ -224,11 +224,6 @@ export async function syncR2ToSupabase(): Promise<{ total: number; ok: number; f
   return { total: files.length, ok, failed: errors.length, errors: errors.slice(0, 20) };
 }
 
-export function cloudAutomationHealth(): { r2: boolean; supabase: boolean } {
-  return { r2: Boolean(r2Client()), supabase: Boolean(supabaseAdmin()) };
-}
-
-
 // ---------------------------------------------------------------------------
 // VisualMONK: Generierungen + Feedback ablegen (Migration 008)
 // ---------------------------------------------------------------------------

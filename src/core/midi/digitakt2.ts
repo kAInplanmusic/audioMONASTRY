@@ -51,11 +51,7 @@ export function patternStepMessage(step: DigitaktPatternStep): number[] {
   return [status | channel, note, velocity];
 }
 
-/** MIDI-Clock-Tick (F8) – 24 Ticks pro Viertel. */
-export function midiClockTick(): number[] { return [0xf8]; }
-
 export function midiClockStart(): number[] { return [0xfa]; }
-export function midiClockContinue(): number[] { return [0xfb]; }
 export function midiClockStop(): number[] { return [0xfc]; }
 
 /** Ein 16-Step-Pattern (16 Sequencer-Steps) in MIDI-Bytes umwandeln. */

@@ -15,12 +15,6 @@ import type { IProcessingContext } from './types';
 export const V2_CHANNELS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8', 'channel9', 'channel10'] as const;
 export type V2Channel = (typeof V2_CHANNELS)[number];
 
-export interface V2StudioState {
-  channelGainsDb: Record<string, number>;
-  channelPans: Record<string, number>;
-  masterGain: number;
-}
-
 const SILENCE = (len: number): Float32Array => new Float32Array(len);
 
 export class V2StudioGraph {

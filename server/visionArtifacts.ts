@@ -126,11 +126,6 @@ export function resetR2Block(): void {
   r2BlockedUntil = 0;
 }
 
-/** Nur für Diagnose: ist R2 gerade gesperrt? */
-export function r2Blocked(): boolean {
-  return Date.now() < r2BlockedUntil;
-}
-
 /** data-URI → Buffer (base64 **und** URL-kodiert). `null` = kein data-URI. */
 export function dataUriToBuffer(dataUri: string): Buffer | null {
   const s = String(dataUri ?? '');

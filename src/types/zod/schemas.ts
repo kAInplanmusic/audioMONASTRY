@@ -46,16 +46,6 @@ const PluginStatePayloadSchema = z.object({
 });
 
 // ============================================================================
-// Audio-HRTF-Processing
-// ============================================================================
-
-export const HRTFProcessingResultSchema = z.object({
-  success: z.boolean(),
-  latencyMs: z.number().optional(),
-  error: z.string().optional(),
-});
-
-// ============================================================================
 // Server-API-Payloads (ARCH-SEC-003 – Runtime Validation statt as-Casts)
 // ============================================================================
 
@@ -343,7 +333,6 @@ type SessionFullPayload = z.infer<typeof SessionFullPayloadSchema>;
 type PeerJoinedPayload = z.infer<typeof PeerJoinedPayloadSchema>;
 type PeerLeftPayload = z.infer<typeof PeerLeftPayloadSchema>;
 type PluginStatePayload = z.infer<typeof PluginStatePayloadSchema>;
-export type HRTFProcessingResult = z.infer<typeof HRTFProcessingResultSchema>;
 
 // ============================================================================
 // Validation Helpers

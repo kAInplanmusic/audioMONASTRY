@@ -317,13 +317,6 @@ export function interpolateValue(
 }
 
 /**
- * Get profile by ID
- */
-export function getDropProfile(id: string): DropProfile | undefined {
-  return DROP_PROFILES.find((p) => p.id === id);
-}
-
-/**
  * Filter profiles by category
  */
 export function getDropProfilesByCategory(category: DropCategory): DropProfile[] {
@@ -337,12 +330,3 @@ export function getDropProfilesByIntensity(min: number, max: number): DropProfil
   return DROP_PROFILES.filter((p) => (p.intensity ?? 0.5) >= min && (p.intensity ?? 0.5) <= max);
 }
 
-/**
- * Get profiles suitable for given active plugins
- */
-export function getDropProfilesForPlugins(activePluginIds: string[]): DropProfile[] {
-  return DROP_PROFILES.filter((profile) => {
-    if (!profile.targetPlugins || profile.targetPlugins.length === 0) return true;
-    return profile.targetPlugins.some((target) => activePluginIds.includes(target));
-  });
-}

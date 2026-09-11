@@ -64,12 +64,3 @@ function reportErrorToServer(entry: TrackedError): void {
   } catch { /* noop */ }
 }
 
-function errorLog(): TrackedError[] {
-  return storageGetJson<TrackedError[]>(KEY) ?? [];
-}
-
-export function errorStats(): Record<TrackedError['severity'], number> {
-  const stats: Record<TrackedError['severity'], number> = { low: 0, medium: 0, high: 0, critical: 0 };
-  for (const e of errorLog()) stats[e.severity]++;
-  return stats;
-}

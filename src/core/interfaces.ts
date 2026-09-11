@@ -16,14 +16,6 @@ export interface AudioSignal {
   sampleRate: number;
 }
 
-/** Eine zeitgestempelte Einzelnotiz/MIDI-ähnliches Event. */
-export interface AudioEvent {
-  track: string;        // z.B. 'channel1'
-  step: number;         // 0..15
-  time: number;         // Sekunden (Transport-Zeit)
-  velocity: number;     // 0..1
-}
-
 // ---------------------------------------------------------------------------
 // 1.1.1 · IAudioBackend
 // ---------------------------------------------------------------------------
@@ -74,11 +66,6 @@ export interface AIResult {
   kind: AIBackendKind;
   latencyMs: number;
   data: unknown;
-}
-
-export interface AIAudioResult extends AIResult {
-  /** Stem-Separation, Voice-Synthese o.ä. Dazu zählt z.B. 'stems' | 'voice' | 'embedding'. */
-  audio?: Record<string, AudioSignal>;
 }
 
 /**

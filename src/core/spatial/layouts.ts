@@ -73,6 +73,3 @@ export function getOutputLayout(id: string): OutputLayout | undefined {
   return OUTPUT_LAYOUTS.find((l) => l.id === id);
 }
 
-export function defaultOutputLayout(): OutputLayout {
-  return OUTPUT_LAYOUTS[0];
-}

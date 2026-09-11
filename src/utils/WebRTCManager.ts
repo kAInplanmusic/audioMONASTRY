@@ -25,7 +25,6 @@ type PeerLeftPayload = { socketId: string };
 type SessionFullPayload = { max?: number };
 type RoleChangedPayload = { userId: string; role?: unknown };
 type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
-export type PluginLockPayload = { pluginId?: unknown; lockedBy?: unknown; timestamp?: unknown; ttl?: unknown };
 
 class WebRTCManager {
   private socket: Socket | null = null;

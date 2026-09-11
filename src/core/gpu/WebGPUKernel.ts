@@ -11,8 +11,6 @@
  * halten und dennoch typisiert zu bleiben.
  */
 
-export interface GPUTensor { dims: number[]; data: Float32Array; }
-
 export interface WebGPUKernelOptions {
   /** CPU-Software-Fallback erzwingen (Tests, Offline, fehlendes WebGPU). */
   forceCpu?: boolean;

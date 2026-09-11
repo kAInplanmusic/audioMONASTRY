@@ -79,7 +79,3 @@ export function normalizeControlValue(value: number, resolution: number): number
   return Math.max(0, Math.min(1, value / resolution));
 }
 
-/** Prüft, ob ein ControlMessage als "Note On" zu werten ist (Velocity > 0). */
-export function isNoteOn(msg: ControlMessage): boolean {
-  return msg.kind === 'noteOn' && msg.value > 0;
-}

@@ -191,6 +191,3 @@ export function isSpatialChannelFree(map: SpatialAssignmentMap, channelId: numbe
   return !map[channelId];
 }
 
-export function trackLabel(track: TrackType): string {
-  return track.toUpperCase().replace('CHANNEL', 'CH ');
-}

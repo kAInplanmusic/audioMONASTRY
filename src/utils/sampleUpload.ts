@@ -11,17 +11,6 @@ export type AudioExtension = (typeof AUDIO_EXTENSIONS)[number];
 export const UPLOAD_KINDS = ['sample', 'recording', 'stem', 'sound', 'voice'] as const;
 export type UploadKind = (typeof UPLOAD_KINDS)[number];
 
-export interface UploadMeta {
-  kind: UploadKind;
-  name: string;
-  artist?: string;
-  style?: string;
-  key?: string;
-  bpm?: number;
-  tags: string[];
-  type?: string;
-}
-
 export interface UploadValidation {
   ok: boolean;
   error?: string;

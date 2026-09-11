@@ -249,11 +249,6 @@ export async function analyzeMusic(url: string): Promise<TrackAnalysis | null> {
   }
 }
 
-/** Holt ein gecachtes Analyse-Ergebnis (ohne Neuberechnung). */
-export function getCachedAnalysis(url: string): TrackAnalysis | null {
-  return analysisCache[url] ?? null;
-}
-
 // Beim Start: Cache aus dem Storage laden.
 try {
   const raw = storageGet('am_analysis');

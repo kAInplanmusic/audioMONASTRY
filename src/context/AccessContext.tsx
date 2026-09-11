@@ -1,5 +1,5 @@
 // src/context/AccessContext.tsx
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useState } from 'react';
 
 type UserRole = 'ADMIN' | 'EDITOR' | 'VIEWER';
 
@@ -27,4 +27,3 @@ export const AccessProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   );
 };
 
-export const useAccess = () => useContext(AccessContext)!;

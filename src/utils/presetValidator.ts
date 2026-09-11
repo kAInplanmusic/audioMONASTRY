@@ -3,7 +3,7 @@
 // API bleibt kompatibel: validatePreset / validateGeminiPreset werfen bei
 // ungültigen Daten (wie vorher zod .parse).
 
-import { TRACK_ROLE_MAP, TrackRole, ALL_ROLES, emptyPatterns } from '../types';
+import { TRACK_ROLE_MAP, emptyPatterns } from '../types';
 
 interface PresetTrack {
   id: string;
@@ -91,7 +91,6 @@ export function validateGeminiPreset(data: unknown): GeminiPreset {
 }
 
 // --- Track-Role-Validierung (einheitliches Datenmodell) ---
-export const TRACK_ROLE_ORDER: TrackRole[] = [...ALL_ROLES];
 
 /**
  * Prüft, dass Patterns die erwartete Spurenstruktur haben und jede Spur

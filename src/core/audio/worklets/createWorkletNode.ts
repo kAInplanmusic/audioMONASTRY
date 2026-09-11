@@ -10,16 +10,6 @@
  *   Aufrufer müssen weiterhin Port-/Connect-Zugriffe absichern.
  */
 
-/** Duck-Typing: akzeptiert echte AudioContexts auch aus fremden Realms. */
-export function isAudioContextLike(c: unknown): c is AudioContext {
-  return (
-    c != null &&
-    typeof (c as any).createGain === 'function' &&
-    typeof (c as any).audioWorklet?.addModule === 'function' &&
-    typeof (c as any).destination === 'object'
-  );
-}
-
 export function createAudioWorkletNode(
   ctx: AudioContext | null,
   name: string,

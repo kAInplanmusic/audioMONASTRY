@@ -17,14 +17,6 @@ export interface SystemPrompt {
   createdAt: number;
 }
 
-export interface PromptVersionEntry {
-  pluginId: string;
-  version: number;
-  promptId: string;
-  changelog: string;
-  createdAt: number;
-}
-
 function makeId(): string {
   return `prompt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }

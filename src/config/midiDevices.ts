@@ -71,13 +71,3 @@ export function resolveMidiProfile(name: string, manufacturer?: string): MidiDev
   return null;
 }
 
-/** Gruppiert die Settings nach Typ für die Skin-Engine. */
-export const MIDI_TYPE_LABEL: Record<MidiDeviceType, string> = {
-  GRID: 'Grid / Clip-Launcher',
-  DJ: 'DJ-Controller',
-  MPC: 'Finger-Drumming & Pads',
-  KEYBOARD: 'Keyboard-Controller',
-  MIXER: 'DAW/Mixer-Controller',
-  PAD: 'Pad-Controller',
-  GROOVEBOX: 'Sampler-Groovebox (Elektron)',
-};

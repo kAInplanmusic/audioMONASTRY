@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { API_BASE_URL } from '../config/runtime';
 
 /** fetch mit Timeout (ersetzt axios – Bundle-Diät P2-5). */
@@ -12,26 +11,6 @@ async function fetchJson(url: string, init: RequestInit = {}, timeoutMs = 10_000
     clearTimeout(timer);
   }
 }
-
-export const useAIStatus = () => {
-    const [isOnline, setIsOnline] = useState<boolean | null>(null);
-
-    useEffect(() => {
-        const checkStatus = async () => {
-            try {
-                await fetch(`${API_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) });
-                setIsOnline(true);
-            } catch {
-                setIsOnline(false);
-            }
-        };
-        checkStatus();
-        const interval = setInterval(checkStatus, 30000); // Check every 30s
-        return () => clearInterval(interval);
-    }, []);
-
-    return { isOnline };
-};
 
 export const useAudioAI = () => {
 

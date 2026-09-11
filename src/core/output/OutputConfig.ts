@@ -29,10 +29,6 @@ export function listSupportedLayoutIds(): string[] {
   return OUTPUT_LAYOUTS.map((l) => l.id);
 }
 
-export function supports24_2(layoutId: string): boolean {
-  return layoutId === '24.2';
-}
-
 // ---------------------------------------------------------------------------
 // 2.1-Crossover (P2-3): Linkwitz-Riley 2. Ordnung, Sub < crossoverHz,
 // L/R-Hochpass. Reine Koeffizienten-Berechnung → serverlos testbar.

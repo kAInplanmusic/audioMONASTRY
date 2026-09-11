@@ -17,14 +17,3 @@ export function normalizeNotes(notes: number[], count: number): number[] {
   return [...notes, ...Array(count - notes.length).fill(0)];
 }
 
-/** Wandelt einen MIDI-Noten-String (z. B. 'C5') in eine Frequenz um. */
-export function noteToFreq(note: string): number {
-  const m = /^([A-Ga-g])([#b]?)(-?\d)$/.exec(note);
-  if (!m) return 440;
-  const names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-  const semitone = names.indexOf(m[1].toUpperCase() + m[2]);
-  if (semitone < 0) return 440;
-  const octave = Number.parseInt(m[3], 10);
-  const midi = 12 + (octave + 1) * 12 + semitone; // C4=60
-  return 440 * Math.pow(2, (midi - 69) / 12);
-}

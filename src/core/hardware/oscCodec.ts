@@ -233,9 +233,6 @@ export function timetagToMs(seconds: number, fraction: number): number {
   return unixSec * 1000 + Math.floor((fraction / 0xffffffff) * 1000);
 }
 
-/** Immediat-Timetag (OSC-Konvention: 1). */
-export const OSC_IMMEDIATE = { seconds: 0, fraction: 1 };
-
 // ---------------------------------------------------------------------------
 // Control-Pfad-Helfer (App-Konvention: /control/<kind>/<id>/<value>/<channel>)
 // ---------------------------------------------------------------------------

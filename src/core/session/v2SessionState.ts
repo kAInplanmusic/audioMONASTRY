@@ -131,20 +131,6 @@ export function exportV2SessionState(input: ExportV2SessionStateInput): V2Sessio
   };
 }
 
-/** Defensive Validierung eines unbekannten Objekts als V2-Session-State. */
-export function isV2SessionState(value: unknown): value is V2SessionGraphState {
-  if (!value || typeof value !== 'object') return false;
-  const s = value as Partial<V2SessionGraphState>;
-  return s.version === V2_SESSION_STATE_VERSION
-    && typeof s.sessionId === 'string'
-    && !!s.graph && typeof s.graph === 'object'
-    && !!s.monitor && typeof s.monitor === 'object'
-    && Array.isArray(s.activePlugins)
-    && !!s.transport && typeof s.transport === 'object'
-    && typeof s.updatedBy === 'string'
-    && typeof s.updatedAt === 'number';
-}
-
 export type V2SessionParseResult =
   | { ok: true; state: V2SessionGraphState }
   | { ok: false; errors: string[] };
