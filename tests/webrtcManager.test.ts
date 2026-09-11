@@ -10,7 +10,7 @@ vi.mock('socket.io-client', () => {
     connect: vi.fn(),
     disconnect: vi.fn(),
   };
-  return { io: vi.fn(() => socket) };
+  return { io: vi.fn(() => socket), __testSocket: socket };
 });
 
 import { webRTCManager } from '../src/utils/WebRTCManager';
@@ -34,6 +34,23 @@ describe('WebRTCManager (jsdom)', () => {
   it('sendData/SendToAllPeers sind ohne Peers unkritisch', () => {
     expect(() => webRTCManager.sendData({ type: 'test' })).not.toThrow();
     expect(() => webRTCManager.sendToAllPeers({ type: 'test' } as never)).not.toThrow();
+  });
+
+  it('COLLAB-P0-001: State-Sendungen tragen Event-ID + monotone Sequenz', async () => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    expect(sock, 'Socket-Mock verfügbar').toBeTruthy();
+    sock!.emit.mockClear();
+    webRTCManager.sendToAllPeers({ type: 'SCRATCHPAD_UPDATE' } as never);
+    webRTCManager.sendToAllPeers({ type: 'SCRATCHPAD_UPDATE' } as never);
+    const calls = sock!.emit.mock.calls.filter((c) => c[0] === 'plugin-state');
+    expect(calls.length).toBe(2);
+    const first = calls[0][1] as { eventId: string; sequence: number };
+    const second = calls[1][1] as { eventId: string; sequence: number };
+    expect(typeof first.eventId).toBe('string');
+    expect(first.sequence).toBeGreaterThan(0);
+    expect(second.sequence).toBe(first.sequence + 1);
+    expect(first.eventId).not.toBe(second.eventId);
   });
 
   it('P4-1: startMainStream speichert Main-Stream ohne Peers (kein Throw)', () => {

@@ -113,6 +113,29 @@ export class LockManager {
     return [...this.locks.values()].map((l) => ({ ...l }));
   }
 
+  /** Rohe Lock-Liste OHNE Ablauf-Filter (COLLAB-P0-001: Sweep/Backup). */
+  all(): LeaseLock[] {
+    return [...this.locks.values()].map((l) => ({ ...l }));
+  }
+
+  /**
+   * Übernimmt Locks aus einem serialisierten Zustand (COLLAB-P0-001:
+   * Redis-/Backup-Recovery). Ungültige Einträge werden übersprungen.
+   */
+  restore(locks: readonly LeaseLock[]): void {
+    this.locks.clear();
+    if (!Array.isArray(locks)) return;
+    for (const lock of locks) {
+      if (!lock || typeof lock.objectId !== 'string' || typeof lock.ownerId !== 'string') continue;
+      this.locks.set(lock.objectId, {
+        objectId: lock.objectId,
+        ownerId: lock.ownerId,
+        leaseUntil: Number.isFinite(lock.leaseUntil) ? lock.leaseUntil : 0,
+        renewals: Number.isFinite(lock.renewals) ? lock.renewals : 0,
+      });
+    }
+  }
+
   /** Anzahl aktiver Locks. */
   get size(): number {
     return this.locks.size;

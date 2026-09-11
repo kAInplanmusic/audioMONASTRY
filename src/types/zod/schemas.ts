@@ -320,6 +320,9 @@ export const PluginLockSocketSchema = z.object({
 export const PluginStateSocketSchema = z.object({
   pluginId: z.string().trim().min(1).max(64),
   state: z.enum(['OFF', 'AUTO_AI', 'PRO', 'LOCKED']),
+  // COLLAB-P0-001: Client-Event-ID + monotone Sequenz je Sender für Dedupe/Ordnung.
+  eventId: z.string().trim().min(1).max(128).optional(),
+  sequence: z.number().int().nonnegative().optional(),
 });
 
 // ============================================================================

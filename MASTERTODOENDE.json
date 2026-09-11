@@ -39,23 +39,25 @@
       "id": "COLLAB-P0-001",
       "title": "Serverautoritativer Session-State (Revision/Sequence/Snapshot + atomare Locks)",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Collaboration",
       "source": "MASTER_TODO.md",
       "problem": "server.ts relaisiert plugin-state nur; keine Revision/Sequence, kein Voll-Snapshot fuer Reconnects, keine atomaren Locks ueber Instanzen.",
+      "note": "DONE 2026-09-11: src/core/session/authoritativeSession.ts = autoritativer Kern (Revision steigt nur bei akzeptierten Mutationen; Sequenz je Sender -> 'stale-sequence'; Event-IDs -> 'duplicate'; Locks lease-basiert ueber LockManager -> 'locked-by-other'; snapshot() fuer Join/Reconnect; serialize()/restore() fuer Redis-Backup; LockManager.restore()/all() ergaenzt). server.ts nutzt den Store statt der rohen pluginLocks-Map: join-session sendet zusaetzlich 'session-state' (Revision+Modul-States+Locks+Sequenzen), neuer 'resync-session'-Handler; plugin-state nimmt eventId/sequence an (PluginStateSocketSchema erweitert), antwortet mit plugin-state-ack und lehnt doppelt/verspaet/gesperrt mit 'plugin-state-rejected' bzw. rbac-denied ab; plugin-lock/unlock/leave/disconnect laufen ueber acquireLock/releaseLock/releaseUserLocks; Sweep broadcastet Ablauf; Redis-Persistenz (Key audiomonastry:session-state, best-effort) laedt den Zustand beim Start, In-Memory-Fallback ohne REDIS_URL. Client (WebRTCManager) versieht jede State-Sendung mit eventId+monotoner Sequenz und hat onSessionState/onPluginStateRejected/requestSessionResync. BELEGE: tests/authoritativeSession.test.ts 13/13 (4-User-verschraenkt 20 Events, Replay->alles verworfen, Lock-Deny/Expiry/Disconnect, serialize/restore + Memory-Persistenz), tests/webrtcManager.test.ts 10/10 (u. a. Event-ID+Sequenz); tsc 0, eslint 0, boundary 408/0, test:ci 1254/1254 ohne Skips. OFFEN (bewusst, bleibt COLLAB-P0-002): echte 4-User-Live-Instanz und zwei reale Redis-Instanzen sind in dieser Umgebung nicht nachweisbar; der Live-Beweis laeuft dort.",
       "files": [
         "server.ts",
-        "src/core/session/*",
-        "src/utils/collab.ts"
+        "src/core/session/authoritativeSession.ts",
+        "src/core/session/locking.ts",
+        "src/utils/WebRTCManager.ts"
       ],
       "acceptance": [
-        "4 parallele User konsistent",
-        "Reconnect ohne Pumping",
-        "verspaetete/doppelte Events deterministisch verworfen"
+        "4 parallele User konsistent (Unit: 4 Sender verschraenkt, 20 akzeptiert, Replay verworfen)",
+        "Reconnect ohne Pumping (Snapshot bei join-session + resync-session)",
+        "verspaetete/doppelte Events deterministisch verworfen (stale-sequence/duplicate)"
       ],
       "verification": [
-        "tests/collab*.test.ts",
-        "tests/e2e/collab.spec.ts"
+        "tests/authoritativeSession.test.ts",
+        "tests/webrtcManager.test.ts"
       ]
     },
     {

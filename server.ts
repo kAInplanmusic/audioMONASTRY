@@ -32,6 +32,12 @@ import { normalizeStyleRanking, suggestStyleFromRanking } from './src/core/ai/vi
 import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifact, saveArtifact } from './server/visionArtifacts.ts';
 import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
 import { supabaseServerKey } from './src/config/supabaseKeys';
+import {
+  AuthoritativeSession,
+  MemorySessionPersistence,
+  type AuthoritativeSessionPersistence,
+  type SerializedAuthoritativeSession,
+} from './src/core/session/authoritativeSession';
 import { looksLikeStudioSession, verifyStudioSession } from './src/core/session/studioSession';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
@@ -203,26 +209,41 @@ function addServerAudit(userId: string, role: string, action: string, ok: boolea
 
 // P4-2: Server-seitige Rollenzuordnung je User-ID (Host = admin, Rest = SESSION_ROLE).
 const sessionRoles = new Map<string, string>();
-// K-2/K-5: Server-autoritative Plugin-Locks (session-global). Werte sind
-// { lockedBy, timestamp, ttl }. Der Client bleibt nur optimistisch.
-// ARCH-#2: TTL client/server vereinheitlicht (vorher: Server 60s, Client 5min
-// → Client hielt bis zu 4 Minuten einen Lock, den es serverseitig nicht gab).
-const pluginLocks = new Map<string, { lockedBy: string; timestamp: number; ttl: number }>();
+// COLLAB-P0-001: Serverautoritativer Session-State (Revision/Sequenz/Snapshot +
+// atomare Locks) ersetzt die frühere rohe `pluginLocks`-Map. Der Client bleibt
+// optimistisch; der Server verwirft verspätete/doppelte Events deterministisch.
 const PLUGIN_LOCK_TTL_MS = 60_000; // 60 s + Heartbeat-Verlängerung (Fallback)
 const PLUGIN_LOCK_SWEEP_MS = 15_000;
+const SESSION_STATE_REDIS_KEY = 'audiomonastry:session-state';
+let authoritativeSession = new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS });
+let sessionPersistence: AuthoritativeSessionPersistence = new MemorySessionPersistence();
+let sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+/** Debounced Persistenz (Redis im Multi-Instanz-Betrieb, sonst In-Memory). */
+const persistSessionState = (): void => {
+  if (sessionSaveTimer) return;
+  sessionSaveTimer = setTimeout(() => {
+    sessionSaveTimer = null;
+    void sessionPersistence.save(authoritativeSession.serialize()).catch(() => { /* best effort */ });
+  }, 250);
+  sessionSaveTimer.unref?.();
+};
+/** Legacy-Sicht der Locks für `plugin-locks-sync` (Client-Format, unverändert). */
+const legacyLockMap = (): Record<string, { lockedBy: string; timestamp: number; ttl: number }> => {
+  const now = Date.now();
+  return Object.fromEntries(authoritativeSession.snapshot(now).locks.map((l) => [
+    l.objectId,
+    { lockedBy: l.ownerId, timestamp: now, ttl: Math.max(0, l.leaseUntil - now) },
+  ]));
+};
 // ARCH-#2: Ablauf broadcasten – Callback wird im Socket.io-Setup gesetzt
 // (io + SESSION_ROOM_ID leben dort im Scope). Null = noch nicht initialisiert.
 let broadcastLockExpiry: ((pluginId: string) => void) | null = null;
 const sweepPluginLocks = (): void => {
-  const now = Date.now();
-  for (const [pluginId, lock] of pluginLocks) {
-    if (now - lock.timestamp > lock.ttl) {
-      pluginLocks.delete(pluginId);
-      // ARCH-#2: Ablauf aktiv an ALLE Session-Teilnehmer broadcasten (statt
-      // stillschweigend zu löschen) – sonst bleibt der Lock clientseitig
-      // hängen und das Plugin erscheint für andere weiter als gesperrt.
-      broadcastLockExpiry?.(pluginId);
-    }
+  for (const pluginId of authoritativeSession.sweepExpiredLocks()) {
+    // ARCH-#2: Ablauf aktiv an ALLE Session-Teilnehmer broadcasten (statt
+    // stillschweigend zu löschen) – sonst bleibt der Lock clientseitig
+    // hängen und das Plugin erscheint für andere weiter als gesperrt.
+    broadcastLockExpiry?.(pluginId);
   }
 };
 setInterval(sweepPluginLocks, PLUGIN_LOCK_SWEEP_MS).unref?.();
@@ -2773,7 +2794,31 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const subClient = pubClient.duplicate();
         await Promise.all([pubClient.connect(), subClient.connect()]);
         io.adapter(createAdapter(pubClient, subClient));
-        console.log('Redis-Adapter aktiv (Socket.io Multi-Instanz).');
+        // COLLAB-P0-001: Session-State + Locks über Redis sichern, damit ein
+        // Server-Neustart / eine zweite Instanz keinen State verliert. Best-effort:
+        // Fehler dürfen den Audio-/Signaling-Betrieb nicht beeinträchtigen.
+        const redisPersistence: AuthoritativeSessionPersistence = {
+          async load(): Promise<SerializedAuthoritativeSession | null> {
+            try {
+              const raw = await pubClient.get(SESSION_STATE_REDIS_KEY);
+              if (typeof raw !== 'string' || raw.length === 0) return null;
+              return JSON.parse(raw) as SerializedAuthoritativeSession;
+            } catch {
+              return null;
+            }
+          },
+          async save(state: SerializedAuthoritativeSession): Promise<void> {
+            try {
+              await pubClient.set(SESSION_STATE_REDIS_KEY, JSON.stringify(state));
+            } catch {
+              /* best effort */
+            }
+          },
+        };
+        const restored = await redisPersistence.load();
+        if (restored) authoritativeSession = AuthoritativeSession.restore(restored, { lockTtlMs: PLUGIN_LOCK_TTL_MS });
+        sessionPersistence = redisPersistence;
+        console.log(`Redis-Adapter aktiv (Socket.io Multi-Instanz). Session-State ${restored ? `wiederhergestellt (rev=${authoritativeSession.revision})` : 'neu'}.`);
       } catch (e) {
         console.warn('Redis-Adapter nicht aktiv:', (e as Error).message);
       }
@@ -2865,11 +2910,24 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
         addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : mode === 'visual-out' ? 'JOIN_VISUAL_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
-        // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren.
+        // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren (Legacy-Format).
         socket.emit('plugin-locks-sync', {
           roomId: SESSION_ROOM_ID,
-          locks: Object.fromEntries(pluginLocks),
+          locks: legacyLockMap(),
         });
+        // COLLAB-P0-001: vollständiger, serverautoritativer Snapshot für
+        // Join/Reconnect – Revision + Modul-States + Locks + Sequenzen.
+        {
+          const snapshot = authoritativeSession.snapshot();
+          socket.emit('session-state', {
+            roomId: SESSION_ROOM_ID,
+            revision: snapshot.revision,
+            modules: snapshot.modules,
+            locks: snapshot.locks,
+            sequences: snapshot.sequences,
+            serverTime: snapshot.serverTime,
+          });
+        }
 
         const members = sessionMembers(room);
         if (isListenerMode(mode)) {
@@ -2938,15 +2996,16 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const pluginId = parsed.data.pluginId;
-        const existing = pluginLocks.get(pluginId);
-        if (existing && existing.lockedBy !== senderUserId && Date.now() - existing.timestamp <= existing.ttl) {
-          socket.emit('plugin-lock-denied', { pluginId, lockedBy: existing.lockedBy });
+        const acquired = authoritativeSession.acquireLock(pluginId, senderUserId);
+        if (!acquired.ok) {
+          socket.emit('plugin-lock-denied', { pluginId, lockedBy: acquired.lockedBy ?? null });
           return;
         }
+        persistSessionState();
         const lock = { lockedBy: senderUserId, timestamp: Date.now(), ttl: PLUGIN_LOCK_TTL_MS };
-        pluginLocks.set(pluginId, lock);
-        socket.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock });
-        socket.emit('plugin-lock', { pluginId, ...lock });
+        const revision = authoritativeSession.revision;
+        socket.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock, revision });
+        socket.emit('plugin-lock', { pluginId, ...lock, revision });
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
       });
       // ARCH-#2: Broadcast-Callback für Lock-Ablauf (Sweep im Modul-Scope).
@@ -2965,11 +3024,27 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const pluginId = parsed.data.pluginId;
-        const existing = pluginLocks.get(pluginId);
-        if (!existing || existing.lockedBy !== senderUserId) return;
-        pluginLocks.delete(pluginId);
-        socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId });
+        if (!authoritativeSession.releaseLock(pluginId, senderUserId)) return;
+        persistSessionState();
+        socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId, revision: authoritativeSession.revision });
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_UNLOCK', true, pluginId);
+      });
+
+      // COLLAB-P0-001: Reconnect-Resync – der Client fordert den vollständigen
+      // autoritativen Zustand an, ohne die Session neu zu betreten (kein Pumping).
+      socket.on('resync-session', () => {
+        refreshIdleTimer();
+        if (!socket.data?.sessionRoom) return;
+        const snapshot = authoritativeSession.snapshot();
+        socket.emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: legacyLockMap() });
+        socket.emit('session-state', {
+          roomId: SESSION_ROOM_ID,
+          revision: snapshot.revision,
+          modules: snapshot.modules,
+          locks: snapshot.locks,
+          sequences: snapshot.sequences,
+          serverTime: snapshot.serverTime,
+        });
       });
 
       // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
@@ -2984,8 +3059,8 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const senderRole = String(socket.data?.sessionRole ?? 'guest');
         const { pluginId, state } = parsed.data;
         // K-2: Lock serverseitig durchsetzen – nur der Halter darf den State ändern.
-        const lock = pluginLocks.get(pluginId);
-        if (lock && lock.lockedBy !== senderUserId && Date.now() - lock.timestamp <= lock.ttl) {
+        const lockOwner = authoritativeSession.lockOwner(pluginId);
+        if (lockOwner && lockOwner !== senderUserId) {
           addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
           socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
           return;
@@ -2996,17 +3071,45 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole });
           return;
         }
+        // COLLAB-P0-001: doppelte/verspätete Events deterministisch verwerfen.
+        const eventId = parsed.data.eventId
+          ?? `${senderUserId}:${pluginId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
+        const applied = authoritativeSession.applyEvent({
+          id: eventId,
+          type: 'plugin-state',
+          senderUserId,
+          pluginId,
+          state,
+          sequence: parsed.data.sequence,
+        });
+        if (!applied.accepted) {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:${applied.reason}`);
+          socket.emit('plugin-state-rejected', {
+            pluginId,
+            eventId,
+            reason: applied.reason ?? 'invalid',
+            revision: applied.revision,
+          });
+          return;
+        }
+        persistSessionState();
         addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, pluginId);
-        // Session-Identität: Sender-User-ID anhängen, damit Empfänger
-        // Änderungen einem User zuordnen können (Locking/Audit).
-        const payload = { ...parsed.data, senderUserId, senderRole };
+        // Session-Identität + Revision/Event-ID: Empfänger können ordnen/deduplizieren.
+        const payload = { ...parsed.data, senderUserId, senderRole, revision: applied.revision, eventId };
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
+        socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
       });
 
       socket.on('leave-session', () => {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        const userId = String(socket.data?.sessionUserId ?? '');
+        // K-5/COLLAB-P0-001: Locks des Users beim Verlassen freigeben.
+        for (const pluginId of authoritativeSession.releaseUserLocks(userId)) {
+          socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'left' });
+        }
+        persistSessionState();
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
       });
@@ -3016,12 +3119,10 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (!roomId) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
-        for (const [pluginId, lock] of pluginLocks) {
-          if (lock.lockedBy === userId) {
-            pluginLocks.delete(pluginId);
-            socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId });
-          }
+        for (const pluginId of authoritativeSession.releaseUserLocks(userId)) {
+          socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'disconnect' });
         }
+        persistSessionState();
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
       });
     });

@@ -39,6 +39,11 @@ class WebRTCManager {
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
   // Listener bliebe der lokale Lock aktiv und desynced von der Server-Truth.
   private pluginLockDeniedListeners = new Set<(msg: any) => void>();
+  // COLLAB-P0-001: serverautoritativer State – Event-ID/Sequenz je Sendung
+  // (Dedupe/Ordnung) und Snapshot-/Ablehnungs-Listener für den Reconnect-Resync.
+  private stateSequence = 0;
+  private sessionStateListeners = new Set<(snap: any) => void>();
+  private pluginStateRejectedListeners = new Set<(msg: any) => void>();
 
   private sessionUserId = `user-${random().toString(36).slice(2, 8)}`;
 
@@ -441,6 +446,10 @@ class WebRTCManager {
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
     // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
     this.socket.on('plugin-lock-denied', (data: any) => this.pluginLockDeniedListeners.forEach((l) => l(data)));
+    // COLLAB-P0-001: vollständiger Session-Snapshot (Join/Reconnect/Resync) und
+    // deterministische Ablehnung (Duplikat/verspätet/Lock) weiterreichen.
+    this.socket.on('session-state', (data: any) => this.sessionStateListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-state-rejected', (data: any) => this.pluginStateRejectedListeners.forEach((l) => l(data)));
 
     this.socket.on('peer-joined', (data: PeerJoinedPayload) => {
       const peer: SessionPeer = { socketId: String(data?.socketId ?? ''), userId: String(data?.userId ?? data?.socketId ?? '') };
@@ -629,17 +638,31 @@ class WebRTCManager {
   }
 
   public sendToAllPeers(data: WebRTCMessage) {
+    // COLLAB-P0-001: jede State-Änderung bekommt eine Event-ID + monotone
+    // Sequenz. Der Server verwirft damit Duplikate und verspätete Events
+    // deterministisch (Reconnect/Doppel-Sendung) statt sie zu relaisieren.
+    const sequence = ++this.stateSequence;
+    const envelope = {
+      ...(data as unknown as Record<string, unknown>),
+      eventId: `${this.sessionUserId}:${Date.now().toString(36)}:${sequence.toString(36)}`,
+      sequence,
+    } as unknown as WebRTCMessage;
     // Im SFU-Modus läuft der State-Sync ausschließlich über das Socket-Relay
     // (keine DataChannels) – Session-/Plugin-State bleibt damit identisch.
     if (!this.sfuMode) {
       this.dataChannels.forEach(channel => {
         if (channel.readyState === 'open') {
-          channel.send(JSON.stringify(data));
+          channel.send(JSON.stringify(envelope));
         }
       });
     }
     // Socket.io-Fallback: State-Sync funktioniert auch ohne offene DataChannels.
-    this.socket?.emit('plugin-state', data);
+    this.socket?.emit('plugin-state', envelope);
+  }
+
+  /** COLLAB-P0-001: vollständigen autoritativen Zustand neu anfordern (Resync). */
+  public requestSessionResync(): void {
+    this.socket?.emit('resync-session');
   }
 
   public sendPluginLock(pluginId: string): void {
@@ -670,6 +693,18 @@ class WebRTCManager {
   public onPluginLocksSync(cb: (msg: any) => void): () => void {
     this.pluginLocksSyncListeners.add(cb);
     return () => { this.pluginLocksSyncListeners.delete(cb); };
+  }
+
+  /** COLLAB-P0-001: vollständiger Session-Snapshot vom Server (Join/Reconnect/Resync). */
+  public onSessionState(cb: (snapshot: any) => void): () => void {
+    this.sessionStateListeners.add(cb);
+    return () => { this.sessionStateListeners.delete(cb); };
+  }
+
+  /** COLLAB-P0-001: Server hat ein State-Event deterministisch verworfen. */
+  public onPluginStateRejected(cb: (msg: any) => void): () => void {
+    this.pluginStateRejectedListeners.add(cb);
+    return () => { this.pluginStateRejectedListeners.delete(cb); };
   }
 
   public sendData(data: any) {
