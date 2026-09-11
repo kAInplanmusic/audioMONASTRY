@@ -246,18 +246,19 @@
       "id": "QUAL-P2-001",
       "title": "Dead-Code (knip 144 Eintraege) klassifizieren und entfernen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Qualitaet",
       "source": "MASTER_TODO.md",
-      "note": "Offen (unveraendert): knip-Altbestand klassifizieren. Nicht in diesem Durchgang angefasst - braucht eigene, verhaltensgleiche Runde."
+      "note": "DONE 2026-09-11 (klassifiziert UND entfernt): Aus 148 \"unused files\" wurden durch knip.json (Betriebs-Einstiegspunkte scripts/**, services/**, tests/**, Configs als entry; dist/public/worklets/test-results ignoriert) echte 49. ENTFERNT (mit Gates verifiziert): 11 Dateien ohne jede Referenz (aiRouter, costMonitor, CustomSlotTerminal, StreamLayout, LiveMonitor, LatencyMonitor, LiveStreamOut, ObjectPool, audioDiagnostics, dspOptimizations, spatialAutomation) - Boundary-Scan 414 -> 403 Dateien, tsc/eslint/vitest/build danach gruen; dazu 3 ungenutzte Pakete (motion, ytdl-core, autoprefixer - kein Import, kein PostCSS-Config, Tailwind v4 bringt Prefixing selbst mit) -> -11 Pakete im Lockfile. BEWUSST BEHALTEN (klassifiziert): V1-Legacy (NativeBackend/AudioBackend/nativeAudioKit - Abbau erst nach V2-Paritaet, AUDIO-P1-001), 3 knip-\"duplicates\" die KEIN Totcode sind (workerPool+default, audioEngine+audioV2TerminalBridge, DJMixer+DJ4ChMixer - beide Namen in Benutzung), Service-Deps (ws/midi/osc in services/midi-bridge, mixer-* Plattform-Binaries in services/mixer). NEU: npm run check:deadcode (knip mit Konfiguration) + docs/QUALITY_TOOLING_2026.md. OFFEN als eigener Punkt QUAL-P2-003: 222 unused exports / 137 unused types in 100 Dateien - Kaskadenthema (tote Dateien importieren tote Typen), iterativ in eigener Runde."
     },
     {
       "id": "QUAL-P2-002",
       "title": "jscpd-Duplikate reduzieren",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Qualitaet",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11: jscpd-Klone 15 -> 12, Duplikat-Anteil 0,273 % -> 0,204 %. Entfernt wurde die groesste echte Duplikation: derselbe 16-Bit-PCM-WAV-Encoder lag FUENFMAL im Code (localDemucs, stemSplitter, VoiceMonkService, zweimal inline in melody.ts) mit UNTERSCHIEDLICHEM Clamping - jetzt EINE Implementierung src/utils/wavEncode.ts + 8 Tests (tests/wavEncode.test.ts): Header-Bytes, Kanal-Verschraenkung L,R, Kanal-Begrenzung auf 2, Sample-Rate-Fallback, asymmetrisches Clamping (-32768..32767), NaN/Infinity -> 0, AudioBuffer-Pfad byte-identisch zum Kanal-Pfad. Dokumentierte bewusste Aenderung: negatives Clamping nutzt den vollen -32768 statt -32767 (1 LSB, korrekt gerundet); positives Verhalten bleibt byte-identisch (Abschneiden wie zuvor via setInt16). VERBLEIBENDE 12 KLONE klassifiziert: Worklet <-> processingNodes ist BEABSICHTIGT (eigene Build-Ziele), Gleiche-Datei-Wiederholungen strukturell verschieden, V2MonitorGraph <-> V2StudioGraph als Folgepunkt notiert (Risiko am Audio-Pfad). NEU: npm run check:dupes + docs/QUALITY_TOOLING_2026.md."
     },
     {
       "id": "DOC-P2-001",
@@ -272,9 +273,10 @@
       "id": "MIDI-P2-001",
       "title": "MIDI-Mapping-Layer dokumentieren/testen + Hardware-Hoerprobe",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "MIDI",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11: (1) DOKU - docs/HARDWARE_PROTOCOL.md um den Abschnitt \"Mapping-Layer\" erweitert: vollstaendige Kette (USB-MIDI/HID/OSC -> Adapter -> ControlEvent -> MappingEngine -> MappedParameter -> applyMappedParameter -> audioEngine/V2-Pfad), Dateitabelle, unterstuetzte Ziele, Learn-Modus, Persistenz und Pruefstand-Tabelle. (2) TESTS - tests/mappingApply.test.tsx (8 Tests, jsdom, Engine gemockt) fuer die bisher ungetestete Ziel-Aufloesung und den Learn-Hook: Kanal-Volume/Pan (Klemmung + Umrechnung 0..1 -> -1..1), Master, Worklet-Parameter, Abweisung unbekannter Ziele, Konsistenz zwischen dokumentierten Zielen und Dispatcher, Learn-Regel inkl. Persistenz-Contract, Live-Mapping, Regel-Entfernung. (3) BUG GEFUNDEN UND BEHOBEN: ein Mapping auf \"worklet.\" (leerer Parameter) meldete Erfolg, ohne etwas zu setzen - stiller Fake-Erfolg, jetzt false (src/hooks/useMappingApply.ts). OFFEN (blockiert, unveraendert): Hoerprobe an echter MIDI-Hardware - kein Geraet in der Agent-Umgebung (siehe HW-P1-001)."
     },
     {
       "id": "OPS-P2-001",
@@ -363,6 +365,15 @@
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#5",
       "note": "Offen: bestbewertete Prompt/Bild-Paare kuratieren und ein Stil-LoRA auf einem RunPod-POD trainieren (nicht Serverless). Bewusst nicht gestartet: GPU-Kosten laufen beim Betreiber, und die Datenbasis entsteht erst mit echten Nutzer-Bewertungen (Session-Ende-Umfrage laeuft, siehe VISUAL-P1-004)."
+    },
+    {
+      "id": "QUAL-P2-003",
+      "title": "Ungenutzte Exporte/Typen abbauen (Kaskade, 100 Dateien)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Qualitaet / Struktur",
+      "source": "docs/QUALITY_TOOLING_2026.md#1",
+      "note": "Nach der knip-Konfiguration verbleiben 222 ungenutzte Exporte und 137 ungenutzte Typen in 100 Dateien. Das ist ein Kaskaden-Thema: tote Dateien importieren tote Typen, deshalb iterativ vorgehen (erst Dateien entfernen, knip erneut, dann Exporte/Typen in kleinen Batches) - jeweils mit tsc/eslint/vitest/build als Gate. Bewusst nicht in der Aufraeumrunde gemacht: ein Schnitt ueber 100 Dateien gleichzeitig ist kein \"kleiner\" Punkt. Messung: npm run check:deadcode."
     }
   ],
   "visionSandbox": [

@@ -11,6 +11,7 @@ import { sessionMediaStore, type SessionMediaItem, type ISessionMediaStore } fro
 import { random } from '../../utils/random';
 import { WebSpeechTtsProvider, type ILiveSpeechProvider } from './WebSpeechTtsProvider';
 import { renderVocalWav } from './melody';
+import { encodeWavMono } from '../../utils/wavEncode';
 import { SongGeneratorService, type ISongGenerator, type SongOptions } from './SongGenerator';
 import { type ISongOutputSink, songItemToAudioSource, V2EngineSongSink } from './SongOutputBridge';
 import { hfVoiceRequest, isBrowser } from './hfApi';
@@ -42,31 +43,13 @@ function baseFrequency(text: string, options: VoiceOptions): number {
 }
 
 /** WAV/PCM-Encoder ohne externe Abhängigkeiten. */
+/**
+ * Kompatibilitäts-Wrapper: Mono 16-Bit-PCM-WAV. Die Implementierung liegt
+ * zentral in `src/utils/wavEncode.ts` (vorher gab es hier eine eigene Kopie
+ * mit symmetrischem Clamping → 1 LSB Abweichung bei negativen Werten).
+ */
 export function encodeWav(samples: Float32Array, sampleRate = 22050): Blob {
-  const n = samples.length;
-  const buffer = new ArrayBuffer(44 + n * 2);
-  const view = new DataView(buffer);
-  const writeStr = (offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
-  };
-  writeStr(0, 'RIFF');
-  view.setUint32(4, 36 + n * 2, true);
-  writeStr(8, 'WAVE');
-  writeStr(12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data');
-  view.setUint32(40, n * 2, true);
-  for (let i = 0; i < n; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]));
-    view.setInt16(44 + i * 2, s * 32767, true);
-  }
-  return new Blob([buffer], { type: 'audio/wav' });
+  return encodeWavMono(samples, sampleRate);
 }
 
 /**

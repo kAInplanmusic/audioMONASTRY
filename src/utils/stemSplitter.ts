@@ -12,6 +12,7 @@
  * Sobald ein ONNX-Demucs-Modell geladen ist, übernimmt der KI-Pfad
  * (`src/ai/localDemucs.ts`); dieser Splitter ist der stabile Fallback.
  */
+import { encodeWavFromAudioBuffer } from './wavEncode';
 
 export interface LocalStemUrls {
   vocals: string;
@@ -27,34 +28,6 @@ function getCtxCtor(): typeof OfflineAudioContext | null {
     webkitOfflineAudioContext?: typeof OfflineAudioContext;
   };
   return win.OfflineAudioContext ?? win.webkitOfflineAudioContext ?? null;
-}
-
-/** AudioBuffer → 16-Bit-PCM-WAV-Blob. */
-function encodeWav(buffer: AudioBuffer): Blob {
-  const numCh = Math.min(2, buffer.numberOfChannels);
-  const len = buffer.length;
-  const sampleRate = buffer.sampleRate;
-  const bytesPerSample = 2;
-  const blockAlign = numCh * bytesPerSample;
-  const dataSize = len * blockAlign;
-  const buf = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buf);
-  const writeStr = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-  writeStr(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeStr(8, 'WAVE');
-  writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-  view.setUint16(22, numCh, true); view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true); view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data'); view.setUint32(40, dataSize, true);
-  let off = 44;
-  for (let i = 0; i < len; i++) {
-    for (let ch = 0; ch < numCh; ch++) {
-      const s = Math.max(-1, Math.min(1, buffer.getChannelData(ch)[i] || 0));
-      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-      off += 2;
-    }
-  }
-  return new Blob([buf], { type: 'audio/wav' });
 }
 
 /**
@@ -113,7 +86,7 @@ export async function splitStemsLocally(file: File, onProgress?: (p: number) => 
     tail.connect(off.destination);
     s.start(0);
     const rendered = await off.startRendering();
-    return URL.createObjectURL(encodeWav(rendered));
+    return URL.createObjectURL(encodeWavFromAudioBuffer(rendered));
   };
 
   const lows = await renderInto(monoBuf, (c) => [band(c, 'lowpass', 160, 0.7)]);

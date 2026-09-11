@@ -12,6 +12,8 @@
  * bleibt ausschließlich als Notfall erhalten, wenn das Modell nicht geladen
  * werden kann (z. B. offline installierte Instanz).
  */
+import { encodeWavFromChannels } from '../utils/wavEncode';
+
 export const DEMUCS_MODEL_URL = '/models/htdemucs.onnx';
 export const DEMUCS_SEGMENT = 343980; // ~7,8 s @ 44,1 kHz
 export const DEMUCS_OVERLAP = 0.25;
@@ -32,33 +34,6 @@ function getOrt(): Promise<Ort> {
     ortPromise = import('onnxruntime-web') as unknown as Promise<Ort>;
   }
   return ortPromise;
-}
-
-/** AudioBuffer → 16-Bit-PCM-WAV-Blob (Stereo). */
-function encodeWav(buffer: Float32Array[], sampleRate: number): Blob {
-  const numCh = Math.min(2, buffer.length);
-  const len = buffer[0]?.length ?? 0;
-  const bytesPerSample = 2;
-  const blockAlign = numCh * bytesPerSample;
-  const dataSize = len * blockAlign;
-  const buf = new ArrayBuffer(44 + dataSize);
-  const view = new DataView(buf);
-  const writeStr = (off: number, s: string) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
-  writeStr(0, 'RIFF'); view.setUint32(4, 36 + dataSize, true); writeStr(8, 'WAVE');
-  writeStr(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-  view.setUint16(22, numCh, true); view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * blockAlign, true); view.setUint16(32, blockAlign, true);
-  view.setUint16(34, 16, true);
-  writeStr(36, 'data'); view.setUint32(40, dataSize, true);
-  let off = 44;
-  for (let i = 0; i < len; i++) {
-    for (let ch = 0; ch < numCh; ch++) {
-      const s = Math.max(-1, Math.min(1, buffer[ch][i] || 0));
-      view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
-      off += 2;
-    }
-  }
-  return new Blob([buf], { type: 'audio/wav' });
 }
 
 /** Linearer Overlap-Add-Fenster-Anteil für Position `i` im Segment. */
@@ -173,7 +148,7 @@ export async function separateStemsWithDemucs( // NOSONAR: bewusst komplexe Audi
   const out: Partial<DemucsStems> = {};
   names.forEach((name, s) => {
     if (!stems[s]) return;
-    out[name] = URL.createObjectURL(encodeWav(stems[s], 44100));
+    out[name] = URL.createObjectURL(encodeWavFromChannels(stems[s], 44100));
   });
   onProgress?.(100);
 

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "index.html",
+    "server.ts",
+    "vite.config.ts",
+    "playwright.config.ts",
+    "playwright.responsive.config.ts",
+    "scripts/**/*.{ts,mjs,cjs,js}",
+    "services/*/index.{js,ts,mjs}",
+    "services/*/src/index.{js,ts,mjs}",
+    "tests/**/*.{test,spec}.{ts,tsx,mjs}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "server/**/*.{ts,mjs}",
+    "services/**/*.{ts,js,mjs}",
+    "scripts/**/*.{ts,mjs,cjs}",
+    "tests/**/*.{ts,tsx,mjs}"
+  ],
+  "paths": {
+    "@/*": [
+      "src/*"
+    ]
+  },
+  "ignore": [
+    "dist/**",
+    "coverage/**",
+    "test-results/**",
+    "playwright-report/**",
+    "public/worklets/**",
+    "public/sfu-rtp-test.js",
+    "**/*.d.ts"
+  ],
+  "ignoreDependencies": [
+    "jscpd",
+    "tailwindcss",
+    "playwright",
+    "mixer-.*",
+    "ws",
+    "midi",
+    "osc"
+  ],
+  "ignoreUnresolved": [
+    "mixer-.*"
+  ],
+  "ignoreBinaries": [
+    "docker",
+    "ffmpeg",
+    "ffprobe",
+    "exiftool",
+    "sqlite3",
+    "cua-driver"
+  ]
+}

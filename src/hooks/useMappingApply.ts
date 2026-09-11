@@ -32,7 +32,11 @@ export function applyMappedParameter(target: string, value01: number): boolean {
 
   if (target.startsWith('worklet.')) {
     const param = target.slice('worklet.'.length);
-    if (param) audioEngine.setWorkletParam(param, v);
+    // MIDI-P2-001: `worklet.` ohne Parameter ist KEIN Erfolg – vorher meldete
+    // der Dispatcher hier `true`, ohne irgendetwas zu setzen (stiller
+    // Fake-Erfolg; vom Test tests/mappingApply.test.tsx aufgedeckt).
+    if (!param) return false;
+    audioEngine.setWorkletParam(param, v);
     return true;
   }
 
