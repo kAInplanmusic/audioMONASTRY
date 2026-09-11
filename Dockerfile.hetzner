@@ -20,7 +20,7 @@ WORKDIR /app
 # genau daran ist der Hetzner-App-Deploy am 2026-09-11 gescheitert
 # ("/bin/sh: 1: python: not found").
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libatomic1 python3 make g++ \
+        libatomic1 python3 python3-pip make g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Nur package.json/lock zuerst kopieren (besseres Layer-Caching)
