@@ -8,6 +8,7 @@ import { VISUAL_PRESETS, presetById } from '../../core/visual/visualPresets';
 import { createRendererState, renderFrame } from '../../core/visual/canvasRenderer';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../../core/visual/types';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
+import { useVisualShow } from '../../hooks/useVisualShow';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -34,6 +35,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const presetRef = useRef(presetId);
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
+
+  // VisualMONK #5: Show-Orchestrator (Szenen aus Bildern/Clips, audio-reaktiv).
+  // Über eine Ref erreichbar, damit die RAF-Schleife (Deps `[]`) ihn nutzen kann.
+  const show = useVisualShow();
+  const showRef = useRef(show);
+  useEffect(() => { showRef.current = show; });
 
   // VisualMONK #2: generative Bilder (FLUX ueber /api/ai/vision).
   const [aiPrompt, setAiPrompt] = useState('');
@@ -123,6 +130,28 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     }
   }, [aiPrompt, aiStyle, aiAuto, aiBusy]);
 
+  // VisualMONK #5: aktuelles Bild/Clip als Show-Szene übernehmen.
+  const addCurrentScene = useCallback(() => {
+    const src = aiVideo ?? aiImage;
+    if (!src) return;
+    show.addScene({
+      prompt: aiPrompt.trim() || 'live set visual',
+      style: aiStyle,
+      kind: aiVideo ? 'clip' : 'image',
+      src,
+      label: aiPrompt.trim() || aiStyle,
+    });
+  }, [aiImage, aiVideo, aiPrompt, aiStyle, show]);
+
+  // VisualMONK #5: Text → Clip (FLUX-Bild → Wan2.2-Bewegung, ein Aufruf).
+  const buildSceneClip = useCallback(() => {
+    const features = featuresRef.current;
+    const style = aiAuto ? suggestVisionStyle({ energy: features.energy, bpm: features.bpm }) : aiStyle;
+    const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
+    if (!prompt) return;
+    void show.makeClip({ prompt, style, bpm: features.bpm || undefined, energy: features.energy });
+  }, [aiAuto, aiPrompt, aiStyle, show]);
+
   // Auto-Show: alle 45 s ein neues Set-passendes Bild (kostenbewusst, nur wenn an).
   useEffect(() => {
     if (!aiAuto) return;
@@ -189,6 +218,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, dt);
+
+      // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie)
+      // und zeichnet die aktuelle Szene über die Visualisierung (Crossfade).
+      const showApi = showRef.current;
+      showApi.tick(now, features);
+      if (showApi.playing) showApi.draw(ctx, cssW, cssH);
 
       rafRef.current = requestAnimationFrame(frame);
     };
@@ -298,6 +333,98 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
           <a href={aiImageUrl} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">R2-Link</a>
         )}
       </div>
+
+      {/* VisualMONK #5: Show – Szenen aus Bildern/Clips, audio-reaktiver Ablauf */}
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-white/5">
+        <span className="text-[9px] font-bold tracking-widest text-cyan-300">SHOW</span>
+        <button
+          type="button"
+          onClick={addCurrentScene}
+          disabled={!aiImage && !aiVideo}
+          title="Aktuelles Bild oder Clip als Szene in die Show übernehmen"
+          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-cyan-400/50 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40 transition-colors"
+        >
+          SZENE +
+        </button>
+        <button
+          type="button"
+          onClick={buildSceneClip}
+          disabled={Boolean(show.busy) || (!aiPrompt.trim() && !aiAuto)}
+          title="Text zu Clip: FLUX-Bild, dann Wan2.2-Bewegung (ein Aufruf)"
+          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-fuchsia-400/50 text-fuchsia-200 hover:bg-fuchsia-400/10 disabled:opacity-40 transition-colors"
+        >
+          CLIP AUS TEXT
+        </button>
+        <button
+          type="button"
+          onClick={show.playing ? show.stopShow : show.startShow}
+          disabled={show.summary.scenes === 0}
+          aria-pressed={show.playing}
+          title="Show auf dem Canvas abspielen – Szenenwechsel nach Dauer, Beat oder Energie"
+          className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border transition-colors disabled:opacity-40 ${show.playing ? 'border-emerald-400/70 text-emerald-200 bg-emerald-400/10' : 'border-neutral-600 text-neutral-300 hover:bg-white/5'}`}
+        >
+          {show.playing ? 'SHOW STOP' : 'SHOW START'}
+        </button>
+        <button
+          type="button"
+          onClick={() => void show.mergeShow()}
+          disabled={Boolean(show.busy) || show.summary.clips < 1}
+          title="Clips der Show serverseitig zu einem mp4 zusammenführen (ffmpeg)"
+          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-neutral-600 text-neutral-300 hover:bg-white/5 disabled:opacity-40 transition-colors"
+        >
+          ZUSAMMENFÜHREN
+        </button>
+        {show.scenes.length > 0 && (
+          <button
+            type="button"
+            onClick={show.clearShow}
+            title="Show leeren (Medien bleiben generiert)"
+            className="px-2 py-1.5 rounded-full text-[10px] tracking-widest border border-neutral-700 text-neutral-400 hover:text-red-300 transition-colors"
+          >
+            LEEREN
+          </button>
+        )}
+        <span className="text-[9px] text-neutral-400">
+          {show.summary.scenes} Szenen · {show.summary.clips} Clips · {show.summary.images} Bilder · {Math.round(show.summary.totalS)} s
+        </span>
+        {show.playing && (
+          <span className="text-[9px] text-emerald-300">
+            ▶ {show.currentLabel || 'Szene 1'}{show.lastReason ? ` · Wechsel: ${show.lastReason}` : ''}
+          </span>
+        )}
+        {show.busy && <span className="text-[9px] text-amber-300">{show.busy}</span>}
+        {show.lastStore && <span className="text-[9px] text-neutral-500">Ablage: {show.lastStore}</span>}
+        {show.mergedUrl && (
+          <a href={show.mergedUrl} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">
+            SHOW-MP4 {show.mergedStore ? `(${show.mergedStore})` : ''}
+          </a>
+        )}
+        {show.error && <span className="text-[10px] text-red-400">{show.error}</span>}
+      </div>
+
+      {show.scenes.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto px-3 py-1.5 border-b border-white/5">
+          {show.scenes.map((scene, i) => (
+            <span
+              key={scene.id}
+              className={`shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-full text-[9px] border ${show.playing && i === show.currentIndex ? 'border-emerald-400/70 text-emerald-200' : 'border-neutral-700 text-neutral-400'}`}
+            >
+              <span className="text-[8px] tracking-wider opacity-70">{scene.kind === 'clip' ? 'CLIP' : 'BILD'}</span>
+              <span className="max-w-[10rem] truncate">{scene.label}</span>
+              <span className="opacity-50">{Math.round(scene.durationS)}s</span>
+              <button
+                type="button"
+                onClick={() => show.removeScene(scene.id)}
+                title="Szene entfernen"
+                aria-label={`Szene ${scene.label} entfernen`}
+                className="text-neutral-500 hover:text-red-300 transition-colors"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 relative">
         <canvas ref={canvasRef} className="w-full h-full block" />

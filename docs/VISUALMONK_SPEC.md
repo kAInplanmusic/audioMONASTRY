@@ -1,7 +1,9 @@
 # VisualMONK · Echtzeit-Visualisierung + generative Bilder/Video (Spezifikation)
 
-> Status: **Slice 1 umgesetzt** (visual-Kern + Budget-Guards + Vision-Endpoint live).
-> Stand: 2026-09-11 · Autor: Systemarchitekt · Kanonische Ausführungsliste bleibt `MASTER_TODO.md`.
+> Status: **Slices 1–5 umgesetzt** (visual-Kern, Feature-Bus, Ghost-Clients,
+> Bild-KI live, Video + Show-Orchestrator + Merge). Slice 6 (Selbstlern-Loop)
+> teilweise. Kanonische Ausführungsliste: `MASTERTODOENDE.json`.
+> Stand: 2026-09-11 · Autor: Systemarchitekt.
 
 Diese Spec beschreibt das Subsystem **VisualMONK**: eine **live audio-reaktive
 Visualisierung**, die die App als eigenen Stream an einen **Ghostuser 6** (Beamer)
@@ -152,11 +154,63 @@ Erfahrungswerte: brain/ears/voiceGen/vision je **0,49 €/h** (A6000) → 4 Roll
      einen **veralteten Admin/Host**, den der Listener nicht findet. Sauberer Live-Beweis:
      frische Instanz (kein stale Host) + echtes 2-Geräte-Szenario; Fallback MJPEG.
    Session-Ende-Umfrage (Selbstlern-Loop) folgt mit Schritt 6.
-4. Vision-Pipeline: Text→Bild + Audio→Prompt; R2-Ablage; DB-Eintrag.
-5. Video (LTX-Video/Wan2.1) + Zusammenführen von Clips.
-6. Selbstlern-Loop + Session-Ende-Umfrage + pgvector/RAG + LoRA-Pods.
+4. **DONE** Text→Bild live (`/api/ai/vision`), Audio→Prompt automatisch (Stil aus
+   Energie/Tempo), Auto-Modus, R2-Ablage + DB-Eintrag.
+5. **DONE (2026-09-11)** Video + Zusammenführen von Clips:
+   - **Text→Clip in einem Aufruf** (`POST /api/ai/vision/clip`): FLUX-Bild →
+     Wan2.2-Bewegung (`clipPipeline.ts`, Bewegungs-Prompt getrennt vom Bild-Prompt).
+   - **Ablage**: R2 zuerst, sonst **lokale Artefakt-Ablage**
+     (`/api/ai/vision/artifact/<name>`) — siehe Risiken unten (R2-Keys ungültig).
+   - **Show-Orchestrator** (`src/core/visual/showOrchestrator.ts`,
+     `useVisualShow.ts`, UI-Panel `SHOW`): Szenen laufen auf dem Canvas (→
+     Ghostuser 6), Wechsel nach Dauer/Beat/Energie.
+   - **Merge** (`POST /api/ai/vision/show/merge`): mehrere Clips → **ein** mp4
+     (ffmpeg concat + `scale`/`pad`/`fps`/`yuv420p`), Ablage wie oben.
+6. **TEILWEISE** Selbstlern-Loop: Migration 008 + Feedback-API + Bewertungs-UI
+   stehen; Session-Ende-Umfrage über alle User, pgvector/RAG-Nutzung und
+   Stil-LoRA-Pods auf einem RunPod-Pod sind offen.
 7. `vision` in Deploy-Skript/Registry als benanntes Template festigen
    (Endpoints-Hub-Inline-Template → **benanntes** Template, siehe Befund F-015).
+   **DONE** — siehe VISUAL-P1-006.
+
+## 8b. Show-Orchestrator (Slice 5) – Ablauf, Regeln, Belege
+
+Eine **Show** ist eine geordnete Liste von Szenen (Standbild oder Clip). Der
+Orchestrator ist ein **reiner, deterministischer Kern** (`showOrchestrator.ts`):
+kein DOM, keine Timer – die Zeit kommt als Parameter herein, damit Browser,
+Tests und (später) Replay denselben Ablauf zeigen.
+
+**Wann wird umgeschaltet?**
+
+| Regel | Bedingung | Zweck |
+|---|---|---|
+| `duration` | Standdauer erreicht (Clip-Länge, Wunsch, `maxSceneS` = 30 s) | Grundtakt |
+| `beat` | `onset ≥ 0.72` **nach** `minDwellS` (4 s) | harter Schlag im Set |
+| `energy` | Energie seit Szenenbeginn `+0.35` | Drop/Section-Wechsel |
+
+Die Mindeststandzeit verhindert Flackern; die Show läuft als Schleife (Beamer
+ohne Bedienung). `fadeS` (0,8 s) blendet weich von der Visualisierung in die
+Szene (und zwischen zwei Szenen).
+
+**Kette Text→Clip** (`clipPipeline.ts`): Bild-Prompt (`buildVisionPrompt`) und
+**Bewegungs**-Prompt (`buildMotionPrompt`, getrennt) → `vision` (FLUX) → `video`
+(Wan2.2) → mp4. Ohne Bild wird abgebrochen (`NO_IMAGE`) statt einen leeren Clip
+zu erzeugen.
+
+**Merge** (`server/visionShow.ts`): ffmpeg `concat` + Normalisierung
+(`scale`/`pad`/`fps`/`yuv420p`), weil die Clips unterschiedliche Maße haben. Ein
+einzelner Clip wird **nicht** neu kodiert (kein Qualitätsverlust). Fehlt ffmpeg,
+antwortet die Route `503 NO_FFMPEG`. `ffmpeg` ist in `Dockerfile` (alpine) und
+`Dockerfile.hetzner` (slim) installiert.
+
+**Live gemessen (2026-09-11, lokal):** zwei Testclips (480×832 @24 fps und
+320×240 @12 fps, je 1 s) → `POST /api/ai/vision/show/merge` → **HTTP 200**,
+`reencoded: true`, 14 590 Bytes, 442 ms; das Ergebnis ist **h264 1024×576,
+24 fps, 48 Frames, 2,000 s** (mit `ffprobe` geprüft) und über die Artefakt-URL
+mit `Content-Type: video/mp4` abrufbar.
+
+**Offen (ehrlich):** echter Live-Lauf mit generierten Clips (kostet GPU-Zeit) und
+der Beamer-Beweis Studio → Ghostuser 6 (VISUAL-P1-001).
 
 ## 9. Risiken / ehrliche Grenzen
 
@@ -166,3 +220,14 @@ Erfahrungswerte: brain/ears/voiceGen/vision je **0,49 €/h** (A6000) → 4 Roll
 - AWQ-/Stil-LoRA-Qualität: Stile sind Geschmack; Lizenz je Modell/LoRA prüfen
   (einige NC-Gewichte → privat).
 - Ghost-User braucht **stabile Netze/Reconnect** (Beamer im Club-WLAN).
+- **R2-Keys sind ungültig (2026-09-11 live gemessen):** jeder S3-Aufruf antwortet
+  mit `SignatureDoesNotMatch` (Endpoint/Account/Bucket sind korrekt, das
+  Schlüsselpaar ist es nicht). Deshalb liegt jedes Bild/jeder Clip/jede Show
+  **lokal** (`VISION_ARTIFACT_DIR`, Default `$TMPDIR/audiomonastry-vision`) und
+  wird über `/api/ai/vision/artifact/<name>` ausgeliefert — token-frei wie
+  `/api/health`, Name streng validiert (keine Pfadanteile, feste Endungen).
+  Nach einem R2-Fehler wird R2 10 Minuten nicht erneut versucht (sonst 1–2 s
+  Wartezeit je Ablage). **Betreiber-Aufgabe:** neue R2-S3-Keys setzen; danach
+  geht alles automatisch wieder nach R2 (`store: "r2"` in der Antwort).
+  Hinweis: die lokale Ablage ist ein Temp-Verzeichnis — für Dauerbetrieb
+  `VISION_ARTIFACT_DIR` auf ein persistentes Volume legen.

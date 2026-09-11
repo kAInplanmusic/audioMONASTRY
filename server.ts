@@ -27,6 +27,9 @@ import { isListenerMode, normalizeSessionMode } from './src/core/session/listene
 import { buildVisionPrompt } from './src/core/ai/vision/visionPrompt';
 import { VisionError, generateVisionImage } from './src/core/ai/vision/runpodVision';
 import { VideoError, generateVideo, stripDataUri } from './src/core/ai/vision/runpodVideo';
+import { ClipPipelineError, generateClipFromPrompt } from './src/core/ai/vision/clipPipeline';
+import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifact, saveArtifact } from './server/visionArtifacts.ts';
+import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -35,6 +38,8 @@ import {
   AiGenerateDropSchema,
   AiOrchestrateSchema,
   AiPromptSchema,
+  AiShowMergeSchema,
+  AiVideoClipSchema,
   AiVisionSchema,
   AiVisionFeedbackSchema,
   AiVideoSchema,
@@ -374,6 +379,11 @@ app.use('/api', (req, res, next) => {
 // P-1: Auth-Middleware für alle /api/* außer /api/health.
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next();
+  // VISION-Artefakte: das sind die vom Server selbst erzeugten Bilder/Clips/
+  // Shows. Sie liegen bewusst token-frei wie /api/health — es ist dasselbe
+  // öffentliche Material wie die R2-Public-URL (CFR2_PUBLIC_URL). Der Name
+  // wird in der Route streng validiert (kein Pfadanteil, keine Liste).
+  if (req.method === 'GET' && req.path.startsWith('/ai/vision/artifact/')) return next();
   // P0-Security: fail-closed – ohne Studio-Token UND ohne expliziten
   // Dev-/Test-Modus ist die API geschlossen (kein stiller Dev-Modus).
   if (studioTokenMissing) {
@@ -416,6 +426,25 @@ app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stem
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// --- GET /api/ai/vision/artifact/:name → lokal abgelegte Vision-Medien ---
+// Fallback-Ablage, wenn R2 nicht verfügbar ist (siehe server/visionArtifacts.ts).
+// Token-frei wie /api/health (siehe Auth-Middleware oben); der Name wird streng
+// validiert: keine Pfadanteile, keine `..`, nur erlaubte Endungen.
+app.get('/api/ai/vision/artifact/:name', async (req, res) => {
+  const name = String((req.params as { name?: string }).name ?? '');
+  if (!isSafeArtifactName(name)) {
+    return res.status(400).json({ error: 'invalid artifact name' });
+  }
+  const contentType = contentTypeForArtifact(name);
+  if (!contentType) return res.status(400).json({ error: 'unsupported artifact type' });
+  const body = await readArtifact(name);
+  if (!body) return res.status(404).json({ error: 'artifact not found' });
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Content-Length', String(body.length));
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  return res.end(body);
 });
 
 // --- DCT-108: Metriken (keine Samples, keine Secrets, keine Keys) ---
@@ -991,21 +1020,178 @@ app.post('/api/ai/vision/video', async (req, res) => {
       steps: b.steps, width: b.width, height: b.height, cfg: b.cfg, seed: b.seed, negativePrompt: b.negativePrompt,
     });
     let videoUrl: string | undefined;
+    let videoStore: 'r2' | 'local' | null = null;
     try {
       const raw = Buffer.from(stripDataUri(result.video), 'base64');
       const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const up = await uploadSampleToR2(`vision/video-${stamp}.mp4`, raw, 'video/mp4');
+      // saveArtifact: erst R2, sonst lokale Ablage (R2-Keys waren am 2026-09-11
+      // ungültig – ohne Fallback ginge der Clip verloren).
+      const up = await saveArtifact(`vision/video-${stamp}.mp4`, raw, 'video/mp4');
       videoUrl = up.url;
+      videoStore = up.store;
     } catch (e) {
-      console.warn('[video] R2-Ablage übersprungen:', String((e as Error).message).slice(0, 160));
+      console.warn('[video] Ablage fehlgeschlagen:', String((e as Error).message).slice(0, 160));
     }
-    return res.json({ status: 'success', video: result.video, videoUrl, durationMs: result.durationMs });
+    return res.json({ status: 'success', video: result.video, videoUrl, store: videoStore, durationMs: result.durationMs });
   } catch (e) {
     const err = e as Error;
     const code = err instanceof VideoError ? err.code : 'VIDEO_FAILED';
     const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
     console.warn('[video]', code, err.message?.slice(0, 200));
     return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'video failed').slice(0, 300) });
+  }
+});
+
+// --- POST /api/ai/vision/clip  -> Text zu Clip (FLUX-Bild -> Wan2.2-Bewegung) ---
+// Request:  { prompt, style?, motion?, bpm?, energy?, moodTags?, imageSteps?,
+//             videoSteps?, width?, height?, videoWidth?, videoHeight?, seed? }
+// Response: { status:'success', image(data-URI), video(data-URI), imageUrl?,
+//             videoUrl?, store:{image,video}, imagePrompt, motionPrompt, seed,
+//             imageMs, videoMs, durationMs, generationId? }
+// Der Video-Worker ist image->video; „Text zu Video“ ist deshalb diese Kette.
+app.post('/api/ai/vision/clip', async (req, res) => {
+  metrics.aiRequests += 1;
+  const parsed = AiVideoClipSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const b = parsed.data;
+  try {
+    const clip = await generateClipFromPrompt({
+      text: b.prompt,
+      style: b.style,
+      bpm: b.bpm,
+      energy: b.energy,
+      moodTags: b.moodTags,
+      motion: b.motion,
+      imageSteps: b.imageSteps,
+      videoSteps: b.videoSteps,
+      width: b.width,
+      height: b.height,
+      videoWidth: b.videoWidth,
+      videoHeight: b.videoHeight,
+      seed: b.seed,
+      negativePrompt: b.negativePrompt,
+    });
+
+    // Ablage (best effort): R2 zuerst, sonst lokale Artefakt-URL. Ein Fehler
+    // hier darf den fertigen Clip nicht verwerfen – der data-URI bleibt gültig.
+    let imageArt: Awaited<ReturnType<typeof persistDataUri>> = null;
+    let videoArt: Awaited<ReturnType<typeof persistDataUri>> = null;
+    try {
+      imageArt = await persistDataUri(clip.image, { keyPrefix: 'vision/clip-image', ext: 'png' });
+      videoArt = await persistDataUri(clip.video, { keyPrefix: 'vision/clip', ext: 'mp4' });
+    } catch (e) {
+      console.warn('[clip] Ablage fehlgeschlagen:', String((e as Error).message).slice(0, 160));
+    }
+
+    // Selbstlern-Loop (best effort): Clip als Generierung ablegen.
+    let generationId: string | undefined;
+    try {
+      const saved = await insertVisualGeneration({
+        prompt: clip.imagePrompt,
+        style: b.style,
+        energy: b.energy,
+        bpm: b.bpm,
+        seed: clip.seed,
+        r2Key: videoArt?.key,
+        r2Url: videoArt?.url,
+        durationMs: clip.durationMs,
+        model: 'flux-1-dev+wan2.2',
+      });
+      if (saved.ok) generationId = saved.id;
+    } catch (e) {
+      console.warn('[clip] Generierung nicht gespeichert:', String((e as Error).message).slice(0, 160));
+    }
+
+    return res.json({
+      status: 'success',
+      image: clip.image,
+      video: clip.video,
+      imageUrl: imageArt?.url,
+      videoUrl: videoArt?.url,
+      store: { image: imageArt?.store ?? null, video: videoArt?.store ?? null },
+      imagePrompt: clip.imagePrompt,
+      motionPrompt: clip.motionPrompt,
+      seed: clip.seed,
+      imageMs: clip.imageMs,
+      videoMs: clip.videoMs,
+      durationMs: clip.durationMs,
+      generationId,
+    });
+  } catch (e) {
+    const err = e as Error;
+    const code =
+      err instanceof ClipPipelineError || err instanceof VisionError || err instanceof VideoError
+        ? (err as { code: string }).code
+        : 'CLIP_FAILED';
+    const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+    console.warn('[clip]', code, err.message?.slice(0, 200));
+    return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'clip failed').slice(0, 300) });
+  }
+});
+
+// --- POST /api/ai/vision/show/merge  -> Clips der Show zu EINEM mp4 ---
+// Request:  { clips:[{url|dataUri, label?}], width?, height?, fps? }
+// Response: { status:'success', videoUrl, store, bytes, clipCount, mergeMs }
+// ffmpeg fehlt -> 503 NO_FFMPEG (kein stilles Nicht-Ergebnis).
+app.post('/api/ai/vision/show/merge', async (req, res) => {
+  metrics.aiRequests += 1;
+  const parsed = AiShowMergeSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const b = parsed.data;
+
+  const sources = [];
+  for (let i = 0; i < b.clips.length; i++) {
+    try {
+      sources.push(await loadMergeSource(b.clips[i], i));
+    } catch (e) {
+      const err = e as MergeError;
+      const code = err instanceof MergeError ? err.code : 'BAD_SOURCE';
+      return res.status(code === 'NOT_FOUND' ? 404 : 400).json({
+        status: 'error',
+        code,
+        message: String(err.message ?? 'Clip nicht ladbar').slice(0, 300),
+      });
+    }
+  }
+
+  try {
+    const merged = await mergeClipBuffers(sources, { width: b.width, height: b.height, fps: b.fps });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    try {
+      const art = await saveArtifact(`vision/show/${stamp}.mp4`, merged.video, 'video/mp4');
+      return res.json({
+        status: 'success',
+        videoUrl: art.url,
+        store: art.store,
+        bytes: merged.bytes,
+        clipCount: merged.clipCount,
+        reencoded: merged.reencoded,
+        mergeMs: merged.mergeMs,
+        note: art.note,
+      });
+    } catch (e) {
+      // Letzter Ausweg: die Show direkt ausliefern statt sie zu verlieren.
+      console.warn('[show-merge] Ablage fehlgeschlagen:', String((e as Error).message).slice(0, 160));
+      return res.json({
+        status: 'success',
+        video: `data:video/mp4;base64,${merged.video.toString('base64')}`,
+        store: null,
+        bytes: merged.bytes,
+        clipCount: merged.clipCount,
+        reencoded: merged.reencoded,
+        mergeMs: merged.mergeMs,
+      });
+    }
+  } catch (e) {
+    const err = e as MergeError;
+    const code = err instanceof MergeError ? err.code : 'MERGE_FAILED';
+    const httpStatus = code === 'NO_FFMPEG' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+    console.warn('[show-merge]', code, err.message?.slice(0, 200));
+    return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'merge failed').slice(0, 300) });
   }
 });
 

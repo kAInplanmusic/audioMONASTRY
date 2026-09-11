@@ -53,11 +53,13 @@ ENV NODE_ENV=production \
     NODE_OPTIONS="--enable-source-maps"
 
 # Laufzeit benoetigt: libatomic1 (mediasoup-worker), tini (PID 1),
-# ca-certificates (ausgehende HTTPS-Calls zu HF/DeepSeek/Mistral/Supabase/R2)
+# ca-certificates (ausgehende HTTPS-Calls zu HF/DeepSeek/Mistral/Supabase/R2),
+# ffmpeg (VisualMONK #5: Show-Merge mehrerer Clips zu einem mp4).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libatomic1 \
     tini \
     ca-certificates \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Gebautes Frontend + gebuendeltes Server-Bundle

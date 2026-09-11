@@ -112,3 +112,62 @@ export function suggestVisionStyle(input: StyleHintInput): VisionStyle {
   if (energy >= 0.2) return bpm >= 120 ? 'geometry' : 'liquid';
   return 'abstract';
 }
+
+/** Stil-eigene Bewegung (englisch, wie die Bild-/Videomodelle). */
+const MOTION_STYLE_HINT: Partial<Record<VisionStyle, string>> = {
+  realism: 'handheld camera with slight breathing',
+  abstract: 'slow swirling paint flow',
+  noir: 'drifting rain and smoke, slow dolly',
+  comic: 'snappy parallax pan',
+  psychedelic: 'kaleidoscopic pulsing motion',
+  industrial: 'steam vents, slow crane move',
+  cosmic: 'slow drift through nebula clouds',
+  fantasy: 'floating particles, gentle rise',
+  dystopia: 'smog rolling between towers, slow tracking shot',
+  geometry: 'precise orbital rotation',
+  liquid: 'flowing water and refraction',
+  fire: 'rising embers and plasma arcs',
+};
+
+export interface MotionPromptInput {
+  /** Motiv-Hinweis (derselbe Text wie beim Bild, nur als Bewegung). */
+  text?: string;
+  style?: VisionStyle;
+  bpm?: number;
+  /** Energie 0..1. */
+  energy?: number;
+}
+
+/**
+ * Baut den **Bewegungs**-Prompt fuer den image->video-Worker (Wan2.2). Der
+ * Clip entsteht aus einem fertigen Bild – der Prompt beschreibt deshalb nur,
+ * was sich bewegt, nicht was zu sehen ist.
+ */
+export function buildMotionPrompt(input: MotionPromptInput): string {
+  const energy = clamp01(input.energy ?? Number.NaN);
+  const hasEnergy = Number.isFinite(input.energy);
+  const bpm = Number.isFinite(input.bpm) ? Math.round(input.bpm as number) : 0;
+
+  const motion = !hasEnergy
+    ? 'gentle camera push in, subtle motion'
+    : energy >= 0.75
+      ? 'fast push in, strong camera energy, rapid particle motion'
+      : energy >= 0.45
+        ? 'steady push in, rhythmic motion'
+        : energy >= 0.2
+          ? 'slow parallax drift'
+          : 'very slow drift, almost still';
+
+  const parts: string[] = [motion];
+  const styleHint = input.style ? MOTION_STYLE_HINT[input.style] : undefined;
+  if (styleHint) parts.push(styleHint);
+  if (bpm >= 140) parts.push('motion pulsing with a fast beat');
+  else if (bpm > 0 && bpm < 100) parts.push('motion following a slow beat');
+
+  const text = (input.text ?? '').trim();
+  if (text) parts.push(text.slice(0, 120));
+
+  // Keine Bildinhalte neu erfinden: der Clip bleibt beim Eingangsbild.
+  parts.push('keep the subject and composition identical, no cuts, no text');
+  return parts.join(', ').replace(/\s+/g, ' ').trim().slice(0, 500);
+}

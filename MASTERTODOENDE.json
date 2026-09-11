@@ -203,16 +203,16 @@
       "status": "PARTIAL",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "DONE 2026-09-11 (App-Integration): visionPrompt.ts (12 Stile, BPM/Energie/Mood), runpodVision.ts (RunPod-FLUX: /runsync + Polling, Bild-Extraktion, typisierte Fehler), AiVisionSchema + POST /api/ai/vision (Auth/Rate-Limit), UI im VisualMonkOverlay (Prompt + Stil + 'BILD ERZEUGEN' + Bildanzeige). LIVE: 200, 26,7 s, seed 36757, 1,28 MB PNG. OFFEN: Audio->Prompt (Energie/BPM aus dem Feature-Bus automatisch), R2-Ablage + DB-Eintrag, vision-Rolle in Registry/Deploy-Skript (VISUAL-P1-006)."
+      "note": "DONE 2026-09-11 (App-Integration): visionPrompt.ts (12 Stile, BPM/Energie/Mood), runpodVision.ts (RunPod-FLUX: /runsync + Polling, Bild-Extraktion, typisierte Fehler), AiVisionSchema + POST /api/ai/vision (Auth/Rate-Limit), UI im VisualMonkOverlay (Prompt + Stil + 'BILD ERZEUGEN' + Bildanzeige). LIVE: 200, 26,7 s, seed 36757, 1,28 MB PNG. OFFEN: Audio->Prompt (Energie/BPM aus dem Feature-Bus automatisch), R2-Ablage + DB-Eintrag, vision-Rolle in Registry/Deploy-Skript (VISUAL-P1-006). 2026-09-11: Ablage jetzt mit Fallback — R2 zuerst, sonst lokal ueber /api/ai/vision/artifact/<name> (store-Feld in der Antwort ist ehrlich: r2|local). Grund: die R2-S3-Keys der Umgebung antworten mit SignatureDoesNotMatch (live gemessen) -> Betreiber muss rotieren (siehe ENV-004)."
     },
     {
       "id": "VISUAL-P1-003",
       "title": "Leichtes Video (LTX-Video/Wan2.1) + Zusammenfuehren von Clips",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "GEBAUT/LIVE 2026-09-11: Rolle `video` = Wan2.2 image->video (ComfyUI-Worker registry.runpod.net/wlsdml1114-generate-video-ksampler-dockerfile:a9247705c) auf ADA_24/32. Benanntes Template `samplemonk-ai-video-template` (bgh1bodyeq); Endpoint 6ghy4fh00zb0j9 per REST-PATCH umgehaengt (kein eigenes Image). Client runpodVideo.ts (rohes base64 als image_base64 ERFORDERLICH, data:-Praefix scheitert mit 'Incorrect padding'; Output raw mp4 -> data-URI), POST /api/ai/vision/video (Zod; imageBase64|imageUrl), UI-Button VIDEO + Player im Overlay. LIVE: 200, 200 s (Kaltstart+6 Steps), 2,57 MB h264 480x832 5,03 s/161 Frames. OFFEN: R2 fuer mp4 (CFR2-Creds ungueltig), echtes Text->Video (dieser Worker ist image->video; Pipeline FLUX-Bild -> Clip), Zusammenfuehren mehrerer Clips."
+      "note": "DONE 2026-09-11 (Show-Orchestrator + Merge): (1) Text->Clip in einem Aufruf: POST /api/ai/vision/clip = FLUX-Bild -> Wan2.2-Bewegung (src/core/ai/vision/clipPipeline.ts, eigener Bewegungs-Prompt buildMotionPrompt; ohne Bild Abbruch NO_IMAGE). (2) Show-Orchestrator: src/core/visual/showOrchestrator.ts (rein/deterministisch; Wechsel nach Dauer/Beat/Energie, Mindeststandzeit 4 s, Crossfade 0,8 s, Schleife) + src/hooks/useVisualShow.ts + UI-Panel SHOW im VisualMonkOverlay (SZENE +, CLIP AUS TEXT, SHOW START/STOP, ZUSAMMENFUEHREN). (3) Merge: POST /api/ai/vision/show/merge (server/visionShow.ts) = ffmpeg concat + scale/pad/fps/yuv420p; einzelner Clip wird unveraendert durchgereicht; ffmpeg fehlt -> 503 NO_FFMPEG; ffmpeg in Dockerfile + Dockerfile.hetzner. (4) Ablage: server/visionArtifacts.ts = R2 zuerst, sonst lokale Artefakt-Ablage /api/ai/vision/artifact/<name>. BELEGE: npx tsc --noEmit 0 Fehler; npx eslint . --max-warnings=0 0 Findings; npx vitest run 1138/1138 Tests gruen (neu: tests/visualShowOrchestrator.test.ts, 27 Tests); Boundary-Scan 413 Dateien 0 Verstoesse. LIVE (lokal): zwei Testclips 480x832@24fps + 320x240@12fps (je 1 s) -> Merge HTTP 200, reencoded, 14590 Bytes, 442 ms; ffprobe: h264 1024x576 24fps 48 Frames 2,000 s; Artefakt-URL liefert Content-Type video/mp4. OFFEN: echter Lauf mit generierten Clips (GPU-Kosten) + Beamer-Beweis VISUAL-P1-001."
     },
     {
       "id": "VISUAL-P1-004",
@@ -499,6 +499,15 @@
       "area": "Mensch",
       "source": "MASTER_TODO.md",
       "blockedReason": "Hoertest durch Mensch noetig."
+    },
+    {
+      "id": "ENV-004",
+      "title": "R2-S3-Keys ungueltig (SignatureDoesNotMatch) - Vision-Medien liegen lokal",
+      "priority": "BLOCKED",
+      "status": "BLOCKED",
+      "area": "Betreiber",
+      "source": "docs/VISUALMONK_SPEC.md#9",
+      "blockedReason": "Live gemessen 2026-09-11: PutObject gegen den R2-Bucket antwortet mit SignatureDoesNotMatch (Endpoint/Account/Bucket sind korrekt, das Schluesselpaar ist es nicht; Zugriff 32 hex, Secret 64 hex, Form stimmt). Deshalb speichert der Server Bilder/Clips/Shows lokal unter VISION_ARTIFACT_DIR (Default $TMPDIR) und liefert sie ueber /api/ai/vision/artifact/<name>. Kein Funktionsverlust, aber die Ablage ist fluechtig und nicht CDN-faehig. Betreiber: neue R2-S3-Token in Cloudflare anlegen (R2 -> API-Token -> S3-Zugriff), CFR2_ACCESS_KEY_ID/SECRET/BUCKET setzen, danach optional VISION_ARTIFACT_DIR auf ein persistentes Volume legen."
     }
   ],
   "humanVerification": [

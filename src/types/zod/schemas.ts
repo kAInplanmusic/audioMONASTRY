@@ -167,6 +167,52 @@ export const AiVisionFeedbackSchema = z.object({
   comment: z.string().trim().max(500).optional(),
 });
 
+/**
+ * VisualMONK: Text→Clip in einem Aufruf (FLUX-Bild → Wan2.2-Bewegung).
+ * Der Stil-Enum ist derselbe wie beim Bild (`AiVisionSchema`), damit UI,
+ * Prompt-Bau und Validierung nicht auseinanderlaufen.
+ */
+export const AiVideoClipSchema = z.object({
+  prompt: z.string().trim().min(1).max(1200),
+  motion: z.string().trim().max(500).optional(),
+  style: AiVisionSchema.shape.style,
+  bpm: z.number().finite().min(40).max(220).optional(),
+  energy: z.number().finite().min(0).max(1).optional(),
+  moodTags: z.array(z.string().trim().max(40)).max(8).optional(),
+  imageSteps: z.number().finite().int().min(1).max(50).optional(),
+  videoSteps: z.number().finite().int().min(2).max(30).optional(),
+  width: z.number().finite().int().min(256).max(1536).optional(),
+  height: z.number().finite().int().min(256).max(1536).optional(),
+  videoWidth: z.number().finite().int().min(256).max(1280).optional(),
+  videoHeight: z.number().finite().int().min(256).max(1280).optional(),
+  seed: z.number().finite().int().min(0).max(2_000_000_000).optional(),
+  negativePrompt: z.string().trim().max(500).optional(),
+});
+
+/**
+ * VisualMONK: Show zusammenführen (mehrere Clips → ein mp4).
+ * Ein Clip kommt entweder als `dataUri` (direkt aus der App) oder als `url`
+ * (R2 bzw. lokaler Artefakt-Pfad des Servers). Bewusst begrenzt: 10 Clips und
+ * ~3 MB je Clip passen in das 50-MB-JSON-Limit des Servers.
+ */
+export const AiShowMergeSchema = z.object({
+  clips: z
+    .array(
+      z
+        .object({
+          url: z.string().trim().max(2000).optional(),
+          dataUri: z.string().trim().min(100).max(4_000_000).optional(),
+          label: z.string().trim().max(80).optional(),
+        })
+        .refine((c) => Boolean(c.url || c.dataUri), { message: 'url oder dataUri erforderlich' }),
+    )
+    .min(1)
+    .max(10),
+  width: z.number().finite().int().min(256).max(1920).optional(),
+  height: z.number().finite().int().min(256).max(1920).optional(),
+  fps: z.number().finite().int().min(12).max(60).optional(),
+});
+
 export const AiOrchestrateSchema = z.object({
   userId: z.string().trim().max(64).optional(),
   task: z.string().trim().min(1).max(64),

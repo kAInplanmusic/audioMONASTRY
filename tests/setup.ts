@@ -25,6 +25,11 @@ for (const key of [
   'RUNPOD_API_KEY', 'RP_API_KEY', 'RUNPOD_API_BASE', 'RUNPOD_BRAIN_OPENAI_URL',
   'RUNPOD_ENDPOINT_ID', 'RUNPOD_ENDPOINT_ID_BRAIN', 'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE', 'RUNPOD_BRAIN_MODEL', 'AI_ALLOW_EXTERNAL_LLM',
+  // R2-Ablage: Tests dürfen NICHT gegen den echten Bucket schreiben. Ohne Keys
+  // weicht `saveArtifact` auf die lokale Artefakt-Ablage aus — genau der Pfad,
+  // den tests/visualShowOrchestrator.test.ts prüft.
+  'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_ACCESS_KEY', 'CFR2_SECRET_ACCESS_KEY',
+  'CFR2_BUCKET', 'CFR2_URL', 'CFR2_ENDPOINT', 'CFR2_PUBLIC_URL',
 ]) {
   delete process.env[key];
 }

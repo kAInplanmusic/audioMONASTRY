@@ -9,6 +9,9 @@ RUN npm run build
 # Kopiere optionale statische Assets nach dem Build, wenn sie vorhanden sind
 RUN if [ -f static_assets/general_midi.sf2 ]; then mkdir -p dist/samples/instruments && cp static_assets/general_midi.sf2 dist/samples/instruments/; fi
 
+# VisualMONK #5: Show-Merge nutzt ffmpeg (mehrere Clips zu einem mp4).
+RUN apk add --no-cache ffmpeg
+
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 RUN chown -R appuser:appgroup /app
