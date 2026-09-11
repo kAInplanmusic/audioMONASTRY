@@ -16,6 +16,7 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE',
   'RUNPOD_ENDPOINT_ID_VISION',
+  'RUNPOD_ENDPOINT_ID_VIDEO',
   'AI_FLEET_WAKE',
   'AI_FLEET_SLEEP',
 ] as const;
@@ -192,5 +193,16 @@ describe('GPU-Flotten Session-Wake', () => {
     expect(report.vision?.workersMinSet).toBe(true);
     const visionPatch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/vision-ep');
     expect((visionPatch?.body as { workersMin: number }).workersMin).toBe(0);
+  });
+
+  it('weckt die Rolle video per workersMin (kein warmup-Task)', async () => {
+    configureFleet();
+    process.env.RUNPOD_ENDPOINT_ID_VIDEO = 'video-ep';
+    mockFetch();
+
+    const report = await wakeFleet();
+    expect(report.video).toEqual({ endpointId: 'video-ep', workersMinSet: true });
+    const patch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/video-ep');
+    expect((patch?.body as { workersMin: number }).workersMin).toBe(1);
   });
 });

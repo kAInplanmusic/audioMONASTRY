@@ -47,6 +47,8 @@ export interface FleetReport {
   roles: FleetRoleStatus[];
   /** Rolle `vision` (FLUX) – kennt keinen `warmup`-Task, wird nur per workersMin geweckt. */
   vision?: { endpointId: string; workersMinSet: boolean } | null;
+  /** Rolle `video` (Wan2.2) – ebenfalls nur per workersMin. */
+  video?: { endpointId: string; workersMinSet: boolean } | null;
 }
 
 function env(name: string): string {
@@ -159,6 +161,12 @@ async function toggleVision(workersMin: number, signal?: AbortSignal): Promise<{
   return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
 }
 
+async function toggleVideo(workersMin: number, signal?: AbortSignal): Promise<{ endpointId: string; workersMinSet: boolean } | null> {
+  const endpointId = env('RUNPOD_ENDPOINT_ID_VIDEO');
+  if (!endpointId) return null;
+  return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
+}
+
 let inflightWake: Promise<FleetReport> | null = null;
 
 /**
@@ -214,7 +222,8 @@ async function doWake(signal?: AbortSignal): Promise<FleetReport> {
 
   const ok = roles.every((r) => !r.configured || r.warmup?.ok === true);
   const vision = await toggleVision(1, signal);
-  const report: FleetReport = { action: 'wake', startedAt, durationMs: Date.now() - startedAt, ok, roles, vision };
+  const video = await toggleVideo(1, signal);
+  const report: FleetReport = { action: 'wake', startedAt, durationMs: Date.now() - startedAt, ok, roles, vision, video };
   aiLogger.info('fleet wake finished', {
     ok,
     durationMs: report.durationMs,
@@ -264,6 +273,7 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
 
   const up = roles.filter((r) => r.configured && !r.workersMinSet);
   const vision = await toggleVision(0, signal);
+  const video = await toggleVideo(0, signal);
   const report: FleetReport = {
     action: 'sleep',
     startedAt,
@@ -271,6 +281,7 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
     ok: up.length === 0,
     roles,
     vision,
+    video,
   };
   aiLogger.info('fleet sleep finished', {
     ok: report.ok,

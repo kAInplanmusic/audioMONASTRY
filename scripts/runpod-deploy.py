@@ -52,6 +52,8 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     # 4. Rolle (2026-09-11): generative Bilder (FLUX.1-dev) - eigener Hub-Worker,
     # NICHT unser Audio-Image.
     "vision": {"suffix": "vision", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
+    # 5. Rolle (2026-09-11): Video (Wan2.2 image->video), ADA_24/32-Pool des Hub-Workers.
+    "video": {"suffix": "video", "gpuPoolId": "ADA_24", "gpuCount": 1, "workersMax": 1},
 }
 
 DOCKER_START_CMD = "python runpod_worker.py"
@@ -117,6 +119,18 @@ def build_env_vars_vision() -> Dict[str, str]:
     env_vars: Dict[str, str] = {}
     if env("RUNPOD_VISION_MODEL"):
         env_vars["HF_MODEL"] = env("RUNPOD_VISION_MODEL")
+    if env("HF_TOKEN"):
+        env_vars["HF_TOKEN"] = env("HF_TOKEN")
+    return env_vars
+
+
+#: Rolle `video` = vorgefertigter Wan2.2-Image->Video-Worker (ComfyUI), ADA_24/32.
+VIDEO_IMAGE_DEFAULT = "registry.runpod.net/wlsdml1114-generate-video-ksampler-dockerfile:a9247705c"
+
+
+def build_env_vars_video() -> Dict[str, str]:
+    """Container-Env des Video-Workers (Rolle video)."""
+    env_vars: Dict[str, str] = {}
     if env("HF_TOKEN"):
         env_vars["HF_TOKEN"] = env("HF_TOKEN")
     return env_vars
@@ -223,7 +237,7 @@ def deploy_role(role: str, image: str) -> Optional[str]:
     idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT", "20"))
     # Brain (vLLM) braucht mehr Plattenplatz (Image + ~10 GB AWQ-Gewichte);
     # vision (FLUX) braucht 80 GB (Image + Gewichte).
-    default_disk = "150" if role == "brain" else "80" if role == "vision" else "30"
+    default_disk = "150" if role == "brain" else "80" if role == "vision" else "180" if role == "video" else "30"
     container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB", default_disk))
     template_name = f"{endpoint_name}-template"
 
@@ -244,6 +258,14 @@ def deploy_role(role: str, image: str) -> Optional[str]:
         registry_auth_id = None
         docker_args = ""
         print(f"[deploy] {endpoint_name}: FLUX-Worker (Rolle vision)")
+    elif role == "video":
+        # Rolle video = vorgefertigter Wan2.2-image->video-Worker.
+        image = env("RUNPOD_VIDEO_IMAGE", VIDEO_IMAGE_DEFAULT)
+        env_vars = build_env_vars_video()
+        template_name = "samplemonk-ai-video-template"
+        registry_auth_id = None
+        docker_args = ""
+        print(f"[deploy] {endpoint_name}: Wan2.2-Video-Worker (Rolle video)")
     else:
         registry_auth_id = ensure_registry_auth(endpoint_name)
         env_vars = build_env_vars(role)
@@ -337,7 +359,7 @@ def main() -> int:
 
     # IMAGE nur nötig, wenn mindestens eine Rolle unser eigenes Image nutzt –
     # der vLLM-Brain bringt sein eigenes mit.
-    needs_own_image = any(not ((r == "brain" and brain_vllm_enabled()) or r == "vision") for r in roles)
+    needs_own_image = any(not ((r == "brain" and brain_vllm_enabled()) or r in ("vision", "video")) for r in roles)
     if needs_own_image and not image:
         print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)", file=sys.stderr)
         return 2

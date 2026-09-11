@@ -145,6 +145,20 @@ export const AiVisionSchema = z.object({
   height: z.number().finite().int().min(256).max(1536).optional(),
 });
 
+export const AiVideoSchema = z
+  .object({
+    imageBase64: z.string().trim().min(100).max(20_000_000).optional(),
+    imageUrl: z.string().trim().url().max(2000).optional(),
+    prompt: z.string().trim().max(1200).optional(),
+    negativePrompt: z.string().trim().max(500).optional(),
+    steps: z.number().finite().int().min(2).max(30).optional(),
+    width: z.number().finite().int().min(256).max(1280).optional(),
+    height: z.number().finite().int().min(256).max(1280).optional(),
+    cfg: z.number().finite().min(1).max(10).optional(),
+    seed: z.number().finite().int().min(0).max(2_000_000_000).optional(),
+  })
+  .refine((v) => Boolean(v.imageBase64 || v.imageUrl), { message: 'imageBase64 oder imageUrl erforderlich' });
+
 export const AiVisionFeedbackSchema = z.object({
   generationId: z.string().trim().min(1).max(64),
   rating: z.number().finite().int().min(1).max(5),

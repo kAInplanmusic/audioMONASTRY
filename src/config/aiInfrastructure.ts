@@ -27,8 +27,11 @@ export type GpuRoleId = (typeof GPU_ROLE_IDS)[number];
 /** Zusätzliche Endpoint-Rolle: generative Visuals (nicht im Audio-Manifest). */
 export const VISION_ROLE_ID = 'vision' as const;
 
-/** Alle zulässigen GPU-Endpoint-Rollen (Audio + Vision). */
-export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS, VISION_ROLE_ID] as const;
+/** Zusätzliche Endpoint-Rolle: Video (Wan2.2 image->video). */
+export const VIDEO_ROLE_ID = 'video' as const;
+
+/** Alle zulässigen GPU-Endpoint-Rollen (Audio + generativ). */
+export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS, VISION_ROLE_ID, VIDEO_ROLE_ID] as const;
 
 /** Rolle eines beliebigen GPU-Endpoints. */
 export type GpuEndpointRole = (typeof GPU_ENDPOINT_ROLES)[number];
@@ -59,6 +62,7 @@ export const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
   ears: 0.49,
   voiceGen: 0.49,
   vision: 0.49,
+  video: 0.39,
 };
 
 /**
@@ -75,6 +79,7 @@ export const LEGACY_GPU_ENDPOINTS = [
 /** Namenskonvention der RunPod-Serverless-Endpoints je Rolle. */
 export function endpointNameForRole(role: GpuEndpointRole): string {
   if (role === VISION_ROLE_ID) return 'samplemonk-ai-vision';
+  if (role === VIDEO_ROLE_ID) return 'samplemonk-ai-video';
   return `samplemonk-ai-${role === 'voiceGen' ? 'voice' : role}`;
 }
 

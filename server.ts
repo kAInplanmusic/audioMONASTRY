@@ -26,6 +26,7 @@ import type { AiTask } from './src/core/ai/orchestrator/types';
 import { isListenerMode, normalizeSessionMode } from './src/core/session/listenerMode';
 import { buildVisionPrompt } from './src/core/ai/vision/visionPrompt';
 import { VisionError, generateVisionImage } from './src/core/ai/vision/runpodVision';
+import { VideoError, generateVideo, stripDataUri } from './src/core/ai/vision/runpodVideo';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -36,6 +37,7 @@ import {
   AiPromptSchema,
   AiVisionSchema,
   AiVisionFeedbackSchema,
+  AiVideoSchema,
   CloudMusicSchema,
   CloudSampleSchema,
   CloudUploadJsonSchema,
@@ -962,6 +964,48 @@ app.post('/api/ai/vision', async (req, res) => {
     const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
     console.warn('[vision]', code, err.message?.slice(0, 200));
     return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'vision failed').slice(0, 300) });
+  }
+});
+
+// --- POST /api/ai/vision/video  -> Wan2.2 image->video (Rolle video) ---
+// Request: { imageBase64 | imageUrl, prompt?, steps?, width?, height?, cfg?, seed?, negativePrompt? }
+app.post('/api/ai/vision/video', async (req, res) => {
+  metrics.aiRequests += 1;
+  const parsed = AiVideoSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const b = parsed.data;
+  let image = b.imageBase64 ?? '';
+  if (!image && b.imageUrl) {
+    try {
+      const r = await fetch(b.imageUrl);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      image = Buffer.from(await r.arrayBuffer()).toString('base64');
+    } catch (e) {
+      return res.status(400).json({ error: `imageUrl nicht ladbar: ${String((e as Error).message).slice(0, 120)}` });
+    }
+  }
+  try {
+    const result = await generateVideo(image, b.prompt ?? '', {
+      steps: b.steps, width: b.width, height: b.height, cfg: b.cfg, seed: b.seed, negativePrompt: b.negativePrompt,
+    });
+    let videoUrl: string | undefined;
+    try {
+      const raw = Buffer.from(stripDataUri(result.video), 'base64');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const up = await uploadSampleToR2(`vision/video-${stamp}.mp4`, raw, 'video/mp4');
+      videoUrl = up.url;
+    } catch (e) {
+      console.warn('[video] R2-Ablage übersprungen:', String((e as Error).message).slice(0, 160));
+    }
+    return res.json({ status: 'success', video: result.video, videoUrl, durationMs: result.durationMs });
+  } catch (e) {
+    const err = e as Error;
+    const code = err instanceof VideoError ? err.code : 'VIDEO_FAILED';
+    const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+    console.warn('[video]', code, err.message?.slice(0, 200));
+    return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'video failed').slice(0, 300) });
   }
 });
 

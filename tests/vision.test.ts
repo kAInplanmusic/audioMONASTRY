@@ -3,6 +3,7 @@ import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionSty
 import { VisionError, extractVisionImage, generateVisionImage, visionEndpointId } from '../src/core/ai/vision/runpodVision';
 import { AiVisionFeedbackSchema, AiVisionSchema } from '../src/types/zod/schemas';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
+import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
 
 const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
 
@@ -152,5 +153,49 @@ describe('VisualMONK – Selbstlern-Loop (Feedback)', () => {
     expect(AiVisionFeedbackSchema.safeParse({ generationId: 'g1', rating: 4 }).success).toBe(true);
     expect(AiVisionFeedbackSchema.safeParse({ generationId: 'g1', rating: 9 }).success).toBe(false);
     expect(AiVisionFeedbackSchema.safeParse({ rating: 4 }).success).toBe(false);
+  });
+});
+
+describe('VisualMONK – Video-Client (Wan2.2 image->video)', () => {
+  it('entfernt das data-URI-Praefix und Whitespace', () => {
+    expect(stripDataUri('data:image/png;base64,AAAA')).toBe('AAAA');
+    expect(stripDataUri('AAAA')).toBe('AAAA');
+    expect(stripDataUri('data:image/png;base64,AA\nBB')).toBe('AABB');
+  });
+
+  it('extrahiert rohes base64, data-URI und URLs', () => {
+    const raw = 'A'.repeat(200);
+    expect(extractVideo({ video: raw })).toBe(raw);
+    expect(extractVideo({ output: { video: 'data:video/mp4;base64,AAAA' } })).toBe('data:video/mp4;base64,AAAA');
+    expect(extractVideo({ videos: ['https://x/y.mp4'] })).toBe('https://x/y.mp4');
+    expect(extractVideo({ seed: 1 })).toBeNull();
+  });
+
+  it('erzeugt aus einem Bild einen Clip (gemocktes /run + /status)', async () => {
+    let calls = 0;
+    const raw = 'B'.repeat(150);
+    const fetchImpl = vi.fn(async (url: string) => {
+      calls += 1;
+      if (String(url).endsWith('/run')) return { ok: true, status: 200, json: async () => ({ id: 'v1', status: 'IN_QUEUE' }) };
+      return { ok: true, status: 200, json: async () => ({ id: 'v1', status: 'COMPLETED', output: { video: raw } }) };
+    }) as unknown as typeof fetch;
+    const res = await generateVideo('data:image/png;base64,AAAA', 'push in', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 });
+    expect(res.video).toBe(`data:video/mp4;base64,${raw}`);
+    expect(calls).toBeGreaterThanOrEqual(2);
+  });
+
+  it('wirft typisierte Fehler', async () => {
+    await expect(generateVideo('x', 'p', { endpointId: '', apiKey: 'k' })).rejects.toBeInstanceOf(VideoError);
+    await expect(generateVideo('x', 'p', { endpointId: 'ep', apiKey: '' })).rejects.toMatchObject({ code: 'NO_KEY' });
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ id: 'v2', status: 'FAILED', error: 'boom' }) })) as unknown as typeof fetch;
+    await expect(generateVideo('x', 'p', { endpointId: 'ep', apiKey: 'k', fetchImpl, pollIntervalMs: 1 })).rejects.toMatchObject({ code: 'FAILED' });
+  });
+
+  it('liest die Video-Endpoint-ID aus der Umgebung', () => {
+    const prev = process.env.RUNPOD_ENDPOINT_ID_VIDEO;
+    process.env.RUNPOD_ENDPOINT_ID_VIDEO = 'video-ep-1';
+    expect(videoEndpointId()).toBe('video-ep-1');
+    if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VIDEO;
+    else process.env.RUNPOD_ENDPOINT_ID_VIDEO = prev;
   });
 });

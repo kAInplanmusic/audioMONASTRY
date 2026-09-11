@@ -209,9 +209,10 @@
       "id": "VISUAL-P1-003",
       "title": "Leichtes Video (LTX-Video/Wan2.1) + Zusammenfuehren von Clips",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#8"
+      "source": "docs/VISUALMONK_SPEC.md#8",
+      "note": "GEBAUT/LIVE 2026-09-11: Rolle `video` = Wan2.2 image->video (ComfyUI-Worker registry.runpod.net/wlsdml1114-generate-video-ksampler-dockerfile:a9247705c) auf ADA_24/32. Benanntes Template `samplemonk-ai-video-template` (bgh1bodyeq); Endpoint 6ghy4fh00zb0j9 per REST-PATCH umgehaengt (kein eigenes Image). Client runpodVideo.ts (rohes base64 als image_base64 ERFORDERLICH, data:-Praefix scheitert mit 'Incorrect padding'; Output raw mp4 -> data-URI), POST /api/ai/vision/video (Zod; imageBase64|imageUrl), UI-Button VIDEO + Player im Overlay. LIVE: 200, 200 s (Kaltstart+6 Steps), 2,57 MB h264 480x832 5,03 s/161 Frames. OFFEN: R2 fuer mp4 (CFR2-Creds ungueltig), echtes Text->Video (dieser Worker ist image->video; Pipeline FLUX-Bild -> Clip), Zusammenfuehren mehrerer Clips."
     },
     {
       "id": "VISUAL-P1-004",
@@ -535,7 +536,7 @@
     ]
   },
   "budget": {
-    "fleetEndpointsMax": 4,
+    "fleetEndpointsMax": 5,
     "fleetMaxEurPerHour": 10,
     "storageSnapshotsMaxEurPerMonth": 5,
     "runpodCurrentImage": "ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:7b7391d1302d2dfd085 (ears/voice) · registry.runpod.net/...worker-vllm...76054c22c (brain)",
@@ -543,7 +544,8 @@
     "storageNowEurPerMonth": "~0,30 (5 Live-Snapshots, 25,47 GB)",
     "billingModel": "STUENDLICH: Hetzner + RunPod rechnen pro laufender Stunde ab; gestoppt/geloescht = 0 EUR (Hetzner: gestoppte Server kosten weiter Platte -> nur LOESCHEN stoppt Kosten).",
     "hetznerFleetEurPerHour": 0.054,
-    "snapshotsBilling": "Snapshots kosten pro GB/Monat (Hetzner); 5 Snapshots 4,68 GB ~= 0,06 EUR/Monat."
+    "snapshotsBilling": "Snapshots kosten pro GB/Monat (Hetzner); 5 Snapshots 4,68 GB ~= 0,06 EUR/Monat.",
+    "fleetEndpointsNote": "brain, ears, voiceGen, vision (FLUX), video (Wan2.2) - alle scale-to-zero; ~2,35 EUR/h bei Vollbetrieb."
   },
   "architectureDecisions": [
     "V2 ist der einzige Produktiv-Audiopfad; V1-Code ist entfernt (No-Op-Reste: AUDIO-P1-003).",
@@ -589,7 +591,8 @@
     "runpodVoice": "gajmangfldpzrk",
     "runpodVision": "4gts9y4zph7ik9 (FLUX.1-dev; echtes Bild verifiziert)",
     "snapshots": "5x -2026-09-11-live (25,47 GB, ~0,30 EUR/Monat)",
-    "costModel": "stuendlich: laufende Stunde zaehlt, gestoppt/geloescht = 0 EUR"
+    "costModel": "stuendlich: laufende Stunde zaehlt, gestoppt/geloescht = 0 EUR",
+    "runpodVideo": "6ghy4fh00zb0j9 (Wan2.2 image->video; ADA_24/32; Template bgh1bodyeq)"
   },
   "fleetState2026_09_11": {
     "state": "GELOESCHT (Kostenstopp) - 0 Server, 0 Floating-IPs",

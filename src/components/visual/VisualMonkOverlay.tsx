@@ -47,6 +47,32 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   /** Selbstlern-Loop: ID der letzten Generierung + Bewertung (Session-Ende). */
   const [aiGenerationId, setAiGenerationId] = useState<string | null>(null);
   const [aiRated, setAiRated] = useState(false);
+  /** Video (Wan2.2 image->video) aus dem zuletzt generierten Bild. */
+  const [aiVideo, setAiVideo] = useState<string | null>(null);
+  const [aiVideoBusy, setAiVideoBusy] = useState(false);
+  const [aiVideoError, setAiVideoError] = useState('');
+
+  const generateAiVideo = useCallback(async () => {
+    if (!aiImage || aiVideoBusy) return;
+    setAiVideoBusy(true);
+    setAiVideoError('');
+    try {
+      const resp = await fetch('/api/ai/vision/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: aiImage, prompt: aiPrompt.trim() || 'gentle camera push in, subtle motion', steps: 6 }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data?.status !== 'success' || !data?.video) {
+        throw new Error(String(data?.message || data?.error || `HTTP ${resp.status}`));
+      }
+      setAiVideo(String(data.video));
+    } catch (e) {
+      setAiVideoError((e as Error).message.slice(0, 160));
+    } finally {
+      setAiVideoBusy(false);
+    }
+  }, [aiImage, aiPrompt, aiVideoBusy]);
   const featuresRef = useRef<AudioFeatures>(IDLE_AUDIO_FEATURES);
 
   const rateAi = useCallback(async (rating: number) => {
@@ -257,6 +283,16 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         >
           {aiBusy ? 'ERZEUGT… (kalt ~40 s)' : 'BILD ERZEUGEN'}
         </button>
+        <button
+          type="button"
+          onClick={() => void generateAiVideo()}
+          disabled={!aiImage || aiVideoBusy}
+          title="Aus dem Bild einen kurzen Clip machen (Wan2.2 image->video)"
+          className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-cyan-400/50 text-cyan-200 hover:bg-cyan-400/10 disabled:opacity-40 transition-colors"
+        >
+          {aiVideoBusy ? 'VIDEO… (~2 min)' : 'VIDEO'}
+        </button>
+        {aiVideoError && <span className="text-[10px] text-red-400">{aiVideoError}</span>}
         {aiError && <span className="text-[10px] text-red-400">{aiError}</span>}
         {aiImageUrl && (
           <a href={aiImageUrl} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">R2-Link</a>
@@ -270,6 +306,16 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
             src={aiImage}
             alt="KI-generiertes Bild"
             className="absolute right-3 bottom-3 w-56 max-h-[45%] object-cover rounded-lg border border-white/20 shadow-2xl"
+          />
+        )}
+        {aiVideo && (
+          <video
+            src={aiVideo}
+            controls
+            autoPlay
+            loop
+            muted
+            className="absolute left-3 bottom-3 w-56 max-h-[45%] rounded-lg border border-cyan-400/40 shadow-2xl bg-black"
           />
         )}
         {aiImage && aiGenerationId && (
