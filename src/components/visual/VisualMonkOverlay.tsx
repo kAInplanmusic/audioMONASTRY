@@ -44,7 +44,22 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const [aiError, setAiError] = useState('');
   /** AUTO: Prompt+Stil kommen aus dem laufenden Set (Feature-Bus). */
   const [aiAuto, setAiAuto] = useState(false);
+  /** Selbstlern-Loop: ID der letzten Generierung + Bewertung (Session-Ende). */
+  const [aiGenerationId, setAiGenerationId] = useState<string | null>(null);
+  const [aiRated, setAiRated] = useState(false);
   const featuresRef = useRef<AudioFeatures>(IDLE_AUDIO_FEATURES);
+
+  const rateAi = useCallback(async (rating: number) => {
+    if (!aiGenerationId) return;
+    try {
+      await fetch('/api/ai/vision/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generationId: aiGenerationId, rating, keep: rating >= 3 }),
+      });
+      setAiRated(true);
+    } catch { /* Bewertung ist optional */ }
+  }, [aiGenerationId]);
 
   const generateAiImage = useCallback(async () => {
     if (aiBusy) return;
@@ -73,6 +88,8 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       }
       setAiImage(String(data.image));
       setAiImageUrl(typeof data.imageUrl === 'string' ? data.imageUrl : null);
+      setAiGenerationId(typeof data.generationId === 'string' ? data.generationId : null);
+      setAiRated(false);
     } catch (e) {
       setAiError((e as Error).message.slice(0, 160));
     } finally {
@@ -254,6 +271,23 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
             alt="KI-generiertes Bild"
             className="absolute right-3 bottom-3 w-56 max-h-[45%] object-cover rounded-lg border border-white/20 shadow-2xl"
           />
+        )}
+        {aiImage && aiGenerationId && (
+          <div className="absolute right-3 bottom-3 translate-y-[calc(100%+0.5rem)] flex items-center gap-1 px-2 py-1 rounded-full bg-black/70 border border-white/10">
+            <span className="text-[9px] tracking-widest text-neutral-400 mr-1">BEWERTEN</span>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => void rateAi(n)}
+                title={`${n} von 5`}
+                className="w-6 h-6 rounded-full text-[10px] font-bold border border-amber-400/40 text-amber-200 hover:bg-amber-400/20 transition-colors"
+              >
+                {n}
+              </button>
+            ))}
+            {aiRated && <span className="text-[9px] text-emerald-300 ml-1">DANKE</span>}
+          </div>
         )}
       </div>
     </div>

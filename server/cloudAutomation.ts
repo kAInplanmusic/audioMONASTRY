@@ -225,3 +225,73 @@ export async function syncR2ToSupabase(): Promise<{ total: number; ok: number; f
 export function cloudAutomationHealth(): { r2: boolean; supabase: boolean } {
   return { r2: Boolean(r2Client()), supabase: Boolean(supabaseAdmin()) };
 }
+
+
+// ---------------------------------------------------------------------------
+// VisualMONK: Generierungen + Feedback ablegen (Migration 008)
+// ---------------------------------------------------------------------------
+
+/** VisualMONK: eine Bild-Generierung ablegen (best effort). */
+export async function insertVisualGeneration(row: {
+  prompt: string;
+  style?: string;
+  energy?: number;
+  bpm?: number;
+  seed?: number;
+  r2Key?: string;
+  r2Url?: string;
+  durationMs?: number;
+  model?: string;
+  sessionId?: string;
+  userId?: string;
+}): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const db = supabaseAdmin();
+  if (!db) return { ok: false, error: 'supabase-not-configured' };
+  const { data, error } = await db
+    .from('visual_generations')
+    .insert({
+      prompt: row.prompt,
+      style: row.style ?? null,
+      energy: row.energy ?? null,
+      bpm: row.bpm ?? null,
+      seed: row.seed ?? null,
+      r2_key: row.r2Key ?? null,
+      r2_url: row.r2Url ?? null,
+      duration_ms: row.durationMs ?? null,
+      model: row.model ?? null,
+      session_id: row.sessionId ?? null,
+      user_id: row.userId ?? null,
+    })
+    .select('id')
+    .single();
+  if (error) return { ok: false, error: String(error.message).slice(0, 160) };
+  return { ok: true, id: (data as { id?: string } | null)?.id };
+}
+
+/** VisualMONK: Bewertung ablegen (Session-Ende-Umfrage; ein Eintrag je Nutzer). */
+export async function insertVisualFeedback(row: {
+  generationId: string;
+  rating: number;
+  keep?: boolean;
+  tags?: string[];
+  comment?: string;
+  userId?: string;
+  sessionId?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const db = supabaseAdmin();
+  if (!db) return { ok: false, error: 'supabase-not-configured' };
+  const { error } = await db.from('visual_feedback').upsert(
+    {
+      generation_id: row.generationId,
+      rating: row.rating,
+      keep: row.keep ?? true,
+      tags: row.tags ?? [],
+      comment: row.comment ?? null,
+      user_id: row.userId ?? null,
+      session_id: row.sessionId ?? null,
+    },
+    { onConflict: 'generation_id,user_id' },
+  );
+  if (error) return { ok: false, error: String(error.message).slice(0, 160) };
+  return { ok: true };
+}

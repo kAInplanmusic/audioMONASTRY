@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
 import { VisionError, extractVisionImage, generateVisionImage, visionEndpointId } from '../src/core/ai/vision/runpodVision';
-import { AiVisionSchema } from '../src/types/zod/schemas';
+import { AiVisionFeedbackSchema, AiVisionSchema } from '../src/types/zod/schemas';
+import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
 
 const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
 
@@ -106,5 +107,50 @@ describe('VisualMONK – Stil aus dem Set (AUTO-Modus)', () => {
       expect(a).toBe(b);
       expect(VISION_STYLES).toContain(a);
     }
+  });
+});
+
+
+describe('VisualMONK – Selbstlern-Loop (Feedback)', () => {
+  it('normalisiert Bewertungen auf 1..5', () => {
+    expect(normalizeRating(4.4)).toBe(4);
+    expect(normalizeRating('5')).toBe(5);
+    expect(normalizeRating(0)).toBeNull();
+    expect(normalizeRating(6)).toBeNull();
+    expect(normalizeRating('x')).toBeNull();
+    expect(normalizeRating(Number.NaN)).toBeNull();
+  });
+
+  it('bereinigt Tags', () => {
+    expect(normalizeTags([' techno ', 'dark', 'techno', '', 3])).toEqual(['techno', 'dark', '3']);
+    expect(normalizeTags('nope')).toEqual([]);
+  });
+
+  it('aggregiert Feedback', () => {
+    expect(aggregateFeedback([])).toEqual({ count: 0, avgRating: 0, keepRatio: 0 });
+    const agg = aggregateFeedback([
+      { generationId: 'a', rating: 5, keep: true },
+      { generationId: 'b', rating: 3, keep: true },
+      { generationId: 'c', rating: 1, keep: false },
+    ]);
+    expect(agg.count).toBe(3);
+    expect(agg.avgRating).toBe(3);
+    expect(agg.keepRatio).toBe(0.67);
+  });
+
+  it('waehlt die besten Stile mit Mindest-Feedback', () => {
+    const rows = [
+      { style: 'cosmic', avgRating: 4.8, feedbackCount: 5 },
+      { style: 'noir', avgRating: 4.9, feedbackCount: 1 },
+      { style: 'fire', avgRating: 4.2, feedbackCount: 3 },
+      { style: null, avgRating: 5, feedbackCount: 9 },
+    ];
+    expect(topStyles(rows, { minFeedback: 2, limit: 2 })).toEqual(['cosmic', 'fire']);
+  });
+
+  it('haelt das Feedback-Schema deckungsgleich', () => {
+    expect(AiVisionFeedbackSchema.safeParse({ generationId: 'g1', rating: 4 }).success).toBe(true);
+    expect(AiVisionFeedbackSchema.safeParse({ generationId: 'g1', rating: 9 }).success).toBe(false);
+    expect(AiVisionFeedbackSchema.safeParse({ rating: 4 }).success).toBe(false);
   });
 });

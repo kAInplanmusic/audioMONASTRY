@@ -145,6 +145,14 @@ export const AiVisionSchema = z.object({
   height: z.number().finite().int().min(256).max(1536).optional(),
 });
 
+export const AiVisionFeedbackSchema = z.object({
+  generationId: z.string().trim().min(1).max(64),
+  rating: z.number().finite().int().min(1).max(5),
+  keep: z.boolean().optional(),
+  tags: z.array(z.string().trim().max(40)).max(8).optional(),
+  comment: z.string().trim().max(500).optional(),
+});
+
 export const AiOrchestrateSchema = z.object({
   userId: z.string().trim().max(64).optional(),
   task: z.string().trim().min(1).max(64),

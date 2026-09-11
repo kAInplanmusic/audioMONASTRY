@@ -9,7 +9,7 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
-import { syncR2ToSupabase, ingestAudioObject } from './server/cloudAutomation.ts';
+import { syncR2ToSupabase, ingestAudioObject, insertVisualGeneration, insertVisualFeedback } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
 import {
   buildDropPrompt,
@@ -35,6 +35,7 @@ import {
   AiOrchestrateSchema,
   AiPromptSchema,
   AiVisionSchema,
+  AiVisionFeedbackSchema,
   CloudMusicSchema,
   CloudSampleSchema,
   CloudUploadJsonSchema,
@@ -928,11 +929,30 @@ app.post('/api/ai/vision', async (req, res) => {
       }
     }
 
+    // Selbstlern-Loop (best effort): Generierung in Supabase ablegen.
+    let generationId: string | undefined;
+    try {
+      const saved = await insertVisualGeneration({
+        prompt,
+        style: body.style,
+        energy: body.energy,
+        bpm: body.bpm,
+        seed: result.seed,
+        r2Url: imageUrl,
+        durationMs: result.durationMs,
+        model: 'flux-1-dev',
+      });
+      if (saved.ok) generationId = saved.id;
+    } catch (e) {
+      console.warn('[vision] Generierung nicht gespeichert:', String((e as Error).message).slice(0, 160));
+    }
+
     return res.json({
       status: 'success',
       prompt: result.prompt,
       image: result.image,
       imageUrl,
+      generationId,
       seed: result.seed,
       durationMs: result.durationMs,
     });
@@ -943,6 +963,27 @@ app.post('/api/ai/vision', async (req, res) => {
     console.warn('[vision]', code, err.message?.slice(0, 200));
     return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'vision failed').slice(0, 300) });
   }
+});
+
+// --- POST /api/ai/vision/feedback  -> Session-Ende-Umfrage (Selbstlern-Loop) ---
+// Request: { generationId, rating(1..5), keep?, tags?, comment? }
+app.post('/api/ai/vision/feedback', async (req, res) => {
+  const parsed = AiVisionFeedbackSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const r = await insertVisualFeedback({
+    generationId: parsed.data.generationId,
+    rating: parsed.data.rating,
+    keep: parsed.data.keep,
+    tags: parsed.data.tags,
+    comment: parsed.data.comment,
+  });
+  if (!r.ok) {
+    const status = r.error === 'supabase-not-configured' ? 503 : 502;
+    return res.status(status).json({ status: 'error', code: r.error });
+  }
+  return res.json({ status: 'success' });
 });
 
 // --- POST /api/ai/generate-drop  → dropMONK Drop-Generator (LLM + Fallback) ---

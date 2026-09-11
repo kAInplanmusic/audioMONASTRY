@@ -217,9 +217,10 @@
       "id": "VISUAL-P1-004",
       "title": "Selbstlern-Loop: Session-Ende-Umfrage + pgvector/RAG + Stil-LoRA-Pods",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#8"
+      "source": "docs/VISUALMONK_SPEC.md#8",
+      "note": "GEBAUT 2026-09-11: Migration `database/ai_migration_008_visual.sql` (visual_generations, visual_feedback, visual_embeddings vector(512)+hnsw, RPC match_visuals, View visual_style_ranking, RLS service_role); `insertVisualGeneration`/`insertVisualFeedback` (server/cloudAutomation); POST /api/ai/vision/feedback (Zod 1..5); Generierung wird in /api/ai/vision best-effort gespeichert (generationId); Bewertungs-UI (1-5) im VisualMonkOverlay; reine Helfer aggregateFeedback/topStyles (getestet). OFFEN: Migration 008 in Supabase anwenden (Live-Route meldet aktuell praezise 'Could not find the table public.visual_feedback'), RAG-Vorschlaege (topStyles -> Prompt), Stil-LoRA-Training auf einem Pod."
     },
     {
       "id": "VISUAL-P1-005",
@@ -319,6 +320,15 @@
       "area": "Infra/Hetzner",
       "source": "2026-09-11",
       "note": "ERLEDIGT 2026-09-11: app-1 live. https://anunnakitools.de -> 200, /api/health -> {\"status\":\"ok\"}. Deploy-Fixkette: known_hosts, sg docker, python3+python3-pip+make/g++, 3,4-GB-Excludes."
+    },
+    {
+      "id": "DB-P1-002",
+      "title": "Migration 008 (VisualMONK) in Supabase anwenden",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Database",
+      "source": "2026-09-11",
+      "note": "database/ai_migration_008_visual.sql einspielen; danach liefern /api/ai/vision (generationId) und /api/ai/vision/feedback echte DB-Eintraege statt 502. Ausserdem: CFR2_* Credentials sind ungueltig (SignatureDoesNotMatch) -> R2-Ablage greift erst mit gueltigen Keys."
     }
   ],
   "visionSandbox": [
@@ -587,5 +597,24 @@
     "snapshotsKept": "5x -2026-09-11-live (25,47 GB, ~0,30 EUR/Monat)",
     "restore": "bash scripts/hetzner/bring-up-fleet.sh --yes (neue Floating-IP -> dns_setup.py)",
     "verifiedBeforeDelete": "app https://anunnakitools.de 200 + /api/health ok; SFU-RTP bytes=4653 packets=93"
+  },
+  "visualSelfLearning": {
+    "schema": "database/ai_migration_008_visual.sql (nicht angewendet)",
+    "api": [
+      "POST /api/ai/vision (speichert Generation, gibt generationId)",
+      "POST /api/ai/vision/feedback (rating 1..5)"
+    ],
+    "ui": "Bewertung 1-5 im VisualMonkOverlay nach jeder Generierung",
+    "pure": [
+      "normalizeRating",
+      "normalizeTags",
+      "aggregateFeedback",
+      "topStyles"
+    ],
+    "open": [
+      "Migration anwenden",
+      "RAG: topStyles -> naechster Prompt",
+      "LoRA-Training (Pod) aus Top-Feedback"
+    ]
   }
 }
