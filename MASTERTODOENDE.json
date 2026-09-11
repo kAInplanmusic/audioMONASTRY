@@ -305,19 +305,19 @@
       "id": "INFRA-P1-001",
       "title": "SFU-RTP-Echtpfad-Test fehlgeschlagen (sfu-1)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "bring-up-fleet 2026-09-11",
-      "note": "bring-up meldete 'SFU-RTP-Test fehlgeschlagen (pruefen!)' - RTP-Pfad auf sfu-1 verifizieren."
+      "note": "GELOEST 2026-09-11: sfu-1 hatte kein Image + keine CORS-Header. Image (samplemonk:hetzner) verteilt, SFU_ANNOUNCED_IP gesetzt, CORS im Caddyfile (Origin-reflektierend, credentials) ergaenzt. RTP-Echtpfad gruen: socket->device->mic->DTLS->producer->consumer->rtp bytes=4653 packets=93."
     },
     {
       "id": "INFRA-P1-002",
       "title": "app-1-Deploy abschliessen (anunnakitools.de live)",
       "priority": "P1",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "2026-09-11",
-      "note": "Docker-Build (mediasoup kompiliert lokal) laeuft; Cloudflare zeigt 521 bis der Origin steht. Gefixte Kette: Host-Key, sg docker, python3+pip, 3,4-GB-Excludes."
+      "note": "ERLEDIGT 2026-09-11: app-1 live. https://anunnakitools.de -> 200, /api/health -> {\"status\":\"ok\"}. Deploy-Fixkette: known_hosts, sg docker, python3+python3-pip+make/g++, 3,4-GB-Excludes."
     }
   ],
   "visionSandbox": [
@@ -529,7 +529,7 @@
     "storageSnapshotsMaxEurPerMonth": 5,
     "runpodCurrentImage": "ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:7b7391d1302d2dfd085 (ears/voice) · registry.runpod.net/...worker-vllm...76054c22c (brain)",
     "hetznerFleet": "5 Server (app/sfu/ai/master/edge) - stundlich abgerechnet, ~0,054 EUR/h (~39 EUR/Monat NUR wenn 24/7 an). Nach der Session: delete-fleet.sh -> 0 EUR/h; Floating-IP 3 EUR/Monat bleibt.",
-    "storageNowEurPerMonth": "~0,06 (5 Snapshots, 4,68 GB)",
+    "storageNowEurPerMonth": "~0,30 (5 Live-Snapshots, 25,47 GB)",
     "billingModel": "STUENDLICH: Hetzner + RunPod rechnen pro laufender Stunde ab; gestoppt/geloescht = 0 EUR (Hetzner: gestoppte Server kosten weiter Platte -> nur LOESCHEN stoppt Kosten).",
     "hetznerFleetEurPerHour": 0.054,
     "snapshotsBilling": "Snapshots kosten pro GB/Monat (Hetzner); 5 Snapshots 4,68 GB ~= 0,06 EUR/Monat."
@@ -561,5 +561,18 @@
     "measured": "Kaltstart 40 s (Queue/Image), 25 Steps = 25,7 s, 1024x1024, 1,26 MB PNG",
     "cost": "A6000 ~0,49 USD/h nur bei Generierung; workers 0..1, idle 900 s -> 0 USD idle",
     "test": "scripts/runpod-vision-test.py --endpoint 4gts9y4zph7ik9"
+  },
+  "liveState2026_09_11": {
+    "app": "https://anunnakitools.de (200, /api/health ok) - app-1 159.69.102.29 (Floating IP)",
+    "sfu": "http://91.98.145.156 + RTP 40000-40099 (samplemonk healthy; RTP-Echtpfad gruen)",
+    "ai": "Ollama :11434 + Stem-AI :8000 auf 91.98.147.14",
+    "master": "master-player auf 91.98.147.152",
+    "edge": "Monitoring/Grafana auf 91.98.157.103:3000",
+    "runpodBrain": "ppxo7wrn599p0q (vLLM Qwen3-14B-AWQ)",
+    "runpodEars": "xeax6xrgd0csag",
+    "runpodVoice": "gajmangfldpzrk",
+    "runpodVision": "4gts9y4zph7ik9 (FLUX.1-dev; echtes Bild verifiziert)",
+    "snapshots": "5x -2026-09-11-live (25,47 GB, ~0,30 EUR/Monat)",
+    "costModel": "stuendlich: laufende Stunde zaehlt, gestoppt/geloescht = 0 EUR"
   }
 }
