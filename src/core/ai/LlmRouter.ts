@@ -312,10 +312,27 @@ class RunPodLocalProvider implements ILlmProvider {
     return envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY');
   }
 
+  /**
+   * Modellwahl nach Komplexität (Entscheidung 2026-09-11, „zwei Stufen, eine
+   * Familie"): derselbe Brain-Worker hält `qwen3-4b` als schnellen Ausführer
+   * (latenzkritische `simple`-Aufgaben) und `qwen3-14b` als Brain
+   * (`moderate`/`complex`) – beide per Warmup resident, kein LRU-Wechsel.
+   */
+  private modelFor(complexity: LlmComplexity): string {
+    if (complexity === 'simple') {
+      return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
+    }
+    return envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
+  }
+
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const started = Date.now();
-    const model = envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
+    const model = this.modelFor(req.complexity);
     const openAiUrl = envKey('RUNPOD_BRAIN_OPENAI_URL');
+    // Qwen3 gibt sonst zuerst einen <think>-Block aus, der das Token-Budget
+    // frisst. Für Tool-Calling/Interaktion ist Thinking aus; nur bei explizit
+    // hohem Reasoning-Budget bleibt es an.
+    const enableThinking = req.reasoningEffort === 'high' || req.reasoningEffort === 'max';
 
     if (openAiUrl) {
       const resp = await postJson(
@@ -335,6 +352,7 @@ class RunPodLocalProvider implements ILlmProvider {
       prompt: req.prompt,
       maxTokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.7,
+      enableThinking,
     });
     return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started };
   }

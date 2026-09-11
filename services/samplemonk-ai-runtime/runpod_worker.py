@@ -265,6 +265,7 @@ def _handle_warmup(role: str) -> Dict[str, Any]:
     failed: list[str] = []
     warmed: list[str] = []
     warmup_failed: dict[str, str] = {}
+    warmup_ms: dict[str, int] = {}
     for model_id in targets:
         try:
             manager.load(model_id)
@@ -294,8 +295,10 @@ def _handle_warmup(role: str) -> Dict[str, Any]:
             warmup_failed[model_id] = f"kein Text-Task ({task or '-'}) – Warmup braucht Audio"
             continue
         try:
+            model_started = time.time()
             manager.infer(task, model_id, {"prompt": "ok", "text": "ok", "maxTokens": 1, "temperature": 0})
             warmed.append(model_id)
+            warmup_ms[model_id] = int((time.time() - model_started) * 1000)
         except Exception as exc:  # noqa: BLE001 – Warmup darf den Job nie sprengen
             warmup_failed[model_id] = f"{type(exc).__name__}: {exc}"[:160]
 
@@ -307,6 +310,7 @@ def _handle_warmup(role: str) -> Dict[str, Any]:
         loaded=loaded,
         warmed=warmed,
         warmupFailed=warmup_failed,
+        warmupMs=warmup_ms,
         failed=failed,
         durationMs=duration_ms,
     )
@@ -320,6 +324,7 @@ def _handle_warmup(role: str) -> Dict[str, Any]:
             "loaded": loaded,
             "warmed": warmed,
             "warmupFailed": warmup_failed,
+            "warmupMs": warmup_ms,
             "failed": failed,
         },
         "durationMs": duration_ms,

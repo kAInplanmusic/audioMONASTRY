@@ -81,6 +81,13 @@ RUN python -c "from transformers import AutoConfig; print('qwen3 config ok:', Au
 #
 # Wichtig: hier NICHT als root backen und danach `chown -R /data` – ein
 # rekursives chown über 30+ GB erzeugt einen zweiten Riesen-Layer.
+#
+# Der `AutoConfig`-Prefetch oben (Zeile 68) läuft als root und legt dabei
+# `/data/hf-cache/hub/.locks/...` root-eigen an. Ohne rekursives chown scheitert
+# der Bake als uid 10001 mit `PermissionError` auf genau diese Lock-Datei – das
+# war die echte Ursache des roten Brain-Builds (nicht der Plattenplatz, der
+# Check war grün). Da zu DIESEM Zeitpunkt noch keine Gewichte im Cache liegen,
+# ist das rekursive chown hier klein – die 30-GB-Warnung gilt erst NACH dem Bake.
 ARG AI_BAKE_ROLE=""
 # Anzahl Layer für die Gewichte (Qwen3-14B: 8 Shards à ~4 GB → 4 Layer à ~8 GB,
 # damit kein Einzel-Layer die Registry-Grenzen sprengt).
@@ -89,7 +96,7 @@ ARG AI_BAKE_GROUPS=4
 COPY predownload.py registry.py model_manifest.json ./
 RUN mkdir -p /data/hf-cache \
     && useradd --system --uid 10001 samplemonk \
-    && chown samplemonk:samplemonk /opt/samplemonk-ai /data /data/hf-cache
+    && chown -R samplemonk:samplemonk /opt/samplemonk-ai /data
 USER samplemonk
 RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 0 --groups "$AI_BAKE_GROUPS"; fi
 RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 1 --groups "$AI_BAKE_GROUPS"; fi

@@ -38,8 +38,10 @@ export interface GpuRoleDefinition {
   tasks: readonly AiTask[];
   /** Modelle, die der Rollen-Worker beim Session-Wake vorlädt. */
   preload: readonly string[];
-  /** Primäres LLM dieser Rolle (nur brain). */
+  /** Primäres LLM dieser Rolle (nur brain) – `moderate`/`complex`. */
   brainModel?: string;
+  /** Schneller Ausführer derselben Familie (nur brain) – `simple`. */
+  executorModel?: string;
 }
 
 /**
@@ -56,10 +58,15 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['llm', 'nlu'],
+    // Zwei Stufen, EINE Familie (Entscheidung 2026-09-11): `qwen3-4b` ist der
+    // schnelle Ausführer für latenzkritische `simple`-Aufgaben, `qwen3-14b` das
+    // Brain für Planung/`moderate`/`complex`. Beide sind `preload` und bleiben
+    // gleichzeitig resident (30 + 9 GB < 48 GB Budget) – kein LRU-Wechsel.
     // Upgrade auf qwen3-32b / glm-4.5-air, sobald deren Revision gepinnt ist
     // (im Rollen-Manifest als status="planned" geführt).
-    preload: ['qwen3-14b'],
+    preload: ['qwen3-4b', 'qwen3-14b'],
     brainModel: 'qwen3-14b',
+    executorModel: 'qwen3-4b',
   },
   ears: {
     role: 'ears',

@@ -328,12 +328,12 @@
       "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
       "task": "llm",
       "framework": "transformers",
-      "estimatedVRAM": 16,
-      "estimatedRAM": 24,
+      "estimatedVRAM": 30,
+      "estimatedRAM": 32,
       "loadPriority": 1,
       "preload": true,
       "loadClass": "CORE",
-      "quantization": "int8",
+      "quantization": "fp16",
       "dependencies": [
         "transformers",
         "torch"
@@ -347,6 +347,33 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "qwen3-4b",
+      "repository": "Qwen/Qwen3-4B",
+      "revision": "1cfa9a7208912126459214e8b04321603b3df60c",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 9,
+      "estimatedRAM": 12,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
       "license": "Apache-2.0"
     },
     {
@@ -699,9 +726,11 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
+        "qwen3-4b",
         "qwen3-14b"
       ],
       "models": [
+        "qwen3-4b",
         "qwen3-14b",
         "qwen3-32b",
         "qwen3-30b-a3b",

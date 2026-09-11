@@ -20,6 +20,7 @@ import base64
 import io
 import os
 import tempfile
+import time
 from collections import OrderedDict
 from typing import Any, Callable, Dict, Optional, Tuple
 
@@ -121,7 +122,7 @@ def _resolve_speaker_wav(payload: Dict[str, Any]) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# Qwen3-14B LLM
+# Qwen3 LLM (zwei Stufen derselben Familie: qwen3-4b = Ausführer, qwen3-14b = Brain)
 # ---------------------------------------------------------------------------
 def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     transformers = _require_lib("transformers", "transformers")
@@ -146,11 +147,27 @@ def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
 
     tokenizer, model = _cache_get(f"llm:{model_id}", factory)
     messages = [{"role": "user", "content": text}]
-    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    # Qwen3 gibt sonst zuerst einen <think>-Block aus und verbraucht damit das
+    # Token-Budget (im Live-Test sichtbar). Für Tool-Calling/Interaktion ist
+    # Thinking deshalb standardmäßig AUS; nur ein expliziter Opt-in schaltet es an.
+    enable_thinking = bool(payload.get("enableThinking", False))
+    try:
+        prompt = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=enable_thinking,
+        )
+    except TypeError:
+        # Ältere Chat-Templates kennen das Argument nicht – dann der /no_think-Weg.
+        prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        if not enable_thinking:
+            prompt += "/no_think"
     inputs = tokenizer(prompt, return_tensors="pt").to(_device())
     max_new = int(payload.get("maxTokens", 512))
     do_sample = bool(payload.get("doSample", False))
     temperature = float(payload.get("temperature", 0.7))
+    started_generate = time.time()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -158,8 +175,18 @@ def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
             do_sample=do_sample,
             temperature=temperature if do_sample else None,
         )
+    generate_seconds = max(1e-6, time.time() - started_generate)
+    generated = int(outputs[0].shape[0] - inputs.input_ids.shape[1])
     answer = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    return {"text": answer}
+    # Tokens/s wird OHNE Modell-Load gemessen (Load zahlt der Warmup-Job).
+    return {
+        "text": answer,
+        "modelId": model_id,
+        "generatedTokens": generated,
+        "generateSeconds": round(generate_seconds, 3),
+        "tokensPerSecond": round(generated / generate_seconds, 2),
+        "enableThinking": enable_thinking,
+    }
 
 
 # ---------------------------------------------------------------------------
