@@ -14,8 +14,13 @@
 FROM node:22-slim AS builder
 WORKDIR /app
 
-# libatomic1 wird vom mediasoup-worker-Prebuild benoetigt (postinstall)
-RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 \
+# libatomic1 wird vom mediasoup-worker-Prebuild benoetigt (postinstall).
+# python3/make/g++ sind noetig, wenn der mediasoup-Prebuild im Container NICHT
+# laeuft (Kernel/glibc-Abweichung) und der Worker lokal gebaut werden muss –
+# genau daran ist der Hetzner-App-Deploy am 2026-09-11 gescheitert
+# ("/bin/sh: 1: python: not found").
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libatomic1 python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Nur package.json/lock zuerst kopieren (besseres Layer-Caching)
