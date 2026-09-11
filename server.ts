@@ -45,6 +45,15 @@ import {
   AiVisionSchema,
   AiVisionFeedbackSchema,
   AiVisionStylesQuerySchema,
+  AlertsWebhookSchema,
+  JsonObjectBodySchema,
+  SoundGenerateSchema,
+  GenerateVoiceSchema,
+  LibrarySearchSchema,
+  McpToolInvokeSchema,
+  VoiceSingSchema,
+  VoiceSongSchema,
+  VoiceTtsSchema,
   AiVideoSchema,
   CloudMusicSchema,
   CloudSampleSchema,
@@ -608,7 +617,11 @@ app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
 //   DISCORD_WEBHOOK, SLACK_WEBHOOK, TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
 // Ohne konfigurierte Webhooks wird 202 ohne Side-Effects geantwortet.
 app.post('/api/alerts/webhook', async (req, res) => {
-  const alerts = Array.isArray((req.body ?? {}).alerts) ? (req.body as any).alerts : [];
+  const parsedAlerts = AlertsWebhookSchema.safeParse(req.body ?? {});
+  if (!parsedAlerts.success) {
+    return res.status(400).json({ error: parsedAlerts.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const alerts = parsedAlerts.data.alerts ?? [];
   const discord = process.env.DISCORD_WEBHOOK?.trim();
   const slack = process.env.SLACK_WEBHOOK?.trim();
   const telegramBot = process.env.TELEGRAM_BOT_TOKEN?.trim();
@@ -1444,8 +1457,13 @@ app.get('/api/ai/mcp/tools', (_req, res) => {
 app.post('/api/ai/mcp/tools/:name', async (req, res) => {
   const name = String(req.params.name).trim().slice(0, 120);
   if (!aiOrchestrator.mcp.hasTool(name)) return res.status(404).json({ error: 'unknown tool' });
-  const result = await aiOrchestrator.mcp.invoke(name, (req.body ?? {}) as Record<string, unknown>);
-  void aiPersistence.auditMcp(name, 'localUser', aiOrchestrator.sessions.get().sessionId, result.ok, String((req.body as { permission?: string } | undefined)?.permission ?? 'READ'));
+  const parsedArgs = McpToolInvokeSchema.safeParse(req.body ?? {});
+  if (!parsedArgs.success) {
+    return res.status(400).json({ error: parsedArgs.error.issues[0]?.message ?? 'invalid arguments' });
+  }
+  const args = parsedArgs.data as Record<string, unknown>;
+  const result = await aiOrchestrator.mcp.invoke(name, args);
+  void aiPersistence.auditMcp(name, 'localUser', aiOrchestrator.sessions.get().sessionId, result.ok, String((args as { permission?: string }).permission ?? 'READ'));
   return res.json(result);
 });
 
@@ -1453,7 +1471,11 @@ app.post('/api/ai/mcp/tools/:name', async (req, res) => {
 // 1) Supabase-Embedding-Pfad: match_samples-RPC (pgvector, Kosinus) – sobald
 //    Supabase konfiguriert ist (Migration 005). 2) Lokaler Keyword-Fallback.
 app.post('/api/library/search', async (req, res) => {
-  const { query, limit } = (req.body ?? {}) as { query?: string; limit?: number };
+  const parsedSearch = LibrarySearchSchema.safeParse(req.body ?? {});
+  if (!parsedSearch.success) {
+    return res.status(400).json({ error: parsedSearch.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { query, limit } = parsedSearch.data;
   const q = String(query ?? '').trim().slice(0, 200);
   if (!q) return res.status(400).json({ error: 'query fehlt' });
   const max = Math.max(1, Math.min(50, Number(limit) || 10));
@@ -1695,11 +1717,20 @@ const getMasterPlayerUrl = () =>
   'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 
 async function proxyMasterPlayer(pathName: string, req: express.Request, res: express.Response) {
+  let forward: Record<string, unknown> = {};
+  if (req.method !== 'GET') {
+    const parsed = JsonObjectBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ status: 'error', message: parsed.error.issues[0]?.message ?? 'invalid payload' });
+      return;
+    }
+    forward = parsed.data as Record<string, unknown>;
+  }
   try {
     const resp = await fetch(getMasterPlayerUrl() + pathName, {
       method: req.method,
       headers: { 'Content-Type': 'application/json' },
-      body: req.method === 'GET' ? undefined : JSON.stringify(req.body ?? {}),
+      body: req.method === 'GET' ? undefined : JSON.stringify(forward),
     });
     const data = await resp.json() as any;
     res.status(resp.status).json(data);
@@ -1943,7 +1974,11 @@ app.post('/api/upload/sample', async (req, res) => {
 
 // --- POST /api/generate-voice  → lokaler Voice-Stub ---
 app.post('/api/generate-voice', async (req, res) => {
-  const { text, voicePreset } = (req.body ?? {}) as { text?: string; voicePreset?: string };
+  const parsedVoice = GenerateVoiceSchema.safeParse(req.body ?? {});
+  if (!parsedVoice.success) {
+    return res.status(400).json({ error: parsedVoice.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { text, voicePreset } = parsedVoice.data;
   // S6350: Eingabe sanitieren, bevor sie als CLI-Argument verwendet wird.
   const query = String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 500);
   const rawPreset = String(voicePreset ?? 'FEMALE_ROBOTIC').trim();
@@ -2300,13 +2335,11 @@ function cleanVoiceText(raw: unknown, max = 500): string {
 
 // --- POST /api/voice/tts  → Text → Stimme (Qwen3-TTS/MMS via eigener Runtime oder HF) ---
 app.post('/api/voice/tts', async (req, res) => {
-  const { text, model, language, speaker, instruct } = (req.body ?? {}) as {
-    text?: string;
-    model?: string;
-    language?: string;
-    speaker?: string;
-    instruct?: string;
-  };
+  const parsedTts = VoiceTtsSchema.safeParse(req.body ?? {});
+  if (!parsedTts.success) {
+    return res.status(400).json({ error: parsedTts.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { text, model, language, speaker, instruct } = parsedTts.data;
   const clean = cleanVoiceText(text);
   if (!clean) return res.status(400).json({ error: 'text fehlt' });
   const selected = hfModelFor('tts', model);
@@ -2344,7 +2377,11 @@ app.post('/api/voice/tts', async (req, res) => {
 
 // --- POST /api/voice/sing  → Text → Gesang (Suno Bark) ---
 app.post('/api/voice/sing', async (req, res) => {
-  const { text, model } = (req.body ?? {}) as { text?: string; model?: string };
+  const parsedSing = VoiceSingSchema.safeParse(req.body ?? {});
+  if (!parsedSing.success) {
+    return res.status(400).json({ error: parsedSing.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { text, model } = parsedSing.data;
   const clean = cleanVoiceText(text);
   if (!clean) return res.status(400).json({ error: 'text fehlt' });
   const selected = hfModelFor('bark', model);
@@ -2378,13 +2415,11 @@ app.post('/api/voice/sing', async (req, res) => {
 
 // --- POST /api/voice/song  → Prompt → Song (MusicGen medium → small) ---
 app.post('/api/voice/song', async (req, res) => {
-  const { prompt, model, durationSeconds, style, bpm } = (req.body ?? {}) as {
-    prompt?: string;
-    model?: string;
-    durationSeconds?: number;
-    style?: string;
-    bpm?: number;
-  };
+  const parsedSong = VoiceSongSchema.safeParse(req.body ?? {});
+  if (!parsedSong.success) {
+    return res.status(400).json({ error: parsedSong.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { prompt, model, durationSeconds, style, bpm } = parsedSong.data;
   const clean = cleanVoiceText(prompt);
   if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
 
@@ -2446,11 +2481,11 @@ const SOUND_DEFAULT_PROMPTS: Record<string, string> = {
 };
 
 app.post('/api/sound/generate', async (req, res) => {
-  const { kind, prompt, durationSeconds } = (req.body ?? {}) as {
-    kind?: string;
-    prompt?: string;
-    durationSeconds?: number;
-  };
+  const parsedSound = SoundGenerateSchema.safeParse(req.body ?? {});
+  if (!parsedSound.success) {
+    return res.status(400).json({ error: parsedSound.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { kind, prompt, durationSeconds } = parsedSound.data;
   const kindClean = String(kind ?? 'beat').replace(/[^a-z]/gi, '').toLowerCase().slice(0, 20);
   const promptClean = cleanVoiceText(prompt, 300);
   const inputs = promptClean || SOUND_DEFAULT_PROMPTS[kindClean] || SOUND_DEFAULT_PROMPTS.beat;
@@ -2492,13 +2527,12 @@ app.post('/api/sound/generate', async (req, res) => {
 // Runtime (MusicGen) → HF-Serverless.
 // ===========================================================================
 app.post('/api/song/generate', async (req, res) => {
-  const { prompt, model, durationSeconds, style, bpm } = (req.body ?? {}) as {
-    prompt?: string;
-    model?: string;
-    durationSeconds?: number;
-    style?: string;
-    bpm?: number;
-  };
+  // Gleiches Feld-Set wie /api/voice/song -> dasselbe Schema (kein Duplikat).
+  const parsedSongGen = VoiceSongSchema.safeParse(req.body ?? {});
+  if (!parsedSongGen.success) {
+    return res.status(400).json({ error: parsedSongGen.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const { prompt, model, durationSeconds, style, bpm } = parsedSongGen.data;
   const clean = cleanVoiceText(prompt);
   if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
 

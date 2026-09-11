@@ -29,7 +29,7 @@
   },
   "rule": "Nur offene Punkte. 100 % Erledigtes ist entfernt (Historie in git).",
   "fundamentals": {
-    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1155 Tests gruen (173 Dateien, test:ci inkl. Skip-Gate) · build/security/boundary gruen · Boundary-Scan 413 Dateien 0 Verstoesse (Stand 2026-09-11)",
+    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1165 Tests gruen (174 Dateien, test:ci inkl. Skip-Gate) · build/security/boundary gruen · Boundary-Scan 414 Dateien 0 Verstoesse (Stand 2026-09-11)",
     "audioLive": "V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
     "aiFleet": "3 Endpoints live (brain=vLLM Qwen3-14B-AWQ, ears, voiceGen) + 4. Rolle `vision` geplant",
     "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
@@ -149,9 +149,10 @@
       "id": "SEC-P1-001",
       "title": "Zod-Validierung auf ALLE externen Payloads ausweiten",
       "priority": "P1",
-      "status": "PARTIAL",
-      "area": "Security",
-      "source": "MASTER_TODO.md"
+      "status": "DONE",
+      "area": "Security / API-Validation",
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11: Zod-Validierung auf die restlichen externen Payloads ausgeweitet (vorher 12 Schreib-Routen ohne safeParse). NEU validiert: /api/generate-voice, /api/voice/tts, /api/voice/sing, /api/voice/song, /api/song/generate (teilt sich das Schema mit voice/song), /api/sound/generate, /api/library/search, /api/ai/mcp/tools/:name (Huelle: Objekt, Schluessel <=64, <=20 kB), /api/alerts/webhook (Alertmanager-Form, max 100 Alerts) und die drei Proxy-Routen /api/master/mix|master|analyze (JsonObjectBodySchema, 256 kB - der master-player validiert selbst nicht). Dabei wurde der letzte `req.body as any` entfernt. Bewusst NICHT verschaerft: Typen+Obergrenzen werden geprueft, die fachlichen Kuerzungen der Routen bleiben (cleanVoiceText kuerzt weiter auf 500 Zeichen -> das Schema laesst 4000 zu, weist erst absurde Groessen ab). VOLLSTAENDIGKEITS-AUDIT (alle 34 Schreib-Routen): validiert = 22; ohne Body (_req) = /api/cloud/sync, /api/ai/session/heartbeat, /api/ai/session/shutdown, /api/ai/fleet/wake, /api/ai/fleet/sleep; kein Body gelesen = /api/separate-stems; multipart mit Streaming-Limit + UPLOAD_KINDS-Whitelist = /api/upload/sample. BELEGE: npx tsc --noEmit 0 Fehler; eslint --max-warnings=0 0 Findings; 10 neue Tests in tests/payloadValidation.test.ts; vitest 1165/1165 ohne Skips; LIVE geprueft: library/search mit falschem Typ -> 400 \"expected string, received object\" (gueltig weiterhin 200 mit Treffern), voice/tts mit Zahl -> 400, alerts/webhook falscher Typ -> 400 (gueltig weiterhin 202), master/mix mit 300 kB -> 400 \"Payload zu gross (max 256 kB)\"."
     },
     {
       "id": "HW-P1-001",

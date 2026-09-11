@@ -223,6 +223,98 @@ export const AiVisionStylesQuerySchema = z.object({
   limit: z.coerce.number().finite().int().min(1).max(50).optional(),
 });
 
+// ---------------------------------------------------------------------------
+// SEC-P1-001: Validierung der restlichen externen Payloads.
+// Grundsatz hier: **Typen und Obergrenzen** prüfen, aber die fachlichen
+// Kürzungen/Meldungen der Routen unangetastet lassen. So wird Typ-Verwirrung
+// (`text: {...}`) und absurd große Eingabe abgewiesen, ohne dass sich das
+// Verhalten für gültige Clients ändert (z. B. kürzt `cleanVoiceText` weiter
+// selbst auf 500 Zeichen — das Schema lässt bewusst mehr zu).
+// ---------------------------------------------------------------------------
+
+/** POST /api/generate-voice – lokaler Voice-Stub. */
+export const GenerateVoiceSchema = z.object({
+  text: z.string().max(4000).optional(),
+  voicePreset: z.string().trim().regex(/^[A-Za-z0-9_-]{1,32}$/).optional(),
+});
+
+/** POST /api/voice/tts – Text zu Stimme. */
+export const VoiceTtsSchema = z.object({
+  text: z.string().max(4000).optional(),
+  model: z.string().trim().max(200).optional(),
+  language: z.string().trim().max(40).optional(),
+  speaker: z.string().trim().max(200).optional(),
+  instruct: z.string().trim().max(2000).optional(),
+});
+
+/** POST /api/voice/sing – Text zu Gesang. */
+export const VoiceSingSchema = z.object({
+  text: z.string().max(4000).optional(),
+  model: z.string().trim().max(200).optional(),
+});
+
+/** POST /api/voice/song – Prompt zu Song (Dauer klemmt die Route selbst auf 1..30 s). */
+export const VoiceSongSchema = z.object({
+  prompt: z.string().max(4000).optional(),
+  model: z.string().trim().max(200).optional(),
+  durationSeconds: z.coerce.number().finite().min(1).max(300).optional(),
+  style: z.string().trim().max(200).optional(),
+  bpm: z.coerce.number().finite().min(20).max(400).optional(),
+});
+
+/** POST /api/library/search – semantische Bibliotheks-Suche. */
+export const LibrarySearchSchema = z.object({
+  query: z.string().trim().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(50).optional(),
+});
+
+/**
+ * POST /api/ai/mcp/tools/:name – Argumente eines MCP-Tools.
+ * Die Tools haben eigene Argument-Schemata, deshalb hier bewusst nur die
+ * **Hülle**: Objekt mit begrenzten Schlüsseln und begrenzter Gesamtgröße.
+ */
+export const McpToolInvokeSchema = z
+  .record(z.string().trim().min(1).max(64), z.unknown())
+  .refine((v) => JSON.stringify(v ?? {}).length <= 20_000, { message: 'Argumente zu gross (max 20 kB)' });
+
+/** POST /api/alerts/webhook – Alertmanager-Webhook (Discord/Slack/Telegram). */
+export const AlertsWebhookSchema = z.object({
+  alerts: z
+    .array(
+      z.object({
+        status: z.string().trim().max(20).optional(),
+        labels: z.record(z.string().max(100), z.string().max(500)).optional(),
+        annotations: z.record(z.string().max(100), z.string().max(2000)).optional(),
+        startsAt: z.string().trim().max(40).optional(),
+        endsAt: z.string().trim().max(40).optional(),
+      }),
+    )
+    .max(100)
+    .optional(),
+});
+
+/** POST /api/sound/generate – Einzel-Sound (Kick, Snare, Atmos …). */
+export const SoundGenerateSchema = z.object({
+  kind: z.string().trim().max(40).optional(),
+  prompt: z.string().max(4000).optional(),
+  durationSeconds: z.coerce.number().finite().min(1).max(300).optional(),
+});
+
+/**
+ * Weiterleitungs-Routen (`/api/master/*`): Der Body geht unverändert an den
+ * master-player-Service. Dort gibt es (Stand 2026-09-11) keine Validierung,
+ * deshalb wird hier wenigstens die Hülle begrenzt: Objekt mit kurzen Schlüsseln
+ * und gedeckelter Gesamtgröße.
+ */
+export function boundedJsonObjectSchema(maxBytes: number, message: string) {
+  return z
+    .record(z.string().trim().min(1).max(64), z.unknown())
+    .refine((v) => JSON.stringify(v ?? {}).length <= maxBytes, { message });
+}
+
+/** Gedeckelter JSON-Objekt-Body für Proxy-Routen (256 kB). */
+export const JsonObjectBodySchema = boundedJsonObjectSchema(262_144, 'Payload zu gross (max 256 kB)');
+
 export const AiOrchestrateSchema = z.object({
   userId: z.string().trim().max(64).optional(),
   task: z.string().trim().min(1).max(64),
