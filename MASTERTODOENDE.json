@@ -200,10 +200,10 @@
       "id": "VISUAL-P1-002",
       "title": "Vision-Endpoint: FLUX.1-dev (Text/Audio -> Bild) + R2-Ablage + DB-Eintrag",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "Ersatz-Worker gewaehlt (PrunaAI/runpod-worker-FLUX.1-dev 1.0.3, AMPERE_48); worker-sdxl-turbo v1.1.1 war kaputt. Kaltstart 15-25 min."
+      "note": "LIVE 2026-09-11: Endpoint samplemonk-ai-vision (4gts9y4zph7ik9) auf PrunaAI/runpod-worker-FLUX.1-dev (v1.0.3, AMPERE_48). Echtes Bild erzeugt: Kaltstart 40 s, 25 Steps in 25,7 s, 1,26 MB PNG (logs/vision-20260911-075608.png), Prompt-Treue hoch. OFFEN: Audio->Prompt (ears/CLAP), R2-Ablage, DB-Eintrag, benanntes Template statt Hub-Inline (VISUAL-P1-006)."
     },
     {
       "id": "VISUAL-P1-003",
@@ -550,5 +550,16 @@
     "Docker: lokale Prozesse ohne docker-Gruppe -> deploy.sh via 'sg docker'",
     "mediasoup-postinstall: python3 + python3-pip + make/g++ im Builder ergaenzt",
     "3,4 GB Dev-Daten (public/data/orchestral gitignored, public/music) aus .dockerignore + allen rsyncs ausgeschlossen"
-  ]
+  ],
+  "visionLive": {
+    "endpointName": "samplemonk-ai-vision",
+    "endpointId": "4gts9y4zph7ik9",
+    "templateId": "axj3mbdh9c",
+    "worker": "PrunaAI/runpod-worker-FLUX.1-dev 1.0.3",
+    "gpuPool": "AMPERE_48",
+    "model": "FLUX.1-dev",
+    "measured": "Kaltstart 40 s (Queue/Image), 25 Steps = 25,7 s, 1024x1024, 1,26 MB PNG",
+    "cost": "A6000 ~0,49 USD/h nur bei Generierung; workers 0..1, idle 900 s -> 0 USD idle",
+    "test": "scripts/runpod-vision-test.py --endpoint 4gts9y4zph7ik9"
+  }
 }
