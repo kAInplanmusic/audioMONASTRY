@@ -263,14 +263,15 @@ Gate auf WebGPU-fähiger Maschine).
 - AWQ-/Stil-LoRA-Qualität: Stile sind Geschmack; Lizenz je Modell/LoRA prüfen
   (einige NC-Gewichte → privat).
 - Ghost-User braucht **stabile Netze/Reconnect** (Beamer im Club-WLAN).
-- **R2-Keys sind ungültig (2026-09-11 live gemessen):** jeder S3-Aufruf antwortet
-  mit `SignatureDoesNotMatch` (Endpoint/Account/Bucket sind korrekt, das
-  Schlüsselpaar ist es nicht). Deshalb liegt jedes Bild/jeder Clip/jede Show
-  **lokal** (`VISION_ARTIFACT_DIR`, Default `$TMPDIR/audiomonastry-vision`) und
-  wird über `/api/ai/vision/artifact/<name>` ausgeliefert — token-frei wie
-  `/api/health`, Name streng validiert (keine Pfadanteile, feste Endungen).
-  Nach einem R2-Fehler wird R2 10 Minuten nicht erneut versucht (sonst 1–2 s
-  Wartezeit je Ablage). **Betreiber-Aufgabe:** neue R2-S3-Keys setzen; danach
-  geht alles automatisch wieder nach R2 (`store: "r2"` in der Antwort).
-  Hinweis: die lokale Ablage ist ein Temp-Verzeichnis — für Dauerbetrieb
-  `VISION_ARTIFACT_DIR` auf ein persistentes Volume legen.
+- **R2-Keys sind seit 2026-09-11 wieder gültig** (Key-Rotation durch den Betreiber;
+  live verifiziert: `HeadBucket`, `ListObjectsV2`, `PutObject`, `HeadObject`,
+  `DeleteObject` gegen `CFR2_BUCKET` — Testobjekt danach gelöscht). Vorher antwortete
+  jeder S3-Aufruf mit `SignatureDoesNotMatch`; in dieser Zeit lag jedes Bild/jeder
+  Clip/jede Show **lokal** (`VISION_ARTIFACT_DIR`, Default
+  `$TMPDIR/audiomonastry-vision`) und wurde über `/api/ai/vision/artifact/<name>`
+  ausgeliefert — token-frei wie `/api/health`, Name streng validiert (keine
+  Pfadanteile, feste Endungen). Dieser lokale Fallback bleibt als Schutz bestehen
+  (R2 zuerst, sonst lokal; `store: "r2" | "local"` sagt es ehrlich), ebenso die
+  10-Minuten-Sperre nach einem R2-Fehler. Für Dauerbetrieb `VISION_ARTIFACT_DIR`
+  auf ein persistentes Volume legen. Offen bleibt der Supabase-anon-Key (401) —
+  siehe `ENV-005` in `MASTERTODOENDE.json`.

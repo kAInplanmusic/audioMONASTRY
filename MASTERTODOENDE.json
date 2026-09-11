@@ -585,11 +585,29 @@
     {
       "id": "ENV-004",
       "title": "R2-S3-Keys ungueltig (SignatureDoesNotMatch) - Vision-Medien liegen lokal",
-      "priority": "BLOCKED",
-      "status": "BLOCKED",
+      "priority": "P1",
+      "status": "DONE",
       "area": "Betreiber",
       "source": "docs/VISUALMONK_SPEC.md#9",
-      "blockedReason": "Live gemessen 2026-09-11: PutObject gegen den R2-Bucket antwortet mit SignatureDoesNotMatch (Endpoint/Account/Bucket sind korrekt, das Schluesselpaar ist es nicht; Zugriff 32 hex, Secret 64 hex, Form stimmt). Deshalb speichert der Server Bilder/Clips/Shows lokal unter VISION_ARTIFACT_DIR (Default $TMPDIR) und liefert sie ueber /api/ai/vision/artifact/<name>. Kein Funktionsverlust, aber die Ablage ist fluechtig und nicht CDN-faehig. Betreiber: neue R2-S3-Token in Cloudflare anlegen (R2 -> API-Token -> S3-Zugriff), CFR2_ACCESS_KEY_ID/SECRET/BUCKET setzen, danach optional VISION_ARTIFACT_DIR auf ein persistentes Volume legen."
+      "note": "DONE 2026-09-11 (Key-Rotation): neue Cloudflare-R2-S3-Zugangsdaten in .env gesetzt (CFR2_ACCOUNT_ID/CFR2_ACCESS_KEY_ID/CFR2_SECRET_ACCESS_KEY/CFR2_URL, dazu CFR2_API_TOKEN und die Aliasse CF_*/CLOUDFLARE_*) und LIVE verifiziert: HeadBucket OK, ListObjectsV2 OK, PutObject/HeadObject/DeleteObject OK gegen CFR2_BUCKET (Testobjekt health/audiomonastry-key-rotation-check.txt danach geloescht). Das zuvor gemessene SignatureDoesNotMatch ist damit weg; die Vision-Ablage nutzt wieder R2 (store: r2), der lokale Fallback bleibt als Schutz bestehen. Rotation zusaetzlich in .env.TEMPLATE/.env.deploy/.env.portal nachgezogen (alle drei geprueft: identisch zu .env); die git-getrackte Vorlage .env.hetzner.example enthaelt nur Platzhalter (keine Secrets im Repo). Offene Restpunkte aus der Messung: ENV-005 (Supabase anon/publishable 401) und ENV-006 (Cloudflare cfat_-Token 401)."
+    },
+    {
+      "id": "ENV-005",
+      "title": "Supabase anon/publishable-Key ungueltig (HTTP 401)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Betreiber",
+      "source": "ENV-004 / Key-Rotation 2026-09-11",
+      "note": "Live gemessen 2026-09-11: SUPABASE_SERVICE_ROLE antwortet gegen {SUPABASE_URL}/rest/v1/ mit HTTP 200 (Serverpfad ok), SUPABASE_ANON_PUB mit HTTP 401. Betroffen sind damit Client-Login/Realtime mit dem oeffentlichen Key; VITE_SUPABASE_ANON_PUB hat denselben Wert und wird beim Build ins Frontend gebacken. Betreiber: in Supabase unter Project Settings -> API den anon/publishable-Key neu erzeugen und SUPABASE_ANON_PUB + VITE_SUPABASE_ANON_PUB + SUPABASE_PUBLISHABLE setzen (Teil 2 der Rotation)."
+    },
+    {
+      "id": "ENV-006",
+      "title": "Cloudflare CF_ACCOUNT_TOKEN (cfat_) antwortet HTTP 401",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Betreiber",
+      "source": "ENV-004 / Key-Rotation 2026-09-11",
+      "note": "Live gemessen 2026-09-11: CF_ACCOUNT_TOKEN (cfat_...) liefert gegen https://api.cloudflare.com/client/v4/user/tokens/verify HTTP 401 (fuer diesen Endpoint kein gueltiges/aktives Token). Der API-Token cfut_ (CF_API_TOKEN/CLOUDFLARE_API_TOKEN/CFR2_API_TOKEN) ist aktiv (HTTP 200), die R2-S3-Keys funktionieren. Betreiber: cfat_-Token pruefen/neu ausstellen oder aus .env entfernen, falls ungenutzt."
     }
   ],
   "humanVerification": [
