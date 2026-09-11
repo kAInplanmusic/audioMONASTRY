@@ -53,6 +53,22 @@
 		-X-Powered-By
 	}
 
+	# CORS fuer das SFU-Signaling (App-/Test-Origin -> sfu-1). Origin wird
+	# reflektiert, weil mit Credentials gearbeitet wird (`*` waere ungueltig).
+	@sfuSignal path /sfu-signaling/* /socket.io/*
+	header @sfuSignal {
+		Access-Control-Allow-Origin "{http.request.header.Origin}"
+		Vary Origin
+		Access-Control-Allow-Methods "GET, POST, OPTIONS"
+		Access-Control-Allow-Headers "*"
+		Access-Control-Allow-Credentials "true"
+	}
+	@sfuPreflight {
+		method OPTIONS
+		path /sfu-signaling/* /socket.io/*
+	}
+	respond @sfuPreflight 204
+
 	# Gebaute Assets sind content-hashed (Vite) -> lange immutable cachen
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 	# AudioWorklets: stabil, aber nicht versioniert -> 1 Tag
