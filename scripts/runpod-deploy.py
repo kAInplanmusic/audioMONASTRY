@@ -49,6 +49,9 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     "brain": {"suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
     "ears": {"suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
     "voiceGen": {"suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
+    # 4. Rolle (2026-09-11): generative Bilder (FLUX.1-dev) - eigener Hub-Worker,
+    # NICHT unser Audio-Image.
+    "vision": {"suffix": "vision", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
 }
 
 DOCKER_START_CMD = "python runpod_worker.py"
@@ -99,6 +102,21 @@ def build_env_vars_vllm() -> Dict[str, str]:
         "MAX_MODEL_LEN": env("RUNPOD_BRAIN_VLLM_MAX_MODEL_LEN", "16384"),
         "GPU_MEMORY_UTILIZATION": env("RUNPOD_BRAIN_VLLM_GPU_MEMORY_UTILIZATION", "0.90"),
     }
+    if env("HF_TOKEN"):
+        env_vars["HF_TOKEN"] = env("HF_TOKEN")
+    return env_vars
+
+
+#: Rolle `vision` = vorgefertigter FLUX.1-dev-Worker (PrunaAI), AMPERE_48.
+#: Der Worker laedt FLUX.1-dev selbst; optional anderes Modell ueber HF_MODEL.
+VISION_IMAGE_DEFAULT = "registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201"
+
+
+def build_env_vars_vision() -> Dict[str, str]:
+    """Container-Env des FLUX-Workers (Rolle vision)."""
+    env_vars: Dict[str, str] = {}
+    if env("RUNPOD_VISION_MODEL"):
+        env_vars["HF_MODEL"] = env("RUNPOD_VISION_MODEL")
     if env("HF_TOKEN"):
         env_vars["HF_TOKEN"] = env("HF_TOKEN")
     return env_vars
@@ -203,8 +221,9 @@ def deploy_role(role: str, image: str) -> Optional[str]:
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX") or defaults.get("workersMax", 1))
     idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT", "20"))
-    # Brain (vLLM) braucht mehr Plattenplatz (Image + ~10 GB AWQ-Gewichte).
-    default_disk = "150" if role == "brain" else "30"
+    # Brain (vLLM) braucht mehr Plattenplatz (Image + ~10 GB AWQ-Gewichte);
+    # vision (FLUX) braucht 80 GB (Image + Gewichte).
+    default_disk = "150" if role == "brain" else "80" if role == "vision" else "30"
     container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB", default_disk))
     template_name = f"{endpoint_name}-template"
 
@@ -217,6 +236,14 @@ def deploy_role(role: str, image: str) -> Optional[str]:
         registry_auth_id = None
         docker_args = ""  # Image bringt seinen eigenen Entrypoint mit
         print(f"[deploy] {endpoint_name}: vLLM-Worker ({env_vars['MODEL_NAME']}, {env_vars['QUANTIZATION']})")
+    elif role == "vision":
+        # Rolle vision = vorgefertigter FLUX.1-dev-Worker (nicht unser Audio-Image).
+        image = env("RUNPOD_VISION_IMAGE", VISION_IMAGE_DEFAULT)
+        env_vars = build_env_vars_vision()
+        template_name = "samplemonk-ai-vision-template"
+        registry_auth_id = None
+        docker_args = ""
+        print(f"[deploy] {endpoint_name}: FLUX-Worker (Rolle vision)")
     else:
         registry_auth_id = ensure_registry_auth(endpoint_name)
         env_vars = build_env_vars(role)
@@ -310,7 +337,7 @@ def main() -> int:
 
     # IMAGE nur nötig, wenn mindestens eine Rolle unser eigenes Image nutzt –
     # der vLLM-Brain bringt sein eigenes mit.
-    needs_own_image = any(not (r == "brain" and brain_vllm_enabled()) for r in roles)
+    needs_own_image = any(not ((r == "brain" and brain_vllm_enabled()) or r == "vision") for r in roles)
     if needs_own_image and not image:
         print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)", file=sys.stderr)
         return 2

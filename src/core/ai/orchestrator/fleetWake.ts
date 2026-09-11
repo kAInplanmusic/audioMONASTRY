@@ -45,6 +45,8 @@ export interface FleetReport {
   durationMs: number;
   ok: boolean;
   roles: FleetRoleStatus[];
+  /** Rolle `vision` (FLUX) – kennt keinen `warmup`-Task, wird nur per workersMin geweckt. */
+  vision?: { endpointId: string; workersMinSet: boolean } | null;
 }
 
 function env(name: string): string {
@@ -130,6 +132,33 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
   }
 }
 
+/** Best effort: beliebigen Endpoint per REST auf `workersMin` setzen (z. B. Rolle vision). */
+async function setEndpointWorkersMin(endpointId: string, workersMin: number, signal?: AbortSignal): Promise<boolean> {
+  if (!endpointId || !apiKey()) return false;
+  try {
+    const resp = await fetch(`${restBase()}/endpoints/${encodeURIComponent(endpointId)}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workersMin }),
+      signal: signal ?? AbortSignal.timeout(15_000),
+    });
+    return resp.ok;
+  } catch (error) {
+    aiLogger.warn('vision workersMin update failed', { workersMin, error: (error as Error).message });
+    return false;
+  }
+}
+
+/**
+ * Rolle `vision` (FLUX-Worker) wecken/schlafen: sie kennt keinen `warmup`-Task,
+ * Wecken ist hier `workersMin=1` (der Worker zieht Image + Gewichte).
+ */
+async function toggleVision(workersMin: number, signal?: AbortSignal): Promise<{ endpointId: string; workersMinSet: boolean } | null> {
+  const endpointId = env('RUNPOD_ENDPOINT_ID_VISION');
+  if (!endpointId) return null;
+  return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
+}
+
 let inflightWake: Promise<FleetReport> | null = null;
 
 /**
@@ -184,7 +213,8 @@ async function doWake(signal?: AbortSignal): Promise<FleetReport> {
   );
 
   const ok = roles.every((r) => !r.configured || r.warmup?.ok === true);
-  const report: FleetReport = { action: 'wake', startedAt, durationMs: Date.now() - startedAt, ok, roles };
+  const vision = await toggleVision(1, signal);
+  const report: FleetReport = { action: 'wake', startedAt, durationMs: Date.now() - startedAt, ok, roles, vision };
   aiLogger.info('fleet wake finished', {
     ok,
     durationMs: report.durationMs,
@@ -233,12 +263,14 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
   );
 
   const up = roles.filter((r) => r.configured && !r.workersMinSet);
+  const vision = await toggleVision(0, signal);
   const report: FleetReport = {
     action: 'sleep',
     startedAt,
     durationMs: Date.now() - startedAt,
     ok: up.length === 0,
     roles,
+    vision,
   };
   aiLogger.info('fleet sleep finished', {
     ok: report.ok,

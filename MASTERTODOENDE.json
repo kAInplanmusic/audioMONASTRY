@@ -233,9 +233,10 @@
       "id": "VISUAL-P1-006",
       "title": "vision-Rolle als benanntes Template/Registry festigen (nicht nur Hub-Inline-Template)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#8"
+      "source": "docs/VISUALMONK_SPEC.md#8",
+      "note": "ERLEDIGT 2026-09-11: benanntes Template `samplemonk-ai-vision-template` (7xzd1v17dx, registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201) angelegt; Endpoint 4gts9y4zph7ik9 per REST-PATCH umgehaengt (SDK-Rebind wird abgelehnt: 'endpoint has a bound template'). `scripts/runpod-deploy.py` kennt die Rolle vision (RUNPOD_ROLE=vision, Teil des Voll-Deploys); `fleetWake` weckt/schlaefert vision per workersMin=1/0 (kein warmup-Task) + 2 Tests. Warm verifiziert: delay 90 ms, exec 2,5 s, Bild ok."
     },
     {
       "id": "QUAL-P2-001",
@@ -554,7 +555,7 @@
   "visionLive": {
     "endpointName": "samplemonk-ai-vision",
     "endpointId": "4gts9y4zph7ik9",
-    "templateId": "axj3mbdh9c",
+    "templateId": "7xzd1v17dx",
     "worker": "PrunaAI/runpod-worker-FLUX.1-dev 1.0.3",
     "gpuPool": "AMPERE_48",
     "model": "FLUX.1-dev",
@@ -562,7 +563,10 @@
     "cost": "A6000 ~0,49 USD/h nur bei Generierung; workers 0..1, idle 900 s -> 0 USD idle",
     "test": "scripts/runpod-vision-test.py --endpoint 4gts9y4zph7ik9",
     "appRoute": "POST /api/ai/vision (X-Studio-Token) -> {status:success, image:data-uri, seed, durationMs}",
-    "appRouteMeasured": "HTTP 200, durationMs 26738, seed 36757, 1,28 MB PNG (logs/vision-route-20260911.png)"
+    "appRouteMeasured": "HTTP 200, durationMs 26738, seed 36757, 1,28 MB PNG (logs/vision-route-20260911.png)",
+    "templateName": "samplemonk-ai-vision-template",
+    "deploy": "RUNPOD_ROLE=vision python scripts/runpod-deploy.py",
+    "wake": "fleetWake PATCH workersMin=1 (kein warmup-Task)"
   },
   "liveState2026_09_11": {
     "app": "https://anunnakitools.de (200, /api/health ok) - app-1 159.69.102.29 (Floating IP)",

@@ -15,6 +15,7 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE',
+  'RUNPOD_ENDPOINT_ID_VISION',
   'AI_FLEET_WAKE',
   'AI_FLEET_SLEEP',
 ] as const;
@@ -165,5 +166,31 @@ describe('GPU-Flotten Session-Wake', () => {
       'samplemonk-ai-voice',
     ]);
     expect(calls).toHaveLength(0);
+  });
+
+  it('weckt die Rolle vision per workersMin (kein warmup-Task)', async () => {
+    configureFleet();
+    process.env.RUNPOD_ENDPOINT_ID_VISION = 'vision-ep';
+    mockFetch();
+
+    const report = await wakeFleet();
+
+    expect(report.vision).toEqual({ endpointId: 'vision-ep', workersMinSet: true });
+    const visionPatch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/vision-ep');
+    expect(visionPatch?.method).toBe('PATCH');
+    expect((visionPatch?.body as { workersMin: number }).workersMin).toBe(1);
+    // Vision bekommt KEINEN warmup-Job.
+    expect(calls.some((c) => c.url.includes('/v2/vision-ep/run'))).toBe(false);
+  });
+
+  it('schläfert die Rolle vision mit workersMin=0', async () => {
+    configureFleet();
+    process.env.RUNPOD_ENDPOINT_ID_VISION = 'vision-ep';
+    mockFetch();
+
+    const report = await sleepFleet();
+    expect(report.vision?.workersMinSet).toBe(true);
+    const visionPatch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/vision-ep');
+    expect((visionPatch?.body as { workersMin: number }).workersMin).toBe(0);
   });
 });
