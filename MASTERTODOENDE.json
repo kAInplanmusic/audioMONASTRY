@@ -203,7 +203,7 @@
       "status": "PARTIAL",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "LIVE 2026-09-11: Endpoint samplemonk-ai-vision (4gts9y4zph7ik9) auf PrunaAI/runpod-worker-FLUX.1-dev (v1.0.3, AMPERE_48). Echtes Bild erzeugt: Kaltstart 40 s, 25 Steps in 25,7 s, 1,26 MB PNG (logs/vision-20260911-075608.png), Prompt-Treue hoch. OFFEN: Audio->Prompt (ears/CLAP), R2-Ablage, DB-Eintrag, benanntes Template statt Hub-Inline (VISUAL-P1-006)."
+      "note": "DONE 2026-09-11 (App-Integration): visionPrompt.ts (12 Stile, BPM/Energie/Mood), runpodVision.ts (RunPod-FLUX: /runsync + Polling, Bild-Extraktion, typisierte Fehler), AiVisionSchema + POST /api/ai/vision (Auth/Rate-Limit), UI im VisualMonkOverlay (Prompt + Stil + 'BILD ERZEUGEN' + Bildanzeige). LIVE: 200, 26,7 s, seed 36757, 1,28 MB PNG. OFFEN: Audio->Prompt (Energie/BPM aus dem Feature-Bus automatisch), R2-Ablage + DB-Eintrag, vision-Rolle in Registry/Deploy-Skript (VISUAL-P1-006)."
     },
     {
       "id": "VISUAL-P1-003",
@@ -560,7 +560,9 @@
     "model": "FLUX.1-dev",
     "measured": "Kaltstart 40 s (Queue/Image), 25 Steps = 25,7 s, 1024x1024, 1,26 MB PNG",
     "cost": "A6000 ~0,49 USD/h nur bei Generierung; workers 0..1, idle 900 s -> 0 USD idle",
-    "test": "scripts/runpod-vision-test.py --endpoint 4gts9y4zph7ik9"
+    "test": "scripts/runpod-vision-test.py --endpoint 4gts9y4zph7ik9",
+    "appRoute": "POST /api/ai/vision (X-Studio-Token) -> {status:success, image:data-uri, seed, durationMs}",
+    "appRouteMeasured": "HTTP 200, durationMs 26738, seed 36757, 1,28 MB PNG (logs/vision-route-20260911.png)"
   },
   "liveState2026_09_11": {
     "app": "https://anunnakitools.de (200, /api/health ok) - app-1 159.69.102.29 (Floating IP)",
@@ -574,5 +576,12 @@
     "runpodVision": "4gts9y4zph7ik9 (FLUX.1-dev; echtes Bild verifiziert)",
     "snapshots": "5x -2026-09-11-live (25,47 GB, ~0,30 EUR/Monat)",
     "costModel": "stuendlich: laufende Stunde zaehlt, gestoppt/geloescht = 0 EUR"
+  },
+  "fleetState2026_09_11": {
+    "state": "GELOESCHT (Kostenstopp) - 0 Server, 0 Floating-IPs",
+    "reason": "Betreiber hat Kunden, kein Live-Test jetzt; Kosten laufen stuendlich.",
+    "snapshotsKept": "5x -2026-09-11-live (25,47 GB, ~0,30 EUR/Monat)",
+    "restore": "bash scripts/hetzner/bring-up-fleet.sh --yes (neue Floating-IP -> dns_setup.py)",
+    "verifiedBeforeDelete": "app https://anunnakitools.de 200 + /api/health ok; SFU-RTP bytes=4653 packets=93"
   }
 }
