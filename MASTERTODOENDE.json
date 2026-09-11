@@ -227,11 +227,12 @@
     },
     {
       "id": "VISUAL-P1-005",
-      "title": "WebGL/WGSL-Renderer als Upgrade (Canvas2D laeuft)",
+      "title": "WebGL-Renderer als Upgrade (umgesetzt, umschaltbar; Canvas2D bleibt Referenz)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#8"
+      "source": "docs/VISUALMONK_SPEC.md#8",
+      "note": "DONE 2026-09-11: src/core/visual/webglRenderer.ts - GLSL-ES-1.00-Fragment-Shader (fraktales Feld mit 3 Oktaven aus Sinus-Hash-Noise, Radialspiegelung ueber u_symmetry, Palette-Mischung aus bis zu 6 Preset-Farben, Hue-Rotation, Kontrast/Helligkeit, Glow, Vignette) + Feature-Erkennung (webgl2 -> webgl -> null) + saubere Fehlerbehandlung (Shader-/Link-Fehler werden geloggt, Aufrufer faellt auf Canvas2D zurueck). Reine Teile (buildFragmentShader, packUniforms) sind ohne GPU getestet; ein Canvas kann nur EINEN Kontexttyp haben, deshalb ist der Renderer im Overlay umschaltbar (Button CANVAS2D/WEBGL, data-renderer-Attribut, window.__visualRenderer) und waehrend einer Show gesperrt - Show-Szenen brauchen den 2D-Pfad (drawImage). BELEGE: 6 Tests in tests/webglRenderer.test.ts (Uniform-Deklarationen, GLSL-ES-1.00 statt 300 es, Winkel in Radiant, Paletten-Auffuellung, Klemmung, NaN-Sicherheit inkl. gefundenem Resolution-Bug, 6-Farben-Limit); Browser-Gate scripts/visual-monk-gate.cjs erweitert und GRUEN: Canvas2D nonUniform mit 44 Farben, WebGL2 mit gebundenem Programm, glError 0, kein Kontextverlust, Zeichenpuffer 1440x720, PNG 81 KB/52 KB. OFFEN (neu VISUAL-P1-008): Medien/Clips im GL-Pfad (Textur statt drawImage) und WGSL/WebGPU. Doku: docs/VISUALMONK_SPEC.md §8c."
     },
     {
       "id": "VISUAL-P1-006",
@@ -306,11 +307,12 @@
     },
     {
       "id": "FEAT-P3-001",
-      "title": "Optionale Synthese-/DSP-Bausteine (E-Piano, Phase-Distortion, Mod-Matrix, HQ-Reverb)",
+      "title": "Optionale Synthese-/DSP-Bausteine (E-Piano, Phase-Distortion, Mod-Matrix, HQ-Reverb) als getestete Kerne",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Backlog",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11 als getestete KERNE (bewusst nicht verdrahtet): src/core/dsp/modMatrix.ts (Routing mit Tiefe/Polaritaet, Summe je Ziel, uebersprungene Routen werden GEMELDET statt still Null zu addieren), src/core/dsp/phaseDistortion.ts (Casio-CZ-Phasenverzerrung + Oberwellen-Mass highFrequencyEnergy), src/core/dsp/electricPiano.ts (FM-Stimme mit Glockenanschlag -> Sustain, Huelle/Detune, Dauer- und Pegelgrenzen), src/core/dsp/hqReverb.ts (4-Leitungs-FDN mit Hadamard-Mischung, Ein-Pol-Daempfung, RT60-basiertem Feedback, reset). BELEGE: 17 Tests in tests/optionalDspBlocks.test.ts, die die WIRKUNG pruefen (Oberwellen > 2x bei amount 0,9; Huellkurve faellt ueber drei Fenster; mix=0 ist das trockene Signal; Impulsantwort klingt ab; RT60 30 s bleibt bei 400 Bloecken stabil; reset hinterlaesst keinen Resthall; NaN/Unsinn wird geklemmt). Ein Delay-Line-Detail (Lese-/Schreibreihenfolge) wurde dabei korrigiert. NICHT gemacht (neu FEAT-P3-002): Verdrahtung in V2-Graph/Plugin-UI/Parameter-Persistenz. Doku: docs/DSP_OPTIONAL_BLOCKS_2026.md."
     },
     {
       "id": "INFRA-P1-001",
@@ -383,6 +385,24 @@
       "area": "Qualitaet / Struktur",
       "source": "docs/QUALITY_TOOLING_2026.md#4",
       "note": "Nach QUAL-P2-003 offen: 68 Deklarationen, die sogar innerhalb ihrer Datei ungenutzt sind (Loeschkandidaten), und ~187 Exporte/Typen, die nur deshalb gemeldet werden, weil sie von bewusst behaltenen, nicht angebundenen Dateien (V1-Barrel, Worker/Spatial/Native-Infrastruktur, B2BModal/ModuleContainer/RoomPlannerPanel/SampleMonkLogo/MasterTrackTerminal, EdgeDspClient/FailoverController, HardwareSimulator, State-Replikation, TransportRegistry, webgpu_adapter, firebase/db) importiert werden. Jede dieser Dateien braucht die Entscheidung \"anbinden (mit Test + UI-Pfad) oder loeschen\" - das ist Produkt-/Architekturentscheidung, kein Skript. Messung: npm run check:deadcode."
+    },
+    {
+      "id": "VISUAL-P1-008",
+      "title": "Medien/Clips im WebGL-Pfad + WGSL/WebGPU-Ausbau",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8c",
+      "note": "Offen nach VISUAL-P1-005: Show-Szenen (Bilder/Clips) im GL-Pfad zeichnen (texImage2D statt drawImage), damit der Renderer-Wechsel auch mit laufender Show moeglich ist; danach WGSL/WebGPU als weiterer Schritt. Heute ist der Umschalter waehrend einer Show bewusst gesperrt."
+    },
+    {
+      "id": "FEAT-P3-002",
+      "title": "DSP-Bausteine in V2-Graph/Plugin-UI verdrahten (E-Piano, Phase-Distortion, Mod-Matrix, HQ-Reverb)",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Audio Runtime / UI",
+      "source": "docs/DSP_OPTIONAL_BLOCKS_2026.md",
+      "note": "Die vier Bausteine aus FEAT-P3-001 existieren als getestete Kerne, sind aber NICHT angebunden. Offen: Zuordnung zu den 16 MONKs, Parametrisierung/Persistenz (Preset-Schema), UI-Pfad und Nachweis am hoerbaren V2-Pfad (Worklet-Level- oder headed Gate). Ohne diese Entscheidung bleibt es bei Bibliothek statt Feature - deshalb eigener Punkt statt stilles \"fertig\"."
     }
   ],
   "visionSandbox": [

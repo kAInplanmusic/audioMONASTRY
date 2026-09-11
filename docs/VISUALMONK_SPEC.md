@@ -212,6 +212,30 @@ mit `Content-Type: video/mp4` abrufbar.
 **Offen (ehrlich):** echter Live-Lauf mit generierten Clips (kostet GPU-Zeit) und
 der Beamer-Beweis Studio → Ghostuser 6 (VISUAL-P1-001).
 
+## 8c. Renderer: Canvas2D (Referenz) und WebGL (Upgrade) – VISUAL-P1-005
+
+| | Canvas2D (`canvasRenderer.ts`) | WebGL/WebGL2 (`webglRenderer.ts`) |
+|---|---|---|
+| Rolle | **Referenz** und Pfad für Show-Szenen | Upgrade (GPU, 60 fps, kein Partikel-Array) |
+| Steuerung | Partikel/Felder im Main-Thread | Fragment-Shader (fraktales Feld, Radialspiegelung, Palette, Hue, Glow, Vignette) |
+| Umschalten | UI-Button `CANVAS2D`/`WEBGL` | dito (`data-renderer` am Overlay für das Gate) |
+
+**Warum umschaltbar und nicht „immer WebGL":** Ein Canvas kann nur **einen**
+Kontexttyp haben — ist der WebGL-Kontext erzeugt, liefert `getContext('2d')`
+`null`. Show-Szenen blenden Medien per `drawImage` ein und brauchen den
+2D-Kontext. Deshalb: der Wechsel ist während einer laufenden Show gesperrt, und
+der GL-Pfad zeichnet die generative Liveshow, nicht die Szene.
+
+**Belege (echter Browser):** `scripts/visual-monk-gate.cjs` prüft beide Pfade —
+Canvas2D über Pixel-Varianz (44 Farben), WebGL über GL-Zustand (Programm
+gebunden, `glError = 0`, kein Kontextverlust, Zeichenpuffer 1440×720) plus
+Nicht-Einfarbigkeit über die PNG-Größe des Canvas-Screenshots (81 KB bzw.
+52 KB ≫ 15 KB Schwellwert). Der Shader nutzt GLSL ES 1.00 und läuft damit in
+WebGL **und** WebGL2 ohne doppelten Pfad.
+
+**Offen (bewusst):** Medien/Clips im WebGL-Pfad (Textur statt `drawImage`) und
+WGSL/WebGPU als weiterer Schritt — beides als `VISUAL-P1-008` notiert.
+
 ## 9. Risiken / ehrliche Grenzen
 
 - Diffusion ist **kein** Live-Stream — Projektion muss die Liveshow (Shader) sein.

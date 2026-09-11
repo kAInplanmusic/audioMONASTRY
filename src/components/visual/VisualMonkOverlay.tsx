@@ -6,6 +6,7 @@ import { VisualFeatureBus } from '../../core/visual/featureBus';
 import { mapAudioToParams, blendParams } from '../../core/visual/audioReactive';
 import { VISUAL_PRESETS, presetById } from '../../core/visual/visualPresets';
 import { createRendererState, renderFrame } from '../../core/visual/canvasRenderer';
+import { createWebGLVisualRenderer, type VisualRendererKind, type WebGLVisualRenderer } from '../../core/visual/webglRenderer';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../../core/visual/types';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
@@ -35,6 +36,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const presetRef = useRef(presetId);
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
+
+  // VISUAL-P1-005: Renderer-Umschalter. Canvas2D bleibt Pflicht für Show-Szenen
+  // (Medien werden per drawImage eingeblendet) — deshalb ist der Wechsel während
+  // einer laufenden Show gesperrt und der Umschalter erklärt das auch.
+  const [rendererMode, setRendererMode] = useState<'canvas2d' | 'gl'>('canvas2d');
+  const [rendererKind, setRendererKind] = useState<VisualRendererKind>('canvas2d');
+  const glRendererRef = useRef<WebGLVisualRenderer | null>(null);
 
   // VisualMONK #5: Show-Orchestrator (Szenen aus Bildern/Clips, audio-reaktiv).
   // Über eine Ref erreichbar, damit die RAF-Schleife (Deps `[]`) ihn nutzen kann.
@@ -214,8 +222,18 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    // Canvas2D ist der Referenzpfad; im GL-Modus gibt es keinen 2D-Kontext.
+    const ctx = rendererMode === 'gl' ? null : canvas.getContext('2d');
+    if (rendererMode === 'gl') {
+      const gl = createWebGLVisualRenderer(canvas);
+      glRendererRef.current = gl;
+      setRendererKind(gl ? gl.kind : 'canvas2d');
+      if (!gl) setAiError('WebGL nicht verfügbar – Canvas2D bleibt aktiv.');
+    } else {
+      glRendererRef.current = null;
+      setRendererKind('canvas2d');
+    }
+    if (!ctx && !glRendererRef.current) return;
 
     let disposed = false;
     let lastTapAttempt = 0;
@@ -255,14 +273,22 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         canvas.width = Math.round(cssW * dpr);
         canvas.height = Math.round(cssH * dpr);
       }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, dt);
+      const gl = glRendererRef.current;
+      if (gl) {
+        gl.resize(canvas.width, canvas.height);
+        gl.render(preset, paramsRef.current, now / 1000);
+      } else if (ctx) {
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, dt);
+      }
 
       // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie)
       // und zeichnet die aktuelle Szene über die Visualisierung (Crossfade).
       const showApi = showRef.current;
       showApi.tick(now, features);
-      if (showApi.playing) showApi.draw(ctx, cssW, cssH);
+      // Show-Szenen brauchen den 2D-Kontext (drawImage); im GL-Modus sind sie
+      // gesperrt (siehe Umschalter), dieser Zweig ist dann nie aktiv.
+      if (showApi.playing && ctx) showApi.draw(ctx, cssW, cssH);
 
       rafRef.current = requestAnimationFrame(frame);
     };
@@ -272,16 +298,32 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       disposed = true;
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+      if (glRendererRef.current) {
+        glRendererRef.current.dispose();
+        glRendererRef.current = null;
+      }
       if (analyserRef.current) {
         try { audioEngine.disconnectVisualAnalyser(analyserRef.current); } catch { /* ignore */ }
         analyserRef.current = null;
         busRef.current = null;
       }
     };
-  }, []);
+  }, [rendererMode]);
+
+  // Für das Browser-Gate (scripts/visual-monk-gate.cjs) und die Diagnose:
+  // welcher Renderer zeichnet tatsächlich? Kein stiller Erfolg — steht auch als
+  // `data-renderer` am Dialog.
+  useEffect(() => {
+    (window as unknown as { __visualRenderer?: string }).__visualRenderer = rendererKind;
+  }, [rendererKind]);
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col" role="dialog" aria-label="VisualMONK Liveshow">
+    <div
+      className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col"
+      role="dialog"
+      aria-label="VisualMONK Liveshow"
+      data-renderer={rendererKind}
+    >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
         <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUALMONK · LIVESHOW</span>
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${audioLinked ? 'border-emerald-400/50 text-emerald-300' : 'border-neutral-600 text-neutral-400'}`}>
@@ -290,6 +332,24 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${streamStatus === 'live' ? 'border-cyan-400/60 text-cyan-300' : streamStatus === 'unsupported' ? 'border-amber-400/50 text-amber-300' : 'border-neutral-700 text-neutral-400'}`}>
           {streamStatus === 'live' ? 'GHOSTUSER 6 · STREAM AN' : streamStatus === 'unsupported' ? 'Stream nicht unterstützt' : 'Stream aus'}
         </span>
+        <span
+          className={`text-[9px] px-1.5 py-0.5 rounded-full border ${rendererKind === 'canvas2d' ? 'border-neutral-700 text-neutral-400' : 'border-emerald-400/50 text-emerald-300'}`}
+          title={rendererMode === 'gl' && rendererKind === 'canvas2d' ? 'WebGL nicht verfügbar – Canvas2D aktiv' : `Renderer: ${rendererKind}`}
+        >
+          {rendererKind.toUpperCase()}
+        </span>
+        <button
+          type="button"
+          onClick={() => setRendererMode((m) => (m === 'gl' ? 'canvas2d' : 'gl'))}
+          disabled={show.playing}
+          aria-pressed={rendererMode === 'gl'}
+          title={show.playing
+            ? 'Renderer-Wechsel während einer Show gesperrt: Show-Szenen brauchen den Canvas2D-Pfad (drawImage)'
+            : 'Renderer wechseln: WebGL (GPU-Renderer) oder Canvas2D (Referenz)'}
+          className={`px-2 py-1 rounded-full text-[9px] font-bold tracking-widest border transition-colors disabled:opacity-40 ${rendererMode === 'gl' ? 'border-emerald-400/60 text-emerald-200 bg-emerald-400/10' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
+        >
+          {rendererMode === 'gl' ? 'WEBGL' : 'CANVAS2D'}
+        </button>
         <div className="flex-1" />
         <button
           type="button"
@@ -480,7 +540,9 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       )}
 
       <div className="flex-1 min-h-0 relative">
-        <canvas ref={canvasRef} className="w-full h-full block" />
+        {/* key: ein Canvas kann nur EINEN Kontexttyp haben — beim Renderer-Wechsel
+            wird das Element bewusst neu erzeugt (VISUAL-P1-005). */}
+        <canvas key={rendererMode} ref={canvasRef} className="w-full h-full block" />
         {aiImage && (
           <img
             src={aiImage}
