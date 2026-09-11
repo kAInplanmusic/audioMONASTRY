@@ -177,7 +177,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
         </div>
 
         {/* Digitakt-USB-Ansicht (uidigitakt.png) */}
-        <img src="/uidigitakt.png" alt="Digitakt-USB-Ansicht" title="USB-Anschluss-Ansicht (Referenz Digitakt II)"
+        <img src="/midi&controllerui/uidigitakt.png" alt="Digitakt-USB-Ansicht" title="USB-Anschluss-Ansicht (Referenz Digitakt II)"
           className="h-16 rounded border border-neutral-800 hover:border-pink-500/60 transition-colors object-cover" />
 
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">

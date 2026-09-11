@@ -40,7 +40,7 @@ interface GbInstrument {
 const WHITE_KEYS_C4 = [261.63, 293.66, 329.63, 349.23, 392.0, 440.0, 493.88, 523.25];
 
 const GARAGEBAND_INSTRUMENTS: GbInstrument[] = [
-  { id: 'schlagzeug', name: 'Schlagzeug', image: '/bspschlagzeug.png', mode: 'drums', pads: [
+  { id: 'schlagzeug', name: 'Schlagzeug', image: '/instruMONK/bspschlagzeug.png', mode: 'drums', pads: [
     { label: 'Kick', left: 50, top: 72, freq: 60, osc: 'sine' },
     { label: 'Snare', left: 24, top: 64, freq: 200, osc: 'triangle' },
     { label: 'HiHat', left: 14, top: 38, freq: 6000, osc: 'square' },
@@ -50,20 +50,20 @@ const GARAGEBAND_INSTRUMENTS: GbInstrument[] = [
     { label: 'Crash', left: 84, top: 28, freq: 5200, osc: 'square' },
     { label: 'Ride', left: 30, top: 20, freq: 4800, osc: 'square' },
   ]},
-  { id: 'gitarre', name: 'Gitarre', image: '/bspgitarre.jpg', mode: 'strings', stringTuning: [82.41, 110.0, 146.83, 196.0, 246.94, 329.63], frets: 4 },
-  { id: 'bass', name: 'Bass', image: '/bspbassgitarre.jpg', mode: 'strings', stringTuning: [41.2, 55.0, 73.42, 98.0], frets: 4 },
-  { id: 'klavier', name: 'Klavier', image: '/bspklavier.jpg', mode: 'keys', keys: WHITE_KEYS_C4 },
-  { id: 'cello', name: 'Cello', image: '/bspcello.jpg', mode: 'strings', stringTuning: [65.41, 98.0, 146.83, 220.0], frets: 4 },
-  { id: 'streicher', name: 'Streicher', image: '/bspstreicher.jpg', mode: 'keys', keys: WHITE_KEYS_C4.map((f) => f / 2) },
-  { id: 'pads', name: 'Pads', image: '/bsppads.jpg', mode: 'keys', keys: [130.81, 146.83, 164.81, 174.61, 196.0, 220.0, 246.94, 261.63] },
-  { id: 'glocken', name: 'Glocken', image: '/bspchinaglocken.jpg', mode: 'keys', keys: WHITE_KEYS_C4.map((f) => f * 2) },
-  { id: 'drummaschine', name: 'Drum-Machine', image: '/bspdrummaschine.jpg', mode: 'drums', pads: [
+  { id: 'gitarre', name: 'Gitarre', image: '/instruMONK/bspgitarre.jpg', mode: 'strings', stringTuning: [82.41, 110.0, 146.83, 196.0, 246.94, 329.63], frets: 4 },
+  { id: 'bass', name: 'Bass', image: '/instruMONK/bspbassgitarre.jpg', mode: 'strings', stringTuning: [41.2, 55.0, 73.42, 98.0], frets: 4 },
+  { id: 'klavier', name: 'Klavier', image: '/instruMONK/bspklavier.jpg', mode: 'keys', keys: WHITE_KEYS_C4 },
+  { id: 'cello', name: 'Cello', image: '/instruMONK/bspcello.jpg', mode: 'strings', stringTuning: [65.41, 98.0, 146.83, 220.0], frets: 4 },
+  { id: 'streicher', name: 'Streicher', image: '/instruMONK/bspstreicher.jpg', mode: 'keys', keys: WHITE_KEYS_C4.map((f) => f / 2) },
+  { id: 'pads', name: 'Pads', image: '/instruMONK/bsppads.jpg', mode: 'keys', keys: [130.81, 146.83, 164.81, 174.61, 196.0, 220.0, 246.94, 261.63] },
+  { id: 'glocken', name: 'Glocken', image: '/instruMONK/bspchinaglocken.jpg', mode: 'keys', keys: WHITE_KEYS_C4.map((f) => f * 2) },
+  { id: 'drummaschine', name: 'Drum-Machine', image: '/instruMONK/bspdrummaschine.jpg', mode: 'drums', pads: [
     { label: 'BD', left: 20, top: 55, freq: 55, osc: 'sine' },
     { label: 'SD', left: 40, top: 55, freq: 190, osc: 'triangle' },
     { label: 'HH', left: 60, top: 55, freq: 7000, osc: 'square' },
     { label: 'OH', left: 80, top: 55, freq: 5000, osc: 'square' },
   ]},
-  { id: 'sequenzer', name: 'Pad-Sequenzer', image: '/uipadsequenzer.jpg', mode: 'drums', pads: [
+  { id: 'sequenzer', name: 'Pad-Sequenzer', image: '/uidesign/uipadsequenzer.jpg', mode: 'drums', pads: [
     { label: '1', left: 25, top: 40, freq: 261.63, osc: 'triangle' },
     { label: '2', left: 50, top: 40, freq: 293.66, osc: 'triangle' },
     { label: '3', left: 75, top: 40, freq: 329.63, osc: 'triangle' },

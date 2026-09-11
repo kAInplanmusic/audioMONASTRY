@@ -14,7 +14,9 @@ on:
         default: '15'
         type: string
   push:
-    branches: [runpod-migration]
+    # SSOT ist `main`; `runpod-migration` bleibt als historischer Deploy-Branch
+    # erlaubt, damit alte Pushes nicht ins Leere laufen.
+    branches: [main, runpod-migration]
     paths:
       - 'services/samplemonk-ai-runtime/**'
       - '.github/workflows/runpod-deploy.yml'

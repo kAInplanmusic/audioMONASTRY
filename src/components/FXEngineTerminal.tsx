@@ -140,7 +140,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
         </div>
 
         {/* EffectMONK-Referenz (uieffektMONK.jpg) */}
-        <img src="/uieffektMONK.jpg" alt="EffectMONK-Referenz" className="h-12 rounded border border-neutral-800 hover:border-rose-500/60 transition-colors object-cover" />
+        <img src="/uidesign/uieffektMONK.jpg" alt="EffectMONK-Referenz" className="h-12 rounded border border-neutral-800 hover:border-rose-500/60 transition-colors object-cover" />
 
         <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
             <option value="OFF">OFF</option>

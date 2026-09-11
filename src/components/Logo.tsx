@@ -1,7 +1,7 @@
 
 
 /**
- * audioMONASTRY-Logo – aus public/logofullsize.png (korrektes Logo;
+ * audioMONASTRY-Logo – aus public/logo.png (korrektes Logo;
  * logo.webp ist das alte Testlogo und wird nur als Fallback genutzt).
  * `size` steuert die Ausdehnung; optional `glow` für den Start-Effekt.
  */
@@ -18,7 +18,7 @@ export function Logo({
 }) {
   return (
     <img
-      src="/logofullsize.png"
+      src="/logo.png"
       width={size}
       height={size}
       alt="audioMONASTRY"

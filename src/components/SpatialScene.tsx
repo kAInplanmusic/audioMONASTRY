@@ -638,9 +638,9 @@ export const SpatialScene = React.memo(function SpatialScene() {
       <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-2 overflow-x-auto">
         <span className="text-[8px] font-mono tracking-widest text-neutral-500">SETUPS</span>
         {[
-          { src: '/12-2-setup.png', label: '12.2' },
-          { src: '/18-2-setup.png', label: '18.2' },
-          { src: '/24-2-setup.png', label: '24.2' },
+          { src: '/spatialMONK/12-2-setup.png', label: '12.2' },
+          { src: '/spatialMONK/18-2-setup.png', label: '18.2' },
+          { src: '/spatialMONK/24-2-setup.png', label: '24.2' },
         ].map((s) => (
           <img key={s.src} src={s.src} alt={s.label} title={`${s.label} Setup (Referenz)`}
             className="h-12 rounded border border-neutral-800 hover:border-lime-500/60 transition-colors cursor-zoom-in object-cover" />
