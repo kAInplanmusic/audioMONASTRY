@@ -170,6 +170,14 @@
       "verdict": "NOT_VERIFIED",
       "evidence": "Umgesetzt und getestet am 2026-09-10: Template mit runpod/worker-vllm:1.0.1-cuda12.1.0, MODEL_NAME=Qwen/Qwen3-14B-AWQ (9,99 GB), QUANTIZATION=awq, MAX_MODEL_LEN=16384; Brain-Endpoint per PATCH auf dieses Template umgestellt (templateId 42pqqc06vb). Dann 3 POSTs an /openai/v1/chat/completions mit 240-s-Client-Timeout: ALLE liefen in TimeoutError (t+240s, t+500s, t+761s). Endpoint-Health waehrenddessen: workers.running=1, jobs.inQueue=3, completed=10, failed=0 - ein Worker lief also, antwortete aber nicht. Ohne Zugriff auf die Worker-Logs ist die Ursache nicht unterscheidbar: (a) vLLM laedt noch, (b) das Image-Tag ist zu alt und bietet die OpenAI-Route nicht, (c) Env/Quantisierung passt nicht zu diesem Tag, (d) OPENAI_SERVED_MODEL_NAME_OVERRIDE passt nicht zum angefragten Modellnamen.",
       "impact": "Der vielversprechendste Hebel (kein 30-GB-Build, 9 GB statt 29,5 GB, OpenAI-kompatibel) ist damit NICHT belegt. Der Endpoint wurde auf das bewaehrte eigene Image (templateId e4yzwic56u) zurueckgestellt und der OpenAI-Pfad in .env deaktiviert. Kosten des Versuchs: $0.156. Naechster sinnvoller Schritt: Rueckgabe der RunPod-Hub/Docker-Tag-Liste pruefen und einen Tag mit bekanntem Qwen3-Support waehlen, ODER die Worker-Logs einsehbar machen (Artefakt/Support), statt weiter zu raten."
+    },
+    {
+      "id": "F-012",
+      "severity": "P0",
+      "claim": "Der `warmup`-Task waermt die Modelle vor (Session-Wake)",
+      "verdict": "FALSIFIED_THEN_FIXED",
+      "evidence": "model_manager._load_locked() macht NUR Buchhaltung: `self._used_vram_gb += required` und `self._loaded[id] = time.time()` - es wird kein Gewicht geladen (niemand ruft set_loader). Die Gewichte kommen erst im Handler per `from_pretrained`, also beim ersten echten `infer()`. Folge: `warmup` meldete `durationMs: 0` und `ready: true`, obwohl nichts geladen war - und der erste Nutzeraufruf zahlte weiterhin alles (gemessen 201 s beim Brain inkl. 28-GB-Download). Belegt durch lokalen Smoke: derselbe Fall meldete vorher `loaded:[qwen3-14b], failed:[]` = Erfolg, jetzt `warmed:[]` + `warmupFailed:{qwen3-14b: 'dependency missing for transformers'}`.",
+      "impact": "Session-Wake und Kaltstart-Vorwaermung waren ein Placebo - ein stiller Erfolg genau der Klasse, die dieser Audit sucht. Behoben: `_handle_warmup` faehrt nach `load()` pro Modell eine minimale echte Inferenz (1 Token). Text-Tasks werden gewaermt; Audio-Modelle (Whisper/CLAP/AST) brauchen echtes Audio und werden ehrlich als `warmupFailed` gemeldet statt als Erfolg."
     }
   ],
   "tasks": [

@@ -263,6 +263,8 @@ def _handle_warmup(role: str) -> Dict[str, Any]:
     targets = [info["id"] for info in manager.get_model_info() if info.get("preload")]
     loaded: list[str] = []
     failed: list[str] = []
+    warmed: list[str] = []
+    warmup_failed: dict[str, str] = {}
     for model_id in targets:
         try:
             manager.load(model_id)
@@ -270,13 +272,56 @@ def _handle_warmup(role: str) -> Dict[str, Any]:
         except ModelUnavailableError as exc:
             failed.append(model_id)
             log_event("WARN", "warmup model unavailable", model=model_id, error=str(exc))
+
+    # ECHTES Vorwaermen (AUDIT-F-012).
+    #
+    # `manager.load()` ist reine Buchhaltung (VRAM-Ledger) – die Gewichte kommen
+    # erst im Handler per `from_pretrained`, also beim ERSTEN echten `infer()`.
+    # Ein Warmup, das nur `load()` aufruft, ist deshalb ein Placebo: der erste
+    # Nutzeraufruf zahlt weiterhin Download + Load (gemessen: 201 s beim Brain).
+    # Hier laeuft daher pro Modell eine minimale echte Inferenz, damit diese
+    # Kosten in den Session-Wake fallen – die App braucht ohnehin 5–10 min zum
+    # Start, der Nutzer merkt davon nichts.
+    #
+    # Nur textbasierte Handler koennen mit einem Mini-Prompt gewaermt werden;
+    # Audio-Modelle (Whisper/CLAP/AST) brauchen echtes Audio und werden
+    # uebersprungen – das wird ehrlich als `warmupSkipped` gemeldet, statt als
+    # Erfolg ausgegeben zu werden.
+    info_by_id = {info["id"]: info for info in manager.get_model_info()}
+    for model_id in loaded:
+        task = str(info_by_id.get(model_id, {}).get("task") or "")
+        if task not in ("llm", "nlu"):
+            warmup_failed[model_id] = f"kein Text-Task ({task or '-'}) – Warmup braucht Audio"
+            continue
+        try:
+            manager.infer(task, model_id, {"prompt": "ok", "text": "ok", "maxTokens": 1, "temperature": 0})
+            warmed.append(model_id)
+        except Exception as exc:  # noqa: BLE001 – Warmup darf den Job nie sprengen
+            warmup_failed[model_id] = f"{type(exc).__name__}: {exc}"[:160]
+
     duration_ms = int((time.time() - started) * 1000)
-    log_event("INFO", "warmup completed", role=role, loaded=loaded, failed=failed, durationMs=duration_ms)
+    log_event(
+        "INFO",
+        "warmup completed",
+        role=role,
+        loaded=loaded,
+        warmed=warmed,
+        warmupFailed=warmup_failed,
+        failed=failed,
+        durationMs=duration_ms,
+    )
     return {
         "status": "success",
         "task": "warmup",
         "model": "",
-        "result": {"ready": not failed, "role": role, "loaded": loaded, "failed": failed},
+        "result": {
+            "ready": not failed,
+            "role": role,
+            "loaded": loaded,
+            "warmed": warmed,
+            "warmupFailed": warmup_failed,
+            "failed": failed,
+        },
         "durationMs": duration_ms,
     }
 
