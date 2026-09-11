@@ -119,10 +119,15 @@ Erfahrungswerte: brain/ears/voiceGen/vision je **0,49 €/h** (A6000) → 4 Roll
 
 1. **DONE** visual-Kern (Presets + Audio→Visual, getestet) · Budget-Guards ·
    Vision-Endpoint live (`samplemonk-ai-vision`).
-2. **NEXT** Renderer (WebGPU mit WebGL-Fallback) + `VisualTerminal`-UI +
-   Settings-Toggle + Feature-Bus am Master-Tap.
+2. **DONE** Feature-Bus + Canvas-Renderer + Overlay + Stream-Hook.
+   - `audioEngine.createVisualAnalyser()` = reiner Fan-out am V2-Ausgang (kein Eingriff in den Signalweg).
+   - `src/core/visual/featureBus.ts` (Bänder/RMS/Onset), `canvasRenderer.ts` (5 Zeichenmodi für 12 Presets).
+   - `VisualMonkOverlay.tsx` (Header-Button `VISUAL`, default AUS) + `useVisualStream.ts` (`captureStream(30)` → Ghostuser 6).
+   - Browser-Gate `scripts/visual-monk-gate.cjs`: App mountet, Overlay öffnet, Canvas zeichnet ein **variiertes**
+     Bild (1440x814, 33 Farben) — keine Page-Errors. WebGL/WGSL bleibt als Upgrade offen (Canvas2D reicht für den Start).
 3. **NEXT** Ghost-Clients `/ghost/5` (Audio) und `/ghost/6` (Visual) + Stream
-   über den bestehenden SFU-Track; Fallback MJPEG.
+   über den bestehenden SFU-Track (der Canvas-Stream liegt bereit); Fallback MJPEG.
+   Session-Ende-Umfrage (Selbstlern-Loop) folgt mit Schritt 6.
 4. Vision-Pipeline: Text→Bild + Audio→Prompt; R2-Ablage; DB-Eintrag.
 5. Video (LTX-Video/Wan2.1) + Zusammenführen von Clips.
 6. Selbstlern-Loop + Session-Ende-Umfrage + pgvector/RAG + LoRA-Pods.

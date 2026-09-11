@@ -10,6 +10,7 @@ import { SafeModuleBoundary } from './components/SafeModuleBoundary';
 import { FEATURE_FLAGS } from './config/featureFlags';
 const VoiceGenTerminal = lazy(() => import('./components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m => ({ default: m.VoiceMonkPanel })));
+const VisualMonkOverlay = lazy(() => import('./components/visual/VisualMonkOverlay').then(m => ({ default: m.VisualMonkOverlay })));
 import { MoaHistoryPanel } from './components/MoaHistoryPanel';
 import { AudioActionMenuHost } from './components/AudioActionMenuHost';
 import { MasteringOverlay } from './components/MasteringOverlay';
@@ -18,7 +19,7 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
-import { Settings, Activity, ClipboardCopy, UserRound, Gauge } from 'lucide-react';
+import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
@@ -79,6 +80,7 @@ function AppComponent() {
   const [masteringOpen, setMasteringOpen] = useState(false);
   const [masterPlayerOpen, setMasterPlayerOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
+  const [visualOpen, setVisualOpen] = useState(false);
   const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
   const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
     MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
@@ -579,6 +581,16 @@ function AppComponent() {
             <div className="hidden xl:block"><Scratchpad /></div>
             <div className="hidden lg:block"><MasterStreamToggle /></div>
             <button type="button"
+              onClick={() => setVisualOpen(v => !v)}
+              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-fuchsia-400/10 border border-fuchsia-400/40 text-fuchsia-300 hover:bg-fuchsia-400/20 hover:border-fuchsia-300/70 transition-all duration-200 cursor-pointer"
+              aria-label="VisualMONK Liveshow oeffnen"
+              aria-pressed={visualOpen}
+              title="VisualMONK Liveshow (Stream an Ghostuser 6 / Beamer)"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span className="text-[9px] font-bold tracking-widest">VISUAL</span>
+            </button>
+            <button type="button"
               onClick={() => setSettingsOpen(true)}
               className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
               title="Audio / I-O Einstellungen"
@@ -794,6 +806,13 @@ function AppComponent() {
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* VisualMONK Liveshow (Ghostuser 6 / Beamer) – guarded, default aus */}
+      {visualOpen && (
+        <Suspense fallback={null}>
+          <VisualMonkOverlay onClose={() => setVisualOpen(false)} />
+        </Suspense>
+      )}
 
       {/* P1-4 (D9): Session-Zwischenspeicher – Overlay-Sidebar */}
       <SessionScratchpadPanel

@@ -1933,6 +1933,35 @@ class AudioEngine {
     } catch { /* bereits getrennt */ }
   }
 
+  /**
+   * VisualMONK: Analyser-Tap am hörbaren V2-Ausgang (reiner Fan-out, verändert
+   * den Signalweg nicht). Liefert `null`, wenn der V2-Sink nicht verbunden ist –
+   * der Visualizer bleibt dann im Ruhezustand, statt Stille als Audio zu verkaufen.
+   */
+  public createVisualAnalyser(fftSize = 2048): AnalyserNode | null {
+    try {
+      if (!this.ctx || typeof this.ctx.createAnalyser !== 'function') return null;
+      const analyser = this.ctx.createAnalyser();
+      analyser.fftSize = fftSize;
+      analyser.smoothingTimeConstant = 0.75;
+      if (!this.v2LiveSink.isConnected || !this.v2LiveSink.connectExtra(analyser)) {
+        try { analyser.disconnect(); } catch { /* ignore */ }
+        return null;
+      }
+      return analyser;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Trennt einen Visual-Analyser sauber vom V2-Ausgang. */
+  public disconnectVisualAnalyser(analyser: AnalyserNode): void {
+    try {
+      this.v2LiveSink.disconnectExtra(analyser);
+      analyser.disconnect();
+    } catch { /* bereits getrennt */ }
+  }
+
   /** Audio-Health-Snapshot für den Echtzeit-Performance-Monitor. */
   public getAudioHealth(): { state: string; sampleRate: number; baseLatencyMs: number; outputLatencyMs: number } {
     const ctx = this.ctx as unknown as {
