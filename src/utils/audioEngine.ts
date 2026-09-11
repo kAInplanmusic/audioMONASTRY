@@ -41,6 +41,7 @@ import {
   type MonitorRoutingPlan, type MonitorSource, type MonitorUser,
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
+import { renderDrumBuffer as renderDrumBufferImpl } from '../audio/drumRender';
 import { defaultOptionalDspPreset } from '../core/dsp/dspPresets';
 import type { V2SynthVoice } from '../core/audio/live/V2SinkEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
@@ -1315,159 +1316,12 @@ class AudioEngine {
     };
   }
 
-  /** Rendert einen Drum-Sound über einen OfflineAudioContext in einen AudioBuffer. */
+  /** Rendert einen Drum-Sound (AUDIO-P1-002: Logik in `src/audio/drumRender.ts`). */
   private async renderDrumBuffer(sound: DrumSoundPreset): Promise<AudioBuffer | null> {
-    const sr = this.ctx?.sampleRate || 48000;
-    const dur = Math.max(0.08, Math.min(1.5, (sound.decay ?? 0.25) + 0.08));
-    const frames = Math.max(64, Math.ceil(sr * dur));
-    try {
-      const off = new OfflineAudioContext(1, frames, sr);
-      const out = off.createGain();
-      out.gain.value = 1;
-      out.connect(off.destination);
-      this.buildDrumGraph(off, out, sound, sr, dur);
-      return await off.startRendering();
-    } catch (e) {
-      console.warn('Offline-Drum-Render nicht verfügbar – Math-Fallback:', (e as Error).message);
-      return this.renderDrumBufferMath(sound, sr, frames);
-    }
-  }
-
-  /** Baut den nativen WebAudio-Graph eines Drum-Sounds (Offline-Render). */
-  private buildDrumGraph(off: OfflineAudioContext, out: GainNode, sound: DrumSoundPreset, sr: number, dur: number) {
-    const decay = Math.max(0.02, sound.decay ?? 0.25);
-
-    switch (sound.type) {
-      case 'kick':
-      case 'tom': {
-        const osc = off.createOscillator();
-        osc.type = 'sine';
-        const f0 = Math.max(20, sound.freqStart ?? (sound.freq ? sound.freq * 2.5 : 160));
-        const f1 = Math.max(20, sound.freqEnd ?? sound.freq ?? 50);
-        osc.frequency.setValueAtTime(f0, 0);
-        osc.frequency.exponentialRampToValueAtTime(f1, Math.min(decay, dur * 0.8));
-        const g = off.createGain();
-        g.gain.setValueAtTime(1, 0);
-        g.gain.exponentialRampToValueAtTime(0.001, decay);
-        osc.connect(g); g.connect(out);
-        osc.start(0); osc.stop(dur);
-        break;
-      }
-      case 'hat': {
-        const src = off.createBufferSource();
-        src.buffer = this.makeNoiseBuffer(off, dur, sr);
-        const bp = off.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.value = sound.noiseFilter ?? 8000;
-        bp.Q.value = 1.2;
-        const g = off.createGain();
-        g.gain.setValueAtTime(1, 0);
-        g.gain.exponentialRampToValueAtTime(0.001, decay);
-        src.connect(bp); bp.connect(g); g.connect(out);
-        src.start(0);
-        break;
-      }
-      case 'snare':
-      case 'clap': {
-        // Noise-Anteil (bandpass-gefiltert)
-        const nsrc = off.createBufferSource();
-        nsrc.buffer = this.makeNoiseBuffer(off, dur, sr);
-        const bp = off.createBiquadFilter();
-        bp.type = 'bandpass';
-        bp.frequency.value = sound.noiseFilter ?? 1800;
-        bp.Q.value = 0.8;
-        const ng = off.createGain();
-        ng.gain.setValueAtTime(1, 0);
-        ng.gain.exponentialRampToValueAtTime(0.001, decay);
-        nsrc.connect(bp); bp.connect(ng); ng.connect(out);
-        nsrc.start(0);
-        // Ton-Anteil (Körper)
-        const osc = off.createOscillator();
-        osc.type = 'triangle';
-        osc.frequency.value = sound.freq ?? 180;
-        const og = off.createGain();
-        og.gain.setValueAtTime(0.6, 0);
-        og.gain.exponentialRampToValueAtTime(0.001, decay * 0.6);
-        osc.connect(og); og.connect(out);
-        osc.start(0); osc.stop(dur);
-        break;
-      }
-      case 'perc':
-      default: {
-        if (sound.noise) {
-          const src = off.createBufferSource();
-          src.buffer = this.makeNoiseBuffer(off, dur, sr);
-          const hp = off.createBiquadFilter();
-          hp.type = 'highpass';
-          hp.frequency.value = Math.min(sound.noiseFilter ?? 5000, sr * 0.45);
-          const g = off.createGain();
-          g.gain.setValueAtTime(1, 0);
-          g.gain.exponentialRampToValueAtTime(0.001, decay);
-          src.connect(hp); hp.connect(g); g.connect(out);
-          src.start(0);
-        } else {
-          const osc = off.createOscillator();
-          osc.type = 'sine';
-          osc.frequency.value = sound.freq ?? 1000;
-          const g = off.createGain();
-          g.gain.setValueAtTime(1, 0);
-          g.gain.exponentialRampToValueAtTime(0.001, decay);
-          osc.connect(g); g.connect(out);
-          osc.start(0); osc.stop(dur);
-        }
-      }
-    }
-  }
-
-  /** Erzeugt einen weißen Rausch-AudioBuffer (für Noise-basierte Drums). */
-  private makeNoiseBuffer(ctx: BaseAudioContext, seconds: number, sr: number): AudioBuffer {
-    const len = Math.max(64, Math.ceil(sr * seconds));
-    const buf = ctx.createBuffer(1, len, sr);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = this.noiseRandom() * 2 - 1;
-    return buf;
-  }
-
-  /** Fallback: Drum-Sound rein mathematisch in einen AudioBuffer rendern. */
-  private renderDrumBufferMath(sound: DrumSoundPreset, sr: number, frames: number): AudioBuffer | null {
-    try {
-      const buf = this.ctx.createBuffer(1, frames, sr);
-      const d = buf.getChannelData(0);
-      const decay = Math.max(0.02, sound.decay ?? 0.25);
-      const env = (t: number, dec: number) => Math.exp((-t * 7) / dec);
-      for (let i = 0; i < frames; i++) {
-        const t = i / sr;
-        let v = 0;
-        switch (sound.type) {
-          case 'kick':
-          case 'tom': {
-            const f0 = Math.max(20, sound.freqStart ?? (sound.freq ? sound.freq * 2.5 : 160));
-            const f1 = Math.max(20, sound.freqEnd ?? sound.freq ?? 50);
-            const r = f1 / f0;
-            const sweep = Math.min(t / decay, 1);
-            const phase = (2 * Math.PI * f0 * decay * (Math.pow(r, sweep) - 1)) / Math.log(r);
-            v = Math.sin(phase) * env(t, decay);
-            break;
-          }
-          case 'hat':
-          case 'snare':
-          case 'clap': {
-            const n = this.noiseRandom() * 2 - 1;
-            v = n * env(t, decay) + Math.sin(2 * Math.PI * (sound.freq ?? 180) * t) * env(t, decay) * 0.5;
-            break;
-          }
-          default: {
-            if (sound.noise) v = (this.noiseRandom() * 2 - 1) * env(t, decay);
-            else v = Math.sin(2 * Math.PI * (sound.freq ?? 1000) * t) * env(t, decay);
-          }
-        }
-        d[i] = v;
-      }
-      return buf;
-    } catch (e) {
-      console.warn('Math-Drum-Render fehlgeschlagen:', (e as Error).message);
-      return null;
-    }
+    return renderDrumBufferImpl(sound, this.ctx?.sampleRate || 48000, {
+      random: this.noiseRandom,
+      createBuffer: (length, sampleRate) => (this.ctx ? this.ctx.createBuffer(1, length, sampleRate) : null),
+    });
   }
 
   /**

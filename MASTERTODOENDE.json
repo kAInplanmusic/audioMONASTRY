@@ -96,13 +96,16 @@
       "id": "AUDIO-P1-002",
       "title": "audioEngine-Facade (3444 LOC) in Module zerlegen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Audio-Architektur",
       "source": "MASTER_TODO.md",
+      "problem": "35+ Dateien importieren utils/audioEngine; der Monolith vermischt Zustand, Verdrahtung, Worklet-Setup und V2-Sync.",
+      "note": "PARTIAL 2026-09-11 (erster, verifizierter Schnitt; Ziel <1500 LOC noch nicht erreicht): Das Drum-Rendering ist vollstaendig ausgelagert nach src/audio/drumRender.ts (makeNoiseBuffer/buildDrumGraph/renderDrumBufferMath/renderDrumBuffer; Zufallsquelle + Buffer-Factory werden hereingereicht, kein Engine-Zustand) - audioEngine delegiert nur noch per renderDrumBufferImpl und uebergibt this.ctx/this.noiseRandom. Gemessen: src/utils/audioEngine.ts 3132 -> 2986 LOC (-146; entfernte Methoden 138 Zeilen, 5 Zeilen Delegation + Import). Importeure unveraendert (audioEngine/audioV2TerminalBridge/Proxy bleiben identisch), Tests gruen. BELEGE: tests/drumRender.test.ts 5/5 (deterministisches Rauschen, Math-Fallback deterministisch/nicht still/abklingend, Fallback-Kette ohne OfflineAudioContext, null-Fall); tsc 0, eslint 0, boundary 411/0, test:ci 1289/1289 ohne Skips. NAECHSTE SCHNITTE (Reihenfolge nach Nutzen/Risiko, je eigener Commit): (1) Worklet-Parameter-Fassade (setDspParam/setEffectParam/automate*/setDynamicsParams/setGranularParams/setFm6* ~250 LOC) in src/audio/workletParamBridge.ts, (2) V2-Sync-Mirror (syncV2FromV1/Patterns/Samples/SynthSources ~120 LOC) in src/audio/v2SyncMirror.ts, (3) Monitor-Routing (~145 LOC), (4) Master-Stream/Visual-Analyser (~100 LOC), (5) Instrument-/Preview-Pfade (playSynthesisInstrument/buildInstrumentSynth/preview* ~350 LOC). Kein stilles 'fertig': der Monolith ist weiterhin >1500 LOC.",
       "acceptance": [
-        "audioEngine.ts < 1500 LOC",
-        "Importeure unveraendert",
-        "Tests gruen"
+        "audioEngine.ts < 1500 LOC (OFFEN: aktuell 2986)",
+        "Importeure unveraendert (erfuellt)",
+        "Tests gruen (erfuellt)",
+        "erster Schnitt ausgelagert + getestet (Drum-Render, erfuellt)"
       ]
     },
     {
