@@ -912,10 +912,27 @@ app.post('/api/ai/vision', async (req, res) => {
       width: body.width,
       height: body.height,
     });
+
+    // Persistenz (best effort): Bild nach R2 legen -> dauerhafte URL; ohne
+    // R2-Konfiguration bleibt es beim data-URI (kein Fehler).
+    let imageUrl: string | undefined;
+    if (result.image.startsWith('data:image/')) {
+      try {
+        const comma = result.image.indexOf(',');
+        const buf = Buffer.from(result.image.slice(comma + 1), 'base64');
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const up = await uploadSampleToR2(`vision/${stamp}-${result.seed ?? 'seed'}.png`, buf, 'image/png');
+        imageUrl = up.url;
+      } catch (e) {
+        console.warn('[vision] R2-Ablage übersprungen:', String((e as Error).message).slice(0, 160));
+      }
+    }
+
     return res.json({
       status: 'success',
       prompt: result.prompt,
       image: result.image,
+      imageUrl,
       seed: result.seed,
       durationMs: result.durationMs,
     });

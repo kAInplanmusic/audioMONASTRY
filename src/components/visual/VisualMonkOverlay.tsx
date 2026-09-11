@@ -7,7 +7,7 @@ import { mapAudioToParams, blendParams } from '../../core/visual/audioReactive';
 import { VISUAL_PRESETS, presetById } from '../../core/visual/visualPresets';
 import { createRendererState, renderFrame } from '../../core/visual/canvasRenderer';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../../core/visual/types';
-import { VISION_STYLES, type VisionStyle } from '../../core/ai/vision/visionPrompt';
+import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -40,30 +40,52 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const [aiStyle, setAiStyle] = useState<VisionStyle>('cosmic');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiImageUrl, setAiImageUrl] = useState<string | null>(null);
   const [aiError, setAiError] = useState('');
+  /** AUTO: Prompt+Stil kommen aus dem laufenden Set (Feature-Bus). */
+  const [aiAuto, setAiAuto] = useState(false);
+  const featuresRef = useRef<AudioFeatures>(IDLE_AUDIO_FEATURES);
 
   const generateAiImage = useCallback(async () => {
-    const prompt = aiPrompt.trim();
-    if (!prompt || aiBusy) return;
+    if (aiBusy) return;
+    const features = featuresRef.current;
+    // Im AUTO-Modus darf der Prompt leer sein: Energie/Tempo/Stil kommen aus dem Set.
+    const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
+    if (!prompt) return;
+    const style = aiAuto ? suggestVisionStyle({ energy: features.energy, bpm: features.bpm }) : aiStyle;
     setAiBusy(true);
     setAiError('');
     try {
       const resp = await fetch('/api/ai/vision', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, style: aiStyle, steps: 25 }),
+        body: JSON.stringify({
+          prompt,
+          style,
+          steps: 25,
+          energy: features.energy,
+          bpm: features.bpm || undefined,
+        }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || data?.status !== 'success' || !data?.image) {
         throw new Error(String(data?.message || data?.error || `HTTP ${resp.status}`));
       }
       setAiImage(String(data.image));
+      setAiImageUrl(typeof data.imageUrl === 'string' ? data.imageUrl : null);
     } catch (e) {
       setAiError((e as Error).message.slice(0, 160));
     } finally {
       setAiBusy(false);
     }
-  }, [aiPrompt, aiStyle, aiBusy]);
+  }, [aiPrompt, aiStyle, aiAuto, aiBusy]);
+
+  // Auto-Show: alle 45 s ein neues Set-passendes Bild (kostenbewusst, nur wenn an).
+  useEffect(() => {
+    if (!aiAuto) return;
+    const timer = window.setInterval(() => { void generateAiImage(); }, 45_000);
+    return () => window.clearInterval(timer);
+  }, [aiAuto, generateAiImage]);
 
   const toggleStream = useCallback(() => {
     if (streamStatus === 'live') {
@@ -109,6 +131,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       } catch {
         features = IDLE_AUDIO_FEATURES;
       }
+      featuresRef.current = features;
 
       const preset = presetById(presetRef.current);
       const target = mapAudioToParams(features, preset, now / 1000);
@@ -202,13 +225,25 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         </select>
         <button
           type="button"
+          onClick={() => setAiAuto((v) => !v)}
+          aria-pressed={aiAuto}
+          title="AUTO: Prompt/Stil kommen aus dem laufenden Set (Energie/Tempo), alle 45 s ein neues Bild"
+          className={`px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border transition-colors ${aiAuto ? 'border-emerald-400/70 text-emerald-200 bg-emerald-400/10' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
+        >
+          AUTO {aiAuto ? 'AN' : 'AUS'}
+        </button>
+        <button
+          type="button"
           onClick={() => void generateAiImage()}
-          disabled={aiBusy || !aiPrompt.trim()}
+          disabled={aiBusy || (!aiPrompt.trim() && !aiAuto)}
           className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-fuchsia-400/50 text-fuchsia-200 hover:bg-fuchsia-400/10 disabled:opacity-40 transition-colors"
         >
           {aiBusy ? 'ERZEUGT… (kalt ~40 s)' : 'BILD ERZEUGEN'}
         </button>
         {aiError && <span className="text-[10px] text-red-400">{aiError}</span>}
+        {aiImageUrl && (
+          <a href={aiImageUrl} target="_blank" rel="noreferrer" className="text-[10px] text-cyan-300 underline">R2-Link</a>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 relative">

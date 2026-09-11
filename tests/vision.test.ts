@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt } from '../src/core/ai/vision/visionPrompt';
+import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
 import { VisionError, extractVisionImage, generateVisionImage, visionEndpointId } from '../src/core/ai/vision/runpodVision';
 import { AiVisionSchema } from '../src/types/zod/schemas';
 
@@ -83,5 +83,28 @@ describe('VisualMONK – Vision-Client', () => {
     expect(visionEndpointId()).toBe('vision-ep-1');
     if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VISION;
     else process.env.RUNPOD_ENDPOINT_ID_VISION = prev;
+  });
+});
+
+describe('VisualMONK – Stil aus dem Set (AUTO-Modus)', () => {
+  it('wählt den Stil aus Energie und Tempo', () => {
+    expect(suggestVisionStyle({ energy: 0.9, bpm: 150 })).toBe('industrial');
+    expect(suggestVisionStyle({ energy: 0.8, bpm: 100 })).toBe('fire');
+    expect(suggestVisionStyle({ energy: 0.5, bpm: 128 })).toBe('psychedelic');
+    expect(suggestVisionStyle({ energy: 0.5, bpm: 90 })).toBe('cosmic');
+    expect(suggestVisionStyle({ energy: 0.3, bpm: 130 })).toBe('geometry');
+    expect(suggestVisionStyle({ energy: 0.3, bpm: 90 })).toBe('liquid');
+    expect(suggestVisionStyle({ energy: 0.1 })).toBe('abstract');
+    // Default-Energie 0.4, kein Tempo -> liquid
+    expect(suggestVisionStyle({})).toBe('liquid');
+  });
+
+  it('ist deterministisch und liegt innerhalb der Stil-Liste', () => {
+    for (const energy of [0, 0.2, 0.5, 0.9]) {
+      const a = suggestVisionStyle({ energy, bpm: 128 });
+      const b = suggestVisionStyle({ energy, bpm: 128 });
+      expect(a).toBe(b);
+      expect(VISION_STYLES).toContain(a);
+    }
   });
 });

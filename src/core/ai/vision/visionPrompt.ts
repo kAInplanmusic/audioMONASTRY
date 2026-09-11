@@ -92,3 +92,23 @@ export function buildVisionPrompt(input: VisionPromptInput): string {
   const fallback = 'abstract ambient visual, soft gradients, subtle motion, dark background';
   return (prompt || fallback).slice(0, MAX_PROMPT);
 }
+
+/** Audio-Features, die den Stil automatisch waehlen (aus dem Feature-Bus). */
+export interface StyleHintInput {
+  bpm?: number;
+  /** Energie 0..1. */
+  energy?: number;
+}
+
+/**
+ * Waehlt einen Stil aus dem laufenden Set (Energie zuerst, Tempo als Feinschliff).
+ * Bewusst deterministisch und ohne KI – damit der Auto-Modus vorhersagbar ist.
+ */
+export function suggestVisionStyle(input: StyleHintInput): VisionStyle {
+  const energy = clamp01(input.energy ?? 0.4);
+  const bpm = Number.isFinite(input.bpm) ? (input.bpm as number) : 0;
+  if (energy >= 0.75) return bpm >= 140 ? 'industrial' : 'fire';
+  if (energy >= 0.45) return bpm >= 120 ? 'psychedelic' : 'cosmic';
+  if (energy >= 0.2) return bpm >= 120 ? 'geometry' : 'liquid';
+  return 'abstract';
+}
