@@ -17,7 +17,7 @@ export interface EpianoParams {
   hammerLevel: number;
 }
 
-export const DEFAULT_EPIANO: EpianoParams = {
+const DEFAULT_EPIANO: EpianoParams = {
   inharmonicity: 0.0004,
   partials: [1, 0.6, 0.35, 0.18, 0.08, 0.04],
   decaySec: 1.8,

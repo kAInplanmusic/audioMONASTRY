@@ -9,7 +9,7 @@
  * Referenz: Elektron Digitakt MIDI-Spezifikation (Track 1-8, CC 0-127).
  */
 
-export const DIGITAKT_TRACKS = 8;
+const DIGITAKT_TRACKS = 8;
 
 /** Wichtige CCs im Track-Mode (Digitakt). */
 export const DIGITAKT_CC: Record<string, number> = {

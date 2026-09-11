@@ -31,7 +31,7 @@ export interface PluginEvalSpec {
 
 /** Default-Gate: 4 von 5 Punkten, 5 s Laufzeit-Budget je Plugin-Run. */
 export const DEFAULT_MIN_SCORE = 4;
-export const DEFAULT_MAX_DURATION_MS = 5000;
+const DEFAULT_MAX_DURATION_MS = 5000;
 
 /**
  * Mindest-Scores je Plugin. Audio-kritische Plugins (MAIN-Pfad, Mastering,

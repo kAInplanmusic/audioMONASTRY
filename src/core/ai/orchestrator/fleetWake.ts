@@ -28,7 +28,7 @@ import { RunPodProvider, type WarmupResult } from './runpodProvider';
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
 
 /** Status einer Rolle nach einem Wake-/Sleep-Lauf. */
-export interface FleetRoleStatus {
+interface FleetRoleStatus {
   role: GpuRoleId;
   endpointId: string;
   configured: boolean;

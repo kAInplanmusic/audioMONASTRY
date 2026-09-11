@@ -9,7 +9,7 @@
  */
 import { RuleBasedSpeechToIntent, type VoiceIntent, type ISpeechToIntent } from './SpeechToIntent';
 
-export interface VoiceCommandContext {
+interface VoiceCommandContext {
   userId: string;
   pluginId: string;
   intent: VoiceIntent;

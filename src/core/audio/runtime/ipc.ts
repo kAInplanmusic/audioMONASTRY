@@ -7,7 +7,7 @@
 
 import { random } from '../../../utils/random';
 
-export const IPC_PROTOCOL_VERSION = 1;
+const IPC_PROTOCOL_VERSION = 1;
 
 export type IpcChannel =
   | 'graph.sync'

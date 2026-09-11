@@ -88,7 +88,7 @@ function writePluginParameter(pluginId: string, parameterId: string, value: numb
 }
 
 /** Adapter-Implementierung auf Basis der audioEngine. */
-export const audioEngineDropAdapter: DropAudioAdapter = {
+const audioEngineDropAdapter: DropAudioAdapter = {
   getChannels(): DropMixerChannelSnapshot[] {
     const info = audioEngine.getChannelStripInfo();
     return CHANNELS.map((id, index) => ({

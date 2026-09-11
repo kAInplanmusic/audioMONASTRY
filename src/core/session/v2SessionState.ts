@@ -20,9 +20,9 @@ import {
 import type { TrackType } from '../../types';
 import { ALL_TRACKS } from '../../types';
 
-export const V2_SESSION_STATE_VERSION = 1;
+const V2_SESSION_STATE_VERSION = 1;
 
-export type V2TransportMode = 'local' | 'p2p' | 'sfu';
+type V2TransportMode = 'local' | 'p2p' | 'sfu';
 
 export interface V2SfuProducerInfo {
   producerId: string;

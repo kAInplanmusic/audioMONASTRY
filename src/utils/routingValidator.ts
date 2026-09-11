@@ -7,7 +7,7 @@ export interface RoutingConfig {
 }
 
 // Zuordnung: rationale Rolle -> erwartete Instrument-/DSP-Module
-export const ROLE_INSTRUMENT_MAP: Record<string, string[]> = {
+const ROLE_INSTRUMENT_MAP: Record<string, string[]> = {
   kick: ['kickSynth', 'MembraneSynth', 'Drum'],
   hat: ['hatSynth', 'MetalSynth', 'HiHat'],
   clap: ['clapSynth', 'NoiseSynth', 'Clap'],

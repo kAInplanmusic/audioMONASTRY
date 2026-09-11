@@ -26,7 +26,7 @@ export type InstrumentCategory =
 // ---------------------------------------------------------------------------
 // Gemeinsame Basiseigenschaften
 // ---------------------------------------------------------------------------
-export interface InstrumentBase {
+interface InstrumentBase {
   id: number;
   key: string;
   name: string;

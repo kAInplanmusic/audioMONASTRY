@@ -15,7 +15,7 @@
 import type { AudioSample } from '../../data/samples';
 import type { TrackType } from '../../types';
 
-export type AudioContentKind =
+type AudioContentKind =
   | 'sample'
   | 'music'
   | 'stem'
@@ -78,7 +78,7 @@ export interface SpatialChannelAssignment {
 export type TrackAssignmentMap = Partial<Record<TrackType, TrackAssignment>>;
 export type SpatialAssignmentMap = Partial<Record<number, SpatialChannelAssignment>>;
 
-export const SPATIAL_CHANNEL_COUNT = 8;
+const SPATIAL_CHANNEL_COUNT = 8;
 export const SPATIAL_CHANNEL_IDS: readonly number[] = Object.freeze(
   Array.from({ length: SPATIAL_CHANNEL_COUNT }, (_, i) => i + 1),
 );
@@ -88,7 +88,7 @@ export function spatialChannelTrack(channelId: number): TrackType {
 }
 
 /** LWW-Vergleich: neuere Revision gewinnt, bei Gleichstand entscheidet senderId. */
-export function isNewerRevision(
+function isNewerRevision(
   a: { revision: number; assignedBy?: string },
   b: { revision: number; assignedBy?: string },
 ): boolean {

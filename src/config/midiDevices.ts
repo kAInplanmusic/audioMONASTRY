@@ -23,7 +23,7 @@ export interface MidiDeviceProfile {
   name: string;
 }
 
-export const MIDI_DEVICE_REGISTRY: MidiDeviceProfile[] = [
+const MIDI_DEVICE_REGISTRY: MidiDeviceProfile[] = [
   // --- AKAI ---
   { profile: 'APC40',  type: 'GRID',     vendor: 'Akai',       name: 'APC40' },
   { profile: 'APC40',  type: 'GRID',     vendor: 'Akai',       name: 'LPD8' },

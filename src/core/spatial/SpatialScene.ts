@@ -12,7 +12,7 @@ export interface SceneSource extends SpatialSource {
   distance?: number; // 0..1 (Nähe)
 }
 
-export type CoordinateSystem = 'cartesian' | 'polar' | 'ambisonic';
+type CoordinateSystem = 'cartesian' | 'polar' | 'ambisonic';
 
 export interface Vec3 {
   x: number;
@@ -35,7 +35,7 @@ export interface Listener {
   coordinateSystem: CoordinateSystem;
 }
 
-export interface AudioObjectAutomation {
+interface AudioObjectAutomation {
   position: { time: number; value: Vec3 }[];
   gain: { time: number; value: number }[];
 }

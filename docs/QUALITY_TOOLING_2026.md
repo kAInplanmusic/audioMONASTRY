@@ -90,3 +90,44 @@ bleibt byte-identisch (Abschneiden wie zuvor durch `setInt16`).
 `npm run test:ci` schreibt den Vitest-JSON-Report und lässt den Lauf rot werden,
 wenn ein Test `skipped`/`todo` ist. Beide Richtungen bewiesen: künstlicher
 `it.skip` → Exit 1; voller Lauf 1181 Tests → Exit 0.
+
+## 4. Totcode-Kaskade (QUAL-P2-003) – was in dieser Runde passiert ist
+
+**Vorgehen in der richtigen Reihenfolge** (die erste Fassung scheiterte, weil sie
+Exporte reduzierte, bevor die toten Dateien weg waren – dadurch brachen die
+bewusst behaltenen Barrel-Dateien):
+
+1. **Erreichbarkeit statt Namenssuche.** 263 Wurzeln (index.html→main.tsx,
+   server.ts, Configs, scripts/**, tests/**, Worklet-Verzeichnis – letzteres wird
+   von `build-worklets.mjs` per `readdir` gebaut) → BFS über aufgelöste Importe.
+   Ergebnis: 628 erreichbare Dateien, 44 der 49 knip-Kandidaten unerreichbar.
+2. **Klassifikation vor Löschung.** Nur was in **keinem** Dokument/Plan vorkommt
+   und zusätzlich überholt ist, wurde gelöscht. Entfernt: `src/plugins/PluginBase.tsx`,
+   `PluginLockable.ts`, `dsp-engine/DspEnginePlugin.tsx`, `instrumente/InstrumentePlugin.tsx`
+   (eigener Kommentar: „Basisklasse für Legacy-Plugins“), `src/hubConnector.ts`,
+   `src/hooks/useDevice.ts` → Boundary 404 → 398 Dateien.
+   **Bewusst behalten** (im `knip.json`-`ignore` mit Begründung gruppiert):
+   V1-Barrel (`src/core/index.ts`, `src/lib/db.ts`, `src/core/audio/backends/*`)
+   und implementierte, aber nicht angebundene Infrastruktur (Session-Replikation,
+   RingBuffer/WorkletPool/AsyncSandbox, Ambisonics/HRTF/SceneRenderers,
+   EdgeDspClient/Failover, HardwareSimulator, Native-Runtime, webgpu_adapter).
+   Grund: Projektregel „kein V1-Abbau vor V2-Parität“ + „kein stiller
+   Funktionsverlust“. Rückholbar per `git checkout <sha> -- <pfad>`.
+3. **Exporte/Typen reduzieren – mit zwei Schutzregeln** (beide aus Fehlschlägen
+   gelernt): (a) kein Name, der irgendwo importiert **oder re-exportiert** wird;
+   (b) nur zurückstufen, wenn die Deklaration in ihrer Datei selbst benutzt wird
+   (sonst schlägt `--max-warnings=0` wegen einer ungenutzten lokalen
+   Deklaration an). Ergebnis: **171 Exporte/Typen** über 89 Dateien auf
+   „nur intern“ zurückgestuft, ohne eine Zeile Verhalten zu ändern.
+
+| Kennzahl | vorher | nachher |
+|---|---|---|
+| ungenutzte Exporte | 221 | **136** |
+| ungenutzte Typen | 137 | **51** |
+| ungenutzte Dateien | 148 | **5** (dokumentierte Behalten-Liste) |
+
+**Rest (eigene Runde, `QUAL-P2-004`):** 68 Deklarationen sind sogar **innerhalb
+ihrer Datei** ungenutzt (Kandidaten für echte Löschung) und ~187 Exporte/Typen
+sind nur deshalb noch offen, weil sie von bewusst behaltenen, nicht angebundenen
+Dateien importiert werden. Beides braucht die Datei-für-Datei-Entscheidung
+„anbinden oder löschen“, kein Skript.

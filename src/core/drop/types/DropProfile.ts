@@ -19,7 +19,7 @@ export interface ParameterTransformation {
   smoothingTime?: number; // ms für Audio-Rate Safe smoothing
 }
 
-export interface SampleCriteria {
+interface SampleCriteria {
   category?: string; // 'mids', 'highs', 'lows', 'percussive', 'bass'
   tempo?: number;
   minLength?: number; // ms

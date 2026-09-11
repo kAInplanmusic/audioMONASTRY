@@ -19,7 +19,7 @@
 
 import type { AudioFeatures } from './types';
 
-export type ShowSceneKind = 'image' | 'clip';
+type ShowSceneKind = 'image' | 'clip';
 
 /** Ein Element der Show. */
 export interface ShowScene {
@@ -68,7 +68,7 @@ export const SHOW_DEFAULTS: Required<ShowOptions> = {
   maxSceneS: 30,
 };
 
-export type ShowAdvanceReason = 'duration' | 'beat' | 'energy' | null;
+type ShowAdvanceReason = 'duration' | 'beat' | 'energy' | null;
 
 export interface ShowTick {
   state: ShowState;

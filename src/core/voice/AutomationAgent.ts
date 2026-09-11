@@ -6,7 +6,7 @@ import type { VoiceIntent } from './SpeechToIntent';
  * Generiert aus Sprachbefehlen Automation-Curves für Parameter.
  */
 
-export interface AutomationCurve {
+interface AutomationCurve {
   parameterId: string;
   points: { time: number; value: number }[];
 }

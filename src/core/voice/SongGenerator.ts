@@ -41,7 +41,7 @@ export class HfMusicGenProvider implements ISongGenerator {
 }
 
 /** Lokaler Fallback: generiert eine Melodie aus dem Prompt-Text. */
-export class LocalFormantSongProvider implements ISongGenerator {
+class LocalFormantSongProvider implements ISongGenerator {
   readonly id = 'local-formant-song';
 
   get available(): boolean {

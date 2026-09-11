@@ -62,7 +62,7 @@ const getStored = (): SettingsStore => {
   return DEFAULT_SETTINGS;
 };
 
-export const useAudioSettings = () => {
+const useAudioSettings = () => {
   const [settings, setSettings] = useState<SettingsStore>(getStored);
   const persist = (next: SettingsStore) => {
     setSettings(next);

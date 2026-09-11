@@ -18,7 +18,7 @@ export function envKey(name: string): string | undefined {
 }
 
 /** Beste kostenlose Modelle (HF-Inference) für Stimmen, Gesang und Songs. */
-export const VOICE_MODELS = {
+const VOICE_MODELS = {
   /** Stimmen: beste kostenlose deutsche TTS-Stimme (MMS). */
   tts: 'facebook/mms-tts-deu',
   /** Gesang: Suno Bark – expressive Stimmen & Gesang, multilingual. */

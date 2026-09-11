@@ -5,12 +5,12 @@
  * AudioGraphState und liefert eine Liste von Differenzen.
  */
 
-export interface RoutingNodeLike {
+interface RoutingNodeLike {
   id: string;
   type?: string;
 }
 
-export interface RoutingConnectionLike {
+interface RoutingConnectionLike {
   source: string;
   target: string;
 }

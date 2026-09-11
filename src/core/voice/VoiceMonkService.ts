@@ -106,7 +106,7 @@ export class HfBarkSingingProvider implements ISingingProvider {
 }
 
 /** Lokaler Gesangs-Fallback: deterministischer Formant-Synth (offline). */
-export class LocalFormantSingingProvider implements ISingingProvider {
+class LocalFormantSingingProvider implements ISingingProvider {
   readonly id = 'vocal-formant';
   readonly available = true;
 

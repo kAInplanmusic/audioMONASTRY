@@ -188,7 +188,7 @@ export class HfEndpointProvider implements IAiProvider {
 // ---------------------------------------------------------------------------
 // HF Serverless Provider (bestehendes Muster)
 // ---------------------------------------------------------------------------
-export class HfServerlessProvider implements IAiProvider {
+class HfServerlessProvider implements IAiProvider {
   readonly id = 'hf-serverless' as const;
 
   get available(): boolean {
@@ -230,7 +230,7 @@ export class HfServerlessProvider implements IAiProvider {
 // ---------------------------------------------------------------------------
 // Replicate Provider (Stem-Separation – bestehendes, live verifiziertes Muster)
 // ---------------------------------------------------------------------------
-export class ReplicateProvider implements IAiProvider {
+class ReplicateProvider implements IAiProvider {
   readonly id = 'replicate' as const;
 
   get available(): boolean {
@@ -287,7 +287,7 @@ export class ReplicateProvider implements IAiProvider {
 // ---------------------------------------------------------------------------
 // Local/Deterministischer Provider (DAW bleibt ohne Cloud nutzbar)
 // ---------------------------------------------------------------------------
-export class LocalProvider implements IAiProvider {
+class LocalProvider implements IAiProvider {
   readonly id = 'local' as const;
 
   get available(): boolean {

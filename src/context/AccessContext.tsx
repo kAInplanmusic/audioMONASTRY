@@ -1,7 +1,7 @@
 // src/context/AccessContext.tsx
 import React, { createContext, useContext, useState } from 'react';
 
-export type UserRole = 'ADMIN' | 'EDITOR' | 'VIEWER';
+type UserRole = 'ADMIN' | 'EDITOR' | 'VIEWER';
 
 interface AccessContextType {
   role: UserRole;

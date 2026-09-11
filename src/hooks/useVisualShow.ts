@@ -13,7 +13,7 @@ import { formatEtaMs, clipEtaMs } from '../core/ai/vision/clipPipeline';
 /** Ein Element, das gezeichnet werden kann (Clip oder Standbild). */
 type ShowMedia = HTMLVideoElement | HTMLImageElement;
 
-export interface AddSceneInput {
+interface AddSceneInput {
   prompt: string;
   style?: string;
   kind: 'image' | 'clip';

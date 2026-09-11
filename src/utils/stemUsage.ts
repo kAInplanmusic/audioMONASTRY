@@ -26,7 +26,7 @@ const STORAGE_KEY = 'audiomonastry_stem_usage';
  * Geschätzte Kosten pro Song in USD (Stand 2026, inkl. Kaltstart-Overhead).
  * Quelle: Replicate-Modellseiten + Produktions-Messungen (aistemsplitter.org).
  */
-export const STEM_COST_ESTIMATES: Record<StemProvider, number> = {
+const STEM_COST_ESTIMATES: Record<StemProvider, number> = {
   local: 0,
   'stem-ai': 0,
   replicate: 0.05,

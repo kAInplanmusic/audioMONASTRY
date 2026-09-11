@@ -41,7 +41,7 @@ export const PPQN = 24;
 export const PULSES_PER_STEP = PPQN / 4;
 
 /** GM-Percussion-Noten je DrumKit-Sound-Typ (General MIDI Kanal 10). */
-export const GM_DRUM_NOTES: Record<string, number> = {
+const GM_DRUM_NOTES: Record<string, number> = {
   kick: 36,   // Bass Drum 1
   snare: 38,  // Acoustic Snare
   clap: 39,   // Hand Clap

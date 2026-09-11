@@ -5,26 +5,26 @@ import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
 import { isListenerMode, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
 
-export type SessionPeer = { socketId: string; userId: string };
-export type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
+type SessionPeer = { socketId: string; userId: string };
+type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
 // T-0009/AD-N3 (Tropfen 1): Socket.io-Session-Payloads typisiert (statt `any`).
 // Server-Quelle: server.ts join-session/peer-joined/peer-left/session-full-Handler.
-export type SessionRole = 'admin' | 'producer' | 'engineer' | 'guest' | string;
-export type SessionMembersPayload = {
+type SessionRole = 'admin' | 'producer' | 'engineer' | 'guest' | string;
+type SessionMembersPayload = {
   members?: Array<{ socketId: string; userId: string }>;
   selfRole?: SessionRole;
   hostUserId?: string;
   max?: number;
 };
-export type PeerJoinedPayload = {
+type PeerJoinedPayload = {
   socketId: string;
   userId: string;
   role?: unknown;
 };
-export type PeerLeftPayload = { socketId: string };
-export type SessionFullPayload = { max?: number };
-export type RoleChangedPayload = { userId: string; role?: unknown };
-export type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
+type PeerLeftPayload = { socketId: string };
+type SessionFullPayload = { max?: number };
+type RoleChangedPayload = { userId: string; role?: unknown };
+type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
 export type PluginLockPayload = { pluginId?: unknown; lockedBy?: unknown; timestamp?: unknown; ttl?: unknown };
 
 class WebRTCManager {

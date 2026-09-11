@@ -7,7 +7,7 @@
 import { OfflineRenderer, type OfflineRenderRequest, type OfflineRenderResult, type RenderFactor } from './OfflineRenderer';
 import type { IAudioBuffer } from '../audio/types';
 
-export type RenderJobStatus = 'queued' | 'running' | 'done' | 'error';
+type RenderJobStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface RenderJob {
   id: string;

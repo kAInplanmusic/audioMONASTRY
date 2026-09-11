@@ -15,7 +15,7 @@ export function nowMs(): number {
 }
 
 /** Standard-Auflösung je Message-Typ (für ControlMessage → ControlEvent). */
-export function defaultResolution(kind: ControlMessage['kind']): number {
+function defaultResolution(kind: ControlMessage['kind']): number {
   switch (kind) {
     case 'pitch':
     case 'nrpn':

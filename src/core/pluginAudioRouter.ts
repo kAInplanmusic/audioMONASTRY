@@ -12,7 +12,7 @@ import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';
 import type { TrackType } from '../types';
 
 export type PluginActiveState = 'AUTO_AI' | 'PRO';
-export type PluginIsolationLevel = 'insert' | 'send' | 'ui-only';
+type PluginIsolationLevel = 'insert' | 'send' | 'ui-only';
 
 export interface PluginRouteConfig {
   id: string;

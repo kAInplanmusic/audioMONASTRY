@@ -25,10 +25,10 @@ export const GPU_ROLE_IDS = ['brain', 'ears', 'voiceGen'] as const;
 export type GpuRoleId = (typeof GPU_ROLE_IDS)[number];
 
 /** Zusätzliche Endpoint-Rolle: generative Visuals (nicht im Audio-Manifest). */
-export const VISION_ROLE_ID = 'vision' as const;
+const VISION_ROLE_ID = 'vision' as const;
 
 /** Zusätzliche Endpoint-Rolle: Video (Wan2.2 image->video). */
-export const VIDEO_ROLE_ID = 'video' as const;
+const VIDEO_ROLE_ID = 'video' as const;
 
 /** Alle zulässigen GPU-Endpoint-Rollen (Audio + generativ). */
 export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS, VISION_ROLE_ID, VIDEO_ROLE_ID] as const;
@@ -57,7 +57,7 @@ export const AI_MAX_STORAGE_EUR_PER_MONTH = envNumber('AI_MAX_STORAGE_EUR_PER_MO
  * Erfahrungswerte pro Endpoint-Rolle in EUR/h (A6000 48 GB, scale-to-zero).
  * Reine Größenordnung für den Budget-Guard – keine Abrechnung.
  */
-export const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
+const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
   brain: 0.49,
   ears: 0.49,
   voiceGen: 0.49,

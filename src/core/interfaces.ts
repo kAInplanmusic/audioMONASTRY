@@ -136,7 +136,7 @@ export interface ISpatialRenderer {
 // ---------------------------------------------------------------------------
 // 1.1.5 · IHardwareAdapter
 // ---------------------------------------------------------------------------
-export type ControlMessageKind =
+type ControlMessageKind =
   | 'noteOn' | 'noteOff' | 'cc' | 'pitch' | 'program' | 'osc'
   | 'polyAftertouch' | 'channelAftertouch'
   | 'clock' | 'start' | 'stop' | 'continue' | 'songPosition'
@@ -173,7 +173,7 @@ export interface IHardwareAdapter {
 export type ControlSourceProtocol = 'midi' | 'hid' | 'osc' | 'virtual';
 
 /** Semantik-Klasse eines Controls (für Mapping-Engine). */
-export type ControlSemantics =
+type ControlSemantics =
   | 'absolute'   // Fader/Poti/Encoder mit Absolutwert (0..resolution)
   | 'relative'   // Endlos-Encoder/Jog (Deltawerte, ggf. mit Vorzeichen)
   | 'toggle'     // Umschalter (Wert wechselt 0/1 bei jedem Drücken)

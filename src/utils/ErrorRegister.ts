@@ -6,7 +6,7 @@
  * Netzwerk-/Storage-Zwang – Serverless testbar.
  */
 
-export interface ErrorEntry {
+interface ErrorEntry {
   id: string;
   source: string;
   message: string;

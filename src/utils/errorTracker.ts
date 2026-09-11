@@ -52,7 +52,7 @@ export function trackError(
  * JSON-Line ins Docker-Log schreibt (Log-Rotation greift) und in den
  * Prometheus-Metriken zählt. Fire-and-forget mit keepalive.
  */
-export function reportErrorToServer(entry: TrackedError): void {
+function reportErrorToServer(entry: TrackedError): void {
   try {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     fetch('/api/telemetry', {
@@ -64,7 +64,7 @@ export function reportErrorToServer(entry: TrackedError): void {
   } catch { /* noop */ }
 }
 
-export function errorLog(): TrackedError[] {
+function errorLog(): TrackedError[] {
   return storageGetJson<TrackedError[]>(KEY) ?? [];
 }
 

@@ -1,4 +1,4 @@
-export type ProtocolMessageType = 
+type ProtocolMessageType = 
   | 'PLUGIN_STATE_UPDATE'
   | 'FX_UPDATE'
   | 'MIDI_CC'
@@ -12,19 +12,19 @@ export type ProtocolMessageType =
   | 'TRACK_ASSIGNMENT_UPDATE'
   | 'SPATIAL_ASSIGNMENT_UPDATE';
 
-export interface BaseMessage {
+interface BaseMessage {
   type: ProtocolMessageType;
   senderId: string;
   timestamp: number;
 }
 
-export interface PluginStateMessage extends BaseMessage {
+interface PluginStateMessage extends BaseMessage {
   type: 'PLUGIN_STATE_UPDATE';
   pluginId: string;
   state: 'OFF' | 'AUTO_AI' | 'PRO';
 }
 
-export interface FXUpdateMessage extends BaseMessage {
+interface FXUpdateMessage extends BaseMessage {
   type: 'FX_UPDATE';
   fx_type: string;
   settings: { wetDry: number };

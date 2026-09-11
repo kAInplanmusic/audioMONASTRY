@@ -47,7 +47,7 @@ export const localUser = {
   color: getLocalUserColor()
 };
 
-export interface CollabSession {
+interface CollabSession {
   locks: Record<string, string>;
   playback: {
     isPlaying: boolean;

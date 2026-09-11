@@ -19,8 +19,8 @@ import { BaseNode } from './basicNodes';
 import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
 
-export type BiquadType = 'peaking' | 'lowshelf' | 'highshelf' | 'highpass' | 'lowpass';
-export type BiquadCoefficients = [number, number, number, number, number];
+type BiquadType = 'peaking' | 'lowshelf' | 'highshelf' | 'highpass' | 'lowpass';
+type BiquadCoefficients = [number, number, number, number, number];
 
 // ---------------------------------------------------------------------------
 // Pure DSP-Helfer (lokal, keine Abhängigkeit zu AudioWorklet-Dateien)
@@ -60,7 +60,7 @@ export function compressorCurveDb(
   return threshold + over / r;
 }
 
-export function computeBiquadCoefficients(
+function computeBiquadCoefficients(
   type: BiquadType,
   freq: number,
   gainDb: number,

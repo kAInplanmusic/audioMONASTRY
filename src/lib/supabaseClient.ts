@@ -33,7 +33,7 @@ export interface CloudMusicRow {
 let cached: PostgrestClient | null | undefined;
 
 /** Liefert den (lazy) Supabase-REST-Client oder `null`, wenn nicht verfügbar. */
-export function getSupabaseClient(): PostgrestClient | null {
+function getSupabaseClient(): PostgrestClient | null {
   if (cached !== undefined) return cached;
 
   if (!cloudEnabled || !SUPABASE_URL || !SUPABASE_ANON_PUB) {

@@ -52,7 +52,7 @@ export function buildProfileId(fp: DeviceFingerprint): string {
 }
 
 /** Normalisiert Hersteller/Produktnamen für robustes Matching. */
-export function normId(s: string | undefined): string {
+function normId(s: string | undefined): string {
   return (s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 

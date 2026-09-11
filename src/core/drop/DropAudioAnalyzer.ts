@@ -40,8 +40,8 @@ export interface DropAnalysisRaw {
   };
 }
 
-export type DropVocal = 'none' | 'present' | 'unknown';
-export type DropTransient = 'weak' | 'medium' | 'strong';
+type DropVocal = 'none' | 'present' | 'unknown';
+type DropTransient = 'weak' | 'medium' | 'strong';
 
 /** Stabiler Feature-Vertrag für UI, aiMONK-Kontext und Vorschlagslogik. */
 export interface DropAudioFeatures {

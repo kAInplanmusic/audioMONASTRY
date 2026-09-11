@@ -27,7 +27,7 @@ export function songItemToAudioSource(item: SessionMediaItem): AudioSourceInput 
 }
 
 /** SongOutputBridge: Session-Medium → Sink. */
-export class SongOutputBridge {
+class SongOutputBridge {
   constructor(private sink: ISongOutputSink) {}
 
   publishSong(item: SessionMediaItem): AudioSourceInput {

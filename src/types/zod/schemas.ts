@@ -10,36 +10,36 @@ import { z } from 'zod';
 // Session-Payloads
 // ============================================================================
 
-export const SessionPeerSchema = z.object({
+const SessionPeerSchema = z.object({
   socketId: z.string(),
   userId: z.string(),
 });
 
-export const SessionMembersPayloadSchema = z.object({
+const SessionMembersPayloadSchema = z.object({
   members: z.array(SessionPeerSchema),
 });
 
-export const RoleChangedPayloadSchema = z.object({
+const RoleChangedPayloadSchema = z.object({
   socketId: z.string(),
   oldRole: z.string(),
   newRole: z.enum(['USER', 'ADMIN']),
 });
 
-export const SessionFullPayloadSchema = z.object({
+const SessionFullPayloadSchema = z.object({
   message: z.string().optional(),
 });
 
-export const PeerJoinedPayloadSchema = z.object({
+const PeerJoinedPayloadSchema = z.object({
   socketId: z.string(),
   userId: z.string(),
 });
 
-export const PeerLeftPayloadSchema = z.object({
+const PeerLeftPayloadSchema = z.object({
   socketId: z.string(),
   userId: z.string(),
 });
 
-export const PluginStatePayloadSchema = z.object({
+const PluginStatePayloadSchema = z.object({
   pluginId: z.string(),
   state: z.enum(['OFF', 'AUTO_AI', 'LOCKED']),
   userId: z.string(),
@@ -61,7 +61,7 @@ export const HRTFProcessingResultSchema = z.object({
 
 const UPLOAD_KEY_RE = /^uploads\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$/;
 
-export const TelemetryEventSchema = z.object({
+const TelemetryEventSchema = z.object({
   type: z.string().trim().min(1).max(32).default('log'),
   source: z.string().trim().min(1).max(128).default('client'),
   message: z.string().trim().max(1000).default(''),
@@ -337,12 +337,12 @@ export const PluginStateSocketSchema = z.object({
 // ============================================================================
 
 export type SessionPeer = z.infer<typeof SessionPeerSchema>;
-export type SessionMembersPayload = z.infer<typeof SessionMembersPayloadSchema>;
-export type RoleChangedPayload = z.infer<typeof RoleChangedPayloadSchema>;
-export type SessionFullPayload = z.infer<typeof SessionFullPayloadSchema>;
-export type PeerJoinedPayload = z.infer<typeof PeerJoinedPayloadSchema>;
-export type PeerLeftPayload = z.infer<typeof PeerLeftPayloadSchema>;
-export type PluginStatePayload = z.infer<typeof PluginStatePayloadSchema>;
+type SessionMembersPayload = z.infer<typeof SessionMembersPayloadSchema>;
+type RoleChangedPayload = z.infer<typeof RoleChangedPayloadSchema>;
+type SessionFullPayload = z.infer<typeof SessionFullPayloadSchema>;
+type PeerJoinedPayload = z.infer<typeof PeerJoinedPayloadSchema>;
+type PeerLeftPayload = z.infer<typeof PeerLeftPayloadSchema>;
+type PluginStatePayload = z.infer<typeof PluginStatePayloadSchema>;
 export type HRTFProcessingResult = z.infer<typeof HRTFProcessingResultSchema>;
 
 // ============================================================================

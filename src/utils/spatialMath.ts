@@ -152,7 +152,7 @@ export interface HrtfResult {
 
 const HEAD_RADIUS_NORM = 0.24;
 
-export function toAzimuthElevation(x: number, y: number): { azimuth: number; elevation: number } {
+function toAzimuthElevation(x: number, y: number): { azimuth: number; elevation: number } {
   const azimuth = Math.atan2(x, y) * 180 / Math.PI;
   return { azimuth, elevation: 0 };
 }

@@ -16,7 +16,7 @@ export interface EarlyReflectionParams {
   damping: number;
 }
 
-export const DEFAULT_EARLY_REFLECTIONS: EarlyReflectionParams = {
+const DEFAULT_EARLY_REFLECTIONS: EarlyReflectionParams = {
   tapsMs: [19, 31, 43, 59],
   tapGains: [0.8, 0.6, 0.45, 0.3],
   feedback: 0.25,

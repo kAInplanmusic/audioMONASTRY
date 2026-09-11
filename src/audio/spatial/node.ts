@@ -29,7 +29,7 @@ const PROCESSOR_NAME = 'spatial-processor';
 
 let modulePromise: Promise<void> | null = null;
 
-export async function ensureSpatialProcessorModule(ctx: BaseAudioContext): Promise<void> {
+async function ensureSpatialProcessorModule(ctx: BaseAudioContext): Promise<void> {
   if (!modulePromise) {
     modulePromise = (async () => {
       const aw = (ctx as any).audioWorklet;

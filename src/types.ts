@@ -47,7 +47,7 @@ export const TRACK_ROLE_MAP: Record<TrackType, TrackRole> = {
   channel10: 'lead',
 };
 
-export const ROLE_TO_TRACK: Record<TrackRole, TrackType> = {
+const ROLE_TO_TRACK: Record<TrackRole, TrackType> = {
   kick: 'channel1',
   hat: 'channel2',
   clap: 'channel3',
@@ -159,7 +159,7 @@ export interface SpatialSource {
   track?: TrackType;
 }
 
-export interface SpatialGlobalState {
+interface SpatialGlobalState {
   quality: SpatialQuality;
   listenerRot: number;
   masterGain: number;

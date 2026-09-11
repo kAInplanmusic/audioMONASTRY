@@ -35,7 +35,7 @@ export function musicToContent(track: MusicTrack, source = 'music-library'): Aud
   };
 }
 
-export function streamToContent(
+function streamToContent(
   id: string,
   name: string,
   kind: 'stream' | 'master-stream' | 'mixer-channel',

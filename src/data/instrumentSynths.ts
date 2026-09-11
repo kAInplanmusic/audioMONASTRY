@@ -8,7 +8,7 @@
 // Wird von `audioEngine.loadInstrument(id)` in einen Tone.js-Synth umgesetzt.
 // ============================================================================
 
-export type InstrumentFamily =
+type InstrumentFamily =
   | 'keys' | 'strings' | 'pluck' | 'brass' | 'woodwind'
   | 'voice' | 'perc' | 'drone';
 

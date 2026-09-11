@@ -5,7 +5,7 @@
  * Genutzt von der Upload-UI und vom Server-Pendant (server.ts).
  */
 
-export const AUDIO_EXTENSIONS = ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac', 'aiff', 'aif'] as const;
+const AUDIO_EXTENSIONS = ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac', 'aiff', 'aif'] as const;
 export type AudioExtension = (typeof AUDIO_EXTENSIONS)[number];
 
 export const UPLOAD_KINDS = ['sample', 'recording', 'stem', 'sound', 'voice'] as const;

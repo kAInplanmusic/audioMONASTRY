@@ -6,7 +6,7 @@
  * hier liegt nur die Node-Erzeugung.
  */
 
-export interface ClockWorkletParams {
+interface ClockWorkletParams {
   bpm: number;
   swing: number;
   gate: number;

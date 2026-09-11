@@ -13,18 +13,18 @@
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 import { aiLogger } from './aiLogger';
 
-export const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
+const CEREBRAS_BASE_URL = 'https://api.cerebras.ai/v1';
 const DEFAULT_MODEL = 'gpt-oss-120b';
 
-export const CEREBRAS_MODEL_TIERS = {
+const CEREBRAS_MODEL_TIERS = {
   simple: 'qwen-3.8-27b',
   moderate: 'gemma-4-31b',
   complex: 'gpt-oss-120b',
 } as const;
 
-export type CerebrasComplexity = keyof typeof CEREBRAS_MODEL_TIERS;
+type CerebrasComplexity = keyof typeof CEREBRAS_MODEL_TIERS;
 
-export function pickCerebrasModel(complexity: CerebrasComplexity = 'moderate'): string {
+function pickCerebrasModel(complexity: CerebrasComplexity = 'moderate'): string {
   return CEREBRAS_MODEL_TIERS[complexity] ?? DEFAULT_MODEL;
 }
 

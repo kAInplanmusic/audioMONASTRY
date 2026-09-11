@@ -5,7 +5,7 @@
 
 import { TRACK_ROLE_MAP, TrackRole, ALL_ROLES, emptyPatterns } from '../types';
 
-export interface PresetTrack {
+interface PresetTrack {
   id: string;
   instrument: string;
   params?: Record<string, unknown>;
@@ -21,7 +21,7 @@ export interface Preset {
   connections?: Array<{ source: string; destination: string }>;
 }
 
-export interface GeminiPreset {
+interface GeminiPreset {
   name?: string;
   bpm: number;
   cutoff: number;

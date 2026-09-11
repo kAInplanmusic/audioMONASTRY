@@ -7,9 +7,9 @@
  * exakten Anleitungen/Skript-Referenzen dafür.
  */
 
-export type AudioOS = 'windows' | 'linux' | 'macos' | 'unknown';
+type AudioOS = 'windows' | 'linux' | 'macos' | 'unknown';
 
-export function detectOS(): AudioOS {
+function detectOS(): AudioOS {
   const ua = (globalThis.navigator?.userAgent ?? '').toLowerCase();
   if (/windows/.test(ua)) return 'windows';
   if (/linux/.test(ua)) return 'linux';
@@ -17,7 +17,7 @@ export function detectOS(): AudioOS {
   return 'unknown';
 }
 
-export interface AggregationGuide {
+interface AggregationGuide {
   os: AudioOS;
   title: string;
   /** 1..n Schritte als Klartext. */
@@ -27,7 +27,7 @@ export interface AggregationGuide {
   command?: string;
 }
 
-export function aggregationGuide(os: AudioOS = detectOS()): AggregationGuide {
+function aggregationGuide(os: AudioOS = detectOS()): AggregationGuide {
   switch (os) {
     case 'windows':
       return {

@@ -33,7 +33,7 @@ export type ParsedMidiEvent =
   | { type: 'rpn'; channel: number; parameter: number; value: number }
   | { type: 'nrpn'; channel: number; parameter: number; value: number };
 
-export const MIDI_RT = {
+const MIDI_RT = {
   clock: 0xf8,
   start: 0xfa,
   continue: 0xfb,
@@ -42,7 +42,7 @@ export const MIDI_RT = {
   reset: 0xff,
 } as const;
 
-export const MIDI_SYSTEM = {
+const MIDI_SYSTEM = {
   sysexStart: 0xf0,
   sysexEnd: 0xf7,
   songPosition: 0xf2,

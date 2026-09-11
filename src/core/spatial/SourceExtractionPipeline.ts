@@ -6,7 +6,7 @@
  */
 import { SpatialScene, type AudioObject, type Vec3 } from './SpatialScene';
 
-export type AudioSourceKind = 'sample' | 'track' | 'stem' | 'recording';
+type AudioSourceKind = 'sample' | 'track' | 'stem' | 'recording';
 
 export interface AudioSourceInput {
   id: string;
@@ -34,7 +34,7 @@ export interface IAudioExtractor {
 const ORIGIN: Vec3 = { x: 0, y: 0, z: 0 };
 
 /** Stereo-Quellen bekommen eine feste Links/Rechts-Position. */
-export class StereoExtractor implements IAudioExtractor {
+class StereoExtractor implements IAudioExtractor {
   readonly id = 'stereo';
 
   canExtract(source: AudioSourceInput): boolean {
@@ -48,7 +48,7 @@ export class StereoExtractor implements IAudioExtractor {
 }
 
 /** Stems werden auf mehrere Objekte aufgeteilt (drums/bass/other/vocals). */
-export class StemExtractor implements IAudioExtractor {
+class StemExtractor implements IAudioExtractor {
   readonly id = 'stems';
 
   canExtract(source: AudioSourceInput): boolean {
@@ -71,7 +71,7 @@ export class StemExtractor implements IAudioExtractor {
 }
 
 /** Fallback: Mono-Aufnahme in die Mitte. */
-export class DefaultExtractor implements IAudioExtractor {
+class DefaultExtractor implements IAudioExtractor {
   readonly id = 'default';
 
   canExtract(_source: AudioSourceInput): boolean {

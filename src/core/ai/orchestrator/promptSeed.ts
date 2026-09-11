@@ -19,7 +19,7 @@ export const PLUGIN_IDS = [
   'ai', 'perfor',
 ] as const;
 
-export interface SystemPromptSeed {
+interface SystemPromptSeed {
   plugin_id: string;
   role: 'system';
   version: number;
@@ -27,7 +27,7 @@ export interface SystemPromptSeed {
   enabled: boolean;
 }
 
-export interface PluginPromptVersionSeed {
+interface PluginPromptVersionSeed {
   plugin_id: string;
   version: number;
   prompt: string;

@@ -8,7 +8,7 @@
  */
 
 /** Farbpalette als RGB-Quadrupel (r,g,b in 0..1) plus Basisfarbton (Grad). */
-export interface VisualPalette {
+interface VisualPalette {
   /** 4–6 Farben, die im Shader interpoliert werden. */
   colors: ReadonlyArray<readonly [number, number, number]>;
   /** Grundfarbton in Grad (0–360), der bei Energie rotiert. */
@@ -16,7 +16,7 @@ export interface VisualPalette {
 }
 
 /** Wie stark die einzelnen Audio-Bänder die Bewegung treiben (0..1). */
-export interface VisualMotion {
+interface VisualMotion {
   /** Grundrotation in Grad/Sekunde. */
   baseSpin: number;
   /** Zusätzliche Rotation aus den Höhen (Grad/Sekunde bei voller Energie). */

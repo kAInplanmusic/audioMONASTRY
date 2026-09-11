@@ -41,15 +41,15 @@ import {
   type TrackAssignmentMap,
 } from '../core/session/projectState';
 
-export type ProjectActionResult = { ok: true } | { ok: false; reason: 'occupied' };
+type ProjectActionResult = { ok: true } | { ok: false; reason: 'occupied' };
 
-export interface SpatialTakeoverRequest {
+interface SpatialTakeoverRequest {
   channelId: number;
   content: AudioContentRef;
   token: number;
 }
 
-export interface ProjectNotice {
+interface ProjectNotice {
   id: number;
   text: string;
   tone: 'info' | 'warn' | 'error';

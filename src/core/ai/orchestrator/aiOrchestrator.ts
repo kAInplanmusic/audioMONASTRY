@@ -19,7 +19,7 @@ import { SessionManager } from './sessionManager';
 import { AiProviderError, type AiJob, type AiTask, type IAiProvider } from './types';
 import { PRESET_SAMPLE_DATABASE } from '../../../data/samples';
 
-export interface OrchestrateRequest {
+interface OrchestrateRequest {
   userId: string;
   task: AiTask;
   model: string;
@@ -28,20 +28,20 @@ export interface OrchestrateRequest {
   mcpPermission?: 'READ' | 'WRITE' | 'EXECUTION' | 'DESTRUCTIVE';
 }
 
-export interface OrchestrateResult {
+interface OrchestrateResult {
   job: AiJob;
   provider: string;
   result: unknown;
   costUsd: number;
 }
 
-export interface AiOrchestratorOptions {
+interface AiOrchestratorOptions {
   endpointClient?: EndpointClient;
   sessionIdleTimeoutMs?: number;
   jobMaxConcurrency?: ConstructorParameters<typeof JobManager>[0]['maxConcurrency'];
 }
 
-export class AiOrchestrator {
+class AiOrchestrator {
   readonly jobs: JobManager;
   readonly sessions: SessionManager;
   readonly models: ModelManager;

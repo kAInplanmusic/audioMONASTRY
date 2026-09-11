@@ -74,7 +74,7 @@ export async function loadScratchpadSnapshots(): Promise<SessionScratchpadItem[]
   return Array.isArray(items) ? items : [];
 }
 
-export async function saveScratchpadSnapshots(items: SessionScratchpadItem[]): Promise<void> {
+async function saveScratchpadSnapshots(items: SessionScratchpadItem[]): Promise<void> {
   await largeSetJson(SCRATCHPAD_SNAPSHOTS_KEY, items.slice(0, 50));
 }
 
@@ -101,7 +101,7 @@ export async function loadScratchpadEntries(): Promise<ScratchpadEntry[]> {
   return Array.isArray(items) ? items : [];
 }
 
-export async function saveScratchpadEntries(entries: ScratchpadEntry[]): Promise<void> {
+async function saveScratchpadEntries(entries: ScratchpadEntry[]): Promise<void> {
   await largeSetJson(SCRATCHPAD_ENTRIES_KEY, entries.slice(0, 100));
 }
 

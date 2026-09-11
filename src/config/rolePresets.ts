@@ -55,7 +55,7 @@ export const ROLE_PRESETS: RolePreset[] = [
 ];
 
 /** Liest Eine Rolle und die dazugehörige Tooltip-Konfiguration als Onboarding. */
-export function getRolePreset(role: StudioRole): RolePreset {
+function getRolePreset(role: StudioRole): RolePreset {
   return ROLE_PRESETS.find(r => r.role === role) ?? ROLE_PRESETS[0];
 }
 

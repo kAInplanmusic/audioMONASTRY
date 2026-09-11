@@ -6,9 +6,9 @@
  */
 import type { AiProviderId, AiTask } from './types';
 
-export type AiLogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
+type AiLogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'FATAL';
 
-export interface AiLogRecord {
+interface AiLogRecord {
   ts: string;
   level: AiLogLevel;
   service: string;
@@ -49,7 +49,7 @@ export function redactSecrets(input: unknown): unknown {
   return input;
 }
 
-export class AiLogger {
+class AiLogger {
   constructor(private service = 'ai-orchestrator') {}
 
   log(level: AiLogLevel, msg: string, fields: Omit<AiLogRecord, 'ts' | 'level' | 'service' | 'msg'> = {}): void {

@@ -23,7 +23,7 @@ export function resolveAudioContextOptions(settings: AudioContextSettings = {}):
   return options;
 }
 
-export function getAudioContextCtor(): AudioContextCtor | null {
+function getAudioContextCtor(): AudioContextCtor | null {
   const win = (typeof window !== 'undefined' ? window : globalThis) as unknown as {
     AudioContext?: AudioContextCtor;
     webkitAudioContext?: AudioContextCtor;
@@ -32,7 +32,7 @@ export function getAudioContextCtor(): AudioContextCtor | null {
 }
 
 /** Erzeugt einen AudioContext mit den gespeicherten AudioSettings (P2-1/P1-3). */
-export function createConfiguredAudioContext(settings: AudioContextSettings = {}): AudioContext | null {
+function createConfiguredAudioContext(settings: AudioContextSettings = {}): AudioContext | null {
   const Ctor = getAudioContextCtor();
   if (!Ctor) return null;
   try {

@@ -8,7 +8,7 @@
  */
 import type { AiTask, ModelDefinition, ModelLoadClass } from './types';
 
-export const MODEL_DEFINITIONS: readonly ModelDefinition[] = [
+const MODEL_DEFINITIONS: readonly ModelDefinition[] = [
   {
     id: 'ast-audioset',
     repository: 'MIT/ast-finetuned-audioset-10-10-0.4593',

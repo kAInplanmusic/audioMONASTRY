@@ -82,7 +82,7 @@ export function distanceLowpassCoef(dist: number, sampleRate: number): number {
 }
 
 /** Built-in HRTF-artige Kurz-Kernel (ipsi-/kontralateral, selbst erzeugt, lizenzfrei). */
-export function buildDefaultHrtf(kind: 'medium' | 'high'): { left: number[]; right: number[] } {
+function buildDefaultHrtf(kind: 'medium' | 'high'): { left: number[]; right: number[] } {
   if (kind === 'medium') {
     return {
       left: [0.65, 0.35, 0.18, 0.08, 0.03, 0.01, 0, 0],

@@ -16,7 +16,7 @@ import { expect, type Page } from '@playwright/test';
 export const STUDIO_NAV = 'nav[aria-label="Studio-Navigation"]';
 
 /** Short-Code → vollständiger Plugin-Name (title-Attribut im Header-Icon, 16-MONK-Ziel). */
-export const SHORT_TO_NAME: Record<string, string> = {
+const SHORT_TO_NAME: Record<string, string> = {
   INS: 'instruMONK',
   SYSA: 'syntisamplerMONK',
   DRSA: 'drumsamplerMONK',
@@ -48,7 +48,7 @@ export async function enterStudio(page: Page): Promise<void> {
 }
 
 /** Bekannte Umgebungsfehler (Tone.js Worklet-Blob-Polyfills im Headless-Chromium). */
-export const IGNORED_PAGEERRORS = [
+const IGNORED_PAGEERRORS = [
   "Unexpected token 'export'",
 ];
 

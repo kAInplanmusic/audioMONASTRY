@@ -14,7 +14,7 @@
  * Keine Browser-/Node-Abhängigkeiten. Vollständig unit-testbar.
  */
 
-export type UmpMessageType = 0x0 | 0x1 | 0x2 | 0x3 | 0x4 | 0x5;
+type UmpMessageType = 0x0 | 0x1 | 0x2 | 0x3 | 0x4 | 0x5;
 
 export interface UmpPacket {
   messageType: UmpMessageType;
@@ -41,7 +41,7 @@ export interface UmpMidi2NoteOn {
   attribute: number; // 16-Bit
 }
 
-export interface UmpMidi2NoteOff {
+interface UmpMidi2NoteOff {
   kind: 'midi2NoteOff';
   group: number;
   channel: number;
@@ -62,7 +62,7 @@ export interface UmpMidi2Controller {
   value32: number;
 }
 
-export interface UmpMidi2PitchBend {
+interface UmpMidi2PitchBend {
   kind: 'midi2PitchBend';
   group: number;
   channel: number;
@@ -70,14 +70,14 @@ export interface UmpMidi2PitchBend {
   value32: number;
 }
 
-export interface UmpMidi2ChannelPressure {
+interface UmpMidi2ChannelPressure {
   kind: 'midi2ChannelPressure';
   group: number;
   channel: number;
   value32: number;
 }
 
-export interface UmpMidi2ProgramChange {
+interface UmpMidi2ProgramChange {
   kind: 'midi2ProgramChange';
   group: number;
   channel: number;

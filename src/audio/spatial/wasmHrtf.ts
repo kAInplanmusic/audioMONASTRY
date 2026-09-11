@@ -7,7 +7,7 @@
  * - `compileHrtfConvWasm`: fetch + compile (Streaming, mit ArrayBuffer-Fallback)
  */
 
-export interface HrtfConvolver {
+interface HrtfConvolver {
   readonly blockSize: number;
   setIr(left: Float32Array, right: Float32Array): void;
   processBlock(inputL: Float32Array, inputR: Float32Array, outL: Float32Array, outR: Float32Array): void;

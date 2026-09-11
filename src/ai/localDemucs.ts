@@ -14,9 +14,9 @@
  */
 import { encodeWavFromChannels } from '../utils/wavEncode';
 
-export const DEMUCS_MODEL_URL = '/models/htdemucs.onnx';
-export const DEMUCS_SEGMENT = 343980; // ~7,8 s @ 44,1 kHz
-export const DEMUCS_OVERLAP = 0.25;
+const DEMUCS_MODEL_URL = '/models/htdemucs.onnx';
+const DEMUCS_SEGMENT = 343980; // ~7,8 s @ 44,1 kHz
+const DEMUCS_OVERLAP = 0.25;
 
 export interface DemucsStems {
   drums: string;

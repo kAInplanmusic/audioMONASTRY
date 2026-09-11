@@ -30,20 +30,20 @@ export interface ManagedOutputDevice {
   isXonar: boolean;
 }
 
-export interface ManagedInputDevice {
+interface ManagedInputDevice {
   deviceId: string;
   label: string;
   kind: MediaDeviceKind;
 }
 
-export interface XonarChannelMap {
+interface XonarChannelMap {
   setupId: string;
   totalChannels: number;
   requiredDevices: number;
   channels: { channel: number; name: string; deviceIndex: number; deviceChannel: number; deviceChannelName: string }[];
 }
 
-export interface AudioLatencySnapshot {
+interface AudioLatencySnapshot {
   state: string;
   sampleRate: number;
   baseLatencyMs: number;
@@ -54,7 +54,7 @@ export interface AudioLatencySnapshot {
   source: 'webaudio';
 }
 
-export interface AudioDeviceChange {
+interface AudioDeviceChange {
   kind: 'CONNECTED' | 'DISCONNECTED' | 'CHANGED';
   deviceId: string;
   label: string;

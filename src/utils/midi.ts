@@ -4,7 +4,7 @@
 // Alle Funktionen sind NaN-sicher und clamps auf den 7/14-Bit-Bereich.
 // =============================================================================
 
-export const MIDI_STATUS = {
+const MIDI_STATUS = {
   noteOff: 0x80,
   noteOn: 0x90,
   polyAftertouch: 0xa0,
@@ -20,8 +20,8 @@ export type MidiMessageKind =
   | 'noteOff' | 'noteOn' | 'polyAftertouch' | 'controlChange'
   | 'programChange' | 'channelAftertouch' | 'pitchBend' | 'sysex' | 'unknown';
 
-export const clamp7 = (v: number): number => Math.max(0, Math.min(127, Math.round(v)));
-export const clamp14 = (v: number): number => Math.max(0, Math.min(16383, Math.round(v)));
+const clamp7 = (v: number): number => Math.max(0, Math.min(127, Math.round(v)));
+const clamp14 = (v: number): number => Math.max(0, Math.min(16383, Math.round(v)));
 
 /** Kanal aus einem Status-Byte (0–15). */
 export function channelOf(status: number): number {

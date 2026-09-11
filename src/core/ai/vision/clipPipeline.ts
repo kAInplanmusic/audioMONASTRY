@@ -52,7 +52,7 @@ export interface ClipPipelineDeps {
   video: typeof generateVideo;
 }
 
-export const DEFAULT_CLIP_DEPS: ClipPipelineDeps = {
+const DEFAULT_CLIP_DEPS: ClipPipelineDeps = {
   image: generateVisionImage,
   video: generateVideo,
 };
@@ -130,7 +130,7 @@ export async function generateClipFromPrompt(
  * benennen, nicht sekundengenau sein.
  */
 export const CLIP_ETA_COLD_MS = 240_000;
-export const CLIP_ETA_WARM_MS = 70_000;
+const CLIP_ETA_WARM_MS = 70_000;
 
 export function clipEtaMs(warm = false): number {
   return warm ? CLIP_ETA_WARM_MS : CLIP_ETA_COLD_MS;

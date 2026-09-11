@@ -36,7 +36,7 @@ const resolveOrigin = (
   return null; // same origin
 };
 
-export const API_ORIGIN = resolveOrigin(
+const API_ORIGIN = resolveOrigin(
   typeof import.meta !== 'undefined' ? import.meta.env.VITE_API_BASE_URL : undefined,
   'http://localhost:8080',
 );

@@ -87,7 +87,7 @@ function noteToHz(noteHz: number, transpose: number): number {
 }
 
 /** Baut den deterministischen Voice-State (alle Puffer vorallokiert). */
-export function createFmVoice(patch: Dx7Patch, opts: FmRenderOptions): {
+function createFmVoice(patch: Dx7Patch, opts: FmRenderOptions): {
   states: OpVoiceState[];
   algIndex: number;
   feedbackGain: number;

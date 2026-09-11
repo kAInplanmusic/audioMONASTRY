@@ -370,10 +370,19 @@
       "id": "QUAL-P2-003",
       "title": "Ungenutzte Exporte/Typen abbauen (Kaskade, 100 Dateien)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Qualitaet / Struktur",
       "source": "docs/QUALITY_TOOLING_2026.md#1",
-      "note": "Nach der knip-Konfiguration verbleiben 222 ungenutzte Exporte und 137 ungenutzte Typen in 100 Dateien. Das ist ein Kaskaden-Thema: tote Dateien importieren tote Typen, deshalb iterativ vorgehen (erst Dateien entfernen, knip erneut, dann Exporte/Typen in kleinen Batches) - jeweils mit tsc/eslint/vitest/build als Gate. Bewusst nicht in der Aufraeumrunde gemacht: ein Schnitt ueber 100 Dateien gleichzeitig ist kein \"kleiner\" Punkt. Messung: npm run check:deadcode."
+      "note": "TEILWEISE ERLEDIGT 2026-09-11 (Kaskade, iterativ): (1) ERREICHBARKEITSANALYSE statt Namenssuche: 263 Wurzeln (index.html->main.tsx, server.ts, Configs, scripts/**, tests/**, Worklet-Verzeichnis wegen readdir-Build) -> BFS ueber aufgeloeste Importe; 628 erreichbare Dateien, 44 der 49 knip-Kandidaten unerreichbar. (2) GELOESCHT (nur was in KEINEM Dokument vorkommt UND ueberholt ist): plugins/PluginBase.tsx, plugins/PluginLockable.ts, plugins/dsp-engine/DspEnginePlugin.tsx, plugins/instrumente/InstrumentePlugin.tsx (eigener Kommentar: \"Basisklasse fuer Legacy-Plugins\"), src/hubConnector.ts, src/hooks/useDevice.ts -> Boundary 404 -> 398 Dateien. (3) BEWUSST BEHALTEN + im knip.json-ignore gruppiert (Projektregel: kein V1-Abbau vor V2-Paritaet, kein stiller Funktionsverlust): V1-Barrel (src/core/index.ts, src/lib/db.ts, src/core/audio/backends/*) und implementierte, noch nicht angebundene Infrastruktur (Session-Replikation, RingBuffer/WorkletPool/AsyncSandbox, Ambisonics/HRTF/SceneRenderers, EdgeDspClient/Failover, HardwareSimulator, Native-Runtime, webgpu_adapter) - per git checkout <sha> -- <pfad> rueckholbar. (4) EXPORTE REDUZIERT mit zwei Schutzregeln (aus zwei Fehlschlaegen gelernt): kein Name, der importiert ODER re-exportiert wird; nur zurueckstufen, wenn die Deklaration in ihrer Datei selbst benutzt wird (sonst --max-warnings=0 rot). Ergebnis: ungenutzte Exporte 221 -> 136, ungenutzte Typen 137 -> 51, ungenutzte Dateien 148 -> 5 (171 Namen in 89 Dateien zurueckgestuft, kein Verhalten geaendert). BELEGE: tsc 0, eslint 0, Boundary 398/0, build gruen, test:ci 1181/1181 ohne Skips. REST als QUAL-P2-004: 68 Deklarationen sind sogar INNERHALB ihrer Datei ungenutzt (echte Loeschkandidaten) und ~187 Exporte/Typen haengen an den behaltenen, nicht angebundenen Dateien - beides braucht die Datei-fuer-Datei-Entscheidung \"anbinden oder loeschen\", kein Skript. DOKU: docs/QUALITY_TOOLING_2026.md §4."
+    },
+    {
+      "id": "QUAL-P2-004",
+      "title": "Nicht angebundene Dateien: anbinden oder loeschen (Datei-fuer-Datei)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Qualitaet / Struktur",
+      "source": "docs/QUALITY_TOOLING_2026.md#4",
+      "note": "Nach QUAL-P2-003 offen: 68 Deklarationen, die sogar innerhalb ihrer Datei ungenutzt sind (Loeschkandidaten), und ~187 Exporte/Typen, die nur deshalb gemeldet werden, weil sie von bewusst behaltenen, nicht angebundenen Dateien (V1-Barrel, Worker/Spatial/Native-Infrastruktur, B2BModal/ModuleContainer/RoomPlannerPanel/SampleMonkLogo/MasterTrackTerminal, EdgeDspClient/FailoverController, HardwareSimulator, State-Replikation, TransportRegistry, webgpu_adapter, firebase/db) importiert werden. Jede dieser Dateien braucht die Entscheidung \"anbinden (mit Test + UI-Pfad) oder loeschen\" - das ist Produkt-/Architekturentscheidung, kein Skript. Messung: npm run check:deadcode."
     }
   ],
   "visionSandbox": [

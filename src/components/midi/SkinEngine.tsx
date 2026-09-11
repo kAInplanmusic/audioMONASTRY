@@ -12,7 +12,7 @@ import { MidiDeviceType } from '../../config/midiDevices';
  * dadurch Plug-and-Play für alle registrierten Geräte.
  */
 
-export interface SkinState {
+interface SkinState {
   pads?: Record<number, boolean>;        // aktiv leuchtende Pads
   padColors?: Record<number, string>;    // Pad-Farben
   encoders?: number[];                   // Encoder-Positionen 0..1

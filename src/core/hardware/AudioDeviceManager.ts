@@ -12,7 +12,7 @@
  */
 export type AudioDeviceBackendKind = 'asio' | 'coreaudio' | 'pipewire' | 'wasapi';
 
-export type AudioDeviceState = 'disconnected' | 'connected' | 'opened' | 'running';
+type AudioDeviceState = 'disconnected' | 'connected' | 'opened' | 'running';
 
 export interface AudioDeviceCapabilities {
   /** Unterstützte Samplerates (leer = unbekannt, nicht annehmen!). */
@@ -48,7 +48,7 @@ export interface AudioDevice {
   latency?: AudioLatencyInfo;
 }
 
-export type AudioDeviceEventKind = 'CONNECTED' | 'DISCONNECTED' | 'CHANGED' | 'RECONNECTED';
+type AudioDeviceEventKind = 'CONNECTED' | 'DISCONNECTED' | 'CHANGED' | 'RECONNECTED';
 
 export interface AudioDeviceEvent {
   kind: AudioDeviceEventKind;

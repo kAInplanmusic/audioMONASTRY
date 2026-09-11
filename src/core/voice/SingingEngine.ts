@@ -15,7 +15,7 @@ export interface VoiceModel {
   locale: string;
 }
 
-export interface SingingNote {
+interface SingingNote {
   lyric: string;
   midi: number;
   start: number; // Sekunden
@@ -27,7 +27,7 @@ export interface SingingPhrase {
   bpm: number;
 }
 
-export interface ISingingEngine {
+interface ISingingEngine {
   loadModel(model: VoiceModel): Promise<void>;
   sing(phrase: SingingPhrase): Promise<void>;
   speak(text: string): Promise<void>;

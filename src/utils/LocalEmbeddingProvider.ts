@@ -50,7 +50,7 @@ async function loadTransformer(): Promise<any> {
 }
 
 /** Deterministischer 512-d-Feature-Hash (TF-gewichtetes Hashing; kein Zufall). */
-export function fallbackEmbedding(text: string): number[] {
+function fallbackEmbedding(text: string): number[] {
   const vec = new Array(DIM).fill(0);
   const norm = (text || '').toLowerCase().replace(/[^a-zäöüß0-9\s-]/g, ' ');
   const tokens = norm.split(/\s+/).filter((t) => Boolean(t) && !STOPWORDS.has(t));

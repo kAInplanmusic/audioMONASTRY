@@ -5,7 +5,7 @@
  * Audio-Medien (TTS/Gesang/Samples) ablegen, damit DJ/Plugins sie aufgreifen.
  */
 
-export type SessionMediaKind = 'tts' | 'singing' | 'sample' | 'recording' | 'song';
+type SessionMediaKind = 'tts' | 'singing' | 'sample' | 'recording' | 'song';
 
 export interface SessionMediaItem {
   id: string;

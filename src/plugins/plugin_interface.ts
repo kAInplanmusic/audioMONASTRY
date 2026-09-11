@@ -34,7 +34,7 @@ export type CanonicalPluginId =
   | 'master'
   | 'record';
 
-export type PluginCapability =
+type PluginCapability =
   | 'audio-source'
   | 'audio-processor'
   | 'audio-mixer'

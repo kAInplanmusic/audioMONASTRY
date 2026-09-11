@@ -163,7 +163,7 @@ export function canAccessModule(role: string, moduleId: string, param?: string, 
 // ============================================================================
 // 3.2.3 – Echtzeit-Rollenwechsel (ohne Audio-Unterbrechung)
 // ============================================================================
-export interface RoleTransition {
+interface RoleTransition {
   from: string;
   to: string;
   at: number;
@@ -171,7 +171,7 @@ export interface RoleTransition {
   progress: number;
 }
 
-export class RoleTransitionManager {
+class RoleTransitionManager {
   private current = new Map<string, string>();
   private transitions = new Map<string, RoleTransition>();
   private onTransition: (userId: string, t: RoleTransition) => void = () => {};

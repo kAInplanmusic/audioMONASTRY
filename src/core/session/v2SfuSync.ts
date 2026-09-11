@@ -12,7 +12,7 @@ import type { AudioGraphState } from '../../utils/audioGraphSerialization';
 import type { V2SessionTransportState, V2SfuProducerInfo } from './v2SessionState';
 import { createV2TransportState } from './v2SessionState';
 
-export function canonicalStringify(value: unknown): string {
+function canonicalStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map((v) => canonicalStringify(v)).join(',')}]`;
   const obj = value as Record<string, unknown>;
@@ -51,7 +51,7 @@ export function createSfuTransportState(
 }
 
 /** Aktualisiert die Graph-Revision eines Transport-State. */
-export function setV2GraphRevision(state: V2SessionTransportState, revision: string | null): V2SessionTransportState {
+function setV2GraphRevision(state: V2SessionTransportState, revision: string | null): V2SessionTransportState {
   return {
     ...state,
     graphRevision: revision,

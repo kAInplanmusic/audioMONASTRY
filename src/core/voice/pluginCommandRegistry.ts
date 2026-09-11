@@ -25,7 +25,7 @@ export const PLUGIN_COMMAND_IDS: readonly string[] = Object.freeze([
 
 let registered = false;
 
-export function registerDefaultVoiceCommands(): void {
+function registerDefaultVoiceCommands(): void {
   if (registered) return;
   registered = true;
 

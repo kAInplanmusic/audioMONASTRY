@@ -20,7 +20,7 @@ import { attachDropBridges } from '../utils/dropAudioBridge';
 
 export type DropMode = 'generator' | 'dj_transition' | 'sampler_top';
 
-export interface ChatMessage {
+interface ChatMessage {
   id: string;
   sender: 'user' | 'ai';
   text: string;

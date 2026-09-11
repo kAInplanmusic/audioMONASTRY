@@ -11,7 +11,7 @@
  */
 import { computeWorkerUrl } from './computeWorkerUrl';
 
-export interface PoolOptions {
+interface PoolOptions {
   size?: number;
   timeoutMs?: number;
 }

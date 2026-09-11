@@ -36,7 +36,7 @@ const PAD = (n: number): number => (4 - (n % 4)) % 4;
 // Encode
 // ---------------------------------------------------------------------------
 
-export function oscString(s: string): Uint8Array {
+function oscString(s: string): Uint8Array {
   const bytes = new TextEncoder().encode(s);
   const out = new Uint8Array(bytes.length + 1 + PAD(bytes.length + 1));
   out.set(bytes, 0);
@@ -129,7 +129,7 @@ export function encodeOscPacket(packet: OscPacket): Uint8Array {
 // Decode
 // ---------------------------------------------------------------------------
 
-export function decodeOscString(bytes: Uint8Array, offset: number): { value: string; next: number } {
+function decodeOscString(bytes: Uint8Array, offset: number): { value: string; next: number } {
   let end = offset;
   while (end < bytes.length && bytes[end] !== 0) end++;
   const value = new TextDecoder().decode(bytes.subarray(offset, end));
