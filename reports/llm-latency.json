@@ -1,0 +1,28 @@
+{
+  "prompt": "Antworte NUR mit JSON, ohne Erklaerung: {\"pluginId\":\"mixer\",\"command\":\"gain\",\"channel\":\"channel1\",\"db\":-6}",
+  "results": [
+    {
+      "provider": "cerebras",
+      "httpError": 404,
+      "body": "{\"message\":\"Model does not exist or you do not have access to it.\",\"type\":\"not_found_error\",\"param\":\"model\",\"code\":\"model_not_found\"}"
+    },
+    {
+      "provider": "deepseek-flash",
+      "model": "deepseek-v4-flash",
+      "latencyMs": 1329,
+      "completionTokens": 64,
+      "tokensPerSecond": 48.2,
+      "textHead": ""
+    },
+    {
+      "provider": "openrouter",
+      "model": "meta-llama/llama-3.3-70b-instruct",
+      "latencyMs": 3449,
+      "completionTokens": 25,
+      "tokensPerSecond": 7.2,
+      "textHead": "{\"pluginId\":\"mixer\",\"command\":\"gain\",\"channel\":\"channel1\",\"db\":-6,\"status\":\"ok\"}"
+    }
+  ],
+  "finding_logs": "RunPod-Serverless-Worker-Logs sind mit den vorhandenen Zugängen NICHT lesbar: /v2/{id}/logs liefert in allen Varianten (Bearer Account-Key, x-api-key, api_key=, S3-Access-Key) HTTP 401 \"invalid worker api key\". Es braucht einen Worker-API-Key am Endpoint (Console-Einstellung).",
+  "note": "cerebras 404 = falscher Modellname (llama-3.3-70b existiert dort nicht); deepseek liefert 64 Tokens in 1329 ms aber leeren content (Reasoning-Budget); openrouter antwortet in 3449 ms mit korrektem Tool-Call-JSON."
+}
