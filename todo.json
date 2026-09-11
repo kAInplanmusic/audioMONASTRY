@@ -162,6 +162,14 @@
       "verdict": "CONFIRMED_UNPROVEN",
       "evidence": "GEMESSEN im UI-Gate: nach engine.play() ist der Pegel am Master -inf, waehrend isPlaying/playing-Flags true werden koennen. Ohne geladenes Sample/Pattern kann das korrekt sein - der Punkt ist, dass 'playing === true' KEINEN Klang beweist. Genau das behauptet der alte Gate aber.",
       "impact": "Der Live-Gate kann stumm von hoerbar nicht unterscheiden (bestaetigt F-004, jetzt mit Messwert)."
+    },
+    {
+      "id": "F-011",
+      "severity": "P1",
+      "claim": "Der vorgefertigte RunPod-vLLM-Worker kann unser Brain ersetzen (kein Custom-Image, AWQ, OpenAI-Pfad)",
+      "verdict": "NOT_VERIFIED",
+      "evidence": "Umgesetzt und getestet am 2026-09-10: Template mit runpod/worker-vllm:1.0.1-cuda12.1.0, MODEL_NAME=Qwen/Qwen3-14B-AWQ (9,99 GB), QUANTIZATION=awq, MAX_MODEL_LEN=16384; Brain-Endpoint per PATCH auf dieses Template umgestellt (templateId 42pqqc06vb). Dann 3 POSTs an /openai/v1/chat/completions mit 240-s-Client-Timeout: ALLE liefen in TimeoutError (t+240s, t+500s, t+761s). Endpoint-Health waehrenddessen: workers.running=1, jobs.inQueue=3, completed=10, failed=0 - ein Worker lief also, antwortete aber nicht. Ohne Zugriff auf die Worker-Logs ist die Ursache nicht unterscheidbar: (a) vLLM laedt noch, (b) das Image-Tag ist zu alt und bietet die OpenAI-Route nicht, (c) Env/Quantisierung passt nicht zu diesem Tag, (d) OPENAI_SERVED_MODEL_NAME_OVERRIDE passt nicht zum angefragten Modellnamen.",
+      "impact": "Der vielversprechendste Hebel (kein 30-GB-Build, 9 GB statt 29,5 GB, OpenAI-kompatibel) ist damit NICHT belegt. Der Endpoint wurde auf das bewaehrte eigene Image (templateId e4yzwic56u) zurueckgestellt und der OpenAI-Pfad in .env deaktiviert. Kosten des Versuchs: $0.156. Naechster sinnvoller Schritt: Rueckgabe der RunPod-Hub/Docker-Tag-Liste pruefen und einen Tag mit bekanntem Qwen3-Support waehlen, ODER die Worker-Logs einsehbar machen (Artefakt/Support), statt weiter zu raten."
     }
   ],
   "tasks": [
@@ -733,7 +741,7 @@
     {
       "id": "INFRA-001",
       "priority": "P1",
-      "status": "IN_PROGRESS",
+      "status": "NEEDS_VERIFICATION",
       "title": "RunPod: schneller Brain-Kaltstart (Gewichte ins Image)",
       "files": [
         ".github/workflows/runpod-deploy.yml",
@@ -741,11 +749,11 @@
         "services/samplemonk-ai-runtime/predownload.py"
       ],
       "implementation": [
-        "ERLEDIGT: predownload.py (geteilt zwischen Build und Runtime), Format-Auswahl senkt 105 GB auf 36,4 GB, Gruppen-Aufteilung fuer Layer < 10 GB",
-        "ERLEDIGT: Dockerfile ARG AI_BAKE_ROLE mit 4 Back-Schritten, gebacken als uid 10001, kein rekursives chown",
-        "ERLEDIGT: shared-Image gruen (bb6fd74f), alle drei Endpoints darauf",
-        "BLOCKIERT: Brain-Back-Build schlaegt fehl (Verdacht Runner-Plattenplatz; harte df-Zusage jetzt im Workflow)",
-        "FALSIFIZIERT: die Hypothese 'Runner-Plattenplatz' ist widerlegt – der Plattenplatz-Check (>= 60 GB) ist im CI gruen, der Back-Build scheitert dennoch. Nur der Back-Build scheitert, der shared-Build laeuft mit demselben Dockerfile durch."
+        "ERLEDIGT: Back-Build abgeschaltet (Workflow-Step, Plattenplatz-Check, Proben 9/10, IMAGE_BRAIN entfernt; 19 -> 15 Steps)",
+        "ERLEDIGT: predownload.py + Dockerfile ARG AI_BAKE_ROLE bleiben im Repo, falls das Einbacken je wieder gebraucht wird",
+        "GEMESSEN: der erste echte llm-Aufruf am Brain war nach 201 s fertig (delay 71 s + exec 58 s) - die Vorgabe 'Kaltstart < 15 min' ist damit auch ohne Backing erfuellt",
+        "VERSUCHT (nicht verifiziert): Brain auf runpod/worker-vllm mit Qwen3-14B-AWQ + QUANTIZATION=awq; 3 Timeouts ueber 13 min bei laufendem Worker -> F-011",
+        "ZURUECKGESTELLT: Endpoint wieder auf das eigene Image, RUNPOD_BRAIN_OPENAI_URL deaktiviert"
       ],
       "tests": [
         "Probe 9: du -sh /data/hf-cache im Brain-Image",
@@ -758,7 +766,7 @@
       "commands": [
         "python3 services/samplemonk-ai-runtime/predownload.py --role brain --groups 4 --list"
       ],
-      "blockedReason": "Ursache unbekannt: Action-Logs sind ohne gueltigen API-Token nicht lesbar. Naechster Schritt ist nicht ein weiterer Rateversuch, sondern den Build-Fehler sichtbar zu machen (Artefakt-Upload oder Build mit eigenem Log-Zugriff)."
+      "blockedReason": "Worker-Logs sind ohne gueltigen API-Token nicht lesbar; ohne sie ist nicht entscheidbar, ob vLLM laedt oder das Image-Tag die OpenAI-Route nicht bietet."
     }
   ],
   "baseline": {
