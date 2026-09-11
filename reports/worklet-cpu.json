@@ -1,0 +1,62 @@
+{
+  "messageTypes": {
+    "cpu-stats": 11,
+    "step": 56
+  },
+  "generatedAt": "2026-09-11T14:02:19.790Z",
+  "browser": "151.0.7922.34",
+  "budgets": {
+    "warnLoadPct": 25,
+    "failLoadPct": 50,
+    "maxBlockOverBudget": true,
+    "warnContextLoad": 0.25,
+    "failContextLoad": 0.5,
+    "measureMs": 6000
+  },
+  "cpu": {
+    "type": "cpu-stats",
+    "blocks": 2500,
+    "avgMs": 0.4784,
+    "maxMs": 6,
+    "budgetMs": 2.6667,
+    "loadPct": 17.94,
+    "sampleRate": 48000,
+    "timer": "date"
+  },
+  "cpuReportCount": 11,
+  "maxLoadPctReported": 225,
+  "maxBlockMsReported": 6,
+  "renderCapacityAvailable": false,
+  "contextLoads": [],
+  "pageErrors": [],
+  "checks": [
+    {
+      "check": "Messmodus aktiv (erster Bericht)",
+      "ok": true
+    },
+    {
+      "check": "Messwerte vorhanden",
+      "ok": true
+    },
+    {
+      "check": "Ø-Last im Budget",
+      "ok": true
+    },
+    {
+      "check": "kein Block über Budget (nur bei feiner Zeitquelle)",
+      "ok": true
+    },
+    {
+      "check": "Context-Last im Rahmen (falls messbar)",
+      "ok": true
+    },
+    {
+      "check": "Ausgang hat Signal (Graph rendert wirklich)",
+      "ok": true
+    },
+    {
+      "check": "keine pageErrors",
+      "ok": true
+    }
+  ]
+}

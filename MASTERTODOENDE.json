@@ -295,11 +295,12 @@
     },
     {
       "id": "PERF-P3-001",
-      "title": "Worklet-CPU-Budgets neu messen (nach AUDIO-P0-004) + Vitest/Bundle optimieren",
+      "title": "Worklet-CPU-Budgets messen + Bundle-/Test-Laufzeit (gemessen 2026-09-11: 15,4 % Audio-Last, 0,93 MB Startlast)",
       "priority": "P3",
-      "status": "OPEN",
-      "area": "Performance",
-      "source": "MASTER_TODO.md"
+      "status": "DONE",
+      "area": "Performance / Audio-Runtime",
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11 (gemessen, nicht geschaetzt): (1) Neue opt-in CPU-Messung im v2-sink-processor (processorOptions.measure, im Betrieb aus) + Gate npm run perf:worklet (scripts/worklet-cpu-gate.cjs, echter Chromium, 4 Kanaele + Testton, 6 s). MESSWERT: 0,41 ms pro Block = 15,4 % des Echtzeit-Budgets (2,667 ms bei 48 kHz, 2500 Bloecke) -> 84 % Luft; Ausgangspegel 0,297 als Beweis, dass wirklich gerendert wurde; 7/7 Zusagen, Exit 0. Budgets im Gate: WARN >25 %, FAIL >50 %, Signalpflicht, keine Page-Errors. (2) Bundle-Messung korrigiert: das Gate summierte alle Chunks und warnte ueber \"1,65 MB Startup\" - tatsaechlich sind 0,93 MB Startlast (eager = Entry + modulepreload) und 0,72 MB lazy (groesster: onnx 403 KB, per import() erst bei lokaler ONNX-/Demucs-Nutzung). check-bundle-size.mjs unterscheidet das jetzt und wertet nur die Startlast -> Budget eingehalten, kein Optimierungsdruck. (3) Vitest: 1165 Tests in ~27 s - kein Handlungsbedarf. DOKU: docs/PERFORMANCE_BUDGETS_2026.md (Verfahren, Zahlen, Budgets, Wiederholung) inkl. der drei live gefundenen Worklet-Fallen: `performance` ist im AudioWorkletGlobalScope undefiniert (perf.now() warf pro Block -> Prozessor starb -> Stille, ohne Page-Error; jetzt Feature-Test + Date.now-Rueckfall + try/catch-Abschaltung), postMessage im Prozessor-Konstruktor bricht den Prozessor, und headless Chromium rendert Audio nur bei beschaeftigtem Main-Thread - waehrenddessen werden Port-Nachrichten nicht zugestellt (deshalb Laden und Zustellen zeitlich trennen). OFFEN (bewusst): renderCapacity-Messung auf einem Chromium mit dieser API (hier nicht vorhanden, wird ausgewiesen) und der Max-Blockwert auf einer Maschine mit `performance` im Worklet-Scope (hier nur 1-ms-Quantisierung). ENTSCHEIDUNGSGRUNDLAGE AUDIO-P1-002: 15 % Audio-Thread-Last und 0,93 MB Startlast geben KEIN Dringlichkeitssignal - die audioEngine-Zerlegung ist Struktur-Verbesserung, keine Performance-Rettung."
     },
     {
       "id": "FEAT-P3-001",

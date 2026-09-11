@@ -37,8 +37,41 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
   private readonly sfzBanks = new Map<V2Channel, SfzVoiceBank>();
 
-  constructor() {
+  // --- CPU-Budget-Messung (PERF-P3-001) -------------------------------------
+  // Ausschliesslich opt-in ueber `processorOptions.measure` (Default aus, im
+  // Betrieb also null zusaetzliche Messkosten ausser zwei Zeitstempeln pro Block).
+  /** Nicht `readonly`: die Messung schaltet sich bei Fehlern selbst ab (s. recordCpu). */
+  private measure: boolean;
+  private blocks = 0;
+  private sumMs = 0;
+  private maxMs = 0;
+  /**
+   * Zeitquelle. `performance` ist im AudioWorkletGlobalScope NICHT garantiert
+   * vorhanden – live gemessen 2026-09-11 (headless Chromium): `typeof
+   * performance === 'undefined'`. Ein direkter `performance.now()`-Aufruf warf
+   * dort in JEDEM Block eine ReferenceError, der Prozessor starb und lieferte
+   * nur noch Stille. Deshalb Feature-Test + `Date.now()`-Rueckfall (1 ms
+   * Auflösung, fuer Mittelwerte ausreichend – der Bericht weist `timer` aus).
+   */
+  private readonly timer: 'performance' | 'date' =
+    typeof performance !== 'undefined' && typeof performance.now === 'function' ? 'performance' : 'date';
+  /** Ein Block = 128 Frames; das ist das Echtzeit-Budget pro process()-Aufruf. */
+  private readonly budgetMs = (128 / sampleRate) * 1000;
+  private static readonly REPORT_EVERY = 250; // ~0,67 s bei 48 kHz
+
+  private nowMs(): number {
+    return this.timer === 'performance' ? performance.now() : Date.now();
+  }
+
+  constructor(options?: AudioWorkletNodeOptions) {
     super();
+    const opts = (options?.processorOptions ?? {}) as { measure?: boolean };
+    this.measure = opts.measure === true;
+    // WICHTIG (live gemessen 2026-09-11): NICHT im Konstruktor posten. Ein
+    // `this.port.postMessage()` an dieser Stelle brachte den Prozessor zum
+    // Scheitern – der Knoten lieferte danach Stille und es kamen keine
+    // Nachrichten an. Die Messung meldet sich deshalb im ersten process()-Block
+    // (recordCpu sendet den ersten Bericht sofort).
     this.port.onmessage = (e: MessageEvent<V2SinkMessage>) => {
       const msg = e.data;
       if (!msg || typeof msg.type !== 'string') return;
@@ -182,6 +215,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     if (!output || !output[0]) return true;
 
     const length = output[0].length;
+    // PERF-P3-001: Startmarke nur bei aktivierter Messung (Default aus).
+    const startedAt = this.measure ? this.nowMs() : 0;
     const events: V2StepRenderEvent[] = [];
 
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
@@ -244,7 +279,46 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     for (let ch = channels; ch < output.length; ch++) {
       output[ch].fill(0);
     }
+    this.recordCpu(startedAt);
     return true;
+  }
+
+  /**
+   * PERF-P3-001: sammelt die Render-Zeit eines Blocks und meldet regelmaessig
+   * einen Bericht an den Main-Thread. `budgetMs` ist die Echtzeit-Grenze des
+   * Blocks (128 Frames / sampleRate) – `loadPct` ist damit der Anteil, den der
+   * V2-Live-Pfad vom Audio-Thread belegt.
+   */
+  private recordCpu(startedAt: number): void {
+    if (!this.measure) return;
+    try {
+      this.recordCpuUnsafe(startedAt);
+    } catch (e) {
+      // Die Messung darf NIE den Audio-Pfad gefaehrden: einmal melden, dann aus.
+      this.measure = false;
+      this.port.postMessage({ type: 'cpu-error', message: String((e as Error)?.message ?? e).slice(0, 160) });
+    }
+  }
+
+  private recordCpuUnsafe(startedAt: number): void {
+    const elapsed = this.nowMs() - startedAt;
+    this.blocks += 1;
+    this.sumMs += elapsed;
+    if (elapsed > this.maxMs) this.maxMs = elapsed;
+    // Erster Block meldet sofort (Beweis, dass die Messung greift), danach
+    // regelmaessig. Fehlt schon der erste Bericht, laeuft process() nicht.
+    if (this.blocks !== 1 && this.blocks % V2SinkProcessor.REPORT_EVERY !== 0) return;
+    this.port.postMessage({
+      type: 'cpu-stats',
+      blocks: this.blocks,
+      avgMs: Number((this.sumMs / this.blocks).toFixed(4)),
+      maxMs: Number(this.maxMs.toFixed(4)),
+      budgetMs: Number(this.budgetMs.toFixed(4)),
+      loadPct: Number(((this.sumMs / this.blocks / this.budgetMs) * 100).toFixed(2)),
+      sampleRate,
+      /** 'date' = grobe 1-ms-Auflösung (kein `performance` im Worklet-Scope). */
+      timer: this.timer,
+    });
   }
 }
 
