@@ -1,3 +1,6 @@
+> ⚠️ SUPERSEDED (2026-09-11): Einzige SSOT fuer offene Arbeiten ist jetzt **MASTERTODOENDE.json**.
+> Dieses Dokument bleibt nur als historische Referenz und wird nicht mehr gepflegt.
+
 # audioMONASTRY MASTER TODO
 
 Last audited: 2026-09-10

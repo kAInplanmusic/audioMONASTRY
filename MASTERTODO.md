@@ -1,3 +1,6 @@
+> ⚠️ SUPERSEDED (2026-09-11): Einzige SSOT fuer offene Arbeiten ist jetzt **MASTERTODOENDE.json**.
+> Dieses Dokument bleibt nur als historische Referenz und wird nicht mehr gepflegt.
+
 # MASTERTODO — audioMONASTRY Produktionsreife (P0–P2)
 
 > Stand: 2026-09-09 · Arbeitsliste für die DeepCode-Prompt-Umsetzung.

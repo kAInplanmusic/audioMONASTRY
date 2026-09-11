@@ -1,0 +1,526 @@
+{
+  "schemaVersion": "2.0.0",
+  "id": "MASTERTODOENDE",
+  "project": "audioMONASTRY",
+  "role": "SINGLE_SOURCE_OF_TRUTH",
+  "generatedAt": "2026-09-11T04:59:03.981713+00:00",
+  "branch": "main",
+  "commit": "8c1555bf175781201150618fa79e2fc7656f20ae",
+  "supersedes": [
+    "MASTER_TODO.md",
+    "MASTERTODO.md",
+    "TODO.md",
+    "V2TODO.md",
+    "VISIONS_TODO.md",
+    "todo.json",
+    "AUDIT_REPORT.md",
+    "reports/AUDIT_2026-09-10.md",
+    "docs/PRODUCTION_READINESS_AUDIT_2026-09-09.md",
+    "PRODUCTION_READINESS.md",
+    "docs/RUNPOD_AI_V1_SPEC.md (§6)",
+    "docs/VISUALMONK_SPEC.md (§8)"
+  ],
+  "statusVocabulary": {
+    "OPEN": "nicht begonnen",
+    "IN_PROGRESS": "begonnen, Nachweis unvollstaendig",
+    "PARTIAL": "teilweise umgesetzt",
+    "BLOCKED": "in der Agent-Umgebung nicht nachweisbar (Grund dokumentiert)",
+    "SANDBOX": "Vision/Experiment, erst nach Benchmark aufnehmen"
+  },
+  "rule": "Nur offene Punkte. 100 % Erledigtes ist entfernt (Historie in git).",
+  "fundamentals": {
+    "build": "tsc 0 · eslint 0 · 1056+3 Tests gruen · build/security/boundary gruen (Stand 2026-09-11)",
+    "audioLive": "V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
+    "aiFleet": "3 Endpoints live (brain=vLLM Qwen3-14B-AWQ, ears, voiceGen) + 4. Rolle `vision` geplant",
+    "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
+  },
+  "items": [
+    {
+      "id": "COLLAB-P0-001",
+      "title": "Serverautoritativer Session-State (Revision/Sequence/Snapshot + atomare Locks)",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Collaboration",
+      "source": "MASTER_TODO.md",
+      "problem": "server.ts relaisiert plugin-state nur; keine Revision/Sequence, kein Voll-Snapshot fuer Reconnects, keine atomaren Locks ueber Instanzen.",
+      "files": [
+        "server.ts",
+        "src/core/session/*",
+        "src/utils/collab.ts"
+      ],
+      "acceptance": [
+        "4 parallele User konsistent",
+        "Reconnect ohne Pumping",
+        "verspaetete/doppelte Events deterministisch verworfen"
+      ],
+      "verification": [
+        "tests/collab*.test.ts",
+        "tests/e2e/collab.spec.ts"
+      ]
+    },
+    {
+      "id": "COLLAB-P0-002",
+      "title": "4-User-Live-E2E gegen echte Instanz",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "area": "Collaboration",
+      "source": "MASTER_TODO.md",
+      "blockedReason": "Kein 4-Browser-/Live-Target in der Agent-Umgebung; der Betreiber faehrt die Flotte hoch und testet live."
+    },
+    {
+      "id": "COLLAB-P0-003",
+      "title": "WebRTC/SFU/TURN-Haertung (ICE/TURN aus Server-Config, Reconnect-Zustandsmaschine)",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Networking",
+      "source": "MASTER_TODO.md",
+      "files": [
+        "src/context/AudioContext.tsx",
+        "src/utils/WebRTCManager.ts",
+        "server.ts",
+        "src/core/transport/MediasoupTransport.ts"
+      ],
+      "acceptance": [
+        "ICE-Fehler/Reconnect/TURN-Konfig getestet",
+        "keine doppelten PeerConnections/Tracks"
+      ]
+    },
+    {
+      "id": "AUDIO-P1-002",
+      "title": "audioEngine-Facade (3444 LOC) in Module zerlegen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Audio-Architektur",
+      "source": "MASTER_TODO.md",
+      "acceptance": [
+        "audioEngine.ts < 1500 LOC",
+        "Importeure unveraendert",
+        "Tests gruen"
+      ]
+    },
+    {
+      "id": "AUDIO-P1-003",
+      "title": "nativeAudioKit nur noch als Zustandstraeger (kein No-Op im Live-Signalweg)",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Audio-Cleanup",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "AI-P1-001",
+      "title": "RunPod-Cutover validieren, erst dann Replicate/HF entfernen",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "AI",
+      "source": "MASTER_TODO.md",
+      "remaining": [
+        "BS-RoFormer-GPU-Verifikation",
+        "Failover-/Timeout-/Kosten-Limit-Tests",
+        "Provider-Entfernung als eigener revertierbarer Schritt"
+      ]
+    },
+    {
+      "id": "AI-P1-002",
+      "title": "AI-Runtime async/isoliert vom Audio-Thread (Queues/Timeouts/Cancellation)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI-Runtime",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "AI-P1-003",
+      "title": "Flotten-Restpakete nach dem 3-Rollen-/vLLM-Umbau",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "AI/GPU-Flotte",
+      "source": "MASTER_TODO.md",
+      "subitems": [
+        "Revisions-Pins fuer qwen3-32b, qwen3-30b-a3b, glm-4.5-air, mert-v1-95m, fish-speech, rvc eintragen (derzeit status=planned)",
+        "Benchmark-Gate Brain (50-200 echte MCP-Aufgaben DE/EN) -> ggf. GLM-4.5-Air-Upgrade (2xA6000)",
+        "Benchmark-Gate Voice DE/EN + Gesang (AuditEval/AuditScore + MOS) -> Voice-Modell fixieren",
+        "Batch-Indexer fuer public.sample_audio_embeddings (Migration 007)",
+        "aiMONK-Agent-Loop (planen->ausfuehren->pruefen->korrigieren, Kontext-Assembly, Bestaetigung ab WRITE)",
+        "Voice-Handler fish-speech/rvc + BS-RoFormer-GPU-Verifikation",
+        "Qwen3-Thinking im Brain ist abgeschaltet (enable_thinking=false) - erledigt 2026-09-11",
+        "CI-Deploy ist gruen (Lauf 34552407251) - erledigt 2026-09-11"
+      ]
+    },
+    {
+      "id": "SEC-P1-001",
+      "title": "Zod-Validierung auf ALLE externen Payloads ausweiten",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Security",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "HW-P1-001",
+      "title": "Xonar U7 / 2.1 / Hotplug Live-Test",
+      "priority": "P1",
+      "status": "BLOCKED",
+      "area": "Hardware",
+      "source": "MASTER_TODO.md",
+      "blockedReason": "Physische Hardware nicht in der Agent-Umgebung."
+    },
+    {
+      "id": "UI-P1-001",
+      "title": "Mobile-/Browser-Matrix verifizieren (Touch/Safe-Area/A11y/Safari/iOS/Android)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "DB-P1-001",
+      "title": "Supabase-Live-Abgleich + RLS-Verifikation",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Database",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "CI-P1-001",
+      "title": "E2E in CI + Secret-Scan (uebersprungene Tests muessen rot machen)",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "CI/CD",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "VISUAL-P1-001",
+      "title": "Live-Beweis Ghostuser 5/6 (Studio -> PA + Beamer) + MJPEG-Fallback",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8",
+      "note": "Der Betreiber macht den Live-Test, sobald die Flotte hochgefahren ist. Headless blockiert (Signaling auf :8080 gepinnt, stale Admin)."
+    },
+    {
+      "id": "VISUAL-P1-002",
+      "title": "Vision-Endpoint: FLUX.1-dev (Text/Audio -> Bild) + R2-Ablage + DB-Eintrag",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8",
+      "note": "Ersatz-Worker gewaehlt (PrunaAI/runpod-worker-FLUX.1-dev 1.0.3, AMPERE_48); worker-sdxl-turbo v1.1.1 war kaputt. Kaltstart 15-25 min."
+    },
+    {
+      "id": "VISUAL-P1-003",
+      "title": "Leichtes Video (LTX-Video/Wan2.1) + Zusammenfuehren von Clips",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8"
+    },
+    {
+      "id": "VISUAL-P1-004",
+      "title": "Selbstlern-Loop: Session-Ende-Umfrage + pgvector/RAG + Stil-LoRA-Pods",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8"
+    },
+    {
+      "id": "VISUAL-P1-005",
+      "title": "WebGL/WGSL-Renderer als Upgrade (Canvas2D laeuft)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8"
+    },
+    {
+      "id": "VISUAL-P1-006",
+      "title": "vision-Rolle als benanntes Template/Registry festigen (nicht nur Hub-Inline-Template)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8"
+    },
+    {
+      "id": "QUAL-P2-001",
+      "title": "Dead-Code (knip 144 Eintraege) klassifizieren und entfernen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Qualitaet",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "QUAL-P2-002",
+      "title": "jscpd-Duplikate reduzieren",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Qualitaet",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "DOC-P2-001",
+      "title": "Dokumentationszahlen synchronisieren",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Doku",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "MIDI-P2-001",
+      "title": "MIDI-Mapping-Layer dokumentieren/testen + Hardware-Hoerprobe",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "MIDI",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "OPS-P2-001",
+      "title": "HF-Secret-Rotation vor RunPod-Cutover (GHCR-Token gesetzt 2026-09-11)",
+      "priority": "P2",
+      "status": "PARTIAL",
+      "area": "Ops",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "SEC-P2-001",
+      "title": "Cookie-Sicherheit serverseitig dokumentieren + SHA-Pinning pruefen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Security",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "PERF-P3-001",
+      "title": "Worklet-CPU-Budgets neu messen (nach AUDIO-P0-004) + Vitest/Bundle optimieren",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Performance",
+      "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "FEAT-P3-001",
+      "title": "Optionale Synthese-/DSP-Bausteine (E-Piano, Phase-Distortion, Mod-Matrix, HQ-Reverb)",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Backlog",
+      "source": "MASTER_TODO.md"
+    }
+  ],
+  "visionSandbox": [
+    {
+      "id": "V1.1",
+      "title": "WASM-SIMD-DSP-Kernel (Mixer/Summe, 128 Kanaele)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": ">=1,5x schneller als JS-Worklet bei 8+ Kanaelen"
+    },
+    {
+      "id": "V1.2",
+      "title": "WebCodecs AudioEncoder/Decoder (Opus Stems)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "weniger CPU als JS-WAV-Encode bei >50 MB"
+    },
+    {
+      "id": "V1.3",
+      "title": "WebTransport Stem-Streaming (QUIC)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "erst ab >10 Usern / >100 MB"
+    },
+    {
+      "id": "V1.4",
+      "title": "WebGPU-Spektral-Effekte (FFT/Konvolution)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "GPU-Transfer < CPU-Ersparnis bei >=8192-Punkt-FFT"
+    },
+    {
+      "id": "V1.5",
+      "title": "Hybride Engine (Low-Latency + High-Quality, PDC)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "weniger Dropouts bei Mastering/Reverb unter Last"
+    },
+    {
+      "id": "V1.6",
+      "title": "OPFS-Sample-Cache (>2 GB)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "Laden <50 ms aus OPFS"
+    },
+    {
+      "id": "V1.7",
+      "title": "MPE / Polyphonic Aftertouch (MIDI 2.0)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "erst bei Hardware/User-Anforderung"
+    },
+    {
+      "id": "V1.8",
+      "title": "DAWproject-Export",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "erst bei Session-Austausch-Bedarf"
+    },
+    {
+      "id": "V1.9",
+      "title": "Native Client (Tauri) fuer ASIO/CoreAudio/PipeWire",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "erst wenn Browser-Audio real schmerzt"
+    },
+    {
+      "id": "V1.10",
+      "title": "CRDT (Yjs/Automerge) fuer Undo/Redo + >10 User",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md",
+      "gate": "erst wenn LWW-CRDT an Grenzen stoesst"
+    },
+    {
+      "id": "V2-A",
+      "title": "Eigene Modell-Runtime (ONNX/WASM, Demucs-lite + Embedding)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md"
+    },
+    {
+      "id": "V2-B",
+      "title": "KI-Co-Producer Level 2 (Plant->Hoert->Bewertet->Iteriert)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md"
+    },
+    {
+      "id": "V2-C",
+      "title": "Spatial 24.2 + Binaural/Fallback (Ambisonics HOA3)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md"
+    },
+    {
+      "id": "V2-D",
+      "title": "Session-Cloud (E2E-verschluesselt, CRDT-Merge)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md"
+    },
+    {
+      "id": "V2-E",
+      "title": "Live-Events/Broadcast-Modus (1 Produzent -> N Zuhoerer)",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "VISIONS_TODO.md"
+    },
+    {
+      "id": "VISION-B1..B8",
+      "title": "Patch-Bay-Router, Hardware-Clock, Steckmodul-Hub, Auto-Codegen, Edge-NPUs, Analog/Digital, Routing-Vorschlaege, Paritaetstest",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Vision",
+      "source": "MASTER_TODO.md"
+    }
+  ],
+  "blockedByEnvironment": [
+    {
+      "id": "ENV-001",
+      "title": "4-User-Live-E2E / 2.1-Hardware / TURN-SFU",
+      "priority": "BLOCKED",
+      "status": "BLOCKED",
+      "area": "Umgebung",
+      "source": "MASTER_TODO.md",
+      "blockedReason": "Kein 4-Browser-/Live-Target, keine physische Hardware in der Agent-Umgebung."
+    },
+    {
+      "id": "ENV-002",
+      "title": "RunPod-Live-Inferenz mit echten Nutzerlasten/Kosten",
+      "priority": "BLOCKED",
+      "status": "BLOCKED",
+      "area": "Umgebung",
+      "source": "MASTER_TODO.md",
+      "blockedReason": "Kosten laufen beim Betreiber; Agent fuehrt nur kurze, teardown-sichere Tests aus."
+    },
+    {
+      "id": "ENV-003",
+      "title": "Reale Hoerqualitaet der V2-Drum-/Synth-Stimmen",
+      "priority": "BLOCKED",
+      "status": "BLOCKED",
+      "area": "Mensch",
+      "source": "MASTER_TODO.md",
+      "blockedReason": "Hoertest durch Mensch noetig."
+    }
+  ],
+  "humanVerification": [
+    "Echtes 4-User-Live-Szenario (Audio-Stream, Locks, RBAC, Reconnect)",
+    "Physische Hardware (Xonar U7, 2.1, MIDI-Controller)",
+    "RunPod-Live-Kosten und Langzeitverhalten bei Vollbetrieb",
+    "Cookie-Sicherheit im Portal-Worker (HttpOnly/Secure/SameSite)",
+    "Geschmack/Bewertung der VisualMONK-Visuals (Session-Ende-Umfrage)"
+  ],
+  "gates": {
+    "baseline": [
+      "npx tsc --noEmit",
+      "npx eslint . --max-warnings=0",
+      "npx vitest run",
+      "npm run build",
+      "npm run security",
+      "npm run verify:boundary"
+    ],
+    "audio": [
+      "npx playwright test tests/e2e/v2-live.spec.ts --headed",
+      "node scripts/asset-gate.cjs",
+      "node scripts/visual-monk-gate.cjs"
+    ],
+    "visualmonk": [
+      "node scripts/visual-out-gate.cjs",
+      "node scripts/master-out-gate.cjs (Live, Betreiber)"
+    ],
+    "release": [
+      "npm run typecheck",
+      "npm run lint",
+      "npm test",
+      "npm run security",
+      "npm run build",
+      "Live-Gates (4-User/2.1/AI)"
+    ]
+  },
+  "budget": {
+    "fleetEndpointsMax": 4,
+    "fleetMaxEurPerHour": 10,
+    "storageSnapshotsMaxEurPerMonth": 5,
+    "runpodCurrentImage": "ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:7b7391d1302d2dfd085 (ears/voice) · registry.runpod.net/...worker-vllm...76054c22c (brain)",
+    "hetznerFleet": "5 Server (app/sfu/ai/master/edge) - laeuft; Snapshots 2026-09-11",
+    "storageNowEurPerMonth": "~0,06 (5 Snapshots, 4,68 GB)"
+  },
+  "architectureDecisions": [
+    "V2 ist der einzige Produktiv-Audiopfad; V1-Code ist entfernt (No-Op-Reste: AUDIO-P1-003).",
+    "MIDI ist kein MONK: Settings -> MIDI-Runtime -> Mapping -> Routing -> MONK/Transport/Parameter.",
+    "16 Plugin-IDs + 3 System-Module (masterplayer/ai/perfor); Registry ist einzige Quelle.",
+    "Master-Stream-Tap gehoert an den V2-Ausgang (AUDIO-P0-002, umgesetzt).",
+    "Kein Feature gilt als DONE, solange es nur im Zustand, nicht im hoerbaren V2-Pfad wirkt.",
+    "Brain = RunPod-vLLM-Worker (Qwen3-14B-AWQ); 4B-Ausfuehrer entfaellt (2026-09-11).",
+    "Ghostuser 5 = /master-out (Alias /ghost/5, PA) · Ghostuser 6 = /visual-out (Alias /ghost/6, Beamer).",
+    "VisualMONK: Echtzeit-Liveshow per Shader (Client) + generative Bilder/Video per RunPod-Rolle `vision`.",
+    "Kostenregel: max. 4 GPU-Endpoints, <=10 EUR/h Flotte, <=5 EUR/Monat Storage/Snapshots."
+  ]
+}
