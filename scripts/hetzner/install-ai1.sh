@@ -20,7 +20,7 @@ RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 
 echo "== Sync Repo → $HOST:/opt/samplemonk =="
 rsync -az --delete -e "$RSYNC_E" \
-  --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results \
+  --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results --exclude public/data/orchestral --exclude public/music --exclude target --exclude .venv-runpod --exclude .agents --exclude logs \
   ./ "$HOST:/opt/samplemonk/"
 
 echo "== Installiere Ollama + Stem-AI (idempotent) =="

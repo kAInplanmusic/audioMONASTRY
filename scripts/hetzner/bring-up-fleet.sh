@@ -80,7 +80,7 @@ done
 
 # --- 4. app-1 deployen --------------------------------------------------------
 step "4/7 app-1 deployen (Caddy + App + Signaling, HTTPS)"
-DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" DEPLOY_SMOKE=0 bash deploy.sh
+DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" DEPLOY_SMOKE=0 sg docker -c "bash deploy.sh"
 
 # --- 5. Übrige Rollen ---------------------------------------------------------
 step "5/7 sfu-1, master-1, edge-1, ai-1 einrichten"
