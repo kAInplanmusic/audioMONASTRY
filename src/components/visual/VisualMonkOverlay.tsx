@@ -7,6 +7,7 @@ import { mapAudioToParams, blendParams } from '../../core/visual/audioReactive';
 import { VISUAL_PRESETS, presetById } from '../../core/visual/visualPresets';
 import { createRendererState, renderFrame } from '../../core/visual/canvasRenderer';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../../core/visual/types';
+import { VISION_STYLES, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -33,6 +34,36 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const presetRef = useRef(presetId);
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
+
+  // VisualMONK #2: generative Bilder (FLUX ueber /api/ai/vision).
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiStyle, setAiStyle] = useState<VisionStyle>('cosmic');
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiImage, setAiImage] = useState<string | null>(null);
+  const [aiError, setAiError] = useState('');
+
+  const generateAiImage = useCallback(async () => {
+    const prompt = aiPrompt.trim();
+    if (!prompt || aiBusy) return;
+    setAiBusy(true);
+    setAiError('');
+    try {
+      const resp = await fetch('/api/ai/vision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, style: aiStyle, steps: 25 }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data?.status !== 'success' || !data?.image) {
+        throw new Error(String(data?.message || data?.error || `HTTP ${resp.status}`));
+      }
+      setAiImage(String(data.image));
+    } catch (e) {
+      setAiError((e as Error).message.slice(0, 160));
+    } finally {
+      setAiBusy(false);
+    }
+  }, [aiPrompt, aiStyle, aiBusy]);
 
   const toggleStream = useCallback(() => {
     if (streamStatus === 'live') {
@@ -151,8 +182,44 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         ))}
       </div>
 
-      <div className="flex-1 min-h-0">
+      {/* VisualMONK #2: generatives Bild (FLUX ueber /api/ai/vision) */}
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-white/5">
+        <input
+          value={aiPrompt}
+          onChange={(e) => setAiPrompt(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void generateAiImage(); }}
+          placeholder="Bild-Prompt (z. B. Galaxie ueber dunklem Wasser, Filmkorn)"
+          aria-label="Bild-Prompt"
+          className="flex-1 min-w-[12rem] px-2.5 py-1.5 rounded-full bg-black/40 border border-white/10 text-[11px] text-neutral-200 placeholder:text-neutral-600 focus:outline-none focus:border-fuchsia-400/60"
+        />
+        <select
+          value={aiStyle}
+          onChange={(e) => setAiStyle(e.target.value as VisionStyle)}
+          aria-label="Bild-Stil"
+          className="px-2 py-1.5 rounded-full bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-300 focus:outline-none"
+        >
+          {VISION_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <button
+          type="button"
+          onClick={() => void generateAiImage()}
+          disabled={aiBusy || !aiPrompt.trim()}
+          className="px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-fuchsia-400/50 text-fuchsia-200 hover:bg-fuchsia-400/10 disabled:opacity-40 transition-colors"
+        >
+          {aiBusy ? 'ERZEUGT… (kalt ~40 s)' : 'BILD ERZEUGEN'}
+        </button>
+        {aiError && <span className="text-[10px] text-red-400">{aiError}</span>}
+      </div>
+
+      <div className="flex-1 min-h-0 relative">
         <canvas ref={canvasRef} className="w-full h-full block" />
+        {aiImage && (
+          <img
+            src={aiImage}
+            alt="KI-generiertes Bild"
+            className="absolute right-3 bottom-3 w-56 max-h-[45%] object-cover rounded-lg border border-white/20 shadow-2xl"
+          />
+        )}
       </div>
     </div>
   );

@@ -24,6 +24,8 @@ import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { embedText } from './src/core/ai/orchestrator/textEmbedding';
 import type { AiTask } from './src/core/ai/orchestrator/types';
 import { isListenerMode, normalizeSessionMode } from './src/core/session/listenerMode';
+import { buildVisionPrompt } from './src/core/ai/vision/visionPrompt';
+import { VisionError, generateVisionImage } from './src/core/ai/vision/runpodVision';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -32,6 +34,7 @@ import {
   AiGenerateDropSchema,
   AiOrchestrateSchema,
   AiPromptSchema,
+  AiVisionSchema,
   CloudMusicSchema,
   CloudSampleSchema,
   CloudUploadJsonSchema,
@@ -884,6 +887,45 @@ app.post('/api/ai/describe', async (req, res) => {
     return res.json({ ai: raw.trim() });
   }
   return res.json({ ai: 'Ollama nicht erreichbar. (Lokaler Fallback: keine KI-Antwort verfügbar)' });
+});
+
+// --- POST /api/ai/vision  → VisualMONK: Bild aus Prompt/Stil/Audio-Features (FLUX) ---
+// Request:  { prompt, style?, bpm?, energy?, moodTags?, steps?, width?, height? }
+// Response: { status:'success', prompt, image(data-URI|URL), seed?, durationMs } | { status:'error', code, message }
+app.post('/api/ai/vision', async (req, res) => {
+  metrics.aiRequests += 1;
+  const parsed = AiVisionSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const body = parsed.data;
+  const prompt = buildVisionPrompt({
+    text: body.prompt,
+    style: body.style,
+    bpm: body.bpm,
+    energy: body.energy,
+    moodTags: body.moodTags,
+  });
+  try {
+    const result = await generateVisionImage(prompt, {
+      steps: body.steps,
+      width: body.width,
+      height: body.height,
+    });
+    return res.json({
+      status: 'success',
+      prompt: result.prompt,
+      image: result.image,
+      seed: result.seed,
+      durationMs: result.durationMs,
+    });
+  } catch (e) {
+    const err = e as Error;
+    const code = err instanceof VisionError ? err.code : 'VISION_FAILED';
+    const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+    console.warn('[vision]', code, err.message?.slice(0, 200));
+    return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'vision failed').slice(0, 300) });
+  }
 });
 
 // --- POST /api/ai/generate-drop  → dropMONK Drop-Generator (LLM + Fallback) ---

@@ -12,10 +12,6 @@ const FFT_SIZE = 2048;
 const BINS = FFT_SIZE / 2;
 const HZ_PER_BIN = SAMPLE_RATE / FFT_SIZE;
 
-function binFor(hz: number): number {
-  return Math.round(hz / HZ_PER_BIN);
-}
-
 function freqInRange(lo: number, hi: number, value = 255): Uint8Array {
   const f = new Uint8Array(BINS);
   for (let i = 0; i < BINS; i += 1) {

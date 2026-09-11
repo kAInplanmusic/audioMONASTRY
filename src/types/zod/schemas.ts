@@ -129,6 +129,22 @@ export const AiGenerateDropSchema = z
     path: ['userPrompt'],
   });
 
+export const AiVisionSchema = z.object({
+  prompt: z.string().trim().min(1).max(1200),
+  style: z
+    .enum([
+      'realism', 'abstract', 'noir', 'comic', 'psychedelic', 'industrial',
+      'cosmic', 'fantasy', 'dystopia', 'geometry', 'liquid', 'fire',
+    ])
+    .optional(),
+  bpm: z.number().finite().min(40).max(220).optional(),
+  energy: z.number().finite().min(0).max(1).optional(),
+  moodTags: z.array(z.string().trim().max(40)).max(8).optional(),
+  steps: z.number().finite().int().min(1).max(50).optional(),
+  width: z.number().finite().int().min(256).max(1536).optional(),
+  height: z.number().finite().int().min(256).max(1536).optional(),
+});
+
 export const AiOrchestrateSchema = z.object({
   userId: z.string().trim().max(64).optional(),
   task: z.string().trim().min(1).max(64),
