@@ -131,7 +131,13 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           break;
         case 'synth-source':
           if (msg.channel && typeof msg.freq === 'number') {
-            this.engine.setSynthSource(msg.channel, { freq: msg.freq, voice: msg.voice ?? 'lead' });
+            this.engine.setSynthSource(msg.channel, {
+              freq: msg.freq,
+              voice: msg.voice ?? 'lead',
+              // FEAT-P3-002: optionale Quellen-Parameter durchreichen.
+              amount: msg.amount,
+              modIndex: msg.modIndex,
+            });
           }
           break;
         case 'mute':
@@ -183,6 +189,20 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             msg.resonance ?? 0.5,
             msg.depth ?? 0,
             msg.drive ?? 0,
+          );
+          break;
+        case 'master-mod-matrix':
+          // FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain).
+          this.engine.setMasterModMatrix(Boolean(msg.modEnabled), msg.modRate ?? 0.5, msg.modDepth ?? 0.35);
+          break;
+        case 'master-reverb':
+          // FEAT-P3-002: optionale HQ-Reverb (4-Leitungs-FDN).
+          this.engine.setMasterReverb(
+            Boolean(msg.reverbEnabled),
+            msg.reverbMix ?? 0.3,
+            msg.reverbDecayS ?? 2,
+            msg.reverbDamping ?? 0.35,
+            msg.reverbSizeScale ?? 1,
           );
           break;
         case 'master-fx':

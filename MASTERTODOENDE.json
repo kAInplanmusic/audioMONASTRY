@@ -408,10 +408,10 @@
       "id": "FEAT-P3-002",
       "title": "DSP-Bausteine in V2-Graph/Plugin-UI verdrahten (E-Piano, Phase-Distortion, Mod-Matrix, HQ-Reverb)",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Audio Runtime / UI",
       "source": "docs/DSP_OPTIONAL_BLOCKS_2026.md",
-      "note": "Die vier Bausteine aus FEAT-P3-001 existieren als getestete Kerne, sind aber NICHT angebunden. Offen: Zuordnung zu den 16 MONKs, Parametrisierung/Persistenz (Preset-Schema), UI-Pfad und Nachweis am hoerbaren V2-Pfad (Worklet-Level- oder headed Gate). Ohne diese Entscheidung bleibt es bei Bibliothek statt Feature - deshalb eigener Punkt statt stilles \"fertig\"."
+      "note": "DONE 2026-09-11 (V2-Graph + Preset-Schema + Plugin-UI + hoerbarer Nachweis): (1) ZUORDNUNG (Produktentscheidung): dspMONK -> Mod-Matrix, effectMONK -> HQ-Reverb (beide Prozessoren), syntisamplerMONK -> Phase-Distortion, instruMONK -> E-Piano (beide Quellen). (2) V2-GRAPH: src/core/audio/nodes/optionalDspNodes.ts (ModMatrixNode nutzt applyModMatrix; HqReverbNode nutzt HighQualityReverb pro Kanal) haengt in V2MonitorGraph zwischen DSP- und FX-Insert (master:mod-matrix -> master:hq-reverb); beide sind aus = bit-transparenter Bypass (Test, keine Behauptung). Quellen laufen als V2-Synth-Stimmen 'phase'/'epiano' in V2SinkEngine.renderStepBurst (amount/modIndex ueber synth-source). (3) STEUERUNG bis in den Audio-Thread: V2SinkEngine/V2LiveSink-Setter, Worklet-Nachrichten master-mod-matrix/master-reverb in v2SinkProcessor.ts (Worklets neu gebaut), audioEngine.setOptionalModMatrix/setOptionalReverb/setOptionalSynthVoice + resetOptionalSynthVoice. (4) PRESET-SCHEMA/PERSISTENZ: src/core/dsp/dspPresets.ts (Defaults, Bereiche, MONK-Zuordnung; unbekannte Bausteine/Parameter werfen, Werte werden geklemmt und gemeldet; serialize/parse fuer JSON). (5) UI-PFAD: src/components/dsp/OptionalDspPanel.tsx, vier Panels im DSPTerminal, schreibt in den hoerbaren Pfad und persistiert lokal. BELEGE: tests/optionalDspWiring.test.ts 15/15 (Hall-Tail/Tremolo/Quellen am V2SinkEngine = dieselbe Engine wie im Worklet; Bypass bit-transparent; Schema; Adapter-Delegation); scripts/audio-gate.cjs (echter Browser, echtes Worklet) GATE PASS mit Hall-Tail -35,0 dBFS nach Ton aus (aus: wieder Stille) und Tremolo-Hub 27,0 dB (aus: wieder Stille). Volle Gates: tsc 0, eslint 0, Boundary 407/0, test:ci 1241/1241 ohne Skips. DOKU: docs/DSP_OPTIONAL_BLOCKS_2026.md."
     }
   ],
   "visionSandbox": [

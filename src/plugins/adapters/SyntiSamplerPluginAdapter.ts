@@ -1,5 +1,6 @@
 import type { PluginManifest, PluginParameterValue } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
+import type { TrackType } from '../../types';
 
 /** syntisamplerMONK – Synthesizer + Sampler + MCP-Steuerung (kanonische ID `syntisampler`). */
 export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
@@ -42,6 +43,15 @@ export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
         const preset = command.name.replace('pattern_', '');
         controlBus.emit('monk:mcp-pattern', { preset });
         return { ok: true, preset };
+      }
+      case 'optional-voice': {
+        // FEAT-P3-002: Phase-Distortion-Oszillator (Casio CZ) als V2-Quelle.
+        const { audioEngine } = await import('../../utils/audioEngine');
+        const channel = (command.payload?.channel ?? 'channel5') as TrackType;
+        const freq = Number(command.payload?.freq ?? 440);
+        const amount = Number(command.payload?.amount ?? 0.6);
+        audioEngine.setOptionalSynthVoice(channel, 'phase', freq, { amount });
+        return { ok: true, block: 'phase-distortion', channel };
       }
       default:
         return super.onCommand(command);

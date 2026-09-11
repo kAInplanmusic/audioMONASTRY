@@ -3,6 +3,7 @@ import { Activity, Power, Cpu, Zap, SlidersHorizontal, Gauge } from 'lucide-reac
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
+import { OptionalDspPanel } from './dsp/OptionalDspPanel';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { webRTCManager } from '../utils/WebRTCManager';
 
@@ -160,6 +161,14 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
         >
           <Power className="w-5 h-5" />
         </button>
+      </div>
+
+      {/* FEAT-P3-002: optionale DSP-Bausteine – je Baustein sichtbar, welchem MONK er gehört. */}
+      <div className="px-4 py-2 border-b border-neutral-800 bg-black/20 grid grid-cols-1 md:grid-cols-2 gap-2">
+        <OptionalDspPanel block="mod-matrix" />
+        <OptionalDspPanel block="hq-reverb" />
+        <OptionalDspPanel block="phase-distortion" />
+        <OptionalDspPanel block="electric-piano" />
       </div>
 
       <div className={`flex-1 p-6 grid grid-cols-12 gap-6 transition-opacity duration-1000 ${power ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>

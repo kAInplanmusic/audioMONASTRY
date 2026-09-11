@@ -32,6 +32,14 @@ export class DspPluginAdapter extends BasePluginAdapter {
         case 'lfoDepth':
           audioEngine.setDspParam({ [parameter.name]: value });
           break;
+        // FEAT-P3-002: Modulations-Matrix (dspMONK) im hörbaren V2-Pfad.
+        case 'modEnabled':
+          audioEngine.setOptionalModMatrix({ enabled: value >= 0.5 });
+          break;
+        case 'modRate':
+        case 'modDepth':
+          audioEngine.setOptionalModMatrix({ [parameter.name === 'modRate' ? 'rate' : 'depth']: value });
+          break;
         default:
           audioEngine.setDspParam({ [parameter.name]: value });
       }
@@ -50,6 +58,17 @@ export class DspPluginAdapter extends BasePluginAdapter {
         Number(command.payload?.ramp ?? 0.5),
       );
       return { ok: true };
+    }
+    if (command.name === 'optional-dsp') {
+      // FEAT-P3-002: Modulations-Matrix (LFO → Master-Gain).
+      const { audioEngine } = await import('../../utils/audioEngine');
+      const payload = command.payload ?? {};
+      audioEngine.setOptionalModMatrix({
+        enabled: payload.enabled === undefined ? undefined : Boolean(payload.enabled),
+        rate: payload.rate === undefined ? undefined : Number(payload.rate),
+        depth: payload.depth === undefined ? undefined : Number(payload.depth),
+      });
+      return { ok: true, block: 'mod-matrix' };
     }
     return super.onCommand(command);
   }

@@ -12,7 +12,7 @@
  * In Node/jsdom (Tests, CI) sind alle Aufrufe sichere No-Ops.
  */
 import type { V2Channel } from '../V2StudioGraph';
-import type { V2SinkMessage } from '../live/V2SinkEngine';
+import type { V2SinkMessage, V2SynthVoice } from '../live/V2SinkEngine';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import { v2OutputChannelCount } from '../V2OutputGraph';
 
@@ -147,6 +147,23 @@ export class V2LiveSink {
     return this.post({ type: 'master-dsp', cutoff, resonance, depth, drive });
   }
 
+  /** FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain). */
+  setMasterModMatrix(enabled: boolean, rate: number, depth: number): boolean {
+    return this.post({ type: 'master-mod-matrix', modEnabled: enabled, modRate: rate, modDepth: depth });
+  }
+
+  /** FEAT-P3-002: optionale HQ-Reverb (4-Leitungs-FDN) auf dem Master. */
+  setMasterReverb(enabled: boolean, mix: number, decayS: number, damping: number, sizeScale = 1): boolean {
+    return this.post({
+      type: 'master-reverb',
+      reverbEnabled: enabled,
+      reverbMix: mix,
+      reverbDecayS: decayS,
+      reverbDamping: damping,
+      reverbSizeScale: sizeScale,
+    });
+  }
+
   /** Master-FX: Reverb/Delay/Chorus-Mix. */
   setMasterFx(wet: number, feedback: number, rate: number, depth: number): boolean {
     return this.post({ type: 'master-fx', wet, feedback, rate, depth });
@@ -225,9 +242,14 @@ export class V2LiveSink {
   }
 
   /** Registriert eine Synth-/Step-Quelle für einen V2-Kanal. */
-  setSynthSource(channel: V2Channel, freq: number, voice?: 'kick' | 'hat' | 'clap' | 'bass' | 'lead'): boolean {
+  setSynthSource(
+    channel: V2Channel,
+    freq: number,
+    voice?: V2SynthVoice,
+    opts: { amount?: number; modIndex?: number } = {},
+  ): boolean {
     if (!Number.isFinite(freq) || freq <= 0) return false;
-    return this.post({ type: 'synth-source', channel, freq, voice });
+    return this.post({ type: 'synth-source', channel, freq, voice, amount: opts.amount, modIndex: opts.modIndex });
   }
 
   /** AUDIO-P0-001: Stummschaltung eines Kanals im V2-Sink. */

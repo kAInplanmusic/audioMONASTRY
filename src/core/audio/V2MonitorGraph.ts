@@ -23,6 +23,7 @@ import {
   MasteringNode,
   ParametricEqNode,
 } from './nodes/processingNodes';
+import { HqReverbNode, ModMatrixNode } from './nodes/optionalDspNodes';
 import { V2_CHANNELS, type V2Channel } from './V2StudioGraph';
 import { defaultMonitorPlan, type MonitorRoutingPlan } from './monitorRouting';
 import type { IProcessingContext } from './types';
@@ -50,6 +51,9 @@ export class V2MonitorGraph {
   /** Master-Processing-Kette (AUDIO-P0-004): EQ → DSP → FX → Dynamics → Mastering. */
   readonly masterEq: ParametricEqNode;
   readonly masterDsp: DspFilterNode;
+  /** FEAT-P3-002: optionale DSP-Bausteine (bypass-transparent, Default aus). */
+  readonly masterModMatrix: ModMatrixNode;
+  readonly masterReverb: HqReverbNode;
   readonly masterFx: EffectNode;
   readonly masterDynamics: DynamicsNode;
   readonly masterMastering: MasteringNode;
@@ -72,6 +76,12 @@ export class V2MonitorGraph {
     this.masterDsp.cutoff.setValue(20000);
     this.masterDsp.depth.setValue(0);
     this.masterDsp.drive.setValue(0);
+    // FEAT-P3-002: optionale Bausteine liegen zwischen DSP und FX; Default aus
+    // (bypass-transparent), damit die Einbindung die V2-Parität nicht ändert.
+    this.masterModMatrix = new ModMatrixNode('master:mod-matrix');
+    this.masterModMatrix.setEnabled(false);
+    this.masterReverb = new HqReverbNode('master:hq-reverb');
+    this.masterReverb.setEnabled(false);
     this.masterFx = new EffectNode('master:fx');
     this.masterFx.wet.setValue(0);
     this.masterDynamics = new DynamicsNode('master:dynamics');
@@ -85,6 +95,8 @@ export class V2MonitorGraph {
     this.graph.addNode(this.cueBus);
     this.graph.addNode(this.masterEq);
     this.graph.addNode(this.masterDsp);
+    this.graph.addNode(this.masterModMatrix);
+    this.graph.addNode(this.masterReverb);
     this.graph.addNode(this.masterFx);
     this.graph.addNode(this.masterDynamics);
     this.graph.addNode(this.masterMastering);
@@ -94,7 +106,9 @@ export class V2MonitorGraph {
     // MAIN: Summe → Processing-Kette → lokaler MAIN-Abhörpegel.
     this.graph.connect(this.mainBus.outputs[0], this.masterEq.inputs[0]);
     this.graph.connect(this.masterEq.outputs[0], this.masterDsp.inputs[0]);
-    this.graph.connect(this.masterDsp.outputs[0], this.masterFx.inputs[0]);
+    this.graph.connect(this.masterDsp.outputs[0], this.masterModMatrix.inputs[0]);
+    this.graph.connect(this.masterModMatrix.outputs[0], this.masterReverb.inputs[0]);
+    this.graph.connect(this.masterReverb.outputs[0], this.masterFx.inputs[0]);
     this.graph.connect(this.masterFx.outputs[0], this.masterDynamics.inputs[0]);
     this.graph.connect(this.masterDynamics.outputs[0], this.masterMastering.inputs[0]);
     this.graph.connect(this.masterMastering.outputs[0], this.mainMonitorGainNode.inputs[0]);
@@ -175,6 +189,26 @@ export class V2MonitorGraph {
     if (Number.isFinite(depth)) this.masterFx.depth.setValue(depth);
   }
 
+  // -------------------------------------------------------------------------
+  // FEAT-P3-002: optionale DSP-Bausteine (Mod-Matrix + HQ-Reverb)
+  // -------------------------------------------------------------------------
+
+  /** Modulations-Matrix: LFO → Master-Gain (bypass, wenn aus/Tiefe 0). */
+  setMasterModMatrix(enabled: boolean, rate: number, depth: number): void {
+    this.masterModMatrix.setEnabled(enabled);
+    if (Number.isFinite(rate)) this.masterModMatrix.rate.setValue(rate);
+    if (Number.isFinite(depth)) this.masterModMatrix.depth.setValue(depth);
+  }
+
+  /** HQ-Reverb (4-Leitungs-FDN) auf dem Master. */
+  setMasterReverb(enabled: boolean, mix: number, decayS: number, damping: number, sizeScale?: number): void {
+    this.masterReverb.setEnabled(enabled);
+    if (Number.isFinite(mix)) this.masterReverb.mix.setValue(mix);
+    if (Number.isFinite(decayS)) this.masterReverb.decayS.setValue(decayS);
+    if (Number.isFinite(damping)) this.masterReverb.damping.setValue(damping);
+    if (sizeScale !== undefined && Number.isFinite(sizeScale)) this.masterReverb.sizeScale.setValue(sizeScale);
+  }
+
   /** Dynamics-Insert (Soft-Knee-Kompressor). */
   setMasterDynamics(enabled: boolean, threshold: number, ratio: number, makeup: number): void {
     this.masterDynamics.setEnabled(enabled);
@@ -238,6 +272,11 @@ export class V2MonitorGraph {
     this.masterDsp.cutoff.setValue(20000);
     this.masterDsp.depth.setValue(0);
     this.masterDsp.drive.setValue(0);
+    // FEAT-P3-002: optionale Bausteine zurücksetzen und wieder ausschalten.
+    this.masterModMatrix.reset();
+    this.masterModMatrix.setEnabled(false);
+    this.masterReverb.reset();
+    this.masterReverb.setEnabled(false);
     this.masterFx.wet.setValue(0);
     this.masterDynamics.setEnabled(false);
     this.routingPlan = defaultMonitorPlan('MON1');

@@ -1,5 +1,5 @@
 {
-  "ts": "2026-09-11T17:20:14.790Z",
+  "ts": "2026-09-11T19:01:44.975Z",
   "thresholds": {
     "silenceDbfsMax": -60,
     "toneDbfsMin": -20,
@@ -17,10 +17,10 @@
       "peakR": 0
     },
     "testTone": {
-      "rmsL": 0.18895828595296993,
-      "rmsR": 0.18895828595296993,
-      "dbfsL": -14.47268118425379,
-      "dbfsR": -14.47268118425379,
+      "rmsL": 0.18893814575327636,
+      "rmsR": 0.18893814575327636,
+      "dbfsL": -14.473607022855667,
+      "dbfsR": -14.473607022855667,
       "peakL": 0.2366092950105667,
       "peakR": 0.2366092950105667
     },
@@ -41,10 +41,10 @@
       "peakR": 0
     },
     "samplePlaying": {
-      "rmsL": 0.18893322491789083,
-      "rmsR": 0.06426104852751127,
-      "dbfsL": -14.473833247102359,
-      "dbfsR": -23.841043849578224,
+      "rmsL": 0.18896936856763882,
+      "rmsR": 0.06427180316736274,
+      "dbfsL": -14.472171762057286,
+      "dbfsR": -23.839590312776803,
       "peakL": 0.2366115152835846,
       "peakR": 0.1035556048154831
     },
@@ -55,8 +55,41 @@
       "dbfsR": null,
       "peakL": 0,
       "peakR": 0
+    },
+    "reverbTone": {
+      "rmsL": 0.12472042652369152,
+      "rmsR": 0.12472042652369152,
+      "dbfsL": -18.08124825199544,
+      "dbfsR": -18.08124825199544,
+      "peakL": 0.20498937368392944,
+      "peakR": 0.20498937368392944
+    },
+    "reverbTail": {
+      "rmsL": 0.01780753249035008,
+      "rmsR": 0.01780753249035008,
+      "dbfsL": -34.98792509200044,
+      "dbfsR": -34.98792509200044,
+      "peakL": 0.051493119448423386,
+      "peakR": 0.051493119448423386
+    },
+    "silenceAfterReverbOff": {
+      "rmsL": 0,
+      "rmsR": 0,
+      "dbfsL": null,
+      "dbfsR": null,
+      "peakL": 0,
+      "peakR": 0
+    },
+    "silenceAfterModOff": {
+      "rmsL": 0,
+      "rmsR": 0,
+      "dbfsL": null,
+      "dbfsR": null,
+      "peakL": 0,
+      "peakR": 0
     }
   },
+  "modSpread": 26.998179730866656,
   "checks": {
     "Stille vor Trigger": true,
     "test-tone hoerbar": true,
@@ -66,6 +99,10 @@
     "Sample nach Trigger hoerbar (R)": true,
     "Kanaele getrennt gespeist (L deutlich lauter als R)": true,
     "Stille nach sample-stop": true,
+    "HQ-Reverb: Hall-Tail nach Ton aus hoerbar": true,
+    "HQ-Reverb aus: wieder Stille": true,
+    "Mod-Matrix: Tremolo-Hub messbar (>= 3 dB)": true,
+    "Mod-Matrix aus: wieder Stille": true,
     "keine pageErrors": true
   },
   "pageErrors": [],

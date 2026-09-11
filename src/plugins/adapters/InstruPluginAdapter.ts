@@ -1,5 +1,6 @@
 import type { PluginManifest } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
+import type { TrackType } from '../../types';
 
 /** instruMONK – Instrumente, MIDI-Programme, Presets (kanonische ID `instru`). */
 export class InstruPluginAdapter extends BasePluginAdapter {
@@ -32,6 +33,15 @@ export class InstruPluginAdapter extends BasePluginAdapter {
       const { audioEngine } = await import('../../utils/audioEngine');
       audioEngine.instrumentNote(note as string | number);
       return { ok: true };
+    }
+    if (command.name === 'optional-voice') {
+      // FEAT-P3-002: FM-E-Piano (Bellschlag → Sustain) als V2-Quelle.
+      const { audioEngine } = await import('../../utils/audioEngine');
+      const channel = (command.payload?.channel ?? 'channel4') as TrackType;
+      const freq = Number(command.payload?.freq ?? 440);
+      const modIndex = Number(command.payload?.modIndex ?? 2.4);
+      audioEngine.setOptionalSynthVoice(channel, 'epiano', freq, { modIndex });
+      return { ok: true, block: 'electric-piano', channel };
     }
     return super.onCommand(command);
   }

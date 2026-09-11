@@ -41,6 +41,8 @@ import {
   type MonitorRoutingPlan, type MonitorSource, type MonitorUser,
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
+import { defaultOptionalDspPreset } from '../core/dsp/dspPresets';
+import type { V2SynthVoice } from '../core/audio/live/V2SinkEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
 import { normalizeNotes, normalizeSteps } from '../core/audio/state/sequenceUtils';
@@ -749,6 +751,19 @@ class AudioEngine {
   private v2MasterEqLowDb = 0;
   private v2MasterEqMidDb = 0;
   private v2MasterEqHighDb = 0;
+  /**
+   * FEAT-P3-002: optionale DSP-Bausteine im hörbaren V2-Pfad. Die Defaults
+   * kommen aus dem Preset-Schema (`core/dsp/dspPresets.ts`) — eine Quelle für
+   * UI, Adapter und Persistenz (ein Test hält beide Seiten synchron).
+   */
+  private optionalModMatrix = (() => {
+    const p = defaultOptionalDspPreset('mod-matrix');
+    return { enabled: p.enabled, rate: p.params.rate, depth: p.params.depth };
+  })();
+  private optionalReverb = (() => {
+    const p = defaultOptionalDspPreset('hq-reverb');
+    return { enabled: p.enabled, mix: p.params.mix, decayS: p.params.decayS, damping: p.params.damping, sizeScale: p.params.sizeScale };
+  })();
 
   /** Ist der Dynamik-Insert tatsächlich in der Master-Kette? */
   public isDynamicsInsertReady(): boolean {
@@ -955,6 +970,60 @@ class AudioEngine {
     try { this.dspNode?.port?.postMessage({ ...p }); } catch { /* Gain-Fallback */ }
     // AUDIO-P0-004: DSP-Parameter in den V2-Live-Pfad spiegeln.
     this.v2LiveSink.setMasterDsp(p.filterCutoff ?? 20000, p.resonance ?? 0.5, p.depth ?? 0, p.drive ?? 0);
+  }
+
+  // ---------------------------------------------------------------------------
+  // FEAT-P3-002: optionale DSP-Bausteine (Mod-Matrix, HQ-Reverb, Quellen)
+  // ---------------------------------------------------------------------------
+
+  /** Modulations-Matrix (LFO → Master-Gain) im hörbaren V2-Pfad. */
+  public setOptionalModMatrix(patch: { enabled?: boolean; rate?: number; depth?: number } = {}): void {
+    this.optionalModMatrix = { ...this.optionalModMatrix, ...patch };
+    const { enabled, rate, depth } = this.optionalModMatrix;
+    this.v2LiveSink.setMasterModMatrix(enabled, rate, depth);
+  }
+
+  /** HQ-Reverb (4-Leitungs-FDN) auf dem Master im hörbaren V2-Pfad. */
+  public setOptionalReverb(patch: { enabled?: boolean; mix?: number; decayS?: number; damping?: number; sizeScale?: number } = {}): void {
+    this.optionalReverb = { ...this.optionalReverb, ...patch };
+    const { enabled, mix, decayS, damping, sizeScale } = this.optionalReverb;
+    this.v2LiveSink.setMasterReverb(enabled, mix, decayS, damping, sizeScale);
+  }
+
+  /** Aktueller Zustand der optionalen Bausteine (UI/Diagnose). */
+  public getOptionalDspState(): {
+    modMatrix: { enabled: boolean; rate: number; depth: number };
+    reverb: { enabled: boolean; mix: number; decayS: number; damping: number; sizeScale: number };
+  } {
+    return { modMatrix: { ...this.optionalModMatrix }, reverb: { ...this.optionalReverb } };
+  }
+
+  /** Setzt eine optionale Synth-Quelle (Phase-Distortion / E-Piano) auf einen Kanal. */
+  public setOptionalSynthVoice(
+    channel: TrackType,
+    voice: V2SynthVoice,
+    freq = 440,
+    opts: { amount?: number; modIndex?: number } = {},
+  ): boolean {
+    const f = Number.isFinite(freq) && freq > 0 ? Math.max(20, Math.min(20000, freq)) : 440;
+    return this.v2LiveSink.setSynthSource(channel, f, voice, opts);
+  }
+
+  /** Stellt die Rollen-Default-Stimme eines Kanals wieder her („optional-voice“ aus). */
+  public resetOptionalSynthVoice(channel: TrackType): boolean {
+    const role = TRACK_ROLE_MAP[channel];
+    const voice: V2SynthVoice = role === 'kick' ? 'kick'
+      : role === 'hat' ? 'hat'
+      : role === 'clap' ? 'clap'
+      : role === 'bass' ? 'bass'
+      : 'lead';
+    const freq = role === 'kick' ? 50
+      : role === 'hat' ? 6000
+      : role === 'clap' ? 1200
+      : role === 'bass' ? 55
+      : channel === 'channel8' ? 880
+      : 440;
+    return this.v2LiveSink.setSynthSource(channel, freq, voice);
   }
 
   /** Task 9: EQ-Band parametrisch setzen (eqProcessor). */

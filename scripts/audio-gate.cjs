@@ -199,8 +199,40 @@ function buildStereoWav(sampleRate = 48000, seconds = 1.0) {
       await settle();
       steps.silenceAfterStop = await measure(thresholds.measureMs);
 
+      // --- FEAT-P3-002: optionale Bausteine im ECHTEN Worklet-Pfad ---
+      // HQ-Reverb: nach dem Abschalten des Tons muss ein hörbarer Tail bleiben.
+      node.port.postMessage({ type: 'master-reverb', reverbEnabled: true, reverbMix: 0.6, reverbDecayS: 3, reverbDamping: 0.2, reverbSizeScale: 1 });
+      node.port.postMessage({ type: 'test-tone', active: true, freq: 1000, amplitude: 0.5 });
+      await settle();
+      steps.reverbTone = await measure(thresholds.measureMs);
+      node.port.postMessage({ type: 'test-tone', active: false });
+      await settle();
+      steps.reverbTail = await measure(thresholds.measureMs);
+      node.port.postMessage({ type: 'master-reverb', reverbEnabled: false, reverbMix: 0, reverbDecayS: 2, reverbDamping: 0.35, reverbSizeScale: 1 });
+      await settle();
+      steps.silenceAfterReverbOff = await measure(thresholds.measureMs);
+
+      // Mod-Matrix: der Pegel muss über mehrere Fenster messbar schwanken (Tremolo).
+      // Rate 1,5 Hz (Periode 667 ms) und 10 kurze Fenster über ~850 ms – so wird
+      // ein voller Modulationszyklus erfasst (kurze Fenster mitteln das Tremolo nicht weg).
+      node.port.postMessage({ type: 'master-mod-matrix', modEnabled: true, modRate: 1.5, modDepth: 1 });
+      node.port.postMessage({ type: 'test-tone', active: true, freq: 1000, amplitude: 0.5 });
+      await settle();
+      const modLevels = [];
+      for (let i = 0; i < 10; i++) {
+        modLevels.push((await measure(60)).dbfsL);
+        await new Promise((r) => setTimeout(r, 25));
+      }
+      const finiteLevels = modLevels.filter((v) => Number.isFinite(v));
+      const modSpread = finiteLevels.length ? Math.max(...finiteLevels) - Math.min(...finiteLevels) : 0;
+      log.push(`mod levels dBFS: ${modLevels.map((v) => (Number.isFinite(v) ? v.toFixed(1) : '-inf')).join(', ')} (Hub ${modSpread.toFixed(1)} dB)`);
+      node.port.postMessage({ type: 'test-tone', active: false });
+      node.port.postMessage({ type: 'master-mod-matrix', modEnabled: false, modRate: 0.5, modDepth: 0.35 });
+      await settle();
+      steps.silenceAfterModOff = await measure(thresholds.measureMs);
+
       await ctx.close();
-      return { log, steps, sampleFrames: left.length, sampleRate: audioBuffer.sampleRate };
+      return { log, steps, sampleFrames: left.length, sampleRate: audioBuffer.sampleRate, modSpread };
     },
     { wavBase64, thresholds: THRESHOLDS },
   );
@@ -229,6 +261,11 @@ function buildStereoWav(sampleRate = 48000, seconds = 1.0) {
     ['Sample nach Trigger hoerbar (R)', s.samplePlaying.dbfsR >= THRESHOLDS.sampleDbfsMin],
     ['Kanaele getrennt gespeist (L deutlich lauter als R)', s.samplePlaying.dbfsL - s.samplePlaying.dbfsR >= 6],
     ['Stille nach sample-stop', Math.max(s.silenceAfterStop.dbfsL, s.silenceAfterStop.dbfsR) <= THRESHOLDS.silenceDbfsMax],
+    // FEAT-P3-002: die optionalen Bausteine müssen im echten Worklet-Pfad hörbar sein.
+    ['HQ-Reverb: Hall-Tail nach Ton aus hoerbar', s.reverbTail.dbfsL >= -55],
+    ['HQ-Reverb aus: wieder Stille', Math.max(s.silenceAfterReverbOff.dbfsL, s.silenceAfterReverbOff.dbfsR) <= THRESHOLDS.silenceDbfsMax],
+    ['Mod-Matrix: Tremolo-Hub messbar (>= 3 dB)', result.modSpread >= 3],
+    ['Mod-Matrix aus: wieder Stille', Math.max(s.silenceAfterModOff.dbfsL, s.silenceAfterModOff.dbfsR) <= THRESHOLDS.silenceDbfsMax],
     ['keine pageErrors', pageErrors.length === 0],
   ];
 
@@ -244,6 +281,7 @@ function buildStereoWav(sampleRate = 48000, seconds = 1.0) {
     ts: new Date().toISOString(),
     thresholds: THRESHOLDS,
     raw: s,
+    modSpread: result.modSpread,
     checks: Object.fromEntries(checks),
     pageErrors,
     sampleFrames: result.sampleFrames,

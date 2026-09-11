@@ -20,13 +20,15 @@ import { V2MonitorGraph } from '../V2MonitorGraph';
 import { V2OutputGraph } from '../V2OutputGraph';
 import type { IProcessingContext } from '../types';
 import type { MonitorRoutingPlan } from '../monitorRouting';
+import { phaseDistortionSample } from '../../dsp/phaseDistortion';
+import { renderElectricPiano } from '../../dsp/electricPiano';
 
 export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
     | 'sample-set' | 'sample-trigger' | 'sample-stop' | 'synth-source'
     | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
     | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
-    | 'mute' | 'synth-trigger';
+    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb';
   active?: boolean;
   freq?: number;
   amplitude?: number;
@@ -55,6 +57,9 @@ export interface V2SinkMessage {
   // AUDIO-P0-001: Synth-Stimme + Mute
   voice?: V2SynthVoice;
   muted?: boolean;
+  // FEAT-P3-002: Parameter der optionalen Quellen (Phase-Distortion/E-Piano)
+  amount?: number;
+  modIndex?: number;
   // AUDIO-P0-004: Master-Processing-Payloads
   lowDb?: number;
   midDb?: number;
@@ -70,6 +75,15 @@ export interface V2SinkMessage {
   ratio?: number;
   makeup?: number;
   ceiling?: number;
+  // FEAT-P3-002: optionale DSP-Bausteine (Mod-Matrix + HQ-Reverb)
+  modEnabled?: boolean;
+  modRate?: number;
+  modDepth?: number;
+  reverbEnabled?: boolean;
+  reverbMix?: number;
+  reverbDecayS?: number;
+  reverbDamping?: number;
+  reverbSizeScale?: number;
 }
 
 /** Ein sample-genau getriggerter Step-Burst innerhalb eines Render-Blocks. */
@@ -107,12 +121,16 @@ interface V2SamplePlaybackState extends V2LoadedSample {
 }
 
 /** Konfigurierbare Synthese-/Step-Quelle je Kanal (Synth-Source-Registry). */
-export type V2SynthVoice = 'kick' | 'hat' | 'clap' | 'bass' | 'lead';
+export type V2SynthVoice = 'kick' | 'hat' | 'clap' | 'bass' | 'lead' | 'phase' | 'epiano';
 
 export interface V2SynthSourceConfig {
   freq: number;
   /** AUDIO-P0-001: Synthese-Stimme je Kanal (Rollen-Default statt 440-Hz-Sinus). */
   voice: V2SynthVoice;
+  /** FEAT-P3-002: Phase-Distortion-Tiefe 0..1 (nur `voice === 'phase'`). */
+  amount?: number;
+  /** FEAT-P3-002: FM-Index (nur `voice === 'epiano'`). */
+  modIndex?: number;
 }
 
 /** AUDIO-P0-001: Rollen-Default-Stimmen je V2-Kanal (V1-Parität kick/hat/clap/bass). */
@@ -218,6 +236,16 @@ export class V2SinkEngine {
     this.studio.setMasterDsp(cutoff, resonance, depth, drive);
   }
 
+  /** FEAT-P3-002: optionale Modulations-Matrix (LFO → Master-Gain). */
+  setMasterModMatrix(enabled: boolean, rate: number, depth: number): void {
+    this.studio.setMasterModMatrix(enabled, rate, depth);
+  }
+
+  /** FEAT-P3-002: optionale HQ-Reverb (4-Leitungs-FDN) auf dem Master. */
+  setMasterReverb(enabled: boolean, mix: number, decayS: number, damping: number, sizeScale?: number): void {
+    this.studio.setMasterReverb(enabled, mix, decayS, damping, sizeScale);
+  }
+
   setMasterFx(wet: number, feedback: number, rate: number, depth: number): void {
     this.studio.setMasterFx(wet, feedback, rate, depth);
   }
@@ -306,6 +334,9 @@ export class V2SinkEngine {
       this.synthSources.set(channel, {
         freq: Math.max(20, Math.min(20000, config.freq)),
         voice: config.voice ?? ROLE_VOICE[channel] ?? 'lead',
+        // FEAT-P3-002: optionale Quellen-Parameter (Phase-Distortion/E-Piano).
+        ...(config.amount === undefined ? {} : { amount: config.amount }),
+        ...(config.modIndex === undefined ? {} : { modIndex: config.modIndex }),
       });
     }
   }
@@ -383,8 +414,8 @@ export class V2SinkEngine {
       if (!event || event.startSample < 0 || event.startSample >= ctx.bufferSize) continue;
       // AUDIO-P0-001: Mute + rollenbasierte Synthese-Stimme.
       if (this.mutedChannels.has(event.track)) continue;
-      const voice = this.getSynthSource(event.track).voice;
-      const burst = this.renderStepBurst(event, ctx.bufferSize, ctx.sampleRate, voice);
+      const source = this.getSynthSource(event.track);
+      const burst = this.renderStepBurst(event, ctx.bufferSize, ctx.sampleRate, source.voice, source.amount, source.modIndex);
       this.studio.setSourceBuffer(event.track, [burst]);
       usedChannels.add(event.track);
     }
@@ -469,8 +500,17 @@ export class V2SinkEngine {
   /**
    * AUDIO-P0-001: Rollenbasierte Step-Stimme (kick/hat/clap/bass/lead).
    * Kein 440-Hz-Sinus-Default mehr – jede Rolle hat ihre eigene Synthese.
+   * FEAT-P3-002: zusätzlich `phase` (Phase-Distortion-Oszillator) und `epiano`
+   * (FM-E-Piano) aus den optionalen DSP-Bausteinen.
    */
-  private renderStepBurst(event: V2StepRenderEvent, length: number, sampleRate: number, voice: V2SynthVoice): Float32Array {
+  private renderStepBurst(
+    event: V2StepRenderEvent,
+    length: number,
+    sampleRate: number,
+    voice: V2SynthVoice,
+    amount?: number,
+    modIndex?: number,
+  ): Float32Array {
     const buffer = new Float32Array(length);
     const start = Math.max(0, Math.min(length - 1, event.startSample));
     const freq = Number.isFinite(event.freq) && event.freq > 0 ? Math.max(20, Math.min(20000, event.freq)) : ROLE_FREQ[event.track] ?? 440;
@@ -478,9 +518,21 @@ export class V2SinkEngine {
     const sr = Math.max(8000, sampleRate);
     const decay = voice === 'kick' ? 14 : voice === 'bass' ? 9 : voice === 'clap' ? 22 : 18;
     const baseFreq = voice === 'kick' ? Math.min(freq, 120) : voice === 'bass' ? Math.min(freq, 160) : freq;
+    const phaseAmount = Number.isFinite(amount) ? Math.max(0, Math.min(1, amount as number)) : 0.6;
+    const pianoModIndex = Number.isFinite(modIndex) ? Math.max(0, Math.min(12, modIndex as number)) : 2.4;
     let phase = 0;
     let noiseState = 1;
     let noiseHp = 0;
+    // FEAT-P3-002: Das E-Piano ist eine komplette FM-Stimme (eigene Hüllkurve
+    // Anschlag → Sustain). Sie wird einmal für die Burst-Länge gerendert.
+    const pianoNote = voice === 'epiano'
+      ? renderElectricPiano(baseFreq, {
+          sampleRate: sr,
+          durationS: Math.max(0.01, (length - start) / sr),
+          modIndex: pianoModIndex,
+          gain: 1,
+        })
+      : null;
 
     const nextNoise = (): number => {
       noiseState = (noiseState * 1664525 + 1013904223) >>> 0;
@@ -520,6 +572,18 @@ export class V2SinkEngine {
           const saw = (phase * 2 - 1) * env;
           s = this.bassFilterState + 0.25 * (saw - this.bassFilterState);
           this.bassFilterState = s;
+          break;
+        }
+        case 'phase': {
+          // Casio-CZ-Phasenverzerrung: nichtlineare Phase erzeugt harte Kanten.
+          phase += freq / sr;
+          if (phase >= 1) phase -= 1;
+          s = phaseDistortionSample(phase, phaseAmount, 'saw', 0.9) * env;
+          break;
+        }
+        case 'epiano': {
+          // FM-Stimme mit eigener Hüllkurve (kein zusätzliches env nötig).
+          s = pianoNote ? (pianoNote[i - start] ?? 0) : 0;
           break;
         }
         default: {
