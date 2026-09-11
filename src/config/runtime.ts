@@ -80,3 +80,14 @@ export const SIGNALING_TRANSPORT_URL =
         typeof import.meta !== 'undefined' ? import.meta.env.VITE_SIGNALING_TRANSPORT_URL : undefined,
         'http://localhost:8080/webrtc-signaling',
       ) ?? '');
+
+/**
+ * Legacy-HTTP-Signaling (`POST {SIGNALING_HTTP_URL}/offer`) nur, wenn ein
+ * Operator es **explizit** konfiguriert hat. Der aktuelle Pfad läuft über
+ * socket.io (`/webrtc-signaling`); der Server hat keine `/offer`-Route, daher
+ * erzeugte der same-origin-Default bei jedem Start einen 404.
+ */
+export const SIGNALING_HTTP_EXPLICIT =
+  typeof import.meta !== 'undefined'
+    ? Boolean(String(import.meta.env.VITE_SIGNALING_HTTP_URL ?? '').trim())
+    : false;

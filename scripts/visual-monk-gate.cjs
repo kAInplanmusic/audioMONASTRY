@@ -5,8 +5,10 @@ const { chromium } = require('playwright');
   const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errs = [];
+  const badResponses = [];
   page.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
   page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 160)); });
+  page.on('response', (r) => { if (r.status() >= 400) badResponses.push(`${r.status()} ${r.url()}`); });
 
   await page.goto('http://localhost:8080/', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForTimeout(3000);
@@ -54,7 +56,7 @@ const { chromium } = require('playwright');
     };
   });
 
-  console.log(JSON.stringify({ hasVisualButton: !!hasBtn, ...info }, null, 2));
+  console.log(JSON.stringify({ hasVisualButton: !!hasBtn, ...info, badResponses }, null, 2));
   console.log('errors:', errs.slice(0, 6));
   await browser.close();
   const ok = hasBtn && info.dialogFound && info.canvas && info.nonUniform;

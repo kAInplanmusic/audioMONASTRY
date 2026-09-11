@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useRef, useEffect, useState } from 'react';
 import * as Tone from '../core/audio/compat/nativeAudioKit';
-import { SIGNALING_HTTP_URL, SIGNALING_TRANSPORT_URL } from '../config/runtime';
+import { SIGNALING_HTTP_EXPLICIT, SIGNALING_HTTP_URL, SIGNALING_TRANSPORT_URL } from '../config/runtime';
 import { CrdtClock, CrdtLwwMap, CrdtClockMerger, CrdtSyncMessage } from '../utils/crdt';
 
 // Define the shape of the context value
@@ -228,8 +228,11 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
                 await pc.setLocalDescription(offer);
 
                 let answer;
-                if (!SIGNALING_HTTP_URL) {
-                    console.warn('WebRTC signaling is disabled: no production signaling endpoint configured.');
+                if (!SIGNALING_HTTP_URL || !SIGNALING_HTTP_EXPLICIT) {
+                    // Der Legacy-HTTP-Pfad (`/offer`) existiert serverseitig nicht;
+                    // das Signaling läuft über socket.io (WebRTCManager). Ohne
+                    // explizite Konfiguration wird der sinnlose 404 vermieden.
+                    console.warn('Legacy-HTTP-Signaling übersprungen (socket.io übernimmt; VITE_SIGNALING_HTTP_URL nicht gesetzt).');
                     return;
                 }
                 // UX-Fix: Wenn das Backend nicht erreichbar ist, darf der Fetch
