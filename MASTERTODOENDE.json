@@ -73,18 +73,23 @@
       "id": "COLLAB-P0-003",
       "title": "WebRTC/SFU/TURN-Haertung (ICE/TURN aus Server-Config, Reconnect-Zustandsmaschine)",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Networking",
       "source": "MASTER_TODO.md",
+      "problem": "ICE-Server hartkodiert (nur STUN), keine kurzlebigen TURN-Credentials, iceConnectionState/connectionState unbehandelt, Reconnect konnte doppelte PeerConnections erzeugen.",
+      "note": "PARTIAL 2026-09-11 (code+Tests fertig, Live-TURN nicht nachweisbar): NEU src/core/transport/iceConfig.ts (buildIceServers/parseIceConfigResponse/hasRelayServer, rein) und src/core/transport/connectionRecovery.ts (Zustandsmaschine: healthy->reset, failed->1. ICE-Restart dann Reconnect mit Exponential-Backoff, disconnected mit Karenz, maxAttempts->aufgeben; now injiziert). Server: server/webrtcConfig.ts erzeugt kurzlebige coturn-REST-Credentials (username=<expiry>:<userId>, credential=base64(HMAC-SHA1(secret))) + GET /api/webrtc-config (token-geschuetzt wie andere /api-Routen, Cache-Control no-store). Client: src/config/webrtc.ts refreshIceConfig() holt die Server-Config und faellt sonst ehrlich auf statisches STUN zurueck; WebRTCManager nutzt rtcConfig.iceServers statt hartkodiertem STUN, hat einen Doppel-PC-Guard (createPeerConnection liefert lebende Verbindung statt neuer) und ICE-/connection-State-Handler, die die Zustandsmaschine ausfuehren (ein Timer je Peer, recoverPeer: restartIce + Offer nur fuer den deterministischen Initiator bzw. close+connectToPeer). BELEGE: tests/iceConfig.test.ts 9/9 (STUN immer, TURN nur mit Credentials, Signatur/TTL/Determinismus, Env-Aufbau), tests/connectionRecovery.test.ts 6/6 (Backoff, Karenz, Obergrenze, Policy-Deckel), tests/webrtcManager.test.ts 10/10; tsc 0, eslint 0, boundary 408/0, test:ci 1270/1270 ohne Skips. OFFEN (bewusst): echtes TURN-Relay (TURN_URLS+TURN_STATIC_AUTH_SECRET existieren in dieser Umgebung nicht) und die Main-Stream-Wiederherstellung nach echtem ICE-Fail sind nur verdrahtet, nicht live gemessen -> gehoert zum Live-Beweis COLLAB-P0-002.",
       "files": [
-        "src/context/AudioContext.tsx",
-        "src/utils/WebRTCManager.ts",
+        "src/core/transport/iceConfig.ts",
+        "src/core/transport/connectionRecovery.ts",
+        "server/webrtcConfig.ts",
         "server.ts",
-        "src/core/transport/MediasoupTransport.ts"
+        "src/config/webrtc.ts",
+        "src/utils/WebRTCManager.ts"
       ],
       "acceptance": [
-        "ICE-Fehler/Reconnect/TURN-Konfig getestet",
-        "keine doppelten PeerConnections/Tracks"
+        "ICE-Fehler/Reconnect/TURN-Konfig getestet (Unit: 15 neue Tests)",
+        "keine doppelten PeerConnections (Guard in createPeerConnection + ein Recovery-Timer je Peer)",
+        "OFFEN: Live-TURN + Main-Stream-Wiederherstellung (COLLAB-P0-002)"
       ]
     },
     {

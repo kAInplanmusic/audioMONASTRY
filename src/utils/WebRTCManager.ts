@@ -4,6 +4,14 @@ import { WebRTCMessage } from '../types/protocol';
 import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
 import { isListenerMode, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
+import { rtcConfig, refreshIceConfig } from '../config/webrtc';
+import {
+  createRecoveryState,
+  nextRecoveryDecision,
+  type IceConnectionStateLike,
+  type PeerConnectionStateLike,
+  type RecoveryState,
+} from '../core/transport/connectionRecovery';
 
 type SessionPeer = { socketId: string; userId: string };
 type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
@@ -44,6 +52,9 @@ class WebRTCManager {
   private stateSequence = 0;
   private sessionStateListeners = new Set<(snap: any) => void>();
   private pluginStateRejectedListeners = new Set<(msg: any) => void>();
+  // COLLAB-P0-003: ICE-/Verbindungs-Recovery je Peer (Backoff, kein Doppel-PC).
+  private recoveryStates = new Map<string, RecoveryState>();
+  private recoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   private sessionUserId = `user-${random().toString(36).slice(2, 8)}`;
 
@@ -173,6 +184,9 @@ class WebRTCManager {
       });
       this.setupSignaling();
       this.setupActivityHeartbeat();
+      // COLLAB-P0-003: autoritative ICE-/TURN-Konfiguration vom Server holen
+      // (best-effort; ohne Antwort bleibt das statische STUN aktiv).
+      void refreshIceConfig(this.sessionUserId);
       // Mikrofon wird NICHT im Konstruktor angefragt: iOS-Safari verlangt
       // eine User-Geste. App.tsx ruft startLocalAudio() nach "Studio betreten".
     }
@@ -543,11 +557,21 @@ class WebRTCManager {
   }
 
   private createPeerConnection(targetId: string, opts?: { remoteIsMasterOut?: boolean }): RTCPeerConnection {
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.services.mozilla.com'] }
-      ]
-    });
+    // COLLAB-P0-003: kein Doppel-PC – existiert schon eine lebende Verbindung,
+    // wird sie zurückgegeben (ein Reconnect erzeugte sonst parallele PCs).
+    const existing = this.peerConnections.get(targetId);
+    if (existing && existing.iceConnectionState !== 'closed' && existing.iceConnectionState !== 'failed') {
+      return existing;
+    }
+    if (existing) this.closePeerConnection(targetId);
+
+    // ICE-Server aus der autoritativen Server-Konfiguration (STUN + optional
+    // kurzlebiges TURN); Fallback auf öffentliches STUN, falls nicht geladen.
+    const iceServers = (rtcConfig.iceServers && rtcConfig.iceServers.length > 0)
+      ? rtcConfig.iceServers
+      : [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.services.mozilla.com'] }];
+    const pc = new RTCPeerConnection({ ...rtcConfig, iceServers });
+    this.recoveryStates.set(targetId, createRecoveryState());
 
     // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: Listen-Client sendet nie eigene
     // Tracks; Host schickt an einen Listener keinen Mikrofon-Track, sondern nur
@@ -599,15 +623,91 @@ class WebRTCManager {
         this.onRemoteStream(e.streams[0], targetId);
     };
 
+    // COLLAB-P0-003: ICE-/Verbindungszustand überwachen und mit Backoff
+    // wiederherstellen (erster Versuch: ICE-Restart, danach Reconnect).
+    pc.oniceconnectionstatechange = () => this.handlePeerConnectionState(targetId, pc);
+    pc.onconnectionstatechange = () => this.handlePeerConnectionState(targetId, pc);
+
     this.peerConnections.set(targetId, pc);
     return pc;
   }
 
   private closePeerConnection(targetId: string) {
+    const timer = this.recoveryTimers.get(targetId);
+    if (timer) { clearTimeout(timer); this.recoveryTimers.delete(targetId); }
+    this.recoveryStates.delete(targetId);
     const pc = this.peerConnections.get(targetId);
     if (pc) { try { pc.close(); } catch { /* noop */ } }
     this.peerConnections.delete(targetId);
     this.dataChannels.delete(targetId);
+  }
+
+  /** Plant genau einen Recovery-Versuch je Peer (kein Timer-Duplikat). */
+  private scheduleRecovery(targetId: string, delayMs: number, fn: () => void): void {
+    const existing = this.recoveryTimers.get(targetId);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.recoveryTimers.delete(targetId);
+      try { fn(); } catch (e) { console.warn('[webrtc] Recovery fehlgeschlagen:', (e as Error).message); }
+    }, Math.max(0, delayMs));
+    this.recoveryTimers.set(targetId, timer);
+  }
+
+  /**
+   * COLLAB-P0-003: entscheidet anhand der reinen Zustandsmaschine, ob gewartet,
+   * ein ICE-Restart oder ein Reconnect nötig ist – mit Backoff und Obergrenze.
+   */
+  private handlePeerConnectionState(targetId: string, pc: RTCPeerConnection): void {
+    const state = this.recoveryStates.get(targetId) ?? createRecoveryState();
+    const ice = pc.iceConnectionState as IceConnectionStateLike;
+    const connection = ((pc as { connectionState?: string }).connectionState ?? 'unknown') as PeerConnectionStateLike;
+    const disconnectedForMs = (state as RecoveryState & { disconnectedSince?: number }).disconnectedSince
+      ? Date.now() - (state as RecoveryState & { disconnectedSince?: number }).disconnectedSince!
+      : 0;
+    const decision = nextRecoveryDecision(state, { ice, connection, now: Date.now(), disconnectedForMs });
+    const nextState = decision.state as RecoveryState & { disconnectedSince?: number };
+    if (ice === 'disconnected' && !nextState.disconnectedSince) nextState.disconnectedSince = Date.now();
+    if (ice !== 'disconnected' && connection !== 'disconnected') delete nextState.disconnectedSince;
+    this.recoveryStates.set(targetId, nextState);
+
+    if (decision.action === 'none' || decision.action === 'gave-up') {
+      if (decision.action === 'gave-up') {
+        console.warn(`[webrtc] Verbindung zu ${targetId} aufgegeben (${decision.reason})`);
+      }
+      return;
+    }
+    if (decision.action === 'wait') {
+      this.scheduleRecovery(targetId, decision.delayMs, () => this.handlePeerConnectionState(targetId, pc));
+      return;
+    }
+    const action = decision.action;
+    if (action === 'restart-ice' || action === 'reconnect') {
+      this.scheduleRecovery(targetId, decision.delayMs, () => { void this.recoverPeer(targetId, action); });
+    }
+  }
+
+  /** Führt die von der Zustandsmaschine gewählte Aktion aus. */
+  private async recoverPeer(targetId: string, action: 'restart-ice' | 'reconnect'): Promise<void> {
+    if (action === 'restart-ice') {
+      const pc = this.peerConnections.get(targetId);
+      const restart = (pc as unknown as { restartIce?: () => void })?.restartIce;
+      if (pc && typeof restart === 'function') {
+        try { restart.call(pc); } catch { /* Kontext evtl. schon zu */ }
+        // Nur der deterministische Initiator erneuert das Offer (Glare-Schutz).
+        const selfId = this.socket?.id ?? '';
+        if (this.masterOutMode || !selfId || targetId >= selfId) {
+          try {
+            const offer = await pc.createOffer({ iceRestart: true });
+            await pc.setLocalDescription(offer);
+            this.socket?.emit('offer', { target: targetId, offer });
+          } catch { /* Negotiation scheitert → nächster Versuch/Backoff */ }
+        }
+        return;
+      }
+      // Kein restartIce verfügbar → wie Reconnect behandeln.
+    }
+    this.closePeerConnection(targetId);
+    await this.connectToPeer(targetId);
   }
 
   public async connectToPeer(targetId: string) {

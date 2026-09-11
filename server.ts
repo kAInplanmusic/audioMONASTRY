@@ -32,6 +32,7 @@ import { normalizeStyleRanking, suggestStyleFromRanking } from './src/core/ai/vi
 import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifact, saveArtifact } from './server/visionArtifacts.ts';
 import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
 import { supabaseServerKey } from './src/config/supabaseKeys';
+import { buildWebRtcConfigResponse } from './server/webrtcConfig.ts';
 import {
   AuthoritativeSession,
   MemorySessionPersistence,
@@ -472,6 +473,20 @@ app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stem
 // --- Health check ---
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// COLLAB-P0-003: autoritative ICE/TURN-Konfiguration. Token-frei wie /api/health
+// (nur ICE-Server, keine App-Daten); das TURN-Secret bleibt serverseitig, der
+// Client bekommt pro Anfrage kurzlebige coturn-REST-Credentials.
+app.get('/api/webrtc-config', (req, res) => {
+  try {
+    const userId = String((req.query as { userId?: string }).userId ?? '').slice(0, 64);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(buildWebRtcConfigResponse(process.env, { userId, now: Date.now() }));
+  } catch (e) {
+    console.warn('[webrtc-config] Aufbau fehlgeschlagen:', (e as Error).message);
+    res.status(500).json({ error: 'webrtc-config unavailable' });
+  }
 });
 
 // --- GET /api/ai/vision/artifact/:name → lokal abgelegte Vision-Medien ---

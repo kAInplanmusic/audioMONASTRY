@@ -8,6 +8,8 @@
 //   ohne Credentials -> sendet zuerst ohne, fügt gezielt hinzu wenn nötig.
 // ============================================================================
 
+import { parseIceConfigResponse } from '../core/transport/iceConfig';
+
 interface IceServer {
   urls: string | string[];
   username?: string;
@@ -82,4 +84,31 @@ export function addTurnServer(turn: IceServer): void {
   const cfg = rtcConfig as { iceServers?: IceServer[] };
   if (!cfg.iceServers) cfg.iceServers = [];
   cfg.iceServers.push(turn);
+}
+
+/**
+ * COLLAB-P0-003: holt die autoritative ICE-Konfiguration vom Server
+ * (`GET /api/webrtc-config`, inkl. kurzlebiger TURN-Credentials) und übernimmt
+ * sie. Schlägt der Abruf fehl, bleibt die statische STUN-Konfiguration aktiv
+ * (ehrlich: ohne Relay), der Aufrufer bekommt `false` zurück.
+ */
+export async function refreshIceConfig(
+  userId?: string,
+  fetchImpl: typeof fetch | undefined = typeof fetch !== 'undefined' ? fetch : undefined,
+): Promise<boolean> {
+  if (!fetchImpl) return false;
+  try {
+    const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    const resp = await fetchImpl(`/api/webrtc-config${query}`, { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const parsed = parseIceConfigResponse(await resp.json());
+    const cfg = rtcConfig as { iceServers?: IceServer[] };
+    cfg.iceServers = parsed.iceServers as IceServer[];
+    return true;
+  } catch (e) {
+    // Erwarteter Fallback (kein Token/kein TURN konfiguriert) – daher debug und
+    // nicht warn: die statische STUN-Konfiguration bleibt aktiv.
+    console.debug('[webrtc] ICE-Konfiguration nicht vom Server geladen – statisches STUN aktiv:', (e as Error).message);
+    return false;
+  }
 }
