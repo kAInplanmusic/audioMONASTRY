@@ -11,6 +11,7 @@ import { aiLogger } from './aiLogger';
 import { CostTracker } from './costTracker';
 import { fleetStatus, sleepFleet, wakeFleet } from './fleetWake';
 import { JobManager } from './jobManager';
+import { AiJobRuntime, type AiRuntimeJobResult } from './aiJobRuntime';
 import { McpRuntime, createDefaultMcpRuntime } from './mcpRuntime';
 import { ModelManager, type EndpointClient } from './modelManager';
 import { listModels, validateRegistry } from './modelRegistry';
@@ -39,17 +40,31 @@ interface AiOrchestratorOptions {
   endpointClient?: EndpointClient;
   sessionIdleTimeoutMs?: number;
   jobMaxConcurrency?: ConstructorParameters<typeof JobManager>[0]['maxConcurrency'];
+  /** AI-P1-002: Gesamtzahl gleichzeitiger Provider-Aufrufe. */
+  jobRuntimeConcurrency?: number;
+  /** AI-P1-002: Per-Job-Timeout (ms); 0 = kein Timeout. */
+  jobTimeoutMs?: number;
 }
 
-class AiOrchestrator {
+export class AiOrchestrator {
   readonly jobs: JobManager;
   readonly sessions: SessionManager;
   readonly models: ModelManager;
   readonly costs: CostTracker;
   readonly providers: ProviderRouter;
   readonly mcp: McpRuntime;
+  /** AI-P1-002: Warteschlange/Timeout/Cancellation, isoliert vom Aufrufer-Thread. */
+  readonly runtime: AiJobRuntime;
+  private readonly jobTimeoutMs: number;
 
   constructor(options: AiOrchestratorOptions = {}) {
+    this.jobTimeoutMs = Number.isFinite(options.jobTimeoutMs)
+      ? Math.max(0, Math.floor(options.jobTimeoutMs as number))
+      : Number(process.env.AI_JOB_TIMEOUT_MS ?? 120_000);
+    this.runtime = new AiJobRuntime({
+      maxConcurrent: options.jobRuntimeConcurrency ?? 4,
+      defaultTimeoutMs: this.jobTimeoutMs,
+    });
     this.jobs = new JobManager({ maxConcurrency: options.jobMaxConcurrency });
     this.sessions = new SessionManager(undefined, {
       idleTimeoutMs: options.sessionIdleTimeoutMs,
@@ -96,21 +111,58 @@ class AiOrchestrator {
     }
     this.sessions.jobStarted(job.model);
     const started = Date.now();
-    try {
-      this.jobs.start(job.jobId);
-      this.jobs.markRunning(job.jobId);
-      const { provider, result } = await this.providers.run(job.task, job.model, req.input);
+    // AI-P1-002: Der Provider-Aufruf läuft in der Runtime (Queue/Timeout/Abort);
+    // `submit` kehrt sofort zurück und der Aufrufer-/Render-Thread wird nie
+    // blockiert. Das AbortSignal wird an den Provider durchgereicht.
+    const handle = this.runtime.submit(
+      async (signal) => {
+        this.jobs.start(job.jobId);
+        this.jobs.markRunning(job.jobId);
+        return this.providers.run(job.task, job.model, req.input, signal);
+      },
+      { id: job.jobId, timeoutMs: this.jobTimeoutMs, label: `${job.task}:${job.model}` },
+    );
+    const outcome = await handle.promise;
+
+    if (outcome.status === 'completed') {
+      const { provider, result } = outcome.value as { provider: string; result: unknown };
       const inferenceMs = Date.now() - started;
       this.jobs.complete(job.jobId, result);
       const cost = this.costs.settle(this.jobs.get(job.jobId) ?? job, inferenceMs);
       this.sessions.jobFinished(job.model);
       return { job: this.jobs.get(job.jobId) ?? job, provider, result, costUsd: cost.estimatedCostUsd };
-    } catch (error) {
-      const aiError = error instanceof AiProviderError ? error : new AiProviderError('local', 'UNKNOWN', (error as Error).message, false);
-      this.jobs.fail(job.jobId, aiError, aiError.code === 'TIMEOUT' ? 'TIMEOUT' : 'FAILED');
-      this.sessions.jobFinished(job.model);
-      throw aiError;
     }
+
+    const aiError = this.toOrchestratorError(outcome);
+    this.jobs.fail(
+      job.jobId,
+      aiError,
+      outcome.status === 'timeout' ? 'TIMEOUT' : outcome.status === 'cancelled' ? 'CANCELLED' : 'FAILED',
+    );
+    this.sessions.jobFinished(job.model);
+    throw aiError;
+  }
+
+  /** Bildet ein Runtime-Ergebnis auf einen normalisierten AI-Fehler ab. */
+  private toOrchestratorError(outcome: AiRuntimeJobResult<unknown>): AiProviderError {
+    if (outcome.error instanceof AiProviderError) return outcome.error;
+    if (outcome.status === 'timeout') {
+      return new AiProviderError('local', 'TIMEOUT', outcome.error?.message ?? 'AI-Job Timeout', true);
+    }
+    if (outcome.status === 'cancelled') {
+      return new AiProviderError('local', 'CANCELLED', outcome.error?.message ?? 'AI-Job abgebrochen', false);
+    }
+    return new AiProviderError('local', 'UNKNOWN', outcome.error?.message ?? 'AI-Job fehlgeschlagen', false);
+  }
+
+  /**
+   * AI-P1-002: Bricht einen wartenden oder laufenden AI-Job ab. Der Concurrency-
+   * Slot wird sofort frei, das AbortSignal erreicht den Provider.
+   */
+  cancelJob(jobId: string, reason?: string): boolean {
+    const cancelled = this.runtime.cancel(jobId, reason);
+    if (cancelled) this.jobs.cancel(jobId);
+    return cancelled;
   }
 
   /** Führt einen Task direkt aus (für MCP-Tools), ohne Job-Dedup. */
@@ -143,6 +195,8 @@ class AiOrchestrator {
       jobs: this.jobs.list().length,
       cost: this.costs.summary(),
       fleet: fleetStatus(),
+      // AI-P1-002: Queue-/Timeout-/Cancellation-Kennzahlen (queued/running/peak).
+      runtime: this.runtime.snapshot(),
     };
   }
 }

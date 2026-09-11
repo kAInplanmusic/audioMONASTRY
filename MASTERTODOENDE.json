@@ -130,9 +130,25 @@
       "id": "AI-P1-002",
       "title": "AI-Runtime async/isoliert vom Audio-Thread (Queues/Timeouts/Cancellation)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI-Runtime",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "problem": "AI-Aufrufe liefen direkt im Aufruferkontext: kein Executor, kein Per-Job-Timeout, keine Abbruchmoeglichkeit; ein haengender Provider blockierte bis zum Stale-Cleanup.",
+      "note": "DONE 2026-09-11: src/core/ai/orchestrator/aiJobRuntime.ts = reiner Job-Runtime-Kern (bounded concurrency, stabile Prioritaet/FIFO, submit fuehrt NIE Job-Code synchron aus -> Scheduler/Timer, Per-Job-Timeout mit AbortSignal, Cancellation fuer wartende UND laufende Jobs mit sofortiger Slot-Freigabe, injizierbarer Executor fuer Worker-Auslagerung, Metriken + drain()). AiOrchestrator nutzt ihn jetzt: orchestrate() reicht das AbortSignal an providers.run durch, Timeout/Cancel werden zu AiProviderError TIMEOUT/CANCELLED und setzen den JobManager-Status; neu cancelJob() + POST /api/ai/jobs/:jobId/cancel; getStatus() enthaelt runtime-Kennzahlen (queued/running/peak). BELEGE: tests/aiJobRuntime.test.ts 10/10 (kein synchroner Start, Concurrency-Grenze 3 bei 12 Jobs, Prioritaet/FIFO, Timeout mit aborted=true, Cancel wartend/laufend, Fehler als Status, Event-Loop-Ticker laeuft unter Last weiter) + tests/aiOrchestratorRuntime.test.ts 4/4 (Erfolg, haengender Provider -> TIMEOUT in <1 s, cancelJob -> CANCELLED + Signal, runtime-Kennzahlen); tsc 0, eslint 0, boundary 411/0, test:ci 1284/1284 ohne Skips. Ein Worker-Executor (utils/workerFactory.ts) kann ueber AiJobRuntimeOptions.executor injiziert werden, ohne den Kern an Plattform-APIs zu binden.",
+      "files": [
+        "src/core/ai/orchestrator/aiJobRuntime.ts",
+        "src/core/ai/orchestrator/aiOrchestrator.ts",
+        "server.ts"
+      ],
+      "acceptance": [
+        "AI-Job blockiert nie den Render-Thread (kein synchroner Start + Ticker laeuft unter Last)",
+        "Per-Job-Timeout bricht haengende Provider ab (AbortSignal)",
+        "Cancellation wartend/laufend mit sofortiger Slot-Freigabe, API-Route vorhanden"
+      ],
+      "verification": [
+        "tests/aiJobRuntime.test.ts",
+        "tests/aiOrchestratorRuntime.test.ts"
+      ]
     },
     {
       "id": "AI-P1-003",

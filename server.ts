@@ -1455,6 +1455,16 @@ app.get('/api/ai/jobs/:jobId', (req, res) => {
   return res.json(job);
 });
 
+// AI-P1-002: laufenden/wartenden AI-Job abbrechen (Slot wird sofort frei,
+// AbortSignal erreicht den Provider).
+app.post('/api/ai/jobs/:jobId/cancel', (req, res) => {
+  const jobId = String(req.params.jobId);
+  const job = aiOrchestrator.jobs.get(jobId);
+  if (!job) return res.status(404).json({ error: 'job not found' });
+  const cancelled = aiOrchestrator.cancelJob(jobId, 'api-cancel');
+  return res.json({ jobId, cancelled, status: aiOrchestrator.jobs.get(jobId)?.status ?? job.status });
+});
+
 // --- Session-Lifecycle ---
 app.get('/api/ai/session', (_req, res) => res.json(aiOrchestrator.sessions.get()));
 
