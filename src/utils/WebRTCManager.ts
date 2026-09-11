@@ -3,6 +3,7 @@ import { random } from './random';
 import { WebRTCMessage } from '../types/protocol';
 import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
+import type { SessionMode } from '../core/session/listenerMode';
 
 export type SessionPeer = { socketId: string; userId: string };
 export type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
@@ -69,6 +70,9 @@ class WebRTCManager {
   // MASTEROUTMAINSTREAM: eigener Listen-Modus für /master-out – zählt nicht zu
   // den 4 Session-Usern, sendet selbst nichts und verbindet sich nur zum Host.
   private masterOutMode = false;
+  // VISUALOUTMAINSTREAM (Ghostuser 6): gleicher Listen-Modus für /visual-out –
+  // empfängt den Video-Producer (Canvas-Liveshow) und zählt nicht als User.
+  private visualOutMode = false;
   private sfuMode = false;
   private sfu: MediasoupTransport | null = null;
   private sfuSubscribed = new Set<string>();
@@ -221,8 +225,9 @@ class WebRTCManager {
   public startMainStream(stream: MediaStream): void {
     this.mainStream = stream;
     if (this.sfuMode && this.sfu) {
-      stream.getAudioTracks().forEach((track) => {
-        this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
+      stream.getTracks().forEach((track) => {
+        const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track);
+        send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
       });
     } else {
       this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
@@ -273,6 +278,38 @@ class WebRTCManager {
     return this.masterOutMode;
   }
 
+  /** VISUALOUTMAINSTREAM: Seite /visual-out aktiviert den Visual-Listener (Ghostuser 6). */
+  public setVisualOutMode(enabled: boolean): void {
+    this.visualOutMode = enabled;
+  }
+
+  /** VISUALOUTMAINSTREAM: Ist dieser Client der Visual-Listener (Beamer)? */
+  public get isVisualOutMode(): boolean {
+    return this.visualOutMode;
+  }
+
+  /** Aktuell anzumeldender Session-Modus (Listener zählen nicht zu den 4 Usern). */
+  public sessionMode(): SessionMode {
+    if (this.visualOutMode) return 'visual-out';
+    if (this.masterOutMode) return 'master-out';
+    return 'member';
+  }
+
+  /**
+   * VisualMONK: Canvas-Liveshow als Track veröffentlichen (Ghostuser 6).
+   * SFU-Modus → Video-Producer; P2P → Track in den Main-Stream legen und per
+   * Renegotiation an alle Peers senden.
+   */
+  public publishVisualTrack(track: MediaStreamTrack): void {
+    if (this.sfuMode && this.sfu) {
+      this.sfu.sendVideoTrack(track).catch((e) => console.warn('SFU visual produce fehlgeschlagen:', e));
+      return;
+    }
+    const others = this.mainStream ? this.mainStream.getTracks().filter((t) => t.id !== track.id) : [];
+    this.mainStream = new MediaStream([...others, track]);
+    this.peerConnections.forEach((pc) => this.addMainTracksToPeer(pc));
+  }
+
   /**
    * Schaltet den Transport-Modus um:
    *   p2p  – Full-Mesh-WebRTC (DataChannels + Media), bisheriges Verhalten.
@@ -307,10 +344,11 @@ class WebRTCManager {
             this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU produce fehlgeschlagen:', e));
           });
         }
-        // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten.
+        // P4-1: Main-Stream (Host) ebenfalls als Producer anbieten (Audio + Visual).
         if (this.mainStream) {
-          this.mainStream.getAudioTracks().forEach((track) => {
-            this.sfu?.sendAudioTrack(track).catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
+          this.mainStream.getTracks().forEach((track) => {
+            const send = track.kind === 'video' ? this.sfu?.sendVideoTrack(track) : this.sfu?.sendAudioTrack(track);
+            send?.catch((e) => console.warn('SFU main produce fehlgeschlagen:', e));
           });
         }
         this.syncSfuSubscriptions(this.sfu.knownRemoteProducers());
@@ -357,7 +395,7 @@ class WebRTCManager {
     // Ein Raum pro Sitzung: Nach dem Connect automatisch der festen
     // Studio-Session beitreten (kein Raum-Erstellen im UI).
     this.socket.on('connect', () => {
-      this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.masterOutMode ? 'master-out' : 'member' });
+      this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.sessionMode() });
     });
 
     this.socket.on('session-members', (data: SessionMembersPayload) => {

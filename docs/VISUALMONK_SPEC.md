@@ -125,8 +125,17 @@ Erfahrungswerte: brain/ears/voiceGen/vision je **0,49 €/h** (A6000) → 4 Roll
    - `VisualMonkOverlay.tsx` (Header-Button `VISUAL`, default AUS) + `useVisualStream.ts` (`captureStream(30)` → Ghostuser 6).
    - Browser-Gate `scripts/visual-monk-gate.cjs`: App mountet, Overlay öffnet, Canvas zeichnet ein **variiertes**
      Bild (1440x814, 33 Farben) — keine Page-Errors. WebGL/WGSL bleibt als Upgrade offen (Canvas2D reicht für den Start).
-3. **NEXT** Ghost-Clients `/ghost/5` (Audio) und `/ghost/6` (Visual) + Stream
-   über den bestehenden SFU-Track (der Canvas-Stream liegt bereit); Fallback MJPEG.
+3. **DONE** Ghost-Clients (Listener, zählen nicht zu den 4 Session-Usern).
+   - **Ghostuser 6 = `/visual-out`** (Alias `/ghost/6`): `VisualOutPage` rendert den Video-Track
+     vollbild (Beamer) mit Wartezustand + Aktivieren-Button.
+   - **Ghostuser 5 = `/master-out`** (Alias `/ghost/5`): unverändert, nutzt jetzt denselben Modus-Helfer.
+   - Modus-Helfer `src/core/session/listenerMode.ts` (Server + Manager + Routing aus EINER Quelle);
+     `normalizeSessionMode` fällt sicher auf `member` zurück.
+   - Sender: `MediasoupTransport.sendVideoTrack` + `WebRTCManager.publishVisualTrack`
+     (SFU-Producer bzw. P2P-Main-Stream + Renegotiation); `startMainStream`/`setSfuMode` produzieren Audio **und** Video.
+   - Gates: `scripts/visual-out-gate.cjs` (beide URLs rendern + verbinden, keine Page-Errors),
+     `scripts/visual-monk-gate.cjs` unverändert grün.
+   - **Offen:** echter 2-Geräte-Live-Beweis (Studio + Beamer) im Club-Netz; Fallback MJPEG.
    Session-Ende-Umfrage (Selbstlern-Loop) folgt mit Schritt 6.
 4. Vision-Pipeline: Text→Bild + Audio→Prompt; R2-Ablage; DB-Eintrag.
 5. Video (LTX-Video/Wan2.1) + Zusammenführen von Clips.

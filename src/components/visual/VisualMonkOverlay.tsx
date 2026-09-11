@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useVisualStream } from '../../hooks/useVisualStream';
+import { webRTCManager } from '../../utils/WebRTCManager';
 import { VisualFeatureBus } from '../../core/visual/featureBus';
 import { mapAudioToParams, blendParams } from '../../core/visual/audioReactive';
 import { VISUAL_PRESETS, presetById } from '../../core/visual/visualPresets';
@@ -37,7 +38,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     if (streamStatus === 'live') {
       stopStream();
     } else {
-      startStream(canvasRef.current, 30);
+      const stream = startStream(canvasRef.current, 30);
+      const track = stream?.getVideoTracks()[0];
+      if (track) {
+        // An Ghostuser 6 senden (SFU-Producer bzw. P2P-Main-Stream).
+        try { webRTCManager.publishVisualTrack(track); } catch { /* Transport nicht bereit */ }
+      }
     }
   }, [streamStatus, startStream, stopStream]);
 

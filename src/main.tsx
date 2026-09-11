@@ -3,6 +3,8 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { MasterOutPage } from './pages/MasterOutPage';
+import { VisualOutPage } from './pages/VisualOutPage';
+import { listenerModeForPath } from './core/session/listenerMode';
 import { AudioProvider } from './context/AudioContext';
 import { SampleProvider } from './context/SampleContext';
 import { ModuleStateProvider } from './context/ModuleStateContext';
@@ -28,13 +30,17 @@ window.addEventListener('unhandledrejection', (event) => {
 });
 // ...
 
-const isMasterOutPage = window.location.pathname.startsWith('/master-out');
+// Fixe Andock-URLs für die Ghost-User: /master-out bzw. /ghost/5 (PA) und
+// /visual-out bzw. /ghost/6 (Beamer).
+const bootMode = listenerModeForPath(window.location.pathname);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      {isMasterOutPage ? (
+      {bootMode === 'master-out' ? (
         <MasterOutPage />
+      ) : bootMode === 'visual-out' ? (
+        <VisualOutPage />
       ) : (
         <AccessProvider>
         <SessionProvider>

@@ -23,6 +23,7 @@ import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { embedText } from './src/core/ai/orchestrator/textEmbedding';
 import type { AiTask } from './src/core/ai/orchestrator/types';
+import { isListenerMode, normalizeSessionMode } from './src/core/session/listenerMode';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -2426,8 +2427,8 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           for (const sid of sockets) {
             if (sid === socket.id) continue;
             const s = io.sockets.sockets.get(sid);
-            // Master-Out-Listener zählen NICHT als Session-Mitglieder.
-            if (s?.data?.sessionUserId && s?.data?.sessionMode !== 'master-out') {
+            // Listener (Ghostuser 5/6) zählen NICHT als Session-Mitglieder.
+            if (s?.data?.sessionUserId && !isListenerMode(normalizeSessionMode(s?.data?.sessionMode))) {
               members.push({ socketId: sid, userId: s.data.sessionUserId, role: s.data.sessionRole ?? 'guest' });
             }
           }
@@ -2438,10 +2439,11 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
       socket.on('join-session', (data: any) => {
         refreshIdleTimer();
         const userId = String(data?.userId ?? socket.id).trim();
-        // MASTEROUTMAINSTREAM: eigener Listen-Modus – zählt nicht zu den 4 Usern,
-        // sendet selbst nichts und bekommt die Mitgliederliste, um den Host zu
-        // finden (Szenario: 4 iPads + 1 Laptop am Verstärker).
-        const mode = String(data?.mode ?? 'member') === 'master-out' ? 'master-out' : 'member';
+        // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: eigener Listen-Modus – zählt
+        // nicht zu den 4 Usern, sendet selbst nichts und bekommt die
+        // Mitgliederliste, um den Host zu finden (Szenario: 4 iPads + Laptop an
+        // der PA (/master-out) + Beamer (/visual-out)).
+        const mode = normalizeSessionMode(data?.mode);
         const room = `session:${SESSION_ROOM_ID}`;
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
@@ -2450,7 +2452,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const role = roleForSessionUser(userId);
         socket.data.sessionRole = role;
         if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
-        addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
+        addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : mode === 'visual-out' ? 'JOIN_VISUAL_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
         // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren.
         socket.emit('plugin-locks-sync', {
@@ -2459,7 +2461,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         });
 
         const members = sessionMembers(room);
-        if (mode === 'master-out') {
+        if (isListenerMode(mode)) {
           // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
           // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
           // initiiert seine Verbindung selbst zum Host.
@@ -2467,7 +2469,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
             roomId: SESSION_ROOM_ID,
             members,
             selfRole: 'guest',
-            selfMode: 'master-out',
+            selfMode: mode,
             hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? '',
           });
           return;

@@ -113,6 +113,17 @@ export class MediasoupTransport implements ITransport {
     this.ownProducerIds.add(producer.id);
   }
 
+  /**
+   * VisualMONK: Video-Track (Canvas-Liveshow) als Producer anbieten –
+   * Grundlage für Ghostuser 6 (`/visual-out`, Beamer).
+   */
+  async sendVideoTrack(track: MediaStreamTrack): Promise<void> {
+    if (!this.sendTransport) throw new Error('SFU send-transport nicht bereit');
+    const producer = await this.sendTransport.produce({ track });
+    this.producers.set(track.id, producer);
+    this.ownProducerIds.add(producer.id);
+  }
+
   /** Stellt sicher, dass ein Recv-Transport existiert (fuer Consume). */
   private async ensureRecvTransport(): Promise<any> {
     if (this.recvTransport) return this.recvTransport;
