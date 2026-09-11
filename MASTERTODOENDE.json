@@ -184,7 +184,8 @@
       "priority": "P1",
       "status": "PARTIAL",
       "area": "CI/CD",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "gitleaks-Secret-Scan + E2E-Matrix (chromium/firefox/webkit) sind in build.yml vorhanden (2026-09-11 geprueft). Offen: Audio-Artefakte aus CI hochladen."
     },
     {
       "id": "VISUAL-P1-001",
@@ -299,6 +300,24 @@
       "status": "OPEN",
       "area": "Backlog",
       "source": "MASTER_TODO.md"
+    },
+    {
+      "id": "INFRA-P1-001",
+      "title": "SFU-RTP-Echtpfad-Test fehlgeschlagen (sfu-1)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "bring-up-fleet 2026-09-11",
+      "note": "bring-up meldete 'SFU-RTP-Test fehlgeschlagen (pruefen!)' - RTP-Pfad auf sfu-1 verifizieren."
+    },
+    {
+      "id": "INFRA-P1-002",
+      "title": "app-1-Deploy abschliessen (anunnakitools.de live)",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "area": "Infra/Hetzner",
+      "source": "2026-09-11",
+      "note": "Docker-Build (mediasoup kompiliert lokal) laeuft; Cloudflare zeigt 521 bis der Origin steht. Gefixte Kette: Host-Key, sg docker, python3+pip, 3,4-GB-Excludes."
     }
   ],
   "visionSandbox": [
@@ -525,5 +544,11 @@
     "Ghostuser 5 = /master-out (Alias /ghost/5, PA) · Ghostuser 6 = /visual-out (Alias /ghost/6, Beamer).",
     "VisualMONK: Echtzeit-Liveshow per Shader (Client) + generative Bilder/Video per RunPod-Rolle `vision`.",
     "Kostenregel: max. 4 GPU-Endpoints, <=10 EUR/h Flotte, <=5 EUR/Monat Storage/Snapshots."
+  ],
+  "infraFixes2026_09_11": [
+    "SSH: veraltete known_hosts-Eintraege der wiederverwendeten Hetzner-IPs entfernt",
+    "Docker: lokale Prozesse ohne docker-Gruppe -> deploy.sh via 'sg docker'",
+    "mediasoup-postinstall: python3 + python3-pip + make/g++ im Builder ergaenzt",
+    "3,4 GB Dev-Daten (public/data/orchestral gitignored, public/music) aus .dockerignore + allen rsyncs ausgeschlossen"
   ]
 }
