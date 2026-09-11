@@ -60,7 +60,15 @@ Anforderung „Audio-Thread bleibt frei“). Mapping → `VisualParams` ist bere
 
 - **4. Endpoint** der Flotte (`samplemonk-ai-vision`), A6000 48 GB, `workers 0..1`,
   `idle=15 min`, scale-to-zero → **~0,49 €/h nur bei Generierung**.
-- **Live jetzt:** RunPod-Hub-Worker **SDXL-Turbo** (schnell, 1024², 4 Steps).
+- **Live-Versuch 2026-09-11:** Hub-Worker `runpod-workers/worker-sdxl-turbo` (v1.1.1)
+  angelegt (Endpoint `5eiw6t03hjln9x`, A40/A6000) — der Worker laedt zwar, **verwirft aber
+  jeden Job** (`ERROR | Error while getting job: 'NoneType' object has no attribute 'get'`).
+  Das ist das bekannte „kaputter Hub-Worker“-Muster: alter Job-Contract, nicht abwarten.
+  Endpoint wieder **geloescht** (Kosten), Ersatz gewaehlt:
+  **`PrunaAI/runpod-worker-FLUX.1-dev` 1.0.3** (2025-07-18, GPU-Pool `AMPERE_48` = unser
+  A6000, 80 GB Disk) bzw. als schlanke Alternative `runpod-workers/worker-sdxl` 2.1.1.
+- **Naechster Schritt:** Ersatz-Worker deployen (Kaltstart 15–25 min Bild-Pull) und mit
+  `scripts/runpod-vision-test.py` ein echtes Bild ziehen.
 - **Tasks:** `image.generate` (Text→Bild), `image.style` (Bildupload→Stil via
   IP-Adapter/ControlNet), `video.generate` (leichtes Modell), `video.audioReactive`.
 - **Upgrade-Pfad:** FLUX.1-schnell (Apache-2.0) für Realismus; ein zweiter Satz
