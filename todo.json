@@ -183,9 +183,9 @@
       "id": "F-013",
       "severity": "P1",
       "claim": "Der CI-`deploy`-Job scheitert, weil das Repo-Secret RP_API_KEY fehlt",
-      "verdict": "FALSIFIED_THEN_ROOT_CAUSED",
-      "evidence": "Actions-Log (Lauf 34549596159, deploy-Job) am 2026-09-11 erstmals lesbar: `Registry-Auth konnte nicht angelegt werden: Failed to create registry auth` und `FEHLER samplemonk-ai-brain: QueryError: You must have at least $0.01 in your account balance to create an endpoint.` sowie `Template 'samplemonk-ai-brain-template' aktualisieren (id=xk4pta3x4q)`. Unser Konto (user_3J64…, $6.29) besitzt e4yzwic56u/4uzprwb5x8/4kjoanoc91. Das Secret ist also vorhanden, gehört aber zu einem anderen/leeren Konto; der Preflight prüft nur die Existenz. Zusätzlich ist GHCR_PASSWORD ein fine-grained PAT, das GHCR ablehnt.",
-      "impact": "Der `build`-Job bleibt grün und pusht das Image; nur der automatische Deploy ist rot. Deploy läuft zuverlässig lokal. Fix ist ein User-Schritt (Secret/GHCR-PAT tauschen)."
+      "verdict": "FALSIFIED_THEN_FIXED_VERIFIED",
+      "evidence": "Actions-Log (Lauf 34549596159, deploy-Job) am 2026-09-11 erstmals lesbar: `Registry-Auth konnte nicht angelegt werden: Failed to create registry auth` und `FEHLER samplemonk-ai-brain: QueryError: You must have at least $0.01 in your account balance to create an endpoint.` sowie `Template 'samplemonk-ai-brain-template' aktualisieren (id=xk4pta3x4q)`. Unser Konto (user_3J64…, $6.29) besitzt e4yzwic56u/4uzprwb5x8/4kjoanoc91. Das Secret ist also vorhanden, gehört aber zu einem anderen/leeren Konto; der Preflight prüft nur die Existenz. Zusätzlich ist GHCR_PASSWORD ein fine-grained PAT, das GHCR ablehnt. | GELOEST 2026-09-11: Repo-Secrets gesetzt (RP_API_KEY = Key des aktiven Kontos; GHCR_PASSWORD = neuer PAT). Workflow-Dispatch 34552407251: build gruen (4m40s) UND deploy gruen (44s); alle drei Templates/Endpoints auf 518cad6f. Der neue ghp_-PAT ist ungueltig (GitHub-API 401), aber das ist harmlos: das GHCR-Paket ist oeffentlich (anon. Manifest HTTP 200), runpod zieht das Image ohne Registry-Auth.",
+      "impact": "CI-Deploy ist repariert und live verifiziert; GHCR-PAT optional (Paket oeffentlich)."
     },
     {
       "id": "F-014",

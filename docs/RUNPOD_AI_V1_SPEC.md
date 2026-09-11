@@ -170,7 +170,7 @@ den Indexierungsgrad abfragbar.
 | 5 | **aiMONK-Agent-Loop**: mehrstufig planen → ausführen → prüfen → korrigieren, Kontext-Assembly (16 Plugin-IDs, `routing.json`, Session-/Projektzustand, Locks/RBAC), Bestätigungspflicht ab `WRITE` | offen |
 | 6 | Voice-Handler für `fish-speech`/`rvc`, BS-RoFormer-GPU-Verifikation | offen |
 | 7 | `PATCH /endpoints/{id}` (RunPod REST) gegen die echte API-Shape verifizieren | ✅ verifiziert (idleTimeout/workersMin wirken; `workersStandby=1` ist Flashboot, nicht GPU-billable) |
-| 8 | **CI-Deploy**: Repo-Secret `RP_API_KEY` gehört zu einem anderen/leeren Konto; `GHCR_PASSWORD` ist ein GHCR-untaugliches fine-grained PAT | offen (User-Schritt) |
+| 8 | **CI-Deploy**: Repo-Secret `RP_API_KEY` gehörte zu einem anderen/leeren Konto | ✅ DONE 2026-09-11 (build+deploy grün, Lauf `34552407251`; GHCR-Paket öffentlich → Registry-Auth optional) |
 
 ---
 
@@ -205,9 +205,10 @@ Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
 ### 8.2 Update 2026-09-11 — zwei Stufen live
 
 - Aktives Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@518cad6f` (Commit `518cad6`).
-  Der CI-`build` ist grün und pusht das Image; der `deploy`-Job ist rot, weil das Repo-Secret
-  `RP_API_KEY` zu einem **anderen, leeren RunPod-Konto** gehört (Root-Cause in
-  `RUN_PROTOKOLL.md` §14C) — deployt wird lokal via `scripts/runpod-deploy.py`.
+  **CI ist wieder der Hauptweg:** nach dem Setzen der Repo-Secrets ist Lauf `34552407251`
+  (`build` 4m40s + `deploy` 44s) **grün** — alle drei Rollen stehen auf `518cad6f`. Der
+  Registry-Auth-Schritt meldet zwar „Failed to create registry auth" (der `ghp_`-PAT ist
+  ungültig), das ist aber harmlos: das GHCR-Paket ist öffentlich.
 - Brain-Smoke live (`scripts/runpod-brain-latency.py`): Warmup lädt **beide** Modelle
   (`qwen3-14b` 37,5 s, `qwen3-4b` 12,3 s), danach `simple` 1,08 s vs. `complex` 1,40 s.
   Kosten $0,0372; Endzustand `$0/h`.

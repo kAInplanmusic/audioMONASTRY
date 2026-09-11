@@ -169,6 +169,10 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
      Zusätzlich: `GHCR_PASSWORD` ist ein fine-grained PAT und wird von GHCR für den
      Registry-Auth abgelehnt → GHCR-fähiges PAT verwenden. Der `build`-Job bleibt grün und
      pusht das Image; deployt wird lokal über `scripts/runpod-deploy.py`.
+     **DONE (2026-09-11):** Repo-Secrets gesetzt (`RP_API_KEY` = aktives Konto,
+     `GHCR_PASSWORD` = neuer PAT); Workflow-Dispatch `34552407251` = **`build` grün (4m40s) +
+     `deploy` grün (44s)**, alle drei Rollen auf `518cad6f`. Der neue `ghp_`-PAT ist ungültig,
+     aber das ist harmlos: das GHCR-Paket ist öffentlich → Registry-Auth optional.
   0b. **Qwen3-Thinking im Brain abgeschaltet — DONE (2026-09-11).** `qwen3_llm` setzt
      `enable_thinking=False` als Default (Opt-in über `enableThinking`); der Live-Test
      liefert pures Tool-Call-JSON ohne `<think>`-Block. vLLM bleibt als Tempo-Hebel offen.
