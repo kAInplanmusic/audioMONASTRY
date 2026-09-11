@@ -51,12 +51,12 @@ export interface MergeOptions {
 }
 
 /** Beamer-Format 16:9 (aus 480×832-Querformat abgeleitet, hochskaliert). */
-export const MERGE_DEFAULTS = { width: 1024, height: 576, fps: 24, timeoutMs: 300_000 };
+const MERGE_DEFAULTS = { width: 1024, height: 576, fps: 24, timeoutMs: 300_000 };
 
 /** Maximalgröße je Clip (Schutz gegen Riesen-Uploads über die API). */
 export const MAX_MERGE_CLIP_BYTES = 12 * 1024 * 1024;
 
-export function ffmpegPath(): string {
+function ffmpegPath(): string {
   return (process.env.FFMPEG_PATH || '').trim() || 'ffmpeg';
 }
 
@@ -107,7 +107,7 @@ export function buildMergeArgs(
 let ffmpegProbe: Promise<boolean> | null = null;
 
 /** Prüft einmalig, ob ffmpeg aufrufbar ist. */
-export function ffmpegAvailable(bin = ffmpegPath()): Promise<boolean> {
+function ffmpegAvailable(bin = ffmpegPath()): Promise<boolean> {
   if (!ffmpegProbe) {
     ffmpegProbe = execFileAsync(bin, ['-version'], { timeout: 10_000 })
       .then(() => true)
