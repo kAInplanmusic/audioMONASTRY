@@ -3,7 +3,7 @@ import { random } from './random';
 import { WebRTCMessage } from '../types/protocol';
 import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
-import type { SessionMode } from '../core/session/listenerMode';
+import { isListenerMode, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
 
 export type SessionPeer = { socketId: string; userId: string };
 export type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
@@ -410,8 +410,8 @@ class WebRTCManager {
       if (typeof data?.selfRole === 'string') this.localRole = data.selfRole;
       if (typeof data?.hostUserId === 'string') this.hostUserId = data.hostUserId;
       this.emitSessionUpdate();
-      if (this.masterOutMode) {
-        // MASTEROUTMAINSTREAM: nur mit dem Host verbinden (Main-Signal).
+      if (isListenerMode(this.sessionMode())) {
+        // Listener (Ghostuser 5/6): nur mit dem Host verbinden (Main-/Visual-Signal).
         const host = this.sessionMembers.find((m) => m.userId === this.hostUserId);
         if (host) void this.connectToPeer(host.socketId);
         return;
@@ -451,8 +451,8 @@ class WebRTCManager {
         this.emitSessionUpdate();
       }
       if (data?.role === 'admin') this.hostUserId = String(data.userId ?? this.hostUserId);
-      if (this.masterOutMode) {
-        // MASTEROUTMAINSTREAM: nur auf den Host reagieren.
+      if (isListenerMode(this.sessionMode())) {
+        // Listener (Ghostuser 5/6): nur auf den Host reagieren.
         if (data?.role === 'admin' || peer.userId === this.hostUserId) void this.connectToPeer(peer.socketId);
         return;
       }
@@ -476,7 +476,7 @@ class WebRTCManager {
     });
 
     this.socket.on('offer', async (data) => {
-      const pc = this.createPeerConnection(data.sender, { remoteIsMasterOut: data?.senderMode === 'master-out' });
+      const pc = this.createPeerConnection(data.sender, { remoteIsMasterOut: isListenerMode(normalizeSessionMode(data?.senderMode)) });
       // Race-Guard: Bei simultanem Beitritt kann ein zweites Offer eintreffen,
       // während bereits ein Offer verarbeitet wird. Nur im Zustand 'stable'
       // darf ein Remote-Offer gesetzt werden.
@@ -541,16 +541,17 @@ class WebRTCManager {
       ]
     });
 
-    // MASTEROUTMAINSTREAM: Listen-Client sendet nie eigene Tracks; Host schickt
-    // an einen Listener keinen Mikrofon-Track, sondern nur den Main-Stream.
-    const isMasterOut = this.masterOutMode || !!opts?.remoteIsMasterOut;
+    // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: Listen-Client sendet nie eigene
+    // Tracks; Host schickt an einen Listener keinen Mikrofon-Track, sondern nur
+    // den Main-Stream (Audio + ggf. Visual).
+    const isMasterOut = isListenerMode(this.sessionMode()) || !!opts?.remoteIsMasterOut;
 
     // Add local tracks (Mikrofon) – nicht für Master-Out-Peers.
     if (!isMasterOut && this.localStream) {
         this.localStream.getTracks().forEach(track => pc.addTrack(track, this.localStream!));
     }
-    // P4-1: Host-Main-Stream direkt in neue Peer-Verbindungen aufnehmen.
-    if (!this.masterOutMode && this.mainStream) {
+    // P4-1: Host-Main-Stream direkt in neue Peer-Verbindungen aufnehmen (nicht als Listener).
+    if (!isListenerMode(this.sessionMode()) && this.mainStream) {
         this.mainStream.getTracks().forEach(track => pc.addTrack(track, this.mainStream!));
     }
 

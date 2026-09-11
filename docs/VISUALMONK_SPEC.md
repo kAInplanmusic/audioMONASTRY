@@ -133,9 +133,24 @@ Erfahrungswerte: brain/ears/voiceGen/vision je **0,49 €/h** (A6000) → 4 Roll
      `normalizeSessionMode` fällt sicher auf `member` zurück.
    - Sender: `MediasoupTransport.sendVideoTrack` + `WebRTCManager.publishVisualTrack`
      (SFU-Producer bzw. P2P-Main-Stream + Renegotiation); `startMainStream`/`setSfuMode` produzieren Audio **und** Video.
+   - **Erreichbarkeit:** Outputs-Panel im Studio-Header (`OutputsPanel.tsx`) zeigt beide fixen
+     URLs (aus der aktuellen Origin) mit Kopieren-Button; Aliase `/ghost/5` und `/ghost/6`.
+   - **Media-Pfad-Bugs gefixt (2026-09-11):** (a) der Manager behandelte nur `master-out` als
+     Listener – `visual-out` fiel in den Full-Mesh; (b) der Host hängte seinen Main-Stream nur
+     bei `senderMode === 'master-out'` an. Beides läuft jetzt über `isListenerMode(...)`.
+   - **Mainsound-Härtung:** der Host versucht den Main-Stream-Aufbau jetzt zusätzlich alle 2 s
+     (max. 5 min), weil `createMasterStreamDestination()` erst greift, wenn die Engine wirklich
+     spielt (`play()`) – vorher blieb der Listener leer, wenn der Host erst nach dem
+     Session-Beitritt abspielte.
+   - Deterministische Tests für den Sendepfad: `tests/webrtcManager.test.ts` (SFU produziert
+     Audio **und** Video, Publish legt den Track in den Main-Stream, `sessionMode()`).
    - Gates: `scripts/visual-out-gate.cjs` (beide URLs rendern + verbinden, keine Page-Errors),
      `scripts/visual-monk-gate.cjs` unverändert grün.
-   - **Offen:** echter 2-Geräte-Live-Beweis (Studio + Beamer) im Club-Netz; Fallback MJPEG.
+   - **Offen (ehrlich):** echter Live-Beweis Studio → Beamer/PA. Der Headless-2-Browser-Versuch
+     (`scripts/master-out-gate.cjs`) scheitert an der lokalen Dev-Verdrahtung: auf `localhost`
+     pinnt der Client das Signaling auf `:8080`, und die lange laufende Studio-Session hält
+     einen **veralteten Admin/Host**, den der Listener nicht findet. Sauberer Live-Beweis:
+     frische Instanz (kein stale Host) + echtes 2-Geräte-Szenario; Fallback MJPEG.
    Session-Ende-Umfrage (Selbstlern-Loop) folgt mit Schritt 6.
 4. Vision-Pipeline: Text→Bild + Audio→Prompt; R2-Ablage; DB-Eintrag.
 5. Video (LTX-Video/Wan2.1) + Zusammenführen von Clips.

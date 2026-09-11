@@ -18,6 +18,7 @@ import { useAudio } from './context/AudioContext';
 import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
+import { OutputsPanel } from './components/OutputsPanel';
 import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
 import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles } from 'lucide-react';
 import { Logo } from './components/Logo';
@@ -170,6 +171,20 @@ function AppComponent() {
     if (webRTCManager.isHost) {
       startHostMain();
     }
+    // Nachziehen: der Master-Stream entsteht erst, wenn die Engine wirklich
+    // spielt (V2-Sink verbunden). Solange er fehlt, wird alle 2 s erneut
+    // versucht (max. 5 min) – damit Ghostuser 5 (/master-out) und Ghostuser 6
+    // (/visual-out) den Main-Ton sicher bekommen, auch wenn der Host erst nach
+    // dem Session-Beitritt abspielt.
+    let hostMainAttempts = 0;
+    const hostMainRetry = window.setInterval(() => {
+      if (mainDestRef.current || hostMainAttempts >= 150) {
+        window.clearInterval(hostMainRetry);
+        return;
+      }
+      hostMainAttempts += 1;
+      startHostMain();
+    }, 2000);
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionFull(info.full);
@@ -178,6 +193,7 @@ function AppComponent() {
       }
     };
     return () => {
+      window.clearInterval(hostMainRetry);
       webRTCManager.onSessionUpdate = () => {};
       webRTCManager.onMainStream = () => {};
       if (mainDestRef.current) {
@@ -590,6 +606,7 @@ function AppComponent() {
               <Sparkles className="w-4 h-4" />
               <span className="text-[9px] font-bold tracking-widest">VISUAL</span>
             </button>
+            <OutputsPanel />
             <button type="button"
               onClick={() => setSettingsOpen(true)}
               className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
