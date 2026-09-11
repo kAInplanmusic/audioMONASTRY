@@ -1,16 +1,18 @@
 /**
  * audioMONASTRY · VisualMONK – WebGL-Renderer (PERF/Qualität-Upgrade, VISUAL-P1-005)
  * ================================================================================
- * Der Canvas2D-Renderer (`canvasRenderer.ts`) läuft und bleibt die **Referenz**
- * (und der Pfad für Show-Szenen, die Medien über `drawImage` einblenden). Dieser
- * Renderer ist das **Upgrade**: dieselben `VisualParams` + `VisualPreset` werden
- * per GLSL auf der GPU gezeichnet — bei 60 fps deutlich günstiger als Canvas2D
- * und ohne Partikel-Array auf dem Main-Thread.
+ * Der Canvas2D-Renderer (`canvasRenderer.ts`) läuft und bleibt die **Referenz**.
+ * Dieser Renderer ist das **Upgrade**: dieselben `VisualParams` + `VisualPreset`
+ * werden per GLSL auf der GPU gezeichnet — bei 60 fps deutlich günstiger als
+ * Canvas2D und ohne Partikel-Array auf dem Main-Thread. Seit VISUAL-P1-008 zeichnet
+ * er auch Show-Szenen (Bild/Clip) als Textur (`texImage2D`), inklusive Cover-Fit
+ * und Crossfade zwischen vorheriger und aktueller Szene.
  *
  * Eigenheiten, die den Entwurf bestimmen:
  *   * Ein Canvas kann **nur einen** Kontexttyp haben. Ist der WebGL-Kontext erst
- *     erzeugt, liefert `getContext('2d')` `null`. Deshalb ist der Renderer
- *     umschaltbar (UI) und wird für Show-Szenen nicht verwendet.
+ *     erzeugt, liefert `getContext('2d')` `null`. Beim Umschalten wird deshalb
+ *     das Canvas-Element neu erzeugt; Show-Szenen laufen in beiden Pfaden
+ *     (Canvas2D: `drawImage`, WebGL: Textur).
  *   * Ein einziges GLSL-ES-1.00-Shader-Quelltext läuft in WebGL **und** WebGL2
  *     (WebGL2 akzeptiert ES-1.00-Shader) — kein doppelter Shader-Pfad.
  *   * Reine Teile (`buildFragmentShader`, `packUniforms`) sind ohne GPU testbar;
@@ -24,7 +26,10 @@ export type VisualRendererKind = 'webgl2' | 'webgl' | 'canvas2d';
 /** Maximal 6 Farben je Preset (WebGL1-Uniform-Limit-schonend). */
 export const MAX_SHADER_COLORS = 6;
 
-/** Zahl der Uniform-Vektoren/Floats, die der Shader erwartet. */
+/**
+ * Zahl der Uniform-Vektoren/Floats, die der Shader erwartet.
+ * VISUAL-P1-008: zusätzlich die Show-Szene als Textur (Bild/Clip).
+ */
 export const SHADER_UNIFORMS = [
   'u_resolution',
   'u_time',
@@ -39,6 +44,12 @@ export const SHADER_UNIFORMS = [
   'u_glow',
   'u_symmetry',
   'u_colorCount',
+  'u_sceneA',
+  'u_sceneB',
+  'u_sceneMix',
+  'u_sceneAmount',
+  'u_sceneSpanA',
+  'u_sceneSpanB',
 ] as const;
 
 export const VERTEX_SHADER_SOURCE = `attribute vec2 a_pos;
@@ -73,6 +84,12 @@ uniform float u_glow;
 uniform float u_symmetry;
 uniform float u_colorCount;
 ${colorDecls}
+uniform sampler2D u_sceneA;
+uniform sampler2D u_sceneB;
+uniform float u_sceneMix;
+uniform float u_sceneAmount;
+uniform vec2 u_sceneSpanA;
+uniform vec2 u_sceneSpanB;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -151,6 +168,19 @@ ${colorArray}
   float vignette = smoothstep(1.15, 0.25, length(v_uv - 0.5));
   color *= mix(0.55, 1.0, vignette);
 
+  // VISUAL-P1-008: Show-Szene (Bild/Clip) als Textur über das Feld legen.
+  // Cover-Fit: die sichtbare UV-Spanne wird von der CPU aus Canvas- und
+  // Medien-Seitenverhältnis berechnet (kein Verzerren). Bei einem Szenenwechsel
+  // blendet u_sceneMix von der vorherigen (A) zur aktuellen Szene (B).
+  if (u_sceneAmount > 0.0) {
+    vec2 uvA = (v_uv - 0.5) * u_sceneSpanA + 0.5;
+    vec2 uvB = (v_uv - 0.5) * u_sceneSpanB + 0.5;
+    vec3 scenePrev = texture2D(u_sceneA, clamp(uvA, 0.001, 0.999)).rgb;
+    vec3 sceneCur = texture2D(u_sceneB, clamp(uvB, 0.001, 0.999)).rgb;
+    vec3 scene = mix(scenePrev, sceneCur, clamp(u_sceneMix, 0.0, 1.0));
+    color = mix(color, scene, clamp(u_sceneAmount, 0.0, 1.0));
+  }
+
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`;
 }
@@ -214,10 +244,57 @@ export function packUniforms(
   };
 }
 
+/** Ein Frame der Show: aktuelle Szene und (im Crossfade) die vorherige. */
+export interface VisualSceneFrame {
+  /** Aktuelle Szene (Bild oder Video). */
+  current: TexImageSource | null;
+  /** Vorherige Szene während des Crossfades. */
+  previous?: TexImageSource | null;
+  /** 0 = nur vorherige, 1 = nur aktuelle Szene. */
+  mix?: number;
+}
+
+/** Pixelmaße eines Bildes/eines Videos; `[0, 0]`, solange nicht dekodiert. */
+export function mediaSize(source: TexImageSource | null | undefined): [number, number] {
+  if (!source) return [0, 0];
+  const m = source as {
+    videoWidth?: number; videoHeight?: number;
+    naturalWidth?: number; naturalHeight?: number;
+    width?: number; height?: number;
+  };
+  const w = m.videoWidth ?? m.naturalWidth ?? m.width ?? 0;
+  const h = m.videoHeight ?? m.naturalHeight ?? m.height ?? 0;
+  return [Number.isFinite(w) && w > 0 ? w : 0, Number.isFinite(h) && h > 0 ? h : 0];
+}
+
+/**
+ * Cover-Fit als sichtbare UV-Spanne: Das Medium füllt den Canvas vollständig,
+ * ohne verzerrt zu werden (überstehende Ränder werden beschnitten). Reine
+ * Funktion, damit die Abbildung ohne GPU prüfbar ist.
+ */
+export function sceneCoverSpan(
+  canvasWidth: number,
+  canvasHeight: number,
+  mediaWidth: number,
+  mediaHeight: number,
+): [number, number] {
+  const cw = safeSide(canvasWidth);
+  const ch = safeSide(canvasHeight);
+  const mw = Number.isFinite(mediaWidth) && mediaWidth > 0 ? mediaWidth : 0;
+  const mh = Number.isFinite(mediaHeight) && mediaHeight > 0 ? mediaHeight : 0;
+  if (mw === 0 || mh === 0) return [1, 1];
+  const canvasAspect = cw / ch;
+  const mediaAspect = mw / mh;
+  return canvasAspect >= mediaAspect ? [1, mediaAspect / canvasAspect] : [canvasAspect / mediaAspect, 1];
+}
+
 export interface WebGLVisualRenderer {
   kind: 'webgl2' | 'webgl';
-  /** Zeichnet einen Frame (Preset + Parameter). */
-  render(preset: VisualPreset, params: VisualParams, timeS: number): void;
+  /**
+   * Zeichnet einen Frame (Preset + Parameter + optionale Show-Szene).
+   * Ohne Szene (`null`) zeichnet der Shader nur das generative Feld.
+   */
+  render(preset: VisualPreset, params: VisualParams, timeS: number, scene?: VisualSceneFrame | null): void;
   /** Puffergröße angleichen (CSS-Größe * dpr). */
   resize(width: number, height: number): void;
   dispose(): void;
@@ -299,10 +376,55 @@ export function createWebGLVisualRenderer(canvas: HTMLCanvasElement): WebGLVisua
     symmetry: uniformOf('u_symmetry'),
     colorCount: uniformOf('u_colorCount'),
     colors: Array.from({ length: MAX_SHADER_COLORS }, (_, i) => uniformOf(`u_color${i}`)),
+    sceneA: uniformOf('u_sceneA'),
+    sceneB: uniformOf('u_sceneB'),
+    sceneMix: uniformOf('u_sceneMix'),
+    sceneAmount: uniformOf('u_sceneAmount'),
+    sceneSpanA: uniformOf('u_sceneSpanA'),
+    sceneSpanB: uniformOf('u_sceneSpanB'),
   };
 
   let width = canvas.width || 1;
   let height = canvas.height || 1;
+
+  // VISUAL-P1-008: zwei Texturen für Show-Szenen (A = vorherige, B = aktuelle).
+  // Bilder werden einmal hochgeladen, Videos pro Frame (sie ändern sich).
+  const makeTexture = (): WebGLTexture | null => {
+    const tex = gl!.createTexture();
+    if (!tex) return null;
+    gl!.bindTexture(gl!.TEXTURE_2D, tex);
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_S, gl!.CLAMP_TO_EDGE);
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_WRAP_T, gl!.CLAMP_TO_EDGE);
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MIN_FILTER, gl!.LINEAR);
+    gl!.texParameteri(gl!.TEXTURE_2D, gl!.TEXTURE_MAG_FILTER, gl!.LINEAR);
+    // 1×1-Platzhalter (schwarz): auch ohne Szene ist ein gültiger Sampler
+    // gebunden, manche Treiber warnen sonst über eine unvollständige Textur.
+    gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, 1, 1, 0, gl!.RGBA, gl!.UNSIGNED_BYTE, new Uint8Array([0, 0, 0, 255]));
+    return tex;
+  };
+  const sceneTextureA = makeTexture();
+  const sceneTextureB = makeTexture();
+  let uploadedA: TexImageSource | null = null;
+  let uploadedB: TexImageSource | null = null;
+
+  const isVideoSource = (s: TexImageSource): boolean =>
+    typeof HTMLVideoElement !== 'undefined' && s instanceof HTMLVideoElement;
+
+  /** Lädt ein Bild/Video in die Textur. `false` = (noch) nicht bereit. */
+  const upload = (tex: WebGLTexture | null, unit: number, source: TexImageSource): boolean => {
+    const [mw, mh] = mediaSize(source);
+    if (!tex || mw === 0 || mh === 0) return false;
+    try {
+      gl!.activeTexture(unit);
+      gl!.bindTexture(gl!.TEXTURE_2D, tex);
+      // Bildzeilen laufen von oben nach unten, GL erwartet v = 0 unten.
+      gl!.pixelStorei(gl!.UNPACK_FLIP_Y_WEBGL, true);
+      gl!.texImage2D(gl!.TEXTURE_2D, 0, gl!.RGBA, gl!.RGBA, gl!.UNSIGNED_BYTE, source);
+    } catch {
+      return false;
+    }
+    return true;
+  };
 
   return {
     kind,
@@ -316,7 +438,7 @@ export function createWebGLVisualRenderer(canvas: HTMLCanvasElement): WebGLVisua
       canvas.height = h;
       gl!.viewport(0, 0, w, h);
     },
-    render(preset: Preset, params: VisualParams, timeS: number): void {
+    render(preset: Preset, params: VisualParams, timeS: number, scene: VisualSceneFrame | null = null): void {
       const values = packUniforms(preset, params, { timeS, width, height });
       gl!.viewport(0, 0, width, height);
       gl!.uniform2f(u.resolution, values.resolution[0], values.resolution[1]);
@@ -336,10 +458,54 @@ export function createWebGLVisualRenderer(canvas: HTMLCanvasElement): WebGLVisua
         const base = i * 3;
         gl!.uniform3f(u.colors[i], values.colors[base], values.colors[base + 1], values.colors[base + 2]);
       }
+
+      // Show-Szene: aktuelle Szene → Textur B, vorherige (Crossfade) → A.
+      // `sceneAmount = 0` lässt den Shader das generative Feld allein zeichnen.
+      let sceneAmount = 0;
+      let mix = 1;
+      let spanA: [number, number] = [1, 1];
+      let spanB: [number, number] = [1, 1];
+      if (scene?.current) {
+        if ((isVideoSource(scene.current) || uploadedB !== scene.current) && upload(sceneTextureB, gl!.TEXTURE1, scene.current)) {
+          uploadedB = scene.current;
+        }
+        if (uploadedB === scene.current) {
+          const [mw, mh] = mediaSize(scene.current);
+          spanB = sceneCoverSpan(width, height, mw, mh);
+          sceneAmount = 1;
+          const previous = scene.previous ?? null;
+          if (previous) {
+            if ((isVideoSource(previous) || uploadedA !== previous) && upload(sceneTextureA, gl!.TEXTURE0, previous)) {
+              uploadedA = previous;
+            }
+            if (uploadedA === previous) {
+              const [pw, ph] = mediaSize(previous);
+              spanA = sceneCoverSpan(width, height, pw, ph);
+              mix = typeof scene.mix === 'number' && Number.isFinite(scene.mix)
+                ? Math.max(0, Math.min(1, scene.mix))
+                : 1;
+            }
+          }
+        }
+      }
+
+      gl!.activeTexture(gl!.TEXTURE0);
+      gl!.bindTexture(gl!.TEXTURE_2D, sceneTextureA);
+      gl!.activeTexture(gl!.TEXTURE1);
+      gl!.bindTexture(gl!.TEXTURE_2D, sceneTextureB);
+      gl!.uniform1i(u.sceneA, 0);
+      gl!.uniform1i(u.sceneB, 1);
+      gl!.uniform1f(u.sceneMix, mix);
+      gl!.uniform1f(u.sceneAmount, sceneAmount);
+      gl!.uniform2f(u.sceneSpanA, spanA[0], spanA[1]);
+      gl!.uniform2f(u.sceneSpanB, spanB[0], spanB[1]);
+
       gl!.drawArrays(gl!.TRIANGLES, 0, 3);
     },
     dispose(): void {
       try {
+        gl!.deleteTexture(sceneTextureA);
+        gl!.deleteTexture(sceneTextureB);
         gl!.deleteBuffer(buffer);
         gl!.deleteProgram(program);
         gl!.deleteShader(vs);

@@ -11,7 +11,7 @@ import type { AudioFeatures } from '../core/visual/types';
 import { formatEtaMs, clipEtaMs } from '../core/ai/vision/clipPipeline';
 
 /** Ein Element, das gezeichnet werden kann (Clip oder Standbild). */
-type ShowMedia = HTMLVideoElement | HTMLImageElement;
+export type ShowMedia = HTMLVideoElement | HTMLImageElement;
 
 interface AddSceneInput {
   prompt: string;
@@ -48,6 +48,12 @@ export interface VisualShowApi {
   tick: (nowMs: number, features: AudioFeatures) => void;
   /** Zeichnet die Show auf den Canvas. true = es wurde etwas gezeichnet. */
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => boolean;
+  /**
+   * Aktueller Show-Frame für den WebGL-Pfad (VISUAL-P1-008): Medien als Textur
+   * statt `drawImage`, inklusive Crossfade (`fade` 0..1). `current = null`,
+   * solange die Show steht oder das Video noch nicht dekodiert ist.
+   */
+  frame: () => { current: ShowMedia | null; previous: ShowMedia | null; fade: number };
   mergeShow: () => Promise<void>;
 }
 
@@ -218,6 +224,31 @@ export function useVisualShow(): VisualShowApi {
     return coverFit(ctx, media, width, height, fade);
   }, [mediaFor]);
 
+  /**
+   * VISUAL-P1-008: derselbe Show-Frame wie `draw`, aber für den WebGL-Renderer.
+   * Die Medien werden als Textur hochgeladen statt per `drawImage` gezeichnet;
+   * `fade` steuert den Crossfade von der vorherigen zur aktuellen Szene.
+   */
+  const frame = useCallback((): { current: ShowMedia | null; previous: ShowMedia | null; fade: number } => {
+    if (!playingRef.current) return { current: null, previous: null, fade: 1 };
+    const list = scenesRef.current;
+    const index = stateRef.current.index;
+    const scene = list[Math.min(Math.max(index, 0), list.length - 1)];
+    if (!scene) return { current: null, previous: null, fade: 1 };
+
+    const elapsedS = Math.max(0, (performanceNow() - stateRef.current.startedAtMs) / 1000);
+    const fadeS = 0.8;
+    const fade = Math.min(1, elapsedS / fadeS);
+    const prevSrc = prevSrcRef.current;
+    const previous = prevSrc && fade < 1 ? mediaRef.current.get(prevSrc) ?? null : null;
+    const media = mediaFor(scene, true);
+    // Video erst zeigen, wenn ein Bild dekodiert ist (sonst schwarzer Blitz).
+    if (!media || (media instanceof HTMLVideoElement && media.readyState < 2)) {
+      return { current: null, previous, fade };
+    }
+    return { current: media, previous, fade };
+  }, [mediaFor]);
+
   /** Text→Clip: FLUX-Bild → Wan2.2 (ein Aufruf, ein Ergebnis). */
   const makeClip = useCallback(
     async (input: { prompt: string; style?: string; bpm?: number; energy?: number; durationS?: number }) => {
@@ -325,6 +356,7 @@ export function useVisualShow(): VisualShowApi {
     stopShow,
     tick,
     draw,
+    frame,
     mergeShow,
   };
 }

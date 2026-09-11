@@ -216,15 +216,17 @@ der Beamer-Beweis Studio → Ghostuser 6 (VISUAL-P1-001).
 
 | | Canvas2D (`canvasRenderer.ts`) | WebGL/WebGL2 (`webglRenderer.ts`) |
 |---|---|---|
-| Rolle | **Referenz** und Pfad für Show-Szenen | Upgrade (GPU, 60 fps, kein Partikel-Array) |
+| Rolle | **Referenz** (Show-Szenen per `drawImage`) | Upgrade (GPU, 60 fps, kein Partikel-Array; Show-Szenen als Textur) |
 | Steuerung | Partikel/Felder im Main-Thread | Fragment-Shader (fraktales Feld, Radialspiegelung, Palette, Hue, Glow, Vignette) |
 | Umschalten | UI-Button `CANVAS2D`/`WEBGL` | dito (`data-renderer` am Overlay für das Gate) |
 
 **Warum umschaltbar und nicht „immer WebGL":** Ein Canvas kann nur **einen**
 Kontexttyp haben — ist der WebGL-Kontext erzeugt, liefert `getContext('2d')`
-`null`. Show-Szenen blenden Medien per `drawImage` ein und brauchen den
-2D-Kontext. Deshalb: der Wechsel ist während einer laufenden Show gesperrt, und
-der GL-Pfad zeichnet die generative Liveshow, nicht die Szene.
+`null`. Beim Wechsel wird das Canvas-Element deshalb bewusst neu erzeugt
+(`key={rendererMode}`). Seit **VISUAL-P1-008** zeichnen **beide** Pfade die
+Show-Szenen: Canvas2D mit `drawImage`, WebGL mit `texImage2D` in eine Textur
+(Cover-Fit + Crossfade). Der Umschalter ist damit auch während einer laufenden
+Show frei.
 
 **Belege (echter Browser):** `scripts/visual-monk-gate.cjs` prüft beide Pfade —
 Canvas2D über Pixel-Varianz (44 Farben), WebGL über GL-Zustand (Programm
@@ -233,8 +235,25 @@ Nicht-Einfarbigkeit über die PNG-Größe des Canvas-Screenshots (81 KB bzw.
 52 KB ≫ 15 KB Schwellwert). Der Shader nutzt GLSL ES 1.00 und läuft damit in
 WebGL **und** WebGL2 ohne doppelten Pfad.
 
-**Offen (bewusst):** Medien/Clips im WebGL-Pfad (Textur statt `drawImage`) und
-WGSL/WebGPU als weiterer Schritt — beides als `VISUAL-P1-008` notiert.
+**Beleg Show-Szenen im GL-Pfad (VISUAL-P1-008, dasselbe Gate):** Das Gate mockt
+den Bild-Endpunkt, erzeugt daraus über die UI eine Szene und startet die Show.
+Während die Show läuft, wird der Renderer gewechselt und zurückgeschaltet.
+Messung: `showRunning = true`, `toggleDisabledDuringShow = false` (nicht
+gesperrt), im GL-Pfad `renderer = webgl2`, `glError = 0`, `u_sceneAmount = 1`,
+Textur gebunden, kein Kontextverlust, Show-Frame 37,8 KB ≫ 15 KB. Die
+Cover-Fit-/Crossfade-Mathematik ist zusätzlich in `tests/webglRenderer.test.ts`
+rein (ohne GPU) geprüft.
+
+## 8d. Offen: WGSL/WebGPU-Renderer – VISUAL-P1-009
+
+Der GL-Pfad (WebGL2 → WebGL1 → Canvas2D-Fallback) ist umgesetzt und im echten
+Browser belegt. Der als weiterer Schritt notierte **WebGPU/WGSL-Pfad** bleibt
+offen, weil er in dieser Umgebung **nicht verifizierbar** ist: das im Gate
+genutzte headless Chromium stellt `navigator.gpu` nicht bereit (am 2026-09-11
+gemessen: `hasGpu = false`). Ein ungeprüfter Renderer würde der Projektregel
+„erst messen, dann behaupten" widersprechen, deshalb ist er als eigener Punkt
+`VISUAL-P1-009` notiert (WGSL-Shader, Pipeline, Textur-Szene, Capability-Probe,
+Gate auf WebGPU-fähiger Maschine).
 
 ## 9. Risiken / ehrliche Grenzen
 

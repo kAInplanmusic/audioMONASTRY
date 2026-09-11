@@ -37,9 +37,9 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
 
-  // VISUAL-P1-005: Renderer-Umschalter. Canvas2D bleibt Pflicht für Show-Szenen
-  // (Medien werden per drawImage eingeblendet) — deshalb ist der Wechsel während
-  // einer laufenden Show gesperrt und der Umschalter erklärt das auch.
+  // VISUAL-P1-005/P1-008: Renderer-Umschalter. Canvas2D bleibt die Referenz,
+  // WebGL das Upgrade. Seit VISUAL-P1-008 zeichnet auch der GL-Pfad Show-Szenen
+  // (Bild/Clip als Textur) — der Wechsel ist deshalb auch während einer Show möglich.
   const [rendererMode, setRendererMode] = useState<'canvas2d' | 'gl'>('canvas2d');
   const [rendererKind, setRendererKind] = useState<VisualRendererKind>('canvas2d');
   const glRendererRef = useRef<WebGLVisualRenderer | null>(null);
@@ -273,22 +273,22 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         canvas.width = Math.round(cssW * dpr);
         canvas.height = Math.round(cssH * dpr);
       }
+      // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie).
+      const showApi = showRef.current;
+      showApi.tick(now, features);
+
       const gl = glRendererRef.current;
       if (gl) {
         gl.resize(canvas.width, canvas.height);
-        gl.render(preset, paramsRef.current, now / 1000);
+        // VISUAL-P1-008: Show-Szenen auch im GL-Pfad als Textur (kein drawImage).
+        const scene = showApi.playing ? showApi.frame() : null;
+        gl.render(preset, paramsRef.current, now / 1000, scene);
       } else if (ctx) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, dt);
+        // Canvas2D: Szene per drawImage über die Visualisierung (Crossfade).
+        if (showApi.playing) showApi.draw(ctx, cssW, cssH);
       }
-
-      // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie)
-      // und zeichnet die aktuelle Szene über die Visualisierung (Crossfade).
-      const showApi = showRef.current;
-      showApi.tick(now, features);
-      // Show-Szenen brauchen den 2D-Kontext (drawImage); im GL-Modus sind sie
-      // gesperrt (siehe Umschalter), dieser Zweig ist dann nie aktiv.
-      if (showApi.playing && ctx) showApi.draw(ctx, cssW, cssH);
 
       rafRef.current = requestAnimationFrame(frame);
     };
@@ -341,12 +341,9 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         <button
           type="button"
           onClick={() => setRendererMode((m) => (m === 'gl' ? 'canvas2d' : 'gl'))}
-          disabled={show.playing}
           aria-pressed={rendererMode === 'gl'}
-          title={show.playing
-            ? 'Renderer-Wechsel während einer Show gesperrt: Show-Szenen brauchen den Canvas2D-Pfad (drawImage)'
-            : 'Renderer wechseln: WebGL (GPU-Renderer) oder Canvas2D (Referenz)'}
-          className={`px-2 py-1 rounded-full text-[9px] font-bold tracking-widest border transition-colors disabled:opacity-40 ${rendererMode === 'gl' ? 'border-emerald-400/60 text-emerald-200 bg-emerald-400/10' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
+          title="Renderer wechseln: WebGL (GPU-Renderer) oder Canvas2D (Referenz) – auch während einer laufenden Show (VISUAL-P1-008)"
+          className={`px-2 py-1 rounded-full text-[9px] font-bold tracking-widest border transition-colors ${rendererMode === 'gl' ? 'border-emerald-400/60 text-emerald-200 bg-emerald-400/10' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
         >
           {rendererMode === 'gl' ? 'WEBGL' : 'CANVAS2D'}
         </button>

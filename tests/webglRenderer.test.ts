@@ -4,7 +4,9 @@ import {
   SHADER_UNIFORMS,
   VERTEX_SHADER_SOURCE,
   buildFragmentShader,
+  mediaSize,
   packUniforms,
+  sceneCoverSpan,
 } from '../src/core/visual/webglRenderer';
 import type { VisualParams, VisualPreset } from '../src/core/visual/types';
 
@@ -116,5 +118,55 @@ describe('WebGL-Renderer – Uniform-Abbildung', () => {
     const u = packUniforms(many, params, { timeS: 0, width: 10, height: 10 });
     expect(u.colors).toHaveLength(MAX_SHADER_COLORS * 3);
     expect(u.colorCount).toBe(MAX_SHADER_COLORS);
+  });
+});
+
+describe('WebGL-Renderer – Show-Szenen als Textur (VISUAL-P1-008)', () => {
+  it('deklariert die Szenen-Uniforms und sampelt die Texturen', () => {
+    const src = buildFragmentShader();
+    for (const name of ['u_sceneA', 'u_sceneB']) {
+      expect(SHADER_UNIFORMS).toContain(name);
+      expect(src).toContain(`uniform sampler2D ${name};`);
+    }
+    for (const name of ['u_sceneMix', 'u_sceneAmount']) {
+      expect(SHADER_UNIFORMS).toContain(name);
+      expect(src).toContain(`uniform float ${name};`);
+    }
+    for (const name of ['u_sceneSpanA', 'u_sceneSpanB']) {
+      expect(SHADER_UNIFORMS).toContain(name);
+      expect(src).toContain(`uniform vec2 ${name};`);
+    }
+    expect(src).toContain('texture2D(u_sceneA');
+    expect(src).toContain('texture2D(u_sceneB');
+    // Ohne Szene (amount 0) bleibt das generative Feld unberührt.
+    expect(src).toContain('if (u_sceneAmount > 0.0)');
+  });
+
+  it('legt das Bild im Cover-Fit passend zum Seitenverhältnis (kein Verzerren)', () => {
+    // Canvas 16:9, Bild 1:1 → Breite voll, Höhe beschnitten.
+    const [sx1, sy1] = sceneCoverSpan(1600, 900, 1000, 1000);
+    expect(sx1).toBeCloseTo(1, 6);
+    expect(sy1).toBeCloseTo(9 / 16, 6);
+
+    // Canvas 1:1, Bild 16:9 → Höhe voll, Breite beschnitten.
+    const [sx2, sy2] = sceneCoverSpan(1000, 1000, 1600, 900);
+    expect(sx2).toBeCloseTo(9 / 16, 6);
+    expect(sy2).toBeCloseTo(1, 6);
+
+    // Gleiches Seitenverhältnis → keine Beschneidung.
+    expect(sceneCoverSpan(1920, 1080, 1280, 720)).toEqual([1, 1]);
+  });
+
+  it('liefert für unbekannte/ungültige Medien eine neutrale Spanne', () => {
+    expect(sceneCoverSpan(800, 600, 0, 0)).toEqual([1, 1]);
+    expect(sceneCoverSpan(Number.NaN, 0, Number.NaN, Number.POSITIVE_INFINITY)).toEqual([1, 1]);
+  });
+
+  it('liest die Pixelmaße von Bild, Video und Canvas', () => {
+    expect(mediaSize({ naturalWidth: 1024, naturalHeight: 768 } as unknown as TexImageSource)).toEqual([1024, 768]);
+    expect(mediaSize({ videoWidth: 1920, videoHeight: 1080 } as unknown as TexImageSource)).toEqual([1920, 1080]);
+    expect(mediaSize({ width: 320, height: 240 } as unknown as TexImageSource)).toEqual([320, 240]);
+    expect(mediaSize(null)).toEqual([0, 0]);
+    expect(mediaSize({ naturalWidth: 0, naturalHeight: 0 } as unknown as TexImageSource)).toEqual([0, 0]);
   });
 });

@@ -388,12 +388,21 @@
     },
     {
       "id": "VISUAL-P1-008",
-      "title": "Medien/Clips im WebGL-Pfad + WGSL/WebGPU-Ausbau",
+      "title": "Medien/Clips im WebGL-Pfad (Show-Szenen als Textur)",
+      "priority": "P3",
+      "status": "DONE",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#8c",
+      "note": "DONE 2026-09-11: Show-Szenen (Bild/Clip) werden auch im GL-Pfad gezeichnet - src/core/visual/webglRenderer.ts sampelt zwei Texturen (A = vorherige, B = aktuelle Szene) mit u_sceneAmount/u_sceneMix/u_sceneSpanA/B; Cover-Fit und Crossfade sind reine Funktionen (sceneCoverSpan/mediaSize). Bilder werden einmal hochgeladen (UNPACK_FLIP_Y_WEBGL, CLAMP_TO_EDGE), Videos pro Frame; ohne Szene bleibt das generative Feld (amount 0). src/hooks/useVisualShow.ts liefert dafuer frame() (current/previous/fade), das Overlay schaltet tick -> Render, nutzt im GL-Pfad die Textur und im Canvas2D-Pfad weiter drawImage; der Umschalter ist WAEHREND der Show nicht mehr gesperrt (disabled entfernt). BELEGE: tests/webglRenderer.test.ts 10/10 (u. a. Cover-Fit 16:9 vs. 1:1, ungueltige Medien, Pixelmasse von Bild/Video/Canvas); scripts/visual-monk-gate.cjs erweitert und GRUEN im echten Browser: gemockter Bild-Endpunkt -> Szene -> SHOW START -> showRunning=true, toggleDisabledDuringShow=false, Wechsel zu Canvas2D und zurueck, GL: renderer=webgl2, glError=0, u_sceneAmount=1, Textur gebunden, Show-Frame 37,8 KB > 15 KB. Gates: tsc 0, eslint 0, Boundary 404/0, test:ci 1226/1226 ohne Skips. WGSL/WebGPU als eigener Folgeschritt VISUAL-P1-009 (in dieser Umgebung nicht verifizierbar: navigator.gpu fehlt, gemessen). Doku: docs/VISUALMONK_SPEC.md §8c/§8d."
+    },
+    {
+      "id": "VISUAL-P1-009",
+      "title": "WebGPU/WGSL-Renderer als dritter Pfad",
       "priority": "P3",
       "status": "OPEN",
       "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#8c",
-      "note": "Offen nach VISUAL-P1-005: Show-Szenen (Bilder/Clips) im GL-Pfad zeichnen (texImage2D statt drawImage), damit der Renderer-Wechsel auch mit laufender Show moeglich ist; danach WGSL/WebGPU als weiterer Schritt. Heute ist der Umschalter waehrend einer Show bewusst gesperrt."
+      "source": "docs/VISUALMONK_SPEC.md#8d",
+      "note": "Offen nach VISUAL-P1-008: WGSL-Shader + WebGPU-Pipeline, die dieselben VisualParams/VisualPreset und Show-Szenen (Textur) rendert, mit Capability-Probe und Fallback auf WebGL2/WebGL/Canvas2D. Bewusst nicht in dieser Runde: das headless Chromium der Gates stellt navigator.gpu nicht bereit (2026-09-11 gemessen: hasGpu=false), ein ungepruefter Renderer wuerde der Projektregel 'erst messen, dann behaupten' widersprechen. Nachweis erst auf WebGPU-faehiger Maschine (Gate-Erweiterung + headed Test)."
     },
     {
       "id": "FEAT-P3-002",
