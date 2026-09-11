@@ -343,10 +343,10 @@
       "id": "SEC-P2-002",
       "title": "Portal: kurzlebiges Session-Cookie statt Master-Token im Browser",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Security / Portal",
       "source": "docs/SECURITY_COOKIES.md#3",
-      "note": "Befund F-1: das studio-Cookie enthaelt den vollen STUDIO_ACCESS_TOKEN (24 h, Max-Age nur clientseitig). Ein Cookie-Diebstahl liefert damit den dauerhaften Studio-Zugang; es gibt keine serverseitige Ablauffrist und keine Einzel-Sperre. Empfehlung: der Portal-Worker stellt ein kurzlebiges signiertes Session-Token aus (exp wie beim portal-Cookie, z. B. 15 min), der Server prueft dieses statt des Master-Tokens; das Master-Token bleibt serverseitig. Mildernd heute: HttpOnly + Secure + SameSite=Lax, fail-closed-API, Konstantzeit-Vergleich."
+      "note": "DONE 2026-09-11 (additiv, rueckwaertskompatibel): (1) NEUES MODUL src/core/session/studioSession.ts - kurzlebiges signiertes Session-Token `v1.<exp>.<hmac-sha256-hex>` (Signatur ueber `v1.<exp>` mit SESSION_SECRET, Default-Lebensdauer 15 min, konstantzeit-Vergleich, fail-closed ohne Secret, Praefix verhindert Verwechslung mit dem Master-Token). (2) SERVER akzeptiert es ZUSAMEN mit dem Master-Token in REST-Guard, REST-Cookie und Socket.io-Handshake (server.ts); ohne SESSION_SECRET bleiben Session-Token ungueltig - der Master-Token funktioniert unveraendert, es bricht nichts. (3) PORTAL-WORKER kann die Token ausstellen: STUDIO_SESSION_MODE=session -> studio-Cookie enthaelt ein 15-min-Token (Max-Age=900) statt des Master-Tokens (24 h); Default bleibt das alte Verhalten (zweistufiger Rollout: erst SESSION_SECRET am Server, dann Mode im Portal). BELEGE: 11 Tests in tests/studioSession.test.ts (Form, Ablauf exakt auf exp, manipulierte Signatur, hochgesetztes exp, fremdes Secret, leeres Secret, sub-Bindung, Cookie-Auslesen UND unabhaengig nachgerechnetes Wire-Format per node:crypto) + 7 Ende-zu-Ende-Tests in tests/studioSessionAuth.test.ts gegen einen echten Server (Master-Token 200, Session-Token im Header 200, im Cookie 200, abgelaufen 401, manipuliert 401, fremdes Secret 401, ohne Token 401). Ein Parser-Bug (Token ohne sub wurde abgelehnt) wurde dabei gefunden und behoben. DOKU: docs/SECURITY_COOKIES.md Befund F-1 + Rollout-Schritte + Restrisiko."
     },
     {
       "id": "DB-P1-003",

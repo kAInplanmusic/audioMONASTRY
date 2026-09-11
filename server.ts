@@ -32,6 +32,7 @@ import { normalizeStyleRanking, suggestStyleFromRanking } from './src/core/ai/vi
 import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifact, saveArtifact } from './server/visionArtifacts.ts';
 import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
 import { supabaseServerKey } from './src/config/supabaseKeys';
+import { looksLikeStudioSession, verifyStudioSession } from './src/core/session/studioSession';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -310,6 +311,11 @@ app.use((_req, res, next) => {
   next();
 });
 
+// SEC-P2-002: Secret zum Prüfen der kurzlebigen Portal-Session-Token.
+// Fehlt es, werden Session-Token abgelehnt (fail-closed) — der Master-Token
+// funktioniert unverändert weiter.
+const STUDIO_SESSION_SECRET = (process.env.SESSION_SECRET || '').trim();
+
 // --- Security: Rate limiting (per Env konfigurierbar fuer Lasttests) ---
 const API_RATE_LIMIT_WINDOW_MS = Number(process.env.API_RATE_LIMIT_WINDOW_MS || 60 * 1000);
 const API_RATE_LIMIT_MAX = Number(process.env.API_RATE_LIMIT_MAX || 60);
@@ -389,7 +395,7 @@ app.use('/api', (req, res, next) => {
 });
 
 // P-1: Auth-Middleware für alle /api/* außer /api/health.
-app.use('/api', (req, res, next) => {
+app.use('/api', async (req, res, next) => {
   if (req.path === '/health') return next();
   // VISION-Artefakte: das sind die vom Server selbst erzeugten Bilder/Clips/
   // Shows. Sie liegen bewusst token-frei wie /api/health — es ist dasselbe
@@ -405,6 +411,13 @@ app.use('/api', (req, res, next) => {
   if (studioAuthOpen) return next();
   const token = studioTokenFromRequest(req);
   if (token && safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) return next();
+  // SEC-P2-002: Das Portal gibt dem Browser jetzt ein kurzlebiges, signiertes
+  // Session-Token (`v1.<exp>.<hmac>`) statt des Master-Tokens. Additiv: der
+  // Master-Token oben bleibt gültig (Skripte/CI/API-Clients/alte Cookies).
+  // Ohne SESSION_SECRET auf dem Server ist diese Prüfung fail-closed.
+  if (token && looksLikeStudioSession(token) && (await verifyStudioSession(token, STUDIO_SESSION_SECRET))) {
+    return next();
+  }
   res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
 });
 
@@ -2710,7 +2723,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
 
     // P-11: Handshake-Auth + Origin-Prüfung. Mit STUDIO_ACCESS_TOKEN müssen
     // Clients das `studio`-Cookie (vom Portal gesetzt) mitschicken.
-    io.use((socket: any, next: (err?: Error) => void) => {
+    io.use(async (socket: any, next: (err?: Error) => void) => {
       const origin = String(socket.handshake?.headers?.origin ?? '');
       if (
         ALLOWED_ORIGINS.length > 0 &&
@@ -2731,7 +2744,11 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const token = String(socket.handshake?.auth?.token ?? '') ||
           String(socket.handshake?.headers?.['x-studio-token'] ?? '') ||
           (m ? decodeURIComponent(m[1]) : '');
-        if (!token || !safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) {
+        const masterOk = Boolean(token) && safeTokenEqual(token, STUDIO_ACCESS_TOKEN);
+        // SEC-P2-002: zusätzlich das kurzlebige Portal-Session-Token akzeptieren.
+        const sessionOk = !masterOk && Boolean(token) && looksLikeStudioSession(token)
+          && (await verifyStudioSession(token, STUDIO_SESSION_SECRET));
+        if (!masterOk && !sessionOk) {
           return next(new Error('unauthorized'));
         }
       }

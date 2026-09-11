@@ -473,8 +473,38 @@ function sessionCookie(env, session) {
   return `portal=${encodeURIComponent(session)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400; Secure`;
 }
 
-function studioCookie(env) {
-  return `studio=${encodeURIComponent(env.STUDIO_ACCESS_TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400; Secure`;
+/**
+ * SEC-P2-002: Kurzlebiges Studio-Session-Token statt des Master-Tokens.
+ *
+ * Vorher stand hier `env.STUDIO_ACCESS_TOKEN` im Cookie (24 h, ohne
+ * serverseitige Ablauffrist) – ein erbeutetes Cookie war damit ein dauerhafter
+ * Zugang (Befund F-1 in docs/SECURITY_COOKIES.md).
+ *
+ * Format/Ableitung ist identisch zum Server (`src/core/session/studioSession.ts`):
+ * Signatur = HMAC-SHA256(SESSION_SECRET, `v1.<exp>`) als Hex.
+ * Der Server prüft dasselbe mit seinem `SESSION_SECRET`.
+ *
+ * Rollout ist zweistufig und rückwärtskompatibel:
+ *   1. Server: `SESSION_SECRET` setzen (gleicher Wert wie hier).
+ *   2. Portal: `STUDIO_SESSION_MODE=session` setzen → ab dann kurzlebige Token.
+ * Ohne Schritt 2 bleibt das Verhalten exakt wie vorher (Master-Token-Cookie),
+ * ohne Schritt 1 würde der Server die Session-Token ablehnen (fail-closed) —
+ * deshalb erst 1, dann 2.
+ */
+async function studioSessionToken(env) {
+  const ttlS = Math.max(60, Number(env.STUDIO_SESSION_TTL_S) || 900);
+  const exp = Math.floor(Date.now() / 1000) + ttlS;
+  const signature = await hmacHex(env, `v1.${exp}`);
+  return { token: `v1.${exp}.${signature}`, ttlS };
+}
+
+async function studioCookie(env) {
+  const useSession = String(env.STUDIO_SESSION_MODE || '').trim().toLowerCase() === 'session';
+  if (!useSession) {
+    return `studio=${encodeURIComponent(env.STUDIO_ACCESS_TOKEN)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400; Secure`;
+  }
+  const { token, ttlS } = await studioSessionToken(env);
+  return `studio=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${ttlS}; Secure`;
 }
 
 // ---------------------------------------------------------------------------
@@ -828,7 +858,7 @@ export default {
           headers: {
             'content-type': 'application/json; charset=utf-8',
             // P-1: Studio-Cookie gleich mitsetzen – die App verlangt es später.
-            'set-cookie': [sessionCookie(env, session), studioCookie(env)],
+            'set-cookie': [sessionCookie(env, session), await studioCookie(env)],
           },
         });
       }

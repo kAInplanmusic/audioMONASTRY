@@ -57,12 +57,28 @@ API-Master-Token (`STUDIO_ACCESS_TOKEN`). Damit gilt:
 **Mildernd:** `HttpOnly` + `Secure` + `SameSite=Lax`, fail-closed-API,
 Konstantzeit-Vergleich, keine Token-Ausgabe in Logs (nur Status/Quellname).
 
-**Empfehlung (eigener Task `SEC-P2-002`):** Das Portal sollte statt des
-Master-Tokens ein **kurzlebiges, signiertes Session-Token** ausstellen
-(z. B. 15 min, mit `exp`-Feld wie beim `portal`-Cookie) und der Server sollte
-dieses prüfen; das Master-Token bleibt dann ausschließlich serverseitig. Bis
-dahin: Token bei Verdacht rotieren und `STUDIO_ACCESS_TOKEN` niemals in
-Screenshots/Logs/Tickets zeigen.
+**UMGESETZT (2026-09-11, `SEC-P2-002`):** Das Portal kann statt des Master-Tokens
+ein **kurzlebiges, signiertes Session-Token** ausstellen — Format
+`v1.<exp>.<hmac-sha256-hex>`, Signatur über `v1.<exp>` mit `SESSION_SECRET`,
+Lebensdauer **15 min** (`STUDIO_SESSION_TTL_S`). Der Server akzeptiert es
+**zusätzlich** zum Master-Token (REST-Header, REST-Cookie und Socket-Handshake) —
+Skripte, CI und alte Cookies brechen also nicht.
+
+**Rollout (bewusst zweistufig, damit nichts klemmt):**
+
+1. Server: `SESSION_SECRET` setzen (derselbe Wert wie im Portal-Worker).
+   Ohne dieses Secret lehnt der Server Session-Token **fail-closed** ab.
+2. Portal-Worker: `STUDIO_SESSION_MODE=session` setzen → ab dann gibt es
+   kurzlebige Token mit `Max-Age=900` statt des Master-Tokens mit 24 h.
+
+Danach gilt: ein erbeutetes Browser-Cookie ist **15 Minuten** wert, nicht mehr
+unbegrenzt; das Master-Token verlässt den Server nicht mehr. Es bleibt für
+Nicht-Browser-Clients (Skripte/CI) gültig — das ist beabsichtigt.
+
+Restrisiko (dokumentiert): Solange ein Client aus Schritt 1 ohne
+`SESSION_SECRET` läuft oder ein altes Master-Cookie im Umlauf ist, gilt weiter
+die alte Semantik. Nach dem Rollout `STUDIO_ACCESS_TOKEN` rotieren, dann sind
+alte Cookies endgültig entwertet.
 
 ## 4. Workflow-Pinning (geprüft)
 
