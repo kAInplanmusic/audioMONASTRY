@@ -56,9 +56,11 @@ npm start                   # node dist/server.cjs
 | `npm run dev` | Dev-Server (API + Frontend, Port 8080) |
 | `npm run worker` | Datei-Queue-Worker (`services/taskWorker.ts`) |
 | `npm run build` / `npm start` | Produktions-Build / -Start |
-| `npm run lint` | `tsc --noEmit` (Typprüfung, es gibt keinen ESLint-Schritt) |
-| `npm test`, `npm run test:coverage` | Vitest (Unit/Integration, aktuell 107 Dateien) |
-| `npm run test:e2e`, `test:e2e:responsive`, `test:stress` | Playwright (13 Specs, u. a. smoke/collab/hardware/keyboard/visual/responsive/stress/live2browser) |
+| `npm run typecheck` | `tsc --noEmit` (Typprüfung) |
+| `npm run lint` | `eslint . --max-warnings=0` (Lint-Gate, 0 Findings) |
+| `npm test`, `npm run test:coverage` | Vitest (Unit/Integration, aktuell 173 Dateien / 1155 Tests) |
+| `npm run test:ci` | Vitest + Gate gegen übersprungene/todo-Tests (CI-P1-001) |
+| `npm run test:e2e`, `test:e2e:responsive`, `test:stress` | Playwright (17 Specs, u. a. smoke/collab/hardware/keyboard/visual/responsive/stress/live2browser) |
 | `npm run verify` | **Release-Gate:** tsc + Vitest + Interface-Boundary-Scan |
 | `npm run verify:boundary` | nur `scripts/validate-interface-boundaries.mjs` |
 | `npm run check:bundle` | Bundle-Größe (< 2,0 MiB FAIL-Gate, Warnung < 1,5 MiB) |
@@ -321,7 +323,7 @@ src/
   utils/, hooks/, types/  RBAC, Prompts, Themes, geteilte Typen
 services/                 Micro-Services (siehe Abschnitt 3)
 scripts/                  Build-, Deploy-, Benchmark- und Hetzner-Automation
-tests/                    Vitest-Suites (101 Dateien) + tests/e2e (Playwright)
+tests/                    Vitest-Suites (173 Dateien / 1155 Tests) + tests/e2e (17 Playwright-Specs)
 public/                   Statische Assets, plugin-manifest.json, routing.json
 docs/                     Architektur-, AI-, Security-, Hardware- und Ops-Doku
 database/                 Supabase-Schema & Migrationen
@@ -331,8 +333,9 @@ deploy/                   Helm-Charts (optional)
 ## 12. Tests, Qualität & CI
 
 **Lokale Gates:**
-- `npm run lint` – TypeScript-Typprüfung (`tsc --noEmit`)
-- `npm test` – Vitest (Unit/Integration, aktuell 107 Dateien, u. a.
+- `npm run typecheck` – TypeScript-Typprüfung (`tsc --noEmit`)
+- `npm run lint` – ESLint (`eslint . --max-warnings=0`)
+- `npm test` – Vitest (Unit/Integration, aktuell 173 Dateien / 1155 Tests, u. a.
   `architecture.test.ts`, `lockFuzz.test.ts`, `goldenAudio.test.ts`,
   `aiOrchestrator.test.ts`, `pluginAudioRouter.test.ts`, `midiClockOut.test.ts`,
   `dynamicsProcessor.test.ts`, `spatialProcessor.test.ts`, `wasmHrtf.test.ts`)

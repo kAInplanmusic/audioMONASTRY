@@ -60,8 +60,9 @@ jobs:
       - name: TypeScript-Check
         run: npm run lint
 
-      - name: Vitest-Suite
-        run: npm run test
+      - name: Vitest-Suite (ohne stille Skips)
+        # CI-P1-001: Report + Gate gegen übersprungene/todo-Tests.
+        run: npm run test:ci
 
       - name: Interface-Boundary-Scan
         run: node scripts/validate-interface-boundaries.mjs
@@ -114,4 +115,22 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: E2E (ohne visuelle Baselines)
-        run: npx playwright test --browser=${{ matrix.browser }} --grep-invert "Baseline"
+        # CI-P1-001: `--forbid-only`, damit ein versehentliches `test.only` nicht
+        # den Rest der Suite stillschweigend aus dem Lauf nimmt. Begründete
+        # bedingte Skips (`test.skip(bedingung, 'Grund')`) bleiben erlaubt.
+        run: npx playwright test --browser=${{ matrix.browser }} --grep-invert "Baseline" --forbid-only
+
+      - name: E2E-Artefakte hochladen (Audio-Gate, Traces, Report)
+        # CI-P1-001: offener Punkt „Audio-Artefakte aus CI hochladen".
+        # Auch bei Fehlschlag hochladen — gerade dann sind sie die Beweislage.
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-${{ matrix.browser }}-audio-artifacts
+          path: |
+            test-results/
+            playwright-report/
+            reports/audio-gate.json
+            reports/*.wav
+          if-no-files-found: ignore
+          retention-days: 14

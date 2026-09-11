@@ -9,6 +9,7 @@
  */
 import { PostgrestClient } from '@supabase/postgrest-js';
 import { aiLogger } from './aiLogger';
+import { supabaseServerKey } from '../../../config/supabaseKeys';
 import type { AiJob, AiSession } from './types';
 
 let client: PostgrestClient | null = null;
@@ -23,7 +24,9 @@ function getClient(): PostgrestClient | null {
   if (testClient !== null) return testClient;
   if (client) return client;
   const url = (process.env.SUPABASE_URL ?? '').trim();
-  const key = (process.env.SUPABASE_LEGACY_PAT ?? process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
+  // EINE Prioritätsordnung (src/config/supabaseKeys.ts): der tote Legacy-PAT darf
+  // den gültigen Service-Role-Key nicht mehr verdecken (Live-Bug 2026-09-11).
+  const key = supabaseServerKey();
   if (!url || !key) return null;
   try {
     client = new PostgrestClient(`${url.replace(/\/+$/, '')}/rest/v1`, {

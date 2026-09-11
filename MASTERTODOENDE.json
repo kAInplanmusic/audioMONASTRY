@@ -29,7 +29,7 @@
   },
   "rule": "Nur offene Punkte. 100 % Erledigtes ist entfernt (Historie in git).",
   "fundamentals": {
-    "build": "tsc 0 · eslint 0 · 1056+3 Tests gruen · build/security/boundary gruen (Stand 2026-09-11)",
+    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1155 Tests gruen (173 Dateien, test:ci inkl. Skip-Gate) · build/security/boundary gruen · Boundary-Scan 413 Dateien 0 Verstoesse (Stand 2026-09-11)",
     "audioLive": "V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
     "aiFleet": "3 Endpoints live (brain=vLLM Qwen3-14B-AWQ, ears, voiceGen) + 4. Rolle `vision` geplant",
     "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
@@ -174,18 +174,19 @@
       "id": "DB-P1-001",
       "title": "Supabase-Live-Abgleich + RLS-Verifikation",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Database",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11 (Live-Abgleich + RLS-Verifikation): 20 Tabellen live, ALLE mit aktivem RLS; keine Tabelle mit RLS ohne Policy; keine Schreib-Policy fuer anon/authenticated (kein offener Schreibpfad trotz oeffentlichem Anon-Key); keine live-Tabelle ohne Migrationsbezug. Luecken geschlossen: mcp_audit_events (vom Code in aiPersistence.ts:150 benutzt, fehlte live!) ueber ai_migration_001 und sample_audio_embeddings ueber ai_migration_007 eingespielt (beide idempotent, keine destruktiven Statements). Insert-Contract auditMcp() live geprueft (201) + aufgeraeumt. Hinweis: documents aus ai_migration_004 ist bewusst auskommentiert (Entwurf)."
     },
     {
       "id": "CI-P1-001",
       "title": "E2E in CI + Secret-Scan (uebersprungene Tests muessen rot machen)",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "CI/CD",
       "source": "MASTER_TODO.md",
-      "note": "gitleaks-Secret-Scan + E2E-Matrix (chromium/firefox/webkit) sind in build.yml vorhanden (2026-09-11 geprueft). Offen: Audio-Artefakte aus CI hochladen."
+      "note": "DONE 2026-09-11: (a) gitleaks-Secret-Scan und E2E-Matrix (chromium/firefox/webkit) waren vorhanden; (b) NEU: Gate gegen stille Coverage-Verluste - npm run test:ci schreibt den Vitest-JSON-Report und scripts/assert-no-skipped-tests.mjs laesst den Lauf fehlschlagen, wenn ein Test uebersprungen/todo ist (beide Richtungen bewiesen: Skip+todo -> Exit 1, voller Lauf 1155/1155 -> Exit 0; der erste Entwurf war wertlos, weil Vitest Skips als status=\"skipped\" meldet, nicht \"pending\"); (c) E2E laeuft mit --forbid-only und laedt Artefakte hoch (test-results/, playwright-report/, reports/audio-gate.json, reports/*.wav; if: always()). Playwright behaelt BEGRUENDETE bedingte Skips (test.skip(bedingung, grund)) - ein pauschales Skip-Verbot wuerde die dokumentierten Umgebungs-Gates brechen; die Begruendung steht jeweils im Code."
     },
     {
       "id": "VISUAL-P1-001",
@@ -221,7 +222,7 @@
       "status": "PARTIAL",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "GEBAUT 2026-09-11: Migration `database/ai_migration_008_visual.sql` (visual_generations, visual_feedback, visual_embeddings vector(512)+hnsw, RPC match_visuals, View visual_style_ranking, RLS service_role); `insertVisualGeneration`/`insertVisualFeedback` (server/cloudAutomation); POST /api/ai/vision/feedback (Zod 1..5); Generierung wird in /api/ai/vision best-effort gespeichert (generationId); Bewertungs-UI (1-5) im VisualMonkOverlay; reine Helfer aggregateFeedback/topStyles (getestet). OFFEN: Migration 008 in Supabase anwenden (Live-Route meldet aktuell praezise 'Could not find the table public.visual_feedback'), RAG-Vorschlaege (topStyles -> Prompt), Stil-LoRA-Training auf einem Pod."
+      "note": "GEBAUT + LIVE VERIFIZIERT 2026-09-11: Migration 008 ist eingespielt (siehe DB-P1-002), Feedback-API + Bewertungs-UI laufen, und die RAG-Vorschlaege sind umgesetzt: GET /api/ai/vision/styles liest visual_style_ranking, normalisiert die View-Spalten (snake_case -> camelCase) und liefert style + source (ranking|fallback) + reason + confidence. LIVE-BEWEIS: mit 2 Bewertungen (cosmic 5/5, noir 3) antwortete die Route {\"suggestion\":{\"style\":\"cosmic\",\"source\":\"ranking\",\"reason\":\"bestbewertet: Ø 5.0 aus 2 Bewertungen\"},\"source\":\"db\"}; ohne Bewertungen ehrlich source=fallback mit Begruendung. UI: Button VORSCHLAG im VisualMonkOverlay, AUTO bevorzugt den gelernten Stil. Testdaten danach entfernt (View wieder leer). OFFEN (neu: VISUAL-P1-007): Stil-LoRA-Training auf einem RunPod-Pod (GPU-Kosten, Betreiber)."
     },
     {
       "id": "VISUAL-P1-005",
@@ -246,7 +247,8 @@
       "priority": "P2",
       "status": "OPEN",
       "area": "Qualitaet",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "Offen (unveraendert): knip-Altbestand klassifizieren. Nicht in diesem Durchgang angefasst - braucht eigene, verhaltensgleiche Runde."
     },
     {
       "id": "QUAL-P2-002",
@@ -260,9 +262,10 @@
       "id": "DOC-P2-001",
       "title": "Dokumentationszahlen synchronisieren",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Doku",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11: aktuelle Zahlen synchronisiert (Vitest 173 Dateien / 1155 Tests, 17 E2E-Specs, Boundary 413 Dateien) in README.md und README_DE.md; zusaetzlich Fehler in README_DE.md korrigiert (npm run lint ist ESLint, Typpruefung ist npm run typecheck) und npm run test:ci dokumentiert. MASTER_TODO.md bleibt historische Referenz (Audit-Stand 2026-09-10) und wurde nur entsprechend markiert."
     },
     {
       "id": "MIDI-P2-001",
@@ -284,9 +287,10 @@
       "id": "SEC-P2-001",
       "title": "Cookie-Sicherheit serverseitig dokumentieren + SHA-Pinning pruefen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Security",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-11: docs/SECURITY_COOKIES.md angelegt (Befunde mit Datei:Zeile). Cookies: portal = HMAC-signierte Session, studio = STUDIO_ACCESS_TOKEN im Klartext, beide Path=/ HttpOnly SameSite=Lax Max-Age=86400 Secure (services/portal-worker/src/index.js:473/477); Server liest Header x-studio-token ODER Cookie studio (server.ts:335-341, Socket-Handshake 2695-2696), Konstantzeit-Vergleich, fail-closed. CSRF: SameSite=Lax + application/json + optionale Origin-Allowlist. SHA-Pinning geprueft: 9 Actions / 42 uses-Zeilen / 10 Workflows, alle auf 40-stellige Commit-SHAs gepinnt. Neuer Befund F-1 -> SEC-P2-002."
     },
     {
       "id": "PERF-P3-001",
@@ -326,10 +330,37 @@
       "id": "DB-P1-002",
       "title": "Migration 008 (VisualMONK) in Supabase anwenden",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Database",
       "source": "2026-09-11",
-      "note": "database/ai_migration_008_visual.sql einspielen; danach liefern /api/ai/vision (generationId) und /api/ai/vision/feedback echte DB-Eintraege statt 502. Ausserdem: CFR2_* Credentials sind ungueltig (SignatureDoesNotMatch) -> R2-Ablage greift erst mit gueltigen Keys."
+      "note": "DONE 2026-09-11: Migration 008 ueber die Supabase-Management-API eingespielt (idempotent, create table if not exists). BELEGE: 3 Tabellen + 1 View live (visual_generations, visual_feedback, visual_embeddings, visual_style_ranking); RLS auf allen drei Tabellen aktiv, je 1 Policy (service_only); RPC match_visuals(query_embedding vector, match_count, min_rating) vorhanden; Vektorspalte vector(512) + hnsw-Index; View visual_style_ranking liefert style/generations/avg_rating/feedback_count. Insert-Contract des Codes geprueft (POST visual_generations 201, danach geloescht; FK-Test visual_feedback 409 wie erwartet). ENDE-zu-ENDE: POST /api/ai/vision/feedback -> {\"status\":\"success\"} HTTP 200 (vorher 502 \"Could not find the table public.visual_feedback\")."
+    },
+    {
+      "id": "SEC-P2-002",
+      "title": "Portal: kurzlebiges Session-Cookie statt Master-Token im Browser",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Security / Portal",
+      "source": "docs/SECURITY_COOKIES.md#3",
+      "note": "Befund F-1: das studio-Cookie enthaelt den vollen STUDIO_ACCESS_TOKEN (24 h, Max-Age nur clientseitig). Ein Cookie-Diebstahl liefert damit den dauerhaften Studio-Zugang; es gibt keine serverseitige Ablauffrist und keine Einzel-Sperre. Empfehlung: der Portal-Worker stellt ein kurzlebiges signiertes Session-Token aus (exp wie beim portal-Cookie, z. B. 15 min), der Server prueft dieses statt des Master-Tokens; das Master-Token bleibt serverseitig. Mildernd heute: HttpOnly + Secure + SameSite=Lax, fail-closed-API, Konstantzeit-Vergleich."
+    },
+    {
+      "id": "DB-P1-003",
+      "title": "Supabase-Key-Prioritaet: toter Legacy-PAT verdeckte den gueltigen Service-Role-Key",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Datenbank / Konfiguration",
+      "source": "src/config/supabaseKeys.ts",
+      "note": "DONE 2026-09-11: An vier Stellen stand process.env.SUPABASE_LEGACY_PAT ?? SUPABASE_SERVICE_ROLE - `??` greift nur bei null/undefined, also gewann der abgelaufene Legacy-Key gegen den gueltigen Service-Role-Key (Supabase antwortete \"JWT failed verification\"; server.ts hielt Supabase fuer konfiguriert, alle Schreibpfade liefen still ins Leere). Fix: zentrale, getestete Prioritaet in src/config/supabaseKeys.ts (SERVICE_ROLE -> SERVICE_ROLE_JWT -> SECRET -> LEGACY_PAT) plus Formatpruefung; umgestellt in aiPersistence.ts, server.ts (RPC-Pfad), server/cloud.ts (admin+anon), server/cloudAutomation.ts und den Skripten verify-supabase.ts / seed-sample-embeddings.ts. /api/cloud/health nennt jetzt den tatsaechlich benutzten Schluessel (supabaseServerKeyLabel) statt fest \"service_role\". BELEGE: npx tsc --noEmit 0 Fehler; 9 neue Tests in tests/supabaseKeys.test.ts (inkl. Regressionsfall toter Legacy-PAT + gueltiger Service-Role-Key); live: /api/cloud/health -> supabase \"ok (service_role)\"."
+    },
+    {
+      "id": "VISUAL-P1-007",
+      "title": "Stil-LoRA-Training auf RunPod-Pod (Selbstlern-Loop, GPU-Kosten)",
+      "priority": "P3",
+      "status": "BLOCKED",
+      "area": "VisualMONK",
+      "source": "docs/VISUALMONK_SPEC.md#5",
+      "note": "Offen: bestbewertete Prompt/Bild-Paare kuratieren und ein Stil-LoRA auf einem RunPod-POD trainieren (nicht Serverless). Bewusst nicht gestartet: GPU-Kosten laufen beim Betreiber, und die Datenbasis entsteht erst mit echten Nutzer-Bewertungen (Session-Ende-Umfrage laeuft, siehe VISUAL-P1-004)."
     }
   ],
   "visionSandbox": [

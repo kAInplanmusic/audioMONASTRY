@@ -70,3 +70,104 @@ export function topStyles(
     .slice(0, limit)
     .map((r) => String(r.style));
 }
+
+// ---------------------------------------------------------------------------
+// RAG: bestbewertete Stile als Prompt-Vorschlag (Datenquelle: die SQL-View
+// `visual_style_ranking`, Migration 008)
+// ---------------------------------------------------------------------------
+
+/** Eine Zeile des Stil-Rankings (camelCase, wie es der Rest der App nutzt). */
+export interface StyleRankingRow {
+  style?: string | null;
+  generations?: number | null;
+  avgRating?: number | null;
+  feedbackCount?: number | null;
+}
+
+function toCount(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}
+
+function toRating(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.min(5, n) : 0;
+}
+
+/**
+ * Rohzeilen der View (`style`, `generations`, `avg_rating`, `feedback_count`)
+ * auf camelCase bringen und Zahlen klemmen. Unbekannte Formen werden verworfen
+ * statt sie zu raten.
+ */
+export function normalizeStyleRanking(rows: ReadonlyArray<Record<string, unknown>>): StyleRankingRow[] {
+  const out: StyleRankingRow[] = [];
+  for (const row of rows) {
+    const style = String(row?.style ?? '').trim();
+    if (!style) continue;
+    out.push({
+      style,
+      generations: toCount(row.generations),
+      avgRating: toRating(row.avg_rating ?? row.avgRating),
+      feedbackCount: toCount(row.feedback_count ?? row.feedbackCount),
+    });
+  }
+  return out;
+}
+
+export interface StyleSuggestion {
+  style: string;
+  /** `ranking` = aus echten Bewertungen, `fallback` = deterministisch aus Energie/Tempo. */
+  source: 'ranking' | 'fallback';
+  /** Kurzbegründung für die UI (keine Zahlen erfinden). */
+  reason: string;
+  /** 0..1 – Belastbarkeit (Bewertung × Stichprobengröße). */
+  confidence: number;
+}
+
+/**
+ * Wählt den Stil für die nächste Generierung: den bestbewerteten Stil aus dem
+ * Ranking, sonst den deterministischen Vorschlag aus Energie/Tempo. Es wird
+ * **nichts erfunden** — ohne Bewertungen ist die Quelle ehrlich `fallback`.
+ */
+export function suggestStyleFromRanking(
+  rows: readonly StyleRankingRow[],
+  hint: { energy?: number; bpm?: number },
+  opts: { minFeedback?: number; minRating?: number } = {},
+): StyleSuggestion {
+  const minFeedback = opts.minFeedback ?? 2;
+  const minRating = opts.minRating ?? 3.5;
+
+  const usable = rows
+    .filter((r) => Boolean(r.style) && (r.feedbackCount ?? 0) >= minFeedback && (r.avgRating ?? 0) >= minRating)
+    .sort((a, b) => (b.avgRating ?? 0) - (a.avgRating ?? 0) || (b.feedbackCount ?? 0) - (a.feedbackCount ?? 0));
+
+  const best = usable[0];
+  if (best?.style) {
+    const rating = best.avgRating ?? 0;
+    const count = best.feedbackCount ?? 0;
+    const confidence = Number(Math.min(1, (rating / 5) * Math.min(1, count / 5)).toFixed(2));
+    return {
+      style: best.style,
+      source: 'ranking',
+      reason: `bestbewertet: Ø ${rating.toFixed(1)} aus ${count} Bewertung${count === 1 ? '' : 'en'}`,
+      confidence,
+    };
+  }
+
+  return {
+    style: fallbackStyle(hint),
+    source: 'fallback',
+    reason: 'noch keine Bewertungen – Vorschlag aus Energie und Tempo',
+    confidence: 0.25,
+  };
+}
+
+/** Deterministischer Ersatz, wenn das Ranking (noch) keine Bewertungen hat. */
+function fallbackStyle(hint: { energy?: number; bpm?: number }): string {
+  const energy = Math.min(1, Math.max(0, Number.isFinite(hint.energy) ? Number(hint.energy) : 0.4));
+  const bpm = Number.isFinite(hint.bpm) ? Number(hint.bpm) : 0;
+  if (energy >= 0.75) return bpm >= 140 ? 'industrial' : 'fire';
+  if (energy >= 0.45) return bpm >= 120 ? 'psychedelic' : 'cosmic';
+  if (energy >= 0.2) return bpm >= 120 ? 'geometry' : 'liquid';
+  return 'abstract';
+}

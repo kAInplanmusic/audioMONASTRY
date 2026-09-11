@@ -13,6 +13,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { S3Client, PutObjectCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
 import { PRESET_SAMPLE_DATABASE, AudioSample } from '../src/data/samples';
 import { MUSIC_LIBRARY, MusicTrack } from '../src/data/musicLibrary';
+import { isValidSupabaseKey, supabasePublicKey, supabaseServerKey, supabaseServerKeyLabel } from '../src/config/supabaseKeys';
 
 const env = process.env;
 
@@ -32,23 +33,15 @@ function isSafeObjectKey(key: string): boolean {
   return SAFE_OBJECT_KEY.test(key);
 }
 
-/** Liefert einen gültigen Supabase-Key oder `null` (erkennt Platzhalter). */
+/**
+ * Liefert einen gültigen Supabase-Key oder `null`.
+ * Die Formatprüfung liegt zentral in `src/config/supabaseKeys.ts`, damit
+ * Server, Skripte und Client dieselbe Regel benutzen (Platzhalter, neue
+ * `sb_*`-Formate, Legacy-JWT).
+ */
 function validSupabaseKey(key: string | undefined): string | null {
   const k = key?.trim() ?? '';
-  if (!k || k.includes('.placeholder')) return null;
-
-  // Neue Supabase-Key-Formate (sb_publishable_/sb_secret_) – langer Zufallsteil.
-  if (k.startsWith('sb_publishable_') || k.startsWith('sb_secret_')) {
-    return k.length >= 40 ? k : null;
-  }
-
-  // Legacy-JWT-Format (anon/service_role): 3 Segmente, signiert.
-  if (k.startsWith('eyJ')) {
-    const parts = k.split('.');
-    return parts.length === 3 && k.length >= 80 ? k : null;
-  }
-
-  return k.length >= 32 ? k : null;
+  return isValidSupabaseKey(k) ? k : null;
 }
 
 function supabaseUrl(): string | null {
@@ -64,7 +57,9 @@ function supabaseUrl(): string | null {
 
 function supabaseAdmin(): SupabaseClient | null {
   const url = supabaseUrl();
-  const key = validSupabaseKey(env.SUPABASE_SERVICE_ROLE) ?? validSupabaseKey(env.SUPABASE_SERVICE_ROLE_JWT);
+  // Zentrale Prioritätsordnung (Service-Role → JWT → Secret → Legacy-PAT):
+  // ein abgelaufener Legacy-Key darf den gültigen Service-Role-Key nicht verdecken.
+  const key = validSupabaseKey(supabaseServerKey(env));
   if (!url || !key) return null;
   try {
     return createClient(url, key, { auth: { persistSession: false } });
@@ -76,7 +71,7 @@ function supabaseAdmin(): SupabaseClient | null {
 /** Anon-/publishable-Client für Lese-Zugriffe (RLS-geschützt). */
 function supabaseAnon(): SupabaseClient | null {
   const url = supabaseUrl();
-  const key = validSupabaseKey(env.SUPABASE_ANON_PUB) ?? validSupabaseKey(env.SUPABASE_PUBLISHABLE);
+  const key = validSupabaseKey(supabasePublicKey(env));
   if (!url || !key) return null;
   try {
     return createClient(url, key, { auth: { persistSession: false } });
@@ -291,7 +286,10 @@ export async function cloudHealth() { // NOSONAR: bewusst komplexe Audio-/DSP-/U
   let supabase = 'not-configured';
   if (sb) {
     try {
-      supabase = (await supabaseReadOk(sb)) ? 'ok (service_role)' : 'error (service_role)';
+      // Ehrliches Label statt fest „service_role": nennt den tatsächlich
+      // benutzten Schlüssel (service_role / sb_secret_ / legacy_pat).
+      const label = supabaseServerKeyLabel(env);
+      supabase = (await supabaseReadOk(sb)) ? `ok (${label})` : `error (${label})`;
     } catch (e) {
       supabase = `error: ${(e as Error).message}`;
     }

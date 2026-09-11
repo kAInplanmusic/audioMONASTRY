@@ -2,10 +2,16 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { createClient } from '@supabase/supabase-js';
 import { embedText } from '../src/core/ai/orchestrator/textEmbedding';
+import { supabaseServerKey } from '../src/config/supabaseKeys';
 
 async function main() {
   const url = process.env.SUPABASE_URL!;
-  const key = process.env.SUPABASE_LEGACY_PAT || process.env.SUPABASE_SERVICE_ROLE!;
+  // Zentrale Prioritätsordnung: Service-Role/Secret vor dem (toten) Legacy-PAT.
+  const key = supabaseServerKey();
+  if (!url || !key) {
+    console.error('❌ SUPABASE_URL / SUPABASE_SERVICE_ROLE fehlen in der .env.');
+    process.exit(1);
+  }
   const db = createClient(url, key, { auth: { persistSession: false } });
   const { data: migs } = await db.from('ai_migrations').select('version').order('version');
   const { count } = await db.from('sample_embeddings').select('*', { count: 'exact', head: true });

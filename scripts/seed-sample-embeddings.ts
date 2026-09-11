@@ -17,12 +17,14 @@ import { createClient } from '@supabase/supabase-js';
 import { PRESET_SAMPLE_DATABASE } from '../src/data/samples';
 import { orchestralSamples } from '../src/data/orchestralLibrary';
 import { embedText } from '../src/core/ai/orchestrator/textEmbedding';
+import { supabaseServerKey } from '../src/config/supabaseKeys';
 
 dotenv.config();
 
 async function main(): Promise<void> {
   const url = (process.env.SUPABASE_URL ?? '').trim();
-  const key = (process.env.SUPABASE_LEGACY_PAT ?? process.env.SUPABASE_SERVICE_ROLE ?? '').trim();
+  // Prioritätsordnung zentral: Service-Role/Secret vor dem (toten) Legacy-PAT.
+  const key = supabaseServerKey();
   if (!url || !key) {
     console.error('❌ SUPABASE_URL / SUPABASE_SERVICE_ROLE fehlen in der .env.');
     process.exit(1);

@@ -291,7 +291,8 @@ deploy/                   Helm charts (optional)
 **Local Gates:**
 - `npm run lint` – ESLint (`eslint . --max-warnings=0`)
 - `npm run typecheck` – TypeScript (`tsc --noEmit`)
-- `npm test` – Vitest (unit/integration, currently 156 files / 966 tests, including `audioEngine.test.ts`, `lockFuzz.test.ts`, `goldenAudio.test.ts`, `aiOrchestrator.test.ts`, `pluginAudioRouter.test.ts`, `midiClockOut.test.ts`, `dynamicsProcessor.test.ts`, `spatialProcessor.test.ts`, `wasmHrtf.test.ts`, `securityAuthz.test.ts`, `v2Parity.test.ts`)
+- `npm test` – Vitest (unit/integration, currently 173 files / 1155 tests, including `audioEngine.test.ts`, `lockFuzz.test.ts`, `goldenAudio.test.ts`, `aiOrchestrator.test.ts`, `pluginAudioRouter.test.ts`, `midiClockOut.test.ts`, `dynamicsProcessor.test.ts`, `spatialProcessor.test.ts`, `wasmHrtf.test.ts`, `securityAuthz.test.ts`, `v2Parity.test.ts`)
+- `npm run test:ci` – Vitest + JSON report gate that fails when a test is skipped or marked todo
 - `npm run verify:boundary` – Interface boundary scan: platform APIs may only be used in their designated adapters
 - `npm run verify` – Mandatory before every PR (typecheck + lint + Vitest + security + deep static audit)
 - `npm run audit:deep:static` – Deep Audit offline (tsc/eslint/knip/npm-audit/semgrep/boundary/bundle)

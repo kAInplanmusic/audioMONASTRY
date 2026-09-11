@@ -213,6 +213,16 @@ export const AiShowMergeSchema = z.object({
   fps: z.number().finite().int().min(12).max(60).optional(),
 });
 
+/**
+ * VisualMONK RAG: Query-Parameter für den Stil-Vorschlag (`GET /api/ai/vision/styles`).
+ * Query-Strings sind externer Input → `coerce` (Zahl aus String), geklemmt.
+ */
+export const AiVisionStylesQuerySchema = z.object({
+  energy: z.coerce.number().finite().min(0).max(1).optional(),
+  bpm: z.coerce.number().finite().min(40).max(220).optional(),
+  limit: z.coerce.number().finite().int().min(1).max(50).optional(),
+});
+
 export const AiOrchestrateSchema = z.object({
   userId: z.string().trim().max(64).optional(),
   task: z.string().trim().min(1).max(64),

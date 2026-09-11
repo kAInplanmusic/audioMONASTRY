@@ -16,6 +16,7 @@
     "lint": "eslint . --max-warnings=0",
     "security": "npm audit && node scripts/validate-interface-boundaries.mjs",
     "test": "vitest run",
+    "test:ci": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json && node scripts/assert-no-skipped-tests.mjs",
     "test:coverage": "vitest run --coverage",
     "test:parity": "vitest run tests/v2Parity.test.ts",
     "test:e2e": "playwright test",

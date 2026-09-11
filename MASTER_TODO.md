@@ -1,5 +1,10 @@
 > ⚠️ SUPERSEDED (2026-09-11): Einzige SSOT fuer offene Arbeiten ist jetzt **MASTERTODOENDE.json**.
 > Dieses Dokument bleibt nur als historische Referenz und wird nicht mehr gepflegt.
+>
+> **Alle Zahlen in diesem Dokument sind der Audit-Stand 2026-09-10** (z. B. „996 Tests").
+> Aktuelle Messwerte stehen in `README.md` / `README_DE.md` und in `MASTERTODOENDE.json`
+> (`fundamentals.build`); sie werden hier bewusst **nicht** nachgezogen, damit die
+> Historie nachvollziehbar bleibt (DOC-P2-001).
 
 # audioMONASTRY MASTER TODO
 

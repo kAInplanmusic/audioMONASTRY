@@ -6,6 +6,7 @@
  */
 import { S3Client, ListObjectsV2Command} from '@aws-sdk/client-s3';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { supabaseServerKey } from '../src/config/supabaseKeys';
 
 const env = process.env;
 
@@ -47,7 +48,8 @@ function r2Client(): S3Client | null {
 
 function supabaseAdmin(): SupabaseClient | null {
   const url = env.SUPABASE_URL?.trim();
-  const key = env.SUPABASE_SERVICE_ROLE?.trim() || env.SUPABASE_SERVICE_ROLE_JWT?.trim();
+  // Zentrale Prioritätsordnung (Service-Role → JWT → Secret → Legacy-PAT).
+  const key = supabaseServerKey(env);
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
 }
@@ -294,4 +296,25 @@ export async function insertVisualFeedback(row: {
   );
   if (error) return { ok: false, error: String(error.message).slice(0, 160) };
   return { ok: true };
+}
+
+/**
+ * VisualMONK RAG: Stil-Ranking lesen (View `visual_style_ranking`, Migration 008).
+ * Die View liefert snake_case-Spalten (`avg_rating`, `feedback_count`); die
+ * Zuordnung auf camelCase macht `normalizeStyleRanking()` im reinen Kern.
+ * Ohne Supabase/bei Fehler kommt eine leere Liste mit Grund zurück — es wird
+ * nichts erfunden.
+ */
+export async function fetchVisualStyleRanking(
+  limit = 10,
+): Promise<{ ok: boolean; rows: Array<Record<string, unknown>>; error?: string }> {
+  const db = supabaseAdmin();
+  if (!db) return { ok: false, rows: [], error: 'supabase-not-configured' };
+  const capped = Math.max(1, Math.min(50, Math.floor(limit) || 10));
+  const { data, error } = await db
+    .from('visual_style_ranking')
+    .select('style,generations,avg_rating,feedback_count')
+    .limit(capped);
+  if (error) return { ok: false, rows: [], error: String(error.message).slice(0, 160) };
+  return { ok: true, rows: (data ?? []) as Array<Record<string, unknown>> };
 }

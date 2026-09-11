@@ -51,6 +51,11 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const [aiError, setAiError] = useState('');
   /** AUTO: Prompt+Stil kommen aus dem laufenden Set (Feature-Bus). */
   const [aiAuto, setAiAuto] = useState(false);
+  /**
+   * RAG (Migration 008): vorgeschlagener Stil aus den bestbewerteten
+   * Generierungen. Wird im AUTO-Modus bevorzugt, sonst gilt die Heuristik.
+   */
+  const [aiSuggestion, setAiSuggestion] = useState<{ style: VisionStyle; reason: string; source: string } | null>(null);
   /** Selbstlern-Loop: ID der letzten Generierung + Bewertung (Session-Ende). */
   const [aiGenerationId, setAiGenerationId] = useState<string | null>(null);
   const [aiRated, setAiRated] = useState(false);
@@ -100,7 +105,10 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     // Im AUTO-Modus darf der Prompt leer sein: Energie/Tempo/Stil kommen aus dem Set.
     const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
     if (!prompt) return;
-    const style = aiAuto ? suggestVisionStyle({ energy: features.energy, bpm: features.bpm }) : aiStyle;
+    // AUTO: bevorzugt den gelernten (RAG-)Stil, sonst die Energie-/Tempo-Heuristik.
+    const style = aiAuto
+      ? (aiSuggestion ? aiSuggestion.style : suggestVisionStyle({ energy: features.energy, bpm: features.bpm }))
+      : aiStyle;
     setAiBusy(true);
     setAiError('');
     try {
@@ -128,7 +136,38 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     } finally {
       setAiBusy(false);
     }
-  }, [aiPrompt, aiStyle, aiAuto, aiBusy]);
+  }, [aiPrompt, aiStyle, aiAuto, aiBusy, aiSuggestion]);
+
+  /**
+   * RAG-Vorschlag holen (`GET /api/ai/vision/styles`): der Server liest die
+   * bestbewerteten Stile aus `visual_style_ranking` (Migration 008). Ohne
+   * Bewertungen kommt ehrlich der Heuristik-Vorschlag mit `source: 'fallback'`.
+   */
+  const suggestAiStyle = useCallback(async () => {
+    const features = featuresRef.current;
+    const params = new URLSearchParams();
+    if (Number.isFinite(features.energy)) params.set('energy', String(features.energy));
+    if (features.bpm > 0) params.set('bpm', String(Math.round(features.bpm)));
+    try {
+      const resp = await fetch(`/api/ai/vision/styles?${params.toString()}`);
+      const data = await resp.json().catch(() => ({}));
+      const s = data?.suggestion;
+      if (!resp.ok || !s?.style) throw new Error(String(data?.error || `HTTP ${resp.status}`));
+      const style = String(s.style);
+      if (!VISION_STYLES.includes(style as VisionStyle)) {
+        throw new Error(`unbekannter Stil aus dem Ranking: ${style.slice(0, 24)}`);
+      }
+      setAiStyle(style as VisionStyle);
+      setAiSuggestion({
+        style: style as VisionStyle,
+        reason: String(s.reason ?? ''),
+        source: String(s.source ?? ''),
+      });
+      setAiError('');
+    } catch (e) {
+      setAiError((e as Error).message.slice(0, 160));
+    }
+  }, []);
 
   // VisualMONK #5: aktuelles Bild/Clip als Show-Szene übernehmen.
   const addCurrentScene = useCallback(() => {
@@ -310,6 +349,20 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         >
           AUTO {aiAuto ? 'AN' : 'AUS'}
         </button>
+        <button
+          type="button"
+          onClick={() => void suggestAiStyle()}
+          title="RAG-Vorschlag: Stil aus den bestbewerteten Generierungen holen (visual_style_ranking, Migration 008)"
+          className="px-2.5 py-1.5 rounded-full text-[10px] font-bold tracking-widest border border-amber-400/50 text-amber-200 hover:bg-amber-400/10 transition-colors"
+        >
+          VORSCHLAG
+        </button>
+        {aiSuggestion && (
+          <span className="text-[9px] text-amber-300/90" title={aiSuggestion.reason}>
+            {aiSuggestion.source === 'ranking' ? 'GELERNT' : 'HEURISTIK'}: {aiSuggestion.style}
+            {aiSuggestion.reason ? ` · ${aiSuggestion.reason}` : ''}
+          </span>
+        )}
         <button
           type="button"
           onClick={() => void generateAiImage()}

@@ -26,8 +26,10 @@ jobs:
       - name: Lint (ESLint, 0 Errors/Warnings)
         run: npm run lint
 
-      - name: Unit-/Integration-Tests (vitest)
-        run: npm run test
+      - name: Unit-/Integration-Tests (vitest, ohne stille Skips)
+        # CI-P1-001: `test:ci` schreibt den JSON-Report und lässt den Lauf
+        # fehlschlagen, wenn ein Test übersprungen oder als todo markiert ist.
+        run: npm run test:ci
 
       - name: Security (npm audit + Interface-Boundary-Scan)
         run: npm run security

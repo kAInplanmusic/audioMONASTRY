@@ -29,6 +29,9 @@ test-results/
 playwright-report/
 playwright/.cache/
 
+# Vitest-JSON-Report (CI-Gate gegen übersprungene Tests, CI-P1-001)
+.vitest-report.json
+
 # Generiertes SFU-RTP-Testbundle (npx esbuild scripts/hetzner/sfu-rtp-entry.js ...)
 public/sfu-rtp-test.js
 

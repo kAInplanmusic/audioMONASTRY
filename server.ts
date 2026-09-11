@@ -9,7 +9,7 @@ import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
-import { syncR2ToSupabase, ingestAudioObject, insertVisualGeneration, insertVisualFeedback } from './server/cloudAutomation.ts';
+import { syncR2ToSupabase, ingestAudioObject, insertVisualGeneration, insertVisualFeedback, fetchVisualStyleRanking } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
 import {
   buildDropPrompt,
@@ -28,8 +28,10 @@ import { buildVisionPrompt } from './src/core/ai/vision/visionPrompt';
 import { VisionError, generateVisionImage } from './src/core/ai/vision/runpodVision';
 import { VideoError, generateVideo, stripDataUri } from './src/core/ai/vision/runpodVideo';
 import { ClipPipelineError, generateClipFromPrompt } from './src/core/ai/vision/clipPipeline';
+import { normalizeStyleRanking, suggestStyleFromRanking } from './src/core/ai/vision/visualFeedback';
 import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifact, saveArtifact } from './server/visionArtifacts.ts';
 import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
+import { supabaseServerKey } from './src/config/supabaseKeys';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -42,6 +44,7 @@ import {
   AiVideoClipSchema,
   AiVisionSchema,
   AiVisionFeedbackSchema,
+  AiVisionStylesQuerySchema,
   AiVideoSchema,
   CloudMusicSchema,
   CloudSampleSchema,
@@ -1216,6 +1219,31 @@ app.post('/api/ai/vision/feedback', async (req, res) => {
   return res.json({ status: 'success' });
 });
 
+// --- GET /api/ai/vision/styles  -> RAG-Stilvorschlag aus echten Bewertungen ---
+// Query: { energy?, bpm?, limit? }   (reine DB-Abfrage, KEIN GPU-Aufruf)
+// Response: { status:'success', suggestion:{style,source,reason,confidence},
+//             ranking:[{style,generations,avgRating,feedbackCount}],
+//             source:'db'|'none', note? }
+// Ohne Bewertungen ist die Quelle ehrlich `fallback` (Energie/Tempo-Heuristik);
+// ein fehlendes Supabase liefert `source:'none'` statt erfundener Zahlen.
+app.get('/api/ai/vision/styles', async (req, res) => {
+  const parsed = AiVisionStylesQuerySchema.safeParse(req.query ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid query' });
+  }
+  const { energy, bpm, limit } = parsed.data;
+  const ranking = await fetchVisualStyleRanking(limit ?? 10);
+  const rows = normalizeStyleRanking(ranking.rows);
+  const suggestion = suggestStyleFromRanking(rows, { energy, bpm });
+  return res.json({
+    status: 'success',
+    suggestion,
+    ranking: rows,
+    source: ranking.ok ? 'db' : 'none',
+    ...(ranking.ok ? {} : { note: ranking.error }),
+  });
+});
+
 // --- POST /api/ai/generate-drop  → dropMONK Drop-Generator (LLM + Fallback) ---
 // Request:  { userPrompt|prompt, context?: { bpm, activePlugins, currentEnergy }, style?, duration? }
 // Response: { name, description, category, parameterSequence, buildupTime,
@@ -1431,7 +1459,9 @@ app.post('/api/library/search', async (req, res) => {
   const max = Math.max(1, Math.min(50, Number(limit) || 10));
 
   // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst lokaler Embedding-Pfad).
-  const supabaseConfigured = !!(process.env.SUPABASE_URL && (process.env.SUPABASE_LEGACY_PAT || process.env.SUPABASE_SERVICE_ROLE));
+  // Wichtig: die Formatprüfung nutzen — vorher galt „konfiguriert" auch mit einem
+  // abgelaufenen Legacy-PAT, wodurch der RPC-Pfad still ins Leere lief.
+  const supabaseConfigured = Boolean(process.env.SUPABASE_URL && supabaseServerKey());
   if (supabaseConfigured) {
     const matches = await aiPersistence.rpcMatchSamples(embedText(q), max);
     if (matches.length > 0) {
