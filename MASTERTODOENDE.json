@@ -509,8 +509,11 @@
     "fleetMaxEurPerHour": 10,
     "storageSnapshotsMaxEurPerMonth": 5,
     "runpodCurrentImage": "ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:7b7391d1302d2dfd085 (ears/voice) · registry.runpod.net/...worker-vllm...76054c22c (brain)",
-    "hetznerFleet": "5 Server (app/sfu/ai/master/edge) - laeuft; Snapshots 2026-09-11",
-    "storageNowEurPerMonth": "~0,06 (5 Snapshots, 4,68 GB)"
+    "hetznerFleet": "5 Server (app/sfu/ai/master/edge) - stundlich abgerechnet, ~0,054 EUR/h (~39 EUR/Monat NUR wenn 24/7 an). Nach der Session: delete-fleet.sh -> 0 EUR/h; Floating-IP 3 EUR/Monat bleibt.",
+    "storageNowEurPerMonth": "~0,06 (5 Snapshots, 4,68 GB)",
+    "billingModel": "STUENDLICH: Hetzner + RunPod rechnen pro laufender Stunde ab; gestoppt/geloescht = 0 EUR (Hetzner: gestoppte Server kosten weiter Platte -> nur LOESCHEN stoppt Kosten).",
+    "hetznerFleetEurPerHour": 0.054,
+    "snapshotsBilling": "Snapshots kosten pro GB/Monat (Hetzner); 5 Snapshots 4,68 GB ~= 0,06 EUR/Monat."
   },
   "architectureDecisions": [
     "V2 ist der einzige Produktiv-Audiopfad; V1-Code ist entfernt (No-Op-Reste: AUDIO-P1-003).",

@@ -87,7 +87,7 @@ step "5/7 sfu-1, master-1, edge-1, ai-1 einrichten"
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 rsync_repo() {
   rsync -az --delete -e "$RSYNC_E" \
-    --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results \
+    --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results --exclude public/data/orchestral --exclude public/music --exclude target --exclude .venv-runpod --exclude .agents --exclude logs \
     ./ "root@$1:/opt/samplemonk/"
 }
 sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/samplemonk/.env"; }

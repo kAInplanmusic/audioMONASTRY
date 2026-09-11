@@ -11,5 +11,17 @@ deepcode
 .env.deploy
 public/models
 public/samples/instruments/general_midi.sf2
+# Lokale/grosse Dev-Daten NICHT in den Build-Kontext (3,4 GB):
+#   public/data/orchestral ist gitignored, public/music sind Demo-Tracks.
+#   Sonst wird jeder Image-Build um GB aufgeblaeht (Deploy-Hang 2026-09-11).
+public/data/orchestral
+public/music
+logs
+.venv-runpod
+.agents
+.claude
+target
+services/audio-runtime/target
+services/*/target
 # Hinweis: .env bleibt bewusst IM Build-Kontext, weil `vite build` die VITE_*-Werte
 # daraus liest. Das finale Image enthaelt .env nicht (nur die Builder-Stage).

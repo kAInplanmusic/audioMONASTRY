@@ -122,6 +122,8 @@ RSYNC_EXCLUDES=(
   --exclude 'test-results' --exclude 'deepcode' --exclude '.continue'
   --exclude '.env' --exclude '.env.deploy'
   --exclude 'public/models' --exclude 'public/music'
+  --exclude 'public/data/orchestral' --exclude 'services/audio-runtime/target'
+  --exclude 'target' --exclude '.venv-runpod' --exclude '.agents' --exclude 'logs'
 )
 if command -v rsync >/dev/null 2>&1; then
   rsync -az "${RSYNC_EXCLUDES[@]}" -e "${SSH[*]}" \
