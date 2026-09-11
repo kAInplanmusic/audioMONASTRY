@@ -168,16 +168,32 @@
       "severity": "P1",
       "claim": "Der vorgefertigte RunPod-vLLM-Worker kann unser Brain ersetzen (kein Custom-Image, AWQ, OpenAI-Pfad)",
       "verdict": "NOT_VERIFIED",
-      "evidence": "Umgesetzt und getestet am 2026-09-10: Template mit runpod/worker-vllm:1.0.1-cuda12.1.0, MODEL_NAME=Qwen/Qwen3-14B-AWQ (9,99 GB), QUANTIZATION=awq, MAX_MODEL_LEN=16384; Brain-Endpoint per PATCH auf dieses Template umgestellt (templateId 42pqqc06vb). Dann 3 POSTs an /openai/v1/chat/completions mit 240-s-Client-Timeout: ALLE liefen in TimeoutError (t+240s, t+500s, t+761s). Endpoint-Health waehrenddessen: workers.running=1, jobs.inQueue=3, completed=10, failed=0 - ein Worker lief also, antwortete aber nicht. Ohne Zugriff auf die Worker-Logs ist die Ursache nicht unterscheidbar: (a) vLLM laedt noch, (b) das Image-Tag ist zu alt und bietet die OpenAI-Route nicht, (c) Env/Quantisierung passt nicht zu diesem Tag, (d) OPENAI_SERVED_MODEL_NAME_OVERRIDE passt nicht zum angefragten Modellnamen.",
+      "evidence": "Umgesetzt und getestet am 2026-09-10: Template mit runpod/worker-vllm:1.0.1-cuda12.1.0, MODEL_NAME=Qwen/Qwen3-14B-AWQ (9,99 GB), QUANTIZATION=awq, MAX_MODEL_LEN=16384; Brain-Endpoint per PATCH auf dieses Template umgestellt (templateId 42pqqc06vb). Dann 3 POSTs an /openai/v1/chat/completions mit 240-s-Client-Timeout: ALLE liefen in TimeoutError (t+240s, t+500s, t+761s). Endpoint-Health waehrenddessen: workers.running=1, jobs.inQueue=3, completed=10, failed=0 - ein Worker lief also, antwortete aber nicht. Ohne Zugriff auf die Worker-Logs ist die Ursache nicht unterscheidbar: (a) vLLM laedt noch, (b) das Image-Tag ist zu alt und bietet die OpenAI-Route nicht, (c) Env/Quantisierung passt nicht zu diesem Tag, (d) OPENAI_SERVED_MODEL_NAME_OVERRIDE passt nicht zum angefragten Modellnamen. | Nachtrag 2026-09-11: Der Log-Blocker ist gelöst – `runpodctl serverless logs <id>` (v2.14.0) liest die Worker-Logs des realen Kontos; damit ist die vLLM-Ursache künftig diagnostizierbar. Der vLLM-Versuch selbst wurde NICHT wiederholt (zwei Stufen laufen nativ über task=llm).",
       "impact": "Der vielversprechendste Hebel (kein 30-GB-Build, 9 GB statt 29,5 GB, OpenAI-kompatibel) ist damit NICHT belegt. Der Endpoint wurde auf das bewaehrte eigene Image (templateId e4yzwic56u) zurueckgestellt und der OpenAI-Pfad in .env deaktiviert. Kosten des Versuchs: $0.156. Naechster sinnvoller Schritt: Rueckgabe der RunPod-Hub/Docker-Tag-Liste pruefen und einen Tag mit bekanntem Qwen3-Support waehlen, ODER die Worker-Logs einsehbar machen (Artefakt/Support), statt weiter zu raten."
     },
     {
       "id": "F-012",
       "severity": "P0",
       "claim": "Der `warmup`-Task waermt die Modelle vor (Session-Wake)",
-      "verdict": "FALSIFIED_THEN_FIXED",
-      "evidence": "model_manager._load_locked() macht NUR Buchhaltung: `self._used_vram_gb += required` und `self._loaded[id] = time.time()` - es wird kein Gewicht geladen (niemand ruft set_loader). Die Gewichte kommen erst im Handler per `from_pretrained`, also beim ersten echten `infer()`. Folge: `warmup` meldete `durationMs: 0` und `ready: true`, obwohl nichts geladen war - und der erste Nutzeraufruf zahlte weiterhin alles (gemessen 201 s beim Brain inkl. 28-GB-Download). Belegt durch lokalen Smoke: derselbe Fall meldete vorher `loaded:[qwen3-14b], failed:[]` = Erfolg, jetzt `warmed:[]` + `warmupFailed:{qwen3-14b: 'dependency missing for transformers'}`.",
+      "verdict": "FALSIFIED_THEN_FIXED_VERIFIED_LIVE",
+      "evidence": "model_manager._load_locked() macht NUR Buchhaltung: `self._used_vram_gb += required` und `self._loaded[id] = time.time()` - es wird kein Gewicht geladen (niemand ruft set_loader). Die Gewichte kommen erst im Handler per `from_pretrained`, also beim ersten echten `infer()`. Folge: `warmup` meldete `durationMs: 0` und `ready: true`, obwohl nichts geladen war - und der erste Nutzeraufruf zahlte weiterhin alles (gemessen 201 s beim Brain inkl. 28-GB-Download). Belegt durch lokalen Smoke: derselbe Fall meldete vorher `loaded:[qwen3-14b], failed:[]` = Erfolg, jetzt `warmed:[]` + `warmupFailed:{qwen3-14b: 'dependency missing for transformers'}`. | LIVE VERIFIZIERT 2026-09-11 (Image 518cad6f, Endpoint ppxo7wrn599p0q): `warmup` meldet `loaded/warmed=[qwen3-14b, qwen3-4b]`, `warmupFailed:{}`, `warmupMs={qwen3-14b:37529, qwen3-4b:12336}` und `durationMs:49866` – statt der früheren Placebo-`0 ms`. Die Folge-LLM-Jobs zahlen keinen Modell-Load mehr (delayTime 87–94 ms).",
       "impact": "Session-Wake und Kaltstart-Vorwaermung waren ein Placebo - ein stiller Erfolg genau der Klasse, die dieser Audit sucht. Behoben: `_handle_warmup` faehrt nach `load()` pro Modell eine minimale echte Inferenz (1 Token). Text-Tasks werden gewaermt; Audio-Modelle (Whisper/CLAP/AST) brauchen echtes Audio und werden ehrlich als `warmupFailed` gemeldet statt als Erfolg."
+    },
+    {
+      "id": "F-013",
+      "severity": "P1",
+      "claim": "Der CI-`deploy`-Job scheitert, weil das Repo-Secret RP_API_KEY fehlt",
+      "verdict": "FALSIFIED_THEN_ROOT_CAUSED",
+      "evidence": "Actions-Log (Lauf 34549596159, deploy-Job) am 2026-09-11 erstmals lesbar: `Registry-Auth konnte nicht angelegt werden: Failed to create registry auth` und `FEHLER samplemonk-ai-brain: QueryError: You must have at least $0.01 in your account balance to create an endpoint.` sowie `Template 'samplemonk-ai-brain-template' aktualisieren (id=xk4pta3x4q)`. Unser Konto (user_3J64…, $6.29) besitzt e4yzwic56u/4uzprwb5x8/4kjoanoc91. Das Secret ist also vorhanden, gehört aber zu einem anderen/leeren Konto; der Preflight prüft nur die Existenz. Zusätzlich ist GHCR_PASSWORD ein fine-grained PAT, das GHCR ablehnt.",
+      "impact": "Der `build`-Job bleibt grün und pusht das Image; nur der automatische Deploy ist rot. Deploy läuft zuverlässig lokal. Fix ist ein User-Schritt (Secret/GHCR-PAT tauschen)."
+    },
+    {
+      "id": "F-014",
+      "severity": "P1",
+      "claim": "Ein zweites, kleineres Qwen3 als Ausführer bringt 5–10x Latenzvorteil",
+      "verdict": "MEASURED_AND_PARTIALLY_FALSIFIED",
+      "evidence": "LIVE 2026-09-11, beide Modelle warm/resident, identischer 64-Token-Tool-Call (21 Tokens erzeugt): qwen3-4b executionTime 1081/1079 ms (22,1/23,1 tok/s), qwen3-14b 1438/1393 ms (16,5/16,7 tok/s). Der Ausführer ist ~25 % schneller, NICHT 5–10x – das war eine vLLM-Erwartung, kein transformers-fp16-Ergebnis. Beide Modelle bleiben gleichzeitig resident (kein LRU-Wechsel) und liefern korrektes Tool-Call-JSON. Rohdaten: logs/runpod-brain-latency-20260911-012329.json.",
+      "impact": "Die Zwei-Stufen-Entscheidung ist umgesetzt und wirkt, aber der große Tempo-Hebel bleibt die Engine (vLLM). Ehrlich dokumentiert, damit die Erwartung nicht überzogen wird."
     }
   ],
   "tasks": [
@@ -761,7 +777,10 @@
         "ERLEDIGT: predownload.py + Dockerfile ARG AI_BAKE_ROLE bleiben im Repo, falls das Einbacken je wieder gebraucht wird",
         "GEMESSEN: der erste echte llm-Aufruf am Brain war nach 201 s fertig (delay 71 s + exec 58 s) - die Vorgabe 'Kaltstart < 15 min' ist damit auch ohne Backing erfuellt",
         "VERSUCHT (nicht verifiziert): Brain auf runpod/worker-vllm mit Qwen3-14B-AWQ + QUANTIZATION=awq; 3 Timeouts ueber 13 min bei laufendem Worker -> F-011",
-        "ZURUECKGESTELLT: Endpoint wieder auf das eigene Image, RUNPOD_BRAIN_OPENAI_URL deaktiviert"
+        "ZURUECKGESTELLT: Endpoint wieder auf das eigene Image, RUNPOD_BRAIN_OPENAI_URL deaktiviert",
+        "GELÖST 2026-09-11: Worker-/Actions-Logs sind lesbar (runpodctl 2.14.0 bzw. GitHub-Token).",
+        "ROOT CAUSE 2026-09-11: Der Brain-Build scheiterte NICHT am Plattenplatz, sondern an `PermissionError` auf `/data/hf-cache/hub/.locks/...` (AutoConfig-Prefetch als root, chown nicht rekursiv) -> Dockerfile-Fix (Commit 518cad6).",
+        "ENTSCHEIDUNG 2026-09-11: Zwei-Stufen-Brain (qwen3-4b Ausfuehrer + qwen3-14b) live; Back-Build bleibt bewusst aus."
       ],
       "tests": [
         "Probe 9: du -sh /data/hf-cache im Brain-Image",
@@ -774,7 +793,47 @@
       "commands": [
         "python3 services/samplemonk-ai-runtime/predownload.py --role brain --groups 4 --list"
       ],
-      "blockedReason": "Worker-Logs sind ohne gueltigen API-Token nicht lesbar; ohne sie ist nicht entscheidbar, ob vLLM laedt oder das Image-Tag die OpenAI-Route nicht bietet."
+      "blockedReason": "Nicht mehr blockiert: Logs lesbar, Build-Ursache gefixt. Der Back-Build bleibt bewusst abgeschaltet (Kaltstart inkl. 37,5 GB Download und Warmup: 324 s < 15 min)."
+    },
+    {
+      "id": "AI-002",
+      "priority": "P1",
+      "status": "DONE",
+      "title": "Zwei-Stufen-Brain: schneller Ausfuehrer + Brain, gleiche Familie",
+      "files": [
+        "services/samplemonk-ai-runtime/model_manifest.json",
+        "services/samplemonk-ai-runtime/handlers_runpod.py",
+        "services/samplemonk-ai-runtime/runpod_worker.py",
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/endpointRegistry.ts",
+        "scripts/runpod-brain-latency.py"
+      ],
+      "implementation": [
+        "qwen3-4b (Qwen/Qwen3-4B, Pin 1cfa9a72) als zweites preload-Modell der Brain-Rolle; qwen3-14b ehrlich 30 GB/fp16 (Summe 39 GB < 48 GB Budget -> kein LRU-Wechsel).",
+        "LlmRouter: complexity=simple -> RUNPOD_EXECUTOR_MODEL (qwen3-4b), sonst RUNPOD_BRAIN_MODEL (qwen3-14b).",
+        "qwen3_llm: enable_thinking=false als Default + tokensPerSecond-Messung; Warmup meldet warmupMs je Modell.",
+        "LIVE: Warmup laedt BEIDE (qwen3-14b 37,5 s / qwen3-4b 12,3 s); simple 1,08 s vs complex 1,40 s; korrektes Tool-Call-JSON; Kosten $0,0372, Endzustand $0/h."
+      ],
+      "tests": [
+        "npx vitest run tests/manifestRoles.test.ts tests/endpointRegistry.test.ts tests/llmRouter.test.ts",
+        "npx tsc --noEmit",
+        "npx eslint src/core/ai/LlmRouter.ts src/core/ai/orchestrator/endpointRegistry.ts --max-warnings=0",
+        "python3 scripts/runpod-brain-latency.py (live, Endpoint ppxo7wrn599p0q)"
+      ],
+      "acceptanceCriteria": [
+        "Warmup laedt BEIDE Stufen (warmupMs > 0 je Modell)",
+        "simple/complex liefern korrektes Antwort-JSON, warm, ohne Modell-Load",
+        "Beide Modelle bleiben gleichzeitig resident",
+        "Alles nach dem Test auf $0/h"
+      ],
+      "commands": [
+        "IMAGE=<tag> RUNPOD_ROLE=brain python scripts/runpod-deploy.py",
+        "RUNPOD_ENDPOINT_ID_BRAIN=ppxo7wrn599p0q python3 scripts/runpod-brain-latency.py"
+      ],
+      "remainingRisks": [
+        "Der Ausfuehrer ist nur ~25 % schneller (nicht 5-10x) - vLLM bleibt der offene Tempo-Hebel.",
+        "Beide Modelle fp16 = 39 GB Ledger; real ~40 GB auf 48 GB Karte - bei OOM zuerst 4b quantisieren."
+      ]
     }
   ],
   "baseline": {
@@ -832,12 +891,13 @@
     "conclusion": "Plattenplatz ist NICHT die Ursache des fehlgeschlagenen Back-Builds."
   },
   "knownUnverifiedAfterChange": [
+    "MediaStream-Nicht-Stille",
+    "Song-Playback ueber die App-UI",
     "npm run build",
+    "npm run check:bundle",
     "npm run security",
     "npm run verify:boundary",
-    "npm run check:bundle",
-    "Song-Playback ueber die App-UI",
-    "MediaStream-Nicht-Stille"
+    "vLLM-Beschleunigung des Brain (F-011) weiterhin nicht verifiziert"
   ],
   "audioGate": {
     "command": "npm run test:audio-gate",

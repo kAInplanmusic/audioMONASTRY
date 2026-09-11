@@ -160,15 +160,18 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
 - **Problem:** Der Umbau läuft, aber mehrere Punkte sind bewusst offen
   (siehe `docs/RUNPOD_AI_V1_SPEC.md` §6/§8).
 - **Required change:**
-  0. **CI-Deploy reparieren:** Der Actions-`deploy`-Job ist rot (Läufe #6/#7/#8), weil
-     vermutlich das Repo-Secret `RP_API_KEY` fehlt. Preflight-Check ist im Workflow
-     eingebaut; Secret im Repo setzen. Lokales Deploy funktioniert. Zusätzlich:
-     `GHCR_PASSWORD` in `.env` ist ein fine-grained PAT und für GHCR-Push unbrauchbar.
-  0b. **Qwen3-Thinking im Brain abschalten** — Qwen3 gibt zuerst einen `<think>`-Block aus
-     und verbraucht damit das Token-Budget (im Live-Test sichtbar). Im `qwen3_llm`-Handler
-     `enable_thinking=False` bzw. `/no_think` setzen; erst danach ist Tool-Calling sinnvoll.
-     (vLLM ist **nicht** nötig – der Brain läuft über `task: "llm"`. Ein vLLM-Image
-     `AI_INSTALL_VLLM=1` + `RUNPOD_BRAIN_OPENAI_URL` bleibt optional für Speed.)
+  0. **CI-Deploy reparieren — Ursache jetzt belegt (2026-09-11, Actions-Logs lesbar).**
+     Das Repo-Secret `RP_API_KEY` fehlt **nicht** — es gehört zu einem **anderen, leeren
+     RunPod-Konto** (`QueryError: You must have at least $0.01 in your account balance`,
+     Template-ID `xk4pta3x4q` statt unseres `e4yzwic56u`). Der Preflight prüft nur
+     „Secret vorhanden", nicht das Konto.
+     **Fix (User-Schritt):** Repo-Secret `RP_API_KEY` auf den Key des aktiven Kontos setzen.
+     Zusätzlich: `GHCR_PASSWORD` ist ein fine-grained PAT und wird von GHCR für den
+     Registry-Auth abgelehnt → GHCR-fähiges PAT verwenden. Der `build`-Job bleibt grün und
+     pusht das Image; deployt wird lokal über `scripts/runpod-deploy.py`.
+  0b. **Qwen3-Thinking im Brain abgeschaltet — DONE (2026-09-11).** `qwen3_llm` setzt
+     `enable_thinking=False` als Default (Opt-in über `enableThinking`); der Live-Test
+     liefert pures Tool-Call-JSON ohne `<think>`-Block. vLLM bleibt als Tempo-Hebel offen.
   0c. **RunPod-Network-Volume** mit `HF_HOME` einrichten — ohne Volume lädt ein kalter
      Brain-Worker jedes Mal ~28 GB Gewichte (Qwen3-14B fp16).
      **Status: BLOCKIERT (2026-09-10).** Der `predownload`-Task ist gebaut und der
@@ -188,8 +191,16 @@ Branch: main @ 9f8e2ef (working tree clean zum Audit-Zeitpunkt)
      **Nächster Schritt:** Brain-Image auf einer Maschine mit genug Platz bauen —
      (i) größerer/self-hosted Runner, (ii) Build in einem **RunPod Pod** mit Push
      nach GHCR, (iii) Back-Schritt auf das größere `/mnt` der GitHub-Runner legen.
-     Vorher eine `df -h`-Probe in den Build einbauen (Logs sind nicht lesbar).
-     Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md` §9.
+     **Ursache jetzt belegt (2026-09-11, Logs lesbar):** kein Plattenplatz, sondern
+     `PermissionError` auf `/data/hf-cache/hub/.locks/...` — der `AutoConfig`-Prefetch läuft
+     als root und der `chown` war nicht rekursiv. Fix im Dockerfile (Commit `518cad6`).
+     Der Back-Build bleibt dennoch abgeschaltet (Kaltstart < 15 min genügt).
+     Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md` §14B.
+  0e. **Zwei-Stufen-Brain — DONE (2026-09-11).** `qwen3-4b` (Ausführer, `simple`) +
+     `qwen3-14b` (Brain, `moderate`/`complex`), beide `preload`/resident, Routing über
+     `complexity` (`RUNPOD_EXECUTOR_MODEL`/`RUNPOD_BRAIN_MODEL`). Live: Warmup lädt beide
+     (37,5 s / 12,3 s), `simple` 1,08 s vs `complex` 1,40 s; Kosten $0,0372, $0/h.
+     Der große Latenzhebel bleibt vLLM. Details: `logs/run-2026-09-10/RUN_PROTOKOLL.md` §13.
   1. **Revisions-Pins** für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` eintragen (derzeit `status: "planned"` → werden nicht geladen).
   2. **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → Voice-Modell fixieren.
   3. **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN; bei Durchfall GLM-4.5-Air-Upgrade (2×A6000, `gpuCount=2`).

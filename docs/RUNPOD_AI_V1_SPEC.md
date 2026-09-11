@@ -44,7 +44,7 @@ Die Task-Mengen sind **disjunkt** – pro Task genau eine zuständige Rolle:
 
 | Rolle | Tasks | Preload (resident) |
 |---|---|---|
-| brain | `llm`, `nlu` | `qwen3-14b` |
+| brain | `llm`, `nlu` | `qwen3-4b` (`simple`), `qwen3-14b` (`moderate`/`complex`) |
 | ears | `audio.classify`, `audio.transcribe`, `audio.embed`, `audio.analyze`, `audio.diarize`, `audio.understand`, `multimodal` | `ast-audioset`, `whisper-large-v3`, `clap-music` |
 | voiceGen | `tts`, `sing`, `song`, `audio.generate`, `stem.separate` | `qwen3-tts-06b`, `mms-tts-deu`, `demucs` |
 
@@ -52,18 +52,28 @@ Der Worker wählt seine Rolle per **`AI_ROLE`** und lädt daraus nur die Modelle
 Rollen-Manifests. `AI_ROLE` leer = Legacy-Single-Endpoint (alle Modelle, z. B. der
 bestehende H200-Endpoint `uzg7p9lm890ts8`) — der Cutover ist dadurch unterbrechungsfrei.
 
-### 2.1 Gehirn
+### 2.1 Gehirn — zwei Stufen, eine Familie (Entscheidung 2026-09-11)
 
-- **Heute aktiv:** `qwen3-14b` (Revision gepinnt, Apache-2.0) — ansprechbar über den
-  OpenAI-kompatiblen Pfad des Brain-Workers (vLLM), Provider `runpod-local`.
+- **Heute aktiv:** zwei Qwen3-Modelle, beide `preload` und gleichzeitig resident
+  (30 + 9 GB < 48 GB Budget, kein LRU-Wechsel):
+  - `qwen3-4b` = **Ausführer** für `complexity: simple` (`RUNPOD_EXECUTOR_MODEL`)
+  - `qwen3-14b` = **Brain** für `moderate`/`complex` (`RUNPOD_BRAIN_MODEL`)
+
+  Beide über den nativen `task: "llm"`-Weg des Brain-Workers, Provider `runpod-local`.
+- **Warum gleiche Familie:** ein Chat-Template, ein Tool-Call-Format, ein Prompt-Pfad.
+  Weil beide resident bleiben, kostet der Stufenwechsel keinen LRU-Tausch — genau dafür
+  lädt der `warmup`-Job beide (verifiziert: 37,5 s / 12,3 s Ladezeit je Modell).
+- **Gemessen (2026-09-11, live):** `simple` 1,08 s / 22–23 tok/s, `complex` 1,40 s /
+  16,5–16,7 tok/s (je 21 Tokens, warm). Der Ausführer ist **~25 % schneller** — der
+  große Latenzhebel bleibt die Engine (vLLM), nicht die Modellzahl. Rohdaten:
+  `logs/runpod-brain-latency-20260911-012329.json`.
 - **Ziel (im Manifest als `status: "planned"`):** `qwen3-32b` (int4, ~20 GB, 32k Kontext)
-  bzw. `qwen3-30b-a3b` (MoE, 3B aktiv, Latenz-Variante).
+  bzw. `qwen3-30b-a3b` (MoE, 3B aktiv, Latenz-Variante) als Brain-Upgrade.
 - **Upgrade-Pfad:** `glm-4.5-air` (106B MoE/12B aktiv, int4 ~53 GB) auf **2×A6000
   (96 GB, `gpuCount=2`)** — stärkster bilingualer Agent, ~0,78 $/h.
 - `gpt-oss-120b` verworfen: Harmony-Parser-Aufwand, schwächeres Deutsch, 80 GB nötig.
-- **Planung bleibt bei einem Modell:** MCP ist die Werkzeug-Schnittstelle, MOA die
-  Planungsschleife (`McpRuntime`, `MoaAgent`) — „MCP/MOA als Gehirn“ ist kein Modell,
-  sondern das Harness um das Modell.
+- **Thinking:** Qwen3 gibt sonst zuerst einen `<think>`-Block aus und frisst das
+  Token-Budget. `qwen3_llm` schaltet es per Default ab (`enableThinking=false`).
 
 > **Warum nicht sofort 32B?** Ein Produktions-Pin braucht einen echten Commit-Hash.
 > Die 32B/GLM-Einträge sind deshalb `status: "planned"` und werden vom Runtime-Loader
@@ -155,11 +165,12 @@ den Indexierungsgrad abfragbar.
 |---|---|---|
 | 1 | Echte Revisions-Pins für `qwen3-32b`, `qwen3-30b-a3b`, `glm-4.5-air`, `mert-v1-95m`, `fish-speech`, `rvc` | offen (Manifest `status: "planned"`) |
 | 2 | **Benchmark-Gate Voice DE/EN + Gesang** (AuditEval/AuditScore + MOS) → fixiert das Voice-Modell | offen |
-| 3 | **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN; bei Durchfall → GLM-4.5-Air-Upgrade (2×A6000) | offen |
+| 3 | **Benchmark-Gate Brain**: 50–200 echte MCP-Aufgaben DE/EN (zwei Stufen live: `simple` 1,08 s / `complex` 1,40 s); bei Durchfall → GLM-4.5-Air-Upgrade (2×A6000) | offen |
 | 4 | **Batch-Indexer** für `sample_audio_embeddings` | offen |
 | 5 | **aiMONK-Agent-Loop**: mehrstufig planen → ausführen → prüfen → korrigieren, Kontext-Assembly (16 Plugin-IDs, `routing.json`, Session-/Projektzustand, Locks/RBAC), Bestätigungspflicht ab `WRITE` | offen |
 | 6 | Voice-Handler für `fish-speech`/`rvc`, BS-RoFormer-GPU-Verifikation | offen |
-| 7 | `PATCH /endpoints/{id}` (RunPod REST) gegen die echte API-Shape verifizieren | offen |
+| 7 | `PATCH /endpoints/{id}` (RunPod REST) gegen die echte API-Shape verifizieren | ✅ verifiziert (idleTimeout/workersMin wirken; `workersStandby=1` ist Flashboot, nicht GPU-billable) |
+| 8 | **CI-Deploy**: Repo-Secret `RP_API_KEY` gehört zu einem anderen/leeren Konto; `GHCR_PASSWORD` ist ein GHCR-untaugliches fine-grained PAT | offen (User-Schritt) |
 
 ---
 
@@ -190,6 +201,18 @@ Rollen-Smoke je Rolle grün (brain→`qwen3-14b`, ears→`ast-audioset`/`clap-mu
 voiceGen→`demucs`/`mms-tts-deu`/`qwen3-tts-06b`). Kosten der Inbetriebnahme inkl.
 Brain-Aktivierung **$0.052**; nach jedem Test alles auf `$0/h` abgeschaltet.
 Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
+
+### 8.2 Update 2026-09-11 — zwei Stufen live
+
+- Aktives Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@518cad6f` (Commit `518cad6`).
+  Der CI-`build` ist grün und pusht das Image; der `deploy`-Job ist rot, weil das Repo-Secret
+  `RP_API_KEY` zu einem **anderen, leeren RunPod-Konto** gehört (Root-Cause in
+  `RUN_PROTOKOLL.md` §14C) — deployt wird lokal via `scripts/runpod-deploy.py`.
+- Brain-Smoke live (`scripts/runpod-brain-latency.py`): Warmup lädt **beide** Modelle
+  (`qwen3-14b` 37,5 s, `qwen3-4b` 12,3 s), danach `simple` 1,08 s vs. `complex` 1,40 s.
+  Kosten $0,0372; Endzustand `$0/h`.
+- **Worker-Logs sind jetzt lesbar:** `runpodctl serverless logs <endpoint>` (v2.14.0) umgeht den
+  401-„worker api key" von `/v2/{id}/logs`. Damit sind CI-Build, vLLM und Warmup nicht mehr blind.
 
 ### 8.1 Lokales Brain ist aktiv (2026-09-10)
 
