@@ -22,7 +22,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { uploadSampleToR2 } from './cloud.ts';
 
-export type ArtifactStore = 'r2' | 'local';
+type ArtifactStore = 'r2' | 'local';
 
 export interface StoredArtifact {
   /** Objekt-Key (R2) bzw. flachgelegter Name (lokal). */
@@ -62,7 +62,7 @@ export function isSafeArtifactName(name: string): boolean {
 }
 
 /** Verzeichnis der lokalen Ablage (Default: Temp — bewusst nicht im Repo). */
-export function artifactDir(): string {
+function artifactDir(): string {
   const configured = (process.env.VISION_ARTIFACT_DIR || '').trim();
   return configured || path.join(os.tmpdir(), 'audiomonastry-vision');
 }
