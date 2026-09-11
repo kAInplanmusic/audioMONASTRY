@@ -53,6 +53,16 @@ Rollen-Manifests. `AI_ROLE` leer = Legacy-Single-Endpoint (alle Modelle, z. B. d
 bestehende H200-Endpoint `uzg7p9lm890ts8`) — der Cutover ist dadurch unterbrechungsfrei.
 
 ### 2.1 Gehirn — zwei Stufen, eine Familie (Entscheidung 2026-09-11)
+> **Produktiv seit 2026-09-11: vLLM.** Der Brain läuft auf dem vorgefertigten RunPod-vLLM-Worker
+> **v2.27.0 / vLLM 0.29.0** (`registry.runpod.net/runpod-workers-worker-vllm-main-dockerfile:76054c22c`)
+> mit **`Qwen/Qwen3-14B-AWQ`** (`QUANTIZATION=awq`, `MAX_MODEL_LEN=16384`), Template
+> `samplemonk-ai-brain-vllm-template` (`42pqqc06vb`). Gemessen warm: kurzer Tool-Call
+> **0,67–0,74 s** (~2× vs. transformers fp16), 400-Token-Output **58,6–59,1 tok/s** (~3,6×).
+> Der Brain ist damit **eine** Stufe — der 4B-Ausführer ist schneller überflüssig als nützlich
+> (vLLM-14B ~0,7 s < 4B auf transformers ~1,08 s).
+> Die folgende Zwei-Stufen-Beschreibung gilt für den **Fallback mit unserem eigenen Image**
+> (`RUNPOD_BRAIN_VLLM=0`). App-Seite: `RUNPOD_BRAIN_OPENAI_URL` (OpenAI-Pfad) +
+> `RUNPOD_BRAIN_MODEL=Qwen/Qwen3-14B-AWQ`.
 
 - **Heute aktiv:** zwei Qwen3-Modelle, beide `preload` und gleichzeitig resident
   (30 + 9 GB < 48 GB Budget, kein LRU-Wechsel):
@@ -171,6 +181,7 @@ den Indexierungsgrad abfragbar.
 | 6 | Voice-Handler für `fish-speech`/`rvc`, BS-RoFormer-GPU-Verifikation | offen |
 | 7 | `PATCH /endpoints/{id}` (RunPod REST) gegen die echte API-Shape verifizieren | ✅ verifiziert (idleTimeout/workersMin wirken; `workersStandby=1` ist Flashboot, nicht GPU-billable) |
 | 8 | **CI-Deploy**: Repo-Secret `RP_API_KEY` gehörte zu einem anderen/leeren Konto | ✅ DONE 2026-09-11 (build+deploy grün, Lauf `34552407251`; GHCR-Paket öffentlich → Registry-Auth optional) |
+| 9 | **vLLM-Brain** (`Qwen/Qwen3-14B-AWQ`, vLLM 0.29.0) live + integriert | ✅ DONE 2026-09-11 (kurz 0,67–0,74 s ≈2×, lang 58,6–59,1 tok/s ≈3,6×; Template `42pqqc06vb`, `RUNPOD_BRAIN_VLLM=0` = Fallback) |
 
 ---
 
@@ -214,6 +225,10 @@ Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
   Kosten $0,0372; Endzustand `$0/h`.
 - **Worker-Logs sind jetzt lesbar:** `runpodctl serverless logs <endpoint>` (v2.14.0) umgeht den
   401-„worker api key" von `/v2/{id}/logs`. Damit sind CI-Build, vLLM und Warmup nicht mehr blind.
+- **Brain = vLLM (2026-09-11):** `samplemonk-ai-brain` zeigt auf Template `42pqqc06vb`
+  (RunPod-vLLM-Worker v2.27.0, `Qwen/Qwen3-14B-AWQ`, `minCudaVersion=13.0`). Kaltstart (Image
+  flash-cached) Delay ~66 s + warme `executionTime` 775 ms. Der 4B-Ausführer entfällt; ears/voiceGen
+  bleiben auf unserem Image (`518cad6f`).
 
 ### 8.1 Lokales Brain ist aktiv (2026-09-10)
 

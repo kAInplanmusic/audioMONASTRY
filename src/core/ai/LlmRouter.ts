@@ -313,12 +313,17 @@ class RunPodLocalProvider implements ILlmProvider {
   }
 
   /**
-   * Modellwahl nach Komplexität (Entscheidung 2026-09-11, „zwei Stufen, eine
-   * Familie"): derselbe Brain-Worker hält `qwen3-4b` als schnellen Ausführer
-   * (latenzkritische `simple`-Aufgaben) und `qwen3-14b` als Brain
-   * (`moderate`/`complex`) – beide per Warmup resident, kein LRU-Wechsel.
+   * Modellwahl.
+   *
+   * - **vLLM-Brain** (`RUNPOD_BRAIN_OPENAI_URL` gesetzt): der vorgefertigte
+   *   RunPod-Worker serviert GENAU EIN Modell → beide Stufen nutzen es.
+   * - **Eigener Worker** (nativer `task: "llm"`-Weg): zwei Stufen derselben
+   *   Familie — `qwen3-4b` (Ausführer, `simple`) + `qwen3-14b` (`moderate`/`complex`).
    */
   private modelFor(complexity: LlmComplexity): string {
+    if (envKey('RUNPOD_BRAIN_OPENAI_URL')) {
+      return envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
+    }
     if (complexity === 'simple') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
@@ -343,6 +348,8 @@ class RunPodLocalProvider implements ILlmProvider {
           messages: [{ role: 'user', content: req.prompt }],
           max_tokens: req.maxTokens ?? 1024,
           temperature: req.temperature ?? 0.7,
+          // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block).
+          chat_template_kwargs: { enable_thinking: enableThinking },
         },
       );
       return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };

@@ -28,6 +28,13 @@ Betriebsarten:
 Optional:
   RUNPOD_NETWORK_VOLUME_ID, RUNPOD_WORKERS_MAX, RUNPOD_IDLE_TIMEOUT,
   RUNPOD_TEMPLATE_ID, GHCR_USERNAME/GHCR_PASSWORD
+
+Brain seit 2026-09-11: Die Rolle brain laeuft auf dem vorgefertigten RunPod-vLLM-Worker
+(Qwen3-14B-AWQ) statt auf unserem Image. Gemessen ~2x (kurze Calls) / ~3,6x (lange Outputs)
+gegenueber transformers. Steuerung:
+  RUNPOD_BRAIN_VLLM=0                    zurueck auf unser eigenes Brain-Image
+  RUNPOD_BRAIN_VLLM_IMAGE / _MODEL / _REVISION / _QUANTIZATION / _MAX_MODEL_LEN
+Der vLLM-Brain ist ein reiner LLM-Endpoint; ears/voiceGen bleiben auf unserem Image.
 """
 from __future__ import annotations
 
@@ -46,9 +53,22 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
 
 DOCKER_START_CMD = "python runpod_worker.py"
 
+#: Brain läuft seit 2026-09-11 auf dem vorgefertigten RunPod-vLLM-Worker
+#: (v2.27.0 / vLLM 0.29.0). Der Brain ist ein reiner LLM-Endpoint; Audio-Modelle
+#: bleiben auf ears/voiceGen. Gemessen: ~2x kurze Calls, ~3,6x lange Outputs.
+BRAIN_VLLM_IMAGE_DEFAULT = "registry.runpod.net/runpod-workers-worker-vllm-main-dockerfile:76054c22c"
+BRAIN_VLLM_MODEL_DEFAULT = "Qwen/Qwen3-14B-AWQ"
+BRAIN_VLLM_REVISION_DEFAULT = "31c69efc29464b6bb0aee1398b5a7b50a99340c3"
+
 
 def env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
+
+
+def brain_vllm_enabled() -> bool:
+    """Default AN (Entscheidung 2026-09-11); `RUNPOD_BRAIN_VLLM=0` schaltet zurück."""
+    raw = env("RUNPOD_BRAIN_VLLM").lower()
+    return raw not in ("0", "false", "no", "off")
 
 
 def build_env_vars(role: str) -> Dict[str, str]:
@@ -70,6 +90,20 @@ def build_env_vars(role: str) -> Dict[str, str]:
     return env_vars
 
 
+def build_env_vars_vllm() -> Dict[str, str]:
+    """Container-Env des RunPod-vLLM-Workers (OpenAI-kompatibler Brain)."""
+    env_vars = {
+        "MODEL_NAME": env("RUNPOD_BRAIN_VLLM_MODEL", BRAIN_VLLM_MODEL_DEFAULT),
+        "MODEL_REVISION": env("RUNPOD_BRAIN_VLLM_REVISION", BRAIN_VLLM_REVISION_DEFAULT),
+        "QUANTIZATION": env("RUNPOD_BRAIN_VLLM_QUANTIZATION", "awq"),
+        "MAX_MODEL_LEN": env("RUNPOD_BRAIN_VLLM_MAX_MODEL_LEN", "16384"),
+        "GPU_MEMORY_UTILIZATION": env("RUNPOD_BRAIN_VLLM_GPU_MEMORY_UTILIZATION", "0.90"),
+    }
+    if env("HF_TOKEN"):
+        env_vars["HF_TOKEN"] = env("HF_TOKEN")
+    return env_vars
+
+
 def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
     ghcr_user = env("GHCR_USERNAME")
     ghcr_pass = env("GHCR_PASSWORD") or env("GHCR_PAT_ALL_ACCESS")
@@ -83,7 +117,13 @@ def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
         return None
 
 
-def save_template(template_name: str, image: str, env_vars: Dict[str, str], container_disk_gb: int) -> Dict[str, Any]:
+def save_template(
+    template_name: str,
+    image: str,
+    env_vars: Dict[str, str],
+    container_disk_gb: int,
+    docker_args: str = DOCKER_START_CMD,
+) -> Dict[str, Any]:
     """Idempotentes Template-Handling (kein 'Template name must be unique')."""
     from runpod.api.graphql import run_graphql_query
 
@@ -98,7 +138,7 @@ def save_template(template_name: str, image: str, env_vars: Dict[str, str], cont
               {id_line}
               name: "{template_name}"
               imageName: "{image}"
-              dockerArgs: "{DOCKER_START_CMD}"
+              dockerArgs: "{docker_args}"
               containerDiskInGb: {container_disk_gb}
               volumeInGb: 0
               ports: ""
@@ -163,16 +203,26 @@ def deploy_role(role: str, image: str) -> Optional[str]:
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX") or defaults.get("workersMax", 1))
     idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT", "20"))
-    # Das Brain-Image enthält ~30 GB Gewichte → Container-Disk muss größer sein
-    # als das Image, sonst schlägt der Worker-Start fehl.
-    default_disk = "70" if role == "brain" else "30"
+    # Brain (vLLM) braucht mehr Plattenplatz (Image + ~10 GB AWQ-Gewichte).
+    default_disk = "150" if role == "brain" else "30"
     container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB", default_disk))
     template_name = f"{endpoint_name}-template"
 
-    registry_auth_id = ensure_registry_auth(endpoint_name)
-    env_vars = build_env_vars(role)
+    # Brain = gepflegter RunPod-vLLM-Worker (OpenAI-kompatibel, AWQ).
+    vllm_brain = role == "brain" and brain_vllm_enabled()
+    if vllm_brain:
+        image = env("RUNPOD_BRAIN_VLLM_IMAGE", BRAIN_VLLM_IMAGE_DEFAULT)
+        env_vars = build_env_vars_vllm()
+        template_name = "samplemonk-ai-brain-vllm-template"
+        registry_auth_id = None
+        docker_args = ""  # Image bringt seinen eigenen Entrypoint mit
+        print(f"[deploy] {endpoint_name}: vLLM-Worker ({env_vars['MODEL_NAME']}, {env_vars['QUANTIZATION']})")
+    else:
+        registry_auth_id = ensure_registry_auth(endpoint_name)
+        env_vars = build_env_vars(role)
+        docker_args = DOCKER_START_CMD
 
-    template = save_template(template_name, image, env_vars, container_disk_gb)
+    template = save_template(template_name, image, env_vars, container_disk_gb, docker_args)
     template_id = template.get("id", "")
     if not template_id:
         print(f"[deploy] FEHLER: Template-Erstellung lieferte keine ID für {endpoint_name}", file=sys.stderr)
@@ -242,9 +292,6 @@ def main() -> int:
     if not api_key:
         print("FEHLER: RP_API_KEY/RUNPOD_API_KEY fehlt", file=sys.stderr)
         return 2
-    if not image:
-        print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)", file=sys.stderr)
-        return 2
 
     runpod.api_key = api_key
 
@@ -260,6 +307,13 @@ def main() -> int:
         roles = [single_role]
     else:
         roles = list(ROLE_DEFAULTS)
+
+    # IMAGE nur nötig, wenn mindestens eine Rolle unser eigenes Image nutzt –
+    # der vLLM-Brain bringt sein eigenes mit.
+    needs_own_image = any(not (r == "brain" and brain_vllm_enabled()) for r in roles)
+    if needs_own_image and not image:
+        print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)", file=sys.stderr)
+        return 2
 
     print(f"[deploy] Rollen: {roles or ['(legacy)']}")
     results: Dict[str, str] = {}

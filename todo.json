@@ -167,9 +167,9 @@
       "id": "F-011",
       "severity": "P1",
       "claim": "Der vorgefertigte RunPod-vLLM-Worker kann unser Brain ersetzen (kein Custom-Image, AWQ, OpenAI-Pfad)",
-      "verdict": "NOT_VERIFIED",
-      "evidence": "Umgesetzt und getestet am 2026-09-10: Template mit runpod/worker-vllm:1.0.1-cuda12.1.0, MODEL_NAME=Qwen/Qwen3-14B-AWQ (9,99 GB), QUANTIZATION=awq, MAX_MODEL_LEN=16384; Brain-Endpoint per PATCH auf dieses Template umgestellt (templateId 42pqqc06vb). Dann 3 POSTs an /openai/v1/chat/completions mit 240-s-Client-Timeout: ALLE liefen in TimeoutError (t+240s, t+500s, t+761s). Endpoint-Health waehrenddessen: workers.running=1, jobs.inQueue=3, completed=10, failed=0 - ein Worker lief also, antwortete aber nicht. Ohne Zugriff auf die Worker-Logs ist die Ursache nicht unterscheidbar: (a) vLLM laedt noch, (b) das Image-Tag ist zu alt und bietet die OpenAI-Route nicht, (c) Env/Quantisierung passt nicht zu diesem Tag, (d) OPENAI_SERVED_MODEL_NAME_OVERRIDE passt nicht zum angefragten Modellnamen. | Nachtrag 2026-09-11: Der Log-Blocker ist gelöst – `runpodctl serverless logs <id>` (v2.14.0) liest die Worker-Logs des realen Kontos; damit ist die vLLM-Ursache künftig diagnostizierbar. Der vLLM-Versuch selbst wurde NICHT wiederholt (zwei Stufen laufen nativ über task=llm).",
-      "impact": "Der vielversprechendste Hebel (kein 30-GB-Build, 9 GB statt 29,5 GB, OpenAI-kompatibel) ist damit NICHT belegt. Der Endpoint wurde auf das bewaehrte eigene Image (templateId e4yzwic56u) zurueckgestellt und der OpenAI-Pfad in .env deaktiviert. Kosten des Versuchs: $0.156. Naechster sinnvoller Schritt: Rueckgabe der RunPod-Hub/Docker-Tag-Liste pruefen und einen Tag mit bekanntem Qwen3-Support waehlen, ODER die Worker-Logs einsehbar machen (Artefakt/Support), statt weiter zu raten."
+      "verdict": "FIXED_AND_VERIFIED_LIVE",
+      "evidence": "Umgesetzt und getestet am 2026-09-10: Template mit runpod/worker-vllm:1.0.1-cuda12.1.0, MODEL_NAME=Qwen/Qwen3-14B-AWQ (9,99 GB), QUANTIZATION=awq, MAX_MODEL_LEN=16384; Brain-Endpoint per PATCH auf dieses Template umgestellt (templateId 42pqqc06vb). Dann 3 POSTs an /openai/v1/chat/completions mit 240-s-Client-Timeout: ALLE liefen in TimeoutError (t+240s, t+500s, t+761s). Endpoint-Health waehrenddessen: workers.running=1, jobs.inQueue=3, completed=10, failed=0 - ein Worker lief also, antwortete aber nicht. Ohne Zugriff auf die Worker-Logs ist die Ursache nicht unterscheidbar: (a) vLLM laedt noch, (b) das Image-Tag ist zu alt und bietet die OpenAI-Route nicht, (c) Env/Quantisierung passt nicht zu diesem Tag, (d) OPENAI_SERVED_MODEL_NAME_OVERRIDE passt nicht zum angefragten Modellnamen. | Nachtrag 2026-09-11: Der Log-Blocker ist gelöst – `runpodctl serverless logs <id>` (v2.14.0) liest die Worker-Logs des realen Kontos; damit ist die vLLM-Ursache künftig diagnostizierbar. Der vLLM-Versuch selbst wurde NICHT wiederholt (zwei Stufen laufen nativ über task=llm). | GELOEST 2026-09-11: Ursache des Timeouts war das FALSCHE, veraltete Image — Docker Hub `runpod/worker-vllm` endet 2024. Der aktuelle Worker ist v2.27.0 (vLLM 0.29.0) auf RunPods Registry (`registry.runpod.net/runpod-workers-worker-vllm-main-dockerfile:76054c22c`). Live: Qwen/Qwen3-14B-AWQ@31c69efc, Lauf 2026-09-11 — kurzer Tool-Call exec 672-743 ms (transformers fp16: 1393-1438 ms, ~2x), langes Output 400 Tok 6767-6831 ms = 58,6-59,1 tok/s (transformers: 16,5 tok/s, ~3,6x); 400-Token-Call via OpenAI-Pfad 55,9 tok/s. Worker-Logs via runpodctl lesbar.",
+      "impact": "vLLM ist der Produktiv-Brain (RunPod-vLLM-Worker, AWQ int4). Gleiche Modellgewichte = gleiche Funktion/Stärken; AWQ kostet ~1-2 % Qualität. Der 4B-Ausführer wird damit überfluessig (vLLM-14B ~0,7 s < 4B-auf-transformers ~1,08 s) -> eine Stufe, keine zwei."
     },
     {
       "id": "F-012",
@@ -194,6 +194,14 @@
       "verdict": "MEASURED_AND_PARTIALLY_FALSIFIED",
       "evidence": "LIVE 2026-09-11, beide Modelle warm/resident, identischer 64-Token-Tool-Call (21 Tokens erzeugt): qwen3-4b executionTime 1081/1079 ms (22,1/23,1 tok/s), qwen3-14b 1438/1393 ms (16,5/16,7 tok/s). Der Ausführer ist ~25 % schneller, NICHT 5–10x – das war eine vLLM-Erwartung, kein transformers-fp16-Ergebnis. Beide Modelle bleiben gleichzeitig resident (kein LRU-Wechsel) und liefern korrektes Tool-Call-JSON. Rohdaten: logs/runpod-brain-latency-20260911-012329.json.",
       "impact": "Die Zwei-Stufen-Entscheidung ist umgesetzt und wirkt, aber der große Tempo-Hebel bleibt die Engine (vLLM). Ehrlich dokumentiert, damit die Erwartung nicht überzogen wird."
+    },
+    {
+      "id": "F-015",
+      "severity": "P1",
+      "claim": "Das Loeschen eines Hub-Testendpoints entfernt das Inline-Template, auf das ein anderer Endpoint zeigt",
+      "verdict": "CONFIRMED_AND_FIXED",
+      "evidence": "2026-09-11: Der Hub-Worker wurde testweise als eigener Endpoint (bzpfqamg49bh6x) mit Inline-Template sd09v6m9ap angelegt; der bestehende Brain-Endpoint wurde per REST-PATCH auf sd09v6m9ap umgehängt. Nach `serverless delete bzpfqamg49bh6x` fehlte sd09v6m9ap in der Template-Liste, der Brain zeigte ins Leere (nur ein noch warmer Worker hielt ihn am Leben).",
+      "impact": "Behoben mit einem BENANNTEN, wiederverwendbaren Template (`samplemonk-ai-brain-vllm-template`, 42pqqc06vb) und Support im Deploy-Skript (`brain_vllm_enabled()`, BRAIN_VLLM_*). Der Brain bleibt damit auch nach CI-Deploys auf vLLM."
     }
   ],
   "tasks": [
@@ -833,6 +841,48 @@
       "remainingRisks": [
         "Der Ausfuehrer ist nur ~25 % schneller (nicht 5-10x) - vLLM bleibt der offene Tempo-Hebel.",
         "Beide Modelle fp16 = 39 GB Ledger; real ~40 GB auf 48 GB Karte - bei OOM zuerst 4b quantisieren."
+      ]
+    },
+    {
+      "id": "AI-003",
+      "priority": "P1",
+      "status": "DONE",
+      "title": "Brain auf vLLM (Qwen3-14B-AWQ) umruesten — gemessen und integriert",
+      "files": [
+        "scripts/runpod-deploy.py",
+        "scripts/runpod-vllm-brain-test.py",
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        ".env.example",
+        "docs/RUNPOD_AI_V1_SPEC.md"
+      ],
+      "implementation": [
+        "Brain-Endpoint ppxo7wrn599p0q laeuft auf dem RunPod-vLLM-Worker v2.27.0 (vLLM 0.29.0), Modell Qwen/Qwen3-14B-AWQ@31c69efc, QUANTIZATION=awq, MAX_MODEL_LEN=16384.",
+        "Benanntes Template samplemonk-ai-brain-vllm-template (42pqqc06vb); Deploy-Skript deployt den Brain jetzt als vLLM (RUNPOD_BRAIN_VLLM=0 schaltet auf das eigene Image zurueck).",
+        "LlmRouter: OpenAI-Pfad sendet chat_template_kwargs={enable_thinking:false}; bei gesetztem RUNPOD_BRAIN_OPENAI_URL nutzen beide Komplexitaetsstufen das eine servierte Modell.",
+        "fleetWake: Brain-Warmup laeuft ueber den OpenAI-Pfad (task:warmup kennt der vLLM-Worker nicht).",
+        "Gemessen: kurz 0,67-0,74 s (~2x), lang 58,6-59,1 tok/s (~3,6x) vs. transformers fp16."
+      ],
+      "tests": [
+        "npx tsc --noEmit",
+        "npx eslint src/core/ai/LlmRouter.ts src/core/ai/orchestrator/fleetWake.ts --max-warnings=0",
+        "npx vitest run (1056/1056)",
+        "python3 scripts/runpod-vllm-brain-test.py (live)"
+      ],
+      "acceptanceCriteria": [
+        "vLLM-Brain antwortet warm mit korrektem Tool-Call-JSON",
+        "Kaltstart als Delay messbar (66 s nach Image-Cache), warme exec ~0,7 s",
+        "Deploy-Skript haelt den vLLM-Brain (kein Rueckfall auf das eigene Image)",
+        "Alles nach dem Test auf $0/h"
+      ],
+      "commands": [
+        "RUNPOD_ROLE=brain python scripts/runpod-deploy.py",
+        "RUNPOD_VLLM_ENDPOINT=<id> python3 scripts/runpod-vllm-brain-test.py"
+      ],
+      "remainingRisks": [
+        "AWQ int4 kostet ~1-2 % Qualitaet gegenueber fp16 (gleiche Gewichte, quantisiert).",
+        "Der vLLM-Worker bedient nur LLMs; ears/voiceGen bleiben auf unserem Image.",
+        "Der OpenAI-Pfad lief im Test einmal in einen Timeout und brauchte einen Retry (Kaltstart)."
       ]
     }
   ],

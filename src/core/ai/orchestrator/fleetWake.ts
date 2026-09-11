@@ -113,7 +113,7 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: env('RUNPOD_BRAIN_MODEL') || 'qwen3-14b-awq',
+        model: env('RUNPOD_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ',
         messages: [{ role: 'user', content: 'ok' }],
         max_tokens: 1,
         temperature: 0,
