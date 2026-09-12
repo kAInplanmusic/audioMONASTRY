@@ -8,6 +8,8 @@
  * Kommando-Steuerung ("Tempo 128", "Plugin X User2 zuweisen", ...).
  */
 import { RuleBasedSpeechToIntent, type VoiceIntent, type ISpeechToIntent } from './SpeechToIntent';
+import { AiAgentLoop } from '../ai/agentLoop';
+import { moaAgent, type MoaRunOptions, type MoaRunResult } from '../ai/MoaAgent';
 
 interface VoiceCommandContext {
   userId: string;
@@ -67,9 +69,36 @@ export class VoiceControlService {
   private commands: VoiceCommandRegistration[] = [];
   private pluginCommands: PluginCommandRegistration[] = [];
   private parser: ISpeechToIntent;
+  private agentLoop: AiAgentLoop;
 
-  constructor(parser: ISpeechToIntent = new RuleBasedSpeechToIntent()) {
+  constructor(parser: ISpeechToIntent = new RuleBasedSpeechToIntent(), agentLoop: AiAgentLoop = new AiAgentLoop(moaAgent)) {
     this.parser = parser;
+    this.agentLoop = agentLoop;
+  }
+
+  /**
+   * Mehrstufiger Agent-Loop (AI-P1-003 P5): freie Aufgabe in Plugin-Schritte
+   * zerlegen, mit WRITE-Bestätigung ausführen, prüfen und korrigieren.
+   * Der Executor ist dieser Service; Kontext (routing.json/Session-Zustand)
+   * reicht der Aufrufer herein.
+   */
+  async runAgentTask(
+    userId: string,
+    task: string,
+    opts: {
+      routing?: unknown;
+      sessionState?: unknown;
+      confirmWrite?: MoaRunOptions['confirmWrite'];
+      maxCorrections?: number;
+    } = {},
+  ): Promise<MoaRunResult> {
+    return this.agentLoop.runTask(task, {
+      userId,
+      routing: opts.routing,
+      sessionState: opts.sessionState,
+      confirmWrite: opts.confirmWrite,
+      maxCorrections: opts.maxCorrections,
+    });
   }
 
   /** Registriert einen Befehl für ein Plugin (z.B. 'fx', 'mcp', 'mixer'). */
