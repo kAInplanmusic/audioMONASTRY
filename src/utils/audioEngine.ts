@@ -32,6 +32,7 @@ import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/
 import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
+import { MusicBufferCache } from '../audio/musicBufferCache';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -176,7 +177,10 @@ class AudioEngine {
   /** Einzelner, wiederverwendeter Preview-Player (kein Leak bei schnellem Klicken). */
   private previewPlayer: Tone.Player | null = null;
   private previewUrl: string | null = null;
-  private musicBufferCache = new Map<string, Tone.ToneAudioBuffer>();
+  // AUDIO-P1-002: Decode-Cache in eigener Fassade (Tone-Erzeugung injiziert).
+  private readonly musicBuffers = new MusicBufferCache<Tone.ToneAudioBuffer>({
+    create: (url, onload, onerror) => { const _b = new Tone.ToneAudioBuffer(url, onload, onerror); void _b; },
+  });
   private trackSampleUrl: Record<TrackType, string | null> = {
     channel1: null, channel2: null, channel3: null, channel4: null,
     channel5: null, channel6: null, channel7: null, channel8: null,
@@ -2423,14 +2427,7 @@ class AudioEngine {
 
   /** WF-2: Lädt/decodiert eine Musik-URL genau einmal und cached den Buffer. */
   private async getMusicBuffer(url: string): Promise<Tone.ToneAudioBuffer> {
-    const cached = this.musicBufferCache.get(url);
-    if (cached) return cached;
-    const buffer = await new Promise<Tone.ToneAudioBuffer>((resolve, reject) => {
-      // Konstruktor-Callbacks: onload -> resolve, onerror -> reject.
-      const b = new Tone.ToneAudioBuffer(url, () => resolve(b), (e) => reject(e ?? new Error(`Audio-Decode fehlgeschlagen: ${url}`)));
-    });
-    this.musicBufferCache.set(url, buffer);
-    return buffer;
+    return this.musicBuffers.get(url);
   }
 
   public async loadTrackSample(track: TrackType, url: string | null) {
