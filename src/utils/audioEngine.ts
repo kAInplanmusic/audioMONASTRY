@@ -5,7 +5,7 @@ import { TrackType, MUSIC_SCALES } from '../types';
 
 
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
-import { getPatch, InstrumentPatch } from '../data/instrumentSynths';
+import { getPatch } from '../data/instrumentSynths';
 import { InstrumentNoteBridge, instrumentPatches, toPitchDef as toPitchDefImpl } from '../audio/instrumentNoteBridge';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
 import type {
@@ -34,6 +34,7 @@ import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
 import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
+import { InstrumentSynth } from '../audio/instrumentSynth';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -1587,7 +1588,7 @@ class AudioEngine {
     this.stop();
 
     // Fallback-Instrument + Preview-Player entsorgen (Leak-Schutz).
-    this.disposeInstrumentSynth();
+    this.instrumentSynth.dispose();
     this.samplePreview.reset();
 
     // Sample-Player-Zustand zurücksetzen.
@@ -1658,21 +1659,21 @@ class AudioEngine {
     this.initialized = false;
   }
 
-  // #14: Physikalischer Instrument-Synthesizer (additive Synthese).
-  private instrumentOscs: Tone.Oscillator[] = [];
-  private instrumentPartialRatios: number[] = [];
-  private instrumentNoise: Tone.Noise | null = null;
-  private instrumentVibrato: Tone.Oscillator | null = null;
-  private instrumentFilter: Tone.Filter | null = null;
-  private instrumentEnvOut: Tone.Gain | null = null;
+  // #14: Physikalischer Instrument-Synthesizer (AUDIO-P1-002: eigene Fassade).
+  private readonly instrumentSynth = new InstrumentSynth({
+    ensureChannelNode: (track) => this.ensureChannelNode(track),
+    getChannelInput: (track) => (this.channelInputs[track] as unknown as AudioNode | undefined) ?? null,
+    getMasterBus: () => (this.masterBuses['GLOBAL_MASTER'] as unknown as AudioNode | undefined) ?? null,
+    getCurrentTime: () => this.ctx?.currentTime ?? 0,
+  });
 
   /** Lädt ein Instrument (Patch) und baut den additiven Synthesizer neu auf. */
   public async loadInstrument(instrumentId: number) {
     this.ensureInitialized();
     const patch = getPatch(instrumentId);
-    this.disposeInstrumentSynth();
+    this.instrumentSynth.dispose();
     if (!patch) return;
-    await this.buildInstrumentSynth(patch);
+    await this.instrumentSynth.build(patch);
   }
 
   public getInstrumentPatches() {
@@ -1681,28 +1682,13 @@ class AudioEngine {
 
   /** Spielt eine Note am aktuellen Instrument-Synth (MIDI o. Name wie 'A4'). */
   public instrumentNote(note: string | number) {
-    if (this.instrumentOscs.length === 0) return;
-    const freq = typeof note === 'number'
-      ? Tone.Frequency(note, 'midi').toFrequency()
-      : Tone.Frequency(note).toFrequency();
-    const t = this.ctx?.currentTime ?? 0;
-    // Additive Synthese: jede Partial-Oszillator-Frequenz = Grundfrequenz * ratio.
-    this.instrumentOscs.forEach((osc, i) => {
-      const ratio = this.instrumentPartialRatios[i] ?? 1;
-      try { osc.frequency.setValueAtTime(freq * ratio, t); } catch { /* ignore */ }
-    });
-    // Envelope/Gain anheben (trigger).
-    this.instrumentEnvOut?.gain.cancelScheduledValues(t);
-    try { this.instrumentEnvOut?.gain.setValueAtTime(0.0001, t); } catch { /* ignore */ }
-    try { this.instrumentEnvOut?.gain.exponentialRampToValueAtTime(1, t + 0.01); } catch { /* ignore */ }
+    this.instrumentSynth.noteOn(note);
   }
 
   public instrumentRelease(time?: number) {
     // Worklet-Pfad: Note freigeben (ADSR-Release im Audio-Thread).
     this.itSynthNode?.port.postMessage({ type: 'noteOff', fast: false });
-    const t = time ?? this.ctx?.currentTime ?? 0;
-    this.instrumentEnvOut?.gain.cancelScheduledValues(t);
-    this.instrumentEnvOut?.gain.setTargetAtTime(0.0001, t, 0.15);
+    this.instrumentSynth.release(time);
   }
 
   /** Harte Note-Aus (alle Stimmen) – für Umschalten/Stop. */
@@ -2117,89 +2103,6 @@ class AudioEngine {
     }
   }
 
-  private async buildInstrumentSynth(patch: InstrumentPatch) {
-    try {
-      const vol = new Tone.Gain(0);
-      // F1: Instrument-Stimmen über den Kanalzug (channel4) führen.
-      this.ensureChannelNode('channel4');
-      vol.connect(this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER']);
-
-      const [a, d, s, r] = patch.env;
-      const baseEnv = new Tone.AmplitudeEnvelope(a, d, s, r).connect(vol);
-
-      // Additive Obertöne (Sinus je Partial) mit Anblas-/Anschlag-Kurve.
-      const partialNodes: Tone.Oscillator[] = [];
-      const ratios: number[] = [];
-      patch.partials.forEach((p, _i) => {
-        // Bei eingebauten Oszillator-Wellen ist die Teilwelle genug;
-        // multi-sample-Pattials werden als Detune-Spread additiv gemischt.
-        const osc = new Tone.Oscillator(patch.osc);
-        osc.frequency.value = 220; // Platzhalter; wird in instrumentNote präzise gesetzt.
-        const g = new Tone.Gain(p.amp / Math.max(1, patch.partials.length));
-        osc.connect(g);
-        g.connect(baseEnv);
-        osc.start();
-        partialNodes.push(osc);
-        ratios.push(p.ratio);
-      });
-
-      // Filter (Resonanz nach Bauart) – Q wird separat am Filter gesetzt
-      // (Tone.Filter: drittes Argument ist der Rolloff, nicht die Resonanz-Q).
-      const filt = new Tone.Filter(patch.filterFreq, patch.filterType, -12);
-      try { (filt as any).Q.value = patch.filterQ; } catch { /* Q ggf. nicht verfügbar */ }
-      baseEnv.disconnect(vol);
-      baseEnv.connect(filt);
-      filt.connect(vol);
-
-      // Vibrato: LFO moduliert die Detune aller akustischen Oszillatoren
-      // (physiologisch korrekt – Frequenz-Vibrato statt purer Lautheits-Tremolo).
-      if (patch.vibratoAmt > 0.01) {
-        const lfoOsc = new Tone.Oscillator(patch.vibratoHz, 'sine');
-        const lfoGain = new Tone.Gain(patch.vibratoAmt * 80); // Detune in Cents
-        lfoOsc.connect(lfoGain);
-        partialNodes.forEach((o) => lfoGain.connect((o as any).detune));
-        lfoOsc.start();
-        this.instrumentVibrato = lfoOsc;
-      }
-
-      // Anblas-NOISE für Bläser/Reibung (hochpassgefiltert)
-      if (patch.noise > 0.03) {
-        const noise = new Tone.Noise('white');
-        const noiseEnv = new Tone.AmplitudeEnvelope(a * 0.5, d, s * 0.4, r);
-        const hp = new Tone.Filter(patch.filterFreq * 0.6, 'highpass');
-        noise.chain(hp, noiseEnv, vol);
-        noise.start();
-        this.instrumentNoise = noise;
-      }
-
-      this.instrumentOscs = partialNodes;
-      this.instrumentPartialRatios = ratios;
-      this.instrumentFilter = filt;
-      this.instrumentEnvOut = vol;
-
-      // Basis-Envelope wird beim Note-On getriggert; hier als stabile baseline.
-      vol.gain.value = 0.0001;
-    } catch (e) {
-      console.warn('Instrument-Synth nicht aufgebaut:', e);
-      this.disposeInstrumentSynth();
-    }
-  }
-
-  private disposeInstrumentSynth() {
-    this.instrumentOscs.forEach((o) => { try { o.stop(); o.disconnect(); } catch { /* ignore */ } });
-    this.instrumentNoise?.stop();
-    this.instrumentNoise?.disconnect();
-    this.instrumentVibrato?.stop?.();
-    this.instrumentVibrato?.disconnect?.();
-    this.instrumentFilter?.disconnect();
-    this.instrumentEnvOut?.disconnect();
-    this.instrumentOscs = [];
-    this.instrumentPartialRatios = [];
-    this.instrumentNoise = null;
-    this.instrumentVibrato = null;
-    this.instrumentFilter = null;
-    this.instrumentEnvOut = null;
-  }
 
   /**
    * Spielt ein Synthese-Instrument aus dem erweiterten Katalog (`instrumentMONK`):
@@ -2233,7 +2136,7 @@ class AudioEngine {
     // --- Fallback: Tone.js-Ketten (nur, wenn Worklet nicht verfügbar) ---
     // Vorherige Fallback-Stimme zuerst entsorgen – sonst leaken Oszillatoren/
     // Filter/Envelopes pro Note (GC-Pausen im Dauerbetrieb).
-    this.disposeInstrumentSynth();
+    this.instrumentSynth.dispose();
     const freq = typeof note === 'number'
       ? Tone.Frequency(note, 'midi').toFrequency()
       : Tone.Frequency(note).toFrequency();
@@ -2257,9 +2160,7 @@ class AudioEngine {
           env.triggerAttackRelease(0.5, t);
           osc.start(t);
           osc.stop(t + d.attack + 0.5 + d.release + 0.1);
-          this.instrumentOscs = [osc];
-          this.instrumentFilter = filt;
-          this.instrumentEnvOut = new Tone.Gain(1);
+          this.instrumentSynth.adopt({ oscs: [osc], filter: filt, envOut: new Tone.Gain(1) });
           break;
         }
         case 'fm': {
@@ -2277,8 +2178,7 @@ class AudioEngine {
           modulator.start(t); carrier.start(t);
           const stop = t + d.attack + 0.5 + d.release + 0.1;
           modulator.stop(stop); carrier.stop(stop);
-          this.instrumentOscs = [carrier, modulator];
-          this.instrumentFilter = filt;
+          this.instrumentSynth.adopt({ oscs: [carrier, modulator], filter: filt });
           break;
         }
         case 'drum': {
@@ -2294,8 +2194,7 @@ class AudioEngine {
             env.gain.exponentialRampToValueAtTime(0.001, t + (d.decay ?? 0.2));
             noise.start(t);
             noise.stop(t + (d.decay ?? 0.2) + 0.05);
-            this.instrumentNoise = noise;
-            this.instrumentFilter = filt;
+            this.instrumentSynth.adopt({ noise, filter: filt });
           } else {
             const osc = new Tone.Oscillator(freq * 0.5, 'sine');
             const startF = (d.freqStart ?? 150) + (freq > 200 ? freq * 0.5 : 0);
@@ -2308,7 +2207,7 @@ class AudioEngine {
             env.gain.exponentialRampToValueAtTime(0.001, t + (d.decay ?? 0.3));
             osc.connect(env);
             osc.start(t); osc.stop(t + (d.decay ?? 0.3) + 0.05);
-            this.instrumentOscs = [osc];
+            this.instrumentSynth.adopt({ oscs: [osc] });
           }
           break;
         }
@@ -2334,7 +2233,7 @@ class AudioEngine {
             lfo.start(t);
             const stopT = t + d.attack + 0.5 + d.release + 0.1;
             lfo.stop(stopT);
-            this.instrumentVibrato = lfo;
+            this.instrumentSynth.adopt({ vibrato: lfo });
           }
           osc.start(t);
           osc.stop(t + d.attack + 0.5 + d.release + 0.1);
@@ -2342,9 +2241,7 @@ class AudioEngine {
           out.gain.setValueAtTime(0.0001, t);
           out.gain.exponentialRampToValueAtTime(velocity * 0.5, t + Math.max(0.01, d.attack));
           out.gain.exponentialRampToValueAtTime(0.0001, t + d.attack + 0.5 + d.release);
-          this.instrumentOscs = [osc];
-          this.instrumentFilter = filt;
-          this.instrumentEnvOut = out;
+          this.instrumentSynth.adopt({ oscs: [osc], filter: filt, envOut: out });
           break;
         }
         default: {
@@ -2363,15 +2260,13 @@ class AudioEngine {
             partialNodes.push(o);
             ratios.push(p.ratio || 1);
           });
-          this.instrumentOscs = partialNodes;
-          this.instrumentPartialRatios = ratios;
-          this.instrumentEnvOut = out;
+          this.instrumentSynth.adopt({ oscs: partialNodes, partialRatios: ratios, envOut: out });
           break;
         }
       }
     } catch (e) {
       console.warn('playSynthesisInstrument fehlgeschlagen:', e);
-      this.disposeInstrumentSynth();
+      this.instrumentSynth.dispose();
     }
   }
 
