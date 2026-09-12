@@ -17,6 +17,14 @@ Verwendung:
 
 Ausgabe:
   logs/runpod-smoke-<timestamp>.json   (finaler Job-Status inkl. Ergebnis)
+
+Exit-Codes:
+  0 = Job COMPLETED und Output ohne Fehlermeldung
+  2 = Aufruffehler (Key/Endpoint fehlt, unbekannte Rolle)
+  3 = runsync fehlgeschlagen
+  4 = Endzustand nicht COMPLETED
+  5 = Job COMPLETED, aber der Worker meldet im Output einen Fehler
+      (z. B. {"code": "MODEL_UNAVAILABLE", "status": "error"})
 """
 from __future__ import annotations
 
@@ -160,6 +168,19 @@ def main() -> int:
         output = final.get("output")
         print("[smoke] COMPLETED ✓")
         print(json.dumps(output, indent=2, ensure_ascii=False)[:1500])
+        # Ein COMPLETED-Job kann einen Fehler IM Output tragen. Live belegt
+        # (2026-09-12, voice/qwen3-tts-06b): der Worker liefert Job-Status
+        # COMPLETED, waehrend die Nutzlast {"code": "MODEL_UNAVAILABLE",
+        # "status": "error"} meldet und kein Audio enthaelt. Ohne diese
+        # Pruefung meldet der Smoke einen kaputten Pfad als Erfolg.
+        if isinstance(output, dict):
+            worker_status = str(output.get("status", "")).lower()
+            worker_code = output.get("code")
+            if worker_status == "error" or worker_code:
+                print(f"[smoke] FEHLER im Output trotz COMPLETED: "
+                      f"{worker_code or worker_status} "
+                      f"({output.get('message', '')})", file=sys.stderr)
+                return 5
         return 0
     print(f"[smoke] Endzustand: {status}", file=sys.stderr)
     return 4

@@ -121,6 +121,11 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
         messages: [{ role: 'user', content: 'ok' }],
         max_tokens: 1,
         temperature: 0,
+        // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block) –
+        // konsistent mit `LlmRouter.ts`. Ohne dieses Feld liefert der rohe
+        // vLLM-OpenAI-Pfad Reasoning-Tokens trotz max_tokens:1 (live belegt
+        // 2026-09-12: Antwort begann mit "<think>Okay, the user is asking…").
+        chat_template_kwargs: { enable_thinking: false },
       }),
       signal: signal ?? AbortSignal.timeout(Number(env('RUNPOD_WARMUP_TIMEOUT_MS') || 900_000)),
     });

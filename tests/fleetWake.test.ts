@@ -17,6 +17,9 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_VOICE',
   'RUNPOD_ENDPOINT_ID_VISION',
   'RUNPOD_ENDPOINT_ID_VIDEO',
+  // Der Brain-Warmup nimmt bei gesetzter URL den OpenAI-Pfad statt `warmup`.
+  'RUNPOD_BRAIN_OPENAI_URL',
+  'RUNPOD_BRAIN_MODEL',
   'AI_FLEET_WAKE',
   'AI_FLEET_SLEEP',
 ] as const;
@@ -99,6 +102,25 @@ describe('GPU-Flotten Session-Wake', () => {
       'https://api.runpod.ai/v2/voice-ep/run',
     ]);
     expect((runs[0].body as { input: { task: string } }).input.task).toBe('warmup');
+  });
+
+  it('schaltet beim Brain-Warmup über den OpenAI-Pfad das Reasoning ab', async () => {
+    configureFleet();
+    process.env.RUNPOD_BRAIN_OPENAI_URL = 'https://api.runpod.ai/v2/brain-ep/openai/v1';
+    mockFetch();
+
+    const report = await wakeFleet();
+
+    expect(report.roles.find((r) => r.role === 'brain')?.warmup?.ok).toBe(true);
+    const chat = calls.find((c) => c.url.endsWith('/chat/completions'));
+    expect(chat?.method).toBe('POST');
+    // Ohne dieses Feld liefert der rohe vLLM-OpenAI-Pfad Reasoning-Tokens
+    // (live belegt 2026-09-12: Antwort begann mit "<think>") – das Muster ist
+    // mit `LlmRouter.ts` identisch.
+    expect((chat?.body as { chat_template_kwargs?: unknown }).chat_template_kwargs)
+      .toEqual({ enable_thinking: false });
+    // Der Warmup bleibt minimal.
+    expect((chat?.body as { max_tokens: number }).max_tokens).toBe(1);
   });
 
   it('meldet nicht konfigurierte Rollen, ohne Netzwerk zu benutzen', async () => {
