@@ -138,6 +138,10 @@ jobs:
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import handlers; print('llm' in handlers.HANDLERS, sorted(handlers.HANDLERS))"
 
+      - name: Probe 8b – demucs importierbar (Stem-Separation)
+        continue-on-error: true
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import demucs; print('demucs ok')"
+
       # ---------------------------------------------------------------------
       # GATE (bewusst OHNE continue-on-error): torch >= 2.6 ist Pflicht.
       # `torch.load` verweigert darunter das Laden von Pickle-Checkpoints, und

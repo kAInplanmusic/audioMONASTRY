@@ -14,3 +14,10 @@ accelerate==1.12.0
 # transformers 4.57.3 verlangt huggingface-hub<1 – hier explizit mitpinnen,
 # damit der Voice-/Audio-Stack den Pin nicht wieder auf 1.x hebt.
 huggingface-hub>=0.34.0,<1.0
+
+# Stem-Separation (biblioMONK #11): demucs ist der aktuell einzige 4-Stem-Pfad
+# der Flotte. bs-roformer ist im Handler bewusst als Stub markiert ("Checkpoint/
+# audiosep-API muss auf dem Pod verifiziert werden"). Ohne dieses Paket meldet
+# der Worker "No module named 'demucs'" und der Stem-Pfad ist tot (live belegt
+# 2026-09-12).
+demucs
