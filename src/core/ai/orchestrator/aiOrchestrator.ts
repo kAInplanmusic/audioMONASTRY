@@ -104,7 +104,7 @@ export class AiOrchestrator {
   /** Haupt-Einstieg: AI-Request mit Job-Dedup, Concurrency und Provider-Routing. */
   async orchestrate(req: OrchestrateRequest): Promise<OrchestrateResult> {
     const sessionId = req.sessionId ?? this.sessions.get().sessionId;
-    const job = this.jobs.create(sessionId, req.userId, req.task, req.model, 'hf-endpoint', req.input);
+    const job = this.jobs.create(sessionId, req.userId, req.task, req.model, 'runpod', req.input);
     if (job.status !== 'QUEUED') {
       // Deduplizierter Job – auf Abschluss warten (SingleFlight).
       return this.waitForJob(job.jobId);

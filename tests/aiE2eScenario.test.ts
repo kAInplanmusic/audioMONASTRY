@@ -13,7 +13,7 @@ import { JobManager } from '../src/core/ai/orchestrator/jobManager';
 import { ModelManager, type EndpointClient } from '../src/core/ai/orchestrator/modelManager';
 import { listModels } from '../src/core/ai/orchestrator/modelRegistry';
 import { SessionManager } from '../src/core/ai/orchestrator/sessionManager';
-import { HfEndpointProvider } from '../src/core/ai/orchestrator/providerRouter';
+import { AiProviderError, type IAiProvider } from '../src/core/ai/orchestrator/types';
 
 function fakeEndpoint(): EndpointClient & { calls: string[] } {
   const calls: string[] = [];
@@ -98,12 +98,29 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
     session.transition('ACTIVE');
 
     // --- 4. Request: Job anlegen und über den Endpoint ausführen ----------
-    const job = jobs.create('ai-e2e', 'user-1', 'audio.transcribe', 'whisper-large-v3', 'hf-endpoint', { audioDataUri: 'data:audio/wav;base64,AA' });
+    const job = jobs.create('ai-e2e', 'user-1', 'audio.transcribe', 'whisper-large-v3', 'runpod-ears', { audioDataUri: 'data:audio/wav;base64,AA' });
     jobs.start(job.jobId);
     jobs.markRunning(job.jobId);
     session.jobStarted('whisper-large-v3');
 
-    const provider = new HfEndpointProvider();
+    // Nach dem Cutover: der RunPod-Rollen-Provider hat dieselbe Wake-Semantik
+    // (Scale-to-Zero liefert 503, bis der Worker bereit ist).
+    const provider: IAiProvider = {
+      id: 'runpod-ears',
+      get available() { return true; },
+      canRun: () => true,
+      estimateCostUsd: () => 0.01,
+      async run(_task, _model, _input) {
+        let resp = await fetch('https://endpoint.test/infer', { method: 'POST' });
+        if (resp.status === 503) {
+          await new Promise((r) => setTimeout(r, 2000));
+          resp = await fetch('https://endpoint.test/infer', { method: 'POST' });
+        }
+        if (!resp.ok) throw new AiProviderError('runpod-ears', `HTTP_${resp.status}`, 'Endpoint kaputt', true);
+        const data = (await resp.json()) as { result?: unknown };
+        return data.result;
+      },
+    };
     const runPromise = provider.run('audio.transcribe', 'whisper-large-v3', { audioDataUri: 'data:audio/wav;base64,AA' });
     // Cold-Start-Backoff (2 s) überspringen.
     await vi.advanceTimersByTimeAsync(3000);

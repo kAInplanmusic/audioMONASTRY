@@ -40,16 +40,17 @@ beforeAll(async () => {
   hfMock = http.createServer((req, res) => {
     if (req.url?.startsWith('/health')) return json(res, 200, { status: 'ok' });
     if (req.url?.startsWith('/ready')) return json(res, 200, { status: 'ready' });
-    if (req.url?.startsWith('/infer')) {
+    if (req.url?.includes('/runsync')) {
       let raw = '';
       req.on('data', (c) => { raw += c; });
       req.on('end', () => {
         try {
-          const body = JSON.parse(raw) as { task?: string; model?: string };
-          if (body.task === 'audio.transcribe') return json(res, 200, { status: 'success', result: { text: 'test transcription' } });
-          if (body.task === 'audio.embed') return json(res, 200, { status: 'success', result: { embedding: [0.1, 0.2], dim: 2 } });
-          if (body.task === 'audio.generate') return json(res, 200, { status: 'success', result: { audioBase64: 'UklGRg==', sampleRate: 32000 } });
-          return json(res, 200, { status: 'success', result: { labels: ['Music'], scores: [0.9] } });
+          const body = JSON.parse(raw) as { input?: { task?: string } };
+          const task = body.input?.task ?? '';
+          if (task === 'audio.transcribe') return json(res, 200, { status: 'COMPLETED', output: { text: 'test transcription' } });
+          if (task === 'audio.embed') return json(res, 200, { status: 'COMPLETED', output: { embedding: [0.1, 0.2], dim: 2 } });
+          if (task === 'audio.generate') return json(res, 200, { status: 'COMPLETED', output: { audioBase64: 'UklGRg==', sampleRate: 32000 } });
+          return json(res, 200, { status: 'COMPLETED', output: { labels: ['Music'], scores: [0.9] } });
         } catch {
           return json(res, 422, { detail: 'bad json' });
         }
@@ -61,8 +62,11 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => hfMock.listen(0, '127.0.0.1', resolve));
   const hfAddr = hfMock.address() as AddressInfo;
   hfBase = `http://127.0.0.1:${hfAddr.port}`;
-  process.env.HF_ENDPOINT_URL = hfBase;
-  process.env.HF_TOKEN = 'test-token';
+  process.env.RUNPOD_API_BASE = hfBase;
+  process.env.RUNPOD_ENDPOINT_ID_EARS = 'ears-ep';
+  process.env.RUNPOD_ENDPOINT_ID_VOICE = 'voice-ep';
+  process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
+  process.env.RUNPOD_API_KEY = 'test-key';
   process.env.AI_TIMEOUT_MS = '5000';
 
   const mod = await import('../server');
@@ -86,7 +90,7 @@ describe('/api/ai/*-Routen (Integration)', () => {
     expect(res.status).toBe(422);
   });
 
-  it('POST /api/ai/orchestrate führt audio.transcribe über HF-Endpoint aus', async () => {
+  it('POST /api/ai/orchestrate führt audio.transcribe über die RunPod-Rolle ears aus', async () => {
     const res = await fetch(`${baseUrl}/api/ai/orchestrate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

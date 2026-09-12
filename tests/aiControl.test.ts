@@ -91,18 +91,6 @@ describe('LlmRouter Provider (gemocktes fetch)', () => {
     expect(completion.text).toBe('deepseek ok');
   });
 
-  it('hf-provider liefert JSON-Fallback-Text', async () => {
-    process.env.HF_API_KEY = 'test-key';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
-      JSON.stringify([{ generated_text: 'hf ok' }]),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    )));
-    const router = new LlmRouter();
-    const completion = await router.complete({ prompt: 'Hi', complexity: 'simple' });
-    expect(completion.provider).toBe('hf');
-    expect(completion.text).toContain('hf ok');
-  });
-
   it('plan() bevorzugt DeepSeek-Flash als MOA/MCP-Planer', async () => {
     process.env.DEEPSEEK_API_KEY = 'test-key';
     vi.stubGlobal('fetch', vi.fn(async () => new Response(

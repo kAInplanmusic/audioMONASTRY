@@ -31,10 +31,6 @@ export type AiTask =
  * eigenem VRAM-Budget und disjunkter Task-Menge.
  */
 export type AiProviderId =
-  | 'hf-standard-endpoint'
-  | 'hf-endpoint'
-  | 'hf-serverless'
-  | 'replicate'
   | 'runpod'
   | 'runpod-brain'
   | 'runpod-ears'

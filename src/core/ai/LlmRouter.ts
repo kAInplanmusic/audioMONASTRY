@@ -158,55 +158,6 @@ class OpenAiCompatibleProvider implements ILlmProvider {
   }
 }
 
-class HfProvider implements ILlmProvider {
-  readonly id = 'hf' as const;
-  get available(): boolean { return Boolean(envKey('HF_API_KEY')); }
-
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const model = envKey('HF_LLM_MODEL') || DEFAULT_MODELS.hf;
-    // HF Inference Providers: OpenAI-kompatibler Router (api-inference.huggingface.co
-    // ist veraltet und löst in manchen Netzen nicht mehr auf).
-    const resp = await postJson(
-      'https://router.huggingface.co/v1/chat/completions',
-      { Authorization: `Bearer ${envKey('HF_API_KEY')}` },
-      {
-        model,
-        messages: [{ role: 'user', content: req.prompt }],
-        max_tokens: req.maxTokens ?? 256,
-        temperature: req.temperature ?? 0.7,
-      },
-    );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
-  }
-}
-
-/** Qwen3-Coder (Code-/Plan-Spezialist, OpenAI-kompatibel über HF Router). */
-class QwenCoderProvider implements ILlmProvider {
-  readonly id = 'qwen3-coder' as const;
-
-  get available(): boolean {
-    return Boolean(envKey('HF_API_KEY') || envKey('HF_TOKEN'));
-  }
-
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const model = envKey('QWEN3_CODER_MODEL') || DEFAULT_MODELS['qwen3-coder'];
-    const token = envKey('HF_API_KEY') || envKey('HF_TOKEN');
-    const resp = await postJson(
-      'https://router.huggingface.co/v1/chat/completions',
-      { Authorization: `Bearer ${token}` },
-      {
-        model,
-        messages: [{ role: 'user', content: req.prompt }],
-        max_tokens: req.maxTokens ?? 2048,
-        temperature: req.temperature ?? 0.3,
-      },
-    );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
-  }
-}
-
 /** Lokaler Ollama-Provider (MOA/Sprachbefehle/TTS-Fallback auf der eigenen Instanz). */
 class OllamaProvider implements ILlmProvider {
   readonly id = 'ollama' as const;
@@ -386,8 +337,6 @@ export class LlmRouter {
   constructor() {
     // Lokales Brain zuerst registrieren – es ist der primäre Provider.
     this.register(new RunPodLocalProvider());
-    this.register(new HfProvider());
-    this.register(new QwenCoderProvider());
     this.register(new OpenAiCompatibleProvider('mistral', 'https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'));
     this.register(new OllamaProvider());
     this.register(new OpenAiCompatibleProvider('deepseek-flash', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));

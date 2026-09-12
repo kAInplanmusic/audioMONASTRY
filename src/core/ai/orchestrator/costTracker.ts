@@ -5,12 +5,9 @@
  * geschätzte Kosten. Keine Fantasiewerte – Preisquellen sind unten dokumentiert
  * und per Env überschreibbar (AI_COST_*).
  *
- * Preisquellen (Stand 2026-08, live zu verifizieren):
- * - HF Endpoint A100 (AWS): $2.50/h – huggingface.co/docs/inference-endpoints/pricing
- * - HF CPU (intel-spr): $0.033/h – ebd.
- * - Replicate Demucs: ~$0.05/Stem-Job – Modellseite cjwbw/demucs
- * - DeepSeek V4 Flash: $0.22–0.44/M in, $0.66–1.32/M out – api-docs.deepseek.com
- * - HF Serverless: Free-Tier/PRO $9/Monat – huggingface.co/pricing
+ * Preisquellen (Stand 2026-09, nach RunPod-Cutover):
+ * - RunPod Serverless AMPERE_48: $1.22/h je aktivem Worker (live gemessen)
+ * - Cerebras/DeepSeek V4 Flash: $0.22–0.44/M in, $0.66–1.32/M out – api-docs.deepseek.com
  */
 import { aiLogger } from './aiLogger';
 import type { AiJob, AiProviderId, AiTask } from './types';
@@ -60,14 +57,8 @@ export class CostTracker {
   }
 
   /** Schätzung für einen Job (vor Ausführung). */
-  estimateJobCostUsd(task: AiTask, provider: AiProviderId, _model: string): number {
-    if (provider === 'replicate' && task === 'stem.separate') return TASK_COST_USD['stem.separate'] ?? 0.05;
-    if (provider === 'hf-endpoint') {
-      const gpuMs = 10_000; // konservativ: 10 s aktive GPU inkl. Anteil Kaltstart
-      return this.estimateGpuCostUsd(gpuMs);
-    }
-    if (provider === 'hf-serverless') return TASK_COST_USD[task] ?? 0.001;
-    return 0;
+  estimateJobCostUsd(task: AiTask, _provider: AiProviderId, _model: string): number {
+    return TASK_COST_USD[task] ?? 0;
   }
 
   private prune(now = Date.now()): void {
@@ -133,13 +124,7 @@ export class CostTracker {
 
   /** Job-Abrechnung bei Abschluss (nutzt echte Laufzeit). */
   settle(job: AiJob, inferenceMs: number): CostEntry {
-    const gpuRuntimeMs = Math.max(inferenceMs, job.durationMs ?? inferenceMs);
-    const base =
-      job.provider === 'replicate'
-        ? TASK_COST_USD['stem.separate'] ?? 0.05
-        : job.provider === 'hf-endpoint'
-          ? this.estimateGpuCostUsd(gpuRuntimeMs)
-          : TASK_COST_USD[job.task] ?? 0;
+    const base = TASK_COST_USD[job.task] ?? 0;
     return this.record({
       jobId: job.jobId,
       sessionId: job.sessionId,
@@ -147,7 +132,7 @@ export class CostTracker {
       task: job.task,
       model: job.model,
       gpuType: this.gpuType,
-      gpuRuntimeMs,
+      gpuRuntimeMs: Math.max(inferenceMs, job.durationMs ?? inferenceMs),
       inferenceMs,
       estimatedCostUsd: Number(base.toFixed(6)),
     });

@@ -27,7 +27,7 @@ function fakeEndpoint(overrides: Partial<EndpointClient> = {}): EndpointClient {
 }
 
 /** Provider-Stub mit steuerbarem Verhalten (offline/crash/ok). */
-function stubProvider(id: 'hf-endpoint' | 'hf-serverless' | 'local', behaviour: () => Promise<unknown>): IAiProvider {
+function stubProvider(id: 'runpod-voice' | 'runpod-ears' | 'local', behaviour: () => Promise<unknown>): IAiProvider {
   return {
     id,
     get available() { return true; },
@@ -52,26 +52,26 @@ describe('AI-Failure-Suite', () => {
     vi.restoreAllMocks();
   });
 
-  // ------------------------------------------------------------ HF offline
-  it('HF offline: Endpoint fällt aus → nächster Provider übernimmt', async () => {
+  // ------------------------------------------------ RunPod-Rolle fällt aus
+  it('Rolle fällt aus: nächster Provider übernimmt', async () => {
     const router = new ProviderRouter();
     const calls: string[] = [];
-    router.register(stubProvider('hf-serverless', async () => {
-      calls.push('hf-serverless');
+    router.register(stubProvider('runpod-ears', async () => {
+      calls.push('runpod-ears');
       return { audio: 'ok' };
     }));
-    router.register(stubProvider('hf-endpoint', async () => {
-      calls.push('hf-endpoint');
-      throw new AiProviderError('hf-endpoint', 'ENDPOINT_FAILED', 'HF-Endpoint nicht erreichbar', true);
+    router.register(stubProvider('runpod-voice', async () => {
+      calls.push('runpod-voice');
+      throw new AiProviderError('runpod-voice', 'ENDPOINT_FAILED', 'voice-Endpoint nicht erreichbar', true);
     }));
 
     const { provider, result } = await router.run('tts', 'mms-tts-deu', { text: 'hallo' });
-    expect(calls).toEqual(['hf-endpoint', 'hf-serverless']);
-    expect(provider).toBe('hf-serverless');
+    expect(calls).toEqual(['runpod-voice', 'runpod-ears']);
+    expect(provider).toBe('runpod-ears');
     expect(result).toEqual({ audio: 'ok' });
   });
 
-  it('HF offline und kein Fallback: kontrollierter Fehler statt Hänger', async () => {
+  it('Kein Provider konfiguriert: kontrollierter Fehler statt Hänger', async () => {
     const router = new ProviderRouter();
     // Kein Provider für stem.separate (REPLICATE_API_TOKEN fehlt).
     await expect(router.run('stem.separate', 'demucs', { audioDataUri: 'data:audio/wav;base64,AA' }))
@@ -101,28 +101,28 @@ describe('AI-Failure-Suite', () => {
   it('Duplicate: identischer Request wird dedupliziert (SingleFlight)', () => {
     const jobs = new JobManager();
     const input = { text: 'hallo welt' };
-    const first = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'hf-endpoint', input);
+    const first = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', input);
     jobs.start(first.jobId);
-    const second = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'hf-endpoint', { ...input });
+    const second = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { ...input });
     expect(second.jobId).toBe(first.jobId);
     expect(jobs.list('s1').length).toBe(1);
 
     // Nach Abschluss ist derselbe Request wieder ein neuer Job.
     jobs.complete(first.jobId);
-    const third = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'hf-endpoint', { ...input });
+    const third = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { ...input });
     expect(third.jobId).not.toBe(first.jobId);
   });
 
   it('Duplicate: unterschiedlicher Input → eigener Job', () => {
     const jobs = new JobManager();
-    const a = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'hf-endpoint', { text: 'a' });
-    const b = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'hf-endpoint', { text: 'b' });
+    const a = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { text: 'a' });
+    const b = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { text: 'b' });
     expect(b.jobId).not.toBe(a.jobId);
   });
 
   // ----------------------------------------------------------------- Crash
   it('Crash: wiederholte Abstürze öffnen den Circuit Breaker (fail-fast)', async () => {
-    const breaker = new CircuitBreaker('hf-endpoint', { failureThreshold: 3, resetTimeoutMs: 30_000 });
+    const breaker = new CircuitBreaker('runpod-voice', { failureThreshold: 3, resetTimeoutMs: 30_000 });
     const crash = async () => { throw new Error('worker crashed'); };
     for (let i = 0; i < 3; i++) {
       await expect(breaker.call(crash)).rejects.toThrow(/worker crashed/);
@@ -134,7 +134,7 @@ describe('AI-Failure-Suite', () => {
 
   it('Crash: Job wird als FAILED markiert und gibt die Concurrency frei', () => {
     const jobs = new JobManager({ maxConcurrency: { tts: 1 } });
-    const job = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'hf-endpoint', { text: 'x' });
+    const job = jobs.create('s1', 'u1', 'tts', 'mms-tts-deu', 'runpod-voice', { text: 'x' });
     jobs.start(job.jobId);
     jobs.fail(job.jobId, new Error('worker crashed'));
     expect(jobs.get(job.jobId)?.status).toBe('FAILED');

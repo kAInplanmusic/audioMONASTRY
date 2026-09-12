@@ -188,12 +188,12 @@ describe('Job Manager', () => {
 // Cost Tracker
 // ---------------------------------------------------------------------------
 describe('Cost Tracker', () => {
-  it('berechnet A100-GPU-Kosten und Session-Summen', () => {
+  it('berechnet GPU-Kosten und Session-Summen', () => {
     const ct = new CostTracker();
     const entry = ct.record({
       jobId: 'j1',
       sessionId: 's1',
-      provider: 'hf-endpoint',
+      provider: 'runpod-ears',
       task: 'audio.classify',
       model: 'ast-audioset',
       gpuType: 'A100',
@@ -206,9 +206,9 @@ describe('Cost Tracker', () => {
     expect(ct.summary().totalUsd).toBeGreaterThan(0);
   });
 
-  it('Replicate-Stem-Kosten sind fix konfigurierbar', () => {
+  it('Stem-Kosten kommen aus der Task-Tabelle (AI_COST_STEM_USD)', () => {
     const ct = new CostTracker();
-    expect(ct.estimateJobCostUsd('stem.separate', 'replicate', 'cjwbw/demucs')).toBeCloseTo(0.05, 2);
+    expect(ct.estimateJobCostUsd('stem.separate', 'runpod-voice', 'demucs')).toBeCloseTo(0.05, 2);
   });
 });
 
