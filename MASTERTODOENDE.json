@@ -203,10 +203,10 @@
       "id": "UI-P1-002",
       "title": "A11y-Matrix: Keyboard/Focus/Screenreader + prefers-reduced-motion",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "MASTER_TODO.md / UI-P1-001",
-      "note": "Offen nach UI-P1-001: die responsive/Cross-Browser-Matrix ist gruen (Chromium+Firefox+WebKit, Mobile-Viewports), aber A11y-Punkte fehlen noch: vollstaendige Keyboard-Bedienbarkeit (Tab-Reihenfolge, Fokus-Falle in Dialogen, sichtbarer Fokus), Screenreader-Beschriftungen der Toolbar/Racks sowie prefers-reduced-motion (Animationen/Feldbewegung abschaltbar). Verifikation: axe-/playwright-A11y-Checks in tests/e2e plus manueller Geraetelauf."
+      "note": "DONE 2026-09-12: (1) Toolbar per Tastatur erreichbar und jeder Button hat einen zugaenglichen Namen (title/Text), Enter aktiviert (aria-current); (2) VisualMONK-Dialog: aria-modal, Initial-Fokus im Dialog, Fokusfalle (40 Tab-Schritte bleiben drin), Escape schliesst; (3) prefers-reduced-motion: Emulation via page.emulateMedia -> data-reduced-motion=true, Feld/Parameter stehen still (identische Canvas-Frames nach Anlauf). Gate: npm run test:e2e:a11y = playwright test tests/e2e/a11y.spec.ts (3/3, Chromium); tsc 0, eslint 0, test:ci 1339/1339 ohne Skips. OFFEN als Mensch-Thema: echter Screenreader-Durchlauf (NVDA/VoiceOver) und iOS/Android-Geraetelauf. Kontext: die responsive/Cross-Browser-Matrix ist gruen (Chromium+Firefox+WebKit, Mobile-Viewports), aber A11y-Punkte fehlen noch: vollstaendige Keyboard-Bedienbarkeit (Tab-Reihenfolge, Fokus-Falle in Dialogen, sichtbarer Fokus), Screenreader-Beschriftungen der Toolbar/Racks sowie prefers-reduced-motion (Animationen/Feldbewegung abschaltbar). Verifikation: axe-/playwright-A11y-Checks in tests/e2e plus manueller Geraetelauf."
     },
     {
       "id": "DB-P1-001",

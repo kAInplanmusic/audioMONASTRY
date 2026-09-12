@@ -31,6 +31,37 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const paramsRef = useRef<VisualParams>(mapAudioToParams(IDLE_AUDIO_FEATURES, VISUAL_PRESETS[0], 0));
   const rafRef = useRef<number | null>(null);
   const lastRef = useRef(0);
+  // UI-P1-002 (A11y): Dialog-Fokus (Initial + Fokusfalle) und Reduced-Motion.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const reducedMotionRef = useRef(false);
+  useEffect(() => {
+    const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)')
+      : null;
+    if (!mq) return;
+    const apply = () => { reducedMotionRef.current = mq.matches; setReducedMotion(mq.matches); };
+    apply();
+    mq.addEventListener?.('change', apply);
+    return () => mq.removeEventListener?.('change', apply);
+  }, []);
+  // Beim Öffnen den Fokus in den Dialog holen (Keyboard/Screenreader).
+  useEffect(() => { dialogRef.current?.focus(); }, []);
+  const onDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+    if (e.key !== 'Tab') return;
+    const root = dialogRef.current;
+    if (!root) return;
+    const focusables = Array.from(root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ));
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement as HTMLElement | null;
+    if (!e.shiftKey && active === last) { e.preventDefault(); first.focus(); }
+    else if (e.shiftKey && (active === first || active === root)) { e.preventDefault(); last.focus(); }
+  };
   const [presetId, setPresetId] = useState<string>(VISUAL_PRESETS[0].id);
   const [audioLinked, setAudioLinked] = useState(false);
   const presetRef = useRef(presetId);
@@ -263,8 +294,15 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       featuresRef.current = features;
 
       const preset = presetById(presetRef.current);
-      const target = mapAudioToParams(features, preset, now / 1000);
-      paramsRef.current = blendParams(paramsRef.current, target, 0.35);
+      // UI-P1-002: Reduced-Motion friert die Feldbewegung (kein Flackern/Drift).
+      const animTimeS = reducedMotionRef.current ? 0 : now / 1000;
+      const animDt = reducedMotionRef.current ? 0 : dt;
+      // Reduced-Motion: keine Audio-Reaktivität/Glättung -> Parameter stehen still.
+      const target = reducedMotionRef.current
+        ? mapAudioToParams(IDLE_AUDIO_FEATURES, preset, 0)
+        : mapAudioToParams(features, preset, animTimeS);
+      // Reduced-Motion: ohne Glättungs-Animation direkt auf den Zielwert (Frames identisch).
+      paramsRef.current = reducedMotionRef.current ? target : blendParams(paramsRef.current, target, 0.35);
 
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const cssW = canvas.clientWidth || 960;
@@ -282,10 +320,10 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         gl.resize(canvas.width, canvas.height);
         // VISUAL-P1-008: Show-Szenen auch im GL-Pfad als Textur (kein drawImage).
         const scene = showApi.playing ? showApi.frame() : null;
-        gl.render(preset, paramsRef.current, now / 1000, scene);
+        gl.render(preset, paramsRef.current, animTimeS, scene);
       } else if (ctx) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, dt);
+        renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, animDt);
         // Canvas2D: Szene per drawImage über die Visualisierung (Crossfade).
         if (showApi.playing) showApi.draw(ctx, cssW, cssH);
       }
@@ -319,10 +357,15 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
 
   return (
     <div
-      className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col"
+      ref={dialogRef}
+      tabIndex={-1}
+      onKeyDown={onDialogKeyDown}
+      className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col outline-none"
       role="dialog"
+      aria-modal="true"
       aria-label="VisualMONK Liveshow"
       data-renderer={rendererKind}
+      data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
         <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUALMONK · LIVESHOW</span>

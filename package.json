@@ -21,6 +21,7 @@
     "test:parity": "vitest run tests/v2Parity.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:responsive": "playwright test tests/e2e/responsive.spec.ts --config=playwright.responsive.config.ts",
+    "test:e2e:a11y": "playwright test tests/e2e/a11y.spec.ts",
     "test:stress": "playwright test tests/e2e/stress.spec.ts",
     "stress:hetzner": "node scripts/hetzner/stress-test.mjs",
     "stress:sfu": "node scripts/hetzner/sfu-stress-test.mjs",
