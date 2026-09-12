@@ -104,39 +104,39 @@ jobs:
       # (`MODEL_UNAVAILABLE`, weil `_require_lib` einen ImportError fängt).
       - name: Probe 1 – torch importierbar
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import torch; print(torch.__version__)"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import torch; print(torch.__version__)"
 
       - name: Probe 2 – transformers über den Worker-Pfad (_require_lib)
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "from handlers_runpod import _require_lib; print('require_lib ok', _require_lib('transformers','transformers').__version__)"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "from handlers_runpod import _require_lib; print('require_lib ok', _require_lib('transformers','transformers').__version__)"
 
       - name: Probe 3 – transformers kennt Qwen3-14B
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "from transformers import AutoConfig; print(AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "from transformers import AutoConfig; print(AutoConfig.from_pretrained('Qwen/Qwen3-14B').model_type)"
 
       - name: Probe 3b – huggingface-hub Version
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import huggingface_hub; print(huggingface_hub.__version__)"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import huggingface_hub; print(huggingface_hub.__version__)"
 
       - name: Probe 4 – soundfile + scipy importierbar
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import soundfile, scipy; print(soundfile.__version__, scipy.__version__)"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import soundfile, scipy; print(soundfile.__version__, scipy.__version__)"
 
       - name: Probe 5 – diffusers importierbar
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import diffusers; print(diffusers.__version__)"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import diffusers; print(diffusers.__version__)"
 
       - name: Probe 6 – pyannote.audio importierbar
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import pyannote.audio; print('ok')"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import pyannote.audio; print('ok')"
 
       - name: Probe 7 – qwen_tts importierbar
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import qwen_tts; print('ok')"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import qwen_tts; print('ok')"
 
       - name: Probe 8 – Worker-Handler-Tabelle läd
         continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import handlers; print('llm' in handlers.HANDLERS, sorted(handlers.HANDLERS))"
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import handlers; print('llm' in handlers.HANDLERS, sorted(handlers.HANDLERS))"
 
       # ---------------------------------------------------------------------
       # GATE (bewusst OHNE continue-on-error): torch >= 2.6 ist Pflicht.
@@ -148,7 +148,7 @@ jobs:
       # fällt die Grenze beim nächsten Basis-Image-Wechsel still zurück.
       - name: GATE – torch >= 2.6 (CLAP-Pickle-Checkpoints)
         run: |
-          docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "
+          docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "
           import sys, torch
           print('torch', torch.__version__)
           major, minor = (int(x) for x in torch.__version__.split('+')[0].split('.')[:2])
