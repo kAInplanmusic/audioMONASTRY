@@ -194,9 +194,19 @@
       "id": "UI-P1-001",
       "title": "Mobile-/Browser-Matrix verifizieren (Touch/Safe-Area/A11y/Safari/iOS/Android)",
       "priority": "P1",
+      "status": "PARTIAL",
+      "area": "UI",
+      "source": "MASTER_TODO.md",
+      "note": "PARTIAL 2026-09-12 (Matrix laeuft und ist gruen; A11y-Teil offen): playwright.responsive.config.ts um WebKit/Safari-Projekt erweitert (lokal installiert, CI via install-deps). Lauf: 21 passed, 9 skipped (Skips sind die bewussten Firefox-Ausnahmen der iOS/Android-Emulation) - Chromium 10/10, WebKit 10/10, Firefox Desktop. Dabei echte Befunde behoben: (1) iPhone SE Touch-Ziel der Toolbar war 39,5 px statt >=44 px -> Header-Hoehe h-20 (80px, 2 Reihen je 40px) auf h-[5.75rem] (92px) angehoben, seither >=44 px; (2) zwei VERALTETE Spec-Erwartungen (18 bzw. 19 Toolbar-Buttons) auf die tatsaechliche Quelle korrigiert: navPlugins = getPluginRegistry() ohne NAV_EXCLUDED = 16 kanonische MONKs im 2x8-Raster (CODE = Source of Truth). Belege: npm run test:e2e:responsive (3 Projekte) 21 passed/9 skipped; tsc 0, eslint 0. OFFEN als UI-P1-002: Keyboard/Focus/Screenreader (A11y), prefers-reduced-motion und der manuelle iOS/Android-Geraetelauf."
+    },
+    {
+      "id": "UI-P1-002",
+      "title": "A11y-Matrix: Keyboard/Focus/Screenreader + prefers-reduced-motion",
+      "priority": "P1",
       "status": "OPEN",
       "area": "UI",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md / UI-P1-001",
+      "note": "Offen nach UI-P1-001: die responsive/Cross-Browser-Matrix ist gruen (Chromium+Firefox+WebKit, Mobile-Viewports), aber A11y-Punkte fehlen noch: vollstaendige Keyboard-Bedienbarkeit (Tab-Reihenfolge, Fokus-Falle in Dialogen, sichtbarer Fokus), Screenreader-Beschriftungen der Toolbar/Racks sowie prefers-reduced-motion (Animationen/Feldbewegung abschaltbar). Verifikation: axe-/playwright-A11y-Checks in tests/e2e plus manueller Geraetelauf."
     },
     {
       "id": "DB-P1-001",

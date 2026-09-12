@@ -32,6 +32,8 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
+    // Safari/iOS-Abdeckung (WebKit ist lokal installiert; in CI via install-deps).
+    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
   webServer: BASE_URL
     ? undefined

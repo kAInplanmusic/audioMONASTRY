@@ -139,8 +139,8 @@ test.describe('Responsive/Touch-Matrix', () => {
       await startStudio(page);
       await expectNoHorizontalOverflow(page);
       await expect(page.locator('nav[aria-label="Studio-Navigation"]')).toBeVisible();
-      // 18 Plugin-Icons (alle außer ai/mixer/masterplayer), zwei Reihen à 9.
-      await expect(page.locator('nav[aria-label="Studio-Navigation"] button')).toHaveCount(18);
+      // 16 kanonische MONKs (navPlugins = Registry ohne NAV_EXCLUDED), Raster 2×8.
+      await expect(page.locator('nav[aria-label="Studio-Navigation"] button')).toHaveCount(16);
     });
   });
 
@@ -160,9 +160,8 @@ test.describe('Responsive/Touch-Matrix', () => {
     test('Studio lädt ohne Overflow und alle Plugin-Icons sind sichtbar', async ({ page }) => {
       await startStudio(page);
       await expectNoHorizontalOverflow(page);
-      // Masterplayer + aiMONK (im Dock) werden ausgeblendet; die übrigen
-      // 19 Plugin-Kacheln müssen in der Toolbar liegen.
-      await expect(page.locator(`${TOOLBAR} button`)).toHaveCount(19);
+      // 16 kanonische MONKs (Source of Truth: getPluginRegistry() minus NAV_EXCLUDED).
+      await expect(page.locator(`${TOOLBAR} button`)).toHaveCount(16);
     });
   });
 });
