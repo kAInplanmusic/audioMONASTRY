@@ -5,6 +5,14 @@
  * Prompts für Sub-Agents, iteriert über Zwischenergebnisse und steuert die
  * Plugins über den VoiceControlService (deterministischer Fallback) bzw.
  * über die LLM-Route.
+ *
+ * AI-P1-003 P5 (Agent-Loop): `run()` ergänzt den reinen Plan/Execute-Pfad um
+ *   - WRITE-Bestätigungspflicht (`confirmWrite`; ohne Bestätigung wird ein
+ *     Schreib-Schritt NICHT ausgeführt),
+ *   - Verify (fehlgeschlagene Schritte erkennen) und
+ *   - eine Korrekturschleife (fehlgeschlagene Schritte werden neu geplant und
+ *     erneut ausgeführt, max. `maxCorrections` Runden).
+ * `executePlan()` bleibt bewusst unverändert (Rückwärtskompatibilität).
  */
 import { type LlmCompletion, type LlmRequest } from './LlmRouter';
 import { completeLlm } from './clientLlm';
@@ -32,6 +40,27 @@ export interface MoaStepResult {
   error?: string;
 }
 
+export interface MoaRunOptions {
+  userId?: string;
+  /** Zusätzlicher Kontext (Session-/Projektzustand) für den Planer. */
+  context?: string;
+  /**
+   * WRITE-Bestätigungspflicht: wird vor jedem Schreib-Schritt gefragt.
+   * Fehlt die Funktion oder liefert sie `false`, wird der Schritt NICHT
+   * ausgeführt und als Fehler `WRITE nicht bestätigt` protokolliert.
+   */
+  confirmWrite?: (step: MoaStep) => boolean | Promise<boolean>;
+  /** Max. Korrekturrunden (Default 1). */
+  maxCorrections?: number;
+}
+
+export interface MoaRunResult {
+  plan: MoaPlan;
+  steps: MoaStepResult[];
+  corrections: number;
+  succeeded: boolean;
+}
+
 type CompletionFn = (req: LlmRequest) => Promise<LlmCompletion>;
 
 /** Minimale Schnittstelle für die Plugin-Steuerung (VoiceControlService erfüllt sie). */
@@ -42,6 +71,23 @@ export interface IMoaCommandExecutor {
     pluginId: string,
     command: string,
   ): Promise<{ handled: boolean; pluginId: string; error?: string; action?: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// WRITE-Klassifikation
+// ---------------------------------------------------------------------------
+/** Kommandos, die ausdrücklich nur LESEN (keine Bestätigung nötig). */
+const READ_COMMANDS = new Set(['status', 'search', 'get', 'list']);
+
+/**
+ * Klassifiziert ein MOA-Kommando als Schreib-Operation.
+ * Regel (fail-safe): alles, was nicht ausdrücklich in der Lese-Liste steht,
+ * gilt als WRITE – ein unbekanntes Kommando verlangt damit immer Bestätigung.
+ */
+export function isWriteCommand(command: string): boolean {
+  const name = command.split('(')[0].trim().toLowerCase();
+  if (!name) return false;
+  return !READ_COMMANDS.has(name);
 }
 
 /** Entfernt Code-Fences und parst das MOA-JSON (tolerant). */
@@ -77,6 +123,14 @@ export function parseMoaSteps(raw: string): MoaStep[] {
   }
 }
 
+/** Liefert einen Plan-String für die Korrekturschleife. */
+export function correctionPromptFor(failures: MoaStepResult[]): string {
+  const failed = failures
+    .filter((r) => !r.handled || r.error)
+    .map((r) => ({ pluginId: r.pluginId || r.step.pluginId, command: r.step.command, error: r.error ?? 'nicht ausgeführt' }));
+  return `Korrigiere NUR diese fehlgeschlagenen Schritte und antworte wieder als JSON-Array: ${JSON.stringify(failed)}`;
+}
+
 export class MoaAgent {
   constructor(
     private complete: CompletionFn = (req) => completeLlm(req),
@@ -84,7 +138,7 @@ export class MoaAgent {
   ) {}
 
   /** Plant eine Aufgabe mit DeepSeek V4 Flash (automatischer Free-Fallback). */
-  async plan(task: string, pluginId = ''): Promise<MoaPlan> {
+  async plan(task: string, pluginId = '', context = ''): Promise<MoaPlan> {
     const catalog = moaCommandCatalog();
     const role = pluginId ? moaSystemPromptForPlugin(pluginId) : moaSystemPromptForPlugin('');
     const completion = await this.complete({
@@ -92,7 +146,9 @@ export class MoaAgent {
         `${role} Zerlege die Aufgabe in klare Einzelschritte. ` +
         `Du darfst NUR diese Plugin-IDs und Kommandos verwenden (Syntax command(parameter)): ${catalog}. ` +
         `Antworte NUR als JSON-Array (keine Erklärung, kein Markdown): ` +
-        `[{"pluginId":"string","command":"string","prompt":"string"}] . Aufgabe: ` + task,
+        `[{"pluginId":"string","command":"string","prompt":"string"}] . ` +
+        (context ? `Kontext (Session-/Projektzustand): ${context.slice(0, 2000)}. ` : '') +
+        `Aufgabe: ` + task,
       complexity: 'moderate',
       maxTokens: 1024,
       temperature: 0.3,
@@ -129,6 +185,84 @@ export class MoaAgent {
       });
     }
     return results;
+  }
+
+  /** Führt einen Plan mit WRITE-Gate aus (ohne Korrektur). */
+  async executePlanGated(plan: MoaPlan, userId: string, confirmWrite?: MoaRunOptions['confirmWrite']): Promise<MoaStepResult[]> {
+    const results: MoaStepResult[] = [];
+    for (const step of plan.steps) {
+      if (!step.command) {
+        results.push({ step, handled: false, pluginId: step.pluginId, error: 'Kein Kommando' });
+        continue;
+      }
+      // AI-P1-003 P5: Bestätigungspflicht ab WRITE. Ohne Bestätigung wird der
+      // Schritt nicht ausgeführt – fail-safe: unbekannte Kommandos sind WRITE.
+      if (isWriteCommand(step.command) && !(await confirmWrite?.(step))) {
+        results.push({ step, handled: false, pluginId: step.pluginId, error: 'WRITE nicht bestätigt' });
+        continue;
+      }
+      let res: { handled: boolean; pluginId: string; error?: string };
+      if (this.voice.executePluginCommand && step.pluginId && step.pluginId !== 'unknown') {
+        res = await this.voice.executePluginCommand(userId, step.pluginId, step.command);
+      } else {
+        res = await this.voice.execute(userId, step.command);
+      }
+      results.push({
+        step,
+        handled: res.handled,
+        pluginId: res.pluginId || step.pluginId,
+        error: res.error,
+      });
+    }
+    return results;
+  }
+
+  /**
+   * Agent-Loop (AI-P1-003 P5): planen → (WRITE-gate) ausführen → prüfen →
+   * korrigieren. `maxCorrections` begrenzt die Korrekturrunden.
+   */
+  async run(task: string, opts: MoaRunOptions = {}): Promise<MoaRunResult> {
+    const userId = opts.userId ?? 'localUser';
+    const plan = await this.plan(task, '', opts.context);
+    return this.runPlan(plan, opts, userId);
+  }
+
+  /** Wie `run`, aber mit bereits erzeugtem Plan. */
+  async runPlan(plan: MoaPlan, opts: MoaRunOptions = {}, userId = 'localUser'): Promise<MoaRunResult> {
+    const maxCorrections = Math.max(0, opts.maxCorrections ?? 1);
+    let results = await this.executePlanGated(plan, userId, opts.confirmWrite);
+    let corrections = 0;
+    while (this.hasFailures(results) && corrections < maxCorrections) {
+      corrections += 1;
+      const correctionPlan = await this.plan(correctionPromptFor(results));
+      const retryResults = await this.executePlanGated(correctionPlan, userId, opts.confirmWrite);
+      results = this.mergeResults(results, retryResults);
+    }
+    return { plan, steps: results, corrections, succeeded: !this.hasFailures(results) };
+  }
+
+  private hasFailures(results: MoaStepResult[]): boolean {
+    return results.some((r) => !r.handled || Boolean(r.error));
+  }
+
+  /** Ersetzt fehlgeschlagene Schritte der Reihe nach durch die Korrektur-Ergebnisse. */
+  private mergeResults(original: MoaStepResult[], corrections: MoaStepResult[]): MoaStepResult[] {
+    const out: MoaStepResult[] = [];
+    let c = 0;
+    for (const r of original) {
+      if (!r.handled || r.error) {
+        out.push(corrections[c] ?? r);
+        c += 1;
+      } else {
+        out.push(r);
+      }
+    }
+    // Überzählige Korrekturergebnisse (Planer hat mehr Schritte geliefert) anhängen.
+    while (c < corrections.length) {
+      out.push(corrections[c]);
+      c += 1;
+    }
+    return out;
   }
 }
 

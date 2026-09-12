@@ -2,8 +2,8 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { LlmRouter, extractWorkerText, type ILlmProvider, type LlmProviderId } from '../src/core/ai/LlmRouter';
 
 const ALL_IDS: LlmProviderId[] = [
-  'runpod-local', 'hf', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro',
-  'cerebras', 'qwen3-coder', 'openrouter', 'publicai',
+  'runpod-local', 'mistral', 'ollama', 'deepseek-flash', 'deepseek-pro',
+  'cerebras', 'openrouter', 'publicai',
 ];
 
 function stub(id: LlmProviderId, available: boolean): ILlmProvider {
@@ -43,7 +43,7 @@ describe('LlmRouter: Provider-Reihenfolge (AI nur lokal)', () => {
 
     const order = router.rankProviders('simple').map((p) => p.id);
     expect(order).toEqual([
-      'runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'hf', 'mistral', 'openrouter', 'publicai',
+      'runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai',
     ]);
   });
 

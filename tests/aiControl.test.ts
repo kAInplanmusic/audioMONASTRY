@@ -40,18 +40,17 @@ describe('LlmRouter (Kosten-Priorität)', () => {
 
   it('simple: DeepSeek Flash zuerst, HF dahinter, kein Pro', () => {
     const router = new LlmRouter();
-    for (const p of ['hf', 'deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
+    for (const p of ['deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
       router.register(mockProvider(p));
     }
     const ids = router.rankProviders('simple').map((p) => p.id);
     expect(ids[0]).toBe('deepseek-flash');
-    expect(ids[1]).toBe('hf');
-    expect(ids).not.toContain('deepseek-pro');
+        expect(ids).not.toContain('deepseek-pro');
   });
 
   it('complex: Pro zuerst, dann Free/Flash, Paid zuletzt', () => {
     const router = new LlmRouter();
-    for (const p of ['hf', 'deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
+    for (const p of ['deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
       router.register(mockProvider(p));
     }
     const ids = router.rankProviders('complex').map((p) => p.id);
@@ -61,7 +60,7 @@ describe('LlmRouter (Kosten-Priorität)', () => {
 
   it('moderate: DeepSeek-Flash ist der MOA/MCP-Planer (vor Free/Pro)', () => {
     const router = new LlmRouter();
-    for (const p of ['hf', 'deepseek-flash', 'deepseek-pro'] as const) {
+    for (const p of ['deepseek-flash', 'deepseek-pro'] as const) {
       router.register(mockProvider(p));
     }
     const ids = router.rankProviders('moderate').map((p) => p.id);

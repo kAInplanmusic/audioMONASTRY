@@ -30,12 +30,10 @@ export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
 export type LlmProviderId =
   | 'runpod-local'
-  | 'hf'
   | 'mistral'
   | 'ollama'
   | 'deepseek-flash'
   | 'deepseek-pro'
-  | 'qwen3-coder'
   | 'publicai'
   | 'cerebras'
   | 'openrouter'
@@ -67,12 +65,10 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // Gepinntes, heute lauffähiges Brain-Modell. Upgrade auf qwen3-32b /
   // glm-4.5-air per RUNPOD_BRAIN_MODEL, sobald die Revision gepinnt ist.
   'runpod-local': 'qwen3-14b',
-  hf: 'Qwen/Qwen2.5-72B-Instruct',
   mistral: 'mistral-small-latest',
   ollama: 'qwen2.5:7b',
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
-  'qwen3-coder': 'Qwen/Qwen3-Coder-Next',
   publicai: 'swiss-ai/apertus-v1.5-70b-thinking',
   cerebras: 'qwen-3.8-27b',
   openrouter: 'meta-llama/llama-3.3-70b-instruct',
@@ -376,10 +372,10 @@ export class LlmRouter {
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const order: LlmProviderId[] =
       complexity === 'complex'
-        ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-pro', 'qwen3-coder', 'deepseek-flash', 'openrouter', 'hf', 'mistral', 'publicai', 'gemini', 'openai']
+        ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-pro', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'gemini', 'openai']
         : complexity === 'moderate'
-          ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'qwen3-coder', 'openrouter', 'hf', 'mistral', 'publicai', 'deepseek-pro']
-          : ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'hf', 'mistral', 'openrouter', 'publicai'];
+          ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'deepseek-pro']
+          : ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai'];
     const allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true';
     return order
       .filter((id) => allowExternal || LOCAL_LLM_PROVIDERS.has(id))
