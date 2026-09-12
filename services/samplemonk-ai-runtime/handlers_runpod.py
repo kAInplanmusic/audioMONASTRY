@@ -329,7 +329,11 @@ def demucs_stem(model_id: str, definition: ModelDefinition, payload: Dict[str, A
         from demucs.api import Separator  # type: ignore
 
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        separator = Separator(model="htdemucs", device=device, half=device == "cuda")
+        # `half` wurde aus dem Separator-Konstruktor neuerer demucs-Versionen
+        # entfernt (TypeError "unexpected keyword argument 'half'", live belegt
+        # 2026-09-12). Manifest-Quantisierung ist fp32 - ohne das Argument laeuft
+        # der Separator in voller Praezision und bleibt versionsunabhaengig.
+        separator = Separator(model="htdemucs", device=device)
         _, separated = separator.separate_audio_file(audio_path)
 
         import numpy as np
