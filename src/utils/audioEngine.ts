@@ -33,6 +33,7 @@ import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
 import { MusicBufferCache } from '../audio/musicBufferCache';
+import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -174,9 +175,38 @@ class AudioEngine {
   private channelInputs: Partial<Record<TrackType, Tone.Gain>> = {};
 
   private samplePlayers: Record<string, Tone.Player> = {};
-  /** Einzelner, wiederverwendeter Preview-Player (kein Leak bei schnellem Klicken). */
-  private previewPlayer: Tone.Player | null = null;
-  private previewUrl: string | null = null;
+  // AUDIO-P1-002: Preview/Track-Load in eigener Fassade (Tone-Erzeugung injiziert).
+  private readonly samplePreview = new SamplePreview({
+    ensureInitialized: () => this.ensureInitialized(),
+    ensureChannelNode: (track) => this.ensureChannelNode(track),
+    getChannelInput: (track) => (this.channelInputs[track] as unknown as AudioNode | undefined) ?? null,
+    canLoadTrack: (track) => this.canLoadTrack(track),
+    getSamplePlayer: (track) => this.samplePlayers[track] ?? null,
+    setSamplePlayer: (track, player) => { this.samplePlayers[track] = player as unknown as Tone.Player; },
+    deleteSamplePlayer: (track) => { delete this.samplePlayers[track]; },
+    getTrackSampleUrl: (track) => this.trackSampleUrl[track] ?? null,
+    setTrackSampleUrl: (track, url) => { this.trackSampleUrl[track] = url; },
+    bridgeBufferToV2: (track, buffer) => { this.bridgeAudioBufferToV2(track, buffer); },
+    triggerV2Sample: (track) => { this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 }); },
+    getMusicBuffer: (url) => this.getMusicBuffer(url),
+    createPlayerFromUrl: (url) => {
+      const player = new Tone.Player(url).toDestination();
+      player.autostart = true;
+      return player as unknown as AudioPlayerLike;
+    },
+    createPlayerFromBuffer: (buffer, connectTo) => {
+      const player = new Tone.Player(buffer as Tone.ToneAudioBuffer);
+      if (connectTo) player.connect(connectTo as never);
+      return player as unknown as AudioPlayerLike;
+    },
+    decodeToV2: (url, onBuffer) => {
+      const _buf = new Tone.ToneAudioBuffer(url, (buf) => {
+        const audioBuffer = buf.get();
+        if (audioBuffer) onBuffer(audioBuffer as unknown as AudioBuffer);
+      }, () => { /* Dekodier-Fehler: still ignorieren */ });
+      void _buf;
+    },
+  });
   // AUDIO-P1-002: Decode-Cache in eigener Fassade (Tone-Erzeugung injiziert).
   private readonly musicBuffers = new MusicBufferCache<Tone.ToneAudioBuffer>({
     create: (url, onload, onerror) => { const _b = new Tone.ToneAudioBuffer(url, onload, onerror); void _b; },
@@ -1558,8 +1588,7 @@ class AudioEngine {
 
     // Fallback-Instrument + Preview-Player entsorgen (Leak-Schutz).
     this.disposeInstrumentSynth();
-    try { this.previewPlayer?.dispose(); } catch { /* ignore */ }
-    this.previewPlayer = null;
+    this.samplePreview.reset();
 
     // Sample-Player-Zustand zurücksetzen.
     this.samplePlayers = {};
@@ -2347,44 +2376,17 @@ class AudioEngine {
   }
 
   public previewSample(track: TrackType, time?: number, url?: string) {
-    this.ensureInitialized();
-    if (url) {
-      // Vorherigen Preview-Player entsorgen, damit schnelles Klicken keinen
-      // Player-Leak erzeugt (jeder Tone.Player hält einen Decoder-Puffer).
-      try { this.previewPlayer?.dispose(); } catch { /* ignore */ }
-      const player = new Tone.Player(url).toDestination();
-      player.autostart = true;
-      this.previewPlayer = player;
-      this.previewUrl = url;
-      // AUDIO-P0-003: Preview hörbar in den V2-Sink laden und triggern.
-      new Tone.ToneAudioBuffer(url, (buf) => {
-        const audioBuffer = buf.get();
-        if (audioBuffer && audioBuffer.numberOfChannels > 0) {
-          this.bridgeAudioBufferToV2(track, audioBuffer);
-          this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
-        }
-      }, () => { /* Dekodier-Fehler: still ignorieren */ });
-    } else if (this.samplePlayers[track]) {
-      this.samplePlayers[track].start(time);
-      // AUDIO-P0-003: auch zuvor geladene Track-Samples im V2-Sink triggern.
-      const buffer = this.samplePlayers[track]?.buffer?.get?.();
-      if (buffer && buffer.numberOfChannels > 0) {
-        this.bridgeAudioBufferToV2(track, buffer);
-        this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
-      }
-    }
+    this.samplePreview.previewSample(track, time, url);
   }
 
   /** Stoppt die laufende Hörprobe (falls aktiv) und gibt den Player frei. */
   public stopPreview(): void {
-    try { this.previewPlayer?.dispose(); } catch { /* ignore */ }
-    this.previewPlayer = null;
-    this.previewUrl = null;
+    this.samplePreview.stopPreview();
   }
 
   /** URL der aktuell laufenden Hörprobe (null = keine aktiv). */
   public getPreviewUrl(): string | null {
-    return this.previewUrl;
+    return this.samplePreview.getPreviewUrl();
   }
 
   /** Einmalige Hörprobe eines synthetischen Samples (biblioMONK Play-Button).
@@ -2417,12 +2419,12 @@ class AudioEngine {
 
   /** Liefert die aktuell auf einem Track geladene Sample-URL (null = frei). */
   public getTrackSampleUrl(track: TrackType): string | null {
-    return this.trackSampleUrl[track] ?? null;
+    return this.samplePreview.getTrackSampleUrl(track);
   }
 
   /** True, wenn auf dem Track bereits ein Sample geladen ist. */
   public isTrackLoaded(track: TrackType): boolean {
-    return !!this.trackSampleUrl[track];
+    return this.samplePreview.isTrackLoaded(track);
   }
 
   /** WF-2: Lädt/decodiert eine Musik-URL genau einmal und cached den Buffer. */
@@ -2431,46 +2433,7 @@ class AudioEngine {
   }
 
   public async loadTrackSample(track: TrackType, url: string | null) {
-    // MAIN-Schutz: laden darf nur der Halter oder ein freigegebener Kanal.
-    if (!this.canLoadTrack(track)) return;
-    // If there's an existing player for this track, dispose of it.
-    // De-Klick: erst weich ausblenden (Volume-Rampe), dann nach kurzer Zeit
-    // disconnect/dispose – ein harter dispose() während der Wiedergabe knackst.
-    const oldPlayer = this.samplePlayers[track];
-    if (oldPlayer) {
-      try { oldPlayer.volume.rampTo(-60, 0.02); } catch { /* ignore */ }
-      try { oldPlayer.stop(); } catch { /* ignore */ }
-      const p = oldPlayer;
-      setTimeout(() => {
-        try { p.disconnect(); } catch { /* ignore */ }
-        try { p.dispose(); } catch { /* ignore */ }
-      }, 100);
-      delete this.samplePlayers[track];        // Remove reference
-    }
-
-    if (url) {
-      // Ensure context is running (und AudioGraph inkl. this.ctx) vor dem Laden.
-      await this.ensureInitialized();
-
-      // #DJ: Kanalzug sicherstellen und Player DURCH die Kette
-      // Pre-Fader → Gain → 3-Band-EQ → Pan → GLOBAL_MASTER routen, damit die
-      // Mischpult-Regler (Fader/EQ/Pan/Mute) tatsächlich auf geladene
-      // Tracks wirken – vorher ging der Player direkt auf den Master.
-      this.ensureChannelNode(track);
-      // WF-2: Decode-Cache – identische URL wird nur einmal dekodiert und
-      // als ToneAudioBuffer wiederverwendet (kein Decode-Spike beim Reload).
-      const buffer = await this.getMusicBuffer(url);
-      const player = new Tone.Player(buffer).connect(this.channelInputs[track]!);
-      // player.autostart = true; // Or player.start() when needed
-      this.samplePlayers[track] = player;
-      this.trackSampleUrl[track] = url;
-      // Phase 3: Tone.js-Buffer gleichzeitig als V2-Sample-Source registrieren,
-      // damit der V2-Pfad denselben dekodierten Buffer nutzen kann.
-      const audioBuffer = buffer.get?.();
-      if (audioBuffer) this.bridgeAudioBufferToV2(track, audioBuffer);
-    } else {
-      this.trackSampleUrl[track] = null;
-    }
+    await this.samplePreview.loadTrackSample(track, url);
   }
 
   /**
