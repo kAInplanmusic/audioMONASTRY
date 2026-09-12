@@ -313,7 +313,7 @@ def acestep_generate(model_id: str, definition: ModelDefinition, payload: Dict[s
 
     samples = np.asarray(audio, dtype=np.float32)
     buf = io.BytesIO()
-    sf.write(buf, samples, sr)
+    sf.write(buf, samples, sr, format="WAV")
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": sr}
 
 
@@ -343,7 +343,7 @@ def demucs_stem(model_id: str, definition: ModelDefinition, payload: Dict[str, A
         for stem_name, wav in separated.items():
             wav_np = wav[0].cpu().numpy() if hasattr(wav[0], "cpu") else np.asarray(wav[0])
             buf = io.BytesIO()
-            sf.write(buf, wav_np, int(separator.samplerate or 44100))
+            sf.write(buf, wav_np, int(separator.samplerate or 44100), format="WAV")
             stems[stem_name] = base64.b64encode(buf.getvalue()).decode()
         return {"stems": stems}
     finally:
