@@ -1,7 +1,7 @@
 import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { createSeededRandom} from './random';
 
-import { TrackType, TRACK_ROLE_MAP, MUSIC_SCALES } from '../types';
+import { TrackType, MUSIC_SCALES } from '../types';
 
 
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
@@ -28,7 +28,8 @@ import {
 import { SpatialScene } from '../core/spatial/SpatialScene';
 import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial/SourceExtractionPipeline';
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
-import { V2StudioGraph } from '../core/audio/V2StudioGraph';
+import { V2StudioGraph, V2_CHANNELS } from '../core/audio/V2StudioGraph';
+import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/v2SyncMirror';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -991,18 +992,7 @@ class AudioEngine {
 
   /** Stellt die Rollen-Default-Stimme eines Kanals wieder her („optional-voice“ aus). */
   public resetOptionalSynthVoice(channel: TrackType): boolean {
-    const role = TRACK_ROLE_MAP[channel];
-    const voice: V2SynthVoice = role === 'kick' ? 'kick'
-      : role === 'hat' ? 'hat'
-      : role === 'clap' ? 'clap'
-      : role === 'bass' ? 'bass'
-      : 'lead';
-    const freq = role === 'kick' ? 50
-      : role === 'hat' ? 6000
-      : role === 'clap' ? 1200
-      : role === 'bass' ? 55
-      : channel === 'channel8' ? 880
-      : 440;
+    const { freq, voice } = roleVoiceFor(channel);
     return this.v2LiveSink.setSynthSource(channel, freq, voice);
   }
 
@@ -1971,32 +1961,26 @@ class AudioEngine {
     }
   }
 
-  /** V1-Zustand in den V2-Graph spiegeln (Offline-Graph + Live-Sink). */
+  /** V1-Zustand in den V2-Graph spiegeln (AUDIO-P1-002: Logik in src/audio/v2SyncMirror.ts). */
   public syncV2FromV1(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      const db = this.channelGains[t]?.volume.value ?? 0;
-      const pan = this.channelPans[t]?.pan.value ?? 0;
-      this.v2Studio.setGainDb(t, db);
-      this.v2Studio.setPan(t, pan);
-      this.v2LiveSink.setChannelGainDb(t, db);
-      this.v2LiveSink.setChannelPan(t, pan);
-    });
-    const master = Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20);
-    this.v2Studio.setMasterGain(master);
-    this.v2LiveSink.setMasterGain(master);
-    // Phase 4: Monitor-/Cue-Plan in den V2-Live-Sink spiegeln.
-    this.v2LiveSink.setMonitorRouting(this.monitorPlan);
-    // AUDIO-P0-001: Mute-Zustand in den V2-Live-Sink spiegeln.
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      this.v2LiveSink.setChannelMuted(t, Boolean(this.mutedStems[t]));
+    const channels: Record<string, { gainDb: number; pan: number; muted: boolean }> = {};
+    for (const t of V2_CHANNELS) {
+      channels[t] = {
+        gainDb: this.channelGains[t]?.volume.value ?? 0,
+        pan: this.channelPans[t]?.pan.value ?? 0,
+        muted: Boolean(this.mutedStems[t]),
+      };
+    }
+    syncV2Mix(this.v2Studio, this.v2LiveSink, {
+      channels,
+      masterGainLinear: Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20),
+      monitorPlan: this.monitorPlan,
     });
   }
 
   /** Spiegelt alle Step-Patterns in den V2-Live-Sink (Phase 2). */
   public syncV2PatternsToLiveSink(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      this.v2LiveSink.setPattern(t, this.patterns[t]);
-    });
+    syncV2Patterns(this.v2LiveSink, this.patterns);
   }
 
   /** Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3). */
@@ -2013,22 +1997,7 @@ class AudioEngine {
    * V2-Sink übertragen, damit Pattern-Steps ohne Sample die richtige Stimme spielen.
    */
   public syncV2SynthSourcesToLiveSink(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      const role = TRACK_ROLE_MAP[t];
-      const voice = role === 'kick' ? 'kick' as const
-        : role === 'hat' ? 'hat' as const
-        : role === 'clap' ? 'clap' as const
-        : role === 'bass' ? 'bass' as const
-        : t === 'channel8' ? 'lead' as const
-        : 'lead' as const;
-      const freq = role === 'kick' ? 50
-        : role === 'hat' ? 6000
-        : role === 'clap' ? 1200
-        : role === 'bass' ? 55
-        : t === 'channel8' ? 880
-        : 440;
-      this.v2LiveSink.setSynthSource(t, freq, voice);
-    });
+    syncV2Voices(this.v2LiveSink);
   }
 
   /** Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source. */
