@@ -308,10 +308,10 @@
       "id": "VISUAL-P1-004",
       "title": "Selbstlern-Loop: Session-Ende-Umfrage + pgvector/RAG + Stil-LoRA-Pods",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "GEBAUT + LIVE VERIFIZIERT 2026-09-11: Migration 008 ist eingespielt (siehe DB-P1-002), Feedback-API + Bewertungs-UI laufen, und die RAG-Vorschlaege sind umgesetzt: GET /api/ai/vision/styles liest visual_style_ranking, normalisiert die View-Spalten (snake_case -> camelCase) und liefert style + source (ranking|fallback) + reason + confidence. LIVE-BEWEIS: mit 2 Bewertungen (cosmic 5/5, noir 3) antwortete die Route {\"suggestion\":{\"style\":\"cosmic\",\"source\":\"ranking\",\"reason\":\"bestbewertet: Ø 5.0 aus 2 Bewertungen\"},\"source\":\"db\"}; ohne Bewertungen ehrlich source=fallback mit Begruendung. UI: Button VORSCHLAG im VisualMonkOverlay, AUTO bevorzugt den gelernten Stil. Testdaten danach entfernt (View wieder leer). OFFEN (neu: VISUAL-P1-007): Stil-LoRA-Training auf einem RunPod-Pod (GPU-Kosten, Betreiber)."
+      "note": "DONE 2026-09-12: Alle eigenen Bestandteile sind gebaut und live verifiziert (Migration 008 eingespielt, Feedback-API + Bewertungs-UI, RAG-Vorschlaege mit style/source/reason/confidence, ehrlicher fallback ohne Bewertungen, UI-VORSCHLAG/AUTO). Der einzige frueher offene Punkt - Stil-LoRA-Training - ist als eigenes Ticket VISUAL-P1-007 (BLOCKED: GPU-Kosten, Datenbasis aus echten Nutzer-Bewertungen) ausgegliedert und gehoert nicht mehr zu diesem Ticket. GEBAUT + LIVE VERIFIZIERT 2026-09-11: Migration 008 ist eingespielt (siehe DB-P1-002), Feedback-API + Bewertungs-UI laufen, und die RAG-Vorschlaege sind umgesetzt: GET /api/ai/vision/styles liest visual_style_ranking, normalisiert die View-Spalten (snake_case -> camelCase) und liefert style + source (ranking|fallback) + reason + confidence. LIVE-BEWEIS: mit 2 Bewertungen (cosmic 5/5, noir 3) antwortete die Route {\"suggestion\":{\"style\":\"cosmic\",\"source\":\"ranking\",\"reason\":\"bestbewertet: Ø 5.0 aus 2 Bewertungen\"},\"source\":\"db\"}; ohne Bewertungen ehrlich source=fallback mit Begruendung. UI: Button VORSCHLAG im VisualMonkOverlay, AUTO bevorzugt den gelernten Stil. Testdaten danach entfernt (View wieder leer). OFFEN (neu: VISUAL-P1-007): Stil-LoRA-Training auf einem RunPod-Pod (GPU-Kosten, Betreiber)."
     },
     {
       "id": "VISUAL-P1-005",
