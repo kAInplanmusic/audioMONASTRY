@@ -138,6 +138,23 @@ jobs:
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "import handlers; print('llm' in handlers.HANDLERS, sorted(handlers.HANDLERS))"
 
+      # ---------------------------------------------------------------------
+      # GATE (bewusst OHNE continue-on-error): torch >= 2.6 ist Pflicht.
+      # `torch.load` verweigert darunter das Laden von Pickle-Checkpoints, und
+      # `laion/larger_clap_music` (CLAP-Audio-Embeddings, Rolle ears) liefert
+      # nur pytorch_model.bin – der safetensors-Ausweg greift dort nicht. Mit
+      # torch 2.5.1 scheiterte jedes `task=embed` an einem ValueError, ohne dass
+      # ein Gate angeschlagen hat (live belegt 2026-09-12). Ohne diesen Block
+      # fällt die Grenze beim nächsten Basis-Image-Wechsel still zurück.
+      - name: GATE – torch >= 2.6 (CLAP-Pickle-Checkpoints)
+        run: |
+          docker run --rm --entrypoint python "${{ needs.build.outputs.image }}:${{ github.sha }}" -c "
+          import sys, torch
+          print('torch', torch.__version__)
+          major, minor = (int(x) for x in torch.__version__.split('+')[0].split('.')[:2])
+          sys.exit(0 if (major, minor) >= (2, 6) else 1)
+          "
+
   # Alle drei Rollen-Endpoints. workers_min bleibt 0 (Scale-to-Zero); der
   # Session-Wake hebt es beim Studio-Eintritt temporär auf 1.
   deploy:

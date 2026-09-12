@@ -5,7 +5,15 @@
 # des Rollen-Manifests (model_manifest.json → "roles"). Die Kernabhängigkeiten
 # (vLLM für brain, TTS-/Audio-Stacks für voiceGen/ears) werden per Build-Arg
 # zugeschaltet.
-FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+# torch MUSS >= 2.6 sein: `torch.load` verweigert darunter das Laden von
+# Pickle-Checkpoints ("we now require users to upgrade torch to at least v2.6"),
+# und `laion/larger_clap_music` (CLAP-Audio-Embeddings der Rolle ears) liefert
+# NUR pytorch_model.bin – der safetensors-Ausweg greift dort nicht. Live belegt
+# am 2026-09-12: mit 2.5.1 scheiterte JEDES `task=embed` an einem ValueError,
+# der Audio-Embedding-Space konnte nicht gefüllt werden. CUDA/cuDNN bleiben bei
+# 12.4/9, damit die Endpunkt-Vorgabe minCudaVersion=12.0 (ears/voice) weiter passt.
+# Der Build-Gate in .github/workflows/runpod-deploy.yml erzwingt torch >= 2.6.
+FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
