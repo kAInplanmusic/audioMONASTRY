@@ -6,7 +6,6 @@ import { TrackType, TRACK_ROLE_MAP, MUSIC_SCALES } from '../types';
 
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
 import { getPatch, INSTRUMENT_PATCHES, InstrumentPatch } from '../data/instrumentSynths';
-import { dx7SysexToPatch } from '../core/instrument/dx7Sysex';
 import { SfzVoiceBank } from '../core/instrument/sfzVoice';
 import { SfzSampleCache, planChunkRanges } from '../core/sampler/sfzStreaming';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
@@ -42,6 +41,7 @@ import {
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 import { renderDrumBuffer as renderDrumBufferImpl } from '../audio/drumRender';
+import { WorkletParamBridge } from '../audio/workletParamBridge';
 import { defaultOptionalDspPreset } from '../core/dsp/dspPresets';
 import type { V2SynthVoice } from '../core/audio/live/V2SinkEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
@@ -73,7 +73,7 @@ function makeSafeArrayBuffer(byteLength: number): ArrayBuffer {
 class AudioEngine {
   public initialized = false;
   /** Engine-seitiges Coalescing für hochfrequente Worklet-Automation. */
-  private automationCoalescer = new AutomationCoalescer((key, payload) => this.flushAutomation(key, payload), 16);
+  private automationCoalescer = new AutomationCoalescer((key, payload) => this.worklets.flushAutomation(key, payload), 16);
   private clockSync = new ClockSync();
 
   private async ensureInitialized() {
@@ -320,6 +320,31 @@ class AudioEngine {
   // Welche Spur (TrackType) hört welcher Monitor? (individuelle Cue-Mix-Matrix)
   private monitorTrackGain: Record<string, Record<string, number>> = {};
 
+
+  // AUDIO-P1-002: Worklet-Steuerung in eigener Fassade (src/audio/workletParamBridge.ts);
+  // die Engine reicht nur Node-Zugriffe, Zeitquelle und V2-Spiegelung hinein.
+  private readonly worklets = new WorkletParamBridge({
+    getEffectNode: () => this.effectNode,
+    setEffectNode: (node) => { this.effectNode = node; },
+    getDynamicsNode: () => this.dynamicsNode,
+    getDspNode: () => (this.dspNode as AudioWorkletNode | undefined) ?? null,
+    getMasteringNode: () => (this.masteringNode as AudioWorkletNode | undefined) ?? null,
+    getEqNode: () => (this.eqNode as AudioWorkletNode | undefined) ?? null,
+    getGranularNode: () => this.granularNode,
+    getFm6Node: () => this.fm6Node,
+    getDrumSynthNode: () => this.drumSynthNode,
+    getRawContext: () => {
+      const raw = (this.ctx && typeof (this.ctx as unknown as { createGain?: unknown }).createGain === 'function')
+        ? this.ctx
+        : (Tone.context as unknown as { rawContext?: unknown })?.rawContext;
+      return raw && typeof (raw as { createGain?: unknown }).createGain === 'function' ? (raw as BaseAudioContext) : null;
+    },
+    now: () => Tone.now(),
+    mirrorDynamics: (enabled, threshold, ratio, makeup) => this.v2LiveSink.setMasterDynamics(enabled, threshold, ratio, makeup),
+    mirrorFx: (wet, feedback, rate, depth) => this.v2LiveSink.setMasterFx(wet, feedback, rate, depth),
+    mirrorDsp: (cutoff, resonance, depth, drive) => this.v2LiveSink.setMasterDsp(cutoff, resonance, depth, drive),
+    mirrorMastering: (threshold, ratio, makeup, ceiling) => this.v2LiveSink.setMasterMastering(threshold, ratio, makeup, ceiling),
+  });
 
   constructor() {
     // Nur der echte Main-Bus wird als Audio-Node vorgehalten. USER_1..4/MON1..4
@@ -722,25 +747,9 @@ class AudioEngine {
       Tone.context.lookAhead = oneWayLatency / 1000 + 0.05;
   }
 
-  /** Flusht gesammelte Automation-Messages an den jeweiligen Worklet-Port. */
-  private flushAutomation(key: string, payload: unknown): void {
-    const target = key.split(':')[0];
-    const msg = payload as Record<string, unknown>;
-    try {
-      switch (target) {
-        case 'dynamics': this.dynamicsNode?.port?.postMessage(msg); break;
-        case 'effect': this.effectNode?.port?.postMessage(msg); break;
-        case 'dsp': this.dspNode?.port?.postMessage(msg); break;
-        case 'mastering': this.masteringNode?.port?.postMessage(msg); break;
-        case 'eq': this.eqNode?.port?.postMessage(msg); break;
-      }
-    } catch { /* Worklet nicht verfügbar – Coalescer verwirft den Batch */ }
-  }
-
   public setWorkletParam(name: string, value: number) {
     this.ensureInitialized();
-    if (!this.dspNode || typeof (this.dspNode as any).parameters?.get !== 'function') return;
-    this.dspNode.parameters!.get(name)?.setValueAtTime(value, Tone.now());
+    this.worklets.setWorkletParam(name, value);
   }
 
   /** Effekt-Engine (effectProcessor) steuern – Insert/Send. */
@@ -768,7 +777,7 @@ class AudioEngine {
 
   /** Ist der Dynamik-Insert tatsächlich in der Master-Kette? */
   public isDynamicsInsertReady(): boolean {
-    return !!(this.dynamicsNode && typeof (this.dynamicsNode as any).connect === 'function');
+    return this.worklets.isDynamicsInsertReady();
   }
 
   /**
@@ -781,14 +790,7 @@ class AudioEngine {
     gate?: { enabled?: boolean; threshold?: number; range?: number; attack?: number; hold?: number; release?: number; hysteresis?: number };
     dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
   }): void {
-    try { this.dynamicsNode?.port?.postMessage({ ...params }); } catch { /* noop */ }
-    // AUDIO-P0-004: Dynamik-Insert in den V2-Live-Pfad spiegeln.
-    this.v2LiveSink.setMasterDynamics(
-      Boolean(params.enabled),
-      params.compressor?.threshold ?? -18,
-      params.compressor?.ratio ?? 3,
-      params.compressor?.makeup ?? 0,
-    );
+    this.worklets.setDynamicsParams(params);
   }
 
   /** Sample-genaue Dynamik-Parameter-Rampe (zipper-frei). */
@@ -807,7 +809,7 @@ class AudioEngine {
 
   /** Granular-Source setzen (Float32Array wird als Kopie an das Worklet gepostet). */
   public loadGranularSource(buffer: Float32Array): void {
-    try { this.granularNode?.port?.postMessage({ buffer }); } catch { /* Worklet nicht verfügbar */ }
+    this.worklets.loadGranularSource(buffer);
   }
 
   /** Granular-Parameter setzen. */
@@ -815,40 +817,37 @@ class AudioEngine {
     grainSize?: number; density?: number; position?: number; positionJitter?: number;
     pitch?: number; pitchJitter?: number; direction?: 1 | -1; freeze?: boolean; gain?: number;
   }): void {
-    try { this.granularNode?.port?.postMessage({ ...p }); } catch { /* noop */ }
+    this.worklets.setGranularParams(p);
   }
 
   public isGranularReady(): boolean {
-    return !!(this.granularNode && typeof (this.granularNode as any).connect === 'function');
+    return this.worklets.isGranularReady();
   }
 
   /** 6-Op-FM-Patch setzen. */
   public setFm6Patch(patch: unknown): void {
-    try { this.fm6Node?.port?.postMessage({ type: 'patch', patch }); } catch { /* noop */ }
+    this.worklets.setFm6Patch(patch);
   }
 
   /** DX7-SysEx (156-Byte-unpacked) laden und als Patch setzen. */
   public loadFm6Sysex(bytes: Uint8Array): void {
-    try {
-      const patch = dx7SysexToPatch(bytes);
-      this.setFm6Patch(patch);
-    } catch { /* ungültige SysEx – Worklet bleibt unverändert */ }
+    this.worklets.loadFm6Sysex(bytes);
   }
 
   public fm6NoteOn(noteHz: number, velocity = 0.8): void {
-    try { this.fm6Node?.port?.postMessage({ type: 'noteOn', noteHz, velocity }); } catch { /* noop */ }
+    this.worklets.fm6NoteOn(noteHz, velocity);
   }
 
   public fm6NoteOff(noteHz: number): void {
-    try { this.fm6Node?.port?.postMessage({ type: 'noteOff', noteHz }); } catch { /* noop */ }
+    this.worklets.fm6NoteOff(noteHz);
   }
 
   public setFm6Gain(gain: number): void {
-    try { this.fm6Node?.port?.postMessage({ type: 'gain', value: gain }); } catch { /* noop */ }
+    this.worklets.setFm6Gain(gain);
   }
 
   public isFm6Ready(): boolean {
-    return !!(this.fm6Node && typeof (this.fm6Node as any).connect === 'function');
+    return this.worklets.isFm6Ready();
   }
 
   // ---------------------------------------------------------------------------
@@ -861,11 +860,11 @@ class AudioEngine {
 
   /** Synthetische Drums triggern (kick/snare/hat). */
   public triggerDrumSynth(kind: 'kick' | 'snare' | 'hat'): void {
-    try { this.drumSynthNode?.port?.postMessage({ type: kind }); } catch { /* noop */ }
+    this.worklets.triggerDrumSynth(kind);
   }
 
   public isDrumSynthReady(): boolean {
-    return !!(this.drumSynthNode && typeof (this.drumSynthNode as any).connect === 'function');
+    return this.worklets.isDrumSynthReady();
   }
 
   /** SFZ-Instrument laden (Text + Sample-Buffer-Map) und als V2-Quelle registrieren. */
@@ -913,28 +912,12 @@ class AudioEngine {
 
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
   public isEffectInsertReady(): boolean {
-    return !!(this.effectNode && typeof (this.effectNode as any).connect === 'function');
+    return this.worklets.isEffectInsertReady();
   }
 
   public setEffectParam(p: { wet?: number; feedback?: number; rate?: number; depth?: number; bits?: number; sampleReduction?: number }) {
     this.ensureInitialized();
-    if (!this.effectNode) {
-      // Fallback, falls setEffectParam vor Abschluss von init() aufgerufen
-      // wurde (ensureInitialized wird nicht awaited).
-      try {
-        const rawCtx: any = (this.ctx && typeof (this.ctx as any).createGain === 'function')
-          ? this.ctx
-          : (Tone.context as any)?.rawContext;
-        if (!rawCtx || typeof (rawCtx as any).createGain !== 'function') return;
-        this.effectNode = new AudioWorkletNode(rawCtx, 'effect-processor', { numberOfInputs: 1, numberOfOutputs: 1 });
-      } catch (e) {
-        console.warn('[audioEngine] effect-worklet nicht verfügbar:', (e as Error).message);
-        return;
-      }
-    }
-    try { this.effectNode.port.postMessage({ ...p }); } catch { /* noop */ }
-    // AUDIO-P0-004: Effekt-Parameter in den hörbaren V2-Live-Pfad spiegeln.
-    this.v2LiveSink.setMasterFx(p.wet ?? 0, p.feedback ?? 0.6, p.rate ?? 0.5, p.depth ?? 0.5);
+    this.worklets.setEffectParam(p);
   }
 
   /** Sample-genaue Effekt-Parameter-Rampe (effectProcessor automate). */
@@ -960,17 +943,13 @@ class AudioEngine {
   /** Task 11: Mastering-Limiter/Kompression steuern (masteringProcessor). */
   public setMasteringParams(p: { threshold?: number; ratio?: number; knee?: number; attack?: number; release?: number; makeup?: number; ceiling?: number }) {
     this.ensureInitialized();
-    try { this.masteringNode?.port?.postMessage({ ...p }); } catch { /* Gain-Fallback */ }
-    // AUDIO-P0-004: Mastering-Parameter in den V2-Live-Pfad spiegeln.
-    this.v2LiveSink.setMasterMastering(p.threshold ?? -14, p.ratio ?? 3, p.makeup ?? 1, p.ceiling ?? 0.98);
+    this.worklets.setMasteringParams(p);
   }
 
   /** Task 10: DSP-Engine steuern (Phasenkorrektur, dynamisches Filter, Drive). */
   public setDspParam(p: { phase?: number; filterCutoff?: number; resonance?: number; depth?: number; drive?: number }) {
     this.ensureInitialized();
-    try { this.dspNode?.port?.postMessage({ ...p }); } catch { /* Gain-Fallback */ }
-    // AUDIO-P0-004: DSP-Parameter in den V2-Live-Pfad spiegeln.
-    this.v2LiveSink.setMasterDsp(p.filterCutoff ?? 20000, p.resonance ?? 0.5, p.depth ?? 0, p.drive ?? 0);
+    this.worklets.setDspParam(p);
   }
 
   // ---------------------------------------------------------------------------
