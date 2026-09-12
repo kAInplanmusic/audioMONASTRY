@@ -6,8 +6,6 @@ import { TrackType, MUSIC_SCALES } from '../types';
 
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
 import { getPatch, INSTRUMENT_PATCHES, InstrumentPatch } from '../data/instrumentSynths';
-import { SfzVoiceBank } from '../core/instrument/sfzVoice';
-import { SfzSampleCache, planChunkRanges } from '../core/sampler/sfzStreaming';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
 import type {
   InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
@@ -32,6 +30,7 @@ import { V2StudioGraph, V2_CHANNELS } from '../core/audio/V2StudioGraph';
 import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/v2SyncMirror';
 import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { MasterStreamTap } from '../audio/masterStreamTap';
+import { SfzBridge } from '../audio/sfzBridge';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -841,9 +840,6 @@ class AudioEngine {
   // Drum-Synth-Worklet + SFZ-Voice-Management (A-Klasse)
   // ---------------------------------------------------------------------------
   private drumSynthNode: AudioWorkletNode | null = null;
-  private sfzBank: SfzVoiceBank | null = null;
-  /** Kanal, auf dem das SFZ-Instrument als V2-Quelle läuft. */
-  private sfzV2Channel: TrackType = 'channel4';
 
   /** Synthetische Drums triggern (kick/snare/hat). */
   public triggerDrumSynth(kind: 'kick' | 'snare' | 'hat'): void {
@@ -854,47 +850,38 @@ class AudioEngine {
     return this.worklets.isDrumSynthReady();
   }
 
+  // AUDIO-P1-002: SFZ-Voice-Management + Streaming-Cache in eigener Fassade.
+  private readonly sfz = new SfzBridge({
+    getSampleRate: () => this.ctx?.sampleRate ?? 48000,
+    getSink: () => this.v2LiveSink,
+  });
+
   /** SFZ-Instrument laden (Text + Sample-Buffer-Map) und als V2-Quelle registrieren. */
   public loadSfzInstrument(sfzText: string, sources: Record<string, Float32Array>, channel: TrackType = 'channel4'): string[] {
-    try {
-      const bank = new SfzVoiceBank(this.ctx?.sampleRate ?? 48000);
-      const errors = bank.load(sfzText, sources);
-      this.sfzBank = bank;
-      this.sfzV2Channel = channel;
-      // Phase 3 Rest: SFZ-Bank auch im V2-Sink als Quelle ablegen.
-      this.v2LiveSink.loadSfzBank(channel, sfzText, sources);
-      return errors;
-    } catch {
-      return ['SFZ konnte nicht geladen werden'];
-    }
+    return this.sfz.load(sfzText, sources, channel);
   }
 
   public sfzNoteOn(note: number, velocity = 100): void {
-    this.sfzBank?.noteOn(note, velocity);
-    this.v2LiveSink.sfzNoteOn(this.sfzV2Channel, note, velocity);
+    this.sfz.noteOn(note, velocity);
   }
 
   public sfzNoteOff(note: number): void {
-    this.sfzBank?.noteOff(note);
-    this.v2LiveSink.sfzNoteOff(this.sfzV2Channel, note);
+    this.sfz.noteOff(note);
   }
-
-  // Task #3: SFZ/OPFS-Streaming-Kern, verdrahtet an die Engine.
-  private sfzStreamCache = new SfzSampleCache<Float32Array>(64 * 1024 * 1024);
 
   /** Legt dekomprimierte SFZ-Sample-Daten in den 64-MB-LRU-Cache. */
   public cacheSfzSample(key: string, data: Float32Array, bytes: number): void {
-    this.sfzStreamCache.put(key, data, bytes);
+    this.sfz.cacheSample(key, data, bytes);
   }
 
   /** Holt gecachte SFZ-Sample-Daten (LRU-Reihenfolge wird aufgefrischt). */
   public getCachedSfzSample(key: string): Float32Array | undefined {
-    return this.sfzStreamCache.get(key);
+    return this.sfz.cachedSample(key);
   }
 
   /** Chunk-Plan für große SFZ-Samples (HTTP-Range + Worker-Decode). */
   public planSfzChunks(totalBytes: number, chunkBytes?: number) {
-    return planChunkRanges(totalBytes, chunkBytes);
+    return this.sfz.planChunks(totalBytes, chunkBytes);
   }
 
   /** P2-4: Ist der effectProcessor tatsächlich in die Master-Kette eingehängt? */
