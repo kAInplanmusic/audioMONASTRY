@@ -394,7 +394,13 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
             exc,
         )
     except Exception as exc:  # noqa: BLE001 – generischer Fehler, keine Details nach außen
-        log_event("ERROR", "inference failed", task=task, model=model, error=type(exc).__name__)
+        # Die Meldung gehoert ins Server-Log (Container-Logs, kein Leak nach aussen) –
+        # nur den Typ zu loggen macht jeden Handler-Fehler undiagnostizierbar. Live
+        # belegt (2026-09-12): CLAP-embed scheiterte wiederholt mit "ValueError",
+        # ohne dass die Ursache aus Log ODER Antwort hervorging (der typisierte
+        # Zweig oben loggt str(exc) bereits, hier fehlte es).
+        log_event("ERROR", "inference failed", task=task, model=model,
+                  error=type(exc).__name__, message=str(exc)[:300])
         return _with_detail(
             {"status": "error", "code": "INFERENCE_FAILED", "model": model, "message": "inference failed"},
             exc,
