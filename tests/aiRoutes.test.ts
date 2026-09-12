@@ -107,6 +107,26 @@ describe('/api/ai/*-Routen (Integration)', () => {
     expect(body.result?.text).toBe('test transcription');
   });
 
+  it('POST /api/ai/voice/mos validiert Hörerwertungen (400 statt 500)', async () => {
+    const bad = await fetch(`${baseUrl}/api/ai/voice/mos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId: 'mms-tts-deu', language: 'DE', score: 9, evaluatorId: 'u1' }),
+    });
+    expect(bad.status).toBe(400);
+  });
+
+  it('POST /api/ai/voice/mos nimmt eine gültige Wertung an (201)', async () => {
+    const ok = await fetch(`${baseUrl}/api/ai/voice/mos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ modelId: 'mms-tts-deu', language: 'DE', score: 5, evaluatorId: 'u1' }),
+    });
+    expect(ok.status).toBe(201);
+    const body = await ok.json() as { summary?: { count?: number } };
+    expect(body.summary?.count).toBeGreaterThanOrEqual(1);
+  });
+
   it('POST /api/ai/generate-drop verlangt einen Prompt', async () => {
     const res = await fetch(`${baseUrl}/api/ai/generate-drop`, {
       method: 'POST',

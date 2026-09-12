@@ -364,3 +364,11 @@ export function validatePluginState(data: unknown): PluginStatePayload {
 export function validateSessionFull(data: unknown): SessionFullPayload {
   return SessionFullPayloadSchema.parse(data);
 }
+/** AI-P1-003 P2: MOS-Hörerwertung (menschlich, 1..5) für das Voice-Benchmark-Gate. */
+export const MosRatingSchema = z.object({
+  modelId: z.string().min(1).max(64),
+  language: z.enum(['DE', 'EN']),
+  score: z.number().int().min(1).max(5),
+  evaluatorId: z.string().min(1).max(64),
+  notes: z.string().max(500).optional(),
+});

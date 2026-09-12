@@ -19,6 +19,7 @@ import {
 import type { DropGenerationRequest, DropStyle } from './src/core/drop/DropTemplateGenerator';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { fleetStatus, sleepFleet, wakeFleet } from './src/core/ai/orchestrator/fleetWake';
+import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { embedText } from './src/core/ai/orchestrator/textEmbedding';
@@ -54,6 +55,7 @@ import {
   AiVisionFeedbackSchema,
   AiVisionStylesQuerySchema,
   AlertsWebhookSchema,
+  MosRatingSchema,
   JsonObjectBodySchema,
   SoundGenerateSchema,
   GenerateVoiceSchema,
@@ -984,6 +986,24 @@ app.post('/api/ai/describe', async (req, res) => {
     return res.json({ ai: raw.trim() });
   }
   return res.json({ ai: 'Ollama nicht erreichbar. (Lokaler Fallback: keine KI-Antwort verfügbar)' });
+});
+
+// --- POST /api/ai/voice/mos  → MOS-Harness (AI-P1-003 P2): Hörerwertung 1..5 ---
+// Request:  { modelId, language: 'DE'|'EN', score: 1..5, evaluatorId, notes? }
+// Response: { ok:true, summary } | { ok:false, error }
+app.post('/api/ai/voice/mos', (req, res) => {
+  const parsed = MosRatingSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+  }
+  const result = mosHarness.add(parsed.data);
+  if (!result.ok) return res.status(400).json(result);
+  return res.status(201).json(result);
+});
+
+// --- GET /api/ai/voice/mos  → MOS-Gate-Status je Modell ---
+app.get('/api/ai/voice/mos', (_req, res) => {
+  return res.json({ minScore: mosHarness.minScore, requiredCount: mosHarness.requiredCount, summaries: mosHarness.list() });
 });
 
 // --- POST /api/ai/vision  → VisualMONK: Bild aus Prompt/Stil/Audio-Features (FLUX) ---
