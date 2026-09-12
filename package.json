@@ -47,6 +47,7 @@
     "runpod:smoke": "python3 scripts/runpod-smoke.py",
     "ghcr:check": "python3 scripts/ghcr-check.py",
     "supabase:seed-embeddings": "tsx scripts/seed-sample-embeddings.ts",
+    "supabase:index-audio-embeddings": "tsx scripts/index-sample-audio-embeddings.ts",
     "supabase:apply": "tsx scripts/apply-supabase-migrations.ts",
     "supabase:verify": "tsx scripts/verify-supabase.ts",
     "download:orchestral": "node scripts/download-orchestral.mjs",
