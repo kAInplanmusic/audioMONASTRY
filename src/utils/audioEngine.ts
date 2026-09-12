@@ -5,7 +5,8 @@ import { TrackType, MUSIC_SCALES } from '../types';
 
 
 import { calculateChannelPan, calculateHRTF, SPATIAL_SETUPS, SpatialSetup } from './spatialMath';
-import { getPatch, INSTRUMENT_PATCHES, InstrumentPatch } from '../data/instrumentSynths';
+import { getPatch, InstrumentPatch } from '../data/instrumentSynths';
+import { InstrumentNoteBridge, instrumentPatches, toPitchDef as toPitchDefImpl } from '../audio/instrumentNoteBridge';
 import { DRUM_KITS, getDrumKit, getDrumSound, DrumSoundPreset } from '../data/drumKits';
 import type {
   InstrumentDefinition, SynthDef, FmDef, DrumDef, FxDef,
@@ -142,6 +143,13 @@ class AudioEngine {
     getContext: () => (this.ctx as AudioContext | undefined) ?? null,
     getSink: () => this.v2LiveSink,
     getLegacyTap: () => this.masterStreamTap,
+  });
+
+  // AUDIO-P1-002: instrumentMONK-Noten/Worklet-Steuerung in eigener Fassade.
+  private readonly instrumentNotes = new InstrumentNoteBridge({
+    getSink: () => this.v2LiveSink,
+    getItSynthNode: () => this.itSynthNode,
+    isItSynthReady: () => this.itSynthReady,
   });
   /** WF-3: Pre-Mastering-Abgriff für das lokale Monitoring (ohne Mastering-Latenz). */
   private monitorTap: GainNode | null = null;
@@ -1501,30 +1509,16 @@ class AudioEngine {
   }
 
   /** Wandelt eine instrumentMONK-Definition in ein worklet-taugliches PitchDef um. */
-  private toPitchDef(def: InstrumentDefinition): any {
-    const a = def as any;
-    const common: any = {
-      id: def.id, name: def.name, kind: def.kind,
-      attack: a.attack ?? 0.01,
-      release: a.release ?? 0.3,
-      cutoff: a.cutoff ?? a.filterFreq,
-      resonance: a.resonance ?? a.filterQ,
-      osc: a.osc ?? a.wave,
-    };
-    if (def.kind === 'acoustic') { common.partials = (def as any).partials; common.sustain = (def as any).env?.[2]; common.decay = (def as any).env?.[1]; }
-    if (def.kind === 'fm') { common.modulatorOsc = (def as any).modulator; common.modIndex = (def as any).modIndex; common.ratio = 2; }
-    if (def.kind === 'drum') { common.freqStart = (def as any).freqStart; common.freqEnd = (def as any).freqEnd; common.noise = (def as any).noise; common.noiseFilter = (def as any).filterFreq; common.multiBurst = (def as any).multiBurst; common.click = (def as any).click; common.decay = (def as any).decay; }
-    if (def.kind === 'fx') { common.lfoRate = (def as any).lfoRate; common.freq = (def as any).freq; common.freqStartHZ = (def as any).freqStart; common.freqEndHZ = (def as any).freqEnd; common.resonance = (def as any).resonance; common.noiseType = (def as any).noiseType; common.wobble = 0.15; }
-    return common;
+  private toPitchDef(def: InstrumentDefinition): Record<string, unknown> {
+    return toPitchDefImpl(def);
   }
 
   /** Steuert den Synth (Note-On) – Phase 9: hörbar über den V2-Sink. */
   public noteOnWorklet(freq: number, velocity = 1, _osc = 'saw') {
-    this.v2LiveSink.setSynthSource('channel8', Math.max(20, Math.min(20000, freq)), 'lead');
-    this.v2LiveSink.synthTrigger('channel8', Math.max(0.2, Math.min(1, velocity)));
+    this.instrumentNotes.noteOn(freq, velocity);
   }
   public noteOffWorklet() {
-    this.v2LiveSink.stopSample('channel8');
+    this.instrumentNotes.noteOff();
   }
 
   public async play() {
@@ -1649,7 +1643,7 @@ class AudioEngine {
   }
 
   public getInstrumentPatches() {
-    return INSTRUMENT_PATCHES;
+    return instrumentPatches();
   }
 
   /** Spielt eine Note am aktuellen Instrument-Synth (MIDI o. Name wie 'A4'). */
@@ -1680,7 +1674,7 @@ class AudioEngine {
 
   /** Harte Note-Aus (alle Stimmen) – für Umschalten/Stop. */
   public allNotesOffItSynth() {
-    this.itSynthNode?.port.postMessage({ type: 'allNotesOff' });
+    this.instrumentNotes.allNotesOff();
   }
 
   // --- Task 1/3: sample-genaue Automation + Stimmen-Status des it-synth ---
@@ -1695,8 +1689,7 @@ class AudioEngine {
     value: number,
     rampTime = 0.02,
   ) {
-    if (!this.itSynthReady || !this.itSynthNode) return;
-    this.itSynthNode.port.postMessage({ type: 'automate', param, value, rampTime });
+    this.instrumentNotes.automate(param, value, rampTime);
   }
 
   /**
