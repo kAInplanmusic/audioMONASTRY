@@ -30,6 +30,7 @@ import { SourceExtractionPipeline, type AudioSourceInput } from '../core/spatial
 import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
 import { V2StudioGraph, V2_CHANNELS } from '../core/audio/V2StudioGraph';
 import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/v2SyncMirror';
+import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -37,7 +38,6 @@ import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatenc
 import { telemetry } from './telemetry';
 import { AudioIdleDetector } from './idleDetection';
 import {
-  defaultMonitorPlan, planMonitorRouting,
   type MonitorRoutingPlan, type MonitorSource, type MonitorUser,
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
@@ -146,12 +146,6 @@ class AudioEngine {
   private cueBus: GainNode | null = null;
   private cueOutGain: GainNode | null = null;
   private cueTrackGains: Partial<Record<TrackType, GainNode>> = {};
-  /** DJ-PFL: Kanäle, deren Vorhören (pre-fader) gerade aktiv ist. */
-  private pflTracks = new Set<TrackType>();
-  /** MAIN-Berechtigung: nur der mixerMONK-Halter darf MAIN verändern (Play/Stop/Load/Trigger). */
-  private mainHolderActive = true;
-  /** Vom DJ freigegebene MAIN-Kanäle (andere User dürfen hineinladen). */
-  private releasedMainTracks = new Set<TrackType>();
   private spatialRebuildTimer: ReturnType<typeof setTimeout> | null = null;
 
   /**
@@ -318,8 +312,12 @@ class AudioEngine {
 
   // --- Task 4: Monitor/Cue-Busse (1..4 Personen, je Mitarbeiter ein eigener Mix) ---
   public monitorCount = 4;
-  // Welche Spur (TrackType) hört welcher Monitor? (individuelle Cue-Mix-Matrix)
-  private monitorTrackGain: Record<string, Record<string, number>> = {};
+  // AUDIO-P1-002: Cue-/Monitor-Zustand in eigener Fassade (src/audio/monitorRoutingFacade.ts).
+  private readonly monitor = new MonitorRoutingState({
+    getSink: () => this.v2LiveSink,
+    ensureInitialized: () => this.ensureInitialized(),
+    getCount: () => this.monitorCount,
+  });
 
 
   // AUDIO-P1-002: Worklet-Steuerung in eigener Fassade (src/audio/workletParamBridge.ts);
@@ -349,25 +347,9 @@ class AudioEngine {
 
   constructor() {
     // Nur der echte Main-Bus wird als Audio-Node vorgehalten. USER_1..4/MON1..4
-    // waren tote Tone.Volume-Knoten ohne Ausgang – die Cue-Matrix lebt rein als
-    // Zustand in `monitorTrackGain` und wird von `planMonitorRouting` verdrahtet.
+    // waren tote Tone.Volume-Knoten ohne Ausgang – die Cue-Matrix lebt als
+    // Zustand in `MonitorRoutingState` und wird von `planMonitorRouting` verdrahtet.
     this.masterBuses['GLOBAL_MASTER'] = new Tone.Volume(0);
-        // Cue-Mix-Matrix: jeder Monitor (1..4) hat pro Spur (channel1..8) einen Pegel 0..1.
-    ['MON1', 'MON2', 'MON3', 'MON4'].forEach(mon => {
-      this.monitorTrackGain[mon] = {
-        channel1: 1, channel2: 1, channel3: 1, channel4: 1,
-        channel5: 1, channel6: 1, channel7: 1, channel8: 1,
-      };
-      // Voreinstellungen für Rollen (DJ/Producer/Engineer/Stem-Host)
-      if (mon === 'MON2') { // Producer: weniger Hats, mehr Bass/Pads
-        this.monitorTrackGain[mon].channel2 = 0.5;
-        this.monitorTrackGain[mon].channel6 = 1.2;
-      }
-      if (mon === 'MON4') { // Stem-Host: viel Drums und Lead
-        this.monitorTrackGain[mon].channel1 = 1.2;
-        this.monitorTrackGain[mon].channel8 = 1.2;
-      }
-    });
   }
   public async init() { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
     if (this.initialized) return;
@@ -1374,7 +1356,7 @@ class AudioEngine {
 
   public triggerEvent(track: TrackType, velocity: number = 1.0) {
     // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
-    if (!this.mainHolderActive) return;
+    if (!this.monitor.isMainHolderActive()) return;
     // AUDIO-P0-003/Phase 9: Trigger hörbar in den V2-Sink leiten.
     const player = this.samplePlayers[track];
     const buffer = player?.buffer?.get?.();
@@ -1391,48 +1373,31 @@ class AudioEngine {
   // ------------------------------------------------------------------ //
   /** Gesamtpegel eines Monitors (0..1, 0 = stumm). */
   public setMonitorGain(mon: 'MON1'|'MON2'|'MON3'|'MON4', gain: number) {
-    const v = Number.isFinite(gain) ? Math.max(0, Math.min(1, gain)) : 0;
-    this.monitorLevels[mon] = v;
-    // P0-6: Läuft der lokale User gerade auf diesem Cue-Bus, wirkt der Pegel sofort.
-    if (mon === this.monitorPlan.mon) this.applyMonitorPlan();
+    this.monitor.setMonitorGain(mon, gain);
   }
 
   /** Setzt den individuellen Spur-Pegel (0..2) eines Tracks in einem Monitor-Cue. */
   public setMonitorTrackGain(mon: 'MON1'|'MON2'|'MON3'|'MON4', track: TrackType, gain: number) {
-    const v = Number.isFinite(gain) ? Math.max(0, Math.min(2, gain)) : 0;
-    if (this.monitorTrackGain[mon]) this.monitorTrackGain[mon][track] = v;
-    // P0-6: Rollen-/Cue-Änderungen des eigenen Busses sofort hörbar machen.
-    if (mon === this.monitorPlan.mon) this.applyMonitorPlan();
+    this.monitor.setMonitorTrackGain(mon, track, gain);
   }
 
   /** Liest den Track-Pegel eines Monitors aus (für UI-Darstellung). */
   public getMonitorTrackGain(mon: 'MON1'|'MON2'|'MON3'|'MON4'): Record<TrackType, number> {
-    return this.monitorTrackGain[mon] ?? ({} as any);
+    return this.monitor.getMonitorTrackGain(mon);
   }
 
   /** Liefert die Monitor-Bus-Namen (gekürzt) als Konfig-Snapshot. */
   public getMonitorConfig() {
-    return {
-      count: this.monitorCount,
-      gains: { ...this.monitorLevels },
-      tracks: Object.fromEntries(Object.entries(this.monitorTrackGain)),
-    };
+    return this.monitor.getMonitorConfig();
   }
 
   // ------------------------------------------------------------------ //
   //  Monitor-Quelle (pro User): MAIN | USER-MIX (MON1..MON4) | PLUGIN  //
   // ------------------------------------------------------------------ //
-  /** Aktueller Abhörplan des lokalen Users (P0-6). */
-  private monitorPlan: MonitorRoutingPlan = defaultMonitorPlan('MON1');
-  /** Zuletzt angeforderte Abhör-Auswahl (Quelle/Bus/Solo-Kanal). */
-  private monitorRequest: { source: MonitorSource; mon: MonitorUser; track?: TrackType } =
-    { source: 'MAIN', mon: 'MON1' };
-  /** Cue-Pegel je Monitor-Bus (0..1, aus `setMonitorGain`). */
-  private monitorLevels: Record<string, number> = { MON1: 1, MON2: 1, MON3: 1, MON4: 1 };
 
   /** Liefert die aktuell gewählte Monitor-Quelle des lokalen Users. */
   public getMonitorSource(): MonitorSource {
-    return this.monitorPlan.source;
+    return this.monitor.getMonitorSource();
   }
 
   /**
@@ -1441,15 +1406,7 @@ class AudioEngine {
    * V2-Live-Sink verbunden ist.
    */
   public getMonitorRouting(): MonitorRoutingPlan & { wired: boolean; nodeGains: { main: number; cue: number } } {
-    return {
-      ...this.monitorPlan,
-      cueTracks: { ...this.monitorPlan.cueTracks },
-      wired: this.v2LiveSink.isConnected,
-      nodeGains: {
-        main: this.monitorPlan.mainMonitorGain,
-        cue: this.monitorPlan.cueGain,
-      },
-    };
+    return this.monitor.getMonitorRouting();
   }
 
   /**
@@ -1467,9 +1424,7 @@ class AudioEngine {
     mon: MonitorUser = 'MON1',
     track?: TrackType,
   ): void {
-    this.ensureInitialized();
-    this.monitorRequest = { source: mode, mon, track };
-    this.applyMonitorPlan();
+    this.monitor.setMonitorSource(mode, mon, track);
   }
 
   /**
@@ -1479,31 +1434,27 @@ class AudioEngine {
    * lokalen Monitor-Weg (MAIN-Bus/Master-Stream bleiben unverändert).
    */
   public setChannelPfl(track: TrackType, active: boolean): void {
-    this.ensureInitialized();
-    if (active) this.pflTracks.add(track);
-    else this.pflTracks.delete(track);
-    this.applyMonitorPlan();
+    this.monitor.setChannelPfl(track, active);
   }
 
   /** Liefert die aktuell vorgehörten Kanäle (leer = kein PFL aktiv). */
   public getPflTracks(): TrackType[] {
-    return [...this.pflTracks];
+    return this.monitor.getPflTracks();
   }
 
   /** MAIN-Berechtigung setzen (App ruft das je Lock-Status des mixerMONK-Halters). */
-  public setMainHolderActive(active: boolean): void { this.mainHolderActive = active; }
-  public isMainHolderActive(): boolean { return this.mainHolderActive; }
+  public setMainHolderActive(active: boolean): void { this.monitor.setMainHolderActive(active); }
+  public isMainHolderActive(): boolean { return this.monitor.isMainHolderActive(); }
 
   /** DJ gibt einen MAIN-Kanal frei (andere User dürfen hineinladen). */
   public setTrackReleased(track: TrackType, released: boolean): void {
-    if (released) this.releasedMainTracks.add(track);
-    else this.releasedMainTracks.delete(track);
+    this.monitor.setTrackReleased(track, released);
   }
-  public isTrackReleased(track: TrackType): boolean { return this.releasedMainTracks.has(track); }
+  public isTrackReleased(track: TrackType): boolean { return this.monitor.isTrackReleased(track); }
 
   /** Darf dieser lokale User den Track laden? (DJ immer, andere nur bei Freigabe.) */
   public canLoadTrack(track: TrackType): boolean {
-    return this.mainHolderActive || this.releasedMainTracks.has(track);
+    return this.monitor.canLoadTrack(track);
   }
 
   /**
@@ -1513,25 +1464,7 @@ class AudioEngine {
    * („zurück auf MAIN → sofort Gesamtmix").
    */
   private applyMonitorPlan(): void {
-    const req = this.monitorRequest;
-    // DJ-PFL hat Vorrang: solange mindestens ein Kanal vorgehört wird, hört
-    // der lokale User NUR diese Kanäle (pre-fader) auf dem Cue-Bus. MAIN-Bus
-    // und Master-Stream bleiben unverändert.
-    const pflMix: Partial<Record<TrackType, number>> = {};
-    if (this.pflTracks.size > 0) {
-      this.pflTracks.forEach((t) => { pflMix[t] = 1; });
-    }
-    const plan = planMonitorRouting({
-      source: this.pflTracks.size > 0 ? 'MON' : req.source,
-      mon: req.mon,
-      track: req.track,
-      baseMix: this.pflTracks.size > 0 ? pflMix : (this.monitorTrackGain[req.mon] ?? {}),
-      cueLevel: this.pflTracks.size > 0 ? 1 : (this.monitorLevels[req.mon] ?? 1),
-    });
-    this.monitorPlan = plan;
-
-    // Phase 9: Der V2-Live-Sink ist der einzige hörbare Monitor-Weg.
-    this.v2LiveSink.setMonitorRouting(plan);
+    this.monitor.applyPlan();
   }
 
   /** P0-2: Synth-Graph (it-synth) erst bei erster Aktivierung aufbauen. */
@@ -1605,7 +1538,7 @@ class AudioEngine {
 
   public async play() {
     // MAIN-Schutz: Transport startet nur beim mixerMONK-Halter.
-    if (!this.mainHolderActive) return;
+    if (!this.monitor.isMainHolderActive()) return;
     this.idleDetector.activity(); // AM-E6-5: Play beendet Idle-Suspend
     // Phase 9: V2-Transport läuft über den sample-genauen AudioWorklet-
     // Scheduler (v2SinkProcessor/V2SampleClock) – kein V1-Scheduler mehr.
@@ -1625,7 +1558,7 @@ class AudioEngine {
   }
 
   public stop() {
-    if (!this.mainHolderActive) return;
+    if (!this.monitor.isMainHolderActive()) return;
     this.isPlaying = false;
     this.v2LiveSink.stopTransport();
     this.v2LiveSink.disconnect();
@@ -1666,8 +1599,7 @@ class AudioEngine {
     this.cueTrackGains = {};
     this.cueBus = null;
     this.cueOutGain = null;
-    this.monitorRequest = { source: 'MAIN', mon: 'MON1' };
-    this.monitorPlan = defaultMonitorPlan('MON1');
+    this.monitor.reset();
 
     // PDC-Delay abräumen.
     try { this.cuePdcDelay?.disconnect(); } catch { /* ignore */ }
@@ -1974,7 +1906,7 @@ class AudioEngine {
     syncV2Mix(this.v2Studio, this.v2LiveSink, {
       channels,
       masterGainLinear: Math.pow(10, (this.masterVolume?.volume.value ?? -6) / 20),
-      monitorPlan: this.monitorPlan,
+      monitorPlan: this.monitor.getPlan(),
     });
   }
 
@@ -2064,7 +1996,7 @@ class AudioEngine {
     return exportV2SessionState({
       sessionId,
       graph: this.exportGraphState(),
-      monitor: this.monitorPlan,
+      monitor: this.monitor.getPlan(),
       activePlugins: [...this.activePluginIds],
       updatedBy: actorId,
     });
@@ -2082,15 +2014,7 @@ class AudioEngine {
     if (!this.importGraphStateV2(graph)) return false;
 
     // Monitor-/Cue-Plan übernehmen (Cue-Matrix des Ziel-Monitors ersetzen).
-    this.monitorRequest = {
-      source: monitor.source,
-      mon: monitor.mon,
-      track: monitor.soloTrack ?? undefined,
-    };
-    if (this.monitorTrackGain[monitor.mon]) {
-      this.monitorTrackGain[monitor.mon] = { ...monitor.cueTracks };
-    }
-    this.applyMonitorPlan();
+    this.monitor.importRoutingPlan(monitor);
 
     // Audio-einspeisende Plugins des Session-Stands aktivieren (idempotent).
     for (const pluginId of activePlugins) {
