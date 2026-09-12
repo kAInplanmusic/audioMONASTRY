@@ -31,6 +31,7 @@ import { GraphPlaybackEngine } from '../core/audio/compat/GraphPlaybackEngine';
 import { V2StudioGraph, V2_CHANNELS } from '../core/audio/V2StudioGraph';
 import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/v2SyncMirror';
 import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
+import { MasterStreamTap } from '../audio/masterStreamTap';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -137,9 +138,12 @@ class AudioEngine {
   private mainMonitorGain: GainNode | null = null;
   /** Post-Mastering-Abgriff für den Master-Stream (SFU/Recording), pre-local-monitor. */
   private masterStreamTap: GainNode | null = null;
-  /** AUDIO-P0-002: Aktive MediaStream-Destination am V2-Ausgang (Master-Stream). */
-  private masterStreamDest: MediaStreamAudioDestinationNode | null = null;
-  private masterStreamDestConnected = false;
+  // AUDIO-P1-002: Master-Stream-Tap + Visual-Analyser in eigener Fassade.
+  private readonly masterTap = new MasterStreamTap({
+    getContext: () => (this.ctx as AudioContext | undefined) ?? null,
+    getSink: () => this.v2LiveSink,
+    getLegacyTap: () => this.masterStreamTap,
+  });
   /** WF-3: Pre-Mastering-Abgriff für das lokale Monitoring (ohne Mastering-Latenz). */
   private monitorTap: GainNode | null = null;
   // P0-6: Cue-Bus des lokalen Users (parallel zu MAIN, pre-Master abgegriffen).
@@ -1713,48 +1717,12 @@ class AudioEngine {
    * Liefert null, wenn kein AudioContext/Master vorhanden ist (kein Fake).
    */
   public createMasterStreamDestination(): MediaStreamAudioDestinationNode | null {
-    try {
-      if (!this.ctx || typeof this.ctx.createMediaStreamDestination !== 'function') return null;
-      const dest = this.ctx.createMediaStreamDestination();
-      // AUDIO-P0-002: Bevorzugt den hörbaren V2-Ausgang abgreifen.
-      if (this.v2LiveSink.isConnected) {
-        if (this.v2LiveSink.connectExtra(dest)) {
-          this.masterStreamDest = dest;
-          this.masterStreamDestConnected = true;
-          return dest;
-        }
-      }
-      // AUDIT-AUDIO-006: Hier gab es einen stillen Erfolg. `masterStreamTap` wird
-      // nirgends als echter Knoten aufgebaut (immer null), deshalb griff immer der
-      // Fallback `?? this.masterVolume` – und `masterVolume` ist eine reine
-      // Zustands-Fassade aus `nativeAudioKit`, deren `connect()` nur `return this`
-      // ist. Folge: der Aufrufer bekam eine gültige MediaStream-Destination zurück,
-      // der Stream blieb aber STUMM, und kein Test hat es bemerkt.
-      // Es gibt keinen No-Op-Fallback mehr: ohne echten Audio-Knoten wird der
-      // Nicht-Zustand explizit gemeldet (null), damit Stille sichtbar ist.
-      if (!this.masterStreamTap) return null;
-      this.masterStreamTap.connect(dest);
-      this.masterStreamDest = dest;
-      this.masterStreamDestConnected = false;
-      return dest;
-    } catch {
-      return null;
-    }
+    return this.masterTap.create();
   }
 
   /** Trennt eine zuvor erzeugte Master-Stream-Destination sauber. */
   public disconnectMasterStreamDestination(dest: MediaStreamAudioDestinationNode): void {
-    try {
-      // AUDIO-P0-002: V2-Abgriff zuerst trennen, sonst Legacy-Tap.
-      this.v2LiveSink.disconnectExtra(dest);
-      // Kein No-Op-Fallback (siehe createMasterStreamDestination).
-      this.masterStreamTap?.disconnect(dest);
-      dest.disconnect();
-      if (this.masterStreamDest === dest) {
-        this.masterStreamDest = null;
-        this.masterStreamDestConnected = false;
-      }
-    } catch { /* bereits getrennt */ }
+    this.masterTap.disconnect(dest);
   }
 
   /**
@@ -1763,27 +1731,12 @@ class AudioEngine {
    * der Visualizer bleibt dann im Ruhezustand, statt Stille als Audio zu verkaufen.
    */
   public createVisualAnalyser(fftSize = 2048): AnalyserNode | null {
-    try {
-      if (!this.ctx || typeof this.ctx.createAnalyser !== 'function') return null;
-      const analyser = this.ctx.createAnalyser();
-      analyser.fftSize = fftSize;
-      analyser.smoothingTimeConstant = 0.75;
-      if (!this.v2LiveSink.isConnected || !this.v2LiveSink.connectExtra(analyser)) {
-        try { analyser.disconnect(); } catch { /* ignore */ }
-        return null;
-      }
-      return analyser;
-    } catch {
-      return null;
-    }
+    return this.masterTap.createAnalyser(fftSize);
   }
 
   /** Trennt einen Visual-Analyser sauber vom V2-Ausgang. */
   public disconnectVisualAnalyser(analyser: AnalyserNode): void {
-    try {
-      this.v2LiveSink.disconnectExtra(analyser);
-      analyser.disconnect();
-    } catch { /* bereits getrennt */ }
+    this.masterTap.disconnectAnalyser(analyser);
   }
 
   /** Audio-Health-Snapshot für den Echtzeit-Performance-Monitor. */
@@ -1862,9 +1815,7 @@ class AudioEngine {
     if (ok) {
       this.syncV2FromV1();
       // AUDIO-P0-002: Master-Stream-Destination an den V2-Ausgang hängen.
-      if (this.masterStreamDest && !this.masterStreamDestConnected) {
-        this.masterStreamDestConnected = this.v2LiveSink.connectExtra(this.masterStreamDest);
-      }
+      this.masterTap.reattach();
     }
     return ok;
   }
