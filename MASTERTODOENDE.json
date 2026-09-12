@@ -141,9 +141,24 @@
       "id": "AUDIO-P1-003",
       "title": "nativeAudioKit nur noch als Zustandstraeger (kein No-Op im Live-Signalweg)",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Audio-Cleanup",
-      "source": "MASTER_TODO.md"
+      "source": "MASTER_TODO.md",
+      "note": "DONE 2026-09-12: No-Op-Guard als Test verankert. tests/audioNoOpFacadeGuard.test.ts verbietet new Tone.<No-Op-Klasse> im Live-Pfad (src/core/audio/ ohne compat plus src/audio/worklets/) und haelt die verbleibende Nutzung als exakte Ausnahmeliste fest: src/utils/audioEngine.ts und src/audio/instrumentSynth.ts (Zustandstraeger; hoerbar erst ueber die V2-Spiegelung bzw. den Worklet-Pfad). 20 No-Op-Klassen werden ueberwacht. Der Guard ist nicht-vakuos geprueft: ein echter Verstoss macht ihn rot (Meldung mit Datei und Klasse), ein reiner Kommentar nicht; die Live-Pfad-Liste wird auf Existenz geprueft, damit der Scan nicht ins Leere greift und still gruen wird. Generierte Bundles public/worklets/*.js und dist/worklets/*.js sind bewusst nicht gescannt (Build-Artefakte aus src/audio/worklets/*.ts, siehe build-worklets.mjs). BELEGE: tests/audioNoOpFacadeGuard.test.ts 5/5; npm run verify 0 (tsc 0, eslint 0, knip 0, npm-audit 0 Vulnerabilities, semgrep 0, boundary 422/0, react-memo 0, bundle-budget 0); test:ci 1359/1359 ohne Skips; audio-gate 13/13 PASS.",
+      "acceptance": [
+        "kein new Tone.Volume/Gain/Player/Compressor/... im Live-Audio-Pfad (erfuellt: src/core/audio ohne compat plus src/audio/worklets, 0 Funde)",
+        "Boundary-Test (erfuellt: boundary 422/0) plus grep-basierter Test tests/audioNoOpFacadeGuard.test.ts",
+        "verbleibende Nutzung nur fuer Zustands-Serialisierung dokumentiert (genau zwei Ausnahmen: audioEngine, instrumentSynth)",
+        "npm run verify gruen"
+      ],
+      "files": [
+        "src/core/audio/compat/nativeAudioKit.ts",
+        "src/utils/audioEngine.ts",
+        "src/audio/instrumentSynth.ts"
+      ],
+      "verification": [
+        "tests/audioNoOpFacadeGuard.test.ts"
+      ]
     },
     {
       "id": "AI-P1-001",
