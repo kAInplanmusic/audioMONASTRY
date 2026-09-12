@@ -79,10 +79,33 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
     }
   });
 
-  it('führt geplante Modelle mit TBD-Revision und ohne Preload', () => {
-    const planned = manifest.models.filter((m) => m.status === 'planned');
-    expect(planned.length).toBeGreaterThan(0);
-    for (const model of planned) {
+  it('hat alle Rollen-Modelle echt gepinnt – keine TBD-Platzhalter (AI-P1-003)', () => {
+    // Frueher forderte dieser Test, dass geplante TBD-Modelle EXISTIEREN, und
+    // schrieb damit den ungepinnten Zustand als Soll fest. AI-P1-003 verlangt
+    // echte Pins – der Test prueft jetzt das Gegenteil.
+    for (const [role, spec] of Object.entries(manifest.roles)) {
+      for (const modelId of spec.models) {
+        const model = modelsById.get(modelId);
+        expect(
+          model?.revision.toUpperCase().startsWith('TBD'),
+          `${role}: ${modelId} ist ungepinnt (${model?.revision})`,
+        ).toBe(false);
+      }
+    }
+
+    // Die in AI-P1-003 geforderten Revisions-Pins sind eingetragen.
+    for (const id of ['qwen3-32b', 'qwen3-30b-a3b', 'glm-4.5-air', 'mert-v1-95m', 'fish-speech', 'rvc']) {
+      const model = modelsById.get(id);
+      expect(model, `${id} fehlt im Manifest`).toBeDefined();
+      expect(model?.revision.toUpperCase().startsWith('TBD'), `${id} ist ungepinnt (${model?.revision})`).toBe(false);
+      expect(model?.status ?? 'ready', `${id} ist noch als planned markiert`).not.toBe('planned');
+    }
+  });
+
+  it('erlaubt TBD-Platzhalter nur mit status="planned" (Spiegel von registry.py)', () => {
+    // Bleibt als Regel bestehen, damit kuenftige geplante Modelle legal sind –
+    // unabhaengig davon, ob das Manifest gerade welche enthaelt.
+    for (const model of manifest.models.filter((m) => m.status === 'planned')) {
       expect(model.revision.toUpperCase().startsWith('TBD'), `${model.id} braucht eine TBD-Revision`).toBe(true);
       expect(model.preload ?? false, `${model.id} ist geplant und darf nicht preload=true sein`).toBe(false);
     }

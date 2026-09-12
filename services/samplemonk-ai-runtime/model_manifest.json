@@ -545,7 +545,7 @@
     {
       "id": "qwen3-32b",
       "repository": "Qwen/Qwen3-32B",
-      "revision": "TBD-qwen3-32b",
+      "revision": "9216db5781bf21249d130ec9da846c4624c16137",
       "task": "llm",
       "framework": "vllm",
       "estimatedVRAM": 20,
@@ -568,13 +568,12 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
-      "license": "Apache-2.0",
-      "status": "planned"
+      "license": "Apache-2.0"
     },
     {
       "id": "qwen3-30b-a3b",
       "repository": "Qwen/Qwen3-30B-A3B",
-      "revision": "TBD-qwen3-30b-a3b",
+      "revision": "ad44e777bcd18fa416d9da3bd8f70d33ebb85d39",
       "task": "llm",
       "framework": "vllm",
       "estimatedVRAM": 18,
@@ -597,13 +596,12 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
-      "license": "Apache-2.0",
-      "status": "planned"
+      "license": "Apache-2.0"
     },
     {
       "id": "glm-4.5-air",
       "repository": "zai-org/GLM-4.5-Air",
-      "revision": "TBD-glm-4.5-air",
+      "revision": "a24ceef6ce4f3536971efe9b778bdaa1bab18daa",
       "task": "llm",
       "framework": "vllm",
       "estimatedVRAM": 53,
@@ -627,13 +625,12 @@
       "concurrency": 1,
       "timeout": 600,
       "license": "MIT",
-      "status": "planned",
       "note": "Upgrade-Pfad: braucht 2x A6000 (96 GB) via gpuCount=2."
     },
     {
       "id": "mert-v1-95m",
       "repository": "m-a-p/MERT-v1-95M",
-      "revision": "TBD-mert-v1-95m",
+      "revision": "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5",
       "task": "embed",
       "framework": "transformers",
       "estimatedVRAM": 1,
@@ -656,13 +653,12 @@
       "maxDuration": 10,
       "concurrency": 2,
       "timeout": 60,
-      "license": "CC-BY-NC-SA-4.0 (weights) - private/research OK",
-      "status": "planned"
+      "license": "CC-BY-NC-SA-4.0 (weights) - private/research OK"
     },
     {
       "id": "fish-speech",
       "repository": "fishaudio/fish-speech-1.5",
-      "revision": "TBD-fish-speech-1.5",
+      "revision": "275a984d33c33659e39eed41ff5bcd6e67517f4c",
       "task": "tts",
       "framework": "custom",
       "estimatedVRAM": 6,
@@ -685,13 +681,12 @@
       "maxDuration": 60,
       "concurrency": 1,
       "timeout": 180,
-      "license": "check weights (CC-BY-NC-SA)",
-      "status": "planned"
+      "license": "check weights (CC-BY-NC-SA)"
     },
     {
       "id": "rvc",
-      "repository": "RVC-Project/Retrieval-based-Voice-Conversion-WebUI",
-      "revision": "TBD-rvc",
+      "repository": "lj1995/VoiceConversionWebUI",
+      "revision": "e6d0c1a17da07c33557852f9dfa2bd44cc75737d",
       "task": "sing",
       "framework": "custom",
       "estimatedVRAM": 4,
@@ -713,8 +708,7 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
-      "license": "MIT",
-      "status": "planned"
+      "license": "MIT"
     }
   ],
   "roles": {
