@@ -73,7 +73,7 @@
       "id": "COLLAB-P0-003",
       "title": "WebRTC/SFU/TURN-Haertung (ICE/TURN aus Server-Config, Reconnect-Zustandsmaschine)",
       "priority": "P0",
-      "status": "PARTIAL",
+      "status": "BLOCKED",
       "area": "Networking",
       "source": "MASTER_TODO.md",
       "problem": "ICE-Server hartkodiert (nur STUN), keine kurzlebigen TURN-Credentials, iceConnectionState/connectionState unbehandelt, Reconnect konnte doppelte PeerConnections erzeugen.",
@@ -90,7 +90,8 @@
         "ICE-Fehler/Reconnect/TURN-Konfig getestet (Unit: 15 neue Tests)",
         "keine doppelten PeerConnections (Guard in createPeerConnection + ein Recovery-Timer je Peer)",
         "OFFEN: Live-TURN + Main-Stream-Wiederherstellung (COLLAB-P0-002)"
-      ]
+      ],
+      "blockedReason": "Code und Tests sind fertig und gruen; der verbleibende Nachweis ist ein Live-TURN-Server (ICE/TURN ueber echte STUN/TURN-Infrastruktur) - in der Agent-Umgebung nicht nachweisbar. PARTIAL 2026-09-11 (code+Tests fertig, Live-TURN nicht nachweisbar): NEU src/core/transport/iceConfig.ts (buildIceServer"
     },
     {
       "id": "AUDIO-P1-002",
