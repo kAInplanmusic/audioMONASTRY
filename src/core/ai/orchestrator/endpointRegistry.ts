@@ -12,7 +12,7 @@
  * Task versehentlich auf einem Endpoint landet, der sein Modell nicht hat.
  *
  * Migrationspfad: fehlt eine rollenspezifische Endpoint-ID, fällt JEDE Rolle
- * auf `RUNPOD_ENDPOINT_ID` zurück (Legacy-Single-Endpoint-Modus, z. B. der
+ * auf `RP_ENDPOINT_ID` zurück (Legacy-Single-Endpoint-Modus, z. B. der
  * bestehende H200-Endpoint). Der Cutover ist damit ohne Codeänderung möglich.
  */
 import { GPU_ROLE_IDS, endpointNameForRole, type GpuRoleId } from '../../../config/aiInfrastructure';
@@ -53,7 +53,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'brain',
     label: 'aiMONK Gehirn (lokales LLM)',
     endpointName: endpointNameForRole('brain'),
-    endpointIdEnv: 'RUNPOD_ENDPOINT_ID_BRAIN',
+    endpointIdEnv: 'RP_ENDPOINT_ID_BRAIN',
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -72,7 +72,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'ears',
     label: 'Audio-Intelligence (STT, Embeddings, Klassifikation)',
     endpointName: endpointNameForRole('ears'),
-    endpointIdEnv: 'RUNPOD_ENDPOINT_ID_EARS',
+    endpointIdEnv: 'RP_ENDPOINT_ID_EARS',
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -91,7 +91,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     role: 'voiceGen',
     label: 'Voice & Generierung (TTS, Gesang, Song, SFX, Stems)',
     endpointName: endpointNameForRole('voiceGen'),
-    endpointIdEnv: 'RUNPOD_ENDPOINT_ID_VOICE',
+    endpointIdEnv: 'RP_ENDPOINT_ID_VOICE',
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
@@ -144,25 +144,25 @@ function env(name: string): string {
 export interface ResolvedGpuRole extends GpuRoleDefinition {
   /** Endpoint-ID oder '' wenn nicht konfiguriert. */
   endpointId: string;
-  /** true, wenn die Rolle auf RUNPOD_ENDPOINT_ID zurückfällt (Legacy-Modus). */
+  /** true, wenn die Rolle auf RP_ENDPOINT_ID zurückfällt (Legacy-Modus). */
   usingLegacyEndpoint: boolean;
 }
 
 /**
  * Liest für jede Rolle die Endpoint-ID aus der Umgebung. Ohne
- * rollenspezifische ID wird `RUNPOD_ENDPOINT_ID` als gemeinsamer Fallback
+ * rollenspezifische ID wird `RP_ENDPOINT_ID` als gemeinsamer Fallback
  * verwendet (bestehender Endpoint bleibt damit lauffähig).
  */
 export function resolveGpuRoles(): ResolvedGpuRole[] {
-  const legacy = env('RUNPOD_ENDPOINT_ID');
+  const legacy = env('RP_ENDPOINT_ID') || env('RUNPOD_ENDPOINT_ID');
   return GPU_ROLE_LIST.map((role) => {
-    const own = env(role.endpointIdEnv);
+    const own = env(role.endpointIdEnv) || env(role.endpointIdEnv.replace(/^RP_/, 'RUNPOD_'));
     const usingLegacy = !own && Boolean(legacy);
     if (usingLegacy) {
       aiLogger.warn('gpu role using legacy single endpoint', {
         role: role.role,
         env: role.endpointIdEnv,
-        fallback: 'RUNPOD_ENDPOINT_ID',
+        fallback: 'RP_ENDPOINT_ID',
       });
     }
     return { ...role, endpointId: own || legacy, usingLegacyEndpoint: usingLegacy };

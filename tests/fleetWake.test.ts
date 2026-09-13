@@ -9,6 +9,7 @@ import {
 const ENV_KEYS = [
   'RUNPOD_API_KEY',
   'RP_API_KEY',
+  'RP_AGENT_KEY',
   'RUNPOD_REST_BASE',
   'RUNPOD_API_BASE',
   'RUNPOD_ENDPOINT_ID',
@@ -17,8 +18,15 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_VOICE',
   'RUNPOD_ENDPOINT_ID_VISION',
   'RUNPOD_ENDPOINT_ID_VIDEO',
+  'RP_ENDPOINT_ID',
+  'RP_ENDPOINT_ID_BRAIN',
+  'RP_ENDPOINT_ID_EARS',
+  'RP_ENDPOINT_ID_VOICE',
+  'RP_ENDPOINT_ID_VISION',
+  'RP_ENDPOINT_ID_VIDEO',
   // Der Brain-Warmup nimmt bei gesetzter URL den OpenAI-Pfad statt `warmup`.
   'RUNPOD_BRAIN_OPENAI_URL',
+  'RP_BRAIN_OPENAI_URL',
   'RUNPOD_BRAIN_MODEL',
   'AI_FLEET_WAKE',
   'AI_FLEET_SLEEP',
@@ -54,10 +62,10 @@ function mockFetch(): void {
 }
 
 function configureFleet(): void {
-  process.env.RUNPOD_API_KEY = 'rp_test';
-  process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
-  process.env.RUNPOD_ENDPOINT_ID_EARS = 'ears-ep';
-  process.env.RUNPOD_ENDPOINT_ID_VOICE = 'voice-ep';
+  process.env.RP_AGENT_KEY = 'rp_test';
+  process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
+  process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
+  process.env.RP_ENDPOINT_ID_VOICE = 'voice-ep';
 }
 
 describe('GPU-Flotten Session-Wake', () => {
@@ -106,7 +114,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
   it('schaltet beim Brain-Warmup über den OpenAI-Pfad das Reasoning ab', async () => {
     configureFleet();
-    process.env.RUNPOD_BRAIN_OPENAI_URL = 'https://api.runpod.ai/v2/brain-ep/openai/v1';
+    process.env.RP_BRAIN_OPENAI_URL = 'https://api.runpod.ai/v2/brain-ep/openai/v1';
     mockFetch();
 
     const report = await wakeFleet();
@@ -132,9 +140,9 @@ describe('GPU-Flotten Session-Wake', () => {
     expect(report.ok).toBe(true);
   });
 
-  it('fällt auf RUNPOD_ENDPOINT_ID zurück (Legacy-Modus)', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID = 'legacy-ep';
+  it('fällt auf RP_ENDPOINT_ID zurück (Legacy-Modus)', async () => {
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID = 'legacy-ep';
     mockFetch();
 
     const report = await wakeFleet();
@@ -193,7 +201,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
   it('weckt die Rolle vision per workersMin (kein warmup-Task)', async () => {
     configureFleet();
-    process.env.RUNPOD_ENDPOINT_ID_VISION = 'vision-ep';
+    process.env.RP_ENDPOINT_ID_VISION = 'vision-ep';
     mockFetch();
 
     const report = await wakeFleet();
@@ -208,7 +216,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
   it('schläfert die Rolle vision mit workersMin=0', async () => {
     configureFleet();
-    process.env.RUNPOD_ENDPOINT_ID_VISION = 'vision-ep';
+    process.env.RP_ENDPOINT_ID_VISION = 'vision-ep';
     mockFetch();
 
     const report = await sleepFleet();
@@ -219,7 +227,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
   it('weckt die Rolle video per workersMin (kein warmup-Task)', async () => {
     configureFleet();
-    process.env.RUNPOD_ENDPOINT_ID_VIDEO = 'video-ep';
+    process.env.RP_ENDPOINT_ID_VIDEO = 'video-ep';
     mockFetch();
 
     const report = await wakeFleet();

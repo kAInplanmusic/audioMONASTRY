@@ -46,7 +46,7 @@ function env(name: string): string {
 }
 
 export function videoEndpointId(): string {
-  return env('RUNPOD_ENDPOINT_ID_VIDEO');
+  return env('RP_ENDPOINT_ID_VIDEO') || env('RUNPOD_ENDPOINT_ID_VIDEO');
 }
 
 /** Entfernt ein evtl. vorhandenes `data:…;base64,`-Praefix. */
@@ -94,14 +94,14 @@ function authHeaders(apiKey: string): Record<string, string> {
 /** Erzeugt einen Clip aus einem Eingangsbild (Wan2.2 image->video). */
 export async function generateVideo(imageBase64: string, prompt: string, opts: VideoOptions = {}): Promise<VideoResult> {
   const endpointId = opts.endpointId || videoEndpointId();
-  const apiKey = opts.apiKey || env('RUNPOD_API_KEY') || env('RP_API_KEY');
+  const apiKey = opts.apiKey || env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
   const doFetch = opts.fetchImpl ?? fetch;
   const started = Date.now();
   const timeoutMs = opts.timeoutMs ?? 1_800_000;
   const pollIntervalMs = opts.pollIntervalMs ?? 5_000;
 
-  if (!endpointId) throw new VideoError('NO_ENDPOINT', 'RUNPOD_ENDPOINT_ID_VIDEO ist nicht gesetzt');
-  if (!apiKey) throw new VideoError('NO_KEY', 'RUNPOD_API_KEY/RP_API_KEY ist nicht gesetzt');
+  if (!endpointId) throw new VideoError('NO_ENDPOINT', 'RP_ENDPOINT_ID_VIDEO ist nicht gesetzt');
+  if (!apiKey) throw new VideoError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
   const image = stripDataUri(imageBase64);
   if (!image) throw new VideoError('NO_IMAGE', 'imageBase64 fehlt');
   const clean = String(prompt ?? '').trim().slice(0, 1200) || 'gentle camera push in, subtle motion';

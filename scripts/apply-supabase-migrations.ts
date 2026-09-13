@@ -18,10 +18,10 @@ import path from 'node:path';
 dotenv.config();
 
 async function main(): Promise<void> {
-  const url = (process.env.SUPABASE_URL ?? '').trim();
-  const pat = (process.env.SUPABASE_PAT ?? '').trim();
+  const url = (process.env.SB_URL ?? process.env.SUPABASE_URL ?? '').trim();
+  const pat = (process.env.SB_PAT ?? process.env.SUPABASE_PAT ?? '').trim();
   if (!url || !pat) {
-    console.error('❌ SUPABASE_URL / SUPABASE_PAT fehlen in der .env.');
+    console.error('❌ SB_URL / SB_PAT fehlen in der .env.');
     process.exit(1);
   }
   const ref = new URL(url).hostname.split('.')[0];

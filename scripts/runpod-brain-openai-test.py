@@ -27,7 +27,7 @@ def env(name: str, default: str = "") -> str:
     return default
 
 
-KEY = env("RP_API_KEY")
+KEY = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
 BASE = f"https://api.runpod.ai/v2/{ENDPOINT}/openai/v1"
 PROMPT = "Antworte in genau einem kurzen deutschen Satz: Was ist ein Drop in einer DAW?"
 

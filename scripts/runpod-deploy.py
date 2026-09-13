@@ -336,10 +336,10 @@ def deploy_role(role: str, image: str) -> Optional[str]:
 
 
 def main() -> int:
-    api_key = env("RP_API_KEY") or env("RUNPOD_API_KEY")
+    api_key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
     image = env("IMAGE")
     if not api_key:
-        print("FEHLER: RP_API_KEY/RUNPOD_API_KEY fehlt", file=sys.stderr)
+        print("FEHLER: RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY fehlt", file=sys.stderr)
         return 2
 
     runpod.api_key = api_key
@@ -376,10 +376,10 @@ def main() -> int:
     print("[deploy] Zusammenfassung:")
     for role, endpoint_id in results.items():
         env_name = {
-            "brain": "RUNPOD_ENDPOINT_ID_BRAIN",
-            "ears": "RUNPOD_ENDPOINT_ID_EARS",
-            "voiceGen": "RUNPOD_ENDPOINT_ID_VOICE",
-        }.get(role, "RUNPOD_ENDPOINT_ID")
+            "brain": "RP_ENDPOINT_ID_BRAIN",
+            "ears": "RP_ENDPOINT_ID_EARS",
+            "voiceGen": "RP_ENDPOINT_ID_VOICE",
+        }.get(role, "RP_ENDPOINT_ID")
         print(f"[deploy]   {env_name}={endpoint_id}")
     return 0
 

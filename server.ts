@@ -32,7 +32,7 @@ import { ClipPipelineError, generateClipFromPrompt } from './src/core/ai/vision/
 import { normalizeStyleRanking, suggestStyleFromRanking } from './src/core/ai/vision/visualFeedback';
 import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifact, saveArtifact } from './server/visionArtifacts.ts';
 import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
-import { supabaseServerKey } from './src/config/supabaseKeys';
+import { supabaseServerKey, supabaseUrl } from './src/config/supabaseKeys';
 import { buildWebRtcConfigResponse } from './server/webrtcConfig.ts';
 import {
   AuthoritativeSession,
@@ -1562,7 +1562,7 @@ app.post('/api/library/search', async (req, res) => {
   // RPC-Pfad (nur wenn Supabase konfiguriert ist; sonst lokaler Embedding-Pfad).
   // Wichtig: die Formatprüfung nutzen — vorher galt „konfiguriert" auch mit einem
   // abgelaufenen Legacy-PAT, wodurch der RPC-Pfad still ins Leere lief.
-  const supabaseConfigured = Boolean(process.env.SUPABASE_URL && supabaseServerKey());
+  const supabaseConfigured = Boolean(supabaseUrl() && supabaseServerKey());
   if (supabaseConfigured) {
     const matches = await aiPersistence.rpcMatchSamples(embedText(q), max);
     if (matches.length > 0) {

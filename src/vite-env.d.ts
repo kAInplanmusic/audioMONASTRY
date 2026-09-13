@@ -9,8 +9,12 @@ interface ImportMetaEnv {
   // --- Cloud-Anbindung (Supabase + Cloudflare R2) ---
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_PUB?: string;
+  readonly VITE_SB_URL?: string;
+  readonly VITE_SB_ANON_PUB?: string;
   readonly VITE_CFR2_ACCOUNT_ID?: string;
   readonly VITE_CFR2_BUCKET?: string;
+  readonly VITE_CFR2_PUBLIC_URL?: string;
+  readonly VITE_CFS3_BUCKET?: string;
 }
 
 interface ImportMeta {

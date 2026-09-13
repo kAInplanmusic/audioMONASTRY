@@ -45,7 +45,7 @@ function validSupabaseKey(key: string | undefined): string | null {
 }
 
 function supabaseUrl(): string | null {
-  const url = env.SUPABASE_URL?.trim();
+  const url = (env.SB_URL ?? env.SUPABASE_URL)?.trim();
   if (!url) return null;
   try {
     const u = new URL(url);
@@ -82,8 +82,9 @@ function supabaseAnon(): SupabaseClient | null {
 
 /** R2-Endpoint: explizit konfiguriert ODER Standard-Endpoint aus Account-ID. */
 function r2Endpoint(accountId: string): string {
-  // CFR2_URL / CFR2_ENDPOINT haben Vorrang (vom Betreiber bereitgestellter Endpoint).
-  const raw = env.CFR2_URL?.trim() || env.CFR2_ENDPOINT?.trim() || env.CLOUDFLARE_API?.trim();
+  // CFS3_ENDPOINT (neu) hat Vorrang; CFR2_URL/CFR2_ENDPOINT/CLOUDFLARE_API
+  // bleiben als Legacy-Fallback (vom Betreiber bereitgestellter Endpoint).
+  const raw = env.CFS3_ENDPOINT?.trim() || env.CFR2_URL?.trim() || env.CFR2_ENDPOINT?.trim() || env.CLOUDFLARE_API?.trim();
   if (raw) {
     try {
       const u = new URL(raw);
@@ -97,9 +98,9 @@ function r2Endpoint(accountId: string): string {
 
 /** Liefert einen konfigurierten R2-S3-Client oder null, wenn Keys fehlen. */
 function r2Client(): S3Client | null {
-  // CFR2_URL-Hostname als Account-ID-Fallback (z. B. https://<account>.r2.cloudflarestorage.com).
+  // Endpoint-Hostname als Account-ID-Fallback (z. B. https://<account>.r2.cloudflarestorage.com).
   const fromUrl = (() => {
-    const raw = env.CFR2_URL?.trim();
+    const raw = env.CFS3_ENDPOINT?.trim() || env.CFR2_URL?.trim();
     if (!raw) return null;
     try {
       return new URL(raw).hostname.split('.')[0] ?? null;
@@ -108,8 +109,8 @@ function r2Client(): S3Client | null {
     }
   })();
   const accountId = env.CFR2_ACCOUNT_ID?.trim() || fromUrl || '';
-  const accessKeyId = env.CFR2_ACCESS_KEY_ID?.trim() || env.CFR2_ACCESS_KEY?.trim();
-  const secretAccessKey = env.CFR2_SECRET_ACCESS_KEY?.trim();
+  const accessKeyId = env.CFS3_ACCESS_KEY?.trim() || env.CFR2_ACCESS_KEY_ID?.trim() || env.CFR2_ACCESS_KEY?.trim();
+  const secretAccessKey = env.CFS3_SECRET_KEY?.trim() || env.CFR2_SECRET_ACCESS_KEY?.trim();
   if (!accountId || !accessKeyId || !secretAccessKey) return null;
   // R2-Zugangsdaten sind hexadezimale Keys (Access 32, Secret 64 Zeichen).
   if (!/^[0-9a-f]{32}$/i.test(accessKeyId)) return null;
@@ -333,9 +334,9 @@ export async function uploadSampleToR2(
   contentType = 'audio/wav',
 ) {
   const r2 = r2Client();
-  const bucket = env.CFR2_BUCKET?.trim();
-  if (!r2) throw new Error('R2 not configured (check CFR2_ACCOUNT_ID / CFR2_ACCESS_KEY_ID / CFR2_SECRET_ACCESS_KEY)');
-  if (!bucket) throw new Error('CFR2_BUCKET missing');
+  const bucket = (env.CFS3_BUCKET ?? env.CFR2_BUCKET)?.trim();
+  if (!r2) throw new Error('R2 not configured (check CFS3_ENDPOINT / CFS3_ACCESS_KEY / CFS3_SECRET_KEY / CFR2_ACCOUNT_ID)');
+  if (!bucket) throw new Error('CFS3_BUCKET missing');
   if (!isSafeObjectKey(objectKey)) throw new Error('invalid objectKey');
 
   await r2.send(new PutObjectCommand({

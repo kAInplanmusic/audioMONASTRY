@@ -35,9 +35,9 @@ const nonEmptyUrl = (v: string | undefined): string | null => {
 };
 
 /** Supabase-Projekt-URL (z.B. https://xxx.supabase.co). */
-export const SUPABASE_URL: string | null = nonEmptyUrl(env.VITE_SUPABASE_URL);
+export const SUPABASE_URL: string | null = nonEmptyUrl(env.VITE_SB_URL ?? env.VITE_SUPABASE_URL);
 /** Supabase für den Browser berechtigter (publishable/anon) Key. */
-export const SUPABASE_ANON_PUB: string | null = nonEmpty(env.VITE_SUPABASE_ANON_PUB);
+export const SUPABASE_ANON_PUB: string | null = nonEmpty(env.VITE_SB_ANON_PUB ?? env.VITE_SUPABASE_ANON_PUB);
 
 /** Observability: sind die externen Dienste für den Client konfiguriert? */
 export const cloudEnabled = !!(SUPABASE_URL && SUPABASE_ANON_PUB);
@@ -45,8 +45,10 @@ export const cloudEnabled = !!(SUPABASE_URL && SUPABASE_ANON_PUB);
 // --- Cloudflare R2 (öffentliche Read-URL, falls der Bucket Public-Read ist) ---
 // Objekt-Pfad-Muster für R2-gehostete Assets.
 export const r2PublicBaseUrl = (() => {
+  const publicBase = nonEmptyUrl(env.VITE_CFR2_PUBLIC_URL);
+  if (publicBase) return publicBase;
   const acct = nonEmpty(env.VITE_CFR2_ACCOUNT_ID);
-  const bucket = nonEmpty(env.VITE_CFR2_BUCKET);
+  const bucket = nonEmpty(env.VITE_CFS3_BUCKET ?? env.VITE_CFR2_BUCKET);
   if (acct && bucket) {
     return `https://${bucket}.${acct}.r2.cloudflarestorage.com`;
   }

@@ -56,9 +56,9 @@ def main() -> int:
                     help="Thinking NICHT abschalten (zum Vergleich)")
     args = ap.parse_args()
 
-    key = env("RP_API_KEY") or env("RUNPOD_API_KEY")
+    key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
     if not key:
-        print("FEHLER: RP_API_KEY fehlt", file=sys.stderr)
+        print("FEHLER: RP_AGENT_KEY fehlt", file=sys.stderr)
         return 2
 
     url = f"https://api.runpod.ai/v2/{args.endpoint}/openai/v1/chat/completions"

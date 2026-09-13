@@ -79,11 +79,15 @@ describe('LlmRouter: lokales Brain (runpod-local)', () => {
   const ENV_KEYS = [
     'RUNPOD_API_KEY',
     'RP_API_KEY',
+    'RP_AGENT_KEY',
     'RUNPOD_API_BASE',
     'RUNPOD_ENDPOINT_ID',
     'RUNPOD_ENDPOINT_ID_BRAIN',
+    'RP_ENDPOINT_ID',
+    'RP_ENDPOINT_ID_BRAIN',
     'RUNPOD_BRAIN_MODEL',
     'RUNPOD_BRAIN_OPENAI_URL',
+    'RP_BRAIN_OPENAI_URL',
   ] as const;
 
   const calls: string[] = [];

@@ -7,9 +7,9 @@ Serverless-Endpoint und persistiert das Ergebnis SOFORT nach Abschluss
 (RunPod bereinigt Job-Datensätze nach kurzer Zeit – deshalb sofort speichern).
 
 Verwendung:
-  RP_API_KEY=… RUNPOD_ENDPOINT_ID=… python3 scripts/runpod-smoke.py
+  RP_AGENT_KEY=… RP_ENDPOINT_ID=… python3 scripts/runpod-smoke.py
   Pro Flotten-Rolle (prüft Rollen-Manifest + Preload):
-    RP_API_KEY=… RUNPOD_SMOKE_ROLE=ears python3 scripts/runpod-smoke.py
+    RP_AGENT_KEY=… RUNPOD_SMOKE_ROLE=ears python3 scripts/runpod-smoke.py
   optional: RUNPOD_SMOKE_TASK=classify RUNPOD_SMOKE_MODEL=ast-audioset
             RUNPOD_SMOKE_ROLE=brain|ears|voiceGen  (Default-Task dann: warmup)
             RUNPOD_SMOKE_WAV=/pfad/zu/test.wav   (Default: generierter 1s/440Hz-Sinus)
@@ -71,19 +71,19 @@ def api_json(url: str, api_key: str, method: str = "GET", body: dict | None = No
 
 
 ROLE_ENDPOINT_ENV = {
-    "brain": "RUNPOD_ENDPOINT_ID_BRAIN",
-    "ears": "RUNPOD_ENDPOINT_ID_EARS",
-    "voiceGen": "RUNPOD_ENDPOINT_ID_VOICE",
+    "brain": "RP_ENDPOINT_ID_BRAIN",
+    "ears": "RP_ENDPOINT_ID_EARS",
+    "voiceGen": "RP_ENDPOINT_ID_VOICE",
 }
 
 
 def main() -> int:
-    api_key = env("RP_API_KEY") or env("RUNPOD_API_KEY")
+    api_key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
     role = env("RUNPOD_SMOKE_ROLE")
     if role and role not in ROLE_ENDPOINT_ENV:
         print(f"FEHLER: unbekannte RUNPOD_SMOKE_ROLE {role!r}", file=sys.stderr)
         return 2
-    endpoint_id = (env(ROLE_ENDPOINT_ENV[role]) if role else "") or env("RUNPOD_ENDPOINT_ID")
+    endpoint_id = (env(ROLE_ENDPOINT_ENV[role]) if role else "") or env("RP_ENDPOINT_ID") or env("RUNPOD_ENDPOINT_ID")
     # Ohne expliziten Task ist der Rollen-Smoke ein Warmup-Probe (prüft Worker,
     # Rollen-Manifest und Preload-Modelle), der Legacy-Smoke ein classify-Job.
     task = env("RUNPOD_SMOKE_TASK") or ("warmup" if role else "classify")
@@ -92,10 +92,10 @@ def main() -> int:
     poll_seconds = max(10, int(env("RUNPOD_POLL_SECONDS", "30")))
 
     if not api_key:
-        print("FEHLER: RP_API_KEY fehlt", file=sys.stderr)
+        print("FEHLER: RP_AGENT_KEY fehlt", file=sys.stderr)
         return 2
     if not endpoint_id:
-        print("FEHLER: RUNPOD_ENDPOINT_ID (oder RUNPOD_ENDPOINT_ID_<ROLLE>) fehlt", file=sys.stderr)
+        print("FEHLER: RP_ENDPOINT_ID (oder RP_ENDPOINT_ID_<ROLLE>) fehlt", file=sys.stderr)
         return 2
 
     if task == "warmup":

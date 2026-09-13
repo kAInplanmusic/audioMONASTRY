@@ -84,10 +84,10 @@ function scorePlan(pluginId: string, command: string, text: string): number {
 }
 
 async function askBrain(prompt: string, signal: AbortSignal): Promise<{ text: string; latencyMs: number }> {
-  const base = env('RUNPOD_BRAIN_OPENAI_URL').replace(/\/+$/, '');
-  const key = env('RUNPOD_API_KEY') || env('RP_API_KEY');
+  const base = (env('RP_BRAIN_OPENAI_URL') || env('RUNPOD_BRAIN_OPENAI_URL')).replace(/\/+$/, '');
+  const key = env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
   const model = env('RUNPOD_BRAIN_MODEL') || 'Qwen/Qwen3-14B-AWQ';
-  if (!base || !key) throw new Error('RUNPOD_BRAIN_OPENAI_URL / RUNPOD_API_KEY fehlen');
+  if (!base || !key) throw new Error('RP_BRAIN_OPENAI_URL / RP_AGENT_KEY fehlen');
   const started = performance.now();
   const resp = await fetch(`${base}/chat/completions`, {
     method: 'POST',

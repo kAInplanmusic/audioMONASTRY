@@ -78,11 +78,11 @@ function renderable(samples: AudioSample[]): { usable: AudioSample[]; skipped: A
 }
 
 async function main(): Promise<void> {
-  const url = (process.env.SUPABASE_URL ?? '').trim();
+  const url = (process.env.SB_URL ?? process.env.SUPABASE_URL ?? '').trim();
   const key = supabaseServerKey();
   const endpointId = (process.env.RUNPOD_ENDPOINT_ID_EARS ?? '').trim();
   const apiKey = (process.env.RUNPOD_API_KEY ?? process.env.RP_API_KEY ?? '').trim();
-  if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE fehlen in der .env');
+  if (!url || !key) throw new Error('SB_URL / SB_SERVICE_ROLE fehlen in der .env');
   if (!endpointId || !apiKey) throw new Error('RUNPOD_ENDPOINT_ID_EARS / RUNPOD_API_KEY fehlen in der .env');
 
   const db = createClient(url, key, { auth: { persistSession: false } });

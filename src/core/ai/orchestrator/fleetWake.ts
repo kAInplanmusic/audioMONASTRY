@@ -14,8 +14,8 @@
  *      Session-Ende bzw. Idle-Timeout (SessionManager.onScaleToZero).
  *
  * Konfiguration:
- *   RUNPOD_ENDPOINT_ID_BRAIN / _EARS / _VOICE   (Fallback: RUNPOD_ENDPOINT_ID)
- *   RUNPOD_API_KEY | RP_API_KEY
+ *   RP_ENDPOINT_ID_BRAIN / _EARS / _VOICE   (Fallback: RP_ENDPOINT_ID)
+ *   RP_AGENT_KEY | RP_API_KEY | RUNPOD_API_KEY
  *   RUNPOD_REST_BASE      (Default https://rest.runpod.io/v1)
  *   AI_FLEET_WAKE=0       deaktiviert das Aufwecken (kein Netzwerkverkehr)
  *   AI_FLEET_SLEEP=0      deaktiviert das Zurücksetzen
@@ -60,7 +60,7 @@ function restBase(): string {
 }
 
 function apiKey(): string {
-  return env('RUNPOD_API_KEY') || env('RP_API_KEY');
+  return env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
 }
 
 function flagEnabled(name: string): boolean {
@@ -99,12 +99,12 @@ async function setWorkersMin(role: ResolvedGpuRole, workersMin: number, signal?:
  * ungueltiger Request enden. Warmup heisst in diesem Fall: eine minimale
  * Completion, die vLLM zwingt, die Gewichte tatsaechlich in den VRAM zu laden.
  *
- * Ohne `RUNPOD_BRAIN_OPENAI_URL` (eigener Worker) bleibt es beim `warmup`-Task.
+ * Ohne `RP_BRAIN_OPENAI_URL` (eigener Worker) bleibt es beim `warmup`-Task.
  */
 async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<WarmupResult> {
   if (role.role !== 'brain') return new RunPodProvider(role.role).warmup(signal);
 
-  const openAiBase = env('RUNPOD_BRAIN_OPENAI_URL').replace(/\/+$/, '');
+  const openAiBase = (env('RP_BRAIN_OPENAI_URL') || env('RUNPOD_BRAIN_OPENAI_URL')).replace(/\/+$/, '');
   if (!openAiBase) return new RunPodProvider(role.role).warmup(signal);
 
   const models = new RunPodProvider(role.role).role?.preload ?? [];
@@ -113,7 +113,7 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
     const resp = await fetch(`${openAiBase}/chat/completions`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${env('RUNPOD_API_KEY') || env('RP_API_KEY')}`,
+        Authorization: `Bearer ${apiKey()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -161,13 +161,13 @@ async function setEndpointWorkersMin(endpointId: string, workersMin: number, sig
  * Wecken ist hier `workersMin=1` (der Worker zieht Image + Gewichte).
  */
 async function toggleVision(workersMin: number, signal?: AbortSignal): Promise<{ endpointId: string; workersMinSet: boolean } | null> {
-  const endpointId = env('RUNPOD_ENDPOINT_ID_VISION');
+  const endpointId = env('RP_ENDPOINT_ID_VISION') || env('RUNPOD_ENDPOINT_ID_VISION');
   if (!endpointId) return null;
   return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
 }
 
 async function toggleVideo(workersMin: number, signal?: AbortSignal): Promise<{ endpointId: string; workersMinSet: boolean } | null> {
-  const endpointId = env('RUNPOD_ENDPOINT_ID_VIDEO');
+  const endpointId = env('RP_ENDPOINT_ID_VIDEO') || env('RUNPOD_ENDPOINT_ID_VIDEO');
   if (!endpointId) return null;
   return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
 }

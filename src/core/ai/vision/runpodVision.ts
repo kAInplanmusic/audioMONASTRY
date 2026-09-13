@@ -45,7 +45,7 @@ function env(name: string): string {
 }
 
 export function visionEndpointId(): string {
-  return env('RUNPOD_ENDPOINT_ID_VISION');
+  return env('RP_ENDPOINT_ID_VISION') || env('RUNPOD_ENDPOINT_ID_VISION');
 }
 
 /** Sucht rekursiv das erste Bild (data-URI oder URL) in der Worker-Ausgabe. */
@@ -93,14 +93,14 @@ function authHeaders(apiKey: string): Record<string, string> {
  */
 export async function generateVisionImage(prompt: string, opts: VisionOptions = {}): Promise<VisionImageResult> {
   const endpointId = opts.endpointId || visionEndpointId();
-  const apiKey = opts.apiKey || env('RUNPOD_API_KEY') || env('RP_API_KEY');
+  const apiKey = opts.apiKey || env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
   const doFetch = opts.fetchImpl ?? fetch;
   const started = Date.now();
   const timeoutMs = opts.timeoutMs ?? 900_000;
   const pollIntervalMs = opts.pollIntervalMs ?? 5_000;
 
-  if (!endpointId) throw new VisionError('NO_ENDPOINT', 'RUNPOD_ENDPOINT_ID_VISION ist nicht gesetzt');
-  if (!apiKey) throw new VisionError('NO_KEY', 'RUNPOD_API_KEY/RP_API_KEY ist nicht gesetzt');
+  if (!endpointId) throw new VisionError('NO_ENDPOINT', 'RP_ENDPOINT_ID_VISION ist nicht gesetzt');
+  if (!apiKey) throw new VisionError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
   const clean = String(prompt ?? '').trim().slice(0, 1200);
   if (!clean) throw new VisionError('NO_PROMPT', 'prompt fehlt');
 

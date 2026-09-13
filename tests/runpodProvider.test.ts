@@ -4,11 +4,16 @@ import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
 const ENV_KEYS = [
   'RUNPOD_API_KEY',
   'RP_API_KEY',
+  'RP_AGENT_KEY',
   'RUNPOD_API_BASE',
   'RUNPOD_ENDPOINT_ID',
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE',
+  'RP_ENDPOINT_ID',
+  'RP_ENDPOINT_ID_BRAIN',
+  'RP_ENDPOINT_ID_EARS',
+  'RP_ENDPOINT_ID_VOICE',
   'RUNPOD_BRAIN_MODEL',
   'AI_COST_RUNPOD_BRAIN_USD_PER_HOUR',
 ] as const;
@@ -80,8 +85,8 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
   });
 
   it('nutzt runsync über api.runpod.ai/v2 für kurze Tasks', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
     mockFetch(() => jsonResponse({ status: 'COMPLETED', output: { text: 'hallo' }, executionTime: 42 }));
 
     const provider = new RunPodProvider('brain');
@@ -95,8 +100,8 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
   });
 
   it('nutzt run + Status-Polling auch für llm (Kaltstart-Ladezeit)', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
     mockFetch((url) =>
       url.endsWith('/run')
         ? jsonResponse({ id: 'job-9', status: 'IN_QUEUE' })
@@ -114,8 +119,8 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
   });
 
   it('nutzt run + Status-Polling für lange Tasks', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_VOICE = 'voice-ep';
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_VOICE = 'voice-ep';
     mockFetch((url) =>
       url.endsWith('/run')
         ? jsonResponse({ id: 'job-1', status: 'IN_QUEUE' })
@@ -133,8 +138,8 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
   });
 
   it('meldet Worker-Fehler aus dem Output als AiProviderError', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_BRAIN = 'brain-ep';
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
     mockFetch(() =>
       jsonResponse({ status: 'COMPLETED', output: { status: 'error', code: 'MODEL_UNAVAILABLE', message: 'nope' } }),
     );
@@ -147,8 +152,8 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
   });
 
   it('meldet fehlendes Guthaben nicht als wiederholbar', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_EARS = 'ears-ep';
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
     mockFetch(() => new Response('no credit', { status: 402 }));
 
     const provider = new RunPodProvider('ears');
@@ -160,8 +165,8 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
   });
 
   it('lädt beim Warmup die Preload-Modelle der Rolle', async () => {
-    process.env.RUNPOD_API_KEY = 'rp_test';
-    process.env.RUNPOD_ENDPOINT_ID_EARS = 'ears-ep';
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
     mockFetch((url) =>
       url.endsWith('/run') ? jsonResponse({ id: 'warm-1' }) : jsonResponse({ status: 'COMPLETED', output: { ready: true } }),
     );

@@ -16,6 +16,10 @@ const ALL_TASKS: AiTask[] = [
 ];
 
 const ENDPOINT_ENV_KEYS = [
+  'RP_ENDPOINT_ID',
+  'RP_ENDPOINT_ID_BRAIN',
+  'RP_ENDPOINT_ID_EARS',
+  'RP_ENDPOINT_ID_VOICE',
   'RUNPOD_ENDPOINT_ID',
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RUNPOD_ENDPOINT_ID_EARS',
@@ -68,7 +72,7 @@ describe('GPU-Rollen-Registry', () => {
     for (const role of GPU_ROLE_LIST) {
       expect(role.vramBudgetGb).toBeGreaterThan(0);
       expect(role.gpuPoolId).toMatch(/^[A-Z0-9_]+$/);
-      expect(role.endpointIdEnv).toMatch(/^RUNPOD_ENDPOINT_ID_/);
+      expect(role.endpointIdEnv).toMatch(/^RP_ENDPOINT_ID_/);
       expect(role.preload.length).toBeGreaterThan(0);
     }
     // ears und voiceGen brauchen 48 GB (resident + on-demand bzw. ACE-Step + Stems).
@@ -88,8 +92,8 @@ describe('GPU-Rollen-Registry', () => {
     expect(() => requireRoleForTask('unbekannt' as AiTask)).toThrow(/kein GPU-Rollen-Endpoint/);
   });
 
-  it('fällt ohne Rollen-ID auf RUNPOD_ENDPOINT_ID zurück (Legacy-Modus)', () => {
-    withEndpointEnv({ RUNPOD_ENDPOINT_ID: 'legacy-endpoint' }, () => {
+  it('fällt ohne Rollen-ID auf RP_ENDPOINT_ID zurück (Legacy-Modus)', () => {
+    withEndpointEnv({ RP_ENDPOINT_ID: 'legacy-endpoint' }, () => {
       const roles = resolveGpuRoles();
       expect(roles).toHaveLength(3);
       for (const role of roles) {
@@ -101,7 +105,7 @@ describe('GPU-Rollen-Registry', () => {
 
   it('bevorzugt die rollenspezifische Endpoint-ID', () => {
     withEndpointEnv(
-      { RUNPOD_ENDPOINT_ID: 'legacy-endpoint', RUNPOD_ENDPOINT_ID_BRAIN: 'brain-endpoint' },
+      { RP_ENDPOINT_ID: 'legacy-endpoint', RP_ENDPOINT_ID_BRAIN: 'brain-endpoint' },
       () => {
         const roles = resolveGpuRoles();
         const brain = roles.find((r) => r.role === 'brain');

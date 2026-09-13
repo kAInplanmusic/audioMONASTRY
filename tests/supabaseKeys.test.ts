@@ -45,13 +45,22 @@ describe('Supabase-Schlüssel – Prioritätsordnung (Regression 2026-09-11)', (
     // Genau der Live-Fehler: `LEGACY_PAT ?? SERVICE_ROLE` ließ den toten Key gewinnen.
     const env = {
       SUPABASE_LEGACY_PAT: 'sbp_abgelaufen-aber-gesetzt-1234567890ab',
-      SUPABASE_SERVICE_ROLE: JWT_SERVICE_ROLE,
+      SB_SERVICE_ROLE: JWT_SERVICE_ROLE,
     };
     const picked = pickSupabaseServerKey(env);
-    expect(picked?.source).toBe('SUPABASE_SERVICE_ROLE');
+    expect(picked?.source).toBe('SB_SERVICE_ROLE');
     expect(supabaseServerKey(env)).toBe(JWT_SERVICE_ROLE);
-    expect(supabaseServerKeySource(env)).toBe('SUPABASE_SERVICE_ROLE');
+    expect(supabaseServerKeySource(env)).toBe('SB_SERVICE_ROLE');
     expect(supabaseServerKeyLabel(env)).toBe('service_role');
+  });
+
+  it('bevorzugt das neue SB_-Prefix vor den alten SUPABASE_-Namen', () => {
+    const env = {
+      SB_SERVICE_ROLE: JWT_SERVICE_ROLE,
+      SUPABASE_SERVICE_ROLE: LEGACY_PAT,
+    };
+    expect(supabaseServerKeySource(env)).toBe('SB_SERVICE_ROLE');
+    expect(supabaseServerKey(env)).toBe(JWT_SERVICE_ROLE);
   });
 
   it('meldet den Legacy-PAT nur, wenn er der einzige gültige Kandidat ist', () => {
@@ -60,15 +69,23 @@ describe('Supabase-Schlüssel – Prioritätsordnung (Regression 2026-09-11)', (
     expect(supabaseServerKeyLabel(env)).toBe('legacy_pat');
   });
 
-  it('fällt bei leerem/ungültigem Service-Role-Key auf JWT und Secret zurück', () => {
+  it('meldet den neuen PAT (SB_PAT) korrekt', () => {
+    const env = { SB_PAT: LEGACY_PAT };
+    expect(supabaseServerKeySource(env)).toBe('SB_PAT');
+    expect(supabaseServerKeyLabel(env)).toBe('pat (sbp_)');
+  });
+
+  it('fällt bei leerem/ungültigem Service-Role-Key auf Secret und Legacy zurück', () => {
+    expect(supabaseServerKeySource({ SB_SERVICE_ROLE: '   ', SB_SECRET: NEW_SECRET }))
+      .toBe('SB_SECRET');
+    expect(supabaseServerKeyLabel({ SB_SECRET: NEW_SECRET })).toBe('secret (sb_secret_)');
     expect(supabaseServerKeySource({ SUPABASE_SERVICE_ROLE: '   ', SUPABASE_SERVICE_ROLE_JWT: JWT_SERVICE_ROLE }))
       .toBe('SUPABASE_SERVICE_ROLE_JWT');
     expect(supabaseServerKeySource({ SUPABASE_SECRET: NEW_SECRET })).toBe('SUPABASE_SECRET');
-    expect(supabaseServerKeyLabel({ SUPABASE_SECRET: NEW_SECRET })).toBe('secret (sb_secret_)');
   });
 
   it('gibt ohne gültigen Kandidaten leer/„none" zurück und sammelt die Abgewiesenen', () => {
-    const env = { SUPABASE_LEGACY_PAT: 'zu-kurz', SUPABASE_SERVICE_ROLE: '' };
+    const env = { SUPABASE_LEGACY_PAT: 'zu-kurz', SB_SERVICE_ROLE: '' };
     expect(supabaseServerKey(env)).toBe('');
     expect(supabaseServerKeySource(env)).toBeNull();
     expect(supabaseServerKeyLabel(env)).toBe('none');
@@ -77,6 +94,9 @@ describe('Supabase-Schlüssel – Prioritätsordnung (Regression 2026-09-11)', (
 
   it('behält die dokumentierte Reihenfolge bei', () => {
     expect([...SUPABASE_SERVER_KEY_ORDER]).toEqual([
+      'SB_SERVICE_ROLE',
+      'SB_SECRET',
+      'SB_PAT',
       'SUPABASE_SERVICE_ROLE',
       'SUPABASE_SERVICE_ROLE_JWT',
       'SUPABASE_SECRET',
@@ -85,20 +105,21 @@ describe('Supabase-Schlüssel – Prioritätsordnung (Regression 2026-09-11)', (
   });
 
   it('wählt öffentliche Schlüssel getrennt (anon → publishable)', () => {
-    expect([...SUPABASE_PUBLIC_KEY_ORDER]).toEqual(['SUPABASE_ANON_PUB', 'SUPABASE_PUBLISHABLE']);
+    expect([...SUPABASE_PUBLIC_KEY_ORDER]).toEqual(['SB_ANON_PUB', 'SB_PUBLISHABLE', 'SUPABASE_ANON_PUB', 'SUPABASE_PUBLISHABLE']);
+    expect(supabasePublicKey({ SB_ANON_PUB: JWT_ANON })).toBe(JWT_ANON);
+    expect(supabasePublicKey({ SB_ANON_PUB: '', SB_PUBLISHABLE: NEW_PUBLISHABLE })).toBe(NEW_PUBLISHABLE);
     expect(supabasePublicKey({ SUPABASE_ANON_PUB: JWT_ANON })).toBe(JWT_ANON);
-    expect(supabasePublicKey({ SUPABASE_ANON_PUB: '', SUPABASE_PUBLISHABLE: NEW_PUBLISHABLE })).toBe(NEW_PUBLISHABLE);
     expect(supabasePublicKey({})).toBe('');
   });
 
   it('liest standardmäßig process.env (Aufrufer ohne Argument)', () => {
-    const prev = process.env.SUPABASE_SERVICE_ROLE;
-    process.env.SUPABASE_SERVICE_ROLE = JWT_SERVICE_ROLE;
+    const prev = process.env.SB_SERVICE_ROLE;
+    process.env.SB_SERVICE_ROLE = JWT_SERVICE_ROLE;
     try {
       expect(supabaseServerKey()).toBe(JWT_SERVICE_ROLE);
     } finally {
-      if (prev === undefined) delete process.env.SUPABASE_SERVICE_ROLE;
-      else process.env.SUPABASE_SERVICE_ROLE = prev;
+      if (prev === undefined) delete process.env.SB_SERVICE_ROLE;
+      else process.env.SB_SERVICE_ROLE = prev;
     }
   });
 });

@@ -5,11 +5,11 @@ import { embedText } from '../src/core/ai/orchestrator/textEmbedding';
 import { supabaseServerKey } from '../src/config/supabaseKeys';
 
 async function main() {
-  const url = process.env.SUPABASE_URL!;
+  const url = (process.env.SB_URL ?? process.env.SUPABASE_URL ?? '').trim();
   // Zentrale Prioritätsordnung: Service-Role/Secret vor dem (toten) Legacy-PAT.
   const key = supabaseServerKey();
   if (!url || !key) {
-    console.error('❌ SUPABASE_URL / SUPABASE_SERVICE_ROLE fehlen in der .env.');
+    console.error('❌ SB_URL / SB_SERVICE_ROLE fehlen in der .env.');
     process.exit(1);
   }
   const db = createClient(url, key, { auth: { persistSession: false } });

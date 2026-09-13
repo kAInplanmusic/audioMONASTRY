@@ -15,9 +15,14 @@
  * Formatprüfung — analog zu `validSupabaseKey()` in `server/cloud.ts`, das
  * bisher als einzige Stelle validiert hat.
  *
- *   SUPABASE_SERVICE_ROLE → SUPABASE_SERVICE_ROLE_JWT → SUPABASE_SECRET → SUPABASE_LEGACY_PAT
+ * Namensschema seit 2026-09-13 (Betreiber-Entscheidung): das Supabase-Prefix
+ * ist `SB_` (SB_URL, SB_SERVICE_ROLE, SB_SECRET, SB_PAT, SB_ANON_PUB,
+ * SB_PUBLISHABLE). Die alten `SUPABASE_*`-Namen bleiben als Fallback lesbar,
+ * damit bestehende Deployments nicht brechen; neue Namen gewinnen.
  *
- * Der Service-Role-Key (Legacy-JWT) und `SUPABASE_SECRET` (neues
+ *   SB_SERVICE_ROLE → SB_SECRET → SB_PAT → SUPABASE_SERVICE_ROLE → …
+ *
+ * Der Service-Role-Key (Legacy-JWT) und `SB_SECRET` (neues
  * `sb_secret_…`-Format) sind die **richtigen** Server-Schlüssel; der
  * Legacy-PAT steht bewusst zuletzt, damit er nie einen gültigen Key verdeckt.
  *
@@ -26,6 +31,9 @@
 
 /** Reihenfolge, in der Server-Schlüssel gelesen werden. */
 export const SUPABASE_SERVER_KEY_ORDER = [
+  'SB_SERVICE_ROLE',
+  'SB_SECRET',
+  'SB_PAT',
   'SUPABASE_SERVICE_ROLE',
   'SUPABASE_SERVICE_ROLE_JWT',
   'SUPABASE_SECRET',
@@ -35,9 +43,14 @@ export const SUPABASE_SERVER_KEY_ORDER = [
 export type SupabaseServerKeyName = (typeof SUPABASE_SERVER_KEY_ORDER)[number];
 
 /** Anon-/publishable-Schlüssel, in dieser Reihenfolge. */
-export const SUPABASE_PUBLIC_KEY_ORDER = ['SUPABASE_ANON_PUB', 'SUPABASE_PUBLISHABLE'] as const;
+export const SUPABASE_PUBLIC_KEY_ORDER = ['SB_ANON_PUB', 'SB_PUBLISHABLE', 'SUPABASE_ANON_PUB', 'SUPABASE_PUBLISHABLE'] as const;
 
 type Env = Record<string, string | undefined>;
+
+/** Supabase-Projekt-URL: `SB_URL` (neu) vor `SUPABASE_URL` (Legacy). */
+export function supabaseUrl(env: Env = process.env as Env): string {
+  return (env.SB_URL ?? env.SUPABASE_URL ?? '').trim();
+}
 
 /**
  * Formprüfung. Bewusst tolerant, aber ohne Platzhalter:
@@ -93,13 +106,21 @@ export function supabaseServerKeySource(env: Env = process.env as Env): Supabase
   return pickSupabaseServerKey(env)?.source ?? null;
 }
 
-/** Kurzbericht für Health-Ausgaben: „service_role“ | „secret (sb_secret_)“ | „none“. */
+const SERVER_KEY_LABELS: Partial<Record<SupabaseServerKeyName, string>> = {
+  SB_SERVICE_ROLE: 'service_role',
+  SB_SECRET: 'secret (sb_secret_)',
+  SB_PAT: 'pat (sbp_)',
+  SUPABASE_SERVICE_ROLE: 'service_role',
+  SUPABASE_SERVICE_ROLE_JWT: 'service_role_jwt',
+  SUPABASE_SECRET: 'secret (sb_secret_)',
+  SUPABASE_LEGACY_PAT: 'legacy_pat',
+};
+
+/** Kurzbericht für Health-Ausgaben: „service_role" | „secret (sb_secret_)" | „none". */
 export function supabaseServerKeyLabel(env: Env = process.env as Env): string {
   const picked = pickSupabaseServerKey(env);
   if (!picked) return 'none';
-  if (picked.source === 'SUPABASE_SECRET') return 'secret (sb_secret_)';
-  if (picked.source === 'SUPABASE_LEGACY_PAT') return 'legacy_pat';
-  return picked.source === 'SUPABASE_SERVICE_ROLE' ? 'service_role' : picked.source.toLowerCase();
+  return SERVER_KEY_LABELS[picked.source] ?? picked.source.toLowerCase();
 }
 
 /** Erster gültiger öffentlicher Schlüssel (anon/publishable). */

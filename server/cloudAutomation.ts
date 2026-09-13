@@ -36,19 +36,20 @@ export interface AudioMetadata {
 
 function r2Client(): S3Client | null {
   const accountId = env.CFR2_ACCOUNT_ID?.trim();
-  const accessKeyId = env.CFR2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = env.CFR2_SECRET_ACCESS_KEY?.trim();
+  const accessKeyId = env.CFS3_ACCESS_KEY?.trim() || env.CFR2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = env.CFS3_SECRET_KEY?.trim() || env.CFR2_SECRET_ACCESS_KEY?.trim();
   if (!accountId || !accessKeyId || !secretAccessKey) return null;
+  const endpoint = env.CFS3_ENDPOINT?.trim() || `https://${accountId}.r2.cloudflarestorage.com`;
   return new S3Client({
     region: 'auto',
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    endpoint,
     credentials: { accessKeyId, secretAccessKey },
   });
 }
 
 function supabaseAdmin(): SupabaseClient | null {
-  const url = env.SUPABASE_URL?.trim();
-  // Zentrale Prioritätsordnung (Service-Role → JWT → Secret → Legacy-PAT).
+  const url = (env.SB_URL ?? env.SUPABASE_URL)?.trim();
+  // Zentrale Prioritätsordnung (Service-Role → Secret → PAT → Legacy).
   const key = supabaseServerKey(env);
   if (!url || !key) return null;
   return createClient(url, key, { auth: { persistSession: false } });
@@ -66,7 +67,7 @@ function r2PublicUrl(key: string): string {
     .split('/')
     .map((segment) => encodeURIComponent(segment))
     .join('/');
-  const bucket = env.CFR2_BUCKET?.trim() || 'audiomonastrysamples';
+  const bucket = (env.CFS3_BUCKET ?? env.CFR2_BUCKET)?.trim() || 'audiomonastrysamples';
   const accountId = env.CFR2_ACCOUNT_ID?.trim() || '';
   const publicBase = env.CFR2_PUBLIC_URL ? trimTrailingSlash(env.CFR2_PUBLIC_URL.trim()) : '';
   if (publicBase) return `${publicBase}/${encodedKey}`;
@@ -134,8 +135,8 @@ export function analyzeAudioKey(key: string, fileSize?: number): AudioMetadata |
 /** Listet alle Audio-Objekte im R2-Bucket. */
 export async function listR2Audio(): Promise<{ key: string; size?: number }[]> {
   const s3 = r2Client();
-  if (!s3) throw new Error('R2 not configured (CFR2_ACCOUNT_ID/ACCESS_KEY_ID/SECRET_ACCESS_KEY)');
-  const bucket = env.CFR2_BUCKET?.trim() || 'audiomonastrysamples';
+  if (!s3) throw new Error('R2 not configured (CFS3_ENDPOINT/CFS3_ACCESS_KEY/CFS3_SECRET_KEY/CFR2_ACCOUNT_ID)');
+  const bucket = (env.CFS3_BUCKET ?? env.CFR2_BUCKET)?.trim() || 'audiomonastrysamples';
   const out: { key: string; size?: number }[] = [];
   let token: string | undefined;
   do {

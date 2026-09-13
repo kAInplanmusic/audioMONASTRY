@@ -11,7 +11,7 @@ Prüft die Entscheidung „zwei Stufen, eine Familie" LIVE am Brain-Endpoint:
      ermittelten Tokens/s (ohne Modell-Load).
 
 Voraussetzungen:
-  RP_API_KEY / RUNPOD_API_KEY, RUNPOD_ENDPOINT_ID_BRAIN (oder --endpoint).
+  RP_AGENT_KEY / RP_API_KEY / RUNPOD_API_KEY, RP_ENDPOINT_ID_BRAIN (oder --endpoint).
 
 Ergebnis: logs/runpod-brain-latency-<timestamp>.json (sofort persistiert).
 """
@@ -71,19 +71,19 @@ def poll(base: str, api_key: str, job_id: str, label: str, deadline_s: int) -> d
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--endpoint", default=env("RUNPOD_ENDPOINT_ID_BRAIN"))
+    ap.add_argument("--endpoint", default=env("RP_ENDPOINT_ID_BRAIN") or env("RUNPOD_ENDPOINT_ID_BRAIN"))
     ap.add_argument("--max-tokens", type=int, default=64)
     ap.add_argument("--skip-warmup", action="store_true")
     ap.add_argument("--warmup-timeout", type=int, default=1500)
     ap.add_argument("--job-timeout", type=int, default=600)
     args = ap.parse_args()
 
-    api_key = env("RP_API_KEY") or env("RUNPOD_API_KEY")
+    api_key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
     if not api_key:
-        print("FEHLER: RP_API_KEY fehlt", file=sys.stderr)
+        print("FEHLER: RP_AGENT_KEY fehlt", file=sys.stderr)
         return 2
     if not args.endpoint:
-        print("FEHLER: RUNPOD_ENDPOINT_ID_BRAIN fehlt", file=sys.stderr)
+        print("FEHLER: RP_ENDPOINT_ID_BRAIN fehlt", file=sys.stderr)
         return 2
 
     base = f"https://api.runpod.ai/v2/{args.endpoint}"

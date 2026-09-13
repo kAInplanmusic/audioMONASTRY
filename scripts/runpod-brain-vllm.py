@@ -35,9 +35,9 @@ def env(name: str, default: str = "") -> str:
     return default
 
 
-KEY = env("RP_API_KEY")
+KEY = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
 HF = env("HF_TOKEN")
-assert KEY, "RP_API_KEY fehlt in .env"
+assert KEY, "RP_AGENT_KEY fehlt in .env"
 
 
 def api(url, body=None, method="GET", timeout=60, auth=None):

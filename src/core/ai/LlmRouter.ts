@@ -250,13 +250,13 @@ class RunPodLocalProvider implements ILlmProvider {
   }
 
   get available(): boolean {
-    const openAiUrl = envKey('RUNPOD_BRAIN_OPENAI_URL');
-    if (openAiUrl) return Boolean(envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY'));
+    const openAiUrl = envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL');
+    if (openAiUrl) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
     return this.brainProvider().available;
   }
 
   private apiKey(): string | undefined {
-    return envKey('RUNPOD_API_KEY') || envKey('RP_API_KEY');
+    return envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY');
   }
 
   /**

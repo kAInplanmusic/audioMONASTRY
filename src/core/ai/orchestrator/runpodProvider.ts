@@ -9,9 +9,9 @@
  *   voiceGen  → runpod-voice   (tts, sing, song, audio.generate, stem.separate)
  *
  * Konfiguration je Rolle:
- *   RUNPOD_ENDPOINT_ID_BRAIN / _EARS / _VOICE
- *   RUNPOD_API_KEY (oder RP_API_KEY)
- *   Fehlt eine Rollen-ID, fällt die Rolle auf RUNPOD_ENDPOINT_ID zurück
+ *   RP_ENDPOINT_ID_BRAIN / _EARS / _VOICE
+ *   RP_AGENT_KEY (Fallback: RP_API_KEY / RUNPOD_API_KEY)
+ *   Fehlt eine Rollen-ID, fällt die Rolle auf RP_ENDPOINT_ID zurück
  *   (Legacy-Single-Endpoint-Modus – der Cutover bleibt damit lauffähig).
  *
  * Ausführung:
@@ -103,7 +103,7 @@ export class RunPodProvider implements IAiProvider {
   }
 
   private get apiKey(): string {
-    return env('RUNPOD_API_KEY') || env('RP_API_KEY');
+    return env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
   }
 
   private get timeoutMs(): number {
@@ -140,7 +140,7 @@ export class RunPodProvider implements IAiProvider {
       );
     }
     if (!this.apiKey) {
-      throw new AiProviderError(this.id, 'NO_KEY', 'RUNPOD_API_KEY/RP_API_KEY fehlt', false);
+      throw new AiProviderError(this.id, 'NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY fehlt', false);
     }
 
     const started = Date.now();
