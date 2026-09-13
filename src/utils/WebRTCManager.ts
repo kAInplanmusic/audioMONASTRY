@@ -3,7 +3,7 @@ import { random } from './random';
 import { WebRTCMessage } from '../types/protocol';
 import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
-import { isListenerMode, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
+import { isListenerMode, listenerModeForPath, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
 import { rtcConfig, refreshIceConfig } from '../config/webrtc';
 import {
   createRecoveryState,
@@ -168,7 +168,8 @@ class WebRTCManager {
     this.dataChannelListeners.forEach((l) => l(data));
   }
   /** Wird bei jeder Änderung der Session (Join/Peer-Join/Peer-Left/Voll) aufgerufen. */
-  public onSessionUpdate: (info: SessionInfo) => void = () => {};
+  // `onSessionUpdate` ist als Getter/Setter unten definiert (Replay des letzten
+  // Stands beim Abo – COLLAB-P0-002).
 
   constructor() {
     // '' (empty string) means "same origin" — resolve to io() default so the
@@ -310,6 +311,11 @@ class WebRTCManager {
   public sessionMode(): SessionMode {
     if (this.visualOutMode) return 'visual-out';
     if (this.masterOutMode) return 'master-out';
+    // WICHTIG (COLLAB-P0-002): Der Modus kommt aus der ANDOCK-URL, nicht aus
+    // einem Modul-Seiteneffekt. Vorher setzten VisualOutPage/MasterOutPage den
+    // Modus beim Import; da main.tsx beide Seiten eager importiert, wurde JEDER
+    // Client (auch '/') zum Listener und zaehlte nicht mehr als Session-User.
+    if (typeof window !== 'undefined') return listenerModeForPath(window.location.pathname);
     return 'member';
   }
 
@@ -399,12 +405,32 @@ class WebRTCManager {
     }
   }
 
+  /**
+   * COLLAB-P0-002: Der Socket verbindet/joined bereits beim Modul-Init, App.tsx
+   * abonniert `onSessionUpdate` erst beim Mount. Die Zuweisung liefert deshalb
+   * sofort den zuletzt bekannten Stand nach — sonst bliebe der Zähler auf dem
+   * Initialwert stehen, wenn der Join vor dem Abo passiert ist.
+   */
+  private lastSessionInfo: SessionInfo | null = null;
+  private onSessionUpdateCallback: (info: SessionInfo) => void = () => {};
+
+  set onSessionUpdate(cb: (info: SessionInfo) => void) {
+    this.onSessionUpdateCallback = cb;
+    if (this.lastSessionInfo) cb({ ...this.lastSessionInfo, members: [...this.lastSessionInfo.members] });
+  }
+
+  get onSessionUpdate(): (info: SessionInfo) => void {
+    return this.onSessionUpdateCallback;
+  }
+
   private emitSessionUpdate() {
-    this.onSessionUpdate({
+    const info: SessionInfo = {
       members: [...this.sessionMembers],
       full: this.sessionFull,
       joined: this.sessionJoined,
-    });
+    };
+    this.lastSessionInfo = info;
+    this.onSessionUpdateCallback({ ...info, members: [...info.members] });
   }
 
   private setupSignaling() {

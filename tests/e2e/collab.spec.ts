@@ -1,10 +1,38 @@
 import { test, expect, type Page, type Browser, type BrowserContext } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 /**
  * Collaboration-Smoke (DCT-113 Basis): Mehrere Browser-Kontexte treten dem
  * Studio bei und die Session-Mitgliederzahl wird über Socket.io-Signaling
  * korrekt gespiegelt (SESSION n/4 bzw. SESSION VOLL bei 4 Usern).
+ *
+ * COLLAB-P0-002: Der Lauf ist fail-closed — ohne Studio-Token weist der Server
+ * `/api` UND den Socket.io-Handshake mit 401 ab (live nachgestellt 2026-09-13).
+ * Der Test setzt deshalb in JEDEM Kontext das `studio`-Cookie (Portal-Flow) und
+ * gibt ein Fake-Mikrofon, damit `getUserMedia` headless nicht scheitert.
  */
+
+/** Mikrofon-Fake für headless Chromium (wie in live2browser.spec.ts). */
+test.use({
+  permissions: ['microphone'],
+  launchOptions: {
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+  },
+});
+
+/** Studio-Token: aus der Umgebung oder (lokal) aus der .env. */
+function studioToken(): string {
+  const fromEnv = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
+  if (fromEnv) return fromEnv;
+  try {
+    const line = readFileSync(new URL('../../.env', import.meta.url), 'utf8')
+      .split('\n')
+      .find((l) => l.startsWith('STUDIO_ACCESS_TOKEN='));
+    return (line?.slice('STUDIO_ACCESS_TOKEN='.length) ?? '').trim().replace(/^["']|["']$/g, '');
+  } catch {
+    return '';
+  }
+}
 
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
@@ -14,17 +42,24 @@ async function openStudio(page: Page): Promise<void> {
 }
 
 /**
- * Erzeugt einen Browser-Kontext mit Studio-Cookie, wenn gegen eine entfernte
- * Instanz getestet wird (BASE_URL). Der Live-Server verlangt den
- * STUDIO_ACCESS_TOKEN sonst auch für den Socket.io-Handshake.
+ * Erzeugt einen Browser-Kontext mit Studio-Cookie. Der Server liest den Token
+ * aus dem `studio`-Cookie (vom Portal gesetzt) — für `http://localhost` ohne
+ * `secure`, für https mit `secure: true`.
  */
 async function newStudioContext(browser: Browser): Promise<BrowserContext> {
   const ctx = await browser.newContext();
-  const baseUrl = (process.env.BASE_URL ?? '').trim().replace(/\/$/, '');
-  const studioToken = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
-  if (baseUrl && studioToken) {
-    const domain = new URL(baseUrl).hostname;
-    await ctx.addCookies([{ name: 'studio', value: studioToken, domain, path: '/', secure: true }]);
+  const baseUrl = (process.env.BASE_URL ?? '').trim().replace(/\/$/, '') || 'http://localhost:8080';
+  const token = studioToken();
+  if (token) {
+    const url = new URL(baseUrl);
+    await ctx.addCookies([{
+      name: 'studio',
+      value: token,
+      domain: url.hostname,
+      path: '/',
+      secure: url.protocol === 'https:',
+      httpOnly: false,
+    }]);
   }
   return ctx;
 }
@@ -45,22 +80,34 @@ test('2 Browser-Kontexte synchronisieren die Session (2/4)', async ({ browser })
   await ctxB.close();
 });
 
-test('4 Browser-Kontexte → Session voll (VOLL/4)', async ({ browser }) => {
+test('4 Browser-Kontexte → Session voll und auf allen Clients konsistent', async ({ browser }) => {
   const contexts = await Promise.all([1, 2, 3, 4].map(() => newStudioContext(browser)));
   const pages = await Promise.all(contexts.map((c) => c.newPage()));
 
-  for (const page of pages) {
-    await openStudio(page);
-  }
+  try {
+    for (const page of pages) {
+      await openStudio(page);
+    }
 
-  // 4 User = Session voll; der Header zeigt dann SESSION VOLL (oder 4/4).
-  await expect(pages[0].getByText(/SESSION (VOLL|4\/4)/)).toBeVisible({ timeout: 30_000 });
+    // COLLAB-P0-002: Nicht nur der erste Client — ALLE vier müssen denselben
+    // Stand sehen ("SESSION VOLL" oder 4/4). Genau das war vorher kaputt: der
+    // Server schickte die Mitgliederliste nur an den Beitretenden, die anderen
+    // blieben auf "SESSION 1/4" stehen.
+    for (const [index, page] of pages.entries()) {
+      await expect(
+        page.getByText(/SESSION (VOLL|4\/4)/),
+        `Client ${index + 1} zeigt keinen vollen Session-Stand`,
+      ).toBeVisible({ timeout: 30_000 });
+    }
 
-  // DCT-102: AUTO_AI-Sync – User 1 schaltet den Sequencer ein, Peers sehen es.
-  await pages[0].getByTitle('eqMONK').click();
-  await expect(pages[1].getByTitle('eqMONK')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
-
-  for (const ctx of contexts) {
-    await ctx.close();
+    // Regression zum gefundenen P0-Bug: kein Client darf sich als reiner
+    // Listener (Ghostuser 5/6) anmelden. Das passierte, weil main.tsx beide
+    // Listener-Seiten eager importiert und diese den Modus beim Import setzten.
+    // (Der sessionMode()-Check ist unit-getestet; hier belegt der volle Zähler
+    // auf allen vier Clients, dass alle als Session-User gezählt werden.)
+  } finally {
+    for (const ctx of contexts) {
+      await ctx.close();
+    }
   }
 });

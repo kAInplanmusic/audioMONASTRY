@@ -12,8 +12,8 @@ import { webRTCManager } from '../utils/WebRTCManager';
  * Der Listener zählt NICHT zu den 4 Session-Usern (server-seitiger
  * `master-out`-Modus) und verbindet sich nur mit dem Host.
  */
-// Muss VOR dem Socket-Connect gesetzt sein (der Connect startet beim Import).
-webRTCManager.setMasterOutMode(true);
+// Der Listener-Modus kommt aus der Andock-URL (sessionMode() -> listenerModeForPath);
+// ein Modul-Seiteneffekt war hier falsch, weil main.tsx beide Seiten eager importiert.
 
 export const MasterOutPage = () => {
   const audioRef = useRef<HTMLAudioElement>(null);

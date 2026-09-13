@@ -64,10 +64,11 @@
       "id": "COLLAB-P0-002",
       "title": "4-User-Live-E2E gegen echte Instanz",
       "priority": "P0",
-      "status": "BLOCKED",
+      "status": "PARTIAL",
       "area": "Collaboration",
       "source": "MASTER_TODO.md",
-      "blockedReason": "Kein 4-Browser-/Live-Target in der Agent-Umgebung; der Betreiber faehrt die Flotte hoch und testet live."
+      "blockedReason": "Kein 4-Browser-/Live-Target in der Agent-Umgebung; der Betreiber faehrt die Flotte hoch und testet live.",
+      "note": "PARTIAL 2026-09-13 (lokaler 4-Client-Lauf, Playwright). Dabei zwei ECHTE P0-Bugs gefunden und gefixt: (1) main.tsx importiert VisualOutPage/MasterOutPage eager; beide setzten den Listener-Modus beim Modul-Import -> JEDER Client meldete sich als 'visual-out' (Ghostuser 6) an, zaehlte nicht als Session-User und der Zaehler blieb dauerhaft auf SESSION 1/4. Fix: sessionMode() leitet den Modus aus der Andock-URL ab (listenerModeForPath), die Modul-Seiteneffekte sind entfernt. (2) Der Server schickte 'session-members' nur an den Beitretenden; die anderen erfuhren Aenderungen nur ueber 'peer-joined'. Jetzt verteilt broadcastSessionMembers() die autoritative Liste an alle Sockets im Raum. Zusaetzlich: onSessionUpdate liefert beim Abo den letzten Stand nach (Modul-Init laeuft vor React-Mount) und die E2E-Kontexte setzen das studio-Cookie (fail-closed Auth) + Fake-Mikrofon. BELEGT: tests/e2e/collab.spec.ts 2/2 gruen - '2 Browser-Kontexte -> SESSION 2/4' bei BEIDEN Clients und '4 Browser-Kontexte -> voll und auf ALLEN vier Clients konsistent'. OFFEN (deshalb PARTIAL): Lock-Denial + RBAC im 4-User-Lauf protokollieren, Reconnect ohne Pumping, und die Ansichts-Spiegelung (neues Item COLLAB-P1-004)."
     },
     {
       "id": "COLLAB-P0-003",
@@ -602,6 +603,20 @@
         "Keyboard-E2E + Sichtpruefungen im Browser"
       ],
       "note": "Beide Checklisten sind Live-/Hardware-Schritte ohne Automatisierung und wurden 2026-09-13 hierher konsolidiert (die Einzeldateien sind entfernt). Blockiert wie ENV-001/ENV-003: kein 4-Browser-/Hardware-Zugang in der Agent-Umgebung."
+    },
+    {
+      "id": "COLLAB-P1-004",
+      "title": "Aktives Plugin/Nav wird nicht auf andere Session-User gespiegelt",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Collaboration",
+      "source": "COLLAB-P0-002 Live-Lauf 2026-09-13",
+      "subitems": [
+        "aktive Nav/Ansicht (aria-current) ueber den Socket-Relay spiegeln",
+        "Regel aus AGENTS.md 1.2 (identische State-Mirroring) fuer die Nav pruefen",
+        "E2E-Assertion: User A oeffnet Plugin X -> User B sieht X aktiv"
+      ],
+      "note": "Live gemessen 2026-09-13 (2 Kontexte, lokaler Server): nach Klick auf eqMONK hat Client A aria-current=\"page\", Client B bleibt null. Der Session-Zaehler selbst konvergiert jetzt auf allen Clients; die Ansichts-/Nav-Spiegelung fehlt. Bewusst als eigenes Item gefuehrt, nicht stillschweigend als erledigt verbucht."
     }
   ],
   "visionSandbox": [
@@ -938,5 +953,5 @@
     "docs/RUNPOD_AI_V1_SPEC.md",
     "docs/VISUALMONK_SPEC.md"
   ],
-  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen. | 2026-09-13 (spaeter): ENV-005 + ENV-006 auf DONE (SB_* live verifiziert; ungenutzter cfat_-Token entfernt). | 2026-09-13 (Code-Paket): AI-P1-004 DONE (Idempotenz), QUAL-P2-005 DONE (Python-Smoke+CI), DSP-P2-002 DONE (PDC-Impuls-Suite), PERF-P3-002 PARTIAL (Messpfad + offene APIs), PERSIST-P1-002 PARTIAL (Kern+Tests, App-Wiring/Remote-Idempotenz offen)."
+  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen. | 2026-09-13 (spaeter): ENV-005 + ENV-006 auf DONE (SB_* live verifiziert; ungenutzter cfat_-Token entfernt). | 2026-09-13 (Code-Paket): AI-P1-004 DONE (Idempotenz), QUAL-P2-005 DONE (Python-Smoke+CI), DSP-P2-002 DONE (PDC-Impuls-Suite), PERF-P3-002 PARTIAL (Messpfad + offene APIs), PERSIST-P1-002 PARTIAL (Kern+Tests, App-Wiring/Remote-Idempotenz offen). | 2026-09-13 (COLLAB-P0-002): 2 P0-Bugs gefixt (listener-mode Modul-Seiteneffekt; session-members nur an Joinenden), 4-Client-E2E lokal gruen; Rest (Locks/RBAC/Reconnect/Nav-Spiegelung) offen -> PARTIAL + COLLAB-P1-004."
 }

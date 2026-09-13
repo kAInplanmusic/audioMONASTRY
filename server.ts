@@ -2932,12 +2932,12 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
       const SESSION_ROOM_ID = 'studio-session';
       const MAX_SESSION_USERS = 4;
 
-      const sessionMembers = (room: string) => {
+      const sessionMembers = (room: string, excludeSocketId: string) => {
         const members: { socketId: string; userId: string; role: string }[] = [];
         const sockets = io.sockets.adapter.rooms.get(room);
         if (sockets) {
           for (const sid of sockets) {
-            if (sid === socket.id) continue;
+            if (sid === excludeSocketId) continue;
             const s = io.sockets.sockets.get(sid);
             // Listener (Ghostuser 5/6) zählen NICHT als Session-Mitglieder.
             if (s?.data?.sessionUserId && !isListenerMode(normalizeSessionMode(s?.data?.sessionMode))) {
@@ -2946,6 +2946,31 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           }
         }
         return members;
+      };
+
+      /**
+       * COLLAB-P0-002: Mitgliederliste serverautoritativ an ALLE Session-Sockets
+       * verteilen (jeder bekommt die Liste OHNE sich selbst). Vorher bekam nur der
+       * Beitretende eine `session-members`-Nachricht; die anderen erfuhren eine
+       * Änderung nur über `peer-joined` — ein Client, der beim Join noch nicht
+       * zuhörte (Modul-Init vor React-Mount), blieb dauerhaft auf einem alten
+       * Zähler stehen (live nachgestellt 2026-09-13).
+       */
+      const broadcastSessionMembers = (room: string): void => {
+        const sockets = io.sockets.adapter.rooms.get(room);
+        if (!sockets) return;
+        for (const sid of sockets) {
+          const s = io.sockets.sockets.get(sid);
+          if (!s?.data?.sessionUserId) continue;
+          const selfMode = normalizeSessionMode(s.data.sessionMode);
+          s.emit('session-members', {
+            roomId: SESSION_ROOM_ID,
+            members: sessionMembers(room, sid),
+            selfRole: s.data.sessionRole ?? 'guest',
+            selfMode,
+            hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? '',
+          });
+        }
       };
 
       socket.on('join-session', (data: any) => {
@@ -2985,7 +3010,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           });
         }
 
-        const members = sessionMembers(room);
+        const members = sessionMembers(room, socket.id);
         if (isListenerMode(mode)) {
           // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
           // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
@@ -3006,8 +3031,10 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           return;
         }
 
-        socket.emit('session-members', { roomId: SESSION_ROOM_ID, members, selfRole: role, hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? userId });
+        // COLLAB-P0-002: Erst dem Raum den neuen Peer ankündigen, dann allen
+        // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
         socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId, role });
+        broadcastSessionMembers(room);
       });
 
       // P4-2: Admin kann einem User eine neue Rolle zuweisen (server-erzwungen).
@@ -3026,7 +3053,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const roomId = socket.data?.sessionRoom;
         const memberIds = new Set<string>([
           String(socket.data?.sessionUserId ?? ''),
-          ...(roomId ? sessionMembers(`session:${roomId}`).map((m) => m.userId) : []),
+          ...(roomId ? sessionMembers(`session:${roomId}`, socket.id).map((m) => m.userId) : []),
         ]);
         if (!memberIds.has(targetUserId)) {
           addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', false, `${targetUserId}->${newRole}`);

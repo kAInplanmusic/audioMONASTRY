@@ -12,8 +12,8 @@ import { SESSION_MODE_LABEL } from '../core/session/listenerMode';
  *
  * Andock-URLs: `/visual-out` oder `/ghost/6`.
  */
-// Muss VOR dem Socket-Connect gesetzt sein (der Connect startet beim Import).
-webRTCManager.setVisualOutMode(true);
+// Der Listener-Modus kommt aus der Andock-URL (sessionMode() -> listenerModeForPath);
+// ein Modul-Seiteneffekt war hier falsch, weil main.tsx beide Seiten eager importiert.
 
 export const VisualOutPage = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
