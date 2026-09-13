@@ -787,12 +787,12 @@
     },
     {
       "id": "ENV-006",
-      "title": "Cloudflare CF_ACCOUNT_TOKEN (cfat_) antwortet HTTP 401",
+      "title": "Cloudflare CF_ACCOUNT_TOKEN (cfat_) war ungueltig (401) - Token entfernt",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Betreiber",
       "source": "ENV-004 / Key-Rotation 2026-09-11",
-      "note": "Weiterhin OPEN (live erneut geprueft 2026-09-13): CFR2_ACCOUNT_TOKEN (cfat_...) liefert gegen api.cloudflare.com/client/v4/user/tokens/verify HTTP 401. Die S3/R2-Credentials (CFS3_*) und CFR2_API_TOKEN (cfut_) funktionieren (r2-check gruen). Betreiber: cfat-Token pruefen/neu ausstellen oder entfernen, falls ungenutzt."
+      "note": "DONE 2026-09-13: Der cfat_-Token war ungueltig (HTTP 401 gegen /user/tokens/verify) und wurde deaktiviert; die tote Zeile ist jetzt ganz aus .env entfernt. Er wurde von KEINEM Code gelesen (0 Referenzen in src/server/services/scripts) - R2/S3 und die Cloudflare-Automation haengen an CFR2_ACCOUNT_ID/CFR2_PUBLIC_URL + CFS3_* bzw. CFR2_API_TOKEN (cfut_). Nachweis nach Entfernung: r2-check live gruen (Bucket audiomonastrysamples, PUT ok)."
     }
   ],
   "humanVerification": [
@@ -933,5 +933,5 @@
     "docs/RUNPOD_AI_V1_SPEC.md",
     "docs/VISUALMONK_SPEC.md"
   ],
-  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen."
+  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen. | 2026-09-13 (spaeter): ENV-005 + ENV-006 auf DONE (SB_* live verifiziert; ungenutzter cfat_-Token entfernt)."
 }
