@@ -113,6 +113,12 @@ export interface AiJob {
   durationMs: number | null;
   error: string | null;
   dedupeKey: string | null;
+  /**
+   * Vom Aufrufer mitgegebener Idempotenz-Schlüssel (z. B. HTTP `Idempotency-Key`).
+   * Gleicher Schlüssel + gleicher Payload ⇒ derselbe Job (auch nach Abschluss),
+   * gleicher Schlüssel + anderer Payload ⇒ Konflikt.
+   */
+  idempotencyKey?: string | null;
   result?: unknown;
 }
 

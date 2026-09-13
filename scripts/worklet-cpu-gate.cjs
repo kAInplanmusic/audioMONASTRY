@@ -9,7 +9,12 @@
  *      Ein Block = 128 Frames → Budget = 128/sampleRate (2,667 ms bei 48 kHz).
  *   2. `AudioContext.renderCapacity` (Chrome) liefert zusaetzlich die Last des
  *      GESAMTEN Graphen inkl. Underrun-Anteil – falls die API fehlt, wird das
- *      ausdruecklich vermerkt statt still weggelassen.
+ *      ausdruecklich als OFFEN vermerkt statt still weggelassen (PERF-P3-002).
+ *
+ * PERF-P3-002: Auf einem Chromium MIT `renderCapacity` und `performance` im
+ * Worklet-Scope sind beide Messungen Pflicht (`REQUIRE_PERF_APIS=1` → Gate
+ * schlaegt fehl, wenn eine API fehlt). Ohne die Env-Variable bleiben sie als
+ * OFFEN sichtbar (Report: `perfOpenPoints`, `fineGrainedTimer`).
  *
  * Lastszenario: vier Kanaele mit je einem eigenen Sample gleichzeitig getriggert
  * (Naeherung an den 4-User-Betrieb) plus Testton im Master.
@@ -217,6 +222,18 @@ const REPORT_FILE = path.resolve(__dirname, '../reports/worklet-cpu.json');
     : '  NICHT aktiv – kein Bericht aus dem Worklet (fehlende Werte sind dann ein Konfigurationsfehler, kein Messergebnis)');
   console.log(`  Nachrichten vom Worklet: ${JSON.stringify(result.messageTypes)}`);
   console.log(`  Ausgangs-Pegel (Beweis, dass gerendert wurde): ${result.outputPeak}`);
+  // PERF-P3-002: Auf einem Chromium MIT den APIs sind beide Punkte Pflicht.
+  // Standardmäßig sind sie „offen, aber sichtbar" – kein stiller Erfolg.
+  const requirePerfApis = process.env.REQUIRE_PERF_APIS === '1';
+  const fineGrainedTimer = Boolean(cpu && cpu.timer !== 'date');
+  const perfOpenPoints = [];
+  if (!result.renderCapacityAvailable) {
+    perfOpenPoints.push('AudioContext.renderCapacity fehlt in diesem Browser (keine Context-Last/Underrun-Messung)');
+  }
+  if (!fineGrainedTimer) {
+    perfOpenPoints.push('performance fehlt im Worklet-Scope (Blockzeit nur mit 1-ms-Aufloesung, Max-Wert informativ)');
+  }
+
   const out = {
     messageTypes: result.messageTypes,
     generatedAt: new Date().toISOString(),
@@ -228,6 +245,9 @@ const REPORT_FILE = path.resolve(__dirname, '../reports/worklet-cpu.json');
     maxBlockMsReported: result.maxBlockMsReported,
     renderCapacityAvailable: result.renderCapacityAvailable,
     contextLoads: result.contextLoads,
+    fineGrainedTimer,
+    perfOpenPoints,
+    requirePerfApis,
     pageErrors,
   };
 
@@ -270,6 +290,10 @@ const REPORT_FILE = path.resolve(__dirname, '../reports/worklet-cpu.json');
     ['Context-Last im Rahmen (falls messbar)', !result.renderCapacityAvailable || (out.contextAverageLoad ?? 0) <= BUDGETS.failContextLoad],
     ['Ausgang hat Signal (Graph rendert wirklich)', result.outputPeak > 0.001],
     ['keine pageErrors', pageErrors.length === 0],
+    // PERF-P3-002: nur auf einem Browser mit den APIs Pflicht (REQUIRE_PERF_APIS=1),
+    // sonst als OFFEN markiert (nicht als stiller Erfolg).
+    ['renderCapacity-API vorhanden (PERF-P3-002)', result.renderCapacityAvailable || !requirePerfApis],
+    ['Blockzeit mit feiner Zeitquelle (PERF-P3-002)', fineGrainedTimer || !requirePerfApis],
   ];
 
   console.log('--- Zusagen ---');
@@ -280,6 +304,11 @@ const REPORT_FILE = path.resolve(__dirname, '../reports/worklet-cpu.json');
   }
   if (cpu && cpu.loadPct > BUDGETS.warnLoadPct && cpu.loadPct <= BUDGETS.failLoadPct) {
     console.log(`  WARN  Ø-Last über Zielwert ${BUDGETS.warnLoadPct} % (noch im Fehlschlag-Korridor)`);
+  }
+  if (perfOpenPoints.length > 0) {
+    console.log('--- OFFEN (PERF-P3-002) ---');
+    for (const point of perfOpenPoints) console.log(`  OFFEN  ${point}`);
+    console.log(`  Hinweis: auf einem Browser mit den APIs mit REQUIRE_PERF_APIS=1 als Pflicht prüfen.`);
   }
 
   fs.mkdirSync(path.dirname(REPORT_FILE), { recursive: true });

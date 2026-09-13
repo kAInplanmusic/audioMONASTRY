@@ -3,7 +3,7 @@
     "cpu-stats": 11,
     "step": 56
   },
-  "generatedAt": "2026-09-11T14:02:19.790Z",
+  "generatedAt": "2026-09-13T03:55:20.266Z",
   "browser": "151.0.7922.34",
   "budgets": {
     "warnLoadPct": 25,
@@ -16,18 +16,24 @@
   "cpu": {
     "type": "cpu-stats",
     "blocks": 2500,
-    "avgMs": 0.4784,
-    "maxMs": 6,
+    "avgMs": 0.37,
+    "maxMs": 10,
     "budgetMs": 2.6667,
-    "loadPct": 17.94,
+    "loadPct": 13.88,
     "sampleRate": 48000,
     "timer": "date"
   },
   "cpuReportCount": 11,
-  "maxLoadPctReported": 225,
-  "maxBlockMsReported": 6,
+  "maxLoadPctReported": 375,
+  "maxBlockMsReported": 10,
   "renderCapacityAvailable": false,
   "contextLoads": [],
+  "fineGrainedTimer": false,
+  "perfOpenPoints": [
+    "AudioContext.renderCapacity fehlt in diesem Browser (keine Context-Last/Underrun-Messung)",
+    "performance fehlt im Worklet-Scope (Blockzeit nur mit 1-ms-Aufloesung, Max-Wert informativ)"
+  ],
+  "requirePerfApis": false,
   "pageErrors": [],
   "checks": [
     {
@@ -56,6 +62,14 @@
     },
     {
       "check": "keine pageErrors",
+      "ok": true
+    },
+    {
+      "check": "renderCapacity-API vorhanden (PERF-P3-002)",
+      "ok": true
+    },
+    {
+      "check": "Blockzeit mit feiner Zeitquelle (PERF-P3-002)",
       "ok": true
     }
   ]

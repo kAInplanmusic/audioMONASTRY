@@ -29,7 +29,7 @@
   },
   "rule": "Nur offene Punkte. 100 % Erledigtes ist entfernt (Historie in git).",
   "fundamentals": {
-    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1388 Tests gruen (202 Dateien) · Boundary-Scan 425 Dateien 0 Verstoesse · build/security/boundary gruen (Stand 2026-09-13)",
+    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1412 Tests gruen (205 Dateien) · Boundary-Scan 428 Dateien 0 Verstoesse · Python-Smoke 13 Tests gruen (Stand 2026-09-13)",
     "audioLive": "V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
     "aiFleet": "3 Endpoints live (brain=vLLM Qwen3-14B-AWQ, ears, voiceGen) + 4. Rolle `vision` geplant",
     "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
@@ -507,7 +507,7 @@
       "id": "PERSIST-P1-002",
       "title": "Robuste lokale/entfernte Persistenz (Autosave, OPFS/IndexedDB, Retry/Backoff)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Persistenz",
       "source": "MASTERTODO.md P1-1",
       "subitems": [
@@ -516,20 +516,22 @@
         "OPFS/IndexedDB-Puffer fuer Offline-Reload",
         "Retry/Backoff + Idempotenz fuer Supabase/R2"
       ],
-      "note": "Beim Konsolidieren 2026-09-13 aus MASTERTODO.md (P1-1) uebernommen; im SSOT zuvor nicht als eigenes Item gefuehrt. Kein Code-Nachweis vorhanden."
+      "note": "PARTIAL 2026-09-13: Kern gebaut + getestet (tests/persistenceAutosave.test.ts, 12 Tests). Neu: src/core/persistence/snapshotEnvelope.ts (schemaVersion 2, Migrationskette v1->v2, monotone revision, stabiler idempotencyKey je Stand), sessionAutosave.ts (DebouncedAutosave mit injizierbaren Timern, retryWithBackoff mit Deckelung, SessionAutosave ueber injizierbaren AsyncKeyValueStore; Umschlag wird PRO Stand einmal gebaut -> Retry schreibt denselben Key, nie eine neue Revision), browserStore.ts (IndexedDB via largeGetJson/largeSetJson, ehrlicher memory-Fallback mit kind). OFFEN: App-Wiring (Autosave an den Session-/Graph-Zustand haengen, flush bei pagehide) und Remote-Sink-Idempotenz fuer Supabase/R2 (Server-Seite).",
+      "updatedAt": "2026-09-13"
     },
     {
       "id": "AI-P1-004",
       "title": "AI-Jobs: Idempotenz-Schluessel (Rest aus MASTERTODO P1-3)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI Runtime",
       "source": "MASTERTODO.md P1-3",
       "subitems": [
         "Idempotency-Keys fuer Job-Anlage (Doppel-Submit verhindern)",
         "Verhalten bei Retry nach Timeout dokumentieren/testen"
       ],
-      "note": "2026-09-13 geprueft: Circuit-Breaker (circuitBreaker.ts, FR-010), Kosten-Tracking (costTracker.ts, FR-011) und Job-/Eval-Persistenz (aiPersistence.ts, ai_migration_001/006) EXISTIEREN; offen ist nur die Idempotenz-Schicht. Queue/Timeout/Cancellation ist mit AI-P1-002 DONE."
+      "note": "DONE 2026-09-13: Idempotenz-Schluessel fuer AI-Jobs implementiert. JobManager.create() nimmt opts.idempotencyKey (Scope sessionId+Key, TTL 24 h, prune); gleicher Key+Payload => derselbe Job auch nach COMPLETED (Retry ohne Doppelausfuehrung), gleicher Key+anderer Payload => IdempotencyConflictError -> HTTP 409 (POST /api/ai/orchestrate liest den Header 'Idempotency-Key'). AiJob traegt idempotencyKey. Tests: tests/aiJobIdempotency.test.ts (7) inkl. Orchestrator-Doppelaufruf (Provider genau 1x).",
+      "updatedAt": "2026-09-13"
     },
     {
       "id": "ARCH-P2-002",
@@ -549,36 +551,39 @@
       "id": "DSP-P2-002",
       "title": "PDC-Impuls-/Latenz-Paritaetssuite (ueber RMS/Hash hinaus)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "DSP",
       "source": "TODO.md ARCH-V2-005",
       "subitems": [
         "mathematische V2-Referenz-Suite",
         "PDC-Impulstest (Phasen-/Latenzkompensation)"
       ],
-      "note": "tests/v2Parity.test.ts deckt GraphState-Paritaet und A/B-Proxy-Hashes ab; die Impuls-/Latenz-Suite fehlt weiterhin."
+      "note": "DONE 2026-09-13: PDC-Impuls-/Latenz-Suite gebaut (tests/v2PdcImpulse.test.ts, 5 Tests): Impuls durch echte GraphPlaybackEngine-Delayline kommt exakt nach N Samples (kein N+-1, genau ein Nicht-Null-Sample), Kompensation ist die exakte Umkehrung, V2SampleClock verschiebt alle Events differenziell gegen einen Scheduler ohne PDC um genau N, und die Raster/Lookahead-Kollision ist ausgeschlossen (Clamp bleibt Schutzregel).",
+      "updatedAt": "2026-09-13"
     },
     {
       "id": "QUAL-P2-005",
       "title": "Deep-Audit-Regressionstest repository/revision (Python-Smoke im CI)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "CI/AI",
       "source": "docs/FEHLER_REGISTER_2026.md FA-P2-2",
-      "note": "Aus dem Fehler-Register: Regressionstest fuer repository/revision-Pfade als Python-Smoke, im naechsten CI-Lauf nachziehen."
+      "note": "DONE 2026-09-13: Python-Smoke fuer repository/revision (FA-P2-2) gebaut: services/samplemonk-ai-runtime/tests/test_model_definition.py (7 Tests) prueft ModelDefinition.from_dict gegen unsichere repository/revision/ID/Klassen und dass das eingecheckte model_manifest.json nur gepinnte Revisionen (kein 'latest') enthaelt. In CI verdrahtet (.github/workflows/ci.yml, Schritt 'Python-Smoke') zusammen mit tests/plugin_interface_test.py (6 Tests).",
+      "updatedAt": "2026-09-13"
     },
     {
       "id": "PERF-P3-002",
       "title": "Worklet-Messluecken: renderCapacity + Max-Blockzeit",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Performance",
       "source": "docs/PERFORMANCE_BUDGETS_2026.md §6",
       "subitems": [
         "renderCapacity auf Chromium mit dieser API messen (Gesamtlast inkl. Underruns)",
         "Max-Blockzeit mit `performance` im Worklet-Scope erheben (bisher nur 1-ms-Quantisierung)"
       ],
-      "note": "Bewusst nicht im Messdurchgang 2026-09-11 enthalten; klein, aber offen."
+      "note": "PARTIAL 2026-09-13: Messpfad + ehrliche Offen-Meldung gebaut. scripts/worklet-cpu-gate.cjs meldet jetzt explizit renderCapacityAvailable, fineGrainedTimer und perfOpenPoints; mit REQUIRE_PERF_APIS=1 sind beide Messungen Pflicht (Gate rot, wenn eine API fehlt). Auf DIESEM Playwright-Chromium 151 fehlen beide APIs (live geprueft: hasRC=false in allen Flag-Varianten; worklet-scope ohne performance) -> Blockzeit nur 1-ms-Aufloesung, keine Context-Last/Underrun. OFFEN: echte Messung auf Chromium mit AudioContextRenderCapacity + performance im Worklet-Scope (Desktop-Chrome oder faehiger CI-Runner), dann REQUIRE_PERF_APIS=1 fahren.",
+      "updatedAt": "2026-09-13"
     },
     {
       "id": "LIVE-P1-003",
@@ -933,5 +938,5 @@
     "docs/RUNPOD_AI_V1_SPEC.md",
     "docs/VISUALMONK_SPEC.md"
   ],
-  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen. | 2026-09-13 (spaeter): ENV-005 + ENV-006 auf DONE (SB_* live verifiziert; ungenutzter cfat_-Token entfernt)."
+  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen. | 2026-09-13 (spaeter): ENV-005 + ENV-006 auf DONE (SB_* live verifiziert; ungenutzter cfat_-Token entfernt). | 2026-09-13 (Code-Paket): AI-P1-004 DONE (Idempotenz), QUAL-P2-005 DONE (Python-Smoke+CI), DSP-P2-002 DONE (PDC-Impuls-Suite), PERF-P3-002 PARTIAL (Messpfad + offene APIs), PERSIST-P1-002 PARTIAL (Kern+Tests, App-Wiring/Remote-Idempotenz offen)."
 }

@@ -18,6 +18,7 @@ import {
 } from './src/core/drop/DropTemplateGenerator';
 import type { DropGenerationRequest, DropStyle } from './src/core/drop/DropTemplateGenerator';
 import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
+import { IdempotencyConflictError } from './src/core/ai/orchestrator/jobManager';
 import { fleetStatus, sleepFleet, wakeFleet } from './src/core/ai/orchestrator/fleetWake';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
 import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
@@ -1439,6 +1440,8 @@ app.post('/api/ai/orchestrate', async (req, res) => {
     return res.status(422).json({ error: 'invalid model id' });
   }
   metrics.aiRequests += 1;
+  // AI-P1-004: Idempotenz-Schlüssel (Standard-Header, z. B. bei Retries).
+  const idempotencyKey = String(req.header('idempotency-key') ?? '').trim().slice(0, 200);
   try {
     const result = await aiOrchestrator.orchestrate({
       userId: String(userId ?? 'localUser').slice(0, 64),
@@ -1446,11 +1449,19 @@ app.post('/api/ai/orchestrate', async (req, res) => {
       model: safeModel,
       input: input ?? {},
       sessionId: sessionId,
+      idempotencyKey: idempotencyKey || undefined,
     });
     void aiPersistence.saveJob(result.job);
     void aiPersistence.saveSession(aiOrchestrator.sessions.get());
     return res.json(result);
   } catch (err) {
+    if (err instanceof IdempotencyConflictError) {
+      return res.status(409).json({
+        error: 'idempotency key already used with a different payload',
+        code: 'IDEMPOTENCY_CONFLICT',
+        jobId: err.jobId,
+      });
+    }
     metrics.aiFailures += 1;
     const message = err instanceof Error ? err.message : 'AI-Orchestrierung fehlgeschlagen';
     const status = message.includes('INSUFFICIENT_CREDIT') ? 402 : message.includes('RATE_LIMITED') ? 429 : 502;

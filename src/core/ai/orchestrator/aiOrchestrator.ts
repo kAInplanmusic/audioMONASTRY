@@ -27,6 +27,12 @@ interface OrchestrateRequest {
   input: unknown;
   sessionId?: string;
   mcpPermission?: 'READ' | 'WRITE' | 'EXECUTION' | 'DESTRUCTIVE';
+  /**
+   * AI-P1-004: Idempotenz-Schlüssel des Aufrufers. Gleicher Schlüssel + gleicher
+   * Payload ⇒ derselbe Job (auch nach Abschluss, kein Doppel-Start); gleicher
+   * Schlüssel + anderer Payload ⇒ `IdempotencyConflictError`.
+   */
+  idempotencyKey?: string;
 }
 
 interface OrchestrateResult {
@@ -104,9 +110,12 @@ export class AiOrchestrator {
   /** Haupt-Einstieg: AI-Request mit Job-Dedup, Concurrency und Provider-Routing. */
   async orchestrate(req: OrchestrateRequest): Promise<OrchestrateResult> {
     const sessionId = req.sessionId ?? this.sessions.get().sessionId;
-    const job = this.jobs.create(sessionId, req.userId, req.task, req.model, 'runpod', req.input);
+    const job = this.jobs.create(sessionId, req.userId, req.task, req.model, 'runpod', req.input, {
+      idempotencyKey: req.idempotencyKey,
+    });
     if (job.status !== 'QUEUED') {
-      // Deduplizierter Job – auf Abschluss warten (SingleFlight).
+      // Deduplizierter oder idempotent wiederholter Job – Ergebnis abwarten
+      // (bei COMPLETED liefert `waitForJob` sofort das gespeicherte Resultat).
       return this.waitForJob(job.jobId);
     }
     this.sessions.jobStarted(job.model);

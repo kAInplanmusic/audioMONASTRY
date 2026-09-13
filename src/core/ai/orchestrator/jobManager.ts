@@ -14,17 +14,39 @@ import { createHash } from 'node:crypto';
 import { aiLogger } from './aiLogger';
 import type { AiJob, AiTask, JobStatus } from './types';
 
+/**
+ * Gleicher Idempotenz-Schlüssel, aber anderer Payload: der Aufrufer hat den
+ * Schlüssel wiederverwendet (Client-Bug oder Retry mit geändertem Request).
+ * Wird als Konflikt gemeldet (HTTP 409), nie still als anderer Job ausgeführt.
+ */
+export class IdempotencyConflictError extends Error {
+  readonly jobId: string;
+  constructor(idempotencyKey: string, jobId: string) {
+    super(`idempotency key reused with a different payload: ${idempotencyKey}`);
+    this.name = 'IdempotencyConflictError';
+    this.jobId = jobId;
+  }
+}
+
 export interface JobManagerOptions {
   maxConcurrency?: Partial<Record<AiTask, number>>;
+  /** Wie lange ein Idempotenz-Schlüssel gültig bleibt (Default 24 h). */
+  idempotencyTtlMs?: number;
+  /** Injizierbare Uhr (Tests). */
+  now?: () => number;
 }
 
 export class JobManager {
   private jobs = new Map<string, AiJob>();
   private runningByTask = new Map<AiTask, number>();
   private dedupe = new Map<string, string>(); // dedupeKey -> jobId (laufend)
+  /** Idempotenz: `${sessionId}:${key}` -> { jobId, fingerprint, at } */
+  private idempotency = new Map<string, { jobId: string; fingerprint: string; at: number }>();
   private limits: Record<AiTask, number>;
+  private readonly idempotencyTtlMs: number;
 
   constructor(private options: JobManagerOptions = {}) {
+    this.idempotencyTtlMs = options.idempotencyTtlMs ?? 24 * 60 * 60 * 1000;
     this.limits = {
       'llm': 4,
       'tts': 2,
@@ -45,7 +67,7 @@ export class JobManager {
   }
 
   private now(): number {
-    return Date.now();
+    return this.options.now ? this.options.now() : Date.now();
   }
 
   dedupeKey(sessionId: string, task: AiTask, model: string, input: unknown): string {
@@ -53,14 +75,63 @@ export class JobManager {
     return `${sessionId}:${task}:${model}:${hash}`;
   }
 
-  /** Erstellt einen Job oder liefert den bereits laufenden identischen Job. */
-  create(sessionId: string, userId: string, task: AiTask, model: string, provider: AiJob['provider'], input: unknown): AiJob {
-    const key = this.dedupeKey(sessionId, task, model, input);
-    const existingId = this.dedupe.get(key);
+  /** Entfernt abgelaufene Idempotenz-Einträge (bounded memory). */
+  private pruneIdempotency(now: number): void {
+    for (const [key, entry] of this.idempotency) {
+      if (now - entry.at >= this.idempotencyTtlMs) this.idempotency.delete(key);
+    }
+  }
+
+  /**
+   * Erstellt einen Job oder liefert einen bereits existierenden.
+   *
+   * Dedup (ohne Schlüssel): identischer laufender Request ⇒ derselbe Job.
+   * Idempotenz (`opts.idempotencyKey`, z. B. HTTP `Idempotency-Key`): derselbe
+   * Schlüssel + identischer Payload liefert **immer** denselben Job – auch wenn
+   * er schon COMPLETED ist (Retry-Antwort ohne Doppelausführung). Derselbe
+   * Schlüssel mit anderem Payload wirft `IdempotencyConflictError`.
+   */
+  create(
+    sessionId: string,
+    userId: string,
+    task: AiTask,
+    model: string,
+    provider: AiJob['provider'],
+    input: unknown,
+    opts: { idempotencyKey?: string } = {},
+  ): AiJob {
+    const fingerprint = this.dedupeKey(sessionId, task, model, input);
+    const now = this.now();
+    const rawKey = (opts.idempotencyKey ?? '').trim().slice(0, 200);
+    const idemMapKey = rawKey ? `${sessionId}:${rawKey}` : '';
+
+    if (idemMapKey) {
+      const entry = this.idempotency.get(idemMapKey);
+      if (entry) {
+        if (now - entry.at >= this.idempotencyTtlMs) {
+          this.idempotency.delete(idemMapKey);
+        } else {
+          const existing = this.jobs.get(entry.jobId);
+          if (existing) {
+            if (entry.fingerprint !== fingerprint) {
+              aiLogger.warn('idempotency key reuse conflict', { sessionId, task, model });
+              throw new IdempotencyConflictError(rawKey, existing.jobId);
+            }
+            aiLogger.info('idempotent ai job replayed', { jobId: existing.jobId, sessionId, task, model, status: existing.status });
+            return existing;
+          }
+          this.idempotency.delete(idemMapKey);
+        }
+      }
+      this.pruneIdempotency(now);
+    }
+
+    const existingId = this.dedupe.get(fingerprint);
     if (existingId) {
       const existing = this.jobs.get(existingId);
       if (existing && (existing.status === 'QUEUED' || existing.status === 'STARTING' || existing.status === 'RUNNING')) {
         aiLogger.info('duplicate ai job deduplicated', { jobId: existing.jobId, sessionId, task, model });
+        if (idemMapKey) this.idempotency.set(idemMapKey, { jobId: existing.jobId, fingerprint, at: now });
         return existing;
       }
     }
@@ -78,11 +149,13 @@ export class JobManager {
       completedAt: null,
       durationMs: null,
       error: null,
-      dedupeKey: key,
+      dedupeKey: fingerprint,
+      idempotencyKey: rawKey || null,
     };
     this.jobs.set(jobId, job);
-    this.dedupe.set(key, jobId);
-    aiLogger.info('ai job created', { jobId, sessionId, task, model, provider });
+    this.dedupe.set(fingerprint, jobId);
+    if (idemMapKey) this.idempotency.set(idemMapKey, { jobId, fingerprint, at: now });
+    aiLogger.info('ai job created', { jobId, sessionId, task, model, provider, idempotent: Boolean(rawKey) });
     return job;
   }
 
