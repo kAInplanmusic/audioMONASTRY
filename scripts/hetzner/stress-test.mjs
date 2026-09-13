@@ -228,7 +228,12 @@ async function socketPhase() {
       const t0 = Date.now();
       try {
         const received = once(b, 'plugin-state', 5_000);
-        a.emit('plugin-state', { pluginId: 'mixer', on: true, round: r });
+        // Fix 2026-09-13: Der Server validiert gegen PluginStateSocketSchema, das
+        // `state: 'OFF'|'AUTO_AI'|'PRO'|'LOCKED'` PFLICHT verlangt. Der Test schickte
+        // `{on:true, round}` – das schlug die Validierung fehl und der Handler stieg
+        // STILL aus (kein Relay, kein Fehler), was als "timeout waiting for
+        // plugin-state" erschien. Der Relay war nie kaputt, der Aufruf war veraltet.
+        a.emit('plugin-state', { pluginId: 'mixer', state: 'OFF', round: r });
         await received;
         relayLat.push(Date.now() - t0);
       } catch (e) {

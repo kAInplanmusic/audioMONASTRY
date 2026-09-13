@@ -42,7 +42,13 @@ DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
 APP_URL="https://$DOMAIN"
 
 step() { echo; echo "=============================================================="; echo "▶ $1"; echo "=============================================================="; }
-ssh_host() { ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$1"; }
+# Fix 2026-09-13: Die Funktion nahm nur $1 (den Host) und verwarf das Kommando
+# in $2. Dadurch liefen ALLE Aufrufe (Cloud-Init-Wait, sfu/master/edge-Setup,
+# Idle-Shutdown) ins Leere – und weil eine interaktive SSH-Sitzung ohne TTY mit
+# Exit 0 endet, sah jede Prüfung wie "OK" aus, obwohl nichts ausgeführt wurde.
+# sfu-1/master-1/edge-1 hatten deshalb keine Container, während das Skript
+# "Flotte ist bereit" meldete. Jetzt werden alle Argumente weitergegeben.
+ssh_host() { local host="$1"; shift; ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"; }
 
 get_ip() {
   curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers?name=$1" \
