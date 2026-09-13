@@ -30,7 +30,7 @@ interface ProcessorInstance {
   process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean;
 }
 
-type ProcessorCtor = new () => ProcessorInstance;
+type ProcessorCtor = new (options?: { processorOptions?: Record<string, unknown> }) => ProcessorInstance;
 
 const SR = 48000;
 const QUANTUM = 128;
@@ -61,6 +61,17 @@ function createProcessor(): ProcessorInstance {
   if (!ProcessorCtor) throw new Error('v2SinkProcessor nicht geladen');
   messages = [];
   const p = new ProcessorCtor();
+  (p.port as unknown as { postMessage: (m: StepMsg) => void }).postMessage = (m) => {
+    messages.push(m as StepMsg);
+  };
+  return p;
+}
+
+function createMeasuredProcessor(): ProcessorInstance {
+  if (!ProcessorCtor) throw new Error('v2SinkProcessor nicht geladen');
+  messages = [];
+  // PERF-P3-001/002: die Messung ist opt-in – hier explizit einschalten.
+  const p = new ProcessorCtor({ processorOptions: { measure: true } });
   (p.port as unknown as { postMessage: (m: StepMsg) => void }).postMessage = (m) => {
     messages.push(m as StepMsg);
   };
@@ -110,5 +121,57 @@ describe('v2SinkProcessor (Phase 2 – AudioWorklet-Scheduler)', () => {
     }
     const burst = output[0].subarray(112);
     expect(burst.some((v) => Math.abs(v) > 0.01)).toBe(true);
+  });
+});
+
+/**
+ * PERF-P3-002: Die Max-Blockzeit laesst sich im AudioWorklet nicht ueber
+ * `performance` messen (im Worklet-Scope nicht exponiert, per Spec). Massgeblich
+ * ist deshalb der Audio-Frame-Zaehler: ein Sprung um mehr als einen Quantum
+ * bedeutet eine verpasste Deadline. Das ist aufloesungsunabhaengig – anders als
+ * `Date.now()` mit 1 ms Raster, wo selbst ein 10-ms-"Max" nur ein Artefakt war.
+ *
+ * Das Gate selbst (scripts/worklet-cpu-gate.cjs) ist ein manuelles Skript und
+ * laeuft nicht im CI; diese Tests sind deshalb der Regressionsschutz.
+ */
+describe('v2SinkProcessor (PERF-P3-002 – Deadline-Treue ueber currentFrame)', () => {
+  const stats = (): Record<string, number>[] =>
+    messages.filter((m) => m.type === 'cpu-stats') as unknown as Record<string, number>[];
+
+  it('meldet lueckenlose Bloecke als 0 verpasste Quanten', () => {
+    const p = createMeasuredProcessor();
+    for (let b = 0; b < 250; b++) runBlock(p, b * QUANTUM);
+
+    const reports = stats();
+    // Erster Block meldet sofort, danach bei jedem 250. Block.
+    expect(reports.length).toBeGreaterThanOrEqual(2);
+    const last = reports[reports.length - 1];
+    expect(last.blocks).toBe(250);
+    expect(last.missedQuanta).toBe(0);
+    expect(last.maxGapQuanta).toBe(1);
+    expect(last.stallEvents).toBe(0);
+    expect(last.quantumFrames).toBe(QUANTUM);
+  });
+
+  it('zaehlt eine uebersprungene Quantengrenze als verpasste Deadline', () => {
+    const p = createMeasuredProcessor();
+    runBlock(p, 0); // Block 1: erster Bericht, noch keine Vergleichsbasis
+    runBlock(p, 2 * QUANTUM); // Luecke von zwei Quanten -> eine verpasst
+    for (let b = 3; b <= 250; b++) runBlock(p, b * QUANTUM);
+
+    const reports = stats();
+    const last = reports[reports.length - 1];
+    expect(last.blocks).toBe(250);
+    expect(last.missedQuanta).toBe(1);
+    expect(last.maxGapQuanta).toBe(2);
+    expect(last.stallEvents).toBe(1);
+  });
+
+  it('misst ohne measure:true gar nicht (kein Aufwand im Betrieb)', () => {
+    const p = createProcessor();
+    for (let b = 0; b < 30; b++) runBlock(p, b * QUANTUM);
+    expect(stats().length).toBe(0);
+    // Der Scheduler laeuft trotzdem normal weiter.
+    expect(messages.every((m) => m.type === 'step')).toBe(true);
   });
 });

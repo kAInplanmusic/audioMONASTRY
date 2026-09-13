@@ -45,13 +45,38 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private blocks = 0;
   private sumMs = 0;
   private maxMs = 0;
+
+  // --- Deadline-Treue (PERF-P3-002) -----------------------------------------
+  // `performance` ist im AudioWorkletGlobalScope nicht exponiert. Das ist per
+  // Spec so (WorkletGlobalScope ist kein WorkerGlobalScope) und gilt in JEDEM
+  // Chromium – live verifiziert 2026-09-13: im Prozessor-Scope ist `typeof
+  // performance === 'undefined'`, waehrend `Date`, `currentTime`,
+  // `currentFrame` und `sampleRate` vorhanden sind. Eine belastbare
+  // Max-Blockzeit ist ueber eine Wall-Clock dort also nicht zu bekommen, und
+  // kein Browser-Update wird das aendern.
+  //
+  // Die belastbare Quelle ist der Audio-Zaehler selbst: `currentFrame` springt
+  // genau dann um mehr als einen Render-Quantum, wenn der Audio-Thread einen
+  // Block nicht rechtzeitig geliefert hat. Das ist aufloesungsunabhaengig (kein
+  // Quantisierungsproblem wie bei `Date.now()`) und beantwortet die eigentlich
+  // interessante Frage: wurde eine Deadline verpasst?
+  private lastFrame = -1;
+  /** Summe der uebersprungenen Render-Quanten seit Messbeginn. */
+  private missedQuanta = 0;
+  /** Groesste beobachtete Luecke in Quanten (1 = unauffaellig). */
+  private maxGapQuanta = 0;
+  /** Anzahl der process()-Aufrufe, auf die eine Luecke folgte. */
+  private stallEvents = 0;
+
   /**
-   * Zeitquelle. `performance` ist im AudioWorkletGlobalScope NICHT garantiert
-   * vorhanden – live gemessen 2026-09-11 (headless Chromium): `typeof
-   * performance === 'undefined'`. Ein direkter `performance.now()`-Aufruf warf
-   * dort in JEDEM Block eine ReferenceError, der Prozessor starb und lieferte
-   * nur noch Stille. Deshalb Feature-Test + `Date.now()`-Rueckfall (1 ms
-   * Auflösung, fuer Mittelwerte ausreichend – der Bericht weist `timer` aus).
+   * Zeitquelle fuer den MITTELWERT. `performance` ist im
+   * AudioWorkletGlobalScope NICHT garantiert vorhanden – live gemessen
+   * 2026-09-11 (headless Chromium): `typeof performance === 'undefined'`. Ein
+   * direkter `performance.now()`-Aufruf warf dort in JEDEM Block eine
+   * ReferenceError, der Prozessor starb und lieferte nur noch Stille. Deshalb
+   * Feature-Test + `Date.now()`-Rueckfall (1 ms Auflösung, fuer Mittelwerte
+   * ausreichend – der Bericht weist `timer` aus). Fuer die Deadline-Treue ist
+   * diese Quelle bewusst NICHT massgeblich (s. oben), sondern `currentFrame`.
    */
   private readonly timer: 'performance' | 'date' =
     typeof performance !== 'undefined' && typeof performance.now === 'function' ? 'performance' : 'date';
@@ -237,6 +262,9 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     const length = output[0].length;
     // PERF-P3-001: Startmarke nur bei aktivierter Messung (Default aus).
     const startedAt = this.measure ? this.nowMs() : 0;
+    // PERF-P3-002: Deadline-Treue ueber den Audio-Zaehler – unabhaengig von der
+    // groben Wall-Clock. Ebenfalls nur bei aktivierter Messung.
+    const gapQuanta = this.measure ? this.trackFrameGap(length) : 1;
     const events: V2StepRenderEvent[] = [];
 
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
@@ -299,8 +327,32 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     for (let ch = channels; ch < output.length; ch++) {
       output[ch].fill(0);
     }
-    this.recordCpu(startedAt);
+    this.recordCpu(startedAt, gapQuanta);
     return true;
+  }
+
+  /**
+   * PERF-P3-002: vergleicht `currentFrame` mit dem letzten Aufruf. Ein Sprung um
+   * mehr als einen Quantum bedeutet, dass der Audio-Thread einen Block nicht
+   * rechtzeitig gerendert hat (Luecke/Underrun) – gemessen mit der Audio-Uhr
+   * selbst, also ohne Wall-Clock und ohne deren Quantisierungsproblem.
+   *
+   * Rueckgabe: Luecke in Quanten (1 = unauffaellig).
+   */
+  private trackFrameGap(quantumFrames: number): number {
+    const frame = currentFrame;
+    if (this.lastFrame < 0) {
+      // Erster Block: keine Vergleichsbasis. Wichtig, weil die Messung sonst
+      // beim Start eine Luecke erfinden wuerde.
+      this.lastFrame = frame;
+      return 1;
+    }
+    const delta = frame - this.lastFrame;
+    this.lastFrame = frame;
+    // Ruhende/zurueckspringende Uhr (Suspend, Kontext-Neustart) ist keine
+    // verpasste Deadline und wird bewusst nicht als Luecke gezaehlt.
+    if (delta <= 0) return 1;
+    return Math.max(1, Math.round(delta / quantumFrames));
   }
 
   /**
@@ -308,11 +360,15 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * einen Bericht an den Main-Thread. `budgetMs` ist die Echtzeit-Grenze des
    * Blocks (128 Frames / sampleRate) – `loadPct` ist damit der Anteil, den der
    * V2-Live-Pfad vom Audio-Thread belegt.
+   *
+   * PERF-P3-002: `gapQuanta` liefert zusaetzlich die Deadline-Treue ueber die
+   * Audio-Uhr; sie ist die massgebliche Aussage, waehrend `maxMs` bei grober
+   * Zeitquelle nur informativ ist.
    */
-  private recordCpu(startedAt: number): void {
+  private recordCpu(startedAt: number, gapQuanta: number): void {
     if (!this.measure) return;
     try {
-      this.recordCpuUnsafe(startedAt);
+      this.recordCpuUnsafe(startedAt, gapQuanta);
     } catch (e) {
       // Die Messung darf NIE den Audio-Pfad gefaehrden: einmal melden, dann aus.
       this.measure = false;
@@ -320,11 +376,20 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     }
   }
 
-  private recordCpuUnsafe(startedAt: number): void {
+  private recordCpuUnsafe(startedAt: number, gapQuanta: number): void {
     const elapsed = this.nowMs() - startedAt;
     this.blocks += 1;
     this.sumMs += elapsed;
     if (elapsed > this.maxMs) this.maxMs = elapsed;
+
+    // PERF-P3-002: Deadline-Treue. Massgeblich – im Gegensatz zu `maxMs` aus
+    // der groben Wall-Clock, die nur als Hinweis im Bericht steht.
+    if (gapQuanta > this.maxGapQuanta) this.maxGapQuanta = gapQuanta;
+    if (gapQuanta > 1) {
+      this.missedQuanta += gapQuanta - 1;
+      this.stallEvents += 1;
+    }
+
     // Erster Block meldet sofort (Beweis, dass die Messung greift), danach
     // regelmaessig. Fehlt schon der erste Bericht, laeuft process() nicht.
     if (this.blocks !== 1 && this.blocks % V2SinkProcessor.REPORT_EVERY !== 0) return;
@@ -338,6 +403,14 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       sampleRate,
       /** 'date' = grobe 1-ms-Auflösung (kein `performance` im Worklet-Scope). */
       timer: this.timer,
+      /** PERF-P3-002: verpasste Render-Quanten (Luecken im currentFrame-Zaehler). */
+      missedQuanta: this.missedQuanta,
+      /** PERF-P3-002: groesste Luecke in Quanten (1 = nie eine Deadline verpasst). */
+      maxGapQuanta: this.maxGapQuanta,
+      /** PERF-P3-002: Anzahl der Bloecke, auf die eine Luecke folgte. */
+      stallEvents: this.stallEvents,
+      /** Die Render-Quantengroesse ist per Spec auf 128 Frames festgelegt. */
+      quantumFrames: 128,
     });
   }
 }

@@ -1,6 +1,6 @@
 # Performance-Budgets 2026 (gemessen, nicht geschätzt)
 
-Datum: 2026-09-11 · Bezug: `MASTERTODOENDE.json` → `PERF-P3-001` · Skill: `audioaudit` (Modus D)
+Datum: 2026-09-11, nachgezogen 2026-09-13 · Bezug: `MASTERTODOENDE.json` → `PERF-P3-001` + `PERF-P3-002` · Skill: `audioaudit` (Modus D)
 
 Alle Zahlen unten sind **gemessen** und mit dem Befehl reproduzierbar. Wo eine
 Messung nicht belastbar ist, steht das ausdrücklich dabei.
@@ -20,30 +20,45 @@ den 4-User-Betrieb), Messfenster 6 s.
 
 | Kennzahl | Wert (Chromium headless, 48 kHz) | Bewertung |
 |---|---|---|
-| Ø Render-Zeit pro Block | **0,41–0,48 ms** (3 Läufe) | **15–18 %** des Budgets → >80 % Luft |
-| Blöcke im Messfenster | 2 500 | ~6,6 s Audio |
-| Max pro Block | 8 ms | **nicht belastbar** (s. u.) |
-| Ausgangs-Pegel | 0,297 | Beweis, dass wirklich gerendert wurde |
-| Zusagen im Gate | 7/7 OK (Exit 0) | inkl. „kein Signal ⇒ Fehlschlag" |
+| Ø Render-Zeit pro Block | **0,33–0,39 ms** (Läufe 2026-09-13) | **12,5–17 %** des Budgets → >80 % Luft |
+| Blöcke im Messfenster | 2 250–2 500 | ~6 s Audio |
+| **Verpasste Render-Quanten** | **0** (größte Lücke 1 Quantum, 0 Stall-Ereignisse) | **belastbar** – keine Deadline verpasst |
+| Max pro Block (`Date.now()`) | 8–10 ms | **nicht belastbar** (1-ms-Raster, s. u.) |
+| Audio-Uhr-Rückstand | **−0,5 … +0,2 %** (3 Läufe) | Audio-Thread hält Takt (Budget ≤ 10 %) |
+| Ausgangs-Pegel | 0,27–0,30 | Beweis, dass wirklich gerendert wurde |
+| Zusagen im Gate | 8/9 OK, 1 bewusst OFFEN (Exit 0) | offen: `renderCapacity` (s. u.) |
 
-**Streuung:** zwischen Läufen schwankt der Mittelwert um ~±15 % (0,41 / 0,42 /
-0,48 ms) — headless auf einer geteilten Maschine. Die Aussage „deutlich unter
-25 %" ist davon nicht betroffen; einzelne Läufe deshalb nicht überinterpretieren.
+**Streuung:** zwischen Läufen schwankt der Mittelwert um ~±15 % (0,33 / 0,39 ms) —
+headless auf einer geteilten Maschine. Die Aussage „deutlich unter 25 %" ist davon
+nicht betroffen; einzelne Läufe deshalb nicht überinterpretieren.
 
-**Budgets, die das Gate durchsetzt:** WARN > 25 % · FAIL > 50 % · kein Block über
-Budget (nur bei feiner Zeitquelle) · Ausgang muss Signal haben · keine Page-Errors.
+**Budgets, die das Gate durchsetzt:** WARN > 25 % · FAIL > 50 % · **0 verpasste
+Render-Quanten** · |Audio-Uhr-Rückstand| ≤ 10 % · Ausgang muss Signal haben · keine
+Page-Errors · `renderCapacity` nur mit `REQUIRE_PERF_APIS=1` Pflicht.
 
-**Warum der Max-Wert nicht belastbar ist:** In diesem Chromium-Scope ist
-`performance` **undefiniert** (siehe §4), die Messung fällt auf `Date.now()`
-(1 ms Auflösung) zurück und weist das im Bericht als `timer: "date"` aus. Ein
-„Max 8 ms" ist damit Quantisierung/Scheduler und kein DSP-Ausreißer. Für
-**Mittelwerte** ist die Quantisierung unkritisch (Fehler mittelt sich über 2 500
-Blöcke). Auf einer Maschine mit `performance` im Worklet-Scope ist auch der Max
-belastbar.
+**Die belastbare Max-Aussage ist `missedQuanta`, nicht `maxMs` (Stand 2026-09-13):**
+`performance` ist im `AudioWorkletGlobalScope` **per Spec nicht exponiert** – live
+geprüft: im Prozessor-Scope ist `typeof performance === "undefined"`, während
+`Date`, `currentTime`, `currentFrame` und `sampleRate` vorhanden sind. Ein „Max 8 ms"
+aus `Date.now()` ist deshalb Quantisierung/Scheduler und kein DSP-Ausreißer. Das
+frühere Gate hat diese Prüfung bei grober Zeitquelle sogar übersprungen („kein Block
+über Budget (nur bei feiner Zeitquelle)") und war damit grün, **ohne etwas zu
+belegen** – während im selben Bericht `maxBlockOverBudget: true` stand.
 
-**Nicht messbar in dieser Umgebung:** `AudioContext.renderCapacity` existiert im
-verwendeten Chromium-Build nicht. Das Gate meldet das ausdrücklich („kein stiller
-Erfolg") — die Gesamtlast des Graphen ist hier also offen.
+Stattdessen zählt der Prozessor jetzt Lücken im `currentFrame`-Zähler: springt er um
+mehr als einen Render-Quantum, hat der Audio-Thread einen Block nicht rechtzeitig
+geliefert. Das ist auflösungsunabhängig, kostet im Betrieb nichts (weiterhin opt-in
+über `processorOptions.measure`) und ist als Zusage belastbar — gemessen **0
+verpasste Quanten** in allen Läufen. Zusätzlich verknüpft das Gate
+`AudioContext.getOutputTimestamp()` (Main-Thread, dort gibt es `performance`)
+Audio-Zeit und Wall-Clock: ≤ 0,2 % Rückstand ⇒ der Audio-Thread hält exakt Takt.
+
+**Nicht messbar in dieser Umgebung:** `AudioContext.renderCapacity` existiert weder
+im Playwright-Chromium (151.0.7922.34) noch im System-Chrome (153.0.8010.36) —
+geprüft mit und ohne `--enable-blink-features=AudioRenderCapacity` /
+`--enable-features=AudioRenderCapacity`, in sicherem Kontext
+(`isSecureContext: true`) und laufendem Context. Das Gate meldet das ausdrücklich
+(„kein stiller Erfolg") — die Gesamtlast des Graphen ist hier also offen.
 
 ## 2. Startlast des Bundles (eager vs. lazy)
 
@@ -89,6 +104,11 @@ lassen als zu parallelisieren.
    → **Regel:** im Worklet Zeitquelle per Feature-Test wählen und die Messung in
    `try/catch` kapseln, damit sie den Audio-Pfad nie gefährden kann (umgesetzt:
    `timer: 'performance' | 'date'` + Auto-Abschaltung bei Fehler).
+   **Nachtrag 2026-09-13:** `performance` ist im Worklet-Scope **per Spec** nicht
+   exponiert (`WorkletGlobalScope` ist kein `WorkerGlobalScope`) — das ist kein
+   Build-Zufall und wird durch kein Browser-Update kommen. Der `date`-Rückfall
+   taugt deshalb nur für den **Mittelwert**; die Deadline-Aussage kommt aus
+   `currentFrame` (s. §1).
 2. **`this.port.postMessage()` im Konstruktor** eines `AudioWorkletProcessor`
    brachte den Prozessor ebenfalls zum Scheitern. Erste Messung deshalb ohne
    jeden Wert. → **Regel:** im Konstruktor nichts posten; die erste Meldung im
@@ -103,26 +123,45 @@ lassen als zu parallelisieren.
    alles gesund aus, obwohl **nichts** rendert (`currentTime` läuft auch ohne
    Prozessorarbeit). Erst `getFloatTimeDomainData()` am Ausgang beweist Audio.
    Genau diese Prüfung hat den stillen Ausfall oben aufgedeckt.
+5. **Eine Prüfung, die an einer fehlenden API hängt, ist grün ohne Beweis.** Das
+   Gate fragte „kein Block über Budget (nur bei feiner Zeitquelle)" — bei
+   `timer: 'date'` wurde sie stillschweigend übersprungen und meldete **OK**,
+   obwohl im selben Bericht `maxBlockOverBudget: true` und `maxMs: 10` bei
+   `budgetMs: 2,667` standen. → **Regel:** eine Aussage nie an die Verfügbarkeit
+   ihres Messwegs koppeln. Fehlt der Weg, muss die Aussage auf **OFFEN** stehen
+   oder durch eine belastbare Quelle ersetzt werden (hier: Lücken im
+   `currentFrame`-Zähler, s. §1).
 
 ## 5. Wiederholung / Gates
 
 ```bash
 node build-worklets.mjs            # Worklets mit Messcode bauen
 npm run perf:worklet               # CPU-Budget-Gate (Exit 1 bei Verletzung)
+REQUIRE_PERF_APIS=1 npm run perf:worklet   # renderCapacity wird zur Pflicht
+CHROME_PATH=/usr/bin/google-chrome npm run perf:worklet   # System-Chrome statt Playwright-Chromium
 npm run test:audio-gate            # Regression: Messung AUS -> Audio unverändert
 npm run build && npm run check:bundle
-npm run test:ci                    # inkl. Skip-Gate
+npm run test:ci                    # inkl. Skip-Gate + Deadline-Treue-Tests
 ```
 
-Berichte: `reports/worklet-cpu.json` (CPU + Browser-Version + Zusagen),
-`reports/audio-gate.json` (Pegel-Rohdaten).
+Die Deadline-Treue (`missedQuanta`) ist zusätzlich als Unit-Test abgesichert
+(`tests/v2SinkProcessorWorklet.test.ts`) — nötig, weil das Gate ein manuelles
+Skript ist und **nicht** im CI läuft.
+
+Berichte: `reports/worklet-cpu.json` (CPU + Deadline-Treue + Audio-Uhr-Abgleich +
+Browser-Version + Zusagen), `reports/audio-gate.json` (Pegel-Rohdaten).
 
 ## 6. Offene Punkte (bewusst nicht in diesem Durchgang)
 
-- `renderCapacity`-Messung auf einem Chromium mit dieser API nachholen
-  (Gesamtlast inkl. Underruns) — auf dem CI-Runner oder im Desktop-Chrome.
-- Max-Wert der Blockzeit auf einer Maschine mit `performance` im Worklet-Scope
-  erheben (hier nur als 1-ms-Quantisierung sichtbar).
+- `renderCapacity`-Messung auf einer Maschine nachholen, die diese API ausliefert
+  (Gesamtlast inkl. Underruns). Auf diesem Laptop nicht erreichbar: weder
+  Playwright-Chromium 151 noch System-Chrome 153 haben sie, mit und ohne
+  `--enable-blink-features=AudioRenderCapacity` (s. §1) — die Angabe „seit
+  Chrome 116 standardmäßig enthalten" trifft auf diese Builds nicht zu.
+- ~~Max-Wert der Blockzeit über `performance` im Worklet-Scope erheben~~ →
+  **geschlossen, nicht offen:** `performance` ist dort per Spec nicht exponiert und
+  wird es in keinem Chromium sein. Ersetzt durch `missedQuanta` aus `currentFrame`
+  (s. §1); der `date`-Maximalwert bleibt nur als Hinweis im Bericht.
 - `AUDIO-P1-002` (audioEngine-Facade, 3444 LOC): Die Startlast von 0,93 MB und
   15 % Audio-Thread-Last geben **kein** Dringlichkeitssignal — eine Aufteilung
   wäre Struktur-Verbesserung, nicht Performance-Rettung. Diese Zahlen sind die
