@@ -12,8 +12,10 @@
  *     Min/Max und PASS/FAIL gegen `AI_MOS_MIN_SCORE` (Default 4.0) und
  *     `AI_MOS_MIN_RATINGS` (Default 3 Hörer).
  *
- * Ohne echte Hörerwerte bleibt der Gate-Status ehrlich `pass: false` mit
- * Begründung – es wird kein MOS erfunden.
+ * Das Gate zaehlt **verschiedene Hörer** (`evaluatorId`), nicht Wertungen: eine
+ * einzelne Person kann mehrere Hörproben bewerten, darf das Gate aber nicht
+ * allein auf "3 Hörer" bringen. Ohne echte Hörerwerte bleibt der Gate-Status
+ * ehrlich `pass: false` mit Begründung – es wird kein MOS erfunden.
  */
 import { aiLogger } from './aiLogger';
 import { aiPersistence } from './aiPersistence';
@@ -32,7 +34,10 @@ export interface MosRating extends MosRatingInput {
 
 export interface MosSummary {
   modelId: string;
+  /** Anzahl abgegebener Wertungen (ein Hörer kann mehrere Hörproben bewerten). */
   count: number;
+  /** Anzahl VERSCHIEDENER Hörer – das ist die Größe, die das Gate prüft. */
+  evaluators: number;
   avg: number;
   min: number;
   max: number;
@@ -101,17 +106,22 @@ export class MosHarness {
   summaryFor(modelId: string): MosSummary {
     const all = this.ratings.filter((r) => r.modelId === modelId);
     const count = all.length;
+    // Das Gate zaehlt HOERER, nicht Wertungen. Sonst koennte eine einzelne
+    // Person mit drei Wertungen das Gate als "3 Hoerer" ausweisen - genau die
+    // Art erfundener Evidenz, die dieses Modul verhindern soll.
+    const evaluators = new Set(all.map((r) => r.evaluatorId)).size;
     const scores = all.map((r) => r.score);
     const avg = count ? scores.reduce((a, b) => a + b, 0) / count : 0;
-    const pass = count >= this.requiredCount && avg >= this.minScore;
-    const reason = count === 0
+    const pass = evaluators >= this.requiredCount && avg >= this.minScore;
+    const reason = evaluators === 0
       ? `keine Hörerwertungen (benötigt ${this.requiredCount})`
-      : count < this.requiredCount
-        ? `erst ${count} von ${this.requiredCount} Hörerwertungen`
+      : evaluators < this.requiredCount
+        ? `erst ${evaluators} von ${this.requiredCount} Hörern${count > evaluators ? ` (${count} Wertungen)` : ''}`
         : `MOS ${avg.toFixed(2)} ${avg >= this.minScore ? '>=' : '<'} ${this.minScore}`;
     return {
       modelId,
       count,
+      evaluators,
       avg: Number(avg.toFixed(3)),
       min: count ? Math.min(...scores) : 0,
       max: count ? Math.max(...scores) : 0,

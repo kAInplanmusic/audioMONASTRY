@@ -16,7 +16,14 @@ nach Intelligenz-Bedarf statt nach Modell-Liste:
 | `samplemonk-ai-ears` | A6000 48 GB (`AMPERE_48`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
 | `samplemonk-ai-voice` | A6000 48 GB (`AMPERE_48`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
 
-Summe ≈ **1,17 $/h** bei Vollbetrieb, **≈ 0 $ bei Idle** (Scale-to-Zero + Session-Wake).
+Summe ≈ **1,17 $/h** bei Vollbetrieb. Scale-to-Zero gilt, aber **nicht sofort**: ein
+Worker läuft nach dem letzten Job noch `idleTimeout` Sekunden weiter und wird in
+dieser Zeit weiter abgerechnet. Werte (2026-09-13, `ROLE_DEFAULTS` in
+`scripts/runpod-deploy.py`): brain/ears 20 s, voice/vision/video 900 s. Bei
+A6000-Preisen sind 900 s Leerlauf ≈ 0,20 $ pro Aufwachphase – bewusst in Kauf
+genommen, damit wiederholte Einzelaufrufe (MOS-Hörproben, Bild-/Video-Iteration)
+nicht jedes Mal einen Kaltstart zahlen. Erst danach gilt ≈ 0 $ bei Idle
+(Scale-to-Zero + Session-Wake).
 Damit bleibt die dokumentierte Budgetgrenze (4–5 €/h) eingehalten.
 
 **Verworfen und warum:**

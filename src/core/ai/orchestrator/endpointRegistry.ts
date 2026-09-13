@@ -96,7 +96,11 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['tts', 'sing', 'song', 'audio.generate', 'stem.separate'],
-    preload: ['qwen3-tts-06b', 'mms-tts-deu', 'demucs'],
+    // qwen3-tts-06b ist am 2026-09-12/13 live als MODEL_UNAVAILABLE gemessen
+    // (output.status=error) und wird deshalb NICHT vorgeladen: ein Preload eines
+    // nicht verfuegbaren Modells kostet nur Kaltstart-Zeit und bringt nichts.
+    // Wieder aufnehmen, sobald der Image-Rebuild den qwen3-tts-Import ausliefert.
+    preload: ['mms-tts-deu', 'demucs'],
   },
 };
 

@@ -158,7 +158,8 @@
       "estimatedVRAM": 5,
       "estimatedRAM": 6,
       "loadPriority": 5,
-      "preload": true,
+      "preload": false,
+      "note": "Nicht vorgeladen seit 2026-09-13: der Handler laedt das Modell live als MODEL_UNAVAILABLE (der Import-Fix ist im Code, aber noch nicht im deployten Image). Ein Preload kostet nur Kaltstart. Wieder auf preload=true setzen, sobald der Image-Rebuild das Modell ausliefert - dann muss auch roles.voiceGen.preloadModels nachziehen (test/manifestRoles.test.ts erzwingt Gleichstand).",
       "loadClass": "FREQUENT",
       "quantization": "bf16",
       "dependencies": [
@@ -762,7 +763,6 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "qwen3-tts-06b",
         "mms-tts-deu",
         "demucs"
       ],

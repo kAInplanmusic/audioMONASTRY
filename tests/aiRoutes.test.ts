@@ -123,8 +123,10 @@ describe('/api/ai/*-Routen (Integration)', () => {
       body: JSON.stringify({ modelId: 'mms-tts-deu', language: 'DE', score: 5, evaluatorId: 'u1' }),
     });
     expect(ok.status).toBe(201);
-    const body = await ok.json() as { summary?: { count?: number } };
+    const body = await ok.json() as { summary?: { count?: number; evaluators?: number } };
     expect(body.summary?.count).toBeGreaterThanOrEqual(1);
+    // Das Gate zaehlt Hoerer, nicht Wertungen - das Feld muss auf der Leitung liegen.
+    expect(body.summary?.evaluators).toBeGreaterThanOrEqual(1);
   });
 
   it('POST /api/ai/generate-drop verlangt einen Prompt', async () => {

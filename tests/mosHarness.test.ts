@@ -24,6 +24,7 @@ describe('MosHarness', () => {
     const gate = h.gateFor('qwen3-tts-06b');
     expect(gate.pass).toBe(false);
     expect(gate.count).toBe(0);
+    expect(gate.evaluators).toBe(0);
     expect(gate.reason).toContain('keine Hörerwertungen');
   });
 
@@ -35,10 +36,31 @@ describe('MosHarness', () => {
     h.add({ modelId: 'mms-tts-deu', language: 'DE', score: 5, evaluatorId: 'c' });
     const gate = h.gateFor('mms-tts-deu');
     expect(gate.count).toBe(3);
+    expect(gate.evaluators).toBe(3);
     expect(gate.avg).toBeCloseTo(4.667, 2);
     expect(gate.min).toBe(4);
     expect(gate.max).toBe(5);
     expect(gate.pass).toBe(true);
+  });
+
+  it('zählt Hörer, nicht Wertungen: dieselbe Person erfüllt das Gate nicht', () => {
+    const h = new MosHarness();
+    // Eine Person bewertet drei Hörproben - technisch 3 Wertungen, aber 1 Hörer.
+    for (const score of [5, 5, 5] as const) {
+      h.add({ modelId: 'solo', language: 'DE', score, evaluatorId: 'patrick' });
+    }
+    const gate = h.gateFor('solo');
+    expect(gate.count).toBe(3);
+    expect(gate.evaluators).toBe(1);
+    expect(gate.pass).toBe(false);
+    expect(gate.reason).toContain('erst 1 von 3 Hörern');
+    expect(gate.reason).toContain('3 Wertungen');
+    // Erst ein zweiter und dritter Hörer öffnen das Gate.
+    h.add({ modelId: 'solo', language: 'DE', score: 4, evaluatorId: 'zweit' });
+    h.add({ modelId: 'solo', language: 'DE', score: 4, evaluatorId: 'dritt' });
+    const open = h.gateFor('solo');
+    expect(open.evaluators).toBe(3);
+    expect(open.pass).toBe(true);
   });
 
   it('lässt ein Modell mit schlechtem MOS durchfallen', () => {

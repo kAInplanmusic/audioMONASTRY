@@ -11,7 +11,13 @@ Erstellt/aktualisiert die Serverless-Endpoints der GPU-Flotte:
 Jeder Endpoint bekommt dieselben Gewichte-Caches, aber eine andere Rolle per
 `AI_ROLE` – der Worker lädt daraus nur die Modelle seines Rollen-Manifests.
 
-Alle Endpoints starten mit `workers_min=0` (Scale-to-Zero, keine Idle-Kosten).
+Alle Endpoints starten mit `workers_min=0` (Scale-to-Zero). Ein Worker laeuft nach
+dem letzten Job aber noch `idleTimeout` Sekunden weiter und wird in dieser Zeit
+WEITER ABGERECHNET – "keine Idle-Kosten" gilt also erst nach diesem Fenster.
+Werte je Rolle in ROLE_DEFAULTS (voice/vision/video 900 s, brain/ears 20 s),
+global ueberschreibbar per RUNPOD_IDLE_TIMEOUT. Wichtig: die API setzt
+`idleTimeout` nur beim ANLEGEN; bei bestehenden Endpoints wird eine Abweichung
+beim Deploy als Warnung gemeldet (Template-Update allein aendert den Wert nicht).
 Der Session-Wake (`src/core/ai/orchestrator/fleetWake.ts`) hebt `workersMin`
 beim Studio-Eintritt temporär auf 1 und feuert einen Warmup-Job.
 
@@ -45,15 +51,21 @@ from typing import Any, Dict, List, Optional
 import runpod
 
 #: Rollen der Flotte (Spiegel von GPU_ROLE_IDS im TS-Spiegel).
+#:
+#: `idleTimeout` (Sekunden) = wie lange ein Worker nach dem letzten Job
+#: weiterlaeuft. Er wird in dieser Zeit WEITER ABGERECHNET, ist also eine
+#: Kosten-/Kaltstart-Abwaegung: kurz fuer Rollen, die der Session-Wake ohnehin
+#: vorwaermt; lang fuer Rollen mit wiederholten Einzelaufrufen (MOS-Hoerproben,
+#: Bild-/Video-Iteration), die sonst jeden Aufruf mit einem Kaltstart bezahlen.
 ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
-    "brain": {"suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
-    "ears": {"suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
-    "voiceGen": {"suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
+    "brain": {"suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 20},
+    "ears": {"suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 20},
+    "voiceGen": {"suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 900},
     # 4. Rolle (2026-09-11): generative Bilder (FLUX.1-dev) - eigener Hub-Worker,
     # NICHT unser Audio-Image.
-    "vision": {"suffix": "vision", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1},
+    "vision": {"suffix": "vision", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 900},
     # 5. Rolle (2026-09-11): Video (Wan2.2 image->video), ADA_24/32-Pool des Hub-Workers.
-    "video": {"suffix": "video", "gpuPoolId": "ADA_24", "gpuCount": 1, "workersMax": 1},
+    "video": {"suffix": "video", "gpuPoolId": "ADA_24", "gpuCount": 1, "workersMax": 1, "idleTimeout": 900},
 }
 
 DOCKER_START_CMD = "python runpod_worker.py"
@@ -234,7 +246,8 @@ def deploy_role(role: str, image: str) -> Optional[str]:
     gpu_count = int(env("RUNPOD_GPU_COUNT") or defaults.get("gpuCount", 1))
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX") or defaults.get("workersMax", 1))
-    idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT", "20"))
+    # Reihenfolge: globaler Env-Override > Rollen-Default > 20 s.
+    idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT") or defaults.get("idleTimeout", 20))
     # Brain (vLLM) braucht mehr Plattenplatz (Image + ~10 GB AWQ-Gewichte);
     # vision (FLUX) braucht 80 GB (Image + Gewichte).
     default_disk = "150" if role == "brain" else "80" if role == "vision" else "180" if role == "video" else "30"
@@ -284,6 +297,17 @@ def deploy_role(role: str, image: str) -> Optional[str]:
         endpoint_id = existing.get("id", "")
         print(f"[deploy] {endpoint_name}: existiert ({endpoint_id}) → Template-Update")
         runpod.update_endpoint_template(endpoint_id, template_id)
+        # `idleTimeout` setzt die API nur beim ANLEGEN; ein Template-Update laesst
+        # den laufenden Wert unberuehrt. Genau so driftete die Flotte still
+        # auseinander (live 15 s vs. Repo-Default), deshalb hier sichtbar machen.
+        live_idle = existing.get("idleTimeout")
+        if live_idle is not None and int(live_idle) != idle_timeout:
+            print(
+                f"[deploy] WARNUNG {endpoint_name}: idleTimeout live={int(live_idle)}s, "
+                f"gewuenscht={idle_timeout}s. Die API setzt das nur beim Anlegen - "
+                f"laufenden Endpoint per API/Console nachziehen (workers.idleTimeout).",
+                file=sys.stderr,
+            )
     else:
         print(f"[deploy] {endpoint_name}: anlegen (GPU {gpu_id} x{gpu_count}) …")
         volume_id = env("RUNPOD_NETWORK_VOLUME_ID") or None
