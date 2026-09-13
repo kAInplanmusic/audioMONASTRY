@@ -246,7 +246,7 @@ async function main(): Promise<void> {
   console.log(`JSON:   ${paths.jsonPath}`);
   if (options.updateTodo) {
     const todoPath = appendToMasterTodo(root, report, findings);
-    if (todoPath) console.log(`TODO.md aktualisiert: ${todoPath}`);
+    if (todoPath) console.log(`MASTERTODOENDE.json aktualisiert: ${todoPath}`);
   }
   process.exitCode = passed ? 0 : 1;
   if (!passed) console.error('Audit-Gate nicht bestanden.');

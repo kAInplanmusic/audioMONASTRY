@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { chromium } from 'playwright';
 
 /**
- * Live-2-Browser-WebRTC-Test (automatisierter Teil der TODO.md).
+ * Live-2-Browser-WebRTC-Test (automatisierter Teil der offenen Aufgaben (MASTERTODOENDE.json)).
  * ----------------------------------------------------------------
  * Zwei UNABHÄNGIGE Chromium-Browserprozesse (jeweils eigener WebRTC-Stack,
  * eigenes Fake-Mikrofon) treten derselben Session bei:

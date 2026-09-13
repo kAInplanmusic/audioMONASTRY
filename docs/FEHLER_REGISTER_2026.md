@@ -6,8 +6,8 @@
 | ID | Quelle | Severity | Beschreibung | Status | Task-Link |
 |---|---|---|---|---|---|
 | FR-001 | `npm run verify` | Hoch | Stem-Failure-Injection-Timeout (stem-ai down → kein 502) | ✅ Gefixt (D22) | AUD-P1-1 |
-| FR-002 | Fremdaudit FA-3 | Kritisch | MCP-Permission vom Aufrufer selbst erteilt | ⬜ Offen | FA-P0-1 |
-| FR-003 | Fremdaudit FA-5 | Kritisch | VRAM-Buchhaltung ohne echtes Modell-Laden | ⬜ Offen | FA-P0-2 |
+| FR-002 | Fremdaudit FA-3 | Kritisch | MCP-Permission vom Aufrufer selbst erteilt | ✅ Gefixt (Trust-Context: `AI_MCP_PERMISSION`, nie aus dem Client-Body) | FA-P0-1 |
+| FR-003 | Fremdaudit FA-5 | Kritisch | VRAM-Buchhaltung ohne echtes Modell-Laden | ✅ Gefixt (ModelManager lädt/cacht echte Instanzen, injizierbarer Loader) | FA-P0-2 |
 | FR-004 | Fremdaudit FA-6 | Hoch | `/status` KeyError bei fehlender LoadClass | ✅ Gefixt | FA-P1-2 |
 | FR-005 | Fremdaudit FA-7 | Kritisch | busboy 5 × fileSize im RAM | ✅ Gefixt (1 Datei + Summenlimit) | FA-P0-3 |
 | FR-006 | Fremdaudit FA-8 | Hoch | HF-Endpoint-Fehler → A100-Create | ✅ Gefixt (nur 404 → create) | FA-P1-3 |
@@ -24,5 +24,6 @@
 
 ## Verbleibend offen
 
-- FA-P0-1 (MCP-Permission serverseitig), FA-P0-2 (ModelManager echtes Laden)
-- FA-P2-2 (Regressionstests repository/revision) – Python-Smoke, nächster CI-Lauf
+- FA-P2-2 (Regressionstests repository/revision) – Python-Smoke; als `QUAL-P2-005` in `MASTERTODOENDE.json` geführt.
+
+> SSOT für offene Arbeiten ist `MASTERTODOENDE.json`; dieses Register dokumentiert nur den Fehler-Status.

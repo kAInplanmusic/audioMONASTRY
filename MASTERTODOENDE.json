@@ -3,7 +3,7 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-11T04:59:03.981713+00:00",
+  "generatedAt": "2026-09-13T03:23:21.627618+00:00",
   "branch": "main",
   "commit": "8c1555bf175781201150618fa79e2fc7656f20ae",
   "supersedes": [
@@ -29,7 +29,7 @@
   },
   "rule": "Nur offene Punkte. 100 % Erledigtes ist entfernt (Historie in git).",
   "fundamentals": {
-    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1165 Tests gruen (174 Dateien, test:ci inkl. Skip-Gate) · build/security/boundary gruen · Boundary-Scan 414 Dateien 0 Verstoesse (Stand 2026-09-11)",
+    "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1388 Tests gruen (202 Dateien) · Boundary-Scan 425 Dateien 0 Verstoesse · build/security/boundary gruen (Stand 2026-09-13)",
     "audioLive": "V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
     "aiFleet": "3 Endpoints live (brain=vLLM Qwen3-14B-AWQ, ears, voiceGen) + 4. Rolle `vision` geplant",
     "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
@@ -502,6 +502,101 @@
       "area": "Audio Runtime / UI",
       "source": "docs/DSP_OPTIONAL_BLOCKS_2026.md",
       "note": "DONE 2026-09-11 (V2-Graph + Preset-Schema + Plugin-UI + hoerbarer Nachweis): (1) ZUORDNUNG (Produktentscheidung): dspMONK -> Mod-Matrix, effectMONK -> HQ-Reverb (beide Prozessoren), syntisamplerMONK -> Phase-Distortion, instruMONK -> E-Piano (beide Quellen). (2) V2-GRAPH: src/core/audio/nodes/optionalDspNodes.ts (ModMatrixNode nutzt applyModMatrix; HqReverbNode nutzt HighQualityReverb pro Kanal) haengt in V2MonitorGraph zwischen DSP- und FX-Insert (master:mod-matrix -> master:hq-reverb); beide sind aus = bit-transparenter Bypass (Test, keine Behauptung). Quellen laufen als V2-Synth-Stimmen 'phase'/'epiano' in V2SinkEngine.renderStepBurst (amount/modIndex ueber synth-source). (3) STEUERUNG bis in den Audio-Thread: V2SinkEngine/V2LiveSink-Setter, Worklet-Nachrichten master-mod-matrix/master-reverb in v2SinkProcessor.ts (Worklets neu gebaut), audioEngine.setOptionalModMatrix/setOptionalReverb/setOptionalSynthVoice + resetOptionalSynthVoice. (4) PRESET-SCHEMA/PERSISTENZ: src/core/dsp/dspPresets.ts (Defaults, Bereiche, MONK-Zuordnung; unbekannte Bausteine/Parameter werfen, Werte werden geklemmt und gemeldet; serialize/parse fuer JSON). (5) UI-PFAD: src/components/dsp/OptionalDspPanel.tsx, vier Panels im DSPTerminal, schreibt in den hoerbaren Pfad und persistiert lokal. BELEGE: tests/optionalDspWiring.test.ts 15/15 (Hall-Tail/Tremolo/Quellen am V2SinkEngine = dieselbe Engine wie im Worklet; Bypass bit-transparent; Schema; Adapter-Delegation); scripts/audio-gate.cjs (echter Browser, echtes Worklet) GATE PASS mit Hall-Tail -35,0 dBFS nach Ton aus (aus: wieder Stille) und Tremolo-Hub 27,0 dB (aus: wieder Stille). Volle Gates: tsc 0, eslint 0, Boundary 407/0, test:ci 1241/1241 ohne Skips. DOKU: docs/DSP_OPTIONAL_BLOCKS_2026.md."
+    },
+    {
+      "id": "PERSIST-P1-002",
+      "title": "Robuste lokale/entfernte Persistenz (Autosave, OPFS/IndexedDB, Retry/Backoff)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Persistenz",
+      "source": "MASTERTODO.md P1-1",
+      "subitems": [
+        "versioniertes Snapshot-Schema + Migrationen",
+        "debounced Autosave",
+        "OPFS/IndexedDB-Puffer fuer Offline-Reload",
+        "Retry/Backoff + Idempotenz fuer Supabase/R2"
+      ],
+      "note": "Beim Konsolidieren 2026-09-13 aus MASTERTODO.md (P1-1) uebernommen; im SSOT zuvor nicht als eigenes Item gefuehrt. Kein Code-Nachweis vorhanden."
+    },
+    {
+      "id": "AI-P1-004",
+      "title": "AI-Jobs: Idempotenz-Schluessel (Rest aus MASTERTODO P1-3)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI Runtime",
+      "source": "MASTERTODO.md P1-3",
+      "subitems": [
+        "Idempotency-Keys fuer Job-Anlage (Doppel-Submit verhindern)",
+        "Verhalten bei Retry nach Timeout dokumentieren/testen"
+      ],
+      "note": "2026-09-13 geprueft: Circuit-Breaker (circuitBreaker.ts, FR-010), Kosten-Tracking (costTracker.ts, FR-011) und Job-/Eval-Persistenz (aiPersistence.ts, ai_migration_001/006) EXISTIEREN; offen ist nur die Idempotenz-Schicht. Queue/Timeout/Cancellation ist mit AI-P1-002 DONE."
+    },
+    {
+      "id": "ARCH-P2-002",
+      "title": "server.ts zerlegen (Dependency-Graph zuerst, dann Router/Services)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Server/Architektur",
+      "source": "MASTERTODO.md P2-2 / TODO.md ARCH-V2-004",
+      "subitems": [
+        "Dependency-Graph erheben",
+        "Routen in server/ verschieben (auth/ai/cloud/collab/uploads/...)",
+        "keine Verhaltensaenderung, Tests unveraendert gruen"
+      ],
+      "note": "server.ts ist ~150 KB; im SSOT zuvor nicht gefuehrt. 2026-09-13 beim Konsolidieren ergaenzt (Quelle: MASTER_TODO/TODO ARCH-V2-004)."
+    },
+    {
+      "id": "DSP-P2-002",
+      "title": "PDC-Impuls-/Latenz-Paritaetssuite (ueber RMS/Hash hinaus)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "DSP",
+      "source": "TODO.md ARCH-V2-005",
+      "subitems": [
+        "mathematische V2-Referenz-Suite",
+        "PDC-Impulstest (Phasen-/Latenzkompensation)"
+      ],
+      "note": "tests/v2Parity.test.ts deckt GraphState-Paritaet und A/B-Proxy-Hashes ab; die Impuls-/Latenz-Suite fehlt weiterhin."
+    },
+    {
+      "id": "QUAL-P2-005",
+      "title": "Deep-Audit-Regressionstest repository/revision (Python-Smoke im CI)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "CI/AI",
+      "source": "docs/FEHLER_REGISTER_2026.md FA-P2-2",
+      "note": "Aus dem Fehler-Register: Regressionstest fuer repository/revision-Pfade als Python-Smoke, im naechsten CI-Lauf nachziehen."
+    },
+    {
+      "id": "PERF-P3-002",
+      "title": "Worklet-Messluecken: renderCapacity + Max-Blockzeit",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Performance",
+      "source": "docs/PERFORMANCE_BUDGETS_2026.md §6",
+      "subitems": [
+        "renderCapacity auf Chromium mit dieser API messen (Gesamtlast inkl. Underruns)",
+        "Max-Blockzeit mit `performance` im Worklet-Scope erheben (bisher nur 1-ms-Quantisierung)"
+      ],
+      "note": "Bewusst nicht im Messdurchgang 2026-09-11 enthalten; klein, aber offen."
+    },
+    {
+      "id": "LIVE-P1-003",
+      "title": "Live-/Hoerpruefungen (konsolidiert aus TESTRUN_2 + Live-Checkliste 2026-09-02)",
+      "priority": "P1",
+      "status": "BLOCKED",
+      "area": "Mensch/Umgebung",
+      "source": "docs/TESTRUN_2_CHECKLIST.md, docs/LIVE_CHECKLIST_2026-09-02.md",
+      "subitems": [
+        "Idle-RMS <= -60 dBFS am Interface (60 s)",
+        "OFF-unter-Play stoppt Klang < 50 ms (Hoerprobe)",
+        "nur mixerMONK-Halter beeinflusst MAIN; OFF stoppt MainClock/Tick",
+        "Roundtrip-Latenz < 15 ms, Netz-Latenz < 50 ms one-way",
+        "120 BPM / 10 min: Jitter < 1 ms, 0 Xruns",
+        "2.1-Frequenzanalyse: Sub < 120 Hz, Device-Switch/Hotplug",
+        "Keyboard-E2E + Sichtpruefungen im Browser"
+      ],
+      "note": "Beide Checklisten sind Live-/Hardware-Schritte ohne Automatisierung und wurden 2026-09-13 hierher konsolidiert (die Einzeldateien sind entfernt). Blockiert wie ENV-001/ENV-003: kein 4-Browser-/Hardware-Zugang in der Agent-Umgebung."
     }
   ],
   "visionSandbox": [
@@ -685,10 +780,10 @@
       "id": "ENV-005",
       "title": "Supabase anon/publishable-Key ungueltig (HTTP 401)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Betreiber",
       "source": "ENV-004 / Key-Rotation 2026-09-11",
-      "note": "Live gemessen 2026-09-11: SUPABASE_SERVICE_ROLE antwortet gegen {SUPABASE_URL}/rest/v1/ mit HTTP 200 (Serverpfad ok), SUPABASE_ANON_PUB mit HTTP 401. Betroffen sind damit Client-Login/Realtime mit dem oeffentlichen Key; VITE_SUPABASE_ANON_PUB hat denselben Wert und wird beim Build ins Frontend gebacken. Betreiber: in Supabase unter Project Settings -> API den anon/publishable-Key neu erzeugen und SUPABASE_ANON_PUB + VITE_SUPABASE_ANON_PUB + SUPABASE_PUBLISHABLE setzen (Teil 2 der Rotation)."
+      "note": "DONE 2026-09-13: Betreiber hat die Keys auf SB_* umgestellt (SB_ANON_PUB/SB_PUBLISHABLE) und den Service-Role-Key erneuert. Live gemessen: anon-Key gegen {SUPABASE_URL}/rest/v1 -> HTTP 200, service_role -> 200, supabase:verify gruen (Migrationen 001-007, 41 Embeddings). Vorher (2026-09-11): anon/publishable lieferte 401."
     },
     {
       "id": "ENV-006",
@@ -697,7 +792,7 @@
       "status": "OPEN",
       "area": "Betreiber",
       "source": "ENV-004 / Key-Rotation 2026-09-11",
-      "note": "Live gemessen 2026-09-11: CF_ACCOUNT_TOKEN (cfat_...) liefert gegen https://api.cloudflare.com/client/v4/user/tokens/verify HTTP 401 (fuer diesen Endpoint kein gueltiges/aktives Token). Der API-Token cfut_ (CF_API_TOKEN/CLOUDFLARE_API_TOKEN/CFR2_API_TOKEN) ist aktiv (HTTP 200), die R2-S3-Keys funktionieren. Betreiber: cfat_-Token pruefen/neu ausstellen oder aus .env entfernen, falls ungenutzt."
+      "note": "Weiterhin OPEN (live erneut geprueft 2026-09-13): CFR2_ACCOUNT_TOKEN (cfat_...) liefert gegen api.cloudflare.com/client/v4/user/tokens/verify HTTP 401. Die S3/R2-Credentials (CFS3_*) und CFR2_API_TOKEN (cfut_) funktionieren (r2-check gruen). Betreiber: cfat-Token pruefen/neu ausstellen oder entfernen, falls ungenutzt."
     }
   ],
   "humanVerification": [
@@ -818,5 +913,25 @@
       "RAG: topStyles -> naechster Prompt",
       "LoRA-Training (Pod) aus Top-Feedback"
     ]
-  }
+  },
+  "consolidatedFrom": [
+    "MASTER_TODO.md",
+    "MASTERTODO.md",
+    "TODO.md",
+    "V2TODO.md",
+    "VISIONS_TODO.md",
+    "todo.json",
+    "AUDIT_REPORT.md",
+    "PRODUCTION_READINESS.md",
+    "reports/AUDIT_2026-09-10.md",
+    "docs/PRODUCTION_READINESS_AUDIT_2026-09-09.md",
+    "docs/FEHLER_REGISTER_2026.md",
+    "docs/PERFORMANCE_BUDGETS_2026.md",
+    "docs/HARDWARE_PROTOCOL.md",
+    "docs/TESTRUN_2_CHECKLIST.md",
+    "docs/LIVE_CHECKLIST_2026-09-02.md",
+    "docs/RUNPOD_AI_V1_SPEC.md",
+    "docs/VISUALMONK_SPEC.md"
+  ],
+  "lastConsolidation": "2026-09-13: Alle TODO-/Audit-/Pruefdateien erneut geprueft und hier zusammengefuehrt. Neu aufgenommen: PERSIST-P1-002, AI-P1-004, ARCH-P2-002, DSP-P2-002, QUAL-P2-005, PERF-P3-002, LIVE-P1-003. Aktualisiert: ENV-005 -> DONE (SB_* live verifiziert), ENV-006 bleibt OPEN (cfat 401). FR-002/FR-003 im Fehler-Register sind im Code gefixt (mcp_runtime.py Trust-Context, model_manager.py Instanz-Cache) und wurden nachgezogen."
 }

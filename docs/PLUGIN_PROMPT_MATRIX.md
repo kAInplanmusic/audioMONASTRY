@@ -43,4 +43,4 @@ und schreibt den Markdown-Report in die Job-Summary.
 
 **Offen (Betreiber-Schritt):** Anwenden der Migration in der Live-Supabase
 und der echte LLM-Lauf (DeepSeek) je Plugin – siehe
-`docs/LIVE_CHECKLIST_2026-09-02.md`.
+`MASTERTODOENDE.json` (LIVE-P1-003).

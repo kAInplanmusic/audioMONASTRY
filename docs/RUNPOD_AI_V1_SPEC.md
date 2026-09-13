@@ -191,7 +191,7 @@ den Indexierungsgrad abfragbar.
   und vor Produktivbetrieb live zu prüfen.
 - **Session-Wake** hängt an `RUNPOD_API_KEY`; ohne Key bleibt nur der Warmup-Job-Weg
   (kein `workersMin`-Bump) — das ist funktional, aber ohne Warmhalte-Garantie.
-- **„Alle Modelle gleichzeitig resident"** (alte Regel aus `HF_MODEL_CAPABILITY_MATRIX.md` §5)
+- **„Alle Modelle gleichzeitig resident"** (alte Regel aus der HF-Ära, HF ist retired)
   gilt nicht mehr: pro Rolle entscheidet das `preload`-Flag; der Rest lädt per LRU.
 - **Lizenzen**: MusicGen/MERT/Bark/MMS-TTS sind NC-Gewichte → nur privat/Forschung.
 - **Cold-Start** bleibt real, wenn der Wake unterbleibt oder der Endpoint lange idle war.
@@ -255,7 +255,7 @@ einer echten Generierung: `status: success`, `model: qwen3-14b`, 58 s / 64 Token
 
 **Verhaltens-Hinweis:** Qwen3 gibt zuerst einen `<think>`-Block aus. Für Tool-Calling
 sollte der Brain-Handler Thinking abschalten (`enable_thinking=False` bzw.
-`/no_think`), sonst frisst der Denkblock das Token-Budget – offen in `MASTER_TODO.md` AI-P1-003.
+`/no_think`), sonst frisst der Denkblock das Token-Budget – offen in `MASTERTODOENDE.json` AI-P1-003.
 
 ⚠️ **CI-Deploy ist rot** (Läufe #8–#12): `build` grün, `deploy` rot, obwohl der Preflight
 zeigt, dass `RP_API_KEY` im Repo gesetzt ist. Das lokale Deploy funktioniert. Da die

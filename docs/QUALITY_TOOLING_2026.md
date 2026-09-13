@@ -46,7 +46,7 @@ Build-Artefakte (`dist/**`, `public/worklets/**`, `test-results/**`). Ergebnis:
 
 - **V1-Legacy** (`NativeBackend.ts`, `AudioBackend.ts`, `nativeAudioKit.ts`, …):
   wird erst nach nachgewiesener V2-Parität entfernt (siehe `AUDIO-P1-001` /
-  `V1_REMOVAL_REPORT.md`). Löschen wäre ein Funktionsrisiko.
+  `AUDIO-P1-002`). Löschen wäre ein Funktionsrisiko.
 - **Do-Exporte** (knip „duplicates"): `workerPool`+`default`,
   `audioEngine`+`audioV2TerminalBridge`, `DJMixer`+`DJ4ChMixer` — identisches
   Objekt unter zwei Namen, **beide Namen werden benutzt** → kein Totcode.

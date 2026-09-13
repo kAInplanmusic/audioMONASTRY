@@ -217,7 +217,7 @@ gegen Drift abgesichert. Modelle mit `status: "planned"` haben noch keinen echte
 Revisions-Pin und werden im Betrieb nicht geladen.
 
 **Model Registry:** `services/samplemonk-ai-runtime/model_manifest.json` + TS mirror `src/core/ai/orchestrator/modelRegistry.ts`. Load classes CORE/FREQUENT/ON_DEMAND/RARE, revision pinning (no `latest`).
-**Evaluation:** `docs/HF_MODEL_CAPABILITY_MATRIX.md` (scores U·Q·P·V·I·R).
+**Evaluation:** Rollen-/Modell-Manifest + `docs/RUNPOD_AI_V1_SPEC.md`.
 
 ## 7. Server Infrastructure
 
@@ -309,10 +309,8 @@ deploy/                   Helm charts (optional)
 
 - `AGENTS.md` / `.cursorrules` – binding architecture and workflow rules
 - `docs/` – AI architecture, HF setup, deployment, registry, MCP, security, operations, troubleshooting, cost, hardware matrices, release gate
-- `TODO.md` – the single open task list
-- `MASTERTODO.md` – production-readiness work packages (P0–P2) with current status
-- `MONK_ARCHITECTURE.md` – final 16-MONK structure + 21→16 migration matrix
-- `V1_DEPENDENCY_MAP.md` – proof of V1 dependency removal (Tone.js retired)
-- `PRODUCTION_READINESS.md` – final release-gate assessment
-- `docs/HANDOVER.md` – handover/status document
-- `docs/LIVE_CHECKLIST_2026-09-02.md` – remaining live/listen-through check points
+- `MASTERTODOENDE.json` – **single source of truth** for all open work (audits,
+  conversions, live gates, environment blockers) with status + verification per item
+- `AGENTS.md` – binding architecture rules + canonical 16-MONK registry
+- `docs/RUNPOD_AI_V1_SPEC.md` – GPU fleet (roles, endpoints, models)
+- `docs/VISUALMONK_SPEC.md` – VisualMONK (image/clip/show)

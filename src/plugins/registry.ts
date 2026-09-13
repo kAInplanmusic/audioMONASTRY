@@ -43,7 +43,7 @@ const ICON_MAP: Record<string, any> = {
 //   masterplayerMONK (nach Head, fest) · aiMONK (nach recordMONK) ·
 //   perforMONK (ganz unten). MIDI/Controller läuft über Settings.
 //
-// Konsolidierung (Migration-Matrix in TODO.md):
+// Konsolidierung (Migration-Matrix in AGENTS.md §5):
 //   synthesizer + sampler + mcp(Synth/Sampler-Steuerung) → syntisampler
 //   drum (+ Drum-Sampling)                              → drumsampler
 //   instrument                                           → instru

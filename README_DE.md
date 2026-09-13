@@ -244,7 +244,7 @@ Main im Leerlauf stumm bleibt.
 **Model Registry:** `services/samplemonk-ai-runtime/model_manifest.json` +
 TS-Spiegel `src/core/ai/orchestrator/modelRegistry.ts`. Ladeklassen CORE/
 FREQUENT/ON_DEMAND/RARE, Revision-Pinning (kein `latest`).
-**Bewertung:** `docs/HF_MODEL_CAPABILITY_MATRIX.md` (Scores U·Q·P·V·I·R).
+**Bewertung:** Rollen-/Modell-Manifest + `docs/RUNPOD_AI_V1_SPEC.md`.
 
 ## 7. Server-Infrastruktur
 
@@ -364,6 +364,8 @@ Google-frei-Check), `verify.yml` (tsc, Vitest, Boundary-Scan, spatial-regression
 - `AGENTS.md` / `.cursorrules` – verbindliche Architektur- und Workflow-Regeln
 - `docs/` – AI-Architektur, HF-Setup, Deployment, Registry, MCP, Security,
   Operations, Troubleshooting, Cost, Hardware-Matrizen, Release-Gate
-- `TODO.md` – die einzige offene Aufgabenliste
-- `docs/HANDOVER.md` – Übergabe-/Statusdokument
-- `docs/LIVE_CHECKLIST_2026-09-02.md` – verbleibende Live-/Hörprobe-Prüfpunkte
+- `MASTERTODOENDE.json` – **einzige Quelle** für alle offenen Arbeiten (Audits,
+  Umbauten, Live-Gates, Umgebungs-Blocker) mit Status + Nachweis je Item
+- `AGENTS.md` – verbindliche Architekturregeln + kanonische 16-MONK-Registry
+- `docs/RUNPOD_AI_V1_SPEC.md` – GPU-Flotte (Rollen, Endpoints, Modelle)
+- `docs/VISUALMONK_SPEC.md` – VisualMONK (Bild/Clip/Show)

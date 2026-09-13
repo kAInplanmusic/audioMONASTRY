@@ -34,6 +34,6 @@ Ziel: Kompromittierte HF-Tokens regelmäßig ersetzen (Empfehlung: alle 90 Tage)
 
 ## Offene Punkte (vor Produktion)
 
-- HF-Token-Rotation dokumentiert ✅; **Rotation selbst** (Secret ersetzen) noch offen → getrackt in `TODO.md`
-- Pen-Test der neuen Routen (`/api/ai/*`) → getrackt in `TODO.md`
+- HF-Token-Rotation dokumentiert ✅; **Rotation selbst** (Secret ersetzen) noch offen → getrackt in `MASTERTODOENDE.json`
+- Pen-Test der neuen Routen (`/api/ai/*`) → getrackt in `MASTERTODOENDE.json`
 - [x] Lizenz-Verifikation: privat/Forschung, CC-BY-NC ok (2026-08-31)

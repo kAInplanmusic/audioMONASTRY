@@ -96,4 +96,4 @@ Hardware-Console, Skalierung >4 Nutzer, verteilte Compute-Services.
 ---
 
 > Status: Diese Datei ist **Referenz/Asset-Vorlage**. Der konkrete iterative
-> Umsetzungsstatus wird in `TODO.md` gepflegt.
+> Umsetzungsstatus wird in `MASTERTODOENDE.json` gepflegt.

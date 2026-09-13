@@ -157,39 +157,50 @@ export function findNextTodoId(masterTodo: string, dateTag: string): string {
   return id;
 }
 
+/**
+ * Hängt kritische/hohe/mittlere Audit-Findings als neue Items an die SSOT-Liste
+ * `MASTERTODOENDE.json`. Früher zielte diese Funktion auf eine separate Markdown-TODO; die
+ * Einzel-TODO existiert nicht mehr (SSOT ist die JSON-Liste).
+ * Dedupe über Datei:Zeile + Quelle; Rückgabe null, wenn nichts Neues dazukam.
+ */
 export function appendToMasterTodo(root: string, report: AuditReport, findings: Finding[]): string | null {
-  const todoPath = path.join(root, 'TODO.md');
+  const todoPath = path.join(root, 'MASTERTODOENDE.json');
   if (!existsSync(todoPath)) return null;
-  const content = readFileSync(todoPath, 'utf8');
+  let doc: { items?: Array<Record<string, unknown>> };
+  try {
+    doc = JSON.parse(readFileSync(todoPath, 'utf8')) as { items?: Array<Record<string, unknown>> };
+  } catch {
+    return null;
+  }
+  const items = Array.isArray(doc.items) ? doc.items : [];
+  let existingText = JSON.stringify(items);
   const today = report.generatedAt.slice(0, 10);
-  const lines: string[] = [];
-  lines.push('');
-  lines.push('---');
-  lines.push('');
-  lines.push(`## Deep-Audit ${today} – Befunde`);
-  lines.push('');
   let added = 0;
   for (const finding of findings) {
     if (finding.severity !== 'critical' && finding.severity !== 'high' && finding.severity !== 'medium') continue;
     const location = finding.file + (finding.line ? `:${finding.line}` : '');
-    const marker = `\`${location}\` (${finding.source})`;
-    const existingText = `${content}\n${lines.join('\n')}`;
+    const marker = `${location} (${finding.source})`;
     if (existingText.includes(marker)) continue;
     const id = findNextTodoId(existingText, today);
-    lines.push(`- [ ] **${id} · ${finding.severity.toUpperCase()} · ${finding.title}** – ${marker}`);
-    lines.push(`  - ${finding.message.replaceAll('\n', ' ').slice(0, 400)}`);
-    if (finding.suggestion) {
-      lines.push(`  - Vorschlag: ${finding.suggestion.replaceAll('\n', ' ').slice(0, 300)}`);
-    }
+    const suggestion = finding.suggestion ? ` Vorschlag: ${finding.suggestion.replaceAll('\n', ' ').slice(0, 300)}` : '';
+    items.push({
+      id,
+      title: finding.title,
+      priority: finding.severity === 'critical' ? 'P0' : finding.severity === 'high' ? 'P1' : 'P2',
+      status: 'OPEN',
+      area: 'Deep-Audit',
+      source: 'audit:deep',
+      note: `${finding.message.replaceAll('\n', ' ').slice(0, 400)}${suggestion} — Fundstelle: \`${marker}\``,
+      detectedAt: report.generatedAt,
+    });
+    existingText += marker;
     added += 1;
   }
   if (added === 0) {
     return null;
   }
-  lines.push('');
-  const addition = lines.join('\n');
-  const updated = content.endsWith('\n') ? `${content}${addition}` : `${content}\n${addition}`;
-  writeFileSync(todoPath, updated, 'utf8');
+  doc.items = items;
+  writeFileSync(todoPath, `${JSON.stringify(doc, null, 2)}\n`, 'utf8');
   return todoPath;
 }
 

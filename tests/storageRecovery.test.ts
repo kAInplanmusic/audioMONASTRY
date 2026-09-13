@@ -7,7 +7,7 @@ import {
 } from '../src/utils/indexedDB';
 
 /**
- * Storage-Recovery (RELEASE_GATE.md):
+ * Storage-Recovery (Release-Gate, MASTERTODOENDE.json):
  * Korruptes localStorage/IndexedDB darf die App nie crashen – Adapter
  * müssen sich selbst heilen (null liefern, No-Op) und überschreibbar bleiben.
  */

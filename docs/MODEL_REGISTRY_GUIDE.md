@@ -35,6 +35,6 @@ license: "Apache-2.0"
 ## Regeln
 
 - `revision` leer oder `latest` → Registry-Validierung schlägt fehl.
-- Neues Modell: erst in `docs/HF_MODEL_CAPABILITY_MATRIX.md` bewerten
+- Neues Modell: erst gegen `docs/RUNPOD_AI_V1_SPEC.md` und das Rollen-Manifest bewerten
   (gewichteter Score ≥ 6,0, Lizenz ok, Risiko ≤ 4), dann Manifest + TS-Spiegel.
 - VRAM-Summe CORE+FREQUENT muss unter Budget (80 GB) minus Safety-Margin (6 GB) bleiben.
