@@ -3,8 +3,8 @@
     "cpu-stats": 11,
     "step": 56
   },
-  "generatedAt": "2026-09-13T03:55:20.266Z",
-  "browser": "151.0.7922.34",
+  "generatedAt": "2026-09-13T09:21:58.458Z",
+  "browser": "153.0.8010.36",
   "budgets": {
     "warnLoadPct": 25,
     "failLoadPct": 50,
@@ -16,10 +16,10 @@
   "cpu": {
     "type": "cpu-stats",
     "blocks": 2500,
-    "avgMs": 0.37,
+    "avgMs": 0.3928,
     "maxMs": 10,
     "budgetMs": 2.6667,
-    "loadPct": 13.88,
+    "loadPct": 14.73,
     "sampleRate": 48000,
     "timer": "date"
   },
@@ -33,7 +33,7 @@
     "AudioContext.renderCapacity fehlt in diesem Browser (keine Context-Last/Underrun-Messung)",
     "performance fehlt im Worklet-Scope (Blockzeit nur mit 1-ms-Aufloesung, Max-Wert informativ)"
   ],
-  "requirePerfApis": false,
+  "requirePerfApis": true,
   "pageErrors": [],
   "checks": [
     {
@@ -66,11 +66,11 @@
     },
     {
       "check": "renderCapacity-API vorhanden (PERF-P3-002)",
-      "ok": true
+      "ok": false
     },
     {
       "check": "Blockzeit mit feiner Zeitquelle (PERF-P3-002)",
-      "ok": true
+      "ok": false
     }
   ]
 }

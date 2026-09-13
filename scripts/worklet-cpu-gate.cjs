@@ -51,6 +51,10 @@ const REPORT_FILE = path.resolve(__dirname, '../reports/worklet-cpu.json');
   }
 
   const browser = await chromium.launch({
+    // PERF-P3-002: optional ein echtes System-Chrome statt des Playwright-
+    // Chromium nutzen (dieser hat renderCapacity/Worklet-performance nicht):
+    //   CHROME_PATH=/usr/bin/google-chrome REQUIRE_PERF_APIS=1 node scripts/worklet-cpu-gate.cjs
+    executablePath: process.env.CHROME_PATH || undefined,
     args: [
       '--autoplay-policy=no-user-gesture-required',
       '--no-sandbox',
