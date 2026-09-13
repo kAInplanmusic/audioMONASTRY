@@ -69,4 +69,22 @@ describe('VisualMONK – Feature-Bus', () => {
     }
     expect(BANDS.treble[1]).toBe(16000);
   });
+
+  // VISUAL-P1-002: BPM kommt aus dem V2-Transport (injiziert), nicht aus dem
+  // Audiosignal – der Wert muss gerundet und gegen Unsinn geklemmt werden.
+  it('übernimmt das Transport-Tempo und rundet es', () => {
+    const freq = new Uint8Array(BINS).fill(128);
+    const time = new Float32Array(64).fill(0.25);
+    const f = computeFeatures(freq, time, { sampleRate: SAMPLE_RATE, fftSize: FFT_SIZE, bpm: 128.4 });
+    expect(f.bpm).toBe(128);
+  });
+
+  it('lässt ungültiges/gestopptes Tempo bei 0', () => {
+    const freq = new Uint8Array(BINS).fill(128);
+    const time = new Float32Array(64).fill(0.25);
+    expect(computeFeatures(freq, time, { sampleRate: SAMPLE_RATE, fftSize: FFT_SIZE, bpm: 0 }).bpm).toBe(0);
+    expect(computeFeatures(freq, time, { sampleRate: SAMPLE_RATE, fftSize: FFT_SIZE, bpm: -12 }).bpm).toBe(0);
+    expect(computeFeatures(freq, time, { sampleRate: SAMPLE_RATE, fftSize: FFT_SIZE }).bpm).toBe(0);
+    expect(computeFeatures(freq, time, { sampleRate: SAMPLE_RATE, fftSize: FFT_SIZE, bpm: Number.NaN }).bpm).toBe(0);
+  });
 });

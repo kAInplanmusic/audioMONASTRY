@@ -71,6 +71,11 @@ export interface ComputeOptions {
   fftSize: number;
   prevRms?: number;
   onsetGain?: number;
+  /**
+   * Transport-Tempo in BPM. Der Wert wird NICHT aus dem Audiosignal geschätzt
+   * (teuer + unzuverlässig), sondern vom V2-Transport übernommen. 0 = unbekannt.
+   */
+  bpm?: number;
 }
 
 /** Reine Feature-Berechnung aus den beiden Analyser-Puffern. */
@@ -83,7 +88,8 @@ export function computeFeatures(
   const rms = rmsFromTimeDomain(time);
   const onset = detectOnset(rms, opts.prevRms ?? 0, opts.onsetGain ?? 2.5);
   const energy = clamp01((bands.bass + bands.mid + bands.treble) / 3);
-  return { ...bands, rms, onset, energy, bpm: 0 };
+  const bpm = Number.isFinite(opts.bpm) && (opts.bpm ?? 0) > 0 ? Math.round(opts.bpm as number) : 0;
+  return { ...bands, rms, onset, energy, bpm };
 }
 
 /**
@@ -98,6 +104,12 @@ export class VisualFeatureBus {
   constructor(
     private readonly analyser: AnalyserNode,
     private readonly context: { sampleRate: number } = analyser.context,
+    /**
+     * Liefert das aktuelle Transport-Tempo in BPM (0 = unbekannt/gestoppt).
+     * Bewusst injiziert statt intern geschätzt: Das Tempo kommt sample-genau
+     * aus dem V2-Transport und kostet hier keinen Rechenaufwand.
+     */
+    private readonly bpmProvider: () => number = () => 0,
   ) {
     this.freq = new Uint8Array(analyser.frequencyBinCount);
     this.time = new Float32Array(analyser.fftSize);
@@ -111,6 +123,7 @@ export class VisualFeatureBus {
       sampleRate: this.context.sampleRate,
       fftSize: this.analyser.fftSize,
       prevRms: this.prevRms,
+      bpm: this.bpmProvider(),
     });
     this.prevRms = features.rms;
     return features;

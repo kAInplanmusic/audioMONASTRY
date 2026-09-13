@@ -19,7 +19,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/data/hf-cache \
-    AI_ROLE=""
+    AI_ROLE="" \
+    NUMBA_CACHE_DIR=/data/numba-cache
+
+# NUMBA_CACHE_DIR ist PFLICHT: der Worker läuft als uid 10001 (samplemonk),
+# während site-packages root-gehört und nicht beschreibbar ist. librosa nutzt
+# `numba @jit(cache=True)` – numba versucht dann einen Cache im package-eigenen
+# __pycache__ anzulegen, scheitert am Schreibrecht und `import qwen_tts` stirbt
+# an "RuntimeError: cannot cache function ... no locator available". Mit einem
+# schreibbaren Cache-Verzeichnis geht der Import durch (live verifiziert im
+# Image :latest am 2026-09-13; Probe 7 in runpod-deploy.yml erzwingt es).
 
 ARG AI_INSTALL_VOICE_AI=0
 ARG AI_INSTALL_AUDIO_AI=0

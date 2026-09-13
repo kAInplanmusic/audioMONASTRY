@@ -8,7 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     HF_HOME=/data/hf-cache \
-    PORT=8000
+    PORT=8000 \
+    NUMBA_CACHE_DIR=/data/numba-cache
+
+# NUMBA_CACHE_DIR siehe Dockerfile.runpod: ohne schreibbares Cache-Verzeichnis
+# stirbt `import qwen_tts` (librosa -> numba cache=True) am root-gehörten
+# site-packages als uid 10001.
 
 # voiceMONK Qwen3-TTS optional aktivieren:
 #   docker build --build-arg AI_INSTALL_VOICE_AI=1 ...

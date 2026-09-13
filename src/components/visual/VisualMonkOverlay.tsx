@@ -280,7 +280,11 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         const analyser = audioEngine.createVisualAnalyser();
         if (analyser) {
           analyserRef.current = analyser;
-          busRef.current = new VisualFeatureBus(analyser);
+          busRef.current = new VisualFeatureBus(analyser, undefined, () =>
+            // VISUAL-P1-002: Tempo aus dem V2-Transport (0 wenn gestoppt) –
+            // Energie kommt aus dem Analyser, BPM darf nicht still 0 bleiben.
+            audioEngine.getIsPlaying() ? audioEngine.getBpm() : 0,
+          );
           setAudioLinked(true);
         }
       }

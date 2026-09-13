@@ -130,9 +130,12 @@ jobs:
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import pyannote.audio; print('ok')"
 
-      - name: Probe 7 – qwen_tts importierbar
-        continue-on-error: true
-        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import qwen_tts; print('ok')"
+      - name: GATE – qwen_tts importierbar (voiceMONK TTS)
+        # Bewusst OHNE continue-on-error: ein kaputter qwen_tts-Import blieb
+        # bisher grün und meldete sich erst zur Laufzeit als MODEL_UNAVAILABLE
+        # (live belegt am 2026-09-11). Der Fix ist NUMBA_CACHE_DIR im
+        # Dockerfile.runpod – dieses Gate beweist ihn bei jedem Build.
+        run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import qwen_tts; print('qwen_tts import ok')"
 
       - name: Probe 8 – Worker-Handler-Tabelle läd
         continue-on-error: true

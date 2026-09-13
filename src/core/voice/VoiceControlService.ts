@@ -69,11 +69,20 @@ export class VoiceControlService {
   private commands: VoiceCommandRegistration[] = [];
   private pluginCommands: PluginCommandRegistration[] = [];
   private parser: ISpeechToIntent;
-  private agentLoop: AiAgentLoop;
+  private agentLoop: AiAgentLoop | null;
 
-  constructor(parser: ISpeechToIntent = new RuleBasedSpeechToIntent(), agentLoop: AiAgentLoop = new AiAgentLoop(moaAgent)) {
+  // Der Loop wird BEWUSST lazy erzeugt: VoiceControlService ↔ agentLoop ↔ MoaAgent
+  // bilden einen Import-Zyklus. Ein `new AiAgentLoop(moaAgent)` als Default-Parameter
+  // liefe beim Modul-Load (Singleton `voiceControlService`) und träfe dort auf den
+  // noch nicht initialisierten Export („AiAgentLoop is not a constructor“).
+  constructor(parser: ISpeechToIntent = new RuleBasedSpeechToIntent(), agentLoop: AiAgentLoop | null = null) {
     this.parser = parser;
     this.agentLoop = agentLoop;
+  }
+
+  private getAgentLoop(): AiAgentLoop {
+    if (!this.agentLoop) this.agentLoop = new AiAgentLoop(moaAgent);
+    return this.agentLoop;
   }
 
   /**
@@ -92,7 +101,7 @@ export class VoiceControlService {
       maxCorrections?: number;
     } = {},
   ): Promise<MoaRunResult> {
-    return this.agentLoop.runTask(task, {
+    return this.getAgentLoop().runTask(task, {
       userId,
       routing: opts.routing,
       sessionState: opts.sessionState,
