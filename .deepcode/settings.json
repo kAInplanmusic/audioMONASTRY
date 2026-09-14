@@ -1,6 +1,13 @@
 {
   "model": "deepseek-v4-flash",
-  "thinkingEnabled": true,
-  "reasoningEffort": "max",
-  "temperature": 0.1
+  "env": {
+    "MODEL": "deepseek-v4-flash",
+    "BASE_URL": "https://api.deepseek.com"
+  },
+  "mcpServers": {
+    "runpod": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.getrunpod.io/"]
+    }
+  }
 }
