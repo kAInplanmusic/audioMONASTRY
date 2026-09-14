@@ -11,7 +11,6 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import {
   uploadSampleToR2,
 } from './server/cloud.ts';
-import { llmRouter } from './src/core/ai/LlmRouter';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { isListenerMode, normalizeSessionMode } from './src/core/session/listenerMode';
 // ARCH-P2-002: server.ts wird schrittweise zerlegt. Route-Gruppen liegen als
@@ -22,6 +21,10 @@ import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
 import { registerAiRoutes } from './server/routes/aiRoutes.ts';
 import { registerMasterRoutes } from './server/routes/masterRoutes.ts';
 import { registerVoiceRoutes } from './server/routes/voiceRoutes.ts';
+// Der Stem-Job-Zaehler wird im Stem-Modul gefuehrt (dort schreibt ihn die Route);
+// Ops- und Admin-Routen lesen ihn ueber diesen Getter - eine Wertkopie wuerde einfrieren.
+import { registerStemRoutes, getStemActiveJobs } from './server/routes/stemRoutes.ts';
+import { registerAdminRoutes } from './server/routes/adminRoutes.ts';
 import { registerUploadRoutes } from './server/routes/uploadRoutes.ts';
 import { registerOpsRoutes } from './server/routes/opsRoutes.ts';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
@@ -47,10 +50,6 @@ import {
 
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
 const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
-const STEM_JOB_TIMEOUT_MS = Math.max(10_000, Number(process.env.STEM_JOB_TIMEOUT_MS ?? 300_000));
-let stemActiveJobs = 0;
-let stemJobSeq = 0;
-const stemJobStatus = new Map<string, 'active' | 'pending' | 'success' | 'failed' | 'cancelled' | 'timeout'>();
 
 /**
  * audioMONASTRY Server – VENDOR-/CLOUD-FREI.
@@ -462,7 +461,7 @@ app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stem
 registerOpsRoutes(app, {
   STEM_MAX_JOBS,
   getActiveSocketConnections: () => activeSocketConnections,
-  getStemActiveJobs: () => stemActiveJobs,
+  getStemActiveJobs,
   metrics,
   serverAuditLog,
 });
@@ -499,159 +498,14 @@ registerCloudRoutes(app);
 // Middleware-/Rate-Limit-Ketten unveraendert ist.
 registerAiRoutes(app, { metrics, fleetTargets });
 
-// --- POST /api/separate-stems  → lokaler Stems-Stub (SSE mit Fortschritt) ---
-// P11: Proxy zum separaten stem-ai (FastAPI/Demucs) Container, falls aktiviert.
-const getStemAiUrl = () => (process.env.STEM_AI_URL || '').trim() || fleetTargets.stemAi || 'http://stem-ai:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
-app.post('/api/separate-stems', async (req, res) => { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
-  metrics.stemRequests += 1;
-  // Runtime-Check (nicht nur Modul-Konstante), damit Tests/Deploys den Pfad
-  // per Env togglen können und die Queue-Logik deterministisch greifbar ist.
-  const stemAiActive = (process.env.ENABLE_STEMS || '').trim() === '1' && !!(process.env.STEM_AI_URL || fleetTargets.stemAi);
-  const replicateStemsActive = (process.env.STEM_AI_PROVIDER || '').trim() === 'replicate'
-    && !!(process.env.REPLICATE_API_TOKEN || '').trim();
-
-  // Pay-per-Use GPU-Stems über Replicate (Serverless, ~3–5 Cent/Song).
-  if (replicateStemsActive && req.is('multipart/form-data')) {
-    try {
-      const { files } = await parseMultipartStream(req, STEM_MAX_UPLOAD_MB * 1024 * 1024);
-      if (files.length === 0) { res.status(400).json({ error: 'keine Audiodatei' }); return; }
-      const file = files[0];
-      const dataUri = `data:${file.contentType || 'audio/wav'};base64,${file.data.toString('base64')}`;
-      const token = (process.env.REPLICATE_API_TOKEN || '').trim();
-      const model = (process.env.REPLICATE_STEM_MODEL || 'cjwbw/demucs').trim();
-
-      // Version explizit auflösen: der Modell-Alias kann 404 liefern, obwohl
-      // die Version lauffähig ist. Danach Prediction auf der Version starten.
-      const modelResp = await fetch(`https://api.replicate.com/v1/models/${model}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!modelResp.ok) { res.status(modelResp.status).json({ error: `Replicate model ${modelResp.status}` }); return; }
-      const modelInfo = await modelResp.json() as any;
-      const versionId: string = modelInfo?.latest_version?.id ?? '';
-      if (!versionId) { res.status(404).json({ error: 'Replicate: keine lauffähige Version' }); return; }
-
-      const createResp = await fetch(`https://api.replicate.com/v1/models/${model}/versions/${versionId}/predictions`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'wait' },
-        body: JSON.stringify({ input: { audio: dataUri } }),
-        signal: AbortSignal.timeout(180_000),
-      });
-      if (createResp.status === 402) {
-        // Kein Guthaben mehr → Client soll auf lokal zurückfallen (Dropdown-Logik).
-        res.status(402).json({ status: 'error', code: 'INSUFFICIENT_CREDIT', provider: 'replicate', message: 'Replicate-Guthaben aufgebraucht – lokale Extraktion nutzen.' });
-        return;
-      }
-      if (!createResp.ok) { res.status(createResp.status).json({ error: `Replicate ${createResp.status}` }); return; }
-      const prediction = await createResp.json() as any;
-      const status = prediction?.status;
-      if (status === 'succeeded') {
-        res.json({ status: 'success', provider: 'replicate', stems: prediction.output ?? {} });
-      } else if (status === 'failed') {
-        res.status(502).json({ status: 'error', message: 'Replicate-Stem-Job fehlgeschlagen' });
-      } else {
-        // Polling-Fallback, falls Prefer: wait nicht durchlief.
-        let current: any = prediction;
-        for (let i = 0; i < 30 && current?.status !== 'succeeded' && current?.status !== 'failed'; i++) {
-          await new Promise((r) => setTimeout(r, 4000));
-          const pollResp = await fetch(`https://api.replicate.com/v1/predictions/${prediction.id}`, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: AbortSignal.timeout(30_000),
-          });
-          current = await pollResp.json();
-        }
-        if (current?.status === 'succeeded') res.json({ status: 'success', provider: 'replicate', stems: current.output ?? {} });
-        else res.status(502).json({ status: 'error', message: 'Replicate-Stem-Job fehlgeschlagen' });
-      }
-    } catch (e) {
-      metrics.stemFailures += 1;
-      res.status(502).json({ status: 'error', message: 'Replicate-Stems fehlgeschlagen: ' + ((e as Error).message ?? '') });
-    }
-    return;
-  }
-
-  // FormData-Upload (Vite-Frontend/streamStems sendet multipart) -> stem-ai.
-  if (stemAiActive && req.is('multipart/form-data')) {
-    // DCT-101: Backpressure – harte Job-Grenze, Idempotency + Timeout-Reset.
-    if (stemActiveJobs >= STEM_MAX_JOBS) {
-      metrics.stemFailures += 1;
-      res.setHeader('Retry-After', '30');
-      return res.status(429).json({
-        error: 'STEM_QUEUE_FULL',
-        code: 'STEM_QUEUE_FULL',
-        retryAfter: 30,
-        queuePosition: stemActiveJobs - STEM_MAX_JOBS + 1,
-      });
-    }
-
-    const idempotencyKey = (req.headers['x-idempotency-key'] as string | undefined)?.trim() || null;
-    if (idempotencyKey && stemJobStatus.has(idempotencyKey)) {
-      return res.status(409).json({ error: 'DUPLICATE_REQUEST', code: 'DUPLICATE_REQUEST', idempotencyKey });
-    }
-
-    const jobId = `stem-${Date.now().toString(36)}-${(++stemJobSeq).toString(36)}`;
-    if (idempotencyKey) stemJobStatus.set(idempotencyKey, 'active');
-    stemActiveJobs += 1;
-
-    try {
-      // P-2/P-8: Streaming-Parser mit Limit (kein unbegrenztes RAM-Puffern).
-      const { fields, files } = await parseMultipartStream(req, STEM_MAX_UPLOAD_MB * 1024 * 1024);
-      const fd = new FormData();
-      for (const f of files) {
-        fd.append(f.name, new Blob([f.data], { type: f.contentType }), f.filename);
-      }
-      for (const [name, value] of Object.entries(fields)) {
-        fd.append(name, value);
-      }
-
-      const resp = await fetch(getStemAiUrl() + '/separate-stems', {
-        method: 'POST',
-        body: fd,
-        signal: AbortSignal.timeout(STEM_JOB_TIMEOUT_MS),
-      });
-      const data = await resp.json() as any;
-      if (idempotencyKey) stemJobStatus.set(idempotencyKey, resp.ok ? 'success' : 'failed');
-      res.status(resp.status).json({ ...data, provider: 'stem-ai' });
-      return;
-    } catch (e) {
-      metrics.stemFailures += 1;
-      if (idempotencyKey) stemJobStatus.set(idempotencyKey, 'timeout');
-      res.status(502).json({ status: 'error', message: 'stem-ai Proxy fehlgeschlagen: ' + ((e as Error).message ?? '') });
-      return;
-    } finally {
-      stemActiveJobs = Math.max(0, stemActiveJobs - 1);
-      // P-14-Fix: Idempotency-Key sofort nach Abschluss freigeben – die Sperre
-      // gilt nur für den aktiven Job. Legitime Retries (auch nach Fehlschlag)
-      // sind damit sofort wieder möglich.
-      if (idempotencyKey) {
-        stemJobStatus.delete(idempotencyKey);
-      }
-      void jobId;
-    }
-  }
-
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.flushHeaders();
-
-  // Fallback: simulierte 4-Stem-Aufteilung (Stub) mit Fortschritt
-  let p = 0;
-  const timer = setInterval(() => {
-    p += 20;
-    res.write(`data: ${JSON.stringify({ progress: p })}\n\n`);
-    if (p >= 100) {
-      clearInterval(timer);
-      res.write(`data: ${JSON.stringify({
-        status: 'success',
-        provider: 'fallback',
-        stems: {
-          vocals: '', melody: '', highs: '', mids: '', lows: '',
-        },
-      })}\n\n`);
-      res.end();
-    }
-  }, 300);
+// ARCH-P2-002: Die Stem-Separation liegen in server/routes/stemRoutes.ts (Factory). Registrierung an der
+// Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten
+// unveraendert bleibt.
+registerStemRoutes(app, {
+  STEM_MAX_JOBS,
+  fleetTargets,
+  metrics,
+  parseMultipartStream,
 });
 
 // ===========================================================================
@@ -667,25 +521,13 @@ const getMasterPlayerUrl = () =>
   fleetTargets.masterPlayer ||
   'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 
-
-// --- Admin/Root-Debug (nur mit ADMIN_TOKEN, z. B. fuer Root-Debugging) -------
-app.get('/api/admin/debug', (req, res) => {
-  const adminToken = (process.env.ADMIN_TOKEN || '').trim();
-  const supplied = String(req.headers['x-admin-token'] ?? '');
-  if (!adminToken || !safeTokenEqual(supplied, adminToken)) {
-    return res.status(401).json({ error: 'unauthorized' });
-  }
-  res.json({
-    service: 'audioMONASTRY',
-    uptimeSec: Math.round((Date.now() - metrics.startedAt) / 1000),
-    metrics,
-    stemActiveJobs,
-    stemAiProvider: (process.env.STEM_AI_PROVIDER || 'fallback').trim(),
-    replicateActive: Boolean((process.env.REPLICATE_API_TOKEN || '').trim()),
-    llmProviders: llmRouter.providerIds(),
-    node: process.version,
-    memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
-  });
+// ARCH-P2-002: Die Admin-/Debug-Route liegt in server/routes/adminRoutes.ts
+// (Factory). Registrierung an der Originalposition, damit die Reihenfolge relativ
+// zu den Middleware-Ketten unveraendert bleibt.
+registerAdminRoutes(app, {
+  getStemActiveJobs,
+  metrics,
+  safeTokenEqual,
 });
 
 // ARCH-P2-002: Die Handler liegen in server/routes/sessionRoutes.ts (Factory).
@@ -717,8 +559,6 @@ registerSessionRoutes(app, {
 // (Factory). Registrierung an der Originalposition, damit die Reihenfolge relativ
 // zu den Middleware-Ketten unveraendert bleibt.
 registerMasterRoutes(app, { getMasterPlayerUrl });
-
-const STEM_MAX_UPLOAD_MB = Number(process.env.STEM_MAX_UPLOAD_MB || 100);
 
 // P-8: Bewährter Streaming-Multipart-Parser (busboy). Prüft die Dateigröße
 // WÄHREND des Streamens (kein unbegrenztes RAM-Puffern, P-2-Fix) und kommt
