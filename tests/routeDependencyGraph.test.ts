@@ -106,6 +106,29 @@ describe('route-dependency-graph (ARCH-P2-002)', () => {
     expect(other.movable.helper).not.toContain('shared');
   });
 
+  it('wertet eine Import-Zeile als Deklaration, nicht als externe Nutzung', () => {
+    // Ohne das gilt jeder Import als "muss gereicht werden" - genau der Fehler,
+    // der beim AI-Block fast Importe aus server.ts gelöscht hätte.
+    const g = groupOf(graph(fixture('regexLiteral.ts')), '/api/demo');
+    expect(g.imported).toContain('randomUUID');
+    expect(g.movable.imports).toContain('randomUUID');
+    expect(g.shared.imports).toEqual([]);
+  });
+
+  it('rechnet mehrere Präfixe als EINE Gruppe (Familie mit geteilten Helfern)', () => {
+    const out = execFileSync(
+      'python3',
+      [script, '--file', fixture('twoBlocks.ts'), '--plan', '/api/demo,/api/other'],
+      { encoding: 'utf8' },
+    );
+    expect(out).toContain('PLAN /api/demo+/api/other');
+    expect(out).toContain('/api/demo/a');
+    expect(out).toContain('/api/other/b');
+    // In der gemeinsamen Sicht ist `app` nicht mehr "geteilt" zwischen den Gruppen,
+    // es liegt in beiden Bereichen - aber es kommt weiterhin von aussen.
+    expect(out).toContain('/api/demo/c');
+  });
+
   it('analysiert die echte server.ts ohne Fehler', () => {
     const data = graph(resolve(__dirname, '../server.ts'));
     expect(data.routes).toBeGreaterThan(0);

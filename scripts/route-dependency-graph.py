@@ -176,7 +176,7 @@ def statement_span(masked_lines, start):
     return start
 
 
-def analyze(path):
+def analyze(path, unions=None):
     raw = open(path, encoding='utf-8').read()
     lines = raw.split('\n')
     masked = mask_literals(raw).split('\n')
@@ -184,6 +184,7 @@ def analyze(path):
     # --- Modul-Scope: Deklarationen (mit Spans) und Importe ---
     decls = {}        # name -> {'kind', 'start', 'end'}  (0-basierte Zeilen)
     imports = {}      # name -> Modul
+    import_lines = set()   # Zeilen, die zu Import-Statements gehoeren
     i = 0
     while i < len(lines):
         ln = lines[i]
@@ -220,6 +221,7 @@ def analyze(path):
                         dm = re.match(r"import\s+([A-Za-z_$][\w$]*)", head)
                         if dm:
                             imports[dm.group(1)] = mod.group(1)
+                import_lines.update(range(i, j + 1))
                 i = j + 1
                 continue
         i += 1
@@ -265,6 +267,14 @@ def analyze(path):
         key = '/'.join(parts[:3]) if len(parts) > 2 else r['path']
         groups[key].append(r)
 
+    # Zusammengehoerige Gruppen (z. B. /api/voice + /api/sound + /api/song, die sich
+    # die Voice-Helfer teilen) als EINE Gruppe betrachten: sonst gilt jeder Helfer
+    # als "muss gereicht werden", nur weil eine Nachbargruppe ihn auch nutzt.
+    for prefix_list in (unions or []):
+        rs = [r for pfx in prefix_list for r in groups.get(pfx, [])]
+        if rs:
+            groups['+'.join(prefix_list)] = rs
+
     def merged_areas(rs):
         areas = []
         for r in sorted(rs, key=lambda x: x['start']):
@@ -305,10 +315,13 @@ def analyze(path):
                     continue
                 # Die eigene Deklarationszeile zaehlt nicht als externe Referenz -
                 # sonst blockiert sich jede Deklaration selbst und nichts ist beweglich.
+                # Fuer Importe gilt dasselbe: die Import-Zeile IST die Deklaration,
+                # keine Nutzung (sonst meldet der Graph jeden Import als geteilt).
                 own = decls.get(n)
                 lines = ref_lines(n)
                 if own:
                     lines -= set(range(own['start'], own['end'] + 1))
+                lines -= import_lines
                 if lines <= inner:      # leere Menge ist ebenfalls beweglich
                     movable.add(n)
                     changed = True
@@ -420,10 +433,15 @@ def main():
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--file', default=default, help='zu analysierende Datei')
     ap.add_argument('--json', action='store_true', help='maschinenlesbare Ausgabe')
-    ap.add_argument('--plan', metavar='PREFIX', help='Extraktionsplan fuer ein Praefix')
+    ap.add_argument('--plan', metavar='PREFIX[,PREFIX...]',
+                    help='Extraktionsplan; mehrere Präfixe mit Komma werden als EINE '
+                         'Gruppe gerechnet (Hilfe fuer zusammengehoerige Familien)')
     args = ap.parse_args()
 
-    data = analyze(args.file)
+    prefixes = [p.strip() for p in (args.plan or '').split(',') if p.strip()]
+    data = analyze(args.file, unions=[prefixes] if len(prefixes) > 1 else None)
+    if args.plan:
+        return print_plan(data, '+'.join(prefixes) if prefixes else args.plan)
     if args.json:
         print(json.dumps(data, indent=2, ensure_ascii=False))
         return 0
