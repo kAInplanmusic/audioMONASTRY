@@ -23,6 +23,7 @@ import { buildWebRtcConfigResponse } from './server/webrtcConfig.ts';
 import { registerCloudRoutes } from './server/routes/cloudRoutes.ts';
 import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
 import { registerAiRoutes } from './server/routes/aiRoutes.ts';
+import { registerMasterRoutes } from './server/routes/masterRoutes.ts';
 import { buildPluginStateRelayPayload } from './src/core/session/pluginStateRelay';
 import {
   AuthoritativeSession,
@@ -43,7 +44,6 @@ import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
 import {
   AlertsWebhookSchema,
-  JsonObjectBodySchema,
   SoundGenerateSchema,
   GenerateVoiceSchema,
   LibrarySearchSchema,
@@ -968,29 +968,6 @@ const getMasterPlayerUrl = () =>
   fleetTargets.masterPlayer ||
   'http://master-player:8000'; // NOSONAR: interner Docker-Netzwerk-Endpunkt ohne TLS
 
-async function proxyMasterPlayer(pathName: string, req: express.Request, res: express.Response) {
-  let forward: Record<string, unknown> = {};
-  if (req.method !== 'GET') {
-    const parsed = JsonObjectBodySchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      res.status(400).json({ status: 'error', message: parsed.error.issues[0]?.message ?? 'invalid payload' });
-      return;
-    }
-    forward = parsed.data as Record<string, unknown>;
-  }
-  try {
-    const resp = await fetch(getMasterPlayerUrl() + pathName, {
-      method: req.method,
-      headers: { 'Content-Type': 'application/json' },
-      body: req.method === 'GET' ? undefined : JSON.stringify(forward),
-    });
-    const data = await resp.json() as any;
-    res.status(resp.status).json(data);
-  } catch (e) {
-    res.status(502).json({ status: 'error', message: 'master-player Proxy fehlgeschlagen: ' + ((e as Error).message ?? '') });
-  }
-}
-
 // --- Stem-Provider-Status (öffentlich, ohne Secrets) --------------------------
 app.get('/api/stem/status', (_req, res) => {
   const provider = (process.env.STEM_AI_PROVIDER || 'fallback').trim();
@@ -1047,11 +1024,10 @@ registerSessionRoutes(app, {
   uploadToR2: uploadSampleToR2,
 });
 
-app.get('/api/master/health', async (req, res) => proxyMasterPlayer('/health', req, res));
-app.get('/api/master/selftest', async (req, res) => proxyMasterPlayer('/selftest', req, res));
-app.post('/api/master/mix', async (req, res) => proxyMasterPlayer('/mix', req, res));
-app.post('/api/master/master', async (req, res) => proxyMasterPlayer('/master', req, res));
-app.post('/api/master/analyze', async (req, res) => proxyMasterPlayer('/analyze', req, res));
+// ARCH-P2-002: Die /api/master-Routen liegen in server/routes/masterRoutes.ts
+// (Factory). Registrierung an der Originalposition, damit die Reihenfolge relativ
+// zu den Middleware-Ketten unveraendert bleibt.
+registerMasterRoutes(app, { getMasterPlayerUrl });
 
 // ===========================================================================
 // Sample-Upload mit Scan + korrekter Ablage (R2 + Supabase)
