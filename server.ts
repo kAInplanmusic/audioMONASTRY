@@ -339,6 +339,12 @@ const AI_RATE = resolveAiRateLimits(process.env as Record<string, string | undef
 //     Ohne eine dieser Freigaben ist die API geschlossen (kein stiller Dev-Modus).
 const STUDIO_ACCESS_TOKEN = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
 const studioTokenEnabled = STUDIO_ACCESS_TOKEN.length > 0;
+// PROD-P0-001: Monitoring-Scrape. Ist SCRAPE_TOKEN gesetzt, sind die Lese-
+// Metriken /api/metrics und /api/online fuer Prometheus mit x-scrape-token
+// (oder Authorization: Bearer) erreichbar. Ohne SCRAPE_TOKEN bleibt alles
+// unveraendert fail-closed ueber den Studio-Token.
+const SCRAPE_TOKEN = (process.env.SCRAPE_TOKEN || '').trim();
+const scrapeTokenEnabled = SCRAPE_TOKEN.length > 0;
 // P0-Security: Production läuft NIE ungeschützt. Fehlt der Studio-Token in
 // Produktion, bleibt die API fail-closed (nur /api/health offen) statt fail-open.
 const isProductionEnv = process.env.NODE_ENV === 'production';
@@ -409,6 +415,20 @@ app.use('/api', async (req, res, next) => {
   // öffentliche Material wie die R2-Public-URL (CFR2_PUBLIC_URL). Der Name
   // wird in der Route streng validiert (kein Pfadanteil, keine Liste).
   if (req.method === 'GET' && req.path.startsWith('/ai/vision/artifact/')) return next();
+  // PROD-P0-001: Scrape-Ausnahme nur fuer Lese-Metriken und nur mit gueltigem
+  // Scrape-Token (konstantzeit-Vergleich). Ohne gueltiges Token laeuft die
+  // Anfrage in die Studio-Auth weiter - nichts wird fail-open.
+  if (
+    scrapeTokenEnabled &&
+    req.method === 'GET' &&
+    (req.path === '/metrics' || req.path === '/online')
+  ) {
+    const headerToken = String(req.headers?.['x-scrape-token'] ?? '');
+    const authHeader = String(req.headers?.authorization ?? '');
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const scrape = headerToken || bearerToken;
+    if (scrape && safeTokenEqual(scrape, SCRAPE_TOKEN)) return next();
+  }
   // P0-Security: fail-closed – ohne Studio-Token UND ohne expliziten
   // Dev-/Test-Modus ist die API geschlossen (kein stiller Dev-Modus).
   if (studioTokenMissing) {

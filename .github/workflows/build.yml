@@ -38,6 +38,23 @@ jobs:
             echo "✅ Keine Google/Firebase-Imports in src/server.ts."
           fi
 
+  compose:
+    # PROD-P0-004: Deploy-Manifeste duerfen nicht erst auf dem Server brechen.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Compose-Dateien validieren (inkl. SFU-Overlay)
+        env:
+          SFU_ANNOUNCED_IP: 127.0.0.1
+        run: |
+          set -e
+          for f in docker-compose.yml docker-compose.hetzner.yml docker-compose.ai.yml docker-compose.monitoring.yml; do
+            echo "--- $f"
+            docker compose -f "$f" config --quiet
+          done
+          echo "--- Overlay docker-compose.hetzner.yml + docker-compose.sfu.yml"
+          docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml config --quiet
+
   verify:
     runs-on: ubuntu-latest
     steps:

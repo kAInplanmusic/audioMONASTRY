@@ -84,8 +84,12 @@ services:
       - ./scripts/hetzner/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--config.expand-env'
       - '--storage.tsdb.retention.time=15d'
       - '--web.enable-lifecycle'
+    environment:
+      # PROD-P0-001: gleiches Secret wie in der App (server.ts SCRAPE_TOKEN).
+      SCRAPE_TOKEN: ${SCRAPE_TOKEN:-}
     expose:
       - "9090"
     deploy:

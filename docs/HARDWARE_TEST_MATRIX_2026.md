@@ -139,3 +139,21 @@ Legende: ✅ getestet und funktioniert · ⚠️ getestet mit Einschränkung · 
    MIDI-2.0-Hardware/Transporte sind NOT TESTED (Browser-Unterstützung fehlt).
 5. **HID-Rückkanal (LEDs/Motorfader)** ist implementiert (Output-Report-Encoder +
    `sendReport`), unit-getestet; echte LED-Hardware NOT TESTED.
+
+## Onboard-Soundchip ohne Grafikkarte (2026-09-14, PROD-P1-003)
+
+Gerät: `HDA Intel PCH` / `ALC269VB Analog` (Karte 0), **keine NVIDIA-GPU** im
+System (`nvidia-smi` nicht vorhanden). Alle Tests liefen auf dieser Maschine.
+
+| Test | Kommando | Ergebnis |
+|---|---|---|
+| Chip erkannt | `aplay -l` | ✅ Karte 0 `HDA Intel PCH`, Gerät 0 `ALC269VB Analog` |
+| Mixer offen | `amixer sget Master` | ✅ Front L/R 95 % `[on]` |
+| Wiedergabe 48 kHz | `aplay -D plughw:0,0 probe_1k.wav` | ✅ exit 0, PCM `RUNNING` → `DRAINING` → `closed` |
+| Wiedergabe 44,1 kHz | `aplay -D plughw:0,0 t44.wav` | ✅ exit 0, PCM `RUNNING` |
+| Wiedergabe 96 kHz | `aplay -D plughw:0,0 t96.wav` | ✅ exit 0, PCM `RUNNING` (plughw resampelt) |
+| Buffer 512/2048 µs | `aplay --buffer-time=512000 --period-time=128000` | ✅ exit 0 |
+| Aufnahme Onboard-Mic | `arecord -D plughw:0,0 -f cd -d 1 mic.wav` | ✅ 176 444 Bytes (44,1 kHz stereo) |
+| Xrun-Zähler | `/proc/asound/card0/pcm0p/sub0/xrun_debug` | ⚠️ nicht lesbar ohne root; im Betrieb über `metrics.telemetryXruns` messen |
+| Headless ohne Display | `PORT=3901 node dist/server.cjs` + `curl /api/health` | ✅ Server läuft, 200 |
+| Cloud-Realität | RunPod-/Hetzner-VMs | ❌ kein `/dev/snd` — Chip-Test ist dort nicht möglich, nur lokal oder über PulseAudio-Null-Sink |

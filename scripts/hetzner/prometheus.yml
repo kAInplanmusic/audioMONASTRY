@@ -26,12 +26,17 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
-  # sampleMONK-App-Metriken (server.ts liefert /api/metrics?format=prometheus)
+  # sampleMONK-App-Metriken (server.ts liefert /api/metrics?format=prometheus).
+  # PROD-P0-001: der Server verlangt fuer Lese-Metriken das SCRAPE_TOKEN
+  # (Authorization: Bearer). Ohne Token bleibt die Route fail-closed.
   - job_name: 'samplemonk'
     metrics_path: /api/metrics
     params:
       format: ['prometheus']
     scheme: http
+    authorization:
+      type: Bearer
+      credentials: '${SCRAPE_TOKEN}'
     static_configs:
       - targets: ['sample-monk:8080']
 

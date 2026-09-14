@@ -177,6 +177,23 @@ export function registerStemRoutes(app: Express, deps: StemDeps): void {
       }
     }
 
+    // PROD-P1-001: Der simulierte Fallback darf nie stillschweigend als echtes
+    // Ergebnis erscheinen. Ohne multipart/file -> 400; ohne expliziten
+    // fallback-Provider -> 503 (kein Fake-Erfolg); der Stub selbst markiert
+    // jede Antwort mit simulated: true.
+    if (!req.is('multipart/form-data')) {
+      res.status(400).json({ error: 'Erwartet multipart/form-data mit Feld "file".' });
+      return;
+    }
+    if ((process.env.STEM_AI_PROVIDER || '').trim() !== 'fallback') {
+      res.status(503).json({
+        status: 'error',
+        code: 'NO_STEM_PROVIDER',
+        message: 'Kein Stem-Provider konfiguriert (STEM_AI_PROVIDER=fallback oder ENABLE_STEMS=1).',
+      });
+      return;
+    }
+
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
@@ -192,6 +209,7 @@ export function registerStemRoutes(app: Express, deps: StemDeps): void {
         res.write(`data: ${JSON.stringify({
         status: 'success',
         provider: 'fallback',
+        simulated: true,
         stems: {
           vocals: '', melody: '', highs: '', mids: '', lows: '',
         },

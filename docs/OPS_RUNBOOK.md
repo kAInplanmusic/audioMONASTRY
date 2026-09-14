@@ -41,3 +41,22 @@ aus Snapshots booten erfordert `provision-fleet.sh` mit `IMAGE=<snapshot>`.
 - [ ] `git log --all -S` zeigt keine Secrets
 - [ ] Workflow-Actions auf Commit-SHAs (AUD-2609-1)
 - [ ] Nightly-CI-Lauf auf GitHub bestätigt
+
+## 6. Rotations-Drill (2026-09-14, lokal ausgeführt)
+
+Ablauf (gegen `node dist/server.cjs`, `NODE_ENV=production`, Port 3907):
+
+```
+Phase A: STUDIO_ACCESS_TOKEN=old-token-A
+  curl -H "x-studio-token: old-token-A" /api/online  -> 200
+  curl -H "x-studio-token: new-token-B" /api/online  -> 401
+Phase B: Neustart mit STUDIO_ACCESS_TOKEN=new-token-B
+  curl -H "x-studio-token: old-token-A" /api/online  -> 401
+  curl -H "x-studio-token: new-token-B" /api/online  -> 200
+```
+
+Erkenntnis aus dem Drill: Nach dem Kill muss der Port tatsächlich frei sein
+(`ss -ltnp | grep <port>`), sonst startet die neue Instanz mit `EADDRINUSE`
+und die alte Instanz beantwortet weiter — das fällt bei `curl` nicht sofort
+auf, weil die Antworten identisch aussehen. Deshalb im Deploy-Skript nach
+`kill` immer erst `ss`/Health prüfen, bevor `up -d` läuft.

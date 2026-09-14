@@ -31,3 +31,14 @@ groups:
         for: 10m
         labels: { severity: warning }
         annotations: { summary: "Hohe CPU-Last", description: "{{ $labels.instance }} >90% CPU über 10 Minuten." }
+
+      # PROD-P2-001: AI-Kosten-Guard. Budget-Regel im SSOT:
+      # fleetMaxEurPerHour = 10 (≈ USD). samplemonk_ai_cost_usd ist kumulativ,
+      # deshalb increase() über 1 h als Stundenrate.
+      - alert: AiCostBudgetBurned
+        expr: increase(samplemonk_ai_cost_usd[1h]) > 10
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: "AI-Kosten-Budget überschritten"
+          description: "Geschätzte KI-Kosten der letzten Stunde über Budget: {{ $value }} USD (> 10 USD/h laut SSOT)."

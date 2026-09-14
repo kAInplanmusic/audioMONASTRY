@@ -42,7 +42,7 @@
     "audit:deep:help": "tsx scripts/deep-audit/run.ts --help",
     "eval:ai": "tsx scripts/eval-ai.ts",
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run security && npm run audit:deep:static",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run security && npm run audio:gate && npm run audit:deep:static",
     "verify:boundary": "node scripts/validate-interface-boundaries.mjs",
     "runpod:smoke": "python3 scripts/runpod-smoke.py",
     "ghcr:check": "python3 scripts/ghcr-check.py",
@@ -56,7 +56,8 @@
     "fleet:start": "bash scripts/hetzner/lifecycle.sh start",
     "test:audio-gate": "node scripts/audio-gate.cjs",
     "perf:worklet": "node scripts/worklet-cpu-gate.cjs",
-    "mcp:smoke": "node scripts/mcp-smoke.mjs"
+    "mcp:smoke": "node scripts/mcp-smoke.mjs",
+    "audio:gate": "bash scripts/audio-gate.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

@@ -246,17 +246,15 @@ describe('Server API', () => {
     expect(res.status).toBe(415);
   });
 
-  it('POST /api/separate-stems (Fallback) liefert SSE mit progress + success', async () => {
+  it('POST /api/separate-stems ohne multipart liefert 400 statt Stub-Stream (PROD-P1-001)', async () => {
+    // Vor PROD-P1-001 streamte dieser Aufruf simulierte Stems bis 100 %.
+    // Das war ein Fake-Erfolg ohne Datei - heute ist es ein Validierungsfehler.
     const res = await fetch(`${baseUrl}/api/separate-stems`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
     });
-    expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toContain('text/event-stream');
-    const text = await res.text();
-    expect(text).toContain('progress');
-    expect(text).toContain('success');
+    expect(res.status).toBe(400);
   });
 
   it('POST /api/separate-stems (Failure-Injection: stem-ai nicht erreichbar) → 502', async () => {
