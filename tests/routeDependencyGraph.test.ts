@@ -10,12 +10,15 @@ const script = resolve(__dirname, '../scripts/route-dependency-graph.py');
 const fixture = (name: string) => resolve(__dirname, `fixtures/routeDepGraph/${name}`);
 
 interface Statement { method: string; path: string; start: number; end: number }
+interface DepSplit { state: string[]; helper: string[]; imports: string[] }
 interface Group {
   prefix: string;
   statements: Statement[];
   areas: number[][];
   deps: { state: string[]; helper: string[] };
   imported: string[];
+  movable: DepSplit;
+  shared: DepSplit;
 }
 interface Graph {
   lines: number;
@@ -81,6 +84,26 @@ describe('route-dependency-graph (ARCH-P2-002)', () => {
     expect(out).toContain('Zu verschiebende Bereiche');
     expect(out).toContain('/api/demo/a');
     expect(out).toContain('/api/demo/c');
+  });
+
+  it('trennt "kann mitwandern" von "muss gereicht werden"', () => {
+    const g = groupOf(graph(fixture('transitive.ts')), '/api/demo');
+    // Nur in dieser Gruppe referenziert -> darf ins neue Modul wandern.
+    expect(g.movable.helper).toEqual(expect.arrayContaining(['helperA', 'sharedTarget']));
+    expect(g.movable.state).toContain('counter');
+    // Gruppenlokale Helfer wandern mit, sie werden nicht gereicht.
+    expect(g.shared.helper).not.toContain('helperA');
+    expect(g.shared.state).not.toContain('counter');
+  });
+
+  it('teilt einen Namen, den mehrere Gruppen brauchen, korrekt als geteilt ein', () => {
+    const data = graph(fixture('twoBlocks.ts'));
+    // `shared` liegt ausschließlich im /api/demo-Bereich -> mitwanderbar.
+    expect(groupOf(data, '/api/demo').movable.helper).toContain('shared');
+    // Die fremde Gruppe nutzt es nicht, muss aber `app` gereicht bekommen.
+    const other = groupOf(data, '/api/other');
+    expect(other.shared.helper).toContain('app');
+    expect(other.movable.helper).not.toContain('shared');
   });
 
   it('analysiert die echte server.ts ohne Fehler', () => {

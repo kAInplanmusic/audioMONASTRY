@@ -274,6 +274,46 @@ def analyze(path):
                 areas.append([r['start'], r['end']])
         return areas
 
+    def ref_lines(name):
+        """0-basierte Zeilennummern, in denen name als Wort vorkommt."""
+        pat = re.compile(r'\b%s\b' % re.escape(name))
+        return {j for j, line in enumerate(masked) if pat.search(line)}
+
+    def movability(names, areas):
+        """Welche Namen koennen mitwandern, welche muessen gereicht werden?
+
+        Ein Name darf mitwandern, wenn JEDE Referenz entweder innerhalb der
+        Bereiche der Gruppe liegt oder innerhalb einer anderen Deklaration, die
+        selbst mitwandert (Fixpunkt). Sonst wird er auch anderswo gebraucht und
+        muss als Dependency uebergeben werden. Genau diese Frage hat beim
+        AI-Block gefehlt - dort waeren Importe geloescht worden, die server.ts
+        noch braucht.
+        """
+        area_lines = set()
+        for a, b in areas:
+            area_lines.update(range(a - 1, b))
+        movable, changed = set(), True
+        while changed:
+            changed = False
+            inner = set(area_lines)
+            for n in movable:
+                d = decls.get(n)
+                if d:
+                    inner.update(range(d['start'], d['end'] + 1))
+            for n in names:
+                if n in movable:
+                    continue
+                # Die eigene Deklarationszeile zaehlt nicht als externe Referenz -
+                # sonst blockiert sich jede Deklaration selbst und nichts ist beweglich.
+                own = decls.get(n)
+                lines = ref_lines(n)
+                if own:
+                    lines -= set(range(own['start'], own['end'] + 1))
+                if lines <= inner:      # leere Menge ist ebenfalls beweglich
+                    movable.add(n)
+                    changed = True
+        return sorted(movable), sorted(n for n in names if n not in movable)
+
     report = []
     for key in sorted(groups, key=lambda k: (-len(groups[k]), k)):
         rs = groups[key]
@@ -283,12 +323,28 @@ def analyze(path):
         reach = closure(names)
         state = sorted(n for n in reach if decls.get(n, {}).get('kind') == 'state')
         helper = sorted(n for n in reach if n in decls and n not in state)
+        imported = sorted(n for n in reach if n in imports)
+        areas = merged_areas(rs)
+        # EIN Durchgang ueber alle Namen: getrennte Durchlaeufe pro Kategorie
+        # verfehlen den Fall "Zustand wird nur ueber einen mitwandernden Helfer
+        # erreicht" - der Helfer-Span fehlt dann in der inner-Menge.
+        all_names = set(state) | set(helper) | set(imported)
+        movable_all, shared_all = movability(all_names, areas)
+        mov_state = [n for n in state if n in movable_all]
+        shared_state = [n for n in state if n not in movable_all]
+        mov_helper = [n for n in helper if n in movable_all]
+        shared_helper = [n for n in helper if n not in movable_all]
+        mov_imports = [n for n in imported if n in movable_all]
+        shared_imports = [n for n in imported if n not in movable_all]
         report.append({
             'prefix': key,
             'statements': rs,
-            'areas': merged_areas(rs),
+            'areas': areas,
             'deps': {'state': state, 'helper': helper},
-            'imported': sorted(n for n in reach if n in imports),
+            'imported': imported,
+            'movable': {'state': mov_state, 'helper': mov_helper, 'imports': mov_imports},
+            'shared': {'state': shared_state, 'helper': shared_helper,
+                       'imports': shared_imports},
         })
 
     return {
@@ -348,6 +404,12 @@ def print_plan(data, prefix):
         print('    Zustand: %s' % (', '.join(g['deps']['state']) or '-'))
         print('    Helfer:  %s' % (', '.join(g['deps']['helper']) or '-'))
         print('    Importe: %s' % (', '.join(g['imported']) or '-'))
+        print('  Kann mitwandern (nur in dieser Gruppe referenziert):')
+        for kind in ('state', 'helper', 'imports'):
+            print('    %-8s %s' % (kind, ', '.join(g['movable'][kind]) or '-'))
+        print('  MUSS gereicht werden (auch anderswo referenziert):')
+        for kind in ('state', 'helper', 'imports'):
+            print('    %-8s %s' % (kind, ', '.join(g['shared'][kind]) or '-'))
     return 0
 
 
