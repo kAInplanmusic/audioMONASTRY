@@ -6,6 +6,8 @@ const app: any = {};
 const sharedTarget = { url: 'http://127.0.0.1:11434' };
 let counter = 0;
 
+// Hilft der Demo-Route und zählt dabei die Aufrufe. Dieser Kommentar gehört zum
+// Verschiebe-Span: wandert er nicht mit, bleibt er verwaist in der Quelldatei zurück.
 function helperA(): string {
   counter += 1;
   return sharedTarget.url;

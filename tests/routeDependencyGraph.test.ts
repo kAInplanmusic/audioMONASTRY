@@ -4,7 +4,9 @@
 // vorgezogene Route/Vollständigkeitsprüfung). Siehe docs/ARCH_P2_002_DEPENDENCY_GRAPH.md.
 import { describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 const script = resolve(__dirname, '../scripts/route-dependency-graph.py');
 const fixture = (name: string) => resolve(__dirname, `fixtures/routeDepGraph/${name}`);
@@ -24,7 +26,12 @@ interface Graph {
   lines: number;
   routes: number;
   imports: number;
-  moduleScope: { declarations: number; state: string[]; helpers: string[] };
+  moduleScope: {
+    declarations: number;
+    state: string[];
+    helpers: string[];
+    spans: Record<string, { start: number; end: number; moveStart: number }>;
+  };
   groups: Group[];
 }
 
@@ -127,6 +134,40 @@ describe('route-dependency-graph (ARCH-P2-002)', () => {
     // In der gemeinsamen Sicht ist `app` nicht mehr "geteilt" zwischen den Gruppen,
     // es liegt in beiden Bereichen - aber es kommt weiterhin von aussen.
     expect(out).toContain('/api/demo/c');
+  });
+
+  it('rückt ein, ohne mehrzeilige Template-Literale zu verändern', () => {
+    // Beim Verschieben wird nur eingerückt - Template-Inhalte müssen byte-identisch
+    // bleiben, sonst verfälscht man z. B. eingebettetes JSON.
+    const dir = mkdtempSync(join(tmpdir(), 'depgraph-'));
+    const file = join(dir, 'sample.ts');
+    const source = [
+      'const build = (p: string) => `{',
+      '  "prompt": "${p}",',
+      '  "model": "ace"',
+      '}`;',
+      'app.post(\'/api/demo/x\', (req: any, res: any) => {',
+      '  res.json({ v: build(req.query.p) });',
+      '});',
+    ].join('\n');
+    writeFileSync(file, source);
+    const out = execFileSync('python3', [script, '--reindent', file], { encoding: 'utf8' });
+    const got = out.split('\n');
+    expect(got[0]).toBe('  const build = (p: string) => `{');   // Code: 2 Spaces dazu
+    expect(got[1]).toBe('  "prompt": "${p}",');                  // Template: unverändert
+    expect(got[2]).toBe('  "model": "ace"');                     // Template: unverändert
+    expect(got[3]).toBe('}`;');                                  // Template: unverändert
+    expect(got[4]).toBe("  app.post('/api/demo/x', (req: any, res: any) => {");
+  });
+
+  it('nimmt vorangestellte Kommentare in den Verschiebe-Span auf', () => {
+    // Sonst bleiben JSDoc-/Abschnittskommentare als verwaiste Blöcke in server.ts
+    // stehen und die Registrierung landet mitten darin (real passiert).
+    const data = graph(fixture('transitive.ts'));
+    const span = data.moduleScope.spans['helperA'];
+    expect(span.moveStart).toBeLessThan(span.start);
+    expect(span.moveStart).toBe(9); // Kommentarblock ab Zeile 9
+    expect(span.start).toBe(11);    // Funktion selbst
   });
 
   it('analysiert die echte server.ts ohne Fehler', () => {

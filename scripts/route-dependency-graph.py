@@ -38,6 +38,11 @@ DECL_RE = re.compile(
     r"|^(?:export\s+)?async\s+function\s+([A-Za-z_$][\w$]*)"
     r"|^(?:export\s+)?function\s+([A-Za-z_$][\w$]*)"
     r"|^(?:export\s+)?class\s+([A-Za-z_$][\w$]*)"
+    # Typ-Aliase und Interfaces: sie existieren nur zur Compile-Zeit, muessen aber
+    # mitwandern, wenn sie nur in der Gruppe gebraucht werden - sonst findet tsc sie
+    # nicht mehr (real passiert bei HfVoiceKind in der Voice-Familie).
+    r"|^(?:export\s+)?type\s+([A-Za-z_$][\w$]*)"
+    r"|^(?:export\s+)?interface\s+([A-Za-z_$][\w$]*)"
 )
 IDENT_RE = re.compile(r"[A-Za-z_$][\w$]*")
 
@@ -176,6 +181,80 @@ def statement_span(masked_lines, start):
     return start
 
 
+def reindent(lines, spaces=2):
+    """Rueckt Zeilen ein, ohne mehrzeilige Template-Literale zu veraendern.
+
+    Eine Zeile, die INNERHALB eines Template-Literals beginnt, wird nicht angefasst -
+    sonst wuerde der Inhalt des Templates (z. B. ein eingebettetes JSON oder Skript)
+    verfaelscht. Fuer alle anderen Zeilen aendert sich garantiert nur fuehrender
+    Whitespace; das prueft die Funktion selbst.
+    """
+    pad = ' ' * spaces
+    out, in_template = [], False
+    for line in lines:
+        out.append(line if (in_template or not line.strip()) else pad + line)
+        # Zustand fuer die FOLGEZEILE bestimmen (nur Backticks zaehlen,
+        # String-/Kommentar-Literale koennen keine Zeile ueberspannen).
+        i, n = 0, len(line)
+        while i < n:
+            ch = line[i]
+            if in_template:
+                if ch == '\\':
+                    i += 2
+                    continue
+                if ch == '`':
+                    in_template = False
+                i += 1
+                continue
+            if ch == '/' and i + 1 < n and line[i + 1] == '/':
+                break
+            if ch in '\'"':
+                quote, i = ch, i + 1
+                while i < n:
+                    if line[i] == '\\':
+                        i += 2
+                        continue
+                    if line[i] == quote:
+                        i += 1
+                        break
+                    i += 1
+                continue
+            if ch == '`':
+                in_template = True
+            i += 1
+    for old, new in zip(lines, out):
+        assert new.lstrip() == old.lstrip(), 'Inhalt veraendert: %r' % old[:60]
+    return out
+
+
+def attached_comment_start(lines, idx):
+    """Erste Zeile des Kommentarblocks direkt ueber lines[idx].
+
+    Beim Verschieben gehoeren vorangestellte Kommentare (JSDoc, Abschnittskoepfe)
+    zum Code - sonst bleiben sie als verwaiste Bloecke in server.ts stehen. Es
+    werden nur zusammenhaengende Kommentar-/Leerzeilen genommen und an der ersten
+    Code-Zeile gestoppt; steht direkt ueber idx kein Kommentar, bleibt idx.
+    """
+    j = idx - 1
+    if j < 0:
+        return idx
+    probe = lines[j].strip()
+    if not probe or not (probe.startswith('//') or probe.startswith('/*') or probe.startswith('*')):
+        return idx
+    while j > 0:
+        prev = lines[j - 1].strip()
+        if prev.startswith('//') or prev.startswith('/*') or prev.startswith('*') or not prev:
+            j -= 1
+            continue
+        break
+    # Fuehrende Leerzeilen wieder abziehen: der Lauf darf Leerzeilen ueberspringen
+    # (sonst gingen Abschnittskoepfe verloren, die durch eine Leerzeile getrennt sind),
+    # der Span soll aber am ersten Kommentar beginnen.
+    while j < idx and lines[j].strip() == '':
+        j += 1
+    return j
+
+
 def analyze(path, unions=None):
     raw = open(path, encoding='utf-8').read()
     lines = raw.split('\n')
@@ -195,8 +274,13 @@ def analyze(path, unions=None):
                 end = statement_span(masked, i)
                 kind = ('state' if re.match(r"^(?:export\s+)?(?:let|var)\b", ln) else
                         'class' if re.match(r"^(?:export\s+)?class\b", ln) else
+                        'type' if re.match(r"^(?:export\s+)?(?:type|interface)\b", ln) else
                         'function' if 'function' in ln.split('=')[0] else 'const')
-                decls.setdefault(name, {'kind': kind, 'start': i, 'end': end})
+                decls.setdefault(name, {
+                    'kind': kind, 'start': i, 'end': end,
+                    # Verschiebe-Span: mit dem direkt vorangestellten Kommentarblock.
+                    'moveStart': attached_comment_start(lines, i),
+                })
                 i = end + 1
                 continue
             if ln.startswith('import'):
@@ -258,6 +342,8 @@ def analyze(path, unions=None):
             'path': pm.group(1) if pm else '(unbekannt)',
             'start': idx + 1,
             'end': end + 1,
+            # Verschiebe-Span: mit dem direkt vorangestellten Kommentarblock.
+            'moveStart': attached_comment_start(lines, idx) + 1,
         })
 
     # --- Gruppen = Praefix, NICHT ein Block ---
@@ -276,12 +362,14 @@ def analyze(path, unions=None):
             groups['+'.join(prefix_list)] = rs
 
     def merged_areas(rs):
+        """Zu verschiebende Bereiche - inklusive der vorangestellten Kommentare."""
         areas = []
         for r in sorted(rs, key=lambda x: x['start']):
-            if areas and r['start'] <= areas[-1][1] + 1:
-                areas[-1][1] = max(areas[-1][1], r['end'])
+            start, end = r['moveStart'], r['end']
+            if areas and start <= areas[-1][1] + 1:
+                areas[-1][1] = max(areas[-1][1], end)
             else:
-                areas.append([r['start'], r['end']])
+                areas.append([start, end])
         return areas
 
     def ref_lines(name):
@@ -369,6 +457,11 @@ def analyze(path, unions=None):
             'declarations': len(decls),
             'state': sorted(n for n, d in decls.items() if d['kind'] == 'state'),
             'helpers': sorted(n for n, d in decls.items() if d['kind'] != 'state'),
+            # 1-basierte Spans je Symbol. moveStart schliesst den Kommentarblock
+            # darueber ein - das ist der Bereich, den eine Extraktion verschieben muss.
+            'spans': {n: {'start': d['start'] + 1, 'end': d['end'] + 1,
+                          'moveStart': d['moveStart'] + 1}
+                      for n, d in sorted(decls.items())},
         },
         'groups': report,
     }
@@ -436,7 +529,14 @@ def main():
     ap.add_argument('--plan', metavar='PREFIX[,PREFIX...]',
                     help='Extraktionsplan; mehrere Präfixe mit Komma werden als EINE '
                          'Gruppe gerechnet (Hilfe fuer zusammengehoerige Familien)')
+    ap.add_argument('--reindent', metavar='DATEI',
+                    help='DATEI einruecken und ausgeben (template-sicher, fuer Extraktionen)')
     args = ap.parse_args()
+
+    if args.reindent:
+        src = open(args.reindent, encoding='utf-8').read().split('\n')
+        print('\n'.join(reindent(src)))
+        return 0
 
     prefixes = [p.strip() for p in (args.plan or '').split(',') if p.strip()]
     data = analyze(args.file, unions=[prefixes] if len(prefixes) > 1 else None)
