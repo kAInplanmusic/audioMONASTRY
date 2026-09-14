@@ -8,8 +8,8 @@ import { createHash, randomBytes } from 'crypto';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { syncCloudDatabase, cloudHealth, pushSampleToCloud, pushMusicTrackToCloud, uploadSampleToR2 } from './server/cloud.ts';
-import { syncR2ToSupabase, ingestAudioObject, insertVisualGeneration, insertVisualFeedback, fetchVisualStyleRanking } from './server/cloudAutomation.ts';
+import { pushSampleToCloud, uploadSampleToR2 } from './server/cloud.ts';
+import { insertVisualGeneration, insertVisualFeedback, fetchVisualStyleRanking } from './server/cloudAutomation.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
 import {
   buildDropPrompt,
@@ -35,6 +35,11 @@ import { contentTypeForArtifact, isSafeArtifactName, persistDataUri, readArtifac
 import { MergeError, loadMergeSource, mergeClipBuffers } from './server/visionShow.ts';
 import { supabaseServerKey, supabaseUrl } from './src/config/supabaseKeys';
 import { buildWebRtcConfigResponse } from './server/webrtcConfig.ts';
+// ARCH-P2-002: server.ts wird schrittweise zerlegt. Route-Gruppen liegen als
+// Factories unter server/routes/ und werden an ihrer Originalposition
+// registriert (Reihenfolge = Middleware-Reihenfolge, siehe app.use oben).
+import { registerCloudRoutes } from './server/routes/cloudRoutes.ts';
+import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
 import {
   AuthoritativeSession,
   MemorySessionPersistence,
@@ -73,10 +78,6 @@ import {
   VoiceSongSchema,
   VoiceTtsSchema,
   AiVideoSchema,
-  CloudMusicSchema,
-  CloudSampleSchema,
-  CloudUploadJsonSchema,
-  SessionAutosaveEnvelopeSchema,
   PluginLockSocketSchema,
   PluginStateSocketSchema,
   TelemetryPayloadSchema,
@@ -746,122 +747,10 @@ app.post('/api/alerts/webhook', async (req, res) => {
 // Betrieb nur, wenn die Keys in `.env` gesetzt sind (andernfalls melden die
 // Endpunkte 'not-configured' – die App bleibt weiterhin voll offline-fähig).
 
-app.get('/api/cloud/health', async (_req, res) => {
-  try {
-    const health = await cloudHealth();
-    res.json(health);
-  } catch (e) {
-    console.error('[cloud] /api/cloud/health fehlgeschlagen:', e);
-    res.status(500).json({ error: 'cloud-health-failed' });
-  }
-});
-
-app.post('/api/cloud/sync', async (_req, res) => {
-  try {
-    const result = await syncCloudDatabase();
-    let r2 = null;
-    try {
-      r2 = await syncR2ToSupabase();
-    } catch (e) {
-      console.error('[cloud] syncR2ToSupabase fehlgeschlagen:', e);
-      r2 = { total: 0, ok: 0, failed: 0, errors: ['r2-sync-failed'] };
-    }
-    res.status(result.ok ? 200 : 502).json({ ...result, r2 });
-  } catch (e) {
-    console.error('[cloud] /api/cloud/sync fehlgeschlagen:', e);
-    res.status(500).json({ error: 'cloud-sync-failed' });
-  }
-});
-
-// --- POST /api/cloud/samples → einzelnes Sample in Supabase upserten ---
-app.post('/api/cloud/samples', async (req, res) => {
-  try {
-    // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
-    const parsed = CloudSampleSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ ok: false, error: 'invalid sample payload', details: parsed.error.issues.slice(0, 5) });
-    }
-    const sample = parsed.data;
-    const result = await pushSampleToCloud({
-      id: sample.id,
-      name: sample.name,
-      category: sample.category,
-      type: sample.type,
-      url: sample.url,
-      description: sample.description ?? '',
-      tags: sample.tags ?? [],
-      parameters: (sample.parameters ?? {}) as { frequency?: number; decay?: number; pitchDecay?: number; oscillatorType?: string },
-    });
-    res.status(result.ok ? 200 : 502).json(result);
-  } catch (e) {
-    console.error('[cloud] /api/cloud/samples fehlgeschlagen:', e);
-    res.status(500).json({ ok: false, error: 'cloud-sample-upload-failed' });
-  }
-});
-
-// --- POST /api/cloud/music → einzelnen Musik-Track in Supabase upserten ---
-app.post('/api/cloud/music', async (req, res) => {
-  try {
-    // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
-    const parsed = CloudMusicSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({ ok: false, error: 'invalid track payload', details: parsed.error.issues.slice(0, 5) });
-    }
-    const track = parsed.data;
-    const result = await pushMusicTrackToCloud({
-      id: track.id,
-      name: track.name,
-      artist: track.artist ?? 'Unknown',
-      url: track.url,
-      bpm: track.bpm,
-    });
-    res.status(result.ok ? 200 : 502).json(result);
-  } catch (e) {
-    console.error('[cloud] /api/cloud/music fehlgeschlagen:', e);
-    res.status(500).json({ ok: false, error: 'cloud-music-upload-failed' });
-  }
-});
-
-// --- POST /api/cloud/upload → Audio-Blob (binär ODER base64-JSON) in R2 legen ---
-// Binär (empfohlen):  POST /api/cloud/upload?key=…&contentType=audio/wav
-//   Body = rohe Bytes, Content-Type: application/octet-stream.
-// Legacy-JSON:        Body = { key, dataBase64, contentType } (bleibt kompatibel).
-app.post('/api/cloud/upload', express.raw({ type: ['application/octet-stream', 'audio/*', 'application/wav'], limit: '200mb' }), async (req, res) => {
-  try {
-    let key = String(req.query.key ?? '');
-    let contentType = String(req.query.contentType ?? 'audio/wav');
-    let buf: Buffer | null = null;
-
-    if (Buffer.isBuffer(req.body)) {
-      buf = req.body;
-    } else {
-      // ARCH-SEC-003: Zod-Runtime-Validierung statt unsicherem Cast.
-      const parsed = CloudUploadJsonSchema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        return res.status(400).json({ ok: false, error: 'upload requires key + binary body (?key=…) or JSON { key, dataBase64 }', details: parsed.error.issues.slice(0, 5) });
-      }
-      key = parsed.data.key;
-      contentType = parsed.data.contentType ?? contentType;
-      buf = Buffer.from(parsed.data.dataBase64, 'base64');
-    }
-
-    if (!key) return res.status(400).json({ ok: false, error: 'upload requires key' });
-    // P-12: Strikte Key-Whitelist (nur uploads/<name>, keine Sonderzeichen-Pfade).
-    if (!/^uploads\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,120}$/.test(key)) {
-      return res.status(400).json({ ok: false, error: 'invalid key (nur uploads/<dateiname> erlaubt)' });
-    }
-    if (!buf || buf.byteLength === 0) return res.status(400).json({ ok: false, error: 'upload requires non-empty body' });
-
-    const result = await uploadSampleToR2(key, buf, contentType);
-    // Automation: neues Audio direkt analysieren + in Supabase ablegen.
-    const ingest = await ingestAudioObject(key, buf.byteLength);
-    res.json({ ok: true, ...result, ingest });
-  } catch (e) {
-    console.error('[cloud] /api/cloud/upload fehlgeschlagen:', e);
-    res.status(502).json({ ok: false, error: 'cloud-upload-failed' });
-  }
-});
-
+// ARCH-P2-002: Die Handler liegen in server/routes/cloudRoutes.ts (Factory).
+// Die Registrierung bleibt an dieser Stelle, damit die Reihenfolge relativ zu
+// den oben gesetzten Middleware-/Rate-Limit-Ketten unveraendert ist.
+registerCloudRoutes(app);
 // ===========================================================================
 // Lokale, cloud-freie Endpunkte
 // Diese Endpunkte halten die Frontend-Funktionen (KI-Komposition, Stems,
@@ -1880,54 +1769,29 @@ app.get('/api/admin/debug', (req, res) => {
   });
 });
 
-// E2E/Dev-Hook: autoritativen Session-State zurücksetzen, damit Tests
-// deterministisch bei OFF/Lock-frei starten (die In-Memory-Session lebt über
-// einzelne Browser-Kontexte hinaus). Production bleibt fail-closed (404).
-app.post('/api/session/reset', (req, res) => {
-  if (isProductionEnv) {
-    res.status(404).end();
-    return;
-  }
-  const token = studioTokenFromRequest(req);
-  if (!token || !safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) {
-    res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
-    return;
-  }
-  authoritativeSession = new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS });
-  if (sessionSaveTimer) {
-    clearTimeout(sessionSaveTimer);
-    sessionSaveTimer = null;
-  }
-  serverIo?.to('session:studio-session').emit('session-reset', { ts: Date.now() });
-  res.json({ status: 'reset' });
-});
-
-// PERSIST-P1-002: Remote-Sink für den Session-Autosave. Der Umschlag trägt
-// einen stabilen idempotencyKey → wiederholtes Senden schreibt DASSELBE
-// R2-Objekt (PutObject ist idempotent je Key), nie eine neue Revision.
-app.post('/api/session/autosave', async (req, res) => {
-  try {
-    const parsed = SessionAutosaveEnvelopeSchema.safeParse(req.body ?? {});
-    if (!parsed.success) {
-      return res.status(400).json({
-        ok: false,
-        error: 'invalid autosave payload',
-        details: parsed.error.issues.slice(0, 5),
-      });
+// ARCH-P2-002: Die Handler liegen in server/routes/sessionRoutes.ts (Factory).
+// Die Dependencies greifen live auf den Module-Scope zu - insbesondere
+// serverIo, das erst beim Socket-Aufbau gesetzt wird (weiter unten) und
+// deshalb als Getter uebergeben wird, nicht als Wertkopie.
+registerSessionRoutes(app, {
+  isProductionEnv,
+  studioAccessToken: STUDIO_ACCESS_TOKEN,
+  tokenFromRequest: studioTokenFromRequest,
+  safeTokenEqual,
+  newSession: () => new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS }),
+  replaceSession: (session) => {
+    authoritativeSession = session;
+  },
+  clearSaveTimer: () => {
+    if (sessionSaveTimer) {
+      clearTimeout(sessionSaveTimer);
+      sessionSaveTimer = null;
     }
-    const envelope = parsed.data;
-    const objectKey = `autosaves/${envelope.idempotencyKey}.json`;
-    const body = Buffer.from(JSON.stringify(envelope), 'utf8');
-    const result = await uploadSampleToR2(objectKey, body, 'application/json');
-    res.json({ ok: true, idempotent: true, key: objectKey, url: result.url });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : 'unknown';
-    if (message.includes('R2 not configured') || message.includes('CFS3_BUCKET missing')) {
-      return res.status(503).json({ ok: false, error: 'r2-not-configured' });
-    }
-    console.error('[session] /api/session/autosave fehlgeschlagen:', e);
-    res.status(502).json({ ok: false, error: 'session-autosave-failed' });
-  }
+  },
+  get serverIo() {
+    return serverIo;
+  },
+  uploadToR2: uploadSampleToR2,
 });
 
 app.get('/api/master/health', async (req, res) => proxyMasterPlayer('/health', req, res));
