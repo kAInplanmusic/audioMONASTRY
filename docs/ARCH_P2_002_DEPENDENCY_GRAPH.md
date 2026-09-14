@@ -165,7 +165,56 @@ Routen-Registrierung hat keinen Einfluss auf die Session-Zählung, und der einzi
 Catch-all `app.get('*')` steht erst bei Zeile 1955, also nach der Registrierung.
 Bleibt als offener Beobachtungspunkt notiert, nicht als erledigt.
 
+### Pakete 3–8: die restlichen 23 Routen extrahiert (2026-09-14)
+
+Alle noch offenen Route-Handler sind draußen und registriert. `server.ts`:
+**3.476 → 1.383 Zeilen**, davon **0 Top-Level-Route-Handler** — es bleiben
+Middleware-Registrierungen (CORS, Rate-Limit, Security-Header) und die
+Socket-/Session-Schicht.
+
+| Paket | Routen | neues Modul | Gereicht (Gründe) |
+|---|---|---|---|
+| 3 | `/api/master` (5) | `masterRoutes.ts` | `getMasterPlayerUrl` — auch `/api/upload/sample` braucht sie |
+| 4 | `/api/voice` + `/api/sound` + `/api/song` (5) | `voiceRoutes.ts` | nichts außer `app` — 19 Helfer und 4 Schemas wandern mit |
+| 5 | `/api/generate-voice`, `/api/library`, `/api/stem`, `/api/webrtc-config` (4) | `mediaRoutes.ts` | nichts außer `app` |
+| 6 | `/api/health`, `/api/metrics`, `/api/online`, `/api/audit`, `/api/telemetry`, `/api/alerts` (6) | `opsRoutes.ts` | `metrics`, `STEM_MAX_JOBS`, `serverAuditLog` (Referenz) + **Getter** `getStemActiveJobs`, `getActiveSocketConnections` |
+| 7 | `/api/upload/sample` (1) | `uploadRoutes.ts` | `parseMultipartStream` (auch Stems), `getMasterPlayerUrl` |
+| 8 | `/api/separate-stems`, `/api/admin/debug` (2) | `stemRoutes.ts`, `adminRoutes.ts` | `STEM_MAX_JOBS`, `metrics`, `fleetTargets`, `parseMultipartStream`, `safeTokenEqual`; der Stem-Zähler **wandert mit** und wird als `getStemActiveJobs()` exportiert |
+
+Zwei Muster, die sich dabei bewährt haben bzw. erzwungen waren:
+
+- **Getter statt Wertkopie** für veränderliche Skalare. `stemActiveJobs` und
+  `activeSocketConnections` werden von anderer Stelle fortgeschrieben; als Wert
+  übergeben würde die Anzeige einfrieren. Der Stem-Zähler liegt jetzt in
+  `stemRoutes.ts` (dort schreibt ihn die Route) und wird von Ops/Admin über den
+  exportierten Getter gelesen.
+- **Helfer in die Factory, Zustand auf Modulebene.** Verschobene Funktionen
+  brauchen die gereichten Dependencies im Scope, exportierte Getter brauchen den
+  Zustand auf Modulebene. Zuerst lagen beide auf Modulebene — tsc fand
+  `fleetTargets` nicht.
+
+Nachweise: `npm run verify` **exit 0** (tsc 0, eslint 0, vitest **1.445/1.445** in
+210 Dateien, security 0, Deep Audit 0 gate-relevante Findings, **knip 0**) ·
+`npm run build` ok · `npm run verify:boundary` 431/0.
+
+jscpd meldet 19 Findings; drei davon sind Selbst-Klone in `voiceRoutes.ts`. Sie
+sind **mitgezogen, nicht erzeugt**: im Vorher-Stand stehen dieselben Paare an
+denselben Stellen (`server.ts` [1558–1570] ↔ [1480–1492], [1675–1692] ↔
+[1788–1803], [1710–1720] ↔ [1851–1861]) — die drei Voice-Handler waren schon dort
+strukturell gleich; sie sauber zu deduplizieren wäre eine eigene, verhaltensändernde
+Aufgabe.
+
+### Was bewusst offen bleibt
+
+Die **Socket-/Session-Schicht** in `server.ts` (7 Modul-Symbole Zustand:
+`authoritativeSession`, `sessionPersistence`, `sessionSaveTimer`, `serverIo`,
+`broadcastLockExpiry`, `activeSocketConnections`, `FLEET_MAP_URL`) und der
+eingerückte **SPA-Catch-all** `app.get('*')` in der Production-Verzweigung. Der
+Catch-all muss zwingend zuletzt registriert werden und gehört damit nicht in eine
+Factory; die Socket-Schicht ist kein Route-Handler und war oben schon als letzter
+Schritt geführt.
+
 ### Nächste Pakete
 
-Nach der Reihenfolge oben: `/api/master` (Proxy, 5 Routen), dann
-`/api/voice` + `/api/sound` + `/api/song` gemeinsam (geteilte Voice-Helfer).
+Socket-/Session-Schicht (Reihenfolge siehe oben, zuletzt), danach die
+verhaltensneutrale Deduplizierung der drei Voice-Handler-Selbstklone.
