@@ -111,3 +111,22 @@
 
 - `CFR2_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CF_API_KEY`, `CF_ACCOUNT_TOKEN` in lokaler `.env`/alter `.env.TEMPLATE`: werden von **keinem** Laufzeitcode gelesen (nur Deploy-Skripte historisch). Rotieren, da lokal vorhanden.
 - `COMET_API_KEY` in `.env`: wird im Repo nicht verwendet (nur externe Deep-Code-Integration).
+
+## 3b. Hetzner Object Storage als Backup-Ziel (PROD-P0-002, 2026-09-14)
+
+Kanonisch: `HOS_S3_*` (Hetzner Object Storage, S3-kompatibel). Der Uploader
+`scripts/r2-backup.mjs` liest in dieser Reihenfolge: `BACKUP_S3_*` → `HOS_S3_*`
+→ `CFS3_*`/`CFR2_*`. Damit ist das Backup-Ziel unabhaengig vom R2-Sample-Upload.
+
+| Erwarteter ENV-Name | Verwendet von | Pflicht | Beispiel | Secret |
+|---|---|---|---|---|
+| `HOS_S3_ACCESS_KEY` | scripts/r2-backup.mjs, scripts/backup.sh --offsite | fuer Off-Site | 20 Zeichen (Hetzner-Format) | **ja** |
+| `HOS_S3_SECRET_KEY` | dito | fuer Off-Site | 40 Zeichen (Hetzner-Format) | **ja** |
+| `HOS_S3_ENDPOINT` | dito | fuer Off-Site | `https://nbg1.your-objectstorage.com` | nein |
+| `HOS_S3_BUCKET` | dito | fuer Off-Site | `audiomonastry-backups` | nein |
+| `HOS_S3_REGION` | dito (optional) | nein | `nbg1`/`fsn1`/`hel1` – wird sonst aus dem Endpoint abgeleitet | nein |
+
+Wichtig: Hetzner Object Storage verlangt **`region` = Location** (nbg1/fsn1/hel1),
+Cloudflare R2 dagegen `auto`. Der Uploader leitet das automatisch ab.
+R2-Keys sind hex 32/64 Zeichen, Hetzner-Keys 20/40 Zeichen – daran sind sie zu
+unterscheiden (server/cloud.ts validiert R2 streng auf hex32/hex64).

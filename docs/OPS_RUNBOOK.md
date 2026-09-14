@@ -60,3 +60,38 @@ Erkenntnis aus dem Drill: Nach dem Kill muss der Port tatsächlich frei sein
 und die alte Instanz beantwortet weiter — das fällt bei `curl` nicht sofort
 auf, weil die Antworten identisch aussehen. Deshalb im Deploy-Skript nach
 `kill` immer erst `ss`/Health prüfen, bevor `up -d` läuft.
+
+## 7. Backup & Restore (Off-Site, PROD-P0-002 — 2026-09-14 real durchgespielt)
+
+**Ziel:** `BACKUP_S3_*`/`HOS_S3_*` (Hetzner Object Storage, Bucket
+`audiomonastry-backups` in `nbg1`). Lokal bleibt der tar.gz mit Rotation.
+
+```
+# taeglich (Cron): lokales Backup + Off-Site-Kopie + Verifikation per HeadObject
+BACKUP_DIR=/var/backups/audiomonastry bash scripts/backup.sh --offsite
+
+# Kontrolle
+node scripts/r2-backup.mjs buckets          # Bucket sichtbar?
+node scripts/r2-backup.mjs list             # vorhandene Backups (Groesse/Datum)
+
+# Restore
+node scripts/r2-backup.mjs restore backups/audiomonastry_<stamp>.tar.gz /tmp/restore.tar.gz
+sha256sum <lokal> /tmp/restore.tar.gz        # muss identisch sein
+tar -xzf /tmp/restore.tar.gz -C /var/www/audiomonastry
+```
+
+**Scope:** `dist` + `public` OHNE `dist/data`, `dist/music`, `public/data`,
+`public/music` → ~47 MB statt 5 GB (dist enthaelt beim Build Kopien der Medien).
+Die 3 GB Orchestral-Samples sind Inhalt, kein Zustand; fuer eine Vollsicherung
+`--full` verwenden. `public/uploads` (Nutzersamples) ist immer enthalten.
+
+**Drill 2026-09-14 (echt):** Backup 48 253 484 Bytes → Upload nach
+`nbg1.your-objectstorage.com/audiomonastry-backups` (etag verifiziert) →
+Restore → **SHA-256 identisch** (`7889efda…39ddd`) → 311 Dateien entpackt →
+`dist/server.cjs` byte-identisch und `node --check` OK.
+
+**RPO/RTO:** taeglicher Lauf ⇒ RPO 24 h (mit `--offsite` auch off-site);
+RTO ~2 min (entpacken) bzw. ~10 min inkl. `npm ci` + `npm run build`.
+
+**Nicht im Backup (bewusst):** `.env`/Secrets (getrennt verwahren), Supabase-DB
+(eigene Backups), statische Medienbibliothek (siehe Scope).
