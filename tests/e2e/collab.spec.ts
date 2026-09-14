@@ -42,13 +42,33 @@ async function openStudio(page: Page): Promise<void> {
 }
 
 /**
+ * E2E-Isolation: setzt den serverautoritativen Session-State zurück. Die
+ * In-Memory-Session lebt länger als ein einzelner Browser-Kontext; ohne Reset
+ * würden Modul-States/Locks aus einem vorherigen Test in den nächsten bluten.
+ * Der Hook ist dev-only (Production: 404) und verlangt den Studio-Token.
+ */
+async function resetSession(): Promise<void> {
+  const baseUrl = (process.env.E2E_BASE_URL ?? '').trim().replace(/\/$/, '') || 'http://localhost:8080';
+  const token = studioToken();
+  const res = await fetch(`${baseUrl}/api/session/reset`, {
+    method: 'POST',
+    headers: token ? { 'x-studio-token': token } : {},
+  });
+  if (!res.ok) throw new Error(`session reset fehlgeschlagen: ${res.status} ${await res.text()}`);
+}
+
+test.beforeEach(async () => {
+  await resetSession();
+});
+
+/**
  * Erzeugt einen Browser-Kontext mit Studio-Cookie. Der Server liest den Token
  * aus dem `studio`-Cookie (vom Portal gesetzt) — für `http://localhost` ohne
  * `secure`, für https mit `secure: true`.
  */
 async function newStudioContext(browser: Browser): Promise<BrowserContext> {
   const ctx = await browser.newContext();
-  const baseUrl = (process.env.BASE_URL ?? '').trim().replace(/\/$/, '') || 'http://localhost:8080';
+  const baseUrl = (process.env.E2E_BASE_URL ?? '').trim().replace(/\/$/, '') || 'http://localhost:8080';
   const token = studioToken();
   if (token) {
     const url = new URL(baseUrl);
@@ -78,6 +98,101 @@ test('2 Browser-Kontexte synchronisieren die Session (2/4)', async ({ browser })
 
   await ctxA.close();
   await ctxB.close();
+});
+
+test('COLLAB-P1-004: aktive Plugin-Navigation wird an den anderen Client gespiegelt', async ({ browser }) => {
+  const ctxA = await newStudioContext(browser);
+  const ctxB = await newStudioContext(browser);
+  const pageA = await ctxA.newPage();
+  const pageB = await ctxB.newPage();
+
+  try {
+    await openStudio(pageA);
+    await openStudio(pageB);
+
+    // Client A navigiert auf eqMONK. Client B darf keinen eigenen Klick
+    // ausführen – er muss die Navigation über den Server-Relay sehen.
+    await pageA.getByTitle('eqMONK').first().click();
+
+    // Der Header-Badge auf Client B zeigt die Remote-Navigation als
+    // "<userId>→eq" (fuchsia, nur ab xl-Viewport sichtbar).
+    await expect(
+      pageB.getByText(/u[a-z0-9]+→eq$/),
+      'Client B zeigt die gespiegelte eqMONK-Navigation nicht an',
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Sanity: Client A selbst bekommt die eigene Navigation nicht als
+    // Remote-Badge (der Server relayt nur an die anderen Sockets).
+    await expect(pageA.getByText(/u[a-z0-9]+→eq$/)).toHaveCount(0);
+  } finally {
+    await ctxA.close();
+    await ctxB.close();
+  }
+});
+
+test('COLLAB-P0-002: Nachzügler sieht Modul-Stand aus dem Server-Snapshot (kein Pumping)', async ({ browser }) => {
+  const ctxA = await newStudioContext(browser);
+  const pageA = await ctxA.newPage();
+
+  try {
+    // Erst A: aktiviert eqMONK (AUTO_AI), BEVOR ein zweiter Client existiert.
+    await openStudio(pageA);
+    await pageA.getByTitle('eqMONK').first().click();
+    await expect(pageA.locator('#rack-eq').getByText('AUTO_AI').first()).toBeVisible();
+
+    // Jetzt stößt B dazu. Der Server hat für eq bereits AUTO_AI im
+    // autoritativen Snapshot; B bekommt kein replays der alten Events.
+    const ctxB = await newStudioContext(browser);
+    const pageB = await ctxB.newPage();
+    try {
+      await openStudio(pageB);
+      await expect(
+        pageB.locator('#rack-eq').getByText('AUTO_AI').first(),
+        'Client B muss den eqMONK-Stand aus dem session-state Snapshot wiederherstellen',
+      ).toBeVisible({ timeout: 20_000 });
+    } finally {
+      await ctxB.close();
+    }
+  } finally {
+    await ctxA.close();
+  }
+});
+
+test('COLLAB-P0-002: Lock-Denial + Resync stellt Server-Wahrheit wieder her', async ({ browser }) => {
+  const ctxA = await newStudioContext(browser);
+  const ctxB = await newStudioContext(browser);
+  const pageA = await ctxA.newPage();
+  const pageB = await ctxB.newPage();
+
+  try {
+    await openStudio(pageA);
+    await openStudio(pageB);
+
+    // A übernimmt eqMONK per Rack-Menü (AUTO_AI → Lock → PRO).
+    await pageA.getByLabel('eqMONK Menü').click();
+    await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();
+
+    // B sieht den Fremd-Lock an der eq-Zeile.
+    await expect(pageB.locator('#rack-eq').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+
+    // B versucht, eq per Power zu schalten. Der Server lehnt ab (Lock bei A);
+    // Bs lokaler Zustand ist danach optimistisch OFF.
+    await pageB.getByLabel('eqMONK Power').click();
+    await expect(pageB.locator('#rack-eq').getByText('OFF').first()).toBeVisible();
+
+    // A behält den Lock und den PRO-Zustand (Server-Wahrheit unverändert).
+    await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();
+    await expect(pageA.locator('#rack-eq').getByText('LOCKED · REMOTE')).toHaveCount(0);
+
+    // Resync: B fordert den autoritativen Snapshot an und übernimmt ihn
+    // (Reconnect ohne Pumping) – eq ist wieder PRO und von A gelockt.
+    await pageB.evaluate(() => (window as any).__webRTCManager?.requestSessionResync());
+    await expect(pageB.locator('#rack-eq').getByText('PRO').first()).toBeVisible({ timeout: 15_000 });
+    await expect(pageB.locator('#rack-eq').getByText('LOCKED · REMOTE')).toBeVisible();
+  } finally {
+    await ctxA.close();
+    await ctxB.close();
+  }
 });
 
 test('4 Browser-Kontexte → Session voll und auf allen Clients konsistent', async ({ browser }) => {

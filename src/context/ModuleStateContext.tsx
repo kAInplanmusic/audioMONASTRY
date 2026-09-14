@@ -3,9 +3,10 @@ import { storageSet } from '../utils/storage';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
 import { routeModuleState } from '../core/pluginAudioRouter';
-import { can, roleForUser, readSessionConfig } from '../utils/rbac';
 import { setAiModeActive } from '../core/ai/aiMode';
 import { EVAL_PLUGIN_IDS } from '../core/ai/orchestrator/evalMatrix';
+import { isMainOutPlugin } from '../core/session/mainOutGuard';
+import { parseSessionSnapshot, type BridgeModuleState } from '../core/session/sessionStateBridge';
 
 const VALID_PLUGIN_IDS = new Set<string>(EVAL_PLUGIN_IDS);
 
@@ -37,6 +38,10 @@ const loadPersistedStates = (): Record<string, ModuleState> => {
 export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [moduleStates, setModuleStates] = useState<Record<string, ModuleState>>(loadPersistedStates);
   const lastSeen = useRef<Record<string, { t: number; sender: string }>>({});
+  // COLLAB-P0-002: Lock-Schatten für eingehende Peer-Updates. Der Server ist
+  // die Lock-Wahrheit; ohne diesen Filter würde ein abgelehnter WebRTC-Update
+  // eines Nicht-Halters trotzdem per DataChannel bei den anderen ankommen.
+  const lockOwnersRef = useRef<Record<string, string>>({});
 
   // Persistiere Modul-Zustände über den Storage-Adapter (UI-Präferenz, asynchron).
   useEffect(() => {
@@ -48,6 +53,13 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const setModuleState = useCallback((id: string, state: ModuleState, opts?: { replicate?: boolean }) => {
     const now = Date.now();
     const sender = webRTCManager.userId;
+    // P0-1: Main-Out-Schutz (UX-Gate). Der Server lehnt zusätzlich ab – hier
+    // wird der Zustand erst gar nicht lokal gesetzt, damit Nicht-MixerMONK-User
+    // kein visuelles Feedback einer nicht-autoritativen Änderung bekommen.
+    if (isMainOutPlugin(id) && !webRTCManager.isMainOutOwner) {
+      console.warn('[module-state] Main-Out-Änderung verweigert (MixerMONK only)', { id, state, sender });
+      return;
+    }
     lastSeen.current[id] = { t: now, sender };
     setModuleStates(prev => {
       const next = { ...prev, [id]: state };
@@ -73,6 +85,59 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
   }, []);
 
+  // COLLAB-P0-002: Reconnect ohne Pumping – der Server-Snapshot (join/resync)
+  // überschreibt lokale Modul-States autoritativ. Bewusst OHNE Main-Out-Guard
+  // (der Server hat die Berechtigung bereits durchgesetzt) und OHNE Replikation
+  // (kein Echo an die Session).
+  const applyAuthoritativeModules = useCallback((modules: Record<string, BridgeModuleState>) => {
+    setModuleStates(prev => {
+      const next = { ...prev, ...modules };
+      // P0-4: Silence-Gate – Master stumm, wenn kein Plugin aktiv ist.
+      const activeCount = Object.values(next).filter((s) => s !== 'OFF').length;
+      try { audioEngine.setIdleSilence(activeCount === 0); } catch { /* Audio nicht initialisiert */ }
+      return next;
+    });
+    for (const [id, state] of Object.entries(modules)) {
+      routeModuleState(id, state as ModuleState);
+    }
+  }, []);
+
+  // COLLAB-P0-002: autoritativen Session-Snapshot abonnieren (Join/Resync).
+  useEffect(() => {
+    return webRTCManager.onSessionState((snapshot: unknown) => {
+      const parsed = parseSessionSnapshot(snapshot);
+      if (!parsed) return;
+      applyAuthoritativeModules(parsed.modules);
+    });
+  }, [applyAuthoritativeModules]);
+
+  // COLLAB-P0-002: Lock-Schatten pflegen (Server-Broadcasts + Legacy-Sync).
+  // Die Daten sind nur ein Filter für den WebRTC-Pfad; die UI-Anzeige der
+  // Locks bleibt im PluginManagerContext.
+  useEffect(() => {
+    const offLock = webRTCManager.onPluginLock((msg: any) => {
+      const pluginId = String(msg?.pluginId ?? '');
+      const lockedBy = String(msg?.lockedBy ?? '');
+      if (!pluginId || !lockedBy) return;
+      lockOwnersRef.current[pluginId] = lockedBy;
+    });
+    const offUnlock = webRTCManager.onPluginUnlock((msg: any) => {
+      const pluginId = String(msg?.pluginId ?? '');
+      if (!pluginId) return;
+      delete lockOwnersRef.current[pluginId];
+    });
+    const offSync = webRTCManager.onPluginLocksSync((msg: any) => {
+      const raw = msg?.locks;
+      if (!raw || typeof raw !== 'object') return;
+      const next: Record<string, string> = {};
+      for (const [id, lock] of Object.entries<any>(raw)) {
+        if (lock?.active && lock?.lockedBy) next[id] = String(lock.lockedBy);
+      }
+      lockOwnersRef.current = next;
+    });
+    return () => { offLock(); offUnlock(); offSync(); };
+  }, []);
+
   // Eingehende Peer-Updates LWW-merge (idempotent, stale-safe).
   useEffect(() => {
     return webRTCManager.addDataChannelListener((msg: any) => {
@@ -89,13 +154,25 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       if (state !== 'OFF' && state !== 'AUTO_AI' && state !== 'PRO') return;
       const t = Number(timestamp);
       if (!Number.isFinite(t) || t < 0) return;
-      // F1-Fix: Empfangs-RBAC – PRO-Promotion nur durch Producer+ (Lock-Aktion),
-      // OFF/AUTO_AI durch alle Rollen (State-Aktion). Client-RBAC bleibt UX,
-      // aber fremde States werden nicht mehr blind übernommen.
-      const senderRole = roleForUser(senderId ?? '', readSessionConfig().hostUid || null);
-      const neededAction = state === 'PRO' ? 'lock' : 'state';
-      if (!can(senderRole, neededAction)) {
-        console.warn('[module-state] RBAC: Update verworfen', { senderId, state, senderRole });
+      // ROLLENSYSTEM ENTFERNT (2026-09-14): keine Rollen-Prüfung mehr. Nur
+      // der mixerMONK-Lock-Owner ist besonders (Main-Out-Schutz unten).
+      // P0-1: Main-Out-Schutz auch für eingehende Peer-Updates – ein Nicht-Owner
+      // darf mixer/master-States nicht einspeisen (Server lehnt den Socket-Pfad ab,
+      // hier wird zusätzlich der WebRTC-Pfad gefiltert).
+      if (isMainOutPlugin(pluginId)) {
+        const mainOutOwner = webRTCManager.mainOutOwnerId;
+        if (!mainOutOwner || mainOutOwner !== senderId) {
+          console.warn('[module-state] Main-Out-Update von Nicht-Owner verworfen', { senderId, pluginId, state });
+          return;
+        }
+      }
+      // COLLAB-P0-002: Auch für gelockte Nicht-Main-Out-Plugins gilt die
+      // Server-Wahrheit: der WebRTC-Pfad eines Nicht-Halters wird verworfen,
+      // sonst würde ein server-seitig abgelehnter Optimistic-Update die
+      // anderen Clients trotzdem umschalten (Desync).
+      const lockOwner = lockOwnersRef.current[pluginId];
+      if (lockOwner && lockOwner !== senderId) {
+        console.warn('[module-state] Update von Nicht-Lock-Owner verworfen', { senderId, pluginId, state });
         return;
       }
       const last = lastSeen.current[pluginId];

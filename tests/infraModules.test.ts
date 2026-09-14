@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { controlBus, ControlBus } from '../src/core/events/ControlBus';
-import { RbacCache } from '../src/utils/RbacCache';
 import { JitterBufferEstimator } from '../src/utils/JitterBufferEstimator';
 import { computeLowpassCoefficients } from '../src/audio/dsp/biquad';
 import { validateRoutingAgainstGraph } from '../src/core/routing/validateRouting';
@@ -25,18 +24,6 @@ describe('ControlBus (AM-E2-2)', () => {
     controlBus.emit('monk:test2', { x: 1 });
     window.removeEventListener('monk:test2', handler);
     expect(seen).toEqual([{ x: 1 }]);
-  });
-});
-
-describe('RbacCache (AM-E3-2)', () => {
-  it('Lease läuft ab und kann erneuert werden', () => {
-    const cache = new RbacCache(1000);
-    cache.set({ userId: 'u1', role: 'DJ', permissions: ['lock'], expiresAt: 5000 });
-    expect(cache.can('u1', 'lock', 4000)).toBe(true);
-    expect(cache.can('u1', 'lock', 6000)).toBe(false); // abgelaufen
-    cache.set({ userId: 'u2', role: 'Producer', permissions: ['lock'], expiresAt: 10_000 });
-    expect(cache.touch('u2', 9500)).toBe(true);
-    expect(cache.can('u2', 'lock', 10_100)).toBe(true); // Lease verlängert
   });
 });
 

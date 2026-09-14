@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { LockStatus } from '../plugins/types';
-import { isAiModeActive } from '../core/ai/aiMode';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { parseSessionSnapshot } from '../core/session/sessionStateBridge';
 
 /** Default lock TTL: 5 Minuten clientseitig als Fallback-Obergrenze.
  * ARCH-#2: Der Server-Sweep läuft mit 60 s TTL (PLUGIN_LOCK_TTL_MS) und
@@ -86,6 +86,26 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     return () => { offLock(); offUnlock(); offDenied(); offSync(); };
   }, [commit]);
 
+  // COLLAB-P0-002: der vollständige Server-Snapshot (join/resync) trägt die
+  // Locks mit Lease-Zeiten. Der Server schickt zusätzlich plugin-locks-sync
+  // (Legacy-Format); der Snapshot ergänzt/überschreibt autoritativ.
+  useEffect(() => {
+    return webRTCManager.onSessionState((snapshot: unknown) => {
+      const parsed = parseSessionSnapshot(snapshot);
+      if (!parsed) return;
+      const next = { ...locksRef.current };
+      for (const [pluginId, lock] of Object.entries(parsed.locks)) {
+        next[pluginId] = {
+          lockedBy: lock.lockedBy,
+          timestamp: lock.timestamp,
+          active: lock.active,
+          ttl: lock.ttl,
+        };
+      }
+      commit(next);
+    });
+  }, [commit]);
+
   // Sweep expired locks periodically
   useEffect(() => {
     const interval = setInterval(() => {
@@ -114,17 +134,9 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     const now = Date.now();
     const prev = locksRef.current;
     const lock = prev[pluginId];
-    // NEW-D1-3: Halter-Wechsel für mixerMONK nur im AI-Modus erlaubt.
-    // Nur Producer/Admin dürfen einen aktiven Fremd-Lock übernehmen.
-    if (pluginId === 'mixer' && isAiModeActive() && lock && lock.active && lock.lockedBy !== localUserId) {
-      if (webRTCManager.role !== 'admin' && webRTCManager.role !== 'producer') return false;
-      commit({
-        ...prev,
-        [pluginId]: { lockedBy: localUserId, timestamp: now, active: true, ttl: DEFAULT_LOCK_TTL }
-      });
-      webRTCManager.sendPluginLock(pluginId);
-      return true;
-    }
+    // ROLLENSYSTEM ENTFERNT: keine admin/producer-Übernahme mehr. Ein aktiver
+    // Fremd-Lock kann nicht mehr lokal übernommen werden – der Server ist die
+    // Wahrheit und lehnt acquireLock ab, solange der Lease läuft.
     if (lock && lock.active && lock.lockedBy !== localUserId) {
       const ttl = lock.ttl ?? DEFAULT_LOCK_TTL;
       if (now - lock.timestamp <= ttl) {

@@ -4,7 +4,7 @@ import { random } from './src/utils/random';
 import http from 'http';
 import path from 'path';
 import { execFile } from 'child_process';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
@@ -42,6 +42,13 @@ import {
   type SerializedAuthoritativeSession,
 } from './src/core/session/authoritativeSession';
 import { looksLikeStudioSession, verifyStudioSession } from './src/core/session/studioSession';
+import {
+  canControlMainOut,
+  isMainOutPlugin,
+  parseMainOutUpdate,
+  resolveMainOutUserId,
+} from './src/core/session/mainOutGuard';
+import { SnapshotStore, createMemoryKeyValueStore } from './src/core/persistence/snapshotStore';
 import { PRESET_SAMPLE_DATABASE } from './src/data/samples';
 import { orchestralSamples } from './src/data/orchestralLibrary';
 import type { AudioSample } from './src/data/samples';
@@ -211,8 +218,14 @@ function addServerAudit(userId: string, role: string, action: string, ok: boolea
   if (serverAuditLog.length > MAX_SERVER_AUDIT) serverAuditLog.splice(0, serverAuditLog.length - MAX_SERVER_AUDIT);
 }
 
-// P4-2: Server-seitige Rollenzuordnung je User-ID (Host = admin, Rest = SESSION_ROLE).
-const sessionRoles = new Map<string, string>();
+// ROLLENSYSTEM ENTFERNT (2026-09-14): Kein admin/producer/engineer/guest mehr.
+// Es gibt nur noch: Session-Mitglieder (equal) + der mixerMONK-Lock-Owner (DJ).
+const MAIN_OUT_USER_ID = (process.env.MAIN_OUT_USER_ID || '').trim();
+function resolveSessionMainOutUserId(): string {
+  const lockOwner = authoritativeSession.lockOwner('mixer');
+  if (lockOwner) return lockOwner;
+  return resolveMainOutUserId(MAIN_OUT_USER_ID, []);
+}
 // COLLAB-P0-001: Serverautoritativer Session-State (Revision/Sequenz/Snapshot +
 // atomare Locks) ersetzt die frühere rohe `pluginLocks`-Map. Der Client bleibt
 // optimistisch; der Server verwirft verspätete/doppelte Events deterministisch.
@@ -222,12 +235,39 @@ const SESSION_STATE_REDIS_KEY = 'audiomonastry:session-state';
 let authoritativeSession = new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS });
 let sessionPersistence: AuthoritativeSessionPersistence = new MemorySessionPersistence();
 let sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+/** Socket.io-Referenz für Modul-Scope-Routen (E2E-Reset); null vor Start. */
+let serverIo: any = null;
+
+// P1-2: Automatische Snapshots des autoritativen Session-States mit
+// Checksumme, Retention und trockenem Cleanup (dokumentiert in
+// docs/ENV_MATRIX.md bzw. docs/PERSISTENZ). SnapshotStore ist rein; hier wird
+// SHA-256 als Prüfsumme injiziert (node:crypto ist in server.ts erlaubt).
+const sessionSnapshotStore = new SnapshotStore<SerializedAuthoritativeSession>(
+  createMemoryKeyValueStore(),
+  {
+    maxSnapshots: Math.max(1, Number(process.env.SNAPSHOT_MAX_SNAPSHOTS ?? 20)),
+    maxAgeMs: Math.max(0, Number(process.env.SNAPSHOT_MAX_AGE_MS ?? 7 * 24 * 60 * 60 * 1000)),
+    checksum: (input: string) => createHash('sha256').update(input).digest('hex'),
+  },
+);
+const SNAPSHOT_INTERVAL_MS = Math.max(1_000, Number(process.env.SNAPSHOT_INTERVAL_MS ?? 60_000));
+/** Ein Snapshot + Retention-Lauf (best effort, wirft nie). */
+const persistSnapshotNow = (): void => {
+  const serialized = authoritativeSession.serialize();
+  void sessionSnapshotStore.write(serialized, serialized.revision)
+    .then(() => sessionSnapshotStore.prune())
+    .catch((err) => console.warn('[snapshot] persistieren fehlgeschlagen:', (err as Error).message));
+};
+setInterval(persistSnapshotNow, SNAPSHOT_INTERVAL_MS).unref?.();
+
 /** Debounced Persistenz (Redis im Multi-Instanz-Betrieb, sonst In-Memory). */
 const persistSessionState = (): void => {
   if (sessionSaveTimer) return;
   sessionSaveTimer = setTimeout(() => {
     sessionSaveTimer = null;
     void sessionPersistence.save(authoritativeSession.serialize()).catch(() => { /* best effort */ });
+    // P1-2: auch Snapshot-Store aktualisieren (debounced, kein Extra-Timer nötig).
+    persistSnapshotNow();
   }, 250);
   sessionSaveTimer.unref?.();
 };
@@ -251,27 +291,6 @@ const sweepPluginLocks = (): void => {
   }
 };
 setInterval(sweepPluginLocks, PLUGIN_LOCK_SWEEP_MS).unref?.();
-function roleForSessionUser(userId: string): string {
-  // Reconnect-sicher: Ein bereits bekannter User behält seine Rolle
-  // (sonst würde der Host bei jedem Socket-Reconnect zum Guest degradiert).
-  const existing = sessionRoles.get(userId);
-  if (existing) return existing;
-  if (sessionRoles.size === 0) return 'admin'; // Erster User = Host/Admin
-  if (process.env.SESSION_HOST_USER && userId === process.env.SESSION_HOST_USER) return 'admin';
-  // ARCH-#9: Im Multi-User-Betrieb entscheidet currently Socket-Reihenfolge
-  // über Admin-Rechte. Ohne SESSION_HOST_USER deutlich warnen – bei
-  // Simultaneous-Join (4-User-Fall) ist das Rennen unbestimmt.
-  if (!process.env.SESSION_HOST_USER && process.env.NODE_ENV === 'production') {
-    console.warn('[security] SESSION_HOST_USER nicht gesetzt – Admin-Rolle fällt auf den ersten Join '
-      + '(Socket-Reihenfolge). Für deterministisches Host-Routing SESSION_HOST_USER setzen.');
-  }
-  const r = (process.env.SESSION_ROLE || '').trim();
-  return r === 'admin' || r === 'producer' || r === 'engineer' || r === 'guest' ? r : 'guest';
-}
-function roleCanState(role: string, state: string): boolean {
-  if (state !== 'PRO') return true; // OFF/AUTO_AI = state-Aktion für alle
-  return role === 'admin' || role === 'producer';
-}
 
 // DCT-108: Request/Trace-ID-Middleware (Korrelation User-Action → HTTP → AI).
 app.use((req, res, next) => {
@@ -1860,6 +1879,28 @@ app.get('/api/admin/debug', (req, res) => {
   });
 });
 
+// E2E/Dev-Hook: autoritativen Session-State zurücksetzen, damit Tests
+// deterministisch bei OFF/Lock-frei starten (die In-Memory-Session lebt über
+// einzelne Browser-Kontexte hinaus). Production bleibt fail-closed (404).
+app.post('/api/session/reset', (req, res) => {
+  if (isProductionEnv) {
+    res.status(404).end();
+    return;
+  }
+  const token = studioTokenFromRequest(req);
+  if (!token || !safeTokenEqual(token, STUDIO_ACCESS_TOKEN)) {
+    res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
+    return;
+  }
+  authoritativeSession = new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS });
+  if (sessionSaveTimer) {
+    clearTimeout(sessionSaveTimer);
+    sessionSaveTimer = null;
+  }
+  serverIo?.to('session:studio-session').emit('session-reset', { ts: Date.now() });
+  res.json({ status: 'reset' });
+});
+
 app.get('/api/master/health', async (req, res) => proxyMasterPlayer('/health', req, res));
 app.get('/api/master/selftest', async (req, res) => proxyMasterPlayer('/selftest', req, res));
 app.post('/api/master/mix', async (req, res) => proxyMasterPlayer('/mix', req, res));
@@ -2797,6 +2838,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
       },
       path: '/webrtc-signaling',
     });
+    serverIo = io;
 
     // P-11: Handshake-Auth + Origin-Prüfung. Mit STUDIO_ACCESS_TOKEN müssen
     // Clients das `studio`-Cookie (vom Portal gesetzt) mitschicken.
@@ -2966,9 +3008,8 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           s.emit('session-members', {
             roomId: SESSION_ROOM_ID,
             members: sessionMembers(room, sid),
-            selfRole: s.data.sessionRole ?? 'guest',
             selfMode,
-            hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? '',
+            mainOutUserId: resolveSessionMainOutUserId(),
           });
         }
       };
@@ -2985,11 +3026,10 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
         socket.data.sessionMode = mode;
-        // P4-2: Server-seitige Rolle – erster User ist Host/Admin, Rest lt. SESSION_ROLE.
-        const role = roleForSessionUser(userId);
-        socket.data.sessionRole = role;
-        if (!sessionRoles.has(userId)) sessionRoles.set(userId, role);
-        addServerAudit(userId, role, mode === 'master-out' ? 'JOIN_MASTER_OUT' : mode === 'visual-out' ? 'JOIN_VISUAL_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
+        // ROLLENSYSTEM ENTFERNT: alle Session-User sind gleich; nur der
+        // mixerMONK-Lock-Owner ist besonders (Main-Out).
+        socket.data.sessionRole = 'member';
+        addServerAudit(userId, 'member', mode === 'master-out' ? 'JOIN_MASTER_OUT' : mode === 'visual-out' ? 'JOIN_VISUAL_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
         socket.join(room);
         // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren (Legacy-Format).
         socket.emit('plugin-locks-sync', {
@@ -3018,9 +3058,8 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           socket.emit('session-members', {
             roomId: SESSION_ROOM_ID,
             members,
-            selfRole: 'guest',
             selfMode: mode,
-            hostUserId: [...sessionRoles.entries()].find(([, r]) => r === 'admin')?.[0] ?? '',
+            mainOutUserId: resolveSessionMainOutUserId(),
           });
           return;
         }
@@ -3033,41 +3072,8 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
 
         // COLLAB-P0-002: Erst dem Raum den neuen Peer ankündigen, dann allen
         // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
-        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId, role });
+        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
         broadcastSessionMembers(room);
-      });
-
-      // P4-2: Admin kann einem User eine neue Rolle zuweisen (server-erzwungen).
-      socket.on('assign-role', (data: any) => {
-        refreshIdleTimer();
-        const senderRole = String(socket.data?.sessionRole ?? 'guest');
-        if (senderRole !== 'admin') {
-          addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', false, String(data?.userId ?? ''));
-          socket.emit('rbac-denied', { action: 'assign-role', reason: 'admin required' });
-          return;
-        }
-        const targetUserId = String(data?.userId ?? '').trim();
-        const newRole = String(data?.role ?? '').trim();
-        if (!targetUserId || !['admin', 'producer', 'engineer', 'guest'].includes(newRole)) return;
-        // S-3: Ziel-User muss Mitglied DIESER Session sein (Room-Mitglieder + self).
-        const roomId = socket.data?.sessionRoom;
-        const memberIds = new Set<string>([
-          String(socket.data?.sessionUserId ?? ''),
-          ...(roomId ? sessionMembers(`session:${roomId}`, socket.id).map((m) => m.userId) : []),
-        ]);
-        if (!memberIds.has(targetUserId)) {
-          addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', false, `${targetUserId}->${newRole}`);
-          socket.emit('rbac-denied', { action: 'assign-role', reason: 'target not in session' });
-          return;
-        }
-        sessionRoles.set(targetUserId, newRole);
-        // Alle Sockets dieses Users aktualisieren.
-        for (const [, s] of io.sockets.sockets as any) {
-          if (s?.data?.sessionUserId === targetUserId) s.data.sessionRole = newRole;
-        }
-        addServerAudit(String(socket.data?.sessionUserId ?? socket.id), senderRole, 'ASSIGN_ROLE', true, `${targetUserId}->${newRole}`);
-        if (roomId) socket.to(`session:${roomId}`).emit('role-changed', { userId: targetUserId, role: newRole });
-        socket.emit('role-changed', { userId: targetUserId, role: newRole });
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
@@ -3089,6 +3095,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const revision = authoritativeSession.revision;
         socket.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock, revision });
         socket.emit('plugin-lock', { pluginId, ...lock, revision });
+        if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
       });
       // ARCH-#2: Broadcast-Callback für Lock-Ablauf (Sweep im Modul-Scope).
@@ -3098,6 +3105,12 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           lockedBy: null,
           reason: 'expired',
         });
+        broadcastMainOutOwner(`session:${SESSION_ROOM_ID}`);
+      };
+      // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel an den Raum
+      // broadcasten – die Clients spiegeln sonst einen veralteten Owner.
+      const broadcastMainOutOwner = (roomId: string): void => {
+        io.to(roomId).emit('main-out-owner', { userId: resolveSessionMainOutUserId(), ts: Date.now() });
       };
       socket.on('plugin-unlock', (data: any) => {
         refreshIdleTimer();
@@ -3110,6 +3123,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (!authoritativeSession.releaseLock(pluginId, senderUserId)) return;
         persistSessionState();
         socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId, revision: authoritativeSession.revision });
+        if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_UNLOCK', true, pluginId);
       });
 
@@ -3148,10 +3162,21 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
           return;
         }
-        // P4-2: Server-seitige RBAC – PRO-Promotion nur für admin/producer.
-        if (state && !roleCanState(senderRole, state)) {
-          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
-          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole });
+        // ROLLENSYSTEM ENTFERNT: keine Rollen-Prüfung für PRO/OFF/AUTO_AI mehr.
+        // Jeder Session-User darf Plugins schalten; Locks + Main-Out-Schutz
+        // (unten) regeln die Exklusivität.
+        // P0-1: Main-Out-Schutz – mixer/master-Zustand ändert nur der MixerMONK
+        // (Main-Out-Owner). Andere User dürfen den Main-Out nicht schalten,
+        // auch nicht auf OFF (OFF würde das Main-Signal abwürgen).
+        if (isMainOutPlugin(pluginId) && !canControlMainOut(senderUserId, resolveSessionMainOutUserId())) {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:main-out protected`);
+          socket.emit('rbac-denied', {
+            action: 'plugin-state',
+            pluginId,
+            state,
+            reason: 'main-out protected (mixerMONK only)',
+            mainOutUserId: resolveSessionMainOutUserId(),
+          });
           return;
         }
         // COLLAB-P0-001: doppelte/verspätete Events deterministisch verwerfen.
@@ -3183,16 +3208,71 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
       });
 
+      // COLLAB-P1-004: Aktives Plugin/Nav an die Session spiegeln. Reiner
+      // UI-Hinweis (kein Audio-State, keine Lock-Wirkung) – egal welcher User
+      // gerade welches Modul bedient, die anderen sehen es im Header.
+      socket.on('session-nav', (data: any) => {
+        refreshIdleTimer();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        const pluginId = String(data?.pluginId ?? '').trim().slice(0, 64);
+        if (!pluginId) return;
+        const payload = { pluginId, senderUserId, senderRole, ts: Date.now() };
+        socket.to(`session:${roomId}`).emit('session-nav', payload);
+      });
+
+      // P0-1: Server-validierter Main-Out-Parameterkanal (MixerMONK exklusiv).
+      // Clients, die Main-Out-Parameter (masterVolume, Fades, …) ändern wollen,
+      // senden hierhin statt über den unkontrollierten Peer-Pfad. Der Server
+      // validiert Berechtigung + Payload und broadcastet an den Session-Raum.
+      socket.on('main-out-update', (data: unknown) => {
+        refreshIdleTimer();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const senderRole = String(socket.data?.sessionRole ?? 'guest');
+        const mainOutUserId = resolveSessionMainOutUserId();
+        if (!canControlMainOut(senderUserId, mainOutUserId)) {
+          addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', false);
+          socket.emit('rbac-denied', {
+            action: 'main-out-update',
+            role: senderRole,
+            reason: 'main-out protected (MixerMONK only)',
+            mainOutUserId,
+          });
+          return;
+        }
+        const parsed = parseMainOutUpdate(data);
+        if (!parsed) {
+          socket.emit('main-out-update-rejected', { reason: 'invalid payload' });
+          return;
+        }
+        addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', true, parsed.param);
+        const payload = {
+          param: parsed.param,
+          value: parsed.value,
+          senderUserId,
+          senderRole,
+          ts: Date.now(),
+        };
+        socket.to(`session:${roomId}`).emit('main-out-update', payload);
+        socket.emit('main-out-update', payload);
+      });
+
       socket.on('leave-session', () => {
         refreshIdleTimer();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5/COLLAB-P0-001: Locks des Users beim Verlassen freigeben.
-        for (const pluginId of authoritativeSession.releaseUserLocks(userId)) {
+        const released = authoritativeSession.releaseUserLocks(userId);
+        for (const pluginId of released) {
           socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'left' });
         }
         persistSessionState();
+        if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
       });
@@ -3202,10 +3282,12 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (!roomId) return;
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
-        for (const pluginId of authoritativeSession.releaseUserLocks(userId)) {
+        const released = authoritativeSession.releaseUserLocks(userId);
+        for (const pluginId of released) {
           socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'disconnect' });
         }
         persistSessionState();
+        if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
       });
     });

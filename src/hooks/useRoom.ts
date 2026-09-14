@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { random } from '../utils/random';
-import { assertCan, roleForUser, Role, logAuditEvent } from '../utils/rbac';
 
 /**
  * Room-Hook – VENDOR-/CLOUD-FREI.
@@ -8,6 +7,11 @@ import { assertCan, roleForUser, Role, logAuditEvent } from '../utils/rbac';
  * Frueher wurden B2B-Raeume ueber Firestore (Collection `rooms`) verwaltet.
  * Jetzt arbeiten Raeume rein LOKAL im Browser (in-memory). Die Export-Oberflaeche
  * (`useRoom`, `RoomUser`) bleibt erhalten.
+ *
+ * ROLLENSYSTEM ENTFERNT (2026-09-14): Es gibt keine admin/producer/engineer/
+ * guest-Rollen mehr. Einzig der lokale Raum-Ersteller (hostId) darf einen
+ * anderen User entfernen – das ist Raumbesitz, kein Rollensystem. Nur
+ * mixerMONK (Lock-Owner) ist im Studio besonders.
  */
 
 export interface RoomUser {
@@ -31,14 +35,10 @@ export function useRoom(roomId: string | null, userId: string | null) {
     setRoom(roomId ? localRooms[roomId] ?? null : null);
   }
 
-  // RBAC-gestützter Kick: nur admin (Host) darf entfernen; Audit-Event.
+  // Kick: nur der lokale Raum-Ersteller (hostId) darf entfernen. Kein Rollensystem.
   const kickUser = async (targetUserId: string) => {
     if (!room || !roomId || !userId) return;
-    const allowed = await assertCan(userId, 'kick', room.hostId, {
-      reason: 'kickUser versucht, User zu entfernen',
-    });
-    if (!allowed) return;
-    await logAuditEvent(userId, 'ROOM_KICK', { target: targetUserId, room: roomId });
+    if (userId !== room.hostId) return;
     const next = {
       ...room,
       users: room.users.filter(u => u.uid !== targetUserId),
@@ -47,8 +47,8 @@ export function useRoom(roomId: string | null, userId: string | null) {
     setRoom(next);
   };
 
-  // Gibt die RBAC-Rolle des aktuellen Users zurück (Host -> admin).
-  const myRole: Role = roleForUser(userId ?? '', room?.hostId ?? null);
+  // Vereinfachte Sicht: host = Raum-Ersteller, sonst member.
+  const myRole = userId === room?.hostId ? 'host' : 'member';
 
   return { room, kickUser, myRole };
 }

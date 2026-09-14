@@ -11,9 +11,9 @@ import { defineConfig, devices } from '@playwright/test';
  *
  * Nutzung:
  *   npm run test:e2e:responsive
- *   BASE_URL=https://deine-domain.de npm run test:e2e:responsive
+ *   E2E_BASE_URL=https://deine-domain.de npm run test:e2e:responsive
  */
-const BASE_URL = process.env.BASE_URL?.replace(/\/$/, '');
+const E2E_BASE_URL = process.env.E2E_BASE_URL?.replace(/\/$/, '');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -23,7 +23,7 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: BASE_URL ?? 'http://localhost:8080',
+    baseURL: E2E_BASE_URL ?? 'http://localhost:8080',
     trace: 'retain-on-failure',
   },
   expect: {
@@ -35,7 +35,7 @@ export default defineConfig({
     // Safari/iOS-Abdeckung (WebKit ist lokal installiert; in CI via install-deps).
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
   ],
-  webServer: BASE_URL
+  webServer: E2E_BASE_URL
     ? undefined
     : {
         command: 'npm run dev',

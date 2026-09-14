@@ -55,7 +55,8 @@
     "fleet:stop:yes": "bash scripts/hetzner/lifecycle.sh stop --yes",
     "fleet:start": "bash scripts/hetzner/lifecycle.sh start",
     "test:audio-gate": "node scripts/audio-gate.cjs",
-    "perf:worklet": "node scripts/worklet-cpu-gate.cjs"
+    "perf:worklet": "node scripts/worklet-cpu-gate.cjs",
+    "mcp:smoke": "node scripts/mcp-smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

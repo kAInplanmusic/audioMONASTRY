@@ -76,6 +76,13 @@ export interface QuickAction {
 }
 
 export function useQuickActions(run: (cmd: string) => void | Promise<void>): QuickAction[] {
+  // P0-1 (revidiert): PLAY/STOP gibt es ausschließlich für den mixerMONK-Halter
+  // (DJ). Alle anderen Plugins/User haben KEINE Transport-Kontrolle.
+  if (!webRTCManager.isMainOutOwner) {
+    return [
+      { label: 'KI-PATTERN', icon: Wand2, run: () => { void run('Erzeuge ein Techno-Pattern für den Sequencer und wende es an'); } },
+    ];
+  }
   return [
     { label: '▶ PLAY', icon: Play, run: () => { void audioEngine.play(); } },
     { label: '⏹ STOP', icon: Square, run: () => { audioEngine.stop(); } },

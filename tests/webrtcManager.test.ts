@@ -59,9 +59,34 @@ describe('WebRTCManager (jsdom)', () => {
     expect(webRTCManager.getMainStream()).toBe(fakeStream);
   });
 
-  it('P4-2: isHost/role default guest, bis Server-Rolle eintrifft', () => {
-    expect(webRTCManager.isHost).toBe(false);
-    expect(webRTCManager.role).toBe('guest');
+  it('P0-1: ohne main-out-owner ist niemand Main-Out-Owner', () => {
+    expect(webRTCManager.isMainOutOwner).toBe(false);
+    expect(webRTCManager.mainOutOwnerId).toBe('');
+    expect(webRTCManager.hostId).toBe('');
+  });
+
+  it('COLLAB-P1-004: sendSessionNav emittiert session-nav mit pluginId', async () => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { emit: ReturnType<typeof vi.fn> } }).__testSocket;
+    sock!.emit.mockClear();
+    webRTCManager.sendSessionNav('mixer');
+    const calls = sock!.emit.mock.calls.filter((c) => c[0] === 'session-nav');
+    expect(calls.length).toBe(1);
+    expect(calls[0][1]).toEqual({ pluginId: 'mixer' });
+  });
+
+  it('COLLAB-P1-004: addSessionNavListener erhält session-nav-Events', async () => {
+    const mod = await import('socket.io-client');
+    const sock = (mod as unknown as { __testSocket?: { on: ReturnType<typeof vi.fn> } }).__testSocket;
+    // Handler registrieren und den zuletzt registrierten session-nav-Handler fangen.
+    const seen: any[] = [];
+    const off = webRTCManager.addSessionNavListener((m: any) => seen.push(m));
+    const onCalls = sock!.on.mock.calls.filter((c) => c[0] === 'session-nav');
+    expect(onCalls.length).toBeGreaterThan(0);
+    const handler = onCalls[onCalls.length - 1][1] as (d: any) => void;
+    handler({ pluginId: 'eq', senderUserId: 'user-x', ts: 123 });
+    expect(seen).toEqual([{ pluginId: 'eq', senderUserId: 'user-x', ts: 123 }]);
+    off();
   });
 
   it('addDataChannelListener unterstützt mehrere Listener (F2-Fix)', () => {

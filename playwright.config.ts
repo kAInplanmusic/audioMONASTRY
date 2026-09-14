@@ -7,10 +7,14 @@ import { defineConfig } from '@playwright/test';
  *   Startet den Dev-Server (Express + Vite) automatisch auf Port 8080.
  *
  * Gegen eine entfernte Instanz (z. B. Hetzner):
- *   BASE_URL=https://deine-domain.de npm run test:e2e
- *   Dann wird KEIN Dev-Server gestartet und gegen BASE_URL getestet.
+ *   E2E_BASE_URL=https://deine-domain.de npm run test:e2e
+ *   Dann wird KEIN Dev-Server gestartet und gegen E2E_BASE_URL getestet.
+ *
+ * Namensraum: bewusst E2E_BASE_URL statt BASE_URL – in Entwickler-Shells ist
+ * BASE_URL häufig von AI-Gateways belegt (z. B. CometAPI) und würde die
+ * E2E-Läufe still auf den falschen Host lenken.
  */
-const BASE_URL = process.env.BASE_URL?.replace(/\/$/, '');
+const E2E_BASE_URL = process.env.E2E_BASE_URL?.replace(/\/$/, '');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -19,14 +23,14 @@ export default defineConfig({
   workers: 1,
   reporter: [['list']],
   use: {
-    baseURL: BASE_URL ?? 'http://localhost:8080',
+    baseURL: E2E_BASE_URL ?? 'http://localhost:8080',
     trace: 'retain-on-failure',
   },
   expect: {
     // WebKit rendert beim Kaltstart langsamer (DCT-124 Browser-Matrix).
     timeout: 10_000,
   },
-  webServer: BASE_URL
+  webServer: E2E_BASE_URL
     ? undefined
     : {
         command: 'npm run dev',

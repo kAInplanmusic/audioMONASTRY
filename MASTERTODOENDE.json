@@ -68,7 +68,25 @@
       "area": "Collaboration",
       "source": "MASTER_TODO.md",
       "blockedReason": "Kein 4-Browser-/Live-Target in der Agent-Umgebung; der Betreiber faehrt die Flotte hoch und testet live.",
-      "note": "PARTIAL 2026-09-13 (lokaler 4-Client-Lauf, Playwright). Dabei zwei ECHTE P0-Bugs gefunden und gefixt: (1) main.tsx importiert VisualOutPage/MasterOutPage eager; beide setzten den Listener-Modus beim Modul-Import -> JEDER Client meldete sich als 'visual-out' (Ghostuser 6) an, zaehlte nicht als Session-User und der Zaehler blieb dauerhaft auf SESSION 1/4. Fix: sessionMode() leitet den Modus aus der Andock-URL ab (listenerModeForPath), die Modul-Seiteneffekte sind entfernt. (2) Der Server schickte 'session-members' nur an den Beitretenden; die anderen erfuhren Aenderungen nur ueber 'peer-joined'. Jetzt verteilt broadcastSessionMembers() die autoritative Liste an alle Sockets im Raum. Zusaetzlich: onSessionUpdate liefert beim Abo den letzten Stand nach (Modul-Init laeuft vor React-Mount) und die E2E-Kontexte setzen das studio-Cookie (fail-closed Auth) + Fake-Mikrofon. BELEGT: tests/e2e/collab.spec.ts 2/2 gruen - '2 Browser-Kontexte -> SESSION 2/4' bei BEIDEN Clients und '4 Browser-Kontexte -> voll und auf ALLEN vier Clients konsistent'. OFFEN (deshalb PARTIAL): Lock-Denial + RBAC im 4-User-Lauf protokollieren, Reconnect ohne Pumping, und die Ansichts-Spiegelung (neues Item COLLAB-P1-004)."
+      "note": "PARTIAL 2026-09-14 (lokaler 4-Client-Lauf, Playwright, weiter verdichtet). Stand 2026-09-13: zwei echte P0-Bugs gefixt (Ghostuser 5/6 durch listenerModeForPath; session-members wird an ALLE broadcastet). 2026-09-14 kamen die restlichen lokalen Nachweise dazu: (1) LOCK-DENIAL: A uebernimmt eqMONK per Rack-Menue (PRO+Lock), B sieht LOCKED · REMOTE, Bs Power-Versuch wird vom Server abgelehnt (rbac-denied locked-by-other), A bleibt PRO; (2) RESYNC/RECONNECT OHNE PUMPING: neuer Client-Snapshot-Bridge src/core/session/sessionStateBridge.ts konsumiert den session-state-Snapshot (Join/Resync) und stellt Modul-States + Locks wieder her - E2E Nachzuegler sieht eq AUTO_AI aus dem Snapshot und Resync stellt Server-Wahrheit wieder her gruen; (3) dabei gefundener WebRTC-Desync gefixt: ModuleStateContext filtert eingehende Peer-Updates jetzt auch gegen den Lock-Schatten (Nicht-Halter kann andere Clients nicht mehr per DataChannel umschalten). (4) Ansichts-Spiegelung: COLLAB-P1-004 DONE. OFFEN (deshalb PARTIAL): echte 4-User-Live-Instanz + Reconnect-Geraetewechsel gegen die hochgefahrene Flotte (Betreiber).",
+      "files": [
+        "tests/e2e/collab.spec.ts",
+        "src/core/session/sessionStateBridge.ts",
+        "src/context/ModuleStateContext.tsx",
+        "src/context/PluginManagerContext.tsx",
+        "server.ts",
+        "tests/sessionStateBridge.test.ts"
+      ],
+      "acceptance": [
+        "Lock-Denial im 2-User-Lauf (E2E: LOCKED · REMOTE + rbac-denied, A bleibt PRO)",
+        "Reconnect/Restore ohne Pumping (E2E: Nachzuegler + Resync aus session-state Snapshot)",
+        "kein WebRTC-Desync durch abgelehnte Nicht-Halter-Updates (Lock-Schatten-Filter)"
+      ],
+      "verification": [
+        "tests/e2e/collab.spec.ts (5/5 gruen)",
+        "tests/sessionStateBridge.test.ts (5/5)",
+        "tests/webrtcManager.test.ts"
+      ]
     },
     {
       "id": "COLLAB-P0-003",
@@ -609,7 +627,7 @@
       "id": "COLLAB-P1-004",
       "title": "Aktives Plugin/Nav wird nicht auf andere Session-User gespiegelt",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Collaboration",
       "source": "COLLAB-P0-002 Live-Lauf 2026-09-13",
       "subitems": [
@@ -617,7 +635,26 @@
         "Regel aus AGENTS.md 1.2 (identische State-Mirroring) fuer die Nav pruefen",
         "E2E-Assertion: User A oeffnet Plugin X -> User B sieht X aktiv"
       ],
-      "note": "Live gemessen 2026-09-13 (2 Kontexte, lokaler Server): nach Klick auf eqMONK hat Client A aria-current=\"page\", Client B bleibt null. Der Session-Zaehler selbst konvergiert jetzt auf allen Clients; die Ansichts-/Nav-Spiegelung fehlt. Bewusst als eigenes Item gefuehrt, nicht stillschweigend als erledigt verbucht."
+      "note": "DONE 2026-09-14: Server-Relay + Client-Anzeige gebaut und E2E-belegt. Server: neuer session-nav-Handler (senderUserId+senderRole+ts, nur an die ANDEREN Sockets im Raum). Client: WebRTCManager.sendSessionNav/addSessionNavListener (unit-getestet in tests/webrtcManager.test.ts); App.tsx meldet handleNavSelect und zeigt im Header einen fuchsia-Badge userId->pluginId (remoteNav, bis zu 3 User). BELEGT: tests/e2e/collab.spec.ts gruen - Client A klickt eqMONK, Client B sieht den Remote-Badge, Client A selbst bekommt KEINEN Remote-Badge. Zusaetzlich in diesem Zug behoben: Playwright-Configs + collab.spec lasen generisches BASE_URL aus der Umgebung, das hier auf einen AI-Gateway (CometAPI) zeigte -> alle E2E liefen still gegen den falschen Host. Jetzt namespaced E2E_BASE_URL (playwright.config.ts, playwright.responsive.config.ts, tests/e2e/visual.spec.ts, tests/e2e/collab.spec.ts).",
+      "files": [
+        "server.ts",
+        "src/utils/WebRTCManager.ts",
+        "src/App.tsx",
+        "playwright.config.ts",
+        "playwright.responsive.config.ts",
+        "tests/e2e/collab.spec.ts",
+        "tests/e2e/visual.spec.ts",
+        "tests/webrtcManager.test.ts"
+      ],
+      "acceptance": [
+        "Klick auf eqMONK bei A -> B zeigt Remote-Nav-Badge (E2E)",
+        "kein Selbst-Badge beim Sender",
+        "E2E-Base-URL namespaced (E2E_BASE_URL statt BASE_URL)"
+      ],
+      "verification": [
+        "tests/e2e/collab.spec.ts",
+        "tests/webrtcManager.test.ts"
+      ]
     }
   ],
   "visionSandbox": [

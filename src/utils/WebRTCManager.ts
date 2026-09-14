@@ -17,21 +17,17 @@ type SessionPeer = { socketId: string; userId: string };
 type SessionInfo = { members: SessionPeer[]; full: boolean; joined: boolean };
 // T-0009/AD-N3 (Tropfen 1): Socket.io-Session-Payloads typisiert (statt `any`).
 // Server-Quelle: server.ts join-session/peer-joined/peer-left/session-full-Handler.
-type SessionRole = 'admin' | 'producer' | 'engineer' | 'guest' | string;
 type SessionMembersPayload = {
   members?: Array<{ socketId: string; userId: string }>;
-  selfRole?: SessionRole;
-  hostUserId?: string;
+  mainOutUserId?: string;
   max?: number;
 };
 type PeerJoinedPayload = {
   socketId: string;
   userId: string;
-  role?: unknown;
 };
 type PeerLeftPayload = { socketId: string };
 type SessionFullPayload = { max?: number };
-type RoleChangedPayload = { userId: string; role?: unknown };
 type PluginStatePayload = { pluginId?: unknown; state?: unknown; senderId?: unknown; [key: string]: unknown };
 
 class WebRTCManager {
@@ -63,19 +59,19 @@ class WebRTCManager {
     return this.sessionUserId;
   }
 
-  /** P4-2: Ist dieser Client der Session-Host (Rolle admin)? */
-  public get isHost(): boolean {
-    return this.localRole === 'admin';
+  /** P0-1: Server-autoritativer Main-Out-Owner (mixerMONK-Lock-Owner = DJ). */
+  public get mainOutOwnerId(): string {
+    return this.mainOutUserId;
   }
 
-  /** P4-2: Aktuelle server-zugewiesene Rolle. */
-  public get role(): string {
-    return this.localRole;
+  /** P0-1: Darf dieser Client den Main-Sound-Out steuern? */
+  public get isMainOutOwner(): boolean {
+    return this.mainOutUserId.length > 0 && this.sessionUserId === this.mainOutUserId;
   }
 
-  /** P4-2: Host-User-ID (falls vom Server bekannt). */
+  /** Listener-Ziel: die User-ID, die den Main-Stream sendet (= Main-Out-Owner). */
   public get hostId(): string {
-    return this.hostUserId;
+    return this.mainOutUserId;
   }
 
   private sessionMembers: SessionPeer[] = [];
@@ -91,10 +87,11 @@ class WebRTCManager {
   private sfuMode = false;
   private sfu: MediasoupTransport | null = null;
   private sfuSubscribed = new Set<string>();
-  // P4-1/P4-2: Host-Main-Stream + server-seitige Rolle (Host = admin).
+  // P4-1/P4-2: Main-Stream (DJ sendet an Listener). Kein Rollensystem.
   private mainStream: MediaStream | null = null;
-  private localRole: string = 'guest';
-  private hostUserId: string = '';
+  private mainOutUserId: string = '';
+  private mainOutUpdateListeners = new Set<(msg: any) => void>();
+  private sessionNavListeners = new Set<(msg: any) => void>();
   public onMainStream: (stream: MediaStream, senderId: string) => void = () => {};
 
   /** Letzte gemessene One-Way-Netzlatenz (RTT/2) in ms – für Telemetrie. */
@@ -450,13 +447,13 @@ class WebRTCManager {
             .map((m) => ({ socketId: String(m?.socketId ?? ''), userId: String(m?.userId ?? '') }))
             .filter((m) => m.socketId.length > 0)
         : [];
-      // P4-2: Server-seitige Rolle + Host-ID übernehmen.
-      if (typeof data?.selfRole === 'string') this.localRole = data.selfRole;
-      if (typeof data?.hostUserId === 'string') this.hostUserId = data.hostUserId;
+      // ROLLENSYSTEM ENTFERNT: keine selfRole/hostUserId mehr – nur der
+      // Main-Out-Owner (mixerMONK-Lock-Owner) ist für Listener relevant.
+      if (typeof data?.mainOutUserId === 'string') this.mainOutUserId = data.mainOutUserId;
       this.emitSessionUpdate();
       if (isListenerMode(this.sessionMode())) {
-        // Listener (Ghostuser 5/6): nur mit dem Host verbinden (Main-/Visual-Signal).
-        const host = this.sessionMembers.find((m) => m.userId === this.hostUserId);
+        // Listener (Ghostuser 5/6): nur mit dem Main-Out-Owner (DJ) verbinden.
+        const host = this.sessionMembers.find((m) => m.userId === this.mainOutUserId);
         if (host) void this.connectToPeer(host.socketId);
         return;
       }
@@ -464,15 +461,6 @@ class WebRTCManager {
       this.sessionMembers.forEach((m) => {
         if (m.socketId !== this.socket?.id) this.connectToPeer(m.socketId);
       });
-    });
-
-    // P4-2: Rollenwechsel (vom Admin ausgelöst) lokal übernehmen.
-    this.socket.on('role-changed', (data: RoleChangedPayload) => {
-      if (!data || typeof data !== 'object') return;
-      if (String(data.userId ?? '') === this.sessionUserId && typeof data.role === 'string') {
-        this.localRole = data.role;
-      }
-      if (data.role === 'admin') this.hostUserId = String(data.userId ?? this.hostUserId);
     });
 
     // DCT-102: Socket.io-Relay-Fallback für Plugin-/AUTO_AI-State.
@@ -490,6 +478,18 @@ class WebRTCManager {
     // deterministische Ablehnung (Duplikat/verspätet/Lock) weiterreichen.
     this.socket.on('session-state', (data: any) => this.sessionStateListeners.forEach((l) => l(data)));
     this.socket.on('plugin-state-rejected', (data: any) => this.pluginStateRejectedListeners.forEach((l) => l(data)));
+    // P0-1: Server-validierte Main-Out-Parameter (nur MixerMONK darf senden;
+    // alle Clients empfangen den autoritativen Broadcast).
+    this.socket.on('main-out-update', (data: any) => this.mainOutUpdateListeners.forEach((l) => l(data)));
+    // COLLAB-P1-004: aktive Plugin-Navigation anderer Session-User anzeigen.
+    this.socket.on('session-nav', (data: any) => this.sessionNavListeners.forEach((l) => l(data)));
+    // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel vom Server
+    // übernehmen (mixer-Lock-Owner = DJ; kein Admin-Fallback).
+    this.socket.on('main-out-owner', (data: any) => {
+      if (data && typeof data === 'object' && typeof data.userId === 'string') {
+        this.mainOutUserId = data.userId;
+      }
+    });
 
     this.socket.on('peer-joined', (data: PeerJoinedPayload) => {
       const peer: SessionPeer = { socketId: String(data?.socketId ?? ''), userId: String(data?.userId ?? data?.socketId ?? '') };
@@ -498,10 +498,9 @@ class WebRTCManager {
         this.sessionMembers = [...this.sessionMembers, peer];
         this.emitSessionUpdate();
       }
-      if (data?.role === 'admin') this.hostUserId = String(data.userId ?? this.hostUserId);
       if (isListenerMode(this.sessionMode())) {
-        // Listener (Ghostuser 5/6): nur auf den Host reagieren.
-        if (data?.role === 'admin' || peer.userId === this.hostUserId) void this.connectToPeer(peer.socketId);
+        // Listener (Ghostuser 5/6): nur auf den Main-Out-Owner reagieren.
+        if (peer.userId === this.mainOutUserId) void this.connectToPeer(peer.socketId);
         return;
       }
       this.connectToPeer(peer.socketId);
@@ -761,6 +760,29 @@ class WebRTCManager {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     this.socket?.emit('offer', { target: targetId, offer });
+  }
+
+  /** P0-1: Main-Out-Parameter server-validiert senden (nur MixerMONK). */
+  public sendMainOutUpdate(param: string, value: number | string | boolean | null): void {
+    if (!this.isMainOutOwner) return;
+    this.socket?.emit('main-out-update', { param, value });
+  }
+
+  /** P0-1: Listener für serverseitige Main-Out-Broadcasts. */
+  public addMainOutUpdateListener(cb: (msg: any) => void): () => void {
+    this.mainOutUpdateListeners.add(cb);
+    return () => this.mainOutUpdateListeners.delete(cb);
+  }
+
+  /** COLLAB-P1-004: aktive Plugin-Navigation an die Session melden. */
+  public sendSessionNav(pluginId: string): void {
+    this.socket?.emit('session-nav', { pluginId });
+  }
+
+  /** COLLAB-P1-004: aktive Plugin-Navigation anderer User empfangen. */
+  public addSessionNavListener(cb: (msg: any) => void): () => void {
+    this.sessionNavListeners.add(cb);
+    return () => this.sessionNavListeners.delete(cb);
   }
 
   public sendToAllPeers(data: WebRTCMessage) {

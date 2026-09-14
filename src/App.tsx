@@ -19,7 +19,6 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
-import { ROLE_PRESETS, moduleStateForRole, StudioRole } from './config/rolePresets';
 import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles } from 'lucide-react';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
@@ -29,7 +28,6 @@ import { getPluginRoute } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
-const MasterPlayerTerminal = lazy(() => import('./components/MasterPlayerTerminal').then(m => ({ default: m.MasterPlayerTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
 import { storageGetJson } from './utils/storage';
 
@@ -79,7 +77,6 @@ function AppComponent() {
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [masteringOpen, setMasteringOpen] = useState(false);
-  const [masterPlayerOpen, setMasterPlayerOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [visualOpen, setVisualOpen] = useState(false);
   const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
@@ -89,6 +86,8 @@ function AppComponent() {
   const [sessionMembers, setSessionMembers] = useState(0);
   const [sessionFull, setSessionFull] = useState(false);
   const [activeNav, setActiveNav] = useState<string>('instru');
+  // COLLAB-P1-004: aktive Plugin-Navigation der anderen Session-User (userId → pluginId).
+  const [remoteNav, setRemoteNav] = useState<Record<string, { pluginId: string; ts: number }>>({});
   const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
   const [viewport, setViewport] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 0, h: typeof window !== 'undefined' ? window.innerHeight : 0 });
 
@@ -112,6 +111,8 @@ function AppComponent() {
   // Header-Auswahl: aktiviert das Modul (Touch/Click) und scrollt zum Rack.
   const handleNavSelect = useCallback((navId: string) => {
     setActiveNav(navId);
+    // COLLAB-P1-004: aktive Navigation an die Session melden (Server-Relay).
+    webRTCManager.sendSessionNav(navId);
     const current = moduleStates[navId] || 'OFF';
     if (current === 'OFF') {
       releaseLock(navId, webRTCManager.userId);
@@ -119,6 +120,16 @@ function AppComponent() {
     }
     document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [moduleStates, releaseLock, setModuleState]);
+
+  // COLLAB-P1-004: Navigation der anderen User empfangen und anzeigen.
+  useEffect(() => {
+    return webRTCManager.addSessionNavListener((msg: any) => {
+      const senderUserId = String(msg?.senderUserId ?? '');
+      const pluginId = String(msg?.pluginId ?? '');
+      if (!senderUserId || !pluginId) return;
+      setRemoteNav((prev) => ({ ...prev, [senderUserId]: { pluginId, ts: Number(msg?.ts) || Date.now() } }));
+    });
+  }, []);
 
   // Monitor-Ausgabe pro User: MAIN (nur Gesamtmix), MIX (MAIN + eigene
   // Plugins) oder NUR PLUGIN (Cue-Solo). Wirkt ausschließlich auf den
@@ -137,10 +148,12 @@ function AppComponent() {
     applyMonitorMix(user, mix);
   }, [applyMonitorMix]);
 
-  // MAIN-Berechtigung: NUR der mixerMONK-Halter (PRO + Lock) darf MAIN verändern
-  // (Play/Stop, Kanal-Load, Trigger). Die 6 Mixer-Kanäle sind der einzige MAIN-Weg.
+  // MAIN-Berechtigung (revidiert): NUR der Halter (Lock-Owner) des mixerMONK-
+  // Plugins ist der DJ und darf den Main-Sound steuern (Play/Stop/BPM/Fades).
+  // Kein Admin, kein Superuser, kein Fallback.
   const mainHolder = (moduleStates['mixer'] || 'OFF') === 'PRO'
-    && (!pluginLocks['mixer']?.active || pluginLocks['mixer']?.lockedBy === webRTCManager.userId);
+    && Boolean(pluginLocks['mixer']?.active)
+    && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
   useEffect(() => {
     audioEngine.setMainHolderActive(mainHolder);
   }, [mainHolder]);
@@ -161,20 +174,22 @@ function AppComponent() {
       } catch { /* kein Audio-Element verfügbar */ }
     };
     const startHostMain = () => {
-      if (!webRTCManager.isHost || mainDestRef.current) return;
+      // ROLLENSYSTEM ENTFERNT: Der mixerMONK-Halter (DJ) ist der Master-Stream-
+      // Sender für die /master-out-Listener. Kein Admin/Host-Fallback.
+      if (!webRTCManager.isMainOutOwner || mainDestRef.current) return;
       const dest = audioEngine.createMasterStreamDestination();
       if (dest) {
         mainDestRef.current = dest;
         webRTCManager.startMainStream(dest.stream);
       }
     };
-    if (webRTCManager.isHost) {
+    if (webRTCManager.isMainOutOwner) {
       startHostMain();
     }
     // Nachziehen: der Master-Stream entsteht erst, wenn die Engine wirklich
     // spielt (V2-Sink verbunden). Solange er fehlt, wird alle 2 s erneut
     // versucht (max. 5 min) – damit Ghostuser 5 (/master-out) und Ghostuser 6
-    // (/visual-out) den Main-Ton sicher bekommen, auch wenn der Host erst nach
+    // (/visual-out) den Main-Ton sicher bekommen, auch wenn der DJ erst nach
     // dem Session-Beitritt abspielt.
     let hostMainAttempts = 0;
     const hostMainRetry = window.setInterval(() => {
@@ -188,7 +203,7 @@ function AppComponent() {
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionFull(info.full);
-      if (webRTCManager.isHost) {
+      if (webRTCManager.isMainOutOwner) {
         startHostMain();
       }
     };
@@ -202,13 +217,6 @@ function AppComponent() {
       }
     };
   }, []);
-
-  // Task 22: Rollen-Start-Presets – wendet das Modul-Profil einer Rolle an.
-  const applyRole = (role: StudioRole) => {
-    const ids = getPluginRegistry().map(p => p.id);
-    const states = moduleStateForRole(role, ids);
-    Object.entries(states).forEach(([id, s]) => setModuleState(id, s));
-  };
 
   // Keyboard-Transport: Leertaste = Play/Stop. Bewusst NICHT in Eingabefeldern
   // (Input/Textarea/Select/ContentEditable), damit Tippen nicht unterbrochen wird.
@@ -233,6 +241,8 @@ function AppComponent() {
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName ?? '';
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      // P0-1 (revidiert): NUR der mixerMONK-Halter (DJ) darf Play/Stop.
+      if (!mainHolder) return;
       e.preventDefault();
       if (isPlaying) {
         audioEngine.stop();
@@ -244,7 +254,7 @@ function AppComponent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPlaying, moduleStates, releaseLock, setModuleState]);
+  }, [isPlaying, mainHolder, moduleStates, releaseLock, setModuleState]);
 
   // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
   useEffect(() => {
@@ -564,26 +574,26 @@ function AppComponent() {
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
               {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
             </div>
+            {Object.keys(remoteNav).length > 0 && (
+              <div
+                className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/5 text-fuchsia-300 text-[9px] font-mono tracking-widest"
+                title="Aktive Plugin-Navigation der Session-User"
+                role="status"
+                aria-live="polite"
+              >
+                {Object.entries(remoteNav).slice(0, 3).map(([userId, nav]) => (
+                  <span key={userId} className="whitespace-nowrap">
+                    {userId.replace(/^user-/, 'u')}→{nav.pluginId}
+                  </span>
+                ))}
+              </div>
+            )}
             <div
               className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/5 text-cyan-300 text-[9px] font-mono tracking-widest"
               title="Aktuelle Viewport-Auflösung"
               role="status"
             >
               {viewport.w}×{viewport.h}
-            </div>
-            <div className="relative hidden xl:block">
-              <select
-                defaultValue=""
-                onChange={e => e.target.value && applyRole(e.target.value as StudioRole)}
-                className="appearance-none pl-2.5 pr-6 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] hover:border-fuchsia-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 transition-colors cursor-pointer"
-                title="Rollen-Startprofil wählen"
-                aria-label="Rollen-Startprofil wählen"
-              >
-                <option value="" disabled>Rolle</option>
-                {ROLE_PRESETS.map(r => (
-                  <option key={r.role} value={r.role}>{r.role.replace('_', ' ')}</option>
-                ))}
-              </select>
             </div>
             <button type="button"
               onClick={() => setScratchOpen(v => !v)}
@@ -644,24 +654,8 @@ function AppComponent() {
         <div className="px-3 pb-3 border-t border-white/5">
           <BeatVisualizer isPlaying={isPlaying} />
         </div>
-        {/* ARCH-PLUGIN-004: masterplayerMONK = Playback-/WaveTable-/Info-Funktion.
-            Das MasterPlayerTerminal (Analyse/Mastering/Mix-Info) wird als
-            View-only-Sektion unter der Transport-Leiste eingeblendet. */}
-        <div className="px-3 pb-3 border-t border-white/5">
-          <button
-            type="button"
-            onClick={() => setMasterPlayerOpen(v => !v)}
-            aria-pressed={masterPlayerOpen}
-            className="w-full px-3 py-1.5 rounded-lg border border-cyan-400/30 bg-cyan-400/5 text-cyan-200 text-[9px] font-bold tracking-widest hover:bg-cyan-400/15 transition-all cursor-pointer"
-          >
-            {masterPlayerOpen ? '▾ MASTER PLAYER AUSBLENDEN' : '▸ MASTER PLAYER (WAVEFORM / INFO)'}
-          </button>
-          {masterPlayerOpen && (
-            <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Master-Player…</div>}>
-              <MasterPlayerTerminal />
-            </Suspense>
-          )}
-        </div>
+        {/* P0-1 (revidiert): masterplayerMONK ist REINE INFO/VISUALISIERUNG.
+            Keine Eingaben, keine Play/Stop-Buttons, kein Terminal. */}
       </section>
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}

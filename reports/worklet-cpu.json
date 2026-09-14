@@ -3,7 +3,7 @@
     "cpu-stats": 11,
     "step": 56
   },
-  "generatedAt": "2026-09-13T11:14:49.023Z",
+  "generatedAt": "2026-09-13T21:16:50.442Z",
   "browser": "151.0.7922.34",
   "budgets": {
     "warnLoadPct": 25,
@@ -17,10 +17,10 @@
   "cpu": {
     "type": "cpu-stats",
     "blocks": 2500,
-    "avgMs": 0.4052,
-    "maxMs": 10,
+    "avgMs": 0.4496,
+    "maxMs": 9,
     "budgetMs": 2.6667,
-    "loadPct": 15.2,
+    "loadPct": 16.86,
     "sampleRate": 48000,
     "timer": "date",
     "missedQuanta": 0,
@@ -29,8 +29,8 @@
     "quantumFrames": 128
   },
   "cpuReportCount": 11,
-  "maxLoadPctReported": 375,
-  "maxBlockMsReported": 10,
+  "maxLoadPctReported": 337.5,
+  "maxBlockMsReported": 9,
   "missedQuanta": 0,
   "maxGapQuanta": 1,
   "stallEvents": 0,
@@ -47,10 +47,10 @@
   },
   "outputTimestampAvailable": true,
   "outputTimestamp": {
-    "audioElapsedMs": 6007.36,
-    "wallElapsedMs": 6005.7,
-    "driftMs": -1.66,
-    "driftPct": -0.03
+    "audioElapsedMs": 5990.89,
+    "wallElapsedMs": 5988,
+    "driftMs": -2.89,
+    "driftPct": -0.05
   },
   "perfOpenPoints": [
     "AudioContext.renderCapacity fehlt in diesem Browser (keine Context-Last/Underrun-Messung)"

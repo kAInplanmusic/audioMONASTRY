@@ -11,9 +11,9 @@ import { STUDIO_NAV } from './helpers/studioNav';
  * Animationen werden für stabile Pixel-Vergleiche deaktiviert.
  *
  * Hinweis: Baselines gelten nur für den LOKALEN Dev-Server. Gegen entfernte
- * Instanzen (BASE_URL) wird der visuelle Vergleich übersprungen.
+ * Instanzen (E2E_BASE_URL) wird der visuelle Vergleich übersprungen.
  */
-test.skip(!!process.env.BASE_URL, 'Visuelle Baselines nur gegen den lokalen Dev-Server.');
+test.skip(!!process.env.E2E_BASE_URL, 'Visuelle Baselines nur gegen den lokalen Dev-Server.');
 test('Start-Screen Baseline', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
