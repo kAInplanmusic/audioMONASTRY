@@ -7,36 +7,40 @@ fest, damit die Extraktionsreihenfolge begründet ist und nicht geraten wird.
 **Reproduktion.**
 
 ```bash
-python3 scripts/route-dependency-graph.py
+python3 scripts/route-dependency-graph.py                  # Bericht (Markdown)
+python3 scripts/route-dependency-graph.py --json           # maschinenlesbar
+python3 scripts/route-dependency-graph.py --plan /api/ai   # Extraktionsplan
 ```
 
-Das Skript liest `server.ts`, ermittelt jede Top-Level-Route (`app.get|post|put|delete|patch|use`)
-per Klammerbilanz, schneidet String-/Kommentar-Literale weg und schneidet die darin
-verwendeten Bezeichner mit den Modul-Scope-Symbolen. Ausgegeben wird je Routen-Gruppe
-(erste drei Pfadsegmente), welche **server.ts-lokalen** Symbole eine Route anfasst –
-getrennt nach mutierbarem Zustand und Helfern/Konstanten. Importe werden nicht gelistet:
-ein extrahiertes Modul importiert sie selbst.
+Das Skript liest `server.ts`, ermittelt jedes Top-Level-Statement
+(`app.get|post|put|delete|patch|use` und Deklarationen) per Bilanz über `(){}[]`,
+schneidet String-/Template-/**Regex**-/Kommentar-Literale weg und verfolgt die darin
+verwendeten Bezeichner **transitiv** durch blockeigene Helfer. Ausgegeben wird je
+Routen-Gruppe (erste drei Pfadsegmente), welche **server.ts-lokalen** Symbole sie
+anfasst – getrennt nach mutierbarem Zustand und Helfern/Konstanten, plus die Importe
+und **alle** Zeilenbereiche der Gruppe. `--plan <prefix>` ist die Arbeitsanweisung für
+eine Extraktion: genau diese Bereiche verschieben, genau diese Dependencies übergeben.
 
-**Grenzen des Verfahrens (ehrlich).** Die Zuordnung ist textuell und hat drei
-bekannte Blindstellen, die bei der Umsetzung alle drei real zugeschlagen haben:
+Abgesichert durch `tests/routeDependencyGraph.test.ts` (6 Tests) mit Fixtures unter
+`tests/fixtures/routeDepGraph/` — je einer pro Blindstelle (siehe unten).
 
-1. **Nur Routen-Statements, nicht transitiv.** Nutzt eine Route einen blockeigenen
-   Helfer, der seinerseits ein Modul-Symbol anfasst, sieht der Graph das nicht. Im
-   AI-Block fehlte dadurch `fleetTargets` (gelesen in `ollamaGenerate`) — gefunden hat
-   es erst `tsc`, nicht das Werkzeug.
-2. **Regex-Literale kennt der Scanner nicht.** Ein `/['"]/` o. Ä. bringt den
-   String-Zustand durcheinander und lässt den Rest der Datei als „Literal" verschwinden.
-   Dadurch galten `aiOrchestrator`/`aiPersistence` fälschlich als „nur im Block genutzt",
-   und die Importe wären aus `server.ts` entfernt worden (tsc hat es verhindert).
-   Deshalb wird die „wird außerhalb noch gebraucht?"-Frage **ohne** Literal-Stripping
-   entschieden — konservativ, im Zweifel bleibt ein Import stehen.
-3. **Ein Block ist keine Gruppe.** Die erste Blockgrenze war zu eng: der token-freie
-   `GET /api/ai/vision/artifact/:name` steht *vor* dem Hauptblock. Gefunden hat das die
-   Vollständigkeitsprüfung (Pfadmengen-Vergleich alt/neu), nicht das Werkzeug.
+**Die drei Blindstellen sind gefixt (2026-09-14).** Jede hatte beim ersten Umsetzen
+real zugeschlagen; jede hat jetzt Fixture + Test, damit sie nicht zurückkommt:
 
-Für die hier gezogenen Schlüsse ist die `/api/ai`-Gruppe zusätzlich **von Hand** geprüft;
-jede Extraktion wird per Assertion (Parität, Pfadmengen, Template-Zeilen) und über
-`tsc`/`eslint`/`vitest` abgesichert, nicht per Augenschein.
+| Blindstelle | Vorher | Jetzt |
+|---|---|---|
+| 1. **nicht transitiv** | Nur direkte Referenzen: `fleetTargets` (gelesen in `ollamaGenerate`) fehlte — gefunden hat es erst `tsc`. | Closure über die Referenzen der Top-Level-Deklarationen. `--plan /api/ai` listet `fleetTargets` (im Vorher-Stand geprüft). |
+| 2. **Regex-Literale** | Ein `/['"]/` desynchronisierte den String-Zustand und ließ den Rest der Datei als „Literal“ verschwinden; dadurch galten `aiOrchestrator`/`aiPersistence` fälschlich als blocklokal, die Importe wären aus `server.ts` entfernt worden (tsc verhinderte es). | Eigene Regex-Erkennung (Vorgängerzeichen/-Schlüsselwort, Zeichenklassen, Escapes, Flags). Die „wird außerhalb noch gebraucht?“-Frage bleibt zusätzlich konservativ (ohne Literal-Stripping). |
+| 3. **ein Block ≠ eine Gruppe** | Die Blockgrenze war zu eng: der token-freie `GET /api/ai/vision/artifact/:name` steht *vor* dem Hauptblock; gefunden hat das die Vollständigkeitsprüfung. | Eine Gruppe ist die Menge **aller** Statements ihres Präfix. `--plan` gibt die vollständige Bereichsliste aus (Vorher-Stand: 29 Bereiche statt 1 Block). |
+
+**Verbleibende Grenzen (ehrlich).** Die Regex-Erkennung ist eine Heuristik: nach `)`,
+`]` und `}` wird bewusst Division angenommen, weil Block vs. Objektliteral ohne Parser
+nicht entscheidbar ist — ein verpasstes Regex ist der harmlose Fall (es wird dann nur
+etwas zu viel maskiert). Die Zuordnung bleibt textuell, kein Parser: gleichnamige
+lokale Variablen können eine Über-Approximation erzeugen. Für die gezogenen Schlüsse
+ist die `/api/ai`-Gruppe zusätzlich **von Hand** geprüft; jede Extraktion wird per
+Assertion (Parität, Pfadmengen, Template-Zeilen) und über `tsc`/`eslint`/`vitest`
+abgesichert, nicht per Augenschein.
 
 ## Ergebnis
 
