@@ -1,6 +1,5 @@
 import express from 'express';
 import * as BusboyModule from 'busboy';
-import { random } from './src/utils/random';
 import http from 'http';
 import path from 'path';
 import {
@@ -9,7 +8,9 @@ import {
 import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { pushSampleToCloud, uploadSampleToR2 } from './server/cloud.ts';
+import {
+  uploadSampleToR2,
+} from './server/cloud.ts';
 import { llmRouter } from './src/core/ai/LlmRouter';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { isListenerMode, normalizeSessionMode } from './src/core/session/listenerMode';
@@ -21,6 +22,7 @@ import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
 import { registerAiRoutes } from './server/routes/aiRoutes.ts';
 import { registerMasterRoutes } from './server/routes/masterRoutes.ts';
 import { registerVoiceRoutes } from './server/routes/voiceRoutes.ts';
+import { registerUploadRoutes } from './server/routes/uploadRoutes.ts';
 import { registerOpsRoutes } from './server/routes/opsRoutes.ts';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { buildPluginStateRelayPayload } from './src/core/session/pluginStateRelay';
@@ -38,7 +40,6 @@ import {
   resolveMainOutUserId,
 } from './src/core/session/mainOutGuard';
 import { SnapshotStore, createMemoryKeyValueStore } from './src/core/persistence/snapshotStore';
-import type { AudioSample } from './src/data/samples';
 import {
   PluginLockSocketSchema,
   PluginStateSocketSchema,
@@ -717,18 +718,7 @@ registerSessionRoutes(app, {
 // zu den Middleware-Ketten unveraendert bleibt.
 registerMasterRoutes(app, { getMasterPlayerUrl });
 
-// ===========================================================================
-// Sample-Upload mit Scan + korrekter Ablage (R2 + Supabase)
-//   POST /api/upload/sample  (multipart/form-data)
-//   Felder: file (audio/*), kind (sample|recording|stem|sound|voice),
-//           name, artist, style, key, bpm, tags (kommagetrennt), type
-//   Ablauf: validieren -> scannen (master-player /analyze) ->
-//           Audio in Cloudflare R2 -> Metadaten in Supabase.
-// ===========================================================================
-const UPLOAD_MAX_MB = Number(process.env.UPLOAD_MAX_MB || 100);
 const STEM_MAX_UPLOAD_MB = Number(process.env.STEM_MAX_UPLOAD_MB || 100);
-const UPLOAD_KINDS = new Set(['sample', 'recording', 'stem', 'sound', 'voice']);
-const AUDIO_EXT_RE = /\.(wav|mp3|flac|ogg|m4a|aac|aiff|aif)$/i;
 
 // P-8: Bewährter Streaming-Multipart-Parser (busboy). Prüft die Dateigröße
 // WÄHREND des Streamens (kein unbegrenztes RAM-Puffern, P-2-Fix) und kommt
@@ -821,96 +811,12 @@ function parseMultipartStream(
   });
 }
 
-app.post('/api/upload/sample', async (req, res) => {
-  if (!req.is('multipart/form-data')) {
-    return res.status(415).json({ status: 'error', message: 'Erwartet multipart/form-data mit Feld "file".' });
-  }
-  try {
-    // P-2/P-8: Streaming-Parser mit Limit – bricht zu große Uploads WÄHREND
-    // des Lesens ab, statt erst nach Buffer.concat zu prüfen.
-    const { fields, files } = await parseMultipartStream(req, UPLOAD_MAX_MB * 1024 * 1024);
-    const file = files[0];
-    if (!file) return res.status(400).json({ status: 'error', message: 'Kein Datei-Feld "file" gefunden.' });
-
-    // --- Validierung ---
-    const ext = (file.filename.match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? '').toLowerCase();
-    if (!AUDIO_EXT_RE.test(file.filename) && !(file.contentType || '').startsWith('audio/')) {
-      return res.status(415).json({ status: 'error', message: `Nicht unterstütztes Audio-Format (.${ext || '?'}). Erlaubt: wav/mp3/flac/ogg/m4a/aac/aiff.` });
-    }
-    if (file.data.length > UPLOAD_MAX_MB * 1024 * 1024) {
-      return res.status(413).json({ status: 'error', message: `Upload zu groß (max. ${UPLOAD_MAX_MB} MB).` });
-    }
-
-    const kind = UPLOAD_KINDS.has(fields.kind) ? fields.kind : 'sample';
-    const name = (fields.name || file.filename.replace(/\.[^.]+$/, '')).trim() || 'Upload';
-    const tags = (fields.tags || '').split(',').map((t) => t.trim()).filter(Boolean);
-    const bpm = Number(fields.bpm);
-    const style = (fields.style || '').trim();
-    const artist = (fields.artist || '').trim();
-    const key = (fields.key || '').trim();
-    const type = (fields.type || kind).trim();
-
-    // --- Scan (best effort über master-player, fällt bei Ausfall weich aus) ---
-    let scan: any = null;
-    try {
-      const scanResp = await fetch(getMasterPlayerUrl() + '/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: file.data.toString('base64') }),
-      });
-      if (scanResp.ok) scan = await scanResp.json();
-    } catch { /* master-player optional */ }
-
-    // --- Ablage: Audio nach R2, Metadaten nach Supabase ---
-    const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'audio';
-    const objectKey = `uploads/${kind}s/${Date.now()}-${safeName}.${ext || 'wav'}`;
-    const uploaded = await uploadSampleToR2(objectKey, file.data, file.contentType || 'audio/wav');
-
-    const sampleId = `${kind}-${Date.now().toString(36)}-${random().toString(36).slice(2, 7)}`;
-    const category: AudioSample['category'] = kind === 'voice' || kind === 'recording' ? 'highs' : 'mids';
-    const sample: AudioSample = {
-      id: sampleId,
-      name,
-      category,
-      type,
-      url: uploaded.url,
-      description: `Upload (${kind}) – gescannt am ${new Date().toISOString()}`,
-      tags: [...tags, kind],
-      parameters: {},
-    };
-    const db = await pushSampleToCloud(sample, {
-      kind,
-      artist: artist || null,
-      style: style || null,
-      key: key || null,
-      bpm: Number.isFinite(bpm) ? bpm : null,
-      duration_seconds: scan?.duration ?? null,
-      sample_rate: scan?.sampleRate ?? null,
-      lufs: scan?.lufs ?? null,
-      file_size: file.data.length,
-    });
-
-    if (!db.ok) {
-      return res.status(502).json({ status: 'error', message: 'Supabase-Ablage fehlgeschlagen: ' + (db.error ?? 'unbekannt'), sample, scan, storage: uploaded });
-    }
-
-    return res.json({
-      status: 'ok',
-      sample,
-      meta: {
-        kind,
-        artist: artist || null,
-        style: style || null,
-        key: key || null,
-        bpm: Number.isFinite(bpm) ? bpm : null,
-      },
-      scan,
-      storage: uploaded,
-      db,
-    });
-  } catch (e) {
-    return res.status(500).json({ status: 'error', message: 'Upload fehlgeschlagen: ' + ((e as Error).message ?? '') });
-  }
+// ARCH-P2-002: Die Upload-Route liegen in server/routes/uploadRoutes.ts (Factory). Registrierung an der
+// Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten
+// unveraendert bleibt.
+registerUploadRoutes(app, {
+  getMasterPlayerUrl,
+  parseMultipartStream,
 });
 
 // ARCH-P2-002: Die Voice-Familie (/api/voice, /api/sound, /api/song) liegt in
