@@ -385,4 +385,46 @@ describe('Server API', () => {
     expect(JSON.parse(String(init.body)).content).toContain('CPU hoch');
     delete process.env.DISCORD_WEBHOOK;
   });
+
+  it('POST /api/session/autosave ohne R2-Konfiguration → 503 not-configured', async () => {
+    delete process.env.CFS3_ENDPOINT;
+    delete process.env.CFS3_ACCESS_KEY;
+    delete process.env.CFS3_SECRET_KEY;
+    delete process.env.CFS3_BUCKET;
+    delete process.env.CFR2_ACCOUNT_ID;
+    delete process.env.CFR2_ACCESS_KEY_ID;
+    delete process.env.CFR2_SECRET_ACCESS_KEY;
+    delete process.env.CFR2_BUCKET;
+
+    const res = await fetch(`${baseUrl}/api/session/autosave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        schemaVersion: 2,
+        revision: 1,
+        idempotencyKey: 'rev-1-12345678',
+        savedAt: 1_000,
+        payload: { moduleStates: { eq: 'AUTO_AI' }, bpm: 128 },
+      }),
+    });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe('r2-not-configured');
+  });
+
+  it('POST /api/session/autosave mit ungültigem Umschlag → 400', async () => {
+    const res = await fetch(`${baseUrl}/api/session/autosave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schemaVersion: 99, revision: 1, idempotencyKey: 'rev-1', savedAt: 0 }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('invalid autosave payload');
+  });
+
+  it('POST /api/session/reset verlangt den Studio-Token (401)', async () => {
+    const res = await fetch(`${baseUrl}/api/session/reset`, { method: 'POST' });
+    expect(res.status).toBe(401);
+  });
 });

@@ -88,6 +88,15 @@ export const CloudUploadJsonSchema = z.object({
   contentType: z.string().trim().max(100).optional(),
 });
 
+/** PERSIST-P1-002: Session-Autosave-Umschlag (Remote-Sink, idempotent). */
+export const SessionAutosaveEnvelopeSchema = z.object({
+  schemaVersion: z.number().int().min(2).max(2),
+  revision: z.number().int().min(1).max(10_000_000),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9._-]{8,120}$/, 'invalid idempotencyKey'),
+  savedAt: z.number().finite().nonnegative(),
+  payload: z.unknown(),
+});
+
 export const AiPromptSchema = z.object({
   prompt: z.string().trim().max(4000).optional(),
 });

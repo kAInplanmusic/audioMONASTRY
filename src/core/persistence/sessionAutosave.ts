@@ -206,6 +206,11 @@ export class SessionAutosave {
     this.debounced.schedule(payload);
   }
 
+  /** Letzter erfolgreich geschriebener Umschlag (für Remote-Sync). */
+  getLastEnvelope(): SnapshotEnvelope | null {
+    return this.lastEnvelope;
+  }
+
   /** Sofort speichern (z. B. vor dem Schließen der Seite). */
   flush(): Promise<void> {
     return this.debounced.flush();

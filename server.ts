@@ -76,6 +76,7 @@ import {
   CloudMusicSchema,
   CloudSampleSchema,
   CloudUploadJsonSchema,
+  SessionAutosaveEnvelopeSchema,
   PluginLockSocketSchema,
   PluginStateSocketSchema,
   TelemetryPayloadSchema,
@@ -1899,6 +1900,34 @@ app.post('/api/session/reset', (req, res) => {
   }
   serverIo?.to('session:studio-session').emit('session-reset', { ts: Date.now() });
   res.json({ status: 'reset' });
+});
+
+// PERSIST-P1-002: Remote-Sink für den Session-Autosave. Der Umschlag trägt
+// einen stabilen idempotencyKey → wiederholtes Senden schreibt DASSELBE
+// R2-Objekt (PutObject ist idempotent je Key), nie eine neue Revision.
+app.post('/api/session/autosave', async (req, res) => {
+  try {
+    const parsed = SessionAutosaveEnvelopeSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        ok: false,
+        error: 'invalid autosave payload',
+        details: parsed.error.issues.slice(0, 5),
+      });
+    }
+    const envelope = parsed.data;
+    const objectKey = `autosaves/${envelope.idempotencyKey}.json`;
+    const body = Buffer.from(JSON.stringify(envelope), 'utf8');
+    const result = await uploadSampleToR2(objectKey, body, 'application/json');
+    res.json({ ok: true, idempotent: true, key: objectKey, url: result.url });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'unknown';
+    if (message.includes('R2 not configured') || message.includes('CFS3_BUCKET missing')) {
+      return res.status(503).json({ ok: false, error: 'r2-not-configured' });
+    }
+    console.error('[session] /api/session/autosave fehlgeschlagen:', e);
+    res.status(502).json({ ok: false, error: 'session-autosave-failed' });
+  }
 });
 
 app.get('/api/master/health', async (req, res) => proxyMasterPlayer('/health', req, res));

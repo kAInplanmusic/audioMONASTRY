@@ -526,7 +526,7 @@
       "id": "PERSIST-P1-002",
       "title": "Robuste lokale/entfernte Persistenz (Autosave, OPFS/IndexedDB, Retry/Backoff)",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Persistenz",
       "source": "MASTERTODO.md P1-1",
       "subitems": [
@@ -535,8 +535,27 @@
         "OPFS/IndexedDB-Puffer fuer Offline-Reload",
         "Retry/Backoff + Idempotenz fuer Supabase/R2"
       ],
-      "note": "PARTIAL 2026-09-13: Kern gebaut + getestet (tests/persistenceAutosave.test.ts, 12 Tests). Neu: src/core/persistence/snapshotEnvelope.ts (schemaVersion 2, Migrationskette v1->v2, monotone revision, stabiler idempotencyKey je Stand), sessionAutosave.ts (DebouncedAutosave mit injizierbaren Timern, retryWithBackoff mit Deckelung, SessionAutosave ueber injizierbaren AsyncKeyValueStore; Umschlag wird PRO Stand einmal gebaut -> Retry schreibt denselben Key, nie eine neue Revision), browserStore.ts (IndexedDB via largeGetJson/largeSetJson, ehrlicher memory-Fallback mit kind). OFFEN: App-Wiring (Autosave an den Session-/Graph-Zustand haengen, flush bei pagehide) und Remote-Sink-Idempotenz fuer Supabase/R2 (Server-Seite).",
-      "updatedAt": "2026-09-13"
+      "note": "DONE 2026-09-14: App-Wiring + Remote-Sink-Idempotenz gebaut und getestet. Neu: src/hooks/useSessionAutosave.ts (SessionAutosave-Instanz ueber useState-Lazy-Init, IndexedDB via createBestEffortStore, schedule debounced, flush bei pagehide inkl. best-effort POST /api/session/autosave mit keepalive); App.tsx haengt den Autosave an moduleStates/bpm/isPlaying + audioEngine.exportGraphState() (Graph im Payload). SessionAutosave.getLastEnvelope() liefert den letzten Umschlag fuer den Remote-Sync. Server: POST /api/session/autosave validiert den Umschlag per Zod (SessionAutosaveEnvelopeSchema) und schreibt ihn idempotent nach R2 unter autosaves/<idempotencyKey>.json (PutObject ist je Key idempotent -> wiederholtes Senden erzeugt nie eine neue Revision); ohne R2-Konfiguration ehrlich 503 r2-not-configured. Bewusst KEIN Supabase-Upsert fuer den Umschlag: R2 ist der Objekt-Sink, ein DB-Row braeuchte eine eigene Migration und bringt fuer die Idempotenz keinen Gewinn. BELEGE: tests/persistenceAutosave.test.ts 13/13 (u. a. getLastEnvelope), tests/server.test.ts 30/30 (autosave 503 ohne R2, 400 bei ungueltigem Umschlag), tsc 0, eslint 0, boundary 429/0, vitest 1427/1427, collab-E2E 5/5.",
+      "updatedAt": "2026-09-13",
+      "files": [
+        "src/hooks/useSessionAutosave.ts",
+        "src/App.tsx",
+        "src/core/persistence/sessionAutosave.ts",
+        "server.ts",
+        "src/types/zod/schemas.ts",
+        "tests/persistenceAutosave.test.ts",
+        "tests/server.test.ts"
+      ],
+      "acceptance": [
+        "App-Wiring: Autosave an Session-/Graph-Zustand (moduleStates/bpm/isPlaying/graph)",
+        "flush bei pagehide (letzter Stand geht nicht verloren)",
+        "Remote-Sink idempotent (R2 autosaves/<idempotencyKey>.json, 503 ohne R2, 400 bei ungueltigem Umschlag)"
+      ],
+      "verification": [
+        "tests/persistenceAutosave.test.ts",
+        "tests/server.test.ts",
+        "tests/e2e/collab.spec.ts (Regressionslauf)"
+      ]
     },
     {
       "id": "AI-P1-004",

@@ -3,6 +3,7 @@ import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
+import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
 import { BeatVisualizer } from './components/BeatVisualizer';
 import { TECHNO_PRESETS } from './presets';
@@ -107,6 +108,24 @@ function AppComponent() {
     () => getPluginRegistry().filter(p => !NAV_EXCLUDED.has(p.id)),
     [],
   );
+
+  // PERSIST-P1-002: lokaler Autosave (IndexedDB-Fallback) + flush bei pagehide
+  // + best-effort Remote-Sync. Der Payload wird bei jeder relevanten
+  // Zustandsänderung debounced gespeichert.
+  const sessionAutosave = useSessionAutosave();
+  useEffect(() => {
+    try {
+      sessionAutosave.schedule({
+        moduleStates,
+        bpm,
+        isPlaying,
+        graph: audioEngine.exportGraphState(),
+      });
+    } catch {
+      // Audio-Graph noch nicht initialisiert – dann nur die UI-Wahrheit sichern.
+      sessionAutosave.schedule({ moduleStates, bpm, isPlaying });
+    }
+  }, [moduleStates, bpm, isPlaying, sessionAutosave]);
 
   // Header-Auswahl: aktiviert das Modul (Touch/Click) und scrollt zum Rack.
   const handleNavSelect = useCallback((navId: string) => {

@@ -156,6 +156,20 @@ describe('Persistenz – SessionAutosave (Idempotenz + Revision)', () => {
     expect(loaded?.revision).toBe(1);
   });
 
+  it('getLastEnvelope() liefert den zuletzt geschriebenen Umschlag für den Remote-Sync', async () => {
+    const store = createMemoryStore();
+    const autosave = new SessionAutosave(store, { now: () => 9_000, delayMs: 0 });
+    expect(autosave.getLastEnvelope()).toBeNull();
+
+    autosave.schedule({ bpm: 128 });
+    await autosave.flush();
+    const envelope = autosave.getLastEnvelope();
+    expect(envelope).not.toBeNull();
+    expect(envelope?.revision).toBe(1);
+    expect(envelope?.idempotencyKey).toBe('rev-1-9000');
+    expect(envelope?.payload).toEqual({ bpm: 128 });
+  });
+
   it('createBestEffortStore liefert ohne IndexedDB ehrlich einen Memory-Store', () => {
     const original = (globalThis as { indexedDB?: unknown }).indexedDB;
     try {
