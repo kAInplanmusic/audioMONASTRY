@@ -114,16 +114,71 @@ def mask_literals(text):
             i = j
             continue
         if ch == '`':
+            # Template-Literal: Text maskieren, aber ${ ... } ist CODE und bleibt
+            # erhalten. Sonst uebersieht der Graph Bezeichner, die nur in einer
+            # Interpolation vorkommen (real passiert: randomBytes in /api/library).
+            out.append(' ')
             j = i + 1
             while j < n:
-                if text[j] == '\\':
+                c = text[j]
+                if c == '\\':
+                    out.append('  ')
                     j += 2
                     continue
-                if text[j] == '`':
+                if c == '`':
+                    out.append(' ')
                     j += 1
                     break
+                if c == '$' and j + 1 < n and text[j + 1] == '{':
+                    k, depth = j + 2, 1
+                    while k < n and depth:
+                        cc = text[k]
+                        if cc == '\\':
+                            k += 2
+                            continue
+                        if cc == '{':
+                            depth += 1
+                        elif cc == '}':
+                            depth -= 1
+                            if depth == 0:
+                                # close zeigt auf die schliessende Klammer selbst;
+                                # sie darf NICHT in den inneren Code geraten, sonst
+                                # entsteht eine Klammer-Unwucht und Spans brechen ab.
+                                close = k
+                                break
+                        elif cc == '`':
+                            kk = k + 1
+                            while kk < n:
+                                if text[kk] == '\\':
+                                    kk += 2
+                                    continue
+                                if text[kk] == '`':
+                                    kk += 1
+                                    break
+                                kk += 1
+                            k = kk
+                            continue
+                        elif cc in '\'"':
+                            quote, kk = cc, k + 1
+                            while kk < n:
+                                if text[kk] == '\\':
+                                    kk += 2
+                                    continue
+                                if text[kk] == quote:
+                                    kk += 1
+                                    break
+                                kk += 1
+                            k = kk
+                            continue
+                        k += 1
+                    out.append('${')
+                    out.append(mask_literals(text[j + 2:close]))
+                    out.append('}')
+                    j = close + 1
+                    continue
+                out.append(c if c == '\n' else ' ')
                 j += 1
-            out.append(blank(text[i:j]))
+            i = j
             i = j
             continue
         if ch == '/' and regex_starts_here(text, i):

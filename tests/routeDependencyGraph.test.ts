@@ -122,6 +122,14 @@ describe('route-dependency-graph (ARCH-P2-002)', () => {
     expect(g.shared.imports).toEqual([]);
   });
 
+  it('behandelt ${...} im Template-Literal als Code', () => {
+    // `join` kommt nur in einer Interpolation vor. Wird der ganze Template-Text
+    // maskiert, fehlt der Import im extrahierten Modul (real passiert: randomBytes).
+    const g = groupOf(graph(fixture('regexLiteral.ts')), '/api/demo');
+    expect(g.imported).toContain('join');
+    expect(g.movable.imports).toContain('join');
+  });
+
   it('rechnet mehrere Präfixe als EINE Gruppe (Familie mit geteilten Helfern)', () => {
     const out = execFileSync(
       'python3',
