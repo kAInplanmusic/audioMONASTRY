@@ -172,13 +172,29 @@ test('COLLAB-P0-002: Lock-Denial + Resync stellt Server-Wahrheit wieder her', as
     await pageA.getByLabel('eqMONK Menü').click();
     await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();
 
-    // B sieht den Fremd-Lock an der eq-Zeile.
+    // B sieht den Fremd-Lock an der eq-Zeile ...
     await expect(pageB.locator('#rack-eq').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+
+    // ... und muss As PRO-Stand übernommen haben, BEVOR der Power-Klick kommt.
+    // "LOCKED · REMOTE" beweist nur den Lock: Bs eigener Modul-State ist davon
+    // unabhängig und startet bei OFF. Klickt der Test zu früh, schaltet Power
+    // nicht PRO->OFF, sondern OFF->AUTO_AI - ein sichtbares "OFF" gibt es danach
+    // nie mehr, nur noch den versteckten <option>-Eintrag. Genau das war die
+    // Flakiness (2 von 4 Läufen rot, identisch auch auf dem Baseline-Commit).
+    await expect(pageB.locator('#rack-eq').getByText('PRO').first()).toBeVisible({ timeout: 15_000 });
 
     // B versucht, eq per Power zu schalten. Der Server lehnt ab (Lock bei A);
     // Bs lokaler Zustand ist danach optimistisch OFF.
     await pageB.getByLabel('eqMONK Power').click();
-    await expect(pageB.locator('#rack-eq').getByText('OFF').first()).toBeVisible();
+    // Und hier NICHT einfach getByText('OFF').first() nehmen: das Terminal-
+    // <select> der Zeile enthält zusätzlich <option value="OFF">OFF</option>,
+    // und die Option steht in der DOM-Reihenfolge vor dem Status-Span - .first()
+    // landet dort und toBeVisible() kann nie grün werden (Playwright-Log:
+    // "18 × resolved to <option value=OFF>, received hidden"). filter({ visible:
+    // true }) meint den Status-Span, den der Nutzer sieht.
+    await expect(
+      pageB.locator('#rack-eq').getByText('OFF').filter({ visible: true }).first(),
+    ).toBeVisible();
 
     // A behält den Lock und den PRO-Zustand (Server-Wahrheit unverändert).
     await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();

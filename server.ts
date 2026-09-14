@@ -40,6 +40,7 @@ import { buildWebRtcConfigResponse } from './server/webrtcConfig.ts';
 // registriert (Reihenfolge = Middleware-Reihenfolge, siehe app.use oben).
 import { registerCloudRoutes } from './server/routes/cloudRoutes.ts';
 import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
+import { buildPluginStateRelayPayload } from './src/core/session/pluginStateRelay';
 import {
   AuthoritativeSession,
   MemorySessionPersistence,
@@ -3096,7 +3097,21 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         persistSessionState();
         addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, pluginId);
         // Session-Identität + Revision/Event-ID: Empfänger können ordnen/deduplizieren.
-        const payload = { ...parsed.data, senderUserId, senderRole, revision: applied.revision, eventId };
+        // COLLAB-P0-002: Payload über den getesteten Vertrags-Builder bauen. Der
+        // frühere Spread `{ ...parsed.data }` enthielt KEIN type, senderId und
+        // timestamp (Zod strippt unbekannte Keys) - die Clients haben das Relay
+        // deshalb in dispatchDataMessage verworfen, und die State-Spiegelung hing
+        // allein an offenen DataChannels.
+        const payload = buildPluginStateRelayPayload({
+          pluginId,
+          state,
+          senderUserId,
+          senderRole,
+          revision: applied.revision,
+          eventId,
+          sequence: parsed.data.sequence,
+          timestamp: parsed.data.timestamp,
+        });
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
       });

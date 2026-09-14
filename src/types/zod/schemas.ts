@@ -332,6 +332,12 @@ export const PluginStateSocketSchema = z.object({
   // COLLAB-P0-001: Client-Event-ID + monotone Sequenz je Sender für Dedupe/Ordnung.
   eventId: z.string().trim().min(1).max(128).optional(),
   sequence: z.number().int().nonnegative().optional(),
+  // COLLAB-P0-002: Der Zeitstempel des Senders MUSS erhalten bleiben, sonst
+  // ordnet der Socket-Relay-Pfad anders als der DataChannel-Pfad. Achtung:
+  // `type` und `senderId` stehen hier bewusst NICHT - Zod strippt unbekannte
+  // Keys, und der Server setzt beide beim Relay selbst (type + autoritative
+  // senderId aus der Session), damit sie nicht spoofbar sind.
+  timestamp: z.number().nonnegative().optional(),
 });
 
 // ============================================================================
