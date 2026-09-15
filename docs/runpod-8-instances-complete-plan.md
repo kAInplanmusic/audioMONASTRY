@@ -33,23 +33,32 @@ NICHT unser `{task, model, input}`-Protokoll. Der Orchestrator bindet sie deshal
 MCP-Werkzeuge an; die Uebersetzung leistet jetzt `comfyui_adapter.py`
 (Request- und Antwortrichtung, formtolerant).
 
-### Befund 2026-09-15: MoA-Modellset auf dieser GPU nicht lauffaehig (TODO RUNPOD-P1-002)
+### Befund 2026-09-15: zwei Planner-Modelle sind GATED, kein HF-Token im Projekt (TODO RUNPOD-P1-002)
 
 Der Live-Lauf lief mit `MOA_*_MODEL=qwen3-4b`. Das geplante Set scheitert aus zwei
 unabhaengigen Gruenden (beide gemessen, nicht vermutet):
 
 | Rolle | Geplantes Modell | Befund |
 |---|---|---|
-| planner_a | `meta-llama/Llama-3.2-3B-Instruct` | **HTTP 401** – Lizenz im HF-Konto nicht akzeptiert |
-| planner_b | `google/gemma-3-4b-it` | **HTTP 401** – Lizenz im HF-Konto nicht akzeptiert |
+| planner_a | `meta-llama/Llama-3.2-3B-Instruct` | **HTTP 401** – Repo ist gated, ohne Token nicht ladbar |
+| planner_b | `google/gemma-3-4b-it` | **HTTP 401** – Repo ist gated, ohne Token nicht ladbar |
 | aggregator | `mistralai/Mistral-Small-3.1-24B-Instruct-2503` | zugaenglich, aber 24B in fp16 ≈ **48 GB** → passt nicht auf AMPERE_48 |
 | classifier | `Qwen/Qwen3-4B` | zugaenglich, ~8 GB → heute genutzt |
 
+**Korrektur (wichtig):** Die ersten 401 wurden als "Lizenz nicht akzeptiert"
+gedeutet – das war falsch. Projektweit existiert **kein HF-Token** (`.env` fuehrt
+keinen; der Wert in der Brain-Endpoint-Env ist ungueltig: `whoami-v2` antwortet
+"Incorrect API key"), und der Token identifiziert damit auch kein Konto. Die 401
+kommen daher, dass die beiden Repos **gated** sind und anonym nicht ladbar. Oeffentlich
+(ohne Token) sind u. a. `Qwen/Qwen3-4B`, `Qwen/Qwen3-8B`,
+`microsoft/Phi-3.5-mini-instruct` und `mistralai/Mistral-Small-3.1-24B-Instruct-2503`.
+
 Die Modellwahl ist reine **Endpoint-Env** (`MOA_CLASSIFIER_MODEL`,
-`MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`): Nach einer
-Lizenzfreigabe genuegt ein Env-Wechsel, kein neues Image. Deshalb sind die
-Plaene A/B im Live-Lauf noch identisch (dasselbe Modell) – der MoA-Gewinn
-entsteht erst mit unterschiedlichen Modellfamilien.
+`MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`): ein Wechsel
+auf andere Modelle braucht KEIN neues Image – solange die Modelle im Rollen-Manifest
+stehen (ein Katalog-Eintrag selbst ist ins Image gebacken). Deshalb sind die Plaene
+A/B im Live-Lauf noch identisch (dasselbe Modell); der MoA-Gewinn entsteht erst mit
+unterschiedlichen Modellfamilien.
 
 ### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
 
