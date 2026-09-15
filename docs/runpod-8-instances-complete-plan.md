@@ -1,7 +1,7 @@
 # RunPod 8-Instanzen-Architektur – Gesamtplan
 
 Stand: 2026-09-15
-Status: 7 von 8 Instanzen live (Scale-to-Zero), Code/Config vollständig; Orchestrator offen
+Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA-Plan verifiziert; MoA-Modellset offen (RUNPOD-P1-002)
 Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
@@ -18,15 +18,38 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
 | 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
-| 8 | orchestrator | `audiomonastry-ai-orchestrator` | – | eigenes Image + MoA-Handler | **offen** (Handler fehlt) |
+| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v4` | live (MoA-Plan verifiziert) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
 3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
+`orchestrator` mit einem echten `agent.orchestrate`-Job: COMPLETED,
+Klassifikation `{areas:[audio], intent:track_analysis}`, zwei Plaene und ein
+gemergter Plan mit `steps` (`ears.analyze/classify/embed`); Kaltstart 131 s,
+MoA-Durchlauf 37 s.
 
 **Wichtig**: Die visuellen Rollen (imageHq/videoReal/videoAbstract) und music laufen
-auf **vorgefertigten ComfyUI-/Hub-Workern**. Diese sprechen die ComfyUI-Workflow-API,
+auf **vorgefertigten ComfyUI-/Hub-Workern**. Sie sprechen die ComfyUI-Workflow-API,
 NICHT unser `{task, model, input}`-Protokoll. Der Orchestrator bindet sie deshalb als
-MCP-Werkzeuge an und muss die Aufrufe uebersetzen (Adapter-Schicht, offen).
+MCP-Werkzeuge an; die Uebersetzung leistet jetzt `comfyui_adapter.py`
+(Request- und Antwortrichtung, formtolerant).
+
+### Befund 2026-09-15: MoA-Modellset auf dieser GPU nicht lauffaehig (TODO RUNPOD-P1-002)
+
+Der Live-Lauf lief mit `MOA_*_MODEL=qwen3-4b`. Das geplante Set scheitert aus zwei
+unabhaengigen Gruenden (beide gemessen, nicht vermutet):
+
+| Rolle | Geplantes Modell | Befund |
+|---|---|---|
+| planner_a | `meta-llama/Llama-3.2-3B-Instruct` | **HTTP 401** – Lizenz im HF-Konto nicht akzeptiert |
+| planner_b | `google/gemma-3-4b-it` | **HTTP 401** – Lizenz im HF-Konto nicht akzeptiert |
+| aggregator | `mistralai/Mistral-Small-3.1-24B-Instruct-2503` | zugaenglich, aber 24B in fp16 ≈ **48 GB** → passt nicht auf AMPERE_48 |
+| classifier | `Qwen/Qwen3-4B` | zugaenglich, ~8 GB → heute genutzt |
+
+Die Modellwahl ist reine **Endpoint-Env** (`MOA_CLASSIFIER_MODEL`,
+`MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`): Nach einer
+Lizenzfreigabe genuegt ein Env-Wechsel, kein neues Image. Deshalb sind die
+Plaene A/B im Live-Lauf noch identisch (dasselbe Modell) – der MoA-Gewinn
+entsteht erst mit unterschiedlichen Modellfamilien.
 
 ### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
 
