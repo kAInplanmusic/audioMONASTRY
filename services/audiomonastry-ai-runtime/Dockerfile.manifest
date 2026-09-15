@@ -20,11 +20,15 @@
 #
 # Build:
 #   docker build --platform=linux/amd64 \
-#     -f services/samplemonk-ai-runtime/Dockerfile.manifest \
-#     --build-arg BASE_IMAGE=ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:<bewaehrt> \
-#     -t ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:<neu> \
-#     services/samplemonk-ai-runtime
-ARG BASE_IMAGE=ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:latest
+#     -f services/audiomonastry-ai-runtime/Dockerfile.manifest \
+#     --build-arg BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<bewaehrt> \
+#     -t ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<neu> \
+#     services/audiomonastry-ai-runtime
+#
+# Hinweis: Container-interne Pfade (/opt/samplemonk-ai) und der Worker-User
+# (samplemonk) sind bewusst noch nicht umbenannt – das erfordert einen
+# bestaetigten Voll-Build (TODO NOMEN-P1-001).
+ARG BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:8roles-v2
 FROM ${BASE_IMAGE}
 
 WORKDIR /opt/samplemonk-ai
