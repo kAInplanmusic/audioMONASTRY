@@ -1,9 +1,33 @@
 # RunPod 8-Instanzen-Architektur – Gesamtplan
 
 Stand: 2026-09-15
-Status: Architektur entschieden, Umsetzung noch NICHT gestartet
+Status: 7 von 8 Instanzen live (Scale-to-Zero), Code/Config vollständig; Orchestrator offen
 Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
+
+---
+
+## Umsetzungsstand 2026-09-15 (live)
+
+| # | Rolle | Endpoint | Endpoint-ID | Bildquelle | Status |
+|---|-------|----------|-------------|-----------|--------|
+| 1 | brain | `samplemonk-ai-brain` | `ppxo7wrn599p0q` | RunPod-vLLM-Worker | live (vorhanden) |
+| 2 | ears | `samplemonk-ai-ears` | `xeax6xrgd0csag` | eigenes Runtime-Image | live, Warmup verifiziert |
+| 3 | voiceGen | `samplemonk-ai-voice` | `gajmangfldpzrk` | eigenes Runtime-Image | live (vorhanden) |
+| 4 | music | `samplemonk-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (neu) |
+| 5 | imageHq | `samplemonk-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
+| 6 | videoReal | `samplemonk-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
+| 7 | videoAbstract | `samplemonk-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
+| 8 | orchestrator | `samplemonk-ai-orchestrator` | – | eigenes Image + MoA-Handler | **offen** (Handler fehlt) |
+
+Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
+3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
+
+**Wichtig**: Die visuellen Rollen (imageHq/videoReal/videoAbstract) und music laufen
+auf **vorgefertigten ComfyUI-/Hub-Workern**. Diese sprechen die ComfyUI-Workflow-API,
+NICHT unser `{task, model, input}`-Protokoll. Der Orchestrator bindet sie deshalb als
+MCP-Werkzeuge an und muss die Aufrufe uebersetzen (Adapter-Schicht, offen).
+
 
 ---
 

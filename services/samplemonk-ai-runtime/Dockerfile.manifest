@@ -1,0 +1,28 @@
+# SampleMONK AI Runtime – Manifest-Patch (schneller Rollen-Update)
+# ================================================================
+# Leitet ein Image vom bewährten Runtime-Image ab und tauscht NUR das
+# Rollen-Manifest aus. Zweck: eine Änderung an `model_manifest.json`
+# (neue/entfernte Rollen, Preload-Sätze, Revisions-Pins) braucht keinen
+# 30-minütigen Voll-Build inkl. pip-Installationen – die Abhängigkeiten sind
+# unverändert, nur die Rollen-Daten ändern sich.
+#
+# Wichtig: Das Basis-Image MUSS dieselben Abhängigkeiten tragen wie das
+# Ziel-Manifest verlangt (audio-ai + voice-ai). Der Voll-Build bleibt der
+# kanonische Pfad (`.github/workflows/runpod-deploy.yml` → Dockerfile.runpod);
+# dieser Patch ist fuer reine Manifest-Aenderungen gedacht.
+#
+# Build:
+#   docker build --platform=linux/amd64 \
+#     -f services/samplemonk-ai-runtime/Dockerfile.manifest \
+#     --build-arg BASE_IMAGE=ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:<tag> \
+#     -t ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:<neu> \
+#     services/samplemonk-ai-runtime
+ARG BASE_IMAGE=ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:latest
+FROM ${BASE_IMAGE}
+
+# Zielpfad identisch zum Dockerfile.runpod (AI_MODEL_MANIFEST zeigt hierher).
+COPY model_manifest.json /opt/samplemonk-ai/model_manifest.json
+
+# Beweis, dass das Patch-Image das neue Rollen-Manifest traegt: der Build
+# bricht ab, wenn die acht Rollen fehlen (verhindert stilles Zurueckfallen).
+RUN python -c "import json; m=json.load(open('/opt/samplemonk-ai/model_manifest.json')); roles=set(m['roles']); expected={'brain','ears','voiceGen','music','imageHq','videoReal','videoAbstract','orchestrator'}; missing=expected-roles; assert not missing, f'Manifest ohne Rollen: {sorted(missing)}'; print('Rollen ok:', sorted(roles))"
