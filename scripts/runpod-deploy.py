@@ -285,9 +285,26 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
+    """Registry-Credential fuer ein privates Image (z. B. GHCR).
+
+    Reihenfolge: `RUNPOD_REGISTRY_AUTH_ID` (kein Anlegen) > vorhandenes
+    GHCR-Credential via Env > neu anlegen. Ohne das Credential scheitert der
+    Worker-Pull mit `unauthorized` und der Endpoint laeuft in einen Crash-Loop
+    (live belegt 2026-09-15 beim Wechsel auf ein NEUES GHCR-Paket: neue Pakete
+    sind privat, auch wenn das alte oeffentlich war).
+    """
+    explicit = env("RUNPOD_REGISTRY_AUTH_ID")
+    if explicit:
+        print(f"[deploy] nutze RUNPOD_REGISTRY_AUTH_ID={explicit}")
+        return explicit
     ghcr_user = env("GHCR_USERNAME")
     ghcr_pass = env("GHCR_PASSWORD") or env("GHCR_PAT_ALL_ACCESS")
     if not (ghcr_user and ghcr_pass):
+        print(
+            "[deploy] WARNUNG: weder RUNPOD_REGISTRY_AUTH_ID noch GHCR_USERNAME/GHCR_PASSWORD gesetzt – "
+            "ein privates Image laesst sich dann nicht ziehen.",
+            file=sys.stderr,
+        )
         return None
     try:
         auth = runpod.create_container_registry_auth(name=f"{endpoint_name}-ghcr", username=ghcr_user, password=ghcr_pass)
@@ -303,11 +320,16 @@ def save_template(
     env_vars: Dict[str, str],
     container_disk_gb: int,
     docker_args: str = DOCKER_START_CMD,
+    registry_auth_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Idempotentes Template-Handling (kein 'Template name must be unique')."""
     from runpod.api.graphql import run_graphql_query
 
     env_items = ", ".join([f'{{ key: "{k}", value: "{v}" }}' for k, v in env_vars.items()])
+    # Ohne containerRegistryAuthId zieht RunPod nur oeffentliche Images. Das Feld
+    # muss im saveTemplate-Input stehen (nicht am Endpoint) – nur so erbt jeder
+    # Worker des Endpoints die Credentials.
+    registry_line = f'containerRegistryAuthId: "{registry_auth_id}"' if registry_auth_id else ""
 
     def payload(template_id: Optional[str]) -> str:
         id_line = f'id: "{template_id}"' if template_id else ""
@@ -327,6 +349,7 @@ def save_template(
               startSsh: true
               isPublic: false
               readme: ""
+              {registry_line}
             }}
           ) {{
             id
@@ -384,7 +407,12 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
     )
 
     template = save_template(
-        template_name, resolved["image"], resolved["env_vars"], container_disk_gb, resolved["docker_args"]
+        template_name,
+        resolved["image"],
+        resolved["env_vars"],
+        container_disk_gb,
+        resolved["docker_args"],
+        registry_auth_id,
     )
     template_id = template.get("id", "")
     if not template_id:
