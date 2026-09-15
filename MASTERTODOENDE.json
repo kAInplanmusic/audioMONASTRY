@@ -939,6 +939,32 @@
         "docker compose -f docker-compose.hetzner.yml config --quiet",
         "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=ears nach dem Image-Rebuild"
       ]
+    },
+    {
+      "id": "RUNPOD-P1-001",
+      "title": "Instanz 8 (Orchestrator) deployen + ComfyUI-Workflow-Graphen je Rolle",
+      "priority": "P1",
+      "status": "IN_PROGRESS",
+      "area": "AI/RunPod",
+      "source": "docs/runpod-8-instances-complete-plan.md (Instanz 5-8)",
+      "problem": "Punkt 1 und 2 der Umsetzung sind implementiert und getestet (MoA-Handler agent.orchestrate + MCP-Bruecke, ComfyUI-Adapter fuer die vorgefertigten Worker), aber noch NICHT deployt: die Instanz 8 hat weiterhin keinen Endpoint, und fuer music/videoAbstract fehlt je ein ComfyUI-Workflow im API-Format. Zwei deployte Worker (imageHq = PrunaAI/runpod-worker-FLUX.1-dev, videoReal = wlsdml1114/generate-video-ksampler) haben keine oeffentlich erreichbare Quelle mehr, ihr Request-Kontrakt ist damit undokumentiert.",
+      "note": "Fertig: services/audiomonastry-ai-runtime/moa_orchestrator.py (Classifier qwen3-4b -> Planner A/B llama-32-3b + gemma-3-4b -> Aggregator mistral-small-31, Tool-Katalog, Plan-Merging), comfyui_adapter.py (Request+Antwort-Uebersetzung, formtolerant), handlers.py 'agent.orchestrate' (13 Handler), Deploy-Skript reicht RP_ENDPOINT_ID_* + MOA_*_MODEL an die Orchestrator-Rolle durch, Dockerfiles kopieren die neuen Module, CI-Gates, 56 stdlib-Tests. Offen: (1) Image ueber die CI bauen (kanonischer Pfad; lokal fehlt BuildKit) und den Orchestrator-Endpoint anlegen (GPU-Rolle orchestrator, AMPERE_48, workersMin 0), (2) je ein Workflow-JSON fuer music und videoAbstract aus der ComfyUI-UI exportieren (Workflow -> Export API) und ablegen, (3) Kontrakt von imageHq/videoReal mit scripts/runpod-comfyui-probe.py je einmal live pinnen und im Adapter festziehen, (4) GPU-Verifikation des MoA-Durchlaufs (Kaltstart laedt 3 LLMs, ~36 GB auf 48 GB).",
+      "files": [
+        "services/audiomonastry-ai-runtime/moa_orchestrator.py",
+        "services/audiomonastry-ai-runtime/comfyui_adapter.py",
+        "services/audiomonastry-ai-runtime/workflows/README.md",
+        "scripts/runpod-comfyui-probe.py",
+        "scripts/runpod-deploy.py",
+        ".github/workflows/runpod-deploy.yml"
+      ],
+      "acceptance": "Der Orchestrator-Endpoint antwortet auf agent.orchestrate mit einem Plan; music und videoAbstract laufen mit je einem verifizierten Workflow; die Kontrakte von imageHq und videoReal stehen im Adapter (nicht mehr 'unbekannt') und die Fixture-Erwartungen in workflows/README.md sind eingetragen.",
+      "verification": [
+        "CI-Lauf des runpod-deploy.yml (GATE: MoA + Adapter importierbar, handlers.HANDLERS enthaelt agent.orchestrate)",
+        "python3 scripts/runpod-comfyui-probe.py --role imageHq --prompt 'a red cube' (Rohantwort dokumentieren)",
+        "python3 scripts/runpod-comfyui-probe.py --role videoReal --prompt 'slow dolly shot'",
+        "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=orchestrator nach dem Deploy",
+        "python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py + test_comfyui_adapter.py (56 Tests, laufen in ci.yml)"
+      ]
     }
   ],
   "visionSandbox": [
