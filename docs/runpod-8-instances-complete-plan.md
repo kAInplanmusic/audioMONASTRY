@@ -28,6 +28,29 @@ auf **vorgefertigten ComfyUI-/Hub-Workern**. Diese sprechen die ComfyUI-Workflow
 NICHT unser `{task, model, input}`-Protokoll. Der Orchestrator bindet sie deshalb als
 MCP-Werkzeuge an und muss die Aufrufe uebersetzen (Adapter-Schicht, offen).
 
+### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
+
+Das auf ears/voice deployte Image war vom 2026-09-10 und enthielt noch die
+**alte** `model_manager.py`, die `quantization: "awq-int4"` (Rolle ears →
+`qwen2-audio-7b` im neuen Manifest) nicht kannte. Ein Versuch, nur
+`model_manifest.json` als Patch-Image zu tauschen, fuehrte deshalb zu einem
+**Crash-Loop** aller Worker:
+
+- MCP/`endpoint-health`: `unhealthy: 2`, Jobs blieben `inQueue`
+- `runpodctl serverless logs <id>` (Quelle `system`): wiederholtes
+  `start container … : begin` **ohne jede Container-Ausgabe** – der Container
+  starb vor dem Handler. Das ist die Signatur des Crash-Loops.
+- Root cause lokal reproduziert: `ModelDefinition.from_dict` →
+  `ValueError: invalid quantization: 'awq-int4'` (alte `_ALLOWED_QUANTIZATIONS`).
+- Sofort-Rollback auf `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:94243aac…`
+  + Queue purgen → Endpoint wieder gesund (1 ready, 0 unhealthy).
+
+Konsequenz: `Dockerfile.manifest` kopiert jetzt **Code UND Manifest** und baut ein
+**Gate** ein, das den ModelManager fuer jede Rolle aus dem Manifest konfiguriert –
+Code-/Manifest-Drift kann so nicht mehr in ein Image gelangen. Der Voll-Build in
+der CI (`Dockerfile.runpod`) und dieser Patch bauen denselben Stand.
+
+
 
 ---
 
