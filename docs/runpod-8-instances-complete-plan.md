@@ -12,8 +12,8 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | # | Rolle | Endpoint | Endpoint-ID | Bildquelle | Status |
 |---|-------|----------|-------------|-----------|--------|
 | 1 | brain | `samplemonk-ai-brain` | `ppxo7wrn599p0q` | RunPod-vLLM-Worker | live (vorhanden) |
-| 2 | ears | `samplemonk-ai-ears` | `xeax6xrgd0csag` | eigenes Runtime-Image | live, Warmup verifiziert |
-| 3 | voiceGen | `samplemonk-ai-voice` | `gajmangfldpzrk` | eigenes Runtime-Image | live (vorhanden) |
+| 2 | ears | `samplemonk-ai-ears` | `xeax6xrgd0csag` | eigenes Image `:8roles-v2` | live, Warmup verifiziert (7 Modelle) |
+| 3 | voiceGen | `samplemonk-ai-voice` | `gajmangfldpzrk` | eigenes Image `:8roles-v2` | live |
 | 4 | music | `samplemonk-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (neu) |
 | 5 | imageHq | `samplemonk-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `samplemonk-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
