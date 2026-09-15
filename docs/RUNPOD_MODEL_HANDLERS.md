@@ -38,6 +38,34 @@ Ausgang (groß): R2-URL(s), die der Worker vorher hochgeladen hat.
 | `audio.classify` | `ast-audioset` | vorhanden `hf_classify` | transformers | vorhanden |
 | `stem.separate` | `bs-roformer` / `demucs` | `stem_separate_dispatch` | audiosep/demucs | offen |
 
+## Orchestrator (Instanz 8): `agent.orchestrate`
+
+| Task | Rolle | Handler | Modell(e) | Status |
+|---|---|---|---|---|
+| `agent.orchestrate` | orchestrator | `moa_orchestrate` (`moa_orchestrator.py`) | `qwen3-4b` (Classifier), `llama-32-3b` + `gemma-3-4b` (Planner A/B), `mistral-small-31` (Aggregator) | implementiert, GPU-Verifikation offen |
+
+Ablauf: **Classifier → Planner A/B (unabhaengig) → Aggregator → optionale
+MCP-Ausfuehrung**. Die Plan-Logik ist ohne GPU testbar
+(`tests/test_moa_orchestrator.py`, 27 Tests); die Inferenz nutzt denselben
+LLM-Pfad wie das Brain (`handlers_runpod.generate_chat`).
+
+Eingang:
+
+```json
+{ "task": "agent.orchestrate", "model": "mistral-small-31",
+  "input": { "prompt": "Baue einen Techno-Drop aus track.wav",
+             "execute": true } }
+```
+
+Ausgang: `{ classification, plans: {a, b}, choice, reason, steps[], execution[]? }`.
+
+Die MCP-Bruecke adressiert die Fach-Instanzen ueber `RP_ENDPOINT_ID_*` (das
+Deploy-Skript reicht sie der Orchestrator-Rolle durch). `ears.*`/`voice.*`
+sprechen unser `{task, model, input}`-Protokoll; `music.*`/`image.*`/`video_*.*`
+laufen auf vorgefertigten ComfyUI-Workern und brauchen den Adapter – bis dahin
+melden sie `NotImplementedError` (Punkt 2 der Umsetzung).
+
+
 ## R2-Audio-Transfer
 
 Für große Audio-Dateien (Upload, Stems, Songs) gilt:

@@ -190,6 +190,42 @@ def build_env_vars(role: str) -> Dict[str, str]:
         env_vars["HF_TOKEN"] = env("HF_TOKEN")
     if env("AI_INCLUDE_PLANNED"):
         env_vars["AI_INCLUDE_PLANNED"] = env("AI_INCLUDE_PLANNED")
+    if role == "orchestrator":
+        env_vars.update(_orchestrator_tool_env())
+    return env_vars
+
+
+#: Fach-Instanzen, die der Orchestrator per MCP-Bruecke aufruft.
+ORCHESTRATOR_TOOL_ENDPOINTS = (
+    "RP_ENDPOINT_ID_EARS",
+    "RP_ENDPOINT_ID_VOICE",
+    "RP_ENDPOINT_ID_MUSIC",
+    "RP_ENDPOINT_ID_IMAGE",
+    "RP_ENDPOINT_ID_VIDEO_REAL",
+    "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
+)
+
+#: MoA-Rollen → Modell-Override (siehe services/audiomonastry-ai-runtime/moa_orchestrator.py).
+ORCHESTRATOR_MODEL_ENVS = (
+    "MOA_CLASSIFIER_MODEL",
+    "MOA_PLANNER_A_MODEL",
+    "MOA_PLANNER_B_MODEL",
+    "MOA_AGGREGATOR_MODEL",
+)
+
+
+def _orchestrator_tool_env() -> Dict[str, str]:
+    """Endpoint-IDs der Fach-Instanzen + MoA-Modell-Overrides durchreichen.
+
+    Ohne diese IDs kann der Orchestrator die MCP-Tools nicht adressieren; die
+    Werte kommen aus der Deploy-Umgebung (dieselben Variablen, die die App nutzt)
+    und sind optional – fehlt eine, meldet `call_tool` sie beim Ausfuehren.
+    """
+    env_vars: Dict[str, str] = {}
+    for name in (*ORCHESTRATOR_TOOL_ENDPOINTS, *ORCHESTRATOR_MODEL_ENVS):
+        value = env(name)
+        if value:
+            env_vars[name] = value
     return env_vars
 
 

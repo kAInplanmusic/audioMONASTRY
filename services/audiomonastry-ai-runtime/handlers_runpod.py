@@ -122,15 +122,12 @@ def _resolve_speaker_wav(payload: Dict[str, Any]) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# Qwen3 LLM (zwei Stufen derselben Familie: qwen3-4b = Ausführer, qwen3-14b = Brain)
+# Gemeinsamer LLM-Pfad (Qwen3-Brain + die vier Orchestrator-Modelle)
 # ---------------------------------------------------------------------------
-def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+def load_causal_lm(model_id: str, definition: ModelDefinition) -> Tuple[Any, Any]:
+    """Laedt Tokenizer + CausalLM einer Rolle (gecacht, Geraet aus _device())."""
     transformers = _require_lib("transformers", "transformers")
     torch = _require_lib("torch", "torch")
-
-    text = _text_from(payload)
-    if not text:
-        raise ModelUnavailableError("prompt/text required for qwen3")
 
     def factory() -> Tuple[Any, Any]:
         tokenizer = transformers.AutoTokenizer.from_pretrained(
@@ -145,48 +142,70 @@ def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
         ).to(_device())
         return tokenizer, model
 
-    tokenizer, model = _cache_get(f"llm:{model_id}", factory)
-    messages = [{"role": "user", "content": text}]
-    # Qwen3 gibt sonst zuerst einen <think>-Block aus und verbraucht damit das
-    # Token-Budget (im Live-Test sichtbar). Für Tool-Calling/Interaktion ist
-    # Thinking deshalb standardmäßig AUS; nur ein expliziter Opt-in schaltet es an.
-    enable_thinking = bool(payload.get("enableThinking", False))
+    return _cache_get(f"llm:{model_id}", factory)
+
+
+def generate_chat(
+    model_id: str,
+    definition: ModelDefinition,
+    messages: list,
+    *,
+    max_new_tokens: int = 512,
+    temperature: float = 0.7,
+    do_sample: bool = False,
+    enable_thinking: bool = False,
+) -> Dict[str, Any]:
+    """Chat-Completion ueber das Rollen-Modell – EIN Pfad fuer alle LLMs.
+
+    Qwen3 gibt sonst zuerst einen <think>-Block aus und verbraucht damit das
+    Token-Budget (im Live-Test sichtbar); Thinking ist deshalb standardmaessig
+    AUS und nur per Opt-in an (gleiches Verhalten wie zuvor in `qwen3_llm`).
+    """
+    tokenizer, model = load_causal_lm(model_id, definition)
     try:
         prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=enable_thinking,
+            messages, tokenize=False, add_generation_prompt=True, enable_thinking=enable_thinking
         )
     except TypeError:
-        # Ältere Chat-Templates kennen das Argument nicht – dann der /no_think-Weg.
+        # Aeltere Chat-Templates kennen das Argument nicht – dann der /no_think-Weg.
         prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         if not enable_thinking:
             prompt += "/no_think"
+    torch = _require_lib("torch", "torch")
     inputs = tokenizer(prompt, return_tensors="pt").to(_device())
-    max_new = int(payload.get("maxTokens", 512))
-    do_sample = bool(payload.get("doSample", False))
-    temperature = float(payload.get("temperature", 0.7))
     started_generate = time.time()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=max_new,
+            max_new_tokens=max_new_tokens,
             do_sample=do_sample,
             temperature=temperature if do_sample else None,
         )
     generate_seconds = max(1e-6, time.time() - started_generate)
     generated = int(outputs[0].shape[0] - inputs.input_ids.shape[1])
-    answer = tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True)
-    # Tokens/s wird OHNE Modell-Load gemessen (Load zahlt der Warmup-Job).
     return {
-        "text": answer,
+        "text": tokenizer.decode(outputs[0][inputs.input_ids.shape[1]:], skip_special_tokens=True),
         "modelId": model_id,
         "generatedTokens": generated,
         "generateSeconds": round(generate_seconds, 3),
         "tokensPerSecond": round(generated / generate_seconds, 2),
         "enableThinking": enable_thinking,
     }
+
+
+def qwen3_llm(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
+    text = _text_from(payload)
+    if not text:
+        raise ModelUnavailableError("prompt/text required for qwen3")
+    return generate_chat(
+        model_id,
+        definition,
+        [{"role": "user", "content": text}],
+        max_new_tokens=int(payload.get("maxTokens", 512)),
+        temperature=float(payload.get("temperature", 0.7)),
+        do_sample=bool(payload.get("doSample", False)),
+        enable_thinking=bool(payload.get("enableThinking", False)),
+    )
 
 
 # ---------------------------------------------------------------------------

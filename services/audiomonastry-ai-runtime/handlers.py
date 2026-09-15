@@ -511,6 +511,7 @@ from handlers_runpod import (
     stem_separate_dispatch,
     xtts_tts,
 )
+from moa_orchestrator import moa_orchestrate
 
 
 def tts_dispatch_runpod(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
@@ -540,4 +541,6 @@ HANDLERS = {
     "understand": qwen2_audio_understand,
     "diarize": pyannote_diarize,
     "stem.separate": stem_separate_dispatch,
+    # Instanz 8: Mixture-of-Agents-Planung + MCP-Ausfuehrung.
+    "agent.orchestrate": moa_orchestrate,
 }

@@ -149,6 +149,18 @@ jobs:
         continue-on-error: true
         run: docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "import demucs; print('demucs ok')"
 
+      # Orchestrator (Instanz 8): der Handler muss im Image liegen UND in der
+      # Worker-Tabelle haengen – ein fehlender Import faellt sonst erst zur
+      # Laufzeit als MODEL_UNAVAILABLE auf (gleiche Fehlerklasse wie qwen_tts).
+      - name: GATE – MoA-Orchestrator importierbar + registriert
+        run: |
+          docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "
+          import moa_orchestrator, handlers, sys
+          assert 'agent.orchestrate' in handlers.HANDLERS, sorted(handlers.HANDLERS)
+          assert moa_orchestrator.TOOL_CATALOG, 'Tool-Katalog leer'
+          print('MoA ok:', len(moa_orchestrator.TOOL_CATALOG), 'Tools')
+          "
+
       # ---------------------------------------------------------------------
       # GATE (bewusst OHNE continue-on-error): torch >= 2.6 ist Pflicht.
       # `torch.load` verweigert darunter das Laden von Pickle-Checkpoints, und
