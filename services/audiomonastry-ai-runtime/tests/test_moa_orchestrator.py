@@ -124,9 +124,16 @@ class EnvTest(unittest.TestCase):
 
 
 class ToolBridgeTest(unittest.TestCase):
-    def test_comfyui_tool_reports_missing_adapter(self) -> None:
-        with self.assertRaises(NotImplementedError):
+    def test_workflow_tool_without_workflow_is_rejected(self) -> None:
+        # music laeuft auf einem Workflow-Worker: ohne Workflow kein stiller Fehlschlag.
+        with self.assertRaises(ValueError) as ctx:
+            moa.call_tool("music.generate", {"prompt": "techno"}, env={"RP_ENDPOINT_ID_MUSIC": "m-ep"})
+        self.assertIn("kein Workflow konfiguriert", str(ctx.exception))
+
+    def test_prompt_tool_without_prompt_is_rejected(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
             moa.call_tool("image.generate", {}, env={"RP_ENDPOINT_ID_IMAGE": "img-ep"})
+        self.assertIn("leerer Request", str(ctx.exception))
 
     def test_unknown_tool_is_rejected(self) -> None:
         with self.assertRaises(ValueError):

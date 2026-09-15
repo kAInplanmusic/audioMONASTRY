@@ -40,7 +40,8 @@ USER root
 # Code + Manifest der Runtime auf den aktuellen Repo-Stand bringen.
 # Bewusst NUR die Runtime-Quellen – keine Abhängigkeits-Updates.
 COPY model_manifest.json registry.py model_manager.py runpod_worker.py \
-     app.py mcp_runtime.py handlers.py handlers_runpod.py moa_orchestrator.py \
+     app.py mcp_runtime.py handlers.py handlers_runpod.py moa_orchestrator.py comfyui_adapter.py \
+     workflows/ \
      predownload.py runtime_config.yaml ./
 
 RUN chown samplemonk:samplemonk /opt/samplemonk-ai/*.py /opt/samplemonk-ai/*.json /opt/samplemonk-ai/*.yaml

@@ -36,6 +36,8 @@ jobs:
         run: |
           python3 -m unittest tests.plugin_interface_test
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
+          python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py
+          python3 services/audiomonastry-ai-runtime/tests/test_comfyui_adapter.py
 
       - name: Security (npm audit + Interface-Boundary-Scan)
         run: npm run security

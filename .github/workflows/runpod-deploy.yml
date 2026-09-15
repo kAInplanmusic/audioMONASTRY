@@ -155,10 +155,11 @@ jobs:
       - name: GATE – MoA-Orchestrator importierbar + registriert
         run: |
           docker run --rm --entrypoint python "${{ steps.meta.outputs.image }}:${{ github.sha }}" -c "
-          import moa_orchestrator, handlers, sys
+          import moa_orchestrator, comfyui_adapter, handlers
           assert 'agent.orchestrate' in handlers.HANDLERS, sorted(handlers.HANDLERS)
           assert moa_orchestrator.TOOL_CATALOG, 'Tool-Katalog leer'
-          print('MoA ok:', len(moa_orchestrator.TOOL_CATALOG), 'Tools')
+          assert comfyui_adapter.COMFY_ROLES, 'ComfyUI-Rollen leer'
+          print('MoA ok:', len(moa_orchestrator.TOOL_CATALOG), 'Tools |', len(comfyui_adapter.COMFY_ROLES), 'ComfyUI-Rollen')
           "
 
       # ---------------------------------------------------------------------

@@ -61,9 +61,25 @@ Ausgang: `{ classification, plans: {a, b}, choice, reason, steps[], execution[]?
 
 Die MCP-Bruecke adressiert die Fach-Instanzen ueber `RP_ENDPOINT_ID_*` (das
 Deploy-Skript reicht sie der Orchestrator-Rolle durch). `ears.*`/`voice.*`
-sprechen unser `{task, model, input}`-Protokoll; `music.*`/`image.*`/`video_*.*`
-laufen auf vorgefertigten ComfyUI-Workern und brauchen den Adapter – bis dahin
-melden sie `NotImplementedError` (Punkt 2 der Umsetzung).
+sprechen unser `{task, model, input}`-Protokoll.
+
+## ComfyUI-Adapter (Instanz 5/6/7 + music)
+
+`music`/`image.*`/`video_*.*` laufen auf vorgefertigten Hub-Workern. Der
+`comfyui_adapter.py` uebersetzt in beide Richtungen:
+
+| Rolle | Worker | Protokoll | Antwortform |
+|---|---|---|---|
+| `music` | ACE-Step 1.5 XL | Workflow | `files[]` (`kind: audio`) |
+| `videoAbstract` | worker-comfyui 5.10.0 | Workflow (+ `images[]`) | `images[]` (davor `message`) |
+| `videoReal` | wlsdml1114 (Repo offline) | Prompt | per Form (u. a. `video`) |
+| `imageHq` | PrunaAI FLUX (Repo offline) | Prompt | per Form |
+
+Workflow-JSONs werden je Rolle aus `COMFY_WORKFLOW_<ROLLE>`, `workflows/<rolle>.json`
+oder inline im Job geladen – siehe `services/audiomonastry-ai-runtime/workflows/README.md`.
+Fehlt ein Workflow, meldet der Adapter das explizit statt still zu scheitern.
+Die zwei nicht mehr oeffentlich dokumentierten Worker pinnt
+`scripts/runpod-comfyui-probe.py` mit einem Live-Job je Rolle fest.
 
 
 ## R2-Audio-Transfer

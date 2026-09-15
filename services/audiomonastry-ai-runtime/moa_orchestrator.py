@@ -220,15 +220,21 @@ def call_tool(
     """Fuehrt einen MCP-Schritt gegen die zustaendige Fach-Instanz aus.
 
     Unser Protokoll (`{task, model, input}`) gilt fuer ears/voiceGen. Die
-    `comfyui`-Tools (music/image/video) sprechen die Workflow-API der
-    vorgefertigten Worker – der Adapter ist Punkt 2 der Umsetzung, deshalb hier
-    ein klarer Fehler statt eines stillen Fehlschlags.
+    `comfyui`-Tools (music/image/video) laufen auf vorgefertigten Workern; der
+    `comfyui_adapter` uebersetzt Request UND Antwort in deren API.
     """
     spec = TOOL_CATALOG.get(name)
     if spec is None:
         raise ValueError(f"unknown tool: {name}")
+
     if spec.get("protocol") == "comfyui":
-        raise NotImplementedError(f"{name}: ComfyUI-Adapter noch nicht implementiert (Punkt 2)")
+        from comfyui_adapter import build_request, normalize_output
+
+        inner: Dict[str, Any] = build_request(name, spec["role"], spec["model"], args, payload=args, env=env)
+        normalizer: Optional[Any] = normalize_output
+    else:
+        inner = {"task": spec["task"], "model": spec["model"], "input": args}
+        normalizer = None
 
     endpoint_id = endpoint_for_role(spec["role"], env)
     if not endpoint_id:
@@ -237,7 +243,7 @@ def call_tool(
     if not api_key:
         raise ValueError(f"{name}: RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY fehlt")
 
-    body = json.dumps({"input": {"task": spec["task"], "model": spec["model"], "input": args}}).encode()
+    body = json.dumps({"input": inner}).encode()
     url = f"{_api_base(env)}/{urllib.parse.quote(endpoint_id)}/run"
     request = urllib.request.Request(
         url, data=body, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
@@ -257,7 +263,13 @@ def call_tool(
             state = json.loads(response.read().decode())
         status = str(state.get("status", "")).upper()
         if status and status not in ("IN_QUEUE", "IN_PROGRESS"):
-            return {"tool": name, "jobId": job_id, "status": status, "output": state.get("output")}
+            output = state.get("output")
+            return {
+                "tool": name,
+                "jobId": job_id,
+                "status": status,
+                "output": normalizer(output) if normalizer else output,
+            }
         time.sleep(poll_s)
     return {"tool": name, "jobId": job_id, "status": "TIMEOUT"}
 
