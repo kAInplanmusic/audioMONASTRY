@@ -15,6 +15,8 @@ Verwendung:
                                           (Default-Task: warmup für brain/ears/voiceGen/orchestrator;
                                            Prebuilt-Rollen kennen keinen warmup-Task)
             RUNPOD_SMOKE_WAV=/pfad/zu/test.wav   (Default: generierter 1s/440Hz-Sinus)
+            RUNPOD_SMOKE_PAYLOAD='{"prompt":"…"}'  (rohes JSON als `input`; für
+                                          Tasks ohne Audio, z. B. agent.orchestrate)
             RUNPOD_POLL_SECONDS=30
 
 Ausgabe:
@@ -123,6 +125,15 @@ def main() -> int:
     if task == "warmup":
         print(f"[smoke] Rollen-Warmup-Probe (role={role or 'legacy'})")
         job = {"input": {"task": "warmup", "model": "", "input": {"role": role}}}
+    elif env("RUNPOD_SMOKE_PAYLOAD"):
+        # Tasks ohne Audio (z. B. agent.orchestrate): Nutzlast kommt roh aus der
+        # Umgebung, damit das Skript nicht pro Task eigene Felder kennen muss.
+        custom = json.loads(env("RUNPOD_SMOKE_PAYLOAD"))
+        if not isinstance(custom, dict):
+            print("FEHLER: RUNPOD_SMOKE_PAYLOAD muss ein JSON-Objekt sein", file=sys.stderr)
+            return 1
+        print(f"[smoke] Nutze eigene Nutzlast ({len(json.dumps(custom))} bytes)")
+        job = {"input": {"task": task, "model": model, "input": custom}}
     else:
         if wav_path and os.path.exists(wav_path):
             with open(wav_path, "rb") as fh:

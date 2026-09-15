@@ -62,5 +62,15 @@ assert set(roles) == set(registry.ROLE_IDS), f'Registry/Manifest-Rollen driften:
 [ModelManager().configure(registry.load_manifest(r)) or print('role ok:', r) for r in roles];\
 print('GATE ok: Code + Manifest passen fuer', len(roles), 'Rollen')"
 
+# GATE 2: Die neuen Module (Instanz 8) muessen im Image liegen UND verdrahtet
+# sein. Ein fehlender Import faellt sonst erst zur Laufzeit als
+# MODEL_UNAVAILABLE auf – genau die Fehlerklasse, die qwen_tts gekostet hat.
+RUN python -c "\
+import handlers, moa_orchestrator, comfyui_adapter;\
+assert 'agent.orchestrate' in handlers.HANDLERS, sorted(handlers.HANDLERS);\
+assert moa_orchestrator.TOOL_CATALOG, 'Tool-Katalog leer';\
+assert comfyui_adapter.COMFY_ROLES, 'ComfyUI-Rollen leer';\
+print('GATE ok: MoA + Adapter verdrahtet,', len(handlers.HANDLERS), 'Handler')"
+
 # Zurueck auf den unprivilegierten Worker-User (wie im Basis-Image).
 USER samplemonk

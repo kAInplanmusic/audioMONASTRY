@@ -11,8 +11,10 @@ GPU braucht. Die MCP-Bruecke laeuft gegen ein Fake-Endpoint-Env.
 """
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
+import types
 import unittest
 
 RUNTIME_DIR = pathlib.Path(__file__).resolve().parent.parent
@@ -154,6 +156,67 @@ class ToolBridgeTest(unittest.TestCase):
         )
         self.assertEqual(len(results), 2)
         self.assertTrue(all(r["status"] == "FAILED" for r in results))
+
+
+def _stub_llm(replies: dict) -> "types.ModuleType":
+    """Fake `handlers_runpod.generate_chat` – die Inferenz wird ersetzt, alles
+    andere (Manifest, Rollen, Prompts, Parsing, Merging) bleibt echt."""
+    module = types.ModuleType("handlers_runpod")
+    calls: list = []
+
+    def fake_generate_chat(model_id, definition, messages, **kwargs):  # noqa: ANN001, ARG001
+        calls.append(model_id)
+        return {"text": replies.get(model_id, "{}")}
+
+    module.generate_chat = fake_generate_chat  # type: ignore[attr-defined]
+    module.calls = calls  # type: ignore[attr-defined]
+    return module
+
+
+class PipelineTest(unittest.TestCase):
+    """Ende-zu-Ende ohne GPU: Manifest -> Rollen -> 4 Staenden -> Plan."""
+
+    def setUp(self) -> None:
+        self.saved = sys.modules.get("handlers_runpod")
+        self.manager = _stub_llm(
+            {
+                "qwen3-4b": '{"areas": ["audio"], "intent": "track analysieren", "needs_tools": true}',
+                "llama-32-3b": '{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}',
+                "gemma-3-4b": '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}',
+                "mistral-small-31": '{"chosen": "merged", "reason": "beide decks ab"}',
+            }
+        )
+        sys.modules["handlers_runpod"] = self.manager
+
+    def tearDown(self) -> None:
+        if self.saved is not None:
+            sys.modules["handlers_runpod"] = self.saved
+        else:
+            sys.modules.pop("handlers_runpod", None)
+
+    def test_full_pipeline_resolves_manifest_models(self) -> None:
+        result = moa.moa_orchestrate("mistral-small-31", None, {"prompt": "analysiere track.wav"})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["classification"]["areas"], ["audio"])
+        self.assertEqual(result["choice"], "merged")
+        # Unbekanntes Tool aus Plan B wurde verworfen, beide gueltigen gemerged.
+        self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
+        # Alle vier MoA-Rollen liefen in der erwarteten Reihenfolge.
+        self.assertEqual(self.manager.calls, ["qwen3-4b", "llama-32-3b", "gemma-3-4b", "mistral-small-31"])
+        self.assertNotIn("execution", result)
+
+    def test_missing_prompt_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            moa.moa_orchestrate("mistral-small-31", None, {})
+
+    def test_unknown_model_in_manifest_raises_clear_error(self) -> None:
+        os.environ["MOA_CLASSIFIER_MODEL"] = "gibt-es-nicht"
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                moa.moa_orchestrate("mistral-small-31", None, {"prompt": "x"})
+        finally:
+            del os.environ["MOA_CLASSIFIER_MODEL"]
+        self.assertIn("fehlt im Rollen-Manifest", str(ctx.exception))
 
 
 if __name__ == "__main__":

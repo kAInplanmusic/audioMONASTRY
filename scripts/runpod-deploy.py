@@ -220,12 +220,23 @@ def _orchestrator_tool_env() -> Dict[str, str]:
     Ohne diese IDs kann der Orchestrator die MCP-Tools nicht adressieren; die
     Werte kommen aus der Deploy-Umgebung (dieselben Variablen, die die App nutzt)
     und sind optional – fehlt eine, meldet `call_tool` sie beim Ausfuehren.
+    Der API-Key ist PFLICHT fuer die MCP-Bruecke: der Orchestrator ruft die
+    anderen Endpoints selbst auf.
     """
     env_vars: Dict[str, str] = {}
     for name in (*ORCHESTRATOR_TOOL_ENDPOINTS, *ORCHESTRATOR_MODEL_ENVS):
         value = env(name)
         if value:
             env_vars[name] = value
+    api_key = env("RP_AGENT_KEY") or env("RP_API_KEY")
+    if api_key:
+        env_vars["RP_AGENT_KEY"] = api_key
+    else:
+        print(
+            "[deploy] WARNUNG: RP_AGENT_KEY/RP_API_KEY fehlt – die MCP-Bruecke des Orchestrators "
+            "kann die Fach-Instanzen nicht aufrufen (Plan ja, Ausfuehrung nein).",
+            file=sys.stderr,
+        )
     return env_vars
 
 
