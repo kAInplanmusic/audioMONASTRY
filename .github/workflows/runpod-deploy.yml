@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       role:
-        description: 'Nur eine Rolle deployen (leer = alle drei)'
+        description: 'Nur eine Rolle deployen (leer = alle acht: brain|ears|voiceGen|music|imageHq|videoReal|videoAbstract|orchestrator)'
         required: false
         default: ''
         type: string
@@ -31,8 +31,12 @@ env:
   IMAGE_NAME: samplemonk-ai-runtime-runpod
 
 jobs:
-  # Ein Image für alle drei Rollen – die Rolle wird zur Laufzeit über AI_ROLE
-  # und das Rollen-Manifest gewählt (siehe docs/RUNPOD_AI_V1_SPEC.md).
+  # Ein Image für die Rollen unseres eigenen Runtimes (ears, voiceGen, optional
+  # music/orchestrator) – die Rolle wird zur Laufzeit über AI_ROLE und das
+  # Rollen-Manifest gewählt (siehe docs/runpod-8-instances-complete-plan.md).
+  # brain nutzt den vorgefertigten vLLM-Worker, die visuellen Rollen
+  # (imageHq/videoReal/videoAbstract) und standardmäßig music vorgefertigte
+  # ComfyUI-/Hub-Worker (siehe scripts/runpod-deploy.py → PREBUILT_IMAGES).
   build:
     runs-on: ubuntu-latest
     outputs:

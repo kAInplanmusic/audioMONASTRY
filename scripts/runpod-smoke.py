@@ -11,7 +11,9 @@ Verwendung:
   Pro Flotten-Rolle (prüft Rollen-Manifest + Preload):
     RP_AGENT_KEY=… RUNPOD_SMOKE_ROLE=ears python3 scripts/runpod-smoke.py
   optional: RUNPOD_SMOKE_TASK=classify RUNPOD_SMOKE_MODEL=ast-audioset
-            RUNPOD_SMOKE_ROLE=brain|ears|voiceGen  (Default-Task dann: warmup)
+            RUNPOD_SMOKE_ROLE=brain|ears|voiceGen|music|imageHq|videoReal|videoAbstract|orchestrator
+                                          (Default-Task: warmup für brain/ears/voiceGen/orchestrator;
+                                           Prebuilt-Rollen kennen keinen warmup-Task)
             RUNPOD_SMOKE_WAV=/pfad/zu/test.wav   (Default: generierter 1s/440Hz-Sinus)
             RUNPOD_POLL_SECONDS=30
 
@@ -74,7 +76,19 @@ ROLE_ENDPOINT_ENV = {
     "brain": "RP_ENDPOINT_ID_BRAIN",
     "ears": "RP_ENDPOINT_ID_EARS",
     "voiceGen": "RP_ENDPOINT_ID_VOICE",
+    "music": "RP_ENDPOINT_ID_MUSIC",
+    "imageHq": "RP_ENDPOINT_ID_IMAGE",
+    "videoReal": "RP_ENDPOINT_ID_VIDEO_REAL",
+    "videoAbstract": "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
+    "orchestrator": "RP_ENDPOINT_ID_ORCHESTRATOR",
 }
+
+#: Rollen, deren Worker unseren `warmup`-Task kennen (warmupMode: task in
+#: endpointRegistry.ts). Die vorgefertigten ComfyUI-/Hub-Worker (music, imageHq,
+#: videoReal, videoAbstract) kennen ihn nicht – für sie gibt es keine
+#: Default-Warmup-Probe; ohne RUNPOD_SMOKE_TASK wird dann nur die Endpoint-
+#: Erreichbarkeit geprüft (kein Job).
+WARMUP_ROLES = {"brain", "ears", "voiceGen", "orchestrator"}
 
 
 def main() -> int:
@@ -86,7 +100,9 @@ def main() -> int:
     endpoint_id = (env(ROLE_ENDPOINT_ENV[role]) if role else "") or env("RP_ENDPOINT_ID") or env("RUNPOD_ENDPOINT_ID")
     # Ohne expliziten Task ist der Rollen-Smoke ein Warmup-Probe (prüft Worker,
     # Rollen-Manifest und Preload-Modelle), der Legacy-Smoke ein classify-Job.
-    task = env("RUNPOD_SMOKE_TASK") or ("warmup" if role else "classify")
+    # Prebuilt-Rollen (music/imageHq/videoReal/videoAbstract) kennen den
+    # `warmup`-Task nicht – ohne RUNPOD_SMOKE_TASK wird dort kein Job gefeuert.
+    task = env("RUNPOD_SMOKE_TASK") or ("warmup" if role in WARMUP_ROLES else "classify" if not role else "")
     model = env("RUNPOD_SMOKE_MODEL") or ("ast-audioset" if task == "classify" else "")
     wav_path = env("RUNPOD_SMOKE_WAV")
     poll_seconds = max(10, int(env("RUNPOD_POLL_SECONDS", "30")))
@@ -97,6 +113,12 @@ def main() -> int:
     if not endpoint_id:
         print("FEHLER: RP_ENDPOINT_ID (oder RP_ENDPOINT_ID_<ROLLE>) fehlt", file=sys.stderr)
         return 2
+    if role and not task:
+        # Rolle ohne Warmup-Task und ohne expliziten Task: nur Erreichbarkeit
+        # prüfen, keinen Job feuern (der Prebuilt-Worker würde ihn ablehnen).
+        print(f"[smoke] {role}: Prebuilt-Rolle ohne warmup-Task – nur Endpoint-ID prüfen")
+        print(f"[smoke] OK endpoint={endpoint_id} (kein Job; RUNPOD_SMOKE_TASK setzen für echten Aufruf)")
+        return 0
 
     if task == "warmup":
         print(f"[smoke] Rollen-Warmup-Probe (role={role or 'legacy'})")

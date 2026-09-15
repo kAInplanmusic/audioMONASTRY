@@ -1,46 +1,70 @@
 #!/usr/bin/env python3
 """
-audioMONASTRY · RunPod Serverless Endpoint Deployment (3-Rollen-Flotte)
+audioMONASTRY · RunPod Serverless Endpoint Deployment (8-Rollen-Flotte)
 =======================================================================
-Erstellt/aktualisiert die Serverless-Endpoints der GPU-Flotte:
+Erstellt/aktualisiert die Serverless-Endpoints der GPU-Flotte entsprechend
+docs/runpod-8-instances-complete-plan.md:
 
-    brain     samplemonk-ai-brain   AMPERE_48  (A6000 48 GB)
-    ears      samplemonk-ai-ears    AMPERE_48  (A6000 48 GB)
-    voiceGen  samplemonk-ai-voice   AMPERE_48  (A6000 48 GB)
+    #  Rolle           Endpoint                        GPU-Pool    Idle   Disk
+    1  brain           samplemonk-ai-brain             AMPERE_48    15 s   50 GB
+    2  ears            samplemonk-ai-ears              AMPERE_48    15 s  100 GB
+    3  voiceGen        samplemonk-ai-voice             AMPERE_48   900 s  150 GB
+    4  music           samplemonk-ai-music             AMPERE_48   900 s  200 GB
+    5  imageHq         samplemonk-ai-image             AMPERE_48   900 s  200 GB
+    6  videoReal       samplemonk-ai-video-real        AMPERE_48   900 s  200 GB
+    7  videoAbstract   samplemonk-ai-video-abstract    AMPERE_48   900 s  200 GB
+    8  orchestrator    samplemonk-ai-orchestrator      AMPERE_48   900 s  100 GB
 
-Jeder Endpoint bekommt dieselben Gewichte-Caches, aber eine andere Rolle per
-`AI_ROLE` – der Worker lädt daraus nur die Modelle seines Rollen-Manifests.
+Alle acht Rollen laufen auf EINER A6000 48 GB (GPU-POOL `AMPERE_48`) und
+skalieren auf 0 (`workers_min=0`, Scale-to-Zero). Ein Worker laeuft nach dem
+letzten Job noch `idleTimeout` Sekunden weiter und wird in dieser Zeit WEITER
+ABGERECHNET – "keine Idle-Kosten" gilt also erst nach diesem Fenster. Die API
+setzt `idleTimeout` nur beim ANLEGEN; bei bestehenden Endpoints wird eine
+Abweichung als Warnung gemeldet (Template-Update allein aendert den Wert nicht).
 
-Alle Endpoints starten mit `workers_min=0` (Scale-to-Zero). Ein Worker laeuft nach
-dem letzten Job aber noch `idleTimeout` Sekunden weiter und wird in dieser Zeit
-WEITER ABGERECHNET – "keine Idle-Kosten" gilt also erst nach diesem Fenster.
-Werte je Rolle in ROLE_DEFAULTS (voice/vision/video 900 s, brain/ears 20 s),
-global ueberschreibbar per RUNPOD_IDLE_TIMEOUT. Wichtig: die API setzt
-`idleTimeout` nur beim ANLEGEN; bei bestehenden Endpoints wird eine Abweichung
-beim Deploy als Warnung gemeldet (Template-Update allein aendert den Wert nicht).
-Der Session-Wake (`src/core/ai/orchestrator/fleetWake.ts`) hebt `workersMin`
-beim Studio-Eintritt temporär auf 1 und feuert einen Warmup-Job.
+Bild-Herkunft je Rolle (Bildquellen)
+------------------------------------
+`AI_ROLE` waehlt im Worker die Modelle des Rollen-Manifests. Zwei Bildquellen:
+
+  * `own`      – unser Image `services/samplemonk-ai-runtime/Dockerfile.runpod`
+                 (spricht das audioMONASTRY-`{task, model, input}`-Protokoll).
+                 Rollen: ears, voiceGen, orchestrator (und optional music).
+  * `vllm`     – der vorgefertigte RunPod-vLLM-Worker (OpenAI-kompatibel) fuer
+                 brain.
+  * `prebuilt` – vorgefertigte ComfyUI-/Hub-Worker fuer die visuellen Rollen
+                 (imageHq / videoReal / videoAbstract) und standardmaessig music
+                 (ACE-Step 1.5 XL). Diese Worker sprechen die ComfyUI-
+                 Workflow-API, nicht unser Protokoll – der Orchestrator bindet
+                 sie ueber MCP-Tools an. Empfehlung aus dem Runpod-Skill:
+                 vorgefertigten Worker statt Eigenbau bevorzugen.
+
+Jede Rolle ist per Env uebersteuerbar:
+  RUNPOD_IMAGE_<ROLLE>   z. B. RUNPOD_IMAGE_MUSIC, RUNPOD_IMAGE_IMAGE_HQ
+  RUNPOD_OWN_IMAGE=1     erzwingt unser Image fuer eine sonst prebuilt Rolle
 
 Voraussetzungen:
   - RP_API_KEY (RunPod Personal Access Token)
   - IMAGE (GHCR-Image, z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)
+    nur noetig, wenn mindestens eine Rolle ein `own`-Image nutzt.
 
 Betriebsarten:
-  RUNPOD_DEPLOY_ALL_ROLES=1        alle drei Rollen deployen (Default im Workflow)
-  RUNPOD_ROLE=brain                nur eine Rolle deployen
+  RUNPOD_DEPLOY_ALL_ROLES=1        alle acht Rollen deployen (Default)
+  RUNPOD_ROLE=music                nur eine Rolle deployen
   RUNPOD_ENDPOINT_NAME=...         Legacy: ein einzelner Endpoint ohne Rolle
-                                   (AI_ROLE bleibt leer, alle Modelle des Manifests)
+                                   (AI_ROLE bleibt leer)
 
 Optional:
   RUNPOD_NETWORK_VOLUME_ID, RUNPOD_WORKERS_MAX, RUNPOD_IDLE_TIMEOUT,
-  RUNPOD_TEMPLATE_ID, GHCR_USERNAME/GHCR_PASSWORD
+  RUNPOD_CONTAINER_DISK_GB, RUNPOD_TEMPLATE_ID, RUNPOD_GPU_ID,
+  GHCR_USERNAME/GHCR_PASSWORD
 
 Brain seit 2026-09-11: Die Rolle brain laeuft auf dem vorgefertigten RunPod-vLLM-Worker
 (Qwen3-14B-AWQ) statt auf unserem Image. Gemessen ~2x (kurze Calls) / ~3,6x (lange Outputs)
 gegenueber transformers. Steuerung:
   RUNPOD_BRAIN_VLLM=0                    zurueck auf unser eigenes Brain-Image
   RUNPOD_BRAIN_VLLM_IMAGE / _MODEL / _REVISION / _QUANTIZATION / _MAX_MODEL_LEN
-Der vLLM-Brain ist ein reiner LLM-Endpoint; ears/voiceGen bleiben auf unserem Image.
+Unser eigener Worker waehlt die Rolle zur Laufzeit ueber AI_ROLE und laedt daraus
+nur die Modelle des Rollen-Manifests (model_manifest.json → "roles").
 """
 from __future__ import annotations
 
@@ -50,32 +74,94 @@ from typing import Any, Dict, List, Optional
 
 import runpod
 
-#: Rollen der Flotte (Spiegel von GPU_ROLE_IDS im TS-Spiegel).
-#:
+# ---------------------------------------------------------------------------
+# Rollen (Spiegel von GPU_ROLE_IDS im TS-Spiegel src/config/aiInfrastructure.ts)
+# ---------------------------------------------------------------------------
 #: `idleTimeout` (Sekunden) = wie lange ein Worker nach dem letzten Job
 #: weiterlaeuft. Er wird in dieser Zeit WEITER ABGERECHNET, ist also eine
 #: Kosten-/Kaltstart-Abwaegung: kurz fuer Rollen, die der Session-Wake ohnehin
 #: vorwaermt; lang fuer Rollen mit wiederholten Einzelaufrufen (MOS-Hoerproben,
 #: Bild-/Video-Iteration), die sonst jeden Aufruf mit einem Kaltstart bezahlen.
+#: `containerDiskGb` = Image + Gewichte/Downloads im Container-Dateisystem.
 ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
-    "brain": {"suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 20},
-    "ears": {"suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 20},
-    "voiceGen": {"suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 900},
-    # 4. Rolle (2026-09-11): generative Bilder (FLUX.1-dev) - eigener Hub-Worker,
-    # NICHT unser Audio-Image.
-    "vision": {"suffix": "vision", "gpuPoolId": "AMPERE_48", "gpuCount": 1, "workersMax": 1, "idleTimeout": 900},
-    # 5. Rolle (2026-09-11): Video (Wan2.2 image->video), ADA_24/32-Pool des Hub-Workers.
-    "video": {"suffix": "video", "gpuPoolId": "ADA_24", "gpuCount": 1, "workersMax": 1, "idleTimeout": 900},
+    "brain": {
+        "suffix": "brain", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 50, "imageKind": "vllm",
+    },
+    "ears": {
+        "suffix": "ears", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 15, "containerDiskGb": 100, "imageKind": "own",
+    },
+    "voiceGen": {
+        "suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 150, "imageKind": "own",
+    },
+    "music": {
+        "suffix": "music", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "imageEnv": "RUNPOD_MUSIC_IMAGE", "imageDefault": "ACESTEP",
+    },
+    "imageHq": {
+        "suffix": "image", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "imageEnv": "RUNPOD_IMAGE_HQ_IMAGE", "imageDefault": "COMFYUI",
+    },
+    "videoReal": {
+        "suffix": "video-real", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "imageEnv": "RUNPOD_VIDEO_REAL_IMAGE", "imageDefault": "WAN22",
+    },
+    "videoAbstract": {
+        "suffix": "video-abstract", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "imageEnv": "RUNPOD_VIDEO_ABSTRACT_IMAGE", "imageDefault": "COMFYUI",
+    },
+    "orchestrator": {
+        "suffix": "orchestrator", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 100, "imageKind": "own",
+    },
+}
+
+#: Alte Rollen-IDs aus der 5-Rollen-Vorarchitektur. Sie werden auf die neuen
+#: Rollen abgebildet, damit bestehende Deploy-Skripte nicht hart brechen.
+LEGACY_ROLE_ALIASES: Dict[str, str] = {"vision": "imageHq", "video": "videoReal"}
+
+#: Container-Env-Schluessel → Endpoint-Env-Name fuer die Deploy-Zusammenfassung.
+ENDPOINT_ENV_BY_ROLE: Dict[str, str] = {
+    "brain": "RP_ENDPOINT_ID_BRAIN",
+    "ears": "RP_ENDPOINT_ID_EARS",
+    "voiceGen": "RP_ENDPOINT_ID_VOICE",
+    "music": "RP_ENDPOINT_ID_MUSIC",
+    "imageHq": "RP_ENDPOINT_ID_IMAGE",
+    "videoReal": "RP_ENDPOINT_ID_VIDEO_REAL",
+    "videoAbstract": "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
+    "orchestrator": "RP_ENDPOINT_ID_ORCHESTRATOR",
 }
 
 DOCKER_START_CMD = "python runpod_worker.py"
 
-#: Brain läuft seit 2026-09-11 auf dem vorgefertigten RunPod-vLLM-Worker
+#: Brain laeuft seit 2026-09-11 auf dem vorgefertigten RunPod-vLLM-Worker
 #: (v2.27.0 / vLLM 0.29.0). Der Brain ist ein reiner LLM-Endpoint; Audio-Modelle
 #: bleiben auf ears/voiceGen. Gemessen: ~2x kurze Calls, ~3,6x lange Outputs.
 BRAIN_VLLM_IMAGE_DEFAULT = "registry.runpod.net/runpod-workers-worker-vllm-main-dockerfile:76054c22c"
 BRAIN_VLLM_MODEL_DEFAULT = "Qwen/Qwen3-14B-AWQ"
 BRAIN_VLLM_REVISION_DEFAULT = "31c69efc29464b6bb0aee1398b5a7b50a99340c3"
+
+#: Vorgefertigte Worker der visuellen Rollen + Musik (Registry-Images des RunPod
+#: Hub). Sie bringen ihre Gewichte selbst mit bzw. laden sie beim ersten Boot.
+PREBUILT_IMAGES: Dict[str, str] = {
+    # Offizieller ComfyUI-Serverless-Worker (FLUX.1-dev fp8) – Basis fuer
+    # imageHq (FLUX.2/Qwen-Image-Workflows) und videoAbstract (LTX-Workflows).
+    "COMFYUI": "registry.runpod.net/runpod-workers-worker-comfyui-main-dockerfile:724802bf2",
+    # Wan2.2 text/image-to-video Serverless-Worker (LoRA-faehig).
+    "WAN22": "registry.runpod.net/averystormknight-hue-wan22-ti2v-runpod-main-dockerfile:81fc2044f",
+    # ACE-Step 1.5 XL Musik-Generierung auf ComfyUI (Modelle werden beim ersten
+    # Boot geladen, nichts ist ins Image eingebacken).
+    "ACESTEP": "registry.runpod.net/ryoheitanaka-runpod-template-acestep15xl-main-dockerfile:16b9ccd80",
+}
+
+#: Rollen, die ohne Rollen-Env ein minimales Prebuilt-Env bekommen.
+PREBUILT_ENV_KEYS = ("HF_TOKEN", "COMFYUI_START", "AI_ROLE")
 
 
 def env(name: str, default: str = "") -> str:
@@ -83,13 +169,13 @@ def env(name: str, default: str = "") -> str:
 
 
 def brain_vllm_enabled() -> bool:
-    """Default AN (Entscheidung 2026-09-11); `RUNPOD_BRAIN_VLLM=0` schaltet zurück."""
+    """Default AN (Entscheidung 2026-09-11); `RUNPOD_BRAIN_VLLM=0` schaltet zurueck."""
     raw = env("RUNPOD_BRAIN_VLLM").lower()
     return raw not in ("0", "false", "no", "off")
 
 
 def build_env_vars(role: str) -> Dict[str, str]:
-    """Container-Env eines Rollen-Workers."""
+    """Container-Env eines Rollen-Workers unseres eigenen Images."""
     env_vars = {
         "AI_RUNTIME_DEVICE": env("AI_RUNTIME_DEVICE", "cuda"),
         "AI_MODEL_MANIFEST": "/opt/samplemonk-ai/model_manifest.json",
@@ -121,31 +207,81 @@ def build_env_vars_vllm() -> Dict[str, str]:
     return env_vars
 
 
-#: Rolle `vision` = vorgefertigter FLUX.1-dev-Worker (PrunaAI), AMPERE_48.
-#: Der Worker laedt FLUX.1-dev selbst; optional anderes Modell ueber HF_MODEL.
-VISION_IMAGE_DEFAULT = "registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201"
+def build_env_vars_prebuilt(role: str) -> Dict[str, str]:
+    """Minimales Env eines vorgefertigten Hub-Workers (ComfyUI/Wan/ACE-Step).
 
-
-def build_env_vars_vision() -> Dict[str, str]:
-    """Container-Env des FLUX-Workers (Rolle vision)."""
-    env_vars: Dict[str, str] = {}
-    if env("RUNPOD_VISION_MODEL"):
-        env_vars["HF_MODEL"] = env("RUNPOD_VISION_MODEL")
+    Diese Worker kennen unser Rollen-Manifest nicht. Wir setzen nur, was sie
+    verstehen: HF_TOKEN fuer gated Modelle und AI_ROLE zur Nachvollziehbarkeit
+    in Logs. Rollenspezifische Optionen bleiben per RUNPOD_<ROLLE>_ENV_<KEY>
+    setzbar (z. B. RUNPOD_MUSIC_ENV_COMFYUI_START=true).
+    """
+    env_vars: Dict[str, str] = {"AI_ROLE": role}
     if env("HF_TOKEN"):
         env_vars["HF_TOKEN"] = env("HF_TOKEN")
+    prefix = f"RUNPOD_{_env_token(role)}_ENV_"
+    for key, value in os.environ.items():
+        if key.startswith(prefix) and value:
+            env_vars[key[len(prefix):]] = value
     return env_vars
 
 
-#: Rolle `video` = vorgefertigter Wan2.2-Image->Video-Worker (ComfyUI), ADA_24/32.
-VIDEO_IMAGE_DEFAULT = "registry.runpod.net/wlsdml1114-generate-video-ksampler-dockerfile:a9247705c"
+def _env_token(role: str) -> str:
+    """`voiceGen`/`imageHq` → `VOICEGEN`/`IMAGEHQ` (Env-Token einer Rolle)."""
+    out = []
+    for ch in role:
+        if ch.isupper() and out:
+            out.append("_")
+        out.append(ch.upper())
+    return "".join(out)
 
 
-def build_env_vars_video() -> Dict[str, str]:
-    """Container-Env des Video-Workers (Rolle video)."""
-    env_vars: Dict[str, str] = {}
-    if env("HF_TOKEN"):
-        env_vars["HF_TOKEN"] = env("HF_TOKEN")
-    return env_vars
+def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
+    """Liefert image/docker_args/env_vars fuer eine Rolle.
+
+    Rueckgabe enthaelt `image`, `docker_args`, `env_vars`, `template_name`,
+    `registry_auth` (True, wenn unser privates GHCR-Image genutzt wird).
+    """
+    kind = defaults.get("imageKind", "own")
+    # Rollen-Image per Env ueberschreiben; RUNPOD_OWN_IMAGE erzwingt unser Image.
+    override = env(str(defaults.get("imageEnv", ""))) if defaults.get("imageEnv") else ""
+    if env("RUNPOD_OWN_IMAGE").lower() in ("1", "true", "yes") and kind != "vllm":
+        kind = "own"
+
+    if role == "brain" and brain_vllm_enabled() and kind != "own":
+        return {
+            "image": env("RUNPOD_BRAIN_VLLM_IMAGE", BRAIN_VLLM_IMAGE_DEFAULT),
+            "docker_args": "",  # Image bringt seinen eigenen Entrypoint mit
+            "env_vars": build_env_vars_vllm(),
+            "template_name": "samplemonk-ai-brain-vllm-template",
+            "registry_auth": False,
+        }
+
+    if kind == "prebuilt":
+        image = override or PREBUILT_IMAGES.get(str(defaults.get("imageDefault", "")), "")
+        if not image:
+            raise SystemExit(f"FEHLER: kein Prebuilt-Image fuer Rolle {role} aufgeloest")
+        return {
+            "image": image,
+            "docker_args": "",  # vorgefertigter Entrypoint
+            "env_vars": build_env_vars_prebuilt(role),
+            "template_name": f"samplemonk-ai-{defaults['suffix']}-template",
+            "registry_auth": False,
+        }
+
+    # `own`: unser Image (braucht IMAGE + optional GHCR-Auth).
+    image = override or env("IMAGE")
+    if not image:
+        raise SystemExit(
+            f"FEHLER: IMAGE fehlt fuer Rolle {role} "
+            "(z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)"
+        )
+    return {
+        "image": image,
+        "docker_args": DOCKER_START_CMD,
+        "env_vars": build_env_vars(role),
+        "template_name": f"samplemonk-ai-{defaults['suffix']}-template",
+        "registry_auth": True,
+    }
 
 
 def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
@@ -228,63 +364,28 @@ def save_template(
     return result.get("data", {}).get("saveTemplate", {})
 
 
-def image_for_role(role: str) -> str:
-    """Bild je Rolle: der Brain nutzt das Image mit eingebackenen Gewichten.
-
-    Setzt `IMAGE_BRAIN` nicht, fällt alles auf `IMAGE` zurück (ein Image für alle).
-    """
-    if role == "brain":
-        return env("IMAGE_BRAIN") or env("IMAGE")
-    return env("IMAGE")
-
-
-def deploy_role(role: str, image: str) -> Optional[str]:
+def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
     """Erstellt/aktualisiert den Endpoint einer Rolle; liefert die Endpoint-ID."""
-    defaults = ROLE_DEFAULTS.get(role, {})
-    endpoint_name = env("RUNPOD_ENDPOINT_NAME") or f"samplemonk-ai-{defaults.get('suffix', role)}"
+    resolved = resolve_image(role, defaults)
+    endpoint_name = env("RUNPOD_ENDPOINT_NAME") or f"samplemonk-ai-{defaults['suffix']}"
     gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuPoolId", "AMPERE_48"))
     gpu_count = int(env("RUNPOD_GPU_COUNT") or defaults.get("gpuCount", 1))
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX") or defaults.get("workersMax", 1))
-    # Reihenfolge: globaler Env-Override > Rollen-Default > 20 s.
-    idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT") or defaults.get("idleTimeout", 20))
-    # Brain (vLLM) braucht mehr Plattenplatz (Image + ~10 GB AWQ-Gewichte);
-    # vision (FLUX) braucht 80 GB (Image + Gewichte).
-    default_disk = "150" if role == "brain" else "80" if role == "vision" else "180" if role == "video" else "30"
-    container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB", default_disk))
-    template_name = f"{endpoint_name}-template"
+    # Reihenfolge: globaler Env-Override > Rollen-Default.
+    idle_timeout = int(env("RUNPOD_IDLE_TIMEOUT") or defaults.get("idleTimeout", 900))
+    container_disk_gb = int(env("RUNPOD_CONTAINER_DISK_GB") or defaults.get("containerDiskGb", 100))
+    template_name = resolved["template_name"]
 
-    # Brain = gepflegter RunPod-vLLM-Worker (OpenAI-kompatibel, AWQ).
-    vllm_brain = role == "brain" and brain_vllm_enabled()
-    if vllm_brain:
-        image = env("RUNPOD_BRAIN_VLLM_IMAGE", BRAIN_VLLM_IMAGE_DEFAULT)
-        env_vars = build_env_vars_vllm()
-        template_name = "samplemonk-ai-brain-vllm-template"
-        registry_auth_id = None
-        docker_args = ""  # Image bringt seinen eigenen Entrypoint mit
-        print(f"[deploy] {endpoint_name}: vLLM-Worker ({env_vars['MODEL_NAME']}, {env_vars['QUANTIZATION']})")
-    elif role == "vision":
-        # Rolle vision = vorgefertigter FLUX.1-dev-Worker (nicht unser Audio-Image).
-        image = env("RUNPOD_VISION_IMAGE", VISION_IMAGE_DEFAULT)
-        env_vars = build_env_vars_vision()
-        template_name = "samplemonk-ai-vision-template"
-        registry_auth_id = None
-        docker_args = ""
-        print(f"[deploy] {endpoint_name}: FLUX-Worker (Rolle vision)")
-    elif role == "video":
-        # Rolle video = vorgefertigter Wan2.2-image->video-Worker.
-        image = env("RUNPOD_VIDEO_IMAGE", VIDEO_IMAGE_DEFAULT)
-        env_vars = build_env_vars_video()
-        template_name = "samplemonk-ai-video-template"
-        registry_auth_id = None
-        docker_args = ""
-        print(f"[deploy] {endpoint_name}: Wan2.2-Video-Worker (Rolle video)")
-    else:
-        registry_auth_id = ensure_registry_auth(endpoint_name)
-        env_vars = build_env_vars(role)
-        docker_args = DOCKER_START_CMD
+    registry_auth_id = ensure_registry_auth(endpoint_name) if resolved["registry_auth"] else None
+    print(
+        f"[deploy] {endpoint_name}: Rolle {role} | {resolved['image'].split('/')[-1]} "
+        f"| idle {idle_timeout}s | disk {container_disk_gb} GB"
+    )
 
-    template = save_template(template_name, image, env_vars, container_disk_gb, docker_args)
+    template = save_template(
+        template_name, resolved["image"], resolved["env_vars"], container_disk_gb, resolved["docker_args"]
+    )
     template_id = template.get("id", "")
     if not template_id:
         print(f"[deploy] FEHLER: Template-Erstellung lieferte keine ID für {endpoint_name}", file=sys.stderr)
@@ -359,39 +460,48 @@ def deploy_role(role: str, image: str) -> Optional[str]:
     return endpoint_id
 
 
+def resolve_roles() -> List[str]:
+    """Bestimmt die zu deployenden Rollen aus RUNPOD_ROLE / RUNPOD_DEPLOY_ALL_ROLES."""
+    single_role = env("RUNPOD_ROLE")
+    if single_role in LEGACY_ROLE_ALIASES:
+        mapped = LEGACY_ROLE_ALIASES[single_role]
+        print(f"[deploy] WARNUNG: Rolle '{single_role}' ist veraltet → '{mapped}'")
+        single_role = mapped
+    if single_role and single_role not in ROLE_DEFAULTS:
+        print(f"FEHLER: unbekannte RUNPOD_ROLE {single_role!r} (erwartet: {', '.join(ROLE_DEFAULTS)})", file=sys.stderr)
+        raise SystemExit(2)
+
+    # Legacy: expliziter Einzel-Endpoint ohne Rolle (AI_ROLE leer).
+    if not single_role and not env("RUNPOD_DEPLOY_ALL_ROLES") and env("RUNPOD_ENDPOINT_NAME"):
+        return [""]
+    if single_role:
+        return [single_role]
+    return list(ROLE_DEFAULTS)
+
+
 def main() -> int:
     api_key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
-    image = env("IMAGE")
     if not api_key:
         print("FEHLER: RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY fehlt", file=sys.stderr)
         return 2
 
     runpod.api_key = api_key
 
-    single_role = env("RUNPOD_ROLE")
-    if single_role and single_role not in ROLE_DEFAULTS:
-        print(f"FEHLER: unbekannte RUNPOD_ROLE {single_role!r} (erwartet: {', '.join(ROLE_DEFAULTS)})", file=sys.stderr)
-        return 2
-
-    # Legacy: expliziter Einzel-Endpoint ohne Rolle (AI_ROLE leer).
-    if not single_role and not env("RUNPOD_DEPLOY_ALL_ROLES") and env("RUNPOD_ENDPOINT_NAME"):
-        roles: List[str] = [""]
-    elif single_role:
-        roles = [single_role]
-    else:
-        roles = list(ROLE_DEFAULTS)
-
-    # IMAGE nur nötig, wenn mindestens eine Rolle unser eigenes Image nutzt –
-    # der vLLM-Brain bringt sein eigenes mit.
-    needs_own_image = any(not ((r == "brain" and brain_vllm_enabled()) or r in ("vision", "video")) for r in roles)
-    if needs_own_image and not image:
+    roles = resolve_roles()
+    # IMAGE nur noetig, wenn mindestens eine Rolle unser eigenes Image nutzt –
+    # der vLLM-Brain und die Prebuilt-Worker bringen ihr eigenes mit.
+    needs_own_image = any(
+        (ROLE_DEFAULTS.get(r, {}).get("imageKind") == "own") for r in roles if r
+    )
+    if needs_own_image and not env("IMAGE"):
         print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)", file=sys.stderr)
         return 2
 
     print(f"[deploy] Rollen: {roles or ['(legacy)']}")
     results: Dict[str, str] = {}
     for role in roles:
-        endpoint_id = deploy_role(role, image_for_role(role))
+        defaults = ROLE_DEFAULTS.get(role, {"suffix": env("RUNPOD_ENDPOINT_NAME") or "ai", "imageKind": "own"})
+        endpoint_id = deploy_role(role, defaults)
         if not endpoint_id:
             print(f"[deploy] ABBRUCH – Rolle {role or 'legacy'} fehlgeschlagen", file=sys.stderr)
             return 5
@@ -399,11 +509,7 @@ def main() -> int:
 
     print("[deploy] Zusammenfassung:")
     for role, endpoint_id in results.items():
-        env_name = {
-            "brain": "RP_ENDPOINT_ID_BRAIN",
-            "ears": "RP_ENDPOINT_ID_EARS",
-            "voiceGen": "RP_ENDPOINT_ID_VOICE",
-        }.get(role, "RP_ENDPOINT_ID")
+        env_name = ENDPOINT_ENV_BY_ROLE.get(role, "RP_ENDPOINT_ID")
         print(f"[deploy]   {env_name}={endpoint_id}")
     return 0
 

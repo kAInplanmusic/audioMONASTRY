@@ -16,14 +16,20 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE',
-  'RUNPOD_ENDPOINT_ID_VISION',
-  'RUNPOD_ENDPOINT_ID_VIDEO',
+  'RUNPOD_ENDPOINT_ID_MUSIC',
+  'RUNPOD_ENDPOINT_ID_IMAGE',
+  'RUNPOD_ENDPOINT_ID_VIDEO_REAL',
+  'RUNPOD_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'RUNPOD_ENDPOINT_ID_ORCHESTRATOR',
   'RP_ENDPOINT_ID',
   'RP_ENDPOINT_ID_BRAIN',
   'RP_ENDPOINT_ID_EARS',
   'RP_ENDPOINT_ID_VOICE',
-  'RP_ENDPOINT_ID_VISION',
-  'RP_ENDPOINT_ID_VIDEO',
+  'RP_ENDPOINT_ID_MUSIC',
+  'RP_ENDPOINT_ID_IMAGE',
+  'RP_ENDPOINT_ID_VIDEO_REAL',
+  'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'RP_ENDPOINT_ID_ORCHESTRATOR',
   // Der Brain-Warmup nimmt bei gesetzter URL den OpenAI-Pfad statt `warmup`.
   'RUNPOD_BRAIN_OPENAI_URL',
   'RP_BRAIN_OPENAI_URL',
@@ -31,6 +37,21 @@ const ENV_KEYS = [
   'AI_FLEET_WAKE',
   'AI_FLEET_SLEEP',
 ] as const;
+
+/** Alle acht Rollen der 8-Instanzen-Flotte in Anzeige-Reihenfolge. */
+const FLEET_ROLES = [
+  'brain',
+  'ears',
+  'voiceGen',
+  'music',
+  'imageHq',
+  'videoReal',
+  'videoAbstract',
+  'orchestrator',
+] as const;
+
+/** Rollen mit `warmupMode: 'task'` – sie bekommen einen warmup-Job. */
+const TASK_ROLES = new Set(['brain', 'ears', 'voiceGen', 'orchestrator']);
 
 interface RecordedCall {
   url: string;
@@ -66,6 +87,11 @@ function configureFleet(): void {
   process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
   process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
   process.env.RP_ENDPOINT_ID_VOICE = 'voice-ep';
+  process.env.RP_ENDPOINT_ID_MUSIC = 'music-ep';
+  process.env.RP_ENDPOINT_ID_IMAGE = 'image-ep';
+  process.env.RP_ENDPOINT_ID_VIDEO_REAL = 'video-real-ep';
+  process.env.RP_ENDPOINT_ID_VIDEO_ABSTRACT = 'video-abstract-ep';
+  process.env.RP_ENDPOINT_ID_ORCHESTRATOR = 'orchestrator-ep';
 }
 
 describe('GPU-Flotten Session-Wake', () => {
@@ -81,7 +107,7 @@ describe('GPU-Flotten Session-Wake', () => {
     for (const key of ENV_KEYS) delete process.env[key];
   });
 
-  it('weckt alle drei Rollen (workersMin + Warmup) und meldet ok', async () => {
+  it('weckt alle acht Rollen und meldet ok', async () => {
     configureFleet();
     mockFetch();
 
@@ -89,27 +115,37 @@ describe('GPU-Flotten Session-Wake', () => {
 
     expect(report.action).toBe('wake');
     expect(report.ok).toBe(true);
-    expect(report.roles.map((r) => r.role)).toEqual(['brain', 'ears', 'voiceGen']);
+    expect(report.roles.map((r) => r.role)).toEqual([...FLEET_ROLES]);
     expect(report.roles.every((r) => r.workersMinSet)).toBe(true);
-    expect(report.roles.every((r) => r.warmup?.ok === true)).toBe(true);
 
+    // Jede der acht Rollen bekommt genau ein workersMin=1-PATCH.
     const patches = calls.filter((c) => c.method === 'PATCH');
-    expect(patches).toHaveLength(3);
-    expect(patches.map((p) => p.url).sort()).toEqual([
-      'https://rest.runpod.io/v1/endpoints/brain-ep',
-      'https://rest.runpod.io/v1/endpoints/ears-ep',
-      'https://rest.runpod.io/v1/endpoints/voice-ep',
-    ]);
+    expect(patches).toHaveLength(8);
     expect(patches.every((p) => (p.body as { workersMin: number }).workersMin === 1)).toBe(true);
 
-    // Pro Rolle genau ein Warmup-Job auf dem Rollen-Endpoint.
+    // Nur die vier Task-Rollen feuern einen Warmup-Job – die visuellen
+    // Prebuilt-Worker (music/image/video) kennen den `warmup`-Task nicht.
     const runs = calls.filter((c) => c.url.endsWith('/run'));
-    expect(runs.map((r) => r.url).sort()).toEqual([
-      'https://api.runpod.ai/v2/brain-ep/run',
-      'https://api.runpod.ai/v2/ears-ep/run',
-      'https://api.runpod.ai/v2/voice-ep/run',
-    ]);
+    expect(runs).toHaveLength(4);
     expect((runs[0].body as { input: { task: string } }).input.task).toBe('warmup');
+    for (const role of ['image', 'video-real', 'video-abstract', 'music']) {
+      expect(calls.some((c) => c.url.includes(`/v2/${role}-ep/run`))).toBe(false);
+    }
+  });
+
+  it('markiert die Warmup-Modi je Rolle', async () => {
+    configureFleet();
+    mockFetch();
+
+    const report = await wakeFleet();
+
+    for (const status of report.roles) {
+      const expected = TASK_ROLES.has(status.role) ? 'task' : 'endpoint';
+      expect(status.warmupMode, status.role).toBe(expected);
+    }
+    // Task-Rollen haben ein Warmup-Ergebnis, Endpoint-Rollen nicht.
+    expect(report.roles.filter((r) => r.warmupMode === 'task').every((r) => r.warmup?.ok === true)).toBe(true);
+    expect(report.roles.filter((r) => r.warmupMode === 'endpoint').every((r) => r.warmup === null)).toBe(true);
   });
 
   it('schaltet beim Brain-Warmup über den OpenAI-Pfad das Reasoning ab', async () => {
@@ -136,6 +172,7 @@ describe('GPU-Flotten Session-Wake', () => {
     const report = await wakeFleet();
 
     expect(calls).toHaveLength(0);
+    expect(report.roles).toHaveLength(8);
     expect(report.roles.every((r) => !r.configured)).toBe(true);
     expect(report.ok).toBe(true);
   });
@@ -147,8 +184,9 @@ describe('GPU-Flotten Session-Wake', () => {
 
     const report = await wakeFleet();
     const runs = calls.filter((c) => c.url.endsWith('/run'));
-    expect(runs).toHaveLength(3);
+    expect(runs).toHaveLength(4);
     expect(runs.every((r) => r.url === 'https://api.runpod.ai/v2/legacy-ep/run')).toBe(true);
+    expect(report.roles).toHaveLength(8);
     expect(report.roles.every((r) => r.configured)).toBe(true);
   });
 
@@ -169,7 +207,7 @@ describe('GPU-Flotten Session-Wake', () => {
     const report = await sleepFleet();
     expect(report.ok).toBe(true);
     const patches = calls.filter((c) => c.method === 'PATCH');
-    expect(patches).toHaveLength(3);
+    expect(patches).toHaveLength(8);
     expect(patches.every((p) => (p.body as { workersMin: number }).workersMin === 0)).toBe(true);
     expect(calls.some((c) => c.url.endsWith('/run'))).toBe(false);
   });
@@ -180,7 +218,7 @@ describe('GPU-Flotten Session-Wake', () => {
 
     const [a, b] = await Promise.all([wakeFleet(), wakeFleet()]);
     expect(a).toBe(b);
-    expect(calls.filter((c) => c.url.endsWith('/run'))).toHaveLength(3);
+    expect(calls.filter((c) => c.url.endsWith('/run'))).toHaveLength(4);
   });
 
   it('liefert den Rollen-Status ohne Netzwerkaufruf', () => {
@@ -189,50 +227,18 @@ describe('GPU-Flotten Session-Wake', () => {
 
     const status = fleetStatus() as { roles: Array<Record<string, unknown>>; credentialConfigured: boolean };
     expect(status.credentialConfigured).toBe(true);
-    expect(status.roles.map((r) => r.role)).toEqual(['brain', 'ears', 'voiceGen']);
+    expect(status.roles.map((r) => r.role)).toEqual([...FLEET_ROLES]);
     expect(status.roles.every((r) => r.configured)).toBe(true);
     expect(status.roles.map((r) => r.endpointName)).toEqual([
       'samplemonk-ai-brain',
       'samplemonk-ai-ears',
       'samplemonk-ai-voice',
+      'samplemonk-ai-music',
+      'samplemonk-ai-image',
+      'samplemonk-ai-video-real',
+      'samplemonk-ai-video-abstract',
+      'samplemonk-ai-orchestrator',
     ]);
     expect(calls).toHaveLength(0);
-  });
-
-  it('weckt die Rolle vision per workersMin (kein warmup-Task)', async () => {
-    configureFleet();
-    process.env.RP_ENDPOINT_ID_VISION = 'vision-ep';
-    mockFetch();
-
-    const report = await wakeFleet();
-
-    expect(report.vision).toEqual({ endpointId: 'vision-ep', workersMinSet: true });
-    const visionPatch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/vision-ep');
-    expect(visionPatch?.method).toBe('PATCH');
-    expect((visionPatch?.body as { workersMin: number }).workersMin).toBe(1);
-    // Vision bekommt KEINEN warmup-Job.
-    expect(calls.some((c) => c.url.includes('/v2/vision-ep/run'))).toBe(false);
-  });
-
-  it('schläfert die Rolle vision mit workersMin=0', async () => {
-    configureFleet();
-    process.env.RP_ENDPOINT_ID_VISION = 'vision-ep';
-    mockFetch();
-
-    const report = await sleepFleet();
-    expect(report.vision?.workersMinSet).toBe(true);
-    const visionPatch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/vision-ep');
-    expect((visionPatch?.body as { workersMin: number }).workersMin).toBe(0);
-  });
-
-  it('weckt die Rolle video per workersMin (kein warmup-Task)', async () => {
-    configureFleet();
-    process.env.RP_ENDPOINT_ID_VIDEO = 'video-ep';
-    mockFetch();
-
-    const report = await wakeFleet();
-    expect(report.video).toEqual({ endpointId: 'video-ep', workersMinSet: true });
-    const patch = calls.find((c) => c.url === 'https://rest.runpod.io/v1/endpoints/video-ep');
-    expect((patch?.body as { workersMin: number }).workersMin).toBe(1);
   });
 });

@@ -62,10 +62,8 @@
 |---|---|---|---|---|
 | `RP_API_KEY` | `RP_API_KEY` | `RUNPOD_API_KEY` | runpodProvider.ts, fleetWake.ts | **ja** |
 | `RP_AGENT_KEY` | `RP_AGENT_KEY` | – | runpodProvider.ts (Vorrang) | **ja** |
-| `RP_ENDPOINT_ID_BRAIN/EARS/VOICE` | `RP_ENDPOINT_ID_*` | `RUNPOD_ENDPOINT_ID_*` | endpointRegistry.ts | nein |
-| `RP_ENDPOINT_ID_VISION` | `RP_ENDPOINT_ID_VISION` | `RUNPOD_ENDPOINT_ID_VISION` | runpodVision.ts, fleetWake.ts | nein |
-| `RP_ENDPOINT_ID_VIDEO` | `RP_ENDPOINT_ID_VIDEO` | `RUNPOD_ENDPOINT_ID_VIDEO` | runpodVideo.ts, fleetWake.ts | nein |
-| `RP_ENDPOINT_ID` | `RP_ENDPOINT_ID` | `RUNPOD_ENDPOINT_ID` | endpointRegistry.ts (Legacy-Fallback) | nein |
+| `RP_ENDPOINT_ID_BRAIN/EARS/VOICE/MUSIC/IMAGE/VIDEO_REAL/VIDEO_ABSTRACT/ORCHESTRATOR` | `RP_ENDPOINT_ID_*` | `RUNPOD_ENDPOINT_ID_*` | endpointRegistry.ts (8-Instanzen-Flotte) | nein |
+| `RP_ENDPOINT_ID` | `RP_ENDPOINT_ID` | `RUNPOD_ENDPOINT_ID` | endpointRegistry.ts (Legacy-Fallback, gilt für ALLE 8 Rollen) | nein |
 | `RP_BRAIN_OPENAI_URL` | `RP_BRAIN_OPENAI_URL` | – | LlmRouter (vLLM-Override) | nein |
 | `RUNPOD_API_BASE` | `RUNPOD_API_BASE` | – | runpodProvider.ts (Tests) | nein |
 | `RP_S3_ACCESS_KEY` / `RP_S3_SECRET_KEY` | `RP_S3_*` | – | RunPod-Payload-Transfer | **ja** |

@@ -1,20 +1,25 @@
 /**
  * audioMONASTRY · AI-Orchestrator – Session-Wake der GPU-Flotte
  * =============================================================
- * Die drei Serverless-Endpoints (brain / ears / voiceGen) skalieren auf 0,
+ * Die acht Serverless-Endpoints (siehe endpointRegistry.ts) skalieren auf 0,
  * damit im Idle keine GPU-Kosten entstehen. Der Preis dafür ist ein Kaltstart
  * beim ersten Task eines Tages. Da die App selbst 5–10 min zum Hochfahren
  * braucht, wird der Kaltstart versteckt:
  *
  *   1. `wakeFleet()` setzt `workersMin` je Endpoint temporär auf 1 (best effort,
- *      RunPod REST) und feuert pro Rolle einen `warmup`-Job, der die
- *      Preload-Modelle des Rollen-Manifests in VRAM lädt.
+ *      RunPod REST) und feuert – bei Rollen mit `warmupMode: 'task'` – einen
+ *      `warmup`-Job, der die Preload-Modelle des Rollen-Manifests in VRAM lädt.
  *   2. Ist die Flotte warm, treffen echte Tasks keine Modell-Ladezeit mehr.
  *   3. `sleepFleet()` setzt `workersMin` zurück auf 0 – aufgerufen beim
  *      Session-Ende bzw. Idle-Timeout (SessionManager.onScaleToZero).
  *
+ * Rollen mit `warmupMode: 'endpoint'` (die vorgefertigten ComfyUI-/Hub-Worker
+ * für music/imageHq/videoReal/videoAbstract) kennen unseren `warmup`-Task NICHT –
+ * Wecken ist dort nur `workersMin=1`, ein Warmup-Job würde als ungültiger
+ * Request enden.
+ *
  * Konfiguration:
- *   RP_ENDPOINT_ID_BRAIN / _EARS / _VOICE   (Fallback: RP_ENDPOINT_ID)
+ *   RP_ENDPOINT_ID_<ROLLE>   (Fallback: RP_ENDPOINT_ID)
  *   RP_AGENT_KEY | RP_API_KEY | RUNPOD_API_KEY
  *   RUNPOD_REST_BASE      (Default https://rest.runpod.io/v1)
  *   AI_FLEET_WAKE=0       deaktiviert das Aufwecken (kein Netzwerkverkehr)
@@ -22,7 +27,7 @@
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import { aiLogger } from './aiLogger';
-import { resolveGpuRoles, type ResolvedGpuRole } from './endpointRegistry';
+import { resolveGpuRoles, type GpuRoleDefinition, type ResolvedGpuRole } from './endpointRegistry';
 import { RunPodProvider, type WarmupResult } from './runpodProvider';
 
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
@@ -34,6 +39,8 @@ interface FleetRoleStatus {
   configured: boolean;
   /** Konnte `workersMin` gesetzt werden? (best effort) */
   workersMinSet: boolean;
+  /** `task` = Warmup-Job möglich; `endpoint` = nur workersMin. */
+  warmupMode: GpuRoleDefinition['warmupMode'];
   warmup: WarmupResult | null;
   error?: string;
 }
@@ -45,10 +52,6 @@ export interface FleetReport {
   durationMs: number;
   ok: boolean;
   roles: FleetRoleStatus[];
-  /** Rolle `vision` (FLUX) – kennt keinen `warmup`-Task, wird nur per workersMin geweckt. */
-  vision?: { endpointId: string; workersMinSet: boolean } | null;
-  /** Rolle `video` (Wan2.2) – ebenfalls nur per workersMin. */
-  video?: { endpointId: string; workersMinSet: boolean } | null;
 }
 
 function env(name: string): string {
@@ -139,44 +142,51 @@ async function warmupRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<
   }
 }
 
-/** Best effort: beliebigen Endpoint per REST auf `workersMin` setzen (z. B. Rolle vision). */
-async function setEndpointWorkersMin(endpointId: string, workersMin: number, signal?: AbortSignal): Promise<boolean> {
-  if (!endpointId || !apiKey()) return false;
-  try {
-    const resp = await fetch(`${restBase()}/endpoints/${encodeURIComponent(endpointId)}`, {
-      method: 'PATCH',
-      headers: { Authorization: `Bearer ${apiKey()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ workersMin }),
-      signal: signal ?? AbortSignal.timeout(15_000),
-    });
-    return resp.ok;
-  } catch (error) {
-    aiLogger.warn('vision workersMin update failed', { workersMin, error: (error as Error).message });
-    return false;
-  }
+/** Ein Rollen-Status im Wake-/Sleep-Lauf (ohne Endpoint-ID → nicht konfiguriert). */
+function unconfiguredStatus(role: ResolvedGpuRole, error: string): FleetRoleStatus {
+  return {
+    role: role.role,
+    endpointId: '',
+    configured: false,
+    workersMinSet: false,
+    warmupMode: role.warmupMode,
+    warmup: null,
+    error,
+  };
 }
 
 /**
- * Rolle `vision` (FLUX-Worker) wecken/schlafen: sie kennt keinen `warmup`-Task,
- * Wecken ist hier `workersMin=1` (der Worker zieht Image + Gewichte).
+ * Weckt eine einzelne Rolle: immer `workersMin=1`; zusätzlich ein Warmup-Job,
+ * wenn der Worker unser Protokoll kennt (`warmupMode: 'task'`).
  */
-async function toggleVision(workersMin: number, signal?: AbortSignal): Promise<{ endpointId: string; workersMinSet: boolean } | null> {
-  const endpointId = env('RP_ENDPOINT_ID_VISION') || env('RUNPOD_ENDPOINT_ID_VISION');
-  if (!endpointId) return null;
-  return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
+async function wakeRole(role: ResolvedGpuRole, signal?: AbortSignal): Promise<FleetRoleStatus> {
+  if (!role.endpointId) {
+    return unconfiguredStatus(role, `Endpoint-ID fehlt (${role.endpointIdEnv})`);
+  }
+  const workersMinSet = await setWorkersMin(role, 1, signal);
+  const warmup = role.warmupMode === 'task' ? await warmupRole(role, signal) : null;
+  return {
+    role: role.role,
+    endpointId: role.endpointId,
+    configured: true,
+    workersMinSet,
+    warmupMode: role.warmupMode,
+    warmup,
+  };
 }
 
-async function toggleVideo(workersMin: number, signal?: AbortSignal): Promise<{ endpointId: string; workersMinSet: boolean } | null> {
-  const endpointId = env('RP_ENDPOINT_ID_VIDEO') || env('RUNPOD_ENDPOINT_ID_VIDEO');
-  if (!endpointId) return null;
-  return { endpointId, workersMinSet: await setEndpointWorkersMin(endpointId, workersMin, signal) };
+/** Eine Rolle ist bereit, wenn sie geweckt wurde – Task-Rollen zusätzlich per Warmup. */
+function roleReady(status: FleetRoleStatus): boolean {
+  if (!status.configured) return true;
+  if (status.warmupMode === 'endpoint') return status.workersMinSet;
+  return status.warmup?.ok === true;
 }
 
 let inflightWake: Promise<FleetReport> | null = null;
 
 /**
- * Weckt die Flotte: `workersMin=1` je Endpoint plus ein Warmup-Job pro Rolle.
- * Parallel laufende Aufrufe teilen sich denselben Lauf.
+ * Weckt die Flotte: `workersMin=1` je Endpoint plus (bei Task-Rollen) einen
+ * Warmup-Job pro Rolle. Parallel laufende Aufrufe teilen sich denselben Lauf.
  */
 export async function wakeFleet(signal?: AbortSignal): Promise<FleetReport> {
   if (inflightWake) return inflightWake;
@@ -196,43 +206,18 @@ async function doWake(signal?: AbortSignal): Promise<FleetReport> {
       startedAt,
       durationMs: 0,
       ok: true,
-      roles: resolved.map((role) => ({
-        role: role.role,
-        endpointId: role.endpointId,
-        configured: Boolean(role.endpointId),
-        workersMinSet: false,
-        warmup: null,
-        error: 'AI_FLEET_WAKE disabled',
-      })),
+      roles: resolved.map((role) => unconfiguredStatus(role, 'AI_FLEET_WAKE disabled')),
     };
   }
 
-  const roles = await Promise.all(
-    resolved.map(async (role): Promise<FleetRoleStatus> => {
-      if (!role.endpointId) {
-        return {
-          role: role.role,
-          endpointId: '',
-          configured: false,
-          workersMinSet: false,
-          warmup: null,
-          error: `Endpoint-ID fehlt (${role.endpointIdEnv})`,
-        };
-      }
-      const workersMinSet = await setWorkersMin(role, 1, signal);
-      const warmup = await warmupRole(role, signal);
-      return { role: role.role, endpointId: role.endpointId, configured: true, workersMinSet, warmup };
-    }),
-  );
+  const roles = await Promise.all(resolved.map((role) => wakeRole(role, signal)));
 
-  const ok = roles.every((r) => !r.configured || r.warmup?.ok === true);
-  const vision = await toggleVision(1, signal);
-  const video = await toggleVideo(1, signal);
-  const report: FleetReport = { action: 'wake', startedAt, durationMs: Date.now() - startedAt, ok, roles, vision, video };
+  const ok = roles.every(roleReady);
+  const report: FleetReport = { action: 'wake', startedAt, durationMs: Date.now() - startedAt, ok, roles };
   aiLogger.info('fleet wake finished', {
     ok,
     durationMs: report.durationMs,
-    roles: roles.map((r) => `${r.role}:${r.warmup?.ok ? 'ready' : r.error ?? 'pending'}`),
+    roles: roles.map((r) => `${r.role}:${roleReady(r) ? 'ready' : r.error ?? r.warmup?.message ?? 'pending'}`),
   });
   return report;
 }
@@ -248,46 +233,29 @@ export async function sleepFleet(signal?: AbortSignal): Promise<FleetReport> {
       startedAt,
       durationMs: 0,
       ok: true,
-      roles: resolved.map((role) => ({
-        role: role.role,
-        endpointId: role.endpointId,
-        configured: Boolean(role.endpointId),
-        workersMinSet: false,
-        warmup: null,
-        error: 'AI_FLEET_SLEEP disabled',
-      })),
+      roles: resolved.map((role) => unconfiguredStatus(role, 'AI_FLEET_SLEEP disabled')),
     };
   }
 
   const roles = await Promise.all(
     resolved.map(async (role): Promise<FleetRoleStatus> => {
       if (!role.endpointId) {
-        return {
-          role: role.role,
-          endpointId: '',
-          configured: false,
-          workersMinSet: false,
-          warmup: null,
-          error: `Endpoint-ID fehlt (${role.endpointIdEnv})`,
-        };
+        return unconfiguredStatus(role, `Endpoint-ID fehlt (${role.endpointIdEnv})`);
       }
       const workersMinSet = await setWorkersMin(role, 0, signal);
-      return { role: role.role, endpointId: role.endpointId, configured: true, workersMinSet, warmup: null };
+      return {
+        role: role.role,
+        endpointId: role.endpointId,
+        configured: true,
+        workersMinSet,
+        warmupMode: role.warmupMode,
+        warmup: null,
+      };
     }),
   );
 
   const up = roles.filter((r) => r.configured && !r.workersMinSet);
-  const vision = await toggleVision(0, signal);
-  const video = await toggleVideo(0, signal);
-  const report: FleetReport = {
-    action: 'sleep',
-    startedAt,
-    durationMs: Date.now() - startedAt,
-    ok: up.length === 0,
-    roles,
-    vision,
-    video,
-  };
+  const report: FleetReport = { action: 'sleep', startedAt, durationMs: Date.now() - startedAt, ok: up.length === 0, roles };
   aiLogger.info('fleet sleep finished', {
     ok: report.ok,
     notSlept: up.map((r) => r.role),
@@ -313,6 +281,7 @@ export function fleetStatus(): Record<string, unknown> {
       gpuPoolId: role.gpuPoolId,
       gpuCount: role.gpuCount,
       vramBudgetGb: role.vramBudgetGb,
+      warmupMode: role.warmupMode,
       tasks: [...role.tasks],
       preload: [...role.preload],
     })),

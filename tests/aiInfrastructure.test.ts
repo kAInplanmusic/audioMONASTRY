@@ -22,11 +22,22 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     vi.resetModules();
   });
 
-  it('führt die drei Audio-Rollen und zusätzlich die Vision-Rolle', () => {
-    expect(GPU_ROLE_IDS).toEqual(['brain', 'ears', 'voiceGen']);
-    expect(GPU_ENDPOINT_ROLES).toEqual(['brain', 'ears', 'voiceGen', 'vision', 'video']);
-    // Betreiber-Freigabe 2026-09-11: eine vierte Instanz ist erlaubt.
-    expect(AI_MAX_GPU_ENDPOINTS).toBe(5);
+  it('führt alle acht Flotten-Rollen', () => {
+    expect(GPU_ROLE_IDS).toEqual([
+      'brain',
+      'ears',
+      'voiceGen',
+      'music',
+      'imageHq',
+      'videoReal',
+      'videoAbstract',
+      'orchestrator',
+    ]);
+    // Seit der 8-Instanzen-Architektur sind Visuals echte Manifest-Rollen –
+    // es gibt keine manifestfreien Zusatz-Rollen mehr.
+    expect(GPU_ENDPOINT_ROLES).toEqual([...GPU_ROLE_IDS]);
+    // Betreiber-Freigabe 2026-09-15: Vollausbau auf acht Instanzen.
+    expect(AI_MAX_GPU_ENDPOINTS).toBe(8);
     expect(LEGACY_GPU_ENDPOINTS).toContain('samplemonk-ai');
     expect(() => assertGpuEndpointBudget()).not.toThrow();
   });
@@ -35,31 +46,35 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     expect(endpointNameForRole('brain')).toBe('samplemonk-ai-brain');
     expect(endpointNameForRole('ears')).toBe('samplemonk-ai-ears');
     expect(endpointNameForRole('voiceGen')).toBe('samplemonk-ai-voice');
-    expect(endpointNameForRole('vision')).toBe('samplemonk-ai-vision');
-    expect(endpointNameForRole('video')).toBe('samplemonk-ai-video');
+    expect(endpointNameForRole('music')).toBe('samplemonk-ai-music');
+    expect(endpointNameForRole('imageHq')).toBe('samplemonk-ai-image');
+    expect(endpointNameForRole('videoReal')).toBe('samplemonk-ai-video-real');
+    expect(endpointNameForRole('videoAbstract')).toBe('samplemonk-ai-video-abstract');
+    expect(endpointNameForRole('orchestrator')).toBe('samplemonk-ai-orchestrator');
   });
 
-  it('wirft, wenn mehr als fünf GPU-Endpoints erlaubt werden', async () => {
-    process.env.AI_MAX_GPU_ENDPOINTS = '6';
+  it('wirft, wenn mehr als acht GPU-Endpoints erlaubt werden', async () => {
+    process.env.AI_MAX_GPU_ENDPOINTS = '9';
     vi.resetModules();
     const mod = await import('../src/config/aiInfrastructure');
-    expect(() => mod.assertGpuEndpointBudget()).toThrow(/zwischen 1 und 5/);
+    expect(() => mod.assertGpuEndpointBudget()).toThrow(/zwischen 1 und 8/);
   });
 
   it('wirft bei 0 GPU-Endpoints', async () => {
     process.env.AI_MAX_GPU_ENDPOINTS = '0';
     vi.resetModules();
     const mod = await import('../src/config/aiInfrastructure');
-    expect(() => mod.assertGpuEndpointBudget()).toThrow(/zwischen 1 und 5/);
+    expect(() => mod.assertGpuEndpointBudget()).toThrow(/zwischen 1 und 8/);
   });
 
   it('hält die Flotte im Stundennbudget (10 €/h)', () => {
-    expect(estimateFleetEurPerHour(['brain', 'ears', 'voiceGen', 'vision', 'video'])).toBeCloseTo(2.35, 2);
-    expect(() => assertFleetHourlyBudget(['brain', 'ears', 'voiceGen', 'vision', 'video'])).not.toThrow();
-    // Mit 5 Hetzner-Instanzen zusätzlich bleibt es unter 10 €/h …
-    expect(() => assertFleetHourlyBudget(['brain', 'ears', 'voiceGen', 'vision'], 6)).not.toThrow();
+    // Vollausbau: acht A6000-Instanzen à 0,49 €/h = 3,92 €/h.
+    expect(estimateFleetEurPerHour([...GPU_ROLE_IDS])).toBeCloseTo(3.92, 2);
+    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS])).not.toThrow();
+    // Mit Hetzner-Instanzen zusätzlich bleibt es unter 10 €/h …
+    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 6)).not.toThrow();
     // … aber nicht, wenn die Stunde teurer würde.
-    expect(() => assertFleetHourlyBudget(['brain', 'ears', 'voiceGen', 'vision'], 20)).toThrow(
+    expect(() => assertFleetHourlyBudget([...GPU_ROLE_IDS], 20)).toThrow(
       /übersteigen das Budget/,
     );
     expect(AI_MAX_FLEET_EUR_PER_HOUR).toBe(10);

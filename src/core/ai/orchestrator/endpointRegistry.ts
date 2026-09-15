@@ -38,6 +38,15 @@ export interface GpuRoleDefinition {
   tasks: readonly AiTask[];
   /** Modelle, die der Rollen-Worker beim Session-Wake vorlädt. */
   preload: readonly string[];
+  /**
+   * Wie die Rolle geweckt wird:
+   *  - `task`     – der Worker kennt unseren `warmup`-Task und lädt die
+   *                 Preload-Modelle in den VRAM (unser eigenes Image).
+   *  - `endpoint` – fremder/vorgefertigter Worker (ComfyUI/Hub), der unser
+   *                 Protokoll NICHT kennt: Wecken ist hier nur `workersMin=1`,
+   *                 ein `warmup`-Job würde als ungültiger Request enden.
+   */
+  warmupMode: 'task' | 'endpoint';
   /** Primäres LLM dieser Rolle (nur brain) – `moderate`/`complex`. */
   brainModel?: string;
   /** Schneller Ausführer derselben Familie (nur brain) – `simple`. */
@@ -58,6 +67,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['llm', 'nlu'],
+    warmupMode: 'task',
     // Zwei Stufen, EINE Familie (Entscheidung 2026-09-11): `qwen3-4b` ist der
     // schnelle Ausführer für latenzkritische `simple`-Aufgaben, `qwen3-14b` das
     // Brain für Planung/`moderate`/`complex`. Beide sind `preload` und bleiben
@@ -85,6 +95,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'audio.understand',
       'multimodal',
     ],
+    warmupMode: 'task',
     // Full-Preload (Plan Instanz 2): alle sieben Analyse-Modelle sind fest
     // resident (~26 GB + 6 GB Puffer). Kein on-demand-Nachladen.
     preload: [
@@ -105,7 +116,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
-    tasks: ['tts', 'sing', 'song', 'audio.generate', 'stem.separate'],
+    tasks: ['tts', 'audio.generate', 'stem.separate'],
+    warmupMode: 'task',
     // Standard-TTS: qwen3-tts-17b (1,7B CustomVoice, DE/EN + 8 weitere
     // Sprachen, 9 Premium-Stimmen, Instruct-Steuerung). mms-tts-deu bleibt als
     // Fallback im Modell-Register, wird aber nicht mehr vorgeladen.
@@ -122,6 +134,9 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['song', 'sing'],
+    // Vorgefertigter ACE-Step-ComfyUI-Worker (Hub): kennt unseren `warmup`-Task
+    // nicht, wird nur per workersMin geweckt.
+    warmupMode: 'endpoint',
     // Alle drei XL-Varianten teilen Tokenizer/VAE und bleiben zusammen mit dem
     // 4B-LM-Planer resident (~35 GB + LoRAs).
     preload: [
@@ -140,6 +155,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['image.generate'],
+    // Vorgefertigter ComfyUI-Worker: kennt unseren `warmup`-Task nicht.
+    warmupMode: 'endpoint',
     // FLUX.2 (~32 GB) und Qwen-Image (~15 GB) passen nicht gleichzeitig in 48 GB;
     // beide liegen lokal vorkonfiguriert, der Wechsel dauert < 10 s. ControlNet,
     // IP-Adapter und Upscaler bleiben dauerhaft resident.
@@ -161,6 +178,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['video.generate'],
+    // Vorgefertigter Wan2.2-Worker: kennt unseren `warmup`-Task nicht.
+    warmupMode: 'endpoint',
     preload: [
       'wan22-t2v-a14b',
       'controlnet-depth-video',
@@ -179,6 +198,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['video.abstract'],
+    // Vorgefertigter ComfyUI-Worker: kennt unseren `warmup`-Task nicht.
+    warmupMode: 'endpoint',
     preload: [
       'ltx-video-13b',
       'controlnet-depth-video',
@@ -197,6 +218,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['agent.orchestrate'],
+    warmupMode: 'task',
     // Bewusst vier Anbieter (Mistral/Qwen/Google/Meta): MoA lebt von
     // unterschiedlichen Blickwinkeln, nicht von einer Modellfamilie.
     preload: [
@@ -224,6 +246,11 @@ export const LONG_RUNNING_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
   'sing',
   'audio.generate',
   'stem.separate',
+  // Visual-Rollen: FLUX.2/Wan/LTX brauchen pro Bild bzw. Clip deutlich mehr
+  // Zeit als das runsync-Fenster zulaesst (Diffusion ueber viele Schritte).
+  'image.generate',
+  'video.generate',
+  'video.abstract',
 ]);
 
 /** Alle Rollen in Anzeige-Reihenfolge. */

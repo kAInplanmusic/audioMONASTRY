@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  GPU_ROLES,
   GPU_ROLE_LIST,
   LONG_RUNNING_TASKS,
   requireRoleForTask,
@@ -9,10 +8,14 @@ import {
 } from '../src/core/ai/orchestrator/endpointRegistry';
 import type { AiTask } from '../src/core/ai/orchestrator/types';
 
+//: Muss exakt der `AiTask`-Union in `types.ts` entsprechen – die Registry muss
+//: jeden Task genau einmal abdecken (disjunkte Task-Mengen).
 const ALL_TASKS: AiTask[] = [
   'llm', 'tts', 'sing', 'song', 'stem.separate', 'audio.classify', 'audio.transcribe',
   'audio.embed', 'audio.analyze', 'audio.diarize', 'audio.understand', 'audio.generate',
   'multimodal', 'nlu',
+  // 8-Instanzen-Architektur: Visuals + Orchestrator sind eigene Task-Klassen.
+  'image.generate', 'video.generate', 'video.abstract', 'agent.orchestrate',
 ];
 
 const ENDPOINT_ENV_KEYS = [
@@ -20,10 +23,20 @@ const ENDPOINT_ENV_KEYS = [
   'RP_ENDPOINT_ID_BRAIN',
   'RP_ENDPOINT_ID_EARS',
   'RP_ENDPOINT_ID_VOICE',
+  'RP_ENDPOINT_ID_MUSIC',
+  'RP_ENDPOINT_ID_IMAGE',
+  'RP_ENDPOINT_ID_VIDEO_REAL',
+  'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'RP_ENDPOINT_ID_ORCHESTRATOR',
   'RUNPOD_ENDPOINT_ID',
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE',
+  'RUNPOD_ENDPOINT_ID_MUSIC',
+  'RUNPOD_ENDPOINT_ID_IMAGE',
+  'RUNPOD_ENDPOINT_ID_VIDEO_REAL',
+  'RUNPOD_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'RUNPOD_ENDPOINT_ID_ORCHESTRATOR',
 ] as const;
 
 type EndpointEnvKey = (typeof ENDPOINT_ENV_KEYS)[number];
@@ -64,8 +77,15 @@ describe('GPU-Rollen-Registry', () => {
     expect(roleForTask('audio.transcribe')).toBe('ears');
     expect(roleForTask('audio.understand')).toBe('ears');
     expect(roleForTask('tts')).toBe('voiceGen');
-    expect(roleForTask('song')).toBe('voiceGen');
     expect(roleForTask('stem.separate')).toBe('voiceGen');
+    // 8-Instanzen-Architektur: `song`/`sing` gehören der Musik-Instanz (ACE-Step),
+    // `image.generate`/`video.*`/`agent.orchestrate` haben eigene Rollen.
+    expect(roleForTask('song')).toBe('music');
+    expect(roleForTask('sing')).toBe('music');
+    expect(roleForTask('image.generate')).toBe('imageHq');
+    expect(roleForTask('video.generate')).toBe('videoReal');
+    expect(roleForTask('video.abstract')).toBe('videoAbstract');
+    expect(roleForTask('agent.orchestrate')).toBe('orchestrator');
   });
 
   it('weist jeder Rolle ein VRAM-Budget und eine GPU-Pool-ID zu', () => {
@@ -75,14 +95,18 @@ describe('GPU-Rollen-Registry', () => {
       expect(role.endpointIdEnv).toMatch(/^RP_ENDPOINT_ID_/);
       expect(role.preload.length).toBeGreaterThan(0);
     }
-    // ears und voiceGen brauchen 48 GB (resident + on-demand bzw. ACE-Step + Stems).
-    expect(GPU_ROLES.ears.vramBudgetGb).toBe(48);
-    expect(GPU_ROLES.voiceGen.vramBudgetGb).toBe(48);
+    // Alle acht Instanzen laufen auf einer A6000 48 GB (AMPERE_48) – im
+    // Unterschied zur Vorarchitektur mit einem ADA_24-Video-Endpoint.
+    for (const role of GPU_ROLE_LIST) {
+      expect(role.vramBudgetGb, role.role).toBe(48);
+      expect(role.gpuPoolId, role.role).toBe('AMPERE_48');
+      expect(role.gpuCount, role.role).toBe(1);
+    }
   });
 
   it('markiert die langlaufenden Jobs (llm wegen Kaltstart-Ladezeit)', () => {
     expect([...LONG_RUNNING_TASKS].sort()).toEqual(
-      ['audio.generate', 'llm', 'sing', 'song', 'stem.separate'].sort(),
+      ['audio.generate', 'llm', 'sing', 'song', 'stem.separate', 'image.generate', 'video.generate', 'video.abstract'].sort(),
     );
     expect(LONG_RUNNING_TASKS.has('llm')).toBe(true);
     expect(LONG_RUNNING_TASKS.has('audio.transcribe')).toBe(false);
@@ -95,7 +119,7 @@ describe('GPU-Rollen-Registry', () => {
   it('fällt ohne Rollen-ID auf RP_ENDPOINT_ID zurück (Legacy-Modus)', () => {
     withEndpointEnv({ RP_ENDPOINT_ID: 'legacy-endpoint' }, () => {
       const roles = resolveGpuRoles();
-      expect(roles).toHaveLength(3);
+      expect(roles).toHaveLength(GPU_ROLE_LIST.length);
       for (const role of roles) {
         expect(role.endpointId).toBe('legacy-endpoint');
         expect(role.usingLegacyEndpoint).toBe(true);

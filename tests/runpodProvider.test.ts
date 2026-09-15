@@ -10,10 +10,20 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RUNPOD_ENDPOINT_ID_EARS',
   'RUNPOD_ENDPOINT_ID_VOICE',
+  'RUNPOD_ENDPOINT_ID_MUSIC',
+  'RUNPOD_ENDPOINT_ID_IMAGE',
+  'RUNPOD_ENDPOINT_ID_VIDEO_REAL',
+  'RUNPOD_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'RUNPOD_ENDPOINT_ID_ORCHESTRATOR',
   'RP_ENDPOINT_ID',
   'RP_ENDPOINT_ID_BRAIN',
   'RP_ENDPOINT_ID_EARS',
   'RP_ENDPOINT_ID_VOICE',
+  'RP_ENDPOINT_ID_MUSIC',
+  'RP_ENDPOINT_ID_IMAGE',
+  'RP_ENDPOINT_ID_VIDEO_REAL',
+  'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
+  'RP_ENDPOINT_ID_ORCHESTRATOR',
   'RUNPOD_BRAIN_MODEL',
   'AI_COST_RUNPOD_BRAIN_USD_PER_HOUR',
 ] as const;
@@ -40,7 +50,7 @@ function mockFetch(handler: (url: string) => Response | Promise<Response>): void
   );
 }
 
-describe('RunPodProvider (3-Rollen-Flotte)', () => {
+describe('RunPodProvider (8-Rollen-Flotte)', () => {
   beforeEach(() => {
     calls = [];
     for (const key of ENV_KEYS) delete process.env[key];
@@ -55,12 +65,22 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
     expect(new RunPodProvider('brain').id).toBe('runpod-brain');
     expect(new RunPodProvider('ears').id).toBe('runpod-ears');
     expect(new RunPodProvider('voiceGen').id).toBe('runpod-voice');
+    expect(new RunPodProvider('music').id).toBe('runpod-music');
+    expect(new RunPodProvider('imageHq').id).toBe('runpod-image');
+    expect(new RunPodProvider('videoReal').id).toBe('runpod-video-real');
+    expect(new RunPodProvider('videoAbstract').id).toBe('runpod-video-abstract');
+    expect(new RunPodProvider('orchestrator').id).toBe('runpod-orchestrator');
   });
 
   it('bedient nur die Tasks der eigenen Rolle', () => {
     const brain = new RunPodProvider('brain');
     const ears = new RunPodProvider('ears');
     const voice = new RunPodProvider('voiceGen');
+    const music = new RunPodProvider('music');
+    const image = new RunPodProvider('imageHq');
+    const videoReal = new RunPodProvider('videoReal');
+    const videoAbstract = new RunPodProvider('videoAbstract');
+    const orchestrator = new RunPodProvider('orchestrator');
 
     expect(brain.canRun('llm')).toBe(true);
     expect(brain.canRun('nlu')).toBe(true);
@@ -70,9 +90,23 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
     expect(ears.canRun('audio.understand')).toBe(true);
     expect(ears.canRun('llm')).toBe(false);
 
-    expect(voice.canRun('song')).toBe(true);
+    // `song`/`sing` gehören seit der 8-Instanzen-Architektur der Musik-Instanz.
+    expect(voice.canRun('tts')).toBe(true);
     expect(voice.canRun('stem.separate')).toBe(true);
+    expect(voice.canRun('song')).toBe(false);
     expect(voice.canRun('audio.embed')).toBe(false);
+
+    expect(music.canRun('song')).toBe(true);
+    expect(music.canRun('sing')).toBe(true);
+    expect(music.canRun('tts')).toBe(false);
+
+    expect(image.canRun('image.generate')).toBe(true);
+    expect(image.canRun('video.generate')).toBe(false);
+    expect(videoReal.canRun('video.generate')).toBe(true);
+    expect(videoReal.canRun('video.abstract')).toBe(false);
+    expect(videoAbstract.canRun('video.abstract')).toBe(true);
+    expect(orchestrator.canRun('agent.orchestrate')).toBe(true);
+    expect(orchestrator.canRun('llm')).toBe(false);
   });
 
   it('ist ohne Endpoint-ID und Key nicht verfügbar', async () => {
@@ -120,20 +154,39 @@ describe('RunPodProvider (3-Rollen-Flotte)', () => {
 
   it('nutzt run + Status-Polling für lange Tasks', async () => {
     process.env.RP_AGENT_KEY = 'rp_test';
-    process.env.RP_ENDPOINT_ID_VOICE = 'voice-ep';
+    process.env.RP_ENDPOINT_ID_MUSIC = 'music-ep';
     mockFetch((url) =>
       url.endsWith('/run')
         ? jsonResponse({ id: 'job-1', status: 'IN_QUEUE' })
         : jsonResponse({ id: 'job-1', status: 'COMPLETED', output: { audioUrl: 'r2://song.wav' } }),
     );
 
-    const provider = new RunPodProvider('voiceGen');
+    const provider = new RunPodProvider('music');
     const output = await provider.run('song', 'acestep-v15-xl-turbo', { prompt: 'techno' });
 
     expect(output).toEqual({ audioUrl: 'r2://song.wav' });
     expect(calls.map((c) => c.url)).toEqual([
-      'https://api.runpod.ai/v2/voice-ep/run',
-      'https://api.runpod.ai/v2/voice-ep/status/job-1',
+      'https://api.runpod.ai/v2/music-ep/run',
+      'https://api.runpod.ai/v2/music-ep/status/job-1',
+    ]);
+  });
+
+  it('nutzt run + Status-Polling für die visuellen Rollen', async () => {
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_IMAGE = 'image-ep';
+    mockFetch((url) =>
+      url.endsWith('/run')
+        ? jsonResponse({ id: 'job-img', status: 'IN_QUEUE' })
+        : jsonResponse({ id: 'job-img', status: 'COMPLETED', output: { imageUrl: 'r2://key.png' } }),
+    );
+
+    const provider = new RunPodProvider('imageHq');
+    const output = await provider.run('image.generate', 'flux2-dev', { prompt: 'cityscape' });
+
+    expect(output).toEqual({ imageUrl: 'r2://key.png' });
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://api.runpod.ai/v2/image-ep/run',
+      'https://api.runpod.ai/v2/image-ep/status/job-img',
     ]);
   });
 

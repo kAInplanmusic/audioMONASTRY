@@ -6,9 +6,10 @@
  * `{ input: { prompt, num_inference_steps, width, height } }`, der Output traegt
  * `image_url` (data-URI) bzw. `images`.
  *
- * Bewusst ohne feste Endpoint-ID im Code: die ID kommt aus
- * `RUNPOD_ENDPOINT_ID_VISION` (siehe .env.example).
+ * Bewusst ohne feste Endpoint-ID im Code: die ID kommt aus der Flotten-Registry
+ * (Rolle `imageHq`, Env `RP_ENDPOINT_ID_IMAGE`, Fallback `RP_ENDPOINT_ID`).
  */
+import { resolveGpuRoles } from '../orchestrator/endpointRegistry';
 
 export interface VisionImageResult {
   /** data-URI (`data:image/png;base64,...`) oder Bild-URL. */
@@ -45,7 +46,10 @@ function env(name: string): string {
 }
 
 export function visionEndpointId(): string {
-  return env('RP_ENDPOINT_ID_VISION') || env('RUNPOD_ENDPOINT_ID_VISION');
+  // Einzige Quelle der Wahrheit ist die Flotten-Registry (Rolle `imageHq`).
+  const resolved = resolveGpuRoles().find((r) => r.role === 'imageHq')?.endpointId;
+  // Legacy-Fallback: der fruehere 4. Endpoint hiess `vision`.
+  return resolved || env('RP_ENDPOINT_ID_VISION') || env('RUNPOD_ENDPOINT_ID_VISION');
 }
 
 /** Sucht rekursiv das erste Bild (data-URI oder URL) in der Worker-Ausgabe. */

@@ -105,11 +105,43 @@ export function createDefaultMcpRuntime(deps: {
 
   runtime.register({ name: 'audio.classify', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Klassifikation (AST)' }, (p) => deps.runTask('audio.classify', String(p.model ?? 'ast-audioset'), p));
   runtime.register({ name: 'audio.transcribe', category: 'analysis', permission: 'EXECUTION', description: 'Speech-to-Text (Whisper)' }, (p) => deps.runTask('audio.transcribe', String(p.model ?? 'whisper-large-v3'), p));
-  runtime.register({ name: 'audio.embed', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Embeddings (CLAP)' }, (p) => deps.runTask('audio.embed', String(p.model ?? 'clap-music'), p));
-  runtime.register({ name: 'audio.analyze', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Analyse (Diariation)' }, (p) => deps.runTask('audio.analyze', String(p.model ?? 'pyannote-diarization'), p));
-  runtime.register({ name: 'audio.generate', category: 'generation', permission: 'EXECUTION', description: 'Audio-/Musik-Generierung' }, (p) => deps.runTask('audio.generate', String(p.model ?? 'musicgen-small'), p));
-  runtime.register({ name: 'stem.separate', category: 'audio', permission: 'EXECUTION', description: 'Stem-Separation (Replicate)' }, (p) => deps.runTask('stem.separate', String(p.model ?? 'cjwbw/demucs'), p));
+  runtime.register({ name: 'audio.embed', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Embeddings (CLAP/MERT)' }, (p) => deps.runTask('audio.embed', String(p.model ?? 'clap-music'), p));
+  runtime.register({ name: 'audio.analyze', category: 'analysis', permission: 'EXECUTION', description: 'Musik-Analyse: BPM/Key/Genre/Struktur (Essentia)' }, (p) => deps.runTask('audio.analyze', String(p.model ?? 'essentia'), p));
+  runtime.register({ name: 'audio.diarize', category: 'analysis', permission: 'EXECUTION', description: 'Sprechertrennung (PyAnnote)' }, (p) => deps.runTask('audio.diarize', String(p.model ?? 'pyannote-diarization'), p));
+  runtime.register({ name: 'audio.understand', category: 'analysis', permission: 'EXECUTION', description: 'Audio-Understanding (Qwen2-Audio)' }, (p) => deps.runTask('audio.understand', String(p.model ?? 'qwen2-audio-7b'), p));
+  runtime.register({ name: 'audio.generate', category: 'generation', permission: 'EXECUTION', description: 'SFX/Sound-Erzeugung (Stable Audio)' }, (p) => deps.runTask('audio.generate', String(p.model ?? 'stable-audio-open-1.0'), p));
+  runtime.register({ name: 'stem.separate', category: 'audio', permission: 'EXECUTION', description: 'Stem-Separation (HTDemucs 6-Stem)' }, (p) => deps.runTask('stem.separate', String(p.model ?? 'htdemucs-6s'), p));
   runtime.register({ name: 'sample.search', category: 'sample', permission: 'READ', description: 'Sample-Suche in der lokalen Bibliothek' }, (p) => deps.searchSamples(String(p.query ?? '')));
+
+  // ---------------------------------------------------------------------------
+  // 8-Instanzen-Architektur (docs/runpod-8-instances-complete-plan.md):
+  // eigene MCP-Tools je Spezial-Instanz. `image.*`/`video_*.*` erreichen die
+  // vorgefertigten ComfyUI-/Hub-Worker (Rolle imageHq/videoReal/videoAbstract),
+  // `music.*` die ACE-Step-Musik-Instanz, `agent.*` den MoA-Orchestrator.
+  // ---------------------------------------------------------------------------
+  const generationTools: Array<{ name: string; task: AiTask; model: string; description: string }> = [
+    { name: 'music.generate', task: 'song', model: 'acestep-v15-xl-base', description: 'Track generieren (ACE-Step XL Base)' },
+    { name: 'music.remix', task: 'song', model: 'acestep-v15-xl-sft', description: 'Remix / Stil-Transfer (ACE-Step XL SFT)' },
+    { name: 'music.drop', task: 'song', model: 'acestep-v15-xl-turbo', description: 'Drop generieren (ACE-Step XL Turbo, 8 Schritte)' },
+    { name: 'music.repaint', task: 'song', model: 'acestep-5hz-lm-4b', description: 'Teil-Repaint mit LM-Planer (ACE-Step 5Hz LM 4B)' },
+    { name: 'image.generate', task: 'image.generate', model: 'flux2-dev', description: 'Bild generieren (FLUX.2 [dev])' },
+    { name: 'image.img2img', task: 'image.generate', model: 'qwen-image-2512', description: 'Bild zu Bild (Qwen-Image-2512)' },
+    { name: 'image.keyframes', task: 'image.generate', model: 'flux2-dev', description: 'Keyframes pro Track-Abschnitt' },
+    { name: 'image.upscale', task: 'image.generate', model: 'realesrgan-x4', description: 'Bild hochskalieren (Real-ESRGAN 4x)' },
+    { name: 'video_real.text2video', task: 'video.generate', model: 'wan22-t2v-a14b', description: 'Text zu Video (Wan 2.2 A14B)' },
+    { name: 'video_real.img2video', task: 'video.generate', model: 'wan22-t2v-a14b', description: 'Bild zu Video (Wan 2.2 A14B)' },
+    { name: 'video_real.loop', task: 'video.generate', model: 'wan22-t2v-a14b', description: 'Nahtloser Video-Loop (Wan 2.2)' },
+    { name: 'video_abstract.text2video', task: 'video.abstract', model: 'ltx-video-13b', description: 'Text zu abstraktem Video (LTXVideo 13B)' },
+    { name: 'video_abstract.img2video', task: 'video.abstract', model: 'ltx-video-13b', description: 'Bild zu abstraktem Video (LTXVideo 13B)' },
+    { name: 'video_abstract.glitch', task: 'video.abstract', model: 'ltx-video-13b', description: 'Glitch-Effekt, audio-synchron' },
+    { name: 'agent.orchestrate', task: 'agent.orchestrate', model: 'mistral-small-31', description: 'MoA-Pipeline planen und ausführen (Classifier → Planner → Aggregator)' },
+  ];
+  for (const tool of generationTools) {
+    runtime.register(
+      { name: tool.name, category: 'generation', permission: 'EXECUTION', description: tool.description },
+      (p) => deps.runTask(tool.task, String(p.model ?? tool.model), p),
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // P3-2: Plugin-MCP-Tools (serverseitige Planung, client-seitige Ausführung).

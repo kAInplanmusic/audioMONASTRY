@@ -8,7 +8,11 @@
  * Ein `data:`-Praefix am Bild laesst den Worker mit "Incorrect padding"
  * scheitern (live verifiziert 2026-09-11) – deshalb wird hier immer der
  * reine Base64-Teil gesendet und das Ergebnis als data-URI zurueckgegeben.
+ *
+ * Endpoint-ID aus der Flotten-Registry (Rolle `videoReal`, Env
+ * `RP_ENDPOINT_ID_VIDEO_REAL`, Fallback `RP_ENDPOINT_ID`).
  */
+import { resolveGpuRoles } from '../orchestrator/endpointRegistry';
 
 export interface VideoResult {
   /** data-URI (`data:video/mp4;base64,...`). */
@@ -46,7 +50,10 @@ function env(name: string): string {
 }
 
 export function videoEndpointId(): string {
-  return env('RP_ENDPOINT_ID_VIDEO') || env('RUNPOD_ENDPOINT_ID_VIDEO');
+  // Einzige Quelle der Wahrheit ist die Flotten-Registry (Rolle `videoReal`).
+  const resolved = resolveGpuRoles().find((r) => r.role === 'videoReal')?.endpointId;
+  // Legacy-Fallback: der fruehere 5. Endpoint hiess `video`.
+  return resolved || env('RP_ENDPOINT_ID_VIDEO') || env('RUNPOD_ENDPOINT_ID_VIDEO');
 }
 
 /** Entfernt ein evtl. vorhandenes `data:…;base64,`-Praefix. */

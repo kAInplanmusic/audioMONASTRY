@@ -93,8 +93,11 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
       }
     }
 
-    // Die in AI-P1-003 geforderten Revisions-Pins sind eingetragen.
-    for (const id of ['qwen3-32b', 'qwen3-30b-a3b', 'glm-4.5-air', 'mert-v1-95m', 'fish-speech', 'rvc']) {
+    // Die in AI-P1-003 geforderten Revisions-Pins sind eingetragen. Die
+    // Streichliste der 8-Instanzen-Architektur (qwen3-32b, glm-4.5-air,
+    // mert-v1-95m, fish-speech, rvc ...) ist aus dem Manifest entfernt und
+    // deshalb hier nicht mehr zu prüfen.
+    for (const id of ['qwen3-30b-a3b-awq', 'mert-v1-330m', 'flux2-dev', 'wan22-t2v-a14b', 'ltx-video-13b']) {
       const model = modelsById.get(id);
       expect(model, `${id} fehlt im Manifest`).toBeDefined();
       expect(model?.revision.toUpperCase().startsWith('TBD'), `${id} ist ungepinnt (${model?.revision})`).toBe(false);

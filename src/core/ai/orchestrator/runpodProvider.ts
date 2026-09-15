@@ -4,9 +4,14 @@
  * Führt AI-Tasks über EINEN RunPod-Serverless-Endpoint der Flotte aus.
  * Die Flotte besteht aus drei Rollen (siehe endpointRegistry.ts):
  *
- *   brain     → runpod-brain   (llm, nlu)
- *   ears      → runpod-ears    (audio.*)
- *   voiceGen  → runpod-voice   (tts, sing, song, audio.generate, stem.separate)
+ *   brain          → runpod-brain           (llm, nlu)
+ *   ears           → runpod-ears            (audio.*)
+ *   voiceGen       → runpod-voice           (tts, audio.generate, stem.separate)
+ *   music          → runpod-music           (song, sing)
+ *   imageHq        → runpod-image           (image.generate)
+ *   videoReal      → runpod-video-real      (video.generate)
+ *   videoAbstract  → runpod-video-abstract  (video.abstract)
+ *   orchestrator   → runpod-orchestrator    (agent.orchestrate)
  *
  * Konfiguration je Rolle:
  *   RP_ENDPOINT_ID_BRAIN / _EARS / _VOICE
@@ -34,6 +39,11 @@ const PROVIDER_ID_BY_ROLE: Record<GpuRoleId, AiProviderId> = {
   brain: 'runpod-brain',
   ears: 'runpod-ears',
   voiceGen: 'runpod-voice',
+  music: 'runpod-music',
+  imageHq: 'runpod-image',
+  videoReal: 'runpod-video-real',
+  videoAbstract: 'runpod-video-abstract',
+  orchestrator: 'runpod-orchestrator',
 };
 
 /** Startpreise in USD/h (RunPod Serverless, A6000 48 GB) – vor Produktivbetrieb prüfen. */
@@ -41,6 +51,11 @@ const DEFAULT_HOURLY_USD: Record<GpuRoleId, number> = {
   brain: 0.39,
   ears: 0.39,
   voiceGen: 0.39,
+  music: 0.39,
+  imageHq: 0.39,
+  videoReal: 0.39,
+  videoAbstract: 0.39,
+  orchestrator: 0.39,
 };
 
 /** Angenommene Jobdauer für die Kostenschätzung (RunPod rechnet sekundengenau). */
