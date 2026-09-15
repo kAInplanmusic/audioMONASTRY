@@ -75,7 +75,7 @@
       "estimatedRAM": 6,
       "loadPriority": 3,
       "preload": true,
-      "loadClass": "FREQUENT",
+      "loadClass": "CORE",
       "quantization": "fp16",
       "dependencies": [
         "transformers",
@@ -94,73 +94,17 @@
       "license": "MIT"
     },
     {
-      "id": "musicgen-small",
-      "repository": "facebook/musicgen-small",
-      "revision": "4c8334b02c6ec4e8664a91979669a501ec497792",
-      "task": "generate",
-      "framework": "transformers",
-      "estimatedVRAM": 3,
-      "estimatedRAM": 4,
-      "loadPriority": 4,
-      "preload": true,
-      "loadClass": "FREQUENT",
-      "quantization": "int8",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "scipy"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 30,
-      "concurrency": 1,
-      "timeout": 120,
-      "license": "CC-BY-NC (private/research OK)"
-    },
-    {
-      "id": "mms-tts-deu",
-      "repository": "facebook/mms-tts-deu",
-      "revision": "5cbe521869fcf9da4b2b3e85d7810e3005a121dc",
-      "task": "tts",
-      "framework": "transformers",
-      "estimatedVRAM": 2,
-      "estimatedRAM": 3,
-      "loadPriority": 5,
-      "preload": true,
-      "loadClass": "FREQUENT",
-      "quantization": "fp16",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "scipy"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 30,
-      "concurrency": 2,
-      "timeout": 60,
-      "license": "CC-BY-NC (private/research OK)"
-    },
-    {
-      "id": "qwen3-tts-06b",
-      "repository": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
-      "revision": "85e237c12c027371202489a0ec509ded67b5e4b5",
+      "id": "qwen3-tts-17b",
+      "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "revision": "0c0e3051f131929182e2c023b9537f8b1c68adfe",
       "task": "tts",
       "framework": "custom",
-      "estimatedVRAM": 5,
-      "estimatedRAM": 6,
-      "loadPriority": 5,
-      "preload": false,
-      "note": "Nicht vorgeladen seit 2026-09-13: der Handler laedt das Modell live als MODEL_UNAVAILABLE (der Import-Fix ist im Code, aber noch nicht im deployten Image). Ein Preload kostet nur Kaltstart. Wieder auf preload=true setzen, sobald der Image-Rebuild das Modell ausliefert - dann muss auch roles.voiceGen.preloadModels nachziehen (test/manifestRoles.test.ts erzwingt Gleichstand).",
-      "loadClass": "FREQUENT",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 16,
+      "loadPriority": 4,
+      "preload": true,
+      "note": "Standard-TTS-Modell für die voiceGen-Rolle. 1,7B CustomVoice mit 9 Premium-Stimmen (Mann/Frau, DE/EN/JP/KO/FR/ES/IT/PT/RU), Instruct-Steuerung für Emotion/Stil. Ersetzt mms-tts-deu als Default-TTS.",
+      "loadClass": "CORE",
       "quantization": "bf16",
       "dependencies": [
         "qwen-tts",
@@ -176,38 +120,10 @@
       "outputFormats": [
         "wav"
       ],
-      "maxDuration": 30,
-      "concurrency": 1,
-      "timeout": 120,
-      "license": "Apache-2.0"
-    },
-    {
-      "id": "musicgen-medium",
-      "repository": "facebook/musicgen-medium",
-      "revision": "d3bd7b00761b78ad7a8a05145ee31e7832e9916c",
-      "task": "generate",
-      "framework": "transformers",
-      "estimatedVRAM": 9,
-      "estimatedRAM": 12,
-      "loadPriority": 6,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
-      "quantization": "int8",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "scipy"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 30,
+      "maxDuration": 60,
       "concurrency": 1,
       "timeout": 180,
-      "license": "CC-BY-NC (private/research OK)"
+      "license": "Apache-2.0"
     },
     {
       "id": "stable-audio-open-1.0",
@@ -218,8 +134,8 @@
       "estimatedVRAM": 10,
       "estimatedRAM": 14,
       "loadPriority": 7,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
+      "preload": true,
+      "loadClass": "CORE",
       "quantization": "fp16",
       "dependencies": [
         "diffusers",
@@ -240,44 +156,16 @@
       "license": "stability-community (gated)"
     },
     {
-      "id": "bark",
-      "repository": "suno/bark",
-      "revision": "70a8a7d34168586dc5d028fa9666aceade177992",
-      "task": "tts",
-      "framework": "transformers",
-      "estimatedVRAM": 8,
-      "estimatedRAM": 8,
-      "loadPriority": 7,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
-      "quantization": "int8",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "scipy"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 14,
-      "concurrency": 1,
-      "timeout": 180,
-      "license": "private/research OK"
-    },
-    {
       "id": "pyannote-diarization",
       "repository": "pyannote/speaker-diarization-3.1",
       "revision": "84fd25912480287da0247647c3d2b4853cb3ee5d",
       "task": "diarize",
       "framework": "transformers",
-      "estimatedVRAM": 6,
+      "estimatedVRAM": 3,
       "estimatedRAM": 8,
       "loadPriority": 8,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
+      "preload": true,
+      "loadClass": "CORE",
       "quantization": "fp16",
       "dependencies": [
         "torch",
@@ -293,62 +181,6 @@
       "concurrency": 1,
       "timeout": 300,
       "license": "gated (HF license acceptance required)"
-    },
-    {
-      "id": "qwen-omni",
-      "repository": "Qwen/Qwen2.5-Omni-7B",
-      "revision": "ae9e1690543ffd5c0221dc27f79834d0294cba00",
-      "task": "multimodal",
-      "framework": "transformers",
-      "estimatedVRAM": 18,
-      "estimatedRAM": 24,
-      "loadPriority": 9,
-      "preload": false,
-      "loadClass": "RARE",
-      "quantization": "int8",
-      "dependencies": [
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "audio",
-        "image",
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "Apache-2.0"
-    },
-    {
-      "id": "qwen3-14b",
-      "repository": "Qwen/Qwen3-14B",
-      "revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
-      "task": "llm",
-      "framework": "transformers",
-      "estimatedVRAM": 30,
-      "estimatedRAM": 32,
-      "loadPriority": 1,
-      "preload": true,
-      "loadClass": "CORE",
-      "quantization": "fp16",
-      "dependencies": [
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "Apache-2.0"
     },
     {
       "id": "qwen3-4b",
@@ -383,12 +215,12 @@
       "revision": "0a095220c30b7b31434169c3086508ef3ea5bf0a",
       "task": "audio.understand",
       "framework": "transformers",
-      "estimatedVRAM": 18,
+      "estimatedVRAM": 8,
       "estimatedRAM": 24,
       "loadPriority": 2,
-      "preload": false,
-      "loadClass": "FREQUENT",
-      "quantization": "int8",
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "awq-int4",
       "dependencies": [
         "transformers",
         "torch"
@@ -406,44 +238,16 @@
       "license": "Apache-2.0"
     },
     {
-      "id": "xtts-v2",
-      "repository": "coqui/XTTS-v2",
-      "revision": "6c2b0d75eae4b7047358e3b6bd9325f857d43f77",
-      "task": "tts",
-      "framework": "custom",
-      "estimatedVRAM": 6,
-      "estimatedRAM": 8,
-      "loadPriority": 3,
-      "preload": false,
-      "loadClass": "FREQUENT",
-      "quantization": "fp16",
-      "dependencies": [
-        "TTS",
-        "torch"
-      ],
-      "inputFormats": [
-        "text",
-        "speakerWav"
-      ],
-      "outputFormats": [
-        "audioBase64"
-      ],
-      "maxDuration": 60,
-      "concurrency": 1,
-      "timeout": 180,
-      "license": "coqui-public-model-license"
-    },
-    {
       "id": "acestep-v15-xl-turbo",
       "repository": "ACE-Step/acestep-v15-xl-turbo",
       "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
       "task": "song",
       "framework": "transformers",
-      "estimatedVRAM": 24,
+      "estimatedVRAM": 9,
       "estimatedRAM": 32,
       "loadPriority": 4,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
+      "preload": true,
+      "loadClass": "CORE",
       "quantization": "bf16",
       "dependencies": [
         "transformers",
@@ -462,60 +266,6 @@
       "license": "MIT"
     },
     {
-      "id": "bs-roformer",
-      "repository": "pcunwa/BS-Roformer-Leap",
-      "revision": "4e47d6662ae82eaa8b4ac4329fe66099a843b48e",
-      "task": "stem.separate",
-      "framework": "custom",
-      "estimatedVRAM": 12,
-      "estimatedRAM": 12,
-      "loadPriority": 5,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
-      "quantization": "fp16",
-      "dependencies": [
-        "torch",
-        "audiosep"
-      ],
-      "inputFormats": [
-        "audio"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 300,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "unknown"
-    },
-    {
-      "id": "demucs",
-      "repository": "demucs/demucs",
-      "revision": "htdemucs",
-      "task": "stem.separate",
-      "framework": "custom",
-      "estimatedVRAM": 8,
-      "estimatedRAM": 8,
-      "loadPriority": 6,
-      "preload": true,
-      "loadClass": "ON_DEMAND",
-      "quantization": "fp32",
-      "dependencies": [
-        "demucs",
-        "torch"
-      ],
-      "inputFormats": [
-        "audio"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 300,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "MIT"
-    },
-    {
       "id": "essentia",
       "repository": "essentia/essentia",
       "revision": "cpu-cache",
@@ -524,8 +274,8 @@
       "estimatedVRAM": 0,
       "estimatedRAM": 4,
       "loadPriority": 7,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
+      "preload": true,
+      "loadClass": "CORE",
       "quantization": "none",
       "dependencies": [
         "essentia",
@@ -542,34 +292,6 @@
       "concurrency": 2,
       "timeout": 120,
       "license": "AGPL-3.0"
-    },
-    {
-      "id": "qwen3-32b",
-      "repository": "Qwen/Qwen3-32B",
-      "revision": "9216db5781bf21249d130ec9da846c4624c16137",
-      "task": "llm",
-      "framework": "vllm",
-      "estimatedVRAM": 20,
-      "estimatedRAM": 28,
-      "loadPriority": 1,
-      "preload": false,
-      "loadClass": "CORE",
-      "quantization": "int4",
-      "dependencies": [
-        "vllm",
-        "transformers",
-        "torch"
-      ],
-      "inputFormats": [
-        "text"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "Apache-2.0"
     },
     {
       "id": "qwen3-30b-a3b",
@@ -600,21 +322,408 @@
       "license": "Apache-2.0"
     },
     {
-      "id": "glm-4.5-air",
-      "repository": "zai-org/GLM-4.5-Air",
-      "revision": "a24ceef6ce4f3536971efe9b778bdaa1bab18daa",
-      "task": "llm",
       "framework": "vllm",
-      "estimatedVRAM": 53,
-      "estimatedRAM": 64,
-      "loadPriority": 3,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
-      "quantization": "int4",
+      "estimatedRAM": 24,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "awq-int4",
       "dependencies": [
         "vllm",
-        "transformers",
         "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "text"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "id": "qwen3-30b-a3b-awq",
+      "repository": "QuixiAI/Qwen3-30B-A3B-AWQ",
+      "revision": "1ba5586ace54cc9de85addac384eb88576f94598",
+      "task": "llm",
+      "estimatedVRAM": 20
+    },
+    {
+      "framework": "transformers",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "wav",
+        "mp3",
+        "flac"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "CC-BY-NC-SA-4.0",
+      "id": "mert-v1-330m",
+      "repository": "m-a-p/MERT-v1-330M",
+      "revision": "5240c2708a5acaee1007f43fb9735c7dcd0b78c9",
+      "task": "audio.embed",
+      "estimatedVRAM": 3
+    },
+    {
+      "framework": "custom",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0",
+      "id": "qwen3-tts-voicedesign",
+      "repository": "Qwen/Qwen3-TTS-12Hz-1.7B-VoiceDesign",
+      "revision": "5ecdb67327fd37bb2e042aab12ff7391903235d3",
+      "task": "tts",
+      "estimatedVRAM": 8
+    },
+    {
+      "framework": "custom",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "demucs",
+        "torch",
+        "torchaudio"
+      ],
+      "inputFormats": [
+        "wav",
+        "mp3",
+        "flac"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 600,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "MIT",
+      "id": "htdemucs-6s",
+      "repository": "dokodesuka/htdemucs_ft",
+      "revision": "9a9ab617a65f2a8dcbf0871ed1d574be961f2736",
+      "task": "stem.separate",
+      "estimatedVRAM": 8
+    },
+    {
+      "framework": "custom",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "json"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 300,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "MIT",
+      "id": "acestep-v15-xl-base",
+      "repository": "ACE-Step/acestep-v15-xl-base",
+      "revision": "220c1166efbdd9583eafcb12eb160594bbfcb241",
+      "task": "song",
+      "estimatedVRAM": 9
+    },
+    {
+      "framework": "custom",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "json"
+      ],
+      "outputFormats": [
+        "wav"
+      ],
+      "maxDuration": 300,
+      "concurrency": 1,
+      "timeout": 900,
+      "license": "MIT",
+      "id": "acestep-v15-xl-sft",
+      "repository": "ACE-Step/acestep-v15-xl-sft",
+      "revision": "d06de46b4622f781cf07f4a013a67d591ca52819",
+      "task": "song",
+      "estimatedVRAM": 9
+    },
+    {
+      "framework": "custom",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
+      ],
+      "inputFormats": [
+        "json"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "MIT",
+      "id": "acestep-5hz-lm-4b",
+      "repository": "ACE-Step/acestep-5Hz-lm-4B",
+      "revision": "0a3ec94b557aea7d508da38b31cfe7341f6ff737",
+      "task": "song",
+      "estimatedVRAM": 8
+    },
+    {
+      "framework": "comfyui",
+      "estimatedRAM": 32,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text",
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "FLUX.2-dev Non-Commercial / BFL commercial",
+      "id": "flux2-dev",
+      "repository": "black-forest-labs/FLUX.2-dev",
+      "revision": "26afe3a78bb242c0a8bb181dcc8937bb16e5c66c",
+      "task": "image.generate",
+      "estimatedVRAM": 32,
+      "exclusiveGroup": "image-base"
+    },
+    {
+      "framework": "comfyui",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text",
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "id": "qwen-image-2512",
+      "repository": "Qwen/Qwen-Image-2512",
+      "revision": "25468b98e3276ca6700de15c6628e51b7de54a26",
+      "task": "image.generate",
+      "estimatedVRAM": 15,
+      "exclusiveGroup": "image-base"
+    },
+    {
+      "framework": "comfyui",
+      "estimatedRAM": 32,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text",
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 10,
+      "concurrency": 1,
+      "timeout": 1800,
+      "license": "Apache-2.0",
+      "id": "wan22-t2v-a14b",
+      "repository": "Wan-AI/Wan2.2-T2V-A14B",
+      "revision": "c8c270b13ee05bfa474194ac9fb07a5868a97cea",
+      "task": "video.generate",
+      "estimatedVRAM": 32
+    },
+    {
+      "framework": "comfyui",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "text",
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 10,
+      "concurrency": 1,
+      "timeout": 1800,
+      "license": "LTX Community",
+      "id": "ltx-video-13b",
+      "repository": "Lightricks/LTX-Video",
+      "revision": "8984fa25007f376c1a299016d0957a37a2f797bb",
+      "task": "video.abstract",
+      "estimatedVRAM": 18
+    },
+    {
+      "framework": "vllm",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "vllm",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "text"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "id": "mistral-small-31",
+      "repository": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+      "revision": "68faf511d618ef198fef186659617cfd2eb8e33a",
+      "task": "agent.orchestrate",
+      "estimatedVRAM": 14
+    },
+    {
+      "framework": "vllm",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "vllm",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "text"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Gemma Terms of Use",
+      "id": "gemma-3-4b",
+      "repository": "google/gemma-3-4b-it",
+      "revision": "093f9f388b31de276ce2de164bdc2081324b9767",
+      "task": "agent.orchestrate",
+      "estimatedVRAM": 5
+    },
+    {
+      "framework": "vllm",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp8",
+      "dependencies": [
+        "vllm",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "text"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Llama 3.2 Community",
+      "id": "llama-32-3b",
+      "repository": "meta-llama/Llama-3.2-3B-Instruct",
+      "revision": "0cb88a4f764b7a12671c53f0838cd831a0843b95",
+      "task": "agent.orchestrate",
+      "estimatedVRAM": 4
+    },
+    {
+      "framework": "transformers",
+      "estimatedRAM": 8,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "transformers"
       ],
       "inputFormats": [
         "text"
@@ -622,89 +731,291 @@
       "outputFormats": [
         "json"
       ],
-      "maxDuration": 180,
+      "maxDuration": 120,
       "concurrency": 1,
-      "timeout": 600,
+      "timeout": 120,
       "license": "MIT",
-      "note": "Upgrade-Pfad: braucht 2x A6000 (96 GB) via gpuCount=2."
+      "id": "bge-m3",
+      "repository": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "task": "agent.orchestrate",
+      "estimatedVRAM": 2
     },
     {
-      "id": "mert-v1-95m",
-      "repository": "m-a-p/MERT-v1-95M",
-      "revision": "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5",
-      "task": "embed",
       "framework": "transformers",
-      "estimatedVRAM": 1,
-      "estimatedRAM": 2,
-      "loadPriority": 6,
-      "preload": false,
-      "loadClass": "FREQUENT",
-      "quantization": "fp16",
-      "dependencies": [
-        "transformers",
-        "torch",
-        "soundfile"
-      ],
-      "inputFormats": [
-        "wav"
-      ],
-      "outputFormats": [
-        "json"
-      ],
-      "maxDuration": 10,
-      "concurrency": 2,
-      "timeout": 60,
-      "license": "CC-BY-NC-SA-4.0 (weights) - private/research OK"
-    },
-    {
-      "id": "fish-speech",
-      "repository": "fishaudio/fish-speech-1.5",
-      "revision": "275a984d33c33659e39eed41ff5bcd6e67517f4c",
-      "task": "tts",
-      "framework": "custom",
-      "estimatedVRAM": 6,
       "estimatedRAM": 8,
-      "loadPriority": 4,
-      "preload": false,
-      "loadClass": "FREQUENT",
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
       "quantization": "fp16",
       "dependencies": [
         "torch",
         "transformers"
       ],
       "inputFormats": [
-        "text",
-        "speakerWav"
+        "png",
+        "jpg",
+        "text"
       ],
       "outputFormats": [
-        "audioBase64"
+        "json"
       ],
-      "maxDuration": 60,
+      "maxDuration": 120,
       "concurrency": 1,
-      "timeout": 180,
-      "license": "check weights (CC-BY-NC-SA)"
+      "timeout": 120,
+      "license": "MIT",
+      "id": "clip-vit-l14",
+      "repository": "openai/clip-vit-large-patch14",
+      "revision": "32bd64288804d66eefd0ccbe215aa642df71cc41",
+      "task": "agent.orchestrate",
+      "estimatedVRAM": 2
     },
     {
-      "id": "rvc",
-      "repository": "lj1995/VoiceConversionWebUI",
-      "revision": "e6d0c1a17da07c33557852f9dfa2bd44cc75737d",
-      "task": "sing",
-      "framework": "custom",
-      "estimatedVRAM": 4,
-      "estimatedRAM": 6,
-      "loadPriority": 8,
-      "preload": false,
-      "loadClass": "ON_DEMAND",
+      "id": "controlnet-depth",
+      "repository": "xinsir/controlnet-depth-sdxl-1.0",
+      "revision": "961552fa2913e3aa82cdfb32cb51bf182d95207c",
+      "task": "image.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
       "quantization": "fp16",
       "dependencies": [
         "torch",
-        "fairseq"
+        "diffusers"
       ],
       "inputFormats": [
-        "audio"
+        "png",
+        "jpg"
       ],
       "outputFormats": [
-        "audioBase64"
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "controlnet-canny",
+      "repository": "xinsir/controlnet-canny-sdxl-1.0",
+      "revision": "1271357eda52d54b857c650cacb5b51144643ccb",
+      "task": "image.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "ip-adapter-image",
+      "repository": "h94/IP-Adapter",
+      "revision": "018e402774aeeddd60609b4ecdb7e298259dc729",
+      "task": "image.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "realesrgan-x4",
+      "repository": "ai-forever/Real-ESRGAN",
+      "revision": "8110204ebf8d25c031b66c26c2d1098aa831157e",
+      "task": "image.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 1,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "png"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "MIT"
+    },
+    {
+      "id": "controlnet-depth-video",
+      "repository": "depth-anything/Depth-Anything-V2-Large",
+      "revision": "cbbb86a30ce19b5684b7a05155dc7e6cbc7685b9",
+      "task": "video.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "controlnet-canny-video",
+      "repository": "lllyasviel/ControlNet-v1-1",
+      "revision": "69fc48b9cbd98661f6d0288dc59b59a5ccb32a6b",
+      "task": "video.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "OpenRAIL"
+    },
+    {
+      "id": "ip-adapter-video",
+      "repository": "h94/IP-Adapter",
+      "revision": "018e402774aeeddd60609b4ecdb7e298259dc729",
+      "task": "video.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "Apache-2.0"
+    },
+    {
+      "id": "rife-interpolation",
+      "repository": "hzwer/RIFE",
+      "revision": "01fdc7e97404120c243c3ea7b427046e5dc7643e",
+      "task": "video.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 1,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 300,
+      "license": "MIT"
+    },
+    {
+      "id": "realesrgan-video-x4",
+      "repository": "ai-forever/Real-ESRGAN",
+      "revision": "8110204ebf8d25c031b66c26c2d1098aa831157e",
+      "task": "video.generate",
+      "framework": "comfyui",
+      "estimatedVRAM": 2,
+      "estimatedRAM": 4,
+      "loadPriority": 3,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "torch",
+        "diffusers"
+      ],
+      "inputFormats": [
+        "png",
+        "jpg"
+      ],
+      "outputFormats": [
+        "mp4"
       ],
       "maxDuration": 120,
       "concurrency": 1,
@@ -714,22 +1025,19 @@
   ],
   "roles": {
     "brain": {
-      "label": "aiMONK Gehirn (lokales LLM, MOA-Planung, MCP-Tool-Calls)",
+      "label": "aiMONK Gehirn (App-/Plugin-Steuerung, Tool-Calls)",
       "gpuPoolId": "AMPERE_48",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "qwen3-4b",
-        "qwen3-14b"
+        "qwen3-30b-a3b-awq",
+        "qwen3-4b"
       ],
       "models": [
-        "qwen3-4b",
-        "qwen3-14b",
-        "qwen3-32b",
-        "qwen3-30b-a3b",
-        "glm-4.5-air"
+        "qwen3-30b-a3b-awq",
+        "qwen3-4b"
       ]
     },
     "ears": {
@@ -740,44 +1048,161 @@
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 2,
       "preloadModels": [
-        "ast-audioset",
-        "whisper-large-v3",
-        "clap-music"
-      ],
-      "models": [
-        "ast-audioset",
         "whisper-large-v3",
         "clap-music",
-        "mert-v1-95m",
-        "pyannote-diarization",
+        "mert-v1-330m",
         "qwen2-audio-7b",
-        "qwen-omni",
+        "pyannote-diarization",
+        "ast-audioset",
+        "essentia"
+      ],
+      "models": [
+        "whisper-large-v3",
+        "clap-music",
+        "mert-v1-330m",
+        "qwen2-audio-7b",
+        "pyannote-diarization",
+        "ast-audioset",
         "essentia"
       ]
     },
     "voiceGen": {
-      "label": "Voice & Generierung (TTS, Gesang, Song, SFX, Stem-Separation)",
+      "label": "Voice & SFX (TTS CustomVoice/VoiceDesign, Stems, SFX)",
       "gpuPoolId": "AMPERE_48",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "mms-tts-deu",
-        "demucs"
+        "qwen3-tts-17b",
+        "qwen3-tts-voicedesign",
+        "htdemucs-6s",
+        "stable-audio-open-1.0"
       ],
       "models": [
-        "qwen3-tts-06b",
-        "mms-tts-deu",
-        "bark",
-        "xtts-v2",
-        "fish-speech",
-        "musicgen-small",
-        "musicgen-medium",
-        "stable-audio-open-1.0",
+        "qwen3-tts-17b",
+        "qwen3-tts-voicedesign",
+        "htdemucs-6s",
+        "stable-audio-open-1.0"
+      ]
+    },
+    "music": {
+      "label": "Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "acestep-v15-xl-base",
+        "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
-        "demucs",
-        "bs-roformer"
+        "acestep-5hz-lm-4b"
+      ],
+      "models": [
+        "acestep-v15-xl-base",
+        "acestep-v15-xl-sft",
+        "acestep-v15-xl-turbo",
+        "acestep-5hz-lm-4b"
+      ]
+    },
+    "imageHq": {
+      "label": "Bild-Generierung (FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "flux2-dev",
+        "qwen-image-2512",
+        "controlnet-depth",
+        "controlnet-canny",
+        "ip-adapter-image",
+        "realesrgan-x4"
+      ],
+      "models": [
+        "flux2-dev",
+        "qwen-image-2512",
+        "controlnet-depth",
+        "controlnet-canny",
+        "ip-adapter-image",
+        "realesrgan-x4"
+      ],
+      "exclusiveGroups": {
+        "image-base": "flux2-dev"
+      }
+    },
+    "videoReal": {
+      "label": "Video photorealistisch (Wan 2.2 A14B)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "wan22-t2v-a14b",
+        "controlnet-depth-video",
+        "controlnet-canny-video",
+        "ip-adapter-video",
+        "rife-interpolation",
+        "realesrgan-video-x4"
+      ],
+      "models": [
+        "wan22-t2v-a14b",
+        "controlnet-depth-video",
+        "controlnet-canny-video",
+        "ip-adapter-video",
+        "rife-interpolation",
+        "realesrgan-video-x4"
+      ]
+    },
+    "videoAbstract": {
+      "label": "Video abstrakt/stylisiert (LTXVideo 13B)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 1,
+      "preloadModels": [
+        "ltx-video-13b",
+        "controlnet-depth-video",
+        "controlnet-canny-video",
+        "ip-adapter-video",
+        "rife-interpolation",
+        "realesrgan-video-x4"
+      ],
+      "models": [
+        "ltx-video-13b",
+        "controlnet-depth-video",
+        "controlnet-canny-video",
+        "ip-adapter-video",
+        "rife-interpolation",
+        "realesrgan-video-x4"
+      ]
+    },
+    "orchestrator": {
+      "label": "AI-Orchestrator (MoA aus 4 Anbietern + MCP-Tools)",
+      "gpuPoolId": "AMPERE_48",
+      "gpuCount": 1,
+      "vramBudgetGb": 48,
+      "vramSafetyMarginGb": 6,
+      "maxConcurrentInference": 2,
+      "preloadModels": [
+        "mistral-small-31",
+        "qwen3-4b",
+        "gemma-3-4b",
+        "llama-32-3b",
+        "bge-m3",
+        "clip-vit-l14"
+      ],
+      "models": [
+        "mistral-small-31",
+        "qwen3-4b",
+        "gemma-3-4b",
+        "llama-32-3b",
+        "bge-m3",
+        "clip-vit-l14"
       ]
     }
   }

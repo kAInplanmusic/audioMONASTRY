@@ -20,21 +20,32 @@ export type AiTask =
   | 'audio.understand'
   | 'audio.generate'
   | 'multimodal'
-  | 'nlu';
+  | 'nlu'
+  // 8-Instanzen-Architektur: Visuals + Agent bekommen eigene Task-Klassen,
+  // damit das Routing pro Rolle eindeutig bleibt (disjunkte Task-Mengen).
+  | 'image.generate'
+  | 'video.generate'
+  | 'video.abstract'
+  | 'agent.orchestrate';
 
 /**
  * Provider-IDs des Orchestrators.
  *
  * `runpod` ist der Legacy-Single-Endpoint-Provider (ein Endpoint für alle
- * Tasks). `runpod-brain` / `runpod-ears` / `runpod-voice` sind die drei Rollen
- * der GPU-Flotte (siehe endpointRegistry.ts) – je mit eigener Endpoint-ID,
- * eigenem VRAM-Budget und disjunkter Task-Menge.
+ * Tasks). Die `runpod-*`-IDs sind die acht Rollen der GPU-Flotte (siehe
+ * endpointRegistry.ts) – je mit eigener Endpoint-ID, eigenem VRAM-Budget und
+ * disjunkter Task-Menge.
  */
 export type AiProviderId =
   | 'runpod'
   | 'runpod-brain'
   | 'runpod-ears'
   | 'runpod-voice'
+  | 'runpod-music'
+  | 'runpod-image'
+  | 'runpod-video-real'
+  | 'runpod-video-abstract'
+  | 'runpod-orchestrator'
   | 'local'
   | 'deterministic'
   | 'cerebras';

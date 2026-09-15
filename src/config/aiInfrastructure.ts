@@ -3,35 +3,62 @@
 // ----------------------------------------------------------------------------
 // Alle AI-Inferenz läuft auf RunPod Serverless, verteilt auf Rollen-Endpoints:
 //
-//   brain     lokales LLM (MOA-Planung, MCP-Tool-Calls, App-Steuerung)
-//   ears      Audio-Intelligence (STT, Embeddings, Klassifikation, Audio-LLM)
-//   voiceGen  TTS/Gesang/Song/SFX/Stem-Separation
-//   vision    generative Visuals (Bild/Video aus Text + Ton)  ← seit 2026-09-11
+//   brain          App-/Plugin-Steuerung, Tool-Calls (Qwen3-30B-A3B-AWQ)
+//   ears           Audio-Intelligence (STT, Embeddings, Klassifikation, Audio-LLM)
+//   voiceGen       TTS/SFX/Stem-Separation
+//   music          Musikgenerierung (ACE-Step 1.5 XL + LM-Planer + LoRAs)
+//   imageHq        Keyframes/Texturen (FLUX.2 [dev] + Qwen-Image-2512)
+//   videoReal      photorealistische Clips (Wan 2.2 A14B)
+//   videoAbstract  stylisierte/abstrakte Clips (LTXVideo 13B)
+//   orchestrator   MoA + MCP über die Fach-Instanzen 2–7
 //
-// `brain`/`ears`/`voiceGen` stehen im Rollen-Manifest (Drift-Guard
-// `tests/manifestRoles.test.ts`); `vision` ist ein **Endpoint** (RunPod-Hub-Worker)
-// und bewusst NICHT im Audio-Manifest geführt.
+// ALLE acht Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
+// `tests/manifestRoles.test.ts` geprüft.
 //
-// Kostenregel (Betreiber-Vorgabe 2026-09-11):
-//   - maximal 4 GPU-Endpoints (eine vierte Instanz ist freigegeben)
-//   - maximal 10 €/h für die gesamte laufende Flotte
+// Kostenregel (Betreiber-Vorgabe 2026-09-15, 8-Instanzen-Architektur):
+//   - maximal 8 GPU-Endpoints (eine Rolle je Instanz, alle A6000 48 GB)
+//   - maximal 10 €/h für die gesamte laufende Flotte (8 × 0,49 = 3,92 €/h)
 //   - maximal 5 €/Monat für Speicher/Snapshots (Hetzner + RunPod zusammen)
 // ============================================================================
 
-/** Kanonische Audio-Rollen der GPU-Flotte – Reihenfolge = Anzeige-Reihenfolge. */
-export const GPU_ROLE_IDS = ['brain', 'ears', 'voiceGen'] as const;
+/**
+ * Kanonische Rollen der GPU-Flotte – Reihenfolge = Anzeige-Reihenfolge.
+ *
+ * 8-Instanzen-Architektur (docs/runpod-8-instances-complete-plan.md):
+ *   brain          Qwen3-30B-A3B-AWQ – App-/Plugin-Steuerung, Tool-Calls
+ *   ears           Audio-Analyse (STT, Embeddings, Klassifikation, Diarization)
+ *   voiceGen       TTS (CustomVoice + VoiceDesign), Stems, SFX
+ *   music          ACE-Step 1.5 XL (base/sft/turbo) + LM-Planer + Genre-LoRAs
+ *   imageHq        FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter/LoRAs
+ *   videoReal      Wan 2.2 A14B – photorealistische Clips
+ *   videoAbstract  LTXVideo 13B – stylisierte/abstrakte Clips
+ *   orchestrator   MoA aus 4 Anbieter-diversen kleinen LLMs + MCP-Tools
+ *
+ * ALLE acht Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
+ * `tests/manifestRoles.test.ts` gegen `endpointRegistry.ts` geprüft.
+ */
+export const GPU_ROLE_IDS = [
+  'brain',
+  'ears',
+  'voiceGen',
+  'music',
+  'imageHq',
+  'videoReal',
+  'videoAbstract',
+  'orchestrator',
+] as const;
 
-/** Rolle eines Audio-Endpoints. */
+/** Rolle eines Flotten-Endpoints. */
 export type GpuRoleId = (typeof GPU_ROLE_IDS)[number];
 
-/** Zusätzliche Endpoint-Rolle: generative Visuals (nicht im Audio-Manifest). */
-const VISION_ROLE_ID = 'vision' as const;
-
-/** Zusätzliche Endpoint-Rolle: Video (Wan2.2 image->video). */
-const VIDEO_ROLE_ID = 'video' as const;
-
-/** Alle zulässigen GPU-Endpoint-Rollen (Audio + generativ). */
-export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS, VISION_ROLE_ID, VIDEO_ROLE_ID] as const;
+/**
+ * Alle zulässigen GPU-Endpoint-Rollen.
+ *
+ * Seit der 8-Instanzen-Architektur sind Visuals eigene Manifest-Rollen
+ * (`imageHq`, `videoReal`, `videoAbstract`) statt manifestfreier Sonderfälle –
+ * die frühere Aufteilung in `vision`/`video` entfällt damit.
+ */
+export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS] as const;
 
 /** Rolle eines beliebigen GPU-Endpoints. */
 export type GpuEndpointRole = (typeof GPU_ENDPOINT_ROLES)[number];
@@ -61,8 +88,11 @@ const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
   brain: 0.49,
   ears: 0.49,
   voiceGen: 0.49,
-  vision: 0.49,
-  video: 0.39,
+  music: 0.49,
+  imageHq: 0.49,
+  videoReal: 0.49,
+  videoAbstract: 0.49,
+  orchestrator: 0.49,
 };
 
 /**
@@ -77,10 +107,19 @@ export const LEGACY_GPU_ENDPOINTS = [
 ] as const;
 
 /** Namenskonvention der RunPod-Serverless-Endpoints je Rolle. */
+const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
+  brain: 'samplemonk-ai-brain',
+  ears: 'samplemonk-ai-ears',
+  voiceGen: 'samplemonk-ai-voice',
+  music: 'samplemonk-ai-music',
+  imageHq: 'samplemonk-ai-image',
+  videoReal: 'samplemonk-ai-video-real',
+  videoAbstract: 'samplemonk-ai-video-abstract',
+  orchestrator: 'samplemonk-ai-orchestrator',
+};
+
 export function endpointNameForRole(role: GpuEndpointRole): string {
-  if (role === VISION_ROLE_ID) return 'samplemonk-ai-vision';
-  if (role === VIDEO_ROLE_ID) return 'samplemonk-ai-video';
-  return `samplemonk-ai-${role === 'voiceGen' ? 'voice' : role}`;
+  return ENDPOINT_NAME_BY_ROLE[role];
 }
 
 /**

@@ -64,8 +64,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     // gleichzeitig resident (30 + 9 GB < 48 GB Budget) – kein LRU-Wechsel.
     // Upgrade auf qwen3-32b / glm-4.5-air, sobald deren Revision gepinnt ist
     // (im Rollen-Manifest als status="planned" geführt).
-    preload: ['qwen3-4b', 'qwen3-14b'],
-    brainModel: 'qwen3-14b',
+    preload: ['qwen3-30b-a3b-awq', 'qwen3-4b'],
+    brainModel: 'qwen3-30b-a3b-awq',
     executorModel: 'qwen3-4b',
   },
   ears: {
@@ -85,7 +85,17 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
       'audio.understand',
       'multimodal',
     ],
-    preload: ['ast-audioset', 'whisper-large-v3', 'clap-music'],
+    // Full-Preload (Plan Instanz 2): alle sieben Analyse-Modelle sind fest
+    // resident (~26 GB + 6 GB Puffer). Kein on-demand-Nachladen.
+    preload: [
+      'whisper-large-v3',
+      'clap-music',
+      'mert-v1-330m',
+      'qwen2-audio-7b',
+      'pyannote-diarization',
+      'ast-audioset',
+      'essentia',
+    ],
   },
   voiceGen: {
     role: 'voiceGen',
@@ -96,11 +106,107 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuCount: 1,
     vramBudgetGb: 48,
     tasks: ['tts', 'sing', 'song', 'audio.generate', 'stem.separate'],
-    // qwen3-tts-06b ist am 2026-09-12/13 live als MODEL_UNAVAILABLE gemessen
-    // (output.status=error) und wird deshalb NICHT vorgeladen: ein Preload eines
-    // nicht verfuegbaren Modells kostet nur Kaltstart-Zeit und bringt nichts.
-    // Wieder aufnehmen, sobald der Image-Rebuild den qwen3-tts-Import ausliefert.
-    preload: ['mms-tts-deu', 'demucs'],
+    // Standard-TTS: qwen3-tts-17b (1,7B CustomVoice, DE/EN + 8 weitere
+    // Sprachen, 9 Premium-Stimmen, Instruct-Steuerung). mms-tts-deu bleibt als
+    // Fallback im Modell-Register, wird aber nicht mehr vorgeladen.
+    // Full-Preload (Plan Instanz 3): CustomVoice + VoiceDesign + HTDemucs
+    // 6-Stem + Stable Audio Open (~34 GB). `song` liegt jetzt bei `music`.
+    preload: ['qwen3-tts-17b', 'qwen3-tts-voicedesign', 'htdemucs-6s', 'stable-audio-open-1.0'],
+  },
+  music: {
+    role: 'music',
+    label: 'Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)',
+    endpointName: endpointNameForRole('music'),
+    endpointIdEnv: 'RP_ENDPOINT_ID_MUSIC',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['song', 'sing'],
+    // Alle drei XL-Varianten teilen Tokenizer/VAE und bleiben zusammen mit dem
+    // 4B-LM-Planer resident (~35 GB + LoRAs).
+    preload: [
+      'acestep-v15-xl-base',
+      'acestep-v15-xl-sft',
+      'acestep-v15-xl-turbo',
+      'acestep-5hz-lm-4b',
+    ],
+  },
+  imageHq: {
+    role: 'imageHq',
+    label: 'Bild-Generierung (FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter)',
+    endpointName: endpointNameForRole('imageHq'),
+    endpointIdEnv: 'RP_ENDPOINT_ID_IMAGE',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['image.generate'],
+    // FLUX.2 (~32 GB) und Qwen-Image (~15 GB) passen nicht gleichzeitig in 48 GB;
+    // beide liegen lokal vorkonfiguriert, der Wechsel dauert < 10 s. ControlNet,
+    // IP-Adapter und Upscaler bleiben dauerhaft resident.
+    preload: [
+      'flux2-dev',
+      'qwen-image-2512',
+      'controlnet-depth',
+      'controlnet-canny',
+      'ip-adapter-image',
+      'realesrgan-x4',
+    ],
+  },
+  videoReal: {
+    role: 'videoReal',
+    label: 'Video photorealistisch (Wan 2.2 A14B)',
+    endpointName: endpointNameForRole('videoReal'),
+    endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_REAL',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['video.generate'],
+    preload: [
+      'wan22-t2v-a14b',
+      'controlnet-depth-video',
+      'controlnet-canny-video',
+      'ip-adapter-video',
+      'rife-interpolation',
+      'realesrgan-video-x4',
+    ],
+  },
+  videoAbstract: {
+    role: 'videoAbstract',
+    label: 'Video abstrakt/stylisiert (LTXVideo 13B)',
+    endpointName: endpointNameForRole('videoAbstract'),
+    endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['video.abstract'],
+    preload: [
+      'ltx-video-13b',
+      'controlnet-depth-video',
+      'controlnet-canny-video',
+      'ip-adapter-video',
+      'rife-interpolation',
+      'realesrgan-video-x4',
+    ],
+  },
+  orchestrator: {
+    role: 'orchestrator',
+    label: 'AI-Orchestrator (MoA aus 4 Anbietern + MCP-Tools)',
+    endpointName: endpointNameForRole('orchestrator'),
+    endpointIdEnv: 'RP_ENDPOINT_ID_ORCHESTRATOR',
+    gpuPoolId: 'AMPERE_48',
+    gpuCount: 1,
+    vramBudgetGb: 48,
+    tasks: ['agent.orchestrate'],
+    // Bewusst vier Anbieter (Mistral/Qwen/Google/Meta): MoA lebt von
+    // unterschiedlichen Blickwinkeln, nicht von einer Modellfamilie.
+    preload: [
+      'mistral-small-31',
+      'qwen3-4b',
+      'gemma-3-4b',
+      'llama-32-3b',
+      'bge-m3',
+      'clip-vit-l14',
+    ],
   },
 };
 

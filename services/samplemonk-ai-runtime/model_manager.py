@@ -35,8 +35,18 @@ class ModelUnavailableError(RuntimeError):
 
 
 _ALLOWED_LOAD_CLASSES = {"CORE", "FREQUENT", "ON_DEMAND", "RARE"}
-_ALLOWED_FRAMEWORKS = {"transformers", "ctranslate2", "vllm", "sentence-transformers", "custom"}
-_ALLOWED_QUANTIZATIONS = {"fp16", "bf16", "fp32", "int8", "int4", "none"}
+# `comfyui` kam mit den Visual-Rollen (Instanzen 5–7) hinzu.
+_ALLOWED_FRAMEWORKS = {
+    "transformers",
+    "ctranslate2",
+    "vllm",
+    "sentence-transformers",
+    "comfyui",
+    "custom",
+}
+# `fp8` (Visual-Basismodelle) und `awq-int4` (Brain/Qwen2-Audio) kamen mit der
+# 8-Instanzen-Architektur hinzu.
+_ALLOWED_QUANTIZATIONS = {"fp16", "bf16", "fp32", "fp8", "int8", "int4", "awq-int4", "none"}
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_REPOSITORY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$")
 _SAFE_REVISION_RE = re.compile(r"^[A-Za-z0-9._/-]{1,128}$")
@@ -78,6 +88,9 @@ class ModelDefinition:
     concurrency: int = 1
     timeout: float = 120.0
     license: str = "unknown"
+    #: Modelle mit gleichem Gruppennamen teilen sich ein VRAM-Fenster und sind
+    #: nie gleichzeitig resident (siehe registry.apply_role/exclusiveGroups).
+    exclusiveGroup: Optional[str] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ModelDefinition":
@@ -128,6 +141,10 @@ class ModelDefinition:
             concurrency=_finite_int(data.get("concurrency", 1), 1, "concurrency"),
             timeout=_finite_float(data.get("timeout", 120.0), 120.0, "timeout"),
             license=str(data.get("license", "unknown")).strip()[:128],
+            exclusiveGroup=(
+                str(data["exclusiveGroup"]).strip()[:64]
+                if data.get("exclusiveGroup") else None
+            ),
         )
 
 
@@ -147,6 +164,10 @@ class ModelManager:
         # statt pro Request `from_pretrained` aufzurufen.
         self._instances: Dict[str, Any] = {}
         self._loader = None  # Callable(model_id, definition) -> instance
+        # Exklusive VRAM-Gruppen: group -> aktuell residentes Modell.
+        # Modelle derselben Gruppe teilen sich dasselbe VRAM-Fenster und
+        # verdrängen einander beim Laden (Instanz 5: FLUX.2 ⇄ Qwen-Image).
+        self._exclusive_active: Dict[str, str] = {}
 
     # ------------------------------------------------------------------ Config
     def configure(self, manifest: Dict[str, Any]) -> None:
@@ -160,6 +181,13 @@ class ModelManager:
             for item in manifest.get("models", []):
                 definition = ModelDefinition.from_dict(item)
                 self._models[definition.id] = definition
+            # Startbelegung der exklusiven Gruppen aus dem Rollen-Block.
+            self._exclusive_active = {}
+            configured = manifest.get("exclusiveGroups") or {}
+            if isinstance(configured, dict):
+                for group, model_id in configured.items():
+                    if model_id in self._models:
+                        self._exclusive_active[str(group)] = str(model_id)
 
     # ------------------------------------------------------------------ GPU
     def gpu_state(self) -> Dict[str, Any]:
@@ -190,6 +218,11 @@ class ModelManager:
             key=lambda m: (m.loadClass != "CORE", m.loadPriority),
         )
         for definition in ordered:
+            # Aus einer exklusiven Gruppe wird beim Start nur das aktive Modell
+            # resident; die Geschwister bleiben vorkonfiguriert auf Platte.
+            group = definition.exclusiveGroup
+            if group and self._exclusive_active.get(group, definition.id) != definition.id:
+                continue
             try:
                 self.load(definition.id)
             except ModelUnavailableError as exc:
@@ -231,6 +264,20 @@ class ModelManager:
             return self._instances.get(model_id)
 
     def _load_locked(self, definition: ModelDefinition, attempt: int) -> None:
+        # Exklusive Gruppe: Geschwister zuerst entladen – sie belegen dasselbe
+        # VRAM-Fenster und dürfen nie gleichzeitig resident sein. Das gilt auch
+        # für CORE-Modelle, die die LRU-Eviction bewusst nie anfasst.
+        group = definition.exclusiveGroup
+        if group:
+            for sibling_id, sibling in self._models.items():
+                if (
+                    sibling_id != definition.id
+                    and sibling.exclusiveGroup == group
+                    and sibling_id in self._loaded
+                ):
+                    self.unload(sibling_id)
+            self._exclusive_active[group] = definition.id
+
         required = definition.estimatedVRAM
         if required > self._available_vram_gb():
             evicted = self._evict_for(required)

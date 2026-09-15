@@ -5,9 +5,15 @@ Liest model_manifest.json. Produktionsregeln:
 
 - **Feste Revisionen**: kein ``latest``, keine ungepinnten Revisionen.
   Platzhalter (``TBD-…``) sind nur mit ``status: "planned"`` erlaubt.
-- **Rollen-Filter**: ``load_manifest("brain" | "ears" | "voiceGen")`` liefert
-  genau die Modelle der Rolle plus deren VRAM-Budget und Preload-Satz. Der
-  Rollen-Block im Manifest ist die einzige Quelle der Rollen-Zuordnung.
+- **Rollen-Filter**: ``load_manifest(<rolle>)`` liefert genau die Modelle der
+  Rolle plus deren VRAM-Budget und Preload-Satz. Der Rollen-Block im Manifest
+  ist die einzige Quelle der Rollen-Zuordnung. Gültige Rollen: ``ROLE_IDS``.
+- **Exklusive Modellgruppen**: Modelle mit gleichem ``exclusiveGroup`` belegen
+  dasselbe VRAM-Fenster und sind nie gleichzeitig resident (Instanz 5: FLUX.2
+  bzw. Qwen-Image). ``roles[<rolle>].exclusiveGroups`` benennt je Gruppe das
+  Modell, das beim Start geladen wird; die übrigen liegen vorkonfiguriert auf
+  Platte und werden per Gruppenwechsel getauscht (kein klassisches on-demand,
+  weil nichts erst zur Laufzeit aus dem Netz geholt wird).
 - **Geplante Modelle** (``status: "planned"``) sind im Betrieb ausgeschlossen,
   solange ``AI_INCLUDE_PLANNED`` nicht explizit gesetzt ist – so kann kein
   Modell ohne echten Revisions-Pin versehentlich geladen werden.
@@ -23,7 +29,16 @@ from typing import Any, Dict, List, Optional
 MANIFEST_PATH = os.environ.get("AI_MODEL_MANIFEST", os.path.join(os.path.dirname(__file__), "model_manifest.json"))
 
 #: Rollen der GPU-Flotte (muss zu GPU_ROLE_IDS im TS-Spiegel passen).
-ROLE_IDS = ("brain", "ears", "voiceGen")
+ROLE_IDS = (
+    "brain",
+    "ears",
+    "voiceGen",
+    "music",
+    "imageHq",
+    "videoReal",
+    "videoAbstract",
+    "orchestrator",
+)
 
 _PLANNED_PREFIX = "TBD"
 
@@ -105,6 +120,28 @@ def apply_role(data: Dict[str, Any], role: str) -> Dict[str, Any]:
     if outside:
         raise ValueError(f"role {role}: preloadModels außerhalb der Rolle: {outside}")
 
+    # Exklusive Gruppen: je Gruppe darf höchstens ein Modell initial resident sein.
+    exclusive_groups = spec.get("exclusiveGroups") or {}
+    if not isinstance(exclusive_groups, dict):
+        raise ValueError(f"role {role}: 'exclusiveGroups' muss ein Objekt sein")
+    groups_in_preload: Dict[str, List[str]] = {}
+    for model_id in preload_models:
+        group = by_id[model_id].get("exclusiveGroup")
+        if group:
+            groups_in_preload.setdefault(str(group), []).append(model_id)
+    for group, members in groups_in_preload.items():
+        if group not in exclusive_groups:
+            raise ValueError(
+                f"role {role}: exklusive Gruppe {group!r} ({members}) braucht einen "
+                f"Eintrag in 'exclusiveGroups' (aktives Startmodell)",
+            )
+        active = exclusive_groups[group]
+        if active not in members:
+            raise ValueError(
+                f"role {role}: aktives Modell {active!r} der Gruppe {group!r} "
+                f"steht nicht im Preload-Satz {members}",
+            )
+
     include_planned = _include_planned()
     skipped_planned: List[str] = []
     selected: List[Dict[str, Any]] = []
@@ -127,6 +164,7 @@ def apply_role(data: Dict[str, Any], role: str) -> Dict[str, Any]:
     result["runtime"] = runtime
     result["models"] = selected
     result["skippedPlanned"] = skipped_planned
+    result["exclusiveGroups"] = dict(exclusive_groups)
     return result
 
 
