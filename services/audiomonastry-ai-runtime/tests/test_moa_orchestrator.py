@@ -162,6 +162,11 @@ def _stub_llm(replies: dict) -> "types.ModuleType":
     """Fake `handlers_runpod.generate_chat` – die Inferenz wird ersetzt, alles
     andere (Manifest, Rollen, Prompts, Parsing, Merging) bleibt echt.
 
+    `replies` bildet Modell-ID auf eine LISTE von Antworten ab, die der Reihe
+    nach verbraucht wird. Der Classifier und der Aggregator teilen sich bewusst
+    dasselbe Modell (`qwen3-4b`) – eine Antwort pro Modell waere dafuer zu
+    grob und wuerde die Rolle des Aggregators nicht pruefen.
+
     Der Stub prueft ZUSAETZLICH, dass die Modelldefinition wirklich ein
     `ModelDefinition`-Objekt ist: der erste Live-Lauf scheiterte genau daran,
     dass `load_manifest` rohe Dicts liefert (`'dict' has no attribute
@@ -169,12 +174,14 @@ def _stub_llm(replies: dict) -> "types.ModuleType":
     """
     module = types.ModuleType("handlers_runpod")
     calls: list = []
+    queues = {model: list(texts) for model, texts in replies.items()}
 
     def fake_generate_chat(model_id, definition, messages, **kwargs):  # noqa: ANN001, ARG001
         if not hasattr(definition, "repository"):
             raise TypeError(f"{model_id}: Definition ist kein ModelDefinition-Objekt, sondern {type(definition).__name__}")
         calls.append(model_id)
-        return {"text": replies.get(model_id, "{}")}
+        queue = queues.get(model_id) or []
+        return {"text": queue.pop(0) if queue else "{}"}
 
     module.generate_chat = fake_generate_chat  # type: ignore[attr-defined]
     module.calls = calls  # type: ignore[attr-defined]
@@ -188,10 +195,15 @@ class PipelineTest(unittest.TestCase):
         self.saved = sys.modules.get("handlers_runpod")
         self.manager = _stub_llm(
             {
-                "qwen3-4b": '{"areas": ["audio"], "intent": "track analysieren", "needs_tools": true}',
-                "llama-32-3b": '{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}',
-                "gemma-3-4b": '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}',
-                "mistral-small-31": '{"chosen": "merged", "reason": "beide decks ab"}',
+                # 1. Aufruf = Classifier, 2. Aufruf = Aggregator.
+                "qwen3-4b": [
+                    '{"areas": ["audio"], "intent": "track analysieren", "needs_tools": true}',
+                    '{"chosen": "merged", "reason": "beide decks ab"}',
+                ],
+                "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}'],
+                "ministral-8b": [
+                    '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}'
+                ],
             }
         )
         sys.modules["handlers_runpod"] = self.manager
@@ -202,26 +214,38 @@ class PipelineTest(unittest.TestCase):
         else:
             sys.modules.pop("handlers_runpod", None)
 
+    def test_default_model_set_is_public_and_manifest_backed(self) -> None:
+        """Die Defaults muessen oeffentliche Modelle sein UND im Rollen-Manifest stehen."""
+        import registry
+
+        models = moa.resolve_moa_models({})
+        self.assertEqual(models["planner_a"], "phi-35-mini")
+        self.assertEqual(models["planner_b"], "ministral-8b")
+        known = {entry["id"] for entry in registry.load_manifest("orchestrator")["models"]}
+        for role, model_id in models.items():
+            self.assertIn(model_id, known, f"{role}: {model_id} fehlt im Rollen-Manifest")
+
     def test_full_pipeline_resolves_manifest_models(self) -> None:
-        result = moa.moa_orchestrate("mistral-small-31", None, {"prompt": "analysiere track.wav"})
+        result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "analysiere track.wav"})
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["classification"]["areas"], ["audio"])
         self.assertEqual(result["choice"], "merged")
         # Unbekanntes Tool aus Plan B wurde verworfen, beide gueltigen gemerged.
         self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
-        # Alle vier MoA-Rollen liefen in der erwarteten Reihenfolge.
-        self.assertEqual(self.manager.calls, ["qwen3-4b", "llama-32-3b", "gemma-3-4b", "mistral-small-31"])
+        # Vier Staende in der erwarteten Reihenfolge (Classifier und Aggregator
+        # teilen sich qwen3-4b).
+        self.assertEqual(self.manager.calls, ["qwen3-4b", "phi-35-mini", "ministral-8b", "qwen3-4b"])
         self.assertNotIn("execution", result)
 
     def test_missing_prompt_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
-            moa.moa_orchestrate("mistral-small-31", None, {})
+            moa.moa_orchestrate("qwen3-4b", None, {})
 
     def test_unknown_model_in_manifest_raises_clear_error(self) -> None:
         os.environ["MOA_CLASSIFIER_MODEL"] = "gibt-es-nicht"
         try:
             with self.assertRaises(ValueError) as ctx:
-                moa.moa_orchestrate("mistral-small-31", None, {"prompt": "x"})
+                moa.moa_orchestrate("qwen3-4b", None, {"prompt": "x"})
         finally:
             del os.environ["MOA_CLASSIFIER_MODEL"]
         self.assertIn("fehlt im Rollen-Manifest", str(ctx.exception))

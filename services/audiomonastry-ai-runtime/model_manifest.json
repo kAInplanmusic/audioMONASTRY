@@ -1021,6 +1021,60 @@
       "concurrency": 1,
       "timeout": 300,
       "license": "MIT"
+    },
+    {
+      "id": "phi-35-mini",
+      "repository": "microsoft/Phi-3.5-mini-instruct",
+      "revision": "2fe192450127e6a83f7441aef6e3ca586c338b77",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 8,
+      "estimatedRAM": 10,
+      "loadPriority": 2,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "MIT"
+    },
+    {
+      "id": "ministral-8b",
+      "repository": "mistralai/Ministral-8B-Instruct-2410",
+      "revision": "2f494a194c5b980dfb9772cb92d26cbb671fce5a",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 16,
+      "estimatedRAM": 18,
+      "loadPriority": 2,
+      "preload": false,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "Mistral AI Research License (nicht kommerziell)"
     }
   ],
   "roles": {
@@ -1182,27 +1236,21 @@
       ]
     },
     "orchestrator": {
-      "label": "AI-Orchestrator (MoA aus 4 Anbietern + MCP-Tools)",
+      "label": "AI-Orchestrator (MoA aus 3 Modellfamilien + MCP-Tools)",
       "gpuPoolId": "AMPERE_48",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 2,
       "preloadModels": [
-        "mistral-small-31",
         "qwen3-4b",
-        "gemma-3-4b",
-        "llama-32-3b",
-        "bge-m3",
-        "clip-vit-l14"
+        "phi-35-mini",
+        "ministral-8b"
       ],
       "models": [
-        "mistral-small-31",
         "qwen3-4b",
-        "gemma-3-4b",
-        "llama-32-3b",
-        "bge-m3",
-        "clip-vit-l14"
+        "phi-35-mini",
+        "ministral-8b"
       ]
     }
   }

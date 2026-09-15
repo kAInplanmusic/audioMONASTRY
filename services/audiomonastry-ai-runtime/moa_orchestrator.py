@@ -4,14 +4,14 @@ Instanz 8 der Flotte (docs/runpod-8-instances-complete-plan.md). Der Orchestrato
 nimmt einen multimodalen Auftrag entgegen und baut daraus eine ausfuehrbare
 Pipeline ueber die Fach-Instanzen 2–7.
 
-Drei Schichten (MoA):
-  1. Classifier      qwen3-4b         – Was ist das fuer eine Aufgabe? Welche
-                                       Bereiche (audio/visual/music) braucht sie?
-  2. Planner A/B     llama-32-3b und  – zwei UNABHAENGIGE Pipeline-Plaene aus
-                     gemma-3-4b         verschiedenen Modellfamilien (Diversitaet)
-  3. Aggregator      mistral-small-31 – vergleicht beide Plaene, waehlt/merged
-                                       den besseren und gibt den finalen Plan aus
-  4. Ausfuehrung     MCP-Tools        – Schritte gegen die Fach-Instanzen
+Drei Schichten (MoA), alle Modelle OEFFENTLICH (kein HF-Token noetig):
+  1. Classifier      qwen3-4b     – Was ist das fuer eine Aufgabe? Welche
+                                    Bereiche (audio/visual/music) braucht sie?
+  2. Planner A/B     phi-35-mini  – zwei UNABHAENGIGE Pipeline-Plaene aus
+                     ministral-8b   verschiedenen Modellfamilien (Diversitaet)
+  3. Aggregator      qwen3-4b     – vergleicht beide Plaene, waehlt/merged
+                                    den besseren und gibt den finalen Plan aus
+  4. Ausfuehrung     MCP-Tools    – Schritte gegen die Fach-Instanzen
 
 Die Modell-IDs kommen aus dem Rollen-Manifest (`orchestrator`), ueberschreibbar
 per `MOA_CLASSIFIER_MODEL` / `MOA_PLANNER_A_MODEL` / `MOA_PLANNER_B_MODEL` /
@@ -30,11 +30,15 @@ import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
 
 #: Rolle -> (Env-Override, Default-Modell-ID aus dem Rollen-Manifest).
+#: Alle vier Modelle sind OEFFENTLICH (kein HF-Token, keine gated Repos) und
+#: passen zusammen in 48 GB: Qwen3-4B (9) + Phi-3.5-mini (8) + Ministral-8B (16)
+#: = 33 GB bei 42 GB nutzbarem Budget. Der Aggregator nutzt bewusst dasselbe
+#: Modell wie der Classifier – dadurch kostet der vierte Stand keinen VRAM.
 MOA_MODEL_ROLES: Dict[str, Tuple[str, str]] = {
     "classifier": ("MOA_CLASSIFIER_MODEL", "qwen3-4b"),
-    "planner_a": ("MOA_PLANNER_A_MODEL", "llama-32-3b"),
-    "planner_b": ("MOA_PLANNER_B_MODEL", "gemma-3-4b"),
-    "aggregator": ("MOA_AGGREGATOR_MODEL", "mistral-small-31"),
+    "planner_a": ("MOA_PLANNER_A_MODEL", "phi-35-mini"),
+    "planner_b": ("MOA_PLANNER_B_MODEL", "ministral-8b"),
+    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-4b"),
 }
 
 #: MCP-Tool-Katalog: Tool -> (Rolle, Task, Modell, Protokoll).

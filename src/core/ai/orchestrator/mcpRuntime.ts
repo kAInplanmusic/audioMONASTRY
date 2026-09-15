@@ -134,7 +134,7 @@ export function createDefaultMcpRuntime(deps: {
     { name: 'video_abstract.text2video', task: 'video.abstract', model: 'ltx-video-13b', description: 'Text zu abstraktem Video (LTXVideo 13B)' },
     { name: 'video_abstract.img2video', task: 'video.abstract', model: 'ltx-video-13b', description: 'Bild zu abstraktem Video (LTXVideo 13B)' },
     { name: 'video_abstract.glitch', task: 'video.abstract', model: 'ltx-video-13b', description: 'Glitch-Effekt, audio-synchron' },
-    { name: 'agent.orchestrate', task: 'agent.orchestrate', model: 'mistral-small-31', description: 'MoA-Pipeline planen und ausführen (Classifier → Planner → Aggregator)' },
+    { name: 'agent.orchestrate', task: 'agent.orchestrate', model: 'qwen3-4b', description: 'MoA-Pipeline planen und ausführen (Classifier → Planner → Aggregator)' },
   ];
   for (const tool of generationTools) {
     runtime.register(

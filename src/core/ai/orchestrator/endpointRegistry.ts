@@ -211,7 +211,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
   },
   orchestrator: {
     role: 'orchestrator',
-    label: 'AI-Orchestrator (MoA aus 4 Anbietern + MCP-Tools)',
+    label: 'AI-Orchestrator (MoA aus 3 Modellfamilien + MCP-Tools)',
     endpointName: endpointNameForRole('orchestrator'),
     endpointIdEnv: 'RP_ENDPOINT_ID_ORCHESTRATOR',
     gpuPoolId: 'AMPERE_48',
@@ -219,15 +219,16 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     vramBudgetGb: 48,
     tasks: ['agent.orchestrate'],
     warmupMode: 'task',
-    // Bewusst vier Anbieter (Mistral/Qwen/Google/Meta): MoA lebt von
-    // unterschiedlichen Blickwinkeln, nicht von einer Modellfamilie.
+    // MoA lebt von unterschiedlichen Blickwinkeln, nicht von einer Modellfamilie.
+    // Besetzt mit OEFFENTLICHEN Modellen (kein HF-Token, keine gated Repos):
+    // Microsoft/Phi-3.5-mini + Mistral/Ministral-8B + Qwen/Qwen3-4B.
+    // Preload-VRAM 33 GB bei 48 GB Budget (6 GB Sicherheitsabstand).
+    // Muss exakt dem `preloadModels`-Satz der Rolle `orchestrator` im
+    // Python-Manifest entsprechen (Drift-Test tests/manifestRoles.test.ts).
     preload: [
-      'mistral-small-31',
       'qwen3-4b',
-      'gemma-3-4b',
-      'llama-32-3b',
-      'bge-m3',
-      'clip-vit-l14',
+      'phi-35-mini',
+      'ministral-8b',
     ],
   },
 };
