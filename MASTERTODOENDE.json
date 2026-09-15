@@ -965,6 +965,29 @@
         "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=orchestrator nach dem Deploy",
         "python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py + test_comfyui_adapter.py (56 Tests, laufen in ci.yml)"
       ]
+    },
+    {
+      "id": "RUNPOD-P1-002",
+      "title": "MoA-Modellset lauffaehig machen: HF-Lizenzen + Aggregator-VRAM",
+      "priority": "P1",
+      "status": "BLOCKED",
+      "area": "AI/RunPod",
+      "source": "Live-Verifikation Instanz 8 am 2026-09-15 (Endpoint xu4sqszdfk8lp8)",
+      "problem": "Das im Manifest geplante MoA-Set ist auf der Ziel-GPU nicht lauffaehig, aus zwei unabhaengigen Gruenden (beide live gemessen): (1) LIZENZEN – meta-llama/Llama-3.2-3B-Instruct und google/gemma-3-4b-it liefern fuer den Projekt-Token HTTP 401 auf config.json, die Lizenz ist im HF-Konto also nicht akzeptiert; Planner A und B koennen ihre Gewichte nicht laden. (2) VRAM – mistralai/Mistral-Small-3.1-24B-Instruct-2503 ist mit dem Token erreichbar, ist aber ein 24B-Modell und wird vom gemeinsamen LLM-Pfad in fp16 geladen (~48 GB) – das passt nicht auf eine AMPERE_48, wenn gleichzeitig Classifier/Planner (~22 GB) resident sind.",
+      "note": "Uebergangsloesung ist aktiv: die Endpoint-Env fuehrt MOA_CLASSIFIER_MODEL/MOA_PLANNER_A_MODEL/MOA_PLANNER_B_MODEL/MOA_AGGREGATOR_MODEL = qwen3-4b (ungated, ~8 GB), damit die Instanz 8 live ist und die Pipeline belegt ist. Die Modellwahl ist reine Env-Konfiguration – nach einer Lizenzfreigabe oder einem Modelltausch ist KEIN neues Image noetig. Optionen: (a) die zwei Lizenzen im HF-Konto akzeptieren, dann MOA_PLANNER_A_MODEL=llama-32-3b und MOA_PLANNER_B_MODEL=gemma-3-4b setzen; (b) lizenzfreie Substitute in den Katalog aufnehmen (z. B. microsoft/Phi-3.5-mini-instruct, mistralai/Ministral-8B-Instruct-2410, Qwen/Qwen3-8B) – Achtung: das Manifest ist ins Image gebacken, das kostet einen Rebuild; (c) fuer den Aggregator eine FP8/AWQ-Variante von Mistral-Small-3.1-24B (~24 GB) verwenden oder eine 80-GB-GPU, sonst bei einem kleineren Aggregator bleiben. Die VRAM-Rechnung steht in docs/RUNPOD_MODEL_HANDLERS.md.",
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "services/audiomonastry-ai-runtime/moa_orchestrator.py",
+        "scripts/runpod-deploy.py",
+        "docs/RUNPOD_MODEL_HANDLERS.md"
+      ],
+      "acceptance": "Planner A/B und Aggregator laufen mit je einem eigenen Modell aus verschiedenen Anbieterfamilien auf der Ziel-GPU; ein agent.orchestrate-Job liefert einen Plan aus vier unterscheidbaren Staenden ohne OOM.",
+      "verification": [
+        "curl -sL -o /dev/null -w '%{http_code}' -H \"Authorization: Bearer $HF_TOKEN\" https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/resolve/main/config.json (heute 401, Ziel 200)",
+        "dito fuer google/gemma-3-4b-it",
+        "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate und RUNPOD_SMOKE_PAYLOAD",
+        "runpodctl serverless logs xu4sqszdfk8lp8 (keine OOM-/401-Fehler in den Staenden)"
+      ]
     }
   ],
   "visionSandbox": [
