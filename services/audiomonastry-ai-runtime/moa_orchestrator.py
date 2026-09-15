@@ -292,6 +292,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     `execute: true` werden die geplanten Schritte direkt gegen die
     Fach-Instanzen gefahren (MCP-Bruecke).
     """
+    from model_manager import ModelDefinition
     from registry import load_manifest  # lokal: haelt den Import leicht
 
     from handlers_runpod import generate_chat
@@ -301,15 +302,18 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         raise ValueError("prompt/task/text required for agent.orchestrate")
 
     models = resolve_moa_models()
+    # `load_manifest` liefert ROHE Manifest-Eintraege (dicts); der gemeinsame
+    # LLM-Pfad erwartet ModelDefinition-Objekte (definition.repository/revision).
+    # Genau hier scheiterte der erste Live-Lauf: 'dict' has no attribute 'repository'.
     definitions = {
-        model["id"]: model
-        for model in load_manifest("orchestrator").get("models", [])
+        entry["id"]: ModelDefinition.from_dict(entry)
+        for entry in load_manifest("orchestrator").get("models", [])
+        if isinstance(entry, dict) and entry.get("id")
     }
-    manifest_models = {m: definitions[m] for m in definitions}
 
     def ask(role: str, system: str, user: str, max_new_tokens: int = 512) -> str:
         model_name = models[role]
-        model_def = manifest_models.get(model_name)
+        model_def = definitions.get(model_name)
         if model_def is None:
             raise ValueError(f"MoA-Modell {model_name!r} fehlt im Rollen-Manifest (Rolle {role})")
         return str(

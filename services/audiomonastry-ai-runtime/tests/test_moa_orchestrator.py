@@ -160,11 +160,19 @@ class ToolBridgeTest(unittest.TestCase):
 
 def _stub_llm(replies: dict) -> "types.ModuleType":
     """Fake `handlers_runpod.generate_chat` – die Inferenz wird ersetzt, alles
-    andere (Manifest, Rollen, Prompts, Parsing, Merging) bleibt echt."""
+    andere (Manifest, Rollen, Prompts, Parsing, Merging) bleibt echt.
+
+    Der Stub prueft ZUSAETZLICH, dass die Modelldefinition wirklich ein
+    `ModelDefinition`-Objekt ist: der erste Live-Lauf scheiterte genau daran,
+    dass `load_manifest` rohe Dicts liefert (`'dict' has no attribute
+    'repository'`) – die reine Text-Antwort des Stubs haette das nie gemerkt.
+    """
     module = types.ModuleType("handlers_runpod")
     calls: list = []
 
     def fake_generate_chat(model_id, definition, messages, **kwargs):  # noqa: ANN001, ARG001
+        if not hasattr(definition, "repository"):
+            raise TypeError(f"{model_id}: Definition ist kein ModelDefinition-Objekt, sondern {type(definition).__name__}")
         calls.append(model_id)
         return {"text": replies.get(model_id, "{}")}
 
