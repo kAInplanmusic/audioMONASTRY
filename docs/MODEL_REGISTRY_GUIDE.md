@@ -2,7 +2,7 @@
 
 ## Quellen
 
-1. **Kanonisch im Container:** `services/samplemonk-ai-runtime/model_manifest.json`
+1. **Kanonisch im Container:** `services/audiomonastry-ai-runtime/model_manifest.json`
    (wird von der Python-Runtime geladen).
 2. **TS-Spiegel:** `src/core/ai/orchestrator/modelRegistry.ts` (Orchestrator-Routing,
    VRAM-Planung, Tests).
@@ -27,7 +27,7 @@ dependencies: ["transformers", "torch"]
 inputFormats: ["wav", "mp3"]
 outputFormats: ["json"]
 maxDuration: 30
-concurrency: 1                  # ≥ 1 (SampleMONK-Regel)
+concurrency: 1                  # ≥ 1 (AudioMONASTRY-Regel)
 timeout: 120
 license: "Apache-2.0"
 ```

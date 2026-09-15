@@ -1,5 +1,5 @@
 """
-sampleMONK – stem-ai Service (Separater Container)
+audioMONASTRY – stem-ai Service (Separater Container)
 --------------------------------------------------
 FastAPI-basierter Demucs-Service. Trennt eine Audiodatei in Stems und
 liefert sie als herunterladbare WAV-Dateien aus.
@@ -30,9 +30,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from device_utils import resolve_device
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("samplemonk.stem-ai")
+logger = logging.getLogger("audiomonastry.stem-ai")
 
-app = FastAPI(title="sampleMONK stem-ai", version="2.0.0")
+app = FastAPI(title="audioMONASTRY stem-ai", version="2.0.0")
 
 MAX_UPLOAD_BYTES = int(os.environ.get("AI_MAX_UPLOAD_MB", "50")) * 1024 * 1024
 SEPARATION_TIMEOUT = float(os.environ.get("AI_SEPARATION_TIMEOUT_SEC", "900"))

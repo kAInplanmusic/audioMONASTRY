@@ -6,7 +6,7 @@ import { GPU_ROLE_LIST } from '../src/core/ai/orchestrator/endpointRegistry';
 
 /**
  * Drift-Guard: Der TS-Spiegel der Flotte (`endpointRegistry.ts`) und das
- * Python-Rollen-Manifest (`services/samplemonk-ai-runtime/model_manifest.json`)
+ * Python-Rollen-Manifest (`services/audiomonastry-ai-runtime/model_manifest.json`)
  * müssen dieselben Rollen, Budgets und Preload-Sätze beschreiben. Ohne diesen
  * Test können beide Seiten auseinanderlaufen, ohne dass ein Gate anschlägt.
  */
@@ -33,7 +33,7 @@ interface Manifest {
 }
 
 const manifestPath = fileURLToPath(
-  new URL('../services/samplemonk-ai-runtime/model_manifest.json', import.meta.url),
+  new URL('../services/audiomonastry-ai-runtime/model_manifest.json', import.meta.url),
 );
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as Manifest;
 const modelsById = new Map(manifest.models.map((m) => [m.id, m]));

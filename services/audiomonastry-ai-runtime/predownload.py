@@ -1,5 +1,5 @@
 """
-SampleMONK AI Runtime – Gewichte vorladen (geteilt zwischen Build und Runtime)
+AudioMONASTRY AI Runtime – Gewichte vorladen (geteilt zwischen Build und Runtime)
 =============================================================================
 Ein Ort für die Logik, damit „ins Image backen" (Dockerfile) und „auf ein
 Network Volume laden" (Worker-Task `predownload`) **identisch** arbeiten – sonst

@@ -1,4 +1,4 @@
-# SampleMONK AI Runtime – HF Custom Container
+# AudioMONASTRY AI Runtime – HF Custom Container
 # ==========================================
 # Basis: pytorch/pytorch (torch+cu124 vorinstalliert) → spart ~4 GB Build-Disk
 # und Buildzeit. Keine Secrets im Image, Gewichte kommen aus dem HF-Hub-Cache.
@@ -50,9 +50,9 @@ COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_run
 COPY model_manifest.json runtime_config.yaml startup.sh ./
 RUN chmod +x startup.sh \
     && mkdir -p /data/hf-cache \
-    && useradd --system --uid 10001 samplemonk \
-    && chown -R samplemonk:samplemonk /opt/samplemonk-ai /data
-USER samplemonk
+    && useradd --system --uid 10001 audiomonastry \
+    && chown -R audiomonastry:audiomonastry /opt/samplemonk-ai /data
+USER audiomonastry
 
 # Healthcheck: Prozess lebt; Readiness liefert der Endpoint selbst.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \

@@ -18,8 +18,8 @@ import sys
 import urllib.request
 
 DEFAULT_REPOS = [
-    "kainplanmusic/samplemonk-ai-runtime",
-    "kainplanmusic/samplemonk-ai-runtime-runpod",
+    "kainplanmusic/audiomonastry-ai-runtime",
+    "kainplanmusic/audiomonastry-ai-runtime-runpod",
 ]
 
 

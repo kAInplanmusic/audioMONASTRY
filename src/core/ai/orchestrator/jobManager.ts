@@ -5,7 +5,7 @@
  * status/Zeitstempeln/error. Status: QUEUED, STARTING, RUNNING, COMPLETED,
  * FAILED, CANCELLED, TIMEOUT.
  *
- * SampleMONK-Regel: Kein unkontrolliert paralleler identischer Job.
+ * AudioMONASTRY-Regel: Kein unkontrolliert paralleler identischer Job.
  * Dedup-Key = sessionId + task + model + input-Hash → identische Requests
  * laufen nicht doppelt (SingleFlight: laufender Job wird zurückgegeben).
  * Concurrency-Limits je Task-Klasse konfigurierbar.

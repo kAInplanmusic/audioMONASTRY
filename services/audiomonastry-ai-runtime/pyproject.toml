@@ -1,7 +1,7 @@
 [project]
-name = "samplemonk-ai-runtime"
+name = "audiomonastry-ai-runtime"
 version = "1.0.0"
-description = "SampleMONK AI Runtime (Hugging Face Custom Container)"
+description = "AudioMONASTRY AI Runtime (Hugging Face Custom Container)"
 requires-python = ">=3.10"
 
 dependencies = [

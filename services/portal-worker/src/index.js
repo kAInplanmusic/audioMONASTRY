@@ -385,7 +385,7 @@ case "${role}" in
     pip install --quiet -r requirements.txt || true
     cat > /etc/systemd/system/stem-ai.service <<'UNIT'
 [Unit]
-Description=sampleMONK stem-ai (Demucs CPU-Fallback)
+Description=audioMONASTRY stem-ai (Demucs CPU-Fallback)
 After=network.target
 [Service]
 Type=simple

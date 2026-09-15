@@ -83,7 +83,7 @@ Die obige Rollenverteilung ist unverändert gültig. Neu implementiert:
   (HF-Endpoint/Serverless/Replicate/Local), CostTracker, AiLogger
   (strukturiert + Secret-Redaction), aiPersistence (Supabase).
 - **Server-Routen** (`/api/ai/*`): orchestrate, jobs, session, models, mcp/tools.
-- **Custom Container** (`services/samplemonk-ai-runtime/`): FastAPI-Runtime mit
+- **Custom Container** (`services/audiomonastry-ai-runtime/`): FastAPI-Runtime mit
   `/health`, `/ready`, `/status`, `/models`, `/metrics`, `/infer`, `/mcp/tools`,
   Model Manager + Manifest (Revision-Pinning), Dockerfile, startup.sh.
 - **Supabase-Migration** `database/ai_migration_001.sql` (Sessions/Jobs/Usage/

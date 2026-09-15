@@ -33,7 +33,7 @@
 | DeepSeek/Mistral/HF-Qwen/Ollama | `server.ts` `/api/ai/complete` → `LlmRouter` → `MoaAgent`/`clientLlm` | `llmRouter` (bestehend) |
 | MMS-TTS/Bark | `server.ts` `/api/voice/tts|sing` → `VoiceMonkService` | `HfServerlessProvider` |
 | MusicGen small/medium | `server.ts` `/api/voice/song` + `SongGenerator` | `HfServerlessProvider` / `HfEndpointProvider` |
-| Whisper/AST/CLAP/MERT/PyAnnote/Qwen-Omni | `services/samplemonk-ai-runtime/` (`/infer`) | `HfEndpointProvider` |
+| Whisper/AST/CLAP/MERT/PyAnnote/Qwen-Omni | `services/audiomonastry-ai-runtime/` (`/infer`) | `HfEndpointProvider` |
 | Demucs | `server.ts` `/api/separate-stems` + `StemExtractorTerminal` | `ReplicateProvider` |
 | htdemucs-ONNX | `src/ai/localDemucs.ts` (Browser) | `LocalProvider` |
 | MiniLM | `src/utils/LocalEmbeddingProvider.ts` | `LocalProvider` |
@@ -83,7 +83,7 @@ Dokumentiert in `docs/AI_PROMPTS.md`. Kern:
 - **Quantisierung:** INT8 für große Modelle (Bark, MusicGen-medium, Qwen-Omni),
   FP16 für kleine – im Manifest festgelegt.
 - **Batch-Optimierung:** AST/CLAP batch-fähig (`concurrency: 2`), Generation
-  strikt `concurrency: 1` (SampleMONK-Regel).
+  strikt `concurrency: 1` (AudioMONASTRY-Regel).
 - **Hyperparameter:** LLM `temperature 0.3` (Planung) / `0.7` (kreativ),
   `maxTokens` je Task gedeckelt.
 - **Benchmarks:** GPU-Werte stehen aus (Sandbox ohne GPU). Messpunkte sind in

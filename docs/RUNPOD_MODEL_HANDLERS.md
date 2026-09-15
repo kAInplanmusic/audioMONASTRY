@@ -5,7 +5,7 @@
 
 ## Handler-Vertrag
 
-Alle Handler laufen im RunPod Worker (`services/samplemonk-ai-runtime/runpod_worker.py`)
+Alle Handler laufen im RunPod Worker (`services/audiomonastry-ai-runtime/runpod_worker.py`)
 und nutzen `model_manager.infer(task, model_id, payload)`.
 
 Eingang:

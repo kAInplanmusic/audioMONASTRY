@@ -230,14 +230,14 @@ describe('GPU-Flotten Session-Wake', () => {
     expect(status.roles.map((r) => r.role)).toEqual([...FLEET_ROLES]);
     expect(status.roles.every((r) => r.configured)).toBe(true);
     expect(status.roles.map((r) => r.endpointName)).toEqual([
-      'samplemonk-ai-brain',
-      'samplemonk-ai-ears',
-      'samplemonk-ai-voice',
-      'samplemonk-ai-music',
-      'samplemonk-ai-image',
-      'samplemonk-ai-video-real',
-      'samplemonk-ai-video-abstract',
-      'samplemonk-ai-orchestrator',
+      'audiomonastry-ai-brain',
+      'audiomonastry-ai-ears',
+      'audiomonastry-ai-voice',
+      'audiomonastry-ai-music',
+      'audiomonastry-ai-image',
+      'audiomonastry-ai-video-real',
+      'audiomonastry-ai-video-abstract',
+      'audiomonastry-ai-orchestrator',
     ]);
     expect(calls).toHaveLength(0);
   });

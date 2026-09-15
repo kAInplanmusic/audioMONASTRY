@@ -1,4 +1,4 @@
-# SampleMONK AI Runtime – Runtime-Konfiguration
+# AudioMONASTRY AI Runtime – Runtime-Konfiguration
 # Wird beim Container-Start von startup.sh gelesen; env hat Vorrang.
 runtime:
   device: cuda              # cuda | cpu | simulated

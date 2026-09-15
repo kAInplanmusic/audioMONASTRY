@@ -44,7 +44,7 @@ const DEFAULT_CONFIG: AuditConfig = {
   hotPatterns: [
     'server.ts',
     'server/**',
-    'services/samplemonk-ai-runtime/**',
+    'services/audiomonastry-ai-runtime/**',
     'services/backend-core/**',
     'src/utils/audioEngine.ts',
     'src/utils/WebRTCManager.ts',

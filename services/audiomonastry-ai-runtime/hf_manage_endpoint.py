@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
 """
-SampleMONK AI Runtime – HF Endpoint Manager (create-or-update)
+AudioMONASTRY AI Runtime – HF Endpoint Manager (create-or-update)
 ===============================================================
-Legt den Custom-Container-Endpoint `samplemonk-ai` an bzw. aktualisiert ihn:
+Legt den Custom-Container-Endpoint `audiomonastry-ai` an bzw. aktualisiert ihn:
   - Custom Image (ghcr.io), Task `custom`, A100 x1 (us-east-1, AWS)
   - minReplicas 0 / maxReplicas 1 / Scale-to-Zero-Timeout 20 min
   - Secret `HF_TOKEN` für Gated-Gewichte (wird NIE ins Image geschrieben)
   - Health `/health`, Readiness `/ready`
 
 Aufruf (lokal oder CI):
-  HF_TOKEN=hf_... IMAGE=ghcr.io/<owner>/samplemonk-ai-runtime:latest \
+  HF_TOKEN=hf_... IMAGE=ghcr.io/<owner>/audiomonastry-ai-runtime:latest \
   python3 hf_manage_endpoint.py [create|update|status|delete-legacy]
 
 Regeln (GPU-Konsolidierung):
-- MAXIMAL 1 A100: nur der Endpoint `samplemonk-ai` darf GPU betreiben.
-- Alte Einzel-GPU-Endpoints (samplemonk-ai-pilot, samplemonk-ai-clap) sind
+- MAXIMAL 1 A100: nur der Endpoint `audiomonastry-ai` darf GPU betreiben.
+- Alte Einzel-GPU-Endpoints (audiomonastry-ai-pilot, audiomonastry-ai-clap) sind
   deaktiviert; `delete-legacy` entfernt sie aus der HF-Infrastruktur.
 - GPU-Wechsel nur mit Betreiber-Freigabe (aktuell A100 fixiert).
 - Kein minReplicas=1 (24/7-Billing vermeiden).
@@ -34,8 +34,8 @@ from huggingface_hub import (
 )
 
 # Harte Kostenregel: genau EIN GPU-Endpoint.
-SINGLE_GPU_ENDPOINT_NAME = "samplemonk-ai"
-LEGACY_GPU_ENDPOINT_NAMES = ["samplemonk-ai-pilot", "samplemonk-ai-clap"]
+SINGLE_GPU_ENDPOINT_NAME = "audiomonastry-ai"
+LEGACY_GPU_ENDPOINT_NAMES = ["audiomonastry-ai-pilot", "audiomonastry-ai-clap"]
 
 ENDPOINT_NAME = os.environ.get("HF_ENDPOINT_NAME", SINGLE_GPU_ENDPOINT_NAME)
 NAMESPACE = os.environ.get("HF_NAMESPACE", "AnunnakiTools")
@@ -120,7 +120,7 @@ def _create_kwargs() -> dict:
     kwargs = _common_kwargs()
     kwargs["region"] = REGION
     kwargs["vendor"] = VENDOR
-    kwargs["repository"] = "AnunnakiTools/samplemonk-ai-runtime"  # eigenes HF-Repo (Custom-Container verlangt existierendes Repo im Namespace)
+    kwargs["repository"] = "AnunnakiTools/audiomonastry-ai-runtime"  # eigenes HF-Repo (Custom-Container verlangt existierendes Repo im Namespace)
     kwargs["framework"] = "pytorch"  # Custom-Container: framework muss gesetzt sein
     kwargs["type"] = "authenticated"  # nur create akzeptiert type (update nicht!)
     return kwargs
@@ -169,7 +169,7 @@ def main() -> int:
             return 1
         return 0
     if not IMAGE:
-        print("FEHLER: IMAGE env ist erforderlich (z. B. ghcr.io/<owner>/samplemonk-ai-runtime:latest)")
+        print("FEHLER: IMAGE env ist erforderlich (z. B. ghcr.io/<owner>/audiomonastry-ai-runtime:latest)")
         return 2
     if not os.environ.get("HF_TOKEN", "").strip():
         print("FEHLER: HF_TOKEN env ist erforderlich (Gated-Gewichte + Endpoint-Secret)")

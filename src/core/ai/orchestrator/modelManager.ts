@@ -7,7 +7,7 @@
  * - VRAM-Guard: available = budget - used - safetyMargin; bei Engpass
  *   LRU-Eviction (nie CORE) → Retry → kontrollierter Fehler
  *
- * Die eigentliche Modell-Ausführung liegt im Container (services/samplemonk-ai-runtime);
+ * Die eigentliche Modell-Ausführung liegt im Container (services/audiomonastry-ai-runtime);
  * dieser Manager steuert sie über die Runtime-API (POST /mcp/tools/model.load …).
  */
 import { aiLogger } from './aiLogger';

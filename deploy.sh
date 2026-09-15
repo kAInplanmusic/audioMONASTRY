@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# deploy.sh – sampleMONK high-end deploy auf Hetzner (Google/Firebase-frei)
+# deploy.sh – audioMONASTRY high-end deploy auf Hetzner (Google/Firebase-frei)
 # ----------------------------------------------------------------------------
 # Zwei Modi:
 #   docker (Default, schnell):  Image wird LOKAL gebaut, per `docker save |
@@ -10,7 +10,7 @@
 #   node:                       rsync + `scripts/hetzner/start-prod.sh` remote.
 #
 # Ablauf (docker):
-#   1. Docker-Images lokal bauen (samplemonk + master-player)
+#   1. Docker-Images lokal bauen (audiomonastry + master-player)
 #   2. Remote-Rollback-Image sichern (samplemonk:hetzner-rollback)
 #   3. Images via `docker save | ssh docker load` übertragen
 #   4. Config (Caddyfile, Compose, .env, Services) per rsync übertragen
@@ -21,7 +21,7 @@
 #   - Ausfuehrbar machen:  chmod +x deploy.sh
 #   - Ziel definieren via env (alternativ in .env.deploy):
 #        DEPLOY_HOST=1.2.3.4                 (oder root@1.2.3.4)
-#        DEPLOY_DOMAIN=samplemonk.example    (Pflicht für iOS-Mikrofon/HTTPS)
+#        DEPLOY_DOMAIN=audiomonastry.example    (Pflicht für iOS-Mikrofon/HTTPS)
 #        DEPLOY_SSH_KEY=/pfad/zum/key
 #        DEPLOY_MODE=docker|node             (Voreinstellung: docker)
 #        DEPLOY_REMOTE_BUILD=1               (1 = Remote-Build statt Image-Transfer)

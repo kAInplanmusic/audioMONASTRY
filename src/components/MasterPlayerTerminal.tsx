@@ -525,7 +525,7 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
               <audio controls src={audioUrl} className="h-9 max-w-full" />
               <a
                 href={audioUrl}
-                download={mode === 'mix' ? 'samplemonk-mixdown.wav' : 'samplemonk-master.wav'}
+                download={mode === 'mix' ? 'audiomonastry-mixdown.wav' : 'audiomonastry-master.wav'}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200 text-[9px] font-bold tracking-widest uppercase hover:bg-fuchsia-500/20 transition-colors"
               >
                 <Download className="w-3 h-3" /> WAV speichern

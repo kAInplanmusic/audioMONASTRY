@@ -238,7 +238,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
 
     const format = (a: any) => {
       const labels = a.labels ?? {};
-      const inst = labels.instance ?? labels.alertname ?? 'sampleMONK';
+      const inst = labels.instance ?? labels.alertname ?? 'audioMONASTRY';
       const status = String(a.status ?? 'firing').toUpperCase();
       const summary = String(a.annotations?.summary ?? a.annotations?.description ?? labels.alertname ?? 'Alert');
       return `[${status}] ${summary} (${inst})`;

@@ -1,5 +1,5 @@
 # =============================================================================
-# sampleMONK · docker-compose.fleet-test.yml
+# audioMONASTRY · docker-compose.fleet-test.yml
 # -----------------------------------------------------------------------------
 # Zweite App-Instanz auf demselben Host für den Redis-Fleet-Test.
 # Beide Instanzen teilen sich über Redis die Socket.io-Räume:
@@ -12,7 +12,7 @@
 #   docker compose -f docker-compose.hetzner.yml -f docker-compose.fleet-test.yml --profile fleet up -d sample-monk-2
 #
 # Test:
-#   tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app samplemonk node --input-type=module -
+#   tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app audiomonastry node --input-type=module -
 #   (docker cp geht nicht: Container-Rootfs ist read-only – Härtung gewollt)
 #
 # Der Port 8081 ist nur an 127.0.0.1 gebunden (kein öffentlicher Zugriff).
@@ -20,7 +20,7 @@
 services:
   sample-monk-2:
     image: samplemonk:hetzner
-    container_name: samplemonk-2
+    container_name: audiomonastry-2
     restart: unless-stopped
     init: true
     security_opt:

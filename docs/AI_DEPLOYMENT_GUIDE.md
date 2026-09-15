@@ -1,7 +1,7 @@
 # audioMONASTRY – AI Deployment Guide
 
 > Stand 2026-08-31 · Gilt für die AI-Infrastruktur (`src/core/ai/orchestrator/`,
-> `services/samplemonk-ai-runtime/`).
+> `services/audiomonastry-ai-runtime/`).
 
 ## Architektur (Ist-Zustand)
 
@@ -18,7 +18,7 @@ Browser → Hetzner App (server.ts) → AI Orchestrator
 
 ## 1. HF-Endpoint anlegen (Betreiber-Schritt)
 
-1. `services/samplemonk-ai-runtime/` als Custom Container im HF-Dashboard hochladen
+1. `services/audiomonastry-ai-runtime/` als Custom Container im HF-Dashboard hochladen
    (Dockerfile, Port 8000, Health `/health`, Readiness `/ready`).
 2. Konfiguration gemäß `hf_endpoint.example.json`:
    - Instanz: **A100 ×1 (80 GB, AWS)** – Betreiber-Freigabe 2026-08-31

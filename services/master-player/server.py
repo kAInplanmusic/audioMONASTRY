@@ -1,5 +1,5 @@
 """
-master-player – nativer Mixing/Mastering-Dienst (sampleMONK)
+master-player – nativer Mixing/Mastering-Dienst (audioMONASTRY)
 
 Verarbeitet Audio nativ über FFmpeg (Decode/Encode/Filter) und NumPy
 (Vektor-Mixing, Gain/Pan, Normalisierung). WebRTC bleibt für den

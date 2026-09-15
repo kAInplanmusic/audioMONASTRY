@@ -17,7 +17,7 @@ npx vitest run tests/aiOrchestrator.test.ts     # nur AI
 ## Python-Runtime lokal (simulierter Modus, ohne GPU)
 
 ```bash
-cd services/samplemonk-ai-runtime
+cd services/audiomonastry-ai-runtime
 pip install --target /tmp/smoke-ai-deps fastapi uvicorn
 PYTHONPATH=/tmp/smoke-ai-deps:. AI_RUNTIME_DEVICE=simulated \
   /tmp/smoke-ai-deps/bin/uvicorn app:app --port 8000 --ws none

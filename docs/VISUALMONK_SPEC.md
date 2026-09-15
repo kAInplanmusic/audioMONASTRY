@@ -60,7 +60,7 @@ Anforderung „Audio-Thread bleibt frei“). Mapping → `VisualParams` ist bere
 
 ## 4. Rolle `vision` (generativ)
 
-- **4. Endpoint** der Flotte (`samplemonk-ai-vision`), A6000 48 GB, `workers 0..1`,
+- **4. Endpoint** der Flotte (`audiomonastry-ai-vision`), A6000 48 GB, `workers 0..1`,
   `idle=15 min`, scale-to-zero → **~0,49 €/h nur bei Generierung**.
 - **Live-Versuch 2026-09-11:** Hub-Worker `runpod-workers/worker-sdxl-turbo` (v1.1.1)
   angelegt (Endpoint `5eiw6t03hjln9x`, A40/A6000) — der Worker laedt zwar, **verwirft aber
@@ -120,7 +120,7 @@ Erfahrungswerte: brain/ears/voiceGen/vision je **0,49 €/h** (A6000) → 4 Roll
 ## 8. Arbeitspakete (Slices)
 
 1. **DONE** visual-Kern (Presets + Audio→Visual, getestet) · Budget-Guards ·
-   Vision-Endpoint live (`samplemonk-ai-vision`).
+   Vision-Endpoint live (`audiomonastry-ai-vision`).
 2. **DONE** Feature-Bus + Canvas-Renderer + Overlay + Stream-Hook.
    - `audioEngine.createVisualAnalyser()` = reiner Fan-out am V2-Ausgang (kein Eingriff in den Signalweg).
    - `src/core/visual/featureBus.ts` (Bänder/RMS/Onset), `canvasRenderer.ts` (5 Zeichenmodi für 12 Presets).

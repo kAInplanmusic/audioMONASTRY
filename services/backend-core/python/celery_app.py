@@ -1,5 +1,5 @@
 """
-sampleMONK – Celery App (P3: Lazy-Loading & GPU-Detect)
+audioMONASTRY – Celery App (P3: Lazy-Loading & GPU-Detect)
 -------------------------------------------------------
 Die KI-Modelle (Demucs, MusicGen) werden NICHT mehr beim Import geladen.
 Stattdessen:
@@ -18,7 +18,7 @@ from celery import Celery
 
 from device_utils import half_precision_compatible, resolve_device
 
-logger = logging.getLogger("samplemonk.celery")
+logger = logging.getLogger("audiomonastry.celery")
 
 _AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aiff", ".aif", ".webm", ".opus"}
 

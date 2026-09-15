@@ -1,5 +1,5 @@
 """
-SampleMONK AI Runtime – MCP Runtime (Tools + Permissions)
+AudioMONASTRY AI Runtime – MCP Runtime (Tools + Permissions)
 ==========================================================
 Nur tatsächlich existierende Runtime-Funktionen werden exponiert.
 

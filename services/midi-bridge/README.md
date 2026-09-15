@@ -49,11 +49,11 @@ MIDI_IN_NAME="Xonar" MIDI_OUT_NAME="Xonar" node index.js
 ## Docker
 
 ```bash
-docker build -t samplemonk-midi-bridge .
+docker build -t audiomonastry-midi-bridge .
 docker run --rm -p 9100:9100 \
   -e MIDI_IN_NAME=Xonar -e MIDI_OUT_NAME=Xonar \
   --device /dev/snd \
-  samplemonk-midi-bridge
+  audiomonastry-midi-bridge
 ```
 
 Hinweis: Im Container brauchst du Zugriff auf ALSA (`--device /dev/snd`) bzw. die

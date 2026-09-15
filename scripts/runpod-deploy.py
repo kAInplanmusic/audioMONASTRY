@@ -6,14 +6,14 @@ Erstellt/aktualisiert die Serverless-Endpoints der GPU-Flotte entsprechend
 docs/runpod-8-instances-complete-plan.md:
 
     #  Rolle           Endpoint                        GPU-Pool    Idle   Disk
-    1  brain           samplemonk-ai-brain             AMPERE_48    15 s   50 GB
-    2  ears            samplemonk-ai-ears              AMPERE_48    15 s  100 GB
-    3  voiceGen        samplemonk-ai-voice             AMPERE_48   900 s  150 GB
-    4  music           samplemonk-ai-music             AMPERE_48   900 s  200 GB
-    5  imageHq         samplemonk-ai-image             AMPERE_48   900 s  200 GB
-    6  videoReal       samplemonk-ai-video-real        AMPERE_48   900 s  200 GB
-    7  videoAbstract   samplemonk-ai-video-abstract    AMPERE_48   900 s  200 GB
-    8  orchestrator    samplemonk-ai-orchestrator      AMPERE_48   900 s  100 GB
+    1  brain           audiomonastry-ai-brain             AMPERE_48    15 s   50 GB
+    2  ears            audiomonastry-ai-ears              AMPERE_48    15 s  100 GB
+    3  voiceGen        audiomonastry-ai-voice             AMPERE_48   900 s  150 GB
+    4  music           audiomonastry-ai-music             AMPERE_48   900 s  200 GB
+    5  imageHq         audiomonastry-ai-image             AMPERE_48   900 s  200 GB
+    6  videoReal       audiomonastry-ai-video-real        AMPERE_48   900 s  200 GB
+    7  videoAbstract   audiomonastry-ai-video-abstract    AMPERE_48   900 s  200 GB
+    8  orchestrator    audiomonastry-ai-orchestrator      AMPERE_48   900 s  100 GB
 
 Alle acht Rollen laufen auf EINER A6000 48 GB (GPU-POOL `AMPERE_48`) und
 skalieren auf 0 (`workers_min=0`, Scale-to-Zero). Ein Worker laeuft nach dem
@@ -26,7 +26,7 @@ Bild-Herkunft je Rolle (Bildquellen)
 ------------------------------------
 `AI_ROLE` waehlt im Worker die Modelle des Rollen-Manifests. Zwei Bildquellen:
 
-  * `own`      – unser Image `services/samplemonk-ai-runtime/Dockerfile.runpod`
+  * `own`      – unser Image `services/audiomonastry-ai-runtime/Dockerfile.runpod`
                  (spricht das audioMONASTRY-`{task, model, input}`-Protokoll).
                  Rollen: ears, voiceGen, orchestrator (und optional music).
   * `vllm`     – der vorgefertigte RunPod-vLLM-Worker (OpenAI-kompatibel) fuer
@@ -44,7 +44,7 @@ Jede Rolle ist per Env uebersteuerbar:
 
 Voraussetzungen:
   - RP_API_KEY (RunPod Personal Access Token)
-  - IMAGE (GHCR-Image, z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)
+  - IMAGE (GHCR-Image, z. B. ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<sha>)
     nur noetig, wenn mindestens eine Rolle ein `own`-Image nutzt.
 
 Betriebsarten:
@@ -252,7 +252,7 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
             "image": env("RUNPOD_BRAIN_VLLM_IMAGE", BRAIN_VLLM_IMAGE_DEFAULT),
             "docker_args": "",  # Image bringt seinen eigenen Entrypoint mit
             "env_vars": build_env_vars_vllm(),
-            "template_name": "samplemonk-ai-brain-vllm-template",
+            "template_name": "audiomonastry-ai-brain-vllm-template",
             "registry_auth": False,
         }
 
@@ -264,7 +264,7 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
             "image": image,
             "docker_args": "",  # vorgefertigter Entrypoint
             "env_vars": build_env_vars_prebuilt(role),
-            "template_name": f"samplemonk-ai-{defaults['suffix']}-template",
+            "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
             "registry_auth": False,
         }
 
@@ -273,13 +273,13 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
     if not image:
         raise SystemExit(
             f"FEHLER: IMAGE fehlt fuer Rolle {role} "
-            "(z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)"
+            "(z. B. ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<sha>)"
         )
     return {
         "image": image,
         "docker_args": DOCKER_START_CMD,
         "env_vars": build_env_vars(role),
-        "template_name": f"samplemonk-ai-{defaults['suffix']}-template",
+        "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
         "registry_auth": True,
     }
 
@@ -367,7 +367,7 @@ def save_template(
 def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
     """Erstellt/aktualisiert den Endpoint einer Rolle; liefert die Endpoint-ID."""
     resolved = resolve_image(role, defaults)
-    endpoint_name = env("RUNPOD_ENDPOINT_NAME") or f"samplemonk-ai-{defaults['suffix']}"
+    endpoint_name = env("RUNPOD_ENDPOINT_NAME") or f"audiomonastry-ai-{defaults['suffix']}"
     gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuPoolId", "AMPERE_48"))
     gpu_count = int(env("RUNPOD_GPU_COUNT") or defaults.get("gpuCount", 1))
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
@@ -494,7 +494,7 @@ def main() -> int:
         (ROLE_DEFAULTS.get(r, {}).get("imageKind") == "own") for r in roles if r
     )
     if needs_own_image and not env("IMAGE"):
-        print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/samplemonk-ai-runtime-runpod:<sha>)", file=sys.stderr)
+        print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<sha>)", file=sys.stderr)
         return 2
 
     print(f"[deploy] Rollen: {roles or ['(legacy)']}")

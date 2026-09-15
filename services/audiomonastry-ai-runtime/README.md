@@ -1,4 +1,4 @@
-# SampleMONK AI Runtime (HF Custom Container)
+# AudioMONASTRY AI Runtime (HF Custom Container)
 
 FastAPI-Runtime für den dedizierten Hugging-Face-Inference-Endpoint.
 
@@ -8,4 +8,4 @@ FastAPI-Runtime für den dedizierten Hugging-Face-Inference-Endpoint.
   Gewichte liegen im persistenten `HF_HOME`-Cache.
 
 Deployment: GitHub Actions Workflow `.github/workflows/hf-endpoint.yml`
-(baut Image → GHCR → legt/aktualisiert HF-Endpoint `samplemonk-ai`).
+(baut Image → GHCR → legt/aktualisiert HF-Endpoint `audiomonastry-ai`).

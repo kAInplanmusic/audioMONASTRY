@@ -9,7 +9,7 @@
 | `STEM_QUEUE_FULL` 429 | Stem-Concurrency erreicht | `Retry-After` beachten; `STEM_MAX_JOBS` prüfen |
 | `VRAM exhausted` | Modell passt nicht | Eviction greift automatisch; sonst `AI_MAX_VRAM`/Manifest prüfen |
 | Job bleibt QUEUED | Concurrency-Limit | `GET /api/ai/jobs`; Limit je Task (`AI_MAX_CONCURRENCY_*`) |
-| Duplicate request | Absichtlich dedupliziert | Gleiche jobId wird zurückgegeben (SampleMONK-Regel) |
+| Duplicate request | Absichtlich dedupliziert | Gleiche jobId wird zurückgegeben (AudioMONASTRY-Regel) |
 | Runtime `/ready` 503 | Startup-Fehler/CORE-Modell fehlt | Container-Logs (JSON) prüfen; Manifest-Revisionen prüfen |
 
 ## Logs

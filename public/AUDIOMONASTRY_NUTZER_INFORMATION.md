@@ -1,4 +1,4 @@
-# audioMONASTRY · SampleMONK – Der Informationstext für Nutzer und Kunden
+# audioMONASTRY · AudioMONASTRY – Der Informationstext für Nutzer und Kunden
 
 ## Worum geht es? – Dein kreatives Studio im Browser
 

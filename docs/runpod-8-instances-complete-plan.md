@@ -11,14 +11,14 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
 | # | Rolle | Endpoint | Endpoint-ID | Bildquelle | Status |
 |---|-------|----------|-------------|-----------|--------|
-| 1 | brain | `samplemonk-ai-brain` | `ppxo7wrn599p0q` | RunPod-vLLM-Worker | live (vorhanden) |
-| 2 | ears | `samplemonk-ai-ears` | `xeax6xrgd0csag` | eigenes Image `:8roles-v2` | live, Warmup verifiziert (7 Modelle) |
-| 3 | voiceGen | `samplemonk-ai-voice` | `gajmangfldpzrk` | eigenes Image `:8roles-v2` | live |
-| 4 | music | `samplemonk-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (neu) |
-| 5 | imageHq | `samplemonk-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
-| 6 | videoReal | `samplemonk-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
-| 7 | videoAbstract | `samplemonk-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
-| 8 | orchestrator | `samplemonk-ai-orchestrator` | – | eigenes Image + MoA-Handler | **offen** (Handler fehlt) |
+| 1 | brain | `audiomonastry-ai-brain` | `ppxo7wrn599p0q` | RunPod-vLLM-Worker | live (vorhanden) |
+| 2 | ears | `audiomonastry-ai-ears` | `xeax6xrgd0csag` | eigenes Image `:8roles-v2` | live, Warmup verifiziert (7 Modelle) |
+| 3 | voiceGen | `audiomonastry-ai-voice` | `gajmangfldpzrk` | eigenes Image `:8roles-v2` | live |
+| 4 | music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (neu) |
+| 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
+| 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
+| 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
+| 8 | orchestrator | `audiomonastry-ai-orchestrator` | – | eigenes Image + MoA-Handler | **offen** (Handler fehlt) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
 3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
@@ -42,7 +42,7 @@ Das auf ears/voice deployte Image war vom 2026-09-10 und enthielt noch die
   starb vor dem Handler. Das ist die Signatur des Crash-Loops.
 - Root cause lokal reproduziert: `ModelDefinition.from_dict` →
   `ValueError: invalid quantization: 'awq-int4'` (alte `_ALLOWED_QUANTIZATIONS`).
-- Sofort-Rollback auf `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:94243aac…`
+- Sofort-Rollback auf `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:94243aac…`
   + Queue purgen → Endpoint wieder gesund (1 ready, 0 unhealthy).
 
 Konsequenz: `Dockerfile.manifest` kopiert jetzt **Code UND Manifest** und baut ein
@@ -76,7 +76,7 @@ der CI (`Dockerfile.runpod`) und dieser Patch bauen denselben Stand.
 ## 1. Instanz: Brain
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-brain` (bestehend, wird upgegradet)
+- **Name:** `audiomonastry-ai-brain` (bestehend, wird upgegradet)
 - **Bild:** RunPod vLLM-Worker (offiziell / Hub)
 - **GPU:** A6000 48 GB
 - **GPU-Pool:** AMPERE_48
@@ -109,7 +109,7 @@ der CI (`Dockerfile.runpod`) und dieser Patch bauen denselben Stand.
 
 ### RunPod-Konfiguration (Serverless Endpoint)
 ```
-Name: samplemonk-ai-brain
+Name: audiomonastry-ai-brain
 Model: Qwen/Qwen3-30B-A3B-AWQ
 Image: runpod/vllm-worker:latest
 GPU: A6000 (AMPERE_48)
@@ -126,8 +126,8 @@ Flashboot: true
 ## 2. Instanz: Ears
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-ears` (bestehend, wird erweitert)
-- **Bild:** eigenes `samplemonk-ai-runtime-runpod`
+- **Name:** `audiomonastry-ai-ears` (bestehend, wird erweitert)
+- **Bild:** eigenes `audiomonastry-ai-runtime-runpod`
 - **Rolle:** `ears`
 - **GPU:** A6000 48 GB
 - **Idle-Timeout:** 15 s
@@ -160,8 +160,8 @@ Flashboot: true
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-ears
-Image: ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:ears
+Name: audiomonastry-ai-ears
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:ears
 Rolle: ears
 GPU: A6000 (AMPERE_48)
 GPUs: 1
@@ -181,8 +181,8 @@ Env:
 ## 3. Instanz: Voice
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-voice` (wird umgewidmet aus VoiceGen)
-- **Bild:** eigenes `samplemonk-ai-runtime-runpod`
+- **Name:** `audiomonastry-ai-voice` (wird umgewidmet aus VoiceGen)
+- **Bild:** eigenes `audiomonastry-ai-runtime-runpod`
 - **Rolle:** `voice`
 - **GPU:** A6000 48 GB
 - **Idle-Timeout:** 900 s (15 min)
@@ -217,8 +217,8 @@ Env:
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-voice
-Image: ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:voice
+Name: audiomonastry-ai-voice
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:voice
 Rolle: voice
 GPU: A6000 (AMPERE_48)
 GPUs: 1
@@ -238,7 +238,7 @@ Env:
 ## 4. Instanz: Music
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-music` (NEU)
+- **Name:** `audiomonastry-ai-music` (NEU)
 - **Bild:** ComfyUI-basiert oder eigenes Runtime
 - **Rolle:** `music`
 - **GPU:** A6000 48 GB
@@ -287,8 +287,8 @@ Env:
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-music
-Image: ghcr.io/kainplanmusic/samplemonk-ai-comfyui-music:latest
+Name: audiomonastry-ai-music
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-music:latest
 Rolle: music
 GPU: A6000 (AMPERE_48)
 GPUs: 1
@@ -308,7 +308,7 @@ Env:
 ## 5. Instanz: Image HQ
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-visual-image` (aus Vision umgewidmet)
+- **Name:** `audiomonastry-ai-visual-image` (aus Vision umgewidmet)
 - **Bild:** ComfyUI-basiert
 - **GPU:** A6000 48 GB
 - **Idle-Timeout:** 900 s
@@ -375,8 +375,8 @@ Grund für diese Lösung:
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-visual-image
-Image: ghcr.io/kainplanmusic/samplemonk-ai-comfyui-image:latest
+Name: audiomonastry-ai-visual-image
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-image:latest
 GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
@@ -399,7 +399,7 @@ Env:
 ## 6. Instanz: Video Real
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-video-real` (NEU)
+- **Name:** `audiomonastry-ai-video-real` (NEU)
 - **Bild:** ComfyUI Video-Worker
 - **GPU:** A6000 48 GB
 - **Idle-Timeout:** 900 s
@@ -447,8 +447,8 @@ Env:
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-video-real
-Image: ghcr.io/kainplanmusic/samplemonk-ai-comfyui-video:latest
+Name: audiomonastry-ai-video-real
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-video:latest
 GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
@@ -472,7 +472,7 @@ Env:
 ## 7. Instanz: Video Abstract
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-video-abstract` (NEU)
+- **Name:** `audiomonastry-ai-video-abstract` (NEU)
 - **Bild:** ComfyUI Video-Worker
 - **GPU:** A6000 48 GB
 - **Idle-Timeout:** 900 s
@@ -520,8 +520,8 @@ Env:
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-video-abstract
-Image: ghcr.io/kainplanmusic/samplemonk-ai-comfyui-video:latest
+Name: audiomonastry-ai-video-abstract
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-comfyui-video:latest
 GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
@@ -545,7 +545,7 @@ Env:
 ## 8. Instanz: AI Orchestrator (MoA + MCP)
 
 ### Grunddaten
-- **Name:** `samplemonk-ai-orchestrator` (NEU)
+- **Name:** `audiomonastry-ai-orchestrator` (NEU)
 - **Bild:** Agent-Runtime-Image (LangGraph / eigenes Framework) + MCP-Server
 - **Rolle:** `orchestrator`
 - **GPU:** A6000 48 GB
@@ -645,8 +645,8 @@ Jede der 6 Spezial-Instanzen ist über MCP als Tool erreichbar:
 
 ### RunPod-Konfiguration
 ```
-Name: samplemonk-ai-orchestrator
-Image: ghcr.io/kainplanmusic/samplemonk-ai-orchestrator:latest
+Name: audiomonastry-ai-orchestrator
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-orchestrator:latest
 GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 100 GB

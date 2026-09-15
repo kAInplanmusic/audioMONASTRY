@@ -35,7 +35,7 @@ Supabase (pgvector) + R2 (Audio-Objekte)
 Komponenten: `src/core/audio` (V2-Graph, Worklets, Routing), `src/core/session`
 (AuthoritativeSession, mainOutGuard, SnapshotStore), `src/core/ai/orchestrator`
 (JobManager, AiJobRuntime, McpRuntime, ProviderRouter), `src/plugins` (16
-kanonische Adapter), `services/` (samplemonk-ai-runtime Python, stem-ai,
+kanonische Adapter), `services/` (audiomonastry-ai-runtime Python, stem-ai,
 master-player, mixer/Rust, …).
 
 ## 3. Audio-Routing-Dokumentation
@@ -102,7 +102,7 @@ DESTRUCTIVE-Tools ohne explizite Permission.
 
 - ENV: `docs/ENV_MATRIX.md` (kanonisch `RP_*`, `SB_*`, `CFR2_*`/`CFS3_*`,
   Alias-Warnung, Secret-Kennzeichnung). Template: `.env.TEMPLATE` bereinigt.
-- Modelle: `services/samplemonk-ai-runtime/model_manifest.json` (Revision-Pinning,
+- Modelle: `services/audiomonastry-ai-runtime/model_manifest.json` (Revision-Pinning,
   5 `planned` ohne Revision werden nicht geladen).
 - Codecs: WAV-Encode (16-bit PCM, 1–2 Kanäle) ✅; Browser-Decode für
   MP3/FLAC/OGG/AAC via `decodeAudioData`; **keine** MP3/FLAC/AAC/OGG-Encoder.

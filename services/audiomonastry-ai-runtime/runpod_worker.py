@@ -1,5 +1,5 @@
 """
-sampleMONK AI Runtime – RunPod Serverless Worker
+audioMONASTRY AI Runtime – RunPod Serverless Worker
 =================================================
 Wrapper für RunPod Serverless. Der Worker übernimmt Jobs von der RunPod-Queue
 und führt sie über den vorhandenen ModelManager/handlers aus.
@@ -71,7 +71,7 @@ def log_event(level: str, msg: str, **fields: Any) -> None:
     record: Dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "level": level,
-        "service": "samplemonk-ai-runtime-runpod-worker",
+        "service": "audiomonastry-ai-runtime-runpod-worker",
         "msg": msg,
         **fields,
     }

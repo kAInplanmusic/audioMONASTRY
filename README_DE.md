@@ -1,4 +1,4 @@
-# audioMONASTRY · SampleMONK
+# audioMONASTRY · AudioMONASTRY
 
 > Browser-basierte kollaborative Audio-Workstation für bis zu 4 Nutzer.
 > Version: **1.210.001** (`V. 1|210|001`) · Codename „HyperAudioWorkstation" · Stand 2026-09-09.
@@ -90,7 +90,7 @@ npm start                   # node dist/server.cjs
       ▼           ▼              ▼
 ┌──────────┐ ┌──────────┐ ┌───────────────────────────┐
 │ Replicate│ │ HF       │ │ HF Endpoint (Custom)      │
-│ (Stems)  │ │ Serverless│ │ samplemonk-ai-runtime    │
+│ (Stems)  │ │ Serverless│ │ audiomonastry-ai-runtime    │
 └──────────┘ │ (LLM/TTS)│ │ A100, Scale-to-Zero       │
              └──────────┘ └───────────────────────────┘
       ▼           ▼              ▼
@@ -117,7 +117,7 @@ CostTracker → Supabase-Persistenz → Response.
 |---|---|---|---|
 | **App/API** | `server.ts` | 8080 HTTP + WebSocket | REST, Socket.io-Signaling, AI-Proxy, Metriken |
 | **AI Orchestrator** | `src/core/ai/orchestrator/` | in-process | Jobs, Sessions, Provider-Routing, MCP, Kosten |
-| **AI Runtime (Custom Container)** | `services/samplemonk-ai-runtime/` | 8000 HTTP | HF-Endpoint: `/health`, `/ready`, `/status`, `/infer`, `/mcp/tools`, `/metrics` |
+| **AI Runtime (Custom Container)** | `services/audiomonastry-ai-runtime/` | 8000 HTTP | HF-Endpoint: `/health`, `/ready`, `/status`, `/infer`, `/mcp/tools`, `/metrics` |
 | **stem-ai** (optional) | `services/stem-ai/` | 8000 HTTP (intern) | Lokaler Demucs-CPU-Fallback |
 | **master-player** | `services/master-player/` | intern | FFmpeg-Mastering/Render |
 | **midi-bridge** | `services/midi-bridge/` | intern | MIDI ↔ WebSocket-Bridge |
@@ -155,11 +155,11 @@ Plugin-Leases) und liefert im Produktionsbetrieb das SPA-Bundle (`GET *`).
   `docker-compose.monitoring.yml`, `docker-compose.sfu.yml`,
   `docker-compose.fleet-test.yml`
 - `Caddyfile` – TLS/Reverse-Proxy
-- `services/samplemonk-ai-runtime/runtime_config.yaml` – AI-Runtime (Device,
+- `services/audiomonastry-ai-runtime/runtime_config.yaml` – AI-Runtime (Device,
   VRAM-Budget, Idle-Timeout)
-- `services/samplemonk-ai-runtime/model_manifest.json` – Model Registry
+- `services/audiomonastry-ai-runtime/model_manifest.json` – Model Registry
   (Revision-Pinning)
-- `services/samplemonk-ai-runtime/hf_endpoint.example.json` – HF-Endpoint-Konfig
+- `services/audiomonastry-ai-runtime/hf_endpoint.example.json` – HF-Endpoint-Konfig
 - `database/schema.sql` + `database/ai_migration_001.sql` +
   `database/ai_migration_002.sql` – Supabase-Schema & Prompt-/Eval-Tabellen
 - `deploy/helm/audioMONASTRY/values.yaml` – Helm (optional)
@@ -241,7 +241,7 @@ Main im Leerlauf stumm bleibt.
 | htdemucs-ONNX | Stem-Separation lokal | `smank/htdemucs-onnx` | lokal/ONNX | nein |
 | LocalEmbeddingProvider | Embeddings lokal | transformers.js (~80 MB) | Browser/Node | nein |
 
-**Model Registry:** `services/samplemonk-ai-runtime/model_manifest.json` +
+**Model Registry:** `services/audiomonastry-ai-runtime/model_manifest.json` +
 TS-Spiegel `src/core/ai/orchestrator/modelRegistry.ts`. Ladeklassen CORE/
 FREQUENT/ON_DEMAND/RARE, Revision-Pinning (kein `latest`).
 **Bewertung:** Rollen-/Modell-Manifest + `docs/RUNPOD_AI_V1_SPEC.md`.
@@ -251,12 +251,12 @@ FREQUENT/ON_DEMAND/RARE, Revision-Pinning (kein `latest`).
 **Deployment-Targets:**
 - Hetzner-Flotte: `app-1` (CPX31), `sfu-1` (CPX31), `master-1` (CX23),
   `edge-1` (CX23), `ai-1` (CCX33, Ollama/stem-ai-CPU)
-- Hugging Face Dedicated Endpoints: `samplemonk-ai` (Custom Container, A100 ×1,
-  us-east-1, Scale-to-Zero 20 min), `samplemonk-ai-pilot` (Whisper, läuft)
+- Hugging Face Dedicated Endpoints: `audiomonastry-ai` (Custom Container, A100 ×1,
+  us-east-1, Scale-to-Zero 20 min), `audiomonastry-ai-pilot` (Whisper, läuft)
 - Cloudflare Worker (`portal-worker`), Supabase, Cloudflare R2
 
 **Containerisierung:** `Dockerfile` (App), `Dockerfile.hetzner`,
-`Dockerfile.multistage`, `services/samplemonk-ai-runtime/Dockerfile`
+`Dockerfile.multistage`, `services/audiomonastry-ai-runtime/Dockerfile`
 (pytorch/pytorch-Basis, keine Gewichte im Image, `HF_HOME=/data/hf-cache`),
 `services/stem-ai/Dockerfile`, `services/master-player/Dockerfile`,
 `services/midi-bridge/Dockerfile`.

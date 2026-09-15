@@ -1,4 +1,4 @@
-# audioMONASTRY · SampleMONK
+# audioMONASTRY · AudioMONASTRY
 
 > Browser-based collaborative audio workstation for up to 4 users.
 > Version: **1.210.001** (`V. 1|210|001`) · Codename "HyperAudioWorkstation" · Stand 2026-09-09.
@@ -75,7 +75,7 @@ npm start                   # node dist/server.cjs
       ▼           ▼              ▼
 ┌──────────┐ ┌──────────┐ ┌───────────────────────────┐
 │ Replicate│ │ HF       │ │ HF Endpoint (Custom)      │
-│ (Stems)  │ │ Serverless│ │ samplemonk-ai-runtime    │
+│ (Stems)  │ │ Serverless│ │ audiomonastry-ai-runtime    │
 └──────────┘ │ (LLM/TTS)│ │ A100, Scale-to-Zero       │
              └──────────┘ └───────────────────────────┘
       ▼           ▼              ▼
@@ -102,7 +102,7 @@ CostTracker → Supabase persistence → response.
 |---|---|---|---|
 | **App/API** | `server.ts` | 8080 HTTP + WebSocket | REST, Socket.io signaling, AI proxy, metrics |
 | **AI Orchestrator** | `src/core/ai/orchestrator/` | in-process | Jobs, sessions, provider routing, MCP, costs |
-| **AI Runtime (Custom Container)** | `services/samplemonk-ai-runtime/` | 8000 HTTP | HF Endpoint: `/health`, `/ready`, `/status`, `/infer`, `/mcp/tools`, `/metrics` |
+| **AI Runtime (Custom Container)** | `services/audiomonastry-ai-runtime/` | 8000 HTTP | HF Endpoint: `/health`, `/ready`, `/status`, `/infer`, `/mcp/tools`, `/metrics` |
 | **stem-ai** (optional) | `services/stem-ai/` | 8000 HTTP (internal) | Local Demucs CPU fallback |
 | **master-player** | `services/master-player/` | internal | FFmpeg mastering/render |
 | **midi-bridge** | `services/midi-bridge/` | internal | MIDI ↔ WebSocket bridge |
@@ -137,9 +137,9 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 - `.env` / `.env.example` – Environment variables (secrets NEVER committed)
 - `docker-compose.yml`, `docker-compose.hetzner.yml`, `docker-compose.ai.yml`, `docker-compose.monitoring.yml`, `docker-compose.sfu.yml`, `docker-compose.fleet-test.yml`
 - `Caddyfile` – TLS/reverse proxy
-- `services/samplemonk-ai-runtime/runtime_config.yaml` – AI runtime (device, VRAM budget, idle timeout)
-- `services/samplemonk-ai-runtime/model_manifest.json` – model registry (revision pinning)
-- `services/samplemonk-ai-runtime/hf_endpoint.example.json` – HF endpoint config
+- `services/audiomonastry-ai-runtime/runtime_config.yaml` – AI runtime (device, VRAM budget, idle timeout)
+- `services/audiomonastry-ai-runtime/model_manifest.json` – model registry (revision pinning)
+- `services/audiomonastry-ai-runtime/hf_endpoint.example.json` – HF endpoint config
 - `database/schema.sql` + `database/ai_migration_001.sql` + `database/ai_migration_002.sql` – Supabase schema & prompt/eval tables
 - `deploy/helm/audioMONASTRY/values.yaml` – Helm (optional)
 
@@ -211,12 +211,12 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 **Verbindliche Quelle der Rollen-/Modellzuordnung:** `docs/RUNPOD_AI_V1_SPEC.md`.
 Jedes Modell gehört zu **genau einer** Flotten-Rolle (`brain`/`ears`/`voiceGen`); die
 Task-Mengen sind disjunkt. Maßgeblich ist der `roles`-Block in
-`services/samplemonk-ai-runtime/model_manifest.json`, gespiegelt in
+`services/audiomonastry-ai-runtime/model_manifest.json`, gespiegelt in
 `src/core/ai/orchestrator/endpointRegistry.ts` und per `tests/manifestRoles.test.ts`
 gegen Drift abgesichert. Modelle mit `status: "planned"` haben noch keinen echten
 Revisions-Pin und werden im Betrieb nicht geladen.
 
-**Model Registry:** `services/samplemonk-ai-runtime/model_manifest.json` + TS mirror `src/core/ai/orchestrator/modelRegistry.ts`. Load classes CORE/FREQUENT/ON_DEMAND/RARE, revision pinning (no `latest`).
+**Model Registry:** `services/audiomonastry-ai-runtime/model_manifest.json` + TS mirror `src/core/ai/orchestrator/modelRegistry.ts`. Load classes CORE/FREQUENT/ON_DEMAND/RARE, revision pinning (no `latest`).
 **Evaluation:** Rollen-/Modell-Manifest + `docs/RUNPOD_AI_V1_SPEC.md`.
 
 ## 7. Server Infrastructure
@@ -224,12 +224,12 @@ Revisions-Pin und werden im Betrieb nicht geladen.
 **Deployment Targets:**
 - Hetzner fleet: `app-1` (CPX31), `sfu-1` (CPX31), `master-1` (CX23), `edge-1` (CX23), `ai-1` (CCX33, Ollama/stem-ai CPU)
 - **RunPod Serverless – 3-Rollen-GPU-Flotte** (Details: `docs/RUNPOD_AI_V1_SPEC.md`):
-  `samplemonk-ai-brain` (A6000 48 GB, lokales LLM), `samplemonk-ai-ears` (A6000 48 GB, STT/Embeddings/Klassifikation), `samplemonk-ai-voice` (A6000 48 GB, TTS/Gesang/Song/SFX/Stems).
+  `audiomonastry-ai-brain` (A6000 48 GB, lokales LLM), `audiomonastry-ai-ears` (A6000 48 GB, STT/Embeddings/Klassifikation), `audiomonastry-ai-voice` (A6000 48 GB, TTS/Gesang/Song/SFX/Stems).
   Alle mit `workers_min=0` (Scale-to-Zero, ≈ 0 $ im Idle) und **Session-Wake** beim Studio-Eintritt.
-  Die früheren HF-Dedicated-Endpoints (`samplemonk-ai`, `samplemonk-ai-pilot`, `samplemonk-ai-clap`) sind abgelöst.
+  Die früheren HF-Dedicated-Endpoints (`audiomonastry-ai`, `audiomonastry-ai-pilot`, `audiomonastry-ai-clap`) sind abgelöst.
 - Cloudflare Worker (`portal-worker`), Supabase, Cloudflare R2
 
-**Containerization:** `Dockerfile` (app), `Dockerfile.hetzner`, `Dockerfile.multistage`, `services/samplemonk-ai-runtime/Dockerfile` (pytorch/pytorch base, no weights in image, `HF_HOME=/data/hf-cache`), `services/stem-ai/Dockerfile`, `services/master-player/Dockerfile`, `services/midi-bridge/Dockerfile`.
+**Containerization:** `Dockerfile` (app), `Dockerfile.hetzner`, `Dockerfile.multistage`, `services/audiomonastry-ai-runtime/Dockerfile` (pytorch/pytorch base, no weights in image, `HF_HOME=/data/hf-cache`), `services/stem-ai/Dockerfile`, `services/master-player/Dockerfile`, `services/midi-bridge/Dockerfile`.
 
 **Orchestration:** Docker Compose (dev/hetzner/ai/monitoring/sfu/fleet-test), optional Helm (`deploy/helm/`), Hetzner scripts (`scripts/hetzner/`: bring-up/delete-fleet, idle-shutdown, auto-repair, prometheus/alertmanager).
 

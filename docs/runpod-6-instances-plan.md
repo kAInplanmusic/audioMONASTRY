@@ -8,7 +8,7 @@ Alle Instanzen: A6000 48 GB, scale-to-zero mit idle-Timeout (App max. 10 h/Monat
 
 ## 1. Brain — AI-MONK (Text, Planung, Tool-Calling)
 
-- Instanz: `samplemonk-ai-brain` (bestehend)
+- Instanz: `audiomonastry-ai-brain` (bestehend)
 - Bild: RunPod vLLM-Worker
 - Modell: `Qwen/Qwen3-30B-A3B-AWQ` (4-bit, MoE, 3B aktiv / 30B total)
 - Begründung: deutlich bessere Qualität (Code, Reasoning, komplexe Anweisungen) als 14B, aber trotzdem schnell dank MoE (nur 3B aktiv pro Token). Passt locker auf A6000.
@@ -27,8 +27,8 @@ Alle Instanzen: A6000 48 GB, scale-to-zero mit idle-Timeout (App max. 10 h/Monat
 
 ## 2. Ears — Audio Intelligence (Analyse, Tags, Embeddings, Retrieval)
 
-- Instanz: `samplemonk-ai-ears` (bestehend)
-- Bild: eigenes samplemonk-ai-runtime-runpod
+- Instanz: `audiomonastry-ai-ears` (bestehend)
+- Bild: eigenes audiomonastry-ai-runtime-runpod
 - Rolle: `ears`
 - Vorgeladen (ALLES fest im Speicher, ~32 GB VRAM):
   1. **Whisper Large v3** — Sprache/Lyrics/Transkription (höchste Qualität)
@@ -53,8 +53,8 @@ Alle Instanzen: A6000 48 GB, scale-to-zero mit idle-Timeout (App max. 10 h/Monat
 
 ## 3. Voice — Sprache + SFX + Stems (aus VoiceGen geteilt)
 
-- Instanz: `samplemonk-ai-voice` (wird umgewidmet / verkleinert)
-- Bild: eigenes samplemonk-ai-runtime-runpod
+- Instanz: `audiomonastry-ai-voice` (wird umgewidmet / verkleinert)
+- Bild: eigenes audiomonastry-ai-runtime-runpod
 - Rolle: `voice`
 - Vorgeladen:
   1. Qwen3-TTS-12Hz-1.7B-CustomVoice — Standard-TTS mit 9 Premium-Stimmen
@@ -81,8 +81,8 @@ Alle Instanzen: A6000 48 GB, scale-to-zero mit idle-Timeout (App max. 10 h/Monat
 
 ## 4. Music — Musikgenerator (NEUE INSTANZ)
 
-- Instanz: `samplemonk-ai-music` (neu)
-- Bild: eigenes samplemonk-ai-runtime-runpod oder ComfyUI-basiert
+- Instanz: `audiomonastry-ai-music` (neu)
+- Bild: eigenes audiomonastry-ai-runtime-runpod oder ComfyUI-basiert
 - Rolle: `music`
 - Vorgeladen (ALLES fest im Speicher, ~37 GB VRAM):
   1. **ACE-Step 1.5 XL Base** (DiT 4B, ~9 GB) — Vielseitig, alle Modi (Repaint/Cover/Extract/Lego/Complete)
@@ -115,7 +115,7 @@ Alle Instanzen: A6000 48 GB, scale-to-zero mit idle-Timeout (App max. 10 h/Monat
 
 ## 5. Visual Image — Universal Visual Source (NEU, aus Vision umgewidmet)
 
-- Instanz: `samplemonk-ai-visual-image` (bisher `samplemonk-ai-vision`)
+- Instanz: `audiomonastry-ai-visual-image` (bisher `audiomonastry-ai-vision`)
 - Bild: ComfyUI-basiert
 - Modell-Stack (ALLES fest vorgeladen, ~36 GB VRAM):
   1. **FLUX.2 [dev] Q4_K_M-GGUF** (~16 GB) — Hauptmodell, hochwertige Photorealistik
@@ -163,7 +163,7 @@ Alle Instanzen: A6000 48 GB, scale-to-zero mit idle-Timeout (App max. 10 h/Monat
 
 ## 6. Visual Video — Style-Shifting Motion Engine (NEU)
 
-- Instanz: `samplemonk-ai-orchestrator` (NEU)
+- Instanz: `audiomonastry-ai-orchestrator` (NEU)
 - Bild: Agent-Runtime (LangGraph / AutoGen / eigenes Framework) + MCP-Server
 - Rolle: `orchestrator` — AI-Orchestrator für Instanzen 2–7
 - **MoA-Stack (DIVERSE Modelle, NICHT nur Qwen) — alles fest vorgeladen, ~25 GB VRAM:**

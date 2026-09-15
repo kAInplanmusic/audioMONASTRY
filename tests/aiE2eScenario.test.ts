@@ -48,7 +48,7 @@ describe('AI-E2E-Szenario: Wake → Cold-Start → Load → Request → Switch �
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    process.env.HF_ENDPOINT_URL = 'https://endpoint.test/samplemonk-ai';
+    process.env.HF_ENDPOINT_URL = 'https://endpoint.test/audiomonastry-ai';
     vi.useFakeTimers();
   });
 

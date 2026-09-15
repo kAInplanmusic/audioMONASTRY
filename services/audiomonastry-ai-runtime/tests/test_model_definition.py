@@ -3,7 +3,7 @@
 Reiner Python-Smoke ohne schwere Abhängigkeiten (nur stdlib + `model_manager`),
 damit er in jedem CI-Lauf und lokal läuft:
 
-    python3 services/samplemonk-ai-runtime/tests/test_model_definition.py
+    python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
 
 Er prüft genau die Lücke aus dem Fremdaudit: dass `ModelDefinition.from_dict`
 unsichere `repository`-/`revision`-Werte ablehnt und dass das eingecheckte

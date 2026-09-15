@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================================
-# HF-Single-GPU-Check – Harte Kostenregel: maximal 1 A100 für SampleMONK
+# HF-Single-GPU-Check – Harte Kostenregel: maximal 1 A100 für AudioMONASTRY
 # ----------------------------------------------------------------------------
-# Prüft, dass nur der Endpoint `samplemonk-ai` konfiguriert ist und keine
+# Prüft, dass nur der Endpoint `audiomonastry-ai` konfiguriert ist und keine
 # alten Einzel-GPU-Endpoints (pilot/clap) mehr aktiv sind.
 # ============================================================================
 set -euo pipefail
@@ -35,13 +35,13 @@ if grep -q "new HfStandardEndpointProvider()" src/core/ai/orchestrator/providerR
 fi
 
 echo "==> 3/4 hf_manage_endpoint.py-Guard"
-if ! grep -q "SINGLE_GPU_ENDPOINT_NAME = \"samplemonk-ai\"" services/samplemonk-ai-runtime/hf_manage_endpoint.py; then
+if ! grep -q "SINGLE_GPU_ENDPOINT_NAME = \"audiomonastry-ai\"" services/audiomonastry-ai-runtime/hf_manage_endpoint.py; then
   echo "FEHLER: Single-GPU-Guard fehlt in hf_manage_endpoint.py." >&2
   fail=1
 fi
 
 echo "==> 4/4 Modell-Manifest (alle Modelle auf einer Runtime)"
-if ! python3 -c "import json;json.load(open('services/samplemonk-ai-runtime/model_manifest.json'))"; then
+if ! python3 -c "import json;json.load(open('services/audiomonastry-ai-runtime/model_manifest.json'))"; then
   echo "FEHLER: model_manifest.json ist ungültig." >&2
   fail=1
 fi
@@ -52,7 +52,7 @@ if [[ "$fail" -ne 0 ]]; then
 fi
 
 echo "STATUS: PASS"
-echo "GPU INSTANCES: 1 (samplemonk-ai, A100)"
-echo "ACTIVE A100: samplemonk-ai"
+echo "GPU INSTANCES: 1 (audiomonastry-ai, A100)"
+echo "ACTIVE A100: audiomonastry-ai"
 echo "MIGRATED SERVICES: whisper-large-v3 (Pilot), clap-music (CLAP), ast-audioset, musicgen-small/medium, mms-tts-deu, bark, pyannote-diarization, qwen-omni"
-echo "DISABLED/REMOVED GPU ENDPOINTS: samplemonk-ai-pilot, samplemonk-ai-clap"
+echo "DISABLED/REMOVED GPU ENDPOINTS: audiomonastry-ai-pilot, audiomonastry-ai-clap"

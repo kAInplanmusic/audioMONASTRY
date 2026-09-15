@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'services/samplemonk-ai-runtime/**'
+      - 'services/audiomonastry-ai-runtime/**'
       - '.github/workflows/hf-endpoint.yml'
   workflow_dispatch:
 
@@ -14,7 +14,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: samplemonk-ai-runtime
+  IMAGE_NAME: audiomonastry-ai-runtime
 
 jobs:
   build-and-push:
@@ -47,7 +47,7 @@ jobs:
       - name: Build & Push (Custom Container)
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
-          context: services/samplemonk-ai-runtime
+          context: services/audiomonastry-ai-runtime
           push: true
           tags: |
             ${{ steps.meta.outputs.image }}:latest
@@ -84,7 +84,7 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           IMAGE: ${{ needs.build-and-push.outputs.image }}:${{ github.sha }}
-          HF_ENDPOINT_NAME: samplemonk-ai
+          HF_ENDPOINT_NAME: audiomonastry-ai
           HF_NAMESPACE: AnunnakiTools
           HF_REGION: us-east-1
           HF_INSTANCE_TYPE: nvidia-a100
@@ -93,9 +93,9 @@ jobs:
           HF_INSTANCE_SIZE: x1
           HF_SCALE_TO_ZERO_TIMEOUT: '20'
           AI_MAX_GPU_ENDPOINTS: '1'
-        run: python services/samplemonk-ai-runtime/hf_manage_endpoint.py update
+        run: python services/audiomonastry-ai-runtime/hf_manage_endpoint.py update
 
       - name: Endpoint-Status ausgeben
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: python services/samplemonk-ai-runtime/hf_manage_endpoint.py status
+        run: python services/audiomonastry-ai-runtime/hf_manage_endpoint.py status

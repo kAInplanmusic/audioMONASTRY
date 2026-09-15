@@ -9,7 +9,7 @@ import os
 import threading
 from typing import Optional
 
-logger = logging.getLogger("samplemonk.device")
+logger = logging.getLogger("audiomonastry.device")
 
 _device_lock = threading.Lock()
 _device: Optional[str] = None

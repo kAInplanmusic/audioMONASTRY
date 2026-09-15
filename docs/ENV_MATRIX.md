@@ -82,7 +82,7 @@
 | `AI_CB_FAILURE_THRESHOLD` / `AI_CB_RESET_MS` | `AI_CB_*` | 5 / 30000 | circuitBreaker.ts | nein |
 | `AI_MAX_VRAM` | `AI_MAX_VRAM` | 80 | modelManager.ts | nein |
 
-## 6. Python-AI-Runtime (services/samplemonk-ai-runtime)
+## 6. Python-AI-Runtime (services/audiomonastry-ai-runtime)
 
 | Name | Pflicht | Default | Secret |
 |---|---|---|---|

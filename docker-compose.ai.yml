@@ -6,8 +6,8 @@
 services:
   ai-runtime:
     build:
-      context: ./services/samplemonk-ai-runtime
-    container_name: samplemonk-ai-runtime
+      context: ./services/audiomonastry-ai-runtime
+    container_name: audiomonastry-ai-runtime
     environment:
       AI_RUNTIME_DEVICE: simulated   # cuda auf GPU-Host, simulated für Smoke-Tests
       HF_HOME: /data/hf-cache

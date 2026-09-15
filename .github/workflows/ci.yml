@@ -35,7 +35,7 @@ jobs:
         # QUAL-P2-005 (FA-P2-2): reine stdlib-Tests, kein pip-Install nötig.
         run: |
           python3 -m unittest tests.plugin_interface_test
-          python3 services/samplemonk-ai-runtime/tests/test_model_definition.py
+          python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
 
       - name: Security (npm audit + Interface-Boundary-Scan)
         run: npm run security

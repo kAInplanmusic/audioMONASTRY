@@ -1,5 +1,5 @@
 """
-SampleMONK AI Runtime – Model Registry (Manifest-Loader)
+AudioMONASTRY AI Runtime – Model Registry (Manifest-Loader)
 =========================================================
 Liest model_manifest.json. Produktionsregeln:
 

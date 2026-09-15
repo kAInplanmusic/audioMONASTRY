@@ -1,5 +1,5 @@
 """
-SampleMONK AI Runtime – RunPod/Neue Modell-Handler
+AudioMONASTRY AI Runtime – RunPod/Neue Modell-Handler
 ===================================================
 Ergänzende Handler für Modelle, die im RunPod-Stack laufen:
 

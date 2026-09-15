@@ -145,7 +145,7 @@ Max-Blockzeit sind nicht messbar → Latenzversprechen (< 10 ms) ist nicht beleg
 4. Metrik-Scrape freigeben (P0-1) und `curl -s <metrics-url> | head` als Nachweis.
 5. Prometheus + Alertmanager starten (`docker compose -f docker-compose.monitoring.yml up -d`),
    eine Testregel (z. B. `up == 0`) bis zur Zustellung durchspielen.
-6. **Akzeptanz:** Dashboard zeigt `samplemonk_*`-Metriken; ein künstlich erzeugter
+6. **Akzeptanz:** Dashboard zeigt `audiomonastry_*`-Metriken; ein künstlich erzeugter
    Fehler löst sichtbar einen Alarm aus.
 
 ### Phase 2 — Echter Deploy + Rollback (1 Tag, ~0,20 €)

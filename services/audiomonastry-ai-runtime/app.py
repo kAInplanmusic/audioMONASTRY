@@ -1,5 +1,5 @@
 """
-audioMONASTRY · SampleMONK AI Runtime (Hugging Face Custom Container)
+audioMONASTRY · AudioMONASTRY AI Runtime (Hugging Face Custom Container)
 =====================================================================
 FastAPI-Runtime für den dedizierten HF-Inference-Endpoint.
 
@@ -48,7 +48,7 @@ def log_event(level: str, msg: str, **fields: Any) -> None:
     record: Dict[str, Any] = {
         "ts": datetime.now(timezone.utc).isoformat(),
         "level": level,
-        "service": "samplemonk-ai-runtime",
+        "service": "audiomonastry-ai-runtime",
         "msg": msg,
         **fields,
     }
@@ -166,7 +166,7 @@ async def lifespan(_app: FastAPI):
     log_event("INFO", "shutdown complete")
 
 
-app = FastAPI(title="SampleMONK AI Runtime", version=RUNTIME_VERSION, lifespan=lifespan)
+app = FastAPI(title="AudioMONASTRY AI Runtime", version=RUNTIME_VERSION, lifespan=lifespan)
 
 
 @app.get("/health")

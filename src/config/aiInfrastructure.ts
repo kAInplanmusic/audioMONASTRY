@@ -97,25 +97,25 @@ const FLEET_ROLE_EUR_PER_HOUR: Record<GpuEndpointRole, number> = {
 
 /**
  * Alt-Endpoints, die NICHT mehr verwendet werden dürfen (nur Doku/Status).
- * `samplemonk-ai` war der gemeinsame HF-Custom-Container, die übrigen die
+ * `audiomonastry-ai` war der gemeinsame HF-Custom-Container, die übrigen die
  * abgeschalteten HF-Pilot-/CLAP-Endpoints.
  */
 export const LEGACY_GPU_ENDPOINTS = [
-  'samplemonk-ai',
-  'samplemonk-ai-pilot',
-  'samplemonk-ai-clap',
+  'audiomonastry-ai',
+  'audiomonastry-ai-pilot',
+  'audiomonastry-ai-clap',
 ] as const;
 
 /** Namenskonvention der RunPod-Serverless-Endpoints je Rolle. */
 const ENDPOINT_NAME_BY_ROLE: Record<GpuEndpointRole, string> = {
-  brain: 'samplemonk-ai-brain',
-  ears: 'samplemonk-ai-ears',
-  voiceGen: 'samplemonk-ai-voice',
-  music: 'samplemonk-ai-music',
-  imageHq: 'samplemonk-ai-image',
-  videoReal: 'samplemonk-ai-video-real',
-  videoAbstract: 'samplemonk-ai-video-abstract',
-  orchestrator: 'samplemonk-ai-orchestrator',
+  brain: 'audiomonastry-ai-brain',
+  ears: 'audiomonastry-ai-ears',
+  voiceGen: 'audiomonastry-ai-voice',
+  music: 'audiomonastry-ai-music',
+  imageHq: 'audiomonastry-ai-image',
+  videoReal: 'audiomonastry-ai-video-real',
+  videoAbstract: 'audiomonastry-ai-video-abstract',
+  orchestrator: 'audiomonastry-ai-orchestrator',
 };
 
 export function endpointNameForRole(role: GpuEndpointRole): string {

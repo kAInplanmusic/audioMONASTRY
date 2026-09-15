@@ -12,9 +12,9 @@ nach Intelligenz-Bedarf statt nach Modell-Liste:
 
 | Endpoint | GPU | Aufgabe | ~$/h (Vollbetrieb) |
 |---|---|---|---|
-| `samplemonk-ai-brain` | A6000 48 GB (`AMPERE_48`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
-| `samplemonk-ai-ears` | A6000 48 GB (`AMPERE_48`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
-| `samplemonk-ai-voice` | A6000 48 GB (`AMPERE_48`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
+| `audiomonastry-ai-brain` | A6000 48 GB (`AMPERE_48`) | lokales LLM: MOA-Planung, MCP-Tool-Calls, App-Steuerung | 0,39 |
+| `audiomonastry-ai-ears` | A6000 48 GB (`AMPERE_48`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
+| `audiomonastry-ai-voice` | A6000 48 GB (`AMPERE_48`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
 
 Summe ≈ **1,17 $/h** bei Vollbetrieb. Scale-to-Zero gilt, aber **nicht sofort**: ein
 Worker läuft nach dem letzten Job noch `idleTimeout` Sekunden weiter und wird in
@@ -44,7 +44,7 @@ Damit bleibt die dokumentierte Budgetgrenze (4–5 €/h) eingehalten.
 ## 2. Rollen-Vertrag (einzige Quelle der Wahrheit)
 
 **TS:** `src/core/ai/orchestrator/endpointRegistry.ts` (+ `src/config/aiInfrastructure.ts` für die Kostenregel)
-**Python:** `services/samplemonk-ai-runtime/model_manifest.json` → `roles`
+**Python:** `services/audiomonastry-ai-runtime/model_manifest.json` → `roles`
 **Drift-Guard:** `tests/manifestRoles.test.ts` erzwingt Gleichheit von Rollen, Budgets und Preload-Sätzen.
 
 Die Task-Mengen sind **disjunkt** – pro Task genau eine zuständige Rolle:
@@ -63,7 +63,7 @@ bestehende H200-Endpoint `uzg7p9lm890ts8`) — der Cutover ist dadurch unterbrec
 > **Produktiv seit 2026-09-11: vLLM.** Der Brain läuft auf dem vorgefertigten RunPod-vLLM-Worker
 > **v2.27.0 / vLLM 0.29.0** (`registry.runpod.net/runpod-workers-worker-vllm-main-dockerfile:76054c22c`)
 > mit **`Qwen/Qwen3-14B-AWQ`** (`QUANTIZATION=awq`, `MAX_MODEL_LEN=16384`), Template
-> `samplemonk-ai-brain-vllm-template` (`42pqqc06vb`). Gemessen warm: kurzer Tool-Call
+> `audiomonastry-ai-brain-vllm-template` (`42pqqc06vb`). Gemessen warm: kurzer Tool-Call
 > **0,67–0,74 s** (~2× vs. transformers fp16), 400-Token-Output **58,6–59,1 tok/s** (~3,6×).
 > Der Brain ist damit **eine** Stufe — der 4B-Ausführer ist schneller überflüssig als nützlich
 > (vLLM-14B ~0,7 s < 4B auf transformers ~1,08 s).
@@ -213,7 +213,7 @@ den Indexierungsgrad abfragbar.
 | ears | `xeax6xrgd0csag` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
 | voiceGen | `gajmangfldpzrk` | A40 / RTX A6000 (`AMPERE_48`) | 0..1 | 15 min |
 
-Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@31dc58ea` (Build-Args
+Image: `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@31dc58ea` (Build-Args
 `AI_INSTALL_AUDIO_AI=1 AI_INSTALL_VOICE_AI=1 AI_INSTALL_VLLM=0`).
 Rollen-Smoke je Rolle grün (brain→`qwen3-14b`, ears→`ast-audioset`/`clap-music`/`whisper-large-v3`,
 voiceGen→`demucs`/`mms-tts-deu`/`qwen3-tts-06b`). Kosten der Inbetriebnahme inkl.
@@ -222,7 +222,7 @@ Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
 
 ### 8.2 Update 2026-09-11 — zwei Stufen live
 
-- Aktives Image: `ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod@518cad6f` (Commit `518cad6`).
+- Aktives Image: `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod@518cad6f` (Commit `518cad6`).
   **CI ist wieder der Hauptweg:** nach dem Setzen der Repo-Secrets ist Lauf `34552407251`
   (`build` 4m40s + `deploy` 44s) **grün** — alle drei Rollen stehen auf `518cad6f`. Der
   Registry-Auth-Schritt meldet zwar „Failed to create registry auth" (der `ghp_`-PAT ist
@@ -232,7 +232,7 @@ Vollständiges Protokoll: `logs/run-2026-09-10/RUN_PROTOKOLL.md`.
   Kosten $0,0372; Endzustand `$0/h`.
 - **Worker-Logs sind jetzt lesbar:** `runpodctl serverless logs <endpoint>` (v2.14.0) umgeht den
   401-„worker api key" von `/v2/{id}/logs`. Damit sind CI-Build, vLLM und Warmup nicht mehr blind.
-- **Brain = vLLM (2026-09-11):** `samplemonk-ai-brain` zeigt auf Template `42pqqc06vb`
+- **Brain = vLLM (2026-09-11):** `audiomonastry-ai-brain` zeigt auf Template `42pqqc06vb`
   (RunPod-vLLM-Worker v2.27.0, `Qwen/Qwen3-14B-AWQ`, `minCudaVersion=13.0`). Kaltstart (Image
   flash-cached) Delay ~66 s + warme `executionTime` 775 ms. Der 4B-Ausführer entfällt; ears/voiceGen
   bleiben auf unserem Image (`518cad6f`).

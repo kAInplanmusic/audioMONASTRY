@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# vm-startup.sh  –  sampleMONK GCE VM Startup Script
+# vm-startup.sh  –  audioMONASTRY GCE VM Startup Script
 # =============================================================================
 # This script is automatically executed on every GCE VM boot via the GCP
 # project-level startup-script metadata key (terraform/modules/core/vm_startup.tf).
@@ -17,7 +17,7 @@ LOG=/var/log/samplemonk-idle-shutdown.log
 IDLE_MINUTES=30
 CHECK_INTERVAL=5   # minutes between idle checks
 
-echo "[startup] $(date -u +%FT%TZ)  sampleMONK startup script running" >> "$LOG"
+echo "[startup] $(date -u +%FT%TZ)  audioMONASTRY startup script running" >> "$LOG"
 
 # ---------------------------------------------------------------------------
 # 1. Write the idle-check helper script
@@ -58,7 +58,7 @@ echo "[idle-check] $(ts)  Idle cycle $NEXT / $IDLE_CYCLES" >> "$LOG"
 
 if [[ "$NEXT" -ge "$IDLE_CYCLES" ]]; then
   echo "[idle-check] $(ts)  *** Idle threshold reached – shutting down VM ***" >> "$LOG"
-  shutdown -h now "sampleMONK: auto-shutdown after ${IDLE_MINUTES} min idle"
+  shutdown -h now "audioMONASTRY: auto-shutdown after ${IDLE_MINUTES} min idle"
 fi
 IDLE_EOF
 
@@ -69,7 +69,7 @@ chmod +x /usr/local/bin/samplemonk-idle-check.sh
 # ---------------------------------------------------------------------------
 cat > /etc/systemd/system/samplemonk-idle-check.service << EOF
 [Unit]
-Description=sampleMONK idle VM shutdown check
+Description=audioMONASTRY idle VM shutdown check
 After=network.target
 
 [Service]
@@ -84,7 +84,7 @@ EOF
 # ---------------------------------------------------------------------------
 cat > /etc/systemd/system/samplemonk-idle-check.timer << EOF
 [Unit]
-Description=sampleMONK idle check every ${CHECK_INTERVAL} minutes
+Description=audioMONASTRY idle check every ${CHECK_INTERVAL} minutes
 After=network.target
 
 [Timer]

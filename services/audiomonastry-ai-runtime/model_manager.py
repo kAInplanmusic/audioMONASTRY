@@ -1,5 +1,5 @@
 """
-SampleMONK AI Runtime – Model Manager
+AudioMONASTRY AI Runtime – Model Manager
 =====================================
 Echter Model Manager: load/unload/isLoaded/getStatus/getMemoryUsage/
 getModelInfo/preload/warmup/evict.

@@ -1,5 +1,5 @@
 """
-SampleMONK AI Runtime – Inference Handlers
+AudioMONASTRY AI Runtime – Inference Handlers
 ==========================================
 Echte Modell-Handler mit Lazy-Imports und Modell-Cache.
 
@@ -63,7 +63,7 @@ def _cache_get(model_id: str, factory: Callable[[], Any]) -> Any:
                 pass
         # Eviction als strukturierter Log sichtbar machen (Dashboard zeigt msg).
         print(
-            '{"level":"INFO","service":"samplemonk-ai-runtime","msg":"model cache evicted","model":"' + str(evicted_id) + '"}',
+            '{"level":"INFO","service":"audiomonastry-ai-runtime","msg":"model cache evicted","model":"' + str(evicted_id) + '"}',
             flush=True,
         )
     return value

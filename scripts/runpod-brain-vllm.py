@@ -22,7 +22,7 @@ ENV = ROOT / ".env"
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36"
 
 MODEL_NAME = "Qwen/Qwen3-14B-AWQ"
-TEMPLATE_NAME = "samplemonk-ai-brain-vllm-template"
+TEMPLATE_NAME = "audiomonastry-ai-brain-vllm-template"
 BRAIN_ENDPOINT = "ppxo7wrn599p0q"
 CONTAINER_DISK_GB = 60
 DRY = "--dry-run" in sys.argv

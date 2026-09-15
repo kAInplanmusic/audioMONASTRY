@@ -74,7 +74,7 @@ export const SoundTerminal = React.memo(function SoundTerminal() {
         const sample = synthesizeSample(kind);
         let usedAi = false;
         try {
-          // soundMONK Server-AI (samplemonk-ai / MusicGen) zuerst, lokale Synthese als Fallback.
+          // soundMONK Server-AI (audiomonastry-ai / MusicGen) zuerst, lokale Synthese als Fallback.
           const resp = await fetch('/api/sound/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

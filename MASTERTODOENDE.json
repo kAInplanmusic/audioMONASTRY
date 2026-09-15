@@ -349,7 +349,7 @@
       "status": "DONE",
       "area": "VisualMONK",
       "source": "docs/VISUALMONK_SPEC.md#8",
-      "note": "ERLEDIGT 2026-09-11: benanntes Template `samplemonk-ai-vision-template` (7xzd1v17dx, registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201) angelegt; Endpoint 4gts9y4zph7ik9 per REST-PATCH umgehaengt (SDK-Rebind wird abgelehnt: 'endpoint has a bound template'). `scripts/runpod-deploy.py` kennt die Rolle vision (RUNPOD_ROLE=vision, Teil des Voll-Deploys); `fleetWake` weckt/schlaefert vision per workersMin=1/0 (kein warmup-Task) + 2 Tests. Warm verifiziert: delay 90 ms, exec 2,5 s, Bild ok."
+      "note": "ERLEDIGT 2026-09-11: benanntes Template `audiomonastry-ai-vision-template` (7xzd1v17dx, registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201) angelegt; Endpoint 4gts9y4zph7ik9 per REST-PATCH umgehaengt (SDK-Rebind wird abgelehnt: 'endpoint has a bound template'). `scripts/runpod-deploy.py` kennt die Rolle vision (RUNPOD_ROLE=vision, Teil des Voll-Deploys); `fleetWake` weckt/schlaefert vision per workersMin=1/0 (kein warmup-Task) + 2 Tests. Warm verifiziert: delay 90 ms, exec 2,5 s, Bild ok."
     },
     {
       "id": "QUAL-P2-001",
@@ -632,7 +632,7 @@
       "status": "DONE",
       "area": "CI/AI",
       "source": "docs/FEHLER_REGISTER_2026.md FA-P2-2",
-      "note": "DONE 2026-09-13: Python-Smoke fuer repository/revision (FA-P2-2) gebaut: services/samplemonk-ai-runtime/tests/test_model_definition.py (7 Tests) prueft ModelDefinition.from_dict gegen unsichere repository/revision/ID/Klassen und dass das eingecheckte model_manifest.json nur gepinnte Revisionen (kein 'latest') enthaelt. In CI verdrahtet (.github/workflows/ci.yml, Schritt 'Python-Smoke') zusammen mit tests/plugin_interface_test.py (6 Tests).",
+      "note": "DONE 2026-09-13: Python-Smoke fuer repository/revision (FA-P2-2) gebaut: services/audiomonastry-ai-runtime/tests/test_model_definition.py (7 Tests) prueft ModelDefinition.from_dict gegen unsichere repository/revision/ID/Klassen und dass das eingecheckte model_manifest.json nur gepinnte Revisionen (kein 'latest') enthaelt. In CI verdrahtet (.github/workflows/ci.yml, Schritt 'Python-Smoke') zusammen mit tests/plugin_interface_test.py (6 Tests).",
       "updatedAt": "2026-09-13"
     },
     {
@@ -715,7 +715,7 @@
         "docker-compose.monitoring.yml",
         "docs/OPS_RUNBOOK.md"
       ],
-      "acceptance": "Ein Scrape von aussen liefert samplemonk-Metriken; eine Testregel (up == 0) wird sichtbar zugestellt; /api/health bleibt unveraendert oeffentlich und die uebrigen Routen bleiben fail-closed.",
+      "acceptance": "Ein Scrape von aussen liefert audiomonastry-Metriken; eine Testregel (up == 0) wird sichtbar zugestellt; /api/health bleibt unveraendert oeffentlich und die uebrigen Routen bleiben fail-closed.",
       "verification": [
         "curl -s <metrik-url> | head (mit Scrape-Credential)",
         "curl -s -o /dev/null -w %{http_code} <metrik-url> ohne Credential -> 401",
@@ -905,6 +905,39 @@
       "verification": [
         "Token rotieren + Neustart + curl mit altem/neuem Token",
         "CORS-Preflight gegen die Produktionsdomain"
+      ]
+    },
+    {
+      "id": "NOMEN-P1-001",
+      "title": "Nomenklatur-Rest: Ops-Ressourcen samplemonk -> audiomonastry",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Ops/Nomenklatur",
+      "source": "Betreiber-Entscheidung 2026-09-15 (Rename sampleMONK -> audioMONASTRY)",
+      "problem": "Repo und RunPod-Flotte sind umbenannt (277 Tokens, 80 Dateien; Endpoints audiomonastry-ai-*, Image ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod). Bewusst NICHT mit umbenannt, weil es laufende Infrastruktur bricht: Prometheus-Metriknamen (samplemonk_http_requests_total, samplemonk_ai_cost_usd, samplemonk_telemetry_*), Hetzner-Hostnamen (samplemonk-app-1/-sfu-1/-ai-1/-master-1/-edge-1), Hetzner-Firewalls (samplemonk-app/-master/-ai/-sfu), Compose-Service sample-monk, Deploy-Verzeichnis /opt/samplemonk, App-Images samplemonk:hetzner und samplemonk-master-player:hetzner, Snapshot-Praefix samplemonk-snapshot-, systemd-Units/Logs (samplemonk-idle-check.sh, samplemonk-idle-shutdown.log, samplemonk-floating-ip.service), Grafana-Datei samplemonk-overview.json sowie die Container-Pfade /opt/samplemonk-ai im Runtime-Image.",
+      "note": "Betroffene Stellen: scripts/hetzner/** (prometheus*.yml, alertmanager.yml, grafana-*, systemd/**, auto-repair.sh, install-idle-shutdown.sh, bring-up-fleet.sh, cloud-init.yaml, Caddyfile.origin), docker-compose.yml, docker-compose.hetzner.yml, docker-compose.sfu.yml, Dockerfile.hetzner, Caddyfile, deploy.sh (IMAGE_APP/IMAGE_MASTER), services/turn/deploy-turn.sh, services/portal-worker/src/index.js (FLEET-Servernamen + Firewallnamen + SNAPSHOT_PREFIX), server/routes/opsRoutes.ts (# HELP/# TYPE + Metriknamen), tests/server.test.ts, tests/telemetryXrun.test.ts, docs/HETZNER_DEPLOY.md, docs/SERVER_FLEET.md, docs/PORTAL_SETUP.md, services/audiomonastry-ai-runtime/Dockerfile* (WORKDIR/COPY).",
+      "files": [
+        "scripts/hetzner/prometheus-alerts.yml",
+        "scripts/hetzner/prometheus.yml",
+        "scripts/hetzner/alertmanager.yml",
+        "scripts/hetzner/grafana-dashboards/samplemonk-overview.json",
+        "scripts/hetzner/systemd/idle-check.sh",
+        "services/portal-worker/src/index.js",
+        "server/routes/opsRoutes.ts",
+        "docker-compose.hetzner.yml",
+        "Dockerfile.hetzner",
+        "Caddyfile",
+        "deploy.sh",
+        "services/audiomonastry-ai-runtime/Dockerfile",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod"
+      ],
+      "acceptance": "Alle genannten Ressourcen tragen audiomonastry; /api/metrics liefert audiomonastry_* und Prometheus/Grafana/Alerts sind darauf umgestellt; Hetzner-Server, Firewalls und Snapshots sind umbenannt; das Runtime-Image nutzt /opt/audiomonastry-ai.",
+      "verification": [
+        "curl -s localhost:8080/api/metrics | grep -c audiomonastry_http_requests_total",
+        "hcloud server list | grep -c audiomonastry",
+        "hcloud firewall list | grep -c audiomonastry",
+        "docker compose -f docker-compose.hetzner.yml config --quiet",
+        "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=ears nach dem Image-Rebuild"
       ]
     }
   ],
@@ -1142,7 +1175,7 @@
     "fleetEndpointsMax": 5,
     "fleetMaxEurPerHour": 10,
     "storageSnapshotsMaxEurPerMonth": 5,
-    "runpodCurrentImage": "ghcr.io/kainplanmusic/samplemonk-ai-runtime-runpod:f9bc71cc0dc61e5bd038bccc3757422e462291ef (ears + voice, live abgeglichen 2026-09-13) · registry.runpod.net/...worker-vllm...76054c22c (brain) · registry.runpod.net/prunaai-...flux-1-dev...287a29201 (vision, Endpoint wzh9hcbitjnn95) · registry.runpod.net/wlsdml1114-...ksampler...a9247705c (video)",
+    "runpodCurrentImage": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:f9bc71cc0dc61e5bd038bccc3757422e462291ef (ears + voice, live abgeglichen 2026-09-13) · registry.runpod.net/...worker-vllm...76054c22c (brain) · registry.runpod.net/prunaai-...flux-1-dev...287a29201 (vision, Endpoint wzh9hcbitjnn95) · registry.runpod.net/wlsdml1114-...ksampler...a9247705c (video)",
     "hetznerFleet": "5 Server (app/sfu/ai/master/edge) - stundlich abgerechnet, ~0,054 EUR/h (~39 EUR/Monat NUR wenn 24/7 an). Nach der Session: delete-fleet.sh -> 0 EUR/h; Floating-IP 3 EUR/Monat bleibt.",
     "storageNowEurPerMonth": "~0,30 (5 Live-Snapshots, 25,47 GB)",
     "billingModel": "STUENDLICH: Hetzner + RunPod rechnen pro laufender Stunde ab; gestoppt/geloescht = 0 EUR (Hetzner: gestoppte Server kosten weiter Platte -> nur LOESCHEN stoppt Kosten).",
@@ -1169,7 +1202,7 @@
     "3,4 GB Dev-Daten (public/data/orchestral gitignored, public/music) aus .dockerignore + allen rsyncs ausgeschlossen"
   ],
   "visionLive": {
-    "endpointName": "samplemonk-ai-vision",
+    "endpointName": "audiomonastry-ai-vision",
     "endpointId": "wzh9hcbitjnn95",
     "templateId": "7xzd1v17dx",
     "worker": "PrunaAI/runpod-worker-FLUX.1-dev 1.0.3",
@@ -1182,7 +1215,7 @@
   },
   "liveState2026_09_11": {
     "app": "https://anunnakitools.de (200, /api/health ok) - app-1 159.69.102.29 (Floating IP)",
-    "sfu": "http://91.98.145.156 + RTP 40000-40099 (samplemonk healthy; RTP-Echtpfad gruen)",
+    "sfu": "http://91.98.145.156 + RTP 40000-40099 (audiomonastry healthy; RTP-Echtpfad gruen)",
     "ai": "Ollama :11434 + Stem-AI :8000 auf 91.98.147.14",
     "master": "master-player auf 91.98.147.152",
     "edge": "Monitoring/Grafana auf 91.98.157.103:3000",

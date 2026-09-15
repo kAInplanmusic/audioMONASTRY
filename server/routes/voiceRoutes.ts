@@ -119,12 +119,12 @@ async function sendHfBlob(res: Response, upstream: globalThis.Response): Promise
   res.setHeader('Cache-Control', 'no-store');
   res.send(buf);
 }
-/** Eigenen samplemonk-ai-runtime-Endpoint bevorzugen, falls konfiguriert. */
+/** Eigenen audiomonastry-ai-runtime-Endpoint bevorzugen, falls konfiguriert. */
 function voiceRuntimeUrl(): string {
   return (process.env.VOICE_AI_RUNTIME_URL || process.env.HF_ENDPOINT_URL || '').trim();
 }
 /**
- * Ruft den eigenen Custom-Container (samplemonk-ai-runtime) über POST /infer auf.
+ * Ruft den eigenen Custom-Container (audiomonastry-ai-runtime) über POST /infer auf.
  * Liefert das fertige WAV als Buffer zurück. Der Runtime-Handler muss
  * `{ audioBase64, sampleRate }` zurückgeben.
  */
@@ -345,7 +345,7 @@ export function registerVoiceRoutes(app: Express): void {
         const upstream = await replicateAudio(ttsModel, { prompt: clean });
         await sendHfBlob(res, upstream);
       } else {
-        // Eigene Runtime (samplemonk-ai, Qwen3-TTS) zuerst – HF-Serverless nur Fallback.
+        // Eigene Runtime (audiomonastry-ai, Qwen3-TTS) zuerst – HF-Serverless nur Fallback.
         if (voiceRuntimeUrl()) {
           const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
           try {
@@ -435,7 +435,7 @@ export function registerVoiceRoutes(app: Express): void {
     const candidates = [primary, fallback].filter((m) => m.length > 0);
     let lastError = '';
 
-    // Eigene Runtime (MusicGen im samplemonk-ai) zuerst – HF-Serverless Fallback.
+    // Eigene Runtime (MusicGen im audiomonastry-ai) zuerst – HF-Serverless Fallback.
     if (voiceRuntimeUrl()) {
       const runtimeModel = (process.env.VOICE_AI_RUNTIME_SONG_MODEL || 'musicgen-small').trim();
       try {

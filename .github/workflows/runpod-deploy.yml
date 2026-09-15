@@ -18,7 +18,7 @@ on:
     # erlaubt, damit alte Pushes nicht ins Leere laufen.
     branches: [main, runpod-migration]
     paths:
-      - 'services/samplemonk-ai-runtime/**'
+      - 'services/audiomonastry-ai-runtime/**'
       - '.github/workflows/runpod-deploy.yml'
       - 'scripts/runpod-deploy.py'
 
@@ -28,7 +28,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: samplemonk-ai-runtime-runpod
+  IMAGE_NAME: audiomonastry-ai-runtime-runpod
 
 jobs:
   # Ein Image für die Rollen unseres eigenen Runtimes (ears, voiceGen, optional
@@ -74,8 +74,8 @@ jobs:
       - name: Build & Push (shared – ears + voiceGen)
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
         with:
-          context: services/samplemonk-ai-runtime
-          file: services/samplemonk-ai-runtime/Dockerfile.runpod
+          context: services/audiomonastry-ai-runtime
+          file: services/audiomonastry-ai-runtime/Dockerfile.runpod
           push: true
           build-args: |
             AI_INSTALL_AUDIO_AI=1

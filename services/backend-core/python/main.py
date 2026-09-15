@@ -1,4 +1,4 @@
-"""sampleMONK – Backend-Core Gateway (FastAPI).
+"""audioMONASTRY – Backend-Core Gateway (FastAPI).
 
 Lokaler, selbstgehosteter API-Gateway, der Anfragen an die Fach-Services
 weiterreicht (stem-ai, voice-ai, dsp-processor, sequencer-engine,
@@ -23,9 +23,9 @@ from fastapi.responses import JSONResponse
 
 from celery_app import celery_app, render_project_task
 
-logger = logging.getLogger("samplemonk.gateway")
+logger = logging.getLogger("audiomonastry.gateway")
 
-app = FastAPI(title="sampleMONK Backend-Core", version="2.0.0")
+app = FastAPI(title="audioMONASTRY Backend-Core", version="2.0.0")
 
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",") if o.strip()]
 app.add_middleware(

@@ -1,4 +1,4 @@
-# SampleMONK AI Runtime – deterministisches Dependency-Lock
+# AudioMONASTRY AI Runtime – deterministisches Dependency-Lock
 # torch ist NICHT enthalten: kommt aus dem Basisimage pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime.
 # Direkte Dependencies inkl. sha256-Pins (Transitive werden weiterhin von pip aufgelöst).
 fastapi==0.115.6 \

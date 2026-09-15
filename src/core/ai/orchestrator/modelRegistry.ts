@@ -1,7 +1,7 @@
 /**
  * audioMONASTRY · AI Orchestrator – Model Registry (TS-Spiegel)
  * =============================================================
- * Kanonische Quelle im Betrieb ist `services/samplemonk-ai-runtime/model_manifest.json`
+ * Kanonische Quelle im Betrieb ist `services/audiomonastry-ai-runtime/model_manifest.json`
  * (wird vom Container geladen). Dieses Modul ist der TS-Spiegel für den
  * Orchestrator (Routing, VRAM-Planung, Tests). Produktionsregel:
  * feste Revisionen – kein `latest`.

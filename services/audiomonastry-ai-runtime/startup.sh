@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SampleMONK AI Runtime – Startup
+# AudioMONASTRY AI Runtime – Startup
 # - liest runtime_config.yaml (env hat Vorrang)
 # - startet Uvicorn mit graceful shutdown
 # - klare Startup-Fehler über strukturierte Logs
@@ -25,7 +25,7 @@ export AI_RUNTIME_DEVICE
 # AD-I1: Manifest-Default an das Script-Verzeichnis binden (nicht an pwd).
 export AI_MODEL_MANIFEST="${AI_MODEL_MANIFEST:-$SCRIPT_DIR/model_manifest.json}"
 
-echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"level\":\"INFO\",\"service\":\"samplemonk-ai-runtime\",\"msg\":\"starting\",\"device\":\"${AI_RUNTIME_DEVICE}\",\"manifest\":\"${AI_MODEL_MANIFEST}\"}"
+echo "{\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"level\":\"INFO\",\"service\":\"audiomonastry-ai-runtime\",\"msg\":\"starting\",\"device\":\"${AI_RUNTIME_DEVICE}\",\"manifest\":\"${AI_MODEL_MANIFEST}\"}"
 
 # Modelle werden NICHT manuell installiert – Gewichte kommen aus dem HF-Hub
 # in den persistenten HF_HOME-Cache (Revision-Pinning im Manifest).

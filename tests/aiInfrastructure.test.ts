@@ -38,19 +38,19 @@ describe('AI-Infrastruktur (Rollen + Budgets)', () => {
     expect(GPU_ENDPOINT_ROLES).toEqual([...GPU_ROLE_IDS]);
     // Betreiber-Freigabe 2026-09-15: Vollausbau auf acht Instanzen.
     expect(AI_MAX_GPU_ENDPOINTS).toBe(8);
-    expect(LEGACY_GPU_ENDPOINTS).toContain('samplemonk-ai');
+    expect(LEGACY_GPU_ENDPOINTS).toContain('audiomonastry-ai');
     expect(() => assertGpuEndpointBudget()).not.toThrow();
   });
 
   it('leitet die Endpoint-Namen aus der Rolle ab', () => {
-    expect(endpointNameForRole('brain')).toBe('samplemonk-ai-brain');
-    expect(endpointNameForRole('ears')).toBe('samplemonk-ai-ears');
-    expect(endpointNameForRole('voiceGen')).toBe('samplemonk-ai-voice');
-    expect(endpointNameForRole('music')).toBe('samplemonk-ai-music');
-    expect(endpointNameForRole('imageHq')).toBe('samplemonk-ai-image');
-    expect(endpointNameForRole('videoReal')).toBe('samplemonk-ai-video-real');
-    expect(endpointNameForRole('videoAbstract')).toBe('samplemonk-ai-video-abstract');
-    expect(endpointNameForRole('orchestrator')).toBe('samplemonk-ai-orchestrator');
+    expect(endpointNameForRole('brain')).toBe('audiomonastry-ai-brain');
+    expect(endpointNameForRole('ears')).toBe('audiomonastry-ai-ears');
+    expect(endpointNameForRole('voiceGen')).toBe('audiomonastry-ai-voice');
+    expect(endpointNameForRole('music')).toBe('audiomonastry-ai-music');
+    expect(endpointNameForRole('imageHq')).toBe('audiomonastry-ai-image');
+    expect(endpointNameForRole('videoReal')).toBe('audiomonastry-ai-video-real');
+    expect(endpointNameForRole('videoAbstract')).toBe('audiomonastry-ai-video-abstract');
+    expect(endpointNameForRole('orchestrator')).toBe('audiomonastry-ai-orchestrator');
   });
 
   it('wirft, wenn mehr als acht GPU-Endpoints erlaubt werden', async () => {
