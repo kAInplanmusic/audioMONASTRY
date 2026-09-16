@@ -422,7 +422,7 @@ GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Musik-Modelle)
-Idle Timeout: 900 s
+Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis unten
 Workers Min: 0
 Workers Max: 1
 Env:
@@ -509,7 +509,7 @@ GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Bild-Modelle + Assets)
-Idle Timeout: 900 s
+Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis unten
 Workers Min: 0
 Workers Max: 1
 Env:
@@ -581,7 +581,7 @@ GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Video-Modelle + Assets)
-Idle Timeout: 900 s
+Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis unten
 Workers Min: 0
 Workers Max: 1
 Env:
@@ -654,7 +654,7 @@ GPU: A6000 (AMPERE_48)
 GPUs: 1
 Container Disk: 200 GB
 Volume: (Network Volume für Video-Modelle + Assets)
-Idle Timeout: 900 s
+Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis unten
 Workers Min: 0
 Workers Max: 1
 Env:
@@ -670,6 +670,21 @@ Env:
 
 ---
 
+
+**Hinweis Idle-Timeout (gemessen 2026-09-16):** `workersMin=0` allein reicht nicht. Nach den
+Kontrakt-Probes blieben die Worker von `music`, `imageHq`, `videoReal` und `videoAbstract`
+13 Minuten nach dem letzten Job auf `RUNNING` (idleTimeout 900 s war abgelaufen) und die
+Abrechnung lief mit **3,66 $/h** weiter (Guthaben -0,77 $ in 7 Minuten; `videoReal` laeuft auf
+RTX 4090/5090). Derselbe Befund traf am selben Tag den Orchestrator. Mit einem kurzen Wert
+raeumte die Plattform die Worker innerhalb von ~2 Minuten ab und `currentSpendPerHr` ging auf 0:
+
+```bash
+runpodctl serverless update <endpoint-id> --idle-timeout 5   # Notgriff, raeumt sofort ab
+runpodctl serverless update <endpoint-id> --idle-timeout 120 # gesetzt: kurz warm, kein Leerlauf
+```
+
+Vor jedem Laenger-Laufen-Lassen also pruefen: `runpodctl user` -> `currentSpendPerHr` muss bei
+ungenutzter Flotte **0** sein.
 ## 8. Instanz: AI Orchestrator (MoA + MCP)
 
 ### Grunddaten
