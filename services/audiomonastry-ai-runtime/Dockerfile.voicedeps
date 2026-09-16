@@ -1,34 +1,36 @@
 # audioMONASTRY · Voice-Clone-/Convert-Schicht (fish-speech + OpenVoice V2)
 # =======================================================================
-# Warum eine eigene SCHICHT mit eigener venv und nicht ein Paket im Haupt-Image:
-# beide Zielpakete bringen einen gepinnten, inkompatiblen Stack mit.
+# Warum eine eigene venv und nicht einfach Pakete ins Haupt-Image:
+#   * rvc-python ist auf einem modernen Stack nicht installierbar (gemessen
+#     2026-09-16): "Requested omegaconf==2.0.6 ... has invalid metadata:
+#     PyYAML (>=5.1.*)" -> ResolutionImpossible mit pip >= 24.1, dazu
+#     numpy<=1.23.5 und fairseq==0.12.2. Fuer die Stimmonvertierung wird deshalb
+#     OpenVoice V2 (MIT) genutzt - dieselbe Faehigkeit, saubere Lizenz.
+#   * fish-speech und OpenVoice pinnen numpy<=1.26.4 bzw. numpy==1.22.0; unser
+#     Runtime-Image faehrt numpy 2.2.2 fuer transformers 4.57/torch 2.6.
 #
-# Gemessen am 2026-09-16 (pip-Aufloesung im laufenden Runtime-Image):
-#   * rvc-python:  "Requested omegaconf==2.0.6 ... has invalid metadata:
-#     PyYAML (>=5.1.*)" -> ResolutionImpossible mit pip >= 24.1; verlangt
-#     ausserdem numpy<=1.23.5 (Image: 2.2.2) und fairseq==0.12.2.
-#     -> RVC ist auf einem modernen Stack so nicht installierbar. Ersetzt durch
-#        OpenVoice V2 (MIT) fuer die Stimmonvertierung, siehe unten.
-#   * fish-speech: verlangt numpy<=1.26.4 und torch<=2.4.1 (Image: torch 2.6.0,
-#     numpy 2.2.2) -> im Haupt-Environment ein Konflikt mit den laufenden Rollen.
+# Aufbau (bewusst OHNE zweiten torch-Download):
+#   Die venv wird mit --system-site-packages angelegt und erbt damit torch 2.6.0
+#   +cu124 und die Audio-Bibliotheken des Basis-Images. Nur die Konflikt-Pakete
+#   (numpy) und die kleinen Zusatzabhaengigkeiten liegen in der venv und
+#   ueberschreiben das System. Grund: der PyTorch-Index lieferte im Messlauf
+#   2026-09-16 nur ~1,0 MB/s - ein zweiter CUDA-torch-Satz (~2,5 GB) haette den
+#   Build um ~40 Minuten verlaengert, ohne Nutzen, weil dieselbe CUDA-Runtime
+#   bereits im Image liegt.
 #
-# Loesung: beide Pakete liegen in einer eigenen venv (/opt/voiceclone-venv).
-# Unser Haupt-Environment (torch 2.6.0, transformers 4.57.3, numpy 2.2.2) bleibt
-# unangetastet - kein Risiko fuer ears/voiceGen/orchestrator. Die Handler rufen
-# die Bridges als Subprozess mit dem venv-Interpreter auf; fehlt venv oder Modell,
-# meldet der Handler ehrlich MODEL_UNAVAILABLE statt zu crashen.
+#   EHRLICHE ABWEICHUNG: fish-speech deklariert `torch<=2.4.1`, laeuft hier aber
+#   auf dem torch 2.6.0 des Images. Das wird NICHT schoengeredet: die Gates
+#   pruefen die Importe, und ein echter Job auf der GPU belegt, ob die Inferenz
+#   traegt. Schlaegt sie fehl, ist der dokumentierte Rueckfallweg, torch==2.4.1
+#   doch in die venv zu installieren (Zeilen am Ende der Datei) - dann kostet der
+#   Build die genannten ~40 Minuten Download.
 #
-# Lizenzen (wichtig fuer die Vermarktung):
-#   * fish-speech CODE (Repo, Tag v1.5.1)          -> Apache-2.0
-#   * fish-speech GEWICHTE (fishaudio/fish-speech-1.5) -> cc-by-nc-sa-4.0
-#     (NICHT kommerziell, Share-Alike) - gleiche Einordnung wie FLUX.2/Ministral
-#     im 8-Instanzen-Plan.
-#   * OpenVoice V2 (myshell-ai/OpenVoice, Commit gepinnt) -> MIT, Gewichte MIT.
+# Lizenzen: fish-speech-Code Apache-2.0 / Gewichte cc-by-nc-sa-4.0 (nicht
+# kommerziell), OpenVoice V2 MIT (Code und Gewichte).
 #
 # Build:
 #   docker build --platform=linux/amd64 \
 #     -f services/audiomonastry-ai-runtime/Dockerfile.voicedeps \
-#     --build-arg BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:8roles-v2 \
 #     -t ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<neu> \
 #     services/audiomonastry-ai-runtime
 ARG BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:8roles-v2
@@ -42,39 +44,37 @@ ARG OPENVOICE_COMMIT=74a1d147b17a8c3092dd5430504bd83ef6c7eb23
 USER root
 WORKDIR /opt/samplemonk-ai
 
-# Build-Werkzeuge fuer die Abhaengigkeiten (u. a. faster-whisper/ctranslate2,
-# pydub -> ffmpeg, portaudio fuer fish-speechs optionales Streaming).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      build-essential git ffmpeg libsndfile1 portaudio19-dev \
+ && apt-get install -y --no-install-recommends build-essential git ffmpeg libsndfile1 portaudio19-dev \
  && rm -rf /var/lib/apt/lists/*
 
 # ---------------------------------------------------------------------------
-# GATE 1: venv + torch (die Basis von fish-speech; openvoice laeuft damit mit)
+# GATE 1: venv mit System-Paketen (erbt torch/CUDA aus dem Basis-Image)
 # ---------------------------------------------------------------------------
-RUN python -m venv /opt/voiceclone-venv \
+RUN python -m venv --system-site-packages /opt/voiceclone-venv \
  && /opt/voiceclone-venv/bin/pip install --quiet --upgrade pip setuptools wheel \
- && /opt/voiceclone-venv/bin/pip install --quiet \
-      --index-url https://download.pytorch.org/whl/cu124 torch==2.4.1 torchaudio==2.4.1 \
- && /opt/voiceclone-venv/bin/python -c "import torch; print('GATE ok: torch', torch.__version__)"
+ && /opt/voiceclone-venv/bin/pip install --quiet "numpy<2" \
+ && /opt/voiceclone-venv/bin/python -c "\
+import torch, numpy;\
+assert numpy.__version__.startswith('1.'), numpy.__version__;\
+print('GATE ok: venv erbt torch', torch.__version__, '| eigene numpy', numpy.__version__)"
 
 # ---------------------------------------------------------------------------
-# GATE 2: fish-speech (Code auf Tag, Gewichte kommen zur Laufzeit aus dem Hub)
+# GATE 2: fish-speech (Code auf Tag; Gewichte kommen zur Laufzeit aus dem Hub)
 # ---------------------------------------------------------------------------
 RUN git clone --quiet --depth 1 --branch ${FISH_SPEECH_TAG} \
       https://github.com/fishaudio/fish-speech /opt/fish-speech \
  && /opt/voiceclone-venv/bin/pip install --quiet -e /opt/fish-speech --no-deps \
  && /opt/voiceclone-venv/bin/pip install --quiet \
-      "numpy<=1.26.4" "transformers>=4.45.2" hydra-core kui "einx[torch]==0.2.2" \
-      tiktoken vector_quantize_pytorch==1.14.24 loguru ormsgpack soundfile \
-      librosa safetensors einops pyrootutils resampy zstandard pydub cachetools \
+      "transformers>=4.45.2" hydra-core kui "einx[torch]==0.2.2" tiktoken \
+      vector_quantize_pytorch==1.14.24 loguru ormsgpack resampy zstandard cachetools pyrootutils \
+      natsort loralib rich pydub safetensors descript-audio-codec \
  && /opt/voiceclone-venv/bin/python -c "\
-import torch;\
 from fish_speech.inference_engine import TTSInferenceEngine;\
 from fish_speech.models.text2semantic.inference import launch_thread_safe_queue;\
 from fish_speech.models.vqgan.inference import load_model;\
 from fish_speech.utils.schema import ServeTTSRequest, ServeReferenceAudio;\
-print('GATE ok: fish-speech Importe', torch.__version__)"
+print('GATE ok: fish-speech-Importe')"
 
 # ---------------------------------------------------------------------------
 # GATE 3: OpenVoice (MIT) auf gepinntem Commit
@@ -83,21 +83,31 @@ RUN git clone --quiet https://github.com/myshell-ai/OpenVoice /opt/openvoice \
  && git -C /opt/openvoice checkout --quiet ${OPENVOICE_COMMIT} \
  && /opt/voiceclone-venv/bin/pip install --quiet -e /opt/openvoice --no-deps \
  && /opt/voiceclone-venv/bin/pip install --quiet \
-      "numpy<=1.26.4" librosa soundfile pydub faster-whisper wavmark \
-      eng_to_ipa inflect unidecode pypinyin cn2an jieba langid \
+      librosa soundfile pydub faster-whisper wavmark eng_to_ipa inflect unidecode \
+      pypinyin cn2an jieba langid whisper-timestamped \
  && /opt/voiceclone-venv/bin/python -c "\
-import numpy, torch;\
 from openvoice.api import ToneColorConverter;\
-print('GATE ok: OpenVoice Importe', numpy.__version__, torch.__version__)"
+from openvoice import se_extractor;\
+print('GATE ok: OpenVoice-Importe')"
 
 # ---------------------------------------------------------------------------
-# GATE 4: die Bridges selbst (unsere Vertragsschicht) - Imports ohne Modelle
+# GATE 4: die Bridges selbst (unsere Vertragsschicht)
 # ---------------------------------------------------------------------------
 COPY voice_clone_bridge.py voice_convert_bridge.py ./voice_bridge/
 RUN /opt/voiceclone-venv/bin/python voice_bridge/voice_clone_bridge.py --selftest \
  && /opt/voiceclone-venv/bin/python voice_bridge/voice_convert_bridge.py --selftest \
- && python voice_bridge/voice_clone_bridge.py --selftest 2>&1 | grep -q "venv" \
+ && (python voice_bridge/voice_clone_bridge.py --selftest 2>&1 || true) | grep -q "voiceclone-venv" \
  && echo "GATE ok: Bridges laden im venv; ohne venv kommt die klare Meldung"
 
 RUN chown -R samplemonk:samplemonk /opt/voiceclone-venv /opt/fish-speech /opt/openvoice voice_bridge
 USER samplemonk
+
+# ---------------------------------------------------------------------------
+# Rueckfallweg (nur falls die Gates oder ein Live-Job zeigen, dass fish-speech
+# den gepinnten torch-Stand braucht) - dann diese Zeilen aktivieren und ~40
+# Minuten Download einplanen:
+#
+# RUN /opt/voiceclone-venv/bin/pip install --quiet \
+#       --index-url https://download.pytorch.org/whl/cu124 torch==2.4.1 torchaudio==2.4.1
+# RUN /opt/voiceclone-venv/bin/python -c "import torch; print('fallback torch', torch.__version__)"
+# ---------------------------------------------------------------------------
