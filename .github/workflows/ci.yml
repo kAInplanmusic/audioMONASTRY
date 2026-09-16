@@ -36,6 +36,7 @@ jobs:
         run: |
           python3 -m unittest tests.plugin_interface_test
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
+          python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py
           python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py
           python3 services/audiomonastry-ai-runtime/tests/test_comfyui_adapter.py
 

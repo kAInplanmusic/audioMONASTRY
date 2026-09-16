@@ -91,6 +91,15 @@ class ModelDefinition:
     #: Modelle mit gleichem Gruppennamen teilen sich ein VRAM-Fenster und sind
     #: nie gleichzeitig resident (siehe registry.apply_role/exclusiveGroups).
     exclusiveGroup: Optional[str] = None
+    #: `trust_remote_code` beim Laden. Standard ist False: es gewinnt die native
+    #: Implementierung aus `transformers`. Remote-Code aus Modell-Repos ist auf
+    #: den transformers-Stand seines Entstehungszeitpunkts geeicht und bricht auf
+    #: neueren Staenden. Live belegt 2026-09-15: Phi-3.5-mini ruft in seinem
+    #: mitgelieferten `modeling_phi3.py` `past_key_values.seen_tokens`, das
+    #: transformers >= 4.54 entfernt hat -> AttributeError, sobald der Repo-Code
+    #: statt der nativen `Phi3ForCausalLM` geladen wird. Nur wo die native Klasse
+    #: fehlt, bewusst auf True setzen.
+    trustRemoteCode: bool = False
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ModelDefinition":
@@ -121,6 +130,11 @@ class ModelDefinition:
             raise ValueError("inputFormats must be a list")
         if not isinstance(data.get("outputFormats", []), list):
             raise ValueError("outputFormats must be a list")
+        # Beide Schreibweisen zulassen, aber nur echte Booleans: ein String
+        # ("false") wuerde sonst als truthy durchgehen und den Repo-Code laden.
+        trust_remote_code = data.get("trustRemoteCode", data.get("trust_remote_code", False))
+        if not isinstance(trust_remote_code, bool):
+            raise ValueError("trustRemoteCode must be a boolean")
 
         return cls(
             id=model_id,
@@ -145,6 +159,7 @@ class ModelDefinition:
                 str(data["exclusiveGroup"]).strip()[:64]
                 if data.get("exclusiveGroup") else None
             ),
+            trustRemoteCode=trust_remote_code,
         )
 
 

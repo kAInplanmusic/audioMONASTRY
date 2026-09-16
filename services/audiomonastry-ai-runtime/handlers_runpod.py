@@ -125,20 +125,27 @@ def _resolve_speaker_wav(payload: Dict[str, Any]) -> Optional[str]:
 # Gemeinsamer LLM-Pfad (Qwen3-Brain + die vier Orchestrator-Modelle)
 # ---------------------------------------------------------------------------
 def load_causal_lm(model_id: str, definition: ModelDefinition) -> Tuple[Any, Any]:
-    """Laedt Tokenizer + CausalLM einer Rolle (gecacht, Geraet aus _device())."""
+    """Laedt Tokenizer + CausalLM einer Rolle (gecacht, Geraet aus _device()).
+
+    `trust_remote_code` kommt aus dem Katalogeintrag und ist standardmaessig
+    AUS: die native transformers-Klasse ist der gepflegte Pfad. Repo-eigener
+    Code ist auf seine Entstehungs-Transformers-Version geeicht und bricht auf
+    neueren Staenden (live 2026-09-15: Phi-3.5-mini -> `seen_tokens` entfernt).
+    """
     transformers = _require_lib("transformers", "transformers")
     torch = _require_lib("torch", "torch")
 
     def factory() -> Tuple[Any, Any]:
+        trust_remote_code = bool(definition.trustRemoteCode)
         tokenizer = transformers.AutoTokenizer.from_pretrained(
-            definition.repository, revision=definition.revision, trust_remote_code=True
+            definition.repository, revision=definition.revision, trust_remote_code=trust_remote_code
         )
         dtype = torch.bfloat16 if definition.quantization == "bf16" else torch.float16
         model = transformers.AutoModelForCausalLM.from_pretrained(
             definition.repository,
             revision=definition.revision,
             torch_dtype=dtype,
-            trust_remote_code=True,
+            trust_remote_code=trust_remote_code,
         ).to(_device())
         return tokenizer, model
 

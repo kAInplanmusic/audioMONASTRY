@@ -67,6 +67,29 @@ class TestModelDefinitionValidation(unittest.TestCase):
             ModelDefinition.from_dict(definition(quantization="q4_k_m"))
 
 
+class TestTrustRemoteCode(unittest.TestCase):
+    """RUNPOD-P1-002: Repo-eigener Modellcode ist opt-in, nicht Default.
+
+    Live belegt: Phi-3.5-mini brachte `modeling_phi3.py` mit, das
+    `past_key_values.seen_tokens` liest – in transformers 4.57.3 entfernt.
+    """
+
+    def test_standard_ist_nativ(self) -> None:
+        self.assertIs(ModelDefinition.from_dict(definition()).trustRemoteCode, False)
+
+    def test_opt_in_wird_gelesen(self) -> None:
+        self.assertIs(ModelDefinition.from_dict(definition(trustRemoteCode=True)).trustRemoteCode, True)
+        # Schlangenschreibweise ebenfalls akzeptiert (Manifest-Kompatibilitaet).
+        self.assertIs(ModelDefinition.from_dict(definition(trust_remote_code=True)).trustRemoteCode, True)
+
+    def test_nur_echte_booleans(self) -> None:
+        # Ein String "false" waere truthy und wuerde den Repo-Code laden.
+        for bad in ("false", "true", 0, 1, None, []):
+            with self.subTest(value=bad):
+                with self.assertRaises(ValueError):
+                    ModelDefinition.from_dict(definition(trustRemoteCode=bad))
+
+
 class TestModelManifest(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

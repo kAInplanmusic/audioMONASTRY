@@ -3,7 +3,7 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-14",
+  "generatedAt": "2026-09-16",
   "branch": "main",
   "commit": "aeec270443c971875e241d9bdc26a8fdb0207a49",
   "supersedes": [
@@ -970,23 +970,48 @@
       "id": "RUNPOD-P1-002",
       "title": "MoA-Modellset: gated Planner-Modelle ersetzen + Aggregator-VRAM",
       "priority": "P1",
-      "status": "BLOCKED",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "Live-Verifikation Instanz 8 am 2026-09-15 (Endpoint xu4sqszdfk8lp8)",
-      "problem": "Zwei der vier geplanten MoA-Modelle sind auf dem Hub GATED und damit ohne Token nicht ladbar: meta-llama/Llama-3.2-3B-Instruct und google/gemma-3-4b-it antworten auf config.json mit HTTP 401. Projektweit existiert kein HF-Token (.env fuehrt keinen), und der Wert in der Brain-Endpoint-Env ist ungueltig (whoami-v2: Incorrect API key). Frueherer Befund 'Lizenz im Konto nicht akzeptiert' war falsch. Zusaetzlich ist der geplante Aggregator mistralai/Mistral-Small-3.1-24B-Instruct-2503 mit ~48 GB in fp16 zu gross fuer eine AMPERE_48 neben den anderen Staenden.",
-      "note": "Uebergangsloesung ist aktiv: MOA_*_MODEL = qwen3-4b (oeffentlich, ~8 GB), damit die Instanz 8 live ist und der Plan-Pfad belegt ist; Plaene A/B sind deshalb identisch. Loesung ohne jeden HF-Token: Planner auf oeffentliche Modelle anderer Anbieter legen (z. B. microsoft/Phi-3.5-mini-instruct und Qwen/Qwen3-8B oder mistralai/Ministral-8B-Instruct-2410) – das erfordert Katalogeintraege im Rollen-Manifest und damit EINEN Rebuild, danach genuegt Env-Wechsel. Fuer den Aggregator entweder ein passendes 8B-Modell (fp16 ~16 GB) oder eine FP8-Variante von Mistral-Small-3.1-24B (~24 GB) bzw. eine 80-GB-GPU. Alternative ohne Rebuild: eine Payload-Ueberschreibung, die Modelldefinitionen pro Job mitgibt (Code-Aenderung, Rebuild noetig, dafuer kein Manifest-Eintrag).",
+      "problem": "Zwei der vier geplanten MoA-Modelle sind auf dem Hub GATED und damit ohne Token nicht ladbar: meta-llama/Llama-3.2-3B-Instruct und google/gemma-3-4b-it antworten auf config.json mit HTTP 401. Projektweit existiert kein HF-Token (.env fuehrt keinen), und der Wert in der Brain-Endpoint-Env ist ungueltig (whoami-v2: Incorrect API key). Frueherer Befund 'Lizenz im Konto nicht akzeptiert' war falsch. Zusaetzlich ist der geplante Aggregator mistralai/Mistral-Small-3.1-24B-Instruct-2503 mit ~48 GB in fp16 zu gross fuer eine AMPERE_48 neben den anderen Staenden. GELOEST 2026-09-16 durch ein Set aus oeffentlichen Modellen (siehe note).",
+      "note": "DONE 2026-09-16 (Commit-Stand dieser Runde, Images :moa-comfy-v5/v6/v7). Gesetztes Modellset ohne jeden HF-Token: Classifier Qwen/Qwen3-4B (Apache-2.0, 9 GB), Planner A microsoft/Phi-3.5-mini-instruct (MIT, 8 GB), Planner B mistralai/Ministral-8B-Instruct-2410 (Mistral Research License, NICHT kommerziell, 16 GB), Aggregator Qwen/Qwen3-4B (teilt das Modell mit dem Classifier, +0 GB) -> 33 GB Set bei 42 GB nutzbarem Budget (48 - 6 GB Sicherheitsabstand). Modellwahl ist reine Endpoint-Env (MOA_CLASSIFIER_MODEL, MOA_PLANNER_A_MODEL, MOA_PLANNER_B_MODEL, MOA_AGGREGATOR_MODEL); die zwei neuen Katalogeintraege brauchten EINEN Patch-Build. LIVE GEMESSEN (Endpoint xu4sqszdfk8lp8, Template 9q019cos0i auf ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:moa-comfy-v7, Job COMPLETED): models = {classifier: qwen3-4b, planner_a: phi-35-mini, planner_b: ministral-8b, aggregator: qwen3-4b} - vier unterscheidbare Staende, Klassifikation {areas: [video, music, audio], intent: 'Videoclip erstellen', parsed: true} (echtes JSON), Kaltstart 144 s, MoA-Durchlauf 103 s, kein OOM, keine 401; die drei Gewichte liegen im Host-Cache (/data/hf-cache). ZWEI BEFUNDE dabei, beide behoben bzw. ausgewiesen: (A) Phi-3.5 war zunaechst nicht lauffaehig: handlers_runpod.load_causal_lm setzte trust_remote_code=True fest, dadurch gewann die mitgelieferte modeling_phi3.py (transformers-4.43-Zeit), die past_key_values.seen_tokens liest - in transformers 4.57.3 aus DynamicCache entfernt -> jeder Planungslauf endete mit AttributeError 'DynamicCache' object has no attribute 'seen_tokens' (der Fehlertext nennt nur das ANGEFORDERTE Modell qwen3-4b; im Worker-Log stand unmittelbar davor die GenerationConfig von Phi-3.5 mit eos_token_id 32007/32001/32000). FIX: trustRemoteCode ist jetzt ein Katalogeintrag (Default false, nur echte Booleans; native transformers-Klasse gewinnt, Repo-Code ist opt-in) und der Handler nutzt das Flag; Regressionstest services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py (8 Tests) in .github/workflows/ci.yml verdrahtet, Doku in docs/RUNPOD_MODEL_HANDLERS.md. (B) Plan B bleibt live leer (1753 Zeichen, 0 auswertbare Schritte) - als eigenes Ticket RUNPOD-P1-003 aufgenommen; der Plan-Parser wurde gehaertet (nackte JSON-Arrays aus Prosa, Form-Hinweis list/dict, Einzel-Schritt-Objekt) und plannerParse weist einen leeren Plan jetzt als suspicious aus, statt still 'merged' zu melden.",
       "files": [
         "services/audiomonastry-ai-runtime/model_manifest.json",
         "services/audiomonastry-ai-runtime/moa_orchestrator.py",
-        "scripts/runpod-deploy.py",
+        "services/audiomonastry-ai-runtime/handlers_runpod.py",
+        "services/audiomonastry-ai-runtime/model_manager.py",
+        "services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py",
+        "services/audiomonastry-ai-runtime/tests/test_model_definition.py",
+        "services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py",
+        ".github/workflows/ci.yml",
+        "docs/runpod-8-instances-complete-plan.md",
         "docs/RUNPOD_MODEL_HANDLERS.md"
       ],
-      "acceptance": "Planner A/B und Aggregator laufen mit je einem eigenen Modell aus verschiedenen Anbieterfamilien auf der Ziel-GPU; ein agent.orchestrate-Job liefert einen Plan aus vier unterscheidbaren Staenden ohne OOM.",
+      "acceptance": "ERFUELLT 2026-09-16: Planner A/B und Aggregator laufen mit je einem eigenen Modell aus verschiedenen Anbieterfamilien auf der Ziel-GPU, und ein agent.orchestrate-Job liefert einen Plan aus vier unterscheidbaren Staenden ohne OOM. EINSCHRAENKUNG (deshalb eigenes Ticket RUNPOD-P1-003): Plan B ist live noch leer - der MoA-Gewinn aus ZWEI Plaenen ist damit noch nicht belegt, der Ausfall wird aber nicht mehr still verschluckt.",
       "verification": [
-        "curl -sL -o /dev/null -w '%{http_code}' -H \"Authorization: Bearer $HF_TOKEN\" https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/resolve/main/config.json (heute 401, Ziel 200)",
-        "dito fuer google/gemma-3-4b-it",
-        "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate und RUNPOD_SMOKE_PAYLOAD",
-        "runpodctl serverless logs xu4sqszdfk8lp8 (keine OOM-/401-Fehler in den Staenden)"
+        "python3 scripts/runpod-smoke.py mit RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate RUNPOD_SMOKE_MODEL=qwen3-4b -> logs/runpod-smoke-20260916-064433.json: COMPLETED, models mit drei Familien, plannerParse.a = 6 Schritte, kein OOM",
+        "runpodctl template get 9q019cos0i: imageName ...:moa-comfy-v7, MOA_PLANNER_A_MODEL=phi-35-mini, MOA_PLANNER_B_MODEL=ministral-8b (18 Env-Variablen erhalten)",
+        "python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py (8) + test_model_definition.py (10) + test_moa_orchestrator.py (47) + test_comfyui_adapter.py (21) gruen, test_moa_orchestrator.py auch im Image selbst",
+        "AutoConfig.from_pretrained('microsoft/Phi-3.5-mini-instruct', revision='2fe19245...', trust_remote_code=False) -> transformers.models.phi3.Phi3Config (nativ) statt transformers_modules.<repo>"
+      ]
+    },
+    {
+      "id": "RUNPOD-P1-003",
+      "title": "MoA Plan B (Ministral-8B) liefert keinen auswertbaren Plan",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "Live-Verifikation Instanz 8 am 2026-09-16 (Endpoint xu4sqszdfk8lp8, Image :moa-comfy-v7)",
+      "problem": "Der Planer B (mistralai/Ministral-8B-Instruct-2410) antwortet live mit 1753 Zeichen, aus denen kein einziger gueltiger Plan-Schritt wird: plannerParse = {chars: 1753, steps: 0, parsed: false, suspicious: true}, waehrend Plan A (Phi-3.5) 6 Schritte liefert. Faktisch traegt damit nur ein Plan zum Merge bei, der MoA-Gewinn aus zwei unabhaengigen Plaenen ist nicht belegt. Die Ursache ist noch NICHT unterscheidbar, weil der Rohtext nicht geloggt wird und die Container-Logs mit dem Worker verfallen (idleTimeout 900 s): entweder gar kein JSON oder ausschliesslich Tool-Namen ausserhalb des TOOL_CATALOG (beides wird verworfen).",
+      "note": "Bereits erledigt in v7: extract_json zieht jetzt auch nackte JSON-Arrays aus Prosa (prefer='list' fuer Plaene, 'dict' fuer Klassifikation/Aggregat - sonst gewinnt bei 'Prosa + [{...},{...}]' das erste innere Schritt-Objekt und der Plan schrumpft), parse_steps akzeptiert {steps:[...]}, nackte Listen und ein einzelnes Schritt-Objekt, und plannerParse meldet einen leeren Plan als suspicious (vorher lief das still als 'merged' durch). Naechster Schritt: bei suspicious den Rohtext gekuerzt (z. B. 300 Zeichen) in den Worker-Log schreiben, damit 'kein JSON' von 'nur unbekannte Tools' unterscheidbar wird - dann gezielt nachziehen: Planer-Prompt mit Format-Beispiel haerten oder Planner B tauschen (dann aus einer dritten permissiven Familie, weil Ministral nur unter der Research-Lizenz steht und nicht kommerziell nutzbar ist).",
+      "files": [
+        "services/audiomonastry-ai-runtime/moa_orchestrator.py",
+        "services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py"
+      ],
+      "acceptance": "Ein agent.orchestrate-Job liefert ZWEI unterscheidbare, nicht-leere Plaene (plannerParse.a.steps > 0 UND plannerParse.b.steps > 0, suspicious false) - oder der Ausfall von Plan B ist mit Ursache im Worker-Log belegt.",
+      "verification": [
+        "python3 scripts/runpod-smoke.py RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate (erwartet: plannerParse.b.steps > 0)",
+        "runpodctl serverless logs xu4sqszdfk8lp8 --source container (Rohtext-Hinweis bei suspicious)"
       ]
     }
   ],

@@ -207,7 +207,8 @@
       "maxDuration": 60,
       "concurrency": 1,
       "timeout": 120,
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "trustRemoteCode": false
     },
     {
       "id": "qwen2-audio-7b",
@@ -319,7 +320,8 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 300,
-      "license": "Apache-2.0"
+      "license": "Apache-2.0",
+      "trustRemoteCode": false
     },
     {
       "framework": "vllm",
@@ -346,7 +348,8 @@
       "repository": "QuixiAI/Qwen3-30B-A3B-AWQ",
       "revision": "1ba5586ace54cc9de85addac384eb88576f94598",
       "task": "llm",
-      "estimatedVRAM": 20
+      "estimatedVRAM": 20,
+      "trustRemoteCode": false
     },
     {
       "framework": "transformers",
@@ -1047,7 +1050,8 @@
       "maxDuration": 60,
       "concurrency": 1,
       "timeout": 120,
-      "license": "MIT"
+      "license": "MIT",
+      "trustRemoteCode": false
     },
     {
       "id": "ministral-8b",
@@ -1074,7 +1078,8 @@
       "maxDuration": 60,
       "concurrency": 1,
       "timeout": 120,
-      "license": "Mistral AI Research License (nicht kommerziell)"
+      "license": "Mistral AI Research License (nicht kommerziell)",
+      "trustRemoteCode": false
     }
   ],
   "roles": {

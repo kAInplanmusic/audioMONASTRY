@@ -107,9 +107,24 @@ Damit braucht der Worker keine R2-Credentials.
   "loadClass": "FREQUENT",
   "preload": false,
   "quantization": "int8",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "trustRemoteCode": false
 }
 ```
+
+**`trustRemoteCode`** (Default `false`, nur echte Booleans) steuert, ob der
+gemeinsame LLM-Lader den **Repo-eigenen** Modellcode lädt oder die native
+Klasse aus `transformers`. Er ist bewusst **opt-in**: Repo-Code ist auf den
+transformers-Stand seines Entstehungszeitpunkts geeicht und bricht auf neueren
+Ständen. Live belegt am 2026-09-15 (Image `:moa-comfy-v5`): `microsoft/Phi-3.5-mini-instruct`
+(Revision `2fe19245…`) liefert `modeling_phi3.py` mit, das in
+`prepare_inputs_for_generation` `past_key_values.seen_tokens` liest — das
+Attribut hat transformers ≥ 4.54 entfernt. Mit `trust_remote_code=true` starb
+jeder Planungslauf mit `AttributeError: 'DynamicCache' object has no attribute
+'seen_tokens'`; mit `false` lädt die native `Phi3ForCausalLM`. Vor `true` also
+prüfen, ob `transformers.AutoConfig.from_pretrained(repo, trust_remote_code=False)`
+eine native Klasse liefert (`transformers.models.<arch>` statt
+`transformers_modules.<repo>`).
 
 Weitere bekannte Revisions:
 - `coqui/XTTS-v2` → `6c2b0d75eae4b7047358e3b6bd9325f857d43f77`

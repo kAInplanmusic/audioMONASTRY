@@ -21,6 +21,7 @@ schweren Aufrufe sind lazy und die Plan-Logik ist rein (unit-testbar).
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import time
@@ -28,6 +29,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 #: Rolle -> (Env-Override, Default-Modell-ID aus dem Rollen-Manifest).
 #: Alle vier Modelle sind OEFFENTLICH (kein HF-Token, keine gated Repos) und
@@ -107,12 +110,39 @@ def resolve_moa_models(env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     }
 
 
-def extract_json(text: str) -> Optional[Any]:
-    """Erstes JSON-Objekt/-Array aus einer LLM-Antwort (ohne Code-Fences)."""
+def _json_candidates(text: str, prefer: str = "dict") -> List[str]:
+    """Kandidaten in der Reihenfolge, in der sie geparst werden.
+
+    `prefer` bestimmt, welche FORM zuerst gesucht wird, weil die Erwartung je
+    Aufrufer verschieden ist:
+      * `dict` (Default) – Klassifikation und Aggregat: das aeussere Objekt.
+        Sonst wuerde `{"areas": ["audio"]}` auf sein inneres Array verkuerzt.
+      * `list` – Plan-Schritte: eine nackte Liste. Sonst gewinnt bei
+        "Prosa + [ {...}, {...} ]" das ERSTE innere Schritt-Objekt und der Plan
+        schrumpft auf einen Schritt bzw. faellt ganz aus (Live-Fund 2026-09-16:
+        Plan B kam leer zurueck, waehrend das Ergebnis "merged" meldete).
+
+    Beide Formen bleiben erlaubt – `prefer` dreht nur die Reihenfolge.
+    """
+    cleaned = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
+    objects = [r"\{.*\}", r"\{.*?\}"]   # greedy, dann kurz
+    arrays = [r"\[.*\]", r"\[.*?\]"]
+    patterns = arrays + objects if prefer == "list" else objects + arrays
+    candidates = [cleaned]
+    for pattern in patterns:
+        candidates += re.findall(pattern, cleaned, flags=re.DOTALL)
+    return candidates
+
+
+def extract_json(text: str, prefer: str = "dict") -> Optional[Any]:
+    """Erstes JSON-Objekt/-Array aus einer LLM-Antwort (ohne Code-Fences).
+
+    Die vollstaendige Antwort hat immer Vorrang; erst danach greifen die
+    Suchmuster in der durch `prefer` gesetzten Form-Reihenfolge.
+    """
     if not isinstance(text, str):
         return None
-    cleaned = re.sub(r"^```(?:json)?|```$", "", text.strip(), flags=re.MULTILINE).strip()
-    for candidate in (cleaned, *re.findall(r"\{.*\}", cleaned, flags=re.DOTALL)):
+    for candidate in _json_candidates(text, prefer):
         try:
             return json.loads(candidate)
         except (ValueError, TypeError):
@@ -144,16 +174,34 @@ def parse_classification(text: str) -> Dict[str, Any]:
     }
 
 
+def _step_list(data: Any) -> List[Any]:
+    """Schritt-Liste aus einer geparsten Antwort ziehen (formtolerant).
+
+    Akzeptiert `{"steps": [...]}` (Prompt-Vorgabe), eine nackte Liste und ein
+    einzelnes Schritt-Objekt. Alles andere bleibt leer – aber nicht mehr still:
+    `planner_report` weist einen leeren Plan als Parse-Fehler aus.
+    """
+    if isinstance(data, dict):
+        steps = data.get("steps")
+        if isinstance(steps, list):
+            return steps
+        if "tool" in data:
+            return [data]
+        return []
+    if isinstance(data, list):
+        return data
+    return []
+
+
 def parse_steps(text: str) -> List[Dict[str, Any]]:
-    """Plan-Schritte lesen; unbekannte Tools werden verworfen."""
-    data = extract_json(text)
-    if not isinstance(data, dict):
-        return []
-    steps = data.get("steps")
-    if not isinstance(steps, list):
-        return []
+    """Plan-Schritte lesen; unbekannte Tools werden verworfen.
+
+    `prefer="list"`: ein Plan darf eine nackte Liste sein, und bei
+    "Prosa + [ {...}, {...} ]" muss die GANZE Liste gewinnen – nicht das erste
+    innere Schritt-Objekt (sonst schrumpft der Plan still auf einen Schritt).
+    """
     out: List[Dict[str, Any]] = []
-    for step in steps:
+    for step in _step_list(extract_json(text, prefer="list")):
         if not isinstance(step, dict):
             continue
         tool = str(step.get("tool", "")).strip()
@@ -162,6 +210,24 @@ def parse_steps(text: str) -> List[Dict[str, Any]]:
         args = step.get("args")
         out.append({"tool": tool, "args": args if isinstance(args, dict) else {}})
     return out
+
+
+def planner_report(text: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Parse-Beleg eines Plans – macht einen leeren Plan sichtbar.
+
+    Ein nicht-leerer Text ohne einen einzigen gueltigen Schritt ist ein
+    Parse-Fehler (unparsebare Formatierung oder ausschliesslich unbekannte
+    Tools) und kein "leerer Plan". Live am 2026-09-16 blieb genau das
+    unsichtbar: Plan B kam als `[]` zurueck und das Ergebnis stand trotzdem auf
+    `merged` – der MoA-Gewinn war damit nicht belegt.
+    """
+    raw = text if isinstance(text, str) else ""
+    return {
+        "chars": len(raw),
+        "steps": len(steps),
+        "parsed": bool(steps),
+        "suspicious": bool(raw.strip()) and not steps,
+    }
 
 
 def merge_plans(choice: str, plan_a: List[Dict[str, Any]], plan_b: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
@@ -336,6 +402,16 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     plan_a_text = ask("planner_a", PLANNER_SYSTEM, planner_user, 512)
     plan_b_text = ask("planner_b", PLANNER_SYSTEM, planner_user, 512)
     plan_a, plan_b = parse_steps(plan_a_text), parse_steps(plan_b_text)
+    planner_parse = {
+        "a": planner_report(plan_a_text, plan_a),
+        "b": planner_report(plan_b_text, plan_b),
+    }
+    for side, report in planner_parse.items():
+        if report["suspicious"]:
+            logger.warning(
+                "MoA-Planer %s (%s) lieferte %d Zeichen ohne auswertbaren Schritt",
+                side, models[f"planner_{side}"], report["chars"],
+            )
 
     aggregator_user = (
         f"Auftrag: {request}\nPlan A ({models['planner_a']}): {json.dumps(plan_a)}\n"
@@ -352,6 +428,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         "models": models,
         "classification": classification,
         "plans": {"a": plan_a, "b": plan_b},
+        "plannerParse": planner_parse,
         "choice": chosen,
         "reason": str((aggregate or {}).get("reason", ""))[:300],
         "steps": steps,

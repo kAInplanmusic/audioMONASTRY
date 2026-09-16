@@ -1,7 +1,7 @@
 # RunPod 8-Instanzen-Architektur – Gesamtplan
 
-Stand: 2026-09-15
-Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA-Plan verifiziert; MoA-Modellset offen (RUNPOD-P1-002)
+Stand: 2026-09-16
+Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf drei Modellfamilien live verifiziert (RUNPOD-P1-002 erledigt); offen: Plan B (Ministral) liefert noch keinen auswertbaren Plan (RUNPOD-P1-003)
 Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
@@ -18,14 +18,17 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
 | 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
-| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v4` | live (MoA-Plan verifiziert) |
+| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v7` | live (MoA auf 3 Modellfamilien verifiziert 2026-09-16) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
 3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
-`orchestrator` mit einem echten `agent.orchestrate`-Job: COMPLETED,
-Klassifikation `{areas:[audio], intent:track_analysis}`, zwei Plaene und ein
-gemergter Plan mit `steps` (`ears.analyze/classify/embed`); Kaltstart 131 s,
-MoA-Durchlauf 37 s.
+`orchestrator` mit echten `agent.orchestrate`-Jobs. Erster Lauf (2026-09-15,
+Uebergangs-Set `MOA_*_MODEL=qwen3-4b`, also viermal dasselbe Modell):
+COMPLETED, Klassifikation `{areas:[audio], intent:track_analysis}`, zwei Plaene
+und ein gemergter Plan mit `steps` (`ears.analyze/classify/embed`); Kaltstart
+131 s, MoA-Durchlauf 37 s – dieser Lauf belegt den Pipeline-Pfad, **nicht** das
+Modellset. Aktueller Lauf (2026-09-16, Image `:moa-comfy-v7`, drei Familien):
+siehe „Modellset" unten.
 
 **Wichtig**: Die visuellen Rollen (imageHq/videoReal/videoAbstract) und music laufen
 auf **vorgefertigten ComfyUI-/Hub-Workern**. Sie sprechen die ComfyUI-Workflow-API,
@@ -33,32 +36,83 @@ NICHT unser `{task, model, input}`-Protokoll. Der Orchestrator bindet sie deshal
 MCP-Werkzeuge an; die Uebersetzung leistet jetzt `comfyui_adapter.py`
 (Request- und Antwortrichtung, formtolerant).
 
-### Befund 2026-09-15: zwei Planner-Modelle sind GATED, kein HF-Token im Projekt (TODO RUNPOD-P1-002)
+### Modellset 2026-09-15: MoA auf oeffentliche Modelle umgestellt (TODO RUNPOD-P1-002)
 
-Der Live-Lauf lief mit `MOA_*_MODEL=qwen3-4b`. Das geplante Set scheitert aus zwei
-unabhaengigen Gruenden (beide gemessen, nicht vermutet):
+Das urspruenglich geplante Set war nicht fahrbar – zwei Gruende, beide gemessen:
 
-| Rolle | Geplantes Modell | Befund |
+| Rolle | Geplant (verworfen) | Befund |
 |---|---|---|
-| planner_a | `meta-llama/Llama-3.2-3B-Instruct` | **HTTP 401** – Repo ist gated, ohne Token nicht ladbar |
-| planner_b | `google/gemma-3-4b-it` | **HTTP 401** – Repo ist gated, ohne Token nicht ladbar |
-| aggregator | `mistralai/Mistral-Small-3.1-24B-Instruct-2503` | zugaenglich, aber 24B in fp16 ≈ **48 GB** → passt nicht auf AMPERE_48 |
-| classifier | `Qwen/Qwen3-4B` | zugaenglich, ~8 GB → heute genutzt |
+| planner_a | `meta-llama/Llama-3.2-3B-Instruct` | Repo ist **gated** (HF-API `gated=manual`), ohne Token nicht ladbar |
+| planner_b | `google/gemma-3-4b-it` | Repo ist **gated**, ohne Token nicht ladbar |
+| aggregator | `mistralai/Mistral-Small-3.1-24B-Instruct-2503` | zugaenglich, aber 24B in fp16 ≈ **48 GB** → sprengt die AMPERE_48 |
 
-**Korrektur (wichtig):** Die ersten 401 wurden als "Lizenz nicht akzeptiert"
-gedeutet – das war falsch. Projektweit existiert **kein HF-Token** (`.env` fuehrt
-keinen; der Wert in der Brain-Endpoint-Env ist ungueltig: `whoami-v2` antwortet
-"Incorrect API key"), und der Token identifiziert damit auch kein Konto. Die 401
-kommen daher, dass die beiden Repos **gated** sind und anonym nicht ladbar. Oeffentlich
-(ohne Token) sind u. a. `Qwen/Qwen3-4B`, `Qwen/Qwen3-8B`,
-`microsoft/Phi-3.5-mini-instruct` und `mistralai/Mistral-Small-3.1-24B-Instruct-2503`.
+**Richtigstellung:** Die 401 wurden zuerst als "Lizenz im HF-Konto nicht akzeptiert"
+gedeutet – das war falsch. Das Projekt fuehrt **keinen HF-Token** (`.env` enthaelt
+keinen; der Wert in der Brain-Endpoint-Env ist ungueltig, `whoami-v2` antwortet
+"Incorrect API key" und identifiziert damit kein Konto). Die 401 kamen allein daher,
+dass die beiden Repos gated sind.
+
+**Jetzt gesetzt – alle `gated=false`, also ohne jeden Token nutzbar:**
+
+| Stand | Modell | Lizenz | VRAM |
+|---|---|---|---|
+| Classifier | `Qwen/Qwen3-4B` | Apache-2.0 | 9 GB |
+| Planner A | `microsoft/Phi-3.5-mini-instruct` | MIT | 8 GB |
+| Planner B | `mistralai/Ministral-8B-Instruct-2410` | Mistral Research License (**nicht kommerziell**) | 16 GB |
+| Aggregator | `Qwen/Qwen3-4B` (teilt das Modell mit dem Classifier) | Apache-2.0 | +0 GB |
+
+Preload-VRAM **33 GB** bei 48 GB Budget (42 GB nutzbar nach 6 GB Sicherheitsabstand).
+Der Aggregator teilt sich bewusst das Modell mit dem Classifier – dadurch kostet der
+vierte Stand keinen VRAM.
 
 Die Modellwahl ist reine **Endpoint-Env** (`MOA_CLASSIFIER_MODEL`,
-`MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`): ein Wechsel
-auf andere Modelle braucht KEIN neues Image – solange die Modelle im Rollen-Manifest
-stehen (ein Katalog-Eintrag selbst ist ins Image gebacken). Deshalb sind die Plaene
-A/B im Live-Lauf noch identisch (dasselbe Modell); der MoA-Gewinn entsteht erst mit
-unterschiedlichen Modellfamilien.
+`MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`). Ein Wechsel
+braucht KEIN neues Image, solange das Modell im Rollen-Manifest steht – ein neuer
+Katalogeintrag selbst ist ins Image gebacken und kostet einen Patch-Build.
+
+**Live verifiziert (2026-09-16, Image `:moa-comfy-v7`, Endpoint `xu4sqszdfk8lp8`):**
+
+Ein echter `agent.orchestrate`-Job („20-Sekunden-Videoclip zu einem Sonnenuntergang
+am Meer, mit Musik und gesprochenem Intro") lief COMPLETED mit vier
+unterscheidbaren Staenden; `models` = `{classifier: qwen3-4b, planner_a:
+phi-35-mini, planner_b: ministral-8b, aggregator: qwen3-4b}`. Klassifikation
+`{areas: [video, music, audio], intent: "Videoclip erstellen", parsed: true}`
+(echtes JSON), Kaltstart 144 s, MoA-Durchlauf 103 s, **kein OOM** (33-GB-Set in
+48 GB). Die Gewichte der drei Modelle liegen im Host-Cache (`/data/hf-cache`) –
+zur Laufzeit wird nichts nachgeladen.
+
+**Befund A – Planner A (Phi-3.5) war nicht lauffaehig (behoben in v6/v7):**
+`handlers_runpod.load_causal_lm` setzte `trust_remote_code=True` **fest**. Damit
+gewann fuer `microsoft/Phi-3.5-mini-instruct` (Revision `2fe19245…`) die
+mitgelieferte `modeling_phi3.py` aus der transformers-4.43-Zeit; die liest in
+`prepare_inputs_for_generation` `past_key_values.seen_tokens` (Zeilen 1291/1298)
+– das Attribut hat transformers ≥ 4.54 aus `DynamicCache` entfernt (Image:
+4.57.3). Folge: jeder Planungslauf endete mit `{"code": "INFERENCE_FAILED",
+"detail": "AttributeError: 'DynamicCache' object has no attribute 'seen_tokens'",
+"model": "qwen3-4b"}`. Der Fehlertext nennt nur das **angeforderte** Modell; im
+Worker-Log stand unmittelbar davor die `GenerationConfig` von Phi-3.5
+(`eos_token_id` 32007/32001/32000) – das identifizierte den echten Verursacher.
+Fix: `trustRemoteCode` ist jetzt ein **Katalogeintrag** (Default `false`, nur
+echte Booleans; `false` = native `transformers`-Klasse, Repo-Code ist opt-in).
+Belege: lokal im Image laeuft die native `Phi3ForCausalLM` durch, waehrend
+`DynamicCache.seen_tokens` den Fehler exakt reproduziert; `AutoConfig.from_pretrained
+(repo, trust_remote_code=False)` liefert `transformers.models.phi3.Phi3Config`
+statt `transformers_modules.<repo>`; Live-Lauf auf v6/v7 ohne diesen Fehler.
+
+**Befund B – Plan B ist live leer (offen, RUNPOD-P1-003):** `plannerParse` weist
+fuer B `{chars: 1753, steps: 0, parsed: false, suspicious: true}` aus, fuer A
+`{chars: 1346, steps: 6, parsed: true}`. Der Rohtext war also da, ergab aber
+keinen auswertbaren Schritt: entweder kein JSON oder ausschliesslich Tools
+ausserhalb des Katalogs (beides wird verworfen) – unterscheidbar erst, wenn der
+Rohtext bei Verdacht mitgeloggt wird. Zusaetzlich laeuft `merge_plans` auf
+`merged`, obwohl faktisch nur Plan A beigetragen hat. Vorher war dieser Zustand
+**unsichtbar**: das Ergebnis stand auf `merged` mit leeren `plans.b`.
+
+**Image-Stand dieser Runde:** `:moa-comfy-v5` = Modellset (Phi noch kaputt),
+`:moa-comfy-v6` = `trustRemoteCode`-Fix, `:moa-comfy-v7` = Parser-Haertung +
+`plannerParse` (live verifiziert, aktuell am Template). Rollback-Stand bleibt
+`:moa-comfy-v4` (Template-Aenderung ist ein einzeiliger `runpodctl template
+update --image`).
 
 ### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
 
@@ -877,6 +931,21 @@ visual-assets/
 ---
 
 # Offene Punkte
+- [ ] **RUNPOD-P1-003:** Plan B (`ministral-8b`) liefert live keinen auswertbaren
+      Plan (2026-09-16: 1753 Zeichen, 0 Schritte, `suspicious: true`). Naechster
+      Schritt: bei Verdacht den Rohtext (gekuerzt) mitloggen, um „kein JSON" von
+      „nur unbekannte Tools" zu trennen; danach Planer-Prompt haerten
+      (Format-Beispiel) oder Modell tauschen.
+- [ ] Ministral-8B steht unter der **Mistral Research License (nicht
+      kommerziell)** – vor einer Monetarisierung ersetzen (dann Planner B aus
+      einer dritten permissiven Familie).
+- [ ] A6000-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
+      `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
+      Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer
+      einplanen.
+- [ ] Plan-Argumente der Modelle sind Platzhalter (`track123`,
+      `path_to_…jpg`) – fuer `execute: true` braucht die Prompt-/Adapter-Schicht
+      echte Pfade, sonst scheitern die Fachtools an erfundenen Werten.
 - [ ] FLUX.2 kommerzielle Lizenz klären (oder auf Qwen-Image-only setzen)
 - [ ] Stable Audio Open Lizenz prüfen
 - [ ] LTXVideo Lizenz prüfen

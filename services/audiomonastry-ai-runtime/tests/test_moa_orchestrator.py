@@ -37,6 +37,27 @@ class ExtractJsonTest(unittest.TestCase):
     def test_garbage_returns_none(self) -> None:
         self.assertIsNone(moa.extract_json("kein json hier"))
 
+    def test_bare_array_inside_prose_mit_form_hinweis(self) -> None:
+        # Live-Fund 2026-09-16: Plan B kam als nackte Liste hinter Prosa.
+        # Nur mit `prefer="list"` gewinnt die ganze Liste statt des inneren
+        # Schritt-Objekts.
+        self.assertEqual(
+            moa.extract_json('Hier der Plan:\n[{"tool": "voice.tts"}]\nViel Erfolg', prefer="list"),
+            [{"tool": "voice.tts"}],
+        )
+
+    def test_ohne_hinweis_gewinnt_das_objekt(self) -> None:
+        # Gegenprobe: der Default (dict) haelt das Verhalten unveraendert.
+        self.assertEqual(
+            moa.extract_json('Hier der Plan:\n[{"tool": "voice.tts"}]'),
+            {"tool": "voice.tts"},
+        )
+
+    def test_object_shape_wins_over_inner_array(self) -> None:
+        # Die Reihenfolge bleibt: eine dict-Antwort (Klassifikation, Aggregat)
+        # darf nicht auf ihr inneres Array verkuerzt werden.
+        self.assertEqual(moa.extract_json('Klar: {"areas": ["audio"]} fertig'), {"areas": ["audio"]})
+
 
 class ClassificationTest(unittest.TestCase):
     def test_valid_classification(self) -> None:
@@ -71,6 +92,55 @@ class StepsTest(unittest.TestCase):
 
     def test_bad_shape_is_empty(self) -> None:
         self.assertEqual(moa.parse_steps('{"steps": "nope"}'), [])
+
+    def test_bare_array_is_accepted(self) -> None:
+        steps = moa.parse_steps('[{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]')
+        self.assertEqual(steps, [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}])
+
+    def test_array_inside_prose_is_accepted(self) -> None:
+        # Genau der Live-Fall: Prosa + nackte Liste ergab vorher still [].
+        steps = moa.parse_steps('Hier der Plan:\n[{"tool": "music.generate", "args": {"genre": "ambient"}}]')
+        self.assertEqual(steps, [{"tool": "music.generate", "args": {"genre": "ambient"}}])
+
+    def test_single_step_object_is_accepted(self) -> None:
+        steps = moa.parse_steps('{"tool": "voice.tts", "args": {"text": "hi"}}')
+        self.assertEqual(steps, [{"tool": "voice.tts", "args": {"text": "hi"}}])
+
+    def test_unknown_tool_in_bare_array_is_dropped(self) -> None:
+        self.assertEqual(moa.parse_steps('[{"tool": "hack.it"}]'), [])
+
+    def test_mehrere_schritte_werden_nicht_abgeschnitten(self) -> None:
+        # Schutz gegen die Teil-Lesung: bei Prosa + Liste darf nicht nur das
+        # erste innere Objekt uebrig bleiben.
+        text = 'Mein Plan:\n[{"tool": "music.generate"}, {"tool": "voice.tts"}, {"tool": "ears.embed"}]'
+        steps = moa.parse_steps(text)
+        self.assertEqual([s["tool"] for s in steps], ["music.generate", "voice.tts", "ears.embed"])
+
+
+class PlannerReportTest(unittest.TestCase):
+    """Ein leerer Plan darf nicht mehr still durchgehen (Live 2026-09-16)."""
+
+    def test_valid_plan_is_not_suspicious(self) -> None:
+        text = '{"steps": [{"tool": "ears.analyze", "args": {}}]}'
+        report = moa.planner_report(text, moa.parse_steps(text))
+        self.assertEqual(report["steps"], 1)
+        self.assertTrue(report["parsed"])
+        self.assertFalse(report["suspicious"])
+        self.assertEqual(report["chars"], len(text))
+
+    def test_text_without_a_single_step_is_suspicious(self) -> None:
+        report = moa.planner_report("Ich wuerde zuerst die Musik generieren.", [])
+        self.assertEqual(report["steps"], 0)
+        self.assertFalse(report["parsed"])
+        self.assertTrue(report["suspicious"])
+
+    def test_only_unknown_tools_is_suspicious(self) -> None:
+        text = '{"steps": [{"tool": "hack.it"}]}'
+        self.assertTrue(moa.planner_report(text, moa.parse_steps(text))["suspicious"])
+
+    def test_empty_text_is_not_suspicious(self) -> None:
+        # Ein wirklich leerer Text ist ein anderes Problem als ein Parse-Fehler.
+        self.assertFalse(moa.planner_report("   ", [])["suspicious"])
 
 
 class MergeTest(unittest.TestCase):
@@ -236,6 +306,47 @@ class PipelineTest(unittest.TestCase):
         # teilen sich qwen3-4b).
         self.assertEqual(self.manager.calls, ["qwen3-4b", "phi-35-mini", "ministral-8b", "qwen3-4b"])
         self.assertNotIn("execution", result)
+
+    def test_gueltige_plaene_sind_nicht_verdaechtig(self) -> None:
+        result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "analysiere track.wav"})
+        self.assertFalse(result["plannerParse"]["a"]["suspicious"])
+        self.assertFalse(result["plannerParse"]["b"]["suspicious"])
+        self.assertTrue(result["plannerParse"]["a"]["parsed"])
+        self.assertTrue(result["plannerParse"]["b"]["parsed"])
+
+    def test_plan_als_nackte_liste_wird_jetzt_gelesen(self) -> None:
+        # Live-Fall als Regressionstest: Plan B antwortete mit Prosa + Liste.
+        sys.modules["handlers_runpod"] = _stub_llm({
+            "qwen3-4b": [
+                '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
+                '{"chosen": "merged", "reason": "kombiniert"}',
+            ],
+            "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
+            "ministral-8b": ['Hier der Plan:\n[{"tool": "voice.tts", "args": {"text": "hi"}}]'],
+        })
+        result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
+        self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
+        self.assertFalse(result["plannerParse"]["b"]["suspicious"])
+
+    def test_unparsebarer_plan_wird_ausgewiesen(self) -> None:
+        # Genau der Live-Befund 2026-09-16: Plan B kam als [] zurueck und das
+        # Ergebnis stand trotzdem auf "merged" – der MoA-Gewinn war unbelegt.
+        sys.modules["handlers_runpod"] = _stub_llm({
+            "qwen3-4b": [
+                '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
+                '{"chosen": "merged", "reason": "nur A"}',
+            ],
+            "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
+            "ministral-8b": ["Ich wuerde mit der Musik anfangen, dann das Video."],
+        })
+        result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
+        self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze"])
+        self.assertFalse(result["plannerParse"]["a"]["suspicious"])
+        report_b = result["plannerParse"]["b"]
+        self.assertTrue(report_b["suspicious"])
+        self.assertFalse(report_b["parsed"])
+        self.assertEqual(report_b["steps"], 0)
+        self.assertGreater(report_b["chars"], 0)
 
     def test_missing_prompt_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
