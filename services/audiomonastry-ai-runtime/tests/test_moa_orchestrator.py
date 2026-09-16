@@ -231,6 +231,51 @@ class MergeTest(unittest.TestCase):
         self.assertEqual(moa.merge_plans("a", [], self.b), ("b", self.b))
 
 
+class RoleDefaultsTest(unittest.TestCase):
+    """Vorgaben des Aufrufers je Rolle (Aufloesung, Laenge, Tempo, LoRAs)."""
+
+    def test_vorgaben_landen_in_den_schritt_argumenten(self) -> None:
+        steps = [{"tool": "video_abstract.text2video", "args": {"prompt": "colors"}}]
+        merged = moa.merge_step_defaults(
+            steps, {"videoAbstract": {"width": 768, "height": 1280, "length": 97, "lora_pairs": [{"name": "glitch.safetensors", "strength": 0.8}]}}
+        )
+        self.assertEqual(merged[0]["args"]["prompt"], "colors")
+        self.assertEqual(merged[0]["args"]["width"], 768)
+        self.assertEqual(merged[0]["args"]["length"], 97)
+        self.assertEqual(len(merged[0]["args"]["lora_pairs"]), 1)
+
+    def test_argumente_des_plans_gewinnen(self) -> None:
+        # Der Planer kennt den Auftrag, die Vorgabe ist nur der Rahmen.
+        steps = [{"tool": "music.generate", "args": {"prompt": "techno", "bpm": 140}}]
+        merged = moa.merge_step_defaults(steps, {"music": {"bpm": 90, "duration": 30}})
+        self.assertEqual(merged[0]["args"]["bpm"], 140)
+        self.assertEqual(merged[0]["args"]["duration"], 30)
+
+    def test_nur_die_genannte_rolle_wird_veraendert(self) -> None:
+        steps = [
+            {"tool": "video_abstract.text2video", "args": {"prompt": "a"}},
+            {"tool": "music.generate", "args": {"prompt": "b"}},
+        ]
+        merged = moa.merge_step_defaults(steps, {"music": {"duration": 20}})
+        self.assertEqual(merged[0], steps[0])
+        self.assertEqual(merged[1]["args"]["duration"], 20)
+
+    def test_ohne_vorgaben_bleiben_die_schritte_unveraendert(self) -> None:
+        steps = [{"tool": "music.generate", "args": {"prompt": "x"}}]
+        self.assertIs(moa.merge_step_defaults(steps, {}), steps)
+        self.assertIs(moa.merge_step_defaults(steps, None), steps)
+
+    def test_unbekannte_rolle_wird_abgelehnt(self) -> None:
+        # Ein Tippfehler soll nicht still wirkungslos bleiben.
+        with self.assertRaises(ValueError) as ctx:
+            moa.merge_step_defaults([], {"videoAbtract": {"width": 1}})
+        self.assertIn("videoAbtract", str(ctx.exception))
+
+    def test_falscher_typ_wird_abgelehnt(self) -> None:
+        with self.assertRaises(ValueError):
+            moa.merge_step_defaults([], ["kein objekt"])  # type: ignore[arg-type]
+
+
 class CatalogTest(unittest.TestCase):
     def test_audio_areas_offer_ears_and_voice(self) -> None:
         tools = moa.tool_catalog_for(["audio"])
@@ -261,11 +306,13 @@ class EnvTest(unittest.TestCase):
 
 
 class ToolBridgeTest(unittest.TestCase):
-    def test_workflow_tool_without_workflow_is_rejected(self) -> None:
-        # music laeuft auf einem Workflow-Worker: ohne Workflow kein stiller Fehlschlag.
+    def test_music_tool_baut_jetzt_einen_workflow_request(self) -> None:
+        # Bis 2026-09-16 fehlte der Graph (Fehler 'kein Workflow konfiguriert');
+        # jetzt kommt er aus workflows/music.json. Die Kette scheitert daher erst
+        # an fehlenden Credentials - der Workflow selbst ist da.
         with self.assertRaises(ValueError) as ctx:
             moa.call_tool("music.generate", {"prompt": "techno"}, env={"RP_ENDPOINT_ID_MUSIC": "m-ep"})
-        self.assertIn("kein Workflow konfiguriert", str(ctx.exception))
+        self.assertIn("RP_AGENT_KEY", str(ctx.exception))
 
     def test_prompt_tool_without_prompt_is_rejected(self) -> None:
         with self.assertRaises(ValueError) as ctx:
@@ -464,6 +511,27 @@ class PipelineTest(unittest.TestCase):
         finally:
             del os.environ["MOA_CLASSIFIER_MODEL"]
         self.assertIn("fehlt im Rollen-Manifest", str(ctx.exception))
+
+    def test_rolevorgaben_landen_im_ergebnis_und_in_den_schritten(self) -> None:
+        # Der Aufrufer gibt Aufloesung/Laenge/LoRAs vor; der Planer wuerde sie raten.
+        result = moa.moa_orchestrate(
+            "qwen3-4b",
+            None,
+            {
+                "prompt": "abstract loop",
+                "roleDefaults": {"videoAbstract": {"width": 768, "height": 1280, "length": 97}},
+            },
+        )
+        self.assertEqual(result["roleDefaults"]["videoAbstract"]["width"], 768)
+        # Der Stub-Plan enthaelt keinen videoAbstract-Schritt; die Schritte selbst
+        # bleiben also unveraendert - die Vorgabe steht aber im Ergebnis, damit der
+        # Aufrufer sieht, was gilt.
+        self.assertTrue(all("width" not in (step.get("args") or {}) for step in result["steps"]))
+
+    def test_unbekannte_rolle_in_vorgaben_bricht_ab(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            moa.moa_orchestrate("qwen3-4b", None, {"prompt": "x", "roleDefaults": {"tippfehler": {"width": 1}}})
+        self.assertIn("tippfehler", str(ctx.exception))
 
 
 if __name__ == "__main__":

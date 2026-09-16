@@ -295,6 +295,45 @@ def plan_with_retry(
     return repaired, parse_steps(repaired), 2
 
 
+#: Rollen, fuer die ein Aufrufer Vorgaben machen kann (Katalog + Endpoint-Env).
+KNOWN_ROLES = frozenset({spec.get("role") for spec in TOOL_CATALOG.values()} | set(ROLE_ENDPOINT_ENV))
+
+
+def merge_step_defaults(
+    steps: List[Dict[str, Any]], defaults: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    """Vorgaben des Aufrufers (je Rolle) in die Schritt-Argumente mischen.
+
+    Der Planer kennt den Auftrag, aber nicht die Rahmenbedingungen des Aufrufers:
+    Aufloesung, Laenge, Tempo oder Stil-LoRAs wuerde er raten. `roleDefaults`
+    setzt diese Groessen je Rolle (z. B. `{"videoAbstract": {"width": 768,
+    "height": 1280, "length": 97, "lora_pairs": [...]}}`). Argumente des Plans
+    gewinnen gegen die Vorgabe, weil sie sich auf den konkreten Auftrag beziehen;
+    die Vorgabe ist der Rahmen.
+
+    Unbekannte Rollen werden abgelehnt: ein Tippfehler soll nicht still
+    wirkungslos bleiben.
+    """
+    if not defaults:
+        return steps
+    if not isinstance(defaults, dict):
+        raise ValueError("roleDefaults muss ein Objekt 'Rolle -> Argumente' sein")
+    unknown = sorted(set(defaults) - KNOWN_ROLES)
+    if unknown:
+        raise ValueError(
+            f"roleDefaults: unbekannte Rolle(n) {unknown}; bekannt sind {sorted(KNOWN_ROLES)}"
+        )
+    merged: List[Dict[str, Any]] = []
+    for step in steps:
+        role = (TOOL_CATALOG.get(str(step.get("tool"))) or {}).get("role")
+        preset = defaults.get(role) if role else None
+        if isinstance(preset, dict) and preset:
+            merged.append({**step, "args": {**preset, **(step.get("args") or {})}})
+        else:
+            merged.append(step)
+    return merged
+
+
 def merge_plans(choice: str, plan_a: List[Dict[str, Any]], plan_b: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
     """Aggregator-Entscheidung anwenden (a/b/merged); dedupliziert nach Tool+Args.
 
@@ -487,6 +526,13 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
     choice = str((aggregate or {}).get("chosen", "merged")).lower()
     chosen, steps = merge_plans(choice, plan_a, plan_b)
 
+    # Rahmenbedingungen des Aufrufers (Aufloesung, Laenge, Tempo, Stil-LoRAs)
+    # je Rolle einsetzen - der Planer wuerde sie sonst raten. Plan-Argumente
+    # gewinnen gegen die Vorgabe.
+    role_defaults = payload.get("roleDefaults", payload.get("role_defaults"))
+    if role_defaults:
+        steps = merge_step_defaults(steps, role_defaults)
+
     result: Dict[str, Any] = {
         "status": "success",
         "task": "agent.orchestrate",
@@ -497,6 +543,7 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         "plannerParse": planner_parse,
         "choice": chosen,
         "reason": str((aggregate or {}).get("reason", ""))[:300],
+        "roleDefaults": role_defaults or {},
         "steps": steps,
         "plannedInMs": int((time.time() - started) * 1000),
     }

@@ -42,22 +42,34 @@ Ausgang (groß): R2-URL(s), die der Worker vorher hochgeladen hat.
 
 | Task | Rolle | Handler | Modell(e) | Status |
 |---|---|---|---|---|
-| `agent.orchestrate` | orchestrator | `moa_orchestrate` (`moa_orchestrator.py`) | `qwen3-4b` (Classifier), `llama-32-3b` + `gemma-3-4b` (Planner A/B), `mistral-small-31` (Aggregator) | implementiert, GPU-Verifikation offen |
+| `agent.orchestrate` | orchestrator | `moa_orchestrate` (`moa_orchestrator.py`) | `qwen3-4b` (Classifier, Planner B), `qwen3-8b` (Planner A, Aggregator) | **live verifiziert** 2026-09-16 (Planner 10/6 Schritte, Aggregator-Wahl, 0 doppelte Schritte) |
 
 Ablauf: **Classifier → Planner A/B (unabhaengig) → Aggregator → optionale
 MCP-Ausfuehrung**. Die Plan-Logik ist ohne GPU testbar
-(`tests/test_moa_orchestrator.py`, 27 Tests); die Inferenz nutzt denselben
+(`tests/test_moa_orchestrator.py`, 61 Tests); die Inferenz nutzt denselben
 LLM-Pfad wie das Brain (`handlers_runpod.generate_chat`).
 
 Eingang:
 
 ```json
-{ "task": "agent.orchestrate", "model": "mistral-small-31",
+{ "task": "agent.orchestrate", "model": "qwen3-4b",
   "input": { "prompt": "Baue einen Techno-Drop aus track.wav",
-             "execute": true } }
+             "execute": true,
+             "roleDefaults": {
+               "videoAbstract": { "width": 768, "height": 1280, "length": 97,
+                                  "lora_pairs": [{ "name": "glitch.safetensors", "strength": 0.8 }] },
+               "music": { "duration": 30, "bpm": 128 } } } }
 ```
 
-Ausgang: `{ classification, plans: {a, b}, choice, reason, steps[], execution[]? }`.
+`roleDefaults` (optional) setzt **Rahmenbedingungen je Rolle**: Aufloesung, Laenge,
+Tempo oder Stil-LoRAs. Der Planer wuerde diese Werte raten – er kennt den Auftrag,
+aber nicht die Vorgaben des Aufrufers. Argumente des **Plans gewinnen** gegen die
+Vorgabe (der Plan bezieht sich auf den konkreten Auftrag, die Vorgabe ist der
+Rahmen); die wirksamen Werte stehen im Ergebnis unter `roleDefaults` und in den
+`steps[]`. Unbekannte Rollennamen werden mit klarer Meldung abgelehnt, damit ein
+Tippfehler nicht still wirkungslos bleibt (`merge_step_defaults`).
+
+Ausgang: `{ classification, plans: {a, b}, choice, reason, roleDefaults, steps[], execution[]? }`.
 
 Die MCP-Bruecke adressiert die Fach-Instanzen ueber `RP_ENDPOINT_ID_*` (das
 Deploy-Skript reicht sie der Orchestrator-Rolle durch). `ears.*`/`voice.*`

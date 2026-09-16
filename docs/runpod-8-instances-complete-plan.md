@@ -685,6 +685,24 @@ runpodctl serverless update <endpoint-id> --idle-timeout 120 # gesetzt: kurz war
 
 Vor jedem Laenger-Laufen-Lassen also pruefen: `runpodctl user` -> `currentSpendPerHr` muss bei
 ungenutzter Flotte **0** sein.
+
+**Hinweis Secrets / HF-Token (aufgeraeumt 2026-09-16):** Der Token stand vorher im
+Klartext in **sechs** Templates. Er ist nur noch dort, wo er gebraucht wird –
+`image` (PrunaAI FLUX): `black-forest-labs/FLUX.1-dev` ist auf Hugging Face
+`gated: auto`, ohne akzeptierte Lizenz + Token laedt das Modell nicht. Entfernt
+wurde er aus `music`, `videoReal`, `videoAbstract`, `brain` und `orchestrator`;
+deren Modelle sind nicht gated und wurden live ohne Token nachgeladen
+(`Comfy-Org/ace_step_1.5_ComfyUI_files`, `Wan-AI/Wan2.2-*`, `Qwen/Qwen3-14B-AWQ`,
+`Qwen/Qwen3-4B`/`-8B`). Kein Code im Repo liest `HF_TOKEN` ausser den
+Deploy-Skripten, die ihn nur durchreichen, wenn er in der lokalen Umgebung steht.
+
+**Der Token selbst sollte rotiert werden** – er lag in mehreren Templates im
+Klartext. Nach der Rotation nur noch im Template von `image` (`7xzd1v17dx`)
+eintragen: `runpodctl template update 7xzd1v17dx --env '{"HF_TOKEN":"<neu>"}'`.
+Wer den Token ganz aus der Flotte haben will, muesste `imageHq` auf ein nicht
+gated Modell umstellen (z. B. `FLUX.1-schnell`, Apache-2.0) – das ist eine
+Qualitaets-/Lizenzentscheidung, kein technisches Problem.
+
 ## 8. Instanz: AI Orchestrator (MoA + MCP)
 
 ### Grunddaten
@@ -1037,6 +1055,9 @@ visual-assets/
 - [ ] Plan-Argumente der Modelle sind Platzhalter (`track123`,
       `path_to_…jpg`) – fuer `execute: true` braucht die Prompt-/Adapter-Schicht
       echte Pfade, sonst scheitern die Fachtools an erfundenen Werten.
+      **Teilentschaerft 2026-09-16:** die *Rahmenparameter* sind jetzt vom Aufrufer
+      vorgebbar (`roleDefaults` in `agent.orchestrate`: Aufloesung, Laenge, Tempo,
+      Länge, LoRA-Paare je Rolle) – es fehlen nur noch echte Dateipfade.
 - [ ] FLUX.2 kommerzielle Lizenz klären (oder auf Qwen-Image-only setzen)
 - [ ] Stable Audio Open Lizenz prüfen
 - [ ] LTXVideo Lizenz prüfen
