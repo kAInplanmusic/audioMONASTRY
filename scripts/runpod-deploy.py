@@ -15,12 +15,20 @@ docs/runpod-8-instances-complete-plan.md:
     7  videoAbstract   audiomonastry-ai-video-abstract    AMPERE_48   900 s  200 GB
     8  orchestrator    audiomonastry-ai-orchestrator      AMPERE_48   900 s  100 GB
 
-Alle acht Rollen laufen auf EINER A6000 48 GB (GPU-POOL `AMPERE_48`) und
-skalieren auf 0 (`workers_min=0`, Scale-to-Zero). Ein Worker laeuft nach dem
-letzten Job noch `idleTimeout` Sekunden weiter und wird in dieser Zeit WEITER
-ABGERECHNET – "keine Idle-Kosten" gilt also erst nach diesem Fenster. Die API
-setzt `idleTimeout` nur beim ANLEGEN; bei bestehenden Endpoints wird eine
-Abweichung als Warnung gemeldet (Template-Update allein aendert den Wert nicht).
+Die Rollen laufen auf zwei GPU-Klassen: `AMPERE_48` (A6000/A40 48 GB) fuer
+Sprache, Musik und Bild, `ADA_24` (RTX 4090 24 GB) fuer die Video-Rollen – deren
+Worker-Images sind auf Ada/CUDA 12.8 ausgelegt. Alle Rollen skalieren auf 0
+(`workers_min=0`, Scale-to-Zero). Ein Worker laeuft nach dem letzten Job noch
+`idleTimeout` Sekunden weiter und wird in dieser Zeit WEITER ABGERECHNET –
+"keine Idle-Kosten" gilt also erst nach diesem Fenster. Die API setzt
+`idleTimeout` nur beim ANLEGEN; bei bestehenden Endpoints wird eine Abweichung als
+Warnung gemeldet (Template-Update allein aendert den Wert nicht).
+
+**Idle-Timeout = 120 s** (gemessen 2026-09-16): mit 900 s blieben Worker nach
+kurzen Probes ueber die Zeitgrenze hinaus auf `RUNNING` und die Abrechnung lief
+mit bis zu 3,66 $/h weiter (`runpodctl user` -> `currentSpendPerHr`). Kuerzere
+Werte raeumten sie in ~2 Minuten ab. Fuer lange Ketten (MOS-Laeufe, Voice)
+kann eine Rolle bewusst hoeher stehen – dann aber mit Blick auf `currentSpendPerHr`.
 
 Bild-Herkunft je Rolle (Bildquellen)
 ------------------------------------
@@ -98,27 +106,33 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
     "music": {
         "suffix": "music", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
         "imageEnv": "RUNPOD_MUSIC_IMAGE", "imageDefault": "ACESTEP",
     },
     "imageHq": {
         "suffix": "image", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
-        "imageEnv": "RUNPOD_IMAGE_HQ_IMAGE", "imageDefault": "COMFYUI",
+        "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "imageEnv": "RUNPOD_IMAGE_HQ_IMAGE", "imageDefault": "FLUX_DEV",
     },
     "videoReal": {
-        "suffix": "video-real", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
+        # Video-Rollen auf Ada: die Wan-Images sind auf CUDA 12.8/Ada ausgelegt,
+        # und die 4090 kostet 1,10 $/h Serverless (eine 5090 waere 1,58 $/h).
+        "suffix": "video-real", "gpuPoolId": "ADA_24", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
         "imageEnv": "RUNPOD_VIDEO_REAL_IMAGE", "imageDefault": "WAN22",
     },
     "videoAbstract": {
-        "suffix": "video-abstract", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 200, "imageKind": "prebuilt",
-        "imageEnv": "RUNPOD_VIDEO_ABSTRACT_IMAGE", "imageDefault": "COMFYUI",
+        # Muss der Wan-Worker sein: das frueher hier eingetragene generische
+        # COMFYUI-Image bringt KEINE Gewichte mit und laedt auch keine nach - der
+        # Worker meldete auf Nachfrage leere Modell-Listen, jeder Job scheiterte.
+        # Seit 2026-09-16 laeuft die Rolle auf demselben Image wie videoReal.
+        "suffix": "video-abstract", "gpuPoolId": "ADA_24", "gpuCount": 1,
+        "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 200, "imageKind": "prebuilt",
+        "imageEnv": "RUNPOD_VIDEO_ABSTRACT_IMAGE", "imageDefault": "WAN22",
     },
     "orchestrator": {
         "suffix": "orchestrator", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 100, "imageKind": "own",
+        "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 100, "imageKind": "own",
     },
 }
 
@@ -150,14 +164,21 @@ BRAIN_VLLM_REVISION_DEFAULT = "31c69efc29464b6bb0aee1398b5a7b50a99340c3"
 #: Vorgefertigte Worker der visuellen Rollen + Musik (Registry-Images des RunPod
 #: Hub). Sie bringen ihre Gewichte selbst mit bzw. laden sie beim ersten Boot.
 PREBUILT_IMAGES: Dict[str, str] = {
-    # Offizieller ComfyUI-Serverless-Worker (FLUX.1-dev fp8) – Basis fuer
-    # imageHq (FLUX.2/Qwen-Image-Workflows) und videoAbstract (LTX-Workflows).
-    "COMFYUI": "registry.runpod.net/runpod-workers-worker-comfyui-main-dockerfile:724802bf2",
-    # Wan2.2 text/image-to-video Serverless-Worker (LoRA-faehig).
-    "WAN22": "registry.runpod.net/averystormknight-hue-wan22-ti2v-runpod-main-dockerfile:81fc2044f",
+    # PrunaAI FLUX-Worker – das live laufende imageHq-Image. Braucht HF_TOKEN,
+    # weil black-forest-labs/FLUX.1-dev auf HF `gated: auto` ist.
+    "FLUX_DEV": "registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201",
+    # Wan2.2 ksampler (wlsdml1114) – laeuft bei videoReal UND videoAbstract und
+    # laedt seine Gewichte beim ersten Boot (Wan-AI/Wan2.2-*, nicht gated, daher
+    # ohne HF_TOKEN). Live verifiziert 2026-09-16: H.264 480x720, 5,03 s.
+    "WAN22": "registry.runpod.net/wlsdml1114-generate-video-ksampler-dockerfile:a9247705c",
     # ACE-Step 1.5 XL Musik-Generierung auf ComfyUI (Modelle werden beim ersten
     # Boot geladen, nichts ist ins Image eingebacken).
     "ACESTEP": "registry.runpod.net/ryoheitanaka-runpod-template-acestep15xl-main-dockerfile:16b9ccd80",
+    # ACHTUNG: generischer ComfyUI-Worker OHNE Gewichte – er laedt auch keine
+    # nach (live geprueft: der Worker meldet leere Modell-Listen). Nur mit
+    # angeschlossenem Netzwerk-Volume sinnvoll; fuer die Bild-/Videorollen sind
+    # FLUX_DEV bzw. WAN22 die richtige Wahl.
+    "COMFYUI": "registry.runpod.net/runpod-workers-worker-comfyui-main-dockerfile:724802bf2",
 }
 
 #: Rollen, die ohne Rollen-Env ein minimales Prebuilt-Env bekommen.
