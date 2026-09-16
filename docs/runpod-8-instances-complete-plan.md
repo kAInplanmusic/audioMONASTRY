@@ -753,23 +753,35 @@ Jede der 6 Spezial-Instanzen ist über MCP als Tool erreichbar:
 - Gibt fertige Pakete zurück (Track + Stems + Visuals + Metadaten)
 - Verwaltet Zwischenergebnisse und Caching
 
-### RunPod-Konfiguration
+### RunPod-Konfiguration (live, 2026-09-16)
 ```
 Name: audiomonastry-ai-orchestrator
-Image: ghcr.io/kainplanmusic/audiomonastry-ai-orchestrator:latest
-GPU: A6000 (AMPERE_48)
-GPUs: 1
+Endpoint-ID: xu4sqszdfk8lp8   (Template 9q019cos0i haelt Image + Env)
+Image: ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:moa-comfy-v8
+GPU: A6000 48 GB (AMPERE_48), 1 GPU
 Container Disk: 100 GB
-Idle Timeout: 900 s
-Workers Min: 0
-Workers Max: 1
-Env:
+Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis
+Workers Min: 0 (Scale-to-Zero) / Workers Max: 1
+Env (18 Variablen im Template, hier die wirksamen):
   AI_ROLE=orchestrator
-  MOA_MODELS=mistral_small_3.1_8b,qwen3_4b,gemma3_7b,llama3.2_3b
-  MCP_ENDPOINTS=ears,voice,music,image,video_real,video_abstract
-  LANGGRAPH_SERVER=true
-  HF_TOKEN=***
+  AI_MODEL_MANIFEST=/opt/samplemonk-ai/model_manifest.json
+  AI_RUNPOD_PRELOAD=0                     # Modelle laden lazy beim ersten Job
+  MOA_CLASSIFIER_MODEL=qwen3-4b
+  MOA_PLANNER_A_MODEL=phi-35-mini
+  MOA_PLANNER_B_MODEL=ministral-8b
+  MOA_AGGREGATOR_MODEL=qwen3-4b
+  RP_ENDPOINT_ID_EARS|VOICE|MUSIC|IMAGE|VIDEO_REAL|VIDEO_ABSTRACT
+  RP_AGENT_KEY=*** (Agent-Key fuer die MCP-Bruecke)
+  HF_TOKEN=*** (ungueltig - wird nicht gebraucht, alle Modelle sind oeffentlich)
 ```
+
+**Hinweis Idle-Timeout (gemessen 2026-09-16):** Nach einem Job (Ende 07:30)
+blieb der Worker ueber 22 Minuten auf `RUNNING`, obwohl nichts lief und die
+900 s laengst abgelaufen waren - die Abrechnung lief weiter. Ein kurzer Wert
+raeumte ihn innerhalb von ~4 Minuten (`runpodctl serverless update
+xu4sqszdfk8lp8 --idle-timeout 5`), danach wurde 120 s gesetzt: begrenzt die
+Idle-Kosten und bleibt fuer Jobs in Folge kurz warm. Zurueck auf den alten Wert:
+`runpodctl serverless update xu4sqszdfk8lp8 --idle-timeout 900`.
 
 ---
 
