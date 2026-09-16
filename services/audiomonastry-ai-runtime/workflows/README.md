@@ -6,15 +6,16 @@
 2. `COMFY_WORKFLOW_<ROLLE>` (Pfad, z. B. `/data/workflows/music.json`)
 3. `workflows/<rolle>.json` in diesem Verzeichnis
 
-Rollen mit Workflow-Protokoll: **music**, **videoAbstract**.
-Rollen mit Prompt-Protokoll (kein Workflow noetig): **imageHq**, **videoReal**.
+Rolle mit Workflow-Protokoll: **music**.
+Rollen mit Prompt-Protokoll (kein Workflow noetig): **imageHq**, **videoReal**,
+**videoAbstract**.
 
 ## Stand je Rolle (2026-09-16)
 
-| Rolle | Workflow | Status |
+| Rolle | Protokoll | Status |
 |---|---|---|
-| **music** | `music.json` (ACE-Step 1.5 XL Turbo) | **live verifiziert**: Job COMPLETED, echte MP3 (`ACESTEP_00001.mp3`, 10,032 s, 48 kHz stereo, 293.716 Bytes), Prompt nachweislich im Graphen (ID3-Metadaten) |
-| **videoAbstract** | fehlt – und zwar zu Recht | **blockiert**: das deployte Image hat **keine Gewichte** (`unet_name: not in []`, `clip_name: not in []`, `vae_name: not in ['pixel_space']`, live geprueft). Kein Graph kann das beheben |
+| **music** | Workflow | **live verifiziert**: `music.json` (ACE-Step 1.5 XL Turbo), Job COMPLETED, echte MP3 (`ACESTEP_00001.mp3`, 10,032 s, 48 kHz stereo, 293.716 Bytes), Prompt nachweislich im Graphen (ID3-Metadaten) |
+| **videoAbstract** | Prompt | **live verifiziert** (nach Image-Wechsel, siehe unten): Job COMPLETED, echtes Video (H.264, 480×720, 161 Frames, 5,03 s, 1,1 MB) |
 
 Belege: `logs/probes/*.json` (gitignored, base64-Nutzlasten), auswertbare Fassung
 ohne Nutzlast in `contracts-20260916.json`.
@@ -125,13 +126,28 @@ Kurzfassung (Feldname, Typ, Groesse). Ohne diesen Schalter war die Ausgabe bei
 * `videoReal` liefert **rohes base64** statt eines `data:`-URI; `decode_item`
   behandelt beide Formen.
 
-## Warum videoAbstract so nicht laeuft
+## Warum videoAbstract das Image gewechselt hat
 
-Das deployte Image ist der **generische** `runpod-workers/worker-comfyui` (ComfyUI
-0.34.0). Er bringt keine Gewichte mit und laedt auch keine nach (der Start-Skript
-des Repos hat keine Download-Logik), und am Endpoint haengt **kein Netzwerk-Volume**
-(`networkVolumes: []`). Live geprueft nennt der Worker selbst leere Listen fuer
-`diffusion_models`, `text_encoders` und `vae`. Optionen und Kosten stehen in
-`docs/runpod-8-instances-complete-plan.md` (Offene Punkte); kurz: ein Volume mit
-LTX-Gewichten anhaengen oder die Rolle auf einen Video-Worker umstellen, der seine
-Gewichte selbst mitbringt (wie es `music` und `videoReal` tun).
+Der Endpoint lief bis 2026-09-16 auf dem **generischen**
+`runpod-workers/worker-comfyui` (ComfyUI 0.34.0). Der bringt keine Gewichte mit und
+laedt auch keine nach (das Start-Skript des Repos hat keine Download-Logik), und am
+Endpoint hing **kein Netzwerk-Volume** (`networkVolumes: []`). Live geprueft nannte
+der Worker selbst leere Listen fuer `diffusion_models`, `text_encoders` und `vae`
+(`unet_name: not in []`) – **kein Graph kann das beheben**.
+
+Umgesetzt wurde deshalb die Variante „Video-Worker mit eigenen Gewichten“: derselbe
+Endpoint (`fogwdyxp1zj8zv`) laeuft jetzt auf dem Image
+`wlsdml1114/generate-video-ksampler` (Wan2.2, dasselbe wie `videoReal`) und auf der
+GPU-Pool `ADA_24` (RTX 4090, **1,10 $/h** Serverless; eine 5090 waere 1,58 $/h).
+Damit ist der Adapter fuer diese Rolle **prompt-basiert** – „abstrakt“ kommt aus dem
+Prompt/Stil, nicht aus einem zweiten Modell. Kein neuer Endpoint, keine zusaetzlichen
+Env-Verkabelungen, kein Volume-Abo.
+
+Verifiziert (2026-09-16): Job COMPLETED in 3m48s, `{"video": "<rohes base64 MP4>"}`,
+dekodiert H.264, 480×720, 161 Frames, 5,03 s, 1,1 MB
+(`logs/probes/videoabstract-wan-prompt-20260916.json`).
+
+**Noch offen dazu:** LoRA-Paare fuer eigene Stile (`lora_pairs[]` unterstuetzt der
+Worker, der Adapter reicht sie durch) und die Frage, ob 480×720/5 s als Vorgabe fuer
+„abstract loops“ reicht – beides per Prompt-Argumente steuerbar, sobald die
+Prompt-/Adapter-Schicht echte Werte statt Platzhalter liefert.

@@ -17,7 +17,7 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | 4 | music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (Workflow + Prompt-Injektion verifiziert 2026-09-16, echte MP3) |
 | 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
-| 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | Endpoint live, aber **ohne Gewichte** – Erzeugung blockiert (RUNPOD-P1-001) |
+| 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Wan2.2 `generate-video-ksampler` (gewechselt 2026-09-16, vorher generischer ComfyUI-Worker ohne Gewichte) | live (Video verifiziert 2026-09-16: H.264 480×720, 5,03 s) |
 | 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v9` | live (MoA Qwen3-8B/4B, beide Planer + Aggregator-Wahl verifiziert 2026-09-16) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
@@ -1016,20 +1016,20 @@ visual-assets/
       `scripts/comfyui-ui-to-api.py`), nicht von Hand. Dazu: Prompt-Injektion im
       Adapter (`apply_prompt_to_workflow`), 41 neue/erweiterte Tests, Doku in
       `workflows/README.md`.
-- [ ] **RUNPOD-P1-001 (videoAbstract blockiert, kein Workflow-Problem):** der
-      Worker nennt auf Nachfrage leere Modell-Listen
-      (`unet_name: not in []`, `clip_name: not in []`,
-      `vae_name: not in ['pixel_space']`) – das deployte Image ist der generische
+- [x] **RUNPOD-P1-001 (videoAbstract erledigt, Image gewechselt):** Der Worker
+      nannte leere Modell-Listen (`unet_name: not in []`, `clip_name: not in []`,
+      `vae_name: not in ['pixel_space']`) – das alte Image war der generische
       `runpod-workers/worker-comfyui` (ComfyUI 0.34.0) **ohne Gewichte**, sein
-      Start-Skript laedt auch keine nach, und am Endpoint haengt kein Volume
-      (`networkVolumes: []`). Kein Graph kann das beheben. Optionen:
-      (a) Netzwerk-Volume mit LTX-Gewichten anhaengen (Speicher ~0,07 $/GB/Monat,
-      z. B. 100 GB ≈ 7 $/Monat, plus einmaliger Upload in einen Pod) und den
-      LTX-Graphen liefern, oder (b) die Rolle auf einen Video-Worker umstellen,
-      der seine Gewichte selbst mitbringt (wie `music`/`videoReal`), z. B. ein
-      LTX-Hub-Worker – dann neuer Endpoint + GPU-Stunden wie bei den anderen
-      Rollen. Empfehlung: (b), weil es dem Muster der funktionierenden Rollen
-      folgt und kein Volume-Pflege kostet.
+      Start-Skript laedt keine nach, und der Endpoint hatte kein Volume. Kein Graph
+      kann das beheben, deshalb laeuft **derselbe Endpoint** (`fogwdyxp1zj8zv`)
+      jetzt auf `wlsdml1114/generate-video-ksampler` (Wan2.2, wie `videoReal`) im
+      GPU-Pool `ADA_24` (**1,10 $/h** Serverless, 5090 waere 1,58 $/h); Adapter-
+      Protokoll fuer die Rolle auf **Prompt** umgestellt. Verifiziert: Job
+      COMPLETED in 3m48s, `{"video": "<rohes base64 MP4>"}`, H.264, 480×720,
+      161 Frames, 5,03 s, 1,1 MB. Eine besprochene Alternative (Netzwerk-Volume
+      ~7 $/Monat + LTX-Gewichte) wurde verworfen, weil der Image-Wechsel dasselbe
+      ohne Speicher-Abo und ohne Volume-Pflege liefert. Offen bleibt nur Feintuning
+      (LoRA-Paare fuer eigene Stile, Aufloesung/Laenge als echte Argumente).
 - [ ] A6000-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
       `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
       Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer

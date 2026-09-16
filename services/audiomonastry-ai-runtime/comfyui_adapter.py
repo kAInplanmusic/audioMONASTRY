@@ -8,24 +8,25 @@ Adapter uebersetzt in beide Richtungen:
   unser Protokoll  ->  Worker-Request   (`build_request`)
   Worker-Antwort   ->  normierte Ausgabe (`normalize_output`)
 
-Dokumentierte Vertraege (Stand 2026-09-15, aus den Repos gelesen):
+Dokumentierte Vertraege (live gemessen, Belege in `logs/probes/`):
 
-* **Wan2.2 TI2V** (`videoReal`, averystormknight-hue/Wan22-t2v-runpod):
-  prompt-basiert – `{prompt, negative_prompt, image_url|image_base64|image_path,
-  width, height, length, steps, cfg, seed, lora_pairs[]}` -> `{video: "data:video/mp4;base64,..."}`.
+* **Wan2.2 TI2V** (`videoReal` **und** `videoAbstract`, beide auf
+  wlsdml1114/generate-video-ksampler): prompt-basiert – `{prompt, negative_prompt,
+  image_url|image_base64|image_path, width, height, length, steps, cfg, seed,
+  lora_pairs[]}` -> `{video: "<rohes base64 MP4>"}` (kein `data:`-Praefix).
 * **ACE-Step 1.5 XL** (`music`, RyoheiTanaka/runpod-template-acestep15xl):
-  workflow-basiert – `{workflow: <ComfyUI-API-JSON>}` -> `{files: [{filename, kind, node_id, ...}]}`
-  (`kind` ist dort `audio`); `{health_check: true}` liefert die system_stats.
-* **worker-comfyui** (`videoAbstract`, runpod-workers/worker-comfyui 5.10.0):
-  workflow-basiert – `{workflow, images: [{name, image}]}` -> `{images: [...]}`
-  (seit 5.0.0 strukturiert, davor der Primaerwert in `output.message`).
+  workflow-basiert – `{workflow: <ComfyUI-API-JSON>}` ->
+  `{files: [{filename, kind: "audio", node_id, ...}]}`; `{health_check: true}`
+  liefert die system_stats. Den Graphen liefert `workflows/music.json`.
+* **PrunaAI FLUX** (`imageHq`): prompt-basiert – `{prompt}` ->
+  `{image_url: "data:image/png;base64,...", images: [<derselbe URI>], seed}`.
 
-NICHT dokumentiert (Repos nicht mehr oeffentlich erreichbar): `imageHq`
-(PrunaAI/runpod-worker-FLUX.1-dev) und das deployte `videoReal`-Image
-(wlsdml1114/generate-video-ksampler). Fuer sie baut der Adapter den
-prompt-basierten Standard-Request und `normalize_output` erkennt die Antwort
-trotzdem per Form; die exakten Felder pinnt `scripts/runpod-comfyui-probe.py`
-mit EINEM Live-Job je Rolle fest.
+`videoAbstract` lief bis 2026-09-16 auf dem generischen runpod-workers/worker-comfyui.
+Der bringt keine Gewichte mit, laedt auch keine nach, und der Endpoint hatte kein
+Volume – der Worker nannte auf Nachfrage leere Modell-Listen
+(`unet_name: not in []`). Ein Workflow haette das nicht geloest; die Rolle laeuft
+seitdem auf demselben Wan-Worker wie `videoReal` (Abstraktion kommt aus dem
+Prompt/Stil, nicht aus einem zweiten Modell).
 
 Workflow-JSONs werden NICHT erfunden: der Adapter laedt sie aus
 `COMFY_WORKFLOW_<ROLLE>` (Pfad) oder `workflows/<rolle>.json` und meldet sonst
@@ -48,7 +49,14 @@ COMFY_ROLES: Dict[str, Dict[str, str]] = {
     "music": {"worker": "acestep", "protocol": "workflow", "defaultModel": "acestep-v15-xl-base"},
     "imageHq": {"worker": "flux", "protocol": "prompt", "defaultModel": "flux1-dev-juiced"},
     "videoReal": {"worker": "ti2v", "protocol": "prompt", "defaultModel": "wan22-ti2v-5b"},
-    "videoAbstract": {"worker": "comfyui", "protocol": "workflow", "defaultModel": "flux1-dev"},
+    "videoAbstract": {
+        # Seit 2026-09-16 derselbe Wan-Worker wie videoReal: das vorher deployte
+        # generische worker-comfyui hatte keine Gewichte (live geprueft: leere
+        # Modell-Listen), ein Workflow haette das nicht geloest.
+        "worker": "wan",
+        "protocol": "prompt",
+        "defaultModel": "wan22-ti2v-5b",
+    },
 }
 
 WORKFLOW_DIR = pathlib.Path(__file__).resolve().parent / "workflows"

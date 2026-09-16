@@ -71,7 +71,7 @@ sprechen unser `{task, model, input}`-Protokoll.
 | Rolle | Worker | Protokoll | Antwortform (live gepinnt 2026-09-16) |
 |---|---|---|---|
 | `music` | ACE-Step 1.5 XL | Workflow | `files[]` (`kind: audio`); `{health_check:true}` → `system_stats` + `usage` |
-| `videoAbstract` | worker-comfyui 5.10.0 | Workflow (+ `images[]`) | `images[]` (davor `message`); leerer Graph → `FAILED`, `error` = rohe ComfyUI-Antwort |
+| `videoAbstract` | Wan2.2 `wlsdml1114/generate-video-ksampler` (seit 2026-09-16, vorher: generischer worker-comfyui **ohne Gewichte**) | Prompt | `video` = rohes base64 MP4 (H.264, 480×720, 5,03 s im Probelauf) |
 | `videoReal` | wlsdml1114 (Repo offline) | Prompt | `video` = **rohes base64 MP4** (kein `data:`-Praefix) |
 | `imageHq` | PrunaAI FLUX (Repo offline) | Prompt | `image_url` **und** `images[0]` mit demselben `data:image/png`-URI, dazu `seed` |
 

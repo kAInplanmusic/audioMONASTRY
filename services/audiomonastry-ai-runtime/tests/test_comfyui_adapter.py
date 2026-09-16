@@ -71,6 +71,17 @@ class PromptRoleRoutingTest(unittest.TestCase):
         request = adapter.build_request("video_real.text2video", "videoReal", "wan22", {"prompt": "drone shot"})
         self.assertEqual(request["prompt"], "drone shot")
 
+    def test_videoAbstract_laeuft_jetzt_ueber_den_prompt_worker(self) -> None:
+        # Bis 2026-09-16 war die Rolle workflow-basiert; das deployte
+        # worker-comfyui hatte aber keine Gewichte. Jetzt derselbe Wan-Worker
+        # wie videoReal, also prompt-basiert - ohne Workflow-Zwang.
+        request = adapter.build_request(
+            "video_abstract.text2video", "videoAbstract", "wan22-ti2v-5b", {"prompt": "flowing colors"}
+        )
+        self.assertEqual(request["prompt"], "flowing colors")
+        self.assertNotIn("workflow", request)
+        self.assertEqual(adapter.COMFY_ROLES["videoAbstract"]["protocol"], "prompt")
+
     def test_unknown_role_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             adapter.build_request("x", "ears", "whisper", {"prompt": "y"})
@@ -80,15 +91,17 @@ class WorkflowRequestTest(unittest.TestCase):
     def test_rolle_ohne_workflow_wird_mit_klarer_meldung_abgelehnt(self) -> None:
         # Ohne `COMFY_WORKFLOW_<ROLLE>` und ohne workflows/<rolle>.json muss der
         # Adapter sagen, WAS fehlt – nicht still einen leeren Graphen schicken.
+        # (Direkt gegen build_workflow_request, weil derzeit nur `music` das
+        # Workflow-Protokoll nutzt und einen Graphen mitbringt.)
         with tempfile.TemporaryDirectory() as tmp:
             original = adapter.WORKFLOW_DIR
             adapter.WORKFLOW_DIR = pathlib.Path(tmp)
             try:
                 with self.assertRaises(ValueError) as ctx:
-                    adapter.build_request("video_abstract.text2video", "videoAbstract", "flux", {"prompt": "x"})
+                    adapter.build_workflow_request("someRole", {"prompt": "x"}, None, {})
             finally:
                 adapter.WORKFLOW_DIR = original
-        self.assertIn("COMFY_WORKFLOW_VIDEOABSTRACT", str(ctx.exception))
+        self.assertIn("COMFY_WORKFLOW_SOMEROLE", str(ctx.exception))
 
     def test_music_workflow_kommt_aus_der_mitgelieferten_datei(self) -> None:
         # music hat seit 2026-09-16 einen geprueften Graphen im Repo.
@@ -118,10 +131,11 @@ class WorkflowRequestTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = pathlib.Path(tmp) / "wf.json"
             path.write_text('{"1": {"class_type": "EmptyLatentImage", "inputs": {}}}', encoding="utf-8")
-            request = adapter.build_request(
-                "video_abstract.text2video", "videoAbstract", "flux1-dev", {"prompt": "x"}, env={"COMFY_WORKFLOW_VIDEOABSTRACT": str(path)}
+            request = adapter.build_workflow_request(
+                "someRole", {"prompt": "x"}, None, {"COMFY_WORKFLOW_SOMEROLE": str(path)}
             )
             self.assertIn("workflow", request)
+            self.assertEqual(request["workflow"]["1"]["class_type"], "EmptyLatentImage")
 
     def test_images_are_passed_through_and_validated(self) -> None:
         workflow = {"1": {"class_type": "LoadImage", "inputs": {}}}
