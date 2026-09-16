@@ -14,10 +14,10 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | 1 | brain | `audiomonastry-ai-brain` | `ppxo7wrn599p0q` | RunPod-vLLM-Worker | live (vorhanden) |
 | 2 | ears | `audiomonastry-ai-ears` | `xeax6xrgd0csag` | eigenes Image `:8roles-v2` | live, Warmup verifiziert (7 Modelle) |
 | 3 | voiceGen | `audiomonastry-ai-voice` | `gajmangfldpzrk` | eigenes Image `:8roles-v2` | live |
-| 4 | music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (neu) |
+| 4 | music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (Workflow + Prompt-Injektion verifiziert 2026-09-16, echte MP3) |
 | 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
-| 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
+| 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | Endpoint live, aber **ohne Gewichte** – Erzeugung blockiert (RUNPOD-P1-001) |
 | 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v9` | live (MoA Qwen3-8B/4B, beide Planer + Aggregator-Wahl verifiziert 2026-09-16) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
@@ -1008,15 +1008,28 @@ visual-assets/
       finale Plan 0 doppelte tool+args, und der Aggregator trifft eine echte Wahl
       (`choice: b`) statt zu mergen. Kein Ministral mehr im aktiven Set, damit
       entfaellt auch die Research-Lizenz-Frage fuer den Orchestrator.
-- [ ] **RUNPOD-P1-001 (Rest, nur noch die zwei Graphen):** je ein Workflow-JSON
-      fuer `music` und `videoAbstract` aus der ComfyUI-UI exportieren (API-Format,
-      aus Frontend 1.48.7 / Templates 0.11.39) und als
-      `services/audiomonastry-ai-runtime/workflows/<rolle>.json` ablegen; danach
-      mit `scripts/runpod-comfyui-probe.py --payload …` auf der GPU pruefen.
-      Erledigt: die Kontrakte aller vier Rollen sind live gepinnt
-      (`logs/probes/*.json`), der Adapter ist auf die gemessenen Formen
-      festgezogen (`image_url` + doppelte Nutzlast, rohes base64 bei `videoReal`),
-      und `--out` schreibt jetzt vollstaendige Rohantworten.
+- [x] **RUNPOD-P1-001 (music erledigt):** `workflows/music.json` liegt im Repo und
+      ist **live verifiziert** – Job COMPLETED, echte MP3 (`ACESTEP_00001.mp3`,
+      10,032 s, 48 kHz stereo, 293.716 Bytes), Prompt nachweislich im Graphen
+      (ID3-Metadaten). Erzeugt wird der Graph reproduzierbar aus dem offiziellen
+      ACE-Step-1.5-XL-Turbo-Template (`scripts/build-music-workflow.py` +
+      `scripts/comfyui-ui-to-api.py`), nicht von Hand. Dazu: Prompt-Injektion im
+      Adapter (`apply_prompt_to_workflow`), 41 neue/erweiterte Tests, Doku in
+      `workflows/README.md`.
+- [ ] **RUNPOD-P1-001 (videoAbstract blockiert, kein Workflow-Problem):** der
+      Worker nennt auf Nachfrage leere Modell-Listen
+      (`unet_name: not in []`, `clip_name: not in []`,
+      `vae_name: not in ['pixel_space']`) – das deployte Image ist der generische
+      `runpod-workers/worker-comfyui` (ComfyUI 0.34.0) **ohne Gewichte**, sein
+      Start-Skript laedt auch keine nach, und am Endpoint haengt kein Volume
+      (`networkVolumes: []`). Kein Graph kann das beheben. Optionen:
+      (a) Netzwerk-Volume mit LTX-Gewichten anhaengen (Speicher ~0,07 $/GB/Monat,
+      z. B. 100 GB ≈ 7 $/Monat, plus einmaliger Upload in einen Pod) und den
+      LTX-Graphen liefern, oder (b) die Rolle auf einen Video-Worker umstellen,
+      der seine Gewichte selbst mitbringt (wie `music`/`videoReal`), z. B. ein
+      LTX-Hub-Worker – dann neuer Endpoint + GPU-Stunden wie bei den anderen
+      Rollen. Empfehlung: (b), weil es dem Muster der funktionierenden Rollen
+      folgt und kein Volume-Pflege kostet.
 - [ ] A6000-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
       `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
       Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer

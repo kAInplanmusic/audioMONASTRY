@@ -34,10 +34,14 @@ klar, was fehlt.
 from __future__ import annotations
 
 import base64
+import copy
 import json
+import logging
 import os
 import pathlib
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 #: Rollen, die auf vorgefertigten Workern laufen, mit ihrem Erwartungsmodell.
 COMFY_ROLES: Dict[str, Dict[str, str]] = {
@@ -48,6 +52,13 @@ COMFY_ROLES: Dict[str, Dict[str, str]] = {
 }
 
 WORKFLOW_DIR = pathlib.Path(__file__).resolve().parent / "workflows"
+
+#: ComfyUI-Knoten, die bei ACE-Step den Prompt tragen (1.0 und 1.5).
+ACE_TEXT_ENCODE_NODES = ("TextEncodeAceStepAudio1.5", "TextEncodeAceStepAudio")
+
+#: Knoten, deren Laenge zur Duration passen muss (sonst passt das Latent nicht
+#: zum Text-Konditionierungspfad).
+ACE_LATENT_NODES = ("EmptyAceStep1.5LatentAudio", "EmptyAceStepLatentAudio")
 
 #: Antwort-Felder, die einen Primaerwert direkt tragen (worker-comfyui < 5.0.0).
 PRIMARY_MESSAGE_FIELDS = ("message", "image", "images", "video", "audio", "files", "output")
@@ -92,6 +103,67 @@ def build_prompt_request(args: Dict[str, Any], model: str) -> Dict[str, Any]:
     return request
 
 
+def apply_prompt_to_workflow(workflow: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+    """Prompt/Laenge/Seed eines Tool-Aufrufs in einen ComfyUI-Graphen schreiben.
+
+    Workflow-Worker kennen keinen `prompt`-Parameter: der Text steckt IM Graphen.
+    Ohne diesen Schritt wuerde jeder Aufruf den im Workflow hinterlegten
+    Demo-Song erzeugen, waehrend der Aufrufer seinen Prompt fuer erledigt haelt -
+    ein stiller Fehlschlag. Deshalb setzt der Adapter die Werte in die
+    ACE-Step-Knoten ein (Tags/Lyrics/BPM/Seed/Duration) und zieht die
+    Latent-Laenge mit, damit Konditionierung und Latent zusammenpassen.
+
+    Erkannt wird ueber die Knotenklassen der eingesetzten ComfyUI-Version
+    (`comfy_extras/nodes_ace.py`). Findet der Adapter keinen solchen Knoten,
+    bleibt der Workflow unveraendert und das wird als Warnung geloggt.
+    """
+    if not isinstance(workflow, dict) or not workflow:
+        return workflow
+
+    prompt = str(args.get("prompt") or args.get("tags") or args.get("text") or "").strip()
+    lyrics = str(args.get("lyrics") or "").strip()
+    seconds = args.get("duration", args.get("seconds"))
+    bpm = args.get("bpm")
+    seed = args.get("seed")
+    if not prompt and not lyrics and seconds is None and bpm is None and seed is None:
+        return workflow
+
+    result = copy.deepcopy(workflow)
+    touched_text = False
+    for node in result.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        class_type = str(node.get("class_type") or "")
+        if class_type in ACE_TEXT_ENCODE_NODES:
+            if prompt:
+                inputs["tags"] = prompt
+            if lyrics:
+                inputs["lyrics"] = lyrics
+            if bpm is not None:
+                inputs["bpm"] = int(bpm)
+            if seed is not None and not isinstance(inputs.get("seed"), list):
+                inputs["seed"] = int(seed)
+            if seconds is not None and not isinstance(inputs.get("duration"), list):
+                # Ein verdrahteter duration-Eingang bleibt unangetastet.
+                inputs["duration"] = float(seconds)
+            touched_text = True
+        elif class_type in ACE_LATENT_NODES and seconds is not None and not isinstance(inputs.get("seconds"), list):
+            inputs["seconds"] = float(seconds)
+        elif class_type == "KSampler" and seed is not None and not isinstance(inputs.get("seed"), list):
+            inputs["seed"] = int(seed)
+
+    if not touched_text and (prompt or lyrics):
+        logger.warning(
+            "Workflow ohne ACE-Step-Textknoten (%s): Prompt/Lyrics wurden NICHT eingesetzt",
+            sorted({str(node.get("class_type")) for node in result.values() if isinstance(node, dict)}),
+        )
+        return workflow
+    return result
+
+
 def build_workflow_request(
     role: str,
     args: Dict[str, Any],
@@ -105,6 +177,7 @@ def build_workflow_request(
             f"{role}: kein Workflow konfiguriert – COMFY_WORKFLOW_{role.upper()} setzen "
             f"(Export aus der ComfyUI-UI mit 'Workflow → Export (API)') oder workflows/{role}.json ablegen"
         )
+    workflow = apply_prompt_to_workflow(workflow, args)
     request: Dict[str, Any] = {"workflow": workflow}
     images = args.get("images")
     if isinstance(images, list) and images:

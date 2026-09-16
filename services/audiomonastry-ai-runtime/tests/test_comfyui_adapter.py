@@ -77,15 +77,42 @@ class PromptRoleRoutingTest(unittest.TestCase):
 
 
 class WorkflowRequestTest(unittest.TestCase):
-    def test_music_without_workflow_is_rejected(self) -> None:
-        with self.assertRaises(ValueError) as ctx:
-            adapter.build_request("music.generate", "music", "acestep-v15-xl-base", {"prompt": "techno"})
-        self.assertIn("COMFY_WORKFLOW_MUSIC", str(ctx.exception))
+    def test_rolle_ohne_workflow_wird_mit_klarer_meldung_abgelehnt(self) -> None:
+        # Ohne `COMFY_WORKFLOW_<ROLLE>` und ohne workflows/<rolle>.json muss der
+        # Adapter sagen, WAS fehlt – nicht still einen leeren Graphen schicken.
+        with tempfile.TemporaryDirectory() as tmp:
+            original = adapter.WORKFLOW_DIR
+            adapter.WORKFLOW_DIR = pathlib.Path(tmp)
+            try:
+                with self.assertRaises(ValueError) as ctx:
+                    adapter.build_request("video_abstract.text2video", "videoAbstract", "flux", {"prompt": "x"})
+            finally:
+                adapter.WORKFLOW_DIR = original
+        self.assertIn("COMFY_WORKFLOW_VIDEOABSTRACT", str(ctx.exception))
+
+    def test_music_workflow_kommt_aus_der_mitgelieferten_datei(self) -> None:
+        # music hat seit 2026-09-16 einen geprueften Graphen im Repo.
+        request = adapter.build_request("music.generate", "music", "acestep-v15-xl-base", {"prompt": "techno"})
+        classes = {node["class_type"] for node in request["workflow"].values()}
+        self.assertIn("TextEncodeAceStepAudio1.5", classes)
+        # Und der Prompt sitzt im Graphen, nicht nur im Request.
+        text = next(n for n in request["workflow"].values() if n["class_type"] == "TextEncodeAceStepAudio1.5")
+        self.assertEqual(text["inputs"]["tags"], "techno")
 
     def test_inline_workflow_wins(self) -> None:
         workflow = {"3": {"class_type": "KSampler", "inputs": {}}}
         request = adapter.build_request("music.generate", "music", "acestep", {"workflow": workflow})
         self.assertEqual(request, {"workflow": workflow})
+
+    def test_verdrahteter_seed_wird_nicht_ueberschrieben(self) -> None:
+        # Zeigt der Seed auf einen anderen Knoten, darf der Adapter ihn nicht
+        # durch eine Zahl ersetzen – sonst zerreisst er die Verdrahtung.
+        workflow = {
+            "3": {"class_type": "KSampler", "inputs": {"seed": ["9", 0]}},
+            "9": {"class_type": "PrimitiveInt", "inputs": {}},
+        }
+        request = adapter.build_request("music.generate", "music", "acestep", {"workflow": workflow, "seed": 5})
+        self.assertEqual(request["workflow"]["3"]["inputs"]["seed"], ["9", 0])
 
     def test_workflow_from_env_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -105,6 +132,58 @@ class WorkflowRequestTest(unittest.TestCase):
             {"workflow": workflow, "images": [{"name": "a.png", "image": IMAGE_URI}, {"name": "broken"}]},
         )
         self.assertEqual(request["images"], [{"name": "a.png", "image": IMAGE_URI}])
+
+
+class ApplyPromptToWorkflowTest(unittest.TestCase):
+    """Prompt-Werte muessen IM Graphen landen – sonst erzeugt jedes Lied dasselbe."""
+
+    def _workflow(self) -> dict:
+        return {
+            "94": {
+                "class_type": "TextEncodeAceStepAudio1.5",
+                "inputs": {"clip": ["105", 0], "tags": "Demo-Song", "lyrics": "Demo", "bpm": 95, "duration": 120, "seed": 0},
+            },
+            "98": {"class_type": "EmptyAceStep1.5LatentAudio", "inputs": {"seconds": 120, "batch_size": 1}},
+            "3": {"class_type": "KSampler", "inputs": {"seed": 0, "steps": 8, "latent_image": ["98", 0]}},
+        }
+
+    def test_prompt_lyrics_tempo_und_laenge_landen_im_graphen(self) -> None:
+        filled = adapter.apply_prompt_to_workflow(
+            self._workflow(), {"prompt": "Dark Techno", "lyrics": "[verse]", "bpm": 128, "duration": 30, "seed": 4711}
+        )
+        text = filled["94"]["inputs"]
+        self.assertEqual(text["tags"], "Dark Techno")
+        self.assertEqual(text["lyrics"], "[verse]")
+        self.assertEqual(text["bpm"], 128)
+        self.assertEqual(text["duration"], 30.0)
+        self.assertEqual(text["seed"], 4711)
+        self.assertEqual(filled["3"]["inputs"]["seed"], 4711)
+        # Die Latent-Laenge muss mitwandern, sonst passt sie nicht zur Duration.
+        self.assertEqual(filled["98"]["inputs"]["seconds"], 30.0)
+
+    def test_original_workflow_bleibt_unveraendert(self) -> None:
+        original = self._workflow()
+        adapter.apply_prompt_to_workflow(original, {"prompt": "anders"})
+        self.assertEqual(original["94"]["inputs"]["tags"], "Demo-Song")
+
+    def test_ohne_prompt_argumente_bleibt_alles(self) -> None:
+        original = self._workflow()
+        self.assertIs(adapter.apply_prompt_to_workflow(original, {}), original)
+
+    def test_verdrahtete_laenge_wird_nicht_ueberschrieben(self) -> None:
+        workflow = self._workflow()
+        workflow["94"]["inputs"]["duration"] = ["99", 0]
+        workflow["98"]["inputs"]["seconds"] = ["99", 0]
+        filled = adapter.apply_prompt_to_workflow(workflow, {"prompt": "x", "duration": 30})
+        self.assertEqual(filled["94"]["inputs"]["duration"], ["99", 0])
+        self.assertEqual(filled["98"]["inputs"]["seconds"], ["99", 0])
+
+    def test_workflow_ohne_ace_knoten_wird_gemeldet_statt_still_ignoriert(self) -> None:
+        workflow = {"1": {"class_type": "KSampler", "inputs": {"seed": 1}}}
+        with self.assertLogs("comfyui_adapter", level="WARNING") as logs:
+            result = adapter.apply_prompt_to_workflow(workflow, {"prompt": "kommt nicht an"})
+        self.assertIs(result, workflow)
+        self.assertIn("NICHT eingesetzt", " ".join(logs.output))
 
 
 class NormalizeOutputTest(unittest.TestCase):
