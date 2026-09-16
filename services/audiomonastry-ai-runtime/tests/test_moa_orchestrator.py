@@ -142,6 +142,71 @@ class PlannerReportTest(unittest.TestCase):
         # Ein wirklich leerer Text ist ein anderes Problem als ein Parse-Fehler.
         self.assertFalse(moa.planner_report("   ", [])["suspicious"])
 
+    def test_versuche_und_auszug_im_beleg(self) -> None:
+        # Bei Verdacht muss der Beleg die Diagnose tragen: Versuchszahl und ein
+        # Auszug des Rohtexts (die Container-Logs sind mit dem Worker weg).
+        lang = "x" * 500
+        report = moa.planner_report(lang, [], attempts=2, preview_chars=120)
+        self.assertEqual(report["attempts"], 2)
+        self.assertEqual(report["chars"], 500)
+        self.assertEqual(len(report["preview"]), 120)
+        # Ohne Verdacht kein Auszug (kein Rauschen im Erfolgsfall).
+        clean = moa.planner_report('{"steps": [{"tool": "ears.analyze"}]}', [{"tool": "ears.analyze", "args": {}}])
+        self.assertNotIn("preview", clean)
+
+
+class PlanWithRetryTest(unittest.TestCase):
+    """Ein Planer, der Prosa statt JSON liefert, wird einmal nachgefasst."""
+
+    class _Ask:
+        def __init__(self, replies: list) -> None:
+            self.replies = list(replies)
+            self.calls: list = []
+
+        def __call__(self, role: str, system: str, user: str, max_new_tokens: int = 512) -> str:
+            self.calls.append(
+                {"role": role, "system": system, "user": user, "max_new_tokens": max_new_tokens}
+            )
+            return self.replies.pop(0) if self.replies else ""
+
+    TOOLS = ["ears.analyze", "voice.tts"]
+    USER = "Auftrag: mach was\nErlaubte Tools: ears.analyze, voice.tts"
+
+    def test_direkter_treffer_ohne_zweiten_versuch(self) -> None:
+        ask = self._Ask(['{"steps": [{"tool": "ears.analyze", "args": {}}]}'])
+        text, steps, attempts = moa.plan_with_retry(ask, "planner_b", self.USER, self.TOOLS)
+        self.assertEqual(attempts, 1)
+        self.assertEqual(len(ask.calls), 1)
+        self.assertEqual([s["tool"] for s in steps], ["ears.analyze"])
+        self.assertTrue(text)
+
+    def test_reparatur_nennt_form_und_tools(self) -> None:
+        ask = self._Ask([
+            "Ich wuerde zuerst die Musik generieren.",
+            '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}]}',
+        ])
+        _text, steps, attempts = moa.plan_with_retry(ask, "planner_b", self.USER, self.TOOLS)
+        self.assertEqual(attempts, 2)
+        self.assertEqual(len(ask.calls), 2)
+        self.assertEqual([s["tool"] for s in steps], ["voice.tts"])
+        # Der zweite Aufruf nutzt den Reparatur-Prompt und nennt die Tools erneut.
+        self.assertIn("kein auswertbares JSON", ask.calls[1]["system"])
+        self.assertIn("ears.analyze", ask.calls[1]["system"])
+        # ... und zeigt dem Modell seine vorige Antwort.
+        self.assertIn("Ich wuerde zuerst die Musik generieren.", ask.calls[1]["user"])
+
+    def test_zwei_fehlversuche_bleiben_leer(self) -> None:
+        ask = self._Ask(["Prosa eins.", "Prosa zwei."])
+        _text, steps, attempts = moa.plan_with_retry(ask, "planner_b", self.USER, self.TOOLS)
+        self.assertEqual(attempts, 2)
+        self.assertEqual(steps, [])
+
+    def test_grosszuegiges_token_budget(self) -> None:
+        # Ein verboses Modell muss sein JSON noch erreichen koennen.
+        ask = self._Ask(['{"steps": [{"tool": "ears.analyze", "args": {}}]}'])
+        moa.plan_with_retry(ask, "planner_b", self.USER, self.TOOLS)
+        self.assertGreaterEqual(ask.calls[0]["max_new_tokens"], 1024)
+
 
 class MergeTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -313,6 +378,10 @@ class PipelineTest(unittest.TestCase):
         self.assertFalse(result["plannerParse"]["b"]["suspicious"])
         self.assertTrue(result["plannerParse"]["a"]["parsed"])
         self.assertTrue(result["plannerParse"]["b"]["parsed"])
+        # Gueltiger Plan = genau EIN Versuch je Planer, kein Reparatur-Nachfassen.
+        self.assertEqual(result["plannerParse"]["a"]["attempts"], 1)
+        self.assertEqual(result["plannerParse"]["b"]["attempts"], 1)
+        self.assertNotIn("preview", result["plannerParse"]["a"])
 
     def test_plan_als_nackte_liste_wird_jetzt_gelesen(self) -> None:
         # Live-Fall als Regressionstest: Plan B antwortete mit Prosa + Liste.
@@ -331,13 +400,17 @@ class PipelineTest(unittest.TestCase):
     def test_unparsebarer_plan_wird_ausgewiesen(self) -> None:
         # Genau der Live-Befund 2026-09-16: Plan B kam als [] zurueck und das
         # Ergebnis stand trotzdem auf "merged" – der MoA-Gewinn war unbelegt.
+        # Der Reparatur-Versuch (zweiter Aufruf) scheitert hier ebenfalls.
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
                 '{"chosen": "merged", "reason": "nur A"}',
             ],
             "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
-            "ministral-8b": ["Ich wuerde mit der Musik anfangen, dann das Video."],
+            "ministral-8b": [
+                "Ich wuerde mit der Musik anfangen, dann das Video.",
+                "Wie gesagt: erst Musik, dann Video, dann Ton.",
+            ],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
         self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze"])
@@ -346,7 +419,32 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(report_b["suspicious"])
         self.assertFalse(report_b["parsed"])
         self.assertEqual(report_b["steps"], 0)
+        self.assertEqual(report_b["attempts"], 2)
         self.assertGreater(report_b["chars"], 0)
+        # Der Beleg nennt den Rohtext-Auszug, damit die Ursache diagnostizierbar
+        # bleibt (die Container-Logs sind mit dem Worker weg).
+        self.assertIn("Musik", report_b["preview"])
+
+    def test_reparatur_versuch_holt_den_plan(self) -> None:
+        # Der eigentliche Zweck: ein Planer, der beim ersten Versuch Prosa
+        # liefert, wird mit strengerer Anweisung nachgefasst - und liefert dann.
+        sys.modules["handlers_runpod"] = _stub_llm({
+            "qwen3-4b": [
+                '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
+                '{"chosen": "merged", "reason": "beides"}',
+            ],
+            "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
+            "ministral-8b": [
+                "Ich wuerde mit der Musik anfangen, dann das Video.",
+                '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}]}',
+            ],
+        })
+        result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
+        self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
+        report_b = result["plannerParse"]["b"]
+        self.assertEqual(report_b["attempts"], 2)
+        self.assertTrue(report_b["parsed"])
+        self.assertFalse(report_b["suspicious"])
 
     def test_missing_prompt_is_rejected(self) -> None:
         with self.assertRaises(ValueError):

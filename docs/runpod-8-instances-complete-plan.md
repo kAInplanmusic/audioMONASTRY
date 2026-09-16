@@ -1,7 +1,7 @@
 # RunPod 8-Instanzen-Architektur – Gesamtplan
 
 Stand: 2026-09-16
-Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf drei Modellfamilien live verifiziert (RUNPOD-P1-002 erledigt); offen: Plan B (Ministral) liefert noch keinen auswertbaren Plan (RUNPOD-P1-003)
+Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf drei Modellfamilien live verifiziert, beide Planer liefern Plaene (RUNPOD-P1-002 und -P1-003 erledigt); offen: Plan-Qualitaet von Planner B (Wiederholungen, RUNPOD-P1-004)
 Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
@@ -18,7 +18,7 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
 | 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
-| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v7` | live (MoA auf 3 Modellfamilien verifiziert 2026-09-16) |
+| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v8` | live (MoA auf 3 Modellfamilien, beide Planer liefern 2026-09-16) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
 3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
@@ -70,14 +70,14 @@ Die Modellwahl ist reine **Endpoint-Env** (`MOA_CLASSIFIER_MODEL`,
 braucht KEIN neues Image, solange das Modell im Rollen-Manifest steht – ein neuer
 Katalogeintrag selbst ist ins Image gebacken und kostet einen Patch-Build.
 
-**Live verifiziert (2026-09-16, Image `:moa-comfy-v7`, Endpoint `xu4sqszdfk8lp8`):**
+**Live verifiziert (2026-09-16, Image `:moa-comfy-v8`, Endpoint `xu4sqszdfk8lp8`):**
 
 Ein echter `agent.orchestrate`-Job („20-Sekunden-Videoclip zu einem Sonnenuntergang
 am Meer, mit Musik und gesprochenem Intro") lief COMPLETED mit vier
 unterscheidbaren Staenden; `models` = `{classifier: qwen3-4b, planner_a:
 phi-35-mini, planner_b: ministral-8b, aggregator: qwen3-4b}`. Klassifikation
 `{areas: [video, music, audio], intent: "Videoclip erstellen", parsed: true}`
-(echtes JSON), Kaltstart 144 s, MoA-Durchlauf 103 s, **kein OOM** (33-GB-Set in
+(echtes JSON), Kaltstart 118 s, MoA-Durchlauf 146 s, **kein OOM** (33-GB-Set in
 48 GB). Die Gewichte der drei Modelle liegen im Host-Cache (`/data/hf-cache`) –
 zur Laufzeit wird nichts nachgeladen.
 
@@ -99,20 +99,44 @@ Belege: lokal im Image laeuft die native `Phi3ForCausalLM` durch, waehrend
 (repo, trust_remote_code=False)` liefert `transformers.models.phi3.Phi3Config`
 statt `transformers_modules.<repo>`; Live-Lauf auf v6/v7 ohne diesen Fehler.
 
-**Befund B – Plan B ist live leer (offen, RUNPOD-P1-003):** `plannerParse` weist
-fuer B `{chars: 1753, steps: 0, parsed: false, suspicious: true}` aus, fuer A
-`{chars: 1346, steps: 6, parsed: true}`. Der Rohtext war also da, ergab aber
-keinen auswertbaren Schritt: entweder kein JSON oder ausschliesslich Tools
-ausserhalb des Katalogs (beides wird verworfen) – unterscheidbar erst, wenn der
-Rohtext bei Verdacht mitgeloggt wird. Zusaetzlich laeuft `merge_plans` auf
-`merged`, obwohl faktisch nur Plan A beigetragen hat. Vorher war dieser Zustand
-**unsichtbar**: das Ergebnis stand auf `merged` mit leeren `plans.b`.
+**Befund B – Plan B kam leer zurueck (behoben in v7/v8, RUNPOD-P1-003):**
+Auf v7 wies `plannerParse` fuer B `{chars: 1753, steps: 0, parsed: false,
+suspicious: true}` aus, fuer A `{chars: 1346, steps: 6, parsed: true}` — der
+Rohtext war also da, ergab aber keinen auswertbaren Schritt. Vorher war genau
+dieser Zustand **unsichtbar**: das Ergebnis stand auf `merged` mit leeren
+`plans.b`, obwohl faktisch nur Plan A beigetragen hat. Drei Schritte dafuer:
+
+1. **Parser gehaertet (v7):** `extract_json` zieht auch nackte JSON-Arrays aus
+   Prosa (Form-Hinweis `list` fuer Plaene, `dict` fuer Klassifikation/Aggregat),
+   `parse_steps` akzeptiert `{"steps": [...]}`, nackte Listen und ein einzelnes
+   Schritt-Objekt; `plannerParse` weist einen leeren Plan als `suspicious` aus.
+2. **Reparatur-Versuch (v8):** liefert ein Planer keinen auswertbaren Schritt,
+   wird er EINMAL mit strengerer Anweisung nachgefasst (`PLANNER_REPAIR_SYSTEM`
+   nennt Form und erlaubte Tools erneut und zeigt die vorige Antwort); das
+   Token-Budget der Planer stieg von 512 auf 1024, weil verbose Modelle sonst
+   vor dem JSON abbrechen.
+3. **Vorabpruefung:** der Verdacht, der Mistral-Tokenizer loese den
+   `/no_think`-Fallback aus (Qwen-spezifisch), ist widerlegt — er akzeptiert
+   `enable_thinking` ohne `TypeError`, der Prompt bleibt `[INST]…[/INST]`.
+
+**Live verifiziert (2026-09-16, Image `:moa-comfy-v8`, Job COMPLETED):**
+`plannerParse` = A `{attempts: 1, chars: 940, steps: 4, parsed: true}`, B
+`{attempts: 2, chars: 2230, steps: 22, parsed: true, suspicious: false}` — Plan B
+ist damit **nicht mehr leer**, und der Merge fuehrt beide Plaene zusammen (final
+10 Schritte). Der `attempts: 2` bei B ist der Nachweis, dass der Reparatur-Weg
+greift; das Worker-Log zeigt fuer Ministral zwei `Generate config`-Bloecke,
+`Instantiating MinistralForCausalLM` (nativ, kein Repo-Code) und kein
+`INFERENCE_FAILED`. **Qualitaetsbefund (neues Ticket RUNPOD-P1-004):** Plan B
+wiederholt einen Vierer-Zyklus (`video_real.img2video`, `music.remix`,
+`voice.tts`, `video_abstract.text2video`) fuenfmal; `merge_plans` dedupliziert
+nur identische Tool+Args, deshalb stehen auch im Endergebnis Wiederholungen.
+Der Mechanismus traegt, die Plan-Qualitaet von Ministral ist die offene Kante.
 
 **Image-Stand dieser Runde:** `:moa-comfy-v5` = Modellset (Phi noch kaputt),
 `:moa-comfy-v6` = `trustRemoteCode`-Fix, `:moa-comfy-v7` = Parser-Haertung +
-`plannerParse` (live verifiziert, aktuell am Template). Rollback-Stand bleibt
-`:moa-comfy-v4` (Template-Aenderung ist ein einzeiliger `runpodctl template
-update --image`).
+`plannerParse`, `:moa-comfy-v8` = Planer-Reparatur + 1024 Token Budget (live
+verifiziert, aktuell am Template). Rollback-Stand bleibt `:moa-comfy-v4`
+(Template-Aenderung ist ein einzeiliger `runpodctl template update --image`).
 
 ### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
 
@@ -943,6 +967,11 @@ visual-assets/
       `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
       Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer
       einplanen.
+- [ ] **RUNPOD-P1-004:** Plan-Qualitaet von Planner B (`ministral-8b`): live
+      wiederholt er einen Vierer-Zyklus fuenfmal (22 Schritte), und `merge_plans`
+      dedupliziert nur identische Tool+Args – im Endergebnis stehen deshalb
+      Wiederholungen. Kandidaten: Schritt-Obergrenze je Plan, Dedupe nach Tool
+      oder ein Planer-Modell mit besserem Instruktionsfolgen.
 - [ ] Plan-Argumente der Modelle sind Platzhalter (`track123`,
       `path_to_…jpg`) – fuer `execute: true` braucht die Prompt-/Adapter-Schicht
       echte Pfade, sonst scheitern die Fachtools an erfundenen Werten.

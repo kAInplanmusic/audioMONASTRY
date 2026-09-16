@@ -28,7 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,21 @@ PLANNER_SYSTEM = (
     "Du bist ein Pipeline-Planer. Zerlege den Auftrag in konkrete Schritte und "
     "antworte AUSSCHLIESSLICH mit JSON: "
     '{"steps": [{"tool": "<tool-name>", "args": {...}, "why": "<kurz>"}]}. '
-    "Erlaubte Tools stehen im Auftrag. Keine Erklaerung, kein Markdown."
+    "Beginne deine Antwort direkt mit { - KEINE Vorrede, keine Analyse, keine "
+    "Begruendung ausserhalb des JSON, kein Markdown, keine Code-Fences. "
+    "Verwende ausschliesslich Tool-Namen aus der Liste 'Erlaubte Tools' im Auftrag. "
+    'Beispiel: {"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}, "why": "BPM messen"}]}'
+)
+#: Zweiter, strengerer Versuch, wenn ein Planer keinen auswertbaren Schritt
+#: geliefert hat. Live belegt (2026-09-16): Ministral-8B schrieb 1753 Zeichen
+#: Prosa ohne JSON - bei 512 Token Budget (Verdacht: Prosa hat das Budget
+#: aufgebraucht). Der Reparatur-Prompt nennt Form UND erlaubte Tools erneut und
+#: verlangt die kuerzestmoegliche Antwort.
+PLANNER_REPAIR_SYSTEM = (
+    "Deine vorige Antwort war kein auswertbares JSON. Antworte JETZT nur mit dem "
+    'JSON-Objekt {"steps": [{"tool": "<tool-name>", "args": {...}}]} und sonst mit '
+    "nichts - keine Vorrede, kein Markdown. Erlaubt sind ausschliesslich diese "
+    "Tool-Namen: %s"
 )
 AGGREGATOR_SYSTEM = (
     "Du bist der Aggregator eines Mixture-of-Agents. Du bekommst zwei unabhaengige "
@@ -212,7 +226,13 @@ def parse_steps(text: str) -> List[Dict[str, Any]]:
     return out
 
 
-def planner_report(text: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
+def planner_report(
+    text: str,
+    steps: List[Dict[str, Any]],
+    *,
+    attempts: int = 1,
+    preview_chars: int = 200,
+) -> Dict[str, Any]:
     """Parse-Beleg eines Plans – macht einen leeren Plan sichtbar.
 
     Ein nicht-leerer Text ohne einen einzigen gueltigen Schritt ist ein
@@ -220,14 +240,57 @@ def planner_report(text: str, steps: List[Dict[str, Any]]) -> Dict[str, Any]:
     Tools) und kein "leerer Plan". Live am 2026-09-16 blieb genau das
     unsichtbar: Plan B kam als `[]` zurueck und das Ergebnis stand trotzdem auf
     `merged` – der MoA-Gewinn war damit nicht belegt.
+
+    Bei Verdacht enthaelt der Beleg einen gekuerzten Auszug des Rohtexts: ohne
+    ihn ist "kein JSON" nicht von "nur unbekannte Tools" zu unterscheiden, und
+    die Container-Logs sind mit dem Worker wieder weg.
     """
     raw = text if isinstance(text, str) else ""
-    return {
+    suspicious = bool(raw.strip()) and not steps
+    report: Dict[str, Any] = {
         "chars": len(raw),
         "steps": len(steps),
         "parsed": bool(steps),
-        "suspicious": bool(raw.strip()) and not steps,
+        "attempts": max(1, int(attempts)),
+        "suspicious": suspicious,
     }
+    if suspicious:
+        report["preview"] = " ".join(raw.split())[: max(0, int(preview_chars))]
+    return report
+
+
+def plan_with_retry(
+    ask: Callable[..., str],
+    role: str,
+    planner_user: str,
+    tools: List[str],
+    *,
+    max_new_tokens: int = 1024,
+) -> Tuple[str, List[Dict[str, Any]], int]:
+    """Einen Planer-Stand holen und bei erfolglosem Parse EINMAL nachfassen.
+
+    Hintergrund: kleine Instruct-Modelle schreiben gern erst Prosa und liefern
+    das JSON nie (live 2026-09-16: Ministral-8B, 1753 Zeichen ohne einen
+    auswertbaren Schritt). Deshalb ein grosszuegiges Token-Budget und, wenn
+    trotzdem kein Schritt herauskommt, ein zweiter Versuch mit
+    `PLANNER_REPAIR_SYSTEM` (nennt Form und erlaubte Tools erneut und verlangt
+    die kuerzestmoegliche Antwort). Rueckgabe: (Rohtext des letzten Versuchs,
+    Schritte, Anzahl der Versuche).
+    """
+    text = str(ask(role, PLANNER_SYSTEM, planner_user, max_new_tokens))
+    steps = parse_steps(text)
+    if steps:
+        return text, steps, 1
+    repair_user = f"{planner_user}\n\nDeine vorige Antwort war:\n{text.strip()[:600]}"
+    repaired = str(
+        ask(
+            role,
+            PLANNER_REPAIR_SYSTEM % ", ".join(tools),
+            repair_user,
+            max_new_tokens,
+        )
+    )
+    return repaired, parse_steps(repaired), 2
 
 
 def merge_plans(choice: str, plan_a: List[Dict[str, Any]], plan_b: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
@@ -399,18 +462,19 @@ def moa_orchestrate(model_id: str, definition: Any, payload: Dict[str, Any]) -> 
         f"Auftrag: {request}\nBereiche: {', '.join(classification['areas'])}\n"
         f"Erlaubte Tools: {', '.join(tools)}"
     )
-    plan_a_text = ask("planner_a", PLANNER_SYSTEM, planner_user, 512)
-    plan_b_text = ask("planner_b", PLANNER_SYSTEM, planner_user, 512)
-    plan_a, plan_b = parse_steps(plan_a_text), parse_steps(plan_b_text)
+    plan_a_text, plan_a, attempts_a = plan_with_retry(ask, "planner_a", planner_user, tools)
+    plan_b_text, plan_b, attempts_b = plan_with_retry(ask, "planner_b", planner_user, tools)
     planner_parse = {
-        "a": planner_report(plan_a_text, plan_a),
-        "b": planner_report(plan_b_text, plan_b),
+        "a": planner_report(plan_a_text, plan_a, attempts=attempts_a),
+        "b": planner_report(plan_b_text, plan_b, attempts=attempts_b),
     }
     for side, report in planner_parse.items():
         if report["suspicious"]:
             logger.warning(
-                "MoA-Planer %s (%s) lieferte %d Zeichen ohne auswertbaren Schritt",
-                side, models[f"planner_{side}"], report["chars"],
+                "MoA-Planer %s (%s) lieferte nach %d Versuch(en) %d Zeichen ohne "
+                "auswertbaren Schritt: %s",
+                side, models[f"planner_{side}"], report["attempts"], report["chars"],
+                report.get("preview", ""),
             )
 
     aggregator_user = (

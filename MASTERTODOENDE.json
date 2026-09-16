@@ -999,19 +999,41 @@
       "id": "RUNPOD-P1-003",
       "title": "MoA Plan B (Ministral-8B) liefert keinen auswertbaren Plan",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "Live-Verifikation Instanz 8 am 2026-09-16 (Endpoint xu4sqszdfk8lp8, Image :moa-comfy-v7)",
-      "problem": "Der Planer B (mistralai/Ministral-8B-Instruct-2410) antwortet live mit 1753 Zeichen, aus denen kein einziger gueltiger Plan-Schritt wird: plannerParse = {chars: 1753, steps: 0, parsed: false, suspicious: true}, waehrend Plan A (Phi-3.5) 6 Schritte liefert. Faktisch traegt damit nur ein Plan zum Merge bei, der MoA-Gewinn aus zwei unabhaengigen Plaenen ist nicht belegt. Die Ursache ist noch NICHT unterscheidbar, weil der Rohtext nicht geloggt wird und die Container-Logs mit dem Worker verfallen (idleTimeout 900 s): entweder gar kein JSON oder ausschliesslich Tool-Namen ausserhalb des TOOL_CATALOG (beides wird verworfen).",
-      "note": "Bereits erledigt in v7: extract_json zieht jetzt auch nackte JSON-Arrays aus Prosa (prefer='list' fuer Plaene, 'dict' fuer Klassifikation/Aggregat - sonst gewinnt bei 'Prosa + [{...},{...}]' das erste innere Schritt-Objekt und der Plan schrumpft), parse_steps akzeptiert {steps:[...]}, nackte Listen und ein einzelnes Schritt-Objekt, und plannerParse meldet einen leeren Plan als suspicious (vorher lief das still als 'merged' durch). Naechster Schritt: bei suspicious den Rohtext gekuerzt (z. B. 300 Zeichen) in den Worker-Log schreiben, damit 'kein JSON' von 'nur unbekannte Tools' unterscheidbar wird - dann gezielt nachziehen: Planer-Prompt mit Format-Beispiel haerten oder Planner B tauschen (dann aus einer dritten permissiven Familie, weil Ministral nur unter der Research-Lizenz steht und nicht kommerziell nutzbar ist).",
+      "problem": "Der Planer B (mistralai/Ministral-8B-Instruct-2410) antwortete live mit 1753 Zeichen, aus denen kein einziger gueltiger Plan-Schritt wurde (plannerParse: chars 1753, steps 0, suspicious true), waehrend Plan A (Phi-3.5) 6 Schritte lieferte. Faktisch trug damit nur ein Plan zum Merge bei - der MoA-Gewinn aus zwei unabhaengigen Plaenen war nicht belegt. GELOEST 2026-09-16 in zwei Schritten (siehe note): Parser-Haertung plus Parse-Beleg (v7) und Reparatur-Versuch mit groesserem Token-Budget (v8).",
+      "note": "DONE 2026-09-16 (Image :moa-comfy-v8). Drei Massnahmen, alle mit Beleg: (1) Parser (v7): extract_json zieht auch nackte JSON-Arrays aus Prosa - Form-Hinweis prefer='list' fuer Plaene, 'dict' fuer Klassifikation/Aggregat, sonst gewinnt bei 'Prosa + [{...},{...}]' das erste innere Schritt-Objekt bzw. ein Klassifikations-Dict wird auf sein inneres Array verkuerzt; parse_steps akzeptiert {steps:[...]}, nackte Listen und ein einzelnes Schritt-Objekt; plannerParse weist einen leeren Plan als suspicious aus (vorher lief das still als 'merged' durch). (2) Reparatur-Versuch (v8): plan_with_retry fasst einen Planer, der keinen auswertbaren Schritt liefert, EINMAL mit PLANNER_REPAIR_SYSTEM nach (nennt Form und erlaubte Tools erneut, zeigt die vorige Antwort gekuerzt); Planer-Token-Budget 512 -> 1024, weil verbose Modelle sonst vor dem JSON abbrechen. (3) Vorabpruefung: der Verdacht, der Mistral-Tokenizer loese den Qwen-spezifischen /no_think-Fallback aus, ist widerlegt - er akzeptiert enable_thinking ohne TypeError, der Prompt bleibt [INST]...[/INST]. LIVE GEMESSEN (Endpoint xu4sqszdfk8lp8, Job COMPLETED, Kaltstart 118 s, Durchlauf 146 s, kein OOM): plannerParse = A {attempts 1, chars 940, steps 4, parsed true} und B {attempts 2, chars 2230, steps 22, parsed true, suspicious false} - Plan B ist nicht mehr leer, beide Plaene fliessen in den Merge (final 10 Schritte). attempts=2 bei B ist der Nachweis, dass der Reparatur-Weg greift; das Worker-Log zeigt fuer Ministral zwei Generate-Bloecke, 'Instantiating MinistralForCausalLM' (native Klasse, kein Repo-Code) und kein INFERENCE_FAILED. Belege: tests/test_moa_orchestrator.py 47 -> 53 Tests (Retry-Pfad, Preview, Token-Budget, Ende-zu-Ende mit Reparatur), zusaetzlich im Image gruen. QUALITAET OFFEN als RUNPOD-P1-004: Plan B wiederholt einen Vierer-Zyklus fuenfmal und merge_plans dedupliziert nur identische Tool+Args.",
       "files": [
         "services/audiomonastry-ai-runtime/moa_orchestrator.py",
-        "services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py"
+        "services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py",
+        "docs/runpod-8-instances-complete-plan.md"
       ],
-      "acceptance": "Ein agent.orchestrate-Job liefert ZWEI unterscheidbare, nicht-leere Plaene (plannerParse.a.steps > 0 UND plannerParse.b.steps > 0, suspicious false) - oder der Ausfall von Plan B ist mit Ursache im Worker-Log belegt.",
+      "acceptance": "ERFUELLT 2026-09-16 (mit Einschraenkung, siehe RUNPOD-P1-004): ein agent.orchestrate-Job liefert zwei unterscheidbare, nicht-leere Plaene - plannerParse.a = 4 Schritte und plannerParse.b = 22 Schritte, beide parsed true, suspicious false. Offen bleibt die Plan-Qualitaet von B (wiederholte Schritte).",
       "verification": [
-        "python3 scripts/runpod-smoke.py RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate (erwartet: plannerParse.b.steps > 0)",
-        "runpodctl serverless logs xu4sqszdfk8lp8 --source container (Rohtext-Hinweis bei suspicious)"
+        "python3 scripts/runpod-smoke.py RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate RUNPOD_SMOKE_MODEL=qwen3-4b -> logs/runpod-smoke-20260916-073020.json: COMPLETED, plannerParse.b.attempts=2 und steps=22",
+        "python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py (53 Tests, auch im Image :moa-comfy-v8)",
+        "runpodctl serverless logs xu4sqszdfk8lp8 --source container: zwei Generate-Bloecke fuer Ministral, kein INFERENCE_FAILED, keine Warnung",
+        "Vorabpruefung Tokenizer: AutoTokenizer.apply_chat_template(..., enable_thinking=False) auf mistralai/Ministral-8B-Instruct-2410 wirft KEINEN TypeError (kein /no_think-Fallback)"
+      ]
+    },
+    {
+      "id": "RUNPOD-P1-004",
+      "title": "Plan-Qualitaet Planner B: wiederholte Schritte im Merge",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "Live-Verifikation Instanz 8 am 2026-09-16 (Endpoint xu4sqszdfk8lp8, Image :moa-comfy-v8)",
+      "problem": "Plan B ist nicht mehr leer, aber qualitativ schwach: Ministral-8B liefert 22 Schritte, die im Kern ein Vierer-Zyklus (video_real.img2video, music.remix, voice.tts, video_abstract.text2video) fuenfmal sind. merge_plans dedupliziert nur identische Tool+Args, deshalb stehen auch im finalen Plan (10 Schritte) Wiederholungen - ein ausfuehrbarer Plan im Sinn der Fachrollen ist das noch nicht.",
+      "note": "Der Mechanismus traegt (Plan B parst jetzt, siehe RUNPOD-P1-003); offen ist die Plan-Qualitaet. Kandidaten, in dieser Reihenfolge zu pruefen: (1) Planer-Prompt um eine Obergrenze und 'jeden Schritt genau einmal' ergaenzen; (2) Dedupe im Merge auf Tool-Ebene erweitern (Vorsicht: gleiche Tools mit anderen Args koennen legitim sein, deshalb nicht still verwerfen, sondern im Ergebnis ausweisen); (3) Planner B auf ein Modell mit besserem Instruktionsfolgen tauschen - dann aus einer dritten permissiven Familie, weil Ministral nur unter der Research-Lizenz steht.",
+      "files": [
+        "services/audiomonastry-ai-runtime/moa_orchestrator.py",
+        "docs/runpod-8-instances-complete-plan.md"
+      ],
+      "acceptance": "Ein agent.orchestrate-Job liefert einen finalen Plan, in dem keine (tool,args)-Kombination wiederholt auftritt und der nicht durch Wiederholungen aufgeblaeht ist (Richtwert: <= 12 Schritte bei diesem Auftrag); Plan B bleibt dabei nicht leer.",
+      "verification": [
+        "python3 scripts/runpod-smoke.py RUNPOD_SMOKE_ROLE=orchestrator RUNPOD_SMOKE_TASK=agent.orchestrate (Erwartung: keine doppelten tool+args im finalen Plan)",
+        "python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py (neuer Test fuer Obergrenze/Dedupe)"
       ]
     }
   ],
