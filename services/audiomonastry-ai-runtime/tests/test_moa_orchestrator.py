@@ -328,16 +328,17 @@ class PipelineTest(unittest.TestCase):
 
     def setUp(self) -> None:
         self.saved = sys.modules.get("handlers_runpod")
+        # Ein starkes (qwen3-8b) + ein schnelles (qwen3-4b) Modell:
+        # Aufruffolge = Classifier(4b), Planner A(8b), Planner B(4b), Aggregator(8b).
         self.manager = _stub_llm(
             {
-                # 1. Aufruf = Classifier, 2. Aufruf = Aggregator.
                 "qwen3-4b": [
                     '{"areas": ["audio"], "intent": "track analysieren", "needs_tools": true}',
-                    '{"chosen": "merged", "reason": "beide decks ab"}',
+                    '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}',
                 ],
-                "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}'],
-                "ministral-8b": [
-                    '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}, {"tool": "hack.it", "args": {}}]}'
+                "qwen3-8b": [
+                    '{"steps": [{"tool": "ears.analyze", "args": {"tasks": ["bpm"]}}]}',
+                    '{"chosen": "merged", "reason": "beide decks ab"}',
                 ],
             }
         )
@@ -354,8 +355,11 @@ class PipelineTest(unittest.TestCase):
         import registry
 
         models = moa.resolve_moa_models({})
-        self.assertEqual(models["planner_a"], "phi-35-mini")
-        self.assertEqual(models["planner_b"], "ministral-8b")
+        # Ein starkes (8B) und ein schnelles (4B) Modell, beide Qwen3/Apache-2.0.
+        self.assertEqual(models["classifier"], "qwen3-4b")
+        self.assertEqual(models["planner_a"], "qwen3-8b")
+        self.assertEqual(models["planner_b"], "qwen3-4b")
+        self.assertEqual(models["aggregator"], "qwen3-8b")
         known = {entry["id"] for entry in registry.load_manifest("orchestrator")["models"]}
         for role, model_id in models.items():
             self.assertIn(model_id, known, f"{role}: {model_id} fehlt im Rollen-Manifest")
@@ -367,9 +371,9 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(result["choice"], "merged")
         # Unbekanntes Tool aus Plan B wurde verworfen, beide gueltigen gemerged.
         self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
-        # Vier Staende in der erwarteten Reihenfolge (Classifier und Aggregator
-        # teilen sich qwen3-4b).
-        self.assertEqual(self.manager.calls, ["qwen3-4b", "phi-35-mini", "ministral-8b", "qwen3-4b"])
+        # Vier Staende in der erwarteten Reihenfolge: Classifier und Planner B
+        # teilen sich das schnelle 4B-Modell, Planner A und Aggregator das 8B.
+        self.assertEqual(self.manager.calls, ["qwen3-4b", "qwen3-8b", "qwen3-4b", "qwen3-8b"])
         self.assertNotIn("execution", result)
 
     def test_gueltige_plaene_sind_nicht_verdaechtig(self) -> None:
@@ -388,10 +392,12 @@ class PipelineTest(unittest.TestCase):
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
+                'Hier der Plan:\n[{"tool": "voice.tts", "args": {"text": "hi"}}]',
+            ],
+            "qwen3-8b": [
+                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
                 '{"chosen": "merged", "reason": "kombiniert"}',
             ],
-            "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
-            "ministral-8b": ['Hier der Plan:\n[{"tool": "voice.tts", "args": {"text": "hi"}}]'],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
         self.assertEqual([s["tool"] for s in result["steps"]], ["ears.analyze", "voice.tts"])
@@ -404,12 +410,12 @@ class PipelineTest(unittest.TestCase):
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
-                '{"chosen": "merged", "reason": "nur A"}',
-            ],
-            "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
-            "ministral-8b": [
                 "Ich wuerde mit der Musik anfangen, dann das Video.",
                 "Wie gesagt: erst Musik, dann Video, dann Ton.",
+            ],
+            "qwen3-8b": [
+                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
+                '{"chosen": "merged", "reason": "nur A"}',
             ],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})
@@ -431,12 +437,12 @@ class PipelineTest(unittest.TestCase):
         sys.modules["handlers_runpod"] = _stub_llm({
             "qwen3-4b": [
                 '{"areas": ["audio"], "intent": "x", "needs_tools": true}',
-                '{"chosen": "merged", "reason": "beides"}',
-            ],
-            "phi-35-mini": ['{"steps": [{"tool": "ears.analyze", "args": {}}]}'],
-            "ministral-8b": [
                 "Ich wuerde mit der Musik anfangen, dann das Video.",
                 '{"steps": [{"tool": "voice.tts", "args": {"text": "hi"}}]}',
+            ],
+            "qwen3-8b": [
+                '{"steps": [{"tool": "ears.analyze", "args": {}}]}',
+                '{"chosen": "merged", "reason": "beides"}',
             ],
         })
         result = moa.moa_orchestrate("qwen3-4b", None, {"prompt": "mach was"})

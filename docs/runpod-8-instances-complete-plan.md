@@ -1,7 +1,7 @@
 # RunPod 8-Instanzen-Architektur – Gesamtplan
 
 Stand: 2026-09-16
-Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf drei Modellfamilien live verifiziert, beide Planer liefern Plaene (RUNPOD-P1-002 und -P1-003 erledigt); offen: Plan-Qualitaet von Planner B (Wiederholungen, RUNPOD-P1-004)
+Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf 1 starken + 1 schnellen Modell (Qwen3-8B/4B) live verifiziert; RUNPOD-P1-002, -P1-003 und -P1-004 erledigt
 Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
@@ -18,7 +18,7 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 | 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
 | 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
 | 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Hub: offizieller ComfyUI-Worker | live (neu) |
-| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v8` | live (MoA auf 3 Modellfamilien, beide Planer liefern 2026-09-16) |
+| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v9` | live (MoA Qwen3-8B/4B, beide Planer + Aggregator-Wahl verifiziert 2026-09-16) |
 
 Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
 3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
@@ -52,34 +52,48 @@ keinen; der Wert in der Brain-Endpoint-Env ist ungueltig, `whoami-v2` antwortet
 "Incorrect API key" und identifiziert damit kein Konto). Die 401 kamen allein daher,
 dass die beiden Repos gated sind.
 
-**Jetzt gesetzt – alle `gated=false`, also ohne jeden Token nutzbar:**
+**Final gesetzt – EIN starkes + EIN schnelles Modell, beide native Qwen3
+(Apache-2.0, `gated=false`, ohne Repo-Code, ohne jeden Token nutzbar):**
 
-| Stand | Modell | Lizenz | VRAM |
+| Stand | Modell | Charakter | VRAM |
 |---|---|---|---|
-| Classifier | `Qwen/Qwen3-4B` | Apache-2.0 | 9 GB |
-| Planner A | `microsoft/Phi-3.5-mini-instruct` | MIT | 8 GB |
-| Planner B | `mistralai/Ministral-8B-Instruct-2410` | Mistral Research License (**nicht kommerziell**) | 16 GB |
-| Aggregator | `Qwen/Qwen3-4B` (teilt das Modell mit dem Classifier) | Apache-2.0 | +0 GB |
+| Classifier | `Qwen/Qwen3-4B` | schnell | 9 GB |
+| Planner A | `Qwen/Qwen3-8B` | stark (Hauptplan) | 16 GB |
+| Planner B | `Qwen/Qwen3-4B` | schnell (zweiter, unabhaengiger Plan) | +0 GB |
+| Aggregator | `Qwen/Qwen3-8B` | stark (waehlt/merged) | +0 GB |
 
-Preload-VRAM **33 GB** bei 48 GB Budget (42 GB nutzbar nach 6 GB Sicherheitsabstand).
-Der Aggregator teilt sich bewusst das Modell mit dem Classifier – dadurch kostet der
-vierte Stand keinen VRAM.
+Preload-VRAM **25 GB** bei 48 GB Budget (42 GB nutzbar nach 6 GB Sicherheitsabstand).
+Classifier und Planner B teilen sich das schnelle Modell, Planner A und Aggregator
+das starke – so kostet der dritte und vierte Stand keinen zusaetzlichen VRAM.
+`Qwen/Qwen3-8B` ist mit Revision `b968826d9c46dd6066d109eabc6255188de91218` gepinnt
+und per Vorabpruefung als native `Qwen3ForCausalLM` bestaetigt (kein `auto_map`).
 
 Die Modellwahl ist reine **Endpoint-Env** (`MOA_CLASSIFIER_MODEL`,
 `MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`). Ein Wechsel
 braucht KEIN neues Image, solange das Modell im Rollen-Manifest steht – ein neuer
 Katalogeintrag selbst ist ins Image gebacken und kostet einen Patch-Build.
 
-**Live verifiziert (2026-09-16, Image `:moa-comfy-v8`, Endpoint `xu4sqszdfk8lp8`):**
+**Live verifiziert (2026-09-16, Image `:moa-comfy-v9`, Endpoint `xu4sqszdfk8lp8`):**
 
 Ein echter `agent.orchestrate`-Job („20-Sekunden-Videoclip zu einem Sonnenuntergang
 am Meer, mit Musik und gesprochenem Intro") lief COMPLETED mit vier
-unterscheidbaren Staenden; `models` = `{classifier: qwen3-4b, planner_a:
-phi-35-mini, planner_b: ministral-8b, aggregator: qwen3-4b}`. Klassifikation
-`{areas: [video, music, audio], intent: "Videoclip erstellen", parsed: true}`
-(echtes JSON), Kaltstart 118 s, MoA-Durchlauf 146 s, **kein OOM** (33-GB-Set in
-48 GB). Die Gewichte der drei Modelle liegen im Host-Cache (`/data/hf-cache`) –
-zur Laufzeit wird nichts nachgeladen.
+unterscheidbaren Staenden: `models` = `{classifier: qwen3-4b, planner_a: qwen3-8b,
+planner_b: qwen3-4b, aggregator: qwen3-8b}`. **Beide Plaene waren im ersten Versuch
+auswertbar** – `plannerParse` = A `{attempts: 1, chars: 1211, steps: 10}` und
+B `{attempts: 1, chars: 786, steps: 6}`, kein `suspicious`, kein Reparatur-Lauf
+noetig. Der Aggregator hat sich diesmal **entschieden** statt nur zu mergen:
+`choice: b` mit Begruendung („Plan B ist kuerzer und effizienter …"), der finale
+Plan hat 6 Schritte und **keine doppelte tool+args-Kombination**. Kaltstart 75 s,
+MoA-Durchlauf 71 s (vorher 146 s mit drei Familien), **kein OOM** (25-GB-Set in
+48 GB), keine 401, keine Warnung. Worker-Log: `Instantiating Qwen3ForCausalLM`
+(native Klasse), `inference completed`, kein `INFERENCE_FAILED`. Beide Gewichte
+liegen im Host-Cache (`/data/hf-cache`).
+
+**Historie dieser Runde (nicht mehr im aktiven Set):** Zuerst war
+Planner A = `microsoft/Phi-3.5-mini-instruct` und Planner B =
+`mistralai/Ministral-8B-Instruct-2410`. Beide Eintraege stehen weiter im Katalog,
+sind aber **keiner Rolle mehr zugeordnet**; die beiden Befunde unten sind damit
+erledigt bzw. umgangen.
 
 **Befund A – Planner A (Phi-3.5) war nicht lauffaehig (behoben in v6/v7):**
 `handlers_runpod.load_causal_lm` setzte `trust_remote_code=True` **fest**. Damit
@@ -126,16 +140,20 @@ ist damit **nicht mehr leer**, und der Merge fuehrt beide Plaene zusammen (final
 10 Schritte). Der `attempts: 2` bei B ist der Nachweis, dass der Reparatur-Weg
 greift; das Worker-Log zeigt fuer Ministral zwei `Generate config`-Bloecke,
 `Instantiating MinistralForCausalLM` (nativ, kein Repo-Code) und kein
-`INFERENCE_FAILED`. **Qualitaetsbefund (neues Ticket RUNPOD-P1-004):** Plan B
-wiederholt einen Vierer-Zyklus (`video_real.img2video`, `music.remix`,
+`INFERENCE_FAILED`. **Qualitaetsbefund (damals RUNPOD-P1-004):** Plan B
+wiederholte einen Vierer-Zyklus (`video_real.img2video`, `music.remix`,
 `voice.tts`, `video_abstract.text2video`) fuenfmal; `merge_plans` dedupliziert
-nur identische Tool+Args, deshalb stehen auch im Endergebnis Wiederholungen.
-Der Mechanismus traegt, die Plan-Qualitaet von Ministral ist die offene Kante.
+nur identische Tool+Args, deshalb standen auch im Endergebnis Wiederholungen.
+**Erledigt mit dem finalen Set (v9):** mit `qwen3-8b`/`qwen3-4b` liefern beide
+Planer im ersten Versuch saubere Plaene (10 bzw. 6 Schritte), der finale Plan hat
+**0 doppelte tool+args**, und der Aggregator trifft eine echte Wahl (`choice: b`)
+statt zu mergen.
 
 **Image-Stand dieser Runde:** `:moa-comfy-v5` = Modellset (Phi noch kaputt),
 `:moa-comfy-v6` = `trustRemoteCode`-Fix, `:moa-comfy-v7` = Parser-Haertung +
-`plannerParse`, `:moa-comfy-v8` = Planer-Reparatur + 1024 Token Budget (live
-verifiziert, aktuell am Template). Rollback-Stand bleibt `:moa-comfy-v4`
+`plannerParse`, `:moa-comfy-v8` = Planer-Reparatur + 1024 Token Budget,
+`:moa-comfy-v9` = **finales Set (Qwen3-8B stark / Qwen3-4B schnell)**, live
+verifiziert und aktuell am Template. Rollback-Stand bleibt `:moa-comfy-v4`
 (Template-Aenderung ist ein einzeiliger `runpodctl template update --image`).
 
 ### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
@@ -946,9 +964,9 @@ visual-assets/
 | Qwen-Image-2512 | Apache 2.0 | ✅ Ja |
 | Wan 2.2 A14B | Apache 2.0 | ✅ Ja |
 | LTXVideo 13B | LTX-Community | ⚠️ Bedingt (prüfen) |
-| Mistral-Small-3.1 | Apache 2.0 | ✅ Ja |
-| Gemma 3 7B | Google Gemma | ✅ Ja |
-| Llama 3.2 3B | Meta Llama 3 | ✅ Ja (Akzeptanz der Meta-Lizenz) |
+| Qwen3-4B / Qwen3-8B (MoA Instanz 8) | Apache 2.0 | ✅ Ja (finales Set, kein Repo-Code) |
+| Phi-3.5-mini (Katalog, ungenutzt) | MIT | ✅ Ja (nicht mehr einer Rolle zugeordnet) |
+| Ministral-8B (Katalog, ungenutzt) | Mistral Research License | ❌ Nicht kommerziell (nicht mehr einer Rolle zugeordnet) |
 
 **Wichtigste Lizenz-Risiken:**
 - FLUX.2 [dev]: Nicht kommerziell frei. Wenn audioMONASTRY monetarisiert wird → entweder BFL-Lizenz kaufen oder auf Qwen-Image + FLUX.2-klein (Apache 2.0) umsteigen.
@@ -967,23 +985,18 @@ visual-assets/
 ---
 
 # Offene Punkte
-- [ ] **RUNPOD-P1-003:** Plan B (`ministral-8b`) liefert live keinen auswertbaren
-      Plan (2026-09-16: 1753 Zeichen, 0 Schritte, `suspicious: true`). Naechster
-      Schritt: bei Verdacht den Rohtext (gekuerzt) mitloggen, um „kein JSON" von
-      „nur unbekannte Tools" zu trennen; danach Planer-Prompt haerten
-      (Format-Beispiel) oder Modell tauschen.
-- [ ] Ministral-8B steht unter der **Mistral Research License (nicht
-      kommerziell)** – vor einer Monetarisierung ersetzen (dann Planner B aus
-      einer dritten permissiven Familie).
+- [x] **RUNPOD-P1-003 (erledigt):** Plan B lieferte live keinen auswertbaren Plan.
+      Geloest ueber Parser-Haertung, `plannerParse`-Beleg und Reparatur-Versuch;
+      mit dem finalen Set (`qwen3-8b`/`qwen3-4b`) parsen beide Planer im ersten
+      Versuch.
+- [x] **RUNPOD-P1-004 (erledigt):** Plan-Qualitaet – mit Qwen3-8B/4B hat der
+      finale Plan 0 doppelte tool+args, und der Aggregator trifft eine echte Wahl
+      (`choice: b`) statt zu mergen. Kein Ministral mehr im aktiven Set, damit
+      entfaellt auch die Research-Lizenz-Frage fuer den Orchestrator.
 - [ ] A6000-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
       `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
       Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer
       einplanen.
-- [ ] **RUNPOD-P1-004:** Plan-Qualitaet von Planner B (`ministral-8b`): live
-      wiederholt er einen Vierer-Zyklus fuenfmal (22 Schritte), und `merge_plans`
-      dedupliziert nur identische Tool+Args – im Endergebnis stehen deshalb
-      Wiederholungen. Kandidaten: Schritt-Obergrenze je Plan, Dedupe nach Tool
-      oder ein Planer-Modell mit besserem Instruktionsfolgen.
 - [ ] Plan-Argumente der Modelle sind Platzhalter (`track123`,
       `path_to_…jpg`) – fuer `execute: true` braucht die Prompt-/Adapter-Schicht
       echte Pfade, sonst scheitern die Fachtools an erfundenen Werten.

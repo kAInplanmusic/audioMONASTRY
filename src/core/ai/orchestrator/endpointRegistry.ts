@@ -219,16 +219,15 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     vramBudgetGb: 48,
     tasks: ['agent.orchestrate'],
     warmupMode: 'task',
-    // MoA lebt von unterschiedlichen Blickwinkeln, nicht von einer Modellfamilie.
-    // Besetzt mit OEFFENTLICHEN Modellen (kein HF-Token, keine gated Repos):
-    // Microsoft/Phi-3.5-mini + Mistral/Ministral-8B + Qwen/Qwen3-4B.
-    // Preload-VRAM 33 GB bei 48 GB Budget (6 GB Sicherheitsabstand).
+    // MoA: EIN starkes + EIN schnelles Modell, beide native Qwen3 (Apache-2.0,
+    // oeffentlich, kein Repo-Code): qwen3-4b schnell fuer Classifier und
+    // Planner B, qwen3-8b stark fuer Planner A und Aggregator.
+    // Preload-VRAM 25 GB bei 48 GB Budget (6 GB Sicherheitsabstand).
     // Muss exakt dem `preloadModels`-Satz der Rolle `orchestrator` im
     // Python-Manifest entsprechen (Drift-Test tests/manifestRoles.test.ts).
     preload: [
       'qwen3-4b',
-      'phi-35-mini',
-      'ministral-8b',
+      'qwen3-8b',
     ],
   },
 };

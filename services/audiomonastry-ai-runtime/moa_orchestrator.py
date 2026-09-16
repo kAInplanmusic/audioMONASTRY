@@ -4,13 +4,14 @@ Instanz 8 der Flotte (docs/runpod-8-instances-complete-plan.md). Der Orchestrato
 nimmt einen multimodalen Auftrag entgegen und baut daraus eine ausfuehrbare
 Pipeline ueber die Fach-Instanzen 2–7.
 
-Drei Schichten (MoA), alle Modelle OEFFENTLICH (kein HF-Token noetig):
-  1. Classifier      qwen3-4b     – Was ist das fuer eine Aufgabe? Welche
-                                    Bereiche (audio/visual/music) braucht sie?
-  2. Planner A/B     phi-35-mini  – zwei UNABHAENGIGE Pipeline-Plaene aus
-                     ministral-8b   verschiedenen Modellfamilien (Diversitaet)
-  3. Aggregator      qwen3-4b     – vergleicht beide Plaene, waehlt/merged
-                                    den besseren und gibt den finalen Plan aus
+Drei Schichten (MoA) mit EINEM starken und EINEM schnellen Modell – beide
+native Qwen3 (Apache-2.0, oeffentlich, kein Repo-Code, kein HF-Token):
+  1. Classifier      qwen3-4b     – schnell: Was ist das fuer eine Aufgabe?
+                                    Welche Bereiche (audio/visual/music)?
+  2. Planner A/B     qwen3-8b     – stark: Hauptplan
+                     qwen3-4b     – schnell: zweiter, unabhaengiger Plan
+  3. Aggregator      qwen3-8b     – stark: vergleicht beide Plaene, waehlt/merged
+                                    und gibt den finalen Plan aus
   4. Ausfuehrung     MCP-Tools    – Schritte gegen die Fach-Instanzen
 
 Die Modell-IDs kommen aus dem Rollen-Manifest (`orchestrator`), ueberschreibbar
@@ -33,15 +34,16 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 #: Rolle -> (Env-Override, Default-Modell-ID aus dem Rollen-Manifest).
-#: Alle vier Modelle sind OEFFENTLICH (kein HF-Token, keine gated Repos) und
-#: passen zusammen in 48 GB: Qwen3-4B (9) + Phi-3.5-mini (8) + Ministral-8B (16)
-#: = 33 GB bei 42 GB nutzbarem Budget. Der Aggregator nutzt bewusst dasselbe
-#: Modell wie der Classifier – dadurch kostet der vierte Stand keinen VRAM.
+#: Zwei Modelle, beide OEFFENTLICH und native Qwen3 (kein HF-Token, keine gated
+#: Repos, kein Repo-Code): qwen3-4b schnell (9 GB) + qwen3-8b stark (16 GB)
+#: = 25 GB bei 42 GB nutzbarem Budget (48 - 6 GB Sicherheitsabstand).
+#: Classifier und Planner B teilen sich bewusst das schnelle Modell, Planner A
+#: und Aggregator das starke – so bleibt der VRAM-Bedarf bei zwei Staenden.
 MOA_MODEL_ROLES: Dict[str, Tuple[str, str]] = {
     "classifier": ("MOA_CLASSIFIER_MODEL", "qwen3-4b"),
-    "planner_a": ("MOA_PLANNER_A_MODEL", "phi-35-mini"),
-    "planner_b": ("MOA_PLANNER_B_MODEL", "ministral-8b"),
-    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-4b"),
+    "planner_a": ("MOA_PLANNER_A_MODEL", "qwen3-8b"),
+    "planner_b": ("MOA_PLANNER_B_MODEL", "qwen3-4b"),
+    "aggregator": ("MOA_AGGREGATOR_MODEL", "qwen3-8b"),
 }
 
 #: MCP-Tool-Katalog: Tool -> (Rolle, Task, Modell, Protokoll).

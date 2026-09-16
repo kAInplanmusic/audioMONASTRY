@@ -211,6 +211,34 @@
       "trustRemoteCode": false
     },
     {
+      "id": "qwen3-8b",
+      "repository": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "task": "llm",
+      "framework": "transformers",
+      "estimatedVRAM": 16,
+      "estimatedRAM": 18,
+      "loadPriority": 2,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "fp16",
+      "dependencies": [
+        "transformers",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "json"
+      ],
+      "maxDuration": 60,
+      "concurrency": 1,
+      "timeout": 120,
+      "license": "Apache-2.0",
+      "trustRemoteCode": false
+    },
+    {
       "id": "qwen2-audio-7b",
       "repository": "Qwen/Qwen2-Audio-7B-Instruct",
       "revision": "0a095220c30b7b31434169c3086508ef3ea5bf0a",
@@ -1241,7 +1269,7 @@
       ]
     },
     "orchestrator": {
-      "label": "AI-Orchestrator (MoA aus 3 Modellfamilien + MCP-Tools)",
+      "label": "AI-Orchestrator (MoA: 1 starkes + 1 schnelles Modell, Qwen3-8B/4B)",
       "gpuPoolId": "AMPERE_48",
       "gpuCount": 1,
       "vramBudgetGb": 48,
@@ -1249,13 +1277,11 @@
       "maxConcurrentInference": 2,
       "preloadModels": [
         "qwen3-4b",
-        "phi-35-mini",
-        "ministral-8b"
+        "qwen3-8b"
       ],
       "models": [
         "qwen3-4b",
-        "phi-35-mini",
-        "ministral-8b"
+        "qwen3-8b"
       ]
     }
   }
