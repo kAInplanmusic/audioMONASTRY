@@ -177,9 +177,12 @@ def _item(kind: Optional[str], value: Dict[str, Any]) -> Dict[str, Any]:
 def normalize_output(output: Any) -> Dict[str, Any]:
     """Worker-Antwort -> {kind, items[], count} (formtolerant ueber alle Familien).
 
-    Erkennt die drei dokumentierten Familien (Wan2.2 `video`, ACE-Step `files`,
-    worker-comfyui `images`/`message`) und degradiert bei unbekannter Form zu
-    `kind: "raw"` mit der unveraenderten Antwort – nie ein stiller Verlust.
+    Erkennt die vier live gepinnten Familien: Wan2.2 `video` (rohes base64),
+    ACE-Step `files`, worker-comfyui `images`/`message` und FLUX `image_url`
+    (`data:image/png;base64,…`, gemessen 2026-09-16). Zusaetzlich wird jedes
+    unbekannte Feld mit einer `data:`-Nutzlast erkannt, damit ein neuer
+    Feldname nicht still als `raw` durchfaellt. Bei unbekannter Form bleibt es
+    bei `kind: "raw"` mit der unveraenderten Antwort – nie ein stiller Verlust.
     """
     if isinstance(output, dict):
         for field in ("video", "audio"):
@@ -198,10 +201,20 @@ def normalize_output(output: Any) -> Dict[str, Any]:
                 return {"kind": "image", "items": [_item("image", {"data": i}) for i in images], "count": len(images)}
             items = [_item("image", i) for i in images if isinstance(i, dict)]
             return {"kind": "image", "items": items, "count": len(items)}
+        # Prompt-Worker: imageHq (PrunaAI FLUX) liefert genau dieses Feld.
+        for field in ("image_url", "imageUrl", "image"):
+            value = output.get(field)
+            if isinstance(value, str) and value:
+                return {"kind": "image", "items": [{"kind": "image", "data": value}], "count": 1}
         message = output.get("message")
         if isinstance(message, (str, dict, list)) and message not in ("", None, [], {}):
             nested = normalize_output(message)
             return nested if nested["kind"] != "raw" else {"kind": "raw", "items": [], "count": 0, "payload": message}
+        # Letzte Rettung: ein unbekanntes Feld mit data:-Nutzlast (formtolerant).
+        for value in output.values():
+            media = _data_uri_kind(value) if isinstance(value, str) else None
+            if media in ("image", "video", "audio"):
+                return {"kind": media, "items": [{"kind": media, "data": value}], "count": 1}
     if isinstance(output, list) and output and all(isinstance(i, str) for i in output):
         return {"kind": "unknown", "items": [_item(None, {"data": i}) for i in output], "count": len(output)}
     if isinstance(output, str) and output:

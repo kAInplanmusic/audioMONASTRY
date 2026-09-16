@@ -993,6 +993,15 @@ visual-assets/
       finale Plan 0 doppelte tool+args, und der Aggregator trifft eine echte Wahl
       (`choice: b`) statt zu mergen. Kein Ministral mehr im aktiven Set, damit
       entfaellt auch die Research-Lizenz-Frage fuer den Orchestrator.
+- [ ] **RUNPOD-P1-001 (Rest, nur noch die zwei Graphen):** je ein Workflow-JSON
+      fuer `music` und `videoAbstract` aus der ComfyUI-UI exportieren (API-Format,
+      aus Frontend 1.48.7 / Templates 0.11.39) und als
+      `services/audiomonastry-ai-runtime/workflows/<rolle>.json` ablegen; danach
+      mit `scripts/runpod-comfyui-probe.py --payload …` auf der GPU pruefen.
+      Erledigt: die Kontrakte aller vier Rollen sind live gepinnt
+      (`logs/probes/*.json`), der Adapter ist auf die gemessenen Formen
+      festgezogen (`image_url` + doppelte Nutzlast, rohes base64 bei `videoReal`),
+      und `--out` schreibt jetzt vollstaendige Rohantworten.
 - [ ] A6000-Kapazitaet: `stockStatus` war am 2026-09-16 zeitweise
       `unavailable`; ein Job wartete dadurch 648 s in der Queue. Bei Haeufung
       Pool erweitern (L40S 48 GB, ~2x Preis) oder Wartezeit im Aufrufer

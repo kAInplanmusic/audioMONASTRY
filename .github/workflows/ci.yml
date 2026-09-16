@@ -35,6 +35,7 @@ jobs:
         # QUAL-P2-005 (FA-P2-2): reine stdlib-Tests, kein pip-Install nötig.
         run: |
           python3 -m unittest tests.plugin_interface_test
+          python3 tests/test_runpod_comfyui_probe.py
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
           python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py
           python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py

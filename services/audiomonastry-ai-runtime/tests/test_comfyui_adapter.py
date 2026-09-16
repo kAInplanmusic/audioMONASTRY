@@ -130,6 +130,29 @@ class NormalizeOutputTest(unittest.TestCase):
         result = adapter.normalize_output({"message": IMAGE_URI})
         self.assertEqual((result["kind"], result["count"]), ("image", 1))
 
+    def test_flux_image_url_und_images_ergeben_genau_ein_item(self) -> None:
+        """Live-Form von imageHq (2026-09-16): die Nutzlast kommt DOPPELT.
+
+        Die FLUX-Antwort traegt `image_url` und `images[0]` mit demselben
+        data:-URI (gemessen: je 1.198.258 Zeichen, dazu `seed`). Beide Felder
+        duerfen nicht zu zwei Items fuehren – sonst wandert dasselbe Bild
+        zweimal durch die Pipeline.
+        """
+        result = adapter.normalize_output({"image_url": IMAGE_URI, "images": [IMAGE_URI], "seed": 9030})
+        self.assertEqual((result["kind"], result["count"]), ("image", 1))
+        self.assertEqual(result["items"][0]["data"], IMAGE_URI)
+
+    def test_flux_image_url_allein_wird_erkannt(self) -> None:
+        # Rueckfall, falls ein Worker nur image_url liefert.
+        result = adapter.normalize_output({"image_url": IMAGE_URI})
+        self.assertEqual((result["kind"], result["count"]), ("image", 1))
+        self.assertEqual(result["items"][0]["data"], IMAGE_URI)
+
+    def test_unbekanntes_feld_mit_data_uri_wird_erkannt(self) -> None:
+        # Formtoleranz: ein neuer Feldname darf nicht still als "raw" enden.
+        result = adapter.normalize_output({"output_png": IMAGE_URI})
+        self.assertEqual((result["kind"], result["count"]), ("image", 1))
+
     def test_plain_url_list(self) -> None:
         result = adapter.normalize_output(["https://example.com/a.png"])
         self.assertEqual(result["count"], 1)
@@ -157,6 +180,21 @@ class DecodeItemTest(unittest.TestCase):
     def test_invalid_base64_returns_none(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             self.assertIsNone(adapter.decode_item({"data": "not base64 !!"}, pathlib.Path(tmp) / "x.bin"))
+
+    def test_rohes_base64_ohne_data_praefix_wird_geschrieben(self) -> None:
+        """videoReal (Wan ksampler) liefert rohes base64, keinen data:-URI.
+
+        Live gemessen 2026-09-16: die Antwort ist `{"video": "AAAAIGZ0eXBpc29t…"}`
+        (MP4, beginnt mit der ftyp-Box) – ein Adapter, der nur data:-URIs
+        dekodiert, schreibt hier nichts.
+        """
+        import base64
+
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = base64.b64encode(b"\x00\x00\x00\x18ftypmp42").decode()
+            target = pathlib.Path(tmp) / "clip.mp4"
+            written = adapter.decode_item({"data": payload}, target)
+            self.assertEqual(written.read_bytes(), b"\x00\x00\x00\x18ftypmp42")
 
     def test_missing_data_returns_none(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

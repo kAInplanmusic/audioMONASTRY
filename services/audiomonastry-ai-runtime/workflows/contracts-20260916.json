@@ -1,0 +1,86 @@
+{
+  "measuredAt": "2026-09-16",
+  "method": "scripts/runpod-comfyui-probe.py je Rolle, ein Job (Rohantworten in logs/probes/, gitignored)",
+  "roles": {
+    "imageHq": {
+      "response": {
+        "image_url": {
+          "type": "str",
+          "chars": 1198258,
+          "dataUri": "data:image/png;base64",
+          "decodedBytes": 898676
+        },
+        "images": {
+          "type": "list",
+          "len": 1,
+          "first": {
+            "type": "str",
+            "chars": 1198258,
+            "dataUri": "data:image/png;base64",
+            "decodedBytes": 898676
+          }
+        },
+        "seed": {
+          "type": "int",
+          "value": 9030
+        }
+      }
+    },
+    "music": {
+      "response": {
+        "comfyui": {
+          "type": "dict",
+          "keys": [
+            "devices",
+            "system"
+          ]
+        },
+        "status": {
+          "type": "str",
+          "chars": 5
+        },
+        "usage": {
+          "type": "str",
+          "chars": 59
+        }
+      }
+    },
+    "videoAbstract": {
+      "response": {
+        "delayTime": {
+          "type": "int",
+          "value": 12173
+        },
+        "error": {
+          "type": "str",
+          "chars": 165
+        },
+        "executionTime": {
+          "type": "int",
+          "value": 4341
+        },
+        "id": {
+          "type": "str",
+          "chars": 39
+        },
+        "status": {
+          "type": "str",
+          "chars": 6
+        },
+        "workerId": {
+          "type": "str",
+          "chars": 14
+        }
+      }
+    },
+    "videoReal": {
+      "response": {
+        "video": {
+          "type": "str",
+          "note": "rohes base64 MP4, KEIN data:-Praefix; beginnt mit der ftyp-Box"
+        }
+      },
+      "note": "gemessen im Probe-Log 2026-09-16 (Job COMPLETED in 4m17s); kein --out, weil der Lauf vor dem Schalter stattfand"
+    }
+  }
+}

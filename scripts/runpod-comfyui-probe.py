@@ -34,7 +34,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 API_BASE = os.environ.get("RUNPOD_API_BASE", "https://api.runpod.ai/v2").rstrip("/")
 ROLE_ENDPOINT_ENV = {
@@ -93,6 +93,26 @@ def poll(endpoint_id: str, job_id: str, key: str, timeout_s: int) -> Dict[str, A
     return {"status": "TIMEOUT", "jobId": job_id}
 
 
+def summarize_response(output: Any) -> str:
+    """Kurzfassung der Rohantwort: Felder, Typen und Groessen statt Riesen-Blobs.
+
+    Nutzlasten wie ein base64-Bild oder -Video sind zehntausende Zeichen lang; im
+    Terminal ist davon nur der Anfang lesbar (der Rohdump ist gedeckelt). Die
+    Kurzfassung nennt deshalb genau das, was fuer das Pinnen eines Kontrakts
+    zaehlt: welche Felder kommen, von welchem Typ und wie gross. Zum Aufheben
+    dient `--out`.
+    """
+    if not isinstance(output, dict):
+        return f"{type(output).__name__}: {str(output)[:200]}"
+    parts: List[str] = []
+    for key, value in output.items():
+        if isinstance(value, str) and len(value) > 256:
+            parts.append(f"{key}=<str {len(value)} Zeichen, beginnt {value[:24]!r}>")
+        else:
+            parts.append(f"{key}={json.dumps(value, ensure_ascii=False)[:160]}")
+    return "; ".join(parts)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Kontrakt-Probe fuer einen ComfyUI-Worker")
     parser.add_argument("--role", required=True, choices=sorted(ROLE_ENDPOINT_ENV))
@@ -102,6 +122,11 @@ def main() -> int:
     parser.add_argument("--health-check", action="store_true", help="nur {health_check:true} senden")
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--dry-run", action="store_true", help="nur zeigen, was gesendet wuerde")
+    parser.add_argument(
+        "--out",
+        default="",
+        help="vollstaendige Rohantwort als JSON in diese Datei schreiben (fuer das Pinnen des Kontrakts)",
+    )
     args = parser.parse_args()
 
     try:
@@ -137,9 +162,16 @@ def main() -> int:
     print(f"[probe] Job {job_id} eingereicht – warte bis {args.timeout}s …")
 
     state = poll(endpoint_id, job_id, key, args.timeout)
+    output = state.get("output", state)
     print(f"[probe] Status: {state.get('status')}")
-    print("[probe] Rohantwort:")
-    print(json.dumps(state.get("output", state), indent=2, ensure_ascii=False)[:4000])
+    print(f"[probe] Kurzfassung: {summarize_response(output)}")
+    if args.out:
+        # Vollstaendig, auch grosse base64-Nutzlasten – das ist der Beleg.
+        with open(args.out, "w", encoding="utf-8") as handle:
+            json.dump(output, handle, indent=2, ensure_ascii=False)
+        print(f"[probe] vollstaendige Rohantwort: {args.out}")
+    print("[probe] Rohantwort (gekuerzt):")
+    print(json.dumps(output, indent=2, ensure_ascii=False)[:4000])
     return 2 if str(state.get("status")) == "TIMEOUT" else 0
 
 

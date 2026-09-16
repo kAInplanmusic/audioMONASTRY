@@ -68,18 +68,20 @@ sprechen unser `{task, model, input}`-Protokoll.
 `music`/`image.*`/`video_*.*` laufen auf vorgefertigten Hub-Workern. Der
 `comfyui_adapter.py` uebersetzt in beide Richtungen:
 
-| Rolle | Worker | Protokoll | Antwortform |
+| Rolle | Worker | Protokoll | Antwortform (live gepinnt 2026-09-16) |
 |---|---|---|---|
-| `music` | ACE-Step 1.5 XL | Workflow | `files[]` (`kind: audio`) |
-| `videoAbstract` | worker-comfyui 5.10.0 | Workflow (+ `images[]`) | `images[]` (davor `message`) |
-| `videoReal` | wlsdml1114 (Repo offline) | Prompt | per Form (u. a. `video`) |
-| `imageHq` | PrunaAI FLUX (Repo offline) | Prompt | per Form |
+| `music` | ACE-Step 1.5 XL | Workflow | `files[]` (`kind: audio`); `{health_check:true}` → `system_stats` + `usage` |
+| `videoAbstract` | worker-comfyui 5.10.0 | Workflow (+ `images[]`) | `images[]` (davor `message`); leerer Graph → `FAILED`, `error` = rohe ComfyUI-Antwort |
+| `videoReal` | wlsdml1114 (Repo offline) | Prompt | `video` = **rohes base64 MP4** (kein `data:`-Praefix) |
+| `imageHq` | PrunaAI FLUX (Repo offline) | Prompt | `image_url` **und** `images[0]` mit demselben `data:image/png`-URI, dazu `seed` |
 
 Workflow-JSONs werden je Rolle aus `COMFY_WORKFLOW_<ROLLE>`, `workflows/<rolle>.json`
 oder inline im Job geladen – siehe `services/audiomonastry-ai-runtime/workflows/README.md`.
 Fehlt ein Workflow, meldet der Adapter das explizit statt still zu scheitern.
-Die zwei nicht mehr oeffentlich dokumentierten Worker pinnt
-`scripts/runpod-comfyui-probe.py` mit einem Live-Job je Rolle fest.
+Die zwei nicht mehr oeffentlich dokumentierten Worker hat
+`scripts/runpod-comfyui-probe.py --out <datei>` mit je einem Live-Job festgepinnt; die
+Rohantworten liegen unter `logs/probes/`. `--out` schreibt die vollstaendige Antwort
+(vorher war die Ausgabe bei 4000 Zeichen gedeckelt, also mitten im base64 zu Ende).
 
 
 ## R2-Audio-Transfer
