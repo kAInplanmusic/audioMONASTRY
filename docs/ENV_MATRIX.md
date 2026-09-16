@@ -65,8 +65,29 @@
 | `RP_ENDPOINT_ID_BRAIN/EARS/VOICE/MUSIC/IMAGE/VIDEO_REAL/VIDEO_ABSTRACT/ORCHESTRATOR` | `RP_ENDPOINT_ID_*` | `RUNPOD_ENDPOINT_ID_*` | endpointRegistry.ts (8-Instanzen-Flotte) | nein |
 | `RP_ENDPOINT_ID` | `RP_ENDPOINT_ID` | `RUNPOD_ENDPOINT_ID` | endpointRegistry.ts (Legacy-Fallback, gilt für ALLE 8 Rollen) | nein |
 | `RP_BRAIN_OPENAI_URL` | `RP_BRAIN_OPENAI_URL` | – | LlmRouter (vLLM-Override) | nein |
+| `RUNPOD_BRAIN_OPENAI_URL` | `RUNPOD_BRAIN_OPENAI_URL` | – | LlmRouter (Server-Pfad liest genau diesen Namen) | nein |
 | `RUNPOD_API_BASE` | `RUNPOD_API_BASE` | – | runpodProvider.ts (Tests) | nein |
 | `RP_S3_ACCESS_KEY` / `RP_S3_SECRET_KEY` | `RP_S3_*` | – | RunPod-Payload-Transfer | **ja** |
+
+## 4b. Brain-OpenAI-Pfad (vLLM)
+
+Live gemessen 2026-09-16 gegen den Brain-Endpoint (`Qwen/Qwen3-14B-AWQ`):
+
+```
+POST https://api.runpod.ai/v2/<brain-endpoint-id>/openai/v1/chat/completions
+Authorization: Bearer <RP_AGENT_KEY|RP_API_KEY|RUNPOD_API_KEY>
+{ "model": "Qwen/Qwen3-14B-AWQ", "messages": [...], "max_tokens": 32,
+  "chat_template_kwargs": { "enable_thinking": false } }
+```
+
+* Ohne `enable_thinking: false` verbraucht der Qwen3-`<think>`-Block das
+  Token-Budget komplett (gemessen: 16/16 Tokens, `finish_reason=length`, keine
+  nutzbare Antwort). Mit der Payload des App-Pfads: `Paris`,
+  `finish_reason=stop`, 2 Tokens. Die Abschaltung ist tragend, nicht kosmetisch -
+  `LlmRouter` schickt sie deshalb standardmaessig mit.
+* Kaltstart im Messlauf: 4m48s bzw. 2m35s (Worker-Skalierung von 0).
+* Der Brain braucht **kein** `HF_TOKEN`; `Qwen/Qwen3-14B-AWQ` ist auf Hugging
+  Face nicht gated (live ohne Token verifiziert).
 
 ## 5. AI-Orchestrator / LLM
 
