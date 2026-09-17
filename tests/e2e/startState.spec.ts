@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV, STUDIO_NAV_COUNT } from './helpers/studioNav';
+import { STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
 
 /**
  * P0-1-Prüfpunkt („Kein Plugin offen" beim Studio-Eintritt):
@@ -31,6 +32,15 @@ async function instrumentSilenceGate(page: Page, ramp: number): Promise<void> {
   }, ramp);
 }
 
+// Test-Isolation: Der serverautoritative Session-State lebt laenger als ein
+// Browser-Kontext. Ohne Reset bluten Modul-Zustaende aus vorherigen Specs in diesen
+// Test - live belegt: nach keyboard.spec.ts (Ctrl+1 togglet dropMONK) war das
+// dropMONK-Rack beim Start AKTIV und zeigte kein OFF mehr. collab.spec.ts macht das
+// seit jeher so; hier fehlte es.
+test.beforeEach(async () => {
+  await resetSession();
+});
+
 test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async ({ page }) => {
   await openStudio(page);
 
@@ -44,13 +54,20 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
   // Dazu mixerMONK: es ist seit der Betreiberregel 2026-09-17 die einzige
   // Main-Einspeisung, startet aktiv und laesst sich nicht schliessen (COLLAB-P0-004).
   const FIXED_SECTIONS = new Set(['rack-masterplayer', 'rack-perfor', 'rack-mixer']);
-  for (let i = 0; i < rackCount; i++) {
-    const rack = racks.nth(i);
-    const id = await rack.getAttribute('id');
-    if (FIXED_SECTIONS.has(id ?? '')) continue;
+  // Namensbasiert statt ueber Indizes: ein Index sagt bei einem Fehlschlag nicht,
+  // WELCHES Rack betroffen ist (im CI-Log stand nur 'nth(3)'). Die Liste kommt aus
+  // dem gepflegten Helfer (16-MONK-Ziel); die Rack-ID ist der Name ohne 'MONK'.
+  const rackIds = Object.values(SHORT_TO_NAME).map((name) => name.replace(/MONK$/, '').toLowerCase());
+  for (const id of rackIds) {
+    if (FIXED_SECTIONS.has(`rack-${id}`)) continue;
+    const rack = page.locator(`#rack-${id}`);
+    if ((await rack.count()) === 0) continue; // dieses Plugin hat kein Rack
     // Nicht .first() allein: das trifft das versteckte <option value="OFF"> eines
     // Auswahlfelds und kann nie sichtbar sein (live nachgestellt 2026-09-17).
-    await expect(rack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+    await expect(
+      rack.getByText('OFF', { exact: true }).filter({ visible: true }).first(),
+      `Rack ${id} muss beim Start ein sichtbares OFF zeigen`,
+    ).toBeVisible();
   }
 
   // Nav-Icons: `aria-current` markiert die gewaehlte ANSICHT

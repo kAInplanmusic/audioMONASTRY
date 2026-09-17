@@ -426,11 +426,13 @@ function AppComponent() {
       // Backend (WebRTC-Signaling) oder einzelne Worklets nicht verfügbar sind,
       // darf die App NICHT auf dem Start-Screen hängen bleiben – sie startet
       // trotzdem und protokolliert den Fehler konsolen-seitig.
-      // 25 s: der KALTSTART kompiliert die Worklets ueber Vite neu; 12 s waren
-      // zu knapp und liessen den Start weiterlaufen, bevor der Audio-Kontext stand
-      // (live gemessen: Panel zeigte STATE CLOSED / SAMPLE RATE 0 Hz). Die Grenze
-      // greift jetzt nur noch bei echten Haengern.
-      await startStepWithTimeout(startAudio(), 'startAudio', 25_000);
+      // 10 s: liegt bewusst UNTER den Wartezeiten der E2E-Specs (15 s), damit die
+      // Oberflaeche nie auf dem Start-Screen stehen bleibt. Der Audio-Aufbau laeuft
+      // im Hintergrund weiter und wird von den Specs anschliessend abgewartet
+      // (live gemessen: mit einer Grenze von 25 s blieb das Studio in den Tests
+      // laenger haengen als deren Wartezeit - mit 12 s lief der Start weiter, bevor
+      // der Audio-Kontext stand).
+      await startStepWithTimeout(startAudio(), 'startAudio', 10_000);
       console.log('[startApp] startAudio done');
       // COLLAB-P0-004: Den Startzustand in den Audio-Router nachziehen.
       // mixerMONK startet aktiv, aber `routeModuleState` wird sonst NUR aus

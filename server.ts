@@ -559,7 +559,6 @@ registerAdminRoutes(app, {
 registerSessionRoutes(app, {
   isProductionEnv,
   studioAccessToken: STUDIO_ACCESS_TOKEN,
-  authOpen: studioAuthOpen,
   tokenFromRequest: studioTokenFromRequest,
   safeTokenEqual,
   newSession: () => new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS }),
