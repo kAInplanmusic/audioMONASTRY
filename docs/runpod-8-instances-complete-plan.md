@@ -11,31 +11,37 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
 Prozent = Checkliste aus fuenf Punkten (je 20 %): Endpoint live und skalierbar ·
 GPU-Pool liefert aktuell Kapazitaet · Protokoll/Handler verdrahtet · Live-Beweis
-mit echtem Job · vom Orchestrator/App erreichbar. Damit ist die Zahl
+mit echtem Job · vom Orchestrator/App erreichbar. Die Zahl ist damit
 nachpruefbar und nicht geschaetzt.
 
-| # | Rolle | Aufgabe | Endpoint-ID | Integration | Was fehlt zum voollen Stand |
+| # | Rolle | Aufgabe | Endpoint-ID | Integration | Was fehlt zum vollen Stand |
 |---|-------|---------|-------------|------------|------------------------------|
-| 1 | brain | LLM-Antworten (Qwen3-14B-AWQ, vLLM, OpenAI-Pfad) | `ppxo7wrn599p0q` | **80 %** | GPU-Pool zeigt auf A40/A6000, beide `Out` -> Start nur bei Kapazitaet |
-| 2 | ears | Audio-Intelligence (Transkript, Klassifikation, Embedding, Analyse) | `xeax6xrgd0csag` | **80 %** | dito (A40/A6000 `Out`) |
+| 1 | brain | LLM-Antworten (Qwen3-14B-AWQ, vLLM, OpenAI-Pfad) | `ppxo7wrn599p0q` | **90 %** | Pool erweitert (A40/A6000/RTX 6000 Ada/L40/L40S); erster Job auf dem neuen Pool steht aus |
+| 2 | ears | Audio-Intelligence (Transkript, Klassifikation, Embedding, Analyse) | `xeax6xrgd0csag` | **100 %** | – (eigenes Image `:8roles-v2`, auf Ada heute live gelaufen) |
 | 3 | voiceGen | TTS, Stems, SFX, MOS-Harness | `gajmangfldpzrk` | **90 %** | Sprach-Fix (ISO-Codes) greift erst mit dem naechsten Image-Build; Hoererzahl im MOS-Gate offen |
-| 4 | music | Musik-Erzeugung (ACE-Step 1.5 XL) | `vsbjhw0nnnb47e` | **80 %** | A40/A6000 `Out` |
-| 5 | imageHq | Bild-Erzeugung (FLUX.1-dev ueber PrunaAI-Worker) | `wzh9hcbitjnn95` | **80 %** | A40/A6000 `Out`; Modell ist `gated` (HF-Token noetig) und nicht kommerziell |
+| 4 | music | Musik-Erzeugung (ACE-Step 1.5 XL) | `vsbjhw0nnnb47e` | **90 %** | Pool erweitert; erster Job auf dem neuen Pool steht aus (Prebuilt-Worker) |
+| 5 | imageHq | Bild-Erzeugung (FLUX.1-dev ueber PrunaAI-Worker) | `wzh9hcbitjnn95` | **90 %** | Pool erweitert, Erstjob offen; Modell `gated` (HF-Token) und nicht kommerziell |
 | 6 | videoReal | Video aus Text/Bild (Wan 2.2) | `6ghy4fh00zb0j9` | **100 %** | – |
 | 7 | videoAbstract | Abstraktes Video (Wan 2.2, seit 2026-09-16) | `fogwdyxp1zj8zv` | **100 %** | – |
-| 8 | orchestrator | MoA-Planung + MCP-Ausfuehrung (Qwen3-8B/4B) | `xu4sqszdfk8lp8` | **80 %** | A40/A6000 `Out` |
+| 8 | orchestrator | MoA-Planung + MCP-Ausfuehrung (Qwen3-8B/4B) | `xu4sqszdfk8lp8` | **100 %** | – (eigenes Image, auf Ada heute live gelaufen) |
 
-**Flotte gesamt: 86 %** (690 von 800 Punkten). Alle acht Rollen stehen auf
-`workersMin=0` (Scale-to-Zero, 0 $/h im Leerlauf) und `workersMax=1`; die
-Idle-Timeouts sind 120 s (brain/ears 15 s).
+**Flotte gesamt: 95 %** (760 von 800 Punkten). Alle acht Rollen stehen auf
+`workersMin=0` (Scale-to-Zero, 0 $/h im Leerlauf), `workersMax=1`, Idle-Timeout
+120 s (brain/ears 15 s).
 
-**Wichtigster offener Flottenpunkt:** fuenf Rollen (brain, ears, music, imageHq,
-orchestrator) haengen an `A40`/`RTX A6000` - beide sind laut Kapazitaetsabfrage
-**`Out`**. Jobs dieser Rollen warten dann ohne Worker in der Queue, bis wieder
-Kapazitaet da ist. Sofort abhilfe schafft derselbe Schritt wie bei `voice`:
-Pool um `ADA_48_PRO` (L40S/L40/RX 6000 Ada) erweitern - das kostet aber
-0,79 $/h statt ~0,40 $/h, deshalb ist das eine Kostenentscheidung und nicht
-stillschweigend gesetzt.
+**GPU-Pools (2026-09-17 erweitert):** nach dem Ausfall von A40/A6000 (`Out`)
+laufen sechs Rollen jetzt auf `AMPERE_48,ADA_48_PRO` - also A40, RTX A6000,
+RTX 6000 Ada, L40 oder L40S. Zurueckgelesen per API:
+
+```
+brain/ears/voice/music/image/orchestrator  AMPERE_48,ADA_48_PRO
+videoReal                                  RTX 4090, RTX 5090
+videoAbstract                              RTX 4090
+```
+
+Ada/L40S kostet **0,79 $/h** statt ~0,40 $/h (A6000) - solange Ampere liefert,
+waehlt die Plattform die guenstigere Karte; die Erweiterung ist ein
+Verfuegbarkeitsnetz, kein Kostenschritt.
 
 **MOS-Stand (Hoererwerten, 2026-09-17):** `mms-tts-deu` (alt, 16 kHz) Mittel
 **3,33** bei 1 Hoerer; `qwen3-tts-17b` (aktuell, 24 kHz) Mittel **4,33** bei
