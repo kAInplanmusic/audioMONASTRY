@@ -28,6 +28,12 @@ jobs:
             package-lock.json
             vitest.config.ts
             tsconfig.json
+            # Von Tests gelesen, aber zusammen nur 416 KB (public/ selbst bleibt
+            # aussen vor: 3,4 GB Musik/Modelle):
+            public/hrtf
+            public/plugin-manifest.json
+            database
+            .github
           sparse-checkout-cone-mode: false
 
       - name: Setup Node
