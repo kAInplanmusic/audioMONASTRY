@@ -1057,7 +1057,9 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         }
         const { pluginId, toUserId } = parsed.data;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const targetIsMember = sessionMembers(SESSION_ROOM_ID, '').some((m) => m.userId === toUserId);
+        // Der Raumname traegt das Praefix 'session:' (siehe join-session: room = `session:${SESSION_ROOM_ID}`).
+        // Ohne das Praefix findet sessionMembers keine Mitglieder - live aufgefallen 2026-09-17.
+        const targetIsMember = sessionMembers(`session:${roomId}`, '').some((m) => m.userId === toUserId);
         if (!targetIsMember) {
           socket.emit('plugin-lock-transfer-denied', { pluginId, reason: 'target-not-in-session', lockedBy: authoritativeSession.lockOwner(pluginId) ?? null });
           return;
