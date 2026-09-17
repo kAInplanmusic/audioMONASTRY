@@ -173,6 +173,48 @@ export class AuthoritativeSession {
     return this.locks.release(pluginId, userId, now);
   }
 
+  /**
+   * Uebertraegt einen Lock gezielt vom aktuellen Halter auf einen anderen Nutzer
+   * (Betreiberentscheidung 2026-09-17, COLLAB-P0-004 Teil 2: „der Halter kann
+   * mixerMONK weitergeben, dann ist der neue Halter der Einzige, der den Mainsound
+   * beeinflusst").
+   *
+   * Atomar in einem Schritt: nur der AKTUELLE Halter darf uebertragen (kein
+   * Admin-/Rollen-Fallback), und der neue Halter muss eine echte Identitaet sein.
+   * Die Mitgliedschaft im Raum prueft der Server (Socket-Pfad), weil die Session
+   * selbst keine Raum-Mitgliederliste kennt.
+   */
+  transferLock(
+    pluginId: string,
+    fromUserId: string,
+    toUserId: string,
+    now = Date.now(),
+    ttlMs = this.lockTtlMs,
+  ): { ok: boolean; reason?: 'invalid' | 'not-owner' | 'same-owner'; lockedBy?: string } {
+    // IDs defensiv normalisieren: Leerzeichen duerfen keinen "Geister-Halter" erzeugen
+    // (der Test dazu hat genau das aufgedeckt - '   ' ging vorher als Nutzer durch).
+    const from = typeof fromUserId === 'string' ? fromUserId.trim() : '';
+    const to = typeof toUserId === 'string' ? toUserId.trim() : '';
+    if (!pluginId || !from || !to) {
+      return { ok: false, reason: 'invalid', lockedBy: this.locks.ownerOf(pluginId, now) ?? undefined };
+    }
+    if (from === to) {
+      return { ok: false, reason: 'same-owner', lockedBy: from };
+    }
+    const owner = this.locks.ownerOf(pluginId, now);
+    if (owner !== from) {
+      return { ok: false, reason: 'not-owner', lockedBy: owner ?? undefined };
+    }
+    // Lease sauber umschreiben: erst freigeben, dann fuer den neuen Halter setzen.
+    this.locks.release(pluginId, from, now);
+    const ok = this.locks.acquire(pluginId, to, ttlMs, now);
+    if (!ok) {
+      return { ok: false, reason: 'invalid', lockedBy: this.locks.ownerOf(pluginId, now) ?? undefined };
+    }
+    return { ok: true, lockedBy: toUserId };
+  }
+
+
   lockOwner(pluginId: string, now = Date.now()): string | null {
     return this.locks.ownerOf(pluginId, now);
   }

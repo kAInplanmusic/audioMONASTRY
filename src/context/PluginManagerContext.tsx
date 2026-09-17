@@ -15,6 +15,13 @@ interface PluginManagerContextType {
   pluginLocks: Record<string, LockStatus>;
   requestLock: (pluginId: string, userId: string) => boolean;
   releaseLock: (pluginId: string, userId: string) => void;
+  /**
+   * COLLAB-P0-004 Teil 2: Halter gezielt an einen anderen Session-Nutzer uebergeben
+   * (Betreiberregel: der Halter kann mixerMONK weitergeben). Liefert `false`, wenn
+   * der lokale Nutzer den Lock nicht haelt - die eigentliche Entscheidung trifft
+   * der Server und antwortet ueber das `plugin-lock`-Broadcast.
+   */
+  transferLock: (pluginId: string, toUserId: string) => boolean;
 }
 
 const PluginManagerContext = createContext<PluginManagerContextType | undefined>(undefined);
@@ -164,8 +171,21 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     webRTCManager.sendPluginUnlock(pluginId);
   }, [commit]);
 
+  // COLLAB-P0-004 Teil 2: gezielte Uebergabe. Nur der aktuelle Halter darf sie
+  // anstossen (gleiche Pruefung wie beim Freigeben); Ziel muss ein anderer Nutzer
+  // sein. Kein optimistisches Setzen: der Server bestaetigt per Broadcast.
+  const transferLock = useCallback((pluginId: string, toUserId: string): boolean => {
+    const localUserId = webRTCManager.userId;
+    const lock = locksRef.current[pluginId];
+    if (!lock?.active || lock.lockedBy !== localUserId) return false;
+    const target = String(toUserId ?? '').trim();
+    if (!target || target === localUserId) return false;
+    webRTCManager.sendPluginLockTransfer(pluginId, target);
+    return true;
+  }, []);
+
   return (
-    <PluginManagerContext.Provider value={{ pluginLocks, requestLock, releaseLock }}>
+    <PluginManagerContext.Provider value={{ pluginLocks, requestLock, releaseLock, transferLock }}>
       {children}
     </PluginManagerContext.Provider>
   );

@@ -38,6 +38,7 @@ import {
 import { looksLikeStudioSession, verifyStudioSession } from './src/core/session/studioSession';
 import {
   canControlMainOut,
+  MIXER_NEVER_CLOSES,
   isMainOutPlugin,
   parseMainOutUpdate,
   resolveMainOutUserId,
@@ -45,6 +46,7 @@ import {
 import { SnapshotStore, createMemoryKeyValueStore } from './src/core/persistence/snapshotStore';
 import {
   PluginLockSocketSchema,
+  PluginLockTransferSocketSchema,
   PluginStateSocketSchema,
 } from './src/types/zod/schemas';
 
@@ -1040,6 +1042,43 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
         addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
       });
+      // COLLAB-P0-004 (Teil 2): gezielte Uebergabe des Halters. Betreiberregel
+      // 2026-09-17: der Halter kann mixerMONK an einen bestimmten Nutzer geben -
+      // danach ist dieser der Einzige, der den Mainsound beeinflusst. Nur der
+      // aktuelle Halter darf uebertragen; der Ziel-Nutzer muss im Raum sein.
+      socket.on('plugin-lock-transfer', (data: any) => {
+        refreshIdleTimer();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const parsed = PluginLockTransferSocketSchema.safeParse(data ?? {});
+        if (!parsed.success) {
+          socket.emit('plugin-lock-transfer-denied', { reason: 'invalid' });
+          return;
+        }
+        const { pluginId, toUserId } = parsed.data;
+        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
+        const targetIsMember = sessionMembers(SESSION_ROOM_ID, '').some((m) => m.userId === toUserId);
+        if (!targetIsMember) {
+          socket.emit('plugin-lock-transfer-denied', { pluginId, reason: 'target-not-in-session', lockedBy: authoritativeSession.lockOwner(pluginId) ?? null });
+          return;
+        }
+        const result = authoritativeSession.transferLock(pluginId, senderUserId, toUserId);
+        if (!result.ok) {
+          socket.emit('plugin-lock-transfer-denied', {
+            pluginId,
+            reason: result.reason ?? 'invalid',
+            lockedBy: result.lockedBy ?? null,
+          });
+          addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK_TRANSFER', false, pluginId);
+          return;
+        }
+        persistSessionState();
+        const lock = { lockedBy: toUserId, timestamp: Date.now(), ttl: PLUGIN_LOCK_TTL_MS };
+        const revision = authoritativeSession.revision;
+        io.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock, revision });
+        if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
+        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK_TRANSFER', true, pluginId);
+      });
       // ARCH-#2: Broadcast-Callback für Lock-Ablauf (Sweep im Modul-Scope).
       broadcastLockExpiry = (pluginId: string) => {
         io.to(`session:${SESSION_ROOM_ID}`).emit('plugin-unlock', {
@@ -1097,6 +1136,20 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const senderRole = String(socket.data?.sessionRole ?? 'guest');
         const { pluginId, state } = parsed.data;
+        // COLLAB-P0-004 (Betreiberregel 2026-09-17): mixerMONK ist die einzige
+        // Main-Einspeisung und laesst sich NIE schliessen - auch nicht vom Halter.
+        // OFF wuerde die Signalkette trennen und Main UND Clock stoppen.
+        if (pluginId === MIXER_NEVER_CLOSES && state === 'OFF') {
+          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
+          socket.emit('rbac-denied', {
+            action: 'plugin-state',
+            pluginId,
+            state,
+            role: senderRole,
+            reason: 'mixerMONK laesst sich nicht schliessen',
+          });
+          return;
+        }
         // K-2: Lock serverseitig durchsetzen – nur der Halter darf den State ändern.
         const lockOwner = authoritativeSession.lockOwner(pluginId);
         if (lockOwner && lockOwner !== senderUserId) {

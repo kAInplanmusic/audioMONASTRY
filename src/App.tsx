@@ -70,7 +70,7 @@ export default function App() {
 function AppComponent() {
   const { startAudio } = useAudio();
   const { moduleStates, setModuleState } = useModuleState();
-  const { requestLock, releaseLock, pluginLocks } = usePluginManager();
+  const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
   const { pendingSample, setPendingSample } = useSamples();
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -85,6 +85,8 @@ function AppComponent() {
     MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
   });
   const [sessionMembers, setSessionMembers] = useState(0);
+  /** COLLAB-P0-004 Teil 2: die Session-Nutzer, damit der Halter auswaehlen kann. */
+  const [sessionPeers, setSessionPeers] = useState<{ socketId: string; userId: string }[]>([]);
   const [sessionFull, setSessionFull] = useState(false);
   // Betreiberentscheidung 2026-09-17: Wenn beim Start eine Ansicht markiert ist,
   // dann das Mischpult (mixerMONK) - vorher 'instru'. Die Markierung sagt nur,
@@ -224,6 +226,7 @@ function AppComponent() {
     }, 2000);
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
+      setSessionPeers(info.members.map((m) => ({ socketId: m.socketId, userId: m.userId })));
       setSessionFull(info.full);
       if (webRTCManager.isMainOutOwner) {
         startHostMain();
@@ -595,6 +598,24 @@ function AppComponent() {
             >
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
               {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
+              {/* COLLAB-P0-004 Teil 2: Nur der Halter des Mixers kann ihn weitergeben.
+                  Der neue Halter ist danach der Einzige, der den Mainsound beeinflusst. */}
+              {pluginLocks.mixer?.active && pluginLocks.mixer?.lockedBy === webRTCManager.userId
+                && sessionPeers.some((m) => m.userId !== webRTCManager.userId) && (
+                  <select
+                    aria-label="mixerMONK-Halter übergeben"
+                    className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1 py-0.5"
+                    value=""
+                    onChange={(e) => { if (e.target.value) transferLock('mixer', e.target.value); }}
+                  >
+                    <option value="">Halter übergeben …</option>
+                    {sessionPeers
+                      .filter((m) => m.userId !== webRTCManager.userId)
+                      .map((m) => (
+                        <option key={m.socketId} value={m.userId}>{m.userId}</option>
+                      ))}
+                  </select>
+                )}
             </div>
             {Object.keys(remoteNav).length > 0 && (
               <div

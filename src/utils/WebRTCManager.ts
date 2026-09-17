@@ -474,6 +474,7 @@ class WebRTCManager {
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
     // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
     this.socket.on('plugin-lock-denied', (data: any) => this.pluginLockDeniedListeners.forEach((l) => l(data)));
+    this.socket.on('plugin-lock-transfer-denied', (data: any) => this.pluginLockDeniedListeners.forEach((l) => l(data)));
     // COLLAB-P0-001: vollständiger Session-Snapshot (Join/Reconnect/Resync) und
     // deterministische Ablehnung (Duplikat/verspätet/Lock) weiterreichen.
     this.socket.on('session-state', (data: any) => this.sessionStateListeners.forEach((l) => l(data)));
@@ -819,6 +820,15 @@ class WebRTCManager {
 
   public sendPluginUnlock(pluginId: string): void {
     this.socket?.emit('plugin-unlock', { pluginId });
+  }
+
+  /**
+   * COLLAB-P0-004 Teil 2: Halter gezielt an einen anderen Session-Nutzer uebergeben.
+   * Die Autoritaet bleibt beim Server - hier wird nur beantragt; der neue Zustand
+   * kommt ueber das `plugin-lock`-Broadcast zurueck.
+   */
+  public sendPluginLockTransfer(pluginId: string, toUserId: string): void {
+    this.socket?.emit('plugin-lock-transfer', { pluginId, toUserId });
   }
 
   public onPluginLock(cb: (msg: any) => void): () => void {

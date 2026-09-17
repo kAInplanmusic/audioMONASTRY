@@ -326,6 +326,16 @@ export const PluginLockSocketSchema = z.object({
   pluginId: z.string().trim().min(1).max(64),
 });
 
+/**
+ * COLLAB-P0-004 Teil 2: Halter gezielt an einen anderen Session-Nutzer uebergeben.
+ * Nur der aktuelle Halter darf das (serverseitig geprueft); der Ziel-Nutzer muss
+ * Mitglied der Session sein.
+ */
+export const PluginLockTransferSocketSchema = z.object({
+  pluginId: z.string().trim().min(1).max(64),
+  toUserId: z.string().trim().min(1).max(128),
+});
+
 export const PluginStateSocketSchema = z.object({
   pluginId: z.string().trim().min(1).max(64),
   state: z.enum(['OFF', 'AUTO_AI', 'PRO', 'LOCKED']),
