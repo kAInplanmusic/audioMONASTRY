@@ -16,8 +16,16 @@ import { navButton } from './helpers/studioNav';
  */
 const CUE_RAMP = 0.01;
 
+/**
+ * Studio öffnen. (Bis 2026-09-17 rief diese Funktion sich SELBST auf - ein
+ * Kopierfehler, der als „Maximum call stack size exceeded" scheiterte und beide
+ * P0-6-Tests lahmlegte. Jetzt wie in den übrigen Specs implementiert.)
+ */
 async function openStudio(page: Page): Promise<void> {
-  await openStudio(page);
+  await page.goto('/');
+  await expect(page).toHaveTitle(/audioMONASTRY/);
+  await page.getByLabel('audioMONASTRY starten').click();
+  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 
 /** Zeichnet alle Cue-Rampen (10 ms) des lokalen Abhörwegs auf. */
@@ -43,10 +51,12 @@ test('P0-6: PLUGIN-Cue solo, MAIN unverändert, zurück auf MAIN = sofort Gesamt
   await instrumentCueRamps(page, CUE_RAMP);
   await openStudio(page);
 
-  // Plugin aktivieren (drumMONK speist MAIN über seinen Kanal).
-  await navButton(page, 'DRM').click();
+  // Plugin aktivieren (drumsamplerMONK speist MAIN über seinen Kanal).
+  // Short-Code DRSA: seit dem UI-Refactor gilt der Registry-Code; das alte DRM
+  // (und der Name drumMONK) laufen ins Leere - live geprueft 2026-09-17.
+  await navButton(page, 'DRSA').click();
   // Neuer Nav-Semantik: aktiv = aria-current="page".
-  await expect(navButton(page, 'DRM'))
+  await expect(navButton(page, 'DRSA'))
     .toHaveAttribute('aria-current', 'page');
 
   // Abhörweg von User 3 wählen; Startzustand ist MAIN + PLUGIN.

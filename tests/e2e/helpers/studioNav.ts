@@ -16,7 +16,12 @@ import { expect, type Page } from '@playwright/test';
 export const STUDIO_NAV = 'nav[aria-label="Studio-Navigation"]';
 
 /** Short-Code → vollständiger Plugin-Name (title-Attribut im Header-Icon, 16-MONK-Ziel). */
-const SHORT_TO_NAME: Record<string, string> = {
+/**
+ * Short-Code → vollständiger Plugin-Name (title-Attribut im Header-Icon).
+ * Exportiert, damit Specs NICHT ihre eigene (veraltete) Liste pflegen - genau das
+ * war die Ursache der stale Namen in smoke.spec.ts (instrumentMONK, mcpMONK, ...).
+ */
+export const SHORT_TO_NAME: Record<string, string> = {
   INS: 'instruMONK',
   SYSA: 'syntisamplerMONK',
   DRSA: 'drumsamplerMONK',

@@ -1,44 +1,22 @@
 import { test, expect, type Page } from '@playwright/test';
+import { STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton } from './helpers/studioNav';
 
 /**
- * E2E-Smoke: App lädt, Entry-Gate passieren, alle 18 Plugin-Buttons sind da,
+ * E2E-Smoke: App lädt, Entry-Gate passieren, alle Nav-Buttons sind da,
  * Mixer-Terminal + MOA-Leiste rendern, Plugin-Toggle funktioniert und es gibt
  * keine uncaught pageerrors (White-Screen-Killer, DCT-104/118).
  *
- * Selektor-Stand 2026-09-07 (UI-Refactor): Die alte Plugin-Toolbar
- * (`nav[aria-label="Plugin-Toolbar"]` + `button[aria-pressed]` + Short-Codes
- * wie `title="MIX"`) wurde ersetzt durch die Studio-Navigation
- * (`nav[aria-label="Studio-Navigation"]`, `aria-current="page"` statt
- * `aria-pressed`, `title={plugin.name}` z. B. `mixerMONK` statt `MIX`).
+ * Modernisiert 2026-09-17 (CI-P1-002). Der Spec pflegte eine EIGENE, veraltete
+ * Namensliste (instrumentMONK, synthesizerMONK, drumMONK, samplerMONK, mcpMONK,
+ * midiMONK, masteringMONK, stemMONK, recordingMONK - keine davon existiert in der
+ * Navigation) und erwartete 18 Buttons sowie "kein aria-current beim Start".
+ * Er nutzt jetzt die gepflegte Liste aus helpers/studioNav (16-MONK-Ziel) und die
+ * Betreiberregel vom 2026-09-17: mixerMONK ist die markierte Startansicht.
  *
  * Bekannte, abgeschirmte Umgebungsfehler:
  *  - Tone.js legt Worklet-Polyfills als Blob an; Chromium meldet dafür
  *    gelegentlich „Unexpected token 'export'" (kein App-Fehler, kein Crash).
  */
-
-const STUDIO_NAV = 'nav[aria-label="Studio-Navigation"]';
-
-/** Short-Code → vollständiger Plugin-Name (title-Attribut im Header-Icon). */
-const SHORT_TO_NAME: Record<string, string> = {
-  INS: 'instrumentMONK',
-  SYN: 'synthesizerMONK',
-  DRM: 'drumMONK',
-  SAM: 'samplerMONK',
-  MCP: 'mcpMONK',
-  VOX: 'voiceMONK',
-  SND: 'soundMONK',
-  MIX: 'mixerMONK',
-  CTRL: 'midiMONK',
-  FX: 'effectMONK',
-  DRP: 'dropMONK',
-  LIB: 'biblioMONK',
-  EQ: 'eqMONK',
-  DSP: 'dspMONK',
-  MST: 'masteringMONK',
-  RMX: 'stemMONK',
-  '3D': 'spatialMONK',
-  REC: 'recordingMONK',
-};
 
 /** Startseite öffnen und das „Studio betreten"-Gate passieren. */
 async function openStudio(page: Page): Promise<void> {
@@ -68,7 +46,7 @@ function collectErrors(page: Page): { pageErrors: string[]; consoleErrors: strin
   return { pageErrors, consoleErrors };
 }
 
-test('App lädt mit korrektem Titel und 18 Plugin-Buttons', async ({ page }) => {
+test('App lädt mit korrektem Titel und allen Nav-Buttons', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
@@ -98,41 +76,43 @@ test('Session-Anzeige zeigt 1/4', async ({ page }) => {
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('Plugin-Toggle öffnet mcpMONK ohne React-Crash', async ({ page }) => {
+test('Plugin-Toggle öffnet dropMONK ohne React-Crash', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
-  await page.locator(STUDIO_NAV).getByTitle('mcpMONK').first().click();
-  await expect(page.getByText('mcpMONK').first()).toBeVisible({ timeout: 10_000 });
+  // mcpMONK (früher hier geprüft) existiert nicht mehr - dropMONK ist ein
+  // bestehendes, nicht Main-Out-gesperrtes Plugin.
+  await navButton(page, 'DRP').click();
+  await expect(page.locator('#rack-drop').getByLabel('dropMONK aktiv')).toBeVisible({ timeout: 10_000 });
 
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('P0-1: Studio-Start hat alle Nav-Buttons ohne aria-current (kein Modul aktiv)', async ({ page }) => {
+test('Betreiberregel 2026-09-17: Startansicht ist mixerMONK, Module starten OFF-frei', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
   const nav = page.locator(STUDIO_NAV);
   const buttons = nav.locator('button');
-  const count = await buttons.count();
-  expect(count).toBeGreaterThanOrEqual(18);
-  // Neuer Nav-Semantik: aktives Modul = aria-current="page", Start = keins gesetzt.
-  for (let i = 0; i < count; i++) {
-    await expect(buttons.nth(i)).not.toHaveAttribute('aria-current', /.+/);
-  }
+  expect(await buttons.count()).toBeGreaterThanOrEqual(STUDIO_NAV_COUNT);
+  // Genau EINE markierte Ansicht - und das ist mixerMONK (Betreiberentscheidung:
+  // wenn eine Ansicht markiert ist, dann das Mischpult). Die Markierung betrifft
+  // die Ansicht, nicht die Modulaktivität.
+  await expect(page.locator(STUDIO_NAV + ' button[aria-current]')).toHaveCount(1);
+  await expect(nav.getByTitle('mixerMONK').first()).toHaveAttribute('aria-current', 'page');
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('P0-3: Plugin-OFF im Terminal synchronisiert Nav-Icon (aria-current entfernt)', async ({ page }) => {
+test('P0-3: Power-Button schließt dropMONK und löst die Ansichtsmarkierung', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
-  const navButton = page.locator(STUDIO_NAV).getByTitle('mcpMONK').first();
-  await navButton.click();
-  const rack = page.locator('#rack-mcp');
-  await expect(rack.getByText('mcpMONK').first()).toBeVisible({ timeout: 10_000 });
-  await rack.locator('select').selectOption('OFF');
-  await expect(navButton).not.toHaveAttribute('aria-current', /.+/);
+  await navButton(page, 'DRP').click();
+  const rack = page.locator('#rack-drop');
+  await expect(rack.getByLabel('dropMONK aktiv')).toBeVisible({ timeout: 10_000 });
+
+  await rack.getByLabel(/Power$/).click();
+  await expect(rack.getByLabel('dropMONK inaktiv')).toBeVisible();
 
   expect(errors.pageErrors).toEqual([]);
 });
