@@ -25,7 +25,13 @@ test('App startet, Mixer ist offen und Audio wird RUNNING (kein Worklet-Crash)',
 
   // perfMONK Audio-Health muss RUNNING melden
   await expect(page.getByText('RUNNING', { exact: true }).first()).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText('48000 Hz', { exact: false }).first()).toBeVisible({ timeout: 15000 });
+  // Samplerate: die Engine nennt je Geraet 48000 oder 44100 Hz (CI ohne echtes
+  // Audiogeraet meldet 44100). Wichtig ist, dass ueberhaupt eine Rate angezeigt
+  // wird - und zwar eine SICHTBARE: der erste DOM-Treffer ist ein unsichtbarer
+  // Eintrag, deshalb filter({ visible: true }).
+  await expect(
+    page.getByText(/\b(48000|44100) Hz/).filter({ visible: true }).first(),
+  ).toBeVisible({ timeout: 15000 });
 
   // Keine kritischen Fehler: Worklet-Export-Crash wäre sichtbar als
   // "Unexpected token 'export'" bzw. "No valid URL".

@@ -78,7 +78,10 @@ test('Hardware-Terminal zeigt virtuelle MIDI-Geräte und bleibt stabil', async (
 
   // Soundkarten-Panel öffnen: Engine-Metriken sichtbar.
   await page.getByText(/Soundkarten/).first().click();
-  await expect(page.getByText(/Engine .* Hz/).first()).toBeVisible({ timeout: 10_000 });
+  // Format beachtet: die Anzeige lautet "Engine: running · 44100 Hz · Base …" -
+  // ein Regex mit Leerzeichen nach 'Engine' findet sie NICHT (CI-Fund: das Panel
+  // rendert einen Doppelpunkt). Tolerant auf beides pruefen.
+  await expect(page.getByText(/Engine:?\s.*Hz/).first()).toBeVisible({ timeout: 10_000 });
 
   // Kein White-Screen/Absturz durch Hardware-Mocks.
   expect(pageErrors).toEqual([]);
