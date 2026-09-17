@@ -16,16 +16,16 @@ nachpruefbar und nicht geschaetzt.
 
 | # | Rolle | Aufgabe | Endpoint-ID | Integration | Was fehlt zum vollen Stand |
 |---|-------|---------|-------------|------------|------------------------------|
-| 1 | brain | LLM-Antworten (Qwen3-14B-AWQ, vLLM, OpenAI-Pfad) | `ppxo7wrn599p0q` | **90 %** | Pool erweitert (A40/A6000/RTX 6000 Ada/L40/L40S); erster Job auf dem neuen Pool steht aus |
+| 1 | brain | LLM-Antworten (Qwen3-14B-AWQ, vLLM, OpenAI-Pfad) | `ppxo7wrn599p0q` | **90 %** | wartet weiter auf Kapazitaet: auf dem Ada-Pool startete kein Worker (Hypothese: der vorgefertigte vLLM-Worker braucht neuere Treiber-CUDA, als die verfuegbaren L40S-Hosts bieten) |
 | 2 | ears | Audio-Intelligence (Transkript, Klassifikation, Embedding, Analyse) | `xeax6xrgd0csag` | **100 %** | – (eigenes Image `:8roles-v2`, auf Ada heute live gelaufen) |
 | 3 | voiceGen | TTS, Stems, SFX, MOS-Harness | `gajmangfldpzrk` | **90 %** | Sprach-Fix (ISO-Codes) greift erst mit dem naechsten Image-Build; Hoererzahl im MOS-Gate offen |
-| 4 | music | Musik-Erzeugung (ACE-Step 1.5 XL) | `vsbjhw0nnnb47e` | **90 %** | Pool erweitert; erster Job auf dem neuen Pool steht aus (Prebuilt-Worker) |
-| 5 | imageHq | Bild-Erzeugung (FLUX.1-dev ueber PrunaAI-Worker) | `wzh9hcbitjnn95` | **90 %** | Pool erweitert, Erstjob offen; Modell `gated` (HF-Token) und nicht kommerziell |
+| 4 | music | Musik-Erzeugung (ACE-Step 1.5 XL) | `vsbjhw0nnnb47e` | **100 %** | – (Live-Job auf dem neuen Pool 2026-09-17, lief auf einer A40) |
+| 5 | imageHq | Bild-Erzeugung (FLUX.1-dev ueber PrunaAI-Worker) | `wzh9hcbitjnn95` | **100 %** | – (Live-Job auf dem neuen Pool 2026-09-17, echtes PNG); Modell `gated` (HF-Token) und nicht kommerziell |
 | 6 | videoReal | Video aus Text/Bild (Wan 2.2) | `6ghy4fh00zb0j9` | **100 %** | – |
 | 7 | videoAbstract | Abstraktes Video (Wan 2.2, seit 2026-09-16) | `fogwdyxp1zj8zv` | **100 %** | – |
 | 8 | orchestrator | MoA-Planung + MCP-Ausfuehrung (Qwen3-8B/4B) | `xu4sqszdfk8lp8` | **100 %** | – (eigenes Image, auf Ada heute live gelaufen) |
 
-**Flotte gesamt: 95 %** (760 von 800 Punkten). Alle acht Rollen stehen auf
+**Flotte gesamt: 98 %** (780 von 800 Punkten). Live nachgeprueft 2026-09-17 auf dem neuen Pool: imageHq (echtes PNG) und music (A40) COMPLETED; brain wartet weiter auf Kapazitaet. Alle acht Rollen stehen auf
 `workersMin=0` (Scale-to-Zero, 0 $/h im Leerlauf), `workersMax=1`, Idle-Timeout
 120 s (brain/ears 15 s).
 
