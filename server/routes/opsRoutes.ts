@@ -60,8 +60,10 @@ export interface OpsDeps {
 export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   const { STEM_MAX_JOBS, getActiveSocketConnections, getStemActiveJobs, metrics, serverAuditLog } = deps;
   // --- Health check ---
+  // PROD-P0-003: zusaetzlich die Build-Version (kein Secret, additiv). Damit ist
+  // nach einem Deploy/Rollback von aussen pruefbar, WELCHE Version laeuft.
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', version: process.env.AUDIOMONASTRY_VERSION || 'dev' });
   });
 
   // --- DCT-108: Metriken (keine Samples, keine Secrets, keine Keys) ---

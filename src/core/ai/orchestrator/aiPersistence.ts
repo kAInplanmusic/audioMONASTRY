@@ -173,6 +173,44 @@ export const aiPersistence = {
     }
   },
 
+  /**
+   * DB-P1-005: semantische Suche im AUDIO-Space (CLAP, 512-dim) ueber die
+   * `match_audio_samples`-RPC (Migration 007). Bis hierher fuellte der
+   * Batch-Indexer `sample_audio_embeddings`, aber niemand las die Tabelle -
+   * dieser Pfad ist der fehlende Konsument.
+   *
+   * Liefert [] bei fehlendem Client/Fehler, damit der Aufrufer ehrlich
+   * "keine Treffer / nicht konfiguriert" melden kann (kein erfundener Treffer).
+   */
+  async rpcMatchAudioSamples(
+    embedding: number[],
+    matchCount = 10,
+  ): Promise<Array<{ sample_id: string; similarity: number }>> {
+    const db = getClient();
+    if (!db) return [];
+    if (!Array.isArray(embedding) || embedding.length === 0 || !embedding.every((n) => Number.isFinite(n))) {
+      return [];
+    }
+    try {
+      const { data, error } = await db.rpc('match_audio_samples', {
+        query_embedding: embedding,
+        match_count: matchCount,
+      });
+      if (error) {
+        aiLogger.warn('supabase match_audio_samples failed', { error: error.message });
+        return [];
+      }
+      if (!Array.isArray(data)) return [];
+      return (data as Array<Record<string, unknown>>).map((row) => ({
+        sample_id: String(row.sample_id ?? ''),
+        similarity: Number(row.similarity ?? 0),
+      })).filter((row) => row.sample_id.length > 0);
+    } catch (error) {
+      aiLogger.warn('supabase match_audio_samples failed', { error: (error as Error).message });
+      return [];
+    }
+  },
+
   async auditMcp(tool: string, userId: string, sessionId: string, ok: boolean, permission: string): Promise<void> {
     const db = getClient();
     if (!db) return;

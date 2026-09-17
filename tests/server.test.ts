@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi, afterEach } from 'vitest';
+import { setAiPersistenceClientForTests } from '../src/core/ai/orchestrator/aiPersistence';
 import type { Server } from 'node:http';
 
 let server: Server;
@@ -56,11 +57,15 @@ function sineWavBuffer(sampleRate = 44100, seconds = 0.2): Buffer {
 }
 
 describe('Server API', () => {
-  it('liefert /api/health mit status ok', async () => {
+  it('liefert /api/health mit status ok und Build-Version (PROD-P0-003)', async () => {
     const res = await fetch(`${baseUrl}/api/health`);
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('ok');
+    // Die Version macht Deploy/Rollback von aussen pruefbar ('dev' ausserhalb
+    // eines gestempelten Images).
+    expect(typeof body.version).toBe('string');
+    expect(body.version.length).toBeGreaterThan(0);
   });
 
   it('liefert /api/cloud/health ohne Konfiguration als not-configured', async () => {
@@ -469,6 +474,101 @@ describe('Server API', () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBe('invalid autosave payload');
+  });
+
+  // DB-P1-005: Der Audio-Embedding-Space (41 Zeilen) hatte keinen Leser. Hier
+  // laeuft die ganze Kette ueber die echte Route: WAV -> gestubbter ears-Worker
+  // (CLAP 512-dim) -> gestubbte match_audio_samples-RPC -> Bibliothekstreffer.
+  it('POST /api/library/search-audio: Audio -> CLAP -> match_audio_samples (DB-P1-005)', async () => {
+    const backup = { SB_URL: process.env.SB_URL, SB_SERVICE_ROLE: process.env.SB_SERVICE_ROLE, RP_AGENT_KEY: process.env.RP_AGENT_KEY, RP_ENDPOINT_ID_EARS: process.env.RP_ENDPOINT_ID_EARS, RUNPOD_API_BASE: process.env.RUNPOD_API_BASE };
+    process.env.SB_URL = 'https://example.supabase.co';
+    process.env.SB_SERVICE_ROLE = 'x'.repeat(80);
+    process.env.RP_AGENT_KEY = 'rp_test_key';
+    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
+    process.env.RUNPOD_API_BASE = 'https://runpod.test/v2';
+
+    const rpcCalls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+    setAiPersistenceClientForTests({
+      rpc: async (fn: string, args: Record<string, unknown>) => {
+        rpcCalls.push({ fn, args });
+        return { data: [{ sample_id: 'bass-909-kick', similarity: 0.9912 }], error: null };
+      },
+    } as never);
+
+    const realFetch = globalThis.fetch;
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.startsWith('https://runpod.test/')) {
+        return new Response(
+          JSON.stringify({ id: 'job-1', status: 'COMPLETED', output: { result: { embedding: Array.from({ length: 512 }, (_, i) => Math.sin(i)), dim: 512 } } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return realFetch(input as never, init as never);
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+
+    try {
+      const res = await fetch(`${baseUrl}/api/library/search-audio?limit=5`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: sineWavBuffer(),
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.provider).toBe('clap-audio');
+      expect(body.model).toBe('clap-music');
+      expect(body.dims).toBe(512);
+      expect(body.results[0]).toMatchObject({ id: 'bass-909-kick', score: 0.9912 });
+
+      expect(rpcCalls).toHaveLength(1);
+      expect(rpcCalls[0].fn).toBe('match_audio_samples');
+      expect(rpcCalls[0].args.match_count).toBe(5);
+      expect((rpcCalls[0].args.query_embedding as number[])).toHaveLength(512);
+
+      // Kaltstart-fest: der Embedding-Aufruf laeuft ueber /run + Status-Polling
+      // (runLong) - NICHT ueber /runsync, das bei scale-to-zero mit IN_QUEUE endet.
+      const calledUrls = fetchSpy.mock.calls.map((c) => String(c[0]));
+      expect(calledUrls.some((u) => u.endsWith('/run'))).toBe(true);
+      expect(calledUrls.some((u) => u.includes('/status/job-1'))).toBe(true);
+      expect(calledUrls.some((u) => u.endsWith('/runsync'))).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      setAiPersistenceClientForTests(null);
+      for (const [key, value] of Object.entries(backup)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('POST /api/library/search-audio ohne Audio → 400, ohne ears-Rolle → 503', async () => {
+    const savedUrl = process.env.SB_URL;
+    const savedKey = process.env.SB_SERVICE_ROLE;
+    const savedEars = process.env.RP_ENDPOINT_ID_EARS;
+    const savedAgentKey = process.env.RP_AGENT_KEY;
+    try {
+      const empty = await fetch(`${baseUrl}/api/library/search-audio`, { method: 'POST' });
+      expect(empty.status).toBe(400);
+      expect((await empty.json()).error).toBe('EMPTY_AUDIO');
+
+      process.env.SB_URL = 'https://example.supabase.co';
+      process.env.SB_SERVICE_ROLE = 'x'.repeat(80);
+      delete process.env.RP_ENDPOINT_ID_EARS;
+      delete process.env.RP_AGENT_KEY;
+      const noEars = await fetch(`${baseUrl}/api/library/search-audio`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: sineWavBuffer(),
+      });
+      expect(noEars.status).toBe(503);
+      expect((await noEars.json()).error).toBe('ears-not-configured');
+    } finally {
+      if (savedUrl === undefined) delete process.env.SB_URL; else process.env.SB_URL = savedUrl;
+      if (savedKey === undefined) delete process.env.SB_SERVICE_ROLE; else process.env.SB_SERVICE_ROLE = savedKey;
+      if (savedEars === undefined) delete process.env.RP_ENDPOINT_ID_EARS; else process.env.RP_ENDPOINT_ID_EARS = savedEars;
+      if (savedAgentKey === undefined) delete process.env.RP_AGENT_KEY; else process.env.RP_AGENT_KEY = savedAgentKey;
+    }
   });
 
   it('POST /api/session/reset verlangt den Studio-Token (401)', async () => {

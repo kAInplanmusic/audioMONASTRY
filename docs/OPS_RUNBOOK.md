@@ -95,3 +95,67 @@ RTO ~2 min (entpacken) bzw. ~10 min inkl. `npm ci` + `npm run build`.
 
 **Nicht im Backup (bewusst):** `.env`/Secrets (getrennt verwahren), Supabase-DB
 (eigene Backups), statische Medienbibliothek (siehe Scope).
+
+## 8. Deploy + Rollback (PROD-P0-003 — 2026-09-17 real auf einer Hetzner-Instanz durchgespielt)
+
+**Ziel:** Nachweis, dass `deploy.sh` gegen eine echte Instanz faehrt, der
+Health-Check greift und ein BEWUSSTER Rollback die Vorversion zurueckbringt.
+Der Punkt stand bis 2026-09-17 als BLOCKED im SSOT ("Hetzner-Token ungueltig") -
+das war ueberholt: das Token ist gueltig (API-Antwort HTTP 200).
+
+**Instanz:** `audiomonastry-drill` (cx23, 167.235.20.245, nbg1, Ubuntu 24.04,
+Docker 29.1.3 + Compose 2.40.3, Firewall `audiomonastry-drill` oeffnet 22/80/443).
+Ohne `DEPLOY_DOMAIN` bleibt `DOMAIN` leer, Compose setzt dann `:80`
+(reiner HTTP-Test ohne ACME) - genau dafuer ist der Default da.
+
+```bash
+# Deploy (lokal bauen, Images per ssh uebertragen, remote starten)
+DEPLOY_HOST=167.235.20.245 DEPLOY_SSH_KEY=$HOME/.ssh/id_ed25519 \
+DEPLOY_MODE=docker DEPLOY_SYNC_ENV=1 DEPLOY_SMOKE=1 ./deploy.sh
+
+# Rollout mit neuem Versionsstempel (ohne package.json anzufassen)
+DEPLOY_HOST=167.235.20.245 DEPLOY_SSH_KEY=$HOME/.ssh/id_ed25519 \
+DEPLOY_MODE=docker DEPLOY_SYNC_ENV=0 DEPLOY_SMOKE=1 \
+DEPLOY_VERSION=1.210.002-drill ./deploy.sh
+
+# Rollback (Befehl, den deploy.sh selbst ausgibt: das Skript taggt vor jedem
+# Deploy das LAUFENDE Image als samplemonk:hetzner-rollback)
+ssh root@167.235.20.245 'docker tag samplemonk:hetzner-rollback samplemonk:hetzner \
+  && cd /opt/samplemonk \
+  && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate sample-monk'
+```
+
+**Nachweis (2026-09-17, gemessen):**
+
+| Schritt | Ergebnis |
+|---|---|
+| Deploy v1 | `EXIT=0`, `docker compose ps`: `samplemonk` + `samplemonk-master` **healthy**, `samplemonk-caddy` up |
+| Health von aussen | `curl http://167.235.20.245/api/health` → `{"status":"ok","version":"1.210.001"}` |
+| Smoke mit Studio-Token | `/api/health` 200, `/api/cloud/health` 200 (`supabase: ok (service_role)`), `/api/master/health` 200 (`master-player 2.0.0`) |
+| Deploy v2 (`DEPLOY_VERSION=1.210.002-drill`) | `EXIT=0`, Health → `{"status":"ok","version":"1.210.002-drill"}` |
+| Rollback (Befehl oben) | Container recreated + gestartet, Health → `{"status":"ok","version":"1.210.001"}`, App **healthy**, Image-SHA `sha256:41106b55e92f…` = exakt der v1-Build |
+| Cost-Stop | Instanz nach dem Drill geloescht |
+
+**Warum die Version im Health-Endpunkt steht:** Ohne sie ist ein Rollback von
+aussen nicht unterscheidbar ("`{"status":"ok"}` bleibt `{"status":"ok"}`").
+`deploy.sh` uebergibt die Version aus `package.json` als Build-Arg
+(`DEPLOY_VERSION` ueberschreibt sie), das Dockerfile setzt
+`AUDIOMONASTRY_VERSION`, `/api/health` nennt sie als `version` (`dev` ohne
+Stempel). Das Argument steht im Dockerfile bewusst NACH den teuren Layern
+(`COPY --chown` von dist/services/node_modules): stand es davor, baute ein
+reiner Versionswechsel den kompletten Runtime-Stage neu.
+
+**Operative Messwerte aus dem Drill (wichtig fuer die Planung):**
+
+- Lokaler Image-Build: ~5 min warm (Builder-Stage gecacht), ~30 min kalt. Der
+  fruehere `RUN chown -R node:node /app` brauchte allein >20 min (overlayfs
+  kopierte jede der ~50k Dateien aus 305 MB node_modules); jetzt
+  `COPY --chown=node:node` in einem Durchlauf.
+- `docker save | ssh docker load` uebertraegt beide Images UNKOMPRIMIERT
+  (~2,65 GB: app 1,43 GB + master-player 1,22 GB) und brauchte ~17 min je
+  Deploy. Fuer haeufige Deploys ist eine Registry (GHCR) statt Image-Transfer
+  der richtige Weg; `DEPLOY_REMOTE_BUILD=1` baut auf dem Ziel, spart den
+  Transfer, braucht dort aber npm/mediasoup-Build.
+- Deploy-Skript waehrend eines laufenden Deploys NICHT editieren: bash liest
+  Skripte stueckweise - eine Aenderung mitten im Lauf brach den Drill mit
+  `uild: Befehl nicht gefunden` ab (Lehre aus diesem Lauf).

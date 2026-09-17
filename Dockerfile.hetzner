@@ -62,16 +62,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Gebautes Frontend + gebuendeltes Server-Bundle
-COPY --from=builder /app/dist ./dist
+# Gebautes Frontend + gebuendeltes Server-Bundle.
+# Wichtig: `--chown=node:node` direkt beim COPY statt eines spaeteren
+# `chown -R` - der rekursive Lauf musste auf overlayfs jede der ~50k Dateien
+# (305 MB node_modules) kopieren und brauchte im Deploy-Drill 2026-09-17 ueber
+# 20 Minuten (einheitliche Besitzrechte, aber ohne zweiten Durchlauf).
+COPY --chown=node:node --from=builder /app/dist ./dist
 
 # Services (z. B. vorkompilierter Mixer) + node_modules (inkl. mediasoup/socket.io)
-COPY --from=builder /app/services ./services
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
+COPY --chown=node:node --from=builder /app/services ./services
+COPY --chown=node:node --from=builder /app/node_modules ./node_modules
+COPY --chown=node:node --from=builder /app/package.json ./
 
-# Nicht-root Nutzer (node:22-slim bringt den User "node" mit)
-RUN chown -R node:node /app
+# Nicht-root Nutzer (node:22-slim bringt den User "node" mit). Das App-Root
+# bleibt beschreibbar (z. B. VISION_ARTIFACT_DIR unter /app) - ohne Rekursion.
+RUN chown node:node /app
+
+# PROD-P0-003: Build-Version im Image (deploy.sh uebergibt sie aus package.json).
+# Sie ist ein ENV im Runtime-Stage und damit von aussen pruefbar
+# (/api/health -> version) - genau das macht einen Rollback nachweisbar.
+# Bewusst ERST HIER (nach copy/chown): ein reiner Versionswechsel invalidiert
+# dadurch nur diese letzten Layer. Stand er vor dem apt-Layer, baute ein
+# DEPLOY_VERSION-Wechsel im Drill 2026-09-17 den kompletten Stage neu.
+ARG BUILD_VERSION=dev
+ENV AUDIOMONASTRY_VERSION=$BUILD_VERSION
+
 USER node
 
 EXPOSE 8080

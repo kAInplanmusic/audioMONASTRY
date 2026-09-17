@@ -20,6 +20,14 @@ import { orchestralSamples } from '../../src/data/orchestralLibrary';
 import { PRESET_SAMPLE_DATABASE } from '../../src/data/samples';
 import { GenerateVoiceSchema, LibrarySearchSchema } from '../../src/types/zod/schemas';
 import { buildWebRtcConfigResponse } from '../webrtcConfig.ts';
+import { RunPodProvider } from '../../src/core/ai/orchestrator/runpodProvider';
+import {
+  AUDIO_EMBED_MODEL,
+  AudioSearchError,
+  extractAudioEmbedding,
+  parseAudioSearchLimit,
+  toAudioSearchResults,
+} from '../../src/core/library/audioSearch';
 import { execFile } from 'child_process';
 import { randomBytes } from 'crypto';
 import express, { type Express } from 'express';
@@ -83,6 +91,56 @@ export function registerMediaRoutes(app: Express): void {
         console.warn('[audio-encode] fehlgeschlagen:', code, (error as Error).message);
         return res.status(status).json({ error: code, message: (error as Error).message });
       }
+    },
+  );
+
+  // --- POST /api/library/search-audio → Aehnlichkeitssuche im AUDIO-Space (DB-P1-005) ---
+  // Body: WAV binaer. Query: ?limit=1..50 (Default 10).
+  // Kette: Audio -> CLAP-Embedding (ears-Rolle) -> match_audio_samples (pgvector).
+  // Vorher hatte der Audio-Index (sample_audio_embeddings, 41 Zeilen aus dem
+  // Batch-Indexer) keinen Leser; die Suche lief nur ueber den TEXT-Space.
+  // Ehrliche Fehler statt leerer Trefferlisten: fehlt Supabase oder die
+  // ears-Rolle, sagt die Route das ausdruecklich.
+  app.post(
+    '/api/library/search-audio',
+    express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '50mb' }),
+    async (req, res) => {
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      if (!body.length) {
+        return res.status(400).json({ error: 'EMPTY_AUDIO', message: 'Audio-Body fehlt' });
+      }
+      const limit = parseAudioSearchLimit((req.query as { limit?: unknown }).limit);
+      if (!supabaseUrl() || !supabaseServerKey()) {
+        return res.status(503).json({
+          error: 'audio-index-not-configured',
+          message: 'Supabase (SB_URL/SB_SERVICE_ROLE) fehlt - dort liegt der Audio-Index',
+        });
+      }
+      const provider = new RunPodProvider('ears');
+      if (!provider.available) {
+        return res.status(503).json({
+          error: 'ears-not-configured',
+          message: 'RP_ENDPOINT_ID_EARS / RP_AGENT_KEY|RP_API_KEY fehlt',
+        });
+      }
+      let embedding: number[];
+      try {
+        const output = await provider.runLong('audio.embed', AUDIO_EMBED_MODEL, {
+          audioBase64: body.toString('base64'),
+        });
+        embedding = extractAudioEmbedding(output);
+      } catch (error) {
+        const code = error instanceof AudioSearchError ? error.code : 'EMBED_FAILED';
+        console.warn('[library-audio-search] Embedding fehlgeschlagen:', code, (error as Error).message);
+        return res.status(502).json({ error: code, message: (error as Error).message });
+      }
+      const matches = await aiPersistence.rpcMatchAudioSamples(embedding, limit);
+      return res.json({
+        provider: 'clap-audio',
+        model: AUDIO_EMBED_MODEL,
+        dims: embedding.length,
+        results: toAudioSearchResults(matches),
+      });
     },
   );
 

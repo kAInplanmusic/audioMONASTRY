@@ -73,12 +73,18 @@ fi
 SSH=(ssh -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
 SCP_OPTS=(-i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new)
 
+# PROD-P0-003: App-Version aus package.json als Build-Arg mitgeben, damit
+# /api/health die laufende Version nennt (Deploy-/Rollback-Nachweis).
+# DEPLOY_VERSION ueberschreibt sie bewusst (z. B. fuer einen Rollback-Drill auf
+# einen aelteren Stand) - ohne die package.json anzufassen.
+APP_VERSION="${DEPLOY_VERSION:-$(node -p "require('./package.json').version" 2>/dev/null || echo dev)}"
+
 docker_build() {
   local dockerfile="$1" tag="$2" context="$3"
   if [[ -n "$DEPLOY_PLATFORM" ]] && docker buildx version >/dev/null 2>&1; then
-    docker buildx build --platform "$DEPLOY_PLATFORM" -t "$tag" -f "$dockerfile" "$context" --load
+    docker buildx build --platform "$DEPLOY_PLATFORM" -t "$tag" -f "$dockerfile" "$context" --build-arg "BUILD_VERSION=$APP_VERSION" --load
   else
-    docker build -t "$tag" -f "$dockerfile" "$context"
+    docker build -t "$tag" -f "$dockerfile" "$context" --build-arg "BUILD_VERSION=$APP_VERSION"
   fi
 }
 
