@@ -52,8 +52,14 @@ test('P0-7: Leertaste in Eingabefeldern löst keinen Transport aus', async ({ pa
   const input = page.locator('input[type="text"], textarea').first();
   if (await input.count()) {
     await input.click();
-    await input.type('a b');
-    await expect(input).toHaveValue(/a b/);
+    // Firefox fokussiert per Klick nicht zuverlaessig: ohne Fokus geht die
+    // Leertaste an das Dokument und scrollt die Seite (CI-Fund 2026-09-17:
+    // window.scrollY sprang um 2217 px). Fokus explizit setzen und pruefen.
+    await input.focus();
+    await expect(input).toBeFocused();
+    await input.press('Space');
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue(/\s/);
   }
   // Kein Page-Scroll-Sprung durch die Leertaste.
   expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollBefore)).toBeLessThan(50);
