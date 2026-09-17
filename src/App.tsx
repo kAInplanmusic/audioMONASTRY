@@ -257,7 +257,15 @@ function AppComponent() {
           if (target) {
             const current = moduleStates[target.id] || 'OFF';
             releaseLock(target.id, webRTCManager.userId);
-            setModuleState(target.id, current === 'OFF' ? 'AUTO_AI' : 'OFF');
+            const turningOn = current === 'OFF';
+            setModuleState(target.id, turningOn ? 'AUTO_AI' : 'OFF');
+            // Konsistenz zum Nav-Icon (handleNavSelect): mit dem Modul auch die
+            // ANSICHT markieren bzw. loesen und an die Session melden. Ohne das
+            // bleibt nach dem Hotkey ein unmarkiertes Nav-Icon stehen (im Test
+            // als fehlendes aria-current sichtbar).
+            setActiveNav(turningOn ? target.id : '');
+            if (turningOn) webRTCManager.sendSessionNav(target.id);
+            document.getElementById(`rack-${target.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }
         }
         return;

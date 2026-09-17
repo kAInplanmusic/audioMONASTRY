@@ -43,17 +43,22 @@ test.describe('Tastatur-Navigation', () => {
 });
 
 test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', () => {
-  test('Space togglet den Transport (Play/Stop)', async ({ page }) => {
+  test('Space ohne Halter lässt den Transport unberührt (P0-1: nur der DJ togglet)', async ({ page }) => {
     await page.goto('/');
     await page.getByLabel('audioMONASTRY starten').click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
+    // P0-1 (revidiert): Play/Stop darf NUR der mixerMONK-Halter (DJ); App.tsx
+    // bricht mit `if (!mainHolder) return` ab. Ohne Session-Halter ist die
+    // Leertaste deshalb absichtlich wirkungslos - das ist die Sicherheitsregel,
+    // kein Fehler. Der Toggle-mit-Halter-Fall braucht eine Zwei-Client-Session.
     const transport = page.locator('#rack-masterplayer');
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
+
     await page.keyboard.press('Space');
-    await expect(transport.getByText('PLAY', { exact: true })).toBeVisible();
-    await page.keyboard.press('Space');
+
     await expect(transport.getByText('STOP', { exact: true })).toBeVisible();
+    await expect(transport.getByText('PLAY', { exact: true })).toHaveCount(0);
   });
 
   test('Ctrl/Cmd+1 togglet das erste Registry-Plugin (dropMONK, Index 1)', async ({ page }) => {
