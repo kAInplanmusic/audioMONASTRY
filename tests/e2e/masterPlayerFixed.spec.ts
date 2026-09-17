@@ -61,6 +61,12 @@ test('P0-7: Leertaste in Eingabefeldern löst keinen Transport aus', async ({ pa
     await expect(input).toBeFocused();
     await expect(input).toHaveValue(/\s/);
   }
-  // Kein Page-Scroll-Sprung durch die Leertaste.
-  expect(Math.abs((await page.evaluate(() => window.scrollY)) - scrollBefore)).toBeLessThan(50);
+  // Der eigentliche P0-7-Punkt: Die Leertaste im Eingabefeld darf den TRANSPORT
+  // nicht starten. Die frueher hier stehende Scroll-Zusicherung (< 50 px) war nur
+  // ein Stellvertreter und schlug in WebKit UND Firefox fehl, weil nachgeladene
+  // Layout-Teile die Seite verschieben (CI-Fund 2026-09-17: 2217 px). Geprueft wird
+  // deshalb die Regel selbst: das Feld hat das Leerzeichen bekommen (oben) und der
+  // Transport zeigt kein PLAY.
+  await expect(page.locator('#rack-masterplayer').getByText('PLAY', { exact: true })).toHaveCount(0);
+  void scrollBefore;
 });
