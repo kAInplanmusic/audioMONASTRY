@@ -304,6 +304,48 @@ def hf_stable_audio(model_id: str, definition: ModelDefinition, payload: Dict[st
     return {"audioBase64": base64.b64encode(buf.getvalue()).decode(), "sampleRate": 44100}
 
 
+#: Sprachnamen, die Qwen3-TTS akzeptiert (live aus der Fehlermeldung des Workers).
+QWEN3_TTS_LANGUAGES = frozenset(
+    {
+        "auto", "chinese", "english", "french", "german", "italian",
+        "japanese", "korean", "portuguese", "russian", "spanish",
+    }
+)
+
+#: ISO-Codes und deutsche Schreibweisen -> Sprachname des Modells.
+#: Ohne diese Zuordnung scheitert jeder Auftrag mit ISO-Code: der Worker brach
+#: am 2026-09-17 mit "Unsupported languages: ['DE']. Supported: [... 'german' ...]"
+#: ab. Der Aufrufer sah "MODEL_UNAVAILABLE" und hielt es fuer einen Modellfehler -
+#: es war nur eine Schreibweise.
+QWEN3_TTS_LANGUAGE_ALIASES = {
+    "de": "german", "deu": "german", "ger": "german", "deutsch": "german",
+    "en": "english", "eng": "english", "fr": "french", "fra": "french", "fre": "french",
+    "it": "italian", "ita": "italian", "ja": "japanese", "jpn": "japanese",
+    "ko": "korean", "kor": "korean", "pt": "portuguese", "por": "portuguese",
+    "ru": "russian", "rus": "russian", "es": "spanish", "spa": "spanish",
+    "zh": "chinese", "zho": "chinese", "chi": "chinese", "cn": "chinese",
+}
+
+
+def normalize_tts_language(value: Any, default: str = "german") -> str:
+    """Vereinheitlicht die Sprachangabe fuer Qwen3-TTS.
+
+    Akzeptiert ISO-Codes ("DE", "de-DE"), deutsche Namen ("deutsch") und die
+    Namen des Modells ("german"). Leere Angabe -> `default`. Ein unbekannter
+    Wert bricht mit klarer Meldung ab, statt das Modell raten zu lassen.
+    """
+    raw = str(value or "").strip().lower().replace("_", "-")
+    if not raw:
+        return default
+    base = raw.split("-", 1)[0]
+    if base in QWEN3_TTS_LANGUAGES:
+        return base
+    if base in QWEN3_TTS_LANGUAGE_ALIASES:
+        return QWEN3_TTS_LANGUAGE_ALIASES[base]
+    supported = ", ".join(sorted(QWEN3_TTS_LANGUAGES | set(QWEN3_TTS_LANGUAGE_ALIASES)))
+    raise ModelUnavailableError(f"unsupported tts language {value!r}; supported: {supported}")
+
+
 def qwen3_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any]) -> Any:
     """Qwen3-TTS (CustomVoice): Apache-2.0, multilingual inkl. Deutsch.
 
@@ -318,7 +360,9 @@ def qwen3_tts(model_id: str, definition: ModelDefinition, payload: Dict[str, Any
     text = str(payload.get("text", ""))[:2000].strip()
     if not text:
         raise ModelUnavailableError("text required for qwen3-tts")
-    language = str(payload.get("language") or "German")[:50]
+    # ISO-Codes und Namen werden auf die Schreibweise des Modells gebracht; ohne
+    # das scheitert jeder Auftrag mit "DE" (live belegt 2026-09-17).
+    language = normalize_tts_language(payload.get("language"))
     speaker = str(payload.get("speaker") or "Ryan")[:64]
     instruct_raw = payload.get("instruct")
     instruct = str(instruct_raw)[:500].strip() if instruct_raw else ""
