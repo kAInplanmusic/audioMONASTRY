@@ -31,21 +31,26 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
     w.__audioMonastry.audioEngine.setPlaybackMode('v2');
   });
 
-  // Studio starten (echter AudioContext + Worklet-Load) und mixerMONK aktivieren.
+  // Studio starten (echter AudioContext + Worklet-Load). mixerMONK muss NICHT
+  // eingeschaltet werden: er ist die Main-Einspeisung und startet seit der
+  // Betreiberregel 2026-09-17 aktiv (COLLAB-P0-004) - der Power-Button ist bewusst
+  // gesperrt, ein Klick darauf lief in den Timeout.
   await page.getByLabel('audioMONASTRY starten').click();
   await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: /mixerMONK Power/i }).click();
   await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15_000 });
 
-  // MAIN-Schutz: play() läuft nur, wenn mixerMONK den PRO-Halter hat.
-  // Power aktiviert lediglich (AUTO_AI) – das ⋮-Menü promotet zu PRO (Lock).
+  // MAIN-Schutz (P0-1/COLLAB-P0-004): den PRO-Halter (Main-Out) darf nur der
+  // jeweilige Lock-Owner erlangen - in einer Einzelbrowser-Sitzung ohne Halter
+  // bleibt die Promotion deshalb AUS. Genau diese Sperre wird geprueft; der
+  // V2-Wiedergabepfad MIT Halter braucht eine Zwei-Client-Session und ist im
+  // Register als offene Luecke vermerkt.
   await page.getByRole('button', { name: /mixerMONK Menü/i }).click();
   await expect
     .poll(async () => page.evaluate(() => {
       const w = window as unknown as { __audioMonastry: { audioEngine: { isMainHolderActive: () => boolean } } };
       return w.__audioMonastry.audioEngine.isMainHolderActive();
     }), { timeout: 10_000 })
-    .toBe(true);
+    .toBe(false);
 
   // Engine muss im V2-Modus stehen.
   await expect
@@ -55,20 +60,20 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
     }), { timeout: 15_000 })
     .toBe('v2');
 
-  // Play über die echte Engine-Bridge – V2LiveSink verbindet sich als AudioWorklet.
+  // P0-1/COLLAB-P0-004: Ohne Main-Out-Halter (DJ) darf niemand den Transport
+  // starten - auch nicht ueber die Engine-Bridge. Statt eines erwarteten Starts
+  // wird die Sperre geprueft; der positive V2-Wiedergabepfad braucht eine
+  // Zwei-Client-Session mit Halter und steht als offene Luecke im Register.
   await page.evaluate(async () => {
     const w = window as unknown as { __audioMonastry: { audioEngine: { play: () => Promise<void> } } };
     await w.__audioMonastry.audioEngine.play();
   });
   await expect
     .poll(async () => page.evaluate(() => {
-      const w = window as unknown as { __audioMonastry: { audioEngine: { isPlaying?: boolean; v2LiveSink?: { isConnected?: boolean } } } };
-      return {
-        playing: w.__audioMonastry.audioEngine.isPlaying ?? false,
-        v2Connected: w.__audioMonastry.audioEngine.v2LiveSink?.isConnected ?? false,
-      };
-    }), { timeout: 15_000 })
-    .toEqual({ playing: true, v2Connected: true });
+      const w = window as unknown as { __audioMonastry: { audioEngine: { isPlaying?: boolean } } };
+      return w.__audioMonastry.audioEngine.isPlaying ?? false;
+    }), { timeout: 5_000 })
+    .toBe(false);
 
   // Kurz laufen lassen (mehrere Audio-Quanten, echte Scheduler-Steps).
   await page.waitForTimeout(500);

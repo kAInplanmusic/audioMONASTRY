@@ -79,8 +79,10 @@ test('P1-4 Scratchpad: Snapshot überlebt Reload, DnD beide Richtungen, Clipboar
     target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
     target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
   }, { mime: MONK_SCRATCH_MIME });
-  // Modul wurde aktiviert (AUTO_AI), weil der Eintrag zum Modul passt.
-  await expect(page.locator('#rack-mixer button[aria-pressed="true"]')).toBeVisible({ timeout: 10_000 });
+  // Der Mixer ist seit der Betreiberregel 2026-09-17 ohnehin aktiv (COLLAB-P0-004),
+  // und das Rack enthaelt mehrere Toggle-Controls - der frühere Locator war
+  // strikt mehrdeutig (5 Treffer). Geprueft wird der Zustand ueber das Label.
+  await expect(page.locator('#rack-mixer').getByLabel('mixerMONK aktiv')).toBeVisible({ timeout: 10_000 });
 
   // ------------------------------ 6) Clipboard: Copy → Paste liefert gültiges JSON
   // Scratchpad-Overlay schließen, damit der Copy-Button im Rack klickbar ist.

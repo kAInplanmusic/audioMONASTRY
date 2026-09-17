@@ -391,6 +391,34 @@ function AppComponent() {
     });
   }, [setModuleState]);
 
+  /**
+   * Startet einen Initialisierungsschritt mit Zeitgrenze.
+   *
+   * Befund 2026-09-17 (CI-P1-002): `startAudio()` kann HÄNGEN, ohne abzulehnen -
+   * dann lief `await startAudio()` nie weiter, `setIsStarted(true)` wurde nie
+   * erreicht und das Studio blieb dauerhaft auf dem Start-Screen stehen. Genau das
+   * schließt der Kommentar unten aus („darf NICHT auf dem Start-Screen hängen
+   * bleiben"). Ein abgelehnter Schritt war schon vorher abgesichert; jetzt auch der
+   * nicht endende: nach `timeoutMs` läuft der Start weiter und der Schritt darf im
+   * Hintergrund fertig werden.
+   */
+  const startStepWithTimeout = async <T,>(step: Promise<T>, label: string, timeoutMs: number): Promise<void> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const guard = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        console.warn(`[startApp] ${label} ohne Rückmeldung nach ${timeoutMs} ms – App startet trotzdem`);
+        resolve();
+      }, timeoutMs);
+    });
+    try {
+      await Promise.race([step.then(() => undefined).catch((e) => {
+        console.error(`[startApp] ${label} fehlgeschlagen (App startet trotzdem):`, e);
+      }), guard]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  };
+
   const startApp = async () => {
       // UX-Debug: markiert den Start-Ablauf sichtbar in der Konsole.
       console.log('[startApp] Aktion ausgelöst – Audio-Init beginnt');
@@ -398,11 +426,7 @@ function AppComponent() {
       // Backend (WebRTC-Signaling) oder einzelne Worklets nicht verfügbar sind,
       // darf die App NICHT auf dem Start-Screen hängen bleiben – sie startet
       // trotzdem und protokolliert den Fehler konsolen-seitig.
-      try {
-        await startAudio();
-      } catch (e) {
-        console.error('[startApp] startAudio fehlgeschlagen (App startet trotzdem):', e);
-      }
+      await startStepWithTimeout(startAudio(), 'startAudio', 12_000);
       console.log('[startApp] startAudio done');
       // COLLAB-P0-004: Den Startzustand in den Audio-Router nachziehen.
       // mixerMONK startet aktiv, aber `routeModuleState` wird sonst NUR aus

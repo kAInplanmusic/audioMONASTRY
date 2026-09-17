@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { chromium } from 'playwright';
 import { newStudioContext } from './helpers/studioAuth';
+import { navButton } from './helpers/studioNav';
 
 /**
  * Live-2-Browser-WebRTC-Test (automatisierter Teil der offenen Aufgaben (MASTERTODOENDE.json)).
@@ -79,9 +80,19 @@ test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
 
     // Offer/Answer + DataChannel: PLUGIN_STATE_UPDATE (AUTO_AI) muss von A nach B
     // über den WebRTC-DataChannel ankommen (ohne DataChannel keine State-Sync).
-    await pageA.getByTitle('eqMONK').click();
-    await expect(pageB.getByTitle('eqMONK')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
-    await expect(pageA.getByTitle('eqMONK')).toHaveAttribute('aria-current', 'page');
+    // Falsche Erwartung korrigiert (2026-09-17): die gespiegelte Navigation wird
+    // NICHT als aria-current in Bs eigener Nav markiert - aria-current zeigt die
+    // EIGENE Ansicht. Der Server relayt die Fremd-Navigation als Remote-Badge
+    // ("<userId>->eq", nur ab xl-Viewport sichtbar), genau wie collab.spec.ts es
+    // prueft. Zuvor lief die Zusicherung deshalb gegen ein fremdes Element
+    // ("Received: ''").
+    await navButton(pageA, 'EQ').click();
+    await expect(
+      pageB.getByText(/u[a-z0-9]+→eq$/),
+      'Client B zeigt die gespiegelte eqMONK-Navigation nicht an',
+    ).toBeVisible({ timeout: 15_000 });
+    // Sanity: A selbst bekommt die eigene Navigation nicht als Remote-Badge.
+    await expect(pageA.getByText(/u[a-z0-9]+→eq$/)).toHaveCount(0);
 
     // Harte WebRTC-Assertion: Beide Browser haben mindestens einen Peer mit
     // offenem DataChannel und verbundenem ICE (Offer/Answer wirklich gelaufen).
