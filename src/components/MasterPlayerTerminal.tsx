@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useState, type DragEvent } from 'react';
 import { random } from '../utils/random';
+import {
+  AUDIO_EXPORT_FORMATS,
+  exportFileName,
+  exportFormatInfo,
+  type AudioExportFormat,
+} from '../utils/audioExportFormats';
 import { Activity, Download, RefreshCw, Upload, X } from 'lucide-react';
 
 type Metrics = {
@@ -222,6 +228,9 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
   const [result, setResult] = useState<MasterResponse | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [online, setOnline] = useState<boolean | null>(null);
+  // FEAT-P3-004: Codec-Export (WAV/MP3/FLAC/AAC/OGG) über /api/audio/encode.
+  const [exportFormat, setExportFormat] = useState<AudioExportFormat>('wav');
+  const [exportBusy, setExportBusy] = useState(false);
 
   // Mastering-Parameter
   const [eqLow, setEqLow] = useState(0);
@@ -324,6 +333,51 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
     setResult(res);
     if (res.data) setAudioUrl(`data:audio/wav;base64,${res.data}`);
   };
+
+  // FEAT-P3-004: Export in WAV/MP3/FLAC/AAC/OGG. WAV bleibt der direkte
+  // Download (bit-identisch zum Bounce); alle anderen Formate kodiert der
+  // Server (/api/audio/encode, ffmpeg) und liefert die Datei zurueck.
+  const exportBaseName = mode === 'mix' ? 'audiomonastry-mixdown' : 'audiomonastry-master';
+
+  const runExport = useCallback(async () => {
+    const info = exportFormatInfo(exportFormat);
+    if (!audioUrl || !info) return;
+    const fileName = exportFileName(info, exportBaseName);
+    const triggerDownload = (url: string) => {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
+    if (!info.codec) {
+      triggerDownload(audioUrl);
+      return;
+    }
+    setExportBusy(true);
+    setError(null);
+    try {
+      const source = await (await fetch(audioUrl)).blob();
+      const params = new URLSearchParams({ format: info.format, name: exportBaseName, title: fileName });
+      const resp = await fetch(`/api/audio/encode?${params.toString()}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: source,
+      });
+      if (!resp.ok) {
+        const detail = (await resp.json().catch(() => ({}))) as { message?: string; error?: string };
+        throw new Error(detail.message || detail.error || `Export fehlgeschlagen (${resp.status})`);
+      }
+      const url = URL.createObjectURL(await resp.blob());
+      triggerDownload(url);
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setExportBusy(false);
+    }
+  }, [audioUrl, exportBaseName, exportFormat]);
 
   const run = async () => {
     setBusy(true);
@@ -523,13 +577,26 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
           {audioUrl && (
             <div className="flex items-center gap-3 flex-wrap">
               <audio controls src={audioUrl} className="h-9 max-w-full" />
-              <a
-                href={audioUrl}
-                download={mode === 'mix' ? 'audiomonastry-mixdown.wav' : 'audiomonastry-master.wav'}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200 text-[9px] font-bold tracking-widest uppercase hover:bg-fuchsia-500/20 transition-colors"
+              <label className="sr-only" htmlFor="mp-export-format">Exportformat</label>
+              <select
+                id="mp-export-format"
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value as AudioExportFormat)}
+                className="h-9 rounded-full border border-neutral-700 bg-neutral-900 px-3 text-[9px] font-bold tracking-widest uppercase text-neutral-300"
               >
-                <Download className="w-3 h-3" /> WAV speichern
-              </a>
+                {AUDIO_EXPORT_FORMATS.map((f) => (
+                  <option key={f.format} value={f.format}>{f.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={runExport}
+                disabled={exportBusy}
+                aria-label={`Export als ${exportFormat.toUpperCase()}`}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-200 text-[9px] font-bold tracking-widest uppercase hover:bg-fuchsia-500/20 transition-colors disabled:opacity-50"
+              >
+                <Download className="w-3 h-3" /> {exportBusy ? 'Exportiere …' : 'Export'}
+              </button>
             </div>
           )}
         </div>

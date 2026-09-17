@@ -9,7 +9,7 @@
  */
 import { PostgrestClient } from '@supabase/postgrest-js';
 import { aiLogger } from './aiLogger';
-import { supabaseServerKey } from '../../../config/supabaseKeys';
+import { supabaseServerKey, supabaseUrl } from '../../../config/supabaseKeys';
 import type { AiJob, AiSession } from './types';
 
 let client: PostgrestClient | null = null;
@@ -23,7 +23,13 @@ export function setAiPersistenceClientForTests(mock: PostgrestClient | null): vo
 function getClient(): PostgrestClient | null {
   if (testClient !== null) return testClient;
   if (client) return client;
-  const url = (process.env.SUPABASE_URL ?? '').trim();
+  // AI-P1-007 (live gemessen 2026-09-17): hier stand `process.env.SUPABASE_URL`.
+  // Die .env benennt die URL aber `SB_URL` (seit der Umbenennung 2026-09-13,
+  // siehe src/config/supabaseKeys.ts) - der Client wurde deshalb nie gebaut und
+  // JEDER Schreibpfad lief still ins Leere. Genau das ist der in supabaseKeys.ts
+  // beschriebene Fehlertyp (stummer No-Op statt Fehler). `supabaseUrl()` kennt
+  // SB_URL vor SUPABASE_URL.
+  const url = supabaseUrl();
   // EINE Prioritätsordnung (src/config/supabaseKeys.ts): der tote Legacy-PAT darf
   // den gültigen Service-Role-Key nicht mehr verdecken (Live-Bug 2026-09-11).
   const key = supabaseServerKey();
@@ -37,6 +43,27 @@ function getClient(): PostgrestClient | null {
     return null;
   }
   return client;
+}
+
+/** Eine Zeile aus `ai_evaluations` in der Form, die das Laden braucht (AI-P1-007). */
+export interface PersistedEvaluation {
+  id: string;
+  pluginId: string;
+  task: string;
+  model: string;
+  provider: string;
+  /** `input` ist jsonb: je nach Schreibpfad ein JSON-String ODER ein Objekt. */
+  input: unknown;
+  output: unknown;
+  score: number;
+  metrics: Record<string, unknown>;
+  /** ISO-Zeitstempel aus der DB. */
+  createdAt: string;
+}
+
+/** Ist eine Supabase-Verbindung konfiguriert? (Für ehrliche Diagnose statt No-Op.) */
+export function isAiPersistenceConfigured(): boolean {
+  return getClient() !== null;
 }
 
 export const aiPersistence = {
@@ -199,6 +226,48 @@ export const aiPersistence = {
       });
     } catch (error) {
       aiLogger.warn('supabase savePromptVersion failed', { pluginId: entry.pluginId, error: (error as Error).message });
+    }
+  },
+
+  /**
+   * AI-P1-007: Eval-Zeilen wieder einlesen (Gegenstueck zu `saveEvaluation`).
+   * Ohne Client oder bei Fehlern kommt `[]` zurueck - der Aufrufer entscheidet,
+   * ob das "nichts gespeichert" oder "nicht erreichbar" bedeutet (`isAiPersistenceConfigured`).
+   */
+  async loadEvaluations(query: { task: string; pluginId?: string; limit?: number }): Promise<PersistedEvaluation[]> {
+    const db = getClient();
+    if (!db) return [];
+    const limit = Number.isFinite(query.limit) && (query.limit as number) > 0 ? Math.floor(query.limit as number) : 1000;
+    try {
+      let builder = db
+        .from('ai_evaluations')
+        .select('id,plugin_id,task,model,provider,input,output,score,metrics,created_at')
+        .eq('task', query.task);
+      if (query.pluginId) builder = builder.eq('plugin_id', query.pluginId);
+      const { data, error } = await builder.order('created_at', { ascending: true }).limit(limit);
+      if (error) {
+        aiLogger.warn('supabase loadEvaluations failed', { task: query.task, error: error.message });
+        return [];
+      }
+      if (!Array.isArray(data)) return [];
+      return data.map((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          id: String(r.id ?? ''),
+          pluginId: String(r.plugin_id ?? ''),
+          task: String(r.task ?? ''),
+          model: String(r.model ?? ''),
+          provider: String(r.provider ?? ''),
+          input: r.input,
+          output: r.output,
+          score: Number(r.score ?? 0),
+          metrics: (r.metrics && typeof r.metrics === 'object' ? r.metrics : {}) as Record<string, unknown>,
+          createdAt: String(r.created_at ?? ''),
+        };
+      });
+    } catch (error) {
+      aiLogger.warn('supabase loadEvaluations failed', { task: query.task, error: (error as Error).message });
+      return [];
     }
   },
 

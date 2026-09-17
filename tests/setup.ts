@@ -38,6 +38,11 @@ for (const key of [
   'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_ACCESS_KEY', 'CFR2_SECRET_ACCESS_KEY',
   'CFR2_BUCKET', 'CFR2_URL', 'CFR2_ENDPOINT', 'CFR2_PUBLIC_URL',
   'CFS3_ENDPOINT', 'CFS3_ACCESS_KEY', 'CFS3_SECRET_KEY', 'CFS3_BUCKET',
+  // Supabase (AI-P1-007): Unit-Tests duerfen NICHT gegen die echte DB lesen
+  // oder schreiben (MOS-Ladepfad, ai_evaluations). Tests, die Persistenz
+  // brauchen, injizieren einen Mock (setAiPersistenceClientForTests).
+  'SB_URL', 'SB_SERVICE_ROLE', 'SB_SECRET', 'SB_PAT',
+  'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_SERVICE_ROLE_JWT', 'SUPABASE_SECRET', 'SUPABASE_LEGACY_PAT',
 ]) {
   delete process.env[key];
 }

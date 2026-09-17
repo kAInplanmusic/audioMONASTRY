@@ -128,8 +128,38 @@ Authorization: Bearer <RP_AGENT_KEY|RP_API_KEY|RUNPOD_API_KEY>
 
 ## 8. Bekannte Altlasten (nicht still umbenannt)
 
-- `CFR2_API_TOKEN`, `CLOUDFLARE_API_TOKEN`, `CF_API_KEY`, `CF_ACCOUNT_TOKEN` in lokaler `.env`/alter `.env.TEMPLATE`: werden von **keinem** Laufzeitcode gelesen (nur Deploy-Skripte historisch). Rotieren, da lokal vorhanden.
-- `COMET_API_KEY` in `.env`: wird im Repo nicht verwendet (nur externe Deep-Code-Integration).
+**Stand 2026-09-17 (SEC-P1-002, gemessen statt vermutet):** Die lokale `.env`
+wurde von den ungenutzten Cloudflare-/Comet-Tokens befreit. Entfernt:
+`CFR2_API_KEY`, `CF_ACCESS_TOKEN`, `CF_API_TOKEN`, `CFR2_API_TOKEN`,
+`COMET_API_KEY` (Backup der Datei: `.env.bak-<ts>-sec-p1-002`). `CF_API_KEY` und
+`CF_ACCOUNT_TOKEN` waren bereits vorher aus der `.env` verschwunden.
+
+Referenzprüfung (kein Code liest diese Namen - geprüft in `src/`, `server/`,
+`services/`, `scripts/`, `.github/`, `docker-compose*`, `Dockerfile*`,
+`Caddyfile`): einzig `CFR2_API_TOKEN` hatte einen Konsumenten,
+`scripts/wake-on-login/deploy.sh` (Fallback `CF_TOKEN`) - dieser Token war bei
+der Messung bereits **tot** (HTTP 401), das Skript war also schon vorher nicht
+lauffähig und braucht für einen Wake-on-Login-Deploy einen frischen Token per
+`CF_TOKEN`.
+
+Gültigkeitsmessung 2026-09-17 gegen `GET https://api.cloudflare.com/client/v4/user/tokens/verify`:
+
+| Token | Ergebnis | Konsequenz |
+|---|---|---|
+| `CF_API_TOKEN` | HTTP 200, `status: active` → **gültig** | aus der `.env` entfernt; **im Cloudflare-Dashboard widerrufen** (lokales Löschen macht den Token nicht ungültig) |
+| `CFR2_API_TOKEN` | HTTP 401 (Code 1000) → tot | entfernt |
+| `CF_ACCESS_TOKEN` | HTTP 401 (Code 1000) → tot | entfernt |
+| `CFR2_API_KEY`, `COMET_API_KEY` | nicht prüfbar / kein Repo-Konsument | entfernt (`COMET_API_KEY` gehört zur externen Deep-Code-Integration, nicht zum Repo) |
+
+Weiter ungenutzt in der `.env`, aber **bewusst nicht angefasst** (kein
+Repo-Konsument auffindbar, externe Werkzeuge des Betreibers sind nicht
+ausschließbar - Betreiberentscheidung, siehe SEC-P1-002): `CFS3_PUBLIC_KEY`
+(öffentlicher Schlüssel, kein Secret), `DNS_HC_TOKEN`, `GHCR_REPO`,
+`GHCR_TOKEN` (`GHCR_USERNAME`/`GHCR_PASSWORD` werden von Deploy-Skripten
+gelesen), `RP_S3_ACCESS_KEY`, `RP_S3_SECRET_KEY`, `SB_PROJECT_ID`,
+`SB_REST_ENDPOINT`, `SQ_PERSONAL_TOKEN`. Diese gehören in einen eigenen
+Aufräum-/Rotationslauf oder in die Löschung beim Anbieter; das bloße Entfernen
+aus der `.env` widerruft sie nicht.
 
 ## 3b. Hetzner Object Storage als Backup-Ziel (PROD-P0-002, 2026-09-14)
 

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import { RunPodProvider, isNonTerminalStatus } from '../src/core/ai/orchestrator/runpodProvider';
 
 const ENV_KEYS = [
   'RUNPOD_API_KEY',
@@ -238,5 +238,77 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
     const provider = new RunPodProvider('brain');
     // 10 s angenommene Jobdauer bei 1.20 USD/h = 0.00333…
     expect(provider.estimateCostUsd('llm', 'qwen3-32b')).toBeCloseTo((10 / 3600) * 1.2, 6);
+  });
+});
+
+/**
+ * DB-P1-004: Der Embedding-Batch-Indexer brach am Kaltstart ab
+ * ("Worker-Fehler: IN_QUEUE"), weil `runsync` bei scale-to-zero nur bis zu
+ * seinem Wartefenster wartet und dann den LAUFENDEN Job zurueckgibt.
+ */
+describe('DB-P1-004 · Kaltstart: runsync-Fallback + runLong', () => {
+  beforeEach(() => {
+    calls = [];
+    for (const key of ENV_KEYS) delete process.env[key];
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    for (const key of ENV_KEYS) delete process.env[key];
+  });
+
+  it('erkennt IN_QUEUE/IN_PROGRESS als nicht-terminal', () => {
+    expect(isNonTerminalStatus('IN_QUEUE')).toBe(true);
+    expect(isNonTerminalStatus('in_progress')).toBe(true);
+    expect(isNonTerminalStatus('COMPLETED')).toBe(false);
+    expect(isNonTerminalStatus(undefined)).toBe(false);
+  });
+
+  it('pollt einen per runsync nur eingereihten Job zu Ende (statt zu scheitern)', async () => {
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
+    mockFetch((url) =>
+      url.endsWith('/runsync')
+        ? jsonResponse({ id: 'job-77', status: 'IN_QUEUE' })
+        : jsonResponse({ id: 'job-77', status: 'COMPLETED', output: { result: { embedding: [0.1] } } }),
+    );
+
+    const provider = new RunPodProvider('ears');
+    const output = await provider.run('audio.embed', 'clap-music', { audioBase64: 'AA==' });
+
+    expect(output).toEqual({ result: { embedding: [0.1] } });
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://api.runpod.ai/v2/ears-ep/runsync',
+      'https://api.runpod.ai/v2/ears-ep/status/job-77',
+    ]);
+  });
+
+  it('runLong nutzt IMMER /run + Polling (Batch-Pfad nimmt den Kaltstart in Kauf)', async () => {
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_EARS = 'ears-ep';
+    mockFetch((url) =>
+      url.endsWith('/run')
+        ? jsonResponse({ id: 'job-88', status: 'IN_QUEUE' })
+        : jsonResponse({ id: 'job-88', status: 'COMPLETED', output: { result: { embedding: [0.2, 0.3] } } }),
+    );
+
+    const provider = new RunPodProvider('ears');
+    const output = await provider.runLong('audio.embed', 'clap-music', { audioBase64: 'AA==' });
+
+    expect(output).toEqual({ result: { embedding: [0.2, 0.3] } });
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://api.runpod.ai/v2/ears-ep/run',
+      'https://api.runpod.ai/v2/ears-ep/status/job-88',
+    ]);
+    // Gegenprobe: der alte Weg haette /runsync genommen.
+    expect(calls.some((c) => c.url.endsWith('/runsync'))).toBe(false);
+  });
+
+  it('runLong prueft die Konfiguration wie run', async () => {
+    const provider = new RunPodProvider('ears');
+    await expect(provider.runLong('audio.embed', 'clap-music', {})).rejects.toMatchObject({
+      code: 'ENDPOINT_NOT_CONFIGURED',
+      retryable: false,
+    });
   });
 });

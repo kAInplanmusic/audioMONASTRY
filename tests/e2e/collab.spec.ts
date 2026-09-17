@@ -165,6 +165,48 @@ test('COLLAB-P0-002: Lock-Denial + Resync stellt Server-Wahrheit wieder her', as
   }
 });
 
+test('COLLAB-P0-004 Teil 2: Halter-Uebergabe des mixerMONK per Header-Auswahl (2 Browser)', async ({ browser }) => {
+  const ctxA = await newStudioContext(browser);
+  const ctxB = await newStudioContext(browser);
+  const pageA = await ctxA.newPage();
+  const pageB = await ctxB.newPage();
+
+  try {
+    await openStudio(pageA);
+    await openStudio(pageB);
+    await expect(pageA.getByText(/SESSION 2\/4/)).toBeVisible({ timeout: 20_000 });
+
+    // A wird Halter des mixerMONK (⋮-Menue = PRO + Lock).
+    await pageA.getByLabel('mixerMONK Menü').click();
+    await expect(pageA.locator('#rack-mixer').getByText('PRO').first()).toBeVisible({ timeout: 15_000 });
+    await expect(pageB.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+
+    // Die Uebergabe-Auswahl erscheint NUR beim Halter und nennt B als Ziel.
+    const transferSelect = pageA.getByLabel('mixerMONK-Halter übergeben');
+    await expect(transferSelect).toBeVisible({ timeout: 15_000 });
+    const targetUserId = await transferSelect.locator('option').nth(1).getAttribute('value');
+    expect(targetUserId, 'kein Uebergabe-Ziel in der Auswahl').toBeTruthy();
+
+    await transferSelect.selectOption(targetUserId as string);
+
+    // B ist jetzt der Halter: eigener Lock, Zustand PRO bleibt.
+    await expect(pageB.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toHaveCount(0, { timeout: 15_000 });
+    await expect(pageB.locator('#rack-mixer').getByText('PRO').first()).toBeVisible();
+
+    // A ist nicht mehr Halter: Auswahl verschwindet, A sieht den Fremd-Lock.
+    await expect(transferSelect).toHaveCount(0, { timeout: 15_000 });
+    await expect(pageA.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+
+    // Und die Regel dahinter gilt weiter: B als NEUER Halter kann mixerMONK
+    // trotzdem nicht schliessen (MIXER_NEVER_CLOSES) - der Power-Button bleibt
+    // gesperrt. Genau das ist der Zweck des Haltermodells.
+    await expect(pageB.getByLabel('mixerMONK Power')).toBeDisabled();
+  } finally {
+    await ctxA.close();
+    await ctxB.close();
+  }
+});
+
 test('4 Browser-Kontexte → Session voll und auf allen Clients konsistent', async ({ browser }) => {
   const contexts = await Promise.all([1, 2, 3, 4].map(() => newStudioContext(browser)));
   const pages = await Promise.all(contexts.map((c) => c.newPage()));

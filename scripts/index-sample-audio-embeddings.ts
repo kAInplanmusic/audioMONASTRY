@@ -13,8 +13,10 @@
  * mit `src/audio/sampleAudioRender.ts`, das exakt den Hörproben-Pfad der App
  * spiegelt (`audioEngine.previewSynthesizedSample`).
  *
- * Voraussetzungen: Migration 007 ist eingespielt; `.env` enthält SUPABASE_URL +
- * Service-Role-Key sowie RUNPOD_ENDPOINT_ID_EARS + RUNPOD_API_KEY.
+ * Voraussetzungen: Migration 007 ist eingespielt; `.env` enthält SB_URL +
+ * SB_SERVICE_ROLE sowie die ears-Rolle (RP_ENDPOINT_ID_EARS + RP_API_KEY; die
+ * Legacy-Schreibweisen RUNPOD_ENDPOINT_ID_EARS / RUNPOD_API_KEY und die
+ * Fallbacks RP_ENDPOINT_ID / RP_AGENT_KEY werden mitgelesen - DB-P1-004).
  *
  * Aufruf:  npx tsx scripts/index-sample-audio-embeddings.ts
  *          INDEX_LIMIT=3 npx tsx scripts/index-sample-audio-embeddings.ts   (Teillauf)
@@ -23,72 +25,51 @@ import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import { PRESET_SAMPLE_DATABASE, type AudioSample } from '../src/data/samples';
 import { orchestralSamples } from '../src/data/orchestralLibrary';
-import { supabaseServerKey } from '../src/config/supabaseKeys';
 import { renderPresetWav } from '../src/audio/sampleAudioRender';
+import { RunPodProvider } from '../src/core/ai/orchestrator/runpodProvider';
+import {
+  CLAP_DIMS,
+  CLAP_MODEL,
+  parseIndexLimit,
+  pickIndexableSamples,
+  resolveIndexerConfig,
+} from './embeddingIndex';
 
 dotenv.config();
 
-const CLAP_MODEL = 'clap-music';
-const CLAP_DIMS = 512;
-
-interface EmbedConfig {
-  endpointId: string;
-  apiKey: string;
-}
-
-/** Einbettet ein WAV über den ears-Endpoint (`task=embed`, CLAP 512-dim). */
-async function embedAudio(wav: Buffer, cfg: EmbedConfig): Promise<number[]> {
-  const body = JSON.stringify({
-    input: {
-      task: 'embed',
-      model: CLAP_MODEL,
-      input: { audioBase64: wav.toString('base64') },
-    },
-  });
-  const resp = await fetch(`https://api.runpod.ai/v2/${cfg.endpointId}/runsync`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${cfg.apiKey}`, 'Content-Type': 'application/json' },
-    body,
-    signal: AbortSignal.timeout(600_000),
-  });
-  if (!resp.ok) throw new Error(`runsync HTTP ${resp.status}`);
-  const payload = (await resp.json()) as { status?: string; output?: Record<string, unknown> };
-  const out = payload.output ?? {};
-  // Job-Status COMPLETED sagt nichts über den Worker-Ausgang (siehe
-  // runpod-smoke.py): ein Fehler steckt in output.status/code.
-  if (payload.status !== 'COMPLETED' || out.status === 'error' || out.code) {
-    throw new Error(`Worker-Fehler: ${String(out.code ?? payload.status)} (${String(out.message ?? '')})`);
-  }
-  const result = (out.result ?? {}) as { embedding?: number[]; dim?: number };
-  const embedding = result.embedding;
+/**
+ * Einbettet ein WAV über die ears-Rolle (`audio.embed`, CLAP 512-dim).
+ *
+ * Bewusst über den kanonischen `RunPodProvider.runLong()` statt per eigenem
+ * `fetch`: der Provider kennt Auth, Retry, Fehler-Mapping und vor allem das
+ * Polling. `runsync` (der eigene Weg vorher) endet bei einem Kaltstart der
+ * Flotte mit `IN_QUEUE` - live gemessen 2026-09-17 endeten zwei Embryos des
+ * Batch-Laufs nach 3 Minuten mit `Worker-Fehler: IN_QUEUE`, der Lauf war damit
+ * nicht reproduzierbar.
+ */
+async function embedAudio(wav: Buffer, provider: RunPodProvider): Promise<number[]> {
+  const out = (await provider.runLong('audio.embed', CLAP_MODEL, {
+    audioBase64: wav.toString('base64'),
+  })) as { result?: { embedding?: number[]; dim?: number } } | null;
+  const embedding = out?.result?.embedding;
   if (!Array.isArray(embedding) || embedding.length !== CLAP_DIMS) {
     throw new Error(`unerwartete Embedding-Form: ${embedding?.length ?? 'keine'} (erwartet ${CLAP_DIMS})`);
   }
   return embedding;
 }
 
-/** Nur Einträge mit renderbaren Parametern sind indexierbar. */
-function renderable(samples: AudioSample[]): { usable: AudioSample[]; skipped: AudioSample[] } {
-  const usable: AudioSample[] = [];
-  const skipped: AudioSample[] = [];
-  for (const s of samples) {
-    (s.parameters && typeof s.parameters === 'object' ? usable : skipped).push(s);
-  }
-  return { usable, skipped };
-}
-
 async function main(): Promise<void> {
-  const url = (process.env.SB_URL ?? process.env.SUPABASE_URL ?? '').trim();
-  const key = supabaseServerKey();
-  const endpointId = (process.env.RUNPOD_ENDPOINT_ID_EARS ?? '').trim();
-  const apiKey = (process.env.RUNPOD_API_KEY ?? process.env.RP_API_KEY ?? '').trim();
-  if (!url || !key) throw new Error('SB_URL / SB_SERVICE_ROLE fehlen in der .env');
-  if (!endpointId || !apiKey) throw new Error('RUNPOD_ENDPOINT_ID_EARS / RUNPOD_API_KEY fehlen in der .env');
+  const resolved = resolveIndexerConfig(process.env);
+  if (!resolved.config) {
+    throw new Error(`fehlende Konfiguration in der .env: ${resolved.missing.join(', ')}`);
+  }
+  const { supabaseUrl: url, supabaseKey: key } = resolved.config;
+  const provider = new RunPodProvider('ears');
 
   const db = createClient(url, key, { auth: { persistSession: false } });
   const all = [...PRESET_SAMPLE_DATABASE, ...orchestralSamples()];
-  const { usable, skipped } = renderable(all);
-  const limit = Number(process.env.INDEX_LIMIT ?? 0);
+  const { usable, skipped } = pickIndexableSamples<AudioSample>(all);
+  const limit = parseIndexLimit(process.env.INDEX_LIMIT);
   const targets = limit > 0 ? usable.slice(0, limit) : usable;
 
   console.log(`[index] ${targets.length} von ${all.length} Samples indexierbar`
@@ -99,7 +80,7 @@ async function main(): Promise<void> {
   for (const [i, sample] of targets.entries()) {
     try {
       const wav = renderPresetWav(sample.parameters);
-      const embedding = await embedAudio(wav, { endpointId, apiKey });
+      const embedding = await embedAudio(wav, provider);
       const { error } = await db.from('sample_audio_embeddings').upsert({
         sample_id: sample.id,
         model: CLAP_MODEL,

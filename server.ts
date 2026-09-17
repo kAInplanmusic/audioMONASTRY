@@ -28,6 +28,8 @@ import { registerAdminRoutes } from './server/routes/adminRoutes.ts';
 import { registerUploadRoutes } from './server/routes/uploadRoutes.ts';
 import { registerOpsRoutes } from './server/routes/opsRoutes.ts';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
+import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
+import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
 import { buildPluginStateRelayPayload } from './src/core/session/pluginStateRelay';
 import {
   AuthoritativeSession,
@@ -43,7 +45,8 @@ import {
   parseMainOutUpdate,
   resolveMainOutUserId,
 } from './src/core/session/mainOutGuard';
-import { SnapshotStore, createMemoryKeyValueStore } from './src/core/persistence/snapshotStore';
+import { SnapshotStore, createMemoryKeyValueStore, type KeyValueStore } from './src/core/persistence/snapshotStore';
+import { createRedisKeyValueStore } from './src/core/persistence/redisKeyValueStore';
 import {
   PluginLockSocketSchema,
   PluginLockTransferSocketSchema,
@@ -207,14 +210,17 @@ let serverIo: any = null;
 // Checksumme, Retention und trockenem Cleanup (dokumentiert in
 // docs/ENV_MATRIX.md bzw. docs/PERSISTENZ). SnapshotStore ist rein; hier wird
 // SHA-256 als Prüfsumme injiziert (node:crypto ist in server.ts erlaubt).
-const sessionSnapshotStore = new SnapshotStore<SerializedAuthoritativeSession>(
-  createMemoryKeyValueStore(),
-  {
-    maxSnapshots: Math.max(1, Number(process.env.SNAPSHOT_MAX_SNAPSHOTS ?? 20)),
-    maxAgeMs: Math.max(0, Number(process.env.SNAPSHOT_MAX_AGE_MS ?? 7 * 24 * 60 * 60 * 1000)),
-    checksum: (input: string) => createHash('sha256').update(input).digest('hex'),
-  },
-);
+const SNAPSHOT_OPTIONS = {
+  maxSnapshots: Math.max(1, Number(process.env.SNAPSHOT_MAX_SNAPSHOTS ?? 20)),
+  maxAgeMs: Math.max(0, Number(process.env.SNAPSHOT_MAX_AGE_MS ?? 7 * 24 * 60 * 60 * 1000)),
+  checksum: (input: string) => createHash('sha256').update(input).digest('hex'),
+};
+const createSessionSnapshotStore = (kv: KeyValueStore): SnapshotStore<SerializedAuthoritativeSession> =>
+  new SnapshotStore<SerializedAuthoritativeSession>(kv, SNAPSHOT_OPTIONS);
+// PERSIST-P1-003: Default ist der In-Memory-Store (Single-Instance). Ist
+// REDIS_URL gesetzt, wird der Store im Redis-Block auf den Redis-KV-Adapter
+// umgestellt, damit Snapshots einen Prozess-Neustart überleben.
+let sessionSnapshotStore = createSessionSnapshotStore(createMemoryKeyValueStore());
 const SNAPSHOT_INTERVAL_MS = Math.max(1_000, Number(process.env.SNAPSHOT_INTERVAL_MS ?? 60_000));
 /** Ein Snapshot + Retention-Lauf (best effort, wirft nie). */
 const persistSnapshotNow = (): void => {
@@ -279,6 +285,11 @@ if (process.env.REDIS_URL) {
 }
 
 app.use(express.json({ limit: '50mb' }));
+
+// AI-P1-005: Body-Parse-Fehler strukturiert und ohne Stack-Trace beantworten.
+// Muss DIREKT nach express.json() stehen, sonst greift der Express-Default-
+// Handler und schreibt den kompletten Stack auf stderr.
+app.use(createJsonBodyErrorHandler());
 
 // Gzip/Brotli-Kompression für API + statische Assets (deutlich kleinere
 // Payloads, gerade für JSON-Antworten und das SPA-Bundle).
@@ -860,7 +871,21 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
         const restored = await redisPersistence.load();
         if (restored) authoritativeSession = AuthoritativeSession.restore(restored, { lockTtlMs: PLUGIN_LOCK_TTL_MS });
         sessionPersistence = redisPersistence;
-        console.log(`Redis-Adapter aktiv (Socket.io Multi-Instanz). Session-State ${restored ? `wiederhergestellt (rev=${authoritativeSession.revision})` : 'neu'}.`);
+        // PERSIST-P1-003: Snapshots ueberleben den Prozess-Neustart, weil der
+        // SnapshotStore jetzt auf Redis schreibt (vorher nur In-Memory).
+        sessionSnapshotStore = createSessionSnapshotStore(createRedisKeyValueStore(pubClient));
+        let snapshotRestored = false;
+        if (!restored) {
+          // Zweiter, checksummen-gepruefter Pfad: falls der Session-State-Key
+          // fehlt, den neuesten GUELTIGEN Snapshot wiederherstellen.
+          const snapshot = await sessionSnapshotStore.restore('latest');
+          if (snapshot) {
+            authoritativeSession = AuthoritativeSession.restore(snapshot.payload, { lockTtlMs: PLUGIN_LOCK_TTL_MS });
+            snapshotRestored = true;
+            console.log(`Session aus Snapshot wiederhergestellt (id=${snapshot.id}, rev=${authoritativeSession.revision}).`);
+          }
+        }
+        console.log(`Redis-Adapter aktiv (Socket.io Multi-Instanz). Session-State ${restored ? `wiederhergestellt (rev=${authoritativeSession.revision})` : snapshotRestored ? `aus Snapshot (rev=${authoritativeSession.revision})` : 'neu'}. Snapshots liegen in Redis.`);
       } catch (e) {
         console.warn('Redis-Adapter nicht aktiv:', (e as Error).message);
       }
@@ -1444,6 +1469,19 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
       resolve();
     });
   });
+
+  // AI-P1-007: MOS-Hörerwertungen aus der Persistenz zurückholen, damit ein
+  // Neustart sie nicht mehr verliert (live belegt 2026-09-17: sechs Wertungen
+  // waren nach dem Neustart weg). Bewusst awaited – der Zustand ist ab dem
+  // ersten Request korrekt; Fehler sind nicht fatal (loadEvaluations fängt).
+  try {
+    const restored = await mosHarness.loadPersisted();
+    if (restored.loaded > 0) {
+      console.log(`[mos] ${restored.loaded} Hörerwertungen aus der Persistenz geladen (${restored.total} gesamt)`);
+    }
+  } catch (e) {
+    console.warn('[mos] Laden der Hörerwertungen fehlgeschlagen:', (e as Error).message);
+  }
   return { httpServer: server, io };
 }
 

@@ -31,6 +31,30 @@ afterEach(() => {
   delete process.env.AI_ALLOW_EXTERNAL_LLM;
 });
 
+/** Minimales WAV (mono, 16 Bit, 0,2 s, 440 Hz) fuer den Codec-Export-Test. */
+function sineWavBuffer(sampleRate = 44100, seconds = 0.2): Buffer {
+  const frames = Math.floor(sampleRate * seconds);
+  const data = Buffer.alloc(frames * 2);
+  for (let i = 0; i < frames; i += 1) {
+    data.writeInt16LE(Math.round(Math.sin((2 * Math.PI * 440 * i) / sampleRate) * 12000), i * 2);
+  }
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + data.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(data.length, 40);
+  return Buffer.concat([header, data]);
+}
+
 describe('Server API', () => {
   it('liefert /api/health mit status ok', async () => {
     const res = await fetch(`${baseUrl}/api/health`);
@@ -54,6 +78,32 @@ describe('Server API', () => {
     const body = await res.json();
     expect(body.supabase).toBe('not-configured');
     expect(body.r2.status).toBe('not-configured');
+  });
+
+  it('AI-P1-005: ungueltiges JSON im Body → 400 strukturiert ohne Stack-Trace', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await fetch(`${baseUrl}/api/ai/mcp/tools/models.list`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{invalid json',
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe('invalid JSON body');
+      expect(typeof body.requestId).toBe('string');
+      expect(body.requestId.length).toBeGreaterThan(0);
+      expect(res.headers.get('x-request-id')).toBeTruthy();
+      // Der Befund war der Stack-Trace - er darf weder in der Antwort noch im Log stehen.
+      expect(JSON.stringify(body)).not.toMatch(/(\s+at\s+[\w$.]+\s*\()|\(<anonymous>\)/);
+      const stackLogs = errorSpy.mock.calls.filter((c) => String(c[0] ?? '').includes('\n    at '));
+      expect(stackLogs).toEqual([]);
+      expect(warnSpy.mock.calls.some((c) => String(c[0]).includes('invalid JSON body'))).toBe(true);
+    } finally {
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    }
   });
 
   it('POST /api/ai/complete ohne prompt → 400', async () => {
@@ -424,5 +474,39 @@ describe('Server API', () => {
   it('POST /api/session/reset verlangt den Studio-Token (401)', async () => {
     const res = await fetch(`${baseUrl}/api/session/reset`, { method: 'POST' });
     expect(res.status).toBe(401);
+  });
+
+  // FEAT-P3-004: Codec-Export (MP3/FLAC/AAC/OGG) über die echte Route.
+  it('POST /api/audio/encode liefert MP3 mit ID3-Header und Tags', async () => {
+    const res = await fetch(`${baseUrl}/api/audio/encode?format=mp3&title=Pruefton&artist=audioMONASTRY&name=master`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/wav' },
+      body: sineWavBuffer(),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('audio/mpeg');
+    expect(res.headers.get('x-audio-format')).toBe('mp3');
+    expect(res.headers.get('content-disposition')).toContain('filename="master.mp3"');
+    const bytes = Buffer.from(await res.arrayBuffer());
+    expect(bytes.subarray(0, 3).toString('latin1')).toBe('ID3');
+    expect(bytes.length).toBeGreaterThan(1000);
+  });
+
+  it('POST /api/audio/encode lehnt unbekannte Formate ab (400)', async () => {
+    const res = await fetch(`${baseUrl}/api/audio/encode?format=opus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'audio/wav' },
+      body: sineWavBuffer(),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toBe('unknown format');
+    expect(body.formats).toContain('flac');
+  });
+
+  it('POST /api/audio/encode ohne Body → 400 (kein stiller Erfolg)', async () => {
+    const res = await fetch(`${baseUrl}/api/audio/encode?format=flac`, { method: 'POST' });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe('EMPTY_INPUT');
   });
 });

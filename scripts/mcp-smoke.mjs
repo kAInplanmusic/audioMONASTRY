@@ -93,9 +93,11 @@ async function stepInvalidPayload() {
     method: 'POST',
     body: '{invalid json',
   });
-  // Express + body-parser liefert 400; toleriere auch 500-Fallback, solange kein 200.
-  assert(status !== 200, 'ungültiger Payload wird abgelehnt', `HTTP ${status}`);
-  void body;
+  // AI-P1-005: strukturierte 400 statt Express-Default mit Stack-Trace.
+  assert(status === 400, 'ungültiger Payload → 400 (strukturiert)', `HTTP ${status}`);
+  assert(body?.error === 'invalid JSON body', 'ungültiger Payload → Fehlercode', `error=${body?.error ?? '-'}`);
+  assert(typeof body?.requestId === 'string' && body.requestId.length > 0, 'Request-ID in der Antwort', body?.requestId ?? '-');
+  assert(!/(\s+at\s+[\w$.]+\s*\()|\(<anonymous>\)/.test(JSON.stringify(body ?? {})), 'kein Stack-Trace in der Antwort');
 }
 
 async function stepPermissionDenied() {

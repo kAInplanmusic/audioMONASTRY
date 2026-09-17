@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest';
+import { describe, expect, it, afterEach, vi } from 'vitest';
 import { aiPersistence, setAiPersistenceClientForTests } from '../src/core/ai/orchestrator/aiPersistence';
 
 type Call = { table: string; op: 'upsert' | 'insert'; data: Record<string, unknown> };
@@ -112,3 +112,86 @@ describe('AI-Supabase-Persistenz (AITodo Phase 12, gemockt)', () => {
     } as any);
     await expect(aiPersistence.rpcMatchSamples([0.1], 3)).resolves.toEqual([]);
   });
+
+/**
+ * AI-P1-007: Lesepfad + URL-Alias. Die `.env` benennt die Supabase-URL
+ * `SB_URL`; `getClient()` las aber nur `SUPABASE_URL`. Folge (live gemessen
+ * 2026-09-17): ohne Client lief JEDER Schreibpfad still ins Leere, und die
+ * MOS-Wertungen waren nach einem Server-Neustart weg.
+ */
+describe('AI-P1-007 · loadEvaluations + Supabase-URL-Alias', () => {
+  afterEach(() => setAiPersistenceClientForTests(null));
+
+  function createReadClient(rows: unknown[], error: unknown = null, calls: Array<{ table: string; filters: Array<[string, unknown]> }> = []) {
+    const chain: Record<string, unknown> = {};
+    const entry = { table: '', filters: [] as Array<[string, unknown]> };
+    chain.select = () => chain;
+    chain.eq = (col: string, val: unknown) => {
+      entry.filters.push([col, val]);
+      return chain;
+    };
+    chain.order = () => chain;
+    chain.limit = () => Promise.resolve({ data: rows, error });
+    return {
+      from: (table: string) => {
+        entry.table = table;
+        calls.push(entry);
+        return chain;
+      },
+      __calls: calls,
+    } as any;
+  }
+
+  it('liest ai_evaluations gefiltert nach task/plugin und mappt die Spalten', async () => {
+    const calls: Array<{ table: string; filters: Array<[string, unknown]> }> = [];
+    const client = createReadClient(
+      [{
+        id: 'x1', plugin_id: 'voice', task: 'voice.mos', model: 'qwen3-tts-06b', provider: 'mos-listener',
+        input: '{"language":"DE","evaluatorId":"peter"}', output: '4', score: '4.000', metrics: { latencyMs: 0 },
+        created_at: '2026-09-14T22:44:27.490529+00:00',
+      }],
+      null,
+      calls,
+    );
+    setAiPersistenceClientForTests(client);
+
+    const rows = await aiPersistence.loadEvaluations({ task: 'voice.mos', pluginId: 'voice' });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      id: 'x1', pluginId: 'voice', task: 'voice.mos', model: 'qwen3-tts-06b', provider: 'mos-listener',
+      score: 4, createdAt: '2026-09-14T22:44:27.490529+00:00',
+    });
+    expect(typeof rows[0].input).toBe('string');
+    expect(calls[0].filters).toEqual([['task', 'voice.mos'], ['plugin_id', 'voice']]);
+  });
+
+  it('liefert [] bei DB-Fehler und ohne Client (kein Wurf)', async () => {
+    setAiPersistenceClientForTests(createReadClient(null, { message: 'kaputt' }));
+    await expect(aiPersistence.loadEvaluations({ task: 'voice.mos' })).resolves.toEqual([]);
+    setAiPersistenceClientForTests(null);
+    await expect(aiPersistence.loadEvaluations({ task: 'voice.mos' })).resolves.toEqual([]);
+  });
+
+  it('SB_URL allein genuegt fuer einen konfigurierten Client (Regression)', async () => {
+    const saved = { SB_URL: process.env.SB_URL, SUPABASE_URL: process.env.SUPABASE_URL, SB_SERVICE_ROLE: process.env.SB_SERVICE_ROLE };
+    try {
+      vi.resetModules();
+      delete process.env.SB_URL;
+      delete process.env.SUPABASE_URL;
+      delete process.env.SB_SERVICE_ROLE;
+      const empty = await import('../src/core/ai/orchestrator/aiPersistence');
+      expect(empty.isAiPersistenceConfigured()).toBe(false);
+
+      vi.resetModules();
+      process.env.SB_URL = 'https://example.supabase.co';
+      process.env.SB_SERVICE_ROLE = 'x'.repeat(80);
+      const configured = await import('../src/core/ai/orchestrator/aiPersistence');
+      expect(configured.isAiPersistenceConfigured()).toBe(true);
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+});

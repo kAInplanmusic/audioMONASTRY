@@ -61,6 +61,16 @@ const DEFAULT_HOURLY_USD: Record<GpuRoleId, number> = {
 /** Angenommene Jobdauer für die Kostenschätzung (RunPod rechnet sekundengenau). */
 const ASSUMED_JOB_SECONDS = 10;
 
+/**
+ * Ist der RunPod-Status noch nicht entschieden? Bei einem Kaltstart antwortet
+ * `runsync` mit `IN_QUEUE`/`IN_PROGRESS` statt mit einem Ergebnis - der Job
+ * laeuft serverseitig weiter und muss gepollt werden (DB-P1-004).
+ */
+export function isNonTerminalStatus(status: unknown): boolean {
+  const s = String(status ?? '').toUpperCase();
+  return s === 'IN_QUEUE' || s === 'IN_PROGRESS';
+}
+
 /** Ergebnis eines Warmup-Aufrufs (Session-Wake). */
 export interface WarmupResult {
   role: GpuRoleId;
@@ -146,6 +156,46 @@ export class RunPodProvider implements IAiProvider {
   }
 
   async run(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+    this.assertConfigured();
+
+    const started = Date.now();
+    const deadline = started + this.timeoutMs;
+    const body = { input: { task, model, input } };
+
+    if (LONG_RUNNING_TASKS.has(task)) {
+      return this.submitAndPoll(task, model, input, signal, started, deadline);
+    }
+
+    const sync = await this.submitWithRetry('runsync', body, signal, deadline);
+    // Kaltstart (scale-to-zero): runsync endet dann mit IN_QUEUE/IN_PROGRESS,
+    // weil sein Wartefenster kuerzer ist als der Worker-Start. Der Job laeuft
+    // serverseitig weiter - also denselben Job zu Ende pollen, statt einen
+    // laufenden Job als Fehler zu verwerfen.
+    if (isNonTerminalStatus(sync.status)) {
+      const jobId = String(sync.id ?? '');
+      if (!jobId) throw new AiProviderError(this.id, 'NO_JOB_ID', 'RunPod lieferte keine Job-ID', false);
+      const finished = await this.pollUntilDone(jobId, signal, deadline);
+      return this.unwrap(finished, task, model, started);
+    }
+    return this.unwrap(sync, task, model, started);
+  }
+
+  /**
+   * `run`, aber IMMER ueber `/run` + Status-Polling - auch fuer Tasks, die
+   * sonst `runsync` nutzen. Fuer Batch-/CLI-Pfade (z. B. den Embedding-Indexer),
+   * die einen Kaltstart bewusst in Kauf nehmen. Live gemessen 2026-09-17: zwei
+   * Embedding-Jobs des Indexers endeten nach 3 Minuten mit
+   * `Worker-Fehler: IN_QUEUE`, weil `runsync` das Kaltstart-Fenster nicht
+   * ueberbrueckt - der Batch-Lauf war damit nicht reproduzierbar.
+   */
+  async runLong(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
+    this.assertConfigured();
+    const started = Date.now();
+    return this.submitAndPoll(task, model, input, signal, started, started + this.timeoutMs);
+  }
+
+  /** Endpoint-ID + Key pruefen (identische Fehler wie bisher in `run`). */
+  private assertConfigured(): void {
     if (!this.endpointId) {
       throw new AiProviderError(
         this.id,
@@ -157,21 +207,22 @@ export class RunPodProvider implements IAiProvider {
     if (!this.apiKey) {
       throw new AiProviderError(this.id, 'NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY fehlt', false);
     }
+  }
 
-    const started = Date.now();
-    const deadline = started + this.timeoutMs;
-    const body = { input: { task, model, input } };
-
-    if (LONG_RUNNING_TASKS.has(task)) {
-      const submitted = await this.submitWithRetry('run', body, signal, deadline);
-      const jobId = String(submitted.id ?? '');
-      if (!jobId) throw new AiProviderError(this.id, 'NO_JOB_ID', 'RunPod lieferte keine Job-ID', false);
-      const finished = await this.pollUntilDone(jobId, signal, deadline);
-      return this.unwrap(finished, task, model, started);
-    }
-
-    const sync = await this.submitWithRetry('runsync', body, signal, deadline);
-    return this.unwrap(sync, task, model, started);
+  /** Submit per `/run` + Polling bis terminal - gemeinsamer Kern von run/runLong. */
+  private async submitAndPoll(
+    task: AiTask,
+    model: string,
+    input: unknown,
+    signal: AbortSignal | undefined,
+    started: number,
+    deadline: number,
+  ): Promise<unknown> {
+    const submitted = await this.submitWithRetry('run', { input: { task, model, input } }, signal, deadline);
+    const jobId = String(submitted.id ?? '');
+    if (!jobId) throw new AiProviderError(this.id, 'NO_JOB_ID', 'RunPod lieferte keine Job-ID', false);
+    const finished = await this.pollUntilDone(jobId, signal, deadline);
+    return this.unwrap(finished, task, model, started);
   }
 
   /**

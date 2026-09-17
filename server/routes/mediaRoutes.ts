@@ -22,7 +22,15 @@ import { GenerateVoiceSchema, LibrarySearchSchema } from '../../src/types/zod/sc
 import { buildWebRtcConfigResponse } from '../webrtcConfig.ts';
 import { execFile } from 'child_process';
 import { randomBytes } from 'crypto';
-import type { Express } from 'express';
+import express, { type Express } from 'express';
+import {
+  AUDIO_EXPORT_FORMATS,
+  AudioEncodeError,
+  encodeAudioBuffer,
+  exportFileName,
+  exportFormatInfo,
+  sanitizeMetadataValue,
+} from '../audioEncode.ts';
 
 
 export function registerMediaRoutes(app: Express): void {
@@ -39,6 +47,44 @@ export function registerMediaRoutes(app: Express): void {
       res.status(500).json({ error: 'webrtc-config unavailable' });
     }
   });
+
+  // --- POST /api/audio/encode → Codec-Export für Mixdown/Master (FEAT-P3-004) ---
+  // Body: WAV binaer (Content-Type audio/* oder application/octet-stream).
+  // Query: ?format=wav|mp3|flac|aac|ogg, optional &title=&artist=&album=&comment=&name=
+  // Antwort: kodierte Datei als Download (Content-Type + Content-Disposition).
+  app.post(
+    '/api/audio/encode',
+    express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '50mb' }),
+    async (req, res) => {
+      const format = exportFormatInfo(req.query.format);
+      if (!format) {
+        return res.status(400).json({
+          error: 'unknown format',
+          formats: AUDIO_EXPORT_FORMATS.map((f) => f.format),
+        });
+      }
+      const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+      const query = req.query as Record<string, unknown>;
+      try {
+        const { data, info } = await encodeAudioBuffer(body, format.format, {
+          title: sanitizeMetadataValue(query.title),
+          artist: sanitizeMetadataValue(query.artist),
+          album: sanitizeMetadataValue(query.album),
+          comment: sanitizeMetadataValue(query.comment),
+        });
+        res.setHeader('Content-Type', info.mimeType);
+        res.setHeader('Content-Disposition', `attachment; filename="${exportFileName(info, String(query.name ?? ''))}"`);
+        res.setHeader('X-Audio-Format', info.format);
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(200).send(data);
+      } catch (error) {
+        const code = error instanceof AudioEncodeError ? error.code : 'ENCODE_FAILED';
+        const status = code === 'UNKNOWN_FORMAT' || code === 'EMPTY_INPUT' ? 400 : code === 'NO_FFMPEG' ? 503 : 500;
+        console.warn('[audio-encode] fehlgeschlagen:', code, (error as Error).message);
+        return res.status(status).json({ error: code, message: (error as Error).message });
+      }
+    },
+  );
 
   // --- POST /api/library/search → semantische Bibliotheks-Suche (NEW-MONK-6) ---
   // 1) Supabase-Embedding-Pfad: match_samples-RPC (pgvector, Kosinus) – sobald

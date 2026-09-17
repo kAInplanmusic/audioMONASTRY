@@ -240,8 +240,17 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
   });
 
   // --- GET /api/ai/voice/mos  → MOS-Gate-Status je Modell ---
-  app.get('/api/ai/voice/mos', (_req, res) => {
-    return res.json({ minScore: mosHarness.minScore, requiredCount: mosHarness.requiredCount, summaries: mosHarness.list() });
+  // AI-P1-007: laedt die gespeicherten Wertungen lazy nach (idempotent), damit
+  // ein Server-Neustart sie nicht mehr verliert und die Antwort den Zustand
+  // ehrlich ausweist (`persistence`).
+  app.get('/api/ai/voice/mos', async (_req, res) => {
+    await mosHarness.loadPersisted();
+    return res.json({
+      minScore: mosHarness.minScore,
+      requiredCount: mosHarness.requiredCount,
+      summaries: mosHarness.list(),
+      persistence: mosHarness.persistenceStatus(),
+    });
   });
 
   // --- POST /api/ai/vision  → VisualMONK: Bild aus Prompt/Stil/Audio-Features (FLUX) ---
