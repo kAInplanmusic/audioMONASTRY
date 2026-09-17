@@ -151,13 +151,12 @@ jobs:
         # expliziten Dev-/Test-Modus blockt er API und Socket ausser /api/health.
         # Genau das liess in der CI alle Session-Tests scheitern (Log: "FATAL:
         # STUDIO_ACCESS_TOKEN fehlt und kein expliziter Dev-/Test-Modus aktiv").
-        # Fuer den E2E-Lauf wird deshalb der dafuer vorgesehene Schalter gesetzt
-        # (server.ts: studioAuthOpen = !studioTokenEnabled && (devNoAuthExplicit ||
-        # testNoAuth)); er wirkt nur ausserhalb von Production. Damit verhaelt sich
-        # die CI wie ein lokaler Dev-Lauf: kein Cookie noetig, alle Kontexte duerfen
-        # verbinden. Der alternative Weg - Token setzen und das `studio`-Cookie ueber
-        # tests/e2e/helpers/studioAuth.ts verteilen - bleibt moeglich, wuerde aber
-        # jede Spec ohne diesen Helfer aussperren.
+        # Fuer den E2E-Lauf setzt der Job den dafuer vorgesehenen Schalter
+        # AUDIOMONASTRY_DEV_NO_AUTH=1 (server.ts: studioAuthOpen =
+        # !studioTokenEnabled && (devNoAuthExplicit || testNoAuth); wirkt nur
+        # ausserhalb von Production). Dann sind API, Socket UND der Dev-only-Hook
+        # /api/session/reset offen - der Reset verlangt sonst auch im Dev-Modus den
+        # Token und liess die Session-Tests mit 401 STUDIO_TOKEN_REQUIRED scheitern.
         env:
           AUDIOMONASTRY_DEV_NO_AUTH: '1'
         run: npx playwright test --browser=${{ matrix.browser }} --grep-invert "Baseline" --forbid-only

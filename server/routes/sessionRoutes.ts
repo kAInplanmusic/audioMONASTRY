@@ -25,6 +25,13 @@ import { SessionAutosaveEnvelopeSchema } from '../../src/types/zod/schemas';
 export interface SessionRoutesDeps {
   isProductionEnv: boolean;
   studioAccessToken: string;
+  /**
+   * Expliziter Dev-/Test-Modus (server.ts: AUDIOMONASTRY_DEV_NO_AUTH=1 bzw.
+   * VITEST/NODE_ENV=test). Dann ist auch dieser Dev-only-Hook offen - sonst
+   * scheiterten die E2E-Session-Tests in der CI am Reset mit 401
+   * STUDIO_TOKEN_REQUIRED, obwohl API und Socket bereits offen waren.
+   */
+  authOpen?: boolean;
   tokenFromRequest(req: unknown): string;
   safeTokenEqual(a: string, b: string): boolean;
   newSession(): AuthoritativeSession;
@@ -41,7 +48,8 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
       return;
     }
     const token = deps.tokenFromRequest(req);
-    if (!token || !deps.safeTokenEqual(token, deps.studioAccessToken)) {
+    const tokenOk = Boolean(token) && deps.safeTokenEqual(token, deps.studioAccessToken);
+    if (!tokenOk && !deps.authOpen) {
       res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
       return;
     }
