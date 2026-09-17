@@ -32,7 +32,8 @@ test('P0-3: OFF im Terminal schließt Plugin, Icon wird dunkel', async ({ page }
 
   await expect(rack.locator('select')).toHaveCount(0);
   await expect(toolbarIcon(page, 'MCP')).not.toHaveAttribute('aria-current', /.+/);
-  await expect(rack.getByText('OFF', { exact: true }).first()).toBeVisible();
+  // Siehe startState.spec.ts: die <option value="OFF"> ist nie sichtbar.
+  await expect(rack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
 });
 
 test('P0-3: Power-Button des Rack-Streifens schließt das Terminal', async ({ page }) => {

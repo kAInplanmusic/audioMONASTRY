@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV } from './helpers/studioNav';
+import { STUDIO_NAV, STUDIO_NAV_COUNT } from './helpers/studioNav';
 
 /**
  * P0-1-Prüfpunkt („Kein Plugin offen" beim Studio-Eintritt):
@@ -38,17 +38,25 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
   const racks = page.locator('section[id^="rack-"]');
   const rackCount = await racks.count();
   expect(rackCount).toBeGreaterThan(0);
+  // Feste Sektionen ohne OFF-Zustand: der Transport (P0-7) und das
+  // Performance-Monitor-Panel ('FIXED · MONITOR', kein Power-Button, zeigt
+  // dauerhaft Metriken). Beide sind keine Plugin-Racks - live geprueft 2026-09-17.
+  const FIXED_SECTIONS = new Set(['rack-masterplayer', 'rack-perfor']);
   for (let i = 0; i < rackCount; i++) {
     const rack = racks.nth(i);
     const id = await rack.getAttribute('id');
-    if (id === 'rack-masterplayer') continue; // feste Transport-Sektion (P0-7)
-    await expect(rack.getByText('OFF', { exact: true }).first()).toBeVisible();
+    if (FIXED_SECTIONS.has(id ?? '')) continue;
+    // Nicht .first() allein: das trifft das versteckte <option value="OFF"> eines
+    // Auswahlfelds und kann nie sichtbar sein (live nachgestellt 2026-09-17).
+    await expect(rack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
   }
 
   // Nav-Icons: Startzustand = kein Modul aktiv (kein aria-current gesetzt).
   const buttons = page.locator('nav[aria-label="Studio-Navigation"] button');
   const count = await buttons.count();
-  expect(count).toBeGreaterThanOrEqual(19);
+  // Quelle der Wahrheit ist der Helper (16-MONK-Ziel); die frueher hier
+  // stehende 19 war veraltet und liess den Test in jedem Browser scheitern.
+  expect(count).toBeGreaterThanOrEqual(STUDIO_NAV_COUNT);
   for (let i = 0; i < count; i++) {
     await expect(buttons.nth(i)).not.toHaveAttribute('aria-current', /.+/);
   }
@@ -58,7 +66,7 @@ test('P0-1: Mixer-Sonderfall entfernt – mixerMONK startet OFF', async ({ page 
   await openStudio(page);
 
   const mixerRack = page.locator('#rack-mixer');
-  await expect(mixerRack.getByText('OFF', { exact: true }).first()).toBeVisible();
+  await expect(mixerRack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
   await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .not.toHaveAttribute('aria-current', /.+/);
 });

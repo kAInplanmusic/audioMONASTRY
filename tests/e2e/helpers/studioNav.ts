@@ -35,6 +35,13 @@ const SHORT_TO_NAME: Record<string, string> = {
   SNG: 'songMONK',
 };
 
+/**
+ * Anzahl der Plugin-Icons in der Studio-Navigation (16-MONK-Ziel).
+ * Ableitung statt Zahl im Test: sonst bleibt beim naechsten Umbau wieder
+ * eine veraltete Erwartung stehen (Befund 2026-09-17: Test wollte 19, real 16).
+ */
+export const STUDIO_NAV_COUNT = Object.keys(SHORT_TO_NAME).length;
+
 /** Nav-Button für einen Short-Code (z. B. 'MIX') lokalisieren. */
 export function navButton(page: Page, short: string) {
   return page.locator(STUDIO_NAV).getByTitle(SHORT_TO_NAME[short] ?? short).first();
