@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Browser, type BrowserContext } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { newStudioContext, resetSession } from './helpers/studioAuth';
 
 /**
  * Collaboration-Smoke (DCT-113 Basis): Mehrere Browser-Kontexte treten dem
@@ -20,20 +20,9 @@ test.use({
   },
 });
 
-/** Studio-Token: aus der Umgebung oder (lokal) aus der .env. */
-function studioToken(): string {
-  const fromEnv = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
-  if (fromEnv) return fromEnv;
-  try {
-    const line = readFileSync(new URL('../../.env', import.meta.url), 'utf8')
-      .split('\n')
-      .find((l) => l.startsWith('STUDIO_ACCESS_TOKEN='));
-    return (line?.slice('STUDIO_ACCESS_TOKEN='.length) ?? '').trim().replace(/^["']|["']$/g, '');
-  } catch {
-    return '';
-  }
-}
-
+// Studio-Token/-Kontext und Session-Reset liegen zentral in
+// tests/e2e/helpers/studioAuth.ts - live2browser.spec.ts scheiterte daran, dass es
+// diese Regel NICHT nutzte (401 fuer den zweiten Kontext).
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
@@ -41,48 +30,9 @@ async function openStudio(page: Page): Promise<void> {
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 
-/**
- * E2E-Isolation: setzt den serverautoritativen Session-State zurück. Die
- * In-Memory-Session lebt länger als ein einzelner Browser-Kontext; ohne Reset
- * würden Modul-States/Locks aus einem vorherigen Test in den nächsten bluten.
- * Der Hook ist dev-only (Production: 404) und verlangt den Studio-Token.
- */
-async function resetSession(): Promise<void> {
-  const baseUrl = (process.env.E2E_BASE_URL ?? '').trim().replace(/\/$/, '') || 'http://localhost:8080';
-  const token = studioToken();
-  const res = await fetch(`${baseUrl}/api/session/reset`, {
-    method: 'POST',
-    headers: token ? { 'x-studio-token': token } : {},
-  });
-  if (!res.ok) throw new Error(`session reset fehlgeschlagen: ${res.status} ${await res.text()}`);
-}
-
 test.beforeEach(async () => {
   await resetSession();
 });
-
-/**
- * Erzeugt einen Browser-Kontext mit Studio-Cookie. Der Server liest den Token
- * aus dem `studio`-Cookie (vom Portal gesetzt) — für `http://localhost` ohne
- * `secure`, für https mit `secure: true`.
- */
-async function newStudioContext(browser: Browser): Promise<BrowserContext> {
-  const ctx = await browser.newContext();
-  const baseUrl = (process.env.E2E_BASE_URL ?? '').trim().replace(/\/$/, '') || 'http://localhost:8080';
-  const token = studioToken();
-  if (token) {
-    const url = new URL(baseUrl);
-    await ctx.addCookies([{
-      name: 'studio',
-      value: token,
-      domain: url.hostname,
-      path: '/',
-      secure: url.protocol === 'https:',
-      httpOnly: false,
-    }]);
-  }
-  return ctx;
-}
 
 test('2 Browser-Kontexte synchronisieren die Session (2/4)', async ({ browser }) => {
   const ctxA = await newStudioContext(browser);

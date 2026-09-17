@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { chromium } from 'playwright';
+import { newStudioContext } from './helpers/studioAuth';
 
 /**
  * Live-2-Browser-WebRTC-Test (automatisierter Teil der offenen Aufgaben (MASTERTODOENDE.json)).
@@ -41,8 +42,14 @@ test('2 echte Browser: Offer/Answer, State-Sync und Mikrofon', async () => {
   const micErrorsB: string[] = [];
 
   try {
-    const ctxA = await browserA.newContext({ permissions: ['microphone'] });
-    const ctxB = await browserB.newContext({ permissions: ['microphone'] });
+    // Studio-Auth: der Signalisierungs-Server verlangt den Token aus dem
+    // `studio`-Cookie. Ohne ihn weist er den zweiten Kontext mit 401
+    // 'unauthorized' ab und der Test sieht nie SESSION 2/4 - genau das war der
+    // Fehler (live gemessen 2026-09-17: '[B] Signaling connection failed:
+    // unauthorized'). collab.spec.ts machte es richtig; die Regel liegt jetzt als
+    // Helfer in tests/e2e/helpers/studioAuth.ts.
+    const ctxA = await newStudioContext(browserA, { permissions: ['microphone'] });
+    const ctxB = await newStudioContext(browserB, { permissions: ['microphone'] });
     const pageA = await ctxA.newPage();
     const pageB = await ctxB.newPage();
 
