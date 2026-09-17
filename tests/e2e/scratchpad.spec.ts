@@ -1,5 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
 
+// Nur Chromium: Der Spec setzt die Berechtigung 'clipboard-write', die es nur in Chromium gibt.
+// CI-Fund 2026-09-17 (e2e-webkit): 'browserContext.newPage: Unknown permission: clipboard-write'.
+test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: Clipboard-Permission clipboard-write');
+
 /**
  * P1-4 Prüfpunkt (Browser-Live, automatisiert):
  * Session-Zwischenspeicher (Scratchpad) – IndexedDB-Snapshots überleben Reload,

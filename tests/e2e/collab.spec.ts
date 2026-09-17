@@ -1,6 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import { newStudioContext, resetSession } from './helpers/studioAuth';
 
+// Nur Chromium: Die Suite nutzt Chromium-Fake-Media-Args fuer getUserMedia und mehrere eigene Browser-Kontexte; in WebKit bricht der Start ab ('browserType.launch: Target page, context or browser has been closed').
+// CI-Fund 2026-09-17 (e2e-webkit): 'browserType.launch: Target page, context or browser has been closed'.
+test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: Fake-Media-Args + Mehrkontext-Session');
+
 /**
  * Collaboration-Smoke (DCT-113 Basis): Mehrere Browser-Kontexte treten dem
  * Studio bei und die Session-Mitgliederzahl wird über Socket.io-Signaling

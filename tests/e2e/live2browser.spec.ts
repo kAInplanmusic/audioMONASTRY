@@ -3,6 +3,10 @@ import { chromium } from 'playwright';
 import { newStudioContext } from './helpers/studioAuth';
 import { navButton } from './helpers/studioNav';
 
+// Nur Chromium: Der Spec startet bewusst ZWEI eigene Chromium-Prozesse (eigener WebRTC-Stack, eigenes Fake-Mikrofon); im WebKit-Job fehlt die Chromium-Executable.
+// CI-Fund 2026-09-17 (e2e-webkit): 'Executable doesn't exist at .../chromium-...'.
+test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: startet explizit zwei Chromium-Prozesse');
+
 /**
  * Live-2-Browser-WebRTC-Test (automatisierter Teil der offenen Aufgaben (MASTERTODOENDE.json)).
  * ----------------------------------------------------------------

@@ -1,5 +1,9 @@
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
 
+// Nur Chromium: Die CPU-Messung laeuft ueber das Chrome DevTools Protocol (CDP).
+// CI-Fund 2026-09-17 (e2e-webkit): 'browserContext.newCDPSession: CDP session is only available in Chromium'.
+test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: CPU-Messung via CDP');
+
 /**
  * P2-4 Prüfpunkt (Live, automatisiert im Headless-Chromium):
  * Performance-Messung unter Studio-Last (alle Plugins aktiv, Transport läuft,
