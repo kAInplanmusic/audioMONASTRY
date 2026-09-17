@@ -51,15 +51,18 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
     await expect(rack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
   }
 
-  // Nav-Icons: Startzustand = kein Modul aktiv (kein aria-current gesetzt).
+  // Nav-Icons: `aria-current` markiert die gewaehlte ANSICHT
+  // (App.tsx:549, `active = activeNav === plugin.id`) - beim Start ist genau eine
+  // Default-Ansicht markiert. Das sagt nichts ueber die Modulaktivitaet aus; dass
+  // kein Modul laeuft, sichern die OFF-Zusicherungen der Rack-Schleife oben ab.
+  // Geprueft wird daher: genau eine Ansicht markiert (nicht keine, nicht zwei).
   const buttons = page.locator('nav[aria-label="Studio-Navigation"] button');
   const count = await buttons.count();
   // Quelle der Wahrheit ist der Helper (16-MONK-Ziel); die frueher hier
   // stehende 19 war veraltet und liess den Test in jedem Browser scheitern.
   expect(count).toBeGreaterThanOrEqual(STUDIO_NAV_COUNT);
-  for (let i = 0; i < count; i++) {
-    await expect(buttons.nth(i)).not.toHaveAttribute('aria-current', /.+/);
-  }
+  // Das Attribut sitzt am Button selbst, nicht an einem Kindelement.
+  await expect(page.locator(STUDIO_NAV + ' button[aria-current]')).toHaveCount(1);
 });
 
 test('P0-1: Mixer-Sonderfall entfernt – mixerMONK startet OFF', async ({ page }) => {
