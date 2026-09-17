@@ -63,6 +63,9 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
   expect(count).toBeGreaterThanOrEqual(STUDIO_NAV_COUNT);
   // Das Attribut sitzt am Button selbst, nicht an einem Kindelement.
   await expect(page.locator(STUDIO_NAV + ' button[aria-current]')).toHaveCount(1);
+  // Betreiberentscheidung 2026-09-17: Startansicht ist mixerMONK (das Mischpult).
+  await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
+    .toHaveAttribute('aria-current', 'page');
 });
 
 test('P0-1: Mixer-Sonderfall entfernt – mixerMONK startet OFF', async ({ page }) => {
@@ -70,8 +73,13 @@ test('P0-1: Mixer-Sonderfall entfernt – mixerMONK startet OFF', async ({ page 
 
   const mixerRack = page.locator('#rack-mixer');
   await expect(mixerRack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
+  // mixerMONK ist seit der Betreiberentscheidung vom 2026-09-17 die markierte
+  // Startansicht (aria-current) - das ist die ANSICHT, nicht der Modulzustand.
+  // Dass das Modul aus ist, sichert die OFF-Zusicherung oben ab. mixerMONK darf
+  // ohnehin nur der Main-Out-Halter schalten (src/core/session/mainOutGuard.ts),
+  // hier gibt es keinen Halter - also bleibt es OFF.
   await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
-    .not.toHaveAttribute('aria-current', /.+/);
+    .toHaveAttribute('aria-current', 'page');
 });
 
 test('P0-1: Master startet im Silence-Gate (kein Rauschen auf Main)', async ({ page }) => {

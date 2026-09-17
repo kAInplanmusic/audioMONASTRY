@@ -86,7 +86,10 @@ function AppComponent() {
   });
   const [sessionMembers, setSessionMembers] = useState(0);
   const [sessionFull, setSessionFull] = useState(false);
-  const [activeNav, setActiveNav] = useState<string>('instru');
+  // Betreiberentscheidung 2026-09-17: Wenn beim Start eine Ansicht markiert ist,
+  // dann das Mischpult (mixerMONK) - vorher 'instru'. Die Markierung sagt nur,
+  // welche Ansicht gewaehlt ist; Module bleiben davon unberuehrt und starten OFF (P0-1).
+  const [activeNav, setActiveNav] = useState<string>('mixer');
   // COLLAB-P1-004: aktive Plugin-Navigation der anderen Session-User (userId → pluginId).
   const [remoteNav, setRemoteNav] = useState<Record<string, { pluginId: string; ts: number }>>({});
   const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
