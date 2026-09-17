@@ -77,6 +77,10 @@ jobs:
       - name: TypeScript-Check
         run: npm run lint
 
+      - name: ffmpeg installieren (Audio-Gate PROD-P1-002)
+        # Die GitHub-Runner bringen ffmpeg NICHT mit; ohne diese Zeile faellt
+        # tests/audioGate.test.ts mit 'spawnSync ffmpeg ENOENT' um.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Vitest-Suite (ohne stille Skips)
         # CI-P1-001: Report + Gate gegen übersprungene/todo-Tests.
         run: npm run test:ci

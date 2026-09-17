@@ -27,6 +27,10 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit
+      - name: ffmpeg installieren (Audio-Gate PROD-P1-002)
+        # Die GitHub-Runner bringen ffmpeg NICHT mit; ohne diese Zeile faellt
+        # tests/audioGate.test.ts mit 'spawnSync ffmpeg ENOENT' um.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: AI-Unit-Tests
         run: npx vitest run tests/aiOrchestrator.test.ts
       - name: Boundary-Scan

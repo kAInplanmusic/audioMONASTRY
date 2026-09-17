@@ -18,7 +18,8 @@ MAX_TP="-1.0"
 MAX_PK="-1.0"
 
 if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "AUDIO-GATE: ffmpeg fehlt - bitte installieren (CI: ubuntu-latest hat es vorinstalliert)."
+  echo "AUDIO-GATE: ffmpeg fehlt - bitte installieren (apt-get install -y ffmpeg)."
+  echo "Hinweis: die GitHub-Runner bringen ffmpeg NICHT mit; der Workflow installiert es."
   exit 1
 fi
 

@@ -827,17 +827,22 @@
       "area": "Qualitaet",
       "source": "docs/PRODUKTIONSREIFE_WEGPLAN.md",
       "problem": "Kein WAV-Fixture im Repo (assets/ enthaelt nur .aistudio), kein ebur128/LUFS/True-Peak-Lauf in CI, obwohl Zielwerte dokumentiert sind. Audio-Qualitaet ist damit nicht regressionsfest.",
-      "note": "scripts/generate-golden-wav.ts erzeugt Testsignale, wird aber von keinem Gate genutzt. Zielwerte: -14 LUFS integriert, True Peak <= -1 dBTP, kein Clipping. | DONE 2026-09-14: Golden-WAV tests/fixtures/audio/golden-1s.wav (48 kHz stereo, Referenzkette) erzeugt und committet; scripts/audio-gate.sh misst per ffmpeg ebur128: I = -12.0 LUFS +/-1.5, TruePeak <= -1.0 dBTP, Peak <= -1.0 dBFS. In npm run verify eingereiht (audio:gate); Test tests/audioGate.test.ts beweist, dass ein uebersteuertes WAV das Gate bricht.",
+      "note": "scripts/generate-golden-wav.ts erzeugt Testsignale, wird aber von keinem Gate genutzt. Zielwerte: -14 LUFS integriert, True Peak <= -1 dBTP, kein Clipping. | DONE 2026-09-14: Golden-WAV tests/fixtures/audio/golden-1s.wav (48 kHz stereo, Referenzkette) erzeugt und committet; scripts/audio-gate.sh misst per ffmpeg ebur128: I = -12.0 LUFS +/-1.5, TruePeak <= -1.0 dBTP, Peak <= -1.0 dBFS. In npm run verify eingereiht (audio:gate); Test tests/audioGate.test.ts beweist, dass ein uebersteuertes WAV das Gate bricht. NACHTRAG 2026-09-17 (CI-Defekt, live belegt): das Gate war auf main WIRKUNGSLOS. Die CI-Laeufe waren bei jedem Push rot ('CI - Verify + Build (Pflicht-Gate) failure', 'Build & Verify (Google-frei) failure'); die Ursache stand im Job-Log: 'tests/audioGate.test.ts ... Error: spawnSync ffmpeg ENOENT' - 1 von 214 Testdateien. Grund: das Gate misst per ffmpeg ebur128 (LUFS/True-Peak) und Test 2 erzeugt sein uebersteuertes WAV direkt mit ffmpeg, aber KEIN Workflow installierte ffmpeg; die GitHub-Runner bringen es nicht mit. Der Kommentar in scripts/audio-gate.sh behauptete das Gegenteil ('CI: ubuntu-latest hat es vorinstalliert') und ist korrigiert. Fix: Schritt 'ffmpeg installieren (Audio-Gate PROD-P1-002)' in ci.yml, build.yml und ai.yml vor dem Test-Schritt. BEWUSST kein Skip: fehlt ffmpeg, bleibt der Test rot - ein stilles Ueberspringen waere genau das, was CI-P1-001 verbietet.",
       "files": [
-        "scripts/generate-golden-wav.ts",
-        "tests/fixtures/audio/",
+        ".github/workflows/ai.yml",
+        ".github/workflows/build.yml",
+        ".github/workflows/ci.yml",
         "package.json",
-        "scripts/asset-gate.cjs"
+        "scripts/asset-gate.cjs",
+        "scripts/audio-gate.sh",
+        "scripts/generate-golden-wav.ts",
+        "tests/fixtures/audio/"
       ],
       "acceptance": "npm run verify enthaelt ein Audio-Gate, das Golden-WAVs gegen LUFS/True-Peak/Clipping prueft und bei absichtlich uebersteuertem Signal fehlschlaegt.",
       "verification": [
         "ffmpeg -i golden.wav -af ebur128=peak=true -f null -",
-        "npm run verify (Gate schlaegt bei manipuliertem WAV fehl)"
+        "npm run verify (Gate schlaegt bei manipuliertem WAV fehl)",
+        "2026-09-17: CI-Job-Log zeigt 'spawnSync ffmpeg ENOENT' als Ursache der roten Laeufe; nach dem ffmpeg-Schritt sind tests/audioGate.test.ts lokal und in CI gruen (Gegenprobe: 'AUDIO-GATE: OK (1 Datei(en))' mit I=-12.0 LUFS, TPK=-8.4 dBTP)"
       ]
     },
     {
