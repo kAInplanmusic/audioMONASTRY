@@ -44,20 +44,26 @@ test('Library-Sample → Action Menu → Project Clipboard → Send to Track', a
   await page.getByPlaceholder('Suche Samples & Musik…').fill('e2e-action-test');
   await page.getByRole('heading', { name: 'e2e-action-test' }).first().waitFor({ timeout: 15_000 });
 
-  // Upload-Sample an einen freien Track senden.
+  // Upload-Sample an einen Kanal senden wollen.
   await page.getByRole('heading', { name: 'e2e-action-test' }).first().click();
   const menu2 = page.getByRole('menu', { name: 'Audio-Aktionen' });
   await expect(menu2).toBeVisible();
   await menu2.getByRole('menuitem', { name: /Send to Track/ }).click();
   await expect(menu2.getByRole('menuitem', { name: /CH 1 · KICK/ })).toBeVisible();
-  await menu2.getByRole('menuitem', { name: /CH 1 · KICK/ }).click({ force: true });
-  await expect(menu2).not.toBeVisible();
 
-  // Belegter Track darf nicht erneut angeboten werden.
-  await page.getByRole('heading', { name: 'e2e-action-test' }).first().click();
-  const menu3 = page.getByRole('menu', { name: 'Audio-Aktionen' });
-  await menu3.getByRole('menuitem', { name: /Send to Track/ }).click();
-  await expect(menu3.getByRole('menuitem', { name: /CH 1 · KICK/ })).toBeDisabled();
+  // P0-1: Kanaele darf NUR der DJ (mixerMONK-Halter) belegen - 'nur DJ / Freigabe'.
+  // Ohne Session-Halter (diese Umgebung) sind deshalb ALLE Ziele gesperrt; genau
+  // das wird geprueft. Live belegt am 2026-09-17: 10/10 Kanaele disabled mit dem
+  // Hinweis 'nur DJ / Freigabe'. Der erfolgreiche Send setzt einen Halter voraus
+  // und ist im Register als offene Luecke vermerkt (wie der Space-Transport).
+  const channels = menu2.getByRole('menuitem').filter({ hasText: /^CH \d+ ·/ });
+  await expect(channels.first()).toBeVisible();
+  const channelCount = await channels.count();
+  expect(channelCount).toBeGreaterThan(0);
+  for (let i = 0; i < channelCount; i += 1) {
+    await expect(channels.nth(i)).toBeDisabled();
+    await expect(channels.nth(i)).toContainText('nur DJ / Freigabe');
+  }
 });
 
 test.describe('Touch', () => {

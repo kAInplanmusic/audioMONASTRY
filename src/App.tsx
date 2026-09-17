@@ -25,7 +25,7 @@ import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
-import { getPluginRoute } from './core/pluginAudioRouter';
+import { getPluginRoute, routeModuleState } from './core/pluginAudioRouter';
 import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadItem } from './core/session/sessionScratchpad';
 const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
@@ -404,6 +404,17 @@ function AppComponent() {
         console.error('[startApp] startAudio fehlgeschlagen (App startet trotzdem):', e);
       }
       console.log('[startApp] startAudio done');
+      // COLLAB-P0-004: Den Startzustand in den Audio-Router nachziehen.
+      // mixerMONK startet aktiv, aber `routeModuleState` wird sonst NUR aus
+      // `setModuleState` gerufen - beim Start gibt es diesen Aufruf nicht, die
+      // Main-Einspeisung bliebe unkonfiguriert. Live sichtbar wurde das daran,
+      // dass die Audio-Health-Anzeige kein RUNNING meldete, solange niemand den
+      // (jetzt gesperrten) Mixer-Power-Button klicken konnte.
+      for (const [mid, mstate] of Object.entries(moduleStates)) {
+        if (mstate && mstate !== 'OFF') {
+          try { routeModuleState(mid, mstate); } catch { /* Router noch nicht bereit */ }
+        }
+      }
       // Mikrofon für die WebRTC-Session erst NACH der User-Geste anfragen
       // (iOS-Safari verweigert getUserMedia ohne Geste). Fehler sind optional.
       // Geräte-Wahl aus den Audio-Settings (falls der Nutzer ein Interface

@@ -60,8 +60,20 @@ test('Hardware-Terminal zeigt virtuelle MIDI-Geräte und bleibt stabil', async (
   await mockWebMidi(page);
   await openStudio(page);
 
-  // Hardware-Terminal öffnen.
-  await page.getByTitle('midiMONK').first().click();
+  // Modernisiert 2026-09-17 (CI-P1-002): das Hardware-Terminal ist kein Plugin
+  // mehr (midiMONK existierte in der Navigation nicht mehr - der Klick lief in
+  // den Timeout). Es liegt jetzt als System-Layer in
+  // Einstellungen → MIDI → Controller-Dashboard (SettingsDialog rendert
+  // MIDIControllerTerminal, ARCH-PLUGIN-005).
+  await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
+
+  // MIDI aktivieren (mit gemocktem requestMIDIAccess), damit Geräte erscheinen.
+  const midiToggle = page.getByRole('button', { name: /^MIDI (AN|AUS)$/ });
+  await expect(midiToggle).toBeVisible({ timeout: 10_000 });
+  if ((await midiToggle.textContent())?.includes('AUS')) await midiToggle.click();
+
+  // Controller-Dashboard aufklappen → Hardware-Terminal.
+  await page.getByRole('button', { name: /CONTROLLER-DASHBOARD/ }).click();
   await expect(page.getByText('Virtual Keyboard')).toBeVisible({ timeout: 10_000 });
 
   // Soundkarten-Panel öffnen: Engine-Metriken sichtbar.
