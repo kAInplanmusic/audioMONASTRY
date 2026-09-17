@@ -28,8 +28,6 @@ Ausgang (groß): R2-URL(s), die der Worker vorher hochgeladen hat.
 | `llm` / `nlu` | `qwen3-14b` | `qwen3_llm` | transformers >= 4.57 (Qwen3), torch | offen |
 | `audio.understand` | `qwen2-audio-7b` | `qwen2_audio_understand` | transformers (Qwen2Audio), torch | offen |
 | `tts` | `xtts-v2` | `xtts_tts` | TTS (Coqui), torch | offen |
-| `tts` | `fish-speech-1.5` | `fish_speech_tts` | **venv** `/opt/voiceclone-venv` (fish-speech v1.5.1, torch<=2.4.1) | siehe unten |
-| `voice.convert` | `openvoice-v2` | `voice_convert` | **venv** `/opt/voiceclone-venv` (OpenVoice @74a1d147) | siehe unten |
 | `sing` | `bark` oder ACE-Step | `sing_dispatch` | transformers / acestep | offen |
 | `song` | `acestep-v15-xl-turbo` | `acestep_generate` | transformers/diffusers + acestep | offen |
 | `audio.generate` | `stable-audio-open-1.0` | vorhanden `hf_stable_audio` | diffusers | vorhanden |
@@ -39,41 +37,6 @@ Ausgang (groß): R2-URL(s), die der Worker vorher hochgeladen hat.
 | `audio.embed` | `clap-music` | vorhanden `hf_embed` | transformers | vorhanden |
 | `audio.classify` | `ast-audioset` | vorhanden `hf_classify` | transformers | vorhanden |
 | `stem.separate` | `bs-roformer` / `demucs` | `stem_separate_dispatch` | audiosep/demucs | offen |
-
-## Stimmklon und Stimmonvertierung (isolierte venv)
-
-`fish-speech-1.5` (Task `tts`, Stimmklon) und `openvoice-v2` (Task
-`voice.convert`, Timbre-Transfer) laufen **nicht** im Haupt-Environment, sondern in
-`/opt/voiceclone-venv` (`Dockerfile.voicedeps`). Grund: beide bringen gepinnte, mit
-dem Image kollidierende Abhaengigkeiten mit (`numpy<=1.26.4`, `torch<=2.4.1` gegen
-numpy 2.2.2 / torch 2.6.0). Der Handler ruft eine **Bridge** als Subprozess auf und
-liest genau eine JSON-Zeile:
-
-```
-voice_bridge/voice_clone_bridge.py    {"modelDir","text","referenceAudioPath"?,"referenceText"?} -> {"ok",outputPath,sampleRate,seconds}
-voice_bridge/voice_convert_bridge.py  {"modelDir","sourceAudioPath","targetReferencePath","tau"}  -> {"ok",outputPath,sampleRate,seconds}
-```
-
-Exitcodes der Bridges: 0 ok | 12 Abhaengigkeit/venv fehlt | 13 ungueltige Anfrage |
-14 Inferenz/Konvertierung fehlgeschlagen. Der Handler uebersetzt jeden
-Nicht-Erfolg in `ModelUnavailableError` mit der Originalmeldung - kein stiller
-Fehlschlag, keine leere Audiodatei.
-
-Betriebshinweise:
-
-* Referenzaudio wird auf 44,1 kHz Mono normiert und auf 30 s begrenzt
-  (`MAX_REFERENCE_SECONDS`) - laengere Referenzen kosten nur Rechenzeit.
-* Die Gewichte werden beim ersten Auftrag ueber die gepinnte Revision geladen
-  (`snapshot_download`), danach aus dem Cache. Deshalb `preload: false` im
-  Manifest: der Hauptprozess kann die venv-Modelle nicht laden.
-* **Lizenz:** fish-speech-Code Apache-2.0, Gewichte **cc-by-nc-sa-4.0**
-  (nicht kommerziell - im Manifest ausgewiesen); OpenVoice V2 ist **MIT**.
-* RVC ist bewusst nicht implementiert: `rvc-python` laesst sich mit pip >= 24.1
-  nicht aufloesen (ungueltige Metadaten in `omegaconf==2.0.6`, dazu
-  `numpy<=1.23.5`/`fairseq==0.12.2`). OpenVoice V2 deckt die Faehigkeit ab.
-
-Beweiswerkzeug: `scripts/runpod-voice-probe.py` (Task/Modell waehlbar, legt WAV +
-Messwerte-JSON unter `logs/probes/` ab).
 
 ## Orchestrator (Instanz 8): `agent.orchestrate`
 

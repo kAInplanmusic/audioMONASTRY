@@ -38,8 +38,6 @@ jobs:
           python3 tests/test_runpod_comfyui_probe.py
           python3 tests/test_comfyui_ui_to_api.py
           python3 tests/test_runpod_deploy_defaults.py
-          python3 tests/test_runpod_voice_probe.py
-          python3 services/audiomonastry-ai-runtime/tests/test_voice_bridges.py
           python3 services/audiomonastry-ai-runtime/tests/test_model_definition.py
           python3 services/audiomonastry-ai-runtime/tests/test_llm_trust_remote_code.py
           python3 services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py

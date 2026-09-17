@@ -331,28 +331,14 @@ Env:
 - mms-tts-deu → von Qwen abgelöst
 - bark → alt/schlecht
 - xtts-v2 → Voice-Cloning, nicht benötigt
+- fish-speech → Voice-Cloning, nicht benötigt
 - musicgen-small / musicgen-medium → wandert zu Instanz 4 / von ACE-Step abgelöst
 - bs-roformer → erst nach A/B-Test wieder aufnehmen
+- rvc → Gesangs-Umwandlung, nicht benötigt
+  (Nachtrag 2026-09-16: rvc wäre ohnehin nicht reproduzierbar gewesen –
+  `rvc-python` verlangt `omegaconf==2.0.6` mit ungültigen Metadaten und lässt sich
+  mit pip >= 24.1 nicht auflösen, dazu `numpy<=1.23.5` und `fairseq==0.12.2`.)
 - qwen3-tts-06b → von 1.7B vollständig abgedeckt
-
-### 2026-09-16 revidiert: Stimmklon und Stimmonvertierung kommen zurück
-Auf Nutzerwunsch sind beide Fähigkeiten wieder in der voiceGen-Rolle — aber in
-einer **isolierten venv** (`Dockerfile.voicedeps`), weil ihre Abhängigkeiten mit
-dem Haupt-Stack kollidieren (`numpy<=1.26.4`/`torch<=2.4.1` gegen numpy 2.2.2 und
-torch 2.6.0 im Image):
-
-- **fish-speech 1.5** (`fishaudio/fish-speech-1.5`, Code-Tag `v1.5.1`) für
-  Zero-Shot-Stimmklon: Referenzaufnahme + Text. Lizenz: Code **Apache-2.0**,
-  Gewichte **cc-by-nc-sa-4.0** → nicht kommerziell, im Manifest so gekennzeichnet.
-- **OpenVoice V2** (`myshell-ai/OpenVoiceV2`) für Stimmonvertierung (Timbre einer
-  bestehenden Aufnahme auf eine Zielstimme) — **MIT**, kommerziell nutzbar.
-
-**RVC wurde bewusst nicht genommen** (war zuvor als „nicht benötigt" gestrichen,
-dann erneut angefragt): `rvc-python` lässt sich mit pip >= 24.1 nicht auflösen
-(gepinntes `omegaconf==2.0.6` hat ungültige Metadaten) und verlangt zusätzlich
-`numpy<=1.23.5` sowie `fairseq==0.12.2` — auf diesem Stack nicht reproduzierbar.
-OpenVoice V2 liefert dieselbe Fähigkeit lizenzseitig sauberer.
-
 
 ### Aufgaben
 - Sprachgenerierung (TTS) für aiMONK, DJ-Ansagen

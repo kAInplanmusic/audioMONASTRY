@@ -1108,70 +1108,6 @@
       "timeout": 120,
       "license": "Mistral AI Research License (nicht kommerziell)",
       "trustRemoteCode": false
-    },
-    {
-      "id": "fish-speech-1.5",
-      "repository": "fishaudio/fish-speech-1.5",
-      "revision": "275a984d33c33659e39eed41ff5bcd6e67517f4c",
-      "task": "tts",
-      "framework": "custom",
-      "estimatedVRAM": 4,
-      "estimatedRAM": 8,
-      "loadPriority": 6,
-      "preload": false,
-      "note": "Zero-Shot-TTS mit Stimmklon: Referenzaufnahme (10-30 s) plus Text -> Sprachausgabe in der Referenzstimme. Laeuft im isolierten venv /opt/voiceclone-venv (torch<=2.4.1, numpy<=1.26.4) hinter voice_clone_bridge.py, weil fish-speechs Abhaengigkeiten mit dem Haupt-Environment kollidieren. LIZENZ: Code Apache-2.0, GEWICHTE cc-by-nc-sa-4.0 - NICHT kommerziell. Kein preload: die Bridge laedt die Gewichte beim ersten Auftrag selbst (Snapshot ueber die gepinnte Revision).",
-      "loadClass": "ON_DEMAND",
-      "quantization": "bf16",
-      "dependencies": [
-        "voiceclone-venv",
-        "fish-speech@v1.5.1",
-        "torch",
-        "torchaudio"
-      ],
-      "inputFormats": [
-        "text",
-        "wav"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 120,
-      "concurrency": 1,
-      "timeout": 300,
-      "license": "cc-by-nc-sa-4.0 (Gewichte) / Apache-2.0 (Code)",
-      "trustRemoteCode": false
-    },
-    {
-      "id": "openvoice-v2",
-      "repository": "myshell-ai/OpenVoiceV2",
-      "revision": "f36e7edfe1684461a8343844af60babc2efbb727",
-      "task": "voice.convert",
-      "framework": "custom",
-      "estimatedVRAM": 2,
-      "estimatedRAM": 4,
-      "loadPriority": 7,
-      "preload": false,
-      "note": "Tone-Color-Conversion: das Timbre einer bestehenden Aufnahme wird auf eine Zielstimme uebertragen (Source + Referenzclip). Ersetzt RVC, das auf diesem Stack nicht installierbar ist (rvc-python verlangt omegaconf==2.0.6 mit ungueltigen Metadaten und numpy<=1.23.5). Laeuft im isolierten venv hinter voice_convert_bridge.py. LIZENZ: MIT (Code und Gewichte) - kommerziell nutzbar.",
-      "loadClass": "ON_DEMAND",
-      "quantization": "fp32",
-      "dependencies": [
-        "voiceclone-venv",
-        "openvoice@74a1d147",
-        "torch",
-        "librosa",
-        "soundfile"
-      ],
-      "inputFormats": [
-        "wav"
-      ],
-      "outputFormats": [
-        "wav"
-      ],
-      "maxDuration": 60,
-      "concurrency": 1,
-      "timeout": 240,
-      "license": "MIT",
-      "trustRemoteCode": false
     }
   ],
   "roles": {
@@ -1234,9 +1170,7 @@
         "qwen3-tts-17b",
         "qwen3-tts-voicedesign",
         "htdemucs-6s",
-        "stable-audio-open-1.0",
-        "fish-speech-1.5",
-        "openvoice-v2"
+        "stable-audio-open-1.0"
       ]
     },
     "music": {
