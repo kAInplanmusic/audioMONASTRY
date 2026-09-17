@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { STUDIO_NAV_COUNT } from './helpers/studioNav';
 
 /**
  * audioMONASTRY – Audio-Engine-/UI-Stresstest (Playwright, headless Chromium)
@@ -127,7 +128,9 @@ test('Engine-/UI-Stresstest: alle Toolbar-Plugins, 8000 Pattern-Loads, Play/Stop
   const benignPageErrors = ['Unexpected token \'export\''];
   const realPageErrors = pageErrors.filter((e) => !benignPageErrors.some((b) => e.includes(b)));
   expect(realPageErrors, `Page-Errors: ${pageErrors.join(' | ')}`).toEqual([]);
-  expect(pluginCount).toBeGreaterThanOrEqual(17);
+  // 16-MONK-Ziel: die Navigation fuehrt 16 Plugin-Buttons (frueher 18/17 erwartet).
+  // Die Zahl kommt aus dem gepflegten Helfer, damit sie nicht wieder auseinanderlaeuft.
+  expect(pluginCount).toBeGreaterThanOrEqual(STUDIO_NAV_COUNT);
   expect(bootMs).toBeLessThan(45_000);
   const isHeadless = test.info().project.use.headless !== false;
   const fpsMin = isHeadless ? 10 : 20; // Headless rendert ohne GPU → weichere Schwelle

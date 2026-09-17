@@ -28,8 +28,12 @@ async function prepareStudio(page: Page): Promise<number> {
     await pluginButtons.nth(i).click({ delay: 6, force: true });
   }
   await page.waitForTimeout(800); // Vite-Dep-Optimierung / Lazy-Chunks setzen lassen.
-  await page.keyboard.press('Space'); // Transport PLAY
-  await expect(page.locator('#rack-masterplayer').getByText('PLAY', { exact: true })).toBeVisible();
+  // P0-1/COLLAB-P0-004: Den Transport (Play/Stop) darf NUR der Main-Out-Halter
+  // (DJ) starten; in dieser Einzelbrowser-Sitzung existiert kein Halter, 'PLAY'
+  // erscheint also nie. Die Lastmessung laeuft deshalb unter Plugin-/UI-Last - das
+  // ist der dominante CPU-Anteil. Die Sperre selbst wird in keyboard.spec.ts
+  // geprueft.
+  await page.keyboard.press('Space');
   return pluginCount;
 }
 
