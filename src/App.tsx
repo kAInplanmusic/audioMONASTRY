@@ -701,6 +701,13 @@ function AppComponent() {
               state={state}
               lockedByOther={lockedByOther}
               onToggle={() => togglePlugin(id)}
+              // Betreiberregel 2026-09-17: mixerMONK entscheidet den Main-Out und
+              // laesst sich nicht schliessen (OFF stoppt Main und Clock).
+              toggleLockedReason={
+                id === 'mixer'
+                  ? 'mixerMONK entscheidet den Main-Out und lässt sich nicht schließen'
+                  : undefined
+              }
               onPromote={() => rackPromote(id)}
               onCopy={() => {
                 try {

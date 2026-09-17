@@ -5,7 +5,7 @@ import { audioEngine } from '../utils/audioEngine';
 import { routeModuleState } from '../core/pluginAudioRouter';
 import { setAiModeActive } from '../core/ai/aiMode';
 import { EVAL_PLUGIN_IDS } from '../core/ai/orchestrator/evalMatrix';
-import { isMainOutPlugin } from '../core/session/mainOutGuard';
+import { MIXER_NEVER_CLOSES, canSetModuleState, isMainOutPlugin } from '../core/session/mainOutGuard';
 import { parseSessionSnapshot, type BridgeModuleState } from '../core/session/sessionStateBridge';
 
 const VALID_PLUGIN_IDS = new Set<string>(EVAL_PLUGIN_IDS);
@@ -23,10 +23,14 @@ interface ModuleContextType {
 const ModuleStateContext = createContext<ModuleContextType | undefined>(undefined);
 
 const loadPersistedStates = (): Record<string, ModuleState> => {
-  // P0-1 (Start-Silence): Beim Start sind ALLE Module OFF – persistierte
-  // Zustände werden bewusst ignoriert (Session-Scratchpad ersetzt das,
-  // siehe P1-4/NEW-D-Maßnahmen).
-  return {};
+  // P0-1 (Start-Silence): persistierte Zustände werden bewusst ignoriert
+  // (Session-Scratchpad ersetzt das, siehe P1-4/NEW-D-Maßnahmen).
+  //
+  // Betreiberregel 2026-09-17: mixerMONK ist die einzige Main-Einspeisung und
+  // startet deshalb AKTIV; alle anderen Module starten OFF. Der Master bleibt
+  // trotzdem still, weil das Idle-Silence-Gate auf die zuliefernden Module sieht
+  // (siehe setModuleStates unten) - der Mixer allein ist keine Quelle.
+  return { mixer: 'AUTO_AI' };
 };
 
 /**
@@ -53,19 +57,25 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const setModuleState = useCallback((id: string, state: ModuleState, opts?: { replicate?: boolean }) => {
     const now = Date.now();
     const sender = webRTCManager.userId;
-    // P0-1: Main-Out-Schutz (UX-Gate). Der Server lehnt zusätzlich ab – hier
-    // wird der Zustand erst gar nicht lokal gesetzt, damit Nicht-MixerMONK-User
-    // kein visuelles Feedback einer nicht-autoritativen Änderung bekommen.
-    if (isMainOutPlugin(id) && !webRTCManager.isMainOutOwner) {
-      console.warn('[module-state] Main-Out-Änderung verweigert (MixerMONK only)', { id, state, sender });
+    // P0-1 + Betreiberregel 2026-09-17: Main-Out-Schutz (UX-Gate). Der Server
+    // lehnt zusätzlich ab – hier wird der Zustand erst gar nicht lokal gesetzt,
+    // damit Nicht-Halter kein visuelles Feedback einer nicht-autoritativen
+    // Änderung bekommen. Zusätzlich: mixerMONK lässt sich nie schließen (OFF
+    // würde die Signalkette trennen und Main UND Clock stoppen).
+    const decision = canSetModuleState(id, state, { isMainOutOwner: webRTCManager.isMainOutOwner });
+    if (!decision.allowed) {
+      console.warn('[module-state] Änderung verweigert:', decision.reason, { id, state, sender });
       return;
     }
     lastSeen.current[id] = { t: now, sender };
     setModuleStates(prev => {
       const next = { ...prev, [id]: state };
-      // P0-4: Silence-Gate – Master stumm, wenn kein Plugin aktiv ist.
-      const activeCount = Object.values(next).filter((s) => s !== 'OFF').length;
-      try { audioEngine.setIdleSilence(activeCount === 0); } catch { /* Audio nicht initialisiert */ }
+      // P0-4 + Betreiberregel 2026-09-17: Das Idle-Silence-Gate schaut auf die
+      // ZULIEFERNDEN Module. mixerMONK ist die Main-Einspeisung und startet aktiv,
+      // ist aber selbst keine Quelle - ohne Zulieferung bleibt der Master still.
+      const feedingCount = Object.entries(next)
+        .filter(([pid, s]) => s !== 'OFF' && pid !== MIXER_NEVER_CLOSES).length;
+      try { audioEngine.setIdleSilence(feedingCount === 0); } catch { /* Audio nicht initialisiert */ }
       return next;
     });
     // P0-2: Audio-Routing an den PluginAudioRouter delegieren
@@ -92,9 +102,12 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const applyAuthoritativeModules = useCallback((modules: Record<string, BridgeModuleState>) => {
     setModuleStates(prev => {
       const next = { ...prev, ...modules };
-      // P0-4: Silence-Gate – Master stumm, wenn kein Plugin aktiv ist.
-      const activeCount = Object.values(next).filter((s) => s !== 'OFF').length;
-      try { audioEngine.setIdleSilence(activeCount === 0); } catch { /* Audio nicht initialisiert */ }
+      // P0-4 + Betreiberregel 2026-09-17: Das Idle-Silence-Gate schaut auf die
+      // ZULIEFERNDEN Module. mixerMONK ist die Main-Einspeisung und startet aktiv,
+      // ist aber selbst keine Quelle - ohne Zulieferung bleibt der Master still.
+      const feedingCount = Object.entries(next)
+        .filter(([pid, s]) => s !== 'OFF' && pid !== MIXER_NEVER_CLOSES).length;
+      try { audioEngine.setIdleSilence(feedingCount === 0); } catch { /* Audio nicht initialisiert */ }
       return next;
     });
     for (const [id, state] of Object.entries(modules)) {
@@ -159,6 +172,12 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // P0-1: Main-Out-Schutz auch für eingehende Peer-Updates – ein Nicht-Owner
       // darf mixer/master-States nicht einspeisen (Server lehnt den Socket-Pfad ab,
       // hier wird zusätzlich der WebRTC-Pfad gefiltert).
+      // Betreiberregel 2026-09-17: mixerMONK laesst sich nie schliessen - auch
+      // nicht ueber ein eingehendes Peer-Update (OFF stoppt Main und Clock).
+      if (pluginId === MIXER_NEVER_CLOSES && state === 'OFF') {
+        console.warn('[module-state] Peer-Update verworfen: mixerMONK laesst sich nicht schliessen', { senderId, state });
+        return;
+      }
       if (isMainOutPlugin(pluginId)) {
         const mainOutOwner = webRTCManager.mainOutOwnerId;
         if (!mainOutOwner || mainOutOwner !== senderId) {

@@ -4,7 +4,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAIN_OUT_PLUGINS,
+  MIXER_NEVER_CLOSES,
   canControlMainOut,
+  canSetModuleState,
   isMainOutPlugin,
   parseMainOutUpdate,
   resolveMainOutUserId,
@@ -81,5 +83,39 @@ describe('mainOutGuard: parseMainOutUpdate', () => {
     expect(parseMainOutUpdate({ param: 'x'.repeat(65), value: 1 })).toBeNull();
     expect(parseMainOutUpdate({ param: 'ok', value: { nested: true } })).toBeNull();
     expect(parseMainOutUpdate({ param: 'ok', value: Number.NaN })).toBeNull();
+  });
+});
+
+// COLLAB-P0-004 (Betreiberentscheidung 2026-09-17): mixerMONK ist die einzige
+// Main-Einspeisung ("die anderen spielen zu, mixerMONK entscheidet") und darf nie
+// geschlossen werden - OFF trennt die Signalkette und stoppt Main UND Clock
+// (pluginAudioRouter.deactivatePlugin). Freiwillig darf es aktiv werden.
+describe('mainOutGuard: canSetModuleState (mixerMONK nie schliessen)', () => {
+  it('OFF fuer mixerMONK wird abgelehnt - auch fuer den Halter', () => {
+    const asOwner = canSetModuleState(MIXER_NEVER_CLOSES, 'OFF', { isMainOutOwner: true });
+    const asOther = canSetModuleState(MIXER_NEVER_CLOSES, 'OFF', { isMainOutOwner: false });
+    expect(asOwner.allowed).toBe(false);
+    expect(asOther.allowed).toBe(false);
+    expect(asOwner.reason).toMatch(/Main-Out/);
+    expect(asOwner.reason).toMatch(/Main und Clock/);
+  });
+
+  it('aktivieren ist erlaubt, aber weiterhin nur fuer den Halter', () => {
+    for (const state of ['AUTO_AI', 'PRO']) {
+      expect(canSetModuleState(MIXER_NEVER_CLOSES, state, { isMainOutOwner: true }).allowed).toBe(true);
+      expect(canSetModuleState(MIXER_NEVER_CLOSES, state, { isMainOutOwner: false }).allowed).toBe(false);
+    }
+  });
+
+  it('masterMONK bleibt schliessbar - aber nur fuer den Halter', () => {
+    expect(canSetModuleState('master', 'OFF', { isMainOutOwner: true }).allowed).toBe(true);
+    expect(canSetModuleState('master', 'OFF', { isMainOutOwner: false }).allowed).toBe(false);
+  });
+
+  it('alle uebrigen Module sind frei, auch fuer Nicht-Halter', () => {
+    for (const id of ['eq', 'drop', 'voice', 'instru', 'perfor']) {
+      expect(canSetModuleState(id, 'OFF', { isMainOutOwner: false }).allowed).toBe(true);
+      expect(canSetModuleState(id, 'AUTO_AI', { isMainOutOwner: false }).allowed).toBe(true);
+    }
   });
 });

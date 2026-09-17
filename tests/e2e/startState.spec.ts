@@ -41,7 +41,9 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
   // Feste Sektionen ohne OFF-Zustand: der Transport (P0-7) und das
   // Performance-Monitor-Panel ('FIXED · MONITOR', kein Power-Button, zeigt
   // dauerhaft Metriken). Beide sind keine Plugin-Racks - live geprueft 2026-09-17.
-  const FIXED_SECTIONS = new Set(['rack-masterplayer', 'rack-perfor']);
+  // Dazu mixerMONK: es ist seit der Betreiberregel 2026-09-17 die einzige
+  // Main-Einspeisung, startet aktiv und laesst sich nicht schliessen (COLLAB-P0-004).
+  const FIXED_SECTIONS = new Set(['rack-masterplayer', 'rack-perfor', 'rack-mixer']);
   for (let i = 0; i < rackCount; i++) {
     const rack = racks.nth(i);
     const id = await rack.getAttribute('id');
@@ -68,16 +70,21 @@ test('P0-1: Studio-Start zeigt 0 Plugin-Terminals und nur gedimmte Icons', async
     .toHaveAttribute('aria-current', 'page');
 });
 
-test('P0-1: Mixer-Sonderfall entfernt – mixerMONK startet OFF', async ({ page }) => {
+test('P0-1/COLLAB-P0-004: mixerMONK startet aktiv und laesst sich nicht schliessen', async ({ page }) => {
   await openStudio(page);
 
   const mixerRack = page.locator('#rack-mixer');
-  await expect(mixerRack.getByText('OFF', { exact: true }).filter({ visible: true }).first()).toBeVisible();
-  // mixerMONK ist seit der Betreiberentscheidung vom 2026-09-17 die markierte
-  // Startansicht (aria-current) - das ist die ANSICHT, nicht der Modulzustand.
-  // Dass das Modul aus ist, sichert die OFF-Zusicherung oben ab. mixerMONK darf
-  // ohnehin nur der Main-Out-Halter schalten (src/core/session/mainOutGuard.ts),
-  // hier gibt es keinen Halter - also bleibt es OFF.
+  // Betreiberregel 2026-09-17: der Mixer entscheidet den Main-Out und ist immer da;
+  // die anderen Module spielen zu und starten OFF (siehe Schleife oben).
+  await expect(mixerRack.getByLabel('mixerMONK aktiv')).toBeVisible();
+
+  // Geschlossen werden kann er nicht: der Power-Button ist gesperrt und nennt den Grund.
+  const power = mixerRack.getByLabel(/Power$/);
+  await expect(power).toBeDisabled();
+  await expect(power).toHaveAttribute('title', /entscheidet den Main-Out/);
+
+  // mixerMONK ist ausserdem die markierte Startansicht (aria-current = ANSICHT,
+  // nicht Modulzustand).
   await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .toHaveAttribute('aria-current', 'page');
 });

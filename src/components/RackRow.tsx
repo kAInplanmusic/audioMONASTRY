@@ -12,6 +12,8 @@ interface RackRowProps {
   state: ModuleState;
   lockedByOther: boolean;
   onToggle: () => void;
+  /** Gesetzt = Schliessen gesperrt (z. B. mixerMONK); Text erscheint als Tooltip. */
+  toggleLockedReason?: string;
   onPromote: () => void;
   /** P1-4: „In Zwischenablage senden" – kopiert Plugin-State/Config als JSON. */
   onCopy?: () => void;
@@ -35,6 +37,7 @@ export const RackRow = React.memo(function RackRow({
   state,
   lockedByOther,
   onToggle,
+  toggleLockedReason,
   onPromote,
   onCopy,
   onLoadScratch,
@@ -110,6 +113,8 @@ export const RackRow = React.memo(function RackRow({
         <button
           type="button"
           onClick={onToggle}
+          disabled={!!toggleLockedReason}
+          title={toggleLockedReason}
           aria-label={`${name} Power`}
           className={`w-9 h-9 shrink-0 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
             active

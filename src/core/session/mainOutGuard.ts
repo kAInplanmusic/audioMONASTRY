@@ -59,6 +59,51 @@ export function resolveMainOutUserId(
   return configured && userIds.has(configured) ? configured : '';
 }
 
+/**
+ * mixerMONK ist die EINZIGE Main-Einspeisung und darf nie geschlossen werden:
+ * ein OFF trennt die Signalkette und stoppt Main UND Clock
+ * (`pluginAudioRouter.deactivatePlugin`: `if (id === 'mixer') stopMainAndClock()`).
+ *
+ * Betreiberregel 2026-09-17: „die anderen spielen zu, mixerMONK entscheidet".
+ * Die anderen 15 Module starten weiterhin OFF (P0-1), mixerMONK startet aktiv.
+ */
+export const MIXER_NEVER_CLOSES = 'mixer';
+
+/** Ergebnis einer Zustandspruefung fuer ein Modul (rein, ohne Seiteneffekte). */
+export interface ModuleStateDecision {
+  allowed: boolean;
+  /** Grund der Ablehnung - fuer Konsole UND Nutzer-Oberflaeche. */
+  reason?: string;
+}
+
+/**
+ * Darf `id` in den Zustand `state` gebracht werden?
+ *
+ * Zwei Regeln, beide aus dem Main-Out-Schutz:
+ *  1. mixerMONK laesst sich nie schliessen (OFF) - es ist die Main-Einspeisung.
+ *  2. mixer/master darf nur der Main-Out-Halter schalten (sonst kein falsches
+ *     Feedback einer nicht-autoritativen Aenderung).
+ */
+export function canSetModuleState(
+  id: string,
+  state: string,
+  options: { isMainOutOwner: boolean },
+): ModuleStateDecision {
+  if (id === MIXER_NEVER_CLOSES && state === 'OFF') {
+    return {
+      allowed: false,
+      reason: 'mixerMONK entscheidet den Main-Out und laesst sich nicht schliessen (OFF wuerde Main und Clock stoppen)',
+    };
+  }
+  if (isMainOutPlugin(id) && !options.isMainOutOwner) {
+    return {
+      allowed: false,
+      reason: 'Nur der Halter (Main-Out) darf dieses Modul schalten',
+    };
+  }
+  return { allowed: true };
+}
+
 /** Payload-Schema (semantisch) für `main-out-update`-Events. */
 export interface MainOutUpdate {
   /** z. B. `masterVolume`, `channelGain`, `fadeInSeconds`, `bpm`. */
