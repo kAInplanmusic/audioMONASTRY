@@ -158,6 +158,12 @@ jobs:
           # Invariante, abgesichert durch tests/server.test.ts). Das `studio`-Cookie
           # verteilt playwright.config.ts (use.storageState) an ALLE Kontexte.
           STUDIO_ACCESS_TOKEN: e2e-ci-test-token
+          # Rate-Limit fuer den E2E-Lauf hochsetzen: der Limiter schluesselt pro
+          # Studio-Token/IP, und die ganze Suite laeuft unter EINEM Schluessel
+          # (Standard: 60 Requests/Minute) - im CI-Lauf endete das in
+          # '429 Too many requests' beim Session-Reset und liess die Session-Tests
+          # scheitern. Nur fuer den Testlauf, nicht in Produktion.
+          API_RATE_LIMIT_MAX: '100000'
         run: npx playwright test --browser=${{ matrix.browser }} --grep-invert "Baseline" --forbid-only
 
       - name: E2E-Artefakte hochladen (Audio-Gate, Traces, Report)
