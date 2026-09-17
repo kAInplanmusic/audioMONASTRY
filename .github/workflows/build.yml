@@ -48,12 +48,29 @@ jobs:
           SFU_ANNOUNCED_IP: 127.0.0.1
         run: |
           set -e
-          for f in docker-compose.yml docker-compose.hetzner.yml docker-compose.ai.yml docker-compose.monitoring.yml; do
-            echo "--- $f"
-            docker compose -f "$f" config --quiet
-          done
+          # Die Compose-Dateien binden `env_file: .env` ein; die Datei ist
+          # gitignored und fehlt daher im CI-Checkout - `docker compose config`
+          # bricht dann mit "env file ... not found" ab (genau das liess diesen Job
+          # scheitern). Fuer die Syntaxpruefung genuegt eine leere Datei; Werte
+          # braucht die Validierung nicht.
+          [ -f .env ] || { echo "lege leere .env fuer die Validierung an"; : > .env; }
+          # Fehlerdiagnose: `config --quiet` verschluckt die Meldung, und der Job
+          # scheiterte in der CI nur mit "exit code 1" (Log nicht mehr abrufbar).
+          # Deshalb wird im Fehlerfall die vollstaendige Ausgabe gedruckt.
+          validate() {
+            echo "--- $*"
+            if ! docker compose "$@" config --quiet; then
+              echo "FEHLER in: docker compose $*"
+              docker compose "$@" config
+              return 1
+            fi
+          }
+          validate -f docker-compose.yml
+          validate -f docker-compose.hetzner.yml
+          validate -f docker-compose.ai.yml
+          validate -f docker-compose.monitoring.yml
           echo "--- Overlay docker-compose.hetzner.yml + docker-compose.sfu.yml"
-          docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml config --quiet
+          validate -f docker-compose.hetzner.yml -f docker-compose.sfu.yml
 
   verify:
     runs-on: ubuntu-latest
