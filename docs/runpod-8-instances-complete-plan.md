@@ -7,199 +7,40 @@ Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
 
 ---
 
-## Umsetzungsstand 2026-09-15 (live)
+## Instanzliste mit Aufgabe und Integrationsstatus (Stand 2026-09-17)
 
-| # | Rolle | Endpoint | Endpoint-ID | Bildquelle | Status |
-|---|-------|----------|-------------|-----------|--------|
-| 1 | brain | `audiomonastry-ai-brain` | `ppxo7wrn599p0q` | RunPod-vLLM-Worker | live (vorhanden) |
-| 2 | ears | `audiomonastry-ai-ears` | `xeax6xrgd0csag` | eigenes Image `:8roles-v2` | live, Warmup verifiziert (7 Modelle) |
-| 3 | voiceGen | `audiomonastry-ai-voice` | `gajmangfldpzrk` | eigenes Image `:8roles-v2` | live |
-| 4 | music | `audiomonastry-ai-music` | `vsbjhw0nnnb47e` | Hub: ACE-Step 1.5 XL (ComfyUI) | live (Workflow + Prompt-Injektion verifiziert 2026-09-16, echte MP3) |
-| 5 | imageHq | `audiomonastry-ai-image` | `wzh9hcbitjnn95` | PrunaAI FLUX-Worker (umbenannt aus `vision`) | live |
-| 6 | videoReal | `audiomonastry-ai-video-real` | `6ghy4fh00zb0j9` | Wan-Worker (umbenannt aus `video`) | live |
-| 7 | videoAbstract | `audiomonastry-ai-video-abstract` | `fogwdyxp1zj8zv` | Wan2.2 `generate-video-ksampler` (gewechselt 2026-09-16, vorher generischer ComfyUI-Worker ohne Gewichte) | live (Video verifiziert 2026-09-16: H.264 480×720, 5,03 s) |
-| 8 | orchestrator | `audiomonastry-ai-orchestrator` | `xu4sqszdfk8lp8` | eigenes Image `:moa-comfy-v9` | live (MoA Qwen3-8B/4B, beide Planer + Aggregator-Wahl verifiziert 2026-09-16) |
+Prozent = Checkliste aus fuenf Punkten (je 20 %): Endpoint live und skalierbar ·
+GPU-Pool liefert aktuell Kapazitaet · Protokoll/Handler verdrahtet · Live-Beweis
+mit echtem Job · vom Orchestrator/App erreichbar. Damit ist die Zahl
+nachpruefbar und nicht geschaetzt.
 
-Verifiziert: `ears` mit einem echten `warmup`-Job (COMPLETED, Rolle `ears`,
-3 Modelle geladen; die uebrigen Rollen-Modelle brauchen Audio als Input).
-`orchestrator` mit echten `agent.orchestrate`-Jobs. Erster Lauf (2026-09-15,
-Uebergangs-Set `MOA_*_MODEL=qwen3-4b`, also viermal dasselbe Modell):
-COMPLETED, Klassifikation `{areas:[audio], intent:track_analysis}`, zwei Plaene
-und ein gemergter Plan mit `steps` (`ears.analyze/classify/embed`); Kaltstart
-131 s, MoA-Durchlauf 37 s – dieser Lauf belegt den Pipeline-Pfad, **nicht** das
-Modellset. Aktueller Lauf (2026-09-16, Image `:moa-comfy-v7`, drei Familien):
-siehe „Modellset" unten.
+| # | Rolle | Aufgabe | Endpoint-ID | Integration | Was fehlt zum voollen Stand |
+|---|-------|---------|-------------|------------|------------------------------|
+| 1 | brain | LLM-Antworten (Qwen3-14B-AWQ, vLLM, OpenAI-Pfad) | `ppxo7wrn599p0q` | **80 %** | GPU-Pool zeigt auf A40/A6000, beide `Out` -> Start nur bei Kapazitaet |
+| 2 | ears | Audio-Intelligence (Transkript, Klassifikation, Embedding, Analyse) | `xeax6xrgd0csag` | **80 %** | dito (A40/A6000 `Out`) |
+| 3 | voiceGen | TTS, Stems, SFX, MOS-Harness | `gajmangfldpzrk` | **90 %** | Sprach-Fix (ISO-Codes) greift erst mit dem naechsten Image-Build; Hoererzahl im MOS-Gate offen |
+| 4 | music | Musik-Erzeugung (ACE-Step 1.5 XL) | `vsbjhw0nnnb47e` | **80 %** | A40/A6000 `Out` |
+| 5 | imageHq | Bild-Erzeugung (FLUX.1-dev ueber PrunaAI-Worker) | `wzh9hcbitjnn95` | **80 %** | A40/A6000 `Out`; Modell ist `gated` (HF-Token noetig) und nicht kommerziell |
+| 6 | videoReal | Video aus Text/Bild (Wan 2.2) | `6ghy4fh00zb0j9` | **100 %** | – |
+| 7 | videoAbstract | Abstraktes Video (Wan 2.2, seit 2026-09-16) | `fogwdyxp1zj8zv` | **100 %** | – |
+| 8 | orchestrator | MoA-Planung + MCP-Ausfuehrung (Qwen3-8B/4B) | `xu4sqszdfk8lp8` | **80 %** | A40/A6000 `Out` |
 
-**Wichtig**: Die visuellen Rollen (imageHq/videoReal/videoAbstract) und music laufen
-auf **vorgefertigten ComfyUI-/Hub-Workern**. Sie sprechen die ComfyUI-Workflow-API,
-NICHT unser `{task, model, input}`-Protokoll. Der Orchestrator bindet sie deshalb als
-MCP-Werkzeuge an; die Uebersetzung leistet jetzt `comfyui_adapter.py`
-(Request- und Antwortrichtung, formtolerant).
+**Flotte gesamt: 86 %** (690 von 800 Punkten). Alle acht Rollen stehen auf
+`workersMin=0` (Scale-to-Zero, 0 $/h im Leerlauf) und `workersMax=1`; die
+Idle-Timeouts sind 120 s (brain/ears 15 s).
 
-### Modellset 2026-09-15: MoA auf oeffentliche Modelle umgestellt (TODO RUNPOD-P1-002)
+**Wichtigster offener Flottenpunkt:** fuenf Rollen (brain, ears, music, imageHq,
+orchestrator) haengen an `A40`/`RTX A6000` - beide sind laut Kapazitaetsabfrage
+**`Out`**. Jobs dieser Rollen warten dann ohne Worker in der Queue, bis wieder
+Kapazitaet da ist. Sofort abhilfe schafft derselbe Schritt wie bei `voice`:
+Pool um `ADA_48_PRO` (L40S/L40/RX 6000 Ada) erweitern - das kostet aber
+0,79 $/h statt ~0,40 $/h, deshalb ist das eine Kostenentscheidung und nicht
+stillschweigend gesetzt.
 
-Das urspruenglich geplante Set war nicht fahrbar – zwei Gruende, beide gemessen:
-
-| Rolle | Geplant (verworfen) | Befund |
-|---|---|---|
-| planner_a | `meta-llama/Llama-3.2-3B-Instruct` | Repo ist **gated** (HF-API `gated=manual`), ohne Token nicht ladbar |
-| planner_b | `google/gemma-3-4b-it` | Repo ist **gated**, ohne Token nicht ladbar |
-| aggregator | `mistralai/Mistral-Small-3.1-24B-Instruct-2503` | zugaenglich, aber 24B in fp16 ≈ **48 GB** → sprengt die AMPERE_48 |
-
-**Richtigstellung:** Die 401 wurden zuerst als "Lizenz im HF-Konto nicht akzeptiert"
-gedeutet – das war falsch. Das Projekt fuehrt **keinen HF-Token** (`.env` enthaelt
-keinen; der Wert in der Brain-Endpoint-Env ist ungueltig, `whoami-v2` antwortet
-"Incorrect API key" und identifiziert damit kein Konto). Die 401 kamen allein daher,
-dass die beiden Repos gated sind.
-
-**Final gesetzt – EIN starkes + EIN schnelles Modell, beide native Qwen3
-(Apache-2.0, `gated=false`, ohne Repo-Code, ohne jeden Token nutzbar):**
-
-| Stand | Modell | Charakter | VRAM |
-|---|---|---|---|
-| Classifier | `Qwen/Qwen3-4B` | schnell | 9 GB |
-| Planner A | `Qwen/Qwen3-8B` | stark (Hauptplan) | 16 GB |
-| Planner B | `Qwen/Qwen3-4B` | schnell (zweiter, unabhaengiger Plan) | +0 GB |
-| Aggregator | `Qwen/Qwen3-8B` | stark (waehlt/merged) | +0 GB |
-
-Preload-VRAM **25 GB** bei 48 GB Budget (42 GB nutzbar nach 6 GB Sicherheitsabstand).
-Classifier und Planner B teilen sich das schnelle Modell, Planner A und Aggregator
-das starke – so kostet der dritte und vierte Stand keinen zusaetzlichen VRAM.
-`Qwen/Qwen3-8B` ist mit Revision `b968826d9c46dd6066d109eabc6255188de91218` gepinnt
-und per Vorabpruefung als native `Qwen3ForCausalLM` bestaetigt (kein `auto_map`).
-
-Die Modellwahl ist reine **Endpoint-Env** (`MOA_CLASSIFIER_MODEL`,
-`MOA_PLANNER_A_MODEL`, `MOA_PLANNER_B_MODEL`, `MOA_AGGREGATOR_MODEL`). Ein Wechsel
-braucht KEIN neues Image, solange das Modell im Rollen-Manifest steht – ein neuer
-Katalogeintrag selbst ist ins Image gebacken und kostet einen Patch-Build.
-
-**Live verifiziert (2026-09-16, Image `:moa-comfy-v9`, Endpoint `xu4sqszdfk8lp8`):**
-
-Ein echter `agent.orchestrate`-Job („20-Sekunden-Videoclip zu einem Sonnenuntergang
-am Meer, mit Musik und gesprochenem Intro") lief COMPLETED mit vier
-unterscheidbaren Staenden: `models` = `{classifier: qwen3-4b, planner_a: qwen3-8b,
-planner_b: qwen3-4b, aggregator: qwen3-8b}`. **Beide Plaene waren im ersten Versuch
-auswertbar** – `plannerParse` = A `{attempts: 1, chars: 1211, steps: 10}` und
-B `{attempts: 1, chars: 786, steps: 6}`, kein `suspicious`, kein Reparatur-Lauf
-noetig. Der Aggregator hat sich diesmal **entschieden** statt nur zu mergen:
-`choice: b` mit Begruendung („Plan B ist kuerzer und effizienter …"), der finale
-Plan hat 6 Schritte und **keine doppelte tool+args-Kombination**. Kaltstart 75 s,
-MoA-Durchlauf 71 s (vorher 146 s mit drei Familien), **kein OOM** (25-GB-Set in
-48 GB), keine 401, keine Warnung. Worker-Log: `Instantiating Qwen3ForCausalLM`
-(native Klasse), `inference completed`, kein `INFERENCE_FAILED`. Beide Gewichte
-liegen im Host-Cache (`/data/hf-cache`).
-
-**Historie dieser Runde (nicht mehr im aktiven Set):** Zuerst war
-Planner A = `microsoft/Phi-3.5-mini-instruct` und Planner B =
-`mistralai/Ministral-8B-Instruct-2410`. Beide Eintraege stehen weiter im Katalog,
-sind aber **keiner Rolle mehr zugeordnet**; die beiden Befunde unten sind damit
-erledigt bzw. umgangen.
-
-**Befund A – Planner A (Phi-3.5) war nicht lauffaehig (behoben in v6/v7):**
-`handlers_runpod.load_causal_lm` setzte `trust_remote_code=True` **fest**. Damit
-gewann fuer `microsoft/Phi-3.5-mini-instruct` (Revision `2fe19245…`) die
-mitgelieferte `modeling_phi3.py` aus der transformers-4.43-Zeit; die liest in
-`prepare_inputs_for_generation` `past_key_values.seen_tokens` (Zeilen 1291/1298)
-– das Attribut hat transformers ≥ 4.54 aus `DynamicCache` entfernt (Image:
-4.57.3). Folge: jeder Planungslauf endete mit `{"code": "INFERENCE_FAILED",
-"detail": "AttributeError: 'DynamicCache' object has no attribute 'seen_tokens'",
-"model": "qwen3-4b"}`. Der Fehlertext nennt nur das **angeforderte** Modell; im
-Worker-Log stand unmittelbar davor die `GenerationConfig` von Phi-3.5
-(`eos_token_id` 32007/32001/32000) – das identifizierte den echten Verursacher.
-Fix: `trustRemoteCode` ist jetzt ein **Katalogeintrag** (Default `false`, nur
-echte Booleans; `false` = native `transformers`-Klasse, Repo-Code ist opt-in).
-Belege: lokal im Image laeuft die native `Phi3ForCausalLM` durch, waehrend
-`DynamicCache.seen_tokens` den Fehler exakt reproduziert; `AutoConfig.from_pretrained
-(repo, trust_remote_code=False)` liefert `transformers.models.phi3.Phi3Config`
-statt `transformers_modules.<repo>`; Live-Lauf auf v6/v7 ohne diesen Fehler.
-
-**Befund B – Plan B kam leer zurueck (behoben in v7/v8, RUNPOD-P1-003):**
-Auf v7 wies `plannerParse` fuer B `{chars: 1753, steps: 0, parsed: false,
-suspicious: true}` aus, fuer A `{chars: 1346, steps: 6, parsed: true}` — der
-Rohtext war also da, ergab aber keinen auswertbaren Schritt. Vorher war genau
-dieser Zustand **unsichtbar**: das Ergebnis stand auf `merged` mit leeren
-`plans.b`, obwohl faktisch nur Plan A beigetragen hat. Drei Schritte dafuer:
-
-1. **Parser gehaertet (v7):** `extract_json` zieht auch nackte JSON-Arrays aus
-   Prosa (Form-Hinweis `list` fuer Plaene, `dict` fuer Klassifikation/Aggregat),
-   `parse_steps` akzeptiert `{"steps": [...]}`, nackte Listen und ein einzelnes
-   Schritt-Objekt; `plannerParse` weist einen leeren Plan als `suspicious` aus.
-2. **Reparatur-Versuch (v8):** liefert ein Planer keinen auswertbaren Schritt,
-   wird er EINMAL mit strengerer Anweisung nachgefasst (`PLANNER_REPAIR_SYSTEM`
-   nennt Form und erlaubte Tools erneut und zeigt die vorige Antwort); das
-   Token-Budget der Planer stieg von 512 auf 1024, weil verbose Modelle sonst
-   vor dem JSON abbrechen.
-3. **Vorabpruefung:** der Verdacht, der Mistral-Tokenizer loese den
-   `/no_think`-Fallback aus (Qwen-spezifisch), ist widerlegt — er akzeptiert
-   `enable_thinking` ohne `TypeError`, der Prompt bleibt `[INST]…[/INST]`.
-
-**Live verifiziert (2026-09-16, Image `:moa-comfy-v8`, Job COMPLETED):**
-`plannerParse` = A `{attempts: 1, chars: 940, steps: 4, parsed: true}`, B
-`{attempts: 2, chars: 2230, steps: 22, parsed: true, suspicious: false}` — Plan B
-ist damit **nicht mehr leer**, und der Merge fuehrt beide Plaene zusammen (final
-10 Schritte). Der `attempts: 2` bei B ist der Nachweis, dass der Reparatur-Weg
-greift; das Worker-Log zeigt fuer Ministral zwei `Generate config`-Bloecke,
-`Instantiating MinistralForCausalLM` (nativ, kein Repo-Code) und kein
-`INFERENCE_FAILED`. **Qualitaetsbefund (damals RUNPOD-P1-004):** Plan B
-wiederholte einen Vierer-Zyklus (`video_real.img2video`, `music.remix`,
-`voice.tts`, `video_abstract.text2video`) fuenfmal; `merge_plans` dedupliziert
-nur identische Tool+Args, deshalb standen auch im Endergebnis Wiederholungen.
-**Erledigt mit dem finalen Set (v9):** mit `qwen3-8b`/`qwen3-4b` liefern beide
-Planer im ersten Versuch saubere Plaene (10 bzw. 6 Schritte), der finale Plan hat
-**0 doppelte tool+args**, und der Aggregator trifft eine echte Wahl (`choice: b`)
-statt zu mergen.
-
-**Image-Stand dieser Runde:** `:moa-comfy-v5` = Modellset (Phi noch kaputt),
-`:moa-comfy-v6` = `trustRemoteCode`-Fix, `:moa-comfy-v7` = Parser-Haertung +
-`plannerParse`, `:moa-comfy-v8` = Planer-Reparatur + 1024 Token Budget,
-`:moa-comfy-v9` = **finales Set (Qwen3-8B stark / Qwen3-4B schnell)**, live
-verifiziert und aktuell am Template. Rollback-Stand bleibt `:moa-comfy-v4`
-(Template-Aenderung ist ein einzeiliger `runpodctl template update --image`).
-
-### Befund 2026-09-15: Image-Drift (Crash-Loop) – behoben per Gate
-
-Das auf ears/voice deployte Image war vom 2026-09-10 und enthielt noch die
-**alte** `model_manager.py`, die `quantization: "awq-int4"` (Rolle ears →
-`qwen2-audio-7b` im neuen Manifest) nicht kannte. Ein Versuch, nur
-`model_manifest.json` als Patch-Image zu tauschen, fuehrte deshalb zu einem
-**Crash-Loop** aller Worker:
-
-- MCP/`endpoint-health`: `unhealthy: 2`, Jobs blieben `inQueue`
-- `runpodctl serverless logs <id>` (Quelle `system`): wiederholtes
-  `start container … : begin` **ohne jede Container-Ausgabe** – der Container
-  starb vor dem Handler. Das ist die Signatur des Crash-Loops.
-- Root cause lokal reproduziert: `ModelDefinition.from_dict` →
-  `ValueError: invalid quantization: 'awq-int4'` (alte `_ALLOWED_QUANTIZATIONS`).
-- Sofort-Rollback auf `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:94243aac…`
-  + Queue purgen → Endpoint wieder gesund (1 ready, 0 unhealthy).
-
-Konsequenz: `Dockerfile.manifest` kopiert jetzt **Code UND Manifest** und baut ein
-**Gate** ein, das den ModelManager fuer jede Rolle aus dem Manifest konfiguriert –
-Code-/Manifest-Drift kann so nicht mehr in ein Image gelangen. Der Voll-Build in
-der CI (`Dockerfile.runpod`) und dieser Patch bauen denselben Stand.
-
-
-
----
-
-## Übersicht aller 8 Instanzen
-
-| # | Name | Rolle | Hauptmodell(e) | VRAM ca. | Typ |
-|---|------|-------|---------------|----------|-----|
-| 1 | **Brain** | App-Steuerung, Plugins, GUI, Code | Qwen3-30B-A3B-AWQ | ~18 GB | vLLM LLM |
-| 2 | **Ears** | Audio-Analyse, BPM/Key, Embeddings | 7 Audio-Modelle | ~32 GB | Eigenes Runtime |
-| 3 | **Voice** | Sprache, SFX, Stems | Qwen TTS 1.7B × 2 + HTDemucs + Stable Audio | ~34 GB | Eigenes Runtime |
-| 4 | **Music** | Musikgenerierung, Remixe, Drops | ACE-Step 1.5 XL × 3 + LM 4B + 10 LoRAs | ~37 GB | ComfyUI / Eigenes |
-| 5 | **Image HQ** | Keyframes, Texturen, Stills | FLUX.2 [dev] FP8 + Qwen-Image-2512 FP8 + 15 LoRAs + ControlNet + IP-Adapter + Upscaler | ~48 GB | ComfyUI |
-| 6 | **Video Real** | Photorealistische Video-Loops | Wan 2.2 A14B FP8 + 15 LoRAs + ControlNet + IP-Adapter + Interpolation + Upscaler | ~40 GB | ComfyUI |
-| 7 | **Video Abstract** | Abstrakte/stylisierte Video-Loops | LTXVideo 13B FP8 + 15 LoRAs + ControlNet + IP-Adapter + Interpolation + Upscaler | ~26 GB | ComfyUI |
-| 8 | **Orchestrator** | MoA + MCP, orchestriert Instanzen 2–7 | 4 diverse LLMs (MoA) + Embeddings | ~25 GB | Agent-Runtime + MCP |
-
----
-
-# Detaillierte Beschreibungen
-
----
+**MOS-Stand (Hoererwerten, 2026-09-17):** `mms-tts-deu` (alt, 16 kHz) Mittel
+**3,33** bei 1 Hoerer; `qwen3-tts-17b` (aktuell, 24 kHz) Mittel **4,33** bei
+1 Hoerer. Das Score-Gate (>=4,0) ist mit dem aktuellen Modell erfuellt; offen ist
+allein die Hoererzahl (Gate will 3 verschiedene Personen).
 
 ## 1. Instanz: Brain
 

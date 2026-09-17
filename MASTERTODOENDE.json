@@ -1071,6 +1071,78 @@
         "npx vitest run tests/manifestRoles.test.ts tests/modelRegistry.test.ts (Drift Manifest <-> endpointRegistry) gruen",
         "Vorabpruefung: AutoConfig.from_pretrained('Qwen/Qwen3-8B', revision 'b968826d...', trust_remote_code=False) -> transformers.models.qwen3.Qwen3Config (nativ)"
       ]
+    },
+    {
+      "id": "COLLAB-P1-005",
+      "prio": "P1",
+      "status": "OPEN",
+      "title": "WebRTC-Peer-Parameter server-inspizierbar machen (main-out-update)",
+      "problem": "Der Main-Out-Parameterpfad laeuft am Server vorbei; Mixer-/Master-Terminals sind nicht umgestellt. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §13.1.",
+      "acceptance": "Main-Out-Parameter laufen ueber das main-out-update-Event; Mixer- und Master-Terminal umgestellt und im Live-Betrieb geprueft.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "PERSIST-P1-003",
+      "prio": "P1",
+      "status": "OPEN",
+      "title": "SnapshotStore von In-Memory auf Redis umstellen",
+      "problem": "Der SnapshotStore haelt den Session-Zustand nur im Prozess; bei Neustart/Mehrfach-Worker geht er verloren. Eine Redis-Anbindung fuer den KV-Store fehlt. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §13.2.",
+      "acceptance": "Snapshots liegen in Redis, ein Prozess-Neustart verliert keine Session, ein Test belegt das Wiederaufsetzen.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "SEC-P1-002",
+      "prio": "P1",
+      "status": "OPEN",
+      "title": "Historische Tokens aus der lokalen .env rotieren (Cloudflare, Comet)",
+      "problem": "Die lokale .env enthaelt historische, ungenutzte Cloudflare-Tokens (CFR2_API_TOKEN, CF_API_KEY, CF_ACCOUNT_TOKEN) und COMET_API_KEY. Ungenutzte, aber gueltige Secrets sind Angriffsflaeche. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §13.3.",
+      "acceptance": "Tokens rotiert oder entfernt, .env von ungenutzten Eintraegen bereinigt, Zugriffe dokumentiert.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "AI-P1-005",
+      "prio": "P1",
+      "status": "OPEN",
+      "title": "Ungueltiges JSON im MCP-Pfad ohne Stack-Trace beantworten",
+      "problem": "Bei ungueltigem JSON loggt der MCP-Pfad einen Stack-Trace (die Antwort selbst ist korrekt). Log-Rauschen erschwert die Fehlersuche. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §13.6.",
+      "acceptance": "Ungueltiges JSON liefert eine strukturierte Fehlermeldung ohne Stack-Trace; Log-Zeile nennt Request-ID und Ursache.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "FEAT-P3-003",
+      "prio": "P3",
+      "status": "OPEN",
+      "title": "Upload-Resume/Chunking mit Abbruch-Wiederaufnahme",
+      "problem": "Grosse Uploads laufen ohne Chunking; bricht der Transfer ab, beginnt er von vorn. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §14.",
+      "acceptance": "Uploads laufen in Chunks mit Resume nach Abbruch; ein Test belegt das Fortsetzen an der Abbruchstelle.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "FEAT-P3-004",
+      "prio": "P3",
+      "status": "OPEN",
+      "title": "Codec-Export MP3/FLAC/AAC/OGG (heute nur WAV)",
+      "problem": "Export und Bounce koennen nur WAV; MP3/FLAC/AAC/OGG fehlen. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §14.",
+      "acceptance": "Export bietet mindestens MP3 und FLAC mit korrekten Metadaten; ein Test prueft Format und Lesbarkeit.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "AI-P1-006",
+      "prio": "P1",
+      "status": "OPEN",
+      "title": "aiMONK-Agent-Loop (mehrstufig planen -> ausfuehren -> pruefen)",
+      "problem": "Ein mehrstufiger Agent-Loop fehlt. Teil davon laeuft seit 2026-09-16 auf der Flotte (agent.orchestrate plant mit MoA und fuehrt Schritte aus), aber die App-Seite (Schleife mit Pruefschritt, Abbruch, Wiederaufnahme) ist nicht angebunden. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §14.",
+      "acceptance": "Ein Auftrag durchlaeuft planen->ausfuehren->pruefen mit Abbruch/Wiederaufnahme; Ergebnis und Kosten werden angezeigt.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
+    },
+    {
+      "id": "DB-P1-004",
+      "prio": "P1",
+      "status": "OPEN",
+      "title": "Batch-Indexer fuer sample_audio_embeddings",
+      "problem": "Audio-Embeddings der Sample-Bibliothek werden nicht stapelweise indiziert; die semantische Suche haengt damit an Einzelaufrufen. Quelle: test-results/ABSCHLUSSBERICHT_2026-09-13.md §14.",
+      "acceptance": "Ein Batch-Lauf indexiert die Bibliothek reproduzierbar; Fortschritt und Fehlerausgabe sind sichtbar, Wiederholung ist idempotent.",
+      "source": "test-results/ABSCHLUSSBERICHT_2026-09-13.md (Abschnitt 13/14)"
     }
   ],
   "visionSandbox": [
