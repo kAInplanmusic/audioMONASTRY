@@ -38,6 +38,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: ffmpeg installieren (Audio-Gate PROD-P1-002)
+        # Tests with coverage laufen ueber tests/audioGate.test.ts -> braucht ffmpeg;
+        # die GitHub-Runner bringen es nicht mit.
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
       - name: Tests with coverage
         run: npm run test:coverage
 

@@ -32,12 +32,14 @@ jobs:
         run: npm ci
 
       - name: Install Semgrep
-        run: python3 -m pip install --user semgrep
+        run: |
+          python3 -m pip install --user semgrep
+          # pip --user legt Skripte in ~/.local/bin; ueber $GITHUB_PATH anmelden.
+          # ($HOME wird hier von der Shell expandiert - in einem env:-Block NICHT.)
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Deep Audit Static (offline)
         run: npm run audit:deep:static -- --fail-on high
-        env:
-          PATH: ${{ runner.home }}/.local/bin:${{ runner.home }}/.local/usr/bin:$PATH
 
       - name: Upload Deep Audit artifacts
         if: always()
