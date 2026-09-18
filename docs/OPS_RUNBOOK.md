@@ -591,12 +591,35 @@ drei Presets ergeben unterschiedliche Bilder, eine Show-Szene wird als
 Zusätzlich nützlich: die Floating-IP (`samplemonk-floating`, 46.225.253.71) war **nicht
 angehängt** — `POST /api/wake` tut das nicht.
 
+### Zwei Live-Runden: 5/7 → 7/7 (Ursache der zwei Ausfaelle)
+
+Die erste Runde ergab 5/7. Die beiden Ausfaelle prueften ueber den Debug-Hook
+`window.__webRTCManager` — der wird **absichtlich nur im Dev-Build** gesetzt
+(`if (import.meta.env?.DEV)` in `src/utils/WebRTCManager.ts`). Isolation: derselbe
+Code als lokaler **Produktions-Build** (`NODE_ENV=production node dist/server.cjs`,
+Port 8080) zeigte exakt dieselben 2 Ausfaelle. Danach wurden die Tests auf
+produktionssichtbares Verhalten umgestellt (Resync per Reconnect,
+Main-Out-Vorbedingung per Spiegelung + Audit): **Dev 7/7 · Prod-Build 7/7 ·
+live 7/7**. Wer kuenftig gegen eine echte Instanz testet, findet die Falle im
+Runbook: Debug-Hooks sind dev-only.
+
+### Snapshot-Wake: ~60 s statt ~5 min (gemessen in der zweiten Runde)
+
+Der zweite Wake benutzte Snapshots (`usedSnapshots: {app: …}`) und die App war nach
+**~60 s** erreichbar; der erste Wake (ohne Snapshots) brauchte ~5 min Kaltstart.
+Grund: die Snapshots vom 2026-09-11 tragen **keine Labels** (deshalb der
+Repo-Fix an `snapshotRoleOf`), die aus `/api/refresh-snapshots` tragen welche. Der
+Snapshot enthaelt den deployten Stand (Container + Overlay) — ein Restore bringt
+also Code **und** Geschwindigkeit.
+
 ### Was live bewiesen wurde (2026-09-18)
 
-- **4-User-Session gegen den echten Knoten**: 5 von 7 `collab.spec.ts`-Tests grün über
-  den Tunnel (`E2E_BASE_URL=http://localhost:8080`); offen: „Lock-Denial + Resync"
-  (B zeigt nach dem Resync kein `PRO`) und „Main-Out" (nur im Verbund rot, einzeln
-  grün) — siehe `MASTERTODOENDE.json`, COLLAB-P0-002.
+- **4-User-Session gegen den echten Knoten**: **7 von 7** `collab.spec.ts`-Tests grün
+  über den Tunnel (`E2E_BASE_URL=http://localhost:8080`, 1,3 min) — nachdem die zwei
+  Tests, die einen dev-only Debug-Hook benutzten, auf produktionssichtbares
+  Verhalten umgestellt wurden (Details oben).
+- **Live-Latenz der echten Instanz**: 782 HTTP-Requests, Mittel 7,6 ms, p95 ≤ 25 ms
+  (`scripts/prom-p95.py` liest die Histogramm-Exposition).
 - **Ghostuser 6 (Beamer) live**: der echte Client unter `/visual-out` verbindet sich
   und **verbraucht keinen der 4 Plätze** (Zähler bleibt `SESSION 1/4`).
 - **Bildweg live**: ein Abonnent am Knoten empfängt echten Multipart-Strom

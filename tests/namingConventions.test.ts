@@ -25,8 +25,9 @@ import { readFileSync } from 'node:fs';
 
 // Beide historischen Schreibweisen: `samplemonk` UND `sample-monk` (der
 // Compose-Service hiess mit Bindestrich - genau das war der Rest, den die erste
-// Suchrunde uebersehen hatte).
-const LEGACY = /sample[-_]?monk/i;
+// Suchrunde uebersehen hatte). Das Muster steht als Regex-Quelle im `git grep`
+// weiter unten (DESIGN: eine Quelle statt zweier, die auseinanderlaufen).
+const LEGACY_PATTERN = 'sample[-_]?monk';
 
 /** Dateien, in denen der Altname bewusst stehen bleibt - mit Begründung. */
 const ALLOWED: Record<string, string> = {
@@ -40,6 +41,8 @@ const ALLOWED: Record<string, string> = {
   'server/fleetWiring.ts': 'FLEET_LEGACY_NAME_PREFIX (Fleet-Map einer nicht aktualisierten Instanz).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
+  'scripts/hetzner/fleet-deploy-live.sh': 'Live-Deploy-Skript 2026-09-18: der Standardpfad der laufenden Flotte '
+    + 'ist /opt/samplemonk (Altname) - das Skript muss dorthin rsyncen.',
   'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
     + 'Flotte (Snapshots "samplemonk-snapshot-*", Knotenpfad /opt/samplemonk, Floating-IP "samplemonk-floating", '
     + 'Fleet-Map des alten Workers) - ohne die Altnamen waere das Runbook falsch.',
@@ -51,35 +54,44 @@ function trackedFiles(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Dateien mit dem Altnamen - per `git grep` statt jede Datei in JS zu lesen.
+ *
+ * WARUM: die erste Fassung las ALLE getrackten Dateien synchron. Mit wachsendem
+ * Repo riss das unter voller Suite-Last das 15-s-Testlimit ("Test timed out in
+ * 15000ms") - ein Waechter, der sporadisch rot wird, wird abgeschaltet. `git grep`
+ * ist um Groessenordnungen schneller und liefert dieselbe Aussage.
+ */
+function filesWithLegacyName(): string[] {
+  try {
+    return execFileSync('git', ['grep', '-l', '-I', '-i', '-E', LEGACY_PATTERN, '--', '.'], {
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(Boolean)
+      // `git grep` liefert "./pfad" - die Ausnahmeliste ist ohne Praefix.
+      .map((f) => f.replace(/^\.\//, ''));
+  } catch (err) {
+    // git grep endet mit Exit 1, wenn es KEINEN Treffer gibt - das ist der Idealfall.
+    const status = (err as { status?: number }).status;
+    if (status === 1) return [];
+    throw err;
+  }
+}
+
 describe('NOMEN-P1-001 · Nomenklatur', () => {
   const files = trackedFiles();
 
   it('findet den Altnamen nur in begruendeten Ausnahmen', () => {
-    const hits: string[] = [];
-    for (const file of files) {
-      let content: string;
-      try {
-        content = readFileSync(file, 'utf8');
-      } catch {
-        continue; // Binaerdateien
-      }
-      if (!LEGACY.test(content)) continue;
-      if (ALLOWED[file]) continue;
-      hits.push(file);
-    }
+    const hits = filesWithLegacyName().filter((file) => !ALLOWED[file]);
     expect(hits).toEqual([]);
   });
 
   it('haelt die Ausnahmeliste aktuell (keine veralteten Eintraege)', () => {
     // Eine Ausnahme, die niemand mehr braucht, ist eine offene Flanke: sie
     // erlaubt den Altnamen an einer Stelle, an der er gar nicht mehr vorkommt.
-    const stale = Object.keys(ALLOWED).filter((file) => {
-      try {
-        return !LEGACY.test(readFileSync(file, 'utf8'));
-      } catch {
-        return true;
-      }
-    });
+    const withLegacy = new Set(filesWithLegacyName());
+    const stale = Object.keys(ALLOWED).filter((file) => !withLegacy.has(file));
     expect(stale).toEqual([]);
   });
 

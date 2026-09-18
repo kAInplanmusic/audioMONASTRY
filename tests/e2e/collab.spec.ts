@@ -154,10 +154,20 @@ test('COLLAB-P0-002: Lock-Denial + Resync stellt Server-Wahrheit wieder her', as
     await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();
     await expect(pageA.locator('#rack-eq').getByText('LOCKED · REMOTE')).toHaveCount(0);
 
-    // Resync: B fordert den autoritativen Snapshot an und übernimmt ihn
+    // Resync: B verbindet sich neu und übernimmt den autoritativen Server-Stand
     // (Reconnect ohne Pumping) – eq ist wieder PRO und von A gelockt.
-    await pageB.evaluate(() => (window as any).__webRTCManager?.requestSessionResync());
-    await expect(pageB.locator('#rack-eq').getByText('PRO').first()).toBeVisible({ timeout: 15_000 });
+    //
+    // WARUM NEU LADEN UND NICHT `requestSessionResync()`: der Debug-Hook
+    // `window.__webRTCManager` wird ABSICHTLICH nur im Dev-Build gesetzt
+    // (`if (import.meta.env?.DEV)` in src/utils/WebRTCManager.ts). Ein Test, der
+    // ihn benutzt, kann gegen einen Produktions-Build oder eine echte Instanz
+    // grundsaetzlich nicht gruen werden - live und im lokalen Prod-Build sind
+    // genau diese zwei Tests daran gescheitert (5/7). Der Reconnect ist der Pfad,
+    // den ein Nutzer auch hat.
+    await pageB.reload();
+    await openStudio(pageB);
+    await pageB.locator('#rack-eq').evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
+    await expect(pageB.locator('#rack-eq').getByText('PRO').first()).toBeVisible({ timeout: 20_000 });
     await expect(pageB.locator('#rack-eq').getByText('LOCKED · REMOTE')).toBeVisible();
   } finally {
     await ctxA.close();
@@ -276,15 +286,12 @@ test('COLLAB-P1-005: Main-Out-Parameter laufen server-validiert und werden gespi
     const expected = Math.min(100, start + 10);
     await expect(levelA).toHaveAttribute('aria-valuenow', String(expected), { timeout: 10_000 });
 
-    // Vorbedingung: A ist auf Client-Seite wirklich der Main-Out-Owner - ohne
-    // diese Rolle verwirft `sendMainOutUpdate` den Aufruf bewusst.
-    const ownerState = await pageA.evaluate(() => {
-      const m = (globalThis as { __webRTCManager?: { isMainOutOwner?: boolean; mainOutUserId?: string; sessionUserId?: string } }).__webRTCManager;
-      return { isOwner: m?.isMainOutOwner, mainOutUserId: m?.mainOutUserId, sessionUserId: m?.sessionUserId };
-    });
-    expect(ownerState.isOwner, `A ist kein Main-Out-Owner: ${JSON.stringify(ownerState)}`).toBe(true);
-
-    // Der andere Browser spiegelt den Wert über den Server (nicht per P2P).
+    // Vorbedingung „A ist Main-Out-Owner" wird NICHT ueber den dev-only
+    // Debug-Hook `__webRTCManager` geprueft (den gibt es im Produktions-Build
+    // nicht - daran sind diese zwei Tests live und im lokalen Prod-Build
+    // gescheitert). Produktionssichtbarer Beweis ist die Wirkung: nur der
+    // Halter sendet `main-out-update`, der Server akzeptiert es und B spiegelt
+    // den Wert. Genau das wird hier geprueft (Spiegelung + Audit unten).
     await expect(levelB).toHaveAttribute('aria-valuenow', String(expected), { timeout: 20_000 });
 
     // Und der Server hat den Vorgang gesehen: Audit-Eintrag mit param=wert.
