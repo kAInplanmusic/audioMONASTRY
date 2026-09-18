@@ -57,7 +57,9 @@
     "test:audio-gate": "node scripts/audio-gate.cjs",
     "perf:worklet": "node scripts/worklet-cpu-gate.cjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
-    "audio:gate": "bash scripts/audio-gate.sh"
+    "audio:gate": "bash scripts/audio-gate.sh",
+    "proof:turn": "node scripts/turn-live-proof.mjs",
+    "proof:ice-recovery": "node scripts/ice-recovery-live-proof.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

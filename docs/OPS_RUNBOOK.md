@@ -392,3 +392,61 @@ MCP-Runtime (`session.getState`, `runtime.status`, `sample.search`, `fleet.statu
 muss dazu passen (z. B. 240000), sonst endet der Lauf korrekt, aber ohne Ergebnis:
 `Zeitlimit ueberschritten`. Messung mit korrektem Modellnamen gegen den warmen
 Endpoint: **HTTP 200 in ~1 s**.
+
+## TURN-Relay und ICE-Wiederherstellung beweisen (COLLAB-P0-003)
+
+Der TURN-Pfad war lange „verdrahtet, aber nicht nachgewiesen" (in der
+Entwicklungs-/CI-Umgebung gab es keinen TURN-Server). Er ist lokal mit einem echten
+coturn **messbar** — genau das schließt die Lücke:
+
+```bash
+# 1) coturn starten (Beweis-Konfiguration, Loopback-Peers erlaubt)
+docker run -d --name am-coturn --network host \
+  -v "$PWD/services/turn/turnserver.local-proof.conf:/etc/coturn/turnserver.conf:ro" \
+  coturn/coturn:latest -c /etc/coturn/turnserver.conf
+
+# 2) App mit denselben Werten starten (Secret identisch zur coturn-Konfiguration)
+PORT=8080 STUDIO_ACCESS_TOKEN=... \
+TURN_URLS=turn:127.0.0.1:3478 TURN_STATIC_AUTH_SECRET=turnproofsecret123 \
+npx tsx server.ts
+
+# 3) Relay-Beweis: relay-only-Verbindung + Gegenprobe mit manipuliertem Credential
+APP_URL=http://127.0.0.1:8080 STUDIO_TOKEN=... npm run proof:turn
+
+# 4) Ausfall-Beweis: coturn WAEHREND der Verbindung stoppen, ICE-Restart, Erholung
+APP_URL=http://127.0.0.1:8080 STUDIO_TOKEN=... npm run proof:ice-recovery
+```
+
+Was die beiden Läufe messen (Stand 2026-09-18, gemessen):
+
+| Prüfung | Ergebnis |
+|---|---|
+| `/api/webrtc-config` liefert kurzlebige TURN-Credentials | 200, `username=<expiry>:…`, Credential gesetzt |
+| Relay-only-Verbindung über coturn | **verbunden**, ausgewählter Kandidatenpfad `relay`/`relay` (udp) |
+| Gegenprobe mit manipuliertem Credential | **keine** Relay-Kandidaten → Verbindung scheitert (Rechteprüfung wirkt) |
+| Echter ICE-Ausfall (coturn gestoppt) | nach ~10 s `disconnected`, nach ~20 s `failed` |
+| Zustandsmaschine (`src/core/transport/connectionRecovery.ts`) | `restart-ice` (first-failure) → `reconnect` (attempt-2) |
+| Erholung nach Rückkehr des Relays | verbunden nach ~2,2 s (2 ICE-Restarts, selbsttätig) |
+
+**Befund aus mehreren Läufen (ehrlich, weil gemessen):** Die Erholung gelingt, wenn
+der Relay innerhalb des Versuchsfensters zurückkommt — in zwei von drei Läufen
+verbunden nach 18,4 s bzw. 22,2 s. In einem Lauf blieb der Relay länger weg und die
+Zustandsmaschine lief in `gave-up (max-attempts)` (Standard: 3 Versuche, Decke 15 s;
+mit der Mess-Policy 8/12 Versuche wurden 8 Versuche verbraucht, Abstände ~15 s aus
+der ICE-Ausfallerkennung). Danach versucht sie **nichts** mehr — das ist so gewollt
+(nicht endlos gegen einen toten Relay hämmern), hat aber eine Folge für den Betrieb:
+
+* **Nur ein Relay + Ausfall länger als ~1 min ⇒ Client neu laden.** Für Produktion
+  deshalb entweder **zwei TURN-Knoten** in `TURN_URLS` (Client probiert beide) oder
+  ein höheres Versuchsbudget; im Runbook-Abschnitt „Ausfall" steht der Reload als
+  Eskalation.
+
+Der Beweis misst bewusst **auch diesen Fall** — eine Zustandsmaschine, die nur im
+Glücksfall erholt, wäre als Nachweis wertlos.
+
+**Wichtig:** `services/turn/turnserver.local-proof.conf` erlaubt Loopback-Peers —
+die Produktionsvorlage (`services/turn/turnserver.conf`) verbietet sie bewusst
+(Relay-Sonde in interne Netze). Der Beweis misst daher **das Credential-Verfahren
+und die Wiederherstellung**, nicht die Peer-Härtung der Produktionskonfiguration.
+Für Produktion `services/turn/deploy-turn.sh` auf einem eigenen Knoten benutzen
+(TLS 5349, öffentliche IP, `TURN_URLS`/`TURN_STATIC_AUTH_SECRET` in der App).
