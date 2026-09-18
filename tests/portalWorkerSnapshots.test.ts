@@ -141,6 +141,37 @@ describe('Portal-Worker OPS-Snapshot', () => {
     vi.unstubAllGlobals();
   });
 
+  // LIVE-BEFUND 2026-09-18: die Portal-Snapshots haben KEIN Label und KEINEN
+  // Namen, nur die Beschreibung. Mit der reinen Label-Abfrage lief jeder Wake als
+  // Kaltstart (gemessen: `usedSnapshots: {}`, cloud-init + Build auf allen
+  // Knoten). Dieser Test haelt fest, dass die Rolle aus der Beschreibung faellt.
+  it('findet Snapshots, die nur eine Beschreibung tragen (Live-Fall)', async () => {
+    const images = FLEET_ROLES.map((role, i) => ({
+      id: 201 + i,
+      name: null,
+      description: `samplemonk-snapshot-${role}-2026-09-18`,
+      status: 'available',
+      created: '2026-09-18T10:00:00+00:00',
+      labels: {},
+    }));
+    const { serverPayloads } = setupFetchMock({ images });
+
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/wake', { method: 'POST', headers: { cookie } }),
+      env,
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.fallbackRoles ?? []).toEqual([]); // kein cloud-init-Fallback
+    expect(Object.keys(body.usedSnapshots ?? {}).sort()).toEqual([...FLEET_ROLES].sort());
+    // Jede erzeugte Server-Anfrage traegt ein Snapshot-Image (2xx) statt der Basis.
+    const appPayload = serverPayloads.find((p) => p.name === 'audiomonastry-app-1');
+    expect(appPayload?.image).toBe(201 + FLEET_ROLES.indexOf('app'));
+  });
+
   it('startFleet nutzt das Rollen-Snapshot-Image statt cloud-init', async () => {
     const images = FLEET_ROLES.map((role, i) => ({
       id: 101 + i,

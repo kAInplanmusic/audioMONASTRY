@@ -197,3 +197,28 @@ Wichtig: Hetzner Object Storage verlangt **`region` = Location** (nbg1/fsn1/hel1
 Cloudflare R2 dagegen `auto`. Der Uploader leitet das automatisch ab.
 R2-Keys sind hex 32/64 Zeichen, Hetzner-Keys 20/40 Zeichen – daran sind sie zu
 unterscheiden (server/cloud.ts validiert R2 streng auf hex32/hex64).
+
+## Cloudflare-API-Token (2026-09-18, gemessen)
+
+Der Betreiber hat einen Cloudflare-API-Token bereitgestellt. Er liegt **nur** in der
+gitignorierten `.env` (`CF_API_TOKEN`, `CF_ACCOUNT_ID`) — **kein Repo-Konsument**
+(siehe SEC-P1-002 oben), sondern ein Betreiber-Werkzeug.
+
+Gemessener Umfang (Probes gegen `api.cloudflare.com/client/v4`):
+
+| Endpunkt | Ergebnis |
+|---|---|
+| `/accounts/<id>/tokens/verify` | 200, `status: active` |
+| `/accounts/<id>/workers/scripts` | 200 — Worker können gelesen/ausgerollt werden |
+| `/accounts/<id>/storage/kv/namespaces` | 200 (KV, im Account aktuell leer) |
+| `/zones?name=anunnakitools.de` | 200 (Zone lesbar) |
+| `/zones/<id>/dns_records` | **Authentication error** — **kein DNS-Zugriff** |
+
+Konsequenz (live gemessen, siehe `docs/OPS_RUNBOOK.md`): der Token reicht für Worker-Deploy
+und KV, aber **nicht**, um `origin.anunnakitools.de` auf die neue app-1-IP zu setzen — genau
+das braucht der Wake (`POST /api/wire-fleet` → `dns.ok: false`). Für einen vollständigen
+Wake-Pfad braucht es zusätzlich die Berechtigung `Zone → DNS → Edit` (oder einen eigenen
+`origin`-A-Record, der die Floating-IP nutzt).
+
+**Sicherheitshinweis:** Der Token wurde im Klartext übergeben. Er gehört nach getaner Arbeit
+im Cloudflare-Dashboard rotiert; ein Commit enthält ihn nicht (`.env` ist gitignoriert).

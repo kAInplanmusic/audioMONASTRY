@@ -75,5 +75,13 @@ export async function resetSession(): Promise<void> {
     method: 'POST',
     headers: token ? { 'x-studio-token': token } : {},
   });
+  // GEGEN EINE ECHTE INSTANZ (E2E_BASE_URL) ist der Hook absichtlich abwesend:
+  // er ist dev-only, Produktion antwortet 404. Ein Live-Beweis darf daran nicht
+  // scheitern - der Reset ist eine Bequemlichkeit, kein Teil der Pruefung. Der
+  // frische Serverzustand kommt dort vom Neustart des Containers (Operator).
+  if (res.status === 404 && process.env.E2E_BASE_URL) {
+    console.log('[e2e] session/reset nicht verfuegbar (Produktion) - fahre ohne Reset fort');
+    return;
+  }
   if (!res.ok) throw new Error(`session reset fehlgeschlagen: ${res.status} ${await res.text()}`);
 }

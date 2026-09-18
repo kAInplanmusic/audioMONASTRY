@@ -555,3 +555,60 @@ Gemessen (2026-09-18, Chromium 151.0.7922.34): mit den Flags `adapter-vorhanden`
 der Pfad zeichnet ~55 000 nicht-schwarze Pixel je Frame (mittlere Helligkeit ~134),
 drei Presets ergeben unterschiedliche Bilder, eine Show-Szene wird als
 `sceneIgnored` gemeldet.
+
+## Live-Beweise gegen die Flotte (2026-09-18, gemessen)
+
+### Ablauf, der funktioniert
+
+1. **Wecken** (Portal): `POST /api/login` (ADMIN_USER/ADMIN_PASSWORD aus `.env.deploy`)
+   → Cookie `portal=…` **und** `studio=…`; dann `POST /api/wake`.
+   Messskript: `python3 scripts/fleet-wake-measure.py`, Verdrahtung: `python3 scripts/fleet-wire.py`.
+2. **Auf den Knoten bringen**: `bash scripts/hetzner/fleet-deploy-live.sh <app-ip> 8080`
+   (rsync des Repo-Stands ohne Knoten-`.env`, Image per `docker save | gzip | ssh docker load`,
+   plus Test-Overlay, das den App-Port **nur an Loopback** veröffentlicht).
+3. **Tunnel**: `ssh -N -L 8080:127.0.0.1:8080 root@<app-ip>` (Hintergrundprozess).
+4. **Messen** (siehe unten) — **Achtung**: gegen `http://localhost:8080` fahren, nicht
+   gegen `127.0.0.1`.
+
+### Vier Fallen, die je einen halben Tag kosten können
+
+| Falle | Wirkung | Regel |
+|---|---|---|
+| `http://127.0.0.1:8080` als Browser-URL | `src/config/runtime.ts` behandelt `127.0.0.1` wie einen Entwicklungsrechner und setzt die Signalisierungs-URL auf den **absoluten** Dev-Default `http://localhost:8080` → anderer Origin → das Studio-Cookie wird nicht mitgesendet → `Signaling connection failed: unauthorized`, der Session-Zähler bleibt bei `1/4` | Immer **`http://localhost:8080`** verwenden |
+| `/api/session/reset` gegen eine Produktions-Instanz | HTTP 404 (dev-only) | Der E2E-Helfer toleriert 404 bei gesetztem `E2E_BASE_URL`; für einen frischen Serverzustand den **Container neu starten** |
+| Kein Reset-Hook + 7 Tests hintereinander | nach 4 belegten Plätzen öffnet der nächste Browser kein Studio mehr (`SESSION VOLL`) | Live-Beweise **pro Test** mit frischem Container fahren |
+| `POST /api/visual/frame` mit `image/png` | HTTP 415 `unsupported-type` | Der Route-Vertrag erlaubt `image/jpeg`, `image/webp`, `application/octet-stream` |
+
+### Wake→ready: Ziel < 90 s wird NICHT erreicht — vier Ursachen (gemessen)
+
+| # | Befund | Beleg |
+|---|---|---|
+| 1 | **Snapshots werden nie benutzt** → jeder Wake ist ein Kaltstart (cloud-init + Docker-Build) | `POST /api/wake` → `fallbackRoles: ["app","sfu","ai","master","edge"]`, `usedSnapshots: {}`, obwohl 5 Rollen-Snapshots `available` sind. Ursache: `snapshotRoleOf()` las nur `labels.role`; die Portal-Snapshots haben **leere Labels** und nur eine Beschreibung (`samplemonk-snapshot-app-2026-09-18[-live]`). **Behoben** in `services/portal-worker/src/index.js` + Test |
+| 2 | **Wake verdrahtet die Domain nicht** | `/api/status` bleibt dauerhaft `starting-app` mit `healthError: HTTP 522`; `origin.anunnakitools.de` zeigt nicht auf die neue app-IP. `wire-fleet` hilft nur, wenn der Worker-Token DNS darf (siehe 3) |
+| 3 | **Cloudflare-Token im Worker ist tot** | `POST /api/wire-fleet` → `{"dns":{"ok":false,"message":"Cloudflare-Zone nicht gefunden"}}` (der Worker bekommt bei `/zones` eine leere Antwort). Der neu bereitgestellte Token darf Workers/KV/Zonen **lesen**, aber **kein DNS** (`/zones/<id>/dns_records` → *Authentication error*) |
+| 4 | **Idle-Shutdown schläft den Knoten vor der Erreichbarkeit** | app-1 war nach ~35 min `off` (Timer „idle=30 min"), obwohl die Domain nie erreichbar wurde. Für Beweissessions: `systemctl stop audiomonastry-idle-shutdown.timer` |
+
+Zusätzlich nützlich: die Floating-IP (`samplemonk-floating`, 46.225.253.71) war **nicht
+angehängt** — `POST /api/wake` tut das nicht.
+
+### Was live bewiesen wurde (2026-09-18)
+
+- **4-User-Session gegen den echten Knoten**: 5 von 7 `collab.spec.ts`-Tests grün über
+  den Tunnel (`E2E_BASE_URL=http://localhost:8080`); offen: „Lock-Denial + Resync"
+  (B zeigt nach dem Resync kein `PRO`) und „Main-Out" (nur im Verbund rot, einzeln
+  grün) — siehe `MASTERTODOENDE.json`, COLLAB-P0-002.
+- **Ghostuser 6 (Beamer) live**: der echte Client unter `/visual-out` verbindet sich
+  und **verbraucht keinen der 4 Plätze** (Zähler bleibt `SESSION 1/4`).
+- **Bildweg live**: ein Abonnent am Knoten empfängt echten Multipart-Strom
+  (`--audiomonastryframe`, Content-Type `image/jpeg`, 1971 Bytes für zwei Frames);
+  `POST /api/visual/frame` liefert 200 (584 Bytes je JPEG).
+- **Nebenbei live bestätigt**: `[fleet] Knoten verdrahtet: masterPlayer → 142.132.231.146:8000`
+  über die **Alt-Namen** der Fleet-Map (`samplemonk-*`) — der Kompatibilitätspfad aus
+  NOMEN-P1-001 arbeitet in Produktion; und `[mos] 16 Hörerwertungen aus der Persistenz
+  geladen` (AI-P1-007).
+
+### Aufräumen (Kosten)
+
+`POST /api/stop` **löscht** alle Server und Floating-IPs (danach 0 €/Monat für Compute;
+die Snapshots bleiben). Vorher: `POST /api/refresh-snapshots`, damit der nächste Wake
+den aktuellen Stand enthält — das ist erst nach dem `snapshotRoleOf`-Fix auch schnell.

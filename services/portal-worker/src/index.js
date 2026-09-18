@@ -116,7 +116,20 @@ function isFleetSnapshot(img) {
 }
 
 function snapshotRoleOf(img) {
-  return img?.labels?.role ?? null;
+  const fromLabel = img?.labels?.role;
+  if (fromLabel) return fromLabel;
+  // LIVE-BEFUND 2026-09-18: Die Portal-Snapshots tragen KEIN Label und KEINEN
+  // Namen - nur die Beschreibung ("samplemonk-snapshot-app-2026-09-18[-live]").
+  // Mit der reinen Label-Abfrage fand `findSnapshot()` nie etwas, jeder Wake
+  // lief deshalb als Kaltstart mit cloud-init + Build (gemessen: statt
+  // Snapshot-Start; `usedSnapshots: {}`). Die Rolle wird daher aus Name/
+  // Beschreibung abgeleitet, wenn das Label fehlt.
+  const text = `${img?.name ?? ''} ${img?.description ?? ''}`;
+  for (const prefix of ALL_SNAPSHOT_PREFIXES) {
+    const match = text.match(new RegExp(`${prefix}(app|sfu|ai|master|edge)(?![a-z])`));
+    if (match) return match[1];
+  }
+  return null;
 }
 
 async function listSnapshots(env) {
