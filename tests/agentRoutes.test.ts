@@ -21,6 +21,18 @@ let baseUrl = '';
 let dir = '';
 let runner: ResumableAgentRunner;
 const executed: string[] = [];
+/**
+ * Gate fuer deterministische Abbruch-Tests: der erste Schritt haengt, bis der
+ * Test ihn freigibt. Ohne das war der Lauf unter Last schneller als der
+ * Cancel-Request (flaky) - mit Gate ist die Reihenfolge festgelegt.
+ */
+let firstStepGate: Promise<void> = Promise.resolve();
+let releaseFirstStep: () => void = () => {};
+/**
+ * Pro Test scharf geschaltet (nicht zustandsabhaengig von vorherigen Tests):
+ * der jeweils naechste Schritt haengt am Gate.
+ */
+let gateArmed = false;
 
 const plan: MoaPlan = {
   task: 'Test', provider: 'test' as never, createdAt: 1, raw: '',
@@ -32,6 +44,13 @@ const plan: MoaPlan = {
 
 const sleepMs = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Verbraucht die scharfe Gate-Marke: genau EIN Schritt wartet. */
+async function passGate(): Promise<void> {
+  if (!gateArmed) return;
+  gateArmed = false;
+  await firstStepGate;
+}
+
 function makeAgent(delayMs: number): ResumableAgent {
   const complete = async () => ({
     provider: 'test' as never,
@@ -39,8 +58,14 @@ function makeAgent(delayMs: number): ResumableAgent {
     latencyMs: 1,
   });
   const voice = {
-    execute: async (_u: string, command: string) => { await sleepMs(delayMs); executed.push(command); return { handled: true, pluginId: 'p' }; },
+    execute: async (_u: string, command: string) => {
+      await passGate();
+      await sleepMs(delayMs);
+      executed.push(command);
+      return { handled: true, pluginId: 'p' };
+    },
     executePluginCommand: async (_u: string, pluginId: string, command: string) => {
+      await passGate();
       await sleepMs(delayMs);
       executed.push(`${pluginId}:${command}`);
       return { handled: true, pluginId };
@@ -119,11 +144,25 @@ describe('AI-P1-006 · Routen', () => {
   });
 
   it('bricht ab und setzt an der Abbruchstelle fort', async () => {
+    // Schritt 1 haengt am Gate -> der Abbruch kommt garantiert WAEHREND des Laufs.
+    firstStepGate = new Promise<void>((resolve) => { releaseFirstStep = resolve; });
+    gateArmed = true;
     const started = await post('/api/ai/agent/runs', { task: 'Abbruch-Test', allowWrite: true });
     const { run } = await started.json() as { run: { runId: string } };
-    // Warten, bis der Lauf existiert und der erste Schritt laeuft, dann abbrechen.
+
+    // Auf 'running' warten, dann abbrechen (die Antwort kommt erst, wenn der
+    // Lauf wirklich gestoppt ist - deshalb nicht awaiten, sondern das Gate oeffnen).
     await waitForStatus(run.runId, ['running']);
-    const cancelled = await (await post(`/api/ai/agent/runs/${run.runId}/cancel`)).json() as { run: { status: string; executedCount: number } };
+    const cancelPromise = post(`/api/ai/agent/runs/${run.runId}/cancel`);
+    // Warten, bis der Server die Abbruchmarke gesetzt hat.
+    for (let i = 0; i < 200; i += 1) {
+      const res = await fetch(`${baseUrl}/api/ai/agent/runs/${run.runId}`);
+      const body = await res.json() as { run?: { cancelRequested?: boolean } };
+      if (body.run?.cancelRequested) break;
+      await sleepMs(10);
+    }
+    releaseFirstStep();
+    const cancelled = await (await cancelPromise).json() as { run: { status: string; executedCount: number } };
     expect(cancelled.run.status).toBe('cancelled');
     expect(cancelled.run.executedCount).toBeLessThan(2);
 

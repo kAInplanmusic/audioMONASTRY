@@ -349,3 +349,46 @@ stehen lässt.
 Plugin-Terminal mit MOA-Zeile): Auftrag starten, Status/Phase, Schritte mit
 Haken/Fehler, Kostensumme sowie **Abbrechen**/**Fortsetzen**. Der Panel lädt beim
 Öffnen den letzten Lauf (der Lauf liegt serverseitig).
+
+### 11b. LLM-Weg: drei Defekte und die Kaltstart-Falle (AI-P1-008, 2026-09-18)
+
+Der Agent-Lauf plant über den lokalen Brain. Drei Defekte in
+`src/core/ai/LlmRouter.ts` hatten den ganzen LLM-Weg lahmgelegt — jeder einzelne
+hätte gereicht, und alle drei waren unsichtbar (die Aufrufer fielen still auf
+lokale Ersatzpfade zurück, z. B. der Drop-Generator):
+
+1. **Asymmetrischer Env-Zugriff (Hauptursache).** `available` prüfte
+   `RP_BRAIN_OPENAI_URL` **und** `RUNPOD_BRAIN_OPENAI_URL`; `modelFor()` und
+   `complete()` lasen nur `RUNPOD_…`. In `.env` steht nur die `RP_`-Form → der
+   Provider galt als verfügbar, der Aufruf ging aber in den **nativen
+   Worker-Pfad** (`task:'llm'` mit `{prompt,maxTokens,…}`), und worker-vllm
+   lehnt das ab:
+   `Job input must contain one of: openai_input (+openai_route), route (+body), or prompt/messages.`
+   → **Fix:** eine Stelle `openAiUrl()`, von `available`/`modelFor`/`complete`
+   gemeinsam benutzt.
+2. **Falscher Modellname.** Der vLLM-Endpoint adressiert sein Modell über den
+   HuggingFace-Namen. Der Router schickte `qwen3-14b`, der Endpoint bietet
+   `Qwen/Qwen3-14B-AWQ` (`GET <url>/models`; Worker-Log:
+   ``The model `qwen3-14b` does not exist.`` NotFoundError 404).
+   → **Fix:** eigener Default `OPENAI_COMPAT_BRAIN_MODEL_DEFAULT='Qwen/Qwen3-14B-AWQ'`
+   plus `RUNPOD_BRAIN_OPENAI_MODEL`/`RP_BRAIN_OPENAI_MODEL`; der interne Kurzname
+   gilt nur noch für den nativen Worker-Weg.
+3. **Unbrauchbare Fehlermeldung.** `extractText` warf nur `HTTP 500` und verwarf
+   den Fehlerkörper; `JSON.stringify(new Error(...))` liefert `{}` — der Grund des
+   Endpoints war nicht ermittelbar. → **Fix:** Fehlerkörper (300 Zeichen) in die
+   Meldung, Fehlerabbildung berücksichtigt `.message`, und bei Modell-Ablehnung
+   nennt die Meldung Modell, Stellschraube und Modell-Listen-URL.
+
+**Nebenbei geklärt (kein Defekt, sondern Aufbau):** Die Plugin-Kommandos
+(`transport`, `mixer`, …) werden **client-seitig** registriert
+(`src/main.tsx` → `src/core/voice/pluginCommandRegistry.ts`). Ein serverseitiger
+Agent-Lauf plant und prüft daher, kann Plugin-Kommandos aber nicht ausführen und
+meldet ehrlich `Kein Plugin-Kommando`. Server-ausführbar sind die Werkzeuge der
+MCP-Runtime (`session.getState`, `runtime.status`, `sample.search`, `fleet.status`).
+
+**Kaltstart (Betreiber):** Der Brain-Endpoint läuft mit `workersMin=0` und
+`idleTimeout=15 s`. Nach Idle kostet der erste Aufruf **~2–3 min** (vLLM-Init
+133 s + CUDA-Graphs ~50 s, im Worker-Log gemessen). `AI_AGENT_PLAN_TIMEOUT_MS`
+muss dazu passen (z. B. 240000), sonst endet der Lauf korrekt, aber ohne Ergebnis:
+`Zeitlimit ueberschritten`. Messung mit korrektem Modellnamen gegen den warmen
+Endpoint: **HTTP 200 in ~1 s**.

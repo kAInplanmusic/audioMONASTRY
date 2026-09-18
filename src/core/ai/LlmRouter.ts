@@ -61,8 +61,27 @@ export interface ILlmProvider {
   complete(req: LlmRequest): Promise<LlmCompletion>;
 }
 
+/**
+ * AI-P1-008: Der OpenAI-kompatible Brain-Endpoint (worker-vllm) adressiert sein
+ * Modell ueber den HUGGINGFACE-Namen, den der Endpoint tatsaechlich serviert -
+ * NICHT ueber den internen Kurznamen.
+ *
+ * Live belegt (2026-09-18) im Worker-Log des Endpoints ppxo7wrn599p0q:
+ *   `The model `qwen3-14b` does not exist.` (NotFoundError, HTTP 404)
+ * Der Endpoint bietet `Qwen/Qwen3-14B-AWQ` an (`GET /openai/v1/models`). Folge:
+ * jeder LLM-Aufruf scheiterte, und aufrufende Features fielen STILL auf lokale
+ * Ersatzpfade zurueck (z.B. der Drop-Generator auf seinen lokalen Generator).
+ */
+export const OPENAI_COMPAT_BRAIN_MODEL_DEFAULT = 'Qwen/Qwen3-14B-AWQ';
+
+/** Modellname fuer den OpenAI-kompatiblen Weg (per Env ueberschreibbar). */
+export function openAiCompatBrainModel(): string {
+  return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
+}
+
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
-  // Gepinntes, heute lauffähiges Brain-Modell. Upgrade auf qwen3-32b /
+  // Gepinntes, heute lauffähiges Brain-Modell fuer den NATIVEN Worker-Weg
+  // (task 'llm'): dort gelten die internen Kurznamen. Upgrade auf qwen3-32b /
   // glm-4.5-air per RUNPOD_BRAIN_MODEL, sobald die Revision gepinnt ist.
   'runpod-local': 'qwen3-14b',
   mistral: 'mistral-small-latest',
@@ -96,7 +115,13 @@ function postJson(url: string, headers: Record<string, string>, body: unknown): 
 }
 
 async function extractText(resp: Response): Promise<string> {
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  if (!resp.ok) {
+    // AI-P1-008: Den Fehlerkoerper mitnehmen. Ohne ihn blieb nur "HTTP 500"
+    // uebrig, obwohl der Endpoint den Grund nennt ("The model `x` does not exist.")
+    // - genau daran hing die Diagnose eines kaputten LLM-Wegs.
+    const detail = await resp.text().catch(() => '');
+    throw new Error(`HTTP ${resp.status}${detail ? `: ${detail.slice(0, 300)}` : ''}`);
+  }
   const data = await resp.json();
   const anyData = data as Record<string, unknown>;
   if (typeof anyData?.text === 'string') return anyData.text;
@@ -249,9 +274,21 @@ class RunPodLocalProvider implements ILlmProvider {
     return new RunPodProvider('brain');
   }
 
+  /**
+   * AI-P1-008: Der OpenAI-kompatible Brain-Endpoint. EINE Stelle fuer den Zugriff -
+   * vorher pruefte `available` beide Schreibweisen (`RP_` und `RUNPOD_`), `complete`
+   * aber nur `RUNPOD_`. Mit dem in `.env` gesetzten `RP_BRAIN_OPENAI_URL` galt der
+   * Provider damit als verfuegbar, der Aufruf lief aber in den NATIVEN Worker-Pfad
+   * (task 'llm' mit `{prompt,maxTokens,...}`) - und worker-vllm lehnt das ab:
+   * `Job input must contain one of: openai_input (+openai_route), route (+body),
+   * or prompt/messages.` Live belegt 2026-09-18.
+   */
+  private openAiUrl(): string | undefined {
+    return envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL') || undefined;
+  }
+
   get available(): boolean {
-    const openAiUrl = envKey('RP_BRAIN_OPENAI_URL') || envKey('RUNPOD_BRAIN_OPENAI_URL');
-    if (openAiUrl) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
+    if (this.openAiUrl()) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
     return this.brainProvider().available;
   }
 
@@ -268,8 +305,12 @@ class RunPodLocalProvider implements ILlmProvider {
    *   Familie — `qwen3-4b` (Ausführer, `simple`) + `qwen3-14b` (`moderate`/`complex`).
    */
   private modelFor(complexity: LlmComplexity): string {
-    if (envKey('RUNPOD_BRAIN_OPENAI_URL')) {
-      return envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
+    if (this.openAiUrl()) {
+      // OpenAI-kompatibler Endpoint: HF-Modellname (siehe openAiCompatBrainModel).
+      // `RUNPOD_BRAIN_OPENAI_MODEL` gewinnt, dann ein gesetztes RUNPOD_BRAIN_MODEL,
+      // sonst der Default des Endpoint-Images.
+      return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL')
+        || envKey('RUNPOD_BRAIN_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
     }
     if (complexity === 'simple') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
@@ -280,26 +321,50 @@ class RunPodLocalProvider implements ILlmProvider {
   async complete(req: LlmRequest): Promise<LlmCompletion> {
     const started = Date.now();
     const model = this.modelFor(req.complexity);
-    const openAiUrl = envKey('RUNPOD_BRAIN_OPENAI_URL');
+    const openAiUrl = this.openAiUrl();
     // Qwen3 gibt sonst zuerst einen <think>-Block aus, der das Token-Budget
     // frisst. Für Tool-Calling/Interaktion ist Thinking aus; nur bei explizit
     // hohem Reasoning-Budget bleibt es an.
     const enableThinking = req.reasoningEffort === 'high' || req.reasoningEffort === 'max';
 
     if (openAiUrl) {
-      const resp = await postJson(
-        `${openAiUrl.replace(/\/+$/, '')}/chat/completions`,
-        { Authorization: `Bearer ${this.apiKey()}` },
-        {
-          model,
-          messages: [{ role: 'user', content: req.prompt }],
-          max_tokens: req.maxTokens ?? 1024,
-          temperature: req.temperature ?? 0.7,
-          // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block).
-          chat_template_kwargs: { enable_thinking: enableThinking },
-        },
-      );
-      return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+      const url = `${openAiUrl.replace(/\/+$/, '')}/chat/completions`;
+      let text: string;
+      try {
+        const resp = await postJson(
+          url,
+          { Authorization: `Bearer ${this.apiKey()}` },
+          {
+            model,
+            messages: [{ role: 'user', content: req.prompt }],
+            max_tokens: req.maxTokens ?? 1024,
+            temperature: req.temperature ?? 0.7,
+            // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block).
+            chat_template_kwargs: { enable_thinking: enableThinking },
+          },
+        );
+        // `extractText` wirft bei HTTP != 2xx ("HTTP 500") - das muss in denselben
+        // catch, sonst bleibt ein abgelehnter Modellname unerklaerlich.
+        text = await extractText(resp);
+      } catch (error) {
+        // AI-P1-008: Der haeufigste Fehler war ein falscher Modellname. Der
+        // Endpoint antwortet dann mit 404/`worker_error` - ohne Hinweis bleibt nur
+        // ein stiller Fallback auf lokale Ersatzpfade. Deshalb hier eine klare
+        // Meldung mit dem probierten Modell und der Stellschraube.
+        // Fehler koennen als Error (mit .message) oder als Objekt kommen - beides
+        // beruecksichtigen, `JSON.stringify(new Error(...))` liefert nur "{}".
+        const errorMessage = error instanceof Error ? error.message : '';
+        const detail = `${errorMessage} ${JSON.stringify(error)}`.trim();
+        if (/does not exist|NotFoundError|worker_error/i.test(detail)) {
+          throw new Error(
+            `Brain-Endpoint lehnt Modell '${model}' ab (${detail.slice(0, 200)}). `
+            + 'Pruefen: serviert der Endpoint dieses Modell? Stellschraube: RUNPOD_BRAIN_OPENAI_MODEL '
+            + `(Endpoint-Modelle: GET ${openAiUrl.replace(/\/+$/, '')}/models).`,
+          );
+        }
+        throw error;
+      }
+      return { provider: this.id, text: text!, latencyMs: Date.now() - started };
     }
 
     const result = await this.brainProvider().run('llm', model, {

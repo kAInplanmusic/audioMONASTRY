@@ -169,3 +169,72 @@ describe('LlmRouter: lokales Brain (runpod-local)', () => {
     await expect(router.complete({ prompt: 'Hi', complexity: 'simple' })).rejects.toThrow(/Kein LLM-Provider/);
   });
 });
+
+/**
+ * AI-P1-008 (live gefunden 2026-09-18): Der OpenAI-kompatible Brain-Endpoint wurde
+ * NUR unter `RUNPOD_BRAIN_OPENAI_URL` erkannt, waehrend `available` auch
+ * `RP_BRAIN_OPENAI_URL` akzeptierte. Mit dem in `.env` gesetzten `RP_`-Namen galt
+ * der Provider damit als verfuegbar, der Aufruf lief aber in den NATIVEN
+ * Worker-Pfad - und der lehnt das Payload ab
+ * ("Job input must contain one of: openai_input ...").
+ * Zweiter Fehler: der vLLM-Endpoint adressiert sein Modell ueber den
+ * HuggingFace-Namen (`Qwen/Qwen3-14B-AWQ`), nicht ueber den internen Kurznamen
+ * (`qwen3-14b`) - dieser 404 wurde als stiller Fallback auf lokale Ersatzpfade
+ * sichtbar. Beide Fehler sind hier festgehalten.
+ */
+describe('LlmRouter: OpenAI-kompatibler Brain-Endpoint (AI-P1-008)', () => {
+  const ENV_KEYS = ['RP_BRAIN_OPENAI_URL', 'RUNPOD_BRAIN_OPENAI_URL', 'RP_API_KEY', 'RUNPOD_BRAIN_OPENAI_MODEL', 'RP_BRAIN_OPENAI_MODEL', 'RUNPOD_BRAIN_MODEL'];
+
+  beforeEach(() => {
+    ENV_KEYS.forEach((k) => delete process.env[k]);
+    delete process.env.AI_ALLOW_EXTERNAL_LLM;
+    // NUR die RP_-Schreibweise setzen: genau die Konstellation aus .env.
+    process.env.RP_BRAIN_OPENAI_URL = 'https://api.runpod.ai/v2/ppxo7wrn599p0q/openai/v1';
+    process.env.RP_API_KEY = 'rpa_test';
+  });
+
+  afterEach(() => {
+    ENV_KEYS.forEach((k) => delete process.env[k]);
+    vi.unstubAllGlobals();
+  });
+
+  const okResponse = { choices: [{ message: { content: 'OK' } }] };
+
+  it('nutzt den OpenAI-Pfad auch bei RP_BRAIN_OPENAI_URL (nicht den nativen Worker-Pfad)', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(okResponse), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const router = new LlmRouter();
+    const provider = router.rankProviders('moderate')[0];
+    expect(provider?.id).toBe('runpod-local');
+    const completion = await provider!.complete({ prompt: 'Test', complexity: 'moderate' });
+
+    expect(completion.text).toBe('OK');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toBe('https://api.runpod.ai/v2/ppxo7wrn599p0q/openai/v1/chat/completions');
+    const body = JSON.parse(String(init.body)) as { model: string; messages: unknown[] };
+    // HuggingFace-Name des Endpoint-Modells - nicht 'qwen3-14b'.
+    expect(body.model).toBe('Qwen/Qwen3-14B-AWQ');
+    expect(body.messages).toHaveLength(1);
+  });
+
+  it('erlaubt das Modell per Env zu ueberschreiben', async () => {
+    process.env.RUNPOD_BRAIN_OPENAI_MODEL = 'Qwen/Qwen3-32B-AWQ';
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(okResponse), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const provider = new LlmRouter().rankProviders('moderate')[0];
+    await provider!.complete({ prompt: 'Test', complexity: 'moderate' });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect((JSON.parse(String(init.body)) as { model: string }).model).toBe('Qwen/Qwen3-32B-AWQ');
+  });
+
+  it('meldet einen abgelehnten Modellnamen mit Modell und Stellschraube', async () => {
+    const workerError = { message: 'The model `qwen3-14b` does not exist.', type: 'worker_error', code: null };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(workerError), { status: 500 })));
+
+    const provider = new LlmRouter().rankProviders('moderate')[0];
+    await expect(provider!.complete({ prompt: 'Test', complexity: 'moderate' }))
+      .rejects.toThrowError(/lehnt Modell.*RUNPOD_BRAIN_OPENAI_MODEL/s);
+  });
+});

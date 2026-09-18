@@ -66,6 +66,8 @@ export function agentRunSummary(record: AgentRunRecord): {
   corrections: number;
   cost: MoaRunCost;
   succeeded: boolean;
+  /** Abbruch angefordert (der laufende Schritt darf noch zu Ende laufen). */
+  cancelRequested: boolean;
   error?: string;
   updatedAt: number;
 } {
@@ -89,6 +91,7 @@ export function agentRunSummary(record: AgentRunRecord): {
     corrections: record.corrections,
     cost: record.cost,
     succeeded: record.succeeded,
+    cancelRequested: record.cancelRequested,
     error: record.error,
     updatedAt: record.updatedAt,
   };
