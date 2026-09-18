@@ -205,7 +205,8 @@ function Fader({ value, onChange, tall = false, color = ORANGE, label }: {
 function Meter({ level, tall = true }: { level: number; tall?: boolean }) {
   const lit = Math.round(clamp01(level) * 12);
   return (
-    <div className={`flex flex-col-reverse gap-[1px] ${tall ? 'h-36' : 'h-10'} w-2.5 rounded-sm bg-black/90 border border-zinc-800 p-[2px]`}>
+    // data-live-value: Pegel aendern sich mit dem Signal (VISUAL-P1-010).
+    <div data-live-value="meter" className={`flex flex-col-reverse gap-[1px] ${tall ? 'h-36' : 'h-10'} w-2.5 rounded-sm bg-black/90 border border-zinc-800 p-[2px]`}>
       {Array.from({ length: 12 }, (_, i) => {
         const on = i < lit;
         const c = i >= 10 ? 'bg-red-500' : i >= 7 ? 'bg-amber-400' : 'bg-emerald-400';
@@ -219,7 +220,7 @@ function Meter({ level, tall = true }: { level: number; tall?: boolean }) {
 function MasterMeter({ level }: { level: number }) {
   const lit = Math.round(clamp01(level) * 14);
   return (
-    <div className="flex flex-col gap-[2px] w-full">
+    <div data-live-value="master-meter" className="flex flex-col gap-[2px] w-full">
       {['L', 'R'].map((ch) => (
         <div key={ch} className="flex items-center gap-1">
           <span className="text-[9px] font-mono text-zinc-500 w-2">{ch}</span>

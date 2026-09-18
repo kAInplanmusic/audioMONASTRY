@@ -193,7 +193,9 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
             <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-4">
               <Zap className="w-4 h-4" /> LATENCY & JITTER
             </h3>
-            <div className="space-y-3">
+            {/* VISUAL-P1-010: Live-Werte (FPS/Jitter/Latenz) aendern sich staendig -
+                visuelle Baselines blenden den Bereich ueber [data-live-value] aus. */}
+            <div className="space-y-3" data-live-value="perf">
               <div>
                 <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
                   <span>UI FPS</span>

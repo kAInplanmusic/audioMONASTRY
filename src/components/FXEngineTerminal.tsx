@@ -192,7 +192,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
          {/* Center Column: FX Selection & Visualizer */}
          <div className="col-span-6 flex flex-col gap-6">
              <div className="bg-black rounded-2xl border border-neutral-800 p-4 shadow-inner">
-                 <canvas ref={canvasRef} width={600} height={120} className="w-full h-full rounded-xl" />
+                 <canvas data-live-value="fx-scope" ref={canvasRef} width={600} height={120} className="w-full h-full rounded-xl" />
              </div>
 
              <div className="bg-[#1a1a1a] rounded-2xl border border-neutral-800 p-6 flex flex-col gap-4 flex-1 shadow-inner">

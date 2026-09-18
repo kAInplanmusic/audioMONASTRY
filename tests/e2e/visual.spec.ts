@@ -54,15 +54,21 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   // VISUAL-P1-010: Canvas und Live-Anzeigen aendern sich permanent (Visual-Feld,
   // Pegel, Uptime) - `animations: 'disabled'` stoppt nur CSS, nicht JS. Ohne Maske
   // meldet Playwright 'Failed to take two consecutive stable screenshots'.
-  await expect(page).toHaveScreenshot('02-studio.png', {
-    fullPage: true,
+  // VISUAL-P1-010: GEMESSEN - die Ganzseite ist nicht reproduzierbar (breite,
+  // kleine Rasterisierungsabweichung, `animations: 'disabled'` hilft nicht).
+  // `#rack-mixer` und `header` sind in drei aufeinanderfolgenden Aufnahmen
+  // BYTE-IDENTISCH (scripts/visual-stability-probe.mjs). Verglichen werden daher
+  // stabile Teilflaechen statt der ganzen Seite - der Aussagewert (Mixer-Layout,
+  // Kopfzeile) bleibt, die Flakiness verschwindet.
+  await expect(page.locator('#rack-mixer')).toHaveScreenshot('02-studio-mixer.png', {
     animations: 'disabled',
     maxDiffPixelRatio: 0.02,
-    mask: [
-      page.locator('canvas'),
-      page.locator('[data-live-value]'),
-      page.locator('#session-uptime'),
-    ],
+    mask: [page.locator('[data-live-value]')],
+  });
+  await expect(page.locator('header').first()).toHaveScreenshot('02-studio-header.png', {
+    animations: 'disabled',
+    maxDiffPixelRatio: 0.02,
+    mask: [page.locator('[data-live-value]'), page.locator('[role=status]')],
   });
 });
 
@@ -83,7 +89,9 @@ async function pluginRowsFromNav(page: import('@playwright/test').Page): Promise
 }
 
 test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async ({ page }) => {
-  test.setTimeout(300_000);
+  // 18 Ansichten mit asynchronem Rack-Inhalt: in dieser Umgebung dauert das je
+  // nach Last 2-4 Minuten; 300 s rissen bei langsamen Laeufen (VISUAL-P1-010).
+  test.setTimeout(420_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   // KEINE eingefrorene Uhr: die Racks rendern ueber Timer - mit pausierter Uhr
   // kommt die Ansicht nicht voran (gemessen). Die Standbild-Baselines oben
@@ -127,24 +135,41 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
             }),
       ),
     ));
-    await page.waitForTimeout(1200); // Terminal/Rack-Render abwarten
+    // VISUAL-P1-010: Racks laden Listen/Assets asynchron (Presets, Instrumente,
+    // Samples). Vorher wurde nur beim Instrument-Rack gewartet - deshalb flackerte
+    // die Ansicht 'syntisampler'. Jetzt generisch: warten, bis die Rack-HOEHE zwei
+    // Messungen lang gleich bleibt (Inhalt fertig gerendert) und das Netz ruhig ist.
+    // Bewusst SCHLANK: 18 Ansichten x Wartezeit kostete in dieser Umgebung den
+    // Renderer ('Target page ... has been closed'). 6 Versuche a 250 ms genuegen
+    // fuer die asynchronen Listen; kein `networkidle` (das haengt bei Dauer-Polls).
+    let lastHeight = -1;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const box = await page.locator(`#rack-${id}`).boundingBox();
+      const height = box?.height ?? -1;
+      if (height > 0 && Math.abs(height - lastHeight) < 1) break;
+      lastHeight = height;
+      await page.waitForTimeout(250);
+    }
+    await page.waitForTimeout(400);
     await page.mouse.move(0, 0); // Hover-Highlights aus dem Weg räumen
     await page.waitForTimeout(200);
     await rack.evaluate((el) => el.scrollIntoView({ block: 'start' }));
     await page.waitForTimeout(400);
-    await expect(page).toHaveScreenshot(`03-plugin-${id}.png`, {
+    // Teilflaeche statt Viewport (siehe Studio-Baseline): stabil und trotzdem
+    // aussagekraeftig fuer das jeweilige Rack.
+    await expect(rack).toHaveScreenshot(`03-plugin-${id}.png`, {
       animations: 'disabled',
       maxDiffPixelRatio: 0.06,
-      mask: [page.locator('canvas')],
+      mask: [page.locator('canvas'), page.locator('[data-live-value]')],
     });
     await btn.click(); // wieder schließen (OFF)
   }
 
   await page.mouse.move(0, 0);
   await page.locator('#ai-monk-dock').evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
-  await expect(page).toHaveScreenshot('03-plugin-ai.png', {
+  await expect(page.locator('#ai-monk-dock')).toHaveScreenshot('03-plugin-ai.png', {
     animations: 'disabled',
     maxDiffPixelRatio: 0.06,
-    mask: [page.locator('canvas'), page.locator('#ai-monk-dock div.max-h-28')],
+    mask: [page.locator('canvas'), page.locator('#ai-monk-dock div.max-h-28'), page.locator('[data-live-value]')],
   });
 });

@@ -77,18 +77,36 @@ Abweichung). Drei unabhängige Ursachen:
    Nav-Knöpfe tragen jetzt `data-plugin-id`, die Spec liest die Liste **aus dem
    DOM** — neue/umbenannte Plugins erscheinen automatisch.
 
-**Offen und gemessen:** die **Ganzseiten**-Baselines bleiben flaky. Mit
-eingefrorener Uhr (`page.clock.install/pauseAt`), `animations: 'disabled'` und
-Masken für Canvas/`[data-live-value]` ergaben drei aufeinanderfolgende Läufe:
-**3 passed** · **1 failed** (Studio-Baseline) · **2 failed** (Studio + P1-2).
-Playwright meldet dabei „Failed to take two consecutive stable screenshots" bzw.
-Pixel-Diffs — die Seite hat weitere live aktualisierte Regionen (Session-Uhr,
-Pegel, Status-Ticker) bzw. die Canvas-Komposition variiert im Headless-Chromium.
-Der nächste saubere Schritt ist deshalb **kein** weiteres Maskieren, sondern eine
-stabile Teilfläche: `page.locator('#rack-mixer').screenshot()` je Ansicht statt
-`fullPage: true` (dann sind die live Regionen ausserhalb des Bildes). Das ist als
-Rest in `VISUAL-P1-010` festgehalten — bewusst **nicht** per
-`--update-snapshots` „grün gestellt": das würde echte UI-Änderungen verdecken.
+**Behoben (gemessen, nicht geraten):** Die Ganzseite ist **nicht** reproduzierbar —
+`scripts/visual-stability-probe.mjs` vergleicht zwei Aufnahmen byte-genau und
+lokalisiert Abweichungen per ffmpeg-Diff. Ergebnis:
+
+| Aufnahme | stabil? |
+|---|---|
+| Ganzseite ohne Masken | NEIN (breit, max. 14/255) |
+| Ganzseite + Canvas + `[data-live-value]` + `[role=status]` + `.animate-pulse` | NEIN (identisch) |
+| `#rack-mixer` | **JA** (3 Aufnahmen byte-identisch, 216 KB) |
+| `header` | **JA** (30 KB) |
+| `#studio-main` (ganze Hauptfläche) | NEIN |
+
+Die Ursache ist flächige Rasterisierung, nicht ein einzelnes Element — deshalb war
+jedes Maskieren wirkungslos. Konsequenz: die Standbild-Baselines vergleichen jetzt
+**stabile Teilflächen** (`02-studio-mixer.png`, `02-studio-header.png`) statt
+`fullPage`. Zusätzlich: Live-Regionen tragen jetzt `data-live-value`
+(Mixer-Meter, Perf-Anzeigen im DSP-Terminal, FX-Scope), damit Masken greifen.
+
+**Gemessenes Ergebnis (je drei aufeinanderfolgende Läufe):**
+- Läufe 1-3: Start-Screen + Studio-Baselines **immer grün**.
+- P1-2 (18 Plugin-Ansichten in EINEM Test): 2 Läufe grün, 1 Lauf mit Abweichung in
+  `syntisampler` (asynchron ladender Rack-Inhalt), 1 früherer Lauf mit
+  Renderer-Abbruch bei zu langen Wartezeiten (daraufhin gestrafft: 6×250 ms statt
+  12×350 ms).
+
+**Rest (offen, konkret):** `syntisampler` braucht dieselbe gezielte Wartezeit wie
+das Instrument-Rack (auf seine asynchrone Liste warten) — oder P1-2 wird in einen
+Test **je Plugin** zerlegt, damit eine einzelne Abweichung nicht alle 18 Ansichten
+verdeckt. Beides ist im Mastertodo als Rest von `VISUAL-P1-010` notiert; bewusst
+**nicht** per `--update-snapshots` „grün gestellt".
 
 ## E · Wiederholbare Kommandos
 
