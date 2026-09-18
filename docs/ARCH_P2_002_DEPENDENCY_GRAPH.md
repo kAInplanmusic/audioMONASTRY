@@ -218,3 +218,63 @@ Schritt geführt.
 
 Socket-/Session-Schicht (Reihenfolge siehe oben, zuletzt), danach die
 verhaltensneutrale Deduplizierung der drei Voice-Handler-Selbstklone.
+
+## Abschluss 2026-09-18 — Socket-/Session-Schicht zerlegt (letzter offener Punkt)
+
+Die Route-Handler waren bereits extrahiert. Offen war ausdrücklich die
+**Socket-/Session-Schicht** mit sieben mutierbaren Modul-Symbolen
+(`authoritativeSession`, `sessionPersistence`, `sessionSaveTimer`, `serverIo`,
+`broadcastLockExpiry`, `activeSocketConnections`, `FLEET_MAP_URL`). Sie ist jetzt
+in drei Module gehoben:
+
+| Modul | Inhalt | Zeilen |
+|---|---|---|
+| `server/sessionRuntime.ts` | autoritativer Zustand, Persistenz (Memory/Redis), Snapshots inkl. Retention, Lock-Sweep + Broadcast, `start()`/`stop()` | 209 |
+| `server/realtime.ts` | Socket.io-Setup, Handshake-Auth, Redis-Adapter, Session-Raum, Locks, Plugin-State-Relay, Main-Out-Ownership, Telemetrie, Mediasoup-SFU | 763 |
+| `server/fleetWiring.ts` | Fleet-Map-URL, Ziel-Validierung, Altnamen-Fallback, Verdrahtung beim Start | 136 |
+
+**Ergebnis:**
+
+| Kennzahl | vorher | jetzt |
+|---|---|---|
+| `server.ts` | 1613 Zeilen | **788 Zeilen** |
+| Route-Handler in `server.ts` | 0 | 0 |
+| Modul-Zustandssymbole in `server.ts` | 7 | **0** (Tool: 7 Gruppen, `state: []`) |
+| `serverIo` in `server.ts` | Zustandshalter | Veröffentlichung des Hub-`io` (einmal gesetzt) |
+| `fleetTargets` in `server.ts` | Zustandshalter | Getter-Objekt aus `createFleetWiring` |
+
+Was `server.ts` jetzt ist: Komposition (Express-App, Sicherheits-/Rate-Limit-
+Ketten, Route-Registrierung, Start/Stop). Der Dependency-Graph bestätigt es:
+`python3 scripts/route-dependency-graph.py --json` liefert 7 Gruppen und **kein**
+mutierbares Zustandssymbol mehr.
+
+**Zwei Fehler, die beim Umsetzen real zugeschlagen haben (jetzt abgesichert):**
+
+1. *Snapshot-Store nach Redis.* Der Entwurf von `restoreFromRedis` legte den
+   Snapshot-Store versehentlich wieder auf den In-Memory-Adapter — PERSIST-P1-003
+   wäre still verloren gegangen. Der Store nimmt jetzt den Redis-Key-Value-Store
+   als **Pflichtargument**; `tests/sessionRuntime.test.ts` prüft beide
+   Wiederherstellungspfade (State-Key, Snapshot) und die Prüfsummen-Bindung.
+2. *Getter statt Wertkopie.* `fleetTargets` wird als Objekt mit Getter
+   weitergereicht; eine Kopie hätte die Verdrahtung eingefroren (derselbe Fehler
+   war bei einer früheren Extraktion in dieser Datei schon einmal passiert).
+   `tests/fleetWiring.test.ts` hält das fest.
+
+**Und ein Fehler, den erst der Browser-E2E gezeigt hat (nicht dieser Umbau, aber
+in seinem Umfeld entstanden):** `src/core/ai/MoaAgent.ts` las `process.env` auf
+Modulebene. Diese Datei ist über `MoaAssistant` im Client-Bundle, und Vite
+definiert `process` nicht — die App rendete leer
+(`Uncaught ReferenceError: process is not defined`, Quelle `MoaAgent.ts`).
+Alle 7 Zwei-Browser-E2E-Tests waren dadurch rot; **Node-Tests können das nicht
+sehen, weil sie ein `process` haben**. Behoben (`MoaAgent.ts`,
+`LocalEmbeddingProvider.ts`, `aiLogger.ts`, `agentRuns.ts`) und abgesichert:
+`tests/browserSafeModules.test.ts` löst den Importgraphen ab `src/main.tsx` auf
+(189 Module) und verlangt für jedes client-erreichbare Modul: kein
+`process`-Zugriff auf Modulebene und `process.env` nur mit `typeof
+process`-Absicherung. Server-Module unter `src/`, die `process` legitim nutzen,
+bleiben davon unberührt.
+
+**Nachweise:** `npm run verify` exit 0 (228 Dateien / 1595 Tests),
+`npm run build` exit 0, Playwright `tests/e2e/collab.spec.ts` **7/7 grün**
+(2-Browser-Sync, Lock-Denial + Resync, 4-User-Session, Main-Out, Halter-Übergabe —
+alles über die extrahierte Socket-Schicht).

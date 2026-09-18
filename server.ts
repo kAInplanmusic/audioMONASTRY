@@ -12,7 +12,6 @@ import {
   uploadSampleToR2,
 } from './server/cloud.ts';
 import { resolveAiRateLimits } from './src/config/aiRateLimits';
-import { isListenerMode, normalizeSessionMode } from './src/core/session/listenerMode';
 // ARCH-P2-002: server.ts wird schrittweise zerlegt. Route-Gruppen liegen als
 // Factories unter server/routes/ und werden an ihrer Originalposition
 // registriert (Reihenfolge = Middleware-Reihenfolge, siehe app.use oben).
@@ -33,29 +32,13 @@ import { moaAgent } from './src/core/ai/MoaAgent';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
-import { buildPluginStateRelayPayload } from './src/core/session/pluginStateRelay';
-import {
-  AuthoritativeSession,
-  MemorySessionPersistence,
-  type AuthoritativeSessionPersistence,
-  type SerializedAuthoritativeSession,
-} from './src/core/session/authoritativeSession';
+import { AuthoritativeSession } from './src/core/session/authoritativeSession';
 import { looksLikeStudioSession, verifyStudioSession } from './src/core/session/studioSession';
-import {
-  canControlMainOut,
-  MIXER_NEVER_CLOSES,
-  isMainOutPlugin,
-  resolveMainOutUserId,
-  validateMainOutPayload,
-} from './src/core/session/mainOutGuard';
+import { resolveMainOutUserId } from './src/core/session/mainOutGuard';
 import { LatencyHistogram } from './src/core/observability/latencyHistogram';
-import { SnapshotStore, createMemoryKeyValueStore, type KeyValueStore } from './src/core/persistence/snapshotStore';
-import { createRedisKeyValueStore } from './src/core/persistence/redisKeyValueStore';
-import {
-  PluginLockSocketSchema,
-  PluginLockTransferSocketSchema,
-  PluginStateSocketSchema,
-} from './src/types/zod/schemas';
+import { createSessionRuntime, DEFAULT_PLUGIN_LOCK_TTL_MS } from './server/sessionRuntime.ts';
+import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
+import { createFleetWiring } from './server/fleetWiring.ts';
 
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
 const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
@@ -95,88 +78,16 @@ const PORT = Number(process.env.PORT || 8080);
 // Direkte Env-Variablen (MASTER_PLAYER_URL, OLLAMA_URL, STEM_AI_URL) haben
 // weiterhin Vorrang (explizit gesetzt > Flotten-Map > interner Default).
 // ---------------------------------------------------------------------------
-// S-9: Fleet-Map-URL validieren (https-only, sonst Default).
-const FLEET_MAP_URL_RAW = (process.env.FLEET_MAP_URL || '').trim();
-let FLEET_MAP_URL = 'https://anunnakitools.de/api/fleet-map';
-try {
-  const u = new URL(FLEET_MAP_URL_RAW || FLEET_MAP_URL);
-  if (u.protocol === 'https:') FLEET_MAP_URL = u.toString();
-} catch { /* Default behalten */ }
-const fleetTargets: { masterPlayer: string; ollama: string; stemAi: string } = {
-  masterPlayer: '',
-  ollama: '',
-  stemAi: '',
-};
+// ARCH-P2-002: Flotten-Verdrahtung (FLEET_MAP_URL, Ziel-Validierung, Altnamen-
+// Fallback) liegt in server/fleetWiring.ts. `fleetTargets` wird bewusst als
+// Getter weitergereicht: die Routen und der Ollama-/Master-Player-Zugriff lesen
+// die Ziele zur Laufzeit, nicht als Kopie beim Start.
+const fleetWiring = createFleetWiring({});
+const fleetTargets = fleetWiring.targets;
+void fleetWiring.wire();
 
-/** Validiert einen Fleet-Knoten (Hostname/IP, optional :port) gegen SSRF-/Injection-Werte. */
-function buildFleetTarget(raw: unknown, defaultPort: number): string {
-  const value = typeof raw === 'string' ? raw.trim() : '';
-  if (!value || value.length > 255) return '';
-  if (/[\s/@\\?&#]/.test(value)) return '';
-  const withoutScheme = value.replace(/^https?:\/\//i, '');
-  const portIndex = withoutScheme.lastIndexOf(':');
-  let host = withoutScheme;
-  let port = defaultPort;
-  if (portIndex !== -1) {
-    const portPart = withoutScheme.slice(portIndex + 1);
-    if (!/^\d{1,5}$/.test(portPart)) return '';
-    host = withoutScheme.slice(0, portIndex);
-    port = Number(portPart);
-  }
-  if (!host || host.length > 253) return '';
-  // Hostname oder IPv4, keine Wildcards/Unterstriche/Pfade.
-  if (!/^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(host) && !/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return '';
-  if (port < 1 || port > 65535) return '';
-  return `http://${host}:${port}`;
-}
-
-/**
- * NOMEN-P1-001: Die Flotte heisst `audiomonastry-*`. Die Fleet-Map ist nach dem
- * Server-/Firewall-Namen verschluesselt, und eine LAUFENDE Installation kann noch
- * die alten Namen tragen (der Portal-Worker bildet sie inzwischen auf den neuen
- * Namen ab, aber nicht jede Installation ist aktualisiert). Deshalb: neuer Name
- * zuerst, Altname als Fallback - so verdrahten sich beide Flotten.
- */
-const FLEET_LEGACY_NAME_PREFIX = 'samplemonk-';
-
-export function fleetNodeAddress(
-  map: Record<string, string>,
-  node: string,
-): string | undefined {
-  const direct = map[node];
-  if (direct) return direct;
-  const legacy = node.startsWith('audiomonastry-')
-    ? `${FLEET_LEGACY_NAME_PREFIX}${node.slice('audiomonastry-'.length)}`
-    : '';
-  return legacy ? map[legacy] : undefined;
-}
-
-async function wireFleetFromPortal(): Promise<void> {
-  const token = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
-  if (!token) return; // Lokal/Test: keine Flotten-Verdrahtung.
-  try {
-    const resp = await fetch(FLEET_MAP_URL, {
-      headers: { 'x-studio-token': token },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!resp.ok) return;
-    const data = (await resp.json()) as { fleet?: Record<string, string> };
-    const f = data.fleet ?? {};
-    const masterTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-master-1'), 8000);
-    if (masterTarget) fleetTargets.masterPlayer = masterTarget;
-    const aiTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-ai-1'), 8000);
-    if (aiTarget) {
-      const ollamaPort = Number(process.env.FLEET_OLLAMA_PORT || 11434);
-      const ollamaTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-ai-1'), Number.isFinite(ollamaPort) ? ollamaPort : 11434);
-      fleetTargets.ollama = ollamaTarget || '';
-      fleetTargets.stemAi = aiTarget;
-    }
-    console.log('[fleet] Knoten verdrahtet:', JSON.stringify({ masterPlayer: fleetTargets.masterPlayer, ollama: fleetTargets.ollama, stemAi: fleetTargets.stemAi }));
-  } catch (e) {
-    console.warn('[fleet] Fleet-Map nicht erreichbar:', (e as Error).message);
-  }
-}
-void wireFleetFromPortal();
+// NOMEN-P1-001: fuer Tests und Aufrufer weiterhin direkt erreichbar.
+export { fleetNodeAddress, buildFleetTarget } from './server/fleetWiring.ts';
 
 
 // DCT-108: In-Process-Metriken (keine neuen Dependencies, keine Secrets/Samples).
@@ -204,7 +115,6 @@ const metrics = {
 };
 
 // Aktive Socket.io-Verbindungen (User-Sessions) für /api/online + Idle-Shutdown.
-let activeSocketConnections = 0;
 
 // P4-2: Server-seitiges Audit-Log (Rollenwechsel, Lock-/State-Events, RBAC-Denials).
 const serverAuditLog: { ts: string; userId: string; role: string; action: string; target?: string; ok: boolean }[] = [];
@@ -218,78 +128,29 @@ function addServerAudit(userId: string, role: string, action: string, ok: boolea
 // Es gibt nur noch: Session-Mitglieder (equal) + der mixerMONK-Lock-Owner (DJ).
 const MAIN_OUT_USER_ID = (process.env.MAIN_OUT_USER_ID || '').trim();
 function resolveSessionMainOutUserId(): string {
-  const lockOwner = authoritativeSession.lockOwner('mixer');
+  const lockOwner = sessionRuntime.session.lockOwner('mixer');
   if (lockOwner) return lockOwner;
   return resolveMainOutUserId(MAIN_OUT_USER_ID, []);
 }
 // COLLAB-P0-001: Serverautoritativer Session-State (Revision/Sequenz/Snapshot +
 // atomare Locks) ersetzt die frühere rohe `pluginLocks`-Map. Der Client bleibt
 // optimistisch; der Server verwirft verspätete/doppelte Events deterministisch.
-const PLUGIN_LOCK_TTL_MS = 60_000; // 60 s + Heartbeat-Verlängerung (Fallback)
-const PLUGIN_LOCK_SWEEP_MS = 15_000;
-const SESSION_STATE_REDIS_KEY = 'audiomonastry:session-state';
-let authoritativeSession = new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS });
-let sessionPersistence: AuthoritativeSessionPersistence = new MemorySessionPersistence();
-let sessionSaveTimer: ReturnType<typeof setTimeout> | null = null;
+const PLUGIN_LOCK_TTL_MS = DEFAULT_PLUGIN_LOCK_TTL_MS; // 60 s + Heartbeat-Verlängerung (Fallback)
 /** Socket.io-Referenz für Modul-Scope-Routen (E2E-Reset); null vor Start. */
 let serverIo: any = null;
+/** Echtzeit-Schicht (ARCH-P2-002); null vor dem Start. */
+let realtimeHub: RealtimeHub | null = null;
 
-// P1-2: Automatische Snapshots des autoritativen Session-States mit
-// Checksumme, Retention und trockenem Cleanup (dokumentiert in
-// docs/ENV_MATRIX.md bzw. docs/PERSISTENZ). SnapshotStore ist rein; hier wird
-// SHA-256 als Prüfsumme injiziert (node:crypto ist in server.ts erlaubt).
-const SNAPSHOT_OPTIONS = {
-  maxSnapshots: Math.max(1, Number(process.env.SNAPSHOT_MAX_SNAPSHOTS ?? 20)),
-  maxAgeMs: Math.max(0, Number(process.env.SNAPSHOT_MAX_AGE_MS ?? 7 * 24 * 60 * 60 * 1000)),
+// ARCH-P2-002: Der autoritative Session-Zustand, seine Persistenz, die Snapshots
+// (Prüfsumme/Retention, PERSIST-P1-003) und der Lock-Sweep liegen in
+// server/sessionRuntime.ts. Hier bleibt nur die EINE Instanz - die Handler und
+// Routen greifen ueber `sessionRuntime` darauf zu, statt den Zustand im
+// Modulscope zu teilen.
+const sessionRuntime = createSessionRuntime({
+  log: (message) => console.log(message),
   checksum: (input: string) => createHash('sha256').update(input).digest('hex'),
-};
-const createSessionSnapshotStore = (kv: KeyValueStore): SnapshotStore<SerializedAuthoritativeSession> =>
-  new SnapshotStore<SerializedAuthoritativeSession>(kv, SNAPSHOT_OPTIONS);
-// PERSIST-P1-003: Default ist der In-Memory-Store (Single-Instance). Ist
-// REDIS_URL gesetzt, wird der Store im Redis-Block auf den Redis-KV-Adapter
-// umgestellt, damit Snapshots einen Prozess-Neustart überleben.
-let sessionSnapshotStore = createSessionSnapshotStore(createMemoryKeyValueStore());
-const SNAPSHOT_INTERVAL_MS = Math.max(1_000, Number(process.env.SNAPSHOT_INTERVAL_MS ?? 60_000));
-/** Ein Snapshot + Retention-Lauf (best effort, wirft nie). */
-const persistSnapshotNow = (): void => {
-  const serialized = authoritativeSession.serialize();
-  void sessionSnapshotStore.write(serialized, serialized.revision)
-    .then(() => sessionSnapshotStore.prune())
-    .catch((err) => console.warn('[snapshot] persistieren fehlgeschlagen:', (err as Error).message));
-};
-setInterval(persistSnapshotNow, SNAPSHOT_INTERVAL_MS).unref?.();
-
-/** Debounced Persistenz (Redis im Multi-Instanz-Betrieb, sonst In-Memory). */
-const persistSessionState = (): void => {
-  if (sessionSaveTimer) return;
-  sessionSaveTimer = setTimeout(() => {
-    sessionSaveTimer = null;
-    void sessionPersistence.save(authoritativeSession.serialize()).catch(() => { /* best effort */ });
-    // P1-2: auch Snapshot-Store aktualisieren (debounced, kein Extra-Timer nötig).
-    persistSnapshotNow();
-  }, 250);
-  sessionSaveTimer.unref?.();
-};
-/** Legacy-Sicht der Locks für `plugin-locks-sync` (Client-Format, unverändert). */
-const legacyLockMap = (): Record<string, { lockedBy: string; timestamp: number; ttl: number }> => {
-  const now = Date.now();
-  return Object.fromEntries(authoritativeSession.snapshot(now).locks.map((l) => [
-    l.objectId,
-    { lockedBy: l.ownerId, timestamp: now, ttl: Math.max(0, l.leaseUntil - now) },
-  ]));
-};
-// ARCH-#2: Ablauf broadcasten – Callback wird im Socket.io-Setup gesetzt
-// (io + SESSION_ROOM_ID leben dort im Scope). Null = noch nicht initialisiert.
-let broadcastLockExpiry: ((pluginId: string) => void) | null = null;
-const sweepPluginLocks = (): void => {
-  for (const pluginId of authoritativeSession.sweepExpiredLocks()) {
-    // ARCH-#2: Ablauf aktiv an ALLE Session-Teilnehmer broadcasten (statt
-    // stillschweigend zu löschen) – sonst bleibt der Lock clientseitig
-    // hängen und das Plugin erscheint für andere weiter als gesperrt.
-    broadcastLockExpiry?.(pluginId);
-  }
-};
-setInterval(sweepPluginLocks, PLUGIN_LOCK_SWEEP_MS).unref?.();
+});
+sessionRuntime.start();
 
 // DCT-108: Request/Trace-ID-Middleware (Korrelation User-Action → HTTP → AI).
 app.use((req, res, next) => {
@@ -592,7 +453,7 @@ app.use('/api/ai/agent/runs', agentLimiter);
 // unveraendert bleibt.
 registerOpsRoutes(app, {
   STEM_MAX_JOBS,
-  getActiveSocketConnections: () => activeSocketConnections,
+  getActiveSocketConnections: () => realtimeHub?.getActiveSocketConnections() ?? 0,
   getStemActiveJobs,
   metrics,
   serverAuditLog,
@@ -680,13 +541,13 @@ registerSessionRoutes(app, {
   safeTokenEqual,
   newSession: () => new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS }),
   replaceSession: (session) => {
-    authoritativeSession = session;
+    sessionRuntime.setSession(session);
   },
+  // Der Save-Timer liegt in der Laufzeit; `stop()` bricht ihn ab. Frueher stand
+  // hier eine eigene Kopie der Timer-Verwaltung - die zweite Stelle war genau
+  // die Art von Zustand, die diese Zerlegung aufloest.
   clearSaveTimer: () => {
-    if (sessionSaveTimer) {
-      clearTimeout(sessionSaveTimer);
-      sessionSaveTimer = null;
-    }
+    sessionRuntime.stopSaveTimer();
   },
   get serverIo() {
     return serverIo;
@@ -875,710 +736,24 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
 
   const server = http.createServer(app);
 
-  // --- WebRTC Socket.io signaling (same origin as the app) ---
-  const IDLE_TIMEOUT_MS = Number(process.env.SIGNALING_IDLE_TIMEOUT_MS || 20 * 60 * 1000);
-  const ALLOWED_ORIGINS = (process.env.SIGNALING_ALLOWED_ORIGINS || '')
-    .split(',')
-    .map((o) => o.trim())
-    .filter(Boolean);
-  // '*' muss als Wildcard durchgereicht werden (Array ['*'] matcht keine Origins).
-  const CORS_ORIGIN: any = ALLOWED_ORIGINS.includes('*')
-    ? '*'
-    : ALLOWED_ORIGINS.length > 0
-      ? ALLOWED_ORIGINS
-      : false;
-
-  let io: any = null;
-
-  try {
-    const { Server } = (await import('socket.io')) as any;
-    io = new Server(server, {
-      cors: {
-        origin: CORS_ORIGIN,
-        methods: ['GET', 'POST'],
-      },
-      path: '/webrtc-signaling',
-    });
-    serverIo = io;
-
-    // P-11: Handshake-Auth + Origin-Prüfung. Mit STUDIO_ACCESS_TOKEN müssen
-    // Clients das `studio`-Cookie (vom Portal gesetzt) mitschicken.
-    io.use(async (socket: any, next: (err?: Error) => void) => {
-      const origin = String(socket.handshake?.headers?.origin ?? '');
-      if (
-        ALLOWED_ORIGINS.length > 0 &&
-        !ALLOWED_ORIGINS.includes('*') &&
-        origin &&
-        !ALLOWED_ORIGINS.includes(origin)
-      ) {
-        return next(new Error('origin-not-allowed'));
-      }
-      // P0-Security: fail-closed – ohne Studio-Token und ohne expliziten
-      // Dev-/Test-Modus keine Signalisierung/WebRTC.
-      if (studioTokenMissing) {
-        return next(new Error('server-not-configured'));
-      }
-      if (!studioAuthOpen) {
-        const cookie = String(socket.handshake?.headers?.cookie ?? '');
-        const m = cookie.match(/(?:^|;\s*)studio=([^;]+)/);
-        const token = String(socket.handshake?.auth?.token ?? '') ||
-          String(socket.handshake?.headers?.['x-studio-token'] ?? '') ||
-          (m ? decodeURIComponent(m[1]) : '');
-        const masterOk = Boolean(token) && safeTokenEqual(token, STUDIO_ACCESS_TOKEN);
-        // SEC-P2-002: zusätzlich das kurzlebige Portal-Session-Token akzeptieren.
-        const sessionOk = !masterOk && Boolean(token) && looksLikeStudioSession(token)
-          && (await verifyStudioSession(token, STUDIO_SESSION_SECRET));
-        if (!masterOk && !sessionOk) {
-          return next(new Error('unauthorized'));
-        }
-      }
-      next();
-    });
-
-    // Multi-Instanz-Modus: Mit REDIS_URL teilen sich alle App-Knoten die
-    // Socket.io-Räume (Session-/Plugin-State über Prozessgrenzen hinweg).
-    // S-9: REDIS_URL nur mit redis/rediss-Schema akzeptieren.
-    let redisUrl = (process.env.REDIS_URL || '').trim();
-    if (redisUrl && !/^rediss?:\/\//i.test(redisUrl)) {
-      console.warn('[signaling] REDIS_URL ungültig (Schema) – In-Memory-Adapter aktiv.');
-      redisUrl = '';
-    }
-    if (redisUrl) {
-      try {
-        const [{ createClient }, { createAdapter }] = await Promise.all([
-          import('redis'),
-          import('@socket.io/redis-adapter'),
-        ]);
-        const pubClient = createClient({ url: redisUrl });
-        const subClient = pubClient.duplicate();
-        await Promise.all([pubClient.connect(), subClient.connect()]);
-        io.adapter(createAdapter(pubClient, subClient));
-        // COLLAB-P0-001: Session-State + Locks über Redis sichern, damit ein
-        // Server-Neustart / eine zweite Instanz keinen State verliert. Best-effort:
-        // Fehler dürfen den Audio-/Signaling-Betrieb nicht beeinträchtigen.
-        const redisPersistence: AuthoritativeSessionPersistence = {
-          async load(): Promise<SerializedAuthoritativeSession | null> {
-            try {
-              const raw = await pubClient.get(SESSION_STATE_REDIS_KEY);
-              if (typeof raw !== 'string' || raw.length === 0) return null;
-              return JSON.parse(raw) as SerializedAuthoritativeSession;
-            } catch {
-              return null;
-            }
-          },
-          async save(state: SerializedAuthoritativeSession): Promise<void> {
-            try {
-              await pubClient.set(SESSION_STATE_REDIS_KEY, JSON.stringify(state));
-            } catch {
-              /* best effort */
-            }
-          },
-        };
-        const restored = await redisPersistence.load();
-        if (restored) authoritativeSession = AuthoritativeSession.restore(restored, { lockTtlMs: PLUGIN_LOCK_TTL_MS });
-        sessionPersistence = redisPersistence;
-        // PERSIST-P1-003: Snapshots ueberleben den Prozess-Neustart, weil der
-        // SnapshotStore jetzt auf Redis schreibt (vorher nur In-Memory).
-        sessionSnapshotStore = createSessionSnapshotStore(createRedisKeyValueStore(pubClient));
-        let snapshotRestored = false;
-        if (!restored) {
-          // Zweiter, checksummen-gepruefter Pfad: falls der Session-State-Key
-          // fehlt, den neuesten GUELTIGEN Snapshot wiederherstellen.
-          const snapshot = await sessionSnapshotStore.restore('latest');
-          if (snapshot) {
-            authoritativeSession = AuthoritativeSession.restore(snapshot.payload, { lockTtlMs: PLUGIN_LOCK_TTL_MS });
-            snapshotRestored = true;
-            console.log(`Session aus Snapshot wiederhergestellt (id=${snapshot.id}, rev=${authoritativeSession.revision}).`);
-          }
-        }
-        console.log(`Redis-Adapter aktiv (Socket.io Multi-Instanz). Session-State ${restored ? `wiederhergestellt (rev=${authoritativeSession.revision})` : snapshotRestored ? `aus Snapshot (rev=${authoritativeSession.revision})` : 'neu'}. Snapshots liegen in Redis.`);
-      } catch (e) {
-        console.warn('Redis-Adapter nicht aktiv:', (e as Error).message);
-      }
-    }
-
-    io.on('connection', (socket: any) => {
-      activeSocketConnections += 1;
-      let idleTimer: ReturnType<typeof setTimeout> | null = null;
-      const refreshIdleTimer = () => {
-        if (idleTimer) clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => socket.disconnect(true), IDLE_TIMEOUT_MS);
-      };
-      refreshIdleTimer();
-
-      socket.on('disconnect', () => {
-        activeSocketConnections = Math.max(0, activeSocketConnections - 1);
-      });
-
-      // S-2: Signaling-Relay mit Ziel-Validierung – es darf nur an Sockets
-      // derselben Session geroutet werden (nie an fremde/ungültige Socket-IDs).
-      const relayToSessionPeer = (event: string, data: any, payload: Record<string, unknown>): void => {
-        const targetId = String(data?.target ?? '').trim();
-        if (!targetId) return;
-        const target = io.sockets.sockets.get(targetId);
-        if (!target) return;
-        const sameRoom = !!socket.data?.sessionRoom
-          && target.data?.sessionRoom === socket.data.sessionRoom;
-        if (!sameRoom) return;
-        target.emit(event, payload);
-      };
-
-      socket.on('offer', (data: any) => {
-        refreshIdleTimer();
-        if (!data.offer) return;
-        relayToSessionPeer('offer', data, { offer: data.offer, sender: socket.id, senderMode: socket.data?.sessionMode ?? 'member' });
-      });
-      socket.on('answer', (data: any) => {
-        refreshIdleTimer();
-        if (!data.answer) return;
-        relayToSessionPeer('answer', data, { answer: data.answer, sender: socket.id });
-      });
-      socket.on('ice-candidate', (data: any) => {
-        refreshIdleTimer();
-        if (!data.candidate) return;
-        relayToSessionPeer('ice-candidate', data, { candidate: data.candidate, sender: socket.id });
-      });
-      socket.on('activity', refreshIdleTimer);
-
-      // -------------------------------------------------------------------
-      // Session-Verwaltung (EINE feste Session, max. 4 User) – Full-Mesh.
-      //   Kein Raum-Erstellen/Beitreten: Jede App-Sitzung ist automatisch
-      //   genau dieser eine Raum. 'join-session { userId }' → 'session-members'
-      //   an den Neuen, 'peer-joined' an alle anderen; bei >4: 'session-full'.
-      // -------------------------------------------------------------------
-      const SESSION_ROOM_ID = 'studio-session';
-      const MAX_SESSION_USERS = 4;
-
-      const sessionMembers = (room: string, excludeSocketId: string) => {
-        const members: { socketId: string; userId: string; role: string }[] = [];
-        const sockets = io.sockets.adapter.rooms.get(room);
-        if (sockets) {
-          for (const sid of sockets) {
-            if (sid === excludeSocketId) continue;
-            const s = io.sockets.sockets.get(sid);
-            // Listener (Ghostuser 5/6) zählen NICHT als Session-Mitglieder.
-            if (s?.data?.sessionUserId && !isListenerMode(normalizeSessionMode(s?.data?.sessionMode))) {
-              members.push({ socketId: sid, userId: s.data.sessionUserId, role: s.data.sessionRole ?? 'guest' });
-            }
-          }
-        }
-        return members;
-      };
-
-      /**
-       * COLLAB-P0-002: Mitgliederliste serverautoritativ an ALLE Session-Sockets
-       * verteilen (jeder bekommt die Liste OHNE sich selbst). Vorher bekam nur der
-       * Beitretende eine `session-members`-Nachricht; die anderen erfuhren eine
-       * Änderung nur über `peer-joined` — ein Client, der beim Join noch nicht
-       * zuhörte (Modul-Init vor React-Mount), blieb dauerhaft auf einem alten
-       * Zähler stehen (live nachgestellt 2026-09-13).
-       */
-      const broadcastSessionMembers = (room: string): void => {
-        const sockets = io.sockets.adapter.rooms.get(room);
-        if (!sockets) return;
-        for (const sid of sockets) {
-          const s = io.sockets.sockets.get(sid);
-          if (!s?.data?.sessionUserId) continue;
-          const selfMode = normalizeSessionMode(s.data.sessionMode);
-          s.emit('session-members', {
-            roomId: SESSION_ROOM_ID,
-            members: sessionMembers(room, sid),
-            selfMode,
-            mainOutUserId: resolveSessionMainOutUserId(),
-          });
-        }
-      };
-
-      socket.on('join-session', (data: any) => {
-        refreshIdleTimer();
-        const userId = String(data?.userId ?? socket.id).trim();
-        // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: eigener Listen-Modus – zählt
-        // nicht zu den 4 Usern, sendet selbst nichts und bekommt die
-        // Mitgliederliste, um den Host zu finden (Szenario: 4 iPads + Laptop an
-        // der PA (/master-out) + Beamer (/visual-out)).
-        const mode = normalizeSessionMode(data?.mode);
-        const room = `session:${SESSION_ROOM_ID}`;
-        socket.data.sessionUserId = userId;
-        socket.data.sessionRoom = SESSION_ROOM_ID;
-        socket.data.sessionMode = mode;
-        // ROLLENSYSTEM ENTFERNT: alle Session-User sind gleich; nur der
-        // mixerMONK-Lock-Owner ist besonders (Main-Out).
-        socket.data.sessionRole = 'member';
-        addServerAudit(userId, 'member', mode === 'master-out' ? 'JOIN_MASTER_OUT' : mode === 'visual-out' ? 'JOIN_VISUAL_OUT' : 'JOIN_SESSION', true, SESSION_ROOM_ID);
-        socket.join(room);
-        // K-2: Aktive Locks an den neuen Teilnehmer synchronisieren (Legacy-Format).
-        socket.emit('plugin-locks-sync', {
-          roomId: SESSION_ROOM_ID,
-          locks: legacyLockMap(),
-        });
-        // COLLAB-P0-001: vollständiger, serverautoritativer Snapshot für
-        // Join/Reconnect – Revision + Modul-States + Locks + Sequenzen.
-        {
-          const snapshot = authoritativeSession.snapshot();
-          socket.emit('session-state', {
-            roomId: SESSION_ROOM_ID,
-            revision: snapshot.revision,
-            modules: snapshot.modules,
-            locks: snapshot.locks,
-            sequences: snapshot.sequences,
-            serverTime: snapshot.serverTime,
-          });
-        }
-
-        const members = sessionMembers(room, socket.id);
-        if (isListenerMode(mode)) {
-          // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
-          // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
-          // initiiert seine Verbindung selbst zum Host.
-          socket.emit('session-members', {
-            roomId: SESSION_ROOM_ID,
-            members,
-            selfMode: mode,
-            mainOutUserId: resolveSessionMainOutUserId(),
-          });
-          return;
-        }
-
-        if (members.length >= MAX_SESSION_USERS) {
-          socket.emit('session-full', { roomId: SESSION_ROOM_ID, max: MAX_SESSION_USERS });
-          socket.leave(room);
-          return;
-        }
-
-        // COLLAB-P0-002: Erst dem Raum den neuen Peer ankündigen, dann allen
-        // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
-        socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
-        broadcastSessionMembers(room);
-      });
-
-      // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
-      socket.on('plugin-lock', (data: any) => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const parsed = PluginLockSocketSchema.safeParse(data ?? {});
-        if (!parsed.success) return;
-        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const pluginId = parsed.data.pluginId;
-        const acquired = authoritativeSession.acquireLock(pluginId, senderUserId);
-        if (!acquired.ok) {
-          socket.emit('plugin-lock-denied', { pluginId, lockedBy: acquired.lockedBy ?? null });
-          return;
-        }
-        persistSessionState();
-        const lock = { lockedBy: senderUserId, timestamp: Date.now(), ttl: PLUGIN_LOCK_TTL_MS };
-        const revision = authoritativeSession.revision;
-        socket.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock, revision });
-        socket.emit('plugin-lock', { pluginId, ...lock, revision });
-        if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
-        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK', true, pluginId);
-      });
-      // COLLAB-P0-004 (Teil 2): gezielte Uebergabe des Halters. Betreiberregel
-      // 2026-09-17: der Halter kann mixerMONK an einen bestimmten Nutzer geben -
-      // danach ist dieser der Einzige, der den Mainsound beeinflusst. Nur der
-      // aktuelle Halter darf uebertragen; der Ziel-Nutzer muss im Raum sein.
-      socket.on('plugin-lock-transfer', (data: any) => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const parsed = PluginLockTransferSocketSchema.safeParse(data ?? {});
-        if (!parsed.success) {
-          socket.emit('plugin-lock-transfer-denied', { reason: 'invalid' });
-          return;
-        }
-        const { pluginId, toUserId } = parsed.data;
-        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        // Der Raumname traegt das Praefix 'session:' (siehe join-session: room = `session:${SESSION_ROOM_ID}`).
-        // Ohne das Praefix findet sessionMembers keine Mitglieder - live aufgefallen 2026-09-17.
-        const targetIsMember = sessionMembers(`session:${roomId}`, '').some((m) => m.userId === toUserId);
-        if (!targetIsMember) {
-          socket.emit('plugin-lock-transfer-denied', { pluginId, reason: 'target-not-in-session', lockedBy: authoritativeSession.lockOwner(pluginId) ?? null });
-          return;
-        }
-        const result = authoritativeSession.transferLock(pluginId, senderUserId, toUserId);
-        if (!result.ok) {
-          socket.emit('plugin-lock-transfer-denied', {
-            pluginId,
-            reason: result.reason ?? 'invalid',
-            lockedBy: result.lockedBy ?? null,
-          });
-          addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK_TRANSFER', false, pluginId);
-          return;
-        }
-        persistSessionState();
-        const lock = { lockedBy: toUserId, timestamp: Date.now(), ttl: PLUGIN_LOCK_TTL_MS };
-        const revision = authoritativeSession.revision;
-        io.to(`session:${roomId}`).emit('plugin-lock', { pluginId, ...lock, revision });
-        if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
-        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_LOCK_TRANSFER', true, pluginId);
-      });
-      // ARCH-#2: Broadcast-Callback für Lock-Ablauf (Sweep im Modul-Scope).
-      broadcastLockExpiry = (pluginId: string) => {
-        io.to(`session:${SESSION_ROOM_ID}`).emit('plugin-unlock', {
-          pluginId,
-          lockedBy: null,
-          reason: 'expired',
-        });
-        broadcastMainOutOwner(`session:${SESSION_ROOM_ID}`);
-      };
-      // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel an den Raum
-      // broadcasten – die Clients spiegeln sonst einen veralteten Owner.
-      const broadcastMainOutOwner = (roomId: string): void => {
-        io.to(roomId).emit('main-out-owner', { userId: resolveSessionMainOutUserId(), ts: Date.now() });
-      };
-      socket.on('plugin-unlock', (data: any) => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const parsed = PluginLockSocketSchema.safeParse(data ?? {});
-        if (!parsed.success) return;
-        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const pluginId = parsed.data.pluginId;
-        if (!authoritativeSession.releaseLock(pluginId, senderUserId)) return;
-        persistSessionState();
-        socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId, revision: authoritativeSession.revision });
-        if (pluginId === 'mixer') broadcastMainOutOwner(`session:${roomId}`);
-        addServerAudit(senderUserId, String(socket.data?.sessionRole ?? 'guest'), 'PLUGIN_UNLOCK', true, pluginId);
-      });
-
-      // COLLAB-P0-001: Reconnect-Resync – der Client fordert den vollständigen
-      // autoritativen Zustand an, ohne die Session neu zu betreten (kein Pumping).
-      socket.on('resync-session', () => {
-        refreshIdleTimer();
-        if (!socket.data?.sessionRoom) return;
-        const snapshot = authoritativeSession.snapshot();
-        socket.emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: legacyLockMap() });
-        socket.emit('session-state', {
-          roomId: SESSION_ROOM_ID,
-          revision: snapshot.revision,
-          modules: snapshot.modules,
-          locks: snapshot.locks,
-          sequences: snapshot.sequences,
-          serverTime: snapshot.serverTime,
-        });
-      });
-
-      // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
-      // (noch) nicht offen sind – deterministischer Fallback über den Signaling-Pfad.
-      socket.on('plugin-state', (data: any) => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const parsed = PluginStateSocketSchema.safeParse(data ?? {});
-        if (!parsed.success) return;
-        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const senderRole = String(socket.data?.sessionRole ?? 'guest');
-        const { pluginId, state } = parsed.data;
-        // COLLAB-P0-004 (Betreiberregel 2026-09-17): mixerMONK ist die einzige
-        // Main-Einspeisung und laesst sich NIE schliessen - auch nicht vom Halter.
-        // OFF wuerde die Signalkette trennen und Main UND Clock stoppen.
-        if (pluginId === MIXER_NEVER_CLOSES && state === 'OFF') {
-          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
-          socket.emit('rbac-denied', {
-            action: 'plugin-state',
-            pluginId,
-            state,
-            role: senderRole,
-            reason: 'mixerMONK laesst sich nicht schliessen',
-          });
-          return;
-        }
-        // K-2: Lock serverseitig durchsetzen – nur der Halter darf den State ändern.
-        const lockOwner = authoritativeSession.lockOwner(pluginId);
-        if (lockOwner && lockOwner !== senderUserId) {
-          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, pluginId);
-          socket.emit('rbac-denied', { action: 'plugin-state', pluginId, state, role: senderRole, reason: 'locked by other' });
-          return;
-        }
-        // ROLLENSYSTEM ENTFERNT: keine Rollen-Prüfung für PRO/OFF/AUTO_AI mehr.
-        // Jeder Session-User darf Plugins schalten; Locks + Main-Out-Schutz
-        // (unten) regeln die Exklusivität.
-        // P0-1: Main-Out-Schutz – mixer/master-Zustand ändert nur der MixerMONK
-        // (Main-Out-Owner). Andere User dürfen den Main-Out nicht schalten,
-        // auch nicht auf OFF (OFF würde das Main-Signal abwürgen).
-        if (isMainOutPlugin(pluginId) && !canControlMainOut(senderUserId, resolveSessionMainOutUserId())) {
-          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:main-out protected`);
-          socket.emit('rbac-denied', {
-            action: 'plugin-state',
-            pluginId,
-            state,
-            reason: 'main-out protected (mixerMONK only)',
-            mainOutUserId: resolveSessionMainOutUserId(),
-          });
-          return;
-        }
-        // COLLAB-P0-001: doppelte/verspätete Events deterministisch verwerfen.
-        const eventId = parsed.data.eventId
-          ?? `${senderUserId}:${pluginId}:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
-        const applied = authoritativeSession.applyEvent({
-          id: eventId,
-          type: 'plugin-state',
-          senderUserId,
-          pluginId,
-          state,
-          sequence: parsed.data.sequence,
-        });
-        if (!applied.accepted) {
-          addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', false, `${pluginId}:${applied.reason}`);
-          socket.emit('plugin-state-rejected', {
-            pluginId,
-            eventId,
-            reason: applied.reason ?? 'invalid',
-            revision: applied.revision,
-          });
-          return;
-        }
-        persistSessionState();
-        addServerAudit(senderUserId, senderRole, 'PLUGIN_STATE', true, pluginId);
-        // Session-Identität + Revision/Event-ID: Empfänger können ordnen/deduplizieren.
-        // COLLAB-P0-002: Payload über den getesteten Vertrags-Builder bauen. Der
-        // frühere Spread `{ ...parsed.data }` enthielt KEIN type, senderId und
-        // timestamp (Zod strippt unbekannte Keys) - die Clients haben das Relay
-        // deshalb in dispatchDataMessage verworfen, und die State-Spiegelung hing
-        // allein an offenen DataChannels.
-        const payload = buildPluginStateRelayPayload({
-          pluginId,
-          state,
-          senderUserId,
-          senderRole,
-          revision: applied.revision,
-          eventId,
-          sequence: parsed.data.sequence,
-          timestamp: parsed.data.timestamp,
-        });
-        socket.to(`session:${roomId}`).emit('plugin-state', payload);
-        socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
-      });
-
-      // COLLAB-P1-004: Aktives Plugin/Nav an die Session spiegeln. Reiner
-      // UI-Hinweis (kein Audio-State, keine Lock-Wirkung) – egal welcher User
-      // gerade welches Modul bedient, die anderen sehen es im Header.
-      socket.on('session-nav', (data: any) => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const senderRole = String(socket.data?.sessionRole ?? 'guest');
-        const pluginId = String(data?.pluginId ?? '').trim().slice(0, 64);
-        if (!pluginId) return;
-        const payload = { pluginId, senderUserId, senderRole, ts: Date.now() };
-        socket.to(`session:${roomId}`).emit('session-nav', payload);
-      });
-
-      // P0-1: Server-validierter Main-Out-Parameterkanal (MixerMONK exklusiv).
-      // Clients, die Main-Out-Parameter (masterVolume, Fades, …) ändern wollen,
-      // senden hierhin statt über den unkontrollierten Peer-Pfad. Der Server
-      // validiert Berechtigung + Payload und broadcastet an den Session-Raum.
-      socket.on('main-out-update', (data: unknown) => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
-        const senderRole = String(socket.data?.sessionRole ?? 'guest');
-        const mainOutUserId = resolveSessionMainOutUserId();
-        if (!canControlMainOut(senderUserId, mainOutUserId)) {
-          addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', false);
-          socket.emit('rbac-denied', {
-            action: 'main-out-update',
-            role: senderRole,
-            reason: 'main-out protected (MixerMONK only)',
-            mainOutUserId,
-          });
-          return;
-        }
-        // COLLAB-P1-005: zusaetzlich Allow-List + Wertebereich. Vorher wurde ein
-        // formal gueltiger Payload mit unbekanntem Namen (z. B. `bpm`) oder
-        // einem Wert ausserhalb des Bereichs (`masterVolumeDb = 99`) ungeprueft
-        // an alle Peers gespiegelt und dort auf den Main-Out angewandt.
-        // `'reason' in parsed` statt `!parsed.ok`: das Repo faehrt ohne `strict`
-        // (strictNullChecks off), dort greift die Diskriminanten-Verengung ueber
-        // ein Boolean-Literal nicht - die `in`-Verengung schon.
-        const parsed = validateMainOutPayload(data);
-        if ('reason' in parsed) {
-          addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', false, String(parsed.reason));
-          socket.emit('main-out-update-rejected', {
-            param: String((data as { param?: unknown } | null)?.param ?? ''),
-            reason: parsed.reason,
-          });
-          return;
-        }
-        addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', true, `${parsed.param}=${parsed.value}`);
-        const payload = {
-          param: parsed.param,
-          value: parsed.value,
-          senderUserId,
-          senderRole,
-          ts: Date.now(),
-        };
-        socket.to(`session:${roomId}`).emit('main-out-update', payload);
-        socket.emit('main-out-update', payload);
-      });
-
-      socket.on('leave-session', () => {
-        refreshIdleTimer();
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const userId = String(socket.data?.sessionUserId ?? '');
-        // K-5/COLLAB-P0-001: Locks des Users beim Verlassen freigeben.
-        const released = authoritativeSession.releaseUserLocks(userId);
-        for (const pluginId of released) {
-          socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'left' });
-        }
-        persistSessionState();
-        if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
-        socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
-        socket.leave(`session:${roomId}`);
-      });
-
-      socket.on('disconnect', () => {
-        const roomId = socket.data?.sessionRoom;
-        if (!roomId) return;
-        const userId = String(socket.data?.sessionUserId ?? '');
-        // K-5: Locks des getrennten Users sofort freigeben und verteilen.
-        const released = authoritativeSession.releaseUserLocks(userId);
-        for (const pluginId of released) {
-          socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId, reason: 'disconnect' });
-        }
-        persistSessionState();
-        if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
-        socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
-      });
-    });
-
-    // ---------------------------------------------------------------------
-    // SFU (Mediasoup) – skalierbarer Kollaborations-Transport für 10+ Nutzer
-    // Aktiviert mit ENABLE_SFU=1. Baut einen Mediasoup-Router pro Session auf
-    // und bedient die RTC-Capabilities-/Transport-/Produce-/Consume-Anfragen
-    // des Frontend-`MediasoupTransport`.
-    // ---------------------------------------------------------------------
-    if ((process.env.ENABLE_SFU || '').trim() === '1') {
-      try {
-        const mediasoup = (await import('mediasoup')) as any;
-        const sfuIo = new Server(server, {
-          cors: {
-            origin: CORS_ORIGIN,
-            methods: ['GET', 'POST'],
-          },
-          path: '/sfu-signaling',
-        });
-
-        // Globale (für diese Prozessinstanz) Worker/Router-Registry je Session.
-        // RTC-Portbereich per Env einstellbar, damit der docker-compose-Portbereich
-        // klein gehalten werden kann (sonst erzeugt Docker sehr viele iptables-Regeln).
-        const SFU_RTC_MIN_PORT = Number(process.env.SFU_RTC_MIN_PORT || 40000);
-        const SFU_RTC_MAX_PORT = Number(process.env.SFU_RTC_MAX_PORT || 40099);
-        const mWorker = await mediasoup.createWorker({ rtcMinPort: SFU_RTC_MIN_PORT, rtcMaxPort: SFU_RTC_MAX_PORT });
-        const routers = new Map<string, any>();
-        // Producer-Registry je Session: erlaubt Peer-uebergreifendes Consume.
-        const sessionProducers = new Map<string, Map<string, any>>();
-
-        const ensureRouter = async (sessionId: string) => {
-          if (!routers.has(sessionId)) {
-            const router = await mWorker.createRouter({
-              mediaCodecs: [
-                { kind: 'audio', mimeType: 'audio/opus', clockRate: 48000, channels: 2 },
-              ],
-            });
-            routers.set(sessionId, router);
-          }
-          return routers.get(sessionId);
-        };
-
-        sfuIo.on('connection', (socket: any) => {
-          const sessionId = (socket.handshake?.query?.sessionId || 'main').toString();
-          // S-5: sessionId strikt whitelisten (kein Path/Namespace-Injection in Raumnamen).
-          if (!/^[a-zA-Z0-9_-]{1,64}$/.test(sessionId)) {
-            socket.disconnect(true);
-            return;
-          }
-          // Mehrere Transports je Socket (send + recv) und lokale Producer-Map.
-          const transports = new Map<string, any>();
-          const producers = new Map<string, any>();
-          if (!sessionProducers.has(sessionId)) sessionProducers.set(sessionId, new Map());
-          const sessionProducerMap = sessionProducers.get(sessionId)!;
-          socket.join(`sfu-session:${sessionId}`);
-
-          socket.on('getRouterRtpCapabilities', async (_d: any, cb: any) => {
-            try {
-              const router = await ensureRouter(sessionId);
-              cb?.({ rtpCapabilities: router.rtpCapabilities });
-            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
-          });
-          socket.on('createTransport', async (data: any, cb: any) => {
-            try {
-              const router = await ensureRouter(sessionId);
-              const transport = await router.createWebRtcTransport({
-                listenIps: [{ ip: process.env.SFU_LISTEN_IP || '0.0.0.0', announcedIp: process.env.SFU_ANNOUNCED_IP } as any],
-                enableUdp: true, enableTcp: true, preferUdp: true,
-              });
-              transport.on('dtlsstatechange', (s: string) => { if (s === 'closed') transport.close(); });
-              transports.set(transport.id, transport);
-              if (data?.direction) transport.appData.direction = data.direction;
-              cb?.({
-                id: transport.id,
-                iceParameters: transport.iceParameters,
-                iceCandidates: transport.iceCandidates,
-                dtlsParameters: transport.dtlsParameters,
-              });
-            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
-          });
-          socket.on('connectTransport', async (data: any, cb: any) => {
-            try {
-              const t = transports.get(String(data?.transportId ?? ''));
-              if (!t) throw new Error('kein transport');
-              await t.connect({ dtlsParameters: data.dtlsParameters });
-              cb?.({});
-            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
-          });
-          socket.on('produce', async (data: any, cb: any) => {
-            try {
-              const t = transports.get(String(data?.transportId ?? ''));
-              if (!t) throw new Error('kein transport');
-              if (t.appData?.direction === 'recv') throw new Error('recv-transport kann nicht produzieren');
-              const producer = await t.produce({
-                kind: data.kind, rtpParameters: data.rtpParameters, appData: data.appData,
-              });
-              producers.set(producer.id, producer);
-              sessionProducerMap.set(producer.id, producer);
-              socket.to(`sfu-session:${sessionId}`).emit('new-producer', { producerId: producer.id, kind: producer.kind });
-              cb?.({ id: producer.id });
-            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
-          });
-          socket.on('consume', async (data: any, cb: any) => {
-            try {
-              const t = transports.get(String(data?.transportId ?? ''));
-              if (!t) throw new Error('kein transport');
-              if (t.appData?.direction === 'send') throw new Error('send-transport kann nicht konsumieren');
-              const producer = sessionProducerMap.get(String(data?.producerId ?? ''));
-              if (!producer) throw new Error('producer nicht gefunden');
-              const consumer = await t.consume({
-                producerId: producer.id, rtpCapabilities: data.rtpCapabilities,
-              });
-              cb?.({
-                id: consumer.id, kind: consumer.kind,
-                rtpParameters: consumer.rtpParameters, producerId: producer.id,
-              });
-            } catch (e) { console.warn('[sfu] operation failed:', (e as Error).message); cb?.({ error: 'internal' }); }
-          });
-          socket.on('disconnect', () => {
-            for (const t of transports.values()) {
-              try { t.close(); } catch { /* ignore */ }
-            }
-            transports.clear();
-            for (const [id] of producers) {
-              sessionProducerMap.delete(id);
-            }
-            producers.clear();
-          });
-        });
-        console.log('SFU (Mediasoup) aktiviert: /sfu-signaling');
-      } catch (e) {
-        console.warn('Mediasoup SFU nicht gestartet (ENABLE_SFU):', (e as Error).message);
-      }
-    }
-  } catch (e) {
-    console.warn('Socket.io signaling disabled:', (e as Error).message);
-  }
+  // ARCH-P2-002: Socket.io-Signalisierung, Session-Raum, Locks, Plugin-State,
+  // Main-Out-Ownership, Telemetrie und der optionale SFU liegen in
+  // server/realtime.ts. Hier wird die Schicht nur noch verdrahtet.
+  const hub = await createRealtimeHub(server, {
+    sessionRuntime,
+    addServerAudit,
+    resolveSessionMainOutUserId,
+    pluginLockTtlMs: PLUGIN_LOCK_TTL_MS,
+    studioTokenMissing,
+    studioAuthOpen,
+    studioAccessToken: STUDIO_ACCESS_TOKEN,
+    studioSessionSecret: STUDIO_SESSION_SECRET,
+    safeTokenEqual,
+    looksLikeStudioSession,
+    verifyStudioSession,
+  });
+  serverIo = hub.io;
+  realtimeHub = hub;
 
   await new Promise<void>((resolve) => {
     server.listen(port, '0.0.0.0', () => {
@@ -1599,7 +774,7 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
   } catch (e) {
     console.warn('[mos] Laden der Hörerwertungen fehlgeschlagen:', (e as Error).message);
   }
-  return { httpServer: server, io };
+  return { httpServer: server, io: hub.io };
 }
 
 export { app, startServer };

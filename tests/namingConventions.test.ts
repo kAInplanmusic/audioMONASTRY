@@ -36,7 +36,8 @@ const ALLOWED: Record<string, string> = {
   'services/portal-worker/src/index.js': 'LEGACY_NAME_PREFIX / LEGACY_SNAPSHOT_PREFIXES (Bestandsressourcen).',
   'scripts/hetzner/fleet-names.sh': 'LEGACY_FLEET_PREFIX (Aufloesung des tatsaechlichen Knotennamens).',
   'scripts/hetzner/fleet-status.sh': 'Altname im case-Muster des Health-Checks.',
-  'server.ts': 'FLEET_LEGACY_NAME_PREFIX (Fleet-Map einer nicht aktualisierten Instanz).',
+  'server/fleetWiring.ts': 'FLEET_LEGACY_NAME_PREFIX (Fleet-Map einer nicht aktualisierten Instanz).',
+  'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
 };
 

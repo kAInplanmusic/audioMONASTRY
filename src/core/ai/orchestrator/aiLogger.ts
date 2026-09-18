@@ -67,7 +67,22 @@ class AiLogger {
   }
 
   debug(msg: string, fields?: Omit<AiLogRecord, 'ts' | 'level' | 'service' | 'msg'>): void {
-    if ((process.env.AI_LOG_LEVEL ?? 'INFO').toUpperCase() === 'DEBUG') this.log('DEBUG', msg, fields);
+    if (this.logLevel() === 'DEBUG') this.log('DEBUG', msg, fields);
+  }
+
+  /**
+   * Log-Level aus dem Env - OHNE ungeschuetzten `process`-Zugriff: dieses Modul
+   * ist ueber den Client-Importgraphen erreichbar (aiOrchestrator -> UI-Pfade),
+   * und im Browser gibt es `process` nicht (Vite definiert es nicht). Ein
+   * direkter Zugriff wirft dort "ReferenceError: process is not defined".
+   */
+  private logLevel(): string {
+    try {
+      if (typeof process === 'undefined' || !process?.env) return 'INFO';
+      return String(process.env.AI_LOG_LEVEL ?? 'INFO').toUpperCase();
+    } catch {
+      return 'INFO';
+    }
   }
 
   info(msg: string, fields?: Omit<AiLogRecord, 'ts' | 'level' | 'service' | 'msg'>): void {

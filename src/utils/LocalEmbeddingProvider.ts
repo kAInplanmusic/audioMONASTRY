@@ -103,7 +103,16 @@ export const generateLocalEmbedding = async (text: string): Promise<number[]> =>
 export const isLocalEmbeddingAvailable = async (): Promise<boolean> => {
   const tx = await loadTransformer();
   if (tx) return true;
-  return process.env.VITE_ENABLE_LOCAL_EMBEDDINGS === 'true';
+  // Kein direkter `process`-Zugriff: diese Datei laeuft auch im Browser, wo es
+  // `process` nicht gibt (Vite definiert es nicht). Ein Zugriff wirft dort
+  // "ReferenceError: process is not defined" - dieselbe Fehlerklasse, die in
+  // src/core/ai/MoaAgent.ts die App leer gerendert hat (E2E-Fund 2026-09-18).
+  try {
+    if (typeof process === 'undefined' || !process?.env) return false;
+    return process.env.VITE_ENABLE_LOCAL_EMBEDDINGS === 'true';
+  } catch {
+    return false;
+  }
 };
 
 // Kosinus-Ähnlichkeit zweier Vektoren

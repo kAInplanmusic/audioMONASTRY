@@ -190,7 +190,7 @@ export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Pr
  * (`estimated: true`) - so wird es auch angezeigt.
  */
 export function estimateLlmCostUsd(req: LlmRequest, res: LlmCompletion): number {
-  const perThousand = Number(process.env.AI_AGENT_COST_PER_1K_USD || 0.0002);
+  const perThousand = envNumber('AI_AGENT_COST_PER_1K_USD', 0.0002);
   const chars = String(req.prompt ?? '').length + String(res?.text ?? '').length;
   return Number(((chars / 4 / 1000) * perThousand).toFixed(6));
 }
@@ -200,7 +200,25 @@ export function estimateLlmCostUsd(req: LlmRequest, res: LlmCompletion): number 
  * (2026-09-18): ein haengender LLM-Aufruf liess den Agent-Lauf endlos in
  * 'running' stehen - ohne Limit gibt es weder Ergebnis noch Abbruchgrund.
  */
-export const DEFAULT_PLAN_TIMEOUT_MS = Number(process.env.AI_AGENT_PLAN_TIMEOUT_MS || 45_000);
+export const DEFAULT_PLAN_TIMEOUT_MS = 45_000;
+
+/**
+ * Env-Wert lesen, OHNE im Browser zu crashen: `process` gibt es dort nicht, und
+ * schon ein Zugriff auf Modulebene laesst das Bundle beim Laden scheitern.
+ *
+ * Genau dieser Fehler ist passiert (E2E: "Uncaught ReferenceError: process is not
+ * defined", Quelle src/core/ai/MoaAgent.ts) - die Node-Tests konnten ihn nicht
+ * sehen, weil sie ein `process` haben.
+ */
+function envNumber(name: string, fallback: number): number {
+  try {
+    if (typeof process === 'undefined' || !process?.env) return fallback;
+    const parsed = Number(process.env[name]);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export class MoaAgent {
   constructor(
@@ -216,7 +234,9 @@ export class MoaAgent {
   async plan(task: string, pluginId = '', context = '', onCost?: (usd: number) => void): Promise<MoaPlan> {
     const catalog = moaCommandCatalog();
     const role = pluginId ? moaSystemPromptForPlugin(pluginId) : moaSystemPromptForPlugin('');
-    const timeoutMs = Number.isFinite(this.planTimeoutMs) && this.planTimeoutMs > 0 ? this.planTimeoutMs : DEFAULT_PLAN_TIMEOUT_MS;
+    const timeoutMs = Number.isFinite(this.planTimeoutMs) && this.planTimeoutMs > 0
+      ? this.planTimeoutMs
+      : envNumber('AI_AGENT_PLAN_TIMEOUT_MS', DEFAULT_PLAN_TIMEOUT_MS);
     const completion = await withTimeout(this.complete({
       prompt:
         `${role} Zerlege die Aufgabe in klare Einzelschritte. ` +

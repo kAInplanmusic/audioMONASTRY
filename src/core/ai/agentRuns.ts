@@ -138,7 +138,14 @@ export class AgentRunStore {
 }
 
 export function agentRunDir(): string {
-  return (process.env.AI_AGENT_RUN_DIR || '').trim() || path.join(tmpdir(), 'audiomonastry-agent-runs');
+  // Kein ungeschuetzter `process`-Zugriff: diese Datei liegt unter src/ und kann
+  // ueber einen Client-Import ins Browser-Bundle geraten, wo es `process` nicht
+  // gibt (siehe tests/browserSafeModules.test.ts).
+  let configured = '';
+  try {
+    if (typeof process !== 'undefined' && process?.env) configured = process.env.AI_AGENT_RUN_DIR ?? '';
+  } catch { /* Browser: kein Prozess-Env */ }
+  return configured.trim() || path.join(tmpdir(), 'audiomonastry-agent-runs');
 }
 
 /** `MoaAgent`-Teilmenge, die der Runner braucht (fuer Tests injizierbar). */
