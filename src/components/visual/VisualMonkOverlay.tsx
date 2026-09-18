@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useVisualStream } from '../../hooks/useVisualStream';
 import { createFallbackPublisher, studioTokenFromCookie } from '../../utils/visualMjpeg';
+import { createWebGpuVisualRenderer, type WebGpuVisualRenderer } from '../../core/visual/webgpuRenderer';
 import { webRTCManager } from '../../utils/WebRTCManager';
 import { VisualFeatureBus } from '../../core/visual/featureBus';
 import { mapAudioToParams, blendParams } from '../../core/visual/audioReactive';
@@ -78,9 +79,16 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   // VISUAL-P1-005/P1-008: Renderer-Umschalter. Canvas2D bleibt die Referenz,
   // WebGL das Upgrade. Seit VISUAL-P1-008 zeichnet auch der GL-Pfad Show-Szenen
   // (Bild/Clip als Textur) — der Wechsel ist deshalb auch während einer Show möglich.
-  const [rendererMode, setRendererMode] = useState<'canvas2d' | 'gl'>('canvas2d');
+  // VISUAL-P1-009: dritter Pfad. Reihenfolge im Umschalter: Canvas2D -> WebGL -> WebGPU.
+  const [rendererMode, setRendererMode] = useState<'canvas2d' | 'gl' | 'gpu'>('canvas2d');
   const [rendererKind, setRendererKind] = useState<VisualRendererKind>('canvas2d');
+  /** WebGPU-Pfad kann Show-Szenen nicht darstellen - das wird sichtbar gemeldet. */
+  const [sceneIgnored, setSceneIgnored] = useState(false);
   const glRendererRef = useRef<WebGLVisualRenderer | null>(null);
+  // VISUAL-P1-009: WebGPU-Renderer + Meldung, wenn eine Show-Szene im GPU-Pfad
+  // nicht dargestellt wird (Grenze des dritten Pfads, sichtbar statt still).
+  const gpuRendererRef = useRef<WebGpuVisualRenderer | null>(null);
+  const sceneIgnoredRef = useRef(false);
 
   // VisualMONK #5: Show-Orchestrator (Szenen aus Bildern/Clips, audio-reaktiv).
   // Über eine Ref erreichbar, damit die RAF-Schleife (Deps `[]`) ihn nutzen kann.
@@ -272,12 +280,28 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     const canvas = canvasRef.current;
     if (!canvas) return;
     // Canvas2D ist der Referenzpfad; im GL-Modus gibt es keinen 2D-Kontext.
-    const ctx = rendererMode === 'gl' ? null : canvas.getContext('2d');
+    const ctx = rendererMode === 'canvas2d' ? canvas.getContext('2d') : null;
     if (rendererMode === 'gl') {
       const gl = createWebGLVisualRenderer(canvas);
       glRendererRef.current = gl;
       setRendererKind(gl ? gl.kind : 'canvas2d');
       if (!gl) setAiError('WebGL nicht verfügbar – Canvas2D bleibt aktiv.');
+    } else if (rendererMode === 'gpu') {
+      // WebGPU ist asynchron (Adapter + Geraet) und wird ehrlich gemeldet, wenn
+      // es fehlt - der Canvas bleibt dann beim 2D-Pfad.
+      let cancelled = false;
+      void createWebGpuVisualRenderer(canvas).then((gpu) => {
+        if (cancelled) { gpu?.dispose(); return; }
+        gpuRendererRef.current = gpu;
+        setRendererKind(gpu ? 'webgpu' : 'canvas2d');
+        if (!gpu) setAiError('WebGPU nicht verfügbar – WebGL/Canvas2D bleibt aktiv.');
+        if (gpu) ctx?.clearRect(0, 0, canvas.width, canvas.height);
+      });
+      return () => {
+        cancelled = true;
+        gpuRendererRef.current?.dispose();
+        gpuRendererRef.current = null;
+      };
     } else {
       glRendererRef.current = null;
       setRendererKind('canvas2d');
@@ -337,8 +361,18 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       const showApi = showRef.current;
       showApi.tick(now, features);
 
-      const gl = glRendererRef.current;
-      if (gl) {
+      const gpu = gpuRendererRef.current;
+      const gl = gpu ? null : glRendererRef.current;
+      if (gpu) {
+        gpu.resize(canvas.width, canvas.height);
+        // Show-Szenen gibt es nur im WebGL-Pfad; das wird gemeldet, nicht verschwiegen.
+        const scene = showApi.playing ? showApi.frame() : null;
+        const result = gpu.render(preset, paramsRef.current, animTimeS, scene);
+        if (result.sceneIgnored !== sceneIgnoredRef.current) {
+          sceneIgnoredRef.current = result.sceneIgnored;
+          setSceneIgnored(result.sceneIgnored);
+        }
+      } else if (gl) {
         gl.resize(canvas.width, canvas.height);
         // VISUAL-P1-008: Show-Szenen auch im GL-Pfad als Textur (kein drawImage).
         const scene = showApi.playing ? showApi.frame() : null;
@@ -399,18 +433,21 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         </span>
         <span
           className={`text-[9px] px-1.5 py-0.5 rounded-full border ${rendererKind === 'canvas2d' ? 'border-neutral-700 text-neutral-400' : 'border-emerald-400/50 text-emerald-300'}`}
-          title={rendererMode === 'gl' && rendererKind === 'canvas2d' ? 'WebGL nicht verfügbar – Canvas2D aktiv' : `Renderer: ${rendererKind}`}
+          title={rendererMode !== 'canvas2d' && rendererKind === 'canvas2d'
+            ? `${rendererMode === 'gpu' ? 'WebGPU' : 'WebGL'} nicht verfügbar – Canvas2D aktiv`
+            : sceneIgnored ? 'Renderer: webgpu (Show-Szenen nur im WebGL-Pfad)' : `Renderer: ${rendererKind}`}
         >
           {rendererKind.toUpperCase()}
         </span>
         <button
           type="button"
-          onClick={() => setRendererMode((m) => (m === 'gl' ? 'canvas2d' : 'gl'))}
-          aria-pressed={rendererMode === 'gl'}
+          onClick={() => setRendererMode((m) => (m === 'canvas2d' ? 'gl' : m === 'gl' ? 'gpu' : 'canvas2d'))}
+          aria-pressed={rendererMode !== 'canvas2d'}
+          data-renderer-mode={rendererMode}
           title="Renderer wechseln: WebGL (GPU-Renderer) oder Canvas2D (Referenz) – auch während einer laufenden Show (VISUAL-P1-008)"
           className={`px-2 py-1 rounded-full text-[9px] font-bold tracking-widest border transition-colors ${rendererMode === 'gl' ? 'border-emerald-400/60 text-emerald-200 bg-emerald-400/10' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
         >
-          {rendererMode === 'gl' ? 'WEBGL' : 'CANVAS2D'}
+          {rendererMode === 'gl' ? 'WEBGL' : rendererMode === 'gpu' ? 'WEBGPU' : 'CANVAS2D'}
         </button>
         <div className="flex-1" />
         <button

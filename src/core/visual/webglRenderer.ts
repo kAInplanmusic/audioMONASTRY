@@ -21,7 +21,8 @@
 
 import type { VisualParams, VisualPreset } from './types';
 
-export type VisualRendererKind = 'webgl2' | 'webgl' | 'canvas2d';
+/** Renderpfade: Canvas2D (Referenz), WebGL(2) und WebGPU/WGSL (VISUAL-P1-009). */
+export type VisualRendererKind = 'webgl2' | 'webgl' | 'webgpu' | 'canvas2d';
 
 /** Maximal 6 Farben je Preset (WebGL1-Uniform-Limit-schonend). */
 export const MAX_SHADER_COLORS = 6;

@@ -530,3 +530,28 @@ pkill -f "[t]sx server.ts"          # Klammer-Trick: killt nicht die eigene Shel
 Die Beweis-Skripte (`proof:turn`, `proof:ice-recovery`, `proof:mjpeg`) starten ihre
 Server `detached` und beenden die **Prozessgruppe**; `proof:mjpeg` bricht zusätzlich
 ab, wenn sein Port belegt ist — damit wird kein fremder/alter Server gemessen.
+
+## WebGPU-Pfad prüfen und beweisen (VISUAL-P1-009)
+
+Der dritte Renderpfad (WebGPU/WGSL) ist gebaut und live bewiesen. Zwei Fallen sind
+dabei aufgefallen und stehen hier fest, damit sie nicht wiederkehren:
+
+1. **`about:blank` ist kein sicherer Kontext.** Dort fehlen `navigator.gpu` *und*
+   `audioWorklet` — eine API-Sonde auf `about:blank` meldet „WebGPU nicht
+   vorhanden", obwohl es vorhanden ist. Deshalb: immer auf einem lokalen Origin
+   (`http://127.0.0.1:PORT`) messen.
+2. **Headless braucht die Entwicklungs-Flags.** Ohne Flags liefert
+   `requestAdapter()` keinen Adapter (SwiftShader nicht freigeschaltet):
+   `--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan
+   --use-vulkan=swiftshader --disable-vulkan-surface`. Auf echter GPU-Hardware
+   ist das nicht nötig.
+
+```bash
+npm run probe:apis     # Verfügbarkeit in 4 Startkonfigurationen + Chromium-Version
+npm run proof:webgpu   # echter Frame + GPU-Rücklesung: zeichnet der Pfad wirkt?
+```
+
+Gemessen (2026-09-18, Chromium 151.0.7922.34): mit den Flags `adapter-vorhanden`,
+der Pfad zeichnet ~55 000 nicht-schwarze Pixel je Frame (mittlere Helligkeit ~134),
+drei Presets ergeben unterschiedliche Bilder, eine Show-Szene wird als
+`sceneIgnored` gemeldet.

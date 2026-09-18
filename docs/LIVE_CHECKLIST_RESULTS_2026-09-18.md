@@ -58,7 +58,18 @@ Grund, warum er hier nicht erhebbar ist. Kein Punkt bleibt still offen.
    einem Vite-Reload. Die CPU-Messung selbst bleibt hier trotzdem nicht
    erhebbar (Renderer beendet sich unter der Plugin-Last dieser Umgebung).
 
-## D · Wiederholbare Kommandos
+## D · Weiterer Befund: visuelle Baselines sind veraltet (A/B-bewiesen)
+
+`npx playwright test tests/e2e/visual.spec.ts` scheitert: erwartet 1280×2945 px,
+erhalten 1280×1679 px bzw. 1280×5446 px (45–68 % der Pixel unterschiedlich). Der
+**A/B-Test** (Änderungen dieser Runde per `git stash` entfernt, Spec erneut
+gelaufen) zeigt **dasselbe** Ergebnis — die Baselines stammen vom 2026-09-02
+(`2456a91`), seitdem hat sich die UI deutlich geändert. Das ist ein Testschuld-Fund,
+kein Regressionsbefund; die Baselines werden bewusst **nicht** blind überschrieben
+(`--update-snapshots` würde echte UI-Änderungen verdecken) und stehen als offener
+Punkt im Mastertodo.
+
+## E · Wiederholbare Kommandos
 
 ```bash
 npm run verify && npm run build
@@ -68,4 +79,6 @@ npx playwright test tests/e2e/smoke.spec.ts tests/e2e/keyboard.spec.ts \
 npm run proof:turn          # braucht coturn (services/turn/turnserver.local-proof.conf)
 npm run proof:ice-recovery  # stoppt den Relay WAEHREND der Verbindung
 npm run proof:mjpeg         # Beamer-Fallback im echten Chromium
+npm run proof:webgpu        # WebGPU/WGSL-Pfad: echter Frame + GPU-Ruecklesung
+npm run probe:apis          # WebGPU/renderCapacity/worklet-Scope in 4 Konfigurationen
 ```

@@ -60,7 +60,9 @@
     "audio:gate": "bash scripts/audio-gate.sh",
     "proof:turn": "node scripts/turn-live-proof.mjs",
     "proof:ice-recovery": "node scripts/ice-recovery-live-proof.mjs",
-    "proof:mjpeg": "node scripts/mjpeg-live-proof.mjs"
+    "proof:mjpeg": "node scripts/mjpeg-live-proof.mjs",
+    "proof:webgpu": "node scripts/webgpu-live-proof.mjs",
+    "probe:apis": "node scripts/browser-api-probe.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

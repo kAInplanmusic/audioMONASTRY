@@ -37,6 +37,17 @@ Studio-Session (App)
   Audio-Features (FFT/RMS/Onset) ──► Visual-Params ─┘
 ```
 
+- **Drei Renderpfade** (VISUAL-P1-009): Canvas2D (Referenz), WebGL/WebGL2 und
+  **WebGPU/WGSL** (`src/core/visual/webgpuRenderer.ts`). Der WebGPU-Pfad teilt den
+  Parameter-Contract über `packUniforms()` (Zoom, Rotation, Warp, Farbton, Fluss,
+  Helligkeit, Kontrast, Verdrängung, Glow, Symmetrie, Palette), hat aber eine
+  **eigene Feldformel** — die Bilder sind also verwandt, nicht pixelgleich.
+  Ehrliche Grenze: **Show-Szenen** (Bild/Video-Textur, Crossfade) gibt es nur im
+  WebGL-Pfad; `render()` meldet das als `sceneIgnored`, die UI zeigt es an.
+  Umschalter im VisualMONK: Canvas2D → WebGL → WebGPU.
+  Nachweis: `npm run proof:webgpu` (echte GPU-Rücklesung: nicht-schwarze Pixel,
+  unterschiedliche Presets, Szene ehrlich ignoriert) und `npm run probe:apis`
+  (Verfügbarkeit in vier Startkonfigurationen).
 - **Ghost-Client:** eigener, headless Client (`/ghost/5` = Audio-Playback, `/ghost/6` =
   Fullscreen-Canvas), der der Session per fixer URL beitritt, auto-Play/Fullscreen,
   Reconnect-fähig. Kein UI, kein Mikro/keine Frequenzanalyse nötig.
