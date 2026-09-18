@@ -1,4 +1,4 @@
-# SampleMONK AI Runtime – RunPod Serverless Worker
+# audioMONASTRY AI Runtime – RunPod Serverless Worker
 # =================================================
 # Ein Image für alle drei Flotten-Rollen (brain | ears | voiceGen). Die Rolle
 # wird zur Laufzeit über AI_ROLE gewählt; der Worker lädt daraus nur die Modelle
@@ -22,7 +22,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     AI_ROLE="" \
     NUMBA_CACHE_DIR=/data/numba-cache
 
-# NUMBA_CACHE_DIR ist PFLICHT: der Worker läuft als uid 10001 (samplemonk),
+# NUMBA_CACHE_DIR ist PFLICHT: der Worker läuft als uid 10001 (audiomonastry),
 # während site-packages root-gehört und nicht beschreibbar ist. librosa nutzt
 # `numba @jit(cache=True)` – numba versucht dann einen Cache im package-eigenen
 # __pycache__ anzulegen, scheitert am Schreibrecht und `import qwen_tts` stirbt
@@ -39,7 +39,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 sox curl \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/samplemonk-ai
+WORKDIR /opt/audiomonastry-ai
 
 COPY requirements.in ./
 RUN pip install --no-cache-dir -r requirements.in
@@ -112,9 +112,9 @@ ARG AI_BAKE_GROUPS=4
 
 COPY predownload.py registry.py model_manifest.json ./
 RUN mkdir -p /data/hf-cache \
-    && useradd --system --uid 10001 samplemonk \
-    && chown -R samplemonk:samplemonk /opt/samplemonk-ai /data
-USER samplemonk
+    && useradd --system --uid 10001 audiomonastry \
+    && chown -R audiomonastry:audiomonastry /opt/audiomonastry-ai /data
+USER audiomonastry
 RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 0 --groups "$AI_BAKE_GROUPS"; fi
 RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 1 --groups "$AI_BAKE_GROUPS"; fi
 RUN if [ -n "$AI_BAKE_ROLE" ]; then python predownload.py --role "$AI_BAKE_ROLE" --group 2 --groups "$AI_BAKE_GROUPS"; fi
@@ -127,9 +127,9 @@ COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py moa_o
 COPY workflows/ ./workflows/
 COPY runtime_config.yaml ./
 # Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
-RUN chown samplemonk:samplemonk /opt/samplemonk-ai/*.py /opt/samplemonk-ai/*.json /opt/samplemonk-ai/*.yaml
+RUN chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonastry-ai/*.json /opt/audiomonastry-ai/*.yaml
 
-USER samplemonk
+USER audiomonastry
 
 # RunPod Serverless Worker
 ENTRYPOINT ["python", "runpod_worker.py"]

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# provision-fleet.sh – sampleMONK 5er-Hetzner-Flotte provisionieren
+# provision-fleet.sh – audioMONASTRY 5er-Hetzner-Flotte provisionieren
 # -----------------------------------------------------------------------------
 #   app-1     CX33 (4 vCPU/8GB)   Rolle app     + Floating IP (DNS)
 #   sfu-1     CX33 (4 vCPU/8GB)   Rolle sfu     (RTP-Ports 40000-40099 offen)
@@ -25,7 +25,7 @@ fi
 
 PY=python3
 PROV=scripts/hetzner/provision.py
-LOG_DIR=/tmp/samplemonk-fleet
+LOG_DIR=/tmp/audiomonastry-fleet
 mkdir -p "$LOG_DIR"
 
 provision_one() {
@@ -46,11 +46,11 @@ TYPE_APP="${FLEET_TYPE_APP:-cx23}"
 TYPE_SFU="${FLEET_TYPE_SFU:-cx23}"
 TYPE_AI="${FLEET_TYPE_AI:-cx23}"
 
-provision_one samplemonk-app-1    "$TYPE_APP" app    samplemonk-app    samplemonk-floating
-provision_one samplemonk-sfu-1    "$TYPE_SFU" sfu    samplemonk-sfu    none
-provision_one samplemonk-ai-1     "$TYPE_AI"  ai     samplemonk-ai     none
-provision_one samplemonk-master-1 cx23 master samplemonk-master none
-provision_one samplemonk-edge-1   cx23 app    samplemonk-edge   none
+provision_one audiomonastry-app-1    "$TYPE_APP" app    audiomonastry-app    audiomonastry-floating
+provision_one audiomonastry-sfu-1    "$TYPE_SFU" sfu    audiomonastry-sfu    none
+provision_one audiomonastry-ai-1     "$TYPE_AI"  ai     audiomonastry-ai     none
+provision_one audiomonastry-master-1 cx23 master audiomonastry-master none
+provision_one audiomonastry-edge-1   cx23 app    audiomonastry-edge   none
 
 echo ""
 echo "=============================================================="
@@ -61,4 +61,4 @@ echo "  sfu-1:    DEPLOY_HOST=root@<sfu-1-ip>    DEPLOY_DOMAIN= bash deploy.sh  
 echo "  ai-1:     SSH ai-1  -> Ollama + Stem-AI (siehe docs/SERVER_FLEET.md)"
 echo "  master-1: SSH master-1 -> docker compose -f docker-compose.hetzner.yml up -d master-player"
 echo "  edge-1:   SSH edge-1 -> Monitoring-Stack + Smoke-Tests"
-echo "  Auto-Shutdown: ssh root@<ip> 'bash /opt/samplemonk/scripts/hetzner/install-idle-shutdown.sh'"
+echo "  Auto-Shutdown: ssh root@<ip> 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh'"

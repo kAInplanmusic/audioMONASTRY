@@ -1,4 +1,4 @@
-# Grafana Datasource-Provisioning für sampleMONK
+# Grafana Datasource-Provisioning für audioMONASTRY
 apiVersion: 1
 
 datasources:

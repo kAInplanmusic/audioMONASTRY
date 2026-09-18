@@ -17,7 +17,13 @@ cd "$(dirname "$0")/../.."
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
 
-NAMES=(samplemonk-app-1 samplemonk-master-1 samplemonk-edge-1 samplemonk-sfu-1 samplemonk-ai-1)
+# NOMEN-P1-001: auch hier beide Schreibweisen (Altbestand darf nicht liegen bleiben).
+source "$(dirname "$0")/fleet-names.sh"
+CANONICAL_NAMES=(audiomonastry-app-1 audiomonastry-master-1 audiomonastry-edge-1 audiomonastry-sfu-1 audiomonastry-ai-1)
+NAMES=()
+for n in "${CANONICAL_NAMES[@]}"; do
+  while read -r candidate; do NAMES+=("$candidate"); done < <(fleet_candidates "$n")
+done
 TS="$(date -u +%Y%m%d-%H%M)"
 
 snapshot_all() {

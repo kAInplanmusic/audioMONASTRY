@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# smoke-test.sh – sampleMONK Hetzner Smoke-Test
+# smoke-test.sh – audioMONASTRY Hetzner Smoke-Test
 # -----------------------------------------------------------------------------
 # Aufruf:
-#   bash scripts/hetzner/smoke-test.sh https://samplemonk.example
-#   BASE_URL=https://samplemonk.example bash scripts/hetzner/smoke-test.sh
+#   bash scripts/hetzner/smoke-test.sh https://audiomonastry.example
+#   BASE_URL=https://audiomonastry.example bash scripts/hetzner/smoke-test.sh
 # =============================================================================
 set -euo pipefail
 

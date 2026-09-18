@@ -15,20 +15,44 @@
 
 const HETZNER = 'https://api.hetzner.cloud/v1';
 
+// NOMEN-P1-001: Die Flotte heisst `audiomonastry-*`. Laufende Installationen
+// koennen noch die alten Knoten-/Firewall-/Snapshot-Namen tragen, deshalb
+// akzeptiert der Worker BEIDE Schreibweisen (Altname nur fuer Bestandsressourcen,
+// angelegt wird immer mit dem neuen Namen). Der Altpraefix steht genau hier.
 const FLEET = [
-  { name: 'samplemonk-app-1',    type: 'cx33', role: 'app' },
-  { name: 'samplemonk-sfu-1',    type: 'cx33', role: 'sfu' },
-  { name: 'samplemonk-ai-1',     type: 'cx33', role: 'ai' },
-  { name: 'samplemonk-master-1', type: 'cx23', role: 'master' },
-  { name: 'samplemonk-edge-1',   type: 'cx23', role: 'edge' },
+  { name: 'audiomonastry-app-1',    type: 'cx33', role: 'app' },
+  { name: 'audiomonastry-sfu-1',    type: 'cx33', role: 'sfu' },
+  { name: 'audiomonastry-ai-1',     type: 'cx33', role: 'ai' },
+  { name: 'audiomonastry-master-1', type: 'cx23', role: 'master' },
+  { name: 'audiomonastry-edge-1',   type: 'cx23', role: 'edge' },
 ];
+
+const NAME_PREFIX = 'audiomonastry-';
+/** Altpraefix aus der Zeit vor der Umbenennung (nur lesend/Bestand). */
+const LEGACY_NAME_PREFIX = 'samplemonk-';
+
+/** Kanonischer Flotten-Name zu einem (moeglicherweise alten) Servernamen. */
+function canonicalFleetName(name) {
+  const raw = String(name ?? '');
+  if (FLEET.some((f) => f.name === raw)) return raw;
+  if (!raw.startsWith(LEGACY_NAME_PREFIX)) return '';
+  const candidate = `${NAME_PREFIX}${raw.slice(LEGACY_NAME_PREFIX.length)}`;
+  return FLEET.some((f) => f.name === candidate) ? candidate : '';
+}
 
 const LOCATION = 'fsn1';
 const IMAGE = 'ubuntu-24.04';
 // OPS-Snapshot: Basis-Image-Name, von dem die Rollen-Snapshots abgeleitet werden.
 // Snapshots kosten ~0,01 €/GB/Monat (Cent-Beträge) und beschleunigen den
 // Flotten-Start deutlich (kein Docker-Build/cloud-init-Bootstrap je Knoten).
-const SNAPSHOT_PREFIX = 'samplemonk-snapshot-';
+const SNAPSHOT_PREFIX = 'audiomonastry-snapshot-';
+/**
+ * Altbestand: Snapshots, die vor der Umbenennung entstanden sind. Sie werden
+ * weiter gefunden (schneller Flotten-Start) und weiter aufgeraeumt (Retention) -
+ * sonst blieben sie unbemerkt liegen und kosten Speicher.
+ */
+const LEGACY_SNAPSHOT_PREFIXES = ['samplemonk-snapshot-'];
+const ALL_SNAPSHOT_PREFIXES = [SNAPSHOT_PREFIX, ...LEGACY_SNAPSHOT_PREFIXES];
 const SNAPSHOT_RETENTION = 2; // je Rolle die letzten 2 Snapshots behalten
 const PORTAL_DOMAIN = 'anunnakitools.de';
 const ORIGIN_HOST = 'origin.anunnakitools.de';
@@ -67,7 +91,11 @@ async function fleetServers(env) {
   const data = await hzGet(env, '/servers?per_page=50');
   const map = {};
   for (const s of data.servers ?? []) {
-    if (FLEET.some((f) => f.name === s.name)) map[s.name] = s;
+    // Schluessel ist der kanonische Name; Altinstallationen liefern ihre alten
+    // Servernamen und werden darauf abgebildet (sonst waere die Flotte fuer den
+    // Portal-Worker unsichtbar, obwohl sie laeuft).
+    const key = canonicalFleetName(s.name);
+    if (key) map[key] = s;
   }
   return map;
 }
@@ -75,12 +103,16 @@ async function fleetServers(env) {
 // ---------------------------------------------------------------------------
 // OPS-Snapshot: Rollen-Snapshots für schnellen Flotten-Start
 // ---------------------------------------------------------------------------
-function isFleetSnapshot(img) {
-  return (
-    img?.labels?.app === 'audioMONASTRY' ||
-    String(img?.name ?? '').startsWith(SNAPSHOT_PREFIX) ||
-    String(img?.description ?? '').startsWith(SNAPSHOT_PREFIX)
+function hasFleetSnapshotPrefix(img) {
+  return ALL_SNAPSHOT_PREFIXES.some(
+    (prefix) =>
+      String(img?.name ?? '').startsWith(prefix) ||
+      String(img?.description ?? '').startsWith(prefix),
   );
+}
+
+function isFleetSnapshot(img) {
+  return img?.labels?.app === 'audioMONASTRY' || hasFleetSnapshotPrefix(img);
 }
 
 function snapshotRoleOf(img) {
@@ -94,15 +126,17 @@ async function listSnapshots(env) {
 
 /** Neuesten verfügbaren Snapshot einer Rolle finden (oder null). */
 function findSnapshot(images, role) {
-  return (
-    images.find(
-      (img) =>
-        img.status === 'available' &&
-        snapshotRoleOf(img) === role &&
-        (String(img.name ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`) ||
-          String(img.description ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`)),
-    ) ?? null
-  );
+  const candidates = images.filter((img) => img.status === 'available' && snapshotRoleOf(img) === role);
+  const matches = (img, prefix) =>
+    String(img.name ?? '').startsWith(`${prefix}${role}`) ||
+    String(img.description ?? '').startsWith(`${prefix}${role}`);
+  // Reihenfolge = ALL_SNAPSHOT_PREFIXES: der neue Name gewinnt, der Altbestand
+  // bleibt nutzbar (eine Umbenennung darf den schnellen Start nicht verhindern).
+  for (const prefix of ALL_SNAPSHOT_PREFIXES) {
+    const hit = candidates.find((img) => matches(img, prefix));
+    if (hit) return hit;
+  }
+  return null;
 }
 
 async function createServerSnapshot(env, server, role, meta = {}) {
@@ -276,8 +310,13 @@ async function syncOriginDns(env, appIp) {
 /** Aktualisiert die app-Firewall auf die aktuellen Cloudflare-IP-Ranges. */
 async function syncAppFirewall(env) {
   const cfIps = await cloudflareIpRanges();
-  const list = await hzGet(env, '/firewalls?name=samplemonk-app');
-  const fw = (list.firewalls ?? [])[0];
+  // Firewall des Bestands kann noch den Altnamen tragen -> beide probieren.
+  let fw = null;
+  for (const name of [`${NAME_PREFIX}app`, `${LEGACY_NAME_PREFIX}app`]) {
+    const list = await hzGet(env, `/firewalls?name=${name}`);
+    fw = (list.firewalls ?? [])[0] ?? null;
+    if (fw) break;
+  }
   if (!fw) return { ok: false, message: 'app-Firewall nicht gefunden' };
   const rules = firewallRules('app', cfIps);
   const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
@@ -333,35 +372,35 @@ set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 ORIGIN_CERT='${originCert}'
 ORIGIN_KEY='${originKey}'
-mkdir -p /opt/samplemonk
+mkdir -p /opt/audiomonastry
 apt-get update -qq
 apt-get install -y -qq git curl rsync python3 python3-venv
 curl -fsSL https://get.docker.com | sh
 # P-4: Token NICHT in der Clone-URL (landet sonst in .git/config) – stattdessen
 # als Einmal-Header übergeben und das Remote danach auf die saubere URL setzen.
 GIT_AUTH_HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' '${token}' | base64 -w0)"
-git -c http.extraheader="$GIT_AUTH_HEADER" clone --depth 1 https://github.com/kAInplanmusic/audioMONASTRY.git /opt/samplemonk 2>/dev/null \\
-  || git -C /opt/samplemonk pull
-git -C /opt/samplemonk remote set-url origin https://github.com/kAInplanmusic/audioMONASTRY.git
-cat > /opt/samplemonk/.env <<'ENVEOF'
+git -c http.extraheader="$GIT_AUTH_HEADER" clone --depth 1 https://github.com/kAInplanmusic/audioMONASTRY.git /opt/audiomonastry 2>/dev/null \\
+  || git -C /opt/audiomonastry pull
+git -C /opt/audiomonastry remote set-url origin https://github.com/kAInplanmusic/audioMONASTRY.git
+cat > /opt/audiomonastry/.env <<'ENVEOF'
 ${envLines}
 ENVEOF
-cd /opt/samplemonk
+cd /opt/audiomonastry
 case "${role}" in
   app)
     # P-7b: Origin-TLS mit Cloudflare-Origin-Zertifikat (falls Secrets gesetzt).
     if [ -n "\${ORIGIN_CERT:-}" ] && [ -n "\${ORIGIN_KEY:-}" ]; then
-      mkdir -p /opt/samplemonk/certs
-      echo "\${ORIGIN_CERT}" | base64 -d > /opt/samplemonk/certs/origin.crt
-      echo "\${ORIGIN_KEY}" | base64 -d > /opt/samplemonk/certs/origin.key
-      chmod 600 /opt/samplemonk/certs/origin.key
+      mkdir -p /opt/audiomonastry/certs
+      echo "\${ORIGIN_CERT}" | base64 -d > /opt/audiomonastry/certs/origin.crt
+      echo "\${ORIGIN_KEY}" | base64 -d > /opt/audiomonastry/certs/origin.key
+      chmod 600 /opt/audiomonastry/certs/origin.key
       cp scripts/hetzner/Caddyfile.origin Caddyfile
     fi
-    docker compose -f docker-compose.hetzner.yml up -d caddy sample-monk
+    docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry
     ;;
   sfu)
     echo "SFU_ANNOUNCED_IP=$(hostname -I | awk '{print $1}')" >> .env
-    docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk
+    docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
     ;;
   master)
     docker compose -f docker-compose.hetzner.yml up -d master-player
@@ -389,9 +428,9 @@ Description=audioMONASTRY stem-ai (Demucs CPU-Fallback)
 After=network.target
 [Service]
 Type=simple
-WorkingDirectory=/opt/samplemonk/services/stem-ai
+WorkingDirectory=/opt/audiomonastry/services/stem-ai
 Environment=AI_DEVICE=cpu
-ExecStart=/opt/samplemonk/services/stem-ai/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/opt/audiomonastry/services/stem-ai/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -403,9 +442,9 @@ UNIT
 esac
 # Idle-Auto-Shutdown nur auf app-1 (misst /api/online der App)
 if [ "${role}" = "app" ]; then
-  bash /opt/samplemonk/scripts/hetzner/install-idle-shutdown.sh || true
+  bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh || true
 fi
-touch /root/.samplemonk-bootstrap-done
+touch /root/.audiomonastry-bootstrap-done
 `;
 }
 
@@ -515,7 +554,7 @@ async function computeStatus(env) {
   const existing = Object.values(servers);
   if (existing.length === 0) return { state: 'off', created: 0, total: FLEET.length };
 
-  const app = servers['samplemonk-app-1'];
+  const app = servers['audiomonastry-app-1'];
   const running = existing.filter((s) => s.status === 'running').length;
 
   if (app && app.status === 'running') {
@@ -563,7 +602,7 @@ async function startFleet(env) {
   const failed = [];
 
   for (const item of FLEET) {
-    const fwName = `samplemonk-${item.role}`;
+    const fwName = `audiomonastry-${item.role}`;
     const fwId = await ensureFirewall(env, fwName, firewallRules(item.role, item.role === 'app' ? cfIps : []));
     // OPS-Snapshot: zuerst das Rollen-Snapshot-Image verwenden (schneller
     // Start, kein cloud-init-Bootstrap). Fallback: Basis-Image + cloud-init.
@@ -603,7 +642,7 @@ async function startFleet(env) {
       let appIp = '';
       for (let i = 0; i < 15 && !appIp; i++) {
         const m = await fleetServers(env);
-        appIp = m['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+        appIp = m['audiomonastry-app-1']?.public_net?.ipv4?.ip ?? '';
         if (!appIp) await new Promise((r) => setTimeout(r, 2000));
       }
       await syncAppFirewall(env);
@@ -624,12 +663,12 @@ async function startFleet(env) {
  */
 async function openFleetPorts(env) {
   const servers = await fleetServers(env);
-  const appIp = servers['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+  const appIp = servers['audiomonastry-app-1']?.public_net?.ipv4?.ip ?? '';
   if (!appIp) return { ok: false, message: 'app-1 hat noch keine IP.' };
 
   const portsByRole = {
-    'samplemonk-master': ['8000'],
-    'samplemonk-ai': ['8000', '11434'],
+    'audiomonastry-master': ['8000'],
+    'audiomonastry-ai': ['8000', '11434'],
   };
   const list = await hzGet(env, '/firewalls?per_page=100');
   const updated = {};
@@ -900,7 +939,7 @@ export default {
       if (url.pathname === '/api/wire-fleet' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
         const servers = await fleetServers(env);
-        const appIp = servers['samplemonk-app-1']?.public_net?.ipv4?.ip ?? '';
+        const appIp = servers['audiomonastry-app-1']?.public_net?.ipv4?.ip ?? '';
         const appFirewall = await syncAppFirewall(env);
         const dns = appIp ? await syncOriginDns(env, appIp) : { ok: false, message: 'app-1 hat noch keine IP.' };
         const ports = await openFleetPorts(env);
@@ -954,7 +993,7 @@ export default {
 
     // Hauptdomain: wenn Flotte bereit -> Proxy auf app-1, sonst Portal-Seite
     const servers = await fleetServers(env);
-    const app = servers['samplemonk-app-1'];
+    const app = servers['audiomonastry-app-1'];
     if (app && app.status === 'running' && app.public_net?.ipv4?.ip) {
       // Proxy mit ORIGINAL-URL (Host + SNI = Domain, kein Host=IP → kein
       // Cloudflare-Fehler 1003). resolveOverride über den origin-Host
@@ -972,7 +1011,7 @@ export default {
 
     // Auto-Stopp: Sobald app-1 (nach 20 min Idle) ausgeschaltet wurde, löschen.
     const servers = await fleetServers(env);
-    const app = servers['samplemonk-app-1'];
+    const app = servers['audiomonastry-app-1'];
     const existing = Object.keys(servers);
 
     if (existing.length === 0) return;

@@ -1,8 +1,8 @@
 {
-  "uid": "samplemonk-overview",
-  "title": "sampleMONK Overview (inkl. SLO/Telemetrie)",
+  "uid": "audiomonastry-overview",
+  "title": "audioMONASTRY Overview (inkl. SLO/Telemetrie)",
   "tags": [
-    "samplemonk",
+    "audiomonastry",
     "audio",
     "hetzner"
   ],
@@ -57,7 +57,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "samplemonk_uptime_seconds",
+          "expr": "audiomonastry_uptime_seconds",
           "legendFormat": "uptime"
         }
       ]
@@ -102,7 +102,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "samplemonk_http_requests_total",
+          "expr": "audiomonastry_http_requests_total",
           "legendFormat": "requests"
         }
       ]
@@ -151,7 +151,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "samplemonk_http_errors_total",
+          "expr": "audiomonastry_http_errors_total",
           "legendFormat": "errors"
         }
       ]
@@ -183,7 +183,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(samplemonk_http_requests_total[5m])",
+          "expr": "rate(audiomonastry_http_requests_total[5m])",
           "legendFormat": "requests/s"
         }
       ]
@@ -215,7 +215,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "samplemonk_http_avg_latency_ms",
+          "expr": "audiomonastry_http_avg_latency_ms",
           "legendFormat": "avg latency"
         }
       ]
@@ -247,12 +247,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(samplemonk_ai_requests_total[5m])",
+          "expr": "rate(audiomonastry_ai_requests_total[5m])",
           "legendFormat": "ai requests"
         },
         {
           "refId": "B",
-          "expr": "rate(samplemonk_ai_failures_total[5m])",
+          "expr": "rate(audiomonastry_ai_failures_total[5m])",
           "legendFormat": "ai failures"
         }
       ]
@@ -284,12 +284,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(samplemonk_stem_requests_total[5m])",
+          "expr": "rate(audiomonastry_stem_requests_total[5m])",
           "legendFormat": "stem requests"
         },
         {
           "refId": "B",
-          "expr": "rate(samplemonk_stem_failures_total[5m])",
+          "expr": "rate(audiomonastry_stem_failures_total[5m])",
           "legendFormat": "stem failures"
         }
       ]
@@ -345,7 +345,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "samplemonk_stem_jobs_active",
+          "expr": "audiomonastry_stem_jobs_active",
           "legendFormat": "active"
         }
       ]
@@ -419,7 +419,7 @@
     {
       "id": 11,
       "type": "timeseries",
-      "title": "Container CPU (samplemonk*)",
+      "title": "Container CPU (audiomonastry*)",
       "datasource": {
         "type": "prometheus",
         "uid": "prometheus"
@@ -443,7 +443,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"samplemonk.*\"}[5m]))",
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"audiomonastry.*\"}[5m]))",
           "legendFormat": "{{name}}"
         }
       ]
@@ -488,7 +488,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "samplemonk_telemetry_events_total",
+          "expr": "audiomonastry_telemetry_events_total",
           "legendFormat": "events"
         }
       ]
@@ -520,7 +520,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (type) (increase(samplemonk_telemetry_events_by_type_total[5m]))",
+          "expr": "sum by (type) (increase(audiomonastry_telemetry_events_by_type_total[5m]))",
           "legendFormat": "{{type}}"
         }
       ]
@@ -552,7 +552,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (source) (increase(samplemonk_telemetry_events_by_source_total[5m]))",
+          "expr": "sum by (source) (increase(audiomonastry_telemetry_events_by_source_total[5m]))",
           "legendFormat": "{{source}}"
         }
       ]
@@ -603,7 +603,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "samplemonk:slo_availability:ratio_24h",
+          "expr": "audiomonastry:slo_availability:ratio_24h",
           "refId": "A"
         }
       ]
@@ -654,7 +654,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "samplemonk:slo_availability:ratio_1h",
+          "expr": "audiomonastry:slo_availability:ratio_1h",
           "refId": "A"
         }
       ]
@@ -705,7 +705,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "samplemonk:slo_latency_p95_seconds:30m",
+          "expr": "audiomonastry:slo_latency_p95_seconds:30m",
           "refId": "A"
         }
       ]
@@ -756,7 +756,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "samplemonk_ai_cost_usd",
+          "expr": "audiomonastry_ai_cost_usd",
           "refId": "A"
         }
       ]

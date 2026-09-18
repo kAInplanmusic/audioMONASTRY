@@ -11,7 +11,7 @@
 #
 # Ablauf (docker):
 #   1. Docker-Images lokal bauen (audiomonastry + master-player)
-#   2. Remote-Rollback-Image sichern (samplemonk:hetzner-rollback)
+#   2. Remote-Rollback-Image sichern (audiomonastry:hetzner-rollback)
 #   3. Images via `docker save | ssh docker load` übertragen
 #   4. Config (Caddyfile, Compose, .env, Services) per rsync übertragen
 #   5. Remote: docker compose up -d --no-build
@@ -27,7 +27,7 @@
 #        DEPLOY_REMOTE_BUILD=1               (1 = Remote-Build statt Image-Transfer)
 #        DEPLOY_SYNC_ENV=1|0                 (1 = lokale .env hochladen)
 #        DEPLOY_SMOKE=1|0                    (1 = Smoke-Test nach Deploy)
-#        DEPLOY_REMOTE_DIR=/opt/samplemonk
+#        DEPLOY_REMOTE_DIR=/opt/audiomonastry
 #        DEPLOY_PLATFORM=linux/amd64         (optional, Cross-Build via buildx)
 #
 #   - Auf der Ziel-Instanz muss Docker (Compose v2) installiert sein:
@@ -41,13 +41,13 @@ DEPLOY_USER="${DEPLOY_USER:-root}"
 DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY:-}"
 DEPLOY_MODE="${DEPLOY_MODE:-docker}"
 DEPLOY_REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-0}"
-DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/samplemonk}"
+DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/audiomonastry}"
 DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-}"
 DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-1}"
 DEPLOY_SMOKE="${DEPLOY_SMOKE:-1}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
-IMAGE_APP="samplemonk:hetzner"
-IMAGE_MASTER="samplemonk-master-player:hetzner"
+IMAGE_APP="audiomonastry:hetzner"
+IMAGE_MASTER="audiomonastry-master-player:hetzner"
 COMPOSE_FILE="docker-compose.hetzner.yml"
 
 if [[ -z "$DEPLOY_HOST" ]]; then
@@ -176,9 +176,9 @@ if [[ "$DEPLOY_MODE" == "docker" ]]; then
     "${SSH[@]}" "$SSH_TARGET" "docker image tag $IMAGE_APP ${IMAGE_APP}-rollback 2>/dev/null || true"
     echo "--- Images via docker save | ssh docker load übertragen ---"
     docker save "$IMAGE_APP" "$IMAGE_MASTER" | "${SSH[@]}" "$SSH_TARGET" "docker load"
-    echo "--- docker compose up -d --no-build --force-recreate sample-monk master-player ---"
+    echo "--- docker compose up -d --no-build --force-recreate audiomonastry master-player ---"
     "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \
-       docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate sample-monk master-player && \
+       docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry master-player && \
        docker compose -f $COMPOSE_FILE up -d caddy"
   else
     echo "--- Remote-Build (docker compose up -d --build) ---"
@@ -212,6 +212,6 @@ fi
 echo ""
 echo "✅ Deployment abgeschlossen: $BASE_URL"
 echo ""
-echo "   Logs:      ssh $SSH_TARGET 'docker compose -f $DEPLOY_REMOTE_DIR/$COMPOSE_FILE logs -f sample-monk'"
-echo "   Rollback:  ssh $SSH_TARGET 'docker tag ${IMAGE_APP}-rollback $IMAGE_APP && cd $DEPLOY_REMOTE_DIR && docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate sample-monk'"
+echo "   Logs:      ssh $SSH_TARGET 'docker compose -f $DEPLOY_REMOTE_DIR/$COMPOSE_FILE logs -f audiomonastry'"
+echo "   Rollback:  ssh $SSH_TARGET 'docker tag ${IMAGE_APP}-rollback $IMAGE_APP && cd $DEPLOY_REMOTE_DIR && docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry'"
 echo "   Optional Auto-Shutdown: ssh $SSH_TARGET 'sudo bash $DEPLOY_REMOTE_DIR/scripts/hetzner/install-idle-shutdown.sh'"

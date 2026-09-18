@@ -77,7 +77,7 @@ wrangler deploy
 2. `POST /api/refresh-snapshots` (eingeloggt, Session-Cookie) aufrufen – das
    erzeugt je **laufendem** Flotten-Server einen Snapshot:
    - `POST /servers/{id}/actions/create_image` mit Label `role=<app|sfu|ai|master|edge>`
-   - Name/Label `samplemonk-snapshot-<role>`
+   - Name/Label `audiomonastry-snapshot-<role>`
    - Auto-Retention: es bleiben je Rolle die **letzten 2** Snapshots erhalten,
      ältere werden automatisch gelöscht.
 3. Beim nächsten Wake versucht `startFleet` zuerst das passende

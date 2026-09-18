@@ -1,21 +1,21 @@
-# Prometheus-Alerting-Regeln für sampleMONK (Live-Betrieb)
+# Prometheus-Alerting-Regeln für audioMONASTRY (Live-Betrieb)
 groups:
-  - name: samplemonk
+  - name: audiomonastry
     rules:
-      - alert: SamplemonkAppDown
-        expr: up{job="samplemonk"} == 0
+      - alert: AudiomonastryAppDown
+        expr: up{job="audiomonastry"} == 0
         for: 2m
         labels: { severity: critical }
-        annotations: { summary: "sampleMONK App nicht erreichbar", description: "{{ $labels.instance }} ist seit 2 Minuten down." }
+        annotations: { summary: "audioMONASTRY App nicht erreichbar", description: "{{ $labels.instance }} ist seit 2 Minuten down." }
 
-      - alert: SamplemonkHighErrorRate
-        expr: rate(samplemonk_http_errors_total[5m]) / rate(samplemonk_http_requests_total[5m]) > 0.1
+      - alert: AudiomonastryHighErrorRate
+        expr: rate(audiomonastry_http_errors_total[5m]) / rate(audiomonastry_http_requests_total[5m]) > 0.1
         for: 5m
         labels: { severity: warning }
         annotations: { summary: "Hohe HTTP-Fehlerrate", description: ">10% Fehler über 5 Minuten ({{ $value }})." }
 
-      - alert: SamplemonkStemQueueFull
-        expr: samplemonk_stem_jobs_active >= samplemonk_stem_jobs_max
+      - alert: AudiomonastryStemQueueFull
+        expr: audiomonastry_stem_jobs_active >= audiomonastry_stem_jobs_max
         for: 10m
         labels: { severity: warning }
         annotations: { summary: "Stem-Queue voll", description: "Alle Stem-Slots sind seit 10 Minuten belegt." }
@@ -33,10 +33,10 @@ groups:
         annotations: { summary: "Hohe CPU-Last", description: "{{ $labels.instance }} >90% CPU über 10 Minuten." }
 
       # PROD-P2-001: AI-Kosten-Guard. Budget-Regel im SSOT:
-      # fleetMaxEurPerHour = 10 (≈ USD). samplemonk_ai_cost_usd ist kumulativ,
+      # fleetMaxEurPerHour = 10 (≈ USD). audiomonastry_ai_cost_usd ist kumulativ,
       # deshalb increase() über 1 h als Stundenrate.
       - alert: AiCostBudgetBurned
-        expr: increase(samplemonk_ai_cost_usd[1h]) > 10
+        expr: increase(audiomonastry_ai_cost_usd[1h]) > 10
         for: 15m
         labels: { severity: warning }
         annotations:
@@ -48,36 +48,36 @@ groups:
   # Bis hierher gab es Einzelalarme, aber keine Verfuegbarkeits-/Latenz-Zusage
   # und damit auch keine Messgrundlage ("erfuellen wir unser SLO?").
   # ---------------------------------------------------------------------------
-  - name: samplemonk-slo
+  - name: audiomonastry-slo
     interval: 30s
     rules:
       # SLO 1 (Verfuegbarkeit 99,5 % / 24 h): Anteil erfolgreicher HTTP-Antworten.
-      - record: samplemonk:slo_availability:ratio_24h
+      - record: audiomonastry:slo_availability:ratio_24h
         expr: |
           (
-            sum(rate(samplemonk_http_requests_total[24h]))
-            - sum(rate(samplemonk_http_errors_total[24h]))
+            sum(rate(audiomonastry_http_requests_total[24h]))
+            - sum(rate(audiomonastry_http_errors_total[24h]))
           )
-          / clamp_min(sum(rate(samplemonk_http_requests_total[24h])), 1e-9)
+          / clamp_min(sum(rate(audiomonastry_http_requests_total[24h])), 1e-9)
       # Kurzes Fenster fuer den schnellen Burn-Rate-Alarm (2 % Fehlerbudget in 1 h).
-      - record: samplemonk:slo_availability:ratio_1h
+      - record: audiomonastry:slo_availability:ratio_1h
         expr: |
           (
-            sum(rate(samplemonk_http_requests_total[1h]))
-            - sum(rate(samplemonk_http_errors_total[1h]))
+            sum(rate(audiomonastry_http_requests_total[1h]))
+            - sum(rate(audiomonastry_http_errors_total[1h]))
           )
-          / clamp_min(sum(rate(samplemonk_http_requests_total[1h])), 1e-9)
+          / clamp_min(sum(rate(audiomonastry_http_requests_total[1h])), 1e-9)
       # SLO 2 (Latenz): p95 der HTTP-Requests aus dem Histogramm (30-min-Fenster).
-      - record: samplemonk:slo_latency_p95_seconds:30m
+      - record: audiomonastry:slo_latency_p95_seconds:30m
         expr: |
           histogram_quantile(
             0.95,
-            sum by (le) (rate(samplemonk_http_request_duration_seconds_bucket[30m]))
+            sum by (le) (rate(audiomonastry_http_request_duration_seconds_bucket[30m]))
           )
 
       # Burn-Rate-Alarm 1: Verfuegbarkeit unter dem 24-h-Ziel (99,5 %).
-      - alert: SamplemonkSloAvailabilityBreach
-        expr: samplemonk:slo_availability:ratio_1h < 0.995
+      - alert: AudiomonastrySloAvailabilityBreach
+        expr: audiomonastry:slo_availability:ratio_1h < 0.995
         for: 10m
         labels: { severity: warning }
         annotations:
@@ -85,8 +85,8 @@ groups:
           description: "Anteil erfolgreicher Requests in der letzten Stunde: {{ $value | humanizePercentage }} (Ziel 99,5 %)."
 
       # Burn-Rate-Alarm 2: Latenz-SLO - p95 ueber 250 ms (30 min).
-      - alert: SamplemonkSloLatencyBreach
-        expr: samplemonk:slo_latency_p95_seconds:30m > 0.25
+      - alert: AudiomonastrySloLatencyBreach
+        expr: audiomonastry:slo_latency_p95_seconds:30m > 0.25
         for: 15m
         labels: { severity: warning }
         annotations:
@@ -96,8 +96,8 @@ groups:
       # Burn-Rate-Alarm 3: Xruns - hoert die Audio-Engine eines Clients auf zu
       # takten, ist das ein Klangproblem, kein Rechenproblem. Schwelle bewusst
       # niedrig (Audio-Artefakte sind sofort hoerbar).
-      - alert: SamplemonkClientXruns
-        expr: sum(increase(samplemonk_telemetry_xruns_total[10m])) > 20
+      - alert: AudiomonastryClientXruns
+        expr: sum(increase(audiomonastry_telemetry_xruns_total[10m])) > 20
         for: 5m
         labels: { severity: warning }
         annotations:

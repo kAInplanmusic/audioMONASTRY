@@ -39,14 +39,14 @@ describe('LatencyHistogram', () => {
     h.observe(12);
     h.observe(2000);
     const lines = formatLatencyHistogram(h.snapshot());
-    expect(lines[0]).toContain('# HELP samplemonk_http_request_duration_seconds');
-    expect(lines[1]).toBe('# TYPE samplemonk_http_request_duration_seconds histogram');
+    expect(lines[0]).toContain('# HELP audiomonastry_http_request_duration_seconds');
+    expect(lines[1]).toBe('# TYPE audiomonastry_http_request_duration_seconds histogram');
     // 12 ms liegt ueber 10 ms und unter 25 ms -> le="0.01" ist noch 0, le="0.025" zaehlt.
-    expect(lines).toContain('samplemonk_http_request_duration_seconds_bucket{le="0.01"} 0');
-    expect(lines).toContain('samplemonk_http_request_duration_seconds_bucket{le="0.025"} 1');
-    expect(lines).toContain('samplemonk_http_request_duration_seconds_bucket{le="+Inf"} 2');
-    expect(lines).toContain('samplemonk_http_request_duration_seconds_count 2');
-    expect(lines.some((l) => l.startsWith('samplemonk_http_request_duration_seconds_sum 2.012'))).toBe(true);
+    expect(lines).toContain('audiomonastry_http_request_duration_seconds_bucket{le="0.01"} 0');
+    expect(lines).toContain('audiomonastry_http_request_duration_seconds_bucket{le="0.025"} 1');
+    expect(lines).toContain('audiomonastry_http_request_duration_seconds_bucket{le="+Inf"} 2');
+    expect(lines).toContain('audiomonastry_http_request_duration_seconds_count 2');
+    expect(lines.some((l) => l.startsWith('audiomonastry_http_request_duration_seconds_sum 2.012'))).toBe(true);
     // Genau ein +Inf-Bucket und EINE Zeile pro Obergrenze (Prometheus-Pflicht).
     expect(lines.filter((l) => l.includes('_bucket{')).length).toBe(LATENCY_BUCKETS_SECONDS.length + 1);
   });

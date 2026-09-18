@@ -103,7 +103,7 @@ def _common_kwargs() -> dict:
         "custom_image": image,
         "env": {
             "AI_RUNTIME_DEVICE": "cuda",
-            "AI_MODEL_MANIFEST": "/opt/samplemonk-ai/model_manifest.json",
+            "AI_MODEL_MANIFEST": "/opt/audiomonastry-ai/model_manifest.json",
             "HF_HOME": "/data/hf-cache",
         },
         "secrets": {"HF_TOKEN": os.environ.get("HF_TOKEN", "")},

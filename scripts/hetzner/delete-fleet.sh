@@ -18,17 +18,24 @@ cd "$(dirname "$0")/../.."
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
 
-NAMES=(samplemonk-app-1 samplemonk-sfu-1 samplemonk-ai-1 samplemonk-master-1 samplemonk-edge-1)
+# NOMEN-P1-001: Aufraeumen darf NICHTS uebersehen - ein Altname, der nicht
+# geloescht wird, kostet weiter Geld. Deshalb beide Schreibweisen.
+source "$(dirname "$0")/fleet-names.sh"
+NAMES=(audiomonastry-app-1 audiomonastry-sfu-1 audiomonastry-ai-1 audiomonastry-master-1 audiomonastry-edge-1)
+ALL_NAMES=()
+for n in "${NAMES[@]}"; do
+  while read -r candidate; do ALL_NAMES+=("$candidate"); done < <(fleet_candidates "$n")
+done
 
 if [[ "${1:-}" != "--yes" ]]; then
   echo "Folgende Server werden ENDGÜLTIG gelöscht:"
-  printf '  - %s\n' "${NAMES[@]}"
-  echo "Die Floating-IP (${FLOATING_IP_NAME:-samplemonk-floating}) bleibt reserviert (3 €/Monat)."
+  printf '  - %s\n' "${ALL_NAMES[@]}"
+  echo "Die Floating-IP (${FLOATING_IP_NAME:-audiomonastry-floating}) bleibt reserviert (3 €/Monat)."
   read -r -p "Wirklich löschen? [j/N] " ans
   [[ "$ans" == "j" || "$ans" == "J" ]] || { echo "Abgebrochen."; exit 0; }
 fi
 
-for name in "${NAMES[@]}"; do
+for name in "${ALL_NAMES[@]}"; do
   id=$(curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers?name=$name" \
     | python3 -c "import sys,json; d=json.load(sys.stdin); s=d['servers'][0] if d['servers'] else None; print(s['id'] if s else '')")
   if [[ -n "$id" ]]; then

@@ -1,10 +1,10 @@
-# Grafana Dashboard-Provisioning für sampleMONK
+# Grafana Dashboard-Provisioning für audioMONASTRY
 apiVersion: 1
 
 providers:
-  - name: samplemonk
+  - name: audiomonastry
     orgId: 1
-    folder: sampleMONK
+    folder: audioMONASTRY
     type: file
     disableDeletion: true
     updateIntervalSeconds: 30

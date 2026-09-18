@@ -17,7 +17,7 @@
 # Aufruf (auf sfu-1):
 #   sudo TURN_STATIC_AUTH_SECRET="$(openssl rand -hex 32)" bash services/turn/deploy-turn.sh
 #
-# Firewall-Voraussetzung (Hetzner-Cloud-Firewall samplemonk-sfu, 2026-09-13
+# Firewall-Voraussetzung (Hetzner-Cloud-Firewall audiomonastry-sfu, 2026-09-13
 # gesetzt und verifiziert): udp/3478, tcp/3478, udp/49152-65535 oeffentlich.
 #
 # WICHTIG (2026-09-13 gefixt): Das Skript generiert KEIN Secret mehr selbst.

@@ -1,9 +1,9 @@
 # =============================================================================
-# sampleMONK · Hetzner Cloud (docker compose) – high-end production
+# audioMONASTRY · Hetzner Cloud (docker compose) – high-end production
 # -----------------------------------------------------------------------------
 # Rollen (siehe docs/SERVER_SIZING.md / docs/SERVER_FLEET.md):
 #   * caddy          – HTTPS-Terminierung + Reverse-Proxy (KLEIN, 0.5 CPU)
-#   * sample-monk    – App + REST + WebRTC-Signaling (GUT: 2 CPU/2 GB;
+#   * audiomonastry    – App + REST + WebRTC-Signaling (GUT: 2 CPU/2 GB;
 #                      bei 4 Usern + SFU auf 4 CPU/8 GB anheben)
 #   * master-player  – Mixing/Mastering (KLEIN, 1 CPU/1 GB)
 #   * redis          – OPTIONAL, Profil "fleet": Socket.io-Multi-Instanz-Adapter
@@ -12,7 +12,7 @@
 #   * ollama         – OPTIONAL, Profil "ai": lokales LLM/TTS/Song-Fallback
 #
 #   Start:        docker compose -f docker-compose.hetzner.yml up -d --build
-#   Fleet (SFU):  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk
+#   Fleet (SFU):  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
 #   Redis-Knoten: docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
 #   Secrets kommen aus .env (Kopie von .env.hetzner.example).
 # =============================================================================
@@ -37,7 +37,7 @@ services:
   # Hinweis: Caddy benötigt Port 80/443 und behält daher CAP_NET_BIND_SERVICE.
   caddy:
     image: caddy:2.8-alpine
-    container_name: samplemonk-caddy
+    container_name: audiomonastry-caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -54,7 +54,7 @@ services:
       - caddy_config:/config
     logging: *default-logging
     depends_on:
-      - sample-monk
+      - audiomonastry
     deploy:
       resources:
         limits:
@@ -62,12 +62,12 @@ services:
           cpus: "0.5"
 
   # --- Haupt-App (static + REST + WebRTC-Signaling) ------------------------
-  sample-monk:
+  audiomonastry:
     build:
       context: .
       dockerfile: Dockerfile.hetzner
-    image: samplemonk:hetzner
-    container_name: samplemonk
+    image: audiomonastry:hetzner
+    container_name: audiomonastry
     <<: *default-runtime
     expose:
       - "8080"          # nur intern; extern läuft alles über Caddy/HTTPS
@@ -107,8 +107,8 @@ services:
   # --- Nativer Mixing/Mastering-Dienst (FFmpeg+NumPy) ----------------------
   master-player:
     build: ./services/master-player
-    image: samplemonk-master-player:hetzner
-    container_name: samplemonk-master
+    image: audiomonastry-master-player:hetzner
+    container_name: audiomonastry-master
     <<: *default-runtime
     # FLEET-WIRING: auf Hetzner-Knoten öffentlich publizieren (Firewall
     # beschränkt den Zugriff auf die app-1-IP, siehe Portal /api/wire-fleet).
@@ -140,7 +140,7 @@ services:
   # Start: docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
   redis:
     image: redis:7-alpine
-    container_name: samplemonk-redis
+    container_name: audiomonastry-redis
     <<: *default-runtime
     profiles: ["fleet"]
     # Direkt als redis-User starten: der Entrypoint braucht sonst SETUID/SETGID
@@ -177,7 +177,7 @@ services:
   # Start:  docker compose -f docker-compose.hetzner.yml --profile midi up -d
   midi-bridge:
     build: ./services/midi-bridge
-    container_name: samplemonk-midi
+    container_name: audiomonastry-midi
     <<: *default-runtime
     profiles: ["midi"]
     ports:
@@ -200,7 +200,7 @@ services:
   #   build:
   #     context: ./services
   #     dockerfile: stem-ai/Dockerfile
-  #   container_name: samplemonk-stem
+  #   container_name: audiomonastry-stem
   #   <<: *default-runtime
   #   expose:
   #     - "8000"
@@ -226,7 +226,7 @@ services:
   # Start: docker compose -f docker-compose.hetzner.yml --profile ai up -d ollama
   # ollama:
   #   image: ollama/ollama:0.6
-  #   container_name: samplemonk-ollama
+  #   container_name: audiomonastry-ollama
   #   <<: *default-runtime
   #   profiles: ["ai"]
   #   expose:

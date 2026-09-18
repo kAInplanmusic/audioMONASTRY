@@ -22,10 +22,10 @@ else
 fi
 
 # Persistenz ueber Reboots (systemd-oneshot; vermeidet netplan-Merge-Probleme).
-UNIT="/etc/systemd/system/samplemonk-floating-ip.service"
+UNIT="/etc/systemd/system/audiomonastry-floating-ip.service"
 cat > "$UNIT" <<EOF
 [Unit]
-Description=sampleMONK Hetzner Floating IP (${IP})
+Description=audioMONASTRY Hetzner Floating IP (${IP})
 After=network-online.target
 Wants=network-online.target
 
@@ -39,7 +39,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable samplemonk-floating-ip.service >/dev/null 2>&1 || true
-systemctl start samplemonk-floating-ip.service >/dev/null 2>&1 || true
+systemctl enable audiomonastry-floating-ip.service >/dev/null 2>&1 || true
+systemctl start audiomonastry-floating-ip.service >/dev/null 2>&1 || true
 
-echo "[floating-ip] systemd-Unit installiert: samplemonk-floating-ip.service"
+echo "[floating-ip] systemd-Unit installiert: audiomonastry-floating-ip.service"

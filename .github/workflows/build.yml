@@ -71,6 +71,14 @@ jobs:
           validate -f docker-compose.monitoring.yml
           echo "--- Overlay docker-compose.hetzner.yml + docker-compose.sfu.yml"
           validate -f docker-compose.hetzner.yml -f docker-compose.sfu.yml
+          # NOMEN-P1-001: Die Overlays wurden bisher NICHT geprueft - genau daher
+          # kam "service X has neither an image nor a build context". Jetzt werden
+          # alle Overlay-Paare validiert (inkl. Profil `fleet`, sonst gilt `redis`
+          # als undefinierter Service).
+          echo "--- Overlay docker-compose.hetzner.yml + docker-compose.fleet-test.yml (Profil fleet)"
+          validate -f docker-compose.hetzner.yml -f docker-compose.fleet-test.yml --profile fleet
+          echo "--- Overlay docker-compose.monitoring.yml + docker-compose.monitoring.proof.yml"
+          validate -f docker-compose.monitoring.yml -f docker-compose.monitoring.proof.yml
 
   verify:
     runs-on: ubuntu-latest

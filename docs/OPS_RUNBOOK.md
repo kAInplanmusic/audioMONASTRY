@@ -119,17 +119,17 @@ DEPLOY_MODE=docker DEPLOY_SYNC_ENV=0 DEPLOY_SMOKE=1 \
 DEPLOY_VERSION=1.210.002-drill ./deploy.sh
 
 # Rollback (Befehl, den deploy.sh selbst ausgibt: das Skript taggt vor jedem
-# Deploy das LAUFENDE Image als samplemonk:hetzner-rollback)
-ssh root@167.235.20.245 'docker tag samplemonk:hetzner-rollback samplemonk:hetzner \
-  && cd /opt/samplemonk \
-  && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate sample-monk'
+# Deploy das LAUFENDE Image als audiomonastry:hetzner-rollback)
+ssh root@167.235.20.245 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner \
+  && cd /opt/audiomonastry \
+  && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate audiomonastry'
 ```
 
 **Nachweis (2026-09-17, gemessen):**
 
 | Schritt | Ergebnis |
 |---|---|
-| Deploy v1 | `EXIT=0`, `docker compose ps`: `samplemonk` + `samplemonk-master` **healthy**, `samplemonk-caddy` up |
+| Deploy v1 | `EXIT=0`, `docker compose ps`: `audiomonastry` + `audiomonastry-master` **healthy**, `audiomonastry-caddy` up |
 | Health von aussen | `curl http://167.235.20.245/api/health` → `{"status":"ok","version":"1.210.001"}` |
 | Smoke mit Studio-Token | `/api/health` 200, `/api/cloud/health` 200 (`supabase: ok (service_role)`), `/api/master/health` 200 (`master-player 2.0.0`) |
 | Deploy v2 (`DEPLOY_VERSION=1.210.002-drill`) | `EXIT=0`, Health → `{"status":"ok","version":"1.210.002-drill"}` |
@@ -199,7 +199,7 @@ PORT=8080 STUDIO_ACCESS_TOKEN=... SCRAPE_TOKEN=... ALERT_WEBHOOK_TOKEN=... \
 # 2) Empfaenger (Messinstrument; im Betrieb nicht noetig)
 node scripts/hetzner/alert-webhook-receiver.mjs --port 9099 --out /tmp/alerts.jsonl
 
-# 3) Stack (das Overlay loest `sample-monk` auf den Host auf und oeffnet die APIs)
+# 3) Stack (das Overlay loest `audiomonastry` auf den Host auf und oeffnet die APIs)
 SCRAPE_TOKEN=... ALERT_WEBHOOK_TOKEN=... CRITICAL_WEBHOOK=http://host.docker.internal:9099/alerts \
   docker compose -f docker-compose.monitoring.yml -f docker-compose.monitoring.proof.yml \
   up -d prometheus alertmanager grafana
@@ -209,21 +209,21 @@ SCRAPE_TOKEN=... ALERT_WEBHOOK_TOKEN=... CRITICAL_WEBHOOK=http://host.docker.int
 
 | Nachweis | Ergebnis |
 |---|---|
-| Scrape | `up{job="samplemonk"}=1`, Target `healthy`; Serien `samplemonk_http_requests_total`, `..._duration_seconds_bucket/_sum/_count` (neu), `..._ai_cost_usd`, `..._telemetry_xruns_total` |
+| Scrape | `up{job="audiomonastry"}=1`, Target `healthy`; Serien `audiomonastry_http_requests_total`, `..._duration_seconds_bucket/_sum/_count` (neu), `..._ai_cost_usd`, `..._telemetry_xruns_total` |
 | Regeln | 12 Regeln geladen, `health=ok`: 6 Einzelalarme + 3 SLO-Recordings + 3 SLO-/Xrun-Alarme (neu) |
-| Dashboard | Grafana 11.2: Dashboard `samplemonk-overview` provisioniert, **22 Panels** inkl. `SLO Verfuegbarkeit (24h)`, `SLO Verfuegbarkeit (1h)`, `Latenz p95 (30m)`, `AI-Kosten (USD, kumuliert)`, `AI-Kosten pro Stunde`, `Client-Xruns pro Sekunde (nach Quelle)`, `Xruns gesamt (10m-Zunahme)`, `SLO-Burn: Fehlerquote`; Panel-Ausdruecke liefern Daten |
-| Alarm 1 (Fehlerrate) | 40×401 gegen 40×200 → Regel `SamplemonkHighErrorRate` **firing** → zugestellt: `[FIRING] Hohe HTTP-Fehlerrate (sample-monk:8080)` |
-| Alarm 2 (neues SLO) | dieselbe Störung → `SamplemonkSloAvailabilityBreach` **firing** → zugestellt: `[FIRING] Verfuegbarkeits-SLO verletzt (1 h < 99,5 %)` |
-| Alarm 3 (App-Down, DIREKT) | App gestoppt → `up=0` → `SamplemonkAppDown` **firing** → direkt zugestellt (Alertmanager-Payload, App war tot) |
-| Xruns (neu) | 30 Telemetrie-Events `type=xrun` via `POST /api/telemetry` → `SamplemonkClientXruns` **pending** → `firing` nach `for: 5m` |
+| Dashboard | Grafana 11.2: Dashboard `audiomonastry-overview` provisioniert, **22 Panels** inkl. `SLO Verfuegbarkeit (24h)`, `SLO Verfuegbarkeit (1h)`, `Latenz p95 (30m)`, `AI-Kosten (USD, kumuliert)`, `AI-Kosten pro Stunde`, `Client-Xruns pro Sekunde (nach Quelle)`, `Xruns gesamt (10m-Zunahme)`, `SLO-Burn: Fehlerquote`; Panel-Ausdruecke liefern Daten |
+| Alarm 1 (Fehlerrate) | 40×401 gegen 40×200 → Regel `AudiomonastryHighErrorRate` **firing** → zugestellt: `[FIRING] Hohe HTTP-Fehlerrate (audiomonastry:8080)` |
+| Alarm 2 (neues SLO) | dieselbe Störung → `AudiomonastrySloAvailabilityBreach` **firing** → zugestellt: `[FIRING] Verfuegbarkeits-SLO verletzt (1 h < 99,5 %)` |
+| Alarm 3 (App-Down, DIREKT) | App gestoppt → `up=0` → `AudiomonastryAppDown` **firing** → direkt zugestellt (Alertmanager-Payload, App war tot) |
+| Xruns (neu) | 30 Telemetrie-Events `type=xrun` via `POST /api/telemetry` → `AudiomonastryClientXruns` **pending** → `firing` nach `for: 5m` |
 
 **SLO-Definitionen (Recording-Rules in `prometheus-alerts.yml`):**
 
-- `samplemonk:slo_availability:ratio_24h` – Anteil erfolgreicher HTTP-Antworten,
-  Ziel **99,5 % / 24 h**; Alarm `SamplemonkSloAvailabilityBreach` ab 1-h-Verletzung.
-- `samplemonk:slo_latency_p95_seconds:30m` – p95 aus dem neuen Histogramm
-  `samplemonk_http_request_duration_seconds_bucket`, Ziel **< 250 ms**; Alarm
-  `SamplemonkSloLatencyBreach`. Vorher gab es nur einen Mittelwert-Gauge – der
+- `audiomonastry:slo_availability:ratio_24h` – Anteil erfolgreicher HTTP-Antworten,
+  Ziel **99,5 % / 24 h**; Alarm `AudiomonastrySloAvailabilityBreach` ab 1-h-Verletzung.
+- `audiomonastry:slo_latency_p95_seconds:30m` – p95 aus dem neuen Histogramm
+  `audiomonastry_http_request_duration_seconds_bucket`, Ziel **< 250 ms**; Alarm
+  `AudiomonastrySloLatencyBreach`. Vorher gab es nur einen Mittelwert-Gauge – der
   verdeckt genau den langen Schwanz, den ein Latenz-SLO messen soll.
 
 **Noch offen (bewusst):** `fleetMaxEurPerHour`-Alarm feuert auf die kumulierte
@@ -316,7 +316,7 @@ korrigieren, seit AI-P1-003 P5 im Einsatz). Darum herum liegt
   kostet nichts. Die Schätzung rechnet über die Zeichenzahl (`AI_AGENT_COST_PER_1K_USD`);
   der Router liefert keinen Preis. **Kein hartes Budget-Limit pro Lauf** — die
   Grenze zieht die Kostenbremse (`AI_RATE.expensiveMax`) und der Alarm
-  `SamplemonkAiCostBudget` (siehe §9).
+  `AudiomonastryAiCostBudget` (siehe §9).
 - **Schreibzugriffe sind opt-in**: ohne `allowWrite:true` lehnt das WRITE-Gate
   jeden Schreib-Schritt ab (fail-safe, unbekannte Kommandos gelten als WRITE).
   Die UI startet ohne Freigabe, also nur lesende Schritte.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# sampleMONK – Hetzner DNS Setup für anunnakitools.de
+# audioMONASTRY – Hetzner DNS Setup für anunnakitools.de
 # -----------------------------------------------------------------------------
 # Verwendet die NEUE Hetzner Cloud DNS API (seit 2026 unter api.hetzner.cloud):
 #   A     @                  -> TARGET_IP   (Floating IP)
@@ -121,7 +121,7 @@ def upsert_rrset(token: str, zone_id, name: str, rtype: str, value: str) -> None
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="sampleMONK Hetzner DNS Setup (Cloud API)")
+    parser = argparse.ArgumentParser(description="audioMONASTRY Hetzner DNS Setup (Cloud API)")
     parser.add_argument("--domain", default=DEFAULT_DOMAIN, help="Domain (Standard: anunnakitools.de)")
     parser.add_argument("--target-ip", default=DEFAULT_TARGET_IP, help="Floating IP / TARGET_IP")
     parser.add_argument("--token", default=os.environ.get("HCLOUD_TOKEN") or os.environ.get("HCLOUD_DNS_TOKEN", ""),

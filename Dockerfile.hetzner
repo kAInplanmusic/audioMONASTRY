@@ -1,5 +1,5 @@
 # =============================================================================
-# sampleMONK · Dockerfile.hetzner  (high-end production image)
+# audioMONASTRY · Dockerfile.hetzner  (high-end production image)
 # -----------------------------------------------------------------------------
 # Optimiert fuer Hetzner Cloud VPS (stuendlich abgerechnet):
 #   - nutzt das VOR-KOMPILIERTE native Mixer-Modul (services/mixer/*.node)
@@ -9,7 +9,7 @@
 #   - tini als PID 1 (Zombie-Reaping, saubere Signal-Weiterleitung).
 #   - Non-root User, OCI-Labels, Healthcheck.
 #
-# Build:  docker build -f Dockerfile.hetzner -t samplemonk:hetzner .
+# Build:  docker build -f Dockerfile.hetzner -t audiomonastry:hetzner .
 # =============================================================================
 FROM node:22-slim AS builder
 WORKDIR /app
@@ -42,9 +42,9 @@ FROM node:22-slim
 WORKDIR /app
 
 # OCI-Labels (OCI Image Format Spec)
-LABEL org.opencontainers.image.title="sampleMONK" \
+LABEL org.opencontainers.image.title="audioMONASTRY" \
       org.opencontainers.image.description="audioMONASTRY Pro Audio Workstation – App, REST API, WebRTC-Signaling" \
-      org.opencontainers.image.source="https://github.com/kAInplanmusic/sampleMONK" \
+      org.opencontainers.image.source="https://github.com/kAInplanmusic/audioMONASTRY" \
       org.opencontainers.image.vendor="monkMONASTRY" \
       org.opencontainers.image.licenses="UNLICENSED"
 

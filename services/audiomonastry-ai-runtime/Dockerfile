@@ -26,7 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libsndfile1 sox curl passwd \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/samplemonk-ai
+WORKDIR /opt/audiomonastry-ai
 
 # Dependencies (torch kommt aus dem Basisimage, wird NICHT neu geladen)
 # Hinweis: requirements.lock ist kein vollständiger Transitiv-Lock; für den
@@ -52,7 +52,7 @@ COPY model_manifest.json runtime_config.yaml startup.sh ./
 RUN chmod +x startup.sh \
     && mkdir -p /data/hf-cache \
     && useradd --system --uid 10001 audiomonastry \
-    && chown -R audiomonastry:audiomonastry /opt/samplemonk-ai /data
+    && chown -R audiomonastry:audiomonastry /opt/audiomonastry-ai /data
 USER audiomonastry
 
 # Healthcheck: Prozess lebt; Readiness liefert der Endpoint selbst.

@@ -1,6 +1,6 @@
 #cloud-config
 # =============================================================================
-# sampleMONK – Hetzner Cloud-Init (Ubuntu 24.04) – high-end production
+# audioMONASTRY – Hetzner Cloud-Init (Ubuntu 24.04) – high-end production
 # -----------------------------------------------------------------------------
 # Installiert Docker + Compose + Firewall + Monitoring-Grundlagen auf einer
 # frischen Hetzner-Instanz und tuned das System für Echtzeit-Audio/WebRTC:
@@ -71,4 +71,4 @@ runcmd:
   - ufw allow 80/tcp
   - ufw allow 443/tcp
   - ufw --force enable
-  - echo "samplemonk cloud-init done" > /root/.samplemonk-bootstrap-done
+  - echo "audiomonastry cloud-init done" > /root/.audiomonastry-bootstrap-done

@@ -5,7 +5,7 @@
 # Es aendert nichts an der Produktions-Konfiguration, sondern macht sie auf einer
 # Entwicklermaschine pruefbar:
 #
-#   * `sample-monk:host-gateway` laest die Container den Namen `sample-monk`
+#   * `audiomonastry:host-gateway` laest die Container den Namen `audiomonastry`
 #     auf den HOST aufloesen. Damit greifen die unveraenderten Ziele aus
 #     prometheus.yml (Scrape der App) und alertmanager.yml
 #     (/api/alerts/webhook) gegen den lokal laufenden Server auf :8080.
@@ -22,14 +22,14 @@
 services:
   prometheus:
     extra_hosts:
-      - 'sample-monk:host-gateway'
+      - 'audiomonastry:host-gateway'
       - 'host.docker.internal:host-gateway'
     ports:
       - "9090:9090"
 
   alertmanager:
     extra_hosts:
-      - 'sample-monk:host-gateway'
+      - 'audiomonastry:host-gateway'
       - 'host.docker.internal:host-gateway'
     ports:
       - "9093:9093"

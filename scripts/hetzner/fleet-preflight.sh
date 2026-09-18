@@ -29,7 +29,7 @@ if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 PORTAL_URL="${PORTAL_URL:-https://anunnakitools.de}"
 DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
 DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
-COOKIE_JAR="/tmp/samplemonk-portal.cookies"
+COOKIE_JAR="/tmp/audiomonastry-portal.cookies"
 SSH_OPTS=(-i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes)
 
 LOCAL_COMMIT="$(git rev-parse --short HEAD)"

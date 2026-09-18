@@ -1,7 +1,7 @@
 # =============================================================================
-# sampleMONK · Alertmanager-Konfiguration (Prometheus-Alerts → Chat-Webhook)
+# audioMONASTRY · Alertmanager-Konfiguration (Prometheus-Alerts → Chat-Webhook)
 # -----------------------------------------------------------------------------
-# Route: alle Prometheus-Alerts → sampleMONK-App-Endpoint /api/alerts/webhook.
+# Route: alle Prometheus-Alerts → audioMONASTRY-App-Endpoint /api/alerts/webhook.
 # Der App-Server leitet sie an die in .env konfigurierten Webhooks weiter:
 #   DISCORD_WEBHOOK, SLACK_WEBHOOK, TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
 #
@@ -33,7 +33,7 @@ route:
 receivers:
   - name: 'chat-webhook'
     webhook_configs:
-      - url: 'http://sample-monk:8080/api/alerts/webhook'
+      - url: 'http://audiomonastry:8080/api/alerts/webhook'
         # PROD-P1-004: Die Route ist ein Maschinen-Endpunkt und verlangt das
         # ALERT_WEBHOOK_TOKEN (sonst 401 - Alarme kamen nie an). Der Platzhalter
         # wird beim Containerstart ersetzt (docker-compose.monitoring.yml).

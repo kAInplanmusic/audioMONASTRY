@@ -2,7 +2,7 @@
  * audioMONASTRY · Latenz-Histogramm fuer das SLO (PROD-P1-004)
  * =====================================================================
  * Bis hierher exportierte der Server nur die MITTLERE Request-Latenz als Gauge
- * (`samplemonk_http_avg_latency_ms`). Ein Mittelwert verdeckt genau das, was ein
+ * (`audiomonastry_http_avg_latency_ms`). Ein Mittelwert verdeckt genau das, was ein
  * Latenz-SLO messen soll: den langen Schwanz. Deshalb zaehlt dieses Modul die
  * Requests in feste Zeit-Buckets (Prometheus-Histogramm) - damit kann
  * Prometheus mit `histogram_quantile(0.95, ...)` ein echtes p95 rechnen.
@@ -60,7 +60,7 @@ export class LatencyHistogram {
  */
 export function formatLatencyHistogram(
   snapshot: LatencyHistogramSnapshot,
-  metric = 'samplemonk_http_request_duration_seconds',
+  metric = 'audiomonastry_http_request_duration_seconds',
   bounds: readonly number[] = LATENCY_BUCKETS_SECONDS,
 ): string[] {
   const lines = [

@@ -199,7 +199,7 @@ def build_env_vars(role: str) -> Dict[str, str]:
     """Container-Env eines Rollen-Workers unseres eigenen Images."""
     env_vars = {
         "AI_RUNTIME_DEVICE": env("AI_RUNTIME_DEVICE", "cuda"),
-        "AI_MODEL_MANIFEST": "/opt/samplemonk-ai/model_manifest.json",
+        "AI_MODEL_MANIFEST": "/opt/audiomonastry-ai/model_manifest.json",
         "HF_HOME": env("HF_HOME", "/data/hf-cache"),
         "AI_RUNPOD_PRELOAD": env("AI_RUNPOD_PRELOAD", "0"),
         # Nur für Diagnose: hängt die echte Fehlermeldung an Worker-Fehler an.

@@ -130,6 +130,27 @@ function buildFleetTarget(raw: unknown, defaultPort: number): string {
   return `http://${host}:${port}`;
 }
 
+/**
+ * NOMEN-P1-001: Die Flotte heisst `audiomonastry-*`. Die Fleet-Map ist nach dem
+ * Server-/Firewall-Namen verschluesselt, und eine LAUFENDE Installation kann noch
+ * die alten Namen tragen (der Portal-Worker bildet sie inzwischen auf den neuen
+ * Namen ab, aber nicht jede Installation ist aktualisiert). Deshalb: neuer Name
+ * zuerst, Altname als Fallback - so verdrahten sich beide Flotten.
+ */
+const FLEET_LEGACY_NAME_PREFIX = 'samplemonk-';
+
+export function fleetNodeAddress(
+  map: Record<string, string>,
+  node: string,
+): string | undefined {
+  const direct = map[node];
+  if (direct) return direct;
+  const legacy = node.startsWith('audiomonastry-')
+    ? `${FLEET_LEGACY_NAME_PREFIX}${node.slice('audiomonastry-'.length)}`
+    : '';
+  return legacy ? map[legacy] : undefined;
+}
+
 async function wireFleetFromPortal(): Promise<void> {
   const token = (process.env.STUDIO_ACCESS_TOKEN || '').trim();
   if (!token) return; // Lokal/Test: keine Flotten-Verdrahtung.
@@ -141,12 +162,12 @@ async function wireFleetFromPortal(): Promise<void> {
     if (!resp.ok) return;
     const data = (await resp.json()) as { fleet?: Record<string, string> };
     const f = data.fleet ?? {};
-    const masterTarget = buildFleetTarget(f['samplemonk-master-1'], 8000);
+    const masterTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-master-1'), 8000);
     if (masterTarget) fleetTargets.masterPlayer = masterTarget;
-    const aiTarget = buildFleetTarget(f['samplemonk-ai-1'], 8000);
+    const aiTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-ai-1'), 8000);
     if (aiTarget) {
       const ollamaPort = Number(process.env.FLEET_OLLAMA_PORT || 11434);
-      const ollamaTarget = buildFleetTarget(f['samplemonk-ai-1'], Number.isFinite(ollamaPort) ? ollamaPort : 11434);
+      const ollamaTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-ai-1'), Number.isFinite(ollamaPort) ? ollamaPort : 11434);
       fleetTargets.ollama = ollamaTarget || '';
       fleetTargets.stemAi = aiTarget;
     }

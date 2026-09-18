@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# sampleMONK – Hetzner Cloud Provisioning
+# audioMONASTRY – Hetzner Cloud Provisioning
 # -----------------------------------------------------------------------------
 # Erstellt (idempotent) auf Hetzner Cloud:
 #   1. SSH-Key (lokal, z.B. ~/.ssh/id_ed25519.pub)
@@ -100,7 +100,7 @@ def ensure_ssh_key(token: str, pub_path: pathlib.Path) -> int:
     if existing:
         print(f"[provision] SSH-Key vorhanden: {pub_path} (id={existing})")
         return existing
-    name = f"samplemonk-{pub_path.stem}"
+    name = f"audiomonastry-{pub_path.stem}"
     result = api(token, "POST", "/ssh_keys", {
         "name": name,
         "public_key": public_key,
@@ -152,7 +152,7 @@ def ensure_firewall(token: str, name: str, role: str = "app") -> int:
     result = api(token, "POST", "/firewalls", {
         "name": name,
         "rules": rules,
-        "labels": {"app": "samplemonk", "managed-by": "samplemonk-provision"},
+        "labels": {"app": "audiomonastry", "managed-by": "audiomonastry-provision"},
     })
     fw_id = result["firewall"]["id"]
     print(f"[provision] Firewall angelegt: {name} (id={fw_id})")
@@ -169,8 +169,8 @@ def ensure_floating_ip(token: str, name: str, location: str) -> dict:
         "name": name,
         "type": "ipv4",
         "home_location": location,
-        "description": "sampleMONK feste IP für DNS anunnakitools.de",
-        "labels": {"app": "samplemonk", "managed-by": "samplemonk-provision"},
+        "description": "audioMONASTRY feste IP für DNS anunnakitools.de",
+        "labels": {"app": "audiomonastry", "managed-by": "audiomonastry-provision"},
     })
     fip = result["floating_ip"]
     print(f"[provision] Floating IP angelegt: {name} → {fip.get('ip')} (id={fip['id']})")
@@ -244,7 +244,7 @@ def wait_for_cloud_init(ip: str, private_key: pathlib.Path, timeout: int = 600) 
                  "-o", "StrictHostKeyChecking=accept-new", "-o", "UserKnownHostsFile=/dev/null",
                  "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
                  f"root@{ip}",
-                 "test -f /root/.samplemonk-bootstrap-done"],
+                 "test -f /root/.audiomonastry-bootstrap-done"],
                 check=True, capture_output=True, timeout=30,
             )
             if result.returncode == 0:
@@ -278,11 +278,11 @@ def configure_floating_ip(primary_ip: str, floating_ip: str, private_key: pathli
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="sampleMONK Hetzner Cloud Provisioning")
+    parser = argparse.ArgumentParser(description="audioMONASTRY Hetzner Cloud Provisioning")
     parser.add_argument("--token", default=os.environ.get("HCLOUD_TOKEN", ""),
                         help="Hetzner API-Token (oder HCLOUD_TOKEN)")
-    parser.add_argument("--name", default=os.environ.get("SERVER_NAME", "samplemonk-test"),
-                        help="Servername (Standard: samplemonk-test)")
+    parser.add_argument("--name", default=os.environ.get("SERVER_NAME", "audiomonastry-test"),
+                        help="Servername (Standard: audiomonastry-test)")
     parser.add_argument("--type", default=os.environ.get("SERVER_TYPE", "cx23"),
                         help="Servertyp (Standard: cx23 = 2 vCPU/4GB/40GB)")
     parser.add_argument("--location", default=os.environ.get("LOCATION", "fsn1"),
@@ -292,9 +292,9 @@ def main() -> None:
     parser.add_argument("--ssh-key", default=os.environ.get("SSH_KEY_PATH",
                         str(pathlib.Path.home() / ".ssh" / "id_ed25519.pub")),
                         help="Pfad zum öffentlichen SSH-Key")
-    parser.add_argument("--firewall", default=os.environ.get("FIREWALL_NAME", "samplemonk-test"),
+    parser.add_argument("--firewall", default=os.environ.get("FIREWALL_NAME", "audiomonastry-test"),
                         help="Name der Hetzner-Firewall")
-    parser.add_argument("--floating-ip", default=os.environ.get("FLOATING_IP_NAME", "samplemonk-floating"),
+    parser.add_argument("--floating-ip", default=os.environ.get("FLOATING_IP_NAME", "audiomonastry-floating"),
                         help="Name/ID der festen Floating IP; 'none' = keine Floating IP")
     parser.add_argument("--role", default=os.environ.get("ROLE", "app"),
                         help="Rolle: app (Default), sfu (öffnet RTP-Ports 40000-40099), "
@@ -341,8 +341,8 @@ def main() -> None:
             "firewalls": [{"firewall": firewall_id}],
             "user_data": user_data,
             "labels": {
-                "app": "samplemonk",
-                "managed-by": "samplemonk-provision",
+                "app": "audiomonastry",
+                "managed-by": "audiomonastry-provision",
                 "role": args.role,
             },
         }
@@ -374,7 +374,7 @@ def main() -> None:
 
     print()
     print("=" * 72)
-    print("sampleMONK Hetzner-Instanz bereit!")
+    print("audioMONASTRY Hetzner-Instanz bereit!")
     print("=" * 72)
     print(f"  Feste IP:     {ip}   {'(Floating IP, überlebt Instanz-Wechsel)' if floating else '(primäre IP)'}")
     print(f"  Primäre IP:   {primary_ip}")
@@ -383,7 +383,7 @@ def main() -> None:
     print(f"  Rolle:        {args.role}")
     print(f"  Firewall:     {args.firewall} (22/80/443 + ICMP{' + RTP 40000-40099' if args.role == 'sfu' else ''})")
     print()
-    print("  Weiter mit Deploy (im Repo-Verzeichnis samplemonk/):")
+    print("  Weiter mit Deploy (im Repo-Verzeichnis audiomonastry/):")
     print(f"    DEPLOY_HOST=root@{ip} DEPLOY_DOMAIN=anunnakitools.de bash deploy.sh")
     print()
     print("  DNS (einmalig, siehe scripts/hetzner/dns_setup.py):")
@@ -394,7 +394,7 @@ def main() -> None:
     print("                sonst nur http://IP-Test im Desktop-Browser.")
     print()
     print("  Stunden-Abrechnung sparen (Auto-Shutdown bei Inaktivität):")
-    print(f"    ssh root@{ip} 'bash /opt/samplemonk/scripts/hetzner/install-idle-shutdown.sh'")
+    print(f"    ssh root@{ip} 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh'")
     print("=" * 72)
 
 

@@ -1,4 +1,4 @@
-# SampleMONK AI Runtime – Code-/Manifest-Patch (schneller Rollen-Update)
+# audioMONASTRY AI Runtime – Code-/Manifest-Patch (schneller Rollen-Update)
 # =====================================================================
 # Leitet ein Image vom bewährten Runtime-Image ab und tauscht NUR den
 # Python-Code der Runtime + das Rollen-Manifest aus. Zweck: Änderungen an
@@ -25,16 +25,26 @@
 #     -t ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<neu> \
 #     services/audiomonastry-ai-runtime
 #
-# Hinweis: Container-interne Pfade (/opt/samplemonk-ai) und der Worker-User
-# (samplemonk) sind bewusst noch nicht umbenannt – das erfordert einen
-# bestaetigten Voll-Build (TODO NOMEN-P1-001).
-ARG BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:8roles-v2
+# NOMEN-P1-001: Container-interner Pfad ist umbenannt (/opt/audiomonastry-ai).
+# Dieses Image PATCHT ein Basis-Image, deshalb haengt der Pfad am Basis-Image.
+# Zwei gueltige Paare (Pfad als Build-Argument, damit beides moeglich bleibt):
+#   neu (Default): BASE_IMAGE=…:8roles-v3 (aus Dockerfile.runpod ab dem Umbenennungsstand)
+#   alt          : --build-arg BASE_IMAGE=…:8roles-v2 --build-arg WORKER_HOME=/opt/samplemonk-ai
+# Rechte werden ueber die UID/GID gesetzt (10001 in beiden Basis-Images) - damit
+# ist der Build unabhaengig davon, wie der User im Basis-Image heisst
+# (`chown <name>` bzw. `USER <name>` wuerde mit dem jeweils anderen Basis-Image
+# den Build abbrechen).
+ARG BASE_IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:8roles-v3
+ARG WORKER_HOME=/opt/audiomonastry-ai
 FROM ${BASE_IMAGE}
 
-WORKDIR /opt/samplemonk-ai
+# ARGs gelten in Docker nur bis zum FROM - danach erneut deklarieren.
+ARG WORKER_HOME=/opt/audiomonastry-ai
 
-# Das Basis-Image endet als uid 10001 (`samplemonk`) – fuer COPY/chown zurueck
-# auf root; am Ende laeuft der Worker wieder unprivilegiert als samplemonk.
+WORKDIR ${WORKER_HOME}
+
+# Das Basis-Image endet als uid 10001 – fuer COPY/chown zurueck auf root; am Ende
+# laeuft der Worker wieder unprivilegiert als 10001:10001.
 USER root
 
 # Code + Manifest der Runtime auf den aktuellen Repo-Stand bringen.
@@ -44,7 +54,7 @@ COPY model_manifest.json registry.py model_manager.py runpod_worker.py \
      workflows/ \
      predownload.py runtime_config.yaml ./
 
-RUN chown samplemonk:samplemonk /opt/samplemonk-ai/*.py /opt/samplemonk-ai/*.json /opt/samplemonk-ai/*.yaml
+RUN chown 10001:10001 ${WORKER_HOME}/*.py ${WORKER_HOME}/*.json ${WORKER_HOME}/*.yaml
 
 # ---------------------------------------------------------------------------
 # GATE: Code und Manifest müssen für JEDE Rolle zusammenpassen.
@@ -73,4 +83,4 @@ assert comfyui_adapter.COMFY_ROLES, 'ComfyUI-Rollen leer';\
 print('GATE ok: MoA + Adapter verdrahtet,', len(handlers.HANDLERS), 'Handler')"
 
 # Zurueck auf den unprivilegierten Worker-User (wie im Basis-Image).
-USER samplemonk
+USER 10001:10001

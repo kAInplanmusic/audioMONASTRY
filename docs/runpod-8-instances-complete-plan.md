@@ -665,7 +665,7 @@ Idle Timeout: 120 s          # 2026-09-16 von 900 s gesenkt, siehe Hinweis
 Workers Min: 0 (Scale-to-Zero) / Workers Max: 1
 Env (18 Variablen im Template, hier die wirksamen):
   AI_ROLE=orchestrator
-  AI_MODEL_MANIFEST=/opt/samplemonk-ai/model_manifest.json
+  AI_MODEL_MANIFEST=/opt/audiomonastry-ai/model_manifest.json
   AI_RUNPOD_PRELOAD=0                     # Modelle laden lazy beim ersten Job
   MOA_CLASSIFIER_MODEL=qwen3-4b
   MOA_PLANNER_A_MODEL=phi-35-mini

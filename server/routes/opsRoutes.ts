@@ -79,72 +79,72 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       const uptime = Math.round((Date.now() - metrics.startedAt) / 1000);
       const avgLatencyMs = metrics.requests ? Math.round(metrics.latencyMsSum / metrics.requests) : 0;
       const lines = [
-        '# HELP samplemonk_uptime_seconds Prozess-Uptime in Sekunden.',
-        '# TYPE samplemonk_uptime_seconds gauge',
-        `samplemonk_uptime_seconds ${uptime}`,
-        '# HELP samplemonk_http_requests_total Anzahl HTTP-Requests (kumulativ).',
-        '# TYPE samplemonk_http_requests_total counter',
-        `samplemonk_http_requests_total ${metrics.requests}`,
-        '# HELP samplemonk_http_errors_total Anzahl HTTP-Fehler >= 400 (kumulativ).',
-        '# TYPE samplemonk_http_errors_total counter',
-        `samplemonk_http_errors_total ${metrics.errors}`,
-        '# HELP samplemonk_http_avg_latency_ms Durchschnittliche Request-Latenz in ms.',
-        '# TYPE samplemonk_http_avg_latency_ms gauge',
-        `samplemonk_http_avg_latency_ms ${avgLatencyMs}`,
+        '# HELP audiomonastry_uptime_seconds Prozess-Uptime in Sekunden.',
+        '# TYPE audiomonastry_uptime_seconds gauge',
+        `audiomonastry_uptime_seconds ${uptime}`,
+        '# HELP audiomonastry_http_requests_total Anzahl HTTP-Requests (kumulativ).',
+        '# TYPE audiomonastry_http_requests_total counter',
+        `audiomonastry_http_requests_total ${metrics.requests}`,
+        '# HELP audiomonastry_http_errors_total Anzahl HTTP-Fehler >= 400 (kumulativ).',
+        '# TYPE audiomonastry_http_errors_total counter',
+        `audiomonastry_http_errors_total ${metrics.errors}`,
+        '# HELP audiomonastry_http_avg_latency_ms Durchschnittliche Request-Latenz in ms.',
+        '# TYPE audiomonastry_http_avg_latency_ms gauge',
+        `audiomonastry_http_avg_latency_ms ${avgLatencyMs}`,
         // PROD-P1-004: p95/p99 brauchen ein Histogramm (Latenz-SLO).
         ...(metrics.latencyHistogram ? formatLatencyHistogram(metrics.latencyHistogram.snapshot()) : []),
-        '# HELP samplemonk_ai_requests_total Anzahl KI-Proxy-Requests (kumulativ).',
-        '# TYPE samplemonk_ai_requests_total counter',
-        `samplemonk_ai_requests_total ${metrics.aiRequests}`,
-        '# HELP samplemonk_ai_failures_total Anzahl KI-Proxy-Fehler (kumulativ).',
-        '# TYPE samplemonk_ai_failures_total counter',
-        `samplemonk_ai_failures_total ${metrics.aiFailures}`,
-        '# HELP samplemonk_stem_requests_total Anzahl Stem-Separation-Requests (kumulativ).',
-        '# TYPE samplemonk_stem_requests_total counter',
-        `samplemonk_stem_requests_total ${metrics.stemRequests}`,
-        '# HELP samplemonk_stem_failures_total Anzahl Stem-Separation-Fehler (kumulativ).',
-        '# TYPE samplemonk_stem_failures_total counter',
-        `samplemonk_stem_failures_total ${metrics.stemFailures}`,
-        '# HELP samplemonk_stem_jobs_active Aktive Stem-Jobs.',
-        '# TYPE samplemonk_stem_jobs_active gauge',
-        `samplemonk_stem_jobs_active ${getStemActiveJobs()}`,
-        '# HELP samplemonk_stem_jobs_max Maximale parallele Stem-Jobs.',
-        '# TYPE samplemonk_stem_jobs_max gauge',
-        `samplemonk_stem_jobs_max ${STEM_MAX_JOBS}`,
-        '# HELP samplemonk_telemetry_events_total Client-Telemetrie-Events (kumulativ).',
-        '# TYPE samplemonk_telemetry_events_total counter',
-        `samplemonk_telemetry_events_total ${metrics.telemetryEvents ?? 0}`,
-        '# HELP samplemonk_telemetry_xruns_total Xrun-/Dropout-Telemetrie-Events (kumulativ).',
-        '# TYPE samplemonk_telemetry_xruns_total counter',
-        `samplemonk_telemetry_xruns_total ${metrics.telemetryXruns ?? 0}`,
-        '# HELP samplemonk_ai_jobs_total Anzahl AI-Orchestrator-Jobs (kumulativ).',
-        '# TYPE samplemonk_ai_jobs_total counter',
-        `samplemonk_ai_jobs_total ${aiOrchestrator.jobs.list().length}`,
-        '# HELP samplemonk_ai_cost_usd Geschätzte AI-Kosten (USD, kumulativ).',
-        '# TYPE samplemonk_ai_cost_usd gauge',
-        `samplemonk_ai_cost_usd ${aiOrchestrator.costs.summary().totalUsd ?? 0}`,
+        '# HELP audiomonastry_ai_requests_total Anzahl KI-Proxy-Requests (kumulativ).',
+        '# TYPE audiomonastry_ai_requests_total counter',
+        `audiomonastry_ai_requests_total ${metrics.aiRequests}`,
+        '# HELP audiomonastry_ai_failures_total Anzahl KI-Proxy-Fehler (kumulativ).',
+        '# TYPE audiomonastry_ai_failures_total counter',
+        `audiomonastry_ai_failures_total ${metrics.aiFailures}`,
+        '# HELP audiomonastry_stem_requests_total Anzahl Stem-Separation-Requests (kumulativ).',
+        '# TYPE audiomonastry_stem_requests_total counter',
+        `audiomonastry_stem_requests_total ${metrics.stemRequests}`,
+        '# HELP audiomonastry_stem_failures_total Anzahl Stem-Separation-Fehler (kumulativ).',
+        '# TYPE audiomonastry_stem_failures_total counter',
+        `audiomonastry_stem_failures_total ${metrics.stemFailures}`,
+        '# HELP audiomonastry_stem_jobs_active Aktive Stem-Jobs.',
+        '# TYPE audiomonastry_stem_jobs_active gauge',
+        `audiomonastry_stem_jobs_active ${getStemActiveJobs()}`,
+        '# HELP audiomonastry_stem_jobs_max Maximale parallele Stem-Jobs.',
+        '# TYPE audiomonastry_stem_jobs_max gauge',
+        `audiomonastry_stem_jobs_max ${STEM_MAX_JOBS}`,
+        '# HELP audiomonastry_telemetry_events_total Client-Telemetrie-Events (kumulativ).',
+        '# TYPE audiomonastry_telemetry_events_total counter',
+        `audiomonastry_telemetry_events_total ${metrics.telemetryEvents ?? 0}`,
+        '# HELP audiomonastry_telemetry_xruns_total Xrun-/Dropout-Telemetrie-Events (kumulativ).',
+        '# TYPE audiomonastry_telemetry_xruns_total counter',
+        `audiomonastry_telemetry_xruns_total ${metrics.telemetryXruns ?? 0}`,
+        '# HELP audiomonastry_ai_jobs_total Anzahl AI-Orchestrator-Jobs (kumulativ).',
+        '# TYPE audiomonastry_ai_jobs_total counter',
+        `audiomonastry_ai_jobs_total ${aiOrchestrator.jobs.list().length}`,
+        '# HELP audiomonastry_ai_cost_usd Geschätzte AI-Kosten (USD, kumulativ).',
+        '# TYPE audiomonastry_ai_cost_usd gauge',
+        `audiomonastry_ai_cost_usd ${aiOrchestrator.costs.summary().totalUsd ?? 0}`,
       ];
       // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
       const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       for (const [type, count] of Object.entries(metrics.telemetryByType ?? {})) {
         lines.push(
-          '# HELP samplemonk_telemetry_events_by_type_total Client-Telemetrie-Events nach Typ.',
-          '# TYPE samplemonk_telemetry_events_by_type_total counter',
-          `samplemonk_telemetry_events_by_type_total{type="${esc(type)}"} ${count}`,
+          '# HELP audiomonastry_telemetry_events_by_type_total Client-Telemetrie-Events nach Typ.',
+          '# TYPE audiomonastry_telemetry_events_by_type_total counter',
+          `audiomonastry_telemetry_events_by_type_total{type="${esc(type)}"} ${count}`,
         );
       }
       for (const [source, count] of Object.entries(metrics.telemetryBySource ?? {})) {
         lines.push(
-          '# HELP samplemonk_telemetry_events_by_source_total Client-Telemetrie-Events nach Quelle.',
-          '# TYPE samplemonk_telemetry_events_by_source_total counter',
-          `samplemonk_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
+          '# HELP audiomonastry_telemetry_events_by_source_total Client-Telemetrie-Events nach Quelle.',
+          '# TYPE audiomonastry_telemetry_events_by_source_total counter',
+          `audiomonastry_telemetry_events_by_source_total{source="${esc(source)}"} ${count}`,
         );
       }
       for (const [source, count] of Object.entries(metrics.telemetryXrunsBySource ?? {})) {
         lines.push(
-          '# HELP samplemonk_telemetry_xruns_by_source_total Xrun-/Dropout-Events nach Quelle.',
-          '# TYPE samplemonk_telemetry_xruns_by_source_total counter',
-          `samplemonk_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
+          '# HELP audiomonastry_telemetry_xruns_by_source_total Xrun-/Dropout-Events nach Quelle.',
+          '# TYPE audiomonastry_telemetry_xruns_by_source_total counter',
+          `audiomonastry_telemetry_xruns_by_source_total{source="${esc(source)}"} ${count}`,
         );
       }
       res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
@@ -185,7 +185,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // --- Live-Telemetrie: Client-Events/Fehler einsammeln (auto-logging) --------
   // POST /api/telemetry  body: { events: [{type, source, message, context?, ts?}] }
   // Der Server loggt jede Meldung als JSON-Line (Docker-Log-Rotation greift)
-  // und zählt sie in den Prometheus-Metriken (samplemonk_telemetry_events_total).
+  // und zählt sie in den Prometheus-Metriken (audiomonastry_telemetry_events_total).
   app.post('/api/telemetry', express.json({ limit: '1mb' }), (req, res) => {
     // ARCH-SEC-003: Runtime-Validierung statt `as any`-Cast auf externe Nutzdaten.
     const parsed = TelemetryPayloadSchema.safeParse(req.body ?? {});

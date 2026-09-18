@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# start-prod.sh  –  sampleMONK direkt auf einem Hetzner VPS starten
+# start-prod.sh  –  audioMONASTRY direkt auf einem Hetzner VPS starten
 # =============================================================================
 # Vorteil: ganzer Stack (App + REST API + WebRTC-Signaling) laeuft in EINEM
 # Node-Prozess auf EINEM Port. Ideal fuer stundenlich abgerechnete Hetzner-VPS.

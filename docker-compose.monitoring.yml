@@ -126,7 +126,7 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-http://sample-monk:8080/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-http://audiomonastry:8080/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
     environment:
       # Direkter Chat-Webhook fuer Alarme, die die App selbst betreffen
       # (App-Down laesst sich nicht ueber die App zustellen).

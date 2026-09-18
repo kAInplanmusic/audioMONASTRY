@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // =============================================================================
-// stress-test.mjs – sampleMONK Hetzner Stress-/Lasttest
+// stress-test.mjs – audioMONASTRY Hetzner Stress-/Lasttest
 // -----------------------------------------------------------------------------
 // Testet gegen eine laufende Instanz (lokal oder Hetzner):
 //   1. HTTP-Phase:  gemischte Endpunkte (health/cloud/master/compose/statisch)

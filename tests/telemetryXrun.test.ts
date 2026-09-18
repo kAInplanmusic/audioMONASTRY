@@ -91,7 +91,7 @@ describe('AM-E6-1: /api/telemetry aggregiert Xrun-/Dropout-Events', () => {
 
     const prom = await fetch(`${baseUrl}/api/metrics?format=prometheus`);
     const text = await prom.text();
-    expect(text).toContain('samplemonk_telemetry_xruns_total 2');
-    expect(text).toContain('samplemonk_telemetry_xruns_by_source_total{source="audio-engine"} 1');
+    expect(text).toContain('audiomonastry_telemetry_xruns_total 2');
+    expect(text).toContain('audiomonastry_telemetry_xruns_by_source_total{source="audio-engine"} 1');
   });
 });

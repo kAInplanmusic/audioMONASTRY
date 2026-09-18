@@ -390,8 +390,8 @@ describe('Server API', () => {
     const res = await fetch(`${baseUrl}/api/metrics?format=prometheus`);
     expect(res.status).toBe(200);
     const text = await res.text();
-    expect(text).toContain('samplemonk_telemetry_events_by_type_total');
-    expect(text).toContain('samplemonk_telemetry_events_by_source_total');
+    expect(text).toContain('audiomonastry_telemetry_events_by_type_total');
+    expect(text).toContain('audiomonastry_telemetry_events_by_source_total');
     expect(text).toContain('type="dropout"');
   });
 
@@ -405,7 +405,7 @@ describe('Server API', () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        alerts: [{ status: 'firing', labels: { alertname: 'SamplemonkAppDown', instance: 'app-1' }, annotations: { summary: 'App down' } }],
+        alerts: [{ status: 'firing', labels: { alertname: 'AudiomonastryAppDown', instance: 'app-1' }, annotations: { summary: 'App down' } }],
       }),
     });
     expect(res.status).toBe(202);

@@ -1,4 +1,4 @@
-# Prometheus-Konfiguration für sampleMONK (Hetzner-Knoten)
+# Prometheus-Konfiguration für audioMONASTRY (Hetzner-Knoten)
 # Wird von docker-compose.monitoring.yml gemountet.
 global:
   scrape_interval: 15s
@@ -26,7 +26,7 @@ scrape_configs:
     static_configs:
       - targets: ['cadvisor:8080']
 
-  # sampleMONK-App-Metriken (server.ts liefert /api/metrics?format=prometheus).
+  # audioMONASTRY-App-Metriken (server.ts liefert /api/metrics?format=prometheus).
   # PROD-P0-001: der Server verlangt fuer Lese-Metriken das SCRAPE_TOKEN
   # (Authorization: Bearer). Ohne Token bleibt die Route fail-closed.
   #
@@ -36,7 +36,7 @@ scrape_configs:
   # beim Start ab, der ganze Stack lief in eine Restart-Schleife). Der Platzhalter
   # `__SCRAPE_TOKEN__` wird deshalb beim Containerstart vom Entrypoint der Compose-
   # Datei ersetzt (siehe docker-compose.monitoring.yml, Abschnitt prometheus).
-  - job_name: 'samplemonk'
+  - job_name: 'audiomonastry'
     metrics_path: /api/metrics
     params:
       format: ['prometheus']
@@ -45,11 +45,11 @@ scrape_configs:
       type: Bearer
       credentials: '__SCRAPE_TOKEN__'
     static_configs:
-      - targets: ['sample-monk:8080']
+      - targets: ['audiomonastry:8080']
 
   # Cross-Host-Scrape, falls der Monitoring-Knoten NICHT auf dem App-Knoten
   # läuft (z. B. edge-1). Domain anpassen:
-  # - job_name: 'samplemonk-public'
+  # - job_name: 'audiomonastry-public'
   #   metrics_path: /api/metrics
   #   params:
   #     format: ['prometheus']

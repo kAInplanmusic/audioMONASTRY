@@ -9,11 +9,11 @@
 #   1. Installs a systemd timer that checks every 5 minutes whether the VM
 #      has been idle for ≥ 30 minutes (no active SSH sessions, CPU < 5 %).
 #   2. When idle threshold is reached the VM shuts itself down cleanly.
-#   3. Logs all activity to /var/log/samplemonk-idle-shutdown.log
+#   3. Logs all activity to /var/log/audiomonastry-idle-shutdown.log
 # =============================================================================
 set -euo pipefail
 
-LOG=/var/log/samplemonk-idle-shutdown.log
+LOG=/var/log/audiomonastry-idle-shutdown.log
 IDLE_MINUTES=30
 CHECK_INTERVAL=5   # minutes between idle checks
 
@@ -22,12 +22,12 @@ echo "[startup] $(date -u +%FT%TZ)  audioMONASTRY startup script running" >> "$L
 # ---------------------------------------------------------------------------
 # 1. Write the idle-check helper script
 # ---------------------------------------------------------------------------
-cat > /usr/local/bin/samplemonk-idle-check.sh << 'IDLE_EOF'
+cat > /usr/local/bin/audiomonastry-idle-check.sh << 'IDLE_EOF'
 #!/usr/bin/env bash
 # Checks whether the VM is idle and shuts it down if it has been idle
 # for IDLE_MINUTES consecutive checks.
-LOG=/var/log/samplemonk-idle-shutdown.log
-STATE_FILE=/run/samplemonk-idle-count
+LOG=/var/log/audiomonastry-idle-shutdown.log
+STATE_FILE=/run/audiomonastry-idle-count
 IDLE_MINUTES=30
 CHECK_INTERVAL=5
 IDLE_CYCLES=$(( IDLE_MINUTES / CHECK_INTERVAL ))
@@ -62,19 +62,19 @@ if [[ "$NEXT" -ge "$IDLE_CYCLES" ]]; then
 fi
 IDLE_EOF
 
-chmod +x /usr/local/bin/samplemonk-idle-check.sh
+chmod +x /usr/local/bin/audiomonastry-idle-check.sh
 
 # ---------------------------------------------------------------------------
 # 2. Create systemd service unit
 # ---------------------------------------------------------------------------
-cat > /etc/systemd/system/samplemonk-idle-check.service << EOF
+cat > /etc/systemd/system/audiomonastry-idle-check.service << EOF
 [Unit]
 Description=audioMONASTRY idle VM shutdown check
 After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/samplemonk-idle-check.sh
+ExecStart=/usr/local/bin/audiomonastry-idle-check.sh
 StandardOutput=append:${LOG}
 StandardError=append:${LOG}
 EOF
@@ -82,7 +82,7 @@ EOF
 # ---------------------------------------------------------------------------
 # 3. Create systemd timer unit (runs every CHECK_INTERVAL minutes)
 # ---------------------------------------------------------------------------
-cat > /etc/systemd/system/samplemonk-idle-check.timer << EOF
+cat > /etc/systemd/system/audiomonastry-idle-check.timer << EOF
 [Unit]
 Description=audioMONASTRY idle check every ${CHECK_INTERVAL} minutes
 After=network.target
@@ -90,7 +90,7 @@ After=network.target
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=${CHECK_INTERVAL}min
-Unit=samplemonk-idle-check.service
+Unit=audiomonastry-idle-check.service
 
 [Install]
 WantedBy=timers.target
@@ -100,6 +100,6 @@ EOF
 # 4. Enable & start the timer
 # ---------------------------------------------------------------------------
 systemctl daemon-reload
-systemctl enable --now samplemonk-idle-check.timer
+systemctl enable --now audiomonastry-idle-check.timer
 
 echo "[startup] $(date -u +%FT%TZ)  Auto-shutdown timer active (idle=${IDLE_MINUTES} min, check every ${CHECK_INTERVAL} min)" >> "$LOG"

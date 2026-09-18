@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# sampleMONK Hetzner idle check – läuft periodisch per systemd-Timer.
+# audioMONASTRY Hetzner idle check – läuft periodisch per systemd-Timer.
 # Fährt die Instanz herunter, wenn über IDLE_MINUTES keine Aktivität messbar
 # ist (stündliche Abrechnung → Kosten sparen).
 #
@@ -12,8 +12,8 @@
 #   5. Docker-Container mit > 5 % CPU (optionale Erkennung aktiver Jobs)
 # =============================================================================
 set -uo pipefail
-LOG="${LOG:-/var/log/samplemonk-idle-shutdown.log}"
-STATE_FILE="${STATE_FILE:-/run/samplemonk-idle-count}"
+LOG="${LOG:-/var/log/audiomonastry-idle-shutdown.log}"
+STATE_FILE="${STATE_FILE:-/run/audiomonastry-idle-count}"
 IDLE_MINUTES="${IDLE_MINUTES:-30}"
 CHECK_INTERVAL="${CHECK_INTERVAL:-5}"
 IDLE_CYCLES=$(( IDLE_MINUTES / CHECK_INTERVAL ))
@@ -50,5 +50,5 @@ echo "$NEXT" > "$STATE_FILE"
 
 if [[ "$NEXT" -ge "$IDLE_CYCLES" ]]; then
   echo "[idle-check] $(ts)  ** IDLE ($IDLE_MINUTES min) - shutting down **" >> "$LOG"
-  shutdown -h now "sampleMONK: idle shutdown after ${IDLE_MINUTES} min"
+  shutdown -h now "audioMONASTRY: idle shutdown after ${IDLE_MINUTES} min"
 fi

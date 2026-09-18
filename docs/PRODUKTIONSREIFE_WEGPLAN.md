@@ -82,7 +82,7 @@ Ergebnis im Runbook; Kosten s. §6.
 
 **P0-4 · `docker-compose.sfu.yml` ist allein nicht deploybar.**
 `docker compose -f docker-compose.sfu.yml config` bricht ab:
-`service "sample-monk" has neither an image nor a build context specified` und
+`service "audiomonastry" has neither an image nor a build context specified` und
 `SFU_ANNOUNCED_IP is not set`. Es ist ein Overlay — das steht nirgends.
 *Fix:* Overlay in Datei-Kommentar/`HETZNER_DEPLOY.md` dokumentieren, in CI mit
 `docker compose config -f docker-compose.yml -f docker-compose.sfu.yml` validieren.

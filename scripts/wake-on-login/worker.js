@@ -35,7 +35,7 @@ async function powerOnFleet() {
   const data = await res.json();
   const servers = data.servers || [];
   const off = servers.filter(
-    (s) => s.labels && s.labels['managed-by'] === 'samplemonk-provision' && s.status === 'off',
+    (s) => s.labels && s.labels['managed-by'] === 'audiomonastry-provision' && s.status === 'off',
   );
   const results = await Promise.all(off.map(async (s) => {
     const r = await fetch(`${HETZNER_API}/servers/${s.id}/actions/poweron`, {

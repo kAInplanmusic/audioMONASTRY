@@ -256,7 +256,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
       expect(FLEET_ROLES).toContain(labels.role);
       expect(labels.commit).toBe('abc123def');
       expect(labels.version).toBe('1.210.001');
-      expect(action.payload.description).toMatch(/^samplemonk-snapshot-/);
+      expect(action.payload.description).toMatch(/^audiomonastry-snapshot-/);
       expect(action.payload.type).toBe('snapshot');
     }
   });
@@ -318,5 +318,61 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const body = (await res.json()) as { snapshots: { id: number; role: string; commit: string | null; version: string | null }[] };
     expect(body.snapshots).toHaveLength(1);
     expect(body.snapshots[0]).toMatchObject({ id: 301, role: 'app', commit: 'abc123', version: '1.210.001' });
+  });
+});
+
+/**
+ * NOMEN-P1-001: Die Umbenennung darf laufende Installationen nicht brechen.
+ * Der Portal-Worker akzeptiert daher BEIDE Schreibweisen: Bestandsressourcen mit
+ * Altnamen bleiben bedienbar, Alt-Snapshots bleiben auffindbar und werden weiter
+ * aufgeraeumt - neu angelegt wird immer mit dem neuen Namen.
+ */
+describe('NOMEN-P1-001 · Altnamen-Kompatibilitaet (Bestandsflotte)', () => {
+  it('erkennt eine Flotte, die noch die alten Servernamen traegt', async () => {
+    // Fixture bewusst mit ALTen Namen: genau das ist eine laufende Installation.
+    setupFetchMock({ servers: FLEET_SERVERS, images: [] });
+
+    const env = createEnv();
+    // /api/fleet-map ist der Weg, den die App beim Start nutzt (Studio-Token).
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/fleet-map', {
+        headers: { 'x-studio-token': String(env.STUDIO_ACCESS_TOKEN) },
+      }),
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { fleet?: Record<string, string> };
+    // Die Altflotte wird unter dem NEUEN Schluessel geliefert - genau so findet
+    // die umbenannte App ihre Knoten, ohne dass Server umbenannt werden muessen.
+    expect(body.fleet?.['audiomonastry-app-1']).toBe('1.2.3.4');
+    // Alle fuenf Rollen erscheinen unter dem NEUEN Namen, obwohl die Fixture
+    // durchgehend Alt-Namen traegt (master/ai/... ohne oeffentliche IP im Fixture).
+    expect(Object.keys(body.fleet ?? {}).sort()).toEqual(
+      ['audiomonastry-ai-1', 'audiomonastry-app-1', 'audiomonastry-edge-1', 'audiomonastry-master-1', 'audiomonastry-sfu-1'],
+    );
+    expect(Object.keys(body.fleet ?? {}).some((k) => k.startsWith('samplemonk-'))).toBe(false);
+  });
+
+  it('findet Snapshots mit Altpraefix weiter (schneller Start + Retention)', async () => {
+    const legacyImage = {
+      id: 91, name: 'samplemonk-snapshot-app-20260801',
+      description: 'samplemonk-snapshot-app-2026-08-01', status: 'available',
+      created: '2026-08-01T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' },
+    };
+    setupFetchMock({ images: [legacyImage] });
+
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/snapshots', { headers: { cookie } }),
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { snapshots?: { id: number }[] };
+    // Auch Alt-Snapshots werden gelistet - sonst blieben sie unbemerkt liegen
+    // (Speicherkosten) und der schnelle Flotten-Start waere unnoetig langsam.
+    expect((body.snapshots ?? []).map((s) => s.id)).toContain(91);
   });
 });

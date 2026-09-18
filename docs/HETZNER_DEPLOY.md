@@ -1,4 +1,4 @@
-# sampleMONK auf Hetzner deployen – empfohlene Konfiguration
+# audioMONASTRY auf Hetzner deployen – empfohlene Konfiguration
 
 Stand: 2026-08-25 · Ziel: **günstig testen, später skalieren**, für
 Linux-Laptops + iPhones/iPads (Querformat).
@@ -40,7 +40,7 @@ Monatspreis). Das ist genau das Modell für günstiges Testen und Event-Betrieb.
 ### 1, 2 oder 3 Instanzen?
 
 **Fürs Testen reicht 1 Instanz (CX23 x86).** Auf der einen Box laufen dann
-Caddy (HTTPS), sample-monk (App + API + Signaling), master-player und optional
+Caddy (HTTPS), audiomonastry (App + API + Signaling), master-player und optional
 Redis. Mehr Instanzen brauchst du erst, wenn du Last hast – dann skaliert man
 horizontal (Load Balancer, Redis-Signaling, getrennte Services) oder vertikal
 (CX23 → CX33/CAX21).
@@ -53,21 +53,21 @@ Voraussetzungen: Hetzner-Konto + API-Token (Console → Security → API Tokens)
 lokaler SSH-Key (`~/.ssh/id_ed25519.pub`), Python 3.
 
 ```bash
-# Im Repo samplemonk/:
+# Im Repo audiomonastry/:
 HCLOUD_TOKEN=dein-token python3 scripts/hetzner/provision.py
 
 # SFU-Knoten (öffnet zusätzlich RTP-Ports 40000-40099):
-HCLOUD_TOKEN=dein-token ROLE=sfu SERVER_NAME=samplemonk-sfu python3 scripts/hetzner/provision.py
+HCLOUD_TOKEN=dein-token ROLE=sfu SERVER_NAME=audiomonastry-sfu python3 scripts/hetzner/provision.py
 
 # Ohne Floating IP (z. B. ai-/master-/edge-Knoten):
-HCLOUD_TOKEN=dein-token FLOATING_IP_NAME=none SERVER_NAME=samplemonk-ai python3 scripts/hetzner/provision.py
+HCLOUD_TOKEN=dein-token FLOATING_IP_NAME=none SERVER_NAME=audiomonastry-ai python3 scripts/hetzner/provision.py
 ```
 
 Das Skript erstellt idempotent:
 
 1. SSH-Key in Hetzner Cloud
 2. Firewall (nur 22/80/443 + ICMP; bei `ROLE=sfu` zusätzlich UDP/TCP 40000–40099)
-3. **Floating IP** (`samplemonk-floating`, fsn1) – feste IP, überlebt Instanz-Wechsel
+3. **Floating IP** (`audiomonastry-floating`, fsn1) – feste IP, überlebt Instanz-Wechsel
    (`FLOATING_IP_NAME=none` überspringt das)
 4. Server **CX23**, **Ubuntu 24.04**, **fsn1 (Falkenstein)** (per `SERVER_TYPE`/`LOCATION` änderbar)
 5. Floating IP wird dem Server zugewiesen
@@ -116,7 +116,7 @@ sudo ufw enable
 ## 3. Deploy (ein Befehl vom Laptop)
 
 ```bash
-# Im Repo samplemonk/ (Floating IP + Domain sind vorbereitet):
+# Im Repo audiomonastry/ (Floating IP + Domain sind vorbereitet):
 DEPLOY_HOST=91.98.104.74 \
 DEPLOY_DOMAIN=anunnakitools.de \
 DEPLOY_SYNC_ENV=1 \
@@ -127,7 +127,7 @@ Was `deploy.sh` macht (Default `DEPLOY_MODE=docker`):
 
 1. **Lokaler Image-Build** – `Dockerfile.hetzner` (App) + `services/master-player`
    (kein `npm ci` mehr auf dem Laptop oder VPS)
-2. Remote-Rollback-Image sichern (`samplemonk:hetzner-rollback`)
+2. Remote-Rollback-Image sichern (`audiomonastry:hetzner-rollback`)
 3. Images per **`docker save | ssh docker load`** übertragen (kein Remote-Build,
    deutlich schneller für stündlich abgerechnete Instanzen)
 4. Config (`Caddyfile`, `docker-compose.hetzner.yml`, `.env`, Services) per rsync
@@ -148,8 +148,8 @@ Wichtige Variablen:
 Rollback:
 
 ```bash
-ssh root@IP 'docker tag samplemonk:hetzner-rollback samplemonk:hetzner && \
-  cd /opt/samplemonk && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate sample-monk'
+ssh root@IP 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner && \
+  cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate audiomonastry'
 ```
 
 > Ohne `DEPLOY_DOMAIN` wird nur HTTP auf der IP getestet – das geht im Desktop-Browser,
@@ -162,7 +162,7 @@ Kopie von `.env.hetzner.example` (oder deine lokale `.env`):
 ```env
 PORT=8080
 NODE_ENV=production
-DOMAIN=samplemonk.example          # Pflicht für HTTPS/iOS
+DOMAIN=audiomonastry.example          # Pflicht für HTTPS/iOS
 
 # --- Externe Datenbanken (Supabase + R2) ---
 SUPABASE_URL=https://DEIN-PROJEKT.supabase.co
@@ -224,11 +224,11 @@ Installation auf app-1 (manuell oder automatisch – der Worker macht genau das 
 
 ```bash
 # Zertifikate aus .env.portal dekodieren und auf app-1 legen:
-ssh root@<app-1-ip> 'mkdir -p /opt/samplemonk/certs'
-echo "$ORIGIN_CERT" | base64 -d | ssh root@<app-1-ip> 'cat > /opt/samplemonk/certs/origin.crt'
-echo "$ORIGIN_KEY"  | base64 -d | ssh root@<app-1-ip> 'cat > /opt/samplemonk/certs/origin.key && chmod 600 /opt/samplemonk/certs/origin.key'
+ssh root@<app-1-ip> 'mkdir -p /opt/audiomonastry/certs'
+echo "$ORIGIN_CERT" | base64 -d | ssh root@<app-1-ip> 'cat > /opt/audiomonastry/certs/origin.crt'
+echo "$ORIGIN_KEY"  | base64 -d | ssh root@<app-1-ip> 'cat > /opt/audiomonastry/certs/origin.key && chmod 600 /opt/audiomonastry/certs/origin.key'
 # Caddyfile.origin installieren (tls-Direktive auf das CF-Origin-Paar) + Caddy neu starten:
-ssh root@<app-1-ip> 'cp /opt/samplemonk/scripts/hetzner/Caddyfile.origin /opt/samplemonk/Caddyfile && cd /opt/samplemonk && docker compose -f docker-compose.hetzner.yml up -d caddy && docker compose -f docker-compose.hetzner.yml restart caddy'
+ssh root@<app-1-ip> 'cp /opt/audiomonastry/scripts/hetzner/Caddyfile.origin /opt/audiomonastry/Caddyfile && cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d caddy && docker compose -f docker-compose.hetzner.yml restart caddy'
 ```
 
 **2) origin.anunnakitools.de zeigt nach Fleet-Neuaufbau auf eine alte IP:**
@@ -264,22 +264,22 @@ Verifikation des RTP-Pfads: `BASE_URL=http://<sfu-1-ip> node scripts/hetzner/sfu
 
 ```bash
 # Status / Logs:
-ssh root@IP 'docker compose -f /opt/samplemonk/docker-compose.hetzner.yml ps'
-ssh root@IP 'docker compose -f /opt/samplemonk/docker-compose.hetzner.yml logs -f sample-monk'
+ssh root@IP 'docker compose -f /opt/audiomonastry/docker-compose.hetzner.yml ps'
+ssh root@IP 'docker compose -f /opt/audiomonastry/docker-compose.hetzner.yml logs -f audiomonastry'
 
 # Updates:
 git pull
-DEPLOY_HOST=1.2.3.4 DEPLOY_DOMAIN=samplemonk.example bash deploy.sh
+DEPLOY_HOST=1.2.3.4 DEPLOY_DOMAIN=audiomonastry.example bash deploy.sh
 ```
 
 ### Smoke-Test
 
 ```bash
-bash scripts/hetzner/smoke-test.sh https://samplemonk.example
+bash scripts/hetzner/smoke-test.sh https://audiomonastry.example
 # oder manuell:
-curl -s https://samplemonk.example/api/health
-curl -s https://samplemonk.example/api/cloud/health
-curl -s https://samplemonk.example/api/master/health
+curl -s https://audiomonastry.example/api/health
+curl -s https://audiomonastry.example/api/cloud/health
+curl -s https://audiomonastry.example/api/master/health
 ```
 
 ---
@@ -318,8 +318,8 @@ REDIS_URL=redis://<redis-host>:6379
 ```
 
 **Verifiziert (2026-08-29):** Cross-Instanz-Signaling über den Redis-Adapter
-(Offer/Answer-Relay zwischen zwei `sample-monk`-Instanzen) läuft; Test:
-`tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app samplemonk node --input-type=module -`
+(Offer/Answer-Relay zwischen zwei `audiomonastry`-Instanzen) läuft; Test:
+`tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app audiomonastry node --input-type=module -`
 (Zweite Instanz: `docker-compose.fleet-test.yml` mit `--profile fleet`).
 
 ### Monitoring (Prometheus + Grafana + cAdvisor + node-exporter)
@@ -334,7 +334,7 @@ docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up
 ```
 
 Das Grafana-Provisioning (`scripts/hetzner/grafana-provisioning/` + `grafana-dashboards/`)
-richtet Datasource und das Dashboard **sampleMONK Overview** automatisch ein.
+richtet Datasource und das Dashboard **audioMONASTRY Overview** automatisch ein.
 
 ### Lokale KI (Ollama) + Stem-AI
 
@@ -344,7 +344,7 @@ Auf dem ai-1-Knoten (siehe `docs/SERVER_FLEET.md`) die kommentierten
 ### Auto-Shutdown (stündliche Abrechnung sparen)
 
 ```bash
-ssh root@IP 'sudo bash /opt/samplemonk/scripts/hetzner/install-idle-shutdown.sh'
+ssh root@IP 'sudo bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh'
 # IDLE_MINUTES=60 CHECK_INTERVAL=5 sudo -E bash scripts/hetzner/install-idle-shutdown.sh
 ```
 
@@ -387,3 +387,76 @@ Cloudflare → Hetzner LB11 (sticky WebSocket-Sessions) → app-1 / app-2
 
 **Prüfpunkt (offen, Live):** 2 App-Knoten hinter LB, 4-User-E2E grün
 (State-Sync, Locking, Main-Stream stabil); Failover-Test (ein Knoten weg).
+
+## NOMEN-P1-001 · Umbenennung der Ops-Ressourcen (`samplemonk` → `audiomonastry`)
+
+Der Repo- und Flottenname ist seit längerem `audiomonastry` (Endpoints
+`audiomonastry-ai-*`, Image `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod`).
+Die **Ops-Ressourcen** waren bewusst zurückgestellt, weil sie laufende
+Infrastruktur berühren — jetzt sind sie mit umbenannt, **mit Kompatibilität für
+den Bestand**:
+
+| Bereich | vorher | jetzt |
+|---|---|---|
+| Prometheus-Metriken | `samplemonk_http_requests_total`, `samplemonk_ai_cost_usd`, `samplemonk_telemetry_*` | `audiomonastry_*` (27 Zeitreihen inkl. Latenz-Histogramm) |
+| Scrape-Job | `job_name: samplemonk` | `job_name: audiomonastry` |
+| Alarme/Recording-Rules | `SamplemonkAppDown`, `SamplemonkSloAvailabilityBreach`, … | `AudiomonastryAppDown`, `AudiomonastrySloAvailabilityBreach`, … |
+| Dashboard | `samplemonk-overview.json` / uid `samplemonk-overview` | `audiomonastry-overview.json` / uid `audiomonastry-overview` |
+| Compose-Service + Container | `sample-monk` / `samplemonk`, `samplemonk-master`, `samplemonk-redis` | `audiomonastry`, `audiomonastry-master`, `audiomonastry-redis` |
+| Images | `samplemonk:hetzner`, `samplemonk-master-player:hetzner` | `audiomonastry:hetzner`, `audiomonastry-master-player:hetzner` |
+| Deploy-Verzeichnis / Bootstrap | `/opt/samplemonk`, `/root/.samplemonk-bootstrap-done` | `/opt/audiomonastry`, `/root/.audiomonastry-bootstrap-done` |
+| systemd/Timer/Logs | `samplemonk-idle-check`, `samplemonk-floating-ip.service`, `samplemonk-*.log` | `audiomonastry-*` |
+| Snapshot-Präfix (Hetzner) | `samplemonk-snapshot-` | `audiomonastry-snapshot-` |
+| Firewalls | `samplemonk-app/-master/-ai/-sfu` | `audiomonastry-app/-master/-ai/-sfu` |
+| Flotten-Servernamen (neu angelegt) | `samplemonk-app-1`, … | `audiomonastry-app-1`, … |
+| Container-Pfad/User (Runtime-Image) | `/opt/samplemonk-ai`, User `samplemonk` | `/opt/audiomonastry-ai`, uid 10001 |
+
+**Kompatibilität für den Bestand (nichts bricht durch das Update):**
+
+- `services/portal-worker`: bildet alte Servernamen auf den kanonischen Namen ab
+  (`canonicalFleetName`) — eine Flotte, die noch `samplemonk-*` heißt, bleibt über
+  `/api/fleet-map`, Status und Stop bedienbar. Alt-Snapshots
+  (`samplemonk-snapshot-*`) werden weiter **gefunden** (schneller Start) und
+  weiter **aufgeräumt** (Retention); neu angelegt wird mit dem neuen Präfix.
+- `server.ts` (`fleetNodeAddress`): liest die Fleet-Map unter dem neuen Namen,
+  fällt auf den Altnamen zurück.
+- `scripts/hetzner/fleet-names.sh` (`fleet_name`/`fleet_candidates`): löst den
+  tatsächlichen Knotennamen auf; `fleet-status.sh` prüft beide Schreibweisen,
+  `delete-fleet.sh`/`lifecycle.sh` räumen **beide** auf (sonst bliebe ein
+  Alt-Server kostenpflichtig stehen).
+- `Dockerfile.manifest` patcht ein Basis-Image: Pfad ist Build-Argument
+  (`WORKER_HOME`), Rechte laufen über uid/gid 10001 — damit funktioniert es mit
+  dem alten `:8roles-v2` (`--build-arg WORKER_HOME=/opt/samplemonk-ai`) und mit
+  dem neuen Basis-Image.
+
+**Was der Betreiber tun muss:**
+
+1. **App neu ausrollen** (neuer Image-Name, neuer Service-Name):
+   `docker compose -f docker-compose.hetzner.yml up -d --force-recreate --remove-orphans`
+   — `--remove-orphans` entfernt den alten `sample-monk`-Container, sonst laufen
+   beide und binden Ports doppelt.
+2. **Monitoring neu ausrollen** (Configs/Alarme/Dashboards kommen aus dem Repo):
+   Prometheus neu starten, dann `up{job="audiomonastry"}` prüfen. Eigene
+   Dashboards/Alarme, die `samplemonk_*` abfragen, auf `audiomonastry_*` umstellen —
+   die alten Zeitreihen enden mit dem Update (Metriknamen sind keine Aliase).
+3. **Server/Firewalls**: neue Flotten entstehen als `audiomonastry-*`. Bestehende
+   `samplemonk-*`-Server dürfen bleiben (Auflösung oben) oder per
+   `hcloud server rename <id> audiomonastry-app-1` umbenannt werden — danach die
+   Firewall-Namen anpassen.
+4. **Snapshots**: `samplemonk-snapshot-*` wird weiter aufgeräumt, aber nur im
+   Rahmen der Retention (2 je Rolle). Empfehlung: Restbestand einmalig sichten
+   und löschen (`GET /images?type=snapshot`).
+5. **Runtime-Image**: das neue Image nutzt `/opt/audiomonastry-ai` und uid 10001 —
+   beim Rollout `AI_MODEL_MANIFEST=/opt/audiomonastry-ai/model_manifest.json`
+   setzen. Solange alte Images laufen, bleibt der alte Pfad richtig (Paar
+   Image+Env gemeinsam wechseln).
+6. **Hosts, die noch `/opt/samplemonk` nutzen**: neu provisionieren
+   (`provision-fleet.sh` legt `audiomonastry-*` an) — die Skripte sind ab jetzt
+   auf den neuen Pfad ausgelegt.
+
+**Regressionsschutz:** `tests/namingConventions.test.ts` prüft **jede** getrackte
+Datei auf beide historischen Schreibweisen (`samplemonk`, `sample-monk`) und
+lässt nur eine begründete Ausnahmeliste zu (Bestands-Kompatibilität,
+Kompatibilitäts-Fixtures, historische SSOT-Notizen). Zusätzlich halten Tests fest,
+dass Metriken/Jobs/Alarme/Dashboards den neuen Präfix tragen und dass eine
+Altflotte weiter bedient und aufgeräumt wird.

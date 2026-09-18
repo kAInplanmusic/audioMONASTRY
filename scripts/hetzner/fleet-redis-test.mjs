@@ -9,9 +9,9 @@
 // Event die Instanzgrenze NICHT überschreiten; mit Adapter muss es bei B
 // ankommen. Anschließend antwortet B und A muss die Answer erhalten.
 //
-// Aufruf (innerhalb des samplemonk-Containers):
+// Aufruf (innerhalb des audiomonastry-Containers):
 //   node /tmp/fleet-redis-test.mjs
-//   A_URL=http://127.0.0.1:8080 B_URL=http://samplemonk-2:8081 node /tmp/fleet-redis-test.mjs
+//   A_URL=http://127.0.0.1:8080 B_URL=http://audiomonastry-2:8081 node /tmp/fleet-redis-test.mjs
 // =============================================================================
 import { createRequire } from 'node:module';
 
@@ -20,7 +20,7 @@ const require = createRequire(process.env.APP_DIR || '/app/');
 const { io } = require('socket.io-client');
 
 const A_URL = process.env.A_URL || 'http://127.0.0.1:8080';
-const B_URL = process.env.B_URL || 'http://samplemonk-2:8081';
+const B_URL = process.env.B_URL || 'http://audiomonastry-2:8081';
 const TIMEOUT_MS = Number(process.env.TIMEOUT_MS || 15000);
 
 const state = {

@@ -200,12 +200,12 @@ def models() -> JSONResponse:
 @app.get("/metrics")
 def metrics() -> PlainTextResponse:
     lines = [
-        "# HELP samplemonk_ai_runtime_uptime_seconds Runtime-Uptime",
-        "# TYPE samplemonk_ai_runtime_uptime_seconds gauge",
-        f"samplemonk_ai_runtime_uptime_seconds {time.time() - STARTED_AT:.1f}",
+        "# HELP audiomonastry_ai_runtime_uptime_seconds Runtime-Uptime",
+        "# TYPE audiomonastry_ai_runtime_uptime_seconds gauge",
+        f"audiomonastry_ai_runtime_uptime_seconds {time.time() - STARTED_AT:.1f}",
     ]
     for name, value in STATE.manager.get_metrics().items():
-        lines.append(f"samplemonk_ai_runtime_{name} {value}")
+        lines.append(f"audiomonastry_ai_runtime_{name} {value}")
     return PlainTextResponse("\n".join(lines) + "\n", media_type="text/plain")
 
 

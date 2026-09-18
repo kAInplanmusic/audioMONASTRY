@@ -30,11 +30,11 @@ bash scripts/hetzner/delete-fleet.sh
 
 | # | Name | Typ | IP | Rolle |
 |---|---|---|---|---|
-| 1 | samplemonk-app-1 | CX33 | 159.69.102.29 (Floating) | Caddy + App/API/Signaling + master-player |
-| 2 | samplemonk-sfu-1 | CX33 | 49.13.0.226 | Caddy + Mediasoup-SFU (UDP/TCP 40000–40099) |
-| 3 | samplemonk-ai-1 | CX33 | 49.13.65.150 | Ollama/Stem-CPU-Fallback (installiert + aktiv, systemd) |
-| 4 | samplemonk-master-1 | CX23 | 167.233.22.157 | master-player (FFmpeg-Mixing/Mastering) |
-| 5 | samplemonk-edge-1 | CX23 | 167.233.214.220 | Staging, Prometheus/Grafana/cAdvisor/node-exporter, Smoke |
+| 1 | audiomonastry-app-1 | CX33 | 159.69.102.29 (Floating) | Caddy + App/API/Signaling + master-player |
+| 2 | audiomonastry-sfu-1 | CX33 | 49.13.0.226 | Caddy + Mediasoup-SFU (UDP/TCP 40000–40099) |
+| 3 | audiomonastry-ai-1 | CX33 | 49.13.65.150 | Ollama/Stem-CPU-Fallback (installiert + aktiv, systemd) |
+| 4 | audiomonastry-master-1 | CX23 | 167.233.22.157 | master-player (FFmpeg-Mixing/Mastering) |
+| 5 | audiomonastry-edge-1 | CX23 | 167.233.214.220 | Staging, Prometheus/Grafana/cAdvisor/node-exporter, Smoke |
 
 Alle 5 Einheiten haben Idle-Auto-Shutdown (20 min ohne aktive User/Session
 fährt die Instanz herunter – stündliche Abrechnung). **Replicate ist aktiv**
@@ -49,8 +49,8 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 | # | Name | Hetzner-Typ | Rolle |
 |---|---|---|---|
 | 1 | **ai-1** | CCX33 (CPU) | Ollama (MOA/LLM/TTS/Song-Fallback) + Stem-CPU-Fallback (Demucs) |
-| 2 | **app-1** | CPX31 | Caddy + sample-monk (App, API, Signaling) – ENABLE_SFU=0 |
-| 3 | **sfu-1** | CPX31 | Caddy + sample-monk mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
+| 2 | **app-1** | CPX31 | Caddy + audiomonastry (App, API, Signaling) – ENABLE_SFU=0 |
+| 3 | **sfu-1** | CPX31 | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
 | 4 | **master-1** | CX23 | master-player (FFmpeg-Mixing/Mastering) |
 | 5 | **edge-1** | CX23 | Staging, Smoke-Tests, Monitoring, Backup-Target |
 
@@ -71,7 +71,7 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 6. **Fleet-Test verifiziert (2026-08-29):** Redis-Adapter läuft auf beiden
    App-Instanzen (`docker-compose.fleet-test.yml` + `--profile fleet`);
    Cross-Instanz-Signaling (Offer A→B, Answer B→A über Redis) erfolgreich.
-   Test: `tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app samplemonk node --input-type=module -`
+   Test: `tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app audiomonastry node --input-type=module -`
 
 ## ai-1 (CPU, CCX33): lokale KI + Stem
 
@@ -86,7 +86,7 @@ ollama pull qwen2.5:7b
 systemctl enable --now ollama          # API: http://127.0.0.1:11434
 
 # Stem-AI (Demucs) als systemd-Dienst:
-cd /opt/samplemonk/services/stem-ai
+cd /opt/audiomonastry/services/stem-ai
 python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 # Unit: /etc/systemd/system/stem-ai.service (ExecStart uvicorn main:app --port 8000)
@@ -113,14 +113,14 @@ MASTER_PLAYER_URL=http://<master-1>:8000
 ```
 
 ```bash
-docker compose -f docker-compose.hetzner.yml up -d caddy sample-monk
+docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry
 ```
 
 ## sfu-1 (Mediasoup)
 
 ```bash
 # .env: SFU_ANNOUNCED_IP=<public-ip>, SIGNALING_ALLOWED_ORIGINS=*
-docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk
+docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
 ```
 
 Firewall: UDP/TCP **40000–40099** zusätzlich öffnen.

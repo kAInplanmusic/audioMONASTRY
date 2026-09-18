@@ -29,7 +29,7 @@
 
 	# App + API + Signaling (gleicher Ursprung, COOP/COEP-Header bleiben erhalten)
 	# WebSockets (Socket.io) werden von Caddy automatisch über den gleichen Pfad getunnelt.
-	reverse_proxy sample-monk:8080 {
+	reverse_proxy audiomonastry:8080 {
 		# Längere Idle-Timeouts für Socket.io-/SSE-Verbindungen
 		transport http {
 			read_timeout 5m

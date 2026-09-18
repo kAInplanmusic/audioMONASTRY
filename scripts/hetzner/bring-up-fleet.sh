@@ -50,8 +50,11 @@ step() { echo; echo "===========================================================
 # "Flotte ist bereit" meldete. Jetzt werden alle Argumente weitergegeben.
 ssh_host() { local host="$1"; shift; ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"; }
 
+# NOMEN-P1-001: Namen der laufenden Installation aufloesen (neu oder Altname).
+source "$(dirname "$0")/fleet-names.sh"
+
 get_ip() {
-  curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers?name=$1" \
+  curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers?name=$(fleet_name "$1")" \
     | python3 -c "import sys,json; d=json.load(sys.stdin); s=d['servers'][0] if d['servers'] else None; print(s['public_net']['ipv4']['ip'] if s else '')"
 }
 
@@ -61,11 +64,11 @@ bash scripts/hetzner/provision-fleet.sh
 
 # --- 2. IPs ermitteln ---------------------------------------------------------
 step "2/7 IPs ermitteln"
-APP_IP=$(get_ip samplemonk-app-1)
-SFU_IP=$(get_ip samplemonk-sfu-1)
-AI_IP=$(get_ip samplemonk-ai-1)
-MASTER_IP=$(get_ip samplemonk-master-1)
-EDGE_IP=$(get_ip samplemonk-edge-1)
+APP_IP=$(get_ip audiomonastry-app-1)
+SFU_IP=$(get_ip audiomonastry-sfu-1)
+AI_IP=$(get_ip audiomonastry-ai-1)
+MASTER_IP=$(get_ip audiomonastry-master-1)
+EDGE_IP=$(get_ip audiomonastry-edge-1)
 [[ -n "$APP_IP" && -n "$SFU_IP" && -n "$AI_IP" && -n "$MASTER_IP" && -n "$EDGE_IP" ]] || {
   echo "❌ Nicht alle IPs gefunden. Läuft die Provisionierung? (app=$APP_IP sfu=$SFU_IP ai=$AI_IP master=$MASTER_IP edge=$EDGE_IP)" >&2
   exit 1
@@ -78,7 +81,7 @@ for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   echo -n "  $ip … "
   ok=0
   for _ in $(seq 1 90); do
-    if ssh_host "$ip" 'test -f /root/.samplemonk-bootstrap-done' 2>/dev/null; then ok=1; break; fi
+    if ssh_host "$ip" 'test -f /root/.audiomonastry-bootstrap-done' 2>/dev/null; then ok=1; break; fi
     sleep 5
   done
   if [[ "$ok" == "1" ]]; then echo "bereit"; else echo "TIMEOUT"; exit 1; fi
@@ -94,21 +97,21 @@ RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 rsync_repo() {
   rsync -az --delete -e "$RSYNC_E" \
     --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results --exclude public/data/orchestral --exclude public/music --exclude target --exclude .venv-runpod --exclude .agents --exclude logs \
-    ./ "root@$1:/opt/samplemonk/"
+    ./ "root@$1:/opt/audiomonastry/"
 }
-sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/samplemonk/.env"; }
+sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/audiomonastry/.env"; }
 
 echo "  sfu-1 (Mediasoup) …"
 rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
-ssh_host "$SFU_IP" "cd /opt/samplemonk && grep -q SFU_ANNOUNCED_IP .env || echo SFU_ANNOUNCED_IP=$SFU_IP >> .env; docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy sample-monk"
+ssh_host "$SFU_IP" "cd /opt/audiomonastry && grep -q SFU_ANNOUNCED_IP .env || echo SFU_ANNOUNCED_IP=$SFU_IP >> .env; docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
 
 echo "  master-1 (master-player) …"
 rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
-ssh_host "$MASTER_IP" "cd /opt/samplemonk && docker compose -f docker-compose.hetzner.yml up -d master-player"
+ssh_host "$MASTER_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d master-player"
 
 echo "  edge-1 (Monitoring: Prometheus/Grafana/Alertmanager) …"
 rsync_repo "$EDGE_IP"; sync_env "$EDGE_IP"
-ssh_host "$EDGE_IP" "cd /opt/samplemonk && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d"
+ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d"
 
 echo "  ai-1 (Ollama + Stem-AI) …"
 bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
@@ -116,7 +119,7 @@ bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
 # --- 6. Idle-Auto-Shutdown ----------------------------------------------------
 step "6/7 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
-  ssh_host "$ip" 'bash /opt/samplemonk/scripts/hetzner/install-idle-shutdown.sh' 2>/dev/null || true
+  ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' 2>/dev/null || true
 done
 
 # --- 7. Tests -----------------------------------------------------------------

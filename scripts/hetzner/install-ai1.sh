@@ -5,7 +5,7 @@
 # Aufruf:  bash scripts/hetzner/install-ai1.sh root@<ai-1-ip>
 #
 # Macht (idempotent, kann mehrfach laufen):
-#   1. Repo per rsync nach /opt/samplemonk syncen
+#   1. Repo per rsync nach /opt/audiomonastry syncen
 #   2. Ollama installieren (falls fehlt) + qwen2.5:7b pullen (falls fehlt)
 #   3. Stem-AI (Demucs) venv + systemd-Unit anlegen und starten
 #   4. Health-Check http://127.0.0.1:8000/health
@@ -18,10 +18,10 @@ SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 
-echo "== Sync Repo → $HOST:/opt/samplemonk =="
+echo "== Sync Repo → $HOST:/opt/audiomonastry =="
 rsync -az --delete -e "$RSYNC_E" \
   --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results --exclude public/data/orchestral --exclude public/music --exclude target --exclude .venv-runpod --exclude .agents --exclude logs \
-  ./ "$HOST:/opt/samplemonk/"
+  ./ "$HOST:/opt/audiomonastry/"
 
 echo "== Installiere Ollama + Stem-AI (idempotent) =="
 ssh "${SSH_OPTS[@]}" "$HOST" 'bash -s' <<'REMOTE'
@@ -48,7 +48,7 @@ if ! ollama list 2>/dev/null | grep -q "qwen2.5:7b"; then
 fi
 
 # --- Stem-AI (Demucs CPU-Fallback) ---
-cd /opt/samplemonk/services/stem-ai
+cd /opt/audiomonastry/services/stem-ai
 if [ ! -d .venv ]; then
   python3 -m venv .venv 2>/dev/null || {
     apt-get update -qq && apt-get install -y -qq python3.12-venv
@@ -61,15 +61,15 @@ pip install --quiet -r requirements.txt
 
 cat > /etc/systemd/system/stem-ai.service <<UNIT
 [Unit]
-Description=sampleMONK stem-ai (Demucs CPU-Fallback)
+Description=audioMONASTRY stem-ai (Demucs CPU-Fallback)
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/samplemonk/services/stem-ai
+WorkingDirectory=/opt/audiomonastry/services/stem-ai
 Environment=AI_DEVICE=cpu
 Environment=AI_MAX_UPLOAD_MB=50
-ExecStart=/opt/samplemonk/services/stem-ai/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=/opt/audiomonastry/services/stem-ai/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=on-failure
 RestartSec=5
 

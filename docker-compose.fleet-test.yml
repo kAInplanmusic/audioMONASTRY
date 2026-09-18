@@ -3,13 +3,13 @@
 # -----------------------------------------------------------------------------
 # Zweite App-Instanz auf demselben Host für den Redis-Fleet-Test.
 # Beide Instanzen teilen sich über Redis die Socket.io-Räume:
-#   app-1 (sample-monk, :8080)  ──┐
+#   app-1 (audiomonastry, :8080)  ──┐
 #                                  ├── Redis (Profil fleet)
-#   app-2 (sample-monk-2, :8081) ──┘
+#   app-2 (audiomonastry-2, :8081) ──┘
 #
 # Start:
 #   docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
-#   docker compose -f docker-compose.hetzner.yml -f docker-compose.fleet-test.yml --profile fleet up -d sample-monk-2
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.fleet-test.yml --profile fleet up -d audiomonastry-2
 #
 # Test:
 #   tail -n +2 scripts/hetzner/fleet-redis-test.mjs | docker exec -i -w /app audiomonastry node --input-type=module -
@@ -18,8 +18,8 @@
 # Der Port 8081 ist nur an 127.0.0.1 gebunden (kein öffentlicher Zugriff).
 # =============================================================================
 services:
-  sample-monk-2:
-    image: samplemonk:hetzner
+  audiomonastry-2:
+    image: audiomonastry:hetzner
     container_name: audiomonastry-2
     restart: unless-stopped
     init: true

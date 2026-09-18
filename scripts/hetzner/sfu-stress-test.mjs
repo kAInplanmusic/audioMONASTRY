@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // =============================================================================
-// sfu-stress-test.mjs – sampleMONK SFU/Mediasoup-Lasttest (Signaling-Ebene)
+// sfu-stress-test.mjs – audioMONASTRY SFU/Mediasoup-Lasttest (Signaling-Ebene)
 // -----------------------------------------------------------------------------
 // Testet gegen eine Instanz mit ENABLE_SFU=1:
 //   * N parallele Socket.io-Clients auf /sfu-signaling

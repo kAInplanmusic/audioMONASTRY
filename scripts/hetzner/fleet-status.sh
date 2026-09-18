@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# fleet-status.sh – Live-Status der gesamten sampleMONK-Flotte auf einen Blick
+# fleet-status.sh – Live-Status der gesamten audioMONASTRY-Flotte auf einen Blick
 # -----------------------------------------------------------------------------
 # Zeigt für alle Hetzner-Knoten: Status (off/running), aktuelle IPv4,
 # SSH-Erreichbarkeit, Container-Status und App-/Master-Health.
@@ -19,7 +19,7 @@ if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 S="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8"
 
-echo "=== sampleMONK Fleet-Status ($(date -u +%FT%TZ)) ==="
+echo "=== audioMONASTRY Fleet-Status ($(date -u +%FT%TZ)) ==="
 curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" https://api.hetzner.cloud/v1/servers -o /tmp/hc_fleet.json
 
 # Serverliste als TSV: name<TAB>status<TAB>ip
@@ -50,11 +50,13 @@ done < /tmp/hc_fleet.tsv
 
 echo ""
 echo "--- Health-Endpoints ---"
-# App-Knoten (samplemonk-app-*) direkt prüfen
+# App-Knoten (audiomonastry-app-*) direkt prüfen. NOMEN-P1-001: der Altname
+# (samplemonk-app-*) wird mitgeprueft, sonst bleibt der Health-Check bei einer
+# noch nicht umbenannten Flotte stumm.
 while IFS=$'\t' read -r name status ip; do
   [ -n "$ip" ] || continue
   case "$name" in
-    samplemonk-app-*)
+    audiomonastry-app-*|samplemonk-app-*)
       CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "http://$ip/api/health" 2>/dev/null || echo "000")
       echo "http://$ip/api/health ($name) -> HTTP $CODE"
       ;;
