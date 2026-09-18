@@ -119,7 +119,11 @@ describe('FEAT-P3-004 · Formatkatalog (rein)', () => {
     // Ein Fehlschlag darf NICHT dauerhaft cachen (transienter Last-Timeout
     // haette sonst den ganzen Export abgeschaltet - live beobachtet 2026-09-17).
     expect(await ffmpegAvailable()).toBe(true);
-  });
+    // Zeitschranke: die ffmpeg-Probe darf bis FFMPEG_PROBE_TIMEOUT_MS (30 s)
+    // laufen - das vitest-Limit von 15 s riss diesen Test unter voller Suite-Last
+    // (real gesehen am 2026-09-18, waehrend parallel ein Image-Build lief). Der
+    // Test prueft bewusst die Probe, also bekommt er ein passendes Budget.
+  }, 45_000);
 
   it('lässt WAV unverändert durch (kein ffmpeg, bit-identisch)', async () => {
     const wav = sineWav();
