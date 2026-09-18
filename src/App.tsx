@@ -71,6 +71,17 @@ function AppComponent() {
   const { startAudio } = useAudio();
   const { moduleStates, setModuleState } = useModuleState();
   const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
+
+  // COLLAB-P1-005: eingehende Main-Out-Parameter anderer Session-User anwenden.
+  // EINE Stelle fuer die AudioEngine (die Terminals spiegeln nur ihre Anzeige),
+  // damit es keinen doppelten/verschachtelten Aufruf gibt.
+  useEffect(() => webRTCManager.addMainOutUpdateListener((msg: { param?: unknown; value?: unknown }) => {
+    const param = String(msg?.param ?? '');
+    const value = Number(msg?.value);
+    if (!param || !Number.isFinite(value)) return;
+    if (param === 'masterVolume') audioEngine.setMasterVolume(value);
+    else if (param === 'masterVolumeDb') audioEngine.setMasterVolumeDb(value, 0.05);
+  }), []);
   const { pendingSample, setPendingSample } = useSamples();
 
   const [isPlaying, setIsPlaying] = useState(false);

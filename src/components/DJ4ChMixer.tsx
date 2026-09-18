@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
 import { analyzeMusic } from '../utils/audioAnalyzer';
 import { ALL_TRACKS, TrackRole, TrackType, TRACK_ROLE_MAP } from '../types';
@@ -105,10 +106,13 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 /* ------------------------------------------------------------------ */
 
 function Knob({
-  value, onChange, label, size = 'md', color = COPPER, sub,
+  value, onChange, label, size = 'md', color = COPPER, sub, ariaLabel,
 }: {
   value: number; onChange: (v: number) => void; label?: string;
   size?: 'sm' | 'md' | 'lg'; color?: string; sub?: string;
+  /** Eigener Zugaenglichkeitsname, wenn der sichtbare Text nicht eindeutig ist
+   *  (COLLAB-P1-005: es gibt vier "LEVEL"-Regler im Pult). */
+  ariaLabel?: string;
 }) {
   const deg = -135 + value * 270;
   const w = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
@@ -131,7 +135,7 @@ function Knob({
       <div
         role="slider"
         tabIndex={0}
-        aria-label={label ?? 'Drehregler'}
+        aria-label={ariaLabel ?? label ?? 'Drehregler'}
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(value * 100)}
@@ -300,7 +304,7 @@ function MasterColumn({ master, onMaster }: { master: number; onMaster: (v: numb
     <div className="w-32 shrink-0 bg-[#17171a] rounded-md border border-black/70 p-2.5 flex flex-col items-center gap-2 shadow-[0_10px_25px_rgba(0,0,0,0.55)]">
       <div className="text-[11px] font-black tracking-[0.3em] text-zinc-300">MASTER</div>
       <MasterMeter level={master} />
-      <Knob size="lg" value={master} onChange={onMaster} label="LEVEL" color={COPPER} />
+      <Knob size="lg" value={master} onChange={onMaster} label="LEVEL" color={COPPER} ariaLabel="Main-Out LEVEL" />
       <div className="w-full h-px bg-zinc-800" />
       <div className="text-[9px] font-bold tracking-widest text-zinc-500">BOOTH</div>
       <Knob size="sm" value={booth} onChange={setBooth} label="LEVEL" />
@@ -436,6 +440,15 @@ export const DJMixer = React.memo(function DJMixer() {
   const [xfd, setXfd] = useState(0.5);
   const [xfMode, setXfMode] = useState<XfMode>('THRU');
   const [master, setMaster] = useState(0.8);
+
+  // Eingehende Main-Out-Aenderungen anderer Clients auf den Fader spiegeln.
+  // NICHT zuruecksenden (sonst Ping-Pong) - die AudioEngine setzt der zentrale
+  // Main-Out-Sync in App.tsx.
+  useEffect(() => webRTCManager.addMainOutUpdateListener((msg: { param?: unknown; value?: unknown }) => {
+    if (String(msg?.param ?? '') !== 'masterVolume') return;
+    const value = Number(msg?.value);
+    if (Number.isFinite(value)) setMaster(value);
+  }), []);
   const [deckSkins, setDeckSkins] = useState<Record<'A' | 'B', MixerSkinId>>(loadDeckSkins);
   const [deckLabels, setDeckLabels] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
   const [group, setGroup] = useState({ left: 0.8, right: 0.8 });
@@ -489,7 +502,15 @@ export const DJMixer = React.memo(function DJMixer() {
     if (s) pushStrip(s, next[idx], xf, mode);
   };
 
-  const applyMaster = (v: number) => { setMaster(v); audioEngine.setMasterVolume(v); };
+  // COLLAB-P1-005: Der Main-Out-Pfad laeuft jetzt ueber den Server
+  // (`main-out-update`) statt nur lokal. Der Server prueft Allow-List/Bereich,
+  // setzt den Halter durch, auditiert und spiegelt an die anderen Session-User.
+  // Nur der MixerMONK-Halter sendet (WebRTCManager prueft `isMainOutOwner`).
+  const applyMaster = (v: number) => {
+    setMaster(v);
+    audioEngine.setMasterVolume(v);
+    webRTCManager.sendMainOutUpdate('masterVolume', v);
+  };
 
   const applyCross = (v: number) => {
     setXfd(v);

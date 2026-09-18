@@ -16,6 +16,7 @@
  * Der Code wurde 1:1 verschoben; die Einrueckung ist die einzige Aenderung.
  */
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
+import { formatLatencyHistogram } from '../../src/core/observability/latencyHistogram';
 import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
 import express from 'express';
 import type { Express } from 'express';
@@ -25,6 +26,8 @@ export interface OpsMetrics {
   requests: number;
   errors: number;
   latencyMsSum: number;
+  /** PROD-P1-004: Histogramm fuer das Latenz-SLO (p95). */
+  latencyHistogram?: { snapshot: () => { buckets: number[]; count: number; sumSeconds: number } };
   aiRequests: number;
   aiFailures: number;
   stemRequests: number;
@@ -88,6 +91,8 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         '# HELP samplemonk_http_avg_latency_ms Durchschnittliche Request-Latenz in ms.',
         '# TYPE samplemonk_http_avg_latency_ms gauge',
         `samplemonk_http_avg_latency_ms ${avgLatencyMs}`,
+        // PROD-P1-004: p95/p99 brauchen ein Histogramm (Latenz-SLO).
+        ...(metrics.latencyHistogram ? formatLatencyHistogram(metrics.latencyHistogram.snapshot()) : []),
         '# HELP samplemonk_ai_requests_total Anzahl KI-Proxy-Requests (kumulativ).',
         '# TYPE samplemonk_ai_requests_total counter',
         `samplemonk_ai_requests_total ${metrics.aiRequests}`,

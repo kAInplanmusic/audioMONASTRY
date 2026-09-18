@@ -112,6 +112,57 @@ export interface MainOutUpdate {
   value: number | string | boolean | null;
 }
 
+/**
+ * COLLAB-P1-005: erlaubte Main-Out-Parameter mit Wertebereich.
+ *
+ * Der Main-Out-Pfad lief bisher am Server vorbei (Mixer-/Master-Terminal
+ * schrieben direkt in die AudioEngine). Damit der Server ihn inspizieren kann,
+ * braucht er eine Allow-List mit Bereichen - ein unbekannter Parameter oder ein
+ * Wert ausserhalb des Bereichs wird abgelehnt, statt blind an alle Peers
+ * weitergereicht zu werden.
+ *
+ *   masterVolume    linearer Mixer-Level (0..2; 1 = neutral) - mixerMONK "LEVEL"
+ *   masterVolumeDb  Main-Out-Pegel in dB (-48..12) - masteringMONK
+ *   fadeInSeconds   Fade-In-Zeit des Main-Out (0..30 s)
+ */
+export const MAIN_OUT_PARAM_SPECS = {
+  masterVolume: { min: 0, max: 2, kind: 'number' },
+  masterVolumeDb: { min: -48, max: 12, kind: 'number' },
+  fadeInSeconds: { min: 0, max: 30, kind: 'number' },
+} as const;
+
+export type MainOutParamName = keyof typeof MAIN_OUT_PARAM_SPECS;
+
+export type MainOutRejectReason = 'invalid-payload' | 'unknown-param' | 'value-out-of-range';
+
+export type MainOutPayloadResult =
+  | { ok: true; param: MainOutParamName; value: number }
+  | { ok: false; reason: MainOutRejectReason };
+
+/**
+ * Prueft einen `main-out-update`-Payload gegen die Allow-List und die Bereiche.
+ *
+ * Die BERECHTIGUNG bleibt bewusst bei `canControlMainOut` (nur der Halter) -
+ * diese Funktion ergaenzt genau das, was vorher fehlte: ein formal gueltiger
+ * Payload mit unbekanntem Namen (`bpm`) oder einem Wert ausserhalb des Bereichs
+ * (`masterVolumeDb = 99`) wurde ungeprueft an alle Peers gespiegelt und dort
+ * blind auf den Main-Out angewandt.
+ */
+export function validateMainOutPayload(data: unknown): MainOutPayloadResult {
+  const parsed = parseMainOutUpdate(data);
+  if (!parsed) return { ok: false, reason: 'invalid-payload' };
+
+  const spec = (MAIN_OUT_PARAM_SPECS as Record<string, { min: number; max: number }>)[parsed.param];
+  if (!spec) return { ok: false, reason: 'unknown-param' };
+  if (typeof parsed.value !== 'number' || !Number.isFinite(parsed.value)) {
+    return { ok: false, reason: 'value-out-of-range' };
+  }
+  if (parsed.value < spec.min || parsed.value > spec.max) {
+    return { ok: false, reason: 'value-out-of-range' };
+  }
+  return { ok: true, param: parsed.param as MainOutParamName, value: parsed.value };
+}
+
 /** Validiert einen rohen main-out-update Payload. Gibt `null` bei ungültig zurück. */
 export function parseMainOutUpdate(data: unknown): MainOutUpdate | null {
   if (!data || typeof data !== 'object') return null;

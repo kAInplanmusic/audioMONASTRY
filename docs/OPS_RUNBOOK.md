@@ -159,3 +159,75 @@ reiner Versionswechsel den kompletten Runtime-Stage neu.
 - Deploy-Skript waehrend eines laufenden Deploys NICHT editieren: bash liest
   Skripte stueckweise - eine Aenderung mitten im Lauf brach den Drill mit
   `uild: Befehl nicht gefunden` ab (Lehre aus diesem Lauf).
+
+## 9. Observability: Stack, SLOs, Alarmzustellung (PROD-P1-004 — 2026-09-18 lokal durchgespielt)
+
+**Ziel:** Ein Dashboard zeigt Requests/Latenz/Fehler/Xruns und AI-Kosten; ein
+kuenstlich erzeugter Fehler loest sichtbar einen Alarm aus.
+
+**Zwei echte Defekte, die die Inbetriebnahme verhindert haetten** (beide live
+gemessen und behoben):
+
+1. `docker-compose.monitoring.yml` uebergab Prometheus `--config.expand-env`.
+   Das Flag gibt es nicht → `unknown long flag` → Prometheus startete nie
+   (Restart-Schleife). Zusaetzlich expandiert Prometheus Umgebungsvariablen in
+   der Konfiguration grundsaetzlich nicht, `credentials: '${SCRAPE_TOKEN}'` waere
+   also selbst mit funktionierendem Start das Literal geblieben (Scrape → 401).
+   Fix: gueltige Flags und ein Entrypoint, der `__SCRAPE_TOKEN__` beim Start
+   ersetzt (das Token steht damit nie im Image, die Datei bleibt secret-frei).
+2. Die Alarmzustellung starb an der eigenen Auth: Alertmanager kann kein
+   Studio-Cookie halten, `POST /api/alerts/webhook` antwortete
+   `401 STUDIO_TOKEN_REQUIRED` – Alarme erreichten Discord/Slack/Telegram NIE.
+   Fix: dediziertes `ALERT_WEBHOOK_TOKEN` (nur diese eine Route, Konstantzeit-
+   Vergleich, ohne gesetztes Token weiter fail-closed). Zusaetzlich: ein
+   App-Down-Alarm kann nicht ueber die App zugestellt werden (der Empfaenger ist
+   genau das, was ausgefallen ist) → Route fuer `severity="critical"` direkt auf
+   einen `CRITICAL_WEBHOOK`; ohne gesetztes CRITICAL_WEBHOOK bleibt der Fallback
+   die App-Route (Verhalten wie vorher).
+3. Zweiter Stolperstein: ein gefalteter YAML-Block mit tiefer eingerueckten
+   Folgezeilen behaelt den Zeilenumbruch – der `sed`-Aufruf wurde dadurch in drei
+   Shell-Befehle zerlegt (`-e: not found`, `...yml: Permission denied`).
+   Entrypoint deshalb EINZEILIG halten.
+
+**Lokaler Nachweis (die App lief auf dem Host, :8080):**
+
+```bash
+# 1) App mit Scrape-Token, Alert-Token und Webhook-Ziel
+PORT=8080 STUDIO_ACCESS_TOKEN=... SCRAPE_TOKEN=... ALERT_WEBHOOK_TOKEN=... \
+  DISCORD_WEBHOOK=http://127.0.0.1:9099/alerts npx tsx server.ts
+
+# 2) Empfaenger (Messinstrument; im Betrieb nicht noetig)
+node scripts/hetzner/alert-webhook-receiver.mjs --port 9099 --out /tmp/alerts.jsonl
+
+# 3) Stack (das Overlay loest `sample-monk` auf den Host auf und oeffnet die APIs)
+SCRAPE_TOKEN=... ALERT_WEBHOOK_TOKEN=... CRITICAL_WEBHOOK=http://host.docker.internal:9099/alerts \
+  docker compose -f docker-compose.monitoring.yml -f docker-compose.monitoring.proof.yml \
+  up -d prometheus alertmanager grafana
+```
+
+**Ergebnis (gemessen):**
+
+| Nachweis | Ergebnis |
+|---|---|
+| Scrape | `up{job="samplemonk"}=1`, Target `healthy`; Serien `samplemonk_http_requests_total`, `..._duration_seconds_bucket/_sum/_count` (neu), `..._ai_cost_usd`, `..._telemetry_xruns_total` |
+| Regeln | 12 Regeln geladen, `health=ok`: 6 Einzelalarme + 3 SLO-Recordings + 3 SLO-/Xrun-Alarme (neu) |
+| Dashboard | Grafana 11.2: Dashboard `samplemonk-overview` provisioniert, **22 Panels** inkl. `SLO Verfuegbarkeit (24h)`, `SLO Verfuegbarkeit (1h)`, `Latenz p95 (30m)`, `AI-Kosten (USD, kumuliert)`, `AI-Kosten pro Stunde`, `Client-Xruns pro Sekunde (nach Quelle)`, `Xruns gesamt (10m-Zunahme)`, `SLO-Burn: Fehlerquote`; Panel-Ausdruecke liefern Daten |
+| Alarm 1 (Fehlerrate) | 40×401 gegen 40×200 → Regel `SamplemonkHighErrorRate` **firing** → zugestellt: `[FIRING] Hohe HTTP-Fehlerrate (sample-monk:8080)` |
+| Alarm 2 (neues SLO) | dieselbe Störung → `SamplemonkSloAvailabilityBreach` **firing** → zugestellt: `[FIRING] Verfuegbarkeits-SLO verletzt (1 h < 99,5 %)` |
+| Alarm 3 (App-Down, DIREKT) | App gestoppt → `up=0` → `SamplemonkAppDown` **firing** → direkt zugestellt (Alertmanager-Payload, App war tot) |
+| Xruns (neu) | 30 Telemetrie-Events `type=xrun` via `POST /api/telemetry` → `SamplemonkClientXruns` **pending** → `firing` nach `for: 5m` |
+
+**SLO-Definitionen (Recording-Rules in `prometheus-alerts.yml`):**
+
+- `samplemonk:slo_availability:ratio_24h` – Anteil erfolgreicher HTTP-Antworten,
+  Ziel **99,5 % / 24 h**; Alarm `SamplemonkSloAvailabilityBreach` ab 1-h-Verletzung.
+- `samplemonk:slo_latency_p95_seconds:30m` – p95 aus dem neuen Histogramm
+  `samplemonk_http_request_duration_seconds_bucket`, Ziel **< 250 ms**; Alarm
+  `SamplemonkSloLatencyBreach`. Vorher gab es nur einen Mittelwert-Gauge – der
+  verdeckt genau den langen Schwanz, den ein Latenz-SLO messen soll.
+
+**Noch offen (bewusst):** `fleetMaxEurPerHour`-Alarm feuert auf die kumulierte
+Kostenserie (`increase(...[1h]) > 10`) – er ist konfiguriert, aber nicht
+kuenstlich ausgeloest (Kosten lassen sich nicht serioes simulieren, ohne echte
+Provider-Calls zu bezahlen). Node-/cadvisor-Alarme brauchen die beiden
+Host-Exporter, die im lokalen Nachweis nicht gestartet wurden.

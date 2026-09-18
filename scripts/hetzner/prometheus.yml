@@ -29,6 +29,13 @@ scrape_configs:
   # sampleMONK-App-Metriken (server.ts liefert /api/metrics?format=prometheus).
   # PROD-P0-001: der Server verlangt fuer Lese-Metriken das SCRAPE_TOKEN
   # (Authorization: Bearer). Ohne Token bleibt die Route fail-closed.
+  #
+  # PROD-P1-004 (Befund 2026-09-18): Prometheus expandiert Umgebungsvariablen in
+  # der Konfiguration NICHT - auch nicht mit dem frueher hier gesetzten Flag
+  # `--config.expand-env`, das es gar nicht gibt (Prometheus brach damit schon
+  # beim Start ab, der ganze Stack lief in eine Restart-Schleife). Der Platzhalter
+  # `__SCRAPE_TOKEN__` wird deshalb beim Containerstart vom Entrypoint der Compose-
+  # Datei ersetzt (siehe docker-compose.monitoring.yml, Abschnitt prometheus).
   - job_name: 'samplemonk'
     metrics_path: /api/metrics
     params:
@@ -36,7 +43,7 @@ scrape_configs:
     scheme: http
     authorization:
       type: Bearer
-      credentials: '${SCRAPE_TOKEN}'
+      credentials: '__SCRAPE_TOKEN__'
     static_configs:
       - targets: ['sample-monk:8080']
 

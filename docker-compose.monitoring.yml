@@ -82,11 +82,22 @@ services:
       - prometheus_data:/prometheus
       - ./scripts/hetzner/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./scripts/hetzner/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--config.expand-env'
-      - '--storage.tsdb.retention.time=15d'
-      - '--web.enable-lifecycle'
+    # PROD-P1-004 (Befund 2026-09-18): `--config.expand-env` gibt es bei
+    # Prometheus NICHT (Startabbruch: "unknown long flag", Stack in der
+    # Restart-Schleife), und Prometheus expandiert Umgebungsvariablen in der
+    # Konfiguration grundsaetzlich nicht. Der Platzhalter __SCRAPE_TOKEN__ wird
+    # deshalb hier beim Start ersetzt - das Token landet nie im Image und die
+    # Konfigurationsdatei bleibt im Repo ohne Secret.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >
+        sed "s|__SCRAPE_TOKEN__|$${SCRAPE_TOKEN}|g" /etc/prometheus/prometheus.yml
+        > /tmp/prometheus.yml &&
+        exec /bin/prometheus
+        --config.file=/tmp/prometheus.yml
+        --storage.tsdb.retention.time=15d
+        --web.enable-lifecycle
     environment:
       # PROD-P0-001: gleiches Secret wie in der App (server.ts SCRAPE_TOKEN).
       SCRAPE_TOKEN: ${SCRAPE_TOKEN:-}
@@ -106,8 +117,22 @@ services:
     <<: *default-runtime
     volumes:
       - ./scripts/hetzner/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    command:
-      - '--config.file=/etc/alertmanager/alertmanager.yml'
+    # PROD-P1-004: gleiche Rendering-Regel wie bei Prometheus. Ohne gesetztes
+    # CRITICAL_WEBHOOK bleibt der Fallback die App-Route (Verhalten wie vorher).
+    # ACHTUNG: EINZEILIG halten. Ein gefalteter YAML-Block mit tiefer
+    # eingerueckten Folgezeilen behaelt den Zeilenumbruch - der sed-Befehl wurde
+    # dadurch in drei Shell-Befehle zerlegt ('-e: not found',
+    # '/etc/alertmanager/alertmanager.yml: Permission denied').
+    entrypoint:
+      - /bin/sh
+      - -c
+      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-http://sample-monk:8080/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+    environment:
+      # Direkter Chat-Webhook fuer Alarme, die die App selbst betreffen
+      # (App-Down laesst sich nicht ueber die App zustellen).
+      CRITICAL_WEBHOOK: ${CRITICAL_WEBHOOK:-}
+      # Gemeinsames Geheimnis mit der App (server.ts ALERT_WEBHOOK_TOKEN).
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
     expose:
       - "9093"
     deploy:

@@ -3,10 +3,12 @@
 // Berechtigung und Payload-Validierung für `main-out-update`.
 import { describe, it, expect } from 'vitest';
 import {
+  MAIN_OUT_PARAM_SPECS,
   MAIN_OUT_PLUGINS,
   MIXER_NEVER_CLOSES,
   canControlMainOut,
   canSetModuleState,
+  validateMainOutPayload,
   isMainOutPlugin,
   parseMainOutUpdate,
   resolveMainOutUserId,
@@ -117,5 +119,60 @@ describe('mainOutGuard: canSetModuleState (mixerMONK nie schliessen)', () => {
       expect(canSetModuleState(id, 'OFF', { isMainOutOwner: false }).allowed).toBe(true);
       expect(canSetModuleState(id, 'AUTO_AI', { isMainOutOwner: false }).allowed).toBe(true);
     }
+  });
+});
+/**
+ * COLLAB-P1-005: Main-Out-Parameter laufen server-inspizierbar. Der Server
+ * prueft zwei Dinge getrennt - BERECHTIGUNG ueber `canControlMainOut` (nur der
+ * mixerMONK-Halter, oben getestet) und PAYLOAD ueber `validateMainOutPayload`
+ * (Allow-List + Bereich). Vorher fehlte die Payload-Pruefung komplett: jeder
+ * formal gueltige name/Wert wurde an alle Peers gespiegelt.
+ */
+describe('mainOutGuard: validateMainOutPayload (COLLAB-P1-005)', () => {
+  it('laesst die erlaubten Parameter in ihren Bereichen durch', () => {
+    expect(validateMainOutPayload({ param: 'masterVolume', value: 0 }))
+      .toEqual({ ok: true, param: 'masterVolume', value: 0 });
+    expect(validateMainOutPayload({ param: 'masterVolume', value: 2 }))
+      .toEqual({ ok: true, param: 'masterVolume', value: 2 });
+    expect(validateMainOutPayload({ param: 'masterVolumeDb', value: -48 }))
+      .toEqual({ ok: true, param: 'masterVolumeDb', value: -48 });
+    expect(validateMainOutPayload({ param: 'masterVolumeDb', value: 12 }))
+      .toEqual({ ok: true, param: 'masterVolumeDb', value: 12 });
+    expect(validateMainOutPayload({ param: 'fadeInSeconds', value: 3 }))
+      .toEqual({ ok: true, param: 'fadeInSeconds', value: 3 });
+  });
+
+  it('erlaubt genau diese drei Parameter (Allow-List)', () => {
+    expect(Object.keys(MAIN_OUT_PARAM_SPECS).sort()).toEqual(['fadeInSeconds', 'masterVolume', 'masterVolumeDb']);
+    // Formal gueltiger Payload, aber kein Main-Out-Parameter.
+    expect(validateMainOutPayload({ param: 'bpm', value: 128 })).toEqual({ ok: false, reason: 'unknown-param' });
+    expect(validateMainOutPayload({ param: 'channelGain', value: 1 })).toEqual({ ok: false, reason: 'unknown-param' });
+  });
+
+  it('weist Werte ausserhalb des Bereichs ab (kein stilles Clamping)', () => {
+    expect(validateMainOutPayload({ param: 'masterVolume', value: 2.5 }))
+      .toEqual({ ok: false, reason: 'value-out-of-range' });
+    expect(validateMainOutPayload({ param: 'masterVolumeDb', value: 99 }))
+      .toEqual({ ok: false, reason: 'value-out-of-range' });
+    expect(validateMainOutPayload({ param: 'masterVolumeDb', value: -49 }))
+      .toEqual({ ok: false, reason: 'value-out-of-range' });
+    // Zahl erwartet: ein String-Wert ist kein Pegel.
+    expect(validateMainOutPayload({ param: 'masterVolume', value: '1' }))
+      .toEqual({ ok: false, reason: 'value-out-of-range' });
+    expect(validateMainOutPayload({ param: 'masterVolume', value: true }))
+      .toEqual({ ok: false, reason: 'value-out-of-range' });
+    // NaN/Infinity fallen schon in parseMainOutUpdate durch (kein gueltiger Payload).
+    expect(validateMainOutPayload({ param: 'masterVolume', value: Number.NaN }))
+      .toEqual({ ok: false, reason: 'invalid-payload' });
+    expect(validateMainOutPayload({ param: 'masterVolume', value: Number.POSITIVE_INFINITY }))
+      .toEqual({ ok: false, reason: 'invalid-payload' });
+  });
+
+  it('weist kaputte Payloads ab', () => {
+    expect(validateMainOutPayload(null)).toEqual({ ok: false, reason: 'invalid-payload' });
+    expect(validateMainOutPayload({ param: 'a b', value: 1 })).toEqual({ ok: false, reason: 'invalid-payload' });
+    expect(validateMainOutPayload({ value: 1 })).toEqual({ ok: false, reason: 'invalid-payload' });
+    expect(validateMainOutPayload({ param: 'masterVolume', value: { nested: true } }))
+      .toEqual({ ok: false, reason: 'invalid-payload' });
   });
 });

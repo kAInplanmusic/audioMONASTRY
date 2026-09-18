@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { newStudioContext, resetSession } from './helpers/studioAuth';
+import { newStudioContext, resetSession, studioBaseUrl, studioToken } from './helpers/studioAuth';
 
 // Nur Chromium: Die Suite nutzt Chromium-Fake-Media-Args fuer getUserMedia und mehrere eigene Browser-Kontexte; in WebKit bricht der Start ab ('browserType.launch: Target page, context or browser has been closed').
 // CI-Fund 2026-09-17 (e2e-webkit): 'browserType.launch: Target page, context or browser has been closed'.
@@ -236,5 +236,70 @@ test('4 Browser-Kontexte → Session voll und auf allen Clients konsistent', asy
     for (const ctx of contexts) {
       await ctx.close();
     }
+  }
+});
+
+/**
+ * COLLAB-P1-005: Der Main-Out-Pfad läuft nicht mehr am Server vorbei.
+ * Der Halter (mixerMONK-Lock) bewegt den LEVEL-Regler; der Wert geht als
+ * `main-out-update` an den Server, der ihn prüft (Allow-List + Bereich),
+ * auditiert und an die anderen Session-User spiegelt - hier sichtbar am
+ * gespiegelten Regler des zweiten Browsers und belegt über /api/audit.
+ */
+test('COLLAB-P1-005: Main-Out-Parameter laufen server-validiert und werden gespiegelt (2 Browser)', async ({ browser }) => {
+  // Zwei Kontexte + Studio-Start + Spiegelung brauchen mehr als die Standard-30 s.
+  test.setTimeout(120_000);
+  const ctxA = await newStudioContext(browser);
+  const ctxB = await newStudioContext(browser);
+  const pageA = await ctxA.newPage();
+  const pageB = await ctxB.newPage();
+
+  try {
+    await openStudio(pageA);
+    await openStudio(pageB);
+    await expect(pageA.getByText(/SESSION 2\/4/)).toBeVisible({ timeout: 20_000 });
+
+    // A wird Halter des mixerMONK -> A ist damit der Main-Out-Owner.
+    await pageA.getByLabel('mixerMONK Menü').click();
+    await expect(pageB.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+
+    // Eindeutiger Name: das Pult hat vier "LEVEL"-Regler (Master, Booth, Phones).
+    const levelA = pageA.getByRole('slider', { name: 'Main-Out LEVEL' });
+    const levelB = pageB.getByRole('slider', { name: 'Main-Out LEVEL' });
+    const start = Number(await levelA.getAttribute('aria-valuenow'));
+    expect(Number.isFinite(start), 'LEVEL-Regler ohne aria-valuenow').toBe(true);
+
+    // Zwei Schritte hoch (Step 0.05 -> +10 Punkte im aria-Wert).
+    await levelA.focus();
+    await levelA.press('ArrowUp');
+    await levelA.press('ArrowUp');
+    const expected = Math.min(100, start + 10);
+    await expect(levelA).toHaveAttribute('aria-valuenow', String(expected), { timeout: 10_000 });
+
+    // Vorbedingung: A ist auf Client-Seite wirklich der Main-Out-Owner - ohne
+    // diese Rolle verwirft `sendMainOutUpdate` den Aufruf bewusst.
+    const ownerState = await pageA.evaluate(() => {
+      const m = (globalThis as { __webRTCManager?: { isMainOutOwner?: boolean; mainOutUserId?: string; sessionUserId?: string } }).__webRTCManager;
+      return { isOwner: m?.isMainOutOwner, mainOutUserId: m?.mainOutUserId, sessionUserId: m?.sessionUserId };
+    });
+    expect(ownerState.isOwner, `A ist kein Main-Out-Owner: ${JSON.stringify(ownerState)}`).toBe(true);
+
+    // Der andere Browser spiegelt den Wert über den Server (nicht per P2P).
+    await expect(levelB).toHaveAttribute('aria-valuenow', String(expected), { timeout: 20_000 });
+
+    // Und der Server hat den Vorgang gesehen: Audit-Eintrag mit param=wert.
+    const token = studioToken();
+    const audit = await fetch(`${studioBaseUrl()}/api/audit`, {
+      headers: token ? { 'x-studio-token': token } : {},
+    });
+    expect(audit.ok, `Audit nicht abrufbar: ${audit.status}`).toBe(true);
+    const body = (await audit.json()) as { entries?: { action?: string; ok?: boolean; target?: string }[] };
+    const entries = (body.entries ?? []).filter((e) => e.action === 'MAIN_OUT_UPDATE');
+    expect(entries.length, 'kein MAIN_OUT_UPDATE im Server-Audit').toBeGreaterThan(0);
+    const accepted = entries.filter((e) => e.ok === true && String(e.target ?? '').startsWith('masterVolume='));
+    expect(accepted.length, `kein akzeptierter masterVolume-Eintrag (${JSON.stringify(entries.slice(0, 5))})`).toBeGreaterThan(0);
+  } finally {
+    await ctxA.close();
+    await ctxB.close();
   }
 });

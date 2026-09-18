@@ -18,9 +18,32 @@ route:
   group_wait: 10s
   group_interval: 30s
   repeat_interval: 1h
+  routes:
+    # PROD-P1-004 (Befund 2026-09-18): Ein App-Down-Alarm kann NICHT ueber die
+    # App zugestellt werden - der Empfaenger ist genau das, was ausgefallen ist.
+    # Kritische/service-bezogene Alarme gehen deshalb direkt an einen Chat-
+    # Webhook. Ohne gesetztes CRITICAL_WEBHOOK ersetzt der Entrypoint der Compose-
+    # Datei den Platzhalter durch die App-Route (Verhalten wie vorher, damit der
+    # Stack ohne Zusatzkonfiguration laeuft).
+    - matchers:
+        - severity="critical"
+      receiver: 'critical-direct'
+      continue: true
 
 receivers:
   - name: 'chat-webhook'
     webhook_configs:
       - url: 'http://sample-monk:8080/api/alerts/webhook'
+        # PROD-P1-004: Die Route ist ein Maschinen-Endpunkt und verlangt das
+        # ALERT_WEBHOOK_TOKEN (sonst 401 - Alarme kamen nie an). Der Platzhalter
+        # wird beim Containerstart ersetzt (docker-compose.monitoring.yml).
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: '__ALERT_WEBHOOK_TOKEN__'
+        send_resolved: true
+
+  - name: 'critical-direct'
+    webhook_configs:
+      - url: '__CRITICAL_WEBHOOK__'
         send_resolved: true

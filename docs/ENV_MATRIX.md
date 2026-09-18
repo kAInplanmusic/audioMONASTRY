@@ -27,6 +27,11 @@
 | `TURN_URLS` | `TURN_URLS` | .env | nein | – | URL | server/webrtcConfig.ts | nein |
 | `VISION_ARTIFACT_DIR` | `VISION_ARTIFACT_DIR` | .env | nein | system temp | Pfad | server/visionArtifacts.ts | nein |
 | `VITE_ENABLE_LOCAL_EMBEDDINGS` | `VITE_ENABLE_LOCAL_EMBEDDINGS` | Vite | nein | – | boolean | src/lib/cloudConfig.ts | nein |
+| `SCRAPE_TOKEN` | `SCRAPE_TOKEN` | .env | nein | – | 16+ Zeichen empfohlen | server.ts (Lese-Metriken), Prometheus | **ja** |
+| `ALERT_WEBHOOK_TOKEN` | `ALERT_WEBHOOK_TOKEN` | .env | nein | – | **16+ Zeichen erzwungen** (`length >= 16`, sonst inaktiv) | server.ts (Maschinen-Endpunkt `/api/alerts/webhook`) | **ja** |
+| `CRITICAL_WEBHOOK` | `CRITICAL_WEBHOOK` | .env/Compose | nein | App-Route | URL | docker-compose.monitoring.yml (Alertmanager-Direktroute fuer `severity="critical"`) | **ja** |
+| `DISCORD_WEBHOOK` / `SLACK_WEBHOOK` | dito | .env | nein | – | URL | server.ts `/api/alerts/webhook` (Weiterleitung) | **ja** |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | dito | .env | nein | – | Token/ID | server.ts `/api/alerts/webhook` | **ja** |
 
 ## 2. Supabase (kanonisch `SB_*`)
 
@@ -160,6 +165,17 @@ gelesen), `RP_S3_ACCESS_KEY`, `RP_S3_SECRET_KEY`, `SB_PROJECT_ID`,
 `SB_REST_ENDPOINT`, `SQ_PERSONAL_TOKEN`. Diese gehören in einen eigenen
 Aufräum-/Rotationslauf oder in die Löschung beim Anbieter; das bloße Entfernen
 aus der `.env` widerruft sie nicht.
+
+## 8b. Alarmzustellung (PROD-P1-004, 2026-09-18 gemessen)
+
+Ohne `ALERT_WEBHOOK_TOKEN` antwortet `POST /api/alerts/webhook` mit
+`401 STUDIO_TOKEN_REQUIRED` – genau das passierte live: der Alertmanager konnte
+kein Studio-Cookie halten, jede Zustellung scheiterte. Reihenfolge deshalb:
+Token setzen → Alertmanager rendert ihn beim Start in den
+`http_config.authorization`-Header (Platzhalter `__ALERT_WEBHOOK_TOKEN__`) →
+erst danach Alarme erwarten. `CRITICAL_WEBHOOK` ist der zweite, unabhaengige Weg
+fuer Alarme, die die App selbst betreffen (App-Down) – ohne ihn zeigt
+`http_config` weiter auf die App-Route.
 
 ## 3b. Hetzner Object Storage als Backup-Ziel (PROD-P0-002, 2026-09-14)
 

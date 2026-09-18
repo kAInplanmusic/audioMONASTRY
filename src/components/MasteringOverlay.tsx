@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { audioEngine } from '../utils/audioEngine';
+import { webRTCManager } from '../utils/WebRTCManager';
 import { MoaAssistant } from './MoaAssistant';
 import { MASTERING_PRESETS } from '../data/masteringPresets';
 import { Cpu, Sparkles, SlidersHorizontal, Activity, Layers, Power } from 'lucide-react';
@@ -30,11 +31,23 @@ export function MasteringOverlay({
     setActiveTab(plugin);
   }
   const [lufs, setLufs] = useState(-23);
+  // COLLAB-P1-005: Main-Out-Pegel (dB) des masteringMONK. Er laeuft ueber den
+  // server-validierten `main-out-update`-Pfad (Allow-List -48..12 dB) und wird
+  // von anderen Clients mitgespiegelt.
+  const [mainOutDb, setMainOutDb] = useState(-6);
   const [autoMode, setAutoMode] = useState(false);
   const [targetSample, setTargetSample] = useState<AudioSample | null>(null);
   const [activePreset, setActivePreset] = useState<PresetKey>(initialPresetKey);
   const [masterMeParams, setMasterMeParams] = useState(MASTERING_PRESETS[initialPresetKey].master_me);
   const [toneShiftParams, setToneShiftParams] = useState(MASTERING_PRESETS[initialPresetKey].tone_shift);
+
+  // Main-Out-Aenderungen anderer Clients in die UI spiegeln (die AudioEngine
+  // setzt der zentrale Sync in App.tsx - hier nur die Anzeige).
+  useEffect(() => webRTCManager.addMainOutUpdateListener((msg: { param?: unknown; value?: unknown }) => {
+    if (String(msg?.param ?? '') !== 'masterVolumeDb') return;
+    const value = Number(msg?.value);
+    if (Number.isFinite(value)) setMainOutDb(value);
+  }), []);
 
   useEffect(() => {
     // Event-driven LUFS: register callback on audioEngine, fall back to polling
@@ -128,6 +141,30 @@ export function MasteringOverlay({
               <Activity className="w-4 h-4 text-emerald-500" />
               <span className="font-mono text-xs text-neutral-400">LUFS:</span>
               <span className="font-mono text-sm font-bold text-emerald-400">{lufs.toFixed(1)}</span>
+            </div>
+
+            {/* COLLAB-P1-005: Main-Out-Pegel - nur der Halter sendet, der Server
+                prueft Bereich (-48..12 dB) und spiegelt an die Session. */}
+            <div className="flex items-center gap-2 px-3 py-2 bg-black rounded border border-sky-500/30">
+              <SlidersHorizontal className="w-4 h-4 text-sky-400" />
+              <label htmlFor="master-main-out-db" className="font-mono text-xs text-neutral-400">MAIN-OUT:</label>
+              <input
+                id="master-main-out-db"
+                type="range"
+                min={-24}
+                max={6}
+                step={0.5}
+                value={mainOutDb}
+                aria-label="Main-Out-Pegel in dB"
+                onChange={(e) => {
+                  const db = Number(e.target.value);
+                  setMainOutDb(db);
+                  audioEngine.setMasterVolumeDb(db, 0.05);
+                  webRTCManager.sendMainOutUpdate('masterVolumeDb', db);
+                }}
+                className="w-28 accent-sky-400"
+              />
+              <span className="font-mono text-sm font-bold text-sky-300 w-14 text-right">{mainOutDb.toFixed(1)} dB</span>
             </div>
 
             {/* Auto Mode Toggle */}

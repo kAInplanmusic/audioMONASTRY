@@ -42,9 +42,10 @@ import {
   canControlMainOut,
   MIXER_NEVER_CLOSES,
   isMainOutPlugin,
-  parseMainOutUpdate,
   resolveMainOutUserId,
+  validateMainOutPayload,
 } from './src/core/session/mainOutGuard';
+import { LatencyHistogram } from './src/core/observability/latencyHistogram';
 import { SnapshotStore, createMemoryKeyValueStore, type KeyValueStore } from './src/core/persistence/snapshotStore';
 import { createRedisKeyValueStore } from './src/core/persistence/redisKeyValueStore';
 import {
@@ -159,6 +160,9 @@ const metrics = {
   requests: 0,
   errors: 0,
   latencyMsSum: 0,
+  // PROD-P1-004: Histogramm zusaetzlich zum Mittelwert - nur damit ist ein
+  // Latenz-SLO (p95) berechenbar; ein Mittelwert verdeckt den langen Schwanz.
+  latencyHistogram: new LatencyHistogram(),
   aiRequests: 0,
   aiFailures: 0,
   stemRequests: 0,
@@ -271,7 +275,9 @@ app.use((req, res, next) => {
   const start = Date.now();
   metrics.requests += 1;
   res.on('finish', () => {
-    metrics.latencyMsSum += Date.now() - start;
+    const durationMs = Date.now() - start;
+    metrics.latencyMsSum += durationMs;
+    metrics.latencyHistogram.observe(durationMs);
     if (res.statusCode >= 400) metrics.errors += 1;
   });
   next();
@@ -358,6 +364,14 @@ const studioTokenEnabled = STUDIO_ACCESS_TOKEN.length > 0;
 // unveraendert fail-closed ueber den Studio-Token.
 const SCRAPE_TOKEN = (process.env.SCRAPE_TOKEN || '').trim();
 const scrapeTokenEnabled = SCRAPE_TOKEN.length > 0;
+// PROD-P1-004: Alertmanager ist ein Maschinen-Client und kann kein Studio-Cookie
+// halten. Ohne diese Ausnahme starb JEDE Alarmzustellung mit 401
+// (live belegt 2026-09-18: "unexpected status code 401 ... STUDIO_TOKEN_REQUIRED").
+// Wie beim Scrape-Token gilt: nur diese eine Route, nur mit gueltigem Token,
+// Konstantzeit-Vergleich - und ohne konfiguriertes Token bleibt alles fail-closed
+// ueber die Studio-Auth.
+const ALERT_WEBHOOK_TOKEN = (process.env.ALERT_WEBHOOK_TOKEN || '').trim();
+const alertWebhookTokenEnabled = ALERT_WEBHOOK_TOKEN.length >= 16;
 // P0-Security: Production läuft NIE ungeschützt. Fehlt der Studio-Token in
 // Produktion, bleibt die API fail-closed (nur /api/health offen) statt fail-open.
 const isProductionEnv = process.env.NODE_ENV === 'production';
@@ -431,6 +445,14 @@ app.use('/api', async (req, res, next) => {
   // PROD-P0-001: Scrape-Ausnahme nur fuer Lese-Metriken und nur mit gueltigem
   // Scrape-Token (konstantzeit-Vergleich). Ohne gueltiges Token laeuft die
   // Anfrage in die Studio-Auth weiter - nichts wird fail-open.
+  // PROD-P1-004: Alarmzustellung (Alertmanager -> App -> Discord/Slack/Telegram).
+  if (alertWebhookTokenEnabled && req.method === 'POST' && req.path === '/alerts/webhook') {
+    const headerToken = String(req.headers?.['x-alert-token'] ?? '');
+    const authHeader = String(req.headers?.authorization ?? '');
+    const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    const presented = headerToken || bearerToken;
+    if (presented && safeTokenEqual(presented, ALERT_WEBHOOK_TOKEN)) return next();
+  }
   if (
     scrapeTokenEnabled &&
     req.method === 'GET' &&
@@ -1280,12 +1302,23 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
           });
           return;
         }
-        const parsed = parseMainOutUpdate(data);
-        if (!parsed) {
-          socket.emit('main-out-update-rejected', { reason: 'invalid payload' });
+        // COLLAB-P1-005: zusaetzlich Allow-List + Wertebereich. Vorher wurde ein
+        // formal gueltiger Payload mit unbekanntem Namen (z. B. `bpm`) oder
+        // einem Wert ausserhalb des Bereichs (`masterVolumeDb = 99`) ungeprueft
+        // an alle Peers gespiegelt und dort auf den Main-Out angewandt.
+        // `'reason' in parsed` statt `!parsed.ok`: das Repo faehrt ohne `strict`
+        // (strictNullChecks off), dort greift die Diskriminanten-Verengung ueber
+        // ein Boolean-Literal nicht - die `in`-Verengung schon.
+        const parsed = validateMainOutPayload(data);
+        if ('reason' in parsed) {
+          addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', false, String(parsed.reason));
+          socket.emit('main-out-update-rejected', {
+            param: String((data as { param?: unknown } | null)?.param ?? ''),
+            reason: parsed.reason,
+          });
           return;
         }
-        addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', true, parsed.param);
+        addServerAudit(senderUserId, senderRole, 'MAIN_OUT_UPDATE', true, `${parsed.param}=${parsed.value}`);
         const payload = {
           param: parsed.param,
           value: parsed.value,

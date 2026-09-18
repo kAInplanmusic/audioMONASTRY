@@ -1,0 +1,39 @@
+# =============================================================================
+# audioMONASTRY · docker-compose.monitoring.proof.yml
+# -----------------------------------------------------------------------------
+# Overlay fuer den LOKALEN Nachweis des Observability-Stacks (PROD-P1-004).
+# Es aendert nichts an der Produktions-Konfiguration, sondern macht sie auf einer
+# Entwicklermaschine pruefbar:
+#
+#   * `sample-monk:host-gateway` laest die Container den Namen `sample-monk`
+#     auf den HOST aufloesen. Damit greifen die unveraenderten Ziele aus
+#     prometheus.yml (Scrape der App) und alertmanager.yml
+#     (/api/alerts/webhook) gegen den lokal laufenden Server auf :8080.
+#   * Die Ports 9090/9093/3000 werden veroeffentlicht, damit die Nachweise aus
+#     dem Runbook (Prometheus-API, Alertmanager-API, Grafana-API) von aussen
+#     abfragbar sind. In Produktion bleiben sie bewusst auf `expose` (nur intern,
+#     Zugriff ueber Caddy).
+#
+# Aufruf (App lokal auf :8080, siehe docs/OPS_RUNBOOK.md Abschnitt 9):
+#   docker compose -f docker-compose.monitoring.yml \
+#                  -f docker-compose.monitoring.proof.yml \
+#                  up -d prometheus alertmanager grafana
+# =============================================================================
+services:
+  prometheus:
+    extra_hosts:
+      - 'sample-monk:host-gateway'
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    extra_hosts:
+      - 'sample-monk:host-gateway'
+      - 'host.docker.internal:host-gateway'
+    ports:
+      - "9093:9093"
+
+  grafana:
+    ports:
+      - "3000:3000"
