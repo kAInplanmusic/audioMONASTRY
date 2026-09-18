@@ -45,8 +45,15 @@ export async function synthesizeVoiceLocal(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, voicePreset }),
       });
-      const data = await resp.json() as { url?: string };
-      if (resp.ok && data.url) return { url: data.url, text, engine: 'vits' };
+      const data = await resp.json() as { url?: string; speechText?: string };
+      if (resp.ok && data.url) {
+        // VOICE-P1-001: Der Server liefert den normalisierten Text mit - er ist
+        // die Vorlage fuer die Aussprache (Zahlwoerter statt Ziffern).
+        return { url: data.url, text: data.speechText || text, engine: 'vits' };
+      }
+      // Kein lokales CLI: Web-Speech nutzt den normalisierten Text des Servers,
+      // damit Browser-Stimme und Flotten-Stimme gleich klingen.
+      if (resp.ok && data.speechText) return webSpeechVoice(data.speechText);
     } catch { /* Server nicht erreichbar → WebSpeech */ }
   }
   return webSpeechVoice(text);

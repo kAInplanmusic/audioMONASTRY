@@ -20,6 +20,7 @@ import {
   VoiceTtsSchema,
 } from '../../src/types/zod/schemas';
 import type { Response } from 'express';
+import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import type { Express } from 'express';
 
 // ===========================================================================
@@ -336,6 +337,13 @@ export function registerVoiceRoutes(app: Express): void {
     const { text, model, language, speaker, instruct } = parsedTts.data;
     const clean = cleanVoiceText(text);
     if (!clean) return res.status(400).json({ error: 'text fehlt' });
+    // VOICE-P1-001: Sprach-Normalisierung fuer die Flotte. Qwen3-TTS (und jeder
+    // HF-Fallback) bekommt ausgeschriebene Zahlwoerter, aufgeloeste Abkuerzungen
+    // und gesprochene Einheiten - sonst liest das Modell "17.09.2026", "19,99 €"
+    // oder "z.B." als Zeichenkette vor. Der normalisierte Text steht als Header
+    // in der Antwort, damit im Betrieb nachvollziehbar ist, WAS gesprochen wurde.
+    const speech = normalizeForSpeech(clean);
+    res.setHeader('X-Voice-Speech-Text', encodeURIComponent(speech.slice(0, 400)));
     const selected = hfModelFor('tts', model);
     if (!selected) return res.status(400).json({ error: 'Ungültiges Modell' });
     try {
@@ -350,7 +358,7 @@ export function registerVoiceRoutes(app: Express): void {
           const runtimeModel = (process.env.VOICE_AI_RUNTIME_TTS_MODEL || 'qwen3-tts-06b').trim();
           try {
             const runtimeBuf = await voiceRuntimeInference('tts', runtimeModel, {
-              text: clean,
+              text: speech,
               language: cleanVoiceText(language, 50) || 'German',
               speaker: cleanVoiceText(speaker, 64) || 'Ryan',
               instruct: cleanVoiceText(instruct, 500),
@@ -360,7 +368,7 @@ export function registerVoiceRoutes(app: Express): void {
             console.warn(`[voice] Runtime-TTS (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, runtimeErr instanceof Error ? runtimeErr.message : runtimeErr);
           }
         }
-        const upstream = await hfInference(selected, clean);
+        const upstream = await hfInference(selected, speech);
         await sendHfBlob(res, upstream);
       }
     } catch (err) {
@@ -391,7 +399,8 @@ export function registerVoiceRoutes(app: Express): void {
         if (voiceRuntimeUrl()) {
           const runtimeModel = (process.env.VOICE_AI_RUNTIME_SING_MODEL || 'bark').trim();
           try {
-            const runtimeBuf = await voiceRuntimeInference('sing', runtimeModel, { text: `♪ ${clean} ♪` });
+            // VOICE-P1-001: auch der Singtext wird normalisiert (gleiche Aussprache-Regeln).
+            const runtimeBuf = await voiceRuntimeInference('sing', runtimeModel, { text: `♪ ${normalizeForSpeech(clean)} ♪` });
             return sendWavBuffer(res, runtimeBuf);
           } catch (runtimeErr) {
             console.warn(`[voice] Runtime-Sing (${runtimeModel}) fehlgeschlagen, Fallback auf HF:`, runtimeErr instanceof Error ? runtimeErr.message : runtimeErr);

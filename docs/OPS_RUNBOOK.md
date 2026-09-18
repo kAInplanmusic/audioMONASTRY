@@ -481,3 +481,36 @@ Ein Stream, der nach 15 s endet und dann stehen bleibt, war der erste-Frame-Time
 **Was noch offen bleibt (Betreiber, nicht Repo):** der Live-Beweis Ghostuser 5/6
 gegen die echte Flotte (Studio → PA + Beamer) mit zwei Geräten und frischer
 Session; siehe `VISUAL-P1-001` im Mastertodo.
+
+## Sprach-Kette: Text-Normalisierung vor der Synthese (VOICE-P1-001)
+
+Alle Sprachwege (Flotten-Runtime mit Qwen3-TTS, HF-Fallback, lokales RVC/VITS-CLI,
+Web-Speech im Browser) bekommen denselben, vorbereiteten Text. Die Normalisierung
+liegt in `src/core/audio/speechNormalization.ts` und läuft in beiden Servern:
+
+| Route | Weg | Normalisierung |
+|---|---|---|
+| `POST /api/voice/tts` | Flotte (`VOICE_AI_RUNTIME_URL` → `/infer`, Qwen3-TTS) bzw. HF | ja — `text` im `/infer`-Auftrag ist normalisiert |
+| `POST /api/voice/sing` | Flotte | ja |
+| `POST /api/generate-voice` | lokales CLI bzw. Web-Speech | ja — Antwort enthält zusätzlich `speechText` |
+
+Beispiele (gemessen über `tests/voiceNormalizationRoutes.test.ts`, das einen
+`/infer`-Stub mitschreiben lässt):
+
+| Eingabe | was gesprochen wird |
+|---|---|
+| `17.09.2026` | siebzehnte September zweitausendsechsundzwanzig |
+| `14:30` | vierzehn Uhr dreißig |
+| `19,99 €` | neunzehn Komma neun neun Euro |
+| `12 %` | zwölf Prozent |
+| `3,5 kg` / `44,1 kHz` / `120 km/h` | drei Komma fünf Kilogramm / … Kilohertz / … Kilometer pro Stunde |
+| `z.B.` / `max.` / `Nr. 7` | zum Beispiel / maximal / Nummer sieben |
+| `MP3`, `AI` | M P drei, A I |
+| **unverändert:** `Port 8080`, `Version 1.210.001`, `@#1` | technische Angaben werden NICHT als Zahlwort vorgelesen |
+
+Betrieb: der gesprochene Text steht bei `/api/voice/tts` im Antwort-Header
+`X-Voice-Speech-Text` (URI-kodiert, gekürzt) — damit ist ohne Zusatzwerkzeug
+nachvollziehbar, was das Modell zu lesen bekam. Die Runtime selbst bringt den
+Qwen3-TTS-Handler mit (`services/audiomonastry-ai-runtime/handlers.py`,
+inkl. Sprach-Aliassen); sie braucht das Paket `qwen-tts` im Image — das ist der
+Punkt „nächster Image-Build“ aus `VOICE-P1-001`.

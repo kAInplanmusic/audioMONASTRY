@@ -14,6 +14,7 @@
  * Der Code wurde 1:1 verschoben; die Einrueckung ist die einzige Aenderung.
  */
 import { supabaseServerKey, supabaseUrl } from '../../src/config/supabaseKeys';
+import { normalizeForSpeech } from '../../src/core/audio/speechNormalization';
 import { aiPersistence } from '../../src/core/ai/orchestrator/aiPersistence';
 import { embedText } from '../../src/core/ai/orchestrator/textEmbedding';
 import { orchestralSamples } from '../../src/data/orchestralLibrary';
@@ -244,7 +245,12 @@ export function registerMediaRoutes(app: Express): void {
     }
     const { text, voicePreset } = parsedVoice.data;
     // S6350: Eingabe sanitieren, bevor sie als CLI-Argument verwendet wird.
-    const query = String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 500);
+    const raw = String(text ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 500);
+    // VOICE-P1-001: Sprach-Normalisierung VOR der Synthese. Ohne sie liest jedes
+    // TTS-Modell Ziffern, Abkuerzungen und Symbole falsch vor ("17.09.2026",
+    // "19,99 €", "z.B."). Der normalisierte Text geht an die Engine UND an den
+    // Client (Web-Speech-Pfad) - damit sprechen alle Wege gleich.
+    const query = normalizeForSpeech(raw);
     const rawPreset = String(voicePreset ?? 'FEMALE_ROBOTIC').trim();
     const preset = /^[A-Za-z0-9_-]{1,32}$/.test(rawPreset) ? rawPreset : 'FEMALE_ROBOTIC';
 
@@ -268,7 +274,7 @@ export function registerMediaRoutes(app: Express): void {
             resolve(`/voices/voice_${stamp}.wav`);
           });
         });
-        return res.json({ status: 'ok', url: audioUrl, text: query, voicePreset: preset });
+        return res.json({ status: 'ok', url: audioUrl, text: raw, speechText: query, voicePreset: preset });
       } catch (e) {
         console.warn('[voice] lokaler Engine-Fehler, Fallback auf Web-Speech.', (e as Error).message);
       }
@@ -279,7 +285,8 @@ export function registerMediaRoutes(app: Express): void {
     return res.json({
       status: 'local',
       url: '',
-      text: query,
+      text: raw,
+      speechText: query,
       voicePreset: preset,
       hint: 'Web-Speech (browser) verwenden',
     });
