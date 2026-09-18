@@ -80,9 +80,14 @@ const main = async () => {
     process.exit(3);
   }
 
+  // `detached: true` + Kill der Prozessgruppe: der Dev-Server startet Vite mit
+  // festem HMR-Port (24678). Blieb ein Kindprozess zurueck (z. B. weil das Skript
+  // abgebrochen wurde), blockierte er diesen Port und liess ANDERE E2E-Laeufe mit
+  // "WebSocket closed without opened" scheitern - genau das ist passiert.
   server = spawn('npx', ['tsx', 'server.ts'], {
     env: { ...process.env, PORT: String(PORT), STUDIO_ACCESS_TOKEN: TOKEN, NODE_ENV: 'development' },
     stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
   });
   const log = [];
   server.stdout.on('data', (d) => log.push(String(d)));
@@ -184,8 +189,21 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
-    if (server) server.kill('SIGTERM');
+    if (server?.pid) {
+      try {
+        server.kill('SIGTERM');
+        // Prozessgruppe mitnehmen (npx -> tsx -> node -> vite).
+        process.kill(-server.pid, 'SIGTERM');
+      } catch { /* schon weg */ }
+    }
     rmSync(workdir, { recursive: true, force: true });
-    // Dem Serverkind Zeit zum Beenden geben, dann hart aussteigen.
-    setTimeout(() => process.exit(process.exitCode ?? 0), 500);
+    // Dem Serverkind Zeit zum Beenden geben, dann hart aussteigen. Bleibt es
+    // hartnaeckig, wird die Gruppe nachgeschickt - ein verwaister Dev-Server
+    // blockiert sonst HMR-Port 24678 und sabotiert andere E2E-Laeufe.
+    setTimeout(() => {
+      if (server?.pid) {
+        try { process.kill(-server.pid, 'SIGKILL'); } catch { /* weg */ }
+      }
+      process.exit(process.exitCode ?? 0);
+    }, 1_500);
   });

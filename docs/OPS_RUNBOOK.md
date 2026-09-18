@@ -514,3 +514,19 @@ nachvollziehbar, was das Modell zu lesen bekam. Die Runtime selbst bringt den
 Qwen3-TTS-Handler mit (`services/audiomonastry-ai-runtime/handlers.py`,
 inkl. Sprach-Aliassen); sie braucht das Paket `qwen-tts` im Image — das ist der
 Punkt „nächster Image-Build“ aus `VOICE-P1-001`.
+
+## Vor jedem E2E-Lauf: Ports prüfen (Fund 2026-09-18)
+
+Vite nutzt einen **festen HMR-Port** (`24678`). Läuft noch ein Dev-Server aus einem
+früheren Lauf (z. B. aus einem abgebrochenen Beweis-Skript), bindet Playwrights
+`webServer` ihn nicht, der HMR-WebSocket scheitert — und die Smoke-Tests fallen mit
+`"WebSocket closed without opened"` um, obwohl kein Codefehler vorliegt.
+
+```bash
+ss -ltnp | grep -E ':24678|:8080'   # muss leer sein
+pkill -f "[t]sx server.ts"          # Klammer-Trick: killt nicht die eigene Shell
+```
+
+Die Beweis-Skripte (`proof:turn`, `proof:ice-recovery`, `proof:mjpeg`) starten ihre
+Server `detached` und beenden die **Prozessgruppe**; `proof:mjpeg` bricht zusätzlich
+ab, wenn sein Port belegt ist — damit wird kein fremder/alter Server gemessen.

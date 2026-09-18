@@ -17,9 +17,25 @@ test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: CPU-Me
  */
 
 async function openStudio(page: Page): Promise<void> {
-  await page.goto('/');
+  // Frische Navigation statt `page.reload()`: Vite optimiert beim ersten
+  // Aktivieren aller Plugins Abhaengigkeiten nach und laedt die Seite dabei
+  // selbst neu - ein zusaetzlicher reload() bricht dann mit 'net::ERR_ABORTED'
+  // ab und die Messung laeuft in den Timeout (real gesehen 2026-09-18). Mit
+  // einer kurzen Wiederholung ist die Messung reproduzierbar.
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await page.goto('/', { waitUntil: 'load' });
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      await page.waitForTimeout(1_000);
+    }
+  }
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  // Tolerant gegen den Vite-Dep-Optimierungs-Reload: nach einem solchen Reload
+  // steht wieder der Startbildschirm da, sonst ist das Studio schon offen.
+  const startButton = page.getByLabel('audioMONASTRY starten');
+  if ((await startButton.count()) > 0) await startButton.first().click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 30_000 });
 }
 
@@ -66,7 +82,12 @@ test('P2-4 Performance-Prüfpunkt: CPU < 70 % unter Studio-Last', async ({ page,
   // Dependencies neu und lädt die Seite dabei neu. Deshalb einmal voll durchlaufen,
   // dann neu laden und erst die zweite Runde messen.
   await prepareStudio(page);
-  await page.reload();
+  // Zweite Runde OHNE erneute Navigation: genau der zweite `page.goto`/`reload`
+  // kollidierte mit dem Vite-Reload und brach ab (ERR_ABORTED, Timeout - real
+  // gesehen 2026-09-18). Die Messung braucht nur den warmen Zustand; openStudio
+  // ist tolerant, falls Vite zwischenzeitlich selbst neu geladen hat.
+  await page.waitForLoadState('load');
+  await page.waitForTimeout(800);
   const pluginCount = await prepareStudio(page);
   navLog.length = 0; // Baseline für die Messung: danach darf keine Navigation mehr kommen.
   const navBaseline = navLog.length;
