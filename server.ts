@@ -28,7 +28,8 @@ import { registerUploadRoutes } from './server/routes/uploadRoutes.ts';
 import { registerOpsRoutes } from './server/routes/opsRoutes.ts';
 import { registerAgentRoutes } from './server/routes/agentRoutes.ts';
 import { ResumableAgentRunner } from './src/core/ai/agentRuns';
-import { moaAgent } from './src/core/ai/MoaAgent';
+import { MoaAgent } from './src/core/ai/MoaAgent';
+import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -39,6 +40,7 @@ import { LatencyHistogram } from './src/core/observability/latencyHistogram';
 import { createSessionRuntime, DEFAULT_PLUGIN_LOCK_TTL_MS } from './server/sessionRuntime.ts';
 import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
 import { createFleetWiring } from './server/fleetWiring.ts';
+import { catalogFromMcpTools, createMcpAgentExecutor } from './server/mcpAgentExecutor.ts';
 
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
 const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
@@ -496,7 +498,24 @@ registerAiRoutes(app, { metrics, fleetTargets });
 // AI-P1-003 P5 im Einsatz, siehe VoiceControlService) - hier kommt der
 // persistente Lauf darum herum: `ResumableAgentRunner` schreibt jeden Lauf auf
 // Platte, bricht kooperativ ab und setzt beim Originalplan fort.
-registerAgentRoutes(app, { runner: new ResumableAgentRunner({ agent: moaAgent }) });
+// Serverseitige Laeufe planen gegen die MCP-WERKZEUGE und fuehren sie auch aus
+// (AI-P1-006): der Server hat keine Plugin-Registry (die lebt im Browser), dafuer
+// aber echte Werkzeuge - session.getState, runtime.status, fleet.status,
+// models.list, sample.search. Der Katalog wird aus der Werkzeugliste abgeleitet,
+// deshalb kann der Planer nichts planen, was nicht ausfuehrbar ist.
+const agentAllowExecutionTools = process.env.AI_AGENT_ALLOW_EXECUTION_TOOLS === '1';
+const agentPlanCatalog = catalogFromMcpTools(aiOrchestrator.mcp.listTools(), {
+  allowExecution: agentAllowExecutionTools,
+});
+const serverAgent = new MoaAgent(
+  undefined, // Standard-LLM-Pfad (clientLlm -> llmRouter)
+  createMcpAgentExecutor({ mcp: aiOrchestrator.mcp, allowExecution: agentAllowExecutionTools }),
+  undefined, // Kostenschaetzung (Default)
+  undefined, // Zeitlimit (Default/Env)
+  agentPlanCatalog,
+);
+console.log(`[agent] serverseitige Werkzeuge: ${agentPlanCatalog || '(keine)'}`);
+registerAgentRoutes(app, { runner: new ResumableAgentRunner({ agent: serverAgent }) });
 
 // ARCH-P2-002: Die Stem-Separation liegen in server/routes/stemRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten

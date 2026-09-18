@@ -102,6 +102,16 @@ type CompletionFn = (req: LlmRequest) => Promise<LlmCompletion>;
 /** Minimale Schnittstelle für die Plugin-Steuerung (VoiceControlService erfüllt sie). */
 export interface IMoaCommandExecutor {
   execute(userId: string, command: string): Promise<{ handled: boolean; pluginId: string; error?: string }>;
+  /**
+   * AI-P1-006: Meldet, dass dieses Kommando NUR LIEST.
+   *
+   * Das WRITE-Gate ist fail-safe: es behandelt jedes unbekannte Kommando als
+   * schreibend, weil der Server nicht wissen kann, was ein Plugin damit tut.
+   * Ein Executor WEISS es (z. B. MCP-Werkzeuge tragen `permission: READ`) -
+   * deshalb kann er es hier belegen. Fehlt die Methode, bleibt es beim
+   * fail-safe Verhalten (Schritt gilt als WRITE).
+   */
+  isReadOnly?(pluginId: string, command: string): boolean;
   executePluginCommand?(
     userId: string,
     pluginId: string,
@@ -226,13 +236,27 @@ export class MoaAgent {
     private voice: IMoaCommandExecutor = voiceControlService,
     /** AI-P1-006: Kostenschaetzung (injizierbar fuer Tests). */
     private estimateCost: (req: LlmRequest, res: LlmCompletion) => number = estimateLlmCostUsd,
-    /** AI-P1-006: Zeitlimit je Planungs-/Korrekturaufruf (0 = kein Limit). */
-    private planTimeoutMs: number = DEFAULT_PLAN_TIMEOUT_MS,
+    /**
+     * AI-P1-006: Zeitlimit je Planungs-/Korrekturaufruf.
+     * `0` (Default) heisst: `AI_AGENT_PLAN_TIMEOUT_MS` lesen, sonst
+     * `DEFAULT_PLAN_TIMEOUT_MS`. Ein fester Default hier machte die Env
+     * wirkungslos - live belegt: mit `AI_AGENT_PLAN_TIMEOUT_MS=240000` brach ein
+     * Kaltstart des Brain-Endpoints trotzdem nach 45 s ab.
+     */
+    private planTimeoutMs: number = 0,
+    /**
+     * AI-P1-006: Katalog fuer den Plan-Prompt. Ohne Angabe der Plugin-Katalog
+     * (Client-Pfad). Serverseitige Laeufe setzen hier die MCP-Werkzeuge ein -
+     * dann plant das Modell nur Dinge, die der Server auch ausfuehren kann.
+     */
+    private planCatalog?: string,
   ) {}
 
   /** Plant eine Aufgabe mit DeepSeek V4 Flash (automatischer Free-Fallback). */
   async plan(task: string, pluginId = '', context = '', onCost?: (usd: number) => void): Promise<MoaPlan> {
-    const catalog = moaCommandCatalog();
+    const catalog = this.planCatalog && this.planCatalog.trim().length > 0
+      ? this.planCatalog
+      : moaCommandCatalog();
     const role = pluginId ? moaSystemPromptForPlugin(pluginId) : moaSystemPromptForPlugin('');
     const timeoutMs = Number.isFinite(this.planTimeoutMs) && this.planTimeoutMs > 0
       ? this.planTimeoutMs
@@ -327,7 +351,10 @@ export class MoaAgent {
       }
       // AI-P1-003 P5: Bestätigungspflicht ab WRITE. Ohne Bestätigung wird der
       // Schritt nicht ausgeführt – fail-safe: unbekannte Kommandos sind WRITE.
-      if (isWriteCommand(step.command) && !(await confirmWrite?.(step))) {
+      // AI-P1-006: Weiss der Executor, dass das Kommando nur liest (MCP-Werkzeug
+      // mit permission READ), braucht es keine Schreib-Bestätigung.
+      const readOnlyByExecutor = this.voice.isReadOnly?.(step.pluginId, step.command) === true;
+      if (!readOnlyByExecutor && isWriteCommand(step.command) && !(await confirmWrite?.(step))) {
         results.push({ step, handled: false, pluginId: step.pluginId, error: 'WRITE nicht bestätigt' });
         continue;
       }

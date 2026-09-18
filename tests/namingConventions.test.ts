@@ -33,6 +33,7 @@ const ALLOWED: Record<string, string> = {
   'MASTERTODOENDE.json': 'Historische Notizen (Audit: Vergangenes wird nicht umgeschrieben).',
   'docs/HETZNER_DEPLOY.md': 'Migrationsliste alt -> neu + Betreiber-Schritte (nennt die Altwerte bewusst).',
   'tests/portalWorkerSnapshots.test.ts': 'Fixtures mit Alt-Namen + Tests der Kompatibilitaet.',
+  'tests/fleetWiring.test.ts': 'Fixture einer Bestandsflotte (Alt-Namen in der Fleet-Map) + Kompatibilitaetstest.',
   'services/portal-worker/src/index.js': 'LEGACY_NAME_PREFIX / LEGACY_SNAPSHOT_PREFIXES (Bestandsressourcen).',
   'scripts/hetzner/fleet-names.sh': 'LEGACY_FLEET_PREFIX (Aufloesung des tatsaechlichen Knotennamens).',
   'scripts/hetzner/fleet-status.sh': 'Altname im case-Muster des Health-Checks.',
