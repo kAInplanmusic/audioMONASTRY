@@ -5,6 +5,7 @@ import {
   UPLOAD_KINDS, UploadKind, validateAudioFile, tagsFrom, localSampleId,
 } from '../utils/sampleUpload';
 import { persistFile } from '../utils/opfs';
+import { uploadFileInChunks } from '../utils/chunkedUpload';
 import type { AudioSample } from '../data/samples';
 
 type UploadStatus = 'idle' | 'uploading' | 'ok' | 'local' | 'error';
@@ -23,6 +24,8 @@ export const SampleUploadPanel: React.FC = () => {
   const [message, setMessage] = useState('');
   const [kind, setKind] = useState<UploadKind>('sample');
   const [tagsInput, setTagsInput] = useState('');
+  // FEAT-P3-003: sichtbarer Fortschritt des Chunk-Uploads (0..100).
+  const [progress, setProgress] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -39,22 +42,27 @@ export const SampleUploadPanel: React.FC = () => {
       const name = file.name.replace(/\.[^.]+$/, '') || 'Upload';
       const tags = tagsFrom(tagsInput, kind, validation.ext);
 
-      // Cloud-Pfad: multipart → /api/upload/sample (Scan + R2 + Supabase).
+      // Cloud-Pfad: CHUNKED Upload (FEAT-P3-003). Bricht der Upload ab,
+      // findet der naechste Versuch die Sitzung ueber den Datei-Fingerabdruck
+      // wieder und sendet nur die fehlenden Chunks - statt alles erneut.
       try {
-        const form = new FormData();
-        form.append('file', file);
-        form.append('kind', kind);
-        form.append('name', name);
-        form.append('tags', tags.join(','));
-        const resp = await fetch('/api/upload/sample', { method: 'POST', body: form });
-        const data = await resp.json().catch(() => ({})) as { status?: string; sample?: AudioSample; message?: string };
-        if (resp.ok && data.status === 'ok' && data.sample) {
+        setProgress(0);
+        const data = await uploadFileInChunks(file, {
+          kind,
+          fields: { kind, name, tags: tags.join(',') },
+          onProgress: ({ percent, resumed }) => {
+            setProgress(percent);
+            if (resumed) setMessage(`Fortsetzen bei ${percent} % (bereits übertragene Teile werden genutzt) …`);
+          },
+        }) as { status?: string; sample?: AudioSample; message?: string };
+        if (data.status === 'ok' && data.sample) {
           addSample(data.sample);
           setStatus('ok');
-          setMessage(`Cloud: ${data.sample.name} erkannt, getaggt und einsortiert.`);
+          setProgress(100);
+          setMessage(`Cloud: ${data.sample.name} erkannt, getaggt und einsortiert (chunked).`);
           return;
         }
-        throw new Error(data.message || `Server antwortete ${resp.status}`);
+        throw new Error(data.message || 'Server meldete keinen Erfolg');
       } catch (cloudError) {
         // Lokaler Fallback: OPFS + Sample-Liste (Cloud optional).
         const id = localSampleId(kind, name);
@@ -118,13 +126,18 @@ export const SampleUploadPanel: React.FC = () => {
           className="text-[10px] text-neutral-400 file:mr-2 file:px-2 file:py-1 file:rounded file:border file:border-neutral-700 file:bg-neutral-900 file:text-cyan-300 file:text-[10px]"
         />
       </div>
+      {status === 'uploading' && (
+        <div className="mt-2 h-1 w-full bg-neutral-800 rounded overflow-hidden" role="progressbar" aria-label="Upload-Fortschritt" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
+          <div className="h-full bg-cyan-400 transition-[width] duration-200" style={{ width: `${progress}%` }} />
+        </div>
+      )}
       {message && (
         <p className={`mt-2 text-[9px] font-mono leading-snug ${status === 'error' ? 'text-red-400' : status === 'local' ? 'text-amber-300' : 'text-emerald-300'}`}>
           {message}
         </p>
       )}
       <p className="mt-1 text-[8px] text-neutral-600 font-mono">
-        Cloud (R2+Supabase) mit Scan · fällt sie aus, wird lokal in OPFS gespeichert.
+        Cloud (R2+Supabase) mit Scan, in Chunks mit Wiederaufnahme · fällt sie aus, wird lokal in OPFS gespeichert.
       </p>
     </div>
   );

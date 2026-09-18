@@ -28,6 +28,8 @@
 | `VISION_ARTIFACT_DIR` | `VISION_ARTIFACT_DIR` | .env | nein | system temp | Pfad | server/visionArtifacts.ts | nein |
 | `VITE_ENABLE_LOCAL_EMBEDDINGS` | `VITE_ENABLE_LOCAL_EMBEDDINGS` | Vite | nein | – | boolean | src/lib/cloudConfig.ts | nein |
 | `SCRAPE_TOKEN` | `SCRAPE_TOKEN` | .env | nein | – | 16+ Zeichen empfohlen | server.ts (Lese-Metriken), Prometheus | **ja** |
+| `UPLOAD_CHUNK_DIR` | `UPLOAD_CHUNK_DIR` | .env | nein | `<tmp>/audiomonastry-uploads` | Pfad | server/chunkedUpload.ts (Teil-Uploads) | nein |
+| `UPLOAD_CHUNK_RATE_LIMIT_MAX` | dito | .env | nein | `240` | Nummer/min | server.ts (eigener Limiter fuer Chunk-Uploads) | nein |
 | `ALERT_WEBHOOK_TOKEN` | `ALERT_WEBHOOK_TOKEN` | .env | nein | – | **16+ Zeichen erzwungen** (`length >= 16`, sonst inaktiv) | server.ts (Maschinen-Endpunkt `/api/alerts/webhook`) | **ja** |
 | `CRITICAL_WEBHOOK` | `CRITICAL_WEBHOOK` | .env/Compose | nein | App-Route | URL | docker-compose.monitoring.yml (Alertmanager-Direktroute fuer `severity="critical"`) | **ja** |
 | `DISCORD_WEBHOOK` / `SLACK_WEBHOOK` | dito | .env | nein | – | URL | server.ts `/api/alerts/webhook` (Weiterleitung) | **ja** |

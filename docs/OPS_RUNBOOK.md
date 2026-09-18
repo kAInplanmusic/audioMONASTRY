@@ -231,3 +231,55 @@ Kostenserie (`increase(...[1h]) > 10`) – er ist konfiguriert, aber nicht
 kuenstlich ausgeloest (Kosten lassen sich nicht serioes simulieren, ohne echte
 Provider-Calls zu bezahlen). Node-/cadvisor-Alarme brauchen die beiden
 Host-Exporter, die im lokalen Nachweis nicht gestartet wurden.
+
+## 10. Upload-Resume/Chunking (FEAT-P3-003 — 2026-09-18 live durchgespielt)
+
+**Ziel:** Uploads laufen in Chunks und setzen nach einem Abbruch an der
+Abbruchstelle fort, statt von vorn zu beginnen.
+
+**Routen** (alle unter der Studio-Auth; `/api/upload/sample` bleibt unveraendert
+der Ein-Request-Weg):
+
+```
+POST /api/upload/chunk/init        {filename,size,chunkSize,contentType,fields,fingerprint}
+PUT  /api/upload/chunk/:id/:index  (roher Chunk-Body)
+GET  /api/upload/chunk/:id         -> receivedChunks/missingChunks/nextIndex
+POST /api/upload/chunk/:id/complete
+```
+
+**Drei Eigenschaften, die den Unterschied machen:**
+
+1. *Positioniertes Schreiben + Schreibstand in den Metadaten.* Ein Chunk wird an
+   seinen Offset geschrieben (idempotent, auch out-of-order). Der Schreibstand
+   liegt in `<id>.json` - bewusst NICHT aus der Dateigroesse abgeleitet: die
+   Datei waechst spaerlich, und eine erste Fassung, die sie vorab auf Zielgroesse
+   stutzte, zaehlte deshalb alle Chunks als vorhanden (der Test hat es
+   aufgedeckt).
+2. *Sitzung auf Platte.* Damit ueberlebt die Wiederaufnahme auch einen
+   Serverneustart/Deploy - haelt man es nur im Speicher, ist nach jedem Deploy
+   alles weg. `sweep()` verwirft nie fortgesetzte Uploads nach 24 h
+   (`DEFAULT_UPLOAD_TTL_MS`), sonst waechst die Platte zu.
+3. *Eigener Limiter.* Die Kostenbremse fuer `/api/upload` steht bei 10
+   Requests/Minute; ein Chunk-Upload ist zwangslaeufig eine Serie und lief live
+   nach 20 Chunks in 429. Chunks laufen deshalb unter
+   `UPLOAD_CHUNK_RATE_LIMIT_MAX` (Default 240/min), der Scan-/Ablage-Schritt
+   weiterhin unter der Kostenbremse.
+
+**Live-Nachweis (5 292 078 Bytes WAV, 21 Chunks à 256 kB):**
+
+| Schritt | Ergebnis |
+|---|---|
+| init | `resumed:false`, 21 fehlende Chunks |
+| Chunk 0 + 2 senden, dann **Serverprozess beendet** | `receivedChunks:[0,2]`, `nextIndex:1` |
+| init nach dem Neustart (gleicher Fingerabdruck) | `resumed:true`, **gleiche uploadId**, `receivedChunks:[0,2]`, `nextIndex:1` |
+| nur die fehlenden Chunks (1, 3–20) | `complete:true`, `receivedBytes: 5292078` |
+| sha256 der zusammengesetzten Datei vs. Original | `337dafc0…67ae` = **byte-identisch** |
+| complete | lief durch die GEMEINSAME Pipeline (Scan/R2/Supabase); R2 scheitert am bekannten Legacy-Token-Signaturfehler, `chunked.sha256` belegt die Zusammensetzung |
+
+**Tests:** `tests/chunkedUpload.test.ts` (12: Chunk-Arithmetik, halb
+geschriebener Chunk zaehlt nicht, Idempotenz, Resume nach "Neustart", TTL,
+Metadaten-Robustheit), `tests/uploadChunkRoutes.test.ts` (6: Abnahme ueber die
+echten Routen inkl. byte-identischer Assemblierung, unvollstaendig -> 409,
+gemischte Validierung mit dem Multipart-Weg, Limiter-Trennung),
+`tests/chunkedUploadClient.test.ts` (7: nur fehlende Chunks senden, 429-Backoff,
+4xx ohne Retry, Abbruchsignal).

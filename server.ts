@@ -486,12 +486,36 @@ app.use('/api', async (req, res, next) => {
 const studioKeyGenerator = (req: any): string =>
   studioTokenFromRequest(req) || ipKeyGenerator(req.ip);
 
+// FEAT-P3-003: Ein Chunk-Upload ist per Definition eine REQUEST-SERIE. Live
+// belegt (2026-09-18): der allgemeine Limiter (60/min) und besonders der
+// "expensiv"-Limiter (10/min) haben einen 5-MB-Upload nach 20 Chunks mit 429
+// beendet - ein 100-MB-Upload haette nie durchlaufen koennen. Chunks sind
+// ausserdem I/O (kein KI-/Cloud-Aufwand), die Kostenbremse gilt weiter fuer den
+// Scan-/Ablage-Schritt. Deshalb: eigene Ausnahme vom allgemeinen Limit plus
+// eigener Limiter mit eigenem Budget fuer die Chunk-Routen.
+const isChunkUploadRequest = (req: { originalUrl?: string; url?: string }): boolean =>
+  String(req.originalUrl || req.url || '').includes('/api/upload/chunk');
+
+const UPLOAD_CHUNK_RATE_LIMIT_MAX = Number(process.env.UPLOAD_CHUNK_RATE_LIMIT_MAX || 240);
+
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
   max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute/IP
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
+  keyGenerator: studioKeyGenerator,
+  skip: isChunkUploadRequest,
+});
+
+// Chunk-Stream: eigenes, groesseres Budget (Default 240/min = 4 Chunks/s bei
+// 4-MB-Chunks ~ 1 GB/min). Der Client wiederholt 429 mit Backoff.
+const uploadChunkLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: UPLOAD_CHUNK_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many upload chunks, please slow down.', code: 'UPLOAD_CHUNK_RATE_LIMIT' },
   keyGenerator: studioKeyGenerator,
 });
 
@@ -508,7 +532,10 @@ const expensiveLimiter = rateLimit({
 });
 
 app.use('/api', apiLimiter);
-app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload'], expensiveLimiter);
+// `/api/upload/sample` (Scan + Ablage) bleibt unter der Kostenbremse; die
+// Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.
+app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload/sample'], expensiveLimiter);
+app.use('/api/upload/chunk', uploadChunkLimiter);
 
 // ARCH-P2-002: Die Betriebs-/Telemetrie-Routen liegen in server/routes/opsRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten
