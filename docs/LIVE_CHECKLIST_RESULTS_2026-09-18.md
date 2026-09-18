@@ -95,18 +95,20 @@ jedes Maskieren wirkungslos. Konsequenz: die Standbild-Baselines vergleichen jet
 `fullPage`. Zusätzlich: Live-Regionen tragen jetzt `data-live-value`
 (Mixer-Meter, Perf-Anzeigen im DSP-Terminal, FX-Scope), damit Masken greifen.
 
-**Gemessenes Ergebnis (je drei aufeinanderfolgende Läufe):**
-- Läufe 1-3: Start-Screen + Studio-Baselines **immer grün**.
-- P1-2 (18 Plugin-Ansichten in EINEM Test): 2 Läufe grün, 1 Lauf mit Abweichung in
-  `syntisampler` (asynchron ladender Rack-Inhalt), 1 früherer Lauf mit
-  Renderer-Abbruch bei zu langen Wartezeiten (daraufhin gestrafft: 6×250 ms statt
-  12×350 ms).
+**Gemessenes Ergebnis (drei aufeinanderfolgende Läufe, `npx playwright test tests/e2e/visual.spec.ts`):**
+alle drei Läufe **3/3 grün** (Start-Screen, Studio-Teilflächen, P1-2 mit 18 Ansichten).
+Zuvor: 3 passed / 1 failed / 2 failed bzw. ein Renderer-Abbruch.
 
-**Rest (offen, konkret):** `syntisampler` braucht dieselbe gezielte Wartezeit wie
-das Instrument-Rack (auf seine asynchrone Liste warten) — oder P1-2 wird in einen
-Test **je Plugin** zerlegt, damit eine einzelne Abweichung nicht alle 18 Ansichten
-verdeckt. Beides ist im Mastertodo als Rest von `VISUAL-P1-010` notiert; bewusst
-**nicht** per `--update-snapshots` „grün gestellt".
+Der letzte Flake war `syntisampler`: dort läuft der **Step-Sequencer** weiter
+(`audioEngine.addStepListener` → `curStep`), der laufende Step ist also ein
+Live-Wert. Er trägt jetzt `data-live-value="step-sequencer"` und wird aus den
+visuellen Baselines ausgeblendet — dieselbe Behandlung wie Mixer-Meter, Perf-Anzeigen
+und FX-Scope. Zusätzlich wartet P1-2 generisch auf eine stabile Rack-Höhe (asynchron
+ladende Listen), mit gestrafften Wartezeiten (6×250 ms) und 420 s Testbudget.
+
+Reproduzierbar bleibt alles über:
+`PROOF_PORT`-freie Kommandos siehe Abschnitt E, plus
+`node scripts/visual-stability-probe.mjs` (misst, ob eine Aufnahme stabil ist).
 
 ## E · Wiederholbare Kommandos
 

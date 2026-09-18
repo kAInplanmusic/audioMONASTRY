@@ -176,7 +176,9 @@ export const SamplerTerminal = React.memo(() => {
       </div>
 
       {/* NEW-MONK-2: Step-Sequencer für das gewählte Pad (16/32, Bank A/B) */}
-      <div className="px-4 pb-3">
+      {/* VISUAL-P1-010: enthält den laufenden Step (curStep) - data-live-value haelt
+          ihn aus visuellen Baselines heraus, weil er sich mit dem Transport aendert. */}
+      <div className="px-4 pb-3" data-live-value="step-sequencer">
         <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-[8px] font-mono tracking-[0.25em] text-indigo-500">
             STEP SEQ · PAD {sel !== null ? String(sel + 1).padStart(2, '0') : '—'} · BANK {bank} · {curStep + 1}/{seqCount}
