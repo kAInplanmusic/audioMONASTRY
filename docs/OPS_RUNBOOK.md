@@ -283,3 +283,69 @@ echten Routen inkl. byte-identischer Assemblierung, unvollstaendig -> 409,
 gemischte Validierung mit dem Multipart-Weg, Limiter-Trennung),
 `tests/chunkedUploadClient.test.ts` (7: nur fehlende Chunks senden, 429-Backoff,
 4xx ohne Retry, Abbruchsignal).
+
+## 11. aiMONK-Agent-Lauf (AI-P1-006 — planen → ausführen → prüfen)
+
+**Routen** (unter der Studio-Auth; Start/Fortsetzen sind teuer, Statusabfragen nicht):
+
+```
+POST /api/ai/agent/runs              {task, maxCorrections?, allowWrite?, context?}  -> 202 {run}
+GET  /api/ai/agent/runs              -> letzte 20 Läufe (Status, Schritte, Kosten)
+GET  /api/ai/agent/runs/:runId       -> Zustand eines Laufs
+POST /api/ai/agent/runs/:runId/cancel
+POST /api/ai/agent/runs/:runId/resume
+```
+
+Der Loop selbst ist `MoaAgent.run()` (planen → WRITE-Gate → ausführen → prüfen →
+korrigieren, seit AI-P1-003 P5 im Einsatz). Darum herum liegt
+`ResumableAgentRunner`:
+
+- **Lauf auf Platte** (`AI_AGENT_RUN_DIR`, Default `<tmp>/audiomonastry-agent-runs`):
+  jeder Schritt wird weggeschrieben. Damit überlebt ein Abbruch einen
+  Neustart/Deploy — im Speicher wäre „Wiederaufnahme" nur solange wahr, wie der
+  Prozess lebt.
+- **Abbruch** ist kooperativ: die Marke wird vor jedem Schritt geprüft, es läuft
+  kein halber Schritt weiter. `cancel` wartet den Stopp ab und liefert den
+  **wirklich** abgebrochenen Zustand (sonst sähe der Aufrufer noch „running").
+- **Wiederaufnahme** benutzt den **Originalplan** und führt nur die offenen
+  Schritte aus — kein zweiter Vollauf, keine doppelten Planungskosten. Wurde der
+  Lauf während der Planung abgebrochen (noch kein Plan), plant er neu: es ist ja
+  nichts ausgeführt worden.
+- **Kosten**: `cost.totalUsd` mit `planningUsd`/`correctionsUsd` und `estimated:true`.
+  Planung/Korrektur sind LLM-Aufrufe, die Ausführung sind lokale Kommandos und
+  kostet nichts. Die Schätzung rechnet über die Zeichenzahl (`AI_AGENT_COST_PER_1K_USD`);
+  der Router liefert keinen Preis. **Kein hartes Budget-Limit pro Lauf** — die
+  Grenze zieht die Kostenbremse (`AI_RATE.expensiveMax`) und der Alarm
+  `SamplemonkAiCostBudget` (siehe §9).
+- **Schreibzugriffe sind opt-in**: ohne `allowWrite:true` lehnt das WRITE-Gate
+  jeden Schreib-Schritt ab (fail-safe, unbekannte Kommandos gelten als WRITE).
+  Die UI startet ohne Freigabe, also nur lesende Schritte.
+
+**Zwei live gefundene Betriebsfehler (2026-09-18, beide behoben):**
+
+1. *Statusabfrage lag hinter der Kostenbremse.* Die Agent-Routen liegen unter
+   `/api/ai` (10 Requests/Minute). Die UI fragt einen laufenden Lauf aber
+   regelmäßig ab — nach wenigen Polls kam `429`. Statusabfragen sind jetzt von
+   der Kostenbremse ausgenommen und haben ein eigenes Budget
+   (`AI_AGENT_RATE_LIMIT_MAX`, Default 240/min); das **Starten/Fortsetzen**
+   bleibt unter der Kostenbremse.
+2. *Stiller Leer-Erfolg.* Antwortete das Modell nur mit Denktext statt JSON,
+   war der Plan leer — der Lauf meldete trotzdem `succeeded: true` bei null
+   Schritten. Jetzt gilt ein leerer Plan als Fehlschlag, löst die
+   Korrekturrunde aus („antworte NUR mit dem JSON-Array"), und ein Lauf ohne
+   ausgeführten Schritt ist nie erfolgreich.
+
+**Weiteres live gefundenes Problem (offen, separat erfasst):** der LLM-Weg ist
+zurzeit nicht benutzbar: der lokale Brain-Provider (Worker) lehnt das Payload ab
+(`Job input must contain one of: openai_input (+openai_route), route (+body), or
+prompt/messages.`), und der externe Provider (`AI_ALLOW_EXTERNAL_LLM=true`,
+DeepSeek) antwortet nicht (Zeitlimit greift). Deshalb zeigt der Agent-Lauf live
+`failed` mit `Zeitlimit überschritten` bzw. den Worker-Fehler — **die Mechanik ist
+davon unabhängig** und durch die Tests abgedeckt. Neu: `AI_AGENT_PLAN_TIMEOUT_MS`
+(Default 45 s) verhindert, dass ein hängender Aufruf den Lauf endlos „running"
+stehen lässt.
+
+**UI:** `src/components/AgentRunPanel.tsx`, eingebunden in `MoaAssistant` (jedes
+Plugin-Terminal mit MOA-Zeile): Auftrag starten, Status/Phase, Schritte mit
+Haken/Fehler, Kostensumme sowie **Abbrechen**/**Fortsetzen**. Der Panel lädt beim
+Öffnen den letzten Lauf (der Lauf liegt serverseitig).

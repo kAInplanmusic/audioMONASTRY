@@ -13,6 +13,9 @@ const RESULT: MoaRunResult = {
   steps: [],
   corrections: 0,
   succeeded: true,
+  costUsd: 0,
+  cost: { totalUsd: 0, planningUsd: 0, correctionsUsd: 0, estimated: true },
+  cancelled: false,
 };
 
 function makeService(fakeLoop: AiAgentLoop): VoiceControlService {

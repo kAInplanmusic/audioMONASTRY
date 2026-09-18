@@ -46,6 +46,9 @@ describe('AiAgentLoop (Einstieg)', () => {
       steps: [],
       corrections: 0,
       succeeded: true,
+      costUsd: 0,
+      cost: { totalUsd: 0, planningUsd: 0, correctionsUsd: 0, estimated: true },
+      cancelled: false,
     }));
     const loop = new AiAgentLoop({ run } as unknown as never);
 
@@ -73,6 +76,9 @@ describe('AiAgentLoop (Einstieg)', () => {
       steps: [],
       corrections: 0,
       succeeded: true,
+      costUsd: 0,
+      cost: { totalUsd: 0, planningUsd: 0, correctionsUsd: 0, estimated: true },
+      cancelled: false,
     }));
     const loop = new AiAgentLoop({ run } as unknown as never);
     await loop.runTask('Status prüfen');

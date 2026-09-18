@@ -27,6 +27,9 @@ import { registerStemRoutes, getStemActiveJobs } from './server/routes/stemRoute
 import { registerAdminRoutes } from './server/routes/adminRoutes.ts';
 import { registerUploadRoutes } from './server/routes/uploadRoutes.ts';
 import { registerOpsRoutes } from './server/routes/opsRoutes.ts';
+import { registerAgentRoutes } from './server/routes/agentRoutes.ts';
+import { ResumableAgentRunner } from './src/core/ai/agentRuns';
+import { moaAgent } from './src/core/ai/MoaAgent';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
@@ -496,6 +499,29 @@ const studioKeyGenerator = (req: any): string =>
 const isChunkUploadRequest = (req: { originalUrl?: string; url?: string }): boolean =>
   String(req.originalUrl || req.url || '').includes('/api/upload/chunk');
 
+// AI-P1-006: Gleiche Ueberlegung fuer die Agent-Laeufe. Live belegt
+// (2026-09-18): ein laufender Lauf wird vom Client regelmaessig abgefragt - das
+// Status-LESEN landete hinter der Kostenbremse (10/min) und lief nach wenigen
+// Polls in 429, obwohl es nichts kostet. Deshalb: eigener Limiter fuer die
+// Agent-Routen; die teuren SCHREIB-Aufrufe (Lauf starten/fortsetzen) bleiben
+// zusaetzlich unter der Kostenbremse.
+const isAgentRequest = (req: { originalUrl?: string; url?: string }): boolean =>
+  String(req.originalUrl || req.url || '').includes('/api/ai/agent/runs');
+/** Lesender Zugriff auf einen Lauf: kostet nichts, darf nicht gebremst werden. */
+const isAgentReadRequest = (req: { originalUrl?: string; url?: string; method?: string }): boolean =>
+  String(req.method || '').toUpperCase() === 'GET' && isAgentRequest(req);
+
+const AGENT_RATE_LIMIT_MAX = Number(process.env.AI_AGENT_RATE_LIMIT_MAX || 240);
+
+const agentLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: AGENT_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many agent requests, please slow down.', code: 'AGENT_RATE_LIMIT' },
+  keyGenerator: studioKeyGenerator,
+});
+
 const UPLOAD_CHUNK_RATE_LIMIT_MAX = Number(process.env.UPLOAD_CHUNK_RATE_LIMIT_MAX || 240);
 
 const apiLimiter = rateLimit({
@@ -505,7 +531,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
   keyGenerator: studioKeyGenerator,
-  skip: isChunkUploadRequest,
+  skip: (req) => isChunkUploadRequest(req) || isAgentRequest(req),
 });
 
 // Chunk-Stream: eigenes, groesseres Budget (Default 240/min = 4 Chunks/s bei
@@ -529,6 +555,8 @@ const expensiveLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many expensive requests, please try again later.' },
   keyGenerator: studioKeyGenerator,
+  // Statusabfragen eines Laufs kosten nichts (nur das Starten/Fortsetzen).
+  skip: isAgentReadRequest,
 });
 
 app.use('/api', apiLimiter);
@@ -536,6 +564,7 @@ app.use('/api', apiLimiter);
 // Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.
 app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload/sample'], expensiveLimiter);
 app.use('/api/upload/chunk', uploadChunkLimiter);
+app.use('/api/ai/agent/runs', agentLimiter);
 
 // ARCH-P2-002: Die Betriebs-/Telemetrie-Routen liegen in server/routes/opsRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten
@@ -579,6 +608,13 @@ registerCloudRoutes(app);
 // Die Registrierung bleibt an dieser Stelle, damit die Reihenfolge relativ zu den
 // Middleware-/Rate-Limit-Ketten unveraendert ist.
 registerAiRoutes(app, { metrics, fleetTargets });
+
+// AI-P1-006: aiMONK-Agent-Loop (planen -> ausfuehren -> pruefen) mit Abbruch,
+// Wiederaufnahme und Kostenausweis. Der Loop selbst ist `MoaAgent.run` (seit
+// AI-P1-003 P5 im Einsatz, siehe VoiceControlService) - hier kommt der
+// persistente Lauf darum herum: `ResumableAgentRunner` schreibt jeden Lauf auf
+// Platte, bricht kooperativ ab und setzt beim Originalplan fort.
+registerAgentRoutes(app, { runner: new ResumableAgentRunner({ agent: moaAgent }) });
 
 // ARCH-P2-002: Die Stem-Separation liegen in server/routes/stemRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten

@@ -4,6 +4,7 @@ import { moaAgent, type MoaStep } from '../core/ai/MoaAgent';
 import { moaHistory } from '../core/ai/MoaHistory';
 import { storageGetJson, storageSetJson } from '../utils/storage';
 import { moaTaskForPlugin } from '../utils/prompts';
+import { AgentRunPanel } from './AgentRunPanel';
 
 interface MoaAssistantProps {
   pluginId: string;
@@ -122,6 +123,9 @@ export function MoaAssistant({ pluginId, placeholder = 'MOA-Aufgabe…', onActiv
       {log.length > 0 && (
         <div className="text-[9px] font-mono text-neutral-500 break-words">{log.join(' · ')}</div>
       )}
+      {/* AI-P1-006: mehrstufiger Agent-Lauf (planen -> ausfuehren -> pruefen) mit
+          Ergebnis, Kosten und Abbruch/Wiederaufnahme - serverseitig gefuehrt. */}
+      <AgentRunPanel />
     </div>
   );
 }

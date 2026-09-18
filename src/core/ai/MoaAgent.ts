@@ -45,6 +45,23 @@ export interface MoaRunOptions {
   /** Zusätzlicher Kontext (Session-/Projektzustand) für den Planer. */
   context?: string;
   /**
+   * AI-P1-006: Abbruch. Wird vor jedem Schritt und vor jeder Korrekturrunde
+   * geprueft - der Lauf endet dann sauber mit `cancelled:true` und dem bisherigen
+   * Protokoll, statt mitten in einer Ausfuehrung abzureissen.
+   */
+  signal?: AbortSignal;
+  /**
+   * AI-P1-006: Wiederaufnahme. Schritte vor `startIndex` gelten als erledigt und
+   * werden NICHT erneut ausgefuehrt; ihre Ergebnisse kommen aus `priorResults`.
+   */
+  startIndex?: number;
+  priorResults?: MoaStepResult[];
+  /**
+   * AI-P1-006: Rueckmeldung nach jedem ausgeführten Schritt (fuer die
+   * persistente Fortsetzung: der Aufrufer schreibt den Stand weg).
+   */
+  onStep?: (info: { index: number; result: MoaStepResult; executedCount: number }) => void | Promise<void>;
+  /**
    * WRITE-Bestätigungspflicht: wird vor jedem Schreib-Schritt gefragt.
    * Fehlt die Funktion oder liefert sie `false`, wird der Schritt NICHT
    * ausgeführt und als Fehler `WRITE nicht bestätigt` protokolliert.
@@ -54,11 +71,30 @@ export interface MoaRunOptions {
   maxCorrections?: number;
 }
 
+/**
+ * AI-P1-006: Kosten eines Laufs. Sie entstehen in der PLANUNG und in den
+ * KORREKTURRUNDEN (LLM-Aufrufe) - die Ausfuehrung selbst sind lokale
+ * Plugin-Kommandos und kosten nichts. Deshalb getrennt ausgewiesen, statt eine
+ * Zahl zu zeigen, die niemand zuordnen kann.
+ */
+export interface MoaRunCost {
+  totalUsd: number;
+  planningUsd: number;
+  correctionsUsd: number;
+  /** Wahr, wenn Teile geschaetzt und nicht vom Anbieter gemeldet sind. */
+  estimated: boolean;
+}
+
 export interface MoaRunResult {
   plan: MoaPlan;
   steps: MoaStepResult[];
   corrections: number;
   succeeded: boolean;
+  /** AI-P1-006: Gesamtkosten des Laufs (siehe MoaRunCost). */
+  costUsd: number;
+  cost: MoaRunCost;
+  /** AI-P1-006: Lauf wurde abgebrochen (nicht alle Schritte ausgefuehrt). */
+  cancelled: boolean;
 }
 
 type CompletionFn = (req: LlmRequest) => Promise<LlmCompletion>;
@@ -131,17 +167,57 @@ export function correctionPromptFor(failures: MoaStepResult[]): string {
   return `Korrigiere NUR diese fehlgeschlagenen Schritte und antworte wieder als JSON-Array: ${JSON.stringify(failed)}`;
 }
 
+/** Zeitlimit um eine Zusage; laeuft die Zeit ab, gibt es eine klare Meldung. */
+export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`Zeitlimit ueberschritten (${timeoutMs} ms)`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * AI-P1-006: Kostenschaetzung eines LLM-Aufrufs. Der LlmRouter liefert keinen
+ * Preis, deshalb Naeherung ueber die Zeichenzahl (4 Zeichen ~ 1 Token) mit
+ * konfigurierbarem Preis. Das Ergebnis ist ausdruecklich als Schaetzung markiert
+ * (`estimated: true`) - so wird es auch angezeigt.
+ */
+export function estimateLlmCostUsd(req: LlmRequest, res: LlmCompletion): number {
+  const perThousand = Number(process.env.AI_AGENT_COST_PER_1K_USD || 0.0002);
+  const chars = String(req.prompt ?? '').length + String(res?.text ?? '').length;
+  return Number(((chars / 4 / 1000) * perThousand).toFixed(6));
+}
+
+/**
+ * AI-P1-006: Zeitlimit fuer einen Planungs-/Korrekturaufruf. Live belegt
+ * (2026-09-18): ein haengender LLM-Aufruf liess den Agent-Lauf endlos in
+ * 'running' stehen - ohne Limit gibt es weder Ergebnis noch Abbruchgrund.
+ */
+export const DEFAULT_PLAN_TIMEOUT_MS = Number(process.env.AI_AGENT_PLAN_TIMEOUT_MS || 45_000);
+
 export class MoaAgent {
   constructor(
     private complete: CompletionFn = (req) => completeLlm(req),
     private voice: IMoaCommandExecutor = voiceControlService,
+    /** AI-P1-006: Kostenschaetzung (injizierbar fuer Tests). */
+    private estimateCost: (req: LlmRequest, res: LlmCompletion) => number = estimateLlmCostUsd,
+    /** AI-P1-006: Zeitlimit je Planungs-/Korrekturaufruf (0 = kein Limit). */
+    private planTimeoutMs: number = DEFAULT_PLAN_TIMEOUT_MS,
   ) {}
 
   /** Plant eine Aufgabe mit DeepSeek V4 Flash (automatischer Free-Fallback). */
-  async plan(task: string, pluginId = '', context = ''): Promise<MoaPlan> {
+  async plan(task: string, pluginId = '', context = '', onCost?: (usd: number) => void): Promise<MoaPlan> {
     const catalog = moaCommandCatalog();
     const role = pluginId ? moaSystemPromptForPlugin(pluginId) : moaSystemPromptForPlugin('');
-    const completion = await this.complete({
+    const timeoutMs = Number.isFinite(this.planTimeoutMs) && this.planTimeoutMs > 0 ? this.planTimeoutMs : DEFAULT_PLAN_TIMEOUT_MS;
+    const completion = await withTimeout(this.complete({
       prompt:
         `${role} Zerlege die Aufgabe in klare Einzelschritte. ` +
         `Du darfst NUR diese Plugin-IDs und Kommandos verwenden (Syntax command(parameter)): ${catalog}. ` +
@@ -150,10 +226,19 @@ export class MoaAgent {
         (context ? `Kontext (Session-/Projektzustand): ${context.slice(0, 2000)}. ` : '') +
         `Aufgabe: ` + task,
       complexity: 'moderate',
-      maxTokens: 1024,
+      // 1536 statt 1024: ein Reasoning-Modell verbraucht Tokens fuers Denken,
+      // bevor die JSON-Antwort kommt. Live belegt (2026-09-18): bei 1024 kam
+      // NUR der Denktext an, kein JSON-Array - der Plan war leer.
+      maxTokens: 1536,
       temperature: 0.3,
       reasoningEffort: 'low',
-    });
+    }), timeoutMs);
+    // AI-P1-006: Kosten dieses Planungsaufrufs melden (Schaetzung, siehe
+    // estimateLlmCostUsd) - der Aufrufer summiert sie.
+    onCost?.(this.estimateCost(
+      { prompt: task, complexity: 'moderate' },
+      completion,
+    ));
     return {
       task,
       provider: completion.provider,
@@ -187,12 +272,37 @@ export class MoaAgent {
     return results;
   }
 
-  /** Führt einen Plan mit WRITE-Gate aus (ohne Korrektur). */
-  async executePlanGated(plan: MoaPlan, userId: string, confirmWrite?: MoaRunOptions['confirmWrite']): Promise<MoaStepResult[]> {
-    const results: MoaStepResult[] = [];
-    for (const step of plan.steps) {
+  /**
+   * Führt einen Plan mit WRITE-Gate aus (ohne Korrektur).
+   *
+   * AI-P1-006: `startIndex`/`priorResults` erlauben die Wiederaufnahme (bereits
+   * erledigte Schritte werden uebernommen statt erneut ausgefuehrt), `signal`
+   * bricht kooperativ vor dem naechsten Schritt ab und `onStep` meldet jeden
+   * ausgeführten Schritt (fuer die persistente Fortsetzung).
+   */
+  async executePlanGated(
+    plan: MoaPlan,
+    userId: string,
+    confirmWrite?: MoaRunOptions['confirmWrite'],
+    options: {
+      signal?: AbortSignal;
+      startIndex?: number;
+      priorResults?: MoaStepResult[];
+      onStep?: MoaRunOptions['onStep'];
+    } = {},
+  ): Promise<{ results: MoaStepResult[]; cancelled: boolean }> {
+    const startIndex = Math.max(0, Math.floor(options.startIndex ?? 0));
+    const results: MoaStepResult[] = [...(options.priorResults ?? [])];
+    let cancelled = false;
+    for (let index = 0; index < plan.steps.length; index += 1) {
+      const step = plan.steps[index];
+      // Bereits erledigt (Wiederaufnahme): Ergebnis uebernehmen, nichts tun.
+      if (index < startIndex) continue;
+      // Abbruch VOR dem Schritt: der Lauf endet hier, nichts halb Ausgefuehrtes.
+      if (options.signal?.aborted) { cancelled = true; break; }
       if (!step.command) {
         results.push({ step, handled: false, pluginId: step.pluginId, error: 'Kein Kommando' });
+        await options.onStep?.({ index, result: results[results.length - 1], executedCount: results.length });
         continue;
       }
       // AI-P1-003 P5: Bestätigungspflicht ab WRITE. Ohne Bestätigung wird der
@@ -207,38 +317,92 @@ export class MoaAgent {
       } else {
         res = await this.voice.execute(userId, step.command);
       }
-      results.push({
+      const result: MoaStepResult = {
         step,
         handled: res.handled,
         pluginId: res.pluginId || step.pluginId,
         error: res.error,
-      });
+      };
+      results.push(result);
+      await options.onStep?.({ index, result, executedCount: results.length });
     }
-    return results;
+    return { results, cancelled };
   }
 
   /**
    * Agent-Loop (AI-P1-003 P5): planen → (WRITE-gate) ausführen → prüfen →
    * korrigieren. `maxCorrections` begrenzt die Korrekturrunden.
+   *
+   * AI-P1-006: zusaetzlich abbrechbar (`signal`), wiederaufnehmbar
+   * (`startIndex`/`priorResults`) und mit Kostenausweis (`cost`).
    */
   async run(task: string, opts: MoaRunOptions = {}): Promise<MoaRunResult> {
     const userId = opts.userId ?? 'localUser';
-    const plan = await this.plan(task, '', opts.context);
-    return this.runPlan(plan, opts, userId);
+    const cost: MoaRunCost = { totalUsd: 0, planningUsd: 0, correctionsUsd: 0, estimated: true };
+    const plan = await this.plan(task, '', opts.context, (usd) => { cost.planningUsd += usd; });
+    return this.runPlan(plan, opts, userId, cost);
   }
 
   /** Wie `run`, aber mit bereits erzeugtem Plan. */
-  async runPlan(plan: MoaPlan, opts: MoaRunOptions = {}, userId = 'localUser'): Promise<MoaRunResult> {
+  async runPlan(
+    plan: MoaPlan,
+    opts: MoaRunOptions = {},
+    userId = 'localUser',
+    cost: MoaRunCost = { totalUsd: 0, planningUsd: 0, correctionsUsd: 0, estimated: true },
+  ): Promise<MoaRunResult> {
     const maxCorrections = Math.max(0, opts.maxCorrections ?? 1);
-    let results = await this.executePlanGated(plan, userId, opts.confirmWrite);
+    const first = await this.executePlanGated(plan, userId, opts.confirmWrite, {
+      signal: opts.signal,
+      startIndex: opts.startIndex,
+      priorResults: opts.priorResults,
+      onStep: opts.onStep,
+    });
+    let results = first.results;
+    let cancelled = first.cancelled;
     let corrections = 0;
-    while (this.hasFailures(results) && corrections < maxCorrections) {
+    // Ein LEERER Plan ist kein Erfolg: der Planer hat dann nichts Ausfuehrbares
+    // geliefert (typisch: das Modell antwortet nur mit Denktext statt JSON).
+    // Live belegt (2026-09-18): der Lauf meldete "succeeded" bei null Schritten -
+    // ein stiller Leer-Erfolg. Deshalb zaehlt ein leerer Plan wie ein Fehlschlag
+    // und loest die Korrekturrunde aus.
+    const planIsEmpty = (): boolean => plan.steps.length === 0;
+    while (!cancelled && (this.hasFailures(results) || planIsEmpty()) && corrections < maxCorrections) {
+      if (opts.signal?.aborted) { cancelled = true; break; }
       corrections += 1;
-      const correctionPlan = await this.plan(correctionPromptFor(results));
-      const retryResults = await this.executePlanGated(correctionPlan, userId, opts.confirmWrite);
-      results = this.mergeResults(results, retryResults);
+      const correctionPrompt = planIsEmpty()
+        ? 'Die vorige Antwort enthielt KEIN JSON-Array. Antworte JETZT ausschliesslich mit dem JSON-Array '
+          + '[{"pluginId":"...","command":"...","prompt":"..."}] ohne jeden weiteren Text. Aufgabe: '
+        : correctionPromptFor(results);
+      const correctionPlan = await this.plan(
+        correctionPrompt,
+        '',
+        '',
+        (usd) => { cost.correctionsUsd += usd; },
+      );
+      if (correctionPlan.steps.length > 0 && planIsEmpty()) {
+        // Ersatzplan uebernehmen: der leere Plan war unbrauchbar.
+        plan.steps = correctionPlan.steps;
+      }
+      const retry = await this.executePlanGated(correctionPlan, userId, opts.confirmWrite, {
+        signal: opts.signal,
+        onStep: opts.onStep,
+      });
+      results = this.mergeResults(results, retry.results);
+      if (retry.cancelled) { cancelled = true; break; }
     }
-    return { plan, steps: results, corrections, succeeded: !this.hasFailures(results) };
+    cost.totalUsd = Number((cost.planningUsd + cost.correctionsUsd).toFixed(6));
+    return {
+      plan,
+      steps: results,
+      corrections,
+      // Ein abgebrochener Lauf ist nicht "erfolgreich", auch wenn die bisherigen
+      // Schritte griffen - sonst wuerde ein Abbruch als Erfolg angezeigt. Und ein
+      // Lauf ohne ausgefuehrten Schritt ist ebenfalls kein Erfolg.
+      succeeded: !cancelled && !this.hasFailures(results) && results.length > 0,
+      costUsd: cost.totalUsd,
+      cost,
+      cancelled,
+    };
   }
 
   private hasFailures(results: MoaStepResult[]): boolean {
