@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { STUDIO_NAV } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
 
 /**
  * Visuelle Regression (A/B-Baseline): Playwright `toHaveScreenshot` mit
@@ -16,6 +17,11 @@ import { STUDIO_NAV } from './helpers/studioNav';
 test.skip(!!process.env.E2E_BASE_URL, 'Visuelle Baselines nur gegen den lokalen Dev-Server.');
 test('Start-Screen Baseline', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  // VISUAL-P1-010: Der Studio-Zustand haengt am SERVER (Modul-/Ansichts-State).
+  // Ohne Reset screenshotet der Test je nach vorherigem Lauf eine andere Ansicht -
+  // gemessen: Seitenhoehen 1679 px und 5446 px bei derselben Spec. Erst der Reset
+  // macht die Baseline reproduzierbar.
+  await resetSession();
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await expect(page).toHaveScreenshot('01-start-screen.png', {
@@ -27,6 +33,7 @@ test('Start-Screen Baseline', async ({ page }) => {
 
 test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  await resetSession(); // siehe Start-Screen: reproduzierbare Ansicht
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });

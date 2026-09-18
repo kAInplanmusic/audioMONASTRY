@@ -69,6 +69,20 @@ kein Regressionsbefund; die Baselines werden bewusst **nicht** blind überschrie
 (`--update-snapshots` würde echte UI-Änderungen verdecken) und stehen als offener
 Punkt im Mastertodo.
 
+**Zweite, unabhängige Ursache in derselben Datei (neu gefunden):** der Test
+„P1-2: Screenshot-Baselines für alle Plugin-Ansichten" hängt. Seine Liste
+`PLUGIN_ROWS` nennt **Plugin-Namen, die es nicht mehr gibt** — `instrumentMONK`
+(heute `instruMONK`), `synthesizerMONK`/`drumMONK`/`samplerMONK` (heute
+`syntisamplerMONK`), `mcpMONK` u. a., 20 Einträge gegen 18 Nav-Icons. Der
+`getByTitle`-Klick findet nie ein Element und läuft in den 300-s-Testabbruch.
+Nach dem Aktualisieren der Baselines für Start/Studio/masterplayer läuft der Test
+deshalb bis in diese Schleife und hängt dort — **vorher** brach er schon an der
+ersten Baseline ab, sodass die veraltete Liste nie auffiel.
+
+Reparatur-Rezept: `PLUGIN_ROWS` aus der Registry ableiten (`getPluginRegistry()`
+ohne `NAV_EXCLUDED`) statt Namen von Hand zu pflegen, dann die Plugin-Baselines
+einmal bewusst erzeugen (`--update-snapshots`) und die Diff-Bilder ansehen.
+
 ## E · Wiederholbare Kommandos
 
 ```bash
