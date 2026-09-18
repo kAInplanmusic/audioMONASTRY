@@ -611,6 +611,7 @@ function AppComponent() {
                   <button
                     key={plugin.id}
                     type="button"
+                    data-plugin-id={plugin.id}
                     onClick={() => handleNavSelect(plugin.id)}
                     aria-current={active ? 'page' : undefined}
                     title={plugin.name}

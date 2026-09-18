@@ -58,30 +58,37 @@ Grund, warum er hier nicht erhebbar ist. Kein Punkt bleibt still offen.
    einem Vite-Reload. Die CPU-Messung selbst bleibt hier trotzdem nicht
    erhebbar (Renderer beendet sich unter der Plugin-Last dieser Umgebung).
 
-## D · Weiterer Befund: visuelle Baselines sind veraltet (A/B-bewiesen)
+## D · Visuelle Baselines: drei Ursachen, zwei behoben, eine gemessen offen
 
-`npx playwright test tests/e2e/visual.spec.ts` scheitert: erwartet 1280×2945 px,
-erhalten 1280×1679 px bzw. 1280×5446 px (45–68 % der Pixel unterschiedlich). Der
-**A/B-Test** (Änderungen dieser Runde per `git stash` entfernt, Spec erneut
-gelaufen) zeigt **dasselbe** Ergebnis — die Baselines stammen vom 2026-09-02
-(`2456a91`), seitdem hat sich die UI deutlich geändert. Das ist ein Testschuld-Fund,
-kein Regressionsbefund; die Baselines werden bewusst **nicht** blind überschrieben
-(`--update-snapshots` würde echte UI-Änderungen verdecken) und stehen als offener
-Punkt im Mastertodo.
+`npx playwright test tests/e2e/visual.spec.ts` scheiterte — **A/B-bewiesen keine
+Regression** dieser Runde (Änderungen per `git stash` entfernt → identische
+Abweichung). Drei unabhängige Ursachen:
 
-**Zweite, unabhängige Ursache in derselben Datei (neu gefunden):** der Test
-„P1-2: Screenshot-Baselines für alle Plugin-Ansichten" hängt. Seine Liste
-`PLUGIN_ROWS` nennt **Plugin-Namen, die es nicht mehr gibt** — `instrumentMONK`
-(heute `instruMONK`), `synthesizerMONK`/`drumMONK`/`samplerMONK` (heute
-`syntisamplerMONK`), `mcpMONK` u. a., 20 Einträge gegen 18 Nav-Icons. Der
-`getByTitle`-Klick findet nie ein Element und läuft in den 300-s-Testabbruch.
-Nach dem Aktualisieren der Baselines für Start/Studio/masterplayer läuft der Test
-deshalb bis in diese Schleife und hängt dort — **vorher** brach er schon an der
-ersten Baseline ab, sodass die veraltete Liste nie auffiel.
+1. **Baselines veraltet** (2026-09-02, `2456a91`) — inzwischen neu erzeugt; die
+   UI-Änderungen seither (Steuer-Panels, MJPEG-Fallback, Renderer-Umschalter) sind
+   gewollt.
+2. **Test war nicht reproduzierbar** — der Studio-Zustand liegt am **Server**
+   (Modul-/Ansichts-State): dieselbe Spec screenshotete je nach vorherigem Lauf
+   1679 px oder 5446 px hoch. Behoben: `resetSession()` vor jeder Aufnahme.
+3. **Selektor-Liste veraltet** — `PLUGIN_ROWS` nannte Plugin-Namen, die es nicht
+   mehr gibt (`instrumentMONK` statt `instruMONK`, `synthesizerMONK`/`drumMONK`/
+   `samplerMONK` statt `syntisamplerMONK`, `mcpMONK`, …: 20 Einträge gegen 18
+   Nav-Icons). `getByTitle` fand nie ein Element → 300-s-Abbruch. Behoben: die
+   Nav-Knöpfe tragen jetzt `data-plugin-id`, die Spec liest die Liste **aus dem
+   DOM** — neue/umbenannte Plugins erscheinen automatisch.
 
-Reparatur-Rezept: `PLUGIN_ROWS` aus der Registry ableiten (`getPluginRegistry()`
-ohne `NAV_EXCLUDED`) statt Namen von Hand zu pflegen, dann die Plugin-Baselines
-einmal bewusst erzeugen (`--update-snapshots`) und die Diff-Bilder ansehen.
+**Offen und gemessen:** die **Ganzseiten**-Baselines bleiben flaky. Mit
+eingefrorener Uhr (`page.clock.install/pauseAt`), `animations: 'disabled'` und
+Masken für Canvas/`[data-live-value]` ergaben drei aufeinanderfolgende Läufe:
+**3 passed** · **1 failed** (Studio-Baseline) · **2 failed** (Studio + P1-2).
+Playwright meldet dabei „Failed to take two consecutive stable screenshots" bzw.
+Pixel-Diffs — die Seite hat weitere live aktualisierte Regionen (Session-Uhr,
+Pegel, Status-Ticker) bzw. die Canvas-Komposition variiert im Headless-Chromium.
+Der nächste saubere Schritt ist deshalb **kein** weiteres Maskieren, sondern eine
+stabile Teilfläche: `page.locator('#rack-mixer').screenshot()` je Ansicht statt
+`fullPage: true` (dann sind die live Regionen ausserhalb des Bildes). Das ist als
+Rest in `VISUAL-P1-010` festgehalten — bewusst **nicht** per
+`--update-snapshots` „grün gestellt": das würde echte UI-Änderungen verdecken.
 
 ## E · Wiederholbare Kommandos
 

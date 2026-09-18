@@ -3,6 +3,18 @@ import { STUDIO_NAV } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
+ * VISUAL-P1-010: Visuelle Baselines brauchen eine STEHENDE Seite. `animations:
+ * 'disabled'` stoppt nur CSS - Uhrzeit, Session-Timer, Pegel und Canvas laufen
+ * weiter, deshalb meldete Playwright 'Failed to take two consecutive stable
+ * screenshots'. Mit eingefrorener Uhr (Playwright clock) und Uhrzeit-Fixpunkt
+ * sind die Aufnahmen reproduzierbar.
+ */
+async function freezeTime(page: import('@playwright/test').Page): Promise<void> {
+  await page.clock.install({ time: new Date('2026-09-18T12:00:00Z') });
+  await page.clock.pauseAt(new Date('2026-09-18T12:00:05Z'));
+}
+
+/**
  * Visuelle Regression (A/B-Baseline): Playwright `toHaveScreenshot` mit
  * committeten Baselines (tests/e2e/__screenshots__).
  *
@@ -22,6 +34,7 @@ test('Start-Screen Baseline', async ({ page }) => {
   // gemessen: Seitenhoehen 1679 px und 5446 px bei derselben Spec. Erst der Reset
   // macht die Baseline reproduzierbar.
   await resetSession();
+  await freezeTime(page);
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
   await expect(page).toHaveScreenshot('01-start-screen.png', {
@@ -34,42 +47,47 @@ test('Start-Screen Baseline', async ({ page }) => {
 test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await resetSession(); // siehe Start-Screen: reproduzierbare Ansicht
+  await freezeTime(page);
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
+  // VISUAL-P1-010: Canvas und Live-Anzeigen aendern sich permanent (Visual-Feld,
+  // Pegel, Uptime) - `animations: 'disabled'` stoppt nur CSS, nicht JS. Ohne Maske
+  // meldet Playwright 'Failed to take two consecutive stable screenshots'.
   await expect(page).toHaveScreenshot('02-studio.png', {
     fullPage: true,
     animations: 'disabled',
     maxDiffPixelRatio: 0.02,
+    mask: [
+      page.locator('canvas'),
+      page.locator('[data-live-value]'),
+      page.locator('#session-uptime'),
+    ],
   });
 });
 
-/** Nav-title (Plugin-Name) → Plugin-ID (Reihenfolge laut Registry, ohne ai; masterplayer ist Kopfzeile). */
-const PLUGIN_ROWS: { title: string; id: string }[] = [
-  { title: 'instrumentMONK', id: 'instrument' },
-  { title: 'synthesizerMONK', id: 'synthesizer' },
-  { title: 'drumMONK', id: 'drum' },
-  { title: 'samplerMONK', id: 'sampler' },
-  { title: 'mcpMONK', id: 'mcp' },
-  { title: 'voiceMONK', id: 'voice' },
-  { title: 'soundMONK', id: 'sound' },
-  { title: 'songMONK', id: 'song' },
-  { title: 'mixerMONK', id: 'mixer' },
-  { title: 'midiMONK', id: 'controller' },
-  { title: 'effectMONK', id: 'effect' },
-  { title: 'dropMONK', id: 'drop' },
-  { title: 'biblioMONK', id: 'library' },
-  { title: 'eqMONK', id: 'eq' },
-  { title: 'dspMONK', id: 'dsp' },
-  { title: 'masteringMONK', id: 'mastering' },
-  { title: 'stemMONK', id: 'stem' },
-  { title: 'spatialMONK', id: 'spatial' },
-  { title: 'recordingMONK', id: 'recording' },
-  ];
+/**
+ * VISUAL-P1-010: Die Plugin-Ansichten werden aus dem DOM gelesen
+ * (`data-plugin-id` am Nav-Knopf) statt aus einer gepflegten Liste. Die alte
+ * Liste nannte Namen, die es nicht mehr gibt (`instrumentMONK` statt
+ * `instruMONK`, `synthesizerMONK`/`drumMONK`/`samplerMONK` statt
+ * `syntisamplerMONK`) — der Klick fand nie ein Element und lief in den
+ * Test-Abbruch. Selbstwartend: neue/umbenannte Plugins erscheinen automatisch.
+ */
+async function pluginRowsFromNav(page: import('@playwright/test').Page): Promise<{ title: string; id: string }[]> {
+  return page.locator(`${STUDIO_NAV} button[data-plugin-id]`).evaluateAll((buttons) =>
+    buttons.map((b) => ({
+      title: b.getAttribute('title') ?? '',
+      id: b.getAttribute('data-plugin-id') ?? '',
+    })).filter((r) => r.id));
+}
 
 test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async ({ page }) => {
   test.setTimeout(300_000);
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  // KEINE eingefrorene Uhr: die Racks rendern ueber Timer - mit pausierter Uhr
+  // kommt die Ansicht nicht voran (gemessen). Die Standbild-Baselines oben
+  // brauchen sie dagegen, sonst sind sie nicht reproduzierbar.
   await page.goto('/');
   await page.getByLabel('audioMONASTRY starten').click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
@@ -85,15 +103,17 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
   });
 
   const toolbar = page.locator(STUDIO_NAV);
-  for (const { title, id } of PLUGIN_ROWS) {
-    const btn = toolbar.getByTitle(title).first();
+  const rows = await pluginRowsFromNav(page);
+  expect(rows.length, 'Nav-Knoepfe mit data-plugin-id gefunden').toBeGreaterThan(10);
+  for (const { id } of rows) {
+    const btn = toolbar.locator(`button[data-plugin-id="${id}"]`).first();
     await btn.click();
     const rack = page.locator(`#rack-${id}`);
     await expect(rack).toBeVisible({ timeout: 20_000 });
     // Instrument-Terminal lädt seine Liste asynchron – erst abwarten, sonst
     // verschiebt sich der Rack-Inhalt zwischen den Screenshots.
-    if (id === 'instrument') {
-      await expect(page.getByText(/100 \/ 100 Instrumente/)).toBeVisible({ timeout: 20_000 });
+    if (id.startsWith('instru')) {
+      await expect(page.getByText(/Instrumente/)).toBeVisible({ timeout: 20_000 });
     }
     // Bilder im Terminal fertig laden, sonst reflowt das Rack zwischen den
     // beiden Stabilitäts-Screenshots (instabile Baseline).
