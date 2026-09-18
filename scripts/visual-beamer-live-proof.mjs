@@ -47,18 +47,65 @@ const solidJpeg = (r, g, b) => {
   return buf;
 };
 
-/** Ein Pixel aus der Mitte des Bildes (misst das GERENDERTE Ergebnis). */
-const centerPixel = (pngBuffer, box) => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'vis-pixel-'));
-  const file = path.join(dir, 'shot.png');
-  writeFileSync(file, pngBuffer);
-  const crop = box
-    ? `crop=1:1:${Math.round(box.x + box.width / 2)}:${Math.round(box.y + box.height / 2)}`
-    : 'crop=1:1:(iw/2):(ih/2)';
-  const raw = execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file,
-    '-vf', crop, '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1']);
-  rmSync(dir, { recursive: true, force: true });
-  return { r: raw[0], g: raw[1], b: raw[2] };
+/**
+ * Pixel aus der Bildmitte. Kein `crop`-Filter: ueber stdin kennt ffmpeg die
+ * Bildgroesse noch nicht und `crop=iw/2` scheitert ("width 0" - real passiert).
+ * Deshalb das ganze Bild als rgb24 dekodieren und in JS die Mitte lesen.
+ */
+const centerPixel = (imageBuffer) => {
+  const raw = execFileSync('ffmpeg', [
+    '-hide_banner', '-loglevel', 'error', '-i', 'pipe:0',
+    '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', 'pipe:1',
+  ], { input: imageBuffer, maxBuffer: 64 * 1024 * 1024 });
+  const pixels = Math.floor(raw.length / 3);
+  const mid = Math.floor(pixels / 2) * 3;
+  return { r: raw[mid], g: raw[mid + 1], b: raw[mid + 2], pixels };
+};
+
+/**
+ * Einen kompletten Frame aus dem MJPEG-Strom lesen: verbinden, waehrend des
+ * Lesens Frames einspeisen, bis ein vollstaendiges JPEG (SOI..EOI) vorliegt.
+ */
+const readFrameFromStream = async (url, tokenValue, timeoutMs = 20_000) => {
+  const controller = new AbortController();
+  const res = await fetch(url, { headers: { 'x-studio-token': tokenValue }, signal: controller.signal });
+  const reader = res.body?.getReader();
+  const chunks = [];
+  let bytes = 0;
+  const deadline = Date.now() + timeoutMs;
+  const shot = setInterval(() => { void pushFrame([220, 30, 30]); }, 400);
+  try {
+    while (Date.now() < deadline) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(Buffer.from(value));
+        bytes += value.length;
+      }
+      const all = Buffer.concat(chunks);
+      // Multipart korrekt zerlegen statt nach JPEG-Markern zu suchen: das erste
+      // SOI/EOI-Paar kann aus zwei Teilen stammen (dann dekodiert ffmpeg Muell).
+      const boundary = Buffer.from('--audiomonastryframe');
+      const start = all.indexOf(boundary);
+      if (start >= 0) {
+        const headerEnd = all.indexOf(Buffer.from('\r\n\r\n'), start);
+        if (headerEnd > start) {
+          const headers = all.subarray(start, headerEnd).toString('latin1');
+          const len = Number(/Content-Length:\s*(\d+)/i.exec(headers)?.[1] ?? 0);
+          const body = headerEnd + 4;
+          if (len > 0 && all.length >= body + len) {
+            const file = path.join(mkdtempSync(path.join(tmpdir(), 'vis-live-')), 'frame.jpg');
+            writeFileSync(file, all.subarray(body, body + len));
+            return { status: res.status, bytes, jpegBytes: len, file };
+          }
+        }
+      }
+    }
+    return { status: res.status, bytes, jpegBytes: 0, file: null };
+  } finally {
+    clearInterval(shot);
+    controller.abort();
+  }
 };
 
 const pushFrame = async (rgb) => {
@@ -87,6 +134,25 @@ const main = async () => {
   const hasMedia = (await media.count()) > 0;
   console.log(`Beamer-Seite /visual-out geladen, Anzeigeelement vorhanden: ${hasMedia}`);
 
+  // --- Ghostuser 5 (PA) parallel: /master-out -------------------------------
+  // Der PA-Zuschauer dockt unter seiner festen URL an; auch er darf keinen der
+  // 4 Plaetze verbrauchen. Was hier NICHT gemessen werden kann, ist der Klang
+  // an der PA - dafuer braucht es ein echtes Ausgabegeraet (Betreiber-Rest).
+  const paCtx = await browser.newContext({ viewport: { width: 800, height: 480 } });
+  if (token) await paCtx.addCookies([{ name: 'studio', value: token, url: BASE }]);
+  const pa = await paCtx.newPage();
+  const paErrors = [];
+  pa.on('pageerror', (e) => paErrors.push(e.message.slice(0, 120)));
+  await pa.goto(`${BASE}/master-out`, { waitUntil: 'domcontentloaded' });
+  await sleep(3_000);
+  // Der PA-Zuschauer hat KEIN Bild (reiner Audio-Listener) - das richtige
+  // Kriterium ist der produktionssichtbare Beweis im Server-Audit: der Server
+  // protokolliert den Beitritt als JOIN_MASTER_OUT.
+  const auditRes = await fetch(`${BASE}/api/audit`, { headers: { 'x-studio-token': token } });
+  const auditBody = await auditRes.json().catch(() => ({}));
+  const paJoined = (auditBody.entries ?? []).some((e) => String(e.action ?? '') === 'JOIN_MASTER_OUT');
+  console.log(`PA-Seite /master-out geladen (Fehler: ${paErrors.length}) · Server-Audit JOIN_MASTER_OUT: ${paJoined}`);
+
   // --- Ein normaler Studio-User parallel: Zaehler muss 1/4 bleiben ----------
   const studioCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   if (token) await studioCtx.addCookies([{ name: 'studio', value: token, url: BASE }]);
@@ -109,40 +175,26 @@ const main = async () => {
   await sleep(2_000);
   console.log('Frame 2:', JSON.stringify(await pushFrame([220, 30, 30])));
 
-  const streamPage = await beamerCtx.newPage();
-  // Kein setContent: der MJPEG-Strom endet nie, das `load`-Ereignis feuert also
-  // nicht (30-s-Timeout, real passiert). Stattdessen Bild per Skript anhaengen.
-  await streamPage.goto('about:blank');
-  await streamPage.evaluate((url) => {
-    document.body.style.margin = '0';
-    document.body.style.background = '#000';
-    const img = document.createElement('img');
-    img.id = 'live';
-    img.src = url;
-    img.style.cssText = 'width:800px;height:480px;object-fit:contain';
-    document.body.appendChild(img);
-  }, `${BASE}/api/visual/mjpeg?token=${encodeURIComponent(token)}`);
-  await sleep(3_000);
-  console.log('Frame 3:', JSON.stringify(await pushFrame([220, 30, 30])));
-  await sleep(2_500);
-  console.log('Frame 4:', JSON.stringify(await pushFrame([220, 30, 30])));
-  await sleep(2_500);
+  // (Der frueher hier genutzte Browser-<img>-Weg ist entfallen: ein nie endender
+  // multipart-Strom liefert keinen Screenshot, und das <img> landete im 'broken'-
+  // Zustand. Die Auswertung passiert jetzt in Node, siehe unten.)
 
-  // Vollbild-Screenshot + Ausschnitt am Bild (der Element-Screenshot eines
-  // nie endenden Stroms kommt schwarz zurueck - so misst der lokale Beweis auch).
-  const shot = await streamPage.screenshot();
-  const view = await streamPage.locator('#live').boundingBox().catch(() => null);
-  const px = centerPixel(shot, view);
-  console.log('Beamer-Seitenfehler:', beamerErrors.slice(0, 3));
-  await browser.close();
+  const gelesen = await readFrameFromStream(`${BASE}/api/visual/mjpeg?token=${encodeURIComponent(token)}`, token);
+  console.log(`Strom: HTTP ${gelesen.status}, ${gelesen.bytes} Bytes, JPEG ${gelesen.jpegBytes} Bytes -> ${gelesen.file ?? 'kein JPEG'}`);
+  const px = gelesen.file ? centerPixel(readFileSync(gelesen.file)) : { r: 0, g: 0, b: 0 };
+  if (gelesen.file) rmSync(gelesen.file, { force: true });
 
   const rot = px.r > 150 && px.g < 90 && px.b < 90;
   console.log('Gemessenes Pixel im Beamer-Bild:', JSON.stringify(px), '(erwartet ~ r=220 g=30 b=30)');
   console.log('\nErgebnis:');
   console.log(`  Beamer-Client (/visual-out) verbunden: ${hasMedia ? 'JA' : 'NEIN'}`);
+  console.log(`  PA-Client (/master-out) verbunden:     ${paJoined ? 'JA (JOIN_MASTER_OUT im Audit)' : 'NEIN'}`);
   console.log(`  Beamer zaehlt NICHT zu den 4 Usern:    ${listenerCounted ? 'NEIN (Zaehler stieg)' : 'JA'}`);
   console.log(`  Beamer zeigt das eingespeiste Bild:    ${rot ? 'JA' : 'NEIN'}`);
-  process.exitCode = rot && !listenerCounted && hasMedia ? 0 : 1;
+  process.exitCode = rot && !listenerCounted && hasMedia && paJoined ? 0 : 1;
+  // Der abgebrochene MJPEG-Fetch haelt sonst einen offenen Socket und Node endet
+  // nicht (real: Lauf lief in den Timeout, obwohl alle Messungen fertig waren).
+  process.exit(process.exitCode);
 };
 
 main().catch((e) => {

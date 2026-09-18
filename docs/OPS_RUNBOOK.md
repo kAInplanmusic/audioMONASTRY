@@ -570,6 +570,19 @@ drei Presets ergeben unterschiedliche Bilder, eine Show-Szene wird als
 4. **Messen** (siehe unten) — **Achtung**: gegen `http://localhost:8080` fahren, nicht
    gegen `127.0.0.1`.
 
+### Falle 0 (die teuerste): die Ziel-Instanz verifizieren
+
+Ein **lokaler** Produktions-Build (`node dist/server.cjs`) antwortet auf `/api/health`
+genauso wie der Knoten — nur mit `"version":"dev"`. Läuft lokal noch ein Server auf
+8080, scheitert der SSH-Tunnel still (`Address already in use`) und die E2E-Suite
+misst die falsche Maschine: ein "Live-Beweis" gegen den lokalen Build ist keiner.
+Vor jedem Live-Lauf:
+
+```bash
+ss -ltnp | grep ':8080'                 # muss den ssh-Tunnel zeigen, nicht node/tsx
+curl -s http://localhost:8080/api/health # MUSS die Knoten-Version melden (z. B. 1.210.001)
+```
+
 ### Vier Fallen, die je einen halben Tag kosten können
 
 | Falle | Wirkung | Regel |
@@ -620,11 +633,15 @@ also Code **und** Geschwindigkeit.
   Verhalten umgestellt wurden (Details oben).
 - **Live-Latenz der echten Instanz**: 782 HTTP-Requests, Mittel 7,6 ms, p95 ≤ 25 ms
   (`scripts/prom-p95.py` liest die Histogramm-Exposition).
-- **Ghostuser 6 (Beamer) live**: der echte Client unter `/visual-out` verbindet sich
-  und **verbraucht keinen der 4 Plätze** (Zähler bleibt `SESSION 1/4`).
-- **Bildweg live**: ein Abonnent am Knoten empfängt echten Multipart-Strom
-  (`--audiomonastryframe`, Content-Type `image/jpeg`, 1971 Bytes für zwei Frames);
-  `POST /api/visual/frame` liefert 200 (584 Bytes je JPEG).
+- **Beide Ghostuser live** (gleicher Lauf): `/visual-out` (Beamer) und `/master-out`
+  (PA) verbinden sich, der Zähler eines normalen Users bleibt **`SESSION 1/4`** —
+  keiner der beiden verbraucht einen der 4 Plätze. Die PA-Seite hat bewusst kein
+  Bild; ihr Beleg ist der Server-Audit-Eintrag `JOIN_MASTER_OUT`.
+- **Bildweg live inklusive Inhalt**: ein Abonnent am Knoten empfängt echten
+  Multipart-Strom (`--audiomonastryframe`, `image/jpeg`); der Beweis schneidet das
+  JPEG per `Content-Length` heraus und **dekodiert** es: 320×180, Mittelpixel
+  `r=218 g=30 b=30` — genau das eingespeiste Rot. `POST /api/visual/frame` liefert
+  200 (584 Bytes je JPEG; PNG wird korrekt mit 415 abgelehnt).
 - **Nebenbei live bestätigt**: `[fleet] Knoten verdrahtet: masterPlayer → 142.132.231.146:8000`
   über die **Alt-Namen** der Fleet-Map (`samplemonk-*`) — der Kompatibilitätspfad aus
   NOMEN-P1-001 arbeitet in Produktion; und `[mos] 16 Hörerwertungen aus der Persistenz
