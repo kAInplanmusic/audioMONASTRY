@@ -40,6 +40,8 @@ import { LatencyHistogram } from './src/core/observability/latencyHistogram';
 import { createSessionRuntime, DEFAULT_PLUGIN_LOCK_TTL_MS } from './server/sessionRuntime.ts';
 import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
 import { createFleetWiring } from './server/fleetWiring.ts';
+import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
+import { registerVisualRoutes } from './server/routes/visualRoutes.ts';
 import { catalogFromMcpTools, createMcpAgentExecutor } from './server/mcpAgentExecutor.ts';
 
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
@@ -340,6 +342,15 @@ app.use('/api', async (req, res, next) => {
     const presented = headerToken || bearerToken;
     if (presented && safeTokenEqual(presented, ALERT_WEBHOOK_TOKEN)) return next();
   }
+  // VISUAL-P1-001: Der Beamer (Ghostuser 6) liest den MJPEG-Fallback mit einem
+  // <img> - dort lassen sich KEINE Header setzen. Genau diese EINE Route darf den
+  // Studio-Token deshalb als Query tragen (Vergleich weiterhin mit
+  // safeTokenEqual). Alles andere bleibt bei Header/Cookie; ohne gueltiges Token
+  // laeuft die Anfrage in die normale Auth und wird abgelehnt (kein fail-open).
+  if (req.method === 'GET' && req.path === '/visual/mjpeg') {
+    const queryToken = tokenFromUrl(req);
+    if (queryToken && safeTokenEqual(queryToken, STUDIO_ACCESS_TOKEN)) return next();
+  }
   if (
     scrapeTokenEnabled &&
     req.method === 'GET' &&
@@ -465,6 +476,19 @@ registerOpsRoutes(app, {
 // (Factory). Registrierung an der Originalposition, damit die Reihenfolge relativ
 // zu den Middleware-Ketten unveraendert bleibt.
 registerMediaRoutes(app);
+
+// VISUAL-P1-001: MJPEG-Fallback fuer den Beamer (Ghostuser 6) - der Spec-Punkt
+// "Fallback ohne SFU" war nie gebaut. Der Hub ist EINE Instanz pro Prozess; bei
+// mehreren App-Knoten liefert der Knoten, der die Frames bekommt (Beamer-URL
+// also auf denselben Knoten zeigen lassen wie die Studio-Session).
+const visualFrameHub = new VisualFrameHub();
+registerVisualRoutes(app, {
+  hub: visualFrameHub,
+  tokenFromRequest: studioTokenFromRequest,
+  safeTokenEqual,
+  studioAccessToken: STUDIO_ACCESS_TOKEN,
+  studioAuthOpen,
+});
 
 // ===========================================================================
 // Externe Cloud-Anbindung (Supabase + Cloudflare R2)

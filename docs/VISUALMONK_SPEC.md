@@ -42,7 +42,16 @@ Studio-Session (App)
   Reconnect-fähig. Kein UI, kein Mikro/keine Frequenzanalyse nötig.
 - Der Visual-Stream ist **kein** neuer Medienkanal im Datenmodell, sondern ein
   weiterer Track im bestehenden WebRTC/SFU-Pfad (wie der Master-Sound-Track).
-- Fallback ohne SFU: MJPEG/WebP über WebSocket oder HLS-Frames.
+- Fallback ohne SFU: **MJPEG über HTTP** ist gebaut (VISUAL-P1-001) —
+  `server/visualStream.ts` + `server/routes/visualRoutes.ts` + `src/utils/visualMjpeg.ts`.
+  Der Beamer liest den Strom mit einem `<img>` (`/api/visual/mjpeg?token=…`); das
+  lokale Studio schiebt Canvas-Frames über `POST /api/visual/frame` ein — aber
+  **nur, solange ein Zuschauer verbunden ist** (`GET /api/visual/status`), sonst
+  wird nichts enkodiert. Live gemessen: `npm run proof:mjpeg` zeigt echte
+  JPEG-Frames (ffmpeg) im Browser-Beamer-Bild (Pixel rot → grün → blau). Ein
+  ehrlicher Detail-Befund: Chromium übernimmt den n-ten Teil eines
+  `multipart/x-mixed-replace`-Stroms erst mit dem (n+1)-ten — der laufende
+  Publisher sendet ohnehin kontinuierlich, ein Einzelbild bleibt deshalb stehen.
 
 ## 3. Audio-Feature-Bus
 

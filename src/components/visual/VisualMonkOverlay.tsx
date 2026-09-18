@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useVisualStream } from '../../hooks/useVisualStream';
+import { createFallbackPublisher, studioTokenFromCookie } from '../../utils/visualMjpeg';
 import { webRTCManager } from '../../utils/WebRTCManager';
 import { VisualFeatureBus } from '../../core/visual/featureBus';
 import { mapAudioToParams, blendParams } from '../../core/visual/audioReactive';
@@ -67,6 +68,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const presetRef = useRef(presetId);
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
+  /**
+   * VISUAL-P1-001: MJPEG-Fallback. Der Publisher laeuft die ganze Zeit, sendet
+   * aber NUR, wenn ein Beamer am MJPEG-Strom haengt (Server meldet die
+   * Zuschauerzahl) - ohne Zuschauer wird kein Frame enkodiert.
+   */
+  const fallbackPublisherRef = useRef<ReturnType<typeof createFallbackPublisher> | null>(null);
 
   // VISUAL-P1-005/P1-008: Renderer-Umschalter. Canvas2D bleibt die Referenz,
   // WebGL das Upgrade. Seit VISUAL-P1-008 zeichnet auch der GL-Pfad Show-Szenen
@@ -240,7 +247,18 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const toggleStream = useCallback(() => {
     if (streamStatus === 'live') {
       stopStream();
+      fallbackPublisherRef.current?.stop();
+      fallbackPublisherRef.current = null;
     } else {
+      // Der Fallback laeuft parallel zum SFU-Pfad (er springt nur ein, wenn beim
+      // Beamer kein WebRTC ankommt) - er kostet nichts, solange niemand schaut.
+      if (!fallbackPublisherRef.current) {
+        fallbackPublisherRef.current = createFallbackPublisher({
+          getCanvas: () => canvasRef.current,
+          token: studioTokenFromCookie(),
+        });
+        fallbackPublisherRef.current.start();
+      }
       const stream = startStream(canvasRef.current, 30);
       const track = stream?.getVideoTracks()[0];
       if (track) {

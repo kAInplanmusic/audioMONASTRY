@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Monitor, Sparkles } from 'lucide-react';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { SESSION_MODE_LABEL } from '../core/session/listenerMode';
+import { mjpegStreamUrl, studioTokenFromCookie } from '../utils/visualMjpeg';
 
 /**
  * VISUALOUTMAINSTREAM – eigene Seite (/visual-out) = **Ghostuser 6**
@@ -20,6 +21,14 @@ export const VisualOutPage = () => {
   const [state, setState] = useState<'connecting' | 'waiting' | 'live' | 'error'>('connecting');
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
+  /**
+   * VISUAL-P1-001: MJPEG-Fallback. Der Spec-Punkt „Fallback ohne SFU" war nie
+   * gebaut - genau er traegt den Beamer, wenn WebRTC/SFU nicht durchkommt (kein
+   * Login, kein Signaling, fremdes Geraet). Der Fallback ist KEIN Ersatz: er
+   * springt nur ein, wenn der WebRTC-Stream nicht kommt.
+   */
+  const [mjpeg, setMjpeg] = useState(false);
+  const [mjpegError, setMjpegError] = useState(false);
 
   useEffect(() => {
     const attach = (stream: MediaStream) => {
@@ -38,8 +47,14 @@ export const VisualOutPage = () => {
     };
 
     const t = window.setTimeout(() => setState((prev) => (prev === 'connecting' ? 'waiting' : prev)), 4000);
+    // Ohne Video-Track nach 6 s auf MJPEG umschalten (Beamer-Notfallpfad).
+    const fallbackTimer = window.setTimeout(() => setState((prev) => {
+      if (prev !== 'live') setMjpeg(true);
+      return prev;
+    }), 6000);
     return () => {
       window.clearTimeout(t);
+      window.clearTimeout(fallbackTimer);
       webRTCManager.onRemoteStream = () => {};
       webRTCManager.onMainStream = () => {};
     };
@@ -58,6 +73,17 @@ export const VisualOutPage = () => {
     <div className="fixed inset-0 bg-black text-white select-none overflow-hidden">
       <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black" />
 
+      {/* MJPEG-Fallback: reines <img> gegen den Server-Strom (kein SFU, kein Login) */}
+      {mjpeg && state !== 'live' && !mjpegError && (
+        <img
+          src={mjpegStreamUrl(studioTokenFromCookie())}
+          alt="Visual-Fallback (MJPEG)"
+          className="absolute inset-0 w-full h-full object-contain bg-black"
+          onLoad={() => { setState('live'); setMjpegError(false); }}
+          onError={() => setMjpegError(true)}
+        />
+      )}
+
       {/* Status-Overlay (nur solange nicht live) */}
       {state !== 'live' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-black/80">
@@ -67,7 +93,10 @@ export const VisualOutPage = () => {
             <span className="text-[10px] font-mono tracking-[0.3em] text-neutral-500">GHOSTUSER 6 · BEAMER</span>
           </div>
           <p className="text-xs font-mono tracking-widest text-neutral-400">
-            {state === 'connecting' && 'Verbinde mit Studio-Session …'}
+            {/* In diesem Block ist `state` bereits nicht 'live' (TS-Narrowing). */}
+            {mjpeg && !mjpegError && 'WebRTC kommt nicht durch – MJPEG-Fallback aktiv …'}
+            {mjpegError && 'Weder WebRTC noch MJPEG-Fallback erreichbar.'}
+            {!mjpeg && state === 'connecting' && 'Verbinde mit Studio-Session …'}
             {state === 'waiting' && 'Verbunden – warte auf Visual-Stream des Hosts … (Studio: VISUAL → AN GHOSTUSER 6)'}
             {state === 'error' && 'Verbindungsfehler – Seite neu laden'}
           </p>
