@@ -650,6 +650,13 @@ async function startFleet(env) {
 
   // FLEET-WIRING: Auf die app-1-IP warten (bis ~30 s), dann DNS + Firewalls
   // synchronisieren (master/ai-Ports, origin-DNS, app-Firewall).
+  //
+  // LIVE-BEFUND 2026-09-18: das Ergebnis wurde nur ins Worker-Log geschrieben
+  // (`console.warn`). Starb die DNS-Verdrahtung (abgelaufener Cloudflare-Token),
+  // blieb das Portal dauerhaft in 'starting-app' mit HTTP 522 - ohne jeden Hinweis
+  // fuer den Betreiber; genau daran ist ein Live-Wake gescheitert. Jetzt wird das
+  // Ergebnis zurueckgegeben und im Ladebildschirm sichtbar gemacht.
+  let wiring = null;
   if (created.length === FLEET.length) {
     try {
       let appIp = '';
@@ -658,15 +665,20 @@ async function startFleet(env) {
         appIp = m['audiomonastry-app-1']?.public_net?.ipv4?.ip ?? '';
         if (!appIp) await new Promise((r) => setTimeout(r, 2000));
       }
-      await syncAppFirewall(env);
-      if (appIp) await syncOriginDns(env, appIp);
-      await openFleetPorts(env);
+      const appFirewall = await syncAppFirewall(env);
+      const dns = appIp
+        ? await syncOriginDns(env, appIp)
+        : { ok: false, message: 'app-1 hat noch keine IP.' };
+      const ports = await openFleetPorts(env);
+      wiring = { appIp, appFirewall, dns, ports };
+      if (!dns.ok) console.warn('[portal] fleet-wiring: DNS nicht gesetzt –', dns.message);
     } catch (e) {
+      wiring = { ok: false, error: String(e?.message ?? e) };
       console.warn('[portal] fleet-wiring:', e?.message ?? e);
     }
   }
 
-  return { started: true, created, usedSnapshots, fallbackRoles, failed };
+  return { started: true, created, usedSnapshots, fallbackRoles, failed, wiring };
 }
 
 /**
@@ -870,6 +882,11 @@ $('loginBtn').onclick = async () => {
   const wake = await fetch('/api/wake', { method: 'POST' });
   const wd = await wake.json();
   if (!wake.ok) { $('err').textContent = wd.error || 'Start fehlgeschlagen'; return; }
+  // Verdrahtung (Firewall/DNS/Ports) sichtbar machen: ohne DNS bleibt der
+  // Health-Check ueber die Domain bei 522 stehen und der Start wirkt "haengend".
+  if (wd.wiring && wd.wiring.dns && wd.wiring.dns.ok === false) {
+    $('loadErr').textContent = 'Achtung: Domain-Verdrahtung fehlgeschlagen – ' + (wd.wiring.dns.message || 'unbekannt');
+  }
   $('login').style.display = 'none';
   $('loading').style.display = '';
   renderSteps({ state: 'creating', created: 0, total: 5 });

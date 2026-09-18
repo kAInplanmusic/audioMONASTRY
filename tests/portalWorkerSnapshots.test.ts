@@ -39,6 +39,10 @@ function createEnv(): Record<string, unknown> {
     ORIGIN_CERT: '',
     ORIGIN_KEY: '',
     APP_DOMAIN: 'anunnakitools.de',
+    // Ohne diesen Token bricht `syncOriginDns` sofort mit
+    // "CLOUDFLARE_API_TOKEN fehlt im Worker" ab - im Live-Fall war der Token
+    // abgelaufen und die Verdrahtung scheiterte still. Beides deckt der Test ab.
+    CLOUDFLARE_API_TOKEN: 'cf-token',
   };
 }
 
@@ -60,6 +64,8 @@ async function makeSessionCookie(secret: string, user = 'admin'): Promise<string
 }
 
 interface FetchMockOptions {
+  /** true = die Cloudflare-Zonenabfrage liefert nichts (abgelaufener Token, LIVE-Fall). */
+  cloudflareZoneMissing?: boolean;
   images?: unknown[];
   servers?: unknown[];
   createServer?: (payload: Record<string, unknown>) => Record<string, unknown>;
@@ -68,6 +74,7 @@ interface FetchMockOptions {
 
 function setupFetchMock(opts: FetchMockOptions = {}) {
   const serverPayloads: Record<string, unknown>[] = [];
+  const dnsPatches: { content?: string }[] = [];
   let serverGetCount = 0;
   const imageActions: { serverId: string; payload: Record<string, unknown> }[] = [];
   const deletedImages: string[] = [];
@@ -77,7 +84,22 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
     const method = init.method ?? 'GET';
 
     if (url.hostname === 'api.cloudflare.com') {
-      return Response.json({ result: { ipv4_cidrs: ['1.2.3.0/24'], ipv6_cidrs: [] } });
+      // Cloudflare-API gezielt beantworten: die IP-Ranges braucht die Firewall,
+      // Zonen + DNS-Records die Verdrahtung der origin-Domain.
+      if (url.pathname === '/client/v4/ips') {
+        return Response.json({ result: { ipv4_cidrs: ['1.2.3.0/24'], ipv6_cidrs: [] } });
+      }
+      if (url.pathname === '/client/v4/zones') {
+        return Response.json({ result: opts.cloudflareZoneMissing ? [] : [{ id: 'zone-1', name: 'anunnakitools.de' }] });
+      }
+      if (/^\/client\/v4\/zones\/[^/]+\/dns_records/.test(url.pathname)) {
+        if (method === 'PATCH') {
+          dnsPatches.push(JSON.parse(String(init.body ?? '{}')) as { content?: string });
+          return Response.json({ success: true, result: { id: 'rec-1' } });
+        }
+        return Response.json({ result: [{ id: 'rec-1', type: 'A', name: 'origin.anunnakitools.de', content: '9.9.9.9' }] });
+      }
+      return Response.json({ result: {} });
     }
 
     const path = url.pathname;
@@ -129,7 +151,7 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
   });
 
   vi.stubGlobal('fetch', fetchMock);
-  return { fetchMock, serverPayloads, imageActions, deletedImages };
+  return { fetchMock, serverPayloads, imageActions, deletedImages, dnsPatches };
 }
 
 describe('Portal-Worker OPS-Snapshot', () => {
@@ -170,6 +192,60 @@ describe('Portal-Worker OPS-Snapshot', () => {
     // Jede erzeugte Server-Anfrage traegt ein Snapshot-Image (2xx) statt der Basis.
     const appPayload = serverPayloads.find((p) => p.name === 'audiomonastry-app-1');
     expect(appPayload?.image).toBe(201 + FLEET_ROLES.indexOf('app'));
+  });
+
+  // LIVE-BEFUND 2026-09-18: `startFleet` verdrahtet die Flotte (Firewall, origin-DNS,
+  // Ports), verschluckte das Ergebnis aber (`console.warn`). Starb die DNS-Setzung
+  // (abgelaufener Cloudflare-Token), blieb das Portal dauerhaft in 'starting-app' mit
+  // HTTP 522 - ohne Hinweis fuer den Betreiber. Diese Tests halten fest, dass das
+  // Ergebnis zurueckkommt UND dass ein Fehlschlag sichtbar ist.
+  it('meldet die Flotten-Verdrahtung zurueck und setzt die origin-DNS', async () => {
+    const images = FLEET_ROLES.map((role, i) => ({
+      id: 301 + i,
+      name: null,
+      description: `samplemonk-snapshot-${role}-2026-09-18`,
+      status: 'available',
+      created: '2026-09-18T10:00:00+00:00',
+      labels: {},
+    }));
+    const { dnsPatches } = setupFetchMock({ images });
+
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/wake', { method: 'POST', headers: { cookie } }),
+      env,
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.wiring?.dns?.ok).toBe(true);
+    expect(dnsPatches.length, 'kein DNS-PATCH abgesetzt').toBeGreaterThan(0);
+    expect(dnsPatches[0].content).toBe('1.2.3.4'); // app-1-IP aus dem Mock
+  });
+
+  it('macht einen DNS-Fehlschlag sichtbar statt ihn zu verschlucken', async () => {
+    const images = FLEET_ROLES.map((role, i) => ({
+      id: 401 + i,
+      name: null,
+      description: `samplemonk-snapshot-${role}-2026-09-18`,
+      status: 'available',
+      created: '2026-09-18T10:00:00+00:00',
+      labels: {},
+    }));
+    setupFetchMock({ images, cloudflareZoneMissing: true });
+
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/wake', { method: 'POST', headers: { cookie } }),
+      env,
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200); // der Start selbst klappt ...
+    expect(body.wiring?.dns?.ok).toBe(false); // ... die Verdrahtung nicht
+    expect(String(body.wiring?.dns?.message ?? '')).toContain('Cloudflare-Zone');
   });
 
   it('startFleet nutzt das Rollen-Snapshot-Image statt cloud-init', async () => {

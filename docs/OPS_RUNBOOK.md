@@ -598,7 +598,7 @@ curl -s http://localhost:8080/api/health # MUSS die Knoten-Version melden (z. B.
 |---|---|---|
 | 1 | **Snapshots werden nie benutzt** → jeder Wake ist ein Kaltstart (cloud-init + Docker-Build) | `POST /api/wake` → `fallbackRoles: ["app","sfu","ai","master","edge"]`, `usedSnapshots: {}`, obwohl 5 Rollen-Snapshots `available` sind. Ursache: `snapshotRoleOf()` las nur `labels.role`; die Portal-Snapshots haben **leere Labels** und nur eine Beschreibung (`samplemonk-snapshot-app-2026-09-18[-live]`). **Behoben** in `services/portal-worker/src/index.js` + Test |
 | 2 | **Wake verdrahtet die Domain nicht** | `/api/status` bleibt dauerhaft `starting-app` mit `healthError: HTTP 522`; `origin.anunnakitools.de` zeigt nicht auf die neue app-IP. `wire-fleet` hilft nur, wenn der Worker-Token DNS darf (siehe 3) |
-| 3 | **Cloudflare-Token im Worker ist tot** | `POST /api/wire-fleet` → `{"dns":{"ok":false,"message":"Cloudflare-Zone nicht gefunden"}}` (der Worker bekommt bei `/zones` eine leere Antwort). Der neu bereitgestellte Token darf Workers/KV/Zonen **lesen**, aber **kein DNS** (`/zones/<id>/dns_records` → *Authentication error*) |
+| 3 | **Cloudflare-Token im Worker ist tot** — seit 2026-09-18 **sichtbar**: `startFleet` gibt `wiring` zurueck (`dns.ok=false` + Meldung), der Ladebildschirm warnt. Vorher verschluckte ein `console.warn` den Fehlschlag, der Betreiber sah nur `starting-app`/522 | `POST /api/wire-fleet` → `{"dns":{"ok":false,"message":"Cloudflare-Zone nicht gefunden"}}` (der Worker bekommt bei `/zones` eine leere Antwort). Der neu bereitgestellte Token darf Workers/KV/Zonen **lesen**, aber **kein DNS** (`/zones/<id>/dns_records` → *Authentication error*) |
 | 4 | **Idle-Shutdown schläft den Knoten vor der Erreichbarkeit** | app-1 war nach ~35 min `off` (Timer „idle=30 min"), obwohl die Domain nie erreichbar wurde. Für Beweissessions: `systemctl stop audiomonastry-idle-shutdown.timer` |
 
 Zusätzlich nützlich: die Floating-IP (`samplemonk-floating`, 46.225.253.71) war **nicht
@@ -615,6 +615,23 @@ produktionssichtbares Verhalten umgestellt (Resync per Reconnect,
 Main-Out-Vorbedingung per Spiegelung + Audit): **Dev 7/7 · Prod-Build 7/7 ·
 live 7/7**. Wer kuenftig gegen eine echte Instanz testet, findet die Falle im
 Runbook: Debug-Hooks sind dev-only.
+
+### Wake nach dem Worker-Deploy (2026-09-18, dritte Messung)
+
+Mit dem ausgerollten Worker (snapshotRoleOf-Fix + sichtbare Verdrahtung):
+
+```
+POST /api/wake -> HTTP 200 nach 2,4 s
+  usedSnapshots: [app, sfu, ai, master, edge]   # ALLE Rollen aus Snapshots
+  fallbackRoles: []                             # kein cloud-init, kein Build
+  wiring: { appFirewall:{ok:true},
+            dns:{ok:false, message:"Cloudflare-Zone nicht gefunden"},
+            ports:{ok:true} }
+```
+
+Der Knoten war nach ~45 s gesund; `state` bleibt `starting-app` mit HTTP 522, weil
+`ready` den Health-Check UEBER DIE DOMAIN verlangt und dem Token das DNS-Recht fehlt.
+Der Unterschied zu vorher: der Grund steht jetzt in der Antwort und im Ladebildschirm.
 
 ### Snapshot-Wake: ~60 s statt ~5 min (gemessen in der zweiten Runde)
 
