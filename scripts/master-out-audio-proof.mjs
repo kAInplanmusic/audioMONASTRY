@@ -25,6 +25,7 @@
  * wird erkannt: 3 audioinputs, AudioContext laeuft, Transport startet).
  */
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
 
 const BASE = (process.env.E2E_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
@@ -81,9 +82,58 @@ const main = async () => {
     const pro = pageA.locator('#rack-mixer').getByText('PRO').first();
     const hatPro = await pro.waitFor({ timeout: 15_000 }).then(() => true).catch(() => false);
     console.log(`mixerMONK uebernommen (PRO sichtbar: ${hatPro ? 'JA' : 'NEIN'}).`);
-    await sleep(2_000);
+    // Der Kanal-Gate verlangt PRO **und** den SERVER-Lock auf 'mixer' mit eigener
+    // userId (src/App.tsx). Der Lock kommt per Socket - deshalb hier warten und
+    // den Rack-Zustand protokollieren, statt zu raten.
+    await sleep(6_000);
+    const rack = await pageA.locator('#rack-mixer').innerText().catch(() => '');
+    console.log('Rack-Zustand:', JSON.stringify(rack.replace(/\s+/g, ' ').slice(0, 120)));
   } else {
     console.log('Kein mixerMONK-Menue gefunden - Halter konnte nicht gesetzt werden.');
+  }
+
+  // Sample auf einen Kanal legen - DAS ist der Ausloeser fuer den V2-Sink.
+  //
+  // Warum ein EIGENER Upload: die Library-Presets ("TR-909 Classic Kick") haben in
+  // dieser Umgebung keine Audio-URL, der Menuepunkt "Send to Track" ist dann
+  // korrekt mit dem Hinweis "kein Audio-URL" gesperrt (gemessen). Ein lokaler
+  // Upload bekommt eine Blob-URL und ist damit sendbar. Der Kanal selbst ist nur
+  // fuer den Halter frei ("nur DJ / Freigabe") - den haben wir oben gesetzt.
+  let sampleAssigned = false;
+  try {
+    const wav = execFileSync('ffmpeg', [
+      '-hide_banner', '-loglevel', 'error', '-y',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
+      '-af', 'volume=0.5', '-ar', '48000', '-ac', '2',
+      '-f', 'wav', 'pipe:1',
+    ], { maxBuffer: 64 * 1024 * 1024 });
+    await pageA.locator('nav[aria-label="Studio-Navigation"]').getByTitle('biblioMONK').first().click({ timeout: 10_000 });
+    const fileInput = pageA.locator('input[type="file"]:visible').first();
+    await fileInput.setInputFiles({ name: 'pa-beweis.wav', mimeType: 'audio/wav', buffer: wav });
+    await sleep(4_000);
+    await pageA.getByPlaceholder('Suche Samples & Musik…').fill('pa-beweis').catch(() => {});
+    const sample = pageA.getByRole('heading', { name: /pa-beweis/ }).first();
+    await sample.waitFor({ timeout: 20_000 });
+    await sample.click();
+    const menu = pageA.getByRole('menu', { name: 'Audio-Aktionen' });
+    await menu.waitFor({ timeout: 10_000 });
+    const sendItem = menu.getByRole('menuitem', { name: /Send to Track/ });
+    if (await sendItem.isDisabled()) {
+      console.log('Send to Track ist gesperrt (Hinweis:', await sendItem.textContent().then((t) => String(t).trim()).catch(() => '?'), ')');
+    } else {
+      await sendItem.click();
+      const target = menu.getByRole('menuitem', { name: /CH 1 · KICK/ }).first();
+      await target.waitFor({ timeout: 10_000 });
+      if (await target.isDisabled()) {
+        console.log('Kanal CH 1 · KICK ist GESPERRT (Halter gesetzt!) - Befund.');
+      } else {
+        await target.click();
+        sampleAssigned = true;
+        console.log('Upload-Sample auf CH 1 · KICK gelegt (V2-Sink sollte verbinden).');
+      }
+    }
+  } catch (e) {
+    console.log('Sample-Zuweisung nicht moeglich:', String(e.message).slice(0, 200).replace(/\n/g, ' '));
   }
 
   // Transport starten (der Halter = einziger User darf das). WICHTIG: auf den
@@ -174,6 +224,7 @@ const main = async () => {
   // ueberhaupt? (data-main-stream wird gesetzt, sobald startMainStream lief.)
   const mainStreamState = await pageA.evaluate(() => document.body.dataset.mainStream ?? 'unbekannt');
   console.log('DJ-Marker data-main-stream:', mainStreamState);
+  console.log('Sample auf Kanal gelegt:', sampleAssigned ? 'JA' : 'NEIN');
 
   // Serverseitige Sicht: wer ist beigetreten?
   const audit = await fetch(`${BASE}/api/audit`, { headers: { 'x-studio-token': token } }).then((r) => r.json()).catch(() => ({}));

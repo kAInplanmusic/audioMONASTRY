@@ -687,6 +687,16 @@ Der Fortschritt ist seit 2026-09-18 **produktionssichtbar** am Marker
 | `owner-no-dest` | Halter, aber die Engine liefert keinen Stream — der V2-Sink ist nicht verbunden, weil **nichts spielt** (`MasterStreamTap.create()` → `null`, bewusst kein No-Op-Fallback) |
 | `on` | Stream läuft zu den Zuschauern |
 
+**Warum im Headless-Aufbau zusätzlich die KANÄLE gesperrt bleiben** (nachgelesen
+2026-09-19): „Send to Track" verlangt `audioEngine.canLoadTrack(t)` →
+`mainHolderActive`, und das ist in `src/App.tsx` dreifach verknüpft:
+`moduleStates['mixer'] === 'PRO'` **und** `pluginLocks['mixer'].active` **und**
+`pluginLocks['mixer'].lockedBy === webRTCManager.userId`. Ein Menü-Klick im
+Einzel-Browser lässt das Rack auf `AUTO_AI` — PRO+Server-Lock kommen dort nicht
+zustande, also bleiben alle Kanäle „nur DJ / Freigabe". Außerdem: Preset-Samples
+haben in dieser Umgebung **keine Audio-URL** (Menüpunkt korrekt gesperrt mit „kein
+Audio-URL"); ein **eigener Upload** bekommt eine Blob-URL und ist sendbar.
+
 Für eine Messung muss also erst der Halter gesetzt **und** eine Quelle
 tatsächlich abgespielt werden; dann misst
 `node scripts/master-out-audio-proof.mjs` den RMS am Zuschauer
