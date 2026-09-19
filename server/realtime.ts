@@ -39,6 +39,15 @@ import type { SessionRuntime } from './sessionRuntime.ts';
  * Listener-Modus, Relay-Vertrag, Redis-Adapter) wird direkt importiert - es ist
  * zustandslos und braucht keine Verdrahtung.
  */
+/**
+ * Antwort auf einen Clock-Ping: t0 kommt vom Client, t1/t2 sind Serverzeit
+ * (reines Echo ohne Zustand - siehe `socket.on('clock-ping')`).
+ */
+export function buildClockPong(data: unknown, serverTime: number): { t0: number; t1: number; t2: number } {
+  const raw = Number((data as { t0?: unknown })?.t0 ?? Number.NaN);
+  return { t0: Number.isFinite(raw) ? raw : 0, t1: serverTime, t2: serverTime };
+}
+
 export interface RealtimeDeps {
   sessionRuntime: SessionRuntime;
   addServerAudit: (userId: string, role: string, action: string, ok: boolean, target?: string) => void;
@@ -214,6 +223,16 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         relayToSessionPeer('ice-candidate', data, { candidate: data.candidate, sender: socket.id });
       });
       socket.on('activity', refreshIdleTimer);
+
+      // Clock-Sync (NTP-artig): der Server spiegelt BEIDE Zeitstempel zurueck,
+      // damit der Client den Offset zur Serveruhr rechnen kann (Live-Befund
+      // 2026-09-19: die Kette existierte, aber niemand sendete je einen Ping -
+      // syncCount blieb 0). Reines Echo: kein Zustand, kein Audit, keine Locks.
+      socket.on('clock-ping', (data: unknown, ack?: (answer: unknown) => void) => {
+        const answer = buildClockPong(data, Date.now());
+        if (typeof ack === 'function') ack(answer);
+        else socket.emit('clock-pong', answer);
+      });
 
       // -------------------------------------------------------------------
       // Session-Verwaltung (EINE feste Session, max. 4 User) – Full-Mesh.

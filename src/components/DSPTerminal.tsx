@@ -2,6 +2,7 @@ import React, {  useState, useEffect, useRef  } from 'react';
 import { Activity, Power, Cpu, Zap, SlidersHorizontal, Gauge } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
+import { masterClock } from '../core/clock/MonastryMasterClock';
 import { MoaAssistant } from './MoaAssistant';
 import { OptionalDspPanel } from './dsp/OptionalDspPanel';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
@@ -27,6 +28,12 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
   });
   // Echtzeit-Performance-Snapshot (FPS, Jitter, Audio-Health).
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
+  /**
+   * Clock-Diagnose (Befund 2026-09-19): die NTP-artige Sync-Kette war vorhanden,
+   * wurde aber nie ausgeloest - hier wird sichtbar, ob und wie gut die Clients
+   * auf die Serveruhr eingemessen sind (RTT, Drift, Anzahl Messungen).
+   */
+  const [clock, setClock] = useState(() => masterClock.getDiagnostics());
 
   const handleParamChange = (name: string, value: number) => {
       audioEngine.setWorkletParam(name, value);
@@ -36,7 +43,10 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
   useEffect(() => {
     performanceMonitor.setAudioStateProvider(() => audioEngine.getAudioHealth());
     performanceMonitor.start();
-    const timer = setInterval(() => setPerf(performanceMonitor.snapshot()), 1000);
+    const timer = setInterval(() => {
+      setPerf(performanceMonitor.snapshot());
+      setClock(masterClock.getDiagnostics());
+    }, 1000);
     return () => { clearInterval(timer); performanceMonitor.stop(); };
   }, []);
 
@@ -195,7 +205,14 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
             </h3>
             {/* VISUAL-P1-010: Live-Werte (FPS/Jitter/Latenz) aendern sich staendig -
                 visuelle Baselines blenden den Bereich ueber [data-live-value] aus. */}
-            <div className="space-y-3" data-live-value="perf">
+            <div
+              className="space-y-3"
+              data-live-value="perf"
+              data-clock-values={clock.syncCount}
+              // Schätzwert der Serveruhr (Serverzeit-Epoche minus lokale performance.now())
+              // - damit laesst sich vergleichen, ob zwei Clients dieselbe Serverzeit sehen.
+              data-clock-offset-ms={Math.round(clock.syncedOffsetMs)}
+            >
               <div>
                 <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
                   <span>UI FPS</span>
@@ -230,6 +247,22 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
                 </span>
               </div>
               <div className="flex justify-between text-[10px] font-mono">
+                <span className="text-neutral-500">CLOCK RTT</span>
+                <span className={clock.serverRttMs > 0 && clock.serverRttMs < 50 ? 'text-emerald-400' : 'text-neutral-400'}>
+                  {clock.serverRttMs > 0 ? `${clock.serverRttMs.toFixed(1)}ms` : 'keine Messung'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-mono">
+                <span className="text-neutral-500">CLOCK DRIFT</span>
+                <span className={Math.abs(clock.offsetDriftMs) < 5 ? 'text-emerald-400' : 'text-amber-400'}>
+                  {clock.syncCount > 0 ? `${clock.offsetDriftMs.toFixed(1)}ms` : '-'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-mono">
+                <span className="text-neutral-500">CLOCK MESSUNGEN</span>
+                <span className={clock.syncCount > 0 ? 'text-emerald-400' : 'text-amber-400'}>{clock.syncCount}</span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-mono">
                 <span className="text-neutral-500">DROPPED FRAMES</span>
                 <span className={perf.droppedFrames === 0 ? 'text-emerald-400' : 'text-amber-400'}>{perf.droppedFrames}</span>
               </div>

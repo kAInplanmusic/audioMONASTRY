@@ -94,6 +94,28 @@ class WebRTCManager {
   private sessionNavListeners = new Set<(msg: any) => void>();
   public onMainStream: (stream: MediaStream, senderId: string) => void = () => {};
 
+  /**
+   * Clock-Sync (NTP-artig): der Client misst seinen Offset zur Serveruhr.
+   * `sendClockPing()` schickt t0, der Server antwortet mit t1/t2, t3 entsteht beim
+   * Empfang - die Auswertung macht `masterClock.applyServerClock`.
+   */
+  private readonly clockPongListeners: ((data: unknown) => void)[] = [];
+
+  public addClockPongListener(listener: (data: unknown) => void): () => void {
+    this.clockPongListeners.push(listener);
+    return () => {
+      const idx = this.clockPongListeners.indexOf(listener);
+      if (idx >= 0) this.clockPongListeners.splice(idx, 1);
+    };
+  }
+
+  /** Sendet einen Clock-Ping (t0 = lokale Sendezeit). */
+  public sendClockPing(): boolean {
+    if (!this.socket?.connected) return false;
+    this.socket.emit('clock-ping', { t0: performance.now() });
+    return true;
+  }
+
   /** Letzte gemessene One-Way-Netzlatenz (RTT/2) in ms – für Telemetrie. */
   public lastRttMs = 0;
 
@@ -469,6 +491,8 @@ class WebRTCManager {
     });
 
     // K-2/K-5: Server-autoritative Lock-Replikation.
+    // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
+    this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-unlock', (data: any) => this.pluginUnlockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));

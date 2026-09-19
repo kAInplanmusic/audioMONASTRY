@@ -1,6 +1,7 @@
 import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
+import { masterClock } from './core/clock/MonastryMasterClock';
 import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
@@ -199,6 +200,28 @@ function AppComponent() {
   // (Mixer-Sonderfall entfernt). Nur masterplayer (oben) und aiMONK (unten)
   // sind als feste Sektionen für alle 4 User immer sichtbar.
   const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+
+  /**
+   * Clock-Sync (Live-Befund 2026-09-19): die NTP-artige Messung existierte,
+   * wurde aber NIE ausgeloest - niemand sendete einen Ping, der Offset blieb 0.
+   * Jetzt pingt jeder Client alle 15 s; der Server spiegelt t1/t2 zurueck, die
+   * Auswertung (Standardformel) macht die Master-Clock. Ergebnis ist in der
+   * DSP-Konsole sichtbar (CLOCK RTT / DRIFT / MESSUNGEN).
+   */
+  useEffect(() => {
+    const off = webRTCManager.addClockPongListener((data) => {
+      const d = (data ?? {}) as { t0?: number; t1?: number; t2?: number };
+      masterClock.applyServerClock({ t0: d.t0, t1: d.t1, t2: d.t2, t3: performance.now() });
+    });
+    const tick = window.setInterval(() => {
+      webRTCManager.sendClockPing();
+    }, 15_000);
+    webRTCManager.sendClockPing();
+    return () => {
+      off();
+      window.clearInterval(tick);
+    };
+  }, []);
 
   useEffect(() => {
     webRTCManager.onMainStream = (stream) => {

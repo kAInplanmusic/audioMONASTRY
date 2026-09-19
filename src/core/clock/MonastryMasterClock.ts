@@ -24,6 +24,12 @@ export interface MasterClockDiagnostics {
   watchdogs: number;
   pllOffsetMs: number;
   syncedOffsetMs: number;
+  /** Umlaufzeit der letzten Clock-Messung (ms) - Netz + Serververarbeitung. */
+  serverRttMs: number;
+  /** Aenderung des Offsets seit der letzten Messung (ms) - Drift, die die PLL glattet. */
+  offsetDriftMs: number;
+  /** Anzahl erfolgreicher Messungen. */
+  syncCount: number;
 }
 
 interface AudioEngineLike {
@@ -44,6 +50,11 @@ export class MonastryMasterClock {
   private bpm = 128;
   private playing = false;
   private xruns = 0;
+  private serverRttMs = 0;
+  private offsetDriftMs = 0;
+  private syncCount = 0;
+  private lastOffset = 0;
+  private lastSyncAt = 0;
   private watchdogs = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private readonly clockSync = new ClockSync();
@@ -108,6 +119,35 @@ export class MonastryMasterClock {
     this.pll.update(offset);
   }
 
+  /**
+   * Wendet eine Clock-Messung an (NTP-Formel, siehe ClockSync.handleServerPong).
+   *
+   * BEFUND 2026-09-19: die Sync-Kette war vollstaendig vorhanden, aber NIEMAND
+   * sendete je einen Ping - `syncCount` blieb 0 und der Offset damit wirkungslos.
+   * Jetzt speist der Client jede Serverantwort hier ein; die PLL bekommt die
+   * DRIFT (Aenderung seit der letzten Messung), nicht den Absolutwert.
+   *
+   * @returns den neuen Offset (Serverzeit - Clientzeit, ms)
+   */
+  public applyServerClock(payload: { t0?: unknown; t1?: unknown; t2?: unknown; t3?: unknown }): number {
+    const t0 = Number(payload?.t0);
+    const t1 = Number(payload?.t1);
+    const t2 = Number(payload?.t2);
+    const t3 = Number(payload?.t3);
+    if (![t0, t1, t2, t3].every((v) => Number.isFinite(v))) return this.lastOffset;
+    const previous = this.lastOffset;
+    const offset = this.clockSync.handleServerPong(t0, t1, t2, t3);
+    this.lastOffset = offset;
+    this.offsetDriftMs = Math.round((offset - previous) * 10) / 10;
+    this.serverRttMs = Math.round(this.clockSync.getRtt() * 10) / 10;
+    this.syncCount += 1;
+    this.lastSyncAt = performance.now();
+    if (this.syncCount > 1) {
+      this.pll.update(this.offsetDriftMs);
+    }
+    return offset;
+  }
+
   /** Diagnose-Snapshot für perfMONK. */
   public getDiagnostics(): MasterClockDiagnostics {
     return {
@@ -118,6 +158,9 @@ export class MonastryMasterClock {
       watchdogs: this.watchdogs,
       pllOffsetMs: Math.round(this.pll.update(0) * 10) / 10,
       syncedOffsetMs: Math.round((this.clockSync.getSyncedTime() - performance.now()) * 10) / 10,
+      serverRttMs: this.serverRttMs,
+      offsetDriftMs: this.offsetDriftMs,
+      syncCount: this.syncCount,
     };
   }
 
