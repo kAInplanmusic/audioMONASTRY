@@ -14,7 +14,7 @@
     "clean": "rm -rf dist server.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
-    "security": "npm audit && node scripts/validate-interface-boundaries.mjs",
+    "security": "node scripts/npm-audit.mjs && node scripts/validate-interface-boundaries.mjs",
     "test": "vitest run",
     "test:ci": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json && node scripts/assert-no-skipped-tests.mjs",
     "test:coverage": "vitest run --coverage",
