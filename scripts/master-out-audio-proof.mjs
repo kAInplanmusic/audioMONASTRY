@@ -70,15 +70,18 @@ const main = async () => {
   // Der DJ muss den mixerMONK UEBERNEHMEN: nur der Main-Out-Halter sendet den
   // Master-Stream (src/App.tsx: startHostMain() prueft isMainOutOwner). Ohne
   // diesen Schritt bleibt der PA stumm - real gemessen im ersten Anlauf.
-  // Rack erst oeffnen (das ⋮-Menue sitzt im Rack, nicht im Kopf-Icon).
-  await pageA.getByTitle('mixerMONK').first().click().catch(() => {});
-  await pageA.waitForTimeout(800);
-  const mixerMenu = pageA.getByLabel('mixerMONK Menü').first();
-  await mixerMenu.waitFor({ timeout: 10_000 }).catch(() => {});
+  // Halter werden: das ⋮-Menue im Rack (NICHT ueber das Kopf-Icon - das Rack ist
+  // fest sichtbar, ein Nav-Klick schaltet es sonst zu). Genau wie in der
+  // collab-Spec, dort funktioniert es im dev-Modus.
+  const mixerMenu = pageA.getByLabel('mixerMONK Menü');
+  await mixerMenu.first().waitFor({ timeout: 25_000 }).catch(() => {});
   if (await mixerMenu.count()) {
-    await mixerMenu.click().catch(() => {});
-    console.log('mixerMONK uebernommen (Main-Out-Halter).');
-    await sleep(1_500);
+    await mixerMenu.first().click().catch((e) => console.log('Menue-Klick:', e.message.slice(0, 80)));
+    // Bestaetigung abwarten: PRO erscheint nur beim Halter.
+    const pro = pageA.locator('#rack-mixer').getByText('PRO').first();
+    const hatPro = await pro.waitFor({ timeout: 15_000 }).then(() => true).catch(() => false);
+    console.log(`mixerMONK uebernommen (PRO sichtbar: ${hatPro ? 'JA' : 'NEIN'}).`);
+    await sleep(2_000);
   } else {
     console.log('Kein mixerMONK-Menue gefunden - Halter konnte nicht gesetzt werden.');
   }
@@ -166,6 +169,11 @@ const main = async () => {
     };
   });
   console.log('DJ-Umgebung:', JSON.stringify(djState));
+
+  // Publisher-Seite produktionssichtbar pruefen: existiert der Main-Out-Stream
+  // ueberhaupt? (data-main-stream wird gesetzt, sobald startMainStream lief.)
+  const mainStreamState = await pageA.evaluate(() => document.body.dataset.mainStream ?? 'unbekannt');
+  console.log('DJ-Marker data-main-stream:', mainStreamState);
 
   // Serverseitige Sicht: wer ist beigetreten?
   const audit = await fetch(`${BASE}/api/audit`, { headers: { 'x-studio-token': token } }).then((r) => r.json()).catch(() => ({}));

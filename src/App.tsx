@@ -216,8 +216,24 @@ function AppComponent() {
       if (dest) {
         mainDestRef.current = dest;
         webRTCManager.startMainStream(dest.stream);
+        // Diagnose-Marker (produktionssichtbar, wie data-live-value): der
+        // Main-Out-Stream existiert jetzt. Ohne ihn ist am Zuschauer nicht
+        // unterscheidbar, ob der SENDER fehlt oder die Uebertragung.
+        if (typeof document !== 'undefined') document.body.dataset.mainStream = 'on';
       }
     };
+    /**
+     * Diagnose-Marker fuer die Sender-Kette: sagt, WIE WEIT der Main-Out-Audioweg
+     * gediehen ist - 'no-owner' (DJ ist nicht Halter) -> 'owner-no-dest' (Halter,
+     * aber die Engine liefert keinen Master-Stream) -> 'on' (Stream laeuft zu den
+     * Zuschauern). Ohne diese Unterscheidung ist am Zuhörer nicht erkennbar, ob
+     * der Sender fehlt oder die Uebertragung.
+     */
+    const markMainStreamState = () => {
+      if (typeof document === 'undefined' || mainDestRef.current) return;
+      document.body.dataset.mainStream = webRTCManager.isMainOutOwner ? 'owner-no-dest' : 'no-owner';
+    };
+    markMainStreamState();
     if (webRTCManager.isMainOutOwner) {
       startHostMain();
     }
@@ -233,6 +249,7 @@ function AppComponent() {
         return;
       }
       hostMainAttempts += 1;
+      markMainStreamState();
       startHostMain();
     }, 2000);
     webRTCManager.onSessionUpdate = (info) => {

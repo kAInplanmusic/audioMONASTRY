@@ -676,10 +676,22 @@ src/App.tsx:  if (webRTCManager.isMainOutOwner) startHostMain()
 ```
 
 Die Rolle vergibt der Server (mixerMONK-Lock). Ohne Halter bleibt der PA stumm —
-auch wenn er korrekt angedockt ist (`JOIN_MASTER_OUT` im Audit). Wer den
-Audioweg headless messen will, muss also erst den Halter setzen (Rack-Menü
-`mixerMONK Menü`) und dann `node scripts/master-out-audio-proof.mjs` laufen
-lassen: das Skript misst per AnalyserNode den RMS am Zuschauer.
+auch wenn er korrekt angedockt ist (`JOIN_MASTER_OUT` im Audit).
+
+Der Fortschritt ist seit 2026-09-18 **produktionssichtbar** am Marker
+`document.body.dataset.mainStream`:
+
+| Marker | Bedeutung |
+|---|---|
+| `no-owner` | DJ ist nicht Main-Out-Halter (Rack-Menü `mixerMONK Menü` → PRO) |
+| `owner-no-dest` | Halter, aber die Engine liefert keinen Stream — der V2-Sink ist nicht verbunden, weil **nichts spielt** (`MasterStreamTap.create()` → `null`, bewusst kein No-Op-Fallback) |
+| `on` | Stream läuft zu den Zuschauern |
+
+Für eine Messung muss also erst der Halter gesetzt **und** eine Quelle
+tatsächlich abgespielt werden; dann misst
+`node scripts/master-out-audio-proof.mjs` den RMS am Zuschauer
+(AnalyserNode). Ein vorheriger Klick auf das Kopf-Icon `mixerMONK` schließt das
+Rack — das Menü liegt direkt im Rack.
 
 ### Aufräumen (Kosten)
 
