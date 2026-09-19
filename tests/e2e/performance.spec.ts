@@ -69,7 +69,13 @@ async function getMetrics(cdp: CDPSession): Promise<{ name: string; value: numbe
 }
 
 test('P2-4 Performance-Prüfpunkt: CPU < 70 % unter Studio-Last', async ({ page, context }) => {
-  test.setTimeout(150_000);
+  // Budget: die MESSUNG selbst dauert nur ~8 s - das Budget geht fuer den
+  // Studio-Aufbau drauf (16 Plugins, Vite-Transforms, ggf. Vite-Reload). Auf einer
+  // belasteten Maschine (parallel laufender Docker-Build) riss das 150-s-Limit
+  // VOR der Messung ab (real gesehen 2026-09-19: Timeout in openStudio, waehrend
+  // gleichzeitig ein Image gebaut wurde); mit freier Maschine lief derselbe Test
+  // in 51 s durch. Deshalb 240 s - der Gate-Wert bleibt unveraendert.
+  test.setTimeout(240_000);
 
   const navLog: string[] = [];
   page.on('framenavigated', (f) => navLog.push(f.url()));
