@@ -664,6 +664,23 @@ also Code **und** Geschwindigkeit.
   NOMEN-P1-001 arbeitet in Produktion; und `[mos] 16 Hörerwertungen aus der Persistenz
   geladen` (AI-P1-007).
 
+### PA-Audioweg: was er voraussetzt (gemessen 2026-09-18)
+
+Der Master-Stream zum `/master-out`-Zuhörer entsteht **nur**, wenn der DJ
+Main-Out-Halter ist:
+
+```
+src/App.tsx:  if (webRTCManager.isMainOutOwner) startHostMain()
+              -> audioEngine.createMasterStreamDestination()
+              -> webRTCManager.startMainStream(dest.stream)
+```
+
+Die Rolle vergibt der Server (mixerMONK-Lock). Ohne Halter bleibt der PA stumm —
+auch wenn er korrekt angedockt ist (`JOIN_MASTER_OUT` im Audit). Wer den
+Audioweg headless messen will, muss also erst den Halter setzen (Rack-Menü
+`mixerMONK Menü`) und dann `node scripts/master-out-audio-proof.mjs` laufen
+lassen: das Skript misst per AnalyserNode den RMS am Zuschauer.
+
 ### Aufräumen (Kosten)
 
 `POST /api/stop` **löscht** alle Server und Floating-IPs (danach 0 €/Monat für Compute;

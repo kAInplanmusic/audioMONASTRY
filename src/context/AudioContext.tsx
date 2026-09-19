@@ -11,83 +11,20 @@ interface AudioContextType {
 
 const AudioContext = createContext<AudioContextType | null>(null);
 
+/**
+ * Worklet-Module laden. Die Implementierung liegt in
+ * `src/core/audio/worklets/loadAudioWorklets.ts` (Single-Flight), damit auch
+ * `audioEngine.init()` darauf warten kann - vorher baute der Graph seine Knoten
+ * parallel zum Laden und fuenf DSP-Knoten fielen auf Pass-through zurueck
+ * (Befund 2026-09-18, gemessen im Produktions-Build).
+ */
 const loadAllAudioWorklets = async () => {
-    // Define a simple dummy processor in case loading fails
-    const registerDummyProcessor = (processorId: string) => {
-        // This is a minimal pass-through processor
-        const dummyProcessorCode = `
-            class DummyProcessor extends AudioWorkletProcessor {
-                process(inputs, outputs) {
-                    const input = inputs[0];
-                    const output = outputs[0];
-                    if (!input || !input[0]) return true;
-                    for (let channel = 0; channel < input.length; ++channel) {
-                        output[channel].set(input[channel]);
-                    }
-                    return true;
-                }
-            }
-            registerProcessor('${processorId}', DummyProcessor);
-        `;
-        const blob = new Blob([dummyProcessorCode], { type: 'application/javascript' });
-        const blobUrl = URL.createObjectURL(blob);
-        const rawCtx = Tone.context.rawContext as AudioContext;
-        return rawCtx.audioWorklet.addModule(blobUrl);
-    };
-
-    let manifest: { worklets: { id: string, url: string, hash: string }[] } | null = null;
-    try {
-        const response = await fetch('/plugin-manifest.json');
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        manifest = await response.json();
-        // console.log("Loaded plugin manifest.");
-    } catch (error) {
-        console.error("Failed to load plugin-manifest.json:", error);
-        return;
+    const { ensureAudioWorkletsLoaded } = await import('../core/audio/worklets/loadAudioWorklets');
+    const ctx = Tone.context.rawContext as unknown as { audioWorklet?: { addModule: (u: string) => Promise<unknown> } };
+    const result = await ensureAudioWorkletsLoaded({ ctx });
+    if (result.fallback.length > 0) {
+        console.warn('[worklets] Prozessoren mit Dummy-Fallback:', result.fallback.join(', '));
     }
-
-    const normalizeWorkletUrls = (url: string): string[] => {
-        const normalized = url.startsWith('/public/') ? url.replace('/public/', '/') : url;
-        return Array.from(new Set([url, normalized]));
-    };
-
-    const workletsConfigFromManifest = manifest?.worklets.map(w => ({
-        name: w.id,
-        urls: normalizeWorkletUrls(w.url),
-        processorId: w.id,
-        hash: w.hash
-    })) || [];
-
-    const rawCtx = Tone.context.rawContext as AudioContext;
-
-    for (const worklet of workletsConfigFromManifest) {
-        let loaded = false;
-        try {
-            for (const candidateUrl of worklet.urls) {
-                try {
-                    await rawCtx.audioWorklet.addModule(candidateUrl);
-                    loaded = true;
-                    break;
-                } catch {
-                    // Try next candidate
-                }
-            }
-
-            if (!loaded) {
-                throw new Error(`No valid URL for ${worklet.name}`);
-            }
-        } catch (error) {
-            console.error(`Failed to load ${worklet.name}:`, error);
-            try {
-                await registerDummyProcessor(worklet.processorId);
-                console.warn(`Registered dummy-processor as '${worklet.processorId}' for ${worklet.name}.`);
-            } catch (fallbackError) {
-                console.error(`Failed to register dummy-processor for ${worklet.name}:`, fallbackError);
-            }
-        }
-    }
-
-    // console.log("Attempted to load all AudioWorklets.");
 };
 
 export const AudioProvider = ({ children }: { children: React.ReactNode }) => {

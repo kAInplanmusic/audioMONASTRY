@@ -21,6 +21,7 @@ import { workletGraphRuntime, type WorkletSpec, type WorkletChainResult } from '
 import { registerReferenceWorkletSpecs } from '../core/audio/workletSpecs';
 import { WebAudioWorkletBridge } from '../core/audio/backends/WebAudioWorkletBridge';
 import { createAudioWorkletNode } from '../core/audio/worklets/createWorkletNode';
+import { ensureAudioWorkletsLoaded } from '../core/audio/worklets/loadAudioWorklets';
 import {
   createItSynthWorkletNode,
 } from '../core/audio/worklets/workletInitializers';
@@ -482,6 +483,21 @@ class AudioEngine {
         this.onStateChange?.(state ?? 'closed');
       };
     } catch { /* kein onstatechange verfügbar */ }
+
+    // WICHTIG (Befund 2026-09-18): erst die Worklet-MODULE registrieren, dann
+    // Knoten bauen. Vorher lief das Laden nur in der React-Startkette; die
+    // Knoten entstanden parallel dazu, und fuenf von zehn (dynamics, granular,
+    // fm6, drumsynth, lufs) fielen dauerhaft auf einen Gain-Pass-through zurueck.
+    // `ensureAudioWorkletsLoaded` ist single-flight - mehrfacher Aufruf kostet
+    // nichts.
+    try {
+      const res = await ensureAudioWorkletsLoaded({ ctx: this.ctx as unknown as { audioWorklet?: { addModule: (u: string) => Promise<unknown> } } });
+      if (res.fallback.length > 0) {
+        console.warn(`[worklets] ${res.fallback.length} Prozessor(en) ohne Modul (Dummy aktiv):`, res.fallback.join(', '));
+      }
+    } catch (workletErr) {
+      console.warn('[worklets] Laden der Module fehlgeschlagen:', (workletErr as Error).message);
+    }
 
     // Worklets robust erzeugen: Fehlt eine module-Registrierung (oder der
     // Context ist nicht nutzbar), liefert der Helfer einen neutralen Gain-Knoten
