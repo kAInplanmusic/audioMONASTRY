@@ -31,6 +31,8 @@ import {
 } from '../src/types/zod/schemas';
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
 import type { SessionRuntime } from './sessionRuntime.ts';
+import { resolveSfuAnnouncedIp } from './sfuNetwork.ts';
+import { normalizeSfuSignalingPath } from './webrtcConfig.ts';
 
 /**
  * Was injiziert wird, ist genau das, was server.ts zur Laufzeit besitzt:
@@ -649,12 +651,15 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     if ((process.env.ENABLE_SFU || '').trim() === '1') {
       try {
         const mediasoup = (await import('mediasoup')) as any;
+        // F6: Pfad der SFU-Signalisierung aus derselben Quelle wie die
+        // /api/webrtc-config-Antwort - Client und Server koennen nicht auseinanderlaufen.
+        const SFU_SIGNALING_PATH = normalizeSfuSignalingPath(process.env.SFU_SIGNALING_PATH);
         const sfuIo = new Server(server, {
           cors: {
             origin: CORS_ORIGIN,
             methods: ['GET', 'POST'],
           },
-          path: '/sfu-signaling',
+          path: SFU_SIGNALING_PATH,
         });
 
         // Globale (für diese Prozessinstanz) Worker/Router-Registry je Session.
@@ -662,6 +667,22 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // klein gehalten werden kann (sonst erzeugt Docker sehr viele iptables-Regeln).
         const SFU_RTC_MIN_PORT = Number(process.env.SFU_RTC_MIN_PORT || 40000);
         const SFU_RTC_MAX_PORT = Number(process.env.SFU_RTC_MAX_PORT || 40099);
+        // F6: Die öffentliche IP zur LAUFZEIT ermitteln, statt sie zu erwarten.
+        // Vorher war SFU_ANNOUNCED_IP auf dem SFU-Knoten leer (bzw. im Portal-Pfad
+        // die PRIVATE 10.x-Adresse aus `hostname -I`) - Mediasoup kündigte dann
+        // Adressen an, die kein externer Browser erreichen kann, ohne dass es
+        // irgendwo stand.
+        const announced = await resolveSfuAnnouncedIp(process.env);
+        const SFU_ANNOUNCED_IP = announced.announcedIp ?? undefined;
+        if (SFU_ANNOUNCED_IP) {
+          log(`SFU: announcedIp=${SFU_ANNOUNCED_IP} (Quelle: ${announced.source})`);
+        } else {
+          warn(
+            '[sfu] SFU_ANNOUNCED_IP nicht ermittelbar - ICE-Kandidaten tragen keine oeffentliche Adresse, '
+            + `der Medienpfad bleibt auf das LAN beschraenkt (${announced.reason ?? 'unbekannt'}; `
+            + `Versuche: ${announced.attempts.join(' | ') || 'keine'})`,
+          );
+        }
         const mWorker = await mediasoup.createWorker({ rtcMinPort: SFU_RTC_MIN_PORT, rtcMaxPort: SFU_RTC_MAX_PORT });
         const routers = new Map<string, any>();
         // Producer-Registry je Session: erlaubt Peer-uebergreifendes Consume.
@@ -703,7 +724,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             try {
               const router = await ensureRouter(sessionId);
               const transport = await router.createWebRtcTransport({
-                listenIps: [{ ip: process.env.SFU_LISTEN_IP || '0.0.0.0', announcedIp: process.env.SFU_ANNOUNCED_IP } as any],
+                listenIps: [{ ip: process.env.SFU_LISTEN_IP || '0.0.0.0', announcedIp: SFU_ANNOUNCED_IP } as any],
                 enableUdp: true, enableTcp: true, preferUdp: true,
               });
               transport.on('dtlsstatechange', (s: string) => { if (s === 'closed') transport.close(); });
@@ -766,7 +787,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             producers.clear();
           });
         });
-        log('SFU (Mediasoup) aktiviert: /sfu-signaling');
+        log(`SFU (Mediasoup) aktiviert: ${SFU_SIGNALING_PATH}`);
       } catch (e) {
         warn('Mediasoup SFU nicht gestartet (ENABLE_SFU):', (e as Error).message);
       }

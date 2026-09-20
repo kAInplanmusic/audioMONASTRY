@@ -50,6 +50,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 import urllib.parse
@@ -1152,6 +1153,343 @@ class BuildParityTest(unittest.TestCase):
         text = self.LIB.read_text(encoding="utf-8")
         for name in PARITY_LIB_CALLS:
             self.assertIn(f"{name}() {{", text)
+
+
+class RtcVerdrahtungTest(unittest.TestCase):
+    """F6: SFU-Rolle und TURN/coturn sind im Standardpfad verdrahtet.
+
+    Der Befund: `/api/webrtc-config` lieferte nur STUN, `SFU_ANNOUNCED_IP` war auf
+    sfu-1 leer (bzw. im Portal-Pfad die PRIVATE 10.x-Adresse aus `hostname -I`),
+    und coturn wurde von keinem Flottenskript installiert. Geprueft wird deshalb
+    die ganze Kette - ohne Netz, ohne Server, ohne Secret:
+
+      * Rollen-Verdrahtung: `wire-rtc.sh` schreibt ENABLE_SFU/SFU_ANNOUNCED_IP/
+        TURN_* idempotent in die Knoten-.env (auch wenn dort eine LEERE Zeile
+        steht - genau daran war die IP-Ankuendigung leer) und erzeugt die
+        coturn-Konfiguration aus der eingecheckten Vorlage.
+      * IP-Ermittlung: nur OEFFENTLICHE IPv4 werden akzeptiert; die Quellen sind
+        Umgebung -> Hetzner-Metadata -> Cloud-Init-Datei -> Aussenprobe.
+      * coturn als Service: Overlay startet, Ports sind in Firewall (beide
+        Provisioning-Pfade), Vorlage und Doku identisch freigegeben.
+      * Portal-Worker/Cloud-Init ziehen mit.
+    """
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.lib = HETZNER / "lib" / "rtc-fleet.sh"
+        self.wire = HETZNER / "wire-rtc.sh"
+        self.turn_compose = ROOT / "docker-compose.turn.yml"
+        self.sfu_compose = ROOT / "docker-compose.sfu.yml"
+        self.turn_conf = ROOT / "services" / "turn" / "turnserver.conf"
+        self.cloud_init = HETZNER / "cloud-init.yaml"
+
+    def _run(self, args, env=None, cwd=ROOT):
+        return subprocess.run(
+            [self.bash, *args], capture_output=True, text=True, cwd=cwd, timeout=60,
+            env=env if env is not None else clean_env(),
+        )
+
+    def _lib_run(self, script: str, env=None):
+        """Fuehrt ein Shell-Schnipsel mit geladener Bibliothek aus (kein Netz)."""
+        return self._run(["-c", f'source "{self.lib}"\n{script}'], env=env)
+
+    @staticmethod
+    def _without_comments(text: str) -> str:
+        """Quelltext ohne Kommentarzeilen (Regressionspruefungen auf Kommandos).
+
+        Die Begruendungen der Skripte NENNEN die alten Fehlerwege
+        (`SFU_ANNOUNCED_IP=$(hostname -I ...)`); gesucht werden darf nur die
+        ausfuehrbare Form.
+        """
+        keep = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("#", "//", "*", "/*")):
+                continue
+            keep.append(line)
+        return "\n".join(keep)
+
+    # --- Syntax ---------------------------------------------------------------
+    def test_bash_syntax_der_neuen_skripte_ist_sauber(self) -> None:
+        for path in (self.lib, self.wire, BRING_UP, HETZNER / "provision-fleet.sh", ROOT / "services" / "turn" / "deploy-turn.sh"):
+            with self.subTest(script=path.name):
+                result = self._run(["-n", str(path)])
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    # --- .env-Schreiben -------------------------------------------------------
+    def test_env_upsert_ersetzt_auch_eine_leere_zeile(self) -> None:
+        # Das war der F6-Fehler: `grep -q KEY .env || echo KEY=... >> .env` laesst
+        # eine vorhandene LEERE Zeile stehen -> SFU_ANNOUNCED_IP blieb leer.
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env"
+            env_file.write_text("DOMAIN=\nSFU_ANNOUNCED_IP=\nENABLE_SFU=\n", encoding="utf-8")
+            result = self._lib_run(
+                f'rtc_env_upsert "{env_file}" SFU_ANNOUNCED_IP 49.13.65.150\n'
+                f'rtc_env_upsert "{env_file}" ENABLE_SFU 1\n'
+                f'rtc_env_upsert "{env_file}" TURN_URLS "turn:49.13.65.150:3478?transport=udp,turn:49.13.65.150:3478?transport=tcp"\n'
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            lines = env_file.read_text(encoding="utf-8").splitlines()
+            self.assertIn("SFU_ANNOUNCED_IP=49.13.65.150", lines)
+            self.assertIn("ENABLE_SFU=1", lines)
+            self.assertEqual(len([l for l in lines if l.startswith("SFU_ANNOUNCED_IP=")]), 1)
+            self.assertNotIn("SFU_ANNOUNCED_IP=", lines)
+            self.assertIn("DOMAIN=", lines)
+
+    def test_env_upsert_ist_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env"
+            env_file.write_text("A=1\n", encoding="utf-8")
+            script = f'rtc_env_upsert "{env_file}" TURN_TTL_SECONDS 3600'
+            self._lib_run(f"{script}\n{script}\n{script}")
+            text = env_file.read_text(encoding="utf-8")
+            self.assertEqual(text.count("TURN_TTL_SECONDS="), 1)
+            self.assertIn("A=1", text)
+
+    # --- IP-Regeln ------------------------------------------------------------
+    def test_nur_oeffentliche_ipv4_werden_akzeptiert(self) -> None:
+        # `true` am Ende: der letzte Aufruf ist absichtlich "nein" (Exit 1) und
+        # darf den Testlauf nicht als Fehlschlag erscheinen lassen.
+        result = self._lib_run(
+            "rtc_is_public_ipv4 49.13.65.150; rtc_is_public_ipv4 10.0.0.5; "
+            "rtc_is_public_ipv4 127.0.0.1; rtc_is_public_ipv4 169.254.169.254; "
+            "rtc_is_public_ipv4 192.168.1.10; rtc_is_public_ipv4 172.16.0.9; rtc_is_public_ipv4 kaputt; true"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # "kaputt" ist keine IPv4 -> die Funktion gibt GAR NICHTS aus (kein "ja"),
+        # deshalb stehen hier sechs Antworten fuer sieben Aufrufe.
+        self.assertEqual(result.stdout.split(), ["ja", "nein", "nein", "nein", "nein", "nein"])
+        self.assertEqual(result.stdout.split().count("ja"), 1)
+
+    def test_ip_kette_umgebung_metadata_cloudinit_aussenprobe(self) -> None:
+        text = self.lib.read_text(encoding="utf-8")
+        for marker in ("SFU_ANNOUNCED_IP", "SFU_PUBLIC_IP", "169.254.169.254", "NODE_IP_CONF", "api.ipify.org"):
+            self.assertIn(marker, text)
+        # Die Cloud-Init-Datei ist ausdruecklich Teil der Kette (Fallback).
+        cloud = self.cloud_init.read_text(encoding="utf-8")
+        self.assertIn("/etc/audiomonastry-node.conf", cloud)
+        self.assertIn("public-ipv4", cloud)
+        self.assertIn("/usr/local/bin/audiomonastry-node-public-ip.sh", cloud)
+
+    # --- Trockenlauf ----------------------------------------------------------
+    def test_print_config_zeigt_alle_rtc_variablen_ohne_secret(self) -> None:
+        result = self._run([str(self.wire), "sfu", "--print-config"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = result.stdout
+        for expected in ("ENABLE_SFU=1", "SFU_ANNOUNCED_IP", "SFU_LISTEN_IP", "TURN_URLS=", "TURN_TTL_SECONDS", "TURN_REALM"):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, output)
+        # Trockenlauf heisst: kein Netzzugriff, kein Schreiben, kein Secret.
+        self.assertIn("Trockenlauf", output)
+        self.assertNotIn(os.environ.get("TURN_STATIC_AUTH_SECRET", "\x00"), output)
+
+    def test_print_config_der_app_rolle_nennt_sfu_url_und_turn(self) -> None:
+        result = self._run([str(self.wire), "app", "--print-config"], env=clean_env(SFU_PUBLIC_IP="49.13.65.150"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ENABLE_SFU=0", result.stdout)
+        self.assertIn("SFU_SIGNALING_URL=http://49.13.65.150", result.stdout)
+        self.assertIn("turn:49.13.65.150:3478?transport=udp", result.stdout)
+
+    def test_flottenstart_trockenlauf_nennt_sfu_und_turn_schritte(self) -> None:
+        result = self._run([str(BRING_UP), "--print-config"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        output = result.stdout
+        self.assertIn("wire-rtc.sh sfu", output)
+        self.assertIn("wire-rtc.sh app", output)
+        self.assertIn("docker-compose.turn.yml", output)
+        self.assertIn("coturn", output)
+        # Die Portzahlen kommen aus der Bibliothek, nicht aus einer Annahme.
+        self.assertIn("3478", output)
+        self.assertIn("49152-49201", output)
+
+    def test_wire_rtc_ohne_secret_bricht_laut_ab(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env"
+            result = self._run(
+                [str(self.wire), "sfu"],
+                env=clean_env(SFU_ANNOUNCED_IP="49.13.65.150", ENV_FILE=str(env_file)),
+            )
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn("TURN_STATIC_AUTH_SECRET fehlt", result.stderr)
+            self.assertFalse(env_file.exists() and env_file.read_text())
+
+    def test_wire_rtc_weist_private_ankuendigungs_ip_ab(self) -> None:
+        # Genau der Portal-Fehler aus F6: die 10.x-Adresse aus `hostname -I`.
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env"
+            result = self._run(
+                [str(self.wire), "sfu"],
+                env=clean_env(
+                    TURN_STATIC_AUTH_SECRET="s3cret", SFU_ANNOUNCED_IP="10.0.0.5",
+                    ENV_FILE=str(env_file), TURN_CONF_OUT=str(pathlib.Path(tmp) / "turnserver.conf"),
+                ),
+            )
+            self.assertEqual(result.returncode, 1, result.stdout)
+            self.assertIn("keine oeffentliche IPv4", result.stderr)
+
+    def test_wire_rtc_schreibt_env_und_coturn_konfiguration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / ".env"
+            conf_out = pathlib.Path(tmp) / "coturn" / "turnserver.conf"
+            env_file.write_text("DOMAIN=\nSFU_ANNOUNCED_IP=\n", encoding="utf-8")
+            env = clean_env(
+                TURN_STATIC_AUTH_SECRET="s3cret-f6", SFU_ANNOUNCED_IP="49.13.65.150",
+                ENV_FILE=str(env_file), TURN_CONF_OUT=str(conf_out),
+            )
+            result = self._run([str(self.wire), "sfu"], env=env)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            text = env_file.read_text(encoding="utf-8")
+            self.assertIn("ENABLE_SFU=1", text)
+            self.assertIn("SFU_ANNOUNCED_IP=49.13.65.150", text)
+            self.assertIn("SFU_SIGNALING_URL=http://49.13.65.150", text)
+            self.assertIn("TURN_STATIC_AUTH_SECRET=s3cret-f6", text)
+            self.assertIn("turn:49.13.65.150:3478?transport=udp", text)
+            # Zweiter Lauf: nichts doppelt (idempotent).
+            again = self._run([str(self.wire), "sfu"], env=env)
+            self.assertEqual(again.returncode, 0, again.stderr)
+            second = env_file.read_text(encoding="utf-8")
+            self.assertEqual(second.count("SFU_ANNOUNCED_IP="), 1)
+            self.assertEqual(second.count("TURN_URLS="), 1)
+
+            conf = conf_out.read_text(encoding="utf-8")
+            self.assertIn("static-auth-secret=s3cret-f6", conf)
+            self.assertIn("relay-ip=49.13.65.150", conf)
+            self.assertIn("min-port=49152", conf)
+            self.assertIn("max-port=49201", conf)
+            # Container-Besonderheiten (live verifiziert, siehe Overlay-Kommentare).
+            self.assertIn("log-file=stdout", conf)
+            self.assertIn("pidfile=/tmp/turnserver.pid", conf)
+            self.assertNotIn("\nno-loopback-peers\n", conf)
+            # Rechte: Gruppe darf lesen (Container laeuft als nobody:nogroup).
+            mode = oct(conf_out.stat().st_mode)[-3:]
+            self.assertEqual(mode, "640")
+
+    # --- coturn als Service --------------------------------------------------
+    def test_turn_overlay_startet_den_relay_als_service(self) -> None:
+        if yaml is None:  # pragma: no cover
+            self.skipTest("PyYAML nicht installiert")
+        overlay = yaml.safe_load(self.turn_compose.read_text(encoding="utf-8")) or {}
+        services = overlay.get("services") or {}
+        self.assertIn("coturn", services)
+        coturn = services["coturn"] or {}
+        self.assertTrue(str(coturn.get("image", "")).startswith("coturn/coturn:"), coturn.get("image"))
+        # Host-Netz: die Relay-Ports liegen direkt auf der oeffentlichen IP.
+        self.assertEqual(coturn.get("network_mode"), "host")
+        self.assertEqual(coturn.get("user"), "65534:65534")
+        command = coturn.get("command") or []
+        self.assertIn("-c", command)
+        self.assertIn("/etc/coturn/turnserver.conf", command)
+        self.assertTrue(any(str(c).startswith("--log-file=") for c in command))
+        volumes = coturn.get("volumes") or []
+        self.assertTrue(any("runtime/coturn/turnserver.conf" in str(v) for v in volumes), volumes)
+        # Healthcheck beweist den antwortenden Dienst (nicht "Container laeuft").
+        self.assertIn("turnutils_stunclient", " ".join(coturn.get("healthcheck", {}).get("test", [])))
+        # Regression: `cap_drop: [ALL]` hat den Start live verhindert
+        # ("/usr/bin/turnserver: Operation not permitted") - deshalb steht dort
+        # eine Begruendung statt der Haertung.
+        self.assertNotIn("cap_drop", coturn)
+        self.assertIn("cap_drop", self.turn_compose.read_text(encoding="utf-8"))
+
+    def test_portfreigaben_stimmen_in_allen_pfaden_ueberein(self) -> None:
+        # Vorlage (coturn) -> Firewall (CLI-Pfad + Portal-Worker) -> Bibliothek.
+        conf = self.turn_conf.read_text(encoding="utf-8")
+        found: dict[str, str] = {}
+        for key, pattern in (("min", r"^min-port=(\d+)"), ("max", r"^max-port=(\d+)"), ("listen", r"^listening-port=(\d+)")):
+            match = re.search(pattern, conf, re.MULTILINE)
+            self.assertIsNotNone(match, f"{key} fehlt in turnserver.conf")
+            found[key] = match.group(1) if match else ""
+        relay_range = f"{found['min']}-{found['max']}"
+        listen_port = found["listen"]
+
+        provision = (HETZNER / "provision.py").read_text(encoding="utf-8")
+        worker = PORTAL_WORKER.read_text(encoding="utf-8")
+        lib = self.lib.read_text(encoding="utf-8")
+        docs = (ROOT / "docs" / "HETZNER_DEPLOY.md").read_text(encoding="utf-8")
+        for name, text in (("provision.py", provision), ("portal-worker", worker), ("HETZNER_DEPLOY.md", docs)):
+            with self.subTest(source=name):
+                self.assertIn(relay_range, text)
+                self.assertIn(listen_port, text)
+        # Die Bibliothek haelt die Grenzen einzeln (RTC_TURN_MIN/MAX_PORT) - daraus
+        # setzt sie den Bereich zusammen, statt ihn zu wiederholen.
+        with self.subTest(source="rtc-fleet.sh"):
+            self.assertIn(f'RTC_TURN_MIN_PORT="${{RTC_TURN_MIN_PORT:-{found["min"]}}}"', lib)
+            self.assertIn(f'RTC_TURN_MAX_PORT="${{RTC_TURN_MAX_PORT:-{found["max"]}}}"', lib)
+            self.assertIn(f'RTC_TURN_PORT="${{RTC_TURN_PORT:-{listen_port}}}"', lib)
+
+        # Die Bibliothek definiert die Ports genau einmal (RTC_TURN_*).
+        self.assertIn('RTC_TURN_PORT="${RTC_TURN_PORT:-3478}"', lib)
+        self.assertIn('RTC_TURN_MIN_PORT="${RTC_TURN_MIN_PORT:-49152}"', lib)
+        self.assertIn('RTC_TURN_MAX_PORT="${RTC_TURN_MAX_PORT:-49201}"', lib)
+
+    def test_sfu_overlay_setzt_enable_sfu_und_announced_ip_aus_der_umgebung(self) -> None:
+        if yaml is None:  # pragma: no cover
+            self.skipTest("PyYAML nicht installiert")
+        overlay = yaml.safe_load(self.sfu_compose.read_text(encoding="utf-8")) or {}
+        env = ((overlay.get("services") or {}).get("audiomonastry") or {}).get("environment") or {}
+        self.assertEqual(str(env.get("ENABLE_SFU")), "1")
+        self.assertIn("SFU_ANNOUNCED_IP", env)
+        # Leer ist erlaubt: der Server ermittelt die IP dann selbst
+        # (server/sfuNetwork.ts) - aber der Platzhalter darf nicht hartkodiert sein.
+        self.assertNotRegex(str(env.get("SFU_ANNOUNCED_IP")), r"\d+\.\d+\.\d+\.\d+")
+
+    def test_compose_dateien_sind_gueltig_wenn_docker_verfuegbar_ist(self) -> None:
+        docker = shutil.which("docker")
+        if docker is None:  # pragma: no cover - CI ohne Docker-CLI
+            self.skipTest("docker nicht vorhanden")
+        probe = subprocess.run([docker, "compose", "version"], capture_output=True, text=True, timeout=60)
+        if probe.returncode != 0:  # pragma: no cover
+            self.skipTest("docker compose nicht verfuegbar")
+        env_file = ROOT / ".env"
+        created = False
+        if not env_file.exists():  # env_file: .env ist gitignored - wie im CI-Job `compose`
+            env_file.write_text("", encoding="utf-8")
+            created = True
+        try:
+            combos = [
+                ["-f", "docker-compose.turn.yml"],
+                ["-f", "docker-compose.hetzner.yml", "-f", "docker-compose.sfu.yml"],
+                ["-f", "docker-compose.hetzner.yml", "-f", "docker-compose.sfu.yml", "-f", "docker-compose.turn.yml"],
+            ]
+            for files in combos:
+                with self.subTest(files=" ".join(files)):
+                    result = subprocess.run(
+                        [docker, "compose", *files, "config", "--quiet"],
+                        capture_output=True, text=True, cwd=ROOT, timeout=120,
+                        env=clean_env(SFU_ANNOUNCED_IP="127.0.0.1"),
+                    )
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        finally:
+            if created:
+                env_file.unlink(missing_ok=True)
+
+    # --- Portal-Worker + Cloud-Init -----------------------------------------
+    def test_portal_worker_verdraehtet_die_sfu_rolle_ueber_wire_rtc(self) -> None:
+        worker = PORTAL_WORKER.read_text(encoding="utf-8")
+        self.assertIn("wire-rtc.sh sfu", worker)
+        self.assertIn("docker-compose.turn.yml", worker)
+        # Der alte Weg (private IP aus `hostname -I`) darf nicht zurueckkommen -
+        # geprueft wird die ausfuehrbare Form, nicht die Nennung im Kommentar.
+        self.assertNotIn("SFU_ANNOUNCED_IP=$(hostname -I", self._without_comments(worker))
+        self.assertNotIn("hostname -I", self._without_comments(worker))
+        # RTC-Schluessel sind Rollen-Konfiguration (App: Adresse + TURN, SFU: Secret).
+        for key in ("SFU_SIGNALING_URL", "TURN_URLS", "TURN_STATIC_AUTH_SECRET"):
+            with self.subTest(key=key):
+                self.assertIn(key, worker)
+
+    def test_portal_worker_meldet_fehlende_rtc_verdrahtung(self) -> None:
+        worker = PORTAL_WORKER.read_text(encoding="utf-8")
+        self.assertIn("export function rtcEnvWiring", worker)
+        # Der Report haengt an /api/wiring - sonst sieht ihn niemand.
+        self.assertIn("rtcEnvWiring(env)", worker)
+        self.assertIn("rtc,", worker)
+
+    def test_cloud_init_legt_die_oeffentliche_ip_ab(self) -> None:
+        cloud = self.cloud_init.read_text(encoding="utf-8")
+        self.assertIn("NODE_PUBLIC_IP=", cloud)
+        self.assertIn("audiomonastry-node-public-ip.sh || true", cloud)
+        # Keine private Adresse als Ankuendigungsadresse (ausfuehrbare Form,
+        # nicht der erklaerende Kommentar).
+        self.assertNotIn("hostname -I", self._without_comments(cloud))
 
 
 if __name__ == "__main__":

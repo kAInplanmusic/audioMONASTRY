@@ -331,6 +331,13 @@ function firewallRules(role, cloudflareIps = []) {
   if (role === 'sfu') {
     base.push({ direction: 'in', protocol: 'udp', port: '40000-40099', source_ips: ['0.0.0.0/0', '::/0'] });
     base.push({ direction: 'in', protocol: 'tcp', port: '40000-40099', source_ips: ['0.0.0.0/0', '::/0'] });
+    // F6: TURN/STUN (coturn, docker-compose.turn.yml). Dieselben Zahlen wie in
+    // scripts/hetzner/provision.py, services/turn/turnserver.conf und
+    // docs/HETZNER_DEPLOY.md.
+    base.push({ direction: 'in', protocol: 'udp', port: '3478', source_ips: ['0.0.0.0/0', '::/0'] });
+    base.push({ direction: 'in', protocol: 'tcp', port: '3478', source_ips: ['0.0.0.0/0', '::/0'] });
+    base.push({ direction: 'in', protocol: 'udp', port: '49152-49201', source_ips: ['0.0.0.0/0', '::/0'] });
+    base.push({ direction: 'in', protocol: 'tcp', port: '49152-49201', source_ips: ['0.0.0.0/0', '::/0'] });
   }
   return base;
 }
@@ -570,15 +577,58 @@ const ROLE_ENV_KEYS = {
     'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
     'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
     'OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL', 'MASTER_PLAYER_URL',
+    // F6: Die RTC-Strecke des App-Knotens. Der Worker kennt die oeffentliche IP
+    // des SFU-Knotens zum Cloud-Init-Zeitpunkt NICHT (sie wird erst beim
+    // Server-Create vergeben) - sie kann deshalb nicht berechnet werden, sondern
+    // kommt aus dem Portal-Secret. Fehlt sie, meldet `rtcEnvWiring()` das laut
+    // (Betreiber-Sicht), und /api/webrtc-config sagt ehrlich "kein Relay" statt
+    // still nur STUN zu liefern. Der CLI-Pfad (bring-up-fleet.sh) setzt dieselben
+    // Werte automatisch ueber scripts/hetzner/wire-rtc.sh.
+    'SFU_SIGNALING_URL', 'SFU_SIGNALING_PATH',
+    'TURN_URLS', 'TURN_TTL_SECONDS', 'TURN_STATIC_AUTH_SECRET',
   ],
   // F7-Fix: SIGNALING_ALLOWED_ORIGINS stand hier als Rollen-Schluessel – die
   // Liste wird jetzt unten für JEDEN Knoten berechnet (envFile), ein zweiter
   // Eintrag ueber die Env wuerde sie nur doppelt/unklar schreiben.
-  sfu: [],
+  // F6: Der SFU-Knoten bekommt das TURN-Secret (coturn prueft damit die
+  // kurzlebigen Credentials) und den Realm; die oeffentliche IP ermittelt er
+  // beim Bootstrap selbst.
+  sfu: ['TURN_STATIC_AUTH_SECRET', 'TURN_REALM'],
   master: [],
   edge: ['GF_SECURITY_ADMIN_PASSWORD'],
   ai: ['OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL'],
 };
+
+/**
+ * F6: Zustand der RTC-Verdrahtung aus Betreiber-Sicht (Portal-/Wiring-Report).
+ *
+ * Der Befund war: `/api/webrtc-config` lieferte nur STUN und der Client verband
+ * die SFU same-origin - beides ohne Warnung. Diese Funktion benennt in
+ * Klartext, was fehlt, statt einen Scheinerfolg zu melden.
+ */
+export function rtcEnvWiring(env = {}) {
+  const sfuUrl = String(env.SFU_SIGNALING_URL ?? '').trim();
+  const turnUrls = String(env.TURN_URLS ?? '').trim();
+  const turnSecret = String(env.TURN_STATIC_AUTH_SECRET ?? '').trim();
+  const turnList = turnUrls.split(',').map((u) => u.trim()).filter(Boolean);
+  const problems = [];
+  if (!/^https?:\/\/[^\s/]+/i.test(sfuUrl)) {
+    problems.push('SFU_SIGNALING_URL fehlt/ist keine absolute http(s)-URL - der Client haette keine SFU-Adresse');
+  }
+  if (!turnList.some((u) => /^turns?:/i.test(u))) {
+    problems.push('TURN_URLS fehlt - /api/webrtc-config liefert nur STUN');
+  }
+  if (!turnSecret) {
+    problems.push('TURN_STATIC_AUTH_SECRET fehlt - ohne Secret keine kurzlebigen TURN-Credentials');
+  }
+  return {
+    ok: problems.length === 0,
+    sfuUrl: sfuUrl || null,
+    turnUrls: turnList,
+    turnSecret: Boolean(turnSecret),
+    problems,
+  };
+}
 
 /**
  * F7-Fix: Erlaubte WebRTC-/Signalisierungs-Origins (CSV) für die Knoten-.env.
@@ -688,8 +738,20 @@ case "${role}" in
     docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry
     ;;
   sfu)
-    echo "SFU_ANNOUNCED_IP=$(hostname -I | awk '{print $1}')" >> .env
-    docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
+    # F6: ENABLE_SFU=1 + SFU_ANNOUNCED_IP (oeffentliche IP zur LAUFZEIT ermitteln)
+    # + coturn als Service. Vorher stand hier nur
+    #   echo "SFU_ANNOUNCED_IP=$(hostname -I | awk '{print $1}')" >> .env
+    # - auf einem Knoten mit Hetzner-Privatnetz ist das die 10.x-Adresse, also
+    # eine Adresse, die kein externer Browser erreichen kann; ENABLE_SFU blieb
+    # ungesetzt und der Relay fehlte ganz. wire-rtc.sh kennt beide Werte, prueft
+    # die IP und erzeugt die coturn-Konfiguration (runtime/coturn/turnserver.conf).
+    if bash scripts/hetzner/wire-rtc.sh sfu; then
+      docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d caddy audiomonastry coturn
+    else
+      echo "[portal] WARNUNG: SFU/TURN-Verdrahtung fehlgeschlagen (Grund oben) - Start OHNE coturn." >&2
+      echo "[portal] Ohne Relay fehlen die turn:-Eintraege in /api/webrtc-config." >&2
+      docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
+    fi
     ;;
   master)
     docker compose -f docker-compose.hetzner.yml up -d master-player
@@ -1193,8 +1255,11 @@ async function startFleet(env, options = {}) {
       const ports = await openFleetPorts(env);
       // F1: ok + Klartextgrund auf oberster Ebene - so sieht der Betreiber im
       // Wake-Ergebnis sofort, WELCHER Teil der Verdrahtung fehlt.
-      wiring = { appIp, appFirewall, dns, ports, ...wiringSummary({ appFirewall, dns, ports }) };
+      // F6: dazu der RTC-Zustand (SFU-Adresse + TURN), ebenfalls mit Klartext.
+      const rtc = rtcEnvWiring(env);
+      wiring = { appIp, appFirewall, dns, ports, rtc, ...wiringSummary({ appFirewall, dns, ports }) };
       if (!dns.ok) console.warn('[portal] fleet-wiring: DNS nicht gesetzt –', dns.message);
+      if (!rtc.ok) console.warn('[portal] fleet-wiring: RTC (SFU/TURN) unvollstaendig –', rtc.problems.join(' | '));
     } catch (e) {
       wiring = { ok: false, error: String(e?.message ?? e), appFirewall: null, dns: null, ports: null };
       console.warn('[portal] fleet-wiring:', e?.message ?? e);
@@ -1690,9 +1755,12 @@ export default {
           ? await syncOriginDns(env, appIp)
           : { ok: false, code: 'no-app-ip', message: 'app-1 hat noch keine IP.' };
         const ports = await openFleetPorts(env);
+        // F6: RTC-Zustand mitmelden (SFU-Adresse + TURN). Der Report ist die
+        // Betreiber-Sicht auf genau die Werte, die /api/webrtc-config ausliefert.
+        const rtc = rtcEnvWiring(env);
         // F1: derselbe Klartextgrund wie im Wake-Ergebnis - ein fehlender oder
         // abgelaufener Cloudflare-Token darf hier nicht still bleiben.
-        return json({ ...wiringSummary({ appFirewall, dns, ports }), appFirewall, dns, ports });
+        return json({ ...wiringSummary({ appFirewall, dns, ports }), appFirewall, dns, ports, rtc });
       }
 
       // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot

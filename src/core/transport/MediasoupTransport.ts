@@ -12,10 +12,25 @@
 import { io, Socket } from 'socket.io-client';
 import { Device } from 'mediasoup-client';
 import { ITransport, TransportMode } from '../interfaces';
+import {
+  DEFAULT_SFU_SIGNALING_PATH,
+  SfuSignalingNotConfiguredError,
+  currentPageProtocol,
+  fetchSfuSignalingTarget,
+  isMixedContentBlocked,
+  normalizeSfuPath,
+  normalizeSfuUrl,
+  resolveSfuSignalingTarget,
+  type SfuSignalingTarget,
+} from './sfuEndpoint';
 
 export interface SfuOptions {
   sessionId?: string;
   handshake?: Record<string, unknown>;
+  /** Ausdrueckliche Basis-URL (gewinnt gegen Server-/Build-Wert). */
+  signalingUrl?: string;
+  /** Ausdruecklicher socket.io-Pfad (Default `/sfu-signaling`). */
+  signalingPath?: string;
 }
 
 export class MediasoupTransport implements ITransport {
@@ -33,6 +48,22 @@ export class MediasoupTransport implements ITransport {
   private _onMessage: (payload: unknown, fromPeerId: string) => void = () => {};
   private _onPeerJoin: (peerId: string) => void = () => {};
   private _onPeerLeave: (peerId: string) => void = () => {};
+  /**
+   * F6: Ziel der SFU-Signalisierung. Vorher war es implizit der App-Ursprung
+   * (`io()` ohne URL + `path: '/sfu-signaling'`) - dort liefert der App-Knoten
+   * die SPA aus. `null` = noch nicht aufgeloest.
+   */
+  private target: SfuSignalingTarget | null = null;
+
+  /** Ziel explizit setzen (App-Bootstrap nach /api/webrtc-config, Tests). */
+  setSignalingTarget(target: SfuSignalingTarget | null): void {
+    this.target = target;
+  }
+
+  /** Aktuelles Ziel (null = keines konfiguriert). */
+  signalingTarget(): SfuSignalingTarget | null {
+    return this.target;
+  }
 
   /** true, wenn der SFU-Signaling-Socket aktuell verbunden ist. */
   get connected(): boolean {
@@ -46,13 +77,20 @@ export class MediasoupTransport implements ITransport {
   onPeerLeave: ITransport['onPeerLeave'] = (cb) => { this._onPeerLeave = cb; };
 
   async connect(sessionId: string, _userId: string, opts?: SfuOptions): Promise<void> {
-    this.socket = io({
-      path: '/sfu-signaling',
+    const target = await this.resolveTarget(opts);
+    this.socket = io(target.url, {
+      path: target.path,
       query: { sessionId: opts?.sessionId ?? sessionId },
     });
     await new Promise<void>((resolve, reject) => {
       this.socket!.on('connect', resolve);
-      this.socket!.on('connect_error', reject);
+      this.socket!.on('connect_error', (err: Error) => {
+        reject(new Error(
+          `SFU-Signalisierung ${target.url}${target.path} nicht erreichbar: ${err?.message ?? 'unbekannter Fehler'}. `
+          + 'Antwortet der Host mit HTML, zeigt die Adresse auf die App-/SPA-Auslieferung '
+          + '(SFU_SIGNALING_URL am Server bzw. VITE_SFU_URL prüfen).',
+        ));
+      });
     });
 
     this.device = new Device();
@@ -157,6 +195,52 @@ export class MediasoupTransport implements ITransport {
   /** Bekannte fremde Producer der Session (via new-producer-Events). */
   knownRemoteProducers(): { producerId: string; kind: string }[] {
     return [...this.remoteProducers.values()].filter((p) => !this.ownProducerIds.has(p.producerId));
+  }
+
+  /**
+   * Ziel auflösen: ausdrückliche Option → bereits gesetztes Ziel → Server
+   * (`/api/webrtc-config`) → `VITE_SFU_URL`. Ohne Ziel wird NICHT same-origin
+   * verbunden, sondern ein klarer Fehler geworfen (F6).
+   */
+  private async resolveTarget(opts?: SfuOptions): Promise<SfuSignalingTarget> {
+    const explicitUrl = normalizeSfuUrl(opts?.signalingUrl);
+    const explicitPath = normalizeSfuPath(opts?.signalingPath ?? this.target?.path ?? DEFAULT_SFU_SIGNALING_PATH);
+    if (explicitUrl) {
+      const target: SfuSignalingTarget = { url: explicitUrl, path: explicitPath, source: 'explicit' };
+      this.assertNotMixedContent(target);
+      this.target = target;
+      return target;
+    }
+    if (this.target) {
+      this.assertNotMixedContent(this.target);
+      return this.target;
+    }
+
+    const fromServer = await fetchSfuSignalingTarget();
+    if (fromServer.target) {
+      this.assertNotMixedContent(fromServer.target);
+      this.target = fromServer.target;
+      return fromServer.target;
+    }
+
+    // fetchSfuSignalingTarget hat `VITE_SFU_URL` bereits berücksichtigt - ist
+    // auch dort nichts gesetzt, wird bewusst NICHT verbunden.
+    throw new SfuSignalingNotConfiguredError(fromServer.reason);
+  }
+
+  /**
+   * Eine HTTPS-Seite kann kein `http://`-Ziel öffnen (Mixed Content): der Browser
+   * blockiert die Anfrage, der Fehler wäre nur ein leeres "xhr poll error". Hier
+   * wird die Ursache stattdessen benannt.
+   */
+  private assertNotMixedContent(target: SfuSignalingTarget): void {
+    if (!isMixedContentBlocked(currentPageProtocol(), target.url)) return;
+    throw new SfuSignalingNotConfiguredError(
+      `Mixed Content: die Seite laeuft ueber HTTPS, die SFU-Adresse ${target.url} ist HTTP - `
+      + 'der Browser blockiert die Verbindung. Fuer den Produktivbetrieb eine '
+      + 'HTTPS-SFU-Adresse setzen (SFU_PUBLIC_URL/SFU_SIGNALING_URL, z. B. https://sfu.<domain>); '
+      + 'HTTP gilt nur fuer lokale Testaufbauten',
+    );
   }
 
   /** Socket.io call-basiertes Signalisieren (Server antwortet mit callback). */

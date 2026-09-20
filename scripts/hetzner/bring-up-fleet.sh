@@ -8,9 +8,11 @@
 #   3. app-1 deployen (Caddy + App + Signaling, HTTPS via anunnakitools.de)
 #   4. sfu-1 (Mediasoup), master-1 (master-player), edge-1 (NUR Monitoring-Stack),
 #      ai-1 (Ollama + Stem-AI) einrichten
-#   5. Idle-Auto-Shutdown + Watchdog installieren, Backup-Timer auf app-1
-#   6. Smoke-Test + Stresstest + SFU-RTP-Echtpfad-Test
-#   7. Browser/URL öffnen, sobald alles bereit ist (Weiterleitung)
+#   5. RTC-Verdrahtung (F6): SFU-Rolle + coturn/TURN auf sfu-1, TURN- und
+#      SFU-Adresse in die App-.env (wire-rtc.sh; oeffentliche IP zur Laufzeit)
+#   6. Idle-Auto-Shutdown + Watchdog installieren, Backup-Timer auf app-1
+#   7. Smoke-Test + Stresstest + SFU-RTP-Echtpfad-Test
+#   8. Browser/URL öffnen, sobald alles bereit ist (Weiterleitung)
 #
 # Aufruf:
 #   bash scripts/hetzner/bring-up-fleet.sh               (mit Rückfrage)
@@ -47,6 +49,14 @@ APP_URL="https://$DOMAIN"
 # Verhalten, auf den Knoten aber nicht live nachgemessen (kein Knoten läuft).
 MONITORING_SERVICES="node-exporter cadvisor prometheus alertmanager grafana"
 
+# NOMEN-P1-001: Namen der laufenden Installation aufloesen (neu oder Altname).
+# F6: dazu die RTC-Bausteine (oeffentliche IP, idempotentes .env-Schreiben,
+# TURN-URLs, Portbereiche) - dieselbe Quelle benutzt wire-rtc.sh auf den Knoten.
+# Beide Bibliotheken werden VOR dem Trockenlauf geladen, damit --print-config die
+# echten Portbereiche zeigen kann (und nicht auf Annahmen angewiesen ist).
+source "$(dirname "$0")/fleet-names.sh"
+source "$(dirname "$0")/lib/rtc-fleet.sh"
+
 # Trockenlauf (INFRA-HETZNER-006/007): Rollen, Typen und Service-Listen ausgeben -
 # ohne HCLOUD_TOKEN, ohne API-Aufruf, ohne Rückfrage.
 if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -57,6 +67,14 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog"
   echo "  edge-1:    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES  (NUR Monitoring) | Watchdog"
   echo "  ai-1:      install-ai1.sh (Ollama + Stem host-nativ) | Watchdog"
+  # F6: Rollen-Verdrahtung der RTC-Strecke (SFU + coturn). Die Zeilen kommen aus
+  # scripts/hetzner/lib/rtc-fleet.sh (dieselbe Quelle, die wire-rtc.sh benutzt);
+  # die IP wird zur LAUFZEIT ermittelt, hier steht bewusst nur der Weg.
+  echo "  sfu-1:     RTC: bash scripts/hetzner/wire-rtc.sh sfu  ->  ENABLE_SFU=1, SFU_ANNOUNCED_IP=<oeffentliche IP zur Laufzeit>,"
+  echo "             docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d caddy audiomonastry coturn"
+  echo "  app-1:     RTC: SFU_PUBLIC_IP=<sfu-1> bash scripts/hetzner/wire-rtc.sh app  ->  SFU_SIGNALING_URL=http://<sfu-1>, TURN_URLS=$(rtc_turn_urls "<sfu-1>"), ENABLE_SFU=0"
+  echo "  TURN:      Secret aus TURN_STATIC_AUTH_SECRET (.env.deploy/Umgebung); fehlt es, wird EINES erzeugt und laut gemeldet"
+  echo "             Ports der Rolle sfu: ${RTC_TURN_PORT}/udp+tcp (TURN) und ${RTC_TURN_MIN_PORT}-${RTC_TURN_MAX_PORT}/udp+tcp (Relay) + RTP 40000-40099"
   echo "  Grafana:   ssh -L 3000:127.0.0.1:3000 root@<edge-1-ip>  ->  http://127.0.0.1:3000"
   exit 0
 fi
@@ -80,7 +98,8 @@ step() { echo; echo "===========================================================
 ssh_host() { local host="$1"; shift; ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"; }
 
 # NOMEN-P1-001: Namen der laufenden Installation aufloesen (neu oder Altname).
-source "$(dirname "$0")/fleet-names.sh"
+# (Quelle steht oben bei MONITORING_SERVICES - sie muss auch fuer den Trockenlauf
+# geladen sein.)
 
 get_ip() {
   curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers?name=$(fleet_name "$1")" \
@@ -141,7 +160,11 @@ sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/audiomonastry/.env"; }
 
 echo "  sfu-1 (Mediasoup) …"
 rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
-ssh_host "$SFU_IP" "cd /opt/audiomonastry && grep -q SFU_ANNOUNCED_IP .env || echo SFU_ANNOUNCED_IP=$SFU_IP >> .env; docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
+# Die RTC-Werte (ENABLE_SFU/SFU_ANNOUNCED_IP) setzt Schritt 6 ueber wire-rtc.sh -
+# hier startet nur der Basis-Stack. Das fruehre `grep -q SFU_ANNOUNCED_IP .env ||
+# echo ...` liess eine vorhandene LEERE Zeile stehen; genau daran war die
+# IP-Ankuendigung im Betrieb leer (F6).
+ssh_host "$SFU_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
 
 echo "  master-1 (master-player) …"
 rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
@@ -161,8 +184,64 @@ ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.h
 echo "  ai-1 (Ollama + Stem-AI) …"
 bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
 
-# --- 6. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
-step "6/7 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
+# --- 6. RTC-Verdrahtung: SFU-Rolle + TURN (F6) --------------------------------
+# Vorher war SFU/TURN nur "vorbereitet": ENABLE_SFU stand bestenfalls im Compose-
+# Overlay, SFU_ANNOUNCED_IP wurde per `grep -q ... || echo` gesetzt (eine bereits
+# vorhandene LEERE Zeile blieb stehen) und coturn wurde von keinem Flottenskript
+# installiert - /api/webrtc-config lieferte deshalb nur STUN, und der Client
+# verband die SFU same-origin auf dem App-Knoten (SPA-HTML). Hier wird die Kette
+# jetzt vollstaendig verdrahtet; die oeffentliche IP ermittelt der Knoten zur
+# Laufzeit (wire-rtc.sh -> lib/rtc-fleet.sh).
+step "6/8 RTC-Verdrahtung (ENABLE_SFU + SFU_ANNOUNCED_IP + TURN/coturn)"
+TURN_SECRET="${TURN_STATIC_AUTH_SECRET:-}"
+if [[ -z "$TURN_SECRET" ]]; then
+  TURN_SECRET="$(openssl rand -hex 32)"
+  echo "  ⚠ TURN_STATIC_AUTH_SECRET war nicht gesetzt (.env.deploy/Umgebung) - fuer diesen"
+  echo "    Flottenstart wurde EINES erzeugt und auf sfu-1 + app-1 verteilt (Wert wird nie"
+  echo "    ausgegeben). Beim NAECHSTEN Start ohne gesetztes Secret rotiert es erneut und"
+  echo "    laufende Clients verlieren den Relay: dauerhaft in .env.deploy ablegen."
+fi
+echo "  Secret: gesetzt (${#TURN_SECRET} Zeichen, wird nicht ausgegeben)"
+
+# ssh mit stdin (das Secret laeuft ueber stdin, nicht ueber die Prozessliste).
+ssh_host_stdin() {
+  local host="$1"; shift
+  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"
+}
+
+echo "  sfu-1: ENABLE_SFU=1 + SFU_ANNOUNCED_IP (oeffentliche IP zur Laufzeit) + coturn …"
+printf '%s\n' "$TURN_SECRET" | ssh_host_stdin "$SFU_IP" \
+  "cd /opt/audiomonastry && bash scripts/hetzner/wire-rtc.sh sfu --secret-stdin" \
+  || echo "  ⚠ RTC-Verdrahtung auf sfu-1 fehlgeschlagen (pruefen!)"
+ssh_host "$SFU_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d caddy audiomonastry coturn" \
+  || echo "  ⚠ Compose-Start (inkl. coturn) auf sfu-1 fehlgeschlagen (pruefen!)"
+
+echo "  app-1: SFU-Adresse + TURN_URLS in die .env, App neu hochfahren …"
+printf '%s\n' "$TURN_SECRET" | ssh_host_stdin "$APP_IP" \
+  "cd /opt/audiomonastry && SFU_PUBLIC_IP=$SFU_IP bash scripts/hetzner/wire-rtc.sh app --secret-stdin" \
+  || echo "  ⚠ RTC-Verdrahtung auf app-1 fehlgeschlagen (pruefen!)"
+ssh_host "$APP_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d audiomonastry" \
+  || echo "  ⚠ App-Restart auf app-1 fehlgeschlagen (pruefen!)"
+# Beleg direkt nach dem Start: die Antwort MUSS turn:-Eintraege enthalten.
+echo "  Kontrolle /api/webrtc-config auf app-1 (erwartet: turn: + sfu.url):"
+ssh_host "$APP_IP" "curl -fsS http://127.0.0.1:8080/api/webrtc-config" 2>/dev/null \
+  | python3 -c 'import json,sys
+try:
+    data = json.load(sys.stdin)
+except Exception as exc:
+    print("    ⚠ Antwort nicht lesbar:", exc); raise SystemExit(0)
+turn = data.get("turn") or {}
+sfu = data.get("sfu") or {}
+print("    turn.available=%s urls=%s" % (turn.get("available"), turn.get("urls")))
+print("    sfu.ready=%s url=%s" % (sfu.get("ready"), sfu.get("url")))
+if not turn.get("available"):
+    print("    ⚠ Kein Relay aktiv - Grund:", turn.get("reason"))
+if not sfu.get("ready"):
+    print("    ⚠ Keine SFU-Adresse - Grund:", sfu.get("reason"))' \
+  || echo "  ⚠ Kontrolle nicht moeglich (Antwort/curl auf app-1)"
+
+# --- 7. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
+step "7/8 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' 2>/dev/null || true
 done
@@ -189,7 +268,7 @@ for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
 done
 
 # --- 7. Tests -----------------------------------------------------------------
-step "7/7 Smoke-, Stress- und SFU-RTP-Echtpfad-Tests"
+step "8/8 Smoke-, Stress- und SFU-RTP-Echtpfad-Tests"
 echo "  Smoke-Test $APP_URL …"
 bash scripts/hetzner/smoke-test.sh "$APP_URL" || echo "  ⚠ Smoke-Test fehlgeschlagen (prüfen!)"
 echo "  Stresstest gegen $APP_URL …"
@@ -202,7 +281,9 @@ echo
 echo "=============================================================="
 echo "✅ audioMONASTRY-Flotte ist bereit:"
 echo "   App:      $APP_URL"
-echo "   SFU:      http://$SFU_IP   (RTP 40000–40099)"
+echo "   SFU:      http://$SFU_IP   (RTP 40000–40099, Signalisierung /sfu-signaling)"
+echo "   TURN:     turn:$SFU_IP:3478 (udp+tcp), Relay-Ports ${RTC_TURN_MIN_PORT}-${RTC_TURN_MAX_PORT}"
+echo "   RTC-Check: curl -s https://$DOMAIN/api/webrtc-config | python3 -m json.tool   (turn: + sfu.url)"
 # INFRA-HETZNER-006/007: Grafana ist nur auf 127.0.0.1 des edge-Knotens
 # veroeffentlicht (keine 3000er-Firewall-Regel, kein oeffentlicher Port) -
 # der Zugriff laeuft ueber einen SSH-Tunnel.

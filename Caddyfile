@@ -55,6 +55,13 @@
 
 	# CORS fuer das SFU-Signaling (App-/Test-Origin -> sfu-1). Origin wird
 	# reflektiert, weil mit Credentials gearbeitet wird (`*` waere ungueltig).
+	#
+	# F6: Diese Datei ist im Flottenbetrieb die Caddy-Konfiguration des
+	# SFU-Knotens (bring-up-fleet.sh rsynct sie dorthin) - hier WIRD
+	# /sfu-signaling an den lokalen audiomonastry-Container (ENABLE_SFU=1)
+	# durchgereicht. Auf app-1 liegt dagegen Caddyfile.origin: dort antwortet
+	# derselbe Pfad mit 404 + der konfigurierten SFU-Adresse, damit der Client
+	# nicht in der SPA-Auslieferung landet.
 	@sfuSignal path /sfu-signaling/* /socket.io/*
 	header @sfuSignal {
 		Access-Control-Allow-Origin "{http.request.header.Origin}"

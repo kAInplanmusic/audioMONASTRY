@@ -85,6 +85,8 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
   // Phase-1-V2: hörbarer V2-Testton (V2-Live-Output-Sink).
   const [v2TestToneActive, setV2TestToneActive] = useState(false);
   const [sfuStatus, setSfuStatus] = useState<'off' | 'connecting' | 'connected' | 'error'>('off');
+  // F6: Klartextursache eines fehlgeschlagenen SFU-Verbindungsversuchs.
+  const [sfuError, setSfuError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -158,21 +160,30 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
     update({ ...settings, transportMode: mode });
     if (mode === 'sfu') {
       setSfuStatus('connecting');
+      setSfuError(null);
       try {
         await sfuTransport.connect('studio-session', 'local-user');
         // Session-/Plugin-State-Sync laeuft weiter ueber den Signaling-Socket,
         // nur der Media-Pfad wechselt auf die SFU (Producer/Consumer).
         webRTCManager.setSfuMode(true, sfuTransport);
-        setSfuStatus(sfuTransport.connected ? 'connected' : 'error');
+        const verbunden = sfuTransport.connected;
+        setSfuStatus(verbunden ? 'connected' : 'error');
+        if (!verbunden) setSfuError('SFU-Socket meldet keinen verbundenen Zustand (Signalisierung antwortet nicht).');
       } catch (e) {
-        console.warn('SFU-Transport nicht verfügbar:', (e as Error).message);
+        // F6: Die Ursache sichtbar machen. Der haeufigste Fall ist NICHT ein
+        // Netzfehler, sondern eine fehlende/ falsche SFU-Adresse - vorher
+        // verband der Client same-origin und bekam die SPA-Auslieferung zurueck.
+        const message = (e as Error).message;
+        console.warn('SFU-Transport nicht verfügbar:', message);
         setSfuStatus('error');
+        setSfuError(message);
         update({ ...settings, transportMode: 'p2p' });
       }
     } else {
       webRTCManager.setSfuMode(false, sfuTransport);
       sfuTransport.disconnect();
       setSfuStatus('off');
+      setSfuError(null);
     }
   };
 
@@ -339,6 +350,14 @@ export const SettingsDialog: React.FC<{ open: boolean; onClose: () => void }> = 
               : sfuStatus === 'connecting' ? '● verbinde mit SFU …'
               : '● SFU inaktiv (P2P aktiv)'}
           </p>
+          {/* F6: Der Fehlerpfad muss die URSACHE nennen (fehlende Adresse vs.
+              nicht erreichbarer Host) - sonst ist ein Fehlversuch nicht von
+              einem Konfigurationsfehler zu unterscheiden. */}
+          {sfuError && (
+            <p className="text-[10px] text-red-300/80 mt-1 break-words" role="status" data-testid="sfu-error">
+              {sfuError}
+            </p>
+          )}
         </div>
 
         {/* MIDI */}

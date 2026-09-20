@@ -23,6 +23,37 @@ packages:
   - chrony
 
 write_files:
+  # F6: oeffentliche IPv4 des Knotens beim Boot ermitteln und ablegen. Der Wert
+  # ist die Quelle Nr. 3 der RTC-Verdrahtung (scripts/hetzner/lib/rtc-fleet.sh):
+  # primaer fragt der Knoten die Hetzner-Metadata live, diese Datei ist der
+  # Fallback, wenn die Metadata (noch) nicht erreichbar ist. Bewusst NICHT
+  # `hostname -I`: auf einem Knoten mit Hetzner-Privatnetz ist der erste Treffer
+  # die 10.x-Adresse - genau damit kündigte Mediasoup unerreichbare
+  # ICE-Kandidaten an, und der Client verband die SFU same-origin (SPA-HTML).
+  - path: /usr/local/bin/audiomonastry-node-public-ip.sh
+    permissions: '0755'
+    owner: root:root
+    content: |
+      #!/bin/sh
+      # Schreibt NODE_PUBLIC_IP=<oeffentliche IPv4> nach /etc/audiomonastry-node.conf.
+      # Gibt nichts aus und endet immer mit 0 - der Boot darf daran nicht scheitern.
+      set -u
+      OUT=/etc/audiomonastry-node.conf
+      META=http://169.254.169.254/hetzner/v1/metadata
+      ip=$(curl -fsS --max-time 8 "$META" 2>/dev/null \
+        | sed -n 's/^[[:space:]]*public-ipv4:[[:space:]]*//p' | head -1 | tr -d '"[:space:]')
+      if [ -z "${ip:-}" ]; then
+        ip=$(curl -fsS --max-time 8 https://api.ipify.org 2>/dev/null | tr -d '[:space:]')
+      fi
+      case "${ip:-}" in
+        ''|10.*|127.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.168.*|169.254.*)
+          echo "audiomonastry: oeffentliche IPv4 nicht ermittelbar (${ip:-leer})" >&2
+          exit 0 ;;
+      esac
+      umask 022
+      printf 'NODE_PUBLIC_IP=%s\n' "$ip" > "$OUT"
+      echo "audiomonastry: NODE_PUBLIC_IP=$ip in $OUT abgelegt"
+
   - path: /etc/sysctl.d/99-audiomonastry-lowlatency.conf
     permissions: '0644'
     owner: root:root
@@ -71,4 +102,8 @@ runcmd:
   - ufw allow 80/tcp
   - ufw allow 443/tcp
   - ufw --force enable
+  # F6: oeffentliche IP fuer die RTC-Verdrahtung ablegen (siehe write_files oben).
+  # Ohne Wert bleibt der Deploy-Pfad bei der Live-Ermittlung (Metadata/ipify) und
+  # meldet laut, wenn auch die scheitert.
+  - /usr/local/bin/audiomonastry-node-public-ip.sh || true
   - echo "audiomonastry cloud-init done" > /root/.audiomonastry-bootstrap-done

@@ -474,8 +474,41 @@ Glücksfall erholt, wäre als Nachweis wertlos.
 die Produktionsvorlage (`services/turn/turnserver.conf`) verbietet sie bewusst
 (Relay-Sonde in interne Netze). Der Beweis misst daher **das Credential-Verfahren
 und die Wiederherstellung**, nicht die Peer-Härtung der Produktionskonfiguration.
-Für Produktion `services/turn/deploy-turn.sh` auf einem eigenen Knoten benutzen
-(TLS 5349, öffentliche IP, `TURN_URLS`/`TURN_STATIC_AUTH_SECRET` in der App).
+
+### F6 (2026-09-20): coturn läuft als Service — was offline belegt ist
+
+Seit F6 ist der Relay **kein Handbetrieb** mehr, sondern ein Compose-Service auf
+dem SFU-Knoten (`docker-compose.turn.yml`) mit Provisioning über
+`scripts/hetzner/wire-rtc.sh` (Verdrahtung) bzw. `services/turn/deploy-turn.sh`
+(apt-/Systemd-Variante auf einem eigenen Knoten). Die Strecke
+`/api/webrtc-config` → kurzlebige Credentials → coturn wurde lokal gemessen:
+
+```bash
+# coturn als Service starten (Konfiguration erzeugt wire-rtc.sh aus der Vorlage)
+docker run -d --name am-coturn --network host \
+  -v "$PWD/services/turn/turnserver.local-proof.conf:/etc/coturn/turnserver.conf:ro" \
+  coturn/coturn:4.18.0 -c /etc/coturn/turnserver.conf
+
+# Credentials aus UNSEREM Servercode holen (derselbe Pfad wie /api/webrtc-config)
+npm run dev   # bzw. PORT=8080 TURN_URLS=turn:127.0.0.1:3478 TURN_STATIC_AUTH_SECRET=turnproofsecret123 npx tsx server.ts
+curl -s localhost:8080/api/webrtc-config -H "x-studio-token: <token>"
+```
+
+| Prüfung (2026-09-20, gemessen) | Ergebnis |
+|---|---|
+| Production-Konfiguration in `coturn/coturn:4.18.0` als Service | läuft, `Relay address to use`, `Default realm`, `Relay ports initialization done` |
+| Listener + Healthcheck | `udp`/`tcp` auf 3478 offen, `turnutils_stunclient 127.0.0.1` → exit 0 |
+| Allokation mit den Credentials aus `buildWebRtcConfigResponse` | **12/12 Nachrichten über den Relay**, exit 0 |
+| Falsches Credential | `ERROR Cannot complete Allocation` (exit 255) |
+| Abgelaufener Zeitstempel | `ERROR Cannot complete Allocation` (exit 255) |
+
+Bekannte Kanten (live gefunden, im Overlay dokumentiert): `cap_drop: [ALL]` lässt
+coturn **nicht** starten (`/usr/bin/turnserver: Operation not permitted`), und
+`--log-file=stdout` auf der Kommandozeile verliert gegen `log-file=` aus der
+Konfigurationsdatei — beides steht als Kommentar dort, wo es auffällt.
+
+**Offen (nicht offline belegbar):** zwei echte Browser außerhalb des LANs
+(Relay-Pfad inkl. Zertifikatskette für `https://sfu.<domain>`).
 
 ## MJPEG-Fallback für den Beamer beweisen (VISUAL-P1-001)
 

@@ -4,6 +4,12 @@
 # gesetzt sind. Caddy terminiert dann selbst TLS mit dem Cloudflare-Origin-
 # Zertifikat; Cloudflare verbindet sich per HTTPS (kein Klartext-Hop mehr).
 # Ansonsten identisch zur Standard-Caddyfile.
+#
+# F6 (2026-09-20): /sfu-signaling/* wird hier NICHT mehr durchgeschleift. Auf
+# dem App-Knoten laeuft keine SFU (ENABLE_SFU=0) - die Anfrage landete vorher in
+# der SPA-Auslieferung, und der Client sah nur ein generisches
+# "xhr poll error". Jetzt antwortet der Knoten in Klartext mit der konfigurierten
+# SFU-Adresse, damit der Fehler sofort zuzuordnen ist.
 {
 	servers {
 		protocols h1 h2
@@ -19,6 +25,15 @@
 		output stdout
 		format console
 	}
+
+	# SFU-Signalisierung: hier gibt es keine SFU (F6). 404 mit Adresse statt SPA-HTML.
+	@sfuSignaling path /sfu-signaling/*
+	respond @sfuSignaling "{\"error\":\"sfu-signaling-nicht-auf-diesem-knoten\",\"sfu\":\"{$SFU_SIGNALING_URL}\",\"hinweis\":\"SFU_SIGNALING_URL zeigt auf den SFU-Knoten; auf dem App-Knoten ist ENABLE_SFU=0\"}" 404
+	@sfuPreflight {
+		method OPTIONS
+		path /sfu-signaling/*
+	}
+	respond @sfuPreflight 204
 
 	# App + API + Signaling (gleicher Ursprung, COOP/COEP-Header bleiben erhalten)
 	# WebSockets (Socket.io) werden von Caddy automatisch über den gleichen Pfad getunnelt.
