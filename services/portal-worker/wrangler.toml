@@ -25,3 +25,21 @@ route = { pattern = "anunnakitools.de/*", zone_name = "anunnakitools.de" }
 
 [triggers]
 crons = ["*/5 * * * *"]
+
+# ---------------------------------------------------------------------------
+# PROD-P1-F4 - Staleness-Gate (Commit-Paritaet)
+# ---------------------------------------------------------------------------
+# Ist EXPECTED_COMMIT gesetzt, gilt die Flotte nur als "ready", wenn
+# /api/health denselben Commit meldet. Eine Abweichung erscheint als
+# state "stale" mit "Flotte laeuft Stand X, Repo ist Y" im Ladebildschirm -
+# kein Weiterleiten in das Studio (Befund 2026-09-20: app-1 lief zwei Tage
+# hinter dem Repo). "Nicht pruefbar" (Image vor F4 ohne commit-Feld) blockiert
+# NICHT, wird aber gemeldet.
+# ALLOW_STALE = "1" erlaubt den abweichenden Stand BEWUSST (nur mit Begruendung;
+# die Meldung bleibt sichtbar). Ohne beide Werte bleibt der Start moeglich,
+# /api/status meldet die Paritaet dann als "nicht pruefbar" - der CLI-Pfad
+# (scripts/hetzner/fleet-preflight.sh) uebergibt Erwartung + Freigabe je Aufruf.
+# Zum Setzen die Kommentarzeichen entfernen (auch das von [vars]):
+# [vars]
+# EXPECTED_COMMIT = "ae5e749"
+# ALLOW_STALE = "0"

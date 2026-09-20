@@ -839,6 +839,125 @@ async function studioCookie(env) {
 }
 
 // ---------------------------------------------------------------------------
+// Commit-Paritaet / Staleness-Gate (PROD-P1-F4)
+// ---------------------------------------------------------------------------
+// Anlass (real gemessen am 2026-09-20): app-1 lief auf einem Image vom 18.09.,
+// das Repo stand zwei Tage weiter (ae5e749). /api/health nannte nur
+// `{"status":"ok","version":"1.210.001"}` - eine Version, die sich nicht mit
+// jedem Commit aendert. Der Wake hielt die Flotte trotzdem fuer "ready".
+//
+// Dieses Gate vergleicht den ERWARTETEN Commit (Repo/Release) mit dem
+// GEMELDETEN Stand der Flotte:
+//   * Snapshot-Label `commit`  - beim Wake: welchen Stand bootet der Knoten?
+//   * /api/health `commit`     - im Betrieb: welcher Stand dient? (beides aus F4
+//     im Image gestempelt, siehe server/buildInfo.ts)
+// "ready" gibt es nur, wenn Health UND Paritaet stimmen; eine Abweichung wird
+// als state 'stale' zurueckgegeben und im Ladebildschirm laut angezeigt.
+// Bewusst veraltet fahren: `allowStale` (Wake-Body / ?allowStale=1) bzw.
+// `--allow-stale` in scripts/hetzner/fleet-preflight.sh.
+//
+// Erwarteter Commit, in dieser Reihenfolge:
+//   1. Request (Wake-Body `expectedCommit`, Status-Query `?expected=`)
+//   2. Worker-Variable `EXPECTED_COMMIT` (wrangler.toml, Betreiber-Pin)
+// Ohne (1)/(2) ist die Paritaet NICHT pruefbar - das wird gemeldet, aber nicht
+// als Abweichung behauptet (kein falscher Alarm, z. B. fuer vor F4 gebaute
+// Images ohne commit-Feld).
+const ENV_EXPECTED_COMMIT = 'EXPECTED_COMMIT';
+const ENV_ALLOW_STALE = 'ALLOW_STALE';
+
+/**
+ * Commit-Angabe auf die Vergleichsform bringen (leer = nicht verwertbar).
+ * Gleiche Regel wie `normalizeCommit` in server/buildInfo.ts und
+ * `normalize_commit` in scripts/hetzner/lib/build-parity.sh.
+ * @param {string|null|undefined} value
+ * @returns {string} */
+export function normalizeCommit(value) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw || raw === 'unknown' || raw === 'dev' || raw === 'none' || raw === 'null') return '';
+  return raw.slice(0, 40);
+}
+
+/** Zwei Commit-Angaben auf denselben Stand pruefen (kurzer trifft langen SHA).
+ * @param {string|null|undefined} a
+ * @param {string|null|undefined} b
+ * @returns {boolean} */
+export function sameCommit(a, b) {
+  const left = normalizeCommit(a);
+  const right = normalizeCommit(b);
+  return Boolean(left) && Boolean(right) && (left.startsWith(right) || right.startsWith(left));
+}
+
+/**
+ * Vergleichsregel (Spiegel von `compareCommits` in `server/buildInfo.ts` -
+ * der Worker kann kein TypeScript importieren, beide Seiten muessen dieselbe
+ * Antwort liefern; tests/portalWorkerStaleness.test.ts haelt das fest).
+ *
+ * Rueckgabe: { ok, checked, expected, actual, allowStale, source, message }
+ *   checked=false -> es fehlt eine Seite; es wird KEINE Abweichung behauptet
+ *   (ok=true) - "nicht pruefbar" darf keinen Alarm ausloesen.
+ *
+ * @param {{ expected?: (string|null), actual?: (string|null), source?: string, allowStale?: boolean }} [input]
+ * @returns {{ ok: boolean, checked: boolean, expected: (string|null), actual: (string|null), allowStale: boolean, source: string, message: string }}
+ */
+export function commitParity({ expected, actual, source = 'health', allowStale = false } = {}) {
+  const want = normalizeCommit(expected);
+  const have = normalizeCommit(actual);
+  if (!want) {
+    return {
+      ok: true,
+      checked: false,
+      expected: null,
+      actual: have || null,
+      allowStale,
+      source,
+      message: 'Kein erwarteter Commit gesetzt - Stand der Flotte nicht vergleichbar.',
+    };
+  }
+  if (!have) {
+    return {
+      ok: true,
+      checked: false,
+      expected: want,
+      actual: null,
+      allowStale,
+      source,
+      message: `Flotte meldet keinen Commit (${source}) - erwartet ${want}, nicht pruefbar.`,
+    };
+  }
+  const ok = sameCommit(want, have);
+  return {
+    ok,
+    checked: true,
+    expected: want,
+    actual: have,
+    allowStale,
+    source,
+    message: ok ? `Commit-Paritaet ok (${want}).` : `Flotte laeuft Stand ${have}, Repo ist ${want}.`,
+  };
+}
+
+/** Erwarteter Commit aus Request bzw. Worker-Variable (1 schlaegt 2). */
+function expectedCommitFrom(env, explicit) {
+  const fromRequest = explicit === undefined || explicit === null ? '' : String(explicit).trim();
+  return normalizeCommit(fromRequest !== '' ? fromRequest : env?.[ENV_EXPECTED_COMMIT]);
+}
+
+/** Bewusste Freigabe ("--allow-stale") aus Request bzw. Worker-Variable. */
+function allowStaleFrom(env, explicit) {
+  if (explicit === true || explicit === 1 || explicit === '1' || explicit === 'true') return true;
+  const raw = String(env?.[ENV_ALLOW_STALE] ?? '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+/** Ein Feld aus einer JSON-Antwort lesen (ohne Exception-Pfad). */
+function jsonField(value, field) {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value[field];
+  if (raw === undefined || raw === null || raw === '') return null;
+  return String(raw).slice(0, 60);
+}
+
+// ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
 // F1: "ready" heisst ab jetzt "die App antwortet ueber die Domain mit JSON 200".
@@ -881,7 +1000,16 @@ async function appHealth() {
     }
     const ms = Date.now() - started;
     if (res.ok && body && (body.status === 'ok' || body.ok === true)) {
-      return { ok: true, http: res.status, ms, version: body.version ?? null };
+      // PROD-P1-F4: Commit und Build-Zeit kommen additiv mit - ohne sie ist
+      // "laeuft die Flotte auf dem Repo-Stand?" nicht beantwortbar.
+      return {
+        ok: true,
+        http: res.status,
+        ms,
+        version: body.version ?? null,
+        commit: body.commit ?? null,
+        buildTime: body.buildTime ?? null,
+      };
     }
     const reason = body
       ? `HTTP ${res.status}, aber Body ohne status:"ok"`
@@ -896,13 +1024,17 @@ async function appHealth() {
   }
 }
 
-async function computeStatus(env) {
+async function computeStatus(env, options = {}) {
   const servers = await fleetServers(env);
   const existing = Object.values(servers);
   if (existing.length === 0) return { state: 'off', created: 0, total: FLEET.length };
 
   const app = servers['audiomonastry-app-1'];
   const running = existing.filter((s) => s.status === 'running').length;
+  // PROD-P1-F4: erwarteter Commit + bewusste Freigabe je Aufruf (Request schlaegt
+  // Worker-Variable). Ohne Erwartung bleibt alles wie vorher.
+  const expectedCommit = expectedCommitFrom(env, options.expectedCommit);
+  const allowStale = allowStaleFrom(env, options.allowStale);
 
   if (app && app.status === 'running') {
     const ip = app.public_net?.ipv4?.ip;
@@ -912,7 +1044,30 @@ async function computeStatus(env) {
       // origin-DNS schreibfrei diagnostiziert und als Grund mitgeliefert.
       const health = await appHealth();
       if (health.ok) {
-        return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/', appIp: ip, health };
+        // PROD-P1-F4: Health ist die eine Haelfte, die Commit-Paritaet die
+        // andere. Eine Abweichung wird NICHT als "ready" verkauft - der
+        // Ladebildschirm bleibt stehen und nennt beide Staende.
+        const parity = commitParity({
+          expected: expectedCommit,
+          actual: health.commit,
+          source: 'health',
+          allowStale,
+        });
+        const common = {
+          created: existing.length,
+          total: FLEET.length,
+          running,
+          appIp: ip,
+          expectedCommit: expectedCommit || null,
+          allowStale,
+          url: '/',
+          health,
+          parity,
+        };
+        if (parity.checked && !parity.ok && !allowStale) {
+          return { ...common, state: 'stale', stale: true };
+        }
+        return { ...common, state: 'ready', stale: parity.checked ? !parity.ok : false };
       }
       const dns = await cachedOriginDiagnosis(env, ip);
       return {
@@ -943,9 +1098,22 @@ async function computeStatus(env) {
 // ---------------------------------------------------------------------------
 // Fleet-Aktionen
 // ---------------------------------------------------------------------------
-async function startFleet(env) {
+async function startFleet(env, options = {}) {
   const servers = await fleetServers(env);
-  if (Object.keys(servers).length > 0) return { started: false, message: 'Flotte existiert bereits.' };
+  // PROD-P1-F4: Das Wake-Gate kennt den erwarteten Stand nur, wenn der Aufrufer
+  // (fleet-preflight.sh / Portal-Body) oder die Worker-Variable EXPECTED_COMMIT
+  // ihn nennt. Ohne Erwartung bleibt der Start wie bisher moeglich - /api/status
+  // meldet die Paritaet dann als "nicht pruefbar" statt sie zu behaupten.
+  const expectedCommit = expectedCommitFrom(env, options.expectedCommit);
+  const allowStale = allowStaleFrom(env, options.allowStale);
+  if (Object.keys(servers).length > 0) {
+    return {
+      started: false,
+      message: 'Flotte existiert bereits.',
+      expectedCommit: expectedCommit || null,
+      allowStale,
+    };
+  }
 
   const sshKeyId = await ensureSshKey(env);
   const cfIps = await cloudflareIpRanges();
@@ -975,7 +1143,14 @@ async function startFleet(env) {
       labels: { app: 'audioMONASTRY', 'managed-by': 'portal-worker', role: item.role },
     };
     if (snap) {
-      usedSnapshots[item.role] = { image: snap.id, description: snap.description ?? snap.name ?? '' };
+      usedSnapshots[item.role] = {
+        image: snap.id,
+        description: snap.description ?? snap.name ?? '',
+        // PROD-P1-F4: Das Snapshot-Label aus POST /api/refresh-snapshots nennt
+        // den Commit, der im Image steckt. Beim Wake ist das der einzige
+        // verfuegbare Stand (der Container bootet noch) - Grundlage des Gates.
+        commit: normalizeCommit(snap.labels?.commit) || null,
+      };
     } else {
       payload.user_data = userData(env, item.role);
       fallbackRoles.push(item.role);
@@ -1026,7 +1201,37 @@ async function startFleet(env) {
     }
   }
 
-  return { started: true, created, types, usedSnapshots, fallbackRoles, failed, wiring };
+  // PROD-P1-F4: Wake-Gate. Beim Start ist /api/health noch nicht erreichbar
+  // (der Container bootet), deshalb wird hier der SNAPSHOT-Stand geprueft - das
+  // ist genau der Stand, der gleich dienen wird. Kaltstart ohne Snapshot oder
+  // Snapshots ohne Label liefern "nicht pruefbar" (checked=false); der laufende
+  // Betrieb wird dann ueber /api/status (Health-Commit) geprueft.
+  const appSnapshotCommit = usedSnapshots?.app?.commit ?? null;
+  const parity = commitParity({ expected: expectedCommit, actual: appSnapshotCommit, source: 'snapshot', allowStale });
+  const staleRoles = expectedCommit
+    ? Object.entries(usedSnapshots)
+        .filter(([, snap]) => snap.commit && !sameCommit(snap.commit, expectedCommit))
+        .map(([role, snap]) => `${role}:${snap.commit}`)
+    : [];
+  if (staleRoles.length > 0) {
+    // Laut ins Worker-Log - ein veralteter Snapshot-Start war bisher nur an
+    // fehlenden Features zu merken (Live-Befund 2026-09-20).
+    console.warn(`[portal] STALE-Flotte: ${parity.message} (Snapshots: ${staleRoles.join(', ')})`);
+  }
+
+  return {
+    started: true,
+    created,
+    types,
+    usedSnapshots,
+    fallbackRoles,
+    failed,
+    wiring,
+    expectedCommit: expectedCommit || null,
+    allowStale,
+    parity,
+    staleRoles,
+  };
 }
 
 /**
@@ -1287,6 +1492,13 @@ function renderSteps(status) {
     if (status.state === 'ready') state = 'done';
     else if (status.state === 'starting-app' && key !== 'ready') state = 'done';
     else if (status.state === 'starting-app' && key === 'ready') state = 'active';
+    else if (status.state === 'stale') {
+      // PROD-P1-F4: Health ist da, aber die Flotte laeuft auf einem anderen
+      // Commit als das Repo. Kein Weiterleiten - der Betreiber muss neu
+      // deployen (oder bewusst mit --allow-stale starten).
+      state = key === 'ready' ? 'active' : 'done';
+      if (key === 'ready') label = 'Stand veraltet – Neu-Deploy noetig';
+    }
     else if (status.state === 'creating') {
       if (key === 'server') state = 'active';
       if (i === 0) label = 'Hetzner-Server erstellen (' + (status.created ?? 0) + '/' + (status.total ?? 5) + ')';
@@ -1298,9 +1510,18 @@ function renderSteps(status) {
   });
 }
 
+// PROD-P1-F4: Der erwartete Commit kommt aus der Wake-Antwort (bzw. aus der
+// Worker-Variable EXPECTED_COMMIT) und wird bei jedem Poll mitgeschickt - nur so
+// kann der Server "Flotte laeuft Stand X, Repo ist Y" melden.
+let expectedCommit = '';
+
+function statusUrl() {
+  return expectedCommit ? '/api/status?expected=' + encodeURIComponent(expectedCommit) : '/api/status';
+}
+
 async function poll() {
   try {
-    const res = await fetch('/api/status');
+    const res = await fetch(statusUrl());
     const status = await res.json();
     if (status.state === 'off') {
       $('login').style.display = '';
@@ -1310,11 +1531,27 @@ async function poll() {
     $('login').style.display = 'none';
     $('loading').style.display = '';
     renderSteps(status);
+    if (status.parity && status.parity.expected) expectedCommit = status.parity.expected;
     // F1: einen Verdrahtungsfehler (z. B. origin-DNS/Cloudflare-Token) im
     // Klartext anzeigen - sonst haengt der Ladebildschirm ohne Grund.
     if (status.wiringError) $('loadErr').textContent = '⚠️ ' + status.wiringError;
+    if (status.state === 'stale') {
+      $('loadErr').textContent = '⏸ ' + (status.parity && status.parity.message
+        ? status.parity.message
+        : 'Die Flotte laeuft auf einem anderen Stand als das Repo.') +
+        ' Bitte neu deployen (scripts/hetzner/fleet-preflight.sh apply) - oder bewusst mit --allow-stale starten.';
+      setTimeout(poll, 4000);
+      return;
+    }
     if (status.state === 'ready') {
-      $('loadErr').textContent = '✓ Bereit – Weiterleitung …';
+      if (status.stale) {
+        // Bewusst freigegeben (allow-stale): weiterleiten, aber sichtbar.
+        $('loadErr').textContent = '⚠️ ' + (status.parity && status.parity.message ? status.parity.message : 'Stand abweichend') + ' (bewusst erlaubt)';
+      } else if (status.parity && status.parity.checked === false && status.parity.message) {
+        $('loadErr').textContent = '⚠️ ' + status.parity.message;
+      } else {
+        $('loadErr').textContent = '✓ Bereit – Weiterleitung …';
+      }
       setTimeout(() => { location.href = '/'; }, 1200);
       return;
     }
@@ -1336,10 +1573,17 @@ $('loginBtn').onclick = async () => {
   const wake = await fetch('/api/wake', { method: 'POST' });
   const wd = await wake.json();
   if (!wake.ok) { $('err').textContent = wd.error || 'Start fehlgeschlagen'; return; }
+  // PROD-P1-F4: erwarteten Stand merken und die Commit-Paritaet des Wake laut
+  // anzeigen (Snapshot-Label vs. Repo) - das ist der Stand, der gleich bootet.
+  if (wd.expectedCommit) expectedCommit = wd.expectedCommit;
   // Verdrahtung (Firewall/DNS/Ports) sichtbar machen: ohne DNS bleibt der
   // Health-Check ueber die Domain bei 522 stehen und der Start wirkt "haengend".
   if (wd.wiring && wd.wiring.dns && wd.wiring.dns.ok === false) {
     $('loadErr').textContent = 'Achtung: Domain-Verdrahtung fehlgeschlagen – ' + (wd.wiring.dns.message || 'unbekannt');
+  }
+  if (wd.parity && wd.parity.checked && wd.parity.ok === false) {
+    const hint = wd.allowStale ? ' (bewusst erlaubt: allow-stale)' : ' - bitte neu deployen, der Stand ist veraltet.';
+    $('loadErr').textContent = '⚠️ ' + wd.parity.message + hint;
   }
   $('login').style.display = 'none';
   $('loading').style.display = '';
@@ -1388,13 +1632,30 @@ export default {
 
       if (url.pathname === '/api/wake' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
-        const result = await startFleet(env);
+        // PROD-P1-F4: Der Wake nimmt den erwarteten Commit mit (`expectedCommit`)
+        // und optional die bewusste Freigabe (`allowStale`) - fleet-preflight.sh
+        // schickt beides, die Portal-Seite kann es aus der Worker-Variable
+        // EXPECTED_COMMIT bekommen. Das Ergebnis enthaelt die Paritaetspruefung
+        // gegen die Snapshot-Labels (laut, siehe startFleet).
+        const body = await request.json().catch(() => ({}));
+        const result = await startFleet(env, {
+          expectedCommit: body?.expectedCommit,
+          allowStale: body?.allowStale,
+        });
+        if (result.staleRoles?.length > 0 && !result.allowStale) {
+          console.warn(`[portal] Wake startet eine veraltete Flotte: ${result.parity?.message ?? ''}`);
+        }
         return json(result);
       }
 
       if (url.pathname === '/api/status') {
         if (!(await checkSession(env, request))) return json({ state: 'off', locked: true });
-        return json(await computeStatus(env));
+        // Erwarteter Commit aus der Abfrage (Portal-Ladebildschirm traegt ihn
+        // aus der Wake-Antwort weiter) oder aus EXPECTED_COMMIT.
+        return json(await computeStatus(env, {
+          expectedCommit: url.searchParams.get('expected'),
+          allowStale: url.searchParams.get('allowStale'),
+        }));
       }
 
       if (url.pathname === '/api/stop' && request.method === 'POST') {

@@ -66,6 +66,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.hetzner
+      # PROD-P1-F4: Build-Metadaten auch im Compose-Build (Kaltstart ohne
+      # Rollen-Snapshot, Remote-Build). Die Werte setzt der Aufrufer -
+      # deploy.sh exportiert sie, cloud-init exportiert sie aus dem geklonten
+      # Repo (git rev-parse --short HEAD, siehe Portal-Worker userData).
+      # Ohne sie stuende "unknown" in /api/health und die Commit-Paritaet waere
+      # fuer diesen Knoten nicht pruefbar.
+      args:
+        BUILD_VERSION: ${AUDIOMONASTRY_VERSION:-dev}
+        BUILD_COMMIT: ${AUDIOMONASTRY_COMMIT:-unknown}
+        BUILD_TIME: ${AUDIOMONASTRY_BUILD_TIME:-unknown}
     image: audiomonastry:hetzner
     container_name: audiomonastry
     <<: *default-runtime

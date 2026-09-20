@@ -52,6 +52,10 @@ const ALLOWED: Record<string, string> = {
   'docs/audit-infra-hetzner.md': 'Infra-Audit 2026-09-20: Belegkapitel listet die tatsaechlichen Hetzner-Ressourcen '
     + '(10 Snapshots "samplemonk-snapshot-*", Firewall-Gruppen, /opt/samplemonk als Default-Ziel von fleet-deploy-live.sh) '
     + '- Messergebnis der laufenden Flotte, keine Nomenklatur.',
+  'docs/FIXPLAN_2026-09-20_externer_apptest.md': 'Belegkapitel des externen App-Tests 2026-09-20 (F1-F10): nennt die '
+    + 'real vorgefundenen Bestandsressourcen (/opt/samplemonk/certs, samplemonk-idle-shutdown.timer, Knotennamen '
+    + 'samplemonk-* im Widerspruch zu audiomonastry-*) - Messergebnis, keine Nomenklatur. Der Befund wird nicht '
+    + 'umgeschrieben, sonst waere das Belegkapitel falsch.',
 };
 
 function trackedFiles(): string[] {

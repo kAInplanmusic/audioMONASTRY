@@ -57,7 +57,7 @@ function sineWavBuffer(sampleRate = 44100, seconds = 0.2): Buffer {
 }
 
 describe('Server API', () => {
-  it('liefert /api/health mit status ok und Build-Version (PROD-P0-003)', async () => {
+  it('liefert /api/health mit status ok, Build-Version, Commit und Build-Zeit (PROD-P0-003/PROD-P1-F4)', async () => {
     const res = await fetch(`${baseUrl}/api/health`);
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -66,6 +66,43 @@ describe('Server API', () => {
     // eines gestempelten Images).
     expect(typeof body.version).toBe('string');
     expect(body.version.length).toBeGreaterThan(0);
+    // PROD-P1-F4: die Version aendert sich nicht mit jedem Commit - deswegen
+    // gehoeren `commit` und `buildTime` additiv mit in die Antwort. Sie bleiben
+    // Strings ('unknown' ohne Build-Arg), damit Konsumenten nicht raten muessen.
+    expect(typeof body.commit).toBe('string');
+    expect(body.commit.length).toBeGreaterThan(0);
+    expect(typeof body.buildTime).toBe('string');
+    expect(body.buildTime.length).toBeGreaterThan(0);
+  });
+
+  it('nennt die Build-Stempel aus der Umgebung (Commit-Paritaet ist von aussen lesbar)', async () => {
+    const before = {
+      commit: process.env.AUDIOMONASTRY_COMMIT,
+      buildTime: process.env.AUDIOMONASTRY_BUILD_TIME,
+      version: process.env.AUDIOMONASTRY_VERSION,
+    };
+    try {
+      process.env.AUDIOMONASTRY_COMMIT = 'ae5e7491234567890abcdef1234567890abcdef12';
+      process.env.AUDIOMONASTRY_BUILD_TIME = '2026-09-20T15:04:05Z';
+      process.env.AUDIOMONASTRY_VERSION = '1.210.001';
+      const res = await fetch(`${baseUrl}/api/health`);
+      const body = await res.json();
+      expect(body).toMatchObject({
+        status: 'ok',
+        version: '1.210.001',
+        commit: 'ae5e7491234567890abcdef1234567890abcdef12',
+        buildTime: '2026-09-20T15:04:05Z',
+      });
+    } finally {
+      for (const [key, value] of Object.entries({
+        AUDIOMONASTRY_COMMIT: before.commit,
+        AUDIOMONASTRY_BUILD_TIME: before.buildTime,
+        AUDIOMONASTRY_VERSION: before.version,
+      })) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it('liefert /api/cloud/health ohne Konfiguration als not-configured', async () => {

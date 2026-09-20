@@ -161,7 +161,9 @@ Was `deploy.sh` macht (Default `DEPLOY_MODE=docker`):
    Knoten-`.env` rollen-skopiert vom Portal-Worker kommt; bei `1` sichert das Skript
    die vorhandene Remote-`.env` vorher nach `.env.bak-predeploy`)
 6. `docker compose up -d --no-build` (App + master-player) + Caddy
-7. **Health-Wait** auf `/api/health` + Smoke-Test
+7. **Health-Wait** auf `/api/health` + Smoke-Test + **Commit-Paritaet**
+   (seit PROD-P1-F4: der Container meldet `commit`/`buildTime`; weicht er vom Repo-Stand ab,
+   endet der Deploy mit Exit 1 – bewusster Ausweg: `DEPLOY_ALLOW_STALE=1`)
 
 Wichtige Variablen:
 
@@ -174,6 +176,13 @@ Wichtige Variablen:
 | `DEPLOY_SYNC_ENV` | `0` | lokale `.env` hochladen — **überschreibt die rollen-skopierte Knoten-`.env`** (Portal-Worker), nur für frische Knoten ohne Portal setzen |
 | `DEPLOY_INSTALL_CADDYFILE` | `0` | `1` = Repo-Caddyfile (ACME) auf den Knoten laden und damit Origin-TLS ersetzen |
 | `DEPLOY_PRINT_CONFIG` | `0` | `1` = nur effektive Konfiguration ausgeben (Trockenlauf, kein Build/SSH) |
+| `DEPLOY_VERSION` | `package.json` | Versionsstempel im Image (`/api/health` → `version`) |
+| `DEPLOY_COMMIT` | `git rev-parse --short HEAD` | Commitstempel im Image (`/api/health` → `commit`). Überschreiben **nur** zur Kennzeichnung eines bewusst abweichenden Stands – der Code kommt weiter aus dem Arbeitsbaum (Rollback: `docs/ORIGIN_TLS_DNS_RUNBOOK.md` §7.1) |
+| `DEPLOY_ALLOW_STALE` | `0` | `1` = eine belegte Commit-Abweichung blockiert den Deploy **nicht** (Meldung bleibt laut). Nur mit Begründung |
+
+Die drei Stempel (`BUILD_VERSION`/`BUILD_COMMIT`/`BUILD_TIME`) gehen als Build-Args in
+`Dockerfile.hetzner` und sind damit auch im Compose-Build gesetzt
+(`docker-compose.hetzner.yml` liest `AUDIOMONASTRY_VERSION`/`AUDIOMONASTRY_COMMIT`/`AUDIOMONASTRY_BUILD_TIME`).
 
 Rollback:
 
@@ -181,6 +190,12 @@ Rollback:
 ssh root@IP 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner && \
   cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate audiomonastry'
 ```
+
+> Nach einem Rollback läuft der Knoten **absichtlich** auf einem anderen Commit als das Repo:
+> Preflight, Portal-Wake und `deploy.sh` melden dann `Flotte laeuft Stand <alt>, Repo ist <neu>` und
+> blockieren ohne Freigabe (`--allow-stale` / `DEPLOY_ALLOW_STALE=1` / Worker-Variable
+> `ALLOW_STALE="1"`). Prüfen, welcher Stand läuft:
+> `curl -s https://anunnakitools.de/api/health | python3 -m json.tool` → `commit`/`buildTime`.
 
 > Ohne `DEPLOY_DOMAIN` wird nur HTTP auf der IP getestet – das geht im Desktop-Browser,
 > aber **nicht** mit iPhone/iPad-Mikrofon (HTTPS-Pflicht).
