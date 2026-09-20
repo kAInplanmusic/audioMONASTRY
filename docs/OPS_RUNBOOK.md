@@ -989,3 +989,38 @@ braucht `X-Auth-Email` + `X-Auth-Key`, und `CF_EMAIL` fehlt in den Dateien).
 Ergebnis am 2026-09-20: **alle fünf** antworten `1000 Invalid API Token`,
 Zonenzugriff 0 → `Zone:DNS:Edit` fehlt komplett. Das ist der Blocker für F1 und
 für das Portal-gesteuerte Flotten-Wake.
+
+## Flotten-Versorgung: Firewall, Images, Knoten-Stand (2026-09-20)
+
+Drei Werkzeuge, die beim Versorgen der Flotte helfen (alle lesend bzw.
+idempotent, keines provisioniert Server):
+
+```bash
+python3 scripts/hetzner/firewall-inventory.py          # Ist-Stand aller Firewalls + erwartete SFU-Ports
+python3 scripts/hetzner/firewall-ensure-turn.py        # Trockenlauf: fehlende TURN-Regeln der Rolle sfu
+python3 scripts/hetzner/firewall-ensure-turn.py --apply # schreiben (set_rules, idempotent)
+bash scripts/hetzner/fleet-status.sh                   # Knoten, Container, Compose-Projekt, Health
+```
+
+`firewall-ensure-turn.py` ergänzt **nur** die vier Regeln 3478 udp/tcp und
+49152-49201 udp/tcp — dieselben Zahlen wie `portal-worker/firewallRules()` und
+`scripts/hetzner/provision.py`. Ohne sie kann kein Browser einen TURN-Relay
+aufbauen (am 2026-09-20 fehlten sie live, obwohl der Code sie erwartet).
+
+Rollen-Versorgung (neuer Repo-Stand + aktuelles Image, ohne die Knoten-`.env`
+anzufassen):
+
+```bash
+rsync -az -e "ssh -o BatchMode=yes" --exclude node_modules --exclude dist --exclude .git \
+  --exclude .env --exclude '.env.*' --exclude .worktrees --exclude public/data/orchestral \
+  ./ root@<ip>:/opt/audiomonastry/
+docker save audiomonastry:hetzner | gzip -1 | ssh root@<ip> 'gunzip | docker load'
+ssh root@<ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry \
+  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml \
+  up -d --no-build --remove-orphans caddy audiomonastry coturn'
+```
+
+`install-ai1.sh` (ai-1) ist idempotent und zieht `qwen2.5:7b` + Stem-AI
+systemd-Unit; der Health-Check am Ende schlägt fehl, wenn der Dienst nicht
+startet — dann `journalctl -u stem-ai` prüfen (Importpfad-Falle siehe
+`services/stem-ai/main.py`).

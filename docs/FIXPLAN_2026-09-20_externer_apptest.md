@@ -71,6 +71,55 @@ Cloudflare-Origin-Zertifikat (`certs/origin.crt|key`, 600, ausgestellt bis 2041)
 
 ---
 
+## Produktionsstand je Knoten (2026-09-20, nach dem Versorgungs-Lauf)
+
+| Knoten | Code/Image | Projekt | Dienste | Zustand |
+| --- | --- | --- | --- | --- |
+| app-1 (142.132.229.71) | `main` (Repo-Stand 1de9e3b, Image mit Commit-Stempel) | `audiomonastry` | audiomonastry, caddy, master-player | `/api/health` nennt den Commit; TURN-Config aktiv (`turn.available=true`, 2× `turn:` + STUN mit HMAC-Credentials); Origin-TLS-Zertifikat installiert; erreicht master-1/ai-1 (siehe unten) |
+| sfu-1 (142.132.231.146) | neuer Repo-Stand + neues App-Image | `audiomonastry` | audiomonastry, caddy, **coturn** | `ENABLE_SFU=1`, `SFU_ANNOUNCED_IP` gesetzt; coturn lauscht auf 3478 (udp+tcp), Relay 49152-49201; Firewall dafür geöffnet |
+| master-1 (167.233.112.182) | neues `audiomonastry-master-player:hetzner` | `audiomonastry` | master-player | `/health` 200 |
+| ai-1 (178.105.66.67) | Repo-Stand + Stem-AI-Fix | (kein Compose-Stack) | ollama (systemd), stem-ai (systemd) | `qwen2.5:7b` gepullt (4,7 GB), stem-ai `/health` 200 (war vorher tot, siehe unten); von app-1 aus erreichbar (11434/8000) |
+| edge-1 (167.233.192.196) | Monitoring-Compose + Configs aktualisiert | `audiomonastry` | prometheus, grafana, alertmanager, node-exporter, cadvisor | Prometheus läuft (war in der Restart-Schleife), Grafana 200 auf `127.0.0.1:3000` |
+
+Querverbindungen von app-1 gemessen: `master:8000` 200, `ollama:11434` 200
+(`qwen2.5:7b` vorhanden), `stem-ai:8000` 200.
+
+**Zwei weitere echte Defekte in diesem Lauf gefunden und behoben:**
+
+1. **Stem-AI war auf ai-1 nie lauffähig**: `services/stem-ai/main.py` importiert
+   `device_utils` (gemeinsames Modul in `services/backend-core/python`). Das
+   Dockerfile kopiert es daneben, der venv-/systemd-Weg von
+   `install-ai1.sh` nicht → `ModuleNotFoundError: No module named 'device_utils'`,
+   der Dienst lief in eine Restart-Schleife und der Stem-Pfad der App zeigte auf
+   einen toten Port 8000. Fix: Fallback-Import in `main.py` (eine Quelle, keine
+   zweite Kopie) + Regressionstest `tests/test_stem_ai_import.py` (importiert den
+   Dienst mit gestubbtem `fastapi` in einem Verzeichnis OHNE die Kopie) und als
+   `npm run test:python:services` in die verify-Kette aufgenommen.
+2. **TURN-Ports fehlten in der Live-Firewall**: `audiomonastry-sfu` hatte nur
+   22/80/443/ICMP + RTP 40000-40099. Ohne 3478 udp/tcp und 49152-49201 udp/tcp
+   kann kein Browser einen Relay aufbauen. Neu:
+   `python3 scripts/hetzner/firewall-ensure-turn.py [--apply]` (idempotent,
+   Trockenlauf per Default, Zahlen identisch mit `portal-worker/firewallRules`
+   und `provision.py`) — angewendet, Kontrolle zeigt 10 Regeln inkl. aller vier
+   TURN-Regeln. Dazu `scripts/hetzner/firewall-inventory.py` für den Ist-Stand.
+
+**Bewusst offen (Betreiber):**
+
+* `SCRAPE_TOKEN` fehlt in der `.env` von app-1 UND edge-1 — der App-Metrik-Job
+  in Prometheus bleibt deshalb 401 (fail-closed). Ein frischer Token (z. B.
+  `openssl rand -hex 32`) muss in beide Rollen-.envs; das Schreiben von Secrets
+  in die Knoten-.env ist ein bestätigungspflichtiger Schritt und lief in dieser
+  Sitzung nicht durch.
+* Cloudflare-Token (F1) und R2-Paar (F2) — siehe unten.
+* `sfu.<domain>`: für HTTPS-Signalisierung braucht es einen DNS-Record und ein
+  Zertifikat auf sfu-1 (sonst blockt der Browser Mixed Content — `wire-rtc.sh`
+  warnt genau davor). TURN selbst läuft schon über die IP.
+* Alte Verzeichnisse `/opt/samplemonk` (ai-1) und ungenutzte Legacy-Firewalls
+  (`samplemonk-test/-app/-sfu/-ai/-master/-edge`) sind noch vorhanden — die
+  aktiven Firewalls heißen bereits `audiomonastry-*`.
+
+---
+
 ## Live-Session 2026-09-20 (durchgeführt, soweit ohne Betreiber-Secrets möglich)
 
 **Erledigt und live gemessen:**

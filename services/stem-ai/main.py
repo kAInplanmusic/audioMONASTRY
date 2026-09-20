@@ -19,15 +19,31 @@ import logging
 import os
 import secrets
 import shutil
+import sys
 import tempfile
 import threading
 import time
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
-from device_utils import resolve_device
+# `device_utils.py` ist ein GEMEINSAMES Modul (services/backend-core/python) und
+# hat genau zwei Ablageorte:
+#   * Container (services/stem-ai/Dockerfile): wird neben main.py kopiert,
+#     deshalb greift der direkte Import.
+#   * venv/systemd (scripts/hetzner/install-ai1.sh): hier liegt KEINE Kopie -
+#     der Dienst startete deshalb am 2026-09-20 auf ai-1 in eine
+#     Restart-Schleife ("ModuleNotFoundError: No module named 'device_utils'"),
+#     und der Stem-Pfad der App zeigte auf einen toten Port 8000.
+# Der Fallback haelt beide Layouts mit EINER Quelle am Leben, statt das Modul
+# zu duplizieren (zwei Kopien laufen unweigerlich auseinander).
+try:  # pragma: no cover - Layoutabhaengig
+    from device_utils import resolve_device
+except ModuleNotFoundError:  # pragma: no cover - venv-/systemd-Layout
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend-core" / "python"))
+    from device_utils import resolve_device
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("audiomonastry.stem-ai")
