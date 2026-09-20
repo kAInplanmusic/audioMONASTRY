@@ -1849,15 +1849,14 @@
       "id": "INFRA-HETZNER-003",
       "title": "dns_setup.py ist wegen eigener Pfadvalidierung nicht lauffaehig",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "scripts/hetzner/dns_setup.py validiert Pfade mit der Regex ^/[A-Za-z0-9_./-]*$ (:40) und verbietet damit '?', '=' und '@' - genau die Zeichen, die die eigenen Aufrufe bauen: /zones?name=anunnakitools.de (:72) und /zones/<id>/rrsets/@/A (:93, genutzt fuer den Apex-Record :145-147). _safe_url (:41-44) wirft ValueError, bevor der HTTP-Request entsteht; das Skript ist also nicht ausfuehrbar, wird aber in docs/HETZNER_DEPLOY.md:86-88 als Schritt dokumentiert. provision.py:44-46 macht es mit erweiterter Zeichenklasse richtig.",
       "note": "Quelle: docs/audit-infra-hetzner.md Befund H9 / 6.3 (Beweis mit nachgerechneten Regex-Matches). Belege: scripts/hetzner/dns_setup.py:40 vs. :72, :93, :145-147; scripts/hetzner/provision.py:44-46; docs/HETZNER_DEPLOY.md:86-88. Zweiter, unabhaengiger Befund derselben Stelle: das Skript nutzt die Hetzner-Cloud-DNS-API, produktiv setzt der Cloudflare-Worker den A-Record (index.js:302-321) - zwei getrennte DNS-Pfade.",
       "files": [
         "scripts/hetzner/dns_setup.py",
-        "scripts/hetzner/provision.py",
-        "docs/HETZNER_DEPLOY.md"
+        "tests/test_hetzner_scripts.py"
       ],
       "acceptance": [
         "dns_setup.py laeuft (Regex wie provision.py:44-46) oder ist entfernt und die Doku nennt nur den Cloudflare-Worker-Pfad",
@@ -1866,6 +1865,16 @@
       "verification": [
         "Beleg Bestand: docs/audit-infra-hetzner.md 6.3 (Regex-Match fuer '/zones?name=...' und '/zones/<id>/rrsets/@/A' = False)",
         "Nachweis offen: Lauf des Skripts gegen die API (read-only) nach dem Fix"
+      ],
+      "summary": "dns_setup.py wies seine eigenen Aufrufe ab: die Pfad-Whitelist erlaubte kein \"?\"/\"=\" (Filter-Query der Zonen-Suche) und kein \"@\" (Apex in der RRSet-Route) - jeder DNS-Aufruf endete vor dem Request in einem ValueError. Die Zeichenklasse ist auf dieselben Zeichen wie in provision.py erweitert (scripts/hetzner/dns_setup.py:46), das Skript laeuft damit mit den dokumentierten Kommandozeilen.",
+      "evidence": [
+        "Eigener Gegenbeweis (Regex direkt aus beiden Fassungen): ALT = /^\\/[A-Za-z0-9_.\\/-]*$/ matcht \"/zones?name=anunnakitools.de\" NICHT und \"/zones/abc123/rrsets/@/A\" NICHT; NEU = /^\\/[A-Za-z0-9_.\\/?=@&-]*$/ liefert beide URLs (https://api.hetzner.cloud/v1/zones?name=..., .../rrsets/@/A) - der Fehler war also reproduzierbar und ist weg.",
+        "Eigener Lauf: `python3 scripts/hetzner/dns_setup.py --help` startet und zeigt die dokumentierten Optionen (--domain/--target-ip/--token).",
+        "Eigener Lauf der Skript-Testdatei: `python3 tests/test_hetzner_scripts.py` -> 21 Tests OK (enthaelt den DNS-Fluss mit simulierter API: unveraendert/erstellt/aktualisiert)."
+      ],
+      "live_open": "Ein echter DNS-Lauf gegen die Cloudflare/Hetzner-API (Token + Zone anunnakitools.de) wurde NICHT ausgefuehrt - der Test nutzt eine simulierte API.",
+      "commits": [
+        "bb89983"
       ]
     },
     {
@@ -1897,7 +1906,7 @@
       "id": "INFRA-HETZNER-005",
       "title": "auto-repair (Watchdog) wird von keinem Skript installiert",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "scripts/hetzner/auto-repair.sh und install-auto-repair.sh existieren, werden aber von keinem Skript aufgerufen: die Volltextsuche nach 'install-auto-repair' findet nur die Selbst-Doku (install-auto-repair.sh:3, auto-repair.sh:10); bring-up-fleet.sh:121-123 installiert ausschliesslich den Idle-Shutdown. Der Watchdog laeuft also nur, wenn ihn jemand manuell installiert. Zusatzdefekt: auto-repair.sh:36 fragt http://127.0.0.1/api/health ab (Port 80 = Caddy) und wuerde bei totem Caddy die App als krank melden (:43-47) - Fehldiagnose per Konstruktion.",
@@ -1905,8 +1914,10 @@
       "files": [
         "scripts/hetzner/auto-repair.sh",
         "scripts/hetzner/install-auto-repair.sh",
+        "scripts/hetzner/systemd/audiomonastry-auto-repair.service",
+        "scripts/hetzner/systemd/audiomonastry-auto-repair.timer",
         "scripts/hetzner/bring-up-fleet.sh",
-        "docker-compose.hetzner.yml"
+        "tests/test_hetzner_scripts.py"
       ],
       "acceptance": [
         "Der Watchdog wird beim Flottenstart (oder per systemd-Unit) wirklich installiert und ist damit wirksam",
@@ -1915,20 +1926,33 @@
       "verification": [
         "Beleg Bestand: docs/audit-infra-hetzner.md 4.7 (kein Aufrufer ausser der Selbst-Doku)",
         "Nachweis offen: Installation + Nachweis des laufenden Timers auf einem Knoten (kein Knoten live)"
+      ],
+      "summary": "Der Watchdog prueft jetzt den RICHTIGEN Dienst und wird installiert: auto-repair.sh fragte vorher http://127.0.0.1/api/health ab - das ist Port 80 und damit Caddy, nicht die App (starb Caddy, meldete der Watchdog \"App tot\"; war die App tot, blieb es unbemerkt). Jetzt: App-Health ueber den Docker-Healthcheck des Containers (der App-Container veroeffentlicht 8080 NICHT auf den Host, ein Host-curl ist unmoeglich) und Caddy-Health ueber HTTP auf Port 80 (jeder HTTP-Status = Caddy lebt, nur ein Verbindungsfehler = tot). Dazu systemd-Service + Timer und ein Installer.",
+      "evidence": [
+        "Richtig getrennte Healthchecks (auto-repair.sh): container_health/app_health (Z. 86-94) fuer die App, caddy_health (Z. 114-115) fuer den Proxy, eigene URLs APP_HEALTH_URL/APP_HEALTH_URL_IN_CONTAINER/CADDY_HEALTH_URL (Z. 39-41) - begruendet im Kopf (Z. 11-27).",
+        "Installation vorhanden: scripts/hetzner/systemd/audiomonastry-auto-repair.service + .timer (OnBootSec=3min, OnUnitActiveSec=2min, AccuracySec=30s - bewusst Boot-relativ, weil die Flotte je Session neu entsteht) und install-auto-repair.sh (install nach /usr/local/bin + /etc/systemd/system, `systemctl daemon-reload`, `systemctl enable --now <service>.timer`, Intervall per CHECK_INTERVAL, Log /var/log/audiomonastry-auto-repair.log).",
+        "Einheitentests der Skript-Vertraege: tests/test_hetzner_scripts.py 21 Tests OK (eigener Lauf)."
+      ],
+      "live_open": "Die Installation AUF einem Knoten und der erste echte Lauf sind nicht belegt (kein Knoten live): offen sind `systemctl list-timers audiomonastry-auto-repair.timer` und ein Log-Eintrag eines echten Reparaturlaufs.",
+      "commits": [
+        "bb89983"
       ]
     },
     {
       "id": "INFRA-HETZNER-006",
       "title": "edge-1 ueberbucht (ca. 4,56 GiB Limits auf einem 4-GB-Servertyp)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "edge-1 wird ohne Service-Liste gestartet (bring-up-fleet.sh:114; services/portal-worker/src/index.js:422), deshalb entstehen dort zusaetzlich caddy, audiomonastry UND master-player aus der Basisdatei plus der Monitoring-Stack. Die Speicher-Limits dieser acht Container summieren sich auf 4672 MiB ~ 4,56 GiB (App 2048 + master 1024 + caddy 128 + prometheus 512 + grafana 512 + alertmanager 128 + cadvisor 256 + node-exporter 64 MiB), waehrend der Default-Typ cx23 4 GB RAM hat (provision.py:287). Ehrlichkeitsgrenze: ob Compose v2 deploy.resources.limits auf dem Knoten tatsaechlich als --memory/--cpus anwendet, ist im Audit NICHT verifiziert (kein Knoten laeuft); die Ueberbuchung ist eine Rechnung aus den deklarierten Limits.",
       "note": "Quelle: docs/audit-infra-hetzner.md Befund 2.1 / H10 (Abschnitte 2.1, 2.3, 5.1). Belege: scripts/hetzner/bring-up-fleet.sh:114; services/portal-worker/src/index.js:422; Limits aus docker-compose.hetzner.yml:98-105 (App 2G/2 CPU) und :58-62 (caddy 128M), docker-compose.monitoring.yml:36-162; Typ-Default cx23 (provision.py:286-287).",
       "files": [
-        "edge-1 startet nur den Monitoring-Stack (explizite Service-Liste) oder laeuft auf einem Typ, der die Limits traegt",
-        "Die Summe der Limits auf edge-1 ist <= dem RAM des eingesetzten Servertyps"
+        "scripts/hetzner/bring-up-fleet.sh",
+        "services/portal-worker/src/index.js",
+        "docker-compose.monitoring.yml",
+        "scripts/hetzner/auto-repair.sh",
+        "tests/test_hetzner_scripts.py"
       ],
       "acceptance": [
         "Beleg Bestand: docs/audit-infra-hetzner.md 2.1 (Limits-Summe 4672 MiB gegen cx23/4 GB)",
@@ -1937,13 +1961,24 @@
       "verification": [
         "Beleg Bestand: docs/audit-infra-hetzner.md 2.1 (Limits-Summe 4672 MiB gegen cx23/4 GB)",
         "Nachweis offen: docker stats auf edge-1 (kein Knoten live)"
+      ],
+      "summary": "edge-1 startet nur noch den Monitoring-Stack: bring-up-fleet.sh hat die explizite Service-Liste (MONITORING_SERVICES, Z. 48) und benutzt sie in der Startzeile (Z. 153); danach stoppt es idempotent caddy/audiomonastry/master-player, die ein ALTES Rollen-Snapshot per restart: unless-stopped sonst wieder hochzieht. Der Portal-Worker (services/portal-worker/src/index.js) startet fuer die Rolle edge dieselbe Liste; die Ehrlichkeitsgrenze (Wake-Pfad fuehrt kein Compose aus, dann einmalig auf dem Knoten stoppen) steht als Kommentar dort. Compose-Doku + Grafana-Bindung (127.0.0.1) angepasst.",
+      "evidence": [
+        "Eigene Nachrechnung der Limits: Monitoring-Stack 64+256+512+128+512 = 1472 MiB = 1,44 GiB (docker-compose.monitoring.yml), Basisdatei caddy 128 + audiomonastry 2048 + master-player 1024 + redis 384 = 3584 MiB. Ohne Service-Liste also 4672 MiB (ohne redis, exakt die Audit-Zahl) auf einem cx23 mit 4096 MiB -> Ueberbuchung; mit Liste bleiben 1472 MiB.",
+        "Eigener Trockenlauf: `bash scripts/hetzner/bring-up-fleet.sh --print-config` zeigt fuer edge-1 `docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d node-exporter cadvisor prometheus alertmanager grafana` (NUR Monitoring) und keinen App-Container.",
+        "Startzeile im Code geprueft (bring-up-fleet.sh:152-153) - die Liste wird wirklich verwendet, nicht nur dokumentiert; danach der Stop der Basis-Dienste (Z. 155-159).",
+        "Die Deckungsgleichheit der Liste zwischen bring-up-fleet.sh und dem Portal-Worker prueft tests/test_hetzner_scripts.py (21 Tests OK, eigener Lauf)."
+      ],
+      "live_open": "`docker stats` auf einem echten edge-1 gibt es nicht (kein Knoten live): die Summe ist eine Rechnung aus den DEKLARIERTEN Compose-Limits.",
+      "commits": [
+        "bb89983"
       ]
     },
     {
       "id": "INFRA-HETZNER-007",
       "title": "Servertyp-/Rollen-Doku-Drift (cx23 vs. cx33 vs. CCX33/CAX31) und Rolle edge ohne Provisionierungspfad",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Flotte wird an fuenf Stellen mit vier verschiedenen Servertyp-Tabellen beschrieben: provision-fleet.sh:5-7 ('CX33 (4 vCPU/8GB)') gegen die tatsaechlich verwendeten Werte cx23 (:45-47), services/portal-worker/src/index.js:23-27 (app/sfu/ai = cx33, master/edge = cx23), docs/SERVER_FLEET.md:33-37, :49-55, :157-167 und README.md:225. Der Worker ignoriert die Env-Overrides FLEET_TYPE_* - sie wirken nur auf provision-fleet.sh, im Portalbetrieb (produktiver Pfad) sind sie wirkungslos. Zusaetzlich wird die Rolle edge im Repo nirgends provisioniert: provision.py:131-141 behandelt nur sfu und hat fuer ai/master leere Zweige, edge faellt durch alle Sonderfaelle; provision-fleet.sh:53 setzt ROLE=app, waehrend die --role-Hilfe (provision.py:299-301) edge nennt. Live-Gegenprobe: die Firewall audiomonastry-edge hat genau 4 Regeln (icmp/22/80/443) - kein 3000, der dokumentierte Grafana-Zugriff ist damit unmoeglich.",
@@ -1953,7 +1988,9 @@
         "scripts/hetzner/provision.py",
         "services/portal-worker/src/index.js",
         "docs/SERVER_FLEET.md",
-        "README.md"
+        "README.md",
+        "docs/HETZNER_DEPLOY.md",
+        "tests/test_hetzner_scripts.py"
       ],
       "acceptance": [
         "Genau eine gueltige Typ-/Rollen-Tabelle (Konstitution: 5 Hetzner-Rollen app/sfu/ai/master/edge, Typen per FLEET_TYPE_* ueberschreibbar) - Doku und Code stimmen ueberein",
@@ -1962,6 +1999,18 @@
       "verification": [
         "Beleg Bestand: docs/audit-infra-hetzner.md 1.1/1.2 (vier Typ-Tabellen, edge nur in der Hilfe)",
         "Beleg live: Audit 6.2 (Firewall audiomonastry-edge ohne 3000/9090/9093)"
+      ],
+      "summary": "Eine gueltige Typ-/Rollen-Tabelle und die Rolle edge ist behandelt: FLEET_TYPE_<ROLLE> wirkt jetzt auch im Portalbetrieb (services/portal-worker/src/index.js: fleetServerType + Formpruefung /^[a-z]{2,4}[0-9]{1,3}$/, ungueltig/leer -> Fallback mit Meldung), CLI (provision-fleet.sh) und Worker lesen dieselben Variablennamen, docs/SERVER_FLEET.md fuehrt eine Tabelle (CLI-Default cx23 ueberall, Portal-Fallback 3x cx33 fuer app/sfu/ai + 2x cx23 fuer master/edge), README verweist darauf. provision.py behandelt edge explizit statt still durchzufallen (kein 3000er-Firewall-Port: Grafana ist im Overlay nur an 127.0.0.1 gebunden, Zugriff per SSH-Tunnel), --help nennt die Rollen korrekt.",
+      "evidence": [
+        "Eigener Trockenlauf: `bash scripts/hetzner/bring-up-fleet.sh --print-config` -> \"app=cx23 sfu=cx23 ai=cx23 master=cx23 edge=cx23\"; mit `FLEET_TYPE_APP=cx43` -> \"app=cx43 sfu=cx23 ...\" (Override wirkt, Default cx23 ueberall).",
+        "Portal-Worker-Diff geprueft: FLEET_TYPE_APP/SFU/AI/MASTER/EDGE werden gelesen, ungueltige Werte fallen mit Meldung auf den Rollen-Fallback zurueck; MONITORING_SERVICES deckt sich mit bring-up-fleet.sh.",
+        "provision.py-Diff geprueft: die Rollen app/ai/master/edge sind explizit benannt (edge: \"nur Monitoring, 22/80/443 + ICMP, keine 3000er-Regel\"), unbekannte Rollen werden gemeldet statt still ignoriert; --help nennt ai/master/edge korrekt.",
+        "Doku-Abgleich gelesen: docs/SERVER_FLEET.md Z. 27-31 (Tabelle), Z. 98-102 (Startreihenfolge), Z. 191/239-244 (Limit-Rechnung + Kosten je Default), README.md Z. 225 (ein Satz + Verweis) - keine widersprechende Typ-Tabelle mehr.",
+        "tests/test_hetzner_scripts.py 21 Tests OK (eigener Lauf)."
+      ],
+      "live_open": "Nicht live geprueft (kein Knoten): echte Firewall-Regeln eines edge-Knotens und der Grafana-Zugriff per SSH-Tunnel.",
+      "commits": [
+        "bb89983"
       ]
     },
     {
