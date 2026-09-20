@@ -419,6 +419,106 @@ muss dazu passen (z. B. 240000), sonst endet der Lauf korrekt, aber ohne Ergebni
 `Zeitlimit ueberschritten`. Messung mit korrektem Modellnamen gegen den warmen
 Endpoint: **HTTP 200 in ~1 s**.
 
+## 12. Cloud-Speicher R2: Signaturfehler diagnostizieren und Credentials setzen (F2 — 2026-09-20)
+
+**Befund (externer App-Test 2026-09-20):** `/api/cloud/health` meldete
+`r2: error: The request signature we calculated does not match the signature you
+provided`; `/api/session/autosave` scheiterte (20× im Log); `POST /api/upload/sample`
+endete in HTTP 500 exakt mit diesem Fehler.
+
+**Zwei Ursachen (beide im Code adressiert, der Wert bleibt Betreiber-Sache):**
+
+1. **Zwei Schreibweisen für dasselbe Paar, ohne Abgleich.** Der Server kannte nur
+   `CFS3_ACCESS_KEY`/`CFS3_SECRET_KEY` (bzw. `CFR2_*` als Legacy-Fallback). Auf
+   app-1 lagen die Werte unter `CFS3_ACCESS_KEY_ID`/`CFS3_SECRET_ACCESS_KEY` –
+   diese Namen wurden **still ignoriert**, der Aufruf fiel auf das (falsche)
+   `CFR2_*`-Paar aus der Rollen-`.env` zurück. Jetzt lesen Server und
+   Portal-Worker dieselbe Alias-Liste; der Portal-Worker schreibt EINE Herkunft
+   unter den kanonischen Namen **plus** Legacy-Spiegel mit identischem Wert
+   (`services/portal-worker/src/index.js` → `r2EnvLines`), und der Server nennt
+   die benutzte Quelle in der Health-Antwort.
+2. **Der Fehler war nur im Log sichtbar.** R2 wird jetzt mit einem **echten
+   Probeobjekt** geprüft (PUT + DELETE unter `probes/r2-health-<stamp>.json`, mit
+   Timeout), der Zustand steht als `cloud.r2` in `/api/metrics`, und der Autosave
+   wiederholt begrenzt mit Backoff und meldet `degraded` + `reason` statt still
+   zu scheitern.
+
+### Betreiber-Schritte
+
+```bash
+# 1. R2-API-Token im Cloudflare-Konto prüfen/neu erzeugen
+#    (R2 → Manage R2 API Tokens → Object Read & Write für den Bucket)
+#    und im Portal-Secret setzen (canonical ODER legacy, beides wird gelesen):
+#      CFS3_ACCESS_KEY / CFS3_SECRET_KEY / CFS3_BUCKET / CFR2_ACCOUNT_ID
+#    ACHTUNG: liegen beide Familien mit VERSCHIEDENEN Werten vor, ist genau das
+#    die Ursache – der Server meldet die Abweichung laut (siehe unten).
+
+# 2. Diagnose IM Repo (kein Portal, kein Container nötig). Exit 0 = beschreibbar.
+npm run r2:check
+#   bzw. direkt:
+npx tsx scripts/cloud/r2-health-check.ts
+npx tsx scripts/cloud/r2-health-check.ts --json        # maschinenlesbar
+npx tsx scripts/cloud/r2-health-check.ts --timeout=8000
+
+# 3. Rollen-`.env` neu erzeugen (Portal-Wake) oder die Werte auf dem Knoten setzen
+#    /opt/audiomonastry/.env – EIN Paar pro Variable, keine Mischung beider Familien.
+
+# 4. Auf dem laufenden Knoten nachmessen (force = TTL-Cache aus, echte Probe):
+curl -s -H "x-studio-token: $STUDIO_ACCESS_TOKEN" "https://<domain>/api/cloud/health?probe=1"
+curl -s -H "x-studio-token: $STUDIO_ACCESS_TOKEN" "https://<domain>/api/metrics" | grep -o '"cloud":{.*}' 
+```
+
+**Erwartete Ausgabe des Diagnose-Skripts** (real gemessen 2026-09-20 gegen einen
+lokalen Stub, damit keine echten Credentials in die Ausgabe gerieten):
+
+```
+# Fall A – gültige Probe:
+audioMONASTRY R2-Healthcheck (FIX F2)
+  Quelle:        CFS3_ACCESS_KEY + CFS3_SECRET_KEY + CFS3_ENDPOINT + CFS3_BUCKET
+  Bucket:        audiomonastrysamples
+  Endpoint:      127.0.0.1:4599
+  Probe:         ok (PUT+DELETE, 70 ms)
+  Probeobjekt:   probes/r2-health-mua4f00f-est35kng.json (nach dem Test gelöscht)
+  Ergebnis:      ok – R2 ist beschreibbar.
+EXIT=0
+
+# Fall B – Signaturfehler + widersprüchliche Quelle:
+  Quelle:        CFS3_ACCESS_KEY + CFS3_SECRET_KEY + CFS3_ENDPOINT + CFS3_BUCKET
+  Probe:         FEHLER [signature-mismatch] (PUT+DELETE, 64 ms)
+  Meldung:       The request signature we calculated does not match the signature you provided.
+  Unbenutzt:     CFR2_ACCESS_KEY_ID (anderer Wert als die benutzte Quelle)
+  ABWEICHUNG:    Mehrere R2-Quellen widersprechen sich – accessKeyId: benutzt CFS3_ACCESS_KEY
+                 [CFS3_ACCESS_KEY(len=32, fp=3ba3f5f4) vs CFR2_ACCESS_KEY_ID(len=32, fp=cd93782b)].
+  Betreiber:     Access Key und Secret passen nicht zum Bucket/Endpoint. R2-API-Token-Paar im
+                 Portal-Secret UND in der Knoten-`.env` auf dasselbe Paar setzen.
+EXIT=1
+
+# Fall C – keine Credentials (--json): problem "not-configured",
+#          state unconfigured in /api/cloud/health, kein Schreibversuch.
+EXIT=1
+```
+
+**Erwartete Felder nach der Korrektur:**
+
+| Ort | Erwartet |
+|---|---|
+| `GET /api/cloud/health?probe=1` | `r2.state: "ok"`, `r2.status: "ok"`, `r2.probe.method: "PUT+DELETE"`, `r2.credentials.deviationCount: 0` |
+| `GET /api/metrics` (JSON) | `cloud.r2.state`/`cloud.r2.problem`/`cloud.writes.autosave`, `audiomonastry_cloud_r2_ok 1` im Prometheus-Zweig |
+| `POST /api/session/autosave` | 200 `{ok:true}`; bei Fehlschlag `degraded:true`, `reason` (z. B. `signature-mismatch`), `attempts` – und **eine** Log-Zeile je Fehlerklasse |
+| Log auf app-1 | keine wiederholte `SignatureDoesNotMatch`-Flut (Wiederholungen werden gezählt, nicht geloggt) |
+
+**Ohne R2-Credentials** bleibt der Zustand ausdrücklich `unconfigured`
+(`status: "not-configured"`) – **nicht** `ok`. Die App arbeitet lokal weiter
+(OPFS/Presets); der Ladebildschirm zeigt den Grund im Text.
+
+### Was nur der Betreiber live belegen kann
+
+Die Signaturprüfung selbst kann offline nicht nachgestellt werden (der Stub
+antwortet mit derselben XML wie R2, prüft aber nicht kryptografisch). Der
+Live-Nachweis der F2-Verifikation ist deshalb: `npm run r2:check` → `EXIT=0`
+auf app-1, `/api/cloud/health?probe=1` → `r2: ok`, Autosave 200 und ein
+3-s-WAV-Upload mit Objekt-Key in `audiomonastrysamples`.
+
 ## TURN-Relay und ICE-Wiederherstellung beweisen (COLLAB-P0-003)
 
 Der TURN-Pfad war lange „verdrahtet, aber nicht nachgewiesen" (in der

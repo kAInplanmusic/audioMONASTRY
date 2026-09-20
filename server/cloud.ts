@@ -10,10 +10,18 @@
  * NUR Server-seitig verwenden (interne Keys im `.env`; niemals client-seitig).
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { S3Client, PutObjectCommand, ListBucketsCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { PRESET_SAMPLE_DATABASE, AudioSample } from '../src/data/samples';
 import { MUSIC_LIBRARY, MusicTrack } from '../src/data/musicLibrary';
 import { isValidSupabaseKey, supabasePublicKey, supabaseServerKey, supabaseServerKeyLabel } from '../src/config/supabaseKeys';
+import { resolveR2Config, type R2Config } from './r2Config';
+import {
+  R2WriteError,
+  r2ProblemHint,
+  recordR2Write,
+  runR2HealthCheck,
+  toR2WriteError,
+} from './r2Health';
 
 const env = process.env;
 
@@ -80,46 +88,32 @@ function supabaseAnon(): SupabaseClient | null {
   }
 }
 
-/** R2-Endpoint: explizit konfiguriert ODER Standard-Endpoint aus Account-ID. */
-function r2Endpoint(accountId: string): string {
-  // CFS3_ENDPOINT (neu) hat Vorrang; CFR2_URL/CFR2_ENDPOINT/CLOUDFLARE_API
-  // bleiben als Legacy-Fallback (vom Betreiber bereitgestellter Endpoint).
-  const raw = env.CFS3_ENDPOINT?.trim() || env.CFR2_URL?.trim() || env.CFR2_ENDPOINT?.trim() || env.CLOUDFLARE_API?.trim();
-  if (raw) {
-    try {
-      const u = new URL(raw);
-      if (u.protocol === 'https:' || u.protocol === 'http:') return raw;
-    } catch {
-      // ungültige URL -> Fallback auf Standard-Endpoint
-    }
-  }
-  return `https://${accountId}.r2.cloudflarestorage.com`;
+/**
+ * R2-Konfiguration aus EINER Herkunft (FIX F2).
+ *
+ * Vorher stand hier eine eigene Präzedenzliste (`CFS3_ACCESS_KEY` → …), die die
+ * auf app-1 gesetzten `CFS3_ACCESS_KEY_ID`/`CFS3_SECRET_ACCESS_KEY` STILL
+ * ignorierte und dann auf `CFR2_*` zurückfiel – genau der Weg in den
+ * `SignatureDoesNotMatch`. Außerdem prüfte nur diese eine Stelle das
+ * 32/64-Hex-Format; `server/cloudAutomation.ts` baute einen zweiten, abweichenden
+ * Client und schwieg bei falschem Format. Jetzt lösen beide dieselbe Funktion auf.
+ */
+export function r2ConfigFromEnv(source: NodeJS.ProcessEnv | Record<string, string | undefined> = env): R2Config {
+  return resolveR2Config(source as Record<string, string | undefined>);
 }
 
-/** Liefert einen konfigurierten R2-S3-Client oder null, wenn Keys fehlen. */
-function r2Client(): S3Client | null {
-  // Endpoint-Hostname als Account-ID-Fallback (z. B. https://<account>.r2.cloudflarestorage.com).
-  const fromUrl = (() => {
-    const raw = env.CFS3_ENDPOINT?.trim() || env.CFR2_URL?.trim();
-    if (!raw) return null;
-    try {
-      return new URL(raw).hostname.split('.')[0] ?? null;
-    } catch {
-      return null;
-    }
-  })();
-  const accountId = env.CFR2_ACCOUNT_ID?.trim() || fromUrl || '';
-  const accessKeyId = env.CFS3_ACCESS_KEY?.trim() || env.CFR2_ACCESS_KEY_ID?.trim() || env.CFR2_ACCESS_KEY?.trim();
-  const secretAccessKey = env.CFS3_SECRET_KEY?.trim() || env.CFR2_SECRET_ACCESS_KEY?.trim();
-  if (!accountId || !accessKeyId || !secretAccessKey) return null;
-  // R2-Zugangsdaten sind hexadezimale Keys (Access 32, Secret 64 Zeichen).
-  if (!/^[0-9a-f]{32}$/i.test(accessKeyId)) return null;
-  if (!/^[0-9a-f]{64}$/i.test(secretAccessKey)) return null;
-
+/** S3-Client zu einer bereits aufgelösten Konfiguration (Formatfehler ⇒ null). */
+export function r2ClientFor(config: R2Config): S3Client | null {
+  if (!config.configured) return null;
   return new S3Client({
-    region: 'auto',
-    endpoint: r2Endpoint(accountId),
-    credentials: { accessKeyId, secretAccessKey },
+    region: config.region,
+    endpoint: config.endpoint,
+    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    // F2: Anzahl der SDK-internen Wiederholungen. Sie bleibt beim Standard (3),
+    // damit sich am Upload-Verhalten nichts ändert; Tests und Ops setzen sie auf
+    // 1, wenn die eigene Retry-Schicht (Autosave) die EINZIGE Wiederholung sein
+    // soll – sonst multiplizieren sich SDK- und Routen-Wiederholungen.
+    maxAttempts: Math.max(1, Math.floor(Number(env.R2_SDK_MAX_ATTEMPTS) || 3)),
   });
 }
 
@@ -279,10 +273,18 @@ export async function pushMusicTrackToCloud(
   return { ok: true, id: track.id };
 }
 
-/** Gesundheitscheck der Cloud-Anbindung (Supabase ping + R2-Buckets). */
-export async function cloudHealth() { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
+/**
+ * Gesundheitscheck der Cloud-Anbindung.
+ *
+ * Supabase: kurzer Lese-Ping (service_role, sonst anon read-only).
+ * R2: ECHTE Schreibprobe (PUT+DELETE eines kleinen Probeobjekts, mit Timeout),
+ * siehe `server/r2Health.ts`.
+ *
+ * `options.force` (Route: `?probe=1`) misst R2 neu und ignoriert den TTL-Cache –
+ * für die Betreiber-Diagnose direkt nach einer Credential-Korrektur.
+ */
+export async function cloudHealth(options: { force?: boolean } = {}) { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
   const sb = supabaseAdmin();
-  const r2 = r2Client();
 
   let supabase = 'not-configured';
   if (sb) {
@@ -308,19 +310,32 @@ export async function cloudHealth() { // NOSONAR: bewusst komplexe Audio-/DSP-/U
     }
   }
 
-  let r2buckets: string[] | undefined;
-  let r2status = 'not-configured';
-  if (r2) {
-    try {
-      const res = await r2.send(new ListBucketsCommand({}));
-      r2buckets = (res.Buckets ?? []).map((b) => b.Name ?? '');
-      r2status = 'ok';
-    } catch (e) {
-      r2status = `error: ${(e as Error).message}`;
-    }
-  }
+  // R2: ECHTE Schreibprobe (PUT+DELETE eines kleinen Probeobjekts, mit Timeout).
+  // Der frühere Check (`ListBuckets`) hat nur „Credentials vorhanden“ geprüft –
+  // ein falsches Schlüsselpaar fiel erst beim ersten echten Schreibzugriff auf
+  // und landete dann als Log-Flut im Betrieb. Siehe server/r2Health.ts.
+  const r2 = await runR2HealthCheck({ force: options.force === true, env });
 
-  return { supabase, r2: { status: r2status, buckets: r2buckets } };
+  return {
+    supabase,
+    r2: {
+      // Kompatibilitätsfeld (bestehende Consumer: CloudStatusBadge, Smoke-Tests).
+      status: r2.status,
+      // F2: auswertbare Felder – Zustand, Ursache, Nachweis, Herkunft.
+      state: r2.state,
+      ok: r2.ok,
+      problem: r2.problem,
+      reason: r2.problem,
+      message: r2.message,
+      bucket: r2.bucket,
+      endpoint: r2.endpointHost,
+      probe: r2.method === 'none' ? null : { method: r2.method, key: r2.key, bucket: r2.bucket, attempts: r2.attempts },
+      checkedAt: r2.checkedAt,
+      durationMs: r2.durationMs,
+      credentials: r2.credentials,
+      hint: r2ProblemHint(r2.problem),
+    },
+  };
 }
 
 /**
@@ -333,30 +348,43 @@ export async function uploadSampleToR2(
   body: Buffer | Uint8Array,
   contentType = 'audio/wav',
 ) {
-  const r2 = r2Client();
-  const bucket = (env.CFS3_BUCKET ?? env.CFR2_BUCKET)?.trim();
-  if (!r2) throw new Error('R2 not configured (check CFS3_ENDPOINT / CFS3_ACCESS_KEY / CFS3_SECRET_KEY / CFR2_ACCOUNT_ID)');
-  if (!bucket) throw new Error('CFS3_BUCKET missing');
+  const config = r2ConfigFromEnv();
+  const r2 = r2ClientFor(config);
+  const bucket = config.bucket;
+  if (!r2) {
+    // F2: Der Grund wird benannt (fehlend vs. Format vs. Bucket), statt alle
+    // Fälle in eine Sammelmeldung zu werfen – sonst ist er im Betrieb nicht
+    // von einem Signaturfehler unterscheidbar.
+    const detail = config.problems.length ? config.problems.join(', ') : 'keine R2-Variablen gesetzt';
+    throw new R2WriteError('not-configured', `R2 not configured (${detail}; check CFS3_ENDPOINT / CFS3_ACCESS_KEY / CFS3_SECRET_KEY / CFR2_ACCOUNT_ID)`);
+  }
+  if (!bucket) throw new R2WriteError('bucket-missing', 'CFS3_BUCKET missing');
   if (!isSafeObjectKey(objectKey)) throw new Error('invalid objectKey');
 
-  await r2.send(new PutObjectCommand({
-    Bucket: bucket,
-    Key: objectKey,
-    Body: body,
-    ContentType: contentType,
-  }));
+  try {
+    await r2.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: objectKey,
+      Body: body,
+      ContentType: contentType,
+    }));
+    recordR2Write('upload', { ok: true, attempts: 1 });
+  } catch (error) {
+    const writeError = toR2WriteError(error);
+    recordR2Write('upload', { ok: false, problem: writeError.problem, message: writeError.message, attempts: 1 });
+    throw writeError;
+  }
 
-  const accountId = env.CFR2_ACCOUNT_ID?.trim();
   // Öffentliche Basis-URL bevorzugen (R2 > Settings > Public Access / r2.dev
-  // oder eigene Domain). Ohne CFR2_PUBLIC_URL fallback auf die S3-Endpoint-URL
-  // (nur mit signierten Requests erreichbar).
-  const publicBase = env.CFR2_PUBLIC_URL ? trimTrailingSlash(env.CFR2_PUBLIC_URL.trim()) : undefined;
+  // oder eigene Domain). Ohne CFS3_PUBLIC_URL/CFR2_PUBLIC_URL fallback auf die
+  // S3-Endpoint-URL (nur mit signierten Requests erreichbar).
+  const publicBase = config.publicBaseUrl ? trimTrailingSlash(config.publicBaseUrl) : undefined;
   const encodedKey = objectKey.split('/').map((segment) => encodeURIComponent(segment)).join('/');
   return {
     key: objectKey,
     bucket,
     url: publicBase
       ? `${publicBase}/${encodedKey}`
-      : `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${encodedKey}`,
+      : `https://${bucket}.${config.accountId}.r2.cloudflarestorage.com/${encodedKey}`,
   };
 }

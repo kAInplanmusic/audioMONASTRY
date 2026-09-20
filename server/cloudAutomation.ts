@@ -7,6 +7,7 @@
 import { S3Client, ListObjectsV2Command} from '@aws-sdk/client-s3';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { supabaseServerKey } from '../src/config/supabaseKeys';
+import { resolveR2Config } from './r2Config';
 
 const env = process.env;
 
@@ -35,15 +36,16 @@ export interface AudioMetadata {
 }
 
 function r2Client(): S3Client | null {
-  const accountId = env.CFR2_ACCOUNT_ID?.trim();
-  const accessKeyId = env.CFS3_ACCESS_KEY?.trim() || env.CFR2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = env.CFS3_SECRET_KEY?.trim() || env.CFR2_SECRET_ACCESS_KEY?.trim();
-  if (!accountId || !accessKeyId || !secretAccessKey) return null;
-  const endpoint = env.CFS3_ENDPOINT?.trim() || `https://${accountId}.r2.cloudflarestorage.com`;
+  // F2: EINE Herkunft für beide Rollen-Quellen. Die frühere Fassung verlangte
+  // zwingend `CFR2_ACCOUNT_ID` und ignorierte `CFS3_ACCESS_KEY_ID`/
+  // `CFS3_SECRET_ACCESS_KEY` – auf app-1 lief dieser Pfad deshalb still ins
+  // Leere bzw. gegen das falsche Paar (siehe server/r2Config.ts).
+  const config = resolveR2Config(process.env as Record<string, string | undefined>);
+  if (!config.configured) return null;
   return new S3Client({
-    region: 'auto',
-    endpoint,
-    credentials: { accessKeyId, secretAccessKey },
+    region: config.region,
+    endpoint: config.endpoint,
+    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
   });
 }
 
