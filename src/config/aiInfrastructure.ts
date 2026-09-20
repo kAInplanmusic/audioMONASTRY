@@ -15,10 +15,16 @@
 // ALLE acht Rollen stehen im Rollen-Manifest und werden vom Drift-Guard
 // `tests/manifestRoles.test.ts` geprüft.
 //
-// Kostenregel (Betreiber-Vorgabe 2026-09-15, 8-Instanzen-Architektur):
-//   - maximal 8 GPU-Endpoints (eine Rolle je Instanz, alle A6000 48 GB)
-//   - maximal 10 €/h für die gesamte laufende Flotte (8 × 0,49 = 3,92 €/h)
-//   - maximal 5 €/Monat für Speicher/Snapshots (Hetzner + RunPod zusammen)
+// Kosten-Konstitution (Betreiber-Vorgabe 2026-09-20) — EINZIGE QUELLE:
+//   docs/INFRA_KONSTITUTION.md. Kurzfassung:
+//   - maximal 8 GPU-Endpoints (eine Rolle je Instanz, A6000 48 GB)
+//   - maximal 5 Hetzner-Server (app/sfu/ai/master/edge)
+//   - maximal 10 €/h für die gesamte laufende Flotte, Zielband 5–7,5 €/h
+//     (8 × ~0,49 = ~3,92 €/h Vollast)
+//   - maximal 5 €/Monat für Speicher/Snapshots/ISOs (Hetzner + RunPod)
+//   - AI-Flotte per Einstellung abschaltbar -> dann nur Hetzner-Kosten
+//   - bei "AI an" laufen alle immer-Rollen; die VISUAL-Rollen
+//     (imageHq/videoReal/videoAbstract) erst bei Abruf (siehe isVisualRole)
 // ============================================================================
 
 /**
@@ -80,6 +86,37 @@ export const AI_MAX_FLEET_EUR_PER_HOUR = envNumber('AI_MAX_FLEET_EUR_PER_HOUR', 
 /** Budget: maximale Speicher-/Snapshot-Kosten pro Monat (EUR), Hetzner + RunPod. */
 export const AI_MAX_STORAGE_EUR_PER_MONTH = envNumber('AI_MAX_STORAGE_EUR_PER_MONTH', 5);
 
+/** Harte Obergrenze der Hetzner-Server (Rollen app/sfu/ai/master/edge). */
+export const AI_MAX_HETZNER_SERVERS = envNumber('AI_MAX_HETZNER_SERVERS', 5);
+
+/**
+ * Zielband der laufenden Flottenkosten (EUR/h) — weicher Korridor unterhalb der
+ * harten Grenze `AI_MAX_FLEET_EUR_PER_HOUR`. Oberhalb `max` soll die Flotte
+ * gedrosselt werden, ohne die harte Grenze zu reißen.
+ */
+export const AI_TARGET_FLEET_EUR_PER_HOUR = { min: 5, max: 7.5 } as const;
+
+/**
+ * Visual-Rollen: laufen NICHT dauerhaft, sondern erst bei Abruf/Aktivierung
+ * (Bild-/Video-Generierung) und fallen danach per `idleTimeout` auf Null zurück.
+ * Alle übrigen Rollen laufen bei "AI an" voll (kein Lazy-Load).
+ */
+export const AI_VISUAL_ROLES = [
+  'imageHq',
+  'videoReal',
+  'videoAbstract',
+] as const satisfies readonly GpuEndpointRole[];
+
+/** true, wenn die Rolle eine bedarfsgesteuerte Visual-Rolle ist. */
+export function isVisualRole(role: GpuEndpointRole): boolean {
+  return (AI_VISUAL_ROLES as readonly GpuEndpointRole[]).includes(role);
+}
+
+/** Rollen, die bei "AI an" immer laufen (alle außer den Visual-Rollen). */
+export function alwaysOnRoles(): GpuEndpointRole[] {
+  return GPU_ENDPOINT_ROLES.filter((role) => !isVisualRole(role));
+}
+
 /**
  * Erfahrungswerte pro Endpoint-Rolle in EUR/h (A6000 48 GB, scale-to-zero).
  * Reine Größenordnung für den Budget-Guard – keine Abrechnung.
@@ -132,6 +169,19 @@ export function assertGpuEndpointBudget(): void {
     throw new Error(
       `AI_MAX_GPU_ENDPOINTS muss zwischen 1 und ${GPU_ENDPOINT_ROLES.length} liegen (aktuell: ${AI_MAX_GPU_ENDPOINTS}). ` +
         `Die AI-Flotte besteht aus den Rollen ${GPU_ENDPOINT_ROLES.join(', ')} – weitere GPU-Endpoints sind nicht erlaubt.`,
+    );
+  }
+}
+
+/** Wirft, wenn die Hetzner-Serverzahl die Konstitution überschreitet. */
+export function assertHetznerServerBudget(count: number): void {
+  if (!Number.isInteger(count) || count < 0) {
+    throw new Error(`Hetzner-Serverzahl muss eine nicht-negative Ganzzahl sein (erhielt: ${count}).`);
+  }
+  if (count > AI_MAX_HETZNER_SERVERS) {
+    throw new Error(
+      `Hetzner-Flotte ${count} Server übersteigt die Konstitution von ${AI_MAX_HETZNER_SERVERS} Servern ` +
+        `(app/sfu/ai/master/edge) — siehe docs/INFRA_KONSTITUTION.md.`,
     );
   }
 }
