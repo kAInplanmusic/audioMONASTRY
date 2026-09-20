@@ -1683,7 +1683,9 @@
         "Akute Reparatur (Betreiber-Freigabe): PATCH rest.runpod.io/v1/endpoints/gajmangfldpzrk {\"workersMax\":2} -> 200, Ruecklesung workersMin/Max 0/2; danach health {idle:0, ready:0, running:2, unhealthy:0} und jobs {completed:44 -> 48, inQueue:0, failed:0}. Anschliessend wieder auf workersMax=1 zurueckgestellt (Ruecklesung: 1).",
         "Kaltstart-Kette: HF_HOME=/data/hf-cache liegt IM Container, networkVolumeId=null, AI_BAKE_ROLE= leer -> bei jedem Kaltstart 11,8 GB Image-Pull plus Modell-Download, ohne Persistenz ueber den Kaltstart hinweg.",
         "Endpoint-Konfiguration: workersMin=0, workersMax=1, idleTimeout=120, scalerType=QUEUE_DELAY/4, gpuIds=AMPERE_48,ADA_48_PRO.",
-        "Kein Repo-Zusammenhang (kein Codefehler): der Startpfad liest die in INFRA-RUNPOD-006 entfernte runtime_config.yaml nicht; der Build des ausgerollten Images lief durch beide Gates."
+        "Kein Repo-Zusammenhang (kein Codefehler): der Startpfad liest die in INFRA-RUNPOD-006 entfernte runtime_config.yaml nicht; der Build des ausgerollten Images lief durch beide Gates.",
+        "Nach der Reparatur und mit warmem Worker: scripts/generate-mos-samples.py (MOS_LANGUAGE=DE, qwen3-tts-17b) liefert 3/3 COMPLETED - 01.wav 698938 B, 02.wav 714298 B, 03.wav 637498 B (je 24 kHz) unter logs/mos-20260920/. Damit ist Abnahmepunkt 1 erfuellt.",
+        "Hinweis für den Betrieb: workersMax steht wieder auf 1 (Betreiber-Vorgabe). Der Slot-Deadlock kann damit erneut auftreten - der belegte Sofort-Ausweg ist PATCH rest.runpod.io/v1/endpoints/gajmangfldpzrk {\"workersMax\":2}, danach zurueck auf 1."
       ],
       "verification": [],
       "updatedAt": "2026-09-20",
@@ -2560,7 +2562,8 @@
         "Neues Image gebaut (Dockerfile.manifest, buildx): beide Gates im Build OK (\"GATE ok: MoA + Adapter verdrahtet, 13 Handler\"); im neuen Image: normalize_tts_language(\"DE\") == \"german\"; Image-Tests tests/test_tts_language.py + tests/test_qwen3_tts_handler.py im Image 10/10 OK.",
         "Rollout: runpod-deploy Lauf 35499065669 gruen, voiceGen-Endpoint zeigt auf den neuen Tag (:2fccf00...).",
         "LIVE-Beweis: scripts/generate-mos-samples.py mit MOS_LANGUAGE=DE, MOS_MODEL=qwen3-tts-17b -> logs/mos-20260920/qwen3-tts-17b-02.wav (345658 B, 24 kHz) und -03.wav (637498 B, 24 kHz), Status COMPLETED. Vorher brach derselbe Aufruf mit MODEL_UNAVAILABLE ab.",
-        "Offen notiert: der dritte Text blieb im zweiten Anlauf in der Queue, waehrend ein Worker unhealthy war -> eigenes Ticket INFRA-RUNPOD-010."
+        "Offen notiert: der dritte Text blieb im zweiten Anlauf in der Queue, waehrend ein Worker unhealthy war -> eigenes Ticket INFRA-RUNPOD-010.",
+        "Nachtrag: nach der Slot-Reparatur lieferte derselbe Aufruf 3/3 Hoerproben (logs/mos-20260920/qwen3-tts-17b-01..03.wav, 24 kHz, alle COMPLETED) - die Sprach-Normalisierung ist live vollstaendig belegt, nicht nur 2/3."
       ],
       "remaining": "Keine code-seitigen Reste. Der gelegentlich unhealthy Worker wird in INFRA-RUNPOD-010 verfolgt."
     }
