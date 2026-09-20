@@ -49,12 +49,22 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL 2>/dev/null || true
           df -h
 
+      # INFRA-RUNPOD-008: Der Push nach GHCR scheiterte bei JEDEM Lauf mit
+      # "denied: permission_denied: write_package" (der Build selbst lief durch).
+      # Ursache ist die Paketbindung: der GITHUB_TOKEN darf nur schreiben, wenn
+      # das Paket an DIESES Repository gebunden ist. Deshalb wird jetzt zuerst
+      # der auch im Deploy-Job benutzte PAT probiert (GHCR_PAT_ALL_ACCESS, dann
+      # GHCR_PASSWORD) und erst danach der Repo-Token - damit funktioniert der
+      # Push ohne Workflow-Aenderung, sobald einer der Secrets existiert.
+      # Betreiber-Seite (empfohlen, dauerhaft sauber): Paket
+      # `audiomonastry-ai-runtime-runpod` -> Settings -> "Manage Actions access"
+      # -> Repo kAInplanmusic/audioMONASTRY mit Rolle Write aufnehmen.
       - name: GHCR Login
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.GHCR_PAT_ALL_ACCESS != '' && github.repository_owner || github.actor }}
+          password: ${{ secrets.GHCR_PAT_ALL_ACCESS || secrets.GHCR_PASSWORD || secrets.GITHUB_TOKEN }}
 
       - name: Image-URL bestimmen
         id: meta
