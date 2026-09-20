@@ -556,6 +556,30 @@ def image_overrides() -> Dict[str, Dict[str, str]]:
     return overrides
 
 
+def template_name_override(role: str) -> str:
+    """Optionaler Template-Name je Rolle: `RUNPOD_TEMPLATE_NAME_<TOKEN>`.
+
+    Warum es das gibt (live belegt 2026-09-20, Rolle music): der Endpoint hing an
+    einem Template, das `myself.podTemplates` NICHT listet und das die Plattform
+    nicht mehr aufloeste - neue Worker konnten deshalb nicht starten, Jobs lagen
+    fest. `saveTemplate` ohne `id` scheitert dabei am Unique-Fehler, weil der alte
+    Name unsichtbar weiter existiert. Ein NEUER Name ist damit der einzige API-Weg
+    zurueck zu einem funktionierenden Endpoint.
+
+    Beispiel: RUNPOD_TEMPLATE_NAME_MUSIC=audiomonastry-ai-music-template-v2
+    """
+    for name in (f"RUNPOD_TEMPLATE_NAME_{_env_token(role)}", f"RUNPOD_TEMPLATE_NAME_{role.upper()}"):
+        value = env(name)
+        if value:
+            return value
+    return ""
+
+
+def role_template_name(role: str, defaults: Dict[str, Any]) -> str:
+    """Template-Name der Rolle: Override schlaegt den Standardnamen."""
+    return template_name_override(role) or f"audiomonastry-ai-{defaults['suffix']}-template"
+
+
 def resolve_image(role: str, defaults: Dict[str, Any], overrides: Optional[Dict[str, Dict[str, str]]] = None) -> Dict[str, Any]:
     """Liefert image/docker_args/env_vars fuer eine Rolle.
 
@@ -592,7 +616,7 @@ def resolve_image(role: str, defaults: Dict[str, Any], overrides: Optional[Dict[
             "image": image,
             "docker_args": DOCKER_START_CMD if own_runtime else "",
             "env_vars": build_env_vars(role) if own_runtime else build_env_vars_prebuilt(role),
-            "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
+            "template_name": role_template_name(role, defaults),
             "image_origin": source,
             "registry_auth": own_runtime or image.startswith("ghcr.io/"),
         }
@@ -602,7 +626,7 @@ def resolve_image(role: str, defaults: Dict[str, Any], overrides: Optional[Dict[
             "image": env("RUNPOD_BRAIN_VLLM_IMAGE", BRAIN_VLLM_IMAGE_DEFAULT),
             "docker_args": "",  # Image bringt seinen eigenen Entrypoint mit
             "env_vars": build_env_vars_vllm(),
-            "template_name": "audiomonastry-ai-brain-vllm-template",
+            "template_name": template_name_override(role) or "audiomonastry-ai-brain-vllm-template",
             "image_origin": "Rollen-Default brain=vLLM (RUNPOD_BRAIN_VLLM_IMAGE / BRAIN_VLLM_IMAGE_DEFAULT)",
             "registry_auth": False,
         }
@@ -615,7 +639,7 @@ def resolve_image(role: str, defaults: Dict[str, Any], overrides: Optional[Dict[
             "image": image,
             "docker_args": "",  # vorgefertigter Entrypoint
             "env_vars": build_env_vars_prebuilt(role),
-            "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
+            "template_name": role_template_name(role, defaults),
             "image_origin": (
                 f"Override {defaults['imageEnv']} (Rollenvariable)" if override else f"Prebuilt-Default {defaults.get('imageDefault', '')}"
             ),
@@ -633,7 +657,7 @@ def resolve_image(role: str, defaults: Dict[str, Any], overrides: Optional[Dict[
         "image": image,
         "docker_args": DOCKER_START_CMD,
         "env_vars": build_env_vars(role),
-        "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
+        "template_name": role_template_name(role, defaults),
         "image_origin": (
             f"Override {defaults['imageEnv']} (Rollenvariable)" if override else "globales IMAGE (Rollout-Stand)"
         ),

@@ -15,6 +15,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import sys
 import types
@@ -484,6 +485,40 @@ class RolleFehlschlagTest(unittest.TestCase):
                         code = deploy.main()
 
         self.assertEqual(code, 0, "gebundenes Template darf den Lauf nicht rot machen")
+
+
+class TemplateNameOverrideTest(unittest.TestCase):
+    """INFRA-RUNPOD-011: ein unaufloesbares Template braucht einen NEUEN Namen.
+
+    Live 2026-09-20 (Rolle music): der Endpoint hing an einem Template, das die
+    Konto-Liste nicht zeigt und das die Plattform nicht mehr aufloeste - neue Worker
+    starteten nicht. `saveTemplate` ohne `id` scheitert am Unique-Fehler, weil der
+    alte Name unsichtbar weiter existiert; nur ein neuer Name hilft.
+    """
+
+    def test_override_schlaegt_den_standardnamen(self) -> None:
+        with mock.patch.dict(
+            "os.environ", {"RUNPOD_TEMPLATE_NAME_MUSIC": "audiomonastry-ai-music-template-v2"}, clear=False
+        ):
+            self.assertEqual(deploy.template_name_override("music"), "audiomonastry-ai-music-template-v2")
+            img = deploy.resolve_image("music", deploy.ROLE_DEFAULTS["music"])
+        self.assertEqual(img["template_name"], "audiomonastry-ai-music-template-v2")
+
+    def test_ohne_override_bleibt_der_standardname(self) -> None:
+        with mock.patch.dict("os.environ", {}, clear=False):
+            os.environ.pop("RUNPOD_TEMPLATE_NAME_MUSIC", None)
+            self.assertEqual(deploy.template_name_override("music"), "")
+            img = deploy.resolve_image("music", deploy.ROLE_DEFAULTS["music"])
+        self.assertEqual(img["template_name"], "audiomonastry-ai-music-template")
+
+    def test_override_wirkt_nicht_auf_andere_rollen(self) -> None:
+        with mock.patch.dict(
+            "os.environ",
+            {"RUNPOD_TEMPLATE_NAME_MUSIC": "music-v2", "IMAGE": "ghcr.io/x/audiomonastry-ai-runtime-runpod:t"},
+            clear=False,
+        ):
+            img = deploy.resolve_image("ears", deploy.ROLE_DEFAULTS["ears"])
+        self.assertEqual(img["template_name"], "audiomonastry-ai-ears-template")
 
 
 class RestTemplateFallbackTest(unittest.TestCase):

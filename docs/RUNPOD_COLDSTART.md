@@ -332,3 +332,28 @@ verweigert. `updateEndpointTemplate` antwortet bei gebundenen Endpoints mit
 `PATCH /v1/endpoints/<id>` mit `templateId` **setzt den Wert aber wirklich**. Der Deploy
 nutzt das jetzt: schlaegt die Mutation fehl, zieht er die Rolle per REST um und belegt es
 per Ruecklesung (Tests: `RestTemplateFallbackTest`).
+
+### Reparatur eines unaufloesbaren Templates (live 2026-09-20, Rolle `music`)
+
+**Bild:** Der Endpoint `audiomonastry-ai-music` zeigte auf das Template `9q9c60p6xh`, das
+`myself.podTemplates` **nicht** listet. Folge: neue Worker wurden nicht mehr provisioniert
+(`workers: 0/0/0/0`), Jobs blieben auf `IN_QUEUE` — auch nachdem laufende Worker weggeraeumt
+waren. Andere Rollen hatten gleichzeitig Worker, an der GPU-Kapazitaet lag es also nicht.
+
+**Weg zurueck (nur ueber die API):** `saveTemplate` ohne `id` scheitert am Unique-Fehler
+(„Template name must be unique"), weil der alte Name unsichtbar weiter existiert. Deshalb
+braucht es einen **neuen Namen**:
+
+    RUNPOD_ROLE=music \
+    RUNPOD_TEMPLATE_NAME_MUSIC=audiomonastry-ai-music-template-v2 \
+    python3 scripts/runpod-deploy.py
+
+Der Deploy legt das Template unter dem neuen Namen an (es erscheint dann in
+`myself.podTemplates`, live bestaetigt: 23 → 24 Eintraege) und zieht den Endpoint per
+REST-PATCH um; die Ruecklesung belegt `templateId=qsxc8encwr`. Der Override ist bewusst
+**pro Rolle** (`RUNPOD_TEMPLATE_NAME_<TOKEN>`), damit nicht alle Rollen neue Templates
+bekommen. Tests: `TemplateNameOverrideTest`.
+
+**Merksatz:** Ein Endpoint, dessen Template nicht in `myself.podTemplates` auftaucht, ist
+ein Ausfallkandidat — die Wache sieht ihn erst, wenn Jobs liegen bleiben. Bei Verdacht
+zuerst pruefen, ob das Template des Endpoints ueberhaupt gelistet ist.
