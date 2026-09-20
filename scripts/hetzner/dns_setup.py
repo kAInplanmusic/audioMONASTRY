@@ -37,7 +37,15 @@ def die(msg: str) -> None:
 
 
 # Security: URL-Konstruktion strikt auf feste Hetzner-API-Basis + validierte Pfade begrenzen.
-_PATH_RE = re.compile(r'^/[A-Za-z0-9_./-]*$')
+# INFRA-HETZNER-003: Die Zeichenklasse MUSS die Zeichen der eigenen Aufrufe enthalten -
+# sonst weist das Skript seine eigenen URLs ab, bevor ein Request entsteht:
+#   '?' und '=' sind die Filter-Query der Zonen-Suche (`/zones?name=<domain>`, unten),
+#   '@' ist der Apex-Name in der RRSet-Route (`/zones/<id>/rrsets/@/A`, unten).
+# Die Vorfassung liess nur `[A-Za-z0-9_./-]` zu und warf damit in _safe_url einen
+# ValueError fuer jeden DNS-Aufruf (Audit-Befund H9 / 6.3). provision.py:46 erlaubt
+# '?', '=' und '&' aus demselben Grund; '@' braucht nur diese Datei, weil nur sie
+# RRSet-Pfade mit Apex-Namen baut. Gegenprobe: tests/test_hetzner_scripts.py.
+_PATH_RE = re.compile(r'^/[A-Za-z0-9_./?=@&-]*$')
 def _safe_url(path: str) -> str:
     if not isinstance(path, str) or not _PATH_RE.match(path):
         raise ValueError(f'Ungültiger API-Pfad: {path!r}')

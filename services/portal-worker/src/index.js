@@ -21,6 +21,13 @@ const HETZNER = 'https://api.hetzner.cloud/v1';
 // koennen noch die alten Knoten-/Firewall-/Snapshot-Namen tragen, deshalb
 // akzeptiert der Worker BEIDE Schreibweisen (Altname nur fuer Bestandsressourcen,
 // angelegt wird immer mit dem neuen Namen). Der Altpraefix steht genau hier.
+//
+// INFRA-HETZNER-007: `type` ist der FALLBACK der Rolle. Der produktive Pfad liest
+// dieselben Overrides wie die CLI (FLEET_TYPE_APP/SFU/AI/MASTER/EDGE, siehe
+// fleetServerType) - vorher waren die Env-Vorgaben im Portalbetrieb wirkungslos,
+// weil nur provision-fleet.sh sie las. Die Fallbacks selbst sind eine
+// Betreiber-Entscheidung: der Snapshot-Bestand vom 2026-09-18 zeigt fuer
+// app/sfu/ai 80-GB-Disks (cx33) und fuer master/edge 40 GB (cx23).
 const FLEET = [
   { name: 'audiomonastry-app-1',    type: 'cx33', role: 'app' },
   { name: 'audiomonastry-sfu-1',    type: 'cx33', role: 'sfu' },
@@ -28,6 +35,51 @@ const FLEET = [
   { name: 'audiomonastry-master-1', type: 'cx23', role: 'master' },
   { name: 'audiomonastry-edge-1',   type: 'cx23', role: 'edge' },
 ];
+
+// INFRA-HETZNER-006: edge-1 startet NUR den Monitoring-Stack - die explizite
+// Service-Liste ist Pflicht. Ohne Liste zieht die Basisdatei zusaetzlich `caddy`
+// (128M) + `audiomonastry` (2G) + `master-player` (1G) mit: 4672 MiB deklarierte
+// Speicher-Limits auf einem cx23 mit 4096 MiB RAM, plus ein zweiter Caddy fuer
+// dieselbe Domain. Die Liste entspricht exakt docker-compose.monitoring.yml
+// (1472 MiB) und muss mit scripts/hetzner/bring-up-fleet.sh (MONITORING_SERVICES)
+// deckungsgleich bleiben - tests/test_hetzner_scripts.py prueft das.
+const MONITORING_SERVICES = ['node-exporter', 'cadvisor', 'prometheus', 'alertmanager', 'grafana'];
+// Achtung (Ehrlichkeitsgrenze): dieser Pfad greift nur beim Kaltstart mit
+// user_data. Wird edge-1 aus einem ALTEN Rollen-Snapshot gebootet, zieht Docker
+// dort per `restart: unless-stopped` die damals gestarteten Container wieder
+// hoch (caddy/audiomonastry/master-player) - der Wake-Pfad fuehrt dann kein
+// Compose aus. Einmalige Bereinigung auf dem Knoten:
+//   docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml \
+//     stop caddy audiomonastry master-player
+// und danach ein frisches edge-Snapshot ziehen (bring-up-fleet.sh macht den
+// Stop fuer den CLI-Pfad automatisch).
+
+/** Formpruefung fuer Hetzner-Servertypen (z. B. `cx23`, `cax31`). */
+const SERVER_TYPE_PATTERN = /^[a-z]{2,4}[0-9]{1,3}$/;
+
+/**
+ * Servertyp einer Rolle (INFRA-HETZNER-007).
+ *
+ * Die Variable heisst wie in der CLI `FLEET_TYPE_<ROLLE>` (Grossschreibung),
+ * z. B. `FLEET_TYPE_APP=cx43` fuer app-1. Damit sind die Overrides der
+ * Konstitution (docs/INFRA_KONSTITUTION.md §1.2) im Portalbetrieb wirksam und
+ * nicht mehr nur im CLI-Pfad. Ein leerer oder formal ungueltiger Wert wird
+ * gemeldet und faellt auf den Rollen-Fallback zurueck (keine stillen Typen).
+ *
+ * Der Export ist die einzige Named-Export-Ausnahme der Datei: er macht die
+ * Aufloesung ohne Cloudflare-Laufzeit pruefbar (node -e 'import(...)').
+ */
+export function fleetServerType(env, role) {
+  const fallback = FLEET.find((f) => f.role === role)?.type ?? '';
+  const key = `FLEET_TYPE_${String(role).toUpperCase()}`;
+  const override = String(env?.[key] ?? '').trim().toLowerCase();
+  if (!override) return fallback;
+  if (!SERVER_TYPE_PATTERN.test(override)) {
+    console.warn(`[portal] ${key}="${override}" ist kein Hetzner-Servertyp - nutze ${fallback}`);
+    return fallback;
+  }
+  return override;
+}
 
 const NAME_PREFIX = 'audiomonastry-';
 /** Altpraefix aus der Zeit vor der Umbenennung (nur lesend/Bestand). */
@@ -421,7 +473,10 @@ case "${role}" in
     docker compose -f docker-compose.hetzner.yml up -d master-player
     ;;
   edge)
-    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d
+    # INFRA-HETZNER-006: NUR der Monitoring-Stack (explizite Service-Liste).
+    # Ohne Liste startet die Basisdatei zusaetzlich caddy + audiomonastry +
+    # master-player: 4672 MiB Speicher-Limits auf einem 4-GB-cx23.
+    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d ${MONITORING_SERVICES.join(' ')}
     ;;
   ai)
     curl -fsSL https://ollama.com/install.sh | sh || true
@@ -615,16 +670,21 @@ async function startFleet(env) {
   const usedSnapshots = {};
   const fallbackRoles = [];
   const failed = [];
+  // INFRA-HETZNER-007: die tatsaechlich verwendeten Typen je Rolle mitschicken -
+  // so ist im Wake-Ergebnis belegbar, welcher Typ (Fallback oder Override) lief.
+  const types = Object.fromEntries(FLEET.map((f) => [f.role, fleetServerType(env, f.role)]));
 
   for (const item of FLEET) {
     const fwName = `audiomonastry-${item.role}`;
     const fwId = await ensureFirewall(env, fwName, firewallRules(item.role, item.role === 'app' ? cfIps : []));
+    // INFRA-HETZNER-007: Typ je Rolle aus FLEET_TYPE_<ROLLE> (Fallback = Tabelle).
+    const serverType = fleetServerType(env, item.role);
     // OPS-Snapshot: zuerst das Rollen-Snapshot-Image verwenden (schneller
     // Start, kein cloud-init-Bootstrap). Fallback: Basis-Image + cloud-init.
     const snap = findSnapshot(snapshots, item.role);
     const payload = {
       name: item.name,
-      server_type: item.type,
+      server_type: serverType,
       image: snap ? snap.id : IMAGE,
       location: LOCATION,
       firewalls: fwId ? [{ firewall: fwId }] : [],
@@ -680,7 +740,7 @@ async function startFleet(env) {
     }
   }
 
-  return { started: true, created, usedSnapshots, fallbackRoles, failed, wiring };
+  return { started: true, created, types, usedSnapshots, fallbackRoles, failed, wiring };
 }
 
 /**

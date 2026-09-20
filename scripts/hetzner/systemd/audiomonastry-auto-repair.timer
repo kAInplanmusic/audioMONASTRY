@@ -1,0 +1,24 @@
+# ============================================================================
+# audioMONASTRY · systemd-Timer: Watchdog (INFRA-HETZNER-005)
+# ----------------------------------------------------------------------------
+# 3 Minuten nach jedem Boot (die Flotte wird je Session neu erzeugt - ein
+# Kalenderzeitpunkt wuerde bei kurzen Sessions nie greifen), danach alle
+# OnUnitActiveSec. Aktivieren:
+#     sudo bash scripts/hetzner/install-auto-repair.sh
+#     CHECK_INTERVAL=5 sudo bash scripts/hetzner/install-auto-repair.sh
+# Pruefen:
+#     systemctl list-timers audiomonastry-auto-repair.timer
+#     tail -n 20 /var/log/audiomonastry-auto-repair.log
+# ============================================================================
+[Unit]
+Description=audioMONASTRY auto-repair-Timer (Watchdog)
+Documentation=file:///opt/audiomonastry/scripts/hetzner/auto-repair.sh
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=30s
+Unit=audiomonastry-auto-repair.service
+
+[Install]
+WantedBy=timers.target

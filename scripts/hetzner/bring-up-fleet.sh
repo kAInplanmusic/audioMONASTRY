@@ -6,15 +6,17 @@
 #   1. Flotte provisionieren (5 Server, Firewalls, Floating-IP an app-1)
 #   2. IPs ermitteln + auf SSH warten
 #   3. app-1 deployen (Caddy + App + Signaling, HTTPS via anunnakitools.de)
-#   4. sfu-1 (Mediasoup), master-1 (master-player), edge-1 (Monitoring),
+#   4. sfu-1 (Mediasoup), master-1 (master-player), edge-1 (NUR Monitoring-Stack),
 #      ai-1 (Ollama + Stem-AI) einrichten
-#   5. Idle-Auto-Shutdown auf allen Knoten installieren
+#   5. Idle-Auto-Shutdown + Watchdog installieren, Backup-Timer auf app-1
 #   6. Smoke-Test + Stresstest + SFU-RTP-Echtpfad-Test
 #   7. Browser/URL öffnen, sobald alles bereit ist (Weiterleitung)
 #
 # Aufruf:
-#   bash scripts/hetzner/bring-up-fleet.sh          (mit Rückfrage)
-#   bash scripts/hetzner/bring-up-fleet.sh --yes    (ohne Rückfrage)
+#   bash scripts/hetzner/bring-up-fleet.sh               (mit Rückfrage)
+#   bash scripts/hetzner/bring-up-fleet.sh --yes         (ohne Rückfrage)
+#   bash scripts/hetzner/bring-up-fleet.sh --print-config (Trockenlauf: Rollen,
+#                                                         Typen, Service-Listen)
 #
 # WICHTIG (Kostenmodell):
 #   Hetzner berechnet die Server ab ERSTELLUNG – auch im ausgeschalteten
@@ -28,6 +30,37 @@ cd "$(dirname "$0")/../.."
 
 # --- Konfiguration -----------------------------------------------------------
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
+
+SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
+APP_URL="https://$DOMAIN"
+
+# INFRA-HETZNER-006: edge-1 startet NUR den Monitoring-Stack - diese explizite
+# Service-Liste ist Pflicht. Ohne Liste zieht die Basisdatei zusätzlich `caddy`
+# (128M) + `audiomonastry` (2G) + `master-player` (1G) mit; zusammen mit dem
+# Monitoring-Stack sind das 4672 MiB deklarierte Speicher-Limits auf einem cx23
+# mit 4096 MiB RAM (Audit-Befund H10: Überbuchung + Rollenvermischung). Die fünf
+# Dienste hier sind exakt die Services aus docker-compose.monitoring.yml
+# (512+512+128+256+64 = 1472 MiB = 1,44 GiB).
+# Ehrlichkeitsgrenze: das sind DEKLARIERTE Compose-Limits. Compose v2 übersetzt
+# `deploy.resources.limits` beim Start in `--memory`/`--cpus` - dokumentiertes
+# Verhalten, auf den Knoten aber nicht live nachgemessen (kein Knoten läuft).
+MONITORING_SERVICES="node-exporter cadvisor prometheus alertmanager grafana"
+
+# Trockenlauf (INFRA-HETZNER-006/007): Rollen, Typen und Service-Listen ausgeben -
+# ohne HCLOUD_TOKEN, ohne API-Aufruf, ohne Rückfrage.
+if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  echo "[dry-run] Flottenstart (keine API-Aufrufe, keine Server):"
+  echo "  Typen:     app=${FLEET_TYPE_APP:-cx23} sfu=${FLEET_TYPE_SFU:-cx23} ai=${FLEET_TYPE_AI:-cx23} master=${FLEET_TYPE_MASTER:-cx23} edge=${FLEET_TYPE_EDGE:-cx23}  (Override per FLEET_TYPE_<ROLLE>)"
+  echo "  app-1:     deploy.sh (Caddy + App + Signaling) | Backup-Timer | Watchdog"
+  echo "  sfu-1:     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry | Watchdog"
+  echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog"
+  echo "  edge-1:    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES  (NUR Monitoring) | Watchdog"
+  echo "  ai-1:      install-ai1.sh (Ollama + Stem host-nativ) | Watchdog"
+  echo "  Grafana:   ssh -L 3000:127.0.0.1:3000 root@<edge-1-ip>  ->  http://127.0.0.1:3000"
+  exit 0
+fi
+
 [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
 
 if [[ "${1:-}" != "--yes" ]]; then
@@ -36,10 +69,6 @@ if [[ "${1:-}" != "--yes" ]]; then
   read -r -p "Jetzt hochfahren? [j/N] " ans
   [[ "$ans" == "j" || "$ans" == "J" ]] || { echo "Abgebrochen."; exit 0; }
 fi
-
-SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
-DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
-APP_URL="https://$DOMAIN"
 
 step() { echo; echo "=============================================================="; echo "▶ $1"; echo "=============================================================="; }
 # Fix 2026-09-13: Die Funktion nahm nur $1 (den Host) und verwarf das Kommando
@@ -118,9 +147,16 @@ echo "  master-1 (master-player) …"
 rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
 ssh_host "$MASTER_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d master-player"
 
-echo "  edge-1 (Monitoring: Prometheus/Grafana/Alertmanager) …"
+echo "  edge-1 (Monitoring: Prometheus/Grafana/Alertmanager – NUR der Stack) …"
 rsync_repo "$EDGE_IP"; sync_env "$EDGE_IP"
-ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d"
+# INFRA-HETZNER-006: explizite Service-Liste (siehe MONITORING_SERVICES oben).
+ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES"
+# Und die Basis-Dienste stoppen, die ein ALTES edge-Snapshot beim Boot per
+# `restart: unless-stopped` wieder hochzieht (caddy/audiomonastry/master-player):
+# ohne diesen Schritt waere die Limit-Rechnung nur auf frisch provisionierten
+# Knoten wahr. `stop` ist idempotent, laesst die Container liegen und ist ohne
+# vorhandene Container ein No-Op (Exit 0).
+ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml stop caddy audiomonastry master-player >/dev/null 2>&1 || true"
 
 echo "  ai-1 (Ollama + Stem-AI) …"
 bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
@@ -141,6 +177,17 @@ echo "  Backup-Timer auf app-1 installieren …"
 ssh_host "$APP_IP" 'bash /opt/audiomonastry/scripts/hetzner/install-backup-timer.sh' \
   || echo "  ⚠ Backup-Timer konnte auf app-1 nicht installiert werden (prüfen!)."
 
+# INFRA-HETZNER-005: Der Watchdog (auto-repair.sh) existierte, wurde aber von
+# keinem Flottenskript installiert - ein Timer, den nie jemand aktiviert hat.
+# Er laeuft jetzt auf ALLEN Knoten: Container-Health-Restart gilt ueberall,
+# die App-/Caddy-Diagnose greift nur dort, wo die Container tatsaechlich laufen
+# (der Watchdog prueft das selbst und ueberspringt sonst).
+echo "  Auto-Repair-Watchdog auf allen Knoten installieren …"
+for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+  ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-auto-repair.sh' 2>/dev/null \
+    || echo "  ⚠ Watchdog konnte auf $ip nicht installiert werden (prüfen!)."
+done
+
 # --- 7. Tests -----------------------------------------------------------------
 step "7/7 Smoke-, Stress- und SFU-RTP-Echtpfad-Tests"
 echo "  Smoke-Test $APP_URL …"
@@ -156,7 +203,10 @@ echo "=============================================================="
 echo "✅ audioMONASTRY-Flotte ist bereit:"
 echo "   App:      $APP_URL"
 echo "   SFU:      http://$SFU_IP   (RTP 40000–40099)"
-echo "   Grafana:  http://$EDGE_IP:3000 (Firewall ggf. öffnen)"
+# INFRA-HETZNER-006/007: Grafana ist nur auf 127.0.0.1 des edge-Knotens
+# veroeffentlicht (keine 3000er-Firewall-Regel, kein oeffentlicher Port) -
+# der Zugriff laeuft ueber einen SSH-Tunnel.
+echo "   Grafana:  ssh -L 3000:127.0.0.1:3000 root@$EDGE_IP  ->  http://127.0.0.1:3000"
 echo "   Ollama:   http://$AI_IP:11434 · Stem-AI: http://$AI_IP:8000"
 echo "=============================================================="
 

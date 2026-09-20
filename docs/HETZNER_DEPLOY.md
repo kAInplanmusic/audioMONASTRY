@@ -50,8 +50,10 @@ horizontal (Load Balancer, Redis-Signaling, getrennte Services) oder vertikal
 **Flottenrahmen (Stand 2026-09-20):** Die **laufende** Flotte umfasst
 **max. 5 Hetzner-Server** – Rollen `app` (Caddy + API + Signaling),
 `sfu` (mediasoup, RTP 40000–40099), `ai` (CPU-Fallback/Stem),
-`master` (master-player/FFmpeg) und `edge` (Monitoring/Smoke); Typen per
-`FLEET_TYPE_*`-Env überschreibbar (Default cx23). GPU-Inferenz läuft **nicht**
+`master` (master-player/FFmpeg) und `edge` (Monitoring-Stack); Typen per
+`FLEET_TYPE_<ROLLE>`-Env überschreibbar (CLI-Default `cx23`; Portal-Worker-Fallback
+`cx33` für app/sfu/ai, `cx23` für master/edge – verbindliche Tabelle:
+`docs/SERVER_FLEET.md`). GPU-Inferenz läuft **nicht**
 auf diesen Knoten, sondern auf **max. 8 RunPod-Rollen-Endpoints**.
 Laufende Flottenkosten (Hetzner + RunPod zusammen) **max. 10 €/h**, Zielband
 **5–7,5 €/h**; nur Hetzner bei „AI aus" ≈ 0,054 €/h
@@ -99,6 +101,14 @@ Das Skript erstellt idempotent:
 HCLOUD_TOKEN=dein-token TARGET_IP=91.98.104.74 \
   python3 scripts/hetzner/dns_setup.py --domain anunnakitools.de
 ```
+
+> **Zwei DNS-Pfade – nicht gleichzeitig produktiv (INFRA-HETZNER-003):** Dieses
+> Skript schreibt die Zone bei **Hetzner DNS** (`api.hetzner.cloud`, seit
+> 27.05.2026 die gültige Console-API). Im Portalbetrieb läuft der Verkehr
+> dagegen über den **Cloudflare-Worker**: `anunnakitools.de` → Worker →
+> `origin.anunnakitools.de` (A-Record auf die aktuelle app-1-IP, synchronisiert
+> `POST /api/wire-fleet`). Wer den Worker-Pfad fährt, braucht dieses Skript
+> nicht; wer den Hetzner-Pfad fährt, braucht den Worker nicht.
 
 Beim Registrar müssen die Hetzner-Nameserver gesetzt sein:
 
@@ -345,12 +355,16 @@ REDIS_URL=redis://<redis-host>:6379
 ### Monitoring (Prometheus + Grafana + cAdvisor + node-exporter)
 
 ```bash
-# Auf edge-1 (oder eigenem Knoten):
-docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d
+# Auf edge-1 (Rolle edge; NUR der Monitoring-Stack - explizite Service-Liste,
+# sonst starten caddy/audiomonastry/master-player aus der Basisdatei mit):
+docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml \
+  up -d node-exporter cadvisor prometheus alertmanager grafana
 
 # App-Metriken: /api/metrics (JSON) bzw. /api/metrics?format=prometheus
 # (Prometheus scrapt automatisch das Prometheus-Format)
-# Grafana: http://<knoten>:3000 (Port 3000 gezielt in der Firewall öffnen)
+# Grafana: nur auf 127.0.0.1 des Knotens veröffentlicht -> SSH-Tunnel:
+#   ssh -L 3000:127.0.0.1:3000 root@<edge-1-ip>   ->   http://127.0.0.1:3000
+#   (kein 3000er-Port in der Hetzner-Firewall, kein öffentlicher Listener)
 ```
 
 Das Grafana-Provisioning (`scripts/hetzner/grafana-provisioning/` + `grafana-dashboards/`)

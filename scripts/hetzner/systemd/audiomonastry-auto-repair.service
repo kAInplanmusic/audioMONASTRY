@@ -1,0 +1,23 @@
+# ============================================================================
+# audioMONASTRY · systemd-Unit: Watchdog-Lauf (INFRA-HETZNER-005)
+# ----------------------------------------------------------------------------
+# Installiert von scripts/hetzner/install-auto-repair.sh (Kopie nach
+# /etc/systemd/system/). Gestartet vom Timer audiomonastry-auto-repair.timer.
+# Der Watchdog liegt als /usr/local/bin/audiomonastry-auto-repair.sh auf dem
+# Knoten (Quelle: scripts/hetzner/auto-repair.sh) und prüft getrennt:
+# Container-Health (restart), App-Health (/api/health im Container) und
+# Caddy-Health (Port 80) - zwei Diagnosen, zwei Reparaturen.
+# ============================================================================
+[Unit]
+Description=audioMONASTRY auto-repair watchdog (Container, App, Caddy)
+Documentation=file:///opt/audiomonastry/scripts/hetzner/auto-repair.sh
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=LOG=/var/log/audiomonastry-auto-repair.log
+Environment=APP_DIR=/opt/audiomonastry
+ExecStart=/usr/local/bin/audiomonastry-auto-repair.sh
+StandardOutput=append:/var/log/audiomonastry-auto-repair.log
+StandardError=append:/var/log/audiomonastry-auto-repair.log

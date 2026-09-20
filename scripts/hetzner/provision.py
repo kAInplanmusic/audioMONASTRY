@@ -135,10 +135,22 @@ def ensure_firewall(token: str, name: str, role: str = "app") -> int:
             {"direction": "in", "protocol": "tcp", "port": "40000-40099",
              "source_ips": all_ips, "description": "Mediasoup RTP (TCP-Fallback)"},
         ]
-    if role in ("ai", "master"):
-        # Interne Service-Ports nur im Hetzner-Privaten Netz oeffnen;
-        # auf Wunsch via FIREWALL_EXTRA_PORTS erweitern.
+    if role in ("app", "ai", "master", "edge"):
+        # Rollen ohne zusaetzliche oeffentliche Ports - explizit benannt statt
+        # stillem Durchfallen (INFRA-HETZNER-007: die Rolle `edge` wurde vorher
+        # nirgends behandelt, obwohl sie in --help und der Konstitution steht):
+        #   app    – 22/80/443 + ICMP genuegen (Caddy terminiert; die App bleibt intern)
+        #   ai     – host-nativ (Ollama 11434, stem-ai 8000); diese Ports oeffnet der
+        #            Portal-Worker NUR fuer die app-1-IP (`/api/wire-fleet`)
+        #   master – dito (master-player 8000, nur fuer app-1)
+        #   edge   – Monitoring-Knoten: Grafana ist im Compose-Overlay nur auf
+        #            127.0.0.1 veroeffentlicht (Zugriff per SSH-Tunnel), Prometheus/
+        #            Alertmanager bleiben rein intern. Eine 3000er-Regel waere
+        #            Dekoration ohne Listener und wird daher bewusst nicht gesetzt.
         pass
+    elif role != "sfu":
+        print(f"[provision] Hinweis: unbekannte Rolle {role!r} – nur 22/80/443 + ICMP.",
+              file=sys.stderr)
     extra = os.environ.get("FIREWALL_EXTRA_PORTS", "")
     if extra:
         for spec in extra.split(","):
@@ -298,7 +310,8 @@ def main() -> None:
                         help="Name/ID der festen Floating IP; 'none' = keine Floating IP")
     parser.add_argument("--role", default=os.environ.get("ROLE", "app"),
                         help="Rolle: app (Default), sfu (öffnet RTP-Ports 40000-40099), "
-                             "master, ai, edge")
+                             "ai (Ollama/Stem, host-nativ), master (master-player), "
+                             "edge (Monitoring-Knoten, nur 22/80/443 + ICMP)")
     parser.add_argument("--cloud-init", default=str(DEFAULT_CLOUD_INIT),
                         help="Cloud-Init-Datei (YAML)")
     args = parser.parse_args()

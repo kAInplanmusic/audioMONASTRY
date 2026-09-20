@@ -1,41 +1,43 @@
 #!/usr/bin/env bash
-# audioMONASTRY auto-repair installer (systemd-Timer, alle 2 Minuten).
-# Usage: sudo bash scripts/hetzner/install-auto-repair.sh
+# audioMONASTRY auto-repair installer (INFRA-HETZNER-005).
+# ============================================================================
+# Installiert auf einem Flotten-Knoten:
+#   /usr/local/bin/audiomonastry-auto-repair.sh                 (Watchdog)
+#   /etc/systemd/system/audiomonastry-auto-repair.service|.timer (Unit + Timer)
+# und aktiviert den Timer (3 min nach Boot, danach alle CHECK_INTERVAL Minuten).
+#
+# Die Units liegen im REPO (scripts/hetzner/systemd/) - der Installer kopiert sie
+# nur. WARUM: vorher schrieb der Installer die Units per Heredoc und lief damit
+# gegen die Repo-Fassung auseinander; dasselbe Muster wie
+# install-backup-timer.sh (INFRA-HETZNER-008).
+#
+# Aufruf:  sudo bash scripts/hetzner/install-auto-repair.sh
+#   (aus dem Repo-Verzeichnis, i. d. R. /opt/audiomonastry)
+#   CHECK_INTERVAL=5 sudo bash scripts/hetzner/install-auto-repair.sh  # 5 min
+# ============================================================================
 set -euo pipefail
 
+HERE_SRC="$(cd "$(dirname "$0")" && pwd)"
 CHECK_INTERVAL="${CHECK_INTERVAL:-2}"
 SERVICE=audiomonastry-auto-repair
 LOG=/var/log/audiomonastry-auto-repair.log
-HERE_SRC="$(dirname "$0")/auto-repair.sh"
 
-install -m 0755 "$HERE_SRC" /usr/local/bin/audiomonastry-auto-repair.sh
+for f in auto-repair.sh systemd/${SERVICE}.service systemd/${SERVICE}.timer; do
+  [[ -f "$HERE_SRC/$f" ]] || { echo "❌ fehlt: $HERE_SRC/$f" >&2; exit 1; }
+done
 
-cat > "/etc/systemd/system/${SERVICE}.service" << UNIT
-[Unit]
-Description=audioMONASTRY auto repair watchdog
-After=docker.service network.target
+install -m 0755 "$HERE_SRC/auto-repair.sh" /usr/local/bin/audiomonastry-auto-repair.sh
+install -m 0644 "$HERE_SRC/systemd/${SERVICE}.service" "/etc/systemd/system/${SERVICE}.service"
+install -m 0644 "$HERE_SRC/systemd/${SERVICE}.timer" "/etc/systemd/system/${SERVICE}.timer"
 
-[Service]
-Type=oneshot
-Environment=LOG=${LOG}
-ExecStart=/usr/local/bin/audiomonastry-auto-repair.sh
-StandardOutput=append:${LOG}
-StandardError=append:${LOG}
-UNIT
+# Intervall nur anpassen, wenn ausdruecklich gewuenscht (Default steht im Repo).
+if [[ "$CHECK_INTERVAL" != "2" ]]; then
+  sed -i "s|^OnUnitActiveSec=.*|OnUnitActiveSec=${CHECK_INTERVAL}min|" "/etc/systemd/system/${SERVICE}.timer"
+fi
 
-cat > "/etc/systemd/system/${SERVICE}.timer" << TIMER
-[Unit]
-Description=audioMONASTRY auto repair every ${CHECK_INTERVAL} minutes
-
-[Timer]
-OnBootSec=3min
-OnUnitActiveSec=${CHECK_INTERVAL}min
-Unit=${SERVICE}.service
-
-[Install]
-WantedBy=timers.target
-TIMER
-
+touch "$LOG"
 systemctl daemon-reload
 systemctl enable --now "${SERVICE}.timer"
-echo "[done] auto-repair active (every ${CHECK_INTERVAL} min, log: ${LOG})"
+
+echo "[done] auto-repair aktiv ($(systemctl is-active "${SERVICE}.timer"), Intervall ${CHECK_INTERVAL} min, Log: $LOG)"
+systemctl list-timers "${SERVICE}.timer" --no-pager || true

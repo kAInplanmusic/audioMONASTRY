@@ -8,15 +8,26 @@
 #   - grafana       : Dashboards (Login: admin / GF_SECURITY_ADMIN_PASSWORD)
 #
 # Start:
-#   docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml \
+#     up -d node-exporter cadvisor prometheus alertmanager grafana
 #
 # Danach:
-#   Grafana:  https://<DOMAIN>/grafana  (via Caddy-Route unten aktivierbar)
-#   oder      http://<host>:3000         (nur im privaten Netz/Firewall öffnen)
+#   Grafana:  ssh -L 3000:127.0.0.1:3000 root@<edge-1-IP>  ->  http://127.0.0.1:3000
+#             (Login: admin / GF_SECURITY_ADMIN_PASSWORD)
 #
 # Hinweise:
-#   - Ports 9090/3000/9100 sind nur intern (expose); für externen Zugriff
-#     Caddy-Routen ergänzen oder gezielt publizieren.
+#   - INFRA-HETZNER-006: IMMER mit expliziter Service-Liste starten. Ohne Liste
+#     zieht die Basisdatei `caddy` + `audiomonastry` + `master-player` mit
+#     (4672 MiB Speicher-Limits auf einem 4-GB-cx23) - edge-1 soll keinen
+#     App-Traffic und keinen zweiten Caddy fuer dieselbe Domain tragen.
+#   - Prometheus (9090) und Alertmanager (9093) bleiben rein intern (`expose`):
+#     kein veroeffentlichter Port, keine Firewall-Regel. Ein Zugriff von aussen
+#     braucht bewusst einen eigenen Tunnel/Proxy.
+#   - Bereits benutzte Knoten: ein ALTES Rollen-Snapshot bootet seine Container
+#     per `restart: unless-stopped` selbst wieder hoch - dann einmalig
+#     `docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml
+#      stop caddy audiomonastry master-player` ausfuehren und ein frisches
+#     edge-Snapshot ziehen (bring-up-fleet.sh stoppt sie beim Flottenstart selbst).
 #   - Persistenz: benannte Volumes (prometheus_data, grafana_data).
 # =============================================================================
 x-logging: &default-logging
@@ -171,6 +182,14 @@ services:
       - ./scripts/hetzner/grafana-dashboards:/var/lib/grafana/dashboards:ro
     expose:
       - "3000"
+    # INFRA-HETZNER-007: Grafana ist das einzige Monitoring-Werkzeug mit einem
+    # Bediener-Zugang. Statt Port 3000 in der Hetzner-Firewall zu oeffnen (die
+    # Live-Gegenprobe zeigt: `audiomonastry-edge` hat nur icmp/22/80/443), wird
+    # er NUR auf die Loopback-Adresse des Knotens gebunden. Damit ist kein
+    # oeffentlicher Port und keine Firewall-Regel noetig:
+    #   ssh -L 3000:127.0.0.1:3000 root@<edge-1-IP>  ->  http://127.0.0.1:3000
+    ports:
+      - "127.0.0.1:3000:3000"
     deploy:
       resources:
         limits:
