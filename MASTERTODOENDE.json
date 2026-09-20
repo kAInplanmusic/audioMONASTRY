@@ -1682,7 +1682,8 @@
         "Erzeugte Dateien als Teilbeweis: logs/mos-20260920/qwen3-tts-17b-02.wav (345658 B), -03.wav (637498 B), daneben 1 Job ohne Ergebnis."
       ],
       "verification": [],
-      "updatedAt": "2026-09-20"
+      "updatedAt": "2026-09-20",
+      "status": "OPEN"
     },
     {
       "id": "LIVE-P1-003",
