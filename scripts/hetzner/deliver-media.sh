@@ -96,7 +96,14 @@ if (( ${#MISSING[@]} > 0 )); then
 fi
 
 echo "=== Medien nach $IP:$MEDIA_DIR ==="
-ssh "${SSH_OPTS[@]}" "root@$IP" "mkdir -p '$MEDIA_DIR/orchestral' '$MEDIA_DIR/models'" 
+ssh "${SSH_OPTS[@]}" "root@$IP" "mkdir -p '$MEDIA_DIR/orchestral' '$MEDIA_DIR/models'"
+
+# Das Overlay MIT ausliefern: sonst scheitert der Neustart auf einem Knoten,
+# dessen Repo-Stand aelter ist als dieses Skript (live passiert 2026-09-20:
+# "compose file .../docker-compose.media.yml is invalid: no such file").
+echo "--- Overlay + Skript auf den Knoten ---"
+rsync -az -e "$RSYNC_E" docker-compose.media.yml "root@$IP:$REMOTE_DIR/docker-compose.media.yml"
+rsync -az -e "$RSYNC_E" "$HERE_SRC/deliver-media.sh" "root@$IP:$REMOTE_DIR/scripts/hetzner/deliver-media.sh" 
 
 # Orchestral (CC0)
 echo "--- orchestral ($(size_of "$SRC_ORCHESTRAL")) ---"
