@@ -1079,3 +1079,33 @@ angefasst - die kopierten Alt-Volumes sind der Rueckweg der Migration). Auf ai-1
 wurde der veraltete Altpfad `/opt/samplemonk` (6,0 GB, Kopie vom 18.09.) entfernt;
 die Dienste `ollama` und `stem-ai` laufen unveraendert aus
 `/opt/audiomonastry` + `/root/.ollama`.
+
+## App-Metriken direkt scrapen (SCRAPE_TOKEN + Monitoring-Pfad) - 2026-09-20
+
+Befund beim Produktionsreife-Lauf: der Prometheus-Job `audiomonastry` war
+`health=down` mit **HTTP 521** — er fragte `https://anunnakitools.de/api/metrics`
+ab, und diese Kette hängt an Cloudflare/DNS (F1). Die App lief, das Monitoring war
+trotzdem blind; zusätzlich wird `/api/metrics` ohne `SCRAPE_TOKEN` mit 401
+abgewiesen (fail-closed).
+
+Jetzt läuft der Scrape **direkt** gegen den Container:
+
+```bash
+# 1. Token setzen (identisch auf beiden Seiten; Wert wird nie ausgegeben)
+ssh root@142.132.229.71 'bash -s -- app'            < scripts/…/set-scrape-token.sh   # app-1: erzeugt + startet App neu
+ssh root@142.132.229.71 "grep '^SCRAPE_TOKEN=' /opt/audiomonastry/.env" \
+  | ssh root@167.233.192.196 'bash /tmp/edge-scrape-token.sh'                      # edge-1: überträgt + startet Monitoring neu
+
+# 2. Firewall: 8080 NUR fuer den Monitoring-Knoten
+python3 scripts/hetzner/firewall-ensure-app-metrics.py           # Trockenlauf
+python3 scripts/hetzner/firewall-ensure-app-metrics.py --apply
+
+# 3. Kontrolle (alle vier Jobs muessen up sein)
+docker exec audiomonastry-prometheus sh -c 'wget -qO- "http://127.0.0.1:9090/api/v1/targets?state=active"'
+```
+
+`docker-compose.hetzner.yml` veröffentlicht dafür `8080:8080` am App-Container; die
+Begrenzung auf den Monitoring-Knoten liegt in der Hetzner-Firewall
+(`audiomonastry-app`, Regel `8080/tcp` von `167.233.192.196/32`), der Endpunkt
+bleibt durch `SCRAPE_TOKEN` geschützt. Ergebnis am 2026-09-20: `audiomonastry`,
+`node`, `cadvisor` und `prometheus` alle `health=up`.

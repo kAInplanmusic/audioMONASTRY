@@ -98,6 +98,16 @@ services:
     <<: *default-runtime
     expose:
       - "8080"          # nur intern; extern läuft alles über Caddy/HTTPS
+    # Metrik-Scrape (PROD-P1-004-Nachlauf 2026-09-20): Prometheus auf edge-1 fragte
+    # den Job über die Produktions-Domain ab. Ist die Cloudflare-Kette gestört
+    # (F1: origin-DNS/Token), meldete er health=down/HTTP 521, obwohl die App lief -
+    # Monitoring war blind. Der Scrape laeuft deshalb direkt gegen den Container:
+    # hier wird 8080 auf dem Host veroeffentlicht, und die Hetzner-Firewall
+    # (audiomonastry-app) erlaubt diesen Port NUR fuer den Monitoring-Knoten
+    # (scripts/hetzner/firewall-ensure-app-metrics.py). Der Endpunkt bleibt durch
+    # SCRAPE_TOKEN fail-closed geschuetzt.
+    ports:
+      - "8080:8080"
     # RTP-Ports für den SFU-Betrieb kommen aus docker-compose.sfu.yml
     # (nur auf dem SFU-Knoten publizieren, nicht auf App-Knoten).
     env_file:

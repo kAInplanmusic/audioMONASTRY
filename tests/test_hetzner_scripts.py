@@ -420,6 +420,25 @@ class FirewallWerkzeugeTest(unittest.TestCase):
         # Der Legacy-Praefix kommt aus der einen Namensquelle, nicht als Literal.
         self.assertIn("fleet-names.sh", text)
 
+    def test_metrik_scrape_ist_verdrahtet(self) -> None:
+        """Der App-Metrik-Job darf nicht an Cloudflare haengen: die App
+        veroeffentlicht 8080 (nur per Firewall fuer den Monitoring-Knoten
+        erreichbar), der Scrape laeuft direkt und bleibt token-geschuetzt."""
+        metrics = HETZNER / "firewall-ensure-app-metrics.py"
+        self.assertTrue(metrics.exists(), "firewall-ensure-app-metrics.py fehlt")
+        text = metrics.read_text(encoding="utf-8")
+        self.assertIn('"--apply" in args', text)
+        self.assertIn("APP_IP", text)
+        self.assertIn("EDGE_IP", text)
+
+        compose = (ROOT / "docker-compose.hetzner.yml").read_text(encoding="utf-8")
+        self.assertIn('"8080:8080"', compose, "App-Port fuer den Scrape muss veroeffentlicht sein")
+        # Der Port darf nicht unkommentiert offen stehen - die Begrenzung liegt
+        # in der Hetzner-Firewall, das muss an der Stelle stehen.
+        block = compose[compose.index('"8080:8080"') - 900:compose.index('"8080:8080"')]
+        self.assertIn("firewall-ensure-app-metrics", block)
+        self.assertIn("SCRAPE_TOKEN", block)
+
 
 class WatchdogInstallationTest(unittest.TestCase):
     """INFRA-HETZNER-005: der Watchdog wird installiert und diagnostiziert getrennt."""
