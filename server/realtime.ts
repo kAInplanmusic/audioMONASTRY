@@ -14,6 +14,13 @@
  * Rueckgabe: nur `io` (fuer `serverIo`-Zugriffe der Routen) und der
  * Verbindungszaehler. Der Zaehler liegt absichtlich HIER: er beschreibt genau
  * das, was dieses Modul verwaltet (offene Socket-Verbindungen).
+ *
+ * F8-Fix (Ghost-Sockets, docs/FIXPLAN_2026-09-20_externer_apptest.md):
+ * Der Zaehler ist kein freistehendes `let` mehr, sondern wird aus dem
+ * Socket.io-Registry abgeleitet; die Liveness je Socket und der idle-basierte
+ * Sweep liegen in `./socketLiveness.ts` (mit Stub-Sockets testbar). Damit kann
+ * `/api/online` nach abgebrochenen Verbindungen nicht mehr bei 3 stehen bleiben,
+ * waehrend 1 Client verbunden ist.
  */
 import http from 'node:http';
 import { isListenerMode, normalizeSessionMode } from '../src/core/session/listenerMode';
@@ -31,6 +38,11 @@ import {
 } from '../src/types/zod/schemas';
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
 import type { SessionRuntime } from './sessionRuntime.ts';
+import {
+  createSocketLivenessMonitor,
+  type SocketLivenessEvaluation,
+  type SocketLivenessMonitor,
+} from './socketLiveness.ts';
 
 /**
  * Was injiziert wird, ist genau das, was server.ts zur Laufzeit besitzt:
@@ -67,6 +79,12 @@ export interface RealtimeDeps {
 export interface RealtimeHub {
   io: any;
   getActiveSocketConnections(): number;
+  /**
+   * Ergebnis des letzten Socket-Sweeps (F8): Geister/idle/online. `null`, solange
+   * noch kein Sweep lief. Reine Diagnose — die Ops-Routen zeigen damit, dass der
+   * Messwert aus dem Registry kommt und wie viele Geister entfernt wurden.
+   */
+  socketLiveness(): SocketLivenessEvaluation | null;
 }
 
 export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps): Promise<RealtimeHub> {
@@ -86,11 +104,20 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
   const log = deps.log ?? ((message: string) => console.log(message));
   const warn = deps.warn ?? ((message: string, error?: unknown) => console.warn(message, error ?? ''));
 
-  /** Offene Socket-Verbindungen (Anzeige in den Ops-Metriken). */
-  let activeSocketConnections = 0;
-
+  /**
+   * Offene Socket-Verbindungen (Anzeige in den Ops-Metriken).
+   *
+   * F8-Fix: KEIN freistehender Zähler mehr. Der Messwert wird aus dem
+   * Socket-Registry abgeleitet (`socketLiveness.online()`), der Sweep unten
+   * räumt Reste abgebrochener Verbindungen weg. Beleg: FIXPLAN F8 — `/api/online`
+   * meldete 3 Clients bei 1 echten.
+   */
   // --- WebRTC Socket.io signaling (same origin as the app) ---
   const IDLE_TIMEOUT_MS = Number(process.env.SIGNALING_IDLE_TIMEOUT_MS || 20 * 60 * 1000);
+  // Sweep-Intervall: 30 s. Bewusst intervallgetrieben (kein Busy-Loop) — der
+  // Messwert selbst hängt nicht am Sweep, nur das Aufräumen der Idle-Sockets.
+  const SWEEP_INTERVAL_MS = Math.max(1_000, Number(process.env.SIGNALING_SOCKET_SWEEP_MS || 30_000));
+
   const ALLOWED_ORIGINS = (process.env.SIGNALING_ALLOWED_ORIGINS || '')
     .split(',')
     .map((o) => o.trim())
@@ -103,6 +130,27 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       : false;
 
   let io: any = null;
+
+  /**
+   * Liveness/Sweep (F8): Die Hülle kennt socket.io nicht — sie fragt das Registry
+   * über den Getter ab (der `io` erst zur Laufzeit liest) und trennt über den
+   * Callback. Deshalb kann sie VOR `io` angelegt werden und ist mit Stubs ohne
+   * Netz testbar (tests/socketLiveness.test.ts).
+   */
+  const socketLiveness: SocketLivenessMonitor = createSocketLivenessMonitor({
+    getRegistry: () => io?.sockets?.sockets?.values?.() ?? [],
+    disconnect: (id: string) => {
+      try {
+        io?.sockets?.sockets?.get?.(id)?.disconnect?.(true);
+      } catch (e) {
+        warn('[signaling] Socket-Sweep: Trennen fehlgeschlagen:', (e as Error).message);
+      }
+    },
+    idleTimeoutMs: IDLE_TIMEOUT_MS,
+    sweepIntervalMs: SWEEP_INTERVAL_MS,
+    log: (message: string) => log(message),
+  });
+  socketLiveness.start();
 
   try {
     const { Server } = (await import('socket.io')) as any;
@@ -182,16 +230,15 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     }
 
     io.on('connection', (socket: any) => {
-      activeSocketConnections += 1;
-      let idleTimer: ReturnType<typeof setTimeout> | null = null;
-      const refreshIdleTimer = () => {
-        if (idleTimer) clearTimeout(idleTimer);
-        idleTimer = setTimeout(() => socket.disconnect(true), IDLE_TIMEOUT_MS);
-      };
-      refreshIdleTimer();
+      // F8-Fix: EIN Ort für die Liveness je Socket. Den Idle-Timer PRO Verbindung
+      // gibt es nicht mehr — der Sweep trennt idle Sockets zentral (und räumt
+      // Geister auf). `markSocketActivity()` ist der Ersatz für das frühere
+      // `refreshIdleTimer()` an allen Aktivitätspunkten.
+      socketLiveness.attach(socket.id);
+      const markSocketActivity = () => socketLiveness.touch(socket.id);
 
       socket.on('disconnect', () => {
-        activeSocketConnections = Math.max(0, activeSocketConnections - 1);
+        socketLiveness.detach(socket.id);
       });
 
       // S-2: Signaling-Relay mit Ziel-Validierung – es darf nur an Sockets
@@ -208,21 +255,21 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       };
 
       socket.on('offer', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         if (!data.offer) return;
         relayToSessionPeer('offer', data, { offer: data.offer, sender: socket.id, senderMode: socket.data?.sessionMode ?? 'member' });
       });
       socket.on('answer', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         if (!data.answer) return;
         relayToSessionPeer('answer', data, { answer: data.answer, sender: socket.id });
       });
       socket.on('ice-candidate', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         if (!data.candidate) return;
         relayToSessionPeer('ice-candidate', data, { candidate: data.candidate, sender: socket.id });
       });
-      socket.on('activity', refreshIdleTimer);
+      socket.on('activity', markSocketActivity);
 
       // Clock-Sync (NTP-artig): der Server spiegelt BEIDE Zeitstempel zurueck,
       // damit der Client den Offset zur Serveruhr rechnen kann (Live-Befund
@@ -284,7 +331,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       };
 
       socket.on('join-session', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const userId = String(data?.userId ?? socket.id).trim();
         // MASTEROUTMAINSTREAM/VISUALOUTMAINSTREAM: eigener Listen-Modus – zählt
         // nicht zu den 4 Usern, sendet selbst nichts und bekommt die
@@ -347,7 +394,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
       socket.on('plugin-lock', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const parsed = PluginLockSocketSchema.safeParse(data ?? {});
@@ -372,7 +419,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // danach ist dieser der Einzige, der den Mainsound beeinflusst. Nur der
       // aktuelle Halter darf uebertragen; der Ziel-Nutzer muss im Raum sein.
       socket.on('plugin-lock-transfer', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const parsed = PluginLockTransferSocketSchema.safeParse(data ?? {});
@@ -422,7 +469,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         io.to(roomId).emit('main-out-owner', { userId: resolveSessionMainOutUserId(), ts: Date.now() });
       };
       socket.on('plugin-unlock', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const parsed = PluginLockSocketSchema.safeParse(data ?? {});
@@ -439,7 +486,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // COLLAB-P0-001: Reconnect-Resync – der Client fordert den vollständigen
       // autoritativen Zustand an, ohne die Session neu zu betreten (kein Pumping).
       socket.on('resync-session', () => {
-        refreshIdleTimer();
+        markSocketActivity();
         if (!socket.data?.sessionRoom) return;
         const snapshot = sessionRuntime.session.snapshot();
         socket.emit('plugin-locks-sync', { roomId: SESSION_ROOM_ID, locks: sessionRuntime.legacyLockMap() });
@@ -456,7 +503,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // DCT-102: Socket.io-Relay für Modul-/AUTO_AI-State, wenn WebRTC-DataChannels
       // (noch) nicht offen sind – deterministischer Fallback über den Signaling-Pfad.
       socket.on('plugin-state', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const parsed = PluginStateSocketSchema.safeParse(data ?? {});
@@ -549,7 +596,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // UI-Hinweis (kein Audio-State, keine Lock-Wirkung) – egal welcher User
       // gerade welches Modul bedient, die anderen sehen es im Header.
       socket.on('session-nav', (data: any) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
@@ -565,7 +612,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       // senden hierhin statt über den unkontrollierten Peer-Pfad. Der Server
       // validiert Berechtigung + Payload und broadcastet an den Session-Raum.
       socket.on('main-out-update', (data: unknown) => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
@@ -610,7 +657,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       });
 
       socket.on('leave-session', () => {
-        refreshIdleTimer();
+        markSocketActivity();
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
         const userId = String(socket.data?.sessionUserId ?? '');
@@ -777,6 +824,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
 
   return {
     io,
-    getActiveSocketConnections: () => activeSocketConnections,
+    getActiveSocketConnections: () => socketLiveness.online(),
+    socketLiveness: () => socketLiveness.lastEvaluation(),
   };
 }

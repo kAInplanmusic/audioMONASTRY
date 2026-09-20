@@ -15,6 +15,11 @@ beforeAll(async () => {
   // Test-Baseline: keine Studio-Token-Pflicht + hohes Test-Rate-Limit.
   delete process.env.STUDIO_ACCESS_TOKEN;
   process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
+  // F8: Der Reset-Hook hängt jetzt zusätzlich an einem expliziten Schalter
+  // (ohne ihn antwortet die Route 404). Dieser Testlauf prüft die Token-Schranke
+  // (401) — dafür muss der Hook aktiv sein. Gesetzt VOR dem server-Import:
+  // die Konstanten entstehen beim Import.
+  process.env.AUDIOMONASTRY_TEST_RESET = '1';
   const mod = await import('../server');
   server = mod.app.listen(0);
   const addr = server.address();

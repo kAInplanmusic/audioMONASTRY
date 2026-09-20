@@ -18,6 +18,9 @@
 | `REDIS_URL` | `REDIS_URL` | .env | nein | – | URL | server.ts (Socket-Adapter + Session-Persistenz) | **ja** |
 | `SIGNALING_ALLOWED_ORIGINS` | `SIGNALING_ALLOWED_ORIGINS` | .env | nein | alle | CSV-URLs | server.ts (Origin-Check) | nein |
 | `SIGNALING_IDLE_TIMEOUT_MS` | `SIGNALING_IDLE_TIMEOUT_MS` | .env | nein | 300000 | Nummer | server.ts | nein |
+| `SIGNALING_SOCKET_SWEEP_MS` | `SIGNALING_SOCKET_SWEEP_MS` | .env | nein | 30000 | Nummer (min. 1000) | server/realtime.ts + server/socketLiveness.ts (F8: Sweep toter/idle Sockets) | nein |
+| `AUDIOMONASTRY_TEST_RESET` | `AUDIOMONASTRY_TEST_RESET` | .env (nur Dev/Test) | nein | – | `1` = an; nur wirksam mit `NODE_ENV != production` | server.ts + server/routes/sessionRoutes.ts (F8: `/api/session/reset`, `/api/session/state`) | nein |
+| `IDLE_SHUTDOWN_MINUTES` | `IDLE_SHUTDOWN_MINUTES` | .env | nein | `30` | Nummer (Bruchteile nur für Trockenläufe) | server/idleSignal.ts + server/routes/opsRoutes.ts (F9: Fallback-Schwelle, wenn der Timer kein `thresholdSec` schickt) | nein |
 | `SIGNALING_MAX_CLIENTS` | `SIGNALING_MAX_CLIENTS` | .env | nein | – | Nummer | server.ts | nein |
 | `UPLOAD_MAX_MB` | `UPLOAD_MAX_MB` | .env | nein | 100 | Nummer | server.ts `/api/upload` | nein |
 | `STEM_MAX_UPLOAD_MB` | `STEM_MAX_UPLOAD_MB` | .env | nein | 100 | Nummer | server.ts `/api/separate-stems` | nein |
@@ -27,7 +30,7 @@
 | `TURN_URLS` | `TURN_URLS` | .env | nein | – | URL | server/webrtcConfig.ts | nein |
 | `VISION_ARTIFACT_DIR` | `VISION_ARTIFACT_DIR` | .env | nein | system temp | Pfad | server/visionArtifacts.ts | nein |
 | `VITE_ENABLE_LOCAL_EMBEDDINGS` | `VITE_ENABLE_LOCAL_EMBEDDINGS` | Vite | nein | – | boolean | src/lib/cloudConfig.ts | nein |
-| `SCRAPE_TOKEN` | `SCRAPE_TOKEN` | .env | nein | – | 16+ Zeichen empfohlen | server.ts (Lese-Metriken), Prometheus | **ja** |
+| `SCRAPE_TOKEN` | `SCRAPE_TOKEN` | .env | nein | – | 16+ Zeichen empfohlen | server.ts (Lese-Metriken: `/api/metrics`, `/api/online`, `/api/idle-signal`), Prometheus, Hetzner-Idle-Timer | **ja** |
 | `UPLOAD_CHUNK_DIR` | `UPLOAD_CHUNK_DIR` | .env | nein | `<tmp>/audiomonastry-uploads` | Pfad | server/chunkedUpload.ts (Teil-Uploads) | nein |
 | `UPLOAD_CHUNK_RATE_LIMIT_MAX` | dito | .env | nein | `240` | Nummer/min | server.ts (eigener Limiter fuer Chunk-Uploads) | nein |
 | `ALERT_WEBHOOK_TOKEN` | `ALERT_WEBHOOK_TOKEN` | .env | nein | – | **16+ Zeichen erzwungen** (`length >= 16`, sonst inaktiv) | server.ts (Maschinen-Endpunkt `/api/alerts/webhook`) | **ja** |
