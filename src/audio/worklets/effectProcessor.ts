@@ -59,7 +59,13 @@ export class EffectProcessor extends AudioWorkletProcessor {
         this.crushBits = Math.max(2, Math.min(16, m.bits));
         this.crushLevels = Math.pow(2, Math.round(this.crushBits));
       }
-      if (typeof m.sampleReduction === 'number') this.crushReduction = Math.max(1, Math.min(64, m.sampleReduction)); this.crushCounter = 0;
+      if (typeof m.sampleReduction === 'number') {
+        this.crushReduction = Math.max(1, Math.min(64, m.sampleReduction));
+        // Nur bei Änderung der Rate-Reduktion zurücksetzen. Zuvor stand diese
+        // Anweisung außerhalb des if und wurde daher von JEDER Port-Nachricht
+        // (z. B. { wet }) ausgelöst → ungewollte Hold-Artefakte.
+        this.crushCounter = 0;
+      }
     };
   }
 
@@ -139,7 +145,9 @@ export class EffectProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern
     const input = inputs[0];
     const output = outputs[0];
-    if (!input || !input[0]) return true;
+    // Beide Seiten pruefen: ein Throw aus process() kann den Knoten dauerhaft
+    // stumm schalten (vgl. masteringProcessor/dynamicsProcessor).
+    if (!input || !input[0] || !output || !output[0]) return true;
     const sr = sampleRate;
     for (let i = 0; i < output[0].length; i++) {
       this.stepRamps(); // sample-genaue Parameter-Rampen (automate)

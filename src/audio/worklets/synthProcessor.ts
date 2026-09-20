@@ -14,6 +14,11 @@
 import { createMorphWavetables, sampleWavetable } from '../../core/instrument/wavetable';
 import { createTonewheelTable, LeslieSim } from '../../core/instrument/tonewheel';
 
+/** Fallback-Sample-Rate, wenn das Worklet-Global fehlt (Node-Tests). */
+const FALLBACK_SR = 48000;
+const currentSampleRate = (): number =>
+  typeof sampleRate === 'number' && sampleRate > 0 ? sampleRate : FALLBACK_SR;
+
 // Vorberechnete Wavetables (Modul-Load, keine Allokation im Hot-Path).
 const WT = createMorphWavetables(2048);
 const TONEWHEEL_TABLE = createTonewheelTable([8, 0, 8, 4, 0, 2, 0, 0, 1], 2048);
@@ -113,7 +118,9 @@ class SynthProcessor extends AudioWorkletProcessor {
 
   private filter = new MoogLadder();
   // Leslie (nur für tonewheel hörbar – aber immer verfügbar).
-  private leslie = new LeslieSim(48000, { slowHz: 0.8, fastHz: 6.2, rampSec: 0.8, amDepth: 0.5, fmDepth: 0.012 });
+  // Sample-Rate aus dem Worklet-Global (vorher hart 48000 → falsche Rotordrehzahl
+  // bei 44,1/96 kHz).
+  private leslie = new LeslieSim(currentSampleRate(), { slowHz: 0.8, fastHz: 6.2, rampSec: 0.8, amDepth: 0.5, fmDepth: 0.012 });
 
   constructor() {
     super();

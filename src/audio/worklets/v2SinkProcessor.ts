@@ -36,6 +36,15 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
   private readonly sfzBanks = new Map<V2Channel, SfzVoiceBank>();
+  /**
+   * Wiederverwendbarer Render-Scratch je SFZ-Kanal (Mono-Puffer + das
+   * einelementige Block-Array). Vorher entstanden hier pro Block und Kanal ein
+   * `new Float32Array(length)` und ein `[mono]` – Allokationen im
+   * Audio-Render-Pfad (AGENTS.md §5). `V2SinkEngine.setExternalSource` reicht
+   * die Referenz nur bis zum Ende desselben `render()`-Aufrufs durch
+   * (`V2SinkEngine.ts:395-399`), Wiederverwendung ist daher unkritisch.
+   */
+  private readonly sfzScratch = new Map<V2Channel, { buffer: Float32Array; block: Float32Array[] }>();
 
   // --- CPU-Budget-Messung (PERF-P3-001) -------------------------------------
   // Ausschliesslich opt-in ueber `processorOptions.measure` (Default aus, im
@@ -268,11 +277,13 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     const events: V2StepRenderEvent[] = [];
 
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
+    // Hot-Path ohne Allokation: Scratch-Puffer + Block-Array werden je Kanal
+    // wiederverwendet und nur bei geaenderter Blocklaenge einmalig nachgezogen.
     for (const [channel, bank] of this.sfzBanks) {
       if (!bank.hasActiveVoices()) continue;
-      const mono = new Float32Array(length);
-      bank.renderBlock(mono, length);
-      this.engine.setExternalSource(channel, [mono]);
+      const scratch = this.sfzScratchFor(channel, length);
+      bank.renderBlock(scratch.buffer, length);
+      this.engine.setExternalSource(channel, scratch.block);
     }
 
     if (this.clock.playing) {
@@ -329,6 +340,17 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     }
     this.recordCpu(startedAt, gapQuanta);
     return true;
+  }
+
+  /** Scratch-Puffer + Block-Array eines SFZ-Kanals, bei Bedarf einmalig angelegt. */
+  private sfzScratchFor(channel: V2Channel, length: number): { buffer: Float32Array; block: Float32Array[] } {
+    let entry = this.sfzScratch.get(channel);
+    if (!entry || entry.buffer.length !== length) {
+      entry = { buffer: new Float32Array(length), block: [] };
+      entry.block.push(entry.buffer);
+      this.sfzScratch.set(channel, entry);
+    }
+    return entry;
   }
 
   /**

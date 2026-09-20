@@ -141,12 +141,17 @@ export class EqProcessor extends AudioWorkletProcessor {
     f.co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
   }
 
-  // Biquad übertragen (DF2T)
+  // Biquad übertragen (DF2T) – direkter Index-Zugriff (kein Destructuring pro
+  // Sample) und Zustands-Guard: ein nicht-finites Sample darf den Bandzustand
+  // nicht dauerhaft vergiften (sonst bleibt das Band für immer still, weil die
+  // Ausgabe per Number.isFinite auf 0 maskiert wird).
   private biquad(f: BandState, x: number): number {
-    const [b0, b1, b2, a1, a2] = f.co;
-    const y = b0 * x + f.z[0];
-    f.z[0] = b1 * x - a1 * y + f.z[1];
-    f.z[1] = b2 * x - a2 * y;
+    const co = f.co;
+    const y = co[0] * x + f.z[0];
+    const z0 = co[1] * x - co[3] * y + f.z[1];
+    const z1 = co[2] * x - co[4] * y;
+    f.z[0] = Number.isFinite(z0) ? (Math.abs(z0) < 1e-20 ? 0 : z0) : 0;
+    f.z[1] = Number.isFinite(z1) ? (Math.abs(z1) < 1e-20 ? 0 : z1) : 0;
     return y;
   }
 
@@ -172,7 +177,9 @@ export class EqProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern
     const input = inputs[0];
     const output = outputs[0];
-    if (!input || !input[0]) return true;
+    // Beide Seiten pruefen: ein Throw aus process() kann den Knoten dauerhaft
+    // stumm schalten (vgl. masteringProcessor/dynamicsProcessor).
+    if (!input || !input[0] || !output || !output[0]) return true;
     this.blockSize = input[0].length || this.blockSize; // A-6
     this.stepRamps(); // block-genaue Band-Gain-Rampen (automate)
     for (let ch = 0; ch < output.length; ch++) {

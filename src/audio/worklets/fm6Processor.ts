@@ -17,6 +17,13 @@ const FALLBACK_SR = 48000;
 class Fm6Processor extends AudioWorkletProcessor {
   private synth: Fm6Synth | null = null;
   private patch: Dx7Patch | null = null;
+  /**
+   * Wiederverwendbarer Mix-Puffer. Vorher entstand pro Render-Quantum ein
+   * `new Float32Array(blockLen)` im Audio-Thread (375 Allokationen/s bei
+   * 48 kHz). Der Puffer wird vor jedem Render genullt, damit die Semantik
+   * identisch zu einem frisch allokierten Array bleibt.
+   */
+  private mixBuf = new Float32Array(0);
 
   constructor() {
     super();
@@ -45,7 +52,9 @@ class Fm6Processor extends AudioWorkletProcessor {
     if (!output || !output[0]) return true;
     const blockLen = output[0].length;
     if (this.synth) {
-      const mix = new Float32Array(blockLen);
+      if (this.mixBuf.length !== blockLen) this.mixBuf = new Float32Array(blockLen);
+      const mix = this.mixBuf;
+      mix.fill(0);
       this.synth.renderBlock(mix, blockLen);
       for (let ch = 0; ch < output.length; ch++) output[ch].set(mix);
     } else {

@@ -108,7 +108,9 @@ export class DspProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][]) { // NOSONAR: AudioWorkletProcessor muss true liefern
     const input = inputs[0];
     const output = outputs[0];
-    if (!input || !input[0]) return true;
+    // Beide Seiten pruefen: ein Throw aus process() kann den Knoten dauerhaft
+    // stumm schalten (vgl. masteringProcessor/dynamicsProcessor).
+    if (!input || !input[0] || !output || !output[0]) return true;
 
     for (let i = 0; i < output[0].length; i++) {
       this.stepRamps(); // sample-genaue Parameter-Rampen (automate)

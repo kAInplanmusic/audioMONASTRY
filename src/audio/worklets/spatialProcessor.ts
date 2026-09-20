@@ -52,7 +52,24 @@ export interface SpatialProcessorSource {
   histWrite: number;
 }
 
-/** Equal-Power-Stereo-Gains aus Azimut (inkl. Listener-Rotation). */
+/**
+ * Wiederverwendbares Ergebnis-Objekt fuer den Hot-Path. `process()` ruft die
+ * Panning-Berechnung pro Sample und Quelle auf; ein frisches `{ left, right }`
+ * pro Aufruf waeren bei 8 Quellen x 128 Frames ~1000 Objekte pro Block. Die
+ * Funktion ist nur fuer den unmittelbaren Verbrauch im selben Sample gedacht.
+ */
+const SCRATCH_GAINS = { left: 0, right: 0 };
+
+/** Wie {@link azToStereoGains}, aber ohne Allokation (Hot-Path-Variante). */
+export function azToStereoGainsInto(azDeg: number, listenerRotDeg = 0): { left: number; right: number } {
+  const az = azDeg - listenerRotDeg;
+  const rad = (az * Math.PI) / 180;
+  SCRATCH_GAINS.left = Math.cos((rad + Math.PI / 2) / 2);
+  SCRATCH_GAINS.right = Math.sin((rad + Math.PI / 2) / 2);
+  return SCRATCH_GAINS;
+}
+
+/** Equal-Power-Stereo-Gains aus Azimut (inkl. Listener-Rotation, frisches Objekt). */
 export function azToStereoGains(azDeg: number, listenerRotDeg = 0): { left: number; right: number } {
   const az = azDeg - listenerRotDeg;
   const rad = (az * Math.PI) / 180;
@@ -403,7 +420,12 @@ export class SpatialProcessor extends WorkletBase {
       if (!inCh) continue;
 
       if (useWasm) {
-        // High + WASM: partitioned-FFT-HRTF-Faltung pro Block
+        // High + WASM: partitioned-FFT-HRTF-Faltung pro Block.
+        // Die Views werden BEWUSST pro Block neu aus `memory.buffer` erzeugt:
+        // das WASM-Modul kann den Linear-Speicher jederzeit wachsen lassen, die
+        // Ansicht wird dabei detached. Wiederverwendete Views aus `initWasm()`
+        // lassen `%TypedArray%.prototype.set` mit „detached ArrayBuffer“
+        // scheitern (belegt: tests/wasmHrtf.test.ts, Node-Lauf).
         const mem: ArrayBuffer = this.wasm.exports.memory.buffer;
         const wInL = new Float32Array(mem, this.wasm.exports.in_l_ptr(), 128);
         const wInR = new Float32Array(mem, this.wasm.exports.in_r_ptr(), 128);
@@ -414,7 +436,7 @@ export class SpatialProcessor extends WorkletBase {
         this.wasm.exports.hrtf_process(128);
         for (let j = 0; j < n; j++) {
           this.stepRamps(s);
-          const gains = azToStereoGains(s.azCurrent, this.listenerRot);
+          const gains = azToStereoGainsInto(s.azCurrent, this.listenerRot);
           const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
           outL[j] += wOutL[j] * gains.left * g;
           outR[j] += wOutR[j] * gains.right * g;
@@ -442,7 +464,7 @@ export class SpatialProcessor extends WorkletBase {
           s.lpL += s.lpCoef * (leftTap - s.lpL);
           s.lpR += s.lpCoef * (rightTap - s.lpR);
 
-          const gains = azToStereoGains(s.azCurrent, this.listenerRot);
+          const gains = azToStereoGainsInto(s.azCurrent, this.listenerRot);
           const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
           outL[j] += s.lpL * gains.left * g;
           outR[j] += s.lpR * gains.right * g;
@@ -464,7 +486,7 @@ export class SpatialProcessor extends WorkletBase {
             accR += h * kernels.right[k];
           }
 
-          const gains = azToStereoGains(s.azCurrent, this.listenerRot);
+          const gains = azToStereoGainsInto(s.azCurrent, this.listenerRot);
           const g = s.gainCurrent * distanceGain(s.dist) * this.masterGain;
           outL[j] += wet * accL * gains.left * g;
           outR[j] += wet * accR * gains.right * g;

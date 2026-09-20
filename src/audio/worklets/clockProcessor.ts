@@ -48,14 +48,17 @@ class ClockProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(_inputs: Float32Array[][], _outputs: Float32Array[][], parameters: Record<string, Float32Array>): boolean {
+  process(_inputs: Float32Array[][], outputs: Float32Array[][], parameters: Record<string, Float32Array>): boolean {
     const currentTime = currentFrame / sampleRate;
     const bpmParam = parameters?.bpm;
     const bpmArr = bpmParam as Float32Array | undefined;
     // a-rate liefert einen Wert pro Sample (Standard-Quantum 128), k-rate/Test
     // einen einzelnen Wert. Wir unterstützen beides.
     const perSample = !!bpmArr && bpmArr.length > 1;
-    const blockLen = perSample ? bpmArr!.length : 128;
+    // A-6 (analog eqProcessor): Quantum aus der tatsächlichen Blocklänge lesen
+    // statt 128 hart zu verdrahten – sonst driftet der Phasen-Akkumulator,
+    // sobald der Render-Quantum ≠ 128 ist.
+    const blockLen = perSample ? bpmArr!.length : (outputs?.[0]?.[0]?.length ?? 128);
     const swingNow = Math.min(1, Math.max(0, parameters?.swing?.[0] ?? this.swing));
     const gateNow = Math.min(1, Math.max(0.01, parameters?.gate?.[0] ?? this.gate));
 

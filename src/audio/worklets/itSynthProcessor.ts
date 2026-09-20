@@ -188,9 +188,15 @@ class Voice {
       case 'idle': return 0;
     }
 
-    // Frequenz (mit Transposition)
+    // Frequenz (mit Transposition).
+    // Achtung: `this.baseFreq` darf hier NICHT fortgeschrieben werden. Vorher
+    // stand hier `this.baseFreq = f;` – bei jedem Sample. Damit potenzierte
+    // sich die Transposition pro Sample weiter (Faktor 2^(semi/12) je Sample),
+    // d. h. jede Stimme mit Transpose ≠ 0 lief innerhalb von Millisekunden in
+    // den Unendlich-Bereich. Für transposeSemi = 0 ist der Ausdruck bitgenau
+    // identisch (2^0 === 1, Multiplikation mit exakt 1.0), das Verhalten also
+    // unverändert.
     const f = this.baseFreq * Math.pow(2, transposeSemi / 12);
-    this.baseFreq = f;
 
     // --- Frequenz-Sweep (Drum / FX) ---
     let effFreq = f;

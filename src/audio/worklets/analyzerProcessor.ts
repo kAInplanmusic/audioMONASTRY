@@ -18,11 +18,13 @@ class AnalyzerProcessor extends AudioWorkletProcessor {
     const input = inputs[0];
 
     // Underrun-/Dropout-Erkennung: Lücke zwischen Audio-Blöcken messen.
-    // Normalabstand = 128 Samples / sampleRate. > 1.5 Quanten = Dropout.
+    // Normalabstand = Blocklänge / sampleRate. > 1.5 Quanten = Dropout.
+    // Die Quantengröße kommt aus dem tatsächlichen Block (vorher hart 128).
+    const blockLen = input?.[0]?.length ?? 0;
     const now = currentTime;
     if (this.lastBlockTime >= 0) {
       const gap = now - this.lastBlockTime;
-      const quantum = 128 / sampleRate;
+      const quantum = (blockLen > 0 ? blockLen : 128) / sampleRate;
       if (gap > quantum * 1.5) this.dropouts += 1;
     }
     this.lastBlockTime = now;
