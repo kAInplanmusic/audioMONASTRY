@@ -4,6 +4,7 @@ import { WebRTCMessage } from '../types/protocol';
 import { SOCKET_IO_SIGNALING_URL } from '../config/runtime';
 import type { MediasoupTransport } from '../core/transport/MediasoupTransport';
 import { isListenerMode, listenerModeForPath, normalizeSessionMode, type SessionMode } from '../core/session/listenerMode';
+import { setSessionIdentity } from '../core/session/sessionIdentity';
 import { rtcConfig, refreshIceConfig } from '../config/webrtc';
 import {
   createRecoveryState,
@@ -191,6 +192,11 @@ class WebRTCManager {
   // Stands beim Abo – COLLAB-P0-002).
 
   constructor() {
+    // F5-Fix: Die Kollaborations-UserId ist zugleich das Rate-Limit-Kennzeichen
+    // der REST-Aufrufe (`x-session-id`, siehe src/core/session/sessionIdentity.ts).
+    // Ohne sie zaehlte der Server alle vier Session-Nutzer auf EIN Budget, weil
+    // sie sich denselben Master-Token teilen.
+    setSessionIdentity(this.sessionUserId);
     // '' (empty string) means "same origin" — resolve to io() default so the
     // browser connects to the current host (works on Hetzner, Cloud Run, ...).
     if (SOCKET_IO_SIGNALING_URL !== null) {

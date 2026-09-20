@@ -42,6 +42,9 @@ import { LatencyHistogram } from './src/core/observability/latencyHistogram';
 import { createSessionRuntime, DEFAULT_PLUGIN_LOCK_TTL_MS } from './server/sessionRuntime.ts';
 import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
 import { createFleetWiring } from './server/fleetWiring.ts';
+import { resolveRateLimitIdentity, SESSION_IDENTITY_HEADER } from './server/rateLimitKeys.ts';
+import { buildCspPolicy, buildReportingHeaders, CSP_REPORT_PATH } from './server/csp.ts';
+import { registerSecurityRoutes } from './server/routes/securityRoutes.ts';
 import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
 import { registerVisualRoutes } from './server/routes/visualRoutes.ts';
 import { catalogFromMcpTools, createMcpAgentExecutor } from './server/mcpAgentExecutor.ts';
@@ -213,25 +216,22 @@ app.use((_req, res, next) => {
 });
 
 // P-16: Security-Header (ohne CSP-Bruch – CSP separat, da Worklets/Blob/WebRTC
-// besondere Regeln brauchen). S-7: Report-Only-CSP zum Sammeln von Verstößen.
+// besondere Regeln brauchen).
+// F7-Fix: Die CSP wird jetzt aus der Umgebung ABGELEITET (server/csp.ts):
+//   * kein pauschales `https:`/`wss:` mehr in `connect-src` (das erlaubte jedes
+//     Ziel und machte die Policy unwirksam),
+//   * `report-uri /api/security/csp-report` – vorher gab es KEIN Meldeziel, die
+//     Report-Only-Policy meldete also ins Leere,
+//   * `CSP_MODE=enforce` schaltet dieselbe Policy scharf (Default bleibt
+//     `report-only`, siehe Begruendung in server/csp.ts).
+const CSP_POLICY = buildCspPolicy(process.env as Record<string, string | undefined>);
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
-  res.setHeader(
-    'Content-Security-Policy-Report-Only',
-    [
-      "default-src 'self'",
-      "script-src 'self' 'wasm-unsafe-eval'",
-      "worker-src 'self' blob:",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "media-src 'self' blob: data:",
-      "connect-src 'self' https://api.deepseek.com https://router.huggingface.co https://api-inference.huggingface.co https://*.endpoints.huggingface.cloud https://api.openai.com wss: https:",
-      "frame-ancestors 'none'",
-    ].join('; '),
-  );
+  res.setHeader(CSP_POLICY.headerName, CSP_POLICY.value);
+  for (const [name, value] of Object.entries(buildReportingHeaders())) res.setHeader(name, value);
   next();
 });
 
@@ -340,6 +340,11 @@ app.use('/api', async (req, res, next) => {
   // öffentliche Material wie die R2-Public-URL (CFR2_PUBLIC_URL). Der Name
   // wird in der Route streng validiert (kein Pfadanteil, keine Liste).
   if (req.method === 'GET' && req.path.startsWith('/ai/vision/artifact/')) return next();
+  // F7-Fix: CSP-Meldeweg. Der Browser sendet CSP-Reports OHNE eigene Header
+  // (kein Cookie, kein Token moeglich) - mit Pflicht-Token waeren alle Meldungen
+  // still verloren gegangen. Der Endpunkt ist rate-limitiert, nimmt nur wenige
+  // hundert Bytes an, loggt nur Direktive + Host und antwortet immer 204.
+  if (req.method === 'POST' && req.path === '/security/csp-report') return next();
   // PROD-P0-001: Scrape-Ausnahme nur fuer Lese-Metriken und nur mit gueltigem
   // Scrape-Token (konstantzeit-Vergleich). Ohne gueltiges Token laeuft die
   // Anfrage in die Studio-Auth weiter - nichts wird fail-open.
@@ -390,8 +395,38 @@ app.use('/api', async (req, res, next) => {
   res.status(401).json({ error: 'unauthorized', code: 'STUDIO_TOKEN_REQUIRED' });
 });
 
+/**
+ * F5-Fix: Der Limiter-Schluessel ist NICHT mehr der Studio-Token selbst.
+ *
+ * Live belegt (2026-09-20, externe Instanz): mit dem Master-Token als Schluessel
+ * teilten sich alle vier Browser-Nutzer, das Portal, die Monitoring-Skripte und
+ * die Flotten-Aufrufe EIN Budget von 60/min (75 sequenzielle Aufrufe -> exakt
+ * 60x200 + 15x429, `Retry-After: 56`). Die Identitaet kommt jetzt aus der
+ * Nutzer-/Session-Ebene (signiertes Portal-Session-Token bzw. gemeldetes
+ * `x-session-id`), sonst aus der IP – Details und Begruendung in
+ * server/rateLimitKeys.ts.
+ */
 const studioKeyGenerator = (req: any): string =>
-  studioTokenFromRequest(req) || ipKeyGenerator(req.ip);
+  resolveRateLimitIdentity(
+    {
+      token: studioTokenFromRequest(req),
+      sessionId: req.headers?.[SESSION_IDENTITY_HEADER] ?? req.headers?.[String(SESSION_IDENTITY_HEADER)],
+      ip: req.ip,
+    },
+    ipKeyGenerator,
+  );
+
+/** Health ist ein Monitoring-/Liveness-Endpunkt – nie unter einem Nutzer-Budget. */
+const isHealthRequest = (req: { originalUrl?: string; url?: string }): boolean => {
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  return path === '/api/health';
+};
+
+/** Meldeweg der CSP (tokenfrei, siehe server/routes/securityRoutes.ts). */
+const isCspReportRequest = (req: { method?: string; originalUrl?: string; url?: string }): boolean => {
+  if (String(req.method || '').toUpperCase() !== 'POST') return false;
+  return String(req.originalUrl || req.url || '').split('?')[0] === CSP_REPORT_PATH;
+};
 
 // FEAT-P3-003: Ein Chunk-Upload ist per Definition eine REQUEST-SERIE. Live
 // belegt (2026-09-18): der allgemeine Limiter (60/min) und besonders der
@@ -428,14 +463,51 @@ const agentLimiter = rateLimit({
 
 const UPLOAD_CHUNK_RATE_LIMIT_MAX = Number(process.env.UPLOAD_CHUNK_RATE_LIMIT_MAX || 240);
 
+// F5-Fix: /api/health lag bisher HINTER dem allgemeinen /api-Limiter und teilte
+// sich damit das Nutzer-Budget. Live gemessen (2026-09-20): 30 parallele
+// /api/health -> 300/300 HTTP 429, d. h. Monitoring und Alarmierung konnten
+// durch normalen Studio-Betrieb mitgerissen werden (genau das Gegenteil dessen,
+// was ein Health-Endpunkt leisten soll). Health hat jetzt einen EIGENEN,
+// grosszuegigen Limiter pro IP (Default 600/min = 10/s) und ist aus dem
+// allgemeinen Limiter ausgenommen. Die Bremse bleibt trotzdem: der Endpunkt ist
+// tokenfrei und darf kein unbegrenzter Verstaerker sein.
+const HEALTH_RATE_LIMIT_MAX = Number(process.env.HEALTH_RATE_LIMIT_MAX || 600);
+
+const healthLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: HEALTH_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many health requests, please slow down.', code: 'HEALTH_RATE_LIMIT' },
+  // Monitoring (Prometheus/Alertmanager/Portal) haelt keinen Studio-Token:
+  // Health wird deshalb bewusst pro IP gezaehlt, nicht pro Nutzer.
+  keyGenerator: (req: any) => ipKeyGenerator(req.ip),
+});
+
+// Meldeweg der CSP: ebenfalls tokenfrei und deshalb mit eigenem, engem Budget,
+// damit ein fehlerhaftes Deployment das Log nicht fluten kann.
+const CSP_REPORT_RATE_LIMIT_MAX = Number(process.env.CSP_REPORT_RATE_LIMIT_MAX || 120);
+
+const cspReportLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: CSP_REPORT_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many reports, please slow down.', code: 'CSP_REPORT_RATE_LIMIT' },
+  keyGenerator: (req: any) => ipKeyGenerator(req.ip),
+});
+
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
-  max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute/IP
+  max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute je Session/IP
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
   keyGenerator: studioKeyGenerator,
-  skip: (req) => isChunkUploadRequest(req) || isAgentRequest(req),
+  // Eigene Budgets bleiben eigene Budgets: Chunks, Agent-Laeufe, Health und der
+  // CSP-Meldeweg laufen NICHT unter dem allgemeinen Limit.
+  skip: (req) =>
+    isChunkUploadRequest(req) || isAgentRequest(req) || isHealthRequest(req) || isCspReportRequest(req),
 });
 
 // Chunk-Stream: eigenes, groesseres Budget (Default 240/min = 4 Chunks/s bei
@@ -449,8 +521,9 @@ const uploadChunkLimiter = rateLimit({
   keyGenerator: studioKeyGenerator,
 });
 
-// Teure KI-/Cloud-/Upload-Routen: enges Limit pro Studio-Token (Kostenbremse).
-// Legacy-Env API_EXPENSIVE_RATE_LIMIT_MAX bleibt respektiert (Server-Tests/Lasttests).
+// Teure KI-/Cloud-/Upload-Routen: enges Limit je Nutzer-/Session-Identitaet
+// (Kostenbremse). Legacy-Env API_EXPENSIVE_RATE_LIMIT_MAX bleibt respektiert
+// (Server-Tests/Lasttests).
 const legacyExpensiveMax = Number(process.env.API_EXPENSIVE_RATE_LIMIT_MAX || 0);
 const expensiveLimiter = rateLimit({
   windowMs: AI_RATE.expensiveWindowMs,
@@ -463,12 +536,17 @@ const expensiveLimiter = rateLimit({
   skip: isAgentReadRequest,
 });
 
+app.use('/api/health', healthLimiter);
+app.use(CSP_REPORT_PATH, cspReportLimiter);
 app.use('/api', apiLimiter);
 // `/api/upload/sample` (Scan + Ablage) bleibt unter der Kostenbremse; die
 // Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.
 app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stems', '/api/cloud/upload', '/api/cloud/sync', '/api/upload/sample'], expensiveLimiter);
 app.use('/api/upload/chunk', uploadChunkLimiter);
 app.use('/api/ai/agent/runs', agentLimiter);
+
+// F7-Fix: Meldeweg der CSP (tokenfrei, rate-limitiert, 204 ohne Inhalt).
+registerSecurityRoutes(app);
 
 // ARCH-P2-002: Die Betriebs-/Telemetrie-Routen liegen in server/routes/opsRoutes.ts (Factory). Registrierung an der
 // Originalposition, damit die Reihenfolge relativ zu den Middleware-Ketten

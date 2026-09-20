@@ -571,17 +571,47 @@ const ROLE_ENV_KEYS = {
     'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
     'OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL', 'MASTER_PLAYER_URL',
   ],
-  sfu: ['SIGNALING_ALLOWED_ORIGINS'],
+  // F7-Fix: SIGNALING_ALLOWED_ORIGINS stand hier als Rollen-Schluessel – die
+  // Liste wird jetzt unten für JEDEN Knoten berechnet (envFile), ein zweiter
+  // Eintrag ueber die Env wuerde sie nur doppelt/unklar schreiben.
+  sfu: [],
   master: [],
   edge: ['GF_SECURITY_ADMIN_PASSWORD'],
   ai: ['OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL'],
 };
 
+/**
+ * F7-Fix: Erlaubte WebRTC-/Signalisierungs-Origins (CSV) für die Knoten-.env.
+ *
+ * Vorher stand hier fest `SIGNALING_ALLOWED_ORIGINS=*` – damit reflektierte der
+ * Signaling-Endpunkt jede Fremd-Origin (`Access-Control-Allow-Origin: *`, live
+ * gemessen am 2026-09-20 mit `Origin: https://evil.example`); der einzige
+ * verbliebene Schutz war das Handshake-Token. Die Liste ist jetzt hart:
+ * die eigene Produktions-Domain plus die lokalen Vite-Test-Origins.
+ *
+ * Ein ausdruecklich gesetzter Wert (`env.SIGNALING_ALLOWED_ORIGINS`) wird
+ * uebernommen, `*` jedoch NICHT – die Wildcard ist genau der Befund.
+ */
+export function signalingAllowedOrigins(env) {
+  const explicit = String(env.SIGNALING_ALLOWED_ORIGINS ?? '').trim();
+  if (explicit && explicit !== '*') return explicit;
+  const domain = String(env.APP_DOMAIN || 'anunnakitools.de').trim().replace(/^https?:\/\//, '');
+  const origins = [`https://${domain}`];
+  if (!domain.startsWith('www.')) origins.push(`https://www.${domain}`);
+  // Lokale Test-Clients (Vite dev 5173 / preview 4173) – die Audit-Auflage
+  // lautet ausdruecklich "Produktions-Domain + lokale Test-Origins".
+  origins.push(
+    'http://localhost:5173', 'http://127.0.0.1:5173',
+    'http://localhost:4173', 'http://127.0.0.1:4173',
+  );
+  return origins.join(',');
+}
+
 function envFile(env, role) {
   const lines = [
     // Origin-TLS (P-7b): app-1 dient HTTPS mit Cloudflare-Origin-Zertifikat.
     `DOMAIN=${role === 'app' ? (env.APP_DOMAIN || 'anunnakitools.de') : ''}`,
-    'SIGNALING_ALLOWED_ORIGINS=*',
+    `SIGNALING_ALLOWED_ORIGINS=${signalingAllowedOrigins(env)}`,
   ];
   if (role === 'app') {
     lines.push('VOICE_PROVIDER=replicate', 'STEM_AI_PROVIDER=replicate', 'ENABLE_SFU=0');
