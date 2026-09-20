@@ -2211,7 +2211,7 @@
         "Waechter-Test: tests/moaBoundary.test.ts (4 Tests) haelt Rollen-Marker, die Kante agent.orchestrate + Route, die Abwesenheit des Task-Workers (Datei + npm-Skript) und die Doku fest. Eigener Lauf: 4/4 gruen."
       ],
       "commits": [
-        "bbca881"
+        "91eb8d4"
       ]
     },
     {
@@ -2247,7 +2247,7 @@
         "Grenze des Belegs: die Wertungen kamen aus dem Test (drei Hoerer-Scores), nicht von echten Hoerern - die Live-Hoerpruefung selbst bleibt VISUAL-P1-001/LIVE-P1-003 zugeordnet."
       ],
       "commits": [
-        "bbca881"
+        "91eb8d4"
       ]
     },
     {
@@ -2287,7 +2287,7 @@
         "services/taskWorker.ts"
       ],
       "commits": [
-        "bbca881"
+        "91eb8d4"
       ]
     },
     {
