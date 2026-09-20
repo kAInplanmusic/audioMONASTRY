@@ -47,3 +47,4 @@ src/audio/wasm/dspKernel_rs/target/
 
 # Manuell gespeicherte Live-Test-Logs (lokal, koennen Secrets enthalten)
 logs/
+.worktrees/
