@@ -16,15 +16,6 @@ import type { Server } from 'node:http';
  * (serverautoritative Kollaboration) und wird dort getestet.
  */
 
-// ARCH-PERF-001-Muster (Begruendung siehe vitest.config.ts): jeder Test dieser Datei
-// bootet den Server frisch (vi.resetModules() + dynamischer Import von ../server).
-// Unter paralleler Suite-Last (251 Dateien, tsc-nahe CPU-Last) kann dieser Bootstrap
-// die globale 15-s-Grenze reissen. Live belegt am 2026-09-20: npm run verify rot mit
-// "Test timed out in 15000ms" genau in startAppServer; dieselbe Datei allein lief in
-// 3,3 s mit 12/12 Tests durch, die volle Suite danach 251/251 gruen. Die Zusicherungen
-// bleiben unveraendert - es geht nur um das Zeitbudget des Server-Starts.
-vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
-
 function resetAuthEnv(env: Record<string, string | undefined>) {
   process.env.VITEST = env.VITEST ?? 'true';
   process.env.NODE_ENV = env.NODE_ENV ?? 'test';
