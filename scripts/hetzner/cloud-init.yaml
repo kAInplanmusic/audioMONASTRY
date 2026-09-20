@@ -71,4 +71,10 @@ runcmd:
   - ufw allow 80/tcp
   - ufw allow 443/tcp
   - ufw --force enable
+  # F10 · Namespace-Paritaet: das Deploy-Verzeichnis traegt den kanonischen Namen
+  # und existiert ab dem Boot (idempotent). Ohne top-level `name:` leitet
+  # `docker compose` den PROJEKTnamen aus dem Verzeichnisnamen ab - ein manueller
+  # Aufruf im richtigen Pfad trifft damit dasselbe Projekt wie deploy.sh und der
+  # Portal-Worker (die ihn ohnehin explizit als COMPOSE_PROJECT_NAME setzen).
+  - mkdir -p /opt/audiomonastry
   - echo "audiomonastry cloud-init done" > /root/.audiomonastry-bootstrap-done

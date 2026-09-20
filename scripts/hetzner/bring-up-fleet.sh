@@ -35,6 +35,12 @@ SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
 APP_URL="https://$DOMAIN"
 
+# NOMEN-P1-001 / F10: Namen der laufenden Installation aufloesen (neu oder
+# Altname) - fleet-names.sh ist die EINE Quelle (Servernamen, Container,
+# Compose-Projekt, Pfade). Sourcing ist seiteneffektfrei; es steht deshalb VOR
+# dem Trockenlauf, damit auch der Projektname ohne Netz belegbar ist.
+source "$(dirname "$0")/fleet-names.sh"
+
 # INFRA-HETZNER-006: edge-1 startet NUR den Monitoring-Stack - diese explizite
 # Service-Liste ist Pflicht. Ohne Liste zieht die Basisdatei zusätzlich `caddy`
 # (128M) + `audiomonastry` (2G) + `master-player` (1G) mit; zusammen mit dem
@@ -52,6 +58,9 @@ MONITORING_SERVICES="node-exporter cadvisor prometheus alertmanager grafana"
 if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "[dry-run] Flottenstart (keine API-Aufrufe, keine Server):"
   echo "  Typen:     app=${FLEET_TYPE_APP:-cx23} sfu=${FLEET_TYPE_SFU:-cx23} ai=${FLEET_TYPE_AI:-cx23} master=${FLEET_TYPE_MASTER:-cx23} edge=${FLEET_TYPE_EDGE:-cx23}  (Override per FLEET_TYPE_<ROLLE>)"
+  # F10: Projektname + Zielpfad sind Teil des Namespace; beide kommen aus
+  # fleet-names.sh und werden hier ohne Knoten belegt.
+  echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME, top-level 'name:' in docker-compose.hetzner.yml)"
   echo "  app-1:     deploy.sh (Caddy + App + Signaling) | Backup-Timer | Watchdog"
   echo "  sfu-1:     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry | Watchdog"
   echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog"
@@ -79,8 +88,8 @@ step() { echo; echo "===========================================================
 # "Flotte ist bereit" meldete. Jetzt werden alle Argumente weitergegeben.
 ssh_host() { local host="$1"; shift; ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$host" "$@"; }
 
-# NOMEN-P1-001: Namen der laufenden Installation aufloesen (neu oder Altname).
-source "$(dirname "$0")/fleet-names.sh"
+# NOMEN-P1-001 (Quelle: fleet-names.sh, oben bereits gesourct) - die Funktionen
+# fleet_name/fleet_candidates/fleet_compose_project stehen ab hier zur Verfuegung.
 
 get_ip() {
   curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" "https://api.hetzner.cloud/v1/servers?name=$(fleet_name "$1")" \
@@ -140,23 +149,27 @@ rsync_repo() {
 sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/audiomonastry/.env"; }
 
 echo "  sfu-1 (Mediasoup) …"
+# F10: jeder Rollen-Deploy nennt das Compose-Projekt EXPLIZIT
+# (COMPOSE_PROJECT_NAME) - sonst haengt der Projektname am Verzeichnisnamen und
+# ein Knoten mit anderem Pfad bekaeme ein zweites Projekt mit eigenen Volumes.
+# Ein Bestands-Knoten wird vorher migriert (scripts/hetzner/migrate-project-name.sh).
 rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
-ssh_host "$SFU_IP" "cd /opt/audiomonastry && grep -q SFU_ANNOUNCED_IP .env || echo SFU_ANNOUNCED_IP=$SFU_IP >> .env; docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
+ssh_host "$SFU_IP" "cd /opt/audiomonastry && grep -q SFU_ANNOUNCED_IP .env || echo SFU_ANNOUNCED_IP=$SFU_IP >> .env; COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry"
 
 echo "  master-1 (master-player) …"
 rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
-ssh_host "$MASTER_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d master-player"
+ssh_host "$MASTER_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml up -d master-player"
 
 echo "  edge-1 (Monitoring: Prometheus/Grafana/Alertmanager – NUR der Stack) …"
 rsync_repo "$EDGE_IP"; sync_env "$EDGE_IP"
 # INFRA-HETZNER-006: explizite Service-Liste (siehe MONITORING_SERVICES oben).
-ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES"
+ssh_host "$EDGE_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES"
 # Und die Basis-Dienste stoppen, die ein ALTES edge-Snapshot beim Boot per
 # `restart: unless-stopped` wieder hochzieht (caddy/audiomonastry/master-player):
 # ohne diesen Schritt waere die Limit-Rechnung nur auf frisch provisionierten
 # Knoten wahr. `stop` ist idempotent, laesst die Container liegen und ist ohne
 # vorhandene Container ein No-Op (Exit 0).
-ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml stop caddy audiomonastry master-player >/dev/null 2>&1 || true"
+ssh_host "$EDGE_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml stop caddy audiomonastry master-player >/dev/null 2>&1 || true"
 
 echo "  ai-1 (Ollama + Stem-AI) …"
 bash scripts/hetzner/install-ai1.sh "root@$AI_IP"

@@ -15,7 +15,20 @@
 #   Fleet (SFU):  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
 #   Redis-Knoten: docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
 #   Secrets kommen aus .env (Kopie von .env.hetzner.example).
+#
+# F10 · Compose-Projektname ist EXPLIZIT:
+#   Ohne top-level `name:` leitet Compose den Projektnamen aus dem Verzeichnis
+#   ab, in dem es laeuft. Auf Bestands-Knoten lag das Repo in einem anders
+#   benannten Verzeichnis - dort entstand ein zweites Projekt (eigene Volumes,
+#   eigene Container-Labels), waehrend die Container-Namen (container_name)
+#   gleich blieben. `name:` macht den Projektnamen pfad-unabhaengig und
+#   idempotent; er stimmt mit FLEET_COMPOSE_PROJECT aus
+#   scripts/hetzner/fleet-names.sh ueberein (der eine Quelle fuer die Skripte,
+#   hier die Quelle fuer Handaufrufe - ein Test haelt beide deckungsgleich).
+#   Migration eines Bestands-Knotens: scripts/hetzner/migrate-project-name.sh.
 # =============================================================================
+name: audiomonastry
+
 x-logging: &default-logging
   driver: json-file
   options:
