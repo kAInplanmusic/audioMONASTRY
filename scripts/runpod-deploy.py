@@ -451,6 +451,17 @@ def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
         return None
 
 
+class BoundTemplateError(RuntimeError):
+    """Der Endpoint haengt an einem GEBUNDENEN Template (INFRA-RUNPOD-009).
+
+    RunPod erlaubt fuer solche Endpoints kein `updateEndpointTemplate` - live
+    belegt am Endpoint `audiomonastry-ai-music` ("This endpoint has a bound
+    template."). Das ist kein Deploy-Fehler im engeren Sinn, sondern ein
+    Betreiber-Schritt: Endpoint in der Konsole entbinden oder neu anlegen. Der
+    Aufrufer unterscheidet den Fall deshalb von echten Fehlern.
+    """
+
+
 def save_template(
     template_name: str,
     image: str,
@@ -615,7 +626,15 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
     if existing:
         endpoint_id = existing.get("id", "")
         print(f"[deploy] {endpoint_name}: existiert ({endpoint_id}) → Template-Update")
-        runpod.update_endpoint_template(endpoint_id, template_id)
+        try:
+            runpod.update_endpoint_template(endpoint_id, template_id)
+        except Exception as exc:  # noqa: BLE001
+            if "bound template" in str(exc).lower():
+                # INFRA-RUNPOD-009: Kein API-Weg - Endpoint neu anlegen ist eine
+                # Betreiberentscheidung (der Endpoint traegt die Rolle, ein
+                # fehlgeschlagenes Neu-Anlegen liesse sie ohne Endpoint zurueck).
+                raise BoundTemplateError(endpoint_name) from exc
+            raise
         # `idleTimeout` setzt die API nur beim ANLEGEN; ein Template-Update laesst
         # den laufenden Wert unberuehrt. Genau so driftete die Flotte still
         # auseinander (live 15 s vs. Repo-Default), deshalb hier sichtbar machen.
@@ -752,9 +771,33 @@ def main() -> int:
 
     results: Dict[str, str] = {}
     failed: List[str] = []
+    skipped: List[str] = []
     for role in roles:
         defaults = ROLE_DEFAULTS.get(role, {"suffix": env("RUNPOD_ENDPOINT_NAME") or "ai", "imageKind": "own"})
-        endpoint_id = deploy_role(role, defaults)
+        try:
+            endpoint_id = deploy_role(role, defaults)
+        except BoundTemplateError as exc:
+            # Kein Deploy-Fehler, sondern ein Betreiber-Schritt - deshalb zaehlt
+            # das NICHT als fehlgeschlagene Rolle (sonst waere CI dauerhaft rot
+            # und der echte Fehler unsichtbar).
+            print(
+                f"[deploy] UEBERSPRUNGEN (gebunden): {exc} haengt an einem gebundenen "
+                f"Template - die API erlaubt kein Template-Update. Abhilfe: Endpoint in "
+                f"der Konsole entbinden oder mit RUNPOD_ENDPOINT_NAME=<neuer Name> neu "
+                f"anlegen (wie beim Vision-Endpoint 2026-09-13) und die Endpoint-ID in "
+                f"der .env nachziehen.",
+                file=sys.stderr,
+            )
+            skipped.append(role or "legacy")
+            continue
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[deploy] FEHLER – Rolle {role or 'legacy'}: {type(exc).__name__}: {str(exc)[:200]} "
+                f"(weiter mit der naechsten)",
+                file=sys.stderr,
+            )
+            failed.append(role or "legacy")
+            continue
         if not endpoint_id:
             # INFRA-RUNPOD-009: nicht mehr die ganze Flotte abbrechen. Live hat ein
             # einziger Rollenfehler (music) den Lauf beendet, nachdem voiceGen und
@@ -770,8 +813,13 @@ def main() -> int:
     for role, endpoint_id in results.items():
         env_name = ENDPOINT_ENV_BY_ROLE.get(role, "RP_ENDPOINT_ID")
         print(f"[deploy]   {env_name}={endpoint_id}")
+    if skipped:
+        print(
+            f"[deploy] UEBERSPRUNGEN (gebundenes Template, Betreiber-Schritt): {', '.join(skipped)}",
+            file=sys.stderr,
+        )
     if failed:
-        print(f"[deploy] NICHT deployt: {', '.join(failed)}", file=sys.stderr)
+        print(f"[deploy] NICHT deployt (Fehler): {', '.join(failed)}", file=sys.stderr)
         return 5
     return 0
 

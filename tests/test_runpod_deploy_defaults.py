@@ -281,6 +281,44 @@ class RolleFehlschlagTest(unittest.TestCase):
         self.assertEqual(code, 5, "Teilausfall muss sichtbar bleiben")
         self.assertEqual(seen, ["music", "ears", "voiceGen"], "kein Abbruch nach der ersten fehlerhaften Rolle")
 
+    def test_exception_einer_rolle_beendet_den_lauf_nicht(self) -> None:
+        # Live passiert (35398610401): `update_endpoint_template` warf
+        # "This endpoint has a bound template." und der Lauf starb an einer
+        # ungefangenen Exception - nachdem andere Rollen schon deployt waren.
+        seen: list[str] = []
+
+        def fake_deploy_role(role: str, defaults: Any) -> str | None:
+            seen.append(role)
+            if role == "music":
+                raise RuntimeError("This endpoint has a bound template.")
+            return f"ep-{role}"
+
+        with mock.patch.dict("os.environ", {"RP_API_KEY": "test", "IMAGE": "img:tag"}, clear=False):
+            with mock.patch.object(deploy, "resolve_roles", return_value=["music", "ears"]):
+                with mock.patch.object(deploy, "deploy_role", side_effect=fake_deploy_role):
+                    with mock.patch.object(deploy.runpod, "get_endpoints", create=True, return_value=[]):
+                        code = deploy.main()
+
+        self.assertEqual(seen, ["music", "ears"])
+        self.assertEqual(code, 5, "echte Exception = Fehler, nicht Ueberspringen")
+
+    def test_gebundenes_template_ist_ueberspringen_statt_fehler(self) -> None:
+        # Ein gebundenes Template ist kein Deploy-Fehler, sondern ein
+        # Betreiber-Schritt - sonst waere CI dauerhaft rot und der echte Fehler
+        # unsichtbar.
+        def fake_deploy_role(role: str, defaults: Any) -> str | None:
+            if role == "music":
+                raise deploy.BoundTemplateError("audiomonastry-ai-music")
+            return f"ep-{role}"
+
+        with mock.patch.dict("os.environ", {"RP_API_KEY": "test", "IMAGE": "img:tag"}, clear=False):
+            with mock.patch.object(deploy, "resolve_roles", return_value=["music", "ears"]):
+                with mock.patch.object(deploy, "deploy_role", side_effect=fake_deploy_role):
+                    with mock.patch.object(deploy.runpod, "get_endpoints", create=True, return_value=[]):
+                        code = deploy.main()
+
+        self.assertEqual(code, 0, "gebundenes Template darf den Lauf nicht rot machen")
+
 
 if __name__ == "__main__":
     unittest.main()
