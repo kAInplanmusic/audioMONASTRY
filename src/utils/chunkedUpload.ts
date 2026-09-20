@@ -16,6 +16,11 @@
  * ist (siehe tests/chunkedUploadClient.test.ts).
  */
 
+// F5-Fix: Der Server zaehlt Rate-Limits je Nutzer-/Session-Identitaet statt je
+// Master-Token (server/rateLimitKeys.ts). Der Chunk-Upload ist der
+// hochfrequenteste Pfad der App – er muss sein eigenes Budget behalten.
+import { sessionIdentityHeaders } from '../core/session/sessionIdentity';
+
 export interface ChunkUploadStatusResponse {
   uploadId: string;
   filename: string;
@@ -118,7 +123,7 @@ export async function uploadFileInChunks(
   // 1) Sitzung anlegen ODER fortsetzen (der Server entscheidet anhand des Fingerabdrucks).
   const initRes = await doFetch('/api/upload/chunk/init', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...sessionIdentityHeaders() },
     body: JSON.stringify({
       filename: file.name,
       size: file.size,
@@ -157,7 +162,7 @@ export async function uploadFileInChunks(
       try {
         const res = await doFetch(`/api/upload/chunk/${status.uploadId}/${index}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/octet-stream' },
+          headers: { 'Content-Type': 'application/octet-stream', ...sessionIdentityHeaders() },
           body,
           signal: options.signal,
         });
@@ -190,6 +195,7 @@ export async function uploadFileInChunks(
   // 3) Abschluss: der Server setzt zusammen und verarbeitet ueber die gemeinsame Pipeline.
   const completeRes = await doFetch(`/api/upload/chunk/${status.uploadId}/complete`, {
     method: 'POST',
+    headers: { ...sessionIdentityHeaders() },
     signal: options.signal,
   });
   const payload = await completeRes.json().catch(() => ({})) as Record<string, unknown>;

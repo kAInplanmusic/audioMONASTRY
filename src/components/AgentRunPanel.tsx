@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Bot, Ban, Play, RotateCcw, Loader2 } from 'lucide-react';
+// F5-Fix: Der Server zaehlt Rate-Limits je Nutzer-/Session-Identitaet statt je
+// Master-Token – das Status-Polling eines Laufs darf nicht im Budget der
+// anderen Session-Nutzer landen (server/rateLimitKeys.ts).
+import { sessionIdentityHeaders } from '../core/session/sessionIdentity';
 
 /**
  * AI-P1-006 · Agent-Lauf-Panel (aiMONK-Loop: planen -> ausfuehren -> pruefen)
@@ -55,7 +59,9 @@ export function AgentRunPanel() {
 
   const loadRun = useCallback(async (runId: string) => {
     try {
-      const res = await fetch(`/api/ai/agent/runs/${encodeURIComponent(runId)}`);
+      const res = await fetch(`/api/ai/agent/runs/${encodeURIComponent(runId)}`, {
+        headers: { ...sessionIdentityHeaders() },
+      });
       if (!res.ok) return null;
       const body = await res.json() as { run?: AgentRunView };
       return body.run ?? null;
@@ -69,7 +75,7 @@ export function AgentRunPanel() {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch('/api/ai/agent/runs');
+        const res = await fetch('/api/ai/agent/runs', { headers: { ...sessionIdentityHeaders() } });
         if (!res.ok) return;
         const body = await res.json() as { runs?: AgentRunView[] };
         if (!cancelled && body.runs?.[0]) setRun(body.runs[0]);
@@ -100,7 +106,7 @@ export function AgentRunPanel() {
     try {
       const res = await fetch('/api/ai/agent/runs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...sessionIdentityHeaders() },
         // Schreib-Schritte muessen ausdruecklich freigegeben werden; hier nur
         // lesende/diagnostische Schritte -> ohne allowWrite.
         body: JSON.stringify({ task: clean }),
@@ -120,7 +126,10 @@ export function AgentRunPanel() {
     if (!run) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/ai/agent/runs/${encodeURIComponent(run.runId)}/cancel`, { method: 'POST' });
+      const res = await fetch(`/api/ai/agent/runs/${encodeURIComponent(run.runId)}/cancel`, {
+        method: 'POST',
+        headers: { ...sessionIdentityHeaders() },
+      });
       const body = await res.json() as { run?: AgentRunView };
       if (body.run) setRun(body.run);
     } catch (error) {
@@ -134,7 +143,10 @@ export function AgentRunPanel() {
     if (!run) return;
     setBusy(true);
     try {
-      const res = await fetch(`/api/ai/agent/runs/${encodeURIComponent(run.runId)}/resume`, { method: 'POST' });
+      const res = await fetch(`/api/ai/agent/runs/${encodeURIComponent(run.runId)}/resume`, {
+        method: 'POST',
+        headers: { ...sessionIdentityHeaders() },
+      });
       const body = await res.json() as { run?: AgentRunView; message?: string };
       if (!res.ok) throw new Error(body.message ?? `HTTP ${res.status}`);
       if (body.run) setRun(body.run);
