@@ -1,0 +1,223 @@
+# FIXPLAN — Externer App-Test audioMONASTRY (Hetzner), Stand 2026-09-20
+
+Quelle: externer App-Test gegen die Hetzner-Flotte vom 2026-09-20 (app-1 142.132.229.71,
+Deploystand 2026-09-18, Repo-HEAD ae5e749). Alle Befunde sind real gemessen; die
+Rohdaten liegen unter `/home/patrick/e2e-audiomonastry/` und
+`/home/patrick/ext-audit-2026-09-20.md`.
+
+Rahmen: **kein RunPod, keine AI-Rollen** — es geht nur um die Hetzner-Kette
+(app/sfu/master/edge + Portal + Cloud-Speicher).
+
+Arbeitsweise: ein Fix pro Zweig (`hermes/fix-F<n>`), Worktree, kein Push.
+Merge erst nach `npm run typecheck` + betroffenem Test + Review durch den Auftraggeber.
+
+---
+
+## F1 — Öffentlicher Zugang ist tot (P0)
+
+**Symptom:** `https://anunnakitools.de` → 522/Timeout, `/api/health` über die Domain
+HTTP 000 nach 12 s. Direkter IP-Zugriff ist by design dicht (Firewall nur
+Cloudflare-CIDRs).
+
+**Belegte Ursachen (drei, alle nötig):**
+1. Alle Cloudflare-Credentials (`CLOUDFLARE_API_TOKEN`, `CF_API_KEY`,
+   `CF_ACCOUNT_TOKEN`) in `.env.portal` → `9109 Invalid access token`; der
+   Portal-Worker scheitert in `syncOriginDns()` mit „Cloudflare-Zone nicht gefunden“.
+2. `origin.anunnakitools.de` zeigt auf Cloudflare-IPs (104.21.46.111/172.67.168.116)
+   statt auf die aktuelle app-1-IP → `resolveOverride` des Workers landet in der Zone
+   selbst (522), kein Cloudflare-Treffer in 2 Tagen Caddy-Access-Log.
+3. `/opt/samplemonk/certs` ist leer und deployt ist die ACME-Variante des Caddyfiles;
+   http-01/tls-alpn-01 laufen in die Cloudflare-Worker-Route → Endlos-Retry, kein Zert.
+   Die Origin-CA-Credentials in `.env.portal` sind dagegen gültig
+   (SAN `*.anunnakitools.de`, notAfter 2041, Paar-Prüfung ok).
+
+**Fix:**
+- Gültigen Cloudflare-Token mit `Zone:DNS:Edit` für `anunnakitools.de` in
+  `.env.portal` hinterlegen; `syncOriginDns()` muss den Fehler laut melden
+  (kein stiller `console.warn`) und `origin.<domain>` als DNS-only-A-Record auf die
+  app-1-IP patchen.
+- `scripts/hetzner/Caddyfile.origin` als Rollen-Caddyfile installieren, ORIGIN_CERT/KEY
+  nach `/opt/samplemonk/certs/{origin.crt,origin.key}` legen, Caddy neu erzeugen
+  (`up -d --force-recreate caddy`), ACME-Variante nicht mehr verwenden.
+- Portal-Status: „ready“ erst, wenn `https://<domain>/api/health` JSON 200 liefert
+  (nicht bei 522/HTML); Health-Fehler im Ladebildschirm sichtbar machen.
+
+**Verifikation:** `curl https://anunnakitools.de/api/health` → 200 JSON mit
+`{"status":"ok","version":...}`; Zertifikat von der Domain aus sichtbar; `openssl
+s_client -servername anunnakitools.de` ohne `internal error`; Caddy-Log zeigt
+Cloudflare-Treffer.
+
+**Abhängigkeit:** gültiger Cloudflare-Token (Betreiber). Alles außer dem Token ist
+implementierbar.
+
+---
+
+## F2 — R2-Signaturfehler (P1)
+
+**Symptom:** `/api/cloud/health` → `r2: error: The request signature we calculated does
+not match the signature you provided`; `/api/session/autosave` scheitert (20× im Log);
+`POST /api/upload/sample` → HTTP 500 exakt mit diesem Fehler. Supabase ist ok.
+
+**Ursache:** Die auf app-1 verwendeten `CFS3_ACCESS_KEY_ID`/`CFS3_SECRET_ACCESS_KEY`
+passen nicht zum R2-Endpoint/Bucket (`audiomonastrysamples`). Zusätzlich wird der
+Fehler nur als Log-Flut sichtbar, nicht als Betriebszustand.
+
+**Fix:**
+- R2-Paar korrigieren (Access Key ID + Secret des R2-API-Tokens für den Bucket) und
+  beide Rollen-Quellen (`/opt/samplemonk/.env` bzw. Portal-`envFile()`) konsistent
+  machen.
+- Start-Check: `/api/cloud/health` muss R2 mit einem echten HEAD/PUT-Probeobjekt
+  prüfen (nicht nur Credentials vorhanden), Ergebnis in `/api/metrics` als
+  `cloud.r2` sichtbar.
+- Autosave: begrenzte Retries mit Backoff + einmalige Warnung statt Log-Flut; bei
+  dauerhaftem Fehler Status `degraded` statt still.
+
+**Verifikation:** `/api/cloud/health` → `r2: ok`; Autosave 200; Upload eines 3-s-WAVs
+→ 200 mit Objekt-Key; Log enthält keine `SignatureDoesNotMatch`-Flut mehr.
+
+---
+
+## F3 — `/api/master/mix` ist auf 256 kB gedeckelt (P1)
+
+**Symptom:** Mischen über die App scheitert mit `Payload zu gross (max 256 kB)`;
+8 Spuren à 0,1 s gehen, 2 Spuren à 1 s nicht. Der Master-Dienst selbst erlaubt
+64 MB / 8 Spuren / 120 s (`services/master-player/server.py`), aber
+`JsonObjectBodySchema` (`src/types/zod/schemas.ts`) deckelt den App-Proxy auf 262.144 B.
+
+**Fix (nicht das globale Schema anheben):**
+- Eigene Schema-/Transfergrenze nur für die Master-Proxy-Routen (`/api/master/mix`,
+  `/api/master/master`, `/api/master/analyze`) mit serverseitiger Validierung
+  (≤ 64 MB, ≤ 8 Spuren, ≤ 120 s je Spur) und sauberer 413-Antwort mit Zahlen.
+- Idealfall: Spuren als Binär-/Chunk-Transfer statt Base64 im JSON (Base64 bläht um
+  ~33 % und passt nicht zu 64-MB-Grenzen im JSON-Parser); sonst Body-Limit für genau
+  diese Routen anheben und Größe im Handler prüfen.
+- Client (`src/components/MasterPlayerTerminal.tsx`) muss den neuen Fehlerpfad
+  verständlich anzeigen statt generisch zu scheitern.
+
+**Verifikation:** Test mit 4 Spuren à 30 s (realistische Größe) → 200 und hörbares
+Ergebnis; Überschreitung → 413 mit klarer Meldung; `npm run test` grün.
+
+---
+
+## F4 — Flotte läuft veralteten Stand (P1)
+
+**Symptom:** Deploytes Bundle 2026-09-18 17:09, Repo-HEAD 2026-09-20 14:54.
+Beleg: `clock-ping`/`buildClockPong` (Commit 8a38112, 19.09.) fehlen im deployten
+`/app/dist/server.cjs`; `AUDIOMONASTRY_VERSION` ist 1.210.001, aber ohne Commit-Bezug.
+
+**Fix:**
+- Deploy bäckt Commit-SHA + Build-Zeit ins Image (`BUILD_COMMIT`, `BUILD_TIME`) und
+  `/api/health` zeigt beide.
+- Portal-`startFleet`/`bring-up-fleet.sh` vergleicht Repo-Commit vs. Flotten-Commit
+  und meldet „Flotte veraltet“ laut (Statusfeld + Ladebildschirm), statt still einen
+  alten Snapshot hochzufahren.
+- Snapshots tragen Commit-Label (Portal kann das schon: `/api/refresh-snapshots
+  {commit,version}`) — Wake muss dieses Label prüfen, bevor es als „ready“ gilt.
+
+**Verifikation:** frischer Deploy → `/api/health` enthält `commit: <HEAD>`; Wake aus
+einem Snapshot mit altem Label meldet den Unterschied; `clock-ping` ist im Bundle
+nachweisbar (`grep -c` > 0).
+
+---
+
+## F5 — Rate-Limit 60/min pro Studio-Token (P2)
+
+**Symptom:** 30 parallele Requests → 300/300 `429`; 75 sequenzielle →
+exakt 60×200 + 15×429, `Retry-After: 56`. `keyGenerator` ist der Studio-Token, d. h.
+alle vier Nutzer und alle Flotten-Aufrufe teilen ein Budget — auch `/api/health`
+(Monitoring/Alarmierung).
+
+**Fix:**
+- Schlüssel pro Session-Identität statt pro Master-Token (Portal setzt
+  `STUDIO_SESSION_MODE=session` oder leitet ein Nutzerkennzeichen ab).
+- `/api/health` aus dem allgemeinen Limiter nehmen (eigener Limiter, z. B. 600/min IP).
+- Budget für Chunk-Upload/Agenten getrennt lassen (existiert schon), Master-Routen mit
+  eigenem Budget und Backoff-Hinweis.
+
+**Verifikation:** 4 parallele Clients mit eigenen Budgets; `/api/health` unter 1000
+Requests nicht 429; Lasttest `scripts/hetzner/stress-test.mjs` ohne Rate-Limit-Fehler
+auf `/api/health`.
+
+---
+
+## F6 — TURN/SFU fehlen im Standardpfad (P2)
+
+**Symptom:** `/api/webrtc-config` liefert nur STUN (Mozilla/Cloudflare), kein TURN.
+sfu-1 läuft, aber die Client-Transports verbinden `/sfu-signaling` **same-origin**
+(app-1), wo `ENABLE_SFU` leer ist → SPA-HTML statt SFU; `SFU_ANNOUNCED_IP` auf sfu-1
+leer. Für 2–8 Spieler über NAT ist Full-Mesh ohne TURN nicht tragfähig.
+
+**Fix:**
+- SFU-Rolle vollständig verdrahten: `ENABLE_SFU=1`, `SFU_ANNOUNCED_IP=<public-ip>` auf
+  dem SFU-Knoten, Client-Verbindung konfigurierbar (`VITE_SFU_URL`) oder SFU auf dem
+  App-Knoten betreiben; Firewall/RTP-Bereich mitprüfen.
+- TURN (coturn) bereitstellen und `buildWebRtcConfigResponse` um TURN-Server +
+  kurzlebige Credentials erweitern; `/api/webrtc-config` muss das ausliefern.
+
+**Verifikation:** `/api/webrtc-config` enthält `turn:`; `node
+scripts/hetzner/sfu-rtp-run.mjs` meldet `ok:true` mit `bytes>0`; zwei Browser außerhalb
+des LANs verbinden sich ohne Relay-Ausfall.
+
+---
+
+## F7 — CORS/CSP nachschärfen (P2)
+
+**Symptom:** `/webrtc-signaling` antwortet `Access-Control-Allow-Origin: *` auch für
+`Origin: https://evil.example`; `SIGNALING_ALLOWED_ORIGINS` ist nicht auf die eigenen
+Origins gesetzt (Schutz nur über das Handshake-Token). CSP ist nur Report-Only.
+
+**Fix:** erlaubte Origins explizit setzen (Domain + lokale Test-Origins), `*` nur in
+Test-Setups; CSP nach Report-Auswertung auf Enforce umstellen, `connect-src` auf die
+tatsächlich genutzten Hosts begrenzen.
+
+**Verifikation:** fremder Origin → `origin-not-allowed`; eigener Origin verbindet;
+CSP-Report ohne Violations über einen Testlauf, danach Enforce.
+
+---
+
+## F8 — Session-Reset/Ghost-Sockets (P3)
+
+**Symptom:** `/api/session/reset` ist in Produktion 404 → E2E-Läufe können den
+serverautoritativen Zustand nicht isolieren (Fehlschläge nur aus Restzustand). Danach
+meldete `/api/online` 3 Clients bei 1 echten → Ghost-Sockets nach abgebrochenen
+Verbindungen.
+
+**Fix:** token-geschützter, dev-only Reset (z. B. `x-studio-token` + `NODE_ENV!=production`
+oder separater Admin-Port) für Testläufe; Socket-Sweep für tote Verbindungen
+(idle/timeout-basiert) und Messwert `online` aus `activeSocketConnections`.
+
+**Verifikation:** Reset setzt Revision/Modulstates/Locks sauber zurück; nach Abbruch
+eines Clients fällt `/api/online` innerhalb eines Sweep-Intervalls auf den echten Wert.
+
+---
+
+## F9 — Idle-Shutdown-Signal (P3)
+
+**Beobachtung:** `samplemonk-idle-shutdown.timer` feuert gegen ein Primärsignal, das
+strukturell immer 0 ist (Caddy-308 + 401 zählen als „offline“); Idle-Log zeigt
+ausnahmslos `ONLINE=0`. (Nicht selbst nachgemessen — beim Fix zuerst reproduzieren.)
+
+**Fix:** Signal auf echte App-Nutzung stützen (`/api/online` = 0 UND keine offenen
+Sockets UND kein Request in X Minuten), Log-Ausgabe mit echten Zahlen.
+
+---
+
+## F10 — Namespace-/Versionsparität (P3)
+
+**Beobachtung:** Container/Projekt auf sfu-1 und master-1 heißen noch
+`samplemonk-*`; Repo- und Flottennamen (`audiomonastry-*`) laufen auseinander.
+
+**Fix:** Rollen-Deploy/Docker-Projekt auf `audiomonastry-*` ziehen (idempotent,
+Rollback-fähig), Health-/Snapshot-Skripte auf beide Schreibweisen tolerant halten
+(ist teilweise schon implementiert, `fleet-names.sh`).
+
+---
+
+## Reihenfolge
+
+1. **Welle 1 (parallel, jetzt):** F1 Code-Anteil, F2, F3, F4.
+2. **Welle 2 (nach Merge/Prüfung):** F5, F6, F7.
+3. **Welle 3 (Aufräumen, jederzeit):** F8, F9, F10.
+
+Alle Fixes müssen ohne AI/RunPod lauffähig bleiben; die AI-Rollen bleiben in diesem
+Plan ausdrücklich außen vor.
