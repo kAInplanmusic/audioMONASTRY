@@ -1,0 +1,29 @@
+# ============================================================================
+# docker-compose.media.yml – Medieninhalte als READ-ONLY-Mounts (Overlay)
+# ----------------------------------------------------------------------------
+# Die schweren Inhalte liegen bewusst nicht im Image (.dockerignore):
+#   public/data/orchestral  ~3 GB  CC0-Library (VSCO 2 CE) - Orchester/Instrumente
+#   public/models           ~291 MB htdemucs.onnx - lokaler Stem-Pfad
+#   public/music            ~382 MB Demo-Tracks (nur mit Betreiberentscheidung)
+# Ohne sie laeuft die App, aber die Library-/Instrumenten-Plugins sind leer und
+# der lokale Demucs-Pfad findet kein Modell (das faellt ohne Mount erst im
+# Betrieb auf, nicht im Test).
+#
+# Auf dem Knoten liegen die Inhalte unter <deploy-dir>/media/ und werden hier
+# NUR LESEND in die Pfade gemountet, unter denen der Server sie ausliefert
+# (Express static auf /app/dist; das Muster ist /models/htdemucs.onnx im Client,
+# siehe src/ai/localDemucs.ts).
+#
+# Liefern:  bash scripts/hetzner/deliver-media.sh <ip>   (rsync + Neustart)
+# Start:    docker compose -f docker-compose.hetzner.yml -f docker-compose.media.yml up -d
+# ============================================================================
+name: audiomonastry
+
+services:
+  audiomonastry:
+    volumes:
+      - ./media/orchestral:/app/dist/data/orchestral:ro
+      - ./media/models:/app/dist/models:ro
+      # Demo-Tracks: Verzeichnis nur vorhanden, wenn bewusst geliefert wurde
+      # (deliver-media.sh --with-music). Ohne Inhalt ist der Eintrag wirkungslos.
+      - ./media/music:/app/dist/music:ro

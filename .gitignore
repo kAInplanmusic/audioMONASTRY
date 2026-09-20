@@ -53,3 +53,7 @@ logs/
 # NUR auf den Knoten - niemals ins Repo (dieselbe Regel wie fuer .env).
 runtime/
 .worktrees/
+
+# Demo-Tracks (kommerzielle Fremdaufnahmen, keine dokumentierte Freigabe):
+# NICHT im Repo/Image ausliefern - nur mit Betreiberentscheidung und Lizenzbeleg.
+public/music/

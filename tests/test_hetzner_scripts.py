@@ -312,6 +312,67 @@ def monitoring_service_list() -> list[str]:
     return match.group(1).split()
 
 
+class MedienAuslieferungTest(unittest.TestCase):
+    """Medien/Codecs produktionsreif: Inhalte ausserhalb des Images, aber im
+    Container gemountet - und EINE Quelle fuer Modellpfad + Download."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.overlay = ROOT / "docker-compose.media.yml"
+        self.deliver = HETZNER / "deliver-media.sh"
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    def test_overlay_mountet_die_inhalte_readonly_an_den_auslieferpfaden(self) -> None:
+        self.assertTrue(self.overlay.exists(), "docker-compose.media.yml fehlt")
+        text = self.overlay.read_text(encoding="utf-8")
+        for mount in (
+            "./media/orchestral:/app/dist/data/orchestral:ro",
+            "./media/models:/app/dist/models:ro",
+            "./media/music:/app/dist/music:ro",
+        ):
+            with self.subTest(mount=mount):
+                self.assertIn(mount, text)
+        # Kein Schreibzugriff auf Inhalte, keine Aenderung am Image selbst.
+        for line in text.splitlines():
+            if line.strip().startswith("- ./media/"):
+                self.assertTrue(line.rstrip().endswith(":ro"), line)
+
+    def test_auslieferSkript_ist_trockenlaufbar_und_meldet_fehlende_quellen(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(self.deliver), "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(),
+        )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Ziel-Verzeichnis: /opt/audiomonastry/media", combined)
+        self.assertIn("Demo-Tracks", combined)
+        # Der Lizenzhinweis muss im Trockenlauf stehen (sonst wandern fremde
+        # Aufnahmen unbemerkt in die Produktion).
+        self.assertIn("NICHT Teil der Lieferung", combined)
+        # Fehlende Quellen sind ein Fehler, kein stiller No-Op.
+        text = self.deliver.read_text(encoding="utf-8")
+        self.assertIn("Quelle(n) fehlen lokal", text)
+        self.assertIn("exit 2", text)
+
+    def test_modellpfad_ist_eine_wahrheit(self) -> None:
+        """Der Client laedt /models/htdemucs.onnx; das Downloader-Skript muss
+        GENAU dorthin schreiben, und der Alias darf keine zweite Quelle haben."""
+        client = (ROOT / "src" / "ai" / "localDemucs.ts").read_text(encoding="utf-8")
+        self.assertIn("/models/htdemucs.onnx", client)
+
+        models_script = (ROOT / "scripts" / "download-models.sh").read_text(encoding="utf-8")
+        self.assertIn("public/models/htdemucs.onnx", models_script)
+        self.assertIn("huggingface.co/smank/htdemucs-onnx", models_script)
+
+        alias = (ROOT / "scripts" / "download-htdemucs.sh").read_text(encoding="utf-8")
+        self.assertIn("download-models.sh", alias)
+        # Die alte, tote Quelle darf nicht zurueckkommen.
+        self.assertNotIn("facebookresearch/htdemucs/raw/main/htdemucs.onnx", alias)
+
+
 class WatchdogInstallationTest(unittest.TestCase):
     """INFRA-HETZNER-005: der Watchdog wird installiert und diagnostiziert getrennt."""
 

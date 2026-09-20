@@ -8,15 +8,21 @@
 
 - **Quelle:** Meta Research (htdemucs)
 - **Funktion:** Split eines Audio-Tracks in 4 Stems: Vocals, Bass, Drums, Guitar
-- **Größe:** ~824 MB
-- **Pfad:** `public/models/htdemucs/htdemucs.onnx`
+- **Größe:** ~291 MB (ONNX-Export `smank/htdemucs-onnx`)
+- **Pfad:** `public/models/htdemucs.onnx` — GENAU dieser Pfad, weil der Client
+  ihn unter `/models/htdemucs.onnx` lädt (`src/ai/localDemucs.ts`)
 - **Benötigt:** WebGPU oder CPU (CPU fallback über `getGPUKernel()` → `null`)
 
 ## Download
 
 ```bash
-# Modell herunterladen (einmalig, nach CI-Deployment)
-bash scripts/download-htdemucs.sh
+# Modell herunterladen (einmalig, nach CI-Deployment) - EINE Quelle:
+bash scripts/download-models.sh
+# `download-htdemucs.sh` ist nur noch ein Alias darauf (vorher: toter
+# GitHub-Pfad + falsches Zielverzeichnis, siehe Kopf des Skripts).
+
+# Auf einen Flotten-Knoten bringen (read-only gemountet, ohne Image-Ballast):
+bash scripts/hetzner/deliver-media.sh <knoten-ip>
 ```
 
 ## CI/CD

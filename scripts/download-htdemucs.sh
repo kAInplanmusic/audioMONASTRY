@@ -1,36 +1,24 @@
-#!/bin/bash
-# audioMONASTRY · htdemucs.onnx Download
-# ======================================
-# Stand: 2026-09-07
-# HtmDemucs ist ein ONNX-Export von Meta's htdemucs (split vocals/bass/drums/guitar)
-# Quelle: https://github.com/facebookresearch/htdemucs
-# Modell-Größe: ~824 MB (htdemucs.onnx)
-# Ziel: public/models/htdemucs/
-
+#!/usr/bin/env bash
+# ============================================================================
+# download-htdemucs.sh – Kompatibilitaets-Alias auf die EINE Modellquelle
+# ----------------------------------------------------------------------------
+# Vorher stand hier ein eigener Download mit
+#   * falscher Quelle (ein GitHub-Raw-Pfad im Repository facebookresearch/htdemucs -
+#     dort liegt kein ONNX-Modell) und
+#   * falschem Ziel (public/models/htdemucs/htdemucs.onnx),
+# waehrend der Client `/models/htdemucs.onnx` laedt (src/ai/localDemucs.ts) und
+# `scripts/download-models.sh` genau dorthin schreibt. Zwei Skripte, zwei
+# Wahrheiten: das Modell landete entweder gar nicht oder an einem Pfad, den
+# niemand liest.
+#
+# Deshalb gibt es nur noch EINE Umsetzung: scripts/download-models.sh
+# (Quelle: https://huggingface.co/smank/htdemucs-onnx, ~291 MB, HTTP 200 geprueft).
+# ============================================================================
 set -euo pipefail
 
-MODEL_URL="https://github.com/facebookresearch/htdemucs/raw/main/htdemucs.onnx"
-OUTPUT_DIR="public/models/htdemucs"
-MODEL_FILE="$OUTPUT_DIR/htdemucs.onnx"
+HERE_SRC="$(cd "$(dirname "$0")" && pwd)"
+CANONICAL="$HERE_SRC/download-models.sh"
 
-echo "Downloading htdemucs.onnx ($MODEL_URL)..."
-mkdir -p "$OUTPUT_DIR"
-
-if command -v curl &> /dev/null; then
-    curl -L -o "$MODEL_FILE" "$MODEL_URL"
-elif command -v wget &> /dev/null; then
-    wget -O "$MODEL_FILE" "$MODEL_URL"
-else
-    echo "ERROR: curl or wget required" >&2
-    exit 1
-fi
-
-if [ ! -f "$MODEL_FILE" ]; then
-    echo "ERROR: Download failed, $MODEL_FILE not found" >&2
-    exit 1
-fi
-
-MODEL_SIZE=$(du -h "$MODEL_FILE" | cut -f1)
-echo "✅ Download complete: $MODEL_FILE ($MODEL_SIZE)"
-
-# Hinweis: ONNX-Modell kann 5–10 Minuten laden (erstes Mal: Kompilierung)
+[[ -f "$CANONICAL" ]] || { echo "❌ fehlt: $CANONICAL" >&2; exit 1; }
+echo "Hinweis: download-htdemucs.sh ist ein Alias auf scripts/download-models.sh (EINE Quelle, Ziel public/models/htdemucs.onnx)."
+exec bash "$CANONICAL" "$@"

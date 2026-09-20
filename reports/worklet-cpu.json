@@ -1,9 +1,6 @@
 {
-  "messageTypes": {
-    "cpu-stats": 11,
-    "step": 56
-  },
-  "generatedAt": "2026-09-13T21:16:50.442Z",
+  "messageTypes": {},
+  "generatedAt": "2026-09-20T21:19:32.980Z",
   "browser": "151.0.7922.34",
   "budgets": {
     "warnLoadPct": 25,
@@ -14,27 +11,14 @@
     "failContextLoad": 0.5,
     "measureMs": 6000
   },
-  "cpu": {
-    "type": "cpu-stats",
-    "blocks": 2500,
-    "avgMs": 0.4496,
-    "maxMs": 9,
-    "budgetMs": 2.6667,
-    "loadPct": 16.86,
-    "sampleRate": 48000,
-    "timer": "date",
-    "missedQuanta": 0,
-    "maxGapQuanta": 1,
-    "stallEvents": 0,
-    "quantumFrames": 128
-  },
-  "cpuReportCount": 11,
-  "maxLoadPctReported": 337.5,
-  "maxBlockMsReported": 9,
+  "cpu": null,
+  "cpuReportCount": 0,
+  "maxLoadPctReported": 0,
+  "maxBlockMsReported": 0,
   "missedQuanta": 0,
   "maxGapQuanta": 1,
   "stallEvents": 0,
-  "deadlineTracking": true,
+  "deadlineTracking": false,
   "busyLoopMs": 6000,
   "renderCapacityAvailable": false,
   "contextLoads": [],
@@ -42,15 +26,15 @@
   "fineGrainedTimer": false,
   "workletClock": {
     "performance": false,
-    "date": true,
-    "audioFrames": true
+    "date": false,
+    "audioFrames": false
   },
   "outputTimestampAvailable": true,
   "outputTimestamp": {
-    "audioElapsedMs": 5990.89,
-    "wallElapsedMs": 5988,
-    "driftMs": -2.89,
-    "driftPct": -0.05
+    "audioElapsedMs": 0,
+    "wallElapsedMs": 0,
+    "driftMs": 0,
+    "driftPct": 0
   },
   "perfOpenPoints": [
     "AudioContext.renderCapacity fehlt in diesem Browser (keine Context-Last/Underrun-Messung)"
@@ -63,19 +47,19 @@
   "checks": [
     {
       "check": "Messmodus aktiv (erster Bericht)",
-      "ok": true
+      "ok": false
     },
     {
       "check": "Messwerte vorhanden",
-      "ok": true
+      "ok": false
     },
     {
       "check": "Ø-Last im Budget",
-      "ok": true
+      "ok": false
     },
     {
       "check": "keine verpassten Render-Quanten (currentFrame, PERF-P3-002)",
-      "ok": true
+      "ok": false
     },
     {
       "check": "Audio-Uhr im Takt (getOutputTimestamp, PERF-P3-002)",
@@ -87,7 +71,7 @@
     },
     {
       "check": "Ausgang hat Signal (Graph rendert wirklich)",
-      "ok": true
+      "ok": false
     },
     {
       "check": "keine pageErrors",
