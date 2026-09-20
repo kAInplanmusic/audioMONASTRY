@@ -1679,18 +1679,17 @@
         "scripts/voice-coldstart-probe.py"
       ],
       "evidence": [
-        "Endpoint-Konfiguration (GraphQL, read-only): gajmangfldpzrk -> workersMin=0, workersMax=1, idleTimeout=120, scalerType=QUEUE_DELAY/4, networkVolumeId=null, gpuIds=AMPERE_48,ADA_48_PRO.",
-        "Image-Env (Manifest-Blob aus GHCR gelesen): HF_HOME=/data/hf-cache, NUMBA_CACHE_DIR=/data/numba-cache, AI_ROLE= (leer). Dockerfile.runpod:119 belegt: Gewichte werden nur mit nicht-leerem AI_BAKE_ROLE eingebacken; der CI-Build setzt AI_BAKE_ROLE= (leer).",
-        "Decoder fehlt Persistenz: networkVolumeId=null heisst, /data/hf-cache ist bei jedem Kaltstart leer.",
-        "Stoerung live beobachtet (2026-09-20, /health): jobs {inQueue:4}, workers {idle:0, ready:0, running:0, unhealthy:1} - kein Worker nimmt Arbeit an, obwohl Jobs warten.",
-        "Teilbeweis der Funktion: der erste Live-Lauf (VOICE-P1-001) lieferte nach demselben Kaltstart 2 von 3 WAVs (345658 B, 637498 B, 24 kHz); der dritte Text blieb liegen - konsistent mit \"Kaltstart zu lang, Health-Fenster reisst\".",
-        "Kein Repo-Zusammenhang: der Startpfad liest die in INFRA-RUNPOD-006 entfernte runtime_config.yaml nicht (grep: kein Leser, nur Kommentare)."
+        "Messjob (scripts/voice-coldstart-probe.py, ein Text, async /run): t=0s angelegt, ab t=0 bis t~1144s health {running:0, unhealthy:1} ohne jeden Fortschritt, t=1144s frischer Worker (ready:1, unhealthy:0), t=1175s IN_PROGRESS, t=1186s COMPLETED -> delayTime=1175156 ms (19,6 min Wartezeit) bei executionTime=7640 ms (7,6 s Synthese).",
+        "Akute Reparatur (Betreiber-Freigabe): PATCH rest.runpod.io/v1/endpoints/gajmangfldpzrk {\"workersMax\":2} -> 200, Ruecklesung workersMin/Max 0/2; danach health {idle:0, ready:0, running:2, unhealthy:0} und jobs {completed:44 -> 48, inQueue:0, failed:0}. Anschliessend wieder auf workersMax=1 zurueckgestellt (Ruecklesung: 1).",
+        "Kaltstart-Kette: HF_HOME=/data/hf-cache liegt IM Container, networkVolumeId=null, AI_BAKE_ROLE= leer -> bei jedem Kaltstart 11,8 GB Image-Pull plus Modell-Download, ohne Persistenz ueber den Kaltstart hinweg.",
+        "Endpoint-Konfiguration: workersMin=0, workersMax=1, idleTimeout=120, scalerType=QUEUE_DELAY/4, gpuIds=AMPERE_48,ADA_48_PRO.",
+        "Kein Repo-Zusammenhang (kein Codefehler): der Startpfad liest die in INFRA-RUNPOD-006 entfernte runtime_config.yaml nicht; der Build des ausgerollten Images lief durch beide Gates."
       ],
       "verification": [],
       "updatedAt": "2026-09-20",
       "status": "PARTIAL",
-      "summary": "Ursache eingegrenzt und belegt: die Kaltstart-Kette der Stimmen-Rolle ist zu lang fuer das Health-Fenster. Das Image backt KEINE Gewichte ein (AI_BAKE_ROLE= leer) und der HF-Cache liegt im Container (HF_HOME=/data/hf-cache) ohne Network Volume (networkVolumeId=null) - also laden Image-Pull und Modelle bei JEDEM Kaltstart neu. Am 2026-09-20 wurde der Endpoint dadurch handlungsunfaehig: 4 Jobs in der Queue, 1 Worker unhealthy, 0 laufend. Es ist KEIN Codefehler des Repos; die Entscheidung (Gewichte einbacken vs. Volume vs. Warmhalter) ist eine Betreiber-/Kostenfrage.",
-      "remaining": "Betreiber-Entscheidung (Kosten/Architektur), drei belegte Wege: (1) Gewichte einbacken - AI_BAKE_ROLE=voice fuer ein Rollen-Image (groesseres Image, laengerer Pull, aber kein Modell-Download je Kaltstart); (2) Network Volume fuer /data/hf-cache (Dockerfile-Kommentar: nicht in allen 18 Regionen verfuegbar); (3) Warmhalter workersMin=1 waehrend Sessions (~0,4-0,75 EUR/h). Zusaetzlich offen: Worker-Abbruchprotokoll aus der RunPod-Konsole (Betreiber-Zugang), um Startfehler von Zeitueberschreitung zu trennen."
+      "summary": "Ursache gemessen und akute Reparatur belegt. Der Ausfall war ein Slot-Deadlock: ein unhealthy Worker hielt den einzigen erlaubten Platz (workersMax=1), also startete RunPod keinen frischen Worker und die Jobs lagen in der Queue. Ein einzelner Messjob zeigte 19,6 min Wartezeit gegen 7,6 s echter Arbeit. Mit workersMax=2 startete ein frischer Worker und alle 4 wartenden Jobs liefen durch (completed 44 -> 48, Queue leer); danach wieder auf 1 zurueckgestellt. Die strukturelle Ursache der langen Kaltstarts bleibt offen und ist eine Betreiber-/Kostenfrage.",
+      "remaining": "Offen und vom Betreiber zu entscheiden (Kosten/Architektur): (1) Gewichte einbacken (AI_BAKE_ROLE=voice, groesseres Image, kein Download je Kaltstart), (2) Network Volume fuer /data/hf-cache (laut Dockerfile-Kommentar nicht in allen Regionen verfuegbar), (3) workersMin=1 als Warmhalter waehrend Sessions (~0,4-0,75 EUR/h, in der Konstitution bis 10 EUR/h gedeckt), (4) dauerhaft workersMax=2 als Selbstheilung gegen den Slot-Deadlock (halbiert das Risiko, verdoppelt aber den moeglichen Parallel-Worker). Zusaetzlich offen: Worker-Logs aus der Konsole, um Startfehler von Zeitueberschreitung zu trennen."
     },
     {
       "id": "LIVE-P1-003",
