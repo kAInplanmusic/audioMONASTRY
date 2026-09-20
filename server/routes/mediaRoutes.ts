@@ -43,9 +43,13 @@ import {
 
 
 export function registerMediaRoutes(app: Express): void {
-  // COLLAB-P0-003: autoritative ICE/TURN-Konfiguration. Token-frei wie /api/health
-  // (nur ICE-Server, keine App-Daten); das TURN-Secret bleibt serverseitig, der
-  // Client bekommt pro Anfrage kurzlebige coturn-REST-Credentials.
+  // COLLAB-P0-003: autoritative ICE/TURN-Konfiguration. Liegt wie die uebrigen
+  // /api-Routen hinter der Studio-Auth (Cookie oder `x-studio-token`) - der
+  // Browser schickt das Portal-Cookie same-origin mit, der Token bleibt also
+  // serverseitig, und der Client bekommt pro Anfrage nur kurzlebige
+  // coturn-REST-Credentials. F6: die Antwort enthaelt zusaetzlich `turn`
+  // (ist ein Relay konfiguriert?) und `sfu` (absolute Adresse der
+  // SFU-Signalisierung) - siehe server/webrtcConfig.ts.
   app.get('/api/webrtc-config', (req, res) => {
     try {
       const userId = String((req.query as { userId?: string }).userId ?? '').slice(0, 64);

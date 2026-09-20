@@ -303,12 +303,130 @@ Nach dem Wake: `curl https://anunnakitools.de/api/health` → `{"status":"ok"}`
 Cloudflare/NAT funktioniert, stehen in der Remote-`.env` auf sfu-1:
 
 ```text
-SIGNALING_ALLOWED_ORIGINS=*     # Browser-Test-Clients aus beliebigen Kontexten
+SIGNALING_ALLOWED_ORIGINS=*     # nur für Test-Clients aus beliebigen Kontexten
+ENABLE_SFU=1
 SFU_ANNOUNCED_IP=<öffentliche-IP-von-sfu-1>   # Mediasoup ICE-Kandidaten
+SFU_SIGNALING_PATH=/sfu-signaling
+SFU_SIGNALING_URL=http://<öffentliche-IP-von-sfu-1>
+TURN_REALM=anunnakitools.de
+TURN_URLS=turn:<ip>:3478?transport=udp,turn:<ip>:3478?transport=tcp
+TURN_TTL_SECONDS=3600
 ```
 
-Verifikation des RTP-Pfads: `BASE_URL=http://<sfu-1-ip> node scripts/hetzner/sfu-rtp-run.mjs`
-→ erwartet `"ok": true` mit `packetsReceived > 0`.
+Diese Werte werden **nicht mehr von Hand** gesetzt: `wire-rtc.sh` ermittelt die
+öffentliche IP zur Laufzeit und schreibt sie idempotent (Details im nächsten
+Abschnitt).
+
+---
+
+## 4b. SFU + TURN im Standardpfad (F6, 2026-09-20)
+
+Vorher war die RTC-Strecke nur „vorbereitet" (Befund F6 aus
+`docs/FIXPLAN_2026-09-20_externer_apptest.md`):
+
+* `/api/webrtc-config` lieferte **nur STUN** (Mozilla/Cloudflare), keinen
+  `turn:`-Eintrag → Full-Mesh über NAT war für 2–8 Spieler nicht tragfähig.
+* Der Client verband die SFU-Signalisierung **same-origin** gegen den
+  App-Knoten (`ENABLE_SFU` dort leer) → die socket.io-Anfrage landete in der
+  SPA-Auslieferung und der Fehler war nur ein generisches `xhr poll error`.
+* `SFU_ANNOUNCED_IP` war auf sfu-1 leer; der Portal-Pfad schrieb dort die
+  **private** 10.x-Adresse aus `hostname -I` → von aussen unerreichbare
+  ICE-Kandidaten.
+* coturn war im Repo vorhanden, wurde aber von **keinem** Flottenskript
+  installiert.
+
+### Verdrahtung (ein Befehl je Rolle)
+
+```bash
+# auf sfu-1 (Repo unter /opt/audiomonastry)
+TURN_STATIC_AUTH_SECRET=<secret> bash scripts/hetzner/wire-rtc.sh sfu
+docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml \
+               -f docker-compose.turn.yml up -d caddy audiomonastry coturn
+
+# auf app-1 (dieselbe Secret-Quelle; SFU_PUBLIC_IP = öffentliche IP von sfu-1)
+SFU_PUBLIC_IP=<sfu-1-ip> TURN_STATIC_AUTH_SECRET=<secret> \
+  bash scripts/hetzner/wire-rtc.sh app
+docker compose -f docker-compose.hetzner.yml up -d audiomonastry
+```
+
+`bash scripts/hetzner/bring-up-fleet.sh` macht genau das automatisch (Schritt
+6/8, inkl. Kontrolle von `/api/webrtc-config`). Fehlt
+`TURN_STATIC_AUTH_SECRET` in `.env.deploy`, erzeugt der Flottenstart EINES und
+sagt laut, dass es beim nächsten Start rotiert (dauerhaft in `.env.deploy`
+ablegen).
+
+### Trockenläufe (ohne Netz, ohne Secret — so ist es hier belegt)
+
+```bash
+bash scripts/hetzner/wire-rtc.sh sfu --print-config        # ENABLE_SFU/SFU_ANNOUNCED_IP/TURN_*
+bash scripts/hetzner/wire-rtc.sh app --print-config        # ENABLE_SFU=0 + SFU-Adresse + TURN
+bash scripts/hetzner/bring-up-fleet.sh --print-config      # Rolle + Ports + Schritte
+bash -n scripts/hetzner/lib/rtc-fleet.sh scripts/hetzner/wire-rtc.sh
+docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml config --quiet
+```
+
+### Ports (eine Quelle: `services/turn/turnserver.conf`)
+
+| Port | Protokoll | Wofür | Firewall der Rolle `sfu` |
+|---|---|---|---|
+| 3478 | udp + tcp | TURN/STUN (coturn) | ja |
+| 49152-49201 | udp + tcp | TURN-Relay-Ports (50 Allokationen) | ja |
+| 40000-40099 | udp + tcp | Mediasoup-RTP (SFU) | ja |
+| 22, 80, 443 | tcp | SSH/HTTP/HTTPS | ja |
+
+Die Zahlen stehen identisch in `scripts/hetzner/lib/rtc-fleet.sh`,
+`scripts/hetzner/provision.py`, `services/portal-worker/src/index.js` und hier;
+`tests/test_hetzner_scripts.py` hält sie gegeneinander.
+
+### Umgebungsvariablen
+
+| Variable | Rolle | Bedeutung |
+|---|---|---|
+| `ENABLE_SFU` | sfu | `1` startet Mediasoup + `/sfu-signaling` in der App |
+| `SFU_ANNOUNCED_IP` | sfu | öffentliche IP für ICE-Kandidaten. Leer = der Server ermittelt sie beim Start selbst (Metadata → Cloud-Init-Datei → `api.ipify.org`); eine private Adresse wird nie akzeptiert |
+| `SFU_SIGNALING_URL` | app + sfu | absolute Basis-URL der Signalisierung. **Ohne sie verbindet der Client nicht mehr same-origin**, sondern meldet die Ursache |
+| `SFU_PUBLIC_URL` | Aufrufer von `wire-rtc.sh` | setzt `SFU_SIGNALING_URL` explizit, z. B. `https://sfu.anunnakitools.de` |
+| `TURN_URLS` | app + sfu | CSV mit `turn:`-URLs (UDP **und** TCP) |
+| `TURN_STATIC_AUTH_SECRET` | app + sfu | Secret des coturn-REST-Verfahrens; bleibt serverseitig, der Client bekommt nur kurzlebige Credentials |
+| `TURN_TTL_SECONDS` | app + sfu | Gültigkeit der Credentials (Default 3600) |
+| `TURN_REALM` | sfu | coturn-Realm (Default `anunnakitools.de`) |
+
+### Produktion: SFU über HTTPS (Mixed Content)
+
+`http://<sfu-ip>` funktioniert nur in lokalen/HTTP-Testaufbauten. Die
+Produktions-App läuft über HTTPS (Cloudflare) — der Browser blockiert ein
+`http://`-Ziel dann als Mixed Content. Für den Produktivbetrieb deshalb:
+
+```bash
+# auf sfu-1: DNS-Record (A, DNS-only) sfu.anunnakitools.de -> <sfu-1-ip> anlegen
+TURN_STATIC_AUTH_SECRET=<secret> SFU_PUBLIC_URL=https://sfu.anunnakitools.de \
+  bash scripts/hetzner/wire-rtc.sh sfu     # setzt auch DOMAIN=<sfu-host> für Caddy/ACME
+```
+
+`wire-rtc.sh` warnt laut, wenn nur `http://` gesetzt ist; der Client meldet den
+Mixed-Content-Fall in Klartext (`SettingsDialog` → „SFU nicht erreichbar" +
+Grund). Der DNS-Eintrag muss **DNS-only** (kein Cloudflare-Proxy) sein, sonst
+landet WebRTC-UDP am Edge.
+
+### Verifikation
+
+```bash
+# 1) Vertrag: /api/webrtc-config enthält turn: + die SFU-Adresse
+curl -s https://<domain>/api/webrtc-config -H "x-studio-token: <token>" | python3 -m json.tool
+#    erwartet: iceServers mit turn:... (+ username/credential), turn.available=true, sfu.ready=true
+
+# 2) Relay läuft und antwortet (auf sfu-1)
+docker logs audiomonastry-coturn | tail -20          # "Relay ports initialization done"
+docker exec audiomonastry-coturn turnutils_stunclient 127.0.0.1
+ss -lun | grep :3478 ; ss -ltn | grep :3478
+
+# 3) SFU-Medienpfad
+BASE_URL=http://<sfu-1-ip> node scripts/hetzner/sfu-rtp-run.mjs   # erwartet ok:true, bytes>0
+```
+
+Nicht offline belegbar und deshalb als Restnachweis offen: **zwei Browser
+außerhalb des LANs** (echter TURN-Relay-Pfad) sowie die ACME-Zertifikatskette
+für `sfu.<domain>`.
 
 ---
 

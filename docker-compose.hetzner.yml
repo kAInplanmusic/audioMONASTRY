@@ -47,6 +47,10 @@ services:
       # WICHTIG: Default ":80" = reiner HTTP-Test ohne Domain.
       # Mit DOMAIN=deine-domain.example wird automatisch HTTPS aktiviert.
       DOMAIN: ${DOMAIN:-:80}
+      # F6: Adresse der SFU fuer die Fehlerantwort auf /sfu-signaling/*
+      # (Caddyfile.origin). Auf dem App-Knoten laeuft keine SFU - der 404-Body
+      # nennt so die Adresse, an die der Client gehoert.
+      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs:/etc/caddy/certs:ro

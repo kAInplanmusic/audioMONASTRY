@@ -9,6 +9,7 @@
 // ============================================================================
 
 import { parseIceConfigResponse } from '../core/transport/iceConfig';
+import { cacheServerSfuSignaling } from '../core/transport/sfuEndpoint';
 
 interface IceServer {
   urls: string | string[];
@@ -91,6 +92,11 @@ export function addTurnServer(turn: IceServer): void {
  * (`GET /api/webrtc-config`, inkl. kurzlebiger TURN-Credentials) und übernimmt
  * sie. Schlägt der Abruf fehl, bleibt die statische STUN-Konfiguration aktiv
  * (ehrlich: ohne Relay), der Aufrufer bekommt `false` zurück.
+ *
+ * F6: Zusätzlich wird der `sfu`-Block übernommen (Adresse der SFU-Signalisierung)
+ * und der Relay-Zustand gemeldet. Ohne TURN-Relay ist der Ton über strikte
+ * Firewalls/NAT nicht tragfähig – das wird EINMAL laut gesagt, statt still zu
+ * scheitern.
  */
 export async function refreshIceConfig(
   userId?: string,
@@ -104,11 +110,38 @@ export async function refreshIceConfig(
     const parsed = parseIceConfigResponse(await resp.json());
     const cfg = rtcConfig as { iceServers?: IceServer[] };
     cfg.iceServers = parsed.iceServers as IceServer[];
+    // F6: SFU-Adresse für den Transport zwischenspeichern (kein zweiter Abruf).
+    cacheServerSfuSignaling(parsed.sfu ? { url: parsed.sfu.url, path: parsed.sfu.path, ready: parsed.sfu.ready, reason: parsed.sfu.reason } : null);
+    reportRelayAndSfuState(parsed);
     return true;
   } catch (e) {
     // Erwarteter Fallback (kein Token/kein TURN konfiguriert) – daher debug und
     // nicht warn: die statische STUN-Konfiguration bleibt aktiv.
     console.debug('[webrtc] ICE-Konfiguration nicht vom Server geladen – statisches STUN aktiv:', (e as Error).message);
     return false;
+  }
+}
+
+let relayStateReported = false;
+
+/**
+ * Meldet den Relay-/SFU-Zustand aus der Serverantwort einmalig laut. Der Client
+ * erfährt hier, ob überhaupt ein `turn:`-Relay existiert und ob eine
+ * SFU-Signalisierungsadresse konfiguriert ist – beides war in F6 der blinde
+ * Fleck (nur STUN, SFU same-origin).
+ */
+function reportRelayAndSfuState(parsed: ReturnType<typeof parseIceConfigResponse>): void {
+  if (relayStateReported) return;
+  relayStateReported = true;
+  if (parsed.turn && !parsed.turn.available) {
+    console.warn(
+      '[webrtc] kein TURN-Relay konfiguriert – nur STUN aktiv '
+      + `(${parsed.turn.reason || 'Grund unbekannt'}). Verbindungen über strikte NATs/Firewalls können scheitern.`,
+    );
+  } else if (parsed.turn?.available) {
+    console.info(`[webrtc] TURN-Relay aktiv (${parsed.turn.urls.join(', ') || 'Server-Liste'}), TTL ${parsed.ttlSeconds}s.`);
+  }
+  if (parsed.sfu && !parsed.sfu.ready) {
+    console.warn(`[webrtc] keine SFU-Signalisierungsadresse konfiguriert (${parsed.sfu.reason || 'Grund unbekannt'}).`);
   }
 }

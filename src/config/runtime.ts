@@ -91,3 +91,18 @@ export const SIGNALING_HTTP_EXPLICIT =
   typeof import.meta !== 'undefined'
     ? Boolean(String(import.meta.env.VITE_SIGNALING_HTTP_URL ?? '').trim())
     : false;
+
+/**
+ * Basis-URL der SFU-Signalisierung (F6). Nur der ausdrücklich konfigurierte Wert
+ * zählt – hier gibt es bewusst KEINEN same-origin-Rückfall: auf dem App-Knoten
+ * läuft keine SFU (`ENABLE_SFU=0`), eine same-origin-Verbindung landet in der
+ * SPA-Auslieferung. Die autoritative Quelle zur Laufzeit ist
+ * `/api/webrtc-config` (`sfu.url`); `VITE_SFU_URL` ist der Build-Zeit-Notausgang
+ * für Setups, in denen die App die Config nicht erreicht.
+ */
+export const SFU_SIGNALING_URL: string | null = (() => {
+  const configured = typeof import.meta !== 'undefined'
+    ? String(import.meta.env.VITE_SFU_URL ?? '').trim()
+    : '';
+  return configured === '' ? null : configured;
+})();

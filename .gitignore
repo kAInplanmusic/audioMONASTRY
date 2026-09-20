@@ -47,4 +47,9 @@ src/audio/wasm/dspKernel_rs/target/
 
 # Manuell gespeicherte Live-Test-Logs (lokal, koennen Secrets enthalten)
 logs/
+
+# Laufzeitdateien des Rollen-Deploys (F6): `scripts/hetzner/wire-rtc.sh` erzeugt
+# hier `coturn/turnserver.conf` mit dem TURN-Static-Auth-Secret. Die Datei gehoert
+# NUR auf den Knoten - niemals ins Repo (dieselbe Regel wie fuer .env).
+runtime/
 .worktrees/

@@ -135,6 +135,22 @@ def ensure_firewall(token: str, name: str, role: str = "app") -> int:
             {"direction": "in", "protocol": "tcp", "port": "40000-40099",
              "source_ips": all_ips, "description": "Mediasoup RTP (TCP-Fallback)"},
         ]
+        # F6: coturn laeuft als Rolle/Service auf dem SFU-Knoten
+        # (docker-compose.turn.yml). Ohne diese Freigaben startet der Relay,
+        # ist aber von aussen nicht erreichbar - /api/webrtc-config haette dann
+        # turn:-Eintraege, die ins Leere zeigen. Die Zahlen stehen identisch in
+        # services/turn/turnserver.conf, im Portal-Worker und in
+        # docs/HETZNER_DEPLOY.md; tests/test_hetzner_scripts.py haelt sie zusammen.
+        rules += [
+            {"direction": "in", "protocol": "udp", "port": "3478",
+             "source_ips": all_ips, "description": "TURN/STUN (UDP)"},
+            {"direction": "in", "protocol": "tcp", "port": "3478",
+             "source_ips": all_ips, "description": "TURN/STUN (TCP)"},
+            {"direction": "in", "protocol": "udp", "port": "49152-49201",
+             "source_ips": all_ips, "description": "TURN-Relay-Ports (UDP)"},
+            {"direction": "in", "protocol": "tcp", "port": "49152-49201",
+             "source_ips": all_ips, "description": "TURN-Relay-Ports (TCP)"},
+        ]
     if role in ("app", "ai", "master", "edge"):
         # Rollen ohne zusaetzliche oeffentliche Ports - explizit benannt statt
         # stillem Durchfallen (INFRA-HETZNER-007: die Rolle `edge` wurde vorher
@@ -394,7 +410,7 @@ def main() -> None:
     print(f"  SSH:          ssh root@{ip}")
     print(f"  Servertyp:    {args.type} ({args.image}, {args.location})")
     print(f"  Rolle:        {args.role}")
-    print(f"  Firewall:     {args.firewall} (22/80/443 + ICMP{' + RTP 40000-40099' if args.role == 'sfu' else ''})")
+    print(f"  Firewall:     {args.firewall} (22/80/443 + ICMP{' + RTP 40000-40099 + TURN 3478/49152-49201' if args.role == 'sfu' else ''})")
     print()
     print("  Weiter mit Deploy (im Repo-Verzeichnis audiomonastry/):")
     print(f"    DEPLOY_HOST=root@{ip} DEPLOY_DOMAIN=anunnakitools.de bash deploy.sh")

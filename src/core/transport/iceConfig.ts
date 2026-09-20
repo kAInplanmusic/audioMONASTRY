@@ -83,6 +83,10 @@ export interface ParsedIceConfig {
   iceServers: IceServerConfig[];
   ttlSeconds: number;
   generatedAt: number;
+  /** F6: Ist ein Relay konfiguriert (und warum nicht)? Fehlt = alte Antwort. */
+  turn?: { available: boolean; urls: string[]; reason: string };
+  /** F6: Adresse der SFU-Signalisierung (null = keine konfiguriert). */
+  sfu?: { url: string | null; path: string; ready: boolean; reason: string };
 }
 
 /**
@@ -111,9 +115,43 @@ export function parseIceConfigResponse(data: unknown): ParsedIceConfig {
   if (iceServers.length === 0) throw new Error('webrtc-config: keine valide ICE-URL');
   const ttl = Number((data as { ttlSeconds?: unknown }).ttlSeconds);
   const generatedAt = Number((data as { generatedAt?: unknown }).generatedAt);
-  return {
+  const parsed: ParsedIceConfig = {
     iceServers,
     ttlSeconds: Number.isFinite(ttl) && ttl > 0 ? Math.floor(ttl) : 0,
     generatedAt: Number.isFinite(generatedAt) ? generatedAt : 0,
   };
+
+  // F6: Relay-Zustand ehrlich übernehmen (auch die Aussage "nur STUN"). Ein
+  // fehlender Block (ältere Server-Version) fällt auf `hasRelayServer` zurück.
+  const turnRaw = (data as { turn?: unknown }).turn;
+  if (turnRaw && typeof turnRaw === 'object') {
+    const t = turnRaw as { available?: unknown; urls?: unknown; reason?: unknown };
+    parsed.turn = {
+      available: t.available === true,
+      urls: Array.isArray(t.urls) ? normalizeUrls(t.urls as string[]) : [],
+      reason: isNonEmptyString(t.reason) ? t.reason.trim() : '',
+    };
+  } else {
+    parsed.turn = {
+      available: hasRelayServer(iceServers),
+      urls: [],
+      reason: hasRelayServer(iceServers) ? '' : 'Server liefert keinen turn:-Eintrag (nur STUN)',
+    };
+  }
+
+  const sfuRaw = (data as { sfu?: unknown }).sfu;
+  if (sfuRaw && typeof sfuRaw === 'object') {
+    const s = sfuRaw as { url?: unknown; path?: unknown; ready?: unknown; reason?: unknown };
+    const path = isNonEmptyString(s.path) && s.path.startsWith('/') ? s.path.trim() : '/sfu-signaling';
+    parsed.sfu = {
+      url: isNonEmptyString(s.url) ? s.url.trim().replace(/\/+$/, '') : null,
+      path,
+      ready: s.ready === true,
+      reason: isNonEmptyString(s.reason) ? s.reason.trim() : '',
+    };
+  } else {
+    parsed.sfu = { url: null, path: '/sfu-signaling', ready: false, reason: 'Server liefert keinen sfu-Block (F6)' };
+  }
+
+  return parsed;
 }

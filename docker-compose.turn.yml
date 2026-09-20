@@ -1,0 +1,84 @@
+# =============================================================================
+# docker-compose.turn.yml – coturn (TURN/STUN-Relay) als Rolle/Service (F6)
+# -----------------------------------------------------------------------------
+# Overlay für den SFU-Knoten. Zusammen mit der Basisdatei starten:
+#
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml \
+#                  -f docker-compose.turn.yml up -d caddy audiomonastry coturn
+#
+# Wird vom Rollen-Deploy erzeugt/gestartet:
+#   ssh root@<sfu-1-ip> 'cd /opt/audiomonastry && bash scripts/hetzner/wire-rtc.sh sfu'
+# (das Skript erzeugt `runtime/coturn/turnserver.conf` aus der Vorlage
+#  `services/turn/turnserver.conf` – mit echtem Secret, Relay-IP und Realm –
+#  und schreibt ENABLE_SFU/SFU_ANNOUNCED_IP/TURN_* in die Knoten-.env).
+#
+# Warum Host-Netz? coturn vergibt Relay-Ports direkt aus TURN_MIN_PORT..TURN_MAX_PORT
+# auf der öffentlichen IP des Knotens. Mit Docker-Portmapping müsste jeder einzelne
+# Relay-Port per iptables-Regel veroeffentlicht werden (dieselbe Falle, die bei den
+# SFU-RTP-Ports dokumentiert ist). Die Ports müssen in der Hetzner-Firewall der
+# Rolle sfu freigegeben sein (provision.py / Portal-Worker / docs/HETZNER_DEPLOY.md).
+#
+# Die Konfigurationsdatei wird NICHT eingecheckt: sie enthaelt das
+# static-auth-secret. Sie liegt als `runtime/coturn/turnserver.conf` (0640) neben
+# der Knoten-.env und wird von wire-rtc.sh erzeugt.
+#
+# CI validiert dieses Overlay in .github/workflows/build.yml (Job `compose`).
+# =============================================================================
+services:
+  coturn:
+    image: coturn/coturn:4.18.0
+    container_name: audiomonastry-coturn
+    # Host-Netz ist Absicht (siehe Kopf): Relay-Ports ohne Portmapping.
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    # Das Image laeuft als nobody (65534). Explizit gesetzt, damit die
+    # Dateirechte der Konfiguration (0640 root) nachvollziehbar bleiben.
+    user: "65534:65534"
+    # Erste Option beginnt mit '-' -> der Image-Entrypoint setzt `turnserver`
+    # davor. `-c` zeigt auf die eingebundene, erzeugte Konfiguration; damit gilt
+    # GENAU die Vorlage aus services/turn/turnserver.conf (Haertung, Ports,
+    # Realm) statt einer zweiten, driftenden Flag-Liste hier.
+    #   * `--log-file=stdout` steht bewusst auf der Kommandozeile: nur dort
+    #     versteht coturn "stdout", in der Konfigurationsdatei waere es ein
+    #     Dateiname (Live-Befund 2026-09-20: Log landete in /var/tmp).
+    #   * `--no-tls`: TURNS/5349 ist dokumentiert, aber nicht umgesetzt (kein
+    #     Zertifikat im Repo); ohne das Flag loggt coturn Warnungen ueber
+    #     fehlende Zertifikate und startet den Listener nicht.
+    command: ["--log-file=stdout", "--no-tls", "-c", "/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./runtime/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    # Kein Schreibzugriff auf das Root-Dateisystem: coturn schreibt nur in
+    # /tmp (pidfile) und legt seine Benutzer-Datenbank in /var/lib/coturn an
+    # (bei `use-auth-secret` nur Lesepfad - der tmpfs haelt den Start robust).
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    # WICHTIG (verifiziert 2026-09-20, coturn/coturn:4.18.0 als nobody): mit
+    # `cap_drop: [ALL]` bricht der Start ab -
+    #   "/usr/local/bin/docker-entrypoint.sh: line 14: /usr/bin/turnserver:
+    #    Operation not permitted" und es lauscht NICHTS auf 3478.
+    # Die Haertung laeuft deshalb ueber das Host-Netz-Umfeld (read_only, tmpfs,
+    # no-new-privileges, nobody-User, keine Ports des Hosts ausser 3478/Relay)
+    # - NICHT ueber cap_drop.
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/lib/coturn:rw,size=16m
+    # STUN-Bind gegen den eigenen Listener: beweist, dass der Relay antwortet.
+    # (turnutils_* liegt im Image; ein "Container laeuft" sagt nichts ueber den Dienst.)
+    healthcheck:
+      test: ["CMD-SHELL", "turnutils_stunclient 127.0.0.1 >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"

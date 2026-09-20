@@ -71,6 +71,10 @@ jobs:
           validate -f docker-compose.monitoring.yml
           echo "--- Overlay docker-compose.hetzner.yml + docker-compose.sfu.yml"
           validate -f docker-compose.hetzner.yml -f docker-compose.sfu.yml
+          # F6: coturn als Service (Rolle sfu) - eigenes Overlay, auch allein.
+          echo "--- Overlay docker-compose.turn.yml (Standalone) + mit hetzner/sfu"
+          validate -f docker-compose.turn.yml
+          validate -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml
           # NOMEN-P1-001: Die Overlays wurden bisher NICHT geprueft - genau daher
           # kam "service X has neither an image nor a build context". Jetzt werden
           # alle Overlay-Paare validiert (inkl. Profil `fleet`, sonst gilt `redis`

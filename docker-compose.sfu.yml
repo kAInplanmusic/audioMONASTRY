@@ -4,12 +4,17 @@
 # docker-compose.hetzner.yml. Allein gestartet bricht `docker compose config`
 # ab (service "audiomonastry" hat weder image noch build context).
 #
-# Nur auf dem SFU-Server verwenden, SFU_ANNOUNCED_IP ist Pflicht (oeffentliche
-# IP des Knotens fuer das ICE-Candidate-Announcing):
-#   SFU_ANNOUNCED_IP=<public-ip> docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
+# Nur auf dem SFU-Server verwenden. Die Werte kommen NICHT mehr aus der Hand des
+# Aufrufers: `scripts/hetzner/wire-rtc.sh sfu` ermittelt die oeffentliche IP zur
+# Laufzeit und schreibt ENABLE_SFU/SFU_ANNOUNCED_IP/TURN_* idempotent in die
+# Knoten-.env (F6). Danach:
+#
+#   docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml \
+#                  -f docker-compose.turn.yml up -d caddy audiomonastry coturn
 #
 # Publiziert die Mediasoup-RTP-Ports und aktiviert die SFU im audiomonastry-
-# Container. Auf App-Knoten NICHT verwenden (dort bleibt ENABLE_SFU=0).
+# Container. Auf App-Knoten NICHT verwenden (dort bleibt ENABLE_SFU=0; der
+# Client bekommt die SFU-Adresse ueber /api/webrtc-config).
 # CI validiert dieses Overlay in .github/workflows/build.yml (Job `compose`).
 # =============================================================================
 services:
@@ -17,7 +22,11 @@ services:
     environment:
       ENABLE_SFU: "1"
       SFU_LISTEN_IP: "0.0.0.0"
-      SFU_ANNOUNCED_IP: "${SFU_ANNOUNCED_IP}"
+      # Leer = der Server ermittelt die oeffentliche IP beim Start selbst
+      # (server/sfuNetwork.ts: Metadata -> Cloud-Init-Datei -> Aussenprobe) und
+      # meldet laut, wenn das scheitert. Gesetzt ist gesetzt (Betreiber gewinnt).
+      SFU_ANNOUNCED_IP: "${SFU_ANNOUNCED_IP:-}"
+      SFU_SIGNALING_PATH: "${SFU_SIGNALING_PATH:-/sfu-signaling}"
       SFU_RTC_MIN_PORT: "${SFU_RTC_MIN_PORT:-40000}"
       SFU_RTC_MAX_PORT: "${SFU_RTC_MAX_PORT:-40099}"
     ports:

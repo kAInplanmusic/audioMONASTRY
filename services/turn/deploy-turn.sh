@@ -17,8 +17,11 @@
 # Aufruf (auf sfu-1):
 #   sudo TURN_STATIC_AUTH_SECRET="$(openssl rand -hex 32)" bash services/turn/deploy-turn.sh
 #
-# Firewall-Voraussetzung (Hetzner-Cloud-Firewall audiomonastry-sfu, 2026-09-13
-# gesetzt und verifiziert): udp/3478, tcp/3478, udp/49152-65535 oeffentlich.
+# Firewall-Voraussetzung (Hetzner-Cloud-Firewall audiomonastry-sfu): udp/3478,
+# tcp/3478 und udp+tcp/49152-49201 oeffentlich. Die Zahlen stehen identisch in
+# scripts/hetzner/provision.py, services/portal-worker/src/index.js,
+# docker-compose.turn.yml (Container-Variante) und docs/HETZNER_DEPLOY.md -
+# tests/test_hetzner_scripts.py haelt sie gegeneinander (F6, 2026-09-20).
 #
 # WICHTIG (2026-09-13 gefixt): Das Skript generiert KEIN Secret mehr selbst.
 # Vorher entstand bei fehlendem Secret still ein zufaelliges – das rotiert den
