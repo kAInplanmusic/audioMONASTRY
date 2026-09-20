@@ -35,15 +35,15 @@ const ALLOWED: Record<string, string> = {
   'docs/HETZNER_DEPLOY.md': 'Migrationsliste alt -> neu + Betreiber-Schritte (nennt die Altwerte bewusst).',
   'tests/portalWorkerSnapshots.test.ts': 'Fixtures mit Alt-Namen + Tests der Kompatibilitaet.',
   'tests/fleetWiring.test.ts': 'Fixture einer Bestandsflotte (Alt-Namen in der Fleet-Map) + Kompatibilitaetstest.',
+  'tests/test_hetzner_scripts.py': 'F10: Fixture eines Bestands-Knotens (Stack laeuft noch unter dem Altnamen) fuer den '
+    + 'Watchdog-Test - der Altname steht dort BEWUSST als Literal in der Testfixture, nicht im Produktionscode. '
+    + 'Eine Probe, die den Altnamen aus fleet-names.sh ableitet, wuerde sich selbst bestaetigen und nie auffallen.',
   'services/portal-worker/src/index.js': 'LEGACY_NAME_PREFIX / LEGACY_SNAPSHOT_PREFIXES (Bestandsressourcen).',
-  'scripts/hetzner/fleet-names.sh': 'LEGACY_FLEET_PREFIX (Aufloesung des tatsaechlichen Knotennamens).',
-  'scripts/hetzner/fleet-status.sh': 'Altname im case-Muster des Health-Checks.',
+  'scripts/hetzner/fleet-names.sh': 'LEGACY_FLEET_PREFIX/LEGACY_COMPOSE_PROJECT/LEGACY_FLEET_HOME - die EINE Namens- '
+    + 'und Pfadquelle (F10). Alle Skripte loesen ueber sie auf, damit der Altname nicht wandert.',
   'server/fleetWiring.ts': 'FLEET_LEGACY_NAME_PREFIX (Fleet-Map einer nicht aktualisierten Instanz).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
-  'scripts/hetzner/fleet-deploy-live.sh': 'Live-Deploy-Skript: der Default ist /opt/audiomonastry, der Altpfad /opt/samplemonk '
-    + 'steht nur noch als Guard-Erkennung (DEPLOY_LEGACY_REMOTE_DIR) im Skript, damit ein Deploy nicht still in ein '
-    + 'leeres Verzeichnis neben den laufenden Bestands-Stack schreibt (INFRA-HETZNER-009).',
   'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
     + 'Flotte (Snapshots "samplemonk-snapshot-*", Knotenpfad /opt/samplemonk, Floating-IP "samplemonk-floating", '
     + 'Fleet-Map des alten Workers) - ohne die Altnamen waere das Runbook falsch.',

@@ -35,6 +35,22 @@ pruefen zwei zusaetzliche Klassen genau diese drei Aussagen:
     Cloudflare oder Hetzner.
 
 Lauf: python3 tests/test_hetzner_scripts.py
+
+F10 (Namespace-Paritaet): Der Compose-Projektname hing am VERZEICHNISNAMEN - auf
+sfu-1/master-1 liefen Container und Projekt noch unter dem Altnamen, waehrend das
+Repo `audiomonastry-*` fuehrt. Die Klasse `NamespaceParitaetTest` prueft die
+Vertraege dieses Fixes, ohne Docker/Netz:
+  * `fleet-names.sh` bildet BEIDE Schreibweisen auf denselben Namen ab (Server,
+    Container, Projektname, Pfade) und bleibt die einzige Quelle,
+  * `docker-compose.hetzner.yml` nennt denselben Projektnamen wie fleet-names.sh
+    (keine zweite Wahrheit, die auseinanderlaufen kann),
+  * die Trockenlaeufe (`--print-config`) von provision-fleet.sh,
+    bring-up-fleet.sh und fleet-deploy-live.sh zeigen den neuen Projektnamen,
+  * der Watchdog (auto-repair.sh) findet den Container auch unter dem Altnamen
+    und repariert ihn im KANONISCHEN Projekt - gefahren mit einem gefakten
+    `docker` im PATH (echter Codepfad, kein Docker, kein Netz),
+  * das Migrationsskript fuer Bestands-Knoten ist trockenlaufbar, loescht keine
+    Volumes ohne ausdrueckliche Bestaetigung und nennt den Rueckweg.
 """
 from __future__ import annotations
 
@@ -50,6 +66,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 import urllib.parse
@@ -75,6 +92,10 @@ PORTAL_WORKER = ROOT / "services" / "portal-worker" / "src" / "index.js"
 SERVER_FLEET_DOC = ROOT / "docs" / "SERVER_FLEET.md"
 COMPOSE_BASE = ROOT / "docker-compose.hetzner.yml"
 COMPOSE_MONITORING = ROOT / "docker-compose.monitoring.yml"
+# F10: Namensquelle + Migrationsweg fuer Bestands-Knoten.
+FLEET_NAMES = HETZNER / "fleet-names.sh"
+MIGRATE_PROJECT = HETZNER / "migrate-project-name.sh"
+FLEET_DEPLOY_LIVE = HETZNER / "fleet-deploy-live.sh"
 
 #: Speicher-Limits, die mit `deploy.resources.limits.memory` gesetzt werden.
 #: Compose v2 uebersetzt sie beim Start in `--memory` (dokumentiertes Verhalten);
@@ -502,6 +523,11 @@ CONTROLLED_ENV = (
     "DEPLOY_COMMIT", "DEPLOY_VERSION", "DEPLOY_ALLOW_STALE", "ALLOW_STALE", "PORTAL_URL",
     "ADMIN_USER", "ADMIN_PASSWORD", "AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT",
     "AUDIOMONASTRY_BUILD_TIME",
+    # F10: Namens-/Pfadquellen und der Compose-Projektname - sonst haengt ein
+    # Testlauf an der Shell des Rechners (die Skripte lesen sie per ${VAR:-...}).
+    "COMPOSE_PROJECT_NAME", "COMPOSE_PROJECT", "FLEET_COMPOSE_PROJECT", "LEGACY_COMPOSE_PROJECT",
+    "FLEET_PREFIX", "LEGACY_FLEET_PREFIX", "FLEET_HOME", "LEGACY_FLEET_HOME",
+    "DEPLOY_LEGACY_REMOTE_DIR",
 )
 
 
@@ -1152,6 +1178,342 @@ class BuildParityTest(unittest.TestCase):
         text = self.LIB.read_text(encoding="utf-8")
         for name in PARITY_LIB_CALLS:
             self.assertIn(f"{name}() {{", text)
+
+
+# ---------------------------------------------------------------------------
+# F10: Namespace-/Projektparitaet (Repo <-> Flotte)
+# ---------------------------------------------------------------------------
+
+#: Knoten, dessen Stack noch unter dem Altnamen laeuft - Fixture fuer den
+#: Watchdog-Test. Der Altname steht hier BEWUSST als Literal (unabhaengig von
+#: `fleet-names.sh`, sonst waere die Probe zirkulaer: eine Namensquelle, die sich
+#: selbst bestaetigt, wuerde nie auffallen). Begruendung in der ALLOWED-Map von
+#: tests/namingConventions.test.ts.
+LEGACY_FIXTURE_PROJECT = "samplemonk"
+LEGACY_FIXTURE_APP = "samplemonk"
+LEGACY_FIXTURE_CADDY = "samplemonk-caddy"
+
+#: Dateien, in denen der Altname stehen DARF (Bestands-Kompatibilitaet). Alles
+#: andere unter scripts/ + services/ ist ein Befund: der Name darf nicht
+#: wandern, sonst entsteht genau der Drift, den F10 beschreibt.
+LEGACY_ALLOWED_FILES = {
+    "scripts/hetzner/fleet-names.sh",                       # die EINE Namensquelle
+    "services/portal-worker/src/index.js",                  # LEGACY_NAME_PREFIX (Bestand lesen)
+    "services/audiomonastry-ai-runtime/Dockerfile.manifest",  # Alt-Basis-Image-Pfad (Build-Arg)
+}
+
+#: Wie ein Bestands-Knoten antwortet (kein Docker, kein Netz): der Stack laeuft
+#: unter dem Altnamen, die App ist krank -> der Watchdog MUSS sie reparieren.
+FAKE_DOCKER = r"""#!/usr/bin/env bash
+# Fake `docker` fuer den F10-Watchdog-Test. Protokolliert jeden Aufruf mit dem
+# effektiven COMPOSE_PROJECT_NAME (so laesst sich belegen, dass die Reparatur im
+# KANONISCHEN Projekt laeuft) und antwortet wie ein Knoten mit Alt-Namen.
+set -uo pipefail
+{ for a in "$@"; do printf '%s ' "$a"; done
+  printf '| COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-<leer>}"; } >> "${FAKE_DOCKER_LOG:?}"
+case "${1:-}" in
+  ps)
+    # `docker ps --filter health=unhealthy` -> nichts (keine ungesunden Container).
+    if [[ " $* " == *" --filter "* ]]; then exit 0; fi
+    printf '%s\n' ${FAKE_DOCKER_CONTAINERS}
+    ;;
+  inspect) echo "none" ;;   # kein Healthcheck -> der Watchdog probt selbst
+  exec) exit 1 ;;            # App-Probe im Container scheitert
+  compose)
+    { for a in "$@"; do printf '%s ' "$a"; done
+      printf '| COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-<leer>}"; } >> "${FAKE_DOCKER_COMPOSE_LOG:?}"
+    ;;
+esac
+exit 0
+"""
+
+
+class NamespaceParitaetTest(unittest.TestCase):
+    """F10: EINE Namensquelle, beide Schreibweisen, Projektname explizit."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        if not FLEET_NAMES.exists():  # pragma: no cover - Datei ist eingecheckt
+            self.fail(f"Namensquelle fehlt: {FLEET_NAMES}")
+
+    # --- Helpers -----------------------------------------------------------
+    def _bash(self, script: str, **env: str | None) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.bash, "-c", script], capture_output=True, text=True,
+            cwd=ROOT, timeout=120, env=clean_env(**env),
+        )
+
+    def _names(self, **env: str | None) -> dict[str, str]:
+        """Alle Namen AUSSCHLIESSLICH ueber scripts/hetzner/fleet-names.sh fragen."""
+        script = "\n".join([
+            "source scripts/hetzner/fleet-names.sh",
+            'echo "prefix=$FLEET_PREFIX"',
+            'echo "legacy_prefix=$LEGACY_FLEET_PREFIX"',
+            'echo "project=$(fleet_compose_project)"',
+            'echo "legacy_project=$(fleet_legacy_compose_project)"',
+            'echo "home=$FLEET_HOME"',
+            'echo "legacy_home=$(fleet_legacy_home)"',
+            'echo "bare=$(fleet_name_variants audiomonastry | tr \'\\n\' \' \')"',
+            'echo "caddy=$(fleet_name_variants audiomonastry-caddy | tr \'\\n\' \' \')"',
+            'echo "app_node=$(fleet_candidates audiomonastry-app-1 | tr \'\\n\' \' \')"',
+            'echo "fremd=$(fleet_name_variants web-1 | tr \'\\n\' \' \')"',
+        ])
+        result = self._bash(script, **env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        found: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            key, _, value = line.partition("=")
+            # `tr '\n' ' '` laesst ein Leerzeichen am Ende stehen - das ist
+            # Formatierung der Probe, nicht Teil des Namens.
+            found[key] = value.strip()
+        return found
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    # --- 1. Namensaufloesung ----------------------------------------------
+    def test_beide_schreibweisen_werden_auf_denselben_namen_abgebildet(self) -> None:
+        names = self._names()
+        self.assertEqual(names["bare"], f"{names['project']} {names['legacy_project']}")
+        self.assertEqual(names["caddy"], f"{names['project']}-caddy {names['legacy_project']}-caddy")
+        self.assertEqual(names["app_node"], "audiomonastry-app-1 samplemonk-app-1")
+        # Reihenfolge ist Teil des Vertrags: der kanonische Name kommt ZUERST
+        # (neu anlegen/ansprechen), der Altname nur als Rueckfall.
+        self.assertTrue(names["bare"].startswith(names["project"] + " "))
+        self.assertTrue(names["caddy"].startswith(names["project"] + "-"))
+        # Ein fremder Name wird nicht umgeschrieben (nichts wird geraten).
+        self.assertEqual(names["fremd"], "web-1")
+        # Projekt + Pfade stammen aus derselben Quelle.
+        self.assertEqual(names["legacy_project"], LEGACY_FIXTURE_PROJECT)
+        self.assertEqual(names["home"], "/opt/audiomonastry")
+        self.assertEqual(names["legacy_home"], "/opt/samplemonk")
+
+    def test_die_quelle_ist_konfigurierbar_und_bleibt_eine_quelle(self) -> None:
+        # Der Override wirkt auf die Funktionen, die die Skripte aufrufen -
+        # kein Skript baut sich seinen eigenen Namen.
+        names = self._names(FLEET_COMPOSE_PROJECT="probe-projekt")
+        self.assertEqual(names["project"], "probe-projekt")
+        self.assertEqual(names["bare"].split()[1], names["legacy_project"])
+
+    def test_bash_syntax_der_namensquelle(self) -> None:
+        result = subprocess.run([self.bash, "-n", str(FLEET_NAMES)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    # --- 2. Compose-Datei vs. Namensquelle --------------------------------
+    def test_compose_datei_nennt_denselben_projektnamen_wie_die_namensquelle(self) -> None:
+        names = self._names()
+        if yaml is None:  # pragma: no cover
+            self.skipTest("PyYAML nicht installiert")
+        document = yaml.safe_load(COMPOSE_BASE.read_text(encoding="utf-8")) or {}
+        self.assertEqual(
+            document.get("name"), names["project"],
+            "docker-compose.hetzner.yml: top-level `name:` weicht von fleet-names.sh ab "
+            "(zwei Wahrheiten laufen auseinander)",
+        )
+        # Der Compose-Projektname ist pfad-unabhaengig: genau das war der F10-Fehler
+        # (Projektname = Verzeichnisname auf dem Knoten). Ein Handaufruf ausserhalb
+        # von /opt/audiomonastry muss denselben Namen ergeben.
+        self.assertNotRegex(COMPOSE_BASE.read_text(encoding="utf-8"), r"sample[-_]?monk")
+
+    def test_compose_config_loest_das_projekt_unabhaengig_vom_verzeichnis_auf(self) -> None:
+        # Beleg ohne Flotte: `docker compose config` in einem Verzeichnis, das
+        # WEDER kanonisch noch alt heisst, muss den Projektnamen aus der Datei
+        # nennen. Ohne Docker/Compose lokal wird der Test uebersprungen (der
+        # Rest dieser Klasse deckt denselben Vertrag ohne Docker ab).
+        if shutil.which("docker") is None:  # pragma: no cover
+            self.skipTest("docker/compose nicht vorhanden")
+        probe = subprocess.run(["docker", "compose", "version"], capture_output=True, text=True, timeout=60)
+        if probe.returncode != 0:  # pragma: no cover - Compose fehlt/kein Daemon
+            self.skipTest("docker compose nicht aufrufbar")
+        with tempfile.TemporaryDirectory(prefix="f10-probe-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            for name in ("docker-compose.hetzner.yml", "docker-compose.monitoring.yml", "docker-compose.sfu.yml"):
+                shutil.copy(COMPOSE_BASE.parent / name, tmpdir / name)
+            # `env_file: .env` fehlt im Testverzeichnis - CI legt dafuer eine
+            # leere Datei an; hier genauso (nur fuer die Syntaxaufloesung).
+            (tmpdir / ".env").write_text("", encoding="utf-8")
+            result = subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.hetzner.yml", "config"],
+                capture_output=True, text=True, cwd=tmpdir, timeout=120,
+                env={**os.environ, "SFU_ANNOUNCED_IP": "127.0.0.1"},
+            )
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn(f"name: {self._names()['project']}", result.stdout)
+
+    # --- 3. Trockenlaeufe der Skripte --------------------------------------
+    def test_trockenlaeufe_zeigen_den_neuen_projektnamen(self) -> None:
+        project = self._names()["project"]
+        expected = f"COMPOSE_PROJECT_NAME={project}"
+        for script in (PROVISION_FLEET, BRING_UP, FLEET_DEPLOY_LIVE):
+            with self.subTest(script=script.name):
+                result = subprocess.run(
+                    [self.bash, str(script), "--print-config"],
+                    capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+                )
+                self.assertEqual(result.returncode, 0, self._combined(result))
+                self.assertIn(expected, result.stdout, f"{script.name}: Projektname fehlt im Trockenlauf")
+        # deploy.sh hat den Trockenlauf als env-Schalter (kein CLI-Flag).
+        deploy = subprocess.run(
+            [self.bash, str(DEPLOY_SH)], capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(DEPLOY_PRINT_CONFIG="1"),
+        )
+        self.assertEqual(deploy.returncode, 0, self._combined(deploy))
+        self.assertIn(expected, deploy.stdout)
+        # ... und der Zielpfad kommt aus derselben Quelle.
+        self.assertIn("DEPLOY_REMOTE_DIR=/opt/audiomonastry", deploy.stdout)
+
+    def test_skripte_setzen_das_projekt_beim_compose_aufruf(self) -> None:
+        # Ein Trockenlauf belegt die Anzeige; hier steht, dass der Wert auch
+        # WIRKLICH am Compose-Aufruf haengt (sonst waere er nur Dekoration).
+        for script in (DEPLOY_SH, BRING_UP, FLEET_DEPLOY_LIVE, AUTO_REPAIR):
+            with self.subTest(script=script.name):
+                text = script.read_text(encoding="utf-8")
+                self.assertIn("COMPOSE_PROJECT_NAME", text)
+        self.assertIn("COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose", DEPLOY_SH.read_text(encoding="utf-8"))
+        self.assertIn("COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose", BRING_UP.read_text(encoding="utf-8"))
+        self.assertIn('COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose', AUTO_REPAIR.read_text(encoding="utf-8"))
+
+    # --- 4. Watchdog (Health-Skript) akzeptiert beide Schreibweisen --------
+    def test_watchdog_findet_und_repariert_den_container_unter_dem_altnamen(self) -> None:
+        project = self._names()["project"]
+        with tempfile.TemporaryDirectory(prefix="f10-watchdog-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            fake_bin = tmpdir / "bin"
+            fake_bin.mkdir()
+            fake = fake_bin / "docker"
+            fake.write_text(FAKE_DOCKER, encoding="utf-8")
+            fake.chmod(0o755)
+            docker_log = tmpdir / "docker.log"
+            compose_log = tmpdir / "compose.log"
+            repair_log = tmpdir / "auto-repair.log"
+            app_dir = tmpdir / "opt"
+            app_dir.mkdir()
+            env = clean_env(
+                PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+                FAKE_DOCKER_LOG=str(docker_log),
+                FAKE_DOCKER_COMPOSE_LOG=str(compose_log),
+                # Der Knoten laeuft noch unter dem Altnamen - genau der F10-Zustand.
+                FAKE_DOCKER_CONTAINERS=f"{LEGACY_FIXTURE_APP} {LEGACY_FIXTURE_CADDY}",
+                LOG=str(repair_log),
+                APP_DIR=str(app_dir),
+                CHECKS="1",  # eine Probe je Container reicht im Test
+            )
+            result = subprocess.run(
+                [self.bash, str(AUTO_REPAIR)], capture_output=True, text=True,
+                cwd=ROOT, env=env, timeout=180,
+            )
+            self.assertEqual(result.returncode, 0, self._combined(result))
+            compose_calls = compose_log.read_text(encoding="utf-8") if compose_log.exists() else ""
+            repair = repair_log.read_text(encoding="utf-8") if repair_log.exists() else ""
+            calls = docker_log.read_text(encoding="utf-8") if docker_log.exists() else ""
+
+        # 1. Der Watchdog probt ueberhaupt einen Container (sonst "nicht-vorhanden").
+        self.assertIn(f"app-container={LEGACY_FIXTURE_APP}", repair, repair)
+        self.assertIn(f"caddy-container={LEGACY_FIXTURE_CADDY}", repair, repair)
+        # 2. Die Reparatur trifft den ALT-Container ...
+        self.assertIn(f"up -d --force-recreate {LEGACY_FIXTURE_APP}", compose_calls, compose_calls)
+        self.assertIn(f"up -d --force-recreate {LEGACY_FIXTURE_CADDY}", compose_calls, compose_calls)
+        # ... 3. aber im KANONISCHEN Projekt (nicht im Alt-Projekt).
+        self.assertIn(f"COMPOSE_PROJECT_NAME={project}", compose_calls, compose_calls)
+        self.assertNotIn(f"COMPOSE_PROJECT_NAME={LEGACY_FIXTURE_PROJECT}", compose_calls, compose_calls)
+        # 4. Der Betreiber sieht den Altnamen als Migrationshinweis (nicht still).
+        self.assertIn(LEGACY_FIXTURE_PROJECT, repair, repair)
+        self.assertIn("migrate-project-name.sh", repair, repair)
+        # 5. Der Watchdog hat BEIDE Schreibweisen geprobt: der kanonische Name
+        #    wird zuerst abgefragt (er laeuft nicht -> kein Treffer), danach der
+        #    Altname, mit dem die Reparatur dann arbeitet.
+        self.assertGreaterEqual(calls.count("ps --format"), 2, calls)
+        self.assertIn(f"exec {LEGACY_FIXTURE_APP}", calls, calls)
+
+    # --- 5. Health-Skript ohne zweite Namensliste --------------------------
+    def test_health_skript_leitet_die_muster_aus_der_namensquelle_ab(self) -> None:
+        text = (HETZNER / "fleet-status.sh").read_text(encoding="utf-8")
+        self.assertIn('"${FLEET_PREFIX}"app-*|"${LEGACY_FLEET_PREFIX}"app-*', text)
+        self.assertIn("LEGACY_COMPOSE_PROJECT", text)
+        self.assertNotRegex(text, r"sample[-_]?monk", "fleet-status.sh: Altname steht in der Namensquelle, nicht hier")
+        result = subprocess.run([self.bash, "-n", str(HETZNER / "fleet-status.sh")], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_altname_steht_nur_in_der_namensquelle_und_der_bestands_leser(self) -> None:
+        pattern = re.compile(r"sample[-_]?monk", re.IGNORECASE)
+        suffixes = {".sh", ".js", ".mjs", ".ts", ".yml", ".yaml", ".json", ".bash", ".manifest"}
+        hits: set[str] = set()
+        for base in (ROOT / "scripts", ROOT / "services"):
+            for path in base.rglob("*"):
+                if not path.is_file():
+                    continue
+                if {".git", "node_modules", ".venv", ".venv-runpod", "target"} & set(path.parts):
+                    continue
+                if path.suffix not in suffixes and not path.name.startswith("Dockerfile"):
+                    continue
+                try:
+                    text = path.read_text(encoding="utf-8")
+                except (UnicodeDecodeError, OSError):  # pragma: no cover
+                    continue
+                if pattern.search(text):
+                    hits.add(str(path.relative_to(ROOT)))
+        for extra in (ROOT / "deploy.sh", COMPOSE_BASE, COMPOSE_MONITORING):
+            if pattern.search(extra.read_text(encoding="utf-8")):
+                hits.add(str(extra.relative_to(ROOT)))
+        self.assertEqual(hits - LEGACY_ALLOWED_FILES, set(), "Altname ausserhalb der Namensquelle gefunden")
+
+    # --- 6. Migration eines Bestands-Knotens ------------------------------
+    def test_migrationsskript_ist_trockenlaufbar_und_zerstoert_nichts(self) -> None:
+        self.assertTrue(MIGRATE_PROJECT.exists(), f"{MIGRATE_PROJECT} fehlt")
+        result = subprocess.run(
+            [self.bash, str(MIGRATE_PROJECT), "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+        )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        names = self._names()
+        # Der Trockenlauf nennt beide Schreibweisen, beide Pfade und den Plan.
+        self.assertIn(f"Compose-Projekt neu: {names['project']}", combined)
+        self.assertIn(f"Compose-Projekt alt: {names['legacy_project']}", combined)
+        self.assertIn(names["home"], combined)
+        self.assertIn(names["legacy_home"], combined)
+        self.assertIn("KOPIE", combined)
+        # Kein SSH, kein Docker im Trockenlauf: die Ausgabe zeigt die Kommandos
+        # nur als TEXT - ausgefuehrt wird nichts (kein Schritt-Banner, keine
+        # Knoten-Abfrage).
+        self.assertNotIn("ssh ", combined)
+        self.assertNotIn("--- 1/6", combined)
+        self.assertNotIn("laufende Compose-Projekte", combined)
+
+        text = MIGRATE_PROJECT.read_text(encoding="utf-8")
+        # Kein Volume-Loeschen und kein `down -v`: der Rueckweg muss bestehen.
+        self.assertNotIn("down -v", text)
+        self.assertNotIn("prune", text)
+        self.assertIn("docker compose -f docker-compose.hetzner.yml down --remove-orphans", text)
+        # Volumes werden erst nach ausdruecklicher Bestaetigung geloescht -
+        # und danach steht der Rollback-Hinweis.
+        cleanup = text.index('CLEANUP_LEGACY" == "1"')
+        self.assertLess(cleanup, text.index("docker volume rm"))
+        self.assertIn("Rueckweg", text)
+        # Die Datei kennt den Altnamen nicht selbst (Quelle: fleet-names.sh).
+        self.assertNotRegex(text, r"sample[-_]?monk")
+        syntax = subprocess.run([self.bash, "-n", str(MIGRATE_PROJECT)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(syntax.returncode, 0, syntax.stderr)
+
+    def test_migration_ohne_rolle_bricht_mit_klartext_ab(self) -> None:
+        # Ohne Rolle waere unklar, welche Dienste starten - das darf nicht
+        # stillschweigend "irgendetwas" hochfahren.
+        result = subprocess.run(
+            [self.bash, str(MIGRATE_PROJECT), "203.0.113.5"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+        )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("--role fehlt", combined)
+
+    def test_bash_syntax_aller_f10_skripte_ist_sauber(self) -> None:
+        for script in (FLEET_NAMES, AUTO_REPAIR, (HETZNER / "fleet-status.sh"), FLEET_DEPLOY_LIVE,
+                       BRING_UP, PROVISION_FLEET, MIGRATE_PROJECT, DEPLOY_SH):
+            with self.subTest(script=script.name):
+                result = subprocess.run([self.bash, "-n", str(script)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
