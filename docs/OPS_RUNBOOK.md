@@ -1024,3 +1024,35 @@ ssh root@<ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry \
 systemd-Unit; der Health-Check am Ende schlägt fehl, wenn der Dienst nicht
 startet — dann `journalctl -u stem-ai` prüfen (Importpfad-Falle siehe
 `services/stem-ai/main.py`).
+
+## Medieninhalte auf einen Knoten bringen (produktionsreif, ohne Image-Ballast)
+
+Die schweren Inhalte liegen bewusst NICHT im Image (`.dockerignore`): sonst wächst
+jeder Build um ~3,7 GB. Stattdessen liegen sie auf dem Knoten und werden read-only
+in die Auslieferpfade gemountet (`docker-compose.media.yml`):
+
+| Inhalt | Größe | Auslieferpfad im Container | Lizenz |
+| --- | --- | --- | --- |
+| `public/data/orchestral` (VSCO 2 CE) | ~3,0 GB | `/app/dist/data/orchestral` | CC0 – darf ausgeliefert werden |
+| `public/models/htdemucs.onnx` | ~291 MB | `/app/dist/models` | ONNX-Export (HF `smank/htdemucs-onnx`) |
+| `public/music` (Demo-Tracks) | ~382 MB | `/app/dist/music` | **keine dokumentierte Freigabe** – nur mit `--with-music` |
+
+```bash
+# Inhalte nachladen (einmalig, lokal)
+npm run download:orchestral            # CC0-Library, ~3 GB
+bash scripts/download-models.sh        # htdemucs.onnx, ~291 MB
+
+# Auf den Knoten bringen + App mit Medien-Overlay neu starten
+bash scripts/hetzner/deliver-media.sh <knoten-ip>
+bash scripts/hetzner/deliver-media.sh <knoten-ip> --print-config   # Trockenlauf
+bash scripts/hetzner/deliver-media.sh <knoten-ip> --with-music     # nur mit Freigabe
+
+# Kontrolle im Container
+ssh root@<knoten-ip> 'docker exec audiomonastry ls /app/dist/data/orchestral | head -3;
+                      docker exec audiomonastry ls -lh /app/dist/models | head -3'
+```
+
+Fehlen die Quellen lokal, endet das Skript mit Exit 2 und nennt die Nachlade-
+Befehle — ein leeres Inhaltsverzeichnis im Container sähe sonst wie ein kaputtes
+Feature aus. `docs/LICENSE_EXTERNAL_RESOURCES.md` ist die Quelle für die
+Lizenzlage; VSCO 2 CE ist dort die einzige freigegebene Library.
