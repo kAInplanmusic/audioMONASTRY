@@ -1685,7 +1685,9 @@
         "Endpoint-Konfiguration: workersMin=0, workersMax=1, idleTimeout=120, scalerType=QUEUE_DELAY/4, gpuIds=AMPERE_48,ADA_48_PRO.",
         "Kein Repo-Zusammenhang (kein Codefehler): der Startpfad liest die in INFRA-RUNPOD-006 entfernte runtime_config.yaml nicht; der Build des ausgerollten Images lief durch beide Gates.",
         "Nach der Reparatur und mit warmem Worker: scripts/generate-mos-samples.py (MOS_LANGUAGE=DE, qwen3-tts-17b) liefert 3/3 COMPLETED - 01.wav 698938 B, 02.wav 714298 B, 03.wav 637498 B (je 24 kHz) unter logs/mos-20260920/. Damit ist Abnahmepunkt 1 erfuellt.",
-        "Hinweis für den Betrieb: workersMax steht wieder auf 1 (Betreiber-Vorgabe). Der Slot-Deadlock kann damit erneut auftreten - der belegte Sofort-Ausweg ist PATCH rest.runpod.io/v1/endpoints/gajmangfldpzrk {\"workersMax\":2}, danach zurueck auf 1."
+        "Hinweis für den Betrieb: workersMax steht wieder auf 1 (Betreiber-Vorgabe). Der Slot-Deadlock kann damit erneut auftreten - der belegte Sofort-Ausweg ist PATCH rest.runpod.io/v1/endpoints/gajmangfldpzrk {\"workersMax\":2}, danach zurueck auf 1.",
+        "Vorher/Nachher im direkten Vergleich (gleicher Aufruf, gleiche Sprache): WAEHREND des Ausfalls lieferte der Lauf 0/3 Hoerproben, alle drei auf IN_QUEUE (Skript beendet mit \"nur 0/3 geschrieben\"). NACH der Reparatur mit warmem Worker: 3/3 COMPLETED in 36 s Gesamtlaufzeit (time: real 0m36,022s) - gegen 19,6 min Wartezeit im Ausfall.",
+        "Damit ist die Kette vollstaendig belegt: Ursache (Slot-Deadlock + langer Kaltstart) -> Sofort-Ausweg (workersMax=2) -> Wirkung (Queue leer, 4/4 Jobs) -> Ende-zu-Ende (3/3 Hoerproben in 36 s)."
       ],
       "verification": [],
       "updatedAt": "2026-09-20",
