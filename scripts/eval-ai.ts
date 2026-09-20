@@ -1,14 +1,34 @@
 /**
- * P3-3: Serverloser AI-Eval-Runner (offline, ohne Supabase/GPU)
- * ==============================================================
- * Führt deterministische Eval-Cases über den Plugin-Kommando-Katalog aus,
+ * P3-3 + INFRA-AI-001: AI-Eval-Runner
+ * ===================================
+ * Bewertet je Plugin einen Planungs-Case über den Plugin-Kommando-Katalog und
  * schreibt:
- *   - test-results/ai-eval.json            (Gesamt-Report)
+ *   - test-results/ai-eval.json            (Gesamt-Report inkl. Selbsttest)
  *   - test-results/ai-evaluations.json     (DB-ready, Schema ai_evaluations)
  *   - test-results/ai-eval-runs.json       (DB-ready, Schema ai_eval_runs, Gate)
  *   - test-results/ai-eval-report.json/.md (Report je Plugin: Score, Dauer, Fehler)
  * und persistiert bei konfiguriertem Supabase in `ai_evaluations`/`ai_eval_runs`
- * (sonst No-Op). Aufruf: npx tsx scripts/eval-ai.ts
+ * (sonst No-Op).
+ *
+ * WARUM DIESER UMBau (Audit INFRA-AI-001): Vorher konstruierte das Skript
+ * expected und actual identisch und schrieb `model: 'mock'`, `score: 5`,
+ * `exactMatch: true` – ohne einen einzigen Modellaufruf. Das Gate konnte damit
+ * per Konstruktion nicht fehlschlagen. Jetzt gilt:
+ *
+ *   * **Echtes Modell:** je Plugin geht ein Planungs-Prompt über den LlmRouter
+ *     (Provider-Kette respektiert AI-Schalter/Circuit-Breaker/Kosten, siehe
+ *     `src/core/ai/LlmRouter.ts`), die Antwort wird deterministisch bewertet
+ *     (`evalGrading.ts`: 5 = Plan exakt, 4 = gültiges anderes Kommando,
+ *     2 = falsches Plugin, 1 = kein verwertbares JSON, 0 = keine Antwort).
+ *   * **Ehrliches „nicht geprüft":** ist kein Provider erreichbar (Fleet aus,
+ *     keine Keys), werden die Läufe als `UNCHECKED` gemeldet – es wird KEIN
+ *     Score erfunden. Exit 0 (Nightly bleibt grün, aber ehrlich), außer
+ *     `AI_EVAL_REQUIRE_MODEL=1` bzw. `--require-model`: dann Exit 1.
+ *   * **Selbsttest getrennt:** die 21 deterministischen Kern-Kommandos bleiben
+ *     als `selfcheck` im Report (Beweis, dass Katalog/Matrix vollständig sind) –
+ *     sie zählen ausdrücklich NICHT als Modell-Score.
+ *
+ * Aufruf: npx tsx scripts/eval-ai.ts [--require-model] [--plugins=a,b,c]
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
@@ -23,43 +43,82 @@ import {
   renderEvalReportMarkdown,
   type PluginEvalResult,
 } from '../src/core/ai/orchestrator/evalMatrix';
+import { buildPlanPrompt, gradeEmptyAnswer, gradePlanAnswer, type PlanGrade } from '../src/core/ai/orchestrator/evalGrading';
+import { llmRouter } from '../src/core/ai/LlmRouter';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
 
-const PLUGIN_IDS = [...EVAL_PLUGIN_IDS];
+const ALL_PLUGIN_IDS = [...EVAL_PLUGIN_IDS];
+
+/** CLI-Schalter des Laufs. */
+interface EvalOptions {
+  requireModel: boolean;
+  plugins: string[];
+}
+
+function parseOptions(argv: string[]): EvalOptions {
+  const pluginsArg = argv.find((a) => a.startsWith('--plugins='))?.slice('--plugins='.length);
+  const requested = (pluginsArg ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const unknown = requested.filter((id) => !(ALL_PLUGIN_IDS as readonly string[]).includes(id));
+  if (unknown.length > 0) {
+    throw new Error(`unbekannte Plugin-IDs: ${unknown.join(', ')} (erlaubt: ${ALL_PLUGIN_IDS.join(', ')})`);
+  }
+  const envPlugins = (process.env.AI_EVAL_PLUGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const selected = requested.length > 0 ? requested : envPlugins.length > 0 ? envPlugins : ALL_PLUGIN_IDS;
+  return {
+    requireModel: argv.includes('--require-model') || process.env.AI_EVAL_REQUIRE_MODEL === '1',
+    plugins: selected,
+  };
+}
 
 function firstCommand(pluginId: string): string {
   const catalog = PLUGIN_COMMAND_CATALOG[pluginId] ?? 'status';
   return catalog.split(',')[0].trim().split('(')[0].trim();
 }
 
+/** Timeout je Modellaufruf (der LlmRouter bricht damit wirklich ab). */
+function evalTimeoutMs(): number {
+  const raw = Number(process.env.AI_EVAL_TIMEOUT_MS ?? 60_000);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+}
+
 async function main(): Promise<void> {
+  const options = parseOptions(process.argv.slice(2));
   const runner = new EvalRunner();
 
-  // Je Plugin ein deterministischer Kern-Kommando-Case (21 Stück).
-  PLUGIN_IDS.forEach((pluginId) => {
+  // Selbsttest: je Plugin ein deterministischer Kern-Kommando-Case. Er belegt,
+  // dass Katalog/Matrix vollständig sind – er ist KEIN Modell-Score.
+  options.plugins.forEach((pluginId) => {
     const action = firstCommand(pluginId);
     runner.add({
       id: `${pluginId}-${action}`,
-      task: 'plan',
-      model: 'mock',
+      task: 'plan-selfcheck',
+      model: 'selfcheck',
       input: `${pluginId} ${action}`,
       expected: `${pluginId}:${action}`,
       actual: `${pluginId}:${action}`,
-      latencyMs: 5,
+      latencyMs: 0.1,
     });
   });
+  const selfcheck = runner.run();
 
-  const report = runner.run();
+  const providers = llmRouter.rankProviders('moderate').map((p) => p.id);
+  const canCheck = providers.length > 0;
+  const skipReason = canCheck ? '' : 'kein LLM-Provider erreichbar (AI aus, Fleet schlafen oder Keys fehlen)';
+  console.log(
+    canCheck
+      ? `eval:ai – echtes Modell, Provider-Kette: ${providers.join(' → ')}`
+      : `eval:ai – NICHT GEPRÜFT: ${skipReason}`,
+  );
+
   const outDir = path.resolve(process.cwd(), 'test-results');
   mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, 'ai-eval.json'), JSON.stringify(report, null, 2));
+  writeFileSync(path.join(outDir, 'ai-eval.json'), JSON.stringify({ ...selfcheck, providers, canCheck }, null, 2));
 
-  // DB-ready Datensätze je Plugin (ai_evaluations) + Runs (ai_eval_runs).
   const evaluations: Array<Record<string, unknown>> = [];
   const runs: Array<Record<string, unknown>> = [];
   const results: PluginEvalResult[] = [];
 
-  for (const pluginId of PLUGIN_IDS) {
+  for (const pluginId of options.plugins) {
     const spec = evalSpecFor(pluginId);
     const startedAt = performance.now();
     const errors: string[] = [];
@@ -67,19 +126,69 @@ async function main(): Promise<void> {
 
     try {
       const run = evaluationStore.startRun(pluginId);
+
+      if (!canCheck) {
+        // Ehrliches „nicht geprüft" statt Mock-Score (INFRA-AI-001).
+        const summary = evaluationStore.markUnchecked(run.runId, skipReason);
+        runs.push({
+          run_id: summary.runId,
+          plugin_id: pluginId,
+          status: summary.status,
+          summary: {
+            avgScore: 0,
+            count: 0,
+            minScore: spec.minScore,
+            durationMs: summary.durationMs ?? 0,
+            checked: false,
+            skipReason,
+            errors: [skipReason],
+          },
+        });
+        results.push(gradePluginResult({
+          pluginId,
+          score: 0,
+          durationMs: performance.now() - startedAt,
+          checked: false,
+          skipReason,
+        }));
+        continue;
+      }
+
+      const prompt = buildPlanPrompt(pluginId, PLUGIN_COMMAND_CATALOG[pluginId], `Waehle das passende Kern-Kommando fuer ${spec.task}.`);
+      let grade: PlanGrade;
+      let provider = 'n/a';
+      let model = 'n/a';
+      try {
+        const completion = await llmRouter.complete({
+          prompt,
+          complexity: 'moderate',
+          maxTokens: 256,
+          temperature: 0,
+          timeoutMs: evalTimeoutMs(),
+        });
+        provider = completion.provider;
+        model = completion.model ?? completion.provider;
+        grade = completion.text.trim()
+          ? gradePlanAnswer(pluginId, PLUGIN_COMMAND_CATALOG[pluginId], completion.text)
+          : gradeEmptyAnswer();
+      } catch (error) {
+        grade = { score: 0, exactMatch: false, reason: `Modellaufruf fehlgeschlagen: ${(error as Error).message}` };
+      }
+      if (grade.score < spec.minScore) errors.push(grade.reason);
+      score = grade.score;
+
       const record = evaluationStore.record({
         pluginId,
         task: spec.task,
         promptVersion: 1,
-        model: 'mock',
-        provider: 'offline',
-        input: `${pluginId} ${firstCommand(pluginId)}`,
-        output: `${pluginId}:${firstCommand(pluginId)}`,
-        score: 5,
-        metrics: { latencyMs: 5, exactMatch: true },
+        model,
+        provider,
+        input: prompt,
+        output: grade.answer ? JSON.stringify(grade.answer) : grade.reason,
+        score: grade.score,
+        metrics: { latencyMs: Number((performance.now() - startedAt).toFixed(3)), exactMatch: grade.exactMatch, reason: grade.reason },
       });
-      evaluationStore.finishRun(run.runId, spec.minScore);
-      score = evaluationStore.averageScore(pluginId);
+      const finished = evaluationStore.finishRun(run.runId, spec.minScore);
 
       evaluations.push({
         plugin_id: record.pluginId,
@@ -92,22 +201,23 @@ async function main(): Promise<void> {
         score: record.score,
         metrics: record.metrics,
       });
-      const finished = evaluationStore.getRun(run.runId);
-      const durationMs = performance.now() - startedAt;
       runs.push({
-        run_id: finished?.runId ?? run.runId,
+        run_id: finished.runId,
         plugin_id: pluginId,
-        status: finished?.status ?? 'FAIL',
+        status: finished.status,
         summary: {
-          avgScore: finished?.avgScore ?? 0,
-          count: finished?.count ?? 0,
+          avgScore: finished.avgScore,
+          count: finished.count,
           minScore: spec.minScore,
-          durationMs: Number(durationMs.toFixed(3)),
+          durationMs: Number((performance.now() - startedAt).toFixed(3)),
+          checked: true,
+          provider,
+          exactMatch: grade.exactMatch,
+          reason: grade.reason,
           errors,
         },
       });
 
-      // P3-3: Bei konfiguriertem Supabase in die DB schreiben (sonst No-Op).
       await aiPersistence.saveEvaluation({
         pluginId: record.pluginId,
         task: record.task,
@@ -120,14 +230,14 @@ async function main(): Promise<void> {
         metrics: record.metrics,
       });
       await aiPersistence.saveEvalRun({
-        runId: finished?.runId ?? run.runId,
+        runId: finished.runId,
         pluginId,
-        status: finished?.status ?? 'FAIL',
+        status: finished.status,
         summary: {
-          avgScore: finished?.avgScore ?? 0,
-          count: finished?.count ?? 0,
+          avgScore: finished.avgScore,
+          count: finished.count,
           minScore: spec.minScore,
-          durationMs: Number(durationMs.toFixed(3)),
+          durationMs: Number((performance.now() - startedAt).toFixed(3)),
         },
       });
     } catch (error) {
@@ -145,31 +255,41 @@ async function main(): Promise<void> {
   writeFileSync(path.join(outDir, 'ai-evaluations.json'), JSON.stringify(evaluations, null, 2));
   writeFileSync(path.join(outDir, 'ai-eval-runs.json'), JSON.stringify(runs, null, 2));
 
-  // P3-3-Prüfpunkt: Report je Plugin mit Score, Dauer und Fehlern.
   const generatedAt = new Date().toISOString();
   const failedResults = results.filter((r) => r.status === 'FAIL');
+  const uncheckedResults = results.filter((r) => r.status === 'UNCHECKED');
   writeFileSync(
     path.join(outDir, 'ai-eval-report.json'),
     JSON.stringify({
       generatedAt,
+      checked: canCheck,
+      providers,
       plugins: results.length,
       failed: failedResults.length,
-      summary: report.summary,
+      unchecked: uncheckedResults.length,
+      selfcheck: selfcheck.summary,
       results,
     }, null, 2),
   );
   writeFileSync(path.join(outDir, 'ai-eval-report.md'), renderEvalReportMarkdown(results, { generatedAt }));
 
-  const failedRuns = runs.filter((r) => r.status === 'FAIL').length;
   console.log(
-    `eval:ai ok – ${report.summary.count} Cases, Accuracy ${(report.summary.accuracy * 100).toFixed(0)} %, ` +
-    `${runs.length} Plugin-Runs (${failedRuns} FAIL), Report-Gate ${failedResults.length} FAIL ` +
-    `→ test-results/ai-eval*.json + ai-eval-report.md`,
+    `eval:ai ${canCheck ? 'ok' : 'UNCHECKED'} – ${results.length} Plugins, ` +
+    `${failedResults.length} FAIL, ${uncheckedResults.length} nicht geprüft · ` +
+    `Selbsttest ${selfcheck.summary.count} Cases (nicht gewertet, ${(selfcheck.summary.accuracy * 100).toFixed(0)} % Deterministik) ` +
+    '→ test-results/ai-eval*.json + ai-eval-report.md',
   );
   for (const failure of failedResults) {
     console.error(`  FAIL ${failure.pluginId}: ${failure.errors.join('; ')}`);
   }
-  if (failedRuns > 0 || failedResults.length > 0) process.exitCode = 1;
+  if (uncheckedResults.length > 0) {
+    console.warn(`  NICHT GEPRÜFT (${uncheckedResults.length}): ${skipReason}`);
+  }
+  if (failedResults.length > 0) process.exitCode = 1;
+  if (uncheckedResults.length > 0 && options.requireModel) {
+    console.error('eval:ai --require-model: kein Modell erreichbar → Gate rot');
+    process.exitCode = 1;
+  }
 }
 
 main().catch((e) => {

@@ -1606,120 +1606,127 @@
       "id": "INFRA-RUNPOD-001",
       "title": "Kostengrenze der GPU-Flotte widerspruechlich (4/5 vs. 8) und nirgends erzwungen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "Dieselbe Obergroesse steht in drei Fassungen: architectureDecisions 'max. 4 GPU-Endpoints', budget.fleetEndpointsMax 5 und docs/AI_COST_GUIDE.md:30 'max. 4-5 EUR/h', waehrend live 8 Endpoints laufen. Der einzige produktiv aufgerufene Guard assertGpuEndpointBudget() prueft nur 1 <= AI_MAX_GPU_ENDPOINTS <= 8, und dessen Default ist GPU_ENDPOINT_ROLES.length = 8 - er kann fuer die eigene Architektur nie ausloesen. Weder der Deployer noch die App zaehlt Endpoints im Konto.",
-      "note": "Quelle: docs/audit-infra-runpod.md (Befunde S-1, Live-1, V4-8, Abschnitte 6.6 und 7.4). Belege: src/config/aiInfrastructure.ts:81 (Default = GPU_ENDPOINT_ROLES.length = 8) und :167-172 (Pruefung 1..8); src/core/ai/orchestrator/providerRouter.ts:65-71 (einziger Produktionsaufruf); scripts/runpod-deploy.py:491-509 (legt Endpoints an, kennt keine Obergrenze); Live-Enumeration 8 Endpoints (Audit 4.1). SSOT-SEITE IN DIESEM LAUF KORRIGIERT: budget.fleetEndpointsMax = 8, neu budget.hetznerServersMax = 5 und budget.fleetTargetEurPerHour {min 5, max 7,5}, architectureDecisions auf 'max. 8 GPU-Endpoints (Konstitution 2026-09-20)'. OFFEN bleibt die Code-Seite. Rest-Drift in derselben Datei, bewusst NICHT mitgeaendert: budget.fleetEndpointsNote nennt weiter die alten Rollen/Kosten (~2,35 EUR/h) und visionLive.endpointName 'audiomonastry-ai-vision' (live 'audiomonastry-ai-image').",
+      "note": "DONE 2026-09-20. UMGESETZT (Code-Seite; die SSOT-Seite war im Lauf vom 2026-09-20 erledigt): scripts/runpod-deploy.py hat eine harte Obergrenze (ENDPOINT_LIMIT_DEFAULT = 8, env AI_MAX_GPU_ENDPOINTS) und einen Preflight VOR dem Anlegen: plan_endpoint_budget() zaehlt das KONTO (runpod.get_endpoints()) plus die geplanten Rollen-Endpoints und bricht mit Exit 3 ab, bevor ein 9. Endpoint entstuende; orphan_endpoint_names() meldet zusaetzlich Flotten-Endpoints ohne Rolle in diesem Deploy - genau der Fall, der die Diagnose \"wo kommen die neun Endpoints her\" verhindert hat. Der Guard ist verdrahtet (nicht nur definiert); ein Test vergleicht die Grenze zusaetzlich mit AI_MAX_GPU_ENDPOINTS.",
       "files": [
-        "src/config/aiInfrastructure.ts",
-        "src/core/ai/orchestrator/providerRouter.ts",
         "scripts/runpod-deploy.py",
-        "docs/INFRA_KONSTITUTION.md"
+        "tests/test_runpod_deploy_defaults.py",
+        "tests/aiModelIdentity.test.ts",
+        "src/config/aiInfrastructure.ts"
       ],
       "acceptance": [
         "Ein Guard bricht ab oder alarmiert, wenn im RunPod-Konto mehr als 8 Endpoints existieren bzw. der Deploy einen 9. anlegen wuerde",
         "Die SSOT fuehrt genau eine Endpoint-Obergrenze (8) - in diesem Lauf erledigt"
       ],
       "verification": [
-        "Nachweis offen: Test, der 9 Endpoints gegen assertGpuEndpointBudget() laufen laesst und einen Fehler erwartet (heute kann die Pruefung nicht ausloesen)",
-        "Nachweis offen: scripts/runpod-deploy.py zaehlt vor dem Create und bricht bei mehr als 8 Endpoints ab"
+        "python3 tests/test_runpod_deploy_defaults.py -> 21 Tests OK, u. a. 8 vorhandene + 1 neuer Endpoint => Abbruch (\"Grenze 8\"), Redeploy vorhandener Rollen bleibt erlaubt, Konto ueber der Grenze wird gemeldet",
+        "npx vitest run tests/aiModelIdentity.test.ts -> ENDPOINT_LIMIT_DEFAULT == AI_MAX_GPU_ENDPOINTS und plan_endpoint_budget(live_names, planned) ist im main()-Pfad verdrahtet"
       ]
     },
     {
       "id": "INFRA-RUNPOD-002",
       "title": "GPU-Pool doppelt wahr: ADA_24 im Deploy-Skript vs. AMPERE_48 im Manifest",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "Fuer videoReal/videoAbstract existieren zwei widersprechende GPU-Pool-Wahrheiten: scripts/runpod-deploy.py:120,129 setzt ADA_24, model_manifest.json:1225,1249 und der TS-Spiegel endpointRegistry.ts:177,197 setzen AMPERE_48. Ein CI-Deploy hebelt die Rollen-Defaults zusaetzlich aus, weil .github/workflows/runpod-deploy.yml:211-212 RUNPOD_GPU_ID global auf AMPERE_48 setzt und runpod-deploy.py:462 Env Vorrang gibt. Zwei gruene Tests kodieren beide Wahrheiten (tests/test_runpod_deploy_defaults.py:76-79 vs. tests/manifestRoles.test.ts:52); kein Test prueft Deploy-Skript gegen Manifest.",
-      "note": "Quelle: docs/audit-infra-runpod.md Befunde V1-1, V4-2, V4-3 (Abschnitte 3.3, 7.2, 8). Live-Beleg: die API nennt fuer audiomonastry-ai-video-real RTX 4090/5090 und fuer video-abstract RTX 4090 (Audit 4.1) - also ADA-Klasse, das Deploy-Skript hat gewonnen und das Manifest ist fuer diese Rollen faktisch falsch. Folgerisiko belegt: model_manifest.json fuehrt wan22-t2v-a14b mit estimatedVRAM 32, was rechnerisch nicht in ein 24-GB-Fenster (ADA_24) passt - eine VRAM-Planung gegen das Manifest plant gegen die falsche Hardware.",
+      "note": "DONE 2026-09-20. UMGESETZT: EINE Pool-Wahrheit je Rolle. Live-Wahrheit (RunPod-API 2026-09-20) ist ADA_24 fuer videoReal/videoAbstract (RTX 4090/5090; die Wan-Worker-Images sind auf CUDA 12.8/Ada ausgelegt) - Manifest und TS-Spiegel folgen jetzt dem Deploy-Skript: model_manifest.json roles.videoReal/videoAbstract gpuPoolId ADA_24, vramBudgetGb 24 (mit Begruendung im Feld gpuPoolNote), endpointRegistry.ts spiegelt es. Das CI-Workflow setzte RUNPOD_GPU_ID global auf AMPERE_48 und hebelte damit ALLE Rollen-Defaults aus - der globale Override ist entfernt; ein gesetzter Override warnt jetzt laut (deploy_role) und nennt den Rollen-Default. Neuer Test vergleicht runpod-deploy.py ROLE_DEFAULTS (gpuPoolId + gpuCount) gegen model_manifest.json roles.<rolle>.",
       "files": [
-        "scripts/runpod-deploy.py",
-        "model_manifest.json",
+        "services/audiomonastry-ai-runtime/model_manifest.json",
         "src/core/ai/orchestrator/endpointRegistry.ts",
+        "scripts/runpod-deploy.py",
         ".github/workflows/runpod-deploy.yml",
-        "tests/test_runpod_deploy_defaults.py",
-        "tests/manifestRoles.test.ts"
+        "tests/test_runpod_deploy_defaults.py"
       ],
       "acceptance": [
         "Eine Quelle fuer den GPU-Pool je Rolle: Manifest, Deploy-Skript und CI-Env stimmen ueberein",
         "Ein Test vergleicht runpod-deploy.py:ROLE_DEFAULTS.gpuPoolId gegen model_manifest.json roles.<rolle>.gpuPoolId und faellt bei Abweichung"
       ],
       "verification": [
-        "Beleg live: docs/audit-infra-runpod.md 4.1 (gpuTypeIds RTX 4090/5090 fuer die Video-Rollen)",
-        "Nachweis offen: Drift-Test Deploy-Skript <-> Manifest (heute prueft test_runpod_deploy_defaults.py:76-79 nur die Konstante, tests/manifestRoles.test.ts:52 nur TS <-> Manifest)"
+        "python3 tests/test_runpod_deploy_defaults.py -> DeployGegeManifestTest.test_gpu_pool_stimmt_mit_dem_manifest_ueberein OK (8 Rollen), test_manifest_vram_budget_passt_zum_pool OK (ADA_24 => 24 GB)",
+        "npx vitest run tests/manifestRoles.test.ts -> Pool/Anzahl/VRAM-Budget beider Seiten identisch",
+        "Der fruehere Widerspruch (zwei gruene Tests kodierten ADA_24 UND AMPERE_48) ist damit aufgeloest."
       ]
     },
     {
       "id": "INFRA-RUNPOD-003",
       "title": "Brain hat drei divergente Modell-Identitaeten (14B-AWQ / qwen3-14b / qwen3-30b-a3b-awq)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Rolle brain wird an drei Stellen mit drei verschiedenen Modellnamen beschrieben: Qwen/Qwen3-14B-AWQ (OpenAI-Pfad: src/core/ai/LlmRouter.ts:75 und scripts/runpod-deploy.py:161, live am Endpoint per GET /openai/v1/models belegt), qwen3-14b (nativer Worker-Pfad als Default: LlmRouter.ts:86,318) und qwen3-30b-a3b-awq (Manifest/Registry: model_manifest.json roles.brain.preloadModels, src/core/ai/orchestrator/endpointRegistry.ts:77-79). Der Kurzname qwen3-14b existiert in den 39 Manifest-Eintraegen nicht und wuerde im nativen Worker-Pfad an model_manager.load() mit ModelUnavailableError('unknown model') scheitern.",
-      "note": "Quelle: docs/audit-infra-runpod.md Befund V3-6 (Abschnitt 6.5) und Abschnitt 8 Punkt 12; ergaenzt AI-P1-008 (dort wurde der 404 live gefixt, die Manifest-Luecke blieb). Belegstellen: src/core/ai/LlmRouter.ts:75, :86, :318; src/core/ai/orchestrator/endpointRegistry.ts:77-79; services/audiomonastry-ai-runtime/model_manager.py:248-250 (ModelUnavailableError 'unknown model'); Live-Messung des OpenAI-Modells in AI-P1-008 (GET .../openai/v1/models -> Qwen/Qwen3-14B-AWQ).",
+      "note": "DONE 2026-09-20. UMGESETZT: Der kurze Identifier qwen3-14b existiert jetzt IM MANIFEST (repository Qwen/Qwen3-14B-AWQ, revision 31c69efc29464b6bb0aee1398b5a7b50a99340c3 = BRAIN_VLLM_REVISION_DEFAULT, framework vllm, quantization awq-int4, preload) und steht in roles.brain.models + preloadModels; der TS-Spiegel (endpointRegistry brain.preload/brainModel) fuehrt ihn ebenfalls. Manifest, TS-Spiegel und LlmRouter nennen damit denselben Modell-Identifier, und der native Worker-Pfad kann nicht mehr an \"unknown model\" scheitern. Neuer Waechter tests/aiModelIdentity.test.ts prueft die Router-Defaults (brainModelDefaults(): executor/standard/openAiCompat) gegen das Manifest - ueber id ODER repository.",
       "files": [
-        "src/core/ai/LlmRouter.ts",
+        "services/audiomonastry-ai-runtime/model_manifest.json",
         "src/core/ai/orchestrator/endpointRegistry.ts",
-        "model_manifest.json",
-        "scripts/runpod-deploy.py"
+        "src/core/ai/LlmRouter.ts",
+        "tests/aiModelIdentity.test.ts",
+        "tests/test_runpod_deploy_defaults.py"
       ],
       "acceptance": [
         "Die Rolle brain nennt in Manifest, TS-Spiegel und Router denselben Modell-Identifier (oder der native Pfad-Default ist im Manifest vorhanden)",
         "Ein Test faellt, wenn der im Router als Default verdrahtete Brain-Modellname nicht im Manifest existiert"
       ],
       "verification": [
-        "Nachweis offen: Test LlmRouter-Default-Modell gegen model_manifest.json roles.brain.preloadModels",
-        "Beleg Bestand: docs/audit-infra-runpod.md 6.5 (drei Quellen, eine ohne Manifest-Eintrag)"
+        "npx vitest run tests/aiModelIdentity.test.ts -> 8 Tests OK, u. a. \"findet jedes Router-Default-Modell im Manifest\" und \"fuehrt das live servierte Brain-Modell mit Pin\"",
+        "python3 tests/test_runpod_deploy_defaults.py -> BrainModellIdentitaetTest OK (Deploy-Repository == Manifest-Eintrag, Revisionen identisch)"
       ]
     },
     {
       "id": "INFRA-RUNPOD-004",
       "title": "assertFleetHourlyBudget/assertStorageBudget definiert aber unverdrahtet; wakeFleet() ohne Kosten-Gate",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "assertFleetHourlyBudget() (src/config/aiInfrastructure.ts:148-156) und assertStorageBudget() (:159-169) sind definiert und getestet (tests/aiInfrastructure.test.ts:73-86), werden aber von keiner Produktionsdatei aufgerufen - sie existieren nur in aiInfrastructure.ts und in Tests (toter Waechter). Zusaetzlich weckt wakeFleet() immer die komplette Flotte: resolveGpuRoles() liefert alle acht Rollen, Promise.all(resolved.map(wakeRole)) setzt fuer jede workersMin=1, ohne rollenselektiven Einstieg und ohne Pruefung gegen AI_MAX_FLEET_EUR_PER_HOUR vor dem Wecken. Jeder geweckte Worker laeuft danach mindestens idleTimeout Sekunden weiter und wird abgerechnet.",
-      "note": "Quelle: docs/audit-infra-runpod.md Befunde V3-4, V3-7, V4-8. Belege: src/config/aiInfrastructure.ts:148-169 (Definitionen), tests/aiInfrastructure.test.ts:73-86 (Tests); src/core/ai/orchestrator/fleetWake.ts:201,213 (Promise.all ueber alle Rollen), :179-183 (roleReady liefert true fuer nicht-konfigurierte Rollen); keine Aufrufer von assertFleetHourlyBudget/assertStorageBudget in src/ oder server/ (Audit 7.4). Die Flotten-Summe ist im Code selbst gegen das eigene Budget unkritisch (8 Rollen x 0,49 EUR/h = 3,92 EUR/h gegen AI_MAX_FLEET_EUR_PER_HOUR = 10, aiInfrastructure.ts:87-96).",
+      "note": "DONE 2026-09-20 (ueber INFRA-FEAT-003 erledigt, hier der Querverweis): assertFleetHourlyBudget laeuft im Wake-Pfad VOR dem ersten Netzwerkaufruf (fleetWake.doWake, inkl. AI_HETZNER_EUR_PER_HOUR), assertStorageBudget wird in POST /api/ai/budget/check hart geprueft und in GET /api/ai/fleet/status mitgefuehrt. wakeFleet() weckt nur noch die immer-Rollen (Visuals per wakeRoleOnDemand bei Abruf) und prueft die Kosten vorher - bei Ueberschreitung startet nichts (blocked \"budget\", HTTP 409).",
       "files": [
         "src/config/aiInfrastructure.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
-        "server/routes/aiRoutes.ts"
+        "server/routes/aiRoutes.ts",
+        "tests/fleetWake.test.ts",
+        "tests/aiRoutes.test.ts"
       ],
       "acceptance": [
         "Der EUR/h-Guard und der Storage-Guard laufen im Produktionspfad (Start bzw. vor dem Wecken) und brechen bei Ueberschreitung ab",
         "wakeFleet() weckt nur die fuer den Task noetigen Rollen (rollenselektiv) und prueft die Kosten vorher"
       ],
       "verification": [
-        "Nachweis offen: Test, der wakeFleet() mit ueberschrittenem Budget aufruft und einen Fehler/kein workersMin=1 erwartet",
-        "Nachweis offen: Aufrufer-Nachweis der beiden Guards in src/ bzw. server/ (heute nur Definition und Tests)"
+        "tests/fleetWake.test.ts -> Budget-Block: 0 Netzwerkaufrufe, blocked \"budget\"; Gegenprobe mit Konstitutions-Budget weckt wieder",
+        "tests/aiRoutes.test.ts (HTTP) -> POST /api/ai/budget/check {} => 200, {storageEurPerMonth:99} => 409",
+        "tests/fleetWake.test.ts -> rollenselektiver Wake (5 PATCHes statt 8) und setWorkersMin-Sperre"
       ]
     },
     {
       "id": "INFRA-RUNPOD-005",
       "title": "Endpoint-Namensdrift (image vs. vision) und idleTimeout-Drift (live 120 s vs. deklariert 900 s)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "Der Visual-Endpoint heisst live audiomonastry-ai-image (ID wzh9hcbitjnn95), die SSOT dokumentiert in visionLive.endpointName aber audiomonastry-ai-vision - ein Name, der live nicht existiert; die Template-ID 7xzd1v17dx stimmt, derselbe Endpoint ist also umbenannt. Zweitens weicht der idleTimeout live von der Deklaration ab: deklariert sind 900 s fuer voiceGen/music/imageHq/videoReal/videoAbstract/orchestrator (scripts/runpod-deploy.py:11-16), live stehen dort 120 s; nur brain/ears stimmen (15 s). Drittens prueft keine Stelle die konfigurierte RP_ENDPOINT_ID_* gegen den Endpoint-Namen (endpointNameForRole() in aiInfrastructure.ts:110-123 wird nie gegen eine Live-Antwort abgeglichen), so dass diese Drift unbemerkt bleiben konnte.",
-      "note": "Quelle: docs/audit-infra-runpod.md Befunde S-3, Live-2, Live-3, V3-2 (Abschnitte 2.4, 4.2, 6.1). Belege: Live-Enumeration (Audit 4.1) bzw. MASTERTODOENDE visionLive.endpointName/-Id/-templateId; scripts/runpod-deploy.py:11-16 (Header-Deklaration 900 s), :497-507 (Drift wird nur als Warnung gemeldet, weil die API idleTimeout nur beim Anlegen setzt); budget.runpodIdleTimeouts dokumentiert das Verhalten bereits selbst.",
+      "note": "DONE 2026-09-20. UMGESETZT: (a) idleTimeout in SEKUNDEN an einer Stelle: roles.<rolle>.idleTimeoutSeconds im Manifest (brain/ears 15, uebrige 120 = live gemessen 2026-09-20), runtime.idleTimeoutSeconds statt idleTimeoutMinutes, registry.py fuehrt den Schluessel idleTimeoutSeconds; der Deploy-Default voiceGen ist von 900 auf den Live-Wert 120 korrigiert (900 s Weiterlauf kostete bis zu 3,66 $/h), die Header-Tabelle im Skript nennt jetzt den echten Stand (ADA_24 fuer die Video-Rollen, 120 s). (b) Endpoint-Namen: der Live-Name audiomonastry-ai-image war schon im SSOT-Lauf korrigiert; zusaetzlich meldet der Deploy verwaiste Flotten-Endpoints (orphan_endpoint_names). Ein Test vergleicht Deploy-Skript und Manifest je Rolle (Pool, GPU-Anzahl, idleTimeout); der TS-Spiegel fuehrt idleTimeoutSeconds mit.",
       "files": [
-        "src/config/aiInfrastructure.ts",
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "services/audiomonastry-ai-runtime/registry.py",
         "scripts/runpod-deploy.py",
-        "src/core/ai/orchestrator/endpointRegistry.ts"
+        "src/core/ai/orchestrator/endpointRegistry.ts",
+        "tests/test_runpod_deploy_defaults.py",
+        "tests/manifestRoles.test.ts"
       ],
       "acceptance": [
         "SSOT/Endpoint-Name und Live-Name stimmen ueberein (oder die Namenskonvention wird beim Start gegen die Live-Namen geprueft)",
         "Der deklarierte idleTimeout je Rolle ist entweder live gesetzt oder die Deklaration nennt den echten Live-Wert"
       ],
       "verification": [
-        "Beleg live: docs/audit-infra-runpod.md 4.1 (name audiomonastry-ai-image, idleTimeout 120/15 s)",
-        "Nachweis offen: Vergleich RP_ENDPOINT_ID_* gegen Live-Namen (heute kein Gate, Audit 8 Punkt 16)"
+        "python3 tests/test_runpod_deploy_defaults.py -> test_idle_timeout_stimmt_mit_dem_manifest_ueberein OK (8 Rollen)",
+        "npx vitest run tests/manifestRoles.test.ts -> neuer Test \"nennt je Rolle dasselbe Idle-Fenster wie das Manifest (INFRA-RUNPOD-005)\" OK"
       ]
     },
     {
@@ -2006,16 +2013,19 @@
       "id": "INFRA-AI-001",
       "title": "AI-Eval schreibt model='mock'/score=5 ohne LLM-Aufruf - das Gate kann nicht fehlschlagen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "scripts/eval-ai.ts legt je Plugin einen Case an, in dem expected und actual identisch konstruiert werden (:46-47), und schreibt direkt in den Store: model 'mock', provider 'offline', score 5, metrics {latencyMs 5, exactMatch true} (:70-80); es wird kein LLM, kein Modell und kein Netz aufgerufen. Dieser Score speist (a) das Gate evaluationStore.finishRun(run.runId, spec.minScore) mit spec aus evalMatrix.ts (:62-63, :81), (b) den Nightly-Job 'AI-Eval-Run (Gate bei Score-Abfall)' (.github/workflows/nightly.yml:41-42) und das Prompt-Loop-Gate 'Gate bei Nicht-Konvergenz' (:44-46) sowie (c) die Score-Spalte der Doku-Matrix docs/PLUGIN_PROMPT_MATRIX.md:10-30 (durchgehend 5.00 / PASS). Die Gates koennen per Konstruktion nicht fehlschlagen; der einzige echte Messpunkt im Audit ist mosHarness (Hoererwertung), dessen Gate aber keinen Abnehmer hat (INFRA-AI-007).",
-      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 1 sowie Abschnitte 6.2, 6.5 und 3.4 (Drift E). Belege: scripts/eval-ai.ts:38-50, :62-63, :70-81; .github/workflows/nightly.yml:41-46; docs/PLUGIN_PROMPT_MATRIX.md:10-30; src/core/ai/orchestrator/evalMatrix.ts:31-48 (scharf formuliertes Gate, DEFAULT_MIN_SCORE 4, kritische Plugins 4.5).",
+      "note": "DONE 2026-09-20. UMGESETZT: scripts/eval-ai.ts ruft je Plugin ein ECHTES Modell (ueber den LlmRouter inklusive Timeout, Circuit-Breaker und Kostenerfassung) und bewertet dessen Antwort deterministisch - neues Modul src/core/ai/orchestrator/evalGrading.ts: 5 = Plan exakt, 4 = anderes gueltiges Katalog-Kommando, 2 = falsches Plugin, 1 = kein verwertbares JSON, 0 = keine Antwort. Der Mock-Score ist entfernt. Ist kein Modell erreichbar, werden die Laeufe als UNCHECKED gemeldet (evaluationStore.markUnchecked - es wird KEIN Score geschrieben) und der Lauf bleibt gruen; mit --require-model bzw. AI_EVAL_REQUIRE_MODEL=1 wird \"nicht geprueft\" zum Fehler (Exit 1). Der deterministische Selbsttest bleibt als `selfcheck` im Report, zaehlt aber ausdruecklich nicht als Score. Die Score-Spalte der Doku-Matrix ist als MOCK gekennzeichnet.",
       "files": [
         "scripts/eval-ai.ts",
+        "src/core/ai/orchestrator/evalGrading.ts",
+        "src/core/ai/orchestrator/evaluationStore.ts",
         "src/core/ai/orchestrator/evalMatrix.ts",
+        "docs/PLUGIN_PROMPT_MATRIX.md",
         ".github/workflows/nightly.yml",
-        "docs/PLUGIN_PROMPT_MATRIX.md"
+        "tests/aiEvalGrading.test.ts"
       ],
       "acceptance": [
         "Der Eval-Lauf ruft ein echtes Modell auf; ein Negativ-Fall (schlechter Prompt) laesst das Gate wirklich scheitern",
@@ -2023,8 +2033,10 @@
         "Die Score-Spalte der Doku-Matrix stammt aus einem echten Lauf oder ist als Mock gekennzeichnet"
       ],
       "verification": [
-        "Nachweis offen: Test, der einen absichtlich schlechten Prompt in den Eval-Lauf gibt und ein FAIL erwartet (heute score 5 durch Konstruktion)",
-        "Beleg Bestand: docs/audit-infra-ai-routing.md 6.2 (eval-ai.ts:70-81 ohne LLM-Aufruf)"
+        "Live-Pfad offline bewiesen (lokaler Modell-Mock via HTTP): OLLAMA_URL=http://127.0.0.1:11599 npx tsx scripts/eval-ai.ts --plugins=mixer,eq,dsp -> \"echtes Modell, Provider-Kette: ollama\", 3 Plugins, 0 FAIL, Kostenbuch llm-1..llm-3, Exit 0",
+        "Negativ-Fall: derselbe Lauf mit einem Mock, der fuer \"eq\" Unsinn liefert -> \"1 FAIL eq: Antwort ist kein verwertbares JSON ... score 1 < minScore 4.5\", Exit 1 - das Gate kann jetzt wirklich fehlschlagen",
+        "Ohne erreichbares Modell: \"eval:ai UNCHECKED - 2 Plugins, 2 nicht geprueft\", Exit 0; mit --require-model Exit 1",
+        "npx vitest run tests/aiEvalGrading.test.ts -> 5 Tests OK (Parsing, Bewertungsstufen, Negativ-Fall, UNCHECKED)"
       ]
     },
     {
@@ -2076,46 +2088,49 @@
       "id": "INFRA-AI-004",
       "title": "LlmRouter ohne Timeout/AbortSignal; circuitBreaker und costTracker nicht verdrahtet",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "In src/core/ai/LlmRouter.ts gibt es kein AbortController, kein signal und kein AbortSignal.timeout: postJson (:109-115) nutzt ein nacktes fetch ohne Signal. Ein haengender Provider blockiert die Fallback-Kette bis zum Browser-/Node-Fetch-Default. Der Orchestrator-Pfad hat dagegen Zeitlimits (runpodProvider.ts:134-136 RUNPOD_AI_TASK_TIMEOUT_MS Default 600 000, :322-326 AbortSignal.timeout, :342-371 Polling mit Deadline) - eine Timeout-Asymmetrie zwischen den beiden Pfaden. Zusaetzlich sind circuitBreaker.ts und costTracker.ts aus src/core/ai/orchestrator/ nicht in LlmRouter.complete() verdrahtet (LlmRouter.ts:27 importiert nur RunPodProvider); ein Provider-Ausfall zaehlt damit nirgends. Die Fallback-Kette selbst verschluckt jeden Fehlversuch ausser dem letzten (:451-463), und available prueft bei ollama/runpod-local(openai) nur die Env-Praesenz (:185-187, :291).",
-      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefunde 5/5a / R-2, R-3, R-7 (Abschnitte 1.2, 1.4, 6.3, 7). Belege: src/core/ai/LlmRouter.ts:27, :109-115, :185-187, :291, :451-463; kein Konsument von src/core/ai/orchestrator/circuitBreaker.ts und costTracker.ts in LlmRouter; Gegenbeleg Zeitlimit: src/core/ai/orchestrator/runpodProvider.ts:134-136, :322-326, :342-371.",
+      "note": "DONE 2026-09-20. UMGESETZT: (a) Zeitlimit mit ECHTEM Abbruch: LlmRequest.timeoutMs/signal, llmTimeoutMs() (env LLM_TIMEOUT_MS, Default 60 s), combineSignals() verbindet Aufrufer-Signal und Zeitlimit, ALLE Provider reichen das Signal an fetch durch; ein Abbruch heisst LlmTimeoutError (Code LLM_TIMEOUT). (b) Circuit Breaker je Provider (breakerFor/breakerStates): ein offener Breaker wird uebersprungen (fail-fast), Fehler zaehlen sichtbar statt im stillen Fallback zu verschwinden. (c) Kostenerfassung: llmCostTracker (eigene CostTracker-Instanz) verbucht jeden erfolgreichen Aufruf inklusive echtem Modellnamen (neues Feld LlmCompletion.model); llmRouter.costSummary() liefert den Stand fuer Diagnose. AiProviderId kennt die LLM-Provider jetzt direkt - der Cast in providerRouter entfaellt.",
       "files": [
         "src/core/ai/LlmRouter.ts",
-        "src/core/ai/orchestrator/circuitBreaker.ts",
-        "src/core/ai/orchestrator/costTracker.ts"
+        "src/core/ai/orchestrator/types.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "tests/llmRouterHardening.test.ts"
       ],
       "acceptance": [
         "Der LLM-Pfad hat ein Zeitlimit mit echtem Abbruch (AbortSignal) und faellt bei einem haengenden Provider geordnet weiter",
         "Circuit Breaker und Kostenerfassung greifen auch fuer Aufrufe ueber LlmRouter"
       ],
       "verification": [
-        "Nachweis offen: Test mit einem nie antwortenden Provider, der den Abbruch nach X ms belegt (heute kein Signal im Code)",
-        "Beleg Bestand: docs/audit-infra-ai-routing.md 1.4 (kein AbortController/signal in LlmRouter.ts)"
+        "npx vitest run tests/llmRouterHardening.test.ts -> 7 Tests OK: Haenger wird nach 120 ms abgebrochen (statt 5 s Haengezeit), Breaker OPEN => zweiter Aufruf ohne Netz, Kostenbuch +1 je Erfolg, Aufrufer-Signal bricht ab",
+        "Realer Lauf (Eval gegen lokalen Modell-Mock) buchte llm-1..llm-3 mit provider ollama"
       ]
     },
     {
       "id": "INFRA-AI-005",
       "title": "aiMode.ts ist nur ein Lock-Flag - der Modul-State PRO hat keine Wirkung auf die Modellwahl",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "src/core/ai/aiMode.ts (17 Zeilen) ist kein Provider-Schalter: es ist ein einzelnes Modul-Boolean (let aiModeActive, :9) mit Getter/Setter (:11-17), gesetzt aus dem Modul-State-Handler (src/context/ModuleStateContext.tsx:85 und :204). Es gibt keine Kante aiMode.ts -> LlmRouter.ts und keine Zuweisung, die den Modul-State PRO oder AUTO_AI an den Router weiterreicht. Die Provider-Auswahl haengt allein an process.env (AI_ALLOW_EXTERNAL_LLM, LlmRouter.ts:444) und an complexity (:437-443). Wer PRO waehlt, aendert damit nicht die Provider-Auswahl - eine offene Luecke gegenueber der Erwartung 'PRO = bessere Modelle' und gegen die Konstitution (AI an/aus als Einstellung, siehe INFRA-FEAT-001).",
-      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 6 / R-5 (Abschnitte 1.5, 7). Belege: src/core/ai/aiMode.ts:9-17; src/context/ModuleStateContext.tsx:13 ('OFF' | 'AUTO_AI' | 'PRO'), :85, :204; src/core/ai/LlmRouter.ts:437-449 (rankProviders).",
+      "note": "DONE 2026-09-20. UMGESETZT: aiQualityTier() in aiGate.ts bildet die Einstellung auf eine Qualitaetsstufe ab (PRO/on-with-visuals = \"high\", sonst \"standard\"). Der LlmRouter nutzt sie an zwei Stellen: rankProviders() zieht bei \"high\" das staerkere Modell (deepseek-pro) direkt hinter die lokalen Provider, vor die schnellen Cloud-Wege; RunPodLocalProvider.modelFor() waehlt bei \"high\" auch fuer \"simple\" das grosse Brain-Modell (qwen3-14b) statt des 4B-Ausfuehrers. Zusaetzlich wirkt der Modus ueber die Verfuegbarkeit (off => kein GPU-Provider in der Kette).",
       "files": [
+        "src/core/ai/aiGate.ts",
+        "src/core/ai/LlmRouter.ts",
         "src/core/ai/aiMode.ts",
-        "src/context/ModuleStateContext.tsx",
-        "src/core/ai/LlmRouter.ts"
+        "tests/llmRouterHardening.test.ts",
+        "tests/aiGate.test.ts"
       ],
       "acceptance": [
         "Der Einstellungs-/Moduswert (OFF/AUTO_AI/PRO) wirkt nachweisbar auf die Provider-/Modellwahl",
         "Ein Test belegt, dass ein Moduswechsel die gewaehlte Provider-Kette aendert"
       ],
       "verification": [
-        "Nachweis offen: Test, der den Modul-State auf PRO setzt und eine andere Provider-Reihenfolge/Modellwahl erwartet",
-        "Beleg Bestand: docs/audit-infra-ai-routing.md 1.5 (keine Kante aiMode -> LlmRouter)"
+        "tests/llmRouterHardening.test.ts -> \"verschiebt die Provider-Kette zwischen Standard und PRO\" (deepseek-pro vor bzw. nach deepseek-flash) und \"waehlt im PRO-Modus das große Brain-Modell auch fuer einfache Aufgaben\" (Job-Body: qwen3-4b -> qwen3-14b)",
+        "tests/aiGate.test.ts -> bei \"off\" faellt runpod-local aus der Kette (Kante Einstellung -> Providerwahl)"
       ]
     },
     {

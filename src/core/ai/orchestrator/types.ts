@@ -48,7 +48,19 @@ export type AiProviderId =
   | 'runpod-orchestrator'
   | 'local'
   | 'deterministic'
-  | 'cerebras';
+  | 'cerebras'
+  // INFRA-AI-004: Die LLM-Provider des `LlmRouter` sind eigene Provider-IDs –
+  // vorher passte nur ein Cast (`completion.provider as AiProviderId`) sie in
+  // den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf.
+  | 'runpod-local'
+  | 'mistral'
+  | 'ollama'
+  | 'deepseek-flash'
+  | 'deepseek-pro'
+  | 'publicai'
+  | 'openrouter'
+  | 'gemini'
+  | 'openai';
 
 /** Modell-Ladeklassen (Multi-Model Loading). */
 export type ModelLoadClass = 'CORE' | 'FREQUENT' | 'ON_DEMAND' | 'RARE';

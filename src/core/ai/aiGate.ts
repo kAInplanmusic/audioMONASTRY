@@ -170,6 +170,21 @@ export function visualsEnabled(): boolean {
   return getAiOperatingMode() === 'on-with-visuals';
 }
 
+/**
+ * INFRA-AI-005: Qualitätsstufe der Modellwahl, gesteuert über die Einstellung.
+ *
+ *   `standard` – aiMONK = AUTO_AI bzw. `on-no-visuals`: schnelle/günstige
+ *                Modelle (Ausführer-Stufe), Kosten stehen im Vordergrund.
+ *   `high`     – aiMONK = PRO bzw. `on-with-visuals`: das größere Modell wird
+ *                auch für einfache Aufgaben gewählt, Reasoning bleibt an.
+ *
+ * Damit hat der Modul-State eine Kante bis in die Modell- und Providerwahl
+ * (vorher hing die Wahl allein an `complexity` und env-Flags).
+ */
+export function aiQualityTier(): 'standard' | 'high' {
+  return getAiOperatingMode() === 'on-with-visuals' ? 'high' : 'standard';
+}
+
 /** true, wenn die Rolle im aktuellen Modus laufen darf. */
 export function isRoleAllowed(role: GpuEndpointRole): boolean {
   const current = getAiOperatingMode();

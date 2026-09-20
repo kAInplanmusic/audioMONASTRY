@@ -43,6 +43,9 @@ ROLE_IDS = (
 _PLANNED_PREFIX = "TBD"
 
 #: Runtime-Schlüssel, die der Rollen-Block übersteuern darf.
+#: `idleTimeoutSeconds` (nicht Minuten): die Flotte rechnet überall in Sekunden –
+#: Deploy (`ROLE_DEFAULTS[role].idleTimeout`), Manifest (`roles.<role>`) und der
+#: Live-Wert der RunPod-API sind damit dieselbe Einheit (INFRA-RUNPOD-005).
 _ROLE_RUNTIME_KEYS = (
     "label",
     "gpuPoolId",
@@ -50,7 +53,7 @@ _ROLE_RUNTIME_KEYS = (
     "vramBudgetGb",
     "vramSafetyMarginGb",
     "maxConcurrentInference",
-    "idleTimeoutMinutes",
+    "idleTimeoutSeconds",
 )
 
 

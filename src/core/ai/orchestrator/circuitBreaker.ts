@@ -5,6 +5,7 @@
  * Breaker, lehnt weitere Calls sofort ab (fail-fast) und erlaubt nach
  * `resetTimeoutMs` genau EINEN HALF_OPEN-Probe-Call (FA-P1-8).
  */
+import { envNumber } from '../../../config/aiInfrastructure';
 import { aiLogger } from './aiLogger';
 
 export type BreakerState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
@@ -23,8 +24,12 @@ export class CircuitBreaker {
   private readonly resetTimeoutMs: number;
 
   constructor(private name: string, options: CircuitBreakerOptions = {}) {
-    this.failureThreshold = options.failureThreshold ?? Number(process.env.AI_CB_FAILURE_THRESHOLD ?? 5);
-    this.resetTimeoutMs = options.resetTimeoutMs ?? Number(process.env.AI_CB_RESET_MS ?? 30_000);
+    // Browser-sicher ueber den Helfer lesen: dieses Modul wird ueber den
+    // LlmRouter auch vom Client erreicht, wo ein direkter Umgebungszugriff beim
+    // Laden scheitern wuerde (der Waechter tests/browserSafeModules.test.ts
+    // verbietet genau das).
+    this.failureThreshold = options.failureThreshold ?? envNumber('AI_CB_FAILURE_THRESHOLD', 5);
+    this.resetTimeoutMs = options.resetTimeoutMs ?? envNumber('AI_CB_RESET_MS', 30_000);
   }
 
   /** Reiner Getter – keine Zustandsmutation (FA-P1-8). */

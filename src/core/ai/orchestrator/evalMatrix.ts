@@ -68,21 +68,44 @@ export interface PluginEvalResult {
   durationMs: number;
   maxDurationMs: number;
   errors: string[];
-  status: 'PASS' | 'FAIL';
+  /**
+   * INFRA-AI-001: `UNCHECKED` = kein Modell erreichbar, es wurde NICHT bewertet.
+   * Vorher gab es nur PASS/FAIL – und ohne Modell schrieb der Lauf einen
+   * Mock-Score, der per Konstruktion bestand.
+   */
+  status: 'PASS' | 'FAIL' | 'UNCHECKED';
 }
 
 /**
  * Bewertet ein Plugin-Ergebnis gegen die Matrix: Score unter Mindest-Score,
  * Laufzeit über Budget oder gemeldete Fehler ⇒ FAIL (Gate für die Nightly-CI).
+ * Ohne echtes Modell (`checked: false`) ⇒ UNCHECKED (kein stiller Pass).
  */
 export function gradePluginResult(input: {
   pluginId: string;
   score: number;
   durationMs: number;
   errors?: string[];
+  /** false = der Lauf konnte nicht bewerten (kein Modell erreichbar). */
+  checked?: boolean;
+  /** Grund für „nicht geprüft" (erscheint im Report). */
+  skipReason?: string;
 }): PluginEvalResult {
   const spec = evalSpecFor(input.pluginId);
   const errors = [...(input.errors ?? [])];
+  if (input.checked === false) {
+    if (input.skipReason) errors.push(input.skipReason);
+    return {
+      pluginId: input.pluginId,
+      task: spec.task,
+      score: 0,
+      minScore: spec.minScore,
+      durationMs: Number(input.durationMs.toFixed(3)),
+      maxDurationMs: spec.maxDurationMs,
+      errors,
+      status: 'UNCHECKED',
+    };
+  }
   if (input.score < spec.minScore) {
     errors.push(`score ${input.score} < minScore ${spec.minScore}`);
   }
@@ -101,16 +124,24 @@ export function gradePluginResult(input: {
   };
 }
 
+/** Statustext einer Zeile im Markdown-Report. */
+function statusLabel(status: PluginEvalResult['status']): string {
+  if (status === 'PASS') return '✅ PASS';
+  if (status === 'FAIL') return '❌ FAIL';
+  return '⏸ UNCHECKED';
+}
+
 /** Markdown-Report je Plugin: Score, Dauer, Fehler (P3-3-Prüfpunkt). */
 export function renderEvalReportMarkdown(results: PluginEvalResult[], meta: { generatedAt: string }): string {
   const rows = results.map((r) =>
-    `| ${r.pluginId} | ${r.task} | ${r.score.toFixed(2)} | ${r.minScore.toFixed(2)} | ${r.durationMs.toFixed(1)} | ${r.status === 'PASS' ? '✅ PASS' : '❌ FAIL'} | ${r.errors.length === 0 ? '–' : r.errors.join('; ')} |`,
+    `| ${r.pluginId} | ${r.task} | ${r.score.toFixed(2)} | ${r.minScore.toFixed(2)} | ${r.durationMs.toFixed(1)} | ${statusLabel(r.status)} | ${r.errors.length === 0 ? '–' : r.errors.join('; ')} |`,
   );
   const failed = results.filter((r) => r.status === 'FAIL').length;
+  const unchecked = results.filter((r) => r.status === 'UNCHECKED').length;
   return [
     '# AI-Eval-Report (P3-3)',
     '',
-    `> Erzeugt: ${meta.generatedAt} · Plugins: ${results.length} · FAIL: ${failed}`,
+    `> Erzeugt: ${meta.generatedAt} · Plugins: ${results.length} · FAIL: ${failed} · UNCHECKED: ${unchecked}`,
     '',
     '| Plugin | Task | Score | Min-Score | Dauer (ms) | Status | Fehler |',
     '|---|---|---|---|---|---|---|',

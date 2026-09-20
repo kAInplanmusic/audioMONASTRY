@@ -69,12 +69,25 @@ export const GPU_ENDPOINT_ROLES = [...GPU_ROLE_IDS] as const;
 /** Rolle eines beliebigen GPU-Endpoints. */
 export type GpuEndpointRole = (typeof GPU_ENDPOINT_ROLES)[number];
 
-function envNumber(name: string, fallback: number): number {
+/**
+ * Liest eine Zahl aus der Umgebung — browser-sicher: ohne `process` (Client-Bundle)
+ * faellt der Wert auf `fallback` zurueck, statt mit `ReferenceError` zu crashen.
+ * Wird auch von den client-erreichbaren Orchestrator-Modulen genutzt
+ * (circuitBreaker, costTracker).
+ */
+export function envNumber(name: string, fallback: number): number {
   if (typeof process === 'undefined' || !process.env) return fallback;
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/** Liest einen String aus der Umgebung — browser-sicher (siehe `envNumber`). */
+export function envString(name: string, fallback: string): string {
+  if (typeof process === 'undefined' || !process.env) return fallback;
+  const raw = process.env[name];
+  return raw === undefined || raw === '' ? fallback : raw;
 }
 
 /** Harte Obergrenze aktiver GPU-Endpoints (Kostenregel). */

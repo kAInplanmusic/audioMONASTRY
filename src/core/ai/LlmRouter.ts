@@ -25,7 +25,10 @@
  * Details: docs/RUNPOD_AI_V1_SPEC.md.
  */
 import { RunPodProvider } from './orchestrator/runpodProvider';
-import { isRoleAllowed } from './aiGate';
+import { aiQualityTier, isRoleAllowed } from './aiGate';
+import { aiLogger } from './orchestrator/aiLogger';
+import { CircuitBreaker, type BreakerState } from './orchestrator/circuitBreaker';
+import { CostTracker } from './orchestrator/costTracker';
 
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
@@ -45,6 +48,11 @@ export interface LlmCompletion {
   provider: LlmProviderId;
   text: string;
   latencyMs: number;
+  /**
+   * INFRA-AI-004: der TATSAECHLICH angefragte Modellname (nicht der Provider).
+   * Vorher landete im Kostenbuch/Eval-Record nur die Provider-ID.
+   */
+  model?: string;
 }
 
 export interface LlmRequest {
@@ -54,6 +62,48 @@ export interface LlmRequest {
   temperature?: number;
   /** DeepSeek-V4: 'low' | 'high' | 'max' (Default: low, spart Tokens). */
   reasoningEffort?: 'low' | 'high' | 'max';
+  /**
+   * INFRA-AI-004: Zeitlimit mit ECHTEM Abbruch. Ohne Angabe gilt
+   * `LLM_TIMEOUT_MS` (Default 60 000). Ein hängender Provider blockiert die
+   * Fallback-Kette damit nicht mehr endlos.
+   */
+  timeoutMs?: number;
+  /** Zusätzliches Abbruchsignal des Aufrufers (z. B. Job-Abbruch im UI). */
+  signal?: AbortSignal;
+}
+
+/** Wirksames Zeitlimit eines LLM-Aufrufs (env `LLM_TIMEOUT_MS`, Default 60 000). */
+export function llmTimeoutMs(): number {
+  const raw = Number(envKey('LLM_TIMEOUT_MS') ?? 60_000);
+  return Number.isFinite(raw) && raw > 0 ? raw : 60_000;
+}
+
+/** Fehler eines abgebrochenen LLM-Aufrufs (Timeout oder Aufrufer-Abbruch). */
+export class LlmTimeoutError extends Error {
+  readonly code = 'LLM_TIMEOUT';
+  constructor(ms: number) {
+    super(`LLM-Aufruf nach ${ms} ms abgebrochen (LLM_TIMEOUT_MS)`);
+    this.name = 'LlmTimeoutError';
+  }
+}
+
+/**
+ * Verbindet Aufrufer-Signal und Zeitlimit zu einem Signal. `AbortSignal.any`
+ * ist Node 20+/moderne Browser; fehlt es, gewinnt das Zeitlimit.
+ */
+function combineSignals(timeoutMs: number, signal?: AbortSignal): { signal: AbortSignal; dispose: () => void } {
+  const timeoutSignal = AbortSignal.timeout(Math.max(1, Math.floor(timeoutMs)));
+  if (!signal) return { signal: timeoutSignal, dispose: () => {} };
+  const anyFn = (AbortSignal as unknown as { any?: (signals: AbortSignal[]) => AbortSignal }).any;
+  if (typeof anyFn === 'function') return { signal: anyFn([timeoutSignal, signal]), dispose: () => {} };
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  signal.addEventListener('abort', abort, { once: true });
+  timeoutSignal.addEventListener('abort', abort, { once: true });
+  return {
+    signal: controller.signal,
+    dispose: () => signal.removeEventListener('abort', abort),
+  };
 }
 
 export interface ILlmProvider {
@@ -80,6 +130,23 @@ export function openAiCompatBrainModel(): string {
   return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
 }
 
+/**
+ * INFRA-RUNPOD-003: Die Brain-Modell-Identifier, auf die der Router ohne
+ * gesetzte Overrides zurückfällt.
+ *
+ * Diese Werte sind die Kante zum Rollen-Manifest: wer hier einen Namen ändert,
+ * muss ihn dort anlegen (repository + gepinnte Revision), sonst scheitert der
+ * native Pfad mit `ModelUnavailableError: unknown model`. `tests/aiModelIdentity.test.ts`
+ * prüft das gegen `services/audiomonastry-ai-runtime/model_manifest.json`.
+ */
+export function brainModelDefaults(): { executor: string; standard: string; openAiCompat: string } {
+  return {
+    executor: envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b',
+    standard: envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'],
+    openAiCompat: openAiCompatBrainModel(),
+  };
+}
+
 const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // Gepinntes, heute lauffähiges Brain-Modell fuer den NATIVEN Worker-Weg
   // (task 'llm'): dort gelten die internen Kurznamen. Upgrade auf qwen3-32b /
@@ -102,16 +169,45 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
  */
 const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local', 'ollama']);
 
+/**
+ * INFRA-AI-004: Kostenbuch aller `LlmRouter`-Aufrufe.
+ *
+ * Der Orchestrator führt sein eigenes Buch für Jobs; LLM-Aufrufe direkt über den
+ * Router (Sprachbefehle, Eval, Drop-Generator) liefen bisher an JEDER Erfassung
+ * vorbei. Eigene Instanz, damit sich beide Bücher nicht gegenseitig verkürzen
+ * (CostTracker prunt nach 30 Tagen), und exportiert für Status/Diagnose.
+ */
+export const llmCostTracker = new CostTracker();
+
+/**
+ * INFRA-AI-005: Qualitätsstufe der Einstellung in der Provider-Kette.
+ *
+ * Bei `high` (aiMONK = PRO) wandert das stärkere Modell nach vorn – vor den
+ * schnellen Weg. Die Reihenfolge ändert sich nur, wenn der Provider überhaupt
+ * registriert/zugelassen ist (`AI_ALLOW_EXTERNAL_LLM`), sonst bleibt die Kette
+ * unverändert.
+ */
+function promoteQuality(order: LlmProviderId[]): LlmProviderId[] {
+  if (!order.includes('deepseek-pro')) return order;
+  const rest = order.filter((id) => id !== 'deepseek-pro');
+  // Lokale Provider bleiben vorn (`runpod-local`, `ollama`); das stärkere Modell
+  // schiebt sich direkt DAHINTER, vor die schnellen Cloud-Wege.
+  const anchor = rest.indexOf('ollama');
+  const at = anchor >= 0 ? anchor + 1 : 0;
+  return [...rest.slice(0, at), 'deepseek-pro', ...rest.slice(at)];
+}
+
 function envKey(name: string): string | undefined {
   const v = (typeof process !== 'undefined' && process.env ? process.env[name] : undefined)?.trim();
   return v && v.length > 0 ? v : undefined;
 }
 
-function postJson(url: string, headers: Record<string, string>, body: unknown): Promise<Response> {
+function postJson(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   });
 }
 
@@ -175,8 +271,8 @@ class OpenAiCompatibleProvider implements ILlmProvider {
     if (this.id === 'deepseek-flash' || this.id === 'deepseek-pro') {
       body.reasoning_effort = req.reasoningEffort ?? 'low';
     }
-    const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body);
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+    const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body, req.signal);
+    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
   }
 }
 
@@ -199,8 +295,8 @@ class OllamaProvider implements ILlmProvider {
         temperature: req.temperature ?? 0.7,
         num_predict: req.maxTokens ?? 512,
       },
-    });
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+    }, req.signal);
+    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
   }
 }
 
@@ -216,8 +312,9 @@ class GeminiProvider implements ILlmProvider {
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${envKey('GEMINI_API_KEY')}`,
       {},
       { contents: [{ parts: [{ text: req.prompt }] }] },
+      req.signal,
     );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
   }
 }
 
@@ -233,8 +330,9 @@ class OpenAIProvider implements ILlmProvider {
       'https://api.openai.com/v1/chat/completions',
       { Authorization: `Bearer ${envKey('OPENAI_API_KEY')}` },
       { model, messages: [{ role: 'user', content: req.prompt }], max_tokens: req.maxTokens ?? 512 },
+      req.signal,
     );
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started };
+    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
   }
 }
 
@@ -317,7 +415,11 @@ class RunPodLocalProvider implements ILlmProvider {
       return envKey('RUNPOD_BRAIN_OPENAI_MODEL') || envKey('RP_BRAIN_OPENAI_MODEL')
         || envKey('RUNPOD_BRAIN_MODEL') || OPENAI_COMPAT_BRAIN_MODEL_DEFAULT;
     }
-    if (complexity === 'simple') {
+    // INFRA-AI-005: Im Modus PRO (`on-with-visuals`, Qualitätsstufe `high`) wählt
+    // der Router auch für `simple` das große Brain-Modell – die Einstellung hat
+    // damit eine nachweisbare Kante bis in die Modellwahl. Standard bleibt beim
+    // schnellen Ausführer (qwen3-4b), weil dort Latenz und Kosten zählen.
+    if (complexity === 'simple' && aiQualityTier() === 'standard') {
       return envKey('RUNPOD_EXECUTOR_MODEL') || 'qwen3-4b';
     }
     return envKey('RUNPOD_BRAIN_MODEL') || DEFAULT_MODELS['runpod-local'];
@@ -347,6 +449,7 @@ class RunPodLocalProvider implements ILlmProvider {
             // vLLM reicht das an das Qwen3-Chat-Template durch (kein <think>-Block).
             chat_template_kwargs: { enable_thinking: enableThinking },
           },
+          req.signal,
         );
         // `extractText` wirft bei HTTP != 2xx ("HTTP 500") - das muss in denselben
         // catch, sonst bleibt ein abgelehnter Modellname unerklaerlich.
@@ -369,7 +472,7 @@ class RunPodLocalProvider implements ILlmProvider {
         }
         throw error;
       }
-      return { provider: this.id, text: text!, latencyMs: Date.now() - started };
+      return { provider: this.id, text: text!, latencyMs: Date.now() - started, model };
     }
 
     const result = await this.brainProvider().run('llm', model, {
@@ -377,8 +480,8 @@ class RunPodLocalProvider implements ILlmProvider {
       maxTokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.7,
       enableThinking,
-    });
-    return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started };
+    }, req.signal);
+    return { provider: this.id, text: extractWorkerText(result), latencyMs: Date.now() - started, model };
   }
 }
 
@@ -399,6 +502,9 @@ export function extractWorkerText(result: unknown): string {
 
 export class LlmRouter {
   private providers = new Map<LlmProviderId, ILlmProvider>();
+  /** INFRA-AI-004: ein Breaker je Provider – ein Ausfall zählt jetzt sichtbar. */
+  private breakers = new Map<LlmProviderId, CircuitBreaker>();
+  private costCounter = 0;
 
   constructor() {
     // Lokales Brain zuerst registrieren – es ist der primäre Provider.
@@ -438,14 +544,19 @@ export class LlmRouter {
    * Das lokale Brain (`runpod-local`) steht immer vorn; `ollama` ist der
    * wirklich lokale Notfall-Fallback. Externe/bezahlte Provider bleiben
    * registriert, werden aber nur mit `AI_ALLOW_EXTERNAL_LLM=true` zugelassen.
+   *
+   * INFRA-AI-005: Die Qualitätsstufe der Einstellung verschiebt die Reihenfolge –
+   * bei `high` (aiMONK = PRO) steht das stärkere Modell (`deepseek-pro`) vor dem
+   * schnellen `deepseek-flash`, bei `standard` bleibt es beim günstigen Weg.
    */
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
-    const order: LlmProviderId[] =
+    const base: LlmProviderId[] =
       complexity === 'complex'
         ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-pro', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'gemini', 'openai']
         : complexity === 'moderate'
           ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'deepseek-pro']
           : ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai'];
+    const order = aiQualityTier() === 'high' ? promoteQuality(base) : base;
     const allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true';
     return order
       .filter((id) => allowExternal || LOCAL_LLM_PROVIDERS.has(id))
@@ -453,18 +564,87 @@ export class LlmRouter {
       .filter((p): p is ILlmProvider => Boolean(p) && p.available);
   }
 
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const ranked = this.rankProviders(req.complexity);
-    if (ranked.length === 0) throw new Error('Kein LLM-Provider verfügbar (Keys fehlen).');
-    let lastError: unknown;
-    for (const provider of ranked) {
-      try {
-        return await provider.complete(req);
-      } catch (error) {
-        lastError = error;
-      }
+  /** Breaker eines Providers (wird bei Bedarf angelegt). */
+  private breakerFor(id: LlmProviderId): CircuitBreaker {
+    const existing = this.breakers.get(id);
+    if (existing) return existing;
+    const breaker = new CircuitBreaker(`llm:${id}`);
+    this.breakers.set(id, breaker);
+    return breaker;
+  }
+
+  /** Zustand aller Breaker (Diagnose/Statusrouten, ohne Netzwerk). */
+  breakerStates(): Record<string, BreakerState> {
+    const states: Record<string, BreakerState> = {};
+    for (const [id, breaker] of this.breakers) states[id] = breaker.getState();
+    return states;
+  }
+
+  /**
+   * INFRA-AI-004: Kosten je LLM-Aufruf erfassen. Vorher liefen LlmRouter-Aufrufe
+   * am Kostenbuch vorbei (nur Orchestrator-Jobs wurden verbucht).
+   */
+  private recordCost(completion: LlmCompletion, complexity: LlmComplexity): void {
+    this.costCounter += 1;
+    const provider = completion.provider;
+    const model = completion.model ?? provider;
+    try {
+      llmCostTracker.record({
+        jobId: `llm-${this.costCounter}`,
+        sessionId: 'llm-router',
+        provider,
+        task: 'llm',
+        model,
+        gpuType: 'CPU',
+        gpuRuntimeMs: Math.max(0, Math.round(completion.latencyMs)),
+        inferenceMs: Math.max(0, Math.round(completion.latencyMs)),
+        estimatedCostUsd: Number(llmCostTracker.estimateJobCostUsd('llm', provider, model).toFixed(6)),
+      });
+    } catch (error) {
+      // Die Kostenbuchung darf den Aufruf nie verhindern.
+      aiLogger.warn('llm cost record failed', { provider, complexity, error: (error as Error).message });
     }
-    throw lastError instanceof Error ? lastError : new Error('Alle LLM-Provider fehlgeschlagen.');
+  }
+
+  /** Kostenzusammenfassung der LlmRouter-Aufrufe (Diagnose). */
+  costSummary(): ReturnType<CostTracker['summary']> {
+    return llmCostTracker.summary();
+  }
+
+  async complete(req: LlmRequest): Promise<LlmCompletion> {
+    const timeoutMs = req.timeoutMs ?? llmTimeoutMs();
+    const { signal, dispose } = combineSignals(timeoutMs, req.signal);
+    const request: LlmRequest = signal === req.signal ? req : { ...req, signal };
+    try {
+      const ranked = this.rankProviders(req.complexity);
+      if (ranked.length === 0) throw new Error('Kein LLM-Provider verfügbar (Keys fehlen).');
+      let lastError: unknown;
+      for (const provider of ranked) {
+        const breaker = this.breakerFor(provider.id);
+        if (breaker.getState() === 'OPEN') {
+          aiLogger.warn('llm provider skipped: circuit breaker open', { provider: provider.id });
+          lastError = new Error(`circuit breaker open: llm:${provider.id}`);
+          continue;
+        }
+        try {
+          const completion = await breaker.call(() => provider.complete(request));
+          this.recordCost(completion, req.complexity);
+          return completion;
+        } catch (error) {
+          lastError = error;
+          aiLogger.warn('llm provider failed, trying next', {
+            provider: provider.id,
+            error: (error as Error).message,
+          });
+        }
+      }
+      // Abbruch (Zeitlimit/Aufrufer) klar benennen, damit Aufrufer nicht auf
+      // einen Provider-Fehler schließen.
+      if (signal.aborted && !req.signal?.aborted) throw new LlmTimeoutError(timeoutMs);
+      throw lastError instanceof Error ? lastError : new Error('Alle LLM-Provider fehlgeschlagen.');
+    } finally {
+      dispose();
+    }
   }
 
   /**

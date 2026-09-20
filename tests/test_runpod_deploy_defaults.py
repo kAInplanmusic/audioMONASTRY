@@ -12,6 +12,7 @@ Lauf: python3 tests/test_runpod_deploy_defaults.py
 from __future__ import annotations
 
 import importlib.util
+import json
 import pathlib
 import sys
 import types
@@ -82,6 +83,107 @@ class RoleDefaultsTest(unittest.TestCase):
         self.assertEqual(deploy.ROLE_DEFAULTS["brain"]["idleTimeout"], 15)
         self.assertEqual(deploy.ROLE_DEFAULTS["ears"]["idleTimeout"], 15)
         self.assertEqual(deploy.ROLE_DEFAULTS["brain"]["gpuPoolId"], "AMPERE_48")
+
+
+class DeployGegeManifestTest(unittest.TestCase):
+    """INFRA-RUNPOD-002/005: Deploy-Defaults, Manifest und Live-Werte sind EINE Wahrheit.
+
+    Vorher kodierten zwei gruene Tests zwei widersprechende Pool-Wahrheiten
+    (ADA_24 im Deploy-Skript vs. AMPERE_48 im Manifest), und sechs Rollen
+    deklarierten 900 s idleTimeout gegen live 120 s. Dieser Test vergleicht die
+    beiden Seiten direkt - eine Abweichung ist ab jetzt ein roter Test.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest = json.loads(
+            (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
+        )
+
+    def test_gpu_pool_stimmt_mit_dem_manifest_ueberein(self) -> None:
+        roles = self.manifest["roles"]
+        for role, defaults in deploy.ROLE_DEFAULTS.items():
+            with self.subTest(role=role):
+                self.assertIn(role, roles, f"{role} fehlt im Manifest")
+                self.assertEqual(
+                    defaults["gpuPoolId"],
+                    roles[role]["gpuPoolId"],
+                    f"{role}: Deploy-Skript und Manifest nennen verschiedene GPU-Pools",
+                )
+                self.assertEqual(defaults["gpuCount"], roles[role]["gpuCount"])
+
+    def test_idle_timeout_stimmt_mit_dem_manifest_ueberein(self) -> None:
+        roles = self.manifest["roles"]
+        for role, defaults in deploy.ROLE_DEFAULTS.items():
+            with self.subTest(role=role):
+                self.assertEqual(
+                    defaults["idleTimeout"],
+                    roles[role].get("idleTimeoutSeconds"),
+                    f"{role}: idleTimeout im Deploy-Skript weicht vom Manifest ab",
+                )
+
+    def test_manifest_vram_budget_passt_zum_pool(self) -> None:
+        # 24-GB-Pool mit 48-GB-Budget (oder umgekehrt) waere eine Planung gegen
+        # die falsche Hardware - genau der Befund aus dem Audit.
+        expected = {"ADA_24": 24, "AMPERE_48": 48}
+        for role, spec in self.manifest["roles"].items():
+            with self.subTest(role=role):
+                self.assertEqual(spec["vramBudgetGb"], expected[spec["gpuPoolId"]])
+
+
+class EndpointBudgetTest(unittest.TestCase):
+    """INFRA-RUNPOD-001: die Flotte bricht ab, bevor sie die Obergrenze reisst."""
+
+    def test_acht_vorhandene_endpoints_blockieren_den_neunten(self) -> None:
+        existing = [f"audiomonastry-ai-x{i}" for i in range(8)]
+        ok, new_names, message = deploy.plan_endpoint_budget(existing, existing + ["audiomonastry-ai-neu"], limit=8)
+        self.assertFalse(ok)
+        self.assertEqual(new_names, ["audiomonastry-ai-neu"])
+        self.assertIn("Grenze 8", message)
+
+    def test_redeploy_vorhandener_rollen_bleibt_erlaubt(self) -> None:
+        existing = [f"audiomonastry-ai-{r}" for r in deploy.ROLE_DEFAULTS]
+        planned = [f"audiomonastry-ai-{r}" for r in deploy.ROLE_DEFAULTS]
+        ok, new_names, _ = deploy.plan_endpoint_budget(existing, planned, limit=8)
+        self.assertTrue(ok)
+        self.assertEqual(new_names, [])
+
+    def test_konto_ueber_der_grenze_wird_gemeldet(self) -> None:
+        existing = [f"fremd-{i}" for i in range(9)]
+        ok, _new, message = deploy.plan_endpoint_budget(existing, ["audiomonastry-ai-brain"], limit=8)
+        self.assertFalse(ok)
+        self.assertIn("hoechstens 8", message)
+
+    def test_default_grenze_ist_acht(self) -> None:
+        self.assertEqual(deploy.ENDPOINT_LIMIT_DEFAULT, 8)
+
+    def test_verwaiste_flotten_endpoints_werden_erkannt(self) -> None:
+        existing = ["audiomonastry-ai-brain", "audiomonastry-ai-vision", "fremd-endpoint"]
+        orphans = deploy.orphan_endpoint_names(existing, ["audiomonastry-ai-brain"])
+        self.assertEqual(orphans, ["audiomonastry-ai-vision"])
+
+
+class BrainModellIdentitaetTest(unittest.TestCase):
+    """INFRA-RUNPOD-003: der Deploy-Brain nennt dasselbe Modell wie das Manifest."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.manifest = json.loads(
+            (ROOT / "services" / "audiomonastry-ai-runtime" / "model_manifest.json").read_text(encoding="utf-8")
+        )
+
+    def test_brain_realisiert_das_manifest_modell(self) -> None:
+        repository = deploy.BRAIN_VLLM_MODEL_DEFAULT
+        entries = [m for m in self.manifest["models"] if m.get("repository") == repository]
+        self.assertTrue(entries, f"{repository} fehlt im Manifest")
+        model_id = entries[0]["id"]
+        self.assertIn(model_id, self.manifest["roles"]["brain"]["models"])
+        self.assertIn(model_id, self.manifest["roles"]["brain"]["preloadModels"])
+
+    def test_revision_des_brain_deployments_ist_die_des_manifests(self) -> None:
+        repository = deploy.BRAIN_VLLM_MODEL_DEFAULT
+        entry = next(m for m in self.manifest["models"] if m.get("repository") == repository)
+        self.assertEqual(entry["revision"], deploy.BRAIN_VLLM_REVISION_DEFAULT)
 
 
 if __name__ == "__main__":

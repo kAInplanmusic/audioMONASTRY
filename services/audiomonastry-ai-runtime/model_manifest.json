@@ -3,8 +3,9 @@
     "vramBudgetGb": 48,
     "vramSafetyMarginGb": 6,
     "device": "cuda",
-    "idleTimeoutMinutes": 20,
-    "maxConcurrentInference": 2
+    "maxConcurrentInference": 2,
+    "idleTimeoutSeconds": 120,
+    "idleTimeoutNote": "Default fuer Rollen ohne eigenes Feld; autoritativ ist roles.<rolle>.idleTimeoutSeconds (= scripts/runpod-deploy.py ROLE_DEFAULTS.idleTimeout, live verifiziert 2026-09-20)."
   },
   "models": [
     {
@@ -350,6 +351,36 @@
       "timeout": 300,
       "license": "Apache-2.0",
       "trustRemoteCode": false
+    },
+    {
+      "id": "qwen3-14b",
+      "repository": "Qwen/Qwen3-14B-AWQ",
+      "revision": "31c69efc29464b6bb0aee1398b5a7b50a99340c3",
+      "task": "llm",
+      "framework": "vllm",
+      "estimatedVRAM": 11,
+      "estimatedRAM": 12,
+      "loadPriority": 1,
+      "preload": true,
+      "loadClass": "CORE",
+      "quantization": "awq-int4",
+      "dependencies": [
+        "vllm",
+        "torch"
+      ],
+      "inputFormats": [
+        "text"
+      ],
+      "outputFormats": [
+        "text",
+        "json"
+      ],
+      "maxDuration": 120,
+      "concurrency": 1,
+      "timeout": 600,
+      "license": "Apache-2.0",
+      "trustRemoteCode": false,
+      "note": "Live-Brain: der vorgefertigte RunPod-vLLM-Worker serviert genau dieses Modell (GET /openai/v1/models, belegt in AI-P1-008). Revision = scripts/runpod-deploy.py BRAIN_VLLM_REVISION_DEFAULT. Zuvor fehlte der kurze Identifier qwen3-14b im Manifest, obwohl LlmRouter ihn als Default des nativen Pfads nutzt."
     },
     {
       "framework": "vllm",
@@ -1120,12 +1151,15 @@
       "maxConcurrentInference": 1,
       "preloadModels": [
         "qwen3-30b-a3b-awq",
+        "qwen3-14b",
         "qwen3-4b"
       ],
       "models": [
         "qwen3-30b-a3b-awq",
+        "qwen3-14b",
         "qwen3-4b"
-      ]
+      ],
+      "idleTimeoutSeconds": 15
     },
     "ears": {
       "label": "Audio-Intelligence (STT, Embeddings, Klassifikation, Diarization)",
@@ -1151,7 +1185,8 @@
         "pyannote-diarization",
         "ast-audioset",
         "essentia"
-      ]
+      ],
+      "idleTimeoutSeconds": 15
     },
     "voiceGen": {
       "label": "Voice & SFX (TTS CustomVoice/VoiceDesign, Stems, SFX)",
@@ -1171,7 +1206,8 @@
         "qwen3-tts-voicedesign",
         "htdemucs-6s",
         "stable-audio-open-1.0"
-      ]
+      ],
+      "idleTimeoutSeconds": 120
     },
     "music": {
       "label": "Musik-Generierung (ACE-Step 1.5 XL + LM-Planer + Genre-LoRAs)",
@@ -1191,7 +1227,8 @@
         "acestep-v15-xl-sft",
         "acestep-v15-xl-turbo",
         "acestep-5hz-lm-4b"
-      ]
+      ],
+      "idleTimeoutSeconds": 120
     },
     "imageHq": {
       "label": "Bild-Generierung (FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter)",
@@ -1218,13 +1255,14 @@
       ],
       "exclusiveGroups": {
         "image-base": "flux2-dev"
-      }
+      },
+      "idleTimeoutSeconds": 120
     },
     "videoReal": {
       "label": "Video photorealistisch (Wan 2.2 A14B)",
-      "gpuPoolId": "AMPERE_48",
+      "gpuPoolId": "ADA_24",
       "gpuCount": 1,
-      "vramBudgetGb": 48,
+      "vramBudgetGb": 24,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
@@ -1242,13 +1280,15 @@
         "ip-adapter-video",
         "rife-interpolation",
         "realesrgan-video-x4"
-      ]
+      ],
+      "gpuPoolNote": "Ada-Klasse (RTX 4090/5090, 24 GB): die Wan-Worker-Images sind auf CUDA 12.8/Ada ausgelegt, 4090 Serverless 1,10 $/h vs. 5090 1,58 $/h. Live-Beleg: API nennt \"NVIDIA GeForce RTX 4090/5090\" (Audit 4.1, 2026-09-20).",
+      "idleTimeoutSeconds": 120
     },
     "videoAbstract": {
       "label": "Video abstrakt/stylisiert (LTXVideo 13B)",
-      "gpuPoolId": "AMPERE_48",
+      "gpuPoolId": "ADA_24",
       "gpuCount": 1,
-      "vramBudgetGb": 48,
+      "vramBudgetGb": 24,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
@@ -1266,7 +1306,9 @@
         "ip-adapter-video",
         "rife-interpolation",
         "realesrgan-video-x4"
-      ]
+      ],
+      "gpuPoolNote": "Ada-Klasse (RTX 4090, 24 GB) – laeuft auf demselben Wan-Worker-Image wie videoReal. Live-Beleg: API nennt \"NVIDIA GeForce RTX 4090\" (Audit 4.1, 2026-09-20).",
+      "idleTimeoutSeconds": 120
     },
     "orchestrator": {
       "label": "AI-Orchestrator (MoA: 1 starkes + 1 schnelles Modell, Qwen3-8B/4B)",
@@ -1282,7 +1324,8 @@
       "models": [
         "qwen3-4b",
         "qwen3-8b"
-      ]
+      ],
+      "idleTimeoutSeconds": 120
     }
   }
 }

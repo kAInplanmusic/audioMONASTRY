@@ -86,7 +86,7 @@ export class ProviderRouter {
         prompt: String((input as { prompt?: string })?.prompt ?? input ?? ''),
         complexity: (input as { complexity?: 'simple' | 'moderate' | 'complex' })?.complexity ?? 'moderate',
       });
-      return { provider: completion.provider as AiProviderId, result: completion };
+      return { provider: completion.provider, result: completion };
     }
     const ranked = this.candidates(task);
     if (ranked.length === 0) throw new AiProviderError('local', 'NO_PROVIDER', `kein Provider für Task ${task}`, false);

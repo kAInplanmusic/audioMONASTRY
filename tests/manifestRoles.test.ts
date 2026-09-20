@@ -22,6 +22,7 @@ interface ManifestRole {
   gpuPoolId: string;
   gpuCount: number;
   vramBudgetGb: number;
+  idleTimeoutSeconds?: number;
   preloadModels: string[];
   models: string[];
 }
@@ -52,6 +53,17 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
       expect(role.gpuPoolId).toBe(spec.gpuPoolId);
       expect(role.gpuCount).toBe(spec.gpuCount);
       expect(role.vramBudgetGb).toBe(spec.vramBudgetGb);
+    }
+  });
+
+  it('nennt je Rolle dasselbe Idle-Fenster wie das Manifest (INFRA-RUNPOD-005)', () => {
+    // Ein zu großes Fenster ist eine offene Kostenflaeche (der Worker laeuft nach
+    // dem letzten Job weiter und wird abgerechnet); ein zu kleines kostet dagegen
+    // Kaltstart bei jeder Iteration. Deshalb: eine Zahl, drei Orte.
+    for (const role of GPU_ROLE_LIST) {
+      const spec = manifest.roles[role.role];
+      expect(spec.idleTimeoutSeconds, `${role.role}: Manifest ohne idleTimeoutSeconds`).toBeGreaterThan(0);
+      expect(role.idleTimeoutSeconds, `${role.role}: TS-Spiegel weicht ab`).toBe(spec.idleTimeoutSeconds);
     }
   });
 

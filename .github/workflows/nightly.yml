@@ -34,10 +34,11 @@ jobs:
       - name: Bundle-Budget-Check
         run: node scripts/check-bundle-size.mjs || true
 
-      # P3-3: Eval-Run je Plugin (21 deterministische Kern-Kommandos),
-      # schreibt ai-evaluations.json/ai-eval-runs.json + ai-eval-report.md
-      # (Score, Dauer, Fehler je Plugin) und bricht bei Score-Abfall oder
-      # Laufzeit-Überschreitung (Gate aus evalMatrix) mit Exit 1 ab.
+      # P3-3 + INFRA-AI-001: Eval-Run je Plugin gegen ein ECHTES Modell (zuvor
+      # Mock-Score, der nie fehlschlagen konnte). Ist kein Modell erreichbar
+      # (Fleet schlafen, keine Keys), meldet der Lauf ehrlich UNCHECKED und bleibt
+      # grün; mit AI_EVAL_REQUIRE_MODEL=1 wird „nicht geprüft" zum Fehler.
+      # Achtung: 18 echte Modellaufrufe – weckt die Flotte und kostet GPU-Minuten.
       - name: AI-Eval-Run (Gate bei Score-Abfall)
         run: npm run eval:ai
 

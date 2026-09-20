@@ -34,6 +34,13 @@ export interface GpuRoleDefinition {
   gpuCount: number;
   /** Physisches VRAM-Budget der Rolle in GB (Spiegel des Rollen-Manifests). */
   vramBudgetGb: number;
+  /**
+   * Idle-Fenster in Sekunden: so lange bleibt ein Worker nach dem letzten Job
+   * am Leben und wird WEITER ABGERECHNET. Spiegel von
+   * `ROLE_DEFAULTS[<rolle>].idleTimeout` (Deploy) und
+   * `roles.<rolle>.idleTimeoutSeconds` (Manifest) – live verifiziert 2026-09-20.
+   */
+  idleTimeoutSeconds: number;
   /** Tasks, die ausschließlich diese Rolle ausführt. */
   tasks: readonly AiTask[];
   /** Modelle, die der Rollen-Worker beim Session-Wake vorlädt. */
@@ -66,6 +73,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
+    idleTimeoutSeconds: 15,
     tasks: ['llm', 'nlu'],
     warmupMode: 'task',
     // Zwei Stufen, EINE Familie (Entscheidung 2026-09-11): `qwen3-4b` ist der
@@ -74,7 +82,12 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     // gleichzeitig resident (30 + 9 GB < 48 GB Budget) – kein LRU-Wechsel.
     // Upgrade auf qwen3-32b / glm-4.5-air, sobald deren Revision gepinnt ist
     // (im Rollen-Manifest als status="planned" geführt).
-    preload: ['qwen3-30b-a3b-awq', 'qwen3-4b'],
+    //
+    // INFRA-RUNPOD-003: `qwen3-14b` ist seit 2026-09-20 auch IM MANIFEST
+    // (repository Qwen/Qwen3-14B-AWQ, gepinnte Revision) – vorher existierte der
+    // Identifier nur im Router, der native Pfad wäre an `unknown model`
+    // gescheitert. `tests/aiModelIdentity.test.ts` hält beide Seiten zusammen.
+    preload: ['qwen3-30b-a3b-awq', 'qwen3-14b', 'qwen3-4b'],
     brainModel: 'qwen3-30b-a3b-awq',
     executorModel: 'qwen3-4b',
   },
@@ -86,6 +99,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
+    idleTimeoutSeconds: 15,
     tasks: [
       'audio.classify',
       'audio.transcribe',
@@ -116,6 +130,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
+    idleTimeoutSeconds: 120,
     tasks: ['tts', 'audio.generate', 'stem.separate'],
     warmupMode: 'task',
     // Standard-TTS: qwen3-tts-17b (1,7B CustomVoice, DE/EN + 8 weitere
@@ -133,7 +148,8 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
-    tasks: ['song', 'sing'],
+    idleTimeoutSeconds: 120,
+    tasks: ['sing', 'song'],
     // Vorgefertigter ACE-Step-ComfyUI-Worker (Hub): kennt unseren `warmup`-Task
     // nicht, wird nur per workersMin geweckt.
     warmupMode: 'endpoint',
@@ -154,6 +170,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
+    idleTimeoutSeconds: 120,
     tasks: ['image.generate'],
     // Vorgefertigter ComfyUI-Worker: kennt unseren `warmup`-Task nicht.
     warmupMode: 'endpoint',
@@ -174,9 +191,12 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'Video photorealistisch (Wan 2.2 A14B)',
     endpointName: endpointNameForRole('videoReal'),
     endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_REAL',
-    gpuPoolId: 'AMPERE_48',
+    // INFRA-RUNPOD-002: Ada-Klasse wie LIVE (RTX 4090/5090) – die Wan-Images
+    // sind auf CUDA 12.8/Ada ausgelegt, 4090 Serverless 1,10 $/h vs. 5090 1,58 $/h.
+    gpuPoolId: 'ADA_24',
     gpuCount: 1,
-    vramBudgetGb: 48,
+    vramBudgetGb: 24,
+    idleTimeoutSeconds: 120,
     tasks: ['video.generate'],
     // Vorgefertigter Wan2.2-Worker: kennt unseren `warmup`-Task nicht.
     warmupMode: 'endpoint',
@@ -194,9 +214,11 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     label: 'Video abstrakt/stylisiert (LTXVideo 13B)',
     endpointName: endpointNameForRole('videoAbstract'),
     endpointIdEnv: 'RP_ENDPOINT_ID_VIDEO_ABSTRACT',
-    gpuPoolId: 'AMPERE_48',
+    // INFRA-RUNPOD-002: ADA_24 wie videoReal (gleiches Wan-Worker-Image, live RTX 4090).
+    gpuPoolId: 'ADA_24',
     gpuCount: 1,
-    vramBudgetGb: 48,
+    vramBudgetGb: 24,
+    idleTimeoutSeconds: 120,
     tasks: ['video.abstract'],
     // Vorgefertigter ComfyUI-Worker: kennt unseren `warmup`-Task nicht.
     warmupMode: 'endpoint',
@@ -217,6 +239,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     gpuPoolId: 'AMPERE_48',
     gpuCount: 1,
     vramBudgetGb: 48,
+    idleTimeoutSeconds: 120,
     tasks: ['agent.orchestrate'],
     warmupMode: 'task',
     // MoA: EIN starkes + EIN schnelles Modell, beide native Qwen3 (Apache-2.0,

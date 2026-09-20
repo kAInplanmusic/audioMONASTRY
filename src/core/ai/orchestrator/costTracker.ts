@@ -9,6 +9,7 @@
  * - RunPod Serverless AMPERE_48: $1.22/h je aktivem Worker (live gemessen)
  * - Cerebras/DeepSeek V4 Flash: $0.22–0.44/M in, $0.66–1.32/M out – api-docs.deepseek.com
  */
+import { envNumber, envString } from '../../../config/aiInfrastructure';
 import { aiLogger } from './aiLogger';
 import type { AiJob, AiProviderId, AiTask } from './types';
 
@@ -25,18 +26,19 @@ export interface CostEntry {
   createdAt: number;
 }
 
+// Browser-sicher gelesen: das Modul wird ueber LlmRouter auch vom Client erreicht.
 const USD_PER_GPU_HOUR: Record<string, number> = {
-  'A100': Number(process.env.AI_COST_A100_USD_PER_HOUR ?? 2.5),
-  'L4': Number(process.env.AI_COST_L4_USD_PER_HOUR ?? 0.8),
-  'CPU': Number(process.env.AI_COST_CPU_USD_PER_HOUR ?? 0.033),
+  'A100': envNumber('AI_COST_A100_USD_PER_HOUR', 2.5),
+  'L4': envNumber('AI_COST_L4_USD_PER_HOUR', 0.8),
+  'CPU': envNumber('AI_COST_CPU_USD_PER_HOUR', 0.033),
 };
 
 const TASK_COST_USD: Partial<Record<AiTask, number>> = {
-  'stem.separate': Number(process.env.AI_COST_STEM_USD ?? 0.05),
-  'tts': Number(process.env.AI_COST_TTS_USD ?? 0.002),
-  'sing': Number(process.env.AI_COST_SING_USD ?? 0.005),
-  'song': Number(process.env.AI_COST_SONG_USD ?? 0.02),
-  'llm': Number(process.env.AI_COST_LLM_USD ?? 0.001),
+  'stem.separate': envNumber('AI_COST_STEM_USD', 0.05),
+  'tts': envNumber('AI_COST_TTS_USD', 0.002),
+  'sing': envNumber('AI_COST_SING_USD', 0.005),
+  'song': envNumber('AI_COST_SONG_USD', 0.02),
+  'llm': envNumber('AI_COST_LLM_USD', 0.001),
 };
 
 export class CostTracker {
@@ -44,8 +46,8 @@ export class CostTracker {
   private bySession = new Map<string, CostEntry[]>();
   private byJob = new Map<string, CostEntry>();
   // FA-P2-1: Retention-Fenster (Default 30 Tage) gegen unbegrenztes Wachstum.
-  private readonly retentionMs = Number(process.env.AI_COST_RETENTION_MS ?? 30 * 24 * 3_600_000);
-  private gpuType = process.env.AI_GPU_TYPE ?? 'A100';
+  private readonly retentionMs = envNumber('AI_COST_RETENTION_MS', 30 * 24 * 3_600_000);
+  private gpuType = envString('AI_GPU_TYPE', 'A100');
 
   setGpuType(gpuType: string): void {
     this.gpuType = gpuType;

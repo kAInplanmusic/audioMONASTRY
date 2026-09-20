@@ -22,7 +22,12 @@ export interface EvaluationRecord {
 export interface EvalRunSummary {
   runId: string;
   pluginId: string;
-  status: 'RUNNING' | 'PASS' | 'FAIL';
+  /**
+   * INFRA-AI-001: `UNCHECKED` heißt „kein Modell erreichbar“ – der Lauf wurde
+   * NICHT bewertet. Vorher schrieb der Eval-Lauf stattdessen einen Mock-Score,
+   * wodurch das Gate per Konstruktion grün war.
+   */
+  status: 'RUNNING' | 'PASS' | 'FAIL' | 'UNCHECKED';
   count: number;
   avgScore: number;
   createdAt: number;
@@ -30,6 +35,10 @@ export interface EvalRunSummary {
   durationMs?: number;
   /** P3-3: Anzahl der Records unterhalb des Mindest-Scores („Fehler“). */
   errors?: number;
+  /** false, wenn der Lauf ohne Modell als „nicht geprüft“ markiert wurde. */
+  checked?: boolean;
+  /** Grund, warum nicht geprüft wurde (z. B. 'kein LLM-Provider erreichbar'). */
+  skipReason?: string;
 }
 
 function makeId(prefix: string): string {
@@ -87,6 +96,24 @@ export class EvaluationStore {
 
   getRun(runId: string): EvalRunSummary | undefined {
     return this.runs.get(runId);
+  }
+
+  /**
+   * INFRA-AI-001: markiert einen Lauf als NICHT GEPRÜFT (kein Modell erreichbar).
+   * Es wird bewusst kein Score geschrieben – „nicht geprüft" ist kein „bestanden".
+   */
+  markUnchecked(runId: string, reason: string): EvalRunSummary {
+    const run = this.runs.get(runId);
+    if (!run) throw new Error(`unknown run: ${runId}`);
+    run.status = 'UNCHECKED';
+    run.checked = false;
+    run.skipReason = reason;
+    run.count = 0;
+    run.avgScore = 0;
+    run.errors = 0;
+    run.durationMs = Math.max(0, Date.now() - run.createdAt);
+    this.runs.set(runId, run);
+    return run;
   }
 
   exportJson(): { evaluations: EvaluationRecord[]; runs: EvalRunSummary[] } {

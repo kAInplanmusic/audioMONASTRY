@@ -1,5 +1,17 @@
 # Plugin-Prompt-Matrix (GAP-5)
 
+> ⚠️ **Die Score-Spalte dieser Tabelle ist ein MOCK und KEIN Messwert** (Stand
+> 2026-09-03): der damalige `eval:ai`-Lauf konstruierte expected und actual
+> identisch und schrieb `model: 'mock'`, `score: 5` – ohne einen einzigen
+> Modellaufruf (Audit-Befund INFRA-AI-001). Seit 2026-09-20 ruft `npm run eval:ai`
+> ein echtes Modell auf, bewertet dessen Antwort deterministisch
+> (`src/core/ai/orchestrator/evalGrading.ts`) und meldet ohne erreichbares Modell
+> ehrlich `UNCHECKED` statt eines Scores. Der aktuelle Stand steht ausschließlich
+> in `test-results/ai-eval-report.md` (Artefakt des letzten Laufs) – nicht hier.
+>
+> Die Plugin-Namen der Tabelle sind zudem der Vor-Umbenennungs-Stand; verbindlich
+> sind die 18 IDs aus `src/core/ai/orchestrator/evalMatrix.ts`.
+
 > 21 Plugins × Systemprompt/Few-Shots/MCP/Eval/Score. Sprache: Deutsch +
 > englische Keywords (D18). Stand: 2026-09-03 – erzeugt aus
 > `npm run iterate:prompts` (Prompt-Versionen) und `npm run eval:ai`

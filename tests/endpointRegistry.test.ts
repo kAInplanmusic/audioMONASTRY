@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GPU_ROLES,
   GPU_ROLE_LIST,
   LONG_RUNNING_TASKS,
   requireRoleForTask,
@@ -95,12 +96,21 @@ describe('GPU-Rollen-Registry', () => {
       expect(role.endpointIdEnv).toMatch(/^RP_ENDPOINT_ID_/);
       expect(role.preload.length).toBeGreaterThan(0);
     }
-    // Alle acht Instanzen laufen auf einer A6000 48 GB (AMPERE_48) – im
-    // Unterschied zur Vorarchitektur mit einem ADA_24-Video-Endpoint.
+    // INFRA-RUNPOD-002: Zwei GPU-Klassen, eine Wahrheit je Rolle – Sprache,
+    // Musik und Bild auf A6000 48 GB (AMPERE_48), die Video-Rollen auf Ada
+    // (RTX 4090, 24 GB), weil ihre Wan-Worker-Images auf CUDA 12.8/Ada ausgelegt
+    // sind. Live so belegt (RunPod-API 2026-09-20) und im Deploy-Skript verankert;
+    // `tests/test_runpod_deploy_defaults.py` vergleicht beide Seiten.
+    const expectedVram: Record<string, number> = { ADA_24: 24, AMPERE_48: 48 };
     for (const role of GPU_ROLE_LIST) {
-      expect(role.vramBudgetGb, role.role).toBe(48);
-      expect(role.gpuPoolId, role.role).toBe('AMPERE_48');
+      expect(role.vramBudgetGb, role.role).toBe(expectedVram[role.gpuPoolId]);
       expect(role.gpuCount, role.role).toBe(1);
+    }
+    for (const role of ['videoReal', 'videoAbstract'] as const) {
+      expect(GPU_ROLES[role].gpuPoolId, role).toBe('ADA_24');
+    }
+    for (const role of ['brain', 'ears', 'voiceGen', 'music', 'imageHq', 'orchestrator'] as const) {
+      expect(GPU_ROLES[role].gpuPoolId, role).toBe('AMPERE_48');
     }
   });
 

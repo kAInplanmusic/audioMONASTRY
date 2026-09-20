@@ -8,12 +8,19 @@ docs/runpod-8-instances-complete-plan.md:
     #  Rolle           Endpoint                        GPU-Pool    Idle   Disk
     1  brain           audiomonastry-ai-brain             AMPERE_48    15 s   50 GB
     2  ears            audiomonastry-ai-ears              AMPERE_48    15 s  100 GB
-    3  voiceGen        audiomonastry-ai-voice             AMPERE_48   900 s  150 GB
-    4  music           audiomonastry-ai-music             AMPERE_48   900 s  200 GB
-    5  imageHq         audiomonastry-ai-image             AMPERE_48   900 s  200 GB
-    6  videoReal       audiomonastry-ai-video-real        AMPERE_48   900 s  200 GB
-    7  videoAbstract   audiomonastry-ai-video-abstract    AMPERE_48   900 s  200 GB
-    8  orchestrator    audiomonastry-ai-orchestrator      AMPERE_48   900 s  100 GB
+    3  voiceGen        audiomonastry-ai-voice             AMPERE_48   120 s  150 GB
+    4  music           audiomonastry-ai-music             AMPERE_48   120 s  200 GB
+    5  imageHq         audiomonastry-ai-image             AMPERE_48   120 s  200 GB
+    6  videoReal       audiomonastry-ai-video-real        ADA_24      120 s  200 GB
+    7  videoAbstract   audiomonastry-ai-video-abstract    ADA_24      120 s  200 GB
+    8  orchestrator    audiomonastry-ai-orchestrator      AMPERE_48   120 s  100 GB
+
+Diese Tabelle, `ROLE_DEFAULTS` unten und `model_manifest.json`
+(`roles.<rolle>.gpuPoolId` / `idleTimeoutSeconds`) sind EINE Wahrheit – der Test
+`tests/test_runpod_deploy_defaults.py` faellt, sobald sie auseinanderlaufen.
+Zusaetzlich gilt die harte Obergrenze der Flotte (`ENDPOINT_LIMIT`, Konstitution
+§1: max. 8 GPU-Endpoints): der Deploy zaehlt die Endpoints im Konto und bricht
+ab, bevor ein neuer die Grenze reisst.
 
 Die Rollen laufen auf zwei GPU-Klassen: `AMPERE_48` (A6000/A40 48 GB) fuer
 Sprache, Musik und Bild, `ADA_24` (RTX 4090 24 GB) fuer die Video-Rollen – deren
@@ -102,7 +109,9 @@ ROLE_DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
     "voiceGen": {
         "suffix": "voice", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
-        "workersMax": 1, "idleTimeout": 900, "containerDiskGb": 150, "imageKind": "own",
+        # 120 s wie live (Audit 4.1): mit 900 s blieben Worker nach kurzen Probes
+        # ueber die Zeitgrenze hinaus auf RUNNING und wurden weiter abgerechnet.
+        "workersMax": 1, "idleTimeout": 120, "containerDiskGb": 150, "imageKind": "own",
     },
     "music": {
         "suffix": "music", "gpuPoolId": "AMPERE_48", "gpuCount": 1,
@@ -153,6 +162,66 @@ ENDPOINT_ENV_BY_ROLE: Dict[str, str] = {
 }
 
 DOCKER_START_CMD = "python runpod_worker.py"
+
+#: Harte Obergrenze der Flotte in Endpoints (Konstitution §1: max. 8 Rollen).
+#: SSR: derselbe Wert steht als `AI_MAX_GPU_ENDPOINTS` in
+#: src/config/aiInfrastructure.ts; `tests/aiInfrastructure.test.ts` vergleicht
+#: beide Seiten, damit sie nicht auseinanderlaufen.
+ENDPOINT_LIMIT_DEFAULT = 8
+
+
+def endpoint_limit() -> int:
+    """Aktive Endpoint-Obergrenze (env `AI_MAX_GPU_ENDPOINTS`, Default 8)."""
+    raw = env("AI_MAX_GPU_ENDPOINTS") or str(ENDPOINT_LIMIT_DEFAULT)
+    try:
+        value = int(raw)
+    except ValueError:
+        print(f"[deploy] WARNUNG: AI_MAX_GPU_ENDPOINTS={raw!r} ist keine Zahl → {ENDPOINT_LIMIT_DEFAULT}", file=sys.stderr)
+        return ENDPOINT_LIMIT_DEFAULT
+    return value if value > 0 else ENDPOINT_LIMIT_DEFAULT
+
+
+def plan_endpoint_budget(
+    existing_names: List[str],
+    planned_names: List[str],
+    limit: Optional[int] = None,
+) -> "tuple[bool, List[str], str]":
+    """Prueft VOR dem Anlegen, ob die Flotte die Endpoint-Obergrenze reisst.
+
+    Das Konto ist die Wahrheit, nicht die Rollenliste: ein 9. Endpoint kann
+    entstehen, wenn ein Run eine Rolle anlegt, die es noch nicht gibt, oder wenn
+    verwaiste Endpoints (alte Namen, andere Projekte) dazukommen.
+
+    Rueckgabe: ``(ok, neue_namen, meldung)``.
+    """
+    cap = endpoint_limit() if limit is None else limit
+    existing = [n for n in existing_names if n]
+    planned = [n for n in planned_names if n]
+    new_names = [n for n in planned if n not in set(existing)]
+    total = len(set(existing) | set(planned))
+    if len(existing) > cap:
+        return False, new_names, (
+            f"Konto fuehrt {len(existing)} Endpoints, die Flotte erlaubt hoechstens {cap} "
+            f"(Konstitution §1) – erst aufraeumen, dann deployen"
+        )
+    if total > cap:
+        return False, new_names, (
+            f"Deploy wuerde {total} Endpoints ergeben ({len(existing)} vorhanden, "
+            f"{len(new_names)} neu) – Grenze {cap} (Konstitution §1)"
+        )
+    return True, new_names, f"{len(existing)} vorhanden, {len(new_names)} neu, gesamt {total} von {cap}"
+
+
+def orphan_endpoint_names(existing_names: List[str], planned_names: List[str]) -> List[str]:
+    """Fremd-/Altendpoints der Flotte (Namenspraefix, aber keine Rolle dieses Deploys).
+
+    Sie kosten nichts im Idle (workersMin=0), zaehlen aber gegen die
+    Endpoint-Obergrenze – und genau daran scheiterte die Diagnose „wo kommen die
+    neun Endpoints her" (Audit Live-1).
+    """
+    prefix = "audiomonastry-ai-"
+    planned = set(planned_names)
+    return sorted(n for n in existing_names if n and n.startswith(prefix) and n not in planned)
 
 #: Brain laeuft seit 2026-09-11 auf dem vorgefertigten RunPod-vLLM-Worker
 #: (v2.27.0 / vLLM 0.29.0). Der Brain ist ein reiner LLM-Endpoint; Audio-Modelle
@@ -459,7 +528,18 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
     """Erstellt/aktualisiert den Endpoint einer Rolle; liefert die Endpoint-ID."""
     resolved = resolve_image(role, defaults)
     endpoint_name = env("RUNPOD_ENDPOINT_NAME") or f"audiomonastry-ai-{defaults['suffix']}"
-    gpu_id = env("RUNPOD_GPU_ID") or str(defaults.get("gpuPoolId", "AMPERE_48"))
+    role_pool = str(defaults.get("gpuPoolId", "AMPERE_48"))
+    gpu_id = env("RUNPOD_GPU_ID") or role_pool
+    # INFRA-RUNPOD-002: Ein globaler Override kann die Rollen-Wahrheit kippen –
+    # die CI setzte AMPERE_48 fuer ALLE Rollen, auch fuer die Video-Rollen, deren
+    # Worker-Images auf Ada/CUDA 12.8 ausgelegt sind. Der Override gilt weiter
+    # (Ops braucht ihn), aber laut und mit dem Rollen-Default daneben.
+    if gpu_id != role_pool:
+        print(
+            f"[deploy] WARNUNG {endpoint_name}: GPU-Pool {gpu_id} weicht vom Rollen-Default "
+            f"{role_pool} ab (RUNPOD_GPU_ID-Override). Manifest und Deploy-Default erwarten {role_pool}.",
+            file=sys.stderr,
+        )
     gpu_count = int(env("RUNPOD_GPU_COUNT") or defaults.get("gpuCount", 1))
     workers_min = int(env("RUNPOD_WORKERS_MIN", "0"))
     workers_max = int(env("RUNPOD_WORKERS_MAX") or defaults.get("workersMax", 1))
@@ -575,6 +655,15 @@ def resolve_roles() -> List[str]:
     return list(ROLE_DEFAULTS)
 
 
+def planned_endpoint_names(roles: List[str]) -> List[str]:
+    """Endpoint-Namen, die dieser Deploy anfasst (dieselbe Regel wie `deploy_role`)."""
+    names: List[str] = []
+    for role in roles:
+        suffix = ROLE_DEFAULTS[role]["suffix"] if role in ROLE_DEFAULTS else "ai"
+        names.append(env("RUNPOD_ENDPOINT_NAME") or f"audiomonastry-ai-{suffix}")
+    return names
+
+
 def main() -> int:
     api_key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
     if not api_key:
@@ -594,6 +683,31 @@ def main() -> int:
         return 2
 
     print(f"[deploy] Rollen: {roles or ['(legacy)']}")
+
+    # INFRA-RUNPOD-001: harte Obergrenze VOR dem Anlegen prüfen. Nicht die
+    # Rollenliste ist die Wahrheit, sondern das Konto - genau daran hing die
+    # Diagnose „wo kommen die neun Endpoints her" (Audit Live-1).
+    try:
+        live_names = [str(e.get("name", "")) for e in (runpod.get_endpoints() or [])]
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[deploy] WARNUNG: Endpoint-Liste nicht abrufbar ({type(exc).__name__}) – Budget-Preflight übersprungen",
+            file=sys.stderr,
+        )
+        live_names = []
+    planned = planned_endpoint_names(roles)
+    budget_ok, _new_names, budget_message = plan_endpoint_budget(live_names, planned)
+    print(f"[deploy] Endpoint-Budget: {budget_message}")
+    if not budget_ok:
+        print(f"[deploy] ABBRUCH – {budget_message}", file=sys.stderr)
+        return 3
+    orphans = orphan_endpoint_names(live_names, planned)
+    if orphans:
+        print(
+            f"[deploy] HINWEIS: {len(orphans)} Flotten-Endpoint(s) ohne Rolle in diesem Deploy: {', '.join(orphans)}",
+            file=sys.stderr,
+        )
+
     results: Dict[str, str] = {}
     for role in roles:
         defaults = ROLE_DEFAULTS.get(role, {"suffix": env("RUNPOD_ENDPOINT_NAME") or "ai", "imageKind": "own"})
