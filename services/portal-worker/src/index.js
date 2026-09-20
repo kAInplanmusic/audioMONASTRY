@@ -949,14 +949,6 @@ function allowStaleFrom(env, explicit) {
   return raw === '1' || raw === 'true' || raw === 'yes';
 }
 
-/** Ein Feld aus einer JSON-Antwort lesen (ohne Exception-Pfad). */
-function jsonField(value, field) {
-  if (!value || typeof value !== 'object') return null;
-  const raw = value[field];
-  if (raw === undefined || raw === null || raw === '') return null;
-  return String(raw).slice(0, 60);
-}
-
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
