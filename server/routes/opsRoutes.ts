@@ -17,6 +17,7 @@
  */
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
 import { formatLatencyHistogram } from '../../src/core/observability/latencyHistogram';
+import { readBuildInfo } from '../buildInfo';
 import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
 import express from 'express';
 import type { Express } from 'express';
@@ -65,8 +66,13 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // --- Health check ---
   // PROD-P0-003: zusaetzlich die Build-Version (kein Secret, additiv). Damit ist
   // nach einem Deploy/Rollback von aussen pruefbar, WELCHE Version laeuft.
+  // PROD-P1-F4: zusaetzlich Commit (kurzer SHA) und Build-Zeit. Die Version
+  // allein aendert sich nicht mit jedem Commit - erst der Commit macht die
+  // Commit-Paritaet zwischen Flotte und Repo belegbar (Staleness-Gate im
+  // Portal-Worker und in scripts/hetzner/fleet-preflight.sh). Die Felder bleiben
+  // additiv und secretfrei; ohne Build-Arg steht dort `dev`/`unknown`.
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', version: process.env.AUDIOMONASTRY_VERSION || 'dev' });
+    res.json({ status: 'ok', ...readBuildInfo() });
   });
 
   // --- DCT-108: Metriken (keine Samples, keine Secrets, keine Keys) ---

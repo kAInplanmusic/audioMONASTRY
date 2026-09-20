@@ -87,6 +87,21 @@ RUN chown node:node /app
 ARG BUILD_VERSION=dev
 ENV AUDIOMONASTRY_VERSION=$BUILD_VERSION
 
+# PROD-P1-F4: Commit + Build-Zeit gehoeren mit ins Image. Grund (real gemessen am
+# 2026-09-20): auf app-1 lief ein Image vom 18.09., das Repo stand auf ae5e749
+# vom 20.09. - /api/health meldete nur {"status":"ok","version":"1.210.001"}, und
+# die Version aendert sich nicht mit jedem Commit. Die Abweichung war damit nicht
+# belegbar (fehlendes "clock-ping" im Bundle fiel erst im Betrieb auf).
+# `deploy.sh` setzt beide Args (Repo-Commit + UTC-Zeit), /api/health nennt sie
+# als `commit`/`buildTime`; Docker-Compose-Builds (Kaltstart/Remote-Build) setzen
+# sie ueber AUDIOMONASTRY_COMMIT/AUDIOMONASTRY_BUILD_TIME.
+# Bewusst ebenfalls ERST HIER (nach COPY/chown): ein reiner Commit-/Zeitwechsel
+# invalidiert nur diese letzten Layer.
+ARG BUILD_COMMIT=unknown
+ARG BUILD_TIME=unknown
+ENV AUDIOMONASTRY_COMMIT=$BUILD_COMMIT \
+    AUDIOMONASTRY_BUILD_TIME=$BUILD_TIME
+
 USER node
 
 EXPOSE 8080
