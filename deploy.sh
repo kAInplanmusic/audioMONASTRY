@@ -83,6 +83,20 @@
 #        Deploy mit Exit 1.
 #     3. "Nicht pruefbar" (Image ohne commit-Feld) blockiert NICHT, wird aber laut
 #        gemeldet. Bewusst veraltet weiterfahren: DEPLOY_ALLOW_STALE=1.
+#
+# F10 - warum der Rollen-Deploy den Compose-PROJEKTNAMEN explizit setzt:
+#   Der Projektname kam bisher aus dem Verzeichnisnamen (`cd <dir> && docker
+#   compose ...`). Ein Knoten, dessen Repo in einem anders benannten Verzeichnis
+#   liegt, bekam damit ein ZWEITES Projekt: eigene Volumes (`<alt>_caddy_data`),
+#   eigene Container-Labels - waehrend die Container-Namen (container_name)
+#   gleich blieben und der Watchdog die Altinstallation nicht mehr fand. Jetzt
+#   gilt ueberall `COMPOSE_PROJECT_NAME=audiomonastry` (aus
+#   scripts/hetzner/fleet-names.sh, dieselbe Quelle wie das top-level `name:` in
+#   docker-compose.hetzner.yml und der Zielpfad /opt/audiomonastry). Ein zweiter
+#   Deploy trifft damit immer dasselbe Projekt, dieselben Volumes und dieselben
+#   Container - idempotent, ohne zweiten Stack. Migration eines Bestands-Knotens
+#   (Altprojekt/Altpfad): scripts/hetzner/migrate-project-name.sh, Schritte in
+#   docs/HETZNER_DEPLOY.md.
 # ============================================================================
 set -euo pipefail
 
@@ -93,6 +107,11 @@ set -euo pipefail
 DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DEPLOY_SCRIPT_DIR/scripts/hetzner/lib/build-parity.sh"
+# F10: Namen/Pfade kommen aus der EINEN Quelle (scripts/hetzner/fleet-names.sh) -
+# Projektname, kanonischer Pfad und die Alt-Schreibweisen der Container sind dort
+# definiert, nicht hier. Sourcing ist seiteneffektfrei (keine API-Aufrufe).
+# shellcheck disable=SC1091
+source "$DEPLOY_SCRIPT_DIR/scripts/hetzner/fleet-names.sh"
 
 # --- Konfiguration (aus env, sonst Prompt) ---
 DEPLOY_HOST="${DEPLOY_HOST:-}"
@@ -100,7 +119,14 @@ DEPLOY_USER="${DEPLOY_USER:-root}"
 DEPLOY_SSH_KEY="${DEPLOY_SSH_KEY:-}"
 DEPLOY_MODE="${DEPLOY_MODE:-docker}"
 DEPLOY_REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-0}"
-DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/audiomonastry}"
+DEPLOY_REMOTE_DIR="${DEPLOY_REMOTE_DIR:-$FLEET_HOME}"
+# F10: Der Compose-PROJEKTNAME ist nicht mehr vom Verzeichnisnamen abhaengig.
+# Er kommt aus fleet-names.sh und geht als COMPOSE_PROJECT_NAME an jeden
+# docker-compose-Aufruf auf dem Knoten; docker-compose.hetzner.yml traegt
+# denselben Wert als top-level `name:` (Gegenprobe in den Tests). Idempotent:
+# ein zweiter Deploy trifft dasselbe Projekt, dieselben Volumes, dieselben
+# Container - kein zweiter Stack.
+COMPOSE_PROJECT="$(fleet_compose_project)"
 DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-}"
 # INFRA-HETZNER-001: Default 0 - die Knoten-.env gehoert dem Portal-Worker
 # (rollen-skopiert, siehe Kopfkommentar). Sync nur explizit per DEPLOY_SYNC_ENV=1.
@@ -157,6 +183,9 @@ if [[ "${DEPLOY_PRINT_CONFIG:-0}" == "1" ]]; then
   printf '  DEPLOY_HOST=%s\n' "${DEPLOY_HOST:-<leer>}"
   printf '  DEPLOY_MODE=%s\n' "$DEPLOY_MODE"
   printf '  DEPLOY_REMOTE_DIR=%s\n' "$DEPLOY_REMOTE_DIR"
+  # F10: der effektive Compose-Projektname des Rollen-Deploys. Belegt ohne
+  # Knoten, dass der Deploy nicht mehr am Verzeichnisnamen haengt.
+  printf '  COMPOSE_PROJECT_NAME=%s   (aus scripts/hetzner/fleet-names.sh)\n' "$COMPOSE_PROJECT"
   printf '  DEPLOY_SYNC_ENV=%s\n' "$DEPLOY_SYNC_ENV"
   printf '  DEPLOY_INSTALL_CADDYFILE=%s\n' "$DEPLOY_INSTALL_CADDYFILE"
   printf '  CADDYFILE_MODUS=%s\n' "$CADDYFILE_MODE"
@@ -374,14 +403,14 @@ if [[ "$DEPLOY_MODE" == "docker" ]]; then
     "${SSH[@]}" "$SSH_TARGET" "docker image tag $IMAGE_APP ${IMAGE_APP}-rollback 2>/dev/null || true"
     echo "--- Images via docker save | ssh docker load übertragen ---"
     docker save "$IMAGE_APP" "$IMAGE_MASTER" | "${SSH[@]}" "$SSH_TARGET" "docker load"
-    echo "--- docker compose up -d --no-build --force-recreate audiomonastry master-player ---"
+    echo "--- docker compose up -d --no-build --force-recreate audiomonastry master-player (Projekt $COMPOSE_PROJECT) ---"
     "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \
-       docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry master-player && \
-       docker compose -f $COMPOSE_FILE up -d caddy"
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry master-player && \
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE up -d caddy"
   else
-    echo "--- Remote-Build (docker compose up -d --build) ---"
+    echo "--- Remote-Build (docker compose up -d --build, Projekt $COMPOSE_PROJECT) ---"
     "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \
-       docker compose -f $COMPOSE_FILE up -d --build"
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE up -d --build"
   fi
 else
   echo "=== [4/5] Remote starten (Modus: node) ==="

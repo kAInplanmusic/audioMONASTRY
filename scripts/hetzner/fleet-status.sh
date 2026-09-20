@@ -19,6 +19,12 @@ if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 S="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8"
 
+# NOMEN-P1-001 / F10: Namen aus der EINEN Quelle (Knoten, Container,
+# Compose-Projekt, Pfade). Sourcing ist seiteneffektfrei; der Altpraefix steht
+# ausschliesslich dort - dieses Skript kennt nur die Variablen.
+source "$(dirname "$0")/fleet-names.sh"
+FLEET_PROJECT="$(fleet_compose_project)"
+
 echo "=== audioMONASTRY Fleet-Status ($(date -u +%FT%TZ)) ==="
 curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" https://api.hetzner.cloud/v1/servers -o /tmp/hc_fleet.json
 
@@ -37,7 +43,7 @@ with open('/tmp/hc_fleet.tsv', 'w') as f:
 "
 
 echo ""
-echo "--- Knoten-Details ---"
+echo "--- Knoten-Details (Container + Compose-Projekt) ---"
 while IFS=$'\t' read -r name status ip; do
   [ -n "$ip" ] || continue
   printf "%-24s " "$name ($ip)"
@@ -45,18 +51,29 @@ while IFS=$'\t' read -r name status ip; do
     echo "Server-Status: $status (nicht laufend)"
     continue
   fi
-  $S "root@$ip" 'docker ps --format "{{.Names}}({{.Status}})" 2>/dev/null | tr "\n" " "; echo' 2>/dev/null || echo "SSH nicht erreichbar"
+  # F10: das Compose-Projekt je Container mit ausgeben. Ein Knoten, dessen
+  # Projekt noch alt heisst (Altname aus fleet-names.sh), wird unten laut
+  # gemeldet - das ist genau der Befund aus F10 (Container/Projekt laufen
+  # auseinander), und sichtbar wird er nur, wenn man ihn abfragt.
+  PS_OUT=$($S "root@$ip" 'docker ps --format "{{.Names}}({{.Status}})[projekt={{.Label \"com.docker.compose.project\"}}]" 2>/dev/null | tr "\n" " "; echo' 2>/dev/null) \
+    || PS_OUT="SSH nicht erreichbar"
+  echo "$PS_OUT"
+  if [[ "$PS_OUT" == *"[projekt=$LEGACY_COMPOSE_PROJECT]"* ]]; then
+    echo "   ⚠ mindestens ein Container laeuft im ALT-Projekt '$LEGACY_COMPOSE_PROJECT' (erwartet: $FLEET_PROJECT)"
+    echo "     Migration: bash scripts/hetzner/migrate-project-name.sh <ip> --role <rolle>  (docs/HETZNER_DEPLOY.md, F10)"
+  fi
 done < /tmp/hc_fleet.tsv
 
 echo ""
 echo "--- Health-Endpoints ---"
-# App-Knoten (audiomonastry-app-*) direkt prüfen. NOMEN-P1-001: der Altname
-# (samplemonk-app-*) wird mitgeprueft, sonst bleibt der Health-Check bei einer
-# noch nicht umbenannten Flotte stumm.
+# App-Knoten direkt prüfen. NOMEN-P1-001/F10: die Muster kommen aus
+# fleet-names.sh (FLEET_PREFIX/LEGACY_FLEET_PREFIX) - der Health-Check muss BEIDE
+# Schreibweisen akzeptieren, sonst bleibt er bei einer noch nicht umbenannten
+# Flotte stumm.
 while IFS=$'\t' read -r name status ip; do
   [ -n "$ip" ] || continue
   case "$name" in
-    audiomonastry-app-*|samplemonk-app-*)
+    "${FLEET_PREFIX}"app-*|"${LEGACY_FLEET_PREFIX}"app-*)
       CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "http://$ip/api/health" 2>/dev/null || echo "000")
       echo "http://$ip/api/health ($name) -> HTTP $CODE"
       ;;

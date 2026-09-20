@@ -84,6 +84,20 @@ export function fleetServerType(env, role) {
 const NAME_PREFIX = 'audiomonastry-';
 /** Altpraefix aus der Zeit vor der Umbenennung (nur lesend/Bestand). */
 const LEGACY_NAME_PREFIX = 'samplemonk-';
+/**
+ * Compose-PROJEKTNAME der Flotte (F10).
+ *
+ * Ohne top-level `name:` in der Compose-Datei bzw. ohne COMPOSE_PROJECT_NAME
+ * leitet `docker compose` den Projektnamen aus dem VERZEICHNIS ab, in dem es
+ * laeuft. Auf einem Bestands-Knoten mit anders benanntem Pfad entstand dadurch
+ * ein zweites Projekt: eigene Volumes (`<alt>_caddy_data`), eigene
+ * Container-Labels - waehrend die Container-Namen (container_name) gleich
+ * blieben und der Watchdog die Altinstallation nicht mehr fand. Der
+ * Projektname wird deshalb ueberall explizit gesetzt (Cloud-Init hier, deploy.sh,
+ * bring-up-fleet.sh, auto-repair.sh) - Quelle ist dieselbe Konstante wie das
+ * top-level `name:` in docker-compose.hetzner.yml.
+ */
+const COMPOSE_PROJECT = NAME_PREFIX.replace(/-$/, '');
 
 /** Kanonischer Flotten-Name zu einem (moeglicherweise alten) Servernamen. */
 function canonicalFleetName(name) {
@@ -824,6 +838,10 @@ cat > /opt/audiomonastry/.env <<'ENVEOF'
 ${envLines}
 ENVEOF
 cd /opt/audiomonastry
+# F10: Compose-Projektname EXPLIZIT setzen. Der Pfad liefert ihn zwar auch, aber
+# ein Bestands-Stand in einem anders benannten Verzeichnis wuerde sonst ein
+# ZWEITES Projekt (eigene Volumes, eigene Labels) neben dem laufenden anlegen.
+export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT}
 case "${role}" in
   app)
     # P-7b / F1: Origin-TLS ist der DEFAULT des App-Knotens. Deshalb wird das

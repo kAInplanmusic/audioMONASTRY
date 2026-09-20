@@ -39,6 +39,11 @@ fi
 # edge: 1,44 GiB Monitoring) - groessere Typen also nur bewusst und per
 # FLEET_TYPE_<ROLLE> (INFRA-HETZNER-006/007). Dieselben Variablennamen liest der
 # Portal-Worker (services/portal-worker/src/index.js, fleetServerType).
+# F10: Namespace (Compose-Projekt, Zielpfad) kommt aus der EINEN Quelle
+# scripts/hetzner/fleet-names.sh - auch die neu angelegten Knoten tragen ihn.
+# shellcheck source=scripts/hetzner/fleet-names.sh
+# shellcheck disable=SC1091
+source scripts/hetzner/fleet-names.sh
 TYPE_APP="${FLEET_TYPE_APP:-cx23}"
 TYPE_SFU="${FLEET_TYPE_SFU:-cx23}"
 TYPE_AI="${FLEET_TYPE_AI:-cx23}"
@@ -50,6 +55,10 @@ TYPE_EDGE="${FLEET_TYPE_EDGE:-cx23}"
 # Code <-> docs/SERVER_FLEET.md (tests/test_hetzner_scripts.py prueft dasselbe).
 if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "[dry-run] Flotte (keine API-Aufrufe, keine Server):"
+  # F10: der Namespace, den die angelegten Knoten tragen (Projektname des
+  # Compose-Stacks + Zielpfad) - derselbe Wert wie das top-level `name:` in
+  # docker-compose.hetzner.yml und COMPOSE_PROJECT_NAME in den Deploy-Skripten.
+  echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME)"
   printf '  %-28s %-12s %-7s %s\n' \
     audiomonastry-app-1    "$TYPE_APP"    app    "firewall=audiomonastry-app, floating-ip=audiomonastry-floating" \
     audiomonastry-sfu-1    "$TYPE_SFU"    sfu    "firewall=audiomonastry-sfu, floating-ip=none (RTP 40000-40099)" \

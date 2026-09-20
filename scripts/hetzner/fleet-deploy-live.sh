@@ -16,52 +16,91 @@
 #   bash scripts/hetzner/fleet-deploy-live.sh --print-config     (Trockenlauf)
 #
 # INFRA-HETZNER-009 - Zielpfad:
-#   Default ist /opt/audiomonastry - derselbe Pfad wie deploy.sh, der
-#   Portal-Worker (Cloud-Init), auto-repair.sh und bring-up-fleet.sh. Die HEUTE
-#   laufende Flotte liegt dagegen noch unter dem Altpfad /opt/samplemonk; fuer
-#   sie MUSS DEPLOY_REMOTE_DIR gesetzt werden:
-#       DEPLOY_REMOTE_DIR=/opt/samplemonk bash scripts/hetzner/fleet-deploy-live.sh <ip>
+#   Default ist der kanonische Pfad aus scripts/hetzner/fleet-names.sh
+#   (FLEET_HOME=/opt/audiomonastry) - derselbe Pfad wie deploy.sh, der
+#   Portal-Worker (Cloud-Init), auto-repair.sh und bring-up-fleet.sh. Eine
+#   Bestands-Flotte liegt dagegen noch unter dem Altpfad (LEGACY_FLEET_HOME aus
+#   fleet-names.sh); fuer sie MUSS DEPLOY_REMOTE_DIR gesetzt werden:
+#       DEPLOY_REMOTE_DIR=$(bash -c '. scripts/hetzner/fleet-names.sh; fleet_legacy_home') \
+#         bash scripts/hetzner/fleet-deploy-live.sh <ip>
 #   Ohne diesen Wert wuerde der Deploy in ein leeres Verzeichnis schreiben und
 #   einen ZWEITEN Stack starten (Kosten + zwei widersprechende Installationen).
 #   Deshalb prueft das Skript vorher, aus welchem Verzeichnis der laufende
 #   App-Container kommt, und bricht bei Abweichung ab (statt still fehlzudeployen).
 #   Bewusster Neuaufbau neben dem laufenden Stack: DEPLOY_ALLOW_FOREIGN_DIR=1.
+#
+# F10 - Namespace-Paritaet:
+#   Der Altname steht im Repo NUR in scripts/hetzner/fleet-names.sh (dort auch
+#   der Altpfad und der Alt-Projektname). Dieses Skript fragt die Namen dort ab:
+#   * Container des laufenden Stacks: beide Schreibweisen (fleet_name_variants),
+#     sonst bliebe der Guard auf einer Bestands-Installation stumm;
+#   * Compose-Projekt: COMPOSE_PROJECT_NAME aus fleet_compose_project - der
+#     Projektname haengt damit nicht mehr am Verzeichnisnamen, und der Deploy
+#     trifft immer dasselbe Projekt/dieselben Volumes (idempotent).
+#   Umbenennung eines Bestands-Knotens (Altprojekt + Altpfad -> kanonisch):
+#   scripts/hetzner/migrate-project-name.sh, Schritte in docs/HETZNER_DEPLOY.md.
 # =============================================================================
 set -euo pipefail
 
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+# F10: Namen/Pfade aus der EINEN Quelle (Servernamen, Container-Schreibweisen,
+# Compose-Projekt, kanonischer + Alt-Pfad). Sourcing ist seiteneffektfrei.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/hetzner/fleet-names.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/fleet-names.sh"
+
 # Zielarchitektur-Pfad; der Altpfad der laufenden Flotte ist nur noch ein
 # Erkennungswert fuer den Guard unten (Bestands-Kompatibilitaet).
-REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/audiomonastry}"
-LEGACY_REMOTE_DIR="${DEPLOY_LEGACY_REMOTE_DIR:-/opt/samplemonk}"
+REMOTE_DIR="${DEPLOY_REMOTE_DIR:-$FLEET_HOME}"
+LEGACY_REMOTE_DIR="${DEPLOY_LEGACY_REMOTE_DIR:-$LEGACY_FLEET_HOME}"
+COMPOSE_PROJECT="$(fleet_compose_project)"
 ALLOW_FOREIGN_DIR="${DEPLOY_ALLOW_FOREIGN_DIR:-0}"
 IMAGE="${DEPLOY_IMAGE:-audiomonastry:hetzner}"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # Trockenlauf: 1 = nur Zielpfad/Guard zeigen, nichts uebertragen und nichts starten.
 DRY_RUN="${DEPLOY_DRY_RUN:-0}"
 # Test-Haken fuer den Guard: ersetzt die SSH-Abfrage des laufenden
-# Verzeichnisses durch einen lokalen Befehl (z. B. 'echo /opt/samplemonk').
+# Verzeichnisses durch einen lokalen Befehl (z. B. 'echo $FLEET_HOME').
 STACK_DIR_CMD="${DEPLOY_STACK_DIR_CMD:-}"
 
 step() { echo; echo "=== $* ==="; }
 
+# Container-Namen des laufenden Stacks: kanonisch UND Altname - auf einer noch
+# nicht migrierten Installation heisst die App anders, und ein Guard, der nur den
+# neuen Namen kennt, waere dort stumm (F10).
+APP_CONTAINER_CANDIDATES=()
+while read -r candidate; do
+  [[ -n "$candidate" ]] && APP_CONTAINER_CANDIDATES+=("$candidate")
+done < <(fleet_name_variants audiomonastry)
+
 # Verzeichnis, aus dem der laufende App-Container gestartet wurde
 # (Compose-Label) - leer, wenn kein Container laeuft (frischer Knoten).
 stack_dir() {
-  local ip="$1"
+  local ip="$1" container dir
   if [[ -n "$STACK_DIR_CMD" ]]; then
     bash -c "$STACK_DIR_CMD"
     return 0
   fi
-  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$ip" \
-    "docker inspect -f '{{ index .Config.Labels \"com.docker.compose.project.working_dir\" }}' audiomonastry 2>/dev/null || true" \
-    | tr -d '\r' | head -1
+  for container in "${APP_CONTAINER_CANDIDATES[@]}"; do
+    # Erste nicht-leere Antwort gewinnt: so findet der Guard den laufenden Stack
+    # auch dann, wenn die App dort noch unter dem Altnamen laeuft.
+    dir="$(ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 "root@$ip" \
+      "docker inspect -f '{{ index .Config.Labels \"com.docker.compose.project.working_dir\" }}' $container 2>/dev/null || true" \
+      | tr -d '\r' | head -1)"
+    if [[ -n "$dir" ]]; then printf '%s\n' "$dir"; return 0; fi
+  done
+  return 0
 }
 
 if [[ "${1:-}" == "--print-config" ]]; then
   echo "fleet-deploy-live.sh - effektive Konfiguration (kein SSH, kein rsync)"
-  printf '  REMOTE_DIR=%s   (DEPLOY_REMOTE_DIR)\n' "$REMOTE_DIR"
-  printf '  LEGACY_REMOTE_DIR=%s   (nur Guard-Erkennung)\n' "$LEGACY_REMOTE_DIR"
+  printf '  REMOTE_DIR=%s   (DEPLOY_REMOTE_DIR, kanonisch aus fleet-names.sh)\n' "$REMOTE_DIR"
+  printf '  LEGACY_REMOTE_DIR=%s   (nur Guard-Erkennung, aus fleet-names.sh)\n' "$LEGACY_REMOTE_DIR"
+  # F10: der effektive Compose-Projektname + die Container-Schreibweisen, unter
+  # denen der laufende Stack gefunden wird (beide, neu zuerst).
+  printf '  COMPOSE_PROJECT_NAME=%s   (aus scripts/hetzner/fleet-names.sh)\n' "$COMPOSE_PROJECT"
+  printf '  APP_CONTAINER=%s\n' "${APP_CONTAINER_CANDIDATES[*]}"
   printf '  IMAGE=%s\n' "$IMAGE"
   printf '  DEPLOY_ALLOW_FOREIGN_DIR=%s\n' "$ALLOW_FOREIGN_DIR"
   printf '  DEPLOY_DRY_RUN=%s\n' "$DRY_RUN"
@@ -137,8 +176,8 @@ fi
 step "3/4 Image uebertragen ($IMAGE)"
 docker save "$IMAGE" | gzip -1 | "${SSH[@]}" "root@$IP" "gunzip | docker load"
 
-step "4/4 Container neu hochfahren"
-"${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && docker compose -f docker-compose.hetzner.yml ${TUNNEL:+-f docker-compose.e2e-tunnel.yml} up -d --no-build --remove-orphans caddy audiomonastry && sleep 6 && docker compose -f docker-compose.hetzner.yml ps --format '{{.Service}}: {{.State}}' && curl -s -o /dev/null -w 'health am Knoten: %{http_code}\n' http://127.0.0.1:8080/api/health"
+step "4/4 Container neu hochfahren (Compose-Projekt $COMPOSE_PROJECT)"
+"${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml ${TUNNEL:+-f docker-compose.e2e-tunnel.yml} up -d --no-build --remove-orphans caddy audiomonastry && sleep 6 && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml ps --format '{{.Service}}: {{.State}}' && curl -s -o /dev/null -w 'health am Knoten: %{http_code}\n' http://127.0.0.1:8080/api/health"
 
 echo
 echo "FERTIG. Naechster Schritt: SSH-Tunnel + E2E (siehe docs/OPS_RUNBOOK.md, Live-Beweise)."
