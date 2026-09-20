@@ -33,7 +33,7 @@ und in `MASTERTODOENDE.json` als `PROD-P0-F1` … `PROD-P3-F10` mit `live_open`.
 | F7 | bca117f | Origins aus `APP_DOMAIN` ohne `*`, CSP abgeleitet + Report-Ziel, `CSP_MODE=enforce` schaltbar | Report-Auswertung, dann Enforce-Entscheidung; fremder Origin live abgewiesen |
 | F8 | 12d2273 | Reset mit zwei Schlössern + Rücklesebeleg, `/api/session/state`, `online` aus dem Socket-Registry mit Sweep | TCP-Abriss ohne Close-Paket real (Paketverwerfen) |
 | F9 | 12d2273 | `/api/idle-signal` mit echten Regeln, Timer fragt die App (8080) statt Caddy, fail-safe bei unlesbarem Signal | echter systemd-Timer-Lauf auf einem Hetzner-Knoten |
-| F10 | 93fca09 | `fleet-names.sh` als Namensquelle, Compose-Projekt `audiomonastry`, Migration idempotent ohne `down -v` | Live-Migration sfu-1/master-1 + 4-User-E2E danach |
+| F10 | 93fca09 | `fleet-names.sh` als Namensquelle, Compose-Projekt `audiomonastry`, Migration idempotent ohne `down -v` | erledigt am 2026-09-20 auf allen vier Knoten; offen: 4-User-E2E/SFU-RTP danach |
 
 Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 (Details im jeweiligen Commit):
@@ -48,7 +48,62 @@ Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 
 ---
 
-## Restarbeiten (live, Betreiber) — Stand 2026-09-20, alles vorgemessen
+## Live-Session 2026-09-20 (durchgeführt, soweit ohne Betreiber-Secrets möglich)
+
+**Erledigt und live gemessen:**
+
+* **F10-Migration auf allen vier Knoten ausgeführt** (`audiomonastry-app-1`,
+  `-sfu-1`, `-master-1`, `-edge-1`): Projekt und Pfad jetzt kanonisch
+  (`/opt/audiomonastry`, Projekt `audiomonastry`), Volumes kopiert (Alt-Volumes
+  bleiben liegen = Rückweg). Verifikation je Knoten: app `audiomonastry`+
+  `-caddy` laufen, sfu `sample-monk`+`caddy` laufen (Caddy 200 lokal), master
+  `master-player` `/health` → 200, edge Monitoring-Stack läuft.
+* **Zwei echte Defekte der Migration dabei gefunden und behoben** (Commit
+  `fix(hetzner): Migrations-Rollenform …` und der Nachlauf-Commit):
+  1. `--role app` (die in der Nutzung dokumentierte Zwei-Argument-Form) endete in
+     „Unbekannte Option: --role" — die Rolle konnte so nie gesetzt werden.
+  2. Die Migration stoppte den Knoten, bevor sie prüfen konnte, ob der
+     Rollen-Service in der Compose-Datei des Knotens überhaupt existiert: sfu-1
+     lag nach `no such service: audiomonastry` unten (die Repo-Kopie dort ist vom
+     18.09., der App-Service heißt da noch `sample-monk`). Jetzt wird **vor dem
+     Stopp** gegen `docker compose config --services` aufgelöst (Namensvarianten
+     + Schreibweisen ohne Bindestrich), fehlt ein Service bricht das Skript mit
+     Exit 2 ab, und scheitert der Start im Zielprojekt, fährt es den Alt-Stand
+     automatisch wieder hoch. Drei neue Tests fahren den echten Codepfad gegen
+     einen Fake-`ssh` (kein Netz): Auflösung, Fail-early, unlesbare Service-Liste.
+* **Prometheus auf edge-1 war in der Restart-Schleife** (`unknown long flag
+  '--config.expand-env'` — der schon 2026-09-18 behobene Befund, aber die alte
+  Compose-Datei lag noch auf dem Knoten). Aktuelle `docker-compose.monitoring.yml`
+  plus `prometheus.yml`/`prometheus-alerts.yml`/`alertmanager.yml`/
+  `grafana-provisioning`/`grafana-dashboards` nach edge-1 übertragen und den
+  Stack neu erzeugt → Prometheus läuft (`Server is ready`, `/-/healthy` im
+  Container), Grafana antwortet auf `127.0.0.1:3000` (200), Alertmanager läuft.
+  Prometheus/Alertmanager haben bewusst keine veröffentlichten Ports (Zugriff
+  per SSH-Tunnel, wie in `docker-compose.monitoring.yml` dokumentiert).
+* Auf app-1 lagen veraltete SSH-Host-Keys (Knoten wurde neu provisioniert);
+  lokal bereinigt (`ssh-keygen -R <ip>` für alle fünf Knoten).
+
+**Offen geblieben (braucht Betreiber-Werte bzw. die Live-Session):**
+
+* **F1-Blocker gemessen**: *alle fünf* Cloudflare-Credentials in `.env.deploy`
+  und `.env.portal` antworten `1000 Invalid API Token` (Zonenzugriff 0) —
+  `python3 scripts/hetzner/cf-token-diagnose.py`. Ohne gültigen Token mit
+  `Zone:DNS:Edit` bleibt die Domain tot (anunnakitools.de UND
+  origin.anunnakitools.de zeigen weiter auf Cloudflare-IPs).
+* **F4-Deploy** auf app-1 steht noch aus: der Knoten fährt weiter den Stand vom
+  18.09. (`/api/health` ohne `commit`). Er braucht `ORIGIN_CERT`/`ORIGIN_KEY`
+  aus `.env.portal` (die Zertifikate auf dem Knoten sind leer) — ein Deploy ohne
+  sie würde Caddy mit einer `tls`-Direktive auf fehlende Dateien starten.
+* **F2** braucht ein gültiges R2-Paar (`.env` enthält `CFS3_*`/`CFR2_*`; ob sie
+  live passen, muss `npm run r2:check` mit echten Werten zeigen).
+* **`SCRAPE_TOKEN` fehlt in der `.env` von edge-1** — der App-Metrik-Job in
+  Prometheus bleibt damit 401 (fail-closed). Der Token gehört aus der App-`.env`
+  in die Monitoring-Umgebung (docs/OPS_RUNBOOK.md, Abschnitt Observability).
+* `sfu.anunnakitools.de` hat keinen DNS-Record (F6, ACME-Kette) — Betreiber.
+
+---
+
+## Restarbeiten (Betreiber-Werte)
 
 Am 2026-09-20 **live geprüft** (lesend, ohne Schreibzugriff auf die Flotte):
 

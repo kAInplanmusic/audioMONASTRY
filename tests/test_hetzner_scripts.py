@@ -1604,6 +1604,39 @@ exit 0
 """
 
 
+FAKE_SSH = r"""#!/usr/bin/env bash
+# Fake `ssh` fuer den F10-Migrationstest: protokolliert JEDEN entfernten Befehl
+# und antwortet wie ein Bestands-Knoten. Damit laesst sich ohne Netz belegen,
+# dass die Migration erst aufloest und dann stoppt - und im Fehlerfall GAR NICHT
+# stoppt (live passiert am 2026-09-20: sfu-1 lag nach "no such service:
+# audiomonastry" unten).
+set -uo pipefail
+cmd="${*: -1}"
+printf '%s\n' "$cmd" >> "${FAKE_SSH_LOG:?}"
+case "$cmd" in
+  *"config --services"*)
+    printf '%s\n' "${FAKE_SSH_SERVICES:-}"
+    ;;
+  *"volume ls"*)
+    printf '%s\n' "${FAKE_SSH_VOLUMES:-}"
+    ;;
+  *"inspect -f"*)
+    printf '%s\n' "${FAKE_SSH_INSPECT:-}"
+    ;;
+  *"docker ps --format"*)
+    printf '%s\n' "${FAKE_SSH_PROJECTS:-samplemonk}"
+    ;;
+  *"=installation"*)
+    printf '%s\n' "${FAKE_SSH_DIRS:-/opt/samplemonk=installation}"
+    ;;
+  *)
+    printf '%s\n' "${FAKE_SSH_DEFAULT:-}"
+    ;;
+esac
+exit 0
+"""
+
+
 class NamespaceParitaetTest(unittest.TestCase):
     """F10: EINE Namensquelle, beide Schreibweisen, Projektname explizit."""
 
@@ -1889,13 +1922,22 @@ class NamespaceParitaetTest(unittest.TestCase):
         Nutzung. Live gemessen am 2026-09-20: die Form endete in "Unbekannte
         Option: --role", weil `--role` in den `-*`-Zweig fiel; die zweite
         Schleife danach wurde nie erreicht. Der Test faehrt den echten Codepfad
-        gegen 127.0.0.1 (kein sshd im Test -> die Lese-Schritte sind leer, das
-        Skript muss trotzdem den Plan zeigen und sauber enden).
+        gegen einen Fake-`ssh` (kein Netz), damit der Plan wirklich entsteht.
         """
-        plain = subprocess.run(
-            [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role", "app", "--dry-run"],
-            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
-        )
+        with tempfile.TemporaryDirectory(prefix="f10-role-") as tmp:
+            env, _log = self._fake_ssh(
+                pathlib.Path(tmp),
+                FAKE_SSH_SERVICES="caddy audiomonastry",
+                FAKE_SSH_DIRS="/opt/samplemonk=installation",
+            )
+            plain = subprocess.run(
+                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "app", "--dry-run"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+            )
+            equals = subprocess.run(
+                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role=app", "--dry-run"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+            )
         combined = self._combined(plain)
         self.assertNotIn("Unbekannte Option", combined)
         self.assertEqual(plain.returncode, 0, combined)
@@ -1903,14 +1945,11 @@ class NamespaceParitaetTest(unittest.TestCase):
         self.assertIn("Trockenlauf (--dry-run): keine Aenderung ausgefuehrt.", plain.stdout)
 
         # Die Gleichheitsform bleibt gleichwertig.
-        equals = subprocess.run(
-            [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role=app", "--dry-run"],
-            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
-        )
         self.assertEqual(equals.returncode, 0, self._combined(equals))
         self.assertIn("(Rolle app)", equals.stdout)
 
-        # Ein fehlender Rollenwert ist ein Klartextfehler, keine stille Annahme.
+        # Ein fehlender Rollenwert ist ein Klartextfehler, keine stille Annahme
+        # (bricht vor jedem SSH-Zugriff ab - deshalb ohne Fake).
         missing = subprocess.run(
             [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role"],
             capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
@@ -1918,6 +1957,89 @@ class NamespaceParitaetTest(unittest.TestCase):
         missing_combined = self._combined(missing)
         self.assertEqual(missing.returncode, 1, missing_combined)
         self.assertIn("--role ohne Wert", missing_combined)
+
+    def _fake_ssh(self, tmp: pathlib.Path, **extra: str) -> tuple[dict[str, str], pathlib.Path]:
+        """Fake-`ssh` im PATH; liefert (Umgebung, Protokolldatei)."""
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(exist_ok=True)
+        fake = fake_bin / "ssh"
+        fake.write_text(FAKE_SSH, encoding="utf-8")
+        fake.chmod(0o755)
+        log = tmp / "ssh.log"
+        env = clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            FAKE_SSH_LOG=str(log),
+            **extra,
+        )
+        return env, log
+
+    def test_migration_loest_den_altservice_des_knotens_auf(self) -> None:
+        """Der Knoten faehrt eine aeltere Repo-Kopie: dort heisst der App-Service
+        `sample-monk` (Container `samplemonk`). Die Migration muss das erkennen -
+        sonst stoppt sie den Knoten und kann ihn nicht mehr starten (live
+        passiert: "no such service: audiomonastry" auf sfu-1)."""
+        with tempfile.TemporaryDirectory(prefix="f10-migrate-") as tmp:
+            env, log = self._fake_ssh(
+                pathlib.Path(tmp),
+                FAKE_SSH_SERVICES="master-player sample-monk caddy",
+                FAKE_SSH_DIRS="/opt/samplemonk=installation",
+            )
+            result = subprocess.run(
+                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "sfu", "--dry-run"],
+                capture_output=True, text=True, cwd=ROOT, env=env, timeout=120,
+            )
+            combined = self._combined(result)
+            calls = log.read_text(encoding="utf-8") if log.exists() else ""
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Service-Aufloesung: audiomonastry -> sample-monk", combined)
+        self.assertIn("Services auf dem Knoten: master-player sample-monk caddy", combined)
+        # Der Plan nennt den aufgeloesten Service UND die Basis-Compose-Datei.
+        self.assertIn("docker compose -f docker-compose.hetzner.yml", combined)
+        self.assertIn("up -d caddy sample-monk", combined)
+        # Trockenlauf stoppt nichts.
+        self.assertNotIn(" down ", calls)
+
+    def test_migration_stoppt_nicht_wenn_ein_service_fehlt(self) -> None:
+        """Fail-early: fehlt der Rollen-Service auf dem Knoten, darf NICHTS
+        gestoppt werden. Genau das war der Live-Fehler vom 2026-09-20 - die
+        Migration hatte schon `down` ausgefuehrt und scheiterte danach am Start,
+        der Knoten lag unten."""
+        with tempfile.TemporaryDirectory(prefix="f10-migrate-") as tmp:
+            env, log = self._fake_ssh(
+                pathlib.Path(tmp),
+                FAKE_SSH_SERVICES="caddy master-player",  # kein App-Service
+                FAKE_SSH_DIRS="/opt/samplemonk=installation",
+            )
+            result = subprocess.run(
+                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "sfu", "--yes"],
+                capture_output=True, text=True, cwd=ROOT, env=env, timeout=120,
+            )
+            combined = self._combined(result)
+            calls = log.read_text(encoding="utf-8") if log.exists() else ""
+
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("fehlen in der Compose-Datei des Knotens", combined)
+        self.assertIn("audiomonastry", combined)
+        self.assertIn("vorhanden: caddy master-player", combined)
+        self.assertNotIn("docker compose -f docker-compose.hetzner.yml down", calls)
+        self.assertNotIn("mv /opt/samplemonk", calls)
+
+    def test_migration_stoppt_nicht_wenn_die_service_liste_unlesbar_ist(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="f10-migrate-") as tmp:
+            env, log = self._fake_ssh(
+                pathlib.Path(tmp), FAKE_SSH_SERVICES="", FAKE_SSH_DIRS="/opt/samplemonk=installation",
+            )
+            result = subprocess.run(
+                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "app", "--yes"],
+                capture_output=True, text=True, cwd=ROOT, env=env, timeout=120,
+            )
+            combined = self._combined(result)
+            calls = log.read_text(encoding="utf-8") if log.exists() else ""
+
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("Keine Service-Liste vom Knoten lesbar", combined)
+        self.assertNotIn("docker compose -f docker-compose.hetzner.yml down", calls)
 
     def test_bash_syntax_aller_f10_skripte_ist_sauber(self) -> None:
         for script in (FLEET_NAMES, AUTO_REPAIR, (HETZNER / "fleet-status.sh"), FLEET_DEPLOY_LIVE,

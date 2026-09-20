@@ -187,6 +187,72 @@ if [[ "$RUNNING_PROJECTS" == *"$FLEET_PROJECT"* && "$RUNNING_PROJECTS" != *"$LEG
   exit 0
 fi
 
+# Compose-Verzeichnis auf dem Knoten (dieselbe Wahl wie in Schritt 2/3).
+COMPOSE_DIR="$LEGACY_FLEET_HOME"
+if [[ "$DIRS" != *"$LEGACY_FLEET_HOME=installation"* && "$DIRS" == *"$FLEET_HOME=installation"* ]]; then
+  COMPOSE_DIR="$FLEET_HOME"
+fi
+
+# --- 1b. Service-Namen gegen den KNOTEN aufloesen (vor jedem Stopp!) ---------
+# F10-Nachlauf 2026-09-20: die Rollen-Listen nennen die kanonischen Service-Namen
+# des AKTUELLEN Repos. Ein Bestands-Knoten faehrt aber eine aeltere Repo-Kopie -
+# dort heisst der App-Service anders (Alt-Schreibweise des Projekts, mit
+# Bindestrich und angehaengtem Rollennamen). Die Migration stoppte den Knoten und
+# konnte ihn dann nicht mehr starten ("no such service: audiomonastry", real
+# passiert, Stack lag unten). Deshalb wird JETZT gelesen und aufgeloest; fehlt
+# ein Service, bricht das Skript ab, BEVOR irgendetwas gestoppt wird.
+NODE_SERVICES="$(remote "cd $COMPOSE_DIR && COMPOSE_PROJECT_NAME=$LEGACY_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} config --services 2>/dev/null | tr '\n' ' '" || true)"
+echo "   Services auf dem Knoten: ${NODE_SERVICES:-<nicht lesbar>}"
+
+# Loest einen gewuenschten (kanonischen) Service-Namen gegen die Liste des
+# Knotens auf. Erst die Namensvarianten aus fleet-names.sh, dann ein
+# Schreibweisen-Vergleich ohne Bindestriche (deckt die Alt-Schreibweise des
+# App-Services ab, dessen Container ohne Bindestrich heisst) - es entsteht KEIN
+# zweiter Namensvorrat.
+resolve_service() {
+  local wanted="$1" cand have norm
+  for cand in $(fleet_name_variants "$wanted"); do
+    for have in $NODE_SERVICES; do
+      [[ "$have" == "$cand" ]] && { printf '%s\n' "$have"; return 0; }
+    done
+  done
+  for have in $NODE_SERVICES; do
+    norm="${have//-/}"
+    for cand in $(fleet_name_variants "$wanted"); do
+      [[ "$norm" == "${cand//-/}" ]] && { printf '%s\n' "$have"; return 0; }
+    done
+  done
+  return 1
+}
+
+RESOLVED_SERVICES=()
+UNRESOLVED_SERVICES=()
+for svc in "${ROLE_SERVICES[@]}"; do
+  if resolved="$(resolve_service "$svc")"; then
+    RESOLVED_SERVICES+=("$resolved")
+    [[ "$resolved" == "$svc" ]] || echo "   Service-Aufloesung: $svc -> $resolved (Alt-Name der Repo-Kopie auf dem Knoten)"
+  else
+    UNRESOLVED_SERVICES+=("$svc")
+  fi
+done
+
+if [[ -z "$NODE_SERVICES" ]]; then
+  echo >&2
+  echo "❌ Keine Service-Liste vom Knoten lesbar (cd $COMPOSE_DIR && docker compose config --services)." >&2
+  echo "   Ohne diese Liste ist nicht belegbar, dass der Stack danach wieder startet -" >&2
+  echo "   es wird NICHTS gestoppt. Erst deployen (deploy.sh rsync't die Compose-Dateien)" >&2
+  echo "   oder das Compose-Verzeichnis auf dem Knoten pruefen." >&2
+  exit 2
+fi
+if (( ${#UNRESOLVED_SERVICES[@]} > 0 )); then
+  echo >&2
+  echo "❌ Rolle $ROLE: diese Services fehlen in der Compose-Datei des Knotens: ${UNRESOLVED_SERVICES[*]}" >&2
+  echo "   vorhanden: $NODE_SERVICES" >&2
+  echo "   Erwartet werden die kanonischen Namen des Repos; aeltere Repo-Kopien auf dem" >&2
+  echo "   Knoten kennen sie noch nicht. Es wird NICHTS gestoppt - erst deployen, dann migrieren." >&2
+  exit 2
+fi
+
 if [[ "$DRY_RUN" == "1" ]]; then
   echo
   echo "--- Trockenlauf (--dry-run): keine Aenderung ausgefuehrt. ---"
@@ -194,7 +260,7 @@ if [[ "$DRY_RUN" == "1" ]]; then
   echo "  2. docker compose -p $LEGACY_PROJECT -f docker-compose.hetzner.yml down --remove-orphans   (ohne -v)"
   echo "  3. [ -d $FLEET_HOME ] || mv $LEGACY_FLEET_HOME $FLEET_HOME"
   echo "  4. Volume-Kopien: $(echo "$LEGACY_VOLUMES" | tr ' ' '\n' | sed -n 's/^/     /p' | head -10)"
-  echo "  5. cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$FLEET_PROJECT docker compose ${ROLE_OVERLAYS[*]:-} up -d ${ROLE_SERVICES[*]}"
+  echo "  5. cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$FLEET_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} up -d ${RESOLVED_SERVICES[*]}"
   exit 0
 fi
 
@@ -208,10 +274,7 @@ fi
 
 # --- 2. Alt-Stack stoppen (ohne -v) ----------------------------------------
 echo "--- 2/6 Alt-Stack stoppen (Volumes bleiben liegen = Rueckweg) ---"
-SOURCE_DIR="$LEGACY_FLEET_HOME"
-if [[ "$DIRS" != *"$LEGACY_FLEET_HOME=installation"* && "$DIRS" == *"$FLEET_HOME=installation"* ]]; then
-  SOURCE_DIR="$FLEET_HOME"
-fi
+SOURCE_DIR="$COMPOSE_DIR"
 echo "   Compose-Verzeichnis: $SOURCE_DIR"
 remote "cd $SOURCE_DIR && COMPOSE_PROJECT_NAME=$LEGACY_PROJECT docker compose -f docker-compose.hetzner.yml down --remove-orphans" \
   || { echo "❌ down des Alt-Projekts fehlgeschlagen - nichts weiter geaendert." >&2; exit 1; }
@@ -258,7 +321,19 @@ fi
 
 # --- 5. Ziel-Stack starten --------------------------------------------------
 echo "--- 5/6 Stack im Projekt $FLEET_PROJECT starten ---"
-remote "cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$FLEET_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} up -d --remove-orphans ${ROLE_SERVICES[*]}"
+# Fail-safe (F10-Nachlauf 2026-09-20): wenn der Start im Zielprojekt scheitert,
+# wird der Alt-Stand SOFORT wieder hochgefahren - ein Knoten darf durch die
+# Migration nicht unten bleiben. Erst danach bricht das Skript ab.
+if remote "cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$FLEET_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} up -d --remove-orphans ${RESOLVED_SERVICES[*]}"; then
+  :
+else
+  echo >&2
+  echo "❌ Start im Zielprojekt fehlgeschlagen - Alt-Stand wird wieder hochgefahren:" >&2
+  remote "cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$LEGACY_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} up -d --remove-orphans ${RESOLVED_SERVICES[*]}" \
+    || echo "❌❌ Auch der Alt-Start ist fehlgeschlagen - Knoten $IP manuell pruefen (docker ps, docker compose logs)." >&2
+  echo "   Der Knoten laeuft wieder im Projekt $LEGACY_PROJECT (Rueckweg unten)." >&2
+  exit 2
+fi
 
 # --- 6. Verifizieren --------------------------------------------------------
 echo "--- 6/6 Verifikation ---"
@@ -288,7 +363,7 @@ if [[ "$CLEANUP_LEGACY" == "1" ]]; then
 else
   echo "Rueckweg (Alt-Stand bleibt startfaehig, weil die Volumes kopiert wurden):"
   echo "  1. Neu stoppen:  ssh root@$IP 'cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$FLEET_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} down'"
-  echo "  2. Alt starten:  ssh root@$IP 'cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$LEGACY_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} up -d ${ROLE_SERVICES[*]}'"
+  echo "  2. Alt starten:  ssh root@$IP 'cd $FLEET_HOME && COMPOSE_PROJECT_NAME=$LEGACY_PROJECT docker compose -f docker-compose.hetzner.yml ${ROLE_OVERLAYS[*]:-} up -d ${RESOLVED_SERVICES[*]}'"
   echo "  3. Alt-Volumes aufraeumen (erst wenn der Neu-Stand bestaetigt ist):"
   echo "     bash $0 $IP --role $ROLE --cleanup-legacy"
 fi
