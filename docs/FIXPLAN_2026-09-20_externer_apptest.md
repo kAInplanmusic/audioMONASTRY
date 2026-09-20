@@ -48,6 +48,29 @@ Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 
 ---
 
+## Live-Beweise 2026-09-20 (gemessen, nicht behauptet)
+
+Nach dem Deploy von `main`-Commit `37c5719` auf app-1 (`deploy.sh` mit Origin-Zertifikat
+aus `.env.portal`). Alle Abfragen über den Produktionspfad (Caddy, echtes SNI,
+`--resolve`), der Studio-Token wurde nur auf dem Knoten gelesen — nie ausgegeben:
+
+| Fix | Live-Beweis |
+| --- | --- |
+| F2 | `/api/cloud/health` → `r2.state=degraded`, `problem=signature-mismatch`, `ok=false`, mit Begründung + Bucket/Endpoint-Kürzel. Der Fehler ist jetzt ein Betriebszustand (vorher nur 20 Log-Zeilen). Gültiges Paar fehlt weiterhin (Betreiber). |
+| F3 | `POST /api/master/mix` mit **4 Spuren à 30 s** (30,7 MB JSON) → **200** und 7,68 MB gemischtes WAV zurück. Gegenprobe 5 × 120 s (153,6 MB) → **413** mit Zahlen („Gesamtgröße 146,5 MB, erlaubt 64 MB") und `limits`-Block (64 MB / 8 Spuren / 120 s). |
+| F4 | `/api/health` → `{status,version,commit:"37c5719",buildTime:"2026-09-20T19:16:38Z"}` — Commit == Repo-HEAD; `grep -c clock-ping dist/server.cjs` im Container → **1**; Paritäts-Gate in `deploy.sh` ohne Abweichung. Vorher: nur `{status,version}`. |
+| F5 | 60 schnelle `/api/health`-Aufrufe → **60× 200, 0× 429** (Befund war 300/300 429); `/api/online` mit Token 3× → 200; `/api/online`, `/api/session/state`, `/api/idle-signal`, `/api/metrics` ohne Token → **401** (fail-closed). |
+| F7 | Header: `content-security-policy-report-only` mit abgeleitetem `connect-src` + `reporting-endpoints: default="/api/security/csp-report"`; fremder Origin („evil.example") gegen `/webrtc-signaling` → **400**. Vorher: `Access-Control-Allow-Origin: *` und CSP ohne Meldeziel. |
+| F9 | `/api/idle-signal` → `verdict=active`, `shutdown=false`, `reason="aktiv: request-vor-34s"`, Header `x-idle-verdict: active` / `x-idle-shutdown: no`. Das Signal folgt echter Nutzung (vorher im Log ausnahmslos `ONLINE=0`). |
+| F10 | Migration auf allen vier Knoten ausgeführt (siehe unten). |
+| F6 | `/api/webrtc-config` mit Token → `iceServers: 1` mit **2 STUN-URLs**, dazu `turn.available=false` („TURN_URLS nicht gesetzt – nur STUN aktiv") und `sfu.ready=false` („SFU_SIGNALING_URL nicht gesetzt – kein SFU-Pfad für den Client"). Die Lücke wird also **laut gemeldet** statt still ein unbrauchbares ICE-Set geliefert — coturn + Firewall + `sfu.<domain>` fehlen noch live (Betreiber/DNS). |
+
+Mit dem Deploy auf app-1 liegen die Fixes F2/F3/F4/F5/F7/F8/F9 auch als **laufender
+Code** auf der Flotte; app-1 fährt Projekt `audiomonastry` mit installiertem
+Cloudflare-Origin-Zertifikat (`certs/origin.crt|key`, 600, ausgestellt bis 2041).
+
+---
+
 ## Live-Session 2026-09-20 (durchgeführt, soweit ohne Betreiber-Secrets möglich)
 
 **Erledigt und live gemessen:**
