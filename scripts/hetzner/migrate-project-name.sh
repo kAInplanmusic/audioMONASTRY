@@ -126,7 +126,9 @@ Plan (idempotent, jeder Schritt prueft seinen Ausgangszustand):
 PLAN
 }
 
+expect_role="0"
 for arg in "$@"; do
+  if [[ "$expect_role" == "1" ]]; then ROLE="$arg"; expect_role="0"; continue; fi
   case "$arg" in
     --print-config) PRINT_CONFIG="1" ;;
     --dry-run) DRY_RUN="1" ;;
@@ -134,17 +136,21 @@ for arg in "$@"; do
     --skip-volumes) SKIP_VOLUMES="1" ;;
     --yes|-y) ASSUME_YES="1" ;;
     --role=*) ROLE="${arg#--role=}" ;;
+    --role) expect_role="1" ;;
     --help|-h) usage ;;
     -*) echo "Unbekannte Option: $arg" >&2; usage ;;
     *) IP="$arg" ;;
   esac
 done
-# --role <wert> in zwei Argumenten (haeufigste Form)
-prev=""
-for arg in "$@"; do
-  if [[ "$prev" == "--role" ]]; then ROLE="$arg"; fi
-  prev="$arg"
-done
+# Warum `--role <wert>` hier ausdruecklich steht: die Nutzung nennt genau diese
+# Form, aber `--role` fiel vorher in den `-*`-Zweig und beendete das Skript mit
+# "Unbekannte Option: --role" (live gemessen 2026-09-20 mit
+# `migrate-project-name.sh <ip> --role app --dry-run`). Eine zweite Schleife
+# danach konnte das nie reparieren - dort war das Skript schon beendet.
+if [[ "$expect_role" == "1" ]]; then
+  echo "❌ --role ohne Wert (app|sfu|master|edge)" >&2
+  usage
+fi
 
 # Trockenlauf zuerst: er braucht weder IP noch Rolle (Anzeige-Default ist app)
 # und darf keinen SSH-/Docker-Pfad beruehren.

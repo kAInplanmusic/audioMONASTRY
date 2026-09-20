@@ -1884,6 +1884,41 @@ class NamespaceParitaetTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, combined)
         self.assertIn("--role fehlt", combined)
 
+    def test_migration_akzeptiert_die_zwei_argumentige_rollenform(self) -> None:
+        """`--role app` (zwei Argumente) muss laufen - genau so steht es in der
+        Nutzung. Live gemessen am 2026-09-20: die Form endete in "Unbekannte
+        Option: --role", weil `--role` in den `-*`-Zweig fiel; die zweite
+        Schleife danach wurde nie erreicht. Der Test faehrt den echten Codepfad
+        gegen 127.0.0.1 (kein sshd im Test -> die Lese-Schritte sind leer, das
+        Skript muss trotzdem den Plan zeigen und sauber enden).
+        """
+        plain = subprocess.run(
+            [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role", "app", "--dry-run"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+        )
+        combined = self._combined(plain)
+        self.assertNotIn("Unbekannte Option", combined)
+        self.assertEqual(plain.returncode, 0, combined)
+        self.assertIn("(Rolle app)", plain.stdout)
+        self.assertIn("Trockenlauf (--dry-run): keine Aenderung ausgefuehrt.", plain.stdout)
+
+        # Die Gleichheitsform bleibt gleichwertig.
+        equals = subprocess.run(
+            [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role=app", "--dry-run"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+        )
+        self.assertEqual(equals.returncode, 0, self._combined(equals))
+        self.assertIn("(Rolle app)", equals.stdout)
+
+        # Ein fehlender Rollenwert ist ein Klartextfehler, keine stille Annahme.
+        missing = subprocess.run(
+            [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+        )
+        missing_combined = self._combined(missing)
+        self.assertEqual(missing.returncode, 1, missing_combined)
+        self.assertIn("--role ohne Wert", missing_combined)
+
     def test_bash_syntax_aller_f10_skripte_ist_sauber(self) -> None:
         for script in (FLEET_NAMES, AUTO_REPAIR, (HETZNER / "fleet-status.sh"), FLEET_DEPLOY_LIVE,
                        BRING_UP, PROVISION_FLEET, MIGRATE_PROJECT, DEPLOY_SH):

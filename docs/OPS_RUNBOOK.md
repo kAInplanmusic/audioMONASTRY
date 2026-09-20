@@ -967,3 +967,25 @@ curl -fsS http://127.0.0.1:8080/api/online | awk -F'"online":' '{n=$2+0} END{pri
 Zum Mitlesen der Socket-Seite: `/api/online` liefert jetzt zusätzlich `ghosts`,
 `idleSockets` und `unattachedSockets` aus dem letzten Socket-Sweep — nicht-null-Werte
 zeigen Reste abgebrochener Verbindungen, die der Sweep im nächsten Intervall entfernt.
+
+## Cloudflare-Token vor dem DNS-Fix messen (F1 — 2026-09-20)
+
+Der externe App-Test fand **fünf** Cloudflare-Fundstellen in zwei Dateien
+(`CLOUDFLARE_API_TOKEN`, `CF_API_KEY`, `CF_ACCOUNT_TOKEN` in `.env.deploy` und
+`.env.portal`). Bevor jemand einen Token „hinterlegt“ und dann auf einen
+Portal-Neustart wartet, sagt dieses Skript lesend, welcher überhaupt lebt:
+
+```bash
+python3 scripts/hetzner/cf-token-diagnose.py            # Zone anunnakitools.de
+```
+
+Es ruft ausschließlich `GET /user/tokens/verify` und `GET /zones?name=…` auf,
+schreibt nichts und gibt **nie Token-Werte** aus — nur `success`, den ersten
+Fehlercode (z. B. `1000 Invalid API Token`) und die Zahl der sichtbaren Zonen.
+Ein Wert, der wie ein globaler API-Key aussieht (37 Hex-Zeichen), wird als
+solcher gekennzeichnet: für ihn ist `tokens/verify` die falsche Prüfung (er
+braucht `X-Auth-Email` + `X-Auth-Key`, und `CF_EMAIL` fehlt in den Dateien).
+
+Ergebnis am 2026-09-20: **alle fünf** antworten `1000 Invalid API Token`,
+Zonenzugriff 0 → `Zone:DNS:Edit` fehlt komplett. Das ist der Blocker für F1 und
+für das Portal-gesteuerte Flotten-Wake.

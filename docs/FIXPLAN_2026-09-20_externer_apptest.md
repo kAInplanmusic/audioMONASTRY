@@ -48,6 +48,68 @@ Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 
 ---
 
+## Restarbeiten (live, Betreiber) — Stand 2026-09-20, alles vorgemessen
+
+Am 2026-09-20 **live geprüft** (lesend, ohne Schreibzugriff auf die Flotte):
+
+* Flotte läuft: `audiomonastry-app-1` 142.132.229.71, `sfu-1` 142.132.231.146,
+  `ai-1` 178.105.66.67, `master-1` 167.233.112.182, `edge-1` 167.233.192.196
+  (`bash scripts/hetzner/fleet-status.sh`).
+* app-1 fährt `/opt/samplemonk` im Compose-Projekt **samplemonk**
+  (`/audiomonastry` + `audiomonastry-caddy`), `/opt/audiomonastry` fehlt,
+  Volumes `samplemonk_caddy_{config,data}` — genau der F10-Befund, jetzt belegt:
+  `bash scripts/hetzner/migrate-project-name.sh 142.132.229.71 --role app --dry-run`.
+* `http://142.132.229.71:8080/api/health` (auf dem Knoten) liefert weiterhin nur
+  `{"status":"ok","version":"1.210.001"}` — kein `commit`/`buildTime`, also der
+  Stand vom 18.09. (F4-Befund reproduziert).
+* DNS unverändert kaputt: `anunnakitools.de` und **auch**
+  `origin.anunnakitools.de` zeigen auf Cloudflare-IPs (104.21.46.111 /
+  172.67.168.116), `sfu.anunnakitools.de` existiert nicht;
+  `https://anunnakitools.de/api/health` → HTTP 000.
+* **Alle fünf Cloudflare-Credentials sind ungültig** — gemessen mit
+  `python3 scripts/hetzner/cf-token-diagnose.py` (nur lesend, gibt nie Werte
+  aus): `CLOUDFLARE_API_TOKEN`, `CF_API_KEY`, `CF_ACCOUNT_TOKEN` in
+  `.env.portal` und `.env.deploy` antworten durchweg mit `1000 Invalid API
+  Token`, Zonenzugriff 0. Das ist der harte Blocker für F1 (und für das
+  Portal-gesteuerte Flotten-Wake).
+* Auf app-1 lagen veraltete SSH-Host-Keys (Knoten wurde neu provisioniert);
+  lokal bereinigt (`ssh-keygen -R <ip>` für alle fünf Knoten).
+
+Reihenfolge für die Live-Session (jeder Schritt mit Prüfkommando):
+
+1. **Gültigen Cloudflare-Token** mit `Zone:DNS:Edit` für `anunnakitools.de`
+   hinterlegen (`.env.portal` → Worker-Variable), dann
+   `python3 scripts/hetzner/cf-token-diagnose.py` → `success=True`, Zonen ≥ 1.
+2. **Origin-DNS** auf die app-1-IP patchen (schreibfrei vorher prüfen:
+   `bash scripts/hetzner/fleet-preflight.sh dns`; schreiben lässt der
+   Portal-Worker per `POST /api/wire-fleet`).
+3. **F10-Migration** app-1: `bash scripts/hetzner/migrate-project-name.sh
+   142.132.229.71 --role app --dry-run` → danach ohne `--dry-run` (idempotent,
+   `down` ohne `-v`, Volumes werden kopiert, Alt-Stand bleibt
+   rückrollbar). Für `sfu-1`/`master-1` mit `--role sfu|master` wiederholen.
+4. **F4-Deploy** mit Stempel und Origin-Zertifikat:
+   `DEPLOY_HOST=142.132.229.71 DEPLOY_DOMAIN=anunnakitools.de bash deploy.sh`
+   (die Zertifikatswerte `ORIGIN_CERT`/`ORIGIN_KEY` liegen in `.env.portal`);
+   Prüfung: `curl -s https://anunnakitools.de/api/health` enthält
+   `commit: <HEAD>` und `curl -s https://…/api/health | grep -c clock-ping`.
+5. **F5/F6/F7 live:** `node scripts/hetzner/stress-test.mjs` (kein 429 auf
+   `/api/health`); `curl -s https://…/api/webrtc-config` enthält `turn:`;
+   `node scripts/hetzner/sfu-rtp-run.mjs` → `ok:true`; fremder Origin →
+   `origin-not-allowed`; `/api/security/csp-report` auswerten und danach
+   `CSP_MODE=enforce` entscheiden (Worker-Variable + Deploy).
+6. **F8/F9 live:** auf dem App-Knoten
+   `AUDIOMONASTRY_TEST_RESET=1` + Studio-Token → `POST /api/session/reset` (200)
+   und `GET /api/state`; Idle: `GET /api/idle-signal` und ein echter Lauf des
+   systemd-Timers (`--dry-run` vorher).
+7. **F2 live:** gültiges R2-Paar in die Rollen-`.env` von app-1 (kanonisch
+   `CFS3_*`), dann `npm run r2:check` → Exit 0,
+   `curl -s 'https://…/api/cloud/health?probe=1'` → `r2: ok`, 3-s-WAV-Upload →
+   200.
+8. **F3 live:** Mischen mit 4 Spuren à 30 s über die App → 200 + Hörprobe;
+   Überschreitung → 413 mit Zahlenmeldung.
+
+---
+
 ## F1 — Öffentlicher Zugang ist tot (P0)
 
 **Symptom:** `https://anunnakitools.de` → 522/Timeout, `/api/health` über die Domain
