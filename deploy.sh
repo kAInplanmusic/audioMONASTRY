@@ -27,6 +27,10 @@
 #        DEPLOY_REMOTE_BUILD=1               (1 = Remote-Build statt Image-Transfer)
 #        DEPLOY_SYNC_ENV=1|0                 (1 = lokale .env hochladen, Default 0)
 #        DEPLOY_SMOKE=1|0                    (1 = Smoke-Test nach Deploy)
+#        DEPLOY_VERSION=1.210.001            (optional: Versionsstempel ueberschreiben)
+#        DEPLOY_COMMIT=ae5e749               (optional: Commit-Stempel ueberschreiben,
+#                                             z. B. Rollback-Drill auf einen alten Stand)
+#        DEPLOY_ALLOW_STALE=1                (optional: abweichenden Stand BEWUSST erlauben)
 #        DEPLOY_REMOTE_DIR=/opt/audiomonastry
 #        DEPLOY_PLATFORM=linux/amd64         (optional, Cross-Build via buildx)
 #        DEPLOY_PRINT_CONFIG=1               (nur Konfiguration ausgeben, dann Ende)
@@ -66,8 +70,29 @@
 #   laeuft (details: docs/ORIGIN_TLS_DNS_RUNBOOK.md).
 #   DEPLOY_INSTALL_CADDYFILE=1 bleibt der ausdrueckliche ACME-Notausgang: er laedt
 #   das Repo-Caddyfile (automatisches ACME) und ersetzt damit die Origin-Variante.
+#
+# PROD-P1-F4 - warum der Deploy den COMMIT prueft (nicht nur die Version):
+#   Am 2026-09-20 lief auf app-1 ein Image vom 18.09., waehrend das Repo auf
+#   ae5e749 (20.09.) stand. /api/health nannte nur eine Version, die sich nicht
+#   mit jedem Commit aendert - der Drift blieb unbemerkt. Deshalb:
+#     1. Commit + Build-Zeit gehen als Build-Args ins Image (Dockerfile.hetzner,
+#        AUDIOMONASTRY_COMMIT/AUDIOMONASTRY_BUILD_TIME), /api/health nennt sie.
+#     2. Nach Health + Smoke vergleicht deploy.sh den gemeldeten Commit mit dem
+#        Repo-Commit (scripts/hetzner/lib/build-parity.sh - dieselbe Bibliothek
+#        wie fleet-preflight.sh und die Tests). Eine Abweichung beendet den
+#        Deploy mit Exit 1.
+#     3. "Nicht pruefbar" (Image ohne commit-Feld) blockiert NICHT, wird aber laut
+#        gemeldet. Bewusst veraltet weiterfahren: DEPLOY_ALLOW_STALE=1.
 # ============================================================================
 set -euo pipefail
+
+# PROD-P1-F4: Commit-Paritaet als EINE Shell-Umsetzung. deploy.sh,
+# scripts/hetzner/fleet-preflight.sh und tests/test_hetzner_scripts.py nutzen
+# dieselbe Bibliothek - kein zweiter Vergleich, der etwas anderes behaupten kann.
+# shellcheck source=scripts/hetzner/lib/build-parity.sh
+DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$DEPLOY_SCRIPT_DIR/scripts/hetzner/lib/build-parity.sh"
 
 # --- Konfiguration (aus env, sonst Prompt) ---
 DEPLOY_HOST="${DEPLOY_HOST:-}"
@@ -106,6 +131,22 @@ IMAGE_APP="audiomonastry:hetzner"
 IMAGE_MASTER="audiomonastry-master-player:hetzner"
 COMPOSE_FILE="docker-compose.hetzner.yml"
 
+# PROD-P1-F4: Staleness-Gate. 0 = eine Commit-Abweichung zwischen laufendem
+# Container und Repo laesst den Deploy mit Exit 1 enden; 1 = der Betreiber
+# erlaubt den abweichenden Stand BEWUSST (die Meldung bleibt laut).
+DEPLOY_ALLOW_STALE="${DEPLOY_ALLOW_STALE:-0}"
+
+# PROD-P1-F4: Build-Metadaten fuer die Commit-Paritaet.
+#   APP_VERSION  Release-Version (PROD-P0-003, package.json; DEPLOY_VERSION ueberschreibt)
+#   APP_COMMIT   kurzer Commit-SHA des Repo-Stands, der ins Image gebaut wird
+#   BUILD_TIME   Build-Zeit (UTC, ISO-8601)
+# Alle drei gehen als Build-Args ins Image (Dockerfile.hetzner) und kommen aus
+# /api/health zurueck. Ohne Commit ist "laeuft die Flotte auf dem Repo-Stand?"
+# nicht beantwortbar - genau daran blieb der Drift vom 2026-09-20 unbemerkt.
+APP_VERSION="${DEPLOY_VERSION:-$(node -p "require('./package.json').version" 2>/dev/null || echo dev)}"
+APP_COMMIT="${DEPLOY_COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo unknown)}"
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 # Trockenlauf fuer Nachweise (INFRA-HETZNER-001/002): gibt die effektive
 # Konfiguration aus und endet VOR Build/SSH - die Default-Aufloesung ist damit
 # ohne Ziel-Instanz pruefbar (und ohne versehentlichen Deploy). Weil hier auch der
@@ -122,7 +163,13 @@ if [[ "${DEPLOY_PRINT_CONFIG:-0}" == "1" ]]; then
   printf '  Origin-Zertifikate im env vorhanden: %s\n' "$ORIGIN_CERTS_IN_ENV"
   printf '  DEPLOY_REMOTE_BUILD=%s\n' "$DEPLOY_REMOTE_BUILD"
   printf '  DEPLOY_SMOKE=%s\n' "$DEPLOY_SMOKE"
+  printf '  DEPLOY_ALLOW_STALE=%s\n' "$DEPLOY_ALLOW_STALE"
   printf '  DEPLOY_DOMAIN=%s\n' "${DEPLOY_DOMAIN:-<leer>}"
+  # PROD-P1-F4: genau die Werte, die als Build-Args ins Image gehen - damit ist
+  # der Commit-Stempel ohne Build/Docker pruefbar (kein Secret enthalten).
+  printf '  BUILD_VERSION=%s\n' "$APP_VERSION"
+  printf '  BUILD_COMMIT=%s\n' "$APP_COMMIT"
+  printf '  BUILD_TIME=%s\n' "$BUILD_TIME"
   exit 0
 fi
 
@@ -149,18 +196,20 @@ fi
 SSH=(ssh -i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10)
 SCP_OPTS=(-i "$DEPLOY_SSH_KEY" -o StrictHostKeyChecking=accept-new)
 
-# PROD-P0-003: App-Version aus package.json als Build-Arg mitgeben, damit
-# /api/health die laufende Version nennt (Deploy-/Rollback-Nachweis).
-# DEPLOY_VERSION ueberschreibt sie bewusst (z. B. fuer einen Rollback-Drill auf
-# einen aelteren Stand) - ohne die package.json anzufassen.
-APP_VERSION="${DEPLOY_VERSION:-$(node -p "require('./package.json').version" 2>/dev/null || echo dev)}"
-
+# PROD-P0-003 / PROD-P1-F4: Die Build-Metadaten (Version, Commit, Build-Zeit)
+# stehen oben bei APP_VERSION/APP_COMMIT/BUILD_TIME und gehen hier als Build-Args
+# ins Image. DEPLOY_VERSION/DEPLOY_COMMIT ueberschreiben sie bewusst (z. B. fuer
+# einen Rollback-Drill auf einen aelteren Stand) - ohne die package.json oder das
+# Repo anzufassen.
 docker_build() {
   local dockerfile="$1" tag="$2" context="$3"
+  local args=(--build-arg "BUILD_VERSION=$APP_VERSION"
+              --build-arg "BUILD_COMMIT=$APP_COMMIT"
+              --build-arg "BUILD_TIME=$BUILD_TIME")
   if [[ -n "$DEPLOY_PLATFORM" ]] && docker buildx version >/dev/null 2>&1; then
-    docker buildx build --platform "$DEPLOY_PLATFORM" -t "$tag" -f "$dockerfile" "$context" --build-arg "BUILD_VERSION=$APP_VERSION" --load
+    docker buildx build --platform "$DEPLOY_PLATFORM" -t "$tag" -f "$dockerfile" "$context" "${args[@]}" --load
   else
-    docker build -t "$tag" -f "$dockerfile" "$context" --build-arg "BUILD_VERSION=$APP_VERSION"
+    docker build -t "$tag" -f "$dockerfile" "$context" "${args[@]}"
   fi
 }
 
@@ -346,7 +395,7 @@ else
   BASE_URL="http://${DEPLOY_HOST#*@}"
 fi
 
-echo "=== [5/5] Health-Check + Smoke-Test ==="
+echo "=== [5/5] Health-Check + Smoke-Test + Commit-Paritaet ==="
 wait_health "$BASE_URL" || true
 
 if [[ "$DEPLOY_SMOKE" == "1" ]] && command -v curl >/dev/null 2>&1; then
@@ -358,8 +407,25 @@ if [[ "$DEPLOY_SMOKE" == "1" ]] && command -v curl >/dev/null 2>&1; then
   done
 fi
 
+# PROD-P1-F4: Staleness-Gate. "Fertig" heisst jetzt Health UND Commit-Paritaet.
+# Eine Abweichung heisst: der Container laeuft auf einem anderen Stand als das
+# Repo (real passiert am 2026-09-20: Image vom 18.09. bei Repo-Commit ae5e749) -
+# das darf nicht still durchlaufen. Die Entscheidung liegt in
+# scripts/hetzner/lib/build-parity.sh (parity_gate), damit Tests genau diesen
+# Pfad fahren koennen. "Nicht pruefbar" blockiert bewusst nicht.
+if ! parity_gate "$BASE_URL" "$APP_COMMIT" app-1 "$DEPLOY_ALLOW_STALE"; then
+  echo "" >&2
+  echo "❌ Deployment-ABWEICHUNG: der laufende Container entspricht NICHT dem Repo-Stand $APP_COMMIT." >&2
+  echo "   Abbruch (Exit 1), damit keine still veraltete Flotte weiterlaeuft." >&2
+  echo "   Bewusst veraltet weiterfahren:  DEPLOY_ALLOW_STALE=1 (Grund dokumentieren)" >&2
+  echo "   Rollback auf die Vorversion:    ssh $SSH_TARGET 'docker tag ${IMAGE_APP}-rollback $IMAGE_APP && cd $DEPLOY_REMOTE_DIR && docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry'" >&2
+  echo "   Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md, docs/HETZNER_DEPLOY.md §3" >&2
+  exit 1
+fi
+
 echo ""
 echo "✅ Deployment abgeschlossen: $BASE_URL"
+echo "   Stand:     version=$APP_VERSION commit=$APP_COMMIT buildTime=$BUILD_TIME"
 echo ""
 echo "   Logs:      ssh $SSH_TARGET 'docker compose -f $DEPLOY_REMOTE_DIR/$COMPOSE_FILE logs -f audiomonastry'"
 echo "   Rollback:  ssh $SSH_TARGET 'docker tag ${IMAGE_APP}-rollback $IMAGE_APP && cd $DEPLOY_REMOTE_DIR && docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry'"

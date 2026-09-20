@@ -14,6 +14,19 @@
 #                   Worker den Origin nicht erreicht (siehe
 #                   docs/ORIGIN_TLS_DNS_RUNBOOK.md).
 #
+# PROD-P1-F4 – Staleness-Gate (real gemessen am 2026-09-20: app-1 lief auf einem
+# Image vom 18.09., das Repo stand auf ae5e749 vom 20.09.; /api/health nannte nur
+# eine Version, die sich nicht mit jedem Commit aendert):
+#   * Der lokale Repo-Commit geht als `expectedCommit` an /api/wake und als
+#     `?expected=` an /api/status - der Portal-Worker meldet dann "Flotte laeuft
+#     Stand X, Repo ist Y" (state 'stale') statt "ready".
+#   * `check`/`apply` vergleichen zusaetzlich den von /api/health gemeldeten
+#     Commit des laufenden Knotens (scripts/hetzner/lib/build-parity.sh, dieselbe
+#     Bibliothek wie deploy.sh) und enden bei belegter Abweichung mit Exit 1.
+#   * Bewusst abweichend weiterfahren: `--allow-stale` (bzw. ALLOW_STALE=1).
+#     "Nicht pruefbar" (Image vor F4 ohne commit-Feld) blockiert NICHT - es wird
+#     laut gemeldet.
+#
 # Konfiguration (env oder .env.deploy im Repo-Root):
 #   PORTAL_URL         https://anunnakitools.de
 #   DEPLOY_DOMAIN      anunnakitools.de
@@ -27,12 +40,14 @@
 #   APP_IP             nur für 'dns': erwartete app-1-IP (Abweichung = Fehler)
 #   CF_API_BASE        nur für 'dns': API-Basis (Default Cloudflare v4; für den
 #                      Offline-Test gegen einen lokalen Stub überschreibbar)
+#   ALLOW_STALE        1 = belegte Commit-Abweichung bewusst erlauben (Default 0)
 #
 # Aufruf:
 #   bash scripts/hetzner/fleet-preflight.sh check
 #   bash scripts/hetzner/fleet-preflight.sh apply
 #   bash scripts/hetzner/fleet-preflight.sh dns
 #   bash scripts/hetzner/fleet-preflight.sh dns --print-config   (ohne Netz)
+#   bash scripts/hetzner/fleet-preflight.sh check --allow-stale  (bewusst abweichend)
 #
 # Betreiber-Schritte bei 'dns'-Fehlern (Details: docs/ORIGIN_TLS_DNS_RUNBOOK.md):
 #   1. Token mit Zone:DNS:Edit prüfen (Fehlercode 9109 = Token ungültig).
@@ -44,7 +59,36 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+# Vergleich der Commits (PROD-P1-F4) - dieselbe Bibliothek wie deploy.sh.
+# shellcheck source=scripts/hetzner/lib/build-parity.sh
+# shellcheck disable=SC1091
+source scripts/hetzner/lib/build-parity.sh
+
+# Aufruf: <check|apply|dns> [--allow-stale] [--print-config (nur dns)];
+# ALLOW_STALE=1 wirkt ebenso (env/.env.deploy).
+MODE="${1:-check}"
+CLI_ALLOW_STALE=0
+MODE_ARGS=()
+if [[ $# -gt 0 ]]; then shift; fi
+for arg in "$@"; do
+  case "$arg" in
+    --allow-stale) CLI_ALLOW_STALE=1 ;;
+    --print-config) MODE_ARGS+=("$arg") ;;
+    *) echo "Unbekannte Option: $arg (erlaubt: --allow-stale, --print-config)" >&2; exit 1 ;;
+  esac
+done
+
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
+
+# Bewusste Freigabe: CLI schlaegt env/Datei (--allow-stale gewinnt).
+if [[ "$CLI_ALLOW_STALE" == "1" || "${ALLOW_STALE:-0}" == "1" ]]; then
+  ALLOW_STALE=1
+else
+  ALLOW_STALE=0
+fi
+# JSON-taugliche Form fuer den Wake-Body (true/false waere hier auch moeglich,
+# 1/0 haelt Worker-Seite, Portal und Shell auf derselben Schreibweise).
+if [[ "$ALLOW_STALE" == "1" ]]; then ALLOW_STALE_JSON=1; else ALLOW_STALE_JSON=0; fi
 
 PORTAL_URL="${PORTAL_URL:-https://anunnakitools.de}"
 DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
@@ -81,9 +125,27 @@ login() {
   log "Portal-Login ok."
 }
 
-portal_status() { curl -fsS -b "$COOKIE_JAR" "$PORTAL_URL/api/status" 2>/dev/null || echo '{"state":"unreachable"}'; }
+portal_status() {
+  # PROD-P1-F4: der erwartete Repo-Commit geht mit - nur damit kann der Worker
+  # "stale" (Flotte laeuft auf einem anderen Stand) von "ready" unterscheiden.
+  local url="$PORTAL_URL/api/status?expected=$LOCAL_COMMIT"
+  if [[ "$ALLOW_STALE" == "1" ]]; then url="$url&allowStale=1"; fi
+  curl -fsS -b "$COOKIE_JAR" "$url" 2>/dev/null || echo '{"state":"unreachable"}'
+}
 
 list_snapshots() { curl -fsS -b "$COOKIE_JAR" "$PORTAL_URL/api/snapshots" 2>/dev/null || echo '{"snapshots":[]}'; }
+
+# PROD-P1-F4: Die Paritaetsmeldung aus einer /api/status- bzw. Wake-Antwort.
+# Der Wortlaut kommt vom Worker, damit Portal-Konsole, CLI und Log dasselbe sagen.
+parity_message() {
+  python3 -c 'import json, sys
+try:
+    data = json.load(sys.stdin)
+except Exception:
+    print("")
+    sys.exit(0)
+print((data.get("parity") or {}).get("message") or "")'
+}
 
 snapshot_is_current() {
   python3 -c 'import json, sys
@@ -100,21 +162,61 @@ else:
 }
 
 wake_and_wait() {
-  local status
+  local status parity
   status="$(portal_status)"
   if [[ "$status" == *'"state":"off"'* ]]; then
-    log "Flotte ist AUS → wecke sie (Portal-Wake)."
-    curl -fsS -b "$COOKIE_JAR" -X POST "$PORTAL_URL/api/wake" >/dev/null || die "Wake fehlgeschlagen."
+    log "Flotte ist AUS → wecke sie (Portal-Wake, expectedCommit=$LOCAL_COMMIT)."
+    # PROD-P1-F4: Der erwartete Commit geht mit - der Worker vergleicht ihn mit
+    # den Snapshot-Labels (der laufende Container bootet erst) und meldet eine
+    # veraltete Wake-Quelle laut zurueck.
+    curl -fsS -b "$COOKIE_JAR" -H 'content-type: application/json' \
+      -d "{\"expectedCommit\":\"$LOCAL_COMMIT\",\"allowStale\":$ALLOW_STALE_JSON}" \
+      -X POST "$PORTAL_URL/api/wake" > /tmp/audiomonastry-wake.json || die "Wake fehlgeschlagen."
+    parity="$(parity_message < /tmp/audiomonastry-wake.json)"
+    if [[ -n "$parity" ]]; then log "Wake-Paritaet: $parity"; fi
   fi
 
-  log "Warte auf Flotte (ready) …"
+  log "Warte auf Flotte (ready + Commit-Paritaet) …"
   for _ in $(seq 1 180); do
     status="$(portal_status)"
-    if [[ "$status" == *'"state":"ready"'* ]]; then log "Flotte ready."; return 0; fi
+    if [[ "$status" == *'"state":"ready"'* ]]; then
+      parity="$(printf '%s' "$status" | parity_message)"
+      log "Flotte ready.${parity:+ Paritaet: $parity}"
+      return 0
+    fi
+    if [[ "$status" == *'"state":"stale"'* ]]; then
+      parity="$(printf '%s' "$status" | parity_message)"
+      if [[ "$ALLOW_STALE" == "1" ]]; then
+        log "⚠️  ${parity:-Stand abweichend} (bewusst erlaubt: --allow-stale)"
+        return 0
+      fi
+      die "Flotte laeuft auf einem veralteten Stand: ${parity:-unbekannt} — Deploy nachziehen oder bewusst mit --allow-stale starten."
+    fi
     sleep 4
   done
   log "Letzter Status: $status"
   die "Flotte wurde nicht rechtzeitig ready (max. 12 min)."
+}
+
+# PROD-P1-F4: Nach Deploy/Snapshot-Refresh muss der LAUFENDE Knoten den
+# Repo-Commit melden - hier wird der Stand des Knotens direkt gemessen
+# (/api/health ueber die Portal-Domain, dieselbe Bibliothek wie deploy.sh).
+check_running_parity() {
+  log "Pruefe Commit-Paritaet des laufenden Knotens (Repo=$LOCAL_COMMIT) …"
+  local have verdict
+  have="$(health_commit "$PORTAL_URL")"
+  if verdict="$(build_parity_report "$LOCAL_COMMIT" "$have" app-1)"; then
+    case "${verdict%% *}" in
+      OK) log "✅ ${verdict#* }" ;;
+      *) log "⚠️  ${verdict#* } (vor F4 gebaute Images tragen keinen Commit)" ;;
+    esac
+    return 0
+  fi
+  if [[ "$ALLOW_STALE" == "1" ]]; then
+    log "⚠️  ${verdict#* } (bewusst erlaubt: --allow-stale)"
+    return 0
+  fi
+  die "${verdict#* } — Neu deployen: bash deploy.sh (bzw. '$0 apply') oder bewusst: --allow-stale"
 }
 
 app_ip_from_status() {
@@ -149,10 +251,14 @@ refresh_snapshots() {
 }
 
 cmd_check() {
-  echo "Lokal:   commit=$LOCAL_COMMIT  version=$VERSION"
+  echo "Lokal:   commit=$LOCAL_COMMIT  version=$VERSION  allowStale=$ALLOW_STALE_JSON"
   local status
-  status="$(curl -fsS "$PORTAL_URL/api/status" 2>/dev/null || echo '{"state":"unreachable"}')"
+  status="$(portal_status)"
   echo "Portal:  $status"
+
+  # PROD-P1-F4: Was der LAUFENDE Knoten meldet, ist die zweite Haelfte der
+  # Paritaet (die Snapshots sind nur die erste - was bootet beim naechsten Wake).
+  check_running_parity
 
   if [[ -n "${ADMIN_USER:-}" && -n "${ADMIN_PASSWORD:-}" ]]; then
     login
@@ -186,6 +292,11 @@ cmd_apply() {
     apply_update "$app_ip"
     refresh_snapshots
   fi
+
+  # PROD-P1-F4: "Fertig" heisst jetzt Health UND Commit-Paritaet. Der Deploy
+  # selbst bricht bei belegter Abweichung schon ab (parity_gate in deploy.sh) -
+  # hier wird der laufende Knoten danach unabhaengig noch einmal gemessen.
+  check_running_parity
 
   echo "✅ Preflight abgeschlossen. Nächster Flotten-Start nutzt den aktuellen Stand."
 }
@@ -365,9 +476,9 @@ cmd_dns() {
   echo "   Verify: curl -sS -o /dev/null -w '%{http_code}\n' https://$PORTAL_DOMAIN/api/health   # erwartet 200"
 }
 
-case "${1:-check}" in
+case "$MODE" in
   check) cmd_check ;;
   apply) cmd_apply ;;
-  dns) shift; cmd_dns "$@" ;;
-  *) echo "Nutzung: $0 {check|apply|dns [--print-config]}" >&2; exit 1 ;;
+  dns) cmd_dns ${MODE_ARGS[@]+"${MODE_ARGS[@]}"} ;;
+  *) echo "Nutzung: $0 {check|apply|dns [--print-config]} [--allow-stale]" >&2; exit 1 ;;
 esac

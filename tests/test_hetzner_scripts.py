@@ -498,6 +498,10 @@ FAKE_TOKEN = "cf-token-nur-fuer-den-teststub-0000"
 CONTROLLED_ENV = (
     "DEPLOY_PRINT_CONFIG", "DEPLOY_INSTALL_CADDYFILE", "CLOUDFLARE_API_TOKEN",
     "CF_API_BASE", "PORTAL_DOMAIN", "ORIGIN_HOST", "APP_IP", "ORIGIN_CERT", "ORIGIN_KEY",
+    # PROD-P1-F4: Build-Stempel und Parity-Schalter kommen IMMER aus dem Test.
+    "DEPLOY_COMMIT", "DEPLOY_VERSION", "DEPLOY_ALLOW_STALE", "ALLOW_STALE", "PORTAL_URL",
+    "ADMIN_USER", "ADMIN_PASSWORD", "AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT",
+    "AUDIOMONASTRY_BUILD_TIME",
 )
 
 
@@ -881,6 +885,273 @@ class FleetPreflightDnsTest(unittest.TestCase):
         for line in text.splitlines():
             if "CLOUDFLARE_API_TOKEN" in line and line.strip().startswith("echo"):
                 self.assertNotIn("$CLOUDFLARE_API_TOKEN", line)
+
+
+class _HealthStub:
+    """Lokaler `/api/health`-Stub (kein Test spricht ins Internet).
+
+    Beantwortet genau einen Pfad: `/api/health`. Alles andere wird 404 - so
+    laesst sich pruefen, dass der Paritaetsvergleich WIRKLICH den laufenden
+    Knoten liest und nicht irgendeine andere Antwort.
+    """
+
+    def __init__(self, body: dict[str, Any] | None = None, status: int = 200) -> None:
+        self.body = body if body is not None else {"status": "ok", "version": "1.210.001", "commit": "ae5e749"}
+        self.status = status
+        self.hits: list[str] = []
+
+    def __enter__(self) -> "_HealthStub":
+        stub = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - Name kommt von BaseHTTPRequestHandler
+                stub.hits.append(self.path)
+                if self.path.split("?")[0] != "/api/health":
+                    self.send_error(404, "dieser Stub kennt nur /api/health")
+                    return
+                body = json.dumps(stub.body).encode("utf-8")
+                self.send_response(stub.status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args: Any) -> None:  # Testausgabe ruhig halten
+                return
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        return False
+
+    @property
+    def base_url(self) -> str:
+        host, port = self.server.server_address[0], self.server.server_address[1]
+        return f"http://{host}:{port}"
+
+
+#: Bibliotheks-Funktionen, die die Skripte aufrufen. Der Waechter unten sucht
+#: genau diese Namen (mit Suffix) in deploy.sh/fleet-preflight.sh und prueft,
+#: dass sie die Bibliothek wirklich deklariert.
+PARITY_LIB_CALLS = (
+    "verify_build_parity", "parity_gate", "build_parity_report", "health_commit",
+    "normalize_commit", "json_field",
+)
+_PARITY_CALL_RE = re.compile(r"(?<![\w-])(" + "|".join(f"{name}\\w*" for name in PARITY_LIB_CALLS) + r")\b")
+
+
+class BuildParityTest(unittest.TestCase):
+    """PROD-P1-F4: das Staleness-Gate - echt gefahren, nicht nur im Text gesucht.
+
+    Anlass: app-1 lief am 2026-09-20 auf einem Image vom 18.09., das Repo stand
+    auf `ae5e749` (20.09.). `/api/health` nannte nur eine Version, die sich nicht
+    mit jedem Commit aendert - die Abweichung war unbelegbar.
+
+    Der Test faehrt deshalb den ECHTEN Entscheidungspfad
+    (`scripts/hetzner/lib/build-parity.sh`, dieselbe Bibliothek, die deploy.sh
+    und fleet-preflight.sh sourcen) gegen einen lokalen /api/health-Stub: mit
+    einem ALTEN Stand als `commit` muss er scheitern (Exit 1, Klartextmeldung),
+    mit `allow-stale` bewusst durchgehen, und ohne commit-Feld (Image vor F4)
+    NICHT blockieren.
+    """
+
+    LIB = ROOT / "scripts" / "hetzner" / "lib" / "build-parity.sh"
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        if (ROOT / ".env.deploy").exists():
+            # fleet-preflight.sh sourcet .env.deploy und wuerde echtes Portal/Netz
+            # ansprechen - dann ist dieser Offline-Test nicht aussagekraeftig.
+            raise unittest.SkipTest(".env.deploy vorhanden: Offline-Test uebersprungen")
+        self.local_commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT, timeout=30,
+        ).stdout.strip()
+        self.assertTrue(self.local_commit, "git rev-parse --short HEAD lieferte nichts")
+        self.assertTrue(self.LIB.exists(), f"Bibliothek fehlt: {self.LIB}")
+
+    # --- Nutzlast ----------------------------------------------------------
+    def _run_gate(self, base_url: str, expected: str, label: str = "app-1", allow_stale: str = "0") -> subprocess.CompletedProcess:
+        script = 'source scripts/hetzner/lib/build-parity.sh\nparity_gate "$1" "$2" "${3:-app-1}" "${4:-0}"'
+        return subprocess.run(
+            [self.bash, "-c", script, "bash", base_url, expected, label, allow_stale],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(),
+        )
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    # --- Regeln -----------------------------------------------------------
+    def test_gleicher_commit_ist_paritaet(self) -> None:
+        with _HealthStub({"status": "ok", "version": "1.210.001", "commit": self.local_commit}) as stub:
+            result = self._run_gate(stub.base_url, self.local_commit)
+            combined = self._combined(result)
+            hits = list(stub.hits)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Commit-Paritaet ok", combined)
+        self.assertIn("version=1.210.001", combined)
+        self.assertEqual(hits, ["/api/health"])
+
+    def test_kurzer_sha_trifft_langen_sha(self) -> None:
+        long_commit = self.local_commit + "1234567890abcdef1234567890abcdef12"
+        with _HealthStub({"status": "ok", "commit": long_commit}) as stub:
+            kurz_gegen_lang = self._run_gate(stub.base_url, self.local_commit)
+            lang_gegen_kurz = self._run_gate(stub.base_url, long_commit)
+        self.assertEqual(kurz_gegen_lang.returncode, 0, self._combined(kurz_gegen_lang))
+        self.assertEqual(lang_gegen_kurz.returncode, 0, self._combined(lang_gegen_kurz))
+
+    def test_altes_label_ist_eine_belegte_abweichung_mit_klartext(self) -> None:
+        # Genau der Live-Befund: der Knoten meldet einen ALTEN Commit.
+        body = {"status": "ok", "version": "1.210.001", "commit": "deadbee", "buildTime": "2026-09-18T17:09:00Z"}
+        with _HealthStub(body) as stub:
+            result = self._run_gate(stub.base_url, self.local_commit)
+            combined = self._combined(result)
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn(f"Flotte laeuft Stand deadbee, Repo ist {self.local_commit}", combined)
+        self.assertIn("buildTime=2026-09-18T17:09:00Z", combined)
+
+    def test_allow_stale_laesst_die_abweichung_bewusst_durch(self) -> None:
+        with _HealthStub({"status": "ok", "commit": "deadbee"}) as stub:
+            result = self._run_gate(stub.base_url, self.local_commit, "app-1", "1")
+            combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        # Die Meldung bleibt SICHTBAR - nur blockiert sie nicht mehr.
+        self.assertIn("Flotte laeuft Stand deadbee", combined)
+        self.assertIn("BEWUSST akzeptiert", combined)
+
+    def test_fehlendes_commit_feld_blockiert_nicht_aber_meldet(self) -> None:
+        # Vor F4 gebaute Images tragen keinen Commit: KEIN Fehlalarm.
+        for body in (
+            {"status": "ok", "version": "1.210.001"},
+            {"status": "ok", "version": "1.210.001", "commit": "unknown"},
+        ):
+            with self.subTest(body=body):
+                with _HealthStub(body) as stub:
+                    result = self._run_gate(stub.base_url, self.local_commit)
+                    combined = self._combined(result)
+                self.assertEqual(result.returncode, 0, combined)
+                self.assertIn("nicht pruefbar", combined)
+                self.assertNotIn("Flotte laeuft Stand", combined)
+
+    def test_nicht_erreichbarer_knoten_blockiert_nicht(self) -> None:
+        # Cloudflare-only-Firewall: der direkte IP-Zugriff scheitert regelmaessig.
+        result = self._run_gate("http://127.0.0.1:9", self.local_commit)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("nicht pruefbar", combined)
+
+    def test_ohne_erwartung_wird_keine_paritaet_behauptet(self) -> None:
+        with _HealthStub({"status": "ok", "commit": "deadbee"}) as stub:
+            result = self._run_gate(stub.base_url, "")
+            combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Kein erwarteter Commit gesetzt", combined)
+
+    # --- Verdrahtung der Skripte ------------------------------------------
+    def test_deploy_sh_uebergibt_commit_und_zeit_als_build_args(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(DEPLOY_SH)], capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(DEPLOY_PRINT_CONFIG="1", DEPLOY_COMMIT="deadbee"),
+        )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("BUILD_VERSION=", result.stdout)
+        self.assertIn("BUILD_COMMIT=deadbee", result.stdout)
+        self.assertIn("BUILD_TIME=", result.stdout)
+        self.assertIn("DEPLOY_ALLOW_STALE=0", result.stdout)
+        text = DEPLOY_SH.read_text(encoding="utf-8")
+        self.assertIn('--build-arg "BUILD_COMMIT=$APP_COMMIT"', text)
+        self.assertIn('--build-arg "BUILD_TIME=$BUILD_TIME"', text)
+
+    def test_deploy_sh_bricht_bei_abweichung_ab(self) -> None:
+        text = DEPLOY_SH.read_text(encoding="utf-8")
+        # Der Deploy faehrt genau die Bibliotheks-Entscheidung und endet bei
+        # belegter Abweichung mit Exit 1 (kein stilles Weiterlaufen).
+        self.assertIn('parity_gate "$BASE_URL" "$APP_COMMIT" app-1 "$DEPLOY_ALLOW_STALE"', text)
+        self.assertIn("Deployment-ABWEICHUNG", text)
+        self.assertIn("DEPLOY_ALLOW_STALE=1", text)
+
+    def test_preflight_check_meldet_abweichung_und_endet_mit_exit_1(self) -> None:
+        with _HealthStub({"status": "ok", "commit": "deadbee"}) as stub:
+            result = subprocess.run(
+                [self.bash, str(FLEET_PREFLIGHT), "check"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120,
+                env=clean_env(PORTAL_URL=stub.base_url),
+            )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn(f"Flotte laeuft Stand deadbee, Repo ist {self.local_commit}", combined)
+        self.assertIn("--allow-stale", combined)
+        # Der laufende Knoten wurde wirklich gelesen (kein Textbeweis).
+        self.assertIn("/api/health", stub.hits)
+
+    def test_preflight_check_mit_allow_stale_meldet_aber_bricht_nicht_ab(self) -> None:
+        with _HealthStub({"status": "ok", "commit": "deadbee"}) as stub:
+            result = subprocess.run(
+                [self.bash, str(FLEET_PREFLIGHT), "check", "--allow-stale"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120,
+                env=clean_env(PORTAL_URL=stub.base_url),
+            )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Flotte laeuft Stand deadbee", combined)
+        self.assertIn("bewusst erlaubt", combined)
+
+    def test_preflight_check_ist_gruen_wenn_der_knoten_den_repo_stand_meldet(self) -> None:
+        with _HealthStub({"status": "ok", "commit": self.local_commit}) as stub:
+            result = subprocess.run(
+                [self.bash, str(FLEET_PREFLIGHT), "check"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120,
+                env=clean_env(PORTAL_URL=stub.base_url),
+            )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Commit-Paritaet ok", combined)
+
+    def test_preflight_unbekannte_option_wird_abgewiesen(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(FLEET_PREFLIGHT), "check", "--allow-stale=1"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(PORTAL_URL="http://127.0.0.1:9"),
+        )
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("Unbekannte Option", combined)
+
+    def test_jeder_bibliotheksaufruf_der_skripte_existiert_wirklich(self) -> None:
+        # Genau der Bruch aus dem abgebrochenen F4-Lauf: deploy.sh rief
+        # `verify_build_parity_url`, die Bibliothek kennt nur
+        # `verify_build_parity` -> "command not found" erst im Live-Deploy.
+        called: set[str] = set()
+        for path in (DEPLOY_SH, FLEET_PREFLIGHT):
+            called.update(_PARITY_CALL_RE.findall(path.read_text(encoding="utf-8")))
+        # Beide Skripte fahren die Bibliothek (parity_gate entscheidet, health_commit
+        # liest den laufenden Knoten) - kein Skript baut seinen eigenen Vergleich.
+        self.assertIn("parity_gate", called)
+        self.assertIn("health_commit", called)
+
+        script = "source scripts/hetzner/lib/build-parity.sh\n" + "\n".join(
+            f'declare -F {name} >/dev/null || {{ echo "FEHLT: {name}" >&2; exit 3; }}' for name in sorted(called)
+        )
+        result = subprocess.run([self.bash, "-c", script], capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env())
+        self.assertEqual(result.returncode, 0, self._combined(result))
+
+    def test_regex_waechter_erkennt_den_alten_tippfehler(self) -> None:
+        # Selbsttest des Waechters oben: der Name aus dem abgebrochenen Lauf
+        # MUSS als Aufruf erkannt werden - sonst waere der Waechter wertlos.
+        self.assertEqual(_PARITY_CALL_RE.findall('verify_build_parity_url "$1" app-1'), ["verify_build_parity_url"])
+
+    def test_bibliothek_ist_sauber_und_deklariert_die_api(self) -> None:
+        result = subprocess.run([self.bash, "-n", str(self.LIB)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = self.LIB.read_text(encoding="utf-8")
+        for name in PARITY_LIB_CALLS:
+            self.assertIn(f"{name}() {{", text)
 
 
 if __name__ == "__main__":
