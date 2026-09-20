@@ -279,6 +279,14 @@ Ausfallmodus, der am 2026-09-20 die Stimmen-Rolle stillgelegt hat:
 | `OK` | sonst | auch Scale-to-Zero ohne Queue ist normal |
 | `FEHLER` | Antwort ohne `workers`/`jobs` oder falscher Typ | wird NICHT als gesund gemeldet, damit eine geaenderte API auffaellt |
 
+**Konto zuerst (seit 2026-09-20):** Die Wache liest vor allen Rollen
+`{ myself { clientBalance } }` und meldet `KONTO_OK` / `KONTO_NEGATIV` /
+`KONTO_UNBEKANNT`. Ein **negativer** Saldo erklaert „Queue voll, kein Worker" vollstaendig
+(siehe unten) - deshalb steht er im Bericht **vor** den Rollen, im JSON unter
+`summary.account`, und `--heal` wird bei negativem Konto gar nicht erst versucht
+(**Exit 7**, kein Schreibzugriff). Ein nicht lesbarer Kontostand heisst `KONTO_UNBEKANNT`
+und aendert nichts am bisherigen Alarm - er wird nie stillschweigend als gesund gewertet.
+
 `FESTGEFAHREN` wird mit `--confirm-seconds` (Default 30 s) ein **zweites Mal** geprueft, bevor
 alarmiert wird. Grund, live belegt: direkt nach dem Absetzen eines Jobs steht er schon in der
 Queue, waehrend der Worker in keinem Zaehler auftaucht – die erste Lesung meldete `orchestrator`
@@ -287,7 +295,8 @@ Alarm (Exit bleibt 0), sondern ein Hinweis: ein legitim langer Job sieht genauso
 
 **Exit-Codes:** `0` alles gesund · `2` Aufruf-/Konfigurationsfehler · `3` `--heal` ohne
 Freigabe (kein einziger HTTP-Aufruf) · `4` Handlungsbedarf (festgefahren, ohne `--heal`) ·
-`5` Health-Abfrage fehlgeschlagen · `6` Heilung/Rueckstellung fehlgeschlagen.
+`5` Health-Abfrage fehlgeschlagen · `6` Heilung/Rueckstellung fehlgeschlagen ·
+`7` Konto negativ (Heilung unmoeglich, kein Schreibzugriff).
 
 **Heilen** (Produktion, Freigabe + Stundensatz noetig):
 
@@ -357,3 +366,52 @@ bekommen. Tests: `TemplateNameOverrideTest`.
 **Merksatz:** Ein Endpoint, dessen Template nicht in `myself.podTemplates` auftaucht, ist
 ein Ausfallkandidat — die Wache sieht ihn erst, wenn Jobs liegen bleiben. Bei Verdacht
 zuerst pruefen, ob das Template des Endpoints ueberhaupt gelistet ist.
+
+### Die zweite Ursache desselben Bildes: negativer Kontostand (live 2026-09-20)
+
+**Bild:** `audiomonastry-ai-music` stand nach der Template-Reparatur weiter mit
+`jobs.inQueue > 0` und **0/0/0/0 Workern** da, `delayTime: null` — auch mit gelistetem
+Template, nachgelesenem `templateId=qsxc8encwr` und `workersMax=2`. Ueber 45 Minuten
+erschien in keinem Zaehler ein Worker, ein 5-Minuten-Fenster mit frisch abgesetztem Job
+ebenfalls nicht.
+
+**Kontrollprobe (der entscheidende Schritt):** Dieselbe Messung an einer **unbeteiligten**
+Rolle mit eigenem, seit Tagen laufendem Template — `ears` (`xeax6xrgd0csag`, Template
+`4uzprwb5x8`, gelistet) — lieferte **dasselbe** Bild: Queue 1, alle Worker-Zaehler 0.
+Damit war der Defekt nicht rollenspezifisch.
+
+**Ursache:** `{ myself { clientBalance } }` → **-0,0877 USD** (negativ).
+RunPod provisioniert bei negativem Saldo fuer **keine** Rolle einen neuen Worker. Das
+Ergebnis ist von einem unaufloesbaren Template **nicht zu unterscheiden** — nur die
+Kontoabfrage trennt die beiden Faelle. Beobachtung am Rand, ohne Kausalbehauptung: die drei
+Endpoints mit `flashboot: true` (`music`, `videoAbstract`, `videoReal`) hatten danach
+**keinen** Worker mehr, die uebrigen (`brain`, `imageHq`, `voiceGen`) je einen `ready`.
+
+**Beide Defekte waren echt und mussten beide weg:**
+
+| Defekt | Beleg | Status |
+|---|---|---|
+| Template nicht aufloesbar (`music` hing an `9q9c60p6xh`) | `myself.podTemplates` listet es nicht; `GET /v1/templates/9q9c60p6xh` → **HTTP 404** `template not found` | behoben: neues Template `qsxc8encwr`, Endpoint umgezogen, Ruecklesung |
+| Template nicht aufloesbar (`videoAbstract` hing an `1pip14re7h`) | `GET /v1/templates/1pip14re7h` → **HTTP 404**; Endpoint lief nur, solange sein alter Worker lebte | behoben: neues Template **`7iihy61ouf`**, Endpoint umgezogen, Ruecklesung `templateId=7iihy61ouf` |
+| Kontostand negativ | `clientBalance = -0,0877 USD`; Kontrollrolle `ears` ebenfalls ohne Worker | **offen: Betreiber-Entscheidung (Aufladung)** — `--heal` kann das nicht loesen |
+
+**Merksatz (korrigierte Reihenfolge):** Bei „Queue voll, kein Worker" zuerst den
+**Kontostand** lesen, dann das Template pruefen, dann workerlos provisionieren lassen:
+
+    # 1) Kontostand (read-only, kein GPU-Kostenanteil)
+    python3 scripts/runpod-health-guard.py --confirm-seconds 0
+    # 2) Template gelistet?  -> Liste der Endpoint-Bindungen + Template-Ruecklesung
+    # 3) erst danach ueber workersMax/Heilung nachdenken
+
+**Dauerhaftigkeit der Template-Reparatur:** Der Deploy findet das neue Template ueber
+seinen Namen in `myself.podTemplates` und **aktualisiert** es; findet er den Namen nicht,
+faellt er auf die Template-ID des bestehenden Endpoints zurueck (`fallback_template_id`)
+und aktualisiert diese — ein Halb-Rollout mit „Template name must be unique" ist damit
+ausgeschlossen. Wer den neuen Namen auch lokal explizit fahren will, setzt in der `.env`
+(nicht im Git):
+
+    RUNPOD_TEMPLATE_NAME_MUSIC=audiomonastry-ai-music-template-v2
+    RUNPOD_TEMPLATE_NAME_VIDEO_ABSTRACT=audiomonastry-ai-video-abstract-template-v2
+
+**Noch offen (ehrliche Grenze):** Ein Ende-zu-Ende-Beleg der Musik-Rolle (echter Job →
+MP3) ist erst nach der Aufladung moeglich; er gehoert hier als Nachweis nachgetragen.

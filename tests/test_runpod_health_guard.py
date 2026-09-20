@@ -46,10 +46,16 @@ class StubTransport:
         health: Dict[str, Dict[str, Any]],
         configs: Optional[Dict[str, Dict[str, Any]]] = None,
         health_error: Optional[Dict[str, int]] = None,
+        balance: Any = None,
+        balance_code: int = 200,
     ) -> None:
         self.health = health
         self.configs = dict(configs or {})
         self.health_error = dict(health_error or {})
+        # `balance=None` -> die Konto-Abfrage bleibt unbeantwortet (HTTP 404), wie vor
+        # dem Einbau dieser Abfrage. So belegen die Alt-Tests unveraendertes Verhalten.
+        self.balance = balance
+        self.balance_code = balance_code
         self.calls: List[Tuple[str, str, Optional[Dict[str, Any]]]] = []
         self.stdout_at_call: List[str] = []
 
@@ -58,6 +64,10 @@ class StubTransport:
     ) -> Tuple[int, Any]:
         self.calls.append((method, url, payload))
         self.stdout_at_call.append("")
+        if "graphql" in url:
+            if self.balance is None:
+                return 404, {"error": "stub: Kontoabfrage nicht beantwortet"}
+            return self.balance_code, {"data": {"myself": {"clientBalance": self.balance}}}
         if "/health" in url:
             endpoint = url.rsplit("/", 2)[-2]
             if endpoint in self.health_error:
@@ -115,6 +125,47 @@ class ClassifyStatusTest(unittest.TestCase):
     def test_unbrauchbare_antwort_wird_fehler(self) -> None:
         self.assertEqual(guard.classify_status("kaputt")[0], guard.STATUS_ERROR)
         self.assertEqual(guard.classify_status({"workers": []})[0], guard.STATUS_ERROR)
+
+
+class KontostandTest(unittest.TestCase):
+    """Der negative Kontostand blockiert JEDE Provisionierung - live belegt 2026-09-20.
+
+    Gemessen: `music` (gerade saniertes, gelistetes Template) und `ears` (unbeteiligte
+    Kontrollrolle) standen gleichzeitig mit Queue und 0/0/0/0 Workern da; die
+    Kontoabfrage lieferte -0,09 USD. Ohne diese Erkennung sucht man den Fehler im
+    Template, obwohl das Geld fehlt.
+    """
+
+    def test_negativer_kontostand_wird_erkannt(self) -> None:
+        status, reason, balance = guard.classify_balance(
+            {"data": {"myself": {"clientBalance": -0.0876984809}}}
+        )
+        self.assertEqual(status, guard.STATUS_UNFUNDED)
+        self.assertAlmostEqual(balance or 0.0, -0.0876984809, places=6)
+        self.assertIn("NEGATIV", reason)
+        self.assertIn("keinen neuen Worker", reason)
+
+    def test_positiver_kontostand_ist_ok(self) -> None:
+        status, reason, balance = guard.classify_balance(
+            {"data": {"myself": {"clientBalance": 12.5}}}
+        )
+        self.assertEqual(status, guard.STATUS_FUNDED)
+        self.assertAlmostEqual(balance or 0.0, 12.5)
+        self.assertIn("12.50 USD", reason)
+
+    def test_null_kontostand_ist_kein_alarm(self) -> None:
+        # Nur der NEGATIVE Saldo ist belegt (RunPod laesst eine kleine Ueberziehung zu
+        # und blockiert dann). Ein Nullstand wird deshalb gemeldet, aber nicht als
+        # Ausfallursache behauptet.
+        self.assertEqual(guard.classify_balance({"data": {"myself": {"clientBalance": 0}}})[0], guard.STATUS_FUNDED)
+
+    def test_fehlende_oder_kaputte_antwort_ist_unbekannt_nicht_gesund(self) -> None:
+        for payload in ("kaputt", {}, {"data": {}}, {"data": {"myself": {}}},
+                        {"data": {"myself": {"clientBalance": "viel"}}},
+                        {"errors": [{"message": "Unauthorized"}]}):
+            status, _reason, balance = guard.classify_balance(payload)
+            self.assertEqual(status, guard.STATUS_BALANCE_UNKNOWN, payload)
+            self.assertIsNone(balance, payload)
 
 
 class _GuardCase(unittest.TestCase):
@@ -219,8 +270,14 @@ class BerichtTest(_GuardCase):
         self.assertEqual(code, guard.EXIT_STUCK)
         self.assertIn("FESTGEFAHREN", out)
         self.assertIn("HANDLUNGSBEDARF", out)
-        # Nur gelesen, nie geschrieben.
-        self.assertTrue(all(call[0] == "GET" for call in stub.calls), stub.calls)
+        # Nur gelesen, nie geschrieben: die Kontoabfrage ist ein GraphQL-POST, aber
+        # eine reine Query - Schreibzugriffe waeren PATCH.
+        schreibzugriffe = [call for call in stub.calls if call[0] != "GET"]
+        self.assertEqual(
+            [call for call in schreibzugriffe if "graphql" not in call[1]],
+            [],
+            schreibzugriffe,
+        )
 
     def test_gesunde_rolle_wird_nicht_alarmiert(self) -> None:
         stub = StubTransport({self.endpoint: HEALTH_HEALTHY})
@@ -246,6 +303,36 @@ class BerichtTest(_GuardCase):
         payload = json.loads(out[out.index("{") :])
         self.assertEqual(payload["summary"]["stuck"], [self.role])
         self.assertEqual(payload["roles"][0]["status"], guard.STATUS_STUCK)
+
+    def test_negativer_kontostand_wird_als_ursache_genannt(self) -> None:
+        # Live belegt 2026-09-20: dieselbe Rolle war mit gelistetem Template und
+        # geheiltem workersMax weiter festgefahren - der Saldo war negativ.
+        stub = StubTransport({self.endpoint: HEALTH_STUCK}, balance=-0.0876984809)
+        code, out = self.run_guard(stub=stub)
+        self.assertEqual(code, guard.EXIT_STUCK)
+        self.assertIn("KONTO_NEGATIV", out)
+        self.assertIn("Provisionierung blockiert", out)
+        self.assertIn("Konto aufladen", out)
+        self.assertNotIn("--heal --role", out, "bei negativem Konto ist Heilen kein Rat")
+        self.assertTrue(all(call[0] == "GET" for call in stub.calls if "graphql" not in call[1]), stub.calls)
+
+    def test_negativer_kontostand_steht_im_json_bericht(self) -> None:
+        stub = StubTransport({self.endpoint: HEALTH_STUCK}, balance=-0.5)
+        code, out = self.run_guard("--json", stub=stub)
+        self.assertEqual(code, guard.EXIT_STUCK)
+        payload = json.loads(out[out.index("{") :])
+        self.assertEqual(payload["summary"]["account"]["status"], guard.STATUS_UNFUNDED)
+        self.assertAlmostEqual(payload["summary"]["account"]["balance_usd"], -0.5)
+        self.assertEqual(payload["roles"][0]["blocked_by"], "balance")
+
+    def test_unlesbarer_kontostand_laesst_die_alte_meldung_stehen(self) -> None:
+        # Ohne Kontoantwort (404 im Stub) bleibt der Alarm wie vorher - die neue
+        # Abfrage darf die bestehende Erkennung nicht verdraengen.
+        stub = StubTransport({self.endpoint: HEALTH_STUCK})
+        code, out = self.run_guard(stub=stub)
+        self.assertEqual(code, guard.EXIT_STUCK)
+        self.assertIn("KONTO_UNBEKANNT", out)
+        self.assertIn("--heal --role", out)
 
 
 class GateTest(_GuardCase):
@@ -321,6 +408,21 @@ class HeilungTest(_GuardCase):
         self.assertIn("bereits auf 2", out)
         self.assertIn("keine Aenderung noetig", out)
         self.assertEqual([c for c in stub.calls if c[0] == "PATCH"], [])
+
+    def test_heilung_bei_negativem_konto_unterbleibt_ganz(self) -> None:
+        """Ein zweiter Slot schafft keinen Worker herbei, wenn kein Geld da ist.
+
+        Live belegt 2026-09-20: der music-Endpoint war mit gelistetem Template,
+        korrekter Ruecklesung und workersMax=2 weiterhin ohne jeden Worker. Deshalb
+        wird bei negativem Konto gar nicht geheilt - kein einziger Schreibzugriff.
+        """
+        stub = StubTransport(
+            {self.endpoint: HEALTH_STUCK}, {self.endpoint: {"workersMax": 1}}, balance=-0.09
+        )
+        code, _out = self.run_guard("--heal", "--price-per-hour", "0.69", "--yes", stub=stub)
+        self.assertEqual(code, guard.EXIT_UNFUNDED)
+        self.assertEqual([c for c in stub.calls if c[0] == "PATCH"], [], stub.calls)
+        self.assertTrue(all(c[0] == "GET" for c in stub.calls if "graphql" not in c[1]))
 
 
 class DrainTest(_GuardCase):

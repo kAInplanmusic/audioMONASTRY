@@ -34,10 +34,18 @@ Zugang
 ------
   Health:  https://api.runpod.ai/v2/<endpoint-id>/health   (Bearer-Token)
   Config:  https://rest.runpod.io/v1/endpoints/<id>        (GET/PATCH)
+  Konto:   https://api.runpod.io/graphql  { myself { clientBalance } }
   Beide brauchen einen Browser-User-Agent - ohne ihn antwortet Cloudflare mit
   HTTP 403 (live belegt 2026-09-20). Das uebernimmt `transport()` aus
   scripts/runpod-warm.py, das dieses Skript per importlib wiederverwendet:
   eine Implementierung, ein Verhalten, kein Zweitcode.
+
+  Der Kontostand wird ZUERST gelesen (live belegt 2026-09-20, Rolle music UND ears):
+  Ist `clientBalance` negativ, provisioniert RunPod fuer KEINE Rolle einen neuen
+  Worker - das Bild ist identisch zu einem unaufloesbaren Template (`inQueue > 0`,
+  alle Worker-Zaehler 0, `delayTime: null`). Ohne diese Abfrage sucht man den Fehler
+  im Template, obwohl das Geld fehlt. `--heal` ist dann wirkungslos und wird
+  abgelehnt (Exit 7), weil ein zweiter Slot keinen Worker herbeizaubert.
 
 Heilung (nur mit --heal UND Freigabe UND Stundensatz)
 ----------------------------------------------------
@@ -58,6 +66,8 @@ Exit-Codes
   5 = Health-/Config-Abfrage fehlgeschlagen
   6 = Heilung fehlgeschlagen oder Rueckstellung nicht bestaetigt (JETZT handeln:
       `scripts/runpod-warm.py --role <rolle>` bzw. workersMax in der Konsole)
+  7 = Konto NEGATIV: Provisionierung ist blockiert, --heal wird gar nicht versucht
+      (kein Schreibzugriff). Erst aufladen, dann erneut pruefen.
 
 Siehe docs/RUNPOD_COLDSTART.md fuer den Betreiber-Ablauf.
 """
@@ -81,6 +91,7 @@ EXIT_NO_APPROVAL = 3
 EXIT_STUCK = 4
 EXIT_QUERY = 5
 EXIT_HEAL_FAILED = 6
+EXIT_UNFUNDED = 7
 
 STATUS_OK = "OK"
 STATUS_STARTING = "STARTET"
@@ -88,6 +99,13 @@ STATUS_UNHEALTHY = "UNGESUND"
 STATUS_SUSPICIOUS = "VERDAECHTIG"
 STATUS_STUCK = "FESTGEFAHREN"
 STATUS_ERROR = "FEHLER"
+
+GRAPHQL_URL = "https://api.runpod.io/graphql"
+BALANCE_QUERY = "query { myself { clientBalance } }"
+
+STATUS_FUNDED = "KONTO_OK"
+STATUS_UNFUNDED = "KONTO_NEGATIV"
+STATUS_BALANCE_UNKNOWN = "KONTO_UNBEKANNT"
 
 
 def _load_warm_module() -> Any:
@@ -158,6 +176,47 @@ def classify_status(payload: Any) -> Tuple[str, str]:
     if ready > 0 or idle > 0 or running > 0:
         return STATUS_OK, f"{ready} bereit, {running} laufend, Queue {q}"
     return STATUS_OK, "scale-to-zero, kein Worker noetig"
+
+
+def classify_balance(payload: Any) -> Tuple[str, str, Optional[float]]:
+    """GraphQL-Antwort -> (Status, Begruendung, Kontostand in USD). Rein, ohne I/O.
+
+    Warum das existiert (live belegt 2026-09-20): `clientBalance` war **negativ**
+    (-0,09 USD). Folge: RunPod provisionierte fuer KEINE Rolle mehr einen neuen
+    Worker - `music` (frisch saniertes, gelistetes Template) und `ears`
+    (unbeteiligte Kontrollrolle) standen gleichzeitig mit `inQueue > 0` und
+    0/0/0/0 Workern da, `delayTime: null`. Das Bild sieht aus wie ein
+    unaufloesbares Template, ist aber eine Geldfrage - und `--heal` hilft nicht.
+    """
+    if not isinstance(payload, dict):
+        return STATUS_BALANCE_UNKNOWN, "Antwort nicht lesbar", None
+    if payload.get("errors"):
+        return STATUS_BALANCE_UNKNOWN, f"GraphQL-Fehler: {str(payload['errors'])[:120]}", None
+    data = payload.get("data")
+    myself = data.get("myself") if isinstance(data, dict) else None
+    raw = myself.get("clientBalance") if isinstance(myself, dict) else None
+    if raw is None:
+        return STATUS_BALANCE_UNKNOWN, "clientBalance fehlt in der Antwort", None
+    try:
+        balance = float(raw)
+    except (TypeError, ValueError):
+        return STATUS_BALANCE_UNKNOWN, f"clientBalance nicht numerisch: {raw!r}", None
+    if balance < 0:
+        return (
+            STATUS_UNFUNDED,
+            f"Kontostand {balance:.2f} USD ist NEGATIV - RunPod provisioniert keinen "
+            f"neuen Worker (keine Rolle), Jobs bleiben auf IN_QUEUE. Erst aufladen.",
+            balance,
+        )
+    return STATUS_FUNDED, f"Kontostand {balance:.2f} USD", balance
+
+
+def read_client_balance(token: str) -> Tuple[str, str, Optional[float]]:
+    """Kontostand lesen (Read-only). Nicht lesbar heisst UNBEKANNT, nicht 'gesund'."""
+    code, payload = warm.transport("POST", GRAPHQL_URL, {"query": BALANCE_QUERY}, token)
+    if code != 200:
+        return STATUS_BALANCE_UNKNOWN, f"HTTP {code}: {str(payload)[:120]}", None
+    return classify_balance(payload)
 
 
 def cost_block(price_per_hour: float, usd_eur: float) -> List[str]:
@@ -347,6 +406,30 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         for line in cost_block(args.price_per_hour, args.usd_eur):
             print(line)
 
+    # Kontostand ZUERST: er entscheidet, ob Provisionierung ueberhaupt moeglich ist.
+    # Fehler hier sind kein Grund abzubrechen - aber "unbekannt" wird gesagt, nie
+    # stillschweigend als gesund behandelt.
+    try:
+        balance_status, balance_reason, balance_usd = read_client_balance(token)
+    except Exception as exc:  # noqa: BLE001
+        balance_status, balance_reason, balance_usd = (
+            STATUS_BALANCE_UNKNOWN,
+            f"{type(exc).__name__}: {exc}",
+            None,
+        )
+    if not args.as_json:
+        print(f"[wache] {balance_status} {balance_reason}")
+
+    if args.heal and balance_status == STATUS_UNFUNDED:
+        print(
+            "[wache] GATE: " + balance_reason + "\n"
+            "[wache]   Ein zweiter Slot (workersMax) schafft keinen Worker herbei - "
+            "die Heilung wird NICHT versucht,\n"
+            "[wache]   es wird kein Schreibzugriff gesendet. Erst aufladen, dann erneut pruefen.",
+            file=sys.stderr,
+        )
+        return EXIT_UNFUNDED
+
     report: List[Dict[str, Any]] = []
     query_failed = False
     stuck: List[str] = []
@@ -369,6 +452,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         }
         if status == STATUS_ERROR:
             query_failed = True
+        if status == STATUS_STUCK and balance_status == STATUS_UNFUNDED:
+            # Zwei Ursachen, ein Bild: der negative Kontostand erklaert es vollstaendig.
+            entry["reason"] = f"{reason} | Provisionierung blockiert: {balance_reason}"
+            entry["blocked_by"] = "balance"
         if status == STATUS_STUCK:
             stuck.append(role)
             if args.heal:
@@ -390,7 +477,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         heal_failed = True
         report.append(entry)
         if not args.as_json:
-            print(f"[wache] {role:14s} {status:12s} {reason}")
+            print(f"[wache] {role:14s} {status:12s} {entry['reason']}")
             if entry.get("heal"):
                 print(f"[wache]   Heilung: {entry['heal']}")
             if entry.get("restore"):
@@ -404,6 +491,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "unhealthy": [e["role"] for e in report if e["status"] == STATUS_UNHEALTHY],
         "suspicious": [e["role"] for e in report if e["status"] == STATUS_SUSPICIOUS],
         "errors": [e["role"] for e in report if e["status"] == STATUS_ERROR],
+        "account": {
+            "status": balance_status,
+            "balance_usd": balance_usd,
+            "reason": balance_reason,
+        },
     }
     if args.as_json:
         print(json.dumps({"roles": report, "summary": summary}, ensure_ascii=False, indent=2))
@@ -420,14 +512,26 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 + ", ".join(summary["suspicious"])
             )
         if stuck and not args.heal:
-            print(
-                "[wache] HANDLUNGSBEDARF: festgefahren = "
-                + ", ".join(stuck)
-                + " -> sofort loesen mit:\n"
-                "  python3 scripts/runpod-health-guard.py --heal --role <rolle> "
-                "--price-per-hour <satz> --yes\n"
-                "  (oder in der Konsole den Worker neu starten)"
-            )
+            if balance_status == STATUS_UNFUNDED:
+                print(
+                    "[wache] HANDLUNGSBEDARF: festgefahren = " + ", ".join(stuck) + "\n"
+                    "[wache] URSACHE ZUERST: " + balance_reason + "\n"
+                    "[wache]   Solange das Konto negativ ist, startet RunPod KEINEN neuen "
+                    "Worker - auch nicht mit gueltigem,\n"
+                    "[wache]   gelistetem Template und geheiltem workersMax. Ein --heal "
+                    "hier waere vergebliche Muehe (Exit 7).\n"
+                    "[wache]   Reihenfolge: (1) Konto aufladen, (2) Wache erneut laufen "
+                    "lassen, (3) erst dann heilen."
+                )
+            else:
+                print(
+                    "[wache] HANDLUNGSBEDARF: festgefahren = "
+                    + ", ".join(stuck)
+                    + " -> sofort loesen mit:\n"
+                    "  python3 scripts/runpod-health-guard.py --heal --role <rolle> "
+                    "--price-per-hour <satz> --yes\n"
+                    "  (oder in der Konsole den Worker neu starten)"
+                )
 
     if heal_failed:
         return EXIT_HEAL_FAILED

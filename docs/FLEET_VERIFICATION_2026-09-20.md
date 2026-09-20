@@ -53,3 +53,40 @@ Worker-Zeit**, davon ein Teil Leerlauf vor dem jeweiligen Job. Bei 0,4–0,7 EUR
 **rund 0,4–0,8 EUR** — deutlich unter dem freigegebenen Deckel von 4 EUR. Die Zahl ist eine
 Schätzung aus den `/health`- und Job-Zeiten, keine Abrechnung; die exakte Rechnung steht in
 der RunPod-Konsole.
+
+## Nachtrag 2026-09-20, 14:30 (die 8/8 gelten nicht mehr unverändert)
+
+**Was sich geändert hat:** Die Musik-Zeile dieses Berichts stammt aus der Erzeugung von
+**13:19** (`ACESTEP_00001.mp3`). Seitdem konnte die Rolle **keinen neuen Worker mehr
+provisionieren** — der Beleg von damals bleibt gültig, sagt aber nichts über den Zustand
+danach.
+
+**Gemessen (read-only, keine GPU-Kosten):**
+
+| Prüfung | Ergebnis |
+| --- | --- |
+| Endpoint-Bindung `music` | `templateId=qsxc8encwr` (gelistet), `workersMax=2` — Rücklesung bestätigt |
+| Health `music` | `inQueue=2`, **alle Worker-Zähler 0**, `delayTime: null` über > 45 min |
+| Frischer Job, 5-min-Fenster | kein Worker, kein `initializing` |
+| Kontrollrolle `ears` (eigenes, gelistetes Template) | **dasselbe** Bild → nicht rollenspezifisch |
+| `myself.clientBalance` | **-0,0877 USD** |
+| Alt-Templates `9q9c60p6xh` (music) / `1pip14re7h` (videoAbstract) | `GET /v1/templates/<id>` → **HTTP 404**, in `myself.podTemplates` nicht gelistet |
+
+**Bewertung:** Es waren **zwei** unabhängige Defekte. (1) Beide Endpoints hingen an
+Templates, die die Plattform nicht auflöst — das bricht jede Neu-Provisionierung, sobald der
+alte Worker weg ist. (2) Der Kontostand ist negativ — das bricht die Provisionierung
+**flottenweit**, unabhängig von Template oder Rolle. Defekt (1) ist für `music`
+(`qsxc8encwr`) und vorbeugend für `videoAbstract` (**`7iihy61ouf`**) behoben, je mit
+Rücklesung; Defekt (2) ist eine Betreiberentscheidung (Aufladung).
+
+**Auswirkung auf die 8/8:** `brain`, `ears`, `voiceGen`, `imageHq` antworten weiter (warme
+Worker). `music` ist bis zur Aufladung **nicht erreichbar**; `videoAbstract` und
+`videoReal` haben keine Worker mehr, ihre Templates/Images sind aber intakt — sie liefern
+nach der Aufladung neu provisioniert, dann ist der Nachweis nachzutragen.
+
+**Ehrliche Ursachenkette (mein Anteil):** Der Recycle (`workersMax` 0 → zurück), mit dem ich
+nach dem `zz`-Schreibtest wieder für einen frischen Worker sorgen wollte, hat die letzten
+warmen Worker der Musik-Rolle weggeräumt und damit einen **bereits vorhandenen** latenten
+Defekt akut gemacht. Ohne die vorherige Reparatur wäre die Rolle aber auch mit gefülltem
+Konto nicht zurückgekommen — die Template-Bindung war unauflösbar.
+

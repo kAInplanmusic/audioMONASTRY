@@ -2599,6 +2599,51 @@
         "Nachtrag: nach der Slot-Reparatur lieferte derselbe Aufruf 3/3 Hoerproben (logs/mos-20260920/qwen3-tts-17b-01..03.wav, 24 kHz, alle COMPLETED) - die Sprach-Normalisierung ist live vollstaendig belegt, nicht nur 2/3."
       ],
       "remaining": "Keine code-seitigen Reste. Der gelegentlich unhealthy Worker wird in INFRA-RUNPOD-010 verfolgt."
+    },
+    {
+      "id": "INFRA-RUNPOD-012",
+      "title": "Serverless-Flotte: negativer Kontostand blockiert JEDE Neu-Provisionierung - sah identisch aus wie ein unaufloesbares Template",
+      "prio": "P1",
+      "status": "PARTIAL",
+      "area": "infra/runpod",
+      "source": "live 2026-09-20 (Rolle music nach der Template-Reparatur; Kontrollrolle ears)",
+      "problem": "Nach der Reparatur der Rolle music (neues, gelistetes Template qsxc8encwr, Endpoint per REST umgezogen, Ruecklesung bestaetigt) blieb die Rolle weiter ohne jeden Worker: jobs.inQueue=2, workers {idle,initializing,ready,running,throttled,unhealthy} = 0, delayTime=null ueber mehr als 45 Minuten. Dasselbe Bild lieferte die unbeteiligte Kontrollrolle ears mit eigenem, seit Tagen laufendem Template. Ursache ist ein NEGATIVER Kontostand (myself.clientBalance = -0,0877 USD): RunPod provisioniert dann fuer KEINE Rolle einen neuen Worker. Dieses Bild ist von einem nicht aufloesbaren Template nicht zu unterscheiden, und workersMax-Heilung ist wirkungslos.",
+      "acceptance": [
+        "Die Wache nennt den Kontostand VOR den Rollen und meldet ihn als Ursache, wenn Rollen ohne jeden Worker in der Queue stehen",
+        "Bei negativem Kontostand sendet die Wache keinen Heilungs-Schreibzugriff (eigener Exit-Code)",
+        "Nach der Aufladung liefert music einen echten Job (MP3) und videoAbstract/videoReal provisionieren wieder - Nachweis in docs/FLEET_VERIFICATION_2026-09-20.md",
+        "Kein Endpoint der Flotte haengt an einem Template, das myself.podTemplates nicht listet"
+      ],
+      "evidence": [
+        "Kontostand: GraphQL { myself { clientBalance } } -> -0.0876984809 (2026-09-20, 14:2x CEST).",
+        "Kontrollprobe ears (xeax6xrgd0csag, Template 4uzprwb5x8 gelistet, unser Runtime-Image): Job abgesetzt, 5-min-Fenster -> workers 0/0/0/0, Job blieb IN_QUEUE, delayTime null. Damit nicht rollenspezifisch.",
+        "music (vsbjhw0nnnb47e): templateId=qsxc8encwr (in myself.podTemplates gelistet, 25 Eintraege), workersMax=2 - beides per Ruecklesung belegt; Health inQueue=2, workers 0/0/0/0.",
+        "Frischer Job im 5-min-Fenster nach workersMax 2->1 (Kopfraum-Test): kein initializing, kein ready, job IN_QUEUE.",
+        "Alt-Templates: GET rest.runpod.io/v1/templates/9q9c60p6xh -> HTTP 404 'template not found'; GET .../1pip14re7h -> HTTP 404. Beide fehlten auch in myself.podTemplates; die Endpoints liefen nur, solange ihre alten Worker lebten.",
+        "Reparatur videoAbstract (vorbeugend): neues Template audiomonastry-ai-video-abstract-template-v2 = 7iihy61ouf (gelistet), Endpoint fogwdyxp1zj8zv per REST umgezogen, Ruecklesung templateId=7iihy61ouf.",
+        "Wache live: python3 scripts/runpod-health-guard.py --confirm-seconds 0 -> '[wache] KONTO_NEGATIV Kontostand -0.09 USD ist NEGATIV ...', music FESTGEFAHREN mit Zusatz 'Provisionierung blockiert', Exit 4; mit --heal Exit 7 und kein PATCH.",
+        "Tests: npm run test:python:guard -> 33 Tests OK (vorher 25); neu: classify_balance (negativ/positiv/null/kaputte Antwort) und zwei Berichtstests plus Heilungs-Gate.",
+        "Aufgeraeumt: 4 liegengebliebene Testjobs (2x music, 1x music-Probe, 1x ears) per POST /v2/<id>/cancel/<job> abgebrochen, damit sie nicht nach der Aufladung GPU-Zeit verbrauchen."
+      ],
+      "files": [
+        "scripts/runpod-health-guard.py",
+        "tests/test_runpod_health_guard.py",
+        "docs/RUNPOD_COLDSTART.md",
+        "docs/FLEET_VERIFICATION_2026-09-20.md"
+      ],
+      "note": "DONE-Anteil (Repo): Wache liest den Kontostand, meldet KONTO_NEGATIV/KONTO_UNBEKANNT, nennt ihn als Ursache neben FESTGEFAHREN und verweigert die Heilung bei negativem Konto (Exit 7, kein Schreibzugriff); Templates music (qsxc8encwr) und videoAbstract (7iihy61ouf) sind gelistet und gebunden, je mit Ruecklesung; Dokumentation der beiden Ursachen in docs/RUNPOD_COLDSTART.md; Nachtrag im Flottenverifikationsbericht, weil die 8/8 nicht mehr unveraendert gelten. OFFEN (Betreiber): RunPod-Konto aufladen - das ist eine Geldentscheidung und wird nicht automatisch getroffen. DANACH: music echt verifizieren (Job -> MP3) und videoAbstract/videoReal neu provisionieren.",
+      "verification": [
+        "npm run test:python:guard: 33 Tests OK",
+        "python3 scripts/runpod-health-guard.py --confirm-seconds 0 (live, read-only): KONTO_NEGATIV + music FESTGEFAHREN mit Ursachenzusatz, Exit 4",
+        "REST-Ruecklesungen: templates/qsxc8encwr env={AI_ROLE: music}, templates/7iihy61ouf env={AI_ROLE: videoAbstract}; endpoints vsbjhw0nnnb47e -> qsxc8encwr, fogwdyxp1zj8zv -> 7iihy61ouf",
+        "GraphQL myself.podTemplates: 24 -> 25 Eintraege, beide neuen Templates gelistet; 9q9c60p6xh und 1pip14re7h weiterhin nicht"
+      ],
+      "remaining": [
+        "RunPod-Konto aufladen (Betreiber-Entscheidung)",
+        "music: echter Job -> MP3 nach der Aufladung; videoAbstract/videoReal: Neu-Provisionierung belegen",
+        "Danach die 8/8 im Flottenverifikationsbericht wiederherstellen (oder die betroffenen Zeilen korrigieren)"
+      ],
+      "updatedAt": "2026-09-20"
     }
   ],
   "visionSandbox": [
