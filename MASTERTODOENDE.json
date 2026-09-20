@@ -1667,23 +1667,30 @@
       "priority": "P2",
       "area": "infra/runpod",
       "source": "audit:infra 2026-09-20 (beim Live-Nachweis von VOICE-P1-001 aufgefallen)",
-      "problem": "Beim Live-Job mit language=\"DE\" wurden 2 von 3 Texten als WAV erzeugt; der dritte blieb auf IN_QUEUE. Die Endpoint-Health zeigte gleichzeitig workers.unhealthy=1 und running=0. Es ist offen, ob das der Kaltstart nach dem Image-Wechsel ist (11,8-GB-Pull, Health-Check-Timeout) oder ein echter Startfehler des neuen Images.",
+      "problem": "Die Stimmen-Rolle (voiceGen) kann nach einem Kaltstart minutenlang keine Jobs annehmen; der Worker wird von RunPod als unhealthy gefuehrt, waehrend Jobs in der Queue liegen. Messwerte und Konfiguration sind unten belegt.",
       "acceptance": [
-        "Ein Lauf von scripts/generate-mos-samples.py liefert 3/3 Hoerproben (Status COMPLETED)",
-        "Die Endpoint-Health zeigt nach dem Lauf keinen unhealthy Worker mehr ohne erklaerende Ursache",
-        "Die Ursache ist im Ticket festgehalten (Kaltstart/Pull vs. Startfehler des Images)"
+        "Ein Kaltstart der Stimmen-Rolle liefert innerhalb des Health-Fensters einen bereiten Worker (kein unhealthy ohne erklaerende Ursache)",
+        "Ein Lauf von scripts/generate-mos-samples.py liefert 3/3 Hoerproben (COMPLETED)",
+        "Die gewaehlte Abhilfe ist im Ticket dokumentiert UND im Repo nachvollziehbar (Bake-Arg, Volume-ID oder Warmhalter-Regel)"
       ],
       "files": [
-        "scripts/generate-mos-samples.py",
-        "services/audiomonastry-ai-runtime/Dockerfile.manifest"
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        "scripts/runpod-deploy.py",
+        "scripts/voice-coldstart-probe.py"
       ],
       "evidence": [
-        "Health-Abfrage api.runpod.ai/v2/gajmangfldpzrk/health nach dem Lauf: workers {idle:0, initializing:0, ready:0, running:0, unhealthy:1}, jobs {inQueue:1}.",
-        "Erzeugte Dateien als Teilbeweis: logs/mos-20260920/qwen3-tts-17b-02.wav (345658 B), -03.wav (637498 B), daneben 1 Job ohne Ergebnis."
+        "Endpoint-Konfiguration (GraphQL, read-only): gajmangfldpzrk -> workersMin=0, workersMax=1, idleTimeout=120, scalerType=QUEUE_DELAY/4, networkVolumeId=null, gpuIds=AMPERE_48,ADA_48_PRO.",
+        "Image-Env (Manifest-Blob aus GHCR gelesen): HF_HOME=/data/hf-cache, NUMBA_CACHE_DIR=/data/numba-cache, AI_ROLE= (leer). Dockerfile.runpod:119 belegt: Gewichte werden nur mit nicht-leerem AI_BAKE_ROLE eingebacken; der CI-Build setzt AI_BAKE_ROLE= (leer).",
+        "Decoder fehlt Persistenz: networkVolumeId=null heisst, /data/hf-cache ist bei jedem Kaltstart leer.",
+        "Stoerung live beobachtet (2026-09-20, /health): jobs {inQueue:4}, workers {idle:0, ready:0, running:0, unhealthy:1} - kein Worker nimmt Arbeit an, obwohl Jobs warten.",
+        "Teilbeweis der Funktion: der erste Live-Lauf (VOICE-P1-001) lieferte nach demselben Kaltstart 2 von 3 WAVs (345658 B, 637498 B, 24 kHz); der dritte Text blieb liegen - konsistent mit \"Kaltstart zu lang, Health-Fenster reisst\".",
+        "Kein Repo-Zusammenhang: der Startpfad liest die in INFRA-RUNPOD-006 entfernte runtime_config.yaml nicht (grep: kein Leser, nur Kommentare)."
       ],
       "verification": [],
       "updatedAt": "2026-09-20",
-      "status": "OPEN"
+      "status": "PARTIAL",
+      "summary": "Ursache eingegrenzt und belegt: die Kaltstart-Kette der Stimmen-Rolle ist zu lang fuer das Health-Fenster. Das Image backt KEINE Gewichte ein (AI_BAKE_ROLE= leer) und der HF-Cache liegt im Container (HF_HOME=/data/hf-cache) ohne Network Volume (networkVolumeId=null) - also laden Image-Pull und Modelle bei JEDEM Kaltstart neu. Am 2026-09-20 wurde der Endpoint dadurch handlungsunfaehig: 4 Jobs in der Queue, 1 Worker unhealthy, 0 laufend. Es ist KEIN Codefehler des Repos; die Entscheidung (Gewichte einbacken vs. Volume vs. Warmhalter) ist eine Betreiber-/Kostenfrage.",
+      "remaining": "Betreiber-Entscheidung (Kosten/Architektur), drei belegte Wege: (1) Gewichte einbacken - AI_BAKE_ROLE=voice fuer ein Rollen-Image (groesseres Image, laengerer Pull, aber kein Modell-Download je Kaltstart); (2) Network Volume fuer /data/hf-cache (Dockerfile-Kommentar: nicht in allen 18 Regionen verfuegbar); (3) Warmhalter workersMin=1 waehrend Sessions (~0,4-0,75 EUR/h). Zusaetzlich offen: Worker-Abbruchprotokoll aus der RunPod-Konsole (Betreiber-Zugang), um Startfehler von Zeitueberschreitung zu trennen."
     },
     {
       "id": "LIVE-P1-003",
