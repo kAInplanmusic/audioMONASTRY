@@ -1701,6 +1701,32 @@
       "remaining": "Keine offenen Punkte fuer den Ausfall selbst. Bewusst NICHT gesetzt: Network Volume - der dominante Kaltstartanteil ist der Image-Pull (11,8 GB), den ein Volume nicht verkleinert, und es pinnt den Endpoint auf ein RZ (weniger verfuegbare GPU-Typen). Der Bake-Pfad (AI_BAKE_ROLE=voice) liegt als optionaler Workflow-Input bereit, ist aber nicht ausgerollt."
     },
     {
+      "id": "INFRA-RUNPOD-011",
+      "title": "Gebundene Endpoints per REST umziehen + Worker-Kontingent 10 beachten",
+      "priority": "P1",
+      "area": "infra/runpod",
+      "source": "audit:infra 2026-09-20 (beim Sanieren der gebundenen Endpoints gefunden)",
+      "problem": "Die GraphQL-Mutation updateEndpointTemplate verweigert gebundene Endpoints (music, videoReal, videoAbstract). Der REST-Weg kann es, validiert aber nichts. Zusaetzlich begrenzt RunPod die Summe aller workersMax auf 10 - flottenweit 2 ist damit unmoeglich.",
+      "acceptance": [
+        "Der Deploy zieht gebundene Endpoints per REST um und belegt es mit einer Ruecklesung",
+        "Jeder REST-Schreibzugriff wird nachgelesen und verglichen",
+        "Die workersMax-Verteilung passt in das Kontingent 10 und ist dokumentiert"
+      ],
+      "files": [
+        "scripts/runpod-deploy.py",
+        "tests/test_runpod_deploy_defaults.py",
+        "docs/RUNPOD_COLDSTART.md"
+      ],
+      "status": "DONE",
+      "evidence": [
+        "scripts/runpod-deploy.py: rest_transport + rest_set_endpoint_template; im Bound-Template-Zweig wird erst REST versucht, dann (bei Fehler oder abweichender Ruecklesung) BoundTemplateError geworfen.",
+        "tests/test_runpod_deploy_defaults.py: RestTemplateFallbackTest (6 Tests) - setzen und nachlesen, abweichende Ruecklesung gilt als nicht gesetzt, HTTP-Fehler, kein Aufruf ohne Token/Template-ID, deploy_role zieht die Rolle per REST um. Suite 39 -> 45, OK.",
+        "Live: REST-PATCH mit templateId wirkt am gebundenen music-Endpoint. Ein absichtlich ungueltiger Wert wurde OHNE Validierung uebernommen und sofort zurueckgesetzt (9q9c60p6xh, Ruecklesung bestaetigt) - daraus die Pflicht zur Ruecklesung und die Lehre, nie falsche Werte als Test gegen die Produktion zu senden.",
+        "Worker-Kontingent: ein weiterer workersMax=2-PATCH wurde mit \"Max workers across all endpoints will exceed your worker quota of 10\" abgelehnt. Verteilung jetzt voiceGen=2, music=2, alle anderen 1 -> Summe 10."
+      ],
+      "updatedAt": "2026-09-20"
+    },
+    {
       "id": "LIVE-P1-003",
       "title": "Live-/Hoerpruefungen (konsolidiert aus TESTRUN_2 + Live-Checkliste 2026-09-02)",
       "priority": "P1",

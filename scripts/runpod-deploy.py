@@ -100,7 +100,9 @@ from __future__ import annotations
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+import urllib.error
+import urllib.request
+from typing import Any, Dict, List, Optional, Tuple
 
 import runpod
 
@@ -673,12 +675,82 @@ def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
 class BoundTemplateError(RuntimeError):
     """Der Endpoint haengt an einem GEBUNDENEN Template (INFRA-RUNPOD-009).
 
-    RunPod erlaubt fuer solche Endpoints kein `updateEndpointTemplate` - live
-    belegt am Endpoint `audiomonastry-ai-music` ("This endpoint has a bound
-    template."). Das ist kein Deploy-Fehler im engeren Sinn, sondern ein
-    Betreiber-Schritt: Endpoint in der Konsole entbinden oder neu anlegen. Der
-    Aufrufer unterscheidet den Fall deshalb von echten Fehlern.
+    Die GraphQL-Mutation `updateEndpointTemplate` verweigert solche Endpoints -
+    live belegt an `audiomonastry-ai-music`, `audiomonastry-ai-video-real` und
+    `audiomonastry-ai-video-abstract` ("This endpoint has a bound template.").
+    Der REST-Weg kann es aber: `PATCH /v1/endpoints/<id>` mit `templateId`
+    setzt den Wert wirklich (live belegt 2026-09-20). Erst wenn AUCH das
+    scheitert oder die Ruecklesung abweicht, gilt die Rolle als nicht
+    aktualisierbar - dann ist es ein Betreiber-Schritt (Konsole).
     """
+
+
+#: REST-Basis der RunPod-API. ACHTUNG: dieser Endpunkt validiert NICHTS -
+#: ein offensichtlich falscher `templateId` wurde live wortwoertlich uebernommen
+#: (2026-09-20, Rolle music, Wert "zz"). Deshalb wird nach jedem Schreibzugriff
+#: nachgelesen und verglichen; ungepruefte Werte gehen hier nie raus.
+REST_ENDPOINT_URL = "https://rest.runpod.io/v1/endpoints/{endpoint}"
+REST_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/153.0.0.0 Safari/537.36"
+)
+
+
+def rest_transport(
+    method: str, url: str, payload: Optional[Dict[str, Any]] = None, token: str = ""
+) -> Tuple[int, Any]:
+    """Ein GET/PATCH gegen die RunPod-REST-API.
+
+    Modulattribut mit Absicht: Tests ersetzen es durch einen Stub, der die
+    Aufrufe protokolliert - so ist die Reihenfolge ohne Netz belegbar. Der
+    Browser-User-Agent ist Pflicht: ohne ihn antwortet Cloudflare mit HTTP 403
+    (live belegt 2026-09-20).
+    """
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    request = urllib.request.Request(url, data=body, method=method)
+    request.add_header("Authorization", f"Bearer {token}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json")
+    request.add_header("User-Agent", REST_USER_AGENT)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            raw = response.read().decode("utf-8", "replace")
+            return response.status, (json.loads(raw) if raw.strip().startswith(("{", "[")) else raw)
+    except urllib.error.HTTPError as err:
+        raw = err.read().decode("utf-8", "replace")
+        try:
+            parsed: Any = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = raw
+        return err.code, parsed
+    except Exception as exc:  # noqa: BLE001
+        return 0, f"{type(exc).__name__}: {exc}"
+
+
+def rest_set_endpoint_template(
+    endpoint_id: str, template_id: str, token: Optional[str] = None
+) -> Tuple[bool, str]:
+    """Template eines GEBUNDENEN Endpoints per REST setzen und nachlesen.
+
+    Rueckgabe: (ok, Meldung). `ok=False` heisst: nicht gesetzt ODER die
+    Ruecklesung weicht ab - beides darf nicht als Erfolg durchgehen.
+    """
+    if not template_id:
+        return False, "keine Template-ID uebergeben"
+    key = token or env("RP_API_KEY")
+    if not key:
+        return False, "RP_API_KEY fehlt (REST-Zugang noetig)"
+    url = REST_ENDPOINT_URL.format(endpoint=endpoint_id)
+    code, res = rest_transport("PATCH", url, {"templateId": template_id}, key)
+    if code != 200:
+        return False, f"REST-PATCH fehlgeschlagen (HTTP {code}): {str(res)[:120]}"
+    code2, cfg = rest_transport("GET", url, None, key)
+    if code2 != 200 or not isinstance(cfg, dict):
+        return False, f"Ruecklesung nicht lesbar (HTTP {code2})"
+    now = str(cfg.get("templateId") or "")
+    if now != template_id:
+        return False, f"Ruecklesung weicht ab: templateId={now}, erwartet {template_id}"
+    return True, f"Template per REST gesetzt und nachgelesen (templateId={now})"
 
 
 def save_template(
@@ -853,11 +925,16 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
             runpod.update_endpoint_template(endpoint_id, template_id)
         except Exception as exc:  # noqa: BLE001
             if "bound template" in str(exc).lower():
-                # INFRA-RUNPOD-009: Kein API-Weg - Endpoint neu anlegen ist eine
-                # Betreiberentscheidung (der Endpoint traegt die Rolle, ein
-                # fehlgeschlagenes Neu-Anlegen liesse sie ohne Endpoint zurueck).
-                raise BoundTemplateError(endpoint_name) from exc
-            raise
+                # INFRA-RUNPOD-009: Die GraphQL-Mutation verweigert gebundene
+                # Endpoints. Der REST-Weg setzt den templateId aber wirklich
+                # (live belegt 2026-09-20) - deshalb erst dort versuchen und die
+                # Ruecklesung abwarten, statt die Rolle aufzugeben.
+                ok, message = rest_set_endpoint_template(endpoint_id, template_id)
+                if not ok:
+                    raise BoundTemplateError(f"{endpoint_name} ({message})") from exc
+                print(f"[deploy] {endpoint_name}: {message}")
+            else:
+                raise
         # `idleTimeout` setzt die API nur beim ANLEGEN; ein Template-Update laesst
         # den laufenden Wert unberuehrt. Genau so driftete die Flotte still
         # auseinander (live 15 s vs. Repo-Default), deshalb hier sichtbar machen.

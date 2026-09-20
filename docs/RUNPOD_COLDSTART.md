@@ -302,3 +302,33 @@ stellt danach **auf den vorher gelesenen Ausgangswert** zurueck – mit Rueckles
 mit `--json` und `--heal --yes`, aber nur wenn der Stundensatz gesetzt ist; die Ausgabe in
 eine Logdatei schreiben. Ohne Gateway-Anbindung meldet ein Hermes-Cron aus einer CLI-Sitzung
 nichts an ein Messenger-Ziel – die Zustellung muss auf ein verbundenes Ziel zeigen.
+
+
+## Zwei harte Grenzen der RunPod-API (live belegt 2026-09-20)
+
+**1. Worker-Kontingent: die Summe von `workersMax` ist auf 10 begrenzt.**
+Der Versuch, allen acht Rollen `workersMax=2` zu geben, wurde abgelehnt:
+`input validation error: Max workers across all endpoints will exceed your worker quota of 10`.
+Damit ist „flottenweit 2" arithmetisch unmoeglich (8 Rollen x 2 = 16). Gewaehlte
+Verteilung (Summe genau 10): **`voiceGen` und `music` fahren 2** — die beiden Rollen, die
+am 2026-09-20 real festgefahren sind — **alle anderen 1**. Fuer die uebrigen Rollen bleiben
+der Warmhalter (`scripts/runpod-warm.py`) und der Sofort-Griff der Wache
+(`--heal`), die genau dann einen zweiten Worker erlaubt, wenn es klemmt.
+
+**2. Die REST-API validiert NICHTS — jeder Schreibzugriff braucht eine Ruecklesung.**
+Beim Pruefen, ob `PATCH /v1/endpoints/<id>` ein `templateId` ueberhaupt annimmt, wurde
+testweise ein offensichtlich ungueltiger Wert gesendet (`"zz"`). Die API antwortete mit
+HTTP 200 und **uebernahm den Wert wortwoertlich**; der Endpoint `audiomonastry-ai-music`
+hing danach an einem kaputten Template und wurde sofort zurueckgesetzt (`9q9c60p6xh`,
+Ruecklesung bestaetigt). Konsequenzen:
+- `scripts/runpod-deploy.py` liest nach jedem REST-Schreibzugriff nach und vergleicht
+  (`rest_set_endpoint_template`); eine abweichende Ruecklesung gilt als **nicht** gesetzt.
+- Nie einen absichtlich falschen Wert als „Validierungstest" gegen die Produktion senden.
+  Diese Pruefung gehoert auf einen Wegwerf-Endpoint — oder sie entfaellt.
+
+**Gute Nachricht aus demselben Versuch:** der REST-Weg kann, was die GraphQL-Mutation
+verweigert. `updateEndpointTemplate` antwortet bei gebundenen Endpoints mit
+„This endpoint has a bound template." (betrifft `music`, `videoReal`, `videoAbstract`),
+`PATCH /v1/endpoints/<id>` mit `templateId` **setzt den Wert aber wirklich**. Der Deploy
+nutzt das jetzt: schlaegt die Mutation fehl, zieht er die Rolle per REST um und belegt es
+per Ruecklesung (Tests: `RestTemplateFallbackTest`).

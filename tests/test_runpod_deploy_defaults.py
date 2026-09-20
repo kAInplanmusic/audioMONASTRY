@@ -486,5 +486,93 @@ class RolleFehlschlagTest(unittest.TestCase):
         self.assertEqual(code, 0, "gebundenes Template darf den Lauf nicht rot machen")
 
 
+class RestTemplateFallbackTest(unittest.TestCase):
+    """INFRA-RUNPOD-009: gebundene Endpoints per REST umziehen - mit Ruecklesung.
+
+    Live belegt 2026-09-20: die GraphQL-Mutation verweigert gebundene Endpoints,
+    der REST-Weg (`PATCH /v1/endpoints/<id>` mit `templateId`) setzt den Wert
+    aber wirklich. Die API validiert dabei NICHTS - deshalb muss die Ruecklesung
+    stimmen, sonst gilt es als nicht gesetzt.
+    """
+
+    def setUp(self) -> None:
+        self._saved = deploy.rest_transport
+
+    def tearDown(self) -> None:
+        deploy.rest_transport = self._saved
+
+    def test_setzt_und_liest_zurueck(self) -> None:
+        calls: list[tuple[str, str, Any]] = []
+
+        def fake(method: str, url: str, payload: Any = None, token: str = "") -> Any:
+            calls.append((method, url, payload))
+            return (200, {"templateId": payload["templateId"]}) if method == "PATCH" else (200, {"templateId": "tpl-neu"})
+
+        deploy.rest_transport = fake
+        ok, message = deploy.rest_set_endpoint_template("ep-1", "tpl-neu", token="k")
+        self.assertTrue(ok, message)
+        self.assertEqual([c[0] for c in calls], ["PATCH", "GET"], "erst setzen, dann nachlesen")
+        self.assertIn("nachgelesen", message)
+
+    def test_abweichende_ruecklesung_gilt_als_nicht_gesetzt(self) -> None:
+        def fake(method: str, url: str, payload: Any = None, token: str = "") -> Any:
+            # So sah es live aus: die API nimmt einen falschen Wert ohne Murren an.
+            return (200, {"templateId": "zz"}) if method == "GET" else (200, {"templateId": payload["templateId"]})
+
+        deploy.rest_transport = fake
+        ok, message = deploy.rest_set_endpoint_template("ep-1", "tpl-neu", token="k")
+        self.assertFalse(ok)
+        self.assertIn("Ruecklesung weicht ab", message)
+
+    def test_http_fehler_wird_gemeldet(self) -> None:
+        deploy.rest_transport = lambda *a, **k: (400, {"error": "worker quota"})
+        ok, message = deploy.rest_set_endpoint_template("ep-1", "tpl-neu", token="k")
+        self.assertFalse(ok)
+        self.assertIn("HTTP 400", message)
+
+    def test_ohne_token_kein_aufruf(self) -> None:
+        calls: list[Any] = []
+        deploy.rest_transport = lambda *a, **k: calls.append(a) or (200, {})
+        with mock.patch.object(deploy, "env", lambda name, default="": ""):
+            ok, message = deploy.rest_set_endpoint_template("ep-1", "tpl-neu")
+        self.assertFalse(ok)
+        self.assertIn("RP_API_KEY", message)
+        self.assertEqual(calls, [], "ohne Token darf kein HTTP-Aufruf passieren")
+
+    def test_ohne_template_id_kein_aufruf(self) -> None:
+        calls: list[Any] = []
+        deploy.rest_transport = lambda *a, **k: calls.append(a) or (200, {})
+        ok, _message = deploy.rest_set_endpoint_template("ep-1", "", token="k")
+        self.assertFalse(ok)
+        self.assertEqual(calls, [])
+
+    def test_deploy_role_umzieht_gebundenes_template_statt_aufzugeben(self) -> None:
+        """Der Kernfall: GraphQL sagt 'bound template', REST setzt - Rolle gilt als deployt."""
+        env_vars = {"RP_API_KEY": "test", "IMAGE": "img:tag"}
+        with mock.patch.dict("os.environ", env_vars, clear=False):
+            # save_template liefert ein Template-Dict (deploy_role liest template["id"]).
+            with mock.patch.object(deploy, "save_template", return_value={"id": "tpl-neu"}):
+                with mock.patch.object(
+                    deploy.runpod,
+                    "get_endpoints",
+                    create=True,
+                    return_value=[{"id": "ep-music", "name": "audiomonastry-ai-music", "templateId": "tpl-alt"}],
+                ):
+                    with mock.patch.object(
+                        deploy.runpod,
+                        "update_endpoint_template",
+                        create=True,
+                        side_effect=RuntimeError("This endpoint has a bound template."),
+                    ):
+                        with mock.patch.object(
+                            deploy, "rest_set_endpoint_template", return_value=(True, "Template per REST gesetzt")
+                        ) as rest:
+                            result = deploy.deploy_role("music", deploy.ROLE_DEFAULTS["music"])
+
+        self.assertEqual(result, "ep-music", "die Rolle muss als deployt gelten, nicht als uebersprungen")
+        rest.assert_called_once()
+        self.assertEqual(rest.call_args[0][1], "tpl-neu")
+
+
 if __name__ == "__main__":
     unittest.main()
