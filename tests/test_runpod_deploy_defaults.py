@@ -11,7 +11,9 @@ Lauf: python3 tests/test_runpod_deploy_defaults.py
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import pathlib
 import sys
@@ -258,6 +260,170 @@ class TemplateFallbackTest(unittest.TestCase):
         self._install_fake(responses, raise_on_create=Exception("boom"))
         with self.assertRaises(Exception):
             deploy.save_template("audiomonastry-ai-music-template", "img:tag", {}, 150)
+
+
+class RollenImageOverrideTest(unittest.TestCase):
+    """INFRA-RUNPOD-010: eine Rolle darf ein abweichendes Image fahren.
+
+    Hintergrund: die Flotte kennt genau EIN schlankes Image ohne Gewichte
+    (`AI_BAKE_ROLE` leer). Der Kaltstart laedt die Gewichte bei JEDEM neuen
+    Worker - live gemessen 2026-09-20: 19,6 min Wartezeit auf 7,6 s Arbeit. Abhilfe
+    ist ein Rollen-Image mit eingebackenen Gewichten; es darf NUR die eine Rolle
+    ersetzen, muss in der Ausgabe sichtbar sein und darf bei einem vertippten
+    Rollennamen NICHT still verschwinden.
+    """
+
+    GLOBAL_IMAGE = "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:latest"
+    BAKED = "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:baked-voicegen-latest"
+
+    def _resolve(self, role: str, env: dict[str, str]) -> dict[str, Any]:
+        with mock.patch.dict("os.environ", env, clear=True):
+            return deploy.resolve_image(role, deploy.ROLE_DEFAULTS[role])
+
+    def test_override_gewinnt_gegen_das_globale_image(self) -> None:
+        resolved = self._resolve("voiceGen", {"IMAGE": self.GLOBAL_IMAGE, "RP_IMAGE_VOICE": self.BAKED})
+        self.assertEqual(resolved["image"], self.BAKED)
+        self.assertNotEqual(resolved["image"], self.GLOBAL_IMAGE)
+        self.assertIn("RP_IMAGE_VOICE", resolved["image_origin"], "die Quelle muss sichtbar sein")
+        self.assertIn("Vorrang", resolved["image_origin"])
+        # Rollen-Image unseres Runtimes => eigener Startbefehl + Rollen-Env.
+        self.assertEqual(resolved["docker_args"], deploy.DOCKER_START_CMD)
+        self.assertEqual(resolved["env_vars"]["AI_ROLE"], "voiceGen")
+
+    def test_nur_die_eine_rolle_bekommt_das_rollen_image(self) -> None:
+        env = {
+            "IMAGE": self.GLOBAL_IMAGE,
+            "RP_IMAGE_VOICE": self.BAKED,
+        }
+        with mock.patch.dict("os.environ", env, clear=True):
+            voice = deploy.resolve_image("voiceGen", deploy.ROLE_DEFAULTS["voiceGen"])
+            ears = deploy.resolve_image("ears", deploy.ROLE_DEFAULTS["ears"])
+        self.assertEqual(voice["image"], self.BAKED)
+        self.assertEqual(ears["image"], self.GLOBAL_IMAGE, "alle anderen Rollen bleiben auf dem schlanken Image")
+        self.assertIn("IMAGE", ears["image_origin"])
+
+    def test_mechanischer_und_kanonischer_name_werden_beide_akzeptiert(self) -> None:
+        alt = "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:baked-a"
+        neu = "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:baked-b"
+        # Alle drei Schreibweisen sind erlaubt (kanonisch, RP_IMAGE_VOICE_GEN, RP_IMAGE_VOICEGEN).
+        for name in ("RP_IMAGE_VOICE", "RP_IMAGE_VOICE_GEN", "RP_IMAGE_VOICEGEN"):
+            with self.subTest(name=name):
+                self.assertEqual(self._resolve("voiceGen", {"IMAGE": self.GLOBAL_IMAGE, name: alt})["image"], alt)
+        # Kanonisch schlaegt die mechanischen Namen (deterministisch, mit Warnung in stderr).
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            both = self._resolve("voiceGen", {"IMAGE": self.GLOBAL_IMAGE, "RP_IMAGE_VOICEGEN": alt, "RP_IMAGE_VOICE": neu})
+        self.assertEqual(both["image"], neu, "RP_IMAGE_VOICE ist die kanonische Variable")
+        self.assertIn("RP_IMAGE_VOICE gewinnt", buf.getvalue())
+
+    def test_override_sticht_auch_den_vllm_brain_default(self) -> None:
+        # Der Brain laeuft per Default auf dem vLLM-Worker; ein expliziter
+        # Rollen-Override muss auch diesen Default schlagen (sonst waere der
+        # Override fuer brain wirkungslos, ohne dass es auffaellt).
+        resolved = self._resolve("brain", {"RP_IMAGE_BRAIN": self.BAKED})
+        self.assertEqual(resolved["image"], self.BAKED)
+        self.assertEqual(resolved["docker_args"], deploy.DOCKER_START_CMD)
+
+    def test_override_auf_fremdes_image_wird_angemeldet(self) -> None:
+        # Ein Image OHNE unser Runtime-Kuerzel bringt einen fremden Entrypoint mit:
+        # der Worker startet dann ohne Rollen-Env. Das darf nicht still passieren.
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            resolved = self._resolve("voiceGen", {"IMAGE": self.GLOBAL_IMAGE, "RP_IMAGE_VOICE": "docker.io/library/python:3.12"})
+        self.assertEqual(resolved["image"], "docker.io/library/python:3.12")
+        self.assertEqual(resolved["docker_args"], "", "fremdes Image behaelt seinen Entrypoint")
+        self.assertIn("Runtime-Kuerzel", buf.getvalue())
+
+    def test_unbekannter_rollenname_ist_ein_klarer_fehler(self) -> None:
+        with mock.patch.dict("os.environ", {"RP_IMAGE_VOIC": self.BAKED}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                deploy.image_overrides()
+        message = str(ctx.exception)
+        self.assertIn("RP_IMAGE_VOIC", message)
+        self.assertIn("gibt es nicht", message)
+        self.assertIn("RP_IMAGE_VOICE", message, "die Meldung muss die gueltigen Namen nennen")
+
+    def test_leerer_override_ist_ein_fehler_kein_stiller_ignoranz(self) -> None:
+        # Genau der CI-Fall: eine leere Variable sieht gesetzt aus. Wuerde sie
+        # still ignoriert, faehrt die Rolle wieder ohne Gewichte.
+        with mock.patch.dict("os.environ", {"RP_IMAGE_VOICE": "   "}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                deploy.image_overrides()
+        self.assertIn("leer", str(ctx.exception))
+
+    def test_kein_image_verweis_ist_ein_fehler(self) -> None:
+        with mock.patch.dict("os.environ", {"RP_IMAGE_VOICE": "voice-baked"}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                deploy.image_overrides()
+        self.assertIn("kein Image-Verweis", str(ctx.exception))
+
+    def test_grossgeschriebenes_repository_wird_abgewiesen(self) -> None:
+        with mock.patch.dict("os.environ", {"RP_IMAGE_VOICE": "ghcr.io/KainplanMusic/Repo:baked"}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                deploy.image_overrides()
+        self.assertIn("Grossbuchstaben", str(ctx.exception))
+
+    def test_tag_darf_grossgeschrieben_sein(self) -> None:
+        image = "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:Voice-Baked"
+        self.assertEqual(deploy.validate_image_reference(image, "RP_IMAGE_VOICE"), image)
+
+    def test_map_json_gewinnt_gegen_globales_image(self) -> None:
+        env = {"IMAGE": self.GLOBAL_IMAGE, "RP_IMAGE_MAP": json.dumps({"voiceGen": self.BAKED})}
+        resolved = self._resolve("voiceGen", env)
+        self.assertEqual(resolved["image"], self.BAKED)
+        self.assertIn("RP_IMAGE_MAP", resolved["image_origin"])
+
+    def test_map_mit_unbekannter_rolle_faellt_laut_auf(self) -> None:
+        env = {"RP_IMAGE_MAP": json.dumps({"voice": self.BAKED})}
+        with mock.patch.dict("os.environ", env, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                deploy.image_overrides()
+        self.assertIn("unbekannte Rolle", str(ctx.exception))
+
+    def test_kaputtes_map_json_faellt_laut_auf(self) -> None:
+        with mock.patch.dict("os.environ", {"RP_IMAGE_MAP": "{voiceGen:"}, clear=True):
+            with self.assertRaises(SystemExit) as ctx:
+                deploy.image_overrides()
+        self.assertIn("kein gueltiges JSON", str(ctx.exception))
+
+    def test_rollen_override_ersetzt_das_globale_image_auch_im_preflight(self) -> None:
+        # Ohne IMAGE, aber MIT Rollen-Override: der Deploy darf nicht mit "IMAGE
+        # fehlt" abbrechen - die Rolle bringt ihr Image selbst mit.
+        seen: list[str] = []
+
+        def fake_deploy_role(role: str, defaults: Any) -> str:
+            seen.append(role)
+            return f"ep-{role}"
+
+        with mock.patch.dict("os.environ", {"RP_API_KEY": "test", "RP_IMAGE_VOICE": self.BAKED}, clear=True):
+            with mock.patch.object(deploy, "resolve_roles", return_value=["voiceGen"]):
+                with mock.patch.object(deploy, "deploy_role", side_effect=fake_deploy_role):
+                    with mock.patch.object(deploy.runpod, "get_endpoints", create=True, return_value=[]):
+                        code = deploy.main()
+        self.assertEqual(code, 0, "ein Rollen-Override deckt den IMAGE-Bedarf")
+
+    def test_ohne_override_bleibt_fehlendes_image_ein_fehler(self) -> None:
+        with mock.patch.dict("os.environ", {"RP_API_KEY": "test"}, clear=True):
+            with mock.patch.object(deploy, "resolve_roles", return_value=["voiceGen"]):
+                code = deploy.main()
+        self.assertEqual(code, 2, "ohne Override muss IMAGE weiter Pflicht bleiben")
+
+    def test_ausgabe_nennt_image_und_quelle_je_rolle(self) -> None:
+        # Die Anforderung ist ausdruecklich: SICHTBAR, welches Image eine Rolle
+        # faehrt und warum (sonst ist der Override nur in der Umgebung sichtbar).
+        buf = io.StringIO()
+        with mock.patch.dict("os.environ", {"IMAGE": self.GLOBAL_IMAGE, "RP_IMAGE_VOICE": self.BAKED}, clear=True):
+            with mock.patch.object(deploy, "ensure_registry_auth", return_value=None):
+                with mock.patch.object(deploy, "save_template", return_value={"id": "tpl-voice"}):
+                    with mock.patch.object(deploy.runpod, "get_endpoints", create=True, return_value=[]):
+                        with mock.patch.object(deploy.runpod, "create_endpoint", create=True, return_value={"id": "ep-voice"}):
+                            with contextlib.redirect_stdout(buf):
+                                deploy.deploy_role("voiceGen", deploy.ROLE_DEFAULTS["voiceGen"])
+        out = buf.getvalue()
+        self.assertIn(self.BAKED, out, "das verwendete Image muss im Lauf stehen")
+        self.assertIn("Image-Quelle", out, "die Quelle/Begruendung muss im Lauf stehen")
+        self.assertIn("RP_IMAGE_VOICE", out)
+        self.assertNotIn(self.GLOBAL_IMAGE, out, "das globale Image darf fuer diese Rolle nicht auftauchen")
 
 
 class RolleFehlschlagTest(unittest.TestCase):

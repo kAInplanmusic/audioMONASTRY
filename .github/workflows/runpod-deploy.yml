@@ -13,6 +13,21 @@ on:
         required: false
         default: '15'
         type: string
+      # INFRA-RUNPOD-010: optionaler Bake-Pfad. Leer (Default) = Verhalten wie
+      # bisher: EIN schlankes Image (:latest/:<sha>) ohne eingebackene Gewichte,
+      # das beim Kaltstart jedes Mal nachlaedt. Gesetzt = ZUSAETZLICHES Image
+      # dieses Runnings mit eingebackenen Gewichten der Rolle
+      # (Dockerfile.runpod ARG AI_BAKE_ROLE) plus RP_IMAGE_<TOKEN> fuer die Rolle.
+      bake_role:
+        description: 'Optional: Rollen-Image mit eingebackenen Gewichten bauen (leer = nichts; erlaubt: ears|voiceGen|orchestrator)'
+        required: false
+        default: ''
+        type: string
+      bake_groups:
+        description: 'Optional: Layer-Gruppen des Bakes (leer = Repo-Variable AI_BAKE_GROUPS, sonst 4)'
+        required: false
+        default: ''
+        type: string
   push:
     # SSOT ist `main`; `runpod-migration` bleibt als historischer Deploy-Branch
     # erlaubt, damit alte Pushes nicht ins Leere laufen.
@@ -73,6 +88,38 @@ jobs:
           IMAGE="${{ env.REGISTRY }}/${OWNER_LOWER}/${{ env.IMAGE_NAME }}"
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "Image: ${IMAGE}"
+
+      # INFRA-RUNPOD-010: Ziel-Tag des optionalen Rollen-Images. Der Input kommt
+      # ueber `env` (nicht direkt in den Befehl interpoliert) und wird gegen eine
+      # Allow-Liste geprueft: gebacken wird nur das EIGENE Runtime-Image
+      # (Dockerfile.runpod) - music/imageHq/videoReal/videoAbstract laufen auf
+      # vorgefertigten Hub-Workern mit eigenen Gewichten, ein Override wuerde sie
+      # kaputt machen. Ohne bake_role laeuft dieser Schritt nicht (Push auf main
+      # bleibt damit unveraendert schlank).
+      - name: Bake-Ziel bestimmen (optional, nur workflow_dispatch)
+        id: bake
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.bake_role != ''
+        env:
+          BAKE_ROLE: ${{ github.event.inputs.bake_role }}
+          BAKE_GROUPS_INPUT: ${{ github.event.inputs.bake_groups }}
+          BAKE_GROUPS_VAR: ${{ vars.AI_BAKE_GROUPS }}
+        run: |
+          set -euo pipefail
+          case "$BAKE_ROLE" in
+            ears|voiceGen|orchestrator) ;;
+            *)
+              echo "::error::bake_role='${BAKE_ROLE}' ist nicht erlaubt. Gebacken wird nur das eigene Runtime-Image; erlaubt sind: ears, voiceGen, orchestrator (brain laeuft auf dem vorgefertigten vLLM-Worker, music/imageHq/videoReal/videoAbstract auf Hub-Workern mit eigenen Gewichten)."
+              exit 1
+              ;;
+          esac
+          ROLE_LOWER=$(echo "$BAKE_ROLE" | tr '[:upper:]' '[:lower:]')
+          GROUPS="${BAKE_GROUPS_INPUT}"
+          if [ -z "$GROUPS" ]; then GROUPS="${BAKE_GROUPS_VAR}"; fi
+          if [ -z "$GROUPS" ]; then GROUPS="4"; fi
+          echo "role=${BAKE_ROLE}" >> "$GITHUB_OUTPUT"
+          echo "role_lower=${ROLE_LOWER}" >> "$GITHUB_OUTPUT"
+          echo "groups=${GROUPS}" >> "$GITHUB_OUTPUT"
+          echo "Bake-Ziel: Rolle ${BAKE_ROLE} | Tag ${ROLE_LOWER} | Groups ${GROUPS}"
 
       # Betreiberentscheidung 2026-09-10: Das Einbacken der 29,5 GB Qwen3-14B-
       # Gewichte ist ZURUECKGEZOGEN. Es loeste ein Problem, das mit der Vorgabe
@@ -189,6 +236,49 @@ jobs:
           sys.exit(0 if (major, minor) >= (2, 6) else 1)
           "
 
+      # ------------------------------------------------------------------
+      # INFRA-RUNPOD-010: OPTIONALES Rollen-Image mit eingebackenen Gewichten.
+      # Laeuft NUR mit workflow_dispatch-Input bake_role (Default leer) - ein
+      # normaler Push auf main baut weiter das EINE schlanke Image ohne Bake
+      # (AI_BAKE_ROLE= leer, siehe Step "Build & Push (shared)"), damit der
+      # Normalfall klein und schnell bleibt.
+      # Warum Bake statt Network Volume: Volumes gibt es nur in einem Teil der
+      # Rechenzentren, und dort gibt es keinen A40/A6000-Pool (Dockerfile.runpod,
+      # "Rollen-Gewichte einbacken"). Warum ueberhaupt: der Kaltstart ohne Bake
+      # laedt die Gewichte bei JEDEM neuen Worker (live 2026-09-20: 19,6 min
+      # Wartezeit auf 7,6 s Arbeit, siehe docs/RUNPOD_COLDSTART.md).
+      # Dieses Image ersetzt das schlanke NICHT: es bekommt einen eigenen Tag.
+      - name: Build & Push Rollen-Image mit eingebackenen Gewichten (optional)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.bake_role != ''
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25
+        with:
+          context: services/audiomonastry-ai-runtime
+          file: services/audiomonastry-ai-runtime/Dockerfile.runpod
+          push: true
+          build-args: |
+            AI_INSTALL_AUDIO_AI=1
+            AI_INSTALL_VOICE_AI=1
+            AI_INSTALL_VLLM=0
+            AI_BAKE_ROLE=${{ steps.bake.outputs.role }}
+            AI_BAKE_GROUPS=${{ steps.bake.outputs.groups }}
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ github.sha }}-baked-${{ steps.bake.outputs.role_lower }}
+            ${{ steps.meta.outputs.image }}:baked-${{ steps.bake.outputs.role_lower }}-latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.description=Bake-Rolle ${{ steps.bake.outputs.role }}
+
+      # Beleg statt Annahme: der Tag liegt wirklich in GHCR (dieser Job ist dort
+      # eingeloggt). Best effort – ein Manifest-Fehler ist nicht der Deploy-Fehler.
+      - name: Bake-Tag in GHCR pruefen (best effort)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.bake_role != ''
+        continue-on-error: true
+        run: |
+          docker manifest inspect "${{ steps.meta.outputs.image }}:baked-${{ steps.bake.outputs.role_lower }}-latest" > /dev/null \
+            && echo "Bake-Tag vorhanden: ${{ steps.meta.outputs.image }}:baked-${{ steps.bake.outputs.role_lower }}-latest" \
+            || echo "INFO: Bake-Tag (noch) nicht per manifest inspect lesbar."
+
   # Alle drei Rollen-Endpoints. workers_min bleibt 0 (Scale-to-Zero); der
   # Session-Wake hebt es beim Studio-Eintritt temporär auf 1.
   deploy:
@@ -199,6 +289,37 @@ jobs:
 
       - name: RunPod SDK installieren
         run: python3 -m pip install --quiet runpod==1.12.0
+
+      # INFRA-RUNPOD-010: Bei gesetztem bake_role bekommt GENAU DIESE Rolle das
+      # gebackene Image - ueber RP_IMAGE_<TOKEN>, das den Rollen-Image-Override in
+      # scripts/runpod-deploy.py ausloest (Vorrang vor dem globalen IMAGE). Alle
+      # anderen Rollen bleiben auf dem schlanken :<sha>-Image.
+      # Der Rollenname kommt ueber `env` (nicht interpoliert) und wird gegen
+      # dieselbe Allow-Liste geprueft wie der Bake; ein unbekannter Name bricht
+      # hier ab, statt den Deploy mit einem wirkungslosen Override laufen zu lassen.
+      # WICHTIG: Es wird KEINE Variable fuer Rollen ohne Bake gesetzt - ein LEERES
+      # RP_IMAGE_<TOKEN> ist im Deploy ein harter Fehler (Exit 2), kein stiller Fallback.
+      - name: Rollen-Image-Override setzen (nur mit bake_role)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.bake_role != ''
+        env:
+          BAKE_ROLE: ${{ github.event.inputs.bake_role }}
+          IMAGE_BASE: ${{ needs.build.outputs.image }}
+          IMAGE_REF: ${{ needs.build.outputs.image }}:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          case "$BAKE_ROLE" in
+            ears)         TOKEN=EARS ;;
+            voiceGen)     TOKEN=VOICE ;;
+            orchestrator) TOKEN=ORCHESTRATOR ;;
+            *)
+              echo "::error::bake_role='${BAKE_ROLE}' hat keine Rollen-Token-Zuordnung – erwartet: ears|voiceGen|orchestrator."
+              exit 1
+              ;;
+          esac
+          ROLE_LOWER=$(echo "$BAKE_ROLE" | tr '[:upper:]' '[:lower:]')
+          BAKED="${IMAGE_BASE}:${GITHUB_SHA}-baked-${ROLE_LOWER}"
+          echo "RP_IMAGE_${TOKEN}=${BAKED}" >> "$GITHUB_ENV"
+          echo "Rolle ${BAKE_ROLE} faehrt das Rollen-Image ${BAKED} (RP_IMAGE_${TOKEN}); alle anderen Rollen bleiben auf ${IMAGE_REF}"
 
       - name: Preflight – Pflicht-Secrets prüfen
         env:

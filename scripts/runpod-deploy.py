@@ -57,10 +57,24 @@ Jede Rolle ist per Env uebersteuerbar:
   RUNPOD_IMAGE_<ROLLE>   z. B. RUNPOD_IMAGE_MUSIC, RUNPOD_IMAGE_IMAGE_HQ
   RUNPOD_OWN_IMAGE=1     erzwingt unser Image fuer eine sonst prebuilt Rolle
 
+Per-Rolle-Image-Override (INFRA-RUNPOD-010, fuer Rollen-Images mit eingebackenen
+Gewichten) – hat Vorrang vor dem globalen `IMAGE`:
+  RP_IMAGE_<TOKEN>       kanonisch aus dem Endpoint-Namen: RP_IMAGE_VOICE
+                         (voiceGen), RP_IMAGE_IMAGE (imageHq), RP_IMAGE_VIDEO_REAL,
+                         RP_IMAGE_VIDEO_ABSTRACT, RP_IMAGE_BRAIN, RP_IMAGE_EARS,
+                         RP_IMAGE_MUSIC, RP_IMAGE_ORCHESTRATOR; zusaetzlich
+                         RP_IMAGE_VOICE_GEN/RP_IMAGE_VOICEGEN (Grossschreibung des
+                         Rollennamens) und die Altnamen RP_IMAGE_VISION/RP_IMAGE_VIDEO
+  RP_IMAGE_MAP           JSON-Objekt {rolle: image} fuer CI-Matrizen
+Ein unbekannter Rollenname oder ein leerer/ungueltiger Wert ist ein HARTER Fehler
+(Exit 2) – ein still ignorierter Override waere teurer als ein Abbruch.
+Der Deploy nennt je Rolle Image, Image-Quelle und Vorrang in der Ausgabe.
+
 Voraussetzungen:
   - RP_API_KEY (RunPod Personal Access Token)
   - IMAGE (GHCR-Image, z. B. ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<sha>)
-    nur noetig, wenn mindestens eine Rolle ein `own`-Image nutzt.
+    nur noetig, wenn mindestens eine Rolle ein `own`-Image nutzt und kein
+    Rollen-Override fuer sie gesetzt ist.
 
 Betriebsarten:
   RUNPOD_DEPLOY_ALL_ROLES=1        alle acht Rollen deployen (Default)
@@ -83,6 +97,7 @@ nur die Modelle des Rollen-Manifests (model_manifest.json → "roles").
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from typing import Any, Dict, List, Optional
@@ -160,6 +175,22 @@ ENDPOINT_ENV_BY_ROLE: Dict[str, str] = {
     "videoAbstract": "RP_ENDPOINT_ID_VIDEO_ABSTRACT",
     "orchestrator": "RP_ENDPOINT_ID_ORCHESTRATOR",
 }
+
+#: Env-Name des per-Rolle-Image-Overrides (INFRA-RUNPOD-010). Er wird aus dem
+#: Endpoint-Namen der Rolle abgeleitet, damit beide dieselbe Rollen-Kennung
+#: tragen (`RP_ENDPOINT_ID_VOICE` → `RP_IMAGE_VOICE`). Beispiel:
+#: `RP_IMAGE_VOICE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:baked-voicegen-latest`.
+IMAGE_ENV_BY_ROLE: Dict[str, str] = {
+    role: name.replace("RP_ENDPOINT_ID_", "RP_IMAGE_") for role, name in ENDPOINT_ENV_BY_ROLE.items()
+}
+
+#: JSON-Form derselben Zuordnung: `RP_IMAGE_MAP={"voiceGen":"ghcr.io/…:baked-voicegen-latest"}`.
+#: Gedacht fuer Stellen, die keine dynamischen Env-Namen setzen koennen (CI-Matrix).
+IMAGE_MAP_ENV = "RP_IMAGE_MAP"
+
+#: Praefix jedes Rollen-Image-Overrides.
+IMAGE_ENV_PREFIX = "RP_IMAGE_"
+
 
 DOCKER_START_CMD = "python runpod_worker.py"
 
@@ -372,17 +403,197 @@ def _env_token(role: str) -> str:
     return "".join(out)
 
 
-def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
+# ---------------------------------------------------------------------------
+# Per-Rolle-Image-Override (INFRA-RUNPOD-010)
+# ---------------------------------------------------------------------------
+def image_override_env_names(role: str) -> List[str]:
+    """Akzeptierte Env-Namen des Image-Overrides einer Rolle, kanonisch zuerst.
+
+    Reihenfolge und Vorrang:
+      1. `IMAGE_ENV_BY_ROLE` – `RP_IMAGE_VOICE`, `RP_IMAGE_VIDEO_REAL` (dieselbe
+         Rollen-Kennung wie `RP_ENDPOINT_ID_*`).
+      2. mechanisch aus dem Rollennamen – `RP_IMAGE_VOICE_GEN`, `RP_IMAGE_IMAGE_HQ`.
+      3. Grossschreibung ohne Trenner – `RP_IMAGE_VOICEGEN`, `RP_IMAGE_IMAGEHQ`.
+      4. Altnamen der 5-Rollen-Architektur – `RP_IMAGE_VISION`, `RP_IMAGE_VIDEO`.
+
+    Mehrere Schreibweisen sind Absicht: ein Tippfehler im Namen soll nicht als
+    still wirkungsloser Override durchgehen (siehe `image_overrides`).
+    """
+    names: List[str] = []
+    for candidate in (
+        IMAGE_ENV_BY_ROLE.get(role, ""),
+        IMAGE_ENV_PREFIX + _env_token(role),
+        IMAGE_ENV_PREFIX + role.upper(),
+    ):
+        if candidate and candidate not in names:
+            names.append(candidate)
+    for legacy, mapped in LEGACY_ROLE_ALIASES.items():
+        if mapped == role:
+            candidate = IMAGE_ENV_PREFIX + _env_token(legacy)
+            if candidate not in names:
+                names.append(candidate)
+    return names
+
+
+def image_override_tokens() -> Dict[str, str]:
+    """`RP_IMAGE_<TOKEN>` → Rolle (kanonische Zuordnung gewinnt bei Kollision)."""
+    tokens: Dict[str, str] = {}
+    for role in ROLE_DEFAULTS:
+        for name in image_override_env_names(role):
+            tokens.setdefault(name[len(IMAGE_ENV_PREFIX):], role)
+    return tokens
+
+
+def validate_image_reference(value: str, source: str) -> str:
+    """Image-Referenz eines Overrides pruefen – laut scheitern statt still ignorieren.
+
+    Ein Override, der aussieht wie gesetzt, aber kein ziehbares Image ist, waere
+    der teuerste Fall: der Deploy wuerde die Rolle wieder auf ein Image ohne
+    Gewichte stellen und der Fehler faellt erst als Kaltstart-Timeout auf.
+    """
+    text = (value or "").strip()
+    if not text:
+        raise SystemExit(
+            f"FEHLER: {source} ist gesetzt, aber leer. Entweder einen vollen Image-Verweis "
+            f"setzen (z. B. ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:baked-voicegen-latest) "
+            f"oder die Variable ganz entfernen."
+        )
+    if any(ch.isspace() for ch in text):
+        raise SystemExit(f"FEHLER: {source}={text!r} enthaelt Leerzeichen – das ist kein Image-Verweis.")
+    if "=" in text or "$" in text:
+        raise SystemExit(
+            f"FEHLER: {source}={text!r} sieht nach einer nicht aufgeloesten Variable/Env-Zuweisung aus. "
+            f"Erwartet wird ein vollstaendiger Image-Verweis (registry/repo:tag)."
+        )
+    if "/" not in text:
+        raise SystemExit(
+            f"FEHLER: {source}={text!r} ist kein Image-Verweis – erwartet wird z. B. "
+            f"ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<tag>."
+        )
+    # Registry-/Repository-Teil muss kleingeschrieben sein (Docker-Regel); der Tag darf
+    # Grossbuchstaben tragen, deshalb wird nur der Teil VOR dem Tag geprueft.
+    tail = text.rsplit("/", 1)[-1]
+    repository = text[: text.rfind(":")] if ":" in tail else text
+    if repository != repository.lower():
+        raise SystemExit(
+            f"FEHLER: {source}={text!r}: der Repository-Teil enthaelt Grossbuchstaben. "
+            f"Registry-Namen sind kleingeschrieben (GHCR lehnt den Pull sonst mit "
+            f"'invalid reference format' ab)."
+        )
+    return text
+
+
+def image_overrides() -> Dict[str, Dict[str, str]]:
+    """Rollen → Override-Image aus `RP_IMAGE_<TOKEN>` und `RP_IMAGE_MAP` (JSON).
+
+    Rueckgabe: ``{role: {"image": <ref>, "source": <env-name>}}``. Ein unbekannter
+    Rollenname im Override ist ein HARTER Fehler (SystemExit), kein Ignorieren:
+    ein stillschweigend verworfener Override stellt die Rolle wieder auf das
+    Image ohne Gewichte und kostet einen Kaltstart-Timeout je Job.
+    """
+    tokens = image_override_tokens()
+    overrides: Dict[str, Dict[str, str]] = {}
+
+    def take(role: str, source: str, value: str, first: bool) -> None:
+        previous = overrides.get(role)
+        if previous is not None:
+            if previous["image"] == value:
+                return
+            winner = source if first else previous["source"]
+            loser = previous["source"] if first else source
+            print(
+                f"[deploy] WARNUNG: Rolle {role} hat mehrere Image-Overrides mit verschiedenen "
+                f"Werten – {winner} gewinnt gegen {loser} "
+                f"(die kanonische Variable schlaegt den mechanischen Namen).",
+                file=sys.stderr,
+            )
+            if first:
+                overrides[role] = {"image": value, "source": source}
+            return
+        overrides[role] = {"image": value, "source": source}
+
+    for name in os.environ:
+        if not name.startswith(IMAGE_ENV_PREFIX) or name == IMAGE_MAP_ENV:
+            continue
+        token = name[len(IMAGE_ENV_PREFIX):]
+        role = tokens.get(token)
+        if role is None:
+            raise SystemExit(
+                f"FEHLER: {name} ist kein bekannter Rollen-Image-Override – die Rolle {token!r} "
+                f"gibt es nicht. Erwartete Namen: "
+                + ", ".join(sorted(IMAGE_ENV_PREFIX + t for t in tokens))
+            )
+        value = validate_image_reference(os.environ.get(name, ""), name)
+        take(role, name, value, first=(name == image_override_env_names(role)[0]))
+
+    raw_map = env(IMAGE_MAP_ENV)
+    if raw_map:
+        try:
+            parsed = json.loads(raw_map)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"FEHLER: {IMAGE_MAP_ENV} ist kein gueltiges JSON ({exc.msg} an Position {exc.pos}). "
+                f'Beispiel: {IMAGE_MAP_ENV}=\'{{"voiceGen":"ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:baked-voicegen-latest"}}\''
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise SystemExit(f"FEHLER: {IMAGE_MAP_ENV} muss ein JSON-Objekt (Rolle → Image) sein.")
+        for key, value in parsed.items():
+            role = str(key)
+            if role in LEGACY_ROLE_ALIASES:
+                print(f"[deploy] WARNUNG: Rolle '{role}' im {IMAGE_MAP_ENV} ist veraltet → '{LEGACY_ROLE_ALIASES[role]}'")
+                role = LEGACY_ROLE_ALIASES[role]
+            if role not in ROLE_DEFAULTS:
+                raise SystemExit(
+                    f"FEHLER: {IMAGE_MAP_ENV} nennt die unbekannte Rolle {key!r} – "
+                    f"erwartet: {', '.join(ROLE_DEFAULTS)}"
+                )
+            if not isinstance(value, str):
+                raise SystemExit(f"FEHLER: {IMAGE_MAP_ENV}[{key!r}] muss ein String sein (Image-Verweis).")
+            take(role, f"{IMAGE_MAP_ENV}[{key}]", validate_image_reference(value, f"{IMAGE_MAP_ENV}[{key}]"), first=False)
+
+    return overrides
+
+
+def resolve_image(role: str, defaults: Dict[str, Any], overrides: Optional[Dict[str, Dict[str, str]]] = None) -> Dict[str, Any]:
     """Liefert image/docker_args/env_vars fuer eine Rolle.
 
     Rueckgabe enthaelt `image`, `docker_args`, `env_vars`, `template_name`,
-    `registry_auth` (True, wenn unser privates GHCR-Image genutzt wird).
+    `image_origin` (woher das Image kommt – sichtbar in der Ausgabe) und
+    `registry_auth` (True, wenn das Image ein privates GHCR-Image sein kann).
+
+    Vorrang: per-Rolle-Override (`RP_IMAGE_<TOKEN>` / `RP_IMAGE_MAP`) > Rollen-Env
+    (`RUNPOD_<ROLLE>_IMAGE`) > globales `IMAGE` / vLLM- bzw. Prebuilt-Default.
     """
+    overrides = image_overrides() if overrides is None else overrides
     kind = defaults.get("imageKind", "own")
     # Rollen-Image per Env ueberschreiben; RUNPOD_OWN_IMAGE erzwingt unser Image.
     override = env(str(defaults.get("imageEnv", ""))) if defaults.get("imageEnv") else ""
     if env("RUNPOD_OWN_IMAGE").lower() in ("1", "true", "yes") and kind != "vllm":
         kind = "own"
+
+    role_override = overrides.get(role)
+    if role_override is not None:
+        image = role_override["image"]
+        source = f"Override {role_override['source']} (Vorrang vor IMAGE und Rollen-Default)"
+        # Das Image entscheidet ueber den Startbefehl: ein Image unseres Runtimes
+        # braucht `python runpod_worker.py` und das Rollen-Env, ein vorgefertigter
+        # Hub-Worker bringt beides selbst mit.
+        own_runtime = "audiomonastry-ai-runtime" in image
+        if not own_runtime and kind == "own":
+            print(
+                f"[deploy] HINWEIS {role}: {role_override['source']} zeigt auf ein image OHNE unser Runtime-Kuerzel "
+                f"({image.split('/')[-1]}) – der Worker startet ohne Rollen-Env. Fuer ein Rollen-Image des eigenen "
+                f"Runtimes bitte den vollstaendigen ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<tag>-Verweis setzen.",
+                file=sys.stderr,
+            )
+        return {
+            "image": image,
+            "docker_args": DOCKER_START_CMD if own_runtime else "",
+            "env_vars": build_env_vars(role) if own_runtime else build_env_vars_prebuilt(role),
+            "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
+            "image_origin": source,
+            "registry_auth": own_runtime or image.startswith("ghcr.io/"),
+        }
 
     if role == "brain" and brain_vllm_enabled() and kind != "own":
         return {
@@ -390,6 +601,7 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
             "docker_args": "",  # Image bringt seinen eigenen Entrypoint mit
             "env_vars": build_env_vars_vllm(),
             "template_name": "audiomonastry-ai-brain-vllm-template",
+            "image_origin": "Rollen-Default brain=vLLM (RUNPOD_BRAIN_VLLM_IMAGE / BRAIN_VLLM_IMAGE_DEFAULT)",
             "registry_auth": False,
         }
 
@@ -402,6 +614,9 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
             "docker_args": "",  # vorgefertigter Entrypoint
             "env_vars": build_env_vars_prebuilt(role),
             "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
+            "image_origin": (
+                f"Override {defaults['imageEnv']} (Rollenvariable)" if override else f"Prebuilt-Default {defaults.get('imageDefault', '')}"
+            ),
             "registry_auth": False,
         }
 
@@ -417,8 +632,12 @@ def resolve_image(role: str, defaults: Dict[str, Any]) -> Dict[str, Any]:
         "docker_args": DOCKER_START_CMD,
         "env_vars": build_env_vars(role),
         "template_name": f"audiomonastry-ai-{defaults['suffix']}-template",
+        "image_origin": (
+            f"Override {defaults['imageEnv']} (Rollenvariable)" if override else "globales IMAGE (Rollout-Stand)"
+        ),
         "registry_auth": True,
     }
+
 
 
 def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
@@ -596,6 +815,10 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
         f"[deploy] {endpoint_name}: Rolle {role} | {resolved['image'].split('/')[-1]} "
         f"| idle {idle_timeout}s | disk {container_disk_gb} GB"
     )
+    # INFRA-RUNPOD-010: WELCHES Image eine Rolle faehrt und WARUM - ohne diese Zeile
+    # ist ein Rollen-Override nur in der Umgebung sichtbar, nicht im Lauf.
+    print(f"[deploy] {endpoint_name}: Image-Quelle: {resolved.get('image_origin', 'unbekannt')}")
+    print(f"[deploy] {endpoint_name}: Image: {resolved['image']}")
 
     # INFRA-RUNPOD-009: Der bestehende Endpoint wird VOR dem Template-Handling
     # gelesen - seine Template-ID ist der Rettungsanker, wenn die Konto-Liste das
@@ -734,10 +957,30 @@ def main() -> int:
     runpod.api_key = api_key
 
     roles = resolve_roles()
+    # INFRA-RUNPOD-010: Die Rollen-Image-Overrides werden VOR dem ersten API-Aufruf
+    # aufgeloest - ein vertippter Rollenname soll den Lauf beenden, nicht eine Rolle
+    # still auf ein fremdes Image stellen.
+    try:
+        overrides = image_overrides()
+    except SystemExit as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if overrides:
+        for role, entry in sorted(overrides.items()):
+            print(f"[deploy] Rollen-Image-Override: {role} → {entry['image']} (aus {entry['source']})")
+        unused = [r for r in overrides if r not in roles]
+        if unused:
+            print(
+                f"[deploy] HINWEIS: Override(s) gesetzt, aber die Rolle(n) {', '.join(sorted(unused))} "
+                f"werden in diesem Lauf nicht deployt (Rollen: {', '.join(r or 'legacy' for r in roles)}) - "
+                f"der Override bleibt fuer diese Rollen ungenutzt.",
+                file=sys.stderr,
+            )
     # IMAGE nur noetig, wenn mindestens eine Rolle unser eigenes Image nutzt –
-    # der vLLM-Brain und die Prebuilt-Worker bringen ihr eigenes mit.
+    # der vLLM-Brain und die Prebuilt-Worker bringen ihr eigenes mit. Ein
+    # Rollen-Override deckt seinen Bedarf selbst.
     needs_own_image = any(
-        (ROLE_DEFAULTS.get(r, {}).get("imageKind") == "own") for r in roles if r
+        (ROLE_DEFAULTS.get(r, {}).get("imageKind") == "own" and r not in overrides) for r in roles if r
     )
     if needs_own_image and not env("IMAGE"):
         print("FEHLER: IMAGE fehlt (z. B. ghcr.io/<owner>/audiomonastry-ai-runtime-runpod:<sha>)", file=sys.stderr)
