@@ -273,10 +273,17 @@ Ausfallmodus, der am 2026-09-20 die Stimmen-Rolle stillgelegt hat:
 | Status | Bedingung | Bedeutung |
 | --- | --- | --- |
 | `FESTGEFAHREN` | `inQueue > 0` und `running == 0` und `ready == 0` und `initializing == 0` | ein `unhealthy` Worker haelt den einzigen Slot – so sah der Ausfall aus |
+| `VERDAECHTIG` | `inQueue > 0` und `running > 0` und nichts frei (`ready`/`idle` 0) | laufender Worker arbeitet die Queue nicht ab – live belegt 2026-09-20 an `music` (Job 15 min auf `IN_QUEUE`) |
 | `STARTET` | `inQueue > 0` und `initializing > 0` | Kaltstart laeuft, kein Alarm |
 | `UNGESUND` | `unhealthy > 0` und `running == 0` | Vorstufe, beobachten |
 | `OK` | sonst | auch Scale-to-Zero ohne Queue ist normal |
 | `FEHLER` | Antwort ohne `workers`/`jobs` oder falscher Typ | wird NICHT als gesund gemeldet, damit eine geaenderte API auffaellt |
+
+`FESTGEFAHREN` wird mit `--confirm-seconds` (Default 30 s) ein **zweites Mal** geprueft, bevor
+alarmiert wird. Grund, live belegt: direkt nach dem Absetzen eines Jobs steht er schon in der
+Queue, waehrend der Worker in keinem Zaehler auftaucht – die erste Lesung meldete `orchestrator`
+faelschlich als festgefahren, der Job lief danach sauber durch. `VERDAECHTIG` ist bewusst kein
+Alarm (Exit bleibt 0), sondern ein Hinweis: ein legitim langer Job sieht genauso aus.
 
 **Exit-Codes:** `0` alles gesund · `2` Aufruf-/Konfigurationsfehler · `3` `--heal` ohne
 Freigabe (kein einziger HTTP-Aufruf) · `4` Handlungsbedarf (festgefahren, ohne `--heal`) ·

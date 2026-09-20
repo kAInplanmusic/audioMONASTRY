@@ -157,6 +157,61 @@ class _GuardCase(unittest.TestCase):
         return code, buffer.getvalue()
 
 
+HEALTH_WORKER_BUSY = {
+    "workers": {"idle": 0, "initializing": 0, "ready": 0, "running": 1, "throttled": 0, "unhealthy": 0},
+    "jobs": {"completed": 4, "failed": 2, "inProgress": 0, "inQueue": 1, "retried": 0},
+}
+
+
+class VerdachtTest(unittest.TestCase):
+    """Live belegt 2026-09-20 (Rolle music): Worker laeuft, arbeitet die Queue aber nicht ab."""
+
+    def test_laufender_worker_ohne_freie_kapazitaet_ist_verdaechtig(self) -> None:
+        status, reason = guard.classify_status(HEALTH_WORKER_BUSY)
+        self.assertEqual(status, guard.STATUS_SUSPICIOUS)
+        self.assertIn("kann ein langer Job sein", reason)
+
+    def test_langer_job_mit_freiem_worker_bleibt_ok(self) -> None:
+        payload = {
+            "workers": {"idle": 1, "ready": 1, "initializing": 0, "running": 1, "unhealthy": 0},
+            "jobs": {"inQueue": 2, "inProgress": 1},
+        }
+        self.assertEqual(guard.classify_status(payload)[0], guard.STATUS_OK)
+
+
+class BestaetigungTest(_GuardCase):
+    """Fehlalarm-Schutz: das Kaltstart-Fenster direkt nach dem Absetzen eines Jobs."""
+
+    def test_kurzes_fenster_loest_keinen_alarm_aus(self) -> None:
+        sequence = [HEALTH_STUCK, HEALTH_STARTING]
+
+        class Transient(StubTransport):
+            def __call__(self, method, url, payload=None, token=""):
+                if "/health" in url and sequence:
+                    self.calls.append((method, url, payload))
+                    return 200, sequence.pop(0) if len(sequence) > 1 else sequence[0]
+                return super().__call__(method, url, payload, token)
+
+        stub = Transient({self.endpoint: HEALTH_STUCK}, {self.endpoint: {"workersMax": 1}})
+        code, out = self.run_guard("--confirm-seconds", "1", stub=stub)
+        self.assertEqual(code, guard.EXIT_OK, "ein Kaltstart-Fenster darf keinen Alarm ausloesen")
+        self.assertIn("bestaetigt", out)
+        self.assertNotIn("HANDLUNGSBEDARF", out)
+
+    def test_anhaltender_zustand_bleibt_ein_alarm(self) -> None:
+        stub = StubTransport({self.endpoint: HEALTH_STUCK}, {self.endpoint: {"workersMax": 1}})
+        code, out = self.run_guard("--confirm-seconds", "1", stub=stub)
+        self.assertEqual(code, guard.EXIT_STUCK)
+        self.assertIn("erneut bestaetigt", out)
+
+    def test_verdacht_ist_kein_alarm_aber_sichtbar(self) -> None:
+        stub = StubTransport({self.endpoint: HEALTH_WORKER_BUSY}, {self.endpoint: {"workersMax": 1}})
+        code, out = self.run_guard(stub=stub)
+        self.assertEqual(code, guard.EXIT_OK)
+        self.assertIn("VERDAECHTIG", out)
+        self.assertIn("bitte ansehen", out)
+
+
 class BerichtTest(_GuardCase):
     def test_festgefahrene_rolle_wird_gemeldet_mit_exit_4(self) -> None:
         stub = StubTransport({self.endpoint: HEALTH_STUCK})
@@ -281,8 +336,12 @@ class DrainTest(_GuardCase):
                 return super().__call__(method, url, payload, token)
 
         stub = Sequencing({self.endpoint: HEALTH_STUCK}, {self.endpoint: {"workersMax": 1}})
+        # --confirm-seconds 0: der festgefahrene Zustand gilt hier als bereits bestaetigt;
+        # sonst wuerde die zweite Lesung (im Stub HEALTHY) den Verdacht aufloesen - genau
+        # das Verhalten, das BestaetigungTest prueft.
         code, out = self.run_guard(
-            "--heal", "--price-per-hour", "0.69", "--drain-minutes", "5", "--yes", stub=stub
+            "--heal", "--price-per-hour", "0.69", "--drain-minutes", "5", "--yes",
+            "--confirm-seconds", "0", stub=stub,
         )
         self.assertEqual(code, guard.EXIT_OK)
         self.assertIn("Queue leer nach", out)

@@ -21,6 +21,13 @@ Erkennungsregel (rein, in `classify_status`, ohne I/O testbar)
   STARTET       jobs.inQueue > 0 UND workers.initializing > 0 -> Kaltstart laeuft.
   UNGESUND      workers.unhealthy > 0 UND workers.running == 0 (unhealthy belegt den
                 Slot, bedient aber nicht) -> Vorstufe zum Stillstand, beobachten.
+  VERDAECHTIG   jobs.inQueue > 0 UND workers.running > 0 UND nichts frei (ready/idle 0)
+                -> ein laufender Worker arbeitet die Queue nicht ab. Live belegt
+                2026-09-20 (Rolle music: Job 15 min auf IN_QUEUE). Ehrlich als Verdacht
+                gemeldet, weil ein legitim langer Job genauso aussieht.
+  FESTGEFAHREN wird mit `--confirm-seconds` (Default 30) ein zweites Mal geprueft, damit
+                das kurze Fenster direkt nach dem Absetzen eines Jobs keinen Fehlalarm
+                ausloest (live passiert: orchestrator).
   OK            sonst (auch scale-to-zero ohne Queue: kein Worker ist normal).
 
 Zugang
@@ -78,6 +85,7 @@ EXIT_HEAL_FAILED = 6
 STATUS_OK = "OK"
 STATUS_STARTING = "STARTET"
 STATUS_UNHEALTHY = "UNGESUND"
+STATUS_SUSPICIOUS = "VERDAECHTIG"
 STATUS_STUCK = "FESTGEFAHREN"
 STATUS_ERROR = "FEHLER"
 
@@ -136,6 +144,15 @@ def classify_status(payload: Any) -> Tuple[str, str]:
         )
     if q > 0 and initializing > 0:
         return STATUS_STARTING, f"{q} Job(s) warten, {initializing} Worker startet (Kaltstart)"
+    if q > 0 and running > 0 and ready == 0 and idle == 0:
+        # Live belegt 2026-09-20 (Rolle music): ein Worker meldet "laufend", arbeitet die
+        # Queue aber nicht ab - mein Job stand 15 min auf IN_QUEUE. EHRLICH als Verdacht
+        # gemeldet, nicht als Gewissheit: ein legitim langer Job sieht genauso aus.
+        return (
+            STATUS_SUSPICIOUS,
+            f"{q} Job(s) warten, {running} Worker laeuft, aber keiner ist frei "
+            f"(kann ein langer Job sein - oder ein haengender)",
+        )
     if running == 0 and unhealthy > 0:
         return STATUS_UNHEALTHY, f"unhealthy={unhealthy}, kein laufender Worker, Queue leer"
     if ready > 0 or idle > 0 or running > 0:
@@ -157,14 +174,33 @@ def cost_block(price_per_hour: float, usd_eur: float) -> List[str]:
 # ---------------------------------------------------------------------------
 # I/O
 # ---------------------------------------------------------------------------
-def read_role_health(role: str, endpoint_id: str, token: str) -> Tuple[str, str, Dict[str, Any]]:
-    """Health einer Rolle lesen und einordnen."""
+def read_role_health(
+    role: str, endpoint_id: str, token: str, confirm_seconds: float = 0.0
+) -> Tuple[str, str, Dict[str, Any]]:
+    """Health einer Rolle lesen und einordnen.
+
+    `confirm_seconds > 0` prueft einen FESTGEFAHREN-Verdacht ein zweites Mal nach
+    dieser Wartezeit. Grund (live belegt 2026-09-20): direkt nach dem Absetzen eines
+    Jobs gibt es ein kurzes Fenster, in dem der Job schon in der Queue steht, der
+    Worker aber noch in keinem Zaehler auftaucht - die erste Lesung meldete da
+    faelschlich FESTGEFAHREN fuer `orchestrator`, der Job lief danach sauber durch.
+    """
     status_code, payload = warm.transport(
         "GET", HEALTH_URL.format(endpoint=endpoint_id), None, token
     )
     if status_code != 200 or not isinstance(payload, dict):
         return STATUS_ERROR, f"HTTP {status_code}: {str(payload)[:120]}", {}
     status, reason = classify_status(payload)
+    if status == STATUS_STUCK and confirm_seconds > 0:
+        warm.wait(confirm_seconds)
+        code2, payload2 = warm.transport(
+            "GET", HEALTH_URL.format(endpoint=endpoint_id), None, token
+        )
+        if code2 == 200 and isinstance(payload2, dict):
+            status2, reason2 = classify_status(payload2)
+            if status2 != STATUS_STUCK:
+                return status2, f"nach {int(confirm_seconds)} s bestaetigt: {reason2}", payload2
+            return status2, f"{reason2} (nach {int(confirm_seconds)} s erneut bestaetigt)", payload2
     return status, reason, payload
 
 
@@ -252,6 +288,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env-file", default=str(DEFAULT_ENV_FILE), help="Pfad zur .env")
     parser.add_argument("--heal", action="store_true", help="festgefahrene Rollen heben workersMax auf mind. 2")
     parser.add_argument("--drain-minutes", type=float, default=0.0, help="nach der Heilung auf leere Queue warten (max.)")
+    parser.add_argument(
+        "--confirm-seconds",
+        type=float,
+        default=30.0,
+        help="einen FESTGEFAHREN-Verdacht nach dieser Wartezeit erneut pruefen (Default 30, 0 = aus)",
+    )
     parser.add_argument("--price-per-hour", type=float, default=None, help="Stundensatz (PFLICHT bei --heal)")
     parser.add_argument("--usd-eur", type=float, default=0.92, help="nur Anzeige (Default 0.92)")
     parser.add_argument("--yes", action="store_true", help="Freigabe erteilen (auch RP_HEALTH_APPROVE=1)")
@@ -314,7 +356,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     for role in roles:
         try:
             endpoint_id = warm.resolve_endpoint_id(role, source)
-            status, reason, _payload = read_role_health(role, endpoint_id, token)
+            status, reason, _payload = read_role_health(
+                role, endpoint_id, token, args.confirm_seconds
+            )
         except Exception as exc:  # noqa: BLE001
             status, reason, endpoint_id = STATUS_ERROR, f"{type(exc).__name__}: {exc}", ""
         entry: Dict[str, Any] = {
@@ -358,6 +402,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "healed": healed,
         "healthy": [e["role"] for e in report if e["status"] in (STATUS_OK, STATUS_STARTING)],
         "unhealthy": [e["role"] for e in report if e["status"] == STATUS_UNHEALTHY],
+        "suspicious": [e["role"] for e in report if e["status"] == STATUS_SUSPICIOUS],
         "errors": [e["role"] for e in report if e["status"] == STATUS_ERROR],
     }
     if args.as_json:
@@ -366,8 +411,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(
             f"[wache] Ergebnis: {summary['checked']} Rollen geprueft, "
             f"{len(summary['healthy'])} gesund/startend, {len(summary['unhealthy'])} ungesund, "
+            f"{len(summary['suspicious'])} verdaechtig, "
             f"{len(stuck)} festgefahren, {len(summary['errors'])} nicht abfragbar"
         )
+        if summary["suspicious"]:
+            print(
+                "[wache] VERDAECHTIG (kann ein langer Job sein, bitte ansehen): "
+                + ", ".join(summary["suspicious"])
+            )
         if stuck and not args.heal:
             print(
                 "[wache] HANDLUNGSBEDARF: festgefahren = "
