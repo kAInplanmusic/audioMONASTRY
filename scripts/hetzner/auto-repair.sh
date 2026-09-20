@@ -32,9 +32,27 @@
 # =============================================================================
 set -uo pipefail
 
+# F10 · Namespace-Paritaet:
+#   Namen kommen aus der EINEN Quelle scripts/hetzner/fleet-names.sh (dort
+#   stehen Compose-Projekt, Container-Schreibweisen und Pfade). Befund F10:
+#   auf sfu-1/master-1 hiessen Container und Compose-Projekt noch nach dem
+#   Altpraefix (siehe fleet-names.sh) - ein Watchdog, der nur den neuen Namen
+#   kennt, findet dort NICHTS und repariert still nichts. Deshalb: Projektname
+#   explizit setzen und die tatsaechlichen Container ueber beide Schreibweisen
+#   aufloesen (fleet_name_variants).
+HERE_SRC="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=scripts/hetzner/fleet-names.sh
+# shellcheck disable=SC1091
+source "$HERE_SRC/fleet-names.sh"
+
 LOG="${LOG:-/var/log/audiomonastry-auto-repair.log}"
-APP_CONTAINER="${APP_CONTAINER:-audiomonastry}"
-CADDY_CONTAINER="${CADDY_CONTAINER:-audiomonastry-caddy}"
+# Kanonische Namen (Rolle app = Projektname, Caddy = Projektname-caddy); die
+# Aufloesung auf den LAUFENDEN Namen passiert unten ueber fleet_name_variants.
+APP_CONTAINER="${APP_CONTAINER:-$FLEET_COMPOSE_PROJECT}"
+CADDY_CONTAINER="${CADDY_CONTAINER:-$FLEET_COMPOSE_PROJECT-caddy}"
+# Compose-Projekt explizit: sonst haengt es am Verzeichnisnamen (APP_DIR) und
+# eine Reparatur koennte ein ZWEITES Projekt erzeugen statt den Stack zu heilen.
+COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-$FLEET_COMPOSE_PROJECT}"
 # App-Health aus dem Host-Netz (nur im node-Modus erreichbar) bzw. im Container.
 APP_HEALTH_URL="${APP_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 APP_HEALTH_URL_IN_CONTAINER="${APP_HEALTH_URL_IN_CONTAINER:-http://localhost:8080/api/health}"
@@ -52,11 +70,17 @@ log() { echo "[auto-repair] $(ts) $*" >> "$LOG"; }
 read -r -a COMPOSE_ARGS <<< "$COMPOSE_FILES"
 
 print_config() {
+  local app_names caddy_names
+  app_names="$(fleet_name_variants "$APP_CONTAINER" | tr '\n' ' ')"
+  caddy_names="$(fleet_name_variants "$CADDY_CONTAINER" | tr '\n' ' ')"
   cat <<CONFIG
 [auto-repair] Trockenlauf - es wird nichts ausgefuehrt.
   Log:                       $LOG
   App-Container:             $APP_CONTAINER
+  App-Container akzeptiert:  $app_names(neu zuerst, Aufloesung zur Laufzeit)
   Caddy-Container:           $CADDY_CONTAINER
+  Caddy-Container akzeptiert: $caddy_names
+  Compose-Projekt:           $COMPOSE_PROJECT_NAME  (COMPOSE_PROJECT_NAME)
   App-Health (Host):         $APP_HEALTH_URL
   App-Health (Container):    $APP_HEALTH_URL_IN_CONTAINER
   App-Health Weg:            docker inspect (Healthcheck) -> docker exec -> Host-curl
@@ -64,8 +88,8 @@ print_config() {
   App-Verzeichnis:           $APP_DIR
   Compose:                   docker compose ${COMPOSE_ARGS[*]}
   Versuche je Probe:         $CHECKS
-  Reparatur App:             cd $APP_DIR && docker compose ${COMPOSE_ARGS[*]} up -d --force-recreate $APP_CONTAINER
-  Reparatur Caddy:           cd $APP_DIR && docker compose ${COMPOSE_ARGS[*]} up -d --force-recreate $CADDY_CONTAINER
+  Reparatur App:             cd $APP_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose ${COMPOSE_ARGS[*]} up -d --force-recreate $APP_CONTAINER
+  Reparatur Caddy:           cd $APP_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME docker compose ${COMPOSE_ARGS[*]} up -d --force-recreate $CADDY_CONTAINER
 CONFIG
 }
 
@@ -81,6 +105,18 @@ fi
 
 container_running() {
   docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$1"
+}
+
+# F10: Erster LAUFENDER Container aus den akzeptierten Schreibweisen (neu
+# zuerst, Quelle fleet-names.sh). Findet der Watchdog keinen, kommt der
+# kanonische Name zurueck - der Aufrufpfad meldet dann "nicht-vorhanden", statt
+# still nichts zu tun.
+resolve_container() {
+  local canonical="$1" candidate
+  while read -r candidate; do
+    if container_running "$candidate"; then printf '%s\n' "$candidate"; return 0; fi
+  done < <(fleet_name_variants "$canonical")
+  printf '%s\n' "$canonical"
 }
 
 # healthy | unhealthy | starting | none (kein Healthcheck) | missing
@@ -119,7 +155,7 @@ caddy_health() {
 }
 
 compose_recreate() {
-  ( cd "$APP_DIR" && docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate "$1" ) >/dev/null 2>&1 || true
+  ( cd "$APP_DIR" && COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose "${COMPOSE_ARGS[@]}" up -d --force-recreate "$1" ) >/dev/null 2>&1 || true
 }
 
 # --- 1) Ungesunde Container neu starten ---
@@ -133,6 +169,12 @@ fi
 
 # --- 2) App prüfen (nur wenn die App auf diesem Knoten läuft) ---
 APP_STATE="nicht-vorhanden"
+# F10: erst den TATSAECHLICH laufenden Namen aufloesen (neu oder Altname) - sonst
+# bleibt die Reparatur auf einer nicht migrierten Installation stumm.
+APP_CONTAINER="$(resolve_container "$APP_CONTAINER")"
+if [[ "$APP_CONTAINER" != "$FLEET_COMPOSE_PROJECT" ]]; then
+  log "Hinweis: App laeuft noch unter dem Altnamen ($APP_CONTAINER) - Migration: scripts/hetzner/migrate-project-name.sh (docs/HETZNER_DEPLOY.md, F10)"
+fi
 if container_running "$APP_CONTAINER"; then
   if app_health; then
     APP_STATE="ok"
@@ -145,6 +187,7 @@ fi
 
 # --- 3) Caddy prüfen (eigene Diagnose: toter Proxy != kranke App) ---
 CADDY_STATE="nicht-vorhanden"
+CADDY_CONTAINER="$(resolve_container "$CADDY_CONTAINER")"
 if container_running "$CADDY_CONTAINER"; then
   if caddy_health; then
     CADDY_STATE="ok"
@@ -155,4 +198,4 @@ if container_running "$CADDY_CONTAINER"; then
   fi
 fi
 
-log "Check abgeschlossen (unhealthy=${UNHEALTHY:-keine} app=$APP_STATE caddy=$CADDY_STATE)"
+log "Check abgeschlossen (unhealthy=${UNHEALTHY:-keine} app=$APP_STATE caddy=$CADDY_STATE app-container=$APP_CONTAINER caddy-container=$CADDY_CONTAINER projekt=$COMPOSE_PROJECT_NAME)"
