@@ -44,6 +44,7 @@ import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
 import { createFleetWiring } from './server/fleetWiring.ts';
 import { resolveRateLimitIdentity, SESSION_IDENTITY_HEADER } from './server/rateLimitKeys.ts';
 import { buildCspPolicy, buildReportingHeaders, CSP_REPORT_PATH } from './server/csp.ts';
+import { isAppActivityRequest } from './server/idleSignal.ts';
 import { registerSecurityRoutes } from './server/routes/securityRoutes.ts';
 import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
 import { registerVisualRoutes } from './server/routes/visualRoutes.ts';
@@ -121,9 +122,17 @@ const metrics = {
   // der Server aggregiert für Prometheus/JSON-Metriken).
   telemetryXruns: 0,
   telemetryXrunsBySource: {} as Record<string, number>,
+  /**
+   * F9-Fix: Zeitpunkt des letzten ERFOLGREICHEN App-Requests (< 400) auf einem
+   * NICHT-Monitoring-Pfad. Das ist die dritte Saeule des Idle-Shutdown-Signals
+   * neben den offenen Sockets und `/api/online`; Monitoring (health/metrics/
+   * online/audit/idle-signal) darf die Instanz nicht selbst wachhalten.
+   */
+  lastAppActivityAt: 0,
 };
 
-// Aktive Socket.io-Verbindungen (User-Sessions) für /api/online + Idle-Shutdown.
+// Aktive Socket.io-Verbindungen: der Messwert und der Sweep liegen in
+// server/realtime.ts + server/socketLiveness.ts (F8) — hier steht nichts mehr.
 
 // P4-2: Server-seitiges Audit-Log (Rollenwechsel, Lock-/State-Events, RBAC-Denials).
 const serverAuditLog: { ts: string; userId: string; role: string; action: string; target?: string; ok: boolean }[] = [];
@@ -173,6 +182,12 @@ app.use((req, res, next) => {
     metrics.latencyMsSum += durationMs;
     metrics.latencyHistogram.observe(durationMs);
     if (res.statusCode >= 400) metrics.errors += 1;
+    // F9-Fix: letzte ECHTE App-Nutzung merken (Erfolg auf einem Nicht-Monitoring-
+    // Pfad). Der Idle-Shutdown des Hetzner-Timers haengt sonst an Signalen, die
+    // strukturell immer 0 sind (Detail/Begruendung: server/idleSignal.ts).
+    if (res.statusCode < 400 && isAppActivityRequest(req.method, req.originalUrl || req.url || '')) {
+      metrics.lastAppActivityAt = Date.now();
+    }
   });
   next();
 });
@@ -273,6 +288,14 @@ const alertWebhookTokenEnabled = ALERT_WEBHOOK_TOKEN.length >= 16;
 // P0-Security: Production läuft NIE ungeschützt. Fehlt der Studio-Token in
 // Produktion, bleibt die API fail-closed (nur /api/health offen) statt fail-open.
 const isProductionEnv = process.env.NODE_ENV === 'production';
+/**
+ * F8-Fix: Zweites Schloss des Session-Reset-Hooks. `NODE_ENV !== 'production'`
+ * allein genuegte nicht — jeder Dev-/Test-Knoten mit Studio-Token hatte den Hook
+ * offen. Ohne `AUDIOMONASTRY_TEST_RESET=1` ist die Route in JEDER Umgebung
+ * abwesend (404), in Produktion unabhaengig davon (siehe server/routes/
+ * sessionRoutes.ts und tests/sessionResetRoutes.test.ts).
+ */
+const testResetEnabled = !isProductionEnv && process.env.AUDIOMONASTRY_TEST_RESET === '1';
 const devNoAuthExplicit = process.env.AUDIOMONASTRY_DEV_NO_AUTH === '1' && !isProductionEnv;
 const testNoAuth = !isProductionEnv && (process.env.VITEST === 'true' || process.env.NODE_ENV === 'test');
 const studioAuthOpen = !studioTokenEnabled && (devNoAuthExplicit || testNoAuth);
@@ -368,8 +391,12 @@ app.use('/api', async (req, res, next) => {
   if (
     scrapeTokenEnabled &&
     req.method === 'GET' &&
-    (req.path === '/metrics' || req.path === '/online')
+    (req.path === '/metrics' || req.path === '/online' || req.path === '/idle-signal')
   ) {
+    // F9-Fix: `/idle-signal` kommt dazu — der Idle-Timer ist ein Maschinen-Client
+    // (systemd, kein Cookie) und braucht das Signal genau dann, wenn niemand
+    // angemeldet ist. Ohne diese Ausnahme waere die Antwort ein 401 und der Fix
+    // haette denselben blinden Fleck wie das alte Skript.
     const headerToken = String(req.headers?.['x-scrape-token'] ?? '');
     const authHeader = String(req.headers?.authorization ?? '');
     const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -557,6 +584,11 @@ registerOpsRoutes(app, {
   getStemActiveJobs,
   metrics,
   serverAuditLog,
+  // F9: Die dritte Saeule des Idle-Signals — Zeitpunkt der letzten echten
+  // App-Nutzung (Monitoring-Pfade zaehlen nicht, siehe server/idleSignal.ts).
+  getLastAppActivityMs: () => (metrics.lastAppActivityAt > 0 ? metrics.lastAppActivityAt : null),
+  // F8: Geister-Diagnose im Ops-JSON (aus dem letzten Socket-Sweep).
+  getSocketLiveness: () => realtimeHub?.socketLiveness() ?? null,
 });
 
 // ARCH-P2-002: Die Media-/Info-Routen liegen in server/routes/mediaRoutes.ts
@@ -666,12 +698,23 @@ registerAdminRoutes(app, {
 // deshalb als Getter uebergeben wird, nicht als Wertkopie.
 registerSessionRoutes(app, {
   isProductionEnv,
+  // F8: zweites Schloss (AUDIOMONASTRY_TEST_RESET=1) — siehe Definition oben.
+  testResetEnabled,
   studioAccessToken: STUDIO_ACCESS_TOKEN,
   tokenFromRequest: studioTokenFromRequest,
   safeTokenEqual,
   newSession: () => new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS }),
+  // F8: Der Rueck-Lesebeleg des Resets braucht die LIVE-Sicht (nach dem
+  // Austausch) — eine Wertkopie wuerde den alten Zustand beschreiben.
+  getSession: () => sessionRuntime.session,
   replaceSession: (session) => {
     sessionRuntime.setSession(session);
+  },
+  // F8: Der frische Zustand wird sofort persistiert. Ohne diesen Schritt koennte
+  // ein Neustart unmittelbar nach dem Reset den ALTEN Zustand aus Redis/Snapshot
+  // laden — der Reset waere dann nur bis zum naechsten Start gueltig.
+  persistSession: () => {
+    sessionRuntime.persist();
   },
   // Der Save-Timer liegt in der Laufzeit; `stop()` bricht ihn ab. Frueher stand
   // hier eine eigene Kopie der Timer-Verwaltung - die zweite Stelle war genau

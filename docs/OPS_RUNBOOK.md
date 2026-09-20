@@ -734,3 +734,103 @@ Rack — das Menü liegt direkt im Rack.
 `POST /api/stop` **löscht** alle Server und Floating-IPs (danach 0 €/Monat für Compute;
 die Snapshots bleiben). Vorher: `POST /api/refresh-snapshots`, damit der nächste Wake
 den aktuellen Stand enthält — das ist erst nach dem `snapshotRoleOf`-Fix auch schnell.
+
+## Session-Reset im Testlauf und das Idle-Shutdown-Signal lesen (F8/F9 — 2026-09-20)
+
+Beide Punkte kommen aus `docs/FIXPLAN_2026-09-20_externer_apptest.md`, F8 und F9.
+Kurzform der Befunde: Der Reset-Hook war ohne expliziten Schalter aktiv und belegte
+seine Wirkung nicht; `/api/online` meldete nach abgebrochenen Verbindungen 3 Clients
+bei 1 echten. Das Idle-Signal des Timers hingegen war **strukturell immer 0**
+(`curl http://127.0.0.1/api/online` → Caddy-308 bzw. 401 ohne Token; beides endete in
+der 0 des `awk`-END-Blocks, Exit-Code 0 — der Fehlschlag war unsichtbar).
+
+### 1. Session-Reset (nur Testlauf)
+
+Zwei Schlösser, beide nötig: `NODE_ENV != production` **und** `AUDIOMONASTRY_TEST_RESET=1`.
+In Produktion antwortet der Pfad wie ein nicht existierender (404), auch mit Schalter
+und gültigem Token. Zusätzlich ist ein konfiguriertes Studio-Token Pflicht (401).
+
+```bash
+# App fuer den Testlauf (Startzustand isolierbar):
+AUDIOMONASTRY_TEST_RESET=1 STUDIO_ACCESS_TOKEN=<token> npm run dev
+
+# Zustand lesen (gleiche Schranke wie der Reset):
+curl -s -H "x-studio-token: <token>" http://localhost:8080/api/session/state
+#   → {"sessionInstanceId":"session-…","revision":0,"modules":{},"locks":[],…}
+
+# Zuruecksetzen und die Wirkung belegen (Zahlen werden aus dem NEUEN Zustand gelesen):
+curl -s -X POST -H "x-studio-token: <token>" http://localhost:8080/api/session/reset
+#   → {"status":"reset","sessionInstanceId":"session-…","previous":{"revision":7,"moduleStates":2,"locks":1},
+#      "revision":0,"moduleStates":0,"locks":0}
+```
+
+Lesart: `sessionInstanceId` **muss** sich nach dem Reset ändern (eine „Revision 0" allein
+kann auch ein frisch gestarteter Prozess sein); `previous` belegt den Zustand davor.
+Der E2E-Helfer (`tests/e2e/helpers/studioAuth.ts`) ruft denselben Pfad und verträgt 404
+gegen `E2E_BASE_URL` (Produktion) weiterhin — dort bleibt der frische Zustand beim
+**Container-Neustart** der Weg der Wahl.
+
+### 2. Idle-Shutdown-Signal
+
+Der systemd-Timer (`audiomonastry-idle-shutdown.timer`, Installation über
+`scripts/hetzner/install-idle-shutdown.sh`) fragt **die App**:
+
+```bash
+# Menschenlesbar (JSON):
+curl -s -H "x-scrape-token: <token>" "http://127.0.0.1:8080/api/idle-signal"
+# Maschinenlesbar (genau die Log-Zeile; Header x-idle-verdict / x-idle-shutdown):
+curl -s -H "x-scrape-token: <token>" "http://127.0.0.1:8080/api/idle-signal?format=text"
+```
+
+Der Timer liefert dabei nur seine **Host-Fakten** mit (`openSockets`, `sshSessions`,
+`load1`, `busyContainers`, `thresholdSec` aus `IDLE_MINUTES`); die App kennt, was der Host
+nicht wissen kann: aktive Socket-Verbindungen und den letzten **erfolgreichen** App-Request
+(`/api/health`, `/api/metrics`, `/api/online`, `/api/audit` und der Idle-Abruf selbst zählen
+NICHT — sonst hielte sich die Instanz über Scrapes selbst wach). Regeln:
+`server/idleSignal.ts`; Tests: `tests/idleSignal.test.ts`.
+
+Logzeile im Betrieb (`/var/log/audiomonastry-idle-shutdown.log`):
+
+```
+[idle-check] 2026-09-20T17:59:00.900Z ONLINE=0 OPEN_SOCKETS=0 SSH=0 LOAD1=0 BUSY_CONTAINERS=0
+  LAST_ACTIVITY=2026-09-20T17:58:23.179Z ACTIVITY_AGE=38s IDLE_FOR=4s THRESHOLD=3s
+  VERDICT=idle SHUTDOWN=yes REASON="idle seit 4s >= Schwelle 3s"
+```
+
+| Feld | Bedeutung |
+|---|---|
+| `ONLINE` | aktive Socket-Clients (Registry-Wahrheit, F8) |
+| `OPEN_SOCKETS` / `SSH` / `LOAD1` / `BUSY_CONTAINERS` | Host-Fakten, die der Timer meldet |
+| `LAST_ACTIVITY` / `ACTIVITY_AGE` | letzter erfolgreicher App-Request und sein Alter |
+| `IDLE_FOR` / `THRESHOLD` | bisherige Idle-Dauer und die Schwelle |
+| `VERDICT` | `active` (Nutzung messbar), `idle` (keine Nutzung), `unknown` (Signal nicht lesbar) |
+| `SHUTDOWN` | `yes` nur bei `idle` UND erreichter Schwelle |
+
+**`VERDICT=unknown` ist fail-safe: es wird NICHT heruntergefahren.** Die Zeile nennt
+dann `SIGNAL=unavailable HTTP=<code>`; `308` heißt „`IDLE_CHECK_URL` zeigt auf Caddy
+statt auf die App (Port 8080)", `401` heißt „Token fehlt". Der Timer läuft als
+Maschinen-Client ohne Cookie; sein Token liegt in
+`/etc/audiomonastry/idle-check.env` (Modus 0600, wird vom Installer angelegt und
+übernimmt einen vorhandenen `SCRAPE_TOKEN`/`STUDIO_ACCESS_TOKEN` aus der App-`.env`).
+Ohne Token läuft der Check fail-safe — es wird nichts heruntergefahren.
+
+```bash
+# Trockenlauf (schreibt nur ins Log, kein Shutdown). IDLE_MINUTES darf fuer
+# Probelaeufe ein Bruchteil sein (0.05 = 3 s Schwelle):
+IDLE_MINUTES=0.05 bash /usr/local/bin/audiomonastry-idle-check.sh --dry-run
+# Host-Fakten allein (Diagnose, kein Signal, keine Entscheidung):
+bash /usr/local/bin/audiomonastry-idle-check.sh --print-facts
+# Unit-Inhalt offline pruefen (kein Installieren, kein root):
+bash scripts/hetzner/install-idle-shutdown.sh --print-units
+```
+
+Reproduktion des alten Befunds (lokal, beide Pfade ergeben 0 bei Exit-Code 0):
+
+```bash
+curl -fsS http://127.0.0.1/api/online | awk -F'"online":' '{n=$2+0} END{print n+0}'   # 308 → 0
+curl -fsS http://127.0.0.1:8080/api/online | awk -F'"online":' '{n=$2+0} END{print n+0}' # 401 → 0
+```
+
+Zum Mitlesen der Socket-Seite: `/api/online` liefert jetzt zusätzlich `ghosts`,
+`idleSockets` und `unattachedSockets` aus dem letzten Socket-Sweep — nicht-null-Werte
+zeigen Reste abgebrochener Verbindungen, die der Sweep im nächsten Intervall entfernt.

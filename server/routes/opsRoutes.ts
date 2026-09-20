@@ -4,19 +4,42 @@
  *   GET  /api/health       → Liveness/Readiness (keine Secrets)
  *   GET  /api/metrics      → Prometheus- und JSON-Metriken
  *   GET  /api/online       → Anzahl aktiver Socket-Verbindungen
+ *   GET  /api/idle-signal  → Idle-/Shutdown-Signal fuer den Hetzner-Timer (F9)
  *   GET  /api/audit        → Audit-Log (Rollenwechsel, Lock-Events, RBAC-Denials)
  *   POST /api/telemetry    → Client-Telemetrie (Xruns, Latenz, Events)
  *   POST /api/alerts       → Alert-Webhook (strukturierte Warnungen)
- * 
+ *
  * Zwei Zaehler bleiben in server.ts, weil Socket- bzw. Stem-Lebenszyklus sie dort
  * schreiben; sie werden als Getter gereicht (nicht als Wertkopie, sonst wuerde die
  * Anzeige einfrieren): getActiveSocketConnections, getStemActiveJobs. metrics und
  * serverAuditLog sind Objekt/Array und werden als Referenz geteilt.
- * 
+ *
  * Der Code wurde 1:1 verschoben; die Einrueckung ist die einzige Aenderung.
+ *
+ * --- F8 (online) -----------------------------------------------------------------
+ * `getActiveSocketConnections` liefert jetzt die Anzahl der im Socket.io-Registry
+ * WIRKLICH verbundenen Sockets (server/socketLiveness.ts). Der fruehere
+ * freistehende Zaehler meldete nach abgebrochenen Verbindungen 3 Clients bei 1
+ * echten (FIXPLAN F8); ein abgeleiteter Messwert kann strukturell nicht driften.
+ *
+ * --- F9 (idle-signal) ------------------------------------------------------------
+ * Der Timer auf dem Knoten fragte bisher `/api/online` auf Port 80 (Caddy) ab —
+ * Klartext-http bekommt dort 308, ohne Token 401; beides endete in der 0 des
+ * awk-END-Blocks. Das Signal war deshalb strukturell immer 0. Der neue Endpunkt
+ * liefert EINE Entscheidung aus echten Zahlen (aktive Sockets, letzter
+ * erfolgreicher App-Request, Host-Fakten des Timers) plus den fertigen Log-Text;
+ * die Regeln stehen rein und testbar in server/idleSignal.ts.
  */
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
 import { formatLatencyHistogram } from '../../src/core/observability/latencyHistogram';
+import {
+  createIdleWatcher,
+  parseIdleHostFacts,
+  resolveIdleThresholdMs,
+  summarizeIdleResult,
+  type IdleWatcher,
+} from '../idleSignal.ts';
+import type { SocketLivenessEvaluation } from '../socketLiveness.ts';
 import { readBuildInfo } from '../buildInfo';
 import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
 import express from 'express';
@@ -58,11 +81,32 @@ export interface OpsDeps {
   getStemActiveJobs: () => number;
   metrics: OpsMetrics;
   serverAuditLog: AuditLogEntry[];
+  /**
+   * F9: Zeitpunkt des letzten ERFOLGREICHEN App-Requests (ms epoch) — die dritte
+   * Saeule des Idle-Signals neben den Sockets. `null` = seit Prozessstart keiner.
+   * Monitoring-Pfade (health/metrics/online/audit) zaehlen bewusst NICHT
+   * (IDLE_MONITORING_PATHS in server/idleSignal.ts).
+   */
+  getLastAppActivityMs?: () => number | null;
+  /** F8: Ergebnis des letzten Socket-Sweeps (Geister-Diagnose im Idle-Signal). */
+  getSocketLiveness?: () => SocketLivenessEvaluation | null;
 }
 
 
 export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
-  const { STEM_MAX_JOBS, getActiveSocketConnections, getStemActiveJobs, metrics, serverAuditLog } = deps;
+  const {
+    STEM_MAX_JOBS,
+    getActiveSocketConnections,
+    getStemActiveJobs,
+    metrics,
+    serverAuditLog,
+    getLastAppActivityMs,
+    getSocketLiveness,
+  } = deps;
+  // F9: Der Idle-Watcher lebt mit der Route (eine Instanz je Prozess). Er haelt
+  // NUR den Zeitpunkt, seit dem keine Nutzung mehr messbar ist — bewusst kein
+  // Zaehlerfile auf dem Knoten (ein Ort weniger, der driften kann).
+  const idleWatcher: IdleWatcher = createIdleWatcher();
   // --- Health check ---
   // PROD-P0-003: zusaetzlich die Build-Version (kein Secret, additiv). Damit ist
   // nach einem Deploy/Rollback von aussen pruefbar, WELCHE Version laeuft.
@@ -179,8 +223,65 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   });
 
   // --- Aktive User (Socket.io-Verbindungen) für Idle-Auto-Shutdown ------------
+  // F8-Fix: `online` ist die Anzahl der im Socket.io-Registry wirklich
+  // verbundenen Sockets (abgeleitet, nicht gezaehlt) — Geister aus abgebrochenen
+  // Verbindungen koennen den Wert nicht mehr nach oben ziehen. `ghosts`/`idle`
+  // sind der letzte Sweep-Stand (Diagnose, additiv; keine Secrets).
   app.get('/api/online', (_req, res) => {
-    res.json({ online: Math.max(0, getActiveSocketConnections()) });
+    const liveness = getSocketLiveness?.() ?? null;
+    res.json({
+      online: Math.max(0, getActiveSocketConnections()),
+      ghosts: liveness?.ghosts.length ?? 0,
+      idleSockets: liveness?.idle.length ?? 0,
+      unattachedSockets: liveness?.unattached.length ?? 0,
+    });
+  });
+
+  // --- F9: Idle-/Shutdown-Signal fuer den Hetzner-Timer ------------------------
+  // Der Timer auf dem Knoten liefert seine Host-Fakten als Query-Parameter
+  // (offene TCP-Verbindungen, SSH-Sitzungen, Load, beschaeftigte Container) und
+  // optional seine Schwelle (`thresholdSec` aus IDLE_MINUTES); die App liefert
+  // ihre eigenen Fakten (aktive Sockets, letzter erfolgreicher App-Request).
+  // Die Antwort enthaelt die ENTSCHEIDUNG plus `logLine` — der Timer schreibt
+  // damit ECHTE Zahlen und Zeitstempel ins Log statt eines strukturellen `ONLINE=0`.
+  // Auth: Scrape-Token (Maschinen-Client, siehe server.ts) oder Studio-Token.
+  app.get('/api/idle-signal', (req, res) => {
+    const query = (req.query ?? {}) as Record<string, unknown>;
+    const host = parseIdleHostFacts(query);
+    const startedAtMs = Number(metrics.startedAt ?? Date.now());
+    const lastActivityAtMs = getLastAppActivityMs?.() ?? null;
+    const result = idleWatcher.evaluate({
+      nowMs: Date.now(),
+      onlineSockets: Math.max(0, getActiveSocketConnections()),
+      openSockets: host.openSockets,
+      sshSessions: host.sshSessions,
+      load1: host.load1,
+      busyContainers: host.busyContainers,
+      lastActivityAtMs,
+      startedAtMs,
+      idleThresholdMs: resolveIdleThresholdMs(host.thresholdSeconds),
+      signalOk: true,
+    });
+    res.setHeader('Cache-Control', 'no-store');
+    // Maschinenlesbar fuer den Timer (dieselben Werte wie im Text/JSON):
+    res.setHeader('X-Idle-Verdict', result.evaluation.verdict);
+    res.setHeader('X-Idle-Shutdown', result.decision.shutdown ? 'yes' : 'no');
+    // `format=text` = genau die Log-Zeile. Der Shell-Timer braucht damit keinen
+    // JSON-Parser auf dem Knoten (jq ist dort nicht garantiert) und schreibt
+    // trotzdem die Zahlen der App ins Log — eine Quelle, kein Nachbau.
+    const wantsText = String(query.format ?? '').toLowerCase() === 'text'
+      || String(req.headers.accept ?? '').includes('text/plain');
+    if (wantsText) {
+      res.type('text/plain; charset=utf-8').send(`${result.logLine}\n`);
+      return;
+    }
+    res.json({
+      status: 'ok',
+      ...summarizeIdleResult(result, {
+        onlineSockets: Math.max(0, getActiveSocketConnections()),
+        socketEvaluation: getSocketLiveness?.() ?? null,
+      }),
+    });
   });
 
   // --- P4-2: Server-Audit-Log (Rollenzuweisung, Plugin-State, RBAC-Denials) ----
