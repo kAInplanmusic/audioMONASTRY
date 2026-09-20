@@ -37,6 +37,8 @@ import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { InstrumentSynth } from '../audio/instrumentSynth';
 import { SpatialBus } from '../audio/spatialBus';
+import { ChannelStripState } from '../audio/channelStripState';
+import { SequencerState } from '../audio/sequencerState';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -53,7 +55,6 @@ import { defaultOptionalDspPreset } from '../core/dsp/dspPresets';
 import type { V2SynthVoice } from '../core/audio/live/V2SinkEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
 import { checkRoutingConnection, routingTrackToChannel } from '../core/audio/routing/routingConfig';
-import { normalizeNotes, normalizeSteps } from '../core/audio/state/sequenceUtils';
 import { AutomationCoalescer } from '../core/audio/state/automationCoalescer';
 import { exportV2SessionState, parseV2SessionState, type V2SessionGraphState } from '../core/session/v2SessionState';
 import type { IAudioNode } from '../core/audio/types';
@@ -171,21 +172,28 @@ class AudioEngine {
    * Echte per-Kanal-Mischung: Jeder Track (channel1..8) hat eine eigene
    * Gain- und Pan-Stufe. Damit steuern die Mischpult-Fader tatsächlich die
    * Audiokette (statt nur nachbildende UI-Werte).
+   *
+   * AUDIO-P1-002: Der Kanalzug-Zustand liegt jetzt in `ChannelStripState`; die
+   * Tone-Erzeugung der Knoten wird hereingereicht (Muster wie `SpatialBus`).
    */
-  private channelGains: Partial<Record<TrackType, Tone.Volume>> = {};
-  private channelPans: Partial<Record<TrackType, Tone.Panner>> = {};
-  // #DJ: Pro-Kanal 3-Band-EQ (Low/Mid/High) für DJ-Mischpult-Regler.
-  private channelEQs: Partial<Record<TrackType, { low: Tone.Filter; mid: Tone.Filter; high: Tone.Filter }>> = {};
-  /** F1: Pre-Fader-Eingang je Kanal – alle Quellen speisen hier ein, damit
-   *  Fader/EQ/Pan und Cue/PFL real wirken. */
-  private channelInputs: Partial<Record<TrackType, Tone.Gain>> = {};
+  private readonly channelStrip = new ChannelStripState({
+    createNodes: () => ({
+      input: new Tone.Gain(1),
+      gain: new Tone.Volume(0),
+      low: new Tone.Filter(220, 'lowshelf'),
+      mid: new Tone.Filter(1000, 'peaking'),
+      high: new Tone.Filter(4000, 'highshelf'),
+      pan: new Tone.Panner(0),
+    }),
+    now: () => this.ctx?.currentTime ?? Tone.now(),
+  });
 
   private samplePlayers: Record<string, Tone.Player> = {};
   // AUDIO-P1-002: Preview/Track-Load in eigener Fassade (Tone-Erzeugung injiziert).
   private readonly samplePreview = new SamplePreview({
     ensureInitialized: () => this.ensureInitialized(),
     ensureChannelNode: (track) => this.ensureChannelNode(track),
-    getChannelInput: (track) => (this.channelInputs[track] as unknown as AudioNode | undefined) ?? null,
+    getChannelInput: (track) => (this.channelStrip.inputNode(track) as unknown as AudioNode | undefined) ?? null,
     canLoadTrack: (track) => this.canLoadTrack(track),
     getSamplePlayer: (track) => this.samplePlayers[track] ?? null,
     setSamplePlayer: (track, player) => { this.samplePlayers[track] = player as unknown as Tone.Player; },
@@ -223,38 +231,35 @@ class AudioEngine {
     channel9: null, channel10: null
   };
 
-  private patterns: Record<TrackType, boolean[]> = {
-    channel1: Array(16).fill(false), channel2: Array(16).fill(false),
-    channel3: Array(16).fill(false), channel4: Array(16).fill(false),
-    channel5: Array(16).fill(false), channel6: Array(16).fill(false),
-    channel7: Array(16).fill(false), channel8: Array(16).fill(false),
-    channel9: Array(16).fill(false), channel10: Array(16).fill(false)
-  };
-  private mutedStems: Record<TrackType, boolean> = {
-    channel1: false, channel2: false, channel3: false, channel4: false,
-    channel5: false, channel6: false, channel7: false, channel8: false,
-    channel9: false, channel10: false
-  };
-
-  private synthNotes: number[] = Array(16).fill(0);
   public currentScaleName: keyof typeof MUSIC_SCALES = 'A Minor Pentatonic';
   public currentStep = 0;
   /** Schrittanzahl des Sequencers (16 oder 32 Steps). */
   public stepCount: 16 | 32 = 16;
   public onStepUpdate: (step: number) => void = () => {};
   public onBeatCallback: (step: number) => void = () => {};
-  private stepListeners = new Set<(step: number) => void>();
+
+  /**
+   * AUDIO-P1-002: Sequencer-/Pattern-Zustand (Patterns, synthNotes, Mute-Flags,
+   * Step-Listener) liegt in `SequencerState`; Step-/Transportform bleibt hier.
+   * Der V2-Sink und der öffentliche `onStepUpdate`-Callback werden hereingereicht.
+   */
+  private readonly sequencer = new SequencerState(
+    {
+      setLivePattern: (track, pattern) => { this.v2LiveSink.setPattern(track, pattern); },
+      getStepCount: () => this.stepCount,
+      getCurrentStep: () => this.currentStep,
+    },
+    (step) => this.onStepUpdate(step),
+  );
 
   /** Registriert einen Step-Listener; liefert eine Deregistrierungs-Funktion. */
   public addStepListener(cb: (step: number) => void): () => void {
-    this.stepListeners.add(cb);
-    return () => { this.stepListeners.delete(cb); };
+    return this.sequencer.addStepListener(cb);
   }
 
   /** Verteilt einen Step an den Legacy-Callback und alle registrierten Listener. */
   private emitStep(step: number): void {
-    this.onStepUpdate(step);
-    this.stepListeners.forEach((l) => l(step));
+    this.sequencer.emitStep(step);
   }
 
   // Lookahead Scheduler (P2-1: 8–15 ms adaptiv; Worklet-Clock ist Primärquelle)
@@ -354,8 +359,6 @@ class AudioEngine {
   private synthGraphPromise: Promise<void> | null = null;
   /** P0-2: Aktive Plugin-IDs (Audio-Einspeisung). */
   private activePluginIds = new Set<string>();
-  /** Letzte Nutzer-Gains je Kanal – für sanftes OFF/ON (D2-hybrid). */
-  private channelRestoreGain: Partial<Record<TrackType, number>> = {};
 
   // Dropout-/Underrun-Zähler aus dem Audio-Thread (analyzerProcessor).
   public dropoutCount = 0;
@@ -549,10 +552,10 @@ class AudioEngine {
     this.ensureChannelNode('channel2');
     this.ensureChannelNode('channel3');
     this.ensureChannelNode('channel7');
-    this.channelGains.channel1!.volume.value = 0.8;
-    this.channelGains.channel2!.volume.value = 0.6;
-    this.channelGains.channel3!.volume.value = 0.7;
-    this.channelGains.channel7!.volume.value = 0.8;
+    this.channelStrip.setGainDb('channel1', 0.8);
+    this.channelStrip.setGainDb('channel2', 0.6);
+    this.channelStrip.setGainDb('channel3', 0.7);
+    this.channelStrip.setGainDb('channel7', 0.8);
 
     // Apply routing.json only now that all audio nodes exist.
     await this.applyRoutingConfig();
@@ -590,35 +593,17 @@ class AudioEngine {
    * ist; die synthetischen Stimmen (kick/hat/clap/bass) laufen immer.
    */
   public ensureDemoPattern(): void {
-    // Nur befüllen, wenn noch nichts programmiert wurde.
-    const hasContent = (['channel1','channel2','channel3','channel7','channel8'] as TrackType[])
-      .some(t => this.patterns[t].some(Boolean));
-    if (hasContent) return;
-
-    // klassischer Industrieller 4-on-the-Floor-Beat (16tel)
-    this.patterns.channel1 = [true,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false];          // kick
-    this.patterns.channel2 = [false,false,true,false,false,false,true,false,false,false,true,false,false,false,true,false];          // hat (offbeat)
-    this.patterns.channel3 = [false,false,false,false,true,false,false,false,false,false,false,false,true,false,false,false];       // clap (backbeat)
-    this.patterns.channel7 = [true,false,true,false,false,true,false,true,true,false,false,true,false,true,false,true];          // bass-Groove
-    this.patterns.channel8 = [true,false,false,false,false,false,true,false,true,false,false,false,false,false,true,false];          // lead (nur falls Sample)
-    this.synthNotes = [0,4,0,7, 3,7,0,5, 0,3,0,7, 4,0,3,7];
-    this.normalizeAllPatterns();
+    // Nur befüllen, wenn noch nichts programmiert wurde (Logik in SequencerState).
+    const filled = this.sequencer.ensureDemoPattern();
+    if (!filled) return;
     this.emitStep(this.currentStep);
-  }
-
-  /** Bringt alle Patterns + synthNotes auf die aktuelle Schrittanzahl. */
-  private normalizeAllPatterns(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      this.patterns[t] = normalizeSteps(this.patterns[t] ?? [], this.stepCount);
-    });
-    this.synthNotes = normalizeNotes(this.synthNotes, this.stepCount);
   }
 
   /** Schaltet den Sequencer zwischen 16 und 32 Steps um (Patterns werden gepolstert). */
   public setStepCount(count: 16 | 32): void {
     if (count !== 16 && count !== 32) return;
     this.stepCount = count;
-    this.normalizeAllPatterns();
+    this.sequencer.normalizeAll(count);
     this.currentStep = this.currentStep % count;
     this.v2LiveSink.updateTransport({ stepCount: count });
     this.syncV2PatternsToLiveSink();
@@ -646,28 +631,22 @@ class AudioEngine {
 
   /** Kanal-Fader als lineares Gain (0..1.5) zurücklesen. */
   public getChannelGain(track: TrackType): number {
-    const db = this.channelGains[track]?.volume.value;
-    if (db === undefined || db === -Infinity) return 0;
-    return Math.pow(10, db / 20);
+    return this.channelStrip.getGain(track);
   }
 
   /** Kanal-Pan (-1..1) zurücklesen. */
   public getChannelPan(track: TrackType): number {
-    return this.channelPans[track]?.pan.value ?? 0;
+    return this.channelStrip.getPan(track);
   }
 
   /** Setzt einen einzelnen Drum-Step. */
   public setStep(track: TrackType, step: number, on: boolean): void {
-    if (step < 0 || step >= this.stepCount) return;
-    this.patterns[track][step] = on;
-    this.v2LiveSink.setPattern(track, this.patterns[track]);
+    this.sequencer.setStep(track, step, on);
   }
 
   /** Setzt das Muster eines Kanals (16 oder 32 Steps). */
   public setPattern(track: TrackType, steps: boolean[]): void {
-    if (!steps || (steps.length !== 16 && steps.length !== 32)) return;
-    this.patterns[track] = normalizeSteps(steps, this.stepCount);
-    this.v2LiveSink.setPattern(track, this.patterns[track]);
+    this.sequencer.setPattern(track, steps);
   }
 
   /**
@@ -679,20 +658,7 @@ class AudioEngine {
     synthNotes?: number[],
     bpm?: number
   ): void {
-    const keys: TrackType[] = [
-      'channel1','channel2','channel3','channel4',
-      'channel5','channel6','channel7','channel8',
-      'channel9','channel10',
-    ];
-    for (const k of keys) {
-      const arr = patterns?.[k];
-      if (arr && Array.isArray(arr) && (arr.length === 16 || arr.length === 32)) {
-        this.patterns[k] = normalizeSteps(arr, this.stepCount);
-      }
-    }
-    if (synthNotes && Array.isArray(synthNotes) && (synthNotes.length === 16 || synthNotes.length === 32)) {
-      this.synthNotes = normalizeNotes(synthNotes, this.stepCount);
-    }
+    this.sequencer.applyLoadedPatterns(patterns, synthNotes);
     if (bpm && Number.isFinite(bpm) && bpm > 20 && bpm < 300) {
       Tone.Transport.bpm.value = bpm;
     }
@@ -730,7 +696,7 @@ class AudioEngine {
         routingConfig.tracks.forEach(trackConfig => {
           const ch = routingTrackToChannel(trackConfig.id);
           if (ch && Array.isArray(trackConfig.patterns)) {
-            this.patterns[ch] = normalizeSteps(trackConfig.patterns as boolean[], this.stepCount);
+            this.sequencer.applyRawPattern(ch, trackConfig.patterns as boolean[]);
           }
         });
       }
@@ -1065,7 +1031,7 @@ class AudioEngine {
   /** M-2: Kanal weich auf MAIN faden (Fade-in zu Ziel-DB, Default 0 dB). */
   public fadeChannelToMain(track: TrackType, rampSec = 4, targetDb = 0): boolean {
     this.ensureInitialized();
-    const g = this.channelGains[track];
+    const g = this.channelStrip.gainNode(track);
     if (!g) return false;
     const v = Number.isFinite(targetDb) ? Math.max(-80, Math.min(12, targetDb)) : 0;
     try { g.volume.setTargetAtTime(v, Tone.now(), Math.max(0.05, rampSec)); return true; } catch { return false; }
@@ -1086,32 +1052,17 @@ class AudioEngine {
    * #DJ: zusätzlich 3-Band-EQ (Low-Shelf → Peaking Mid → High-Shelf) inline.
    */
   private ensureChannelNode(track: TrackType): void {
-    if (!this.channelGains[track]) {
-      // Phase 9: reine Zustandsträger – die hörbare Verdrahtung (Gain/Pan/EQ)
-      // läuft über den V2-Graph im v2LiveSink. Keine Tone-No-Op-Ketten mehr.
-      const input = new Tone.Gain(1);
-      const g = new Tone.Volume(0);
-      const low = new Tone.Filter(220, 'lowshelf');
-      const mid = new Tone.Filter(1000, 'peaking');
-      const high = new Tone.Filter(4000, 'highshelf');
-      low.gain.value = 0; mid.gain.value = 0; high.gain.value = 0;
-      const p = new Tone.Panner(0);
-      this.channelEQs[track] = { low, mid, high };
-      this.channelInputs[track] = input;
-      this.channelGains[track] = g;
-      this.channelPans[track] = p;
-    }
+    // Phase 9: reine Zustandsträger – die hörbare Verdrahtung (Gain/Pan/EQ)
+    // läuft über den V2-Graph im v2LiveSink. Keine Tone-No-Op-Ketten mehr.
+    // Die Knoten erzeugt `ChannelStripState` (Tone-Fabrik hereingereicht).
+    this.channelStrip.ensure(track);
   }
 
   /** #DJ: Pro-Kanal 3-Band-EQ. gain in dB, band: 'low'|'mid'|'high'. */
   public setChannelEQ(track: TrackType, band: 'low' | 'mid' | 'high', gain: number): void {
     this.ensureInitialized();
     this.ensureChannelNode(track);
-    const eq = this.channelEQs[track];
-    if (!eq) return;
-    // F6-Fix: NaN/Inf abfangen (Math.max/min allein lassen NaN durch).
-    const v = Number.isFinite(gain) ? Math.max(-24, Math.min(12, gain)) : 0;
-    try { eq[band].gain.rampTo(v, 0.03); } catch { /* ignore */ }
+    this.channelStrip.setEq(track, band, gain);
   }
 
   /** #DJ: Master-Gain-Fader (0..1). */
@@ -1148,9 +1099,7 @@ class AudioEngine {
     if (channels.length > 0) {
       channels.forEach((ch) => {
         this.ensureChannelNode(ch);
-        const restore = this.channelRestoreGain[ch] ?? 1;
-        const db = restore <= 0.001 ? -Infinity : 20 * Math.log10(restore);
-        try { this.channelGains[ch]!.volume.rampTo(db, 0.03); } catch { /* ignore */ }
+        this.channelStrip.restoreToRememberedGain(ch);
       });
     }
     if (id === 'synthesizer' || id === 'instrument') {
@@ -1177,10 +1126,7 @@ class AudioEngine {
     this.activePluginIds.delete(id);
     const channels = pluginAudioChannels(id);
     channels.forEach((ch) => {
-      if (!this.channelGains[ch]) return;
-      const current = this.channelGains[ch]!.volume.value;
-      if (current > 0.001) this.channelRestoreGain[ch] = Math.pow(10, current / 20);
-      try { this.channelGains[ch]!.volume.rampTo(-Infinity, 0.05); } catch { /* ignore */ }
+      this.channelStrip.muteAndRemember(ch);
     });
     if (id === 'synthesizer' || id === 'instrument') {
       try { this.itSynthGain?.gain.rampTo(0.0001, 0.05); } catch { /* ignore */ }
@@ -1214,18 +1160,14 @@ class AudioEngine {
   public setChannelGain(track: TrackType, gain01: number): void {
     this.ensureInitialized();
     this.ensureChannelNode(track);
-    const v = Number.isFinite(gain01) ? Math.max(0, Math.min(1.5, gain01)) : 0;
-    const db = v <= 0.001 ? -Infinity : 20 * Math.log10(v);
-    this.channelGains[track]!.volume.rampTo(db, 0.03);
+    this.channelStrip.rampGainLinear(track, gain01);
   }
 
   /** Echtes Kanal-Pan: -1..1 (Tone.Panner). */
   public setChannelPan(track: TrackType, pan: number): void {
     this.ensureInitialized();
     this.ensureChannelNode(track);
-    const p = this.channelPans[track];
-    if (!p) return;
-    p.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), this.ctx?.currentTime ?? Tone.now(), 0.03);
+    this.channelStrip.setPan(track, pan);
   }
 
   /** Setzt die Drum-Kanal-Namen, die das Mischpult anzeigen soll. */
@@ -1306,7 +1248,7 @@ class AudioEngine {
     // F1: Drum-Preview über den Kanalzug (channel2) statt direkt in den Master.
     const drumChannel = pluginAudioChannels('drum')[0] ?? 'channel2';
     this.ensureChannelNode(drumChannel);
-    const drumInput = (this.channelInputs[drumChannel] as any)?.input ?? this.channelInputs[drumChannel];
+    const drumInput = (this.channelStrip.inputNode(drumChannel) as any)?.input ?? this.channelStrip.inputNode(drumChannel);
     const t = this.ctx.currentTime + 0.002;
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
@@ -1557,7 +1499,7 @@ class AudioEngine {
     (this.itSynthNode as any).connect(g);
     // F1: instrumentMONK-Worklet über den Kanalzug (channel4) führen.
     this.ensureChannelNode('channel4');
-    g.connect(this.channelInputs.channel4 ?? this.masterBuses['GLOBAL_MASTER']);
+    g.connect(this.channelStrip.inputNode('channel4') ?? this.masterBuses['GLOBAL_MASTER']);
     this.itSynthGain = g;
     this.itSynthReady = true;
     console.info('it-synth-processor (instrumentMONK, sample-genau) aktiviert.');
@@ -1620,10 +1562,7 @@ class AudioEngine {
     };
 
     // Kanalzug-Zustand zurücksetzen (keine Audio-Nodes mehr – reine Zustände).
-    this.channelInputs = {};
-    this.channelGains = {};
-    this.channelPans = {};
-    this.channelEQs = {};
+    this.channelStrip.reset();
 
     // Spatial-Zustand zurücksetzen.
     this.spatial.reset();
@@ -1679,7 +1618,7 @@ class AudioEngine {
   // #14: Physikalischer Instrument-Synthesizer (AUDIO-P1-002: eigene Fassade).
   private readonly instrumentSynth = new InstrumentSynth({
     ensureChannelNode: (track) => this.ensureChannelNode(track),
-    getChannelInput: (track) => (this.channelInputs[track] as unknown as AudioNode | undefined) ?? null,
+    getChannelInput: (track) => (this.channelStrip.inputNode(track) as unknown as AudioNode | undefined) ?? null,
     getMasterBus: () => (this.masterBuses['GLOBAL_MASTER'] as unknown as AudioNode | undefined) ?? null,
     getCurrentTime: () => this.ctx?.currentTime ?? 0,
   });
@@ -1865,9 +1804,9 @@ class AudioEngine {
     const channels: Record<string, { gainDb: number; pan: number; muted: boolean }> = {};
     for (const t of V2_CHANNELS) {
       channels[t] = {
-        gainDb: this.channelGains[t]?.volume.value ?? 0,
-        pan: this.channelPans[t]?.pan.value ?? 0,
-        muted: Boolean(this.mutedStems[t]),
+        gainDb: this.channelStrip.gainNode(t)?.volume.value ?? 0,
+        pan: this.channelStrip.panNode(t)?.pan.value ?? 0,
+        muted: this.sequencer.isMuted(t),
       };
     }
     syncV2Mix(this.v2Studio, this.v2LiveSink, {
@@ -1879,7 +1818,7 @@ class AudioEngine {
 
   /** Spiegelt alle Step-Patterns in den V2-Live-Sink (Phase 2). */
   public syncV2PatternsToLiveSink(): void {
-    syncV2Patterns(this.v2LiveSink, this.patterns);
+    syncV2Patterns(this.v2LiveSink, this.sequencer.allPatterns());
   }
 
   /** Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3). */
@@ -1922,8 +1861,8 @@ class AudioEngine {
     const gains: Record<string, number> = {};
     const pans: Record<string, number> = {};
     (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      gains[t] = this.channelGains[t]?.volume.value ?? 0;
-      pans[t] = this.channelPans[t]?.pan.value ?? 0;
+      gains[t] = this.channelStrip.gainNode(t)?.volume.value ?? 0;
+      pans[t] = this.channelStrip.panNode(t)?.pan.value ?? 0;
     });
     return {
       version: 1,
@@ -1931,8 +1870,8 @@ class AudioEngine {
       swing: this.swing,
       gate: this.gate,
       scale: String(this.currentScaleName),
-      patterns: JSON.parse(JSON.stringify(this.patterns)) as Record<string, boolean[]>,
-      synthNotes: [...this.synthNotes],
+      patterns: JSON.parse(JSON.stringify(this.sequencer.allPatterns())) as Record<string, boolean[]>,
+      synthNotes: [...this.sequencer.getSynthNotes()],
       masterVolumeDb: this.masterVolume?.volume.value ?? -6,
       spatialSetupId: this.spatial.getSetupId(),
       channelGainsDb: gains,
@@ -2102,14 +2041,14 @@ class AudioEngine {
       }
       this.loadPatterns(state.patterns, state.synthNotes, state.bpm);
       for (const [track, db] of Object.entries(state.channelGainsDb)) {
-        if (!(track in this.patterns)) continue;
+        if (!(track in this.sequencer.allPatterns())) continue;
         this.ensureChannelNode(track as TrackType);
-        if (Number.isFinite(db)) this.channelGains[track as TrackType]!.volume.rampTo(db, 0.03);
+        if (Number.isFinite(db)) this.channelStrip.rampGainToDb(track as TrackType, db, 0.03);
       }
       for (const [track, pan] of Object.entries(state.channelPans)) {
-        if (!(track in this.patterns)) continue;
+        if (!(track in this.sequencer.allPatterns())) continue;
         this.ensureChannelNode(track as TrackType);
-        if (Number.isFinite(pan)) this.channelPans[track as TrackType]!.pan.setTargetAtTime(Math.max(-1, Math.min(1, pan)), this.ctx?.currentTime ?? Tone.now(), 0.03);
+        if (Number.isFinite(pan)) this.channelStrip.setPan(track as TrackType, pan);
       }
       if (Number.isFinite(state.masterVolumeDb)) this.masterVolume.volume.rampTo(state.masterVolumeDb, 0.03);
       if (typeof state.spatialSetupId === 'string') this.setSpatialSetup(state.spatialSetupId);
@@ -2161,7 +2100,7 @@ class AudioEngine {
     // F1: Tone.js-Fallback-Stimmen über den Kanalzug führen (Drum→channel2, Rest→channel4).
     const instChannel: TrackType = def.kind === 'drum' ? 'channel2' : 'channel4';
     this.ensureChannelNode(instChannel);
-    const outBus = this.channelInputs[instChannel] ?? this.masterBuses['GLOBAL_MASTER'];
+    const outBus = this.channelStrip.inputNode(instChannel) ?? this.masterBuses['GLOBAL_MASTER'];
 
     try {
       switch (def.kind) {
@@ -2319,7 +2258,7 @@ class AudioEngine {
         envelope: { attack: 0.005, decay, sustain: 0.02, release: 0.12 },
       });
       this.ensureChannelNode(track);
-      const bus = this.channelInputs[track] ?? this.masterBuses['GLOBAL_MASTER'];
+      const bus = this.channelStrip.inputNode(track) ?? this.masterBuses['GLOBAL_MASTER'];
       if (bus) synth.connect(bus);
       else synth.toDestination();
       synth.triggerAttackRelease(freq, '8n');
@@ -2373,7 +2312,7 @@ class AudioEngine {
   public routeChannelToSpatialInput(track: TrackType, target: AudioNode | null): boolean {
     this.ensureInitialized();
     this.ensureChannelNode(track);
-    const pan = this.channelPans[track];
+    const pan = this.channelStrip.panNode(track);
     const bus = this.masterBuses['GLOBAL_MASTER'];
     if (!pan || !bus) return false;
     try {
