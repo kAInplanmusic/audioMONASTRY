@@ -27,7 +27,7 @@ export interface SnapshotEnvelope<T = unknown> {
 type RawRecord = Record<string, unknown>;
 
 /** Migriert eine Version auf die NÄCHSTE (Rückgabe null = nicht migrierbar). */
-export type SnapshotMigration = (raw: RawRecord) => RawRecord | null;
+type SnapshotMigration = (raw: RawRecord) => RawRecord | null;
 
 /**
  * Migrationskette: `version → Migration auf version + 1`.

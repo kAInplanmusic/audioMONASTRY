@@ -29,13 +29,6 @@ export const STUDIO_SESSION_PREFIX = 'v1.';
 /** Vorgabe-Lebensdauer: 15 Minuten (vorher: 24 h Cookie mit Master-Token). */
 export const STUDIO_SESSION_TTL_S = 900;
 
-export interface StudioSessionClaims {
-  /** Ablaufzeit in Sekunden seit Epoch. */
-  exp: number;
-  /** Optionaler Träger (z. B. Portal-Session-ID) — nur für Diagnose. */
-  sub?: string;
-}
-
 /** Baut das Token aus Claims und Signatur (pur, für Tests/Portal). */
 export function buildStudioSessionToken(exp: number, signatureHex: string, sub?: string): string {
   const body = sub ? `${STUDIO_SESSION_PREFIX}${exp}.${sub}` : `${STUDIO_SESSION_PREFIX}${exp}`;

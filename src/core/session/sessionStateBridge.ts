@@ -14,7 +14,7 @@
 
 export type BridgeModuleState = 'OFF' | 'AUTO_AI' | 'PRO';
 
-export interface BridgeLockStatus {
+interface BridgeLockStatus {
   lockedBy: string;
   timestamp: number;
   active: boolean;

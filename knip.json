@@ -39,7 +39,7 @@
     "src/components/MasterTrackTerminal.tsx",
     "src/components/ModuleContainer.tsx",
     "src/components/RoomPlannerPanel.tsx",
-    "src/components/AudioMONASTRYLogo.tsx",
+    "src/components/AudioMonastryLogo.tsx",
     "src/components/drop/index.ts",
     "src/config/webrtc.ts",
     "src/core/audio/backends/AudioBackend.ts",

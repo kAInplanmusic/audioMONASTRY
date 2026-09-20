@@ -428,7 +428,7 @@ function ChannelStrip({
 /* Hauptkomponente                                                     */
 /* ------------------------------------------------------------------ */
 
-export const DJMixer = React.memo(function DJMixer() {
+const DJMixer = React.memo(function DJMixer() {
   const strips = useMemo(() => buildStrips(), []);
   const [vw, setVw] = useState(typeof window !== 'undefined' ? window.innerWidth : 1280);
   useEffect(() => {

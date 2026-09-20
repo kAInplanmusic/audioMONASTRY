@@ -47,7 +47,7 @@ export const RECOVERY_DEFAULTS: RecoveryPolicy = {
   restartIceOnFirstFailure: true,
 };
 
-export type RecoveryAction = 'none' | 'wait' | 'restart-ice' | 'reconnect' | 'gave-up';
+type RecoveryAction = 'none' | 'wait' | 'restart-ice' | 'reconnect' | 'gave-up';
 
 export interface RecoveryDecision {
   state: RecoveryState;

@@ -110,4 +110,3 @@ class WorkerPoolImpl {
 }
 
 export const workerPool = new WorkerPoolImpl();
-export default workerPool;

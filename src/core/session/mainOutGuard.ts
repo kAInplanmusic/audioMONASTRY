@@ -131,9 +131,9 @@ export const MAIN_OUT_PARAM_SPECS = {
   fadeInSeconds: { min: 0, max: 30, kind: 'number' },
 } as const;
 
-export type MainOutParamName = keyof typeof MAIN_OUT_PARAM_SPECS;
+type MainOutParamName = keyof typeof MAIN_OUT_PARAM_SPECS;
 
-export type MainOutRejectReason = 'invalid-payload' | 'unknown-param' | 'value-out-of-range';
+type MainOutRejectReason = 'invalid-payload' | 'unknown-param' | 'value-out-of-range';
 
 export type MainOutPayloadResult =
   | { ok: true; param: MainOutParamName; value: number }

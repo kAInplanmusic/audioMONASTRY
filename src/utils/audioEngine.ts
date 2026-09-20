@@ -2442,10 +2442,9 @@ export type AudioEngineApi = AudioEngine;
 
 /**
  * Phase 7b: Transparente Terminal-/Plugin-Bridge als Proxy um die AudioEngine.
- * Bestehende Terminals können `audioEngine` oder `audioV2TerminalBridge`
- * importieren – beide laufen durch diesen Proxy. Im V2-Modus wird vor jedem
- * Methodenaufruf `syncV2FromV1()` ausgeführt, damit UI-Aktionen den V2-Graph
- * aktuell halten (zentrale Umstellung ohne Einzel-Rewrites).
+ * Alle Terminals importieren `audioEngine`; Aufrufe laufen durch diesen Proxy.
+ * Im V2-Modus wird vor jedem Methodenaufruf `syncV2FromV1()` ausgeführt, damit
+ * UI-Aktionen den V2-Graph aktuell halten (zentrale Umstellung ohne Einzel-Rewrites).
  */
 const NO_AUTO_SYNC = new Set(['setPlaybackMode', 'syncV2FromV1', 'dispose']);
 function createV2TerminalProxy(engine: AudioEngine): AudioEngineApi {
@@ -2466,9 +2465,6 @@ function createV2TerminalProxy(engine: AudioEngine): AudioEngineApi {
 
 export const audioEngine = createV2TerminalProxy(new AudioEngine());
 
-/** Phase 7: Zentrale Terminal-/Plugin-Bridge für den V2-Umstieg (Drop-in). */
-export const audioV2TerminalBridge = audioEngine;
-
 // Referenz-Worklets (itSynth/eq/mastering) für den graphbasierten Pfad registrieren.
 registerReferenceWorkletSpecs(workletGraphRuntime);
 
@@ -2478,7 +2474,6 @@ try {
   if (typeof window !== 'undefined') {
     (window as unknown as Record<string, unknown>).__audioMonastry = {
       audioEngine,
-      audioV2TerminalBridge,
     };
   }
 } catch {

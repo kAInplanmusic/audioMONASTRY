@@ -35,7 +35,7 @@ export interface SessionEventInput {
   timestamp?: number;
 }
 
-export type SessionRejectReason = 'invalid' | 'duplicate' | 'stale-sequence' | 'locked-by-other';
+type SessionRejectReason = 'invalid' | 'duplicate' | 'stale-sequence' | 'locked-by-other';
 
 export interface SessionEventResult {
   accepted: boolean;
