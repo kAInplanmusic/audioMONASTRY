@@ -114,6 +114,8 @@ pgvector (Supabase) existiert. Neue Tabellen:
    waren die krassesten?" (Skala + Tags).
 2. Bestbewertete Paare (Prompt/Bild) werden kuratiert.
 3. **Stil-LoRA-Training** auf einem RunPod-**Pod** (nicht Serverless) aus dem Katalog.
+   Vorbereitet für VISUAL-P1-007 (Skripte + Kostenrechnung + Freigabe-Gate, ohne
+   GPU-Kosten): `docs/VISUAL_LORA_TRAINING.md`.
 4. bessere Prompts/Params per **Preference-Loop** (Bandit über Stil-Parameter).
 5. **RAG**: ähnliche Prompts/Stile via `visual_embeddings` vorschlagen.
 
