@@ -20,7 +20,6 @@ import {
   isMixedContentBlocked,
   normalizeSfuPath,
   normalizeSfuUrl,
-  resolveSfuSignalingTarget,
   type SfuSignalingTarget,
 } from './sfuEndpoint';
 
