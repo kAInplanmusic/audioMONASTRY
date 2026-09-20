@@ -1056,3 +1056,26 @@ Fehlen die Quellen lokal, endet das Skript mit Exit 2 und nennt die Nachlade-
 Befehle — ein leeres Inhaltsverzeichnis im Container sähe sonst wie ein kaputtes
 Feature aus. `docs/LICENSE_EXTERNAL_RESOURCES.md` ist die Quelle für die
 Lizenzlage; VSCO 2 CE ist dort die einzige freigegebene Library.
+
+## Legacy-Namen aufraeumen (Firewalls, Altpfad) - 2026-09-20
+
+Nach dem Namespace-Fix liegen Altlasten herum, die einen Fehlgriff beguenstigen:
+
+```bash
+# Ungenutzte Legacy-Firewalls (Praefix aus fleet-names.sh) auflisten/loeschen
+python3 scripts/hetzner/cleanup-legacy-firewalls.py            # Trockenlauf
+python3 scripts/hetzner/cleanup-legacy-firewalls.py --apply    # loeschen
+```
+
+Geloescht wird **nur**, wenn `applied_to` leer ist (sonst "UEBERSPRUNGEN" + Grund).
+Am 2026-09-20 waren das sechs Stueck (`samplemonk-test/-app/-sfu/-ai/-master/-edge`)
+mit teils anderen Regeln als die aktiven `audiomonastry-*`-Firewalls - die alte
+`samplemonk-sfu` hatte z. B. keine TURN-Ports.
+
+Dazu die Knoten-Hygiene: `docker image prune -f` + `docker builder prune -f`
+(ungetaggte Images und Build-Cache; **getaggte** Images bleiben, darunter das
+Rollback-Image `audiomonastry:hetzner-rollback`, und Volumes werden nie
+angefasst - die kopierten Alt-Volumes sind der Rueckweg der Migration). Auf ai-1
+wurde der veraltete Altpfad `/opt/samplemonk` (6,0 GB, Kopie vom 18.09.) entfernt;
+die Dienste `ollama` und `stem-ai` laufen unveraendert aus
+`/opt/audiomonastry` + `/root/.ollama`.

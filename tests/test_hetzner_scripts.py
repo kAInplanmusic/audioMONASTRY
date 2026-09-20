@@ -373,6 +373,54 @@ class MedienAuslieferungTest(unittest.TestCase):
         self.assertNotIn("facebookresearch/htdemucs/raw/main/htdemucs.onnx", alias)
 
 
+class FirewallWerkzeugeTest(unittest.TestCase):
+    """TURN-Ports sichern und Legacy-Firewalls aufraeumen - beides ohne
+    Ueberraschungen: Trockenlauf per Default, und nie etwas loeschen, das noch
+    an einem Server haengt."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.ensure = HETZNER / "firewall-ensure-turn.py"
+        self.inventory = HETZNER / "firewall-inventory.py"
+        self.cleanup = HETZNER / "cleanup-legacy-firewalls.py"
+
+    def test_werkzeuge_existieren_und_sind_syntaxgueltig(self) -> None:
+        for script in (self.ensure, self.inventory, self.cleanup):
+            with self.subTest(script=script.name):
+                self.assertTrue(script.exists(), f"{script} fehlt")
+                result = subprocess.run(
+                    ["python3", "-c", "import ast,sys; ast.parse(open(sys.argv[1]).read())", str(script)],
+                    capture_output=True, text=True, cwd=ROOT, timeout=60,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_turn_regeln_sind_identisch_mit_den_quellen(self) -> None:
+        """Die vier Regeln liegen in portal-worker, provision.py und dem Werkzeug -
+        dieselben Zahlen, sonst oeffnet das Werkzeug etwas anderes als der Code."""
+        ensure = self.ensure.read_text(encoding="utf-8")
+        for port in ('"3478"', '"49152-49201"'):
+            with self.subTest(port=port):
+                self.assertIn(port, ensure)
+        worker = (ROOT / "services" / "portal-worker" / "src" / "index.js").read_text(encoding="utf-8")
+        provision = (HETZNER / "provision.py").read_text(encoding="utf-8")
+        for source in (worker, provision):
+            self.assertIn("49152-49201", source)
+        # Trockenlauf per Default: schreiben nur mit --apply.
+        self.assertIn('"--apply" in args', ensure)
+        self.assertIn("Trockenlauf", ensure)
+
+    def test_aufraeumen_loescht_nur_ungebundene_firewalls(self) -> None:
+        text = self.cleanup.read_text(encoding="utf-8")
+        # Reihenfolge: erst applied_to pruefen, dann loeschen.
+        check = text.index("applied_to")
+        delete = text.index('"DELETE"')
+        self.assertLess(check, delete, "applied_to muss VOR dem DELETE geprueft werden")
+        self.assertIn("UEBERSPRUNGEN", text)
+        self.assertIn('"--apply" in sys.argv', text)
+        # Der Legacy-Praefix kommt aus der einen Namensquelle, nicht als Literal.
+        self.assertIn("fleet-names.sh", text)
+
+
 class WatchdogInstallationTest(unittest.TestCase):
     """INFRA-HETZNER-005: der Watchdog wird installiert und diagnostiziert getrennt."""
 
