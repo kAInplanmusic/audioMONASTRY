@@ -25,6 +25,7 @@
  * Details: docs/RUNPOD_AI_V1_SPEC.md.
  */
 import { RunPodProvider } from './orchestrator/runpodProvider';
+import { isRoleAllowed } from './aiGate';
 
 export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 
@@ -288,6 +289,10 @@ class RunPodLocalProvider implements ILlmProvider {
   }
 
   get available(): boolean {
+    // INFRA-FEAT-001: Bei „AI aus“ ist das Brain nicht verfügbar – `rankProviders`
+    // lässt den GPU-Provider dann aus und es geht nichts Richtung RunPod
+    // (lokale Pfade: Ollama/deterministisch).
+    if (!isRoleAllowed('brain')) return false;
     if (this.openAiUrl()) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
     return this.brainProvider().available;
   }

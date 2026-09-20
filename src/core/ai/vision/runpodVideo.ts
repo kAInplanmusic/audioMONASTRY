@@ -13,6 +13,8 @@
  * `RP_ENDPOINT_ID_VIDEO_REAL`, Fallback `RP_ENDPOINT_ID`).
  */
 import { resolveGpuRoles } from '../orchestrator/endpointRegistry';
+import { wakeRoleOnDemand } from '../orchestrator/fleetWake';
+import { blockMessage, roleBlockCode } from '../aiGate';
 
 export interface VideoResult {
   /** data-URI (`data:video/mp4;base64,...`). */
@@ -100,6 +102,10 @@ function authHeaders(apiKey: string): Record<string, string> {
 
 /** Erzeugt einen Clip aus einem Eingangsbild (Wan2.2 image->video). */
 export async function generateVideo(imageBase64: string, prompt: string, opts: VideoOptions = {}): Promise<VideoResult> {
+  // INFRA-FEAT-001/002: Auch der Video-Pfad hängt am AI-Schalter – bei „AI aus“
+  // bzw. Modus "ohne Visuals" entsteht hier kein einziger RunPod-Request.
+  const blocked = roleBlockCode('videoReal');
+  if (blocked) throw new VideoError(blocked, blockMessage(blocked, 'videoReal', 'vision'));
   const endpointId = opts.endpointId || videoEndpointId();
   const apiKey = opts.apiKey || env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
   const doFetch = opts.fetchImpl ?? fetch;
@@ -124,6 +130,10 @@ export async function generateVideo(imageBase64: string, prompt: string, opts: V
   };
   if (opts.negativePrompt) input.negative_prompt = opts.negativePrompt.slice(0, 500);
   if (typeof opts.seed === 'number') input.seed = opts.seed;
+
+  // INFRA-FEAT-002: Video-Rolle erst bei Abruf starten und danach per Idle-Timer
+  // wieder auf workersMin=0 setzen (best effort, siehe runpodVision.ts).
+  void wakeRoleOnDemand('videoReal');
 
   const deadline = started + timeoutMs;
   let job: Record<string, unknown>;

@@ -97,6 +97,63 @@ export const AI_MAX_HETZNER_SERVERS = envNumber('AI_MAX_HETZNER_SERVERS', 5);
 export const AI_TARGET_FLEET_EUR_PER_HOUR = { min: 5, max: 7.5 } as const;
 
 /**
+ * Erfahrungswert der laufenden Hetzner-Kosten aller fünf Rollen (app/sfu/ai/
+ * master/edge) in EUR/h — Konstitution §3. Der Guard rechnet ihn zur GPU-Flotte
+ * dazu, weil die Konstitutionsgrenze (10 €/h) BEIDE Seiten umfasst.
+ */
+export const AI_HETZNER_EUR_PER_HOUR = envNumber('AI_HETZNER_EUR_PER_HOUR', 0.054);
+
+/**
+ * Angenommene Speicher-/Snapshot-Kosten in EUR/Monat (Konstitution §3: fünf
+ * Snapshots ≈ 0,30 €/Monat). Dient dem Storage-Guard als Ist-Wert, solange die
+ * Abrechnungsdaten nicht live abgerufen werden.
+ */
+export const AI_ESTIMATED_STORAGE_EUR_PER_MONTH = envNumber('AI_ESTIMATED_STORAGE_EUR_PER_MONTH', 0.3);
+
+/**
+ * Laufzeit-Grenzen der Budget-Guards.
+ *
+ * Die Werte starten aus den Konstanten oben (env-gestützt) und sind zur Laufzeit
+ * überschreibbar: Ops kann die Grenzen senken (z. B. Zielband erzwingen), und
+ * Tests können eine Überschreitung herstellen, ohne die Umgebung zu verbiegen.
+ */
+export interface AiBudgetLimits {
+  maxEurPerHour: number;
+  maxStorageEurPerMonth: number;
+  maxGpuEndpoints: number;
+  maxHetznerServers: number;
+}
+
+let budgetLimits: AiBudgetLimits = {
+  maxEurPerHour: AI_MAX_FLEET_EUR_PER_HOUR,
+  maxStorageEurPerMonth: AI_MAX_STORAGE_EUR_PER_MONTH,
+  maxGpuEndpoints: AI_MAX_GPU_ENDPOINTS,
+  maxHetznerServers: AI_MAX_HETZNER_SERVERS,
+};
+
+/** Aktuelle Laufzeit-Grenzen (Kopie — Mutation von außen ist wirkungslos). */
+export function getBudgetLimits(): AiBudgetLimits {
+  return { ...budgetLimits };
+}
+
+/** Setzt einzelne Laufzeit-Grenzen und liefert den neuen Stand. */
+export function setBudgetLimits(partial: Partial<AiBudgetLimits>): AiBudgetLimits {
+  budgetLimits = { ...budgetLimits, ...partial };
+  return getBudgetLimits();
+}
+
+/** Stellt den env-Stand wieder her (Ops-Reset bzw. Test-Isolation). */
+export function resetBudgetLimits(): AiBudgetLimits {
+  budgetLimits = {
+    maxEurPerHour: AI_MAX_FLEET_EUR_PER_HOUR,
+    maxStorageEurPerMonth: AI_MAX_STORAGE_EUR_PER_MONTH,
+    maxGpuEndpoints: AI_MAX_GPU_ENDPOINTS,
+    maxHetznerServers: AI_MAX_HETZNER_SERVERS,
+  };
+  return getBudgetLimits();
+}
+
+/**
  * Visual-Rollen: laufen NICHT dauerhaft, sondern erst bei Abruf/Aktivierung
  * (Bild-/Video-Generierung) und fallen danach per `idleTimeout` auf Null zurück.
  * Alle übrigen Rollen laufen bei "AI an" voll (kein Lazy-Load).
@@ -164,10 +221,10 @@ export function endpointNameForRole(role: GpuEndpointRole): string {
  * erlaubten Rollen. Wird beim Start des Provider-Routers aufgerufen.
  */
 export function assertGpuEndpointBudget(): void {
-  const max = AI_MAX_GPU_ENDPOINTS;
+  const max = getBudgetLimits().maxGpuEndpoints;
   if (!Number.isInteger(max) || max < 1 || max > GPU_ENDPOINT_ROLES.length) {
     throw new Error(
-      `AI_MAX_GPU_ENDPOINTS muss zwischen 1 und ${GPU_ENDPOINT_ROLES.length} liegen (aktuell: ${AI_MAX_GPU_ENDPOINTS}). ` +
+      `AI_MAX_GPU_ENDPOINTS muss zwischen 1 und ${GPU_ENDPOINT_ROLES.length} liegen (aktuell: ${max}). ` +
         `Die AI-Flotte besteht aus den Rollen ${GPU_ENDPOINT_ROLES.join(', ')} – weitere GPU-Endpoints sind nicht erlaubt.`,
     );
   }
@@ -178,9 +235,9 @@ export function assertHetznerServerBudget(count: number): void {
   if (!Number.isInteger(count) || count < 0) {
     throw new Error(`Hetzner-Serverzahl muss eine nicht-negative Ganzzahl sein (erhielt: ${count}).`);
   }
-  if (count > AI_MAX_HETZNER_SERVERS) {
+  if (count > getBudgetLimits().maxHetznerServers) {
     throw new Error(
-      `Hetzner-Flotte ${count} Server übersteigt die Konstitution von ${AI_MAX_HETZNER_SERVERS} Servern ` +
+      `Hetzner-Flotte ${count} Server übersteigt die Konstitution von ${getBudgetLimits().maxHetznerServers} Servern ` +
         `(app/sfu/ai/master/edge) — siehe docs/INFRA_KONSTITUTION.md.`,
     );
   }
@@ -197,9 +254,10 @@ export function estimateFleetEurPerHour(active: readonly GpuEndpointRole[]): num
  */
 export function assertFleetHourlyBudget(active: readonly GpuEndpointRole[], extraEurPerHour = 0): void {
   const total = estimateFleetEurPerHour(active) + Math.max(0, extraEurPerHour);
-  if (total > AI_MAX_FLEET_EUR_PER_HOUR) {
+  const limit = getBudgetLimits().maxEurPerHour;
+  if (total > limit) {
     throw new Error(
-      `Flotten-Kosten ${total.toFixed(2)} €/h übersteigen das Budget von ${AI_MAX_FLEET_EUR_PER_HOUR} €/h ` +
+      `Flotten-Kosten ${total.toFixed(2)} €/h übersteigen das Budget von ${limit} €/h ` +
         `(Rollen: ${active.join(', ')}${extraEurPerHour ? `, Hetzner +${extraEurPerHour.toFixed(2)} €/h` : ''}).`,
     );
   }
@@ -210,10 +268,79 @@ export function assertStorageBudget(monthlyEur: number): void {
   if (!Number.isFinite(monthlyEur) || monthlyEur < 0) {
     throw new Error(`Speicherkosten müssen eine nicht-negative Zahl sein (erhielt: ${monthlyEur}).`);
   }
-  if (monthlyEur > AI_MAX_STORAGE_EUR_PER_MONTH) {
+  const limit = getBudgetLimits().maxStorageEurPerMonth;
+  if (monthlyEur > limit) {
     throw new Error(
       `Speicherkosten ${monthlyEur.toFixed(2)} €/Monat übersteigen das Budget von ` +
-        `${AI_MAX_STORAGE_EUR_PER_MONTH} €/Monat (Hetzner + RunPod).`,
+        `${limit} €/Monat (Hetzner + RunPod).`,
     );
   }
+}
+
+/** Ist-Stand eines Budgets inkl. Bewertung gegen Grenze und Zielband. */
+export interface BudgetCheck {
+  /** Ist-Wert (EUR/h bzw. EUR/Monat). */
+  value: number;
+  /** Harte Grenze aus den Laufzeit-Limits. */
+  limit: number;
+  withinLimit: boolean;
+  /** Fehlermeldung des Guards, wenn die Grenze gerissen ist. */
+  violation?: string;
+}
+
+/**
+ * Prüft einen Wert gegen einen Guard und liefert das Ergebnis statt zu werfen.
+ * Für Status-/Alarm-Pfade (Flotten-Status, Monitoring): dort soll eine
+ * Überschreitung sichtbar und geloggt werden, ohne die Antwort abzureißen.
+ */
+function checkBudget(value: number, guard: () => void, limit: number): BudgetCheck {
+  try {
+    guard();
+    return { value, limit, withinLimit: true };
+  } catch (error) {
+    return { value, limit, withinLimit: false, violation: (error as Error).message };
+  }
+}
+
+/**
+ * Gesamtbericht der laufenden und der Speicher-Kosten gegen die Konstitution.
+ * Pur (kein Netzwerk), für `fleetStatus()` und die Budget-Route.
+ */
+export interface FleetBudgetReport {
+  /** GPU-Rollen allein (EUR/h). */
+  gpuEurPerHour: number;
+  /** Hetzner-Anteil (EUR/h). */
+  hetznerEurPerHour: number;
+  /** Gesamt laufend (EUR/h) — GPU + Hetzner. */
+  totalEurPerHour: number;
+  hourly: BudgetCheck;
+  /** Zielband aus `AI_TARGET_FLEET_EUR_PER_HOUR`. */
+  target: { min: number; max: number; within: boolean };
+  storage: BudgetCheck;
+}
+
+export function fleetBudgetReport(
+  active: readonly GpuEndpointRole[],
+  hetznerEurPerHour = AI_HETZNER_EUR_PER_HOUR,
+  storageEurPerMonth = AI_ESTIMATED_STORAGE_EUR_PER_MONTH,
+): FleetBudgetReport {
+  const gpuEurPerHour = estimateFleetEurPerHour(active);
+  const hetzner = Math.max(0, hetznerEurPerHour);
+  const total = gpuEurPerHour + hetzner;
+  const hourly = checkBudget(total, () => assertFleetHourlyBudget(active, hetzner), getBudgetLimits().maxEurPerHour);
+  return {
+    gpuEurPerHour,
+    hetznerEurPerHour: hetzner,
+    totalEurPerHour: total,
+    hourly,
+    target: {
+      ...AI_TARGET_FLEET_EUR_PER_HOUR,
+      within: total >= AI_TARGET_FLEET_EUR_PER_HOUR.min && total <= AI_TARGET_FLEET_EUR_PER_HOUR.max,
+    },
+    storage: checkBudget(
+      storageEurPerMonth,
+      () => assertStorageBudget(storageEurPerMonth),
+      getBudgetLimits().maxStorageEurPerMonth,
+    ),
+  };
 }

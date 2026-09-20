@@ -3,7 +3,8 @@ import { storageSet } from '../utils/storage';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
 import { routeModuleState } from '../core/pluginAudioRouter';
-import { setAiModeActive } from '../core/ai/aiMode';
+import { setAiModeFromModuleState } from '../core/ai/aiMode';
+import { setAiOperatingModeForModuleState } from '../core/ai/aiGate';
 import { EVAL_PLUGIN_IDS } from '../core/ai/orchestrator/evalMatrix';
 import { MIXER_NEVER_CLOSES, canSetModuleState, isMainOutPlugin } from '../core/session/mainOutGuard';
 import { parseSessionSnapshot, type BridgeModuleState } from '../core/session/sessionStateBridge';
@@ -82,7 +83,7 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // (OFF = Signalkette trennen, AUTO_AI/PRO = Einspeisung).
     routeModuleState(id, state);
     // NEW-D1-3: AI-Modus-Flag für Halter-Wechsel (mixerMONK) synchron halten.
-    if (id === 'ai') setAiModeActive(state !== 'OFF');
+    if (id === 'ai') setAiModeFromModuleState(state);
     // Replikation an alle Peers (bestehender Kollaborations-Kanal).
     // P0-1: Es gibt keinen Login-Seed mehr – alle User starten mit OFF.
     if (opts?.replicate === false) return;
@@ -112,6 +113,10 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
     });
     for (const [id, state] of Object.entries(modules)) {
       routeModuleState(id, state as ModuleState);
+      // INFRA-FEAT-001: Der Server-Snapshot bringt den Sitzungsstand des
+      // aiMONK-Moduls mit – der lokale Betriebsmodus zieht nach. Bewusst OHNE
+      // Server-Sync (der Zustand KAM vom Server, ein Rückspiegeln wäre ein Echo).
+      if (id === 'ai') setAiOperatingModeForModuleState(state as ModuleState, { source: 'session-snapshot' });
     }
   }, []);
 
@@ -201,7 +206,9 @@ export const ModuleStateProvider: React.FC<{ children: React.ReactNode }> = ({ c
       // P0-2: Auch fremde Zustandswechsel im Audio-Routing nachziehen.
       routeModuleState(pluginId, state);
       // NEW-D1-3: AI-Modus-Flag auch für fremde Updates synchron halten.
-      if (pluginId === 'ai') setAiModeActive(state !== 'OFF');
+      // INFRA-FEAT-001: Der Modus ist die Kante zur GPU-Flotte – AUTO_AI = „AI
+      // ohne Visualisierung“, PRO = „mit Visualisierung“ (siehe aiGate.ts).
+      if (pluginId === 'ai') setAiModeFromModuleState(state);
     });
   }, []);
 

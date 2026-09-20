@@ -109,6 +109,20 @@ export const AiCompleteSchema = z.object({
   reasoningEffort: z.enum(['low', 'high', 'max']).optional(),
 });
 
+/**
+ * INFRA-FEAT-001/002: Betriebsmodus der AI-Flotte (der Schalter mit echter
+ * Wirkung). `off` stoppt jeden RunPod-Aufruf, `on-no-visuals` lässt die
+ * immer-Rollen laufen und sperrt die Visual-Rollen, `on-with-visuals` erlaubt
+ * Visuals bei Abruf.
+ */
+export const AiOperatingModeSchema = z.enum(['off', 'on-no-visuals', 'on-with-visuals']);
+
+export const AiModeRequestSchema = z.object({
+  mode: AiOperatingModeSchema,
+  /** Herkunft des Wechsels (Log/Nachvollziehbarkeit). */
+  source: z.string().trim().max(40).optional(),
+});
+
 export const AiGenerateDropSchema = z
   .object({
     userPrompt: z.string().trim().max(2000).optional(),

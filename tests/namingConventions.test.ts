@@ -46,6 +46,11 @@ const ALLOWED: Record<string, string> = {
   'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
     + 'Flotte (Snapshots "samplemonk-snapshot-*", Knotenpfad /opt/samplemonk, Floating-IP "samplemonk-floating", '
     + 'Fleet-Map des alten Workers) - ohne die Altnamen waere das Runbook falsch.',
+  'docs/audit-infra-ARCHITEKTUR.md': 'Infra-Audit 2026-09-20: Belegkapitel nennt die real vorhandenen '
+    + 'Bestandsressourcen ("samplemonk-snapshot-*", 12 Firewalls, 6x Legacy-Praefix) - Messergebnis, keine Nomenklatur.',
+  'docs/audit-infra-hetzner.md': 'Infra-Audit 2026-09-20: Belegkapitel listet die tatsaechlichen Hetzner-Ressourcen '
+    + '(10 Snapshots "samplemonk-snapshot-*", Firewall-Gruppen, /opt/samplemonk als Default-Ziel von fleet-deploy-live.sh) '
+    + '- Messergebnis der laufenden Flotte, keine Nomenklatur.',
 };
 
 function trackedFiles(): string[] {

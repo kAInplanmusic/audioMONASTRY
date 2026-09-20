@@ -10,6 +10,8 @@
  * (Rolle `imageHq`, Env `RP_ENDPOINT_ID_IMAGE`, Fallback `RP_ENDPOINT_ID`).
  */
 import { resolveGpuRoles } from '../orchestrator/endpointRegistry';
+import { wakeRoleOnDemand } from '../orchestrator/fleetWake';
+import { blockMessage, roleBlockCode } from '../aiGate';
 
 export interface VisionImageResult {
   /** data-URI (`data:image/png;base64,...`) oder Bild-URL. */
@@ -96,6 +98,10 @@ function authHeaders(apiKey: string): Record<string, string> {
  * `/status/{id}` weiter (Kaltstart kann Minuten dauern).
  */
 export async function generateVisionImage(prompt: string, opts: VisionOptions = {}): Promise<VisionImageResult> {
+  // INFRA-FEAT-001/002: Der AI-Schalter gilt auch für den direkten Visual-Pfad.
+  // Bei „AI aus“ bzw. Modus "ohne Visuals" entsteht hier KEIN Netzwerkverkehr.
+  const blocked = roleBlockCode('imageHq');
+  if (blocked) throw new VisionError(blocked, blockMessage(blocked, 'imageHq', 'vision'));
   const endpointId = opts.endpointId || visionEndpointId();
   const apiKey = opts.apiKey || env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
   const doFetch = opts.fetchImpl ?? fetch;
@@ -115,6 +121,12 @@ export async function generateVisionImage(prompt: string, opts: VisionOptions = 
     width: opts.width ?? 1024,
     height: opts.height ?? 1024,
   };
+
+  // INFRA-FEAT-002: Visual-Rolle erst JETZT starten (workersMin=1) und nach dem
+  // Idle-Fenster automatisch schlafen legen. Best effort – der Job unten wartet
+  // bei kaltem Worker ohnehin auf den Start; ein fehlgeschlagenes Wecken darf
+  // die Generierung nicht verhindern.
+  void wakeRoleOnDemand('imageHq');
 
   const deadline = started + timeoutMs;
   let job: Record<string, unknown>;

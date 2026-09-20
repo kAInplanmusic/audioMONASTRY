@@ -3,7 +3,7 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-17",
+  "generatedAt": "2026-09-20",
   "branch": "main",
   "commit": "45d143b",
   "supersedes": [
@@ -2192,73 +2192,88 @@
       "id": "INFRA-FEAT-001",
       "title": "AI-aus-Schalter mit ECHTER Wirkung (Einstellung stoppt die RunPod-Aufrufe)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Konstitution (docs/INFRA_KONSTITUTION.md, Abschnitt 2) verlangt: bei 'AI aus' (aiMONK = OFF) feuert kein LlmRouter-Aufruf an die GPU-Flotte, es laufen nur Hetzner-Kosten (~0,054 EUR/h). Heute stoppt der Schalter nur das Client-Flag: aiModeActive in src/core/ai/aiMode.ts:9-17 wird aus dem Modul-State gesetzt (ModuleStateContext.tsx:85, :204) und hat keine Kante zum LlmRouter (INFRA-AI-005). Der GPU-Aufruf selbst wird an keiner Stelle durch diesen Schalter verhindert - der Router waehlt allein ueber process.env und complexity (LlmRouter.ts:437-449), und wakeFleet() setzt workersMin=1 unabhaengig davon (fleetWake.ts:201,213).",
-      "note": "Quelle der Forderung: docs/INFRA_KONSTITUTION.md Abschnitte 2 und 4 ('der AI-aus-Schalter stoppt heute nur das Client-Flag, nicht den GPU-Aufruf'). Belegstellen Ist-Zustand: src/core/ai/aiMode.ts:9-17; src/context/ModuleStateContext.tsx:85, :204; src/core/ai/LlmRouter.ts:437-449; src/core/ai/orchestrator/fleetWake.ts:201,213. Verwandt: INFRA-AI-005 und INFRA-RUNPOD-004.",
+      "note": "DONE 2026-09-20 (Fortsetzung nach abgebrochener Sitzung). UMGESETZT: src/core/ai/aiGate.ts ist der EINE Betriebszustand (off | on-no-visuals | on-with-visuals) und wird an JEDER RunPod-Kante geprueft: fleetWake.setWorkersMin/wakeFleet/doWake (bei off kein PATCH, kein Wake), runpodProvider.available/assertConfigured/warmup (AiProviderError AI_DISABLED, retryable=false), LlmRouter.runpod-local.available (Provider faellt aus dem Ranking -> nur lokale Pfade, kein stiller GPU-Aufruf), vision/runpodVision.ts + vision/runpodVideo.ts (VisionError/VideoError AI_DISABLED). aiMode.ts ist nur noch die Client-Fassade des Modus (aiMONK OFF -> off, AUTO_AI -> on-no-visuals, PRO -> on-with-visuals) und spiegelt den Modus per POST /api/ai/mode an den Server; AI_MODE=off ist der harte Server-Kill-Schalter. sleepFleet bleibt bewusst ERLAUBT (senkt nur Kosten, raeumt vor dem Umschalten geweckte Rollen ab). Neue Betriebs-API: GET /api/ai/mode (Status), POST /api/ai/mode. Default ohne Einstellung: on-no-visuals (Konstitution §2).",
       "files": [
+        "src/core/ai/aiGate.ts",
         "src/core/ai/aiMode.ts",
         "src/core/ai/LlmRouter.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
+        "src/core/ai/orchestrator/runpodProvider.ts",
         "src/context/ModuleStateContext.tsx",
-        "src/config/aiInfrastructure.ts"
+        "server/routes/aiRoutes.ts",
+        "src/types/zod/schemas.ts",
+        "tests/aiGate.test.ts",
+        "tests/fleetWake.test.ts",
+        "tests/runpodProvider.test.ts"
       ],
       "acceptance": [
         "Bei 'AI aus' feuert kein LlmRouter-Aufruf an die GPU-Flotte (RunPod) und kein Wake setzt workersMin=1; ein Test belegt es",
         "Bei 'AI aus' laufen ausschliesslich Hetzner-Kosten; bei 'AI an' laufen alle Rollen ausser den Visual-Rollen (siehe INFRA-FEAT-002)"
       ],
       "verification": [
-        "Nachweis offen: Test, der den Modus auf OFF setzt und fuer jeden LlmRouter-/RunPod-Aufruf einen Fehler bzw. kein Netzwerk-Request erwartet",
-        "Nachweis offen: Test, der bei OFF ein leeres/verweigertes wakeFleet() belegt"
+        "tests/aiGate.test.ts: Matrix off/on-no-visuals/on-with-visuals; LlmRouter.rankProviders enthaelt bei off kein runpod-local und llmRouter.complete feuert 0 Requests an api.runpod.ai",
+        "tests/fleetWake.test.ts: setAiOperatingMode(off) -> wakeFleet() 0 Netzwerkaufrufe, blocked \"ai-off\", keine workersMin=1; auch ein expliziter Visual-Abruf weckt nichts",
+        "tests/runpodProvider.test.ts: bei off werfen run/runLong AI_DISABLED (retryable false), runLong ebenso, warmup liefert ok=false – 0 Requests",
+        "npx tsc --noEmit + npx eslint (max-warnings=0): 0 Fehler",
+        "npm run verify grün (vollstaendiger Gate-Lauf, siehe Commit)"
       ]
     },
     {
       "id": "INFRA-FEAT-002",
       "title": "Visual-Rollen nur bei Abruf starten (imageHq/videoReal/videoAbstract lazy)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Konstitution (docs/INFRA_KONSTITUTION.md Abschnitte 1.1 und 2) legt fest: brain/ears/voiceGen/music/orchestrator sind immer-verfuegbar; imageHq/videoReal/videoAbstract sind Visual-Rollen und starten erst bei Abruf/Aktivierung, danach fallen sie per idleTimeout auf Null zurueck. Die Konstanten dafuer existieren bereits in src/config/aiInfrastructure.ts (AI_VISUAL_ROLES :104-109, isVisualRole() :111-113, alwaysOnRoles() :116-118, Rollenkommentar :27), das VERHALTEN ist aber nicht verdrahtet: wakeFleet() weckt weiter alle acht Rollen (fleetWake.ts:201,213 Promise.all ueber resolveGpuRoles()), es gibt keinen rollenselektiven Wake-Einstieg und beim Flottenstart keinen Lazy-Pfad fuer Visuals.",
-      "note": "Quelle der Forderung: docs/INFRA_KONSTITUTION.md Abschnitt 1.1 ('Visual-Rollen starten nur bei Abruf') und Abschnitt 2 ('Regel fuer Visuals ausdruecklich'). Ist-Zustand belegt in docs/audit-infra-runpod.md Befund V3-4 (fleetWake.ts:201,213) sowie in src/config/aiInfrastructure.ts:104-118 (Konstanten vorhanden, kein Konsument im Wake-Pfad).",
+      "note": "DONE 2026-09-20. UMGESETZT: wakeFleet() weckt nur noch die immer-Rollen (brain, ears, voiceGen, music, orchestrator); die Visual-Rollen erscheinen im Bericht als skipped mit Grund \"Visual-Rolle: startet nur bei Abruf\". Neue Einstiege: wakeFleet({roles:[...]}, purpose) und wakeRoleOnDemand(role) – eine Visual-Rolle startet NUR bei Abruf und nur im Modus on-with-visuals; danach setzt scheduleVisualIdleSleep() nach AI_VISUAL_IDLE_MS (Default 900 s = deklarierter idleTimeout) workersMin wieder auf 0 (RunPods idleTimeout greift nicht, solange workersMin=1 steht). Eine angeforderte, aber gesperrte Visual-Rolle ergibt blocked \"visuals-off\" ganz ohne Netzwerk. Verdrahtet in vision/runpodVision.ts (imageHq) und vision/runpodVideo.ts (videoReal) sowie in POST /api/ai/fleet/wake {roles:[...]}.",
       "files": [
-        "src/config/aiInfrastructure.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
+        "src/config/aiInfrastructure.ts",
         "src/core/ai/vision/runpodVision.ts",
-        "src/core/ai/vision/runpodVideo.ts"
+        "src/core/ai/vision/runpodVideo.ts",
+        "server/routes/aiRoutes.ts",
+        "tests/fleetWake.test.ts",
+        "tests/visualGate.test.ts"
       ],
       "acceptance": [
         "Beim Flottenstart/Wake werden Visual-Rollen nicht geweckt; sie starten erst, wenn eine Visual-Aktion (Bild/Video) abgerufen wird",
         "Ein Test belegt: wakeFleet() ohne Visual-Anforderung laesst imageHq/videoReal/videoAbstract unberuehrt, mit Anforderung weckt genau die betroffene Rolle"
       ],
       "verification": [
-        "Nachweis offen: Test gegen fleetWake mit/ohne Visual-Rolle (isVisualRole als Filter)",
-        "Beleg Bestand: docs/audit-infra-runpod.md V3-4 (Wake ueber alle acht Rollen)"
+        "tests/fleetWake.test.ts: wakeFleet() setzt 5 PATCHes (nur immer-Rollen) und beruehrt keinen Visual-Endpoint; wakeFleet({roles:[\"imageHq\"]}) ohne Visual-Freigabe -> blocked \"visuals-off\", 0 Requests; mit on-with-visuals genau EIN PATCH auf den imageHq-Endpoint (kein Warmup, Endpoint-Rolle)",
+        "tests/fleetWake.test.ts: wakeRoleOnDemand(\"imageHq\") + AI_VISUAL_IDLE_MS=0 -> zweiter PATCH mit workersMin=0",
+        "tests/visualGate.test.ts: Bild-/Video-Generierung im Modus \"ohne Visuals\"/\"AI aus\" wirft AI_VISUALS_OFF/AI_DISABLED, bevorzugt KEIN Request; mit Freigabe laeuft der Job und der Abruf startet die Rolle (1 PATCH auf rest.runpod.io)"
       ]
     },
     {
       "id": "INFRA-FEAT-003",
       "title": "Budget-Guards verdrahten (EUR/h und Storage/Snapshots wirksam machen)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Konstitution (docs/INFRA_KONSTITUTION.md Abschnitt 4) fordert die Durchsetzung der Grenzen im Code: max. 10 EUR/h laufend (Ziel 5-7,5), max. 5 EUR/Monat Speicher, max. 8 GPU-Endpoints, max. 5 Hetzner-Server. Die Helfer existieren in src/config/aiInfrastructure.ts (AI_MAX_FLEET_EUR_PER_HOUR :84, AI_MAX_STORAGE_EUR_PER_MONTH :87, AI_MAX_HETZNER_SERVERS :90, AI_TARGET_FLEET_EUR_PER_HOUR :97, assertGpuEndpointBudget :167, assertFleetHourlyBudget :200, assertStorageBudget :213), aber nur assertGpuEndpointBudget() wird produktiv aufgerufen (providerRouter.ts:65-71) - und prueft sich selbst gegen einen Default von 8. assertFleetHourlyBudget/assertStorageBudget sind nicht verdrahtet.",
-      "note": "Quelle der Forderung: docs/INFRA_KONSTITUTION.md Abschnitt 4 ('Offen (Backlog): assertFleetHourlyBudget und assertStorageBudget sind noch nicht verdrahtet'). Belegstellen Ist-Zustand: src/config/aiInfrastructure.ts:84-97, :167-216; src/core/ai/orchestrator/providerRouter.ts:65-71; Aufrufer fehlen fuer die beiden Guards (nur Tests, tests/aiInfrastructure.test.ts:73-86). Haengt direkt an INFRA-RUNPOD-004; die Konstanten-Seite der SSOT ist in diesem Lauf gesetzt (budget.fleetEndpointsMax/hetznerServersMax/fleetTargetEurPerHour/storageSnapshotsMaxEurPerMonth).",
+      "note": "DONE 2026-09-20. UMGESETZT: Laufzeit-Grenzen in aiInfrastructure.ts (getBudgetLimits/setBudgetLimits/resetBudgetLimits) plus Kostenbericht fleetBudgetReport (GPU + Hetzner + Speicher, Zielband 5–7,5 EUR/h). Der Wake-Pfad prueft assertFleetHourlyBudget inkl. AI_HETZNER_EUR_PER_HOUR (Default 0,054) VOR dem ersten Netzwerkaufruf; bei Ueberschreitung startet nichts, der Bericht traegt blocked \"budget\" + Grund, und die HTTP-Antwort von POST /api/ai/fleet/wake ist 409. Speicher: AI_ESTIMATED_STORAGE_EUR_PER_MONTH (Default 0,30) wird in GET /api/ai/fleet/status und GET/POST /api/ai/mode mitgefuehrt und in POST /api/ai/budget/check hart gegen assertStorageBudget geprueft (200/409, Ueberschreitung zusaetzlich als Log-Alarm via aiLogger.error).",
       "files": [
         "src/config/aiInfrastructure.ts",
-        "src/core/ai/orchestrator/providerRouter.ts",
         "src/core/ai/orchestrator/fleetWake.ts",
-        "server/routes/aiRoutes.ts"
+        "server/routes/aiRoutes.ts",
+        "tests/aiInfrastructure.test.ts",
+        "tests/fleetWake.test.ts"
       ],
       "acceptance": [
         "Vor dem Wecken/Betrieb pruefen die Guards das laufende EUR/h-Budget und die Storage-Kosten und brechen bzw. alarmieren bei Ueberschreitung",
         "Ein Test belegt, dass eine Ueberschreitung wirklich einen Fehler erzeugt (nicht nur eine Konstante prueft)"
       ],
       "verification": [
-        "Nachweis offen: Test mit ueberschrittenem Budget gegen assertFleetHourlyBudget()/assertStorageBudget() plus Aufrufer-Nachweis in src/ bzw. server/",
-        "Nachweis offen: Ursprung der Storage-Kostenzahl (Hetzner-Snapshots ~0,01 EUR/GB/Monat laut services/portal-worker/src/index.js:46-47) an die Pruefung anbinden"
+        "tests/aiInfrastructure.test.ts: setBudgetLimits({maxEurPerHour:2}) -> assertFleetHourlyBudget([...8 Rollen]) wirft \"uebersteigen das Budget von 2 EUR/h\"; setBudgetLimits({maxStorageEurPerMonth:0.1}) -> assertStorageBudget(0.3) wirft; fleetBudgetReport liefert Ist/Grenze/Zielband ohne zu werfen (Verletzung wird berichtet)",
+        "tests/fleetWake.test.ts: maxEurPerHour=1 -> wakeFleet() 0 Netzwerkaufrufe, blocked \"budget\"; Gegenprobe mit Konstitutions-Budget weckt die immer-Rollen wieder",
+        "GET /api/ai/fleet/status liefert budget{gpuEurPerHour,hetznerEurPerHour,totalEurPerHour,withinLimit,target,storage}"
       ]
     }
   ],

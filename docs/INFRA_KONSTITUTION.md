@@ -40,19 +40,25 @@ Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default cx23.
 
 ## 2. Betriebsmodi (AI-Schalter)
 
-Die AI-Flotte hängt an **einer Einstellung** (aiMONK-Modus, OFF ⇄ AUTO_AI/PRO):
+Die AI-Flotte hängt an **einer Einstellung** (aiMONK-Modus, OFF ⇄ AUTO_AI/PRO).
+Umgesetzt ist sie als **Betriebsmodus** in `src/core/ai/aiGate.ts` (SSOT im Code):
 
-| Modus | Wirkung | Kostenrahmen |
-|---|---|---|
-| **AI aus** (aiMONK = OFF) | Keine RunPod-Jobs, keine `LlmRouter`-Aufrufe an die GPU-Flotte. | **Nur Hetzner** (~0,054 €/h, ~39 €/Monat @24/7) + Speicher |
-| **AI an** (AUTO_AI/PRO) | **Alle immer-verfügbaren Rollen Vollgas** (brain, ears, voiceGen, music, orchestrator). | bis ~2,5–3,0 €/h (5 Rollen × ~0,49–0,60) |
-| **AI an + Visual angefordert** | Zusätzlich `imageHq`/`videoReal`/`videoAbstract` beim Abruf. | +~0,49 €/h je aktiver Visual-Rolle, danach scale-to-zero |
+| Modus | aiMONK | Wirkung | Kostenrahmen |
+|---|---|---|---|
+| **AI aus** (`off`) | OFF | Kein RunPod-Job, kein `workersMin=1`, keine `LlmRouter`-Aufrufe an die GPU-Flotte, keine Visual-Abrufe. | **Nur Hetzner** (~0,054 €/h, ~39 €/Monat @24/7) + Speicher |
+| **AI an ohne Visuals** (`on-no-visuals`) | AUTO_AI | **Alle immer-verfügbaren Rollen Vollgas** (brain, ears, voiceGen, music, orchestrator); Visual-Rollen gesperrt. | bis ~2,5–3,0 €/h (5 Rollen × ~0,49–0,60) |
+| **AI an mit Visuals** (`on-with-visuals`) | PRO | Zusätzlich `imageHq`/`videoReal`/`videoAbstract` beim Abruf. | +~0,49 €/h je aktiver Visual-Rolle, danach scale-to-zero |
+
+**Default ohne Einstellung:** `on-no-visuals` (Konstitution: „AI an“, Visuals
+erst bei Anforderung). `AI_MODE=off` in der Umgebung ist der harte
+Server-Kill-Schalter, unabhängig von der UI.
 
 **Regel für Visuals (ausdrücklich):** Visual-Rollen laufen **NICHT** dauerhaft.
 Sie starten **erst, wenn eine Visual-Aktion abgerufen/aktiviert wird**
-(Bild-/Video-Generierung), und fallen danach per `idleTimeout` auf Null zurück.
-Das ist die **einzige** bewusste Lazy-Load-Ausnahme — alle übrigen Rollen laufen
-bei „AI an" voll, nicht bedarfsgesteuert.
+(Bild-/Video-Generierung), und fallen danach auf Null zurück
+(`AI_VISUAL_IDLE_MS`, Default 900 s). Das ist die **einzige** bewusste
+Lazy-Load-Ausnahme — alle übrigen Rollen laufen bei „AI an" voll, nicht
+bedarfsgesteuert.
 
 ---
 
@@ -74,12 +80,25 @@ bei „AI an" voll, nicht bedarfsgesteuert.
 
 - `src/config/aiInfrastructure.ts` hält die Konstanten und Helfer
   (`assertGpuEndpointBudget`, `assertFleetHourlyBudget`, `assertStorageBudget`,
-  `isVisualRole`, `alwaysOnRoles`).
+  `isVisualRole`, `alwaysOnRoles`) sowie die **Laufzeit-Grenzen**
+  (`getBudgetLimits`/`setBudgetLimits`/`resetBudgetLimits`) und den Kostenbericht
+  `fleetBudgetReport` (GPU + Hetzner + Speicher).
 - `providerRouter.ts` ruft `assertGpuEndpointBudget()` beim Start.
 - `runpod-deploy.py` (`ROLE_DEFAULTS`) ist die Deploy-Seite derselben 8 Rollen.
-- **Offen (Backlog, siehe MASTERTODOENDE.json):** `assertFleetHourlyBudget`
-  und `assertStorageBudget` sind noch nicht verdrahtet; der AI-aus-Schalter
-  stoppt heute nur das Client-Flag, nicht den GPU-Aufruf.
+- **AI-Schalter (wirksam):** `src/core/ai/aiGate.ts` ist der eine Zustand
+  (`off` / `on-no-visuals` / `on-with-visuals`). Er wird an jeder RunPod-Kante
+  geprüft — `fleetWake.ts` (Wake/Sleep), `runpodProvider.ts` (`run`/`runLong`/
+  `warmup`) und den Visual-Pfaden (`vision/runpodVision.ts`,
+  `vision/runpodVideo.ts`). Bei `off` entsteht **kein** Netzwerkaufruf.
+- **Visual-Rollen (wirksam):** `wakeFleet()` weckt nur die immer-Rollen;
+  Visuals kommen über `wakeRoleOnDemand()` bei Abruf hoch und fallen nach
+  `AI_VISUAL_IDLE_MS` wieder auf `workersMin=0`.
+- **Budget-Guards (verdrahtet):** der Wake-Pfad bricht **vor** dem ersten
+  Netzwerkaufruf beim gerissenen Stundenbudget ab (`blocked: 'budget'`); die
+  Speicherkosten werden in `GET /api/ai/fleet/status` und `POST /api/ai/budget/check`
+  gegen `assertStorageBudget` geprüft (Überschreitung = Log-Alarm bzw. HTTP 409).
+- **Betriebs-API:** `GET /api/ai/mode` (Status), `POST /api/ai/mode`
+  (`{mode, source}`) — die UI spiegelt den aiMONK-Modus dorthin.
 
 ---
 

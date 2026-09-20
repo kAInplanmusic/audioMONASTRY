@@ -1,11 +1,27 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
 import { VisionError, extractVisionImage, generateVisionImage, visionEndpointId } from '../src/core/ai/vision/runpodVision';
 import { AiVisionFeedbackSchema, AiVisionSchema } from '../src/types/zod/schemas';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
 import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
+import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 
 const DATA_URI = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==';
+
+/**
+ * INFRA-FEAT-001/002: Die Visual-Pfade hängen am AI-Betriebsmodus. Diese Datei
+ * prüft den Worker-Vertrag (Requests, Antworten, Fehlercodes) – die Sperre
+ * selbst deckt `visualGate.test.ts` ab. Deshalb steht der Modus hier auf
+ * „AI an mit Visuals“, sonst würde jeder Aufruf schon an der Gate scheitern.
+ */
+beforeEach(() => {
+  __resetAiGate();
+  setAiOperatingMode('on-with-visuals', { source: 'test' });
+});
+
+afterEach(() => {
+  __resetAiGate();
+});
 
 describe('VisualMONK – Vision-Prompt', () => {
   it('baut aus Text + Stil einen Prompt', () => {

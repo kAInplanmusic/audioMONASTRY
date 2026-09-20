@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RunPodProvider, isNonTerminalStatus } from '../src/core/ai/orchestrator/runpodProvider';
+import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 
 const ENV_KEYS = [
   'RUNPOD_API_KEY',
@@ -26,6 +27,9 @@ const ENV_KEYS = [
   'RP_ENDPOINT_ID_ORCHESTRATOR',
   'RUNPOD_BRAIN_MODEL',
   'AI_COST_RUNPOD_BRAIN_USD_PER_HOUR',
+  // INFRA-FEAT-001/002: Betriebsmodus der AI-Flotte.
+  'AI_MODE',
+  'AI_OPERATING_MODE',
 ] as const;
 
 interface RecordedCall {
@@ -53,11 +57,14 @@ function mockFetch(handler: (url: string) => Response | Promise<Response>): void
 describe('RunPodProvider (8-Rollen-Flotte)', () => {
   beforeEach(() => {
     calls = [];
+    // INFRA-FEAT-001/002: Modus-Default („AI an, ohne Visuals“) erzwingen.
+    __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
   });
 
@@ -174,6 +181,8 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
   it('nutzt run + Status-Polling für die visuellen Rollen', async () => {
     process.env.RP_AGENT_KEY = 'rp_test';
     process.env.RP_ENDPOINT_ID_IMAGE = 'image-ep';
+    // Visual-Rollen laufen nur mit Visual-Freigabe (Konstitution §2).
+    setAiOperatingMode('on-with-visuals', { source: 'test' });
     mockFetch((url) =>
       url.endsWith('/run')
         ? jsonResponse({ id: 'job-img', status: 'IN_QUEUE' })
@@ -188,6 +197,38 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
       'https://api.runpod.ai/v2/image-ep/run',
       'https://api.runpod.ai/v2/image-ep/status/job-img',
     ]);
+  });
+
+  it('sperrt die Visual-Rolle im Modus „AI an ohne Visuals“ (INFRA-FEAT-002)', async () => {
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_IMAGE = 'image-ep';
+    mockFetch(() => jsonResponse({ status: 'COMPLETED', output: { imageUrl: 'r2://key.png' } }));
+
+    const provider = new RunPodProvider('imageHq');
+    expect(provider.available).toBe(false);
+    await expect(provider.run('image.generate', 'flux2-dev', { prompt: 'cityscape' })).rejects.toMatchObject({
+      code: 'AI_VISUALS_OFF',
+      retryable: false,
+    });
+    // Kein Warmup-Job und kein Job-Request – die Rolle wird gar nicht berührt.
+    expect(await provider.warmup()).toMatchObject({ ok: false, message: 'AI_VISUALS_OFF' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('feuert bei „AI aus“ gar nichts – auch nicht mit konfiguriertem Endpoint (INFRA-FEAT-001)', async () => {
+    process.env.RP_AGENT_KEY = 'rp_test';
+    process.env.RP_ENDPOINT_ID_BRAIN = 'brain-ep';
+    setAiOperatingMode('off', { source: 'test' });
+    mockFetch(() => jsonResponse({ status: 'COMPLETED', output: { text: 'hallo' } }));
+
+    const provider = new RunPodProvider('brain');
+    expect(provider.available).toBe(false);
+    await expect(provider.run('nlu', 'qwen3-14b', {})).rejects.toMatchObject({
+      code: 'AI_DISABLED',
+      retryable: false,
+    });
+    await expect(provider.runLong('llm', 'qwen3-14b', {})).rejects.toMatchObject({ code: 'AI_DISABLED' });
+    expect(calls).toHaveLength(0);
   });
 
   it('meldet Worker-Fehler aus dem Output als AiProviderError', async () => {
@@ -249,11 +290,14 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
 describe('DB-P1-004 · Kaltstart: runsync-Fallback + runLong', () => {
   beforeEach(() => {
     calls = [];
+    // INFRA-FEAT-001/002: Modus-Default („AI an, ohne Visuals“) erzwingen.
+    __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    __resetAiGate();
     for (const key of ENV_KEYS) delete process.env[key];
   });
 

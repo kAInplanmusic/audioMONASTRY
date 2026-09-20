@@ -14,6 +14,7 @@
 import {
   AiCompleteSchema,
   AiGenerateDropSchema,
+  AiModeRequestSchema,
   AiOrchestrateSchema,
   AiPromptSchema,
   AiShowMergeSchema,
@@ -50,6 +51,16 @@ import {
 } from '../visionArtifacts.ts';
 import { fetchVisualStyleRanking, insertVisualFeedback, insertVisualGeneration } from '../cloudAutomation.ts';
 import { fleetStatus, sleepFleet, wakeFleet } from '../../src/core/ai/orchestrator/fleetWake';
+import { aiGateStatus, getAiOperatingMode, isRoleAllowed, setAiOperatingMode, type AiOperatingMode } from '../../src/core/ai/aiGate';
+import { aiLogger } from '../../src/core/ai/orchestrator/aiLogger';
+import {
+  AI_ESTIMATED_STORAGE_EUR_PER_MONTH,
+  AI_HETZNER_EUR_PER_HOUR,
+  GPU_ENDPOINT_ROLES,
+  fleetBudgetReport,
+  isVisualRole,
+  type GpuEndpointRole,
+} from '../../src/config/aiInfrastructure';
 import { llmRouter } from '../../src/core/ai/LlmRouter';
 import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
@@ -61,6 +72,34 @@ export interface AiRouteDeps {
   metrics: { aiRequests: number; aiFailures: number };
   /** Geteilte Flotten-Ziele; ollama wird fuer den lokalen Fallback gelesen. */
   fleetTargets: { ollama: string };
+}
+
+/**
+ * INFRA-FEAT-003: Kostenbericht für Status- und Prüf-Antworten.
+ *
+ * Rechnet die Rollen, die im AKTUELLEN Modus laufen dürfen, gegen das
+ * Stundenbudget (inkl. Hetzner-Anteil) und die Speicherkosten gegen das
+ * Monatsbudget. Eine Überschreitung wird geloggt (Alarm) – der harte Bruch
+ * passiert im Wake-Pfad (`assertFleetHourlyBudget`) und in der Prüf-Route.
+ */
+function budgetSnapshot(storageEurPerMonth = AI_ESTIMATED_STORAGE_EUR_PER_MONTH) {
+  const allowed = GPU_ENDPOINT_ROLES.filter((role) => isRoleAllowed(role));
+  const report = fleetBudgetReport(allowed, AI_HETZNER_EUR_PER_HOUR, storageEurPerMonth);
+  if (!report.hourly.withinLimit) {
+    aiLogger.error('fleet hourly budget exceeded', {
+      totalEurPerHour: report.totalEurPerHour,
+      limit: report.hourly.limit,
+      error: report.hourly.violation,
+    });
+  }
+  if (!report.storage.withinLimit) {
+    aiLogger.error('storage budget exceeded', {
+      storageEurPerMonth,
+      limit: report.storage.limit,
+      error: report.storage.violation,
+    });
+  }
+  return report;
 }
 
 export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
@@ -322,7 +361,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     } catch (e) {
       const err = e as Error;
       const code = err instanceof VisionError ? err.code : 'VISION_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED' || code === 'AI_VISUALS_OFF'
+          ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[vision]', code, err.message?.slice(0, 200));
       return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'vision failed').slice(0, 300) });
     }
@@ -368,7 +408,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     } catch (e) {
       const err = e as Error;
       const code = err instanceof VideoError ? err.code : 'VIDEO_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED' || code === 'AI_VISUALS_OFF'
+          ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[video]', code, err.message?.slice(0, 200));
       return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'video failed').slice(0, 300) });
     }
@@ -457,7 +498,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         err instanceof ClipPipelineError || err instanceof VisionError || err instanceof VideoError
           ? (err as { code: string }).code
           : 'CLIP_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' ? 503 : code === 'TIMEOUT' ? 504 : 502;
+      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED' || code === 'AI_VISUALS_OFF'
+          ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[clip]', code, err.message?.slice(0, 200));
       return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'clip failed').slice(0, 300) });
     }
@@ -764,12 +806,76 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     return res.json(fleetStatus());
   });
 
-  app.post('/api/ai/fleet/wake', async (_req, res) => {
+  app.post('/api/ai/fleet/wake', async (req, res) => {
+    // INFRA-FEAT-002: Ein Wake darf gezielt Rollen anfordern (Visual-Abruf).
+    // Ohne `roles` weckt er – wie bisher – die immer-Rollen; Visual-Rollen
+    // bleiben außen vor (Konstitution §2).
+    const requestedRaw = (req.body as { roles?: unknown } | undefined)?.roles;
+    const requested: GpuEndpointRole[] = [];
+    if (requestedRaw !== undefined) {
+      if (!Array.isArray(requestedRaw)) {
+        return res.status(400).json({ error: 'roles muss ein Array von Rollen-IDs sein' });
+      }
+      for (const entry of requestedRaw) {
+        const role = String(entry) as GpuEndpointRole;
+        if (!GPU_ENDPOINT_ROLES.includes(role)) {
+          return res.status(422).json({ error: `unbekannte Rolle: ${String(entry).slice(0, 40)}` });
+        }
+        requested.push(role);
+      }
+    }
     try {
-      return res.json(await wakeFleet());
+      const report = await wakeFleet(requested.length > 0
+        ? { roles: requested, purpose: requested.some(isVisualRole) ? 'visual-on-demand' : 'session' }
+        : { purpose: 'session' });
+      // AI aus / Visuals gesperrt / Budget gerissen: kein Netzwerkaufruf, klar
+      // als 409 mit Grund – der Aufrufer soll nicht „erfolgreich“ annehmen.
+      if (report.blocked) {
+        return res.status(409).json(report);
+      }
+      return res.json(report);
     } catch (err) {
       return res.status(502).json({ error: err instanceof Error ? err.message : 'fleet wake failed' });
     }
+  });
+
+  // --- Betriebsmodus der AI-Flotte (INFRA-FEAT-001/002) ---------------------
+  // Der Schalter mit echter Wirkung: `off` stoppt jeden RunPod-Aufruf,
+  // `on-no-visuals` sperrt die Visual-Rollen, `on-with-visuals` erlaubt sie bei
+  // Abruf. Quelle des Defaults ist `AI_MODE` (siehe aiGate.ts).
+  app.get('/api/ai/mode', (_req, res) => {
+    return res.json({ ...aiGateStatus(GPU_ENDPOINT_ROLES), budget: budgetSnapshot() });
+  });
+
+  app.post('/api/ai/mode', (req, res) => {
+    const parsed = AiModeRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(422).json({ error: parsed.error.issues[0]?.message ?? 'invalid mode payload' });
+    }
+    const previous = getAiOperatingMode();
+    const mode = setAiOperatingMode(parsed.data.mode as AiOperatingMode, {
+      source: parsed.data.source ?? 'api',
+    });
+    if (previous !== mode) {
+      console.log(`[ai-mode] ${previous} -> ${mode} (Quelle: ${parsed.data.source ?? 'api'})`);
+    }
+    return res.json({ ...aiGateStatus(GPU_ENDPOINT_ROLES), budget: budgetSnapshot() });
+  });
+
+  // --- Budget-Prüfung (INFRA-FEAT-003) --------------------------------------
+  // Reine Prüf-Route für Ops/Preflight (z. B. vor dem Snapshot-Schritt):
+  // Überschreitung ist ein harter 409 mit der Guard-Meldung.
+  app.post('/api/ai/budget/check', (req, res) => {
+    const body = (req.body ?? {}) as { storageEurPerMonth?: unknown };
+    const storageEurPerMonth = Number.isFinite(Number(body.storageEurPerMonth))
+      ? Number(body.storageEurPerMonth)
+      : AI_ESTIMATED_STORAGE_EUR_PER_MONTH;
+    const snapshot = budgetSnapshot(storageEurPerMonth);
+    const violations = [
+      ...(snapshot.hourly.withinLimit ? [] : [snapshot.hourly.violation ?? 'Stundenbudget gerissen']),
+      ...(snapshot.storage.withinLimit ? [] : [snapshot.storage.violation ?? 'Speicherbudget gerissen']),
+    ];
+    return res.status(violations.length === 0 ? 200 : 409).json({ ok: violations.length === 0, violations, budget: snapshot });
   });
 
   app.post('/api/ai/fleet/sleep', async (_req, res) => {

@@ -27,6 +27,7 @@
  * API-Basis ist `https://api.runpod.ai/v2` – nicht `api.runpod.io/v1`.
  */
 import type { GpuRoleId } from '../../../config/aiInfrastructure';
+import { AiGateError, assertRoleAllowed, isRoleAllowed, roleBlockCode } from '../aiGate';
 import { aiLogger } from './aiLogger';
 import { LONG_RUNNING_TASKS, resolveGpuRoles, type ResolvedGpuRole } from './endpointRegistry';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
@@ -140,7 +141,11 @@ export class RunPodProvider implements IAiProvider {
   }
 
   get available(): boolean {
-    return Boolean(this.endpointId && this.apiKey);
+    // INFRA-FEAT-001/002: Der AI-Betriebsmodus ist Teil der Verfügbarkeit.
+    // Bei „AI aus“ bzw. für Visual-Rollen im Modus "ohne Visuals" ist der
+    // Provider nicht verfügbar – der Router fällt dann auf lokale Pfade
+    // (Ollama/deterministisch) zurück statt eine GPU zu wecken.
+    return Boolean(this.endpointId && this.apiKey) && isRoleAllowed(this.roleId);
   }
 
   /** Nur die Tasks der eigenen Rolle – die Task-Mengen sind disjunkt. */
@@ -196,6 +201,17 @@ export class RunPodProvider implements IAiProvider {
 
   /** Endpoint-ID + Key pruefen (identische Fehler wie bisher in `run`). */
   private assertConfigured(): void {
+    // INFRA-FEAT-001/002: ZUERST der Betriebsmodus. Bei „AI aus“ (bzw. für
+    // Visual-Rollen ohne Visual-Freigabe) darf überhaupt kein Endpoint-Kontakt
+    // entstehen – auch dann nicht, wenn Endpoint-ID und Key gesetzt sind.
+    try {
+      assertRoleAllowed(this.roleId, 'runpod');
+    } catch (error) {
+      if (error instanceof AiGateError) {
+        throw new AiProviderError(this.id, error.code, error.message, false);
+      }
+      throw error;
+    }
     if (!this.endpointId) {
       throw new AiProviderError(
         this.id,
@@ -232,6 +248,12 @@ export class RunPodProvider implements IAiProvider {
    */
   async warmup(signal?: AbortSignal): Promise<WarmupResult> {
     const models = this.resolved?.preload ?? [];
+    // INFRA-FEAT-001/002: Kein Warmup-Job, wenn der Betriebsmodus die Rolle sperrt.
+    const block = roleBlockCode(this.roleId);
+    if (block) {
+      aiLogger.info('warmup suppressed by ai mode', { role: this.roleId, block });
+      return { role: this.roleId, ok: false, models, message: block };
+    }
     if (!this.available) {
       return { role: this.roleId, ok: false, models, message: 'endpoint not configured' };
     }
