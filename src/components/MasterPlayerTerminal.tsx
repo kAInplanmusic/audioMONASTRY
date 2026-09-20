@@ -7,6 +7,12 @@ import {
   type AudioExportFormat,
 } from '../utils/audioExportFormats';
 import { Activity, Download, RefreshCw, Upload, X } from 'lucide-react';
+import {
+  describeMasterHttpError,
+  describeMasterPayloadViolation,
+  masterLimitsHint,
+  masterTrackEntries,
+} from '../types/masterPayload';
 
 type Metrics = {
   duration?: number;
@@ -49,15 +55,42 @@ const TONE_TEXT: Record<'good' | 'warn' | 'bad' | 'neutral', string> = {
   neutral: 'text-neutral-200',
 };
 
+/**
+ * Ruft einen Master-Endpunkt auf.
+ *
+ * FIX F3: Der Body wird genau EINMAL serialisiert - dieselbe Zeichenkette wird
+ * vorher gegen die Master-Grenzen geprüft und danach gesendet. Die Vorprüfung
+ * spart den Upload, der vom Server ohnehin mit 413/400 abgewiesen würde, und
+ * nennt dabei Grenze UND Ist-Wert (z. B. „Gesamtgröße 70,0 MB, erlaubt 64 MB;
+ * 4 Spuren, erlaubt 8."). Die Grenzen kommen aus `src/types/masterPayload.ts` -
+ * derselben Quelle, die der Server benutzt.
+ */
 async function callMaster(path: string, payload: Record<string, unknown>): Promise<MasterResponse> {
+  const body = JSON.stringify(payload);
+  const violation = describeMasterPayloadViolation({
+    bytes: body.length,
+    tracks: masterTrackEntries(payload).length,
+    // Die Dauer einer Spur wird hier NICHT gemessen (dafür müsste die Datei
+    // dekodiert werden); sie prüft der Server aus dem WAV-Kopf.
+    longestTrackSeconds: null,
+  });
+  if (violation) throw new Error(violation.message);
+
   const resp = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body,
   });
-  const data = (await resp.json()) as MasterResponse;
-  if (!resp.ok) throw new Error(data.message || `HTTP ${resp.status}`);
-  return data;
+  let data: MasterResponse | null = null;
+  try {
+    data = (await resp.json()) as MasterResponse;
+  } catch {
+    // Kein JSON (z. B. HTML-Fehlerseite des Reverse-Proxys bei 413): unten wird
+    // daraus trotzdem eine Meldung mit Grenzen und Status.
+    data = null;
+  }
+  if (!resp.ok) throw new Error(describeMasterHttpError(resp.status, data));
+  return data as MasterResponse;
 }
 
 function readFileAsBase64(file: File): Promise<LoadedFile> {
@@ -541,6 +574,11 @@ export const MasterPlayerTerminal = React.memo(function MasterPlayerTerminal() {
         {!busy && !canRun && (
           <p className="text-[9px] font-mono text-neutral-600">
             {mode === 'mix' ? 'Lade Track A und Track B, um den Mixdown zu starten.' : 'Lade eine Audiodatei, um zu starten.'}
+          </p>
+        )}
+        {!busy && (
+          <p className="text-[8px] font-mono text-neutral-700">
+            Grenzen je Anfrage: {masterLimitsHint()}
           </p>
         )}
       </div>

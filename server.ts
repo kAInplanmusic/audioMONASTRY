@@ -18,7 +18,7 @@ import { resolveAiRateLimits } from './src/config/aiRateLimits';
 import { registerCloudRoutes } from './server/routes/cloudRoutes.ts';
 import { registerSessionRoutes } from './server/routes/sessionRoutes.ts';
 import { registerAiRoutes } from './server/routes/aiRoutes.ts';
-import { registerMasterRoutes } from './server/routes/masterRoutes.ts';
+import { installMasterBodyParser, registerMasterRoutes } from './server/routes/masterRoutes.ts';
 import { registerVoiceRoutes } from './server/routes/voiceRoutes.ts';
 // Der Stem-Job-Zaehler wird im Stem-Modul gefuehrt (dort schreibt ihn die Route);
 // Ops- und Admin-Routen lesen ihn ueber diesen Getter - eine Wertkopie wuerde einfrieren.
@@ -181,6 +181,13 @@ if (process.env.REDIS_URL) {
   console.log('[signaling] REDIS_URL gesetzt – Socket.io-Redis-Adapter wird beim Start aktiviert.');
 }
 
+// FIX F3: Der Audio-Weg (/api/master/mix|master|analyze) darf nicht an der
+// globalen 50-MB-Parsergrenze scheitern - 4 Spuren à 30 s sind ~30 MB Base64-JSON.
+// installMasterBodyParser() setzt für GENAU diese drei Pfade die eigene Grenze
+// (64 MB, Zahlen im Fehlertext) und muss deshalb VOR dem globalen Parser stehen;
+// danach wäre der Body bereits abgewiesen (und der Handler könnte keine Zahlen
+// mehr nennen). Für alle anderen Routen bleibt es beim 50-MB-/256-kB-Deckel.
+installMasterBodyParser(app);
 app.use(express.json({ limit: '50mb' }));
 
 // AI-P1-005: Body-Parse-Fehler strukturiert und ohne Stack-Trace beantworten.
