@@ -139,8 +139,7 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 - `.env` / `.env.example` – Environment variables (secrets NEVER committed)
 - `docker-compose.yml`, `docker-compose.hetzner.yml`, `docker-compose.ai.yml`, `docker-compose.monitoring.yml`, `docker-compose.sfu.yml`, `docker-compose.fleet-test.yml`
 - `Caddyfile` – TLS/reverse proxy
-- `services/audiomonastry-ai-runtime/runtime_config.yaml` – AI runtime (device, VRAM budget, idle timeout)
-- `services/audiomonastry-ai-runtime/model_manifest.json` – model registry (revision pinning)
+- `services/audiomonastry-ai-runtime/model_manifest.json` – AI runtime: model registry (revision pinning) **and the single source of the VRAM budget** (`runtime.vramBudgetGb`, per role `roles.<role>.vramBudgetGb`)
 - `services/audiomonastry-ai-runtime/hf_endpoint.example.json` – HF endpoint config
 - `database/schema.sql` + `database/ai_migration_001.sql` + `database/ai_migration_002.sql` – Supabase schema & prompt/eval tables
 - `deploy/helm/audioMONASTRY/values.yaml` – Helm (optional)

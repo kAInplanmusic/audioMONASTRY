@@ -9,7 +9,7 @@ Teil-Dokumenten) bzw. ist als „eigene Prüfung" markiert.
 **Geltung:** Diese Gesamtschau fasst zusammen und bewertet. Die Tiefe
 (Zeilenbelege, Rohantworten, offene Punkte) steht in den drei Teil-Dokumenten:
 
-- `docs/audit-infra-runpod.md` (506 Zeilen)
+- `docs/audit-infra-runpod.md` (512 Zeilen)
 - `docs/audit-infra-hetzner.md` (722 Zeilen)
 - `docs/audit-infra-ai-routing.md` (492 Zeilen)
 
@@ -158,6 +158,9 @@ RunPod scale-to-zero, ~2,35 €/h bei Vollbetrieb. SSOT-Budget:
   (gleiche ID/Template).
 - **Zwei VRAM-Budgets:** `runtime_config.yaml` (141/8 GB) vs. Manifest
   (48/6 GB); die yaml wird von **nichts** gelesen.
+  **Nachtrag 2026-09-20 (INFRA-RUNPOD-006): erledigt** — die yaml ist entfernt,
+  das VRAM-Budget steht ausschließlich im Manifest (`runtime.vramBudgetGb`,
+  Rollen-Override `roles.<rolle>.vramBudgetGb`).
 - **Zwei unverbundene „MoA"-Implementierungen** (TS-Single-Planner vs.
   Python-4-Rollen) plus `taskWorker.ts` als paralleler Pfad ohne KI-Task-Typen.
 - **`wakeFleet()`** weckt immer alle 8 Rollen ohne Kosten-Gate; `roleReady()`

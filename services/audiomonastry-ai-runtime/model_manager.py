@@ -187,6 +187,13 @@ class ModelManager:
     # ------------------------------------------------------------------ Config
     def configure(self, manifest: Dict[str, Any]) -> None:
         with self._lock:
+            # INFRA-RUNPOD-006: das VRAM-Budget hat EINE Quelle - das Manifest.
+            # `runtime.vramBudgetGb` ist der Flotten-Default; hat die Rolle einen
+            # eigenen Wert, steht er durch `registry.apply_role` bereits im
+            # Rollen-Block (registry._ROLE_RUNTIME_KEYS). Eine separate
+            # runtime_config.yaml gibt es bewusst nicht mehr: sie war hier nie
+            # verdrahtet (141/8 GB aus der H200-Pod-Aera erreichten den
+            # Serverless-Worker nie).
             runtime = manifest.get("runtime", {})
             self._budget_vram_gb = float(runtime.get("vramBudgetGb", 80.0))
             self._safety_margin_gb = float(runtime.get("vramSafetyMarginGb", 6.0))

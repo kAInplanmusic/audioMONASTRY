@@ -48,7 +48,7 @@ RUN if [ "$AI_INSTALL_AUDIO_AI" = "1" ]; then \
 
 COPY app.py model_manager.py registry.py mcp_runtime.py handlers.py handlers_runpod.py moa_orchestrator.py comfyui_adapter.py ./
 COPY workflows/ ./workflows/
-COPY model_manifest.json runtime_config.yaml startup.sh ./
+COPY model_manifest.json startup.sh ./
 RUN chmod +x startup.sh \
     && mkdir -p /data/hf-cache \
     && useradd --system --uid 10001 audiomonastry \

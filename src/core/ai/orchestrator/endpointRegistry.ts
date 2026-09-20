@@ -329,3 +329,112 @@ export function resolveGpuRoles(): ResolvedGpuRole[] {
   });
 }
 
+/** Eine Endpoint-ID, die von mehreren Rollen benutzt wird (INFRA-RUNPOD-007). */
+export interface EndpointIdCollision {
+  endpointId: string;
+  roles: GpuRoleId[];
+  /**
+   * true, wenn ALLE beteiligten Rollen über den dokumentierten Legacy-Fallback
+   * (`RP_ENDPOINT_ID`) kommen – der gewollte Migrationspfad.
+   */
+  legacy: boolean;
+}
+
+/** Ergebnis des Endpoint-ID-Wächters (reiner Zustandsbericht, kein Netzwerk). */
+export interface RoleEndpointAudit {
+  /** false = mindestens ein nicht-legitimer Konflikt (Rollen ohne Legacy-Modus). */
+  ok: boolean;
+  /** true, wenn mindestens eine Rolle auf RP_ENDPOINT_ID zurückfällt. */
+  legacyFallback: boolean;
+  collisions: EndpointIdCollision[];
+  /** Klartext für Logs/Statusantworten. */
+  message: string;
+}
+
+/**
+ * Wächter gegen doppelt belegte Endpoint-IDs (INFRA-RUNPOD-007).
+ *
+ * Zwei Rollen auf derselben ID sind gefährlich, weil Task-Mengen, `workersMin`
+ * und VRAM-Budget je Rolle als disjunkt bzw. rollen-eigen gelten: ein Wecken der
+ * einen Rolle skaliert die andere mit, und die Endpoint-Kosten werden doppelt
+ * verbucht. Die Regel ist deshalb zweistufig, weil ein Fall GEWOLLT ist:
+ *
+ *   - **Reine Legacy-Gruppe** (alle Beteiligten ohne eigene Rollen-ID): erlaubt
+ *     und nur LAUT gemeldet (warn) – `RP_ENDPOINT_ID` biegt im Migrationspfad
+ *     alle acht Rollen auf einen Endpoint (`usingLegacyEndpoint`).
+ *   - **Gruppe mit mindestens einer explizit gesetzten Rollen-ID**: Fehler
+ *     (z. B. `RP_ENDPOINT_ID_IMAGE` == `RP_ENDPOINT_ID_VIDEO_REAL`). Eine Zeile
+ *     Env kann das versehentlich erzeugen; sie ist nie ein Migrationspfad,
+ *     deshalb bricht `strict` (Default) hier ab.
+ *
+ * Aufruf beim Start von `ProviderRouter` (hart) und in `fleetStatus()`
+ * (`strict: false`, nur Bericht).
+ */
+export function auditRoleEndpointIds(
+  options: { roles?: readonly ResolvedGpuRole[]; strict?: boolean } = {},
+): RoleEndpointAudit {
+  const resolved = options.roles ?? resolveGpuRoles();
+  const byEndpoint = new Map<string, ResolvedGpuRole[]>();
+  for (const role of resolved) {
+    if (!role.endpointId) continue;
+    const group = byEndpoint.get(role.endpointId) ?? [];
+    group.push(role);
+    byEndpoint.set(role.endpointId, group);
+  }
+
+  const collisions: EndpointIdCollision[] = [];
+  for (const [endpointId, group] of byEndpoint) {
+    if (group.length < 2) continue;
+    collisions.push({
+      endpointId,
+      roles: group.map((role) => role.role),
+      legacy: group.every((role) => role.usingLegacyEndpoint),
+    });
+  }
+
+  const legacyCollisions = collisions.filter((collision) => collision.legacy);
+  const hardCollisions = collisions.filter((collision) => !collision.legacy);
+  const legacyFallback = resolved.some((role) => role.usingLegacyEndpoint);
+
+  if (legacyCollisions.length > 0) {
+    aiLogger.warn('gpu roles share the legacy single endpoint (erlaubt, Migrationspfad)', {
+      endpointId: legacyCollisions[0].endpointId,
+      roles: legacyCollisions[0].roles,
+      hint: 'Sobald die Endpoints existieren, RP_ENDPOINT_ID_<ROLLE> setzen',
+    });
+  }
+  if (hardCollisions.length > 0) {
+    aiLogger.error('gpu roles share one endpoint without legacy mode', {
+      collisions: hardCollisions.map((collision) => ({
+        endpointId: collision.endpointId,
+        roles: collision.roles,
+      })),
+    });
+  }
+
+  const messages: string[] = [];
+  if (legacyCollisions.length > 0) {
+    messages.push(
+      `Legacy-Modus: ${legacyCollisions[0].roles.length} Rollen teilen sich RP_ENDPOINT_ID `
+      + `(${legacyCollisions[0].endpointId}) – gewollter Migrationspfad.`,
+    );
+  }
+  for (const collision of hardCollisions) {
+    messages.push(
+      `Rollen ${collision.roles.join(', ')} zeigen ohne Legacy-Modus auf denselben Endpoint `
+      + `${collision.endpointId} – je Rolle eine eigene Endpoint-ID setzen (RP_ENDPOINT_ID_*).`,
+    );
+  }
+
+  const ok = hardCollisions.length === 0;
+  if (!ok && (options.strict ?? true)) {
+    throw new Error(`Endpoint-ID-Konflikt: ${messages[messages.length - 1]}`);
+  }
+  return {
+    ok,
+    legacyFallback,
+    collisions,
+    message: messages.join(' ') || 'Jede Rolle hat eine eigene Endpoint-ID.',
+  };
+}
+

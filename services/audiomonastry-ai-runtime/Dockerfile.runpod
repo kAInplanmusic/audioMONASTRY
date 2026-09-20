@@ -125,9 +125,11 @@ USER root
 
 COPY app.py model_manager.py mcp_runtime.py handlers.py handlers_runpod.py moa_orchestrator.py comfyui_adapter.py runpod_worker.py ./
 COPY workflows/ ./workflows/
-COPY runtime_config.yaml ./
 # Kein rekursives chown über /data (siehe oben) – nur die kleinen App-Dateien.
-RUN chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonastry-ai/*.json /opt/audiomonastry-ai/*.yaml
+# INFRA-RUNPOD-006: der frühere COPY runtime_config.yaml ist entfallen – die Datei
+# wurde von keinem Worker gelesen. EINZIGE Quelle des VRAM-Budgets ist
+# model_manifest.json (runtime.vramBudgetGb, je Rolle roles.<rolle>.vramBudgetGb).
+RUN chown audiomonastry:audiomonastry /opt/audiomonastry-ai/*.py /opt/audiomonastry-ai/*.json
 
 USER audiomonastry
 

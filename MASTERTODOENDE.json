@@ -1733,49 +1733,67 @@
       "id": "INFRA-RUNPOD-006",
       "title": "runtime_config.yaml wird im Serverless-Betrieb von keinem Skript gelesen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Datei runtime_config.yaml wird ins Serverless-Image kopiert (Dockerfile.runpod:128), aber kein Worker-Skript liest sie: in runpod_worker.py, model_manager.py, registry.py und app.py gibt es kein Vorkommen von runtime_config; startup.sh:2 behauptet 'Wird beim Container-Start von startup.sh gelesen', waehrend startup.sh nur Env setzt (:17-26). Damit erreicht das dokumentierte vram_budget_gb: 141 (runtime_config.yaml:5) den Serverless-Worker nie - und es stehen zwei VRAM-Budgets ohne Aufloesungsregel nebeneinander (runtime_config.yaml:5-6 = 141/8 GB gegen model_manifest.json runtime = 48/6 GB).",
-      "note": "Quelle: docs/audit-infra-runpod.md Befunde V2-1 und V1-2 (Abschnitte 5.1, 3.4). Belege: Dockerfile.runpod:128 (COPY); Kopfkommentar Dockerfile.runpod:3-7 ('drei Flotten-Rollen'); kein runtime_config-Vorkommen in services/audiomonastry-ai-runtime/{runpod_worker.py,model_manager.py,registry.py,app.py}; einziger grep-Treffer ist der Kommentar startup.sh:3.",
+      "note": "DONE 2026-09-20 (Abnahme-Variante \"entfernen\", begruendet). ENTSCHEIDUNG: runtime_config.yaml geloescht statt gelesen - kein Worker-Pfad hat sie je benutzt, und ihre Werte (vram_budget_gb 141 / Margin 8) stammen aus der H200-Pod-Aera; haette ein Worker sie gelesen, waere der falsche Wert erst scharf geworden. UMGESETZT: (1) services/audiomonastry-ai-runtime/runtime_config.yaml entfernt; (2) COPY-Zeile und der chown-Glob *.yaml in Dockerfile.runpod bereinigt (der Glob haette nach dem Loeschen den Build gebrochen), ebenso in Dockerfile und Dockerfile.manifest; (3) startup.sh-Kopfkommentar richtiggestellt (liest nur die Umgebung, VRAM-Budget aus dem Manifest); (4) GENAU EIN VRAM-Budget mit dokumentierter Aufloesungsregel: runtime.vramBudgetGb ist der Flotten-Default, roles.<rolle>.vramBudgetGb uebersteuert je Rolle (registry.py _ROLE_RUNTIME_KEYS -> model_manager.configure()); die Regel steht als runtime.vramBudgetNote im Manifest, im configure()-Kommentar, im Runtime-README und in der Konstitution §1.1; (5) README.md/README_DE.md nennen die Datei nicht mehr. AI_MAX_VRAM bleibt reine TS-Simulation und ist keine Flottenquelle.",
       "files": [
-        "services/audiomonastry-ai-runtime/runtime_config.yaml",
+        "services/audiomonastry-ai-runtime/runtime_config.yaml (geloescht)",
         "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        "services/audiomonastry-ai-runtime/Dockerfile",
+        "services/audiomonastry-ai-runtime/Dockerfile.manifest",
         "services/audiomonastry-ai-runtime/startup.sh",
-        "model_manifest.json"
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "services/audiomonastry-ai-runtime/model_manager.py",
+        "services/audiomonastry-ai-runtime/README.md",
+        "README.md",
+        "README_DE.md",
+        "docs/INFRA_KONSTITUTION.md"
       ],
       "acceptance": [
         "Entweder liest ein Worker die Datei (und die Werte wirken) oder sie wird als tote Datei entfernt und die Doku-Kommentare werden richtiggestellt",
         "Es gibt genau ein VRAM-Budget mit dokumentierter Aufloesungsregel (Manifest vs. yaml)"
       ],
       "verification": [
-        "Nachweis offen: grep-Beleg ueber services/audiomonastry-ai-runtime/ nach jedem Aufruf (heute keiner)",
-        "Beleg Bestand: docs/audit-infra-runpod.md 5.1 (Dockerfile.runpod:128 vs. kein Konsument)"
+        "Eigener Lauf: ls services/audiomonastry-ai-runtime/*.yaml -> \"Datei oder Verzeichnis nicht gefunden\" (keine yaml mehr)",
+        "Eigene statische COPY-Pruefung aller drei Dockerfiles (Zeilenfortsetzungen aufgeloest, shlex): \"COPY-Quellen fehlend: keine\" - kein dangling COPY nach dem Loeschen",
+        "Eigener Glob-Beweis (der Grund fuer die chown-Bereinigung): chown $(id -u):$(id -g) .../*.py .../*.json .../*.yaml -> exit 1 (Build waere gebrochen), ohne *.yaml -> exit 0",
+        "Eigener Testlauf: npx vitest run -> 250 Dateien / 1768 Tests gruen; npm run test:python -> 16 + 122 Tests OK; bash -n services/audiomonastry-ai-runtime/startup.sh OK",
+        "LIVE OFFEN (Betreiber-Schritt): Image-Rebuild + Deploy - die laufenden RunPod-Endpoints fahren noch das alte Image, in dem runtime_config.yaml liegt; erst danach ist die Entfernung live wirksam"
       ]
     },
     {
       "id": "INFRA-RUNPOD-007",
       "title": "Visual-Rollen umgehen den gemeinsamen Provider-/Circuit-Breaker-Pfad",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI/RunPod",
       "source": "audit:infra 2026-09-20",
       "problem": "Die Visual-Pfade loesen ihre Endpoint-ID direkt ueber resolveGpuRoles().find(...).endpointId auf und sprechen RunPod mit eigenem HTTP-Code an (src/core/ai/vision/runpodVision.ts:50, src/core/ai/vision/runpodVideo.ts:54, aufgerufen aus server/routes/aiRoutes.ts:39-40). Der RunPodProvider wird fuer imageHq/videoReal/videoAbstract instanziiert (providerRouter.ts:63), aber nicht benutzt; ein RunPod-Ausfall (402/429/Timeout) wird dort je nach Client unterschiedlich behandelt, und der Circuit Breaker aus providerRouter.ts:96-99 greift fuer diese Aufrufe nicht. Ein zweiter Legacy-Fallback kann zusaetzlich alle acht Rollen auf dieselbe Endpoint-ID biegen (endpointRegistry.ts:294-305), ohne dass ein Waechter 'Rolle X zeigt auf den Endpoint von Rolle Y' erkennt.",
-      "note": "Quelle: docs/audit-infra-runpod.md Befunde V3-5 und V3-1 (Abschnitte 6.3, 6.4, 8 Punkt 14). Belege: src/core/ai/vision/runpodVision.ts:50, src/core/ai/vision/runpodVideo.ts:54, server/routes/aiRoutes.ts:39-40, src/core/ai/orchestrator/providerRouter.ts:63 und :96-99, src/core/ai/orchestrator/endpointRegistry.ts:294-305 und runpodProvider.ts:142-144. Im Live-Bestand ist ein Legacy-RP_ENDPOINT_ID nicht gesetzt (Audit 8 Punkt 16), der Biege-Pfad also derzeit nicht aktiv.",
+      "note": "DONE 2026-09-20 (Abnahme-Variante 2: Sonderweg begruendet UND testgesichert). WARUM DER SONDERWEG BLEIBT: die drei Visual-Rollen sprechen vorgefertigte ComfyUI-/Hub-Worker an (warmupMode \"endpoint\"), die unser {task, model, input}-Protokoll NICHT kennen - ein Umbiegen auf RunPodProvider.run() wuerde sie mit ungueltigen Requests treffen. NEU src/core/ai/vision/runpodJobClient.ts als gemeinsamer Pfad: Gate-Pruefung (aiGate) VOR jedem Netzwerkaufruf, /run|/runsync + Status-Polling, Deadline ueber den ganzen Job inkl. Kaltstart, Retry NUR bei wiederholbaren Fehlern (429/5xx/Netz) mit Backoff, EIN CircuitBreaker je Rolle (visionBreakerStates(), im Flottenstatus als visionBreakers sichtbar) und einheitliche Fehlercodes; VisionError/VideoError bleiben in den Aufrufern (Fehlerfabrik), das HTTP-Mapping der Routen bleibt gueltig. runpodVision/runpodVideo behalten ihre worker-spezifischen Payloads/Parser und die On-Demand-Weckung. WAECHTER: endpointRegistry.auditRoleEndpointIds() erkennt doppelt belegte Endpoint-IDs - die reine Legacy-Gruppe (RP_ENDPOINT_ID biegt dokumentiert alle Rollen auf einen Endpoint) wird nur laut gemeldet, zwei explizite Rollen-IDs auf derselben ID werfen (ProviderRouter-Start hart, fleetStatus mit strict:false als Bericht endpointAudit).",
       "files": [
+        "src/core/ai/vision/runpodJobClient.ts",
         "src/core/ai/vision/runpodVision.ts",
         "src/core/ai/vision/runpodVideo.ts",
-        "server/routes/aiRoutes.ts",
+        "src/core/ai/orchestrator/endpointRegistry.ts",
         "src/core/ai/orchestrator/providerRouter.ts",
-        "src/core/ai/orchestrator/endpointRegistry.ts"
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "server/routes/aiRoutes.ts",
+        "docs/INFRA_KONSTITUTION.md",
+        "tests/visionJobClient.test.ts",
+        "tests/endpointIdGuard.test.ts"
       ],
       "acceptance": [
         "Visual-Aufrufe laufen ueber denselben Provider-/Retry-/Circuit-Breaker-Pfad wie die uebrigen Rollen (oder der Sonderweg ist begruendet und testgesichert)",
         "Ein Waechter verhindert, dass zwei Rollen auf dieselbe Endpoint-ID zeigen"
       ],
       "verification": [
-        "Nachweis offen: Test, der einen RunPod-Ausfall auf dem Visual-Pfad provoziert und das Oeffnen des Circuit Breakers erwartet",
-        "Beleg Bestand: docs/audit-infra-runpod.md 6.4 (eigener HTTP-Pfad, kein Breaker)"
+        "Eigener Testlauf: npx vitest run tests/visionJobClient.test.ts tests/endpointIdGuard.test.ts tests/visualGate.test.ts tests/vision.test.ts tests/runpodProvider.test.ts tests/aiRoutes.test.ts -> 6 Dateien / 69 Tests gruen (die Bestandstests der Visual-Pfade sind UNVERAENDERT und gruen - der Umbau ist damit regressionsfrei)",
+        "Eigene Codepruefung auditRoleEndpointIds(): Legacy-only-Kollision -> ok:true + Warnung; harte Kollision -> ok:false und Wurf bei strict (Default), Bericht bei strict:false; im Live-Bestand (8 eigene Rollen-IDs, kein RP_ENDPOINT_ID) still",
+        "Eigene Pruefung der Statusfelder: fleetWake.ts:520 endpointAudit, :526 visionBreakers (GET /api/ai/fleet/status)",
+        "Review-Korrektur des Auftraggebers: der neue Fehlercode CIRCUIT_OPEN ist in allen drei Route-Mappings auf 503 gelegt (vorher 502) - \"Breaker offen\" ist ein Nicht-verfuegbar-Zustand, kein Provider-Fehler",
+        "LIVE OFFEN: ein echter RunPod-Ausfall gegen die Flotte (Breaker oeffnet live) und die Sichtpruefung der neuen Statusfelder gegen die laufende Flotte"
       ]
     },
     {
@@ -2061,45 +2079,52 @@
       "id": "INFRA-AI-002",
       "title": "promptIteration.ts ist selbstreferenziell (Metrik misst den eigenen Optimierer)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Der Prompt-Iterations-Loop ist mechanisch geschlossen (Bewertung -> Optimierung -> neue Version -> erneute Bewertung, promptIteration.ts:63-117), seine Metrik aber bedeutungslos: der Default-Evaluator evaluatePromptCoverage (:38-48) zaehlt, wie viele Kommando-Namen aus PLUGIN_COMMAND_CATALOG als Substring im Prompt-Text vorkommen (:46 promptContent.includes(cmd)), und der Optimierer optimizePromptContent (:51-56) haengt genau diese Kommandoliste an den Prompt an (:53). Der Loop konvergiert damit garantiert in der zweiten Runde auf 1.0, unabhaengig davon, ob ein Modell die Kommandos korrekt benutzt - gemessen wird die Zeichenkette, die der Optimierer selbst einfuegt. Ein Modell wird nie aufgerufen (model 'heuristic', provider 'offline', :88-89). Das Ergebnis landet ausserdem in promptStore/Supabase, den niemand liest (INFRA-AI-003).",
-      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 3 / L-1 (Abschnitte 5.1, 7). Belege: src/core/ai/orchestrator/promptIteration.ts:38-48, :51-56, :63-117, :88-89; scripts/iterate-prompts.ts:19, :36-52.",
+      "note": "DONE 2026-09-20. UMGESETZT: der Loop misst jetzt die WIRKUNG statt der Anwesenheit von Substrings, die der Optimierer selbst einfuegt. Neue Default-Metrik `plan-effect`: der Prompt geht in SEINER VERSION als Rolle an ein echtes Modell (LlmRouter, inkl. Timeout/Breaker/Kosten), bewertet wird die ANTWORT gegen den Kommando-Katalog (evalGrading.gradePlanAnswer, 5..1 Punkte -> 0..1). Der Katalog steht dabei bewusst NICHT in der Aufgabenstellung (withCatalog: false), sonst waere die Metrik blind fuer den Rollen-Text; withCatalog:true prueft denselben Aufbau wie MoaAgent.plan. Ohne erreichbares Modell oder bei gescheitertem Modellaufruf: Status UNCHECKED, kein Score, keine Records (gleiche Regel wie INFRA-AI-001). Der alte Abdeckungs-Check bleibt als dokumentierte Offline-Vorpruefung (metric coverage-selfcheck, Provider-Label coverage-selfcheck). scripts/iterate-prompts.ts: --mode=effect|coverage, --plugins=, --require-model, ehrliche Zusammenfassung, Exit 1 nur bei Nicht-Konvergenz oder --require-model ohne Modell.",
       "files": [
         "src/core/ai/orchestrator/promptIteration.ts",
-        "scripts/iterate-prompts.ts"
+        "scripts/iterate-prompts.ts",
+        "tests/promptIteration.test.ts"
       ],
       "acceptance": [
         "Die Bewertung misst die Wirkung (Modellantwort gegen erwartetes Kommando), nicht die Anwesenheit von Substrings, die der Optimierer selbst einfuegt",
         "Ein Test belegt, dass ein schlechter Prompt den Loop NICHT auf 1.0 konvergieren laesst"
       ],
       "verification": [
-        "Nachweis offen: Test mit einem Prompt, der die Kommandos NICHT enthaelt (heute garantierte Konvergenz)",
-        "Beleg Bestand: docs/audit-infra-ai-routing.md 5.1 (includes(cmd) vs. Anhaengen derselben Liste)"
+        "tests/promptIteration.test.ts (11 Tests): u. a. das Abnahmekriterium \"konvergiert bei einem schlechten Prompt NICHT auf 1.0\" (Score 0.20, MAX_ITERATIONS) und der direkte Vergleich \"dieselbe Prompt-Version, gutes Modell = 1.0, schlechtes Modell = 0.2, alter Abdeckungs-Check = 1.0\"",
+        "Eigener End-to-End-Lauf mit lokatem Modell-Mock: Effekt-Modus, Modell kennt Kommandos nur aus dem Prompt -> mixer und eq je 2 Iterationen (Score 0.20 -> optimiert -> 1.00), Status KEEP, Exit 0, Versionen v1/v2 in test-results/system-prompts.json",
+        "Eigener Negativ-Lauf (Modell antwortet immer ungueltig): \"1 nicht konvergiert, Score 0.20 nach 3 Iterationen\", Exit 1",
+        "Eigener Lauf ohne Modell: UNCHECKED, Exit 0; mit --require-model Exit 1",
+        "npx vitest run -> 250 Dateien / 1768 Tests gruen; tsc + eslint 0"
       ]
     },
     {
       "id": "INFRA-AI-003",
       "title": "promptStore.ts wird von keiner Produktionsdatei gelesen (Prompt-Versionierung ohne Wirkung)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Der Prompt-Store (src/core/ai/orchestrator/promptStore.ts, 85 Zeilen) wird ausserhalb von Tests und scripts/iterate-prompts.ts von keiner Produktionsdatei importiert - insbesondere nicht von MoaAgent.ts oder LlmRouter.ts. MoaAgent.plan holt seinen Systemprompt direkt aus der Konstante moaSystemPromptForPlugin(pluginId) (MoaAgent.ts:260) bzw. moaCommandCatalog() (:259). Eine im Store angelegte und 'optimierte' Version (promptIteration.ts:101-103) erreicht damit nie einen echten LLM-Aufruf; die Versionierung ist strukturell korrekt, aber wirkungslos.",
-      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 2 / PR-1 (Abschnitte 3.1, 7). Belege: src/core/ai/orchestrator/promptStore.ts:24-85; src/core/ai/MoaAgent.ts:259-260; einzige Aufrufer sind scripts/iterate-prompts.ts und Tests.",
+      "note": "DONE 2026-09-20. UMGESETZT: die Prompt-Versionierung wirkt jetzt auf einen echten LLM-Aufruf. (1) PromptStore.hydrate(rows) laedt Persistenz-Versionen (hoechste Version je Plugin gewinnt, enabled:false aktiviert nichts, leere Inhalte werden uebersprungen). (2) aiPersistence.loadSystemPrompts() liest die Tabelle `system_prompts` (Gegenstueck zu saveSystemPrompt). (3) server.ts hydratisiert den Store beim Start (best effort, wie die MOS-Hoererwertungen) - eine per `npm run iterate:prompts` aktivierte Version kommt damit im laufenden Studio an. (4) MoaAgent.plan() nimmt die aktive Store-Version (Plugin-Schluessel, sonst der neue globale MOA_GLOBAL_PROMPT_KEY `moa`); die Konstante PLUGIN_MOA_SYSTEM_PROMPTS bleibt Fallback, der Store ist injizierbar.",
       "files": [
         "src/core/ai/orchestrator/promptStore.ts",
+        "src/core/ai/orchestrator/aiPersistence.ts",
         "src/core/ai/MoaAgent.ts",
-        "scripts/iterate-prompts.ts"
+        "server.ts",
+        "tests/moaPromptVersion.test.ts"
       ],
       "acceptance": [
         "Der Plan-Call nutzt die aktive Prompt-Version aus dem Store (statt der Konstante) oder der Store wird als toter Pfad entfernt",
         "Ein Test belegt, dass eine im Store aktivierte Version im erzeugten LLM-Prompt ankommt"
       ],
       "verification": [
-        "Nachweis offen: Test, der eine Store-Version aktiviert und den an den Provider uebergebenen Systemprompt prueft",
-        "Beleg Bestand: docs/audit-infra-ai-routing.md 3.1 (kein Produktions-Import)"
+        "tests/moaPromptVersion.test.ts (4 Tests): hydrate aktiviert die hoechste Version und ueberspringt leere/disabled Zeilen; eine im Store aktivierte Version steht im ERZEUGTEN LLM-Prompt (und verdraengt die Konstante); ohne Store-Eintrag gilt die Konstante; der globale `moa`-Prompt wird ohne Plugin-Kontext genutzt",
+        "npx vitest run -> 250 Dateien / 1768 Tests gruen; tsc + eslint 0",
+        "LIVE OFFEN: Sichtpruefung im laufenden Studio gegen konfiguriertes Supabase (Server-Start-Log \"Prompt-Version(en) aus der Persistenz in den Store geladen\") - hier ohne Supabase nur der Code-/Testnachweis"
       ]
     },
     {

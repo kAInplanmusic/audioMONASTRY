@@ -2,6 +2,7 @@
   "runtime": {
     "vramBudgetGb": 48,
     "vramSafetyMarginGb": 6,
+    "vramBudgetNote": "EINZIGE Quelle des VRAM-Budgets (INFRA-RUNPOD-006, Aufloesungsregel): runtime.vramBudgetGb ist der Flotten-Default, roles.<rolle>.vramBudgetGb ueberschreibt ihn je Rolle (registry.py _ROLE_RUNTIME_KEYS, verbraucht in model_manager.py configure()). Die frueher danebenliegende runtime_config.yaml (141 GB Budget / 8 GB Margin aus der H200-Pod-Aera) wurde am 2026-09-20 entfernt, weil sie im Serverless-Image von keinem Skript gelesen wurde. Nur der TS-Simulationspfad (src/core/ai/orchestrator/modelManager.ts) kennt zusaetzlich AI_MAX_VRAM - das ist keine Flottenquelle.",
     "device": "cuda",
     "maxConcurrentInference": 2,
     "idleTimeoutSeconds": 120,

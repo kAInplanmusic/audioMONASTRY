@@ -118,6 +118,8 @@ Struktur: `{"runtime": …, "models": [39 Einträge], "roles": {8 Rollen}}`. Ges
 
 Damit existieren zwei konfigurierbare VRAM-Budgets mit unterschiedlichem Wert und unterschiedlicher Margin. `startup.sh:2` deklariert „env hat Vorrang", `registry.py:57-58`/`registry.py:145-160` zeigt, dass die Rolle das Runtime-Budget übersteuern darf (`_ROLE_RUNTIME_KEYS` in `registry.py:46-54` enthält `vramBudgetGb`, `vramSafetyMarginGb`) — die yaml-Werte sind also ein dritter Kandidat derselben Größe, ohne Auflösungsregel zwischen yaml und Manifest.
 
+> **Nachtrag 2026-09-20 (INFRA-RUNPOD-006): erledigt.** `runtime_config.yaml` ist entfernt; das VRAM-Budget hat genau EINE Quelle: `model_manifest.json` `runtime.vramBudgetGb` (Flotten-Default), je Rolle überschrieben durch `roles.<rolle>.vramBudgetGb` (`registry.py` `_ROLE_RUNTIME_KEYS` → `model_manager.py configure()`). Die Regel steht als `runtime.vramBudgetNote` im Manifest, als Kommentar in `configure()` und in `services/audiomonastry-ai-runtime/README.md`. Die Abschnitte dieses Audits bleiben als Beleg für den Zustand vom Audit-Datum stehen.
+
 ### 3.5 Befund V1-3 (NIEDRIG) — Rest-Doku verweist auf H200-Hardware, die nicht mehr die Zielplattform ist
 
 `runtime_config.yaml:5` (H200 141 GB), `registry.py:175` („z. B. der bestehende H200-Endpoint"), `handlers_runpod.py:14` („auf einer echten GPU (RunPod H200) verifiziert"). Kein live-Endpoint nutzt eine H200 (`gpuTypeIds` in Abschnitt 4). Veraltete Kommentare/Defaults, die die VRAM-Wirklichkeit (48 GB) um Faktor ~3 überschätzen.
@@ -196,6 +198,8 @@ Erzwungen wird in `registry.py`:
 | `services/audiomonastry-ai-runtime/Dockerfile.runpod` | Serverless-Image, `ENTRYPOINT ["python", "runpod_worker.py"]` (`Dockerfile.runpod:135`) |
 
 **Befund V2-1 (MITTEL) — `runtime_config.yaml` ist im Serverless-Betrieb toter Ballast.** Die Datei wird ins Image kopiert (`Dockerfile.runpod:128`), aber kein Worker-Skript liest sie: in `runpod_worker.py`, `model_manager.py`, `registry.py` und `app.py` gibt es kein Vorkommen von `runtime_config`. Der dokumentierte Wert `vram_budget_gb: 141` (`runtime_config.yaml:5`) erreicht damit nie den Serverless-Worker. `startup.sh:2` behauptet „Wird beim Container-Start von startup.sh gelesen" — `startup.sh` selbst liest die Datei ebenfalls nicht, es setzt nur Env (`startup.sh:17-26`). Ein `grep -rn "runtime_config"` über `services/audiomonastry-ai-runtime/` liefert als einzigen Treffer den Kommentar `startup.sh:3` — weder `app.py` noch ein Worker-Skript referenziert die Datei.
+
+> **Nachtrag 2026-09-20 (INFRA-RUNPOD-006): erledigt (Variante „entfernen").** Die Datei ist gelöscht, ihre `COPY`-Zeilen und die `chown *.yaml`-Globs in `Dockerfile.runpod`/`Dockerfile`/`Dockerfile.manifest` sind bereinigt, und der `startup.sh`-Kopfkommentar sagt jetzt die Wahrheit (nur Umgebung; VRAM-Budget aus dem Manifest, siehe Nachtrag zu V1-2).
 
 ### 5.2 Handler-Vertrag (`runpod_worker.py`)
 

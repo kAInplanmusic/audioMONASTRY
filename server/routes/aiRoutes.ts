@@ -361,7 +361,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     } catch (e) {
       const err = e as Error;
       const code = err instanceof VisionError ? err.code : 'VISION_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED' || code === 'AI_VISUALS_OFF'
+      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED'
+        || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[vision]', code, err.message?.slice(0, 200));
       return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'vision failed').slice(0, 300) });
@@ -408,7 +409,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     } catch (e) {
       const err = e as Error;
       const code = err instanceof VideoError ? err.code : 'VIDEO_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED' || code === 'AI_VISUALS_OFF'
+      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED'
+        || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[video]', code, err.message?.slice(0, 200));
       return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'video failed').slice(0, 300) });
@@ -498,7 +500,8 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         err instanceof ClipPipelineError || err instanceof VisionError || err instanceof VideoError
           ? (err as { code: string }).code
           : 'CLIP_FAILED';
-      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED' || code === 'AI_VISUALS_OFF'
+      const httpStatus = code === 'NO_ENDPOINT' || code === 'NO_KEY' || code === 'AI_DISABLED'
+        || code === 'AI_VISUALS_OFF' || code === 'CIRCUIT_OPEN'
           ? 503 : code === 'TIMEOUT' ? 504 : 502;
       console.warn('[clip]', code, err.message?.slice(0, 200));
       return res.status(httpStatus).json({ status: 'error', code, message: String(err.message ?? 'clip failed').slice(0, 300) });

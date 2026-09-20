@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # AudioMONASTRY AI Runtime – Startup
-# - liest runtime_config.yaml (env hat Vorrang)
+# - KEINE eigene Konfigurationsdatei: dieses Skript liest nur die Umgebung.
+#   Das VRAM-Budget hat genau EINE Quelle: model_manifest.json runtime.vramBudgetGb
+#   (Rollen-Override roles.<rolle>.vramBudgetGb, siehe registry.py
+#   _ROLE_RUNTIME_KEYS). Die frühere runtime_config.yaml (141/8 GB aus der
+#   H200-Pod-Ära) wurde am 2026-09-20 entfernt, weil sie von keinem Worker
+#   gelesen wurde (INFRA-RUNPOD-006).
 # - startet Uvicorn mit graceful shutdown
 # - klare Startup-Fehler über strukturierte Logs
 set -euo pipefail

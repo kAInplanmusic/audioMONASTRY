@@ -1,17 +1,26 @@
 /**
  * audioMONASTRY · VisualMONK – RunPod-Vision-Client (FLUX)
  * ========================================================
- * Ruft den Serverless-Endpoint der Rolle `vision` auf (FLUX.1-dev) und liefert
+ * Ruft den Serverless-Endpoint der Rolle `imageHq` auf (FLUX.1-dev) und liefert
  * das erzeugte Bild als data-URI (oder URL). Der Worker-Input ist
  * `{ input: { prompt, num_inference_steps, width, height } }`, der Output traegt
  * `image_url` (data-URI) bzw. `images`.
+ *
+ * SONDERWEG (begruendet, INFRA-RUNPOD-007): Dieser Pfad geht NICHT durch den
+ * `RunPodProvider`, weil der Worker ein VORGEFERTIGTES PrunaAI-FLUX-Image ist
+ * (`warmupMode: 'endpoint'` in endpointRegistry.ts) und unser
+ * `{task, model, input}`-Protokoll nicht kennt – ein Aufruf mit `task`-Feld
+ * wuerde dort als ungueltiger Request enden. Alles, was NICHT worker-spezifisch
+ * ist, teilt dieser Client mit den uebrigen Rollen ueber `runpodJobClient.ts`:
+ * Gate, Retry mit Backoff, Deadline und ein Circuit Breaker je Rolle
+ * (Konstitution docs/INFRA_KONSTITUTION.md §1.1/§4).
  *
  * Bewusst ohne feste Endpoint-ID im Code: die ID kommt aus der Flotten-Registry
  * (Rolle `imageHq`, Env `RP_ENDPOINT_ID_IMAGE`, Fallback `RP_ENDPOINT_ID`).
  */
 import { resolveGpuRoles } from '../orchestrator/endpointRegistry';
 import { wakeRoleOnDemand } from '../orchestrator/fleetWake';
-import { blockMessage, roleBlockCode } from '../aiGate';
+import { assertVisualRoleAllowed, runVisualJob } from './runpodJobClient';
 
 export interface VisionImageResult {
   /** data-URI (`data:image/png;base64,...`) oder Bild-URL. */
@@ -31,6 +40,10 @@ export interface VisionOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
   fetchImpl?: typeof fetch;
+  /** Nur für Tests: Warten (Backoff/Polling) ersetzen. */
+  sleepImpl?: (ms: number) => Promise<void>;
+  /** Nur für Tests: Basis-Backoff in ms (Default 1000). */
+  retryBaseMs?: number;
 }
 
 export class VisionError extends Error {
@@ -85,42 +98,27 @@ export function extractVisionImage(output: unknown): string | null {
   return null;
 }
 
-function authHeaders(apiKey: string): Record<string, string> {
-  return {
-    Authorization: `Bearer ${apiKey}`,
-    'Content-Type': 'application/json',
-    'User-Agent': 'audiomonastry-agent',
-  };
-}
-
 /**
  * Erzeugt ein Bild. Nutzt `/runsync` und pollt bei kaltem Worker per
  * `/status/{id}` weiter (Kaltstart kann Minuten dauern).
+ *
+ * INFRA-RUNPOD-007: Netzwerk, Retry, Deadline und Circuit Breaker kommen aus
+ * dem gemeinsamen `runpodJobClient` – dieser Pfad verhaelt sich damit wie jede
+ * andere RunPod-Kante der Flotte.
  */
 export async function generateVisionImage(prompt: string, opts: VisionOptions = {}): Promise<VisionImageResult> {
   // INFRA-FEAT-001/002: Der AI-Schalter gilt auch für den direkten Visual-Pfad.
   // Bei „AI aus“ bzw. Modus "ohne Visuals" entsteht hier KEIN Netzwerkverkehr.
-  const blocked = roleBlockCode('imageHq');
-  if (blocked) throw new VisionError(blocked, blockMessage(blocked, 'imageHq', 'vision'));
+  const visionError = (code: string, message: string): VisionError => new VisionError(code, message);
+  assertVisualRoleAllowed('imageHq', visionError);
   const endpointId = opts.endpointId || visionEndpointId();
   const apiKey = opts.apiKey || env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
-  const doFetch = opts.fetchImpl ?? fetch;
   const started = Date.now();
-  const timeoutMs = opts.timeoutMs ?? 900_000;
-  const pollIntervalMs = opts.pollIntervalMs ?? 5_000;
 
-  if (!endpointId) throw new VisionError('NO_ENDPOINT', 'RP_ENDPOINT_ID_VISION ist nicht gesetzt');
-  if (!apiKey) throw new VisionError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
+  if (!endpointId) throw visionError('NO_ENDPOINT', 'RP_ENDPOINT_ID_VISION ist nicht gesetzt');
+  if (!apiKey) throw visionError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
   const clean = String(prompt ?? '').trim().slice(0, 1200);
-  if (!clean) throw new VisionError('NO_PROMPT', 'prompt fehlt');
-
-  const base = `https://api.runpod.ai/v2/${encodeURIComponent(endpointId)}`;
-  const input = {
-    prompt: clean,
-    num_inference_steps: opts.steps ?? 25,
-    width: opts.width ?? 1024,
-    height: opts.height ?? 1024,
-  };
+  if (!clean) throw visionError('NO_PROMPT', 'prompt fehlt');
 
   // INFRA-FEAT-002: Visual-Rolle erst JETZT starten (workersMin=1) und nach dem
   // Idle-Fenster automatisch schlafen legen. Best effort – der Job unten wartet
@@ -128,37 +126,32 @@ export async function generateVisionImage(prompt: string, opts: VisionOptions = 
   // die Generierung nicht verhindern.
   void wakeRoleOnDemand('imageHq');
 
-  const deadline = started + timeoutMs;
-  let job: Record<string, unknown>;
-  try {
-    const runResp = await doFetch(`${base}/runsync`, {
-      method: 'POST',
-      headers: authHeaders(apiKey),
-      body: JSON.stringify({ input }),
-    });
-    if (!runResp.ok) throw new VisionError('HTTP', `runsync HTTP ${runResp.status}`);
-    job = (await runResp.json()) as Record<string, unknown>;
-  } catch (e) {
-    if (e instanceof VisionError) throw e;
-    throw new VisionError('NETWORK', `runsync fehlgeschlagen: ${(e as Error).message}`);
-  }
+  const job = await runVisualJob({
+    role: 'imageHq',
+    endpointId,
+    apiKey,
+    submitPath: 'runsync',
+    jobLabel: 'Vision-Job',
+    timeoutMs: opts.timeoutMs ?? 900_000,
+    pollIntervalMs: opts.pollIntervalMs,
+    fetchImpl: opts.fetchImpl,
+    sleepImpl: opts.sleepImpl,
+    retryBaseMs: opts.retryBaseMs,
+    makeError: visionError,
+    // Worker-eigener Vertrag: FLUX kennt kein {task, model}-Umschlagfeld.
+    input: {
+      prompt: clean,
+      num_inference_steps: opts.steps ?? 25,
+      width: opts.width ?? 1024,
+      height: opts.height ?? 1024,
+    },
+  });
 
-  const jobId = String(job.id ?? '');
-  let status = String(job.status ?? '');
-  while (status === 'IN_QUEUE' || status === 'IN_PROGRESS' || status === '') {
-    if (Date.now() > deadline) throw new VisionError('TIMEOUT', `Vision-Job ${jobId} nach ${timeoutMs} ms nicht fertig`);
-    if (!jobId) throw new VisionError('NO_JOB', 'Worker lieferte keine Job-ID');
-    await new Promise((r) => setTimeout(r, pollIntervalMs));
-    const stResp = await doFetch(`${base}/status/${encodeURIComponent(jobId)}`, { headers: authHeaders(apiKey) });
-    if (!stResp.ok) throw new VisionError('HTTP', `status HTTP ${stResp.status}`);
-    job = (await stResp.json()) as Record<string, unknown>;
-    status = String(job.status ?? '');
-  }
-
-  if (status !== 'COMPLETED') throw new VisionError(status || 'FAILED', `Vision-Job ${status}`);
+  const status = String(job.status ?? '').toUpperCase();
+  if (status !== 'COMPLETED') throw visionError(status || 'FAILED', `Vision-Job ${status}`);
 
   const image = extractVisionImage(job.output);
-  if (!image) throw new VisionError('NO_IMAGE', 'Worker lieferte kein Bild');
+  if (!image) throw visionError('NO_IMAGE', 'Worker lieferte kein Bild');
   const output = (job.output ?? {}) as Record<string, unknown>;
   const seed = typeof output.seed === 'number' ? output.seed : undefined;
   return { image, prompt: clean, seed, durationMs: Date.now() - started };

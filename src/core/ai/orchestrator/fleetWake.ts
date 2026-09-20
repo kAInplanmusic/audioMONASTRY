@@ -48,8 +48,9 @@ import {
   isVisualRole,
 } from '../../../config/aiInfrastructure';
 import { aiGateStatus, isAiDisabled, isRoleAllowed, roleBlockCode } from '../aiGate';
+import { visionBreakerStates } from '../vision/runpodJobClient';
 import { aiLogger } from './aiLogger';
-import { resolveGpuRoles, type GpuRoleDefinition, type ResolvedGpuRole } from './endpointRegistry';
+import { auditRoleEndpointIds, resolveGpuRoles, type GpuRoleDefinition, type ResolvedGpuRole } from './endpointRegistry';
 import { RunPodProvider, type WarmupResult } from './runpodProvider';
 
 const DEFAULT_REST_BASE = 'https://rest.runpod.io/v1';
@@ -496,6 +497,10 @@ export function fleetStatus(): Record<string, unknown> {
   const gate = aiGateStatus(roleIds);
   const allowed = resolved.filter((role) => isRoleAllowed(role.role)).map((role) => role.role);
   const budget = fleetBudgetReport(allowed, AI_HETZNER_EUR_PER_HOUR);
+  // INFRA-RUNPOD-007: Endpoint-ID-Wächter und Visual-Breaker sind Teil des
+  // Statusberichts. `strict: false`, weil ein Statusbericht nie werfen darf –
+  // den harten Abbruch macht der Start von `providerRouter`.
+  const endpointAudit = auditRoleEndpointIds({ roles: resolved, strict: false });
   return {
     enabled: flagEnabled('AI_FLEET_WAKE'),
     wakeEnabled: flagEnabled('AI_FLEET_WAKE'),
@@ -510,6 +515,15 @@ export function fleetStatus(): Record<string, unknown> {
     blockedRoles: gate.blockedRoles,
     alwaysOnRoles: alwaysOnRoles(),
     visualIdleMs: visualIdleMs(),
+    // INFRA-RUNPOD-007: sichtbar machen, ob Rollen Endpoint-IDs teilen und ob
+    // ein Visual-Breaker offen ist (Diagnose ohne Log-Zugriff).
+    endpointAudit: {
+      ok: endpointAudit.ok,
+      legacyFallback: endpointAudit.legacyFallback,
+      collisions: endpointAudit.collisions,
+      message: endpointAudit.message,
+    },
+    visionBreakers: visionBreakerStates(),
     budget: {
       gpuEurPerHour: budget.gpuEurPerHour,
       hetznerEurPerHour: budget.hetznerEurPerHour,

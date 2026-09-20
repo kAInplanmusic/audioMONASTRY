@@ -29,6 +29,14 @@ Drift-Guard `tests/manifestRoles.test.ts` hält Code und Manifest zusammen.)
 `videoAbstract` sind die **Visual-Rollen** und starten **nur bei Abruf**
 (siehe §2).
 
+**VRAM-Budget — genau eine Quelle mit Auflösungsregel (INFRA-RUNPOD-006):**
+`model_manifest.json` → `runtime.vramBudgetGb` ist der Flotten-Default,
+`roles.<rolle>.vramBudgetGb` übersteuert ihn je Rolle (gelesen in
+`model_manager.configure()` über `registry.py`). Eine frühere
+`runtime_config.yaml` (141/8 GB aus der H200-Pod-Ära) ist **gelöscht** – kein
+Worker hat sie je gelesen; `AI_MAX_VRAM` in der TS-Simulation ist keine
+Flottenquelle.
+
 ### 1.2 Die 5 Hetzner-Rollen
 
 `app` (Caddy + API + Signaling) · `sfu` (mediasoup, RTP 40000–40099) ·
@@ -84,7 +92,12 @@ bedarfsgesteuert.
   `isVisualRole`, `alwaysOnRoles`) sowie die **Laufzeit-Grenzen**
   (`getBudgetLimits`/`setBudgetLimits`/`resetBudgetLimits`) und den Kostenbericht
   `fleetBudgetReport` (GPU + Hetzner + Speicher).
-- `providerRouter.ts` ruft `assertGpuEndpointBudget()` beim Start.
+- `providerRouter.ts` ruft `assertGpuEndpointBudget()` beim Start und
+  `auditRoleEndpointIds()` (INFRA-RUNPOD-007): der Start bricht ab, wenn zwei
+  Rollen ohne Legacy-Modus auf dieselbe Endpoint-ID zeigen; der dokumentierte
+  Legacy-Migrationspfad (`RP_ENDPOINT_ID` für alle Rollen) bleibt erlaubt und
+  wird nur laut gemeldet. `GET /api/ai/fleet/status` berichtet ihn unter
+  `endpointAudit` (`strict: false`).
 - `runpod-deploy.py` (`ROLE_DEFAULTS`) ist die Deploy-Seite derselben 8 Rollen.
 - **AI-Schalter (wirksam):** `src/core/ai/aiGate.ts` ist der eine Zustand
   (`off` / `on-no-visuals` / `on-with-visuals`). Er wird an jeder RunPod-Kante
@@ -94,6 +107,15 @@ bedarfsgesteuert.
 - **Visual-Rollen (wirksam):** `wakeFleet()` weckt nur die immer-Rollen;
   Visuals kommen über `wakeRoleOnDemand()` bei Abruf hoch und fallen nach
   `AI_VISUAL_IDLE_MS` wieder auf `workersMin=0`.
+- **Visual-Sonderweg (begründet, INFRA-RUNPOD-007):** `vision/runpodVision.ts`
+  und `vision/runpodVideo.ts` gehen NICHT durch `RunPodProvider`, weil ihre
+  vorgefertigten ComfyUI-/Hub-Worker das `{task, model, input}`-Protokoll nicht
+  kennen (§1.1, `warmupMode: 'endpoint'`) – ein Umbiegen würde sie mit
+  ungültigen Requests treffen. Alles, was nicht worker-spezifisch ist, teilen
+  beide über `vision/runpodJobClient.ts`: Gate-Prüfung, Retry mit Backoff nur
+  bei wiederholbaren Fehlern (429/5xx/Netz), Deadline über den ganzen Job und
+  ein Circuit Breaker je Rolle (`visionBreakerStates()`, sichtbar als
+  `visionBreakers` im Flotten-Status).
 - **Budget-Guards (verdrahtet):** der Wake-Pfad bricht **vor** dem ersten
   Netzwerkaufruf beim gerissenen Stundenbudget ab (`blocked: 'budget'`); die
   Speicherkosten werden in `GET /api/ai/fleet/status` und `POST /api/ai/budget/check`

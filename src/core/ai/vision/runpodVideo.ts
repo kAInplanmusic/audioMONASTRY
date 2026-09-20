@@ -1,7 +1,7 @@
 /**
  * audioMONASTRY · VisualMONK – RunPod-Video-Client (Wan2.2 image->video)
  * =====================================================================
- * Ruft den Serverless-Endpoint der Rolle `video` auf. Der Worker ist ein
+ * Ruft den Serverless-Endpoint der Rolle `videoReal` auf. Der Worker ist ein
  * ComfyUI/Wan2.2-Image-to-Video-Worker:
  *   Input:  { image_base64: <ROHES base64, KEIN data:-Praefix>, prompt, negative_prompt?, width?, height?, steps?, cfg?, seed? }
  *   Output: { video: <rohes base64 mp4> }
@@ -9,12 +9,20 @@
  * scheitern (live verifiziert 2026-09-11) – deshalb wird hier immer der
  * reine Base64-Teil gesendet und das Ergebnis als data-URI zurueckgegeben.
  *
+ * SONDERWEG (begruendet, INFRA-RUNPOD-007): Der Worker ist ein VORGEFERTIGTES
+ * Wan2.2-ComfyUI-Image (`warmupMode: 'endpoint'` in endpointRegistry.ts) und
+ * kennt unser `{task, model, input}`-Protokoll NICHT – ein Aufruf ueber den
+ * `RunPodProvider` wuerde ihn mit ungueltigen Requests treffen. Alles, was
+ * NICHT worker-spezifisch ist, kommt deshalb aus `runpodJobClient.ts`: Gate,
+ * Retry mit Backoff, Deadline und ein Circuit Breaker je Rolle
+ * (Konstitution docs/INFRA_KONSTITUTION.md §1.1/§4).
+ *
  * Endpoint-ID aus der Flotten-Registry (Rolle `videoReal`, Env
  * `RP_ENDPOINT_ID_VIDEO_REAL`, Fallback `RP_ENDPOINT_ID`).
  */
 import { resolveGpuRoles } from '../orchestrator/endpointRegistry';
 import { wakeRoleOnDemand } from '../orchestrator/fleetWake';
-import { blockMessage, roleBlockCode } from '../aiGate';
+import { assertVisualRoleAllowed, runVisualJob } from './runpodJobClient';
 
 export interface VideoResult {
   /** data-URI (`data:video/mp4;base64,...`). */
@@ -35,6 +43,10 @@ export interface VideoOptions {
   timeoutMs?: number;
   pollIntervalMs?: number;
   fetchImpl?: typeof fetch;
+  /** Nur für Tests: Warten (Backoff/Polling) ersetzen. */
+  sleepImpl?: (ms: number) => Promise<void>;
+  /** Nur für Tests: Basis-Backoff in ms (Default 1000). */
+  retryBaseMs?: number;
 }
 
 export class VideoError extends Error {
@@ -96,30 +108,22 @@ export function extractVideo(output: unknown): string | null {
   return null;
 }
 
-function authHeaders(apiKey: string): Record<string, string> {
-  return { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', 'User-Agent': 'audiomonastry-agent' };
-}
-
 /** Erzeugt einen Clip aus einem Eingangsbild (Wan2.2 image->video). */
 export async function generateVideo(imageBase64: string, prompt: string, opts: VideoOptions = {}): Promise<VideoResult> {
   // INFRA-FEAT-001/002: Auch der Video-Pfad hängt am AI-Schalter – bei „AI aus“
   // bzw. Modus "ohne Visuals" entsteht hier kein einziger RunPod-Request.
-  const blocked = roleBlockCode('videoReal');
-  if (blocked) throw new VideoError(blocked, blockMessage(blocked, 'videoReal', 'vision'));
+  const videoError = (code: string, message: string): VideoError => new VideoError(code, message);
+  assertVisualRoleAllowed('videoReal', videoError);
   const endpointId = opts.endpointId || videoEndpointId();
   const apiKey = opts.apiKey || env('RP_AGENT_KEY') || env('RP_API_KEY') || env('RUNPOD_API_KEY');
-  const doFetch = opts.fetchImpl ?? fetch;
   const started = Date.now();
-  const timeoutMs = opts.timeoutMs ?? 1_800_000;
-  const pollIntervalMs = opts.pollIntervalMs ?? 5_000;
 
-  if (!endpointId) throw new VideoError('NO_ENDPOINT', 'RP_ENDPOINT_ID_VIDEO ist nicht gesetzt');
-  if (!apiKey) throw new VideoError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
+  if (!endpointId) throw videoError('NO_ENDPOINT', 'RP_ENDPOINT_ID_VIDEO ist nicht gesetzt');
+  if (!apiKey) throw videoError('NO_KEY', 'RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY ist nicht gesetzt');
   const image = stripDataUri(imageBase64);
-  if (!image) throw new VideoError('NO_IMAGE', 'imageBase64 fehlt');
+  if (!image) throw videoError('NO_IMAGE', 'imageBase64 fehlt');
   const clean = String(prompt ?? '').trim().slice(0, 1200) || 'gentle camera push in, subtle motion';
 
-  const base = `https://api.runpod.ai/v2/${encodeURIComponent(endpointId)}`;
   const input: Record<string, unknown> = {
     image_base64: image,
     prompt: clean,
@@ -135,32 +139,30 @@ export async function generateVideo(imageBase64: string, prompt: string, opts: V
   // wieder auf workersMin=0 setzen (best effort, siehe runpodVision.ts).
   void wakeRoleOnDemand('videoReal');
 
-  const deadline = started + timeoutMs;
-  let job: Record<string, unknown>;
-  try {
-    const runResp = await doFetch(`${base}/run`, { method: 'POST', headers: authHeaders(apiKey), body: JSON.stringify({ input }) });
-    if (!runResp.ok) throw new VideoError('HTTP', `run HTTP ${runResp.status}`);
-    job = (await runResp.json()) as Record<string, unknown>;
-  } catch (e) {
-    if (e instanceof VideoError) throw e;
-    throw new VideoError('NETWORK', `run fehlgeschlagen: ${(e as Error).message}`);
-  }
+  const job = await runVisualJob({
+    role: 'videoReal',
+    endpointId,
+    apiKey,
+    // Video-Jobs sprengen das runsync-Fenster (Diffusion ueber viele Schritte).
+    submitPath: 'run',
+    jobLabel: 'Video-Job',
+    timeoutMs: opts.timeoutMs ?? 1_800_000,
+    pollIntervalMs: opts.pollIntervalMs,
+    fetchImpl: opts.fetchImpl,
+    sleepImpl: opts.sleepImpl,
+    retryBaseMs: opts.retryBaseMs,
+    makeError: videoError,
+    // Worker-eigener Vertrag: Wan2.2 kennt kein {task, model}-Umschlagfeld.
+    input,
+  });
 
-  const jobId = String(job.id ?? '');
-  if (!jobId) throw new VideoError('NO_JOB', 'Worker lieferte keine Job-ID');
-  let status = String(job.status ?? '');
-  while (status !== 'COMPLETED' && status !== 'FAILED' && status !== 'CANCELLED' && status !== 'TIMED_OUT') {
-    if (Date.now() > deadline) throw new VideoError('TIMEOUT', `Video-Job nach ${timeoutMs} ms nicht fertig`);
-    await new Promise((r) => setTimeout(r, pollIntervalMs));
-    const stResp = await doFetch(`${base}/status/${encodeURIComponent(jobId)}`, { headers: authHeaders(apiKey) });
-    if (!stResp.ok) throw new VideoError('HTTP', `status HTTP ${stResp.status}`);
-    job = (await stResp.json()) as Record<string, unknown>;
-    status = String(job.status ?? '');
+  const status = String(job.status ?? '').toUpperCase();
+  if (status !== 'COMPLETED') {
+    throw videoError(status || 'FAILED', String(job.error ?? `Video-Job ${status}`).slice(0, 300));
   }
-  if (status !== 'COMPLETED') throw new VideoError(status || 'FAILED', String(job.error ?? `Video-Job ${status}`).slice(0, 300));
 
   const raw = extractVideo(job.output);
-  if (!raw) throw new VideoError('NO_VIDEO', 'Worker lieferte kein Video');
+  if (!raw) throw videoError('NO_VIDEO', 'Worker lieferte kein Video');
   const video = raw.startsWith('data:video') ? raw : `data:video/mp4;base64,${raw}`;
   return { video, prompt: clean, durationMs: Date.now() - started };
 }

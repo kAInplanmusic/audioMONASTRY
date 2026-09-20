@@ -157,10 +157,9 @@ Plugin-Leases) und liefert im Produktionsbetrieb das SPA-Bundle (`GET *`).
   `docker-compose.monitoring.yml`, `docker-compose.sfu.yml`,
   `docker-compose.fleet-test.yml`
 - `Caddyfile` – TLS/Reverse-Proxy
-- `services/audiomonastry-ai-runtime/runtime_config.yaml` – AI-Runtime (Device,
-  VRAM-Budget, Idle-Timeout)
 - `services/audiomonastry-ai-runtime/model_manifest.json` – Model Registry
-  (Revision-Pinning)
+  (Revision-Pinning) **und die EINZIGE Quelle des VRAM-Budgets**
+  (`runtime.vramBudgetGb`, je Rolle `roles.<rolle>.vramBudgetGb`)
 - `services/audiomonastry-ai-runtime/hf_endpoint.example.json` – HF-Endpoint-Konfig
 - `database/schema.sql` + `database/ai_migration_001.sql` +
   `database/ai_migration_002.sql` – Supabase-Schema & Prompt-/Eval-Tabellen
