@@ -4,6 +4,8 @@ Betriebsweg für den Produktionspfad: **Cloudflare → Portal-Worker → `origin
 
 Bereit heißt: `https://anunnakitools.de/api/health` antwortet **HTTP 200** mit **JSON** `{"status":"ok",...}`. Alles andere (522, HTML-Body, `starting-app`) ist *nicht* bereit.
 
+Seit PROD-P1-F4 gehören zwei weitere Felder zur Bereitschaft: `/api/health` nennt `commit` (kurzer Repo-SHA) und `buildTime`, und der Portal-Worker gibt nur noch dann `state: ready`, wenn dieser Commit zum erwarteten Stand passt. Eine **belegte Abweichung** wird als `state: stale` („Flotte laeuft Stand X, Repo ist Y") gemeldet und leitet **nicht** ins Studio weiter; „nicht prüfbar" (Image von vor F4 ohne `commit`-Feld) blockiert nicht, wird aber gemeldet. Betreiber-Ablauf für einen belegbaren Rollback: §7.1.
+
 Zwei Fehlerklassen treten gemeinsam auf und sind in dieser Reihenfolge zu beheben: **erst** der Cloudflare-Token (Schritt 1/2), **dann** A-Record (Schritt 3), **dann** Zertifikat + Caddyfile auf dem Knoten (Schritt 4), **zuletzt** die Verifikation über die Domain (Schritt 5). Ein Zertifikatsfix am Knoten heilt keinen kaputten DNS-Record – und umgekehrt.
 
 > Verbindliche Flotten-Zahlen (Rollen, Typen, Budgets): `docs/INFRA_KONSTITUTION.md`.
@@ -137,7 +139,7 @@ Fehlen `certs/origin.crt`/`origin.key`: `ORIGIN_CERT`/`ORIGIN_KEY` im Portal-Sec
 ```bash
 # 1) Statuscode + Body über die Domain (HTML oder 522 zählt NICHT als bereit)
 curl -s -o /tmp/health.body -w 'http=%{http_code}\n' https://anunnakitools.de/api/health
-cat /tmp/health.body     # erwartet: {"status":"ok","version":"..."}
+cat /tmp/health.body     # erwartet: {"status":"ok","version":"...","commit":"<kurzer SHA>","buildTime":"..."}
 
 # 2) Portal-Zustand inkl. DNS-Feld mit Klartextgrund
 #    (Login-Cookie genau wie fleet-preflight.sh; ADMIN_USER/ADMIN_PASSWORD aus .env.deploy)
@@ -154,7 +156,11 @@ curl -s -b /tmp/portal.cookies -X POST https://anunnakitools.de/api/wake      | 
 Abnahmekriterien:
 
 - `/api/health` → **200** und Body-JSON `status: ok`. Ein HTML-Body (Portal-Seite oder Cloudflare-Fehlerseite) oder 522 ist **kein** Beleg.
-- `GET /api/status` → `state: ready` und der DNS-Zustand als Feld mit **Klartextgrund** (z. B. `DNS-Verdrahtung fehlt: Token ohne Zone:DNS:Edit`).
+- `/api/health` → `commit` **entspricht dem Repo-Stand** (kurzer SHA, seit PROD-P1-F4). Die Version allein genügt nicht: sie ändert sich nicht mit jedem Commit. Prüfen mit
+  `bash scripts/hetzner/fleet-preflight.sh check` (vergleicht Repo-Commit gegen `/api/health`) –
+  ohne Werkzeug: `curl -s https://anunnakitools.de/api/health | python3 -c 'import json,sys; print(json.load(sys.stdin).get("commit"))'` gegen `git rev-parse --short HEAD` halten.
+  Meldet der Knoten **keinen** `commit` (Image von vor F4), ist die Parität *nicht prüfbar*: das blockiert nicht, muss aber als Restpunkt im Bericht stehen.
+- `GET /api/status` → `state: ready` und der DNS-Zustand als Feld mit **Klartextgrund** (z. B. `DNS-Verdrahtung fehlt: Token ohne Zone:DNS:Edit`). Meldet der Worker `state: stale` mit „Flotte laeuft Stand X, Repo ist Y", ist die Parität verletzt: **kein** Weiterleiten ins Studio, erst neu deployen (oder bewusst `--allow-stale`).
 - `POST /api/wire-fleet` → Feld `dns`; `POST /api/wake` → Feld `wiring.dns`. Beide nennen denselben Klartextgrund wie Schritt 2 – Portal und Preflight dürfen sich nicht widersprechen.
 - Kein `acme_client … challenge failed` mehr im Caddy-Log.
 
@@ -190,6 +196,70 @@ ssh -i "$SSH_KEY" root@<app-1-ip> 'ls -ld /opt/audiomonastry/certs && ls -l /opt
 
 ---
 
+## 7.1 Rollback auf ein altes Versionslabel (PROD-P1-F4)
+
+Seit PROD-P1-F4 trägt jedes Image drei Stempel, die `/api/health` ausgibt. Damit ist ein Rollback
+**belegbar** statt gefühlt:
+
+| Feld | Quelle | Aussage |
+|---|---|---|
+| `version` | `package.json` (Build-Arg `BUILD_VERSION`) | Release-Version – ändert sich **nicht** mit jedem Commit |
+| `commit` | `git rev-parse --short HEAD` (Build-Arg `BUILD_COMMIT`) | Repo-Stand, der im Image steckt |
+| `buildTime` | UTC-Zeit beim Build (Build-Arg `BUILD_TIME`) | wann das Image gebaut wurde |
+
+**1. Welcher Stand läuft (vor jedem Rollback messen):**
+
+```bash
+curl -s https://anunnakitools.de/api/health | python3 -m json.tool
+#   → {"status":"ok","version":"1.210.001","commit":"ae5e749","buildTime":"2026-09-20T15:04:05Z"}
+git rev-parse --short HEAD        # Repo-Stand zum Vergleich
+bash scripts/hetzner/fleet-preflight.sh check   # vergleicht beide Seiten, Exit 1 bei Abweichung
+```
+
+**2. Laufenden Stand sichern bzw. altes Label inspizieren (auf dem Knoten):**
+
+```bash
+SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+# Welchen Stempel trägt ein vorhandenes Image? (die Stempel stecken als ENV im Image)
+ssh -i "$SSH_KEY" root@<app-1-ip> "docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' audiomonastry:hetzner | grep AUDIOMONASTRY_"
+#   → AUDIOMONASTRY_VERSION=… AUDIOMONASTRY_COMMIT=… AUDIOMONASTRY_BUILD_TIME=…
+# Vor jeden Rollback: aktuellen Stand als benanntes Label wegschreiben
+ssh -i "$SSH_KEY" root@<app-1-ip> "docker tag audiomonastry:hetzner audiomonastry:hetzner-$(git rev-parse --short HEAD)"
+```
+
+**3. Rollback auf das Vorversions-Label (das Image, das `deploy.sh` beim letzten Deploy gesichert hat):**
+
+```bash
+ssh -i "$SSH_KEY" root@<app-1-ip> 'docker tag audiomonastry:hetzner-rollback audiomonastry:hetzner && \
+  cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d --no-build --force-recreate audiomonastry'
+# Danach: welcher Stand läuft jetzt?
+curl -s https://anunnakitools.de/api/health | python3 -m json.tool   # commit = alter SHA
+```
+
+**4. Rollback auf ein benanntes Zwischen-Label** (z. B. `audiomonastry:hetzner-<alter-sha>` aus Schritt 2):
+`docker tag audiomonastry:hetzner-<alter-sha> audiomonastry:hetzner` und wie in Schritt 3 neu erzeugen.
+
+> `DEPLOY_COMMIT=<alt>` setzt **nur den Stempel** im neuen Image – der Code kommt weiter aus dem
+> Arbeitsbaum. Für einen echten Rollback muss der alte Repo-Stand ausgecheckt sein
+> (`git checkout <sha>`), sonst behauptet `/api/health` einen Stand, der nicht drin ist.
+
+**5. Erwartete Reaktion des Gates nach einem Rollback:** Der Knoten läuft dann bewusst auf einem
+*fremden* Stand – Preflight, Wake und `deploy.sh` melden also `Flotte laeuft Stand <alt>, Repo ist
+<neu>` und blockieren ohne Freigabe:
+
+```bash
+bash scripts/hetzner/fleet-preflight.sh check  --allow-stale   # bewusst abweichend weiterarbeiten
+bash scripts/hetzner/fleet-preflight.sh apply  --allow-stale
+DEPLOY_ALLOW_STALE=1 bash deploy.sh                            # im deploy.sh-Pfad
+# Worker-Pin (dauerhaft, wrangler.toml): ALLOW_STALE = "1"
+```
+
+Die Meldung bleibt dabei **sichtbar** – sie wird nur nicht mehr blockierend. Die Freigabe endet mit
+dem nächsten normalen Deploy (Stempel = Repo-Commit → `state: ready`, keine Warnung). „Nicht
+prüfbar" (Image von vor F4 ohne `commit`-Feld) blockiert nie, wird aber genauso gemeldet.
+
+---
+
 ## 8. Ehrlichkeitsgrenze: Repo-Code vs. offene Betreiber-Aktion
 
 **Repo-Code (löst sich selbst):**
@@ -197,6 +267,7 @@ ssh -i "$SSH_KEY" root@<app-1-ip> 'ls -ld /opt/audiomonastry/certs && ls -l /opt
 - Portal-Worker (`services/portal-worker/src/index.js`): setzt bei jedem Wake den `origin`-Record (`syncOriginDns()`), öffnet die Cloudflare-Firewall-Ranges für 80/443, installiert im Cloud-Init der Rolle `app` Zertifikate + `Caddyfile.origin`; meldet DNS-Fehler im Ergebnis von `/api/wake` (`wiring.dns`), `/api/wire-fleet` (`dns`) und `/api/status`.
 - `deploy.sh`: schließt `Caddyfile` vom rsync aus (INFRA-HETZNER-002), installiert Zertifikate mit Rechten 600 unter `/opt/audiomonastry/certs`, ACME nur bewusst per `DEPLOY_INSTALL_CADDYFILE=1`.
 - `scripts/hetzner/fleet-preflight.sh dns`: diagnostiziert Token/Zone/Record im Klartext (nur GET, ohne Token-Ausgabe).
+- Commit-Paritaet (PROD-P1-F4): `deploy.sh` stempelt Commit + Build-Zeit ins Image, `/api/health` gibt sie aus, und `deploy.sh` / `fleet-preflight.sh` / Portal-Worker vergleichen sie über `scripts/hetzner/lib/build-parity.sh` (kurzer SHA trifft langen). Der frühere Drift (Image 18.09. bei Repo-Stand 20.09.) wird damit laut statt still.
 
 **Offene Betreiber-Aktion (nicht durch Code ersetzbar):**
 
