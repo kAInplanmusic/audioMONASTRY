@@ -5,6 +5,18 @@
 
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// PROD-P1-F4-Nachlauf: Der Lint-Lauf ist Teil von `npm run verify`. Liegen
+// Agenten-Worktrees unter `.worktrees/` (gitignoriert, aber real auf der
+// Platte), findet der TypeScript-Parser mehrere Kandidaten fuer
+// `tsconfigRootDir` und bricht JEDE TS-Datei mit einem Parsing-Fehler ab
+// (am 2026-09-20 gemessen: 5915 Fehler, 0 Warnungen - der gesamte verify-Lauf
+// damit unbrauchbar, obwohl kein Code kaputt war).
+// Deshalb: Wurzel explizit festnageln UND die Worktrees nicht mitlinten (sonst
+// zaehlt jede Datei mehrfach und die Gate-Zahlen sind nicht mehr vergleichbar).
+const repoRoot = dirname(fileURLToPath(import.meta.url));
 
 const reactHooksRules =
   reactHooks.configs?.flat?.recommended?.rules ??
@@ -21,9 +33,23 @@ export default tseslint.config(
       'playwright-report/**',
       'public/**',
       'services/**/target/**',
+      // Agenten-Worktrees: eigene Kopie des Repos, nicht Teil des Gates. Ohne
+      // diesen Eintrag zaehlt jede Datei doppelt und der Parser findet mehrere
+      // tsconfig-Wurzeln (siehe Kommentar oben).
+      '.worktrees/**',
       '**/*.min.js',
       '**/*.d.ts',
     ],
+  },
+  {
+    // EINE Wurzel fuer den TypeScript-Parser. Ohne diese Festlegung rät
+    // typescript-eslint anhand der lintierten Dateien und scheitert, sobald
+    // mehr als ein tsconfig.json-Kandidat erreichbar ist.
+    languageOptions: {
+      parserOptions: {
+        tsconfigRootDir: repoRoot,
+      },
+    },
   },
   ...tseslint.configs.recommended,
   {
