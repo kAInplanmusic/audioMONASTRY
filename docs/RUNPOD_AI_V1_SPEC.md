@@ -287,7 +287,44 @@ einer echten Generierung: `status: success`, `model: qwen3-14b`, 58 s / 64 Token
 sollte der Brain-Handler Thinking abschalten (`enable_thinking=False` bzw.
 `/no_think`), sonst frisst der Denkblock das Token-Budget – offen in `MASTERTODOENDE.json` AI-P1-003.
 
-⚠️ **CI-Deploy ist rot** (Läufe #8–#12): `build` grün, `deploy` rot, obwohl der Preflight
-zeigt, dass `RP_API_KEY` im Repo gesetzt ist. Das lokale Deploy funktioniert. Da die
-Actions-Logs ohne gültigen Token nicht lesbar sind, läuft die Diagnose über
-Step-Status-Proben im Workflow.
+⚠️ **CI-Deploy war rot** (Läufe #8–#12): `build` grün, `deploy` rot. **Behoben am 2026-09-20**, Ursachen waren
+zwei verschiedene: (1) der Push nach GHCR scheiterte bei JEDEM Lauf mit `denied: permission_denied: write_package`
+(der `GITHUB_TOKEN` des Repos darf nicht in das Paket schreiben) – deshalb kam **kein** Image-Update mehr in die Flotte,
+auch nicht der Sprach-Fix; behoben über den PAT-Fallback im Workflow (`GHCR_PAT_ALL_ACCESS || GHCR_PASSWORD`, sonst unverändert).
+(2) Der Deploy-Job brach danach mitten im Rollout ab: erst an einem doppelten Template-Namen (die Rolle `music` hängt an
+Template `9q9c60p6xh`, das `myself.podTemplates` nicht listet), dann an `This endpoint has a bound template`.
+Jetzt sind beide Fälle Betreiber-Schritte mit klarer Meldung, der Lauf endet mit vollständiger Rollen-Bilanz und Exit 5
+nur noch bei echten Fehlern. Stand: Lauf 35499065669 grün, 5 Rollen aktualisiert, 3 gebundene gemeldet
+(`music`, `videoReal`, `videoAbstract`). Tickets: INFRA-RUNPOD-008/009.
+
+## 12. Kaltstart der Rollen – gemessen und abgestellt (2026-09-20, INFRA-RUNPOD-010)
+
+**Ausfallbild:** Die Rolle `voice` nahm minutenlang keine Jobs an. `/health` zeigte `workers{running:0, unhealthy:1}`
+bei `jobs{inQueue:4}` – ein `unhealthy` Worker hielt den **einzigen** erlaubten Platz (`workersMax=1`), also startete
+RunPod keinen frischen Worker. Kein Fehler im Repo: der Code war korrekt, die Kette war es nicht.
+
+**Messung (gleicher Aufruf, `scripts/voice-coldstart-probe.py`, ein Text, `language="DE"`):**
+
+| Zustand | `delayTime` (Wartezeit) | `executionTime` (Synthese) |
+| --- | --- | --- |
+| im Ausfall | **1 175 156 ms = 19,6 min** | 7 640 ms |
+| nach der Abhilfe | **13 681 ms = 13,7 s** | 19 866 ms |
+
+Dazu Ende-zu-Ende mit `scripts/generate-mos-samples.py`: **0/3** Hörproben im Ausfall (alle `IN_QUEUE`) gegen
+**3/3 `COMPLETED`** nach der Abhilfe (ein Lauf in 74 s).
+
+**Was gesetzt wurde (beides live, per Rücklesung bestätigt):**
+`PATCH https://rest.runpod.io/v1/endpoints/<id>` mit `{"workersMax": 2}` (kein Slot-Deadlock mehr) und
+`{"flashboot": true}`. **Die REST-API braucht einen Browser-User-Agent** – ohne ihn antwortet Cloudflare mit 403,
+mit `urllib`-Default-UA ebenfalls. Das war die Ursache dafür, dass `rest.runpod.io` zwischenzeitlich als „nicht nutzbar"
+galt. `workersStandby=1` erscheint danach in der Konfiguration und ist laut Abschnitt 7 dieser Doku FlashBoot-Bestandteil,
+**nicht GPU-abrechenbar** – im Health-Bild sind das die dauerhaft `idle`/`ready` Worker.
+
+**Zwei Fallen für die nächste Diagnose:**
+1. `qwen3-tts-17b` ist **kein** 17B-Modell, sondern heißt so wegen des Punktverlusts in „1.7B":
+   `Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice` (bf16, ~8 GB VRAM laut `model_manifest.json`). Der Modell-Cache der
+   Stimmen-Rolle ist damit grob 15 GB, nicht 40 – wer den Kaltstart danach dimensioniert, rechnet um Faktor 3 falsch.
+2. Ein Network Volume hilft **nicht** gegen den dominanten Teil des Kaltstarts: der ist der **Image-Pull (11,8 GB)**.
+   Ein Volume spart nur den Modell-Download (~15 GB) und **pinnt** den Endpoint zusätzlich auf ein Rechenzentrum,
+   wodurch von den fünf erlaubten GPU-Typen weniger verfügbar sind – das kann die Wartezeit sogar verlängern.
+   Deshalb bewusst **nicht** gesetzt; Abwägung samt Ein-Schritt-Weg in `docs/RUNPOD_COLDSTART.md`.
