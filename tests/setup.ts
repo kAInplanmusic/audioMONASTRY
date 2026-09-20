@@ -38,6 +38,16 @@ for (const key of [
   'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_ACCESS_KEY', 'CFR2_SECRET_ACCESS_KEY',
   'CFR2_BUCKET', 'CFR2_URL', 'CFR2_ENDPOINT', 'CFR2_PUBLIC_URL',
   'CFS3_ENDPOINT', 'CFS3_ACCESS_KEY', 'CFS3_SECRET_KEY', 'CFS3_BUCKET',
+  // FIX F2: Der Resolver liest jetzt zusätzlich die dokumentierten Aliasse
+  // (docs/ENV_MATRIX.md) und die auf app-1 benutzten `*_ID`-Schreibweisen. Eine
+  // Host-Shell mit diesen Variablen würde sonst ECHTE R2-Zugangsdaten in die
+  // Tests tragen (im Betreiber-Shell live gemessen: CLOUDFLARE_ACCESS_KEY_ID,
+  // CLOUDFLARE_SECRET_ACCESS_KEY, CLOUDFLARE_ACCOUNT_ID). Deshalb mit entfernen.
+  'CFS3_ACCESS_KEY_ID', 'CFS3_SECRET_ACCESS_KEY', 'CFS3_ACCOUNT_ID', 'CFS3_PUBLIC_URL',
+  'CLOUDFLARE_ACCESS_KEY_ID', 'CLOUDFLARE_SECRET_ACCESS_KEY', 'CLOUDFLARE_ACCOUNT_ID', 'CF_ACCOUNT_ID',
+  // Ops-/Diagnose-Schalter des R2-Healthchecks (nur Tests setzen sie).
+  'R2_HEALTH_TTL_MS', 'R2_PROBE_TIMEOUT_MS', 'R2_SDK_MAX_ATTEMPTS',
+  'R2_AUTOSAVE_RETRY_ATTEMPTS', 'R2_AUTOSAVE_RETRY_BASE_MS', 'R2_AUTOSAVE_RETRY_MAX_MS',
   // Supabase (AI-P1-007): Unit-Tests duerfen NICHT gegen die echte DB lesen
   // oder schreiben (MOS-Ladepfad, ai_evaluations). Tests, die Persistenz
   // brauchen, injizieren einen Mock (setAiPersistenceClientForTests).

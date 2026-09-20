@@ -54,6 +54,7 @@
     "supabase:index-audio-embeddings": "tsx scripts/index-sample-audio-embeddings.ts",
     "supabase:apply": "tsx scripts/apply-supabase-migrations.ts",
     "supabase:verify": "tsx scripts/verify-supabase.ts",
+    "r2:check": "tsx scripts/cloud/r2-health-check.ts",
     "download:orchestral": "node scripts/download-orchestral.mjs",
     "fleet:stop": "bash scripts/hetzner/lifecycle.sh stop",
     "fleet:stop:yes": "bash scripts/hetzner/lifecycle.sh stop --yes",

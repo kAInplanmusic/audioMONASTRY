@@ -560,6 +560,110 @@ async function syncAppFirewall(env) {
 }
 
 // ---------------------------------------------------------------------------
+// FIX F2: R2-Zugangsdaten aus EINER Herkunft
+// ---------------------------------------------------------------------------
+// Der Live-Befund (2026-09-20): app-1 trug R2-Werte unter
+// `CFS3_ACCESS_KEY_ID`/`CFS3_SECRET_ACCESS_KEY` – Namen, die der Server nicht
+// liest –, während diese Rollen-.env nur die Legacy-Familie `CFR2_*` schrieb.
+// Zwei Schreibweisen, zwei Werte, kein Abgleich: der Server fiel still auf ein
+// falsches Paar zurück und antwortete mit `SignatureDoesNotMatch`.
+//
+// Deshalb: der Portal-Worker loest das Paar EINMAL aus seinem Secret auf und
+// schreibt BEIDE Namen mit IDENTISCHEM Wert in die Rollen-.env. Der Server liest
+// die kanonische Familie (`CFS3_*`), Knoten-Skripte (Backup) die Legacy-Familie
+// (`CFR2_*`) – beide zeigen auf dieselbe Quelle. Widerspricht sich das Portal-
+// Secret selbst, wird das gemeldet (nicht priorisiert und geschwiegen).
+// Die kanonischen Namen sind mit server/r2Config.ts gepinnt:
+// tests/portalWorkerR2EnvParity.test.ts haelt beide Seiten zusammen.
+const R2_KEY_ALIASES = {
+  accessKeyId: ['CFS3_ACCESS_KEY', 'CFS3_ACCESS_KEY_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_ACCESS_KEY', 'CLOUDFLARE_ACCESS_KEY_ID'],
+  secretAccessKey: ['CFS3_SECRET_KEY', 'CFS3_SECRET_ACCESS_KEY', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_SECRET_KEY', 'CLOUDFLARE_SECRET_ACCESS_KEY'],
+  accountId: ['CFR2_ACCOUNT_ID', 'CFS3_ACCOUNT_ID', 'CLOUDFLARE_ACCOUNT_ID'],
+  bucket: ['CFS3_BUCKET', 'CFR2_BUCKET'],
+  publicUrl: ['CFS3_PUBLIC_URL', 'CFR2_PUBLIC_URL'],
+  endpoint: ['CFS3_ENDPOINT', 'CFR2_ENDPOINT', 'CFR2_URL'],
+};
+
+/** Env-Namen, die der Server als KANONISCH liest (Spiegel von R2_CANONICAL_ENV_KEYS). */
+export const R2_CANONICAL_ENV_KEYS = {
+  accessKeyId: 'CFS3_ACCESS_KEY',
+  secretAccessKey: 'CFS3_SECRET_KEY',
+  endpoint: 'CFS3_ENDPOINT',
+  bucket: 'CFS3_BUCKET',
+  publicUrl: 'CFS3_PUBLIC_URL',
+  accountId: 'CFR2_ACCOUNT_ID',
+};
+
+const R2_ROLE_KEYS = new Set([
+  'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
+]);
+
+/** Liest alle gesetzten Varianten eines R2-Feldes (Reihenfolge = Vorrang). */
+function r2Field(env, field) {
+  const names = (R2_KEY_ALIASES[field] ?? [])
+    .map((name) => ({ name, value: String(env[name] ?? '').trim() }))
+    .filter((entry) => entry.value);
+  return { value: names[0]?.value ?? '', name: names[0]?.name ?? '', all: names };
+}
+
+/**
+ * R2-Konfiguration des Portals: benutzte Quelle je Feld + Widersprüche.
+ * Es werden NIE Werte zurückgegeben, nur Namen/Anzahl – Tokens bleiben im Secret.
+ */
+export function portalR2Config(env) {
+  const accessKeyId = r2Field(env, 'accessKeyId');
+  const secretAccessKey = r2Field(env, 'secretAccessKey');
+  const accountId = r2Field(env, 'accountId');
+  const bucket = r2Field(env, 'bucket');
+  const publicUrl = r2Field(env, 'publicUrl');
+  const endpoint = r2Field(env, 'endpoint');
+  const deviation = [
+    ['accessKeyId', accessKeyId], ['secretAccessKey', secretAccessKey], ['accountId', accountId],
+    ['bucket', bucket], ['publicUrl', publicUrl],
+  ]
+    .filter(([, field]) => new Set(field.all.map((entry) => entry.value)).size > 1)
+    .map(([field, entry]) => ({ field, chosen: entry.name, names: entry.all.map((e) => e.name) }));
+  return {
+    accessKeyId: accessKeyId.value,
+    secretAccessKey: secretAccessKey.value,
+    accountId: accountId.value,
+    bucket: bucket.value,
+    publicUrl: publicUrl.value,
+    endpoint: endpoint.value,
+    configured: Boolean(accessKeyId.value && secretAccessKey.value && (accountId.value || endpoint.value) && bucket.value),
+    source: [accessKeyId.name, secretAccessKey.name, accountId.name, bucket.name].filter(Boolean).join(' + '),
+    deviation,
+  };
+}
+
+/**
+ * Die R2-Zeilen der Rollen-.env: kanonische Namen + Legacy-Spiegel, gleicher Wert.
+ * Ohne R2 im Portal-Secret kommt eine leere Liste – dann bleibt der Knoten
+ * ausdrücklich unkonfiguriert (`/api/cloud/health` → unconfigured).
+ */
+export function r2EnvLines(env) {
+  const cfg = portalR2Config(env);
+  if (!cfg.accessKeyId || !cfg.secretAccessKey) return [];
+
+  const lines = [
+    `${R2_CANONICAL_ENV_KEYS.accessKeyId}=${cfg.accessKeyId}`,
+    `${R2_CANONICAL_ENV_KEYS.secretAccessKey}=${cfg.secretAccessKey}`,
+  ];
+  if (cfg.accountId) lines.push(`${R2_CANONICAL_ENV_KEYS.accountId}=${cfg.accountId}`);
+  if (cfg.bucket) {
+    lines.push(`${R2_CANONICAL_ENV_KEYS.bucket}=${cfg.bucket}`);
+    // Legacy-Spiegel, damit Knoten-Skripte (z. B. scripts/r2-backup.mjs), die
+    // heute `CFR2_*` lesen, denselben Wert sehen – EINE Herkunft, zwei Namen.
+    lines.push(`CFR2_ACCESS_KEY_ID=${cfg.accessKeyId}`);
+    lines.push(`CFR2_SECRET_ACCESS_KEY=${cfg.secretAccessKey}`);
+    lines.push(`CFR2_BUCKET=${cfg.bucket}`);
+  }
+  if (cfg.endpoint) lines.push(`${R2_CANONICAL_ENV_KEYS.endpoint}=${cfg.endpoint}`);
+  if (cfg.publicUrl) lines.push(`CFR2_PUBLIC_URL=${cfg.publicUrl}`);
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
 // Cloud-Init: bootstrapet einen Server komplett (Docker + Repo + .env + Rolle)
 // ---------------------------------------------------------------------------
 // P-4: Rollen-spezifische Secrets – jeder Knoten bekommt NUR, was er braucht.
@@ -622,8 +726,22 @@ function envFile(env, role) {
     }
   }
   for (const key of ROLE_ENV_KEYS[role] ?? []) {
+    // F2: R2 kommt NICHT aus der starren Schlüsselliste, sondern aus
+    // `r2EnvLines()` – eine Herkunft, konsistente Namen (siehe dort).
+    if (role === 'app' && R2_ROLE_KEYS.has(key)) continue;
     const v = env[key];
     if (v && String(v).trim()) lines.push(`${key}=${String(v).trim()}`);
+  }
+  if (role === 'app') {
+    const r2Lines = r2EnvLines(env);
+    if (r2Lines.length === 0) {
+      // Ohne R2 im Portal-Secret bleibt der Knoten bewusst unkonfiguriert – laut,
+      // damit der Betreiber es VOR dem Boot sieht (sonst steht es erst in
+      // /api/cloud/health als 'unconfigured').
+      lines.push('# R2: keine Zugangsdaten im Portal-Secret (CFS3_* / CFR2_*) – Cloud-Speicher bleibt unkonfiguriert.');
+    } else {
+      lines.push(...r2Lines);
+    }
   }
   return lines.join('\n');
 }
@@ -1219,10 +1337,41 @@ async function startFleet(env, options = {}) {
     fallbackRoles,
     failed,
     wiring,
+    // FIX F2: R2-Konfiguration des Wakes sichtbar machen. Widerspricht sich das
+    // Portal-Secret (zwei Schreibweisen mit verschiedenen Werten), ist DAS die
+    // Ursache eines späteren `SignatureDoesNotMatch` auf app-1 – und nicht erst
+    // im Log der Flotte zu finden.
+    r2: r2Summary(env),
     expectedCommit: expectedCommit || null,
     allowStale,
     parity,
     staleRoles,
+  };
+}
+
+/**
+ * Zusammenfassung der R2-Rollen-Konfiguration für das Wake-Ergebnis.
+ * Enthält nur Namen/Anzahl, niemals Werte.
+ */
+export function r2Summary(env) {
+  const cfg = portalR2Config(env);
+  const deviationCount = cfg.deviation.length;
+  if (deviationCount > 0) {
+    const details = cfg.deviation
+      .map((d) => `${d.field}: benutzt ${d.chosen} (weitere gesetzt: ${d.names.join(', ')})`)
+      .join('; ');
+    console.error(`[portal] R2-KONFIGURATIONSFEHLER: widersprüchliche Quellen im Portal-Secret – ${details}`);
+  }
+  return {
+    configured: cfg.configured,
+    source: cfg.source || '(keine R2-Variablen im Portal-Secret)',
+    deviationCount,
+    ok: cfg.configured && deviationCount === 0,
+    message: deviationCount > 0
+      ? `R2-Zugangsdaten widersprechen sich im Portal-Secret – app-1 bekommt sonst ein falsches Paar (SignatureDoesNotMatch). Betroffen: ${cfg.deviation.map((d) => d.field).join(', ')}.`
+      : cfg.configured
+        ? ''
+        : 'Keine (vollständigen) R2-Zugangsdaten im Portal-Secret – app-1 startet ohne Cloud-Speicher (localhost/OPFS).',
   };
 }
 
@@ -1576,6 +1725,12 @@ $('loginBtn').onclick = async () => {
   if (wd.parity && wd.parity.checked && wd.parity.ok === false) {
     const hint = wd.allowStale ? ' (bewusst erlaubt: allow-stale)' : ' - bitte neu deployen, der Stand ist veraltet.';
     $('loadErr').textContent = '⚠️ ' + wd.parity.message + hint;
+  }
+  // FIX F2: R2-Konfiguration des Wakes im Ladebildschirm sichtbar machen.
+  // Vorher fiel ein falsches Schluesselpaar erst als Log-Flut auf app-1 auf
+  // (SignatureDoesNotMatch im Autosave) - nie dort, wo gestartet wurde.
+  if (wd.r2 && wd.r2.ok === false && wd.r2.message) {
+    $('loadErr').textContent = '⚠️ ' + wd.r2.message;
   }
   $('login').style.display = 'none';
   $('loading').style.display = '';

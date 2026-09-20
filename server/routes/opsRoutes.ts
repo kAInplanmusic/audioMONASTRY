@@ -41,6 +41,7 @@ import {
 } from '../idleSignal.ts';
 import type { SocketLivenessEvaluation } from '../socketLiveness.ts';
 import { readBuildInfo } from '../buildInfo';
+import { getCloudStatus, getR2Counters } from '../r2Health';
 import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
 import express from 'express';
 import type { Express } from 'express';
@@ -128,6 +129,11 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
     if (wantsProm) {
       const uptime = Math.round((Date.now() - metrics.startedAt) / 1000);
       const avgLatencyMs = metrics.requests ? Math.round(metrics.latencyMsSum / metrics.requests) : 0;
+      // FIX F2: Cloud-/R2-Zustand als Metrikquelle (Prozess-Singleton).
+      const cloud = getCloudStatus();
+      const r2Counters = getR2Counters();
+      // Prometheus-Label-Escaping (vor der Nutzung definiert – TDZ).
+      const escProm = (value: string) => value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       const lines = [
         '# HELP audiomonastry_uptime_seconds Prozess-Uptime in Sekunden.',
         '# TYPE audiomonastry_uptime_seconds gauge',
@@ -173,6 +179,31 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         '# HELP audiomonastry_ai_cost_usd Geschätzte AI-Kosten (USD, kumulativ).',
         '# TYPE audiomonastry_ai_cost_usd gauge',
         `audiomonastry_ai_cost_usd ${aiOrchestrator.costs.summary().totalUsd ?? 0}`,
+        // FIX F2: R2-/Cloud-Zustand als Betriebszustand (der Live-Befund war ein
+        // Signaturfehler, der nur im Log stand). `ok` ist die einzige Zahl, die
+        // eine Alarmregel braucht; die Details stehen im JSON-Zweig.
+        '# HELP audiomonastry_cloud_r2_ok R2-Schreibprobe erfolgreich (1) oder nicht (0).',
+        '# TYPE audiomonastry_cloud_r2_ok gauge',
+        `audiomonastry_cloud_r2_ok ${cloud.r2.ok && cloud.r2.state === 'ok' ? 1 : 0}`,
+        '# HELP audiomonastry_cloud_r2_checked_timestamp_seconds Zeitpunkt der letzten R2-Probe (Unix).',
+        '# TYPE audiomonastry_cloud_r2_checked_timestamp_seconds gauge',
+        `audiomonastry_cloud_r2_checked_timestamp_seconds ${cloud.r2.checkedAt ? Math.round(cloud.r2.checkedAt / 1000) : 0}`,
+        '# HELP audiomonastry_cloud_r2_probe_duration_ms Dauer der letzten R2-Schreibprobe in ms.',
+        '# TYPE audiomonastry_cloud_r2_probe_duration_ms gauge',
+        `audiomonastry_cloud_r2_probe_duration_ms ${cloud.r2.durationMs ?? 0}`,
+        '# HELP audiomonastry_cloud_r2_probes_total Anzahl R2-Schreibproben (kumulativ).',
+        '# TYPE audiomonastry_cloud_r2_probes_total counter',
+        `audiomonastry_cloud_r2_probes_total ${r2Counters.probes}`,
+        '# HELP audiomonastry_cloud_r2_probe_failures_total Fehlgeschlagene R2-Schreibproben (kumulativ).',
+        '# TYPE audiomonastry_cloud_r2_probe_failures_total counter',
+        `audiomonastry_cloud_r2_probe_failures_total ${r2Counters.failures}`,
+        '# HELP audiomonastry_cloud_r2_state R2-Zustand als Info-Metrik (Wert 1 = aktiver Zustand).',
+        '# TYPE audiomonastry_cloud_r2_state gauge',
+        `audiomonastry_cloud_r2_state{state="${escProm(cloud.r2.state)}",problem="${escProm(cloud.r2.problem ?? 'none')}"} 1`,
+        '# HELP audiomonastry_cloud_r2_write_failures_total Fehlgeschlagene R2-Schreibvorgaenge je Pfad (kumulativ).',
+        '# TYPE audiomonastry_cloud_r2_write_failures_total counter',
+        ...(['autosave', 'upload'] as const).map((path) =>
+          `audiomonastry_cloud_r2_write_failures_total{path="${path}"} ${cloud.writes[path].failures}`),
       ];
       // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
       const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
@@ -213,6 +244,11 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         costUsd: aiOrchestrator.costs.summary().totalUsd ?? 0,
       },
       stem: { requests: metrics.stemRequests, failures: metrics.stemFailures, active: getStemActiveJobs(), max: STEM_MAX_JOBS },
+      // FIX F2: Cloud-Speicher als Betriebszustand. `cloud.r2` nennt Zustand,
+      // Ursache, Probeobjekt und Herkunft der Zugangsdaten; `cloud.writes` die
+      // letzten Schreibfehler je Pfad (Autosave/Upload). Secret-Werte erscheinen
+      // hier nie – nur Variablennamen und Fingerabdrücke.
+      cloud: getCloudStatus(),
       telemetryEvents: metrics.telemetryEvents ?? 0,
       telemetryByType: metrics.telemetryByType ?? {},
       telemetryBySource: metrics.telemetryBySource ?? {},

@@ -28,6 +28,7 @@
 import { AudioSample } from '../../src/data/samples';
 import { random } from '../../src/utils/random';
 import { pushSampleToCloud, uploadSampleToR2 } from '../cloud.ts';
+import { logR2Once, r2ProblemHint, toR2WriteError } from '../r2Health.ts';
 import {
   ChunkUploadError,
   ChunkedUploadStore,
@@ -179,7 +180,28 @@ export function registerUploadRoutes(app: Express, deps: UploadDeps): void {
       );
       return res.status(result.httpStatus).json(result.body);
     } catch (e) {
-      return res.status(500).json({ status: 'error', message: 'Upload fehlgeschlagen: ' + ((e as Error).message ?? '') });
+      // FIX F2: Der Live-Befund war `POST /api/upload/sample` → HTTP 500 mit dem
+      // rohen SDK-Text „SignatureDoesNotMatch“. Die Ursache wird jetzt
+      // klassifiziert: 503 = nicht konfiguriert (Client arbeitet lokal weiter),
+      // 502 = konfiguriert, aber der Schreibzugriff scheitert (z. B. Signatur).
+      const writeError = toR2WriteError(e);
+      const unconfigured = writeError.problem === 'not-configured' || writeError.problem === 'bucket-missing';
+      if (unconfigured) {
+        logR2Once('upload:not-configured', `[upload] /api/upload/sample ohne R2-Konfiguration: ${writeError.message}`, 'warn');
+      } else {
+        logR2Once(
+          `upload:${writeError.problem}`,
+          `[upload] /api/upload/sample fehlgeschlagen [${writeError.problem}]: ${writeError.message}. ${r2ProblemHint(writeError.problem)}`,
+        );
+      }
+      return res.status(unconfigured ? 503 : 502).json({
+        status: 'error',
+        error: unconfigured ? 'r2-not-configured' : 'r2-write-failed',
+        reason: writeError.problem,
+        degraded: true,
+        hint: r2ProblemHint(writeError.problem),
+        message: `Upload fehlgeschlagen: ${writeError.message}`,
+      });
     }
   });
 

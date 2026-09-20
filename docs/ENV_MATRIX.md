@@ -60,11 +60,25 @@
 | `CFR2_SECRET_ACCESS_KEY` | `CFR2_SECRET_ACCESS_KEY` | `CLOUDFLARE_SECRET_ACCESS_KEY` | R2-Schreibpfad | **ja** |
 | `CFR2_BUCKET` | `CFR2_BUCKET` | – | server/cloud.ts | nein |
 | `CFR2_PUBLIC_URL` | `CFR2_PUBLIC_URL` | – | Public-Read-URLs | nein |
-| `CFS3_ACCESS_KEY` | `CFS3_ACCESS_KEY` | – | S3-kompatibler Pfad | **ja** |
-| `CFS3_SECRET_KEY` | `CFS3_SECRET_KEY` | – | S3-kompatibler Pfad | **ja** |
+| `CFS3_ACCESS_KEY` | `CFS3_ACCESS_KEY` | `CFS3_ACCESS_KEY_ID` | S3-kompatibler Pfad | **ja** |
+| `CFS3_SECRET_KEY` | `CFS3_SECRET_KEY` | `CFS3_SECRET_ACCESS_KEY` | S3-kompatibler Pfad | **ja** |
 | `CFS3_ENDPOINT` | `CFS3_ENDPOINT` | – | S3-kompatibler Pfad | nein |
 | `CFS3_BUCKET` | `CFS3_BUCKET` | – | S3-kompatibler Pfad | nein |
+| `CFS3_PUBLIC_URL` | `CFS3_PUBLIC_URL` | `CFR2_PUBLIC_URL` | Public-Read-URLs | nein |
 | `CFS3_PUBLIC_KEY` | `CFS3_PUBLIC_KEY` | – | S3-kompatibler Pfad | nein |
+
+**FIX F2 (2026-09-20) – eine Herkunft, Abweichungen laut:** `server/r2Config.ts`
+ist die EINZIGE Auflösung für beide Rollen-Quellen (Knoten-`.env` und Rollen-`.env`
+des Portal-Workers). Gelesen werden die oben genannten Aliasse; auf app-1 lagen die
+Werte unter `CFS3_ACCESS_KEY_ID`/`CFS3_SECRET_ACCESS_KEY`, die der Server vorher
+**still ignorierte** (Folge: `SignatureDoesNotMatch`). Liefern zwei gesetzte
+Variablen unterschiedliche Werte für dasselbe Feld, ist das eine gemeldete
+Abweichung (`/api/cloud/health` → `r2.credentials.deviation`, Warnung im Log,
+`docs/OPS_RUNBOOK.md` Abschnitt 12) – kein stilles Priorisieren. Werte erscheinen
+dabei nie im Klartext, nur als Fingerabdruck. Der Portal-Worker schreibt die
+kanonischen `CFS3_*`-Namen plus Legacy-Spiegel (`CFR2_*`) mit identischem Wert
+(`services/portal-worker/src/index.js` → `r2EnvLines`, geprüft in
+`tests/portalWorkerR2EnvParity.test.ts`).
 
 ## 4. RunPod-GPU-Flotte (kanonisch `RP_*`)
 
