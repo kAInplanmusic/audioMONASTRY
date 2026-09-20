@@ -39,7 +39,10 @@
 #   ORIGIN_HOST        nur für 'dns': Default origin.$PORTAL_DOMAIN
 #   APP_IP             nur für 'dns': erwartete app-1-IP (Abweichung = Fehler)
 #   CF_API_BASE        nur für 'dns': API-Basis (Default Cloudflare v4; für den
-#                      Offline-Test gegen einen lokalen Stub überschreibbar)
+#                      Teststub umstellbar, z. B. http://127.0.0.1:PORT/client/v4)
+#   FLEET_ENV_FILE     Datei statt .env.deploy; "none" laedt gar nichts
+#                      (Tests/CI - sonst ueberschreibt die echte .env.deploy des
+#                      Betreiber-Rechners die Testwerte)
 #   ALLOW_STALE        1 = belegte Commit-Abweichung bewusst erlauben (Default 0)
 #
 # Aufruf:
@@ -78,7 +81,16 @@ for arg in "$@"; do
   esac
 done
 
-if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
+# Konfigurationsdatei laden - mit Test-/CI-Ausweg (gemessen 2026-09-20):
+# Auf einem Betreiber-Rechner liegt hier eine ECHTE .env.deploy mit echten
+# Tokens. Das FLEET_ENV_FILE-Override (Default .env.deploy, "none" = nichts
+# laden) erlaubt Tests und Trockenlaeufen, sich davon zu loesen - sonst haengt
+# das Ergebnis von der Maschine ab (3 Tests von tests/test_hetzner_scripts.py
+# wurden rot, weil CLOUDFLARE_API_TOKEN aus .env.deploy kam).
+FLEET_ENV_FILE="${FLEET_ENV_FILE:-.env.deploy}"
+if [[ "$FLEET_ENV_FILE" != "none" && -f "$FLEET_ENV_FILE" ]]; then
+  set -a; . "$FLEET_ENV_FILE"; set +a
+fi
 
 # Bewusste Freigabe: CLI schlaegt env/Datei (--allow-stale gewinnt).
 if [[ "$CLI_ALLOW_STALE" == "1" || "${ALLOW_STALE:-0}" == "1" ]]; then

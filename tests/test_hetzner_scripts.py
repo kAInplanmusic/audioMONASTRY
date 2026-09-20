@@ -50,6 +50,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import unittest
 import urllib.parse
@@ -502,6 +503,9 @@ CONTROLLED_ENV = (
     "DEPLOY_COMMIT", "DEPLOY_VERSION", "DEPLOY_ALLOW_STALE", "ALLOW_STALE", "PORTAL_URL",
     "ADMIN_USER", "ADMIN_PASSWORD", "AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT",
     "AUDIOMONASTRY_BUILD_TIME",
+    # Env-Datei-Schalter (fleet-preflight.sh): Tests laufen OHNE die echte
+    # .env.deploy des Betreiber-Rechners, siehe clean_env().
+    "FLEET_ENV_FILE",
 )
 
 
@@ -513,10 +517,20 @@ def bash_path() -> str:
 
 
 def clean_env(**overrides: str | None) -> dict[str, str]:
-    """Prozessumgebung ohne Testfluesterer; `None` entfernt einen Schluessel."""
+    """Prozessumgebung ohne Testfluesterer; `None` entfernt einen Schluessel.
+
+    Zusaetzlich wird die Env-Datei-Isolation gesetzt: auf einem Betreiber-Rechner
+    liegt im Repo-Root eine ECHTE `.env.deploy`, die fleet-preflight.sh selbst
+    einliest und damit die Testwerte ueberschreibt. Gemessen am 2026-09-20: drei
+    Tests dieses Moduls (DnsTest) wurden rot, weil CLOUDFLARE_API_TOKEN aus
+    `.env.deploy` kam - "funktioniert nur auf Rechnern ohne Tokens" ist kein
+    Test. `FLEET_ENV_FILE=none` schaltet das Laden ab; wer das Laden PRUEFEN
+    will, setzt den Wert ausdruecklich.
+    """
     env = os.environ.copy()
     for key in CONTROLLED_ENV:
         env.pop(key, None)
+    env.setdefault("FLEET_ENV_FILE", "none")
     for key, value in overrides.items():
         if value is None:
             env.pop(key, None)
@@ -870,6 +884,33 @@ class FleetPreflightDnsTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, self._combined(result))
         self.assertIn("CLOUDFLARE_API_TOKEN gesetzt: nein", result.stdout)
+
+    def test_env_datei_schalter_steuert_das_laden(self) -> None:
+        """FLEET_ENV_FILE: 'none' laedt nichts, ein Pfad laedt genau diese Datei.
+
+        Ohne diesen Schalter liest fleet-preflight.sh auf dem Betreiber-Rechner
+        die echte .env.deploy und ueberschreibt die Testwerte - die drei
+        DnsTest-Tests waren am 2026-09-20 genau deshalb rot. Der Test haelt
+        beide Richtungen fest: Isolation UND echtes Laden.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = pathlib.Path(tmp) / "fleet.env"
+            env_file.write_text(f"CLOUDFLARE_API_TOKEN={FAKE_TOKEN}\n", encoding="utf-8")
+            args = [self.bash, str(FLEET_PREFLIGHT), "dns", "--print-config"]
+            isolated = subprocess.run(
+                args, capture_output=True, text=True, cwd=ROOT, timeout=120,
+                env=clean_env(FLEET_ENV_FILE="none", CLOUDFLARE_API_TOKEN=None),
+            )
+            from_file = subprocess.run(
+                args, capture_output=True, text=True, cwd=ROOT, timeout=120,
+                env=clean_env(FLEET_ENV_FILE=str(env_file), CLOUDFLARE_API_TOKEN=None),
+            )
+        self.assertEqual(isolated.returncode, 0, self._combined(isolated))
+        self.assertIn("CLOUDFLARE_API_TOKEN gesetzt: nein", isolated.stdout)
+        self.assertEqual(from_file.returncode, 0, self._combined(from_file))
+        self.assertIn("CLOUDFLARE_API_TOKEN gesetzt: ja", from_file.stdout)
+        # Der Token selbst darf nie im Klartext auftauchen.
+        self.assertNotIn(FAKE_TOKEN, from_file.stdout + from_file.stderr)
 
     def test_bash_syntax_ist_sauber(self) -> None:
         result = subprocess.run([self.bash, "-n", str(FLEET_PREFLIGHT)], capture_output=True, text=True, cwd=ROOT, timeout=60)
