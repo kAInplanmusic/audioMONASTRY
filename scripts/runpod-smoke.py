@@ -12,8 +12,9 @@ Verwendung:
     RP_AGENT_KEY=… RUNPOD_SMOKE_ROLE=ears python3 scripts/runpod-smoke.py
   optional: RUNPOD_SMOKE_TASK=classify RUNPOD_SMOKE_MODEL=ast-audioset
             RUNPOD_SMOKE_ROLE=brain|ears|voiceGen|music|imageHq|videoReal|videoAbstract|orchestrator
-                                          (Default-Task: warmup für brain/ears/voiceGen/orchestrator;
-                                           Prebuilt-Rollen kennen keinen warmup-Task)
+                                          (Default-Task: warmup für ears/voiceGen/orchestrator;
+                                           brain faehrt den vLLM-Worker -> RUNPOD_SMOKE_PAYLOAD
+                                           mit prompt/messages; Prebuilt-Rollen kennen keinen warmup)
             RUNPOD_SMOKE_WAV=/pfad/zu/test.wav   (Default: generierter 1s/440Hz-Sinus)
             RUNPOD_SMOKE_PAYLOAD='{"prompt":"…"}'  (rohes JSON als `input`; für
                                           Tasks ohne Audio, z. B. agent.orchestrate)
@@ -90,7 +91,14 @@ ROLE_ENDPOINT_ENV = {
 #: videoReal, videoAbstract) kennen ihn nicht – für sie gibt es keine
 #: Default-Warmup-Probe; ohne RUNPOD_SMOKE_TASK wird dann nur die Endpoint-
 #: Erreichbarkeit geprüft (kein Job).
-WARMUP_ROLES = {"brain", "ears", "voiceGen", "orchestrator"}
+#:
+#: `brain` gehoert NICHT dazu (live belegt 2026-09-20): der Endpoint faehrt RunPods
+#: offiziellen vLLM-Worker, der `openai_input` (+`openai_route`), `route` (+`body`)
+#: oder `prompt`/`messages` erwartet. Unser `{"task": "warmup"}` beantwortete er mit
+#: `worker_error: "Job input must contain one of: ..."`. Fuer `brain` deshalb den
+#: echten Vertrag nutzen, z. B.:
+#:   RUNPOD_SMOKE_ROLE=brain RUNPOD_SMOKE_PAYLOAD='{"prompt":"Sag nur: ok","max_tokens":16}'
+WARMUP_ROLES = {"ears", "voiceGen", "orchestrator"}
 
 
 def main() -> int:
