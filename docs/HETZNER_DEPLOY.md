@@ -250,14 +250,21 @@ bricht ab. Caddy loggt `acme_client … challenge failed … 521`.
 **Lösung: Cloudflare-Origin-Zertifikat statt LE.** Die Secrets dafür liegen im
 Worker-Store (`ORIGIN_CERT`/`ORIGIN_KEY`, base64-kodiert, siehe `.env.portal`).
 Installation auf app-1 (manuell oder automatisch – der Worker macht genau das in
-`userData()` für neue Knoten):
+`userData()` für neue Knoten).
+`scripts/hetzner/Caddyfile.origin` ist dabei der **Rollen-Default** (Portal-Worker-Cloud-Init
+*und* `deploy.sh`); das ACME-`Caddyfile` kommt nur noch bewusst auf den Knoten
+(`DEPLOY_INSTALL_CADDYFILE=1`). Der komplette Betreiberweg – Cloudflare-Token
+(`Zone:DNS:Edit`), Zustandsprüfung per `bash scripts/hetzner/fleet-preflight.sh dns`,
+`origin`-A-Record, Zertifikat, Verifikation über die Domain – steht in
+**`docs/ORIGIN_TLS_DNS_RUNBOOK.md`**.
 
 ```bash
+# Rechte: Verzeichnis 700, Schlüsseldateien 600 (nichts anderes darf sie lesen)
 # Zertifikate aus .env.portal dekodieren und auf app-1 legen:
-ssh root@<app-1-ip> 'mkdir -p /opt/audiomonastry/certs'
+ssh root@<app-1-ip> 'mkdir -p /opt/audiomonastry/certs && chmod 700 /opt/audiomonastry/certs'
 echo "$ORIGIN_CERT" | base64 -d | ssh root@<app-1-ip> 'cat > /opt/audiomonastry/certs/origin.crt'
-echo "$ORIGIN_KEY"  | base64 -d | ssh root@<app-1-ip> 'cat > /opt/audiomonastry/certs/origin.key && chmod 600 /opt/audiomonastry/certs/origin.key'
-# Caddyfile.origin installieren (tls-Direktive auf das CF-Origin-Paar) + Caddy neu starten:
+echo "$ORIGIN_KEY"  | base64 -d | ssh root@<app-1-ip> 'cat > /opt/audiomonastry/certs/origin.key && chmod 600 /opt/audiomonastry/certs/origin.crt /opt/audiomonastry/certs/origin.key'
+# Caddyfile.origin installieren (Default: tls-Direktive auf das CF-Origin-Paar) + Caddy neu starten:
 ssh root@<app-1-ip> 'cp /opt/audiomonastry/scripts/hetzner/Caddyfile.origin /opt/audiomonastry/Caddyfile && cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d caddy && docker compose -f docker-compose.hetzner.yml restart caddy'
 ```
 

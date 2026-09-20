@@ -30,6 +30,9 @@
 #        DEPLOY_REMOTE_DIR=/opt/audiomonastry
 #        DEPLOY_PLATFORM=linux/amd64         (optional, Cross-Build via buildx)
 #        DEPLOY_PRINT_CONFIG=1               (nur Konfiguration ausgeben, dann Ende)
+#        ORIGIN_CERT / ORIGIN_KEY            (base64-kodiert, Cloudflare-Origin-Paar:
+#                                             wird als certs/origin.crt|key installiert)
+#        DEPLOY_INSTALL_CADDYFILE=1          (ACME-Notausgang, siehe INFRA-HETZNER-002)
 #
 #   - Auf der Ziel-Instanz muss Docker (Compose v2) installiert sein:
 #        scripts/hetzner/provision.py erledigt das automatisch per Cloud-Init.
@@ -45,14 +48,24 @@
 #   setzt DEPLOY_SYNC_ENV=1: dann wird die vorhandene Remote-.env vorher nach
 #   .env.bak-predeploy gesichert und das Skript sagt laut, was es ueberschreibt.
 #
-# INFRA-HETZNER-002 - warum 'Caddyfile' NICHT per rsync uebertragen wird:
-#   app-1 faehrt Origin-TLS: der Portal-Worker kopiert beim Flottenstart
-#   scripts/hetzner/Caddyfile.origin nach /opt/audiomonastry/Caddyfile und legt
-#   die Zertifikate unter certs/ ab (index.js, Cloud-Init-Rolle app). Das
-#   Repo-Caddyfile nutzt dagegen automatisches ACME - ein rsync wuerde die
-#   Origin-TLS-Variante nach jedem Deploy wieder ueberschreiben. Die Datei ist
-#   deshalb ausgeschlossen; nur ein bewusster Wechsel auf ACME laedt sie hoch
-#   (DEPLOY_INSTALL_CADDYFILE=1).
+# INFRA-HETZNER-002 - warum der ORIGIN-PFAD der Default eines Rollen-Deploys ist:
+#   app-1 faehrt Origin-TLS hinter dem Cloudflare-Portal-Worker. Caddy terminiert
+#   TLS selbst mit dem Cloudflare-Origin-Zertifikat (scripts/hetzner/Caddyfile.origin,
+#   tls-Direktive auf /etc/caddy/certs/origin.crt|key, Compose mountet
+#   ./certs:/etc/caddy/certs:ro). Let's-Encrypt-ACME kann hinter der Worker-Route
+#   NICHT validieren: http-01/tls-alpn-01 laufen dort in eine Retry-Schleife.
+#   Ein Deploy bringt den Knoten deshalb in genau diesen Zustand:
+#     1. rsync schliesst 'Caddyfile' weiter aus (der Worker-Pfad soll nicht
+#        beilaeufig ueberschrieben werden),
+#     2. stattdessen wird scripts/hetzner/Caddyfile.origin per scp nach
+#        $DEPLOY_REMOTE_DIR/Caddyfile kopiert (Origin-TLS),
+#     3. stehen ORIGIN_CERT/ORIGIN_KEY im env (base64), wird das Paar VOR dem
+#        Caddy-Start nach certs/origin.crt|key dekodiert (600, Verzeichnis 700).
+#   Fehlen die Variablen, gibt es KEINEN stillen ACME-Fallback: die Meldung nennt
+#   die Betreiber-Schritte und dass Caddy ohne Zertifikat in eine Restart-Schleife
+#   laeuft (details: docs/ORIGIN_TLS_DNS_RUNBOOK.md).
+#   DEPLOY_INSTALL_CADDYFILE=1 bleibt der ausdrueckliche ACME-Notausgang: er laedt
+#   das Repo-Caddyfile (automatisches ACME) und ersetzt damit die Origin-Variante.
 # ============================================================================
 set -euo pipefail
 
@@ -69,16 +82,35 @@ DEPLOY_DOMAIN="${DEPLOY_DOMAIN:-}"
 DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}"
 DEPLOY_SMOKE="${DEPLOY_SMOKE:-1}"
 DEPLOY_PLATFORM="${DEPLOY_PLATFORM:-}"
-# INFRA-HETZNER-002: 1 = Repo-Caddyfile (ACME) bewusst auf den Knoten laden und
-# damit die Origin-TLS-Variante des Portal-Workers ersetzen.
+# INFRA-HETZNER-002: 1 = ACME-Notausgang - das Repo-Caddyfile (automatisches ACME)
+# bewusst auf den Knoten laden und damit die Origin-TLS-Variante ersetzen.
+# Default 0: Origin-Pfad (Caddyfile.origin + Zertifikatspaar aus dem env).
 DEPLOY_INSTALL_CADDYFILE="${DEPLOY_INSTALL_CADDYFILE:-0}"
+# Effektiver Caddyfile-Modus: 'origin' (Default) oder 'acme' (Notausgang). Genau
+# eine Quelle fuer Meldung, Trockenlauf und Installationsblock - so kann kein
+# zweiter Pfad entstehen, der etwas anderes behauptet als er tut.
+if [[ "$DEPLOY_INSTALL_CADDYFILE" == "1" ]]; then
+  CADDYFILE_MODE="acme"
+else
+  CADDYFILE_MODE="origin"
+fi
+# ORIGIN_CERT/ORIGIN_KEY (base64, wie in .env.portal): hier nur ein BOOLEAN, ob
+# beide gesetzt sind. Die Werte selbst werden nie ausgegeben, geloggt oder als
+# Kommandozeilen-Argument uebergeben - sie laufen ausschliesslich durch Pipes.
+if [[ -n "${ORIGIN_CERT:-}" && -n "${ORIGIN_KEY:-}" ]]; then
+  ORIGIN_CERTS_IN_ENV="ja"
+else
+  ORIGIN_CERTS_IN_ENV="nein"
+fi
 IMAGE_APP="audiomonastry:hetzner"
 IMAGE_MASTER="audiomonastry-master-player:hetzner"
 COMPOSE_FILE="docker-compose.hetzner.yml"
 
 # Trockenlauf fuer Nachweise (INFRA-HETZNER-001/002): gibt die effektive
 # Konfiguration aus und endet VOR Build/SSH - die Default-Aufloesung ist damit
-# ohne Ziel-Instanz pruefbar (und ohne versehentlichen Deploy).
+# ohne Ziel-Instanz pruefbar (und ohne versehentlichen Deploy). Weil hier auch der
+# Caddyfile-Modus und die Boolean-Zusage zu den Origin-Zertifikaten stehen, laesst
+# sich der Origin-Default ohne Knoten nachweisen. Es werden KEINE Werte ausgegeben.
 if [[ "${DEPLOY_PRINT_CONFIG:-0}" == "1" ]]; then
   echo "deploy.sh - effektive Konfiguration (kein Build, kein SSH)"
   printf '  DEPLOY_HOST=%s\n' "${DEPLOY_HOST:-<leer>}"
@@ -86,6 +118,8 @@ if [[ "${DEPLOY_PRINT_CONFIG:-0}" == "1" ]]; then
   printf '  DEPLOY_REMOTE_DIR=%s\n' "$DEPLOY_REMOTE_DIR"
   printf '  DEPLOY_SYNC_ENV=%s\n' "$DEPLOY_SYNC_ENV"
   printf '  DEPLOY_INSTALL_CADDYFILE=%s\n' "$DEPLOY_INSTALL_CADDYFILE"
+  printf '  CADDYFILE_MODUS=%s\n' "$CADDYFILE_MODE"
+  printf '  Origin-Zertifikate im env vorhanden: %s\n' "$ORIGIN_CERTS_IN_ENV"
   printf '  DEPLOY_REMOTE_BUILD=%s\n' "$DEPLOY_REMOTE_BUILD"
   printf '  DEPLOY_SMOKE=%s\n' "$DEPLOY_SMOKE"
   printf '  DEPLOY_DOMAIN=%s\n' "${DEPLOY_DOMAIN:-<leer>}"
@@ -196,18 +230,61 @@ else
     "$SSH_TARGET:$DEPLOY_REMOTE_DIR/"
 fi
 
-# --- Caddyfile auf dem Knoten (INFRA-HETZNER-002) ---
-if [[ "$DEPLOY_INSTALL_CADDYFILE" == "1" ]]; then
-  echo "⚠️  DEPLOY_INSTALL_CADDYFILE=1: Repo-Caddyfile (ACME) ersetzt die Origin-TLS-Variante auf $SSH_TARGET"
+# --- Caddyfile + Origin-Zertifikate (INFRA-HETZNER-002) ---------------------
+# Origin-Pfad ist der Default: scripts/hetzner/Caddyfile.origin wird installiert
+# (der rsync-Ausschluss oben haelt das Repo-Caddyfile bewusst draussen, damit der
+# Worker-Pfad nicht beilaeufig ueberschrieben wird). Beides - Caddyfile UND
+# Zertifikatspaar - liegt danach VOR `docker compose up -d caddy`, sonst startet
+# Caddy in eine Restart-Schleife.
+ORIGIN_CERT_INSTALLED="nein"
+if [[ "$CADDYFILE_MODE" == "acme" ]]; then
+  echo "⚠️  ACME-Notausgang (DEPLOY_INSTALL_CADDYFILE=1): das Repo-Caddyfile (ACME) ersetzt die Origin-TLS-Variante auf $SSH_TARGET"
+  echo "    Hinter der Cloudflare-Worker-Route kann ACME nicht validieren (http-01/tls-alpn-01) - nur bewusst verwenden."
   scp "${SCP_OPTS[@]}" ./Caddyfile "$SSH_TARGET:$DEPLOY_REMOTE_DIR/Caddyfile"
-elif ! "${SSH[@]}" "$SSH_TARGET" "test -f $DEPLOY_REMOTE_DIR/Caddyfile"; then
-  # Kein stiller Fehlpfad: ohne Caddyfile startet der Caddy-Container in eine
-  # Restart-Schleife. Nur pruefen (nichts schreiben) und laut melden - die
-  # Installation gehoert dem Portal-Worker (Origin-TLS) bzw. dem Repo-Clone.
-  echo "❌ $SSH_TARGET:$DEPLOY_REMOTE_DIR enthaelt kein Caddyfile (Caddy wuerde neu starten und scheitern)." >&2
-  echo "   Origin-TLS (Regelfall app-1):  ssh $SSH_TARGET 'cp $DEPLOY_REMOTE_DIR/scripts/hetzner/Caddyfile.origin $DEPLOY_REMOTE_DIR/Caddyfile'" >&2
-  echo "   ACME-Variante bewusst:         DEPLOY_INSTALL_CADDYFILE=1 bash $0" >&2
+else
+  echo "--- Caddyfile-Modus origin: scripts/hetzner/Caddyfile.origin -> $SSH_TARGET:$DEPLOY_REMOTE_DIR/Caddyfile ---"
+  scp "${SCP_OPTS[@]}" ./scripts/hetzner/Caddyfile.origin "$SSH_TARGET:$DEPLOY_REMOTE_DIR/Caddyfile"
+  if [[ -z "$DEPLOY_DOMAIN" ]]; then
+    # Caddyfile.origin nutzt `{$DOMAIN}` als Site-Adresse. Ohne Domain bleibt sie
+    # leer und Caddy laedt die Konfiguration nicht (Restart-Schleife) - der
+    # IP-/HTTP-Testfall braucht bewusst die ACME-Variante (:80-Fallback).
+    echo "⚠️  kein DEPLOY_DOMAIN gesetzt: Caddyfile.origin hat ohne Domain keine Site-Adresse." >&2
+    echo "    Fuer einen reinen IP-/HTTP-Test bewusst: DEPLOY_INSTALL_CADDYFILE=1 bash $0" >&2
+  fi
+  if [[ "$ORIGIN_CERTS_IN_ENV" == "ja" ]]; then
+    # Secrets laufen NUR durch Pipes in ein Remote-Kommando mit umask 077: kein
+    # Argument (das stuende in der Prozessliste), kein echo, kein Log.
+    "${SSH[@]}" "$SSH_TARGET" "mkdir -p $DEPLOY_REMOTE_DIR/certs && chmod 700 $DEPLOY_REMOTE_DIR/certs"
+    if printf '%s\n' "$ORIGIN_CERT" | base64 -d | "${SSH[@]}" "$SSH_TARGET" "umask 077; cat > $DEPLOY_REMOTE_DIR/certs/origin.crt" \
+       && printf '%s\n' "$ORIGIN_KEY" | base64 -d | "${SSH[@]}" "$SSH_TARGET" "umask 077; cat > $DEPLOY_REMOTE_DIR/certs/origin.key"; then
+      "${SSH[@]}" "$SSH_TARGET" "chmod 600 $DEPLOY_REMOTE_DIR/certs/origin.crt $DEPLOY_REMOTE_DIR/certs/origin.key"
+      ORIGIN_CERT_INSTALLED="ja"
+    else
+      echo "❌ ORIGIN_CERT/ORIGIN_KEY liessen sich nicht dekodieren oder schreiben (base64/SSH-Fehler)." >&2
+      echo "   Caddy hat damit kein Zertifikat und laeuft in eine Restart-Schleife." >&2
+      echo "   Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md" >&2
+    fi
+  elif "${SSH[@]}" "$SSH_TARGET" "test -s $DEPLOY_REMOTE_DIR/certs/origin.crt && test -s $DEPLOY_REMOTE_DIR/certs/origin.key"; then
+    # Kein stiller Fallback: hier wird nur GEPRUEFT, dass der Knoten die Zertifikate
+    # schon hat (Flottenstart/Portal-Worker) - geschrieben wird nichts.
+    echo "   Hinweis: ORIGIN_CERT/ORIGIN_KEY sind nicht im env; die vorhandenen Zertifikate auf dem Knoten bleiben unveraendert."
+    ORIGIN_CERT_INSTALLED="ja"
+  else
+    # Der gefaehrliche Fall: Origin-TLS-Caddyfile, aber kein Zertifikat. Laut sagen,
+    # NICHT still auf ACME umschalten (das kann hinter dem Worker nie validieren).
+    echo "❌ ORIGIN_CERT/ORIGIN_KEY fehlen im env und $DEPLOY_REMOTE_DIR/certs ist leer (kein ACME-Fallback)." >&2
+    echo "   Caddy startet ohne Zertifikat in eine Restart-Schleife - die Domain bleibt 522/525." >&2
+    echo "   Betreiber-Schritte (Origin-TLS nachziehen):" >&2
+    echo "     1. Zertifikatspaar im env bereitstellen (base64, z. B. aus .env.portal):" >&2
+    echo "        set -a; . ./.env.portal; set +a   # Werte dabei nie ausgeben" >&2
+    echo "     2. Origin-Deploy mit Zertifikaten wiederholen:" >&2
+    echo "        ORIGIN_CERT=\"\$ORIGIN_CERT\" ORIGIN_KEY=\"\$ORIGIN_KEY\" bash $0" >&2
+    echo "     Quelle/Referenz: scripts/hetzner/Caddyfile.origin + docs/ORIGIN_TLS_DNS_RUNBOOK.md" >&2
+    echo "     ACME nur bewusst (ohne Cloudflare-Worker-Route): DEPLOY_INSTALL_CADDYFILE=1 bash $0" >&2
+  fi
 fi
+# Nur ein Boolean - keine Werte, kein Zertifikatsinhalt im Log.
+echo "   Origin-Zertifikat installiert: $ORIGIN_CERT_INSTALLED"
 
 # --- .env auf den Server bringen (INFRA-HETZNER-001) ---
 # Default ist 0 (siehe Kopfkommentar): die Knoten-.env ist rollen-skopiert und

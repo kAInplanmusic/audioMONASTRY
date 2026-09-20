@@ -19,19 +19,38 @@ automatisch pruefen lassen:
     mit beiden Code-Pfaden ueberein (CLI und Portal-Worker) und beide Pfade
     lesen dieselben `FLEET_TYPE_*`-Overrides.
 
+INFRA-HETZNER-002 (Origin-TLS als Default): Drei Befunde, ein Fix - deshalb
+pruefen zwei zusaetzliche Klassen genau diese drei Aussagen:
+  * deploy.sh bringt den Knoten per Default in den Origin-Zustand
+    (scripts/hetzner/Caddyfile.origin + Zertifikatspaar aus ORIGIN_CERT/ORIGIN_KEY
+    nach certs/, 600/700), ohne die Zertifikatswerte je auszugeben. ACME ist nur
+    noch der ausdrueckliche Notausgang (DEPLOY_INSTALL_CADDYFILE=1) - ein Deploy
+    kann die hinter der Cloudflare-Worker-Route unbrauchbare ACME-Variante also
+    nicht mehr beilaeufig installieren.
+  * Der neue Unterbefehl `dns` in fleet-preflight.sh prueft die DNS-Verdrahtung
+    lesend und meldet den echten Cloudflare-Fehler (z. B. 9109 Invalid access
+    token) statt still zu scheitern: genau das liess origin.anunnakitools.de auf
+    Cloudflare-IPs zeigen. Der Test laeuft gegen einen LOKALEN HTTP-Stub
+    (CF_API_BASE=http://127.0.0.1:PORT/client/v4) - kein Test kontaktiert
+    Cloudflare oder Hetzner.
+
 Lauf: python3 tests/test_hetzner_scripts.py
 """
 from __future__ import annotations
 
+import base64
 import contextlib
+import http.server
 import importlib.util
 import io
 import json
+import os
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
+import threading
 import unittest
 import urllib.parse
 from typing import Any
@@ -50,6 +69,8 @@ BRING_UP = HETZNER / "bring-up-fleet.sh"
 PROVISION_FLEET = HETZNER / "provision-fleet.sh"
 AUTO_REPAIR = HETZNER / "auto-repair.sh"
 INSTALL_AUTO_REPAIR = HETZNER / "install-auto-repair.sh"
+DEPLOY_SH = ROOT / "deploy.sh"
+FLEET_PREFLIGHT = HETZNER / "fleet-preflight.sh"
 PORTAL_WORKER = ROOT / "services" / "portal-worker" / "src" / "index.js"
 SERVER_FLEET_DOC = ROOT / "docs" / "SERVER_FLEET.md"
 COMPOSE_BASE = ROOT / "docker-compose.hetzner.yml"
@@ -457,6 +478,409 @@ class ServertypRollenDriftTest(unittest.TestCase):
         line = next(l for l in readme.splitlines() if l.startswith("- Hetzner fleet:"))
         readme_types = {name.replace("`", ""): typ for name, typ in re.findall(r"`([a-z0-9-]+)` \(([a-z0-9]+)[,)]", line)}
         self.assertEqual(readme_types, expected)
+
+
+# ---------------------------------------------------------------------------
+# INFRA-HETZNER-002: Origin-TLS als Default + lesende DNS-Pruefung
+# ---------------------------------------------------------------------------
+
+#: Platzhalter-Secrets: die Tests behaupten NICHT, dass sie echt sind, sondern
+#: dass genau diese Strings nie im Output der Skripte auftauchen.
+FAKE_CERT_PEM = b"-----BEGIN CERTIFICATE-----\nTEST-ORIGIN-CERT\n-----END CERTIFICATE-----\n"
+FAKE_KEY_PEM = b"-----BEGIN PRIVATE KEY-----\nTEST-ORIGIN-KEY\n-----END PRIVATE KEY-----\n"
+FAKE_CERT = base64.b64encode(FAKE_CERT_PEM).decode("ascii")
+FAKE_KEY = base64.b64encode(FAKE_KEY_PEM).decode("ascii")
+FAKE_TOKEN = "cf-token-nur-fuer-den-teststub-0000"
+
+#: Variablen, die ein Testlauf selbst steuert. Sie werden vorher aus der
+#: Prozessumgebung entfernt, damit ein Test nie von der Shell eines Rechners
+#: abhaengt (und die echten Tokens aus der Umgebung nicht mitlaufen).
+CONTROLLED_ENV = (
+    "DEPLOY_PRINT_CONFIG", "DEPLOY_INSTALL_CADDYFILE", "CLOUDFLARE_API_TOKEN",
+    "CF_API_BASE", "PORTAL_DOMAIN", "ORIGIN_HOST", "APP_IP", "ORIGIN_CERT", "ORIGIN_KEY",
+)
+
+
+def bash_path() -> str:
+    bash = shutil.which("bash")
+    if bash is None:  # pragma: no cover - Windows/Exoten
+        raise unittest.SkipTest("bash nicht vorhanden")
+    return bash
+
+
+def clean_env(**overrides: str | None) -> dict[str, str]:
+    """Prozessumgebung ohne Testfluesterer; `None` entfernt einen Schluessel."""
+    env = os.environ.copy()
+    for key in CONTROLLED_ENV:
+        env.pop(key, None)
+    for key, value in overrides.items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+    return env
+
+
+class DeployOriginTlsTest(unittest.TestCase):
+    """INFRA-HETZNER-002: der Origin-TLS-Pfad ist der Default des Rollen-Deploys."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.text = DEPLOY_SH.read_text(encoding="utf-8")
+        self.lines = self.text.splitlines()
+
+    def _line_of(self, needle: str) -> int:
+        for index, line in enumerate(self.lines):
+            if needle in line:
+                return index
+        self.fail(f"deploy.sh: Zeile mit {needle!r} fehlt")
+
+    def _run(self, **overrides: str | None) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.bash, str(DEPLOY_SH)], capture_output=True, text=True,
+            cwd=ROOT, env=clean_env(**overrides), timeout=60,
+        )
+
+    def test_default_kopiert_das_origin_caddyfile_per_scp(self) -> None:
+        self.assertIn(
+            'scp "${SCP_OPTS[@]}" ./scripts/hetzner/Caddyfile.origin "$SSH_TARGET:$DEPLOY_REMOTE_DIR/Caddyfile"',
+            self.text,
+        )
+        # Der rsync-Ausschluss bleibt (der Worker-Pfad soll nicht beilaeufig
+        # ueberschrieben werden) - die Installation laeuft ausdruecklich per scp.
+        self.assertIn("--exclude 'Caddyfile'", self.text)
+        self.assertIn('CADDYFILE_MODE="origin"', self.text)
+
+    def test_acme_ist_nur_der_ausdrueckliche_notausgang(self) -> None:
+        self.assertIn('if [[ "$DEPLOY_INSTALL_CADDYFILE" == "1" ]]; then\n  CADDYFILE_MODE="acme"', self.text)
+        # Genau EIN scp des Repo-Caddyfiles (ACME) - und zwar im acme-Zweig.
+        self.assertEqual(
+            self.text.count('scp "${SCP_OPTS[@]}" ./Caddyfile "$SSH_TARGET:$DEPLOY_REMOTE_DIR/Caddyfile"'), 1,
+        )
+        self.assertLess(self._line_of('CADDYFILE_MODE" == "acme"'), self._line_of('scp "${SCP_OPTS[@]}" ./Caddyfile'))
+
+    def test_zertifikate_liegen_vor_dem_caddy_start_und_mit_engen_rechten(self) -> None:
+        # Der echte Startbefehl aus Schritt [4/5] (nicht der Kommentar, der ihn nennt).
+        caddy_start = self._line_of("docker compose -f $COMPOSE_FILE up -d caddy")
+        # Reihenfolge ist der Kern des Fixes: Caddyfile + Zertifikate VOR dem Start,
+        # sonst startet Caddy in die Restart-Schleife (live: HTTP 522).
+        self.assertLess(self._line_of("Caddyfile.origin"), caddy_start)
+        self.assertLess(self._line_of("base64 -d"), caddy_start)
+        # Secrets nur per Pipe in ein Remote-Kommando mit umask 077 - nie als Argument.
+        self.assertIn(
+            'printf \'%s\\n\' "$ORIGIN_CERT" | base64 -d | "${SSH[@]}" "$SSH_TARGET" "umask 077; cat > $DEPLOY_REMOTE_DIR/certs/origin.crt"',
+            self.text,
+        )
+        self.assertIn(
+            'printf \'%s\\n\' "$ORIGIN_KEY" | base64 -d | "${SSH[@]}" "$SSH_TARGET" "umask 077; cat > $DEPLOY_REMOTE_DIR/certs/origin.key"',
+            self.text,
+        )
+        self.assertIn("chmod 700 $DEPLOY_REMOTE_DIR/certs", self.text)
+        chmod_600 = [line for line in self.lines if "chmod 600" in line]
+        self.assertEqual(len(chmod_600), 1, "genau eine chmod-600-Zeile erwartet")
+        self.assertIn("origin.crt", chmod_600[0])
+        self.assertIn("origin.key", chmod_600[0])
+
+    def test_fehlende_variablen_ergeben_keinen_stillen_acme_fallback(self) -> None:
+        self.assertIn("kein ACME-Fallback", self.text)
+        self.assertIn("Restart-Schleife", self.text)
+        self.assertIn("docs/ORIGIN_TLS_DNS_RUNBOOK.md", self.text)
+
+    def test_meldung_ist_nur_ein_boolean_ohne_werte(self) -> None:
+        self.assertIn('echo "   Origin-Zertifikat installiert: $ORIGIN_CERT_INSTALLED"', self.text)
+        self.assertIn('ORIGIN_CERT_INSTALLED="ja"', self.text)
+        self.assertIn('ORIGIN_CERT_INSTALLED="nein"', self.text)
+        for leak in ('echo "$ORIGIN_CERT"', 'echo "$ORIGIN_KEY"', 'echo "${ORIGIN_CERT}"', 'echo "${ORIGIN_KEY}"'):
+            with self.subTest(leak=leak):
+                self.assertNotIn(leak, self.text)
+
+    def test_ohne_domain_warnt_der_origin_modus_laut(self) -> None:
+        # Caddyfile.origin hat `{$DOMAIN}` als Site-Adresse: ohne Domain kann Caddy
+        # die Konfiguration nicht laden. Der Deploy muss das sagen, statt einen
+        # Caddy in die Restart-Schleife zu schicken.
+        self.assertIn("Caddyfile.origin hat ohne Domain keine Site-Adresse", self.text)
+        self.assertIn("DEPLOY_INSTALL_CADDYFILE=1 bash $0", self.text)
+
+    def test_bash_syntax_ist_sauber(self) -> None:
+        result = subprocess.run([self.bash, "-n", str(DEPLOY_SH)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_trockenlauf_meldet_modus_und_zertifikats_boolean(self) -> None:
+        with_certs = self._run(DEPLOY_PRINT_CONFIG="1", ORIGIN_CERT=FAKE_CERT, ORIGIN_KEY=FAKE_KEY)
+        self.assertEqual(with_certs.returncode, 0, with_certs.stderr)
+        out = with_certs.stdout + with_certs.stderr
+        self.assertIn("CADDYFILE_MODUS=origin", out)
+        self.assertIn("Origin-Zertifikate im env vorhanden: ja", out)
+        # Der Trockenlauf belegt den Modus, ohne einen Wert zu verraten.
+        self.assertNotIn(FAKE_CERT, out)
+        self.assertNotIn(FAKE_KEY, out)
+        self.assertNotIn("TEST-ORIGIN-KEY", out)
+
+    def test_trockenlauf_ohne_zertifikate_und_mit_acme_notausgang(self) -> None:
+        without = self._run(DEPLOY_PRINT_CONFIG="1")
+        self.assertEqual(without.returncode, 0, without.stderr)
+        self.assertIn("Origin-Zertifikate im env vorhanden: nein", without.stdout)
+        self.assertIn("CADDYFILE_MODUS=origin", without.stdout)
+
+        acme = self._run(DEPLOY_PRINT_CONFIG="1", DEPLOY_INSTALL_CADDYFILE="1", ORIGIN_CERT=FAKE_CERT, ORIGIN_KEY=FAKE_KEY)
+        self.assertEqual(acme.returncode, 0, acme.stderr)
+        self.assertIn("CADDYFILE_MODUS=acme", acme.stdout)
+
+
+class _CloudflareStub:
+    """Lokaler HTTP-Stub der Cloudflare-API (kein Test spricht ins Internet).
+
+    Beantwortet genau die beiden GET-Pfade, die `fleet-preflight.sh dns` braucht,
+    und protokolliert jede Methode - so laesst sich die Zusage "nur lesend"
+    pruefen. Schreibversuche werden mit 405 abgewiesen.
+    """
+
+    def __init__(
+        self,
+        zone: tuple[int, dict] | None = None,
+        records: tuple[int, dict] | None = None,
+    ) -> None:
+        self.zone = zone or (200, {"success": True, "errors": [], "result": [{"id": "zone-4711", "name": "anunnakitools.de"}]})
+        self.records = records or (200, {"success": True, "errors": [], "result": []})
+        self.requests: list[tuple[str, str]] = []
+
+    def __enter__(self) -> "_CloudflareStub":
+        stub = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 - Name kommt von BaseHTTPRequestHandler
+                stub.requests.append(("GET", self.path))
+                status, payload = stub.response_for(self.path)
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self) -> None:  # noqa: N802
+                stub.requests.append(("POST", self.path))
+                self.send_error(405, "dieser Stub schreibt nicht")
+
+            def do_PUT(self) -> None:  # noqa: N802
+                stub.requests.append(("PUT", self.path))
+                self.send_error(405, "dieser Stub schreibt nicht")
+
+            def log_message(self, *args: Any) -> None:  # Testausgabe ruhig halten
+                return
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> bool:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        return False
+
+    @property
+    def api_base(self) -> str:
+        host, port = self.server.server_address[0], self.server.server_address[1]
+        return f"http://{host}:{port}/client/v4"
+
+    def response_for(self, path: str) -> tuple[int, dict]:
+        if path.startswith("/client/v4/zones?"):
+            return self.zone
+        if "/dns_records" in path:
+            return self.records
+        return 404, {"success": False, "errors": [{"code": 9999, "message": "unbekannter Pfad"}]}
+
+    def methods(self) -> list[str]:
+        return [method for method, _path in self.requests]
+
+    def paths(self) -> list[str]:
+        return [path for _method, path in self.requests]
+
+
+class FleetPreflightDnsTest(unittest.TestCase):
+    """INFRA-HETZNER-002: `dns` prueft lesend - offline gegen einen lokalen Stub."""
+
+    ORIGIN = "origin.anunnakitools.de"
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _run_dns(
+        self,
+        stub: _CloudflareStub | None,
+        *args: str,
+        token: str | None = FAKE_TOKEN,
+        app_ip: str | None = None,
+        portal_domain: str = "anunnakitools.de",
+        origin_host: str | None = None,
+    ) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.bash, str(FLEET_PREFLIGHT), "dns", *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=120,
+            env=clean_env(
+                CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
+                PORTAL_DOMAIN=portal_domain,
+                ORIGIN_HOST=origin_host or f"origin.{portal_domain}",
+                CLOUDFLARE_API_TOKEN=token,
+                APP_IP=app_ip,
+            ),
+        )
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    def test_9109_wird_im_klartext_gemeldet_und_der_token_nie_ausgegeben(self) -> None:
+        stub = _CloudflareStub(zone=(403, {
+            "success": False,
+            "errors": [{"code": 9109, "message": "Invalid access token"}],
+            "messages": [],
+            "result": None,
+        }))
+        with stub:
+            result = self._run_dns(stub)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("Token ohne Zone:DNS:Edit", combined)
+        self.assertIn("9109", combined)
+        self.assertIn("Invalid access token", combined)
+        self.assertIn("docs/ORIGIN_TLS_DNS_RUNBOOK.md", combined)
+        self.assertNotIn(FAKE_TOKEN, combined)
+        # Nach dem Token-Fehler wird nichts weiter abgefragt - und nur gelesen.
+        self.assertEqual(stub.methods(), ["GET"])
+
+    def test_leeres_zonen_result_ist_ebenfalls_ein_klartextfehler(self) -> None:
+        stub = _CloudflareStub(zone=(200, {"success": True, "errors": [], "result": []}))
+        with stub:
+            result = self._run_dns(stub)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("Token ohne Zone:DNS:Edit", combined)
+        self.assertNotIn(FAKE_TOKEN, combined)
+
+    def test_proxied_record_wird_abgelehnt(self) -> None:
+        stub = _CloudflareStub(records=(200, {"success": True, "errors": [], "result": [
+            {"id": "rec-1", "type": "A", "name": self.ORIGIN, "content": "91.98.104.74", "proxied": True},
+        ]}))
+        with stub:
+            result = self._run_dns(stub, app_ip="91.98.104.74")
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("proxied=true", combined)
+        self.assertIn("DNS-only", combined)
+        self.assertIn(self.ORIGIN, combined)
+        # Zone + Record: zwei GETs, kein Schreibzugriff.
+        self.assertEqual(stub.methods(), ["GET", "GET"])
+
+    def test_falsche_ziel_ip_wird_gemeldet(self) -> None:
+        stub = _CloudflareStub(records=(200, {"success": True, "errors": [], "result": [
+            {"id": "rec-1", "type": "A", "name": self.ORIGIN, "content": "1.1.1.1", "proxied": False},
+        ]}))
+        with stub:
+            result = self._run_dns(stub, app_ip="203.0.113.5")
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("1.1.1.1", combined)
+        self.assertIn("APP_IP", combined)
+        self.assertIn("203.0.113.5", combined)
+
+    def test_falscher_record_typ_wird_gemeldet(self) -> None:
+        stub = _CloudflareStub(records=(200, {"success": True, "errors": [], "result": [
+            {"id": "rec-1", "type": "CNAME", "name": self.ORIGIN, "content": "app.example", "proxied": False},
+        ]}))
+        with stub:
+            result = self._run_dns(stub)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("CNAME", combined)
+
+    def test_fehlender_record_wird_gemeldet(self) -> None:
+        stub = _CloudflareStub(records=(200, {"success": True, "errors": [], "result": []}))
+        with stub:
+            result = self._run_dns(stub)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("existiert nicht", combined)
+
+    def test_ohne_token_klartextfehler_ohne_netz(self) -> None:
+        stub = _CloudflareStub()
+        with stub:
+            result = self._run_dns(stub, token=None)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("CLOUDFLARE_API_TOKEN nicht gesetzt", combined)
+        self.assertIn("docs/ORIGIN_TLS_DNS_RUNBOOK.md", combined)
+        # Ohne Token darf kein Request entstehen.
+        self.assertEqual(stub.requests, [])
+
+    def test_gruener_fall_gibt_remediation_und_verify_aus(self) -> None:
+        stub = _CloudflareStub(records=(200, {"success": True, "errors": [], "result": [
+            {"id": "rec-1", "type": "A", "name": self.ORIGIN, "content": "203.0.113.5", "proxied": False},
+        ]}))
+        with stub:
+            result = self._run_dns(stub, app_ip="203.0.113.5")
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("DNS-Verdrahtung ok", combined)
+        self.assertIn(self.ORIGIN, combined)
+        self.assertIn("203.0.113.5", combined)
+        # Das Verify-Kommando steht mit dem curl-Statusplatzhalter im Output.
+        self.assertIn("curl -sS -o /dev/null", combined)
+        self.assertIn("%{http_code}", combined)
+        self.assertIn("https://anunnakitools.de/api/health", combined)
+        self.assertIn("/client/v4/zones/", stub.paths()[1])
+        self.assertIn(f"name={self.ORIGIN}", stub.paths()[1])
+
+    def test_token_gesetzt_aber_zone_nicht_erreichbar(self) -> None:
+        # CF_API_BASE auf einen toten Port: der Zustand wird gemeldet, nicht verschluckt.
+        result = self._run_dns(None)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("nicht erreichbar", combined)
+        self.assertNotIn(FAKE_TOKEN, combined)
+
+    def test_print_config_ohne_netz_und_ohne_werte(self) -> None:
+        stub = _CloudflareStub()
+        with stub:
+            with_token = self._run_dns(stub, "--print-config", token=FAKE_TOKEN, app_ip="203.0.113.5")
+            without_token = self._run_dns(stub, "--print-config", token=None)
+        for result in (with_token, without_token):
+            self.assertEqual(result.returncode, 0, self._combined(result))
+            self.assertIn("CF_API_BASE=", result.stdout)
+            self.assertIn(f"ORIGIN_HOST={self.ORIGIN}", result.stdout)
+        self.assertIn("CLOUDFLARE_API_TOKEN gesetzt: ja", with_token.stdout)
+        self.assertIn("CLOUDFLARE_API_TOKEN gesetzt: nein", without_token.stdout)
+        self.assertIn("APP_IP=203.0.113.5", with_token.stdout)
+        self.assertNotIn(FAKE_TOKEN, with_token.stdout + with_token.stderr)
+        # Der Trockenlauf darf keinen Request ausloesen.
+        self.assertEqual(stub.requests, [])
+
+    def test_print_config_ueber_deploy_print_config_env(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(FLEET_PREFLIGHT), "dns"],
+            capture_output=True, text=True, cwd=ROOT, timeout=120,
+            env=clean_env(DEPLOY_PRINT_CONFIG="1", PORTAL_DOMAIN="anunnakitools.de",
+                          CF_API_BASE="http://127.0.0.1:9/client/v4", CLOUDFLARE_API_TOKEN=None),
+        )
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("CLOUDFLARE_API_TOKEN gesetzt: nein", result.stdout)
+
+    def test_bash_syntax_ist_sauber(self) -> None:
+        result = subprocess.run([self.bash, "-n", str(FLEET_PREFLIGHT)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_verweist_auf_dns_ohne_token_zugriff(self) -> None:
+        # Der bestehende check-Pfad bleibt bestehen und nennt 'dns' als Bruecke.
+        text = FLEET_PREFLIGHT.read_text(encoding="utf-8")
+        self.assertIn("bash scripts/hetzner/fleet-preflight.sh dns", text)
+        self.assertIn("check) cmd_check ;;", text)
+        self.assertIn("apply) cmd_apply ;;", text)
+        # Der Token erscheint nie in einer Ausgabezeile.
+        for line in text.splitlines():
+            if "CLOUDFLARE_API_TOKEN" in line and line.strip().startswith("echo"):
+                self.assertNotIn("$CLOUDFLARE_API_TOKEN", line)
 
 
 if __name__ == "__main__":
