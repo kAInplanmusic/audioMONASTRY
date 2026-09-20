@@ -38,6 +38,23 @@ const CONFIGS = [
       '--disable-vulkan-surface',
     ],
   },
+  // PERF-P3-002: renderCapacity ist ein Blink-Feature - hier ist belegt, dass es
+  // sich in dieser Browser-Generation AUCH NICHT per Flag einschalten laesst.
+  // Die Konfigurationen stehen hier, damit die negative Aussage reproduzierbar
+  // bleibt und nicht bei jedem Audit neu geraten werden muss (Stand 2026-09-20:
+  // Playwright-Chromium 151 und /usr/bin/google-chrome 153 - alle Flags false).
+  { name: 'renderCapacity: blink-feature', args: ['--enable-blink-features=AudioContextRenderCapacity'] },
+  { name: 'renderCapacity: ForTesting-Variante', args: ['--enable-blink-features=AudioContextRenderCapacityForTesting'] },
+  { name: 'renderCapacity: Chrome-Feature-Flag', args: ['--enable-features=RenderCapacity'] },
+  { name: 'renderCapacity: experimentelle Web-Plattform', args: ['--enable-experimental-web-platform-features'] },
+  {
+    name: 'renderCapacity: alle Flags zusammen',
+    args: [
+      '--enable-experimental-web-platform-features',
+      '--enable-blink-features=AudioContextRenderCapacity,AudioContextRenderCapacityForTesting',
+      '--enable-features=RenderCapacity',
+    ],
+  },
 ];
 
 const probe = async () => {
@@ -48,7 +65,7 @@ const probe = async () => {
     renderCapacityOnPrototype: false,
     renderCapacityOnLiveContext: false,
     audioContextState: null,
-    performanceInWorklet: null,
+    workletScope: null,
     userAgent: navigator.userAgent,
   };
   try {
@@ -67,17 +84,43 @@ const probe = async () => {
     out.renderCapacityOnLiveContext = 'renderCapacity' in ctx;
     out.audioContextState = ctx.state;
     // AudioWorklet-Scope: gibt es `performance`? (PERF-P3-002, Befund A)
-    const code = 'class P extends AudioWorkletProcessor{constructor(){super();this.port.postMessage({p:typeof performance});process(){return false}}}registerProcessor("probe",P)';
+    //
+    // ACHTUNG (Fehler hier gefunden und behoben, 2026-09-20): die Vorfassung
+    // schloss den Konstruktor eine Klammer zu spaet, dadurch lag die Methode
+    // `process()` IM Konstruktor - das ist kein gueltiges JavaScript, und die
+    // Sonde meldete statt der Messwerte einen SyntaxError ("Unexpected token
+    // '{'"). Aufgefallen ist es beim Nachfahren, weil die Aussage "performance
+    // ist im Worklet nicht exponiert" aus der Sonde nicht reproduzierbar war.
+    // Mehrzeilig formatiert + korrekt geschlossene Klammern, damit genau EIN
+    // Fehlerbild entsteht (fehlende API) und nicht ein Parserfehler.
+    const code = [
+      'class Probe extends AudioWorkletProcessor {',
+      '  constructor() {',
+      '    super();',
+      '    this.port.postMessage({',
+      '      perf: typeof performance,',
+      '      currentTime: typeof currentTime,',
+      '      currentFrame: typeof currentFrame,',
+      '      sampleRate: typeof sampleRate,',
+      '      atomics: typeof Atomics,',
+      '    });',
+      '  }',
+      '  process(frames) {',
+      '    return false;',
+      '  }',
+      '}',
+      'registerProcessor("probe", Probe);',
+    ].join('\n');
     const url = URL.createObjectURL(new Blob([code], { type: 'application/javascript' }));
     await ctx.audioWorklet.addModule(url);
     const node = new AudioWorkletNode(ctx, 'probe');
-    out.performanceInWorklet = await Promise.race([
-      new Promise((resolve) => { node.port.onmessage = (e) => resolve(e.data.p); }),
-      new Promise((r) => setTimeout(() => r('timeout'), 3_000)),
+    out.workletScope = await Promise.race([
+      new Promise((resolve) => { node.port.onmessage = (e) => resolve(e.data); }),
+      new Promise((r) => setTimeout(() => r({ perf: 'timeout' }), 3_000)),
     ]);
     await ctx.close();
   } catch (e) {
-    out.performanceInWorklet = `Fehler: ${String(e).slice(0, 80)}`;
+    out.workletScope = { perf: `Fehler: ${String(e).slice(0, 80)}` };
   }
   return out;
 };
@@ -99,12 +142,24 @@ const main = async () => {
     console.log(`  requestAdapter():            ${result.gpuAdapter ?? '(nicht geprüft)'}`);
     console.log(`  'renderCapacity' im Prototyp: ${result.renderCapacityOnPrototype}`);
     console.log(`  'renderCapacity' in Instanz:  ${result.renderCapacityOnLiveContext} (AudioContext: ${result.audioContextState})`);
-    console.log(`  typeof performance im Worklet: ${result.performanceInWorklet}`);
+    const w = result.workletScope ?? {};
+    console.log(`  Worklet-Scope:               performance=${w.perf} currentTime=${w.currentTime} currentFrame=${w.currentFrame} sampleRate=${w.sampleRate} Atomics=${w.atomics}`);
   }
   pageServer.close();
   console.log('\nErgebnis: WebGPU und renderCapacity sind in ALLEN hier möglichen');
   console.log('Konfigurationen nicht vorhanden - beide Punkte bleiben an die API gebunden,');
-  console.log('nicht an den Messweg. Auf einer Maschine MIT der API: ');
+  console.log('nicht an den Messweg.');
+  console.log('');
+  console.log('PERF-P3-002 (Stand 2026-09-20, nachgemessen): renderCapacity laesst sich');
+  console.log('auch NICHT per Flag einschalten - geprueft in Playwright-Chromium 151 UND');
+  console.log('in /usr/bin/google-chrome 153, je mit --enable-blink-features=');
+  console.log('AudioContextRenderCapacity(+ForTesting), --enable-features=RenderCapacity');
+  console.log('und --enable-experimental-web-platform-features: immer false. Die Sub-');
+  console.log('Messung "Gesamtlast inkl. Underruns" wird deshalb vom Worklet-CPU-Gate');
+  console.log('abgedeckt (scripts/worklet-cpu-gate.cjs: Durchschnittslast des V2-Sinks,');
+  console.log('verpasste Render-Quanten aus currentFrame-Luecken, Audio-Uhr-Abgleich');
+  console.log('ueber getOutputTimestamp).');
+  console.log('Auf einer Maschine MIT der API: ');
   console.log('  VISUAL-P1-009 -> Renderer bauen (src/core/visual/ + rendererMode)');
   console.log('  PERF-P3-002   -> REQUIRE_PERF_APIS=1 setzen, dann ist renderCapacity Pflicht');
 };

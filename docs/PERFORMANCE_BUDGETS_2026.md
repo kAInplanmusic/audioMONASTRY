@@ -53,12 +53,27 @@ verpasste Quanten** in allen Läufen. Zusätzlich verknüpft das Gate
 `AudioContext.getOutputTimestamp()` (Main-Thread, dort gibt es `performance`)
 Audio-Zeit und Wall-Clock: ≤ 0,2 % Rückstand ⇒ der Audio-Thread hält exakt Takt.
 
-**Nicht messbar in dieser Umgebung:** `AudioContext.renderCapacity` existiert weder
-im Playwright-Chromium (151.0.7922.34) noch im System-Chrome (153.0.8010.36) —
-geprüft mit und ohne `--enable-blink-features=AudioRenderCapacity` /
-`--enable-features=AudioRenderCapacity`, in sicherem Kontext
-(`isSecureContext: true`) und laufendem Context. Das Gate meldet das ausdrücklich
-(„kein stiller Erfolg") — die Gesamtlast des Graphen ist hier also offen.
+**Nicht messbar in dieser Umgebung (2026-09-20 nachgemessen, breitere Matrix):**
+`AudioContext.renderCapacity` existiert weder im Playwright-Chromium (151.0.7922.34)
+noch im System-Chrome (153.0.8010.52) — geprüft in **neun** Startkonfigurationen:
+ohne Flag, mit `--enable-blink-features=AudioContextRenderCapacity`, derselben
+`…ForTesting`-Variante, mit `--enable-features=RenderCapacity`, mit
+`--enable-experimental-web-platform-features` sowie allen Kombinationen davon
+(die Konfigurationen stehen in `scripts/browser-api-probe.mjs`, `npm run probe:apis`).
+Ergebnis: `'renderCapacity' in AudioContext.prototype === false` in JEDER
+Konfiguration. Die API ist also **nicht per Flag einschaltbar** — sie fehlt in
+dieser Browser-Generation vollständig, es ist kein Messweg-Problem. Das Gate meldet
+das ausdrücklich („kein stiller Erfolg").
+
+**Ersatz für die „Gesamtlast inkl. Underruns" (Entscheidung 2026-09-20):** der
+Zweck der renderCapacity-Messung wird vom Worklet-CPU-Gate selbst abgedeckt —
+Durchschnittslast des V2-Sinks (Warn 25 % / Fail 50 %), verpasste Render-Quanten
+aus Lücken im `currentFrame`-Zähler (Budget 0) und der Audio-Uhr-Abgleich über
+`AudioContext.getOutputTimestamp()` (≤ 10 %). `renderCapacity` war als dritte,
+bequemere Quelle gedacht; sie ist auf keiner hier verfügbaren Maschine erreichbar
+und auch nicht herbeiflaggbar. Deshalb bleibt sie optional (`REQUIRE_PERF_APIS=1`
+macht sie zur Pflicht, sobald sie vorhanden ist) und die Last-Aussage stützt sich
+auf die eigenen Zähler.
 
 ## 2. Startlast des Bundles (eager vs. lazy)
 
