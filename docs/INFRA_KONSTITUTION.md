@@ -69,7 +69,8 @@ bedarfsgesteuert.
   → **~3,3–4,0 €/h**, deutlich unter der 10-€/h-Grenze und innerhalb des
   Zielbands nur bei den günstigeren Pools.
 - **Nur Hetzner** (AI aus): **~0,054 €/h** (~39 €/Monat bei 24/7-Betrieb).
-- **Speicher:** 5 Snapshots ~25,5 GB ≈ **0,30 €/Monat** — weit unter 5 €/Monat.
+- **Speicher:** 10 Snapshots (Retention: 2 je Rolle) ~50,4 GB ≈ **0,50 €/Monat**
+  (live gemessen 2026-09-20) — weit unter 5 €/Monat.
 - `idleTimeout` wird abgerechnet: scale-to-zero greift erst nach `idleTimeout`s.
   Werte je Rolle: immer-Rollen klein (15–20 s), Visual-Rollen höher (900 s
   deklariert) für Iterations-Läufe.

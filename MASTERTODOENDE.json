@@ -1782,48 +1782,49 @@
       "id": "INFRA-HETZNER-001",
       "title": "deploy.sh ueberschreibt per Default die Portal-.env (DEPLOY_SYNC_ENV=1)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "scripts/hetzner/deploy.sh setzt DEPLOY_SYNC_ENV default auf 1 (:46) und kopiert dann per scp ./.env nach $REMOTE_DIR/.env (:152-158) - damit wird die vom Portal-Worker rollen-skopierte .env ersetzt (services/portal-worker/src/index.js:344-376, z. B. TRUST_PROXY=1 nur fuer die Rolle app, :368). bring-up-fleet.sh:92 ruft deploy.sh ohne DEPLOY_SYNC_ENV-Override, der Flottenstart loescht also die Portal-.env; fleet-preflight.sh:107 macht es mit DEPLOY_SYNC_ENV=0 korrekt, d. h. die beiden Pfade verhalten sich unterschiedlich.",
-      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.1 / H1 (Abschnitte 3.1, 5.1). Belege: scripts/hetzner/deploy.sh:46, :152-158; scripts/hetzner/bring-up-fleet.sh:92; scripts/hetzner/fleet-preflight.sh:107; services/portal-worker/src/index.js:344-376 (Rollenskopierung, TRUST_PROXY :368).",
+      "note": "DONE 2026-09-20. UMGESETZT (Datei liegt im Repo-Root, nicht unter scripts/hetzner/): deploy.sh hat DEPLOY_SYNC_ENV per Default 0 (Kopf-Doku begruendet es: die Knoten-.env ist rollen-skopiert, TRUST_PROXY=1 existiert nur fuer die Rolle app) und laesst die Knoten-.env damit unangetastet; bei DEPLOY_SYNC_ENV=1 kommt eine laute Warnung und vorher ein Remote-Backup (.env.bak-predeploy). bring-up-fleet.sh setzt den Default nun ebenfalls explizit auf 0 - damit verhalten sich bring-up-fleet.sh und fleet-preflight.sh gleich. Neu: DEPLOY_PRINT_CONFIG=1 zeigt die effektive Konfiguration ohne Build/SSH (Trockenlauf).",
       "files": [
-        "scripts/hetzner/deploy.sh",
+        "deploy.sh",
         "scripts/hetzner/bring-up-fleet.sh",
-        "scripts/hetzner/fleet-preflight.sh",
-        "services/portal-worker/src/index.js"
+        "scripts/hetzner/provision-fleet.sh",
+        "docs/HETZNER_DEPLOY.md"
       ],
       "acceptance": [
         "Ein Flottenstart ueberschreibt die Portal-.env nicht mehr (Default DEPLOY_SYNC_ENV=0 oder expliziter Override), dokumentiert im Skript",
         "Die beiden Pfade (bring-up-fleet.sh und fleet-preflight.sh) verhalten sich nachweislich gleich"
       ],
       "verification": [
-        "Beleg Bestand: docs/audit-infra-hetzner.md 3.1 (Default 1 + Aufruf ohne Override) und 5.1 H1",
-        "Nachweis offen: Lauf von bring-up-fleet.sh bzw. ein Test, der die Remote-.env nach dem Deploy prueft (Flotte ist live geloescht, 0 Server)"
+        "Eigener Lauf: DEPLOY_PRINT_CONFIG=1 bash deploy.sh -> DEPLOY_SYNC_ENV=0 (vorher 1), DEPLOY_INSTALL_CADDYFILE=0",
+        "grep beide Flottenpfade: bring-up-fleet.sh und fleet-preflight.sh rufen deploy.sh mit DEPLOY_SYNC_ENV=0",
+        "bash -n deploy.sh + bring-up-fleet.sh OK; npx vitest run tests/portalWorkerSnapshots.test.ts tests/namingConventions.test.ts OK",
+        "LIVE OFFEN: ein echter Flottenstart gegen einen Portal-Knoten - Nachweis, dass TRUST_PROXY=1 in der Knoten-.env unveraendert bleibt"
       ]
     },
     {
       "id": "INFRA-HETZNER-002",
       "title": "deploy.sh rsynct das Repo-Caddyfile und kann damit das Origin-TLS ueberschreiben",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "Der rsync in deploy.sh:126-136 hat keinen Caddyfile-Ausschluss. Der Portal-Worker installiert fuer app-1 aber /opt/audiomonastry/Caddyfile aus scripts/hetzner/Caddyfile.origin (index.js:410) und legt die Zertifikate unter certs/ ab (:406-409). Das Repo-Caddyfile hat keine tls-Direktive (Caddyfile:22 -> automatisches ACME), Caddyfile.origin:14 setzt dagegen explizit tls /etc/caddy/certs/origin.crt /etc/caddy/certs/origin.key. Nach jedem Deploy/Preflight liegt damit wieder die ACME-Variante auf dem Knoten - hinter der Cloudflare-Worker-Route der bekannte TLS-Fehlpfad.",
-      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.2 / H2 und 4.1 (Abschnitte 3.1, 4.1, 5.1). Belege: scripts/hetzner/deploy.sh:126-136 (rsync ohne Ausschluss); services/portal-worker/src/index.js:405-411; scripts/hetzner/Caddyfile.origin:14; Caddyfile:22. Ehrlichkeitsgrenze: ob der Deploy den Effekt live ausloest, ist im Audit NICHT verifiziert (Flotte geloescht) - der Mechanismus ist im Code eindeutig.",
+      "note": "DONE 2026-09-20. UMGESETZT: deploy.sh uebertraegt die Datei Caddyfile nicht mehr (rsync-Ausschluss + scp-Fallback ohne ./Caddyfile). Die Datei auf app-1 gehoert dem Portal-Worker (Caddyfile.origin mit Origin-TLS und certs/); ein bewusster Wechsel auf die ACME-Variante laeuft jetzt ueber DEPLOY_INSTALL_CADDYFILE=1 mit Warnung. Fehlt die Datei auf dem Knoten ganz, meldet der Deploy das mit Reparaturbefehlen statt still einen Caddy ohne Konfiguration zu starten.",
       "files": [
-        "scripts/hetzner/deploy.sh",
-        "services/portal-worker/src/index.js",
-        "scripts/hetzner/Caddyfile.origin",
-        "Caddyfile"
+        "deploy.sh",
+        "docs/HETZNER_DEPLOY.md"
       ],
       "acceptance": [
         "Ein Deploy laesst das im Portal installierte Origin-TLS-Caddyfile unangetastet (Ausschluss oder bewusste Caddyfile-Verwaltung an einer Stelle)",
         "Der Zustand nach einem Deploy ist nachweisbar der Origin-TLS-Variante zuzuordnen"
       ],
       "verification": [
-        "Beleg Bestand: docs/audit-infra-hetzner.md 3.2 (kein Caddyfile-Ausschluss im rsync)",
-        "Nachweis offen: Pruefung des Caddyfile-Inhalts auf einem frisch deployten Knoten (kein Knoten live)"
+        "Eigener rsync-Dry-Run mit den echten Skript-Argumenten: MIT --exclude Caddyfile werden nur Caddyfile.origin und Caddyfile.master uebertragen, die Datei Caddyfile erscheint NICHT; die Gegenprobe ohne Ausschluss zeigt \">f+++++++++ Caddyfile\" (der Test ist damit aussagekraeftig)",
+        "bash -n deploy.sh OK",
+        "LIVE OFFEN: dass auf einem echten app-1 nach einem Deploy die Origin-TLS-Variante unveraendert liegt (offline belegt ist nur, dass deploy.sh die Datei nicht mehr schreibt)"
       ]
     },
     {
@@ -1853,23 +1854,25 @@
       "id": "INFRA-HETZNER-004",
       "title": "Monitoring/Alerting messen und alarmieren die edge-Kopie statt app-1",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "Der App-Job in Prometheus zeigt auf audiomonastry:8080 im lokalen Compose-Netz von edge-1 (scripts/hetzner/prometheus.yml:47-48); der Cross-Host-Job auf die Domain/app-1-IP ist auskommentiert (:50-58). Da Prometheus auf edge-1 und die Produktions-App auf app-1 laeuft, stammen alle App-/Container-Metriken, die das Dashboard fuellen, von der edge-Kopie. Alertmanager schickt seine Alarme zusaetzlich an http://audiomonastry:8080/api/alerts/webhook (alertmanager.yml:36) - im Compose-Netz von edge-1 ist das der edge-eigene Container; die im Kommentar (:8-10) genannte Produktions-URL ist nicht implementiert.",
-      "note": "Quelle: docs/audit-infra-hetzner.md Befunde 4.4, 4.5 / H3 (Abschnitte 4.4, 5.1). Belege: scripts/hetzner/prometheus.yml:47-48, :50-58; scripts/hetzner/alertmanager.yml:36 (Alternative nur im Kommentar :8-10); Start von Prometheus/Alertmanager auf edge-1 (services/portal-worker/src/index.js:422 bzw. bring-up-fleet.sh:114). Bezug: PROD-P1-004 (Observability) hat den Stack lokal in Betrieb genommen - die Zielfrage ist dort nicht abgedeckt.",
+      "note": "DONE 2026-09-20. UMGESETZT: prometheus.yml und alertmanager.yml tragen Platzhalter (__APP_TARGET__, __APP_SCHEME__, __ALERT_WEBHOOK_URL__, __CRITICAL_WEBHOOK__), die der jeweilige Container-Entrypoint in docker-compose.monitoring.yml beim Start ersetzt. Default = PRODUKTION: App-Ziel anunnakitools.de (app-1) mit scheme https, Alarm-Webhook https://anunnakitools.de/api/alerts/webhook. Lokaler Betrieb (Monitoring neben der App im selben Compose-Netz) ist ueber APP_TARGET=audiomonastry:8080 APP_SCHEME=http bzw. ALERT_WEBHOOK_URL=... dokumentiert und umschaltbar - die edge-eigene Kopie ist damit kein Messpunkt mehr, sondern ein bewusster Fallback.",
       "files": [
         "scripts/hetzner/prometheus.yml",
         "scripts/hetzner/alertmanager.yml",
-        "scripts/hetzner/bring-up-fleet.sh"
+        "docker-compose.monitoring.yml"
       ],
       "acceptance": [
         "Die Produktions-App (app-1) ist das Scrape-Ziel der Flotten-Metriken, nicht die lokale edge-Kopie",
         "Alarme werden an den Produktions-Webhook zugestellt (und der Fallback ist dokumentiert)"
       ],
       "verification": [
-        "Beleg Bestand: docs/audit-infra-hetzner.md 4.4/4.5 (lokales Ziel, Cross-Host-Job auskommentiert)",
-        "Nachweis offen: Prometheus-Targets/Alert-Zustellung auf einem laufenden Flottenknoten pruefen (kein Knoten live)"
+        "Eigene Rendering-Probe (Compose-Interpolation + die echte Entrypoint-sed-Zeile lokal ausgefuehrt): prometheus -> scheme: https, targets: [anunnakitools.de]; alertmanager -> beide Webhook-URLs https://anunnakitools.de/api/alerts/webhook; keine Restplatzhalter",
+        "Gegenprobe lokaler Betrieb: mit APP_TARGET=audiomonastry:8080/APP_SCHEME=http bzw. lokaler ALERT_WEBHOOK_URL rendert die Datei genau die edge-lokalen Ziele (bewusster Fallback)",
+        "YAML-Parse aller drei Dateien OK (PyYAML)",
+        "LIVE OFFEN: promtool check config / amtool check-config sowie ein echter Scrape von edge-1 gegen app-1 (Docker/promtool lokal nicht verfuegbar - daher YAML-Parse + real ausgefuehrte sed-Zeile als Ersatzbeleg)"
       ]
     },
     {
@@ -1947,66 +1950,81 @@
       "id": "INFRA-HETZNER-008",
       "title": "Kein Backup in der Flotte verdrahtet",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "Kein Flottenskript ruft scripts/backup.sh auf (Volltextsuche findet nur docs/OPS_RUNBOOK.md:67-78, docs/PRODUKTIONSREIFE_WEGPLAN.md:45,70,139 und die Datei selbst); es gibt keine systemd-Unit und keinen Timer dafuer (in scripts/hetzner/systemd/ liegt nur idle-check.sh). Die einzige maschinelle Sicherung ist der Server-Snapshot - und der wird bei stopFleet nicht erzeugt (services/portal-worker/src/index.js:729-745 loescht nur Server und Floating-IPs), sondern nur im CLI-Pfad lifecycle.sh:29-46. Fuer Off-Site fehlen in dieser Arbeitskopie zusaetzlich die Zugangsdaten (BACKUP_S3_*/HOS_S3_* sind nicht in .env.deploy, erwartet laut docs/ENV_MATRIX.md:185-193).",
-      "note": "Quelle: docs/audit-infra-hetzner.md Befund 4.10 / H6 (Abschnitte 4.5, 5.1). Belege: scripts/backup.sh:33-60 (Rotation 14 Tage, optional --offsite ueber scripts/r2-backup.mjs); kein Aufrufer in scripts/hetzner/; keine Unit in scripts/hetzner/systemd/; services/portal-worker/src/index.js:729-745 (stopFleet ohne Snapshot). Bezug: PROD-P0-002 (Backup off-site + Restore-Drill) ist DONE fuer den Mechanismus, aber nicht in der Flotte verdrahtet.",
+      "note": "DONE 2026-09-20. UMGESETZT: (a) Backup in der Flotte verdrahtet - neue systemd-Unit + Timer (scripts/hetzner/systemd/audiomonastry-backup.{service,timer}), Wrapper scripts/hetzner/systemd/backup-run.sh und Installer scripts/hetzner/install-backup-timer.sh; bring-up-fleet.sh installiert den Timer auf app-1. Der Timer laeuft OnBootSec=15min + OnUnitActiveSec=24h (Kalenderzeit greift bei kurzen Flotten-Sessions nie). Ohne Off-Site-Zugangsdaten wird laut uebersprungen (Grund im Log), lokales Backup laeuft trotzdem; REQUIRE_OFFSITE=1 macht daraus Exit 3. (b) Der Portal-Stop-Pfad zieht jetzt je Knoten einen Snapshot und loescht erst nach bestaetigtem success (waitForAction mit Budget STOP_SNAPSHOT_TIMEOUT_S); ohne Bestaetigung bleibt der Knoten stehen (skipped mit Grund), Floating-IPs werden nur geloescht, wenn wirklich kein Server mehr uebrig ist, danach greift die Retention. Vorher loeschte /api/stop (und der Idle-Cron) die Flotte ohne jede Sicherung.",
       "files": [
         "scripts/backup.sh",
-        "scripts/hetzner/lifecycle.sh",
+        "scripts/hetzner/systemd/backup-run.sh",
+        "scripts/hetzner/systemd/audiomonastry-backup.service",
+        "scripts/hetzner/systemd/audiomonastry-backup.timer",
+        "scripts/hetzner/install-backup-timer.sh",
+        "scripts/hetzner/bring-up-fleet.sh",
         "services/portal-worker/src/index.js",
-        "docs/ENV_MATRIX.md"
+        "docs/OPS_RUNBOOK.md",
+        "tests/portalWorkerSnapshots.test.ts"
       ],
       "acceptance": [
         "Das Backup laeuft in der Flotte automatisch (Timer/Unit oder Aufruf im Start-/Stop-Pfad) und ist nachweisbar vorhanden",
         "Auch der Portal-Stop-Pfad erzeugt vor dem Loeschen einen Snapshot oder ruft das Backup auf"
       ],
       "verification": [
-        "Beleg Bestand: docs/audit-infra-hetzner.md 4.10 (kein Aufrufer, keine Unit)",
-        "Nachweis offen: Timer/Unit auf einem Knoten installieren und einen Lauf belegen (kein Knoten live)"
+        "Eigene Tests im Repo (neu, tests/portalWorkerSnapshots.test.ts): Stop legt fuer alle 5 Knoten Snapshots an, alle create_image-Aufrufe liegen VOR dem ersten Server-Delete, danach werden 5 Server + Floating-IP geloescht; actionStatus=error -> 0 Deletes, 5x skipped \"Snapshot-Status error\", Floating-IP bleibt; actionStatus=running mit Budget 0 s -> 0 Deletes, skipped \"Snapshot-Status timeout\" (14/14 Tests der Datei gruen)",
+        "systemd-analyze verify auf Unit + Timer: keine Befunde (nur die erwartete Meldung zum noch nicht installierten ExecStart-Pfad); bash -n aller Skripte OK",
+        "scripts/backup.sh: nur vorhandene Wurzeln werden archiviert, tar-Fehler werden nicht mehr verschluckt, ohne Ziel Exit 3",
+        "LIVE OFFEN: echte Timer-Installation + erster Lauf auf app-1 (Journal/Log), ein echter Portal-Stop mit Snapshot-Poll, echter Off-Site-Upload mit Produktions-Keys (bewusst nicht ausgefuehrt)"
       ]
     },
     {
       "id": "INFRA-HETZNER-009",
       "title": "fleet-deploy-live.sh deployt per Default nach /opt/samplemonk statt /opt/audiomonastry",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "scripts/hetzner/fleet-deploy-live.sh setzt REMOTE_DIR=\"${DEPLOY_REMOTE_DIR:-/opt/samplemonk}\" (:22), alle uebrigen Pfade im Repo verwenden /opt/audiomonastry (scripts/hetzner/deploy.sh:44, services/portal-worker/src/index.js:388, scripts/hetzner/auto-repair.sh:45, scripts/hetzner/bring-up-fleet.sh:100). Ein Live-Deploy mit Defaults schreibt also in ein anderes Verzeichnis als der laufende Stack; die anschliessenden Compose-Befehle (:57-58) laufen im cd $REMOTE_DIR und starten folglich einen zweiten Stack aus dem Altpfad.",
-      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.4 / H4 (Abschnitte 3.3, 5.1). Belege: scripts/hetzner/fleet-deploy-live.sh:22, :57-58; zum Vergleich scripts/hetzner/deploy.sh:44, services/portal-worker/src/index.js:388, scripts/hetzner/auto-repair.sh:45, scripts/hetzner/bring-up-fleet.sh:100. Relevanz: derselbe Pfad wurde im Live-Nachweis von COLLAB-P0-002 (2026-09-18) benutzt.",
+      "note": "DONE 2026-09-20. UMGESETZT: fleet-deploy-live.sh hat als Default /opt/audiomonastry (Zielarchitektur, wie deploy.sh, Portal-Worker, auto-repair.sh und bring-up-fleet.sh); der Live-Altpfad /opt/samplemonk bleibt ausdruecklich per DEPLOY_REMOTE_DIR erreichbar. Neu ist ein Guard: das Skript liest das Compose-Label (working_dir) des laufenden App-Containers und BRICHT AB, wenn das Zielverzeichnis vom laufenden Stack abweicht - mit dem fertigen Richtig-Stellen-Befehl; ein bewusster Neuaufbau daneben geht ueber DEPLOY_ALLOW_FOREIGN_DIR=1. --print-config zeigt die effektive Konfiguration ohne SSH/rsync.",
       "files": [
-        "scripts/hetzner/fleet-deploy-live.sh"
+        "scripts/hetzner/fleet-deploy-live.sh",
+        "tests/namingConventions.test.ts"
       ],
       "acceptance": [
         "Der Default ist /opt/audiomonastry (oder der Pfad wird aus derselben Konstante wie im Portal gelesen) und ein Deploy trifft nachweislich den laufenden Stack"
       ],
       "verification": [
-        "Beleg Bestand: docs/audit-infra-hetzner.md 3.4 (Default /opt/samplemonk vs. /opt/audiomonastry ueberall sonst)",
-        "Nachweis offen: Deploy gegen einen Knoten und Pruefung des Zielverzeichnisses (kein Knoten live)"
+        "Eigener Lauf: bash scripts/hetzner/fleet-deploy-live.sh --print-config -> REMOTE_DIR=/opt/audiomonastry, LEGACY_REMOTE_DIR=/opt/samplemonk (nur Guard-Erkennung)",
+        "Guard-Pfad im Skript belegt einen harten Abbruch (exit 1) mit Richtig-Stellen-Befehl, wenn Ziel != laufender Stack",
+        "bash -n OK; Nomenklatur-Waechter gruen (der Altname steht nur noch als Guard-Erkennung, Eintrag begruendet)",
+        "LIVE OFFEN: ein echter Deploy gegen den laufenden Knoten mit DEPLOY_REMOTE_DIR=/opt/samplemonk"
       ]
     },
     {
       "id": "INFRA-HETZNER-010",
       "title": "Snapshot-Retention fehlt im CLI-Pfad (live 10 Snapshots, aeltester 2026-09-11)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Infra/Hetzner",
       "source": "audit:infra 2026-09-20",
       "problem": "Der CLI-Pfad lifecycle.sh hat keine Retention: stop erzeugt per snapshot_all Snapshots (:29-46, Description <NAME>-auto-<timestamp>, danach festes sleep 30 ohne Action-Status) und loescht nichts. Die einzige Retention liegt im Portal-Worker (services/portal-worker/src/index.js:56 SNAPSHOT_RETENTION = 2, angewandt auf Portal-Snapshots). Live liegen 10 Snapshots, der aelteste vom 2026-09-11, Summe der image_size-Werte ~50,4 GB - ein laufender Kostenposten, der im Kostenmodell nirgends auftaucht (Konstitution: max. 5 EUR/Monat Speicher).",
-      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.5 / H8 (Abschnitte 3.4, 5.1, 6.1). Belege: scripts/hetzner/lifecycle.sh:15, :29-46; services/portal-worker/src/index.js:46-47 ('~0,01 EUR/GB/Monat') und :56; Live-Liste der 10 Snapshots (Audit 6.1, alle mit Praefix samplemonk-snapshot-). Bezug: budget.storageNowEurPerMonth der SSOT (~0,30 EUR/Monat bei 5 Live-Snapshots) beschreibt einen anderen Bestand als die live gemessenen 10; budget.storageSnapshotsMaxEurPerMonth = 5 (Konstitution) ist in diesem Lauf gesetzt.",
+      "note": "DONE 2026-09-20. UMGESETZT: der CLI-Pfad hat jetzt dieselbe Retention wie der Portal-Worker - SNAPSHOT_RETENTION=2 JE ROLLE (per env ueberschreibbar), angewandt auf BEIDE Snapshot-Familien (Worker: <prefix>snapshot-<rolle>-<datum> inkl. Altpraefix; CLI: <servername>-auto-<ts>). Neue Subkommandos: `lifecycle.sh prune` raeumt nur auf, PRUNE_DRY_RUN=1 zeigt nur. Statt des festen `sleep 30` pollt wait_snapshot_action() den Action-Status bis success (best effort, Timeout SNAPSHOT_WAIT_TIMEOUT=600 s). SSOT-ZAHL NACHGEZOGEN: AI_ESTIMATED_STORAGE_EUR_PER_MONTH von 0,30 auf 0,50 EUR/Monat (Konstitution §3: 10 Snapshots ~50,4 GB ≈ 0,50 EUR/Monat bei ~0,01 EUR/GB/Monat).",
       "files": [
         "scripts/hetzner/lifecycle.sh",
-        "services/portal-worker/src/index.js"
+        "services/portal-worker/src/index.js",
+        "src/config/aiInfrastructure.ts",
+        "docs/INFRA_KONSTITUTION.md",
+        ".env.example"
       ],
       "acceptance": [
         "Der CLI-Pfad raeumt alte Snapshots nach einer dokumentierten Regel auf (Retention wie im Worker)",
         "Die SSOT-Speicherzahl entspricht dem live vorhandenen Bestand"
       ],
       "verification": [
-        "Beleg live: docs/audit-infra-hetzner.md 6.1 (10 Snapshots, aeltester 2026-09-11, ~50,4 GB image_size)",
-        "Nachweis offen: Aufraeum-Lauf + erneute Enumeration der Snapshots"
+        "Eigener Live-Dry-Run (nur GET gegen die Hetzner-API): PRUNE_DRY_RUN=1 bash scripts/hetzner/lifecycle.sh prune -> \"Rollen: ai=2, app=2, edge=2, master=2, sfu=2 | behalten: 10 | waeren geloescht: 0 | nicht zuordenbar: 0\" - der Bestand ist genau im Retention-Gleichgewicht, nichts zu loeschen",
+        "Die Regel ist im Skript als Python mit Label-Erkennung + Namensmustern beider Familien umgesetzt und loescht nur in Nicht-Dry-Run-Laeufen (Code-Pruefung: DELETE nur im else-Zweig)",
+        "Speicherzahl der SSOT auf den gemessenen Bestand gezogen (0,50 EUR/Monat, 10 Snapshots)",
+        "LIVE OFFEN: ein echter lifecycle.sh stop (Snapshot anlegen + bis success pollen) samt tatsaechlichem Loeschen der Alt-Snapshots nach Ablauf der Retention"
       ]
     },
     {

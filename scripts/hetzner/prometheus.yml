@@ -33,26 +33,27 @@ scrape_configs:
   # PROD-P1-004 (Befund 2026-09-18): Prometheus expandiert Umgebungsvariablen in
   # der Konfiguration NICHT - auch nicht mit dem frueher hier gesetzten Flag
   # `--config.expand-env`, das es gar nicht gibt (Prometheus brach damit schon
-  # beim Start ab, der ganze Stack lief in eine Restart-Schleife). Der Platzhalter
-  # `__SCRAPE_TOKEN__` wird deshalb beim Containerstart vom Entrypoint der Compose-
-  # Datei ersetzt (siehe docker-compose.monitoring.yml, Abschnitt prometheus).
+  # beim Start ab, der ganze Stack lief in eine Restart-Schleife). Die Platzhalter
+  # `__SCRAPE_TOKEN__`, `__APP_TARGET__` und `__APP_SCHEME__` werden deshalb beim
+  # Containerstart vom Entrypoint der Compose-Datei ersetzt (siehe
+  # docker-compose.monitoring.yml, Abschnitt prometheus).
+  #
+  # INFRA-HETZNER-004: Ziel ist die PRODUKTIONS-App (app-1), NICHT der lokale
+  # Container im edge-Compose-Netz. Der Monitoring-Stack laeuft auf edge-1 und
+  # hat dort keinen App-Container; `audiomonastry:8080` war deshalb nicht die
+  # Produktion, sondern die edge-eigene Kopie (bzw. gar nichts).
+  #     Default (Flotte):  APP_TARGET=anunnakitools.de  APP_SCHEME=https
+  #                        -> ueber Floating-IP/DNS, also app-1 selbst
+  #     Lokal (edge-only, Monitoring neben der App gestartet):
+  #                        APP_TARGET=audiomonastry:8080  APP_SCHEME=http
   - job_name: 'audiomonastry'
     metrics_path: /api/metrics
     params:
       format: ['prometheus']
-    scheme: http
+    scheme: __APP_SCHEME__
     authorization:
       type: Bearer
       credentials: '__SCRAPE_TOKEN__'
     static_configs:
-      - targets: ['audiomonastry:8080']
+      - targets: ['__APP_TARGET__']
 
-  # Cross-Host-Scrape, falls der Monitoring-Knoten NICHT auf dem App-Knoten
-  # läuft (z. B. edge-1). Domain anpassen:
-  # - job_name: 'audiomonastry-public'
-  #   metrics_path: /api/metrics
-  #   params:
-  #     format: ['prometheus']
-  #   scheme: https
-  #   static_configs:
-  #     - targets: ['anunnakitools.de']

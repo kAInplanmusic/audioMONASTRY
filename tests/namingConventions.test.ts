@@ -41,8 +41,9 @@ const ALLOWED: Record<string, string> = {
   'server/fleetWiring.ts': 'FLEET_LEGACY_NAME_PREFIX (Fleet-Map einer nicht aktualisierten Instanz).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
-  'scripts/hetzner/fleet-deploy-live.sh': 'Live-Deploy-Skript 2026-09-18: der Standardpfad der laufenden Flotte '
-    + 'ist /opt/samplemonk (Altname) - das Skript muss dorthin rsyncen.',
+  'scripts/hetzner/fleet-deploy-live.sh': 'Live-Deploy-Skript: der Default ist /opt/audiomonastry, der Altpfad /opt/samplemonk '
+    + 'steht nur noch als Guard-Erkennung (DEPLOY_LEGACY_REMOTE_DIR) im Skript, damit ein Deploy nicht still in ein '
+    + 'leeres Verzeichnis neben den laufenden Bestands-Stack schreibt (INFRA-HETZNER-009).',
   'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
     + 'Flotte (Snapshots "samplemonk-snapshot-*", Knotenpfad /opt/samplemonk, Floating-IP "samplemonk-floating", '
     + 'Fleet-Map des alten Workers) - ohne die Altnamen waere das Runbook falsch.',

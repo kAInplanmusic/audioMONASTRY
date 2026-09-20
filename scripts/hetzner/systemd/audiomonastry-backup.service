@@ -1,0 +1,26 @@
+# ============================================================================
+# audioMONASTRY · systemd-Unit: Backup-Lauf (INFRA-HETZNER-008)
+# ----------------------------------------------------------------------------
+# Installiert von scripts/hetzner/install-backup-timer.sh (Kopie nach
+# /etc/systemd/system/). Gestartet vom Timer audiomonastry-backup.timer.
+# Der Wrapper liegt als /usr/local/bin/audiomonastry-backup.sh auf dem Knoten
+# (Quelle: scripts/hetzner/systemd/backup-run.sh) und ruft scripts/backup.sh im
+# App-Verzeichnis auf - lokal nach /var/backups/audiomonastry, Off-Site nur mit
+# Zugangsdaten (sonst laute Meldung im Log, kein stiller No-Op).
+# ============================================================================
+[Unit]
+Description=audioMONASTRY Backup (scripts/backup.sh, lokal + optional Off-Site)
+Documentation=file:///opt/audiomonastry/docs/OPS_RUNBOOK.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/opt/audiomonastry
+Environment=BACKUP_DIR=/var/backups/audiomonastry
+Environment=BACKUP_OFFSITE=1
+Environment=REQUIRE_OFFSITE=0
+WorkingDirectory=/opt/audiomonastry
+ExecStart=/usr/local/bin/audiomonastry-backup.sh
+StandardOutput=append:/var/log/audiomonastry-backup.log
+StandardError=append:/var/log/audiomonastry-backup.log

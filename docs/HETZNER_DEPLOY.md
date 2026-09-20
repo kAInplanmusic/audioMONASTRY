@@ -142,8 +142,14 @@ Was `deploy.sh` macht (Default `DEPLOY_MODE=docker`):
 2. Remote-Rollback-Image sichern (`audiomonastry:hetzner-rollback`)
 3. Images per **`docker save | ssh docker load`** übertragen (kein Remote-Build,
    deutlich schneller für stündlich abgerechnete Instanzen)
-4. Config (`Caddyfile`, `docker-compose.hetzner.yml`, `.env`, Services) per rsync
-5. `.env` wird hochgeladen (wenn `DEPLOY_SYNC_ENV=1`), `DOMAIN=...` gesetzt
+4. Config (`docker-compose.hetzner.yml`, Services, Skripte) per rsync — **ohne
+   `Caddyfile`** (INFRA-HETZNER-002: die Datei auf app-1 ist die Origin-TLS-Variante
+   `Caddyfile.origin` des Portal-Workers; ein rsync würde sie auf ACME zurückdrehen.
+   Bewusster Wechsel: `DEPLOY_INSTALL_CADDYFILE=1`)
+5. `.env` bleibt unangetastet, `DOMAIN=...` wird gesetzt. Upload der lokalen `.env`
+   nur mit `DEPLOY_SYNC_ENV=1` (INFRA-HETZNER-001 — der Default ist `0`, weil die
+   Knoten-`.env` rollen-skopiert vom Portal-Worker kommt; bei `1` sichert das Skript
+   die vorhandene Remote-`.env` vorher nach `.env.bak-predeploy`)
 6. `docker compose up -d --no-build` (App + master-player) + Caddy
 7. **Health-Wait** auf `/api/health` + Smoke-Test
 
@@ -155,7 +161,9 @@ Wichtige Variablen:
 | `DEPLOY_REMOTE_BUILD` | `0` | `1` = Remote-Build statt Image-Transfer (Fallback ohne lokales Docker) |
 | `DEPLOY_PLATFORM` | leer | z. B. `linux/amd64` für Cross-Build (Apple Silicon → Hetzner x86) via buildx |
 | `DEPLOY_SMOKE` | `1` | Smoke-Test nach Deploy |
-| `DEPLOY_SYNC_ENV` | `1` | lokale `.env` hochladen |
+| `DEPLOY_SYNC_ENV` | `0` | lokale `.env` hochladen — **überschreibt die rollen-skopierte Knoten-`.env`** (Portal-Worker), nur für frische Knoten ohne Portal setzen |
+| `DEPLOY_INSTALL_CADDYFILE` | `0` | `1` = Repo-Caddyfile (ACME) auf den Knoten laden und damit Origin-TLS ersetzen |
+| `DEPLOY_PRINT_CONFIG` | `0` | `1` = nur effektive Konfiguration ausgeben (Trockenlauf, kein Build/SSH) |
 
 Rollback:
 

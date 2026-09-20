@@ -74,6 +74,10 @@ services:
           memory: 256M
           cpus: "0.5"
 
+  # INFRA-HETZNER-004: Scrape-Ziel ist die PRODUKTIONS-App (app-1), nicht der
+  # lokale Container. Default = Domain ueber Floating-IP; fuer den lokalen
+  # edge-only-Betrieb (Monitoring neben der App) beide Werte umstellen:
+  #     APP_TARGET=audiomonastry:8080 APP_SCHEME=http
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: audiomonastry-prometheus
@@ -85,14 +89,16 @@ services:
     # PROD-P1-004 (Befund 2026-09-18): `--config.expand-env` gibt es bei
     # Prometheus NICHT (Startabbruch: "unknown long flag", Stack in der
     # Restart-Schleife), und Prometheus expandiert Umgebungsvariablen in der
-    # Konfiguration grundsaetzlich nicht. Der Platzhalter __SCRAPE_TOKEN__ wird
-    # deshalb hier beim Start ersetzt - das Token landet nie im Image und die
-    # Konfigurationsdatei bleibt im Repo ohne Secret.
+    # Konfiguration grundsaetzlich nicht. Die Platzhalter __SCRAPE_TOKEN__,
+    # __APP_TARGET__ und __APP_SCHEME__ werden deshalb hier beim Start ersetzt -
+    # Secrets und Ziel bleiben damit aus dem Repo heraus.
     entrypoint:
       - /bin/sh
       - -c
       - >
-        sed "s|__SCRAPE_TOKEN__|$${SCRAPE_TOKEN}|g" /etc/prometheus/prometheus.yml
+        sed -e "s|__SCRAPE_TOKEN__|$${SCRAPE_TOKEN}|g"
+        -e "s|__APP_TARGET__|$${APP_TARGET}|g"
+        -e "s|__APP_SCHEME__|$${APP_SCHEME}|g" /etc/prometheus/prometheus.yml
         > /tmp/prometheus.yml &&
         exec /bin/prometheus
         --config.file=/tmp/prometheus.yml
@@ -101,6 +107,11 @@ services:
     environment:
       # PROD-P0-001: gleiches Secret wie in der App (server.ts SCRAPE_TOKEN).
       SCRAPE_TOKEN: ${SCRAPE_TOKEN:-}
+      # INFRA-HETZNER-004: Dokumentierte Defaults - ein Satz Dateien fuer Flotte
+      # UND lokalen Betrieb. Ohne APP_TARGET wird die Produktions-Domain
+      # gescraped (app-1 hinter der Floating-IP), nicht der edge-Container.
+      APP_TARGET: ${APP_TARGET:-anunnakitools.de}
+      APP_SCHEME: ${APP_SCHEME:-https}
     expose:
       - "9090"
     deploy:
@@ -118,7 +129,9 @@ services:
     volumes:
       - ./scripts/hetzner/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     # PROD-P1-004: gleiche Rendering-Regel wie bei Prometheus. Ohne gesetztes
-    # CRITICAL_WEBHOOK bleibt der Fallback die App-Route (Verhalten wie vorher).
+    # CRITICAL_WEBHOOK zeigt der Fallback auf den Produktions-Webhook (Domain) -
+    # ein App-Down-Alarm geht damit an die Produktion, nicht an den lokalen
+    # edge-Container (INFRA-HETZNER-004: Fallback = Produktions-Route).
     # ACHTUNG: EINZEILIG halten. Ein gefalteter YAML-Block mit tiefer
     # eingerueckten Folgezeilen behaelt den Zeilenumbruch - der sed-Befehl wurde
     # dadurch in drei Shell-Befehle zerlegt ('-e: not found',
@@ -126,11 +139,14 @@ services:
     entrypoint:
       - /bin/sh
       - -c
-      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-http://audiomonastry:8080/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
+      - sed -e "s|__CRITICAL_WEBHOOK__|$${CRITICAL_WEBHOOK:-https://anunnakitools.de/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_URL__|$${ALERT_WEBHOOK_URL:-https://anunnakitools.de/api/alerts/webhook}|g" -e "s|__ALERT_WEBHOOK_TOKEN__|$${ALERT_WEBHOOK_TOKEN:-}|g" /etc/alertmanager/alertmanager.yml > /tmp/alertmanager.yml && exec /bin/alertmanager --config.file=/tmp/alertmanager.yml
     environment:
       # Direkter Chat-Webhook fuer Alarme, die die App selbst betreffen
       # (App-Down laesst sich nicht ueber die App zustellen).
       CRITICAL_WEBHOOK: ${CRITICAL_WEBHOOK:-}
+      # INFRA-HETZNER-004: Ziel des Chat-Webhooks. Default = Produktions-Endpoint.
+      # Lokal (edge-only, Monitoring neben der App): ALERT_WEBHOOK_URL=http://audiomonastry:8080/api/alerts/webhook
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-https://anunnakitools.de/api/alerts/webhook}
       # Gemeinsames Geheimnis mit der App (server.ts ALERT_WEBHOOK_TOKEN).
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
     expose:

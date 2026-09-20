@@ -117,11 +117,15 @@ export const AI_TARGET_FLEET_EUR_PER_HOUR = { min: 5, max: 7.5 } as const;
 export const AI_HETZNER_EUR_PER_HOUR = envNumber('AI_HETZNER_EUR_PER_HOUR', 0.054);
 
 /**
- * Angenommene Speicher-/Snapshot-Kosten in EUR/Monat (Konstitution §3: fünf
- * Snapshots ≈ 0,30 €/Monat). Dient dem Storage-Guard als Ist-Wert, solange die
- * Abrechnungsdaten nicht live abgerufen werden.
+ * Angenommene Speicher-/Snapshot-Kosten in EUR/Monat.
+ *
+ * Ist-Wert der Flotte (2026-09-20 per Hetzner-API gemessen): 10 Snapshots,
+ * 2 je Rolle (Retention `SNAPSHOT_RETENTION=2`), Summe image_size ≈ 50,4 GB
+ * ≈ 0,50 €/Monat bei ~0,01 €/GB/Monat. Die früheren 0,30 €/Monat gingen von
+ * fünf Snapshots (~25,5 GB) aus; die Retention hält jetzt zehn. Dient dem
+ * Storage-Guard als Ist-Wert, solange die Abrechnung nicht live gelesen wird.
  */
-export const AI_ESTIMATED_STORAGE_EUR_PER_MONTH = envNumber('AI_ESTIMATED_STORAGE_EUR_PER_MONTH', 0.3);
+export const AI_ESTIMATED_STORAGE_EUR_PER_MONTH = envNumber('AI_ESTIMATED_STORAGE_EUR_PER_MONTH', 0.5);
 
 /**
  * Laufzeit-Grenzen der Budget-Guards.

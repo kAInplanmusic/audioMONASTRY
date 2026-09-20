@@ -70,6 +70,13 @@ interface FetchMockOptions {
   servers?: unknown[];
   createServer?: (payload: Record<string, unknown>) => Record<string, unknown>;
   createImage?: (serverId: string, payload: Record<string, unknown>) => Record<string, unknown>;
+  /**
+   * INFRA-HETZNER-008: Status, den `GET /v1/actions/:id` meldet. 'success' (Default)
+   * lässt den Stop-Pfad löschen, 'error'/'running' muss ihn stoppen.
+   */
+  actionStatus?: string;
+  /** Floating-IPs, die der Stop-Pfad löschen darf (Default: eine). */
+  floatingIps?: { id: number; name?: string; ip?: string }[];
 }
 
 function setupFetchMock(opts: FetchMockOptions = {}) {
@@ -78,6 +85,9 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
   let serverGetCount = 0;
   const imageActions: { serverId: string; payload: Record<string, unknown> }[] = [];
   const deletedImages: string[] = [];
+  const deletedServers: string[] = [];
+  const deletedFloatingIps: string[] = [];
+  const order: string[] = [];
 
   const fetchMock = vi.fn(async (input: unknown, init: RequestInit = {}) => {
     const url = new URL(String(input));
@@ -123,6 +133,12 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
       };
       return Response.json(created);
     }
+    const deleteServerMatch = /^\/v1\/servers\/(\d+)$/.exec(path);
+    if (deleteServerMatch && method === 'DELETE') {
+      deletedServers.push(deleteServerMatch[1]);
+      order.push(`delete-server:${deleteServerMatch[1]}`);
+      return new Response(null, { status: 204 });
+    }
     if (path === '/v1/images' && method === 'GET') {
       return Response.json({ images: opts.images ?? [] });
     }
@@ -130,10 +146,24 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
     if (createImageMatch && method === 'POST') {
       const payload = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
       imageActions.push({ serverId: createImageMatch[1], payload });
+      order.push(`create_image:${createImageMatch[1]}`);
       const created = opts.createImage?.(createImageMatch[1], payload) ?? {
         action: { id: 1000 + imageActions.length },
       };
       return Response.json(created);
+    }
+    const actionMatch = /^\/v1\/actions\/(\d+)$/.exec(path);
+    if (actionMatch && method === 'GET') {
+      return Response.json({ action: { id: Number(actionMatch[1]), status: opts.actionStatus ?? 'success' } });
+    }
+    if (path === '/v1/floating_ips' && method === 'GET') {
+      return Response.json({ floating_ips: opts.floatingIps ?? [{ id: 7, name: 'audiomonastry-floating', ip: '9.9.9.9' }] });
+    }
+    const deleteFipMatch = /^\/v1\/floating_ips\/(\d+)$/.exec(path);
+    if (deleteFipMatch && method === 'DELETE') {
+      deletedFloatingIps.push(deleteFipMatch[1]);
+      order.push(`delete-fip:${deleteFipMatch[1]}`);
+      return new Response(null, { status: 204 });
     }
     const deleteImageMatch = /^\/v1\/images\/(\d+)$/.exec(path);
     if (deleteImageMatch && method === 'DELETE') {
@@ -151,7 +181,7 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
   });
 
   vi.stubGlobal('fetch', fetchMock);
-  return { fetchMock, serverPayloads, imageActions, deletedImages, dnsPatches };
+  return { fetchMock, serverPayloads, imageActions, deletedImages, deletedServers, deletedFloatingIps, dnsPatches, order };
 }
 
 describe('Portal-Worker OPS-Snapshot', () => {
@@ -481,5 +511,94 @@ describe('NOMEN-P1-001 · Altnamen-Kompatibilitaet (Bestandsflotte)', () => {
     // Auch Alt-Snapshots werden gelistet - sonst blieben sie unbemerkt liegen
     // (Speicherkosten) und der schnelle Flotten-Start waere unnoetig langsam.
     expect((body.snapshots ?? []).map((s) => s.id)).toContain(91);
+  });
+});
+
+/**
+ * INFRA-HETZNER-008: Der Portal-Stop-Pfad loeschte die Flotte ohne jede
+ * Sicherung - ein Stop (oder der Auto-Stop-Cron nach Idle) war unwiederbringlich,
+ * waehrend der CLI-Pfad schon immer einen Snapshot zog. Diese Tests halten die
+ * neue Regel fest: erst Snapshot, dann loeschen, und nur loeschen, wenn der
+ * Snapshot bestaetigt ist. Loeschen ohne bestaetigten Snapshot = Datenverlust.
+ */
+describe('INFRA-HETZNER-008 · Stop zieht erst Snapshots, dann loeschen', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('legt je Knoten einen Snapshot an, wartet auf success und loescht DANN', async () => {
+    const { imageActions, deletedServers, deletedFloatingIps, order } = setupFetchMock({ servers: FLEET_SERVERS });
+
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/stop', { method: 'POST', headers: { cookie } }),
+      env,
+    );
+    const body = (await res.json()) as {
+      deleted?: string[];
+      skipped?: unknown[];
+      snapshots?: { entry: { ok: boolean } }[];
+      fipDeleted?: string[];
+    };
+
+    expect(res.status).toBe(200);
+    expect(imageActions).toHaveLength(FLEET_SERVERS.length);
+    expect(deletedServers).toHaveLength(FLEET_SERVERS.length);
+    expect(body.skipped ?? []).toEqual([]);
+    expect(deletedFloatingIps).toEqual(['7']);
+
+    // Reihenfolge: ALLE create_image-Aufrufe vor dem ERSTEN Server-Delete.
+    const firstDelete = order.findIndex((entry) => entry.startsWith('delete-server'));
+    const lastCreate = order.map((entry) => entry.startsWith('create_image')).lastIndexOf(true);
+    expect(firstDelete).toBeGreaterThan(-1);
+    expect(lastCreate).toBeLessThan(firstDelete);
+  });
+
+  it('loescht KEINEN Knoten, wenn der Snapshot fehlschlaegt', async () => {
+    const { imageActions, deletedServers, deletedFloatingIps } = setupFetchMock({
+      servers: FLEET_SERVERS,
+      actionStatus: 'error',
+    });
+
+    const env = createEnv();
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/stop', { method: 'POST', headers: { cookie } }),
+      env,
+    );
+    const body = (await res.json()) as { deleted?: string[]; skipped?: { reason?: string }[] };
+
+    expect(res.status).toBe(200);
+    // Snapshots wurden versucht, aber nichts geloescht - und das ist sichtbar.
+    expect(imageActions).toHaveLength(FLEET_SERVERS.length);
+    expect(deletedServers).toEqual([]);
+    expect(body.deleted ?? []).toEqual([]);
+    expect(body.skipped?.length).toBe(FLEET_SERVERS.length);
+    expect(String(body.skipped?.[0]?.reason ?? '')).toContain('Snapshot-Status error');
+    // Ohne geloeschte Server darf auch die Floating-IP nicht weg (DNS-Schutz).
+    expect(deletedFloatingIps).toEqual([]);
+  });
+
+  it('loescht bei Snapshot-Timeout ebenfalls nicht', async () => {
+    const { deletedServers, deletedFloatingIps } = setupFetchMock({
+      servers: FLEET_SERVERS,
+      actionStatus: 'running',
+    });
+
+    const env = createEnv();
+    // Budget 0 s: der Poll bricht sofort ab (kein Warten im Test) - geloescht wird nicht.
+    env.STOP_SNAPSHOT_TIMEOUT_S = '0';
+    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
+    const res = await worker.fetch(
+      new Request('https://anunnakitools.de/api/stop', { method: 'POST', headers: { cookie } }),
+      env,
+    );
+    const body = (await res.json()) as { skipped?: { reason?: string }[] };
+
+    expect(res.status).toBe(200);
+    expect(deletedServers).toEqual([]);
+    expect(deletedFloatingIps).toEqual([]);
+    expect(String(body.skipped?.[0]?.reason ?? '')).toContain('Snapshot-Status timeout');
   });
 });

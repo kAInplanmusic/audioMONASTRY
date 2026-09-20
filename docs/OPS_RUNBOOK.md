@@ -95,6 +95,30 @@ Restore → **SHA-256 identisch** (`7889efda…39ddd`) → 311 Dateien entpackt 
 **RPO/RTO:** taeglicher Lauf ⇒ RPO 24 h (mit `--offsite` auch off-site);
 RTO ~2 min (entpacken) bzw. ~10 min inkl. `npm ci` + `npm run build`.
 
+**Flotten-Verdrahtung (INFRA-HETZNER-008):** In der Flotte läuft der Lauf nicht
+per Cron auf dem Laptop, sondern als systemd-Timer auf **app-1** – dort liegt der
+Zustand (`dist`/`public` + Knoten-`.env` mit den Off-Site-Keys):
+
+```bash
+# Installation (macht bring-up-fleet.sh Schritt 6 automatisch auf app-1)
+ssh root@<app-1-ip> 'bash /opt/audiomonastry/scripts/hetzner/install-backup-timer.sh'
+
+# Kontrolle
+ssh root@<app-1-ip> 'systemctl list-timers audiomonastry-backup.timer'
+ssh root@<app-1-ip> 'tail -n 20 /var/log/audiomonastry-backup.log'
+ssh root@<app-1-ip> 'systemctl start audiomonastry-backup.service'   # Sofort-Lauf
+```
+
+Timer: 15 min nach jedem Boot (die Flotte wird je Session neu erzeugt – ein
+Kalenderzeitpunkt greift bei kurzen Sessions nie) und danach alle 24 h.
+`Off-Site ist best effort, aber nie ein stiller No-Op`: fehlen Zugangsdaten
+(`BACKUP_S3_*`/`HOS_S3_*`/`CFS3_*`/`CFR2_*`) oder `@aws-sdk/client-s3` im
+Knoten-Repo, meldet der Lauf das laut ins Log und sichert lokal weiter;
+`REQUIRE_OFFSITE=1` macht Off-Site zur Pflicht (Timer-Lauf endet dann mit
+Exit 3 = `failed`). Der Stop-Pfad (Portal **und** CLI) zieht zusätzlich vor dem
+Löschen je Knoten einen Server-Snapshot (Retention: letzte 2 je Rolle) – ein
+Stop ist damit nicht mehr unwiederbringlich.
+
 **Nicht im Backup (bewusst):** `.env`/Secrets (getrennt verwahren), Supabase-DB
 (eigene Backups), statische Medienbibliothek (siehe Scope).
 

@@ -1,13 +1,19 @@
 # =============================================================================
 # audioMONASTRY · Alertmanager-Konfiguration (Prometheus-Alerts → Chat-Webhook)
 # -----------------------------------------------------------------------------
-# Route: alle Prometheus-Alerts → audioMONASTRY-App-Endpoint /api/alerts/webhook.
+# Route: alle Prometheus-Alerts → audioMONASTRY-Endpoint /api/alerts/webhook.
 # Der App-Server leitet sie an die in .env konfigurierten Webhooks weiter:
 #   DISCORD_WEBHOOK, SLACK_WEBHOOK, TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID.
 #
-# URL anpassen, falls der Monitoring-Stack NICHT im selben Docker-Netzwerk
-# wie der App-Container läuft (z. B. edge-1 → app-1):
-#   url: 'https://anunnakitools.de/api/alerts/webhook'
+# INFRA-HETZNER-004: Ziel ist der PRODUKTIONS-Webhook (app-1). Der Monitoring-
+# Stack laeuft auf edge-1, dort gibt es keinen App-Container - die frueher fest
+# eingetragene URL `http://audiomonastry:8080/...` zeigte auf eine edge-eigene
+# Kopie, deren Alarme nichts ueber die Produktion aussagen.
+#   Default (Flotte):  ALERT_WEBHOOK_URL=https://<DOMAIN>/api/alerts/webhook
+#   Fallback (lokal, Monitoring neben der App im selben Compose-Netz):
+#                      ALERT_WEBHOOK_URL=http://audiomonastry:8080/api/alerts/webhook
+# Der Platzhalter wird beim Containerstart ersetzt (docker-compose.monitoring.yml);
+# ohne gesetzte Variable greift dort der dokumentierte Produktions-Default.
 # =============================================================================
 global:
   resolve_timeout: 1m
@@ -33,7 +39,9 @@ route:
 receivers:
   - name: 'chat-webhook'
     webhook_configs:
-      - url: 'http://audiomonastry:8080/api/alerts/webhook'
+      # INFRA-HETZNER-004: Default = Produktions-Webhook (app-1), gesetzt in
+      # docker-compose.monitoring.yml ueber ALERT_WEBHOOK_URL.
+      - url: '__ALERT_WEBHOOK_URL__'
         # PROD-P1-004: Die Route ist ein Maschinen-Endpunkt und verlangt das
         # ALERT_WEBHOOK_TOKEN (sonst 401 - Alarme kamen nie an). Der Platzhalter
         # wird beim Containerstart ersetzt (docker-compose.monitoring.yml).

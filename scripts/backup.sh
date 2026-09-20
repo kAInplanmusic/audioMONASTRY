@@ -45,8 +45,27 @@ if [ "$FULL" != 1 ]; then
   )
 fi
 
+# Nur VORHANDENE Wurzelverzeichnisse archivieren (INFRA-HETZNER-008): auf einem
+# Flotten-Knoten fehlt z. B. dist/ - deploy.sh schliesst es aus dem rsync aus,
+# gebaut wird im Image. Das frueher hier stehende `2>/dev/null || true` haette
+# das verschwiegen: tar haette ohne dist ein Archiv erzeugt und der Lauf haette
+# wie ein voller Erfolg ausgesehen. Jetzt wird das Fehlen gemeldet und ein Lauf
+# ohne jedes Ziel schlaegt fehl (statt eine leere Datei zu hinterlassen).
+TARGETS=()
+for dir in dist public; do
+  if [ -d "$dir" ]; then
+    TARGETS+=("$dir")
+  else
+    echo "[backup] Hinweis: $dir/ fehlt in $(pwd) - wird nicht archiviert." >&2
+  fi
+done
+if [ ${#TARGETS[@]} -eq 0 ]; then
+  echo "[backup] FEHLER: weder dist/ noch public/ in $(pwd) - nichts zu sichern." >&2
+  exit 3
+fi
+
 mkdir -p "$BACKUP_DIR"
-tar -czf "$OUT" "${EXCLUDES[@]}" -C "$(pwd)" dist public 2>/dev/null || true
+tar -czf "$OUT" "${EXCLUDES[@]}" -C "$(pwd)" "${TARGETS[@]}"
 
 # Alte Backups rotieren (point-in-time bleibt RETENTION_DAYS erhalten).
 find "$BACKUP_DIR" -name 'audiomonastry_*.tar.gz' -mtime "+$RETENTION_DAYS" -delete

@@ -8,7 +8,9 @@
 //   POST /api/login     -> Admin-Login, setzt signiertes Session-Cookie
 //   POST /api/wake      -> erstellt die 5 Hetzner-Server (cloud-init bootstrappt)
 //   GET  /api/status    -> Flotten-Status (für Ladebildschirm-Polling)
-//   POST /api/stop      -> löscht die Flotte sofort (Kosten stoppen)
+//   POST /api/stop      -> zieht je Knoten einen Snapshot und löscht DANN die
+//                          Flotte (Kosten stoppen); ohne bestätigten Snapshot
+//                          bleibt der Knoten stehen (INFRA-HETZNER-008)
 //   Cron */5 * * * *    -> löscht die Flotte, sobald app-1 nach 20 min Idle
 //                          (Idle-Auto-Shutdown) ausgeschaltet wurde.
 // ============================================================================
@@ -726,22 +728,125 @@ async function openFleetPorts(env) {
   return { ok: Object.keys(updated).length > 0, updated, appIp, detail };
 }
 
+// ---------------------------------------------------------------------------
+// Stop-Pfad: Snapshot VOR dem Loeschen (INFRA-HETZNER-008)
+// ---------------------------------------------------------------------------
+// Vorher loeschte stopFleet() die Server ohne Sicherung - ein Stop (oder der
+// Auto-Stop-Cron) war damit unwiederbringlich, waehrend der CLI-Pfad
+// (scripts/hetzner/lifecycle.sh) schon immer einen Snapshot zog. Jetzt gilt fuer
+// BEIDE Pfade dieselbe Regel: erst Snapshot, dann loeschen - und nur loeschen,
+// wenn der Snapshot nachweislich fertig ist (sonst laeuft der Server weiter; das
+// wird laut gemeldet statt still Daten zu verlieren). Die Snapshots sind
+// gleichzeitig der schnelle Start-Pfad des naechsten Wake (findSnapshot()).
+//
+// Rolle eines Servers: Label des Portal-Workers; fuer die Bestandsflotte ohne
+// Label wird sie aus dem Namen abgeleitet (Praefix + app|sfu|ai|master|edge).
+function serverRole(server) {
+  const label = String(server?.labels?.role ?? '').trim();
+  if (label) return label;
+  const name = String(server?.name ?? '');
+  for (const prefix of [NAME_PREFIX, LEGACY_NAME_PREFIX]) {
+    const match = name.match(new RegExp(`^${prefix}(app|sfu|ai|master|edge)(?![a-z])`));
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/** Action-Status bis `deadline` pollen (Hetzner: running|success|error). */
+async function waitForAction(env, actionId, deadline) {
+  // Bewusst begrenzt: der Stop-Pfad wird auch aus dem Cron aufgerufen, ein
+  // unbegrenztes Warten wuerde den Lauf dort abschneiden (Worker-Wall-Clock).
+  const pollMs = Number(env.SNAPSHOT_POLL_MS ?? 5000);
+  for (;;) {
+    const data = await hzGet(env, `/actions/${actionId}`);
+    const status = String(data?.action?.status ?? 'unknown');
+    if (status === 'success' || status === 'error') return status;
+    if (data?.__http) return `http-${data.__http}`;
+    // Deadline erreicht: Abbruch (der Snapshot laeuft serverseitig weiter) -
+    // geloescht wird dann NICHT.
+    if (Date.now() + pollMs > deadline) return 'timeout';
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
+/** Snapshot je Server anlegen und auf Abschluss warten (Budget: `env`-Sekunden). */
+async function snapshotFleet(env) {
+  const servers = await fleetServers(env);
+  const list = Object.values(servers);
+  const budgetMs = Number(env.STOP_SNAPSHOT_TIMEOUT_S ?? 600) * 1000;
+  const entries = [];
+  for (const server of list) {
+    const role = serverRole(server);
+    if (!role) {
+      entries.push({ server: server.name, role: null, action: null, ok: false, error: 'keine Rolle ermittelbar' });
+      continue;
+    }
+    // Alle create_image-Aufrufe zuerst (die Snapshots laufen serverseitig
+    // parallel) - so kostet das Warten das Maximum, nicht die Summe.
+    const snap = await createServerSnapshot(env, server, role);
+    entries.push({ ...snap, ok: false });
+  }
+  const deadline = Date.now() + budgetMs;
+  for (const entry of entries) {
+    if (!entry.action) {
+      entry.error = entry.error ?? 'kein Action-Id (Snapshot-Anlage fehlgeschlagen)';
+      continue;
+    }
+    const status = await waitForAction(env, entry.action, deadline);
+    entry.status = status;
+    entry.ok = status === 'success';
+    if (!entry.ok) entry.error = entry.error ?? `Snapshot-Status ${status}`;
+  }
+  return { entries, budgetS: budgetMs / 1000 };
+}
+
 async function stopFleet(env) {
   const servers = await fleetServers(env);
+  const list = Object.values(servers);
+
+  // 1. Snapshots anlegen und bestaetigen lassen (INFRA-HETZNER-008).
+  const { entries: snapshots, budgetS } = await snapshotFleet(env);
+  const snapByServer = new Map(snapshots.map((s) => [s.server, s]));
+
+  // 2. Nur Server mit FERTIGEM Snapshot loeschen; alles andere bleibt stehen und
+  //    wird gemeldet (kein stiller Datenverlust).
   const deleted = [];
-  for (const s of Object.values(servers)) {
+  const skipped = [];
+  for (const s of list) {
+    const snap = snapByServer.get(s.name);
+    if (!snap?.ok) {
+      skipped.push({ server: s.name, reason: snap?.error ?? 'Snapshot nicht bestaetigt' });
+      continue;
+    }
     await hzDelete(env, `/servers/${s.id}`);
     deleted.push(s.name);
   }
-  // Auch Floating-IPs löschen, damit wirklich 0 € Kosten entstehen
-  // (Floating-IPs werden sonst weiter reserviert und abgerechnet).
-  const fips = await hzGet(env, '/floating_ips?per_page=100');
+
+  // 3. Floating-IPs nur loeschen, wenn wirklich KEIN Server uebrig ist - sonst
+  //    zeigt die DNS auf eine IP, die noch von einem laufenden Knoten genutzt wird.
   const fipDeleted = [];
-  for (const fip of fips.floating_ips ?? []) {
-    await hzDelete(env, `/floating_ips/${fip.id}`);
-    fipDeleted.push(fip.name ?? fip.ip);
+  if (skipped.length === 0) {
+    const fips = await hzGet(env, '/floating_ips?per_page=100');
+    for (const fip of fips.floating_ips ?? []) {
+      await hzDelete(env, `/floating_ips/${fip.id}`);
+      fipDeleted.push(fip.name ?? fip.ip);
+    }
   }
-  return { deleted, fipDeleted };
+
+  // 4. Retention wie im CLI-Pfad: letzten SNAPSHOT_RETENTION je Rolle behalten.
+  const pruned = await pruneSnapshots(env);
+  return {
+    deleted,
+    fipDeleted,
+    skipped,
+    snapshots,
+    pruned,
+    retention: {
+      keepPerRole: SNAPSHOT_RETENTION,
+      snapshotTimeoutS: budgetS,
+      hint: 'Stop zieht je Knoten einen Snapshot und behaelt die letzten 2 je Rolle.',
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

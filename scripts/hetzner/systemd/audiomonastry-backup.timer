@@ -1,0 +1,26 @@
+# ============================================================================
+# audioMONASTRY · systemd-Timer: taegliches Backup auf dem App-Knoten
+# (INFRA-HETZNER-008)
+# ----------------------------------------------------------------------------
+# 15 Minuten nach jedem Boot (die Flotte wird je Session neu erzeugt - ein
+# Kalenderzeitpunkt wuerde bei kurzen Sessions nie greifen) und danach alle 24 h,
+# solange der Knoten laeuft. Aktivieren:
+#     sudo bash scripts/hetzner/install-backup-timer.sh
+# Pruefen:
+#     systemctl list-timers audiomonastry-backup.timer
+#     tail -n 20 /var/log/audiomonastry-backup.log
+# ============================================================================
+[Unit]
+Description=audioMONASTRY Backup-Timer (lokal + optional Off-Site)
+Documentation=file:///opt/audiomonastry/docs/OPS_RUNBOOK.md
+
+[Timer]
+# Nach jedem Flotten-Start einmal sichern (RPO <= 24 h, siehe scripts/backup.sh),
+# danach taeglich weiter, solange der Knoten laeuft.
+OnBootSec=15min
+OnUnitActiveSec=24h
+AccuracySec=1min
+Unit=audiomonastry-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -88,8 +88,17 @@ for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
 done
 
 # --- 4. app-1 deployen --------------------------------------------------------
+# INFRA-HETZNER-001: DEPLOY_SYNC_ENV bleibt hier - wie im Preflight
+# (fleet-preflight.sh, apply_update) - ausdruecklich auf 0. Sonst laedt deploy.sh
+# die lokale Repo-.env hoch und ueberschreibt die rollen-skopierte Knoten-.env
+# (inkl. TRUST_PROXY=1, das nur die Rolle app bekommen darf) - der Flottenstart
+# haette damit die Rollentrennung des Portal-Workers aufgehoben. Beide Pfade
+# rufen deploy.sh also mit derselben Einstellung auf; wer bewusst synchronisieren
+# will, setzt DEPLOY_SYNC_ENV=1 in der Umgebung dieses Skripts.
 step "4/7 app-1 deployen (Caddy + App + Signaling, HTTPS)"
-DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" DEPLOY_SMOKE=0 sg docker -c "bash deploy.sh"
+echo "  .env-Sync: DEPLOY_SYNC_ENV=${DEPLOY_SYNC_ENV:-0} (0 = Knoten-.env des Portal-Workers bleibt)"
+DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
+  DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 sg docker -c "bash deploy.sh"
 
 # --- 5. Übrige Rollen ---------------------------------------------------------
 step "5/7 sfu-1, master-1, edge-1, ai-1 einrichten"
@@ -116,11 +125,21 @@ ssh_host "$EDGE_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.h
 echo "  ai-1 (Ollama + Stem-AI) …"
 bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
 
-# --- 6. Idle-Auto-Shutdown ----------------------------------------------------
+# --- 6. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
 step "6/7 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' 2>/dev/null || true
 done
+
+# INFRA-HETZNER-008: Das Backup lief bisher in KEINEM Flottenskript - nur die
+# Server-Snapshots beim Stop (CLI) sicherten etwas. Der Timer laeuft auf app-1
+# (dort liegt der Zustand: dist/public + Knoten-.env mit den Off-Site-Keys) und
+# laeuft 15 min nach jedem Flotten-Start einmal sowie danach taeglich.
+# Ohne Off-Site-Zugangsdaten meldet der Lauf das laut ins Log und sichert lokal
+# weiter (Details: scripts/hetzner/systemd/backup-run.sh).
+echo "  Backup-Timer auf app-1 installieren …"
+ssh_host "$APP_IP" 'bash /opt/audiomonastry/scripts/hetzner/install-backup-timer.sh' \
+  || echo "  ⚠ Backup-Timer konnte auf app-1 nicht installiert werden (prüfen!)."
 
 # --- 7. Tests -----------------------------------------------------------------
 step "7/7 Smoke-, Stress- und SFU-RTP-Echtpfad-Tests"
