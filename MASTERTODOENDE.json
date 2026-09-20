@@ -31,7 +31,7 @@
   "fundamentals": {
     "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1412 Tests gruen (205 Dateien) · Boundary-Scan 428 Dateien 0 Verstoesse · Python-Smoke 13 Tests gruen (Stand 2026-09-13)",
     "audioLive": "V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
-    "aiFleet": "3 Endpoints live (brain=vLLM Qwen3-14B-AWQ, ears, voiceGen) + 4. Rolle `vision` geplant",
+    "aiFleet": "8 Endpoints live (brain, ears, voiceGen, music, imageHq, videoReal, videoAbstract, orchestrator), alle scale-to-zero",
     "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
   },
   "items": [
@@ -1601,6 +1601,665 @@
         "npx vitest run tests/clockSyncNtp.test.ts -> 6/6",
         "Vorher: kein Emitter fuer clock-ping/clock-pong, syncCount 0 (Befund) - jetzt 2 Messungen je Client nach wenigen Sekunden"
       ]
+    },
+    {
+      "id": "INFRA-RUNPOD-001",
+      "title": "Kostengrenze der GPU-Flotte widerspruechlich (4/5 vs. 8) und nirgends erzwungen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Dieselbe Obergroesse steht in drei Fassungen: architectureDecisions 'max. 4 GPU-Endpoints', budget.fleetEndpointsMax 5 und docs/AI_COST_GUIDE.md:30 'max. 4-5 EUR/h', waehrend live 8 Endpoints laufen. Der einzige produktiv aufgerufene Guard assertGpuEndpointBudget() prueft nur 1 <= AI_MAX_GPU_ENDPOINTS <= 8, und dessen Default ist GPU_ENDPOINT_ROLES.length = 8 - er kann fuer die eigene Architektur nie ausloesen. Weder der Deployer noch die App zaehlt Endpoints im Konto.",
+      "note": "Quelle: docs/audit-infra-runpod.md (Befunde S-1, Live-1, V4-8, Abschnitte 6.6 und 7.4). Belege: src/config/aiInfrastructure.ts:81 (Default = GPU_ENDPOINT_ROLES.length = 8) und :167-172 (Pruefung 1..8); src/core/ai/orchestrator/providerRouter.ts:65-71 (einziger Produktionsaufruf); scripts/runpod-deploy.py:491-509 (legt Endpoints an, kennt keine Obergrenze); Live-Enumeration 8 Endpoints (Audit 4.1). SSOT-SEITE IN DIESEM LAUF KORRIGIERT: budget.fleetEndpointsMax = 8, neu budget.hetznerServersMax = 5 und budget.fleetTargetEurPerHour {min 5, max 7,5}, architectureDecisions auf 'max. 8 GPU-Endpoints (Konstitution 2026-09-20)'. OFFEN bleibt die Code-Seite. Rest-Drift in derselben Datei, bewusst NICHT mitgeaendert: budget.fleetEndpointsNote nennt weiter die alten Rollen/Kosten (~2,35 EUR/h) und visionLive.endpointName 'audiomonastry-ai-vision' (live 'audiomonastry-ai-image').",
+      "files": [
+        "src/config/aiInfrastructure.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "scripts/runpod-deploy.py",
+        "docs/INFRA_KONSTITUTION.md"
+      ],
+      "acceptance": [
+        "Ein Guard bricht ab oder alarmiert, wenn im RunPod-Konto mehr als 8 Endpoints existieren bzw. der Deploy einen 9. anlegen wuerde",
+        "Die SSOT fuehrt genau eine Endpoint-Obergrenze (8) - in diesem Lauf erledigt"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der 9 Endpoints gegen assertGpuEndpointBudget() laufen laesst und einen Fehler erwartet (heute kann die Pruefung nicht ausloesen)",
+        "Nachweis offen: scripts/runpod-deploy.py zaehlt vor dem Create und bricht bei mehr als 8 Endpoints ab"
+      ]
+    },
+    {
+      "id": "INFRA-RUNPOD-002",
+      "title": "GPU-Pool doppelt wahr: ADA_24 im Deploy-Skript vs. AMPERE_48 im Manifest",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Fuer videoReal/videoAbstract existieren zwei widersprechende GPU-Pool-Wahrheiten: scripts/runpod-deploy.py:120,129 setzt ADA_24, model_manifest.json:1225,1249 und der TS-Spiegel endpointRegistry.ts:177,197 setzen AMPERE_48. Ein CI-Deploy hebelt die Rollen-Defaults zusaetzlich aus, weil .github/workflows/runpod-deploy.yml:211-212 RUNPOD_GPU_ID global auf AMPERE_48 setzt und runpod-deploy.py:462 Env Vorrang gibt. Zwei gruene Tests kodieren beide Wahrheiten (tests/test_runpod_deploy_defaults.py:76-79 vs. tests/manifestRoles.test.ts:52); kein Test prueft Deploy-Skript gegen Manifest.",
+      "note": "Quelle: docs/audit-infra-runpod.md Befunde V1-1, V4-2, V4-3 (Abschnitte 3.3, 7.2, 8). Live-Beleg: die API nennt fuer audiomonastry-ai-video-real RTX 4090/5090 und fuer video-abstract RTX 4090 (Audit 4.1) - also ADA-Klasse, das Deploy-Skript hat gewonnen und das Manifest ist fuer diese Rollen faktisch falsch. Folgerisiko belegt: model_manifest.json fuehrt wan22-t2v-a14b mit estimatedVRAM 32, was rechnerisch nicht in ein 24-GB-Fenster (ADA_24) passt - eine VRAM-Planung gegen das Manifest plant gegen die falsche Hardware.",
+      "files": [
+        "scripts/runpod-deploy.py",
+        "model_manifest.json",
+        "src/core/ai/orchestrator/endpointRegistry.ts",
+        ".github/workflows/runpod-deploy.yml",
+        "tests/test_runpod_deploy_defaults.py",
+        "tests/manifestRoles.test.ts"
+      ],
+      "acceptance": [
+        "Eine Quelle fuer den GPU-Pool je Rolle: Manifest, Deploy-Skript und CI-Env stimmen ueberein",
+        "Ein Test vergleicht runpod-deploy.py:ROLE_DEFAULTS.gpuPoolId gegen model_manifest.json roles.<rolle>.gpuPoolId und faellt bei Abweichung"
+      ],
+      "verification": [
+        "Beleg live: docs/audit-infra-runpod.md 4.1 (gpuTypeIds RTX 4090/5090 fuer die Video-Rollen)",
+        "Nachweis offen: Drift-Test Deploy-Skript <-> Manifest (heute prueft test_runpod_deploy_defaults.py:76-79 nur die Konstante, tests/manifestRoles.test.ts:52 nur TS <-> Manifest)"
+      ]
+    },
+    {
+      "id": "INFRA-RUNPOD-003",
+      "title": "Brain hat drei divergente Modell-Identitaeten (14B-AWQ / qwen3-14b / qwen3-30b-a3b-awq)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Rolle brain wird an drei Stellen mit drei verschiedenen Modellnamen beschrieben: Qwen/Qwen3-14B-AWQ (OpenAI-Pfad: src/core/ai/LlmRouter.ts:75 und scripts/runpod-deploy.py:161, live am Endpoint per GET /openai/v1/models belegt), qwen3-14b (nativer Worker-Pfad als Default: LlmRouter.ts:86,318) und qwen3-30b-a3b-awq (Manifest/Registry: model_manifest.json roles.brain.preloadModels, src/core/ai/orchestrator/endpointRegistry.ts:77-79). Der Kurzname qwen3-14b existiert in den 39 Manifest-Eintraegen nicht und wuerde im nativen Worker-Pfad an model_manager.load() mit ModelUnavailableError('unknown model') scheitern.",
+      "note": "Quelle: docs/audit-infra-runpod.md Befund V3-6 (Abschnitt 6.5) und Abschnitt 8 Punkt 12; ergaenzt AI-P1-008 (dort wurde der 404 live gefixt, die Manifest-Luecke blieb). Belegstellen: src/core/ai/LlmRouter.ts:75, :86, :318; src/core/ai/orchestrator/endpointRegistry.ts:77-79; services/audiomonastry-ai-runtime/model_manager.py:248-250 (ModelUnavailableError 'unknown model'); Live-Messung des OpenAI-Modells in AI-P1-008 (GET .../openai/v1/models -> Qwen/Qwen3-14B-AWQ).",
+      "files": [
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/endpointRegistry.ts",
+        "model_manifest.json",
+        "scripts/runpod-deploy.py"
+      ],
+      "acceptance": [
+        "Die Rolle brain nennt in Manifest, TS-Spiegel und Router denselben Modell-Identifier (oder der native Pfad-Default ist im Manifest vorhanden)",
+        "Ein Test faellt, wenn der im Router als Default verdrahtete Brain-Modellname nicht im Manifest existiert"
+      ],
+      "verification": [
+        "Nachweis offen: Test LlmRouter-Default-Modell gegen model_manifest.json roles.brain.preloadModels",
+        "Beleg Bestand: docs/audit-infra-runpod.md 6.5 (drei Quellen, eine ohne Manifest-Eintrag)"
+      ]
+    },
+    {
+      "id": "INFRA-RUNPOD-004",
+      "title": "assertFleetHourlyBudget/assertStorageBudget definiert aber unverdrahtet; wakeFleet() ohne Kosten-Gate",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "assertFleetHourlyBudget() (src/config/aiInfrastructure.ts:148-156) und assertStorageBudget() (:159-169) sind definiert und getestet (tests/aiInfrastructure.test.ts:73-86), werden aber von keiner Produktionsdatei aufgerufen - sie existieren nur in aiInfrastructure.ts und in Tests (toter Waechter). Zusaetzlich weckt wakeFleet() immer die komplette Flotte: resolveGpuRoles() liefert alle acht Rollen, Promise.all(resolved.map(wakeRole)) setzt fuer jede workersMin=1, ohne rollenselektiven Einstieg und ohne Pruefung gegen AI_MAX_FLEET_EUR_PER_HOUR vor dem Wecken. Jeder geweckte Worker laeuft danach mindestens idleTimeout Sekunden weiter und wird abgerechnet.",
+      "note": "Quelle: docs/audit-infra-runpod.md Befunde V3-4, V3-7, V4-8. Belege: src/config/aiInfrastructure.ts:148-169 (Definitionen), tests/aiInfrastructure.test.ts:73-86 (Tests); src/core/ai/orchestrator/fleetWake.ts:201,213 (Promise.all ueber alle Rollen), :179-183 (roleReady liefert true fuer nicht-konfigurierte Rollen); keine Aufrufer von assertFleetHourlyBudget/assertStorageBudget in src/ oder server/ (Audit 7.4). Die Flotten-Summe ist im Code selbst gegen das eigene Budget unkritisch (8 Rollen x 0,49 EUR/h = 3,92 EUR/h gegen AI_MAX_FLEET_EUR_PER_HOUR = 10, aiInfrastructure.ts:87-96).",
+      "files": [
+        "src/config/aiInfrastructure.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "server/routes/aiRoutes.ts"
+      ],
+      "acceptance": [
+        "Der EUR/h-Guard und der Storage-Guard laufen im Produktionspfad (Start bzw. vor dem Wecken) und brechen bei Ueberschreitung ab",
+        "wakeFleet() weckt nur die fuer den Task noetigen Rollen (rollenselektiv) und prueft die Kosten vorher"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der wakeFleet() mit ueberschrittenem Budget aufruft und einen Fehler/kein workersMin=1 erwartet",
+        "Nachweis offen: Aufrufer-Nachweis der beiden Guards in src/ bzw. server/ (heute nur Definition und Tests)"
+      ]
+    },
+    {
+      "id": "INFRA-RUNPOD-005",
+      "title": "Endpoint-Namensdrift (image vs. vision) und idleTimeout-Drift (live 120 s vs. deklariert 900 s)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der Visual-Endpoint heisst live audiomonastry-ai-image (ID wzh9hcbitjnn95), die SSOT dokumentiert in visionLive.endpointName aber audiomonastry-ai-vision - ein Name, der live nicht existiert; die Template-ID 7xzd1v17dx stimmt, derselbe Endpoint ist also umbenannt. Zweitens weicht der idleTimeout live von der Deklaration ab: deklariert sind 900 s fuer voiceGen/music/imageHq/videoReal/videoAbstract/orchestrator (scripts/runpod-deploy.py:11-16), live stehen dort 120 s; nur brain/ears stimmen (15 s). Drittens prueft keine Stelle die konfigurierte RP_ENDPOINT_ID_* gegen den Endpoint-Namen (endpointNameForRole() in aiInfrastructure.ts:110-123 wird nie gegen eine Live-Antwort abgeglichen), so dass diese Drift unbemerkt bleiben konnte.",
+      "note": "Quelle: docs/audit-infra-runpod.md Befunde S-3, Live-2, Live-3, V3-2 (Abschnitte 2.4, 4.2, 6.1). Belege: Live-Enumeration (Audit 4.1) bzw. MASTERTODOENDE visionLive.endpointName/-Id/-templateId; scripts/runpod-deploy.py:11-16 (Header-Deklaration 900 s), :497-507 (Drift wird nur als Warnung gemeldet, weil die API idleTimeout nur beim Anlegen setzt); budget.runpodIdleTimeouts dokumentiert das Verhalten bereits selbst.",
+      "files": [
+        "src/config/aiInfrastructure.ts",
+        "scripts/runpod-deploy.py",
+        "src/core/ai/orchestrator/endpointRegistry.ts"
+      ],
+      "acceptance": [
+        "SSOT/Endpoint-Name und Live-Name stimmen ueberein (oder die Namenskonvention wird beim Start gegen die Live-Namen geprueft)",
+        "Der deklarierte idleTimeout je Rolle ist entweder live gesetzt oder die Deklaration nennt den echten Live-Wert"
+      ],
+      "verification": [
+        "Beleg live: docs/audit-infra-runpod.md 4.1 (name audiomonastry-ai-image, idleTimeout 120/15 s)",
+        "Nachweis offen: Vergleich RP_ENDPOINT_ID_* gegen Live-Namen (heute kein Gate, Audit 8 Punkt 16)"
+      ]
+    },
+    {
+      "id": "INFRA-RUNPOD-006",
+      "title": "runtime_config.yaml wird im Serverless-Betrieb von keinem Skript gelesen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Datei runtime_config.yaml wird ins Serverless-Image kopiert (Dockerfile.runpod:128), aber kein Worker-Skript liest sie: in runpod_worker.py, model_manager.py, registry.py und app.py gibt es kein Vorkommen von runtime_config; startup.sh:2 behauptet 'Wird beim Container-Start von startup.sh gelesen', waehrend startup.sh nur Env setzt (:17-26). Damit erreicht das dokumentierte vram_budget_gb: 141 (runtime_config.yaml:5) den Serverless-Worker nie - und es stehen zwei VRAM-Budgets ohne Aufloesungsregel nebeneinander (runtime_config.yaml:5-6 = 141/8 GB gegen model_manifest.json runtime = 48/6 GB).",
+      "note": "Quelle: docs/audit-infra-runpod.md Befunde V2-1 und V1-2 (Abschnitte 5.1, 3.4). Belege: Dockerfile.runpod:128 (COPY); Kopfkommentar Dockerfile.runpod:3-7 ('drei Flotten-Rollen'); kein runtime_config-Vorkommen in services/audiomonastry-ai-runtime/{runpod_worker.py,model_manager.py,registry.py,app.py}; einziger grep-Treffer ist der Kommentar startup.sh:3.",
+      "files": [
+        "services/audiomonastry-ai-runtime/runtime_config.yaml",
+        "services/audiomonastry-ai-runtime/Dockerfile.runpod",
+        "services/audiomonastry-ai-runtime/startup.sh",
+        "model_manifest.json"
+      ],
+      "acceptance": [
+        "Entweder liest ein Worker die Datei (und die Werte wirken) oder sie wird als tote Datei entfernt und die Doku-Kommentare werden richtiggestellt",
+        "Es gibt genau ein VRAM-Budget mit dokumentierter Aufloesungsregel (Manifest vs. yaml)"
+      ],
+      "verification": [
+        "Nachweis offen: grep-Beleg ueber services/audiomonastry-ai-runtime/ nach jedem Aufruf (heute keiner)",
+        "Beleg Bestand: docs/audit-infra-runpod.md 5.1 (Dockerfile.runpod:128 vs. kein Konsument)"
+      ]
+    },
+    {
+      "id": "INFRA-RUNPOD-007",
+      "title": "Visual-Rollen umgehen den gemeinsamen Provider-/Circuit-Breaker-Pfad",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI/RunPod",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Visual-Pfade loesen ihre Endpoint-ID direkt ueber resolveGpuRoles().find(...).endpointId auf und sprechen RunPod mit eigenem HTTP-Code an (src/core/ai/vision/runpodVision.ts:50, src/core/ai/vision/runpodVideo.ts:54, aufgerufen aus server/routes/aiRoutes.ts:39-40). Der RunPodProvider wird fuer imageHq/videoReal/videoAbstract instanziiert (providerRouter.ts:63), aber nicht benutzt; ein RunPod-Ausfall (402/429/Timeout) wird dort je nach Client unterschiedlich behandelt, und der Circuit Breaker aus providerRouter.ts:96-99 greift fuer diese Aufrufe nicht. Ein zweiter Legacy-Fallback kann zusaetzlich alle acht Rollen auf dieselbe Endpoint-ID biegen (endpointRegistry.ts:294-305), ohne dass ein Waechter 'Rolle X zeigt auf den Endpoint von Rolle Y' erkennt.",
+      "note": "Quelle: docs/audit-infra-runpod.md Befunde V3-5 und V3-1 (Abschnitte 6.3, 6.4, 8 Punkt 14). Belege: src/core/ai/vision/runpodVision.ts:50, src/core/ai/vision/runpodVideo.ts:54, server/routes/aiRoutes.ts:39-40, src/core/ai/orchestrator/providerRouter.ts:63 und :96-99, src/core/ai/orchestrator/endpointRegistry.ts:294-305 und runpodProvider.ts:142-144. Im Live-Bestand ist ein Legacy-RP_ENDPOINT_ID nicht gesetzt (Audit 8 Punkt 16), der Biege-Pfad also derzeit nicht aktiv.",
+      "files": [
+        "src/core/ai/vision/runpodVision.ts",
+        "src/core/ai/vision/runpodVideo.ts",
+        "server/routes/aiRoutes.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "src/core/ai/orchestrator/endpointRegistry.ts"
+      ],
+      "acceptance": [
+        "Visual-Aufrufe laufen ueber denselben Provider-/Retry-/Circuit-Breaker-Pfad wie die uebrigen Rollen (oder der Sonderweg ist begruendet und testgesichert)",
+        "Ein Waechter verhindert, dass zwei Rollen auf dieselbe Endpoint-ID zeigen"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der einen RunPod-Ausfall auf dem Visual-Pfad provoziert und das Oeffnen des Circuit Breakers erwartet",
+        "Beleg Bestand: docs/audit-infra-runpod.md 6.4 (eigener HTTP-Pfad, kein Breaker)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-001",
+      "title": "deploy.sh ueberschreibt per Default die Portal-.env (DEPLOY_SYNC_ENV=1)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "scripts/hetzner/deploy.sh setzt DEPLOY_SYNC_ENV default auf 1 (:46) und kopiert dann per scp ./.env nach $REMOTE_DIR/.env (:152-158) - damit wird die vom Portal-Worker rollen-skopierte .env ersetzt (services/portal-worker/src/index.js:344-376, z. B. TRUST_PROXY=1 nur fuer die Rolle app, :368). bring-up-fleet.sh:92 ruft deploy.sh ohne DEPLOY_SYNC_ENV-Override, der Flottenstart loescht also die Portal-.env; fleet-preflight.sh:107 macht es mit DEPLOY_SYNC_ENV=0 korrekt, d. h. die beiden Pfade verhalten sich unterschiedlich.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.1 / H1 (Abschnitte 3.1, 5.1). Belege: scripts/hetzner/deploy.sh:46, :152-158; scripts/hetzner/bring-up-fleet.sh:92; scripts/hetzner/fleet-preflight.sh:107; services/portal-worker/src/index.js:344-376 (Rollenskopierung, TRUST_PROXY :368).",
+      "files": [
+        "scripts/hetzner/deploy.sh",
+        "scripts/hetzner/bring-up-fleet.sh",
+        "scripts/hetzner/fleet-preflight.sh",
+        "services/portal-worker/src/index.js"
+      ],
+      "acceptance": [
+        "Ein Flottenstart ueberschreibt die Portal-.env nicht mehr (Default DEPLOY_SYNC_ENV=0 oder expliziter Override), dokumentiert im Skript",
+        "Die beiden Pfade (bring-up-fleet.sh und fleet-preflight.sh) verhalten sich nachweislich gleich"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 3.1 (Default 1 + Aufruf ohne Override) und 5.1 H1",
+        "Nachweis offen: Lauf von bring-up-fleet.sh bzw. ein Test, der die Remote-.env nach dem Deploy prueft (Flotte ist live geloescht, 0 Server)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-002",
+      "title": "deploy.sh rsynct das Repo-Caddyfile und kann damit das Origin-TLS ueberschreiben",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der rsync in deploy.sh:126-136 hat keinen Caddyfile-Ausschluss. Der Portal-Worker installiert fuer app-1 aber /opt/audiomonastry/Caddyfile aus scripts/hetzner/Caddyfile.origin (index.js:410) und legt die Zertifikate unter certs/ ab (:406-409). Das Repo-Caddyfile hat keine tls-Direktive (Caddyfile:22 -> automatisches ACME), Caddyfile.origin:14 setzt dagegen explizit tls /etc/caddy/certs/origin.crt /etc/caddy/certs/origin.key. Nach jedem Deploy/Preflight liegt damit wieder die ACME-Variante auf dem Knoten - hinter der Cloudflare-Worker-Route der bekannte TLS-Fehlpfad.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.2 / H2 und 4.1 (Abschnitte 3.1, 4.1, 5.1). Belege: scripts/hetzner/deploy.sh:126-136 (rsync ohne Ausschluss); services/portal-worker/src/index.js:405-411; scripts/hetzner/Caddyfile.origin:14; Caddyfile:22. Ehrlichkeitsgrenze: ob der Deploy den Effekt live ausloest, ist im Audit NICHT verifiziert (Flotte geloescht) - der Mechanismus ist im Code eindeutig.",
+      "files": [
+        "scripts/hetzner/deploy.sh",
+        "services/portal-worker/src/index.js",
+        "scripts/hetzner/Caddyfile.origin",
+        "Caddyfile"
+      ],
+      "acceptance": [
+        "Ein Deploy laesst das im Portal installierte Origin-TLS-Caddyfile unangetastet (Ausschluss oder bewusste Caddyfile-Verwaltung an einer Stelle)",
+        "Der Zustand nach einem Deploy ist nachweisbar der Origin-TLS-Variante zuzuordnen"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 3.2 (kein Caddyfile-Ausschluss im rsync)",
+        "Nachweis offen: Pruefung des Caddyfile-Inhalts auf einem frisch deployten Knoten (kein Knoten live)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-003",
+      "title": "dns_setup.py ist wegen eigener Pfadvalidierung nicht lauffaehig",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "scripts/hetzner/dns_setup.py validiert Pfade mit der Regex ^/[A-Za-z0-9_./-]*$ (:40) und verbietet damit '?', '=' und '@' - genau die Zeichen, die die eigenen Aufrufe bauen: /zones?name=anunnakitools.de (:72) und /zones/<id>/rrsets/@/A (:93, genutzt fuer den Apex-Record :145-147). _safe_url (:41-44) wirft ValueError, bevor der HTTP-Request entsteht; das Skript ist also nicht ausfuehrbar, wird aber in docs/HETZNER_DEPLOY.md:86-88 als Schritt dokumentiert. provision.py:44-46 macht es mit erweiterter Zeichenklasse richtig.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund H9 / 6.3 (Beweis mit nachgerechneten Regex-Matches). Belege: scripts/hetzner/dns_setup.py:40 vs. :72, :93, :145-147; scripts/hetzner/provision.py:44-46; docs/HETZNER_DEPLOY.md:86-88. Zweiter, unabhaengiger Befund derselben Stelle: das Skript nutzt die Hetzner-Cloud-DNS-API, produktiv setzt der Cloudflare-Worker den A-Record (index.js:302-321) - zwei getrennte DNS-Pfade.",
+      "files": [
+        "scripts/hetzner/dns_setup.py",
+        "scripts/hetzner/provision.py",
+        "docs/HETZNER_DEPLOY.md"
+      ],
+      "acceptance": [
+        "dns_setup.py laeuft (Regex wie provision.py:44-46) oder ist entfernt und die Doku nennt nur den Cloudflare-Worker-Pfad",
+        "Ein Test/Lint belegt, dass die Aufruf-URLs die eigene Validierung passieren"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 6.3 (Regex-Match fuer '/zones?name=...' und '/zones/<id>/rrsets/@/A' = False)",
+        "Nachweis offen: Lauf des Skripts gegen die API (read-only) nach dem Fix"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-004",
+      "title": "Monitoring/Alerting messen und alarmieren die edge-Kopie statt app-1",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der App-Job in Prometheus zeigt auf audiomonastry:8080 im lokalen Compose-Netz von edge-1 (scripts/hetzner/prometheus.yml:47-48); der Cross-Host-Job auf die Domain/app-1-IP ist auskommentiert (:50-58). Da Prometheus auf edge-1 und die Produktions-App auf app-1 laeuft, stammen alle App-/Container-Metriken, die das Dashboard fuellen, von der edge-Kopie. Alertmanager schickt seine Alarme zusaetzlich an http://audiomonastry:8080/api/alerts/webhook (alertmanager.yml:36) - im Compose-Netz von edge-1 ist das der edge-eigene Container; die im Kommentar (:8-10) genannte Produktions-URL ist nicht implementiert.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befunde 4.4, 4.5 / H3 (Abschnitte 4.4, 5.1). Belege: scripts/hetzner/prometheus.yml:47-48, :50-58; scripts/hetzner/alertmanager.yml:36 (Alternative nur im Kommentar :8-10); Start von Prometheus/Alertmanager auf edge-1 (services/portal-worker/src/index.js:422 bzw. bring-up-fleet.sh:114). Bezug: PROD-P1-004 (Observability) hat den Stack lokal in Betrieb genommen - die Zielfrage ist dort nicht abgedeckt.",
+      "files": [
+        "scripts/hetzner/prometheus.yml",
+        "scripts/hetzner/alertmanager.yml",
+        "scripts/hetzner/bring-up-fleet.sh"
+      ],
+      "acceptance": [
+        "Die Produktions-App (app-1) ist das Scrape-Ziel der Flotten-Metriken, nicht die lokale edge-Kopie",
+        "Alarme werden an den Produktions-Webhook zugestellt (und der Fallback ist dokumentiert)"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 4.4/4.5 (lokales Ziel, Cross-Host-Job auskommentiert)",
+        "Nachweis offen: Prometheus-Targets/Alert-Zustellung auf einem laufenden Flottenknoten pruefen (kein Knoten live)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-005",
+      "title": "auto-repair (Watchdog) wird von keinem Skript installiert",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "scripts/hetzner/auto-repair.sh und install-auto-repair.sh existieren, werden aber von keinem Skript aufgerufen: die Volltextsuche nach 'install-auto-repair' findet nur die Selbst-Doku (install-auto-repair.sh:3, auto-repair.sh:10); bring-up-fleet.sh:121-123 installiert ausschliesslich den Idle-Shutdown. Der Watchdog laeuft also nur, wenn ihn jemand manuell installiert. Zusatzdefekt: auto-repair.sh:36 fragt http://127.0.0.1/api/health ab (Port 80 = Caddy) und wuerde bei totem Caddy die App als krank melden (:43-47) - Fehldiagnose per Konstruktion.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 4.7 / H5 (Abschnitte 4.4, 5.1). Belege: scripts/hetzner/auto-repair.sh:10, :36, :43-47; scripts/hetzner/install-auto-repair.sh:3; scripts/hetzner/bring-up-fleet.sh:121-123. Zusatz aus demselben Audit: caddy hat keinen Healthcheck (docker-compose.hetzner.yml:38-62), worauf auto-repair.sh:24 aufsetzt.",
+      "files": [
+        "scripts/hetzner/auto-repair.sh",
+        "scripts/hetzner/install-auto-repair.sh",
+        "scripts/hetzner/bring-up-fleet.sh",
+        "docker-compose.hetzner.yml"
+      ],
+      "acceptance": [
+        "Der Watchdog wird beim Flottenstart (oder per systemd-Unit) wirklich installiert und ist damit wirksam",
+        "Die Health-Abfrage unterscheidet App und Caddy (bzw. es gibt einen Healthcheck fuer Caddy)"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 4.7 (kein Aufrufer ausser der Selbst-Doku)",
+        "Nachweis offen: Installation + Nachweis des laufenden Timers auf einem Knoten (kein Knoten live)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-006",
+      "title": "edge-1 ueberbucht (ca. 4,56 GiB Limits auf einem 4-GB-Servertyp)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "edge-1 wird ohne Service-Liste gestartet (bring-up-fleet.sh:114; services/portal-worker/src/index.js:422), deshalb entstehen dort zusaetzlich caddy, audiomonastry UND master-player aus der Basisdatei plus der Monitoring-Stack. Die Speicher-Limits dieser acht Container summieren sich auf 4672 MiB ~ 4,56 GiB (App 2048 + master 1024 + caddy 128 + prometheus 512 + grafana 512 + alertmanager 128 + cadvisor 256 + node-exporter 64 MiB), waehrend der Default-Typ cx23 4 GB RAM hat (provision.py:287). Ehrlichkeitsgrenze: ob Compose v2 deploy.resources.limits auf dem Knoten tatsaechlich als --memory/--cpus anwendet, ist im Audit NICHT verifiziert (kein Knoten laeuft); die Ueberbuchung ist eine Rechnung aus den deklarierten Limits.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 2.1 / H10 (Abschnitte 2.1, 2.3, 5.1). Belege: scripts/hetzner/bring-up-fleet.sh:114; services/portal-worker/src/index.js:422; Limits aus docker-compose.hetzner.yml:98-105 (App 2G/2 CPU) und :58-62 (caddy 128M), docker-compose.monitoring.yml:36-162; Typ-Default cx23 (provision.py:286-287).",
+      "files": [
+        "edge-1 startet nur den Monitoring-Stack (explizite Service-Liste) oder laeuft auf einem Typ, der die Limits traegt",
+        "Die Summe der Limits auf edge-1 ist <= dem RAM des eingesetzten Servertyps"
+      ],
+      "acceptance": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 2.1 (Limits-Summe 4672 MiB gegen cx23/4 GB)",
+        "Nachweis offen: docker stats auf edge-1 (kein Knoten live)"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 2.1 (Limits-Summe 4672 MiB gegen cx23/4 GB)",
+        "Nachweis offen: docker stats auf edge-1 (kein Knoten live)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-007",
+      "title": "Servertyp-/Rollen-Doku-Drift (cx23 vs. cx33 vs. CCX33/CAX31) und Rolle edge ohne Provisionierungspfad",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Flotte wird an fuenf Stellen mit vier verschiedenen Servertyp-Tabellen beschrieben: provision-fleet.sh:5-7 ('CX33 (4 vCPU/8GB)') gegen die tatsaechlich verwendeten Werte cx23 (:45-47), services/portal-worker/src/index.js:23-27 (app/sfu/ai = cx33, master/edge = cx23), docs/SERVER_FLEET.md:33-37, :49-55, :157-167 und README.md:225. Der Worker ignoriert die Env-Overrides FLEET_TYPE_* - sie wirken nur auf provision-fleet.sh, im Portalbetrieb (produktiver Pfad) sind sie wirkungslos. Zusaetzlich wird die Rolle edge im Repo nirgends provisioniert: provision.py:131-141 behandelt nur sfu und hat fuer ai/master leere Zweige, edge faellt durch alle Sonderfaelle; provision-fleet.sh:53 setzt ROLE=app, waehrend die --role-Hilfe (provision.py:299-301) edge nennt. Live-Gegenprobe: die Firewall audiomonastry-edge hat genau 4 Regeln (icmp/22/80/443) - kein 3000, der dokumentierte Grafana-Zugriff ist damit unmoeglich.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befunde 1.1, 1.2, 1.3 / M1, M2, M3 (Abschnitte 1.1, 1.3, 5.2). Belege: scripts/hetzner/provision-fleet.sh:5-7, :45-47, :53; services/portal-worker/src/index.js:23-27; scripts/hetzner/provision.py:286-289, :131-141, :299-301; docs/SERVER_FLEET.md:33-37, :49-55, :157-167; README.md:225; Live: Firewall audiomonastry-edge mit 4 Regeln (Audit 6.2) gegen bring-up-fleet.sh:140 und docs/SERVER_FLEET.md:143 (Grafana 3000).",
+      "files": [
+        "scripts/hetzner/provision-fleet.sh",
+        "scripts/hetzner/provision.py",
+        "services/portal-worker/src/index.js",
+        "docs/SERVER_FLEET.md",
+        "README.md"
+      ],
+      "acceptance": [
+        "Genau eine gueltige Typ-/Rollen-Tabelle (Konstitution: 5 Hetzner-Rollen app/sfu/ai/master/edge, Typen per FLEET_TYPE_* ueberschreibbar) - Doku und Code stimmen ueberein",
+        "Die Rolle edge ist entweder provisioniert (inkl. Firewall-Regeln fuer den Monitoring-Zugriff) oder ausdruecklich als 'laeuft als app' dokumentiert"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 1.1/1.2 (vier Typ-Tabellen, edge nur in der Hilfe)",
+        "Beleg live: Audit 6.2 (Firewall audiomonastry-edge ohne 3000/9090/9093)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-008",
+      "title": "Kein Backup in der Flotte verdrahtet",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Kein Flottenskript ruft scripts/backup.sh auf (Volltextsuche findet nur docs/OPS_RUNBOOK.md:67-78, docs/PRODUKTIONSREIFE_WEGPLAN.md:45,70,139 und die Datei selbst); es gibt keine systemd-Unit und keinen Timer dafuer (in scripts/hetzner/systemd/ liegt nur idle-check.sh). Die einzige maschinelle Sicherung ist der Server-Snapshot - und der wird bei stopFleet nicht erzeugt (services/portal-worker/src/index.js:729-745 loescht nur Server und Floating-IPs), sondern nur im CLI-Pfad lifecycle.sh:29-46. Fuer Off-Site fehlen in dieser Arbeitskopie zusaetzlich die Zugangsdaten (BACKUP_S3_*/HOS_S3_* sind nicht in .env.deploy, erwartet laut docs/ENV_MATRIX.md:185-193).",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 4.10 / H6 (Abschnitte 4.5, 5.1). Belege: scripts/backup.sh:33-60 (Rotation 14 Tage, optional --offsite ueber scripts/r2-backup.mjs); kein Aufrufer in scripts/hetzner/; keine Unit in scripts/hetzner/systemd/; services/portal-worker/src/index.js:729-745 (stopFleet ohne Snapshot). Bezug: PROD-P0-002 (Backup off-site + Restore-Drill) ist DONE fuer den Mechanismus, aber nicht in der Flotte verdrahtet.",
+      "files": [
+        "scripts/backup.sh",
+        "scripts/hetzner/lifecycle.sh",
+        "services/portal-worker/src/index.js",
+        "docs/ENV_MATRIX.md"
+      ],
+      "acceptance": [
+        "Das Backup laeuft in der Flotte automatisch (Timer/Unit oder Aufruf im Start-/Stop-Pfad) und ist nachweisbar vorhanden",
+        "Auch der Portal-Stop-Pfad erzeugt vor dem Loeschen einen Snapshot oder ruft das Backup auf"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 4.10 (kein Aufrufer, keine Unit)",
+        "Nachweis offen: Timer/Unit auf einem Knoten installieren und einen Lauf belegen (kein Knoten live)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-009",
+      "title": "fleet-deploy-live.sh deployt per Default nach /opt/samplemonk statt /opt/audiomonastry",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "scripts/hetzner/fleet-deploy-live.sh setzt REMOTE_DIR=\"${DEPLOY_REMOTE_DIR:-/opt/samplemonk}\" (:22), alle uebrigen Pfade im Repo verwenden /opt/audiomonastry (scripts/hetzner/deploy.sh:44, services/portal-worker/src/index.js:388, scripts/hetzner/auto-repair.sh:45, scripts/hetzner/bring-up-fleet.sh:100). Ein Live-Deploy mit Defaults schreibt also in ein anderes Verzeichnis als der laufende Stack; die anschliessenden Compose-Befehle (:57-58) laufen im cd $REMOTE_DIR und starten folglich einen zweiten Stack aus dem Altpfad.",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.4 / H4 (Abschnitte 3.3, 5.1). Belege: scripts/hetzner/fleet-deploy-live.sh:22, :57-58; zum Vergleich scripts/hetzner/deploy.sh:44, services/portal-worker/src/index.js:388, scripts/hetzner/auto-repair.sh:45, scripts/hetzner/bring-up-fleet.sh:100. Relevanz: derselbe Pfad wurde im Live-Nachweis von COLLAB-P0-002 (2026-09-18) benutzt.",
+      "files": [
+        "scripts/hetzner/fleet-deploy-live.sh"
+      ],
+      "acceptance": [
+        "Der Default ist /opt/audiomonastry (oder der Pfad wird aus derselben Konstante wie im Portal gelesen) und ein Deploy trifft nachweislich den laufenden Stack"
+      ],
+      "verification": [
+        "Beleg Bestand: docs/audit-infra-hetzner.md 3.4 (Default /opt/samplemonk vs. /opt/audiomonastry ueberall sonst)",
+        "Nachweis offen: Deploy gegen einen Knoten und Pruefung des Zielverzeichnisses (kein Knoten live)"
+      ]
+    },
+    {
+      "id": "INFRA-HETZNER-010",
+      "title": "Snapshot-Retention fehlt im CLI-Pfad (live 10 Snapshots, aeltester 2026-09-11)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infra/Hetzner",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der CLI-Pfad lifecycle.sh hat keine Retention: stop erzeugt per snapshot_all Snapshots (:29-46, Description <NAME>-auto-<timestamp>, danach festes sleep 30 ohne Action-Status) und loescht nichts. Die einzige Retention liegt im Portal-Worker (services/portal-worker/src/index.js:56 SNAPSHOT_RETENTION = 2, angewandt auf Portal-Snapshots). Live liegen 10 Snapshots, der aelteste vom 2026-09-11, Summe der image_size-Werte ~50,4 GB - ein laufender Kostenposten, der im Kostenmodell nirgends auftaucht (Konstitution: max. 5 EUR/Monat Speicher).",
+      "note": "Quelle: docs/audit-infra-hetzner.md Befund 3.5 / H8 (Abschnitte 3.4, 5.1, 6.1). Belege: scripts/hetzner/lifecycle.sh:15, :29-46; services/portal-worker/src/index.js:46-47 ('~0,01 EUR/GB/Monat') und :56; Live-Liste der 10 Snapshots (Audit 6.1, alle mit Praefix samplemonk-snapshot-). Bezug: budget.storageNowEurPerMonth der SSOT (~0,30 EUR/Monat bei 5 Live-Snapshots) beschreibt einen anderen Bestand als die live gemessenen 10; budget.storageSnapshotsMaxEurPerMonth = 5 (Konstitution) ist in diesem Lauf gesetzt.",
+      "files": [
+        "scripts/hetzner/lifecycle.sh",
+        "services/portal-worker/src/index.js"
+      ],
+      "acceptance": [
+        "Der CLI-Pfad raeumt alte Snapshots nach einer dokumentierten Regel auf (Retention wie im Worker)",
+        "Die SSOT-Speicherzahl entspricht dem live vorhandenen Bestand"
+      ],
+      "verification": [
+        "Beleg live: docs/audit-infra-hetzner.md 6.1 (10 Snapshots, aeltester 2026-09-11, ~50,4 GB image_size)",
+        "Nachweis offen: Aufraeum-Lauf + erneute Enumeration der Snapshots"
+      ]
+    },
+    {
+      "id": "INFRA-AI-001",
+      "title": "AI-Eval schreibt model='mock'/score=5 ohne LLM-Aufruf - das Gate kann nicht fehlschlagen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "scripts/eval-ai.ts legt je Plugin einen Case an, in dem expected und actual identisch konstruiert werden (:46-47), und schreibt direkt in den Store: model 'mock', provider 'offline', score 5, metrics {latencyMs 5, exactMatch true} (:70-80); es wird kein LLM, kein Modell und kein Netz aufgerufen. Dieser Score speist (a) das Gate evaluationStore.finishRun(run.runId, spec.minScore) mit spec aus evalMatrix.ts (:62-63, :81), (b) den Nightly-Job 'AI-Eval-Run (Gate bei Score-Abfall)' (.github/workflows/nightly.yml:41-42) und das Prompt-Loop-Gate 'Gate bei Nicht-Konvergenz' (:44-46) sowie (c) die Score-Spalte der Doku-Matrix docs/PLUGIN_PROMPT_MATRIX.md:10-30 (durchgehend 5.00 / PASS). Die Gates koennen per Konstruktion nicht fehlschlagen; der einzige echte Messpunkt im Audit ist mosHarness (Hoererwertung), dessen Gate aber keinen Abnehmer hat (INFRA-AI-007).",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 1 sowie Abschnitte 6.2, 6.5 und 3.4 (Drift E). Belege: scripts/eval-ai.ts:38-50, :62-63, :70-81; .github/workflows/nightly.yml:41-46; docs/PLUGIN_PROMPT_MATRIX.md:10-30; src/core/ai/orchestrator/evalMatrix.ts:31-48 (scharf formuliertes Gate, DEFAULT_MIN_SCORE 4, kritische Plugins 4.5).",
+      "files": [
+        "scripts/eval-ai.ts",
+        "src/core/ai/orchestrator/evalMatrix.ts",
+        ".github/workflows/nightly.yml",
+        "docs/PLUGIN_PROMPT_MATRIX.md"
+      ],
+      "acceptance": [
+        "Der Eval-Lauf ruft ein echtes Modell auf; ein Negativ-Fall (schlechter Prompt) laesst das Gate wirklich scheitern",
+        "Ohne erreichbares Modell meldet der Lauf ehrlich 'nicht geprueft' statt eines Mock-Scores",
+        "Die Score-Spalte der Doku-Matrix stammt aus einem echten Lauf oder ist als Mock gekennzeichnet"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der einen absichtlich schlechten Prompt in den Eval-Lauf gibt und ein FAIL erwartet (heute score 5 durch Konstruktion)",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 6.2 (eval-ai.ts:70-81 ohne LLM-Aufruf)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-002",
+      "title": "promptIteration.ts ist selbstreferenziell (Metrik misst den eigenen Optimierer)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der Prompt-Iterations-Loop ist mechanisch geschlossen (Bewertung -> Optimierung -> neue Version -> erneute Bewertung, promptIteration.ts:63-117), seine Metrik aber bedeutungslos: der Default-Evaluator evaluatePromptCoverage (:38-48) zaehlt, wie viele Kommando-Namen aus PLUGIN_COMMAND_CATALOG als Substring im Prompt-Text vorkommen (:46 promptContent.includes(cmd)), und der Optimierer optimizePromptContent (:51-56) haengt genau diese Kommandoliste an den Prompt an (:53). Der Loop konvergiert damit garantiert in der zweiten Runde auf 1.0, unabhaengig davon, ob ein Modell die Kommandos korrekt benutzt - gemessen wird die Zeichenkette, die der Optimierer selbst einfuegt. Ein Modell wird nie aufgerufen (model 'heuristic', provider 'offline', :88-89). Das Ergebnis landet ausserdem in promptStore/Supabase, den niemand liest (INFRA-AI-003).",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 3 / L-1 (Abschnitte 5.1, 7). Belege: src/core/ai/orchestrator/promptIteration.ts:38-48, :51-56, :63-117, :88-89; scripts/iterate-prompts.ts:19, :36-52.",
+      "files": [
+        "src/core/ai/orchestrator/promptIteration.ts",
+        "scripts/iterate-prompts.ts"
+      ],
+      "acceptance": [
+        "Die Bewertung misst die Wirkung (Modellantwort gegen erwartetes Kommando), nicht die Anwesenheit von Substrings, die der Optimierer selbst einfuegt",
+        "Ein Test belegt, dass ein schlechter Prompt den Loop NICHT auf 1.0 konvergieren laesst"
+      ],
+      "verification": [
+        "Nachweis offen: Test mit einem Prompt, der die Kommandos NICHT enthaelt (heute garantierte Konvergenz)",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 5.1 (includes(cmd) vs. Anhaengen derselben Liste)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-003",
+      "title": "promptStore.ts wird von keiner Produktionsdatei gelesen (Prompt-Versionierung ohne Wirkung)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der Prompt-Store (src/core/ai/orchestrator/promptStore.ts, 85 Zeilen) wird ausserhalb von Tests und scripts/iterate-prompts.ts von keiner Produktionsdatei importiert - insbesondere nicht von MoaAgent.ts oder LlmRouter.ts. MoaAgent.plan holt seinen Systemprompt direkt aus der Konstante moaSystemPromptForPlugin(pluginId) (MoaAgent.ts:260) bzw. moaCommandCatalog() (:259). Eine im Store angelegte und 'optimierte' Version (promptIteration.ts:101-103) erreicht damit nie einen echten LLM-Aufruf; die Versionierung ist strukturell korrekt, aber wirkungslos.",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 2 / PR-1 (Abschnitte 3.1, 7). Belege: src/core/ai/orchestrator/promptStore.ts:24-85; src/core/ai/MoaAgent.ts:259-260; einzige Aufrufer sind scripts/iterate-prompts.ts und Tests.",
+      "files": [
+        "src/core/ai/orchestrator/promptStore.ts",
+        "src/core/ai/MoaAgent.ts",
+        "scripts/iterate-prompts.ts"
+      ],
+      "acceptance": [
+        "Der Plan-Call nutzt die aktive Prompt-Version aus dem Store (statt der Konstante) oder der Store wird als toter Pfad entfernt",
+        "Ein Test belegt, dass eine im Store aktivierte Version im erzeugten LLM-Prompt ankommt"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der eine Store-Version aktiviert und den an den Provider uebergebenen Systemprompt prueft",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 3.1 (kein Produktions-Import)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-004",
+      "title": "LlmRouter ohne Timeout/AbortSignal; circuitBreaker und costTracker nicht verdrahtet",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "In src/core/ai/LlmRouter.ts gibt es kein AbortController, kein signal und kein AbortSignal.timeout: postJson (:109-115) nutzt ein nacktes fetch ohne Signal. Ein haengender Provider blockiert die Fallback-Kette bis zum Browser-/Node-Fetch-Default. Der Orchestrator-Pfad hat dagegen Zeitlimits (runpodProvider.ts:134-136 RUNPOD_AI_TASK_TIMEOUT_MS Default 600 000, :322-326 AbortSignal.timeout, :342-371 Polling mit Deadline) - eine Timeout-Asymmetrie zwischen den beiden Pfaden. Zusaetzlich sind circuitBreaker.ts und costTracker.ts aus src/core/ai/orchestrator/ nicht in LlmRouter.complete() verdrahtet (LlmRouter.ts:27 importiert nur RunPodProvider); ein Provider-Ausfall zaehlt damit nirgends. Die Fallback-Kette selbst verschluckt jeden Fehlversuch ausser dem letzten (:451-463), und available prueft bei ollama/runpod-local(openai) nur die Env-Praesenz (:185-187, :291).",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefunde 5/5a / R-2, R-3, R-7 (Abschnitte 1.2, 1.4, 6.3, 7). Belege: src/core/ai/LlmRouter.ts:27, :109-115, :185-187, :291, :451-463; kein Konsument von src/core/ai/orchestrator/circuitBreaker.ts und costTracker.ts in LlmRouter; Gegenbeleg Zeitlimit: src/core/ai/orchestrator/runpodProvider.ts:134-136, :322-326, :342-371.",
+      "files": [
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/circuitBreaker.ts",
+        "src/core/ai/orchestrator/costTracker.ts"
+      ],
+      "acceptance": [
+        "Der LLM-Pfad hat ein Zeitlimit mit echtem Abbruch (AbortSignal) und faellt bei einem haengenden Provider geordnet weiter",
+        "Circuit Breaker und Kostenerfassung greifen auch fuer Aufrufe ueber LlmRouter"
+      ],
+      "verification": [
+        "Nachweis offen: Test mit einem nie antwortenden Provider, der den Abbruch nach X ms belegt (heute kein Signal im Code)",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 1.4 (kein AbortController/signal in LlmRouter.ts)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-005",
+      "title": "aiMode.ts ist nur ein Lock-Flag - der Modul-State PRO hat keine Wirkung auf die Modellwahl",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "src/core/ai/aiMode.ts (17 Zeilen) ist kein Provider-Schalter: es ist ein einzelnes Modul-Boolean (let aiModeActive, :9) mit Getter/Setter (:11-17), gesetzt aus dem Modul-State-Handler (src/context/ModuleStateContext.tsx:85 und :204). Es gibt keine Kante aiMode.ts -> LlmRouter.ts und keine Zuweisung, die den Modul-State PRO oder AUTO_AI an den Router weiterreicht. Die Provider-Auswahl haengt allein an process.env (AI_ALLOW_EXTERNAL_LLM, LlmRouter.ts:444) und an complexity (:437-443). Wer PRO waehlt, aendert damit nicht die Provider-Auswahl - eine offene Luecke gegenueber der Erwartung 'PRO = bessere Modelle' und gegen die Konstitution (AI an/aus als Einstellung, siehe INFRA-FEAT-001).",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 6 / R-5 (Abschnitte 1.5, 7). Belege: src/core/ai/aiMode.ts:9-17; src/context/ModuleStateContext.tsx:13 ('OFF' | 'AUTO_AI' | 'PRO'), :85, :204; src/core/ai/LlmRouter.ts:437-449 (rankProviders).",
+      "files": [
+        "src/core/ai/aiMode.ts",
+        "src/context/ModuleStateContext.tsx",
+        "src/core/ai/LlmRouter.ts"
+      ],
+      "acceptance": [
+        "Der Einstellungs-/Moduswert (OFF/AUTO_AI/PRO) wirkt nachweisbar auf die Provider-/Modellwahl",
+        "Ein Test belegt, dass ein Moduswechsel die gewaehlte Provider-Kette aendert"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der den Modul-State auf PRO setzt und eine andere Provider-Reihenfolge/Modellwahl erwartet",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 1.5 (keine Kante aiMode -> LlmRouter)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-006",
+      "title": "Zwei unverbundene MoA-Implementierungen (TS/Python) plus paralleler taskWorker-Pfad",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Der Begriff 'Mixture-of-Agents' ist zweimal implementiert, mit unterschiedlichem Aufbau, Schema und ohne gemeinsamen Code: TypeScript src/core/ai/MoaAgent.ts (480 Z., ein LLM-Call, Schema [{pluginId, command, prompt}], Ausfuehrung in der Client-Registry) gegen Python services/audiomonastry-ai-runtime/moa_orchestrator.py (552 Z., Classifier -> Planner A/B -> Aggregator, Schema {\"steps\":[{tool, args, why}]}, MCP-Bruecke). Die Python-Seite ist erreichbar ueber mcpRuntime.ts:137 (agent.orchestrate) und POST /api/ai/mcp/tools/agent.orchestrate (aiRoutes.ts:793-804); ein direkter Aufruf aus MoaAgent oder dem Agent-Loop existiert nicht. Dazu kommt services/taskWorker.ts als dritter, paralleler Pfad: er kennt nur 'separate-stems' | 'generate-voice' | 'apply-fx' | 'render' (:15), also keinen AI-/LLM-Task-Typ, und hat keine Kante zur AI-Runtime.",
+      "note": "Quelle: docs/audit-infra-ai-routing.md P-1 und Kernbefund 7 (Abschnitte 2.2, 4.1, 6.4, 7). Belege: src/core/ai/MoaAgent.ts:256-293, :269, :362-366, :460-477; services/audiomonastry-ai-runtime/moa_orchestrator.py:42-47, :95, :451-459, :499-527; src/core/ai/orchestrator/mcpRuntime.ts:137; server/routes/aiRoutes.ts:793-804; services/taskWorker.ts:15, :47, :88-90.",
+      "files": [
+        "src/core/ai/MoaAgent.ts",
+        "services/audiomonastry-ai-runtime/moa_orchestrator.py",
+        "services/taskWorker.ts",
+        "src/core/ai/orchestrator/mcpRuntime.ts"
+      ],
+      "acceptance": [
+        "Es gibt genau eine benannte MoA-Zustaendigkeit (oder die beiden Wege sind klar getrennt - 'Planung clientseitig' vs. 'Ausfuehrung serverseitig' - und dokumentiert)",
+        "taskWorker.ts ist entweder mit der KI-Kette verbunden oder als Legacy entfernt"
+      ],
+      "verification": [
+        "Nachweis offen: Architektur-Entscheid in SSOT/Doku plus Test, der den gewaehlten Weg absichert",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 4.1 (zwei Implementierungen, kein gemeinsamer Code)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-007",
+      "title": "MOS-Gate ohne Abnehmer (Wertung wird erfasst, aber nicht verwendet)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "mosHarness erfasst, persistiert und weist die MOS-Hoererwertung sauber aus (Validierung ohne Toleranz :142-149, Persistenz :163-175, Ladepfad :282, Statusausweis :300-303, Gate-Berechnung summaryFor :182-209 mit pass = evaluators >= requiredCount && avg >= minScore, Schwellen AI_MOS_MIN_SCORE Default 4 / AI_MOS_MIN_RATINGS Default 3). Das Gate hat aber keinen Abnehmer: gateFor()/summaryFor() werden ausschliesslich in tests/mosHarness.test.ts konsumiert; in src/, server/ und scripts/ gibt es keinen Aufrufer, kein Lesen von .pass und keine Verwendung von AI_MOS_MIN_SCORE ausserhalb von mosHarness.ts. Der Server bietet die Wertung nur an (POST/GET /api/ai/voice/mos, aiRoutes.ts:232-254), ein UI-Aufrufer wurde nicht gefunden. Es wird also bewertet, aber keine Modellwahl, kein Rollout und keine Prompt-Anpassung haengt davon ab.",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 4 / L-2 (Abschnitte 5.2, 7). Belege: src/core/ai/mosHarness.ts:133-209, :282, :300-303; server/routes/aiRoutes.ts:232-254; kein Konsument ausser tests/mosHarness.test.ts. Bezug: AI-P1-007 (Ladepfad) hat Erfassung/Persistenz gefixt - die Steuerungsseite blieb offen.",
+      "files": [
+        "src/core/ai/mosHarness.ts",
+        "server/routes/aiRoutes.ts"
+      ],
+      "acceptance": [
+        "mindestens eine echte Entscheidung haengt am MOS-Gate (z. B. Rollout/Prompt-Version/Modellwahl)",
+        "Ein Test belegt, dass ein unterschrittenes Gate die Entscheidung wirklich blockiert"
+      ],
+      "verification": [
+        "Nachweis offen: Aufrufer-Nachweis von gateFor()/.pass ausserhalb der Tests",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 5.2 (Gate nur in tests/mosHarness.test.ts konsumiert)"
+      ]
+    },
+    {
+      "id": "INFRA-AI-008",
+      "title": "Tote Module: embeddingCache, src/ai/modelRegistry, localVoice, parameterPrediction",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Vier Module sind belegt ohne Wirkung: (1) src/ai/embeddingCache.ts - kein Importer in src/, server/, tests/ oder scripts/, in knip.json:35 bewusst ignoriert; reiner Key-zu-Vektor-Cache ohne Indexierungs-/Aehnlichkeitssuche. (2) src/ai/modelRegistry.ts - kein Importer, knip.json:37; Namensdublette zum lebenden src/core/ai/orchestrator/modelRegistry.ts. (3) src/ai/localVoice.ts - kein Importer, knip.json:36. (4) src/core/ai/parameterPrediction.ts - nur tests/parameterPrediction.test.ts:7 als Importer; die im Kommentar :11 genannten UI-Chips existieren nicht.",
+      "note": "Quelle: docs/audit-infra-ai-routing.md Abschnitt 6.1 (Tabelle toter Module) und Kernbefund 10. Belege: src/ai/embeddingCache.ts:15-45, knip.json:35; src/ai/modelRegistry.ts:22-52, knip.json:37; lebende Variante src/core/ai/orchestrator/modelRegistry.ts mit GET /api/ai/models (aiRoutes.ts:784-786); src/ai/localVoice.ts, knip.json:36; src/core/ai/parameterPrediction.ts:11, :29, :79 und tests/parameterPrediction.test.ts:7. Ehrlichkeitsgrenze: die Analyse erfolgte per Import-Suche; dynamische Pfadkonstruktion bzw. @/-Alias ist im Audit nicht abschliessend geprueft.",
+      "files": [
+        "src/ai/embeddingCache.ts",
+        "src/ai/modelRegistry.ts",
+        "src/ai/localVoice.ts",
+        "src/core/ai/parameterPrediction.ts",
+        "knip.json"
+      ],
+      "acceptance": [
+        "Jede der vier Dateien ist entweder angebunden (mit Test, der die Wirkung belegt) oder geloescht; die knip.json-ignores sind entsprechend bereinigt"
+      ],
+      "verification": [
+        "Nachweis offen: Import-Nachweis je Datei bzw. Loeschung plus knip-Lauf ohne die ignore-Eintraege",
+        "Beleg Bestand: docs/audit-infra-ai-routing.md 6.1 (keine Importer, knip.json:35-37)"
+      ]
+    },
+    {
+      "id": "INFRA-FEAT-001",
+      "title": "AI-aus-Schalter mit ECHTER Wirkung (Einstellung stoppt die RunPod-Aufrufe)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Konstitution (docs/INFRA_KONSTITUTION.md, Abschnitt 2) verlangt: bei 'AI aus' (aiMONK = OFF) feuert kein LlmRouter-Aufruf an die GPU-Flotte, es laufen nur Hetzner-Kosten (~0,054 EUR/h). Heute stoppt der Schalter nur das Client-Flag: aiModeActive in src/core/ai/aiMode.ts:9-17 wird aus dem Modul-State gesetzt (ModuleStateContext.tsx:85, :204) und hat keine Kante zum LlmRouter (INFRA-AI-005). Der GPU-Aufruf selbst wird an keiner Stelle durch diesen Schalter verhindert - der Router waehlt allein ueber process.env und complexity (LlmRouter.ts:437-449), und wakeFleet() setzt workersMin=1 unabhaengig davon (fleetWake.ts:201,213).",
+      "note": "Quelle der Forderung: docs/INFRA_KONSTITUTION.md Abschnitte 2 und 4 ('der AI-aus-Schalter stoppt heute nur das Client-Flag, nicht den GPU-Aufruf'). Belegstellen Ist-Zustand: src/core/ai/aiMode.ts:9-17; src/context/ModuleStateContext.tsx:85, :204; src/core/ai/LlmRouter.ts:437-449; src/core/ai/orchestrator/fleetWake.ts:201,213. Verwandt: INFRA-AI-005 und INFRA-RUNPOD-004.",
+      "files": [
+        "src/core/ai/aiMode.ts",
+        "src/core/ai/LlmRouter.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "src/context/ModuleStateContext.tsx",
+        "src/config/aiInfrastructure.ts"
+      ],
+      "acceptance": [
+        "Bei 'AI aus' feuert kein LlmRouter-Aufruf an die GPU-Flotte (RunPod) und kein Wake setzt workersMin=1; ein Test belegt es",
+        "Bei 'AI aus' laufen ausschliesslich Hetzner-Kosten; bei 'AI an' laufen alle Rollen ausser den Visual-Rollen (siehe INFRA-FEAT-002)"
+      ],
+      "verification": [
+        "Nachweis offen: Test, der den Modus auf OFF setzt und fuer jeden LlmRouter-/RunPod-Aufruf einen Fehler bzw. kein Netzwerk-Request erwartet",
+        "Nachweis offen: Test, der bei OFF ein leeres/verweigertes wakeFleet() belegt"
+      ]
+    },
+    {
+      "id": "INFRA-FEAT-002",
+      "title": "Visual-Rollen nur bei Abruf starten (imageHq/videoReal/videoAbstract lazy)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Konstitution (docs/INFRA_KONSTITUTION.md Abschnitte 1.1 und 2) legt fest: brain/ears/voiceGen/music/orchestrator sind immer-verfuegbar; imageHq/videoReal/videoAbstract sind Visual-Rollen und starten erst bei Abruf/Aktivierung, danach fallen sie per idleTimeout auf Null zurueck. Die Konstanten dafuer existieren bereits in src/config/aiInfrastructure.ts (AI_VISUAL_ROLES :104-109, isVisualRole() :111-113, alwaysOnRoles() :116-118, Rollenkommentar :27), das VERHALTEN ist aber nicht verdrahtet: wakeFleet() weckt weiter alle acht Rollen (fleetWake.ts:201,213 Promise.all ueber resolveGpuRoles()), es gibt keinen rollenselektiven Wake-Einstieg und beim Flottenstart keinen Lazy-Pfad fuer Visuals.",
+      "note": "Quelle der Forderung: docs/INFRA_KONSTITUTION.md Abschnitt 1.1 ('Visual-Rollen starten nur bei Abruf') und Abschnitt 2 ('Regel fuer Visuals ausdruecklich'). Ist-Zustand belegt in docs/audit-infra-runpod.md Befund V3-4 (fleetWake.ts:201,213) sowie in src/config/aiInfrastructure.ts:104-118 (Konstanten vorhanden, kein Konsument im Wake-Pfad).",
+      "files": [
+        "src/config/aiInfrastructure.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "src/core/ai/vision/runpodVision.ts",
+        "src/core/ai/vision/runpodVideo.ts"
+      ],
+      "acceptance": [
+        "Beim Flottenstart/Wake werden Visual-Rollen nicht geweckt; sie starten erst, wenn eine Visual-Aktion (Bild/Video) abgerufen wird",
+        "Ein Test belegt: wakeFleet() ohne Visual-Anforderung laesst imageHq/videoReal/videoAbstract unberuehrt, mit Anforderung weckt genau die betroffene Rolle"
+      ],
+      "verification": [
+        "Nachweis offen: Test gegen fleetWake mit/ohne Visual-Rolle (isVisualRole als Filter)",
+        "Beleg Bestand: docs/audit-infra-runpod.md V3-4 (Wake ueber alle acht Rollen)"
+      ]
+    },
+    {
+      "id": "INFRA-FEAT-003",
+      "title": "Budget-Guards verdrahten (EUR/h und Storage/Snapshots wirksam machen)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "audit:infra 2026-09-20",
+      "problem": "Die Konstitution (docs/INFRA_KONSTITUTION.md Abschnitt 4) fordert die Durchsetzung der Grenzen im Code: max. 10 EUR/h laufend (Ziel 5-7,5), max. 5 EUR/Monat Speicher, max. 8 GPU-Endpoints, max. 5 Hetzner-Server. Die Helfer existieren in src/config/aiInfrastructure.ts (AI_MAX_FLEET_EUR_PER_HOUR :84, AI_MAX_STORAGE_EUR_PER_MONTH :87, AI_MAX_HETZNER_SERVERS :90, AI_TARGET_FLEET_EUR_PER_HOUR :97, assertGpuEndpointBudget :167, assertFleetHourlyBudget :200, assertStorageBudget :213), aber nur assertGpuEndpointBudget() wird produktiv aufgerufen (providerRouter.ts:65-71) - und prueft sich selbst gegen einen Default von 8. assertFleetHourlyBudget/assertStorageBudget sind nicht verdrahtet.",
+      "note": "Quelle der Forderung: docs/INFRA_KONSTITUTION.md Abschnitt 4 ('Offen (Backlog): assertFleetHourlyBudget und assertStorageBudget sind noch nicht verdrahtet'). Belegstellen Ist-Zustand: src/config/aiInfrastructure.ts:84-97, :167-216; src/core/ai/orchestrator/providerRouter.ts:65-71; Aufrufer fehlen fuer die beiden Guards (nur Tests, tests/aiInfrastructure.test.ts:73-86). Haengt direkt an INFRA-RUNPOD-004; die Konstanten-Seite der SSOT ist in diesem Lauf gesetzt (budget.fleetEndpointsMax/hetznerServersMax/fleetTargetEurPerHour/storageSnapshotsMaxEurPerMonth).",
+      "files": [
+        "src/config/aiInfrastructure.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "src/core/ai/orchestrator/fleetWake.ts",
+        "server/routes/aiRoutes.ts"
+      ],
+      "acceptance": [
+        "Vor dem Wecken/Betrieb pruefen die Guards das laufende EUR/h-Budget und die Storage-Kosten und brechen bzw. alarmieren bei Ueberschreitung",
+        "Ein Test belegt, dass eine Ueberschreitung wirklich einen Fehler erzeugt (nicht nur eine Konstante prueft)"
+      ],
+      "verification": [
+        "Nachweis offen: Test mit ueberschrittenem Budget gegen assertFleetHourlyBudget()/assertStorageBudget() plus Aufrufer-Nachweis in src/ bzw. server/",
+        "Nachweis offen: Ursprung der Storage-Kostenzahl (Hetzner-Snapshots ~0,01 EUR/GB/Monat laut services/portal-worker/src/index.js:46-47) an die Pruefung anbinden"
+      ]
     }
   ],
   "visionSandbox": [
@@ -1834,7 +2493,7 @@
     ]
   },
   "budget": {
-    "fleetEndpointsMax": 5,
+    "fleetEndpointsMax": 8,
     "fleetMaxEurPerHour": 10,
     "storageSnapshotsMaxEurPerMonth": 5,
     "runpodCurrentImage": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:f9bc71cc0dc61e5bd038bccc3757422e462291ef (ears + voice, live abgeglichen 2026-09-13) · registry.runpod.net/...worker-vllm...76054c22c (brain) · registry.runpod.net/prunaai-...flux-1-dev...287a29201 (vision, Endpoint wzh9hcbitjnn95) · registry.runpod.net/wlsdml1114-...ksampler...a9247705c (video)",
@@ -1843,8 +2502,13 @@
     "billingModel": "STUENDLICH: Hetzner + RunPod rechnen pro laufender Stunde ab; gestoppt/geloescht = 0 EUR (Hetzner: gestoppte Server kosten weiter Platte -> nur LOESCHEN stoppt Kosten).",
     "hetznerFleetEurPerHour": 0.054,
     "snapshotsBilling": "Snapshots kosten pro GB/Monat (Hetzner); 5 Snapshots 4,68 GB ~= 0,06 EUR/Monat.",
-    "fleetEndpointsNote": "brain, ears, voiceGen, vision (FLUX), video (Wan2.2) - alle scale-to-zero; ~2,35 EUR/h bei Vollbetrieb.",
-    "runpodIdleTimeouts": "Scale-to-Zero greift NICHT sofort: ein Worker laeuft nach dem letzten Job noch idleTimeout Sekunden weiter und wird in dieser Zeit weiter abgerechnet. Werte je Rolle (ROLE_DEFAULTS in scripts/runpod-deploy.py, live 2026-09-13): voiceGen 900 s (live von 15 auf 900 gesetzt), vision 900 s, video 900 s, brain 20 s deklariert (live noch 15 s), ears 20 s deklariert (live noch 15 s). 900 s Leerlauf auf AMPERE_48 ~ 0,20 USD pro Aufwachphase - bewusst in Kauf genommen, damit wiederholte Einzelaufrufe (MOS-Hoerproben, Bild-/Video-Iteration) nicht jedes Mal einen Kaltstart zahlen. WICHTIG: die API setzt idleTimeout nur beim ANLEGEN eines Endpoints; ein Template-Update aendert den laufenden Wert nicht - scripts/runpod-deploy.py meldet Abweichungen deshalb jetzt als Warnung."
+    "fleetEndpointsNote": "brain, ears, voiceGen, music, orchestrator (immer-Rollen) + imageHq, videoReal, videoAbstract (Visual, nur bei Abruf) - 8 Rollen, alle scale-to-zero; ~3,2-3,9 EUR/h bei Vollbetrieb.",
+    "runpodIdleTimeouts": "Scale-to-Zero greift NICHT sofort: ein Worker laeuft nach dem letzten Job noch idleTimeout Sekunden weiter und wird in dieser Zeit weiter abgerechnet. Werte je Rolle (ROLE_DEFAULTS in scripts/runpod-deploy.py, live 2026-09-13): voiceGen 900 s (live von 15 auf 900 gesetzt), vision 900 s, video 900 s, brain 20 s deklariert (live noch 15 s), ears 20 s deklariert (live noch 15 s). 900 s Leerlauf auf AMPERE_48 ~ 0,20 USD pro Aufwachphase - bewusst in Kauf genommen, damit wiederholte Einzelaufrufe (MOS-Hoerproben, Bild-/Video-Iteration) nicht jedes Mal einen Kaltstart zahlen. WICHTIG: die API setzt idleTimeout nur beim ANLEGEN eines Endpoints; ein Template-Update aendert den laufenden Wert nicht - scripts/runpod-deploy.py meldet Abweichungen deshalb jetzt als Warnung.",
+    "hetznerServersMax": 5,
+    "fleetTargetEurPerHour": {
+      "min": 5,
+      "max": 7.5
+    }
   },
   "architectureDecisions": [
     "V2 ist der einzige Produktiv-Audiopfad; V1-Code ist entfernt (No-Op-Reste: AUDIO-P1-003).",
@@ -1854,8 +2518,10 @@
     "Kein Feature gilt als DONE, solange es nur im Zustand, nicht im hoerbaren V2-Pfad wirkt.",
     "Brain = RunPod-vLLM-Worker (Qwen3-14B-AWQ); 4B-Ausfuehrer entfaellt (2026-09-11).",
     "Ghostuser 5 = /master-out (Alias /ghost/5, PA) · Ghostuser 6 = /visual-out (Alias /ghost/6, Beamer).",
-    "VisualMONK: Echtzeit-Liveshow per Shader (Client) + generative Bilder/Video per RunPod-Rolle `vision`.",
-    "Kostenregel: max. 4 GPU-Endpoints, <=10 EUR/h Flotte, <=5 EUR/Monat Storage/Snapshots."
+    "VisualMONK: Echtzeit-Liveshow per Shader (Client) + generative Bilder/Video per RunPod-Visual-Rollen `imageHq`/`videoReal`/`videoAbstract` (starten nur bei Abruf, Konstitution 2026-09-20).",
+    "Kostenregel (Konstitution 2026-09-20): max. 8 GPU-Endpoints, <=10 EUR/h Flotte, <=5 EUR/Monat Storage/Snapshots.",
+    "max. 5 Hetzner-Server (Rollen app/sfu/ai/master/edge; Konstitution 2026-09-20, AI_MAX_HETZNER_SERVERS).",
+    "AI ist per Einstellung abschaltbar -> dann nur Hetzner (ca. 0,054 EUR/h) und kein GPU-Aufruf. Bei 'AI an' laufen alle Rollen voll AUSSER den Visual-Rollen (imageHq/videoReal/videoAbstract), die erst bei Abruf starten (Konstitution 2026-09-20)."
   ],
   "infraFixes2026_09_11": [
     "SSH: veraltete known_hosts-Eintraege der wiederverwendeten Hetzner-IPs entfernt",
@@ -1864,7 +2530,7 @@
     "3,4 GB Dev-Daten (public/data/orchestral gitignored, public/music) aus .dockerignore + allen rsyncs ausgeschlossen"
   ],
   "visionLive": {
-    "endpointName": "audiomonastry-ai-vision",
+    "endpointName": "audiomonastry-ai-image",
     "endpointId": "wzh9hcbitjnn95",
     "templateId": "7xzd1v17dx",
     "worker": "PrunaAI/runpod-worker-FLUX.1-dev 1.0.3",
@@ -1873,7 +2539,7 @@
     "measured": "2026-09-13 neu deployed + verifiziert: Kaltstart 32,4 s, 4 Steps 512x512 = 4,19 s, data-URI-PNG 168.598 Zeichen (seed 36068)",
     "cost": "A6000 ~0,49 USD/h nur bei Generierung; workers 0..1, idle 900 s -> 0 USD idle",
     "test": "python3 scripts/verify-vision-endpoint.py",
-    "note": "Ersetzt den alten Endpoint 4gts9y4zph7ik9, der an einem gebundenen Template hing (Update nicht moeglich)."
+    "note": "Ersetzt den alten Endpoint 4gts9y4zph7ik9, der an einem gebundenen Template hing (Update nicht moeglich). [Name live \"audiomonastry-ai-image\" = Rolle imageHq; frueherer SSOT-Name \"audiomonastry-ai-vision\" korrigiert 2026-09-20.]"
   },
   "liveState2026_09_11": {
     "app": "https://anunnakitools.de (200, /api/health ok) - app-1 159.69.102.29 (Floating IP)",
