@@ -398,6 +398,14 @@ fi
 
 if [[ "$DEPLOY_MODE" == "docker" ]]; then
   echo "=== [4/5] Remote starten (Modus: docker) ==="
+  # Medien-Overlay nur, wenn auf dem Knoten wirklich Inhalte liegen: sonst
+  # wuerden leere Bind-Mounts die Modell-/Library-Pfade des Images maskieren
+  # (siehe docker-compose.media.yml + scripts/hetzner/deliver-media.sh).
+  MEDIA_OVERLAY=""
+  if "${SSH[@]}" "$SSH_TARGET" "test -f $DEPLOY_REMOTE_DIR/docker-compose.media.yml && [ -n \"\$(ls -A $DEPLOY_REMOTE_DIR/media 2>/dev/null)\" ]"; then
+    MEDIA_OVERLAY=" -f docker-compose.media.yml"
+    echo "--- Medien-Overlay aktiv ($DEPLOY_REMOTE_DIR/media gefunden) ---"
+  fi
   if [[ "$DEPLOY_REMOTE_BUILD" != "1" ]]; then
     echo "--- Rollback-Image sichern (remote) ---"
     "${SSH[@]}" "$SSH_TARGET" "docker image tag $IMAGE_APP ${IMAGE_APP}-rollback 2>/dev/null || true"
@@ -405,8 +413,8 @@ if [[ "$DEPLOY_MODE" == "docker" ]]; then
     docker save "$IMAGE_APP" "$IMAGE_MASTER" | "${SSH[@]}" "$SSH_TARGET" "docker load"
     echo "--- docker compose up -d --no-build --force-recreate audiomonastry master-player (Projekt $COMPOSE_PROJECT) ---"
     "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \
-       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE up -d --no-build --force-recreate audiomonastry master-player && \
-       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE up -d caddy"
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d --no-build --force-recreate audiomonastry master-player && \
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d caddy"
   else
     echo "--- Remote-Build (docker compose up -d --build, Projekt $COMPOSE_PROJECT) ---"
     "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \

@@ -665,7 +665,9 @@ class DeployOriginTlsTest(unittest.TestCase):
 
     def test_zertifikate_liegen_vor_dem_caddy_start_und_mit_engen_rechten(self) -> None:
         # Der echte Startbefehl aus Schritt [4/5] (nicht der Kommentar, der ihn nennt).
-        caddy_start = self._line_of("docker compose -f $COMPOSE_FILE up -d caddy")
+        # Seit dem Medien-Overlay haengt hinter $COMPOSE_FILE optional
+        # $MEDIA_OVERLAY - der Befehl bleibt derselbe, nur mit einem weiteren -f.
+        caddy_start = self._line_of("docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d caddy")
         # Reihenfolge ist der Kern des Fixes: Caddyfile + Zertifikate VOR dem Start,
         # sonst startet Caddy in die Restart-Schleife (live: HTTP 522).
         self.assertLess(self._line_of("Caddyfile.origin"), caddy_start)
