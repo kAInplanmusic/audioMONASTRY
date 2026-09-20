@@ -27,6 +27,11 @@ for f in auto-repair.sh systemd/${SERVICE}.service systemd/${SERVICE}.timer; do
 done
 
 install -m 0755 "$HERE_SRC/auto-repair.sh" /usr/local/bin/audiomonastry-auto-repair.sh
+# Die Namensquelle gehoert MIT dazu: der Watchdog laeuft spaeter aus
+# /usr/local/bin und sucht `fleet-names.sh` zuerst neben sich. Ohne die Kopie
+# brach jeder Timer-Lauf mit "No such file or directory" + "unbound variable"
+# ab und reparierte nichts (live gemessen 2026-09-20).
+install -m 0644 "$HERE_SRC/fleet-names.sh" /usr/local/bin/fleet-names.sh
 install -m 0644 "$HERE_SRC/systemd/${SERVICE}.service" "/etc/systemd/system/${SERVICE}.service"
 install -m 0644 "$HERE_SRC/systemd/${SERVICE}.timer" "/etc/systemd/system/${SERVICE}.timer"
 

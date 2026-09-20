@@ -2041,6 +2041,59 @@ class NamespaceParitaetTest(unittest.TestCase):
         self.assertIn("Keine Service-Liste vom Knoten lesbar", combined)
         self.assertNotIn("docker compose -f docker-compose.hetzner.yml down", calls)
 
+    def test_watchdog_laeuft_aus_usr_local_bin_ohne_namensquelle_daneben(self) -> None:
+        """Live-Befund 2026-09-20: `install-auto-repair.sh` kopierte den Watchdog
+        nach /usr/local/bin, die Namensquelle `fleet-names.sh` aber nicht. Der
+        Timer schrieb bei JEDEM Lauf "No such file or directory" +
+        "FLEET_COMPOSE_PROJECT: unbound variable" und reparierte nichts.
+
+        Der Test faehrt genau diesen Zustand: die Kopie liegt in einem
+        Verzeichnis OHNE `fleet-names.sh`, die Namensquelle ist nur ueber
+        FLEET_NAMES_SOURCE erreichbar (auf dem Knoten der Repo-Pfad).
+        """
+        project = self._names()["project"]
+        with tempfile.TemporaryDirectory(prefix="f10-install-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            fake_bin = tmpdir / "bin"
+            fake_bin.mkdir()
+            fake = fake_bin / "docker"
+            fake.write_text(FAKE_DOCKER, encoding="utf-8")
+            fake.chmod(0o755)
+
+            install_dir = tmpdir / "usr-local-bin"
+            install_dir.mkdir()
+            watchdog = install_dir / "audiomonastry-auto-repair.sh"
+            watchdog.write_text(AUTO_REPAIR.read_text(encoding="utf-8"), encoding="utf-8")
+            watchdog.chmod(0o755)
+            self.assertFalse((install_dir / "fleet-names.sh").exists(), "Testannahme verletzt")
+
+            repair_log = tmpdir / "auto-repair.log"
+            compose_log = tmpdir / "compose.log"
+            env = clean_env(
+                PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+                FAKE_DOCKER_LOG=str(tmpdir / "docker.log"),
+                FAKE_DOCKER_COMPOSE_LOG=str(compose_log),
+                FAKE_DOCKER_CONTAINERS=f"{LEGACY_FIXTURE_APP} {LEGACY_FIXTURE_CADDY}",
+                FLEET_NAMES_SOURCE=str(FLEET_NAMES),
+                LOG=str(repair_log),
+                APP_DIR=str(tmpdir / "opt"),
+                CHECKS="1",
+            )
+            result = subprocess.run(
+                [self.bash, str(watchdog)], capture_output=True, text=True,
+                cwd=ROOT, env=env, timeout=180,
+            )
+            combined = self._combined(result)
+            repair = repair_log.read_text(encoding="utf-8") if repair_log.exists() else ""
+            compose_calls = compose_log.read_text(encoding="utf-8") if compose_log.exists() else ""
+
+        self.assertNotIn("No such file or directory", combined, combined)
+        self.assertNotIn("unbound variable", combined, combined)
+        self.assertEqual(result.returncode, 0, combined)
+        # Die Namensaufloesung hat gegriffen: der Watchdog nennt die tatsaechlichen
+        # Containernamen (ohne Namensquelle waere er vorher mit Fehler ausgestiegen).
+        self.assertIn(LEGACY_FIXTURE_APP, repair + combined, repair + combined)
+
     def test_bash_syntax_aller_f10_skripte_ist_sauber(self) -> None:
         for script in (FLEET_NAMES, AUTO_REPAIR, (HETZNER / "fleet-status.sh"), FLEET_DEPLOY_LIVE,
                        BRING_UP, PROVISION_FLEET, MIGRATE_PROJECT, DEPLOY_SH):

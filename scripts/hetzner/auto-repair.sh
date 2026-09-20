@@ -41,9 +41,29 @@ set -uo pipefail
 #   explizit setzen und die tatsaechlichen Container ueber beide Schreibweisen
 #   aufloesen (fleet_name_variants).
 HERE_SRC="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=scripts/hetzner/fleet-names.sh
-# shellcheck disable=SC1091
-source "$HERE_SRC/fleet-names.sh"
+# Die Namensquelle wird NEBEN dem Skript erwartet (so laeuft es im Repo) - der
+# Installer kopiert den Watchdog aber nach /usr/local/bin, und dort lag
+# `fleet-names.sh` am 2026-09-20 NICHT: der Timer schrieb bei jedem Lauf
+# "No such file or directory" + "FLEET_COMPOSE_PROJECT: unbound variable" und
+# reparierte stillschweigend nichts. Deshalb jetzt zwei Orte: Seite an Seite
+# (Repo/Installer) und der Repo-Pfad auf dem Knoten (ueber FLEET_NAMES_SOURCE
+# umstellbar, damit Tests ihn setzen koennen). Faellt beides weg, endet der Lauf
+# mit Klartext statt mit einer stummen Nicht-Reparatur.
+FLEET_NAMES_SOURCE="${FLEET_NAMES_SOURCE:-/opt/audiomonastry/scripts/hetzner/fleet-names.sh}"
+NAMES_FOUND=""
+for candidate in "$HERE_SRC/fleet-names.sh" "$FLEET_NAMES_SOURCE"; do
+  if [[ -f "$candidate" ]]; then
+    # shellcheck source=scripts/hetzner/fleet-names.sh
+    # shellcheck disable=SC1091
+    source "$candidate"
+    NAMES_FOUND="$candidate"
+    break
+  fi
+done
+if [[ -z "$NAMES_FOUND" || -z "${FLEET_COMPOSE_PROJECT:-}" ]]; then
+  echo "❌ Namensquelle fleet-names.sh nicht gefunden (gesucht: $HERE_SRC/fleet-names.sh, $FLEET_NAMES_SOURCE)" >&2
+  exit 3
+fi
 
 LOG="${LOG:-/var/log/audiomonastry-auto-repair.log}"
 # Kanonische Namen (Rolle app = Projektname, Caddy = Projektname-caddy); die
