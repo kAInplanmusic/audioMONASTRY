@@ -258,3 +258,40 @@ niemand die Kosten „im Vorbeigehen" sieht.
 
 Offen bleibt: Worker-Logs aus der Konsole, um Startfehler von Zeitüberschreitung zu
 trennen (das kann kein Skript aus dem Repo belegen).
+
+
+## Wache: festgefahrene Rollen frueh erkennen (INFRA-RUNPOD-010)
+
+`scripts/runpod-health-guard.py` liest fuer JEDE Rolle den Health-Zustand und meldet den
+Ausfallmodus, der am 2026-09-20 die Stimmen-Rolle stillgelegt hat:
+
+    python3 scripts/runpod-health-guard.py            # nur berichten (read-only, kostenlos)
+    python3 scripts/runpod-health-guard.py --json     # Bericht als JSON (Cron/Logs)
+
+**Erkennungsregel** (`classify_status`, rein und ohne I/O getestet):
+
+| Status | Bedingung | Bedeutung |
+| --- | --- | --- |
+| `FESTGEFAHREN` | `inQueue > 0` und `running == 0` und `ready == 0` und `initializing == 0` | ein `unhealthy` Worker haelt den einzigen Slot – so sah der Ausfall aus |
+| `STARTET` | `inQueue > 0` und `initializing > 0` | Kaltstart laeuft, kein Alarm |
+| `UNGESUND` | `unhealthy > 0` und `running == 0` | Vorstufe, beobachten |
+| `OK` | sonst | auch Scale-to-Zero ohne Queue ist normal |
+| `FEHLER` | Antwort ohne `workers`/`jobs` oder falscher Typ | wird NICHT als gesund gemeldet, damit eine geaenderte API auffaellt |
+
+**Exit-Codes:** `0` alles gesund · `2` Aufruf-/Konfigurationsfehler · `3` `--heal` ohne
+Freigabe (kein einziger HTTP-Aufruf) · `4` Handlungsbedarf (festgefahren, ohne `--heal`) ·
+`5` Health-Abfrage fehlgeschlagen · `6` Heilung/Rueckstellung fehlgeschlagen.
+
+**Heilen** (Produktion, Freigabe + Stundensatz noetig):
+
+    python3 scripts/runpod-health-guard.py --heal --role voiceGen \
+        --drain-minutes 15 --price-per-hour <runpodctl gpu list -> securePricePerHr> --yes
+
+Die Wache hebt `workersMax` auf mindestens 2, wartet optional, bis die Queue leer ist, und
+stellt danach **auf den vorher gelesenen Ausgangswert** zurueck – mit Ruecklesung. Steht
+`workersMax` schon auf 2, passiert **kein** Schreibzugriff (`keine Aenderung noetig`).
+
+**Als Cron/Systemd-Timer** (Vorschlag, Vorsicht bei der Zustellung): ein Lauf alle 15 Minuten
+mit `--json` und `--heal --yes`, aber nur wenn der Stundensatz gesetzt ist; die Ausgabe in
+eine Logdatei schreiben. Ohne Gateway-Anbindung meldet ein Hermes-Cron aus einer CLI-Sitzung
+nichts an ein Messenger-Ziel – die Zustellung muss auf ein verbundenes Ziel zeigen.
