@@ -10,6 +10,7 @@
 import { PostgrestClient } from '@supabase/postgrest-js';
 import { aiLogger } from './aiLogger';
 import { supabaseServerKey, supabaseUrl } from '../../../config/supabaseKeys';
+import type { PersistedSystemPromptRow } from './promptStore';
 import type { AiJob, AiSession } from './types';
 
 let client: PostgrestClient | null = null;
@@ -305,6 +306,43 @@ export const aiPersistence = {
       });
     } catch (error) {
       aiLogger.warn('supabase loadEvaluations failed', { task: query.task, error: (error as Error).message });
+      return [];
+    }
+  },
+
+  /**
+   * INFRA-AI-003: aktive Prompt-Versionen aus `system_prompts` laden
+   * (Gegenstueck zu `saveSystemPrompt`). Ohne Client oder bei Fehlern kommt `[]`
+   * zurueck – der Aufrufer entscheidet, ob das "nichts gespeichert" oder "nicht
+   * erreichbar" bedeutet (`isAiPersistenceConfigured`).
+   */
+  async loadSystemPrompts(): Promise<PersistedSystemPromptRow[]> {
+    const db = getClient();
+    if (!db) return [];
+    try {
+      const { data, error } = await db
+        .from('system_prompts')
+        .select('plugin_id,role,version,content,enabled,meta')
+        .order('version', { ascending: true })
+        .limit(2000);
+      if (error) {
+        aiLogger.warn('supabase loadSystemPrompts failed', { error: error.message });
+        return [];
+      }
+      if (!Array.isArray(data)) return [];
+      return data.map((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          pluginId: String(r.plugin_id ?? ''),
+          content: String(r.content ?? ''),
+          version: Number.isFinite(Number(r.version)) ? Number(r.version) : undefined,
+          role: typeof r.role === 'string' ? r.role : undefined,
+          enabled: r.enabled === undefined ? undefined : Boolean(r.enabled),
+          meta: (r.meta && typeof r.meta === 'object' ? r.meta : {}) as Record<string, unknown>,
+        };
+      });
+    } catch (error) {
+      aiLogger.warn('supabase loadSystemPrompts failed', { error: (error as Error).message });
       return [];
     }
   },

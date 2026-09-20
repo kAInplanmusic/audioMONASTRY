@@ -33,6 +33,8 @@ import { aiOrchestrator } from './src/core/ai/orchestrator/aiOrchestrator';
 import { registerMediaRoutes } from './server/routes/mediaRoutes.ts';
 import { createJsonBodyErrorHandler } from './server/httpBodyErrors.ts';
 import { mosHarness } from './src/core/ai/orchestrator/mosHarness';
+import { aiPersistence } from './src/core/ai/orchestrator/aiPersistence';
+import { promptStore } from './src/core/ai/orchestrator/promptStore';
 import { AuthoritativeSession } from './src/core/session/authoritativeSession';
 import { looksLikeStudioSession, verifyStudioSession } from './src/core/session/studioSession';
 import { resolveMainOutUserId } from './src/core/session/mainOutGuard';
@@ -816,6 +818,20 @@ async function startServer(port: number = PORT): Promise<{ httpServer: http.Serv
     }
   } catch (e) {
     console.warn('[mos] Laden der Hörerwertungen fehlgeschlagen:', (e as Error).message);
+  }
+
+  // INFRA-AI-003: Prompt-Versionen aus der Persistenz in den Store holen. Vorher
+  // las kein Produktionspfad den Store – eine „optimierte" Version (iterate:prompts)
+  // blieb ein DB-Eintrag und erreichte nie einen echten Plan-Aufruf. Bewusst
+  // awaited wie oben; ohne Supabase bleibt der Store leer und es gilt die Konstante.
+  try {
+    const promptRows = await aiPersistence.loadSystemPrompts();
+    const loaded = promptStore.hydrate(promptRows);
+    if (loaded > 0) {
+      console.log(`[ai] ${loaded} Prompt-Version(en) aus der Persistenz in den Store geladen`);
+    }
+  } catch (e) {
+    console.warn('[ai] Laden der Prompt-Versionen fehlgeschlagen:', (e as Error).message);
   }
   return { httpServer: server, io: hub.io };
 }

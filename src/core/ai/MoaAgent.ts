@@ -18,6 +18,7 @@ import { type LlmCompletion, type LlmRequest } from './LlmRouter';
 import { completeLlm } from './clientLlm';
 import { voiceControlService } from '../voice/VoiceControlService';
 import { moaCommandCatalog, moaSystemPromptForPlugin } from '../../utils/prompts';
+import { MOA_GLOBAL_PROMPT_KEY, promptStore, type PromptStore } from './orchestrator/promptStore';
 
 export interface MoaStep {
   pluginId: string;
@@ -250,14 +251,32 @@ export class MoaAgent {
      * dann plant das Modell nur Dinge, die der Server auch ausfuehren kann.
      */
     private planCatalog?: string,
+    /**
+     * INFRA-AI-003: Prompt-Versionierung. Die im Store AKTIVE Version eines
+     * Plugins gewinnt gegen die Konstante `PLUGIN_MOA_SYSTEM_PROMPTS`; ohne
+     * Store-Eintrag bleibt es beim Konstante-Text. Injizierbar fuer Tests.
+     */
+    private prompts: PromptStore = promptStore,
   ) {}
+
+  /**
+   * INFRA-AI-003: Systemprompt fuer den Plan-Aufruf. Reihenfolge:
+   * aktive Store-Version (Plugin-Schluessel, sonst `MOA_GLOBAL_PROMPT_KEY`) →
+   * Konstante aus `PLUGIN_MOA_SYSTEM_PROMPTS`.
+   */
+  private systemPromptFor(pluginId: string): string {
+    const stored = this.prompts?.getActive(pluginId || MOA_GLOBAL_PROMPT_KEY)
+      ?? (pluginId ? this.prompts?.getActive(MOA_GLOBAL_PROMPT_KEY) : null);
+    if (stored && stored.content.trim().length > 0) return stored.content;
+    return moaSystemPromptForPlugin(pluginId);
+  }
 
   /** Plant eine Aufgabe mit DeepSeek V4 Flash (automatischer Free-Fallback). */
   async plan(task: string, pluginId = '', context = '', onCost?: (usd: number) => void): Promise<MoaPlan> {
     const catalog = this.planCatalog && this.planCatalog.trim().length > 0
       ? this.planCatalog
       : moaCommandCatalog();
-    const role = pluginId ? moaSystemPromptForPlugin(pluginId) : moaSystemPromptForPlugin('');
+    const role = this.systemPromptFor(pluginId);
     const timeoutMs = Number.isFinite(this.planTimeoutMs) && this.planTimeoutMs > 0
       ? this.planTimeoutMs
       : envNumber('AI_AGENT_PLAN_TIMEOUT_MS', DEFAULT_PLAN_TIMEOUT_MS);

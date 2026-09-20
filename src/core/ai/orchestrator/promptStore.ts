@@ -4,7 +4,30 @@
 // In-Memory-Referenzimplementierung. Im Betrieb wird der Store über die
 // Supabase-Tabellen `system_prompts` / `plugin_prompt_versions` persistiert
 // (database/ai_migration_002.sql). CRUD ist identisch – nur das Backend tauscht.
+//
+// INFRA-AI-003: Der Store war bis 2026-09-20 wirkungslos – kein Produktionspfad
+// las ihn, eine „optimierte“ Version erreichte nie einen echten LLM-Aufruf. Jetzt
+// gilt: `MoaAgent.plan()` nimmt die aktive Version aus diesem Store (Konstante
+// nur noch als Fallback), und der Studio-Server hydratisiert den Store beim Start
+// aus Supabase (`aiPersistence.loadSystemPrompts()` → `hydrate()`).
 // ============================================================================
+
+/**
+ * Schlüssel des globalen Planer-Prompts. Der MoA-Agent plant auch ohne
+ * Plugin-Kontext; dafür gibt es keinen Eintrag in `PLUGIN_MOA_SYSTEM_PROMPTS`,
+ * also braucht die Store-Ablage einen eigenen Namen.
+ */
+export const MOA_GLOBAL_PROMPT_KEY = 'moa';
+
+/** Zeile aus der Persistenz (`system_prompts`) – Eingabe für `hydrate()`. */
+export interface PersistedSystemPromptRow {
+  pluginId: string;
+  content: string;
+  version?: number;
+  role?: string;
+  enabled?: boolean;
+  meta?: Record<string, unknown>;
+}
 
 export interface SystemPrompt {
   id: string;
@@ -79,6 +102,44 @@ export class PromptStore {
   /** Export für DB-/File-Persistenz (versioniert, reversibel). */
   exportJson(): { prompts: SystemPrompt[] } {
     return { prompts: [...this.prompts.values()] };
+  }
+
+  /**
+   * INFRA-AI-003: Versionen aus der Persistenz laden (Gegenstueck zu
+   * `exportJson()`), damit eine im Store aktivierte Fassung auch in einem
+   * LAUFENDEN Prozess ankommt. Regeln (bewusst schlicht):
+   *
+   *   * hoechste Version je Plugin gewinnt, bei Gleichstand der spaetere Eintrag,
+   *   * `enabled: false` wird uebernommen (die bisher aktive Version bleibt aktiv),
+   *   * leere Inhalte werden uebersprungen (kein Prompt, der nur aus Leerzeichen
+   *     besteht, darf die Konstante verdraengen).
+   *
+   * Rueckgabe: Anzahl uebernommener Versionen.
+   */
+  hydrate(rows: readonly PersistedSystemPromptRow[]): number {
+    let loaded = 0;
+    for (const row of rows ?? []) {
+      const pluginId = String(row?.pluginId ?? '').trim();
+      const content = typeof row?.content === 'string' ? row.content : '';
+      if (!pluginId || content.trim().length === 0) continue;
+      const prompt: SystemPrompt = {
+        id: makeId(),
+        pluginId,
+        role: row.role ?? 'system',
+        version: row.version ?? (this.highestVersion(pluginId) ?? 0) + 1,
+        content,
+        enabled: row.enabled ?? true,
+        meta: row.meta ?? {},
+        createdAt: Date.now(),
+      };
+      this.prompts.set(prompt.id, prompt);
+      const current = this.getActive(pluginId);
+      if (prompt.enabled && (!current || current.version <= prompt.version)) {
+        this.active.set(pluginId, prompt.id);
+      }
+      loaded += 1;
+    }
+    return loaded;
   }
 }
 
