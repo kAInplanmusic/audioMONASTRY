@@ -118,6 +118,36 @@ Querverbindungen von app-1 gemessen: `master:8000` 200, `ollama:11434` 200
   (`samplemonk-test/-app/-sfu/-ai/-master/-edge`) sind noch vorhanden — die
   aktiven Firewalls heißen bereits `audiomonastry-*`.
 
+### Selbstheilung + Sicherung (installiert, mit einem weiteren Live-Befund)
+
+`install-auto-repair.sh` läuft jetzt auf allen vier Container-Knoten (Timer alle
+2 min), `install-backup-timer.sh` auf app-1 (alle 24 h). Dabei ein **dritter
+Defekt**: der Installer kopierte nur den Watchdog nach `/usr/local/bin`, nicht
+die Namensquelle `fleet-names.sh`, die der Watchdog seit F10 neben sich sucht —
+jeder Timer-Lauf endete mit
+
+```
+/usr/local/bin/audiomonastry-auto-repair.sh: line 46: /usr/local/bin/fleet-names.sh: No such file or directory
+/usr/local/bin/audiomonastry-auto-repair.sh: line 51: FLEET_COMPOSE_PROJECT: unbound variable
+```
+
+also mit einer **stummen Nicht-Reparatur**. Fix: `auto-repair.sh` sucht die
+Namensquelle an zwei Orten (neben sich, dann `FLEET_NAMES_SOURCE` = Repo-Pfad) und
+bricht mit Klartext ab, wenn keine gefunden wird; der Installer kopiert
+`fleet-names.sh` mit. Regressionstest fährt die installierte Kopie ohne Lib
+daneben. Nachweis auf allen vier Knoten: `--print-config` nennt
+„App-Container: audiomonastry" (vorher Abbruch).
+
+Der Backup-Lauf auf app-1 erzeugt ein lokales Archiv
+(`/var/backups/audiomonastry/…tar.gz`, 20 MB) und meldet **off-site übersprungen**:
+`node` fehlt auf dem Knoten (Off-Site läuft über `scripts/r2-backup.mjs`) — offen
+bleibt also der Off-Site-Backup-Pfad (node auf dem Knoten + gültige R2-Werte).
+
+**Nicht installiert (bewusst):** der Idle-Shutdown-Timer. Er würde die Knoten bei
+Inaktivität herunterfahren, und der Portal-Wake ist ohne gültigen
+Cloudflare-Token (F1) nicht benutzbar — die Flotte wäre dann nur noch per CLI
+startbar.
+
 ---
 
 ## Live-Session 2026-09-20 (durchgeführt, soweit ohne Betreiber-Secrets möglich)
