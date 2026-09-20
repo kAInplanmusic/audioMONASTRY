@@ -13,6 +13,41 @@ Merge erst nach `npm run typecheck` + betroffenem Test + Review durch den Auftra
 
 ---
 
+## Stand 2026-09-20 nach dem Fix-Schwung (F1–F10 umgesetzt und gemergt)
+
+Alle zehn Fixes sind code-seitig umgesetzt, reviewt, gemergt und durch den
+Gate-Lauf (`npm run verify`, 272 Testdateien / 1972 Tests, 0 kritische
+Audit-Findings) sowie `npm run build` gedeckt. Kein Fix ist vollständig
+„abgeschlossen“: jeder hat einen Rest, der **live** auf der Flotte bzw. beim
+Betreiber (Token/Werte) nachzuweisen ist. Genau das steht in der letzten Spalte —
+und in `MASTERTODOENDE.json` als `PROD-P0-F1` … `PROD-P3-F10` mit `live_open`.
+
+| Fix | Merge | Was code-seitig belegt ist | Offen (live/Betreiber) |
+| --- | --- | --- | --- |
+| F1 | 6c66a6f | Klartext-Diagnose für Cloudflare-Fehler, `{dryRun}`-DNS-Prüfung, `ready` nur bei JSON-200, Origin-Caddyfile + Zertifikat als Rollen-Default | gültiger CF-Token (Betreiber), origin-A-Record auf app-1, `curl https://anunnakitools.de/api/health` |
+| F2 | 3d1d9b3 | eine Credential-Auflösung (`resolveR2Config`), echter R2-Probe-Healthcheck (`cloud.r2`), Autosave mit Backoff + gedrosselter Warnung | gültiges R2-Paar (Betreiber), `npm run r2:check` auf app-1, 3-s-WAV-Upload |
+| F3 | 6ac391c | eigene Master-Limits (64 MB / 8 Spuren / 120 s) nur für die drei Routen, 413 mit Zahlen, Client-Fehlerpfad | Live-Mischlauf 4 Spuren à 30 s → 200 + Hörprobe |
+| F4 | 38875df | Commit + Build-Zeit im Image, `/api/health` nennt sie, Paritäts-Gate in `deploy.sh`/`fleet-preflight.sh`, Portal meldet Drift | frischer Deploy → `commit == HEAD`; Wake aus altem Snapshot meldet die Abweichung |
+| F5 | bca117f | Limiter-Schlüssel je Session/Nutzer, `/api/health` mit eigenem IP-Budget | Lasttest gegen die Flotte, 4 parallele Clients live |
+| F6 | b962ecb | `wire-rtc.sh` + `rtc-fleet.sh` als eine Quelle, coturn im Standardpfad, `turn:`-Einträge mit kurzlebigen Credentials, kein same-origin-Rückfall | zwei echte Browser außerhalb des LANs, ACME für `sfu.<domain>` (DNS = Betreiber) |
+| F7 | bca117f | Origins aus `APP_DOMAIN` ohne `*`, CSP abgeleitet + Report-Ziel, `CSP_MODE=enforce` schaltbar | Report-Auswertung, dann Enforce-Entscheidung; fremder Origin live abgewiesen |
+| F8 | 12d2273 | Reset mit zwei Schlössern + Rücklesebeleg, `/api/session/state`, `online` aus dem Socket-Registry mit Sweep | TCP-Abriss ohne Close-Paket real (Paketverwerfen) |
+| F9 | 12d2273 | `/api/idle-signal` mit echten Regeln, Timer fragt die App (8080) statt Caddy, fail-safe bei unlesbarem Signal | echter systemd-Timer-Lauf auf einem Hetzner-Knoten |
+| F10 | 93fca09 | `fleet-names.sh` als Namensquelle, Compose-Projekt `audiomonastry`, Migration idempotent ohne `down -v` | Live-Migration sfu-1/master-1 + 4-User-E2E danach |
+
+Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
+(Details im jeweiligen Commit):
+
+* `fix(lint)`: `eslint .` brach mit 5915 Parsing-Fehlern ab, sobald Agenten-Worktrees
+  unter `.worktrees/` lagen (mehrdeutiges `tsconfigRootDir`) — der gesamte
+  verify-Lauf war damit unbrauchbar.
+* `fix(lint)`: F4 brachte einen ungenutzten Helfer im Portal-Worker mit (Lint-Tor).
+* `fix(test)`: Hetzner-Skripttests waren rot, weil `fleet-preflight.sh` die echte
+  `.env.deploy` sourct; jetzt `FLEET_ENV_FILE` (Default `.env.deploy`, `none` = nichts).
+* `fix(transport)`: F6 importierte `resolveSfuSignalingTarget` ungenutzt (Lint-Tor).
+
+---
+
 ## F1 — Öffentlicher Zugang ist tot (P0)
 
 **Symptom:** `https://anunnakitools.de` → 522/Timeout, `/api/health` über die Domain
