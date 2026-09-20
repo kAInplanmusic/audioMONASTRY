@@ -43,7 +43,6 @@ npm start                   # node dist/server.cjs
 | Script | Purpose |
 |---|---|
 | `npm run dev` | Dev server (API + frontend, port 8080) |
-| `npm run worker` | File queue worker (`services/taskWorker.ts`) |
 | `npm run build` / `npm start` | Production build / start |
 | `npm run lint` | ESLint (`eslint . --max-warnings=0`) |
 | `npm test`, `npm run test:coverage` | Vitest (unit/integration, currently 156 files / 966 tests) |
@@ -110,7 +109,6 @@ CostTracker → Supabase persistence → response.
 | **midi-bridge** | `services/midi-bridge/` | internal | MIDI ↔ WebSocket bridge |
 | **audio-runtime** (Rust) | `services/audio-runtime/` | native | Native audio enumeration (Xonar U7, etc.) |
 | **mixer** (Rust NAPI) | `services/mixer/` | native | Native mixer backend |
-| **taskWorker** | `services/taskWorker.ts` | file queue | Legacy backend core processing |
 | **backend-core** | `services/backend-core/` | 8000 (legacy) | Historical Python/Node backend core (partially replaced) |
 | **library-ai** | `services/library-ai/` | internal | Sample tagging (historical) |
 | **portal-worker** | `services/portal-worker/` | Cloudflare | Wake/proxy/auto-delete (€0 portal) |
@@ -227,7 +225,7 @@ Revisions-Pin und werden im Betrieb nicht geladen.
 ## 7. Server Infrastructure
 
 **Deployment Targets:**
-- Hetzner fleet: `app-1` (CPX31), `sfu-1` (CPX31), `master-1` (CX23), `edge-1` (CX23), `ai-1` (CCX33, Ollama/stem-ai CPU)
+- Hetzner fleet: `app-1` (cx23), `sfu-1` (cx23), `ai-1` (cx23), `master-1` (cx23), `edge-1` (cx23) — Rollen app/sfu/ai/master/edge, Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar (Fallback CLI `cx23`, Portal-Worker `cx33` für app/sfu/ai); Tabelle: `docs/SERVER_FLEET.md`
 - **RunPod Serverless – 8-Rollen-GPU-Flotte** (Verbindlich: `docs/INFRA_KONSTITUTION.md`; Details: `docs/runpod-8-instances-complete-plan.md` — die frühere 3-Rollen-Fassung `docs/RUNPOD_AI_V1_SPEC.md` ist überholt):
   `brain` (lokales LLM, vLLM/OpenAI path), `ears` (STT/embeddings/classification), `voiceGen` (TTS/singing/song/SFX/stems), `music`, `imageHq`, `videoReal`, `videoAbstract`, `orchestrator` (MoA/MCP).
   All with `workers_min=0` (scale-to-zero) and **session wake** on studio entry; with AI on the always-on roles (`brain`/`ears`/`voiceGen`/`music`/`orchestrator`) run at full, only the visual roles (`imageHq`/`videoReal`/`videoAbstract`) start on demand.

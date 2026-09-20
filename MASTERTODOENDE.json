@@ -2180,7 +2180,7 @@
       "id": "INFRA-AI-006",
       "title": "Zwei unverbundene MoA-Implementierungen (TS/Python) plus paralleler taskWorker-Pfad",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Der Begriff 'Mixture-of-Agents' ist zweimal implementiert, mit unterschiedlichem Aufbau, Schema und ohne gemeinsamen Code: TypeScript src/core/ai/MoaAgent.ts (480 Z., ein LLM-Call, Schema [{pluginId, command, prompt}], Ausfuehrung in der Client-Registry) gegen Python services/audiomonastry-ai-runtime/moa_orchestrator.py (552 Z., Classifier -> Planner A/B -> Aggregator, Schema {\"steps\":[{tool, args, why}]}, MCP-Bruecke). Die Python-Seite ist erreichbar ueber mcpRuntime.ts:137 (agent.orchestrate) und POST /api/ai/mcp/tools/agent.orchestrate (aiRoutes.ts:793-804); ein direkter Aufruf aus MoaAgent oder dem Agent-Loop existiert nicht. Dazu kommt services/taskWorker.ts als dritter, paralleler Pfad: er kennt nur 'separate-stems' | 'generate-voice' | 'apply-fx' | 'render' (:15), also keinen AI-/LLM-Task-Typ, und hat keine Kante zur AI-Runtime.",
@@ -2188,8 +2188,11 @@
       "files": [
         "src/core/ai/MoaAgent.ts",
         "services/audiomonastry-ai-runtime/moa_orchestrator.py",
-        "services/taskWorker.ts",
-        "src/core/ai/orchestrator/mcpRuntime.ts"
+        "docs/AI_ARCHITECTURE.md",
+        "tests/moaBoundary.test.ts",
+        "package.json",
+        "README.md",
+        "README_DE.md"
       ],
       "acceptance": [
         "Es gibt genau eine benannte MoA-Zustaendigkeit (oder die beiden Wege sind klar getrennt - 'Planung clientseitig' vs. 'Ausfuehrung serverseitig' - und dokumentiert)",
@@ -2198,20 +2201,34 @@
       "verification": [
         "Nachweis offen: Architektur-Entscheid in SSOT/Doku plus Test, der den gewaehlten Weg absichert",
         "Beleg Bestand: docs/audit-infra-ai-routing.md 4.1 (zwei Implementierungen, kein gemeinsamer Code)"
+      ],
+      "summary": "MoA ist genau zwei benannte Dinge: PLANUNG client-/appseitig (src/core/ai/MoaAgent.ts, Schema [{pluginId,command,prompt}]) und AUSFUEHRUNG serverseitig (services/audiomonastry-ai-runtime/moa_orchestrator.py, Rollen-Instanz 8, Schema {steps:[{tool,args,why}]}); verbunden ueber GENAU EINE Kante (MCP-Tool agent.orchestrate via POST /api/ai/mcp/tools/:name). Der dritte, parallele Pfad services/taskWorker.ts (Datei-Queue TASK_QUEUE.json -> BACKEND_CORE_URL, ohne einen einzigen KI-Task-Typ) ist ENTFERNT statt verbunden.",
+      "evidence": [
+        "Rollen-Marker in beiden Dateikoepfen: src/core/ai/MoaAgent.ts (Kopfzeile \"MoA-Planung (client-/appseitig)\", verweist auf moa_orchestrator.py + agent.orchestrate) und services/audiomonastry-ai-runtime/moa_orchestrator.py (\"ROLLE: serverseitige MoA-Ausfuehrung\", verweist auf MoaAgent.ts).",
+        "Kante belegt: mcpRuntime.ts:137 registriert das Tool { name: agent.orchestrate, task: agent.orchestrate, model: qwen3-4b, description: \"MoA-Pipeline planen und ausfuehren (Classifier -> Planner -> Aggregator)\" }; erreichbar ueber die Route /api/ai/mcp/tools/:name (server/routes/aiRoutes.ts).",
+        "Doku: neuer Abschnitt \"MoA-Zustaendigkeiten (INFRA-AI-006, Stand 2026-09-20)\" in docs/AI_ARCHITECTURE.md (Tabelle Planung vs. Ausfuehrung + die eine Kante + Notiz zur Entfernung).",
+        "Entfernung belegt: `git rm services/taskWorker.ts` + package.json-Skript \"worker\" entfernt + README.md/README_DE.md-Zeilen entfernt; vorher geprueft: kein Produzent/Konsument im Repo (kein Treffer in docker-compose/scripts/hetzner/systemd), Ziel war der Legacy-BACKEND_CORE_URL.",
+        "Waechter-Test: tests/moaBoundary.test.ts (4 Tests) haelt Rollen-Marker, die Kante agent.orchestrate + Route, die Abwesenheit des Task-Workers (Datei + npm-Skript) und die Doku fest. Eigener Lauf: 4/4 gruen."
+      ],
+      "commits": [
+        "bbca881"
       ]
     },
     {
       "id": "INFRA-AI-007",
       "title": "MOS-Gate ohne Abnehmer (Wertung wird erfasst, aber nicht verwendet)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "mosHarness erfasst, persistiert und weist die MOS-Hoererwertung sauber aus (Validierung ohne Toleranz :142-149, Persistenz :163-175, Ladepfad :282, Statusausweis :300-303, Gate-Berechnung summaryFor :182-209 mit pass = evaluators >= requiredCount && avg >= minScore, Schwellen AI_MOS_MIN_SCORE Default 4 / AI_MOS_MIN_RATINGS Default 3). Das Gate hat aber keinen Abnehmer: gateFor()/summaryFor() werden ausschliesslich in tests/mosHarness.test.ts konsumiert; in src/, server/ und scripts/ gibt es keinen Aufrufer, kein Lesen von .pass und keine Verwendung von AI_MOS_MIN_SCORE ausserhalb von mosHarness.ts. Der Server bietet die Wertung nur an (POST/GET /api/ai/voice/mos, aiRoutes.ts:232-254), ein UI-Aufrufer wurde nicht gefunden. Es wird also bewertet, aber keine Modellwahl, kein Rollout und keine Prompt-Anpassung haengt davon ab.",
       "note": "Quelle: docs/audit-infra-ai-routing.md Kernbefund 4 / L-2 (Abschnitte 5.2, 7). Belege: src/core/ai/mosHarness.ts:133-209, :282, :300-303; server/routes/aiRoutes.ts:232-254; kein Konsument ausser tests/mosHarness.test.ts. Bezug: AI-P1-007 (Ladepfad) hat Erfassung/Persistenz gefixt - die Steuerungsseite blieb offen.",
       "files": [
-        "src/core/ai/mosHarness.ts",
-        "server/routes/aiRoutes.ts"
+        "src/core/ai/orchestrator/voiceModelGate.ts",
+        "server/routes/aiRoutes.ts",
+        "src/core/ai/orchestrator/mosHarness.ts",
+        "tests/voiceModelGate.test.ts",
+        "tests/aiRoutes.test.ts"
       ],
       "acceptance": [
         "mindestens eine echte Entscheidung haengt am MOS-Gate (z. B. Rollout/Prompt-Version/Modellwahl)",
@@ -2220,23 +2237,32 @@
       "verification": [
         "Nachweis offen: Aufrufer-Nachweis von gateFor()/.pass ausserhalb der Tests",
         "Beleg Bestand: docs/audit-infra-ai-routing.md 5.2 (Gate nur in tests/mosHarness.test.ts konsumiert)"
+      ],
+      "summary": "Das MOS-Gate hat jetzt einen echten Abnehmer: die TTS-Modellwahl der Rolle voiceGen. Neues Modul src/core/ai/orchestrator/voiceModelGate.ts (resolveVoiceModel) prueft das angeforderte Modell und wechselt auf einen erlaubten Kandidaten; sind ALLE TTS-Modelle durchgefallen, wird die Entscheidung abgelehnt (Route antwortet 409 MOS_GATE_BLOCKED). Kandidaten kommen aus dem Rollen-Manifest (GPU_ROLES.voiceGen.preload, qwen3-tts*), nicht aus einer zweiten Liste.",
+      "evidence": [
+        "Abnehmer im Serverpfad: server/routes/aiRoutes.ts orchestrate-Route - fuer task tts/sing laeuft resolveVoiceModel(); bei blocked -> 409 { code: MOS_GATE_BLOCKED, reason, considered }, bei Wechsel -> Log + der Job laeuft mit dem gewaehlten Modell, die Antwort traegt mosGate (Status/Modell/Grund/considered).",
+        "Einheitentests (eigener Lauf, 6/6 gruen): tests/voiceModelGate.test.ts - unrated = erlaubt, provisional = erlaubt (1 von 3 Hoerern), ok ab 3 Hoerern >= Schwelle, blocked + Wechsel auf den erlaubten Kandidaten, blocked wenn ALLES durchgefallen (keine stille Ersatzwahl), Pruefung auch fuer ein nicht vorgeladenes Modell.",
+        "HTTP-Beweise (eigener Lauf, tests/aiRoutes.test.ts 18/18 gruen): (a) 3 Hoerer mit Score 1 auf qwen3-tts-17b -> POST /api/ai/orchestrate {task:tts, model:qwen3-tts-17b} antwortet 200, mosGate.switched=true, gewaehltes Modell qwen3-tts-voicedesign, und job.model ist ebenfalls qwen3-tts-voicedesign; (b) sind beide TTS-Modelle mit 3 Hoerern durchgefallen -> 409 MOS_GATE_BLOCKED mit reason \"alle TTS-Modelle ...\" und considered[] komplett blocked.",
+        "Semantik dokumentiert: Kopf von voiceModelGate.ts (ok/provisional/unrated/blocked) + Hinweis im mosHarness.ts-Kopf (erster echter Abnehmer, Schwellen AI_MOS_MIN_SCORE/AI_MOS_MIN_RATINGS).",
+        "Grenze des Belegs: die Wertungen kamen aus dem Test (drei Hoerer-Scores), nicht von echten Hoerern - die Live-Hoerpruefung selbst bleibt VISUAL-P1-001/LIVE-P1-003 zugeordnet."
+      ],
+      "commits": [
+        "bbca881"
       ]
     },
     {
       "id": "INFRA-AI-008",
       "title": "Tote Module: embeddingCache, src/ai/modelRegistry, localVoice, parameterPrediction",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "AI",
       "source": "audit:infra 2026-09-20",
       "problem": "Vier Module sind belegt ohne Wirkung: (1) src/ai/embeddingCache.ts - kein Importer in src/, server/, tests/ oder scripts/, in knip.json:35 bewusst ignoriert; reiner Key-zu-Vektor-Cache ohne Indexierungs-/Aehnlichkeitssuche. (2) src/ai/modelRegistry.ts - kein Importer, knip.json:37; Namensdublette zum lebenden src/core/ai/orchestrator/modelRegistry.ts. (3) src/ai/localVoice.ts - kein Importer, knip.json:36. (4) src/core/ai/parameterPrediction.ts - nur tests/parameterPrediction.test.ts:7 als Importer; die im Kommentar :11 genannten UI-Chips existieren nicht.",
       "note": "Quelle: docs/audit-infra-ai-routing.md Abschnitt 6.1 (Tabelle toter Module) und Kernbefund 10. Belege: src/ai/embeddingCache.ts:15-45, knip.json:35; src/ai/modelRegistry.ts:22-52, knip.json:37; lebende Variante src/core/ai/orchestrator/modelRegistry.ts mit GET /api/ai/models (aiRoutes.ts:784-786); src/ai/localVoice.ts, knip.json:36; src/core/ai/parameterPrediction.ts:11, :29, :79 und tests/parameterPrediction.test.ts:7. Ehrlichkeitsgrenze: die Analyse erfolgte per Import-Suche; dynamische Pfadkonstruktion bzw. @/-Alias ist im Audit nicht abschliessend geprueft.",
       "files": [
-        "src/ai/embeddingCache.ts",
-        "src/ai/modelRegistry.ts",
-        "src/ai/localVoice.ts",
-        "src/core/ai/parameterPrediction.ts",
-        "knip.json"
+        "knip.json",
+        "scripts/validate-interface-boundaries.mjs",
+        "src/core/ai/MoaHistory.ts"
       ],
       "acceptance": [
         "Jede der vier Dateien ist entweder angebunden (mit Test, der die Wirkung belegt) oder geloescht; die knip.json-ignores sind entsprechend bereinigt"
@@ -2244,6 +2270,24 @@
       "verification": [
         "Nachweis offen: Import-Nachweis je Datei bzw. Loeschung plus knip-Lauf ohne die ignore-Eintraege",
         "Beleg Bestand: docs/audit-infra-ai-routing.md 6.1 (keine Importer, knip.json:35-37)"
+      ],
+      "summary": "Tote Module entfernt statt gepflegt: src/ai/embeddingCache.ts, src/ai/localVoice.ts, src/ai/modelRegistry.ts (Doppel von src/core/ai/orchestrator/modelRegistry.ts) und src/core/ai/parameterPrediction.ts samt Test. Kein Importeur im Repo; die einzige Kette (MoaHistory.suggest -> suggestNextForPlugin) hatte ihrerseits keinen Abnehmer und ist mit entfernt - kein dritter toter Zweig bleibt stehen.",
+      "evidence": [
+        "Vor dem Loeschen geprueft (ripgrep ueber src/, server/, tests/, scripts/, docs/): embeddingCache 0 Importeure, modelRegistry nur der tote Pfad (der lebende src/core/ai/orchestrator/modelRegistry.ts wird von aiOrchestrator/mcpRuntime/modelManager importiert), parameterPrediction nur MoaHistory.ts:9.",
+        "Befund gegenueber dem Audit korrigiert: parameterPrediction.ts wurde NICHT nur vom Test importiert, sondern auch von src/core/ai/MoaHistory.ts - dessen Methode suggest() hatte aber keinen Aufrufer (kein Treffer ausser der Definition). Deshalb: import + Methode suggest() + Datei + Test entfernt.",
+        "Folgearbeiten mitgemacht: knip.json-Ausnahmen der drei src/ai-Module entfernt; scripts/validate-interface-boundaries.mjs: die Allowlist-Zeile ai/localVoice.ts entfernt (Datei existiert nicht mehr).",
+        "Rotation geprueft: git rm fuer alle fuenf Dateien, `npx tsc --noEmit` 0 Fehler, voller vitest-Lauf + npm run verify gruen (siehe Beleg im Commit)."
+      ],
+      "files_deleted": [
+        "src/ai/embeddingCache.ts",
+        "src/ai/localVoice.ts",
+        "src/ai/modelRegistry.ts",
+        "src/core/ai/parameterPrediction.ts",
+        "tests/parameterPrediction.test.ts",
+        "services/taskWorker.ts"
+      ],
+      "commits": [
+        "bbca881"
       ]
     },
     {

@@ -43,7 +43,6 @@ const ALLOWED = new Set([
   'hooks/useWebRTC.ts',            // ITransport-Anbindung (WebRTC-Hook)
   'config/runtime.ts',             // Konfigurations-Schicht (Vite-Env erlaubt)
   'config/webrtc.ts',              // Konfigurations-Schicht (Vite-Env erlaubt)
-  'ai/localVoice.ts',              // KI-Adapter (Vite-Env erlaubt)
   'core/edge/EdgeDspClient.ts',    // Edge-Transport-Adapter (WebSocket)
   'context/AudioContext.tsx',      // App-Initialisierung (bewusst)
   'lib/supabaseClient.ts',         // Datenbank-Client (Cloud-Anbindung)

@@ -56,7 +56,6 @@ npm start                   # node dist/server.cjs
 | Skript | Zweck |
 |---|---|
 | `npm run dev` | Dev-Server (API + Frontend, Port 8080) |
-| `npm run worker` | Datei-Queue-Worker (`services/taskWorker.ts`) |
 | `npm run build` / `npm start` | Produktions-Build / -Start |
 | `npm run typecheck` | `tsc --noEmit` (Typprüfung) |
 | `npm run lint` | `eslint . --max-warnings=0` (Lint-Gate, 0 Findings) |
@@ -125,7 +124,6 @@ CostTracker → Supabase-Persistenz → Response.
 | **midi-bridge** | `services/midi-bridge/` | intern | MIDI ↔ WebSocket-Bridge |
 | **audio-runtime** (Rust) | `services/audio-runtime/` | nativ | Native Audio-Enumeration (Xonar U7 u. a.) |
 | **mixer** (Rust NAPI) | `services/mixer/` | nativ | Native Mixer-Backend |
-| **taskWorker** | `services/taskWorker.ts` | Datei-Queue | Legacy-Backend-Core-Abarbeitung |
 | **backend-core** | `services/backend-core/` | 8000 (legacy) | Historischer Python/Node-Backend-Kern (teilweise ersetzt) |
 | **library-ai** | `services/library-ai/` | intern | Sample-Tagging (historisch) |
 | **portal-worker** | `services/portal-worker/` | Cloudflare | Wake/Proxy/Auto-Delete (0-€-Portal) |
@@ -251,9 +249,10 @@ FREQUENT/ON_DEMAND/RARE, Revision-Pinning (kein `latest`).
 ## 7. Server-Infrastruktur
 
 **Deployment-Targets:**
-- Hetzner-Flotte (max. 5 Server: app/sfu/ai/master/edge): `app-1` (CPX31),
-  `sfu-1` (CPX31), `master-1` (CX23), `edge-1` (CX23),
-  `ai-1` (CCX33, Ollama/stem-ai-CPU)
+- Hetzner-Flotte (max. 5 Server: app/sfu/ai/master/edge): `app-1`, `sfu-1`, `ai-1`,
+  `master-1`, `edge-1` – Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar
+  (Fallback CLI `cx23`, Portal-Worker `cx33` für app/sfu/ai); Tabelle:
+  `docs/SERVER_FLEET.md`
 - **RunPod Serverless – 8-Rollen-GPU-Flotte** (Verbindlich:
   `docs/INFRA_KONSTITUTION.md`; Details: `docs/runpod-8-instances-complete-plan.md`):
   `brain` (lokales LLM), `ears` (STT/Embeddings/Klassifikation), `voiceGen`

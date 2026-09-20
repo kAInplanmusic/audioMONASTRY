@@ -129,6 +129,59 @@ describe('/api/ai/*-Routen (Integration)', () => {
     expect(body.summary?.evaluators).toBeGreaterThanOrEqual(1);
   });
 
+  it('INFRA-AI-007: MOS-Gate wechselt das TTS-Modell, wenn das angeforderte durchgefallen ist', async () => {
+    // Drei VERSCHIEDENE Hörer, Score 1 → `qwen3-tts-17b` fällt durch das Gate.
+    for (const hearer of ['h1', 'h2', 'h3']) {
+      const rated = await fetch(`${baseUrl}/api/ai/voice/mos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelId: 'qwen3-tts-17b', language: 'DE', score: 1, evaluatorId: hearer }),
+      });
+      expect(rated.status).toBe(201);
+    }
+
+    const res = await fetch(`${baseUrl}/api/ai/orchestrate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'u1', task: 'tts', model: 'qwen3-tts-17b', input: { text: 'Hallo' } }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      mosGate?: { model?: string; requested?: string; switched?: boolean; status?: string };
+      job?: { status?: string; model?: string };
+    };
+    expect(body.mosGate?.requested).toBe('qwen3-tts-17b');
+    expect(body.mosGate?.switched).toBe(true);
+    expect(body.mosGate?.model).toBe('qwen3-tts-voicedesign');
+    // Das durchgefallene Modell darf auch im Job nicht auftauchen.
+    expect(body.job?.model).toBe('qwen3-tts-voicedesign');
+  });
+
+  it('INFRA-AI-007: MOS-Gate lehnt ab (409), wenn alle TTS-Modelle durchgefallen sind', async () => {
+    for (const modelId of ['qwen3-tts-17b', 'qwen3-tts-voicedesign']) {
+      for (const hearer of ['h1', 'h2', 'h3']) {
+        await fetch(`${baseUrl}/api/ai/voice/mos`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ modelId, language: 'DE', score: 2, evaluatorId: hearer }),
+        });
+      }
+    }
+
+    const res = await fetch(`${baseUrl}/api/ai/orchestrate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: 'u1', task: 'tts', model: 'qwen3-tts-17b', input: { text: 'Hallo' } }),
+    });
+
+    expect(res.status).toBe(409);
+    const body = await res.json() as { code?: string; reason?: string; considered?: Array<{ status?: string }> };
+    expect(body.code).toBe('MOS_GATE_BLOCKED');
+    expect(body.reason).toMatch(/alle TTS-Modelle/);
+    expect(body.considered?.every((entry) => entry.status === 'blocked')).toBe(true);
+  });
+
   it('POST /api/ai/generate-drop verlangt einen Prompt', async () => {
     const res = await fetch(`${baseUrl}/api/ai/generate-drop`, {
       method: 'POST',

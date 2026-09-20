@@ -10,7 +10,7 @@
 | Komplexe Reasoning-Tasks | **DeepSeek V4 Pro** | nur wenn Flash nicht reicht |
 | TTS, Gesang, Song-Generierung | **Hugging Face** (MMS-TTS, Bark, MusicGen) | Free-Tier/PRO, spezialisierte Audio-Modelle |
 | Stems (Demucs) | **Replicate** (`ryan5453/demucs`) | Serverless-GPU, ~3–5 Cent/Song, schnell (~25–45 s) |
-| Lokaler Fallback (MOA/Sprachbefehle/TTS) | **Ollama** (`qwen2.5:7b`) auf ai-1 (CCX33) | offline, keine API-Kosten |
+| Lokaler Fallback (MOA/Sprachbefehle/TTS) | **Ollama** (`qwen2.5:7b`) auf ai-1 | offline, keine API-Kosten |
 | Notfall | Gemini/OpenAI | nur `AI_EMERGENCY_PROVIDERS=true` |
 
 **Groq ist entfernt** (Pay-as-you-go-Umstellung offen).
@@ -56,15 +56,20 @@ ADMIN_TOKEN=<langes-zufalls-token>
 
 ## Flotte (5 Hetzner-Rollen: app/sfu/ai/master/edge, ohne GPU)
 
+Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar; Default-Spalte = CLI-Default
+(`provision-fleet.sh`), der Portal-Worker nutzt für app/sfu/ai `cx33`. Verbindliche
+Tabelle: `docs/SERVER_FLEET.md`.
+
 | # | Instanz | Typ | Rolle |
 |---|---|---|---|
-| 1 | ai-1 | CCX33 | Ollama (lokal) + Stem-CPU-Fallback |
-| 2 | app-1 | CPX31 | App/API/Signaling |
-| 3 | sfu-1 | CPX31 | Mediasoup-SFU |
-| 4 | master-1 | CX23 | FFmpeg-Mastering |
-| 5 | edge-1 | CX23 | Staging/Smoke/Monitoring |
+| 1 | ai-1 | cx23 | Ollama (host-nativ) + Stem-CPU-Fallback |
+| 2 | app-1 | cx23 | App/API/Signaling |
+| 3 | sfu-1 | cx23 | Mediasoup-SFU |
+| 4 | master-1 | cx23 | FFmpeg-Mastering |
+| 5 | edge-1 | cx23 | Monitoring-Stack (nur der Stack), Smoke |
 
-Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7, nur Hetzner bei „AI aus") +
+Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7 mit den Portal-Typen 3×cx33 + 2×cx23;
+mit dem CLI-Default 5×cx23 ≈ 30,45 €/Monat, s. `docs/SERVER_FLEET.md` §Kosten) +
 API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
 
 > **Stand 2026-09-20:** Die frühere Angabe **≈ 0,36 €/h** stammte aus dem
@@ -74,6 +79,30 @@ API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
 > bei „AI an" laufen die immer-Rollen voll, die Visual-Rollen nur bei Abruf.
 > Laufende Flottenkosten (Hetzner + RunPod) **max. 10 €/h**, Zielband
 > **5–7,5 €/h** (`docs/INFRA_KONSTITUTION.md`).
+
+## MoA-Zuständigkeiten (INFRA-AI-006, Stand 2026-09-20)
+
+„MoA" ist im Projekt genau **zwei** Dinge – bewusst getrennt, ohne gemeinsamen
+Code, verbunden über **eine** Kante. Verbindliche Zahlen: `docs/INFRA_KONSTITUTION.md`.
+
+| | MoA-Planung (client-/appseitig) | MoA-Ausführung (serverseitig) |
+|---|---|---|
+| Datei | `src/core/ai/MoaAgent.ts` | `services/audiomonastry-ai-runtime/moa_orchestrator.py` |
+| Aufbau | ein LLM-Call (DeepSeek V4 Flash), Schema `[{pluginId, command, prompt}]` | Classifier → Planner A/B → Aggregator → MCP-Tools, Schema `{steps:[{tool,args,why}]}` |
+| Ausführung | Client-Plugin-Registry / VoiceControlService | Fach-Instanzen 2–7 der GPU-Flotte |
+| Läuft | im App-/Client-Prozess (schnell, UI-nah) | auf der Rolle `orchestrator` (Instanz 8) |
+
+**Die einzige Kante** ist das MCP-Tool `agent.orchestrate`
+(`POST /api/ai/mcp/tools/agent.orchestrate`, Brücke in
+`src/core/ai/orchestrator/mcpRuntime.ts`). Wer einen der beiden Wege ändert,
+lässt den anderen unberührt; `tests/moaBoundary.test.ts` hält die Rollen und die
+Kante fest.
+
+**Entfernt (Legacy, 2026-09-20):** `services/taskWorker.ts` (Datei-Queue
+`TASK_QUEUE.json` → `BACKEND_CORE_URL`) war ein dritter, paralleler Pfad ohne
+einen einzigen KI-Task-Typ und ohne Produzenten im Repo (nicht in
+docker-compose, nicht in den Flotten-Skripten). Er ist entfernt statt verbunden –
+das Muster liegt in der Git-Historie. Damit gibt es genau zwei MoA-Wege.
 
 ## Offene AI-Punkte
 

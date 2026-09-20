@@ -124,6 +124,14 @@ function ratingFingerprint(r: MosRating): string {
   return `${r.modelId}|${r.language}|${r.score}|${r.evaluatorId}|${Math.floor(r.createdAt / 1000)}`;
 }
 
+/**
+ * INFRA-AI-007: Dieses Harness hatte lange keinen Abnehmer - `gateFor()`/
+ * `summaryFor()` las nur der Test. Der erste echte Abnehmer ist die
+ * TTS-Modellwahl in `voiceModelGate.ts` (`resolveVoiceModel`): genug Hoerer
+ * (Default 3) UND Score unter der Schwelle (`AI_MOS_MIN_SCORE`, Default 4.0)
+ * sperrt das Modell; ungeratete Modelle bleiben erlaubt, damit kein MOS
+ * erfunden wird.
+ */
 export class MosHarness {
   private readonly ratings: MosRating[] = [];
   /** AI-P1-007: true, sobald erfolgreich aus der Persistenz geladen wurde. */

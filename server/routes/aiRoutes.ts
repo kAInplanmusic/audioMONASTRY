@@ -63,6 +63,7 @@ import {
 } from '../../src/config/aiInfrastructure';
 import { llmRouter } from '../../src/core/ai/LlmRouter';
 import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
+import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
 import { uploadSampleToR2 } from '../cloud.ts';
 import type { Express } from 'express';
@@ -733,18 +734,45 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     metrics.aiRequests += 1;
     // AI-P1-004: Idempotenz-Schlüssel (Standard-Header, z. B. bei Retries).
     const idempotencyKey = String(req.header('idempotency-key') ?? '').trim().slice(0, 200);
+
+    // INFRA-AI-007: Das MOS-Gate (Hörerwertung) entscheidet über das TTS-Modell.
+    // Es war bis 2026-09-20 ohne Abnehmer; jetzt hängt die erste echte
+    // Entscheidung daran: ein Modell mit genug Hörern UNTER der Schwelle wird
+    // nicht verwendet – entweder auf einen erlaubten Kandidaten gewechselt oder
+    // (wenn alles durchgefallen ist) mit 409 abgelehnt.
+    let effectiveModel = safeModel;
+    let mosDecision: ReturnType<typeof resolveVoiceModel> | null = null;
+    if (safeTask === 'tts' || safeTask === 'sing') {
+      mosDecision = resolveVoiceModel(safeModel);
+      if (mosDecision.status === 'blocked') {
+        metrics.aiFailures += 1;
+        console.warn('[mos-gate] TTS-Modell abgelehnt:', mosDecision.reason.slice(0, 300));
+        return res.status(409).json({
+          error: 'tts model blocked by mos gate',
+          code: 'MOS_GATE_BLOCKED',
+          requested: mosDecision.requested,
+          reason: mosDecision.reason,
+          considered: mosDecision.considered,
+        });
+      }
+      if (mosDecision.switched) {
+        console.log(`[mos-gate] TTS-Modell gewechselt: ${mosDecision.reason.slice(0, 240)}`);
+      }
+      effectiveModel = mosDecision.model;
+    }
+
     try {
       const result = await aiOrchestrator.orchestrate({
         userId: String(userId ?? 'localUser').slice(0, 64),
         task: safeTask,
-        model: safeModel,
+        model: effectiveModel,
         input: input ?? {},
         sessionId: sessionId,
         idempotencyKey: idempotencyKey || undefined,
       });
       void aiPersistence.saveJob(result.job);
       void aiPersistence.saveSession(aiOrchestrator.sessions.get());
-      return res.json(result);
+      return res.json(mosDecision ? { ...result, mosGate: mosDecision } : result);
     } catch (err) {
       if (err instanceof IdempotencyConflictError) {
         return res.status(409).json({

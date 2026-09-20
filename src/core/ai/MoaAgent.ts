@@ -1,6 +1,21 @@
 /**
- * audioMONASTRY · MOA/MCP-Agent (DeepSeek V4 Flash als Planer)
- * ============================================================
+ * audioMONASTRY · MOA/MCP-Agent – Planung (client-/appseitig)
+ * ==========================================================
+ * INFRA-AI-006: Es gibt ZWEI benannte MoA-Zustaendigkeiten, nicht zwei
+ * konkurrierende Implementierungen:
+ *
+ *   * HIER – **MoA-Planung**: ein LLM-Call (DeepSeek V4 Flash) zerlegt eine
+ *     Aufgabe in Plugin-Schritte `[{pluginId, command, prompt}]`; ausgefuehrt
+ *     werden sie von der Client-Plugin-Registry bzw. dem VoiceControlService.
+ *     Schnell, UI-nah, ohne GPU-Flotte.
+ *   * SERVERSEITIG – **MoA-Ausfuehrung**: `services/audiomonastry-ai-runtime/
+ *     moa_orchestrator.py` (Rolle `orchestrator`, Classifier → Planner A/B →
+ *     Aggregator → MCP-Tools, Schema `{steps:[{tool,args,why}]}`). Erreichbar
+ *     ausschliesslich ueber das MCP-Tool `agent.orchestrate`
+ *     (`POST /api/ai/mcp/tools/agent.orchestrate`) – das ist die EINZIGE Kante
+ *     zwischen beiden Wegen. Wer den einen Weg aendert, laesst den anderen
+ *     unberuehrt; der Waechter tests/moaBoundary.test.ts haelt die Rollen fest.
+ *
  * Der Agent zerlegt Produktions-Aufgaben in Plugin-Schritte, schreibt die
  * Prompts für Sub-Agents, iteriert über Zwischenergebnisse und steuert die
  * Plugins über den VoiceControlService (deterministischer Fallback) bzw.

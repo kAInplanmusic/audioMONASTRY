@@ -1,8 +1,16 @@
 """AudioMONASTRY AI Runtime – Orchestrator (Mixture-of-Agents) + MCP-Tool-Bruecke
 =============================================================================
-Instanz 8 der Flotte (docs/runpod-8-instances-complete-plan.md). Der Orchestrator
-nimmt einen multimodalen Auftrag entgegen und baut daraus eine ausfuehrbare
-Pipeline ueber die Fach-Instanzen 2–7.
+INFRA-AI-006 – ROLLE: das ist die SERVERSEITIGE **MoA-Ausfuehrung** (Instanz 8 der
+Flotte, docs/runpod-8-instances-complete-plan.md). Die client-/appseitige
+**MoA-Planung** liegt in `src/core/ai/MoaAgent.ts` (ein LLM-Call, Schema
+`[{pluginId, command, prompt}]`). Verbunden sind beide ueber GENAU EINE Kante:
+das MCP-Tool `agent.orchestrate` (`POST /api/ai/mcp/tools/agent.orchestrate`,
+Bruecke in `src/core/ai/orchestrator/mcpRuntime.ts`). Kein gemeinsamer Code,
+bewusst: hier Planung + Ausfuehrung ueber die Fach-Instanzen, dort die schnelle
+UI-nahe Zerlegung. Waechter: tests/moaBoundary.test.ts.
+
+Der Orchestrator nimmt einen multimodalen Auftrag entgegen und baut daraus eine
+ausfuehrbare Pipeline ueber die Fach-Instanzen 2–7.
 
 Drei Schichten (MoA) mit EINEM starken und EINEM schnellen Modell – beide
 native Qwen3 (Apache-2.0, oeffentlich, kein Repo-Code, kein HF-Token):
