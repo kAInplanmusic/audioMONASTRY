@@ -348,30 +348,199 @@ async function ensureFirewall(env, name, rules) {
   return created.firewall?.id ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// F1 – Cloudflare-Verdrahtung: jeder Fehlschlag hat einen Klartextgrund
+// ---------------------------------------------------------------------------
+// BEFUND 2026-09-20 (live gemessen): alle Cloudflare-Credentials in .env.portal
+// antworteten mit `9109 Invalid access token`. syncOriginDns() meldete daraufhin
+// nur "Cloudflare-Zone nicht gefunden" - der ECHTE Grund (ungueltiger oder zu
+// enger Token) war unsichtbar; die Domain lief dauerhaft in HTTP 522, waehrend
+// das Portal im Ladebildschirm "startet..." zeigte. Deshalb wird hier jede
+// Cloudflare-Antwort in einen Klartextgrund uebersetzt (Fehlercode + Message +
+// Betreiberhinweis) und das Ergebnis in /api/wake, /api/wire-fleet UND
+// /api/status zurueckgegeben. Der Token selbst wird NIE ausgegeben.
+const CF_API = 'https://api.cloudflare.com/client/v4';
+/** Codes, die auf ein Token-/Berechtigungsproblem deuten (kein Zonenproblem). */
+const CF_AUTH_ERROR_CODES = ['9109', '10000', '6003'];
+
+/** Cloudflare-Fehlerantwort -> Klartextgrund (message + optionaler Hinweis). */
+function cloudflareFailure(label, http, data) {
+  const errors = Array.isArray(data?.errors) ? data.errors : [];
+  const codes = errors.map((e) => String(e?.code ?? '').trim()).filter(Boolean);
+  const messages = errors.map((e) => String(e?.message ?? '').trim()).filter(Boolean);
+  const detail = [
+    codes.length > 0 ? `[${codes.join(', ')}]` : '',
+    messages.join('; '),
+  ].filter(Boolean).join(' ');
+  const authProblem = http === 401 || http === 403 || codes.some((c) => CF_AUTH_ERROR_CODES.includes(c));
+  return {
+    codes,
+    http: http ?? null,
+    message: [label, http ? `HTTP ${http}` : '', detail || 'ohne Detail'].filter(Boolean).join(': '),
+    ...(authProblem ? {
+      hint: `DNS-Verdrahtung fehlt: Token ohne Zone:DNS:Edit (${codes.join(', ') || `HTTP ${http}`}) - Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md`,
+    } : {}),
+  };
+}
+
+/**
+ * Cloudflare-API-Aufruf (GET/PATCH) mit Klartextfehler.
+ * `success === false` zaehlt als Fehler; ein fehlendes `success`-Feld ist bei
+ * den von uns gelesenen Endpunkten die Ausnahme und wird als OK gewertet
+ * (nur HTTP-Fehler schlagen dann durch). Netz-/Timeoutfehler werden ebenfalls
+ * als Klartextgrund zurueckgegeben - kein stilles Scheitern.
+ */
+async function cloudflareRequest(env, method, path, payload) {
+  const token = String(env?.CLOUDFLARE_API_TOKEN ?? '').trim();
+  if (!token) {
+    return {
+      ok: false,
+      code: 'token-missing',
+      message: `DNS-Verdrahtung fehlt: ${method} ${path} ohne CLOUDFLARE_API_TOKEN im Worker`,
+      hint: 'Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md',
+    };
+  }
+  const init = { method, headers: { Authorization: `Bearer ${token}` } };
+  if (payload) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(payload);
+  }
+  let res;
+  let data = {};
+  try {
+    res = await fetch(`${CF_API}${path}`, init);
+    data = await res.json().catch(() => ({}));
+  } catch (err) {
+    return {
+      ok: false,
+      code: 'cloudflare-unreachable',
+      message: `Cloudflare-API nicht erreichbar (${method} ${path}): ${String(err?.message ?? err)}`,
+    };
+  }
+  if (!res.ok || data?.success === false) {
+    return { ok: false, code: 'cloudflare-error', ...cloudflareFailure(`${method} ${path}`, res.status, data) };
+  }
+  return { ok: true, http: res.status, data };
+}
+
+const cloudflareGet = (env, path) => cloudflareRequest(env, 'GET', path);
+
 /**
  * Synchronisiert den DNS-Record `origin.anunnakitools.de` auf die aktuelle
  * app-1-IP. Die Hetzner-IPs wechseln bei jedem Wake; der Worker-Proxy nutzt
  * ORIGIN_HOST als resolveOverride, daher muss der DNS-Record stimmen.
+ *
+ * Mit `{ dryRun: true }` wird NICHTS geschrieben, sondern nur der Ist-Zustand
+ * gemeldet - so kann /api/status dieselbe Diagnose zeigen, ohne bei jedem
+ * Poll einen Schreibzugriff auszuloesen.
+ *
+ * Ergebnis (immer mit `code` + Klartext-`message`):
+ *   ok:false, code: token-missing | no-app-ip | zone-missing | record-missing |
+ *                  record-mismatch | cloudflare-error | cloudflare-unreachable
+ *   ok:true,  code: ok  (+ changed, record, content)
  */
-async function syncOriginDns(env, appIp) {
-  const token = (env.CLOUDFLARE_API_TOKEN ?? '').trim();
-  if (!token) return { ok: false, message: 'CLOUDFLARE_API_TOKEN fehlt im Worker' };
-  const headers = { Authorization: `Bearer ${token}` };
-  const zonesRes = await fetch(`https://api.cloudflare.com/client/v4/zones?name=${PORTAL_DOMAIN}`, { headers });
-  const zones = await zonesRes.json();
-  const zoneId = zones.result?.[0]?.id;
-  if (!zoneId) return { ok: false, message: 'Cloudflare-Zone nicht gefunden' };
-  const recsRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records?name=${ORIGIN_HOST}`, { headers });
-  const recs = await recsRes.json();
-  const rec = recs.result?.[0];
-  if (!rec) return { ok: false, message: `DNS-Record ${ORIGIN_HOST} fehlt` };
-  const updRes = await fetch(`https://api.cloudflare.com/client/v4/zones/${zoneId}/dns_records/${rec.id}`, {
-    method: 'PATCH',
-    headers: { ...headers, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content: appIp }),
-  });
-  const upd = await updRes.json();
-  return { ok: !!upd.success, recordId: rec.id, content: appIp };
+async function syncOriginDns(env, appIp, options = {}) {
+  const dryRun = options.dryRun === true;
+  if (!appIp) {
+    return { ok: false, code: 'no-app-ip', message: 'origin-DNS nicht gesetzt: app-1 hat noch keine oeffentliche IPv4.' };
+  }
+
+  const zone = await cloudflareGet(env, `/zones?name=${PORTAL_DOMAIN}`);
+  if (!zone.ok) return { ok: false, ...zone, step: 'zone' };
+  const zoneId = zone.data?.result?.[0]?.id;
+  if (!zoneId) {
+    return {
+      ok: false,
+      code: 'zone-missing',
+      step: 'zone',
+      message: `Cloudflare-Zone ${PORTAL_DOMAIN} nicht gefunden (Cloudflare-Antwort ohne Zone)`,
+      hint: 'Gehoert der Token zur richtigen Zone? Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md',
+    };
+  }
+
+  const recs = await cloudflareGet(env, `/zones/${zoneId}/dns_records?name=${ORIGIN_HOST}`);
+  if (!recs.ok) return { ok: false, ...recs, step: 'record', zoneId };
+  const rec = recs.data?.result?.[0];
+  if (!rec) {
+    return {
+      ok: false,
+      code: 'record-missing',
+      step: 'record',
+      zoneId,
+      message: `DNS-Record ${ORIGIN_HOST} fehlt in Zone ${PORTAL_DOMAIN}`,
+      hint: `A-Record (DNS only) auf die app-1-IPv4 anlegen - Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md`,
+    };
+  }
+  const record = { id: rec.id, name: rec.name, type: rec.type, content: rec.content, proxied: rec.proxied === true };
+
+  if (dryRun) {
+    const problems = [];
+    if (rec.type !== 'A') problems.push(`type=${rec.type} statt A`);
+    if (rec.proxied === true) problems.push('proxied=true (Cloudflare-Proxy statt DNS-only)');
+    if (rec.content !== appIp) problems.push(`zeigt auf ${rec.content} statt auf app-1 ${appIp}`);
+    if (problems.length === 0) {
+      return { ok: true, code: 'ok', dryRun, record, message: `origin-DNS ok: ${ORIGIN_HOST} -> ${appIp} (A, DNS-only)` };
+    }
+    return {
+      ok: false,
+      code: 'record-mismatch',
+      step: 'record',
+      dryRun,
+      zoneId,
+      record,
+      message: `origin-DNS falsch verdrahtet: ${ORIGIN_HOST} ${problems.join(', ')}`,
+      hint: 'POST /api/wire-fleet korrigiert den Record; Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md',
+    };
+  }
+
+  const needsPatch = rec.content !== appIp || rec.proxied === true;
+  if (!needsPatch) {
+    return { ok: true, code: 'ok', changed: false, record, content: appIp, message: `origin-DNS ok: ${ORIGIN_HOST} -> ${appIp} (A, DNS-only)` };
+  }
+  // `proxied: false` wird mitgeschrieben, wenn der Record proxied ist: der
+  // Worker proxied selbst per resolveOverride - ein proxied Record loest auf
+  // Cloudflare-IPs auf und laeuft in denselben 522-Pfad zurueck (Befund F1).
+  const body = { content: appIp, ...(rec.proxied === true ? { proxied: false } : {}) };
+  const patched = await cloudflareRequest(env, 'PATCH', `/zones/${zoneId}/dns_records/${rec.id}`, body);
+  if (!patched.ok) return { ok: false, ...patched, step: 'patch', zoneId, record };
+  return {
+    ok: true,
+    code: 'ok',
+    changed: true,
+    recordId: rec.id,
+    record: { ...record, content: appIp, proxied: false },
+    content: appIp,
+    message: `origin-DNS gesetzt: ${ORIGIN_HOST} -> ${appIp} (A, DNS-only)`,
+  };
+}
+
+// Derselbe Aufruf, aber schreibfrei - mit kurzem Cache, weil der Ladebildschirm
+// /api/status alle 4 s pollt und der Cloudflare-GET sonst mitpollen wuerde.
+let originDiagnosisCache = { key: '', at: 0, value: null };
+const ORIGIN_DIAGNOSIS_TTL_MS = 15000;
+
+async function cachedOriginDiagnosis(env, appIp) {
+  const key = String(appIp);
+  if (originDiagnosisCache.value && originDiagnosisCache.key === key && Date.now() - originDiagnosisCache.at < ORIGIN_DIAGNOSIS_TTL_MS) {
+    return { ...originDiagnosisCache.value, cached: true };
+  }
+  const value = await syncOriginDns(env, appIp, { dryRun: true });
+  originDiagnosisCache = { key, at: Date.now(), value };
+  return value;
+}
+
+/** Klartext-Zusammenfassung der Verdrahtung (ok + Grund) fuer die API-Antworten. */
+function wiringSummary(wiring) {
+  const missing = [];
+  if (!wiring?.appFirewall?.ok) missing.push(`app-Firewall: ${wiring?.appFirewall?.message ?? 'Zustand unbekannt'}`);
+  if (!wiring?.dns?.ok) missing.push(`origin-DNS: ${wiring?.dns?.message ?? 'Zustand unbekannt'}`);
+  if (!wiring?.ports?.ok) missing.push(`Flotten-Ports: ${wiring?.ports?.message ?? 'Zustand unbekannt'}`);
+  if (missing.length === 0) return { ok: true, message: 'Flotten-Verdrahtung vollstaendig (Firewall, origin-DNS, Ports).' };
+  return {
+    ok: false,
+    message: `Flotten-Verdrahtung unvollstaendig - ${missing.join(' | ')}`,
+    hint: wiring?.dns?.hint ?? 'Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md',
+  };
 }
 
 /** Aktualisiert die app-Firewall auf die aktuellen Cloudflare-IP-Ranges. */
@@ -429,6 +598,10 @@ function envFile(env, role) {
   return lines.join('\n');
 }
 
+// EHRLICHKEITSGRENZE (F1): `userData` laeuft NUR beim Kaltstart (kein Rollen-
+// Snapshot vorhanden). Wird app-1 aus einem Rollen-Snapshot gebootet, kommt
+// Caddyfile/Zertifikat NICHT von hier - dann ist `deploy.sh` (Origin-Default)
+// bzw. der Betreiber-Pfad in docs/ORIGIN_TLS_DNS_RUNBOOK.md zustaendig.
 function userData(env, role) {
   const token = env.GITHUB_TOKEN ?? '';
   const originCert = String(env.ORIGIN_CERT ?? '');
@@ -455,13 +628,32 @@ ENVEOF
 cd /opt/audiomonastry
 case "${role}" in
   app)
-    # P-7b: Origin-TLS mit Cloudflare-Origin-Zertifikat (falls Secrets gesetzt).
+    # P-7b / F1: Origin-TLS ist der DEFAULT des App-Knotens. Deshalb wird das
+    # Caddyfile IMMER als Caddyfile.origin installiert - die ACME-Variante ist
+    # im Origin-Betrieb KEIN Rollen-Default: hinter der Cloudflare-Worker-Route
+    # kann Let's Encrypt nicht validieren (http-01/tls-alpn-01 landen auf dem
+    # Worker), Caddy laeuft dann in eine Retry-Schleife und liefert nie ein
+    # Zertifikat (Live-Befund 2026-09-20: /opt/audiomonastry/certs leer und ACME-
+    # Caddyfile deployt -> dauerhaft 522).
+    mkdir -p /opt/audiomonastry/certs
+    chmod 700 /opt/audiomonastry/certs
+    cp scripts/hetzner/Caddyfile.origin Caddyfile
     if [ -n "\${ORIGIN_CERT:-}" ] && [ -n "\${ORIGIN_KEY:-}" ]; then
-      mkdir -p /opt/audiomonastry/certs
-      echo "\${ORIGIN_CERT}" | base64 -d > /opt/audiomonastry/certs/origin.crt
-      echo "\${ORIGIN_KEY}" | base64 -d > /opt/audiomonastry/certs/origin.key
-      chmod 600 /opt/audiomonastry/certs/origin.key
-      cp scripts/hetzner/Caddyfile.origin Caddyfile
+      umask 077
+      printf '%s' "\${ORIGIN_CERT}" | base64 -d > /opt/audiomonastry/certs/origin.crt
+      printf '%s' "\${ORIGIN_KEY}" | base64 -d > /opt/audiomonastry/certs/origin.key
+      chmod 600 /opt/audiomonastry/certs/origin.crt /opt/audiomonastry/certs/origin.key
+      # Pruefung VOR dem Caddy-Start: ein unlesbares Paar wuerde Caddy in eine
+      # Restart-Schleife schicken, sichtbar erst im Container-Log.
+      if command -v openssl >/dev/null 2>&1 && ! openssl x509 -noout -in /opt/audiomonastry/certs/origin.crt >/dev/null 2>&1; then
+        echo "[portal] WARNUNG: certs/origin.crt ist kein lesbares X.509-Zertifikat - Caddy kann nicht starten." >&2
+      else
+        echo "[portal] Origin-Zertifikat installiert: certs/origin.crt + certs/origin.key (600)"
+      fi
+    else
+      echo "[portal] FEHLER: ORIGIN_CERT/ORIGIN_KEY fehlen im Portal-Secret - app-1 kann kein Origin-TLS terminieren." >&2
+      echo "[portal] Caddy startet mit Caddyfile.origin ohne Zertifikate -> Restart-Schleife." >&2
+      echo "[portal] Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md (Zertifikate nach /opt/audiomonastry/certs)." >&2
     fi
     docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry
     ;;
@@ -619,6 +811,61 @@ async function studioCookie(env) {
 // ---------------------------------------------------------------------------
 // Status
 // ---------------------------------------------------------------------------
+// F1: "ready" heisst ab jetzt "die App antwortet ueber die Domain mit JSON 200".
+// Vorher galt JEDE 2xx-Antwort als bereit - auch die HTML-Seite, die die
+// Cloudflare-Worker-Route im Fehlerfall ausliefert, haette den Ladebildschirm
+// weitergeleitet (der Nutzer landet dann auf einer Fehlerseite statt im Studio).
+const HEALTH_TIMEOUT_MS = 5000;
+
+/** fetch mit Deadline (Bounded Wait) - Haenger duerfen den Status nicht blockieren. */
+async function fetchWithDeadline(url, init, timeoutMs) {
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  try {
+    const res = await fetch(url, controller ? { ...init, signal: controller.signal } : init);
+    const text = await res.text();
+    return { res, text };
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Health-Check ueber die Domain (Host/SNI = Domain, Origin-Zertifikat) mit
+ * resolveOverride auf den origin-Host - genau der Pfad, den der Browser nutzt.
+ * Bereit ist nur: HTTP 200 UND ein JSON-Body mit `status: 'ok'`.
+ */
+async function appHealth() {
+  const started = Date.now();
+  try {
+    const { res, text } = await fetchWithDeadline(
+      `https://${PORTAL_DOMAIN}/api/health`,
+      { cf: { resolveOverride: ORIGIN_HOST } },
+      HEALTH_TIMEOUT_MS,
+    );
+    let body = null;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      /* kein JSON - z. B. HTML-Fehlerseite, 522-Seite oder Login-Redirect */
+    }
+    const ms = Date.now() - started;
+    if (res.ok && body && (body.status === 'ok' || body.ok === true)) {
+      return { ok: true, http: res.status, ms, version: body.version ?? null };
+    }
+    const reason = body
+      ? `HTTP ${res.status}, aber Body ohne status:"ok"`
+      : `HTTP ${res.status} liefert kein JSON (HTML-Fehlerseite statt /api/health?)`;
+    return { ok: false, http: res.status, ms, message: reason };
+  } catch (err) {
+    return {
+      ok: false,
+      ms: Date.now() - started,
+      message: `keine Antwort auf https://${PORTAL_DOMAIN}/api/health (Timeout/522): ${String(err?.message ?? err)}`,
+    };
+  }
+}
+
 async function computeStatus(env) {
   const servers = await fleetServers(env);
   const existing = Object.values(servers);
@@ -630,19 +877,26 @@ async function computeStatus(env) {
   if (app && app.status === 'running') {
     const ip = app.public_net?.ipv4?.ip;
     if (ip) {
-      try {
-        // Health-Check über die Domain (Host/SNI = Domain, Origin-Zertifikat)
-        // und resolveOverride über den origin-Host (DNS zeigt auf app-1).
-        const healthUrl = `https://${PORTAL_DOMAIN}/api/health`;
-        const res = await fetch(healthUrl, { cf: { resolveOverride: ORIGIN_HOST } });
-        if (res.ok) {
-          return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/', appIp: ip };
-        }
-        return { state: 'starting-app', created: existing.length, total: FLEET.length, running, appIp: ip, healthError: `HTTP ${res.status}` };
-      } catch (err) {
-        /* App antwortet noch nicht */
-        return { state: 'starting-app', created: existing.length, total: FLEET.length, running, appIp: ip, healthError: String((err && err.message) || err) };
+      // Health zuerst: im Normalfall (bereit) kostet der Status keinen
+      // Cloudflare-Aufruf. Erst wenn die Domain NICHT bereit ist, wird die
+      // origin-DNS schreibfrei diagnostiziert und als Grund mitgeliefert.
+      const health = await appHealth();
+      if (health.ok) {
+        return { state: 'ready', created: existing.length, total: FLEET.length, running, url: '/', appIp: ip, health };
       }
+      const dns = await cachedOriginDiagnosis(env, ip);
+      return {
+        state: 'starting-app',
+        created: existing.length,
+        total: FLEET.length,
+        running,
+        appIp: ip,
+        healthError: health.message,
+        dns,
+        // Ein Feld mit Klartextgrund fuer den Ladebildschirm (F1): enthaelt den
+        // Cloudflare-Fehlercode, wenn die Verdrahtung fehlt.
+        wiringError: dns.ok ? null : `${dns.message}${dns.hint ? ` - ${dns.hint}` : ''}`,
+      };
     }
     return { state: 'starting-app', created: existing.length, total: FLEET.length, running };
   }
@@ -730,12 +984,14 @@ async function startFleet(env) {
       const appFirewall = await syncAppFirewall(env);
       const dns = appIp
         ? await syncOriginDns(env, appIp)
-        : { ok: false, message: 'app-1 hat noch keine IP.' };
+        : { ok: false, code: 'no-app-ip', message: 'app-1 hat noch keine IP.' };
       const ports = await openFleetPorts(env);
-      wiring = { appIp, appFirewall, dns, ports };
+      // F1: ok + Klartextgrund auf oberster Ebene - so sieht der Betreiber im
+      // Wake-Ergebnis sofort, WELCHER Teil der Verdrahtung fehlt.
+      wiring = { appIp, appFirewall, dns, ports, ...wiringSummary({ appFirewall, dns, ports }) };
       if (!dns.ok) console.warn('[portal] fleet-wiring: DNS nicht gesetzt –', dns.message);
     } catch (e) {
-      wiring = { ok: false, error: String(e?.message ?? e) };
+      wiring = { ok: false, error: String(e?.message ?? e), appFirewall: null, dns: null, ports: null };
       console.warn('[portal] fleet-wiring:', e?.message ?? e);
     }
   }
@@ -1024,6 +1280,9 @@ async function poll() {
     $('login').style.display = 'none';
     $('loading').style.display = '';
     renderSteps(status);
+    // F1: einen Verdrahtungsfehler (z. B. origin-DNS/Cloudflare-Token) im
+    // Klartext anzeigen - sonst haengt der Ladebildschirm ohne Grund.
+    if (status.wiringError) $('loadErr').textContent = '⚠️ ' + status.wiringError;
     if (status.state === 'ready') {
       $('loadErr').textContent = '✓ Bereit – Weiterleitung …';
       setTimeout(() => { location.href = '/'; }, 1200);
@@ -1136,9 +1395,13 @@ export default {
         const servers = await fleetServers(env);
         const appIp = servers['audiomonastry-app-1']?.public_net?.ipv4?.ip ?? '';
         const appFirewall = await syncAppFirewall(env);
-        const dns = appIp ? await syncOriginDns(env, appIp) : { ok: false, message: 'app-1 hat noch keine IP.' };
+        const dns = appIp
+          ? await syncOriginDns(env, appIp)
+          : { ok: false, code: 'no-app-ip', message: 'app-1 hat noch keine IP.' };
         const ports = await openFleetPorts(env);
-        return json({ appFirewall, dns, ports });
+        // F1: derselbe Klartextgrund wie im Wake-Ergebnis - ein fehlender oder
+        // abgelaufener Cloudflare-Token darf hier nicht still bleiben.
+        return json({ ...wiringSummary({ appFirewall, dns, ports }), appFirewall, dns, ports });
       }
 
       // OPS-Snapshot: erzeugt je laufendem Flotten-Server einen Snapshot
