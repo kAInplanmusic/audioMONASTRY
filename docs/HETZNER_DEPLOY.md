@@ -516,3 +516,160 @@ lässt nur eine begründete Ausnahmeliste zu (Bestands-Kompatibilität,
 Kompatibilitäts-Fixtures, historische SSOT-Notizen). Zusätzlich halten Tests fest,
 dass Metriken/Jobs/Alarme/Dashboards den neuen Präfix tragen und dass eine
 Altflotte weiter bedient und aufgeräumt wird.
+
+---
+
+## F10 · Namespace-Parität: Compose-Projekt und Container auf `audiomonastry-*`
+
+**Befund (externer App-Test 2026-09-20):** Auf `sfu-1` und `master-1` heißen
+Container und Compose-**Projekt** noch `samplemonk-*`, während Repo und Flotte
+`audiomonastry-*` führen. Ursache war kein vergessener String, sondern eine
+**Ableitung**: `docker compose` leitet den Projektnamen aus dem Verzeichnis ab, in
+dem es läuft. Auf einem Knoten, dessen Repo unter `/opt/samplemonk` liegt, entsteht
+beim nächsten `up` ein **zweites** Projekt: eigene Volumes (`samplemonk_caddy_data`),
+eigene Container-Labels — während die Container-Namen (`container_name`) gleich
+bleiben. Ein Watchdog, der nur den neuen Namen kennt, findet dort nichts.
+
+**Fix (drei Teile, ein Name):**
+
+| Baustein | Datei | Wirkung |
+|---|---|---|
+| EINE Namensquelle | `scripts/hetzner/fleet-names.sh` | `FLEET_COMPOSE_PROJECT` / `LEGACY_COMPOSE_PROJECT`, `FLEET_HOME` / `LEGACY_FLEET_HOME`; `fleet_name_variants` (Server **und** Container **und** Projekt, neu zuerst), `fleet_compose_project`, `fleet_legacy_home`. Der Altname/Altpfad steht damit genau **einmal** im Repo. |
+| Projektname deklarativ | `docker-compose.hetzner.yml` | top-level `name: audiomonastry` — der Projektname gilt auch für Handaufrufe und ist pfad-unabhängig. |
+| Projektname explizit im Aufruf | `deploy.sh`, `scripts/hetzner/bring-up-fleet.sh`, `scripts/hetzner/fleet-deploy-live.sh`, `scripts/hetzner/auto-repair.sh`, Portal-Worker (`userData`, Kaltstart) | jeder `docker compose`-Aufruf setzt `COMPOSE_PROJECT_NAME=audiomonastry`; `cloud-init.yaml` legt `/opt/audiomonastry` idempotent an (Pfad = Name). |
+
+**Health-/Snapshot-/Lifecycle-Skripte akzeptieren beide Schreibweisen**
+(nicht nur den neuen Namen — sonst wären sie auf dem Bestand stumm):
+
+* `fleet-status.sh`: App-Knoten-Muster kommen jetzt aus `FLEET_PREFIX`/`LEGACY_FLEET_PREFIX`;
+  die Container-Liste zeigt das Compose-Projekt je Container (`{{.Label "com.docker.compose.project"}}`)
+  und meldet ein Alt-Projekt laut mit Migrationstipp.
+* `auto-repair.sh`: löst den laufenden Container zur Laufzeit über `fleet_name_variants`
+  auf (App **und** Caddy) und repariert ihn im **kanonischen** Projekt; ein Altname
+  erscheint als Klartext-Hinweis im Log.
+* `fleet-deploy-live.sh`: der Guard liest das Compose-Arbeitsverzeichnis über beide
+  Container-Schreibweisen; `LEGACY_REMOTE_DIR` kommt aus `fleet-names.sh`.
+* `lifecycle.sh` (Snapshots) nutzt dieselbe Auflösung über `fleet_candidates`
+  (= `fleet_name_variants`) bereits seit NOMEN-P1-001.
+
+### Trockenlauf-Belege (offline, ohne Flotte)
+
+```bash
+# 1. Syntax aller geänderten Skripte
+for f in deploy.sh scripts/hetzner/fleet-names.sh scripts/hetzner/provision-fleet.sh \
+         scripts/hetzner/bring-up-fleet.sh scripts/hetzner/fleet-deploy-live.sh \
+         scripts/hetzner/auto-repair.sh scripts/hetzner/fleet-status.sh \
+         scripts/hetzner/migrate-project-name.sh; do bash -n "$f" && echo "OK $f"; done
+
+# 2. Projektname in den Trockenläufen
+bash scripts/hetzner/provision-fleet.sh --print-config
+#   Projekt:   COMPOSE_PROJECT_NAME=audiomonastry   (Zielpfad /opt/audiomonastry)
+bash scripts/hetzner/bring-up-fleet.sh --print-config
+#   Projekt:   COMPOSE_PROJECT_NAME=audiomonastry   (Zielpfad /opt/audiomonastry, top-level 'name:' in docker-compose.hetzner.yml)
+bash scripts/hetzner/fleet-deploy-live.sh --print-config
+#   COMPOSE_PROJECT_NAME=audiomonastry   (aus scripts/hetzner/fleet-names.sh)
+#   APP_CONTAINER=audiomonastry samplemonk
+DEPLOY_PRINT_CONFIG=1 bash deploy.sh
+#   DEPLOY_REMOTE_DIR=/opt/audiomonastry
+#   COMPOSE_PROJECT_NAME=audiomonastry   (aus scripts/hetzner/fleet-names.sh)
+bash scripts/hetzner/auto-repair.sh --print-config
+#   App-Container akzeptiert:  audiomonastry samplemonk (neu zuerst, Aufloesung zur Laufzeit)
+#   Compose-Projekt:           audiomonastry  (COMPOSE_PROJECT_NAME)
+bash scripts/hetzner/migrate-project-name.sh --print-config
+#   Compose-Projekt neu: audiomonastry | Compose-Projekt alt: samplemonk | Volumes: samplemonk_* -> audiomonastry_* (KOPIE)
+
+# 3. Der Projektname hängt NICHT mehr am Verzeichnisnamen (Verzeichnis "f10-probe"):
+mkdir -p /tmp/f10-probe && cp docker-compose.hetzner.yml docker-compose.monitoring.yml docker-compose.sfu.yml /tmp/f10-probe/
+: > /tmp/f10-probe/.env   # nur damit env_file: .env auflösbar ist
+cd /tmp/f10-probe && docker compose -f docker-compose.hetzner.yml config | head -3
+#   name: audiomonastry
+#   services:
+
+# 4. Vertragstests
+python3 tests/test_hetzner_scripts.py            # Ran 72 tests ... OK
+# (im Worktree: node_modules des Haupt-Repos nutzen - das Repo-Root hat keine eigene Installation)
+/home/patrick/audioMONASTRY/node_modules/.bin/vitest run tests/namingConventions.test.ts   # 5 passed
+/home/patrick/audioMONASTRY/node_modules/.bin/tsc --noEmit                                 # 0 Fehler
+```
+
+Beobachtet am 2026-09-20 auf dem Arbeitszweig `hermes/fix-F10`: Schritte 1–4 wie
+oben, `tsc --noEmit` mit 0 Fehlern. Die Ausgaben sind **offline** erzeugt — kein
+Hetzner-/Cloudflare-Aufruf, kein `docker compose up`, keine Knoten-Änderung.
+
+### Migration der bestehenden Flotte (nummeriert, idempotent, mit Rückweg)
+
+Das Skript `scripts/hetzner/migrate-project-name.sh` fasst **einen** Knoten an und
+prüft jeden Schritt auf seinen Ausgangszustand; ein zweiter Lauf ist ein No-Op.
+Es verschiebt **nichts unwiederbringlich**: die Volumes des Alt-Projekts werden
+**kopiert**, der Alt-Stand bleibt bis zur ausdrücklichen Bestätigung startfähig.
+
+1. **Bestand lesen (nur lesend, gefahrlos zuerst):**
+   `bash scripts/hetzner/migrate-project-name.sh <ip> --role app --dry-run`
+   Zeigt laufende Compose-Projekte, die App-/Caddy-Container mit Projekt-Label,
+   die Alt-Volumes (`samplemonk_*`), den Zustand beider Verzeichnisse und die
+   Kommandos, die im Ernstfall liefen. Kein `down`, kein `mv`, kein `up`.
+2. **Bestätigen, welche Rollen der Knoten trägt** (`--role app|sfu|master|edge`);
+   ohne `--role` bricht das Skript mit Klartext ab (es würde sonst raten, welche
+   Dienste starten).
+3. **Migration ausführen** (mit Rückfrage; `--yes` überspringt sie):
+   `bash scripts/hetzner/migrate-project-name.sh <ip> --role sfu`
+   Ablauf: Alt-Stack `down --remove-orphans` (**ohne** `-v`, die Volumes bleiben),
+   Pfad `mv /opt/samplemonk /opt/audiomonastry` (nur wenn das Ziel fehlt),
+   Volume-Kopien `samplemonk_<suffix>` → `audiomonastry_<suffix>` (bereits
+   gefüllte Ziel-Volumes werden übersprungen = idempotent), Start im neuen Projekt.
+4. **Verifizieren:** Das Skript gibt `compose ps` jedes Dienstes **mit**
+   `projekt=…`-Label aus und probt Port 80 (app/sfu/edge) bzw. `/health`
+   (master). Danach von außen gegenprüfen:
+   `bash scripts/hetzner/fleet-status.sh` (zeigt je Knoten `[projekt=…]`; ein
+   Alt-Projekt wird laut gemeldet) und
+   `bash scripts/hetzner/fleet-preflight.sh check` (Commit-Parität des laufenden
+   Knotens).
+5. **Fachlich nachprüfen (Live, offen):** 4-User-E2E, SFU-RTP-Pfad und
+   `POST /api/online` auf dem migrierten Knoten — das ist ein Live-Beweis und
+   steht in `docs/OPS_RUNBOOK.md` („Live-Beweise"). Bis dahin gilt der Knoten als
+   migriert, aber nicht als fachlich bestätigt.
+6. **Rollback (jederzeit möglich, solange Schritt 7 nicht lief):**
+   ```bash
+   # neu stoppen (Container+Netz des neuen Projekts, Volumes bleiben):
+   ssh root@<ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry \
+     docker compose -f docker-compose.hetzner.yml [-f <overlay>] down'
+   # Alt-Projekt wieder starten (die kopierten Alt-Volumes liegen unverändert):
+   ssh root@<ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=samplemonk \
+     docker compose -f docker-compose.hetzner.yml [-f <overlay>] up -d <dienste>'
+   ```
+   Läuft ein Rollback, ist der nächste `deploy.sh`-Lauf **bewusst** erneut zu
+   migrieren (Schritt 3); die Skripte selbst schreiben nie zurück ins Alt-Projekt.
+7. **Erst danach aufräumen** (löscht die kopierten Alt-Volumes endgültig):
+   `bash scripts/hetzner/migrate-project-name.sh <ip> --role <rolle> --cleanup-legacy`
+   Ohne dieses Flag bleiben die Alt-Volumes liegen — Rückweg inklusive.
+8. **Reihenfolge über die Flotte:** pro Knoten einzeln migrieren, `app-1` zuletzt
+   (dort hängt Caddy/Origin-TLS und die Domain); Knoten, die noch ein
+   Rollen-Snapshot mit Alt-Namen bootet, erst migrieren, dann einen **frischen**
+   Snapshot ziehen — sonst kommt der Alt-Zustand beim nächsten Wake zurück.
+
+### Regressionsschutz (Tests)
+
+* `tests/test_hetzner_scripts.py` → `NamespaceParitaetTest`: löst **beide**
+  Schreibweisen über `fleet-names.sh` auf denselben Namen ab (Server, Container,
+  Projekt, Pfad), prüft `name:` in der Compose-Datei gegen `fleet_compose_project`,
+  die Trockenläufe der drei Rollenskripte, den Watchdog gegen ein **gefaktes `docker`**
+  im PATH (echter Codepfad: Alt-Container gefunden, Reparatur im kanonischen Projekt,
+  Migrationshinweis im Log), den Migrations-Trockenlauf (kein `down -v`, Löschen nur
+  nach Bestätigung) und dass der Altname unter `scripts/`/`services/` **nur** in der
+  Namensquelle, im Bestands-Leser des Portal-Workers und im dokumentierten
+  Basis-Image-Pfad vorkommt.
+* `tests/namingConventions.test.ts`: Ausnahmeliste aufgeräumt — die Einträge für
+  `fleet-status.sh` und `fleet-deploy-live.sh` sind **entfernt** (beide Dateien
+  enthalten den Altnamen nicht mehr), der Eintrag für `tests/test_hetzner_scripts.py`
+  ist neu und begründet (Fixture eines Bestands-Knotens im Watchdog-Test).
+* Bereits vorher grün und unverändert: `--print-config`-Verträge der Typen/Rollen
+  (`ServertypRollenDriftTest`), Edge-Monitoring-Limits, Origin-TLS-Default und das
+  Commit-Paritäts-Gate (`BuildParityTest`).
+
+### Offen (bewusst NICHT behauptet)
+
+* Der Live-Lauf der Migration auf `sfu-1`/`master-1` ist **nicht** ausgeführt —
+  kein `ssh`, kein `hcloud apply`, kein Compose-`up` aus diesem Auftrag. Schritt 1
+  (`--dry-run`) liefert die reale Bestandsaufnahme, erst danach wird migriert.
+* Ob nach der Migration der volle Flottenfluss (4-User-E2E, SFU-RTP) grün ist,
+  bleibt ein Live-Beweis (siehe Schritt 5).
