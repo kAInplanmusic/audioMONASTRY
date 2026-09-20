@@ -2219,7 +2219,8 @@
         "tests/fleetWake.test.ts: setAiOperatingMode(off) -> wakeFleet() 0 Netzwerkaufrufe, blocked \"ai-off\", keine workersMin=1; auch ein expliziter Visual-Abruf weckt nichts",
         "tests/runpodProvider.test.ts: bei off werfen run/runLong AI_DISABLED (retryable false), runLong ebenso, warmup liefert ok=false – 0 Requests",
         "npx tsc --noEmit + npx eslint (max-warnings=0): 0 Fehler",
-        "npm run verify grün (vollstaendiger Gate-Lauf, siehe Commit)"
+        "npm run verify grün (vollstaendiger Gate-Lauf, siehe Commit)",
+        "tests/aiRoutes.test.ts (HTTP-Integration gegen den laufenden Server): POST /api/ai/mode {mode:\"off\"} -> GET /api/ai/fleet/status aiEnabled=false; POST /api/ai/fleet/wake -> 409 mit blocked \"ai-off\" und workersMinSet=false fuer alle Rollen"
       ]
     },
     {
@@ -2247,7 +2248,8 @@
       "verification": [
         "tests/fleetWake.test.ts: wakeFleet() setzt 5 PATCHes (nur immer-Rollen) und beruehrt keinen Visual-Endpoint; wakeFleet({roles:[\"imageHq\"]}) ohne Visual-Freigabe -> blocked \"visuals-off\", 0 Requests; mit on-with-visuals genau EIN PATCH auf den imageHq-Endpoint (kein Warmup, Endpoint-Rolle)",
         "tests/fleetWake.test.ts: wakeRoleOnDemand(\"imageHq\") + AI_VISUAL_IDLE_MS=0 -> zweiter PATCH mit workersMin=0",
-        "tests/visualGate.test.ts: Bild-/Video-Generierung im Modus \"ohne Visuals\"/\"AI aus\" wirft AI_VISUALS_OFF/AI_DISABLED, bevorzugt KEIN Request; mit Freigabe laeuft der Job und der Abruf startet die Rolle (1 PATCH auf rest.runpod.io)"
+        "tests/visualGate.test.ts: Bild-/Video-Generierung im Modus \"ohne Visuals\"/\"AI aus\" wirft AI_VISUALS_OFF/AI_DISABLED, bevorzugt KEIN Request; mit Freigabe laeuft der Job und der Abruf startet die Rolle (1 PATCH auf rest.runpod.io)",
+        "tests/aiRoutes.test.ts (HTTP): POST /api/ai/fleet/wake {roles:[\"imageHq\"]} im Modus on-no-visuals -> 409 blocked \"visuals-off\"; unbekannte Rolle -> 422"
       ]
     },
     {
@@ -2273,7 +2275,8 @@
       "verification": [
         "tests/aiInfrastructure.test.ts: setBudgetLimits({maxEurPerHour:2}) -> assertFleetHourlyBudget([...8 Rollen]) wirft \"uebersteigen das Budget von 2 EUR/h\"; setBudgetLimits({maxStorageEurPerMonth:0.1}) -> assertStorageBudget(0.3) wirft; fleetBudgetReport liefert Ist/Grenze/Zielband ohne zu werfen (Verletzung wird berichtet)",
         "tests/fleetWake.test.ts: maxEurPerHour=1 -> wakeFleet() 0 Netzwerkaufrufe, blocked \"budget\"; Gegenprobe mit Konstitutions-Budget weckt die immer-Rollen wieder",
-        "GET /api/ai/fleet/status liefert budget{gpuEurPerHour,hetznerEurPerHour,totalEurPerHour,withinLimit,target,storage}"
+        "GET /api/ai/fleet/status liefert budget{gpuEurPerHour,hetznerEurPerHour,totalEurPerHour,withinLimit,target,storage}",
+        "tests/aiRoutes.test.ts (HTTP): POST /api/ai/budget/check {} -> 200; {storageEurPerMonth:99} -> 409 mit Guard-Meldung (EUR/Monat)"
       ]
     }
   ],

@@ -216,3 +216,123 @@ describe('/api/ai/*-Routen (Integration)', () => {
     expect(empty.status).toBe(400);
   });
 });
+
+/**
+ * INFRA-FEAT-001..003 über die ECHTE HTTP-Kante: Der Betriebsmodus ist die
+ * Einstellung, die den GPU-Verkehr stoppt – hier gegen den laufenden Server
+ * (RunPod-Basis zeigt im Test auf den lokalen Mock, es geht also nichts nach
+ * draußen). Der Modus wird nach jedem Test auf den Ausgangswert zurückgesetzt,
+ * damit die übrigen Routen-Tests unbeeinflusst bleiben.
+ */
+describe('AI-Betriebsmodus + Budget (INFRA-FEAT-001..003, HTTP)', () => {
+  let originalMode = 'on-no-visuals';
+
+  beforeAll(async () => {
+    const res = await fetch(`${baseUrl}/api/ai/mode`);
+    const body = await res.json() as { mode?: string };
+    originalMode = body.mode ?? 'on-no-visuals';
+  });
+
+  afterAll(async () => {
+    await fetch(`${baseUrl}/api/ai/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: originalMode, source: 'test-restore' }),
+    });
+  });
+
+  it('GET /api/ai/mode liefert Modus, Rollen und Kostenrahmen', async () => {
+    const res = await fetch(`${baseUrl}/api/ai/mode`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as {
+      mode: string;
+      aiEnabled: boolean;
+      visualsEnabled: boolean;
+      allowedRoles: string[];
+      blockedRoles: string[];
+      budget: {
+        totalEurPerHour: number;
+        hourly: { withinLimit: boolean };
+        storage: { withinLimit: boolean };
+      };
+    };
+    expect(['off', 'on-no-visuals', 'on-with-visuals']).toContain(body.mode);
+    expect(body.allowedRoles.length + body.blockedRoles.length).toBe(8);
+    expect(typeof body.budget.totalEurPerHour).toBe('number');
+    expect(body.budget.hourly.withinLimit).toBe(true);
+    expect(body.budget.storage.withinLimit).toBe(true);
+  });
+
+  it('POST /api/ai/mode weist unbekannte Modi ab (422)', async () => {
+    const res = await fetch(`${baseUrl}/api/ai/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'halb-an' }),
+    });
+    expect(res.status).toBe(422);
+  });
+
+  it('POST /api/ai/fleet/wake verweigert bei „AI aus“ ohne Netzwerkaufruf (409)', async () => {
+    await fetch(`${baseUrl}/api/ai/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'off', source: 'test' }),
+    });
+
+    const status = await (await fetch(`${baseUrl}/api/ai/fleet/status`)).json() as { aiEnabled: boolean; aiMode: string };
+    expect(status.aiMode).toBe('off');
+    expect(status.aiEnabled).toBe(false);
+
+    const wake = await fetch(`${baseUrl}/api/ai/fleet/wake`, { method: 'POST' });
+    expect(wake.status).toBe(409);
+    const report = await wake.json() as { blocked: string | null; roles: Array<{ workersMinSet: boolean }> };
+    expect(report.blocked).toBe('ai-off');
+    expect(report.roles.every((r) => r.workersMinSet === false)).toBe(true);
+  });
+
+  it('POST /api/ai/fleet/wake verweigert Visual-Rollen im Modus „ohne Visuals“ (409)', async () => {
+    await fetch(`${baseUrl}/api/ai/mode`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: 'on-no-visuals', source: 'test' }),
+    });
+
+    const wake = await fetch(`${baseUrl}/api/ai/fleet/wake`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles: ['imageHq'] }),
+    });
+    expect(wake.status).toBe(409);
+    const report = await wake.json() as { blocked: string | null; reason?: string };
+    expect(report.blocked).toBe('visuals-off');
+    expect(report.reason).toMatch(/bild|visual|ImageHq|imageHq/i);
+
+    // Unbekannte Rolle bleibt eine Validierungsfrage (422), kein 409.
+    const bogus = await fetch(`${baseUrl}/api/ai/fleet/wake`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roles: ['nichtvorhanden'] }),
+    });
+    expect(bogus.status).toBe(422);
+  });
+
+  it('POST /api/ai/budget/check meldet eine Speicher-Überschreitung als 409', async () => {
+    const ok = await fetch(`${baseUrl}/api/ai/budget/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(ok.status).toBe(200);
+    expect((await ok.json() as { ok: boolean }).ok).toBe(true);
+
+    const over = await fetch(`${baseUrl}/api/ai/budget/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storageEurPerMonth: 99 }),
+    });
+    expect(over.status).toBe(409);
+    const body = await over.json() as { ok: boolean; violations: string[] };
+    expect(body.ok).toBe(false);
+    expect(body.violations.join(' ')).toMatch(/€\/Monat/);
+  });
+});
