@@ -314,18 +314,28 @@ export const SoundGenerateSchema = z.object({
 });
 
 /**
- * Weiterleitungs-Routen (`/api/master/*`): Der Body geht unverändert an den
- * master-player-Service. Dort gibt es (Stand 2026-09-11) keine Validierung,
- * deshalb wird hier wenigstens die Hülle begrenzt: Objekt mit kurzen Schlüsseln
- * und gedeckelter Gesamtgröße.
+ * Hülle für durchgereichte JSON-Bodys: Objekt mit kurzen Schlüsseln, Inhalt
+ * unverändert. Wird von `boundedJsonObjectSchema` (Größendeckel) und von Routen
+ * genutzt, deren Grenze nicht in Bytes ausgedrückt ist bzw. deren Prüfung den
+ * Body mit Zahlen im Klartext ablehnt (siehe `src/types/masterPayload.ts`).
+ */
+export const JsonObjectEnvelopeSchema = z.record(z.string().trim().min(1).max(64), z.unknown());
+
+/**
+ * Weiterleitungs-Routen: Der Body geht unverändert an den Zielservice. Der
+ * Deckel ist eine reine DoS-Bremse (die Fachprüfung liegt beim Zielservice bzw.
+ * bei der Master-Grenze in `src/types/masterPayload.ts`).
  */
 export function boundedJsonObjectSchema(maxBytes: number, message: string) {
-  return z
-    .record(z.string().trim().min(1).max(64), z.unknown())
-    .refine((v) => JSON.stringify(v ?? {}).length <= maxBytes, { message });
+  return JsonObjectEnvelopeSchema.refine((v) => JSON.stringify(v ?? {}).length <= maxBytes, { message });
 }
 
-/** Gedeckelter JSON-Objekt-Body für Proxy-Routen (256 kB). */
+/**
+ * Gedeckelter JSON-Objekt-Body für Proxy-Routen (256 kB).
+ * NICHT für den Audio-Weg (`/api/master/mix|master|analyze`): dort gilt die
+ * eigene, größere Master-Grenze (FIX F3), weil eine einzige Sekunde
+ * 48-kHz-Stereo-WAV als Base64 schon ~256 kB belegt.
+ */
 export const JsonObjectBodySchema = boundedJsonObjectSchema(262_144, 'Payload zu gross (max 256 kB)');
 
 export const AiOrchestrateSchema = z.object({
