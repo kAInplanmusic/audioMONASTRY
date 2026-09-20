@@ -458,8 +458,19 @@ def save_template(
     container_disk_gb: int,
     docker_args: str = DOCKER_START_CMD,
     registry_auth_id: Optional[str] = None,
+    fallback_template_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Idempotentes Template-Handling (kein 'Template name must be unique')."""
+    """Idempotentes Template-Handling (kein 'Template name must be unique').
+
+    INFRA-RUNPOD-009: `myself.podTemplates` listet NICHT zwangslaeufig alle
+    Templates des Kontos - live belegt: der Endpoint `audiomonastry-ai-music`
+    haengt an Template `9q9c60p6xh`, das in der Liste fehlt. Die Vorfassung wollte
+    es dann NEU ANLEGEN und der Lauf brach mit 'Template name must be unique' ab,
+    nachdem die Rollen davor schon aktualisiert waren (halber Rollout). Deshalb:
+    (1) `fallback_template_id` - die Template-ID des BESTEHENDEN Endpoints wird
+    aktualisiert, statt neu anzulegen; (2) faengt der Create-Zweig den
+    Unique-Fehler ab und liefert eine klare Anweisung statt eines Tracebacks.
+    """
     from runpod.api.graphql import run_graphql_query
 
     env_items = ", ".join([f'{{ key: "{k}", value: "{v}" }}' for k, v in env_vars.items()])
@@ -515,12 +526,33 @@ def save_template(
         except Exception:  # noqa: BLE001
             existing_template_id = ""
 
+    if not existing_template_id and fallback_template_id:
+        existing_template_id = fallback_template_id
+        print(
+            f"[deploy] Template '{template_name}' wird von myself.podTemplates nicht "
+            f"gelistet - es wird die Template-ID des bestehenden Endpoints aktualisiert "
+            f"(id={fallback_template_id})."
+        )
+
     if existing_template_id:
         print(f"[deploy] Template '{template_name}' aktualisieren (id={existing_template_id}) …")
         result = run_graphql_query(payload(existing_template_id))
     else:
         print(f"[deploy] Template '{template_name}' anlegen …")
-        result = run_graphql_query(payload(None))
+        try:
+            result = run_graphql_query(payload(None))
+        except Exception as exc:  # noqa: BLE001
+            if "unique" not in str(exc).lower():
+                raise
+            print(
+                f"[deploy] FEHLER: Der Name '{template_name}' ist vergeben, das Template "
+                f"wird aber von myself.podTemplates nicht gelistet (z. B. Rolle aus einer "
+                f"anderen Ansicht/Team). Diese Rolle wird uebersprungen - Abhilfe: "
+                f"RUNPOD_TEMPLATE_ID=<id der bestehenden Vorlage> setzen oder am "
+                f"bestehenden Endpoint die Vorlage belassen.",
+                file=sys.stderr,
+            )
+            return {}
     return result.get("data", {}).get("saveTemplate", {})
 
 
@@ -554,6 +586,13 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
         f"| idle {idle_timeout}s | disk {container_disk_gb} GB"
     )
 
+    # INFRA-RUNPOD-009: Der bestehende Endpoint wird VOR dem Template-Handling
+    # gelesen - seine Template-ID ist der Rettungsanker, wenn die Konto-Liste das
+    # Rollen-Template nicht zeigt (sonst entsteht der Unique-Fehler und der Lauf
+    # bricht nach bereits aktualisierten Rollen ab).
+    endpoints = runpod.get_endpoints() or []
+    existing = next((e for e in endpoints if e.get("name") == endpoint_name), None)
+
     template = save_template(
         template_name,
         resolved["image"],
@@ -561,15 +600,18 @@ def deploy_role(role: str, defaults: Dict[str, Any]) -> Optional[str]:
         container_disk_gb,
         resolved["docker_args"],
         registry_auth_id,
+        fallback_template_id=(existing or {}).get("templateId") or None,
     )
     template_id = template.get("id", "")
     if not template_id:
-        print(f"[deploy] FEHLER: Template-Erstellung lieferte keine ID für {endpoint_name}", file=sys.stderr)
+        print(
+            f"[deploy] FEHLER: Template-Handling lieferte keine ID für {endpoint_name} "
+            f"(Details oben; die Rolle bleibt unveraendert)",
+            file=sys.stderr,
+        )
         return None
     print(f"[deploy] {endpoint_name}: Template-ID {template_id}")
 
-    endpoints = runpod.get_endpoints() or []
-    existing = next((e for e in endpoints if e.get("name") == endpoint_name), None)
     if existing:
         endpoint_id = existing.get("id", "")
         print(f"[deploy] {endpoint_name}: existiert ({endpoint_id}) → Template-Update")
@@ -709,18 +751,28 @@ def main() -> int:
         )
 
     results: Dict[str, str] = {}
+    failed: List[str] = []
     for role in roles:
         defaults = ROLE_DEFAULTS.get(role, {"suffix": env("RUNPOD_ENDPOINT_NAME") or "ai", "imageKind": "own"})
         endpoint_id = deploy_role(role, defaults)
         if not endpoint_id:
-            print(f"[deploy] ABBRUCH – Rolle {role or 'legacy'} fehlgeschlagen", file=sys.stderr)
-            return 5
+            # INFRA-RUNPOD-009: nicht mehr die ganze Flotte abbrechen. Live hat ein
+            # einziger Rollenfehler (music) den Lauf beendet, nachdem voiceGen und
+            # ears schon auf das neue Image gezogen waren - ein halber Rollout ohne
+            # Zusammenfassung. Jetzt laufen alle Rollen durch, das Ergebnis steht
+            # vollstaendig da und der Exit-Code bleibt trotzdem 5.
+            print(f"[deploy] FEHLER – Rolle {role or 'legacy'} fehlgeschlagen (weiter mit der naechsten)", file=sys.stderr)
+            failed.append(role or "legacy")
+            continue
         results[role or "legacy"] = endpoint_id
 
     print("[deploy] Zusammenfassung:")
     for role, endpoint_id in results.items():
         env_name = ENDPOINT_ENV_BY_ROLE.get(role, "RP_ENDPOINT_ID")
         print(f"[deploy]   {env_name}={endpoint_id}")
+    if failed:
+        print(f"[deploy] NICHT deployt: {', '.join(failed)}", file=sys.stderr)
+        return 5
     return 0
 
 

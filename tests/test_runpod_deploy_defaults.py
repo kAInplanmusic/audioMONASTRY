@@ -186,5 +186,101 @@ class BrainModellIdentitaetTest(unittest.TestCase):
         self.assertEqual(entry["revision"], deploy.BRAIN_VLLM_REVISION_DEFAULT)
 
 
+class TemplateFallbackTest(unittest.TestCase):
+    """INFRA-RUNPOD-009: Template-Handling darf den Rollout nicht halbieren.
+
+    Live-Befund 2026-09-20: `myself.podTemplates` listet nicht jedes Template des
+    Kontos (der music-Endpoint haengt an `9q9c60p6xh`, das in der Liste fehlt).
+    Die Vorfassung wollte es neu anlegen, RunPod antwortete 'Template name must be
+    unique', und der Lauf brach ab - nachdem voiceGen und ears schon auf das neue
+    Image gezogen waren. Diese Tests halten den Fix fest.
+    """
+
+    def setUp(self) -> None:
+        self.calls: list[str] = []
+
+    def _install_fake(self, responses: list[Any], raise_on_create: Exception | None = None) -> None:
+        # Das Platzhalter-`runpod` ist ein spec-Mock und legt keine Attribute an -
+        # die Untermodule deshalb explizit in sys.modules einhaengen. Genau so
+        # loest `save_template` den Import auf (from runpod.api.graphql import
+        # run_graphql_query), also trifft der Fake den echten Aufrufpfad.
+        api_module = types.ModuleType("runpod.api")
+        graphql_module = types.ModuleType("runpod.api.graphql")
+
+        def fake(query: str) -> Any:
+            self.calls.append(query)
+            is_create = 'id: "' not in query
+            if is_create and raise_on_create is not None:
+                raise raise_on_create
+            return responses.pop(0)
+
+        graphql_module.run_graphql_query = fake  # type: ignore[attr-defined]
+        api_module.graphql = graphql_module  # type: ignore[attr-defined]
+        sys.modules["runpod.api"] = api_module
+        sys.modules["runpod.api.graphql"] = graphql_module
+        import runpod  # type: ignore
+
+        runpod.api = api_module  # type: ignore[attr-defined]
+
+    def test_fallback_id_wird_aktualisiert_statt_neu_angelegt(self) -> None:
+        responses = [
+            {"data": {"myself": {"podTemplates": []}}},
+            {"data": {"saveTemplate": {"id": "9q9c60p6xh"}}},
+        ]
+        self._install_fake(responses)
+        result = deploy.save_template(
+            "audiomonastry-ai-music-template", "img:tag", {}, 150, fallback_template_id="9q9c60p6xh"
+        )
+        self.assertEqual(result.get("id"), "9q9c60p6xh")
+        self.assertEqual(len(self.calls), 2, "es darf KEIN Create-Aufruf entstehen")
+        self.assertIn('id: "9q9c60p6xh"', self.calls[1], "der zweite Aufruf muss das Update sein")
+
+    def test_gefundene_id_gewinnt_gegen_den_fallback(self) -> None:
+        responses = [
+            {"data": {"myself": {"podTemplates": [{"id": "gefunden", "name": "audiomonastry-ai-music-template"}]}}},
+            {"data": {"saveTemplate": {"id": "gefunden"}}},
+        ]
+        self._install_fake(responses)
+        result = deploy.save_template(
+            "audiomonastry-ai-music-template", "img:tag", {}, 150, fallback_template_id="anders"
+        )
+        self.assertEqual(result.get("id"), "gefunden")
+        self.assertIn('id: "gefunden"', self.calls[1])
+
+    def test_unique_fehler_ueberspringt_die_rolle_statt_zu_crashen(self) -> None:
+        responses = [{"data": {"myself": {"podTemplates": []}}}]
+        self._install_fake(responses, raise_on_create=Exception("Template name must be unique."))
+        result = deploy.save_template("audiomonastry-ai-music-template", "img:tag", {}, 150)
+        self.assertEqual(result, {}, "kein Traceback, sondern ein leeres Ergebnis fuer den Aufrufer")
+
+    def test_andere_fehler_werden_nicht_verschluckt(self) -> None:
+        responses = [{"data": {"myself": {"podTemplates": []}}}]
+        self._install_fake(responses, raise_on_create=Exception("boom"))
+        with self.assertRaises(Exception):
+            deploy.save_template("audiomonastry-ai-music-template", "img:tag", {}, 150)
+
+
+class RolleFehlschlagTest(unittest.TestCase):
+    """INFRA-RUNPOD-009: eine fehlgeschlagene Rolle beendet nicht mehr den Lauf."""
+
+    def test_alle_rollen_laufen_durch_und_der_exitcode_bleibt_5(self) -> None:
+        seen: list[str] = []
+
+        def fake_deploy_role(role: str, defaults: Any) -> str | None:
+            seen.append(role)
+            return None if role == "music" else f"ep-{role}"
+
+        with mock.patch.dict("os.environ", {"RP_API_KEY": "test", "IMAGE": "img:tag"}, clear=False):
+            with mock.patch.object(deploy, "resolve_roles", return_value=["music", "ears", "voiceGen"]):
+                with mock.patch.object(deploy, "deploy_role", side_effect=fake_deploy_role):
+                    # create=True: das Platzhalter-SDK ist ein spec-Mock und hat das
+                    # Attribut nicht - es soll hier nur die Live-Abfrage ersetzen.
+                    with mock.patch.object(deploy.runpod, "get_endpoints", create=True, return_value=[]):
+                        code = deploy.main()
+
+        self.assertEqual(code, 5, "Teilausfall muss sichtbar bleiben")
+        self.assertEqual(seen, ["music", "ears", "voiceGen"], "kein Abbruch nach der ersten fehlerhaften Rolle")
+
+
 if __name__ == "__main__":
     unittest.main()
