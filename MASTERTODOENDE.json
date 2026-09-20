@@ -736,6 +736,9 @@
         "npm run probe:apis (9 Konfigurationen, beide Browser): renderCapacity ueberall false; Worklet-Scope performance=undefined, currentTime/currentFrame/sampleRate=number, Atomics=object",
         "npm run perf:worklet: Last 19,46 % (Budget ok), Audio-Uhr -0,42 % (ok), Context-Last \"nicht verfuegbare API\" (bewusst offen statt stiller Erfolg); unter CPU-Last 4 verpasste Quanten + 1 Stall -> Zusage FAIL (Beweis, dass die Ersatzmetrik anschlaegt)",
         "docs/PERFORMANCE_BUDGETS_2026.md: Abschnitt \"Nicht messbar in dieser Umgebung\" auf die breitere Matrix aktualisiert + Ersatzmetrik-Entscheidung dokumentiert"
+      ],
+      "commits": [
+        "0e6a787"
       ]
     },
     {
