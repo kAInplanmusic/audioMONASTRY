@@ -1092,9 +1092,10 @@ Jetzt läuft der Scrape **direkt** gegen den Container:
 
 ```bash
 # 1. Token setzen (identisch auf beiden Seiten; Wert wird nie ausgegeben)
-ssh root@142.132.229.71 'bash -s -- app'            < scripts/…/set-scrape-token.sh   # app-1: erzeugt + startet App neu
+ssh root@142.132.229.71 'cd /opt/audiomonastry && bash scripts/hetzner/wire-scrape-token.sh app'
 ssh root@142.132.229.71 "grep '^SCRAPE_TOKEN=' /opt/audiomonastry/.env" \
-  | ssh root@167.233.192.196 'bash /tmp/edge-scrape-token.sh'                      # edge-1: überträgt + startet Monitoring neu
+  | ssh root@167.233.192.196 'cd /opt/audiomonastry && bash scripts/hetzner/wire-scrape-token.sh edge'
+# Trockenlauf beider Rollen: ... wire-scrape-token.sh <app|edge> --print-config
 
 # 2. Firewall: 8080 NUR fuer den Monitoring-Knoten
 python3 scripts/hetzner/firewall-ensure-app-metrics.py           # Trockenlauf
