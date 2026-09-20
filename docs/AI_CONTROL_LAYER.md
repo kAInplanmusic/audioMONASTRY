@@ -1,5 +1,7 @@
 # AI Control Layer – AudioMONASTRY
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 Stand: 2026-08-26 · App-weit gültig für alle Module.
 
 ## Provider-Priorität (Kosten zuerst)

@@ -1,6 +1,9 @@
 # RunPod Model Handler Spec
 
-> Ergänzung zu `docs/RUNPOD_AI_V1_SPEC.md`
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
+> Ergänzung zu `docs/runpod-8-instances-complete-plan.md` (8 Rollen);
+> `docs/RUNPOD_AI_V1_SPEC.md` ist als 3-Rollen-Fassung überholt.
 > Ziel: pro AI-Modell den exakten Handler-Vertrag, Abhängigkeiten und Status festhalten.
 
 ## Handler-Vertrag

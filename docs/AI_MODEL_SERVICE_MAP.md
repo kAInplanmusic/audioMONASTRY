@@ -1,5 +1,7 @@
 # AI Model → Service Mapping (Phase 2)
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 > Stand 2026-08-31 · Verkabelung aller AI-Modelle mit verantwortlichem
 > Service/Plugin, Schnittstellen und Evaluierungsstatus.
 

@@ -1,5 +1,7 @@
 # audioMONASTRY – AI Operations
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 ## Täglicher Betrieb
 
 - `GET /api/ai/orchestrator/status` → Session, Modelle, Speicher, Kosten.
@@ -37,7 +39,7 @@ Nur mit Betreiber-Freigabe. Trigger:
 | Dienst | Konfiguration | Status |
 |---|---|---|
 | Ollama (ai-1) | `OLLAMA_URL`, `OLLAMA_MODEL` | dokumentiert in `.env.example` |
-| HF-Endpoint (audiomonastry-ai) | `HF_ENDPOINT_URL`, `HF_TOKEN`, `HF_API_KEY`, `AI_MAX_GPU_ENDPOINTS=1` | **Einziger GPU-Endpoint (Konsolidierung)**; Whisper+CLAP migriert; pilot/clap deaktiviert |
+| HF-Endpoint (audiomonastry-ai) | `HF_ENDPOINT_URL`, `HF_TOKEN`, `HF_API_KEY`, `AI_MAX_GPU_ENDPOINTS=8` | **überholt (Stand 2026-09-20):** HF-Dedicated-Endpoints sind abgelöst; GPU-Inferenz läuft auf **max. 8 RunPod-Rollen-Endpoints** (`brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/`orchestrator`). Die frühere Angabe „Einziger GPU-Endpoint (`AI_MAX_GPU_ENDPOINTS=1`)" ist überholt (`docs/INFRA_KONSTITUTION.md` §1) |
 | Replicate | `REPLICATE_API_TOKEN`, `REPLICATE_STEM_MODEL` | Token/Credit Live-Check bei nächstem Zugang |
 | Supabase | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `VITE_SUPABASE_ANON_PUB` | RLS für AI-Tabellen offen (FA-P1-1) |
 | Cloudflare R2 | `CFR2_*` | dokumentiert |
@@ -59,5 +61,7 @@ Standard bleibt **aus** (Scale-to-Zero spart Kosten). Umsetzung im
 Erst bei **dauerhafter Überlast** und nur **mit Freigabe**:
 - Modell-Splitting = ein Modell auf mehrere GPUs/Worker verteilen.
 - Voraussetzung: VRAM-Benchmarks (AI-GPU-Benchmarks) zeigen dauerhaft > 90 %
-  Auslastung eines A100, und die Kostenregel „max. 1 GPU-Endpoint“ wird
-  bewusst erweitert. Vorher NICHT umsetzen.
+  Auslastung eines GPU-Workers (A6000 48 GB), und die Obergrenze „max. 8
+  GPU-Rollen-Endpoints“ wird bewusst erweitert. Vorher NICHT umsetzen.
+  (Stand 2026-09-20: die frühere Kostenregel „max. 1 GPU-Endpoint" ist überholt;
+  kanonisch sind **max. 8 RunPod-Endpoints**, `docs/INFRA_KONSTITUTION.md` §1.)

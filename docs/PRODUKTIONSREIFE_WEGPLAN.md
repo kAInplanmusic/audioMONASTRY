@@ -1,8 +1,14 @@
 # Produktionsreife-Wegplan audioMONASTRY
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 **Datum:** 2026-09-14 · **Basis-Commit:** a937edc (`main`, gepusht)
 **Auftrag:** tiefe Analyse des Ist-Stands + Wegplan bis zur Produktionsreife; Instanzen
-dürfen hochgefahren und bespielt werden, **Kostendeckel 1,50 € für RunPod + Hetzner**;
+dürfen hochgefahren und bespielt werden, **Kostenrahmen dieses Laufs 1,50 €**. Die
+**laufende** Flotte hat laut `docs/INFRA_KONSTITUTION.md` **max. 10 €/h**
+(Hetzner + RunPod zusammen), Zielband **5–7,5 €/h** (Stand 2026-09-20: die frühere
+Formulierung „Kostendeckel 1,50 € für RunPod + Hetzner" ist damit auf die
+Flotten-Obergrenze gezogen);
 Soundkarte muss auf dem **Onboard-Chip ohne Grafikkarte** funktionieren.
 **Verbraucht bisher: 0,00 €** (keine Cloud-Zugangsdaten vorhanden, s. §6) — alle
 Nachweise kommen von der Zielmaschine selbst (Hostname `audioMONASTRY`).
@@ -123,7 +129,10 @@ Max-Blockzeit sind nicht messbar → Latenzversprechen (< 10 ms) ist nicht beleg
 - **P2-1** Observability-Dashboards + SLOs + Log-Rotation prüfen (json-file-Limits
   sind in den Compose-Dateien gesetzt ✓), Fehler-Tracking/Alert-Zustellung testen.
 - **P2-2** AI-Kosten-Guard scharf stellen (`budget.fleetMaxEurPerHour`=10,
-  `fleetEndpointsMax`=5 existieren als Regel; Alarm bei Überschreitung fehlt).
+  `fleetEndpointsMax`=8 existieren als Regel; Alarm bei Überschreitung fehlt).
+  (Stand 2026-09-20: `fleetEndpointsMax` war zuvor 5 – überholt; kanonisch sind
+  **8 RunPod-Endpoints**, `fleetMaxEurPerHour`=10 mit Zielband 5–7,5 €/h,
+  `docs/INFRA_KONSTITUTION.md` §1.)
 - **P2-3** Security: Rotation von `STUDIO_ACCESS_TOKEN`/`ADMIN_TOKEN`/TURN-Secrets
   nach Runbook (Kap. 1/5 vorhanden) einmal real durchspielen, CORS-Allowlist
   gegen die Produktionsdomain prüfen.
@@ -172,7 +181,8 @@ Max-Blockzeit sind nicht messbar → Latenzversprechen (< 10 ms) ist nicht beleg
 
 ### Phase 5 — Reste/Vision (nach Bedarf, GPU nur mit separatem Budget)
 18. VISUAL-P1-001 (Ghostuser-Beweis), VISUAL-P1-009 (WebGPU), VISUAL-P1-007
-    (Stil-LoRA auf RunPod — **sprengt 1,50 €**, eigener Auftrag), AI-P1-003.
+    (Stil-LoRA auf RunPod — **sprengt den Lauf-Rahmen von 1,50 €**, eigener
+    Auftrag; die Flotten-Obergrenze bleibt 10 €/h, Zielband 5–7,5 €/h), AI-P1-003.
 
 ---
 
@@ -200,7 +210,7 @@ Verifikation der API-Aufrufe (`pactl load-module module-null-sink`).
 
 ---
 
-## 6. Kostenplan (Deckel 1,50 €)
+## 6. Kostenplan (Lauf-Rahmen 1,50 €; Flotten-Obergrenze 10 €/h)
 
 | Posten | Größe | Preis | Dauer | Kosten |
 |---|---|---|---|---|

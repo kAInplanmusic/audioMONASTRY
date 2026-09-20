@@ -1,5 +1,7 @@
 # audioMONASTRY – AI Security Guide
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 ## Grundsätze
 
 - Keine Secrets im Client, keine `VITE_*`-Secrets, Boundary-Scan erzwingt Kapselung.

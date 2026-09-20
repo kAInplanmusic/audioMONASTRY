@@ -1,5 +1,7 @@
 # audioMONASTRY · AudioMONASTRY
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 > Browser-basierte kollaborative Audio-Workstation für bis zu 4 Nutzer.
 > Version: **1.210.001** (`V. 1|210|001`) · Codename „HyperAudioWorkstation" · Stand 2026-09-09.
 > Hauptzweig: `main` · Release-Gate: `npm run verify` muss grün sein.
@@ -244,15 +246,25 @@ Main im Leerlauf stumm bleibt.
 **Model Registry:** `services/audiomonastry-ai-runtime/model_manifest.json` +
 TS-Spiegel `src/core/ai/orchestrator/modelRegistry.ts`. Ladeklassen CORE/
 FREQUENT/ON_DEMAND/RARE, Revision-Pinning (kein `latest`).
-**Bewertung:** Rollen-/Modell-Manifest + `docs/RUNPOD_AI_V1_SPEC.md`.
+**Bewertung:** Rollen-/Modell-Manifest + `docs/runpod-8-instances-complete-plan.md`
+(`docs/RUNPOD_AI_V1_SPEC.md` = überholte 3-Rollen-Fassung).
 
 ## 7. Server-Infrastruktur
 
 **Deployment-Targets:**
-- Hetzner-Flotte: `app-1` (CPX31), `sfu-1` (CPX31), `master-1` (CX23),
-  `edge-1` (CX23), `ai-1` (CCX33, Ollama/stem-ai-CPU)
-- Hugging Face Dedicated Endpoints: `audiomonastry-ai` (Custom Container, A100 ×1,
-  us-east-1, Scale-to-Zero 20 min), `audiomonastry-ai-pilot` (Whisper, läuft)
+- Hetzner-Flotte (max. 5 Server: app/sfu/ai/master/edge): `app-1` (CPX31),
+  `sfu-1` (CPX31), `master-1` (CX23), `edge-1` (CX23),
+  `ai-1` (CCX33, Ollama/stem-ai-CPU)
+- **RunPod Serverless – 8-Rollen-GPU-Flotte** (Verbindlich:
+  `docs/INFRA_KONSTITUTION.md`; Details: `docs/runpod-8-instances-complete-plan.md`):
+  `brain` (lokales LLM), `ears` (STT/Embeddings/Klassifikation), `voiceGen`
+  (TTS/Gesang/Song/SFX/Stems), `music`, `imageHq`, `videoReal`, `videoAbstract`,
+  `orchestrator` (MoA/MCP). Alle mit `workers_min=0` (Scale-to-Zero) und
+  Session-Wake; bei „AI an" laufen die immer-Rollen voll, die Visual-Rollen
+  (`imageHq`/`videoReal`/`videoAbstract`) nur bei Abruf. Laufende Flottenkosten
+  (Hetzner + RunPod) max. 10 €/h, Zielband 5–7,5 €/h.
+  Die früheren Hugging-Face-Dedicated-Endpoints (`audiomonastry-ai`,
+  `audiomonastry-ai-pilot`) sind abgelöst.
 - Cloudflare Worker (`portal-worker`), Supabase, Cloudflare R2
 
 **Containerisierung:** `Dockerfile` (App), `Dockerfile.hetzner`,
@@ -367,5 +379,8 @@ Google-frei-Check), `verify.yml` (tsc, Vitest, Boundary-Scan, spatial-regression
 - `MASTERTODOENDE.json` – **einzige Quelle** für alle offenen Arbeiten (Audits,
   Umbauten, Live-Gates, Umgebungs-Blocker) mit Status + Nachweis je Item
 - `AGENTS.md` – verbindliche Architekturregeln + kanonische 16-MONK-Registry
-- `docs/RUNPOD_AI_V1_SPEC.md` – GPU-Flotte (Rollen, Endpoints, Modelle)
+- `docs/INFRA_KONSTITUTION.md` – verbindliche Flotten-/Kosten-/Betriebsgrenzen
+  (einzige Quelle der Wahrheit für Zahlen)
+- `docs/runpod-8-instances-complete-plan.md` – RunPod-GPU-Flotte, 8 Rollen
+- `docs/RUNPOD_AI_V1_SPEC.md` – GPU-Flotte (überholte 3-Rollen-Fassung)
 - `docs/VISUALMONK_SPEC.md` – VisualMONK (Bild/Clip/Show)

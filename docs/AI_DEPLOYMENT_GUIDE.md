@@ -1,5 +1,7 @@
 # audioMONASTRY – AI Deployment Guide
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 > Stand 2026-08-31 · Gilt für die AI-Infrastruktur (`src/core/ai/orchestrator/`,
 > `services/audiomonastry-ai-runtime/`).
 
@@ -16,7 +18,14 @@ Browser → Hetzner App (server.ts) → AI Orchestrator
                                       └── aiPersistence → Supabase
 ```
 
-## 1. HF-Endpoint anlegen (Betreiber-Schritt)
+## 1. HF-Endpoint anlegen (Betreiber-Schritt) — überholt
+
+> **Stand 2026-09-20:** Dieser Weg (ein HF-Dedicated-Endpoint, **A100 ×1 80 GB,
+> `maxReplicas: 1`**) ist abgelöst. Die GPU-Inferenz läuft auf **max. 8
+> RunPod-Rollen-Endpoints**; laufende Flottenkosten (Hetzner + RunPod) max.
+> 10 €/h, Zielband 5–7,5 €/h (`docs/INFRA_KONSTITUTION.md` §1,
+> `docs/runpod-8-instances-complete-plan.md`). Die Schritte unten bleiben als
+> historischer HF-Pfad stehen.
 
 1. `services/audiomonastry-ai-runtime/` als Custom Container im HF-Dashboard hochladen
    (Dockerfile, Port 8000, Health `/health`, Readiness `/ready`).

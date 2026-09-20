@@ -1,5 +1,7 @@
 # audioMONASTRY – AI Cost Guide
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 ## Preisquellen (Stand 2026-08, live zu verifizieren)
 
 | Position | Preis | Quelle |
@@ -27,4 +29,13 @@
 
 - 4 h/Tag aktiv auf A100: ~120 h/Monat × 2,30 € ≈ 276 € + PRO 9 €.
 - Inaktivität: 0 Replicas → 0 GPU-Kosten.
-- Budget-Grenze: max. 4–5 €/h bei aktiver Inferenz (Betreiber-Vorgabe).
+- Budget-Grenze: **max. 10 €/h** laufende Flottenkosten (Hetzner + RunPod
+  zusammen), Zielband **5–7,5 €/h** (Betreiber-Vorgabe:
+  `docs/INFRA_KONSTITUTION.md` §1). Stand 2026-09-20: die frühere Angabe
+  „max. 4–5 €/h" ist überholt.
+
+> **Stand 2026-09-20:** Die HF-Dedicated-Endpoints sind abgelöst; die
+> GPU-Inferenz läuft auf **max. 8 RunPod-Rollen-Endpoints**. Die A100-Zeile oben
+> beschreibt den historischen HF-Pfad (Preisquelle 2026-08). Kanonische
+> Größenordnungen (`docs/INFRA_KONSTITUTION.md` §3): Vollast AI mit 8 Rollen
+> ~3,3–4,0 €/h, nur Hetzner (AI aus) ~0,054 €/h, Speicher max. 5 €/Monat.

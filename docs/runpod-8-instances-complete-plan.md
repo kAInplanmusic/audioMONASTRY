@@ -1,9 +1,17 @@
 # RunPod 8-Instanzen-Architektur – Gesamtplan
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 Stand: 2026-09-16
 Status: 8 von 8 Instanzen live (Scale-to-Zero) – Instanz 8 mit MoA auf 1 starken + 1 schnellen Modell (Qwen3-8B/4B) live verifiziert; RUNPOD-P1-002, -P1-003 und -P1-004 erledigt
 Kosten: 8 × A6000 48 GB × ~0,40 €/h = ~3,20 €/h Vollast | ~32 €/Monat bei 10 h Einsatz
 Alles scale-to-zero (workersMin=0), 0 € wenn nicht genutzt.
+Kanonischer Rahmen (`docs/INFRA_KONSTITUTION.md`): **8 RunPod-Rollen-Endpoints**
+(`brain`, `ears`, `voiceGen`, `music`, `imageHq`, `videoReal`, `videoAbstract`,
+`orchestrator`), **5 Hetzner-Server**, laufende Flottenkosten (Hetzner + RunPod)
+**max. 10 €/h**, Zielband **5–7,5 €/h**, Speicher **max. 5 €/Monat**. Bei „AI an"
+laufen die immer-Rollen voll, die Visual-Rollen (imageHq/videoReal/videoAbstract)
+starten nur bei Abruf.
 
 ---
 
@@ -863,6 +871,9 @@ visual-assets/
 - **Bei 10 h/Monat:** ~32 €/Monat
 - **Scale-to-zero:** 0 € wenn nicht genutzt
 - **Network Volumes:** ~0,50 €/GB/Monat (ca. 100 GB = ~50 €/Monat – nur falls permanent)
+  - ⚠️ Ein permanentes Volume dieser Größe sprengt die Speicher-Obergrenze der
+    Konstitution (**max. 5 €/Monat** für Speicher/Snapshots/ISOs) und ist damit
+    nicht zulässig — `docs/INFRA_KONSTITUTION.md` §1.
   - Alternative: Modelle werden pro Cold Start neu geladen (kostenlos, aber langsamer Start)
 
 ---

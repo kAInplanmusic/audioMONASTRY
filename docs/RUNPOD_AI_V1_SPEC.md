@@ -1,4 +1,16 @@
-# audioMONASTRY · RunPod 3-Rollen-GPU-Flotte — Umsetzungs-Spezifikation
+# audioMONASTRY · RunPod GPU-Flotte — Umsetzungs-Spezifikation (3-Rollen-Fassung, überholt)
+
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
+> ⚠️ **ÜBERHOLT (Stand 2026-09-20):** Diese Fassung beschreibt die frühere
+> **3-Rollen-Flotte** (`brain`/`ears`/`voiceGen`) und ist von
+> `docs/runpod-8-instances-complete-plan.md` überholt. Kanonisch sind **8
+> Rollen-Endpoints**: `brain`, `ears`, `voiceGen`, `music`, `imageHq`,
+> `videoReal`, `videoAbstract`, `orchestrator`
+> (`docs/INFRA_KONSTITUTION.md` §1.1). Die Abschnitte unten bleiben als
+> Historie/Live-Protokoll stehen; darin genannte Zahlen (u. a. „Summe ≈ 1,17 $/h",
+> „Budgetgrenze 4–5 €/h") sind **nicht mehr verbindlich** – verbindlich sind
+> **max. 10 €/h** laufende Flottenkosten und das Zielband **5–7,5 €/h**.
 
 > Status: **beschlossen & implementiert (Kern)** · Stand: 2026-09-10
 > Ersetzt die Fassung vom 2026-09-07 („eine H200, eine Runtime, ein Model Manager").
@@ -8,6 +20,7 @@
 ## 1. Entscheidung & Begründung
 
 Alle AI-Inferenz läuft auf **RunPod Serverless**, verteilt auf **drei Rollen-Endpoints**
+*(überholt: heute acht Rollen-Endpoints, siehe `docs/runpod-8-instances-complete-plan.md`)*
 nach Intelligenz-Bedarf statt nach Modell-Liste:
 
 | Endpoint | GPU | Aufgabe | ~$/h (Vollbetrieb) |
@@ -16,7 +29,8 @@ nach Intelligenz-Bedarf statt nach Modell-Liste:
 | `audiomonastry-ai-ears` | A6000 48 GB (`AMPERE_48`) | STT, Embeddings, Klassifikation, Diarization, Audio-QA | 0,39 |
 | `audiomonastry-ai-voice` | A6000 48 GB (`AMPERE_48`) | TTS, Gesang, Song, SFX, Stem-Separation | 0,39 |
 
-Summe ≈ **1,17 $/h** bei Vollbetrieb. Scale-to-Zero gilt, aber **nicht sofort**: ein
+Summe ≈ **1,17 $/h** bei Vollbetrieb *(überholt – kanonisch: 8 Rollen, Vollast
+≈ 3,2–3,9 €/h; `docs/INFRA_KONSTITUTION.md` §3)*. Scale-to-Zero gilt, aber **nicht sofort**: ein
 Worker läuft nach dem letzten Job noch `idleTimeout` Sekunden weiter und wird in
 dieser Zeit weiter abgerechnet. Werte (2026-09-13, `ROLE_DEFAULTS` in
 `scripts/runpod-deploy.py`): brain/ears 20 s, voice/vision/video 900 s. Bei
@@ -24,7 +38,10 @@ A6000-Preisen sind 900 s Leerlauf ≈ 0,20 $ pro Aufwachphase – bewusst in Kau
 genommen, damit wiederholte Einzelaufrufe (MOS-Hörproben, Bild-/Video-Iteration)
 nicht jedes Mal einen Kaltstart zahlen. Erst danach gilt ≈ 0 $ bei Idle
 (Scale-to-Zero + Session-Wake).
-Damit bleibt die dokumentierte Budgetgrenze (4–5 €/h) eingehalten.
+Damit bleibt die Budgetgrenze der Konstitution eingehalten: **max. 10 €/h**
+laufende Flottenkosten (Hetzner + RunPod), Zielband **5–7,5 €/h**
+(Stand 2026-09-20: die frühere Angabe „4–5 €/h" ist überholt;
+`docs/INFRA_KONSTITUTION.md` §1).
 
 **Verworfen und warum:**
 
@@ -41,7 +58,7 @@ Damit bleibt die dokumentierte Budgetgrenze (4–5 €/h) eingehalten.
 
 ---
 
-## 2. Rollen-Vertrag (einzige Quelle der Wahrheit)
+## 2. Rollen-Vertrag (3-Rollen-Fassung; kanonische Rollenliste = `GPU_ROLE_IDS` in `src/config/aiInfrastructure.ts`, 8 Rollen — siehe `docs/INFRA_KONSTITUTION.md` §1.1)
 
 **TS:** `src/core/ai/orchestrator/endpointRegistry.ts` (+ `src/config/aiInfrastructure.ts` für die Kostenregel)
 **Python:** `services/audiomonastry-ai-runtime/model_manifest.json` → `roles`
@@ -100,6 +117,12 @@ bestehende H200-Endpoint `uzg7p9lm890ts8`) — der Cutover ist dadurch unterbrec
 ---
 
 ## 3. Betriebsmodell: Scale-to-Zero + Session-Wake
+
+> **Stand 2026-09-20 (kanonische Betriebsmodi, `docs/INFRA_KONSTITUTION.md` §2):**
+> Bei „AI an" laufen die immer-verfügbaren Rollen `brain`, `ears`, `voiceGen`,
+> `music`, `orchestrator` voll; **nur** die Visual-Rollen `imageHq`,
+> `videoReal`, `videoAbstract` starten bei Abruf und fallen per `idleTimeout`
+> auf Null zurück (einzige bewusste Lazy-Load-Ausnahme).
 
 1. Alle Endpoints starten mit `workers_min=0` → keine Idle-Kosten.
 2. Beim Studio-Eintritt weckt `POST /api/ai/fleet/wake` die Flotte:

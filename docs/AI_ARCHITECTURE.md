@@ -1,5 +1,7 @@
 # audioMONASTRY – AI-Architektur (Deep Audit, 2026-08-29)
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 ## Rollen & Zuständigkeiten (final)
 
 | Aufgabe | Provider | Warum |
@@ -52,7 +54,7 @@ OLLAMA_MODEL=qwen2.5:7b
 ADMIN_TOKEN=<langes-zufalls-token>
 ```
 
-## Flotte (5 Stunden-Instanzen, ohne GPU)
+## Flotte (5 Hetzner-Rollen: app/sfu/ai/master/edge, ohne GPU)
 
 | # | Instanz | Typ | Rolle |
 |---|---|---|---|
@@ -62,7 +64,16 @@ ADMIN_TOKEN=<langes-zufalls-token>
 | 4 | master-1 | CX23 | FFmpeg-Mastering |
 | 5 | edge-1 | CX23 | Staging/Smoke/Monitoring |
 
-Kosten: **≈ 0,36 €/h** + API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
+Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7, nur Hetzner bei „AI aus") +
+API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
+
+> **Stand 2026-09-20:** Die frühere Angabe **≈ 0,36 €/h** stammte aus dem
+> CCX33-Altbestand und ist überholt. GPU-Inferenz läuft **nicht** auf diesen
+> Knoten, sondern auf **max. 8 RunPod-Endpoints** (Rollen `brain`/`ears`/
+> `voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/`orchestrator`);
+> bei „AI an" laufen die immer-Rollen voll, die Visual-Rollen nur bei Abruf.
+> Laufende Flottenkosten (Hetzner + RunPod) **max. 10 €/h**, Zielband
+> **5–7,5 €/h** (`docs/INFRA_KONSTITUTION.md`).
 
 ## Offene AI-Punkte
 

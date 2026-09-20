@@ -1,8 +1,18 @@
-# audioMONASTRY – 5-Instanzen-Architektur (final)
+# audioMONASTRY – Server-Flotte: 5 Hetzner-Knoten + 8 RunPod-Rollen
 
-> Stand: 2026-08-30 · Ziel: 5 Server, klare Rollen, GPU nur für lokale KI/Stem.
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
+> Stand: 2026-08-30 · Ziel: **5 Hetzner-Server** (Rollen app/sfu/ai/master/edge),
+> klare Rollen; GPU-Inferenz extern.
 > Cloud bleibt extern: Supabase (DB), Cloudflare R2 (Audio-Blobs),
-> DeepSeek/HF/Mistral/Replicate (Cloud-KI). Lokale KI/Stem laufen auf ai-1.
+> DeepSeek/HF/Mistral/Replicate (Cloud-KI).
+>
+> **Stand 2026-09-20:** Die GPU-Inferenz läuft auf **max. 8 RunPod-Endpoints**
+> (Rollen `brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/
+> `orchestrator`); ai-1 ist nur noch **CPU-Fallback/Stem**. Die frühere Aussage
+> „GPU nur für lokale KI/Stem auf ai-1" ist damit überholt; Titel und
+> Rollenbild der früheren Fassung („5-Instanzen-Architektur", KI lokal auf ai-1)
+> sind überholt (`docs/INFRA_KONSTITUTION.md` §1.1/§1.2).
 
 ## 💶 Kostenmodell (wichtig, Stand 2026-08-30)
 
@@ -44,7 +54,7 @@ GPU-Cloud. Verifiziert per `/api/admin/debug` (`replicateActive: true`).
 
 Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
-## Flotte (5 Instanzen)
+## Hetzner-Flotte (5 Knoten: app/sfu/ai/master/edge)
 
 | # | Name | Hetzner-Typ | Rolle |
 |---|---|---|---|
@@ -148,6 +158,11 @@ docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up
 1. DeepSeek V4 Flash (MOA/MCP) → 2. Hugging Face → 3. Mistral → 4. Groq Free
 → 5. **Ollama (ai-1, lokal)** → 6. DeepSeek V4 Pro → Notfall Gemini/OpenAI.
 
+> **Stand 2026-09-20:** Groq ist entfernt; das lokale LLM der Flotte läuft über
+> die RunPod-Rolle `brain` (`runpod-local` im `LlmRouter`), Ollama auf ai-1
+> bleibt Fallback. Betriebsmodi („AI an"/„AI aus", immer-Rollen vs.
+> Visual-Rollen nur bei Abruf): `docs/INFRA_KONSTITUTION.md` §2.
+
 ## Qualitäts-Eckpunkte
 
 - Master-Player rendert mit FFmpeg/NumPy bei 48 kHz, True-Peak-Limiter im Worklet.
@@ -165,6 +180,13 @@ docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up
 | edge-1 | **CAX21** (ARM) | 10,49 € ≈ 0,0168 €/h |
 | Floating-IP | – | 3 € |
 | **Summe (alle 5, stündlich)** | **≈ 0,096 €/h** |
+
+> Diese Zeile ist der Vergleich der **Empfehlungs-Typen** (CAX-Mix), nicht die
+> laufende Flotte – die laufende 5er-Flotte (3×CX33 + 2×CX23, s. o.) kostet
+> ≈ 39,45 €/Monat ≈ 0,054 €/h. Kanonischer Rahmen (`docs/INFRA_KONSTITUTION.md`
+> §1/§2): 5 Hetzner-Server, 8 RunPod-Rollen-Endpoints, laufende Flottenkosten
+> (Hetzner + RunPod) **max. 10 €/h**, Zielband **5–7,5 €/h**; bei „AI aus"
+> bleiben nur die Hetzner-Kosten (≈ 0,054 €/h).
 
 > Hinweis: CCX33 ist 2026 auf 138,49 €/Monat gestiegen (+122 %) und lohnt nur
 > noch bei garantiert dedizierter CPU. Die CAX-Serie ist die neue

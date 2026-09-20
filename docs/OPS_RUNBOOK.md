@@ -1,5 +1,7 @@
 # audioMONASTRY OPS-Runbook (PREP-8)
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 Betreiber-/Security-Aufgaben, die nur mit externen Zugängen (Cloud-Konsole,
 HF, GitHub) gehen. Kein Code nötig – aber jeder Punkt ist ein Security/Compliance-Gate.
 

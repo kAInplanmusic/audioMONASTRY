@@ -1,5 +1,7 @@
 # audioMONASTRY · AudioMONASTRY
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 > Browser-based collaborative audio workstation for up to 4 users.
 > Version: **1.210.001** (`V. 1|210|001`) · Codename "HyperAudioWorkstation" · Stand 2026-09-09.
 > Main branch: `main` · Release gate: `npm run verify` must be green.
@@ -208,8 +210,11 @@ Additionally, `server.ts` serves Socket.io signaling (session join, state sync, 
 | htdemucs-ONNX | Stem separation local | `smank/htdemucs-onnx` | local/ONNX | no |
 | LocalEmbeddingProvider | Embeddings local | transformers.js (~80 MB) | browser/Node | no |
 
-**Verbindliche Quelle der Rollen-/Modellzuordnung:** `docs/RUNPOD_AI_V1_SPEC.md`.
-Jedes Modell gehört zu **genau einer** Flotten-Rolle (`brain`/`ears`/`voiceGen`); die
+**Verbindliche Quelle der Rollen-/Modellzuordnung:** `docs/INFRA_KONSTITUTION.md` §1.1
+(kanonische Rollenliste = `GPU_ROLE_IDS` in `src/config/aiInfrastructure.ts`);
+Historie: `docs/runpod-8-instances-complete-plan.md` (8 Rollen),
+`docs/RUNPOD_AI_V1_SPEC.md` (überholte 3-Rollen-Fassung).
+Jedes Modell gehört zu **genau einer** Flotten-Rolle (`brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/`orchestrator`); die
 Task-Mengen sind disjunkt. Maßgeblich ist der `roles`-Block in
 `services/audiomonastry-ai-runtime/model_manifest.json`, gespiegelt in
 `src/core/ai/orchestrator/endpointRegistry.ts` und per `tests/manifestRoles.test.ts`
@@ -217,15 +222,17 @@ gegen Drift abgesichert. Modelle mit `status: "planned"` haben noch keinen echte
 Revisions-Pin und werden im Betrieb nicht geladen.
 
 **Model Registry:** `services/audiomonastry-ai-runtime/model_manifest.json` + TS mirror `src/core/ai/orchestrator/modelRegistry.ts`. Load classes CORE/FREQUENT/ON_DEMAND/RARE, revision pinning (no `latest`).
-**Evaluation:** Rollen-/Modell-Manifest + `docs/RUNPOD_AI_V1_SPEC.md`.
+**Evaluation:** Rollen-/Modell-Manifest + `docs/runpod-8-instances-complete-plan.md`
+(`docs/RUNPOD_AI_V1_SPEC.md` = überholte 3-Rollen-Fassung).
 
 ## 7. Server Infrastructure
 
 **Deployment Targets:**
 - Hetzner fleet: `app-1` (CPX31), `sfu-1` (CPX31), `master-1` (CX23), `edge-1` (CX23), `ai-1` (CCX33, Ollama/stem-ai CPU)
-- **RunPod Serverless – 3-Rollen-GPU-Flotte** (Details: `docs/RUNPOD_AI_V1_SPEC.md`):
-  `audiomonastry-ai-brain` (A6000 48 GB, lokales LLM), `audiomonastry-ai-ears` (A6000 48 GB, STT/Embeddings/Klassifikation), `audiomonastry-ai-voice` (A6000 48 GB, TTS/Gesang/Song/SFX/Stems).
-  Alle mit `workers_min=0` (Scale-to-Zero, ≈ 0 $ im Idle) und **Session-Wake** beim Studio-Eintritt.
+- **RunPod Serverless – 8-Rollen-GPU-Flotte** (Verbindlich: `docs/INFRA_KONSTITUTION.md`; Details: `docs/runpod-8-instances-complete-plan.md` — die frühere 3-Rollen-Fassung `docs/RUNPOD_AI_V1_SPEC.md` ist überholt):
+  `brain` (lokales LLM, vLLM/OpenAI path), `ears` (STT/embeddings/classification), `voiceGen` (TTS/singing/song/SFX/stems), `music`, `imageHq`, `videoReal`, `videoAbstract`, `orchestrator` (MoA/MCP).
+  All with `workers_min=0` (scale-to-zero) and **session wake** on studio entry; with AI on the always-on roles (`brain`/`ears`/`voiceGen`/`music`/`orchestrator`) run at full, only the visual roles (`imageHq`/`videoReal`/`videoAbstract`) start on demand.
+  Limits: max. 8 endpoints, max. 5 Hetzner servers, running fleet cost (Hetzner + RunPod) max. 10 €/h, target band 5–7.5 €/h.
   Die früheren HF-Dedicated-Endpoints (`audiomonastry-ai`, `audiomonastry-ai-pilot`, `audiomonastry-ai-clap`) sind abgelöst.
 - Cloudflare Worker (`portal-worker`), Supabase, Cloudflare R2
 
@@ -312,5 +319,7 @@ deploy/                   Helm charts (optional)
 - `MASTERTODOENDE.json` – **single source of truth** for all open work (audits,
   conversions, live gates, environment blockers) with status + verification per item
 - `AGENTS.md` – binding architecture rules + canonical 16-MONK registry
-- `docs/RUNPOD_AI_V1_SPEC.md` – GPU fleet (roles, endpoints, models)
+- `docs/INFRA_KONSTITUTION.md` – binding fleet/cost/operation limits (single source of truth)
+- `docs/runpod-8-instances-complete-plan.md` – RunPod GPU fleet, 8 roles (roles, endpoints, models)
+- `docs/RUNPOD_AI_V1_SPEC.md` – GPU fleet (superseded 3-role revision)
 - `docs/VISUALMONK_SPEC.md` – VisualMONK (image/clip/show)

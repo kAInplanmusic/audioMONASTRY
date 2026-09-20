@@ -1,5 +1,7 @@
 # audioMONASTRY – Model Registry Guide
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 ## Quellen
 
 1. **Kanonisch im Container:** `services/audiomonastry-ai-runtime/model_manifest.json`
@@ -35,6 +37,8 @@ license: "Apache-2.0"
 ## Regeln
 
 - `revision` leer oder `latest` → Registry-Validierung schlägt fehl.
-- Neues Modell: erst gegen `docs/RUNPOD_AI_V1_SPEC.md` und das Rollen-Manifest bewerten
+- Neues Modell: erst gegen `docs/runpod-8-instances-complete-plan.md` (8 Rollen)
+  und das Rollen-Manifest bewerten
   (gewichteter Score ≥ 6,0, Lizenz ok, Risiko ≤ 4), dann Manifest + TS-Spiegel.
+  `docs/RUNPOD_AI_V1_SPEC.md` ist als 3-Rollen-Fassung überholt.
 - VRAM-Summe CORE+FREQUENT muss unter Budget (80 GB) minus Safety-Margin (6 GB) bleiben.

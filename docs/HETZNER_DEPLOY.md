@@ -1,5 +1,7 @@
 # audioMONASTRY auf Hetzner deployen – empfohlene Konfiguration
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 Stand: 2026-08-25 · Ziel: **günstig testen, später skalieren**, für
 Linux-Laptops + iPhones/iPads (Querformat).
 
@@ -44,6 +46,16 @@ Caddy (HTTPS), audiomonastry (App + API + Signaling), master-player und optional
 Redis. Mehr Instanzen brauchst du erst, wenn du Last hast – dann skaliert man
 horizontal (Load Balancer, Redis-Signaling, getrennte Services) oder vertikal
 (CX23 → CX33/CAX21).
+
+**Flottenrahmen (Stand 2026-09-20):** Die **laufende** Flotte umfasst
+**max. 5 Hetzner-Server** – Rollen `app` (Caddy + API + Signaling),
+`sfu` (mediasoup, RTP 40000–40099), `ai` (CPU-Fallback/Stem),
+`master` (master-player/FFmpeg) und `edge` (Monitoring/Smoke); Typen per
+`FLEET_TYPE_*`-Env überschreibbar (Default cx23). GPU-Inferenz läuft **nicht**
+auf diesen Knoten, sondern auf **max. 8 RunPod-Rollen-Endpoints**.
+Laufende Flottenkosten (Hetzner + RunPod zusammen) **max. 10 €/h**, Zielband
+**5–7,5 €/h**; nur Hetzner bei „AI aus" ≈ 0,054 €/h
+(`docs/INFRA_KONSTITUTION.md`).
 
 ---
 

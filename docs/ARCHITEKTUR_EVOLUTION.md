@@ -1,5 +1,7 @@
 # ARCHITEKTUR-EVOLUTION – AudioMONASTRY
 
+> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+
 Stand: 2026-08-26 · Phase 1–5 Grundgerüst implementiert.
 
 ## Architektur-Überblick
@@ -86,6 +88,10 @@ AudioDeviceManager (src/core/hardware) → ASIO/CoreAudio/PipeWire, generisches 
 - **D13:** Bus-Modell MAIN / CUE1–4 / PLUGIN-Pre-Fader.
 - **D15:** AI-Provider A100/HF-Endpoint bevorzugt; DevSettings „AI Server
   Shutdown“ aktiviert Fallbacks.
+  *Stand 2026-09-20:* A100/HF-Dedicated-Endpoints sind abgelöst — die
+  GPU-Inferenz läuft auf **max. 8 RunPod-Rollen-Endpoints**; der AI-Schalter
+  (aiMONK OFF ⇄ AUTO_AI/PRO) schaltet die AI-Flotte ab, dann bleiben nur die
+  5 Hetzner-Knoten (~0,054 €/h). Kanonisch: `docs/INFRA_KONSTITUTION.md` §2.
 - **D22:** `STEM_AI_URL` runtime statt Modul-Konstante → schneller 502 bei
   Provider-Ausfall (umgesetzt in `server.ts`).
 - **D24 (P3-6, 2026-09-05):** Schutz der Algorithmenkerne. TEE/geschützter
