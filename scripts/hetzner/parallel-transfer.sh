@@ -53,7 +53,12 @@
 #   Betreiber-Host: bash, tar, zstd, openssl, curl, ssh  (aria2c NICHT noetig)
 #   Knoten (Ubuntu): tar, sha256sum, curl ODER curl+aria2; fuer den Split-Weg
 #                    `aria2c` und zum Auspacken `zstd`
-#                    -> apt-get install -y --no-install-recommends aria2 zstd
+#                    -> beide stehen seit 2026-09-21 in der PROVISIONIERUNG
+#                       (scripts/hetzner/cloud-init.yaml: packages aria2 + zstd),
+#                       sind auf einem frischen Knoten also bereits vorhanden.
+#                       apt-Kommando nur noch fuer Knoten aus einem Rollen-
+#                       SNAPSHOT (kein cloud-init beim Boot):
+#                       apt-get install -y --no-install-recommends aria2 zstd
 #                    (fehlen sie, faellt der Lauf laut auf EINEN Strom zurueck;
 #                     mit --install-missing wird auf dem Knoten nachinstalliert)
 #   R2: CFS3_ACCESS_KEY/CFS3_SECRET_KEY/CFS3_ENDPOINT/CFS3_BUCKET (+CFR2_ACCOUNT_ID)
@@ -164,6 +169,12 @@ if [[ "$PRINT_CONFIG" == "1" ]]; then
   printf '  Knoten-Ziehen:        aria2c -x%s -s%s (Rueckfall: curl -fL, EIN Strom)\n' "$ARIA2_CONNECTIONS" "$ARIA2_CONNECTIONS"
   printf '  aria2c auf DIESEM Host: %s\n' "$HAVE_LOCAL_ARIA2"
   printf '  Knoten-Voraussetzung: aria2c + zstd -> apt-get install -y --no-install-recommends aria2 zstd\n'
+  # Belegbarer Ursprung der Werkzeuge: sie stehen seit 2026-09-21 in der
+  # Provisionierung (scripts/hetzner/cloud-init.yaml, packages: aria2 + zstd).
+  # Der Aufruf unten bleibt nur fuer Knoten aus einem Rollen-SNAPSHOT noetig -
+  # ein Snapshot bootet ohne cloud-init.
+  printf '                        Quelle: scripts/hetzner/cloud-init.yaml (packages: aria2, zstd) ->\n'
+  printf '                        auf einem frischen/provisionierten Knoten bereits vorhanden\n'
   printf '  Nachinstallieren:     %s\n' "$([[ "$INSTALL_MISSING" == "1" ]] && echo 'ja (--install-missing)' || echo 'nein (dann Rueckfall auf curl)')"
   printf '  R2-Weg benutzt:       %s\n' "$([[ -n "$SOURCE_URL" ]] && echo "nein (--source-url)" || echo 'ja')"
   printf '  lokal behalten:       %s\n' "$([[ "$KEEP_ARCHIVE" == "1" ]] && echo ja || echo 'nein (Temp wird geraeumt)')"

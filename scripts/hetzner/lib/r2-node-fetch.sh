@@ -97,6 +97,9 @@ if [[ -n "$ARIA2" ]]; then
 else
   METHOD="curl (Einzelstrom)"
   echo "[node] HINWEIS: aria2c fehlt - es wird EINZELSTROM gezogen (kein 16-fach-Split)." >&2
+  echo "[node] Auf einem FRISCH provisionierten Knoten steht aria2c aus der Provisionierung" >&2
+  echo "[node] bereit (scripts/hetzner/cloud-init.yaml: packages aria2, zstd) - fehlt es hier," >&2
+  echo "[node] stammt der Knoten aus einem Rollen-Snapshot oder einer aelteren Provisionierung." >&2
   echo "[node] Nachinstallieren auf dem Knoten: apt-get install -y --no-install-recommends aria2 zstd" >&2
   echo "[node] oder diesen Lauf mit --install-missing starten." >&2
   [[ -n "$CURL" ]] || { echo "FEHLER: weder aria2c noch curl vorhanden - apt-get install -y aria2 zstd curl" >&2; exit 6; }

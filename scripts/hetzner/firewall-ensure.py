@@ -34,6 +34,33 @@ scripts/hetzner/firewall-ensure-*.py). Rollen, die es in der laufenden Flotte
 nicht gibt, werden gemeldet statt geraten (Exit != 0, weil der Soll-Zustand
 dann nicht ableitbar ist).
 
+ZUSAMMENSPIEL MIT DEM PORTAL-WAKE (zwei Schreiber, dieselben vier Regeln):
+die Regeln ai:8000/ai:11434/master:8000 entstehen im Portal-Worker in
+`openFleetPorts()` (`POST /firewalls/<id>/actions/set_rules`, Zeilen 1504-1520),
+app:8080 in `syncAppFirewall()` (Zeilen 577-599) - dieselben Ports/Quellen wie
+CONTRACT hier. Beide Seiten sind ERGEBNIS-idempotent (derselbe Zielzustand),
+aber unterschiedlich im Schreiben:
+
+  * dieses Werkzeug schreibt NUR bei Abweichung (zweiter Lauf = kein
+    Schreibaufruf) und liest nach dem Schreiben frisch zurueck (Exit 3 bei
+    Abweichung);
+  * der Portal-Wake schreibt die Regeln bei JEDEM Wake neu (kein Diff, keine
+    Gegenprobe) - ein zweiter Aufruf ist kein No-Op im Schreibverkehr.
+
+Reihenfolge: im Flottenstart laeuft dieses Werkzeug als Schritt 3/9 VOR den
+Rollen-Deploys (bring-up-fleet.sh); der Portal-Wake laeuft in /api/wake und
+/api/wire-fleet. Beide sind NICHT serialisiert: laeuft ein Wake zwischen Lesen
+und Gegenprobe, faellt das als abweichende Gegenprobe (Exit 3) auf - statt als
+stiller Fehlzustand.
+
+BEWUSSTE ABWEICHUNG (Befund, Betreiberentscheidung offen): eine bereits fuer
+`0.0.0.0/0` offene Vertrags-Regel wird hier NICHT auf den Knoten verengt
+(Bedeutungsaenderung, siehe unten im Plan). Der Portal-Wake verengt eine solche
+Regel dagegen auf die aktuelle app-1-IP/edge-1-IP (index.js, `baseRules`-Filter
+plus Neuaufbau der Dienst-Ports). Beide Verhalten sind gepinnt:
+tests/portalWorkerFleetPorts.test.ts (Portal-Seite) und
+`PortalWakeVertragTest` in tests/test_hetzner_scripts.py (diese Seite).
+
 Aufruf:
   python3 scripts/hetzner/firewall-ensure.py               # abgleichen + anwenden
   python3 scripts/hetzner/firewall-ensure.py --dry-run     # Plan zeigen, nichts schreiben
@@ -225,7 +252,10 @@ def plan_firewall(firewall: dict, ips: dict[str, str]) -> dict:
             new_rules.append(dict(rule))
             hints.append(
                 f"tcp/{port}: fuer ALLE offen (0.0.0.0/0) - Regel unveraendert, "
-                f"die Quelle wird bewusst nicht eingeschraenkt"
+                f"die Quelle wird bewusst nicht eingeschraenkt. ACHTUNG: der "
+                f"Portal-Wake (openFleetPorts) verengt genau diese Regel auf die "
+                f"App-Knoten-IP - bewusste Abweichung, siehe "
+                f"docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014, Zusammenspiel)"
             )
             continue
         replaced = [wanted if is_ipv4_host(entry) else entry for entry in current]
@@ -276,6 +306,12 @@ def print_contract() -> None:
     print(f"  Namenspraefix: {PREFIX}   (Rollen ohne Knoten werden gemeldet, nicht geraten)")
     print("  Abgleich im Flottenstart: Schritt 3/9 von scripts/hetzner/bring-up-fleet.sh")
     print("  Abschalten:  FLEET_FIREWALL_ENSURE=0 bash scripts/hetzner/bring-up-fleet.sh")
+    # Zusammenspiel mit dem zweiten Schreiber: der Portal-Wake setzt dieselben
+    # vier Regeln (openFleetPorts/syncAppFirewall). Der Trockenlauf nennt das,
+    # damit die Frage "wer schreibt wann" auch ohne Netz belegbar ist.
+    print("  Zweiter Schreiber: der Portal-Wake (/api/wake, /api/wire-fleet) setzt dieselben")
+    print("                     vier Regeln bei JEDEM Lauf neu; dieses Werkzeug schreibt nur")
+    print("                     bei Abweichung und prueft danach frisch zurueck (Gegenprobe).")
 
 
 def main(argv: list[str] | None = None) -> int:

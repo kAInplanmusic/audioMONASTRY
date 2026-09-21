@@ -176,6 +176,24 @@ if [[ "$ROLE" == "sfu" ]]; then
     rtc_env_upsert "$ENV_FILE" DOMAIN ""
     echo "  DOMAIN= (leer -> Caddy auf :80; reiner HTTP-Testaufbau)"
   fi
+  # Caddyfile auf dem KNOTEN: docker-compose.hetzner.yml mountet `./Caddyfile`
+  # im Repo-Verzeichnis. Live-Befund 2026-09-21: auf sfu-1 fehlte die Datei -
+  # der Repo-Sync schliesst `Caddyfile` BEWUSST aus (sonst wuerde die app-Knoten-
+  # Variante ueberschrieben), und nobody installiert dort die Rollen-Site.
+  # Folge: der Container `audiomonastry-caddy` bleibt im Zustand "Created" und
+  # startet nie. Das ist KEIN Ausfall (die App faehrt ENABLE_SFU=0 und nutzt
+  # diesen Knoten als TURN-Server), aber `https://sfu.<domain>` antwortet mit
+  # 000. Die Meldung steht NACH der TURN-Verdrahtung und aendert nichts an ihr:
+  # kein exit, keine Regel, kein Zustand - sie macht den Zustand nur sichtbar.
+  CADDYFILE="${CADDYFILE:-$REPO_ROOT/Caddyfile}"
+  if [[ ! -f "$CADDYFILE" ]]; then
+    echo "  ⚠ Caddyfile fehlt auf diesem Knoten: $CADDYFILE"
+    echo "    -> 'audiomonastry-caddy' bleibt im Zustand 'Created' und startet nie (kein Proxy auf 80/443)."
+    echo "    -> TURN/coturn ist davon NICHT betroffen; diese Verdrahtung ist vollstaendig durchgelaufen."
+    echo "    -> fuer HTTPS-Signalisierung die ACME-Rollen-Site vom Betreiber-Rechner installieren:"
+    echo "       rsync -az Caddyfile root@<dieser-knoten>:$CADDYFILE   # Repo-Root-Caddyfile ({\$DOMAIN})"
+    echo "       danach Caddy neu erzeugen (docker compose ... up -d caddy; siehe docs/HETZNER_DEPLOY.md)"
+  fi
   echo "  .env aktualisiert: $ENV_FILE (ENABLE_SFU=1, SFU_ANNOUNCED_IP=$ip, TURN_*)"
   echo "  coturn-Konfiguration: $TURN_CONF_OUT (Rechte 0640, Secret nicht eingecheckt)"
   echo "  Naechster Schritt: docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d caddy audiomonastry coturn"

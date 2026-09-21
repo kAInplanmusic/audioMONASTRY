@@ -6,6 +6,8 @@
 # frischen Hetzner-Instanz und tuned das System für Echtzeit-Audio/WebRTC:
 #   - BBR Congestion Control, große UDP/TCP-Buffer (Mediasoup-SFU)
 #   - chrony (präzise Uhr), fail2ban (SSH-Härtung), zram (Build-Headroom)
+#   - aria2 + zstd: Werkzeuge des parallelen Medienweges (--via-r2) - damit ist
+#     ein frischer Knoten ohne apt-Nachinstallation sofort bedienbar
 #   - Docker-Daemon mit hohen File-Limits (WebSockets)
 # Wird von scripts/hetzner/provision.py beim Server-Create übergeben.
 # =============================================================================
@@ -21,6 +23,19 @@ packages:
   - ufw
   - fail2ban
   - chrony
+  # Medienweg (2026-09-21): Werkzeuge des PARALLELEN Medienweges.
+  # `deliver-media.sh --via-r2` / `parallel-transfer.sh` ziehen das zstd-Archiv
+  # mit `aria2c -x16 -s16` und packen es mit `zstd` aus (R2-Zwischenspeicher,
+  # lib/r2-node-fetch.sh). Beides fehlte auf einem KALTSTART-Knoten, deshalb
+  # installierte der Lauf es per apt nach (`--install-missing`) - ein frischer
+  # Knoten war damit erst nach einem Medienlauf vollstaendig nutzbar.
+  # Hier steht es EINMALIG in der Provisionierung (package_update/apt laeuft
+  # ohnehin genau einmal beim Create): keine Nachinstallation bei jedem Lauf.
+  # Der Rueckfall bleibt fuer Knoten aus einem Rollen-SNAPSHOT bestehen - ein
+  # Snapshot bootet ohne cloud-init (user_data erreicht nur Kaltstarts), dort
+  # installiert r2-node-fetch.sh weiterhin nach, wenn aria2c fehlt.
+  - aria2
+  - zstd
 
 write_files:
   # F6: oeffentliche IPv4 des Knotens beim Boot ermitteln und ablegen. Der Wert

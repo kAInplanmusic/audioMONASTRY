@@ -1491,6 +1491,25 @@ export function r2Summary(env) {
  * Öffnet die Flotten-Service-Ports (master-player 8000, stem-ai 8000,
  * Ollama 11434) NUR für die aktuelle app-1-IP – idempotent und bei
  * IP-Wechsel aktualisierend.
+ *
+ * ZWEI SCHREIBER, DIESELBEN REGELN (2026-09-21): genau diese Ports/Quellen
+ * pflegt auch `scripts/hetzner/firewall-ensure.py` (CONTRACT) – dort als
+ * Abgleich im Flottenstart (Schritt 3/9). Unterschiede, die bewusst so sind:
+ *   * firewall-ensure schreibt NUR bei Abweichung und liest danach frisch
+ *     zurück (Exit 3 bei Abweichung); dieser Pfad setzt bei JEDEM Wake neu
+ *     (kein Diff, keine Gegenprobe) – das Ergebnis ist gleich, der
+ *     Schreibverkehr nicht.
+ *   * Eine bereits für 0.0.0.0/0 offene Regel wird hier auf die app-1-IP
+ *     VERENGT (der Filter unten entfernt den Port und baut ihn mit einer
+ *     Quelle neu). firewall-ensure lässt eine offene Regel bewusst stehen.
+ *     Das ist ein dokumentierter Unterschied, keine stille Änderung –
+ *     gepinnt in tests/portalWorkerFleetPorts.test.ts und
+ *     `PortalWakeVertragTest` (tests/test_hetzner_scripts.py); Betreiber-
+ *     Entscheidung über eine Angleichung steht aus (docs/HETZNER_DEPLOY.md,
+ *     INFRA-HETZNER-014).
+ *   * Der Aufrufer ist /api/wake bzw. /api/wire-fleet; die Reihenfolge dort ist
+ *     syncAppFirewall -> syncOriginDns -> openFleetPorts (dieser Pfad fasst die
+ *     app-Firewall NICHT an).
  */
 async function openFleetPorts(env) {
   const servers = await fleetServers(env);

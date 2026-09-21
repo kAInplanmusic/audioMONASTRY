@@ -156,6 +156,10 @@ PARALLEL_TRANSFER = HETZNER / "parallel-transfer.sh"
 R2_SIGV4_LIB = HETZNER / "lib" / "r2-sigv4.sh"
 R2_NODE_FETCH = HETZNER / "lib" / "r2-node-fetch.sh"
 COMPOSE_MEDIA = ROOT / "docker-compose.media.yml"
+#: Provisionierung der Knoten (Pakete, u. a. aria2 + zstd fuer den Medienweg).
+CLOUD_INIT = HETZNER / "cloud-init.yaml"
+#: Flotten-Abbau (Server loeschen; Firewalls bleiben bewusst bestehen).
+DELETE_FLEET = HETZNER / "delete-fleet.sh"
 
 #: Speicher-Limits, die mit `deploy.resources.limits.memory` gesetzt werden.
 #: Compose v2 uebersetzt sie beim Start in `--memory` (dokumentiertes Verhalten);
@@ -1152,6 +1156,10 @@ CONTROLLED_ENV = (
     # gesetzt) und "ohne Token" waere nicht pruefbar.
     "HCLOUD_TOKEN", "HCLOUD_ENV_FILE", "HCLOUD_API_BASE", "FLEET_PREFIX",
     "FLEET_FIREWALL_ENSURE",
+    # 2026-09-21: Abbaupfad (delete-fleet.sh) + Caddyfile-Pfad der sfu-Warnung
+    # (wire-rtc.sh). Ohne diese Eintraege haengen die Tests an der Shell des
+    # Rechners und die Warnung waere nicht isoliert pruefbar.
+    "DELETE_FLEET_ENV_FILE", "CADDYFILE",
 )
 
 
@@ -5570,6 +5578,504 @@ class FirewallAbgleichImFlottenstartTest(unittest.TestCase):
         self.assertEqual(mit.returncode, 0, mit.stdout + mit.stderr)
         self.assertIn("scripts/hetzner/firewall-ensure.py", log_mit,
                       "mit FLEET_FIREWALL_ENSURE=1 muss der Abgleich wirklich starten")
+
+# ---------------------------------------------------------------------------
+# Medienweg: aria2c + zstd kommen aus der PROVISIONIERUNG (2026-09-21)
+# ---------------------------------------------------------------------------
+# Befund der Vorgaengerrunde: der parallele Medienweg
+# (deliver-media.sh --via-r2 -> parallel-transfer.sh -> lib/r2-node-fetch.sh)
+# braucht auf dem Knoten `aria2c` und `zstd`. Beides fehlte auf einem
+# KALTSTART-Knoten; --install-missing holte es per apt nach - der Weg war damit
+# erst nach einem Medienlauf vollstaendig nutzbar, und `apt-get update` lief
+# jedes Mal mit. Jetzt stehen beide in der Provisionierung (cloud-init), und der
+# apt-Zweig im Knotenskript ist nur noch der Rueckfall fuer Knoten aus einem
+# Rollen-SNAPSHOT (dort laeuft kein cloud-init).
+
+
+def cloud_init_packages() -> list[str]:
+    """Pakete aus dem `packages:`-Block der Cloud-Init-Datei (ohne YAML-Zwang)."""
+    packages: list[str] = []
+    inside = False
+    for line in CLOUD_INIT.read_text(encoding="utf-8").splitlines():
+        if line.startswith("packages:"):
+            inside = True
+            continue
+        if not inside:
+            continue
+        if line.startswith("  - "):
+            packages.append(line[4:].strip())
+        elif line.strip() and not line.startswith((" ", "\t", "#")):
+            break  # naechster Top-Level-Schluessel
+    return packages
+
+
+class MedienWerkzeugeInDerProvisionierungTest(TransferSandbox, unittest.TestCase):
+    """Der parallele Medienweg greift auf einem frischen Knoten SOFORT.
+
+    Geprueft wird die Paketliste der Cloud-Init (Provisionierung), dass der
+    apt-Zweig des Knotenskripts nur im Wachter steht (also nicht bei jedem Lauf
+    laeuft) und was die Trockenlaeufe der beiden Medien-Skripte dazu sagen.
+    """
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def test_cloud_init_installiert_aria2_und_zstd(self) -> None:
+        packages = cloud_init_packages()
+        self.assertIn("aria2", packages, "aria2 fehlt in der Provisionierung (aria2c fuer -x16)")
+        self.assertIn("zstd", packages, "zstd fehlt in der Provisionierung (Archiv auspacken)")
+        # Nichts Bestehendes darf dabei verloren gehen (Docker/UFW/chrony ...).
+        for pflicht in ("docker.io", "docker-compose-v2", "ufw", "chrony", "fail2ban"):
+            with self.subTest(paket=pflicht):
+                self.assertIn(pflicht, packages)
+
+    def test_cloud_init_erklaert_den_zweck_und_den_snapshot_rueckfall(self) -> None:
+        cloud = CLOUD_INIT.read_text(encoding="utf-8")
+        # Ein Paket ohne Begruendung wird beim naechsten Aufraeumen geloescht.
+        self.assertIn("--via-r2", cloud)
+        self.assertIn("r2-node-fetch.sh", cloud)
+        self.assertIn("SNAPSHOT", cloud)
+
+    def test_kein_apt_bei_jedem_lauf(self) -> None:
+        text = R2_NODE_FETCH.read_text(encoding="utf-8")
+        guard = 'if [[ -z "$ARIA2" && "$INSTALL_MISSING" == "1" ]]; then'
+        self.assertIn(guard, text)
+        block = text.split(guard, 1)[1].split("\nfi", 1)[0]
+        apt = "apt-get install -y --no-install-recommends aria2 zstd"
+        self.assertIn(apt, block, "die Nachinstallation steht nicht im Wachter")
+        # Ausfuehrbare Zeilen zaehlen (die echo-Hinweise nennen dasselbe apt-Kommando):
+        ausfuehrbar = [
+            line for line in text.splitlines()
+            if apt in line and not line.strip().startswith(("echo", "#"))
+        ]
+        self.assertEqual(len(ausfuehrbar), 1, f"apt-Aufruf mehrfach/ausserhalb des Wachters: {ausfuehrbar}")
+
+    def test_parallel_transfer_trockenlauf_nennt_die_provisionierung(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="media-prov-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "models")
+            env = self._sandbox(tmp)
+            result = self._run(tmp, "10.0.0.1", "--src", str(src),
+                               "--dest", "/opt/audiomonastry/media", "--print-config", env=env)
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("scripts/hetzner/cloud-init.yaml", combined)
+        self.assertIn("packages: aria2, zstd", combined)
+        self.assertIn("bereits vorhanden", combined)
+        # Unveraendert: das apt-Kommando bleibt als Rueckfall im Trockenlauf.
+        self.assertIn("apt-get install -y --no-install-recommends aria2 zstd", combined)
+        # ... und der Trockenlauf bewegt weiterhin nichts.
+        self.assertEqual(self._log(tmp, "ssh.log"), "")
+
+    def test_deliver_media_trockenlauf_nennt_die_provisionierung(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(DELIVER_MEDIA), "10.0.0.1", "--via-r2", "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(),
+        )
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("scripts/hetzner/cloud-init.yaml", combined)
+        self.assertIn("Rollen-SNAPSHOT", combined)
+        self.assertIn("apt-get install -y --no-install-recommends aria2 zstd", combined)
+
+
+# ---------------------------------------------------------------------------
+# Zwei Schreiber, dieselben vier Regeln (Portal-Wake <-> firewall-ensure)
+# ---------------------------------------------------------------------------
+
+
+def portal_wake_firewalls() -> list[dict]:
+    """Firewall-Zustand NACH einem Portal-Wake (`/api/wire-fleet`).
+
+    Regel fuer Regel die Fixture aus `tests/portalWorkerFleetPorts.test.ts`, wo
+    der ECHTE Worker-Codepfad genau diesen Zustand erzeugt: die Dienst-Ports
+    tragen die IP des zustaendigen Knotens und KEINE `description` (der Wake
+    baut die Regeln neu auf), alles andere bleibt wie in `app_firewall_rules()`.
+    """
+    app_ip = FLEET_TEST_IPS["app"]
+    return [
+        {"id": 4711, "name": "audiomonastry-app", "rules": app_firewall_rules(FLEET_TEST_IPS["edge"])},
+        {"id": 4712, "name": "audiomonastry-ai", "rules": [
+            {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
+            {"direction": "in", "protocol": "tcp", "port": "22", "source_ips": ["0.0.0.0/0", "::/0"], "description": "SSH"},
+            {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{app_ip}/32"]},
+            {"direction": "in", "protocol": "tcp", "port": "11434", "source_ips": [f"{app_ip}/32"]},
+        ]},
+        {"id": 4713, "name": "audiomonastry-master", "rules": [
+            {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
+            {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{app_ip}/32"]},
+        ]},
+        {"id": 4714, "name": "audiomonastry-sfu",
+         "rules": [{"direction": "in", "protocol": "udp", "port": "3478", "source_ips": ["0.0.0.0/0", "::/0"]}]},
+    ]
+
+
+class PortalWakeVertragTest(unittest.TestCase):
+    """Der Portal-Wake und dieses Werkzeug muessen auf DENSELBEN Zustand zielen.
+
+    Kein Test kontaktiert Hetzner: die API-Basis zeigt auf den lokalen Stub.
+    Die Portal-Seite (echter Worker-Codepfad) haelt
+    `tests/portalWorkerFleetPorts.test.ts`; hier steht die Abgleich-Seite und der
+    Beweis, dass beide Seiten nach einem Lauf des jeweils anderen nichts zu tun
+    haben (Ergebnis-Idempotenz) bzw. dieselbe Quelle setzen (konfliktfrei).
+    """
+
+    TOKEN = "hcloud-nur-fuer-den-teststub-0000"
+
+    def _run(self, stub: _HetznerFleetStub, *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(FIREWALL_ENSURE), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(
+                HCLOUD_API_BASE=stub.api_base,
+                HCLOUD_TOKEN=self.TOKEN,
+                HCLOUD_ENV_FILE="/nonexistent/nur-test.env",
+            ),
+        )
+
+    def test_kein_nachbessern_am_zustand_des_portal_wakes(self) -> None:
+        # Der Wake hat die Quellen schon auf die laufenden Knoten gesetzt: der
+        # Abgleich darf NICHTS schreiben (sonst liefen zwei Wahrheiten gegeneinander).
+        stub = _HetznerFleetStub(firewalls=portal_wake_firewalls())
+        with stub:
+            result = self._run(stub)
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.writes(), [], "kein Schreibaufruf auf dem Wake-Zustand")
+        self.assertEqual(stub.methods(), ["GET", "GET"])
+        self.assertIn("unveraendert", result.stdout)
+        self.assertIn("geaendert=0", result.stdout)
+        self.assertIn("geprueft=4", result.stdout)
+
+    def test_beide_schreiber_zielen_auf_dieselbe_quelle(self) -> None:
+        # Nach dem Abgleich steht je Vertrags-Regel genau die IP des zustaendigen
+        # Knotens - dieselbe Zuordnung, die der Portal-Wake schreibt (dort gegen
+        # den echten Worker geprueft). Zwei Schreiber, ein Zielzustand.
+        stub = voller_flotten_stub()
+        with stub:
+            result = self._run(stub)
+
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        for fw_suffix, port, role in CROSS_NODE_CONTRACT:
+            with self.subTest(port=port, rolle=role):
+                self.assertEqual(
+                    stub.rule(f"audiomonastry-{fw_suffix}", port)["source_ips"],
+                    [f"{FLEET_TEST_IPS[role]}/32"],
+                )
+        # Kein anderer Port wurde angelegt/entfernt (der Abgleich erfindet nichts).
+        self.assertEqual(rule_set_of(stub.firewall("audiomonastry-ai")["rules"]),
+                         rule_set_of(portal_wake_firewalls()[1]["rules"]))
+
+    def test_verengung_ist_beidseitig_dokumentiert(self) -> None:
+        # BEFUND + Waegter: die beiden Schreiber behandeln eine offene Regel
+        # (0.0.0.0/0) UNTERSCHIEDLICH. Der Unterschied ist dokumentiert - wer eine
+        # Seite angleicht, muss die andere mitziehen (sonst verschwindet er still).
+        js = PORTAL_WORKER.read_text(encoding="utf-8")
+        py = FIREWALL_ENSURE.read_text(encoding="utf-8")
+        self.assertIn("ports.includes(String(r?.port ?? ''))", js)   # filtert den Port heraus
+        self.assertIn("`${appIp}/32`", js)                            # baut ihn mit EINER Quelle neu
+        self.assertIn("fuer ALLE offen", py)                           # diese Seite verengt NICHT
+        self.assertIn("Portal-Wake", py)
+        self.assertIn("Zweiter Schreiber", py)
+        # Und die Portal-Seite nennt die Abweichung ebenfalls (Kommentar am Codepfad).
+        self.assertIn("VERENGT", js)
+
+    def test_trockenlauf_ist_netzfrei_und_nennt_den_zweiten_schreiber(self) -> None:
+        stub = voller_flotten_stub()
+        with stub:
+            result = self._run(stub, "--print-config")
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.requests, [], "--print-config darf keinen API-Aufruf machen")
+        self.assertIn("Zweiter Schreiber", combined)
+        self.assertIn("Portal-Wake", combined)
+        self.assertNotIn(self.TOKEN, combined)
+
+    def test_hinweis_bei_offener_regel_nennt_den_portal_wake(self) -> None:
+        # Quellen sind aktuell - nur der Port 8000 ist bewusst fuer ALLE offen.
+        # Dann darf NICHTS geschrieben werden (kein Verengen) und der Hinweis
+        # muss die Gegenposition des Portal-Wakes nennen.
+        rules = ai_firewall_rules(FLEET_TEST_IPS["app"])
+        rules[2] = {"direction": "in", "protocol": "tcp", "port": "8000",
+                    "source_ips": ["0.0.0.0/0", "::/0"], "description": "bewusst offen"}
+        stub = _HetznerFleetStub(firewalls=[{"id": 4712, "name": "audiomonastry-ai", "rules": rules}])
+        with stub:
+            result = self._run(stub)
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.writes(), [], "eine offene Regel wird hier nicht verengt")
+        self.assertIn("fuer ALLE offen", combined)
+        self.assertIn("Portal-Wake", combined)
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Firewall-Lebenszyklus beim Abbau (delete-fleet.sh)
+# ---------------------------------------------------------------------------
+
+#: Fake-curl fuer den Abbau: protokolliert jeden Aufruf und antwortet wie die
+#: Hetzner-API auf die im Test gebrauchten Pfade. Kein Netz, kein Token.
+FAKE_CURL_HCLOUD = r"""#!/usr/bin/env bash
+printf '%s\n' "$*" >> "${FAKE_CURL_LOG:?}"
+url=""
+for arg in "$@"; do
+  case "$arg" in http://*|https://*) url="$arg" ;; esac
+done
+case "$url" in
+  *"/servers?name="*)
+    if [[ "${FAKE_SERVER_VORHANDEN:-1}" == "1" ]]; then
+      printf '{"servers":[{"id":4242,"name":"audiomonastry-app-1"}]}'
+    else
+      printf '{"servers":[]}'
+    fi ;;
+  *"/servers/"[0-9]*) printf '{"action":{"status":"success"}}' ;;
+  *"/servers") printf '{"servers":[]}' ;;
+  *"/floating_ips") printf '{"floating_ips":[]}' ;;
+  *"/firewalls?per_page=50") printf '%s' "${FAKE_FIREWALLS_JSON:?}" ;;
+  *) printf '{}' ;;
+esac
+"""
+
+#: Zwei Vertrags-Firewalls mit den ALTEN Quell-IPs (Zustand nach einem Abbau).
+FAKE_FIREWALLS_JSON = json.dumps({"firewalls": [
+    {"id": 4711, "name": "audiomonastry-app", "applied_to": [],
+     "rules": [{"direction": "in", "protocol": "tcp", "port": "8080", "source_ips": [f"{ALTE_EDGE_IP}/32"]}]},
+    {"id": 4712, "name": "audiomonastry-ai", "applied_to": [{"server": {"id": 4242}}],
+     "rules": [{"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{ALTE_APP_IP}/32"]},
+               {"direction": "in", "protocol": "tcp", "port": "11434", "source_ips": [f"{ALTE_APP_IP}/32"]}]},
+]})
+
+
+class FleetFirewallLebenszyklusTest(unittest.TestCase):
+    """Entscheid 2026-09-21: der Abbau loescht Server, NICHT die Firewalls.
+
+    Begruendung und die verworfene Alternative stehen in docs/HETZNER_DEPLOY.md
+    (Abschnitt 'Firewall-Lebenszyklus beim Abbau'); dieser Test belegt den
+    Mechanismus gegen ein gefaktes `curl`: kein `DELETE` auf /firewalls, kein
+    `set_rules`, nur Server-Loeschungen - und die Rueckfrage bricht ohne
+    API-Aufruf ab.
+    """
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _run(self, tmp: pathlib.Path, args: tuple[str, ...] = ("--yes",),
+             server_vorhanden: bool = True, eingabe: str | None = None) -> tuple[subprocess.CompletedProcess, str]:
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        curl = fake_bin / "curl"
+        curl.write_text(FAKE_CURL_HCLOUD, encoding="utf-8")
+        curl.chmod(0o755)
+        log = tmp / "curl.log"
+        log.write_text("", encoding="utf-8")
+        env_file = tmp / ".env.deploy"
+        env_file.write_text("HCLOUD_TOKEN=nur-ein-testwert\n", encoding="utf-8")
+        env = clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            FAKE_CURL_LOG=str(log),
+            FAKE_FIREWALLS_JSON=FAKE_FIREWALLS_JSON,
+            FAKE_SERVER_VORHANDEN="1" if server_vorhanden else "0",
+            DELETE_FLEET_ENV_FILE=str(env_file),
+        )
+        result = subprocess.run(
+            [self.bash, str(DELETE_FLEET), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+            input=eingabe if eingabe is not None else "",
+        )
+        return result, log.read_text(encoding="utf-8")
+
+    def test_abbau_loescht_nur_server_und_listet_die_firewalls_lesend(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="delfleet-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            result, log = self._run(tmp)
+        combined = result.stdout + result.stderr
+        lines = [line for line in log.splitlines() if line.strip()]
+
+        self.assertEqual(result.returncode, 0, combined)
+        # 1. Geloescht werden AUSSCHLIESSLICH Server.
+        deletes = [line for line in lines if "-X DELETE" in line]
+        self.assertTrue(deletes, "kein Server geloescht?")
+        for line in deletes:
+            with self.subTest(zeile=line):
+                self.assertIn("/v1/servers/", line)
+                self.assertNotIn("/firewalls", line)
+        # 2. Kein DELETE und kein Regel-Schreiben auf Firewalls - nur ein GET.
+        self.assertEqual([line for line in lines if "/firewalls" in line and "DELETE" in line], [])
+        self.assertEqual([line for line in lines if "set_rules" in line], [])
+        self.assertTrue([line for line in lines if "/firewalls?per_page=50" in line])
+        # 3. Die Auflistung nennt Name + Regelzahl + Zuweisungen und den Entscheid.
+        self.assertIn("audiomonastry-app", result.stdout)
+        self.assertIn("audiomonastry-ai", result.stdout)
+        self.assertIn("2 Regeln, 1 Zuweisung(en)", result.stdout)
+        self.assertIn("bleiben bestehen", result.stdout)
+        self.assertIn("cleanup-legacy-firewalls.py", result.stdout)
+        self.assertIn("Schritt 3/9", result.stdout)
+        # 4. Der Token der Datei steht nirgends in der Ausgabe.
+        self.assertNotIn("nur-ein-testwert", combined)
+
+    def test_rueckfrage_mit_nein_erzeugt_keinen_api_aufruf(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="delfleet-nein-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            result, log = self._run(tmp, args=(), eingabe="n\n")
+        combined = result.stdout + result.stderr
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Abgebrochen", combined)
+        self.assertEqual(log, "", "ohne Bestaetigung darf kein einziger API-Aufruf entstehen")
+        # Die Rueckfrage nennt den Firewall-Entscheid, damit er nicht ueberrascht.
+        self.assertIn("Firewalls und ihre Regeln: bleiben bestehen", combined)
+
+    def test_zweiter_lauf_ohne_server_loescht_nichts(self) -> None:
+        # Idempotenz: sind die Server weg, faellt keine Loeschung mehr an - die
+        # Firewalls werden trotzdem (lesend) aufgelistet.
+        with tempfile.TemporaryDirectory(prefix="delfleet-2-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            result, log = self._run(tmp, server_vorhanden=False)
+        combined = result.stdout + result.stderr
+        lines = [line for line in log.splitlines() if line.strip()]
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual([line for line in lines if "-X DELETE" in line], [])
+        self.assertIn("Überspringe audiomonastry-app-1 (existiert nicht).", result.stdout)
+        self.assertIn("2 Regeln, 1 Zuweisung(en)", result.stdout)
+
+    def test_skript_und_doku_halten_den_entscheid_fest(self) -> None:
+        text = DELETE_FLEET.read_text(encoding="utf-8")
+        self.assertIn('api GET "/firewalls?per_page=50"', text)
+        self.assertIn("cleanup-legacy-firewalls.py", text)
+        for line in text.splitlines():
+            with self.subTest(zeile=line):
+                self.assertFalse("DELETE" in line and "/firewalls" in line,
+                                 "der Abbau darf keine Firewall loeschen")
+
+        doc = HETZNER_DEPLOY_DOC.read_text(encoding="utf-8")
+        for fuer_marker in ("Firewall-Lebenszyklus beim Abbau", "kein `DELETE`",
+                        "`set_rules`", "cleanup-legacy-firewalls.py", "ensure_firewall",
+                        "FleetFirewallLebenszyklusTest"):
+            with self.subTest(marker=fuer_marker):
+                self.assertIn(fuer_marker, doc)
+
+
+# ---------------------------------------------------------------------------
+# sfu-1: `audiomonastry-caddy` bleibt "Created" (bewusst, dokumentiert)
+# ---------------------------------------------------------------------------
+
+
+class SfuCaddyRestzustandTest(unittest.TestCase):
+    """Der Caddy-Container auf sfu-1 startet nie, weil die Caddyfile fehlt.
+
+    Das ist kein Ausfall (TURN/coturn laeuft; die App faehrt ENABLE_SFU=0) - aber
+    es muss sichtbar sein und darf die TURN-Verdrahtung nicht beruehren. Genau das
+    prueft diese Klasse: echter Lauf der sfu-Rolle ohne Caddyfile.
+    """
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.wire = HETZNER / "wire-rtc.sh"
+
+    def _run_sfu(self, tmp: pathlib.Path, caddyfile: str, *extra: str) -> tuple[subprocess.CompletedProcess, pathlib.Path, pathlib.Path]:
+        env_file = tmp / ".env"
+        conf_out = tmp / "coturn" / "turnserver.conf"
+        env = clean_env(
+            TURN_STATIC_AUTH_SECRET="nur-ein-testsecret",
+            SFU_ANNOUNCED_IP="49.13.65.150",
+            ENV_FILE=str(env_file),
+            TURN_CONF_OUT=str(conf_out),
+            CADDYFILE=caddyfile,
+        )
+        result = subprocess.run(
+            [self.bash, str(self.wire), "sfu", *extra],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+        )
+        return result, env_file, conf_out
+
+    def test_warnung_bei_fehlender_caddyfile_turn_laeuft_trotzdem_durch(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sfucaddy-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            result, env_file, conf_out = self._run_sfu(tmp, str(tmp / "fehlt.Caddyfile"))
+            env_text = env_file.read_text(encoding="utf-8")
+            conf = conf_out.read_text(encoding="utf-8")
+        combined = result.stdout + result.stderr
+
+        # Die Verdrahtung laeuft VOLLSTAENDIG durch (Exit 0) - die Meldung aendert nichts.
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("⚠ Caddyfile fehlt", result.stdout)
+        self.assertIn("TURN/coturn ist davon NICHT betroffen", result.stdout)
+        self.assertIn("rsync -az Caddyfile", result.stdout)
+        # TURN/coturn ist verdrahtet: .env + Relay-Konfiguration stehen.
+        self.assertIn("ENABLE_SFU=1", env_text)
+        self.assertIn("SFU_ANNOUNCED_IP=49.13.65.150", env_text)
+        self.assertIn("turn:49.13.65.150:3478?transport=udp", env_text)
+        self.assertIn("static-auth-secret=nur-ein-testsecret", conf)
+        self.assertIn("min-port=49152", conf)
+        self.assertIn("max-port=49201", conf)
+
+    def test_keine_warnung_wenn_die_caddyfile_da_ist(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="sfucaddy-da-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            vorhanden = tmp / "Caddyfile"
+            vorhanden.write_text("{$DOMAIN} {\n}\n", encoding="utf-8")
+            result, _env_file, _conf = self._run_sfu(tmp, str(vorhanden))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("⚠ Caddyfile fehlt", result.stdout)
+
+    def test_meldung_ist_nur_eine_meldung_ohne_zustandsaenderung(self) -> None:
+        text = self.wire.read_text(encoding="utf-8")
+        block = text.split('CADDYFILE="${CADDYFILE:-', 1)[1].split('echo "  .env aktualisiert', 1)[0]
+        self.assertIn("⚠ Caddyfile fehlt", block)
+        # Kein exit, kein Schreiben, kein Compose-Aufruf: nur echo-Zeilen. Die
+        # TURN-Verdrahtung (davor) ist damit vollstaendig abgeschlossen.
+        code = [line.strip() for line in block.splitlines() if not line.strip().startswith("echo")]
+        for verboten in ("exit ", "rtc_env_upsert", "docker ", "rm -f", "cp "):
+            with self.subTest(verboten=verboten):
+                self.assertNotIn(verboten, "\n".join(code))
+        # Reihenfolge: TURN-Konfiguration -> Caddy-Hinweis -> naechster Schritt.
+        self.assertLess(text.index("rtc_render_turn_conf"), text.index('CADDYFILE="${CADDYFILE:-'))
+        self.assertLess(text.index('CADDYFILE="${CADDYFILE:-'), text.index("Naechster Schritt: docker compose"))
+
+    def test_definition_bleibt_und_der_watchdog_greift_nicht_ein(self) -> None:
+        # Die Caddy-Definition wird NICHT aus dem sfu-Pfad entfernt: sie ist der
+        # Weg fuer die HTTPS-Signalisierung (wire-rtc.sh setzt DOMAIN=<sfu-host>).
+        bring_up = BRING_UP.read_text(encoding="utf-8")
+        self.assertIn("docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry", bring_up)
+        sfu_compose = (ROOT / "docker-compose.sfu.yml").read_text(encoding="utf-8")
+        # Das Overlay definiert KEINEN caddy-Dienst und entfernt ihn auch nicht -
+        # es ergaenzt nur den audiomonastry-Service (die Definition bleibt in der
+        # Basisdatei und damit der Weg fuer HTTPS-Signalisierung erhalten).
+        if yaml is not None:
+            overlay = yaml.safe_load(sfu_compose) or {}
+            self.assertEqual(sorted((overlay.get("services") or {}).keys()), ["audiomonastry"])
+        self.assertNotIn("\n  caddy:", sfu_compose)
+        # Der Watchdog fasst einen nie gestarteten Container nicht an: seine
+        # Caddy-Probe laeuft nur fuer LAUFENDE Container (docker ps) - keine
+        # Restart-Schleife um einen "Created"-Container.
+        watchdog = AUTO_REPAIR.read_text(encoding="utf-8")
+        caddy_block = watchdog.split('CADDY_STATE="nicht-vorhanden"', 1)[1].split("log \"Check abgeschlossen", 1)[0]
+        self.assertIn('if container_running "$CADDY_CONTAINER"; then', caddy_block)
+
+    def test_doku_beschreibt_den_zustand_und_den_weg_heraus(self) -> None:
+        doc = HETZNER_DEPLOY_DOC.read_text(encoding="utf-8")
+        for marker in ("audiomonastry-caddy", "Created", "TURN-Server", "Kein Ausfall",
+                       "rsync -az Caddyfile", "SfuCaddyRestzustandTest"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, doc)
+
+
+#: Abbau-Test: Regel-Gleichheit ohne Beschreibung/Reihenfolge vergleichen.
+def rule_set_of(rules: list[dict]) -> list[tuple]:
+    """Regelmenge wie in firewall-ensure.py (ohne Beschreibung, sortiert)."""
+    return sorted(
+        (rule.get("direction"), rule.get("protocol"), str(rule.get("port") or ""),
+         tuple(sorted(str(s) for s in (rule.get("source_ips") or []))))
+        for rule in rules
+    )
+
 
 if __name__ == "__main__":
     unittest.main()
