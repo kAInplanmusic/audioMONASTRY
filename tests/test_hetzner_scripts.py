@@ -112,6 +112,10 @@ FLEET_NAMES = HETZNER / "fleet-names.sh"
 MIGRATE_PROJECT = HETZNER / "migrate-project-name.sh"
 FLEET_DEPLOY_LIVE = HETZNER / "fleet-deploy-live.sh"
 INSTALL_AI1 = HETZNER / "install-ai1.sh"
+# PROD-P2-REG: der Registry-Weg (Push-Werkzeug + gemeinsame Bibliothek + Doku).
+REGISTRY_PUSH = HETZNER / "registry-push.sh"
+REGISTRY_LIB = HETZNER / "lib" / "registry.sh"
+HETZNER_DEPLOY_DOC = ROOT / "docs" / "HETZNER_DEPLOY.md"
 
 #: Speicher-Limits, die mit `deploy.resources.limits.memory` gesetzt werden.
 #: Compose v2 uebersetzt sie beim Start in `--memory` (dokumentiertes Verhalten);
@@ -1081,6 +1085,15 @@ CONTROLLED_ENV = (
     "COMPOSE_PROJECT_NAME", "COMPOSE_PROJECT", "FLEET_COMPOSE_PROJECT", "LEGACY_COMPOSE_PROJECT",
     "FLEET_PREFIX", "LEGACY_FLEET_PREFIX", "FLEET_HOME", "LEGACY_FLEET_HOME",
     "DEPLOY_LEGACY_REMOTE_DIR",
+    # PROD-P2-REG: GHCR-Zugangsdaten + Registry-Schalter. Die Hermes-Shell kann
+    # GHCR_USERNAME/GHCR_PASSWORD exportiert haben - dann liefe ein Test gegen die
+    # ECHTEN Zugangsdaten des Betreibers (gemessen am 2026-09-21: GHCR_USERNAME
+    # und GHCR_PASSWORD waren in der Prozessumgebung gesetzt). Tests setzen ihre
+    # eigenen Werte, dieser Eintrag nimmt sie vorher heraus.
+    "GHCR_USERNAME", "GHCR_TOKEN", "GHCR_PASSWORD", "GHCR_PAT_ALL_ACCESS",
+    "REGISTRY_ENV_FILE", "REGISTRY_OWNER", "REGISTRY_TAG", "REGISTRY_DOCKER",
+    "REGISTRY_SKIP_BUILD", "REGISTRY_FORCE_PUSH",
+    "DEPLOY_IMAGE_SOURCE", "DEPLOY_REGISTRY_IMAGE", "DEPLOY_REGISTRY_IMAGE_MASTER",
 )
 
 
@@ -3346,6 +3359,487 @@ class FleetSyncDeleteGuardTest(unittest.TestCase):
                         pfad, alt.stdout,
                         "Der Altstand hatte den Ausschluss schon - Gegenprobe wertlos",
                     )
+
+
+# =============================================================================
+# PROD-P2-REG (2026-09-21): Registry-Weg (GHCR) - Push-Werkzeug + Pull-Modus
+# =============================================================================
+# Gemessen: die Leitung Betreiber-Rechner -> Knoten macht ~1 MB/s hoch, das
+# App-Image ist 1,43 GB (+ master-player 1,22 GB) -> 25-40 min pro Knoten und
+# jeder weitere Knoten zahlt erneut. Der Registry-Weg dreht das um: EINMAL
+# pushen, danach zieht jeder Knoten mit `docker pull` im Rechenzentrums-Tempo.
+#
+# Fake `docker` fuer die Registry-Vertraege: protokolliert jeden Aufruf (argv)
+# UND stdin. Damit ist ohne Docker/Netz belegbar,
+#   * dass login/pull/tag laufen und KEIN `docker save`,
+#   * dass das Token per Pipe ankommt (stdin) und NIE in argv steht,
+#   * dass ein schon gepushter Tag nicht zweimal gepusht wird.
+# Tests rufen das Skript mit stdin=DEVNULL auf, damit `cat` im Fake nicht wartet.
+FAKE_REGISTRY_DOCKER = r"""#!/usr/bin/env bash
+set -uo pipefail
+printf '%s\n' "$*" >> "${FAKE_REGISTRY_DOCKER_LOG:?}"
+if [[ ! -t 0 ]]; then cat >> "${FAKE_REGISTRY_DOCKER_STDIN:?}" 2>/dev/null || true; fi
+case "${1:-}" in
+  # `manifest inspect` scheitert bei "Tag noch nicht in der Registry" (Exit != 0).
+  manifest) exit "${FAKE_REGISTRY_MANIFEST_EXIT:-1}" ;;
+esac
+exit 0
+"""
+
+#: Fake `ssh`: protokolliert den entfernten Befehl und fuehrt ihn LOKAL aus.
+#: Damit laeuft der ECHTE Codepfad (Login -> pull -> tag -> compose up), aber
+#: ohne Knoten, ohne Netz - und `docker` darin ist wieder der Fake oben.
+FAKE_REGISTRY_SSH = r"""#!/usr/bin/env bash
+set -uo pipefail
+cmd="${*: -1}"
+printf '%s\n' "$cmd" >> "${FAKE_SSH_LOG:?}"
+if [[ -n "${FAKE_SSH_REPO:-}" ]]; then
+  cmd="${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO}}"
+fi
+exec bash -c "$cmd"
+"""
+
+FAKE_REGISTRY_RSYNC = r"""#!/usr/bin/env bash
+# Fake `rsync`: protokolliert und uebertraegt nichts (es geht hier um den
+# Image-Weg, nicht um den Sync - der hat seinen eigenen Waechter).
+printf '%s\n' "$*" >> "${FAKE_RSYNC_LOG:?}"
+exit 0
+"""
+
+FAKE_REGISTRY_CURL = r"""#!/usr/bin/env bash
+# Fake `curl`: die App-Health-Probe des Knotens bekommt eine Antwort, damit der
+# Live-Weg durchlaeuft - ohne Netz und ohne Knoten.
+case "$*" in
+  *"/api/health"*)
+    printf '{"status":"ok","version":"1.210.001","commit":"%s","buildTime":"1970-01-01T00:00:00Z"}\n' \
+      "${FAKE_CURL_COMMIT:-unknown}"
+    ;;
+esac
+exit 0
+"""
+
+
+class RegistryWegTest(unittest.TestCase):
+    """PROD-P2-REG: Der Registry-Weg haelt seinen Vertrag.
+
+    Erster Teil: das Push-Werkzeug `scripts/hetzner/registry-push.sh`
+    (Trockenlauf ohne Docker/Netz, Tag-Bildung, Login per stdin, Idempotenz).
+    Zweiter Teil: der Pull-Modus beider Deploy-Wege - im Registry-Modus laeuft
+    login/pull/tag, aber KEIN `docker save`; der Default bleibt unveraendert.
+    """
+
+    #: Kanarienvogel-Wert: taucht er in einer Ausgabe oder in argv auf, ist der
+    #: Vertrag "Token nur per stdin" gebrochen.
+    TOKEN = "ghcr-canary-nur-fuer-den-test-0000"
+
+    BASH: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        bash = shutil.which("bash")
+        if bash is None:  # pragma: no cover - Windows/Exoten
+            raise unittest.SkipTest("bash nicht vorhanden")
+        cls.BASH = bash
+        for path in (REGISTRY_PUSH, REGISTRY_LIB, DEPLOY_SH, FLEET_DEPLOY_LIVE):
+            if not path.exists():  # pragma: no cover - Dateien sind eingecheckt
+                raise AssertionError(f"fehlt: {path}")
+
+    # --- Helfer ------------------------------------------------------------
+    def _fake_bin(self, tmp: pathlib.Path, *, docker: bool = True, ssh: bool = True,
+                  rsync: bool = False, curl: bool = False) -> pathlib.Path:
+        fake = tmp / "bin"
+        fake.mkdir(parents=True, exist_ok=True)
+        if docker:
+            (fake / "docker").write_text(FAKE_REGISTRY_DOCKER, encoding="utf-8")
+        if ssh:
+            (fake / "ssh").write_text(FAKE_REGISTRY_SSH, encoding="utf-8")
+        if rsync:
+            (fake / "rsync").write_text(FAKE_REGISTRY_RSYNC, encoding="utf-8")
+        if curl:
+            (fake / "curl").write_text(FAKE_REGISTRY_CURL, encoding="utf-8")
+        for name in ("docker", "ssh", "rsync", "curl"):
+            path = fake / name
+            if path.exists():
+                path.chmod(0o755)
+        return fake
+
+    def _env_file(self, tmp: pathlib.Path) -> pathlib.Path:
+        """Ein Konto mit Token in einer Test-Env-Datei (Wert = Kanarienvogel)."""
+        file = tmp / "betreiber.env"
+        file.write_text(
+            f"# Test-Env-Datei\nGHCR_USERNAME=probeuser\nGHCR_TOKEN={self.TOKEN}\n",
+            encoding="utf-8",
+        )
+        return file
+
+    def _logs(self, tmp: pathlib.Path) -> dict[str, str]:
+        """Log-Ziele fuer die Fakes. Die Schluessel SIND die Env-Namen - so
+        koennen sie direkt in `clean_env(**logs)` gehen (Kleinschreibung hatte
+        den Fake dazu gebracht, ins Leere zu schreiben)."""
+        return {
+            "FAKE_REGISTRY_DOCKER_LOG": str(tmp / "docker.log"),
+            "FAKE_REGISTRY_DOCKER_STDIN": str(tmp / "docker.stdin"),
+            "FAKE_SSH_LOG": str(tmp / "ssh.log"),
+            "FAKE_RSYNC_LOG": str(tmp / "rsync.log"),
+        }
+
+    @staticmethod
+    def _befehlszeilen(zweig: str) -> str:
+        """Nur Befehlszeilen eines Zweigs: Kommentare und Ausgabetexte zaehlen
+        nicht. Ein Kommentar oder eine Meldung, die `docker save` ERKLAERT
+        („hier wird nicht gespeichert"), ist kein `docker save`-Aufruf."""
+        behalten = []
+        for line in zweig.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#") or stripped.startswith("echo ") or stripped.startswith("step "):
+                continue
+            behalten.append(line)
+        return "\n".join(behalten)
+
+    def _read(self, name: str) -> str:
+        path = pathlib.Path(name)
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    def _lib(self, script: str, **env: str | None) -> subprocess.CompletedProcess:
+        """Faehrt Funktionen der gemeinsamen Bibliothek (echter Codepfad)."""
+        return subprocess.run(
+            [self.BASH, "-c", "cd " + str(ROOT) + " && source scripts/hetzner/lib/registry.sh\n" + script],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(**env),
+        )
+
+    # --- 1. Tag-/Namensbildung --------------------------------------------
+    def test_tag_kommt_aus_dem_kurzhash_sonst_aus_der_version(self) -> None:
+        # Default: `git rev-parse --short HEAD` des Repos (derselbe Tag, den der
+        # Push setzt und der Pull sucht - eine Bibliothek, kein zweiter Begriff).
+        head = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+            cwd=ROOT, timeout=60,
+        ).stdout.strip()
+        result = self._lib("registry_default_tag " + str(ROOT))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), head)
+        # Ohne .git (z. B. ein entpacktes Archiv) faellt der Tag auf die
+        # package.json-Version zurueck statt zu raten.
+        with tempfile.TemporaryDirectory(prefix="reg-tag-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            (tmpdir / "package.json").write_text('{"version":"9.9.9"}', encoding="utf-8")
+            fallback = self._lib(f"registry_default_tag {tmpdir}")
+            self.assertEqual(fallback.returncode, 0, fallback.stderr)
+            self.assertEqual(fallback.stdout.strip(), "9.9.9")
+
+    def test_referenz_und_owner_werden_aus_dem_repo_gebildet(self) -> None:
+        # Owner aus dem git-Remote (kein hartkodiertes Konto) und klein
+        # geschrieben - GHCR lehnt Grossbuchstaben ab. Das Repo-Remote ist
+        # `kAInplanmusic/audioMONASTRY`, die Referenz muss also `kainplanmusic`
+        # nennen.
+        result = self._lib(
+            "registry_owner " + str(ROOT) + "\n"
+            'registry_image "$(registry_owner ' + str(ROOT) + ')" "$(registry_app_name)" 1234abcd'
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        zeilen = result.stdout.split()
+        self.assertEqual(zeilen[0], "kainplanmusic")
+        self.assertEqual(zeilen[1], "ghcr.io/kainplanmusic/audiomonastry:1234abcd")
+        # Der lokale Name bleibt der, den docker-compose.hetzner.yml erwartet.
+        local = self._lib("printf '%s|%s\\n' \"$(registry_local_app)\" \"$(registry_local_master)\"")
+        self.assertEqual(local.stdout.strip(), "audiomonastry:hetzner|audiomonastry-master-player:hetzner")
+        compose = COMPOSE_BASE.read_text(encoding="utf-8")
+        for name in ("audiomonastry:hetzner", "audiomonastry-master-player:hetzner"):
+            self.assertIn(f"image: {name}", compose)
+
+    # --- 2. Trockenlauf ----------------------------------------------------
+    def test_trockenlauf_ist_netzfrei_und_nennt_beide_referenzen(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="reg-dry-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            # KEIN fake docker im PATH: der Trockenlauf darf Docker nicht brauchen.
+            result = subprocess.run(
+                [self.BASH, str(REGISTRY_PUSH), "--print-config"],
+                capture_output=True, text=True, cwd=ROOT, timeout=60,
+                env=clean_env(REGISTRY_ENV_FILE=str(self._env_file(tmpdir))),
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("ghcr.io/kainplanmusic/audiomonastry:", result.stdout)
+            self.assertIn("ghcr.io/kainplanmusic/audiomonastry-master-player:", result.stdout)
+            self.assertIn("audiomonastry:hetzner", result.stdout)
+            self.assertIn("audiomonastry-master-player:hetzner", result.stdout)
+            self.assertIn("Wert wird nie ausgegeben", result.stdout)
+            # Der Trockenlauf nennt den Pull-Befehl - der Weg ist ohne Flotte lesbar.
+            self.assertIn("DEPLOY_IMAGE_SOURCE=registry", result.stdout)
+            # Und das Token taucht nirgends auf (auch nicht auf stderr).
+            self.assertNotIn(self.TOKEN, result.stdout + result.stderr)
+
+    def test_trockenlauf_zeigt_ueberschriebenen_tag(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="reg-dry-tag-") as tmp:
+            result = subprocess.run(
+                [self.BASH, str(REGISTRY_PUSH), "--tag", "roll-2026-09-21", "--print-config"],
+                capture_output=True, text=True, cwd=ROOT, timeout=60,
+                env=clean_env(REGISTRY_ENV_FILE="none", REGISTRY_OWNER="probe"),
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("ghcr.io/probe/audiomonastry:roll-2026-09-21", result.stdout)
+            self.assertIn("ghcr.io/probe/audiomonastry-master-player:roll-2026-09-21", result.stdout)
+            self.assertIn("Owner=probe", result.stdout)
+
+    # --- 3. Push: Login per stdin, beide Images, idempotent ---------------
+    def test_push_schickt_das_token_per_stdin_und_pusht_beide_images(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="reg-push-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            fake = self._fake_bin(tmpdir)
+            logs = self._logs(tmpdir)
+            result = subprocess.run(
+                [self.BASH, str(REGISTRY_PUSH), "--skip-build", "--tag", "probe123"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120, stdin=subprocess.DEVNULL,
+                env=clean_env(
+                    REGISTRY_ENV_FILE=str(self._env_file(tmpdir)),
+                    PATH=f"{fake}:{os.environ.get('PATH', '')}",
+                    **logs,
+                ),
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            aufrufe = self._read(logs["FAKE_REGISTRY_DOCKER_LOG"])
+            self.assertIn(f"login ghcr.io -u probeuser --password-stdin", aufrufe)
+            self.assertIn("tag audiomonastry:hetzner ghcr.io/kainplanmusic/audiomonastry:probe123", aufrufe)
+            self.assertIn(
+                "tag audiomonastry-master-player:hetzner ghcr.io/kainplanmusic/audiomonastry-master-player:probe123",
+                aufrufe,
+            )
+            self.assertIn("push ghcr.io/kainplanmusic/audiomonastry:probe123", aufrufe)
+            self.assertIn("push ghcr.io/kainplanmusic/audiomonastry-master-player:probe123", aufrufe)
+            # --skip-build bedeutet: kein zweiter Build (der kostet ~25 min).
+            self.assertNotIn("build ", aufrufe)
+            # Der Wert kommt per stdin und NICHT als Argument und nicht in der Ausgabe.
+            self.assertIn(self.TOKEN, self._read(logs["FAKE_REGISTRY_DOCKER_STDIN"]))
+            self.assertNotIn(self.TOKEN, aufrufe)
+            self.assertNotIn(self.TOKEN, result.stdout + result.stderr)
+
+    def test_gleicher_tag_wird_nicht_zweimal_gepusht(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="reg-idem-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            fake = self._fake_bin(tmpdir)
+            logs = self._logs(tmpdir)
+            base_env = dict(
+                REGISTRY_ENV_FILE=str(self._env_file(tmpdir)),
+                PATH=f"{fake}:{os.environ.get('PATH', '')}",
+                **logs,
+            )
+            args = [self.BASH, str(REGISTRY_PUSH), "--skip-build", "--tag", "probe123"]
+            # Erster Lauf: `manifest inspect` scheitert (Tag fehlt) -> Push.
+            first = subprocess.run(
+                args, capture_output=True, text=True, cwd=ROOT, timeout=120,
+                stdin=subprocess.DEVNULL, env=clean_env(**base_env),
+            )
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            self.assertIn("push ghcr.io/kainplanmusic/audiomonastry:probe123", self._read(logs["FAKE_REGISTRY_DOCKER_LOG"]))
+            pathlib.Path(logs["FAKE_REGISTRY_DOCKER_LOG"]).write_text("", encoding="utf-8")
+            # Zweiter Lauf: derselbe Tag ist in der Registry -> KEIN zweiter Push.
+            second = subprocess.run(
+                args, capture_output=True, text=True, cwd=ROOT, timeout=120,
+                stdin=subprocess.DEVNULL,
+                env=clean_env(**base_env, FAKE_REGISTRY_MANIFEST_EXIT="0"),
+            )
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            zweiter_lauf = self._read(logs["FAKE_REGISTRY_DOCKER_LOG"])
+            self.assertIn("manifest inspect", zweiter_lauf)
+            self.assertNotIn("push ", zweiter_lauf)
+            self.assertIn("uebersprungen (Tag existiert schon)", second.stdout)
+            # --force ist der bewusste Gegenweg (z. B. nach einem ueberschriebenen Tag).
+            forced = subprocess.run(
+                args + ["--force"], capture_output=True, text=True, cwd=ROOT, timeout=120,
+                stdin=subprocess.DEVNULL,
+                env=clean_env(**base_env, FAKE_REGISTRY_MANIFEST_EXIT="0"),
+            )
+            self.assertEqual(forced.returncode, 0, forced.stdout + forced.stderr)
+            self.assertIn("push ghcr.io/kainplanmusic/audiomonastry:probe123", self._read(logs["FAKE_REGISTRY_DOCKER_LOG"]))
+
+    def test_push_bricht_ohne_zugangsdaten_ab_statt_zu_raten(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="reg-nocreds-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            fake = self._fake_bin(tmpdir)
+            result = subprocess.run(
+                [self.BASH, str(REGISTRY_PUSH), "--skip-build"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120,
+                stdin=subprocess.DEVNULL,
+                env=clean_env(REGISTRY_ENV_FILE="none", PATH=f"{fake}:{os.environ.get('PATH', '')}",
+                              **self._logs(tmpdir)),
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Keine GHCR-Zugangsdaten", result.stderr)
+            self.assertEqual(self._read(str(tmpdir / "docker.log")), "", "ohne Zugangsdaten darf nichts laufen")
+
+    # --- 4. Pull-Weg: login/pull/tag, KEIN save ---------------------------
+    def test_pull_weg_loggt_ein_zieht_und_taggt_ohne_save(self) -> None:
+        # Der Registry-Weg des Deploys, direkt an der Bibliothek gefahren (echter
+        # Codepfad mit Fake-ssh, der den entfernten Befehl lokal ausfuehrt).
+        with tempfile.TemporaryDirectory(prefix="reg-pull-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            fake = self._fake_bin(tmpdir, rsync=False, curl=False)
+            logs = self._logs(tmpdir)
+            result = self._lib(
+                'registry_pull_images "" "root@10.0.0.1" "' + str(ROOT) + '" "' + str(self._env_file(tmpdir)) + '" '
+                'audiomonastry:hetzner ghcr.io/probe/audiomonastry:probe123',
+                PATH=f"{fake}:{os.environ.get('PATH', '')}",
+                **logs,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            docker = self._read(logs["FAKE_REGISTRY_DOCKER_LOG"])
+            ssh = self._read(logs["FAKE_SSH_LOG"])
+            self.assertIn("login ghcr.io -u probeuser --password-stdin", docker)
+            self.assertIn("pull ghcr.io/probe/audiomonastry:probe123", docker)
+            self.assertIn("tag ghcr.io/probe/audiomonastry:probe123 audiomonastry:hetzner", docker)
+            # Der Rollback-Tag kommt VOR dem Ersetzen des Images - sonst zeigte der
+            # Rueckweg auf den neuen Stand.
+            self.assertIn("docker image tag audiomonastry:hetzner audiomonastry:hetzner-rollback", ssh)
+            self.assertLess(
+                ssh.index("audiomonastry:hetzner-rollback"),
+                ssh.index("docker pull"),
+                "Rollback-Tag muss VOR dem Pull/Ersetzen gesetzt werden",
+            )
+            # Der Kern des Registry-Wegs: kein Image-Transfer.
+            self.assertNotIn("save", docker)
+            # Token wieder nur per stdin.
+            self.assertIn(self.TOKEN, self._read(logs["FAKE_REGISTRY_DOCKER_STDIN"]))
+            self.assertNotIn(self.TOKEN, docker + ssh)
+            self.assertNotIn(self.TOKEN, result.stdout + result.stderr)
+
+    # --- 5. Beide Deploy-Wege: Registry-Zweig vs. Default ------------------
+    def test_registry_zweig_beider_skripte_hat_kein_docker_save(self) -> None:
+        deploy = DEPLOY_SH.read_text(encoding="utf-8")
+        live = FLEET_DEPLOY_LIVE.read_text(encoding="utf-8")
+        # Der LETZTE Treffer ist der echte Image-Zweig: in deploy.sh steht der
+        # Schalter auch im Build-Gate von Schritt [1/5] und in den Abbruchpruefungen.
+        deploy_registry = deploy.split('if [[ "$DEPLOY_IMAGE_SOURCE" == "registry" ]]; then')[-1].split("\n  elif")[0]
+        live_registry = live.split('if [[ "$IMAGE_SOURCE" == "registry" ]]; then')[1].split("\n  else")[0]
+        for name, zweig in (("deploy.sh", deploy_registry), ("fleet-deploy-live.sh", live_registry)):
+            with self.subTest(script=name):
+                self.assertIn("registry_pull_images", zweig)
+                self.assertNotIn(
+                    "docker save", self._befehlszeilen(zweig),
+                    "im Registry-Modus darf KEIN docker save laufen",
+                )
+        # Der Transfer bleibt der Default-Weg und dort steht der Transfer auch.
+        self.assertIn('docker save "$IMAGE_APP" "$IMAGE_MASTER"', deploy)
+        self.assertIn('docker save "$IMAGE"', live)
+        for name, script in (("deploy.sh", deploy), ("fleet-deploy-live.sh", live)):
+            with self.subTest(script=name):
+                self.assertIn("local", script)
+                self.assertIn("registry", script)
+
+    def test_trockenlaeufe_zeigen_die_quelle_default_local(self) -> None:
+        deploy = subprocess.run(
+            [self.BASH, str(DEPLOY_SH)], capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(DEPLOY_PRINT_CONFIG="1", REGISTRY_ENV_FILE="none"),
+        )
+        self.assertEqual(deploy.returncode, 0, deploy.stdout + deploy.stderr)
+        self.assertIn("DEPLOY_IMAGE_SOURCE=local", deploy.stdout)
+        # Ohne Registry-Wahl bleiben die Referenzen leer - nichts schwenkt still um.
+        self.assertIn("DEPLOY_REGISTRY_IMAGE=<leer>", deploy.stdout)
+        live = subprocess.run(
+            [self.BASH, str(FLEET_DEPLOY_LIVE), "--print-config"], capture_output=True, text=True,
+            cwd=ROOT, timeout=60, env=clean_env(REGISTRY_ENV_FILE="none"),
+        )
+        self.assertEqual(live.returncode, 0, live.stderr)
+        self.assertIn("DEPLOY_IMAGE_SOURCE=local", live.stdout)
+        self.assertIn("DEPLOY_REGISTRY_IMAGE=<leer>", live.stdout)
+        # Mit Wahl: die Referenz wird gezeigt (Default-Owner aus dem git-Remote).
+        chosen = subprocess.run(
+            [self.BASH, str(FLEET_DEPLOY_LIVE), "--print-config"], capture_output=True, text=True,
+            cwd=ROOT, timeout=60,
+            env=clean_env(REGISTRY_ENV_FILE="none", DEPLOY_IMAGE_SOURCE="registry",
+                          DEPLOY_REGISTRY_IMAGE="ghcr.io/probe/app:probe123"),
+        )
+        self.assertEqual(chosen.returncode, 0, chosen.stderr)
+        self.assertIn("DEPLOY_IMAGE_SOURCE=registry", chosen.stdout)
+        self.assertIn("DEPLOY_REGISTRY_IMAGE=ghcr.io/probe/app:probe123", chosen.stdout)
+
+    def test_unbekannte_quelle_und_node_modus_brechen_laut_ab(self) -> None:
+        for script, args in ((DEPLOY_SH, []), (FLEET_DEPLOY_LIVE, ["--print-config"])):
+            with self.subTest(script=script.name):
+                env = clean_env(REGISTRY_ENV_FILE="none", DEPLOY_IMAGE_SOURCE="schmuggel")
+                if script is DEPLOY_SH:
+                    env = clean_env(REGISTRY_ENV_FILE="none", DEPLOY_IMAGE_SOURCE="schmuggel",
+                                    DEPLOY_PRINT_CONFIG="1")
+                result = subprocess.run(
+                    [self.BASH, str(script), *args], capture_output=True, text=True,
+                    cwd=ROOT, timeout=60, env=env,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("unbekannt", result.stderr)
+        # Registry-Weg im node-Modus wird nicht still ignoriert.
+        node = subprocess.run(
+            [self.BASH, str(DEPLOY_SH)], capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(DEPLOY_PRINT_CONFIG="1", REGISTRY_ENV_FILE="none",
+                          DEPLOY_IMAGE_SOURCE="registry", DEPLOY_MODE="node"),
+        )
+        self.assertNotEqual(node.returncode, 0)
+        self.assertIn("DEPLOY_IMAGE_SOURCE=registry setzt DEPLOY_MODE=docker", node.stderr)
+
+    # --- 6. Ende-zu-Ende: der Live-Weg zieht wirklich ----------------------
+    def test_live_weg_zieht_im_registry_modus_und_speichert_im_default(self) -> None:
+        """Faehrt `fleet-deploy-live.sh` KOMPLETT durch - mit Fakes fuer
+        ssh/rsync/curl/docker, also ohne Knoten und ohne Netz.
+
+        Das ist der eigentliche Beweis: im Registry-Modus laufen login/pull/tag
+        und KEIN `docker save`; im Default-Modus laeuft `docker save` und KEIN
+        pull. Die Aussagen kommen aus dem protokollierten Docker-Verhalten, nicht
+        aus einer Textsuche im Skript.
+        """
+        with tempfile.TemporaryDirectory(prefix="reg-e2e-") as tmp:
+            tmpdir = pathlib.Path(tmp)
+            remote = tmpdir / "remote"
+            remote.mkdir()
+            # Medien-Overlay „liegt auf dem Knoten": der Weg muss es mitnehmen.
+            (remote / "docker-compose.media.yml").write_text("services: {}\n", encoding="utf-8")
+            (remote / "media").mkdir()
+            (remote / "media" / "marker.txt").write_text("overlay\n", encoding="utf-8")
+            fake = self._fake_bin(tmpdir, rsync=True, curl=True)
+            logs = self._logs(tmpdir)
+            base = dict(
+                REGISTRY_ENV_FILE=str(self._env_file(tmpdir)),
+                PATH=f"{fake}:{os.environ.get('PATH', '')}",
+                DEPLOY_REMOTE_DIR=str(remote),
+                FAKE_SSH_REPO=str(remote),
+                FAKE_CURL_COMMIT="6786809",
+                **logs,
+            )
+            args = [self.BASH, str(FLEET_DEPLOY_LIVE), "10.0.0.1"]
+
+            registry = subprocess.run(
+                args + [], capture_output=True, text=True, cwd=ROOT, timeout=180,
+                stdin=subprocess.DEVNULL,
+                env=clean_env(**base, DEPLOY_IMAGE_SOURCE="registry",
+                              DEPLOY_REGISTRY_IMAGE="ghcr.io/probe/audiomonastry:probe123"),
+            )
+            self.assertEqual(registry.returncode, 0, registry.stdout + registry.stderr)
+            docker = self._read(logs["FAKE_REGISTRY_DOCKER_LOG"])
+            ssh = self._read(logs["FAKE_SSH_LOG"])
+            self.assertIn("pull ghcr.io/probe/audiomonastry:probe123", docker)
+            self.assertIn("tag ghcr.io/probe/audiomonastry:probe123 audiomonastry:hetzner", docker)
+            self.assertNotIn("save", docker, "im Registry-Modus darf KEIN docker save laufen")
+            # Der Container-Start nimmt das Medien-Overlay mit und baut nicht neu.
+            self.assertIn("--no-build --remove-orphans", ssh)
+            self.assertIn("-f docker-compose.media.yml", ssh)
+            self.assertIn("COMPOSE_PROJECT_NAME=audiomonastry", ssh)
+
+            pathlib.Path(logs["FAKE_REGISTRY_DOCKER_LOG"]).write_text("", encoding="utf-8")
+            pathlib.Path(logs["FAKE_SSH_LOG"]).write_text("", encoding="utf-8")
+            local = subprocess.run(
+                args + [], capture_output=True, text=True, cwd=ROOT, timeout=180,
+                stdin=subprocess.DEVNULL, env=clean_env(**base),
+            )
+            self.assertEqual(local.returncode, 0, local.stdout + local.stderr)
+            docker_local = self._read(logs["FAKE_REGISTRY_DOCKER_LOG"])
+            self.assertIn("save audiomonastry:hetzner", docker_local,
+                          "der Default-Weg muss weiterhin docker save fahren")
+            self.assertNotIn("pull ", docker_local)
+
+    # --- 7. Doku ----------------------------------------------------------
+    def test_doku_beschreibt_den_registry_weg(self) -> None:
+        # Die Doku ist Teil des Vertrags: ein Weg, den niemand findet, existiert
+        # fuer den Betrieb nicht.
+        doc = HETZNER_DEPLOY_DOC.read_text(encoding="utf-8")
+        for needle in ("registry-push.sh", "DEPLOY_IMAGE_SOURCE", "DEPLOY_REGISTRY_IMAGE", "docker save"):
+            with self.subTest(needle=needle):
+                self.assertIn(needle, doc)
 
 
 if __name__ == "__main__":

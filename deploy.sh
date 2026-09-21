@@ -17,6 +17,18 @@
 #   5. Remote: docker compose up -d --no-build
 #   6. Health-Wait + Smoke-Test + Rollback-Hinweis
 #
+# Drei Image-Quellen (DEPLOY_IMAGE_SOURCE, Default `local` = heutiges Verhalten):
+#   local     baut lokal und schiebt per `docker save | ssh docker load` hoch
+#             (Schritt 3 oben). Das ist der Engpass: ~1 MB/s hoch, App-Image
+#             1,43 GB + master-player 1,22 GB = 25-40 min je Knoten (gemessen
+#             2026-09-21).
+#   registry  der KNOTEN ZIEHT (`docker pull` + `docker tag` auf die lokalen
+#             Namen) - kein `docker save`. Einmal mit
+#             scripts/hetzner/registry-push.sh nach GHCR schieben, danach zieht
+#             jeder Knoten im Rechenzentrums-Tempo. Eigener Abschnitt unten.
+#   (DEPLOY_REMOTE_BUILD=1 ist davon unabhängig der dritte Weg: Build AUF dem
+#    Knoten aus dem rsync-Delta - siehe PERF-P1-004.)
+#
 # Voraussetzungen:
 #   - Ausfuehrbar machen:  chmod +x deploy.sh
 #   - Ziel definieren via env (alternativ in .env.deploy):
@@ -25,6 +37,11 @@
 #        DEPLOY_SSH_KEY=/pfad/zum/key
 #        DEPLOY_MODE=docker|node             (Voreinstellung: docker)
 #        DEPLOY_REMOTE_BUILD=1               (1 = Remote-Build statt Image-Transfer)
+#        DEPLOY_IMAGE_SOURCE=local|registry  (Default local = nichts schwenkt still um)
+#        DEPLOY_REGISTRY_IMAGE=ghcr.io/<owner>/<name>:<tag>         (App-Image)
+#        DEPLOY_REGISTRY_IMAGE_MASTER=ghcr.io/<owner>/<name>:<tag>  (master-player)
+#        REGISTRY_ENV_FILE=<pfad>            (Quelle der GHCR-Zugangsdaten, Default .env;
+#                                             'none' = nur die Umgebung; Werte nie Ausgabe)
 #        DEPLOY_SYNC_ENV=1|0                 (1 = lokale .env hochladen, Default 0)
 #        DEPLOY_SMOKE=1|0                    (1 = Smoke-Test nach Deploy)
 #        DEPLOY_VERSION=1.210.001            (optional: Versionsstempel ueberschreiben)
@@ -97,6 +114,20 @@
 #   Container - idempotent, ohne zweiten Stack. Migration eines Bestands-Knotens
 #   (Altprojekt/Altpfad): scripts/hetzner/migrate-project-name.sh, Schritte in
 #   docs/HETZNER_DEPLOY.md.
+# PROD-P2-REG - warum der Registry-Weg existiert (gemessen 2026-09-21):
+#   Die Leitung Betreiber-Rechner -> Knoten macht ~1 MB/s hoch. Das App-Image ist
+#   1,43 GB, das master-player-Image 1,22 GB -> 25-40 min PRO KNOTEN, und jeder
+#   weitere Knoten zahlt es erneut. `DEPLOY_IMAGE_SOURCE=registry` dreht das um:
+#   EINMAL langsam hochschieben (scripts/hetzner/registry-push.sh), danach zieht
+#   der Knoten mit `docker pull` im Rechenzentrums-Tempo und taggt nur noch auf
+#   die lokalen Namen, die docker-compose.hetzner.yml erwartet:
+#       audiomonastry:hetzner               <- ghcr.io/<owner>/audiomonastry:<tag>
+#       audiomonastry-master-player:hetzner <- ghcr.io/<owner>/audiomonastry-master-player:<tag>
+#   Der Default bleibt `local`: der neue Weg schwenkt NICHT still um. Rollback
+#   (`<image>-rollback`) und Medien-Overlay gelten unverändert - der Rollback-Tag
+#   wird VOR dem Ersetzen des Images gesetzt, sonst zeigte der Rückweg auf den
+#   neuen Stand. Zugangsdaten (GHCR_TOKEN/GHCR_PASSWORD) laufen ausschließlich per
+#   Pipe in `docker login --password-stdin` - nie als Argument, nie in einer Ausgabe.
 # ============================================================================
 set -euo pipefail
 
@@ -107,6 +138,12 @@ set -euo pipefail
 DEPLOY_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$DEPLOY_SCRIPT_DIR/scripts/hetzner/lib/build-parity.sh"
+# PROD-P2-REG: Registry-Weg (Name, Tag, Zugangsdaten, Login + Pull + Tag auf dem
+# Knoten) kommt aus derselben Bibliothek wie registry-push.sh und der Live-Weg -
+# kein zweiter Ort, der eine andere Referenz oder einen anderen Tag bildet.
+# shellcheck source=scripts/hetzner/lib/registry.sh
+# shellcheck disable=SC1091
+source "$DEPLOY_SCRIPT_DIR/scripts/hetzner/lib/registry.sh"
 # F10: Namen/Pfade kommen aus der EINEN Quelle (scripts/hetzner/fleet-names.sh) -
 # Projektname, kanonischer Pfad und die Alt-Schreibweisen der Container sind dort
 # definiert, nicht hier. Sourcing ist seiteneffektfrei (keine API-Aufrufe).
@@ -157,6 +194,46 @@ IMAGE_APP="audiomonastry:hetzner"
 IMAGE_MASTER="audiomonastry-master-player:hetzner"
 COMPOSE_FILE="docker-compose.hetzner.yml"
 
+# PROD-P2-REG: Image-Quelle. `local` ist der DEFAULT und bedeutet exakt das
+# bisherige Verhalten (lokaler Build -> `docker save | ssh docker load`) - ein
+# bestehender Aufruf darf nicht still umschwenken, nur weil es einen zweiten Weg
+# gibt. `registry` lässt den KNOTEN ZIEHEN (`docker pull` + `docker tag`).
+DEPLOY_IMAGE_SOURCE="${DEPLOY_IMAGE_SOURCE:-local}"
+case "$DEPLOY_IMAGE_SOURCE" in
+  local | registry) ;;
+  *)
+    echo "❌ DEPLOY_IMAGE_SOURCE=$DEPLOY_IMAGE_SOURCE ist unbekannt (erlaubt: local, registry)." >&2
+    exit 1
+    ;;
+esac
+# Quelle der GHCR-Zugangsdaten. Die Werte werden NIE ausgegeben; das Skript liest
+# die Datei selbst (kein Sourcen, kein Export in die Umgebung). Default .env, weil
+# dort GHCR_USERNAME/GHCR_TOKEN liegen (Namen geprueft, Werte nie gelesen).
+REGISTRY_ENV_FILE="${REGISTRY_ENV_FILE:-$DEPLOY_SCRIPT_DIR/.env}"
+# Standard-Referenzen, wenn der Betreiber keine nennt: Owner aus dem git-Remote,
+# Tag aus dem Repo-Stand - dieselbe Bildung wie in scripts/hetzner/registry-push.sh
+# (gemeinsame Bibliothek), damit Push und Pull denselben Tag treffen.
+REGISTRY_OWNER_EFFECTIVE="$(registry_owner "$DEPLOY_SCRIPT_DIR")"
+REGISTRY_TAG_EFFECTIVE="$(registry_default_tag "$DEPLOY_SCRIPT_DIR")"
+DEPLOY_REGISTRY_IMAGE="${DEPLOY_REGISTRY_IMAGE:-}"
+DEPLOY_REGISTRY_IMAGE_MASTER="${DEPLOY_REGISTRY_IMAGE_MASTER:-}"
+if [[ "$DEPLOY_IMAGE_SOURCE" == "registry" && -n "$REGISTRY_OWNER_EFFECTIVE" ]]; then
+  [[ -n "$DEPLOY_REGISTRY_IMAGE" ]] || DEPLOY_REGISTRY_IMAGE="$(registry_image "$REGISTRY_OWNER_EFFECTIVE" "$(registry_app_name)" "$REGISTRY_TAG_EFFECTIVE")"
+  [[ -n "$DEPLOY_REGISTRY_IMAGE_MASTER" ]] || DEPLOY_REGISTRY_IMAGE_MASTER="$(registry_image "$REGISTRY_OWNER_EFFECTIVE" "$(registry_master_name)" "$REGISTRY_TAG_EFFECTIVE")"
+fi
+# Der Registry-Weg haengt am Docker-Modus (er laeuft auf dem Knoten ueber SSH).
+# Im node-Modus wird er NICHT still ignoriert, sondern laut abgelehnt.
+if [[ "$DEPLOY_IMAGE_SOURCE" == "registry" && "$DEPLOY_MODE" != "docker" ]]; then
+  echo "❌ DEPLOY_IMAGE_SOURCE=registry setzt DEPLOY_MODE=docker (aktuell: $DEPLOY_MODE)." >&2
+  echo "   Im node-Modus gibt es keinen Image-Schritt - bitte DEPLOY_MODE=docker setzen." >&2
+  exit 1
+fi
+if [[ "$DEPLOY_IMAGE_SOURCE" == "registry" && -z "$DEPLOY_REGISTRY_IMAGE" ]]; then
+  echo "❌ DEPLOY_IMAGE_SOURCE=registry, aber keine Registry-Referenz ermittelbar" >&2
+  echo "   (kein git-Remote 'origin'; bitte DEPLOY_REGISTRY_IMAGE=... setzen)." >&2
+  exit 1
+fi
+
 # PROD-P1-F4: Staleness-Gate. 0 = eine Commit-Abweichung zwischen laufendem
 # Container und Repo laesst den Deploy mit Exit 1 enden; 1 = der Betreiber
 # erlaubt den abweichenden Stand BEWUSST (die Meldung bleibt laut).
@@ -191,6 +268,14 @@ if [[ "${DEPLOY_PRINT_CONFIG:-0}" == "1" ]]; then
   printf '  CADDYFILE_MODUS=%s\n' "$CADDYFILE_MODE"
   printf '  Origin-Zertifikate im env vorhanden: %s\n' "$ORIGIN_CERTS_IN_ENV"
   printf '  DEPLOY_REMOTE_BUILD=%s\n' "$DEPLOY_REMOTE_BUILD"
+  # PROD-P2-REG: die effektive Image-Quelle + die Referenzen, die der Knoten
+  # ziehen wuerde - ohne Docker, ohne Netz, ohne Secret (nur ein Boolean).
+  printf '  DEPLOY_IMAGE_SOURCE=%s   (local = Transfer/Build wie bisher, registry = Knoten zieht)\n' "$DEPLOY_IMAGE_SOURCE"
+  printf '  DEPLOY_REGISTRY_IMAGE=%s\n' "${DEPLOY_REGISTRY_IMAGE:-<leer>}"
+  printf '  DEPLOY_REGISTRY_IMAGE_MASTER=%s\n' "${DEPLOY_REGISTRY_IMAGE_MASTER:-<leer>}"
+  printf '  REGISTRY_ENV_FILE=%s (%s)\n' "$REGISTRY_ENV_FILE" "$([[ -f "$REGISTRY_ENV_FILE" ]] && echo vorhanden || echo fehlt)"
+  printf '  GHCR-Zugangsdaten=%s (Wert wird nie ausgegeben, Login nur per --password-stdin)\n' \
+    "$(registry_credentials_state "$DEPLOY_SCRIPT_DIR" "$REGISTRY_ENV_FILE")"
   printf '  DEPLOY_SMOKE=%s\n' "$DEPLOY_SMOKE"
   printf '  DEPLOY_ALLOW_STALE=%s\n' "$DEPLOY_ALLOW_STALE"
   printf '  DEPLOY_DOMAIN=%s\n' "${DEPLOY_DOMAIN:-<leer>}"
@@ -261,7 +346,7 @@ wait_health() {
 }
 
 echo "=== [1/5] Images lokal bauen ==="
-if [[ "$DEPLOY_MODE" == "docker" && "$DEPLOY_REMOTE_BUILD" != "1" ]]; then
+if [[ "$DEPLOY_MODE" == "docker" && "$DEPLOY_REMOTE_BUILD" != "1" && "$DEPLOY_IMAGE_SOURCE" != "registry" ]]; then
   if ! command -v docker >/dev/null 2>&1; then
     echo "docker lokal nicht gefunden -> Fallback auf Remote-Build."
     DEPLOY_REMOTE_BUILD=1
@@ -270,7 +355,11 @@ if [[ "$DEPLOY_MODE" == "docker" && "$DEPLOY_REMOTE_BUILD" != "1" ]]; then
     docker_build services/master-player/Dockerfile "$IMAGE_MASTER" services/master-player
   fi
 else
-  echo "Überspringe lokalen Build (Remote-Build oder node-Modus)."
+  if [[ "$DEPLOY_IMAGE_SOURCE" == "registry" ]]; then
+    echo "Überspringe lokalen Build (Image-Quelle registry: der Knoten zieht in Schritt [4/5])."
+  else
+    echo "Überspringe lokalen Build (Remote-Build oder node-Modus)."
+  fi
 fi
 
 echo "=== [2/5] Remote-Verzeichnis vorbereiten ($SSH_TARGET:$DEPLOY_REMOTE_DIR) ==="
@@ -406,7 +495,30 @@ if [[ "$DEPLOY_MODE" == "docker" ]]; then
     MEDIA_OVERLAY=" -f docker-compose.media.yml"
     echo "--- Medien-Overlay aktiv ($DEPLOY_REMOTE_DIR/media gefunden) ---"
   fi
-  if [[ "$DEPLOY_REMOTE_BUILD" != "1" ]]; then
+  if [[ "$DEPLOY_IMAGE_SOURCE" == "registry" ]]; then
+    # PROD-P2-REG: der Knoten ZIEHT. Kein `docker save`, kein lokaler Build - das
+    # ist der ganze Punkt dieses Weges (die Leitung ist der Engpass, gemessen
+    # ~1 MB/s hoch bei 1,43 GB + 1,22 GB Image).
+    echo "--- Registry-Weg: $SSH_TARGET zieht die Images (kein docker save) ---"
+    echo "    App:    $DEPLOY_REGISTRY_IMAGE"
+    echo "    Master: $DEPLOY_REGISTRY_IMAGE_MASTER"
+    echo "    Rollback-Tag und Login laufen in registry_pull_images (Bibliothek) - der"
+    echo "    Rollback-Tag wird VOR dem Ersetzen gesetzt, das Token nur per stdin."
+    if ! registry_pull_images "$DEPLOY_SSH_KEY" "$SSH_TARGET" "$DEPLOY_SCRIPT_DIR" "$REGISTRY_ENV_FILE" \
+         "$IMAGE_APP" "$DEPLOY_REGISTRY_IMAGE" \
+         "$IMAGE_MASTER" "$DEPLOY_REGISTRY_IMAGE_MASTER"; then
+      # Kein stiller Weiterlauf: ein fehlgeschlagener Pull heisst, dass das alte
+      # Image noch aktiv ist - der Deploy endet hier, statt halb fertig zu wirken.
+      echo "❌ Registry-Weg fehlgeschlagen (Login/Pull/Tag auf $SSH_TARGET)." >&2
+      echo "   Das Rollback-Tag ${IMAGE_APP}-rollback ist gesetzt; der laufende Container" >&2
+      echo "   wurde NICHT angefasst. Referenzen pruefen (Tag gepusht?) oder lokal deployen." >&2
+      exit 1
+    fi
+    echo "--- docker compose up -d --no-build --force-recreate audiomonastry master-player (Projekt $COMPOSE_PROJECT) ---"
+    "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d --no-build --force-recreate audiomonastry master-player && \
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d caddy"
+  elif [[ "$DEPLOY_REMOTE_BUILD" != "1" ]]; then
     echo "--- Rollback-Image sichern (remote) ---"
     "${SSH[@]}" "$SSH_TARGET" "docker image tag $IMAGE_APP ${IMAGE_APP}-rollback 2>/dev/null || true"
     echo "--- Images via docker save | ssh docker load übertragen ---"
