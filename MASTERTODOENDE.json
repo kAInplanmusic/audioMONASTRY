@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21T22:57:47+00:00",
+  "generatedAt": "2026-09-21T23:28:28+00:00",
   "branch": "main",
-  "commit": "a3df301",
+  "commit": "0ebd375",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2478,22 +2478,18 @@
     },
     {
       "id": "VISUAL-P1-007",
-      "title": "Stil-LoRA-Training auf RunPod-Pod (Selbstlern-Loop, GPU-Kosten)",
-      "priority": "P3",
+      "title": "Cosmic-Stil-LoRA: Abschnittsbetrieb (1000+1000) mit vorgefuelltem Network Volume",
+      "priority": "P1",
       "status": "PARTIAL",
-      "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#5",
+      "area": "KI/Visuals",
+      "source": "Betreiber-Entscheidungen (2026-09-22): Abschnittsbetrieb, Volume-Vorstaging genehmigt, Budget bis 5 EUR",
       "note": "Offen: bestbewertete Prompt/Bild-Paare kuratieren und ein Stil-LoRA auf einem RunPod-POD trainieren (nicht Serverless). Bewusst nicht gestartet: GPU-Kosten laufen beim Betreiber, und die Datenbasis entsteht erst mit echten Nutzer-Bewertungen (Session-Ende-Umfrage laeuft, siehe VISUAL-P1-004).",
       "summary": "Pipeline fuer das Stil-LoRA ist gebaut und geprueft (Kuration, Dataset, Pod-Training mit hartem Kosten-Gate, Doku, 28 Tests); sie kann aber heute nicht laufen, weil es KEINE Bild-Bewertungen gibt (visual_feedback und visual_generations sind leer - zweifach unabhaengig geprueft). Der Trainingslauf selbst kostet GPU-Geld und bleibt beim Betreiber.",
-      "evidence": [
-        "Neu: scripts/visual-lora-curate.py, scripts/visual-lora-dataset.py, scripts/runpod-lora-train.py, scripts/lora/bootstrap.sh, docs/VISUAL_LORA_TRAINING.md, tests/test_visual_lora_pipeline.py.",
-        "Eigener Testlauf: python3 tests/test_visual_lora_pipeline.py -> Ran 28 tests, OK (ohne Netz, ohne GPU, ohne Kosten).",
-        "Kosten-Gate unabhaengig nachgefahren (Auftraggeber, nicht Subagent): vollstaendige Konfiguration ohne Freigabe -> Exit 3 (\"LORA_APPROVE_SPEND=1 wurde nicht gesetzt\"); Freigabe gesetzt, aber KOSTENBESTAETIGUNG 0,10 unter der harten Obergrenze 1,3225 USD -> Exit 3. Kein Pod angelegt, kein API-Aufruf.",
-        "Unvollstaendige Konfiguration (Trainer-Command/Docker-Args fehlen) -> Exit 2 VOR dem Gate; das Skript erfindet keinen Stundensatz und keinen Trainer.",
-        "Datenlage read-only gegen Supabase geprueft (apikey service_role, Prefer count=exact): visual_feedback -> Content-Range */0, visual_generations -> */0. Es gibt heute 0 verwertbare Paare, also ist die 0-Paare-Ausgabe (Exit 3) das korrekte Ergebnis.",
-        "Kostenrechnung mit Quellen: Kaltstart 20 min als Messwert aus docs/VISUALMONK_SPEC.md markiert, 2,0 s/Schritt ausdruecklich als ANNAHME, harte Obergrenze 1,92 h = 1,32 USD bei 0,69 USD/h inkl. 90 min Laufzeitgrenze und Aufraeumen."
-      ],
-      "remaining": "Betreiber-Schritte bis zum echten Training: (1) erst Bewertungen erzeugen (visual_feedback ist leer, der Datenpfad POST /api/ai/vision/feedback liefert erst mit Nutzung Daten); (2) Stundensatz aus runpodctl gpu list ablesen und eintragen; (3) Trainer-Image und Trainer-Kommando festlegen (bewusst ohne Default); (4) Netz-Volume anlegen und dataset.tar.gz + bootstrap.sh hochladen; (5) 2,0 s/Schritt durch einen echten Messwert ersetzen; (6) freigeben (LORA_APPROVE_SPEND=1 + KOSTENBESTAETIGUNG=<Obergrenze>) und --train starten. Nicht verifiziert bleiben Trainingslauf, Trainer-Syntax im Pod und die LoRA-Qualitaet."
+      "evidence": "R2: lora/cosmic-v1/{dataset.tar.gz,dataset_config.toml,bootstrap.sh} vorhanden; cosmic-rank16.safetensors fehlt noch",
+      "remaining": "Betreiber-Schritte bis zum echten Training: (1) erst Bewertungen erzeugen (visual_feedback ist leer, der Datenpfad POST /api/ai/vision/feedback liefert erst mit Nutzung Daten); (2) Stundensatz aus runpodctl gpu list ablesen und eintragen; (3) Trainer-Image und Trainer-Kommando festlegen (bewusst ohne Default); (4) Netz-Volume anlegen und dataset.tar.gz + bootstrap.sh hochladen; (5) 2,0 s/Schritt durch einen echten Messwert ersetzen; (6) freigeben (LORA_APPROVE_SPEND=1 + KOSTENBESTAETIGUNG=<Obergrenze>) und --train starten. Nicht verifiziert bleiben Trainingslauf, Trainer-Syntax im Pod und die LoRA-Qualitaet.",
+      "problem": "Erster Lauf (2026-09-21, A40 secure 0,49 USD/h) lief 90,4 min in die harte Laufzeitgrenze: Planrechnung war 3700 Schritte x 2,0 s = 123 min und passte nie ins Fenster. Kosten 0,74 USD, KEIN LoRA erzeugt. Zweite Schwaaeche: der Starter ueberwacht nur den Pod-Zustand, nicht den Fortschritt.",
+      "solution": "Zweig hermes/lora baut: Checkpoints + Resume, Fortschrittsmarker nach R2, Abschnittsgroesse 1000, Default 2000 Schritte, Vorab-Rechnung mit lautem Abbruch vor dem Start (genau der Fehler, der 0,74 USD verbrannt hat) sowie VORSTAGING auf einem RunPod-Network-Volume (Gewichte ~24 GB + Dataset + Trainer), damit der Abschnittsstart von ~30 min auf wenige Minuten faellt (Image-Pull 15-25 min und Gewichts-Download waren die Zeitfresser, NICHT die 54-MB-Fotos). Volume 50 GB = 2,50 USD/Monat (~8 Cent/Tag), Vorstagen auf einem CPU-Pod (genehmigt), Loeschen nach der Trainingsphase.",
+      "rest": "NAECHSTER SCHRITT: Zweig pruefen/mergen, dann Vorstaging starten (CPU-Pod + Volume), Abschnitt 1 (1000 Schritte, ~0,35 USD) fahren, Vorschaubilder rendern, entscheiden ob Abschnitt 2 folgt. ECHTE Schrittzeit messen (die 2,0 s sind eine Annahme) - erst danach ist die Frage 'groessere Karte lohnt sich?' seriös beantwortbar."
     },
     {
       "id": "VISUAL-P1-008",
@@ -2506,11 +2502,11 @@
     },
     {
       "id": "VISUAL-P1-009",
-      "title": "WebGPU/WGSL-Renderer als dritter Pfad",
-      "priority": "P3",
-      "status": "DONE",
-      "area": "VisualMONK",
-      "source": "docs/VISUALMONK_SPEC.md#8d",
+      "title": "Weitere Szenen/Themen fuer die Visuals: je Thema ein eigener Bilder-Satz + eigenes LoRA",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "KI/Visuals",
+      "source": "Betreiber (2026-09-22): 'es fehlen ja noch die anderen Szenen und Themen komplett' + Angebot, Beispielordner anzulegen",
       "note": "BLOCKED 2026-09-17 (gemessen, nicht vermutet - ersetzt den OFFEN-Status mit 'der Renderer bleibt bewusst ungebaut'). Der dritte Renderpfad setzt WebGPU voraus. Probe mit Playwright/Chromium in drei Konfigurationen: ohne Flags, mit --enable-unsafe-swiftshader (Software-Adapter) und mit --enable-unsafe-swiftshader + --enable-features=Vulkan -> in ALLEN drei ist navigator.gpu undefined ('gpu' in navigator = false). Damit ist der Renderer auf dieser Maschine nicht einmal mit dem Software-Fallback pruefbar; eine Implementierung waere unbelegter Code und verstoesst gegen 'erst messen, dann behaupten'. Vorbedingung fuer den Nachweis bleibt eine WebGPU-faehige Maschine (Grafikkarte mit Vulkan/D3D12 oder Chromium-Build mit funktionierendem SwiftShader-Adapter), dann: Gate + headed Test und erst danach Implementierung. || DONE 2026-09-18. Die fruehere BLOCKED-Begruendung war FALSCH und ist widerlegt: sie stuetzte sich darauf, dass 'navigator.gpu' in drei Chromium-Konfigurationen undefiniert sei - gemessen wurde damals auf about:blank, und das ist KEIN sicherer Kontext: dort fehlen WebGPU UND audioWorklet. Auf einem lokalen Origin (http://127.0.0.1, isSecureContext=true) ist navigator.gpu vorhanden, und mit den Entwicklungsflags (--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan --use-vulkan=swiftshader --disable-vulkan-surface) liefert requestAdapter() einen Adapter (Chromium 151.0.7922.34, vier Konfigurationen gemessen, reproduzierbar per npm run probe:apis). GEBAUT: src/core/visual/webgpuRenderer.ts - dritter Renderpfad neben Canvas2D und WebGL/WGL2. Der Pfad teilt den PARAMETER-CONTRACT ueber packUniforms() (Zoom, Rotation, Warp, Farbton, Fluss, Helligkeit, Kontrast, Verdraengung, Glow, Symmetrie, Palette) mit dem WebGL-Pfad, hat aber eine EIGENE WGSL-Feldformel (polar gefaltet, symmetrie-faehig, Glow/Vignette) - die Bilder sind verwandt, nicht pixelgleich; das ist als Eigenschaft dokumentiert, nicht als Gleichheit behauptet. Uniforms als 40 floats/160 Bytes (16 Kopf + 6 vec4 mit 16-Byte-Stride) inkl. NaN-Absicherung. Geräteverlust wird gemeldet, dispose() gibt alles frei, ohne Adapter/WebGPU faellt die Fabrik ehrlich auf null zurueck (kein Fake-Renderer). UI: Umschalter im VisualMONK zykelt Canvas2D -> WebGL -> WebGPU (data-renderer-mode fuer Tests), Meldung wenn WebGPU fehlt. EHRliche GRENZE: Show-Szenen (Bild/Video-Textur, Crossfade) gibt es nur im WebGL-Pfad - render() meldet das als sceneIgnored und die UI zeigt es an, statt still etwas anderes zu zeichnen. LIVE-BEWEIS (npm run proof:webgpu, echte GPU-RUECKLESUNG statt 'API ist da'): drei Presets gezeichnet, je ~53 500-56 000 nicht-schwarze Pixel, mittlere Helligkeit 133-139, unterschiedliche Farbton-Kennzahlen (Presets wirken), Szene als ignoriert gemeldet. Tests: tests/webgpuRenderer.test.ts 8/8 (Uniform-Layout 40 floats/16-Byte-Ausrichtung, Werte aus packUniforms, vec4-Farben mit Alpha 1, geklemmt, NaN-Schutz, Shader-Entry-Points, Verfuegbarkeit, null-Rueckfall ohne GPU/Adapter). Gates: npm run verify exit 0 (239 Dateien / 1672 Tests), npm run build exit 0.",
       "blocker": "Kein WebGPU in dieser Umgebung (navigator.gpu fehlt auch mit --enable-unsafe-swiftshader); Nachweis erst auf WebGPU-faehiger Maschine",
       "files": [
@@ -2529,7 +2525,11 @@
         "npm run probe:apis -> navigator.gpu auf lokalem Origin vorhanden; Adapter nur mit Entwicklungsflags (Chromium 151.0.7922.34)",
         "npx vitest run tests/webgpuRenderer.test.ts (8/8)",
         "npm run verify exit 0 (239 Dateien / 1672 Tests), npm run build exit 0"
-      ]
+      ],
+      "problem": "Es existiert nur das Kosmos-Thema (40 Rohbilder, 37 kuratiert). Ein LoRA kann nicht mehrere Stile sauber abbilden - weitere Themen brauchen je einen eigenen Datensatz.",
+      "solution": "Vorgesehener Weg: der Betreiber legt /home/patrick/am-vis-themen/<thema>/ mit 3-8 Beispielbildern + Zweizeiler (was soll sichtbar sein, was nicht). Rechte liegen laut Betreiber vollstaendig bei ihm, Nutzung privat/Forschung (im Lizenzregister so eingetragen). Daraus werden je Thema ~40 Trainingsbilder ueber die FLUX-Route erzeugt (Cent-Betrag, ~20 min GPU) und mit denselben Qualitaetstoren kuratiert.",
+      "rest": "WARTET AUF INHALT: die Themen-Liste kommt vom Betreiber (Inhalt/Design entscheidet er).",
+      "evidence": "Bestehende Kosmos-Kette als Vorlage: visual-lora-curate.py, visual-lora-dataset.py"
     },
     {
       "id": "VISUAL-P1-010",
@@ -3018,22 +3018,22 @@
       "id": "PROD-P0-PORTAL-FAILOPEN",
       "title": "Portal-Wake oeffnet den Origin auf 0.0.0.0/0, wenn die Cloudflare-IP-Liste ausfaellt",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Sicherheit/Infrastruktur",
       "source": "Subagent des Infrastruktur-Auftrags (2026-09-21), Befund mit Codezeile; von mir nicht gegengeprueft (Portal-Verhalten, Betreiberentscheid)",
       "problem": "services/portal-worker/src/index.js:325-328 sagt im Kommentar 'Cache leer lassen -> App-Firewall bleibt zu (sicherer Ausfall)'. Tatsaechlich setzt firewallRules('app', []) bei leerer Cloudflare-IP-Liste die Regeln fuer 80/443 auf 0.0.0.0/0 und ::/0 (Zeile 338). Faellt der Abruf der Cloudflare-Bereiche aus, oeffnet der naechste Wake den Origin weltweit - das Gegenteil der zugesagten Absicherung. Die Abweichung ist als Test gepinnt, der Code aber bewusst NICHT geaendert (Betreiberentscheid).",
-      "rest": "Entscheidung noetig: fail-closed (Regel weglassen, App bleibt zu, Grund melden) oder das Oeffnen bewusst zulassen und den Kommentar korrigieren.",
+      "rest": "ENTSCHEIDUNG GEFALLEN (Betreiber, 2026-09-22): fail-closed. Umsetzung laeuft im Zweig hermes/portal (fail-closed im Cloudflare-IP-Ausfall + laute Meldung). NAECHSTER SCHRITT: Zweig pruefen, mergen, Gate, Push.",
       "evidence": "tests/portalWorkerFleetPorts.test.ts (6 Tests, echter Worker-Codepfad gegen Fake-Hetzner-API)"
     },
     {
       "id": "PROD-P2-PORTAL-DRIFT",
       "title": "Portal-Wake und firewall-ensure haben gegensaetzliche Regeln fuer denselben Regelsatz",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Infrastruktur",
       "source": "Subagent des Infrastruktur-Auftrags (2026-09-21), Codebelege",
       "problem": "services/portal-worker/src/index.js:1511-1520 (openFleetPorts) verengt eine fuer 0.0.0.0/0 offene Vertrags-Regel auf die app-1-IP/32 und verliert dabei die description; firewall-ensure.py laesst offene Regeln bewusst unveraendert. Zusaetzlich schreibt der Wake bei JEDEM Aufruf neu (kein Diff, keine Gegenprobe), waehrend firewall-ensure nur bei Abweichung schreibt und frisch nachprueft - bei gleichzeitigem Lauf sieht nur die Python-Seite den Konflikt (Exit 3).",
-      "rest": "Angleichung der beiden Policy-Seiten ist eine Betreiberentscheidung; bis dahin ist der Zustand dokumentiert und getestet.",
+      "rest": "ENTSCHEIDUNG GEFALLEN (Betreiber, 2026-09-22): die Politik von firewall-ensure.py ist der Vertrag - offene Regel nie verengen, description nie verwerfen, Wake MERGT seine IP statt zu ersetzen, kein Schreiben ohne Aenderung. Umsetzung laeuft im selben Zweig wie PROD-P0-PORTAL-FAILOPEN.",
       "evidence": "tests/portalWorkerFleetPorts.test.ts + PortalWakeVertragTest (5 Python-Faelle gegen API-Stub)"
     },
     {
@@ -3069,6 +3069,53 @@
       "rest": "Reparatur braucht die richtigen PromQL-Ausdruecke (keine erfundenen Werte) - eigener kleiner Auftrag.",
       "evidence": "vitest 2 Dateien/10 Tests gruen, tsc 0; jscpd 7 -> 4 Clones (alle drei Grafana-Findings weg, JSON-Duplikate 3,70 % -> 0,00 %)",
       "solution": "Vier Panels repariert: die Zeichen-Targets (36/70/52/108 Ein-Zeichen-Targets) sind durch je EIN Target mit dem vollstaendigen Ausdruck ersetzt. Die Absicht war exakt rekonstruierbar (die Zeichen ergeben hintereinander den Ausdruck). ZWEITER BEFUND dabei: die Metriknamen trugen den Vorgaenger-Praefix 'samplemonk_' - veroeffentlicht werden 'audiomonastry_*' (Belege: server/routes/opsRoutes.ts mit # HELP audiomonastry_*, lokaler Produktionslauf mit /api/metrics?format=prometheus, prometheus-alerts.yml nutzt bereits die neuen Namen, namingConventions.test.ts verbietet samplemonk_ im Dashboard). Praefix belegbar korrigiert. Neue Vertragstests: tests/grafanaDashboardContract.test.ts (5 Faelle) erzwingt plausible PromQL je Target UND dass jeder benutzte Metrikname wirklich im Code exponiert ist; Negativprobe gegen den Defektstand: 270 Verstoesse, 3 Tests rot."
+    },
+    {
+      "id": "PROD-P3-SKRIPTE-01",
+      "status": "PARTIAL",
+      "priority": "P3",
+      "area": "Code-Hygiene",
+      "title": "20 referenzlose Skripte: pruefen und die sicher toten nach Betreiber-Verfahren entfernen",
+      "source": "Entscheidung des Betreibers (2026-09-22); Umsetzung laeuft im Zweig hermes/scripts",
+      "problem": "Ein Agentenbefund nennt 20 Skripte in scripts/ ohne Repo-Referenz (u.a. ai-benchmark.ts, audio-ui-gate.cjs, dead-code-sweep.sh, docker-gate.sh, r2-check.ts). Der Befund war NICHT gegengeprueft.",
+      "solution": "Verfahren des Betreibers: erst Recovery-Buendel (/home/patrick/am-recovery-skripte-<datum>/ mit tar.gz, Liste, git-Referenz), dann EINE Datei pro Commit, und NACH JEDEM EINZELNEN SCHRITT die betroffenen App-Bereiche testen - erst danach die naechste Datei. Unsichere Faelle bleiben erhalten (Vorschlag: scripts/manual/ + Doku).",
+      "rest": "NAECHSTER SCHRITT: Zweig pruefen, mergen. GANZ AM ENDE: aktueller Deploy + Push, Recovery-Variante und Dateien lokal bereithalten und erst nach erfolgreichem Deploy loeschen (Betreiber-Wunsch).",
+      "evidence": "Recovery-Buendel + Tabelle (Datei, Zweck, Referenz-Beweis, Verdikt) + Testkommando je Entfernung"
+    },
+    {
+      "id": "INFRA-HETZNER-015",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "Infrastruktur/SFU",
+      "title": "SFU scharf machen (Entscheidung: go) - ACME-Caddyfile in den Flottenstart, echte Sitzung pruefen",
+      "source": "Betreiber-Entscheid (2026-09-22): 'grundsaetzlich eher scharf machen' bei <=4 Benutzern + 2 Ausgaengen",
+      "problem": "Auf sfu-1 bleibt der Container audiomonastry-caddy im Zustand 'Created', weil dort keine Caddyfile liegt (der Repo-Sync schliesst Caddyfile bewusst aus). Die App faehrt ENABLE_SFU=0 und nutzt sfu-1 nur als TURN-Server.",
+      "solution": "Begruendete Bewertung: fuer 4 Benutzer + 2 feste Ausgaenge (mainsound, visuals) = 6 Stroeme ist der SFU das bessere Protokoll - im Mesh laedt jeder Client 5 Stroeme hoch (~640 kbit/s), mit SFU nur einen; die Ausgaenge bekommen je einen Strom statt fuenf, die Latenz wird gleichmaessiger. Arbeit ist geschrieben, es fehlt nur die TLS-Faehigkeit des Signalisierungspfads.",
+      "rest": "NAECHSTER SCHRITT: ACME-Caddyfile im Flottenstart installieren (smarte Erzeugung wie bei app-1s Origin-TLS), ENABLE_SFU=1 in der SFU-Verdrahtung, dann eine ECHTE Sitzung mit 2-3 Teilnehmern gegen wss://sfu.<domain> pruefen (Latenz/Ausfaelle). Bringt es keinen Vorteil: Rueckbau und Rueckstand-frei loeschen (Betreiber-Wunsch).",
+      "evidence": "wire-rtc.sh (Rolle sfu) prueft seit dem Infrastruktur-Auftrag, ob die Caddyfile liegt, und meldet es laut"
+    },
+    {
+      "id": "AI-P1-PROMPTS-002",
+      "status": "OPEN",
+      "priority": "P1",
+      "area": "KI/Rollen",
+      "title": "Rollen-Prompts auf ENGLISCH umstellen + Betreiber-Antworten umsetzen",
+      "source": "Betreiber-Antworten (2026-09-22) zu den sieben Prompt-Fragen",
+      "problem": "Die Systemprompts der 22 Rollen sind deutsch (Hausordnung D18: deutscher Rollensatz + englische Keywords). Der Betreiber hat entschieden: Promptsprache NUR ENGLISCH ('sollte einfacher sein und besser fuer die ganzen Modelle').",
+      "solution": "Umzusetzen: (1) alle Rollen-Prompts auf Englisch (Deutsch bleibt in Kommentaren/Doku); (2) midi-controller und transport werden KEINE Rollen; (3) masterplayerMONK bekommt KEINEN Prompt und bleibt rein visuell - als Vertrag im Test verankern: keine Eingabe, kein Knopf, keine Interaktion mit dem schlanken Modul; (4) Score-Gate fuer Bild/Video ja (als Bau-Vertrag, solange es keine Score-Funktion gibt); (5) Gate-Hoehe 4.00 fuer Planer/Bild/Video; (6) Prompts fuer die fuenf GPU-Rollen (brain, ears, voiceGen, music, orchestrator) OHNE Eval-Gate; (7) getrennte Gates: 4.5 nur fuer Erst-Kommando-Faelle, 4.0 fuer Alternativ-Kommandos; (8) Latein nur dort, wo es echte Woerter gibt (cantus, lumen, ordo, vox, silentium, imago, motus) - Auswahl dem Betreiber vorlegen.",
+      "rest": "NAECHSTER SCHRITT: eigene Runde nach den laufenden Zweigen (nicht parallel, weil promptRoles.ts angefasst wird).",
+      "evidence": "Zweig hermes/prompts (gemergt): 22 Rollen, 52 Few-Shots, 53 MCP-Tools, 69 Eval-Faelle, Tests erzwingen Abdeckung"
+    },
+    {
+      "id": "INFRA-HETZNER-016",
+      "status": "DONE",
+      "priority": "P3",
+      "area": "Betrieb",
+      "title": "Flotte ist AUS (0 Server) - erwartetes Verhalten der 15-Minuten-Regel",
+      "source": "Messung 2026-09-22",
+      "problem": "Hetzner-Konto hat 0 Server; SSH auf alle Knoten laeuft ins Timeout. https://anunnakitools.de antwortet trotzdem mit 200 - das kommt von Cloudflare (Cache/Portal-Weg), NICHT von einer laufenden App. Also kein Defekt, sondern die vereinbarte Selbstabschaltung.",
+      "rest": "Fuer die naechste Sitzung: vor jedem Live-Test zuerst die Flotte starten (LOCATION=nbg1 bring-up-fleet.sh) und die Cross-Node-Firewall-Regeln pruefen (firewall-ensure.py --dry-run muss 'geaendert=0' melden, weil die Firewalls den Abbau ueberleben).",
+      "evidence": "GET /v1/servers = 0; curl https://anunnakitools.de/api/health = 200 (Cloudflare)"
     }
   ],
   "visionSandbox": [
