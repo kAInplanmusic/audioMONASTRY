@@ -25,9 +25,12 @@
 #     schiebt danach nichts mehr nach. Umsetzung/Rueckfall: parallel-transfer.sh
 #     + lib/r2-sigv4.sh + lib/r2-node-fetch.sh (Schluessel bleiben beim
 #     Betreiber, der Knoten bekommt nur eine presignierte GET-URL mit TTL).
-#     Knoten-Voraussetzung: aria2c + zstd (apt-get install -y --no-install-
-#     recommends aria2 zstd); ohne sie faellt der Lauf LAUT auf EINEN
-#     curl-Strom zurueck. Opt-out der Nachinstallation: MEDIA_R2_NO_INSTALL=1.
+#     Knoten-Voraussetzung: aria2c + zstd. Beide stehen seit 2026-09-21 in der
+#     Provisionierung (scripts/hetzner/cloud-init.yaml, packages: aria2, zstd) -
+#     auf einem frischen Knoten greift --via-r2 deshalb SOFORT. Die Nachinstall-
+#     Option bleibt fuer Knoten aus einem Rollen-SNAPSHOT (dort laeuft kein
+#     cloud-init): ohne aria2c faellt der Lauf LAUT auf EINEN curl-Strom
+#     zurueck. Opt-out der Nachinstallation: MEDIA_R2_NO_INSTALL=1.
 #     Die Mount-/Ausschlusslogik (docker-compose.media.yml, READ-ONLY) ist in
 #     beiden Wegen identisch.
 #
@@ -92,7 +95,10 @@ if [[ "$PRINT_CONFIG" == "1" ]]; then
     printf '                    je Baum: EIN Upload vom Betreiber-Host, danach zieht JEDER Knoten aus R2 (Egress frei)\n'
     printf '                    Erwartungswert (Referenz Einzelstrom 2026-09-21 ~1 MB/s, 3,7 GB ~60 min): ein Vielfaches\n'
     printf '                    der Rate, wenn das Limit pro Verbindung greift - die echte Zahl misst der Lauf auf dem Knoten\n'
-    printf '                    Knoten-Voraussetzung: aria2c + zstd (apt-get install -y --no-install-recommends aria2 zstd)\n'
+    printf '                    Knoten-Voraussetzung: aria2c + zstd - stehen seit 2026-09-21 in der\n'
+    printf '                    Provisionierung (scripts/hetzner/cloud-init.yaml, packages: aria2, zstd);\n'
+    printf '                    apt-Kommando nur noch fuer Knoten aus einem Rollen-SNAPSHOT:\n'
+    printf '                    apt-get install -y --no-install-recommends aria2 zstd\n'
     printf '                    Nachinstallation auf dem Knoten: %s\n' "$([[ "${MEDIA_R2_NO_INSTALL:-0}" == "1" ]] && echo 'aus (MEDIA_R2_NO_INSTALL=1)' || echo 'ja (Rueckfall auf EINEN curl-Strom, wenn aria2c fehlt)')"
   else
     printf '  Uebertragung:     rsync ueber EINEN ssh-Strom (gemessen 2026-09-21: ~1 MB/s -> 3,7 GB in ~60 min)\n'

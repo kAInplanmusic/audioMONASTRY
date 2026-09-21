@@ -921,10 +921,17 @@ bash scripts/hetzner/parallel-transfer.sh <ip> --src public/models --dest /opt/a
   0600-Datei, die das Knoten-Skript danach löscht. Keine Schlüssel auf dem
   Knoten, kein aws-cli/boto3 (openssl reicht, Signatur ist per Python-Referenz
   im Test verifiziert).
-* **Knoten-Voraussetzung**: `aria2c` + `zstd` (apt: `aria2`, `zstd`) — auf einem
-  frischen Knoten nicht vorhanden (gemessen 2026-09-21). `--via-r2` installiert
-  per `--install-missing` nach (`MEDIA_R2_NO_INSTALL=1` schaltet das ab); ohne
-  `aria2c` läuft der Rückfall `curl -fL` mit **einem** Strom und sagt es laut.
+* **Knoten-Voraussetzung**: `aria2c` + `zstd` (apt: `aria2`, `zstd`). Beide stehen
+  seit 2026-09-21 in der **Provisionierung** (`scripts/hetzner/cloud-init.yaml`,
+  `packages: aria2` + `zstd`, einmaliger apt-Lauf beim Server-Create) — auf einem
+  **frischen** Knoten greift `--via-r2` deshalb sofort, ohne Nachinstallation im
+  Lauf. Der `--install-missing`-Weg in `deliver-media.sh` bleibt als Rueckfall
+  fuer Knoten aus einem Rollen-**Snapshot** bestehen (ein Snapshot bootet ohne
+  cloud-init; `MEDIA_R2_NO_INSTALL=1` schaltet ihn ab); ohne `aria2c` laeuft der
+  Rueckfall `curl -fL` mit **einem** Strom und sagt es laut. Beleg:
+  `MedienWerkzeugeInDerProvisionierungTest` in `tests/test_hetzner_scripts.py`
+  (Paketliste der Cloud-Init + Nachweis, dass das apt-Kommando im Knotenskript
+  NUR im Wachter `command -v aria2c` steht, also nicht bei jedem Lauf).
 * **Erwartungswert (hier NICHT gemessen)**: greift das Limit pro Verbindung,
   liegt die Rate mit 16 Verbindungen ein Vielfaches über 1 MB/s — 3,7 GB wären
   dann in Minuten (statt ~60 min) auf dem Knoten, und jeder weitere Knoten zieht
@@ -1188,4 +1195,150 @@ Gegenprobe endet mit Exit ≠ 0.
 * Firewalls kosten bei Hetzner nichts, sie werden beim Flotten-Abbau auch nicht
   gelöscht — der Regelbestand bleibt damit zwischen Sitzungen erhalten. Alt-Regeln
   aus früheren Namensschemata (`samplemonk-*`) räumt weiterhin nur
-  `scripts/hetzner/cleanup-legacy-firewalls.py` auf.
+  `scripts/hetzner/cleanup-legacy-firewalls.py` auf. Der Abbau-Entscheid ist
+  unten belegt (**Firewall-Lebenszyklus beim Abbau**).
+
+---
+
+## Firewall-Lebenszyklus beim Abbau (Entscheid 2026-09-21)
+
+**Frage:** soll `delete-fleet.sh` beim Flotten-Abbau auch die Firewalls bzw. deren
+Regeln auf den Ausgangszustand zurücksetzen? **Antwort: nein.** Der Abbau löscht
+weiterhin nur Server; die Firewalls werden **lesend aufgelistet**
+(`GET /firewalls?per_page=50`) und bleiben unangetastet — kein `DELETE`, kein
+`set_rules`.
+
+Begründung, in dieser Reihenfolge:
+
+1. **Die Cross-Node-Regeln sind nicht reproduzierbar.** Die vier Vertrags-Regeln
+   (app:tcp/8080 ← edge-1, ai:tcp/8000 + tcp/11434 ← app-1, master:tcp/8000 ←
+   app-1) legt **kein** Provisionierungspfad an: `provision.py` setzt nur
+   22/80/443/ICMP (plus RTP/TURN für die Rolle `sfu`), und `firewall-ensure.py`
+   passt ausschließlich **vorhandene** Quell-IPs an — fehlende Regeln werden
+   **gemeldet**, nicht erzeugt (Exit bleibt 0). Ein Reset beim Abbau würde beim
+   nächsten **CLI**-Aufbau (`bring-up-fleet.sh` ohne Portal-Wake) genau die Ports
+   fehlen lassen, deren Blockade INFRA-HETZNER-014 ausgelöst hat: edge→app:8080
+   (Metrik-Scrape), app→ai:8000/11434, app→master:8000. Der Block wäre **stumm**,
+   weil `/api/health` und die Domain weiter funktionieren.
+2. **Ein Löschen spart nichts und kostet Wiederaufbau.** Hetzner berechnet
+   Firewalls nicht. `provision.py:ensure_firewall` und der Portal-Worker
+   (`ensureFirewall`) finden sie über den **Namen** wieder — ein gelöschter
+   Bestand wäre nur Mehrarbeit (und ein neues Risiko: Regeln, die beim Anlegen
+   fehlen).
+3. **Der Abgleich existiert schon.** Schritt 3/9 des Flottenstarts zieht die
+   Quell-IPs der vier Regeln auf die **laufenden** Knoten
+   (`python3 scripts/hetzner/firewall-ensure.py`, trocken: `--dry-run`). Der
+   Aufbau startet damit in genau dem Zustand, der vor dem Abbau galt — ein Reset
+   wäre eine zweite, konkurrierende Wahrheit über denselben Regelsatz.
+4. **Gelöscht wird nur, was fachlich tot ist:** ungenutzte Firewalls des
+   Alt-Präfixes — `python3 scripts/hetzner/cleanup-legacy-firewalls.py [--apply]`
+   (löscht nur bei leerem `applied_to`).
+
+**Beleg (ohne Netz).** `FleetFirewallLebenszyklusTest` in
+`tests/test_hetzner_scripts.py` fährt den echten Pfad mit `--yes` gegen ein
+gefaktes `curl` und prüft: es werden **nur** Server gelöscht (`DELETE
+/v1/servers/<id>`), in der Spur steht **kein** `DELETE` gegen `/firewalls/...`
+und **kein** `set_rules`; die Auflistung nennt Name + Regelzahl + Zuweisungen;
+eine Rückfrage mit „n" erzeugt **gar keinen** API-Aufruf; ein zweiter Lauf (Server
+schon weg) löscht nichts (idempotent). Der Entscheid selbst ist als Wächter im
+Test (`docs`-Prüfung) festgehalten — er verschwindet nicht unbemerkt.
+
+### Zusammenspiel Portal-Wake ↔ `firewall-ensure.py` (zwei Schreiber, vier Regeln)
+
+Beide Seiten schreiben **dieselben vier Regeln**, aber mit unterschiedlichem
+Verhalten:
+
+| | Portal-Wake (`syncAppFirewall`, `openFleetPorts`) | `firewall-ensure.py` |
+|---|---|---|
+| Wann | bei **jedem** `/api/wake` und `/api/wire-fleet` | Schritt 3/9 im Flottenstart, sonst manuell |
+| Schreibverhalten | setzt `set_rules` **immer** (kein Diff) | schreibt **nur bei Abweichung** (2. Lauf = kein Schreibaufruf) |
+| Nachprüfung | keine | liest **frisch** zurück, Exit **3** bei Abweichung |
+| Offene Regel (`0.0.0.0/0`) | wird auf die Knoten-IP **verengt** | bleibt **unverändert** (Bedeutungsänderung, kein IP-Wechsel) |
+| Fehlende Regel | legt sie an (ai/master) bzw. baut sie mit auf (app:8080) | meldet sie nur („Regel fehlt", Exit 0) |
+
+Ergebnis-Idempotenz: beide erzeugen denselben Zielzustand — ein Portal-Wake auf
+einem frisch abgeglichenen Regelsatz erzeugt also **keine** inhaltliche Änderung
+(nur Schreibverkehr), und `firewall-ensure` hat nach einem Wake **nichts zu tun**
+(`geaendert=0`). Genau das hält `PortalWakeVertragTest`
+(`tests/test_hetzner_scripts.py`, Python-Seite) und
+`tests/portalWorkerFleetPorts.test.ts` (Portal-Seite, echter Codepfad gegen eine
+Fake-Hetzner-API) fest.
+
+**Nicht serialisiert** (bewusst offen, unverändert aus der Vorgängerrunde): laufen
+Wake und Abgleich gleichzeitig, gilt „letzter Schreiber gewinnt" — der Abgleich
+macht das über die Gegenprobe sichtbar (Exit 3), der Wake gar nicht.
+
+**Befunde aus dieser Prüfung (bewusst NICHT eigenmächtig geändert):**
+
+* `services/portal-worker/src/index.js` (`openFleetPorts`, Filter `baseRules` +
+  Neuaufbau der Dienst-Ports, Zeilen 1511-1520): eine für `0.0.0.0/0` **offene**
+  Vertrags-Regel wird auf die app-1-IP verengt und verliert dabei ihre
+  `description`. `firewall-ensure.py` tut das Gegenteil (siehe Tabelle).
+  Beide Verhalten sind gepinnt; eine Angleichung ist eine
+  **Betreiberentscheidung** (Portal-Verhalten!).
+* `services/portal-worker/src/index.js` Zeilen 325-328 + 338: der Kommentar an
+  `cloudflareIpRanges()` sagt „Cache leer lassen -> App-Firewall bleibt zu
+  (sicherer Ausfall)", tatsächlich fällt `firewallRules('app', [])` auf
+  `0.0.0.0/0` + `::/0` für 80/443 zurück — **weit offen**. Ist die
+  Cloudflare-IP-Liste nicht abrufbar, öffnet der nächste Wake den Origin für das
+  ganze Internet. Gepinnt in `portalWorkerFleetPorts.test.ts`
+  („BEFUND: faellt ohne Cloudflare-IP-Liste auf 0.0.0.0/0 …"). Nicht umgebaut,
+  weil das das Sicherheitsverhalten des Portals ändern würde.
+
+---
+
+## sfu-1: `audiomonastry-caddy` bleibt „Created" — bewusst dokumentiert (2026-09-21)
+
+**Befund.** Auf sfu-1 existiert ein Container `audiomonastry-caddy` im Zustand
+`Created`, der nie startet. Grund: `docker-compose.hetzner.yml` mountet
+`./Caddyfile` aus dem Repo-Verzeichnis des Knotens; auf sfu-1 **fehlt** diese
+Datei. Der Repo-Sync schließt `Caddyfile` bewusst aus (`--exclude Caddyfile`,
+damit die app-Knoten-Variante `Caddyfile.origin` nicht überschrieben wird), und
+kein Rollen-Deploy installiert dort eine Site.
+
+**Kein Ausfall.** Die App fährt `ENABLE_SFU=0` und nutzt sfu-1 ausschließlich als
+**TURN-Server** (`turn:<sfu-ip>:3478?transport=udp|tcp`, gemintete
+HMAC-Credentials); coturn läuft healthy und `udp/3478` (+ Relay-Bereich) ist in
+der sfu-Firewall offen. `https://sfu.<domain>` antwortet mit **000** — auf 443
+lauscht nichts. Das ist der dokumentierte Zustand, nicht ein Defekt.
+
+**Warum die Definition bleibt (und nicht entfernt wird).** `caddy` steht im
+sfu-Start absichtlich in der Service-Liste (`bring-up-fleet.sh` Schritt 6 und 7,
+Portal-Worker): `wire-rtc.sh sfu` setzt `DOMAIN=<sfu-host>` und
+`SFU_SIGNALING_URL=https://sfu.<domain>`, und ein HTTPS-Signalisierungspfad
+braucht auf diesem Knoten einen Proxy mit Let's-Encrypt-Zertifikat (der
+Origin-CA-Weg gilt nur für app-1). Die Definition zu entfernen würde diesen Weg
+stumm abschalten — deshalb bleibt sie, und der **fehlende** Baustein (die
+Caddyfile) wird benannt.
+
+**Was getan wurde (ohne Zustandsänderung):**
+
+* `wire-rtc.sh sfu` prüft am Ende der Verdrahtung, ob
+  `$REPO_ROOT/Caddyfile` auf dem Knoten liegt (übersteuerbar per `CADDYFILE`),
+  und meldet es **laut** — inklusive der Klarstellung, dass TURN davon
+  unberührt ist und dass diese Verdrahtung vollständig durchgelaufen ist. Kein
+  `exit`, keine Regel, kein Zustand: die Meldung macht den Zustand nur sichtbar.
+* Der Watchdog (`auto-repair.sh`) greift bei `Created` **nicht** ein: seine
+  Caddy-Probe läuft nur für **laufende** Container (`container_running` via
+  `docker ps`) — es entsteht keine Restart-Schleife.
+
+**Wenn HTTPS-Signalisierung gewünscht ist** (Betreiber-Schritt, nicht Teil des
+Abbaus): ACME-Rollen-Site vom Betreiber-Rechner auf den Knoten bringen und Caddy
+neu erzeugen —
+
+```bash
+rsync -az Caddyfile root@<sfu-1-ip>:/opt/audiomonastry/Caddyfile   # Repo-Root-Caddyfile ({$DOMAIN})
+ssh root@<sfu-1-ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose \
+  -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d caddy'
+```
+
+Voraussetzung: `DOMAIN=sfu.<domain>` steht in der Knoten-`.env` (setzt
+`wire-rtc.sh sfu` aus `SFU_PUBLIC_URL=https://sfu.<domain>`) und der A-Record
+`sfu.<domain>` ist **DNS-only** auf sfu-1 gerichtet
+(`python3 scripts/hetzner/cf-dns-ensure.py --apply`).
+
+**Beleg (ohne Netz):** `SfuCaddyRestzustandTest` in `tests/test_hetzner_scripts.py`
+fährt die sfu-Rolle echt mit `CADDYFILE=<nicht vorhanden>` und belegt: Exit 0,
+Warnung im Log, `ENABLE_SFU=1` + `turn:`-URLs in der `.env` und die fertige
+coturn-Konfiguration (die Verdrahtung läuft also vollständig durch). Mit einer
+**vorhandenen** Datei erscheint keine Warnung.

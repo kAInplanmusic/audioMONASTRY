@@ -7,7 +7,10 @@
 #   2. Firewall (nur 22/80/443 + ICMP)
 #   3. Server: CX23 (2 vCPU / 4 GB / 40 GB) – günstigste x86-Testinstanz,
 #      Ubuntu 24.04, fsn1, stündlich abgerechnet, keine Setup-Gebühr
-#   4. Cloud-Init: Docker + Docker Compose + UFW
+#   4. Cloud-Init: Docker + Docker Compose + UFW + aria2/zstd
+#      (aria2+zstd = Werkzeuge des parallelen Medienweges `--via-r2`; sie stehen
+#      in scripts/hetzner/cloud-init.yaml und sind damit auf einem FRISCHEN
+#      Knoten sofort da - kein apt-Nachinstallieren beim ersten Medienlauf)
 #   5. Wartet auf SSH und gibt die nächsten Deploy-Schritte aus
 #
 # Voraussetzungen: Python 3.8+, Hetzner-API-Token (HCLOUD_TOKEN)
