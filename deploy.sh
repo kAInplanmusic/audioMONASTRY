@@ -416,9 +416,25 @@ if [[ "$DEPLOY_MODE" == "docker" ]]; then
        COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d --no-build --force-recreate audiomonastry master-player && \
        COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d caddy"
   else
+    # PERF-P1-003 (2026-09-21): Der Remote-Build lief bisher OHNE Medien-Overlay,
+    # OHNE Rollback-Image und OHNE Build-Stempel. Damit war er auf app-1 nicht
+    # benutzbar:
+    #   * ohne -f docker-compose.media.yml fehlen die Mounts -> Library/Instrumente
+    #     leer und /models/htdemucs.onnx 404 (genau der Fehler vom 2026-09-20),
+    #   * ohne Rollback-Tag gibt es keinen Rueckweg,
+    #   * ohne AUDIOMONASTRY_COMMIT/BUILD_TIME (docker-compose.hetzner.yml liest sie
+    #     fuer die Build-Args) stuende "unknown" in /api/health -> Commit-Paritaet
+    #     fuer den Knoten nicht pruefbar.
+    echo "--- Rollback-Image sichern (remote) ---"
+    "${SSH[@]}" "$SSH_TARGET" "docker image tag $IMAGE_APP ${IMAGE_APP}-rollback 2>/dev/null || true"
     echo "--- Remote-Build (docker compose up -d --build, Projekt $COMPOSE_PROJECT) ---"
+    echo "    Grund fuer den Remote-Build: die Leitung zum Knoten ist der Engpass"
+    echo "    (gemessen 2026-09-21: ~1 MB/s hoch). Ein lokaler Build muss das ganze"
+    echo "    Image hochschieben (~338 MB -> ~6 min), der Remote-Build nur die"
+    echo "    Quellaenderungen (rsync-Delta) und baut dort auf schneller Leitung."
     "${SSH[@]}" "$SSH_TARGET" "cd $DEPLOY_REMOTE_DIR && \
-       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE up -d --build"
+       AUDIOMONASTRY_VERSION='$APP_VERSION' AUDIOMONASTRY_COMMIT='$APP_COMMIT' AUDIOMONASTRY_BUILD_TIME='$BUILD_TIME' \
+       COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f $COMPOSE_FILE$MEDIA_OVERLAY up -d --build"
   fi
 else
   echo "=== [4/5] Remote starten (Modus: node) ==="

@@ -11,6 +11,14 @@ export default defineConfig(() => {
       // der Plattform-Matrix) statt ES2020-Downleveling. Spart Transpilierungs-
       // Helfer und hält das UI-Budget < 1,5 MB.
       target: 'esnext',
+      // PERF-P1-002 (2026-09-21): public/ NICHT komplett nach dist/ kopieren.
+      // Vite kopierte bisher 3,7 GB (data/orchestral, music, models) mit – reine
+      // Plattenarbeit (Build 5:45 min bei 25 s CPU). Diese Baeume kommen im
+      // Betrieb aus dem Medien-Overlay (docker-compose.media.yml) und fehlen im
+      // Image ohnehin (.dockerignore). Das Kopieren uebernimmt
+      // scripts/build-public-assets.mjs (dieselbe Auswahl, Overlay-Baeume als
+      // Symlink, damit `npm start` lokal unveraendert laeuft).
+      copyPublicDir: false,
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
         output: {
