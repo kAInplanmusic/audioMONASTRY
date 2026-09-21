@@ -2598,6 +2598,90 @@ class NamespaceParitaetTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class DeployImageWegeTest(unittest.TestCase):
+    """PERF-P1-003 (2026-09-21): die zwei Image-Wege von `deploy.sh` halten.
+
+    Anlass: `DEPLOY_REMOTE_BUILD=1` baute auf dem Knoten, aber OHNE
+    Medien-Overlay (Folge: leere Mounts maskieren die Image-Pfade - Library
+    leer, /models 404, genau der Fehler vom 2026-09-20), OHNE Rollback-Image und
+    OHNE die Build-Stempel, die docker-compose.hetzner.yml fuer /api/health
+    liest ("unknown" -> Commit-Paritaet nach PROD-P1-F4 nicht pruefbar). Der Fix
+    stand nur im Commit-Text - hier wird er festgenagelt, und zwar fuer BEIDE
+    Wege (Transfer und Remote-Build), weil beide einzeln kaputt sein koennen.
+    """
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.text = DEPLOY_SH.read_text(encoding="utf-8")
+        # Zerlegung an den Verzweigungen des Skripts statt an Zeilennummern.
+        nach_if = self.text.split('if [[ "$DEPLOY_REMOTE_BUILD" != "1" ]]; then')[1]
+        self.transfer_zweig, rest = nach_if.split("\n  else", 1)
+        self.build_zweig = rest.split("\n  fi", 1)[0]
+
+    # --- Nutzlast ----------------------------------------------------------
+    def _print_config(self, **overrides: str) -> str:
+        result = subprocess.run(
+            [self.bash, "deploy.sh", "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=120,
+            env=clean_env(DEPLOY_PRINT_CONFIG="1", **overrides),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stdout
+
+    # --- Regeln ------------------------------------------------------------
+    def test_schalter_ist_im_trockenlauf_sichtbar(self) -> None:
+        self.assertIn("DEPLOY_REMOTE_BUILD=0", self._print_config())
+        self.assertIn("DEPLOY_REMOTE_BUILD=1", self._print_config(DEPLOY_REMOTE_BUILD="1"))
+
+    def test_rollback_tag_in_beiden_wegen_und_vor_dem_ersetzen(self) -> None:
+        tag = "docker image tag $IMAGE_APP ${IMAGE_APP}-rollback"
+        self.assertEqual(self.text.count(tag), 2, "Rollback-Tag fehlt in einem der Image-Wege")
+        self.assertIn(tag, self.transfer_zweig)
+        self.assertIn(tag, self.build_zweig)
+        # Nach `docker load` bzw. nach dem Build zeigt der Tag auf den neuen Stand.
+        self.assertLess(
+            self.transfer_zweig.index(tag), self.transfer_zweig.index("docker save"),
+            "Rollback-Tag muss VOR docker load gesetzt werden",
+        )
+        self.assertLess(
+            self.build_zweig.index(tag), self.build_zweig.index("up -d --build"),
+            "Rollback-Tag muss VOR dem Remote-Build gesetzt werden",
+        )
+
+    def test_medien_overlay_gilt_fuer_beide_wege(self) -> None:
+        # Ohne -f docker-compose.media.yml maskieren leere Bind-Mounts die Pfade
+        # des Images. Zwei Aufrufe im Transferweg (App+master-player, dann caddy),
+        # einer im Build-Weg.
+        self.assertGreaterEqual(self.text.count("$COMPOSE_FILE$MEDIA_OVERLAY"), 3)
+        for name, zweig in (("transfer", self.transfer_zweig), ("build", self.build_zweig)):
+            with self.subTest(zweig=name):
+                self.assertIn("$COMPOSE_FILE$MEDIA_OVERLAY", zweig)
+
+    def test_stempel_gehen_nur_im_remote_build_mit(self) -> None:
+        for stempel in ("AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT", "AUDIOMONASTRY_BUILD_TIME"):
+            with self.subTest(stempel=stempel):
+                self.assertIn(stempel, self.build_zweig)
+        # Der Build-Weg baut, der Transferweg nicht (sonst baut jeder Rollout neu).
+        self.assertIn("up -d --build", self.build_zweig)
+        self.assertNotIn("--no-build", self.build_zweig)
+        self.assertIn("--no-build", self.transfer_zweig)
+
+    def test_gleicher_vertrag_wie_der_live_deploy_weg(self) -> None:
+        # deploy.sh und fleet-deploy-live.sh bauen dasselbe Image auf demselben
+        # Knoten - gleiche Stempelnamen und derselbe Rueckweg, sonst laufen die
+        # beiden Wege auseinander (genau das war PERF-P1-004).
+        live = FLEET_DEPLOY_LIVE.read_text(encoding="utf-8")
+        for name in ("AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT", "AUDIOMONASTRY_BUILD_TIME"):
+            with self.subTest(name=name):
+                self.assertIn(name, self.build_zweig)
+                self.assertIn(name, live)
+        self.assertIn("-rollback", live)
+        self.assertIn("${IMAGE_APP}-rollback", self.text)
+        # Beide bauen mit demselben Compose-Muster (Projektname explizit, --build).
+        self.assertIn("COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose", self.build_zweig)
+        self.assertIn("COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose", live)
+
+
 class FleetRemoteBuildTest(unittest.TestCase):
     """PERF-P1-004 (2026-09-21): Fleet-Rollout ohne Image-Transfer.
 

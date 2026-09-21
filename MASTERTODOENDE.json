@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "1769fc9",
+  "commit": "7283ce4",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2834,6 +2834,73 @@
         "src/core/drop/DropAudioAnalyzer.ts"
       ],
       "remaining": "(1) AnalyserNode (bzw. OfflineAudioContext im Analyse-Pfad) im Mixer-/Audio-Graph bereitstellen und die Frequenzbaender dort abgreifen, (2) MixerBridge.getEnergyLevel() und DropContextAnalyzer auf EINEN Feature-Vertrag ziehen (Pegele + Baender), (3) Tests: gleiche Pegelsumme, unterschiedliche Spektren -> unterschiedliche Energie; stummgeschaltete/Solo-Kanaele korrekt behandeln, (4) Gegenprobe an einem echten Mix (Hoerprobe: Vorschlaege passen zum Spektrum)."
+    },
+    {
+      "id": "PERF-P1-002",
+      "title": "Lokaler Build kopierte 3,7 GB publicDir mit (5:45 -> 0:15 Wanduhr)",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Infra/Build",
+      "source": "Tiefen-Optimierungsrun 2026-09-21 (Messung statt Bauchgefuehl)",
+      "problem": "`vite build` kopierte den KOMPLETTEN publicDir nach dist/: data/orchestral 3,0 GB, music 382 MB, models 291 MB = 3,7 GB. Im Image fehlen genau diese Baeume (.dockerignore), im Betrieb mountet docker-compose.media.yml sie, der Dev-Server liefert public/ direkt. Gemessen: 5:45 min Wanduhr bei 25 s CPU - reine Plattenwartezeit, kein Rechenaufwand.",
+      "note": "UMGESETZT 2026-09-21 (a9b1487): build.copyPublicDir=false in vite.config.ts + scripts/build-public-assets.mjs kopiert public/ selbst, nimmt die drei Overlay-Baeume aus und legt fuer vorhandene Quellen einen RELATIVEN Symlink in dist/ an (dist bleibt verschiebbar, `npm start` zeigt lokal weiter die Medien). Im Docker-Build fehlen die Quellen -> stiller Skip, der Mount erzeugt die Pfade. GEMESSEN: Build 5:45 -> 0:14,9 (23x), dist 3,7 GB -> 52 MB; Nachmessung 2026-09-21 (warmer Cache) 27,7 s real bei 22,9 s user.",
+      "verification": "tests/buildPublicAssets.test.ts (6 Faelle): Kopierplan nimmt die Overlay-Baeume aus, verlinkt nur vorhandene, ersetzt eine Alt-Kopie durch den Symlink (ohne das Ziel anzufassen), haelt den Vertrag mit docker-compose.media.yml (Mount-Ziel <-> Ausnahmeliste) und die Verdrahtung in package.json/vite.config.ts fest. Eigenmessung: `time npm run build` 27,748 s real / 22,881 s user; `du -sh dist` 52M; dist/data/orchestral, dist/models, dist/music als relative Symlinks. Live im Docker-Build auf app-1: \"[public-assets] nicht vorhanden (Image-Build/Overlay liefert): data/orchestral, models, music\".",
+      "files": [
+        "vite.config.ts",
+        "scripts/build-public-assets.mjs",
+        "package.json",
+        "tests/buildPublicAssets.test.ts"
+      ]
+    },
+    {
+      "id": "PERF-P1-003",
+      "title": "deploy.sh: Remote-Build war ohne Medien-Overlay, Rollback und Stempel unbrauchbar",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Infra/Deploy",
+      "source": "Tiefen-Optimierungsrun 2026-09-21, Teil 2 (Deploy-Weg)",
+      "problem": "Die Leitung Betreiber-Rechner -> Knoten macht gemessen ~1 MB/s hoch (200 MB in 3:14); `docker save` liefert 338 MB Tar, zstd -3 holt davon 337 MB - die Layer sind schon gepackt, der Transfer bleibt der Engpass (~6 min je Knoten). `DEPLOY_REMOTE_BUILD=1` war dafuer gedacht, aber nicht benutzbar: der Zweig lief OHNE `-f docker-compose.media.yml` (leere Bind-Mounts maskieren die Image-Pfade: Library/Instrumente leer, /models/htdemucs.onnx 404 - genau der Fehler vom 2026-09-20), OHNE Rollback-Tag und OHNE die Build-Args, die docker-compose.hetzner.yml fuer /api/health liest ('unknown' -> Commit-Paritaet nach PROD-P1-F4 nicht pruefbar).",
+      "note": "UMGESETZT 2026-09-21 (a9b1487): der Remote-Build-Zweig von deploy.sh taggt vorher `<image>-rollback`, nimmt $MEDIA_OVERLAY mit und uebergibt AUDIOMONASTRY_VERSION/COMMIT/BUILD_TIME; der Transfer-Zweig behaelt --no-build und bekommt denselben Rollback-Tag VOR `docker load` (danach zeigte er auf den neuen Stand).",
+      "verification": "tests/test_hetzner_scripts.py -> DeployImageWegeTest (5 Tests, neu): Schalter im Trockenlauf (DEPLOY_PRINT_CONFIG=1 zeigt DEPLOY_REMOTE_BUILD=0/1), Rollback-Tag in BEIDEN Zweigen und jeweils VOR `docker load` bzw. `up -d --build`, $COMPOSE_FILE$MEDIA_OVERLAY in beiden Zweigen, Stempel nur im Build-Zweig, Vertragsgleichheit mit fleet-deploy-live.sh. Messwert fuer den Engpass: ~1 MB/s hoch, 338 MB Tar, zstd -3 -> 337 MB Rest.",
+      "files": [
+        "deploy.sh",
+        "tests/test_hetzner_scripts.py"
+      ]
+    },
+    {
+      "id": "PERF-P1-004",
+      "title": "Live-Deploy-Weg: Remote-Build-Paritaet, Rollback-Tag, Sync-Trockenlauf, --help",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Infra/Deploy",
+      "source": "Tiefen-Optimierungsrun 2026-09-21, Teil 3 (Live-Beweis-Weg)",
+      "problem": "scripts/hetzner/fleet-deploy-live.sh konnte nur per Image-Transfer deployen (338 MB, ~6 min bei ~1 MB/s); DEPLOY_REMOTE_BUILD war dort nicht verdrahtet. Ausserdem startete `--help` einen Deploy: die Flag landete als IP im Guard/rsync (gemessen: rsync brach mit \"Invalid remote host: hostnames may not start with '-'\" ab, nachdem der Deploy schon begonnen hatte).",
+      "note": "UMGESETZT 2026-09-21 (7283ce4): beide Image-Wege (Build und Transfer) sichern das Rollback-Tag VOR dem Ersetzen des Images, nehmen das Medien-Overlay mit, wenn auf dem Knoten Inhalte liegen, und uebergeben die Build-Stempel aus dem Repo. Neuer Modus DEPLOY_DRY_RUN=2 faehrt den ECHTEN Sync als `--dry-run --itemize-changes` und endet danach (nur lesend, kein Image/Container) - damit ist der Loeschplan vor einem Deploy lesbar. `--help`/`-h` nennt alle Schalter und uebertraegt nichts.",
+      "verification": "tests/test_hetzner_scripts.py -> FleetRemoteBuildTest (6 Tests) + FleetSyncDeleteGuardTest (6 Tests). LIVE gegen app-1 (2026-09-21, DEPLOY_REMOTE_BUILD=1): Deploy-Exit 0; Guard sah den laufenden Stack in /opt/audiomonastry; \"Medien-Overlay aktiv\"; \"Rollback-Image sichern\"; Stempel version=1.210.001 commit=7283ce4 built=2026-09-21T14:08:48Z; /api/health danach {\"status\":\"ok\",\"commit\":\"7283ce4\"} = HEAD-Paritaet (vorher a9b1487); neues Image dfef457028a4, Rollback-Tag zeigt jetzt auf das Vorgaenger-Image 4682647e1a8d; Container audiomonastry running, master-player und caddy unberuehrt (Up About an hour); Medien-Mounts im Container liefern /app/dist/data/orchestral/BassoonStac.sfz und /app/dist/models/htdemucs.",
+      "files": [
+        "scripts/hetzner/fleet-deploy-live.sh",
+        "tests/test_hetzner_scripts.py",
+        "docs/HETZNER_DEPLOY.md"
+      ],
+      "remaining": "Die uebrigen Rollen-Knoten tragen noch den Stand vom 2026-09-20 (gemessen auf sfu-1: scripts/hetzner/fleet-deploy-live.sh vom 20.09., 18:23, ohne die neuen Sync-Ausschluesse) - ein Bring-up-/Deploy-Lauf mit dem aktuellen Stand steht aus."
+    },
+    {
+      "id": "INFRA-HETZNER-011",
+      "title": "rsync --delete in drei Flotten-Skripten loeschte Knoten-lokale Laufzeitdaten (media/, certs/, Caddyfile, runtime/)",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Infra/Deploy",
+      "source": "Nebenbefund des Parity-Fixes fuer den Remote-Build (2026-09-21), am Knoten gemessen",
+      "problem": "fleet-deploy-live.sh, bring-up-fleet.sh und install-ai1.sh spiegeln per `rsync --delete` auf die Knoten - alles, was dort liegt und nicht ausgeschlossen ist, wird GELOESCHT. Nicht ausgeschlossen waren Pfade, die es NUR auf dem Knoten gibt: app-1 media/ (3,3 GB Overlay-Inhalt aus deliver-media.sh), certs/origin.crt|origin.key (0600) und die Origin-Variante der Caddyfile; sfu-1 runtime/coturn/turnserver.conf (0640, TURN-Secret, von wire-rtc.sh AUF dem Knoten erzeugt und von docker-compose.turn.yml genau so gemountet); edge-1 certs/. Ein Lauf haette die Medien geloescht (Folge: leere Mounts, Library/Instrumente leer, /models 404 - und 3,3 GB ueber ~1 MB/s neu liefern), das Origin-TLS-Zertifikat entfernt und die F6-TURN-Verdrahtung still rueckgaengig gemacht.",
+      "note": "UMGESETZT 2026-09-21 (7283ce4): dieselbe Ausschlussliste in allen drei Sync-Wegen (media, certs, Caddyfile, runtime, public/models, __pycache__, .worktrees, '.venv*'), Begruendung je Pfad an der Fundstelle; die gemessene Knoten-Tabelle steht in docs/HETZNER_DEPLOY.md. Dazu DEPLOY_DRY_RUN=2, der den echten Sync als Trockenlauf faehrt.",
+      "verification": "Gegenprobe in FleetSyncDeleteGuardTest: `git show a9b1487:<skript>` hat --delete OHNE die Ausschluesse - der Waechter faengt also den echten Fehler, nicht ein Phantom. Live-Trockenlauf 2026-09-21 gegen app-1 (nur lesend): einzige Loeschungen waren docker-compose.e2e-tunnel.yml (Artefakt dieses Skripts) und Repo-Leichen (services/taskWorker.ts, src/ai/modelRegistry.ts, src/ai/localVoice.ts, src/ai/embeddingCache.ts, src/core/ai/parameterPrediction.ts, services/audiomonastry-ai-runtime/runtime_config.yaml, tests/parameterPrediction.test.ts); media/, certs/, Caddyfile, runtime/ tauchen nicht auf. Danach echter Deploy: media 3,3 G unveraendert (models music orchestral), certs/origin.crt|origin.key vorhanden, Caddyfile sha256 9644f05627ab02e5 vor UND nach dem Deploy identisch.",
+      "files": [
+        "scripts/hetzner/fleet-deploy-live.sh",
+        "scripts/hetzner/bring-up-fleet.sh",
+        "scripts/hetzner/install-ai1.sh",
+        "tests/test_hetzner_scripts.py",
+        "docs/HETZNER_DEPLOY.md"
+      ]
     }
   ],
   "visionSandbox": [

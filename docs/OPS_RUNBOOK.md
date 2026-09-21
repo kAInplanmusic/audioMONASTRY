@@ -725,6 +725,11 @@ drei Presets ergeben unterschiedliche Bilder, eine Show-Szene wird als
 2. **Auf den Knoten bringen**: `bash scripts/hetzner/fleet-deploy-live.sh <app-ip> 8080`
    (rsync des Repo-Stands ohne Knoten-`.env`, Image per `docker save | gzip | ssh docker load`,
    plus Test-Overlay, das den App-Port **nur an Loopback** veröffentlicht).
+   Schneller, wenn die Leitung der Engpass ist: `DEPLOY_REMOTE_BUILD=1` davor (baut per
+   rsync-Delta auf dem Knoten). **Vor** dem Lauf den Löschplan lesen:
+   `DEPLOY_DRY_RUN=2 bash scripts/hetzner/fleet-deploy-live.sh <app-ip>` (nur lesend) —
+   die Ausschlüsse dafür sind Vertrag (PERF-P1-004 / INFRA-HETZNER-011,
+   Tabelle in `docs/HETZNER_DEPLOY.md`); `--help` zeigt alle Schalter.
 3. **Tunnel**: `ssh -N -L 8080:127.0.0.1:8080 root@<app-ip>` (Hintergrundprozess).
 4. **Messen** (siehe unten) — **Achtung**: gegen `http://localhost:8080` fahren, nicht
    gegen `127.0.0.1`.
