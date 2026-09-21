@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "6bcfd1c",
+  "commit": "fd93f3b",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2781,14 +2781,26 @@
       "title": "F9 · Idle-Shutdown-Signal auf echte App-Nutzung stuetzen",
       "priority": "P3",
       "status": "PARTIAL",
-      "area": "Ops",
-      "source": "docs/FIXPLAN_2026-09-20_externer_apptest.md (F9)",
-      "problem": "Der Idle-Timer feuerte gegen ein Signal, das strukturell immer 0 war: der Caddy-308 und der 401-Pfad wurden als 'offline' gezaehlt, das Log zeigte ausnahmslos ONLINE=0.",
-      "note": "DONE (Code) 2026-09-20, Commit 0170e7a, gemergt als 12d2273: Vorzustand zuerst reproduziert (Belegstelle idle-check.sh:35-38: 308-Pfad und 401-Pfad je ONLINE_USERS=0, Exit 0). Neu: GET /api/idle-signal mit reinen Regeln in server/idleSignal.ts (idle nur, wenn KEINE Socket-Clients UND keine offenen Sockets/SSH/Load/Container-Jobs UND kein erfolgreicher App-Request in X Minuten; Shutdown nur bei idle UND Schwelle); der Timer fragt die App auf Port 8080 statt Caddy, liefert nur Host-Fakten und bekommt format=text plus Header x-idle-verdict/-shutdown. Unlesbares Signal -> SIGNAL=unavailable + fail-safe (kein Shutdown). Token aus /etc/audiomonastry/idle-check.env (0600, Installer legt an/uebernimmt Tokens); --dry-run/--print-facts fuer den Trockenlauf, Installer --print-units.",
-      "verification": "Offline/lokal gemessen: tsc 0 Fehler; tests/idleSignal.test.ts gruen; bash -n beider Skripte; systemd-analyze verify der gerenderten Units exit 0; Trockenlauf gegen eine laufende App (Port 18099): aktiv-Zeile mit echten Zahlen (OPEN_SOCKETS=4, ACTIVITY_AGE=2s, VERDICT=active) bzw. leerer Knoten VERDICT=idle SHUTDOWN=yes mit Begruendung; --dry-run unterdrueckt den Shutdown; IDLE_CHECK_URL auf einen Caddy-Mock -> SIGNAL=unavailable, SHUTDOWN=no. Gate-Lauf nach dem Merge gruen. LIVE GEMESSEN 2026-09-20 auf app-1 (Deploy von main-Commit 37c5719, Abfrage ueber den Produktionspfad Caddy/TLS mit echtem SNI, Token nur auf dem Knoten gelesen): /api/idle-signal mit Token: verdict=active, shutdown=false, reason='aktiv: request-vor-34s', Header x-idle-verdict: active und x-idle-shutdown: no - das Signal folgt also echter App-Nutzung (vorher stand im Log ausnahmslos ONLINE=0, weil der Caddy-308/401-Pfad als offline gezaehlt wurde).",
+      "area": "Infra/Deploy",
+      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F9), Live-Nachtrag 2026-09-21",
+      "problem": "Das Signal selbst war gebaut (GET /api/idle-signal mit reinen Regeln in server/idleSignal.ts), aber der Installer des Timers war nicht betreibbar verankert: er schrieb seine Units per Heredoc SELBST (Drift zum Repo - dieselbe Fehlerklasse wie INFRA-HETZNER-005), der Flottenstart schluckte seinen Fehlschlag still (`2>/dev/null || true`), und ein Knoten ohne Token bekam einen Timer, der strukturell nie ausloesen kann (401 -> SIGNAL=unavailable -> fail-safe). Am 2026-09-21 war der Timer auf app-1 zudem GAR NICHT installiert - die Flotte waere ohne Eingriff unbegrenzt auf Kosten gelaufen.",
+      "note": "CODE (gemergt, hermes/f9): Units liegen im Repo (scripts/hetzner/systemd/audiomonastry-idle-shutdown.{service,timer}), der Installer kopiert sie nur und ist idempotent (vorhandene /etc/audiomonastry/idle-check.env mit Token bleibt unangetastet, Wert wird nie ausgegeben); fail-early VOR jeder Installation (fehlende Quelle Exit 1, kein Token Exit 2, Ausweg IDLE_ALLOW_TOKEN_LESS=1); bring-up-fleet.sh Schritt 7 meldet Fehlschlaege sichtbar und liest den Timer auf dem Knoten nach; IDLE_SHUTDOWN_MINUTES/SCRAPE_TOKEN stehen jetzt auch in .env.hetzner.example (waren nur in docs/ENV_MATRIX.md); OPS_RUNBOOK Abschnitt 2 nennt Installation, Kontrolle, Reboot-Verhalten und den fail-early-Abbruch. LIVE 2026-09-21 (mit der Vor-Fassung des Installers auf app-1): Installer zweimal gefahren (idempotent), Units geschrieben, systemd-analyze verify Exit 0, Timer active+enabled, ein echter Tick mit Logzeile (ONLINE=0 OPEN_SOCKETS=0 SSH=0 LOAD1=0 BUSY_CONTAINERS=0 ACTIVITY_AGE=... THRESHOLD=1800s VERDICT=active SHUTDOWN=no), Zugangsdatei /etc/audiomonastry/idle-check.env 0600 mit 13 Zeilen, Check unter /usr/local/bin/audiomonastry-idle-check.sh.",
+      "verification": "python3 tests/test_hetzner_scripts.py: 143 Tests OK, davon die neue Klasse IdleShutdownTimerTest (10 Faelle) mit Fake-systemctl (Allowlist: nur daemon-reload, enable --now, is-active, list-timers - belegt, dass der Installer NICHTS stoppt) und Fake-ssh fuer den Recreate-Pfad; bash -n aller Skripte OK; --print-units liefert die Repo-Fassung; systemd-analyze verify --root=<fake-root> fuer beide Units Exit 0; vitest tests/idleSignal.test.ts 17 OK (App-Semantik unveraendert). Live s. note.",
+      "files": [
+        "scripts/hetzner/install-idle-shutdown.sh",
+        "scripts/hetzner/systemd/idle-check.sh",
+        "scripts/hetzner/systemd/audiomonastry-idle-shutdown.service",
+        "scripts/hetzner/systemd/audiomonastry-idle-shutdown.timer",
+        "scripts/hetzner/bring-up-fleet.sh",
+        "server/idleSignal.ts",
+        "tests/test_hetzner_scripts.py",
+        "docs/OPS_RUNBOOK.md"
+      ],
+      "remaining": "",
       "live_open": [
-        "Echter systemd-Timer-Lauf auf einem Hetzner-Knoten (inkl. Reboot-Verhalten); Installer install-idle-shutdown.sh ist nicht installiert",
-        "Neue Variablen in .env.hetzner.example nachziehen (in docs/ENV_MATRIX.md dokumentiert)"
+        "Live-Lauf der NEUEN Installer-Fassung (mein Live-Beweis lief mit der Vor-Fassung): passiert automatisch in bring-up-fleet.sh Schritt 7 beim naechsten Wake - dort nachsehen statt annehmen",
+        "SHUTDOWN=yes wurde live nie beobachtet (dafuer braucht es 30 Minuten echte Ruhe am Stueck; die Flotte wurde stattdessen kontrolliert gestoppt). Der Zweig ist nur durch die Regeltests in tests/idleSignal.test.ts belegt",
+        "Reboot-Verhalten (OnBootSec=5min) auf einem Knoten, und: IDLE_MINUTES des Timers aendert die Serverschwelle NICHT - die 1800 s entscheidet /api/idle-signal (bewusst, aber in der Doku nachzuziehen)"
       ]
     },
     {
@@ -2829,17 +2841,26 @@
       "id": "DSP-P2-003",
       "title": "Drop-Analyzer: echte Frequenzanalyse (FFT) statt Kanal-Level",
       "priority": "P2",
-      "status": "OPEN",
-      "area": "DSP",
-      "source": "docs/dropMONK_MVP_SUMMARY.md (Platzhalter-Liste) - seit 2026-09-21 in der SSOT gefuehrt",
-      "problem": "DropContextAnalyzer.calculateEnergyFromChannels() schaetzt die Energie ausschliesslich aus den Kanal-Pegeln (und MixerBridge.getEnergyLevel() aus gemittelten Kanal-Levels), obwohl der Typ-Kommentar 'basierend auf Levels + Frequencies' verspricht. Folge: ein leiser, aber brillanter Percussion-Loop und ein dumpfer Bass-Loop mit gleichem Pegel gelten als gleich 'energetisch' - Drop-Vorschlaege und Timing richten sich danach.",
-      "note": "Gefunden bei der Restsuche 2026-09-21 in der MVP-Zusammenfassung; der Punkt stand nur dort, nicht in der SSOT. Bewusst NICHT in derselben Sitzung umgesetzt: MixerBridge haelt keinen AudioContext/AnalyserNode (nur Kanal-Level ueber Adapter/Fallback), ein echter Spektralwert braucht also eine Verdrahtung durch die Audio-Graph-Schicht - eine Aenderung im laufenden Audio-Pfad, die ohne Hoerprobe nicht verantwortbar ist.",
+      "status": "PARTIAL",
+      "area": "Audio/DSP",
+      "source": "MVP-Zusammenfassung docs/dropMONK_MVP_SUMMARY.md (Restsuche 2026-09-21); umgesetzt 2026-09-21",
+      "problem": "Der Drop-Analyzer hatte KEINE Frequenzanalyse, sondern nur Kanalpegel: MixerBridge.getEnergyLevel() mittelte die Kanal-Fader (x1.2), DropContextAnalyzer.analyzeCurrentMix() ebenso, obwohl der Typ-Kommentar dort 'basierend auf Levels + Frequencies' versprach. Der einzige echte FFT-Bandabgriff der App lag im VISUAL-Pfad (featureBus ueber audioEngine.createVisualAnalyser / masterStreamTap) und war fuer dropMONK nicht erreichbar - ein Drop-Kontext konnte also gar nicht wissen, ob der Mix basslastig ist.",
+      "note": "UMGESETZT 2026-09-21 (hermes/p2003, gemergt): neuer reiner DSP-Kern src/core/drop/spectrum.ts (Band-Energien Bass/Mitten/Hoehen als MITTLERE Leistung JE BIN - mit Summen gewaenne allein wegen der Bin-Anzahl immer das schmale Bass-Band; zusaetzlich Energieanteile als share, Peak-Bin/-Hz/-dBFS, Schwerpunkt-Band nur ab 1,5x Bandmittel sonst 'breitbandig'; NaN-fest: leer/zu kurz/NaN/unbrauchbare Geometrie ergeben den Null-Zustand; allokationsfrei mit uebergebenem out-Objekt). Analyser-Tap src/core/drop/spectrumTap.ts auf einen strukturellen AnalyserLike (kein Plattformzugriff im Kern; createFrameBuffer legt -Infinity vor, weil 0 dB im dB-Puffer VOLLAUSSTEUERUNG bedeutet). Verdrahtung AUSSCHLIESSLICH ueber optionale Felder/Methoden: DropAudioAdapter.readSpectrumFrame?(), MixerBridge.getSpectrum()/getEnergyState() (getEnergyLevel() bleibt PegeleVertrag), DropContextAnalyzer(..., spectrum?) mit energySource 'provided'|'spectrum'|'levels', DropAudioAnalyzer dsp.spectrum (Kopie in die Ausgabe, damit das Hot-Path-Objekt nicht nachlebt), und der App-Adapter src/utils/dropAudioBridge.ts liest den echten Master-Analyser (audioEngine.createVisualAnalyser, FFT 2048, lazy, dB-Puffer wiederverwendet, haengt beim Detach wieder ab). Ohne Spektrum verhaelt sich alles exakt wie vorher.",
+      "verification": "tsc --noEmit: 0 Fehler. vitest tests/dropSpectrum.test.ts + tests/dropSpectrumWiring.test.ts: 46 Tests OK (Bass-/Mitten-/Hoehen-Sinus -> richtiges Band staerkste Energie; breitbandiges Spektrum -> kein Schein-Schwerpunkt; leer/kurz/NaN -> definierter Null-Zustand; Determinismus; Gegenprobe verschobener Sinus; Verdrahtungspfade inkl. Rueckfall auf Pegel ohne Analyser). Waechter: tests/validateInterfaceBoundaries.test.mjs + tests/namingConventions.test.ts + tests/browserSafeModules.test.ts 12 Tests OK. Zwei Befunde aus den Tests wurden im CODE behoben, nicht in der Erwartung: dB-Puffer-Vorbelegung (-Infinity statt 0) und ein wiederverwendeter Rueckgabepuffer in MixerBridge.getSpectrum() (zwei Aufrufe zeigten auf dasselbe, schon ueberschriebene Objekt - jetzt ohne out ein frisches Objekt).",
       "files": [
-        "src/core/drop/DropContextAnalyzer.ts",
+        "src/core/drop/spectrum.ts",
+        "src/core/drop/spectrumTap.ts",
         "src/core/drop/MixerBridge.ts",
-        "src/core/drop/DropAudioAnalyzer.ts"
+        "src/core/drop/DropContextAnalyzer.ts",
+        "src/core/drop/DropAudioAnalyzer.ts",
+        "src/utils/dropAudioBridge.ts",
+        "tests/dropSpectrum.test.ts",
+        "tests/dropSpectrumWiring.test.ts"
       ],
-      "remaining": "(1) AnalyserNode (bzw. OfflineAudioContext im Analyse-Pfad) im Mixer-/Audio-Graph bereitstellen und die Frequenzbaender dort abgreifen, (2) MixerBridge.getEnergyLevel() und DropContextAnalyzer auf EINEN Feature-Vertrag ziehen (Pegele + Baender), (3) Tests: gleiche Pegelsumme, unterschiedliche Spektren -> unterschiedliche Energie; stummgeschaltete/Solo-Kanaele korrekt behandeln, (4) Gegenprobe an einem echten Mix (Hoerprobe: Vorschlaege passen zum Spektrum)."
+      "remaining": "",
+      "live_open": [
+        "Hoerprobe/Sichtpruefung im Studio nach dem naechsten Wake: energySource='spectrum' muss im Drop-Kontext ankommen und ein basslastiger Mix sichtbar hoehere Bass-Energie zeigen als ein hoehenlastiger (die Flotte ist seit 2026-09-21 15:20 gestoppt; offline ist nur die Kette, nicht das Klangergebnis belegbar)"
+      ]
     },
     {
       "id": "PERF-P1-002",
