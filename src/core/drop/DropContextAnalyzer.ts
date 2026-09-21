@@ -9,6 +9,7 @@ import {
   DROP_PROFILES,
   getDropProfilesByCategory,
   getDropProfilesByIntensity} from './types/DropProfile';
+import type { DropSpectrum } from './spectrum';
 
 export interface MixerChannel {
   id: string;
@@ -23,7 +24,17 @@ export interface AudioContext {
   key?: string;
   activePlugins: string[]; // z.B. ['synth', 'reverb', 'drum']
   mixerChannels: MixerChannel[];
-  currentEnergy: number; // 0..1 (basierend auf Levels + Frequencies)
+  /**
+   * 0..1 – bevorzugt aus dem ECHTEN FFT-Spektrum (Bass/Mitten/Höhen), sonst aus
+   * den Kanal-Pegeln. Bis 2026-09-21 war das ausschließlich eine
+   * Pegel-Mittelung, obwohl hier „basierend auf Levels + Frequencies" stand
+   * (SSOT DSP-P2-003).
+   */
+  currentEnergy: number;
+  /** Herkunft von `currentEnergy` (Nachvollziehbarkeit für UI/Audit). */
+  energySource?: 'provided' | 'spectrum' | 'levels';
+  /** Spektralwert des Mixes, falls ein Analyser geliefert hat (sonst null). */
+  spectrum?: DropSpectrum | null;
   timeSignature: '4/4' | '3/4' | '6/8' | '5/4' | string;
   analysisTimestamp: number; // when analyzed
 }
@@ -44,6 +55,11 @@ export class DropContextAnalyzer {
   /**
    * Analysiere aktuellen Mix-State
    * (Wird von anderen Services mit aktuellen Daten gefüttert)
+   *
+   * `spectrum` ist der optionale ECHTE FFT-Wert (SSOT DSP-P2-003): liegt er
+   * vor und wurde keine Energie durchgereicht, kommt `currentEnergy` aus den
+   * Frequenzbändern statt aus den Kanal-Pegeln. Ohne Spektrum bleibt alles
+   * unverändert (Headless/Tests/kein Audio).
    */
   analyzeCurrentMix(
     bpm: number,
@@ -51,9 +67,14 @@ export class DropContextAnalyzer {
     mixerChannels: MixerChannel[],
     currentEnergy?: number,
     key?: string,
-    timeSignature: string = '4/4'
+    timeSignature: string = '4/4',
+    spectrum: DropSpectrum | null = null
   ): AudioContext {
-    const energy = currentEnergy ?? this.calculateEnergyFromChannels(mixerChannels);
+    const spectralEnergy = spectrum ? spectrum.overall : undefined;
+    const energy =
+      currentEnergy ?? spectralEnergy ?? this.calculateEnergyFromChannels(mixerChannels);
+    const energySource: AudioContext['energySource'] =
+      currentEnergy !== undefined ? 'provided' : spectralEnergy !== undefined ? 'spectrum' : 'levels';
 
     const context: AudioContext = {
       bpm,
@@ -61,6 +82,8 @@ export class DropContextAnalyzer {
       activePlugins: activePluginIds,
       mixerChannels,
       currentEnergy: energy,
+      energySource,
+      spectrum: spectrum ?? null,
       timeSignature,
       analysisTimestamp: Date.now(),
     };
@@ -72,6 +95,10 @@ export class DropContextAnalyzer {
   /**
    * Kalkuliere Energy-Level aus Mixer-Channels
    * (0=silence, 1=max energy)
+   *
+   * Fallback OHNE Frequenzinformation – nur wenn kein Analyser-Spektrum
+   * vorliegt (siehe `analyzeCurrentMix`). Zwei Loops mit gleichem Pegel, aber
+   * unterschiedlichem Spektrum sind hier bewusst gleich „energetisch".
    */
   private calculateEnergyFromChannels(channels: MixerChannel[]): number {
     if (channels.length === 0) return 0;

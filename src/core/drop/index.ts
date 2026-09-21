@@ -25,7 +25,20 @@ export { DropPresetStore, dropPresetStore } from './DropPresetStore';
 
 // Phase 3 Bridges
 export { MixerBridge, mixerBridge } from './MixerBridge';
-export type { MixerChannelState } from './MixerBridge';
+export type { MixerChannelState, MixEnergyState } from './MixerBridge';
+
+// Spektral-Kern + Analyser-Tap (SSOT DSP-P2-003: echte FFT-Bänder statt Kanal-Pegel)
+export { computeSpectrum, createSpectrum, DROP_BANDS, SPECTRUM_FLOOR_DB, SPECTRUM_DOMINANCE_RATIO } from './spectrum';
+export type {
+  DropSpectrum,
+  SpectrumBand,
+  SpectrumBandValues,
+  SpectrumFrame,
+  ComputeSpectrumOptions,
+} from './spectrum';
+export { readAnalyserFrame, createFrameBuffer, DEFAULT_SAMPLE_RATE } from './spectrumTap';
+export type { AnalyserLike } from './spectrumTap';
+export type { DropSpectrumSummary, DropEnergySource } from './DropAudioAnalyzer';
 
 export { PluginParameterBridge, pluginParameterBridge } from './PluginParameterBridge';
 export type { ParameterSpec } from './PluginParameterBridge';
