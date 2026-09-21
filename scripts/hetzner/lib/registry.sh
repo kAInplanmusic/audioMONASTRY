@@ -130,19 +130,32 @@ registry_load_credentials() {
   REGISTRY_USER=""
   REGISTRY_PASS=""
 
+  # PROD-P2-REG-Fix (2026-09-21): Die DATEI gewinnt gegen die Prozessumgebung.
+  # Gemessen: die Umgebung des Betreiber-Rechners trug ein VERALTETES
+  # GHCR_PASSWORD (Fingerabdruck afab6df9) waehrend .env den gueltigen Wert hatte
+  # (b2e16ea5). Die fruehere Fassung nahm die Umgebung vorrangig, las die Datei
+  # dadurch nie, und der Login endete still in `denied: denied` - derselbe Aufruf
+  # mit den Werten aus .env gelang sofort ("Login Succeeded"). Ein Widerspruch
+  # wird jetzt laut gemeldet, aber nur mit FINGERABDRUCK - nie mit dem Wert.
+  # Ein ausdrueckliches REGISTRY_PASSWORD des Aufrufers bleibt die hoechste Stufe.
+  local datei_user="" datei_pass="" umg_user="${GHCR_USERNAME:-}"
+  local umg_pass="${GHCR_TOKEN:-${GHCR_PASSWORD:-${GHCR_PAT_ALL_ACCESS:-}}}"
+  if [[ "$file" != "none" && -f "$file" ]]; then
+    datei_user="$(registry_env_value "$file" GHCR_USERNAME)"
+    datei_pass="$(registry_env_value "$file" GHCR_TOKEN)"
+    [[ -n "$datei_pass" ]] || datei_pass="$(registry_env_value "$file" GHCR_PASSWORD)"
+    [[ -n "$datei_pass" ]] || datei_pass="$(registry_env_value "$file" GHCR_PAT_ALL_ACCESS)"
+  fi
   if [[ -n "${REGISTRY_PASSWORD:-}" ]]; then
-    REGISTRY_USER="${REGISTRY_USER:-${GHCR_USERNAME:-}}"
+    REGISTRY_USER="${REGISTRY_USER:-${datei_user:-$umg_user}}"
     REGISTRY_PASS="$REGISTRY_PASSWORD"
   else
-    REGISTRY_USER="${GHCR_USERNAME:-}"
-    REGISTRY_PASS="${GHCR_TOKEN:-${GHCR_PASSWORD:-${GHCR_PAT_ALL_ACCESS:-}}}"
-  fi
-
-  if [[ -z "$REGISTRY_PASS" && "$file" != "none" && -f "$file" ]]; then
-    [[ -n "$REGISTRY_USER" ]] || REGISTRY_USER="$(registry_env_value "$file" GHCR_USERNAME)"
-    REGISTRY_PASS="$(registry_env_value "$file" GHCR_TOKEN)"
-    [[ -n "$REGISTRY_PASS" ]] || REGISTRY_PASS="$(registry_env_value "$file" GHCR_PASSWORD)"
-    [[ -n "$REGISTRY_PASS" ]] || REGISTRY_PASS="$(registry_env_value "$file" GHCR_PAT_ALL_ACCESS)"
+    if [[ -n "$umg_pass" && -n "$datei_pass" && "$umg_pass" != "$datei_pass" ]]; then
+      echo "⚠️  GHCR-Zugangsdaten widersprechen sich (Umgebung vs. $file)." >&2
+      echo "    Es gilt die DATEI: Umgebung=$(printf '%s' "$umg_pass" | sha256sum | cut -c1-8) Datei=$(printf '%s' "$datei_pass" | sha256sum | cut -c1-8)" >&2
+    fi
+    REGISTRY_USER="${datei_user:-$umg_user}"
+    REGISTRY_PASS="${datei_pass:-$umg_pass}"
   fi
 
   if [[ -z "$REGISTRY_USER" ]]; then

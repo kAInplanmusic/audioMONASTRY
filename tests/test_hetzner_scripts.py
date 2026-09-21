@@ -90,6 +90,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import shlex
 import unittest
 import urllib.parse
 from typing import Any, Literal
@@ -4871,5 +4872,60 @@ class TransferSyntaxTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
 
 
+class RegistryCredentialPrecedenceTest(unittest.TestCase):
+    """PROD-P2-REG-Fix (2026-09-21): Die .env-DATEI gewinnt gegen die Umgebung.
+
+    Gemessen: die Prozessumgebung des Betreiber-Rechners trug ein VERALTETES
+    GHCR_PASSWORD (FP afab6df9), .env den gueltigen Token (FP b2e16ea5). Die
+    fruehere Fassung nahm die Umgebung vorrangig und las die Datei nie -> der
+    Login endete still in `denied: denied`, obwohl derselbe Aufruf mit den Werten
+    aus .env sofort gelang. Dieser Test haelt die neue Reihenfolge fest.
+    """
+
+    # Wurzel aus der Dateilage, nicht aus einer Modulkonstante: die Testdatei
+    # kennt keine REPO_ROOT (gemessen 2026-09-21, NameError).
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+    LIB = str(ROOT / "scripts" / "hetzner" / "lib" / "registry.sh")
+
+    def test_datei_gewinnt_gegen_umgebung(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_datei = os.path.join(tmp, ".env")
+            with open(env_datei, "w", encoding="utf-8") as f:
+                f.write("GHCR_USERNAME=aus-der-datei\nGHCR_TOKEN=datei-token-richtig\n")
+            skript = (
+                f"set -u; source {shlex.quote(self.LIB)}; "
+                f"registry_load_credentials {shlex.quote(str(self.ROOT))} {shlex.quote(env_datei)} "
+                '&& printf "%s|%s" "$REGISTRY_USER" "$REGISTRY_PASS"'
+            )
+            umgebung = dict(os.environ)
+            umgebung["GHCR_PASSWORD"] = "veraltetes-umgebungs-token"
+            umgebung.pop("GHCR_TOKEN", None)
+            r = subprocess.run(["bash", "-c", skript], capture_output=True, text=True, env=umgebung)
+            self.assertEqual(
+                r.stdout.strip(), "aus-der-datei|datei-token-richtig",
+                f"Es muss die Datei gelten, nicht die Umgebung. stdout={r.stdout!r} stderr={r.stderr!r}",
+            )
+            self.assertIn("widersprechen sich", r.stderr, "Der Widerspruch muss gemeldet werden.")
+            self.assertNotIn("veraltetes-umgebungs-token", r.stdout + r.stderr,
+                             "Der WERT darf nie in der Ausgabe stehen - nur der Fingerabdruck.")
+
+    def test_ohne_umgebung_liest_die_datei(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            env_datei = os.path.join(tmp, ".env")
+            with open(env_datei, "w", encoding="utf-8") as f:
+                f.write("GHCR_USERNAME=nur-datei\nGHCR_TOKEN=nur-datei-token\n")
+            skript = (
+                f"set -u; source {shlex.quote(self.LIB)}; "
+                f"registry_load_credentials {shlex.quote(str(self.ROOT))} {shlex.quote(env_datei)} "
+                '&& printf "%s|%s" "$REGISTRY_USER" "$REGISTRY_PASS"'
+            )
+            umgebung = {k: v for k, v in os.environ.items()
+                        if not k.startswith("GHCR_") and k != "REGISTRY_PASSWORD"}
+            r = subprocess.run(["bash", "-c", skript], capture_output=True, text=True, env=umgebung)
+            self.assertEqual(r.stdout.strip(), "nur-datei|nur-datei-token")
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
