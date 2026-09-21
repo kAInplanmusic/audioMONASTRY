@@ -1452,3 +1452,82 @@ identisch, es wird nichts weiter geändert. Bei einer Blockade im enforce-Betrie
 `/api/security/csp-reports` lesen (Direktive + Ziel stehen dort), dann zurückstellen.
 Wer den Kaltstart-Pfad (Portal-Worker) nutzt, muss `CSP_MODE` auch dort als Secret
 setzen, sonst fällt ein frisch geweckter Knoten auf den Default `report-only` zurück.
+
+## 13. Portal-Firewall: die drei Regeln (Betreiberentscheid 2026-09-22)
+
+Gilt für **beide** Schreiber der Cross-Node-Regeln — den Portal-Wake
+(`/api/wake`, `/api/wire-fleet` → `syncAppFirewall` + `openFleetPorts`) und
+`scripts/hetzner/firewall-ensure.py` (Schritt 3/9 im Flottenstart). SSOT-Items:
+`PROD-P0-PORTAL-FAILOPEN`, `PROD-P2-PORTAL-DRIFT`.
+
+### (a) Fail-closed: ohne Cloudflare-IP-Liste bleibt die App ZU
+
+Die 80/443-Regeln des App-Knotens entstehen aus `GET
+https://api.cloudflare.com/client/v4/ips` (1 h Cache). **Ist der Abruf nicht
+möglich oder liefert er eine leere Liste, werden die Regeln 80/443 WEGGELASSEN** —
+der Origin bleibt zu und ist dann auch über Cloudflare nicht erreichbar.
+
+* Es gibt **keinen** Rückfall auf `0.0.0.0/0`: das war der Defekt
+  (`firewallRules('app', [])` stellte den Origin weltweit offen, während der
+  Kommentar „App-Firewall bleibt zu" behauptete).
+* Der Grund ist **laut**: Worker-Log (`[portal] FAIL-CLOSED …`), im Wake-Report
+  `appFirewall.ok=false` + `appFirewall.message` + `wiring.message`, und
+  `/api/wake` bzw. `/api/wire-fleet` liefern HTTP 200 mit `ok:false`.
+* Die Cloudflare-Liste wird bei einem Fehlschlag **nicht** negativ gecacht (der
+  nächste Aufruf misst sofort wieder).
+* **Betriebliche Folge, bewusst akzeptiert:** ein Ausfall von
+  `api.cloudflare.com` schaltet die Domain ab, statt sie zu öffnen. Wer das
+  nicht will, muss den Abruf vorher reparieren (Proxy/Netz) — nicht die Regel
+  öffnen.
+
+```bash
+# Diagnose (lesend): sagt im Klartext, warum 80/443 fehlt
+curl -s -b <session-cookie> -X POST https://<domain>/api/wire-fleet | jq '.appFirewall, .message'
+#   -> appFirewall.ok=false, failClosed=true, message: "Cloudflare-IP-Liste nicht verfuegbar …"
+# Erholung: nichts tun als erneut wecken (der nächste Abruf misst frisch).
+```
+
+### (b) Mergen statt Ersetzen — fremde Regeln und `description` bleiben
+
+Die Politik von `firewall-ensure.py` ist der Vertrag; der Wake folgt ihr:
+
+* Die app-1-IP wird **in die vorhandene Quellliste aufgenommen** (`sources:
+  'merge'`) — nicht als einzige Quelle gesetzt.
+* Eine bereits für `0.0.0.0/0` (bzw. `::/0`) **offene** Regel bleibt
+  **unangetastet** (`skipOpen: true`); dort passiert nichts.
+* Die `description` einer Regel bleibt erhalten (auch beim 80/443-Pfad).
+* Sonderfall 80/443: hier **ersetzt** die gemessene Cloudflare-Liste die alten
+  Bereiche (Zweck des Cloudflare-Hops — sonst blieben abgelaufene Bereiche
+  stehen). Das ist keine Verengung einer offenen Vertrags-Regel.
+
+### (c) Kein Schreibaufruf ohne Änderung — und fehlende Regeln laut melden
+
+* `POST /firewalls/<id>/actions/set_rules` fällt **nur** bei echter Abweichung an
+  (Vergleich Richtung/Protokoll/Port/Quellen/`description`, Reihenfolge egal). Ein
+  zweiter Wake auf demselben Regelsatz schreibt **nichts** (`updated: {}`,
+  `unchanged: {…}`).
+* **Fehlt** eine Regel, wird sie mit der **gemessenen** Knoten-IP angelegt und
+  laut gemeldet (`notes` im Wake-Report + `console.warn`) — nie mit geratenen
+  oder offenen Quellen. Ist die app-1-IP unbekannt, bricht der Pfad ab
+  (`ok:false`, „app-1 hat noch keine IP") statt etwas zu erfinden.
+* Fehlt die edge-1-IP (Metrik-Port 8080), bleibt die Regel weg und der Grund
+  steht in `appFirewall.notes` — der Scrape meldet dann `down`, die App ist
+  deswegen aber nicht offen.
+
+**Nachweis (beide Richtungen, ohne Live-Infra):**
+
+```bash
+node node_modules/vitest/vitest.mjs run tests/portalWorkerFleetPorts.test.ts \
+  tests/portalWorkerFirewallMetrics.test.ts
+python3 tests/test_hetzner_scripts.py -k PortalWakeVertragTest
+```
+
+`tests/portalWorkerFleetPorts.test.ts` fährt den echten Worker-Codepfad gegen
+eine Fake-Hetzner-API (set_rules merkt sich den Zustand): fail-closed,
+MERGEN + erhaltene `description`, offene Regel unangetastet, „zweiter Lauf
+schreibt nichts". `PortalWakeVertragTest` hält die Python-Seite
+(`firewall-ensure.py`) auf demselben Zielzustand.
+
+**Wichtig für Änderungen an diesem Pfad:** die drei Regeln sind Betreiberentscheid
+— wer eine davon ändert, muss den jeweils anderen Schreiber mitziehen (die Tests
+beider Seiten fallen sonst).

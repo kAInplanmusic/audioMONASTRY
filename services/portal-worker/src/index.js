@@ -310,22 +310,57 @@ async function ensureSshKey(env) {
 // werden 80/443 NUR für Cloudflare geöffnet – der Origin ist dann nicht mehr
 // direkt erreichbar und der Hop Cloudflare→Origin läuft nicht mehr offen ins
 // Internet (nur Cloudflare-Edge kann den App-Server erreichen).
-let cfIpCache = { ips: [], at: 0 };
+// BETREIBERENTSCHEID 2026-09-22 (fail-closed, SSOT PROD-P0-PORTAL-FAILOPEN):
+// faellt der Abruf aus (Netzfehler, HTTP-Fehler oder eine LEERE Liste), bleibt
+// der 80/443-Eintrag WEG und der Origin damit zu. Der Grund wird hier
+// mitgefuehrt und laut gemeldet (appHttpFailClosedReason, syncAppFirewall,
+// startFleet). Ein Rueckfall auf `0.0.0.0/0` ist ausgeschlossen: der Kommentar
+// an dieser Stelle behauptete schon immer "App-Firewall bleibt zu", der
+// Codepfad in firewallRules() stellte den Origin aber weltweit offen. Der
+// Defekt ist in tests/portalWorkerFleetPorts.test.ts auf das SICHERE Verhalten
+// umgeschrieben (rot gegen die alte Fassung).
+let cfIpCache = { ips: [], at: 0, error: '' };
 
-async function cloudflareIpRanges() {
+/**
+ * Cloudflare-IP-Liste MIT Klartextgrund - die EINE Messung des fail-closed-Pfads
+ * (keine zweite Wahrheit, keine erfundene Ursache).
+ */
+async function cloudflareIpRangesDetailed() {
   if (cfIpCache.ips.length > 0 && Date.now() - cfIpCache.at < 60 * 60 * 1000) {
-    return cfIpCache.ips;
+    return { ips: cfIpCache.ips, error: '' };
   }
   try {
     const res = await fetch('https://api.cloudflare.com/client/v4/ips');
     const data = await res.json();
     const v4 = (data.result?.ipv4_cidrs ?? []).filter((c) => c.includes('.'));
     const v6 = (data.result?.ipv6_cidrs ?? []).filter((c) => c.includes(':'));
-    cfIpCache = { ips: [...v4, ...v6], at: Date.now() };
-  } catch {
-    /* Fallback: Cache leer lassen -> App-Firewall bleibt zu (sicherer Ausfall). */
+    const ips = [...v4, ...v6];
+    if (ips.length === 0) {
+      // Eine leere Liste ist KEIN Erfolg: ohne Bereiche gibt es keine
+      // 80/443-Regel - fail-closed mit Grund statt stiller Offenlegung.
+      const reason = `Cloudflare-/ips lieferte keine Bereiche (HTTP ${res.status ?? '?'}, success=${data?.success ?? '?'})`;
+      cfIpCache = { ips: [], at: 0, error: reason };
+      return { ips: [], error: reason };
+    }
+    cfIpCache = { ips, at: Date.now(), error: '' };
+    return { ips, error: '' };
+  } catch (e) {
+    // Den 1h-Cache NICHT fuellen: kein negatives Caching, das den Ausfall
+    // verlaengert - der naechste Aufruf misst frisch. Bis dahin: fail-closed.
+    const reason = `Cloudflare-IP-Liste (api.cloudflare.com/client/v4/ips) nicht abrufbar: ${e?.message ?? e}`;
+    cfIpCache = { ips: [], at: 0, error: reason };
+    console.error(`[portal] FAIL-CLOSED: ${reason} - 80/443 wird nicht gesetzt, der Origin bleibt zu.`);
+    return { ips: [], error: reason };
   }
-  return cfIpCache.ips;
+}
+
+/**
+ * Klartextgrund, wenn 80/443 wegen fehlender Cloudflare-Liste weggelassen wird.
+ * Leerer Text = Liste liegt vor, die Regeln duerfen gesetzt werden.
+ */
+export function appHttpFailClosedReason(cloudflareIps, error = '') {
+  if (Array.isArray(cloudflareIps) && cloudflareIps.length > 0) return '';
+  return `Cloudflare-IP-Liste nicht verfuegbar${error ? ` (${error})` : ''}: 80/443 wird bewusst WEGGELASSEN (fail-closed) - der Origin bleibt zu und ist damit auch ueber Cloudflare nicht erreichbar. Kein Rueckfall auf 0.0.0.0/0. Ursache beheben und erneut wecken.`;
 }
 
 export function firewallRules(role, cloudflareIps = [], options = {}) {
@@ -335,9 +370,15 @@ export function firewallRules(role, cloudflareIps = [], options = {}) {
   ];
   if (role === 'app') {
     // Nur Cloudflare-Edge darf HTTP(S) erreichen (Proxy-Hop abgesichert).
-    const cf = cloudflareIps.length > 0 ? cloudflareIps : ['0.0.0.0/0', '::/0'];
-    base.push({ direction: 'in', protocol: 'tcp', port: '80', source_ips: cf });
-    base.push({ direction: 'in', protocol: 'tcp', port: '443', source_ips: cf });
+    // FAIL-CLOSED (Betreiberentscheid 2026-09-22): ohne Cloudflare-Liste werden
+    // 80/443 WEGGELASSEN - der Origin bleibt zu. Der frueher hier stehende
+    // Rueckfall `['0.0.0.0/0', '::/0']` hat den App-Server bei jedem
+    // Cloudflare-Ausfall weltweit geoeffnet (Defekt PROD-P0-PORTAL-FAILOPEN).
+    // Grund + Meldung liefert appHttpFailClosedReason().
+    if (Array.isArray(cloudflareIps) && cloudflareIps.length > 0) {
+      base.push({ direction: 'in', protocol: 'tcp', port: '80', source_ips: cloudflareIps });
+      base.push({ direction: 'in', protocol: 'tcp', port: '443', source_ips: cloudflareIps });
+    }
     // Monitoring-Scrape: der App-Container veroeffentlicht 8080, Prometheus auf
     // dem Monitoring-Knoten scrapt direkt (statt ueber die Domain/Cloudflare).
     // Ohne diese Regel wuerde der naechste set_rules-Lauf die Regel entfernen,
@@ -365,13 +406,103 @@ export function firewallRules(role, cloudflareIps = [], options = {}) {
   return base;
 }
 
+/**
+ * Vergleichsform einer Regel: alles, was ihre Bedeutung ausmacht (Richtung,
+ * Protokoll, Port, Quellliste sortiert, `description`). Grundlage der
+ * Betreiberentscheidung (c) "kein Schreibaufruf, wenn der Zielzustand schon
+ * erreicht ist" - und Grundlage dafuer, dass eine Beschreibung nicht still
+ * verloren geht.
+ */
+export function ruleSignature(rule) {
+  return JSON.stringify({
+    direction: String(rule?.direction ?? ''),
+    protocol: String(rule?.protocol ?? ''),
+    port: String(rule?.port ?? ''),
+    source_ips: [...(rule?.source_ips ?? [])].map(String).sort(),
+    description: String(rule?.description ?? ''),
+  });
+}
+
+/** Regel-Liste als vergleichbare Menge (Reihenfolge zaehlt nicht). */
+export function ruleSetSignature(rules) {
+  return (Array.isArray(rules) ? rules : []).map(ruleSignature).sort().join('|');
+}
+
+/**
+ * MERGT die Soll-Regeln in die BESTEHENDE Regel-Liste (statt sie zu ersetzen).
+ *
+ * Betreiberentscheid 2026-09-22: die Politik von `scripts/hetzner/firewall-ensure.py`
+ * ist der Vertrag - fremde Regeln bleiben zeichengleich und `description` bleibt
+ * erhalten. Zwei Quell-Semantiken, beide begruendet:
+ *   * `sources: 'merge'` (Cross-Node-Vertragsports): die Soll-IP wird in die
+ *     VORHANDENE Quellliste AUFGENOMMEN. Mit `skipOpen: true` bleibt eine fuer
+ *     `0.0.0.0/0` bzw. `::/0` offene Regel voellig unangetastet (kein Verengen -
+ *     genau die Politik von firewall-ensure.py).
+ *   * `sources: 'replace'` (Cloudflare-Bereiche auf 80/443): die gemessene
+ *     Cloudflare-Liste ERSETZT die alten Bereiche - sonst blieben abgelaufene
+ *     Bereiche fuer immer stehen. Das ist der Zweck dieser Funktion (der
+ *     CF-Proxy-Hop), nicht die Verengung einer offenen Vertrags-Regel.
+ *
+ * Rueckgabe: Ziel-Liste + Klartext-Gruende; geschrieben wird nur bei `changed`.
+ */
+export function mergeRules(current, desired, options = {}) {
+  const sources = options.sources === 'replace' ? 'replace' : 'merge';
+  const skipOpen = Boolean(options.skipOpen);
+  const rules = (Array.isArray(current) ? current : []).map((rule) => ({
+    ...rule,
+    source_ips: [...(rule?.source_ips ?? [])],
+  }));
+  const notes = [];
+  let changed = false;
+  for (const want of desired) {
+    const index = rules.findIndex(
+      (rule) => rule?.direction === want.direction
+        && rule?.protocol === want.protocol
+        && String(rule?.port ?? '') === String(want.port ?? ''),
+    );
+    if (index === -1) {
+      // Regel fehlt: anlegen - aber mit der GEMESSENEN Quelle und mit Meldung
+      // (Betreiberentscheid c: "fehlt eine Regel, laut melden statt erfinden").
+      rules.push({ ...want, source_ips: [...(want.source_ips ?? [])] });
+      notes.push(`tcp/${want.port}: Regel fehlte - mit ${(want.source_ips ?? []).join(', ')} angelegt (gemessen, nicht geraten).`);
+      changed = true;
+      continue;
+    }
+    const before = rules[index];
+    const currentSources = (before.source_ips ?? []).map(String);
+    const wantedSources = (want.source_ips ?? []).map(String);
+    if (skipOpen && (currentSources.includes('0.0.0.0/0') || currentSources.includes('::/0'))) {
+      // Offene Regel: hier passiert NICHTS (keine Verengung, keine Ergaenzung).
+      notes.push(`tcp/${want.port}: fuer ALLE offen (0.0.0.0/0 bzw. ::/0) - Regel unveraendert gelassen, keine Verengung.`);
+      continue;
+    }
+    const next = sources === 'replace'
+      ? wantedSources
+      : [...currentSources, ...wantedSources.filter((ip) => !currentSources.includes(ip))];
+    const merged = { ...before, ...want, source_ips: next, ...(before.description ? { description: before.description } : {}) };
+    if (ruleSignature(merged) === ruleSignature(before)) continue;
+    rules[index] = merged;
+    notes.push(`tcp/${want.port}: Quelle ${currentSources.join(', ') || '-'} -> ${next.join(', ')} (weitere Felder/description bleiben).`);
+    changed = true;
+  }
+  return { rules, notes, changed };
+}
+
 async function ensureFirewall(env, name, rules) {
   const list = await hzGet(env, `/firewalls?name=${encodeURIComponent(name)}`);
   if ((list.firewalls ?? []).length > 0) {
     // Firewall existiert bereits → Regeln aktualisieren (Cloudflare-IP-Listen
     // ändern sich; sonst kann Cloudflare den Origin nicht mehr erreichen).
+    //
+    // BETREIBERENTSCHEID 2026-09-22 (c): KEIN Schreibaufruf, wenn der
+    // Zielzustand schon erreicht ist - und die bestehenden Regeln werden
+    // gemergt statt ersetzt (fremde Regeln + `description` bleiben erhalten).
+    // Vorher baute dieser Pfad die Liste bei JEDEM Flottenstart neu auf und
+    // entfernte damit z. B. die 8080-Regel des Monitoring-Scrapes.
     const fw = list.firewalls[0];
-    await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
+    const target = mergeRules(fw.rules ?? [], rules ?? [], { sources: 'replace' });
+    if (!target.changed) return fw.id;
+    await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules: target.rules });
     return fw.id;
   }
   const created = await hzPost(env, '/firewalls', { name, rules });
@@ -565,17 +696,44 @@ function wiringSummary(wiring) {
   if (!wiring?.appFirewall?.ok) missing.push(`app-Firewall: ${wiring?.appFirewall?.message ?? 'Zustand unbekannt'}`);
   if (!wiring?.dns?.ok) missing.push(`origin-DNS: ${wiring?.dns?.message ?? 'Zustand unbekannt'}`);
   if (!wiring?.ports?.ok) missing.push(`Flotten-Ports: ${wiring?.ports?.message ?? 'Zustand unbekannt'}`);
-  if (missing.length === 0) return { ok: true, message: 'Flotten-Verdrahtung vollstaendig (Firewall, origin-DNS, Ports).' };
+  // Betreiberentscheid 2026-09-22 (c): "Fehlt eine Regel, laut melden statt
+  // erfinden." Die Gruende der Firewall-Pfade (fehlende oder bewusst offen
+  // gelassene Regel, weggelassener Metrik-Port) stehen deshalb auch in der
+  // Zusammenfassung - nicht nur im Worker-Log.
+  const notes = [
+    ...(wiring?.appFirewall?.notes ?? []),
+    ...(wiring?.ports?.notes ?? []).flatMap((entry) => (entry?.notes ?? []).map((note) => `${entry.firewall}: ${note}`)),
+  ].filter(Boolean);
+  const withNotes = notes.length > 0 ? { notes } : {};
+  if (missing.length === 0) {
+    return { ok: true, message: 'Flotten-Verdrahtung vollstaendig (Firewall, origin-DNS, Ports).', ...withNotes };
+  }
   return {
     ok: false,
     message: `Flotten-Verdrahtung unvollstaendig - ${missing.join(' | ')}`,
     hint: wiring?.dns?.hint ?? 'Betreiber-Schritte: docs/ORIGIN_TLS_DNS_RUNBOOK.md',
+    ...withNotes,
   };
 }
 
-/** Aktualisiert die app-Firewall auf die aktuellen Cloudflare-IP-Ranges. */
+/**
+ * Aktualisiert die app-Firewall: 80/443 auf die aktuellen Cloudflare-Bereiche,
+ * 8080 fuer den Monitoring-Knoten (edge-1).
+ *
+ * BETREIBERENTSCHEIDUNGEN 2026-09-22:
+ *   * fail-closed (a): ohne Cloudflare-Liste werden 80/443 WEGGELASSEN - die
+ *     Regel wird entfernt, der Origin bleibt zu. Das wird LAUT gemeldet (Log +
+ *     `message`/`notes` im Wake-Ergebnis und im Ladebildschirm); ein Rueckfall
+ *     auf 0.0.0.0/0 ist ausgeschlossen (PROD-P0-PORTAL-FAILOPEN).
+ *   * Vertrag (b): dieser Pfad besitzt NUR die Ports 80/443/8080 der App-Rolle.
+ *     Fremde Regeln bleiben zeichengleich, `description` bleibt erhalten.
+ *   * Kein Schreibaufruf, wenn der Zielzustand schon erreicht ist (c).
+ *   * Fehlt eine Angabe (edge-1-IP fuer 8080), wird sie gemeldet statt geraten;
+ *     8080 traegt dann keine offene Ersatz-Regel (der Scrape meldet down).
+ */
 async function syncAppFirewall(env) {
-  const cfIps = await cloudflareIpRanges();
+  const { ips: cfIps, error: cfError } = await cloudflareIpRangesDetailed();
+  const failClosed = appHttpFailClosedReason(cfIps, cfError);
   // Firewall des Bestands kann noch den Altnamen tragen -> beide probieren.
   let fw = null;
   for (const name of [`${NAME_PREFIX}app`, `${LEGACY_NAME_PREFIX}app`]) {
@@ -586,17 +744,73 @@ async function syncAppFirewall(env) {
   if (!fw) return { ok: false, message: 'app-Firewall nicht gefunden' };
   // Monitoring-Knoten (edge-1) bestimmen: nur er darf den Metrik-Port 8080
   // erreichen. Faellt die Aufloesung aus, bleibt die Regel weg (der Scrape
-  // meldet dann down) - statt sie offen fuers ganze Internet zu setzen.
+  // meldet dann down) - statt sie offen fuers ganze Internet zu setzen. Seit
+  // dem Betreiberentscheid wird das GEMELDET statt still weggelassen.
   let metricsSourceIp = '';
+  let metricsReason = '';
   try {
     const servers = await fleetServers(env);
     metricsSourceIp = servers[`${NAME_PREFIX}edge-1`]?.public_net?.ipv4?.ip ?? '';
-  } catch {
+  } catch (e) {
     metricsSourceIp = '';
+    metricsReason = `Flottenserver-Liste nicht lesbar (${e?.message ?? e})`;
   }
-  const rules = firewallRules('app', cfIps, { metricsSourceIp });
-  const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
-  return { ok: Array.isArray(result.actions), appFirewallId: fw.id, metricsSourceIp };
+  if (!metricsSourceIp && !metricsReason) {
+    metricsReason = `${NAME_PREFIX}edge-1 hat (noch) keine IP`;
+  }
+
+  // Eigene Ports: nur sie darf dieser Pfad ersetzen/entfernen. Alles andere ist
+  // fremde Regel und bleibt zeichengleich (Vertrag b).
+  const ownPorts = new Set(['80', '443', '8080']);
+  const existing = Array.isArray(fw.rules) ? fw.rules : [];
+  const isOwned = (rule) => rule?.direction === 'in' && rule?.protocol === 'tcp'
+    && ownPorts.has(String(rule?.port ?? ''));
+  const descriptionOf = (port) => {
+    const current = existing.find((rule) => isOwned(rule) && String(rule?.port ?? '') === port);
+    return current?.description ? { description: current.description } : {};
+  };
+
+  const notes = [];
+  const desired = [];
+  if (cfIps.length > 0) {
+    for (const port of ['80', '443']) {
+      desired.push({ direction: 'in', protocol: 'tcp', port, source_ips: [...cfIps], ...descriptionOf(port) });
+    }
+  } else {
+    notes.push(failClosed);
+    // Laut ins Worker-Log: der Origin ist ab jetzt zu - das darf nicht still sein.
+    console.error(`[portal] FAIL-CLOSED app-Firewall (${fw.name}): ${failClosed}`);
+  }
+  if (metricsSourceIp) {
+    desired.push({ direction: 'in', protocol: 'tcp', port: '8080', source_ips: [`${metricsSourceIp}/32`], ...descriptionOf('8080') });
+  } else {
+    notes.push(`Port 8080: ${metricsReason} - Regel wird nicht gesetzt (der Prometheus-Scrape meldet dann down), keine offene Ersatz-Regel.`);
+    console.warn(`[portal] app-Firewall: ${metricsReason} - 8080 wird nicht gesetzt (fail-closed), kein 0.0.0.0/0.`);
+  }
+
+  const target = [...existing.filter((rule) => !isOwned(rule)), ...desired];
+  if (ruleSetSignature(target) === ruleSetSignature(existing)) {
+    // Zielzustand erreicht: KEIN Schreibaufruf (Betreiberentscheidung c).
+    return {
+      ok: !failClosed,
+      unchanged: true,
+      appFirewallId: fw.id,
+      metricsSourceIp,
+      failClosed: Boolean(failClosed),
+      notes,
+      ...(failClosed ? { message: failClosed } : {}),
+    };
+  }
+  const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules: target });
+  return {
+    ok: Array.isArray(result.actions) && !failClosed,
+    appFirewallId: fw.id,
+    metricsSourceIp,
+    changed: true,
+    failClosed: Boolean(failClosed),
+    notes,
+    ...(failClosed ? { message: failClosed } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1335,7 +1549,12 @@ async function startFleet(env, options = {}) {
   }
 
   const sshKeyId = await ensureSshKey(env);
-  const cfIps = await cloudflareIpRanges();
+  const { ips: cfIps, error: cfError } = await cloudflareIpRangesDetailed();
+  // FAIL-CLOSED (Betreiberentscheid 2026-09-22, Punkt a): eine Flotte, die ohne
+  // Cloudflare-Liste startet, bekommt die app-Firewall OHNE 80/443 - der Origin
+  // bleibt zu. Das wird laut gemeldet, statt still eine offene Firewall zu bauen.
+  const cfFailClosed = appHttpFailClosedReason(cfIps, cfError);
+  if (cfFailClosed) console.error(`[portal] FAIL-CLOSED beim Flottenstart: ${cfFailClosed}`);
   const snapshots = await listSnapshots(env);
   const created = [];
   const usedSnapshots = {};
@@ -1489,56 +1708,72 @@ export function r2Summary(env) {
 
 /**
  * Öffnet die Flotten-Service-Ports (master-player 8000, stem-ai 8000,
- * Ollama 11434) NUR für die aktuelle app-1-IP – idempotent und bei
- * IP-Wechsel aktualisierend.
+ * Ollama 11434) für die app-1-IP.
  *
- * ZWEI SCHREIBER, DIESELBEN REGELN (2026-09-21): genau diese Ports/Quellen
- * pflegt auch `scripts/hetzner/firewall-ensure.py` (CONTRACT) – dort als
- * Abgleich im Flottenstart (Schritt 3/9). Unterschiede, die bewusst so sind:
- *   * firewall-ensure schreibt NUR bei Abweichung und liest danach frisch
- *     zurück (Exit 3 bei Abweichung); dieser Pfad setzt bei JEDEM Wake neu
- *     (kein Diff, keine Gegenprobe) – das Ergebnis ist gleich, der
- *     Schreibverkehr nicht.
- *   * Eine bereits für 0.0.0.0/0 offene Regel wird hier auf die app-1-IP
- *     VERENGT (der Filter unten entfernt den Port und baut ihn mit einer
- *     Quelle neu). firewall-ensure lässt eine offene Regel bewusst stehen.
- *     Das ist ein dokumentierter Unterschied, keine stille Änderung –
- *     gepinnt in tests/portalWorkerFleetPorts.test.ts und
- *     `PortalWakeVertragTest` (tests/test_hetzner_scripts.py); Betreiber-
- *     Entscheidung über eine Angleichung steht aus (docs/HETZNER_DEPLOY.md,
- *     INFRA-HETZNER-014).
+ * ZWEI SCHREIBER, DIESELBEN REGELN: genau diese Ports/Quellen pflegt auch
+ * `scripts/hetzner/firewall-ensure.py` (CONTRACT) – dort als Abgleich im
+ * Flottenstart (Schritt 3/9).
+ *
+ * BETREIBERENTSCHEID 2026-09-22 (Punkt b - die Politik von firewall-ensure.py
+ * ist der Vertrag, SSOT PROD-P2-PORTAL-DRIFT):
+ *   * MERGEN statt Ersetzen: die app-1-IP wird in die VORHANDENE Quellliste
+ *     aufgenommen. Eine fuer `0.0.0.0/0` bzw. `::/0` offene Regel bleibt
+ *     unangetastet - hier passiert nichts (kein Verengen).
+ *   * `description` und alle uebrigen Felder einer Regel bleiben erhalten.
+ *     Vorher entfernte der Filter den Port und baute ihn mit genau EINER Quelle
+ *     neu - die Beschreibung ging dabei verloren.
+ *   * Punkt c: KEIN Schreibaufruf, wenn der Zielzustand schon erreicht ist
+ *     (der zweite Aufruf ist damit ein echter No-Op).
+ *   * Fehlt eine Regel, wird das LAUT gemeldet; angelegt wird sie nur mit der
+ *     GEMESSENEN app-1-IP (nie 0.0.0.0/0, nie geraten). Ohne app-1-IP bricht der
+ *     Pfad ab und meldet - provision.py legt nur 22/80/443/ICMP an, die
+ *     Cross-Node-Ports setzt genau dieser Verdrahtungs-Pfad
+ *     (firewall-ensure.py legt bewusst keine Regeln an).
  *   * Der Aufrufer ist /api/wake bzw. /api/wire-fleet; die Reihenfolge dort ist
  *     syncAppFirewall -> syncOriginDns -> openFleetPorts (dieser Pfad fasst die
  *     app-Firewall NICHT an).
  */
 async function openFleetPorts(env) {
   const servers = await fleetServers(env);
-  const appIp = servers['audiomonastry-app-1']?.public_net?.ipv4?.ip ?? '';
+  const appIp = servers[`${NAME_PREFIX}app-1`]?.public_net?.ipv4?.ip ?? '';
   if (!appIp) return { ok: false, message: 'app-1 hat noch keine IP.' };
 
   const portsByRole = {
-    'audiomonastry-master': ['8000'],
-    'audiomonastry-ai': ['8000', '11434'],
+    [`${NAME_PREFIX}master`]: ['8000'],
+    [`${NAME_PREFIX}ai`]: ['8000', '11434'],
   };
   const list = await hzGet(env, '/firewalls?per_page=100');
   const updated = {};
+  const unchanged = {};
+  const notes = [];
+  let failed = 0;
   for (const fw of list.firewalls ?? []) {
     const ports = portsByRole[fw.name];
     if (!ports || ports.length === 0) continue;
-    // Vorhandene Regeln ohne unsere Service-Ports behalten; Service-Ports
-    // werden mit der aktuellen app-1-IP ersetzt (IP-Wechsel-sicher).
-    const baseRules = (fw.rules ?? []).filter(
-      (r) => !(r?.protocol === 'tcp' && ports.includes(String(r?.port ?? ''))),
-    );
-    const extra = ports.map((p) => ({
+    // MERGEN (sources: 'merge') + offene Regel unangetastet lassen (skipOpen):
+    // die Politik von firewall-ensure.py ist der Vertrag (Betreiberentscheid b).
+    const target = mergeRules(fw.rules ?? [], ports.map((port) => ({
       direction: 'in',
       protocol: 'tcp',
-      port: p,
+      port,
       source_ips: [`${appIp}/32`],
-    }));
-    const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules: [...baseRules, ...extra] });
-    updated[fw.name] = Array.isArray(result.actions) && result.actions.length > 0 ? 'ok' : { ok: false, raw: result };
+    })), { sources: 'merge', skipOpen: true });
+    if (target.notes.length > 0) {
+      // Laut melden: fehlende Regel bzw. bewusst offen gelassene Regel.
+      notes.push({ firewall: fw.name, notes: target.notes });
+      console.warn(`[portal] Flotten-Ports ${fw.name}: ${target.notes.join(' | ')}`);
+    }
+    if (!target.changed) {
+      // Zielzustand schon erreicht: KEIN Schreibaufruf (Betreiberentscheid c).
+      unchanged[fw.name] = 'unchanged';
+      continue;
+    }
+    const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules: target.rules });
+    const ok = Array.isArray(result.actions) && result.actions.length > 0;
+    if (!ok) failed += 1;
+    updated[fw.name] = ok ? 'ok' : { ok: false, raw: result };
   }
+
   // Debug-/Betriebssicht: Regeln + Server-Zuordnung zurückgeben.
   const after = await hzGet(env, '/firewalls?per_page=100');
   const detail = {};
@@ -1548,7 +1783,14 @@ async function openFleetPorts(env) {
       rules: (fw.rules ?? []).map((r) => `${r.direction}/${r.protocol}/${r.port}→${(r.source_ips ?? []).join(',')}`),
     };
   }
-  return { ok: Object.keys(updated).length > 0, updated, appIp, detail };
+  return {
+    ok: failed === 0,
+    updated,
+    unchanged,
+    appIp,
+    notes,
+    detail,
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -1262,45 +1262,44 @@ Test (`docs`-Prüfung) festgehalten — er verschwindet nicht unbemerkt.
 
 ### Zusammenspiel Portal-Wake ↔ `firewall-ensure.py` (zwei Schreiber, vier Regeln)
 
-Beide Seiten schreiben **dieselben vier Regeln**, aber mit unterschiedlichem
-Verhalten:
+Beide Seiten schreiben **dieselben vier Regeln**. Seit dem Betreiberentscheid
+2026-09-22 (SSOT `PROD-P2-PORTAL-DRIFT`, `PROD-P0-PORTAL-FAILOPEN`) verhalten sie
+sich dabei **gleich**:
 
 | | Portal-Wake (`syncAppFirewall`, `openFleetPorts`) | `firewall-ensure.py` |
 |---|---|---|
-| Wann | bei **jedem** `/api/wake` und `/api/wire-fleet` | Schritt 3/9 im Flottenstart, sonst manuell |
-| Schreibverhalten | setzt `set_rules` **immer** (kein Diff) | schreibt **nur bei Abweichung** (2. Lauf = kein Schreibaufruf) |
-| Nachprüfung | keine | liest **frisch** zurück, Exit **3** bei Abweichung |
-| Offene Regel (`0.0.0.0/0`) | wird auf die Knoten-IP **verengt** | bleibt **unverändert** (Bedeutungsänderung, kein IP-Wechsel) |
-| Fehlende Regel | legt sie an (ai/master) bzw. baut sie mit auf (app:8080) | meldet sie nur („Regel fehlt", Exit 0) |
+| Wann | bei jedem `/api/wake` und `/api/wire-fleet` | Schritt 3/9 im Flottenstart, sonst manuell |
+| Schreibverhalten | schreibt **nur bei Abweichung** (Punkt c des Entscheids) | schreibt **nur bei Abweichung** (2. Lauf = kein Schreibaufruf) |
+| Nachprüfung | keine (das Ergebnis steht im Wake-Report) | liest **frisch** zurück, Exit **3** bei Abweichung |
+| Offene Regel (`0.0.0.0/0`) | bleibt **unverändert** (MERGEN statt Ersetzen) | bleibt **unverändert** (Bedeutungsänderung, kein IP-Wechsel) |
+| `description` | bleibt erhalten | bleibt erhalten (Vergleichsform enthält sie) |
+| Fehlende Regel | legt sie mit der **gemessenen** app-1-IP an und meldet das laut | meldet sie nur („Regel fehlt", Exit 0) |
 
 Ergebnis-Idempotenz: beide erzeugen denselben Zielzustand — ein Portal-Wake auf
-einem frisch abgeglichenen Regelsatz erzeugt also **keine** inhaltliche Änderung
-(nur Schreibverkehr), und `firewall-ensure` hat nach einem Wake **nichts zu tun**
-(`geaendert=0`). Genau das hält `PortalWakeVertragTest`
-(`tests/test_hetzner_scripts.py`, Python-Seite) und
+einem frisch abgeglichenen Regelsatz schreibt **nichts** (`unchanged`), und
+`firewall-ensure` hat nach einem Wake **nichts zu tun** (`geaendert=0`). Genau das
+hält `PortalWakeVertragTest` (`tests/test_hetzner_scripts.py`, Python-Seite) und
 `tests/portalWorkerFleetPorts.test.ts` (Portal-Seite, echter Codepfad gegen eine
 Fake-Hetzner-API) fest.
 
 **Nicht serialisiert** (bewusst offen, unverändert aus der Vorgängerrunde): laufen
 Wake und Abgleich gleichzeitig, gilt „letzter Schreiber gewinnt" — der Abgleich
-macht das über die Gegenprobe sichtbar (Exit 3), der Wake gar nicht.
+macht das über die Gegenprobe sichtbar (Exit 3), der Wake nicht.
 
-**Befunde aus dieser Prüfung (bewusst NICHT eigenmächtig geändert):**
+**Befunde aus dieser Prüfung — umgesetzt am 2026-09-22** (Betreiberentscheid,
+Details in `docs/OPS_RUNBOOK.md`, Abschnitt „Portal-Firewall: die drei Regeln"):
 
-* `services/portal-worker/src/index.js` (`openFleetPorts`, Filter `baseRules` +
-  Neuaufbau der Dienst-Ports, Zeilen 1511-1520): eine für `0.0.0.0/0` **offene**
-  Vertrags-Regel wird auf die app-1-IP verengt und verliert dabei ihre
-  `description`. `firewall-ensure.py` tut das Gegenteil (siehe Tabelle).
-  Beide Verhalten sind gepinnt; eine Angleichung ist eine
-  **Betreiberentscheidung** (Portal-Verhalten!).
-* `services/portal-worker/src/index.js` Zeilen 325-328 + 338: der Kommentar an
-  `cloudflareIpRanges()` sagt „Cache leer lassen -> App-Firewall bleibt zu
-  (sicherer Ausfall)", tatsächlich fällt `firewallRules('app', [])` auf
-  `0.0.0.0/0` + `::/0` für 80/443 zurück — **weit offen**. Ist die
-  Cloudflare-IP-Liste nicht abrufbar, öffnet der nächste Wake den Origin für das
-  ganze Internet. Gepinnt in `portalWorkerFleetPorts.test.ts`
-  („BEFUND: faellt ohne Cloudflare-IP-Liste auf 0.0.0.0/0 …"). Nicht umgebaut,
-  weil das das Sicherheitsverhalten des Portals ändern würde.
+* `openFleetPorts` verengte eine für `0.0.0.0/0` **offene** Vertrags-Regel auf die
+  app-1-IP und verlor dabei ihre `description`. **Behoben:** der Wake **mergt**
+  seine IP in die vorhandene Quellliste (`sources: 'merge'`), eine offene Regel
+  bleibt unangetastet (`skipOpen: true`), Beschreibungen bleiben erhalten. Beide
+  Schreiber folgen damit derselben Politik (Punkt b).
+* Der Kommentar an `cloudflareIpRanges()` versprach „Cache leer lassen -> App-Firewall
+  bleibt zu (sicherer Ausfall)", tatsächlich fiel `firewallRules('app', [])` auf
+  `0.0.0.0/0` + `::/0` für 80/443 zurück — **weit offen**. **Behoben (fail-closed):**
+  ohne Cloudflare-IP-Liste werden 80/443 **weggelassen** (App bleibt zu) und der
+  Grund laut gemeldet (`appFirewall.ok=false`, `message`, Worker-Log). Ein Rückfall
+  auf `0.0.0.0/0` als Ausfallverhalten existiert nicht mehr (Punkt a).
 
 ---
 

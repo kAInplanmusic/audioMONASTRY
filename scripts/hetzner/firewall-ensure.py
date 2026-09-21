@@ -36,16 +36,16 @@ dann nicht ableitbar ist).
 
 ZUSAMMENSPIEL MIT DEM PORTAL-WAKE (zwei Schreiber, dieselben vier Regeln):
 die Regeln ai:8000/ai:11434/master:8000 entstehen im Portal-Worker in
-`openFleetPorts()` (`POST /firewalls/<id>/actions/set_rules`, Zeilen 1504-1520),
-app:8080 in `syncAppFirewall()` (Zeilen 577-599) - dieselben Ports/Quellen wie
-CONTRACT hier. Beide Seiten sind ERGEBNIS-idempotent (derselbe Zielzustand),
-aber unterschiedlich im Schreiben:
+`openFleetPorts()`, app:8080 in `syncAppFirewall()` (jeweils
+`POST /firewalls/<id>/actions/set_rules`) - dieselben Ports/Quellen wie CONTRACT
+hier. Beide Seiten sind ERGEBNIS-idempotent (derselbe Zielzustand) und seit dem
+Betreiberentscheid 2026-09-22 auch im Schreiben gleich:
 
   * dieses Werkzeug schreibt NUR bei Abweichung (zweiter Lauf = kein
     Schreibaufruf) und liest nach dem Schreiben frisch zurueck (Exit 3 bei
     Abweichung);
-  * der Portal-Wake schreibt die Regeln bei JEDEM Wake neu (kein Diff, keine
-    Gegenprobe) - ein zweiter Aufruf ist kein No-Op im Schreibverkehr.
+  * der Portal-Wake schreibt ebenfalls NUR bei Abweichung (Entscheid Punkt c);
+    eine Gegenprobe wie hier hat er nicht.
 
 Reihenfolge: im Flottenstart laeuft dieses Werkzeug als Schritt 3/9 VOR den
 Rollen-Deploys (bring-up-fleet.sh); der Portal-Wake laeuft in /api/wake und
@@ -53,12 +53,14 @@ Rollen-Deploys (bring-up-fleet.sh); der Portal-Wake laeuft in /api/wake und
 und Gegenprobe, faellt das als abweichende Gegenprobe (Exit 3) auf - statt als
 stiller Fehlzustand.
 
-BEWUSSTE ABWEICHUNG (Befund, Betreiberentscheidung offen): eine bereits fuer
-`0.0.0.0/0` offene Vertrags-Regel wird hier NICHT auf den Knoten verengt
-(Bedeutungsaenderung, siehe unten im Plan). Der Portal-Wake verengt eine solche
-Regel dagegen auf die aktuelle app-1-IP/edge-1-IP (index.js, `baseRules`-Filter
-plus Neuaufbau der Dienst-Ports). Beide Verhalten sind gepinnt:
-tests/portalWorkerFleetPorts.test.ts (Portal-Seite) und
+ANGEGLICHEN (Betreiberentscheid 2026-09-22, SSOT PROD-P2-PORTAL-DRIFT): eine
+bereits fuer `0.0.0.0/0` (bzw. `::/0`) offene Vertrags-Regel wird hier NICHT auf
+den Knoten verengt (Bedeutungsaenderung) - und der Portal-Wake verengt sie seit
+diesem Entscheid EBENFALLS nicht mehr: er MERGT die app-1-IP in die vorhandene
+Quellliste (`sources: 'merge'`, `skipOpen: true`) und laesst eine offene Regel
+unangetastet. Auch die `description` bleibt auf beiden Seiten erhalten. Die
+frueher hier dokumentierte Abweichung (Verengung + verlorene Beschreibung) ist
+damit behoben; gepinnt in tests/portalWorkerFleetPorts.test.ts (Portal-Seite) und
 `PortalWakeVertragTest` in tests/test_hetzner_scripts.py (diese Seite).
 
 Aufruf:
@@ -252,9 +254,10 @@ def plan_firewall(firewall: dict, ips: dict[str, str]) -> dict:
             new_rules.append(dict(rule))
             hints.append(
                 f"tcp/{port}: fuer ALLE offen (0.0.0.0/0) - Regel unveraendert, "
-                f"die Quelle wird bewusst nicht eingeschraenkt. ACHTUNG: der "
-                f"Portal-Wake (openFleetPorts) verengt genau diese Regel auf die "
-                f"App-Knoten-IP - bewusste Abweichung, siehe "
+                f"die Quelle wird bewusst nicht eingeschraenkt. Der Portal-Wake "
+                f"(openFleetPorts) haelt es seit dem Betreiberentscheid 2026-09-22 "
+                f"genauso (MERGEN statt Ersetzen, offene Regel unangetastet) - die "
+                f"frueher hier dokumentierte Abweichung ist damit behoben, siehe "
                 f"docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014, Zusammenspiel)"
             )
             continue
