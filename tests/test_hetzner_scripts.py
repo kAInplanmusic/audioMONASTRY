@@ -5689,22 +5689,16 @@ def portal_wake_firewalls() -> list[dict]:
 
     Regel fuer Regel die Fixture aus `tests/portalWorkerFleetPorts.test.ts`, wo
     der ECHTE Worker-Codepfad genau diesen Zustand erzeugt: die Dienst-Ports
-    tragen die IP des zustaendigen Knotens und KEINE `description` (der Wake
-    baut die Regeln neu auf), alles andere bleibt wie in `app_firewall_rules()`.
+    tragen die IP des zustaendigen Knotens UND ihre `description` - seit dem
+    Betreiberentscheid 2026-09-22 MERGT der Wake in die vorhandene Regel, statt
+    die Liste neu aufzubauen (deshalb liefern `app_firewall_rules`/
+    `ai_firewall_rules`/`master_firewall_rules` hier die AKTUELLEN IPs und ihre
+    Beschreibungen). Alles andere bleibt wie im Bestand.
     """
-    app_ip = FLEET_TEST_IPS["app"]
     return [
         {"id": 4711, "name": "audiomonastry-app", "rules": app_firewall_rules(FLEET_TEST_IPS["edge"])},
-        {"id": 4712, "name": "audiomonastry-ai", "rules": [
-            {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
-            {"direction": "in", "protocol": "tcp", "port": "22", "source_ips": ["0.0.0.0/0", "::/0"], "description": "SSH"},
-            {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{app_ip}/32"]},
-            {"direction": "in", "protocol": "tcp", "port": "11434", "source_ips": [f"{app_ip}/32"]},
-        ]},
-        {"id": 4713, "name": "audiomonastry-master", "rules": [
-            {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
-            {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{app_ip}/32"]},
-        ]},
+        {"id": 4712, "name": "audiomonastry-ai", "rules": ai_firewall_rules(FLEET_TEST_IPS["app"])},
+        {"id": 4713, "name": "audiomonastry-master", "rules": master_firewall_rules(FLEET_TEST_IPS["app"])},
         {"id": 4714, "name": "audiomonastry-sfu",
          "rules": [{"direction": "in", "protocol": "udp", "port": "3478", "source_ips": ["0.0.0.0/0", "::/0"]}]},
     ]
@@ -5767,19 +5761,28 @@ class PortalWakeVertragTest(unittest.TestCase):
         self.assertEqual(rule_set_of(stub.firewall("audiomonastry-ai")["rules"]),
                          rule_set_of(portal_wake_firewalls()[1]["rules"]))
 
-    def test_verengung_ist_beidseitig_dokumentiert(self) -> None:
-        # BEFUND + Waegter: die beiden Schreiber behandeln eine offene Regel
-        # (0.0.0.0/0) UNTERSCHIEDLICH. Der Unterschied ist dokumentiert - wer eine
-        # Seite angleicht, muss die andere mitziehen (sonst verschwindet er still).
+    def test_offene_regel_bleibt_beidseitig_unangetastet(self) -> None:
+        # BETREIBERENTSCHEID 2026-09-22 (SSOT PROD-P2-PORTAL-DRIFT): beide
+        # Schreiber lassen eine fuer 0.0.0.0/0 (bzw. ::/0) offene Vertrags-Regel
+        # stehen. Die frueher hier gepinnte Abweichung - der Portal-Wake verengte
+        # sie auf die App-Knoten-IP und verlor die `description` - ist damit
+        # behoben; wer eine Seite aendert, muss die andere mitziehen.
         js = PORTAL_WORKER.read_text(encoding="utf-8")
         py = FIREWALL_ENSURE.read_text(encoding="utf-8")
-        self.assertIn("ports.includes(String(r?.port ?? ''))", js)   # filtert den Port heraus
-        self.assertIn("`${appIp}/32`", js)                            # baut ihn mit EINER Quelle neu
-        self.assertIn("fuer ALLE offen", py)                           # diese Seite verengt NICHT
+        # Portal-Seite: MERGEN statt Ersetzen, offene Regel unangetastet.
+        self.assertIn("sources: 'merge'", js)
+        self.assertIn("skipOpen: true", js)
+        self.assertIn("MERGEN statt Ersetzen", js)
+        self.assertIn("description", js)
+        # ... und der alte Verengungs-Filter ist weg (sonst waere die Abweichung
+        # stillschweigend wieder da).
+        self.assertNotIn("ports.includes(String(r?.port ?? ''))", js)
+        self.assertNotIn("VERENGT", js)
+        # Diese Seite: dieselbe Politik - und der Hinweis nennt sie.
+        self.assertIn("fuer ALLE offen", py)
         self.assertIn("Portal-Wake", py)
         self.assertIn("Zweiter Schreiber", py)
-        # Und die Portal-Seite nennt die Abweichung ebenfalls (Kommentar am Codepfad).
-        self.assertIn("VERENGT", js)
+        self.assertIn("MERGEN statt Ersetzen", py)
 
     def test_trockenlauf_ist_netzfrei_und_nennt_den_zweiten_schreiber(self) -> None:
         stub = voller_flotten_stub()

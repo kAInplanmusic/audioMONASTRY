@@ -13,15 +13,21 @@
  *   2. Fremde Regeln (ICMP, SSH, Cloudflare-Bereiche auf 80/443) bleiben
  *      zeichengleich - der Wake ist NICHT destruktiv gegenueber Dritt-Regeln.
  *   3. Ein zweiter Lauf erzeugt DENSELBEN Regelzustand (ergebnis-idempotent).
- *   4. BEFUND (Betreiberentscheidung offen, bewusst NICHT umgebaut): der Wake
- *      VERENGT eine fuer 0.0.0.0/0 offene Vertrags-Regel auf die Knoten-IP und
- *      verliert dabei deren `description`; firewall-ensure laesst eine offene
- *      Regel bewusst stehen ("Bedeutungsaenderung, kein IP-Wechsel").
- *   5. BEFUND (Sicherheit, Betreiberentscheidung offen): ist die
- *      Cloudflare-IP-Liste nicht abrufbar, faellt `firewallRules('app')` auf
- *      `0.0.0.0/0` zurueck - der Kommentar an `cloudflareIpRanges()` behauptet
- *      dagegen "App-Firewall bleibt zu". Der Test pinnt das TATSAECHLICHE
- *      Verhalten, damit die Abweichung nicht unbemerkt verschwindet.
+ *   4. VERTRAG (Betreiberentscheid 2026-09-22, SSOT PROD-P2-PORTAL-DRIFT): eine
+ *      fuer 0.0.0.0/0 (bzw. ::/0) offene Vertrags-Regel wird NICHT mehr auf die
+ *      Knoten-IP verengt und ihre `description` nicht mehr verworfen - der Wake
+ *      MERGT die app-1-IP in die vorhandene Quellliste (bei einer offenen Regel
+ *      passiert nichts), genau wie firewall-ensure.py.
+ *   5. FAIL-CLOSED (Betreiberentscheid 2026-09-22, SSOT PROD-P0-PORTAL-FAILOPEN):
+ *      ist die Cloudflare-IP-Liste nicht abrufbar, wird die 80/443-Regel
+ *      WEGGELASSEN - der Origin bleibt zu, der Grund wird laut gemeldet
+ *      (`appFirewall.ok=false` + `message`/Log). Ein Rueckfall auf 0.0.0.0/0 als
+ *      Ausfallverhalten gibt es nicht mehr. Vorher setzte genau dieser Pfad den
+ *      Origin bei jedem Cloudflare-Ausfall weltweit offen, obwohl der Kommentar
+ *      "App-Firewall bleibt zu (sicherer Ausfall)" behauptete.
+ *   6. Punkt c des Entscheids: KEIN Schreibaufruf, wenn der Zielzustand schon
+ *      erreicht ist. Vorher schrieb der Wake bei jedem Lauf dieselben Regeln neu
+ *      (der zweite Lauf erzeugte drei weitere set_rules-Aufrufe).
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -39,6 +45,8 @@ const IPS: Record<string, string> = {
   edge: '198.51.100.7',
 };
 const CF_RANGE = '172.64.0.0/13';
+/** app-1-IP der VORHERIGEN Flotte (Befund INFRA-HETZNER-014, identisch mit tests/test_hetzner_scripts.py). */
+const ALTE_APP_IP = '142.132.229.71';
 
 interface Rule {
   direction: string;
@@ -251,54 +259,129 @@ describe('Portal-Wake <-> firewall-ensure (Cross-Node-Firewall-Regeln)', () => {
     ]);
   });
 
-  it('ist ergebnis-idempotent: der zweite Lauf erzeugt denselben Regelzustand', async () => {
+  it('ist ergebnis-idempotent UND schreibt im zweiten Lauf nichts (Entscheid Punkt c)', async () => {
     const firewalls = fleetFirewalls();
+    // Ausgangszustand = Zustand einer FRUEHEREN Flotte (die alte app-1-IP aus dem
+    // Befund, identisch mit tests/test_hetzner_scripts.py). So hat der erste Lauf
+    // echte Aenderungen und der zweite keine mehr.
+    firewalls[1].rules[2].source_ips = [`${ALTE_APP_IP}/32`];
+    firewalls[1].rules[3].source_ips = [`${ALTE_APP_IP}/32`];
+    firewalls[2].rules[1].source_ips = [`${ALTE_APP_IP}/32`];
     const { writes } = setupFetchMock({ firewalls });
     const worker = await loadWorker();
     const env = createEnv();
 
-    await wireFleet(worker, env);
+    const erster = await wireFleet(worker, env);
     const nachErstem = JSON.parse(JSON.stringify(firewalls));
     const writesErsterLauf = writes.length;
-    await wireFleet(worker, env);
+    const zweiter = await wireFleet(worker, env);
 
     expect(firewalls).toEqual(nachErstem);
-    // DOKUMENTIERTE ABWEICHUNG zu firewall-ensure.py: der Wake schreibt auch beim
-    // zweiten Lauf erneut (kein Diff, keine Gegenprobe) - "zweiter Lauf = kein
-    // Schreibzugriff" gilt fuer firewall-ensure, NICHT fuer den Portal-Wake.
-    expect(writesErsterLauf).toBe(3); // app + ai + master
-    expect(writes.length).toBe(6);
+    // Erster Lauf: ai (8000+11434) und master (8000) - die app-Firewall ist
+    // bereits korrekt (Cloudflare-Bereiche + 8080 von edge-1).
+    expect(writesErsterLauf).toBe(2);
+    // Zweiter Lauf: Zielzustand erreicht -> KEIN Schreibaufruf (Punkt c).
+    expect(writes.length).toBe(2);
+    expect(zweiter.body.ports.updated).toEqual({});
+    expect(zweiter.body.ports.unchanged).toEqual({
+      'audiomonastry-ai': 'unchanged',
+      'audiomonastry-master': 'unchanged',
+    });
+    expect(zweiter.body.ports.ok).toBe(true);
+    expect(erster.body.ports.ok).toBe(true);
   });
 
-  it('BEFUND: verengt eine offene Regel (0.0.0.0/0) auf die app-1-IP und verliert die description', async () => {
-    // firewall-ensure.py laesst eine offene Regel bewusst stehen (Test
-    // `test_offene_regel_wird_nicht_eingeschraenkt`). Der Wake tut das Gegenteil:
-    // er filtert den Port heraus und baut ihn mit genau einer Quelle neu.
+  it('verengt eine offene Regel NICHT mehr und behaelt die description (Vertrag)', async () => {
+    // Betreiberentscheid 2026-09-22 (SSOT PROD-P2-PORTAL-DRIFT): die Politik von
+    // firewall-ensure.py ist der Vertrag. Eine fuer ALLE offene Regel bleibt
+    // unangetastet - vorher verengte der Wake sie auf die app-1-IP/32 und warf
+    // die `description` weg. Der Vorgang wird gemeldet (Punkt c).
     const firewalls = fleetFirewalls();
     firewalls[1].rules[2] = {
       direction: 'in', protocol: 'tcp', port: '8000',
       source_ips: ['0.0.0.0/0', '::/0'], description: 'bewusst fuer alle offen',
     };
+    const { writes } = setupFetchMock({ firewalls });
+    const worker = await loadWorker();
+    const { body } = await wireFleet(worker, createEnv());
+
+    const rule = ruleOf(firewalls, 'audiomonastry-ai', '8000');
+    expect(rule.source_ips).toEqual(['0.0.0.0/0', '::/0']);   // NICHT verengt
+    expect(rule.description).toBe('bewusst fuer alle offen');  // NICHT verloren
+    // Der Zustand ist erreicht: kein Schreibaufruf, aber eine laute Meldung.
+    expect(writes.length).toBe(0);
+    expect(JSON.stringify(body.ports.notes)).toContain('fuer ALLE offen');
+  });
+
+  it('MERGT die Knoten-IP in eine vorhandene Quellliste (statt sie zu ersetzen)', async () => {
+    // Alt-Fall: die Regel trug noch die IP der VORHERIGEN Flotte. Der Wake
+    // ergaenzt die aktuelle app-1-IP und laesst die alten Quellen stehen - er
+    // ersetzt nicht und verwirft die `description` nicht.
+    const firewalls = fleetFirewalls();
+    firewalls[1].rules[2].source_ips = [`${ALTE_APP_IP}/32`];
+    firewalls[2].rules[1].source_ips = [`${ALTE_APP_IP}/32`];
     setupFetchMock({ firewalls });
     const worker = await loadWorker();
     await wireFleet(worker, createEnv());
 
-    const rule = ruleOf(firewalls, 'audiomonastry-ai', '8000');
-    expect(rule.source_ips).toEqual([`${IPS.app}/32`]);        // verengt
-    expect(rule.description).toBeUndefined();                  // Beschreibung verloren
+    const ai = ruleOf(firewalls, 'audiomonastry-ai', '8000');
+    expect(ai.source_ips).toEqual([`${ALTE_APP_IP}/32`, `${IPS.app}/32`]);
+    expect(ai.description).toBe('Stem-AI');                    // erhalten
+    expect(ruleOf(firewalls, 'audiomonastry-master', '8000').source_ips)
+      .toEqual([`${ALTE_APP_IP}/32`, `${IPS.app}/32`]);
   });
 
-  it('BEFUND: faellt ohne Cloudflare-IP-Liste auf 0.0.0.0/0 fuer 80/443 zurueck', async () => {
-    // cloudflareIpRanges() faengt den Fehler ab und laesst den Cache leer; der
-    // Kommentar dort sagt "App-Firewall bleibt zu (sicherer Ausfall)", tatsaechlich
-    // oeffnet firewallRules('app', []) HTTP/HTTPS fuer das ganze Internet.
+  it('fail-closed: ohne Cloudflare-IP-Liste wird 80/443 WEGGELASSEN und laut gemeldet', async () => {
+    // Betreiberentscheid 2026-09-22 (SSOT PROD-P0-PORTAL-FAILOPEN): faellt die
+    // Cloudflare-IP-Liste aus, bleibt die App ZU. Vorher fiel firewallRules('app', [])
+    // auf 0.0.0.0/0 + ::/0 zurueck - der Origin stand weltweit offen, waehrend
+    // der Kommentar "App-Firewall bleibt zu (sicherer Ausfall)" behauptete.
     const firewalls = fleetFirewalls();
-    setupFetchMock({ firewalls, cfIpsMissing: true });
+    const { writes } = setupFetchMock({ firewalls, cfIpsMissing: true });
     const worker = await loadWorker();
-    await wireFleet(worker, createEnv());
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      logs.push(args.map(String).join(' '));
+    });
+    let body: Record<string, any>;
+    try {
+      ({ body } = await wireFleet(worker, createEnv()));
+    } finally {
+      spy.mockRestore();
+    }
 
-    expect(ruleOf(firewalls, 'audiomonastry-app', '80').source_ips).toEqual(['0.0.0.0/0', '::/0']);
-    expect(ruleOf(firewalls, 'audiomonastry-app', '443').source_ips).toEqual(['0.0.0.0/0', '::/0']);
+    const app = firewalls.find((fw) => fw.name === 'audiomonastry-app') as Firewall;
+    expect(app.rules.some((rule) => String(rule.port ?? '') === '80')).toBe(false);
+    expect(app.rules.some((rule) => String(rule.port ?? '') === '443')).toBe(false);
+    // Alles andere bleibt - inklusive der Beschreibungen (kein Neuaufbau der Liste).
+    expect(app.rules.map((rule) => String(rule.port ?? rule.protocol))).toEqual(['icmp', '22', '8080']);
+    expect(app.rules.map((rule) => rule.description)).toEqual(['ICMP', 'SSH', 'App-Metriken']);
+    // Laut gemeldet: Worker-Log, appFirewall-Grund und Verdrahtungs-Zusammenfassung.
+    expect(logs.join('\n')).toContain('FAIL-CLOSED');
+    expect(body.appFirewall.ok).toBe(false);
+    expect(body.appFirewall.failClosed).toBe(true);
+    expect(String(body.appFirewall.message)).toContain('Cloudflare-IP-Liste');
+    // /api/wire-fleet liefert die Zusammenfassung auf oberster Ebene (ok/message).
+    expect(body.ok).toBe(false);
+    expect(String(body.message)).toContain('app-Firewall');
+    // Der Metrik-Pfad ist davon unberuehrt (eigener Port, eigene Quelle).
+    expect(ruleOf(firewalls, 'audiomonastry-app', '8080').source_ips).toEqual([`${IPS.edge}/32`]);
+    // Geschrieben wird nur die app-Firewall (80/443 entfernt), nichts sonst.
+    expect(writes.length).toBe(1);
+  });
+
+  it('fail-closed: ist 80/443 schon weg, entsteht kein Schreibaufruf (Punkt c)', async () => {
+    const firewalls = fleetFirewalls();
+    firewalls[0].rules = firewalls[0].rules.filter((rule) => !['80', '443'].includes(String(rule.port ?? '')));
+    const { writes } = setupFetchMock({ firewalls, cfIpsMissing: true });
+    const worker = await loadWorker();
+    const { body } = await wireFleet(worker, createEnv());
+
+    expect(writes.length).toBe(0);
+    expect(body.appFirewall.unchanged).toBe(true);
+    // Die Verdrahtung ist trotzdem NICHT vollstaendig - der Grund bleibt laut.
+    expect(body.appFirewall.ok).toBe(false);
+    expect(body.ok).toBe(false);
   });
 
   it('der Metrik-Port 8080 kommt nur von edge-1 (kein Fremdzugriff auf die App)', async () => {
