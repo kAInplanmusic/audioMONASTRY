@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21T20:41:16+00:00",
+  "generatedAt": "2026-09-21T21:37:05+00:00",
   "branch": "main",
-  "commit": "75289ca",
+  "commit": "a3df301",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -3013,6 +3013,61 @@
       "evidence": "Regressionstests R2CredentialPrecedenceTest (2 Faelle); Fleet-Suite 189 Tests OK; Commit cea53fc.",
       "lesson": "Zwei unabhaengige Deploy-Bibliotheken hatten denselben Fehler: 'Umgebung vor Datei'. Auf diesem Host ist die Prozessumgebung mit fremden Zugangsdaten belegt - die .env MUSS die Quelle sein, Overrides nur ausdruecklich. Diagnose immer per Fingerabdruck-Vergleich, nie durch Raten.",
       "rest": "Knoten brauchen fuer den parallelen Medienweg aria2c + zstd (apt: aria2, zstd); --via-r2 installiert sie mit --install-missing selbst, sonst faellt der Lauf laut auf EINEN curl-Strom zurueck."
+    },
+    {
+      "id": "PROD-P0-PORTAL-FAILOPEN",
+      "title": "Portal-Wake oeffnet den Origin auf 0.0.0.0/0, wenn die Cloudflare-IP-Liste ausfaellt",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Sicherheit/Infrastruktur",
+      "source": "Subagent des Infrastruktur-Auftrags (2026-09-21), Befund mit Codezeile; von mir nicht gegengeprueft (Portal-Verhalten, Betreiberentscheid)",
+      "problem": "services/portal-worker/src/index.js:325-328 sagt im Kommentar 'Cache leer lassen -> App-Firewall bleibt zu (sicherer Ausfall)'. Tatsaechlich setzt firewallRules('app', []) bei leerer Cloudflare-IP-Liste die Regeln fuer 80/443 auf 0.0.0.0/0 und ::/0 (Zeile 338). Faellt der Abruf der Cloudflare-Bereiche aus, oeffnet der naechste Wake den Origin weltweit - das Gegenteil der zugesagten Absicherung. Die Abweichung ist als Test gepinnt, der Code aber bewusst NICHT geaendert (Betreiberentscheid).",
+      "rest": "Entscheidung noetig: fail-closed (Regel weglassen, App bleibt zu, Grund melden) oder das Oeffnen bewusst zulassen und den Kommentar korrigieren.",
+      "evidence": "tests/portalWorkerFleetPorts.test.ts (6 Tests, echter Worker-Codepfad gegen Fake-Hetzner-API)"
+    },
+    {
+      "id": "PROD-P2-PORTAL-DRIFT",
+      "title": "Portal-Wake und firewall-ensure haben gegensaetzliche Regeln fuer denselben Regelsatz",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Infrastruktur",
+      "source": "Subagent des Infrastruktur-Auftrags (2026-09-21), Codebelege",
+      "problem": "services/portal-worker/src/index.js:1511-1520 (openFleetPorts) verengt eine fuer 0.0.0.0/0 offene Vertrags-Regel auf die app-1-IP/32 und verliert dabei die description; firewall-ensure.py laesst offene Regeln bewusst unveraendert. Zusaetzlich schreibt der Wake bei JEDEM Aufruf neu (kein Diff, keine Gegenprobe), waehrend firewall-ensure nur bei Abweichung schreibt und frisch nachprueft - bei gleichzeitigem Lauf sieht nur die Python-Seite den Konflikt (Exit 3).",
+      "rest": "Angleichung der beiden Policy-Seiten ist eine Betreiberentscheidung; bis dahin ist der Zustand dokumentiert und getestet.",
+      "evidence": "tests/portalWorkerFleetPorts.test.ts + PortalWakeVertragTest (5 Python-Faelle gegen API-Stub)"
+    },
+    {
+      "id": "PROD-P2-CLEANUP-001",
+      "title": "Codebasis-Aufraeumen: 34 Duplikate auf 7 reduziert, Altlasten bewertet",
+      "priority": "P3",
+      "status": "DONE",
+      "area": "Code-Hygiene",
+      "source": "Auftrag des Betreibers (2026-09-21): 'Code nach Fehlern, Duplikaten, alten Irrwegen durchschauen'",
+      "solution": "Gemeinsame Logik in benannte Helfer gezogen (u.a. scripts/lib/envfile.py, scripts/lib/restclient.py, src/core/dsp/dynamicsMath.ts, src/core/audio/v2GainDb.ts, neue Basisklasse V2ChannelStripGraph, BaseNode.getParameter/prepareProcess, consumeProducer, pollCompatibleTaskAudio,apply_stream_config). Duplikate 34 -> 7, doppelte Zeilen 0,50 % -> 0,21 %, Tokens 0,68 % -> 0,23 %.",
+      "rest": "Die 7 Reste sind begruendet (2x von Tests geforderte Literale, 3x Symptom des Grafana-PromQL-Defekts, 2x README-Prosa). Offen: 20 Skripte ohne Repo-Referenz (handbediente Werkzeuge, nicht als tot beweisbar) - Betreiberentscheid, welche weg duerfen; sowie scripts/r2-check.ts (durch cloud/r2-health-check.ts ersetzt, aber historisch in der SSOT genannt).",
+      "evidence": "tsc 0, vitest 278 Dateien/2055 Tests, Python-Suiten, verify:boundary 450 Dateien, lint 0 - alles gruen"
+    },
+    {
+      "id": "AI-P1-PROMPTS-001",
+      "title": "Prompt-Abdeckung der Rollen: 22 Rollen mit echten Vertraegen statt Mock-Scores",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "KI/Rollen",
+      "source": "Auftrag des Betreibers (2026-09-21): 'weitere Prompts fuer die verschiedenen Nodes und Aufgaben schreiben und testen'",
+      "solution": "Neuer Rollen-Katalog src/core/ai/orchestrator/promptRoles.ts: 22 Rollen (18 Plugin-Rollen + Planer moa + imageHq/videoReal/videoAbstract) mit Systemprompt v2 (62-96 -> 616-1113 Zeichen), 52 Few-Shots, 53 MCP-Tools, 69 Eval-Faellen. Fehlende Eintraege machen den Test ROT (roleCoverageGaps()===[] als Vertrag; Rot-Beweis gefuehrt und zurueckgenommen). promptSeed wirft MissingRolePromptError statt stillem Fallback. Doku auf den echten Stand gezogen - die frueheren '21x 5.00 PASS' waren ein Mock und sind jetzt ehrlich UNCHECKED.",
+      "rest": "Alle 22 Rollen sind UNCHECKED - die Abdeckung ist Struktur, keine Qualitaetsmessung; ein echter Eval-Lauf gegen die Endpunkte steht aus (Kosten). Sieben kreative Fragen offen (u.a. transport/midi-controller als echte Rollen, Gate fuer Bild/Video, Prompts fuer die 5 GPU-Rollen brain/ears/voiceGen/music/orchestrator).",
+      "evidence": "vitest 278 Dateien/2084 Tests gruen; tsc 0; iterate:prompts --mode=coverage: 18 Rollen, 35 Iterationen, 0 nicht konvergiert"
+    },
+    {
+      "id": "MON-P2-001",
+      "title": "Grafana-Dashboard: vier Panels mit kaputtem PromQL (Ein-Zeichen-Ausdruecke)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Monitoring",
+      "source": "Subagent des Aufraeum-Auftrags (2026-09-21) als Nebenbefund beim Duplikat-Durchgang",
+      "problem": "scripts/hetzner/grafana-dashboards/audiomonastry-overview.json: die Panels 19-22 (AI-Kosten pro Stunde, Client-Xruns nach Quelle, Xruns 10m-Zunahme, SLO-Burn) tragen je Target ein einzelnes Zeichen als expr (z.B. 'i','n','c','r','e','a','s','e','(' - 36/70/52/108 Targets). Fuer diese Panels ist das Dashboard wertlos; die uebrigen Panels funktionieren. Ursache noch unklar (zeichenweise zerschnitten beim Erzeugen?).",
+      "rest": "Reparatur braucht die richtigen PromQL-Ausdruecke (keine erfundenen Werte) - eigener kleiner Auftrag.",
+      "evidence": "3 der 7 verbliebenen Duplikat-Findings stammen aus genau diesen Panels"
     }
   ],
   "visionSandbox": [
