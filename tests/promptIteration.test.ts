@@ -11,6 +11,8 @@ import {
   type PlanCompleteFn,
 } from '../src/core/ai/orchestrator/promptIteration';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
+import { EVAL_PLUGIN_IDS } from '../src/core/ai/orchestrator/evalMatrix';
+import { ROLE_PROMPT_SPECS } from '../src/core/ai/orchestrator/promptRoles';
 import { __resetAiGate, setAiOperatingMode } from '../src/core/ai/aiGate';
 
 /**
@@ -165,6 +167,40 @@ describe('P3-2 + INFRA-AI-002: Prompt-Iterations-Loop mit Wirkungs-Metrik', () =
     expect(once).toContain('syntisampler: note(freq)');
     const twice = optimizePromptContent('syntisampler', once);
     expect(twice).toBe(once);
+  });
+
+  it('die Fehlerregel des Optimierers nennt nur Kommandos, die die Rolle kennt', () => {
+    // `status` fehlt z. B. bei eq/dsp/instru/mixer/syntisampler – die alte
+    // Universalregel („wähle 'status'") war für 9 der 18 Rollen technisch falsch.
+    for (const roleId of ['eq', 'dsp', 'instru', 'mixer', 'syntisampler', 'drumsampler', 'biblio', 'voice', 'spatial']) {
+      const optimized = optimizePromptContent(roleId, 'Rollen-Satz.');
+      expect(optimized, `${roleId} nennt 'status', obwohl es das Kommando nicht gibt`).not.toContain("wähle 'status'");
+      expect(optimized).toContain('## Fehlerregel');
+    }
+    for (const roleId of ['drop', 'song', 'effect', 'sound', 'stem', 'master', 'record', 'ai', 'perfor']) {
+      expect(optimizePromptContent(roleId, 'Rollen-Satz.'), roleId).toContain("wähle 'status'");
+    }
+  });
+
+  it('der Katalog-Rollenprompt (v2) wirkt in EINER Runde – für jede verbindliche Rolle', async () => {
+    for (const roleId of EVAL_PLUGIN_IDS) {
+      const { prompts, evals } = freshStores();
+      prompts.upsert(roleId, ROLE_PROMPT_SPECS[roleId].systemPrompt, { version: ROLE_PROMPT_SPECS[roleId].version });
+      const report = await runPromptIteration(roleId, { prompts, evals, complete: catalogAwareModel(roleId) });
+      expect(report.status, `${roleId}: ${report.skipReason ?? ''}`).toBe('KEEP');
+      expect(report.score, roleId).toBe(1);
+      expect(report.iterations, `${roleId} brauchte mehr als eine Runde`).toBe(1);
+      // Der Prompt wurde NICHT nachoptimiert (die Rolle war vollständig).
+      expect(prompts.listVersions(roleId), `${roleId} wurde unnötig versioniert`).toHaveLength(1);
+      expect(evals.listByPlugin(roleId)[0].metrics.metric).toBe('plan-effect');
+    }
+  });
+
+  it('ein nackter Rollensatz braucht die Optimierung – der Unterschied ist messbar', async () => {
+    const { prompts, evals } = freshStores();
+    const report = await runPromptIteration('drop', { prompts, evals, complete: catalogAwareModel('drop') });
+    expect(report.status).toBe('KEEP');
+    expect(report.iterations).toBe(2); // Runde 1 ohne Kommandos, Runde 2 mit
   });
 
   it('läuft im coverage-Modus weiter offline (ausdruecklich als Vorpruefung)', async () => {

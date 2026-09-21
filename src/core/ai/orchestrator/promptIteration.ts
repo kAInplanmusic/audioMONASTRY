@@ -15,6 +15,7 @@
 import { promptStore, type PromptStore } from './promptStore';
 import { evaluationStore, type EvaluationStore } from './evaluationStore';
 import { moaSystemPromptForPlugin, PLUGIN_COMMAND_CATALOG } from '../../../utils/prompts';
+import { roleCommandBlock } from './promptRoles';
 import { buildPlanPrompt, gradeEmptyAnswer, gradePlanAnswer, type PlanGrade } from './evalGrading';
 import { evalSpecFor } from './evalMatrix';
 import { llmRouter } from '../LlmRouter';
@@ -89,12 +90,17 @@ export function evaluatePromptCoverage(pluginId: string, _version: number, promp
   return hits / commands.length;
 }
 
-/** Heuristische Optimierung: haengt die erlaubten Kommandos an den Prompt an. */
+/**
+ * Heuristische Optimierung: haengt den operativen Rollen-Block an den Prompt
+ * (erlaubte Kommandos, Fehlerregel, Antwortformat, Few-Shots). Der Block kommt
+ * aus `promptRoles.roleCommandBlock()` – also aus DERSELBEN Quelle wie der
+ * Rollen-Prompt des Katalogs, damit es keine zweite Wahrheit gibt. Die
+ * Fehlerregel nennt dabei nur ein Kommando, das die Rolle wirklich kennt
+ * (`status` gibt es z. B. bei eq/dsp/instru nicht).
+ */
 export function optimizePromptContent(pluginId: string, content: string): string {
-  const catalog = PLUGIN_COMMAND_CATALOG[pluginId] ?? 'status';
-  const block = `\n\n## Erlaubte Kommandos\n${pluginId}: ${catalog}\n\nFehlerbehandlung: Wenn ein Kommando nicht verfügbar ist, wähle 'status' und melde den Fehler.`;
   if (content.includes('## Erlaubte Kommandos')) return content;
-  return `${content.trim()}${block}`;
+  return `${content.trim()}\n\n${roleCommandBlock(pluginId)}`;
 }
 
 /** Ergebnis eines Wirkungs-Laufs inklusive Herkunft (fuer den Eval-Record). */
