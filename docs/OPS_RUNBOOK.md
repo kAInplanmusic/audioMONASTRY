@@ -1133,6 +1133,74 @@ Befehle — ein leeres Inhaltsverzeichnis im Container sähe sonst wie ein kaput
 Feature aus. `docs/LICENSE_EXTERNAL_RESOURCES.md` ist die Quelle für die
 Lizenzlage; VSCO 2 CE ist dort die einzige freigegebene Library.
 
+### Schneller Weg für die 3,7 GB: `--via-r2` (zstd + R2 + `aria2c -x16`)
+
+Gemessen (2026-09-21): **EIN** TCP-Strom Betreiber-Rechner → Knoten macht
+~1 MB/s (200 MB in 3:14) — 3,7 GB Medien brauchen so **~60 min pro Knoten und
+je Lieferung**. Das riecht nach einem Limit *pro Verbindung*, nicht nach
+Serverlast. Deshalb gibt es einen zweiten Weg mit zwei Hebeln: mehrere
+Verbindungen **und** ein Zwischenspeicher (Cloudflare R2 ist bereits bezahlt,
+Egress kostenfrei; 3,7 GB kosten ~0,06 USD/Monat Storage).
+
+```bash
+# Medien ueber R2 liefern (ein Baum = ein zstd-Archiv, EIN Upload je Baum)
+bash scripts/hetzner/deliver-media.sh <knoten-ip> --via-r2
+bash scripts/hetzner/deliver-media.sh <knoten-ip> --via-r2 --print-config   # Trockenlauf, kein Byte
+bash scripts/hetzner/deliver-media.sh <knoten-ip> --via-r2 --with-music     # nur mit Freigabe
+
+# Einzelner Baum oder vorhandener Image-Tar (auch ohne Knoten nutzbar)
+bash scripts/hetzner/parallel-transfer.sh <knoten-ip> --src public/data/orchestral --dest /opt/audiomonastry/media
+bash scripts/hetzner/parallel-transfer.sh <knoten-ip> --tar /tmp/app-image.tar --dest /opt/audiomonastry/media
+bash scripts/hetzner/parallel-transfer.sh --src public/models --pack-only    # nur packen, kein Netz
+```
+
+* **Packen ist deterministisch**: `tar --sort=name --mtime=@0 --owner=0
+  --group=0 --numeric-owner | zstd -T0 -6`. Gleicher Inhalt ⇒ gleicher SHA256 ⇒
+  gleicher Objekt-Schlüssel (`transfer/<baum>/<sha256>.tar.zst`) ⇒ **kein
+  zweiter Upload** — auch wenn die Dateien zwischendurch nur berührt wurden.
+  Liegt der Schlüssel schon in R2, entfällt der Upload (HEAD-Prüfung;
+  `--force-upload` erzwingt ihn).
+* **Der Knoten zieht mit 16 Verbindungen**: `aria2c -x16 -s16 -k1M`; fehlt
+  `aria2c`, fällt der Lauf **laut** auf `curl -fL` (EIN Strom) zurück.
+* **Integrität vor dem Auspacken**: SHA256 wird gegen den Erwartungswert
+  geprüft — bei Abweichung wird **nichts** ausgepackt (Exit 3, Archiv weg),
+  danach werden die Dateizahlen verglichen (Exit 4). Eine halb ausgepackte
+  Library sähe im Container wie ein funktionierendes Feature aus.
+* **Keine Zugangsschlüssel auf dem Knoten**: `scripts/hetzner/lib/r2-sigv4.sh`
+  signiert (SigV4, ohne aws-cli) auf dem Betreiber-Rechner; der Knoten bekommt
+  nur eine presignierte GET-URL (TTL 12 h), übergeben per stdin in eine
+  0600-Datei, die `scripts/hetzner/lib/r2-node-fetch.sh` am Ende **löscht**.
+  Die URL trägt die Access-Key-ID (SigV4-Scope), aber nie das Secret; sie
+  erscheint nie in der Skript-Ausgabe.
+* **Knoten-Voraussetzung**: `aria2c` + `zstd` (Ubuntu-Pakete `aria2`, `zstd`)
+  fehlen auf einem frischen Knoten (gemessen 2026-09-21) →
+  `apt-get install -y --no-install-recommends aria2 zstd`. Im `--via-r2`-Weg
+  wird das per `--install-missing` automatisch nachgeholt
+  (abschaltbar: `MEDIA_R2_NO_INSTALL=1`).
+* **Erwartungswert, kein Messwert**: greift das Limit pro Verbindung, ist die
+  Rate mit 16 Verbindungen ein Vielfaches der 1 MB/s — die 3,7 GB wären dann in
+  Minuten statt in ~60 min auf dem Knoten, und **jeder weitere Knoten zieht
+  dasselbe Archiv aus R2, ohne ein weiteres Byte vom Betreiber-Rechner**. Die
+  echte Zahl nennt `parallel-transfer.sh` am Ende des Laufs (Knoten-Rate,
+  Faktor gegen den Einzelstrom, Dateizahlen).
+* **Unverändert bleibt**: die READ-ONLY-Mounts in `docker-compose.media.yml`,
+  die Auslieferpfade `/app/dist/{data/orchestral,models,music}` und der
+  Lizenzvorbehalt für `public/music` (`--with-music`). Der rsync-Weg ist
+  weiterhin der Default und der Rückfall.
+* **Nachweise ohne Live-Infrastruktur** (2026-09-21): `bash -n`, sowie
+  `python3 tests/test_hetzner_scripts.py` — Fake-`ssh` führt den Knotenbefehl
+  lokal aus, Fake-`aria2c` protokolliert `-x16 -s16`, Fake-`curl` protokolliert
+  PUT/HEAD, und die SigV4-Signatur wird mit einer **zweiten** Umsetzung
+  (Python `hmac`/`hashlib`) Zeichen für Zeichen nachgerechnet.
+* **Signatur live gegen R2 bestätigt** (2026-09-21, nur kleine Testdatei): mit
+  den echten `CFS3_*`-Schlüsseln aus dem Betreiber-`.env` lief ein Selbsttest mit
+  **39 Bytes** — presigned PUT ok, HEAD 200 (der „schon vorhanden"-Pfad greift
+  gegen den echten Dienst), presigned GET byte-identisch, presigned DELETE 204;
+  das Testobjekt unter `transfer/_selbsttest/` ist danach wieder gelöscht
+  (Bucket unverändert). Vorrang beachten: eine **exportierte** `R2_ACCESS_KEY`
+  in der Shell überschreibt `.env` — für echte Läufe die `R2_*`-Variablen
+  entfernen (`env -u R2_ACCESS_KEY -u R2_SECRET_KEY …`).
+
 ## Legacy-Namen aufraeumen (Firewalls, Altpfad) - 2026-09-20
 
 Nach dem Namespace-Fix liegen Altlasten herum, die einen Fehlgriff beguenstigen:
