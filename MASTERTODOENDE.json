@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "fd93f3b",
+  "commit": "61fdafa",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2753,13 +2753,23 @@
       "title": "F7 · CORS/Signaling-Origins ohne Wildcard, CSP abgeleitet mit echtem Meldeweg",
       "priority": "P2",
       "status": "PARTIAL",
-      "area": "Security / Portal",
-      "source": "docs/FIXPLAN_2026-09-20_externer_apptest.md (F7)",
-      "problem": "/webrtc-signaling antwortete Access-Control-Allow-Origin: * auch fuer fremde Origins (SIGNALING_ALLOWED_ORIGINS=* wurde in die .env JEDES Knotens geschrieben und diente zugleich als Rueckfall fuer API_ALLOWED_ORIGINS). Die CSP war ein fest verdrahteter Header mit connect-src wss: https: (jedes Ziel) und ohne Meldeziel - also Dekoration.",
-      "note": "DONE (Code) 2026-09-20, Commit 0e6ddb0, gemergt als bca117f: die Origin-Liste wird aus APP_DOMAIN berechnet (Produktions-Domain + www + lokale Test-Origins 5173/4173) und enthaelt nie '*'; ein ausdruecklich gesetzter Wert wird uebernommen, '*' nicht. CSP (server/csp.ts): connect-src wird aus der Umgebung ABGELEITET (eigene Domain, Supabase/R2, Flotten-/Master-Ziele, Ollama, Provider-Hosts, inkl. der tatsaechlich genutzten VITE_*-Ziele), echtes Meldeziel report-uri /api/security/csp-report + report-to/Reporting-Endpoints, CSP_MODE=enforce schaltet dieselbe Policy scharf. Default bleibt bewusst report-only, weil es bisher KEINE Beobachtungsdaten gab.",
-      "verification": "Offline gemessen: Sicherheits-/CSP-Tests des Zweigs gruen; Gate-Lauf nach dem Merge gruen (u. a. interface-boundaries 445 Dateien, 0 Verstoesse). LIVE GEMESSEN 2026-09-20 auf app-1 (Deploy von main-Commit 37c5719, Abfrage ueber den Produktionspfad Caddy/TLS mit echtem SNI, Token nur auf dem Knoten gelesen): Antwort-Header von /api/health: content-security-policy-report-only mit abgeleitetem connect-src und reporting-endpoints: default=\"/api/security/csp-report\"; fremder Origin (https://evil.example) gegen /webrtc-signaling -> HTTP 400. Die Wildcard ist weg, der Meldeweg existiert.",
+      "area": "Security",
+      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F7), Auswertung 2026-09-21",
+      "problem": "Die CSP wurde abgeleitet und lief report-only, aber es gab praktisch KEINE auswertbaren Beobachtungsdaten: (1) die moderne Drahtform des Browsers wurde verworfen - summarizeCspReport las nur die Altform (Objekt unter 'csp-report', Schluessel mit Bindestrich), waehrend Chrome 'application/reports+json' mit camelCase-Schluesseln (effectiveDirective/blockedURL/documentURL) und MEHREREN Meldungen in EINEM POST sendet, sobald die Policy 'report-to' nennt; (2) es gab keine Ablesestelle - die Zaehler lebten nur fuer Tests, /api/metrics kannte CSP nicht; (3) Reports mit fremdem Dokument-Origin bekamen HTTP 403 ORIGIN_NOT_ALLOWED von der API-Origin-Allowlist, also still verloren; (4) in der Ableitung fehlten der SFU-Signalisierungshost (SFU_SIGNALING_URL, vom Client ueber /api/webrtc-config -> sfu.url genutzt), die Browser-Aliase VITE_SUPABASE_URL/VITE_CFR2_PUBLIC_URL und der vom Client selbst gebildete R2-S3-Endpunkt <bucket>.<account>.r2.cloudflarestorage.com.",
+      "note": "UMGESETZT 2026-09-21 (hermes/f7, gemergt): summarizeCspReports liefert ALLE Meldungen eines Bodies und liest BEIDE Drahtformate (camelCase + Bindestrich), CSP-Sonderwerte (inline/data/eval) werden als blockedKeyword gefuehrt statt als leerer Host, die effektive Direktive hat Vorrang. Neue Ablesestelle GET /api/security/csp-reports (tokenpflichtig ueber die normale /api-Auth, Cache-Control: no-store, Ringpuffer der letzten 20 Meldungen) plus Zaehler je Ausgang (received/violations/unusable/oversized/throttled), je Direktive, je Ziel und je Dokument; der Meldeendpunkt selbst bleibt tokenfrei (Browser senden ohne eigenen Header) und antwortet weiter immer 204. Ableitung um SFU-Host, VITE-Aliase und den R2-S3-Endpunkt erweitert (nur zeichengueltige Werte, kein Wildcard). Gemessen mit echt mitgeschnittenen Bytes eines echten Chrome 153 (3 Meldungen, davon 2 in einem gebuendelten POST): Altfassung erkannte 0, neue erkennt 3.",
+      "verification": "tests/cspPolicy.test.ts erweitert (350 Zeilen Delta): beide Drahtformate, mehrere Meldungen je POST, Sonderwerte, Zaehler, Ringpuffer, Ableseroute inkl. Auth-Pflicht, 403-Fall fremder Dokument-Origin als Regressionstest, Ableitungs-Vollstaendigkeit (SFU-Host, VITE-Aliase, R2-S3-Endpunkt, kein Wildcard). vitest: tests/cspPolicy.test.ts + prodCors + corsAllowedOrigins = 35 Tests OK. tsc 0. npm run verify: 278 Testdateien / 2043 Tests (Stand vor diesem Merge), 0 kritische Audit-Findings. Live-Nutzungslauf 2026-09-21 gegen https://anunnakitools.de (echter Browser): SPA geladen, NULL CSP-Verstoesse im Container-Log - der Einstiegspfad verstoesst also nicht gegen die abgeleitete Policy.",
+      "files": [
+        "server/csp.ts",
+        "server/routes/securityRoutes.ts",
+        "server/routes/opsRoutes.ts",
+        "server.ts",
+        "tests/cspPolicy.test.ts",
+        "docs/OPS_RUNBOOK.md"
+      ],
+      "remaining": "Betreiber-Entscheidung 'CSP_MODE=enforce' bleibt offen; die Belege liegen jetzt vor: Einstiegspfad live ohne Verstoss, Meldeweg nachweislich auswertbar, und der wichtigste Beinahe-Schaden ist behoben (unter enforce waere die SFU-Signalisierung gekappt worden, weil der Host in der Ableitung fehlte). Empfehlung: erst eine echte Nutzungssitzung (Studio betreten, Audio/Visual nutzen) mit report-only fahren, die Zaehler unter /api/security/csp-reports ansehen, und den Rest der Medien-/Worklet-Pfade pruefen.",
       "live_open": [
-        "Auswertung der CSP-Reports ueber einen echten Nutzungslauf und danach die Betreiber-Entscheidung CSP_MODE=enforce (Default bleibt bewusst report-only, weil es bis F7 keine Beobachtungsdaten gab)"
+        "Echte Nutzungssitzung (Studio betreten, nicht nur Landung) mit report-only fahren und die neuen Zaehler unter GET /api/security/csp-reports auswerten",
+        "Danach Betreiber-Entscheid CSP_MODE=enforce mit Rueckweg report-only"
       ]
     },
     {
