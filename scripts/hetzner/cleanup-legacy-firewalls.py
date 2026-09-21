@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Loescht die ungenutzten Legacy-Firewalls (`samplemonk-*`) in Hetzner.
+"""Loescht die ungenutzten Legacy-Firewalls des ALTNAMENS in Hetzner.
 
-Warum: nach dem Namespace-Fix (F10) heissen die AKTIVEN Firewalls
-`audiomonastry-*`. Die alten `samplemonk-*`-Firewalls blieben liegen - sechs
-Stueck, an keinen Server gebunden, mit TEILWEISE ANDEREN Regeln (die alte
-`samplemonk-sfu` hatte z.B. keine TURN-Ports). Genau so entsteht ein Fehlgriff:
-jemand haengt die falsche Firewall an, und die Ports stimmen nicht.
+Warum: nach dem Namespace-Fix (F10) heissen die AKTIVEN Firewalls kanonisch. Die
+alten Firewalls des früheren Praefixes blieben liegen - sechs Stueck, an keinen
+Server gebunden, mit TEILWEISE ANDEREN Regeln (die alte SFU-Firewall hatte z.B.
+keine TURN-Ports). Genau so entsteht ein Fehlgriff: jemand haengt die falsche
+Firewall an, und die Ports stimmen nicht.
+
+Der Praefix wird NICHT hier notiert, sondern aus scripts/hetzner/fleet-names.sh
+gelesen (EINE Namensquelle; ein zweiter Literalvorrat waere genau die Doppelung,
+die F10 beseitigt hat).
 
 Sicherheit: es wird NUR geloescht, wenn `applied_to` leer ist. Ohne `--apply`
-laeuft ein Trockenlauf. Namen sind konfigurierbar (Default: der Legacy-Praefix
-aus scripts/hetzner/fleet-names.sh).
+laeuft ein Trockenlauf.
 
 Aufruf:
   python3 scripts/hetzner/cleanup-legacy-firewalls.py            # Trockenlauf
@@ -19,7 +22,7 @@ from __future__ import annotations
 
 import json
 import pathlib
-import re
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -36,10 +39,21 @@ def token() -> str:
 
 
 def legacy_prefix() -> str:
-    """Praefix aus der EINEN Namensquelle - kein zweiter Namensvorrat."""
-    text = (REPO / "scripts" / "hetzner" / "fleet-names.sh").read_text(encoding="utf-8")
-    match = re.search(r'^LEGACY_FLEET_PREFIX="\$\{LEGACY_FLEET_PREFIX:-([^}]+)\}"', text, re.MULTILINE)
-    return match.group(1) if match else "samplemonk-"
+    """Praefix aus der EINEN Namensquelle (fleet-names.sh), kein zweiter Vorrat.
+
+    Die Bibliothek wird per bash gesourct und der Wert ausgegeben - so gilt genau
+    der Wert, den alle anderen Skripte auch sehen (auch ein Betreiber-Override via
+    LEGACY_FLEET_PREFIX). Ist er nicht ermittelbar, bricht der Aufruf ab: ein
+    eingebauter Ersatzname waere die zweite Namensquelle, die F10 beseitigt hat.
+    """
+    names_sh = REPO / "scripts" / "hetzner" / "fleet-names.sh"
+    if not names_sh.exists():
+        return ""
+    result = subprocess.run(
+        ["bash", "-c", f'source "{names_sh}"; printf %s "$LEGACY_FLEET_PREFIX"'],
+        capture_output=True, text=True, timeout=30,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def api(path: str, tok: str, method: str = "GET") -> dict:
@@ -54,6 +68,9 @@ def api(path: str, tok: str, method: str = "GET") -> dict:
 
 def main() -> int:
     apply_changes = "--apply" in sys.argv[1:]
+    if not legacy_prefix():
+        print("Legacy-Praefix nicht ermittelbar (scripts/hetzner/fleet-names.sh) - kein Ersatzname im Skript.")
+        return 1
     tok = token()
     if not tok:
         print("HCLOUD_TOKEN fehlt in .env.deploy")

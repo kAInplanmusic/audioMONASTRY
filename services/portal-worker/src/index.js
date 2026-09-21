@@ -328,7 +328,7 @@ async function cloudflareIpRanges() {
   return cfIpCache.ips;
 }
 
-function firewallRules(role, cloudflareIps = []) {
+export function firewallRules(role, cloudflareIps = [], options = {}) {
   const base = [
     { direction: 'in', protocol: 'icmp', source_ips: ['0.0.0.0/0', '::/0'] },
     { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'] },
@@ -338,6 +338,15 @@ function firewallRules(role, cloudflareIps = []) {
     const cf = cloudflareIps.length > 0 ? cloudflareIps : ['0.0.0.0/0', '::/0'];
     base.push({ direction: 'in', protocol: 'tcp', port: '80', source_ips: cf });
     base.push({ direction: 'in', protocol: 'tcp', port: '443', source_ips: cf });
+    // Monitoring-Scrape: der App-Container veroeffentlicht 8080, Prometheus auf
+    // dem Monitoring-Knoten scrapt direkt (statt ueber die Domain/Cloudflare).
+    // Ohne diese Regel wuerde der naechste set_rules-Lauf die Regel entfernen,
+    // die scripts/hetzner/firewall-ensure-app-metrics.py setzt - der App-Job
+    // faellt dann still auf health=down. Dieselbe Zahl/Quelle in beiden Quellen.
+    const metricsSource = String(options.metricsSourceIp ?? '').trim();
+    if (metricsSource) {
+      base.push({ direction: 'in', protocol: 'tcp', port: '8080', source_ips: [`${metricsSource}/32`] });
+    }
   } else {
     base.push({ direction: 'in', protocol: 'tcp', port: '80', source_ips: ['0.0.0.0/0', '::/0'] });
     base.push({ direction: 'in', protocol: 'tcp', port: '443', source_ips: ['0.0.0.0/0', '::/0'] });
@@ -575,9 +584,19 @@ async function syncAppFirewall(env) {
     if (fw) break;
   }
   if (!fw) return { ok: false, message: 'app-Firewall nicht gefunden' };
-  const rules = firewallRules('app', cfIps);
+  // Monitoring-Knoten (edge-1) bestimmen: nur er darf den Metrik-Port 8080
+  // erreichen. Faellt die Aufloesung aus, bleibt die Regel weg (der Scrape
+  // meldet dann down) - statt sie offen fuers ganze Internet zu setzen.
+  let metricsSourceIp = '';
+  try {
+    const servers = await fleetServers(env);
+    metricsSourceIp = servers[`${NAME_PREFIX}edge-1`]?.public_net?.ipv4?.ip ?? '';
+  } catch {
+    metricsSourceIp = '';
+  }
+  const rules = firewallRules('app', cfIps, { metricsSourceIp });
   const result = await hz(env, 'POST', `/firewalls/${fw.id}/actions/set_rules`, { rules });
-  return { ok: Array.isArray(result.actions), appFirewallId: fw.id };
+  return { ok: Array.isArray(result.actions), appFirewallId: fw.id, metricsSourceIp };
 }
 
 // ---------------------------------------------------------------------------
@@ -775,10 +794,16 @@ export function signalingAllowedOrigins(env) {
   return origins.join(',');
 }
 
-function envFile(env, role) {
+export function envFile(env, role) {
+  // Site-Adresse je Rolle: app-1 dient die Produktions-Domain (Origin-TLS,
+  // Cloudflare-Origin-Zertifikat). Der SFU-Knoten braucht SEINE EIGENE Site -
+  // sonst schreibt diese Zeile `DOMAIN=` leer und Caddy lauscht dort nur auf :80
+  // (live gemessen 2026-09-21: kein TLS auf sfu-1, Client haette ws:// nutzen
+  // muessen und waere als Mixed Content blockiert worden). Quelle ist die
+  // Signalisierungs-URL, die der Betreiber im Portal-Secret setzt.
+  const sfuHost = String(env.SFU_SIGNALING_URL ?? '').trim().replace(/^https?:\/\//i, '').split('/')[0];
   const lines = [
-    // Origin-TLS (P-7b): app-1 dient HTTPS mit Cloudflare-Origin-Zertifikat.
-    `DOMAIN=${role === 'app' ? (env.APP_DOMAIN || 'anunnakitools.de') : ''}`,
+    `DOMAIN=${role === 'app' ? (env.APP_DOMAIN || 'anunnakitools.de') : role === 'sfu' ? sfuHost : ''}`,
     `SIGNALING_ALLOWED_ORIGINS=${signalingAllowedOrigins(env)}`,
   ];
   if (role === 'app') {
