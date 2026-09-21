@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21T23:28:28+00:00",
+  "generatedAt": "2026-09-21T23:44:17+00:00",
   "branch": "main",
-  "commit": "0ebd375",
+  "commit": "7bf688b",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2485,11 +2485,11 @@
       "source": "Betreiber-Entscheidungen (2026-09-22): Abschnittsbetrieb, Volume-Vorstaging genehmigt, Budget bis 5 EUR",
       "note": "Offen: bestbewertete Prompt/Bild-Paare kuratieren und ein Stil-LoRA auf einem RunPod-POD trainieren (nicht Serverless). Bewusst nicht gestartet: GPU-Kosten laufen beim Betreiber, und die Datenbasis entsteht erst mit echten Nutzer-Bewertungen (Session-Ende-Umfrage laeuft, siehe VISUAL-P1-004).",
       "summary": "Pipeline fuer das Stil-LoRA ist gebaut und geprueft (Kuration, Dataset, Pod-Training mit hartem Kosten-Gate, Doku, 28 Tests); sie kann aber heute nicht laufen, weil es KEINE Bild-Bewertungen gibt (visual_feedback und visual_generations sind leer - zweifach unabhaengig geprueft). Der Trainingslauf selbst kostet GPU-Geld und bleibt beim Betreiber.",
-      "evidence": "R2: lora/cosmic-v1/{dataset.tar.gz,dataset_config.toml,bootstrap.sh} vorhanden; cosmic-rank16.safetensors fehlt noch",
+      "evidence": "53 neue Tests (test_lora_segments.py) + 28 + 29 bestehende gruen, alles ohne Netz/Pod; py_compile/bash -n ok",
       "remaining": "Betreiber-Schritte bis zum echten Training: (1) erst Bewertungen erzeugen (visual_feedback ist leer, der Datenpfad POST /api/ai/vision/feedback liefert erst mit Nutzung Daten); (2) Stundensatz aus runpodctl gpu list ablesen und eintragen; (3) Trainer-Image und Trainer-Kommando festlegen (bewusst ohne Default); (4) Netz-Volume anlegen und dataset.tar.gz + bootstrap.sh hochladen; (5) 2,0 s/Schritt durch einen echten Messwert ersetzen; (6) freigeben (LORA_APPROVE_SPEND=1 + KOSTENBESTAETIGUNG=<Obergrenze>) und --train starten. Nicht verifiziert bleiben Trainingslauf, Trainer-Syntax im Pod und die LoRA-Qualitaet.",
       "problem": "Erster Lauf (2026-09-21, A40 secure 0,49 USD/h) lief 90,4 min in die harte Laufzeitgrenze: Planrechnung war 3700 Schritte x 2,0 s = 123 min und passte nie ins Fenster. Kosten 0,74 USD, KEIN LoRA erzeugt. Zweite Schwaaeche: der Starter ueberwacht nur den Pod-Zustand, nicht den Fortschritt.",
-      "solution": "Zweig hermes/lora baut: Checkpoints + Resume, Fortschrittsmarker nach R2, Abschnittsgroesse 1000, Default 2000 Schritte, Vorab-Rechnung mit lautem Abbruch vor dem Start (genau der Fehler, der 0,74 USD verbrannt hat) sowie VORSTAGING auf einem RunPod-Network-Volume (Gewichte ~24 GB + Dataset + Trainer), damit der Abschnittsstart von ~30 min auf wenige Minuten faellt (Image-Pull 15-25 min und Gewichts-Download waren die Zeitfresser, NICHT die 54-MB-Fotos). Volume 50 GB = 2,50 USD/Monat (~8 Cent/Tag), Vorstagen auf einem CPU-Pod (genehmigt), Loeschen nach der Trainingsphase.",
-      "rest": "NAECHSTER SCHRITT: Zweig pruefen/mergen, dann Vorstaging starten (CPU-Pod + Volume), Abschnitt 1 (1000 Schritte, ~0,35 USD) fahren, Vorschaubilder rendern, entscheiden ob Abschnitt 2 folgt. ECHTE Schrittzeit messen (die 2,0 s sind eine Annahme) - erst danach ist die Frage 'groessere Karte lohnt sich?' seriös beantwortbar."
+      "solution": "Technik ist gebaut (Branch gemergt, Commit 3fbecc4): Checkpoints alle 250 Schritte, Resume aus Checkpoint ('resume_from=auto' nimmt den neuesten im Volume; Startschritt > 0 ohne Checkpoint bricht laut ab), Fortschrittsmarker als JSONL nach R2 (scripts/lora/lora-progress.py: step, loss, ts, state, segment, checkpoint_url) und Anzeige im Starter im Sekundentakt ('Schritt 750/2000 (37.5%) | Abschnitt 1/2 | Loss 0.0812'), Stillstandswarnung nach 15 min. Abschnittsgroesse 1000, Default 2000 Schritte. VORAB-RECHNUNG vor dem Start mit lautem Abbruch (genau der Fehler, der 0,74 USD verbrannt hat) und drei Auswegen. Vorstaging: scripts/lora/vorstaging.sh fuellt ein Network Volume EINMALIG auf einem CPU-Pod (Gewichte per hf_transfer, Dataset, Trainer-Checkout; idempotent mit 'uebersprungen:'-Nachweis, --dry-run, Kostenausweis und Loeschbefehl).",
+      "rest": "NAECHSTER SCHRITT: (1) Vorstaging auf CPU-Pod starten (Betreiber hat es freigegeben, das Repo legt keinen Pod an), (2) Abschnitt 1 (1000 Schritte, ~0,35 USD) fahren, (3) Vorschaubilder rendern und entscheiden, ob Abschnitt 2 folgt, (4) Volume danach loeschen. ERST MIT POD BELEGBAR: echte s/Training je Abschnitt (2,0 s sind weiterhin ANNAHME), Trainer-Resume-Syntax im Image, ob die Loss nach dem Fortsetzen weiterlaeuft, Checkpoint-Up-/Download ueber presigned URLs, echter hf_transfer-Download der 24 GB, reale Volume-Kosten."
     },
     {
       "id": "VISUAL-P1-008",
@@ -3018,23 +3018,25 @@
       "id": "PROD-P0-PORTAL-FAILOPEN",
       "title": "Portal-Wake oeffnet den Origin auf 0.0.0.0/0, wenn die Cloudflare-IP-Liste ausfaellt",
       "priority": "P0",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Sicherheit/Infrastruktur",
       "source": "Subagent des Infrastruktur-Auftrags (2026-09-21), Befund mit Codezeile; von mir nicht gegengeprueft (Portal-Verhalten, Betreiberentscheid)",
       "problem": "services/portal-worker/src/index.js:325-328 sagt im Kommentar 'Cache leer lassen -> App-Firewall bleibt zu (sicherer Ausfall)'. Tatsaechlich setzt firewallRules('app', []) bei leerer Cloudflare-IP-Liste die Regeln fuer 80/443 auf 0.0.0.0/0 und ::/0 (Zeile 338). Faellt der Abruf der Cloudflare-Bereiche aus, oeffnet der naechste Wake den Origin weltweit - das Gegenteil der zugesagten Absicherung. Die Abweichung ist als Test gepinnt, der Code aber bewusst NICHT geaendert (Betreiberentscheid).",
-      "rest": "ENTSCHEIDUNG GEFALLEN (Betreiber, 2026-09-22): fail-closed. Umsetzung laeuft im Zweig hermes/portal (fail-closed im Cloudflare-IP-Ausfall + laute Meldung). NAECHSTER SCHRITT: Zweig pruefen, mergen, Gate, Push.",
-      "evidence": "tests/portalWorkerFleetPorts.test.ts (6 Tests, echter Worker-Codepfad gegen Fake-Hetzner-API)"
+      "rest": "NOCH NICHT LIVE: der Portal-Worker ist nicht deployt (wrangler deploy + secret put fehlen) - das neue Verhalten wirkt erst danach.",
+      "evidence": "vitest 28 Tests (4 Zieldateien) + 58 Portal-Nachbarsuiten + 23 R2/Doku-Tests gruen; tsc 0; 226 Python-Flottentests; eslint 0",
+      "solution": "Fail-closed umgesetzt (Entscheidung Betreiber 2026-09-22): firewallsRules('app') laesst 80/443 WEG, wenn die Cloudflare-Liste fehlt oder leer ist (kein negatives Caching); syncAppFirewall/startFleet melden laut ('[portal] FAIL-CLOSED', appFirewall.ok=false, notes/wiringSummary). Nie mehr 0.0.0.0/0 als Ausfallverhalten. Rot-Beweis: mit der alten index.js-Fassung waren 5/5 neu geschriebene Tests rot, danach zurueckgenommen (sha256 identisch)."
     },
     {
       "id": "PROD-P2-PORTAL-DRIFT",
       "title": "Portal-Wake und firewall-ensure haben gegensaetzliche Regeln fuer denselben Regelsatz",
       "priority": "P2",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Infrastruktur",
       "source": "Subagent des Infrastruktur-Auftrags (2026-09-21), Codebelege",
       "problem": "services/portal-worker/src/index.js:1511-1520 (openFleetPorts) verengt eine fuer 0.0.0.0/0 offene Vertrags-Regel auf die app-1-IP/32 und verliert dabei die description; firewall-ensure.py laesst offene Regeln bewusst unveraendert. Zusaetzlich schreibt der Wake bei JEDEM Aufruf neu (kein Diff, keine Gegenprobe), waehrend firewall-ensure nur bei Abweichung schreibt und frisch nachprueft - bei gleichzeitigem Lauf sieht nur die Python-Seite den Konflikt (Exit 3).",
-      "rest": "ENTSCHEIDUNG GEFALLEN (Betreiber, 2026-09-22): die Politik von firewall-ensure.py ist der Vertrag - offene Regel nie verengen, description nie verwerfen, Wake MERGT seine IP statt zu ersetzen, kein Schreiben ohne Aenderung. Umsetzung laeuft im selben Zweig wie PROD-P0-PORTAL-FAILOPEN.",
-      "evidence": "tests/portalWorkerFleetPorts.test.ts + PortalWakeVertragTest (5 Python-Faelle gegen API-Stub)"
+      "rest": "Ebenfalls erst nach dem Portal-Deploy live wirksam.",
+      "evidence": "PortalWakeVertragTest (Python, Stub) + 5 JS-Tests; Rot-Beweis gefuehrt",
+      "solution": "Entscheidung umgesetzt: die Politik von firewall-ensure.py ist der Vertrag. openFleetPorts MERGT app-1/32 in die vorhandene Quellliste (sources:'merge', skipOpen:true - offene Regel bleibt unangetastet), die description und Fremdregeln bleiben erhalten; set_rules nur bei echter Abweichung (Vergleich ueber Richtung/Protokoll/Port/Quellen/description); fehlende Regeln werden mit gemessener Knoten-IP angelegt und gemeldet, ohne app-1-IP Abbruch statt Erfinden. 80/443 der App-Firewall ist begruendeter Sonderfall (Cloudflare-Bereiche ersetzen alte)."
     },
     {
       "id": "PROD-P2-CLEANUP-001",
@@ -3072,14 +3074,14 @@
     },
     {
       "id": "PROD-P3-SKRIPTE-01",
-      "status": "PARTIAL",
+      "status": "DONE",
       "priority": "P3",
       "area": "Code-Hygiene",
-      "title": "20 referenzlose Skripte: pruefen und die sicher toten nach Betreiber-Verfahren entfernen",
+      "title": "Referenzlose Skripte geprueft; 5 sicher tote entfernt (Recovery-Buendel + Tag)",
       "source": "Entscheidung des Betreibers (2026-09-22); Umsetzung laeuft im Zweig hermes/scripts",
       "problem": "Ein Agentenbefund nennt 20 Skripte in scripts/ ohne Repo-Referenz (u.a. ai-benchmark.ts, audio-ui-gate.cjs, dead-code-sweep.sh, docker-gate.sh, r2-check.ts). Der Befund war NICHT gegengeprueft.",
-      "solution": "Verfahren des Betreibers: erst Recovery-Buendel (/home/patrick/am-recovery-skripte-<datum>/ mit tar.gz, Liste, git-Referenz), dann EINE Datei pro Commit, und NACH JEDEM EINZELNEN SCHRITT die betroffenen App-Bereiche testen - erst danach die naechste Datei. Unsichere Faelle bleiben erhalten (Vorschlag: scripts/manual/ + Doku).",
-      "rest": "NAECHSTER SCHRITT: Zweig pruefen, mergen. GANZ AM ENDE: aktueller Deploy + Push, Recovery-Variante und Dateien lokal bereithalten und erst nach erfolgreichem Deploy loeschen (Betreiber-Wunsch).",
+      "solution": "Eigene Vollexamination aller 172 getrackten Skripte: 5 sicher tote entfernt - scripts/r2-check.ts (loeschte unbedingt den ALT-Bucket audio-monastry-samples), verify-cloud.ts, cloud_sync.ts, build-cross-platform.sh (rief real nur npm run build), hf-single-gpu-check.sh (verlangte AI_MAX_GPU_ENDPOINTS=1, der Code fahrt 8 - gemessen Exit 1/FAIL). Je Datei ein Commit, nach JEDEM Schritt 5 Gates (voller vitest, tsc, eslint, boundary, Python) - Endstand identisch zur Baseline: 280 Dateien/2095 Tests. Recovery: /home/patrick/am-recovery-skripte-2026-09-22/ (tar.gz 5 Originale, LISTE.md, BELEGE.txt, ABLAUF.md) + git-Tag am-skripte-vorher-2026-09-22 (= 0ebd375, Probe per git show).",
+      "rest": "ZAHLEN-KORREKTUR: es sind 18 referenzlose Dateien, nicht 20 - die Agentenzahl war nicht reproduzierbar. 13 weitere bleiben bewusst (handbediente Live-/Hardware-Werkzeuge, Merge-Helfer). Drei Nebenbefunde: audit-audio-realtime.sh meldet auf aktuellem Code 21 Verstoesse (ueberholt/zu breit), dead-code-sweep.sh hat einen Falschtreffer auf 'MASTERTODOENDE', alert-webhook.sh behauptet falsch, aus auto-repair.sh aufgerufen zu werden (Doku korrigieren). Deploy am Ende der Runde steht noch aus (Betreiber-Wunsch).",
       "evidence": "Recovery-Buendel + Tabelle (Datei, Zweck, Referenz-Beweis, Verdikt) + Testkommando je Entfernung"
     },
     {
