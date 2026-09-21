@@ -168,14 +168,14 @@ Was `deploy.sh` macht (Default `DEPLOY_MODE=docker`):
 > **Zwei Image-Wege, ein Schalter (PERF-P1-005).** `deploy.sh` baut das Image
 > entweder lokal und schiebt es hoch (`docker save | ssh docker load`) oder lässt
 > es auf dem Knoten bauen (`DEPLOY_REMOTE_BUILD=1`). Der **Flottenstart**
-> (`scripts/hetzner/bring-up-fleet.sh`, Schritt 4 ruft `deploy.sh`) setzt seit dem
+> (`scripts/hetzner/bring-up-fleet.sh`, Schritt 5 ruft `deploy.sh`) setzt seit dem
 > 2026-09-21 **`DEPLOY_REMOTE_BUILD=1` als Default**: gemessen ist die Leitung der
 > Engpass, nicht der Build — ~1 MB/s hoch, ~2,65 GB Image-Tar (app 1,43 GB +
 > master-player 1,22 GB) = **25–40 min je Knoten** gegenüber **~1 min** bei warmem
 > Layer-Cache auf dem Knoten (zweimal live auf app-1 gefahren). Abschalten bewusst:
 > `DEPLOY_REMOTE_BUILD=0` in der Umgebung. Beide Wege sichern den Rollback-Tag,
 > nehmen das Medien-Overlay mit und setzen die Build-Stempel; der gewählte Weg
-> steht im Trockenlauf und in Schritt 4 als Klartext im Log. Einzelheiten,
+> steht im Trockenlauf und in Schritt 5 als Klartext im Log. Einzelheiten,
 > Messungen und die Rolle des zweiten Images: Abschnitt „Deploy-Wege“ unten.
 
 Wichtige Variablen:
@@ -363,7 +363,7 @@ docker compose -f docker-compose.hetzner.yml up -d audiomonastry
 ```
 
 `bash scripts/hetzner/bring-up-fleet.sh` macht genau das automatisch (Schritt
-6/8, inkl. Kontrolle von `/api/webrtc-config`). Fehlt
+7/9, inkl. Kontrolle von `/api/webrtc-config`). Fehlt
 `TURN_STATIC_AUTH_SECRET` in `.env.deploy`, erzeugt der Flottenstart EINES und
 sagt laut, dass es beim nächsten Start rotiert (dauerhaft in `.env.deploy`
 ablegen).
@@ -373,7 +373,7 @@ ablegen).
 ```bash
 bash scripts/hetzner/wire-rtc.sh sfu --print-config        # ENABLE_SFU/SFU_ANNOUNCED_IP/TURN_*
 bash scripts/hetzner/wire-rtc.sh app --print-config        # ENABLE_SFU=0 + SFU-Adresse + TURN
-bash scripts/hetzner/bring-up-fleet.sh --print-config      # Rolle + Ports + Schritte
+bash scripts/hetzner/bring-up-fleet.sh --print-config      # Rolle + Ports + Schritte + Firewall-Vertrag
 bash -n scripts/hetzner/lib/rtc-fleet.sh scripts/hetzner/wire-rtc.sh
 docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml config --quiet
 ```
@@ -826,12 +826,12 @@ Knoten — und der Flottenstart tut das per Default:
 | Weg | Schalter (Default) | Was sonst gleich bleibt |
 |---|---|---|
 | `deploy.sh` (App-Rolle, master-player) | `DEPLOY_REMOTE_BUILD` (`0`) | Rollback-Tag, Medien-Overlay, Build-Stempel |
-| `scripts/hetzner/bring-up-fleet.sh` (Flottenstart, Schritt 4 → `deploy.sh`) | `DEPLOY_REMOTE_BUILD` (**`1`**, PERF-P1-005) | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| `scripts/hetzner/bring-up-fleet.sh` (Flottenstart, Schritt 5 → `deploy.sh`) | `DEPLOY_REMOTE_BUILD` (**`1`**, PERF-P1-005) | Rollback-Tag, Medien-Overlay, Build-Stempel |
 | `scripts/hetzner/fleet-deploy-live.sh <ip>` (Live-Beweis-Deploy) | `DEPLOY_REMOTE_BUILD=1` | Rollback-Tag, Medien-Overlay, Build-Stempel |
 
 Der Flottenstart setzt den Schalter in seinem `deploy.sh`-Aufruf
 (`DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD"`) und meldet den gewählten Weg als
-Klartext — im Trockenlauf (`--print-config`) und in Schritt 4. So ist im Log
+Klartext — im Trockenlauf (`--print-config`) und in Schritt 5. So ist im Log
 lesbar, **warum** es schnell (Remote-Build, ~1 min) oder langsam (Image-Transfer,
 25–40 min) ist, statt nur einer Wartezeit. Abschalten: `DEPLOY_REMOTE_BUILD=0`
 in der Umgebung von `bring-up-fleet.sh`.
@@ -1043,3 +1043,149 @@ Es verschiebt **nichts unwiederbringlich**: die Volumes des Alt-Projekts werden
   gegen die laufende Flotte).
 * Ob nach der Migration der volle Flottenfluss (4-User-E2E, SFU-RTP) grün ist,
   bleibt ein Live-Beweis (siehe Schritt 5).
+
+---
+
+## INFRA-HETZNER-014 · Firewall-Regel-Drift: die Knoten sprechen nicht mehr miteinander (2026-09-21)
+
+**Befund (live gemessen 2026-09-21, SSOT-Item `INFRA-HETZNER-014`).** Nach dem
+Neuaufbau der Flotte (neue IPs) trugen drei Hetzner-Firewalls noch die Quell-IPs
+der **vorherigen** Flotte:
+
+| Firewall | Regel | Quelle IST (vor dem Fix) | gemeint ist |
+|---|---|---|---|
+| `audiomonastry-app` | tcp/8080 | `167.233.192.196/32` | alte `edge-1` |
+| `audiomonastry-ai` | tcp/8000 | `142.132.229.71/32` | alte `app-1` |
+| `audiomonastry-ai` | tcp/11434 | `142.132.229.71/32` | alte `app-1` |
+| `audiomonastry-master` | tcp/8000 | `142.132.229.71/32` | alte `app-1` |
+
+Folge: **stumm blockierter Querverkehr** — edge-1 durfte die App-Metriken auf
+8080 nicht scrapen (der Prometheus-Job `audiomonastry` blieb `health=down`),
+app-1 durfte weder Stem-AI/Ollama (`ai:8000`, `ai:11434`) noch master-player
+(`master:8000`) erreichen. Von außen war davon nichts zu sehen, weil aller
+öffentliche Verkehr über den Cloudflare-Worker läuft: die Domain antwortete
+normal, nur die Knoten erreichten sich gegenseitig nicht.
+
+**Warum sich das bei jedem Neuaufbau wiederholt.** Die Regeln entstehen beim
+Provisionieren bzw. beim Verdrahten aus festen Werten
+(`scripts/hetzner/provision.py`, `services/portal-worker/src/index.js` →
+`firewallRules`/`openFleetPorts`), und die Firewalls **überleben die Flotte**:
+`delete-fleet.sh` löscht nur Server (nachgeprüft 2026-09-21), und
+`ensure_firewall`/`ensureFirewall` finden die Firewall beim nächsten Aufbau über
+ihren **Namen** wieder und schreiben nur einzelne Regeln nach. Jeder Neuaufbau
+bringt also neue Knoten-IPs zu alten Firewall-Regeln. Der Abgleich ist deshalb
+jetzt Teil des Flottenstarts statt ein Handgriff nach dem Start.
+
+### Der Soll-Vertrag (abgeleitet aus der LAUFENDEN Flotte, keine festen IPs)
+
+| Rolle | Firewall | Port/Protokoll | Quelle = IPv4 des Knotens |
+|---|---|---|---|
+| app-1 | `audiomonastry-app` | tcp/8080 (Monitoring-Scrape) | `edge-1` |
+| app-1 | `audiomonastry-ai` | tcp/8000 (Stem-AI) | `app-1` |
+| app-1 | `audiomonastry-ai` | tcp/11434 (Ollama) | `app-1` |
+| app-1 | `audiomonastry-master` | tcp/8000 (master-player) | `app-1` |
+
+Die Zuordnung wird **zur Laufzeit** aus `GET /servers` gebildet (Server-Namen
+`audiomonastry-<rolle>-1` → primäre IPv4) — keine festen Adressen im Skript.
+Rollen, die es in der laufenden Flotte nicht gibt, werden gemeldet statt geraten
+(Exit ≠ 0, ohne Schreibversuch). Dieselben Zahlen/Quellen stehen in
+`services/portal-worker/src/index.js`; `tests/test_hetzner_scripts.py` hält beide
+Seiten deckungsgleich.
+
+### Werkzeug
+
+```bash
+# Abgleichen + anwenden (Default) - idempotent: sind alle Quellen aktuell,
+# faellt KEIN Schreibaufruf an ("unveraendert").
+python3 scripts/hetzner/firewall-ensure.py
+
+# Nur zeigen, was passieren wuerde (liest die API, schreibt nichts):
+python3 scripts/hetzner/firewall-ensure.py --dry-run
+
+# Netzfrei: Soll-Zuordnung + Pfad der Env-Datei (kein API-Aufruf, kein Token-Wert):
+python3 scripts/hetzner/firewall-ensure.py --print-config
+```
+
+Das Werkzeug liest `GET /v1/firewalls` und `GET /v1/servers`, ersetzt **nur** die
+veralteten Quell-IPv4-Einträge (Host oder `/32`) der vier Vertrags-Regeln durch
+die IP des zuständigen Knotens, schickt die **vollständige** Regel-Liste per
+`POST /v1/firewalls/<id>/actions/set_rules` und liest danach **frisch** zurück
+(Gegenprobe). Es ist **non-destruktiv**:
+
+* ICMP, SSH, andere Ports, Cloudflare-IP-Bereiche, IPv6-Quellen und
+  Beschreibungen bleiben unverändert (und werden beim Rücklesen belegt);
+* eine Regel, die bereits für `0.0.0.0/0` offen ist, wird **nicht** auf den
+  Knoten verengt (das wäre eine Bedeutungsänderung, kein IP-Wechsel);
+* fehlende Regeln werden **gemeldet**, aber nicht erfunden — ob ein Port offen
+  sein soll, entscheidet der Verdrahtungs-Pfad (`/api/wire-fleet` bzw.
+  `firewall-ensure-*.py`).
+
+**Ausgabe** (IPs/Ports/Protokolle, nie Zugangsdaten — der Token erscheint nur als
+Länge + Fingerabdruck): Vorher/Nachher je geänderter Regel, Zähler
+`geaendert=<n> geprueft=<n>`, und die Firewall-IDs.
+**Exit-Codes:** `0` abgeglichen oder schon aktuell · `1` Token fehlt bzw.
+Soll-Zustand nicht ableitbar (Rolle fehlt) · `2` API-/Netzfehler · `3` Gegenprobe
+weicht nach dem Schreiben ab.
+
+### Im Flottenstart (Schritt 3/9)
+
+```bash
+bash scripts/hetzner/bring-up-fleet.sh --yes
+#   Schritt 1/9 Flotte provisionieren
+#   Schritt 2/9 IPs ermitteln
+#   Schritt 3/9 Cross-Node-Firewall-Regeln auf die aktuellen Knoten-IPs abgleichen
+```
+
+Der Abgleich läuft **nach** dem Anlegen der Knoten (Schritt 1) und **vor** den
+Rollen-Deploys — die Knoten sprechen also vom ersten Moment an miteinander.
+Scheitert er, wird das **laut** gemeldet (kein stilles `|| true`); der Start
+läuft weiter, weil die Smoke-/RTP-Tests am Ende den Fachzustand prüfen.
+
+```bash
+# Abschalten (die Firewall bleibt dann unveraendert, inkl. möglicher Blockade):
+FLEET_FIREWALL_ENSURE=0 bash scripts/hetzner/bring-up-fleet.sh --yes
+```
+
+Der Trockenlauf `bring-up-fleet.sh --print-config` zeigt den Schalter **und**
+druckt die Soll-Zuordnung des Abgleichs mit (netzfrei).
+
+### Belege (read-only, ohne Schreibzugriff auf die laufende Flotte)
+
+Trockenlauf gegen die laufende Flotte am 2026-09-21 (nur GET, kein `set_rules`):
+
+```text
+Token: gesetzt (Laenge 64, Fingerabdruck ca5212e5, Quelle: Umgebung)
+Knoten der laufenden Flotte:
+  audiomonastry-app-1        167.233.91.30
+  audiomonastry-edge-1       178.104.175.83
+Firewall audiomonastry-app (id 11645573): alle Quell-IPs aktuell
+Firewall audiomonastry-ai (id 11645575): alle Quell-IPs aktuell
+Firewall audiomonastry-master (id 11645576): alle Quell-IPs aktuell
+
+Alle Quell-IPs sind aktuell - unveraendert (kein Schreibaufruf).
+Zaehler: geaendert=0 geprueft=4
+```
+
+`tests/test_hetzner_scripts.py` → `CrossNodeFirewallAbgleichTest` und
+`FirewallAbgleichImFlottenstartTest` fahren den echten Codepfad gegen einen
+lokalen API-Stub: veraltete Quelle wird ersetzt und **jede** andere Regel bleibt
+zeichengleich, „schon aktuell“ schreibt nichts, ohne Token entsteht kein
+Request, `--print-config`/`--dry-run` schreiben nicht, und eine abweichende
+Gegenprobe endet mit Exit ≠ 0.
+
+### Offen (bewusst nicht behauptet)
+
+* Der **schreibende** Lauf dieses Werkzeugs gegen die laufende Flotte ist hier
+  nicht ausgeführt (Auftrag: keine Produktiv-Firewall anfassen) — belegt sind
+  der netzfreie Trockenlauf und der lesende `--dry-run` gegen die laufende
+  Flotte sowie die Vertragstests gegen den Stub. Der Fix der drei Firewalls
+  wurde vorher mit dem Prototyp live gefahren (Zustand danach: „alle Quell-IPs
+  aktuell“).
+* Ob der Portal-Wake (`/api/wire-fleet` → `openFleetPorts`) und dieser Abgleich
+  in **derselben** Sekunde laufen, ist nicht serialisiert: beide schreiben
+  Regeln. Der Abgleich liest vorher und prüft nachher; ein dazwischenlaufender
+  Schreiber würde als fehlgeschlagene Gegenprobe (Exit 3) sichtbar.
+* Firewalls kosten bei Hetzner nichts, sie werden beim Flotten-Abbau auch nicht
+  gelöscht — der Regelbestand bleibt damit zwischen Sitzungen erhalten. Alt-Regeln
+  aus früheren Namensschemata (`samplemonk-*`) räumt weiterhin nur
+  `scripts/hetzner/cleanup-legacy-firewalls.py` auf.

@@ -4,23 +4,27 @@
 # -----------------------------------------------------------------------------
 # Ein Befehl nach dem Login – macht alles:
 #   1. Flotte provisionieren (5 Server, Firewalls, Floating-IP an app-1)
-#   2. IPs ermitteln + auf SSH warten
-#   3. app-1 deployen (Caddy + App + Signaling, HTTPS via anunnakitools.de)
-#   4. sfu-1 (Mediasoup), master-1 (master-player), edge-1 (NUR Monitoring-Stack),
+#   2. IPs ermitteln
+#   3. Cross-Node-Firewall-Regeln auf die AKTUELLEN Knoten-IPs abgleichen
+#      (INFRA-HETZNER-014; abschaltbar: FLEET_FIREWALL_ENSURE=0)
+#   4. Auf Cloud-Init/SSH warten
+#   5. app-1 deployen (Caddy + App + Signaling, HTTPS via anunnakitools.de)
+#   6. sfu-1 (Mediasoup), master-1 (master-player), edge-1 (NUR Monitoring-Stack),
 #      ai-1 (Ollama + Stem-AI) einrichten
-#   5. RTC-Verdrahtung (F6): SFU-Rolle + coturn/TURN auf sfu-1, TURN- und
+#   7. RTC-Verdrahtung (F6): SFU-Rolle + coturn/TURN auf sfu-1, TURN- und
 #      SFU-Adresse in die App-.env (wire-rtc.sh; oeffentliche IP zur Laufzeit)
-#   6. Idle-Auto-Shutdown + Watchdog installieren, Backup-Timer auf app-1
-#   7. Smoke-Test + Stresstest + SFU-RTP-Echtpfad-Test
-#   8. Browser/URL öffnen, sobald alles bereit ist (Weiterleitung)
+#   8. Idle-Auto-Shutdown + Backup-Timer + Watchdog installieren
+#   9. Smoke-Test + Stresstest + SFU-RTP-Echtpfad-Test
+#   (danach: Browser/URL öffnen, sobald alles bereit ist)
 #
 # Aufruf:
 #   bash scripts/hetzner/bring-up-fleet.sh               (mit Rückfrage)
 #   bash scripts/hetzner/bring-up-fleet.sh --yes         (ohne Rückfrage)
 #   bash scripts/hetzner/bring-up-fleet.sh --print-config (Trockenlauf: Rollen,
-#                                                         Typen, Service-Listen)
+#                                                         Typen, Service-Listen,
+#                                                         Firewall-Vertrag)
 #
-# Image-Weg von Schritt 4 (PERF-P1-005): app-1 wird per Default mit
+# Image-Weg von Schritt 5 (PERF-P1-005): app-1 wird per Default mit
 # DEPLOY_REMOTE_BUILD=1 deployt (rsync-Delta + Build auf dem Knoten; gemessen
 # ~1 min bei warmem Layer-Cache) statt per Image-Transfer (gemessen ~2,65 GB bei
 # ~1 MB/s hoch = 25-40 min je Knoten - die Leitung, nicht der Build, ist der
@@ -44,7 +48,7 @@ SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
 APP_URL="https://$DOMAIN"
 
-# PERF-P1-005 (2026-09-21): der Image-Weg des App-Deploys (Schritt 4).
+# PERF-P1-005 (2026-09-21): der Image-Weg des App-Deploys (Schritt 5).
 # Gemessen: die Leitung Betreiber-Rechner -> Knoten macht ~1 MB/s hoch. Der
 # Transfer-Weg (`docker save | ssh docker load`) schiebt darueber ~2,65 GB
 # (app 1,43 GB + master-player 1,22 GB) - 25-40 min, und zwar NUR fuer einen
@@ -57,7 +61,7 @@ APP_URL="https://$DOMAIN"
 # Bewusst zurueck auf den Transfer: DEPLOY_REMOTE_BUILD=0 in der Umgebung
 # (z. B. Knoten ohne Bau-RAM/ohne Netz zu den Basis-Images).
 DEPLOY_REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-1}"
-# EINE Quelle fuer den Klartext-Namen des Wegs: Trockenlauf UND Schritt 4 melden
+# EINE Quelle fuer den Klartext-Namen des Wegs: Trockenlauf UND Schritt 5 melden
 # damit denselben Satz - zwei Texte koennten etwas anderes behaupten als das
 # Skript tut (und im Log soll lesbar sein, WARUM es schnell/langsam ist).
 if [[ "$DEPLOY_REMOTE_BUILD" == "1" ]]; then
@@ -65,6 +69,16 @@ if [[ "$DEPLOY_REMOTE_BUILD" == "1" ]]; then
 else
   DEPLOY_IMAGE_WEG="Image-Transfer ('docker save | ssh docker load'; gemessen ~2,65 GB bei ~1 MB/s = 25-40 min)"
 fi
+
+# INFRA-HETZNER-014 (gemessen 2026-09-21): Nach einem Neuaufbau trugen die
+# Firewalls app/ai/master noch die Quell-IPs der VORHERIGEN Flotte - der
+# Querverkehr edge->app:8080, app->ai:8000/11434 und app->master:8000 war damit
+# stumm blockiert (von aussen unsichtbar, weil alles Oeffentliche ueber
+# Cloudflare laeuft). Schritt 3 gleicht die Quell-IPs deshalb gegen die
+# TATSAECHLICHEN Knoten-IPs ab (idempotent, atomar auf die Quell-IPs begrenzt).
+# Abschalten bewusst: FLEET_FIREWALL_ENSURE=0 (z. B. wenn der Abgleich schon im
+# Portal-Wake lief und der API-Token hier fehlt).
+FLEET_FIREWALL_ENSURE="${FLEET_FIREWALL_ENSURE:-1}"
 
 # NOMEN-P1-001 / F10: Namen der laufenden Installation aufloesen (neu oder
 # Altname) - fleet-names.sh ist die EINE Quelle (Servernamen, Container,
@@ -104,6 +118,10 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   # PERF-P1-005: der gewaehlte Image-Weg steht im Trockenlauf - so ist der
   # Default (Remote-Build) ohne Knoten belegbar und per Umgebung abschaltbar.
   echo "  Image:     DEPLOY_REMOTE_BUILD=$DEPLOY_REMOTE_BUILD  ->  $DEPLOY_IMAGE_WEG"
+  # INFRA-HETZNER-014: der Firewall-Abgleich ist ein eigener Schritt (3/9) und
+  # muss im Trockenlauf sichtbar sein - inklusive Abschaltbefehl.
+  echo "  Firewall:  Schritt 3/9 gleicht die Cross-Node-Quell-IPs ab (FLEET_FIREWALL_ENSURE=$FLEET_FIREWALL_ENSURE; 0 = ueberspringen)"
+  echo "             Abschalten: FLEET_FIREWALL_ENSURE=0 bash scripts/hetzner/bring-up-fleet.sh"
   echo "  sfu-1:     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry | Watchdog"
   echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog     (Image wird auf dem Knoten gebaut, kein Transfer)"
   echo "  edge-1:    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES  (NUR Monitoring) | Watchdog"
@@ -117,6 +135,11 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   echo "  TURN:      Secret aus TURN_STATIC_AUTH_SECRET (.env.deploy/Umgebung); fehlt es, wird EINES erzeugt und laut gemeldet"
   echo "             Ports der Rolle sfu: ${RTC_TURN_PORT}/udp+tcp (TURN) und ${RTC_TURN_MIN_PORT}-${RTC_TURN_MAX_PORT}/udp+tcp (Relay) + RTP 40000-40099"
   echo "  Grafana:   ssh -L 3000:127.0.0.1:3000 root@<edge-1-ip>  ->  http://127.0.0.1:3000"
+  # INFRA-HETZNER-014: der Soll-Zustand des Firewall-Abgleichs ist selbst ohne
+  # Netz pruefbar - das Werkzeug druckt Rolle -> Firewall -> Ports und den Pfad
+  # der Env-Datei (kein API-Aufruf, kein Token-Wert).
+  echo
+  python3 scripts/hetzner/firewall-ensure.py --print-config
   exit 0
 fi
 
@@ -149,11 +172,11 @@ get_ip() {
 }
 
 # --- 1. Provisionieren -------------------------------------------------------
-step "1/7 Flotte provisionieren (Server + Firewall + Floating-IP)"
+step "1/9 Flotte provisionieren (Server + Firewall + Floating-IP)"
 bash scripts/hetzner/provision-fleet.sh
 
 # --- 2. IPs ermitteln ---------------------------------------------------------
-step "2/7 IPs ermitteln"
+step "2/9 IPs ermitteln"
 APP_IP=$(get_ip audiomonastry-app-1)
 SFU_IP=$(get_ip audiomonastry-sfu-1)
 AI_IP=$(get_ip audiomonastry-ai-1)
@@ -165,8 +188,32 @@ EDGE_IP=$(get_ip audiomonastry-edge-1)
 }
 echo "app=$APP_IP sfu=$SFU_IP ai=$AI_IP master=$MASTER_IP edge=$EDGE_IP"
 
-# --- 3. SSH-Bereitschaft ------------------------------------------------------
-step "3/7 Auf Cloud-Init/SSH warten (kann 2–4 min dauern)"
+# --- 3. Cross-Node-Firewall-Regeln abgleichen (INFRA-HETZNER-014) -------------
+# Die Firewalls entstehen beim Provisionieren/Verdrahten aus festen Werten. Nach
+# einem Neuaufbau (neue IPs) zeigen ihre Quell-IPs deshalb auf Knoten der
+# VORHERIGEN Flotte: app:8080 nur von der alten edge-1, ai:8000/11434 und
+# master:8000 nur von der alten app-1. Der Querverkehr edge->app (Monitoring-
+# Scrape), app->ai (Stem-AI/Ollama) und app->master (master-player) war damit
+# stumm blockiert - nach aussen unsichtbar, weil alles Oeffentliche ueber
+# Cloudflare laeuft. Der Abgleich leitet den Soll-Zustand aus der LAUFENDEN
+# Flotte ab und ersetzt ausschliesslich die veralteten Quell-IPs; alles andere
+# (ICMP, andere Ports, Cloudflare-Bereiche) bleibt unveraendert und wird frisch
+# zurueckgelesen. Idempotent: sind alle Quellen aktuell, faellt kein Schreibaufruf an.
+# Abschalten bewusst: FLEET_FIREWALL_ENSURE=0 (dann bleibt die Firewall, wie sie ist).
+step "3/9 Cross-Node-Firewall-Regeln auf die aktuellen Knoten-IPs abgleichen"
+if [[ "$FLEET_FIREWALL_ENSURE" == "1" ]]; then
+  echo "  Soll: app:8080 <- edge-1 | ai:8000,11434 <- app-1 | master:8000 <- app-1"
+  echo "  (Trockenlauf dieses Schritts: python3 scripts/hetzner/firewall-ensure.py --dry-run)"
+  python3 scripts/hetzner/firewall-ensure.py \
+    || echo "  ⚠ Firewall-Abgleich fehlgeschlagen - edge->app:8080 (Scrape), app->ai:8000/11434 und app->master:8000 koennen blockiert bleiben. Grund oben; Einzelheiten: docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014)."
+else
+  echo "  uebersprungen (FLEET_FIREWALL_ENSURE=0): die Firewall bleibt unveraendert."
+  echo "  Achtung: nach einem Neuaufbau koennen die Quell-IPs noch auf die vorherige Flotte zeigen"
+  echo "  (edge->app:8080, app->ai:8000/11434, app->master:8000 blockiert)."
+fi
+
+# --- 4. SSH-Bereitschaft ------------------------------------------------------
+step "4/9 Auf Cloud-Init/SSH warten (kann 2–4 min dauern)"
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   echo -n "  $ip … "
   ok=0
@@ -177,7 +224,7 @@ for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   if [[ "$ok" == "1" ]]; then echo "bereit"; else echo "TIMEOUT"; exit 1; fi
 done
 
-# --- 4. app-1 deployen --------------------------------------------------------
+# --- 5. app-1 deployen --------------------------------------------------------
 # INFRA-HETZNER-001: DEPLOY_SYNC_ENV bleibt hier - wie im Preflight
 # (fleet-preflight.sh, apply_update) - ausdruecklich auf 0. Sonst laedt deploy.sh
 # die lokale Repo-.env hoch und ueberschreibt die rollen-skopierte Knoten-.env
@@ -185,10 +232,10 @@ done
 # haette damit die Rollentrennung des Portal-Workers aufgehoben. Beide Pfade
 # rufen deploy.sh also mit derselben Einstellung auf; wer bewusst synchronisieren
 # will, setzt DEPLOY_SYNC_ENV=1 in der Umgebung dieses Skripts.
-step "4/7 app-1 deployen (Caddy + App + Signaling, HTTPS)"
+step "5/9 app-1 deployen (Caddy + App + Signaling, HTTPS)"
 echo "  .env-Sync: DEPLOY_SYNC_ENV=${DEPLOY_SYNC_ENV:-0} (0 = Knoten-.env des Portal-Workers bleibt)"
 # PERF-P1-005: im Log muss lesbar sein, WELCHER Image-Weg laeuft und WARUM -
-# sonst ist "25 min haengen bei Schritt 4" nicht von "langsame Leitung" zu
+# sonst ist "25 min haengen bei Schritt 5" nicht von "langsame Leitung" zu
 # unterscheiden. Der Grund fuer den Default (Remote-Build) steht hier im Klartext.
 echo "  Image-Weg: DEPLOY_REMOTE_BUILD=$DEPLOY_REMOTE_BUILD  ->  $DEPLOY_IMAGE_WEG"
 echo "    gemessen 2026-09-21: ~1 MB/s hoch, Transfer-Weg ~2,65 GB = 25-40 min;"
@@ -198,8 +245,8 @@ DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
   DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 \
   DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD" sg docker -c "bash deploy.sh"
 
-# --- 5. Übrige Rollen ---------------------------------------------------------
-step "5/7 sfu-1, master-1, edge-1, ai-1 einrichten"
+# --- 6. Übrige Rollen ---------------------------------------------------------
+step "6/9 sfu-1, master-1, edge-1, ai-1 einrichten"
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 rsync_repo() {
   # ACHTUNG `--delete`: was hier NICHT ausgeschlossen ist und auf dem Knoten
@@ -233,7 +280,7 @@ echo "  sfu-1 (Mediasoup) …"
 # ein Knoten mit anderem Pfad bekaeme ein zweites Projekt mit eigenen Volumes.
 # Ein Bestands-Knoten wird vorher migriert (scripts/hetzner/migrate-project-name.sh).
 rsync_repo "$SFU_IP"; sync_env "$SFU_IP"
-# Die RTC-Werte (ENABLE_SFU/SFU_ANNOUNCED_IP) setzt Schritt 6 ueber wire-rtc.sh -
+# Die RTC-Werte (ENABLE_SFU/SFU_ANNOUNCED_IP) setzt Schritt 7 ueber wire-rtc.sh -
 # hier startet nur der Basis-Stack. Das fruehre `grep -q SFU_ANNOUNCED_IP .env ||
 # echo ...` liess eine vorhandene LEERE Zeile stehen; genau daran war die
 # IP-Ankuendigung im Betrieb leer (F6).
@@ -274,7 +321,7 @@ ssh_host "$EDGE_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOS
 echo "  ai-1 (Ollama + Stem-AI) …"
 bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
 
-# --- 6. RTC-Verdrahtung: SFU-Rolle + TURN (F6) --------------------------------
+# --- 7. RTC-Verdrahtung: SFU-Rolle + TURN (F6) --------------------------------
 # Vorher war SFU/TURN nur "vorbereitet": ENABLE_SFU stand bestenfalls im Compose-
 # Overlay, SFU_ANNOUNCED_IP wurde per `grep -q ... || echo` gesetzt (eine bereits
 # vorhandene LEERE Zeile blieb stehen) und coturn wurde von keinem Flottenskript
@@ -282,7 +329,7 @@ bash scripts/hetzner/install-ai1.sh "root@$AI_IP"
 # verband die SFU same-origin auf dem App-Knoten (SPA-HTML). Hier wird die Kette
 # jetzt vollstaendig verdrahtet; die oeffentliche IP ermittelt der Knoten zur
 # Laufzeit (wire-rtc.sh -> lib/rtc-fleet.sh).
-step "6/8 RTC-Verdrahtung (ENABLE_SFU + SFU_ANNOUNCED_IP + TURN/coturn)"
+step "7/9 RTC-Verdrahtung (ENABLE_SFU + SFU_ANNOUNCED_IP + TURN/coturn)"
 TURN_SECRET="${TURN_STATIC_AUTH_SECRET:-}"
 if [[ -z "$TURN_SECRET" ]]; then
   TURN_SECRET="$(openssl rand -hex 32)"
@@ -330,7 +377,7 @@ if not sfu.get("ready"):
     print("    ⚠ Keine SFU-Adresse - Grund:", sfu.get("reason"))' \
   || echo "  ⚠ Kontrolle nicht moeglich (Antwort/curl auf app-1)"
 
-# --- 7. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
+# --- 8. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
 # PROD-P3-F9: Der Idle-Timer wird auf ALLEN Knoten installiert (Muster: der
 # Watchdog unten). Die Kommandozeile des Installers hatte frueher ein stilles
 # `2>/dev/null || true` - ein Fehlschlag war damit unsichtbar, obwohl ein Knoten
@@ -338,7 +385,7 @@ if not sfu.get("ready"):
 # Jetzt nennt jeder Fehlschlag den Grund: der Installer bricht KLARTEXT ab, wenn
 # auf dem Knoten kein Token erreichbar ist (dann waere der Timer strukturell
 # blind); wer das bewusst will, setzt IDLE_ALLOW_TOKEN_LESS=1.
-step "7/8 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
+step "8/9 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
 echo "  Idle-Shutdown-Timer auf allen Knoten installieren …"
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' \
@@ -371,8 +418,8 @@ for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
     || echo "  ⚠ Watchdog konnte auf $ip nicht installiert werden (prüfen!)."
 done
 
-# --- 7. Tests -----------------------------------------------------------------
-step "8/8 Smoke-, Stress- und SFU-RTP-Echtpfad-Tests"
+# --- 9. Tests -----------------------------------------------------------------
+step "9/9 Smoke-, Stress- und SFU-RTP-Echtpfad-Tests"
 echo "  Smoke-Test $APP_URL …"
 bash scripts/hetzner/smoke-test.sh "$APP_URL" || echo "  ⚠ Smoke-Test fehlgeschlagen (prüfen!)"
 echo "  Stresstest gegen $APP_URL …"

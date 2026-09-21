@@ -32,8 +32,29 @@ Snapshots: `scripts/hetzner/lifecycle.sh stop` erzeugt `<name>-auto-<ts>`.
 Wiederherstellung: `npm run fleet:start` provisioniert aus dem aktuellen Repo;
 aus Snapshots booten erfordert `provision-fleet.sh` mit `IMAGE=<snapshot>`.
 
+**Firewall-Abgleich im Flottenstart (INFRA-HETZNER-014, 2026-09-21).** Die
+Firewalls überleben einen Flotten-Abbau (`delete-fleet.sh` löscht nur Server),
+ihre Regeln entstehen aber aus festen Werten — nach einem Neuaufbau zeigten
+`audiomonastry-app` (8080) sowie `audiomonastry-ai` (8000/11434) und
+`audiomonastry-master` (8000) deshalb auf die Quell-IPs der **vorherigen**
+Flotte: der Querverkehr edge→app (Scrape), app→ai (Stem-AI/Ollama) und
+app→master (master-player) war stumm blockiert, während die Domain über
+Cloudflare weiter normal antwortete. `bring-up-fleet.sh` gleicht die Quell-IPs
+seit dem 2026-09-21 in **Schritt 3/9** gegen die tatsächlichen Knoten-IPs ab
+(idempotent, nur Quell-IPs, Gegenprobe per frischem Rücklesen).
+
+```bash
+python3 scripts/hetzner/firewall-ensure.py --print-config   # netzfrei: Rolle -> Firewall -> Ports
+python3 scripts/hetzner/firewall-ensure.py --dry-run        # Plan zeigen, nichts schreiben
+python3 scripts/hetzner/firewall-ensure.py                  # abgleichen + anwenden (Default)
+FLEET_FIREWALL_ENSURE=0 bash scripts/hetzner/bring-up-fleet.sh --yes   # abschalten
+```
+
+Details, Messwerte und Exit-Codes: `docs/HETZNER_DEPLOY.md`, Abschnitt
+„INFRA-HETZNER-014“.
+
 **Image-Weg des Flottenstarts (PERF-P1-005, 2026-09-21).** `bring-up-fleet.sh`
-deployt app-1 in Schritt 4 über `deploy.sh` und setzt dafür seit dem 2026-09-21
+deployt app-1 in Schritt 5 über `deploy.sh` und setzt dafür seit dem 2026-09-21
 `DEPLOY_REMOTE_BUILD=1` als **Default**: der Knoten baut den per rsync
 übertragenen Stand selbst, statt das Image hochgeschoben zu bekommen. Grund ist
 gemessen — die Leitung ist der Engpass, nicht der Build:
@@ -45,7 +66,7 @@ gemessen — die Leitung ist der Engpass, nicht der Build:
 
 Den gewählten Weg meldet der Flottenstart als Klartext — im Trockenlauf
 (`bash scripts/hetzner/bring-up-fleet.sh --print-config` → `Image:
-DEPLOY_REMOTE_BUILD=… -> …`) und in Schritt 4, inklusive der Messwerte. Bewusst
+DEPLOY_REMOTE_BUILD=… -> …`) und in Schritt 5, inklusive der Messwerte. Bewusst
 zurück auf den langsamen Weg (z. B. Knoten ohne Bau-RAM oder ohne Netz zu den
 Basis-Images): `DEPLOY_REMOTE_BUILD=0 bash scripts/hetzner/bring-up-fleet.sh --yes`.
 Rollback-Tag, Medien-Overlay und Build-Stempel sind in beiden Wegen identisch
@@ -119,7 +140,7 @@ per Cron auf dem Laptop, sondern als systemd-Timer auf **app-1** – dort liegt 
 Zustand (`dist`/`public` + Knoten-`.env` mit den Off-Site-Keys):
 
 ```bash
-# Installation (macht bring-up-fleet.sh Schritt 6 automatisch auf app-1)
+# Installation (macht bring-up-fleet.sh Schritt 8 automatisch auf app-1)
 ssh root@<app-1-ip> 'bash /opt/audiomonastry/scripts/hetzner/install-backup-timer.sh'
 
 # Kontrolle
@@ -986,7 +1007,7 @@ Repo-Fassung auseinander). Er ist **idempotent** und steuert `IDLE_MINUTES`,
 `CHECK_INTERVAL` und `IDLE_CHECK_URL` über die Umgebung.
 
 ```bash
-# Installation (bring-up-fleet.sh Schritt 7 macht das auf allen Knoten;
+# Installation (bring-up-fleet.sh Schritt 8 macht das auf allen Knoten;
 # der Portal-Wake macht es auf app-1):
 sudo bash scripts/hetzner/install-idle-shutdown.sh
 # Kontrolle - Nachweis statt Zusage:
