@@ -19,8 +19,18 @@ SSH_OPTS=(-i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 
 echo "== Sync Repo → $HOST:/opt/audiomonastry =="
+# ACHTUNG `--delete`: gleicher Vertrag wie bring-up-fleet.sh und
+# fleet-deploy-live.sh. Auf ai-1 liegt heute kein Knoten-eigener Top-Level-Pfad
+# (gemessen 2026-09-21: nur Repo-Inhalte + die Rollen-.env), die Ausschluesse
+# sind aber dieselben - sonst wandert der Fix beim naechsten Rollen-Sync nicht
+# mit und ein spaeterer Knoten-Zustand waere ohne Vorwarnung loeschbar
+# (Test: FleetSyncDeleteGuardTest).
 rsync -az --delete -e "$RSYNC_E" \
-  --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results --exclude public/data/orchestral --exclude public/music --exclude target --exclude .venv-runpod --exclude .agents --exclude logs \
+  --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results \
+  --exclude public/data/orchestral --exclude public/models --exclude public/music \
+  --exclude media --exclude certs --exclude Caddyfile --exclude runtime \
+  --exclude target --exclude '.venv*' --exclude .worktrees --exclude .agents --exclude logs \
+  --exclude __pycache__ \
   ./ "$HOST:/opt/audiomonastry/"
 
 echo "== Installiere Ollama + Stem-AI (idempotent) =="

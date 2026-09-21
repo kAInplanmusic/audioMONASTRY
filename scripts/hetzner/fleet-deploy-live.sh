@@ -6,14 +6,21 @@
 # Warum nicht deploy.sh? deploy.sh rsynct auch die .env und zieht weitere Images
 # (master-player). Für einen Live-BEWEIS will ich nur:
 #   1. Repo-Stand (ohne .env des Knotens anzufassen) per rsync,
-#   2. das lokal gebaute App-Image per `docker save | gzip | ssh docker load`,
-#   3. Container neu hochfahren (--no-build --remove-orphans),
+#   2. das App-Image auf den Knoten bringen - entweder per
+#      `docker save | gzip | ssh docker load` oder (PERF-P1-004) per
+#      DEPLOY_REMOTE_BUILD=1 als rsync-Delta + Build auf dem Knoten,
+#   3. Container neu hochfahren,
 #   4. optional eine Test-Overlay-Datei, die den App-Port nur an Loopback
 #      veroeffentlicht (fuer den SSH-Tunnel des E2E; die App bleibt unveraendert).
+#
+# Beide Image-Wege sichern VORHER das Rollback-Tag (<image>-rollback) und nehmen
+# das Medien-Overlay mit, wenn auf dem Knoten Inhalte liegen - sonst maskieren
+# leere Bind-Mounts die Pfade des Images (Library leer, /models 404).
 #
 # Aufruf:
 #   bash scripts/hetzner/fleet-deploy-live.sh <ip> [--tunnel-port]
 #   bash scripts/hetzner/fleet-deploy-live.sh --print-config     (Trockenlauf)
+#   bash scripts/hetzner/fleet-deploy-live.sh --help
 #
 # INFRA-HETZNER-009 - Zielpfad:
 #   Default ist der kanonische Pfad aus scripts/hetzner/fleet-names.sh
@@ -57,6 +64,14 @@ LEGACY_REMOTE_DIR="${DEPLOY_LEGACY_REMOTE_DIR:-$LEGACY_FLEET_HOME}"
 COMPOSE_PROJECT="$(fleet_compose_project)"
 ALLOW_FOREIGN_DIR="${DEPLOY_ALLOW_FOREIGN_DIR:-0}"
 IMAGE="${DEPLOY_IMAGE:-audiomonastry:hetzner}"
+# PERF-P1-004 (2026-09-21): 1 = Image auf dem Knoten BAUEN statt es hochzuschieben.
+# Grund (gemessen): die Leitung Host -> Knoten macht ~1 MB/s hoch, das App-Image
+# ist 338 MB Tar -> ~6 min je Knoten, und zstd/gzip holen nichts heraus (die
+# Layer sind schon gepackt). Der rsync-Delta derselben Aenderung ist wenige MB.
+# Voraussetzung: der Knoten hat genug RAM fuer den Build (>=8 GB gemessen
+# unkritisch; auf 3,8-GB-Knoten laeuft die App waehrend des Builds weiter, dort
+# ist der Image-Transfer der sicherere Weg).
+REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-0}"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 # Trockenlauf: 1 = nur Zielpfad/Guard zeigen, nichts uebertragen und nichts starten.
 DRY_RUN="${DEPLOY_DRY_RUN:-0}"
@@ -93,6 +108,38 @@ stack_dir() {
   return 0
 }
 
+# --help darf NICHTS uebertragen: ohne diesen Zweig landete "--help" als IP im
+# Guard/rsync (gemessen 2026-09-21: rsync brach mit "Invalid remote host:
+# hostnames may not start with '-'" ab - der Aufruf hatte den Deploy schon
+# begonnen). Gleiche Form wie bring-up-/provision-fleet.sh.
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'USAGE'
+fleet-deploy-live.sh - einen Flotten-Knoten auf den lokalen Stand bringen
+
+Aufruf:
+  bash scripts/hetzner/fleet-deploy-live.sh <ip> [--tunnel-port]
+  bash scripts/hetzner/fleet-deploy-live.sh --print-config    (nur Konfiguration)
+  bash scripts/hetzner/fleet-deploy-live.sh --help
+
+Schalter (Umgebung):
+  DEPLOY_REMOTE_BUILD=1        Image auf dem Knoten BAUEN statt hochschieben
+                               (die Leitung ist der Engpass: gemessen ~1 MB/s
+                               hoch, App-Image 338 MB Tar -> ~6 min je Knoten)
+  DEPLOY_REMOTE_DIR=<pfad>     Zielpfad (Default: kanonischer Pfad aus
+                               scripts/hetzner/fleet-names.sh)
+  DEPLOY_ALLOW_FOREIGN_DIR=1   bewusst neben einem laufenden Stack deployen
+  DEPLOY_DRY_RUN=1             Guard anzeigen, dann vor rsync/Transfer abbrechen
+  DEPLOY_DRY_RUN=2             Sync als Trockenlauf gegen den Knoten
+                               (--dry-run --itemize-changes, zeigt den
+                               Loeschplan von --delete) und danach Ende
+  DEPLOY_SSH_KEY=<pfad>        SSH-Schluessel (Default ~/.ssh/id_ed25519)
+
+Rollback am Knoten (das Tag setzt dieses Skript vor jedem Deploy):
+  docker tag <image>-rollback <image> && docker compose ... up -d --no-build
+USAGE
+  exit 0
+fi
+
 if [[ "${1:-}" == "--print-config" ]]; then
   echo "fleet-deploy-live.sh - effektive Konfiguration (kein SSH, kein rsync)"
   printf '  REMOTE_DIR=%s   (DEPLOY_REMOTE_DIR, kanonisch aus fleet-names.sh)\n' "$REMOTE_DIR"
@@ -103,7 +150,8 @@ if [[ "${1:-}" == "--print-config" ]]; then
   printf '  APP_CONTAINER=%s\n' "${APP_CONTAINER_CANDIDATES[*]}"
   printf '  IMAGE=%s\n' "$IMAGE"
   printf '  DEPLOY_ALLOW_FOREIGN_DIR=%s\n' "$ALLOW_FOREIGN_DIR"
-  printf '  DEPLOY_DRY_RUN=%s\n' "$DRY_RUN"
+  printf '  DEPLOY_DRY_RUN=%s   (0 = scharf, 1 = Guard und Ende, 2 = Sync-Trockenlauf)\n' "$DRY_RUN"
+  printf '  DEPLOY_REMOTE_BUILD=%s   (1 = Build auf dem Knoten statt Image-Transfer)\n' "$REMOTE_BUILD"
   exit 0
 fi
 
@@ -149,18 +197,53 @@ if [[ "$DRY_RUN" == "1" ]]; then
 fi
 
 step "1/4 Repo-Stand rsyncen (ohne .env, .git, node_modules, dist)"
-rsync -az --delete -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new" \
+# ACHTUNG --delete: was hier nicht ausgeschlossen ist und auf dem Knoten liegt,
+# wird GELOESCHT. Am Knoten app-1 gemessen (2026-09-21) - genau diese drei Pfade
+# existieren NUR dort und sind nicht reproduzierbar:
+#   media/   3,3 GB Overlay-Inhalt (orchestral/models/music, deliver-media.sh).
+#            Ohne den Ausschluss raeumt der Sync ihn weg, MEDIA_OVERLAY bleibt
+#            aus (leere Mounts maskieren die Image-Pfade: Library/Instrumente
+#            leer, /models/htdemucs.onnx 404) und die 3,3 GB muessten ueber die
+#            langsame Leitung neu geliefert werden.
+#   certs/   origin.crt|key (0600) - das Origin-Zertifikat von Cloudflare, das
+#            deploy.sh per Pipe setzt. Weg = kein TLS mehr fuer origin.<domain>.
+#   Caddyfile  Knoten-Variante mit Origin-TLS. deploy.sh schuetzt sie aus
+#            demselben Grund (dort als --exclude 'Caddyfile').
+# public/models ist wie orchestral/music ein Overlay-Baum (291 MB) und liegt auf
+# dem Knoten unter media/ - ohne Ausschluss wandert er bei jedem Lauf mit.
+# DEPLOY_DRY_RUN=2 (PERF-P1-004): den ECHTEN Sync als Trockenlauf gegen den
+# Knoten fahren (--dry-run --itemize-changes) und danach aufhoeren. Weil rsync
+# mit --delete spiegelt, ist das die einzige Art, den Loeschplan VORHER zu
+# lesen - die Ausschluesse unten sind die Logik, die man dabei prueft.
+RSYNC_DRY=()
+if [[ "$DRY_RUN" == "2" ]]; then
+  RSYNC_DRY=(--dry-run --itemize-changes)
+fi
+rsync -az --delete "${RSYNC_DRY[@]}" -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new" \
   --exclude node_modules --exclude dist --exclude .git --exclude coverage \
   --exclude test-results --exclude logs --exclude .env --exclude '.env.*' \
-  --exclude public/data/orchestral --exclude public/music --exclude target \
-  --exclude .venv-runpod --exclude .agents --exclude 'playwright-report' \
+  --exclude __pycache__ \
+  --exclude media --exclude certs --exclude Caddyfile --exclude runtime \
+  --exclude public/data/orchestral --exclude public/models --exclude public/music \
+  --exclude target --exclude '.venv*' --exclude .worktrees --exclude .agents \
+  --exclude 'playwright-report' \
   "$REPO_ROOT/" "root@$IP:$REMOTE_DIR/"
+
+if [[ "$DRY_RUN" == "2" ]]; then
+  echo
+  echo "Trockenlauf (DEPLOY_DRY_RUN=2): nur der Sync-Plan. Kein Image, kein Container,"
+  echo "kein Tunnel-Overlay - der Knoten wurde nicht angefasst."
+  exit 0
+fi
 
 step "2/4 Container-Definition des Knotens ansehen"
 "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && grep -E '^  [a-z0-9-]+:' docker-compose.hetzner.yml | tr -d ' :' | tr '\n' ' '; echo"
 
 if [[ -n "$TUNNEL" ]]; then
-  step "2b/4 Test-Overlay: App-Port nur an 127.0.0.1:$TUNNEL"
+  # Hinweis: docker-compose.e2e-tunnel.yml ist bewusst NICHT vom rsync
+# ausgeschlossen - sie ist ein Artefakt dieses Skripts und soll zwischen zwei
+# Laeufen verschwinden (der naechste Lauf mit --tunnel-port legt sie neu an).
+step "2b/4 Test-Overlay: App-Port nur an 127.0.0.1:$TUNNEL"
   "${SSH[@]}" "root@$IP" "cat > $REMOTE_DIR/docker-compose.e2e-tunnel.yml <<'YAML'
 # NUR fuer Live-Beweise: veroeffentlicht den App-Port am Loopback, damit der
 # E2E-Test ueber einen SSH-Tunnel gegen den echten Knoten fahren kann.
@@ -173,11 +256,50 @@ YAML
 echo overlay geschrieben"
 fi
 
-step "3/4 Image uebertragen ($IMAGE)"
-docker save "$IMAGE" | gzip -1 | "${SSH[@]}" "root@$IP" "gunzip | docker load"
+# Medien-Overlay (docker-compose.media.yml) nur mitnehmen, wenn auf dem Knoten
+# wirklich Inhalte liegen: sonst maskieren leere Bind-Mounts die Pfade des Images
+# (Library/Instrumente leer, /models/htdemucs.onnx 404). Gleiche Regel wie deploy.sh.
+MEDIA_OVERLAY=""
+if "${SSH[@]}" "root@$IP" "test -f $REMOTE_DIR/docker-compose.media.yml && [ -n \"\$(ls -A $REMOTE_DIR/media 2>/dev/null)\" ]"; then
+  MEDIA_OVERLAY=" -f docker-compose.media.yml"
+  echo "--- Medien-Overlay aktiv ($REMOTE_DIR/media gefunden) ---"
+fi
 
-step "4/4 Container neu hochfahren (Compose-Projekt $COMPOSE_PROJECT)"
-"${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml ${TUNNEL:+-f docker-compose.e2e-tunnel.yml} up -d --no-build --remove-orphans caddy audiomonastry && sleep 6 && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml ps --format '{{.Service}}: {{.State}}' && curl -s -o /dev/null -w 'health am Knoten: %{http_code}\n' http://127.0.0.1:8080/api/health"
+OVERLAYS="-f docker-compose.hetzner.yml$MEDIA_OVERLAY${TUNNEL:+ -f docker-compose.e2e-tunnel.yml}"
+
+if [[ "$REMOTE_BUILD" == "1" ]]; then
+  step "3/4 Build auf dem Knoten (kein Image-Transfer)"
+  # PERF-P1-004: Rueckweg, bevor der Build das Image ersetzt. Der Tag kostet
+  # keinen Speicher (dieselben Layer) und macht den Rollback ohne Netzzugriff
+  # moeglich; auf einem frischen Knoten existiert noch kein Image -> || true.
+  echo "--- Rollback-Image sichern (remote) ---"
+  "${SSH[@]}" "root@$IP" "docker image tag $IMAGE ${IMAGE}-rollback 2>/dev/null || true"
+  # Stempel: der Knoten baut den per rsync uebertragenen Stand, also muessen
+  # Version/Commit/Zeit von HIER kommen - sonst stuende "unknown" in /api/health
+  # und die Commit-Paritaet waere fuer den Knoten nicht pruefbar
+  # (docker-compose.hetzner.yml liest die Werte als Build-Args).
+  STAMP_VERSION="$(node -p "require('$REPO_ROOT/package.json').version" 2>/dev/null || echo dev)"
+  STAMP_COMMIT="$(git -C "$REPO_ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  STAMP_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "--- Stempel: version=$STAMP_VERSION commit=$STAMP_COMMIT built=$STAMP_TIME ---"
+  "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && \
+     AUDIOMONASTRY_VERSION='$STAMP_VERSION' AUDIOMONASTRY_COMMIT='$STAMP_COMMIT' AUDIOMONASTRY_BUILD_TIME='$STAMP_TIME' \
+     COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --build --remove-orphans caddy audiomonastry"
+else
+  step "3/4 Image uebertragen ($IMAGE)"
+  echo "--- Rollback-Image sichern (remote) ---"
+  "${SSH[@]}" "root@$IP" "docker image tag $IMAGE ${IMAGE}-rollback 2>/dev/null || true"
+  docker save "$IMAGE" | gzip -1 | "${SSH[@]}" "root@$IP" "gunzip | docker load"
+
+  step "4/4 Container neu hochfahren (Compose-Projekt $COMPOSE_PROJECT)"
+  "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --remove-orphans caddy audiomonastry"
+fi
+
+step "Health + Container-Status am Knoten"
+"${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS ps --format '{{.Service}}: {{.State}}' && sleep 2 && curl -s http://127.0.0.1:8080/api/health; echo"
 
 echo
 echo "FERTIG. Naechster Schritt: SSH-Tunnel + E2E (siehe docs/OPS_RUNBOOK.md, Live-Beweise)."
+echo
+echo "Rollback am Knoten:"
+echo "  ssh root@$IP 'docker tag $IMAGE ${IMAGE}-rollback && cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --force-recreate audiomonastry'"

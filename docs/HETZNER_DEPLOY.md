@@ -714,6 +714,41 @@ Beobachtet am 2026-09-20 auf dem Arbeitszweig `hermes/fix-F10`: Schritte 1–4 w
 oben, `tsc --noEmit` mit 0 Fehlern. Die Ausgaben sind **offline** erzeugt — kein
 Hetzner-/Cloudflare-Aufruf, kein `docker compose up`, keine Knoten-Änderung.
 
+### Deploy-Wege: Remote-Build + `--delete`-Vertrag (PERF-P1-003/004, 2026-09-21)
+
+Gemessen: die Leitung Betreiber-Rechner → Knoten macht ~1 MB/s hoch, das App-Image
+ist 338 MB Tar (zstd holt davon 337 MB — die Layer sind schon gepackt). Der
+Image-Transfer dauert damit ~6 min je Knoten, der rsync-Delta derselben Änderung
+wenige MB. Deshalb bauen **beide** Deploy-Wege auf Wunsch auf dem Knoten:
+
+| Weg | Schalter | Was sonst gleich bleibt |
+|---|---|---|
+| `deploy.sh` (App-Rolle, master-player) | `DEPLOY_REMOTE_BUILD=1` | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| `scripts/hetzner/fleet-deploy-live.sh <ip>` (Live-Beweis-Deploy) | `DEPLOY_REMOTE_BUILD=1` | Rollback-Tag, Medien-Overlay, Build-Stempel |
+
+Beide **sichern vorher** `audiomonastry:hetzner` als `…-rollback` und geben die
+Build-Stempel (`AUDIOMONASTRY_VERSION/COMMIT/BUILD_TIME`) mit — ohne sie stünde
+`unknown` in `/api/health` und die Commit-Parität (PROD-P1-F4) wäre nicht prüfbar.
+
+**`--delete`-Vertrag:** Die Skripte `fleet-deploy-live.sh`, `bring-up-fleet.sh` und
+`install-ai1.sh` spiegeln per `rsync --delete` auf den Knoten. Alles, was dort
+liegt und nicht ausgeschlossen ist, wird **gelöscht**. Am 2026-09-21 auf der
+Flotte gemessen — diese Pfade existieren nur auf dem Knoten:
+
+| Pfad | Wo (gemessen) | warum er bleiben muss |
+|---|---|---|
+| `media/` | app-1, 3,3 GB | Overlay-Inhalt für `docker-compose.media.yml` (`deliver-media.sh`) — nicht reproduzierbar |
+| `certs/` | app-1 (Origin-Paar), sfu-1/edge-1 (leer) | Origin-TLS-Zertifikat, wird per Pipe gesetzt |
+| `Caddyfile` | alle Rollen | Knoten-Variante (INFRA-HETZNER-002), Repo-Version ist der ACME-Notausgang |
+| `runtime/` | sfu-1, `runtime/coturn/turnserver.conf` (0640) | coturn-Konfig mit dem TURN-Secret, **auf dem Knoten** erzeugt (F6) |
+| `public/{data/orchestral,models,music}` | lokal + Mount | Overlay-Bäume, Gigabytes — gehören nicht in den Sync |
+
+Nachprüfbar **vor** jedem Deploy: `DEPLOY_DRY_RUN=2 bash scripts/hetzner/fleet-deploy-live.sh <ip>`
+fährt den echten Sync als `--dry-run --itemize-changes` (nur lesend, dann Ende) und
+zeigt den Löschplan; `--help` zeigt alle Schalter. Wächter im Repo:
+`FleetSyncDeleteGuardTest` in `tests/test_hetzner_scripts.py` (Ausschlüsse für alle
+drei Sync-Wege + Gegenprobe gegen den Stand vor dem Fix).
+
 ### Migration der bestehenden Flotte (nummeriert, idempotent, mit Rückweg)
 
 Das Skript `scripts/hetzner/migrate-project-name.sh` fasst **einen** Knoten an und

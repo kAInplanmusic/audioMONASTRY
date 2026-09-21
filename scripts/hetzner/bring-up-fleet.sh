@@ -162,8 +162,27 @@ DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
 step "5/7 sfu-1, master-1, edge-1, ai-1 einrichten"
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
 rsync_repo() {
+  # ACHTUNG `--delete`: was hier NICHT ausgeschlossen ist und auf dem Knoten
+  # liegt, wird GELOESCHT. Knoten-lokale Laufzeitdaten gehoeren darum in die
+  # Ausschlussliste - am 2026-09-21 auf der Flotte gemessen:
+  #   runtime/  sfu-1: runtime/coturn/turnserver.conf (0640) - coturn-Konfig mit
+  #             dem TURN-Secret, von wire-rtc.sh AUF DEM KNOTEN erzeugt.
+  #             docker-compose.turn.yml mountet genau diesen Pfad: weg = kein
+  #             TURN mehr (die F6-Verdrahtung waere still rueckgaengig).
+  #   certs/    Origin-Zertifikatspaar auf app-1 (deploy.sh setzt es), leer auf
+  #             sfu-1/edge-1 - der Pfad muss aber existieren.
+  #   media/    app-1: 3,3 GB Overlay-Inhalt (deliver-media.sh) - nicht
+  #             reproduzierbar, muesste ueber ~1 MB/s neu geliefert werden.
+  #   Caddyfile Knoten-Variante der Rolle nicht ueberschreiben (INFRA-HETZNER-002
+  #             fuer app-1, Rollen-Site fuer sfu-1).
+  # Wie fleet-deploy-live.sh: gleiche Liste, damit beide Wege denselben Vertrag
+  # halten (Test: FleetSyncDeleteGuardTest).
   rsync -az --delete -e "$RSYNC_E" \
-    --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results --exclude public/data/orchestral --exclude public/music --exclude target --exclude .venv-runpod --exclude .agents --exclude logs \
+    --exclude node_modules --exclude dist --exclude .git --exclude coverage --exclude test-results \
+    --exclude public/data/orchestral --exclude public/models --exclude public/music \
+    --exclude media --exclude certs --exclude Caddyfile --exclude runtime \
+    --exclude target --exclude '.venv*' --exclude .worktrees --exclude .agents --exclude logs \
+    --exclude __pycache__ \
     ./ "root@$1:/opt/audiomonastry/"
 }
 sync_env() { rsync -az -e "$RSYNC_E" .env "root@$1:/opt/audiomonastry/.env"; }

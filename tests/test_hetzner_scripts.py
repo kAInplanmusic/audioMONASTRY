@@ -97,6 +97,7 @@ COMPOSE_MONITORING = ROOT / "docker-compose.monitoring.yml"
 FLEET_NAMES = HETZNER / "fleet-names.sh"
 MIGRATE_PROJECT = HETZNER / "migrate-project-name.sh"
 FLEET_DEPLOY_LIVE = HETZNER / "fleet-deploy-live.sh"
+INSTALL_AI1 = HETZNER / "install-ai1.sh"
 
 #: Speicher-Limits, die mit `deploy.resources.limits.memory` gesetzt werden.
 #: Compose v2 uebersetzt sie beim Start in `--memory` (dokumentiertes Verhalten);
@@ -2595,6 +2596,257 @@ class NamespaceParitaetTest(unittest.TestCase):
             with self.subTest(script=script.name):
                 result = subprocess.run([self.bash, "-n", str(script)], capture_output=True, text=True, cwd=ROOT, timeout=60)
                 self.assertEqual(result.returncode, 0, result.stderr)
+
+
+class FleetRemoteBuildTest(unittest.TestCase):
+    """PERF-P1-004 (2026-09-21): Fleet-Rollout ohne Image-Transfer.
+
+    Gemessen: die Leitung Host -> Knoten macht ~1 MB/s hoch, das App-Image ist
+    338 MB Tar -> ~6 min pro Knoten und die Layer sind schon gepackt (zstd -3
+    holt 337 von 338 MB - nichts). `DEPLOY_REMOTE_BUILD=1` baut den per rsync
+    uebertragenen Stand auf dem Knoten. Damit das den Stempel nicht verliert,
+    MUESSEN Version/Commit/Zeit als Build-Args mitgehen; ohne sie stuende
+    "unknown" in /api/health und die Commit-Paritaet waere nicht pruefbar.
+    """
+
+    def setUp(self) -> None:
+        self.bash = shutil.which("bash")
+        if self.bash is None:  # pragma: no cover - Windows/Exoten
+            self.skipTest("bash nicht vorhanden")
+        self.text = FLEET_DEPLOY_LIVE.read_text(encoding="utf-8")
+
+    def _print_config(self, **env_extra: str) -> str:
+        env = clean_env()
+        env.update(env_extra)
+        result = subprocess.run(
+            [self.bash, str(FLEET_DEPLOY_LIVE), "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=env,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
+
+    def test_schalter_ist_im_trockenlauf_sichtbar(self) -> None:
+        self.assertIn("DEPLOY_REMOTE_BUILD=0", self._print_config())
+        self.assertIn("DEPLOY_REMOTE_BUILD=1", self._print_config(DEPLOY_REMOTE_BUILD="1"))
+
+    def test_remote_build_branch_uebergibt_die_stempel_werte(self) -> None:
+        # Die drei Namen liest docker-compose.hetzner.yml als Build-Args.
+        for name in ("AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT", "AUDIOMONASTRY_BUILD_TIME"):
+            self.assertIn(name, self.text)
+        # Der Build-Zweig muss --build fahren UND die Stempel setzen; der
+        # Transfer-Zweig bleibt bei --no-build (sonst baut jeder Rollout neu).
+        # Nur der Rumpf des if-Zweigs bis zum else - sonst zaehlt der Test die
+        # Zeilen des Transfer-Zweigs mit und widerspricht sich selbst.
+        build_branch = self.text.split('if [[ "$REMOTE_BUILD" == "1" ]]; then')[1].split("\nelse")[0]
+        self.assertIn("--build --remove-orphans", build_branch)
+        self.assertNotIn("--no-build", build_branch)
+        transfer_branch = self.text.split('step "3/4 Image uebertragen')[1]
+        self.assertIn("--no-build --remove-orphans", transfer_branch)
+
+    def test_medien_overlay_gilt_fuer_alle_wege(self) -> None:
+        # Ohne -f docker-compose.media.yml maskieren leere Mounts die Image-Pfade
+        # (genau der Fehler vom 2026-09-20). Beide Wege muessen $OVERLAYS nutzen.
+        self.assertIn("MEDIA_OVERLAY=", self.text)
+        self.assertIn("ls -A $REMOTE_DIR/media", self.text)
+        self.assertIn("OVERLAYS=", self.text)
+        compose_calls = [line for line in self.text.splitlines() if "docker compose $OVERLAYS" in line]
+        self.assertGreaterEqual(
+            len(compose_calls), 3,
+            "Start/Status muessen die Overlay-Dateien mitnehmen: " + repr(compose_calls),
+        )
+        # Kein Compose-Aufruf darf das Overlay vergessen.
+        for line in self.text.splitlines():
+            if "docker compose -f docker-compose.hetzner.yml" in line and "OVERLAYS" not in line:
+                self.fail(f"Compose-Aufruf ohne Overlay-Dateien: {line.strip()}")
+
+    def test_rollback_tag_in_beiden_image_wegen(self) -> None:
+        # PERF-P1-004: der Rueckweg gehoert in BEIDE Image-Wege und muss VOR dem
+        # Ersetzen des Images stehen - nach `docker load` waere das neue Image
+        # schon da und der Tag wertlos.
+        tag = "docker image tag $IMAGE ${IMAGE}-rollback"
+        self.assertEqual(self.text.count(tag), 2, "Rollback-Tag fehlt in einem der Image-Wege")
+        build_branch = self.text.split('if [[ "$REMOTE_BUILD" == "1" ]]; then')[1].split("\nelse")[0]
+        self.assertIn(tag, build_branch)
+        transfer_branch = self.text.split('step "3/4 Image uebertragen')[1]
+        self.assertIn(tag, transfer_branch)
+        self.assertLess(
+            transfer_branch.index(tag), transfer_branch.index("docker save"),
+            "Rollback-Tag muss VOR docker load gesetzt werden",
+        )
+        # Der Abschluss nennt den Rollback-Befehl mit denselben Overlay-Dateien.
+        self.assertIn("docker tag $IMAGE ${IMAGE}-rollback && cd $REMOTE_DIR", self.text)
+
+    def test_help_zeigt_hilfe_ohne_deploy(self) -> None:
+        # Ohne diesen Zweig landete "--help" als IP im Guard (gemessen 2026-09-21:
+        # rsync brach mit "Invalid remote host: hostnames may not start with '-'"
+        # ab). Ein Hilfeaufruf darf NICHTS uebertragen.
+        for flag in ("--help", "-h"):
+            with self.subTest(flag=flag):
+                result = subprocess.run(
+                    [self.bash, str(FLEET_DEPLOY_LIVE), flag],
+                    capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("Aufruf:", result.stdout)
+                self.assertIn("DEPLOY_REMOTE_BUILD=1", result.stdout)
+                for verboten in ("=== 1/4", "docker save"):
+                    self.assertNotIn(verboten, result.stdout)
+                self.assertEqual(result.stderr, "", "Hilfe darf nichts auf stderr schreiben")
+
+    def test_stempel_werden_aus_dem_repo_abgeleitet(self) -> None:
+        # Der Knoten baut den rsyncten Stand: Version/Commit kommen aus dem Repo,
+        # die Zeit aus dem Deploy-Host (nicht aus dem Knoten - der haette keine
+        # .git, rsync schliesst sie aus).
+        self.assertIn("package.json", self.text)
+        self.assertIn("rev-parse --short HEAD", self.text)
+        self.assertIn("date -u +%Y-%m-%dT%H:%M:%SZ", self.text)
+        self.assertIn("--exclude .git", self.text)
+
+
+
+class FleetSyncDeleteGuardTest(unittest.TestCase):
+    """PERF-P1-004 (2026-09-21): `rsync --delete` darf Knoten-lokale Laufzeitdaten
+    nicht loeschen.
+
+    `fleet-deploy-live.sh` spiegelt mit `--delete` - alles, was auf dem Knoten
+    liegt und nicht ausgeschlossen ist, wird entfernt. Am Knoten app-1 gemessen
+    liegen dort NUR lokal (nicht im Repo, nicht reproduzierbar):
+      media/    3,3 GB Overlay-Inhalt (orchestral/models/music, deliver-media.sh)
+      certs/    origin.crt/origin.key (0600) - Origin-Zertifikat, deploy.sh setzt es
+      Caddyfile Knoten-Variante mit Origin-TLS (deploy.sh schuetzt sie ebenso)
+    Diese Liste ist der Vertrag: faellt ein Ausschluss weg, raeumt der naechste
+    Lauf den Pfad weg (Folge: leere Overlay-Mounts, Library/Instrumente leer,
+    /models 404, TLS fuer origin.<domain>) tot - und die 3,3 GB muessten ueber
+    eine Leitung von ~1 MB/s neu geliefert werden.
+    """
+
+    BASH: str
+    text: str
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        bash = shutil.which("bash")
+        if bash is None:  # pragma: no cover - Windows/Exoten
+            raise unittest.SkipTest("bash nicht vorhanden")
+        cls.BASH = bash
+
+    def setUp(self) -> None:
+        self.text = FLEET_DEPLOY_LIVE.read_text(encoding="utf-8")
+
+    #: Skripte, die mit `rsync --delete` auf einen Knoten spiegeln. Neue Wege
+    #: gehoeren hier hinein - der Waechter prueft dann denselben Vertrag.
+    SYNC_SCRIPTS = (FLEET_DEPLOY_LIVE, BRING_UP, INSTALL_AI1)
+
+    #: Knoten-lokale Laufzeitdaten (am 2026-09-21 auf der Flotte gemessen):
+    #: media/ 3,3 GB (app-1), certs/ Origin-Zertifikat (app-1), Caddyfile
+    #: (Rollen-Variante), runtime/coturn/turnserver.conf (sfu-1, Secret).
+    KNOTEN_LOKAL = ("media", "certs", "Caddyfile", "runtime")
+
+    #: Kein Repo-Sync noetig: lokale Test-/Python-Artefakte (entstehen bei jedem
+    #: `npm run test:python` und haben auf dem Knoten nichts zu suchen).
+    KEIN_SYNC = ("__pycache__",)
+
+    #: Overlay-Baeume: liegen auf dem Knoten unter media/ und werden per
+    #: docker-compose.media.yml gemountet - sie gehoeren in keinen Repo-Sync.
+    OVERLAY_BAEUME = ("public/data/orchestral", "public/models", "public/music")
+
+    def test_sync_laeuft_ueberhaupt_mit_delete(self) -> None:
+        # Ohne --delete waere dieser Waechter gegenstandslos; dann muss auch die
+        # Vertragsliste hier bewusst angepasst werden.
+        for script in self.SYNC_SCRIPTS:
+            with self.subTest(script=script.name):
+                self.assertIn("--delete", script.read_text(encoding="utf-8"))
+
+    def test_alle_knoten_lokalen_pfade_sind_ausgeschlossen(self) -> None:
+        for script in self.SYNC_SCRIPTS:
+            inhalt = script.read_text(encoding="utf-8")
+            for pfad in self.KNOTEN_LOKAL:
+                with self.subTest(script=script.name, pfad=pfad):
+                    self.assertIn(f"--exclude {pfad}", inhalt)
+        for script in self.SYNC_SCRIPTS:
+            inhalt = script.read_text(encoding="utf-8")
+            for pfad in self.KEIN_SYNC:
+                with self.subTest(script=script.name, pfad=pfad):
+                    self.assertIn(f"--exclude {pfad}", inhalt)
+        # Die Rollen-.env (inkl. .env.bak-*) bleibt unangetastet.
+        self.assertIn("--exclude .env --exclude '.env.*'", self.text)
+
+    def test_overlay_baeume_werden_nicht_mitgeschoben(self) -> None:
+        # Alle drei Overlay-Baeume liegen auf dem Knoten unter media/; ohne
+        # Ausschluss wandern bei jedem Lauf Gigabytes mit bzw. werden geloescht.
+        for script in self.SYNC_SCRIPTS:
+            inhalt = script.read_text(encoding="utf-8")
+            for baum in self.OVERLAY_BAEUME:
+                with self.subTest(script=script.name, baum=baum):
+                    self.assertIn(f"--exclude {baum}", inhalt)
+
+    def test_sfu_1_verliert_die_coturn_konfiguration_nicht(self) -> None:
+        # Der live gemessene Fall: sfu-1 haelt runtime/coturn/turnserver.conf
+        # (0640, Secret) - die Datei entsteht AUF dem Knoten (wire-rtc.sh) und
+        # wird von docker-compose.turn.yml gemountet. Kein Deploy bringt sie mit,
+        # also darf der Sync sie weder loeschen noch ueberschreiben.
+        self.assertFalse(
+            (ROOT / "runtime").exists(),
+            "runtime/ liegt jetzt im Repo - der Ausschluss waere nur noch Kosmetik, "
+            "Vertrag in FleetSyncDeleteGuardTest pruefen",
+        )
+        self.assertIn(
+            "./runtime/coturn/turnserver.conf",
+            (ROOT / "docker-compose.turn.yml").read_text(encoding="utf-8"),
+            "Mount-Pfad der coturn-Konfiguration hat sich geaendert",
+        )
+        for script in (FLEET_DEPLOY_LIVE, BRING_UP, INSTALL_AI1):
+            with self.subTest(script=script.name):
+                self.assertIn("--exclude runtime", script.read_text(encoding="utf-8"))
+
+    def test_trockenlauf_zwei_zeigt_den_loeschplan_vor_dem_deploy(self) -> None:
+        # DEPLOY_DRY_RUN=2 faehrt den ECHTEN Sync als Trockenlauf gegen den
+        # Knoten und bricht danach ab - VOR Tunnel-Overlay, Medien-Check und
+        # Image-Schritten. Nur so ist der Loeschplan von `--delete` lesbar,
+        # bevor er zuschlaegt (der Fix oben schuetzt die Pfade, dieser Modus
+        # macht den Schutz nachpruefbar).
+        self.assertIn("--dry-run --itemize-changes", self.text)
+        sync_block = self.text.split('step "1/4 Repo-Stand rsyncen')[1].split('step "2/4')[0]
+        self.assertIn('"${RSYNC_DRY[@]}"', sync_block)
+        self.assertIn('if [[ "$DRY_RUN" == "2" ]]', sync_block)
+        self.assertIn("exit 0", sync_block)
+        # Der Abbruch steht im Sync-Block, also zwingend vor den Image-Schritten.
+        self.assertLess(
+            self.text.index('Trockenlauf (DEPLOY_DRY_RUN=2)'),
+            self.text.index('docker save "$IMAGE"'),
+        )
+        # Und der Modus ist im Trockenlauf sichtbar (Werkzeug-Charakter).
+        config = subprocess.run(
+            [shutil.which("bash") or "bash", str(FLEET_DEPLOY_LIVE), "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+        )
+        self.assertEqual(config.returncode, 0, config.stderr)
+        self.assertIn("DEPLOY_DRY_RUN=0", config.stdout)
+        self.assertIn("Sync-Trockenlauf", config.stdout)
+
+    def test_gegenprobe_stand_vor_dem_fix_verletzt_den_vertrag(self) -> None:
+        # Belegt, dass dieser Waechter den ECHTEN Fehler faengt: der Stand von
+        # a9b1487 hatte --delete ohne media/certs/Caddyfile. Faellt dieser Test
+        # eines Tages um, wurde er entschaerft - dann muss geprueft werden, ob
+        # die Ausschluesse noch im Skript stehen.
+        for rel in (
+            "scripts/hetzner/fleet-deploy-live.sh",
+            "scripts/hetzner/bring-up-fleet.sh",
+            "scripts/hetzner/install-ai1.sh",
+        ):
+            with self.subTest(script=rel):
+                alt = subprocess.run(
+                    ["git", "show", f"a9b1487:{rel}"],
+                    capture_output=True, text=True, cwd=ROOT, timeout=60,
+                )
+                self.assertEqual(alt.returncode, 0, alt.stderr)
+                self.assertIn("--delete", alt.stdout)
+                for pfad in ("--exclude media", "--exclude certs", "--exclude Caddyfile"):
+                    self.assertNotIn(
+                        pfad, alt.stdout,
+                        "Der Altstand hatte den Ausschluss schon - Gegenprobe wertlos",
+                    )
+
 
 if __name__ == "__main__":
     unittest.main()
