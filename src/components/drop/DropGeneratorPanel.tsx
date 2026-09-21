@@ -21,13 +21,17 @@ export const DropGeneratorPanel: React.FC = () => {
 
   // Initiale Vorschläge direkt aus dem State-Initializer (kein setState im Effect).
   const [suggestions] = useState<DropProfile[]>(() => DROP_PROFILES.slice(0, 4));
+  // Verzoegertes Einwerfen: der Drop wartet dann auf die naechste 4-Takt-Grenze
+  // (`dropEngine.triggerDrop(profile, 'quantized', '4bar')`). Der Schalter stand
+  // hier vorher ohne Wirkung - der DROP-Knopf rief immer `executeDrop(…, false)`.
+  const [quantized, setQuantized] = useState(false);
 
   return (
     <div className="space-y-6">
       {/* Main DROP Button */}
       <div className="bg-gradient-to-br from-rose-900/30 to-black border border-rose-500/30 rounded-xl p-8 text-center">
         <button
-          onClick={() => selectedProfile && executeDrop(selectedProfile, false)}
+          onClick={() => selectedProfile && executeDrop(selectedProfile, quantized)}
           disabled={!selectedProfile || isExecuting}
           className={`w-full py-8 px-6 rounded-lg font-black text-2xl tracking-widest transition-all flex items-center justify-center gap-3 ${
             isExecuting
@@ -38,7 +42,11 @@ export const DropGeneratorPanel: React.FC = () => {
           }`}
         >
           <Play className="w-6 h-6" />
-          {isExecuting ? `DROPPING... ${(executionProgress * 100).toFixed(0)}%` : '▼ DROP GENERATE ▼'}
+          {isExecuting
+            ? `DROPPING... ${(executionProgress * 100).toFixed(0)}%`
+            : quantized
+              ? '▼ DROP GENERATE · 4-BAR ▼'
+              : '▼ DROP GENERATE ▼'}
         </button>
       </div>
 
@@ -107,13 +115,15 @@ export const DropGeneratorPanel: React.FC = () => {
           <input
             type="checkbox"
             className="w-4 h-4 rounded border-neutral-700"
-            onChange={() => {
-              // TODO: Handle quantized mode toggle
-            }}
+            checked={quantized}
+            aria-label="Quantized Recall"
+            onChange={(event) => setQuantized(event.target.checked)}
           />
           <div>
             <p className="text-sm font-bold text-neutral-100">Quantized Recall</p>
-            <p className="text-[10px] text-neutral-500">Wait for next 4-bar boundary</p>
+            <p className="text-[10px] text-neutral-500">
+              {quantized ? 'Wartet auf die nächste 4-Takt-Grenze' : 'Wirft sofort ein'}
+            </p>
           </div>
         </label>
       </div>

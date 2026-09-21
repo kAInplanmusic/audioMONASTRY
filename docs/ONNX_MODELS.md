@@ -41,8 +41,19 @@ const stems = await stemSeparate(audioBuffer);
 // Returns: { vocals: Float32Array, bass: Float32Array, drums: Float32Array, guitar: Float32Array }
 ```
 
-## TODO
+## Offene Punkte (Stand 2026-09-21)
 
-- [ ] ONNX-Modell in Docker-Image einbauen (Build-Schritt)
-- [ ] `useModels` Hook für Online-Download (falls nicht im Build)
-- [ ] Modell-Hash-Verifikation (Sicherheit)
+- [x] Modell NICHT ins Docker-Image — bewusste Entscheidung: 291 MB Ballast in
+      jedem Rollen-Image (app/sfu/master) waeren teuer und langsam. Stattdessen
+      liefert `scripts/hetzner/deliver-media.sh` die Datei auf die Knoten und
+      `docker-compose.media.yml` mountet sie read-only nach
+      `/app/dist/models`; `deploy.sh` erkennt das Overlay und behaelt es.
+- [x] Kein `useModels`-Hook noetig — der Client laedt das Modell direkt von
+      `/models/htdemucs.onnx` (`src/ai/localDemucs.ts`), also von der laufenden
+      App; ein zweiter Ladeweg haette nur eine weitere Fehlerquelle erzeugt.
+- [x] Modell-Hash-Verifikation — `scripts/download-models.sh` prueft Groesse UND
+      SHA-256 (Pin = LFS-OID der Quelle
+      `d2b401f322558cd57d67a752ed7be3fa55178a0626011eda8ac7bb74e17280c0`,
+      304 321 552 Bytes) und verschiebt die Datei erst nach bestandener Pruefung
+      in den Produktionspfad. Trockenlauf: `--print-config`, reine Pruefung:
+      `--verify-only` (z. B. im Preflight).

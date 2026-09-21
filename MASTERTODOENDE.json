@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "6690d35",
+  "commit": "1769fc9",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2799,6 +2799,41 @@
         "Fachlicher Nachweis nach der Migration: 4-User-E2E und SFU-RTP-Lauf (blockiert an F1: ohne gueltigen Cloudflare-Token ist die Domain nicht erreichbar, direkter IP-Zugriff ist per Firewall dicht)",
         "Alt-Volumes erst nach bestandener Live-Verifikation aufraeumen (migrate-project-name.sh --cleanup-legacy)"
       ]
+    },
+    {
+      "id": "AI-P2-006",
+      "title": "Drop-Generierung: serverseitiger Cache statt nur globalem Limiter",
+      "priority": "P2",
+      "status": "PARTIAL",
+      "area": "AI/Server",
+      "source": "docs/dropMONK_MVP_SUMMARY.md (Platzhalter-Liste); umgesetzt 2026-09-21",
+      "problem": "/api/ai/generate-drop lief nur durch den globalen expensiveLimiter. Zwei identische Anfragen (gleicher Prompt, gleicher Kontext) kosteten jedes Mal einen bezahlten Modellaufruf - bei GPU-Wakes doppelt teuer, weil schon der Wake Geld kostet.",
+      "note": "UMGESETZT 2026-09-21: server/dropCache.ts (rein, ohne Netz) haelt echte Modell-Ergebnisse kurz vor: Schluessel aus Prompt/BPM/Energie/Plugins/Stil/Dauer + keyVersion (Plugin-Reihenfolge und Zahlenformat normalisiert), TTL 10 min, Obergrenze 50 Eintraege mit Verdrängung des aeltesten, Zaehler (hits/misses/stored/evicted/expired). Die Route fragt den Cache VOR dem Modellaufruf, Antwort traegt `cached: true|false`; der lokale deterministische Fallback wird BEWUSST nicht gecacht (er kostet nichts, und ein Treffer wuerde verdecken, dass gerade kein Modell antwortet). Metriken: `aiCacheHits`/`aiCacheMisses` in server.ts, Prometheus `audiomonastry_ai_drop_cache_hits_total`/`..._misses_total` und JSON `/api/metrics` -> `ai.cache`.",
+      "verification": "tests/aiGenerateDropCache.test.ts 7 Tests OK: Schluessel stabil gegen Plugin-Reihenfolge, aendert sich mit Prompt/Stil/BPM/keyVersion; TTL-Ablauf, Verdrängung und Zaehler; Route mit gemocktem LLM: zwei identische Anfragen -> EIN Modellaufruf, zweite Antwort cached=true; anderer Prompt -> Misser; Fallback wird nicht gecacht. npm run verify 0.",
+      "files": [
+        "server/dropCache.ts",
+        "server/routes/aiRoutes.ts",
+        "server/routes/opsRoutes.ts",
+        "server.ts",
+        "tests/aiGenerateDropCache.test.ts"
+      ],
+      "remaining": "(1) Grafana-Panel/Alert auf die neue Trefferquote (die Metrik liegt an, ein Panel fehlt), (2) TTL und Obergrenze nach echten Nutzungsdaten justieren (aktuell 10 min / 50 - bewusst konservativ gewaehlt), (3) optional: groessere Artefakte in R2 ablegen statt im Prozessspeicher."
+    },
+    {
+      "id": "DSP-P2-003",
+      "title": "Drop-Analyzer: echte Frequenzanalyse (FFT) statt Kanal-Level",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "DSP",
+      "source": "docs/dropMONK_MVP_SUMMARY.md (Platzhalter-Liste) - seit 2026-09-21 in der SSOT gefuehrt",
+      "problem": "DropContextAnalyzer.calculateEnergyFromChannels() schaetzt die Energie ausschliesslich aus den Kanal-Pegeln (und MixerBridge.getEnergyLevel() aus gemittelten Kanal-Levels), obwohl der Typ-Kommentar 'basierend auf Levels + Frequencies' verspricht. Folge: ein leiser, aber brillanter Percussion-Loop und ein dumpfer Bass-Loop mit gleichem Pegel gelten als gleich 'energetisch' - Drop-Vorschlaege und Timing richten sich danach.",
+      "note": "Gefunden bei der Restsuche 2026-09-21 in der MVP-Zusammenfassung; der Punkt stand nur dort, nicht in der SSOT. Bewusst NICHT in derselben Sitzung umgesetzt: MixerBridge haelt keinen AudioContext/AnalyserNode (nur Kanal-Level ueber Adapter/Fallback), ein echter Spektralwert braucht also eine Verdrahtung durch die Audio-Graph-Schicht - eine Aenderung im laufenden Audio-Pfad, die ohne Hoerprobe nicht verantwortbar ist.",
+      "files": [
+        "src/core/drop/DropContextAnalyzer.ts",
+        "src/core/drop/MixerBridge.ts",
+        "src/core/drop/DropAudioAnalyzer.ts"
+      ],
+      "remaining": "(1) AnalyserNode (bzw. OfflineAudioContext im Analyse-Pfad) im Mixer-/Audio-Graph bereitstellen und die Frequenzbaender dort abgreifen, (2) MixerBridge.getEnergyLevel() und DropContextAnalyzer auf EINEN Feature-Vertrag ziehen (Pegele + Baender), (3) Tests: gleiche Pegelsumme, unterschiedliche Spektren -> unterschiedliche Energie; stummgeschaltete/Solo-Kanaele korrekt behandeln, (4) Gegenprobe an einem echten Mix (Hoerprobe: Vorschlaege passen zum Spektrum)."
     }
   ],
   "visionSandbox": [

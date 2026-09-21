@@ -1068,6 +1068,66 @@ class CfDnsEnsureTest(unittest.TestCase):
         self.assertNotIn("cf-geheim-4711", ok.stdout + ok.stderr)
 
 
+class ModellDownloadTest(unittest.TestCase):
+    """Security-TODO aus docs/ONNX_MODELS.md: der 291-MB-Blob wird geprueft.
+
+    Anlass: `download-models.sh` lud die Datei ungeprueft in den Produktionspfad;
+    der Client laedt sie von dort in die Inferenz (src/ai/localDemucs.ts). Der
+    erwartete SHA-256 ist der LFS-OID der Quelle - beides muss sichtbar sein und
+    eine falsche Datei muss abgelehnt werden.
+    """
+
+    SCRIPT = ROOT / "scripts" / "download-models.sh"
+    PIN = "d2b401f322558cd57d67a752ed7be3fa55178a0626011eda8ac7bb74e17280c0"
+    SIZE = "304321552"
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _run(self, *args: str, target: str | None = None):
+        env = clean_env(TARGET=target) if target else clean_env()
+        return subprocess.run([self.bash, str(self.SCRIPT), *args], capture_output=True, text=True, cwd=ROOT, timeout=120, env=env)
+
+    def test_print_config_zeigt_pin_ohne_netz(self) -> None:
+        result = self._run("--print-config")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(self.PIN, result.stdout)
+        self.assertIn(self.SIZE, result.stdout)
+        self.assertIn("kein Netz", result.stdout)
+
+    def test_verify_only_lehnt_falsche_datei_ab(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = pathlib.Path(tmp) / "htdemucs.onnx"
+            fake.write_bytes(b"kein echtes modell" * 10)
+            result = self._run("--verify-only", target=str(fake))
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 1, combined)
+            self.assertIn("Groesse stimmt nicht", combined)
+
+    def test_verify_only_meldet_fehlende_datei(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._run("--verify-only", target=str(pathlib.Path(tmp) / "nicht-da.onnx"))
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("Modell fehlt", result.stdout + result.stderr)
+
+    def test_verify_only_akzeptiert_echte_datei(self) -> None:
+        target = ROOT / "public" / "models" / "htdemucs.onnx"
+        if not target.exists():
+            self.skipTest("Modell liegt lokal nicht vor (nicht eingecheckt)")
+        result = self._run("--verify-only", target=str(target))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Hash-korrekt", result.stdout)
+
+    def test_download_ist_gepinnt_und_laeuft_ueber_eine_part_datei(self) -> None:
+        # Kein Download ohne Pruefung: erst .part laden, dann verifizieren, dann mv.
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        self.assertIn("MODEL_SHA256=", text)
+        self.assertIn('PART="$TARGET.part"', text)
+        part_check = text.index("verify \"$PART\"")
+        move = text.index('mv "$PART" "$TARGET"')
+        self.assertLess(part_check, move, "Die Pruefung muss VOR dem Verschieben passieren")
+
+
 class CfTokenSetTest(unittest.TestCase):
     """F1-Nachlauf: der Token-Setter schreibt nur die vorgesehenen Schluessel.
 

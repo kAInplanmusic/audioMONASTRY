@@ -62,6 +62,8 @@ import {
   type GpuEndpointRole,
 } from '../../src/config/aiInfrastructure';
 import { llmRouter } from '../../src/core/ai/LlmRouter';
+// AI-P2-006: serverseitiger Drop-Cache (VOR dem bezahlten Modellaufruf).
+import { dropCache, type DropCache } from '../dropCache.ts';
 import { mosHarness } from '../../src/core/ai/orchestrator/mosHarness';
 import { resolveVoiceModel } from '../../src/core/ai/orchestrator/voiceModelGate';
 import { normalizeStyleRanking, suggestStyleFromRanking } from '../../src/core/ai/vision/visualFeedback';
@@ -69,10 +71,12 @@ import { uploadSampleToR2 } from '../cloud.ts';
 import type { Express } from 'express';
 
 export interface AiRouteDeps {
-  /** Geteilte Metriken aus server.ts (aiRequests/aiFailures). */
-  metrics: { aiRequests: number; aiFailures: number };
+  /** Geteilte Metriken aus server.ts (aiRequests/aiFailures + Cache-Treffer). */
+  metrics: { aiRequests: number; aiFailures: number; aiCacheHits: number; aiCacheMisses: number };
   /** Geteilte Flotten-Ziele; ollama wird fuer den lokalen Fallback gelesen. */
   fleetTargets: { ollama: string };
+  /** Drop-Cache (Tests koennen eine eigene, kuerzere Instanz einhaengen). */
+  dropCache?: DropCache;
 }
 
 /**
@@ -104,6 +108,8 @@ function budgetSnapshot(storageEurPerMonth = AI_ESTIMATED_STORAGE_EUR_PER_MONTH)
 }
 
 export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
+  // AI-P2-006: eine Instanz pro Serverprozess (Tests haengen ihre eigene ein).
+  const cache: DropCache = deps.dropCache ?? dropCache;
   // Geteilte Referenzen aus server.ts. Bewusst als Objekt-Referenz: die
   // Flotten-Verdrahtung mutiert fleetTargets.ollama zur Laufzeit, und die
   // Metriken sind derselbe Zaehler wie in server.ts (keine Wertkopie).
@@ -653,6 +659,16 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
     const llmPrompt = buildDropPrompt(dropRequest);
 
+    // AI-P2-006: Cache-Treffer VOR dem Modellaufruf. Zwei identische Anfragen
+    // (Prompt, BPM, Energie, Plugins, Stil, Dauer) kosten so nur einen Aufruf.
+    const cacheKey = cache.key(dropRequest);
+    const cached = cache.get<Record<string, unknown>>(cacheKey);
+    if (cached) {
+      metrics.aiCacheHits += 1;
+      return res.json({ ...cached, cached: true });
+    }
+    metrics.aiCacheMisses += 1;
+
     // 1) LLM-Router (API-Keys bleiben serverseitig)
     try {
       const completion = await llmRouter.complete({
@@ -662,7 +678,9 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
         temperature: 0.7,
         reasoningEffort: 'low',
       });
-      return res.json({ ...sanitizeAiDropResponse(completion.text, dropRequest), provider: completion.provider });
+      const payload = { ...sanitizeAiDropResponse(completion.text, dropRequest), provider: completion.provider };
+      cache.set(cacheKey, payload);
+      return res.json({ ...payload, cached: false });
     } catch (err) {
       console.warn('[generate-drop] LLM-Router nicht nutzbar:', (err as Error).message);
     }
@@ -671,15 +689,19 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     const raw = await ollamaGenerate(llmPrompt);
     if (raw) {
       try {
-        return res.json({ ...sanitizeAiDropResponse(raw, dropRequest), provider: 'ollama' });
+        const payload = { ...sanitizeAiDropResponse(raw, dropRequest), provider: 'ollama' };
+        cache.set(cacheKey, payload);
+        return res.json({ ...payload, cached: false });
       } catch (err) {
         console.warn('[generate-drop] ungültige Ollama-Antwort, Fallback.', (err as Error).message);
       }
     }
 
-    // 3) Deterministischer lokaler Fallback (kein Netz, immer verfügbar)
+    // 3) Deterministischer lokaler Fallback (kein Netz, immer verfügbar).
+    // Bewusst NICHT gecacht: er kostet nichts, und ein Cache-Treffer wuerde
+    // verdecken, dass gerade kein Modell antwortet.
     metrics.aiFailures += 1;
-    return res.json({ ...generateDeterministicDrop(dropRequest), provider: 'local' });
+    return res.json({ ...generateDeterministicDrop(dropRequest), provider: 'local', cached: false });
   });
 
   // --- POST /api/ai/complete  → LLM-Router (Keys bleiben serverseitig) ---

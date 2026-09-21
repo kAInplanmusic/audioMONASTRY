@@ -55,6 +55,9 @@ export interface OpsMetrics {
   latencyHistogram?: { snapshot: () => { buckets: number[]; count: number; sumSeconds: number } };
   aiRequests: number;
   aiFailures: number;
+  /** AI-P2-006: Drop-Cache-Treffer/Misser (spart Modellaufrufe). */
+  aiCacheHits: number;
+  aiCacheMisses: number;
   stemRequests: number;
   stemFailures: number;
   telemetryEvents: number;
@@ -152,6 +155,14 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         '# HELP audiomonastry_ai_requests_total Anzahl KI-Proxy-Requests (kumulativ).',
         '# TYPE audiomonastry_ai_requests_total counter',
         `audiomonastry_ai_requests_total ${metrics.aiRequests}`,
+        // AI-P2-006: Drop-Cache - Trefferquote zeigt, wie viele Modellaufrufe
+        // (und damit GPU-Wakes) der Cache schon gespart hat.
+        '# HELP audiomonastry_ai_drop_cache_hits_total Drop-Generierungen aus dem Cache (kumulativ).',
+        '# TYPE audiomonastry_ai_drop_cache_hits_total counter',
+        `audiomonastry_ai_drop_cache_hits_total ${metrics.aiCacheHits}`,
+        '# HELP audiomonastry_ai_drop_cache_misses_total Drop-Generierungen ohne Cache-Treffer (kumulativ).',
+        '# TYPE audiomonastry_ai_drop_cache_misses_total counter',
+        `audiomonastry_ai_drop_cache_misses_total ${metrics.aiCacheMisses}`,
         '# HELP audiomonastry_ai_failures_total Anzahl KI-Proxy-Fehler (kumulativ).',
         '# TYPE audiomonastry_ai_failures_total counter',
         `audiomonastry_ai_failures_total ${metrics.aiFailures}`,
@@ -240,6 +251,7 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       ai: {
         requests: metrics.aiRequests,
         failures: metrics.aiFailures,
+        cache: { hits: metrics.aiCacheHits, misses: metrics.aiCacheMisses },
         jobs: aiOrchestrator.jobs.list().length,
         costUsd: aiOrchestrator.costs.summary().totalUsd ?? 0,
       },

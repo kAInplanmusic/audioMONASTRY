@@ -110,6 +110,9 @@ const metrics = {
   latencyHistogram: new LatencyHistogram(),
   aiRequests: 0,
   aiFailures: 0,
+  // AI-P2-006: Drop-Cache (Treffer sparen den bezahlten Modellaufruf).
+  aiCacheHits: 0,
+  aiCacheMisses: 0,
   stemRequests: 0,
   stemFailures: 0,
   telemetryEvents: 0,
