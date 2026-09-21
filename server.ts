@@ -45,7 +45,7 @@ import { createFleetWiring } from './server/fleetWiring.ts';
 import { resolveRateLimitIdentity, SESSION_IDENTITY_HEADER } from './server/rateLimitKeys.ts';
 import { buildCspPolicy, buildReportingHeaders, CSP_REPORT_PATH } from './server/csp.ts';
 import { isAppActivityRequest } from './server/idleSignal.ts';
-import { registerSecurityRoutes } from './server/routes/securityRoutes.ts';
+import { registerSecurityRoutes, recordThrottledCspReport } from './server/routes/securityRoutes.ts';
 import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
 import { registerVisualRoutes } from './server/routes/visualRoutes.ts';
 import { catalogFromMcpTools, createMcpAgentExecutor } from './server/mcpAgentExecutor.ts';
@@ -344,6 +344,16 @@ const API_ALLOWED_ORIGINS = (
   .filter(Boolean);
 
 app.use('/api', (req, res, next) => {
+  // F7: Der CSP-Meldeendpunkt ist tokenfrei und wird vom Browser mit dem Origin
+  // des DOKUMENTS aufgerufen - gemessen (2026-09-21): fremder Origin → HTTP 403
+  // `ORIGIN_NOT_ALLOWED`, der Report war damit still und ungezaehlt verloren.
+  // Ein Dokument-Origin ist keine API-Kennung: betroffen waeren u. a. die
+  // www.-Variante, ein Vorschau-Host, eine alte IP oder der lokale Testlauf -
+  // also genau die Faelle, aus denen Beobachtungsdaten kommen. Der Endpunkt
+  // fuehrt keine Credentials, antwortet immer 204 und haelt nur Direktive+Hosts;
+  // Missbrauch faengt sein eigenes 120/min-Budget. Deshalb hier ausgenommen
+  // (wie schon bei der Auth).
+  if (req.method === 'POST' && req.path === '/security/csp-report') return next();
   if (
     isProductionEnv &&
     API_ALLOWED_ORIGINS.length > 0 &&
@@ -567,6 +577,16 @@ const expensiveLimiter = rateLimit({
 });
 
 app.use('/api/health', healthLimiter);
+// F7: Gedrosselte CSP-Reports ZAEHLEN - und zwar VOR dem Limiter, weil der
+// Limiter die Anfrage selbst mit 429 beendet (ein danach registrierter Zaehler
+// saehe sie nie). Ohne diese Zahl waere eine Report-Flut genau der Fall, den
+// der Meldeweg nicht sichtbar macht.
+app.use(CSP_REPORT_PATH, (_req, res, next) => {
+  res.on('finish', () => {
+    if (res.statusCode === 429) recordThrottledCspReport();
+  });
+  next();
+});
 app.use(CSP_REPORT_PATH, cspReportLimiter);
 app.use('/api', apiLimiter);
 // `/api/upload/sample` (Scan + Ablage) bleibt unter der Kostenbremse; die

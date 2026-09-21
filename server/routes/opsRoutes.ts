@@ -43,6 +43,7 @@ import type { SocketLivenessEvaluation } from '../socketLiveness.ts';
 import { readBuildInfo } from '../buildInfo';
 import { getCloudStatus, getR2Counters } from '../r2Health';
 import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
+import { getCspReportStats } from './securityRoutes.ts';
 import express from 'express';
 import type { Express } from 'express';
 
@@ -216,6 +217,38 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         ...(['autosave', 'upload'] as const).map((path) =>
           `audiomonastry_cloud_r2_write_failures_total{path="${path}"} ${cloud.writes[path].failures}`),
       ];
+      // F7: Meldeweg der CSP als Betriebszustand. Ohne diese Zaehler waere die
+      // Frage „auf enforce umstellen?" weiter nur per Loggrep zu beantworten;
+      // `outcome` trennt echte Verstoesse von unbrauchbaren/zu grossen/gedrosselten
+      // Meldungen, `directive`/`target` zeigen das Artefakt-Profil (z. B.
+      // `img-src` + `data` fuer Favicons, `style-src` + `inline`).
+      const csp = getCspReportStats();
+      lines.push(
+        '# HELP audiomonastry_csp_mode_report_only Laufender CSP-Modus (1 = report-only, 0 = enforce).',
+        '# TYPE audiomonastry_csp_mode_report_only gauge',
+        `audiomonastry_csp_mode_report_only ${csp.mode === 'report-only' ? 1 : 0}`,
+        '# HELP audiomonastry_csp_reports_total POSTs am CSP-Meldeendpunkt je Ausgang (kumulativ).',
+        '# TYPE audiomonastry_csp_reports_total counter',
+        `audiomonastry_csp_reports_total{outcome="usable"} ${csp.violations}`,
+        `audiomonastry_csp_reports_total{outcome="unusable"} ${csp.unusable}`,
+        `audiomonastry_csp_reports_total{outcome="oversized"} ${csp.oversized}`,
+        `audiomonastry_csp_reports_total{outcome="throttled"} ${csp.throttled}`,
+        `audiomonastry_csp_reports_total{outcome="requests"} ${csp.received}`,
+      );
+      for (const [directive, count] of Object.entries(csp.byDirective)) {
+        lines.push(
+          '# HELP audiomonastry_csp_violations_by_directive_total Erkannte CSP-Verstoesse je Direktive (kumulativ).',
+          '# TYPE audiomonastry_csp_violations_by_directive_total counter',
+          `audiomonastry_csp_violations_by_directive_total{directive="${escProm(directive)}"} ${count}`,
+        );
+      }
+      for (const [target, count] of Object.entries(csp.byTarget)) {
+        lines.push(
+          '# HELP audiomonastry_csp_violations_by_target_total CSP-Verstoesse je blockiertem Ziel (Host oder CSP-Sonderwert).',
+          '# TYPE audiomonastry_csp_violations_by_target_total counter',
+          `audiomonastry_csp_violations_by_target_total{target="${escProm(target)}"} ${count}`,
+        );
+      }
       // P2 Live-Telemetrie-Dashboard: Breakdown nach type/source für Grafana-Panels.
       const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
       for (const [type, count] of Object.entries(metrics.telemetryByType ?? {})) {
@@ -266,6 +299,12 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       telemetryBySource: metrics.telemetryBySource ?? {},
       telemetryXruns: metrics.telemetryXruns ?? 0,
       telemetryXrunsBySource: metrics.telemetryXrunsBySource ?? {},
+      // F7: CSP-Meldeweg (Modus + Zaehler je Direktive/Ziel). Die letzten
+      // Einzelmeldungen stehen unter GET /api/security/csp-reports.
+      csp: (() => {
+        const { recent: _recent, ...rest } = getCspReportStats();
+        return rest;
+      })(),
       lastRequestId: metrics.lastRequestId,
     });
   });
