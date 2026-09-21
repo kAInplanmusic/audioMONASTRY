@@ -274,10 +274,24 @@ if not sfu.get("ready"):
   || echo "  ⚠ Kontrolle nicht moeglich (Antwort/curl auf app-1)"
 
 # --- 7. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
+# PROD-P3-F9: Der Idle-Timer wird auf ALLEN Knoten installiert (Muster: der
+# Watchdog unten). Die Kommandozeile des Installers hatte frueher ein stilles
+# `2>/dev/null || true` - ein Fehlschlag war damit unsichtbar, obwohl ein Knoten
+# ohne Timer die teuerste Fehlerart ist (er laeuft weiter, nichts schaltet ab).
+# Jetzt nennt jeder Fehlschlag den Grund: der Installer bricht KLARTEXT ab, wenn
+# auf dem Knoten kein Token erreichbar ist (dann waere der Timer strukturell
+# blind); wer das bewusst will, setzt IDLE_ALLOW_TOKEN_LESS=1.
 step "7/8 Idle-Auto-Shutdown installieren (spart Ressourcen; Kosten nur durch Löschen!)"
+echo "  Idle-Shutdown-Timer auf allen Knoten installieren …"
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
-  ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' 2>/dev/null || true
+  ssh_host "$ip" 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh' \
+    || echo "  ⚠ Idle-Timer konnte auf $ip nicht installiert werden (Grund oben; Einzelheiten: docs/OPS_RUNBOOK.md Abschnitt 2)."
 done
+# Nachweis statt Zusage: der Timer auf app-1 wird nachgelesen (der Installer
+# legt ihn nur an - aktiv ist er erst, wenn systemd ihn fuehrt).
+echo "  Kontrolle des Idle-Timers auf app-1:"
+ssh_host "$APP_IP" 'systemctl list-timers audiomonastry-idle-shutdown.timer --no-pager' \
+  || echo "  ⚠ Idle-Timer auf app-1 nicht abfragbar (Installation oben pruefen!)."
 
 # INFRA-HETZNER-008: Das Backup lief bisher in KEINEM Flottenskript - nur die
 # Server-Snapshots beim Stop (CLI) sicherten etwas. Der Timer laeuft auf app-1

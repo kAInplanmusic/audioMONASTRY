@@ -38,6 +38,37 @@
 | `DISCORD_WEBHOOK` / `SLACK_WEBHOOK` | dito | .env | nein | – | URL | server.ts `/api/alerts/webhook` (Weiterleitung) | **ja** |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | dito | .env | nein | – | Token/ID | server.ts `/api/alerts/webhook` | **ja** |
 
+## 1b. Idle-Auto-Shutdown-Timer (PROD-P3-F9 / F9)
+
+Der Timer läuft auf dem Knoten und **entscheidet nichts selbst**: er holt
+`GET /api/idle-signal` auf dem App-Port ab und schreibt die Antwort samt
+HTTP-Status ins Log. Die Regeln stehen rein und getestet in
+`server/idleSignal.ts` (idle nur, wenn keine Socket-Clients, keine offenen
+Sockets/SSH/Load/Container-Jobs und kein erfolgreicher App-Request innerhalb der
+Schwelle; Shutdown nur bei `idle` UND erreichter Schwelle). Ohne lesbares Signal
+ist der Lauf fail-safe.
+
+| Name | Ort | Default | Bedeutung | Secret |
+|---|---|---|---|---|
+| `IDLE_SHUTDOWN_MINUTES` | Knoten-`.env` (App) | `30` | Fallback-Schwelle der App, wenn der Timer kein `thresholdSec` schickt | nein |
+| `SCRAPE_TOKEN` | Knoten-`.env` + `/etc/audiomonastry/idle-check.env` | – | Maschinen-Token des Timers (`x-scrape-token`; Fallback `STUDIO_ACCESS_TOKEN`) | **ja** |
+| `IDLE_MINUTES` | Installer/Unit-Environment | `30` | Schwelle des Timers in Minuten → `thresholdSec` | nein |
+| `CHECK_INTERVAL` | Installer | `5` | Prüfintervall des Timers in Minuten (`OnUnitActiveSec`) | nein |
+| `IDLE_CHECK_URL` | `/etc/audiomonastry/idle-check.env` | `http://127.0.0.1:8080/api/idle-signal` | Ziel des Checks; Port 80 ist Caddy (308!) | nein |
+| `IDLE_CHECK_ENV_FILE` | Prozess/Unit | `/etc/audiomonastry/idle-check.env` | Ort der Zugangsdatei (Modus 0600) | nein |
+| `LOG` | Installer/Unit-Environment | `/var/log/audiomonastry-idle-shutdown.log` | Logdatei des Checks | nein |
+| `IDLE_ALLOW_TOKEN_LESS` | Installer | `0` | `1` = Timer auch ohne Token installieren (blind, fährt nie herunter) | nein |
+| `IDLE_BIN_DIR`, `IDLE_UNIT_DIR` | Installer (nur Tests) | `/usr/local/bin`, `/etc/systemd/system` | Zielverzeichnisse der Kopien — damit Tests ohne root/systemd laufen | nein |
+
+`IDLE_SHUTDOWN_MINUTES` und `SCRAPE_TOKEN` stehen seit 2026-09-21 auch in
+`.env.hetzner.example` (sie waren nur hier dokumentiert — genau das war die offene
+SSOT-Lücke zu PROD-P3-F9). Reihenfolge beim Token: der Timer bevorzugt die Datei
+`idle-check.env`; legt der Installer sie an, übernimmt er einen vorhandenen
+`SCRAPE_TOKEN`/`STUDIO_ACCESS_TOKEN` aus der App-`.env` und gibt den Wert nie aus.
+Ohne Token bricht der Installer mit Exit 2 und Klartext ab, **bevor** er Units
+aktiviert (ein Timer ohne Token kann strukturell nie auslösen = dieselbe
+Fehlerklasse wie der F9-Befund).
+
 ## 2. Supabase (kanonisch `SB_*`)
 
 | Erwartet | Verwendet | Alias (Warnung) | Pflicht | Komponenten | Secret |

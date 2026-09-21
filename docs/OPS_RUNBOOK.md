@@ -952,6 +952,36 @@ Maschinen-Client ohne Cookie; sein Token liegt in
 übernimmt einen vorhandenen `SCRAPE_TOKEN`/`STUDIO_ACCESS_TOKEN` aus der App-`.env`).
 Ohne Token läuft der Check fail-safe — es wird nichts heruntergefahren.
 
+**Installation und Recreate-Pfad (PROD-P3-F9).** Der Installer kopiert Check und
+Units aus dem Repo (`scripts/hetzner/systemd/audiomonastry-idle-shutdown.{service,timer}`)
+und aktiviert den Timer — dasselbe Muster wie `install-auto-repair.sh`
+(INFRA-HETZNER-005) und `install-backup-timer.sh`: die Units liegen im Repo, der
+Installer kopiert sie nur (ein Heredoc im Installer lief zuvor gegen die
+Repo-Fassung auseinander). Er ist **idempotent** und steuert `IDLE_MINUTES`,
+`CHECK_INTERVAL` und `IDLE_CHECK_URL` über die Umgebung.
+
+```bash
+# Installation (bring-up-fleet.sh Schritt 7 macht das auf allen Knoten;
+# der Portal-Wake macht es auf app-1):
+sudo bash scripts/hetzner/install-idle-shutdown.sh
+# Kontrolle - Nachweis statt Zusage:
+systemctl list-timers audiomonastry-idle-shutdown.timer
+systemctl status audiomonastry-idle-shutdown.timer --no-pager
+tail -n 5 /var/log/audiomonastry-idle-shutdown.log
+# Reboot-Verhalten: der Timer ist `enabled` (OnBootSec=5min) und kommt von selbst
+# wieder - die Kontrolle nach einem Reboot ist dieselbe Zeile wie oben.
+```
+
+Ohne Token bricht der Installer mit **Exit 2 und Klartext ab, BEVOR** er Units
+aktiviert: ein Timer ohne Token bekommt 401 → `SIGNAL=unavailable` und löst nie
+aus (dieselbe Fehlerklasse wie der F9-Befund — ein Signal, das strukturell nicht
+feuern kann). Wer den blinden, fail-safe Check bewusst will, setzt
+`IDLE_ALLOW_TOKEN_LESS=1`. Ein zweiter Lauf ist unkritisch: eine vorhandene
+`/etc/audiomonastry/idle-check.env` mit Token bleibt unangetastet, der Wert wird
+nie ausgegeben. Der Installer **stoppt nichts** (keine Dienst-Stopps, kein
+Löschen, kein Herunterfahren); für eine Beweissession schaltet nur
+`systemctl stop audiomonastry-idle-shutdown.timer` den Timer ab.
+
 ```bash
 # Trockenlauf (schreibt nur ins Log, kein Shutdown). IDLE_MINUTES darf fuer
 # Probelaeufe ein Bruchteil sein (0.05 = 3 s Schwelle):

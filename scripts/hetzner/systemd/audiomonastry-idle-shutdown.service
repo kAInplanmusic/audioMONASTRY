@@ -1,0 +1,36 @@
+# ============================================================================
+# audioMONASTRY · systemd-Unit: Idle-Shutdown-Check (PROD-P3-F9 / F9)
+# ----------------------------------------------------------------------------
+# Installiert von scripts/hetzner/install-idle-shutdown.sh (Kopie nach
+# /etc/systemd/system/; Quelle im Repo, damit Knoten und Repo nicht driften -
+# dieselbe Lehre wie bei install-auto-repair.sh / install-backup-timer.sh).
+# Gestartet vom Timer audiomonastry-idle-shutdown.timer.
+#
+# Der Lauf liegt als /usr/local/bin/audiomonastry-idle-check.sh auf dem Knoten
+# (Quelle: scripts/hetzner/systemd/idle-check.sh). Er fragt
+# `GET /api/idle-signal` DIREKT auf dem App-Port (Default 127.0.0.1:8080) - NICHT
+# ueber Caddy/Port 80, das antwortet einem Klartext-http-Aufruf mit 308 und war
+# genau die Ursache des F9-Befunds. Die ENTSCHEIDUNG (idle/shutdown) faellt in
+# der App (server/idleSignal.ts); der Check liefert nur seine Host-Fakten mit.
+# Ohne lesbares Signal (kein HTTP 200) ist der Lauf fail-safe: KEIN Shutdown.
+# ============================================================================
+[Unit]
+Description=audioMONASTRY idle shutdown check
+Documentation=file:///opt/audiomonastry/docs/OPS_RUNBOOK.md
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Schwelle in Minuten; geht als `thresholdSec` an die App. Bruchteile
+# (0.05 = 3 s) sind nur fuer Trockenlaeufe gedacht.
+Environment=IDLE_MINUTES=30
+Environment=LOG=/var/log/audiomonastry-idle-shutdown.log
+# Token (`SCRAPE_TOKEN`, Fallback `STUDIO_ACCESS_TOKEN`) und Ziel
+# (`IDLE_CHECK_URL`) des Maschinen-Clients; angelegt vom Installer, Modus 0600.
+# Das Praefix '-' ist Absicht: fehlt die Datei, laeuft der Check fail-safe
+# (kein Shutdown), statt den Timer-Lauf zu scheitern.
+EnvironmentFile=-/etc/audiomonastry/idle-check.env
+ExecStart=/usr/local/bin/audiomonastry-idle-check.sh
+StandardOutput=append:/var/log/audiomonastry-idle-shutdown.log
+StandardError=append:/var/log/audiomonastry-idle-shutdown.log

@@ -18,6 +18,15 @@ automatisch pruefen lassen:
   * INFRA-HETZNER-007: Die Typ-/Rollen-Tabelle in docs/SERVER_FLEET.md stimmt
     mit beiden Code-Pfaden ueberein (CLI und Portal-Worker) und beide Pfade
     lesen dieselben `FLEET_TYPE_*`-Overrides.
+  * PROD-P3-F9: Der Idle-Shutdown-Timer ist installations- und nachweisfaehig -
+    die Units liegen im REPO (`scripts/hetzner/systemd/`, kein Heredoc-Nachbau
+    wie vorher), der Installer ist idempotent, aktiviert genau `daemon-reload` +
+    `enable --now` des EIGENEN Timers und bricht ohne Token mit Klartext ab,
+    BEVOR er Einheiten installiert (ein Timer ohne Token kann strukturell nie
+    ausloesen = dieselbe Fehlerklasse wie der F9-Befund). Der Recreate-Pfad
+    (`bring-up-fleet.sh` Schritt 7 und der Portal-Wake) wird mit einem Fake-ssh
+    gefahren, der die Kommandozeile LOKAL ausfuehrt - kein Knoten, kein systemd,
+    kein Shutdown.
 
 INFRA-HETZNER-002 (Origin-TLS als Default): Drei Befunde, ein Fix - deshalb
 pruefen zwei zusaetzliche Klassen genau diese drei Aussagen:
@@ -87,6 +96,11 @@ BRING_UP = HETZNER / "bring-up-fleet.sh"
 PROVISION_FLEET = HETZNER / "provision-fleet.sh"
 AUTO_REPAIR = HETZNER / "auto-repair.sh"
 INSTALL_AUTO_REPAIR = HETZNER / "install-auto-repair.sh"
+# PROD-P3-F9: Idle-Shutdown-Timer (Installer + Units + Check im Repo).
+INSTALL_IDLE_SHUTDOWN = HETZNER / "install-idle-shutdown.sh"
+IDLE_CHECK_SRC = HETZNER / "systemd" / "idle-check.sh"
+IDLE_SERVICE_UNIT = HETZNER / "systemd" / "audiomonastry-idle-shutdown.service"
+IDLE_TIMER_UNIT = HETZNER / "systemd" / "audiomonastry-idle-shutdown.timer"
 DEPLOY_SH = ROOT / "deploy.sh"
 FLEET_PREFLIGHT = HETZNER / "fleet-preflight.sh"
 PORTAL_WORKER = ROOT / "services" / "portal-worker" / "src" / "index.js"
@@ -473,6 +487,408 @@ class WatchdogInstallationTest(unittest.TestCase):
         self.assertIn('install -m 0644 "$HERE_SRC/systemd/${SERVICE}.service"', text)
         self.assertIn('install -m 0644 "$HERE_SRC/systemd/${SERVICE}.timer"', text)
         self.assertIn("auto-repair.sh", text)
+
+
+#: Fake `systemctl` fuer den Idle-Timer-Vertrag (PROD-P3-F9): protokolliert JEDEN
+#: Aufruf und tut nichts. Damit ist ohne root/systemd belegbar, welche Befehle der
+#: Installer wirklich absendet - und dass kein Stopp/Disable darunter ist.
+FAKE_SYSTEMCTL = r"""#!/usr/bin/env bash
+set -uo pipefail
+printf '%s\n' "$*" >> "${FAKE_SYSTEMCTL_LOG:?}"
+case "${1:-}" in
+  is-active) printf '%s\n' "${FAKE_SYSTEMCTL_ACTIVE:-active}" ;;
+  list-timers) printf '%s\n' "${FAKE_SYSTEMCTL_TIMERS:-}" ;;
+esac
+exit 0
+"""
+
+#: Fake `ssh` fuer den Recreate-Pfad: protokolliert den entfernten Befehl und
+#: fuehrt ihn LOKAL aus (bash -c). Der Knotenpfad /opt/audiomonastry wird auf das
+#: Repo-Verzeichnis umgeschrieben, damit der ECHTE Installer-Codepfad laeuft -
+#: kein Knoten, kein /etc, kein /usr, kein systemd, kein Netz.
+FAKE_SSH_EXEC = r"""#!/usr/bin/env bash
+set -uo pipefail
+cmd="${*: -1}"
+printf '%s\n' "$cmd" >> "${FAKE_SSH_LOG:?}"
+exec bash -c "${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO:?}}"
+"""
+
+
+class IdleShutdownTimerTest(unittest.TestCase):
+    """PROD-P3-F9: Der Idle-Shutdown-Timer ist installierbar, idempotent, im
+    Recreate-Pfad verankert - und der Installer stoppt nichts.
+
+    Gefahren wird der ECHTE Installer-Codepfad in einer Sandbox: ein Fake
+    `systemctl` im PATH protokolliert die Befehle, `IDLE_BIN_DIR`/`IDLE_UNIT_DIR`/
+    `ENV_DIR`/`APP_ENV_FILE`/`LOG` zeigen in ein Temp-Verzeichnis. Kein root,
+    kein /etc, kein systemd, kein Knoten - und kein Shutdown: der Check selbst
+    (der `shutdown -h now` enthaelt) wird hier nie gestartet.
+    """
+
+    #: Was der Installer an systemd senden DARF. Jede andere Zeile ist ein Befund
+    #: (ein `stop`/`disable` waere ein Eingriff in laufende Dienste).
+    ERLAUBTE_SYSTEMCTL_AUFRUFE = (
+        r"daemon-reload",
+        r"enable --now audiomonastry-idle-shutdown\.timer",
+        r"is-active audiomonastry-idle-shutdown\.timer",
+        r"list-timers audiomonastry-idle-shutdown\.timer --no-pager",
+    )
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        for path in (INSTALL_IDLE_SHUTDOWN, IDLE_CHECK_SRC, IDLE_SERVICE_UNIT, IDLE_TIMER_UNIT):
+            if not path.exists():  # pragma: no cover - Dateien sind eingecheckt
+                self.fail(f"fehlt: {path}")
+
+    # --- Helpers -----------------------------------------------------------
+    def _sandbox(self, tmp: pathlib.Path, **extra: str) -> dict[str, str]:
+        """Fake `systemctl` im PATH + Sandbox-Ziele (liefert die Umgebung)."""
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        systemctl = fake_bin / "systemctl"
+        systemctl.write_text(FAKE_SYSTEMCTL, encoding="utf-8")
+        systemctl.chmod(0o755)
+        return clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            FAKE_SYSTEMCTL_LOG=str(tmp / "systemctl.log"),
+            IDLE_BIN_DIR=str(tmp / "local-bin"),
+            IDLE_UNIT_DIR=str(tmp / "units"),
+            ENV_DIR=str(tmp / "etc-audiomonastry"),
+            APP_ENV_FILE=str(tmp / "app.env"),
+            LOG=str(tmp / "idle-check.log"),
+            **extra,
+        )
+
+    def _install(self, env: dict[str, str], *args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.bash, str(INSTALL_IDLE_SHUTDOWN), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+        )
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    @staticmethod
+    def _calls(tmp: pathlib.Path) -> list[str]:
+        """Die an systemd gesendeten Befehle (Fake-Protokoll)."""
+        log = tmp / "systemctl.log"
+        return log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+
+    def _assert_nur_erlaubte_aufrufe(self, calls: list[str]) -> None:
+        for line in calls:
+            self.assertTrue(
+                any(re.fullmatch(muster, line) for muster in self.ERLAUBTE_SYSTEMCTL_AUFRUFE),
+                f"unerwarteter systemctl-Aufruf: {line!r}",
+            )
+
+    @staticmethod
+    def _unit_teil(teil: str) -> str:
+        """Eine Abteilung aus `--print-units` ohne die fuehrende Pfad-Marke."""
+        return teil.strip().split("\n", 1)[1].strip()
+
+    @staticmethod
+    def _code_only(text: str) -> str:
+        """Quelltext ohne Kommentarzeilen (Pruefung auf KOMMANDOS, nicht auf
+        Begruendungen - die nennen die alten Fehlerwege)."""
+        return "\n".join(line for line in text.splitlines() if not line.strip().startswith("#"))
+
+    # --- 1. Unit-Vertrag ----------------------------------------------------
+    def test_units_liegen_im_repo_und_werden_kopiert(self) -> None:
+        service = IDLE_SERVICE_UNIT.read_text(encoding="utf-8")
+        self.assertIn("Type=oneshot", service)
+        self.assertIn("ExecStart=/usr/local/bin/audiomonastry-idle-check.sh", service)
+        # Ohne Token laeuft der Check fail-safe: die Datei ist optional ('-').
+        self.assertIn("EnvironmentFile=-/etc/audiomonastry/idle-check.env", service)
+        self.assertIn("Environment=IDLE_MINUTES=", service)
+        self.assertNotIn("ExecStop", service)
+        timer = IDLE_TIMER_UNIT.read_text(encoding="utf-8")
+        # Boot-relativ statt Kalenderzeit: die Flotte wird je Session neu erzeugt.
+        self.assertIn("OnBootSec=5min", timer)
+        self.assertIn("OnUnitActiveSec=5min", timer)
+        self.assertIn("Unit=audiomonastry-idle-shutdown.service", timer)
+        self.assertIn("WantedBy=timers.target", timer)
+
+        text = INSTALL_IDLE_SHUTDOWN.read_text(encoding="utf-8")
+        self.assertIn('install -m 0755 "$CHECK_SRC" "$BIN_DIR/audiomonastry-idle-check.sh"', text)
+        self.assertIn('install -m 0644 "$SERVICE_SRC" "$UNIT_DIR/${SERVICE}.service"', text)
+        self.assertIn('install -m 0644 "$TIMER_SRC" "$UNIT_DIR/${SERVICE}.timer"', text)
+        # Kein Heredoc-Nachbau der Units: genau das lief gegen die Repo-Fassung
+        # auseinander (Lehre aus INFRA-HETZNER-005).
+        self.assertNotIn("<< UNIT", text)
+        self.assertNotIn("<< TIMER", text)
+
+    # --- 2. Installation + Idempotenz ---------------------------------------
+    def test_installer_installiert_idempotent_und_aktiviert_den_timer(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p3f9-idle-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text(
+                "STUDIO_ACCESS_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8"
+            )
+            env = self._sandbox(tmp)
+            erste = self._install(env)
+            combined_erste = self._combined(erste)
+            calls_erste = self._calls(tmp)
+
+            units = tmp / "units"
+            service_kopie = units / "audiomonastry-idle-shutdown.service"
+            timer_kopie = units / "audiomonastry-idle-shutdown.timer"
+            check_kopie = tmp / "local-bin" / "audiomonastry-idle-check.sh"
+            token_datei = tmp / "etc-audiomonastry" / "idle-check.env"
+
+            self.assertEqual(erste.returncode, 0, combined_erste)
+            self.assertIn("[done] Idle-Shutdown-Timer aktiv", combined_erste)
+            self.assertTrue(service_kopie.exists())
+            self.assertTrue(timer_kopie.exists())
+            self.assertTrue(check_kopie.exists())
+            self.assertTrue(token_datei.exists())
+            # Modus 0600 wie dokumentiert - und der Tokenwert erscheint NIE in
+            # der Ausgabe des Installers.
+            self.assertEqual(token_datei.stat().st_mode & 0o777, 0o600)
+            self.assertIn("STUDIO_ACCESS_TOKEN=token-aus-der-knoten-env", token_datei.read_text(encoding="utf-8"))
+            self.assertIn("IDLE_CHECK_URL=http://127.0.0.1:8080/api/idle-signal", token_datei.read_text(encoding="utf-8"))
+            self.assertNotIn("token-aus-der-knoten-env", combined_erste)
+            # Der Check liegt ausfuehrbar im Zielverzeichnis und ist die Repo-Datei.
+            self.assertEqual(check_kopie.stat().st_mode & 0o777, 0o755)
+            self.assertEqual(check_kopie.read_text(encoding="utf-8"), IDLE_CHECK_SRC.read_text(encoding="utf-8"))
+            # Der Timer ist byte-identisch mit der Repo-Fassung (Default-Intervall);
+            # die Service-Kopie unterscheidet sich NUR in den Sandbox-Pfaden.
+            self.assertEqual(timer_kopie.read_text(encoding="utf-8"), IDLE_TIMER_UNIT.read_text(encoding="utf-8"))
+            service_kopie_text = service_kopie.read_text(encoding="utf-8")
+            ueberschrieben = ("Environment=LOG=", "EnvironmentFile=-", "StandardOutput=append:", "StandardError=append:")
+            for zeile in IDLE_SERVICE_UNIT.read_text(encoding="utf-8").splitlines():
+                if zeile.startswith(ueberschrieben):
+                    continue
+                self.assertIn(zeile, service_kopie_text, f"Zeile fehlt in der Kopie: {zeile!r}")
+            self.assertIn(f"Environment=LOG={tmp / 'idle-check.log'}", service_kopie_text)
+            self.assertIn(f"EnvironmentFile=-{token_datei}", service_kopie_text)
+            # Das Ziel IM LAUF muss dasselbe sein wie die EnvironmentFile der
+            # Unit - sonst kommt der Token nie an (fail-safe, aber blind).
+            self.assertIn(f"Environment=IDLE_CHECK_ENV_FILE={token_datei}", service_kopie_text)
+            self.assertIn("daemon-reload", calls_erste)
+            self.assertIn("enable --now audiomonastry-idle-shutdown.timer", calls_erste)
+            self._assert_nur_erlaubte_aufrufe(calls_erste)
+
+            # Zweiter Lauf: der Betreiber hat die Env-Datei von Hand ergaenzt - das
+            # darf NICHT ueberschrieben werden (Token geht sonst verloren).
+            erweitert = token_datei.read_text(encoding="utf-8") + "# vom Betreiber ergaenzt\n"
+            token_datei.write_text(erweitert, encoding="utf-8")
+            zweite = self._install(env)
+            combined_zweite = self._combined(zweite)
+            calls_alle = self._calls(tmp)
+            token_nach_zweitem = token_datei.read_text(encoding="utf-8")
+            timer_nach_zweitem = timer_kopie.read_text(encoding="utf-8")
+
+        self.assertEqual(zweite.returncode, 0, combined_zweite)
+        self.assertIn("bleibt unveraendert", combined_zweite)
+        self.assertEqual(token_nach_zweitem, erweitert)
+        self.assertEqual(timer_nach_zweitem, IDLE_TIMER_UNIT.read_text(encoding="utf-8"))
+        # Beide Laeufe aktivieren denselben Timer, nichts anderes.
+        self.assertEqual(calls_alle.count("daemon-reload"), 2)
+        self.assertEqual(calls_alle.count("enable --now audiomonastry-idle-shutdown.timer"), 2)
+        self._assert_nur_erlaubte_aufrufe(calls_alle)
+
+    # --- 3. Parameter -------------------------------------------------------
+    def test_parameter_landen_in_den_kopien_und_nicht_im_repo(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p3f9-param-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
+            env = self._sandbox(tmp, IDLE_MINUTES="60", CHECK_INTERVAL="3")
+            ergebnis = self._install(env)
+            combined = self._combined(ergebnis)
+            service_kopie = (tmp / "units" / "audiomonastry-idle-shutdown.service").read_text(encoding="utf-8")
+            timer_kopie = (tmp / "units" / "audiomonastry-idle-shutdown.timer").read_text(encoding="utf-8")
+
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("Environment=IDLE_MINUTES=60", service_kopie)
+        self.assertIn("OnUnitActiveSec=3min", timer_kopie)
+        self.assertIn("idle=60 min, Pruefung alle 3 min", combined)
+        # Die Repo-Dateien bleiben die Quelle mit den Defaults (kein Drift).
+        self.assertIn("Environment=IDLE_MINUTES=30", IDLE_SERVICE_UNIT.read_text(encoding="utf-8"))
+        self.assertIn("OnUnitActiveSec=5min", IDLE_TIMER_UNIT.read_text(encoding="utf-8"))
+
+    # --- 4. Unvollstaendiger Zustand: kein Token ---------------------------
+    def test_ohne_token_bricht_der_installer_mit_klartext_ab(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p3f9-notoken-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text("# Knoten-.env ohne Token\n", encoding="utf-8")
+            env = self._sandbox(tmp)
+            ergebnis = self._install(env)
+            combined = self._combined(ergebnis)
+            calls = self._calls(tmp)
+            units_da = (tmp / "units").exists()
+            bin_da = (tmp / "local-bin").exists()
+            token_da = (tmp / "etc-audiomonastry" / "idle-check.env").exists()
+
+        self.assertEqual(ergebnis.returncode, 2, combined)
+        self.assertIn("[fail] Kein Token gefunden", combined)
+        self.assertIn("IDLE_ALLOW_TOKEN_LESS=1", combined)
+        self.assertIn("NICHTS installiert", combined)
+        # Fail-early: nichts kopiert, nichts aktiviert, nichts gestartet.
+        self.assertFalse(units_da, "Der Installer hat trotz fehlendem Token Einheiten installiert")
+        self.assertFalse(bin_da)
+        self.assertFalse(token_da)
+        self.assertEqual(calls, [])
+
+    def test_allow_token_less_installiert_bewusst_den_blinden_check(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p3f9-tokenless-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text("# Knoten-.env ohne Token\n", encoding="utf-8")
+            env = self._sandbox(tmp, IDLE_ALLOW_TOKEN_LESS="1")
+            ergebnis = self._install(env)
+            combined = self._combined(ergebnis)
+            calls = self._calls(tmp)
+            token_text = (tmp / "etc-audiomonastry" / "idle-check.env").read_text(encoding="utf-8")
+
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn("[warn] IDLE_ALLOW_TOKEN_LESS=1", combined)
+        self.assertIn("fail-safe", combined)
+        self.assertIsNone(re.search(r"(?m)^SCRAPE_TOKEN=", token_text))
+        self.assertIsNone(re.search(r"(?m)^STUDIO_ACCESS_TOKEN=", token_text))
+        self.assertIn("enable --now audiomonastry-idle-shutdown.timer", calls)
+
+    def test_unvollstaendige_quellen_brechen_mit_klartext_ab(self) -> None:
+        """Fehlt eine Unit im Repo-Stand des Knotens (z. B. alte Repo-Kopie), darf
+        der Installer nichts halb installieren - Exit 1 mit Klartext."""
+        with tempfile.TemporaryDirectory(prefix="p3f9-src-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            fake_hetzner = tmp / "scripts" / "hetzner"
+            (fake_hetzner / "systemd").mkdir(parents=True)
+            shutil.copy(INSTALL_IDLE_SHUTDOWN, fake_hetzner / "install-idle-shutdown.sh")
+            shutil.copy(IDLE_CHECK_SRC, fake_hetzner / "systemd" / "idle-check.sh")
+            # Die Units fehlen absichtlich.
+            env = self._sandbox(tmp)
+            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
+            ergebnis = subprocess.run(
+                [self.bash, str(fake_hetzner / "install-idle-shutdown.sh")],
+                capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+            )
+            combined = self._combined(ergebnis)
+            units_da = (tmp / "units").exists()
+
+        self.assertEqual(ergebnis.returncode, 1, combined)
+        self.assertIn("[fail] Quelle fehlt", combined)
+        self.assertIn("audiomonastry-idle-shutdown.service", combined)
+        self.assertIn("NICHTS installiert", combined)
+        self.assertFalse(units_da)
+
+    # --- 5. Gegenprobe: der Installer stoppt nichts -------------------------
+    def test_gegenprobe_der_installer_stoppt_nichts(self) -> None:
+        code = self._code_only(INSTALL_IDLE_SHUTDOWN.read_text(encoding="utf-8"))
+        for verboten in (
+            "lifecycle.sh",
+            "systemctl stop",
+            "systemctl disable",
+            "shutdown -h",
+            "poweroff",
+            "reboot",
+            "docker stop",
+            "docker compose stop",
+            "down -v",
+            "rm -rf",
+        ):
+            self.assertNotIn(verboten, code, f"Der Installer darf '{verboten}' nicht ausfuehren")
+        # ... und die Units tragen keinen Stopp-Pfad.
+        self.assertNotIn("ExecStop", IDLE_SERVICE_UNIT.read_text(encoding="utf-8"))
+        # Der Check selbst faehrt nur herunter, wenn die APP idle meldet - und der
+        # Trockenlauf unterdrueckt das (die Zeile ist der Beleg im Skript).
+        check = IDLE_CHECK_SRC.read_text(encoding="utf-8")
+        self.assertIn('if [[ "$DRY_RUN" == "1" ]]', check)
+        self.assertIn("shutdown -h now", check)
+
+    # --- 6. Recreate-Pfad (Fake-ssh faehrt die Kommandozeile lokal) ---------
+    def test_recreate_pfad_schickt_den_installer_ueber_ssh(self) -> None:
+        command = "bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh"
+        bring_up = BRING_UP.read_text(encoding="utf-8")
+        self.assertIn(f'ssh_host "$ip" \'{command}\'', bring_up)
+        # Kein stilles Schlucken mehr: ein Fehlschlag wird benannt.
+        self.assertNotIn("install-idle-shutdown.sh' 2>/dev/null || true", bring_up)
+        self.assertIn("Idle-Timer konnte auf $ip nicht installiert werden", bring_up)
+        self.assertIn("install-idle-shutdown.sh", PORTAL_WORKER.read_text(encoding="utf-8"))
+
+        with tempfile.TemporaryDirectory(prefix="p3f9-recreate-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
+            env = self._sandbox(tmp, FAKE_SSH_LOG=str(tmp / "ssh.log"), FAKE_SSH_REPO=str(ROOT))
+            ssh = tmp / "bin" / "ssh"
+            ssh.write_text(FAKE_SSH_EXEC, encoding="utf-8")
+            ssh.chmod(0o755)
+            ergebnis = subprocess.run(
+                [self.bash, "-c", f"ssh root@203.0.113.7 '{command}'"],
+                capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
+            )
+            combined = self._combined(ergebnis)
+            ssh_log = (tmp / "ssh.log").read_text(encoding="utf-8") if (tmp / "ssh.log").exists() else ""
+            calls = self._calls(tmp)
+
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertIn(command, ssh_log)
+        self.assertIn("[done] Idle-Shutdown-Timer aktiv", combined)
+        self.assertIn("daemon-reload", calls)
+        self.assertIn("enable --now audiomonastry-idle-shutdown.timer", calls)
+        self._assert_nur_erlaubte_aufrufe(calls)
+
+    # --- 7. Trockenlauf: Units offline pruefbar -----------------------------
+    def test_print_units_gibt_die_repo_fassung_aus_und_installiert_nichts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p3f9-print-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            env = self._sandbox(tmp)  # bewusst OHNE Token: der Trockenlauf laeuft trotzdem
+            ergebnis = self._install(env, "--print-units")
+            combined = self._combined(ergebnis)
+            teile = ergebnis.stdout.split("---8<---")
+            calls = self._calls(tmp)
+            units_da = (tmp / "units").exists()
+            token_da = (tmp / "etc-audiomonastry" / "idle-check.env").exists()
+
+        self.assertEqual(ergebnis.returncode, 0, combined)
+        self.assertEqual(len(teile), 3, ergebnis.stdout)
+        # Teil 1/2 sind die Repo-Units (die erste Zeile ist die Pfad-Marke).
+        self.assertEqual(self._unit_teil(teile[0]), IDLE_SERVICE_UNIT.read_text(encoding="utf-8").strip())
+        self.assertEqual(self._unit_teil(teile[1]), IDLE_TIMER_UNIT.read_text(encoding="utf-8").strip())
+        # Teil 3 ist die Vorlage der Env-Datei - ohne Tokenwert.
+        self.assertIn("IDLE_CHECK_URL=http://127.0.0.1:8080/api/idle-signal", teile[2])
+        self.assertIn("Token-Werte werden nicht ausgegeben", ergebnis.stdout)
+        self.assertNotIn("token-aus-der-knoten-env", combined)
+        # Ein Trockenlauf installiert und aktiviert nichts.
+        self.assertFalse(units_da)
+        self.assertFalse(token_da)
+        self.assertEqual(calls, [])
+
+    # --- 8. systemd-analyze verify (Pfad-Trick, kein root) ------------------
+    def test_units_bestehen_systemd_analyze_verify(self) -> None:
+        """`systemd-analyze verify --root=<fake-root>`: der Trick braucht den
+        ExecStart-Pfad im Root (sonst "Command ... is not executable") und die
+        Basis-Targets (sonst "Unit sysinit.target not found")."""
+        analyze = shutil.which("systemd-analyze")
+        system_units = pathlib.Path("/usr/lib/systemd/system")
+        if analyze is None or not (system_units / "basic.target").is_file():
+            self.skipTest("systemd-analyze bzw. Basis-Units nicht vorhanden (z. B. Nicht-Linux-CI)")
+        with tempfile.TemporaryDirectory(prefix="p3f9-verify-") as tmpdir:
+            root = pathlib.Path(tmpdir) / "root"
+            (root / "etc" / "systemd" / "system").mkdir(parents=True)
+            (root / "usr" / "local" / "bin").mkdir(parents=True)
+            (root / "usr" / "lib" / "systemd" / "system").mkdir(parents=True)
+            for unit in (IDLE_SERVICE_UNIT, IDLE_TIMER_UNIT):
+                shutil.copy(unit, root / "etc" / "systemd" / "system" / unit.name)
+            check_kopie = root / "usr" / "local" / "bin" / "audiomonastry-idle-check.sh"
+            shutil.copy(IDLE_CHECK_SRC, check_kopie)
+            check_kopie.chmod(0o755)
+            for target in system_units.glob("*.target"):
+                shutil.copy(target, root / "usr" / "lib" / "systemd" / "system" / target.name)
+            ergebnisse = {
+                unit.name: subprocess.run(
+                    # `verify` MUSS als Verb mitkommen - ohne Verb lehnt
+                    # systemd-analyze `--root=` ab ("only supported for
+                    # cat-config, verify, condition and security").
+                    [analyze, "verify", f"--root={root}", unit.name],
+                    capture_output=True, text=True, timeout=120,
+                )
+                for unit in (IDLE_TIMER_UNIT, IDLE_SERVICE_UNIT)
+            }
+        for name, ergebnis in ergebnisse.items():
+            with self.subTest(unit=name):
+                self.assertEqual(ergebnis.returncode, 0, ergebnis.stdout + ergebnis.stderr)
+                self.assertEqual(ergebnis.stdout + ergebnis.stderr, "", f"systemd-analyze meldet etwas: {name}")
 
 
 class EdgeMonitoringLimitsTest(unittest.TestCase):
