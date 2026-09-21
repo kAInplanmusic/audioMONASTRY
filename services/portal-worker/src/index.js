@@ -955,9 +955,13 @@ UNIT
     systemctl enable --now stem-ai || true
     ;;
 esac
-# Idle-Auto-Shutdown nur auf app-1 (misst /api/online der App)
+# Idle-Auto-Shutdown auf app-1 (PROD-P3-F9): der Timer fragt die App
+# (GET /api/idle-signal auf dem App-Port); die Entscheidung faellt in der App.
+# Ein Fehlschlag ist sichtbar - der Installer bricht mit Klartext ab, wenn auf
+# dem Knoten kein Token erreichbar ist (dann waere der Timer strukturell blind).
 if [ "${role}" = "app" ]; then
-  bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh || true
+  bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh \
+    || echo "[portal] WARNUNG: Idle-Shutdown-Timer konnte auf dem App-Knoten nicht installiert werden (Grund oben)."
 fi
 touch /root/.audiomonastry-bootstrap-done
 `;

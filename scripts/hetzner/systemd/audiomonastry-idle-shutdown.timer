@@ -1,0 +1,29 @@
+# ============================================================================
+# audioMONASTRY · systemd-Timer: Idle-Shutdown-Check (PROD-P3-F9 / F9)
+# ----------------------------------------------------------------------------
+# 5 Minuten nach jedem Boot (die Flotte wird je Session neu erzeugt - ein
+# Kalenderzeitpunkt wuerde bei kurzen Sessions nie greifen) und danach alle
+# OnUnitActiveSec Minuten, solange der Knoten laeuft. Aktivieren:
+#     sudo bash scripts/hetzner/install-idle-shutdown.sh
+#     IDLE_MINUTES=60 CHECK_INTERVAL=5 sudo -E bash scripts/hetzner/install-idle-shutdown.sh
+#     IDLE_MINUTES=0.05 CHECK_INTERVAL=1 …        # Trockenlauf einer Session
+# Pruefen:
+#     systemctl list-timers audiomonastry-idle-shutdown.timer
+#     systemctl status audiomonastry-idle-shutdown.timer --no-pager
+#     tail -n 20 /var/log/audiomonastry-idle-shutdown.log
+# Ein Reboot ist unkritisch: der Timer ist `enabled`, kommt also von selbst
+# wieder (OnBootSec). `systemctl disable --now` schaltet ihn ab - der Installer
+# tut das nie.
+# ============================================================================
+[Unit]
+Description=audioMONASTRY idle check every 5 minutes
+Documentation=file:///opt/audiomonastry/docs/OPS_RUNBOOK.md
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+AccuracySec=30s
+Unit=audiomonastry-idle-shutdown.service
+
+[Install]
+WantedBy=timers.target
