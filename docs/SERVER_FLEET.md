@@ -209,7 +209,7 @@ bringen und dort einen zweiten Caddy für dieselbe Domain starten.
 > `restart: unless-stopped` die damals gestarteten Container
 > (`caddy`/`audiomonastry`/`master-player`) wieder hoch — der Portal-Wake führt bei
 > Snapshot-Starts **kein** Compose aus. Der CLI-Pfad stoppt sie beim Flottenstart
-> automatisch (`bring-up-fleet.sh`, Schritt 5); für den Portal-Pfad gilt einmalig
+> automatisch (`bring-up-fleet.sh`, Schritt 6); für den Portal-Pfad gilt einmalig
 > auf dem Knoten: `docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml stop caddy audiomonastry master-player` — danach ein frisches
 > edge-Snapshot ziehen.
 

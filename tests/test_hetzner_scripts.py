@@ -24,7 +24,7 @@ automatisch pruefen lassen:
     `enable --now` des EIGENEN Timers und bricht ohne Token mit Klartext ab,
     BEVOR er Einheiten installiert (ein Timer ohne Token kann strukturell nie
     ausloesen = dieselbe Fehlerklasse wie der F9-Befund). Der Recreate-Pfad
-    (`bring-up-fleet.sh` Schritt 7 und der Portal-Wake) wird mit einem Fake-ssh
+    (`bring-up-fleet.sh` Schritt 8 und der Portal-Wake) wird mit einem Fake-ssh
     gefahren, der die Kommandozeile LOKAL ausfuehrt - kein Knoten, kein systemd,
     kein Shutdown.
 
@@ -71,6 +71,24 @@ im Remote-Build-Modus darf kein `docker save`/`docker load` in der Kommandoliste
 stehen, die Abschaltung muss wirklich den Transfer fahren, und das zweite Image
 (`audiomonastry-master-player:hetzner`) muss ueber den Compose-Build-Kontext
 erfasst sein.
+
+INFRA-HETZNER-014 (2026-09-21): Nach dem Neuaufbau der Flotte trugen drei
+Hetzner-Firewalls noch die Quell-IPs der VORHERIGEN Flotte (app:8080 von der
+alten edge-1, ai:8000/11434 und master:8000 von der alten app-1) - der
+Querverkehr edge->app, app->ai und app->master war stumm blockiert, von aussen
+unsichtbar, weil alles Oeffentliche ueber Cloudflare laeuft. Zwei Klassen halten
+den Fix fest: `CrossNodeFirewallAbgleichTest` faehrt den ECHTEN Codepfad von
+`scripts/hetzner/firewall-ensure.py` gegen einen LOKALEN HTTP-Stub der
+Hetzner-API (kein Hetzner, kein Token, keine Flotte; der Stub fuehrt set_rules
+wirklich nach und kann das Schreiben fuer die Gegenprobe bewusst ignorieren) und
+prueft: veraltete Quelle ersetzt + alle uebrigen Regeln zeichengleich, "schon
+aktuell" ohne Schreibaufruf, ohne Token kein Request, `--print-config`/`--dry-run`
+schreiben nicht, abweichende Gegenprobe => Exit ungleich 0, keine erfundenen
+Regeln, keine Verengung offener Regeln. `FirewallAbgleichImFlottenstartTest`
+prueft die Einbindung (Schritt 3/9 NACH der Provisionierung und VOR den Deploys,
+fortlaufende Schrittnummern, Abschaltbefehl `FLEET_FIREWALL_ENSURE=0` - am echten
+Text der Verzweigung mit gefaktem python3 gefahren -, Trockenlauf nennt den
+Vertrag).
 """
 from __future__ import annotations
 
@@ -117,6 +135,8 @@ IDLE_SERVICE_UNIT = HETZNER / "systemd" / "audiomonastry-idle-shutdown.service"
 IDLE_TIMER_UNIT = HETZNER / "systemd" / "audiomonastry-idle-shutdown.timer"
 DEPLOY_SH = ROOT / "deploy.sh"
 FLEET_PREFLIGHT = HETZNER / "fleet-preflight.sh"
+# INFRA-HETZNER-014: Cross-Node-Firewall-Regeln auf die aktuellen Knoten-IPs.
+FIREWALL_ENSURE = HETZNER / "firewall-ensure.py"
 PORTAL_WORKER = ROOT / "services" / "portal-worker" / "src" / "index.js"
 SERVER_FLEET_DOC = ROOT / "docs" / "SERVER_FLEET.md"
 COMPOSE_BASE = ROOT / "docker-compose.hetzner.yml"
@@ -1126,6 +1146,12 @@ CONTROLLED_ENV = (
     "TRANSFER_TMP", "PARALLEL_TRANSFER_CONNECTIONS", "PARALLEL_TRANSFER_ZSTD_LEVEL",
     "PARALLEL_TRANSFER_URL_TTL", "PARALLEL_TRANSFER_PREFIX", "PARALLEL_TRANSFER_REFERENCE_MBPS",
     "MEDIA_SRC_ORCHESTRAL", "MEDIA_SRC_MODELS", "MEDIA_SRC_MUSIC", "MEDIA_R2_NO_INSTALL",
+    # INFRA-HETZNER-014: der Firewall-Abgleich liest HCLOUD_TOKEN/Grenzen aus der
+    # Umgebung. Ohne diese Eintraege wuerde ein Testlauf den Token der Betreiber-
+    # Shell nehmen (gemessen 2026-09-21: HCLOUD_TOKEN war in der Prozessumgebung
+    # gesetzt) und "ohne Token" waere nicht pruefbar.
+    "HCLOUD_TOKEN", "HCLOUD_ENV_FILE", "HCLOUD_API_BASE", "FLEET_PREFIX",
+    "FLEET_FIREWALL_ENSURE",
 )
 
 
@@ -3379,7 +3405,7 @@ class FleetStartRemoteBuildDefaultTest(unittest.TestCase):
     def test_flottenstart_reicht_den_schalter_an_deploy_sh_durch(self) -> None:
         # Der Schalter muss im AUFRUF stehen (nicht nur in einer Anzeige) - sonst
         # meldet der Flottenstart einen Weg, den er nicht faehrt.
-        aufruf = self.text.split('step "4/7 app-1 deployen')[1].split("# --- 5.")[0]
+        aufruf = self.text.split('step "5/9 app-1 deployen')[1].split("# --- 6.")[0]
         self.assertIn('DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD"', aufruf)
         self.assertIn("sg docker -c", aufruf)
         # Und deploy.sh liest genau diesen Namen (kein zweiter Schaltername).
@@ -4969,6 +4995,581 @@ class R2CredentialPrecedenceTest(unittest.TestCase):
         self.assertEqual(r.stdout.strip(), "umgebungs-key|umgebungs-secret",
                          f"Mit R2_ALLOW_ENV_OVERRIDE=1 muss die Umgebung gelten: {r.stdout!r}")
 
+
+# ---------------------------------------------------------------------------
+# INFRA-HETZNER-014 (2026-09-21): Firewall-Regel-Drift nach einem Neuaufbau
+# ---------------------------------------------------------------------------
+# Befund (live gemessen): drei Firewalls trugen nach dem Neuaufbau der Flotte
+# noch die Quell-IPs der VORHERIGEN Flotte -
+#   audiomonastry-app:    8080 nur von 167.233.192.196/32 (alte edge-1)
+#   audiomonastry-ai:     8000 + 11434 nur von 142.132.229.71/32 (alte app-1)
+#   audiomonastry-master: 8000 nur von derselben alten app-1-IP.
+# Der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000/11434
+# (Stem-AI/Ollama) und app->master:8000 (master-player) war damit stumm
+# blockiert - von aussen unsichtbar, weil alles Oeffentliche ueber Cloudflare
+# laeuft. `scripts/hetzner/firewall-ensure.py` gleicht die Quell-IPs gegen die
+# TATSAECHLICHEN Knoten-IPs ab (idempotent, non-destruktiv).
+#
+# Gefahren wird der ECHTE Codepfad des Skripts gegen einen LOKALEN HTTP-Stub der
+# Hetzner-API (127.0.0.1, kein Hetzner, kein Token, keine Flotte). Der Stub
+# fuehrt set_rules wirklich nach, sonst waere "der Trockenlauf schreibt nichts"
+# nur ein Textversprechen; fuer die Gegenprobe kann er das Schreiben bewusst
+# ignorieren (Fall e).
+
+#: Soll-Vertrag, den der Test unabhaengig nachrechnet (Firewall-Suffix, Port, Rolle).
+#: Muss mit scripts/hetzner/firewall-ensure.py (CONTRACT) uebereinstimmen - der
+#: letzte Test der Klasse haelt beide Quellen deckungsgleich.
+CROSS_NODE_CONTRACT = (
+    ("app", "8080", "edge"),
+    ("ai", "8000", "app"),
+    ("ai", "11434", "app"),
+    ("master", "8000", "app"),
+)
+
+#: Knoten-IPs des Test-Szenarios (Testnetze nach RFC 5737, keine echten Adressen).
+FLEET_TEST_IPS = {
+    "app": "203.0.113.5",
+    "sfu": "203.0.113.6",
+    "ai": "203.0.113.7",
+    "master": "203.0.113.8",
+    "edge": "198.51.100.7",
+}
+
+#: Die ALTEN IPs aus dem Befund: sie duerfen in keiner Regel mehr stehen.
+ALTE_APP_IP = "142.132.229.71"
+ALTE_EDGE_IP = "167.233.192.196"
+
+
+def fleet_stub_servers(rollen: tuple[str, ...] = ("app", "sfu", "ai", "master", "edge")) -> list[dict]:
+    """Hetzner-Server-Objekte fuer die Namensaufloesung (Name + IPv4 genuegen)."""
+    return [
+        {
+            "id": 1000 + index,
+            "name": f"audiomonastry-{role}-1",
+            "status": "running",
+            "public_net": {"ipv4": {"ip": FLEET_TEST_IPS[role]}},
+        }
+        for index, role in enumerate(rollen)
+    ]
+
+
+def app_firewall_rules(old_edge_ip: str = ALTE_EDGE_IP) -> list[dict]:
+    """Firewall `audiomonastry-app` im Live-Zustand des Befunds.
+
+    Enthaelt bewusst alles, was NICHT angefasst werden darf: ICMP, SSH, die
+    Cloudflare-Bereiche auf 80/443 und IPv6-Quellen - dazu den veralteten
+    /32-Eintrag auf dem Metrik-Port 8080.
+    """
+    return [
+        {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
+        {"direction": "in", "protocol": "tcp", "port": "22", "source_ips": ["0.0.0.0/0", "::/0"], "description": "SSH"},
+        {"direction": "in", "protocol": "tcp", "port": "80",
+         "source_ips": ["172.64.0.0/13", "2606:4700::/32"], "description": "HTTP (Cloudflare)"},
+        {"direction": "in", "protocol": "tcp", "port": "443",
+         "source_ips": ["172.64.0.0/13", "2606:4700::/32"], "description": "HTTPS (Cloudflare)"},
+        {"direction": "in", "protocol": "tcp", "port": "8080",
+         "source_ips": [f"{old_edge_ip}/32"], "description": "App-Metriken (Monitoring-Scrape)"},
+    ]
+
+
+def ai_firewall_rules(old_app_ip: str = ALTE_APP_IP) -> list[dict]:
+    """Firewall `audiomonastry-ai`: Stem-AI 8000 + Ollama 11434 nur fuer die alte app-1."""
+    return [
+        {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
+        {"direction": "in", "protocol": "tcp", "port": "22", "source_ips": ["0.0.0.0/0", "::/0"], "description": "SSH"},
+        {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{old_app_ip}/32"], "description": "Stem-AI"},
+        {"direction": "in", "protocol": "tcp", "port": "11434", "source_ips": [f"{old_app_ip}/32"], "description": "Ollama"},
+    ]
+
+
+def master_firewall_rules(old_app_ip: str = ALTE_APP_IP) -> list[dict]:
+    """Firewall `audiomonastry-master`: master-player 8000 nur fuer die alte app-1."""
+    return [
+        {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
+        {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{old_app_ip}/32"], "description": "master-player"},
+    ]
+
+
+class _HetznerFleetStub:
+    """Lokale Hetzner-API-Attrappe mit echtem Zustand (kein Netz, kein Token).
+
+    Beantwortet genau die Pfade, die `firewall-ensure.py` faehrt: GET /servers,
+    GET /firewalls, GET /firewalls/<id> und POST
+    /firewalls/<id>/actions/set_rules. Der Schreibpfad aendert den Zustand
+    wirklich - mit `ignore_writes=True` bewusst NICHT (Gegenprobe-Fall e).
+    """
+
+    def __init__(
+        self,
+        servers: list[dict] | None = None,
+        firewalls: list[dict] | None = None,
+        ignore_writes: bool = False,
+    ) -> None:
+        self.servers = servers if servers is not None else fleet_stub_servers()
+        self.firewalls = firewalls or []
+        self.ignore_writes = ignore_writes
+        self.requests: list[tuple[str, str]] = []
+        self.payloads: list[dict] = []
+
+    def __enter__(self) -> "_HetznerFleetStub":
+        stub = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _send(self, status: int, payload: dict) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _read_payload(self) -> dict:
+                length = int(self.headers.get("content-length") or 0)
+                raw = self.rfile.read(length) if length else b""
+                payload = json.loads(raw.decode("utf-8")) if raw else {}
+                stub.payloads.append(payload)
+                return payload
+
+            def _firewall_by_id(self, fw_id: str) -> dict | None:
+                for fw in stub.firewalls:
+                    if str(fw.get("id")) == str(fw_id):
+                        return fw
+                return None
+
+            def do_GET(self) -> None:  # noqa: N802 - Name kommt von BaseHTTPRequestHandler
+                stub.requests.append(("GET", self.path))
+                path = urllib.parse.urlparse(self.path).path
+                if path == "/v1/servers":
+                    return self._send(200, {"servers": stub.servers, "meta": {"pagination": {"last_page": 1}}})
+                if path == "/v1/firewalls":
+                    return self._send(200, {"firewalls": stub.firewalls, "meta": {"pagination": {"last_page": 1}}})
+                if path.startswith("/v1/firewalls/"):
+                    fw = self._firewall_by_id(path.rsplit("/", 1)[-1])
+                    if fw is None:
+                        return self._send(404, {"error": {"code": "not_found", "message": "Firewall nicht gefunden"}})
+                    return self._send(200, {"firewall": fw})
+                return self._send(404, {"error": {"code": "not_found", "message": "unbekannter Pfad"}})
+
+            def do_POST(self) -> None:  # noqa: N802
+                stub.requests.append(("POST", self.path))
+                payload = self._read_payload()
+                path = urllib.parse.urlparse(self.path).path
+                if not path.startswith("/v1/firewalls/") or not path.endswith("/actions/set_rules"):
+                    return self._send(404, {"error": {"code": "not_found", "message": "unbekannter Pfad"}})
+                fw = self._firewall_by_id(path.split("/")[3])
+                if fw is None:
+                    return self._send(404, {"error": {"code": "not_found", "message": "Firewall nicht gefunden"}})
+                if not stub.ignore_writes:
+                    fw["rules"] = payload.get("rules") or []
+                return self._send(200, {"actions": [{"id": 1, "status": "success"}]})
+
+            def log_message(self, *args: Any) -> None:  # Testausgabe ruhig halten
+                return
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> Literal[False]:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        return False
+
+    @property
+    def api_base(self) -> str:
+        host, port = self.server.server_address[0], self.server.server_address[1]
+        return f"http://{host}:{port}/v1"
+
+    # --- Auswertung -------------------------------------------------------
+    def methods(self) -> list[str]:
+        return [method for method, _path in self.requests]
+
+    def writes(self) -> list[str]:
+        return [path for method, path in self.requests if method == "POST"]
+
+    def firewall(self, name: str) -> dict:
+        for fw in self.firewalls:
+            if fw.get("name") == name:
+                return fw
+        raise AssertionError(f"kein Firewall-Objekt {name}: {[f.get('name') for f in self.firewalls]}")
+
+    def rule(self, name: str, port: str) -> dict:
+        for entry in self.firewall(name).get("rules") or []:
+            if str(entry.get("port") or "") == str(port):
+                return entry
+        raise AssertionError(f"keine Regel tcp/{port} auf {name}: {self.firewall(name).get('rules')}")
+
+
+def voller_flotten_stub(ignore_writes: bool = False) -> _HetznerFleetStub:
+    """Alle drei Vertrags-Firewalls im Drift-Zustand des Befunds (+ unbeteiligte sfu-Firewall)."""
+    return _HetznerFleetStub(
+        firewalls=[
+            {"id": 4711, "name": "audiomonastry-app", "rules": app_firewall_rules()},
+            {"id": 4712, "name": "audiomonastry-ai", "rules": ai_firewall_rules()},
+            {"id": 4713, "name": "audiomonastry-master", "rules": master_firewall_rules()},
+            # unbeteiligt: kein Vertrags-Port - darf nie geschrieben werden.
+            {"id": 4714, "name": "audiomonastry-sfu",
+             "rules": [{"direction": "in", "protocol": "udp", "port": "40000-40099",
+                        "source_ips": ["0.0.0.0/0", "::/0"], "description": "RTP"}]},
+        ],
+        ignore_writes=ignore_writes,
+    )
+
+
+class CrossNodeFirewallAbgleichTest(unittest.TestCase):
+    """INFRA-HETZNER-014: der Firewall-Abgleich ist idempotent und non-destruktiv.
+
+    Kein Test kontaktiert Hetzner: die API-Basis zeigt auf den lokalen Stub.
+    """
+
+    TOKEN = "hcloud-nur-fuer-den-teststub-0000"
+
+    def setUp(self) -> None:
+        self.python = sys.executable
+
+    def _run(
+        self,
+        stub: _HetznerFleetStub | None,
+        *args: str,
+        token: str | None = TOKEN,
+        env_file: str | None = None,
+    ) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [self.python, str(FIREWALL_ENSURE), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(
+                HCLOUD_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/v1"),
+                HCLOUD_TOKEN=token,
+                # Ohne diesen Schalter laese das Skript die ECHTE .env.deploy des
+                # Betreiber-Rechners - dann waere "ohne Token" nicht pruefbar.
+                HCLOUD_ENV_FILE=(env_file if env_file is not None else "/nonexistent/nur-test.env"),
+            ),
+        )
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    @staticmethod
+    def _regeln_ohne_vertragsquellen(rules: list[dict]) -> list[dict]:
+        """Regeln, aber die source_ips der Vertragsports entfernt (Zeichengleich-Vergleich)."""
+        vertragsports = {port for _suffix, port, _role in CROSS_NODE_CONTRACT}
+        return [
+            {**rule, "source_ips": None} if str(rule.get("port") or "") in vertragsports else dict(rule)
+            for rule in rules
+        ]
+
+    # --- (a) veraltete Quelle wird ersetzt, der Rest bleibt zeichengleich --
+    def test_veraltete_quelle_wird_ersetzt_und_alles_andere_bleibt(self) -> None:
+        stub = voller_flotten_stub()
+        with stub:
+            before = {fw["name"]: json.loads(json.dumps(fw["rules"])) for fw in stub.firewalls}
+            result = self._run(stub)
+            after = {fw["name"]: json.loads(json.dumps(fw["rules"])) for fw in stub.firewalls}
+        combined = self._combined(result)
+
+        self.assertEqual(result.returncode, 0, combined)
+        # Genau die drei driftenden Firewalls wurden geschrieben, die sfu-Firewall nicht.
+        self.assertEqual(sorted(stub.writes()), [
+            "/v1/firewalls/4711/actions/set_rules",
+            "/v1/firewalls/4712/actions/set_rules",
+            "/v1/firewalls/4713/actions/set_rules",
+        ])
+        # Soll-Quellen stehen in der API (nachgelesener Zustand, nicht die Antwort).
+        self.assertEqual(stub.rule("audiomonastry-app", "8080")["source_ips"], [f"{FLEET_TEST_IPS['edge']}/32"])
+        self.assertEqual(stub.rule("audiomonastry-ai", "8000")["source_ips"], [f"{FLEET_TEST_IPS['app']}/32"])
+        self.assertEqual(stub.rule("audiomonastry-ai", "11434")["source_ips"], [f"{FLEET_TEST_IPS['app']}/32"])
+        self.assertEqual(stub.rule("audiomonastry-master", "8000")["source_ips"], [f"{FLEET_TEST_IPS['app']}/32"])
+        # Die ALTEN IPs sind weg - und die volle Regel-Liste ging raus (set_rules
+        # ersetzt alles, deshalb muss sie vollstaendig sein).
+        for fw in stub.firewalls:
+            flach = json.dumps(fw["rules"])
+            self.assertNotIn(ALTE_APP_IP, flach, flach)
+            self.assertNotIn(ALTE_EDGE_IP, flach, flach)
+        for name in ("audiomonastry-app", "audiomonastry-ai", "audiomonastry-master"):
+            self.assertEqual(len(after[name]), len(before[name]), f"{name}: Regelanzahl hat sich geaendert")
+        # ... und JEDE andere Regel ist zeichengleich geblieben (ICMP, SSH,
+        # Cloudflare-Bereiche, IPv6, Beschreibungen, Reihenfolge der Regeln).
+        for name in ("audiomonastry-app", "audiomonastry-ai", "audiomonastry-master"):
+            self.assertEqual(
+                self._regeln_ohne_vertragsquellen(before[name]),
+                self._regeln_ohne_vertragsquellen(after[name]),
+                f"{name}: eine Regel ausserhalb der Quell-IPs wurde veraendert",
+            )
+        self.assertEqual(before["audiomonastry-sfu"], after["audiomonastry-sfu"])
+        # Vorher/Nachher, Zaehler und Firewall-IDs stehen im Log.
+        self.assertIn(f"{ALTE_EDGE_IP}/32 -> {FLEET_TEST_IPS['edge']}/32", combined)
+        self.assertIn(f"{ALTE_APP_IP}/32 -> {FLEET_TEST_IPS['app']}/32", combined)
+        self.assertIn("geaendert=4", combined)
+        self.assertIn("geprueft=4", combined)
+        self.assertIn("audiomonastry-app=4711", combined)
+        self.assertIn("audiomonastry-ai=4712", combined)
+        self.assertIn("audiomonastry-master=4713", combined)
+        # Der Token erscheint nie.
+        self.assertNotIn(self.TOKEN, combined)
+
+    def test_zweiter_lauf_ist_idempotent(self) -> None:
+        stub = voller_flotten_stub()
+        with stub:
+            erster = self._run(stub)
+            erster_writes = list(stub.writes())
+            zweiter = self._run(stub)
+            zweiter_writes = list(stub.writes())
+
+        self.assertEqual(erster.returncode, 0, self._combined(erster))
+        self.assertEqual(len(erster_writes), 3)
+        self.assertEqual(zweiter.returncode, 0, self._combined(zweiter))
+        self.assertEqual(len(zweiter_writes), 3, "der zweite Lauf darf nicht erneut schreiben")
+        self.assertIn("unveraendert", zweiter.stdout)
+        self.assertIn("geaendert=0", zweiter.stdout)
+        self.assertIn("geprueft=4", zweiter.stdout)
+
+    # --- (b) schon aktuell: kein Schreibaufruf, Exit 0 ---------------------
+    def test_bereits_aktuell_schreibt_nichts_und_exit_null(self) -> None:
+        aktuell = FLEET_TEST_IPS
+        stub = _HetznerFleetStub(firewalls=[
+            {"id": 4711, "name": "audiomonastry-app", "rules": app_firewall_rules(aktuell["edge"])},
+            {"id": 4712, "name": "audiomonastry-ai", "rules": ai_firewall_rules(aktuell["app"])},
+            {"id": 4713, "name": "audiomonastry-master", "rules": master_firewall_rules(aktuell["app"])},
+        ])
+        with stub:
+            result = self._run(stub)
+
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.writes(), [], "kein Schreibaufruf, wenn alle Quellen aktuell sind")
+        # Nur gelesen: /servers + /firewalls.
+        self.assertEqual(stub.methods(), ["GET", "GET"])
+        self.assertIn("unveraendert", result.stdout)
+        self.assertIn("geaendert=0", result.stdout)
+        self.assertIn("geprueft=4", result.stdout)
+
+    # --- (c) fehlender Token: Exit != 0, kein Schreibaufruf ----------------
+    def test_ohne_token_kein_request_und_exit_ungleich_null(self) -> None:
+        stub = voller_flotten_stub()
+        with stub:
+            result = self._run(stub, token=None)
+
+        combined = self._combined(result)
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("HCLOUD_TOKEN fehlt", combined)
+        self.assertEqual(stub.requests, [], "ohne Token darf kein einziger Request entstehen")
+        self.assertIn("nur-test.env", combined)  # der erwartete Env-Pfad wird benannt
+
+    def test_token_aus_der_env_datei_wird_gelesen_aber_nie_ausgegeben(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="fwsync-env-") as tmpdir:
+            env_datei = pathlib.Path(tmpdir) / ".env.deploy"
+            env_datei.write_text(f"HCLOUD_TOKEN={self.TOKEN}\n", encoding="utf-8")
+            stub = _HetznerFleetStub(firewalls=[
+                {"id": 4711, "name": "audiomonastry-app", "rules": app_firewall_rules()},
+            ])
+            with stub:
+                result = self._run(stub, token=None, env_file=str(env_datei))
+            combined = self._combined(result)
+
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.rule("audiomonastry-app", "8080")["source_ips"], [f"{FLEET_TEST_IPS['edge']}/32"])
+        self.assertNotIn(self.TOKEN, combined, "der Tokenwert darf nie in der Ausgabe stehen")
+        self.assertIn("Fingerabdruck", combined)
+
+    # --- (d) --print-config und --dry-run schreiben nichts -----------------
+    def test_print_config_ist_netzfrei_und_zeigt_den_soll_vertrag(self) -> None:
+        stub = voller_flotten_stub()
+        with tempfile.TemporaryDirectory(prefix="fwsync-print-") as tmpdir:
+            env_datei = pathlib.Path(tmpdir) / ".env.deploy"
+            env_datei.write_text("HCLOUD_TOKEN=nicht-ausgeben\n", encoding="utf-8")
+            with stub:
+                result = self._run(stub, "--print-config", env_file=str(env_datei))
+
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.requests, [], "--print-config darf keinen API-Aufruf machen")
+        for fw_suffix, port, role in CROSS_NODE_CONTRACT:
+            with self.subTest(port=port):
+                self.assertRegex(combined, rf"audiomonastry-{fw_suffix}\s+tcp/{port}\s")
+                self.assertIn(f"audiomonastry-{role}-1", combined)
+        # Der Pfad der Env-Datei steht im Trockenlauf - aber kein Wert daraus.
+        self.assertIn(str(env_datei), combined)
+        self.assertNotIn("nicht-ausgeben", combined)
+        self.assertIn("FLEET_FIREWALL_ENSURE=0", combined)
+        self.assertNotIn(self.TOKEN, combined)
+
+    def test_dry_run_zeigt_den_plan_und_schreibt_nichts(self) -> None:
+        stub = voller_flotten_stub()
+        with stub:
+            before = json.loads(json.dumps([fw["rules"] for fw in stub.firewalls]))
+            result = self._run(stub, "--dry-run")
+            after = json.loads(json.dumps([fw["rules"] for fw in stub.firewalls]))
+
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.writes(), [], "--dry-run darf nicht schreiben")
+        self.assertEqual(stub.methods(), ["GET", "GET"])
+        self.assertEqual(before, after, "der Trockenlauf hat den Zustand veraendert")
+        self.assertIn(f"{ALTE_EDGE_IP}/32 -> {FLEET_TEST_IPS['edge']}/32", combined)
+        self.assertIn("Trockenlauf", combined)
+        self.assertIn("geaendert=4", combined)
+        self.assertNotIn(self.TOKEN, combined)
+
+    # --- (e) Gegenprobe schlaegt fehl -------------------------------------
+    def test_gegenprobe_weicht_ab_ergibt_exit_ungleich_null(self) -> None:
+        # Der Stub quittiert set_rules mit Erfolg, AENDERT den Zustand aber nicht
+        # (z. B. weil ein zweiter Schreiber dazwischenkam) - genau der Fall, den
+        # ein blindes "Schreiben war erfolgreich" verschlucken wuerde.
+        stub = voller_flotten_stub(ignore_writes=True)
+        with stub:
+            result = self._run(stub)
+
+        combined = self._combined(result)
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("FEHLER: Gegenprobe von audiomonastry-app weicht ab", combined)
+        self.assertIn("fehlt:", combined)
+        self.assertEqual(len(stub.writes()), 3, "jede driftende Firewall wurde versucht")
+        self.assertIn(ALTE_EDGE_IP, json.dumps(stub.firewall("audiomonastry-app")["rules"]))
+
+    # --- Grenzen: kein Erfinden, keine Einschraenkung ---------------------
+    def test_fehlende_rolle_wird_gemeldet_und_nicht_geraten(self) -> None:
+        # app-1 fehlt: die Quelle fuer ai:8000/11434 und master:8000 ist unbekannt -
+        # das Skript muss das melden und darf nichts schreiben.
+        stub = _HetznerFleetStub(
+            servers=fleet_stub_servers(("sfu", "ai", "master", "edge")),
+            firewalls=[{"id": 4712, "name": "audiomonastry-ai", "rules": ai_firewall_rules()}],
+        )
+        with stub:
+            result = self._run(stub)
+
+        combined = self._combined(result)
+        self.assertNotEqual(result.returncode, 0, combined)
+        self.assertIn("audiomonastry-app-1", combined)
+        self.assertIn("FEHLT", combined)
+        self.assertIn("Soll-Zustand nicht ableitbar", combined)
+        self.assertEqual(stub.writes(), [])
+
+    def test_fehlende_regel_wird_gemeldet_aber_nichts_angelegt(self) -> None:
+        # Ohne 8080-Regel ist der Scrape nicht verdrahtet: melden (Exit 0), aber
+        # NICHT erfinden - Regeln anzulegen ist Sache des Verdrahtungs-Pfads.
+        stub = _HetznerFleetStub(firewalls=[
+            {"id": 4711, "name": "audiomonastry-app", "rules": app_firewall_rules()[:-1]},
+        ])
+        with stub:
+            result = self._run(stub)
+
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Regel fehlt", combined)
+        self.assertIn("geprueft=0", combined)
+        self.assertEqual(stub.writes(), [])
+
+    def test_offene_regel_wird_nicht_eingeschraenkt(self) -> None:
+        # 0.0.0.0/0 heisst "fuer alle offen": das ist keine veraltete Knoten-IP,
+        # sondern eine bewusste Freigabe - sie wird nicht auf den Knoten verengt.
+        rules = app_firewall_rules()
+        rules[-1] = {"direction": "in", "protocol": "tcp", "port": "8080",
+                     "source_ips": ["0.0.0.0/0", "::/0"], "description": "bewusst offen"}
+        stub = _HetznerFleetStub(firewalls=[{"id": 4711, "name": "audiomonastry-app", "rules": rules}])
+        with stub:
+            result = self._run(stub)
+
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.writes(), [])
+        self.assertEqual(stub.rule("audiomonastry-app", "8080")["source_ips"], ["0.0.0.0/0", "::/0"])
+        self.assertIn("fuer ALLE offen", combined)
+
+    def test_api_fehler_ergibt_exit_zwei(self) -> None:
+        # Kein Server erreichbar (Port 9): der Lauf endet mit Befund, nicht mit 0.
+        result = self._run(None)
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("FEHLER beim Lesen der Flotte", combined)
+
+    def test_konfiguration_im_skript_ist_eine_quelle(self) -> None:
+        # Der Soll-Vertrag im Skript muss mit dem hier nachgerechneten Vertrag
+        # identisch sein - sonst prueft der Test etwas anderes als der Betrieb.
+        module = load_module("hetzner_firewall_ensure", FIREWALL_ENSURE)
+        self.assertEqual(tuple(tuple(eintrag) for eintrag in module.CONTRACT), CROSS_NODE_CONTRACT)
+
+
+class FirewallAbgleichImFlottenstartTest(unittest.TestCase):
+    """INFRA-HETZNER-014: der Abgleich laeuft im Flottenstart (Schritt 3/9)."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.text = BRING_UP.read_text(encoding="utf-8")
+
+    def test_abgleich_laeuft_nach_der_provisionierung_vor_den_deploys(self) -> None:
+        provision = self.text.index("bash scripts/hetzner/provision-fleet.sh")
+        abgleich = self.text.index("python3 scripts/hetzner/firewall-ensure.py \\\n")
+        ssh_warten = self.text.index('step "4/9 Auf Cloud-Init/SSH warten')
+        deploy = self.text.index('step "5/9 app-1 deployen')
+        self.assertLess(provision, abgleich, "der Abgleich muss NACH dem Anlegen der Knoten laufen")
+        self.assertLess(abgleich, ssh_warten)
+        self.assertLess(abgleich, deploy)
+
+    def test_schrittnummerierung_ist_vollstaendig_und_fortlaufend(self) -> None:
+        schritte = re.findall(r'^step "(\d+)/(\d+) ', self.text, re.MULTILINE)
+        self.assertEqual([int(nummer) for nummer, _total in schritte], list(range(1, 10)))
+        self.assertEqual({total for _nummer, total in schritte}, {"9"})
+
+    def test_abschaltbefehl_ist_dokumentiert_und_nicht_still(self) -> None:
+        self.assertIn('FLEET_FIREWALL_ENSURE="${FLEET_FIREWALL_ENSURE:-1}"', self.text)
+        self.assertIn('if [[ "$FLEET_FIREWALL_ENSURE" == "1" ]]; then', self.text)
+        self.assertIn("uebersprungen (FLEET_FIREWALL_ENSURE=0)", self.text)
+        self.assertIn("FLEET_FIREWALL_ENSURE=0 bash scripts/hetzner/bring-up-fleet.sh", self.text)
+        # Ein Fehlschlag darf nicht still sein (genau die Fehlerklasse des Befunds).
+        self.assertIn("⚠ Firewall-Abgleich fehlgeschlagen", self.text)
+        self.assertIn("docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014)", self.text)
+
+    def test_trockenlauf_zeigt_den_firewall_schritt_und_den_vertrag(self) -> None:
+        result = subprocess.run(
+            [self.bash, str(BRING_UP), "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(),
+        )
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Firewall:  Schritt 3/9", result.stdout)
+        self.assertIn("FLEET_FIREWALL_ENSURE=1", result.stdout)
+        # Der Abgleich selbst wird netzfrei mitgedruckt (Rolle -> Firewall -> Ports).
+        self.assertIn("Soll-Zuordnung", result.stdout)
+        self.assertRegex(result.stdout, r"audiomonastry-app\s+tcp/8080")
+        self.assertRegex(result.stdout, r"audiomonastry-master\s+tcp/8000")
+        self.assertIn("Abschalten:  FLEET_FIREWALL_ENSURE=0", result.stdout)
+
+    def test_abschalten_ueberspringt_den_aufruf_wirklich(self) -> None:
+        # Gegenprobe des Schalters am ECHTEN Text der Verzweigung: mit
+        # FLEET_FIREWALL_ENSURE=0 darf kein Abgleich starten, mit 1 muss er
+        # starten (sonst waere der Schalter nur eine Zeile im Log).
+        schritt_kopf = 'step "3/9 Cross-Node-Firewall-Regeln auf die aktuellen Knoten-IPs abgleichen"'
+        rumpf = self.text.split(schritt_kopf)[1].split("# --- 4.")[0]
+        aufruf = "  python3 scripts/hetzner/firewall-ensure.py \\\n"
+        self.assertIn(aufruf, rumpf)
+        with tempfile.TemporaryDirectory(prefix="fwsync-off-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            log = tmp / "python.log"
+            log.write_text("", encoding="utf-8")
+            fake = tmp / "python3"
+            fake.write_text("#!/usr/bin/env bash\nprintf '%s\\n' \"$*\" >> \"${FAKE_PY_LOG:?}\"\nexit 0\n", encoding="utf-8")
+            fake.chmod(0o755)
+            skript = 'step() { :; }\n' + rumpf.replace(
+                aufruf, f"  {fake} scripts/hetzner/firewall-ensure.py \\\n"
+            )
+            env = clean_env(FAKE_PY_LOG=str(log))
+            ohne = subprocess.run([self.bash, "-c", skript], capture_output=True, text=True,
+                                  cwd=ROOT, timeout=60, env=dict(env, FLEET_FIREWALL_ENSURE="0"))
+            log_ohne = log.read_text(encoding="utf-8")
+            log.write_text("", encoding="utf-8")
+            mit = subprocess.run([self.bash, "-c", skript], capture_output=True, text=True,
+                                 cwd=ROOT, timeout=60, env=dict(env, FLEET_FIREWALL_ENSURE="1"))
+            log_mit = log.read_text(encoding="utf-8")
+
+        self.assertEqual(ohne.returncode, 0, ohne.stdout + ohne.stderr)
+        self.assertIn("uebersprungen", ohne.stdout + ohne.stderr)
+        self.assertEqual(log_ohne, "", "mit FLEET_FIREWALL_ENSURE=0 darf kein Abgleich laufen")
+        self.assertEqual(mit.returncode, 0, mit.stdout + mit.stderr)
+        self.assertIn("scripts/hetzner/firewall-ensure.py", log_mit,
+                      "mit FLEET_FIREWALL_ENSURE=1 muss der Abgleich wirklich starten")
 
 if __name__ == "__main__":
     unittest.main()
