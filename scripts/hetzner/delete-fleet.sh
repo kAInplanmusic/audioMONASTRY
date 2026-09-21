@@ -30,7 +30,8 @@ done
 if [[ "${1:-}" != "--yes" ]]; then
   echo "Folgende Server werden ENDGÜLTIG gelöscht:"
   printf '  - %s\n' "${ALL_NAMES[@]}"
-  echo "Die Floating-IP (${FLOATING_IP_NAME:-audiomonastry-floating}) bleibt reserviert (3 €/Monat)."
+  echo "Floating-IPs: keine mehr im Projekt (seit 2026-09-21 wird fuer die App-Rolle keine angelegt;"
+  echo "  der Portal-Worker loescht vorhandene beim Flotten-Abbau selbst - sie kostete 3 EUR/Monat ohne Funktion)."
   read -r -p "Wirklich löschen? [j/N] " ans
   [[ "$ans" == "j" || "$ans" == "J" ]] || { echo "Abgebrochen."; exit 0; }
 fi

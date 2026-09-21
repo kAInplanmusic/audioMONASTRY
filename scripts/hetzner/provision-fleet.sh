@@ -60,7 +60,7 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   # docker-compose.hetzner.yml und COMPOSE_PROJECT_NAME in den Deploy-Skripten.
   echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME)"
   printf '  %-28s %-12s %-7s %s\n' \
-    audiomonastry-app-1    "$TYPE_APP"    app    "firewall=audiomonastry-app, floating-ip=audiomonastry-floating" \
+    audiomonastry-app-1    "$TYPE_APP"    app    "firewall=audiomonastry-app, floating-ip=none (DNS nutzt die primaere IPv4)" \
     audiomonastry-sfu-1    "$TYPE_SFU"    sfu    "firewall=audiomonastry-sfu, floating-ip=none (RTP 40000-40099)" \
     audiomonastry-ai-1     "$TYPE_AI"     ai     "firewall=audiomonastry-ai, floating-ip=none (host-nativ)" \
     audiomonastry-master-1 "$TYPE_MASTER" master "firewall=audiomonastry-master, floating-ip=none" \
@@ -89,7 +89,13 @@ provision_one() {
 
 # Rollen + Typen: genau die Zeilen, die --print-config ohne API ausgibt.
 
-provision_one audiomonastry-app-1    "$TYPE_APP" app    audiomonastry-app    audiomonastry-floating
+# KEINE Floating IP fuer die App-Rolle (2026-09-21 gemessen, 3,00 EUR/Monat gespart):
+#   * der DNS-Pfad nutzt die PRIMAERE IPv4 (`app.public_net.ipv4.ip`, portal-worker),
+#   * der Portal-Worker LOESCHT Floating IPs beim Flotten-Abbau selbst,
+#   * `configure-floating-ip.sh` (OS-Konfiguration, ohne NAT noetig) wird von keinem
+#     Deploy-Pfad aufgerufen - die IP war also zugewiesen, aber nirgends nutzbar.
+# Wer sie bewusst will: FLOATING_IP_NAME=<name> und den provision.py-Aufruf anpassen.
+provision_one audiomonastry-app-1    "$TYPE_APP" app    audiomonastry-app    none
 provision_one audiomonastry-sfu-1    "$TYPE_SFU" sfu    audiomonastry-sfu    none
 provision_one audiomonastry-ai-1     "$TYPE_AI"  ai     audiomonastry-ai     none
 provision_one audiomonastry-master-1 "$TYPE_MASTER" master audiomonastry-master none
