@@ -15,7 +15,15 @@
  * Analyse-Rohdaten zu einem stabilen Feature-Vertrag und leitet daraus
  * Vorschläge ab. Es trifft keine ML-Annahmen – fehlende Embedding-Werte werden
  * als Schätzung markiert, nicht erfunden.
+ *
+ * SSOT DSP-P2-003: Liegt in `raw.dsp.spectrum` ein ECHTES FFT-Spektrum
+ * (spectrum.ts, gefüllt aus einem AnalyserNode), kommt die Energie aus den
+ * Frequenzbändern statt aus dem Lautheits-Proxy – und das Profil nennt die
+ * Herkunft (`energySource`) samt Band-Schwerpunkt und Peak. Ohne Spektrum
+ * bleibt der bisherige Weg unverändert (Headless/Tests/kein Audio).
  */
+
+import type { DropSpectrum, SpectrumBand } from './spectrum';
 
 /** Rohdaten der Analyse (aus `audio.analyze` + `audio.classify` + `audio.embed`). */
 export interface DropAnalysisRaw {
@@ -29,6 +37,12 @@ export interface DropAnalysisRaw {
     peakDbfs: number;
     /** 0..1 – Anteil transienter Energie (Onset-Stärke). */
     transientStrength: number;
+    /**
+     * Optionaler, ECHTER FFT-Spektralwert des Mixes (Bass/Mitten/Höhen,
+     * Peak-Bin) – siehe `spectrum.ts`/`MixerBridge.getSpectrum()`.
+     * Fehlt er, gilt wie bisher der reine Pegel-/Lautheits-Weg.
+     */
+    spectrum?: DropSpectrum | null;
   };
   /** AST-AudioSet-Labels mit Score (0..1). */
   labels?: Array<{ label: string; score: number }>;
@@ -63,7 +77,29 @@ export interface DropAudioFeatures {
   estimated: { energy: boolean; danceability: boolean; genreAffinity: boolean };
   /** Bestes AST-Label (für Audit/Transparenz). */
   topLabel: string | null;
+  /**
+   * Kompakter Spektralwert aus echter FFT – nur vorhanden, wenn ein Analyser
+   * einen Frame geliefert hat (SSOT DSP-P2-003). Bewusst eine Kopie, damit ein
+   * wiederverwendetes Spektrum-Objekt nicht nachträglich das Profil ändert.
+   */
+  spectrum?: DropSpectrumSummary;
+  /** Herkunft der Energie (Nachvollziehbarkeit für UI/Audit). */
+  energySource?: DropEnergySource;
 }
+
+/** Skalarer Auszug aus `DropSpectrum` für den Feature-Vertrag. */
+export interface DropSpectrumSummary {
+  bass: number;
+  mid: number;
+  treble: number;
+  overall: number;
+  dominantBand: SpectrumBand | 'none';
+  peakHz: number;
+  peakDbfs: number;
+}
+
+/** Woher die Energie im Profil kommt. */
+export type DropEnergySource = 'embedding' | 'spectrum' | 'levels';
 
 /** Projekt-/Arrangement-Kontext des laufenden Tracks. */
 export interface DropProjectContext {
@@ -101,6 +137,14 @@ const TYPE_RULES: Array<{ pattern: RegExp; type: string; instrument: string }> =
 
 /** AST-Label, die auf eine Gesangs-/Spurstimme hindeuten. */
 const VOCAL_PATTERN = /singing|vocal|voice|speech|choir|male|female/i;
+
+/** Band-Namen für Nutzer-Hinweise (Spektrum, SSOT DSP-P2-003). */
+const BAND_LABELS: Record<SpectrumBand | 'none', string> = {
+  bass: 'Bass',
+  mid: 'Mitten',
+  treble: 'Höhen',
+  none: 'keine hörbaren Bänder',
+};
 
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -152,9 +196,19 @@ export function analyzeDropAudio(raw: DropAnalysisRaw): DropAudioFeatures {
   const energyFromModel = raw.embeddings?.energy;
   const danceFromModel = raw.embeddings?.danceability;
   const genres = raw.embeddings?.genreAffinity;
+  const spectrum = raw.dsp.spectrum ?? null;
 
   // Energie-Proxy: Lautheit relativ zu einem typischen Loop-Pegel (-24 … -6 LUFS).
   const energyProxy = clamp01((raw.dsp.loudnessLufs + 24) / 18);
+  // Echte FFT bevorzugt: sie kennt das Spektrum, nicht nur den Gesamtpegel.
+  const energyValue =
+    energyFromModel !== undefined
+      ? clamp01(energyFromModel)
+      : spectrum
+        ? clamp01(spectrum.overall)
+        : energyProxy;
+  const energySource: DropEnergySource =
+    energyFromModel !== undefined ? 'embedding' : spectrum ? 'spectrum' : 'levels';
   // Danceability-Proxy: Transientenstärke plus Nähe zu typischen Club-Tempi (120–145).
   const tempoAffinity = raw.dsp.bpm >= 120 && raw.dsp.bpm <= 145
     ? 1
@@ -170,7 +224,7 @@ export function analyzeDropAudio(raw: DropAnalysisRaw): DropAudioFeatures {
     peakDbfs: round(raw.dsp.peakDbfs, 1),
     type,
     genreAffinity: (genres ?? []).map((g) => ({ genre: g.genre, score: round(clamp01(g.score), 2) })),
-    energy: round(energyFromModel === undefined ? energyProxy : clamp01(energyFromModel), 2),
+    energy: round(energyValue, 2),
     danceability: round(danceFromModel === undefined ? danceProxy : clamp01(danceFromModel), 2),
     instrument,
     vocal,
@@ -181,6 +235,19 @@ export function analyzeDropAudio(raw: DropAnalysisRaw): DropAudioFeatures {
       genreAffinity: !genres || genres.length === 0,
     },
     topLabel,
+    // Kopie statt Referenz: das Spektrum-Objekt wird im Hot Path wiederverwendet.
+    spectrum: spectrum
+      ? {
+          bass: round(clamp01(spectrum.bass), 3),
+          mid: round(clamp01(spectrum.mid), 3),
+          treble: round(clamp01(spectrum.treble), 3),
+          overall: round(clamp01(spectrum.overall), 3),
+          dominantBand: spectrum.dominantBand,
+          peakHz: round(spectrum.peakHz, 1),
+          peakDbfs: round(spectrum.peakDbfs, 1),
+        }
+      : undefined,
+    energySource,
   };
 }
 
@@ -240,6 +307,15 @@ export function deriveDropSuggestions(features: DropAudioFeatures, project: Drop
   }
   if (features.estimated.energy || features.estimated.danceability) {
     suggestions.push({ kind: 'note', reason: 'Energy/Danceability sind aus DSP-Werten geschätzt (kein Embedding-Modell verfügbar) – Beachten beim Vergleich mit anderen Samples.' });
+  }
+  // 5) Spektrale Transparenz: nur wenn ein echter Analyser einen Frame lieferte.
+  if (features.spectrum) {
+    suggestions.push({
+      kind: 'note',
+      reason:
+        `Energie kommt aus echter FFT-Analyse: Schwerpunkt ${BAND_LABELS[features.spectrum.dominantBand]}, ` +
+        `Peak ${features.spectrum.peakHz} Hz bei ${features.spectrum.peakDbfs} dBFS.`,
+    });
   }
 
   return suggestions;

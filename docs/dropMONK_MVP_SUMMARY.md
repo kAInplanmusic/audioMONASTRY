@@ -269,9 +269,13 @@ gegen eine Parameter-Whitelist validiert und auf 0..1 bzw. 4 Takte geclamped.
 > seit 2026-09-21 in der SSOT gefuehrt (`MASTERTODOENDE.json`) - hier steht nur
 > noch der Verweis, damit die Liste nicht an zwei Orten auseinanderlaeuft.
 
-### DropContextAnalyzer.ts
-- `TODO: Real frequency analysis (FFT)` – Energie kommt aktuell aus den Kanal-Levels
-  → SSOT: **DSP-P2-003**
+### DropContextAnalyzer.ts / MixerBridge.ts (erledigt, Test offen)
+- `TODO: Real frequency analysis (FFT)` – Energie kommt aus den Kanal-Levels
+  → SSOT: **DSP-P2-003**. Umgesetzt am 2026-09-21: `src/core/drop/spectrum.ts`
+  (reiner FFT-Bandkern: Bass/Mitten/Höhen, Peak-Bin, Normierung) +
+  `src/core/drop/spectrumTap.ts` (Analyser-Tap) + `MixerBridge.getEnergyState()`;
+  der Pegel-Weg bleibt der Fallback ohne AudioContext. Offen: Hoerprobe an einem
+  echten Mix (Punkt (4) der SSOT).
 
 ### AiServerBridge.ts
 - Rate-Limiting/Caching für `/api/ai/generate-drop` läuft über den globalen

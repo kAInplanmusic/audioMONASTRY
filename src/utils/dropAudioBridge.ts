@@ -8,8 +8,14 @@
 
 import { audioEngine } from './audioEngine';
 import type { TrackType } from '../types';
-import { setDropAudioAdapter, clockBridge } from '../core/drop';
-import type { DropAudioAdapter, DropMixerChannelSnapshot } from '../core/drop';
+import {
+  setDropAudioAdapter,
+  clockBridge,
+  createFrameBuffer,
+  readAnalyserFrame,
+  DEFAULT_SAMPLE_RATE,
+} from '../core/drop';
+import type { DropAudioAdapter, DropMixerChannelSnapshot, SpectrumFrame } from '../core/drop';
 
 /** dropMONK adressiert die 8 Mixer-Kanäle der Engine. */
 const CHANNELS: TrackType[] = [
@@ -87,6 +93,59 @@ function writePluginParameter(pluginId: string, parameterId: string, value: numb
   }
 }
 
+/**
+ * SSOT DSP-P2-003 · Echter FFT-Abgriff für dropMONK
+ * =================================================
+ * Der Analyser wird LAZY über die Engine erzeugt (`createVisualAnalyser` =
+ * reiner Fan-out am Master, siehe src/audio/masterStreamTap.ts). Ist kein
+ * AudioContext bzw. kein verbundener V2-Sink vorhanden, liefert die Engine
+ * `null` – dann meldet der Adapter `null` und dropMONK bleibt beim
+ * Kanal-Pegel-Weg (Headless/Tests/Plugin OFF). Der Ziel-Puffer wird EINMAL
+ * angelegt und wiederverwendet: pro Frame keine Allokation.
+ */
+const DROP_SPECTRUM_FFT_SIZE = 2048;
+
+let dropAnalyser: AnalyserNode | null = null;
+let dropAnalyserBuffer: Float32Array | null = null;
+
+/** Lazy erzeugter Master-Analyser (null = kein Audio in diesem Kontext). */
+function spectrumAnalyser(): AnalyserNode | null {
+  if (dropAnalyser) return dropAnalyser;
+  const analyser = audioEngine.createVisualAnalyser(DROP_SPECTRUM_FFT_SIZE);
+  if (!analyser) return null;
+  dropAnalyser = analyser;
+  dropAnalyserBuffer = createFrameBuffer(analyser);
+  return dropAnalyser;
+}
+
+/** Liest einen dB-Frame (getFloatFrequencyData) für die Spektralanalyse. */
+function readSpectrumFrame(): SpectrumFrame | null {
+  try {
+    const analyser = spectrumAnalyser();
+    if (!analyser) return null;
+    const buffer = dropAnalyserBuffer ?? (dropAnalyserBuffer = createFrameBuffer(analyser));
+    const healthRate = audioEngine.getAudioHealth().sampleRate;
+    const sampleRate = Number.isFinite(healthRate) && healthRate > 0 ? healthRate : DEFAULT_SAMPLE_RATE;
+    return readAnalyserFrame(analyser, buffer, sampleRate);
+  } catch {
+    /* Kein Audio-Kontext/Analyser → Pegel-Weg (kein Fake-Spektrum). */
+    return null;
+  }
+}
+
+/** Analyser-Tap wieder abhängen (Plugin OFF / Unmount). */
+function releaseSpectrumTap(): void {
+  const analyser = dropAnalyser;
+  dropAnalyser = null;
+  dropAnalyserBuffer = null;
+  if (!analyser) return;
+  try {
+    audioEngine.disconnectVisualAnalyser(analyser);
+  } catch {
+    /* bereits getrennt */
+  }
+}
+
 /** Adapter-Implementierung auf Basis der audioEngine. */
 const audioEngineDropAdapter: DropAudioAdapter = {
   getChannels(): DropMixerChannelSnapshot[] {
@@ -134,6 +193,9 @@ const audioEngineDropAdapter: DropAudioAdapter = {
   getActivePluginIds(): string[] {
     return audioEngine.getActivePluginIds();
   },
+
+  // Echter FFT-Frame am Master (null = kein Audio → Pegel-Weg in der Bridge).
+  readSpectrumFrame,
 };
 
 let detachStepListener: (() => void) | null = null;
@@ -172,5 +234,7 @@ export function attachDropBridges(): () => void {
     detachStepListener = null;
     clockBridge.reset();
     setDropAudioAdapter(null);
+    // Analyser-Tap mit abhängen: kein Knoten bleibt am Master hängen.
+    releaseSpectrumTap();
   };
 }

@@ -74,7 +74,7 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [presets, setPresets] = useState<DropPreset[]>([]);
   const [favorites, setFavorites] = useState<DropPreset[]>([]);
 
-  /** Realer Mix-Zustand (BPM, aktive Plugins, Kanäle, Energie). */
+  /** Realer Mix-Zustand (BPM, aktive Plugins, Kanäle, Energie + FFT-Spektrum). */
   const captureMixContext = useCallback((): DropAudioContextState => {
     const channels = mixerBridge.getCurrentMixerState().map((ch) => ({
       id: ch.id,
@@ -84,11 +84,21 @@ export const DropProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isSoloed: ch.soloed,
     }));
 
+    // SSOT DSP-P2-003: echte FFT-Bänder, wenn ein Analyser liefert; ohne Audio
+    // (Headless/Test/Plugin OFF) unverändert der Pegel-Weg über die Kanal-Fader.
+    const energy = mixerBridge.getEnergyState();
+
     return dropContextAnalyzer.analyzeCurrentMix(
       clockBridge.getClockState().bpm,
       getDropAudioAdapter()?.getActivePluginIds() ?? [],
       channels,
-      mixerBridge.getEnergyLevel()
+      // Im Spektrum-Fall bleibt die Energie bewusst ungesetzt: der Analyzer
+      // rechnet sie dann aus den Bändern (energySource 'spectrum') und nennt
+      // die Herkunft. Im Pegel-Fall wird der bisherige Wert durchgereicht.
+      energy.source === 'spectrum' ? undefined : energy.energy,
+      undefined,
+      '4/4',
+      energy.spectrum,
     );
   }, []);
 

@@ -7,6 +7,8 @@
  * gegen einen internen In-Memory-State (Tests, SSR, Plugin OFF).
  */
 
+import type { SpectrumFrame } from './spectrum';
+
 export interface DropMixerChannelSnapshot {
   id: string;
   label: string;
@@ -34,6 +36,14 @@ export interface DropAudioAdapter {
   getBpm(): number;
   /** IDs der aktuell aktiven Plugins (OFF-Plugins sind nicht enthalten). */
   getActivePluginIds(): string[];
+  /**
+   * Echter FFT-Frame des Master-Ausgangs (optional, SSOT DSP-P2-003).
+   *
+   * Liefert `null`, wenn kein AudioContext/Analyser verfügbar ist (Headless,
+   * Tests, gestoppter V2-Sink). Fehlt die Methode ganz, arbeiten die Bridges
+   * unverändert über die Kanal-Pegel.
+   */
+  readSpectrumFrame?(): SpectrumFrame | null;
 }
 
 let currentAdapter: DropAudioAdapter | null = null;

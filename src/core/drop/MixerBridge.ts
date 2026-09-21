@@ -8,11 +8,23 @@
 
 import { getDropAudioAdapter } from './DropAudioAdapter';
 import type { DropMixerChannelSnapshot } from './DropAudioAdapter';
+import { computeSpectrum, createSpectrum } from './spectrum';
+import type { DropSpectrum } from './spectrum';
 
 /**
  * Mixer Channel State (read from audioEngine)
  */
 export type MixerChannelState = DropMixerChannelSnapshot;
+
+/** Mix-Energie samt Herkunft (SSOT DSP-P2-003). */
+export interface MixEnergyState {
+  /** 0..1 – aus dem Spektrum, wenn ein Analyser liefert, sonst aus den Kanal-Pegeln. */
+  energy: number;
+  /** `'spectrum'` = echte FFT-Bänder, `'levels'` = gemittelte Kanal-Pegel (Fallback). */
+  source: 'spectrum' | 'levels';
+  /** Spektralwert (inkl. Bänder/Peak) oder `null` im Pegel-Weg. */
+  spectrum: DropSpectrum | null;
+}
 
 const DEFAULT_CHANNELS: MixerChannelState[] = [
   { id: 'channel1', label: 'CH1', level: 0, pan: 0, muted: false, soloed: false },
@@ -144,6 +156,12 @@ export class MixerBridge {
 
   /**
    * Energie-Level des Mixes (0..1) für die Kontext-Analyse
+   *
+   * WICHTIG (SSOT DSP-P2-003): Das ist der PEGEL-Weg – reine Fader-Mittelung,
+   * ohne jede Frequenzinformation. Wer den echten Mix beurteilen will, nimmt
+   * `getEnergyState()` (Spektrum, wenn ein Analyser liefert) oder
+   * `getSpectrum()`. Die Methode bleibt unverändert, weil sie der Vertrag für
+   * Headless/Test-Umgebungen ohne Audio ist.
    */
   getEnergyLevel(): number {
     const channels = this.getCurrentMixerState();
@@ -154,6 +172,54 @@ export class MixerBridge {
     const avgLevel =
       unmutedChannels.reduce((sum, ch) => sum + ch.level, 0) / unmutedChannels.length;
     return Math.min(1, avgLevel * 1.2); // leichter Boost für bessere Erkennung
+  }
+
+  /**
+   * Echter FFT-Spektralwert des Mixes (Bass/Mitten/Höhen, Peak-Bin).
+   *
+   * Liefert `null`, wenn kein Adapter registriert ist, er keine
+   * `readSpectrumFrame()`-Methode hat, keinen Analyser sieht (kein
+   * AudioContext / V2-Sink getrennt) oder der Frame unbrauchbar ist. Dann gilt
+   * weiter der Kanal-Pegel-Weg.
+   *
+   * Ohne `out` entsteht ein FRISCHES Ergebnisobjekt – sicher gegen Nachleben,
+   * wenn der Aufrufer es behält. Wer im Hot Path (pro Frame) liest, übergibt
+   * ein eigenes, wiederverwendetes Objekt (`createSpectrum()`) und kommt ohne
+   * Allokation aus; dieses Objekt wird dann bei jedem Aufruf überschrieben.
+   */
+  getSpectrum(out?: DropSpectrum): DropSpectrum | null {
+    const adapter = getDropAudioAdapter();
+    if (!adapter?.readSpectrumFrame) return null;
+    try {
+      const frame = adapter.readSpectrumFrame();
+      if (!frame || !frame.magnitudes || frame.magnitudes.length < 2) return null;
+      // Unbrauchbare Geometrie NIE als "Stille" verkaufen: dann Pegel-Weg.
+      if (!Number.isFinite(frame.sampleRate) || frame.sampleRate <= 0) return null;
+      if (!Number.isFinite(frame.binWidthHz) || frame.binWidthHz <= 0) return null;
+      return computeSpectrum(
+        frame.magnitudes,
+        { sampleRate: frame.sampleRate, binWidthHz: frame.binWidthHz, scale: frame.scale },
+        out ?? createSpectrum(),
+      );
+    } catch {
+      /* Adapter-/Analyser-Fehler → Pegel-Weg */
+      return null;
+    }
+  }
+
+  /**
+   * Mix-Energie MIT Herkunft: bevorzugt das echte Spektrum, sonst die
+   * gemittelten Kanal-Pegel. Damit ziehen `MixerBridge` und
+   * `DropContextAnalyzer` an EINEM Feature-Vertrag (SSOT DSP-P2-003) – ein
+   * leiser, brillanter Percussion-Loop und ein dumpfer Bass-Loop mit gleichem
+   * Pegel sind nicht mehr gleich „energetisch".
+   */
+  getEnergyState(): MixEnergyState {
+    const spectrum = this.getSpectrum();
+    if (spectrum) {
+      return { energy: spectrum.overall, source: 'spectrum', spectrum };
+    }
+    return { energy: this.getEnergyLevel(), source: 'levels', spectrum: null };
   }
 
   /**
