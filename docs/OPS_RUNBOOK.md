@@ -725,8 +725,12 @@ drei Presets ergeben unterschiedliche Bilder, eine Show-Szene wird als
 2. **Auf den Knoten bringen**: `bash scripts/hetzner/fleet-deploy-live.sh <app-ip> 8080`
    (rsync des Repo-Stands ohne Knoten-`.env`, Image per `docker save | gzip | ssh docker load`,
    plus Test-Overlay, das den App-Port **nur an Loopback** veröffentlicht).
-   Schneller, wenn die Leitung der Engpass ist: `DEPLOY_REMOTE_BUILD=1` davor (baut per
-   rsync-Delta auf dem Knoten). **Vor** dem Lauf den Löschplan lesen:
+   Schneller, wenn die Leitung der Engpass ist (gemessen ~1 MB/s hoch, App-Image 1,43 GB):
+   `DEPLOY_REMOTE_BUILD=1` davor (baut per rsync-Delta auf dem Knoten) **oder** der
+   Registry-Weg `DEPLOY_IMAGE_SOURCE=registry [DEPLOY_REGISTRY_IMAGE=<ghcr-ref>]` —
+   dann zieht der Knoten per `docker pull`/`docker tag` und es läuft kein Image-Transfer
+   (`bash scripts/hetzner/registry-push.sh` schiebt die Images einmal hoch; Details
+   `docs/HETZNER_DEPLOY.md` § Deploy-Wege). **Vor** dem Lauf den Löschplan lesen:
    `DEPLOY_DRY_RUN=2 bash scripts/hetzner/fleet-deploy-live.sh <app-ip>` (nur lesend) —
    die Ausschlüsse dafür sind Vertrag (PERF-P1-004 / INFRA-HETZNER-011,
    Tabelle in `docs/HETZNER_DEPLOY.md`); `--help` zeigt alle Schalter.

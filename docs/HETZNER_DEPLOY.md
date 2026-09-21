@@ -714,21 +714,91 @@ Beobachtet am 2026-09-20 auf dem Arbeitszweig `hermes/fix-F10`: Schritte 1–4 w
 oben, `tsc --noEmit` mit 0 Fehlern. Die Ausgaben sind **offline** erzeugt — kein
 Hetzner-/Cloudflare-Aufruf, kein `docker compose up`, keine Knoten-Änderung.
 
-### Deploy-Wege: Remote-Build + `--delete`-Vertrag (PERF-P1-003/004, 2026-09-21)
+### Deploy-Wege: Registry (GHCR), Remote-Build + `--delete`-Vertrag (PERF-P1-003/004, PROD-P2-REG 2026-09-21)
 
-Gemessen: die Leitung Betreiber-Rechner → Knoten macht ~1 MB/s hoch, das App-Image
-ist 338 MB Tar (zstd holt davon 337 MB — die Layer sind schon gepackt). Der
-Image-Transfer dauert damit ~6 min je Knoten, der rsync-Delta derselben Änderung
-wenige MB. Deshalb bauen **beide** Deploy-Wege auf Wunsch auf dem Knoten:
+Gemessen: die Leitung Betreiber-Rechner → Knoten macht ~1 MB/s hoch. Das App-Image
+ist 1,43 GB, das master-player-Image 1,22 GB — mit `docker save | ssh docker load`
+sind das **25–40 min pro Knoten**, und jeder weitere Knoten zahlt denselben Preis
+erneut (`zstd` holt davon nichts: die Layer sind schon gepackt). Deshalb gibt es
+**drei** Image-Wege; der Default bleibt der bisherige (`local`), nichts schwenkt
+still um:
 
-| Weg | Schalter | Was sonst gleich bleibt |
-|---|---|---|
-| `deploy.sh` (App-Rolle, master-player) | `DEPLOY_REMOTE_BUILD=1` | Rollback-Tag, Medien-Overlay, Build-Stempel |
-| `scripts/hetzner/fleet-deploy-live.sh <ip>` (Live-Beweis-Deploy) | `DEPLOY_REMOTE_BUILD=1` | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| Weg | Schalter | Was der Weg tut | Was sonst gleich bleibt |
+|---|---|---|---|
+| **local** (Default) | `DEPLOY_IMAGE_SOURCE=local` | lokaler Build → `docker save \| ssh docker load` | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| **Registry (GHCR)** | `DEPLOY_IMAGE_SOURCE=registry` + `DEPLOY_REGISTRY_IMAGE[_MASTER]` | der **Knoten zieht**: Login → `docker pull` → `docker tag` auf die lokalen Namen. **Kein `docker save`** | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| **Remote-Build** | `DEPLOY_REMOTE_BUILD=1` | rsync-Delta + Build **auf** dem Knoten (4 vCPU) | Rollback-Tag, Medien-Overlay, Build-Stempel |
 
-Beide **sichern vorher** `audiomonastry:hetzner` als `…-rollback` und geben die
-Build-Stempel (`AUDIOMONASTRY_VERSION/COMMIT/BUILD_TIME`) mit — ohne sie stünde
-`unknown` in `/api/health` und die Commit-Parität (PROD-P1-F4) wäre nicht prüfbar.
+Beide Skripte (`deploy.sh` für App-Rolle + master-player, `scripts/hetzner/fleet-deploy-live.sh <ip>`
+für Live-Beweise) fahren denselben Registry-Weg; die Umsetzung liegt **einmal** in
+`scripts/hetzner/lib/registry.sh` (Name, Tag, Zugangsdaten, `registry_pull_images`).
+Der Knoten zieht GHCR-seitig mit Backbone-Tempo — die langsame Betreiber-Leitung
+wird **einmal** bezahlt (erster Push), nicht je Knoten.
+
+#### 1. Einmal pushen: `scripts/hetzner/registry-push.sh`
+
+```bash
+bash scripts/hetzner/registry-push.sh --print-config     # Trockenlauf: kein Docker, kein Netz, kein Secret
+bash scripts/hetzner/registry-push.sh                    # bauen + pushen (Tag = git-Kurzhash)
+bash scripts/hetzner/registry-push.sh --skip-build       # Images liegen schon lokal (z. B. von deploy.sh)
+bash scripts/hetzner/registry-push.sh --tag roll-2026-09-21 [--also-version] [--force]
+```
+
+* Refs: `ghcr.io/<owner>/audiomonastry:<tag>` und `ghcr.io/<owner>/audiomonastry-master-player:<tag>`.
+  `<owner>` kommt aus dem git-Remote (`origin`), kleingeschrieben (GHCR lehnt
+  Großbuchstaben ab) — überschreibbar per `REGISTRY_OWNER`, Namen per
+  `REGISTRY_APP_NAME`/`REGISTRY_MASTER_NAME`.
+* Tag: `git rev-parse --short HEAD`, ohne `.git` die `package.json`-Version;
+  `--tag`/`REGISTRY_TAG` überschreibt bewusst.
+* **Idempotent:** existiert der Tag in der Registry (`docker manifest inspect`),
+  wird **nicht** erneut gepusht (Meldung „uebersprungen (Tag existiert schon)");
+  `--force` ist der ausdrückliche Gegenweg.
+* Zugangsdaten: `GHCR_USERNAME` + `GHCR_TOKEN` (ersatzweise `GHCR_PASSWORD`) liegen im
+  Repo nur unter ihren **Namen** in der `.env`; gelesen werden sie aus der Umgebung oder
+  aus `REGISTRY_ENV_FILE` (Default `<repo>/.env`, `none` = nur Umgebung). Der **Wert**
+  wird nie ausgegeben und nie als Argument übergeben — er läuft ausschließlich per
+  Pipe in `docker login --password-stdin` (auch auf dem Knoten).
+
+#### 2. Ziehen: Registry-Modus des Deploys
+
+```bash
+# App-Rolle (App + master-player), Knoten zieht:
+DEPLOY_HOST=<ip> DEPLOY_DOMAIN=<domain> \
+DEPLOY_IMAGE_SOURCE=registry \
+DEPLOY_REGISTRY_IMAGE=ghcr.io/<owner>/audiomonastry:<tag> \
+DEPLOY_REGISTRY_IMAGE_MASTER=ghcr.io/<owner>/audiomonastry-master-player:<tag> \
+bash deploy.sh
+
+# Live-Beweis-Weg:
+DEPLOY_IMAGE_SOURCE=registry DEPLOY_REGISTRY_IMAGE=ghcr.io/<owner>/audiomonastry:<tag> \
+  bash scripts/hetzner/fleet-deploy-live.sh <ip>
+```
+
+Ohne `DEPLOY_REGISTRY_IMAGE` bildet der Deploy die Referenz selbst (Owner aus dem
+git-Remote, Tag aus `git rev-parse --short HEAD`) — **derselbe Tag**, den
+`registry-push.sh` gepusht hat, weil beide dieselbe Bibliothek nutzen. Ablauf pro
+Knoten: Rollback-Tag `<image>-rollback` → Login (Token per stdin) → `docker pull` →
+`docker tag <ref> <lokaler Name>` → `docker compose up -d --no-build [...]
+--force-recreate`. Fehlt der Pull, endet der Deploy mit Exit 1, **bevor** ein
+Container neu startet (der laufende Stand bleibt aktiv).
+
+Trockenläufe ohne Flotte (beide zeigen die effektive Quelle + Referenz, kein Secret):
+
+```bash
+DEPLOY_PRINT_CONFIG=1 bash deploy.sh                    # DEPLOY_IMAGE_SOURCE / DEPLOY_REGISTRY_IMAGE[…]
+bash scripts/hetzner/fleet-deploy-live.sh --print-config
+```
+
+#### 3. Wächter (Tests)
+
+`RegistryWegTest` in `tests/test_hetzner_scripts.py` fährt den **echten** Codepfad mit
+Fake-`docker`/`ssh`/`rsync`/`curl` (kein Netz, kein Knoten, kein Gigabyte):
+Trockenlauf ohne Docker, Tag-/Owner-Bildung (Kurzhash → Version), Login **nur** per
+stdin (Kanarienvogel-Wert darf weder in argv noch in einer Ausgabe stehen),
+Idempotenz (derselbe Tag = kein zweiter Push, `--force` als Gegenprobe), der
+komplette Live-Weg im Registry-Modus (**pull/tag, kein `docker save`**) und im
+Default-Modus (weiterhin `docker save`, kein pull), plus die Abbruchpfade
+(unbekannte Quelle, `registry` im `node`-Modus).
 
 **`--delete`-Vertrag:** Die Skripte `fleet-deploy-live.sh`, `bring-up-fleet.sh` und
 `install-ai1.sh` spiegeln per `rsync --delete` auf den Knoten. Alles, was dort

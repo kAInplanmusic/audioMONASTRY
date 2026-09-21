@@ -17,6 +17,17 @@
 # das Medien-Overlay mit, wenn auf dem Knoten Inhalte liegen - sonst maskieren
 # leere Bind-Mounts die Pfade des Images (Library leer, /models 404).
 #
+# PROD-P2-REG (2026-09-21): dritter Image-Weg `DEPLOY_IMAGE_SOURCE=registry`.
+#   Der Knoten ZIEHT dann (`docker pull` + `docker tag` auf den lokalen Namen aus
+#   docker-compose.hetzner.yml) - KEIN `docker save`. Grund (gemessen): die
+#   Leitung Betreiber -> Knoten macht ~1 MB/s hoch, das App-Image ist 1,43 GB ->
+#   25-40 min je Knoten. Einmal mit scripts/hetzner/registry-push.sh nach GHCR
+#   schieben, danach zieht jeder Knoten im Rechenzentrums-Tempo. Der Default
+#   bleibt `local` (Transfer) - nichts schwenkt still um.
+#   Referenz: DEPLOY_REGISTRY_IMAGE=<ghcr-ref> (sonst Owner aus dem git-Remote +
+#   `git rev-parse --short HEAD`); Zugangsdaten aus REGISTRY_ENV_FILE (Default
+#   <repo>/.env, 'none' = nur Umgebung), der WERT nie in Ausgabe oder Argument.
+#
 # Aufruf:
 #   bash scripts/hetzner/fleet-deploy-live.sh <ip> [--tunnel-port]
 #   bash scripts/hetzner/fleet-deploy-live.sh --print-config     (Trockenlauf)
@@ -56,6 +67,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/hetzner/fleet-names.sh
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/fleet-names.sh"
+# PROD-P2-REG: Registry-Weg (Referenz-Bildung, Tag, Zugangsdaten, Login + Pull +
+# Tag auf dem Knoten) aus derselben Bibliothek wie deploy.sh und registry-push.sh.
+# shellcheck source=scripts/hetzner/lib/registry.sh
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/registry.sh"
 
 # Zielarchitektur-Pfad; der Altpfad der laufenden Flotte ist nur noch ein
 # Erkennungswert fuer den Guard unten (Bestands-Kompatibilitaet).
@@ -73,6 +89,32 @@ IMAGE="${DEPLOY_IMAGE:-audiomonastry:hetzner}"
 # ist der Image-Transfer der sicherere Weg).
 REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-0}"
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+# PROD-P2-REG: Image-Quelle. `local` (Default) = heutiges Verhalten (Transfer
+# bzw. Remote-Build). `registry` = der Knoten ZIEHT die Images - kein docker save;
+# die Leitung ist der Engpass (~1 MB/s hoch, App-Image 1,43 GB -> 25-40 min je
+# Knoten, gemessen 2026-09-21). Referenz + Zugangsdaten kommen aus der
+# gemeinsamen Bibliothek scripts/hetzner/lib/registry.sh.
+IMAGE_SOURCE="${DEPLOY_IMAGE_SOURCE:-local}"
+case "$IMAGE_SOURCE" in
+  local | registry) ;;
+  *)
+    echo "❌ DEPLOY_IMAGE_SOURCE=$IMAGE_SOURCE ist unbekannt (erlaubt: local, registry)." >&2
+    exit 1
+    ;;
+esac
+REGISTRY_ENV_FILE="${REGISTRY_ENV_FILE:-$REPO_ROOT/.env}"
+REGISTRY_IMAGE="${DEPLOY_REGISTRY_IMAGE:-}"
+if [[ "$IMAGE_SOURCE" == "registry" && -z "$REGISTRY_IMAGE" ]]; then
+  # Default-Referenz aus git-Remote-Owner + Repo-Stand: derselbe Tag, den
+  # registry-push.sh gepusht hat (eine Bibliothek, kein zweiter Tag-Begriff).
+  REGISTRY_OWNER_EFFECTIVE="$(registry_owner "$REPO_ROOT")"
+  if [[ -z "$REGISTRY_OWNER_EFFECTIVE" ]]; then
+    echo "❌ DEPLOY_IMAGE_SOURCE=registry, aber keine Registry-Referenz ermittelbar" >&2
+    echo "   (kein git-Remote 'origin'); bitte DEPLOY_REGISTRY_IMAGE=<ghcr-ref> setzen." >&2
+    exit 1
+  fi
+  REGISTRY_IMAGE="$(registry_image "$REGISTRY_OWNER_EFFECTIVE" "$(registry_app_name)" "$(registry_default_tag "$REPO_ROOT")")"
+fi
 # Trockenlauf: 1 = nur Zielpfad/Guard zeigen, nichts uebertragen und nichts starten.
 DRY_RUN="${DEPLOY_DRY_RUN:-0}"
 # Test-Haken fuer den Guard: ersetzt die SSH-Abfrage des laufenden
@@ -125,6 +167,13 @@ Schalter (Umgebung):
   DEPLOY_REMOTE_BUILD=1        Image auf dem Knoten BAUEN statt hochschieben
                                (die Leitung ist der Engpass: gemessen ~1 MB/s
                                hoch, App-Image 338 MB Tar -> ~6 min je Knoten)
+  DEPLOY_IMAGE_SOURCE=registry der Knoten ZIEHT das Image (docker pull + docker
+                               tag, KEIN Image-Transfer). Vorher einmal pushen:
+                               bash scripts/hetzner/registry-push.sh
+  DEPLOY_REGISTRY_IMAGE=<ref>  Referenz fuer den Registry-Weg
+                               (Default: ghcr.io/<owner>/audiomonastry:<kurzhash>)
+  REGISTRY_ENV_FILE=<pfad>     Quelle der GHCR-Zugangsdaten (Default <repo>/.env,
+                               'none' = nur die Umgebung); Werte nie in der Ausgabe
   DEPLOY_REMOTE_DIR=<pfad>     Zielpfad (Default: kanonischer Pfad aus
                                scripts/hetzner/fleet-names.sh)
   DEPLOY_ALLOW_FOREIGN_DIR=1   bewusst neben einem laufenden Stack deployen
@@ -152,6 +201,13 @@ if [[ "${1:-}" == "--print-config" ]]; then
   printf '  DEPLOY_ALLOW_FOREIGN_DIR=%s\n' "$ALLOW_FOREIGN_DIR"
   printf '  DEPLOY_DRY_RUN=%s   (0 = scharf, 1 = Guard und Ende, 2 = Sync-Trockenlauf)\n' "$DRY_RUN"
   printf '  DEPLOY_REMOTE_BUILD=%s   (1 = Build auf dem Knoten statt Image-Transfer)\n' "$REMOTE_BUILD"
+  # PROD-P2-REG: Image-Quelle + die Referenz, die der Knoten ziehen wuerde -
+  # ohne SSH, ohne Docker, ohne Secret (nur ein Boolean).
+  printf '  DEPLOY_IMAGE_SOURCE=%s   (local = Transfer/Build, registry = Knoten zieht)\n' "$IMAGE_SOURCE"
+  printf '  DEPLOY_REGISTRY_IMAGE=%s\n' "${REGISTRY_IMAGE:-<leer>}"
+  printf '  REGISTRY_ENV_FILE=%s (%s)\n' "$REGISTRY_ENV_FILE" "$([[ -f "$REGISTRY_ENV_FILE" ]] && echo vorhanden || echo fehlt)"
+  printf '  GHCR-Zugangsdaten=%s (Wert wird nie ausgegeben, Login nur per --password-stdin)\n' \
+    "$(registry_credentials_state "$REPO_ROOT" "$REGISTRY_ENV_FILE")"
   exit 0
 fi
 
@@ -286,13 +342,29 @@ if [[ "$REMOTE_BUILD" == "1" ]]; then
      AUDIOMONASTRY_VERSION='$STAMP_VERSION' AUDIOMONASTRY_COMMIT='$STAMP_COMMIT' AUDIOMONASTRY_BUILD_TIME='$STAMP_TIME' \
      COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --build --remove-orphans caddy audiomonastry"
 else
-  step "3/4 Image uebertragen ($IMAGE)"
-  echo "--- Rollback-Image sichern (remote) ---"
-  "${SSH[@]}" "root@$IP" "docker image tag $IMAGE ${IMAGE}-rollback 2>/dev/null || true"
-  docker save "$IMAGE" | gzip -1 | "${SSH[@]}" "root@$IP" "gunzip | docker load"
+  if [[ "$IMAGE_SOURCE" == "registry" ]]; then
+    # PROD-P2-REG: der Knoten ZIEHT. Kein `docker save` - genau der Transfer ist
+    # der Engpass (~1 MB/s hoch, App-Image 1,43 GB). Rollback-Tag, Login und
+    # `docker tag` auf den lokalen Namen laufen in registry_pull_images.
+    step "3/4 Image ziehen (Quelle: registry, kein docker save)"
+    echo "    Referenz: $REGISTRY_IMAGE  ->  $IMAGE"
+    if ! registry_pull_images "$SSH_KEY" "root@$IP" "$REPO_ROOT" "$REGISTRY_ENV_FILE" "$IMAGE" "$REGISTRY_IMAGE"; then
+      echo "❌ Registry-Weg fehlgeschlagen (Login/Pull/Tag auf $IP) - der laufende Container bleibt unangetastet." >&2
+      echo "   Das Rollback-Tag ${IMAGE}-rollback ist gesetzt; Referenz/Tag pruefen" >&2
+      echo "   (gepusht? bash scripts/hetzner/registry-push.sh) oder lokal deployen." >&2
+      exit 1
+    fi
+    step "4/4 Container neu hochfahren (Compose-Projekt $COMPOSE_PROJECT)"
+    "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --remove-orphans caddy audiomonastry"
+  else
+    step "3/4 Image uebertragen ($IMAGE)"
+    echo "--- Rollback-Image sichern (remote) ---"
+    "${SSH[@]}" "root@$IP" "docker image tag $IMAGE ${IMAGE}-rollback 2>/dev/null || true"
+    docker save "$IMAGE" | gzip -1 | "${SSH[@]}" "root@$IP" "gunzip | docker load"
 
-  step "4/4 Container neu hochfahren (Compose-Projekt $COMPOSE_PROJECT)"
-  "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --remove-orphans caddy audiomonastry"
+    step "4/4 Container neu hochfahren (Compose-Projekt $COMPOSE_PROJECT)"
+    "${SSH[@]}" "root@$IP" "cd $REMOTE_DIR && COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose $OVERLAYS up -d --no-build --remove-orphans caddy audiomonastry"
+  fi
 fi
 
 step "Health + Container-Status am Knoten"
