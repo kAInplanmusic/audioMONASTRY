@@ -11,16 +11,22 @@ import {
 import { MoaAgent } from '../src/core/ai/MoaAgent';
 import { evaluationStore } from '../src/core/ai/orchestrator/evaluationStore';
 import { PLUGIN_COMMAND_CATALOG } from '../src/utils/prompts';
+import { EVAL_PLUGIN_IDS } from '../src/core/ai/orchestrator/evalMatrix';
 
-/** Verbindliche 21 Plugin-IDs (siehe src/plugins/registry.ts). */
-const PLUGIN_IDS = [
-  'mixer', 'drop', 'song', 'effect', 'instrument', 'sampler', 'drum', 'mcp',
-  'synthesizer', 'stem', 'voice', 'sound', 'spatial', 'library', 'eq', 'dsp',
-  'mastering', 'recording', 'controller', 'performance', 'ai',
-];
+/**
+ * Verbindliche Plugin-IDs: `EVAL_PLUGIN_IDS` (evalMatrix.ts).
+ *
+ * Befund 2026-09-21: Hier stand eine eigene 21er-Namensliste im Vor-Umbenennungs-
+ * Stand (instrument/sampler/drum/mcp/synthesizer/library/mastering/recording/
+ * controller/performance). Für 10 dieser IDs gibt es keinen Katalog-Eintrag,
+ * `firstCommand()` fiel still auf 'status' zurück – die Fälle liefen also ins
+ * Leere und der Test war grün, obwohl er nichts geprüft hat.
+ */
+const PLUGIN_IDS = EVAL_PLUGIN_IDS;
 
 function firstCommand(pluginId: string): string {
-  const catalog = PLUGIN_COMMAND_CATALOG[pluginId] ?? 'status';
+  const catalog = PLUGIN_COMMAND_CATALOG[pluginId];
+  if (!catalog) throw new Error(`kein Kommando-Katalog für Plugin '${pluginId}'`);
   return catalog.split(',')[0].trim().split('(')[0].trim();
 }
 
@@ -86,7 +92,14 @@ describe('AI Evaluation – evaluateCase', () => {
   });
 });
 
-describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (21 Plugins)', () => {
+describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (18 Rollen aus evalMatrix)', () => {
+  it('jede verbindliche Rolle hat einen Kommando-Katalog (kein stiller status-Fallback)', () => {
+    for (const pluginId of PLUGIN_IDS) {
+      expect(PLUGIN_COMMAND_CATALOG[pluginId], `catalog:${pluginId}`).toBeTruthy();
+    }
+    expect(PLUGIN_IDS).toHaveLength(18);
+  });
+
   for (const pluginId of PLUGIN_IDS) {
     it(`plant und führt ${pluginId}:${firstCommand(pluginId)} korrekt aus`, async () => {
       const action = firstCommand(pluginId);
@@ -135,7 +148,7 @@ describe('P3-2 Prüfpunkt: MOA plant + führt Kern-Kommandos je Plugin aus (21 P
     });
   }
 
-  it('hat für alle 21 Plugins einen Eval-Datensatz im Store', () => {
+  it('hat für alle 18 Rollen einen Eval-Datensatz im Store', () => {
     for (const pluginId of PLUGIN_IDS) {
       expect(evaluationStore.listByPlugin(pluginId).length).toBeGreaterThanOrEqual(1);
     }

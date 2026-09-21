@@ -129,6 +129,11 @@ const MOTION_STYLE_HINT: Partial<Record<VisionStyle, string>> = {
   fire: 'rising embers and plasma arcs',
 };
 
+/** Bewegungs-Hinweis eines Stils (leer, wenn der Stil keinen hat). */
+export function motionStyleHintFor(style: VisionStyle): string | undefined {
+  return MOTION_STYLE_HINT[style];
+}
+
 export interface MotionPromptInput {
   /** Motiv-Hinweis (derselbe Text wie beim Bild, nur als Bewegung). */
   text?: string;
