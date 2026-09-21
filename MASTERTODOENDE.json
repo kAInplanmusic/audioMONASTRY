@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21T19:50:00+00:00",
+  "generatedAt": "2026-09-21T20:05:54+00:00",
   "branch": "main",
-  "commit": "99feba0",
+  "commit": "cea53fc",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -3000,6 +3000,19 @@
       "solution": "Regeln per API auf die aktuellen Knoten-IPs gezogen (app:8080 -> edge 178.104.175.83, ai/master:8000 und ai:11434 -> app 167.233.91.30); jede andere Regel blieb unveraendert, Ruecklesen belegt den Endzustand.",
       "evidence": "Ruecklese-Ausgabe in der Sitzung (3 Firewalls korrigiert, Vorher/Nachher je Regel).",
       "rest": "Der Drift entsteht strukturell: die Querverweise (app-IP in ai/master-Regeln, edge-IP in app-Regeln) werden beim Provisionieren aus festen Werten gesetzt, nicht aus der laufenden Flotte. Fehlt: ein Abgleich-Schritt NACH dem Flottenstart, der die Cross-Node-Regeln auf die tatsaechlichen IPs zieht (und beim Loeschen sauber raeumt). Bis dahin ist jeder Neuaufbau mit neuen IPs erneut betroffen."
+    },
+    {
+      "id": "PROD-P2-R2KEYS",
+      "title": "R2-Zugangsdaten: Datei schlaegt Umgebung (dieselbe Falle wie beim Registry-Login)",
+      "priority": "P2",
+      "status": "DONE",
+      "area": "Deployment/Zugangsdaten",
+      "source": "Bericht des Subagenten zum parallelen R2-Transfer (2026-09-21) + eigene Messung",
+      "problem": "lib/r2-sigv4.sh nahm R2_ACCESS_KEY/R2_SECRET_KEY aus der Prozessumgebung vor den Werten aus .env. Gemessen war die Umgebung mit fremden/veralteten Schluesseln belegt (R2_ACCESS_KEY FP e1f0bbcd, CLOUDFLARE_ACCESS_KEY_ID FP 1b8ac015), waehrend der gueltige Satz in .env liegt (CFS3_ACCESS_KEY FP dac81886 - Probe gegen R2: PUT+DELETE ok, 607 ms). Ein Transfer waere still mit falschem Schluessel signiert worden; der Fehler waere erst als 'Access Denied' weit weg von der Ursache aufgetaucht.",
+      "solution": "Datei gewinnt (gleiche Regel wie lib/registry.sh): CFS3_* aus der Env-Datei, Umgebung nur als Ersatz. R2_ALLOW_ENV_OVERRIDE=1 holt den ausdruecklichen Override bewusst zurueck; ein Widerspruch wird mit Fingerabdruck gemeldet, nie mit dem Wert.",
+      "evidence": "Regressionstests R2CredentialPrecedenceTest (2 Faelle); Fleet-Suite 189 Tests OK; Commit cea53fc.",
+      "lesson": "Zwei unabhaengige Deploy-Bibliotheken hatten denselben Fehler: 'Umgebung vor Datei'. Auf diesem Host ist die Prozessumgebung mit fremden Zugangsdaten belegt - die .env MUSS die Quelle sein, Overrides nur ausdruecklich. Diagnose immer per Fingerabdruck-Vergleich, nie durch Raten.",
+      "rest": "Knoten brauchen fuer den parallelen Medienweg aria2c + zstd (apt: aria2, zstd); --via-r2 installiert sie mit --install-missing selbst, sonst faellt der Lauf laut auf EINEN curl-Strom zurueck."
     }
   ],
   "visionSandbox": [
