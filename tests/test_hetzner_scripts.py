@@ -76,6 +76,8 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import hashlib
+import hmac
 import http.server
 import importlib.util
 import io
@@ -127,6 +129,12 @@ INSTALL_AI1 = HETZNER / "install-ai1.sh"
 REGISTRY_PUSH = HETZNER / "registry-push.sh"
 REGISTRY_LIB = HETZNER / "lib" / "registry.sh"
 HETZNER_DEPLOY_DOC = ROOT / "docs" / "HETZNER_DEPLOY.md"
+# PERF-P1-005: Medienuebertragung mit 16 Verbindungen ueber R2.
+DELIVER_MEDIA = HETZNER / "deliver-media.sh"
+PARALLEL_TRANSFER = HETZNER / "parallel-transfer.sh"
+R2_SIGV4_LIB = HETZNER / "lib" / "r2-sigv4.sh"
+R2_NODE_FETCH = HETZNER / "lib" / "r2-node-fetch.sh"
+COMPOSE_MEDIA = ROOT / "docker-compose.media.yml"
 
 #: Speicher-Limits, die mit `deploy.resources.limits.memory` gesetzt werden.
 #: Compose v2 uebersetzt sie beim Start in `--memory` (dokumentiertes Verhalten);
@@ -1108,6 +1116,15 @@ CONTROLLED_ENV = (
     # PERF-P1-005: der Image-Weg des Flottenstarts (bring-up-fleet.sh Default 1).
     # Ohne diesen Eintrag haengt der Vertragstest an der Shell des Rechners.
     "DEPLOY_REMOTE_BUILD",
+    # PERF-P1-005: R2-/Transfer-Konfiguration. Ohne diese Liste zoege ein Test
+    # die Schluessel des Betreiber-Rechners (die Hermes-Shell exportiert z. B.
+    # CFS3_BUCKET) und "ohne Schluessel" waere nicht pruefbar.
+    "CFS3_ACCESS_KEY", "CFS3_SECRET_KEY", "CFS3_ENDPOINT", "CFS3_BUCKET",
+    "CFR2_ACCOUNT_ID", "R2_ENV_FILE", "R2_ACCESS_KEY", "R2_SECRET_KEY",
+    "R2_ENDPOINT", "R2_BUCKET", "R2_REGION", "R2_ACCOUNT_ID", "R2_SIGNED_AT",
+    "TRANSFER_TMP", "PARALLEL_TRANSFER_CONNECTIONS", "PARALLEL_TRANSFER_ZSTD_LEVEL",
+    "PARALLEL_TRANSFER_URL_TTL", "PARALLEL_TRANSFER_PREFIX", "PARALLEL_TRANSFER_REFERENCE_MBPS",
+    "MEDIA_SRC_ORCHESTRAL", "MEDIA_SRC_MODELS", "MEDIA_SRC_MUSIC", "MEDIA_R2_NO_INSTALL",
 )
 
 
@@ -4099,6 +4116,759 @@ class RegistryWegTest(unittest.TestCase):
         for needle in ("registry-push.sh", "DEPLOY_IMAGE_SOURCE", "DEPLOY_REGISTRY_IMAGE", "docker save"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, doc)
+# ---------------------------------------------------------------------------
+# PERF-P1-005 (2026-09-21): Medien in Teilen ueber R2 statt EINEM ssh-Strom
+# ---------------------------------------------------------------------------
+# Gemessen: EIN TCP-Strom Betreiber -> Hetzner macht ~1 MB/s (200 MB in 3:14),
+# 3,7 GB Medien also ~60 min - pro Knoten und je Lieferung. Der neue Weg packt
+# jeden Baum deterministisch (zstd), legt ihn EINMAL in Cloudflare R2 (Egress
+# kostenfrei) und laesst den Knoten mit `aria2c -x16 -s16` ziehen; der
+# Betreiber-Host schiebt danach nichts mehr nach.
+#
+# Diese Klassen nageln fest, was OHNE Live-Infrastruktur pruefbar ist:
+#   * Die Signatur (lib/r2-sigv4.sh) stimmt mit einer ZWEITEN, unabhaengigen
+#     Umsetzung (Python hmac/hashlib) ueberein; die Schluessel erscheinen nie
+#     in der Ausgabe und nie im Kommando des Knotens.
+#   * Der Knoten zieht mit -x16/-s16, prueft SHA256 VOR dem Auspacken, packt
+#     bei falschem Hash NICHTS aus, meldet Rate + Dateizahlen und loescht die
+#     URL-Datei wieder (sie ist ein Bearer-Token).
+#   * Ein zweiter Knoten zieht DASSELBE Objekt, ohne erneuten Upload.
+#   * Trockenlauf (--print-config/--help) uebertraegt kein Byte.
+#   * `deliver-media.sh --via-r2` liefert dieselben Baeume an dieselben Pfade
+#     (Mount-/Ausschlusslogik unveraendert) und laedt je Baum EINMAL hoch.
+#
+# Gefahren wird der ECHTE Codepfad: Fake-`ssh` (fuehrt den Knotenbefehl lokal
+# aus), Fake-`aria2c` (protokolliert seine Schalter, liefert die Datei aber
+# wirklich - Hash-Pruefung und Auspacken laufen also echt), Fake-`curl`
+# (protokolliert PUT/HEAD der Signatur) und Fake-`rsync` (nur der Medienweg).
+# Kein Test kontaktiert R2, Hetzner oder die Flotte.
+
+#: Nur TESTWERTE. Die Tests behaupten nicht, dass sie echt sind, sondern dass
+#: genau diese Strings nie in Ausgabe/argv/auf dem Knoten auftauchen.
+TEST_R2_ACCESS_KEY = "R2TESTACCESSKEY0001"
+TEST_R2_SECRET_KEY = "r2-test-secret-0001-nur-fuer-den-test"
+TEST_R2_HOST = "testaccount123.r2.cloudflarestorage.com"
+TEST_R2_BUCKET = "audiomonastrysamples-nur-test"
+TEST_SIGNED_AT = "20260921T120000Z"
+
+#: Fake-ssh fuer ALLE Transfer-Tests: protokolliert den entfernten Befehl und
+#: fuehrt ihn LOKAL aus. Der Knotenpfad /opt/audiomonastry wird auf den
+#: Testbaum umgeschrieben - kein Knoten, kein Netz.
+FAKE_SSH_RUN = r"""#!/usr/bin/env bash
+set -uo pipefail
+cmd="${*: -1}"
+printf '%s\n' "$cmd" >> "${FAKE_SSH_LOG:?}"
+exec bash -c "${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO:?}}"
+"""
+
+#: Fake-aria2c: protokolliert seine Schalter (Beweis fuer -x16/-s16) und liefert
+#: die Datei WIRKLICH aus, damit SHA256-Pruefung und Auspacken im echten
+#: Codepfad laufen. Quelle: echte http/file-URL (echter curl, kein Netz) oder -
+#: bei der synthetischen R2-URL der Attrappe - das von parallel-transfer.sh
+#: gepackte Archiv aus dem Test-TMPDIR.
+FAKE_ARIA2 = r"""#!/usr/bin/env bash
+set -uo pipefail
+printf '%s\n' "$*" >> "${FAKE_ARIA2_LOG:?}"
+args=("$@"); d=""; o=""
+for ((i=0;i<${#args[@]};i++)); do
+  case "${args[i]}" in -d) d="${args[i+1]}" ;; -o) o="${args[i+1]}" ;; esac
+done
+url="${args[${#args[@]}-1]}"
+mkdir -p "$d"
+case "$url" in
+  file://*|http://127.0.0.1*|http://localhost*)
+    "$REAL_CURL" -fsS -o "$d/$o" "$url" || exit $? ;;
+  *)
+    src="$(ls -t "${TMPDIR:-/tmp}"/am-parallel-transfer.*/"$o" 2>/dev/null | head -1)"
+    if [[ -z "$src" ]]; then echo "fake-aria2c: kein Testarchiv fuer $o" >&2; exit 1; fi
+    cp "$src" "$d/$o" ;;
+esac
+if [[ "${FAKE_ARIA2_CORRUPT:-0}" == "1" ]]; then printf 'X' >> "$d/$o"; fi
+"""
+
+#: Fake-curl: protokolliert jeden Aufruf (Beweis fuer das presignierte PUT) und
+#: haelt einen winzigen Objektspeicher: HEAD auf einen zuvor per PUT angelegten
+#: Schluessel antwortet 200, sonst 404 - genau das braucht r2_object_exists.
+FAKE_CURL_R2 = r"""#!/usr/bin/env bash
+set -uo pipefail
+printf '%s\n' "$*" >> "${FAKE_CURL_LOG:?}"
+method=GET
+for ((i=1;i<=$#;i++)); do
+  case "${!i}" in
+    -X) j=$((i+1)); method="${!j}" ;;
+    -I) method=HEAD ;;
+  esac
+done
+# Die URL ist NICHT immer das letzte Argument (beim Upload steht -o /dev/null
+# dahinter) - sie wird am Schema erkannt.
+url=""
+for arg in "$@"; do
+  case "$arg" in http://*|https://*) url="$arg"; break ;; esac
+done
+key="${url#*://}"; key="${key%%\?*}"
+case "$method" in
+  HEAD)
+    if grep -qxF "$key" "${FAKE_CURL_STATE:-/dev/null}" 2>/dev/null; then echo 200; else echo 404; fi
+    exit 0 ;;
+  PUT)
+    printf '%s\n' "$key" >> "${FAKE_CURL_STATE:?}"
+    exit 0 ;;
+esac
+exec "$REAL_CURL" "$@"
+"""
+
+#: Fake-rsync: protokolliert und legt die Datei in den Testbaum. Ziele der Form
+#: root@<host>:<pfad> werden wie beim Fake-ssh umgeschrieben (Knoten = lokal).
+FAKE_RSYNC = r"""#!/usr/bin/env bash
+set -uo pipefail
+printf '%s\n' "$*" >> "${FAKE_RSYNC_LOG:?}"
+src="${@: -2:1}"
+dest="${!#}"
+target="$dest"
+case "$dest" in
+  *@*:*) target="${dest#*:}"; target="${target//\/opt\/audiomonastry/${FAKE_SSH_REPO:?}}" ;;
+esac
+if [[ -z "$target" ]]; then echo "fake-rsync: kein Ziel" >&2; exit 1; fi
+mkdir -p "$(dirname "$target")"
+cp -a "$src" "$target"
+"""
+
+
+def reference_presign_url(
+    method: str,
+    key: str,
+    ttl: int,
+    amzdate: str = TEST_SIGNED_AT,
+    *,
+    access: str = TEST_R2_ACCESS_KEY,
+    secret: str = TEST_R2_SECRET_KEY,
+    host: str = TEST_R2_HOST,
+    bucket: str = TEST_R2_BUCKET,
+    region: str = "auto",
+) -> str:
+    """UNABHAENGIGE SigV4-Referenz (Python hmac/hashlib) fuer presignierte R2-URLs.
+
+    Bewusst als zweite Umsetzung geschrieben: die Bash-Version in
+    `scripts/hetzner/lib/r2-sigv4.sh` muss Zeichen fuer Zeichen dasselbe
+    Ergebnis liefern. Eine Signatur, die nur "irgendwie" aussieht, faellt damit
+    im Test auf, statt erst live als SignatureDoesNotMatch.
+    """
+    def enc(value: str) -> str:
+        return urllib.parse.quote(value, safe="-_.~")
+
+    datestamp = amzdate.split("T")[0]
+    scope = f"{datestamp}/{region}/s3/aws4_request"
+    canonical_uri = "/" + enc(bucket) + "/" + "/".join(enc(part) for part in key.split("/"))
+    query = "&".join([
+        "X-Amz-Algorithm=AWS4-HMAC-SHA256",
+        f"X-Amz-Credential={enc(f'{access}/{scope}')}",
+        f"X-Amz-Date={amzdate}",
+        f"X-Amz-Expires={ttl}",
+        "X-Amz-SignedHeaders=host",
+    ])
+    canonical_request = "\n".join([method, canonical_uri, query, f"host:{host}", "", "host", "UNSIGNED-PAYLOAD"])
+    string_to_sign = "\n".join([
+        "AWS4-HMAC-SHA256", amzdate, scope,
+        hashlib.sha256(canonical_request.encode("utf-8")).hexdigest(),
+    ])
+    signing_key = hmac.new(("AWS4" + secret).encode("utf-8"), datestamp.encode("utf-8"), hashlib.sha256).digest()
+    for part in (region, "s3", "aws4_request"):
+        signing_key = hmac.new(signing_key, part.encode("utf-8"), hashlib.sha256).digest()
+    signature = hmac.new(signing_key, string_to_sign.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"https://{host}{canonical_uri}?{query}&X-Amz-Signature={signature}"
+
+
+def make_tree(root: pathlib.Path, dateien: int = 3) -> pathlib.Path:
+    """Kleiner Testbaum (Medien-Ersatz). Der Verzeichnisname ist wichtig: der
+    Archiv-Wurzelordner und das Zielverzeichnis tragen denselben Namen."""
+    (root / "sub").mkdir(parents=True, exist_ok=True)
+    for i in range(dateien):
+        (root / "sub" / f"datei{i}.sfz").write_text(f"inhalt {i}\n" * 20, encoding="utf-8")
+    return root
+
+
+def tree_files(root: pathlib.Path) -> list[str]:
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*") if p.is_file())
+
+
+class TransferSandbox:
+    """Fake-Binaries + Test-R2-Konfiguration fuer die Transfer-Tests.
+
+    TMPDIR zeigt in den Sandkasten (der Fake-aria2c findet dort das gepackte
+    Archiv; nichts bleibt in /tmp liegen), TRANSFER_TMP ist der Knoten-Temp-Pfad
+    IM Sandkasten - der Fake-ssh fuehrt den Knotenbefehl lokal aus.
+    """
+
+    def _sandbox(self, tmp: pathlib.Path, *, with_aria2c: bool = True, with_rsync: bool = False,
+                 **extra: str | None) -> dict[str, str]:
+        fake_bin = tmp / "bin"
+        fake_bin.mkdir(parents=True, exist_ok=True)
+        for name, content, aktiv in (
+            ("ssh", FAKE_SSH_RUN, True),
+            ("aria2c", FAKE_ARIA2, with_aria2c),
+            ("curl", FAKE_CURL_R2, True),
+            ("rsync", FAKE_RSYNC, with_rsync),
+        ):
+            if not aktiv:
+                continue
+            pfad = fake_bin / name
+            pfad.write_text(content, encoding="utf-8")
+            pfad.chmod(0o755)
+        (tmp / "curl-state").write_text("", encoding="utf-8")
+        (tmp / "tmp").mkdir(exist_ok=True)
+        # Der echte curl MUSS absolut referenziert werden: im Sandkasten liegt
+        # ein Fake-`curl` im PATH, und `exec curl` wuerde sich selbst aufrufen.
+        real_curl = shutil.which("curl") or "/usr/bin/curl"
+        env = clean_env(
+            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+            REAL_CURL=real_curl,
+            FAKE_SSH_LOG=str(tmp / "ssh.log"),
+            FAKE_ARIA2_LOG=str(tmp / "aria2c.log"),
+            FAKE_CURL_LOG=str(tmp / "curl.log"),
+            FAKE_RSYNC_LOG=str(tmp / "rsync.log"),
+            FAKE_CURL_STATE=str(tmp / "curl-state"),
+            FAKE_SSH_REPO=str(tmp / "node"),
+            TMPDIR=str(tmp / "tmp"),
+            TRANSFER_TMP=str(tmp / "node" / "var" / "tmp" / "audiomonastry-transfer"),
+            R2_ACCESS_KEY=TEST_R2_ACCESS_KEY,
+            R2_SECRET_KEY=TEST_R2_SECRET_KEY,
+            R2_ENDPOINT=f"https://{TEST_R2_HOST}",
+            R2_BUCKET=TEST_R2_BUCKET,
+            R2_REGION="auto",
+        )
+        for key, value in extra.items():
+            if value is None:
+                env.pop(key, None)
+            else:
+                env[key] = value
+        return env
+
+    @staticmethod
+    def _log(tmp: pathlib.Path, name: str) -> str:
+        pfad = tmp / name
+        return pfad.read_text(encoding="utf-8") if pfad.exists() else ""
+
+    def _pack(self, tmp: pathlib.Path, src: pathlib.Path, env: dict[str, str] | None = None) -> dict[str, str]:
+        result = subprocess.run(
+            [bash_path(), str(PARALLEL_TRANSFER), "--src", str(src), "--pack-only"],
+            capture_output=True, text=True, cwd=ROOT, timeout=300,
+            env=env if env is not None else self._sandbox(tmp),
+        )
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        return dict(
+            line.split("=", 1) for line in result.stdout.splitlines()
+            if line.startswith("PARALLEL_TRANSFER_")
+        )
+
+    def _run(self, tmp: pathlib.Path, *args: str, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [bash_path(), str(PARALLEL_TRANSFER), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=300,
+            env=env if env is not None else self._sandbox(tmp),
+        )
+
+    @staticmethod
+    def _node_exec_zeile(tmp: pathlib.Path) -> str:
+        """Die Zeile des Fake-ssh-Protokolls, die den Knotenbefehl enthaelt."""
+        for line in TransferSandbox._log(tmp, "ssh.log").splitlines():
+            if line.startswith("TRANSFER_ENV_FILE="):
+                return line
+        return ""
+
+
+class ParallelTransferSigV4Test(TransferSandbox, unittest.TestCase):
+    """Die Signatur ist das Sicherheitsfundament des R2-Weges: der Knoten kommt
+    ohne Zugangsschluessel aus, weil eine kurzlebige URL ihn ersetzt."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        for pfad in (PARALLEL_TRANSFER, R2_SIGV4_LIB, R2_NODE_FETCH):
+            if not pfad.exists():  # pragma: no cover - Dateien sind eingecheckt
+                self.fail(f"fehlt: {pfad}")
+
+    def _presign(self, method: str, key: str, ttl: int = 3600, amzdate: str = TEST_SIGNED_AT) -> subprocess.CompletedProcess:
+        env = clean_env(
+            R2_ENV_FILE="/nonexistent",
+            R2_ACCESS_KEY=TEST_R2_ACCESS_KEY,
+            R2_SECRET_KEY=TEST_R2_SECRET_KEY,
+            R2_ENDPOINT=f"https://{TEST_R2_HOST}",
+            R2_BUCKET=TEST_R2_BUCKET,
+            R2_REGION="auto",
+        )
+        return subprocess.run(
+            [self.bash, "-c", 'source "$1"; r2_load_config && r2_presign "$2" "$3" "$4" "$5"', "_",
+             str(R2_SIGV4_LIB), method, key, str(ttl), amzdate],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=env,
+        )
+
+    def test_signatur_stimmt_mit_unabhaengiger_umsetzung(self) -> None:
+        for method, key, ttl in (
+            ("GET", "transfer/orchestral/abc.tar.zst", 3600),
+            ("GET", "transfer/orchestral/abc.tar.zst", 43200),
+            ("PUT", "transfer/models/htdemucs.onnx.tar.zst", 60),
+            ("HEAD", "transfer/music/demo.tar.zst", 300),
+            # Leerzeichen + Umlaut + Sonderzeichen: die Prozentkodierung muss
+            # byteweise (UTF-8) stimmen, sonst weist R2 die Signatur ab.
+            ("GET", "transfer/VSCO 2 CE/Ümlaut & Test.sfz", 7200),
+        ):
+            with self.subTest(method=method, key=key):
+                result = self._presign(method, key, ttl)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(
+                    result.stdout.strip(),
+                    reference_presign_url(method, key, ttl),
+                    "Bash-SigV4 weicht von der unabhaengigen Referenz ab",
+                )
+
+    def test_secret_erscheint_nie_in_der_ausgabe(self) -> None:
+        result = self._presign("GET", "transfer/orchestral/abc.tar.zst")
+        combined = result.stdout + result.stderr
+        self.assertNotIn(TEST_R2_SECRET_KEY, combined)
+        # Die ACCESS-KEY-ID steckt konstruktionsbedingt im Scope der URL
+        # (SigV4-Vertrag) - das Geheimnis nicht. Die URL ist ein Bearer-Token
+        # und wird deshalb nie ausgegeben, sondern nur per stdin uebergeben.
+        self.assertIn("X-Amz-Credential=", combined)
+        self.assertIn("X-Amz-Signature=", combined)
+
+    def test_ohne_schluessel_kein_presign_nur_klartext(self) -> None:
+        env = clean_env(R2_ENV_FILE="/nonexistent")
+        result = subprocess.run(
+            [self.bash, "-c", 'source "$1"; r2_load_config || echo "KONFIG-FEHLT"; r2_key_fingerprint', "_",
+             str(R2_SIGV4_LIB)],
+            capture_output=True, text=True, cwd=ROOT, timeout=60, env=env,
+        )
+        self.assertIn("KONFIG-FEHLT", result.stdout)
+        self.assertIn("kein-Key", result.stdout)
+
+
+class ParallelTransferTrockenlaufTest(TransferSandbox, unittest.TestCase):
+    """--print-config/--help sind die akzeptierte Nachweisform fuer Infra-
+    Aenderungen: sie muessen die Wahrheit zeigen und dabei kein Byte bewegen."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def test_print_config_ist_netzfrei_und_nennt_die_knoten_voraussetzung(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-dry-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "orchestral")
+            env = self._sandbox(tmp)
+            result = self._run(tmp, "10.0.0.1", "--src", str(src), "--dest", "/opt/audiomonastry/media",
+                               "--print-config", env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, combined)
+            self.assertIn("kein Netz", combined)
+            # Der 16-fach-Split und die Knoten-Voraussetzung muessen im
+            # Trockenlauf stehen (sonst ueberrascht der erste echte Lauf).
+            self.assertIn("aria2c -x16 -s16", combined)
+            self.assertIn("apt-get install -y --no-install-recommends aria2 zstd", combined)
+            self.assertIn("Rueckfall: curl -fL, EIN Strom", combined)
+            self.assertIn("deterministisch", combined)
+            self.assertIn("Erwartungswert", combined)
+            # NICHTS bewegt: kein ssh, kein aria2c, kein curl, kein Archiv.
+            self.assertEqual(self._log(tmp, "ssh.log"), "")
+            self.assertEqual(self._log(tmp, "aria2c.log"), "")
+            self.assertEqual(self._log(tmp, "curl.log"), "")
+            self.assertEqual(list((tmp / "tmp").glob("am-parallel-transfer.*")), [])
+
+    def test_print_config_funktioniert_ohne_r2_schluessel(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-dry-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "models")
+            env = self._sandbox(tmp, R2_ACCESS_KEY=None, R2_SECRET_KEY=None, R2_BUCKET=None, R2_ENDPOINT=None)
+            env["R2_ENV_FILE"] = "/nonexistent"
+            result = self._run(tmp, "10.0.0.1", "--src", str(src), "--dest", "/opt/audiomonastry/media",
+                               "--print-config", env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, combined)
+            self.assertIn("FEHLEN (nur fuer den echten Lauf noetig)", combined)
+
+    def test_help_zeigt_hilfe_ohne_netz_und_ohne_ip(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-dry-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            env = self._sandbox(tmp)
+            for flag in ("--help", "-h"):
+                with self.subTest(flag=flag):
+                    result = self._run(tmp, flag, env=env)
+                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    self.assertIn("Aufruf:", result.stdout)
+                    self.assertIn("--print-config", result.stdout)
+                    self.assertEqual(result.stderr, "", "Hilfe darf nichts auf stderr schreiben")
+            self.assertEqual(self._log(tmp, "ssh.log"), "")
+            self.assertEqual(self._log(tmp, "aria2c.log"), "")
+
+    def test_fehlerhafte_aufrufe_brechen_mit_klartext_ab(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-dry-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "orchestral")
+            env = self._sandbox(tmp)
+            faelle = {
+                "Knoten-IP fehlt": (["--src", str(src), "--dest", "/opt/audiomonastry/media"], env),
+                "Quelle fehlt": (["10.0.0.1", "--dest", "/opt/audiomonastry/media"], env),
+                "--dest <ziel auf dem knoten> fehlt": (["10.0.0.1", "--src", str(src)], env),
+                "--source-url verlangt --sha256": (
+                    ["10.0.0.1", "--src", str(src), "--dest", "/x", "--source-url", "https://example.invalid/a.tar.zst"],
+                    env,
+                ),
+                "Unbekannte Option": (["--quatsch"], env),
+            }
+            for erwartet, (args, umgebung) in faelle.items():
+                with self.subTest(fall=erwartet):
+                    result = self._run(tmp, *args, env=umgebung)
+                    combined = result.stdout + result.stderr
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(erwartet, combined)
+
+    def test_ohne_r2_schluessel_bricht_der_echte_lauf_vor_dem_packen_ab(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-dry-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "orchestral")
+            env = self._sandbox(tmp, R2_ACCESS_KEY=None, R2_SECRET_KEY=None, R2_BUCKET=None, R2_ENDPOINT=None)
+            env["R2_ENV_FILE"] = "/nonexistent"
+            result = self._run(tmp, "10.0.0.1", "--src", str(src), "--dest", "/opt/audiomonastry/media", env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 2, combined)
+            self.assertIn("R2-Zugangsdaten fehlen", combined)
+            self.assertIn("NIE ausgegeben", combined)
+            self.assertEqual(self._log(tmp, "ssh.log"), "", "ohne Schluessel darf kein ssh laufen")
+            self.assertEqual(self._log(tmp, "aria2c.log"), "")
+            # Und es wurde nicht gepackt (kein Gigabyte durch zstd, um dann
+            # festzustellen, dass der Endpoint fehlt).
+            self.assertEqual(list((tmp / "tmp").glob("am-parallel-transfer.*/*.tar.zst")), [])
+
+
+class ParallelTransferKnotenVertragTest(TransferSandbox, unittest.TestCase):
+    """Der Knoten-Vertrag: 16 Verbindungen, Integritaet VOR dem Auspacken,
+    lauter Rueckfall ohne aria2c, Rate und Dateizahlen in der Ausgabe."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _vorbereitet(self, tmp: pathlib.Path, **extra: str | None):
+        src = make_tree(tmp / "srcs" / "orchestral")
+        env = self._sandbox(tmp, **extra)
+        felder = self._pack(tmp, src, env=env)
+        return src, env, felder
+
+    @staticmethod
+    def _args(ip: str, src: pathlib.Path, felder: dict[str, str], dest: pathlib.Path) -> list[str]:
+        return [
+            ip,
+            "--src", str(src), "--dest", str(dest),
+            "--source-url", f"file://{felder['PARALLEL_TRANSFER_ARCHIVE']}",
+            "--sha256", felder["PARALLEL_TRANSFER_SHA256"],
+            "--files", felder["PARALLEL_TRANSFER_FILES"],
+        ]
+
+    def test_knoten_zieht_mit_16_verbindungen_prueft_hash_und_packt_aus(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-node-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src, env, felder = self._vorbereitet(tmp)
+            dest = tmp / "ziel"
+            result = self._run(tmp, *self._args("10.0.0.1", src, felder, dest), env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, combined)
+
+            aufruf = self._log(tmp, "aria2c.log")
+            self.assertIn("-x16", aufruf, f"kein 16-fach-Split: {aufruf!r}")
+            self.assertIn("-s16", aufruf)
+            self.assertIn("-k1M", aufruf)
+            self.assertIn("--allow-overwrite=true", aufruf)
+
+            self.assertIn("TRANSFER_SHA256_OK=1", combined)
+            self.assertIn("TRANSFER_RESULT=ok", combined)
+            self.assertIn("TRANSFER_RATE_MBPS=", combined)
+            self.assertIn("TRANSFER_FILES=3", combined)
+            # Der Betreiber vergleicht die Knoten-Rate mit dem gemessenen
+            # EIN-Strom-Referenzwert (Erwartungswert, kein Messwert).
+            self.assertIn("Referenz EIN Strom", combined)
+            self.assertIn("Faktor:", combined)
+            self.assertIn("Dateizahlen:           erwartet 3, auf dem Knoten 3", combined)
+            # Ausgepackt: identischer Baum am Ziel.
+            self.assertEqual(tree_files(dest / "orchestral"), tree_files(src))
+            # URL-Datei und Archiv sind weg (die URL ist ein Bearer-Token).
+            remote = tmp / "node" / "var" / "tmp" / "audiomonastry-transfer"
+            self.assertEqual(sorted(p.name for p in remote.iterdir()), ["r2-node-fetch.sh"])
+            # Die URL stand NICHT im Kommando des Knotens (argv/ps), sondern nur
+            # in der 0600-Datei, die der Knoten selbst wieder loescht.
+            self.assertNotIn("file://", self._node_exec_zeile(tmp))
+            self.assertIn("umask 077; cat > ", self._log(tmp, "ssh.log"))
+            self.assertIn("/transfer.env'", self._log(tmp, "ssh.log"))
+
+    def test_falscher_hash_packt_nichts_aus(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-node-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src, env, felder = self._vorbereitet(tmp, FAKE_ARIA2_CORRUPT="1")
+            dest = tmp / "ziel"
+            result = self._run(tmp, *self._args("10.0.0.1", src, felder, dest), env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 3, combined)
+            self.assertIn("TRANSFER_SHA256_OK=0", combined)
+            self.assertIn("NICHT ausgepackt", combined)
+            self.assertIn("TRANSFER_RESULT=sha256-mismatch", combined)
+            # Kernzusage: der Zielbaum bleibt leer - kein halb ausgepacktes
+            # Medienverzeichnis, das im Container wie ein Feature aussieht.
+            self.assertFalse(dest.exists() and any(dest.rglob("*")), "trotz falschem Hash ausgepackt")
+            # Kaputtes Archiv und Parameterdatei sind entfernt.
+            remote = tmp / "node" / "var" / "tmp" / "audiomonastry-transfer"
+            self.assertEqual(sorted(p.name for p in remote.iterdir()), ["r2-node-fetch.sh"])
+
+    def test_ohne_aria2c_lauter_rueckfall_auf_einen_curl_strom(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-node-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "srcs" / "orchestral")
+            env = self._sandbox(tmp, with_aria2c=False)
+            felder = self._pack(tmp, src, env=env)
+            dest = tmp / "ziel"
+            result = self._run(tmp, *self._args("10.0.0.1", src, felder, dest), env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, combined)
+            self.assertIn("aria2c fehlt", combined)
+            self.assertIn("apt-get install -y --no-install-recommends aria2 zstd", combined)
+            self.assertIn("TRANSFER_METHOD=curl (Einzelstrom)", combined)
+            self.assertEqual(self._log(tmp, "aria2c.log"), "")
+            # Auch ohne aria2c wird geprueft und ausgepackt.
+            self.assertIn("TRANSFER_SHA256_OK=1", combined)
+            self.assertEqual(tree_files(dest / "orchestral"), tree_files(src))
+
+    def test_dateizahl_abweichung_bricht_ab(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-node-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src, env, felder = self._vorbereitet(tmp)
+            dest = tmp / "ziel"
+            args = self._args("10.0.0.1", src, felder, dest)
+            args[args.index("--files") + 1] = "999"
+            result = self._run(tmp, *args, env=env)
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 4, combined)
+            self.assertIn("Dateizahl stimmt nicht", combined)
+            self.assertIn("TRANSFER_RESULT=file-count-mismatch", combined)
+
+    def test_tar_modus_liefert_einen_vorhandenen_tar_und_zaehlt_das_ziel(self) -> None:
+        # `--tar` ist der zweite beworbene Eingang (z. B. ein Image-Tar). Der
+        # Inhalt ist unbekannt, deshalb wird das ZIELVERZEICHNIS gezaehlt und
+        # ohne --files NICHT verglichen (sonst waere der Modus unbrauchbar).
+        with tempfile.TemporaryDirectory(prefix="p1f5-tar-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            inhalt = make_tree(tmp / "image" / "inner", dateien=2)
+            (tmp / "image" / "README.txt").write_text("image-tar\n", encoding="utf-8")
+            tar_pfad = tmp / "app-image.tar"
+            subprocess.run(["tar", "-cf", str(tar_pfad), "-C", str(tmp / "image"), "."],
+                           check=True, cwd=ROOT, timeout=60)
+            env = self._sandbox(tmp)
+            packed = subprocess.run(
+                [bash_path(), str(PARALLEL_TRANSFER), "--tar", str(tar_pfad), "--pack-only"],
+                capture_output=True, text=True, cwd=ROOT, timeout=300, env=env,
+            )
+            self.assertEqual(packed.returncode, 0, packed.stdout + packed.stderr)
+            felder = dict(line.split("=", 1) for line in packed.stdout.splitlines()
+                          if line.startswith("PARALLEL_TRANSFER_"))
+            dest = tmp / "ziel"
+            result = self._run(
+                tmp, "10.0.0.1", "--tar", str(tar_pfad), "--dest", str(dest),
+                "--source-url", f"file://{felder['PARALLEL_TRANSFER_ARCHIVE']}",
+                "--sha256", felder["PARALLEL_TRANSFER_SHA256"], env=env,
+            )
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, combined)
+            self.assertIn("TRANSFER_RESULT=ok", combined)
+            self.assertIn("auf dem Knoten 3", combined)
+            self.assertEqual(sorted(str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file()),
+                             sorted(tree_files(tmp / "image")))
+            self.assertTrue(inhalt.exists())
+
+    def test_packen_ist_deterministisch_und_mtime_unabhaengig(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-det-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "srcs" / "orchestral")
+            env = self._sandbox(tmp)
+            erste = self._pack(tmp, src, env=env)
+            # Nur die mtime aendern: derselbe Inhalt MUSS denselben Hash geben -
+            # sonst laedt jeder Lauf ein neues Objekt nach R2 hoch und die
+            # Zeitersparnis des Zwischenspeichers ist weg.
+            os.utime(src / "sub" / "datei0.sfz", (1_600_000_000, 1_600_000_000))
+            zweite = self._pack(tmp, src, env=env)
+            self.assertEqual(erste["PARALLEL_TRANSFER_SHA256"], zweite["PARALLEL_TRANSFER_SHA256"])
+            self.assertEqual(erste["PARALLEL_TRANSFER_KEY"], zweite["PARALLEL_TRANSFER_KEY"])
+            self.assertIn("/orchestral/", erste["PARALLEL_TRANSFER_KEY"])
+            self.assertIn(".tar.zst", erste["PARALLEL_TRANSFER_KEY"])
+
+
+class ParallelTransferR2WegTest(TransferSandbox, unittest.TestCase):
+    """Der R2-Zwischenspeicher: EINMAL hochladen, danach zieht jeder Knoten -
+    und der Knoten sieht dabei nur eine signierte URL."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+
+    def _zwei_knoten(self, tmp: pathlib.Path, src: pathlib.Path, env: dict[str, str]):
+        args = ["--src", str(src), "--dest", "/opt/audiomonastry/media", "--name", "orchestral"]
+        erst = self._run(tmp, "10.10.0.1", *args, env=env)
+        zweit = self._run(tmp, "10.10.0.2", *args, env=env)
+        return erst, zweit
+
+    def test_ein_upload_danach_zieht_der_zweite_knoten_aus_r2(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-r2-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "srcs" / "orchestral")
+            env = self._sandbox(tmp)
+            erst, zweit = self._zwei_knoten(tmp, src, env)
+            combined = erst.stdout + erst.stderr
+            self.assertEqual(erst.returncode, 0, combined)
+            self.assertIn("hochgeladen", combined)
+            self.assertIn("presignierte GET-URL erzeugt", combined)
+
+            puts = [line for line in self._log(tmp, "curl.log").splitlines() if "-X PUT" in line]
+            self.assertEqual(len(puts), 1, f"kein einzelnes presigned PUT: {puts!r}")
+            self.assertIn("X-Amz-Signature", puts[0])
+            self.assertIn("X-Amz-Expires", puts[0])
+            # Der Objekt-Schluessel traegt den Archiv-Hash: gleicher Inhalt =
+            # gleiches Objekt = kein zweiter Upload.
+            self.assertIn("/transfer/orchestral/", puts[0])
+            self.assertNotIn(TEST_R2_SECRET_KEY, puts[0])
+
+            # Geheimnisse: nie in der Ausgabe, nie im Kommando des Knotens.
+            ssh_log = self._log(tmp, "ssh.log")
+            self.assertNotIn(TEST_R2_SECRET_KEY, combined + ssh_log)
+            self.assertNotIn("X-Amz-Signature", ssh_log, "die signierte URL darf nicht in argv/ps stehen")
+            self.assertNotIn("X-Amz-Signature", combined, "die URL ist ein Bearer-Token")
+
+            # Der zweite Knoten zieht dasselbe Objekt: HEAD 200 -> kein Upload.
+            combined_zweit = zweit.stdout + zweit.stderr
+            self.assertEqual(zweit.returncode, 0, combined_zweit)
+            self.assertIn("schon vorhanden - KEIN erneuter Upload", combined_zweit)
+            puts_zweit = [line for line in self._log(tmp, "curl.log").splitlines() if "-X PUT" in line]
+            self.assertEqual(len(puts_zweit), 1, "der zweite Knoten hat erneut hochgeladen")
+            # Beide Knoten haben den vollstaendigen Baum.
+            self.assertEqual(tree_files(tmp / "node" / "media" / "orchestral"), tree_files(src))
+            self.assertIn("TRANSFER_RESULT=ok", combined_zweit)
+
+    def test_force_upload_laedt_trotz_vorhandenem_objekt(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-r2-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            src = make_tree(tmp / "srcs" / "models", dateien=2)
+            env = self._sandbox(tmp)
+            args = ["--src", str(src), "--dest", "/opt/audiomonastry/media", "--name", "models"]
+            self.assertEqual(self._run(tmp, "10.10.0.1", *args, env=env).returncode, 0)
+            erneut = self._run(tmp, "10.10.0.1", *args, "--force-upload", env=env)
+            self.assertEqual(erneut.returncode, 0, erneut.stdout + erneut.stderr)
+            puts = [line for line in self._log(tmp, "curl.log").splitlines() if "-X PUT" in line]
+            self.assertEqual(len(puts), 2)
+
+
+class DeliverMediaViaR2Test(TransferSandbox, unittest.TestCase):
+    """`deliver-media.sh --via-r2`: derselbe Weg fuer die Medienbaeume, ohne
+    Aenderung an Ausschluss-/Mount-Logik (README: READ-ONLY nach /app/dist)."""
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.text = DELIVER_MEDIA.read_text(encoding="utf-8")
+
+    def _zweige(self) -> tuple[str, str]:
+        """(R2-Zweig, rsync-Zweig) - zerlegt an den Verzweigungen, nicht an
+        Zeilennummern. Der Anker ist `transfer_r2() {`, weil `$VIA_R2` auch im
+        Trockenlauf-Block vorkommt."""
+        r2_teil = self.text.split("transfer_r2() {", 1)[1]
+        r2_zweig, rest = r2_teil.split('if [[ "$VIA_R2" == "1" ]]; then', 1)[1].split("\nelse\n", 1)
+        return r2_zweig, rest.split("\nfi\n", 1)[0]
+
+    def test_r2_zweig_nutzt_parallel_transfer_und_laesst_die_rsync_logik_stehen(self) -> None:
+        r2_zweig, rsync_zweig = self._zweige()
+        self.assertIn("--via-r2", self.text)
+        for name in ("orchestral", "models", "music"):
+            with self.subTest(baum=name):
+                self.assertIn(f'transfer_r2 "$SRC_{name.upper()}" {name}', r2_zweig)
+        # Der R2-Zweig schiebt KEINEN Baum per rsync (nur der kleine Overlay-Rest
+        # laeuft weiter ueber rsync - und zwar in beiden Wegen).
+        for verboten in ("rsync -az --info=stats2", "$SRC_ORCHESTRAL/", "$SRC_MODELS/"):
+            with self.subTest(verboten=verboten):
+                self.assertNotIn(verboten, r2_zweig)
+        # Der rsync-Weg bleibt vollstaendig erhalten (Rueckfall ohne R2).
+        self.assertIn('"$SRC_ORCHESTRAL/" "root@$IP:$MEDIA_DIR/orchestral/"', rsync_zweig)
+        self.assertIn('"$SRC_MODELS/" "root@$IP:$MEDIA_DIR/models/"', rsync_zweig)
+        # Ziel ist in beiden Wegen dasselbe MEDIA_DIR; ohne aria2c wird
+        # nachinstalliert (abschaltbar) - sonst bliebe es bei EINEM Strom.
+        self.assertIn('--dest "$MEDIA_DIR"', self.text)
+        self.assertIn('--name "$name"', self.text)
+        self.assertIn('[[ "${MEDIA_R2_NO_INSTALL:-0}" == "1" ]] || args+=(--install-missing)', self.text)
+
+    def test_mount_logik_bleibt_readonly_und_unveraendert(self) -> None:
+        overlay = COMPOSE_MEDIA.read_text(encoding="utf-8")
+        for mount in (
+            "./media/orchestral:/app/dist/data/orchestral:ro",
+            "./media/models:/app/dist/models:ro",
+            "./media/music:/app/dist/music:ro",
+        ):
+            with self.subTest(mount=mount):
+                self.assertIn(mount, overlay)
+        # Das Overlay wird in BEIDEN Wegen ausgeliefert: die Zeile steht VOR der
+        # Verzweigung, also vor dem R2-/rsync-Zweig.
+        self.assertLess(
+            self.text.index('rsync -az -e "$RSYNC_E" docker-compose.media.yml'),
+            self.text.index('transfer_r2() {'),
+        )
+
+    def test_trockenlauf_kuendigt_den_r2_weg_an(self) -> None:
+        ohne = subprocess.run([self.bash, str(DELIVER_MEDIA), "--print-config"],
+                              capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env())
+        mit = subprocess.run([self.bash, str(DELIVER_MEDIA), "10.0.0.1", "--via-r2", "--print-config"],
+                             capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env())
+        self.assertEqual(ohne.returncode, 0, ohne.stderr)
+        self.assertEqual(mit.returncode, 0, mit.stderr)
+        self.assertIn("rsync ueber EINEN ssh-Strom", ohne.stdout)
+        self.assertIn("--via-r2", ohne.stdout)
+        self.assertIn("aria2c -x16 -s16", mit.stdout)
+        self.assertIn("apt-get install -y --no-install-recommends aria2 zstd", mit.stdout)
+        self.assertIn("Erwartungswert", mit.stdout)
+
+    def test_via_r2_liefert_beide_baeume_an_dieselben_pfade(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="p1f5-media-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            orchestral = make_tree(tmp / "srcs" / "orchestral", dateien=4)
+            models = make_tree(tmp / "srcs" / "models", dateien=2)
+            (models / "htdemucs.onnx").write_text("onnx-ersatz\n" * 50, encoding="utf-8")
+            env = self._sandbox(
+                tmp, with_rsync=True,
+                MEDIA_SRC_ORCHESTRAL=str(orchestral),
+                MEDIA_SRC_MODELS=str(models),
+            )
+            result = subprocess.run(
+                [self.bash, str(DELIVER_MEDIA), "10.10.0.3", "--via-r2", "--no-start"],
+                capture_output=True, text=True, cwd=ROOT, timeout=300, env=env,
+            )
+            combined = result.stdout + result.stderr
+            self.assertEqual(result.returncode, 0, combined)
+            node = tmp / "node"
+            # Dieselben Pfade wie im rsync-Weg: media/<baum> (READ-ONLY gemountet).
+            self.assertEqual(tree_files(node / "media" / "orchestral"), tree_files(orchestral))
+            self.assertEqual(tree_files(node / "media" / "models"), tree_files(models))
+            self.assertTrue((node / "media" / "models" / "htdemucs.onnx").exists())
+            # Genau EIN Upload je Baum; music ist nicht Teil der Lieferung.
+            puts = [line for line in self._log(tmp, "curl.log").splitlines() if "-X PUT" in line]
+            self.assertEqual(len(puts), 2, puts)
+            self.assertIn("via R2", combined)
+            # Der kleine Overlay-Rest laeuft weiter ueber rsync; die Baeume NICHT.
+            rsync_log = self._log(tmp, "rsync.log")
+            self.assertIn("docker-compose.media.yml", rsync_log)
+            self.assertIn("deliver-media.sh", rsync_log)
+            self.assertNotIn("srcs/orchestral", rsync_log)
+            self.assertNotIn("srcs/models", rsync_log)
+            # --no-start: kein Compose-Aufruf auf dem Knoten (der Lauf endet mit
+            # dem Hinweis auf den naechsten Schritt).
+            self.assertNotIn("docker compose", self._log(tmp, "ssh.log"))
+            self.assertIn("Start uebersprungen", combined)
+
+
+class TransferSyntaxTest(unittest.TestCase):
+    """bash -n fuer die vier Dateien dieses Weges (Skript, zwei libs, Nutzer)."""
+
+    def test_bash_syntax_ist_sauber(self) -> None:
+        bash = bash_path()
+        for pfad in (PARALLEL_TRANSFER, R2_SIGV4_LIB, R2_NODE_FETCH, DELIVER_MEDIA):
+            with self.subTest(script=pfad.name):
+                result = subprocess.run([bash, "-n", str(pfad)], capture_output=True, text=True, cwd=ROOT, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

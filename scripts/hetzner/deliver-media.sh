@@ -16,8 +16,23 @@
 #     sind kommerzielle/teils problematische Fremdaufnahmen ohne dokumentierte
 #     Freigabe. Nur mit --with-music und ausdruecklicher Betreiberentscheidung.
 #
+# ZWEI UEBERTRAGUNGSWEGE (gemessen 2026-09-21: EIN ssh-Strom ~1 MB/s hoch,
+# 200 MB in 3:14 - 3,7 GB also ~60 min pro Knoten und je Lieferung):
+#   * Standard: rsync ueber EINEN ssh-Strom.
+#   * --via-r2: jeden Baum deterministisch zstd-packen, EINMAL nach Cloudflare
+#     R2 legen (Egress kostenfrei; 3,7 GB kosten ~0,06 USD/Monat Storage) und
+#     jeden Knoten mit `aria2c -x16 -s16` ziehen lassen - der Betreiber-Host
+#     schiebt danach nichts mehr nach. Umsetzung/Rueckfall: parallel-transfer.sh
+#     + lib/r2-sigv4.sh + lib/r2-node-fetch.sh (Schluessel bleiben beim
+#     Betreiber, der Knoten bekommt nur eine presignierte GET-URL mit TTL).
+#     Knoten-Voraussetzung: aria2c + zstd (apt-get install -y --no-install-
+#     recommends aria2 zstd); ohne sie faellt der Lauf LAUT auf EINEN
+#     curl-Strom zurueck. Opt-out der Nachinstallation: MEDIA_R2_NO_INSTALL=1.
+#     Die Mount-/Ausschlusslogik (docker-compose.media.yml, READ-ONLY) ist in
+#     beiden Wegen identisch.
+#
 # Aufruf:
-#   bash scripts/hetzner/deliver-media.sh <ip> [--print-config] [--with-music] [--no-start]
+#   bash scripts/hetzner/deliver-media.sh <ip> [--print-config] [--with-music] [--no-start] [--via-r2]
 #
 # Danach startet der Rollen-Stack mit dem Medien-Overlay:
 #   docker compose -f docker-compose.hetzner.yml -f docker-compose.media.yml up -d
@@ -36,12 +51,14 @@ IP=""
 PRINT_CONFIG=0
 WITH_MUSIC=0
 NO_START=0
+VIA_R2=0
 for arg in "$@"; do
   case "$arg" in
     --print-config) PRINT_CONFIG=1 ;;
     --with-music) WITH_MUSIC=1 ;;
     --no-start) NO_START=1 ;;
-    --help|-h) sed -n '2,26p' "$0"; exit 0 ;;
+    --via-r2) VIA_R2=1 ;;
+    --help|-h) sed -n '2,39p' "$0"; exit 0 ;;
     -*) echo "Unbekannte Option: $arg" >&2; exit 1 ;;
     *) IP="$arg" ;;
   esac
@@ -55,9 +72,11 @@ MEDIA_DIR="$REMOTE_DIR/media"
 PROJECT="$(fleet_compose_project)"
 
 # Quelle: welche Inhalte sind da? Fehlende werden LAUT gemeldet, nicht verschwiegen.
-SRC_ORCHESTRAL="public/data/orchestral"
-SRC_MODELS="public/models"
-SRC_MUSIC="public/music"
+# Die drei Pfade sind per env ueberschreibbar (Medien auf einer anderen Platte,
+# oder ein Lauf gegen kleine Baeume); die Defaults bleiben die Repo-Pfade.
+SRC_ORCHESTRAL="${MEDIA_SRC_ORCHESTRAL:-public/data/orchestral}"
+SRC_MODELS="${MEDIA_SRC_MODELS:-public/models}"
+SRC_MUSIC="${MEDIA_SRC_MUSIC:-public/music}"
 SOURCES=("$SRC_ORCHESTRAL" "$SRC_MODELS")
 [[ "$WITH_MUSIC" == "1" ]] && SOURCES+=("$SRC_MUSIC")
 
@@ -68,6 +87,17 @@ if [[ "$PRINT_CONFIG" == "1" ]]; then
   printf '  Ziel-Knoten:      %s\n' "${IP:-<keiner>}"
   printf '  Ziel-Verzeichnis: %s\n' "$MEDIA_DIR"
   printf '  Compose-Projekt:  %s (aus fleet-names.sh)\n' "$PROJECT"
+  if [[ "$VIA_R2" == "1" ]]; then
+    printf '  Uebertragung:     R2-Zwischenspeicher + aria2c -x16 -s16 (parallel-transfer.sh, zstd-Archiv deterministisch)\n'
+    printf '                    je Baum: EIN Upload vom Betreiber-Host, danach zieht JEDER Knoten aus R2 (Egress frei)\n'
+    printf '                    Erwartungswert (Referenz Einzelstrom 2026-09-21 ~1 MB/s, 3,7 GB ~60 min): ein Vielfaches\n'
+    printf '                    der Rate, wenn das Limit pro Verbindung greift - die echte Zahl misst der Lauf auf dem Knoten\n'
+    printf '                    Knoten-Voraussetzung: aria2c + zstd (apt-get install -y --no-install-recommends aria2 zstd)\n'
+    printf '                    Nachinstallation auf dem Knoten: %s\n' "$([[ "${MEDIA_R2_NO_INSTALL:-0}" == "1" ]] && echo 'aus (MEDIA_R2_NO_INSTALL=1)' || echo 'ja (Rueckfall auf EINEN curl-Strom, wenn aria2c fehlt)')"
+  else
+    printf '  Uebertragung:     rsync ueber EINEN ssh-Strom (gemessen 2026-09-21: ~1 MB/s -> 3,7 GB in ~60 min)\n'
+    printf '  Schnellerer Weg:  --via-r2 (R2-Zwischenspeicher + aria2c -x16 -s16, keine Schluessel auf dem Knoten)\n'
+  fi
   printf '  Orchestral (CC0): %s (%s) -> %s/orchestral\n' "$SRC_ORCHESTRAL" "$(size_of "$SRC_ORCHESTRAL")" "$MEDIA_DIR"
   printf '  ONNX-Modelle:     %s (%s) -> %s/models\n' "$SRC_MODELS" "$(size_of "$SRC_MODELS")" "$MEDIA_DIR"
   if [[ "$WITH_MUSIC" == "1" ]]; then
@@ -105,18 +135,45 @@ echo "--- Overlay + Skript auf den Knoten ---"
 rsync -az -e "$RSYNC_E" docker-compose.media.yml "root@$IP:$REMOTE_DIR/docker-compose.media.yml"
 rsync -az -e "$RSYNC_E" "$HERE_SRC/deliver-media.sh" "root@$IP:$REMOTE_DIR/scripts/hetzner/deliver-media.sh" 
 
-# Orchestral (CC0)
-echo "--- orchestral ($(size_of "$SRC_ORCHESTRAL")) ---"
-rsync -az --info=stats2 -e "$RSYNC_E" "$SRC_ORCHESTRAL/" "root@$IP:$MEDIA_DIR/orchestral/"
+# Gemeinsamer Helfer fuer den R2-Weg: ein Baum -> parallel-transfer.sh.
+# Die Mount-/Ausschlusslogik (docker-compose.media.yml) bleibt unangetastet -
+# dieser Weg aendert NUR, wie die Bytes auf den Knoten kommen. Ziel ist immer
+# das MEDIA_DIR (der Archiv-Wurzelordner ist der Basisname des Baums, also
+# landet orchestral/ unter media/orchestral - identisch zum rsync-Weg).
+transfer_r2() {
+  local src="$1" name="$2"
+  local args=("$IP" --src "$src" --dest "$MEDIA_DIR" --name "$name")
+  # aria2c/zstd auf dem Knoten nachinstallieren, sofern nicht abgeschaltet: ohne
+  # aria2c faellt der Lauf auf EINEN curl-Strom zurueck (kein 16-fach-Split).
+  [[ "${MEDIA_R2_NO_INSTALL:-0}" == "1" ]] || args+=(--install-missing)
+  bash "$HERE_SRC/parallel-transfer.sh" "${args[@]}"
+}
 
-# Modelle (htdemucs.onnx)
-echo "--- models ($(size_of "$SRC_MODELS")) ---"
-rsync -az --info=stats2 -e "$RSYNC_E" "$SRC_MODELS/" "root@$IP:$MEDIA_DIR/models/"
+if [[ "$VIA_R2" == "1" ]]; then
+  echo "--- orchestral ($(size_of "$SRC_ORCHESTRAL")) via R2 (zstd + aria2c -x16 -s16) ---"
+  transfer_r2 "$SRC_ORCHESTRAL" orchestral
 
-if [[ "$WITH_MUSIC" == "1" ]]; then
-  echo "--- music ($(size_of "$SRC_MUSIC")) - Lizenzlage in docs/LICENSE_EXTERNAL_RESOURCES.md pruefen ---"
-  ssh "${SSH_OPTS[@]}" "root@$IP" "mkdir -p '$MEDIA_DIR/music'"
-  rsync -az --info=stats2 -e "$RSYNC_E" "$SRC_MUSIC/" "root@$IP:$MEDIA_DIR/music/"
+  echo "--- models ($(size_of "$SRC_MODELS")) via R2 ---"
+  transfer_r2 "$SRC_MODELS" models
+
+  if [[ "$WITH_MUSIC" == "1" ]]; then
+    echo "--- music ($(size_of "$SRC_MUSIC")) via R2 - Lizenzlage in docs/LICENSE_EXTERNAL_RESOURCES.md pruefen ---"
+    transfer_r2 "$SRC_MUSIC" music
+  fi
+else
+  # Orchestral (CC0)
+  echo "--- orchestral ($(size_of "$SRC_ORCHESTRAL")) ---"
+  rsync -az --info=stats2 -e "$RSYNC_E" "$SRC_ORCHESTRAL/" "root@$IP:$MEDIA_DIR/orchestral/"
+
+  # Modelle (htdemucs.onnx)
+  echo "--- models ($(size_of "$SRC_MODELS")) ---"
+  rsync -az --info=stats2 -e "$RSYNC_E" "$SRC_MODELS/" "root@$IP:$MEDIA_DIR/models/"
+
+  if [[ "$WITH_MUSIC" == "1" ]]; then
+    echo "--- music ($(size_of "$SRC_MUSIC")) - Lizenzlage in docs/LICENSE_EXTERNAL_RESOURCES.md pruefen ---"
+    ssh "${SSH_OPTS[@]}" "root@$IP" "mkdir -p '$MEDIA_DIR/music'"
+    rsync -az --info=stats2 -e "$RSYNC_E" "$SRC_MUSIC/" "root@$IP:$MEDIA_DIR/music/"
+  fi
 fi
 
 echo "--- Kontrolle auf dem Knoten ---"

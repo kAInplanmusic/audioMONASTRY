@@ -888,6 +888,63 @@ zeigt den Löschplan; `--help` zeigt alle Schalter. Wächter im Repo:
 `FleetSyncDeleteGuardTest` in `tests/test_hetzner_scripts.py` (Ausschlüsse für alle
 drei Sync-Wege + Gegenprobe gegen den Stand vor dem Fix).
 
+### Medien ohne zweiten Gigabyte-Transfer: R2 + `aria2c -x16` (2026-09-21)
+
+Gemessen: EIN TCP-Strom Betreiber → Knoten macht ~1 MB/s (200 MB in 3:14) — die
+3,7 GB Medien (`public/data/orchestral`, `public/models`, optional
+`public/music`) sind so **~60 min pro Knoten und je Lieferung**. `rsync` kann das
+nicht heilen (die Leitung ist der Engpass, zstd bringt bei den schon gepackten
+Formaten wenig). Der neue Weg nutzt zwei Hebel:
+
+| Hebel | Umsetzung | Datei |
+|---|---|---|
+| Mehrere Verbindungen | `aria2c -x16 -s16 -k1M` auf dem Knoten | `scripts/hetzner/lib/r2-node-fetch.sh` |
+| Zwischenspeicher | deterministisches zstd-Archiv in R2, EIN Upload je Baum | `scripts/hetzner/parallel-transfer.sh`, `scripts/hetzner/lib/r2-sigv4.sh` |
+| Nutzer-Schalter | `deliver-media.sh <ip> --via-r2` (rsync bleibt Default) | `scripts/hetzner/deliver-media.sh` |
+
+```bash
+bash scripts/hetzner/deliver-media.sh <ip> --via-r2                 # orchestral + models
+bash scripts/hetzner/deliver-media.sh <ip> --via-r2 --with-music    # nur mit Freigabe
+bash scripts/hetzner/parallel-transfer.sh <ip> --src public/models --dest /opt/audiomonastry/media
+bash scripts/hetzner/parallel-transfer.sh <ip> --src public/models --dest /opt/audiomonastry/media --print-config
+```
+
+* **Deterministisch**: `tar --sort=name --mtime=@0 --owner=0 --group=0
+  --numeric-owner | zstd -T0 -6` ⇒ gleicher Inhalt = gleicher Objekt-Schlüssel
+  `transfer/<baum>/<sha256>.tar.zst` ⇒ der zweite Knoten lädt **nicht** erneut
+  vom Betreiber-Host hoch (`--force-upload` erzwingt es).
+* **Integrität**: SHA256 wird **vor** dem Auspacken geprüft (Exit 3 und *kein*
+  Auspacken bei Abweichung), danach Dateizahlen (Exit 4). Raten/Dauer kommen
+  aus dem Lauf auf dem Knoten.
+* **Sicherheit**: Signatur entsteht auf dem Betreiber-Host (`CFS3_*` in `.env`);
+  der Knoten bekommt nur eine presignierte GET-URL (TTL 12 h) per stdin in eine
+  0600-Datei, die das Knoten-Skript danach löscht. Keine Schlüssel auf dem
+  Knoten, kein aws-cli/boto3 (openssl reicht, Signatur ist per Python-Referenz
+  im Test verifiziert).
+* **Knoten-Voraussetzung**: `aria2c` + `zstd` (apt: `aria2`, `zstd`) — auf einem
+  frischen Knoten nicht vorhanden (gemessen 2026-09-21). `--via-r2` installiert
+  per `--install-missing` nach (`MEDIA_R2_NO_INSTALL=1` schaltet das ab); ohne
+  `aria2c` läuft der Rückfall `curl -fL` mit **einem** Strom und sagt es laut.
+* **Erwartungswert (hier NICHT gemessen)**: greift das Limit pro Verbindung,
+  liegt die Rate mit 16 Verbindungen ein Vielfaches über 1 MB/s — 3,7 GB wären
+  dann in Minuten (statt ~60 min) auf dem Knoten, und jeder weitere Knoten zieht
+  dasselbe Objekt aus R2. Kosten: R2-Egress 0; Storage für 3,7 GB ≈ 0,06
+  USD/Monat. Die echte Rate nennt der Lauf.
+* **Überwachung/Unverändertes**: `docker-compose.media.yml` (READ-ONLY-Mounts)
+  und die Überprüfung `du -sh`/`docker exec … ls /app/dist/...` bleiben
+  identisch; `deliver-media.sh` liefert in beiden Wegen dasselbe `media/<baum>`.
+* **Nachweis offline**: `bash -n` + `python3 tests/test_hetzner_scripts.py`
+  (Klassen `ParallelTransferSigV4Test`, `ParallelTransferTrockenlaufTest`,
+  `ParallelTransferKnotenVertragTest`, `ParallelTransferR2WegTest`,
+  `DeliverMediaViaR2Test`).
+* **Nachweis live (nur 39 Bytes)**: mit den echten `CFS3_*`-Schlüsseln aus dem
+  Betreiber-`.env` lief am 2026-09-21 ein Selbsttest unter
+  `transfer/_selbsttest/`: presigned PUT ok, HEAD 200 („schon vorhanden" greift
+  gegen den echten Dienst), presigned GET byte-identisch, presigned DELETE 204,
+  Objekt danach weg. Vorrang: eine exportierte `R2_ACCESS_KEY` überschreibt
+  `.env` (dokumentiert in `lib/r2-sigv4.sh`) — für echte Läufe
+  `env -u R2_ACCESS_KEY -u R2_SECRET_KEY …` benutzen.
+
 ### Migration der bestehenden Flotte (nummeriert, idempotent, mit Rückweg)
 
 Das Skript `scripts/hetzner/migrate-project-name.sh` fasst **einen** Knoten an und
