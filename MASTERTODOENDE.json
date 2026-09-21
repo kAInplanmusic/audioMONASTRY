@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "61fdafa",
+  "commit": "bcf423f",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2969,6 +2969,20 @@
         "scripts/runpod-health-guard.py"
       ],
       "remaining": "Offen und NICHT gemessen: die Job-Historie der Fehlschlaege (brain 38, video-real 5, video-abstract 4, music 2) - ohne Logs ist die Ursache unbekannt. Ausserdem: der Recycle-Ansatz 'workersMax=0, dann warten bis alle Worker weg sind' laeuft bei FlashBoot ins Leere (der Standby-Worker verschwindet nie, workersStandby=1) - die Wartebedingung muss kuenftig auf running/inProgress pruefen, nicht auf die Gesamtzahl."
+    },
+    {
+      "id": "INFRA-HETZNER-013",
+      "title": "Toter GCE-Rest scripts/vm-startup.sh konnte die neue Idle-Timer-Installation ueberschreiben",
+      "priority": "P2",
+      "status": "DONE",
+      "area": "Infra/Hygiene",
+      "source": "Nebenbefund des F9-Auftrags (2026-09-21), selbst nachgeprueft",
+      "problem": "scripts/vm-startup.sh war ein Startup-Skript aus der Google-Cloud-Phase der App. Es schreibt den Idle-Check nach GENAU dem Pfad, den die heutige Installation benutzt (/usr/local/bin/audiomonastry-idle-check.sh), loggt in dieselbe Datei (/var/log/audiomonastry-idle-shutdown.log) und installiert einen ZWEITEN Timer (audiomonastry-idle-check.timer, `/bin/systemctl enable --now`). Waere es je auf einem Flotten-Knoten gelaufen, haette es den F9-Check ueberschrieben und eine zweite Automatik mit anderer Semantik (SSH/CPU statt App-Regeln) etabliert - zwei Timer, eine Logdatei, widersprechende Entscheidungen.",
+      "note": "UMGESETZT 2026-09-21: Datei entfernt. Belege fuer 'toter Rest, nichts kaputt': `git grep -n vm-startup -- .` findet NUR den eigenen Kopfkommentar der Datei (keine Referenz in Skripten, Tests, Docs, Compose oder CI); `gcloud` ist auf dem Betreiber-Rechner nicht installiert und es gibt keine gcloud-Konfiguration; das Skript ist ausdruecklich GCE-only ('automatically executed on every GCE VM boot via the GCP') und die App laeuft heute auf Hetzner mit eigener systemd-Installation (zusaetzlich war der Idle-Timer auf app-1 gar nicht installiert, siehe PROD-P3-F9). Im Git-Verlauf bleibt die Datei abrufbar.",
+      "verification": "git grep nach dem Loeschen: 0 Treffer; git status zeigt nur 'D scripts/vm-startup.sh'; python3 tests/test_hetzner_scripts.py und der volle `npm run verify` laufen nach der Loeschung gruen (siehe Commit). Kostenbezug geprueft und ausgeschlossen: kein gcloud/keine GCP-Konfiguration auf dem Rechner, also auch keine laufende VM, die Geld kosten wuerde.",
+      "files": [
+        "scripts/vm-startup.sh"
+      ]
     }
   ],
   "visionSandbox": [
