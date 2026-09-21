@@ -61,8 +61,32 @@ r2_env_get() {
 r2_load_config() {
   local envfile="${R2_ENV_FILE:-$(_r2_default_env_file)}"
   R2_ENV_FILE_EFFECTIVE="$envfile"
-  R2_ACCESS_KEY="${R2_ACCESS_KEY:-$(r2_env_get CFS3_ACCESS_KEY "$envfile" || true)}"
-  R2_SECRET_KEY="${R2_SECRET_KEY:-$(r2_env_get CFS3_SECRET_KEY "$envfile" || true)}"
+  # GLEICHE REGEL WIE lib/registry.sh (gemessen 2026-09-21): Die DATEI gewinnt.
+  # Grund: die Prozessumgebung des Betreiber-Rechners trug veraltete/fremde
+  # R2-Schluessel (R2_ACCESS_KEY FP e1f0bbcd, CLOUDFLARE_ACCESS_KEY_ID FP 1b8ac015)
+  # neben dem gueltigen Satz aus .env (CFS3_ACCESS_KEY FP dac81886, Probe: PUT ok).
+  # Der fruehere Vorrang `R2_*` vor der Datei haette jeden Transfer still mit einem
+  # falschen Schluessel signiert. Ausdruecklicher Override bleibt moeglich, aber nur
+  # bewusst per R2_ALLOW_ENV_OVERRIDE=1; ein Widerspruch wird mit FINGERABDRUCK
+  # gemeldet - nie mit dem Wert.
+  local datei_key datei_secret umg_key="${R2_ACCESS_KEY:-}" umg_secret="${R2_SECRET_KEY:-}"
+  datei_key="$(r2_env_get CFS3_ACCESS_KEY "$envfile" || true)"
+  datei_secret="$(r2_env_get CFS3_SECRET_KEY "$envfile" || true)"
+  if [[ "${R2_ALLOW_ENV_OVERRIDE:-0}" == "1" ]]; then
+    R2_ACCESS_KEY="${umg_key:-$datei_key}"
+    R2_SECRET_KEY="${umg_secret:-$datei_secret}"
+  else
+    _r2_konflikt() {
+      local name="$1" umg="$2" datei="$3"
+      [[ -n "$umg" && -n "$datei" && "$umg" != "$datei" ]] || return 0
+      echo "⚠️  R2-Zugangsdaten widersprechen sich ($name: Umgebung vs. $envfile)." >&2
+      echo "    Es gilt die DATEI: Umgebung=$(printf '%s' "$umg" | sha256sum | cut -c1-8) Datei=$(printf '%s' "$datei" | sha256sum | cut -c1-8)  (Override: R2_ALLOW_ENV_OVERRIDE=1)" >&2
+    }
+    _r2_konflikt ACCESS_KEY "$umg_key" "$datei_key"
+    _r2_konflikt SECRET_KEY "$umg_secret" "$datei_secret"
+    R2_ACCESS_KEY="${datei_key:-$umg_key}"
+    R2_SECRET_KEY="${datei_secret:-$umg_secret}"
+  fi
   R2_ENDPOINT="${R2_ENDPOINT:-$(r2_env_get CFS3_ENDPOINT "$envfile" || true)}"
   R2_BUCKET="${R2_BUCKET:-$(r2_env_get CFS3_BUCKET "$envfile" || true)}"
   local account="${R2_ACCOUNT_ID:-}"

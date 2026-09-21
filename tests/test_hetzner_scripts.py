@@ -4925,6 +4925,51 @@ class RegistryCredentialPrecedenceTest(unittest.TestCase):
             self.assertEqual(r.stdout.strip(), "nur-datei|nur-datei-token")
 
 
+class R2CredentialPrecedenceTest(unittest.TestCase):
+    """R2-Zugangsdaten: die .env-DATEI gewinnt gegen die Prozessumgebung.
+
+    Gemessen 2026-09-21: die Umgebung trug veraltete/fremde R2-Schluessel
+    (R2_ACCESS_KEY FP e1f0bbcd, CLOUDFLARE_ACCESS_KEY_ID FP 1b8ac015) neben dem
+    gueltigen Satz aus .env (CFS3_ACCESS_KEY FP dac81886 - Probe gegen R2:
+    PUT+DELETE ok). Der fruehere Vorrang `R2_*` vor der Datei haette jeden
+    Transfer still mit einem falschen Schluessel signiert.
+    """
+
+    ROOT = pathlib.Path(__file__).resolve().parents[1]
+    LIB = str(ROOT / "scripts" / "hetzner" / "lib" / "r2-sigv4.sh")
+
+    def _lauf(self, extra_env):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            env_datei = os.path.join(tmp, ".env")
+            with open(env_datei, "w", encoding="utf-8") as f:
+                f.write("CFS3_ACCESS_KEY=datei-key\nCFS3_SECRET_KEY=datei-secret\n"
+                        "CFS3_ENDPOINT=https://x.r2.cloudflarestorage.com\nCFS3_BUCKET=eimer\n")
+            skript = (
+                f"set -u; source {shlex.quote(self.LIB)}; "
+                f"R2_ENV_FILE={shlex.quote(env_datei)}; "
+                "r2_load_config >/dev/null 2>/tmp/r2warn.$$; "
+                'printf "%s|%s" "$R2_ACCESS_KEY" "$R2_SECRET_KEY"; rm -f /tmp/r2warn.$$'
+            )
+            umgebung = dict(os.environ)
+            umgebung["R2_ACCESS_KEY"] = "umgebungs-key"
+            umgebung["R2_SECRET_KEY"] = "umgebungs-secret"
+            umgebung.update(extra_env)
+            return subprocess.run(["bash", "-c", skript], capture_output=True, text=True, env=umgebung)
+
+    def test_datei_gewinnt_gegen_umgebung(self):
+        r = self._lauf({})
+        self.assertEqual(r.stdout.strip(), "datei-key|datei-secret",
+                         f"Es muss die Datei gelten: {r.stdout!r} {r.stderr!r}")
+        self.assertNotIn("umgebungs-key", r.stdout + r.stderr,
+                         "Der WERT darf nie in der Ausgabe stehen - nur der Fingerabdruck.")
+
+    def test_ausdruecklicher_override_greift(self):
+        r = self._lauf({"R2_ALLOW_ENV_OVERRIDE": "1"})
+        self.assertEqual(r.stdout.strip(), "umgebungs-key|umgebungs-secret",
+                         f"Mit R2_ALLOW_ENV_OVERRIDE=1 muss die Umgebung gelten: {r.stdout!r}")
+
+
 if __name__ == "__main__":
     unittest.main()
 
