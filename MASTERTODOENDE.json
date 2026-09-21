@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21",
+  "generatedAt": "2026-09-21T19:50:00+00:00",
   "branch": "main",
-  "commit": "7df3d80",
+  "commit": "99feba0",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2976,6 +2976,30 @@
       "files": [
         "scripts/vm-startup.sh"
       ]
+    },
+    {
+      "id": "PROD-P2-REG",
+      "title": "Registry-Weg (GHCR): Images einmal pushen, Knoten ziehen im Rechenzentrums-Tempo",
+      "priority": "P2",
+      "status": "DONE",
+      "area": "Deployment/Performance",
+      "source": "Auftrag des Betreibers (2026-09-21): 'kostenlos oder guenstig Images vorhalten, aufteilen und parallel laden'",
+      "problem": "Die Leitung Betreiber-Rechner -> Knoten macht ~1 MB/s hoch. App-Image 1,43 GB + master-player 1,22 GB bedeuten 25-40 min pro Knoten, und jeder weitere Knoten zahlt denselben Preis. Kein Image-Weg war geprueft, ein 'docker save | ssh docker load' war der einzige Transferpfad.",
+      "solution": "Drei Wege, gemessen und implementiert: (1) Registry: scripts/hetzner/registry-push.sh baut und pusht beide Images nach GHCR, DEPLOY_IMAGE_SOURCE=registry laesst den Knoten ziehen - gemessen 1,43 GB in 168 s und 1,22 GB in 188 s (statt 25-40 min pro Knoten). (2) Remote-Build ist im Flottenstart jetzt der Default (bring-up-fleet.sh setzt DEPLOY_REMOTE_BUILD=1, gemessen ~1 min bei warmem Layer-Cache). (3) Paralleler Weg: parallel-transfer.sh packt mit zstd nach R2 und zieht mit aria2c -x16 auf dem Knoten (deliver-media.sh --via-r2) - Medien in Minuten statt einer Stunde.",
+      "evidence": "Push-Log test-results/finale/13-push-head.log (PUSH-Exit 0, beide Tags vorhanden); Vertragstests in tests/test_hetzner_scripts.py (Registry-Weg, Remote-Build, Parallel-Transfer); Doku in docs/HETZNER_DEPLOY.md (Abschnitt Deploy-Wege) und docs/OPS_RUNBOOK.md.",
+      "lesson": "Der Registry-Weg war zuerst STILL kaputt: die Prozessumgebung des Betreiber-Rechners trug ein veraltetes GHCR_PASSWORD (FP afab6df9), .env den gueltigen Token (FP b2e16ea5). Die Bibliothek nahm die Umgebung vorrangig, las die Datei nie und der Login endete in 'denied: denied' - derselbe Aufruf mit den Werten aus .env gelang sofort. Jetzt gewinnt die DATEI, ein Widerspruch wird mit Fingerabdruck gemeldet (nie mit dem Wert); Regressionstest RegistryCredentialPrecedenceTest (2 Faelle)."
+    },
+    {
+      "id": "INFRA-HETZNER-014",
+      "title": "Firewall-Regeln der Flotte zeigten auf die IPs der VORHERIGEN Flotte (Querverkehr blockiert)",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Infra/Vernetzung",
+      "source": "Schlusslauf-Auftrag des Betreibers (2026-09-21): 'richtige Verbindung zueinander' - selbst gemessen",
+      "problem": "Nach dem Neuaufbau der Flotte (neue IPs) trugen drei Firewalls noch die Quell-IPs der alten Knoten: app:8080 erlaubte nur 167.233.192.196 (alte edge-1), ai:8000/11434 und master:8000 nur 142.132.229.71 (alte app-1). Damit war der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000/11434 und app->master:8000 blockiert - dieselbe Flotte, aber ohne Verbindung zueinander. Von aussen unsichtbar, weil alle oeffentlichen Wege ueber Cloudflare laufen.",
+      "solution": "Regeln per API auf die aktuellen Knoten-IPs gezogen (app:8080 -> edge 178.104.175.83, ai/master:8000 und ai:11434 -> app 167.233.91.30); jede andere Regel blieb unveraendert, Ruecklesen belegt den Endzustand.",
+      "evidence": "Ruecklese-Ausgabe in der Sitzung (3 Firewalls korrigiert, Vorher/Nachher je Regel).",
+      "rest": "Der Drift entsteht strukturell: die Querverweise (app-IP in ai/master-Regeln, edge-IP in app-Regeln) werden beim Provisionieren aus festen Werten gesetzt, nicht aus der laufenden Flotte. Fehlt: ein Abgleich-Schritt NACH dem Flottenstart, der die Cross-Node-Regeln auf die tatsaechlichen IPs zieht (und beim Loeschen sauber raeumt). Bis dahin ist jeder Neuaufbau mit neuen IPs erneut betroffen."
     }
   ],
   "visionSandbox": [
