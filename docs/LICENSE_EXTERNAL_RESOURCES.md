@@ -37,6 +37,7 @@ ausgeliefert.
 | The Alpine Project | Versilian/Community | CC-BY-**ND** (keine Bearbeitung) | Blockiert für Derivate | Keine Stems/Slices/Presets daraus; kein Bündeln |
 | Pacific Percussion | Community | Lizenz unklar/nicht eindeutig dokumentiert | `LICENSE_REVIEW_REQUIRED` | Nicht verwenden, bis die Lizenz belegt ist |
 | VSCO 2 Community Edition | Versilian Studios | CC0 (Public Domain Dedication) | Frei | Einzige Library, die als CC0-Subset gebündelt werden darf (Orchestral-CC0-Library) |
+| Demo-Tracks `public/music` (48 Dateien, 382 MB) | verschiedene Rechteinhaber (kommerzielle Aufnahmen) | **keine freie Lizenz** – Auslieferung nur mit ausdrücklicher Betreiber-Freigabe | **freigegeben 2026-09-21** (Betreiber, `deliver-media.sh --with-music`) | Nicht im Git-Index (aus dem Repo entfernt); Auslieferung ausschliesslich auf den Flotten-Knoten als READ-ONLY-Overlay (`docker-compose.media.yml`), nie ins Image, nie in ein Release-Artefakt |
 
 ## Abgrenzung zu Code-Referenzen (Klasse G)
 
