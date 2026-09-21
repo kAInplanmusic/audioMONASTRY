@@ -1208,3 +1208,84 @@ ssh root@<sfu-1> 'bash -s' < /tmp/turn-proof-sfu.sh     # turnutils_uclient im c
 Erwartet: Allokation mit den App-Credentials gelingt, falsches Credential endet mit
 `Cannot complete Allocation` (exit 255). Beides am 2026-09-21 gemessen.
 
+
+## CSP-Meldeweg auswerten und `CSP_MODE=enforce` entscheiden (F7/PROD-P2-F7) — 2026-09-21 lokal gemessen
+
+Die Content-Security-Policy wird in `server/csp.ts` aus der Umgebung abgeleitet
+(eigene Domain, Supabase/R2, SFU-/Master-Ziele, Ollama, Provider-Hosts) und läuft
+bewusst im **Report-Only**-Modus (`CSP_MODE`, Default `report-only`), weil es keine
+Beobachtungsdaten gab. Diese Daten sind jetzt erzeugbar UND ablesbar.
+
+```bash
+# 1) Was ist angekommen? (Studio-Token noetig; die Route liegt unter /api)
+curl -s -H "x-studio-token: $STUDIO_ACCESS_TOKEN" https://<domain>/api/security/csp-reports | jq
+#    -> mode, headerName, received, violations, unusable, oversized, throttled,
+#       byDirective, byTarget, byDocument, recent (Ringpuffer, 20, nur Direktive + Hosts)
+
+# 2) Fuer Dashboard/Alarm (Prometheus, SCRAPE_TOKEN oder Studio-Token)
+curl -s -H "x-studio-token: $STUDIO_ACCESS_TOKEN" "https://<domain>/api/metrics?format=prometheus" \
+  | grep audiomonastry_csp
+```
+
+Neue Metriken: `audiomonastry_csp_mode_report_only` (1 = report-only, 0 = enforce),
+`audiomonastry_csp_reports_total{outcome="usable|unusable|oversized|throttled|requests"}`,
+`audiomonastry_csp_violations_by_directive_total{directive=…}`,
+`audiomonastry_csp_violations_by_target_total{target="…"}` (Host ODER CSP-Sonderwert
+`inline`/`data`). Die Zähler sind prozess-kumulativ: **über 7 Tage mit
+`increase(audiomonastry_csp_violations_by_directive_total[7d])`** auswerten, dann ist
+auch ein Container-Recreate kein Datenverlust.
+
+### Was der lokale Beweislauf (echtes Chrome 153, Chrome/153.0.0.0) gezeigt hat
+
+* **Drahtformat:** Nennt die Policy `report-to` (unsere tut das), sendet Chrome NUR
+  `application/reports+json` — ein ARRAY mit camelCase-Schlüsseln
+  (`effectiveDirective`, `blockedURL`, `documentURL`) und **mehreren Meldungen in EINEM
+  POST**. Der Altweg `report-uri` (Objekt unter `csp-report`, Bindestrich-Schlüssel,
+  eine Meldung je POST) kommt nur, wenn `report-uri` allein steht. Über `http://`
+  liefert Chrome die Reporting-API stillschweigend **nicht** aus (report-uri allein
+  kommt an, `report-to` dabei ⇒ 0 Meldungen); im Betrieb (HTTPS über Caddy) greift
+  deshalb der moderne Weg. Ein früherer Stand las nur die Altform und verwarf damit
+  jede Meldung aus dem echten Betrieb (gemessen: 3 echte Chrome-Meldungen → 0 erkannt).
+* **Meldeendpunkt:** fremder Dokument-Origin (www.-Variante, Vorschau-Host, alte IP)
+  wurde von der API-Origin-Allowlist mit **403 `ORIGIN_NOT_ALLOWED`** abgewiesen —
+  Report still verloren, ohne Zähler, ohne Log. Der Melde-POST ist davon jetzt
+  ausgenommen (er führt keine Credentials, ist rate-limitiert auf 120/min und
+  speichert nur Direktive + Hosts).
+* **Art des Verstoßes:** `connect-src`/`media-src`/`img-src` gegen **fremde Hosts**
+  sind echte Verstöße. Artefakte sind: `img-src` + `data`/`inline` (Favicon,
+  Inline-Bild), `style-src` + `inline` (React-Inline-Styles), `script-src-elem` +
+  `inline`, sowie `connect-src` zu **lokalen** Ports (`127.0.0.1:11434` Ollama am
+  Betreiber-Rechner). Fehlte eine legitime Quelle, war das ein Policy-Fehler — so
+  fehlte der **SFU-Signalisierungshost** (`SFU_SIGNALING_URL`, z. B.
+  `sfu.<domain>`): der Client verbindet sich dorthin, der Host war aber nicht in
+  `connect-src`. Er ist jetzt (mit wss-Variante) abgeleitet, ebenso die Browser-Aliase
+  `VITE_SUPABASE_URL`/`VITE_CFR2_PUBLIC_URL` und der R2-S3-Endpunkt
+  `https://<bucket>.<account>.r2.cloudflarestorage.com`, den der Client selbst bildet.
+* **Lokal über HTTP** sind Browser-Meldungen mit `report-to` nicht zustellbar (siehe
+  oben); der erste echte Messpunkt ist deshalb die Domain nach dem Deploy
+  (`curl … /api/security/csp-reports`, `received > 0`).
+
+### Betreiber-Entscheidung (Empfehlung mit Belegen)
+
+Umstellen, **wenn** über ein Beobachtungsfenster (Empfehlung: 7 Tage mit normalem
+Betrieb) `increase(audiomonastry_csp_violations_by_directive_total[7d])` außerhalb der
+Artefakt-Klassen (`img-src`+`data`, `style-src`/`script-src-elem`+`inline`,
+`connect-src` zu 127.0.0.1) **keine Treffer** zeigt und `oversized`/`unusable` nur
+Rauschen sind. Dann:
+
+```bash
+# auf app-1: CSP scharf stellen (derselbe Policy-Text, nur anderer Header-Name)
+ssh root@<app-1> 'cd /opt/audiomonastry && sed -i "s/^CSP_MODE=.*/CSP_MODE=enforce/" .env'
+ssh root@<app-1> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose \
+  -f docker-compose.hetzner.yml -f docker-compose.media.yml up -d --no-build --force-recreate audiomonastry'
+curl -sI https://<domain>/api/health | grep -i content-security-policy   # jetzt OHNE -Report-Only
+curl -s -H "x-studio-token: $STUDIO_ACCESS_TOKEN" https://<domain>/api/metrics?format=prometheus | grep csp_mode
+#   -> audiomonastry_csp_mode_report_only 0
+```
+
+**Rückweg (jederzeit, Sekunden):** `CSP_MODE=report-only` setzen (oder die Variable
+entfernen — Default) und denselben Compose-Aufruf wiederholen; die Policy selbst ist
+identisch, es wird nichts weiter geändert. Bei einer Blockade im enforce-Betrieb zuerst
+`/api/security/csp-reports` lesen (Direktive + Ziel stehen dort), dann zurückstellen.
+Wer den Kaltstart-Pfad (Portal-Worker) nutzt, muss `CSP_MODE` auch dort als Secret
+setzen, sonst fällt ein frisch geweckter Knoten auf den Default `report-only` zurück.

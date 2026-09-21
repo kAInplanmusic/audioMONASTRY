@@ -22,6 +22,29 @@
  * browser-seitiges lokales Ollama am Operator-Rechner) und waren nicht durch
  * einen einzigen Lauf verifizierbar. Mit Meldeziel ist die Umstellung jetzt eine
  * Betreiber-Entscheidung auf Datenbasis (`CSP_MODE=enforce`), kein Blindflug.
+ *
+ * --- Drahtformate des Browsers (2026-09-21 mit echtem Chrome 153 gemessen) ----
+ * Der Meldeweg ist seit F7 vorhanden – die DATEN fehlten. Der lokale Beweislauf
+ * (Policy der App, echtes Chrome, Recorder am Meldeziel) hat zwei Dinge gezeigt,
+ * die den Meldeweg praktisch leer liessen:
+ *
+ *   1. Es gibt zwei Drahtformate, und der Browser waehlt das zweite, sobald die
+ *      Policy `report-to` nennt (so wie diese Policy):
+ *        * `report-uri`      → `application/csp-report`, EIN Objekt unter
+ *          `csp-report`, Schluessel mit Bindestrich (`violated-directive`,
+ *          `blocked-uri`, `document-uri`) – und EINE Meldung je Verstoss.
+ *        * `report-to`/Reporting-API → `application/reports+json`, ein ARRAY von
+ *          `{ age, type: 'csp-violation', body: {…} }` mit camelCase-Schluesseln
+ *          (`effectiveDirective`, `blockedURL`, `documentURL`, `sourceFile`) –
+ *          und MEHRERE Meldungen in EINEM POST (gemessen: 2 in einem Body).
+ *      Wer nur die Altform liest, verwirft jede Meldung aus dem modernen Weg.
+ *   2. Ueber `http://` liefert Chrome die Reporting-API stillschweigend nicht aus
+ *      (gemessen: `report-uri` allein → Meldung kommt; `report-to` dabei → 0
+ *      Meldungen; dieselbe Konfiguration ueber `https://` → Meldung kommt).
+ *      Im Betrieb (HTTPS ueber Caddy) greift deshalb der moderne Weg; lokal
+ *      ueber HTTP sieht man nur den Altweg. Fuer die Beobachtung heisst das:
+ *      zaehlen/auswerten muss den MODERNEN Weg koennen, sonst ist die
+ *      Enforce-Entscheidung weiter blind.
  */
 
 /** Modi: beobachten (Default) oder durchsetzen. */
@@ -63,7 +86,25 @@ const URL_ENV_KEYS = [
   'SUPABASE_URL',
   'SB_URL',
   'VITE_SB_URL',
+  // Browser-Alias derselben Supabase-URL (src/lib/cloudConfig.ts:38) - die
+  // kanonische Liste kennt `VITE_SUPABASE_URL` gleichberechtigt.
+  'VITE_SUPABASE_URL',
   'CFR2_PUBLIC_URL',
+  // Browser-Alias der R2-Public-URL (src/lib/cloudConfig.ts:48).
+  'VITE_CFR2_PUBLIC_URL',
+  /**
+   * SFU-Signalisierung: der Server reicht `SFU_SIGNALING_URL` als `sfu.url` an
+   * den Client durch (`/api/webrtc-config`, server/webrtcConfig.ts), und der
+   * Client verbindet sich per socket.io (HTTP-Polling + WebSocket) zu GENAU
+   * diesem Host – siehe src/core/transport/sfuEndpoint.ts. Der Host liegt auf
+   * einem eigenen Namen (z. B. `sfu.<domain>`) und ist damit NICHT von `'self'`
+   * oder der eigenen Domain gedeckt; ohne diesen Eintrag kappt eine scharfe
+   * Policy die SFU-Signalisierung (im lokalen Lauf gemessen: der laufende
+   * Header enthielt `https://sfu.anunnakitools.de` NICHT, obwohl die Variable
+   * gesetzt war).
+   */
+  'SFU_SIGNALING_URL',
+  'VITE_SFU_URL',
   // Client-seitige (Build-Zeit-)Ziele – siehe src/config/runtime.ts.
   'VITE_API_BASE_URL',
   'VITE_SOCKET_IO_SIGNALING_URL',
@@ -74,6 +115,17 @@ const URL_ENV_KEYS = [
 
 /** Env-Variablen mit CSV von Origins (z. B. `https://app.example,http://localhost:5173`). */
 const ORIGIN_ENV_KEYS = ['API_ALLOWED_ORIGINS', 'SIGNALING_ALLOWED_ORIGINS', 'CSP_ALLOWED_ORIGINS'];
+
+/**
+ * R2-Anbindung: Account-ID und Bucket, aus denen der Client seinen S3-Endpunkt
+ * SELBST bildet (`src/lib/cloudConfig.ts:53`:
+ * `https://<bucket>.<account>.r2.cloudflarestorage.com`). Dieselbe Ableitung
+ * hier, damit die Policy den Host kennt, den der Browser tatsaechlich anspricht
+ * (Presign-/Upload-Pfade) – und weil `src/utils/mediaUrlGuard.ts` genau diesen
+ * Host als vertrauenswuerdiges Medienziel durchlaesst.
+ */
+const R2_ACCOUNT_ENV_KEYS = ['CFR2_ACCOUNT_ID', 'CLOUDFLARE_ACCOUNT_ID', 'VITE_CFR2_ACCOUNT_ID'];
+const R2_BUCKET_ENV_KEYS = ['CFS3_BUCKET', 'CFR2_BUCKET', 'VITE_CFS3_BUCKET', 'VITE_CFR2_BUCKET'];
 
 export type EnvLike = Record<string, string | undefined>;
 
@@ -93,6 +145,18 @@ export function hostSource(raw: unknown): string {
   } catch {
     return '';
   }
+}
+
+/** S3-Endpunkt des R2-Buckets – dieselbe Ableitung wie im Client (cloudConfig.ts). */
+function r2BucketHost(env: EnvLike): string {
+  const firstValue = (keys: string[]) =>
+    keys.map((key) => String(env[key] ?? '').trim()).find((value) => value.length > 0) ?? '';
+  const account = firstValue(R2_ACCOUNT_ENV_KEYS);
+  const bucket = firstValue(R2_BUCKET_ENV_KEYS);
+  // Nur zeichengueltige Werte: ein leeres/unsinniges Paar darf keine kaputte
+  // CSP-Quelle erzeugen (die der Browser dann verwirft - stiller Fehler).
+  if (!/^[a-z0-9-]{3,64}$/i.test(account) || !/^[a-z0-9.-]{3,63}$/i.test(bucket)) return '';
+  return `https://${bucket}.${account}.r2.cloudflarestorage.com`;
 }
 
 /** Alle Hosts, die diese Installation kennt (dedupliziert, ohne Wildcard). */
@@ -116,6 +180,9 @@ export function collectPolicyHosts(env: EnvLike): string[] {
   }
   // Zusatz-Hosts des Betreibers (CSV von Origins oder nackten Hosts).
   for (const part of String(env.CSP_ALLOWED_HOSTS ?? '').split(',')) add(String(part).trim());
+  // R2-S3-Endpunkt, den der Client aus Account+Bucket bildet.
+  const r2 = r2BucketHost(env);
+  if (r2) hosts.add(r2);
   // DEV/Zusatz: 'none' ist der Schalter, um die eingebauten Provider-Hosts
   // abzuwaehlen (wer sie nicht braucht, bekommt eine engere Policy).
   return [...hosts].sort();
@@ -214,6 +281,12 @@ export interface CspViolationSummary {
   blockedHost: string;
   /** Dokument, in dem es passierte – nur der HOST. */
   documentHost: string;
+  /**
+   * CSP-Sonderwert statt Host: Chrome meldet `inline`, `eval`, `data`, `blob`
+   * (z. B. Favicon als `data:`-URI oder ein Inline-Skript). Ohne dieses Feld
+   * waeren genau die haeufigsten Artefakte im Zaehler nicht unterscheidbar.
+   */
+  blockedKeyword: string;
 }
 
 function hostOf(raw: unknown): string {
@@ -226,36 +299,90 @@ function hostOf(raw: unknown): string {
   }
 }
 
+/** CSP-Sonderwerte, die der Browser statt einer URL meldet (gemessen). */
+const CSP_TARGET_KEYWORDS = new Set([
+  'inline',
+  'eval',
+  'data',
+  'blob',
+  'self',
+  'wasm-eval',
+  'javascript',
+  'about',
+  'filesystem',
+]);
+
+/** Ziel eines Verstosses: Host ODER CSP-Sonderwert (nie beides). */
+function blockedTargetOf(raw: unknown): { host: string; keyword: string } {
+  const value = String(raw ?? '').trim();
+  if (!value) return { host: '', keyword: '' };
+  const bare = value.replace(/:$/, '').toLowerCase();
+  if (CSP_TARGET_KEYWORDS.has(bare)) return { host: '', keyword: bare };
+  return { host: hostOf(value), keyword: '' };
+}
+
 /**
- * Fasst einen CSP-Report auf das Nötige zusammen: Direktive + Hosts, keine
+ * Feld aus einem Report lesen: die Reporting-API schreibt camelCase
+ * (`effectiveDirective`, `blockedURL`, `documentURL`), der Altweg `report-uri`
+ * Bindestrich-Schluessel (`effective-directive`, `blocked-uri`, `document-uri`).
+ * Beide Formen werden bedient.
+ */
+function reportField(report: Record<string, unknown>, camel: string, dashed: string): unknown {
+  return report[camel] ?? report[dashed];
+}
+
+/**
+ * Fasst EINEN Report auf das Nötige zusammen: Direktive + Hosts, keine
  * vollen URLs (die können Query-Parameter mit Daten tragen). Unbekannte Formate
  * ergeben `null` – der Endpunkt antwortet trotzdem 204 (kein Feedback an
  * Angreifer über akzeptierte Formate).
- *
- * Zwei Formen werden bedient, weil der Meldeweg beide anbietet:
- *   * `report-uri`   → ein Objekt, verschachtelt unter `csp-report` (Legacy),
- *   * `report-to`/Reporting-API → ein ARRAY von `{ type, body }`-Meldungen.
- * Ohne die Array-Behandlung wäre der Meldeweg für genau die Browser stumm, die
- * die moderne Reporting-API nutzen (vom Test tests/cspPolicy.test.ts aufgedeckt).
  */
 export function summarizeCspReport(body: unknown): CspViolationSummary | null {
-  if (!body || typeof body !== 'object') return null;
-  if (Array.isArray(body)) {
-    for (const entry of body) {
-      const summary = summarizeCspReport(entry);
-      if (summary) return summary;
-    }
-    return null;
-  }
-  const container = body as Record<string, unknown>;
-  const raw = (container['csp-report'] ?? container.body ?? container) as unknown;
-  if (!raw || typeof raw !== 'object') return null;
-  const report = raw as Record<string, unknown>;
-  const directive = String(report['violated-directive'] ?? report['effective-directive'] ?? '').split(' ')[0];
-  if (!directive || !/^[a-z-]{3,40}$/.test(directive)) return null;
-  return {
-    directive,
-    blockedHost: hostOf(report['blocked-uri'] ?? report.blockedURL),
-    documentHost: hostOf(report['document-uri'] ?? report.documentURL),
-  };
+  return summarizeCspReports(body)[0] ?? null;
 }
+
+/**
+ * Wie `summarizeCspReport`, aber für ALLE Meldungen eines Bodies.
+ *
+ * Die Reporting-API schickt ein ARRAY und bündelt mehrere Verstoesse in EINEM
+ * POST (gemessen mit Chrome 153: ein POST enthielt `media-src` UND
+ * `script-src-elem`). Wer nur das erste Element liest, verliert Verstoesse -
+ * und genau die Summe entscheidet ueber `CSP_MODE=enforce`.
+ */
+export function summarizeCspReports(body: unknown): CspViolationSummary[] {
+  if (!body || typeof body !== 'object') return [];
+  if (Array.isArray(body)) return body.flatMap((entry) => summarizeCspReports(entry));
+  const container = body as Record<string, unknown>;
+  // Meldungstyp der Reporting-API: nur CSP-Verstoesse gehoeren hierher
+  // (dieselbe Schnittstelle transportiert auch `deprecation`, `crash`, …).
+  const type = String(container.type ?? '').trim();
+  if (type && type !== 'csp-violation') return [];
+  const raw = (container['csp-report'] ?? container.body ?? container) as unknown;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const report = raw as Record<string, unknown>;
+  // `effective-directive` gewinnt gegen `violated-directive`: das ist die
+  // Direktive, die den Request tatsaechlich entschieden hat (Chrome setzt in
+  // `violated-directive` teils eine weitere Fassung). Die -elem-Varianten
+  // (`img-src-elem`, `script-src-elem`) bleiben bewusst erhalten - genau die
+  // Direktive muss ein Betreiber im enforce-Fall lockern, und im Zaehler ist
+  // damit sichtbar, welche Fassung greift.
+  const directive = String(
+    reportField(report, 'effectiveDirective', 'effective-directive')
+    ?? reportField(report, 'violatedDirective', 'violated-directive')
+    ?? '',
+  ).split(' ')[0];
+  if (!directive || !/^[a-z-]{3,40}$/.test(directive)) return [];
+  const target = blockedTargetOf(reportField(report, 'blockedURL', 'blocked-uri'));
+  return [{
+    directive,
+    blockedHost: target.host,
+    documentHost: hostOf(reportField(report, 'documentURL', 'document-uri')),
+    blockedKeyword: target.keyword,
+  }];
+}
+
+/** Ziel eines Verstosses als Label fuer Log/Zaehler (`Host`, Sonderwert, sonst ''). */
+export function cspViolationTarget(summary: CspViolationSummary): string {
+  return summary.blockedHost || summary.blockedKeyword;
+}
+
