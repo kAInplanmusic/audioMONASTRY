@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21T20:05:54+00:00",
+  "generatedAt": "2026-09-21T20:41:16+00:00",
   "branch": "main",
-  "commit": "cea53fc",
+  "commit": "75289ca",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2993,13 +2993,13 @@
       "id": "INFRA-HETZNER-014",
       "title": "Firewall-Regeln der Flotte zeigten auf die IPs der VORHERIGEN Flotte (Querverkehr blockiert)",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Infra/Vernetzung",
       "source": "Schlusslauf-Auftrag des Betreibers (2026-09-21): 'richtige Verbindung zueinander' - selbst gemessen",
       "problem": "Nach dem Neuaufbau der Flotte (neue IPs) trugen drei Firewalls noch die Quell-IPs der alten Knoten: app:8080 erlaubte nur 167.233.192.196 (alte edge-1), ai:8000/11434 und master:8000 nur 142.132.229.71 (alte app-1). Damit war der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000/11434 und app->master:8000 blockiert - dieselbe Flotte, aber ohne Verbindung zueinander. Von aussen unsichtbar, weil alle oeffentlichen Wege ueber Cloudflare laufen.",
-      "solution": "Regeln per API auf die aktuellen Knoten-IPs gezogen (app:8080 -> edge 178.104.175.83, ai/master:8000 und ai:11434 -> app 167.233.91.30); jede andere Regel blieb unveraendert, Ruecklesen belegt den Endzustand.",
+      "solution": "Abgleich-Werkzeug scripts/hetzner/firewall-ensure.py: leitet den Soll-Zustand aus der LAUFENDEN Flotte ab (GET /servers, Namen -> IPv4; app:8080<-edge-1, ai:8000+11434<-app-1, master:8000<-app-1), ersetzt NUR veraltete Quell-IPv4-Eintraege, schickt die volle Regel-Liste per set_rules und liest frisch gegen. Idempotent (alles aktuell => kein Schreibaufruf), non-destruktiv (ICMP/SSH/fremde Ports/Cloudflare-CIDRs bleiben zeichengleich), --print-config netzfrei, --dry-run schreibt nichts, Exit 0/1/2/3. Eingebunden als Schritt 3/9 von bring-up-fleet.sh, abschaltbar per FLEET_FIREWALL_ENSURE=0; Fehlschlag wird laut gemeldet. Nachweis: 207 Vertragstests OK (18 neue), lesender Live-Lauf gegen die Flotte meldet 'alle Quell-IPs aktuell, geaendert=0 geprueft=4'.",
       "evidence": "Ruecklese-Ausgabe in der Sitzung (3 Firewalls korrigiert, Vorher/Nachher je Regel).",
-      "rest": "Der Drift entsteht strukturell: die Querverweise (app-IP in ai/master-Regeln, edge-IP in app-Regeln) werden beim Provisionieren aus festen Werten gesetzt, nicht aus der laufenden Flotte. Fehlt: ein Abgleich-Schritt NACH dem Flottenstart, der die Cross-Node-Regeln auf die tatsaechlichen IPs zieht (und beim Loeschen sauber raeumt). Bis dahin ist jeder Neuaufbau mit neuen IPs erneut betroffen."
+      "rest": "Ursache vollstaendig verstanden und im Bericht belegt: delete-fleet.sh loescht KEINE Firewalls (nur Server), deshalb ueberleben sie jeden Abbau und werden beim naechsten Aufbau ueber den NAMEN wiederverwendet - genau so wandern die alten Quell-IPs in die neue Flotte. Der Abgleich beim Start ist damit der richtige Ort (eine Firewall-Loeschung im Abbau waere eine zweite Baustelle). Offen bleibt: der Schreibweg ist nur gegen einen lokalen API-Stub belegt, nicht live (die Regeln waren aktuell, es gab real nichts zu schreiben); fehlende Regeln werden gemeldet, aber nicht angelegt; Legacy-Namenspraefixe (samplemonk-*) werden nicht aufgeloest, sondern als 'Rolle fehlt' gemeldet."
     },
     {
       "id": "PROD-P2-R2KEYS",
