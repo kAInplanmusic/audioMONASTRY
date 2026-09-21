@@ -523,6 +523,23 @@ docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml \
 Das Grafana-Provisioning (`scripts/hetzner/grafana-provisioning/` + `grafana-dashboards/`)
 richtet Datasource und das Dashboard **audioMONASTRY Overview** automatisch ein.
 
+**EINE Quelle der Metriknamen:** die App selbst. `server/routes/opsRoutes.ts` liefert
+`/api/metrics?format=prometheus` (`audiomonastry_*`, Label `source`/`type`), das
+Latenz-Histogramm kommt aus `src/core/observability/latencyHistogram.ts`, und
+`scripts/hetzner/prometheus.yml` scrapt genau diese Route. Wer im Dashboard eine
+Metrik einträgt, prüft sie mit `curl -s -H "Authorization: Bearer $SCRAPE_TOKEN"
+'http://<app>:8080/api/metrics?format=prometheus' | grep '^audiomonastry_'` nach —
+nicht am Code vorbei raten. Der Altpräfix `samplemonk_` existiert NIRGENDS mehr
+(`tests/namingConventions.test.ts` verbietet ihn repo-weit, auch im Dashboard).
+
+Der Vertrag des Dashboards (gültiges JSON, eine Ausdrucksform je Target, Klammern
+balanciert, nur veröffentlichte Metriknamen) hängt an
+`tests/grafanaDashboardContract.test.ts`. Anlass war der Defekt vom 2026-09-22: in
+den Panels 19–22 hatte ein Generator jedes ZEICHEN des PromQL-Ausdrucks als eigenes
+Target abgelegt (36/70/52/108 Ein-Zeichen-Targets) — das Dashboard war gültiges JSON,
+blieb in Grafana aber leer. Sichtbar wurde das nur an den Panels, nicht am Parser;
+der Vertragstest fällt auf genau diesem Stand (3 Tests rot, 270 Verstöße).
+
 ### Lokale KI (Ollama) + Stem-AI
 
 Auf dem ai-1-Knoten (siehe `docs/SERVER_FLEET.md`) die kommentierten
