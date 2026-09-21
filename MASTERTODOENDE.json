@@ -3,7 +3,7 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-21T21:37:05+00:00",
+  "generatedAt": "2026-09-21T22:57:47+00:00",
   "branch": "main",
   "commit": "a3df301",
   "supersedes": [
@@ -3062,12 +3062,13 @@
       "id": "MON-P2-001",
       "title": "Grafana-Dashboard: vier Panels mit kaputtem PromQL (Ein-Zeichen-Ausdruecke)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Monitoring",
       "source": "Subagent des Aufraeum-Auftrags (2026-09-21) als Nebenbefund beim Duplikat-Durchgang",
       "problem": "scripts/hetzner/grafana-dashboards/audiomonastry-overview.json: die Panels 19-22 (AI-Kosten pro Stunde, Client-Xruns nach Quelle, Xruns 10m-Zunahme, SLO-Burn) tragen je Target ein einzelnes Zeichen als expr (z.B. 'i','n','c','r','e','a','s','e','(' - 36/70/52/108 Targets). Fuer diese Panels ist das Dashboard wertlos; die uebrigen Panels funktionieren. Ursache noch unklar (zeichenweise zerschnitten beim Erzeugen?).",
       "rest": "Reparatur braucht die richtigen PromQL-Ausdruecke (keine erfundenen Werte) - eigener kleiner Auftrag.",
-      "evidence": "3 der 7 verbliebenen Duplikat-Findings stammen aus genau diesen Panels"
+      "evidence": "vitest 2 Dateien/10 Tests gruen, tsc 0; jscpd 7 -> 4 Clones (alle drei Grafana-Findings weg, JSON-Duplikate 3,70 % -> 0,00 %)",
+      "solution": "Vier Panels repariert: die Zeichen-Targets (36/70/52/108 Ein-Zeichen-Targets) sind durch je EIN Target mit dem vollstaendigen Ausdruck ersetzt. Die Absicht war exakt rekonstruierbar (die Zeichen ergeben hintereinander den Ausdruck). ZWEITER BEFUND dabei: die Metriknamen trugen den Vorgaenger-Praefix 'samplemonk_' - veroeffentlicht werden 'audiomonastry_*' (Belege: server/routes/opsRoutes.ts mit # HELP audiomonastry_*, lokaler Produktionslauf mit /api/metrics?format=prometheus, prometheus-alerts.yml nutzt bereits die neuen Namen, namingConventions.test.ts verbietet samplemonk_ im Dashboard). Praefix belegbar korrigiert. Neue Vertragstests: tests/grafanaDashboardContract.test.ts (5 Faelle) erzwingt plausible PromQL je Target UND dass jeder benutzte Metrikname wirklich im Code exponiert ist; Negativprobe gegen den Defektstand: 270 Verstoesse, 3 Tests rot."
     }
   ],
   "visionSandbox": [
