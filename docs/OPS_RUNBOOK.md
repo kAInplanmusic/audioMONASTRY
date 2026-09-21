@@ -32,6 +32,25 @@ Snapshots: `scripts/hetzner/lifecycle.sh stop` erzeugt `<name>-auto-<ts>`.
 Wiederherstellung: `npm run fleet:start` provisioniert aus dem aktuellen Repo;
 aus Snapshots booten erfordert `provision-fleet.sh` mit `IMAGE=<snapshot>`.
 
+**Image-Weg des Flottenstarts (PERF-P1-005, 2026-09-21).** `bring-up-fleet.sh`
+deployt app-1 in Schritt 4 über `deploy.sh` und setzt dafür seit dem 2026-09-21
+`DEPLOY_REMOTE_BUILD=1` als **Default**: der Knoten baut den per rsync
+übertragenen Stand selbst, statt das Image hochgeschoben zu bekommen. Grund ist
+gemessen — die Leitung ist der Engpass, nicht der Build:
+
+| Weg | übertragene/benötigte Zeit | Beleg |
+|---|---|---|
+| Image-Transfer (`docker save \| ssh docker load`) | ~2,65 GB (app 1,43 GB + master-player 1,22 GB) bei ~1 MB/s hoch = **25–40 min je Knoten** | Messung 2026-09-21 (Leitung) + Drill-Werte aus §8 |
+| Remote-Build (`up -d --build` auf dem Knoten) | **~1 min** bei warmem Layer-Cache, rsync-Delta derselben Änderung wenige MB | zweimal live auf app-1 gefahren (2026-09-21) |
+
+Den gewählten Weg meldet der Flottenstart als Klartext — im Trockenlauf
+(`bash scripts/hetzner/bring-up-fleet.sh --print-config` → `Image:
+DEPLOY_REMOTE_BUILD=… -> …`) und in Schritt 4, inklusive der Messwerte. Bewusst
+zurück auf den langsamen Weg (z. B. Knoten ohne Bau-RAM oder ohne Netz zu den
+Basis-Images): `DEPLOY_REMOTE_BUILD=0 bash scripts/hetzner/bring-up-fleet.sh --yes`.
+Rollback-Tag, Medien-Overlay und Build-Stempel sind in beiden Wegen identisch
+(details: `docs/HETZNER_DEPLOY.md`, Abschnitt „Deploy-Wege“).
+
 ## 4. Supabase
 - Migrationen live: `npm run supabase:apply`
 - RLS: anon = lesen, service_role = schreiben (Migration 006).
@@ -181,7 +200,9 @@ reiner Versionswechsel den kompletten Runtime-Stage neu.
   (~2,65 GB: app 1,43 GB + master-player 1,22 GB) und brauchte ~17 min je
   Deploy. Fuer haeufige Deploys ist eine Registry (GHCR) statt Image-Transfer
   der richtige Weg; `DEPLOY_REMOTE_BUILD=1` baut auf dem Ziel, spart den
-  Transfer, braucht dort aber npm/mediasoup-Build.
+  Transfer, braucht dort aber npm/mediasoup-Build. Seit PERF-P1-005 (2026-09-21)
+  ist genau das der **Default des Flottenstarts** (gemessen ~1 min bei warmem
+  Layer-Cache statt 25-40 min Transfer bei ~1 MB/s; siehe §3).
 - Deploy-Skript waehrend eines laufenden Deploys NICHT editieren: bash liest
   Skripte stueckweise - eine Aenderung mitten im Lauf brach den Drill mit
   `uild: Befehl nicht gefunden` ab (Lehre aus diesem Lauf).
@@ -1104,6 +1125,14 @@ ssh root@<ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry \
 systemd-Unit; der Health-Check am Ende schlägt fehl, wenn der Dienst nicht
 startet — dann `journalctl -u stem-ai` prüfen (Importpfad-Falle siehe
 `services/stem-ai/main.py`).
+
+> Für app-1 gibt es den schnelleren Weg (PERF-P1-005): statt `docker save | gzip`
+> den Repo-Stand rsyncen und **auf dem Knoten** bauen —
+> `bash scripts/hetzner/fleet-deploy-live.sh <app-ip>` mit
+> `DEPLOY_REMOTE_BUILD=1` (rsync-Delta + `up -d --build`, gemessen ~1 min bei
+> warmem Layer-Cache gegenüber 25–40 min für ~2,65 GB Image-Tar bei ~1 MB/s);
+> der Flottenstart setzt diesen Schalter inzwischen selbst per Default
+> (`docs/HETZNER_DEPLOY.md`, Abschnitt „Deploy-Wege“).
 
 ## Medieninhalte auf einen Knoten bringen (produktionsreif, ohne Image-Ballast)
 

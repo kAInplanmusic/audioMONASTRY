@@ -20,6 +20,13 @@
 #   bash scripts/hetzner/bring-up-fleet.sh --print-config (Trockenlauf: Rollen,
 #                                                         Typen, Service-Listen)
 #
+# Image-Weg von Schritt 4 (PERF-P1-005): app-1 wird per Default mit
+# DEPLOY_REMOTE_BUILD=1 deployt (rsync-Delta + Build auf dem Knoten; gemessen
+# ~1 min bei warmem Layer-Cache) statt per Image-Transfer (gemessen ~2,65 GB bei
+# ~1 MB/s hoch = 25-40 min je Knoten - die Leitung, nicht der Build, ist der
+# Engpass). Abschalten bewusst: DEPLOY_REMOTE_BUILD=0. Der gewaehlte Weg steht
+# im Trockenlauf und in Schritt 4 als Klartext im Log.
+#
 # WICHTIG (Kostenmodell):
 #   Hetzner berechnet die Server ab ERSTELLUNG – auch im ausgeschalteten
 #   Zustand. Die Flotte kostet netto ca. 39 €/Monat, solange die Server
@@ -36,6 +43,28 @@ if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 DOMAIN="${DEPLOY_DOMAIN:-anunnakitools.de}"
 APP_URL="https://$DOMAIN"
+
+# PERF-P1-005 (2026-09-21): der Image-Weg des App-Deploys (Schritt 4).
+# Gemessen: die Leitung Betreiber-Rechner -> Knoten macht ~1 MB/s hoch. Der
+# Transfer-Weg (`docker save | ssh docker load`) schiebt darueber ~2,65 GB
+# (app 1,43 GB + master-player 1,22 GB) - 25-40 min, und zwar NUR fuer einen
+# frischen Knoten, bevor ueberhaupt Health/Smoke geprueft werden kann. Der
+# Remote-Build (rsync-Delta + Build auf dem Knoten; mit warmem Layer-Cache
+# gemessen ~1 min, am 2026-09-21 zweimal live auf app-1) ist in deploy.sh laengst
+# implementiert - der Flottenstart hat ihn aber NICHT gesetzt, also lief jeder
+# Flottenstart den langsamen Weg. Der Grund fuer den Remote-Build ist die
+# Leitung, und die ist beim Flottenstart dieselbe. Default deshalb 1.
+# Bewusst zurueck auf den Transfer: DEPLOY_REMOTE_BUILD=0 in der Umgebung
+# (z. B. Knoten ohne Bau-RAM/ohne Netz zu den Basis-Images).
+DEPLOY_REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-1}"
+# EINE Quelle fuer den Klartext-Namen des Wegs: Trockenlauf UND Schritt 4 melden
+# damit denselben Satz - zwei Texte koennten etwas anderes behaupten als das
+# Skript tut (und im Log soll lesbar sein, WARUM es schnell/langsam ist).
+if [[ "$DEPLOY_REMOTE_BUILD" == "1" ]]; then
+  DEPLOY_IMAGE_WEG="Remote-Build auf dem Knoten (rsync-Delta + 'docker compose up -d --build'; gemessen ~1 min bei warmem Layer-Cache)"
+else
+  DEPLOY_IMAGE_WEG="Image-Transfer ('docker save | ssh docker load'; gemessen ~2,65 GB bei ~1 MB/s = 25-40 min)"
+fi
 
 # NOMEN-P1-001 / F10: Namen der laufenden Installation aufloesen (neu oder
 # Altname) - fleet-names.sh ist die EINE Quelle (Servernamen, Container,
@@ -72,8 +101,11 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   # fleet-names.sh und werden hier ohne Knoten belegt.
   echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME, top-level 'name:' in docker-compose.hetzner.yml)"
   echo "  app-1:     deploy.sh (Caddy + App + Signaling) | Backup-Timer | Watchdog"
+  # PERF-P1-005: der gewaehlte Image-Weg steht im Trockenlauf - so ist der
+  # Default (Remote-Build) ohne Knoten belegbar und per Umgebung abschaltbar.
+  echo "  Image:     DEPLOY_REMOTE_BUILD=$DEPLOY_REMOTE_BUILD  ->  $DEPLOY_IMAGE_WEG"
   echo "  sfu-1:     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry | Watchdog"
-  echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog"
+  echo "  master-1:  docker compose -f docker-compose.hetzner.yml up -d master-player | Watchdog     (Image wird auf dem Knoten gebaut, kein Transfer)"
   echo "  edge-1:    docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d $MONITORING_SERVICES  (NUR Monitoring) | Watchdog"
   echo "  ai-1:      install-ai1.sh (Ollama + Stem host-nativ) | Watchdog"
   # F6: Rollen-Verdrahtung der RTC-Strecke (SFU + coturn). Die Zeilen kommen aus
@@ -155,8 +187,16 @@ done
 # will, setzt DEPLOY_SYNC_ENV=1 in der Umgebung dieses Skripts.
 step "4/7 app-1 deployen (Caddy + App + Signaling, HTTPS)"
 echo "  .env-Sync: DEPLOY_SYNC_ENV=${DEPLOY_SYNC_ENV:-0} (0 = Knoten-.env des Portal-Workers bleibt)"
+# PERF-P1-005: im Log muss lesbar sein, WELCHER Image-Weg laeuft und WARUM -
+# sonst ist "25 min haengen bei Schritt 4" nicht von "langsame Leitung" zu
+# unterscheiden. Der Grund fuer den Default (Remote-Build) steht hier im Klartext.
+echo "  Image-Weg: DEPLOY_REMOTE_BUILD=$DEPLOY_REMOTE_BUILD  ->  $DEPLOY_IMAGE_WEG"
+echo "    gemessen 2026-09-21: ~1 MB/s hoch, Transfer-Weg ~2,65 GB = 25-40 min;"
+echo "    Remote-Build mit warmem Layer-Cache ~1 min (zweimal live auf app-1 gefahren)."
+echo "    Bewusst abschalten (Transfer): DEPLOY_REMOTE_BUILD=0 bash $0"
 DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
-  DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 sg docker -c "bash deploy.sh"
+  DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 \
+  DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD" sg docker -c "bash deploy.sh"
 
 # --- 5. Übrige Rollen ---------------------------------------------------------
 step "5/7 sfu-1, master-1, edge-1, ai-1 einrichten"
@@ -201,6 +241,23 @@ ssh_host "$SFU_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE
 
 echo "  master-1 (master-player) …"
 rsync_repo "$MASTER_IP"; sync_env "$MASTER_IP"
+# PERF-P1-005: das ZWEITE Image (audiomonastry-master-player:hetzner) wird
+# NIRGENDS transferiert - es hat einen eigenen Compose-Service mit eigenem
+# Build-Kontext (`build: ./services/master-player`, Dockerfile + requirements.lock,
+# beide nicht vom rsync ausgeschlossen). Gebaut wird es jeweils auf dem Knoten:
+#   * app-1: der Remote-Build-Weg von deploy.sh faehrt `docker compose up -d --build`
+#     OHNE Service-Liste - damit baut Compose ALLE Dienste des Default-Profils mit
+#     `build:` in einem Aufruf (`docker compose config --services` = audiomonastry,
+#     caddy, master-player; nur caddy hat kein `build:`). Das zweite Image ist also
+#     erfasst, es braucht keinen eigenen Deploy-Schritt. (Der Transferweg laedt es
+#     stattdessen und startet `audiomonastry master-player` mit --no-build.)
+#   * master-1: hier gibt es gar keinen Transfer-Weg. Auf einem frischen Knoten
+#     existiert kein Image, Compose baut es daher aus dem rsyncten Kontext
+#     (Default-Policy beim `up`). Bewusst OHNE `--build`: der Flottenstart ist
+#     der Kaltstart-Pfad, ein erneuter Lauf gegen eine Bestandsflotte soll nicht
+#     jedes Mal ~Minuten Build auf allen Knoten ausloesen. Update eines laufenden
+#     master-1 (Stand nachziehen) bewusst explizit:
+#       ssh root@<master-ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose -f docker-compose.hetzner.yml up -d --build master-player'
 ssh_host "$MASTER_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose -f docker-compose.hetzner.yml up -d master-player"
 
 echo "  edge-1 (Monitoring: Prometheus/Grafana/Alertmanager – NUR der Stack) …"

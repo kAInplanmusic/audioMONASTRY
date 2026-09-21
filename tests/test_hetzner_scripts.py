@@ -60,6 +60,17 @@ Vertraege dieses Fixes, ohne Docker/Netz:
     `docker` im PATH (echter Codepfad, kein Docker, kein Netz),
   * das Migrationsskript fuer Bestands-Knoten ist trockenlaufbar, loescht keine
     Volumes ohne ausdrueckliche Bestaetigung und nennt den Rueckweg.
+
+PERF-P1-005 (2026-09-21): `bring-up-fleet.sh` setzt `DEPLOY_REMOTE_BUILD=1` als
+Default und reicht den Schalter an `deploy.sh` durch (vorher lief jeder
+Flottenstart den Image-Transfer: ~2,65 GB bei ~1 MB/s = 25-40 min je Knoten,
+statt ~1 min Remote-Build bei warmem Layer-Cache). `FleetStartRemoteBuildDefaultTest`
+faehrt dafuer den ECHTEN `deploy.sh`-Pfad mit gefaktem `ssh`/`scp`/`rsync`/`docker`
+und einem lokalen `/api/health`-Stub (kein Knoten, kein Docker-Daemon, kein Netz):
+im Remote-Build-Modus darf kein `docker save`/`docker load` in der Kommandoliste
+stehen, die Abschaltung muss wirklich den Transfer fahren, und das zweite Image
+(`audiomonastry-master-player:hetzner`) muss ueber den Compose-Build-Kontext
+erfasst sein.
 """
 from __future__ import annotations
 
@@ -1094,6 +1105,9 @@ CONTROLLED_ENV = (
     "REGISTRY_ENV_FILE", "REGISTRY_OWNER", "REGISTRY_TAG", "REGISTRY_DOCKER",
     "REGISTRY_SKIP_BUILD", "REGISTRY_FORCE_PUSH",
     "DEPLOY_IMAGE_SOURCE", "DEPLOY_REGISTRY_IMAGE", "DEPLOY_REGISTRY_IMAGE_MASTER",
+    # PERF-P1-005: der Image-Weg des Flottenstarts (bring-up-fleet.sh Default 1).
+    # Ohne diesen Eintrag haengt der Vertragstest an der Shell des Rechners.
+    "DEPLOY_REMOTE_BUILD",
 )
 
 
@@ -3215,6 +3229,251 @@ class FleetRemoteBuildTest(unittest.TestCase):
         self.assertIn("date -u +%Y-%m-%dT%H:%M:%SZ", self.text)
         self.assertIn("--exclude .git", self.text)
 
+
+
+#: Fakes fuer den Vertragstest des Flottenstarts: jeder Aufruf wird mit Namen
+#: protokolliert und mit Exit 0 beantwortet - kein Knoten, kein Docker-Daemon,
+#: kein Netz. Damit ist die ECHTE Kommandozeile von deploy.sh lesbar: welcher
+#: Image-Weg lief (`docker save`/`docker load` vs. `up -d --build`) und mit
+#: welchen Build-Stempeln.
+FAKE_CLI_LOG_ONLY = r"""#!/usr/bin/env bash
+printf '%s\n' "{name} $*" >> "${FAKE_CMD_LOG:?}"
+exit 0
+"""
+
+
+class FleetStartRemoteBuildDefaultTest(unittest.TestCase):
+    """PERF-P1-005 (2026-09-21): der Flottenstart deployt app-1 per Remote-Build.
+
+    Anlass (gemessen): `deploy.sh` kennt den schnellen Weg seit PERF-P1-003
+    (`DEPLOY_REMOTE_BUILD=1` = rsync-Delta + Build auf dem Knoten; am 2026-09-21
+    zweimal live auf app-1 gefahren, ~1 min bei warmem Layer-Cache). Der
+    Flottenstart hat den Schalter aber NICHT gesetzt - und deploy.sh defaultet auf
+    `0` -, also schob jeder Flottenstart ~2,65 GB (app 1,43 GB + master-player
+    1,22 GB) ueber eine Leitung von ~1 MB/s hoch: 25-40 min je Knoten, bevor
+    ueberhaupt Health/Smoke geprueft werden konnte. Der Grund fuer den
+    Remote-Build (die Leitung, nicht der Build) gilt beim Flottenstart genauso.
+
+    Vertraege, die hier festgenagelt sind:
+      1. `bring-up-fleet.sh` setzt `DEPLOY_REMOTE_BUILD=1` als Default und reicht
+         ihn an deploy.sh durch; der gewaehlte Weg steht als Klartext im
+         Trockenlauf UND im Deploy-Schritt (im Log soll lesbar sein, warum es
+         schnell oder langsam ist).
+      2. Per Umgebung ist der Schalter auf `0` stellbar - dann laeuft bewusst der
+         Transfer-Weg (Gegenprobe im Fake-Lauf).
+      3. Im Remote-Build-Modus laeuft der Transfer-Weg NICHT: keine
+         `docker save`/`docker load` in der Kommandoliste.
+      4. Das ZWEITE Image (`audiomonastry-master-player:hetzner`) ist erfasst: es
+         hat einen eigenen Compose-Service mit eigenem Build-Kontext, und der
+         Remote-Build ruft Compose OHNE Service-Liste - damit baut Compose alle
+         Default-Profil-Dienste mit `build:` (audiomonastry UND master-player),
+         caddy hat kein `build:`. Ein eigener Transfer des zweiten Images ist
+         deshalb nicht noetig - es gibt aber auch keinen Schritt, der es
+         vergisst.
+    """
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        self.text = BRING_UP.read_text(encoding="utf-8")
+        self.deploy_text = DEPLOY_SH.read_text(encoding="utf-8")
+
+    # --- Helfer ------------------------------------------------------------
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    def _print_config(self, **overrides: str) -> str:
+        result = subprocess.run(
+            [self.bash, str(BRING_UP), "--print-config"],
+            capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(**overrides),
+        )
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        return result.stdout
+
+    def _deploy_lauf(self, **overrides: str) -> dict[str, Any]:
+        """deploy.sh mit Fake-ssh/-scp/-rsync/-docker fahren: kein Knoten, kein Docker.
+
+        Der lokale `/api/health`-Stub beantwortet den Health-Wait (sonst wartete
+        der Lauf 30x4 s auf einen nicht erreichbaren Knoten) und meldet genau den
+        Repo-Commit - damit ist die Commit-Paritaet (PROD-P1-F4) erfuellt und der
+        Lauf endet mit Exit 0 statt im Stale-Gate. `DEPLOY_HOST` ist der
+        Stub-Host; alle `ssh`/`scp`/`rsync`/`docker`-Aufrufe faengt der Fake ab
+        und schreibt sie in das Kommando-Protokoll.
+        """
+        commit = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+            cwd=ROOT, timeout=60,
+        ).stdout.strip()
+        with tempfile.TemporaryDirectory(prefix="p1-005-deploy-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            fake_bin = tmp / "bin"
+            fake_bin.mkdir()
+            for tool_name in ("ssh", "scp", "rsync", "docker"):
+                tool = fake_bin / tool_name
+                tool.write_text(FAKE_CLI_LOG_ONLY.replace("{name}", tool_name), encoding="utf-8")
+                tool.chmod(0o755)
+            key = tmp / "id_test"
+            key.write_text("KEIN-ECHTES-SCHLUESSELMATERIAL\n", encoding="utf-8")
+            log = tmp / "kommandos.log"
+            health = {"status": "ok", "version": "1.2.3", "commit": commit,
+                      "buildTime": "2026-09-21T00:00:00Z"}
+            with _HealthStub(health) as stub:
+                env = clean_env(
+                    PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
+                    FAKE_CMD_LOG=str(log),
+                    # `BASE_URL` wird als http://${DEPLOY_HOST#*@} gebildet - der
+                    # Stub-Host hat kein "user@", also bleibt er unveraendert.
+                    DEPLOY_HOST=stub.base_url.replace("http://", ""),
+                    DEPLOY_SSH_KEY=str(key),
+                    DEPLOY_SYNC_ENV="0",
+                    DEPLOY_SMOKE="0",
+                    DEPLOY_DOMAIN=None,
+                    **overrides,
+                )
+                result = subprocess.run(
+                    [self.bash, str(DEPLOY_SH)], capture_output=True, text=True,
+                    cwd=ROOT, timeout=300, env=env,
+                )
+            kommandos = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+        return {"result": result, "kommandos": kommandos, "commit": commit,
+                "combined": self._combined(result)}
+
+    # --- 1. Der Schalter im Flottenstart ----------------------------------
+    def test_default_ist_remote_build_und_im_trockenlauf_lesbar(self) -> None:
+        self.assertIn('DEPLOY_REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-1}"', self.text)
+        stdout = self._print_config()
+        self.assertIn("DEPLOY_REMOTE_BUILD=1", stdout)
+        self.assertIn("Remote-Build auf dem Knoten", stdout)
+        # Klartext-Grund: im Log muss die Zeitdifferenz erklaerbar sein.
+        self.assertIn("gemessen ~1 min", stdout)
+        # Die Gegenrichtung darf hier NICHT stehen (sonst waere die Anzeige
+        # widerspruechlich zu dem, was der Deploy-Schritt faehrt).
+        self.assertNotIn("Image-Transfer", stdout)
+
+    def test_schalter_ist_per_umgebung_abschaltbar(self) -> None:
+        stdout = self._print_config(DEPLOY_REMOTE_BUILD="0")
+        self.assertIn("DEPLOY_REMOTE_BUILD=0", stdout)
+        self.assertIn("Image-Transfer", stdout)
+        self.assertIn("docker save | ssh docker load", stdout)
+        self.assertIn("25-40 min", stdout)
+        self.assertNotIn("Remote-Build auf dem Knoten", stdout)
+
+    def test_flottenstart_reicht_den_schalter_an_deploy_sh_durch(self) -> None:
+        # Der Schalter muss im AUFRUF stehen (nicht nur in einer Anzeige) - sonst
+        # meldet der Flottenstart einen Weg, den er nicht faehrt.
+        aufruf = self.text.split('step "4/7 app-1 deployen')[1].split("# --- 5.")[0]
+        self.assertIn('DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD"', aufruf)
+        self.assertIn("sg docker -c", aufruf)
+        # Und deploy.sh liest genau diesen Namen (kein zweiter Schaltername).
+        self.assertIn('DEPLOY_REMOTE_BUILD="${DEPLOY_REMOTE_BUILD:-0}"', self.deploy_text)
+
+    # --- 2. Der Image-Weg selbst (Fake-Tools, kein Knoten) ----------------
+    def test_remote_build_modus_faehrt_keinen_image_transfer(self) -> None:
+        lauf = self._deploy_lauf(DEPLOY_REMOTE_BUILD="1")
+        self.assertEqual(lauf["result"].returncode, 0, lauf["combined"])
+        kommandos = lauf["kommandos"]
+        self.assertTrue(
+            [k for k in kommandos if "up -d --build" in k],
+            f"kein Remote-Build gefahren: {kommandos}",
+        )
+        for verboten in ("docker save", "docker load"):
+            treffer = [k for k in kommandos if verboten in k]
+            self.assertEqual(treffer, [], f"Transfer-Weg lief trotz Remote-Build: {treffer}")
+
+    def test_abschalten_faehrt_bewusst_den_transfer_weg(self) -> None:
+        # Gegenprobe (Haelfte 2 von "per Umgebung auf 0 stellbar"): mit 0 laeuft
+        # wirklich der Image-Transfer - sonst waere der Schalter wirkungslos.
+        lauf = self._deploy_lauf(DEPLOY_REMOTE_BUILD="0")
+        self.assertEqual(lauf["result"].returncode, 0, lauf["combined"])
+        kommandos = lauf["kommandos"]
+        self.assertTrue([k for k in kommandos if "docker save" in k],
+                        f"kein docker save trotz Transfer-Modus: {kommandos}")
+        self.assertTrue([k for k in kommandos if "docker load" in k],
+                        f"kein docker load trotz Transfer-Modus: {kommandos}")
+        self.assertEqual([k for k in kommandos if "up -d --build" in k], [],
+                         "Transfer-Modus hat trotzdem auf dem Knoten gebaut")
+
+    def test_stempel_und_medien_overlay_gehen_mit(self) -> None:
+        # PROD-P1-F4 + PERF-P1-003 gelten auch vom Flottenstart aus: der Knoten
+        # baut den rsyncten Stand, also muessen Version/Commit/Zeit mitgehen
+        # (sonst stuende "unknown" in /api/health) - und das Medien-Overlay muss
+        # dabei sein (leere Mounts maskieren sonst die Image-Pfade).
+        lauf = self._deploy_lauf(DEPLOY_REMOTE_BUILD="1")
+        self.assertEqual(lauf["result"].returncode, 0, lauf["combined"])
+        build_aufruf = next(k for k in lauf["kommandos"] if "up -d --build" in k)
+        version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+        for stempel, wert in (
+            ("AUDIOMONASTRY_VERSION", version),
+            ("AUDIOMONASTRY_COMMIT", lauf["commit"]),
+        ):
+            with self.subTest(stempel=stempel):
+                self.assertIn(f"{stempel}='{wert}'", build_aufruf)
+        self.assertIn("AUDIOMONASTRY_BUILD_TIME='", build_aufruf)
+        # Die Fake-Antwort auf die Medien-Probe (Exit 0) faehrt denselben Zweig
+        # wie ein Knoten MIT Inhalten unter media/: Overlay aktiv.
+        self.assertIn("-f docker-compose.hetzner.yml -f docker-compose.media.yml", build_aufruf)
+        self.assertIn("--- Medien-Overlay aktiv", lauf["combined"])
+
+    # --- 3. Das zweite Image (master-player) ------------------------------
+    def test_master_player_ist_vom_remote_build_erfasst(self) -> None:
+        # Eigener Compose-Service, eigenes Image-Tag, KEIN Profil (also im
+        # Default-Profil, das `up -d --build` ohne Service-Liste anfasst).
+        block = COMPOSE_BASE.read_text(encoding="utf-8").split("  master-player:")[1].split("\n  redis:")[0]
+        self.assertIn("build: ./services/master-player", block)
+        self.assertIn("image: audiomonastry-master-player:hetzner", block)
+        self.assertNotIn("profiles:", block)
+        # Build-Kontext liegt im Repo und wird von KEINEM Sync-Weg ausgeschlossen
+        # (sonst fehlte auf dem Knoten die Quelle fuer den Build).
+        for datei in ("Dockerfile", "requirements.lock", "server.py"):
+            self.assertTrue((ROOT / "services" / "master-player" / datei).exists(), datei)
+        for inhalt, name in ((self.deploy_text, "deploy.sh"), (self.text, "bring-up-fleet.sh")):
+            self.assertNotIn("--exclude services", inhalt, f"{name} schliesst den Build-Kontext aus")
+        # Image-Name im Deploy = Image-Name im Compose-Service (sonst baut Compose
+        # ein anderes Tag als deploy.sh erwartet).
+        self.assertIn('IMAGE_MASTER="audiomonastry-master-player:hetzner"', self.deploy_text)
+        # Der Remote-Build ruft Compose OHNE Service-Liste (oder nennt
+        # master-player ausdruecklich) - beides erfasst das zweite Image.
+        nach_if = self.deploy_text.split('if [[ "$DEPLOY_REMOTE_BUILD" != "1" ]]; then')[1]
+        build_zweig = nach_if.split("\n  else", 1)[1].split("\n  fi", 1)[0]
+        zeile = next(
+            l for l in build_zweig.splitlines()
+            if "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT docker compose" in l and "up -d --build" in l
+        )
+        rest = zeile.split("up -d --build", 1)[1].strip().strip('"').strip()
+        self.assertTrue(
+            rest == "" or "master-player" in rest,
+            f"Remote-Build nennt eine Service-Liste ohne master-player: {zeile.strip()}",
+        )
+
+    def test_master_player_ist_im_default_profil_mit_build_kontext(self) -> None:
+        # Beleg ohne Knoten: was `docker compose up -d --build` ohne Service-Liste
+        # anfasst, ist genau das Default-Profil der Compose-Datei. Ohne Docker
+        # lokal wird uebersprungen (der Vertrag oben deckt denselben Punkt ab).
+        if shutil.which("docker") is None:  # pragma: no cover
+            self.skipTest("docker/compose nicht vorhanden")
+        with tempfile.TemporaryDirectory(prefix="p1-005-compose-") as tmpdir:
+            tmp = pathlib.Path(tmpdir)
+            shutil.copy(COMPOSE_BASE, tmp / "docker-compose.hetzner.yml")
+            (tmp / ".env").write_text("", encoding="utf-8")
+            dienste = subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.hetzner.yml", "config", "--services"],
+                capture_output=True, text=True, cwd=tmp, timeout=120,
+            )
+            if dienste.returncode != 0:  # pragma: no cover - Compose fehlt/kein Daemon
+                self.skipTest(f"docker compose nicht aufrufbar: {dienste.stderr.strip()}")
+            config = subprocess.run(
+                ["docker", "compose", "-f", "docker-compose.hetzner.yml", "config"],
+                capture_output=True, text=True, cwd=tmp, timeout=120,
+            )
+        self.assertEqual(dienste.returncode, 0, dienste.stderr)
+        self.assertEqual(
+            set(dienste.stdout.split()), {"audiomonastry", "caddy", "master-player"},
+            "Default-Profil hat sich geaendert - der Remote-Build fasst andere Dienste an",
+        )
+        self.assertEqual(config.returncode, 0, config.stderr)
+        # ... und der master-player bringt seinen Build-Kontext mit.
+        self.assertIn("services/master-player", config.stdout)
+        self.assertIn("audiomonastry-master-player:hetzner", config.stdout)
 
 
 class FleetSyncDeleteGuardTest(unittest.TestCase):

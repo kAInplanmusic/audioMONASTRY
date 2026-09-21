@@ -165,12 +165,25 @@ Was `deploy.sh` macht (Default `DEPLOY_MODE=docker`):
    (seit PROD-P1-F4: der Container meldet `commit`/`buildTime`; weicht er vom Repo-Stand ab,
    endet der Deploy mit Exit 1 – bewusster Ausweg: `DEPLOY_ALLOW_STALE=1`)
 
+> **Zwei Image-Wege, ein Schalter (PERF-P1-005).** `deploy.sh` baut das Image
+> entweder lokal und schiebt es hoch (`docker save | ssh docker load`) oder lässt
+> es auf dem Knoten bauen (`DEPLOY_REMOTE_BUILD=1`). Der **Flottenstart**
+> (`scripts/hetzner/bring-up-fleet.sh`, Schritt 4 ruft `deploy.sh`) setzt seit dem
+> 2026-09-21 **`DEPLOY_REMOTE_BUILD=1` als Default**: gemessen ist die Leitung der
+> Engpass, nicht der Build — ~1 MB/s hoch, ~2,65 GB Image-Tar (app 1,43 GB +
+> master-player 1,22 GB) = **25–40 min je Knoten** gegenüber **~1 min** bei warmem
+> Layer-Cache auf dem Knoten (zweimal live auf app-1 gefahren). Abschalten bewusst:
+> `DEPLOY_REMOTE_BUILD=0` in der Umgebung. Beide Wege sichern den Rollback-Tag,
+> nehmen das Medien-Overlay mit und setzen die Build-Stempel; der gewählte Weg
+> steht im Trockenlauf und in Schritt 4 als Klartext im Log. Einzelheiten,
+> Messungen und die Rolle des zweiten Images: Abschnitt „Deploy-Wege“ unten.
+
 Wichtige Variablen:
 
 | Variable | Default | Zweck |
 |---|---|---|
 | `DEPLOY_MODE` | `docker` | `docker` (Image-Transfer) oder `node` (start-prod.sh) |
-| `DEPLOY_REMOTE_BUILD` | `0` | `1` = Remote-Build statt Image-Transfer (Fallback ohne lokales Docker) |
+| `DEPLOY_REMOTE_BUILD` | `0` (`deploy.sh`) / **`1` im Flottenstart** | `1` = Remote-Build statt Image-Transfer (rsync-Delta + Build auf dem Knoten). `deploy.sh` defaultet auf `0`; `bring-up-fleet.sh` reicht per Default `1` durch (PERF-P1-005), abschaltbar per Umgebung |
 | `DEPLOY_PLATFORM` | leer | z. B. `linux/amd64` für Cross-Build (Apple Silicon → Hetzner x86) via buildx |
 | `DEPLOY_SMOKE` | `1` | Smoke-Test nach Deploy |
 | `DEPLOY_SYNC_ENV` | `0` | lokale `.env` hochladen — **überschreibt die rollen-skopierte Knoten-`.env`** (Portal-Worker), nur für frische Knoten ohne Portal setzen |
@@ -704,7 +717,7 @@ cd /tmp/f10-probe && docker compose -f docker-compose.hetzner.yml config | head 
 #   services:
 
 # 4. Vertragstests
-python3 tests/test_hetzner_scripts.py            # Ran 72 tests ... OK
+python3 tests/test_hetzner_scripts.py            # Ran 151 tests ... OK (skipped=1)
 # (im Worktree: node_modules des Haupt-Repos nutzen - das Repo-Root hat keine eigene Installation)
 /home/patrick/audioMONASTRY/node_modules/.bin/vitest run tests/namingConventions.test.ts   # 5 passed
 /home/patrick/audioMONASTRY/node_modules/.bin/tsc --noEmit                                 # 0 Fehler
@@ -800,6 +813,62 @@ komplette Live-Weg im Registry-Modus (**pull/tag, kein `docker save`**) und im
 Default-Modus (weiterhin `docker save`, kein pull), plus die Abbruchpfade
 (unbekannte Quelle, `registry` im `node`-Modus).
 
+#### Flottenstart: Remote-Build ist dort der Default (PERF-P1-005, 2026-09-21)
+
+Gemessen: die Leitung Betreiber-Rechner → Knoten macht ~1 MB/s hoch, das App-Image
+ist 338 MB Tar (zstd holt davon 337 MB — die Layer sind schon gepackt) und
+`docker save` überträgt **beide** Images unkomprimiert (~2,65 GB: app 1,43 GB +
+master-player 1,22 GB) = 25–40 min je Knoten. Der rsync-Delta derselben Änderung
+sind wenige MB, der Build auf dem Knoten mit warmem Layer-Cache ~1 min (zweimal
+live auf app-1 gefahren). Deshalb bauen **alle** Deploy-Wege auf Wunsch auf dem
+Knoten — und der Flottenstart tut das per Default:
+
+| Weg | Schalter (Default) | Was sonst gleich bleibt |
+|---|---|---|
+| `deploy.sh` (App-Rolle, master-player) | `DEPLOY_REMOTE_BUILD` (`0`) | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| `scripts/hetzner/bring-up-fleet.sh` (Flottenstart, Schritt 4 → `deploy.sh`) | `DEPLOY_REMOTE_BUILD` (**`1`**, PERF-P1-005) | Rollback-Tag, Medien-Overlay, Build-Stempel |
+| `scripts/hetzner/fleet-deploy-live.sh <ip>` (Live-Beweis-Deploy) | `DEPLOY_REMOTE_BUILD=1` | Rollback-Tag, Medien-Overlay, Build-Stempel |
+
+Der Flottenstart setzt den Schalter in seinem `deploy.sh`-Aufruf
+(`DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD"`) und meldet den gewählten Weg als
+Klartext — im Trockenlauf (`--print-config`) und in Schritt 4. So ist im Log
+lesbar, **warum** es schnell (Remote-Build, ~1 min) oder langsam (Image-Transfer,
+25–40 min) ist, statt nur einer Wartezeit. Abschalten: `DEPLOY_REMOTE_BUILD=0`
+in der Umgebung von `bring-up-fleet.sh`.
+
+Beide Image-Wege **sichern vorher** `audiomonastry:hetzner` als `…-rollback` und
+geben die Build-Stempel (`AUDIOMONASTRY_VERSION/COMMIT/BUILD_TIME`) mit — ohne sie
+stünde `unknown` in `/api/health` und die Commit-Parität (PROD-P1-F4) wäre nicht
+prüfbar. Das Medien-Overlay (`-f docker-compose.media.yml`) wird in beiden Wegen
+nur dann mitgenommen, wenn auf dem Knoten wirklich Inhalte unter `media/` liegen.
+
+**Das zweite Image ist mit erfasst — ohne eigenen Schritt (PERF-P1-005).**
+`audiomonastry-master-player:hetzner` hat einen eigenen Compose-Service mit eigenem
+Build-Kontext (`build: ./services/master-player`, `Dockerfile` +
+`requirements.lock`); beide Sync-Wege schließen `services/` **nicht** aus, der
+Kontext liegt also auf dem Knoten. Der Remote-Build ruft Compose **ohne
+Service-Liste** (`docker compose -f … up -d --build`) — damit baut Compose alle
+Dienste des Default-Profils mit `build:` in **einem** Aufruf. Belegt ohne Flotte:
+
+```bash
+docker compose -f docker-compose.hetzner.yml config --services
+# audiomonastry
+# caddy
+# master-player        <- nur caddy hat kein `build:`
+```
+
+Auf **master-1** gibt es gar keinen Transfer-Weg: der Flottenstart startet dort
+`docker compose … up -d master-player` (bewusst ohne `--build`). Auf einem frischen
+Knoten existiert kein Image, Compose baut es daher aus dem rsyncten Kontext.
+
+> **Bewusst offen (begründet):** Ein erneuter Flottenstart gegen eine
+> **Bestandsflotte** zieht einen geänderten `services/master-player`-Stand **nicht**
+> nach — `up -d master-player` ohne `--build` lässt ein vorhandenes Image stehen.
+> Ein `--build` dort wäre teuer (pip/ffmpeg-Layer auf jedem Knoten bei jedem Lauf)
+> und der Flottenstart ist der Kaltstart-Pfad. Nachziehen bewusst explizit:
+> `ssh root@<master-ip> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose -f docker-compose.hetzner.yml up -d --build master-player'`
+> (so kommentiert in `bring-up-fleet.sh`).
+
 **`--delete`-Vertrag:** Die Skripte `fleet-deploy-live.sh`, `bring-up-fleet.sh` und
 `install-ai1.sh` spiegeln per `rsync --delete` auf den Knoten. Alles, was dort
 liegt und nicht ausgeschlossen ist, wird **gelöscht**. Am 2026-09-21 auf der
@@ -881,6 +950,17 @@ Es verschiebt **nichts unwiederbringlich**: die Volumes des Alt-Projekts werden
   nach Bestätigung) und dass der Altname unter `scripts/`/`services/` **nur** in der
   Namensquelle, im Bestands-Leser des Portal-Workers und im dokumentierten
   Basis-Image-Pfad vorkommt.
+* `tests/test_hetzner_scripts.py` → `FleetStartRemoteBuildDefaultTest` (PERF-P1-005,
+  8 Tests): der Flottenstart setzt `DEPLOY_REMOTE_BUILD=1` als Default und zeigt
+  den Weg im Trockenlauf; per Umgebung auf `0` stellbar (Gegenprobe zeigt den
+  Transfer-Text); der Schalter steht im `deploy.sh`-Aufruf; ein **echter
+  `deploy.sh`-Lauf** mit gefaktem `ssh`/`scp`/`rsync`/`docker` + lokalem
+  `/api/health`-Stub beweist, dass im Remote-Build-Modus **kein** `docker save`/
+  `docker load` läuft (mit Stempeln + Medien-Overlay im Kommando) und dass die
+  Abschaltung wirklich den Transfer fährt; dazu der Beleg, dass
+  `audiomonastry-master-player:hetzner` mit `build: ./services/master-player` im
+  Default-Profil liegt (ohne Docker übersprungen, mit `docker compose config`
+  geprüft).
 * `tests/namingConventions.test.ts`: Ausnahmeliste aufgeräumt — die Einträge für
   `fleet-status.sh` und `fleet-deploy-live.sh` sind **entfernt** (beide Dateien
   enthalten den Altnamen nicht mehr), der Eintrag für `tests/test_hetzner_scripts.py`
@@ -894,5 +974,15 @@ Es verschiebt **nichts unwiederbringlich**: die Volumes des Alt-Projekts werden
 * Der Live-Lauf der Migration auf `sfu-1`/`master-1` ist **nicht** ausgeführt —
   kein `ssh`, kein `hcloud apply`, kein Compose-`up` aus diesem Auftrag. Schritt 1
   (`--dry-run`) liefert die reale Bestandsaufnahme, erst danach wird migriert.
+* Der Flottenstart zieht einen geänderten `services/master-player`-Stand auf einer
+  **Bestandsflotte** nicht nach (`up -d master-player` ohne `--build`, siehe
+  Abschnitt „Deploy-Wege“). Der Kaltstart-Fall ist gedeckt (auf einem frischen
+  Knoten existiert kein Image, Compose baut es dort). Bewusst offen gelassen, weil
+  ein `--build` bei jedem Flottenstart ~Minuten Build auf allen Knoten kostet.
+* Der Default des Flottenstarts ist **ohne Flotte** belegt (Trockenlauf + gefakte
+  Kommandozeile: kein `docker save` im Remote-Build-Modus, `docker compose
+  config --services`). Ein echter Flottenstart-Lauf mit Remote-Build auf einem
+  frisch provisionierten Knoten ist **nicht** Teil dieses Auftrags (kein Deploy
+  gegen die laufende Flotte).
 * Ob nach der Migration der volle Flottenfluss (4-User-E2E, SFU-RTP) grün ist,
   bleibt ein Live-Beweis (siehe Schritt 5).
