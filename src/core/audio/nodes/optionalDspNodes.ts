@@ -15,18 +15,11 @@
  * einschaltet. Sie sind deterministisch und ohne WebAudio-API.
  */
 import { AudioParameter } from '../AudioGraph';
-import { audioBufferPool } from '../BufferPool';
 import { BaseNode } from './basicNodes';
 import { applyModMatrix, type ModRoute } from '../../dsp/modMatrix';
 import { HighQualityReverb } from '../../dsp/hqReverb';
 import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
-
-function copyInput(input: Float32Array[], len: number): Float32Array[] {
-  const out = audioBufferPool.acquire(Math.max(1, input.length), len);
-  for (let ch = 0; ch < input.length; ch++) out[ch].set(input[ch]);
-  return out;
-}
 
 const TAU = Math.PI * 2;
 
@@ -48,22 +41,14 @@ export class ModMatrixNode extends BaseNode implements AutomatableV2Node {
     this.parameters.push(this.enabled, this.rate, this.depth);
   }
 
-  getParameter(paramId: string): AudioParameter | undefined {
-    return this.parameters.find((p) => p.id === paramId);
-  }
-
   setEnabled(active: boolean): void {
     this.enabled.setValue(active ? 1 : 0);
   }
 
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { out, len } = block;
     const active = this.enabled.getValueAtTime(ctx.currentTime) > 0.5;
     const depth = this.depth.getValueAtTime(ctx.currentTime);
     // Tiefe 0 oder aus = bit-transparenter Bypass (kein Tremolo-Rest).
@@ -125,10 +110,6 @@ export class HqReverbNode extends BaseNode implements AutomatableV2Node {
     this.parameters.push(this.enabled, this.mix, this.decayS, this.damping, this.sizeScale);
   }
 
-  getParameter(paramId: string): AudioParameter | undefined {
-    return this.parameters.find((p) => p.id === paramId);
-  }
-
   setEnabled(active: boolean): void {
     this.enabled.setValue(active ? 1 : 0);
   }
@@ -142,13 +123,9 @@ export class HqReverbNode extends BaseNode implements AutomatableV2Node {
   }
 
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { out, len } = block;
     const active = this.enabled.getValueAtTime(ctx.currentTime) > 0.5;
     const wet = this.mix.getValueAtTime(ctx.currentTime);
     // Aus oder Mix 0 = bit-transparenter Bypass (kein Hall-Tail, keine Kosten).

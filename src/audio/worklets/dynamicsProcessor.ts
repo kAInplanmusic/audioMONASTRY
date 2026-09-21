@@ -29,44 +29,18 @@ const FALLBACK_SR = 48000;
 const currentSampleRate = (): number =>
   typeof sampleRate === 'number' && sampleRate > 0 ? sampleRate : FALLBACK_SR;
 
-/** Linearwert → dBFS (NaN-sicher, Untergrenze -120 dB). */
-export function toDb(linear: number): number {
-  const a = Math.abs(linear);
-  if (!Number.isFinite(a) || a < 1e-6) return -120;
-  return 20 * Math.log10(a);
-}
+// Rechenkern an EINER Stelle: src/core/dsp/dynamicsMath.ts (dieselben
+// Funktionen nutzen die V2-Nodes in core/audio/nodes/processingNodes.ts).
+// Die Re-Exporte halten die bisherige API dieses Worklet-Moduls - Tests
+// importieren die Funktionen von hier.
+import {
+  compressorCurveDb,
+  fromDb,
+  smoothingCoefficient,
+  toDb,
+} from '../../core/dsp/dynamicsMath';
 
-/** dB → Linearfaktor (NaN-sicher). */
-export function fromDb(db: number): number {
-  if (!Number.isFinite(db)) return 1;
-  return Math.pow(10, db / 20);
-}
-
-/** One-Pole-Koeffizient für eine Zeitkonstante in Sekunden. */
-export function smoothingCoefficient(seconds: number, sr: number): number {
-  const n = sr * seconds;
-  if (!Number.isFinite(n) || n <= 0) return 1;
-  return 1 - Math.exp(-1 / n);
-}
-
-/**
- * Statische Kompressor-Kennlinie mit Soft-Knee.
- * @returns Ausgangspegel in dB für einen Eingangspegel in dB.
- */
-export function compressorCurveDb(
-  inputDb: number, threshold: number, ratio: number, knee: number,
-): number {
-  const r = Math.max(1, ratio);
-  const k = Math.max(0, knee);
-  const over = inputDb - threshold;
-  if (k > 0 && over > -k / 2 && over < k / 2) {
-    // Quadratische Knee-Interpolation (stetig in Wert und Steigung).
-    const x = over + k / 2;
-    return inputDb + ((1 / r - 1) * x * x) / (2 * k);
-  }
-  if (over <= 0) return inputDb;
-  return threshold + over / r;
-}
+export { compressorCurveDb, fromDb, smoothingCoefficient, toDb };
 
 // Worklet-Global fehlt in Node-Tests → Fallback-Basisklasse mit Fake-Port,
 // damit der Prozessor deterministisch instanziierbar bleibt (vgl. masteringProcessor).

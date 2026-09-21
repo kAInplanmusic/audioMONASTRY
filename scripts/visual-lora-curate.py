@@ -62,6 +62,13 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[0] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from envfile import read_env_file  # noqa: E402
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCHEMA = "visual-lora-pairs/1"
 DEFAULT_ENV_FILE = ROOT / ".env"
@@ -92,22 +99,8 @@ TABLE_GENERATIONS = "visual_generations"
 # ---------------------------------------------------------------------------
 # Env-Auflösung: Prozess-Env gewinnt, `.env` füllt Lücken (wie dotenv es tut)
 # ---------------------------------------------------------------------------
-def read_env_file(path: pathlib.Path) -> Dict[str, str]:
-    """Primitives .env-Lesen (KEY=VALUE, # Kommentar, Quotes werden entfernt).
-
-    Bewusst ohne Zusatzabhängigkeit – dieselbe Bauart wie in
-    `scripts/generate-mos-samples.py`.
-    """
-    out: Dict[str, str] = {}
-    if not path or not path.exists():
-        return out
-    for line in path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        name, value = line.split("=", 1)
-        out[name.strip()] = value.strip().strip('"').strip("'")
-    return out
+# `read_env_file` liegt in scripts/lib/envfile.py (oben importiert); die Klasse
+# `EnvSource` bleibt hier, weil ihr `first()` (Wert, Name) liefert.
 
 
 class EnvSource:

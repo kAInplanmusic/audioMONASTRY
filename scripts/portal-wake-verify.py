@@ -8,31 +8,31 @@ der bereitgestellte Cloudflare-Token darf kein DNS. Genau das war vorher unsicht
 (nur console.warn), und der Betreiber sah nur ein dauerhaftes "starting-app".
 """
 import json
+import pathlib
+import sys
 import time
 import urllib.request
 
 PORTAL = 'https://anunnakitools.de'
 UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
 
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[0] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from envfile import read_required_env_file  # noqa: E402
+from restclient import portal_request  # noqa: E402
+
 
 def load_env(path='/home/patrick/audioMONASTRY/.env.deploy'):
-    env = {}
-    for line in open(path, encoding='utf-8'):
-        line = line.strip()
-        if line and not line.startswith('#') and '=' in line:
-            k, v = line.split('=', 1)
-            env[k.strip()] = v.strip().strip('"').strip("'")
-    return env
+    """KEY=VALUE aus der Deploy-Env; fehlende Datei bricht laut ab (wie bisher)."""
+    return read_required_env_file(pathlib.Path(path))
 
 
 def call(path, data=None, cookie=None):
-    body = json.dumps(data).encode() if data is not None else None
-    req = urllib.request.Request(PORTAL + path, data=body, method='POST' if data is not None else 'GET')
-    req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', UA)
-    req.add_header('Accept', 'application/json')
-    if cookie:
-        req.add_header('Cookie', cookie)
+    """Portal-Aufruf (Browser-UA Pflicht); Fehler kommen als (0, Meldung, '') zurueck."""
+    req = portal_request(PORTAL, path, data, cookie, user_agent=UA)
     try:
         with urllib.request.urlopen(req, timeout=120) as res:
             raw = res.read().decode()

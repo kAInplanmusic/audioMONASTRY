@@ -8,6 +8,7 @@ loggt sich ein, ruft /api/wire-fleet (Firewall + origin-DNS auf die neue app-IP 
 Fleet-Ports) und pollt dann /api/status bis 'ready' - mit Zeitmessung.
 """
 import json
+import pathlib
 import sys
 import time
 import urllib.error
@@ -16,35 +17,23 @@ import urllib.request
 PORTAL = 'https://anunnakitools.de'
 UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
 
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[0] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from envfile import read_required_env_file  # noqa: E402
+from restclient import portal_call  # noqa: E402
+
 
 def load_env(path='.env.deploy'):
-    env = {}
-    with open(path, encoding='utf-8') as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith('#') or '=' not in line:
-                continue
-            k, v = line.split('=', 1)
-            env[k.strip()] = v.strip().strip('"').strip("'")
-    return env
+    """KEY=VALUE aus der Deploy-Env; eine fehlende Datei bricht laut ab (wie bisher)."""
+    return read_required_env_file(pathlib.Path(path))
 
 
 def call(path, data=None, cookie=None):
-    body = json.dumps(data).encode() if data is not None else None
-    req = urllib.request.Request(PORTAL + path, data=body, method='POST' if data is not None else 'GET')
-    req.add_header('Content-Type', 'application/json')
-    req.add_header('User-Agent', UA)
-    req.add_header('Accept', 'application/json')
-    if cookie:
-        req.add_header('Cookie', cookie)
-    try:
-        with urllib.request.urlopen(req, timeout=40) as res:
-            raw = res.read().decode()
-            return res.status, (json.loads(raw) if raw.strip().startswith('{') else raw), res.headers.get('Set-Cookie') or ''
-    except urllib.error.HTTPError as err:
-        return err.code, err.read().decode()[:200], ''
-    except Exception as err:  # noqa: BLE001
-        return 0, f'{type(err).__name__}: {err}', ''
+    """Portal-Aufruf mit Browser-UA (Cloudflare blockt Standard-urllib, Fehler 1010)."""
+    return portal_call(PORTAL, path, data, cookie, timeout=40, user_agent=UA)
 
 
 def main():

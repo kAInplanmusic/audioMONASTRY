@@ -10,6 +10,7 @@
  */
 import { AudioGraph } from './AudioGraph';
 import { GainNode, MasterSumNode, SourceNode, StereoPanNode } from './nodes/basicNodes';
+import { v2GainDbToLinear } from './v2GainDb';
 import type { IProcessingContext } from './types';
 
 export const V2_CHANNELS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8', 'channel9', 'channel10'] as const;
@@ -17,14 +18,37 @@ export type V2Channel = (typeof V2_CHANNELS)[number];
 
 const SILENCE = (len: number): Float32Array => new Float32Array(len);
 
-export class V2StudioGraph {
+/**
+ * Gemeinsamer Kanalzug von `V2StudioGraph` und `V2MonitorGraph`: beide bauen
+ * dieselbe Kette (Source -> Gain (dB) -> StereoPan) auf und setzen sie ueber
+ * dieselben Zugriffe. Quellen-, Gain- und Pan-Map samt Settern liegen deshalb
+ * einmal hier; nur der Master-/Bus-Teil unterscheidet sich und bleibt im
+ * jeweiligen Graphen.
+ */
+export abstract class V2ChannelStripGraph {
+  readonly sources = new Map<V2Channel, SourceNode>();
+  readonly gains = new Map<V2Channel, GainNode>();
+  readonly pans = new Map<V2Channel, StereoPanNode>();
+
+  setSourceBuffer(track: V2Channel, buffer: Float32Array[]): void {
+    this.sources.get(track)!.sourceBuffer = buffer;
+  }
+
+  setGainDb(track: V2Channel, db: number): void {
+    this.gains.get(track)!.gain.setValue(v2GainDbToLinear(db));
+  }
+
+  setPan(track: V2Channel, pan: number): void {
+    this.pans.get(track)!.pan.setValue(Math.max(-1, Math.min(1, pan)));
+  }
+}
+
+export class V2StudioGraph extends V2ChannelStripGraph {
   readonly graph = new AudioGraph();
-  readonly sources = new Map<string, SourceNode>();
-  readonly gains = new Map<string, GainNode>();
-  readonly pans = new Map<string, StereoPanNode>();
   readonly master = new MasterSumNode('master:sum', V2_CHANNELS.length);
 
   constructor(sampleRate = 48000, blockSize = 128) {
+    super();
     this.graph.addNode(this.master);
     V2_CHANNELS.forEach((track, i) => {
       const source = new SourceNode(`source:${track}`, [SILENCE(blockSize)], sampleRate);
@@ -41,19 +65,6 @@ export class V2StudioGraph {
       this.pans.set(track, pan);
     });
     this.graph.compile();
-  }
-
-  setSourceBuffer(track: V2Channel, buffer: Float32Array[]): void {
-    this.sources.get(track)!.sourceBuffer = buffer;
-  }
-
-  setGainDb(track: V2Channel, db: number): void {
-    const linear = db <= -120 ? 0 : Math.pow(10, Math.max(-120, Math.min(24, db)) / 20);
-    this.gains.get(track)!.gain.setValue(linear);
-  }
-
-  setPan(track: V2Channel, pan: number): void {
-    this.pans.get(track)!.pan.setValue(Math.max(-1, Math.min(1, pan)));
   }
 
   setMasterGain(value: number): void {

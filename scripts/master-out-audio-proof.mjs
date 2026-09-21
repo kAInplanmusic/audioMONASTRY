@@ -24,21 +24,9 @@
  * am Zuschauer; alles andere im Skript ist fertig und gemessen (Fake-Gerade
  * wird erkannt: 3 audioinputs, AudioContext laeuft, Transport startet).
  */
-import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { chromium } from 'playwright';
-
-const BASE = (process.env.E2E_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
-
-const token = (() => {
-  const fromEnv = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
-  if (fromEnv) return fromEnv;
-  const line = readFileSync(new URL('../.env', import.meta.url), 'utf8')
-    .split('\n').find((l) => l.startsWith('STUDIO_ACCESS_TOKEN='));
-  return (line?.slice('STUDIO_ACCESS_TOKEN='.length) ?? '').trim();
-})();
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+import { BASE, sleep, token } from './lib/proof-browser.mjs';
 
 const main = async () => {
   console.log(`Ziel: ${BASE}`);

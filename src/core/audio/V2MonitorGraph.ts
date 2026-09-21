@@ -24,7 +24,7 @@ import {
   ParametricEqNode,
 } from './nodes/processingNodes';
 import { HqReverbNode, ModMatrixNode } from './nodes/optionalDspNodes';
-import { V2_CHANNELS, type V2Channel } from './V2StudioGraph';
+import { V2ChannelStripGraph, V2_CHANNELS, type V2Channel } from './V2StudioGraph';
 import { defaultMonitorPlan, type MonitorRoutingPlan } from './monitorRouting';
 import type { IProcessingContext } from './types';
 
@@ -39,11 +39,8 @@ export interface V2MonitorRenderResult {
 
 const SILENCE = (len: number): Float32Array => new Float32Array(len);
 
-export class V2MonitorGraph {
+export class V2MonitorGraph extends V2ChannelStripGraph {
   readonly graph = new AudioGraph();
-  readonly sources = new Map<V2Channel, SourceNode>();
-  readonly gains = new Map<V2Channel, GainNode>();
-  readonly pans = new Map<V2Channel, StereoPanNode>();
   /** Pre-Fader-Cue-Tap-Gain je Kanal (0..2, aus MonitorRoutingPlan.cueTracks). */
   readonly cueGains = new Map<V2Channel, GainNode>();
   readonly mainBus: MasterSumNode;
@@ -66,6 +63,7 @@ export class V2MonitorGraph {
   private routingPlan: MonitorRoutingPlan;
 
   constructor(sampleRate = 48000, blockSize = 128) {
+    super();
     this.routingPlan = defaultMonitorPlan('MON1');
     this.mainBus = new MasterSumNode('main:sum', V2_CHANNELS.length);
     this.cueBus = new StereoSumNode('cue:sum', V2_CHANNELS.length, 1, 2);
@@ -143,19 +141,6 @@ export class V2MonitorGraph {
 
   get monitorPlan(): MonitorRoutingPlan {
     return this.routingPlan;
-  }
-
-  setSourceBuffer(track: V2Channel, buffer: Float32Array[]): void {
-    this.sources.get(track)!.sourceBuffer = buffer;
-  }
-
-  setGainDb(track: V2Channel, db: number): void {
-    const linear = db <= -120 ? 0 : Math.pow(10, Math.max(-120, Math.min(24, db)) / 20);
-    this.gains.get(track)!.gain.setValue(linear);
-  }
-
-  setPan(track: V2Channel, pan: number): void {
-    this.pans.get(track)!.pan.setValue(Math.max(-1, Math.min(1, pan)));
   }
 
   setMasterGain(value: number): void {

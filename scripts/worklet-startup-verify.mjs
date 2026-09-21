@@ -9,17 +9,8 @@
  *
  * Aufruf: E2E_BASE_URL=http://localhost:8080 node scripts/worklet-startup-verify.mjs
  */
-import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
-
-const BASE = (process.env.E2E_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
-const token = (() => {
-  const fromEnv = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
-  if (fromEnv) return fromEnv;
-  const line = readFileSync(new URL('../.env', import.meta.url), 'utf8')
-    .split('\n').find((l) => l.startsWith('STUDIO_ACCESS_TOKEN='));
-  return (line?.slice('STUDIO_ACCESS_TOKEN='.length) ?? '').trim();
-})();
+import { BASE, token } from './lib/proof-browser.mjs';
 
 const main = async () => {
   console.log(`Ziel: ${BASE} · Instanz: ${JSON.stringify(await (await fetch(`${BASE}/api/health`)).json())}`);

@@ -14,8 +14,14 @@
  * sind (siehe `src/core/audio/state/v2NodeAutomation.ts`).
  */
 import { AudioParameter } from '../AudioGraph';
-import { audioBufferPool } from '../BufferPool';
 import { BaseNode } from './basicNodes';
+// Gemeinsamer Dynamics-Rechenkern (auch das Worklet dynamicsProcessor nutzt ihn).
+import {
+  compressorCurveDb,
+  fromDb,
+  smoothingCoefficient,
+  toDb,
+} from '../../dsp/dynamicsMath';
 import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
 
@@ -23,42 +29,11 @@ type BiquadType = 'peaking' | 'lowshelf' | 'highshelf' | 'highpass' | 'lowpass';
 type BiquadCoefficients = [number, number, number, number, number];
 
 // ---------------------------------------------------------------------------
-// Pure DSP-Helfer (lokal, keine Abhängigkeit zu AudioWorklet-Dateien)
+// Pure DSP-Helfer: Rechenkern in src/core/dsp/dynamicsMath.ts, hier re-exportiert
+// (die V2-Paritaetstests lesen toDb/fromDb von diesem Modul).
 // ---------------------------------------------------------------------------
 
-export function toDb(linear: number): number {
-  const a = Math.abs(linear);
-  if (!Number.isFinite(a) || a < 1e-6) return -120;
-  return 20 * Math.log10(a);
-}
-
-export function fromDb(db: number): number {
-  if (!Number.isFinite(db)) return 1;
-  return Math.pow(10, db / 20);
-}
-
-export function smoothingCoefficient(seconds: number, sampleRate: number): number {
-  const n = sampleRate * seconds;
-  if (!Number.isFinite(n) || n <= 0) return 1;
-  return 1 - Math.exp(-1 / n);
-}
-
-export function compressorCurveDb(
-  inputDb: number,
-  threshold: number,
-  ratio: number,
-  knee: number,
-): number {
-  const r = Math.max(1, ratio);
-  const k = Math.max(0, knee);
-  const over = inputDb - threshold;
-  if (k > 0 && over > -k / 2 && over < k / 2) {
-    const x = over + k / 2;
-    return inputDb + ((1 / r - 1) * x * x) / (2 * k);
-  }
-  if (over <= 0) return inputDb;
-  return threshold + over / r;
-}
+export { compressorCurveDb, fromDb, smoothingCoefficient, toDb } from '../../dsp/dynamicsMath';
 
 function computeBiquadCoefficients(
   type: BiquadType,
@@ -149,12 +124,6 @@ class BiquadState {
   }
 }
 
-function copyInput(input: Float32Array[], len: number): Float32Array[] {
-  const out = audioBufferPool.acquire(Math.max(1, input.length), len);
-  for (let ch = 0; ch < input.length; ch++) out[ch].set(input[ch]);
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // ParametricEqNode
 // ---------------------------------------------------------------------------
@@ -198,13 +167,9 @@ export class ParametricEqNode extends BaseNode implements AutomatableV2Node {
   }
 
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { input, out, len } = block;
     const coeffs = this.bands.map((band) =>
       computeBiquadCoefficients(
         band.type,
@@ -263,19 +228,10 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
     this.parameters.push(this.cutoff, this.resonance, this.depth, this.drive);
   }
 
-  getParameter(paramId: string): AudioParameter | undefined {
-    return this.parameters.find((p) => p.id === paramId);
-  }
-
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
-    const sr = ctx.sampleRate;
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { input, out, len, sr } = block;
     const att = smoothingCoefficient(0.02, sr);
     const rel = smoothingCoefficient(0.08, sr);
     const drive = this.drive.getValueAtTime(ctx.currentTime);
@@ -366,19 +322,10 @@ export class EffectNode extends BaseNode implements AutomatableV2Node {
     this.parameters.push(this.wet, this.feedback, this.rate, this.depth, this.bits, this.sampleReduction);
   }
 
-  getParameter(paramId: string): AudioParameter | undefined {
-    return this.parameters.find((p) => p.id === paramId);
-  }
-
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
-    const sr = ctx.sampleRate;
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { out, len, sr } = block;
     const wetAmt = this.wet.getValueAtTime(ctx.currentTime);
     // AUDIO-P0-004: Wet 0 = bit-transparenter Bypass (kein Reverb-/Chorus-Tail).
     if (wetAmt <= 0) {
@@ -483,22 +430,14 @@ export class DynamicsNode extends BaseNode implements AutomatableV2Node {
     this.parameters.push(this.enabled, this.threshold, this.ratio, this.knee, this.makeup, this.attack, this.release);
   }
 
-  getParameter(paramId: string): AudioParameter | undefined {
-    return this.parameters.find((p) => p.id === paramId);
-  }
-
   setEnabled(active: boolean): void {
     this.enabled.setValue(active ? 1 : 0);
   }
 
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { input, out, len } = block;
     if (this.enabled.getValueAtTime(ctx.currentTime) <= 0.5) {
       this.outputs[0].buffer = out;
       return;
@@ -559,19 +498,10 @@ export class MasteringNode extends BaseNode implements AutomatableV2Node {
     this.parameters.push(this.threshold, this.ratio, this.knee, this.makeup, this.ceiling, this.release);
   }
 
-  getParameter(paramId: string): AudioParameter | undefined {
-    return this.parameters.find((p) => p.id === paramId);
-  }
-
   process(ctx: IProcessingContext): void {
-    const input = this.inputBuffer(ctx);
-    if (!input) {
-      this.outputs[0].buffer = null;
-      return;
-    }
-    const len = input[0]?.length ?? ctx.bufferSize;
-    const out = copyInput(input, len);
-    const sr = ctx.sampleRate;
+    const block = this.prepareProcess(ctx);
+    if (!block) return;
+    const { input, out, len, sr } = block;
     const threshold = this.threshold.getValueAtTime(ctx.currentTime);
     const ratio = this.ratio.getValueAtTime(ctx.currentTime);
     const knee = this.knee.getValueAtTime(ctx.currentTime);

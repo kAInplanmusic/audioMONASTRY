@@ -57,7 +57,14 @@ async function main() {
     await device.load({ routerRtpCapabilities: rtpCapabilities });
     result.steps.push('device-loaded');
 
-    if (mode === 'consumer') {
+    /**
+     * Empfangsweg aufbauen, den Ziel-Producer konsumieren und die RTP-Zahlen
+     * lesen. Consumer-Modus und Echo-Modus fahren denselben Ablauf - nur das
+     * Aufraeumen danach unterscheidet sich (Close-Reihenfolge des Aufrufers).
+     *
+     * @returns {Promise<{ consumer: object, recvTransport: object }>}
+     */
+    const consumeProducer = async (producerId) => {
       const recvParams = await ack('createTransport');
       const recvTransport = device.createRecvTransport(recvParams);
       recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
@@ -69,10 +76,10 @@ async function main() {
       });
       const { id, kind, rtpParameters } = await ack('consume', {
         transportId: recvTransport.id,
-        producerId: targetProducerId,
+        producerId,
         rtpCapabilities: device.rtpCapabilities,
       });
-      const consumer = await recvTransport.consume({ id, producerId: targetProducerId, kind, rtpParameters });
+      const consumer = await recvTransport.consume({ id, producerId, kind, rtpParameters });
       result.steps.push('consumer-created ' + consumer.id + ' track=' + (consumer.track ? consumer.track.kind : 'none'));
 
       await sleep(2000);
@@ -81,7 +88,11 @@ async function main() {
       result.packetsReceived = stats.packetsReceived;
       result.steps.push(`rtp-stats bytes=${stats.bytesReceived} packets=${stats.packetsReceived}`);
       result.ok = stats.bytesReceived > 0;
+      return { consumer, recvTransport };
+    };
 
+    if (mode === 'consumer') {
+      const { consumer, recvTransport } = await consumeProducer(targetProducerId);
       consumer.close();
       recvTransport.close();
       socket.disconnect();
@@ -114,30 +125,7 @@ async function main() {
         result.ok = true;
       } else {
         // echo: eigenen Producer ueber separaten Recv-Transport konsumieren.
-        const recvParams = await ack('createTransport');
-        const recvTransport = device.createRecvTransport(recvParams);
-        recvTransport.on('connect', async ({ dtlsParameters }, callback, errback) => {
-          try {
-            await ack('connectTransport', { transportId: recvTransport.id, dtlsParameters });
-            result.steps.push('dtls-recv-connected');
-            callback();
-          } catch (e) { errback(e); }
-        });
-        const { id, kind, rtpParameters } = await ack('consume', {
-          transportId: recvTransport.id,
-          producerId: producer.id,
-          rtpCapabilities: device.rtpCapabilities,
-        });
-        const consumer = await recvTransport.consume({ id, producerId: producer.id, kind, rtpParameters });
-        result.steps.push('consumer-created ' + consumer.id + ' track=' + (consumer.track ? consumer.track.kind : 'none'));
-
-        await sleep(2000);
-        const stats = await readInboundStats(consumer);
-        result.bytesReceived = stats.bytesReceived;
-        result.packetsReceived = stats.packetsReceived;
-        result.steps.push(`rtp-stats bytes=${stats.bytesReceived} packets=${stats.packetsReceived}`);
-        result.ok = stats.bytesReceived > 0;
-
+        const { consumer, recvTransport } = await consumeProducer(producer.id);
         consumer.close();
         producer.close();
         sendTransport.close();

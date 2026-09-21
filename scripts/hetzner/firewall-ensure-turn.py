@@ -27,7 +27,13 @@ import urllib.error
 import urllib.request
 
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
-API = "https://api.hetzner.cloud/v1"
+
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[1] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from restclient import hcloud_api  # noqa: E402
 DEFAULT_IP = "142.132.231.146"  # sfu-1
 #: Muss identisch mit portal-worker/firewallRules und provision.py sein.
 TURN_RULES = (
@@ -47,16 +53,11 @@ def token() -> str:
 
 
 def api(path: str, tok: str, method: str = "GET", payload: dict | None = None) -> dict:
-    body = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = urllib.request.Request(
-        f"{API}{path}", data=body, method=method,
-        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return json.loads(response.read().decode("utf-8", "replace") or "{}")
-    except urllib.error.HTTPError as error:
-        return {"_error": f"HTTP {error.code}", "_body": error.read().decode("utf-8", "replace")[:300]}
+    """Hetzner-Cloud-REST (Fehler als {"_error", "_body"}) - Transport in scripts/lib.
+
+    Die Fehlergrenze von 300 Zeichen ist hier historisch gewachsen und bleibt.
+    """
+    return hcloud_api(path, tok, method, payload, detail_limit=300)
 
 
 def rule_key(rule: dict) -> tuple:

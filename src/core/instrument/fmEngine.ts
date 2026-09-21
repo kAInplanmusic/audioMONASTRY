@@ -148,6 +148,28 @@ function createFmVoice(patch: Dx7Patch, opts: FmRenderOptions): {
   };
 }
 
+/**
+ * Rueckt die Huellkurve eines Operators um einen Sample-Schritt weiter und
+ * liefert den Pegel (lineare Segmente, in `createFmVoice` vorberechnet).
+ * `renderFmPatch` (offline, ein Voice) und `Fm6Synth.renderBlock` (realtime,
+ * mehrere Voices) brauchen dieselbe Schrittlogik - sie liegt deshalb genau
+ * einmal hier. Die Funktion mutiert nur `st` und alloziert nicht (Hot-Path).
+ */
+function advanceEnvelope(st: OpVoiceState): number {
+  if (st.seg < 4) {
+    const segNow = st.segs[st.seg];
+    st.envPos += 1;
+    if (st.envPos >= segNow.dur) {
+      st.seg += 1;
+      st.envPos = 0;
+    }
+  }
+  const segIdx = Math.min(st.seg, 3);
+  return st.seg >= 4
+    ? 0
+    : Math.max(0, Math.min(1, st.segs[segIdx].start + st.segs[segIdx].delta * st.envPos));
+}
+
 /** Rendert eine monophone FM-Voice deterministisch in einen Puffer. */
 export function renderFmPatch(patch: Dx7Patch, opts: FmRenderOptions): Float32Array {
   const sr = Math.max(8000, opts.sampleRate);
@@ -173,18 +195,7 @@ export function renderFmPatch(patch: Dx7Patch, opts: FmRenderOptions): Float32Ar
       if (op === fbOp) modIn += st.fb * voice.feedbackGain;
 
       // Hüllkurve (lineare Segmente, vorberechnet in createFmVoice).
-      if (st.seg < 4) {
-        const segNow = st.segs[st.seg];
-        st.envPos += 1;
-        if (st.envPos >= segNow.dur) {
-          st.seg += 1;
-          st.envPos = 0;
-        }
-      }
-      const segIdx = Math.min(st.seg, 3);
-      const env = st.seg >= 4
-        ? 0
-        : Math.max(0, Math.min(1, st.segs[segIdx].start + st.segs[segIdx].delta * st.envPos));
+      const env = advanceEnvelope(st);
 
       // Oszillator mit Phasenmodulation.
       st.phase += st.phaseIncr * (1 + lfo * voice.lfoPitchDepth * 0.02);
@@ -332,18 +343,7 @@ export class Fm6Synth {
           }
           if (op === this.fbOp) modIn += st.fb * this.feedbackGain;
 
-          if (st.seg < 4) {
-            const segNow = st.segs[st.seg];
-            st.envPos += 1;
-            if (st.envPos >= segNow.dur) {
-              st.seg += 1;
-              st.envPos = 0;
-            }
-          }
-          const segIdx = Math.min(st.seg, 3);
-          const env = st.seg >= 4
-            ? 0
-            : Math.max(0, Math.min(1, st.segs[segIdx].start + st.segs[segIdx].delta * st.envPos));
+          const env = advanceEnvelope(st);
 
           st.phase += st.phaseIncr * (1 + lfo * this.lfoPitchDepth * 0.02);
           if (st.phase > 2 * Math.PI) st.phase -= 2 * Math.PI;

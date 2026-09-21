@@ -14,9 +14,8 @@
  *
  * Aufruf: npm run proof:webgpu   (startet den Dev-Server selbst; Port muss frei sein)
  */
-import { spawn } from 'node:child_process';
-import { createServer } from 'node:net';
 import { chromium } from 'playwright';
+import { portIsFree, startDevServer, waitForHealth } from './lib/proof-server.mjs';
 
 const PORT = Number(process.env.PROOF_PORT || 8099);
 const APP_URL = `http://127.0.0.1:${PORT}`;
@@ -29,26 +28,6 @@ const WEBGPU_FLAGS = [
   '--disable-vulkan-surface',
 ];
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-const portIsFree = (port) => new Promise((resolve) => {
-  const probe = createServer();
-  probe.once('error', () => resolve(false));
-  probe.once('listening', () => probe.close(() => resolve(true)));
-  probe.listen(port, '127.0.0.1');
-});
-
-const waitForHealth = async (timeoutMs = 90_000) => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      if ((await fetch(`${APP_URL}/api/health`)).ok) return true;
-    } catch { /* noch nicht bereit */ }
-    await sleep(500);
-  }
-  return false;
-};
-
 let server = null;
 
 const main = async () => {
@@ -56,15 +35,10 @@ const main = async () => {
     console.error(`ABBRUCH: Port ${PORT} ist belegt - dort laeuft ein fremder Server. PROOF_PORT setzen.`);
     process.exit(3);
   }
-  server = spawn('npx', ['tsx', 'server.ts'], {
-    env: { ...process.env, PORT: String(PORT), NODE_ENV: 'development' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true,
-  });
-  const log = [];
-  server.stdout.on('data', (d) => log.push(String(d)));
-  server.stderr.on('data', (d) => log.push(String(d)));
-  if (!(await waitForHealth())) {
+  const started = startDevServer({ port: PORT });
+  server = started.server;
+  const log = started.log;
+  if (!(await waitForHealth(APP_URL, 90_000))) {
     console.error('Server nicht gestartet:', log.join('').slice(-600));
     process.exit(2);
   }
