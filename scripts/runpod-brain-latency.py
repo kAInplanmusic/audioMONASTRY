@@ -20,11 +20,19 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import sys
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[0] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from restclient import runpod_request_text  # noqa: E402
 
 PROMPT = (
     "Antworte NUR mit JSON, ohne Erklaerung: "
@@ -38,14 +46,11 @@ def env(name: str, default: str = "") -> str:
 
 
 def api(url: str, api_key: str, method: str = "GET", body: dict | None = None, timeout: int = 60):
-    data = None
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if body is not None:
-        data = json.dumps(body).encode()
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode() or "null")
+    """RunPod-REST-Aufruf: JSON rein, JSON raus (leere Antwort -> None).
+
+    Transport in scripts/lib/restclient.py - dieselbe Kante wie in runpod-smoke.py.
+    """
+    return json.loads(runpod_request_text(url, api_key, method, body, timeout) or "null")
 
 
 def poll(base: str, api_key: str, job_id: str, label: str, deadline_s: int) -> dict:

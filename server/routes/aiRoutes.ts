@@ -107,6 +107,24 @@ function budgetSnapshot(storageEurPerMonth = AI_ESTIMATED_STORAGE_EUR_PER_MONTH)
   return report;
 }
 
+/**
+ * Deterministische 16-Schritt-Patterns aus einem Seed (kein Netz, kein Zufall).
+ * `/api/ai/compose` und der lokale Fallback von `/api/ai/generate` liefern
+ * dieselbe Struktur - die Ableitung liegt deshalb genau einmal hier.
+ */
+function localTechnoPatterns(seed: number) {
+  const kick = Array.from({ length: 16 }, (_, i) => (i + seed) % 4 === 0);
+  const hat = Array.from({ length: 16 }, (_, i) => (i + seed) % 2 === 1);
+  const clap = Array.from({ length: 16 }, (_, i) => i === 4 || i === 12);
+  const synth = Array.from({ length: 16 }, (_, i) => (i + seed * 2) % 3 === 0);
+  const synthNotes = Array.from({ length: 16 }, (_, i) => (i + seed) % 8);
+  return {
+    patterns: { kick, hat, clap, synth },
+    synthNotes,
+    bpm: 110 + (seed % 36), // 110–145
+  };
+}
+
 export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
   // AI-P2-006: eine Instanz pro Serverprozess (Tests haengen ihre eigene ein).
   const cache: DropCache = deps.dropCache ?? dropCache;
@@ -167,19 +185,9 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     const seed = (parsed.data.prompt?.trim().slice(0, 4000) || 'techno').length;
 
     // Deterministische Patterns aus dem Prompt-Seed ableiten (kein Netz).
-    const kick = Array.from({ length: 16 }, (_, i) => (i + seed) % 4 === 0);
-    const hat = Array.from({ length: 16 }, (_, i) => (i + seed) % 2 === 1);
-    const clap = Array.from({ length: 16 }, (_, i) => i === 4 || i === 12);
-    const synth = Array.from({ length: 16 }, (_, i) => (i + seed * 2) % 3 === 0);
-
-    const synthNotes = Array.from({ length: 16 }, (_, i) => (i + seed) % 8);
-    const bpm = 110 + (seed % 36); // 110–145
-
     return res.json({
       task_id: 'local_' + Date.now(),
-      patterns: { kick, hat, clap, synth },
-      synthNotes,
-      bpm,
+      ...localTechnoPatterns(seed),
       genre: 'Local Techno',
     });
   });
@@ -244,15 +252,10 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
     // Deterministischer lokaler Fallback (kein Netz).
     const seed = query.length;
-    const kick = Array.from({ length: 16 }, (_, i) => (i + seed) % 4 === 0);
-    const hat = Array.from({ length: 16 }, (_, i) => (i + seed) % 2 === 1);
-    const clap = Array.from({ length: 16 }, (_, i) => i === 4 || i === 12);
-    const synth = Array.from({ length: 16 }, (_, i) => (i + seed * 2) % 3 === 0);
-    const synthNotes = Array.from({ length: 16 }, (_, i) => (i + seed) % 8);
     return res.json({
       task_id: 'local_' + Date.now(), source: 'local',
-      patterns: { kick, hat, clap, synth }, synthNotes,
-      bpm: 110 + (seed % 36), genre: 'Local Techno',
+      ...localTechnoPatterns(seed),
+      genre: 'Local Techno',
     });
   });
 

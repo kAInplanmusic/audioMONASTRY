@@ -101,6 +101,32 @@ const xfGain = (deck: DeckSide, x: number) =>
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
+/**
+ * Vertikales Ziehen eines Reglers/Faders: der Wert folgt der Zeigerposition im
+ * Element, `pointerup` raeumt den Move-Listener wieder ab. Knob und Fader
+ * brauchten bisher dieselbe Funktion zweimal - sie liegt deshalb genau einmal
+ * hier.
+ */
+function verticalDragHandler(onChange: (v: number) => void) {
+  return (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const move = (ev: PointerEvent) => onChange(clamp01(1 - (ev.clientY - r.top) / r.height));
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', () => window.removeEventListener('pointermove', move), { once: true });
+  };
+}
+
+/** Tastatur-Bedienung eines Reglers (Pfeiltasten, Home/End; Shift = feiner Schritt). */
+function sliderKeyHandler(value: number, onChange: (v: number) => void) {
+  return (e: React.KeyboardEvent) => {
+    const step = e.shiftKey ? 0.01 : 0.05;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { onChange(clamp01(value + step)); e.preventDefault(); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { onChange(clamp01(value - step)); e.preventDefault(); }
+    else if (e.key === 'Home') { onChange(0); e.preventDefault(); }
+    else if (e.key === 'End') { onChange(1); e.preventDefault(); }
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Hardware-Bausteine                                                  */
 /* ------------------------------------------------------------------ */
@@ -116,20 +142,9 @@ function Knob({
 }) {
   const deg = -135 + value * 270;
   const w = size === 'lg' ? 'w-12 h-12' : size === 'sm' ? 'w-8 h-8' : 'w-10 h-10';
-  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const move = (ev: PointerEvent) => onChange(clamp01(1 - (ev.clientY - r.top) / r.height));
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', () => window.removeEventListener('pointermove', move), { once: true });
-  };
+  const drag = verticalDragHandler(onChange);
   // F-8/T-12: Slider-Rolle + Tastatur (Pfeiltasten) + aria-Label.
-  const nudge = (e: React.KeyboardEvent) => {
-    const step = e.shiftKey ? 0.01 : 0.05;
-    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { onChange(clamp01(value + step)); e.preventDefault(); }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { onChange(clamp01(value - step)); e.preventDefault(); }
-    else if (e.key === 'Home') { onChange(0); e.preventDefault(); }
-    else if (e.key === 'End') { onChange(1); e.preventDefault(); }
-  };
+  const nudge = sliderKeyHandler(value, onChange);
   return (
     <div className="flex flex-col items-center gap-1 select-none">
       <div
@@ -160,20 +175,9 @@ function Fader({ value, onChange, tall = false, color = ORANGE, label }: {
   value: number; onChange: (v: number) => void; tall?: boolean; color?: string; label?: string;
 }) {
   const h = tall ? 'h-40' : 'h-36';
-  const drag = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const move = (ev: PointerEvent) => onChange(clamp01(1 - (ev.clientY - r.top) / r.height));
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', () => window.removeEventListener('pointermove', move), { once: true });
-  };
+  const drag = verticalDragHandler(onChange);
   // F-8/T-12: Slider-Rolle + Tastatur (Pfeiltasten) + aria-Label.
-  const nudge = (e: React.KeyboardEvent) => {
-    const step = e.shiftKey ? 0.01 : 0.05;
-    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') { onChange(clamp01(value + step)); e.preventDefault(); }
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') { onChange(clamp01(value - step)); e.preventDefault(); }
-    else if (e.key === 'Home') { onChange(0); e.preventDefault(); }
-    else if (e.key === 'End') { onChange(1); e.preventDefault(); }
-  };
+  const nudge = sliderKeyHandler(value, onChange);
   return (
     <div
       role="slider"
@@ -287,10 +291,12 @@ function UtilityColumn() {
         ))}
       </div>
       <div className="text-[9px] font-bold tracking-widest text-zinc-500">PHONES A</div>
-      <div className="flex gap-1.5">
-        <Knob size="sm" value={phones.mix} onChange={(v) => setPhones((p) => ({ ...p, mix: v }))} label="MIX" />
-        <Knob size="sm" value={phones.level} onChange={(v) => setPhones((p) => ({ ...p, level: v }))} label="LEVEL" />
-      </div>
+      <PhonesKnobs
+        mix={phones.mix}
+        level={phones.level}
+        onMix={(v) => setPhones((p) => ({ ...p, mix: v }))}
+        onLevel={(v) => setPhones((p) => ({ ...p, level: v }))}
+      />
       <div className="mt-auto text-[9px] font-mono text-zinc-600">BUILT-IN ✕ EXTERNAL</div>
     </div>
   );
@@ -311,16 +317,37 @@ function MasterColumn({ master, onMaster }: { master: number; onMaster: (v: numb
       <Knob size="sm" value={booth} onChange={setBooth} label="LEVEL" />
       <div className="w-full h-px bg-zinc-800" />
       <div className="text-[9px] font-bold tracking-widest text-zinc-500">PHONES B</div>
-      <div className="flex gap-1.5">
-        <Knob size="sm" value={phones.mix} onChange={(v) => setPhones((p) => ({ ...p, mix: v }))} label="MIX" />
-        <Knob size="sm" value={phones.level} onChange={(v) => setPhones((p) => ({ ...p, level: v }))} label="LEVEL" />
-      </div>
+      <PhonesKnobs
+        mix={phones.mix}
+        level={phones.level}
+        onMix={(v) => setPhones((p) => ({ ...p, mix: v }))}
+        onLevel={(v) => setPhones((p) => ({ ...p, level: v }))}
+      />
       <div className="w-full h-px bg-zinc-800" />
       <div className="text-[9px] font-bold tracking-widest text-zinc-500">MULTI I/O</div>
       <div className="flex items-center gap-2">
         <span className="w-14 h-6 rounded-[3px] bg-black/80 border border-zinc-800 flex items-center justify-center text-[8px] font-mono text-emerald-400">USB</span>
         <LedButton round active={ioOn} onClick={() => setIoOn((v) => !v)} label="ON" />
       </div>
+    </div>
+  );
+}
+
+/**
+ * Zwei-Knopf-Gruppe "MIX/LEVEL" der Kopfhoerer-Ausgaenge. PHONES A (Utility)
+ * und PHONES B (Master) sind derselbe Baustein - er liegt deshalb genau einmal
+ * hier, statt die Knopf-Zeilen zweimal zu fuehren.
+ */
+function PhonesKnobs({ mix, level, onMix, onLevel }: {
+  mix: number;
+  level: number;
+  onMix: (v: number) => void;
+  onLevel: (v: number) => void;
+}) {
+  return (
+    <div className="flex gap-1.5">
+      <Knob size="sm" value={mix} onChange={onMix} label="MIX" />
+      <Knob size="sm" value={level} onChange={onLevel} label="LEVEL" />
     </div>
   );
 }

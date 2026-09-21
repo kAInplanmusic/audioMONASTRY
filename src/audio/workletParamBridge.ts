@@ -11,6 +11,19 @@
  */
 import { dx7SysexToPatch } from '../core/instrument/dx7Sysex';
 
+/**
+ * Dynamik-Parameter (Kompressor/Gate/Dynamic EQ) - der Nachrichtenvertrag
+ * zwischen App, Master-Kette und Worklet. Die Form lag wortgleich doppelt vor
+ * (`workletParamBridge` und `utils/audioEngine`); sie liegt deshalb genau einmal
+ * hier.
+ */
+export interface DynamicsParams {
+  enabled?: boolean;
+  compressor?: { threshold?: number; ratio?: number; attack?: number; release?: number; knee?: number; makeup?: number };
+  gate?: { enabled?: boolean; threshold?: number; range?: number; attack?: number; hold?: number; release?: number; hysteresis?: number };
+  dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
+}
+
 export interface WorkletParamBridgeDeps {
   getEffectNode(): AudioWorkletNode | null;
   setEffectNode(node: AudioWorkletNode): void;
@@ -81,12 +94,7 @@ export class WorkletParamBridge {
    * Dynamik-Parameter setzen (Kompressor/Gate/Dynamic EQ).
    * Ohne `enabled: true` bleibt der Insert im Bypass (Signal unverändert).
    */
-  setDynamicsParams(params: {
-    enabled?: boolean;
-    compressor?: { threshold?: number; ratio?: number; attack?: number; release?: number; knee?: number; makeup?: number };
-    gate?: { enabled?: boolean; threshold?: number; range?: number; attack?: number; hold?: number; release?: number; hysteresis?: number };
-    dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
-  }): void {
+  setDynamicsParams(params: DynamicsParams): void {
     try { this.deps.getDynamicsNode()?.port?.postMessage({ ...params }); } catch { /* noop */ }
     this.deps.mirrorDynamics(
       Boolean(params.enabled),

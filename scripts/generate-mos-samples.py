@@ -27,6 +27,13 @@ import urllib.request
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ENV = ROOT / ".env"
 
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[0] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from envfile import env_from_file  # noqa: E402
+
 TEXTS = [
     "Willkommen im Studio. Der Mixer steht auf vier Kanälen, alles sauber eingepegelt.",
     "Jetzt kommt der Drop. Bass voll aufgedreht, und die Menge geht mit.",
@@ -35,11 +42,8 @@ TEXTS = [
 
 
 def env(name: str, default: str = "") -> str:
-    for line in ENV.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if line.startswith(f"{name}="):
-            return line.split("=", 1)[1].strip().strip('"').strip("'")
-    return default
+    """Einzelner Schluessel aus `.env` (Leser in scripts/lib/envfile.py)."""
+    return env_from_file(ENV, name, default)
 
 
 key = env("RP_API_KEY") or env("RP_AGENT_KEY") or os.environ.get("RP_API_KEY", "")

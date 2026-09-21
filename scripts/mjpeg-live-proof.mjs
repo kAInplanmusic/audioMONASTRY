@@ -20,19 +20,17 @@
  *
  * Aufruf: npm run proof:mjpeg   (startet den Server selbst; Port muss frei sein)
  */
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { portIsFree, sleep, startDevServer, waitForHealth } from './lib/proof-server.mjs';
 
 const PORT = Number(process.env.PROOF_PORT || 8096);
 const TOKEN = process.env.PROOF_TOKEN || 'mjpeg-proof-token';
 const APP_URL = `http://127.0.0.1:${PORT}`;
 const workdir = mkdtempSync(path.join(tmpdir(), 'am-mjpeg-'));
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const makeJpeg = (color, file) => {
   execFileSync('ffmpeg', [
@@ -40,26 +38,6 @@ const makeJpeg = (color, file) => {
     '-f', 'lavfi', '-i', `color=c=${color}:s=320x180`, '-frames:v', '1', file,
   ]);
   return readFileSync(file);
-};
-
-/** Ist der Port frei? Sonst wuerde der Beweis einen FREMDEN (alten) Server messen. */
-const portIsFree = (port) => new Promise((resolve) => {
-  const probe = createServer();
-  probe.once('error', () => resolve(false));
-  probe.once('listening', () => probe.close(() => resolve(true)));
-  probe.listen(port, '127.0.0.1');
-});
-
-const waitForHealth = async (timeoutMs = 60_000) => {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(`${APP_URL}/api/health`);
-      if (res.ok) return true;
-    } catch { /* noch nicht bereit */ }
-    await sleep(500);
-  }
-  return false;
 };
 
 let server = null;
@@ -80,20 +58,13 @@ const main = async () => {
     process.exit(3);
   }
 
-  // `detached: true` + Kill der Prozessgruppe: der Dev-Server startet Vite mit
-  // festem HMR-Port (24678). Blieb ein Kindprozess zurueck (z. B. weil das Skript
-  // abgebrochen wurde), blockierte er diesen Port und liess ANDERE E2E-Laeufe mit
-  // "WebSocket closed without opened" scheitern - genau das ist passiert.
-  server = spawn('npx', ['tsx', 'server.ts'], {
-    env: { ...process.env, PORT: String(PORT), STUDIO_ACCESS_TOKEN: TOKEN, NODE_ENV: 'development' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true,
-  });
-  const log = [];
-  server.stdout.on('data', (d) => log.push(String(d)));
-  server.stderr.on('data', (d) => log.push(String(d)));
+  // Start (detached, killt die Prozessgruppe) und Health-Warten liegen in
+  // scripts/lib/proof-server.mjs - dieselben Bausteine wie im WebGPU-Beweis.
+  const started = startDevServer({ port: PORT, extraEnv: { STUDIO_ACCESS_TOKEN: TOKEN } });
+  server = started.server;
+  const log = started.log;
 
-  if (!(await waitForHealth())) {
+  if (!(await waitForHealth(APP_URL, 60_000))) {
     console.error('Server nicht gestartet:', log.join('').slice(-800));
     process.exit(2);
   }

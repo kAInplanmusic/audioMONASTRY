@@ -77,6 +77,22 @@ fn backend_kind(host_id: &str) -> &'static str {
     else { "unknown" }
 }
 
+/// Uebernimmt Sample-Rate, Kanaele, Puffergroesse und Sample-Format aus einer
+/// cpal-Konfiguration in die Geraetebeschreibung. `SupportedStreamConfig` ist bei
+/// Ein- und Ausgang derselbe Typ - deshalb liegt die Auswertung (inkl. der
+/// ALSA-Sentinel-Behandlung) genau einmal hier.
+fn apply_stream_config(info: &mut AudioDevice, cfg: &cpal::SupportedStreamConfig) {
+    info.default_sample_rate = Some(cfg.sample_rate().0);
+    info.channels = Some(cfg.channels());
+    info.buffer_size = match cfg.buffer_size() {
+        // cpal meldet bei manchen ALSA-Geräten u32::MAX als
+        // Sentinel – das ist kein nutzbarer Wert, also `None`.
+        cpal::SupportedBufferSize::Range { max, .. } if *max <= 1_000_000 => Some(*max),
+        _ => None,
+    };
+    info.sample_format = Some(format!("{:?}", cfg.sample_format()));
+}
+
 fn list_devices_cpal() -> (String, String, Vec<AudioDevice>) {
     let mut devices = Vec::new();
     let host = cpal::default_host();
@@ -88,15 +104,7 @@ fn list_devices_cpal() -> (String, String, Vec<AudioDevice>) {
             let name = device.name().unwrap_or_else(|_| "Output Device".to_string());
             let mut info = AudioDevice::with_direction(format!("out:{name}"), name.clone(), "output");
             if let Ok(cfg) = device.default_output_config() {
-                info.default_sample_rate = Some(cfg.sample_rate().0);
-                info.channels = Some(cfg.channels());
-                info.buffer_size = match cfg.buffer_size() {
-                    // cpal meldet bei manchen ALSA-Geräten u32::MAX als
-                    // Sentinel – das ist kein nutzbarer Wert, also `None`.
-                    cpal::SupportedBufferSize::Range { max, .. } if *max <= 1_000_000 => Some(*max),
-                    _ => None,
-                };
-                info.sample_format = Some(format!("{:?}", cfg.sample_format()));
+                apply_stream_config(&mut info, &cfg);
             }
             devices.push(info);
         }
@@ -107,15 +115,7 @@ fn list_devices_cpal() -> (String, String, Vec<AudioDevice>) {
             let name = device.name().unwrap_or_else(|_| "Input Device".to_string());
             let mut info = AudioDevice::with_direction(format!("in:{name}"), name, "input");
             if let Ok(cfg) = device.default_input_config() {
-                info.default_sample_rate = Some(cfg.sample_rate().0);
-                info.channels = Some(cfg.channels());
-                info.buffer_size = match cfg.buffer_size() {
-                    // cpal meldet bei manchen ALSA-Geräten u32::MAX als
-                    // Sentinel – das ist kein nutzbarer Wert, also `None`.
-                    cpal::SupportedBufferSize::Range { max, .. } if *max <= 1_000_000 => Some(*max),
-                    _ => None,
-                };
-                info.sample_format = Some(format!("{:?}", cfg.sample_format()));
+                apply_stream_config(&mut info, &cfg);
             }
             devices.push(info);
         }

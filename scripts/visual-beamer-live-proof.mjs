@@ -18,18 +18,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
-
-const BASE = (process.env.E2E_BASE_URL || 'http://localhost:8080').replace(/\/$/, '');
-
-const token = (() => {
-  const fromEnv = (process.env.STUDIO_ACCESS_TOKEN ?? '').trim();
-  if (fromEnv) return fromEnv;
-  const line = readFileSync(new URL('../.env', import.meta.url), 'utf8')
-    .split('\n').find((l) => l.startsWith('STUDIO_ACCESS_TOKEN='));
-  return (line?.slice('STUDIO_ACCESS_TOKEN='.length) ?? '').trim();
-})();
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+import { BASE, sleep, token } from './lib/proof-browser.mjs';
 
 /**
  * Solides JPEG in einer Farbe (ffmpeg). JPEG, weil der Route-Vertrag genau das

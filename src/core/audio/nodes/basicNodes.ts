@@ -24,8 +24,45 @@ export abstract class BaseNode implements IAudioNode {
     return this.inputs[0]?.connections[0]?.buffer ?? null;
   }
 
+  /**
+   * Parameter eines Nodes per ID (Vertrag von `AutomatableV2Node`). Jeder Node
+   * fuehrt seine Parameter in `this.parameters`; die Suche liegt deshalb einmal
+   * in der Basisklasse statt siebenmal wortgleich in den einzelnen Nodes.
+   * `ParametricEqNode` ueberschreibt sie bewusst (Bänder in einer Map).
+   */
+  getParameter(paramId: string): AudioParameter | undefined {
+    return this.parameters.find((p) => p.id === paramId);
+  }
+
+  /**
+   * Gemeinsamer Einstieg der Verarbeitung: Eingang pruefen, Ausgang als Kopie
+   * anlegen, Blocklaenge und Sample-Rate bestimmen. Gibt `null`, wenn kein
+   * Eingang anliegt - der Ausgang ist dann bereits geleert.
+   */
+  protected prepareProcess(ctx: IProcessingContext): {
+    input: Float32Array[]; out: Float32Array[]; len: number; sr: number;
+  } | null {
+    const input = this.inputBuffer(ctx);
+    if (!input) {
+      this.outputs[0].buffer = null;
+      return null;
+    }
+    const len = input[0]?.length ?? ctx.bufferSize;
+    return { input, out: copyInput(input, len), len, sr: ctx.sampleRate };
+  }
+
   abstract process(ctx: IProcessingContext): void;
   reset(): void { /* Parameter zurücksetzen */ }
+}
+
+/**
+ * Kopiert den Eingang in einen Pool-Puffer (gemeinsam fuer alle Nodes).
+ * `Math.max(1, ...)` haelt den Pool-Aufruf auch bei leerem Eingang gueltig.
+ */
+export function copyInput(input: Float32Array[], len: number): Float32Array[] {
+  const out = audioBufferPool.acquire(Math.max(1, input.length), len);
+  for (let ch = 0; ch < input.length; ch++) out[ch].set(input[ch]);
+  return out;
 }
 
 /** Statische Quelle (z.B. Sample/Pattern). */

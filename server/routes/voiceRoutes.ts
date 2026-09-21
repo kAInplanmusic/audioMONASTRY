@@ -173,6 +173,53 @@ function aceStepHeaders(): Record<string, string> {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 }
+/**
+ * Pollt eine ACE-Step-kompatible `query_result`-Route bis Status 1 (ok) oder
+ * 2 (failed) und laedt die fertige Audiodatei.
+ *
+ * ACE-Step und der DiffRhythm-Wrapper sprechen dasselbe Protokoll (release_task
+ * → query_result → Audiodatei); der Ablauf liegt deshalb genau einmal hier.
+ * Unterschiedlich sind nur die Kopfzeilen-Quelle und die Fehlerbezeichnung -
+ * beides kommt als Parameter herein, damit die Meldungen wortgleich bleiben.
+ */
+async function pollCompatibleTaskAudio(opts: {
+  base: string;
+  headers: Record<string, string>;
+  taskId: string;
+  deadline: number;
+  timeoutMs: number;
+  label: string;
+}): Promise<Buffer> {
+  const { base, headers, taskId, deadline, timeoutMs, label } = opts;
+  while (Date.now() < deadline) {
+    const queryResp = await fetch(`${base}/query_result`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ task_id_list: [taskId] }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (queryResp.ok) {
+      const queryData = (await queryResp.json()) as {
+        data?: Array<{ task_id?: string; status?: number; result?: string }>;
+      };
+      const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
+      if (entry?.status === 1 && entry.result) {
+        const parsed = JSON.parse(entry.result) as Array<{ file?: string }>;
+        const fileUrl = parsed?.[0]?.file;
+        if (!fileUrl) throw new Error(`${label} Ergebnis ohne Audio-URL`);
+        const audioResp = await fetch(fileUrl.startsWith('http') ? fileUrl : `${base}${fileUrl}`, {
+          signal: AbortSignal.timeout(60_000),
+        });
+        if (!audioResp.ok) throw new Error(`${label} Audio-Download HTTP ${audioResp.status}`);
+        return Buffer.from(await audioResp.arrayBuffer());
+      }
+      if (entry?.status === 2) throw new Error(`${label} Task ${taskId} fehlgeschlagen`);
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error(`${label} Task ${taskId} Timeout nach ${timeoutMs} ms`);
+}
+
 /** ACE-Step REST (uv run acestep-api): async release_task → query_result → download. */
 async function aceStepGenerateSong(input: {
   prompt: string;
@@ -210,33 +257,9 @@ async function aceStepGenerateSong(input: {
   if (!taskId) throw new Error('ACE-Step release_task ohne task_id');
 
   // Poll bis Status 1 (ok) oder 2 (failed).
-  while (Date.now() < deadline) {
-    const queryResp = await fetch(`${base}/query_result`, {
-      method: 'POST',
-      headers: aceStepHeaders(),
-      body: JSON.stringify({ task_id_list: [taskId] }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (queryResp.ok) {
-      const queryData = (await queryResp.json()) as {
-        data?: Array<{ task_id?: string; status?: number; result?: string }>;
-      };
-      const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
-      if (entry?.status === 1 && entry.result) {
-        const parsed = JSON.parse(entry.result) as Array<{ file?: string }>;
-        const fileUrl = parsed?.[0]?.file;
-        if (!fileUrl) throw new Error('ACE-Step Ergebnis ohne Audio-URL');
-        const audioResp = await fetch(fileUrl.startsWith('http') ? fileUrl : `${base}${fileUrl}`, {
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (!audioResp.ok) throw new Error(`ACE-Step Audio-Download HTTP ${audioResp.status}`);
-        return Buffer.from(await audioResp.arrayBuffer());
-      }
-      if (entry?.status === 2) throw new Error(`ACE-Step Task ${taskId} fehlgeschlagen`);
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  throw new Error(`ACE-Step Task ${taskId} Timeout nach ${timeoutMs} ms`);
+  return pollCompatibleTaskAudio({
+    base, headers: aceStepHeaders(), taskId, deadline, timeoutMs, label: 'ACE-Step',
+  });
 }
 // ---------------------------------------------------------------------------
 // DiffRhythm 2 (Apache-2.0) – optionaler zweiter SongMONK-Backend
@@ -285,38 +308,42 @@ async function diffRhythmGenerateSong(input: {
   const taskId = typeof data === 'string' ? data : (data?.task_id ?? data?.taskId ?? '');
   if (!taskId) throw new Error('DiffRhythm release_task ohne task_id');
 
-  while (Date.now() < deadline) {
-    const queryResp = await fetch(`${base}/query_result`, {
-      method: 'POST',
-      headers: diffRhythmHeaders(),
-      body: JSON.stringify({ task_id_list: [taskId] }),
-      signal: AbortSignal.timeout(30_000),
-    });
-    if (queryResp.ok) {
-      const queryData = (await queryResp.json()) as {
-        data?: Array<{ task_id?: string; status?: number; result?: string }>;
-      };
-      const entry = (queryData.data ?? []).find((x) => x.task_id === taskId);
-      if (entry?.status === 1 && entry.result) {
-        const parsed = JSON.parse(entry.result) as Array<{ file?: string }>;
-        const fileUrl = parsed?.[0]?.file;
-        if (!fileUrl) throw new Error('DiffRhythm Ergebnis ohne Audio-URL');
-        const audioResp = await fetch(fileUrl.startsWith('http') ? fileUrl : `${base}${fileUrl}`, {
-          signal: AbortSignal.timeout(60_000),
-        });
-        if (!audioResp.ok) throw new Error(`DiffRhythm Audio-Download HTTP ${audioResp.status}`);
-        return Buffer.from(await audioResp.arrayBuffer());
-      }
-      if (entry?.status === 2) throw new Error(`DiffRhythm Task ${taskId} fehlgeschlagen`);
-    }
-    await new Promise((r) => setTimeout(r, 2000));
-  }
-  throw new Error(`DiffRhythm Task ${taskId} Timeout nach ${timeoutMs} ms`);
+  // Poll bis Status 1 (ok) oder 2 (failed) - derselbe Ablauf wie bei ACE-Step.
+  return pollCompatibleTaskAudio({
+    base, headers: diffRhythmHeaders(), taskId, deadline, timeoutMs, label: 'DiffRhythm',
+  });
 }
 /** Sanitisiert Text/Prompts (kein Prompt-Injection-Rauschen, Länge begrenzt). */
 function cleanVoiceText(raw: unknown, max = 500): string {
   return String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, max);
 }
+
+/**
+ * MusicGen-Eingabe aus dem VoiceSong-Schema bauen: Dauer begrenzen, Stil/BPM
+ * sanft bereinigen, Token-Budget ableiten. `/api/voice/song` und
+ * `/api/song/generate` nutzen denselben Aufbau (gleiches Feld-Set, gleiches
+ * Schema) - er liegt deshalb genau einmal hier.
+ */
+function buildMusicGenRequest(data: {
+  prompt: string;
+  durationSeconds: number;
+  style?: string;
+  bpm?: number;
+}) {
+  const clean = cleanVoiceText(data.prompt);
+  const duration = Math.max(1, Math.min(30, Number(data.durationSeconds) || 8));
+  const maxTokens = Math.max(64, Math.round(duration * 50 / 8));
+  // Prompt für MusicGen: Stil/BPM sauber anhängen (kein Freitext-Injection-Risiko).
+  const styleClean = String(data.style ?? '').replace(/[^\p{L}\p{N}\s\-]/gu, '').trim().slice(0, 80);
+  const bpmClean = Number.isFinite(Number(data.bpm)) && Number(data.bpm) > 0 ? Math.round(Number(data.bpm)) : 0;
+  const inputs = [
+    clean,
+    styleClean ? `Style: ${styleClean}` : '',
+    bpmClean ? `BPM: ${bpmClean}` : '',
+  ].filter(Boolean).join(', ');
+  return { clean, duration, parameters: { max_new_tokens: maxTokens }, styleClean, bpmClean, inputs };
+}
+
 // ===========================================================================
 // soundMONK: Server-AI-Generierung (MusicGen/Runtime) – Browser-Fallback lokal
 // ===========================================================================
@@ -423,21 +450,8 @@ export function registerVoiceRoutes(app: Express): void {
       return res.status(400).json({ error: parsedSong.error.issues[0]?.message ?? 'invalid payload' });
     }
     const { prompt, model, durationSeconds, style, bpm } = parsedSong.data;
-    const clean = cleanVoiceText(prompt);
+    const { clean, duration, parameters, inputs } = buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
-
-    const duration = Math.max(1, Math.min(30, Number(durationSeconds) || 8));
-    const maxTokens = Math.max(64, Math.round(duration * 50 / 8));
-    const parameters = { max_new_tokens: maxTokens };
-
-    // Prompt für MusicGen: Stil/BPM sauber anhängen (kein Freitext-Injection-Risiko).
-    const styleClean = String(style ?? '').replace(/[^\p{L}\p{N}\s\-]/gu, '').trim().slice(0, 80);
-    const bpmClean = Number.isFinite(Number(bpm)) && Number(bpm) > 0 ? Math.round(Number(bpm)) : 0;
-    const inputs = [
-      clean,
-      styleClean ? `Style: ${styleClean}` : '',
-      bpmClean ? `BPM: ${bpmClean}` : '',
-    ].filter(Boolean).join(', ');
 
     const primary = hfModelFor('music', model);
     const fallback = model ? '' : hfModelFor('musicFallback');
@@ -526,20 +540,10 @@ export function registerVoiceRoutes(app: Express): void {
       return res.status(400).json({ error: parsedSongGen.error.issues[0]?.message ?? 'invalid payload' });
     }
     const { prompt, model, durationSeconds, style, bpm } = parsedSongGen.data;
-    const clean = cleanVoiceText(prompt);
+    const { clean, duration, parameters, styleClean, bpmClean, inputs } =
+      buildMusicGenRequest({ prompt, durationSeconds, style, bpm });
     if (!clean) return res.status(400).json({ error: 'prompt fehlt' });
 
-    const duration = Math.max(1, Math.min(30, Number(durationSeconds) || 8));
-    const maxTokens = Math.max(64, Math.round(duration * 50 / 8));
-    const parameters = { max_new_tokens: maxTokens };
-
-    const styleClean = String(style ?? '').replace(/[^\p{L}\p{N}\s\-]/gu, '').trim().slice(0, 80);
-    const bpmClean = Number.isFinite(Number(bpm)) && Number(bpm) > 0 ? Math.round(Number(bpm)) : 0;
-    const inputs = [
-      clean,
-      styleClean ? `Style: ${styleClean}` : '',
-      bpmClean ? `BPM: ${bpmClean}` : '',
-    ].filter(Boolean).join(', ');
     const acePrompt = [clean, styleClean].filter(Boolean).join(', ');
 
     const primary = hfModelFor('music', model);

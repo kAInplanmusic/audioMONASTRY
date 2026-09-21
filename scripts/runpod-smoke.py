@@ -38,12 +38,20 @@ import io
 import json
 import math
 import os
+import pathlib
 import struct
 import sys
 import time
 import urllib.request
 import wave
 from datetime import datetime, timezone
+
+# Gemeinsame Helfer aus scripts/lib/ (Pfad relativ zur eigenen Datei, damit das
+# Skript direkt UND per importlib aus tests/ laeuft).
+_LIB = pathlib.Path(__file__).resolve().parents[0] / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from restclient import runpod_request_text  # noqa: E402
 
 
 def env(name: str, default: str = "") -> str:
@@ -65,14 +73,8 @@ def make_test_wav(seconds: float = 1.0, freq: float = 440.0, sr: int = 16000) ->
 
 
 def api_json(url: str, api_key: str, method: str = "GET", body: dict | None = None, timeout: int = 60):
-    data = None
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if body is not None:
-        data = json.dumps(body).encode()
-        headers["Content-Type"] = "application/json"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode())
+    """RunPod-REST-Aufruf: JSON rein, JSON raus (Transport in scripts/lib/restclient.py)."""
+    return json.loads(runpod_request_text(url, api_key, method, body, timeout))
 
 
 ROLE_ENDPOINT_ENV = {

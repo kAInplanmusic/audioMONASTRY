@@ -50,7 +50,7 @@ import {
 } from '../core/audio/monitorRouting';
 import { OfflineBounceEngine, type BounceResult } from '../audio/bounce/OfflineBounceEngine';
 import { renderDrumBuffer as renderDrumBufferImpl } from '../audio/drumRender';
-import { WorkletParamBridge } from '../audio/workletParamBridge';
+import { WorkletParamBridge, type DynamicsParams } from '../audio/workletParamBridge';
 import { defaultOptionalDspPreset } from '../core/dsp/dspPresets';
 import type { V2SynthVoice } from '../core/audio/live/V2SinkEngine';
 import { pluginAudioChannels } from '../core/audio/pluginChannelMap';
@@ -799,12 +799,7 @@ class AudioEngine {
    * Dynamik-Parameter setzen (Kompressor/Gate/Dynamic EQ).
    * Ohne `enabled: true` bleibt der Insert im Bypass (Signal unverändert).
    */
-  public setDynamicsParams(params: {
-    enabled?: boolean;
-    compressor?: { threshold?: number; ratio?: number; attack?: number; release?: number; knee?: number; makeup?: number };
-    gate?: { enabled?: boolean; threshold?: number; range?: number; attack?: number; hold?: number; release?: number; hysteresis?: number };
-    dynEq?: { enabled?: boolean; freq?: number; q?: number; threshold?: number; ratio?: number; range?: number };
-  }): void {
+  public setDynamicsParams(params: DynamicsParams): void {
     this.worklets.setDynamicsParams(params);
   }
 
