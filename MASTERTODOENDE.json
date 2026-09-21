@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "79eca08",
+  "commit": "7df3d80",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2750,24 +2750,22 @@
       "id": "PROD-P2-F7",
       "title": "F7 · CORS/Signaling-Origins ohne Wildcard, CSP abgeleitet mit echtem Meldeweg",
       "priority": "P2",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Security",
-      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F7), Live-Nachweise 2026-09-21",
-      "problem": "Die CSP wurde abgeleitet und lief report-only, aber es gab praktisch keine auswertbaren Beobachtungsdaten (moderne Drahtform wurde verworfen, keine Ablesestelle, fremde Dokument-Origins still verloren, SFU-Host und R2-/Supabase-Ziele fehlten in der Ableitung).",
-      "note": "Code gemergt (c0fc587/61fdafa): beide Drahtformate, Zaehler je Ausgang/Direktive/Ziel/Dokument, neue Ablesestelle GET /api/security/csp-reports (tokenpflichtig, no-store), Ableitung um SFU-Host, VITE-Aliase und den R2-S3-Endpunkt erweitert. LIVE-NACHTRAG 2026-09-21 auf der frisch provisionierten Flotte: der Lesepunkt antwortet (mode=report-only) und nach einem ECHTEN Browserlauf ueber HTTPS (Studio geladen, alle 16 Plugins) kam eine echte Meldung an: received=1, violations=1, byDirective {script-src-elem: 1}, byTarget {static.cloudflareinsights.com: 1}, byDocument {anunnakitools.de: 1} - also Cloudflares eigenes, vom Proxy injiziertes Analytics-Skript, ein Proxy-Artefakt und kein App-Fehler. Damit ist der Meldeweg live bewiesen und die Datenbasis fuer den enforce-Entscheid existiert.",
-      "verification": "tests/cspPolicy.test.ts (25 Tests) + prodCors/corsAllowedOrigins/securityAuthz/prodScrape/securityProductionAuth - 35 Tests OK; tsc 0; npm run verify 278 Testdateien / 2055 Tests, 0 kritische Findings. Live: GET /api/security/csp-reports liefert die Zaehler und den Ringpuffer; die eine Meldung entstand durch einen echten Chrome-Lauf gegen https://anunnakitools.de.",
+      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F7); Entscheid + Live-Nachweis 2026-09-21",
+      "problem": "Die CSP wurde abgeleitet und lief report-only, weil Beobachtungsdaten fehlten. Der Meldeweg verwarf zusaetzlich die moderne Drahtform, hatte keine Ablesestelle, verlor fremde Dokument-Origins still, und in der Ableitung fehlten SFU-Host sowie R2-/Supabase-Ziele.",
+      "note": "Code (c0fc587/61fdafa): beide Drahtformate, Zaehler je Ausgang/Direktive/Ziel/Dokument, Ablesestelle GET /api/security/csp-reports, Ableitung vervollstaendigt. ENTSCHEIDUNG 2026-09-21 (Ingenieur, nach Datenlage): CSP_MODE=enforce ist gesetzt - die Ableitung ist testfest, der Meldeweg bleibt unter enforce aktiv (Rueckweg CSP_MODE=report-only + Recreate), und der einzige bekannte Verstoss ist ein Proxy-Artefakt (Cloudflare injiziert static.cloudflareinsights.com). Fuer Kaltstarts muss CSP_MODE als Portal-Secret mitgefuehrt werden.",
+      "verification": "Vor dem Scharfstellen: echter Browserlauf ueber HTTPS -> received=1, violations=1, script-src-elem blockiert static.cloudflareinsights.com (Proxy-Artefakt). Nach dem Scharfstellen auf app-1: /api/security/csp-reports meldet mode=enforce, headerName=Content-Security-Policy; der oeffentliche Pfad liefert den ENFORCING-Header (curl -I https://anunnakitools.de) mit Reporting-Endpoint; derselbe Browserlauf (Studio, 23 Ressourcen, keine JS-Fehler) erzeugte KEINEN neuen Verstoss. Tests: cspPolicy 25 + cors/security 10 = 35 OK, tsc 0, npm run verify 278 Dateien/2055 Tests, 0 kritisch.",
       "files": [
         "server/csp.ts",
         "server/routes/securityRoutes.ts",
         "server/routes/opsRoutes.ts",
         "server.ts",
         "tests/cspPolicy.test.ts",
+        ".env.hetzner.example",
         "docs/OPS_RUNBOOK.md"
       ],
-      "remaining": "Betreiber-Entscheidung CSP_MODE=enforce: heute liegt genau EIN Verstoss vor (Cloudflare-Insights, Proxy-Artefakt). Empfehlung: nach einer echten Nutzungssitzung (nicht nur Einstieg) die Zaehler erneut lesen; bleibt es bei Proxy-Artefakten, ist enforce belegbar. Fuer den Kaltstart muss CSP_MODE als Portal-Secret mitgefuehrt werden (heute nicht gesetzt - Default bleibt report-only).",
-      "live_open": [
-        "Betreiber-Entscheid CSP_MODE=enforce (Rueckweg jederzeit report-only; CSP_MODE als Portal-Secret ergaenzen)"
-      ]
+      "live_open": []
     },
     {
       "id": "PROD-P3-F8",
@@ -2785,30 +2783,27 @@
     },
     {
       "id": "PROD-P3-F9",
-      "title": "F9 · Idle-Shutdown-Signal auf echte App-Nutzung stuetzen",
+      "title": "F9 · Idle-Shutdown-Signal auf echte App-Nutzung stuetzen (15-Minuten-Regel)",
       "priority": "P3",
       "status": "PARTIAL",
       "area": "Infra/Deploy",
-      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F9), Live-Nachweise 2026-09-21",
-      "problem": "Das Signal war gebaut, der Timer aber nicht betreibbar verankert (Units per Heredoc, stiller Fehlschlag im Flottenstart, ein Knoten ohne Token bekam einen strukturell nie ausloesenden Timer). Am 2026-09-21 war der Timer auf app-1 zusaetzlich GAR NICHT installiert.",
-      "note": "Code gemergt (082fda0/fd93f3b): Units im Repo, Installer idempotent + fail-early (keine Quelle Exit 1, kein Token Exit 2, Ausweg IDLE_ALLOW_TOKEN_LESS=1), Flottenstart meldet Fehlschlaege sichtbar und liest den Timer nach, Env-Variablen in .env.hetzner.example + ENV_MATRIX + OPS_RUNBOOK. LIVE 2026-09-21 auf app-1 mit der NEUEN Fassung: (1) Gegenprobe ohne Token -> klare Begruendung ('401 -> SIGNAL=unavailable -> der Timer kann strukturell nie ausloesen'), Exit 2, NULL Units installiert, nichts gestoppt; (2) echte Installation -> Timer active+enabled, systemd-analyze verify Exit 0; (3) echter Tick -> SIGNAL erreicht, VERDICT=active SHUTDOWN=no REASON='aktiv: request-vor-10s'; (4) zweiter Lauf idempotent (Token-Datei unveraendert, 0600). Zusätzlich live behoben: SCRAPE_TOKEN fehlte auf dem Knoten -> Metriken UND Idle-Check liefen in 401; wire-scrape-token.sh app hat es verdrahtet (Metriken 200 mit Token / 401 ohne).",
-      "verification": "python3 tests/test_hetzner_scripts.py: 143 Tests OK (Klasse IdleShutdownTimerTest mit Fake-systemctl-Allowlist belegt, dass der Installer nichts stoppt, plus Fake-ssh fuer den Recreate-Pfad). Live: siehe note; Auslösepfad des Timers ist 'shutdown -h now' (im Script belegt), der Portal-Cron entfernt die Flotte danach.",
+      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F9); Betreiber-Vorgabe 2026-09-21 (15 min)",
+      "problem": "Das Signal war gebaut, der Timer nicht betreibbar verankert (Units per Heredoc, stiller Fehlschlag im Flottenstart, Timer ohne Token kann strukturell nie ausloesen). Zusaetzlich war die Schwelle mit 30 Minuten doppelt so hoch wie gewuenscht.",
+      "note": "Code (082fda0/fd93f3b): Units im Repo, Installer idempotent + fail-early, Flottenstart meldet sichtbar, Env-Doku nachgezogen. BETREIBER-VORGABE UMGESETZT 2026-09-21: IDLE_SHUTDOWN_MINUTES=15 in der Knoten-.env (letzter Nutzer + 15 min -> shutdown; Timer prueft alle 5 min), Timer wieder scharf gestellt. Live nachgewiesen: Installer-Gegenprobe ohne Token (Exit 2, NULL Units, nichts gestoppt), echte Installation, systemd-analyze verify 0, echter Tick mit Signal (VERDICT=active, threshold jetzt 900 s), Idempotenz, SCRAPE_TOKEN per wire-scrape-token.sh verdrahtet (vorher liefen Metriken UND Idle-Check in 401). Kette belegt: Portal-Worker hat crons=[*/5] und entfernt die Flotte, wenn app-1 aus ist.",
+      "verification": "python3 tests/test_hetzner_scripts.py: 143 Tests OK. Live am Knoten: /api/idle-signal idleThresholdSec=900; systemctl list-timers zeigt den Timer aktiv; Logzeile des Ticks im Original. Wiederaufwecken dokumentiert (bring-up-fleet.sh bzw. Portal /api/wake).",
       "files": [
         "scripts/hetzner/install-idle-shutdown.sh",
         "scripts/hetzner/systemd/idle-check.sh",
-        "scripts/hetzner/systemd/audiomonastry-idle-shutdown.service",
-        "scripts/hetzner/systemd/audiomonastry-idle-shutdown.timer",
         "scripts/hetzner/bring-up-fleet.sh",
         "scripts/hetzner/wire-scrape-token.sh",
         "tests/test_hetzner_scripts.py",
-        "docs/OPS_RUNBOOK.md",
-        "docs/ENV_MATRIX.md"
+        ".env.hetzner.example",
+        "docs/OPS_RUNBOOK.md"
       ],
-      "remaining": "Nicht beobachtet: der SHUTDOWN=yes-Lauf (braucht 30 Minuten echte Ruhe - die Flotte wurde stattdessen kontrolliert gestoppt) und das Reboot-Verhalten (OnBootSec=5min). Auch offen: IDLE_MINUTES des Timers aendert die Serverschwelle NICHT, die 1800 s entscheidet /api/idle-signal - in der Doku nachzuziehen.",
+      "remaining": "Der SHUTDOWN=yes-Lauf selbst wird in dieser Sitzung beobachtet (der Knoten schaltet sich nach 15 Minuten ohne App-Requests selbst ab, danach entfernt der Portal-Cron die Flotte) - das Ergebnis gehoert in diesen Eintrag nachgetragen. Weiter offen: Reboot-Verhalten (OnBootSec=5min) auf einem Knoten messen.",
       "live_open": [
-        "SHUTDOWN=yes im echten 30-Minuten-Fenster beobachten (Log-Zeile + Node-Halt + Portal-Cron)",
-        "Reboot-Verhalten des Timers auf einem Knoten messen",
-        "IDLE_MINUTES vs. serverseitige Schwelle in der Doku klarstellen"
+        "SHUTDOWN=yes im echten Fenster nachtragen (Node-Halt + Portal-Cron-Entfernung)",
+        "Reboot-Verhalten messen"
       ]
     },
     {

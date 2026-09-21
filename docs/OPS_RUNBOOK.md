@@ -983,14 +983,55 @@ Löschen, kein Herunterfahren); für eine Beweissession schaltet nur
 `systemctl stop audiomonastry-idle-shutdown.timer` den Timer ab.
 
 ```bash
-# Trockenlauf (schreibt nur ins Log, kein Shutdown). IDLE_MINUTES darf fuer
-# Probelaeufe ein Bruchteil sein (0.05 = 3 s Schwelle):
+# Trockenlauf (schreibt nur ins Log, kein Shutdown).
+# ACHTUNG, gemessen am 2026-09-21: IDLE_MINUTES ist NUR das Etikett in der Logzeile -
+# die Schwelle kommt aus der Antwort von /api/idle-signal (Feld idleschwelle, Env
+# IDLE_SHUTDOWN_MINUTES in der App). Ein Lauf mit `IDLE_MINUTES=0` meldete weiter
+# THRESHOLD=1800s. Wer die Schwelle wirklich senken will, setzt IDLE_SHUTDOWN_MINUTES
+# in der Knoten-.env und erzeugt den Container neu.
 IDLE_MINUTES=0.05 bash /usr/local/bin/audiomonastry-idle-check.sh --dry-run
 # Host-Fakten allein (Diagnose, kein Signal, keine Entscheidung):
 bash /usr/local/bin/audiomonastry-idle-check.sh --print-facts
 # Unit-Inhalt offline pruefen (kein Installieren, kein root):
 bash scripts/hetzner/install-idle-shutdown.sh --print-units
 ```
+
+### Betreiber-Entscheidungen 2026-09-21: 15-Minuten-Idle und CSP scharf
+
+**Idle-Schwelle 15 Minuten (statt 30).** Der Auftraggeber wollte: sobald der letzte
+Nutzer raus ist, nach 15 Minuten ohne neue Anmeldung herunterfahren. Umgesetzt ist
+das genau an der Stelle, die entscheidet - `IDLE_SHUTDOWN_MINUTES=15` in der
+Knoten-`.env` (App-seitig; der Timer prueft alle 5 Minuten und laesst sich sonst
+nicht feiner stellen). Die Kette ist live geprueft:
+
+```
+Timer (5 min) -> GET /api/idle-signal (Schwelle 900 s)
+              -> SHUTDOWN=yes -> shutdown -h now
+              -> Portal-Cron (*/5) entfernt die Flotte (Snapshots bleiben)
+```
+
+Nachweis am Knoten: `curl -H "x-studio-token: ..." /api/idle-signal` meldet
+`idleThresholdSec = 900`; `systemctl list-timers` zeigt den Timer aktiv; im
+`wrangler.toml` des Portal-Workers steht `crons = ["*/5 * * * *"]`. Wieder
+aufwecken: `bash scripts/hetzner/bring-up-fleet.sh --yes` oder Portal
+`POST /api/wake` (danach aendern sich die IPs und der Worker verdrahtet
+`origin.<domain>` neu). Fuer eine Beweissession vorher
+`systemctl stop audiomonastry-idle-shutdown.timer`.
+
+**CSP ist scharf (`CSP_MODE=enforce`).** Entscheidung des Ingenieurs nach
+Datenlage, nicht nach Gefuehl: die Ableitung ist vollstaendig und durch
+`tests/cspPolicy.test.ts` festgenagelt, die vier fehlenden Quellen (SFU-Host,
+VITE-Aliase, R2-S3-Endpunkt) sind ergaenzt, und der **Meldeweg bleibt unter
+enforce bestehen** - Verstoesse landen weiter unter
+`GET /api/security/csp-reports`. Beweis vor dem Scharfstellen: ein echter
+Browserlauf ueber HTTPS ergab genau EINE Meldung
+(`script-src-elem` blockiert `static.cloudflareinsights.com`, ein vom Proxy
+injiziertes Cloudflare-Skript - Proxy-Artefakt, kein App-Fehler). Nach dem
+Scharfstellen: derselbe Lauf (Landung + Studio mit allen 16 Plugins, 23
+Ressourcen, keine JS-Fehler) brachte **keinen einzigen neuen Verstoss** - die
+Policy blockiert also nichts aus der App. Rueckweg: `CSP_MODE=report-only` in der
+Knoten-`.env` + Recreate (identische Policy, nur anderer Header). Fuer Kaltstarts
+muss `CSP_MODE` als Portal-Secret mitgefuehrt werden.
 
 Reproduktion des alten Befunds (lokal, beide Pfade ergeben 0 bei Exit-Code 0):
 
