@@ -474,6 +474,10 @@ class GateTest(BaseCase):
 
     def test_max_runtime_terminiert_den_pod_auch_bei_haengendem_lauf(self) -> None:
         # get_pod bleibt für immer RUNNING → die harte Grenze muss greifen.
+        # `--allow-overrun` ist hier ABSICHT: dieser Test prüft die Laufzeitgrenze
+        # (Pod wird terminiert), nicht die VORAB-RECHNUNG. Ohne das Flag würde der
+        # Lauf vorher abbrechen (1 min geplante Dauer in einem 0,02-min-Fenster) –
+        # genau das prüft tests/test_lora_segments.py::VorabRechnungTest.
         env = self.prepare_fake_sdk(states="RUNNING")
         env.update({
             "RP_API_KEY": "fake-key-fuer-tests",
@@ -486,7 +490,8 @@ class GateTest(BaseCase):
         })
         result = self.run_script(
             TRAIN, "--train", "--max-runtime-minutes", "0.02", "--startup-minutes", "0",
-            "--price-per-hour", "0.69", "--train-minutes", "1", "--env-file", str(self.env_file), env=env,
+            "--price-per-hour", "0.69", "--train-minutes", "1", "--allow-overrun",
+            "--env-file", str(self.env_file), env=env,
         )
         self.assertEqual(result.returncode, 4, result.stdout + result.stderr)
         events = [entry["event"] for entry in self.sdk_events()]
