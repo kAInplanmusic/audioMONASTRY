@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "5092fb4",
+  "commit": "bc93c4d",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2669,15 +2669,21 @@
       "title": "F2 · R2-Signaturfehler sichtbar machen, echter Probe-Healthcheck, Autosave ohne Log-Flut",
       "priority": "P1",
       "status": "PARTIAL",
-      "area": "Infra/Hetzner",
-      "source": "docs/FIXPLAN_2026-09-20_externer_apptest.md (F2)",
-      "problem": "/api/cloud/health meldete 'The request signature we calculated does not match'; /api/session/autosave scheiterte 20x im Log; POST /api/upload/sample antwortete HTTP 500 mit rohem SDK-Text. Ursache: die auf app-1 gesetzten CFS3_ACCESS_KEY_ID/CFS3_SECRET_ACCESS_KEY wurden still ignoriert (zwei abweichende Client-Fabriken), und der Fehler war nur als Log-Flut sichtbar, nicht als Betriebszustand.",
-      "note": "DONE (Code) 2026-09-20, Commit cd0a0e1, gemergt als 3d1d9b3: resolveR2Config() (server/r2Config.ts) ist die EINE Aufloesung (CFS3_* kanonisch, Legacy-Aliase gelesen, Widerspruch = gemeldete deviation mit 8-Hex-Fingerabdruecken statt Werten). server/r2Health.ts klassifiziert signatur/timeout/unreachable/unconfigured und drosselt Warnungen auf EINE Zeile je Fehlerklasse (Reset bei Erholung); Signatur-/Rechtefehler werden bewusst NICHT wiederholt (deterministisch). /api/cloud/health prueft mit echtem PUT+DELETE eines Probeobjekts (Timeout, TTL-Cache, ?probe=1), Zustand als cloud.r2 in /api/metrics (JSON + Prometheus); ohne Credentials unconfigured statt ok. Autosave: begrenzte Retries mit Backoff, Antwort degraded/reason/attempts, Status cloud.writes.autosave; /api/upload/sample und /api/cloud/upload klassifizieren (503 vs. 502+hint) statt 500. Portal-Worker schreibt kanonische CFS3_* UND Legacy-CFR2_* mit identischem Wert (Paritaetstest). Neu: scripts/cloud/r2-health-check.ts (npm run r2:check).",
-      "verification": "Offline gemessen: tsc --noEmit 0 Fehler; tests/r2Health.test.ts + tests/cloudR2Routes.test.ts + tests/portalWorkerR2EnvParity.test.ts = 28 Tests gruen; r2:check gegen lokale Stubs (ok / signature-mismatch / not-configured, Ausgabe in docs/OPS_RUNBOOK.md §12); Log-Drosselung gemessen (20 Autosave-Anfragen -> 1 Zeile). Gate-Lauf nach dem Merge: gruen. LIVE GEMESSEN 2026-09-20 auf app-1 (Deploy von main-Commit 37c5719, Abfrage ueber den Produktionspfad Caddy/TLS mit echtem SNI, Token nur auf dem Knoten gelesen): /api/cloud/health liefert jetzt einen Betriebszustand statt Log-Flut: r2.state=degraded, problem=signature-mismatch, ok=false, mit Begruendungstext und Bucket/Endpoint-Kuerzel - vorher war derselbe Fehler nur eine 20-fache Log-Zeile. Die Klassifikation ist damit live belegt, offen bleibt allein das gueltige Credential-Paar.",
+      "area": "Cloud/Storage",
+      "source": "FIXPLAN_2026-09-20_externer_apptest.md (F2), Live-Nachtrag 2026-09-21",
+      "problem": "Drei Befunde: (1) ein R2-Signaturfehler war nur als generischer Fehler sichtbar, (2) der Healthcheck meldete 'konfiguriert' ohne echte Schreibprobe, (3) ein Autosave-Fehler flutete das Log. Der LIVE-Blocker war ein unpassendes Schluesselpaar: alle vier Namensfamilien (CFS3_*, CFR2_*, CF_S3_*, CLOUDFLARE_*) trugen denselben ungueltigen Satz, deshalb 'signature-mismatch' bei jedem Zugriff - lokal, im Container und im Portal-Worker identisch.",
+      "note": "UMSETZUNG (Code) 2026-09-20 (3d1d9b3): resolveR2Config() als EINE Aufloesung (CFS3_* kanonisch, Legacy-Aliase, Widerspruch = gemeldete deviation mit 8-Hex-Fingerabdruecken), r2Health klassifiziert signatur/timeout/unreachable/unconfigured und drosselt Warnungen auf EINE Zeile je Fehlerklasse, Probe ist ein echtes PUT+DELETE. UMSETZUNG (Live) 2026-09-21: Das R2-S3-Paar wurde NEU ERZEUGT (Cloudflare-Account-Token mit 'Workers R2 Storage Read'+'Write'; S3-Access-Key = Token-ID, S3-Secret = SHA-256 des Tokenwerts) und an allen vier Stellen gesetzt: .env/.env.portal/.env.deploy (Sicherungen .bak-r2-<ts>), Portal-Worker-Secrets CFS3_ACCESS_KEY/CFS3_SECRET_KEY + CFR2_-Spiegel (Kaltstart-fest), Knoten-.env von app-1 (CFS3_* neu angelegt, CFR2_* angeglichen) + Container-Recreate mit Medien-Overlay. Ein versehentlich nur-lesendes Zwischentoken wurde geloescht.",
+      "verification": "Direkter SigV4-Beweis gegen den Bucket (eigene Implementierung, unabhaengig vom Repo-Code): LIST 200, PUT 200, GET 200, DELETE 204. /api/cloud/health auf app-1 nach dem Recreate: {\"supabase\":\"ok (service_role)\",\"r2\":{\"state\":\"ok\",\"ok\":true,\"problem\":null,\"probe\":{\"method\":\"PUT+DELETE\",\"attempts\":1},\"durationMs\":405,\"credentials\":{\"source\":\"CFS3_ACCESS_KEY + CFS3_SECRET_KEY + CFR2_BUCKET + CFR2_ACCOUNT_ID\",\"deviationCount\":0,\"ignoredEnvKeys\":[]}}} - vorher: state=degraded, problem=signature-mismatch. `npm run r2:check` lokal: \"Ergebnis: ok - R2 ist beschreibbar.\" Exit 0. Arbeitsteilung: der Einzelpaar-Test (4 Familien, Fingerabdruecke) belegt, dass NICHT der Scope, sondern das Paar falsch war.",
+      "files": [
+        "server/r2Config.ts",
+        "server/r2Health.ts",
+        "server/routes/cloudRoutes.ts",
+        "scripts/cloud/r2-health-check.ts",
+        "tests/r2Health.test.ts"
+      ],
+      "remaining": "Ein app-seitiger Ende-zu-Ende-Test steht beim naechsten Wake an: Autosave 200 und Upload eines 3-s-WAV -> 200 mit Objekt-Key gegen app-1 (die Flotte ist seit 2026-09-21 15:20 gestoppt; der Speicherpfad selbst ist per PUT/GET/DELETE und Health-Probe belegt). Kosmetik: CFR2_PUBLIC_URL weicht von der benutzten Quelle ab (Hinweis im Healthcheck, keine Funktion beeintraechtigt).",
       "live_open": [
-        "Gueltiges R2-Token-Paar in die Rollen-.env von app-1 (Betreiber, Wert bleibt beim Betreiber); danach muss /api/cloud/health r2.state=ok melden",
-        "npm run r2:check auf app-1 -> Exit 0; Autosave 200; Upload eines 3-s-WAV -> 200 mit Objekt-Key",
-        "Die kryptografische Signaturpruefung selbst ist offline nicht nachstellbar (Stub antwortet mit R2-Original-XML)"
+        "Nach dem naechsten Wake: Autosave 200 + Upload eines 3-s-WAV -> 200 mit Objekt-Key auf app-1 (der Speicherzugriff selbst ist bereits bewiesen)"
       ]
     },
     {
@@ -2901,6 +2907,37 @@
         "tests/test_hetzner_scripts.py",
         "docs/HETZNER_DEPLOY.md"
       ]
+    },
+    {
+      "id": "INFRA-HETZNER-012",
+      "title": "Hetzner-Konsole: 33 Objekte geprueft, Waisen-Firewall geloescht, Flotte gestoppt (0 EUR/Monat laufend)",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "Infra/Kosten",
+      "source": "Betreiber-Auftrag 2026-09-21 ('alles was Geld kostet pruefen, Unnoetiges loeschen, Server runterfahren')",
+      "problem": "In der Konsole liefen 33 Objekte: 5 Server (3x cx33, 2x cx23) 24/7, 10 Primary IPs (5 IPv4 a 0,50 EUR/Mo netto + 5 IPv6), 10 Snapshots aus zwei Saetzen, 6 Firewalls, 1 SSH-Key. Laufende Kosten ~0,0584 EUR/h netto (~42,6 EUR/Monat netto, ~50,7 EUR/Monat brutto). Zwei echte Befunde: der Idle-Shutdown-Timer war auf app-1 NICHT installiert (die Flotte haette ohne Eingriff unbegrenzt weitergekostet) und die Firewall `audiomonastry-drill` hing seit dem Drill als Waise in der Konsole (applied_to leer, in keinem Skript referenziert; der Infra-Audit hatte sie als M13 bereits markiert).",
+      "note": "UMGESETZT 2026-09-21: (a) `audiomonastry-drill` (id 11623514) nach Read-back geloescht (applied_to war leer) - 5 Rollen-Firewalls bleiben; (b) Flotte kontrolliert gestoppt: `bash scripts/hetzner/lifecycle.sh stop --yes` = frische Snapshots ALLER fuenf Knoten (15:15-15:20) + Server loeschen; (c) die Retention (2 je Rolle) raeumte dabei den 11.09.-Satz weg; (d) Snapshots kosten weiter 1,06 EUR/Monat netto (73,99 GB), Volumes/Floating IPs/Netzwerke/Load Balancer waren und sind 0. Die frischen Snapshots tragen den aktuellen Stand inklusive App-Image, Medien (3,3 GB) und Knoten-.env.",
+      "verification": "Vorher: /v1/servers 5 (alle running), /v1/primary_ips 10, /v1/images?type=snapshot 10 (53,44 GB). Nachher: /v1/servers 0, /v1/primary_ips 0, /v1/floating_ips 0, /v1/volumes 0, /v1/firewalls 5 (audiomonastry-app/sfu/ai/master/edge), /v1/images?type=snapshot 10 (73,99 GB: fuenf vom 2026-09-21 15:15-15:20 von audiomonastry-*-1 + fuenf vom 18.09.). Stop-Protokoll: 'Lösche audiomonastry-<rolle> … 200' fuer alle fuenf, 'Anzahl Server: 0', 'Flotte gelöscht - es fallen keine Server-Kosten mehr an', STOP_EXIT=0. Preisquelle: /v1/pricing (cx33 0,0136 EUR/h netto, cx23 0,0088, primary_ipv4 0,50 EUR/Mo netto, image 0,0143 EUR/GB/Monat netto). Konstitutionsgrenze Speicher 5,00 EUR/Monat: eingehalten (1,26 EUR brutto).",
+      "files": [
+        "scripts/hetzner/lifecycle.sh",
+        "scripts/hetzner/delete-fleet.sh"
+      ],
+      "remaining": "Aufwecken bei Bedarf: `bash scripts/hetzner/bring-up-fleet.sh --yes` oder Portal `POST /api/wake`; danach aendern sich die IPs und der Portal-Worker verdrahtet `origin.<domain>` neu (wire-fleet). Der Idle-Shutdown-Timer wird beim Recreate wieder installiert (siehe PROD-P3-F9)."
+    },
+    {
+      "id": "INFRA-RUNPOD-013",
+      "title": "RunPod: Kontostand positiv, 8/8 Templates aufloesbar, alle workersMin=0 - ein Worker haengt wandernd in 'throttled'",
+      "priority": "P1",
+      "status": "PARTIAL",
+      "area": "Infra/Kosten",
+      "source": "Betreiber-Auftrag 2026-09-21 ('RunPod hat wieder Geld drauf' - Flotte pruefen)",
+      "problem": "Nach der Kontosperre war unklar, ob die acht Rollen wieder provisionieren koennen und ob im Leerlauf GPU-Geld verbrennt.",
+      "note": "GEMESSEN 2026-09-21: clientBalance 9,9123 USD; acht Endpoints, ALLE workersMin=0 -> kein Dauerlaeufer, keine berechnete Standby-GPU; alle acht Templates loesen auf (HTTP 200, u. a. music=qsxc8encwr und videoAbstract=7iihy61ouf - die frueheren 404-Faelle sind damit weg). Quota: Summe workersMax = 10 (ausgeschoepft). Befund: `audiomonastry-ai-video-real` stand mit throttled=1 bei workersMax=1 still (der einzige Slot durch einen haengenden Worker belegt, 5 failed jobs). Recycle gefahren (workersMax 1 -> 0 -> 1 mit Read-back, kein Job, nur Kaltstart): video-real danach idle=1/ready=1/throttled=0 - aber der Zustand ist auf `audiomonastry-ai-video-abstract` GEWANDERT (throttled=1, workersMax=1). Das ist damit kein Einzelfall, sondern ein wanderndes Muster (beide Video-Rollen, GPU-Pool 4090).",
+      "verification": "Get-Read-backs: /v1/endpoints (workersMin/Max/idleTimeout/flashboot/templateId/gpuTypeIds), https://api.runpod.ai/v2/<id>/health je Rolle (workers/jobs), https://rest.runpod.io/v1/templates/<id> je Rolle (alle 200 mit Namen), GraphQL myself.clientBalance. Preise aus `runpodctl gpu list` (Quelle): RTX 4090 0,34 community/0,74 secure USD/h, A6000 0,33/0,53, A40 0,49, L40S 0,79/1,09, alle available.",
+      "files": [
+        "scripts/runpod-health-guard.py"
+      ],
+      "remaining": "Video-abstract-Recycle laeuft; wenn 'throttled' danach erneut wandert oder stehen bleibt, ist es ein Provider-/Kontozustand (Rate-Limit) und kein Einzelworker - dann gehoert der Grund in den naechsten Wake-Guard (runpod-health-guard.py) statt eines weiteren Recycle-Zyklus. Ausserdem offen: die 38 failed jobs der Rolle brain und 4-5 je Video-Rolle sind nie ausgewertet worden (Job-Historie/Logs fehlen)."
     }
   ],
   "visionSandbox": [
