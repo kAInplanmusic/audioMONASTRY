@@ -48,6 +48,45 @@ Zusätzliche Blocker auf `main`, die beim Nachfahren gefunden und behoben wurden
 
 ---
 
+## Live-Beweise 2026-09-21: F1 und F6 sind live abgeschlossen (gemessen)
+
+Mit einem gueltigen Cloudflare-Token (Zone anunnakitools.de, `Zone:DNS:Edit`) sind
+die beiden Betreiber-Reste aus der Tabelle oben erledigt und gemessen:
+
+| Punkt | Zustand vorher | Zustand jetzt (gemessen 2026-09-21) |
+| --- | --- | --- |
+| `origin.anunnakitools.de` | A `46.225.253.71` (alter Hetzner-Server), **proxied=true** -> HTTP 521/522 | A `142.132.229.71` (app-1), **DNS-only**. `dig` von aussen: `142.132.229.71` |
+| `sfu.anunnakitools.de` | **kein Record** | A `142.132.231.146` (sfu-1), DNS-only |
+| Portal-Domain | HTTP 522 (Worker erreichte keinen Origin) | `curl https://anunnakitools.de/api/health` -> **200** `{status:ok, version:1.210.001, commit:"0e73d78", buildTime:"2026-09-20T23:37:01Z"}` |
+| SFU-HTTPS | kein TLS (Caddy auf sfu-1 hatte leeres `DOMAIN` -> nur :80), `SFU_SIGNALING_URL=http://<ip>` | `https://sfu.anunnakitools.de/api/health` -> **200**, Zertifikat von **Let's Encrypt** (HTTP-01, bis 2026-12-20); `DOMAIN=sfu.anunnakitools.de` per `wire-rtc.sh sfu` gesetzt |
+| Client-RTC | nur STUN, `turn.available=false`, `sfu.ready=false` | `/api/webrtc-config` -> `sfu.url=https://sfu.anunnakitools.de`, **2 STUN + 2 TURN** (`turn:142.132.231.146:3478?transport=udp|tcp`), `turn.available=true`, HMAC-Credentials vorhanden (Mixed Content damit weg: kein `ws://` mehr) |
+| TURN-Relay (echt) | nie live geprueft | `turnutils_uclient` im coturn-Container mit den von der **App geminteten** Credentials: Allokation erfolgreich (1200 Byte ueber den Relay, 0 Paketverlust). Gegenprobe mit falschem Credential: **exit 255, „Cannot complete Allocation"** |
+| Secret-Gleichheit | — | `sha256(TURN_STATIC_AUTH_SECRET)[:16]` auf app-1 == sfu-1 (`a74d62c16d14ec21`) |
+
+Werkzeuge, die dafuer entstanden sind (beide mit Trockenlauf, Token wird nie ausgegeben):
+
+* `scripts/hetzner/cf-dns-ensure.py [--apply]` — setzt/repariert beide A-Records
+  (App + SFU) auf **A, DNS-only**; erkennt Drift (falscher Server, `proxied=true`)
+  und ist beim zweiten Lauf idempotent.
+* `scripts/hetzner/fleet-preflight.sh dns` prueft jetzt **beide** Records und nennt
+  bei jedem Befund den automatischen Weg (`cf-dns-ensure.py`).
+
+Vertrag, der dabei scharf geworden ist: der **Origin-Record darf nicht durch den
+Cloudflare-Proxy laufen** (der Worker holt ihn mit dem Origin-Zertifikat direkt),
+und **WebRTC braucht zwingend einen oeffentlich vertrauenswuerdigen Zertifikatspfad**
+— auf sfu-1 daher Let's Encrypt ueber HTTP-01 (der Record ist DNS-only, Port 80 offen)
+statt eines Origin-CA-Zertifikats (das waere nur fuer Cloudflares Edge gueltig und
+ein Browser wuerde es ablehnen).
+
+**Rest (Betreiber, nur noch Werte):** die fuenf Token-Fundstellen in `.env.deploy` /
+`.env.portal` sind weiterhin die ALTEN (diagnose: `1000 Invalid API Token`) und das
+Worker-Secret `CLOUDFLARE_API_TOKEN` muss im Portal-Worker aktualisiert werden
+(`wrangler secret put`). Der Betrieb haengt nicht daran — die Records stehen jetzt —,
+aber `fleet-preflight.sh dns` sourct `.env.deploy` und wuerde den toten Wert melden,
+und der Worker-DNS-Sync beim Wake braucht den gueltigen Token.
+
+---
+
 ## Live-Beweise 2026-09-20 (gemessen, nicht behauptet)
 
 Nach dem Deploy von `main`-Commit `37c5719` auf app-1 (`deploy.sh` mit Origin-Zertifikat

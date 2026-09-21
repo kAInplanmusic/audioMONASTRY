@@ -114,6 +114,9 @@ CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
 PORTAL_DOMAIN="${PORTAL_DOMAIN:-anunnakitools.de}"
 ORIGIN_HOST="${ORIGIN_HOST:-origin.$PORTAL_DOMAIN}"
 APP_IP="${APP_IP:-}"
+# sfu-1 (WebRTC-Signalisierung + TURN). Der A-Record darf NICHT proxied sein.
+SFU_IP="${SFU_IP:-142.132.231.146}"
+SFU_SUBDOMAIN="${SFU_SUBDOMAIN:-sfu}"
 CF_API_BASE="${CF_API_BASE:-https://api.cloudflare.com/client/v4}"
 
 # Toleranter Zustands-Lookup: 'dns' darf nicht davon abhaengen, dass node/git
@@ -342,10 +345,14 @@ import sys
 mode, body_path, http_status = sys.argv[1], sys.argv[2], sys.argv[3]
 extra = sys.argv[4:]
 RUNBOOK = "   Betreiber-Schritte + Kommandos: docs/ORIGIN_TLS_DNS_RUNBOOK.md"
+# PROD-P1-F1: derselbe Befund ist mit dem eigenen Werkzeug behebbar (schreibt die
+# A-Records fuer App und SFU, Trockenlauf per Default). Der Hinweis steht bei
+# JEDEM DNS-Befund, nicht nur im Erfolgsfall.
+AUTO_FIX = "   Automatisch: python3 scripts/hetzner/cf-dns-ensure.py [--apply]"
 
 
 def fail(lines):
-    print("\n".join(lines), file=sys.stderr)
+    print("\n".join([*lines, AUTO_FIX]), file=sys.stderr)
     sys.exit(2)
 
 
@@ -444,6 +451,7 @@ cmd_dns() {
     printf '  ORIGIN_HOST=%s\n' "$ORIGIN_HOST"
     printf '  APP_IP=%s\n' "${APP_IP:-<nicht gesetzt>}"
     printf '  CLOUDFLARE_API_TOKEN gesetzt: %s\n' "$token_state"
+    printf '  SFU_SUBDOMAIN=%s\n' "${SFU_SUBDOMAIN:-sfu}"
     return 0
   fi
 
@@ -480,12 +488,26 @@ cmd_dns() {
   fi
   origin_ip="$(cf_parse record "$rec_body" "$rec_http" "$ORIGIN_HOST" "$APP_IP")"
 
+  # Schritt 3b: SFU-A-Record pruefen. Der WebRTC-Signalisierungs-Host ist NICHT
+  # der Origin: er zeigt direkt auf sfu-1 und darf NICHT durch den Cloudflare-
+  # Proxy laufen (WebRTC ist kein HTTP; proxied=true bricht die Signalisierung).
+  # Fehlt er, ist das ein Befund - die SFU ist dann nur ueber die IP erreichbar.
+  local sfu_host="${SFU_SUBDOMAIN:-sfu}.$PORTAL_DOMAIN" sfu_body="$tmp/sfu.json" sfu_http sfu_ip
+  if ! sfu_http="$(cf_get "/zones/$zone_id/dns_records?name=$sfu_host" "$sfu_body")"; then
+    echo "DNS-Verdrahtung fehlt: Cloudflare-API nicht erreichbar ($CF_API_BASE)" >&2
+    exit 2
+  fi
+  sfu_ip="$(cf_parse record "$sfu_body" "$sfu_http" "$sfu_host" "$SFU_IP")"
+
   # Schritt 4: Erfolg melden + Remediation/Verify fuer den Betreiber.
   echo "✅ DNS-Verdrahtung ok: $ORIGIN_HOST -> $origin_ip (type A, DNS-only)"
-  echo "   Remediation (falls sich die app-1-IP aendert oder der Record fehlt):"
+  echo "✅ DNS-Verdrahtung ok: $sfu_host -> $sfu_ip (type A, DNS-only)"
+  echo "   Remediation (falls sich eine IP aendert oder ein Record fehlt):"
   echo "     Record '$ORIGIN_HOST' als type A auf die app-1-Floating-IP setzen, proxied=false -"
+  echo "     Record '$sfu_host' als type A auf die sfu-1-IP setzen, proxied=false (WebRTC!),"
   echo "     dafuer braucht der Token Zone:DNS:Edit; Kommandos: docs/ORIGIN_TLS_DNS_RUNBOOK.md"
-  echo "   Verify: curl -sS -o /dev/null -w '%{http_code}\n' https://$PORTAL_DOMAIN/api/health   # erwartet 200"
+  echo "     Automatisch: python3 scripts/hetzner/cf-dns-ensure.py [--apply]"
+  echo "   Verify: curl -sS -o /dev/null -w '%{http_code}\\n' https://$PORTAL_DOMAIN/api/health   # erwartet 200"
 }
 
 case "$MODE" in

@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-20",
+  "generatedAt": "2026-09-21",
   "branch": "main",
-  "commit": "37c5719",
+  "commit": "0e73d78",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -2652,14 +2652,17 @@
       "status": "PARTIAL",
       "area": "Infra/Hetzner",
       "source": "docs/FIXPLAN_2026-09-20_externer_apptest.md (externer App-Test 2026-09-20)",
-      "problem": "https://anunnakitools.de lief dauerhaft in HTTP 522 (direkter IP-Zugriff ist by design dicht). Drei Ursachen in einem Pfad: alle Cloudflare-Credentials in .env.portal antworteten mit 9109 Invalid access token; origin.anunnakitools.de zeigte auf Cloudflare-IPs statt auf app-1; auf app-1 lag die ACME-Variante des Caddyfiles bei leerem certs/ (ACME kann hinter der Worker-Route nicht validieren).",
-      "note": "DONE (Code) 2026-09-20, Commit 03d4884, gemergt als 6c66a6f: Portal-Worker uebersetzt jede Cloudflare-Antwort in Klartextgrund (Code+Message+Betreiberhinweis, Token nie ausgegeben), syncOriginDns() kennt {dryRun} und meldet proxied=false; /api/wake, /api/wire-fleet und /api/status liefern die Diagnose schreibfrei (15-s-Cache). 'ready' gilt nur noch bei HTTP 200 UND JSON status:ok (HTML-200/522/Timeout = starting-app mit Grund). Cloud-Init der Rolle app installiert immer scripts/hetzner/Caddyfile.origin; ORIGIN_CERT/ORIGIN_KEY landen per Pipe/umask 077 als certs/origin.crt|key (600, Verzeichnis 700, X.509-Pruefung VOR dem Caddy-Start); ACME nur noch per DEPLOY_INSTALL_CADDYFILE=1. Ehrlichkeitsgrenze dokumentiert: userData laeuft nur beim Kaltstart, Rollen-Snapshots bekommen Caddyfile/Zertifikat nur ueber deploy.sh.",
-      "verification": "Code/Offline belegt: Trockenlauf-Belege und Tests im Zweig; Portal-Worker-Tests (tests/portalWorkerSnapshots.test.ts) auf main gruen; gesamter Gate-Lauf gruen (272 Testdateien / 1972 Tests, 0 kritische Audit-Findings). Live-Beleg der DNS-Verdrahtung ist lesend vorbereitet: bash scripts/hetzner/fleet-preflight.sh dns (bei ungueltigem Token HTTP 403 + 9109 + Hinweis, Exit 2).",
-      "live_open": [
-        "Gueltigen Cloudflare-Token mit Zone:DNS:Edit in .env.portal hinterlegen (Betreiber-Schritt, Wert bleibt beim Betreiber)",
-        "origin.<domain> als DNS-only-A-Record auf die app-1-IP patchen und POST /api/wire-fleet ausfuehren",
-        "curl https://anunnakitools.de/api/health -> 200 JSON {status:ok,...}; Zertifikat von der Domain aus sichtbar; Caddy-Log zeigt Cloudflare-Treffer"
-      ]
+      "note": "LIVE ABGESCHLOSSEN 2026-09-21 (Code-Teil 2026-09-20, 6c66a6f): mit einem gueltigen Token (Zone anunnakitools.de) ist der oeffentliche Zugang hergestellt. Live-Befund: origin.anunnakitools.de stand auf A 46.225.253.71 (alter Hetzner-Server) UND proxied=true - der Worker holt den Origin ueber genau diesen Namen, daher HTTP 521/522; sfu.anunnakitools.de hatte gar keinen Record. Fix: neues Werkzeug scripts/hetzner/cf-dns-ensure.py setzt beide Records auf A/DNS-only (origin -> 142.132.229.71/app-1, sfu -> 142.132.231.146/sfu-1), erkennt Drift (falscher Server, proxied=true) und ist idempotent; fleet-preflight.sh dns prueft jetzt BEIDE Records und nennt den automatischen Weg. curl https://anunnakitools.de/api/health -> 200 mit commit-Stempel.",
+      "verification": "Gemessen 2026-09-21: dig origin.anunnakitools.de -> 142.132.229.71 (DNS-only), sfu.anunnakitools.de -> 142.132.231.146; https://anunnakitools.de/api/health -> HTTP 200 {\"status\":\"ok\",\"version\":\"1.210.001\",\"commit\":\"0e73d78\",\"buildTime\":\"2026-09-20T23:37:01Z\"}; https://origin.anunnakitools.de direkt von aussen timed out = erwartet (app-Firewall erlaubt 80/443 nur Cloudflare-CIDRs, Traffic kommt vom Worker); cf-dns-ensure.py --apply zweimal gelaufen, zweiter Lauf meldet 'Nichts zu tun (idempotent)'; offline Tests: tests/test_hetzner_scripts.py 109 Tests OK, davon 4 neue fuer cf-dns-ensure (Trockenlauf schreibt nichts = nur GET, Apply legt beide Records A/DNS-only an, Drift-Korrektur + Idempotenz, ohne Token kein Request und Token nie im Output) und 3 fuer die SFU-Record-Pruefung in fleet-preflight.sh.",
+      "files": [
+        "scripts/hetzner/cf-dns-ensure.py",
+        "scripts/hetzner/fleet-preflight.sh",
+        "tests/test_hetzner_scripts.py",
+        "docs/OPS_RUNBOOK.md",
+        "docs/FIXPLAN_2026-09-20_externer_apptest.md"
+      ],
+      "remaining": "Betreiber-Werte: (1) die fuenf Token-Fundstellen in .env.deploy/.env.portal tragen weiterhin den ALTEN Token (cf-token-diagnose.py: '1000 Invalid API Token') - fleet-preflight.sh sourct .env.deploy und wuerde den toten Wert melden; Setter liegt bereit: scripts/hetzner/cf-token-set.py --value-stdin [--apply] (Schreiben in Secret-Dateien braucht die Bestaetigung des Betreibers). (2) Worker-Secret CLOUDFLARE_API_TOKEN im Portal-Worker per 'wrangler secret put' aktualisieren, sonst meldet der Worker-DNS-Sync beim Wake den alten Fehler, obwohl die Records jetzt stehen.",
+      "live_open": "Portal-Wake-Zyklus mit gueltigem Worker-Token live fahren (Server aus -> Wake -> origin-Record wird vom Worker gesetzt)."
     },
     {
       "id": "PROD-P1-F2",
@@ -2726,12 +2729,16 @@
       "status": "PARTIAL",
       "area": "Networking",
       "source": "docs/FIXPLAN_2026-09-20_externer_apptest.md (F6)",
-      "problem": "/api/webrtc-config lieferte nur STUN (kein TURN); sfu-1 lief, aber die Client-Transports verbanden /sfu-signaling same-origin auf dem App-Knoten (dort SPA-HTML), und SFU_ANNOUNCED_IP war leer (bzw. im Portal-Pfad die private 10.x-Adresse). Fuer 2-8 Spieler ueber NAT ist das nicht tragfaehig.",
-      "note": "DONE (Code) 2026-09-20, Commit d252557, gemergt als b962ecb: EINE Quelle scripts/hetzner/lib/rtc-fleet.sh + scripts/hetzner/wire-rtc.sh sfu|app schreiben ENABLE_SFU/SFU_ANNOUNCED_IP/SFU_SIGNALING_URL/TURN_* idempotent in die Knoten-.env (IP zur Laufzeit: env -> Hetzner-Metadata -> Cloud-Init-Datei -> ipify; private IPv4 wird nie akzeptiert; Secret nur per env/--secret-stdin/vorhandene .env). bring-up-fleet.sh Schritt 6/8 verdrahtet sfu+app und startet den Stack inkl. coturn; der fehlerhafte grep-echo-Weg, der eine LEERE SFU_ANNOUNCED_IP-Zeile stehen liess, ist entfernt. Client: src/core/transport/sfuEndpoint.ts (Server -> VITE_SFU_URL, KEIN same-origin-Rueckfall, Mixed-Content-Erkennung), MediasoupTransport verbindet die konfigurierte URL und nennt Adresse/Grund, SettingsDialog zeigt die Ursache, App-Caddy antwortet auf /sfu-signaling mit 404+JSON. TURN: docker-compose.turn.yml (coturn 4.18.0, host network, read_only), Firewall 3478 + Relay 49152-49201 in beiden Provisioning-Pfaden; /api/webrtc-config liefert turn:-Eintraege mit kurzlebigen HMAC-Credentials UND turn.available=false + Grund, wenn Secret/URLs fehlen.",
-      "verification": "Offline gemessen: tsc 0 Fehler; vitest des Zweigs 264 Dateien / 1900 Tests gruen; tests/test_hetzner_scripts.py 77 Tests OK (15 neu, nach dem Merge 91 mit F10 zusammen); docker compose config (turn standalone und base+sfu+turn) OK; caddy validate beide Caddyfiles gueltig; bash -n aller geaenderten Skripte; Trockenlaeufe wire-rtc.sh sfu|app --print-config und bring-up-fleet.sh --print-config ohne Secret in der Ausgabe (selbst nachgefahren). coturn real gemessen: Relay-Ports initialisiert, Listener udp+tcp 3478, Stun-Healthcheck exit 0, Allokation mit den Credentials aus buildWebRtcConfigResponse -> 12/12 Pakete ueber den Relay, falsches/abgelaufenes Credential -> 'Cannot complete Allocation'. Drei Fallen dokumentiert (cap_drop:[ALL] verhindert den Start; --log-file=stdout verliert gegen die Config-Datei; 0640-root-Config ist fuer den nobody-Container unlesbar).",
+      "note": "LIVE ABGESCHLOSSEN 2026-09-21 (Code 2026-09-20, b962ecb): sfu.anunnakitools.de existiert jetzt als A-Record (DNS-only) auf 142.132.231.146; Caddy auf sfu-1 holt dafuer ein Let's-Encrypt-Zertifikat ueber HTTP-01 (Site-Adresse setzt wire-rtc.sh sfu aus SFU_PUBLIC_URL). Auf app-1 steht SFU_SIGNALING_URL=https://sfu.anunnakitools.de, der Client verbindet also wss statt ws - Mixed Content auf der HTTPS-Seite ist damit weg. Zusatzbefund beim Verdrahten: der per grep weitergereichte Secret-Wert enthielt den Schluesselnamen (88 statt 64 Zeichen), coturn haette jede Allokation abgewiesen - wire-rtc.sh schneidet 'TURN_STATIC_AUTH_SECRET=' jetzt ab; die Secrets auf app-1 und sfu-1 sind identisch (sha256[:16] = a74d62c16d14ec21). Ein Origin-CA-Zertifikat waere hier falsch (nur fuer Cloudflares Edge gueltig) - deshalb Let's Encrypt direkt auf dem DNS-only Host.",
+      "verification": "Gemessen 2026-09-21: https://sfu.anunnakitools.de/api/health -> HTTP 200 {\"status\":\"ok\",\"version\":\"1.210.001\",\"commit\":\"0e73d78\"}; Zertifikat von Let's Encrypt, gueltig bis 2026-12-20 (Caddy-Log 'certificate obtained successfully', HTTP-01 ueber Port 80); /api/webrtc-config mit Studio-Token (aus der Knoten-.env) -> sfu.url=https://sfu.anunnakitools.de, iceServers=2 mit 2 stun + 2 turn (turn:142.132.231.146:3478?transport=udp|tcp), turn.available=true, HMAC-Credentials vorhanden; echter TURN-Beweis: turnutils_uclient im coturn-Container mit den von der App geminteten Credentials -> Allokation erfolgreich (5 s, 1200 Byte ueber den Relay, 0 Paketverlust), Gegenprobe mit falschem Credential -> exit 255 'Cannot complete Allocation'; Firewall der Rolle sfu: 80/443 + 3478 udp/tcp + 49152-49201 udp/tcp offen, Listener auf sfu-1 bestaetigt; tests/test_hetzner_scripts.py 109 Tests OK.",
+      "files": [
+        "scripts/hetzner/wire-rtc.sh",
+        "scripts/hetzner/lib/rtc-fleet.sh",
+        "docs/OPS_RUNBOOK.md",
+        "docs/FIXPLAN_2026-09-20_externer_apptest.md"
+      ],
       "live_open": [
-        "Zwei echte Browser ausserhalb des LANs ueber den Relay (Ende-zu-Ende)",
-        "ACME-Kette fuer https://sfu.<domain> (Produktionsanforderung wegen Mixed Content) inkl. DNS-Record - Betreiber-Schritt",
+        "Zwei echte Browser ausserhalb des LANs ueber den Relay (Ende-zu-Ende, Audio + Reconnect) - Menschen-/Hardware-Verifikation",
         "Portal-Pfad: der App-Knoten kann die SFU-IP im Cloud-Init nicht kennen -> Werte aus dem Portal-Secret setzen; rtcEnvWiring() meldet sie bis dahin als fehlend"
       ]
     },

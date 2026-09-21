@@ -74,6 +74,11 @@ secret_source="Umgebung (TURN_STATIC_AUTH_SECRET)"
 secret="${TURN_STATIC_AUTH_SECRET:-}"
 if [[ "$SECRET_STDIN" == "1" ]]; then
   secret="$(head -1)"
+  # Eingaben wie eine .env-ZEILE tolerieren (`TURN_STATIC_AUTH_SECRET=…`): wer
+  # den Wert per `grep '^TURN_STATIC_AUTH_SECRET=' .env | …` weiterreicht, hat den
+  # Schluesselnamen mit dabei. Ohne dieses Abschneiden landet der Name im Wert
+  # (live gemessen: 88 statt 64 Zeichen) und coturn weist jede Allokation ab.
+  secret="${secret#TURN_STATIC_AUTH_SECRET=}"
   secret_source="stdin (--secret-stdin)"
 fi
 secret="${secret//[[:space:]]/}"
@@ -197,5 +202,5 @@ while IFS= read -r line; do
   rtc_env_upsert "$ENV_FILE" "$key" "${line#*=}"
 done < <(rtc_app_env_lines "$sfu_ip" "$TURN_TTL_SECONDS" "${SFU_PUBLIC_URL:-}")
 rtc_env_upsert "$ENV_FILE" TURN_STATIC_AUTH_SECRET "$secret"
-echo "  .env aktualisiert: $ENV_FILE (ENABLE_SFU=0, SFU_SIGNALING_URL=http://$sfu_ip, TURN_URLS=$(rtc_turn_urls "$sfu_ip"))"
+echo "  .env aktualisiert: $ENV_FILE (ENABLE_SFU=0, SFU_SIGNALING_URL=$app_sfu_url, TURN_URLS=$(rtc_turn_urls "$sfu_ip"))"
 echo "  Naechster Schritt: docker compose -f docker-compose.hetzner.yml up -d audiomonastry"

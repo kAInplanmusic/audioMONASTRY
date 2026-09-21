@@ -70,7 +70,7 @@ import tempfile
 import threading
 import unittest
 import urllib.parse
-from typing import Any
+from typing import Any, Literal
 from unittest import mock
 
 try:  # Compose-Dateien werden nur zur Verifikation geparst - kein Laufzeitbedarf.
@@ -82,6 +82,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 HETZNER = ROOT / "scripts" / "hetzner"
 
 DNS_SCRIPT = HETZNER / "dns_setup.py"
+CF_DNS_ENSURE = HETZNER / "cf-dns-ensure.py"
 BRING_UP = HETZNER / "bring-up-fleet.sh"
 PROVISION_FLEET = HETZNER / "provision-fleet.sh"
 AUTO_REPAIR = HETZNER / "auto-repair.sh"
@@ -124,6 +125,8 @@ def load_module(name: str, path: pathlib.Path) -> Any:
 
 
 dns = load_module("hetzner_dns_setup", DNS_SCRIPT)
+# PROD-P1-F1: eigenes Cloudflare-DNS-Werkzeug (A-Records fuer App/SFU).
+cf_dns = load_module("hetzner_cf_dns_ensure", CF_DNS_ENSURE)
 
 
 class _Response:
@@ -138,7 +141,7 @@ class _Response:
     def __enter__(self) -> "_Response":
         return self
 
-    def __exit__(self, *exc: object) -> bool:
+    def __exit__(self, *exc: object) -> Literal[False]:
         return False
 
 
@@ -647,6 +650,8 @@ FAKE_TOKEN = "cf-token-nur-fuer-den-teststub-0000"
 CONTROLLED_ENV = (
     "DEPLOY_PRINT_CONFIG", "DEPLOY_INSTALL_CADDYFILE", "CLOUDFLARE_API_TOKEN",
     "CF_API_BASE", "PORTAL_DOMAIN", "ORIGIN_HOST", "APP_IP", "ORIGIN_CERT", "ORIGIN_KEY",
+    # F1: der SFU-Record gehoert zur selben Pruefung (eigener Host, eigene IP).
+    "SFU_IP", "SFU_SUBDOMAIN",
     # PROD-P1-F4: Build-Stempel und Parity-Schalter kommen IMMER aus dem Test.
     "DEPLOY_COMMIT", "DEPLOY_VERSION", "DEPLOY_ALLOW_STALE", "ALLOW_STALE", "PORTAL_URL",
     "ADMIN_USER", "ADMIN_PASSWORD", "AUDIOMONASTRY_VERSION", "AUDIOMONASTRY_COMMIT",
@@ -812,9 +817,12 @@ class _CloudflareStub:
         self,
         zone: tuple[int, dict] | None = None,
         records: tuple[int, dict] | None = None,
+        records_by_name: dict[str, tuple[int, dict]] | None = None,
     ) -> None:
         self.zone = zone or (200, {"success": True, "errors": [], "result": [{"id": "zone-4711", "name": "anunnakitools.de"}]})
         self.records = records or (200, {"success": True, "errors": [], "result": []})
+        # Je Host eine eigene Antwort (Origin und SFU haben verschiedene Ziele).
+        self.records_by_name = records_by_name or {}
         self.requests: list[tuple[str, str]] = []
 
     def __enter__(self) -> "_CloudflareStub":
@@ -847,7 +855,7 @@ class _CloudflareStub:
         self.thread.start()
         return self
 
-    def __exit__(self, *exc: object) -> bool:
+    def __exit__(self, *exc: object) -> Literal[False]:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)
@@ -862,6 +870,10 @@ class _CloudflareStub:
         if path.startswith("/client/v4/zones?"):
             return self.zone
         if "/dns_records" in path:
+            query = urllib.parse.parse_qs(urllib.parse.urlparse(path).query)
+            name = (query.get("name") or [""])[0]
+            if name and name in self.records_by_name:
+                return self.records_by_name[name]
             return self.records
         return 404, {"success": False, "errors": [{"code": 9999, "message": "unbekannter Pfad"}]}
 
@@ -870,6 +882,247 @@ class _CloudflareStub:
 
     def paths(self) -> list[str]:
         return [path for _method, path in self.requests]
+
+
+class _CloudflareWriteStub:
+    """Schreibender Cloudflare-Stub fuer `cf-dns-ensure.py` (offline, kein Netz).
+
+    Haelt die Records im Speicher, damit Trockenlauf (kein Schreibzugriff),
+    Anlegen/Korrigieren und Idempotenz echt pruefbar sind - die Zusage
+    "Trockenlauf schreibt nichts" waere sonst nur ein Textversprechen.
+    """
+
+    def __init__(self, records: list[dict] | None = None) -> None:
+        self.records = list(records or [])
+        self.requests: list[tuple[str, str]] = []
+        self.payloads: list[dict] = []
+
+    def __enter__(self) -> "_CloudflareWriteStub":
+        stub = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _send(self, status: int, payload: dict) -> None:
+                body = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def _record_request(self) -> bytes:
+                length = int(self.headers.get("content-length") or 0)
+                raw = self.rfile.read(length) if length else b""
+                if raw:
+                    stub.payloads.append(json.loads(raw.decode("utf-8")))
+                return raw
+
+            def do_GET(self) -> None:  # noqa: N802 - Name kommt von BaseHTTPRequestHandler
+                stub.requests.append(("GET", self.path))
+                if self.path.startswith("/client/v4/zones?"):
+                    return self._send(200, {"success": True, "errors": [], "result": [
+                        {"id": "zone-4711", "name": "anunnakitools.de"},
+                    ]})
+                if "/dns_records" in self.path:
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    name = (query.get("name") or [""])[0]
+                    result = [r for r in stub.records if not name or r["name"] == name]
+                    return self._send(200, {"success": True, "errors": [], "result": result})
+                return self._send(404, {"success": False, "errors": [{"code": 9999, "message": "unbekannter Pfad"}]})
+
+            def do_POST(self) -> None:  # noqa: N802
+                stub.requests.append(("POST", self.path))
+                payload = json.loads(self._record_request().decode("utf-8"))
+                record = {"id": f"neu-{len(stub.records) + 1}", **payload}
+                stub.records.append(record)
+                self._send(200, {"success": True, "errors": [], "result": record})
+
+            def do_PUT(self) -> None:  # noqa: N802
+                stub.requests.append(("PUT", self.path))
+                payload = json.loads(self._record_request().decode("utf-8"))
+                record_id = self.path.rsplit("/", 1)[-1]
+                for record in stub.records:
+                    if record["id"] == record_id:
+                        record.update(payload)
+                        return self._send(200, {"success": True, "errors": [], "result": record})
+                self._send(404, {"success": False, "errors": [{"code": 81044, "message": "record not found"}]})
+
+            def log_message(self, *args: Any) -> None:  # Testausgabe ruhig halten
+                return
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> Literal[False]:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=5)
+        return False
+
+    @property
+    def api_base(self) -> str:
+        host, port = self.server.server_address[0], self.server.server_address[1]
+        return f"http://{host}:{port}/client/v4"
+
+    def methods(self) -> list[str]:
+        return [method for method, _path in self.requests]
+
+    def record_for(self, name: str) -> dict:
+        for record in self.records:
+            if record.get("name") == name:
+                return record
+        raise AssertionError(f"kein Record fuer {name}: {self.records}")
+
+
+class CfDnsEnsureTest(unittest.TestCase):
+    """PROD-P1-F1: `cf-dns-ensure.py` haelt den DNS-Vertrag ein - offline geprueft.
+
+    Der Vertrag (identisch mit dem Portal-Worker): beide Records sind A-Records,
+    DNS-only, direkt auf den Knoten. Anlass war der Live-Befund vom 2026-09-21:
+    `origin.anunnakitools.de` stand auf einem alten Server und war proxied, der
+    SFU-Record fehlte ganz - die Domain lief in HTTP 521/522, WebRTC haette per
+    `ws://` gegen Mixed Content verloren.
+    """
+
+    ORIGIN = "origin.anunnakitools.de"
+    SFU = "sfu.anunnakitools.de"
+    APP_IP = "203.0.113.10"
+    SFU_IP = "203.0.113.20"
+
+    def setUp(self) -> None:
+        self.python = sys.executable
+
+    def _run(self, stub: _CloudflareWriteStub | None, *args: str, token: str | None = "cf-token-test"):
+        return subprocess.run(
+            [self.python, str(CF_DNS_ENSURE), *args],
+            capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(
+                CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
+                CLOUDFLARE_API_TOKEN=token,
+                CLOUDFLARE_TOKEN=None,
+                DOMAIN="anunnakitools.de",
+                ORIGIN_HOST=self.ORIGIN,
+                APP_IP=self.APP_IP,
+                SFU_SUBDOMAIN="sfu",
+                SFU_HOST=self.SFU,
+                SFU_IP=self.SFU_IP,
+            ),
+        )
+
+    def test_trockenlauf_schreibt_nichts(self) -> None:
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub)
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertIn("Trockenlauf", combined)
+        self.assertIn("wuerde angelegt", combined)
+        # Nur GET-Requests, kein POST/PUT - das ist die Kernzusage.
+        self.assertEqual(stub.methods(), ["GET", "GET"])
+        self.assertEqual(stub.records, [])
+
+    def test_apply_legt_beide_records_als_dns_only_an(self) -> None:
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply")
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, combined)
+        self.assertEqual(stub.methods(), ["GET", "GET", "POST", "POST"])
+        for name, ip in ((self.ORIGIN, self.APP_IP), (self.SFU, self.SFU_IP)):
+            record = stub.record_for(name)
+            self.assertEqual(record["type"], "A")
+            self.assertEqual(record["content"], ip)
+            self.assertIs(record["proxied"], False, f"{name} muss DNS-only sein")
+
+    def test_drift_wird_korrigiert_und_ist_danach_idempotent(self) -> None:
+        # Live-Zustand vom 2026-09-21: falscher Server + proxied=true.
+        stub = _CloudflareWriteStub(records=[
+            {"id": "rec-origin", "name": self.ORIGIN, "type": "A", "content": "46.225.253.71", "proxied": True},
+        ])
+        with stub:
+            first = self._run(stub, "--apply")
+            second = self._run(stub, "--apply")
+        combined = first.stdout + first.stderr
+        self.assertEqual(first.returncode, 0, combined)
+        self.assertIn("korrigiert", combined)
+        self.assertIn("proxied=true", combined)
+        record = stub.record_for(self.ORIGIN)
+        self.assertEqual(record["content"], self.APP_IP)
+        self.assertIs(record["proxied"], False)
+        # Zweiter Lauf: nichts mehr zu tun, keine weiteren Schreibzugriffe.
+        self.assertEqual(stub.methods(), ["GET", "GET", "PUT", "POST", "GET", "GET"])
+        self.assertIn("Nichts zu tun", second.stdout)
+
+    def test_ohne_token_kein_request_und_token_nie_im_output(self) -> None:
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply", token=None)
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("CLOUDFLARE_API_TOKEN/CLOUDFLARE_TOKEN fehlt", combined)
+        self.assertEqual(stub.requests, [])
+
+        with stub:
+            ok = self._run(stub, "--apply", token="cf-geheim-4711")
+        self.assertNotIn("cf-geheim-4711", ok.stdout + ok.stderr)
+
+
+class CfTokenSetTest(unittest.TestCase):
+    """F1-Nachlauf: der Token-Setter schreibt nur die vorgesehenen Schluessel.
+
+    Anlass: fuenf Fundstellen in `.env.deploy`/`.env.portal` trugen den toten
+    Token (`1000 Invalid API Token`). Das Skript muss (a) im Trockenlauf nichts
+    schreiben, (b) nur die genannten Schluesselnamen anfassen (keine Heuristik),
+    (c) eine Sicherung anlegen und (d) den Wert nie ausgeben.
+    """
+
+    def _run(self, root: pathlib.Path, value: str, *args: str):
+        return subprocess.run(
+            [sys.executable, str(HETZNER / "cf-token-set.py"), "--value-stdin", *args],
+            input=value + "\n", capture_output=True, text=True, cwd=ROOT, timeout=60,
+            env=clean_env(CF_REPO_ROOT=str(root), CLOUDFLARE_API_TOKEN=None),
+        )
+
+    def _fixture(self, tmp: str) -> pathlib.Path:
+        root = pathlib.Path(tmp)
+        (root / ".env.deploy").write_text(
+            "HCLOUD_TOKEN=behalten\nCLOUDFLARE_API_TOKEN=alter-token\nCF_API_KEY=alter-key\n", encoding="utf-8")
+        (root / ".env.portal").write_text(
+            "CLOUDFLARE_API_TOKEN=alter-token\nCF_ACCOUNT_TOKEN=alter-account\nADMIN_PASSWORD=behalten\n", encoding="utf-8")
+        return root
+
+    def test_trockenlauf_aendert_keine_datei(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._fixture(tmp)
+            before = (root / ".env.deploy").read_text(encoding="utf-8")
+            result = self._run(root, "neuer-token-1234")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("wuerde setzen", result.stdout)
+            self.assertEqual((root / ".env.deploy").read_text(encoding="utf-8"), before)
+
+    def test_apply_setzt_nur_die_token_schluessel_und_sichert(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = self._fixture(tmp)
+            result = self._run(root, "neuer-token-1234", "--apply")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            deploy = (root / ".env.deploy").read_text(encoding="utf-8")
+            portal = (root / ".env.portal").read_text(encoding="utf-8")
+            # Gesetzt: die drei Token-Schluessel.
+            self.assertIn("CLOUDFLARE_API_TOKEN=neuer-token-1234", deploy)
+            self.assertIn("CF_API_KEY=neuer-token-1234", deploy)
+            self.assertIn("CF_ACCOUNT_TOKEN=neuer-token-1234", portal)
+            # Unberuehrt: alles andere.
+            self.assertIn("HCLOUD_TOKEN=behalten", deploy)
+            self.assertIn("ADMIN_PASSWORD=behalten", portal)
+            self.assertNotIn("alter-token", deploy)
+            self.assertNotIn("alter-key", deploy)
+            # Sicherung liegt daneben und traegt den Altstand.
+            backup = root / ".env.deploy.bak-cftoken"
+            self.assertTrue(backup.exists())
+            self.assertIn("alter-token", backup.read_text(encoding="utf-8"))
+            # Der Wert selbst darf nie in der Ausgabe stehen.
+            self.assertNotIn("neuer-token-1234", result.stdout + result.stderr)
 
 
 class FleetPreflightDnsTest(unittest.TestCase):
@@ -886,6 +1139,7 @@ class FleetPreflightDnsTest(unittest.TestCase):
         *args: str,
         token: str | None = FAKE_TOKEN,
         app_ip: str | None = None,
+        sfu_ip: str | None = "198.51.100.7",
         portal_domain: str = "anunnakitools.de",
         origin_host: str | None = None,
     ) -> subprocess.CompletedProcess:
@@ -898,6 +1152,7 @@ class FleetPreflightDnsTest(unittest.TestCase):
                 ORIGIN_HOST=origin_host or f"origin.{portal_domain}",
                 CLOUDFLARE_API_TOKEN=token,
                 APP_IP=app_ip,
+                SFU_IP=sfu_ip,
             ),
         )
 
@@ -989,22 +1244,72 @@ class FleetPreflightDnsTest(unittest.TestCase):
         self.assertEqual(stub.requests, [])
 
     def test_gruener_fall_gibt_remediation_und_verify_aus(self) -> None:
-        stub = _CloudflareStub(records=(200, {"success": True, "errors": [], "result": [
-            {"id": "rec-1", "type": "A", "name": self.ORIGIN, "content": "203.0.113.5", "proxied": False},
-        ]}))
+        origin = "origin.anunnakitools.de"
+        sfu = "sfu.anunnakitools.de"
+        stub = _CloudflareStub(records_by_name={
+            origin: (200, {"success": True, "errors": [], "result": [
+                {"id": "rec-1", "type": "A", "name": origin, "content": "203.0.113.5", "proxied": False},
+            ]}),
+            sfu: (200, {"success": True, "errors": [], "result": [
+                {"id": "rec-2", "type": "A", "name": sfu, "content": "198.51.100.7", "proxied": False},
+            ]}),
+        })
         with stub:
             result = self._run_dns(stub, app_ip="203.0.113.5")
         combined = self._combined(result)
         self.assertEqual(result.returncode, 0, combined)
         self.assertIn("DNS-Verdrahtung ok", combined)
-        self.assertIn(self.ORIGIN, combined)
+        self.assertIn(origin, combined)
         self.assertIn("203.0.113.5", combined)
+        # F1: der SFU-Record wird mitgeprueft (eigener Host, eigene IP).
+        self.assertIn(sfu, combined)
+        self.assertIn("198.51.100.7", combined)
         # Das Verify-Kommando steht mit dem curl-Statusplatzhalter im Output.
         self.assertIn("curl -sS -o /dev/null", combined)
         self.assertIn("%{http_code}", combined)
         self.assertIn("https://anunnakitools.de/api/health", combined)
+        self.assertIn("cf-dns-ensure.py", combined)
+        # Zone + Origin + SFU: drei GETs, kein Schreibzugriff.
+        self.assertEqual(stub.methods(), ["GET", "GET", "GET"])
         self.assertIn("/client/v4/zones/", stub.paths()[1])
-        self.assertIn(f"name={self.ORIGIN}", stub.paths()[1])
+        self.assertIn(f"name={origin}", stub.paths()[1])
+        self.assertIn(f"name={sfu}", stub.paths()[2])
+
+    def test_sfu_record_proxied_wird_abgelehnt(self) -> None:
+        """WebRTC ist kein HTTP - ein proxied SFU-Record bricht die Signalisierung."""
+        origin = "origin.anunnakitools.de"
+        sfu = "sfu.anunnakitools.de"
+        stub = _CloudflareStub(records_by_name={
+            origin: (200, {"success": True, "errors": [], "result": [
+                {"id": "rec-1", "type": "A", "name": origin, "content": "203.0.113.5", "proxied": False},
+            ]}),
+            sfu: (200, {"success": True, "errors": [], "result": [
+                {"id": "rec-2", "type": "A", "name": sfu, "content": "198.51.100.7", "proxied": True},
+            ]}),
+        })
+        with stub:
+            result = self._run_dns(stub, app_ip="203.0.113.5")
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn(sfu, combined)
+        self.assertIn("proxied=true", combined)
+        self.assertEqual(stub.methods(), ["GET", "GET", "GET"])
+
+    def test_fehlender_sfu_record_wird_gemeldet(self) -> None:
+        origin = "origin.anunnakitools.de"
+        stub = _CloudflareStub(records_by_name={
+            origin: (200, {"success": True, "errors": [], "result": [
+                {"id": "rec-1", "type": "A", "name": origin, "content": "203.0.113.5", "proxied": False},
+            ]}),
+            "sfu.anunnakitools.de": (200, {"success": True, "errors": [], "result": []}),
+        })
+        with stub:
+            result = self._run_dns(stub, app_ip="203.0.113.5")
+        combined = self._combined(result)
+        self.assertEqual(result.returncode, 2, combined)
+        self.assertIn("sfu.anunnakitools.de", combined)
+        self.assertIn("existiert nicht", combined)
+        self.assertIn("cf-dns-ensure.py", combined)
 
     def test_token_gesetzt_aber_zone_nicht_erreichbar(self) -> None:
         # CF_API_BASE auf einen toten Port: der Zustand wird gemeldet, nicht verschluckt.
@@ -1120,7 +1425,7 @@ class _HealthStub:
         self.thread.start()
         return self
 
-    def __exit__(self, *exc: object) -> bool:
+    def __exit__(self, *exc: object) -> Literal[False]:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=5)

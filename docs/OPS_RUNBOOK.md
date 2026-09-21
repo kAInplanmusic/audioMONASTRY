@@ -1110,3 +1110,66 @@ Begrenzung auf den Monitoring-Knoten liegt in der Hetzner-Firewall
 (`audiomonastry-app`, Regel `8080/tcp` von `167.233.192.196/32`), der Endpunkt
 bleibt durch `SCRAPE_TOKEN` geschützt. Ergebnis am 2026-09-20: `audiomonastry`,
 `node`, `cadvisor` und `prometheus` alle `health=up`.
+
+## Cloudflare-DNS der Flotte verdrahten (F1) — 2026-09-21
+
+Der oeffentliche Zugang haengt an zwei A-Records, die **DNS-only** (proxied=false)
+direkt auf die Knoten zeigen. Vertrag und Werkzeug:
+
+```bash
+# 1. Token ablegen (alle lokalen Fundstellen; Wert wird nie ausgegeben)
+printf '%s\n' "$CF_TOKEN" | python3 scripts/hetzner/cf-token-set.py --value-stdin          # Trockenlauf
+printf '%s\n' "$CF_TOKEN" | python3 scripts/hetzner/cf-token-set.py --value-stdin --apply   # schreiben
+
+# 2. Records setzen/reparieren (drift-fest, idempotent)
+python3 scripts/hetzner/cf-dns-ensure.py            # Trockenlauf: was waere zu tun?
+python3 scripts/hetzner/cf-dns-ensure.py --apply    # origin -> app-1, sfu -> sfu-1, beide A/DNS-only
+
+# 3. Lesende Kontrolle (beide Records)
+bash scripts/hetzner/fleet-preflight.sh dns
+
+# 4. Live-Beweis
+curl -s -o /dev/null -w '%{http_code}\n' https://anunnakitools.de/api/health        # erwartet 200
+curl -s -o /dev/null -w '%{http_code}\n' https://sfu.anunnakitools.de/api/health    # erwartet 200
+```
+
+Live am 2026-09-21 gefunden und behoben: `origin.anunnakitools.de` stand auf einem
+alten Hetzner-Server (`46.225.253.71`) **mit Cloudflare-Proxy** — der Worker holt den
+Origin ueber genau diesen Namen, also lief die Domain dauerhaft in HTTP 521/522; der
+SFU-Record fehlte ganz.
+
+### SFU-HTTPS auf sfu-1 (F6)
+
+`sfu.anunnakitools.de` braucht ein **oeffentlich vertrauenswuerdiges** Zertifikat, weil
+der Browser direkt (DNS-only) dorthin verbindet:
+
+```bash
+# auf sfu-1: Site-Adresse setzen (Caddy holt Let's Encrypt per HTTP-01, Port 80 offen)
+SFU_PUBLIC_URL=https://sfu.anunnakitools.de bash scripts/hetzner/wire-rtc.sh sfu
+COMPOSE_PROJECT_NAME=audiomonastry docker compose -f docker-compose.hetzner.yml \
+  -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d --no-build --force-recreate caddy
+
+# auf app-1: Client-Pfad auf wss umstellen (Secret per Pipe, kein Rotieren)
+ssh root@<sfu-1> "grep '^TURN_STATIC_AUTH_SECRET=' /opt/audiomonastry/.env | cut -d= -f2-" \
+  | ssh root@<app-1> 'cd /opt/audiomonastry && SFU_PUBLIC_IP=<sfu-ip> \
+      SFU_PUBLIC_URL=https://sfu.anunnakitools.de bash scripts/hetzner/wire-rtc.sh app --secret-stdin'
+ssh root@<app-1> 'cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=audiomonastry docker compose \
+  -f docker-compose.hetzner.yml -f docker-compose.media.yml up -d --no-build --force-recreate audiomonastry'
+```
+
+Ein **Cloudflare-Origin-Zertifikat waere hier falsch**: es gilt nur fuer Cloudflares
+Edge, ein Browser lehnt es ab. Ein Origin-Zertifikat gehoert auf den App-Knoten
+(Worker-Pfad, `Caddyfile.origin`), Let's Encrypt auf den SFU-Knoten (Client-Pfad).
+
+TURN-Beweis (echt, mit den von der App geminteten Credentials):
+
+```bash
+# Credentials minten (Token aus der Knoten-.env) und als 600er Datei nach sfu-1
+ssh root@<app-1> 'bash -s' < /tmp/mint-turn-creds.sh > /tmp/.turn-creds      # "username credential"
+scp /tmp/.turn-creds root@<sfu-1>:/root/.turn-creds
+ssh root@<sfu-1> 'bash -s' < /tmp/turn-proof-sfu.sh     # turnutils_uclient im coturn-Container
+```
+
+Erwartet: Allokation mit den App-Credentials gelingt, falsches Credential endet mit
+`Cannot complete Allocation` (exit 255). Beides am 2026-09-21 gemessen.
+
