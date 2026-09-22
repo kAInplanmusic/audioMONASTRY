@@ -28,7 +28,7 @@ Der Selbstlern-Loop hat zwei Hälften: die **Bewertung** (läuft) und das
 | Speicherort der Bewertungen | **nur Supabase**, kein lokaler Spiegel | `database/ai_migration_008_visual.sql`: Tabellen `visual_generations`, `visual_feedback` (RLS, nur `service_role`) |
 | Bilder | **nicht im Repo** | `visual_generations.r2_url` / `r2_key` (Cloudflare R2) oder lokale Server-Ablage `VISION_ARTIFACT_DIR` (`server/visionArtifacts.ts`, Default `$TMPDIR/audiomonastry-vision`) |
 | RAG auf Bewertungen | vorhanden | `visual_style_ranking` (Migration 008) → `GET /api/ai/vision/styles` |
-| **Trainings-Pipeline** | **dieses Dokument** | `scripts/visual-lora-curate.py`, `scripts/visual-lora-dataset.py`, `scripts/runpod-lora-train.py`, `scripts/lora/bootstrap.sh`, `scripts/lora/lora-progress.py` (Fortschrittsmarker), `scripts/lora/vorstaging.sh` (Volume vorstagen) |
+| **Trainings-Pipeline** | **dieses Dokument** | `scripts/visual-lora-curate.py`, `scripts/visual-lora-dataset.py`, `scripts/runpod-lora-train.py`, `scripts/lora/bootstrap.sh`, `scripts/lora/lora-progress.py` (Fortschrittsmarker), `scripts/lora/vorstaging.sh` (Volume vorstagen), `scripts/lora/aitk-segment.py` + `scripts/lora/trainer-aitoolkit.sh` (§3e: Abschnitt → Trainerkommando) |
 
 ### Befund zum Datenpfad (2026-09-20, read-only gegen die Live-DB geprüft)
 
@@ -50,6 +50,30 @@ entstehen. Sie kommen aus der Session-Ende-Umfrage der App (VisualMONK-Overlay �
 Bilder bewertet haben, ist ein Stil-LoRA überhaupt sinnvoll – ein LoRA braucht
 typischerweise einige Dutzend bewertete Bilder desselben Stils. Bis dahin ist
 jeder Trainingslauf ein Lauf auf einer leeren Datenbasis.
+
+### Nachtrag 2026-09-22: es gibt einen Bootstrap-Datensatz in R2 (gemessen)
+
+Der Befund oben gilt für die **Bewertungen** – nicht für alle Bilder. Ein
+read-only Blick in den R2-Bucket (`lora/`-Präfix, Bucket `audiomonastrysamples`)
+fördert genau fünf Objekte zutage:
+
+```
+lora/cosmic-v1/dataset.tar.gz        53 794 733 Bytes   (37 PNG + 37 Captions + README + dataset_config.toml)
+lora/cosmic-v1/dataset_config.toml            566 B
+lora/cosmic-v1/bootstrap.sh                 7 810 B
+lora/cosmic-r16/config.yml                  1 464 B   (FLUX.1-dev, LoRA r16/alpha16, 1024 px)
+lora/cosmic-r16/start.sh                    1 600 B
+```
+
+Alle 37 Captions tragen den Trigger `monkstyle` und die Herkunftsmarke
+`bootstrap, messwerte` – der Betreiber hat die Bilder als **Bootstrap-Satz**
+erzeugt, nicht aus Nutzer-Bewertungen. Konsequenz für die Ehrlichkeit dieses
+Dokuments: „keine Daten“ heißt **„keine bewerteten Paare im RAG-Pfad“**, nicht
+„kein Bildmaterial“. Ein Trainingslauf ist damit technisch möglich (37 Bilder
+sind für einen Stil-Test knapp, aber nicht null) – die Kurationsskripte bleiben
+trotzdem bei Exit 3, weil sie ausschließlich auf `visual_feedback` schauen. Wer
+mit dem Bootstrap-Satz trainieren will, baut den Datensatz bewusst daran vorbei
+(`--from-json` bzw. direkt das tar.gz aus R2, wie der Lauf vom 21.09. es tat).
 
 ---
 
@@ -401,6 +425,27 @@ HF_TOKEN=<token> bash /workspace/lora/vorstaging.sh \
 Fehlen sie, steht dort eine `WARNUNG` – der GPU-Pod lädt dann selbst (bezahlte
 Wartezeit), das Vorstaging wurde übersprungen.
 
+**Rechnet sich das Volume? (Nachtrag 2026-09-22, Break-even)**
+
+Die Entscheidung „Volume ja/nein“ ist eine Rechnung mit den gemessenen Zahlen –
+und sie fällt **gegen** das Volume, solange nur wenige Abschnitte geplant sind:
+
+```
+Gespart je Abschnitt = (Kaltstart ohne Volume − Kaltstart mit Volume) × Stundensatz
+                     = (30 min − 5 min) / 60 × 0,49 USD/h = 0,204 USD
+Volume-Kosten        = 100 GB × 0,05 USD/GB/Monat        = 5,00 USD/Monat
+Break-even           = 5,00 / 0,204 ≈ 24,5 Abschnitte PRO MONAT
+```
+
+Für den geplanten Lauf (2000 Schritte = **2 Abschnitte**) ist das Volume damit
+**rund 4,6 USD teurer** als der Kaltstart: 2 × 0,204 USD = 0,41 USD gespart
+gegen 5,00 USD Monatsmiete – und die Miete läuft weiter, solange das Volume
+existiert (auch in Wochen ohne Training, z. B. bis Bewertungen vorliegen). Erst
+ab ~25 Abschnitten pro Monat (≈ 25 000 Schritte ≈ 14 h GPU-Zeit) dreht die
+Rechnung. Der Vorstaging-Pfad bleibt gültig und offline getestet – er ist nur
+**kein Automatismus** für einen Zwei-Abschnitt-Lauf. Wer ihn nutzt, tut es
+bewusst und löscht das Volume danach (`runpodctl network-volume delete <id>`).
+
 ---
 
 ## 3d. Konfiguration und Volumenkosten anzeigen (`--print-config`)
@@ -426,6 +471,75 @@ nicht in Logs (dieselbe Regel wie in `scripts/hetzner/lib/r2-sigv4.sh`).
 
 ---
 
+## 3e. Trainer-Anbindung: der Abschnitt muss beim Trainer ankommen (2026-09-22)
+
+**Das Problem, gemessen:** `bootstrap.sh` exportiert die Abschnittsangaben als Env
+(`LORA_SEGMENT_START/END`, `LORA_MAX_STEPS`, `LORA_SAVE_EVERY_STEPS`,
+`LORA_RESUME_FROM`, `LORA_CHECKPOINT_DIR`) – **kein Trainer liest Env**. Der
+erste Lauf (21.09.) startete mit einem rohen Kommando
+(`cd /app && python run.py …`); die Konfiguration trainierte ihre eigenen
+1500 Schritte, der Starter plante 3700, und nach 90,4 min war nichts
+hochgeladen (`artifact: null`). Zwei Fehler in einem Kommando: **geratener
+Trainerpfad** und **fehlende Übersetzung**.
+
+**Die Übersetzung ist jetzt gebaut und offline geprüft:**
+`scripts/lora/trainer-aitoolkit.sh` (Treiber) + `scripts/lora/aitk-segment.py`
+(Übersetzer). Aufruf im Auftrag:
+
+```bash
+--train-command 'bash /workspace/lora/trainer-aitoolkit.sh \
+     --aidir /workspace/ai-toolkit --config /workspace/lora/cosmic-r16.yml \
+     --name cosmic-r16'
+```
+
+**Alle Regeln stammen aus dem Quellcode** (Klon von `ostris/ai-toolkit`,
+Commit `a8dfcf7`), nicht aus Blogs:
+
+| Frage | Antwort im Quellcode | Folge für diesen Plan |
+|---|---|---|
+| Gibt es ein `--resume`? | **Nein.** `run.py` kennt nur `config_file_list`, `-r/--recover`, `-n/--name`, `-l/--log` | Kein Flag annehmen; Fortsetzen ist implizit. Blogger behaupten ein `--resume` – der Quellcode nicht |
+| Wie findet der Trainer den Checkpoint? | `BaseSDTrainProcess.get_latest_save_path()`: globbt `<name>*.safetensors` in `save_root` und nimmt das **neueste nach Erstellungszeit** | Der Resume-Checkpoint muss **in `save_root`** liegen, nicht daneben |
+| Was ist `save_root`? | `BaseTrainProcess.py` Z. 45: `<training_folder>/<name>` | Dateiname `<name>_<9-stellig>.safetensors`; ein fremder Name wird umbenannt |
+| Woran erkennt er den Schritt? | `load_training_state_from_metadata()` → `training_info.step` aus den safetensors-Metadaten; Schleife `range(start_step, train.steps)` | **`train.steps` ist ein absoluter Zielschritt** – der Abschnitt sendet das Abschnitts-**Ende**, nicht die Länge |
+| Wie sind die Zwischenstände benannt? | `save()` Z. 517-524: `f'{name}_{str(step).zfill(9)}.safetensors'` | `bootstrap.sh` (flacher Glob in `LORA_CHECKPOINT_DIR`) findet sie deshalb erst nach dem Einsammeln |
+
+**Was das Werkzeug tut (in dieser Reihenfolge):**
+
+1. **Patchen:** `train.steps` = Abschnittsende (absolut), `save_every`,
+   `folder_path` (Bilderordner), `training_folder`, `config.name` – je Schlüssel
+   **genau ein Treffer**, sonst Exit 2 mit Zeilennummern. `sample_steps` bleibt
+   unangetastet.
+2. **Resume setzen:** `LORA_RESUME_FROM` wird nach `save_root` kopiert – und sein
+   Metadaten-Schritt wird **gegen `LORA_SEGMENT_START` geprüft**: passt er nicht,
+   Exit 4 **vor** dem Training. Sonst liefe bezahlte Arbeit doppelt.
+3. **Trainer starten:** `python run.py segment-config.yml` **im Checkout** (kein
+   geratener Pfad: fehlt `<aidir>/run.py`, Exit 2 – genau der Fehler des ersten
+   Laufs).
+4. **Einsammeln:** der neueste Checkpoint wird nach **Schritt** (nicht nach
+   Dateizeit) gewählt und flach nach `LORA_CHECKPOINT_DIR` kopiert, damit
+   `bootstrap.sh` ihn hochlädt.
+
+`--print` zeigt die gepatchte Konfiguration und startet nichts (ohne GPU, ohne
+Kosten). Soll ein Abschnitt **ohne** Vorschaubilder laufen (Sampling kostet
+GPU-Zeit), gibt es `--disable-sampling` – der Schlüssel ist in ai-toolkits
+eigener Beispielkonfiguration dokumentiert, wird also nicht erfunden.
+
+**Drei ehrliche Grenzen dieses Wegs:**
+
+- **Der Optimierer-Zustand wird NICHT fortgesetzt.** ai-toolkit lädt nur die
+  Netzgewichte und die Schrittzahl (kein `optimizer_states`). Jeder
+  Abschnittsanfang startet die AdamW-Momente neu – das ist ein Qualitäts-,
+  kein Mechanikproblem, aber es muss gemessen und bewertet werden.
+- **`steps` ist absolut.** Eine Konfiguration mit `steps: 1500` in einem
+  Abschnitt 1000–2000 würde auf 1500 enden (halber Abschnitt). Der Patcher setzt
+  den Wert deshalb immer, und der Starter zeigt ihn im Report.
+- **Ein nicht getesteter Trainer bleibt ein nicht getesteter Trainer.** Übersetzer
+  und Treiber sind mit einem Stub-Trainer belegt (`tests/test_lora_trainer_aitoolkit.py`,
+  16 Tests); VRAM-Bedarf, Trainingsdauer und Loss-Verlauf des echten Laufs
+  bleiben offen.
+
+---
+
 ## 4. Betreiber-Schritte (exakt, in dieser Reihenfolge)
 
 **A. Einmalig vorbereiten**
@@ -443,6 +557,11 @@ nicht in Logs (dieselbe Regel wie in `scripts/hetzner/lib/r2-sigv4.sh`).
      kohya-ss/sd-scripts (`flux_train_network.py --dataset_config …`) oder
      ai-toolkit. **Syntax gegen die im Image installierte Trainer-Version
      prüfen** – dieses Repo hat sie nicht laufen lassen und behauptet es nicht.
+     **Für ai-toolkit ist die Übersetzung gebaut** (§3e): statt ein Kommando von
+     Hand zu bauen, `--train-command 'bash /workspace/lora/trainer-aitoolkit.sh
+     --aidir /workspace/ai-toolkit --config /workspace/lora/cosmic-r16.yml
+     --name cosmic-r16'` eintragen. Das Skript kennt den Trainerpfad **nicht**
+     als Default – genau der geratene `/app`-Pfad hat den ersten Lauf gekostet.
 3. **Stundensatz ablesen:** `runpodctl gpu list` → `securePricePerHr` bzw.
    `communityPricePerHr` (der Satz muss zur `--cloud-type`-Wahl passen) und
    **denselben Betrag** als `--price-per-hour` einsetzen.
@@ -519,30 +638,47 @@ nicht in Logs (dieselbe Regel wie in `scripts/hetzner/lib/r2-sigv4.sh`).
 ## 5. Ehrliche Grenzen (was hier NICHT belegt ist)
 
 - **Der echte Trainingslauf ist weiterhin nicht belegt.** Der erste Lauf brach an
-  der Laufzeitgrenze ab (90,4 min, 0,74 USD, kein LoRA). Abschnittsbetrieb,
-  Vorab-Rechnung, Checkpoints, Resume, Fortschrittsmarker und Vorstaging sind
-  **offline** geprüft (Fake-SDK, Stub-Trainer, Stub-Downloader, Loopback-HTTP) –
-  aber **nie mit einem echten GPU-Pod und nie mit einem echten Diffusion-Trainer**.
-  Es gibt weiterhin keinen Messwert für Trainingsdauer, Loss-Verlauf,
-  LoRA-Qualität oder VRAM-Eignung des gewählten Images.
+  der Laufzeitgrenze ab (90,4 min, 0,74 USD, kein LoRA). Nachträglich aus dem
+  Report belegt (`logs/lora-runs/20260921-195919-…json`): der Pod lief die
+  gesamten 90 min auf `RUNNING`, `artifact: null`, und das damalige
+  `--train-command` benutzte **nicht** `bootstrap.sh`, sondern ein rohes
+  `cd /app && python run.py …` – es hätte also selbst bei Erfolg **nichts**
+  hochgeladen (`result.upload_url` blieb ungenutzt) und der Trainerpfad war
+  geraten. Abschnittsbetrieb, Vorab-Rechnung, Checkpoints, Resume,
+  Fortschrittsmarker, Vorstaging und die Trainer-Übersetzung sind **offline**
+  geprüft (Fake-SDK, Stub-Trainer, Stub-Downloader, Loopback-HTTP) – aber **nie
+  mit einem echten GPU-Pod und nie mit einem echten Diffusion-Trainer**. Es gibt
+  weiterhin keinen Messwert für Trainingsdauer, Loss-Verlauf, LoRA-Qualität oder
+  VRAM-Eignung des gewählten Images.
 - **Die 2,0 s/Schritt sind eine Annahme.** Sie stehen deshalb als „ANNAHME" im
   Kostenblock und in der Abbruchmeldung. Nach dem ersten gemessenen Abschnitt
   ersetzen (`--seconds-per-step`) – erst dann rechnet der Plan mit der Wahrheit.
-- **Der Trainer-Befehl im Pod ist ungeprüft.** `scripts/lora/bootstrap.sh` ist
-  offline mit Stub-Trainern getestet (Resume-Pflicht, Checkpoint-Prüfung,
-  Fortschrittsmarker, Exit-Codes), aber nie mit einem echten Diffusion-Trainer.
-  `bootstrap.sh` **erfindet keine Trainer-Syntax**: es übergibt die Angaben des
-  Abschnitts als Env (`LORA_RESUME_FROM`, `LORA_MAX_STEPS`,
+- **Der Trainer-Befehl im Pod ist ungeprüft – aber die Übersetzung ist belegt.**
+  `scripts/lora/bootstrap.sh` ist offline mit Stub-Trainern getestet
+  (Resume-Pflicht, Checkpoint-Prüfung, Fortschrittsmarker, Exit-Codes), und seit
+  2026-09-22 ist auch die Übersetzung Abschnitt → ai-toolkit gebaut und mit einem
+  Stub-Trainer belegt (`scripts/lora/trainer-aitoolkit.sh` +
+  `scripts/lora/aitk-segment.py`, 16 Tests: absolutes Ziel, Resume-Platzierung
+  samt Schritt-Prüfung, Einsammeln nach Schritt, Abbruch ohne Zielschritt).
+  `bootstrap.sh` selbst **erfindet keine Trainer-Syntax**: es übergibt die
+  Angaben des Abschnitts als Env (`LORA_RESUME_FROM`, `LORA_MAX_STEPS`,
   `LORA_SAVE_EVERY_STEPS`, `LORA_CHECKPOINT_DIR`, `LORA_SEGMENT_*`,
-  `LORA_PROGRESS_FILE`, `LORA_PROGRESS_URL`) und der Betreiber entscheidet, wie
-  der Trainer sie in seine Syntax übersetzt.
+  `LORA_PROGRESS_FILE`, `LORA_PROGRESS_URL`). **Nicht belegt bleibt der echte
+  Trainer:** VRAM-Bedarf, Trainingsdauer pro Schritt (weiterhin 2,0 s Annahme),
+  Loss-Verlauf und der tatsächliche Optimierer-Zustand über Abschnittsgrenzen
+  (ai-toolkit setzt ihn nachweislich NICHT fort, §3e).
 - **Der HF-Download im Vorstaging ist ungeprüft.** `vorstaging.sh` ist offline mit
   Stub-Downloader, lokalem Git-Repo und lokalem Archiv getestet; der echte
   `huggingface-cli download` mit `hf_transfer` und gated Gewichten
   (`HF_TOKEN`) wurde nicht ausgeführt. Marker/Größenprüfung sind eine
   Vollständigkeits-Heuristik (≥ 90 % der gemessenen Größe), kein Bit-Beweis.
-- **Der Datenpfad ist leer** (live geprüft, s. o.). Ohne echte Bewertungen ist
-  jeder Lauf ein Lauf ohne Daten – die Pipeline bricht dann mit Exit 3 ab.
+- **Der Datenpfad ist leer** – für **Bewertungen** (live geprüft, s. o.); für
+  **Bilder** gilt das nicht: in R2 liegt ein Bootstrap-Satz mit 37 Bildern
+  (`lora/cosmic-v1/dataset.tar.gz`, gemessen 2026-09-22, s. §1 Nachtrag). Die
+  Kurationsskripte bleiben bei Exit 3, weil sie nur `visual_feedback` lesen –
+  die Kette ist also **nicht** durch „null Bilder“ blockiert, sondern durch
+  „keine bewerteten Paare“, und ein Lauf auf dem Bootstrap-Satz ist ein Lauf
+  auf einem selbst erzeugten Stil, nicht auf Nutzer-Geschmack.
 - **Rechte/Lizenz:** Stil-LoRAs aus Nutzerbildern und ggf. gated Basisgewichte
   (`FLUX.1-dev`, `FLUX.2 [dev]`) sind ein eigenes Thema; das Skript prüft keine
   Lizenzen (`docs/VISUALMONK_SPEC.md` §9 nennt es als offenen Punkt).
@@ -557,7 +693,9 @@ nicht in Logs (dieselbe Regel wie in `scripts/hetzner/lib/r2-sigv4.sh`).
 ```bash
 python3 tests/test_visual_lora_pipeline.py        # 28 Tests: Pipeline + Gate (kein Netz/GPU/Kosten)
 python3 tests/test_lora_segments.py               # 53 Tests: Abschnitte, Resume, Marker, Vorab-Abbruch, Volume
+python3 tests/test_lora_trainer_aitoolkit.py      # 16 Tests: Abschnitt -> ai-toolkit (Stub-Trainer)
 python3 tests/test_lora_segments.py -v            # mit Testnamen
+npm run test:python                               # alle Python-Suiten (die drei laufen dort mit)
 ```
 
 `tests/test_lora_segments.py` deckt den Abschnittsbetrieb ab – ohne Netz, GPU,
