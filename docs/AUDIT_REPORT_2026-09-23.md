@@ -482,6 +482,101 @@ das Belegdokument vermeiden soll.
 
 SSOT danach: **163 Einträge = 141 DONE / 16 PARTIAL / 5 OPEN / 1 BLOCKED**.
 
+---
+
+## 11. Nachtrag – Iteration 6: eine committete Migration ist kein Vollzug
+
+**Dies ist der schwerste Befund der ganzen Runde, weil er eine eigene Vollzugsmeldung
+widerlegt.** Erstmals in dieser Reihe wurde nicht nur der Code gelesen, sondern die
+**laufende Datenbank** befragt (Supabase-Projekt `audioMONASTRY`,
+`pwtwtqbcynsjtkxlkrwh`) — und sie widersprach dem Repo.
+
+### 11.1 Was gemessen wurde
+
+`RC1-004` (anon-SELECT entzogen) lag seit Iteration 2 committet als
+`supabase/migrations/007_rls_harden_anon_read.sql` vor und war **in der Datenbank nie
+angewendet worden**. `pg_policies` zeigte vorher:
+
+> anon-SELECT auf **13 Tabellen** — `ai_cost_estimates`, `ai_errors`, `ai_jobs`,
+> `ai_migrations`, `ai_model_usage`, `ai_sessions`, `library_links`, `mcp_audit_events`,
+> `music_tracks`, `plugin_prompt_versions`, `sample_tags`, `samples`, `system_prompts`
+
+Darunter `system_prompts` (53 Zeilen), `ai_evaluations` (285),
+`plugin_prompt_versions` (20), `ai_errors` (21). **Der anon-Key liegt im öffentlichen
+Client-Bundle** — diese Tabellen waren also für jeden lesbar, der das Bundle kennt,
+während im Repo „DONE" stand.
+
+### 11.2 Was dagegen unternommen wurde
+
+Vorprüfung (nicht vermutet): der Browser liest mit dem anon-Key nur `samples` und
+`music_tracks` (`src/lib/supabaseClient.ts`); `sample_tags` liest der Server mit
+`service_role` (`server/cloudAutomation.ts:198/204`); `library_links` hat 0 Codepfade; die
+sechs sensiblen Tabellennamen haben **0 Treffer in `dist/assets/*.js`**.
+
+Danach wurde der Inhalt von `007` als Live-Migration nachgetragen (idempotent, reine
+Rechte-Reduktion, umkehrbar). **Nachmessung an derselben Stelle:**
+
+> `anon_lesen_tabellen = 2`, `welche = "music_tracks, samples"`
+
+### 11.3 Ein Alarm, den ich selbst entwarnt habe
+
+`pg_policies` zeigte für die drei `visual_*`-Tabellen die Rolle `{public}` bei Policies mit
+dem Namen `visual_*_service_only` — das sah nach einem Loch aus (eine Policy für `public`
+mit `ALL`). Nachgesehen in `qual` und `with_check`:
+
+```
+(auth.role() = 'service_role'::text)
+```
+
+Die Policy gilt formal für `public`, lässt aber nur `service_role` durch. **Kein Loch.** Ich
+habe das geprüft, bevor ich es gemeldet habe — die Rolle allein sagt nichts darüber, was
+eine Policy durchlässt.
+
+### 11.4 Die eigentliche Ursache ist nicht diese eine Migration
+
+Es gibt **keine einzige Prüfung**, die Repo-Stand und Datenbank gegeneinander hält:
+
+* `tests/supabaseRls.test.ts` prüft die Migrations**dateien** auf einen Zustandsvertrag —
+  und blieb grün, während die Härtung live unwirksam war. Der Test konnte es nicht sehen.
+* `scripts/verify-supabase.ts` ist **26 Zeilen**, liest `ai_migrations`, zählt
+  `sample_embeddings` und ruft eine `match`-Funktion — es prüft **keine** Policy und läuft
+  **nicht** in `npm run verify`.
+
+Damit ist der Fall nicht „ein vergessener Befehl", sondern eine **Lücke im Prüfnetz**: jede
+künftige Migration kann denselben Weg gehen, und alle Gates bleiben grün. Neu aufgenommen als
+**`DB-P2-002` (offen)**.
+
+**Und das gilt für alle bisherigen RLS-Aussagen:** sie sind **Datei**-Aussagen. Für die
+Sicherheit zählt nur, was in der Datenbank steht.
+
+### 11.5 Weiteres aus Iteration 6
+
+* **`axios` entfernt** — einzige Code-Erwähnung war ein Kommentar in
+  `src/hooks/useAudioAI.ts:3`, der sagt, dass axios früher absichtlich durch `fetch` ersetzt
+  wurde; `npm ls axios` zeigte es ohne Verbraucher. `npm uninstall axios` → 11 Pakete weniger.
+* **`QUAL-P2-007` DONE** — die drei Felder ohne Abnehmer (`windowMs`, `max`,
+  `concurrencyMax`) sind entfernt. Bewusst **nicht** durchgesetzt: ein Zähler im HTTP-Pfad
+  würde gleichzeitige **Anfragen** messen statt gleichzeitiger **Aufträge** (RunPod-Aufträge
+  laufen nach der HTTP-Antwort weiter) — das gäbe die Sicherheit einer Bremse, die es nicht
+  ist.
+* **Gate erweitert** auf `--include files,dependencies --no-config-hints`. Negativprobe: ein
+  testweise eingetragenes unbenutztes Paket lässt das Gate mit `exit 1` und
+  `Unused dependencies (1)` fehlschlagen.
+* **Eigener Fehlschluss dabei korrigiert:** ich hatte knips Ignorierlisten komplett geleert,
+  weil knip für jeden Eintrag „Remove from ignoreDependencies" meldete. Der Hinweis galt nur
+  für den **abgefragten Scope** (die Kategorie `unlisted` fehlte darin). Gegenprobe mit
+  `--include unlisted,binaries`: **21 + 6** Befunde. Nachgeschlagen und wiederhergestellt
+  (`ws`/`midi`/`osc` stehen in `services/midi-bridge/package.json` bzw. `backend-core`,
+  `mixer-*` sind 18 optionale Plattform-Binaries, `ffmpeg`/`ffprobe` sind Systemprogramme).
+  Entfernt bleibt nur `tailwindcss` — wirklich redundant, weil knip seit dem `.css`-Glob den
+  CSS-Import verfolgt.
+* **`DB-P3-001` mit Live-Messung:** `public.library_links` hat RLS aktiv und **0 Zeilen**. Ein
+  Drop verlöre keine Daten. Status bleibt OPEN, weil ein Tabellen-Drop irreversibel ist und
+  ein Verbraucher außerhalb dieses Repos nicht ausgeschlossen werden kann.
+
+SSOT danach: **164 Einträge = 142 DONE / 16 PARTIAL / 5 OPEN / 1 BLOCKED**.
+
+
 
 
 

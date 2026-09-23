@@ -1,8 +1,28 @@
 # Startzettel für die nächste Sitzung
 
-**Stand: 2026-09-23 (nach ReleaseCycle Iteration 5). Arbeitsbaum sauber, nichts ungetrackt.
-Flotte AUS (0 Server). SSOT = `MASTERTODOENDE.json` mit 163 Einträgen
-(141 DONE · 16 PARTIAL · 5 OPEN · 1 BLOCKED).**
+**Stand: 2026-09-23 (nach ReleaseCycle Iteration 6). Flotte AUS (0 Server).
+SSOT = `MASTERTODOENDE.json` mit 164 Einträgen
+(142 DONE · 16 PARTIAL · 5 OPEN · 1 BLOCKED).**
+
+## 0. ZUERST LESEN: eine committete Migration ist kein Vollzug
+
+**Der schwerste Befund dieser Runde.** `RC1-004` (anon-SELECT entzogen) lag seit Iteration 2
+committet vor und war in der **laufenden Datenbank nie angewendet** worden. Live durfte `anon`
+weiterhin SELECT auf **13 Tabellen**, darunter `system_prompts` (53 Zeilen) und
+`ai_evaluations` (285) — und der anon-Key liegt im öffentlichen Client-Bundle.
+
+Nachgetragen und **live nachgemessen**: `anon` liest jetzt genau `music_tracks` und `samples`
+(2 Tabellen). Die Ursache bleibt offen als **`DB-P2-002`**: es gibt **keine** Prüfung, die
+Repo-Stand und Datenbank gegeneinander hält. `tests/supabaseRls.test.ts` prüft die
+Migrations**dateien** und blieb grün, während die Härtung live unwirksam war.
+
+> **Merksatz für jede künftige RLS-Aussage:** sie ist eine **Datei**-Aussage, bis sie an der
+> Datenbank gemessen wurde. Für die Sicherheit zählt nur, was dort steht.
+
+Werkzeug dafür: die Supabase-MCP-Werkzeuge (`list_tables`, `execute_sql` auf `pg_policies`,
+`apply_migration`). Projekt `audioMONASTRY` / `pwtwtqbcynsjtkxlkrwh`.
+
+---
 
 Block 2 ist abgearbeitet: Angriffe 3 und 4 gehärtet (Iteration 4), Angriffe 1, 2 und 5
 belegt — mit Datei- und Zeilenbeleg je Aussage in `docs/SEC_BLOCK2_ATTACKS.md`. Offen
