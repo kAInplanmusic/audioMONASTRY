@@ -43,7 +43,7 @@
     "audit:deep:help": "tsx scripts/deep-audit/run.ts --help",
     "eval:ai": "tsx scripts/eval-ai.ts",
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run test:python && npm run security && npm run audio:gate && npm run check:deadfiles && npm run audit:deep:static",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run test:python && npm run security && npm run audio:gate && npm run test:rls && npm run check:deadfiles && npm run audit:deep:static",
     "verify:boundary": "node scripts/validate-interface-boundaries.mjs",
     "runpod:smoke": "python3 scripts/runpod-smoke.py",
     "ghcr:check": "python3 scripts/ghcr-check.py",
@@ -86,7 +86,8 @@
     "check:library-links": "node scripts/check-library-links.mjs",
     "upload:library-music": "node scripts/upload-library-music.mjs",
     "apply:prompts": "tsx scripts/apply-prompt-catalog.ts",
-    "sync:env": "node scripts/sync-env-values.mjs"
+    "sync:env": "node scripts/sync-env-values.mjs",
+    "test:rls": "tsx scripts/verify-rls-live.ts --gate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

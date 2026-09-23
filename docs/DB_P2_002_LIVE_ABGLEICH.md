@@ -1,6 +1,6 @@
 # Live-Abgleich des RLS-Zustands (`DB-P2-002`)
 
-**Stand: 2026-09-23 · Status: umgesetzt und live bewiesen, noch nicht automatisch ausgeführt**
+**Stand: 2026-09-23 · Status: umgesetzt, live bewiesen, in der Pruefkette (npm run test:rls) - siehe §7**
 
 ---
 
@@ -143,3 +143,81 @@ Vertrag. Das ist derselbe Grundsatz wie in `QUAL-P2-008`.
 > Bis dahin gilt: nach jedem Deploy `npm run verify:rls-live` von Hand ausführen; Rückgabe 1
 > blockiert die Freigabe.
 
+
+---
+
+## 7. Nachtrag 2026-09-23 (Iteration 15): die fehlende Richtung ist gebaut
+
+Bis hierher prüfte der Abgleich **nur das Ist der Datenbank**. Genau der Fall, der
+ihn ausgelöst hat, blieb damit teilweise unsichtbar: eine Migration kann fehlerfrei
+im Repo liegen und nie angewendet worden sein — die Dateien sehen dabei sauber aus.
+Jetzt läuft der Vergleich in **beide** Richtungen.
+
+### Was dazugekommen ist
+
+| Prüfung | Was sie findet |
+|---|---|
+| Jede Tabelle aus `supabase/migrations/` existiert live | eine Migration, die nie gelaufen ist |
+| Jede dort angelegte Policy existiert live | **genau der Fall RC1-004** |
+| Jede dort entfernte Policy ist live weg | eine Härtung, die nicht angekommen ist |
+
+Umgesetzt in `server/rlsContract.ts`: `parseMigrationSql()` liest `create table`,
+`drop table`, `create policy` und `drop policy` als **Ereignisse in Textreihenfolge**.
+`mergeMigrationState()` wendet sie dateiweise in alphabetischer Reihenfolge an
+(so wendet Supabase Migrationen an) und rechnet auf.
+
+### Eigener Fehler, der dabei auffiel
+
+Der erste Entwurf sammelte alle `create` und alle `drop` **getrennt** und rechnete sie
+gegeneinander auf. Der Abgleich meldete daraufhin sofort einen Verstoß:
+
+```
+Tabellen aus den Migrationen fehlen in der Datenbank: library_links
+```
+
+Der Zustand war **richtig** — `012_library_tables.sql` legt `library_links` an,
+`015_drop_library_links.sql` löscht sie wieder. Der Fehler lag im Prüfer, nicht im
+System. Behoben durch ereignisweises Abarbeiten; ein `drop table` entfernt auch die
+Policies dieser Tabelle aus der Erwartung. Ein Test hält den Fall fest.
+
+> **Ein Fehlalarm im Gate ist so schädlich wie ein übersehener Fehler.** Wer einmal
+> grundlos Rot sieht, glaubt danach auch dem echten Rot nicht mehr.
+
+### In der Prüfkette
+
+`npm run test:rls` läuft seit Iteration 15 in `npm run verify`. Das Skript liest die
+`.env` **selbst** — sonst hätte es im Gate nichts gemessen.
+
+| Lage | Verhalten |
+|---|---|
+| Zugangsdaten fehlen | meldet ausdrücklich `UEBERSPRUNGEN … das ist kein bestandener Test` und läuft weiter |
+| Zugangsdaten da, Dateien ≠ Datenbank | **exit 1** → Gate rot |
+| Zugangsdaten da, Messung schlägt fehl | **exit 1** → Gate rot (wir hatten die Mittel und keine Antwort) |
+
+### Gegenbeweis ohne Eingriff in die Datenbank
+
+Weil ein grüner Lauf allein nichts beweist: eine **temporäre Migrationsdatei**
+`supabase/migrations/999_gegenbeweis_probe.sql` legte eine Phantom-Tabelle an und
+entfernte eine echte Policy. Ergebnis:
+
+```
+- Tabellen aus den Migrationen fehlen in der Datenbank: phantom_tabelle — eine Datei ist kein Vollzug.
+- Policies wurden in den Migrationen entfernt, sind live aber noch da: anon_read_samples@samples — die Haertung ist nicht angekommen.
+```
+
+Nach dem Löschen der Datei: wieder `exit 0`. Die Datenbank wurde dabei **nicht
+angefasst** — der Beweis läuft allein über die Dateiseite, ist also gefahrlos
+wiederholbar.
+
+### Was offen bleibt
+
+Nur noch **Betrieb**: der nächtliche Lauf auf dem Hetzner-Knoten
+(`scripts/hetzner/rls-live-check.sh`) ist vorbereitet und laut
+Betreiberentscheidung **nicht** automatisch aktiviert. Das ist jetzt eine
+Betriebsentscheidung, keine Lücke im Prüfnetz mehr.
+
+### Und die Kennzeichnung
+
+Die Erledigungen, die auf **Dateien** beruhen, tragen jetzt ein Feld `dateiAussage`
+— maschinell auffindbar über `jq '.items[] | select(.dateiAussage)'`. Damit ist beim
+Lesen unterscheidbar, ob eine Aussage gemessen oder nur im Repo belegt ist.

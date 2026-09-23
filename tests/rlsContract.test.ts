@@ -16,6 +16,8 @@ import {
   formatRlsSummary,
   grantsAnonRead,
   summarizeRls,
+  parseMigrationSql,
+  mergeMigrationState,
   type RlsReportRow,
 } from '../server/rlsContract';
 
@@ -134,5 +136,155 @@ describe('RLS-Vertrag: Zusammenfassung', () => {
     expect(text).toContain('Tabellen im Schema public: 5');
     expect(text).toContain('VERSTOESSE GEGEN DEN VERTRAG');
     expect(text).toContain('system_prompts');
+  });
+});
+
+// ============================================================================
+// DB-P2-002, Nachtrag: die Richtung DATEI -> DATENBANK
+// ============================================================================
+// Bis hierher prüfte der Vertrag nur das Ist der Datenbank. Genau der Fall, der
+// am 2026-09-23 passiert ist, blieb damit unsichtbar: eine Migration lag fertig
+// im Repo und war NIE angewendet worden - die Dateien sahen dabei fehlerfrei aus.
+// Diese Tests sichern die Gegenrichtung ab, ohne eine Datenbank zu brauchen.
+
+describe('DB-P2-002 · Migrationsdateien gegen den Live-Zustand', () => {
+  const datei = (name: string, sql: string) => ({ name, sql });
+
+  /** Eine Live-Zeile bauen (nur die Felder, die die Prüfung liest). */
+  const live = (tabellen: { name: string; policies?: { name: string; roles: string[]; cmd: string }[] }[]): RlsReportRow[] => {
+    const rows: RlsReportRow[] = [];
+    for (const t of tabellen) {
+      if (!t.policies || t.policies.length === 0) {
+        rows.push({
+          tablename: t.name,
+          rls_enabled: true,
+          policyname: '',
+          policy_roles: null,
+          policy_cmd: '',
+          using_condition: '',
+          check_condition: '',
+        });
+        continue;
+      }
+      for (const p of t.policies) {
+        rows.push({
+          tablename: t.name,
+          rls_enabled: true,
+          policyname: p.name,
+          policy_roles: p.roles,
+          policy_cmd: p.cmd,
+          using_condition: '',
+          check_condition: '',
+        });
+      }
+    }
+    return rows;
+  };
+
+  it('erkennt eine Migration, die im Repo liegt und nie angewendet wurde (Fall RC1-004)', () => {
+    const dateien = [
+      datei('001_basis.sql', 'create table public.samples (id text);\ncreate policy "anon_read_samples" on public.samples for select to anon using (true);'),
+      datei('002_neu.sql', 'create table public.system_prompts (id uuid);\ncreate policy "service_prompts" on public.system_prompts for all to service_role using (true);'),
+    ];
+    // Live fehlt system_prompts samt Policy - die Datenbank hat 002 nie gesehen.
+    const rows = live([{ name: 'samples', policies: [{ name: 'anon_read_samples', roles: ['anon'], cmd: 'SELECT' }] }]);
+    const verstoesse = checkRlsContract(rows, undefined, { dateien });
+    expect(verstoesse.join('\n')).toContain('system_prompts');
+    expect(verstoesse.join('\n')).toContain('eine Datei ist kein Vollzug');
+    expect(verstoesse.join('\n')).toMatch(/service_prompts@system_prompts/);
+  });
+
+  it('erkennt eine Policy, die im Repo entfernt wurde und live noch steht', () => {
+    const dateien = [
+      datei('001_basis.sql', 'create table public.samples (id text);\ncreate policy "anon_read_samples" on public.samples for select to anon using (true);\ncreate policy "anon_read_tags" on public.sample_tags for select to anon using (true);'),
+      datei('002_haerten.sql', 'drop policy if exists "anon_read_tags" on public.sample_tags;'),
+    ];
+    const rows = live([
+      { name: 'samples', policies: [{ name: 'anon_read_samples', roles: ['anon'], cmd: 'SELECT' }] },
+      { name: 'sample_tags', policies: [{ name: 'anon_read_tags', roles: ['anon'], cmd: 'SELECT' }] },
+    ]);
+    const verstoesse = checkRlsContract(rows, undefined, { dateien });
+    expect(verstoesse.join('\n')).toMatch(/anon_read_tags@sample_tags/);
+    expect(verstoesse.join('\n')).toContain('Haertung ist nicht angekommen');
+  });
+
+  it('rechnet die Reihenfolge richtig: spaeter wieder angelegt heißt SOLL vorhanden', () => {
+    const dateien = [
+      datei('001_basis.sql', 'create table public.samples (id text);\ncreate policy "p" on public.samples for select to anon using (true);'),
+      datei('002_weg.sql', 'drop policy if exists "p" on public.samples;'),
+      datei('003_wieder.sql', 'create policy "p" on public.samples for select to anon using (true);'),
+    ];
+    // music_tracks gehoert mit dazu: der Vertrag verlangt GENAU {samples, music_tracks}
+    // als anon-Ziele, sonst meckert Pruefung 1 zu Recht.
+    const rows = live([
+      { name: 'samples', policies: [{ name: 'p', roles: ['anon'], cmd: 'SELECT' }] },
+      { name: 'music_tracks', policies: [{ name: 'q', roles: ['anon'], cmd: 'SELECT' }] },
+    ]);
+    expect(checkRlsContract(rows, undefined, { dateien })).toEqual([]);
+  });
+
+  it('loescht mit einer Tabelle auch deren Policies aus der Erwartung (kein Fehlalarm)', () => {
+    // Genau der Fall library_links: 012 legt an, 015 loescht wieder. Der erste
+    // Entwurf meldete hier faelschlich "Tabelle fehlt in der Datenbank".
+    const dateien = [
+      datei('012_library_tables.sql', 'create table public.library_links (id text);\ncreate policy "service_write_links" on public.library_links for all to service_role using (true);'),
+      datei('015_drop_library_links.sql', 'drop table if exists public.library_links cascade;'),
+    ];
+    const rows = live([{ name: 'samples', policies: [{ name: 'anon_read_samples', roles: ['anon'], cmd: 'SELECT' }] }]);
+    const verstoesse = checkRlsContract(rows, undefined, { dateien });
+    expect(verstoesse.join('\n')).not.toContain('library_links');
+    // Der Vertrag selbst meckert weiter, weil samples als anon-Ziel fehlt -
+    // das ist gewollt und zeigt, dass die Pruefung nicht einfach still ist.
+    expect(verstoesse.length).toBeGreaterThan(0);
+  });
+
+  it('ohne Migrationsdateien wird nur das Ist geprueft (Vertrag bleibt nutzbar)', () => {
+    const rows = live([{ name: 'samples', policies: [{ name: 'a', roles: ['anon'], cmd: 'SELECT' }] }, { name: 'music_tracks', policies: [{ name: 'b', roles: ['anon'], cmd: 'SELECT' }] }]);
+    expect(checkRlsContract(rows)).toEqual([]);
+  });
+
+  it('erkennt ein fehlendes create table auch ohne Policy', () => {
+    const dateien = [datei('001.sql', 'create table public.nur_tabelle (id text);')];
+    const rows = live([{ name: 'samples', policies: [{ name: 'a', roles: ['anon'], cmd: 'SELECT' }] }, { name: 'music_tracks', policies: [{ name: 'b', roles: ['anon'], cmd: 'SELECT' }] }]);
+    expect(checkRlsContract(rows, undefined, { dateien }).join('\n')).toContain('nur_tabelle');
+  });
+});
+
+describe('DB-P2-002 · der Migrationsleser selbst', () => {
+  it('liest die Anweisungen in TEXTREIHENFOLGE, nicht nach Art gruppiert', () => {
+    const ereignisse = parseMigrationSql(
+      [
+        'create table if not exists public.a (id text);',
+        'create policy "p1" on public.a for select to anon using (true);',
+        'drop policy if exists "p1" on public.a;',
+        'create policy "p1" on public.a for select to anon using (true);',
+      ].join('\n'),
+    );
+    expect(ereignisse.map((e) => e.art)).toEqual(['tabelle+', 'policy+', 'policy-', 'policy+']);
+  });
+
+  it('ueberliest Kommentarzeilen', () => {
+    const ereignisse = parseMigrationSql(
+      ['-- create table public.falle (id text);', '-- drop policy if exists "x" on public.samples;', 'create table public.echt (id text);'].join('\n'),
+    );
+    expect(ereignisse).toHaveLength(1);
+    expect(ereignisse[0]).toMatchObject({ art: 'tabelle+', name: 'echt' });
+  });
+
+  it('setzt die Dateien in alphabetischer Reihenfolge zusammen (wie Supabase anwendet)', () => {
+    const zustand = mergeMigrationState([
+      { name: '010_danach.sql', sql: 'drop table if exists public.weg;' },
+      { name: '001_zuerst.sql', sql: 'create table public.weg (id text);\ncreate table public.bleibt (id text);' },
+    ]);
+    expect(zustand.tables).toEqual(['bleibt']);
+  });
+
+  it('nimmt bei einem drop table auch dessen Policies aus der Erwartung', () => {
+    const zustand = mergeMigrationState([
+      { name: '001.sql', sql: 'create table public.t (id text);\ncreate policy "p" on public.t for all to service_role using (true);' },
+      { name: '002.sql', sql: 'drop table if exists public.t cascade;' },
+    ]);
+    expect(zustand.erwartetVorhanden).toEqual([]);
+    expect(zustand.tables).toEqual([]);
   });
 });
