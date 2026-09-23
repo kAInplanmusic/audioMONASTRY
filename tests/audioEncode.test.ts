@@ -78,6 +78,14 @@ describe('FEAT-P3-004 · Formatkatalog (rein)', () => {
     expect(mp3).toEqual(expect.arrayContaining(['-b:a', '320k', '-id3v2_version', '3', '-metadata', 'title=Mixdown', '-metadata', 'artist=MONK']));
     expect(mp3[mp3.length - 1]).toBe('/out.mp3');
 
+    // Block 2 / Angriff 4 (2026-09-23): ohne Protokoll-Whitelist darf ffmpeg
+    // jedes Protokoll lesen, das sein Build kennt (http/https/rtmp/tcp). Sie
+    // muss VOR dem -i stehen, sonst ist sie wirkungslos.
+    const wl = mp3.indexOf('-protocol_whitelist');
+    expect(wl, 'Protokoll-Whitelist fehlt').toBeGreaterThan(-1);
+    expect(mp3[wl + 1]).toBe('file');
+    expect(wl).toBeLessThan(mp3.indexOf('-i'));
+
     // Verlustfrei: keine Bitraten-Angabe, feste Kompressionsstufe.
     const flac = buildEncodeArgs('/in.wav', '/out.flac', exportFormatInfo('flac')!);
     expect(flac).toContain('flac');

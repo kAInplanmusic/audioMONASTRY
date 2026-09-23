@@ -256,6 +256,15 @@ describe('VisualMONK – Show-Merge (ffmpeg)', () => {
     expect(args).toContain('concat');
     expect(args).toContain('/tmp/c.txt');
     expect(args[args.length - 1]).toBe('/tmp/out.mp4');
+
+    // Block 2 / Angriff 4 (2026-09-23): die Konkatdatei UND die darin gelisteten
+    // Medien liegen lokal. Ohne Whitelist koennte ein Listeneintrag ein anderes
+    // Protokoll ansprechen; `file,concat` deckt beide Ebenen ab und muss VOR dem
+    // -i stehen.
+    const wl = args.indexOf('-protocol_whitelist');
+    expect(wl, 'Protokoll-Whitelist fehlt').toBeGreaterThan(-1);
+    expect(args[wl + 1]).toBe('file,concat');
+    expect(wl).toBeLessThan(args.indexOf('-i'));
     const filter = args[args.indexOf('-vf') + 1];
     expect(filter).toContain('scale=1024:576:force_original_aspect_ratio=decrease');
     expect(filter).toContain('pad=1024:576');

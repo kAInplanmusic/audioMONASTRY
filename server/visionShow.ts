@@ -87,6 +87,14 @@ export function buildMergeArgs(
     'concat',
     '-safe',
     '0',
+    // PROTOKOLL-WHITELIST (Block 2 / Angriff 4, 2026-09-23): die Konkatdatei und
+    // die darin gelisteten Medien liegen ausschliesslich lokal im Arbeitsordner.
+    // Ohne Whitelist koennte ein Eintrag der Liste ein anderes Protokoll
+    // ansprechen. `file,concat` deckt beide Ebenen ab (Liste und die daraus
+    // geoeffneten Dateien) und ist empirisch geprueft, damit die Haertung den
+    // Pfad nicht bricht.
+    '-protocol_whitelist',
+    'file,concat',
     '-i',
     concatFile,
     '-vf',

@@ -103,7 +103,27 @@ export function buildEncodeArgs(
   if (!info.codec) {
     throw new AudioEncodeError('UNKNOWN_FORMAT', `${info.format} braucht keinen Encoder (WAV-Durchlauf)`);
   }
-  const args = ['-hide_banner', '-nostdin', '-v', 'error', '-y', '-i', inputPath, '-vn', '-c:a', info.codec];
+  // PROTOKOLL-WHITELIST (Block 2 / Angriff 4, 2026-09-23): ohne sie darf ffmpeg
+  // ueber JEDES Protokoll lesen, das sein Build kennt - auch http/https/rtmp/
+  // tcp. Der Eingabepfad ist hier immer eine Datei, die der Server selbst in
+  // einem mkdtemp-Verzeichnis angelegt hat; mehr wird nicht gebraucht. Ein
+  // manipulierter Eingabename koennte sonst als URL gedeutet werden und ffmpeg
+  // zu einem Netzzugriff veranlassen (SSRF ueber den Mediaparser). `file` steht
+  // VOR dem `-i` - es ist eine Eingabeoption.
+  const args = [
+    '-hide_banner',
+    '-nostdin',
+    '-v',
+    'error',
+    '-y',
+    '-protocol_whitelist',
+    'file',
+    '-i',
+    inputPath,
+    '-vn',
+    '-c:a',
+    info.codec,
+  ];
   if (info.argStyle === 'quality') {
     const quality = Number(options.quality ?? info.defaultQuality ?? 6);
     const clamped = Number.isFinite(quality) ? Math.min(10, Math.max(0, quality)) : 6;
