@@ -63,6 +63,7 @@ import {
   tokenFromCookieHeader,
   tokenFromQueryString,
 } from './server/mediaAccess.ts';
+import { registerLegalRoutes } from './server/legalPages.ts';
 import { isAppActivityRequest } from './server/idleSignal.ts';
 import { registerSecurityRoutes, recordThrottledCspReport } from './server/routes/securityRoutes.ts';
 import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
@@ -923,6 +924,18 @@ registerVoiceRoutes(app);
 // Static Asset delivery (Vite dev / production dist)
 // ===========================================================================
 async function startServer(port: number = PORT): Promise<{ httpServer: http.Server; io: unknown } | null> {
+  // ---------------------------------------------------------------------------
+  // PROD-P0-005: Impressum und Datenschutz als oeffentliche Seiten.
+  //
+  // Gemessen: die Token-Sperre haengt nur an `app.use('/api', …)` (oben), die
+  // Auth-Middleware greift fuer diese Pfade also gar nicht - sie brauchen nur
+  // einen Handler VOR den Static-Zweigen, sonst liefert der SPA-Fallback die
+  // Studio-Oberflaeche aus. Die Angaben kommen aus LEGAL_*-Variablen; fehlende
+  // Pflichtangaben werden auf der Seite sichtbar angezeigt, statt eine leere
+  // oder erfundene Anschrift zu behaupten.
+  // ---------------------------------------------------------------------------
+  registerLegalRoutes(app, process.env as Record<string, string | undefined>);
+
   // ---------------------------------------------------------------------------
   // PROD-P1-006: Zugriffsschutz fuer die Demo-Tracks unter /music.
   //

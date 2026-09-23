@@ -608,6 +608,28 @@ function AppComponent() {
                                  transition-all duration-300 active:scale-95">
                     ▶ Studio betreten
                   </span>
+                  {/* PROD-P0-005: Rechtstexte sind Pflicht und muessen VOR dem
+                      Studio-Betreten erreichbar sein - hier, auf der Startseite,
+                      ohne Zugangstoken. Neuer Tab, damit die Startseite bleibt. */}
+                  <div className="mt-4 flex items-center gap-3 text-[9px] font-mono tracking-[0.25em] uppercase">
+                    <a
+                      href="/impressum"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-500 hover:text-cyan-300 transition-colors"
+                    >
+                      Impressum
+                    </a>
+                    <span className="text-neutral-700" aria-hidden="true">·</span>
+                    <a
+                      href="/datenschutz"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-500 hover:text-cyan-300 transition-colors"
+                    >
+                      Datenschutz
+                    </a>
+                  </div>
               </button>
           </div>
       );
@@ -983,6 +1005,21 @@ function AppComponent() {
         onSaveSnapshot={handleSaveScratchSnapshot}
         onLoadSnapshot={handleLoadScratchSnapshot}
       />
+
+      {/* PROD-P0-005: Rechtstexte in JEDER Studio-Ansicht erreichbar. Die
+          Abnahmebedingung verlangt die Verlinkung „im Footer jeder Ansicht" –
+          dieser Block liegt im gemeinsamen Layout-Abschluss, den alle Ansichten
+          teilen (die Startseite oben hat zusätzlich einen eigenen Hinweis). Es
+          sind oeffentliche Server-Seiten ohne Zugangstoken, daher neuer Tab. */}
+      <footer className="mt-10 flex items-center justify-center gap-3 text-[9px] font-mono tracking-[0.25em] uppercase text-neutral-600">
+        <a href="/impressum" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-300 transition-colors">
+          Impressum
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href="/datenschutz" target="_blank" rel="noopener noreferrer" className="hover:text-cyan-300 transition-colors">
+          Datenschutz
+        </a>
+      </footer>
     </div>
   );
 }
