@@ -428,5 +428,60 @@ Dekodierer für eine zu lange Datei gar nicht erst aufgerufen wird.
 SSOT danach: **162 Einträge = 141 DONE / 15 PARTIAL / 5 OPEN / 1 BLOCKED**.
 Neu aufgenommen: `SEC-P2-004` (die drei noch unbelegten Block-2-Angriffe).
 
+---
+
+## 10. Nachtrag – Iteration 5: Block-2-Angriffe 1, 2 und 5 belegt
+
+Vollständig mit Datei- und Zeilenbelegen: **`docs/SEC_BLOCK2_ATTACKS.md`**. Hier die
+Kurzfassung, inklusive der Korrektur einer eigenen Fehleinschätzung.
+
+**Angriff 1 (Kosten).** Die Geldsumme ist strukturell gedeckelt: Token-Pflicht,
+10 Anfragen/Minute auf den teuren Pfaden, **10 EUR/h hartes Flottenbudget, geprüft
+vor dem ersten Netzwerkaufruf** (`fleetWake.ts:341`, bei Überschreitung 409), harte
+Obergrenze RunPod-Guthaben, dazu der Kill-Switch.
+
+> **Korrektur:** in §2 dieses Berichts hatte ich „Behauptet wird eine Grenze, nicht
+> gemessen" geschrieben. Nach Lektüre des Codes existiert der Wächter, ist
+> verdrahtet und getestet — die Aussage war **zu pessimistisch**.
+
+Offen bleibt: der 402-Pfad wurde nie live provoziert (offener Punkt O-8 des
+Infra-Audits), und für **keinen** der acht Endpunkte ist ein `workersMax` gesetzt —
+der Euro-Deckel hält, die **Parallelität** begrenzt er nicht.
+
+**Angriff 2 (Speicher).** Grenzen je Anfrage (32 MB Chunk, 50 MB JSON, 100 MB
+Sample, 240 Chunks/Minute) und Speichergrenzen je Container (128M–4G) sind
+vorhanden — Containment ja, Verfügbarkeit nein. **Befund:** es gibt **keine
+Parallelitätsbremse für Uploads**, und der Server puffert vollständig
+(`Buffer.concat`, `parseMultipartStream`) → der Bedarf skaliert mit N × 32 MB bis
+zur Container-Grenze.
+
+> Gegen eine naheliegende Fehlinterpretation: `npm run check:memory` ist **kein**
+> Beleg für diesen Angriff. Das Skript fährt **Frontend**-Last und misst 0,03 MB
+> Delta gegen ein 512-MB-Gate. Es sagt nichts über den Server unter Upload-Last.
+
+**Angriff 5 (Polyglot).** `nosniff` auf allen Antworten, und die Middleware steht
+**vor** den statischen Handlern; dazu `X-Frame-Options: DENY`, Referrer-Policy,
+CSP und eine Audio-Whitelist beim Upload (ohne Audio-Endung und ohne
+`audio/`-Content-Type → **415**). Restrisiko: beim Abruf **direkt aus R2/Supabase**
+setzt unser `nosniff`-Kopf nicht — ungeprüft, als `TODO(verify)` notiert.
+
+**Nebenfund, behoben:** `docs/audit-infra-runpod.md:300` führte „Befund V3-4"
+(`wakeFleet` ohne Kosten-Gate) als offen, obwohl er seit 2026-09-20 behoben ist. Wer
+nur die Infra-Audit-Datei liest, hält ein geschlossenes Loch für offen. Dort steht
+jetzt ein Korrekturhinweis mit Stand und Belegstelle.
+
+**Neu aufgenommen:** `QUAL-P2-007` — `AI_RATE_CONCURRENCY_MAX` und `AI_RATE_MAX`
+werden aus der Umgebung gelesen und sind unit-getestet, aber von **keiner**
+Produktionsdatei durchgesetzt. Die Kostenbremse sieht in den Tests vollständig aus
+und ist im Betrieb zu drei Fünfteln wirkungslos.
+
+**`SEC-P2-004` bleibt PARTIAL:** die zwei verbleibenden Prüfungen (Lastversuch zu
+Angriff 2, R2-Abruf zu Angriff 5) brauchen eine laufende Umgebung, und die Flotte
+ist aus. Eine Annahme in eine Erledigung umzuschreiben wäre genau der Fehler, den
+das Belegdokument vermeiden soll.
+
+SSOT danach: **163 Einträge = 141 DONE / 16 PARTIAL / 5 OPEN / 1 BLOCKED**.
+
+
 
 

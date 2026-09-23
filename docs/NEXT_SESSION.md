@@ -1,8 +1,13 @@
 # Startzettel für die nächste Sitzung
 
-**Stand: 2026-09-23 (nach ReleaseCycle Iteration 4). Arbeitsbaum sauber, nichts ungetrackt.
-Flotte AUS (0 Server). SSOT = `MASTERTODOENDE.json` mit 162 Einträgen
-(141 DONE · 15 PARTIAL · 5 OPEN · 1 BLOCKED).**
+**Stand: 2026-09-23 (nach ReleaseCycle Iteration 5). Arbeitsbaum sauber, nichts ungetrackt.
+Flotte AUS (0 Server). SSOT = `MASTERTODOENDE.json` mit 163 Einträgen
+(141 DONE · 16 PARTIAL · 5 OPEN · 1 BLOCKED).**
+
+Block 2 ist abgearbeitet: Angriffe 3 und 4 gehärtet (Iteration 4), Angriffe 1, 2 und 5
+belegt — mit Datei- und Zeilenbeleg je Aussage in `docs/SEC_BLOCK2_ATTACKS.md`. Offen
+bleiben dort genau zwei Prüfungen, die eine laufende Umgebung brauchen: ein Lastversuch
+mit parallelen Uploads und der Abruf einer hochgeladenen Datei direkt aus R2.
 
 Audit-Basis war `e71cb7d`; darauf liegen die Commits aus Iteration 3 und 4. Die exakte Kette
 steht in git — bewusst nicht hier abgeschrieben, weil ein Amend die Hashes verschiebt:
