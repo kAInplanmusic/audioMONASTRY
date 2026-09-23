@@ -203,11 +203,11 @@ class AudioEngine {
     bridgeBufferToV2: (track, buffer) => { this.bridgeAudioBufferToV2(track, buffer); },
     triggerV2Sample: (track) => { this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 }); },
     getMusicBuffer: (url) => this.getMusicBuffer(url),
-    createPlayerFromUrl: (url) => {
-      const player = new Tone.Player(url).toDestination();
-      player.autostart = true;
-      return player as unknown as AudioPlayerLike;
-    },
+    // AUDIO-P3-001 (2026-09-23): `createPlayerFromUrl` ist entfernt. Es erzeugte
+    // einen `Tone.Player(url).toDestination()` mit autostart - der letzte zweite
+    // Pfad zur ctx.destination und die Ursache dafür, dass eine Hörprobe doppelt
+    // klang (einmal direkt, einmal über den V2-Sink). Die Hörprobe läuft jetzt
+    // ausschließlich über den V2-Sink, wie es init() zusichert.
     createPlayerFromBuffer: (buffer, connectTo) => {
       const player = new Tone.Player(buffer as Tone.ToneAudioBuffer);
       if (connectTo) player.connect(connectTo as never);
@@ -217,7 +217,12 @@ class AudioEngine {
       const _buf = new Tone.ToneAudioBuffer(url, (buf) => {
         const audioBuffer = buf.get();
         if (audioBuffer) onBuffer(audioBuffer as unknown as AudioBuffer);
-      }, () => { /* Dekodier-Fehler: still ignorieren */ });
+      }, () => {
+        // AUDIO-P3-001 (2026-09-23): Die Hörprobe läuft ausschließlich über
+        // diesen Weg. Ein Dekodier-Fehler darf deshalb nicht mehr still bleiben -
+        // vorher war er unsichtbar, weil der entfernte Direkt-Player noch klang.
+        console.warn('[audioEngine] Hörprobe nicht dekodierbar - keine Wiedergabe:', url);
+      });
       void _buf;
     },
   });
@@ -545,6 +550,22 @@ class AudioEngine {
     // v2LiveSink (AudioWorklet). Die unten gepflegten Zustände (channelGains,
     // masterVolume, mutedStems, monitorPlan) werden per syncV2FromV1 in den
     // V2-Graph gespiegelt.
+    //
+    // AUDIO-P3-001 (2026-09-23) - Präzisierung nach Prüfung, damit die Zusage
+    // nicht mehr ist als sie hält:
+    //  - ENTFERNT: `createPlayerFromUrl` (Tone.Player(url).toDestination() mit
+    //    autostart) und die zwei Preview-Fallbacks `?? ctx.destination` /
+    //    `else synth.toDestination()`. Die Hörprobe klang dadurch doppelt und
+    //    lief an Fader/EQ/Pan und der Monitor-/Cue-Policy vorbei.
+    //  - GEPARKT, nicht entfernt (öffentliche API, wird von Tests berührt):
+    //    `connectLiveWorkletChain()` verdrahtet itSynth -> eq -> mastering ->
+    //    ctx.destination; die App ruft es nicht auf (nur
+    //    tests/audioEngine.test.ts:164). Wer es aufruft, baut genau den zweiten
+    //    Pfad wieder auf, den dieser Block ausschließt.
+    //  - GEPARKT: `applyMasterOutputRouting()` + Feld `outputGain` sind
+    //    wirkungslos, weil `outputGain` nirgends ein GainNode zugewiesen bekommt
+    //    (nur `= null` in dispose()). Die echte 2.0/2.1-Umschaltung macht
+    //    `v2LiveSink.setOutputLayout()`. Kein zweiter Pfad - aber toter Code.
     this.masterVolume = new Tone.Volume(-6);
 
     // Kanal-Grundpegel für das Demo-Pattern (Zustand, wird in den V2-Graph gespiegelt).
@@ -1241,16 +1262,25 @@ class AudioEngine {
     if (!buffer || !this.ctx) return;
 
     // F1: Drum-Preview über den Kanalzug (channel2) statt direkt in den Master.
+    // AUDIO-P3-001 (2026-09-23): KEIN Fallback mehr auf ctx.destination.
+    // Ein direkter Ausgang umginge Kanalzug, Monitor-/Cue-Policy und den
+    // V2-Live-Sink - genau den zweiten Pfad, den init() ausschliesst. Fehlt der
+    // Kanal-Knoten, wird der Fehler laut gemeldet und die Vorschau unterlassen
+    // (Projektregel: Fehler protokollieren statt stillschweigend umgehen).
     const drumChannel = pluginAudioChannels('drum')[0] ?? 'channel2';
     this.ensureChannelNode(drumChannel);
     const drumInput = (this.channelStrip.inputNode(drumChannel) as any)?.input ?? this.channelStrip.inputNode(drumChannel);
+    if (!drumInput) {
+      console.warn(`[audioEngine] Drum-Vorschau ohne Kanal-Knoten (${drumChannel}) - uebersprungen, kein direkter Ausgang.`);
+      return;
+    }
     const t = this.ctx.currentTime + 0.002;
     const src = this.ctx.createBufferSource();
     src.buffer = buffer;
     const g = this.ctx.createGain();
     g.gain.value = Math.max(0, Math.min(1.5, velocity));
     src.connect(g);
-    g.connect(drumInput || this.ctx.destination);
+    g.connect(drumInput);
     src.start(t);
     src.stop(t + buffer.duration + 0.05);
     src.onended = () => {
@@ -2254,8 +2284,15 @@ class AudioEngine {
       });
       this.ensureChannelNode(track);
       const bus = this.channelStrip.inputNode(track) ?? this.masterBuses['GLOBAL_MASTER'];
-      if (bus) synth.connect(bus);
-      else synth.toDestination();
+      if (!bus) {
+        // AUDIO-P3-001 (2026-09-23): kein toDestination()-Fallback mehr. Ein
+        // direkter Ausgang umginge Kanalzug, Monitor-/Cue-Policy und den
+        // V2-Live-Sink (siehe init(): "kein zweiter Pfad zur ctx.destination").
+        console.warn(`[audioEngine] Synth-Vorschau ohne Bus fuer ${track} - uebersprungen, kein direkter Ausgang.`);
+        synth.dispose();
+        return;
+      }
+      synth.connect(bus);
       synth.triggerAttackRelease(freq, '8n');
       setTimeout(() => { try { synth.dispose(); } catch { /* noop */ } }, 1200);
     } catch (e) {
