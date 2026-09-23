@@ -1,4 +1,22 @@
 -- ============================================================================
+-- Konsolidierung DB-P2-001 (2026-09-23) - HERKUNFT: database/schema.sql
+-- ============================================================================
+-- Warum diese Datei hier liegt:
+-- Fehlte im supabase-Satz KOMPLETT - und genau daran haette der RLS-Fix aus
+-- Iteration 2 unsichtbar gescheitert: samples und music_tracks (die einzigen
+-- Tabellen, die der Browser mit dem anon-Key liest, src/lib/supabaseClient.ts:73/85)
+-- existierten nur in database/schema.sql. Die anon-Grants auf sample_tags und
+-- library_links sind hier bereits entfernt (RC1-004).
+--
+-- Der Inhalt ist eine WOERTLICHE Kopie der Quelle, damit keine Zeile SQL neu
+-- getippt und damit verfaelscht wird. Die Quelle ist idempotent
+-- (create table if not exists / drop policy if exists / on conflict do nothing),
+-- ein doppeltes Anwenden ist deshalb unschaedlich. `database/` bleibt als
+-- historischer Satz bestehen (siehe database/README.md), wird aber nicht mehr
+-- fortgeschrieben.
+-- ============================================================================
+
+-- ============================================================================
 -- audioMONASTRY – Supabase-Schema (externe Sample-/Musik-Datenbank)
 -- ============================================================================
 -- Anwendung: im Supabase-Dashboard unter "SQL Editor" einmalig ausführen
