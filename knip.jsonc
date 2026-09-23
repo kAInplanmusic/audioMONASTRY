@@ -1,0 +1,94 @@
+{
+  // knip-Konfiguration (ARCH-P2-003, 2026-09-23).
+  // Format ist bewusst .jsonc: die Ignorierliste war vorher eine unbegruendete
+  // Sammlung von 42 Pfaden und hat damit genau an der Stelle die Aussagekraft
+  // verloren, an der sie sie liefern soll. Jeder Eintrag traegt jetzt einen Grund.
+  //
+  // REGEL: Nur hier eintragen, was knip PRINZIPIELL nicht sehen kann
+  // (Laufzeit-Laden per URL, Service-Entrypoints ohne TS-Import) oder was
+  // bewusst geparkt ist. Reiner Totcode gehoert geloescht, nicht ignoriert -
+  // Gruppe D (24 tote Dateien) ist am 2026-09-23 genau deshalb geloescht worden.
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // server.ts, vite.config.ts und die beiden playwright-Configs stehen hier bewusst
+  // NICHT mehr: knip erkennt sie selbst (Config-Hinweis "redundant", gemessen 2026-09-23).
+  "entry": [
+    "index.html",
+    "scripts/**/*.{ts,mjs,cjs,js}",
+    "services/*/index.{js,ts,mjs}",
+    "services/*/src/index.{js,ts,mjs}",
+    "tests/**/*.{test,spec}.{ts,tsx,mjs}"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "server/**/*.{ts,mjs}",
+    "services/**/*.{ts,js,mjs}",
+    "scripts/**/*.{ts,mjs,cjs}",
+    "tests/**/*.{ts,tsx,mjs}"
+  ],
+  "paths": {
+    "@/*": [
+      "src/*"
+    ]
+  },
+  "ignore": [
+    // --- Gruppe B: zur LAUFZEIT per URL geladen (audioWorklet.addModule) -----
+    // Beleg: src/core/audio/worklets/loadAudioWorklets.ts liest die URLs aus
+    // public/plugin-manifest.json und ruft addModule(url). Diese Dateien werden
+    // NICHT importiert; build-worklets.mjs uebersetzt sie nach public/worklets/.
+    // knip meldet 5 davon als "Unused files" - sie zu loeschen waere ein
+    // Audio-Ausfall. Deshalb hier mit Grund geparkt.
+    "src/audio/worklets/analyzerProcessor.ts",
+    "src/audio/worklets/fallbackProcessor.ts",
+    "src/audio/worklets/itSynthProcessor.ts",
+    "src/audio/worklets/lufsProcessor.ts",
+    "src/audio/worklets/synthProcessor.ts",
+
+    // --- Gruppe C: Service-Entrypoints ohne TypeScript-Import ----------------
+    // Werden von Docker/Compose direkt als Node-Skript gestartet.
+    "services/backend-core/node/index.js",
+    "services/backend-core/node/audio-routing.js",
+
+    // --- Gruppe D: ERLEDIGT am 2026-09-23 (ARCH-P3-001) ----------------------
+    // Hier standen 24 als tot belegte Dateien, deren Loeschung ausstand. Sie sind
+    // jetzt GELOESCHT (plus src/components/MasterPlayerTerminal.tsx, das knip
+    // zusaetzlich als unerreichbar meldete) - die Liste ist damit weg.
+    //
+    // Nachweis vor der Loeschung: mit dieser Gruppe D aus der Ignorierliste
+    // meldete `npx knip` 25 "Unused files" - genau diese 25. knip verfolgt echte
+    // Importe inklusive Barrels, das ist belastbarer als eine Textsuche. Nach der
+    // Loeschung: `npx tsc --noEmit` exit 0 (nichts Lebendiges hing daran).
+    // Historie: vollstaendig in git, jederzeit wiederherstellbar.
+
+    // --- Gruppe F: Fixtures, die ein Werkzeug per PFAD liest -----------------
+    // Eingaben fuer scripts/route-dependency-graph.py (Regression: Regex-Literale
+    // und transitive Importe). Werden nie importiert, nur eingesammelt.
+    "tests/fixtures/routeDepGraph/regexLiteral.ts",
+    "tests/fixtures/routeDepGraph/transitive.ts",
+    "tests/fixtures/routeDepGraph/twoBlocks.ts",
+
+    // --- Gruppe E: erreichbar, aber knip folgt dem Pfad nicht ---------------
+    "src/components/drop/index.ts", // Barrel: von 8 Stellen importiert (dropAudioBridge, Tests) - knip sieht nur den Re-Export
+    "src/config/webrtc.ts", // von src/utils/WebRTCManager.ts importiert
+    "src/hooks/useSessionSync.ts", // von scripts/deep-audit/config.ts als Pruefziel gelistet
+    "src/lib/db.ts", // von src/context/SessionContext.tsx importiert
+    "src/utils/presetStore.ts" // von src/lib/db.ts importiert
+  ],
+  // Nur Pakete, die knip nicht als benutzt erkennen kann. jscpd und playwright
+  // sind am 2026-09-23 entfernt worden: knip findet beide selbst ueber die
+  // package.json-Skripte (Config-Hinweis "redundant").
+  "ignoreDependencies": [
+    "tailwindcss", // nur ueber das Vite-Plugin @tailwindcss/vite aktiv, kein Import
+    "mixer-.*", // optionale Hardware-Pakete, Aufloesung zur Laufzeit
+    "ws", // wird von socket.io/mediasoup als Peer erwartet
+    "midi", // optionales Hardware-Paket (Laufzeit-Aufloesung)
+    "osc" // optionales Netzwerk-Paket (Laufzeit-Aufloesung)
+  ],
+  // ffmpeg und ffprobe werden von server/audioEncode.ts und den Gates als
+  // externe Programme aufgerufen und existieren in der Agent-Umgebung nicht
+  // immer. docker, exiftool, sqlite3 und cua-driver sind am 2026-09-23 entfernt
+  // worden - knip meldete sie als redundant (kein Aufruf mehr im Repo).
+  "ignoreBinaries": [
+    "ffmpeg",
+    "ffprobe"
+  ]
+}
