@@ -21,6 +21,14 @@
     // setupFiles. knip kann vitest-Configs nicht folgen und meldete sie deshalb
     // als ungenutzte Datei (gemessen 2026-09-23 mit `npx knip --files` -> exit 1).
     // Sie ist ein echter Einstiegspunkt und steht hier mit Grund.
+    //
+    // HINWEIS BEWUSST AKZEPTIERT: knip meldet zu genau dieser Zeile
+    // "Remove redundant entry pattern". Das ist IRREFUEHREND - nachgemessen am
+    // 2026-09-23: mit entferntem Eintrag meldet `npx knip --files`
+    // "Unused files (1) tests/setup.ts" und exit 1. Der Gate-Schritt
+    // check:deadfiles wuerde also rot. Wer diesen Hinweis "aufraeumt", bricht das
+    // Gate - deshalb steht das Ergebnis der Gegenprobe hier und nicht nur die
+    // Vermutung, dass knip recht hat.
     "tests/setup.ts"
   ],
   "project": [
@@ -92,17 +100,45 @@
   // Nur Pakete, die knip nicht als benutzt erkennen kann. jscpd und playwright
   // sind am 2026-09-23 entfernt worden: knip findet beide selbst ueber die
   // package.json-Skripte (Config-Hinweis "redundant").
+  // Alle Eintraege hier tragen einen BELEGTEN Grund. Stand 2026-09-23.
+  //
+  // Selbstkorrektur aus Iteration 6: ich hatte diese Liste zuerst komplett
+  // geleert, weil knip fuer jeden Eintrag "Remove from ignoreDependencies"
+  // meldete. Das war ein Fehlschluss - der Hinweis galt nur fuer den Scope, den
+  // ich abgefragt hatte (`--include files,dependencies`). Die Kategorie
+  // `unlisted` ist darin NICHT enthalten, also sahen Eintraege redundant aus,
+  // die ausschliesslich `unlisted` unterdruecken. Gegenprobe mit
+  // `npx knip --include unlisted,binaries` zeigte danach 21 + 6 Befunde.
+  // Mit dem vollen Bericht geprueft und einzeln nachgeschlagen:
+  //
+  //   ws, midi, osc  -> benutzt in services/midi-bridge/index.js:28/40/80.
+  //                     Stehen in services/midi-bridge/package.json (midi, osc,
+  //                     ws) und ws zusaetzlich in services/backend-core.
+  //                     Am Wurzelpaket nicht deklariert, weil es eigene
+  //                     Dienst-Pakete sind - fuer knip also "unlisted", obwohl
+  //                     die Deklaration existiert. Falsch-positiv ohne diesen
+  //                     Eintrag.
+  //   mixer-.*       -> 18 optionale Plattform-Binaries, dynamisch aufgeloest in
+  //                     services/mixer/index.js (z. B. :191 -gnu, :207 -musl).
+  //                     services/mixer/package.json deklariert keines davon;
+  //                     sie werden beim Installieren plattformabhaengig gewaehlt.
+  //
+  // tailwindcss stand hier ebenfalls und ist am 2026-09-23 ENTFERNT worden -
+  // dieser Eintrag war wirklich redundant: seit "src/**/*.css" im project-Glob
+  // steht, verfolgt knip den CSS-Import aus src/main.tsx:4 und loest das Paket
+  // selbst auf.
   "ignoreDependencies": [
-    "tailwindcss", // nur ueber das Vite-Plugin @tailwindcss/vite aktiv, kein Import
-    "mixer-.*", // optionale Hardware-Pakete, Aufloesung zur Laufzeit
-    "ws", // wird von socket.io/mediasoup als Peer erwartet
-    "midi", // optionales Hardware-Paket (Laufzeit-Aufloesung)
-    "osc" // optionales Netzwerk-Paket (Laufzeit-Aufloesung)
+    "ws", // deklariert in services/{midi-bridge,backend-core}/package.json
+    "midi", // deklariert in services/midi-bridge/package.json
+    "osc", // deklariert in services/midi-bridge/package.json
+    "mixer-.*" // 18 optionale Plattform-Binaries, zur Laufzeit gewaehlt
   ],
-  // ffmpeg und ffprobe werden von server/audioEncode.ts und den Gates als
-  // externe Programme aufgerufen und existieren in der Agent-Umgebung nicht
-  // immer. docker, exiftool, sqlite3 und cua-driver sind am 2026-09-23 entfernt
-  // worden - knip meldete sie als redundant (kein Aufruf mehr im Repo).
+  // ffmpeg und ffprobe sind SYSTEMPROGRAMME, keine npm-Pakete - sie lassen sich
+  // in package.json nicht deklarieren. Benutzt in server/audioEncode.ts (execFile),
+  // in vier Proof-Skripten (scripts/master-out-audio-proof.mjs,
+  // mjpeg-live-proof.mjs, visual-beamer-live-proof.mjs, visual-stability-probe.mjs)
+  // und in tests/audioEncode.test.ts bzw. tests/audioGate.test.ts. Ohne diesen
+  // Eintrag meldet knip sechs "Unlisted binaries", die sich nicht beheben lassen.
   "ignoreBinaries": [
     "ffmpeg",
     "ffprobe"
