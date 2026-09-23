@@ -19,7 +19,7 @@
  * bereits erledigte Schritte gueltig und es entstehen keine zusaetzlichen
  * Planungskosten.
  */
-import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { MoaAgent, MoaPlan, MoaRunCost, MoaRunOptions, MoaStepResult } from './MoaAgent';
@@ -98,6 +98,15 @@ export function agentRunSummary(record: AgentRunRecord): {
 }
 
 export class AgentRunStore {
+  /**
+   * Zaehler fuer eindeutige Namen der temporaeren Schreibdateien (QUAL-P2-008).
+   * Bewusst OHNE `process.pid`: diese Datei kann ueber einen Client-Import ins
+   * Browser-Bundle geraten, wo es `process` nicht gibt - dafuer gibt es
+   * `tests/browserSafeModules.test.ts`. Ein Zaehler plus Zufall reicht, weil die
+   * Eindeutigkeit nur innerhalb dieses Verzeichnisses noetig ist.
+   */
+  private tempZaehler = 0;
+
   constructor(private readonly dir: string = agentRunDir()) {}
 
   private file(runId: string): string {
@@ -106,15 +115,54 @@ export class AgentRunStore {
 
   async save(record: AgentRunRecord): Promise<void> {
     await mkdir(this.dir, { recursive: true });
-    await writeFile(this.file(record.runId), JSON.stringify(record), 'utf8');
+    // ATOMAR SCHREIBEN (QUAL-P2-008, 2026-09-23).
+    //
+    // Vorher: `writeFile(ziel, json)` - das ist truncate + write, also ein
+    // Zeitfenster, in dem die Datei LEER oder HALB geschrieben auf der Platte
+    // liegt. `execute()` speichert bei JEDEM Schritt (`onStep` -> `save`), und
+    // gleichzeitig kann ein zweiter Aufruf `load()` lesen (Abbruch, Statusabfrage).
+    // Ein solcher Leser bekam dann einen Parse-Fehler, und weil `load()` jeden
+    // Fehler als "nicht gefunden" meldete, hiess das fuer den Aufrufer
+    // "unbekannter Lauf" - fuer einen Lauf, den es gab.
+    //
+    // Gemessen mit scripts/agentrun-race-repro.ts: von 740 Lesevorgaengen
+    // waehrend laufender Speicherungen lieferten 399 (53,9 %) faelschlich null.
+    // Das war kein Testproblem: GET /api/ai/agent/runs/:runId konnte 404 fuer
+    // einen existierenden Lauf liefern, und der Abbruch konnte fehlschlagen.
+    //
+    // Jetzt: erst in eine temporaere Datei schreiben, dann umbenennen. `rename`
+    // ist auf POSIX atomar - ein Leser sieht entweder die alte oder die neue
+    // VOLLSTAENDIGE Datei, nie etwas dazwischen. Der temporaere Name endet auf
+    // `.tmp` und wird von `list()` (filtert auf `.json`) nicht erfasst.
+    const ziel = this.file(record.runId);
+    const temp = `${ziel}.${(this.tempZaehler += 1)}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    try {
+      await writeFile(temp, JSON.stringify(record), 'utf8');
+      await rename(temp, ziel);
+    } catch (error) {
+      // Keine halbe Datei liegen lassen.
+      await rm(temp, { force: true }).catch(() => {});
+      throw error;
+    }
   }
 
   async load(runId: string): Promise<AgentRunRecord | null> {
-    try {
-      return JSON.parse(await readFile(this.file(runId), 'utf8')) as AgentRunRecord;
-    } catch {
-      return null;
+    // "Fehlt" und "nicht lesbar" sind NICHT dasselbe (QUAL-P2-008). Vorher
+    // lieferte beides `null`, und ein voruebergehender Lesefehler wurde damit
+    // stillschweigend zu "unbekannter Lauf". Seit dem atomaren Schreiben kann
+    // dieser Fall nicht mehr durch eine laufende Speicherung entstehen; fuer
+    // Dateien, die eine aeltere Fassung beschaedigt hinterlassen hat, wird kurz
+    // erneut versucht, statt sofort aufzugeben.
+    for (let versuch = 0; versuch < 3; versuch += 1) {
+      try {
+        return JSON.parse(await readFile(this.file(runId), 'utf8')) as AgentRunRecord;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return null; // wirklich nicht da
+        if (versuch === 2) return null; // bleibt unlesbar: Vertrag unveraendert (null)
+        await new Promise((r) => setTimeout(r, 5));
+      }
     }
+    return null;
   }
 
   async list(): Promise<AgentRunRecord[]> {
