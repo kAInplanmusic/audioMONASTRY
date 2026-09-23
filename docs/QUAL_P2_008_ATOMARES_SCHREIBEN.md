@@ -135,19 +135,25 @@ Der Test erkennt den Fehler also tatsächlich.
 ## 6. Nachbarschaft: dasselbe Muster noch woanders?
 
 Nach dem Fund habe ich gesucht, wo sonst mit `writeFile` geschrieben und gleichzeitig
-gelesen wird. Ein Kandidat bleibt offen (`QUAL-P3-002`):
+gelesen wird. Ein Treffer, inzwischen **behoben** (`QUAL-P3-002`, Iteration 10 —
+Details in `docs/QUAL_P3_002_CHUNK_UPLOAD.md`):
 
-**`server/chunkedUpload.ts`** schreibt Upload-Metadaten mit einfachem `writeFile` und
-baut sie per *read-modify-write* um (`{ ...meta, chunks: { ...meta.chunks, [index]: len } }`).
-`readMeta` meldet jeden Lesefehler als `UNKNOWN_UPLOAD` — dieselbe Verwechslung von
+**`server/chunkedUpload.ts`** schrieb Upload-Metadaten mit einfachem `writeFile` und
+baute sie per *read-modify-write* um (`{ ...meta, chunks: { ...meta.chunks, [index]: len } }`).
+`readMeta` meldete jeden Lesefehler als `UNKNOWN_UPLOAD` — dieselbe Verwechslung von
 „unlesbar" und „existiert nicht".
 
-**Abgeschwächt, aber nicht behoben:** der Client sendet Chunks **sequenziell**
-(`for (const index of chunksToSend(status))` mit `await`), und das Protokoll ist auf
-Wiederholung ausgelegt („bricht es dazwischen ab, gilt der Chunk als fehlend und wird erneut
-gesendet"). Der Schaden ist deshalb begrenzt: es braucht zwei gleichzeitige Uploader
-desselben Fingerabdrucks oder eine Statusabfrage während eines Schreibvorgangs, und im
-Zweifel heilt die Wiederholung. Deshalb `P3` — ehrlich eingestuft statt als Panik.
+**Meine Einstufung als P3 war falsch** — das hat die Messung in Iteration 10 gezeigt. Ich hatte
+argumentiert: der Client sendet Chunks sequenziell (`for (const index of chunksToSend(status))`
+mit `await`), und das Protokoll ist auf Wiederholung ausgelegt, also sei der Schaden begrenzt.
+Die Messung sagt etwas anderes: bei 8 gleichzeitigen Chunks derselben Sitzung blieb **1 von 8
+Einträgen** übrig, und die Wiederholung läuft in dieselbe Falle. Der Upload kam so nie zum
+Abschluss.
+
+**Lehre:** „abgeschwächt, weil der heutige Client sich brav verhält" ist keine Eigenschaft des
+Servers. Der Server muss damit zurechtkommen, was **seine Schnittstelle zulässt** — nicht damit,
+was der aktuelle Client zufällig tut. Eine Einstufung, die auf dem Verhalten des Aufrufers
+beruht, ist keine Einstufung des Fehlers.
 
 ---
 
