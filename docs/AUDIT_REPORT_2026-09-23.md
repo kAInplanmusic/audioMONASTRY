@@ -1,7 +1,7 @@
 # AUDIT REPORT – audioMONASTRY (Projekt-Einlesen & Code-Audit)
 
 **Datum:** 2026-09-23
-**Scope:** Gesamtprojekt `/home/patrick/audioMONASTRY` (Stand `main` = `e71cb7d` == `origin/main`, Arbeitsbaum sauber)
+**Scope:** Gesamtprojekt `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` (Stand `main` = `e71cb7d` == `origin/main`, Arbeitsbaum sauber)
 **Modus:** D (Audio-Engine-Code-Audit) + Projekt-Einlesen, nach `audioaudit`-Skill
 **Umfang:** 755 TS/TSX-Dateien, `src/utils/audioEngine.ts` (2 476 Z.), 16 Worklets, `src/core/audio/**`,
 `server.ts` + 13 Route-Module, `database/*.sql` (9 Migrationen), 297 Testdateien.
@@ -141,7 +141,7 @@ Hörtest nötig) – daran ändert der Audit nichts.
 
 Reproduktion der Messungen:
 ```bash
-cd /home/patrick/audioMONASTRY
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"
 npx tsc --noEmit                                   # exit 0
 npx eslint . --max-warnings=0                      # exit 0
 npx vitest run                                     # 280 Dateien / 2097 Tests grün

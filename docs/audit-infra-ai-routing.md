@@ -1,6 +1,6 @@
 # Architektur-Audit: KI-Vermittlung, Prompts und Pipeline
 
-**Repo:** `/home/patrick/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3`
+**Repo:** `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3`
 **Art:** reines Lese-Audit (kein Code-Umbau, kein Commit außer dieser Datei)
 **Stand:** Erstellungslauf 2026-09-20
 

@@ -32,7 +32,9 @@ def env(name: str, default: str = "") -> str:
 
 
 def load_env() -> None:
-    p = Path("/home/patrick/audioMONASTRY/.env")
+    # Repo-Wurzel aus der Lage DIESER Datei (scripts/<datei> -> eine Ebene hoch),
+    # nicht als absoluter Pfad: das Repo wurde am 2026-09-23 verschoben.
+    p = Path(__file__).resolve().parents[1] / ".env"
     if not p.exists():
         return
     for line in p.read_text(encoding="utf-8").splitlines():

@@ -1,6 +1,6 @@
 # Architektur-Audit: RunPod-Integration in audioMONASTRY
 
-**Repo:** /home/patrick/audioMONASTRY · **Branch:** main · **HEAD:** 902e9c3 · **Arbeitsbaum:** sauber (Stand der Erstellung dieses Berichts)
+**Repo:** /home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY · **Branch:** main · **HEAD:** 902e9c3 · **Arbeitsbaum:** sauber (Stand der Erstellung dieses Berichts)
 **Audit-Typ:** lesend (read-only). Kein Quellcode geändert, kein Commit.
 **Ausgeschlossen:** node_modules/, dist/, coverage/, logs/
 **Beweisführung:** Jede Code-Aussage trägt `Datei:Zeile`. Nicht Zugreifbares/Nicht Gemessenes wird als solches gekennzeichnet. Es werden keine IDs, Zahlen oder Endpoint-Namen erfunden.

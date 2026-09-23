@@ -53,7 +53,7 @@ laufen, also bis zu 2× der Stundensatz der Rolle – nur solange Jobs anstehen 
 `idleTimeout` läuft.
 
 ```bash
-cd /home/patrick/audioMONASTRY
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"
 UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
 ID=gajmangfldpzrk                      # voiceGen; andere Rollen: docs/audit-infra-runpod.md 4.1
 KEY=$(grep -E '^RP_API_KEY=' .env | cut -d= -f2-)
@@ -194,7 +194,7 @@ anderen Rollennamen mit einer klaren Meldung ab.
 Der Deploy liest den Override auch lokal; `RUNPOD_ROLE` begrenzt ihn auf die Rolle:
 
 ```bash
-cd /home/patrick/audioMONASTRY
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"
 IMAGE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<sha> \
 RP_IMAGE_VOICE=ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<sha>-baked-voicegen \
 RUNPOD_ROLE=voiceGen \

@@ -54,12 +54,50 @@ Iteration 1 und 2).
 ## 0. Zuerst: Zustand übernehmen
 
 ```bash
-cd /home/patrick/audioMONASTRY
-git log --oneline -1                    # muss 6c2e3c8 oder neuer sein
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"
+git log --oneline -1                    # 602df4d oder neuer
 git status --porcelain                  # muss leer sein
-git worktree list
+git worktree list                       # nur der Hauptbaum
 git branch -a | grep hermes             # nur noch hermes/lora-trainer-anbindung
 ```
+
+### Der Rechner wurde am 2026-09-23 aufgeräumt
+
+Die vier laufenden Projekte liegen **nicht mehr direkt im Heimatverzeichnis**, sondern in
+Projektordnern:
+
+```
+~/AnunnakiTools Projekte/laufende Projekte/
+  audioMONASTRY/  cpsMONK/  ProjectArmageddon/  spyMONK/
+~/AnunnakiTools Projekte/fertige Projekte/      (noch leer)
+```
+
+**Was mitgewandert ist:**
+
+| vorher | nachher |
+|---|---|
+| `~/fixlogs/`, `~/fixprompts/` | `audioMONASTRY/logs/fixrunden-2026-09-20/` (nicht in Git, siehe dortiges README) |
+| `~/spyMONK_analysis_20260915_074800/` | Inhalt von `spyMONK/` |
+
+**Was gelöscht wurde:** zwei Worktree-Archive in `fixlogs/` (je 403 MB). Die Runden sind
+abgeschlossen und in `main` dokumentiert (`1de9e3b`, 81 Commits vom 2026-09-20); die Zweige
+existieren nicht mehr. **806 MB eingespart.** Begründung im README des Belegordners.
+
+**Was bewusst liegen blieb:** alles, was zu keinem der vier Projekte gehört —
+`~/am-hautcheck/` (Host-Werkzeuge: iCloud-Abgleich, Musik-Sortierung, Systemprüfung,
+venv), `~/Applications/`, `~/Quarantaene-*/`, `~/hermes-config-review-*/` sowie die
+persönlichen Ordner. `am-hautcheck` hat mit audioMONASTRY nichts zu tun: der Rechner
+*heißt* so (`hostname` → `audioMONASTRY`), das `am-` meint die Maschine, nicht das Projekt.
+
+**Geteilte Dateien gibt es keine.** Gemessen: 0 Querverweise zwischen den vier Projekten
+(`grep -rIl audioMONASTRY cpsMONK ProjectArmageddon spyMONK` → je 0 Treffer). Es musste
+also nichts kopiert werden.
+
+**Pfade sind angepasst.** Vorher hingen 11 Doku-Stellen und 3 Skripte am alten Pfad. Die
+Skripte leiten ihre Repo-Wurzel jetzt aus `__file__` ab und sind damit umzugsfest:
+`scripts/portal-wake-verify.py`, `scripts/runpod-vision-test.py`,
+`scripts/hetzner/firewall-inventory.py`. Auch `~/.hermes/scripts/runpod-wache.sh` ist
+angepasst (und per `AUDIOMONASTRY_REPO` übersteuerbar).
 
 Die drei Übergabe-Zweige aus der Vorsitzung sind **gemergt** – hier ist nichts mehr zu tun
 (Korrektur zum früheren Zettel, der sie noch als offen führte):
