@@ -82,7 +82,11 @@
     "probe:apis": "node scripts/browser-api-probe.mjs",
     "verify:rls-live": "tsx scripts/verify-rls-live.ts",
     "proof:agentrun-race": "tsx scripts/agentrun-race-repro.ts",
-    "proof:chunkupload-race": "tsx scripts/chunkupload-race-repro.ts"
+    "proof:chunkupload-race": "tsx scripts/chunkupload-race-repro.ts",
+    "check:library-links": "node scripts/check-library-links.mjs",
+    "upload:library-music": "node scripts/upload-library-music.mjs",
+    "apply:prompts": "tsx scripts/apply-prompt-catalog.ts",
+    "sync:env": "node scripts/sync-env-values.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

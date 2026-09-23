@@ -240,14 +240,24 @@ export const aiPersistence = {
     const db = getClient();
     if (!db) return;
     try {
-      await db.from('system_prompts').insert({
-        plugin_id: prompt.pluginId,
-        role: prompt.role,
-        version: prompt.version,
-        content: prompt.content,
-        enabled: prompt.enabled,
-        meta: prompt.meta,
-      });
+      // upsert statt insert: bis 2026-09-23 stand hier ein reines `insert`, und
+      // `system_prompts` hatte KEINE Eindeutigkeit. Bei jedem Serverstart kamen
+      // deshalb neue Zeilen dazu - gemessen am 2026-09-23: 53 Zeilen fuer 22
+      // Rollen, also mehrfach dieselbe Rolle/Version mit womoeglich
+      // unterschiedlichem Inhalt. Welche Zeile der Leser bekam, war Zufall.
+      // Die Datenbank hat jetzt `system_prompts_plugin_role_version_key`; dieser
+      // upsert haelt den Pfad dazu passend und ist wiederholbar.
+      await db.from('system_prompts').upsert(
+        {
+          plugin_id: prompt.pluginId,
+          role: prompt.role,
+          version: prompt.version,
+          content: prompt.content,
+          enabled: prompt.enabled,
+          meta: prompt.meta,
+        },
+        { onConflict: 'plugin_id,role,version' },
+      );
     } catch (error) {
       aiLogger.warn('supabase saveSystemPrompt failed', { pluginId: prompt.pluginId, error: (error as Error).message });
     }
@@ -258,11 +268,17 @@ export const aiPersistence = {
     const db = getClient();
     if (!db) return;
     try {
-      await db.from('plugin_prompt_versions').insert({
-        plugin_id: entry.pluginId,
-        version: entry.version,
-        changelog: entry.changelog,
-      });
+      // upsert statt insert: die Tabelle hat UNIQUE (plugin_id, version).
+      // Mit dem vorherigen `insert` lief jeder zweite Start in einen Fehler,
+      // der nur als Warnung im Log landete.
+      await db.from('plugin_prompt_versions').upsert(
+        {
+          plugin_id: entry.pluginId,
+          version: entry.version,
+          changelog: entry.changelog,
+        },
+        { onConflict: 'plugin_id,version' },
+      );
     } catch (error) {
       aiLogger.warn('supabase savePromptVersion failed', { pluginId: entry.pluginId, error: (error as Error).message });
     }

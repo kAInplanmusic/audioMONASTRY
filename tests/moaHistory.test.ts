@@ -44,6 +44,6 @@ describe('PLUGIN_MOA_TASKS (AUTO_AI-Default-Aufgaben)', () => {
     for (const id of Object.keys(PLUGIN_MOA_TASKS)) {
       expect(moaTaskForPlugin(id)).toBeTruthy();
     }
-    expect(moaTaskForPlugin('unbekannt')).toBe('Optimiere dieses Modul');
+    expect(moaTaskForPlugin('unbekannt')).toBe('Optimize this module');
   });
 });
