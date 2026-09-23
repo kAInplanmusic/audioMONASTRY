@@ -574,6 +574,92 @@ Sicherheit zählt nur, was in der Datenbank steht.
   Drop verlöre keine Daten. Status bleibt OPEN, weil ein Tabellen-Drop irreversibel ist und
   ein Verbraucher außerhalb dieses Repos nicht ausgeschlossen werden kann.
 
+---
+
+## 12. Nachtrag – Iteration 7 und 8: Rechtstexte, README, Live-Abgleich
+
+### 12.1 Iteration 7 — Rechtstexte veröffentlicht, README neu
+
+**`/impressum` und `/datenschutz` sind veröffentlicht** und **ohne Zugangstoken** erreichbar.
+Umgesetzt in `server/legalPages.ts`, eingetragen in `server.ts` **vor** den Static-Zweigen.
+Bewusst **keine** React-Route: die App hat keine URL-Routen, und eine Datenschutzerklärung hinter
+dem Studio-Token wäre wertlos — wer sie lesen will, hat den Zugang noch nicht.
+
+Live nachgemessen mit echtem Serverstart (kein Unit-Test):
+
+```
+GET /impressum    -> HTTP 200, text/html, 4 639 Bytes   (ohne Cookie, ohne Header)
+GET /datenschutz  -> HTTP 200, text/html, 7 524 Bytes   (ohne Cookie, ohne Header)
+GET /api/ai/health -> HTTP 401                          (die API bleibt zu)
+```
+
+Beide Seiten laden **keine externen Ressourcen** — eine Datenschutzseite, die Google Fonts
+abruft, widerlegt sich selbst. Genau **ein** fremder Verweis ist erlaubt (OS-Plattform im
+Impressum); ein Test hält beides fest. Die Betreiber-Angaben kommen aus `LEGAL_*`-Variablen;
+fehlen Pflichtangaben, mahnt die Seite das **sichtbar** an, statt eine Anschrift zu erfinden.
+
+**Davon zu trennen:** drei Punkte der Abnahmebedingung kann nur der Betreiber bzw. ein Anwalt
+liefern (Rechtsgrundlagen, Drittlandtransfer, Löschfristen). Die Seiten benennen diese Lücken im
+Text. Deshalb `PARTIAL`, nicht `DONE`.
+
+**Die README ist komplett neu** (456 Zeilen, deutsch): Inhalt, Nicht-Ziele, Schnellstart,
+Rechtliches, Betrieb und Kosten, Architektur, die 16 Module, die acht KI-Rollen, das
+Sicherheitskonzept, die Qualitätssicherung mit gemessenen Zahlen, Projektstruktur, ein Abschnitt
+„Offene Punkte — ehrlich" und ein Dokumentverzeichnis.
+
+Sie nennt auch **die eigene Schwachstelle**: dass die RLS-Härtung bis 2026-09-23 nur im Repo lag
+und nicht in der Datenbank.
+
+`README_DE.md` ist **entfernt** — zwei deutsche Fassungen wären die Drift geworden, die diese
+Runde an anderer Stelle bekämpft.
+
+**Ein bestehender Test hat die neue README prompt zurückgewiesen** — und das war richtig:
+`tests/test_hetzner_scripts.py` liest aus `README.md` die Zeile `- Hetzner fleet: …` und
+vergleicht die Servertypen mit `scripts/hetzner/provision-fleet.sh`. Mein erster Entwurf hatte
+diese Zeile nicht mehr, `verify` ging auf **exit 1**. Die Zeile ist wieder drin, in der
+geforderten Form, mit den Typen direkt aus dem Skript gelesen.
+
+### 12.2 Iteration 8 — der Live-Abgleich (`DB-P2-002`)
+
+Der fehlende Messpunkt existiert jetzt: DB-Funktion `rls_contract_report()`
+(`SECURITY DEFINER`, nur `service_role`), reine Prüffunktion in `server/rlsContract.ts`,
+Abgleich `npm run verify:rls-live`, 11 Tests, Doku `docs/DB_P2_002_LIVE_ABGLEICH.md`.
+
+**Negativprobe an der echten Datenbank** — ein grüner Lauf allein beweist nichts:
+
+1. temporär eine `anon`-SELECT-Policy auf `library_links` angelegt (leer, kein Codepfad);
+2. Abgleich → **exit 1**, `anon darf LESEN, was es nicht darf: library_links`;
+3. zurückgebaut, nachgemessen → **exit 0**, Probe weg.
+
+Der Abgleich erkennt den Vorfall also tatsächlich. Er läuft aber **nicht von selbst** (er braucht
+Zugangsdaten und ist deshalb nicht in `npm run verify`) — deshalb `PARTIAL`. Empfehlung: nächtlicher
+Lauf auf dem Hetzner-Knoten mit Alarmierung über den bestehenden Webhook.
+
+**Festgehalten, damit es nicht wieder passiert:** die Rolle allein ist kein Urteil. Die Policies
+`visual_*_service_only` gelten formal für `public`, sind aber über
+`auth.role() = 'service_role'` gesperrt. Ich hatte sie beim ersten Hinsehen für offen gehalten —
+falsch. Der Vertrag prüft deshalb auf `anon` statt `public`, und ein Test sichert den Unterschied.
+
+### 12.3 Beim eigenen Gate-Lauf: ein flaky Test
+
+Zwei vollständige Läufe von `npm run verify` auf **demselben** Stand ergaben **exit 1** und
+**exit 0**. Der rote Lauf scheiterte in `tests/agentRuns.test.ts:175` mit
+`unbekannter Lauf: r2` aus `ResumableAgentRunner.cancel()` (`agentRuns.ts:301-302`).
+Isoliert ist der Test 13/13 grün, und die Änderungen dieser Runde fassen `agentRuns` nicht an.
+
+Also **keine Regression, sondern ein Wettlauf**: der Test lässt je Schritt 20 ms Wanduhr
+vergehen und pollt mit 50 × 5 ms; auf belasteter Maschine verschiebt sich das Verhältnis.
+
+**Der Ursachenbefund ist offen und ich habe den Test deshalb nicht angefasst.** Ein blinder Fix
+(länger warten, retry, überspringen) könnte einen **echten** Fehler im Abbruchpfad verdecken — und
+der Abbruchpfad gehört zu `AI-P1-006`. Aufgenommen als `QUAL-P2-008` mit der Begründung, warum das
+ein eigener Punkt ist: das Freigabe-Gate ist die Grundlage jeder Freigabeaussage hier, und ein
+Gate, das ohne echten Defekt rot wird, wird erfahrungsgemäß ignoriert — danach fällt ein echter
+Fehler nicht mehr auf.
+
+SSOT danach: **165 Einträge = 142 DONE / 17 PARTIAL / 5 OPEN / 1 BLOCKED**.
+
+
 SSOT danach: **164 Einträge = 142 DONE / 16 PARTIAL / 5 OPEN / 1 BLOCKED**.
 
 
