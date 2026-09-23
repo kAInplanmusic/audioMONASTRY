@@ -112,20 +112,34 @@ Der Abgleich erkennt den Vorfall also tatsächlich — nicht nur theoretisch.
 
 ---
 
-## 6. Was noch offen ist
+## 6. Betrieb: Entscheidung und Stand
 
 **Der Abgleich läuft nicht von selbst.** Er braucht `SB_URL` und `SB_SERVICE_ROLE` und ist deshalb
-**nicht** Teil von `npm run verify` (das ohne Zugangsdaten laufen muss). Solange ihn niemand
-aufruft, kann derselbe Fehler wieder passieren.
+**nicht** Teil von `npm run verify` (das ohne Zugangsdaten laufen muss).
 
-Möglichkeiten, in der Reihenfolge des Aufwands:
+**Entscheidung des Betreibers am 2026-09-23:** *„rls abgleich wenn nur hetzner und auto aus
+danach ja"* — also: **nur auf dem Hetzner-Knoten**, und **nicht von selbst scharf**.
 
-1. **Betreiber-Schritt** (sofort möglich): nach jedem Deploy `npm run verify:rls-live` ausführen;
-   Rückgabe 1 blockiert die Freigabe.
-2. **CI-Auftrag** mit hinterlegtem Service-Role-Schlüssel: eigener Workflow, der bei jedem Merge
-   auf `main` läuft. Bedenken: ein Dienstschlüssel in CI ist selbst ein Ziel.
-3. **Nächtlicher Lauf** auf dem Hetzner-Knoten, wo die `.env` ohnehin liegt, mit Alarmierung über
-   den bestehenden Webhook.
+Umgesetzt als `scripts/hetzner/rls-live-check.sh`. Der Skript ist **absichtlich nicht aktiv**:
+Scharfmachen ist ein eigener, bewusster Schritt. Die vollständige Einrichtung (systemd-Service
+und -Timer, `OnCalendar=*-*-* 03:30:00`) steht als Kommentarblock im Skriptkopf; Ausschalten mit
+`systemctl disable --now audiomonastry-rls-check.timer`.
 
-Empfehlung: **(3)** — dort liegen die Zugangsdaten schon, es braucht keinen neuen Schlüssel in
-CI, und ein Verstoß landet im selben Alarmweg wie die übrigen Betriebsprobleme.
+**Warum Hetzner und nicht CI:** die `.env` mit dem Dienstschlüssel liegt auf dem Knoten ohnehin.
+Ein zusätzlicher Dienstschlüssel in GitHub wäre ein neues Ziel — und der Abgleich braucht keinen.
+
+Rückgabe des Skripts:
+
+| Code | Bedeutung | Wirkung |
+|---|---|---|
+| `0` | Vertrag erfüllt | nur Protokollzeile |
+| `1` | **Verstoß gegen den Vertrag** — die Datenbank erlaubt mehr, als das Repo beschreibt | Alarm über den bestehenden Webhook (`critical`) |
+| `2` | nicht messbar (Zugangsdaten oder Funktion fehlen) | als solches protokolliert, **nicht** als Erfolg |
+
+Ein `2` ist ausdrücklich **kein** grünes Ergebnis: ein fehlender Messwert ist kein bestandener
+Vertrag. Das ist derselbe Grundsatz wie in `QUAL-P2-008`.
+
+> **Noch nicht eingerichtet.** Der Skript liegt im Repo, der Timer ist auf keinem Knoten scharf.
+> Bis dahin gilt: nach jedem Deploy `npm run verify:rls-live` von Hand ausführen; Rückgabe 1
+> blockiert die Freigabe.
+
