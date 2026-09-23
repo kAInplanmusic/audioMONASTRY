@@ -431,7 +431,6 @@ Einträge; Erledigtes steht in der Git-Historie.
 | **Demo-Link und 15-Sekunden-GIF** | Die Flotte ist derzeit **heruntergefahren** (0 Server). Ein Link ganz oben würde ins Leere führen. |
 | **Betreiber-Angaben in Impressum/Datenschutz** | Name und Anschrift kann nur der Betreiber liefern (siehe Abschnitt 4). |
 | **Drittlandtransfer, Rechtsgrundlagen, Löschfristen** | Rechtliche Bewertung, keine Code-Angabe. Auf der Datenschutzseite steht deshalb offen, dass es fehlt — statt einer Vermutung. |
-| **`library_links`-Tabelle** | Kein Codepfad, live **0 Zeilen**. Ein Tabellen-Drop ist irreversibel und wird deshalb nicht stillschweigend ausgeführt. |
 | **Live-Prüfung mancher Angriffe** | Braucht eine laufende Umgebung: Lastversuch mit parallelen Uploads, Abruf direkt aus dem Objektspeicher. |
 
 **Was noch nie live geprüft wurde:** dass eine leere GPU-Rechnung die Dienste wirklich stoppt

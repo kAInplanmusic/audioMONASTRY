@@ -89,10 +89,12 @@ git push origin main                # erst bei GATE_EXIT=0
 2. **Rechts-Entwurf prüfen und veröffentlichen** (`PROD-P0-005`, PARTIAL). Entwurf liegt in
    `docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md`; die Anschrift und die rechtliche Bewertung
    (Rechtsgrundlagen, Drittlandtransfer, Löschfristen, Einordnung der Stimme nach Art. 9) kann
-   ich nicht liefern. Die Seiten `/datenschutz` und `/impressum` existieren noch **nicht**.
-3. **Entscheidungen offen:** `DB-P3-001` (Tabelle `library_links` hat keinen Codepfad – löschen
-   oder Nutzen belegen), `PROD-P2-003` (`README_DE.md` auf den neuen Kopf ziehen),
-   `OPS-P2-002`-Rest (Signup-/Zugangs-Kurratierung).
+   ich nicht liefern. Die Seiten `/datenschutz` und `/impressum` sind **veröffentlicht**
+   (Iteration 7) und tragen die Betreiber-Angaben; offen bleiben die rechtlichen Bewertungen.
+3. **Entscheidungen offen:** `QUAL-P2-008` (flaky Test im Freigabe-Gate – Ursache klären, dann
+   fixen), `OPS-P2-002`-Rest (Signup-/Zugangs-Kurratierung).
+   Erledigt: `DB-P3-001` (Tabelle `library_links` am 2026-09-23 **entfernt** – 0 Codepfade,
+   0 Zeilen) und `PROD-P2-003` (README zusammengeführt).
 
 Zur Erinnerung: `SEC-P1-004` ist **erledigt** – vier weltlesbare `.env`-Dateien wurden am
 2026-09-23 auf 600 gesetzt; nur die drei `.example`-Templates sind noch lesbar und enthalten
