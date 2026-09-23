@@ -36,7 +36,13 @@ Die fehlenden Objekte wurden **wörtlich** in den angewandten Satz übernommen
 | `009_prompt_eval_indexes.sql` | `ai_migration_003.sql` | 7 Sekundär-Indizes der Prompt-/Eval-Tabellen |
 | `010_audio_embeddings.sql` | `ai_migration_007.sql` | `sample_audio_embeddings` + `match_audio_samples` |
 | `011_visual_tables.sql` | `ai_migration_008_visual.sql` | `visual_generations/_feedback/_embeddings` + `match_visuals` |
-| `012_library_tables.sql` | `schema.sql` | `samples`, `sample_tags`, `music_tracks`, `library_links` |
+| `012_library_tables.sql` | `schema.sql` | `samples`, `sample_tags`, `music_tracks` |
+
+> **Nachtrag 2026-09-23 (`DB-P3-001`):** `library_links` wird in 012 noch angelegt,
+> aber im **angewandten** Satz von `supabase/migrations/015_drop_library_links.sql`
+> wieder **entfernt** (0 Codepfade, live 0 Zeilen). Hier im historischen Satz bleibt
+> die Definition stehen – der Satz beschreibt den Stand seiner Zeit und wird nicht
+> rückwirkend umgeschrieben.
 
 Nachweis der Vollständigkeit (gemessen, nicht geschätzt): Der Zustandsvergleich
 beider Sätze (Tabellen, RLS, Policies, Indizes, Funktionen) meldet **keine**

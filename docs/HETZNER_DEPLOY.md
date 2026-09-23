@@ -242,7 +242,7 @@ UPLOAD_MAX_MB=100
 
 ### Datenbank / Storage – Stand
 
-- **Supabase** (Metadaten: `samples`, `music_tracks`, `sample_tags`, `library_links`)
+- **Supabase** (Metadaten: `samples`, `music_tracks`, `sample_tags`)
   ist eingerichtet; `database/schema.sql` wurde ausgeführt und die Preset-Bibliothek
   ist bereits synchronisiert.
 - **Cloudflare R2** (Bucket `audiomonastrysamples`) ist eingerichtet und per S3-API

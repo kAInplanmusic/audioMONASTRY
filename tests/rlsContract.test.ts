@@ -76,8 +76,11 @@ describe('RLS-Vertrag: der Fall RC1-004 wird erkannt', () => {
   });
 
   it('schlaegt an, wenn eine Tabelle kein aktives RLS hat', () => {
-    const ohneRls = [...VERTRAGSGEMAESS, row({ tablename: 'library_links', policyname: '', policy_roles: [], policy_cmd: '', rls_enabled: false })];
-    expect(checkRlsContract(ohneRls).join(' ')).toContain('library_links');
+    // Synthetischer Name, absichtlich kein echter: diese Zeile beschreibt einen
+    // erfundenen Zustand, und ein realer Tabellenname wuerde hier eine falsche
+    // Faehrte legen (library_links etwa ist am 2026-09-23 entfernt worden).
+    const ohneRls = [...VERTRAGSGEMAESS, row({ tablename: 'beispiel_tabelle', policyname: '', policy_roles: [], policy_cmd: '', rls_enabled: false })];
+    expect(checkRlsContract(ohneRls).join(' ')).toContain('beispiel_tabelle');
   });
 
   it('verweigert ein Urteil bei leerem Bericht', () => {
@@ -118,10 +121,10 @@ describe('RLS-Vertrag: Zusammenfassung', () => {
   it('zaehlt Tabellen, fehlendes RLS und anon-Policies', () => {
     const summary = summarizeRls([
       ...VERTRAGSGEMAESS,
-      row({ tablename: 'library_links', policyname: '', policy_roles: [], policy_cmd: '', rls_enabled: false }),
+      row({ tablename: 'beispiel_tabelle', policyname: '', policy_roles: [], policy_cmd: '', rls_enabled: false }),
     ]);
     expect(summary.tabellen).toBe(5);
-    expect(summary.tabellenOhneRls).toEqual(['library_links']);
+    expect(summary.tabellenOhneRls).toEqual(['beispiel_tabelle']);
     expect(summary.anonLiest).toEqual(['music_tracks', 'samples']);
   });
 
