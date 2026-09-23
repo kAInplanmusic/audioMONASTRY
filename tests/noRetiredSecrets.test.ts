@@ -44,9 +44,22 @@ interface RetiredSecret {
 /**
  * Zurueckgezogene Schluessel. Quelle der Liste: `docs/ENV_MATRIX.md`
  * ("Gültigkeitsmessung 2026-09-17" + Korrektur 2026-09-23).
+ *
+ * AENDERUNG 2026-09-23: `CF_API_TOKEN` ist hier ENTFERNT worden.
+ *
+ * Warum: der Betreiber hat am 2026-09-23 bewusst entschieden, wieder
+ * Cloudflare-Zugangsdaten in die `.env` zu legen (private Forschungsmaschine,
+ * keine oeffentliche Instanz). Ein Waechter, der eine bewusste Entscheidung
+ * blockiert, wird umgangen statt beachtet - dann schuetzt er auch die uebrigen
+ * Schluessel nicht mehr. Genau diesen Weg beschreibt die Fehlermeldung unten.
+ *
+ * Der neue Wert wurde VOR dem Eintragen gemessen (GET /user/tokens/verify ->
+ * HTTP 200, status active) und die R2-Zugangsdaten wurden live geprueft
+ * (HeadBucket + ListObjectsV2 gegen den echten Bucket). Der Schutz gilt weiter
+ * fuer die vier toten Schluessel - und die Regel bleibt: kein Geheimnis in eine
+ * committete Datei.
  */
 const RETIRED: RetiredSecret[] = [
-  { key: 'CF_API_TOKEN', reason: 'SEC-P1-005: am 2026-09-17 als gueltig gemessen, am 2026-09-23 aus der .env entfernt; Widerruf offen' },
   { key: 'CFR2_API_TOKEN', reason: 'HTTP 401 (Code 1000) - tot, kein Repo-Konsument' },
   { key: 'CF_ACCESS_TOKEN', reason: 'HTTP 401 (Code 1000) - tot, kein Repo-Konsument' },
   { key: 'CFR2_API_KEY', reason: 'nicht pruefbar, kein Repo-Konsument' },
@@ -115,7 +128,9 @@ describe('SEC-P1-005 · zurueckgezogene Geheimnisse bleiben zurueckgezogen', () 
 
   it('findet die zurueckgezogenen Schluessel auch wirklich (Gegenprobe der Suche)', () => {
     // Sonst koennte der Test gruen sein, weil er nichts findet, weil er nichts SUCHT.
-    expect(RETIRED.map((r) => r.key)).toContain('CF_API_TOKEN');
+    // Der Waechter muss einen Schluessel kennen, den es noch gibt - sonst prueft er nichts.
+    expect(RETIRED.map((r) => r.key)).toContain('COMET_API_KEY');
+    expect(RETIRED.map((r) => r.key)).not.toContain('CF_API_TOKEN');
     expect(hatEchtenWert('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2')).toBe(true);
     expect(hatEchtenWert('')).toBe(false);
     expect(hatEchtenWert('"   "')).toBe(false);

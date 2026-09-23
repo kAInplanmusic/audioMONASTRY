@@ -29,6 +29,44 @@ Dateisystem oder in der Git-Historie steht.
 > Behauptung — derselbe Fehlertyp wie bei der RLS-Härtung (`DB-P2-002`), wo die
 > Migration im Repo lag und nicht in der Datenbank.
 
+---
+
+## Was am 2026-09-23 abends passiert ist (bitte zuerst lesen)
+
+Der Betreiber hat **neue** Cloudflare-Zugangsdaten geliefert; sie wurden in die
+`.env` eingetragen und **vor** dem Eintragen geprüft.
+
+| Eintrag | Prüfung | Ergebnis |
+|---|---|---|
+| `CF_TOKEN_UT` (`cfut_…`) | `GET /user/tokens/verify` | **200, `status: active`** ✅ |
+| `CF_TOKEN_ACCOUNT` (`cfat_…`) | `/user/tokens/verify` → 401 (erwartbar, kontogebunden); `/accounts` | **200** ✅ |
+| `CF_TOKEN_KEY` (`cfk_…`) | `/user/tokens/verify` → 401; `/accounts` → 403 | **nicht verwendbar mit Bearer** ❓ |
+| `CFS3_ENDPOINT` + `CFS3_ACCESS_KEY` + `CFS3_SECRET_KEY` + `CFR2_ACCOUNT_ID` | `HeadBucket` + `ListObjectsV2` mit dem S3-SDK des Projekts | **OK, echte Objekte gelesen** ✅ |
+
+`CF_API_TOKEN` (der kanonische Name, den Code und Doku lesen) wurde auf den
+**gemessenen** gültigen Wert gesetzt — nicht auf einen geratenen.
+
+### Zwei Dinge, die offen bleiben
+
+1. **Ist das überhaupt ein neuer Token?** Der entfernte und der neue Wert sind
+   **beide 53 Zeichen** und im selben `cfut_`-Format. Ob sie identisch sind, ist
+   **nicht mehr feststellbar** — die alten Werte wurden gelöscht, und in der
+   Git-Historie standen sie nie. `ANNAHME:` Es kann derselbe Token sein. Dann hat
+   **keine Rotation stattgefunden**, und der Wert lag tagelang auf der Platte.
+   Wer Sicherheit will, erzeugt im Dashboard einen **neuen** und widerruft den
+   alten — das ist der einzige Weg, der die Frage beantwortet.
+2. **`cfk_…` hat keinen belegten Zweck.** Er antwortet weder als Bearer-Token
+   noch auf Konto-Ebene. Er liegt jetzt in der `.env`, weil er geliefert wurde —
+   nicht weil er geprüft funktioniert. Als `SEC-P2-005` im Register vermerkt.
+
+### Und die Exposition, die ich nicht rückgängig machen kann
+
+Die Zugangsdaten wurden **im Klartext in den Chat** geschrieben. Alles, was dort
+steht, ist aus meiner Sicht **kompromittiert** — unabhängig davon, wie vertraulich
+der Verlauf behandelt wird. Empfehlung: nach dem Testen einen frischen Satz
+erzeugen und diesen hier widerrufen. Der Aufwand ist klein, der Unterschied groß.
+
+
 ## Warum überhaupt
 
 Befund `SEC-P1-005` (Audit 2026-09-23): Der `CF_API_TOKEN` liegt **wieder auf
