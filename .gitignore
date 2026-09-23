@@ -8,6 +8,29 @@ dist/worklets
 !.env.hetzner.example
 !.env.deploy.example
 
+# RC1-009 (Audit 2026-09-23): Schluessel-/Zertifikatsmaterial und
+# Notebook-Reste pauschal ausschliessen. Praevention, kein Vorfall - aktuell
+# ist nichts dergleichen getrackt (geprueft mit
+# `git ls-files | rg -i "\.pem$|\.key$|id_rsa|\.ipynb$"` -> nur tsconfig.json
+# als Fehltreffer auf "config.json"). Eine .gitignore-Regel schuetzt nur vor
+# dem versehentlichen `git add .` - genau das ist der realistische Fehlerpfad.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+*.ipynb
+credentials.json
+secrets.json
+
+# RC2-Sicherungskopien: Konsolidierungs-/Apply-Backups der SSOT
+# (MASTERTODOENDE.json.bak-*). Sie gehoeren nicht in die Historie - der Inhalt
+# ist ueber git selbst rekonstruierbar. Der Betreiber kann sie jederzeit loeschen.
+*.bak-*
+
 # lokale Agent-Tooling-Konfiguration (enthält API-Keys)
 deepcode/
 
