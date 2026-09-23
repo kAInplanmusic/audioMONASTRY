@@ -125,8 +125,9 @@ das begrenzt faktisch, ist aber kein bewusstes Nachhaltigkeits-Instrument.
 |---|---|
 | Audio-Export in Standardformaten | ✅ WAV (bit-genau, `recordMONK`) + MP3/FLAC/AAC(M4A)/OGG über `POST /api/audio/encode` (`FEAT-P3-004`, DONE) |
 | Zustands-/Projekt-Export | ✅ `exportGraphState()` → JSON, validiert beim Import (`audioGraphSerialization`) |
-| Lizenz | ❌ **keine `LICENSE`-Datei, kein `license`-Feld in `package.json`** (Audit-Befund, `P1`) |
-| Doku | ✅ `README.md` + `README_DE.md` + 60 Dateien in `docs/` |
+| Lizenz | ✅ `LICENSE` vorhanden (proprietär, alle Rechte vorbehalten) + `license: UNLICENSED` in `package.json` (`PROD-P1-005`, DONE 2026-09-23) |
+| Doku | ✅ `README.md` (deutsch, einzige Fassung) + 61 Dateien in `docs/` |
+| Impressum / Datenschutz | ✅ unter `/impressum` und `/datenschutz`, **ohne** Zugangstoken erreichbar (`PROD-P0-005`). Betreiber-Angaben fehlen noch und werden auf der Seite sichtbar angemahnt. |
 
 ## 8. Warum
 

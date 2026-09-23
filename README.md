@@ -1,357 +1,466 @@
 # audioMONASTRY
 
-**Status: Alpha — privat / Forschung, keine kommerzielle Nutzung, keine öffentliche Freigabe**
+**Status: Alpha · privates Forschungs- und Entwicklungsprojekt · keine kommerzielle Nutzung**
 
 > **audioMONASTRY ist ein browserbasiertes, kollaboratives Tonstudio (DAW) für bis zu vier
-> Personen gleichzeitig, mit dem ihr ohne proprietäre Plugins und ohne Bindung an einen
-> einzigen Cloud-Anbieter gemeinsam an derselben Session arbeitet.**
+> Personen gleichzeitig: gemeinsam an derselben Session arbeiten, ohne proprietäre Plugins
+> und ohne Bindung an einen einzigen Cloud-Anbieter.**
 
-**Für wen:** Musikproduzenten, DJs, Sounddesigner und Forschende, die zu mehreren an einer
-Session arbeiten wollen — und Menschen, die Wert darauf legen, dass die Audioarbeit im Browser
-und auf eigener Infrastruktur bleibt.
+**Version** 1.210.001 (`V. 1|210|001`) · **Codename** „HyperAudioWorkstation" · **Zweig** `main`
+Stand: **2026-09-23**
 
-**Kosten:** guthabenbasiert. Die Flotte läuft stundenweise (~0,054 EUR/h) und wird nach der
-Session gelöscht → 0 EUR/h. Es wird nur ausgegeben, was vorher gedeckt ist (`PRINCIPLES.md` §1.5).
+---
 
-**Betrieb & Verantwortung:** Betreiber: `kAInplanmusic` · Hosting: Hetzner (nbg1) + Cloudflare
-vor dem Origin · Zugang: token-geschützt (`STUDIO_ACCESS_TOKEN`, fail-closed).
+## Inhalt
 
-> `TODO(operator):` **Demo-Link.** Die öffentliche Instanz `https://anunnakitools.de` ist im
-> Register als live geführt, die Flotte ist derzeit aber **heruntergefahren** (0 Server). Ein
-> Link „above the fold" wird erst gesetzt, wenn eine Instanz dauerhaft erreichbar ist —
-> sonst führt der erste Klick ins Leere. Ebenso offen: das **15-Sekunden-GIF** (höchster ROI
-> laut Startanweisung) und ein **Vorher/Nachher-Hörbeispiel**.
+- [1. Was es ist](#1-was-es-ist)
+- [2. Was es nicht ist](#2-was-es-nicht-ist)
+- [3. Schnellstart](#3-schnellstart)
+- [4. Rechtliches](#4-rechtliches)
+- [5. Betrieb und Kosten](#5-betrieb-und-kosten)
+- [6. Architektur](#6-architektur)
+- [7. Die 16 Module](#7-die-16-module)
+- [8. KI-Rollen](#8-ki-rollen)
+- [9. Sicherheitskonzept](#9-sicherheitskonzept)
+- [10. Qualitätssicherung](#10-qualitaetssicherung)
+- [11. Projektstruktur](#11-projektstruktur)
+- [12. Offene Punkte — ehrlich](#12-offene-punkte--ehrlich)
+- [13. Dokumentation](#13-dokumentation)
 
-**Abgrenzung — was audioMONASTRY nicht ist** (vollständig in `PRINCIPLES.md` §2):
-1. kein eigenes Audio-Interface (keine Hardware-/Treiber-Ebene),
-2. kein Kino-Audio (kein Dolby Atmos / THX),
-3. keine Lichtanlage (Visuals sind Bild-/Beamer-Ausgabe, kein DMX).
+---
 
-**Vergleich:**
+## 1. Was es ist
+
+Vier Personen arbeiten gleichzeitig in **einer** Session. Jede Änderung an Reglern, Effekten oder
+Zuständen wird gespiegelt; ein Modul kann für die anderen gesperrt werden, damit niemand
+gleichzeitig an derselben Sache dreht („B2B-Locking"). Das Audiomaterial bleibt dabei im Browser
+und auf eigener Infrastruktur.
+
+**Kernfunktionen**
+
+| Bereich | Umfang |
+|---|---|
+| Aufnahme & Wiedergabe | Mikrofon, Instrument, Upload, Bounce, Offline-Rendering |
+| Mischpult | 8 Kanäle, Gain, Fader, Pan, Cue, Monitor, Routing, 2.1-Ausgang |
+| Effekte & Dynamik | Effektketten, parametrischer EQ, Kompressor/Gate/Limiter, PDC-fähiges Mastering |
+| Instrumente | Synthesizer, Sampler, Drum-Machine, MIDI-Ein-/Ausgang für externe Hardware |
+| Bibliothek | Samples, Tags, Suche, Metadaten |
+| KI | Text/Sprache erzeugen, Stems trennen, analysieren, Visuals |
+| Kollaboration | bis 4 Nutzer, gespiegelter Zustand, Plugin-Sperren, Chat |
+| Visuals | Bild-/Clip-Ausgabe, Beamer, MJPEG-Rückfallweg |
+
+**Technik in einem Satz je Schicht:** React 19 + Vite 6 + Tailwind 4 im Browser · Express 4 auf
+Node ≥ 22 als Server · **AudioWorklet** (16 Prozessoren) und Rust/WASM-Kernel für die
+Signalverarbeitung · Socket.io + WebRTC für die Gleichzeitigkeit · mediasoup als SFU · Supabase
+für Metadaten, Cloudflare R2 für Audiodateien, OPFS/IndexedDB lokal · acht GPU-Rollen auf
+RunPod-Serverless.
+
+**Vergleich**
 
 | | audioMONASTRY | Audacity | iZotope RX | Colab-Notebooks |
 |---|---|---|---|---|
 | Läuft im Browser, ohne Installation | ✅ | ❌ | ❌ | ✅ |
-| Mehrere Nutzer in **einer** Session | ✅ bis 4, gespiegelter Zustand | ❌ | ❌ | ❌ |
-| Plugin-Locking inklusive | ✅ (B2B-Modus) | – | – | – |
+| Mehrere Nutzer in **einer** Session | ✅ bis 4, gespiegelt | ❌ | ❌ | ❌ |
+| Plugin-Sperren inklusive | ✅ | – | – | – |
 | DSP im AudioWorklet/WASM | ✅ 16 Worklets | nativ | nativ | – |
+| Kosten bei Nichtbenutzung | 0 €/h (Flotte aus) | 0 | einmalig | 0 |
 | Zweck | privat / Forschung | freie Audiosoftware | Restaurierung | Experimente |
 
-> Verbindliche Zahlen: siehe `docs/INFRA_KONSTITUTION.md`.
-> Version: **1.210.001** (`V. 1|210|001`) · Codename "HyperAudioWorkstation" · Stand 2026-09-09.
-> Main branch: `main` · Release gate: `npm run verify` must be green.
-> Project purpose: **private / research** (no commercial purpose).
+---
+
+## 2. Was es nicht ist
+
+1. **Kein eigenes Audio-Interface.** Es gibt keine Hardware- und Treiberebene; das Gerät kommt
+   vom Betriebssystem und vom Browser.
+2. **Kein Kino-Audio.** Kein Dolby Atmos, kein THX, kein 7.1.4-Zwang.
+3. **Keine Lichtanlage.** Visuals sind Bild- und Beamer-Ausgabe, kein DMX.
+
+Die vollständige Abgrenzung samt Zellen-, Stille- und Skriptorium-Prüfung steht in
+**[`PRINCIPLES.md`](PRINCIPLES.md)**.
 
 ---
 
-## 1. Project Overview
-
-**Purpose:** A fully browser-based, real-time collaborative audio workstation (DAW) with AI support – without proprietary plugins and without dependence on a single cloud provider.
-
-**Target Audience:** Music producers, DJs, sound designers, and researchers who want to work together on the same session up to four at a time.
-
-**Core Functionality:**
-- 16 plugin modules ("MONKs") + 3 system modules (masterplayerMONK, aiMONK, perforMONK) – final 16-MONK architecture (complete list in section 5)
-- Real-time collaboration up to 4 users with identical state (WebRTC DataChannels + Socket.io), B2B locking per plugin
-- Audio: **V2-only production path** – `V2StudioGraph` / `V2LiveSink` / `WorkletGraphRuntime` (AudioWorklets), sample-accurate scheduler (`V2SampleClock`), SAB/RingBuffer, PDC-capable mastering, dynamics worklet insert (compressor/gate/dynamic EQ), MIDI clock/note out for external hardware. Tone.js was removed (2026-09-09); a native WebAudio adapter (`src/core/audio/compat/nativeAudioKit.ts`) provides the Tone-compatible facade
-- AI: MOA/MCP planning (DeepSeek), voice/TTS (HF), stems (Replicate), audio analysis (HF Endpoint custom container), local fallbacks (Ollama, WebSpeech, deterministic)
-- Persistence: Supabase (metadata) + Cloudflare R2 (audio blobs) + OPFS/IndexedDB (local)
-
-### 1.1 Quick Start
+## 3. Schnellstart
 
 ```bash
-npm ci                      # Dependencies (package-lock.json is authoritative)
-cp .env.example .env        # Add secrets – .env is NEVER committed
-node build-worklets.mjs     # Build AudioWorklets (public/worklets is gitignored)
-npm run dev                 # tsx server.ts: Express + Vite middleware on :8080
+npm ci                       # Abhängigkeiten (package-lock.json ist maßgeblich)
+cp .env.example .env         # Zugangstoken eintragen – .env wird NIE committet
+node build-worklets.mjs      # AudioWorklets bauen (public/worklets ist gitignored)
+npm run dev                  # Express + Vite auf http://localhost:8080
 ```
 
-Without cloud keys, the app runs completely offline (built-in presets, local fallbacks). Production:
+**Der Zugang ist zu, bis ein Token gesetzt ist.** Ohne `STUDIO_ACCESS_TOKEN` startet die
+Anwendung, beantwortet aber **keine** API-Anfrage (HTTP 503 `STUDIO_TOKEN_MISSING`). Für lokale
+Entwicklung lässt sich die Sperre bewusst öffnen:
 
 ```bash
-npm run build               # Vite client + AudioWorklets + esbuild server bundle
-npm start                   # node dist/server.cjs
+AUDIOMONASTRY_DEV_NO_AUTH=1 npm run dev     # NUR lokal, nie in Produktion
 ```
 
-**Important npm scripts** (complete in `package.json`):
+> Der Name ist wichtig: bis 2026-09-23 stand in `.env.example` irrtümlich `STUDIO_DEV_NO_AUTH`.
+> Diese Variable liest der Server **nicht** — sie war wirkungslos.
 
-| Script | Purpose |
+Ohne Cloud-Schlüssel läuft die Anwendung vollständig offline (eingebaute Voreinstellungen,
+lokale Ersatzwege).
+
+**Produktion**
+
+```bash
+npm run build                # Vite-Client + Worklets + esbuild-Server-Bundle
+npm start                    # node dist/server.cjs
+```
+
+**Die wichtigsten Befehle**
+
+| Befehl | Zweck |
 |---|---|
-| `npm run dev` | Dev server (API + frontend, port 8080) |
-| `npm run build` / `npm start` | Production build / start |
-| `npm run lint` | ESLint (`eslint . --max-warnings=0`) |
-| `npm test`, `npm run test:coverage` | Vitest (unit/integration, currently 156 files / 966 tests) |
-| `npm run test:e2e`, `test:e2e:responsive`, `test:stress` | Playwright (smoke/collab/hardware/keyboard/visual/responsive/stress/live2browser + `v2-live` Audio-Gate) |
-| `npm run verify` | **Release gate:** typecheck + lint + Vitest + security + deep static audit |
-| `npm run verify:boundary` | only `scripts/validate-interface-boundaries.mjs` |
-| `npm run check:bundle` | Bundle size (< 2.0 MiB fail gate, warning < 1.5 MiB) |
-| `npm run check:memo` | React memo heuristic for terminal components |
-| `npm run generate:golden` | Golden WAV references for DSP tests |
-| `npm run eval:ai`, `iterate:prompts` | AI evaluation / prompt iteration (16 plugins) |
-| `npm run stress:hetzner`, `stress:sfu*` | Load/SFU tests against the fleet |
-| `npm run build:wasm-hrtf` | Rust → WASM HRTF convolution (`src/audio/wasm/hrtf_conv`) |
+| `npm run dev` | Entwicklungs-Server (API + Oberfläche, Port 8080) |
+| `npm run build` / `npm start` | Produktionsbau / -start |
+| `npm run verify` | **Freigabeprüfung** — siehe [Abschnitt 10](#10-qualitaetssicherung) |
+| `npm run typecheck` · `npm run lint` | `tsc --noEmit` · ESLint ohne Warnungen |
+| `npm test` · `npm run test:ci` | Vitest · Vitest mit Sperre gegen übersprungene Tests |
+| `npm run test:e2e` | Playwright (Kollaboration, Hardware, Tastatur, visuell, Audio) |
+| `npm run check:deadfiles` | knip: keine unerreichbaren Dateien, keine ungenutzten Pakete |
+| `npm run check:bundle` | Bundle-Budget (< 2,0 MiB) |
+| `npm run check:memory` | Heap-Wachstum im Client (< 512 MB) |
+| `npm run proof:ffmpeg-whitelist` | Beweist die Protokoll-Whitelist der ffmpeg-Aufrufe |
+| `npm run test:python:master` | Beweist die Dekodier-Grenzen des Master-Dienstes |
+| `npm run generate:golden` | Golden-WAV-Referenzen für die DSP-Tests |
+| `npm run audit:deep:static` | Tiefenprüfung offline (tsc/eslint/knip/npm-audit/semgrep/Grenzen/Bundle) |
 
-## 2. System Architecture
+---
 
-```
-┌──────────────┐   HTTPS/WSS    ┌─────────────────────────────┐
-│  Browser (4×)│ ─────────────► │ Hetzner app-1 (server.ts)    │
-│  React/Vite  │ ◄───────────── │ Express + Socket.io + Redis  │
-└──────────────┘   SSE/WebRTC   └──────┬───────────┬──────────┘
-                                       │           │
-                     ┌─────────────────┘           └──────────────────┐
-                     ▼                                                ▼
-          ┌───────────────────┐                              ┌─────────────────┐
-          │ AI Orchestrator   │                              │ SFU (mediasoup) │
-          │ (src/core/ai/     │                              │ sfu-1, UDP/RTP  │
-          │  orchestrator/)   │                              └─────────────────┘
-          └──┬────┬─────┬─────┘
-             │    │     │
-      ┌──────┘    │     └────────┐
-      ▼           ▼              ▼
-┌──────────┐ ┌──────────┐ ┌───────────────────────────┐
-│ Replicate│ │ HF       │ │ HF Endpoint (Custom)      │
-│ (Stems)  │ │ Serverless│ │ audiomonastry-ai-runtime    │
-└──────────┘ │ (LLM/TTS)│ │ A100, Scale-to-Zero       │
-             └──────────┘ └───────────────────────────┘
-      ▼           ▼              ▼
-┌─────────────────────────────────────────────────────┐
-│ Supabase (Metadata, RLS) + Cloudflare R2 (Blobs)   │
-│ Ollama/ai-1 (Local CPU Fallback)                    │
-└─────────────────────────────────────────────────────┘
-```
+## 4. Rechtliches
 
-**Data Flow (AI Request):**
-Browser → `/api/ai/orchestrate` → JobManager (dedup/concurrency) →
-ProviderRouter (HF Endpoint/Serverless/Replicate/local) → result →
-CostTracker → Supabase persistence → response.
+**Impressum und Datenschutzerklärung sind veröffentlicht** und **ohne Anmeldung** erreichbar:
 
-**Dependencies:**
-- Runtime: Node 22, TypeScript, Express, Socket.io, Vite/React 19
-- Audio: Web Audio API, AudioWorklets, native WebAudio adapter (`nativeAudioKit`), SAB/Atomics
-- Cloud: Supabase JS, AWS S3 SDK (R2), Redis adapter (optional)
-- AI: huggingface_hub (endpoint management), FastAPI/PyTorch (custom container)
-
-## 3. Services & Microservices
-
-| Service | Location | Port/Protocol | Responsibility |
-|---|---|---|---|
-| **App/API** | `server.ts` | 8080 HTTP + WebSocket | REST, Socket.io signaling, AI proxy, metrics |
-| **AI Orchestrator** | `src/core/ai/orchestrator/` | in-process | Jobs, sessions, provider routing, MCP, costs |
-| **AI Runtime (Custom Container)** | `services/audiomonastry-ai-runtime/` | 8000 HTTP | HF Endpoint: `/health`, `/ready`, `/status`, `/infer`, `/mcp/tools`, `/metrics` |
-| **stem-ai** (optional) | `services/stem-ai/` | 8000 HTTP (internal) | Local Demucs CPU fallback |
-| **master-player** | `services/master-player/` | internal | FFmpeg mastering/render |
-| **midi-bridge** | `services/midi-bridge/` | internal | MIDI ↔ WebSocket bridge |
-| **audio-runtime** (Rust) | `services/audio-runtime/` | native | Native audio enumeration (Xonar U7, etc.) |
-| **mixer** (Rust NAPI) | `services/mixer/` | native | Native mixer backend |
-| **backend-core** | `services/backend-core/` | 8000 (legacy) | Historical Python/Node backend core (partially replaced) |
-| **library-ai** | `services/library-ai/` | internal | Sample tagging (historical) |
-| **portal-worker** | `services/portal-worker/` | Cloudflare | Wake/proxy/auto-delete (€0 portal) |
-| **turn** | `services/turn/` | 3478/5349 | TURN (WebRTC relay) |
-| **SFU** | `docker-compose.sfu.yml` | 40000–40099 UDP/TCP | Mediasoup selective forwarding |
-
-### 3.1 HTTP API (excerpt from `server.ts`)
-
-| Area | Endpoints |
+| Seite | Adresse |
 |---|---|
-| Health/Status | `GET /api/health`, `/api/online`, `/api/cloud/health`, `/api/master/health`, `/api/master/selftest` |
-| AI Orchestrator | `POST /api/ai/orchestrate`, `/api/ai/complete`, `/api/ai/compose`, `/api/ai/describe`, `/api/ai/generate`, `/api/ai/generate-drop`; `GET /api/ai/jobs`, `/api/ai/jobs/:jobId`, `/api/ai/models`, `/api/ai/orchestrator/status` |
-| AI Session | `GET /api/ai/session`, `POST /api/ai/session/heartbeat`, `POST /api/ai/session/shutdown` |
-| MCP | `GET /api/ai/mcp/tools`, `POST /api/ai/mcp/tools/:name` |
-| Voice | `POST /api/voice/tts`, `/api/voice/sing`, `/api/voice/song`, `/api/generate-voice` |
-| Stems | `POST /api/separate-stems` (SSE progress), `GET /api/stem/status` |
-| Mastering | `POST /api/master/mix`, `/api/master/master`, `/api/master/analyze` |
-| Cloud/Assets | `POST /api/cloud/sync`, `/api/cloud/upload`, `/api/cloud/samples`, `/api/cloud/music`, `/api/upload/sample` |
-| Operations | `GET /api/metrics`, `/api/audit`, `/api/admin/debug`, `POST /api/telemetry`, `POST /api/alerts/webhook` |
+| Impressum | `/impressum` |
+| Datenschutzerklärung | `/datenschutz` |
 
-Additionally, `server.ts` serves Socket.io signaling (session join, state sync, plugin leases) and in production delivers the SPA bundle (`GET *`).
+Beide werden vom Server als eigenständige HTML-Seiten ausgeliefert — **absichtlich nicht** als
+Teil der Studio-Oberfläche und **absichtlich ohne Zugangstoken**: eine Datenschutzerklärung
+hinter einer Anmeldung wäre wertlos. Verlinkt sind sie auf der Startseite vor dem Betreten des
+Studios.
 
-## 4. Configuration Management
+Sie laden **keine externen Ressourcen** — keine Schriftart, kein Skript, kein Bild von einem
+anderen Server. Eine Datenschutzseite, die beim Aufruf eine Verbindung zu einem Schriftarten-
+Dienst aufbaut, würde sich selbst widerlegen. Ein Test prüft das.
 
-**Configuration Files:**
-- `.env` / `.env.example` – Environment variables (secrets NEVER committed)
-- `docker-compose.yml`, `docker-compose.hetzner.yml`, `docker-compose.ai.yml`, `docker-compose.monitoring.yml`, `docker-compose.sfu.yml`, `docker-compose.fleet-test.yml`
-- `Caddyfile` – TLS/reverse proxy
-- `services/audiomonastry-ai-runtime/model_manifest.json` – AI runtime: model registry (revision pinning) **and the single source of the VRAM budget** (`runtime.vramBudgetGb`, per role `roles.<role>.vramBudgetGb`)
-- `services/audiomonastry-ai-runtime/hf_endpoint.example.json` – HF endpoint config
-- `database/schema.sql` + `database/ai_migration_001.sql` + `database/ai_migration_002.sql` – Supabase schema & prompt/eval tables
-- `deploy/helm/audioMONASTRY/values.yaml` – Helm (optional)
+> **Die Betreiber-Angaben fehlen noch.** Name, Anschrift und erreichbare E-Mail sind nach § 5 DDG
+> Pflicht. Solange sie fehlen, zeigt die Seite oben einen deutlichen Hinweis und nennt die
+> fehlenden Felder — es wird **keine erfundene Anschrift** angezeigt. Das Ausfüllen braucht
+> keinen Code-Änderung, nur diese Variablen:
+>
+> ```
+> LEGAL_NAME="…"   LEGAL_STREET="…"   LEGAL_CITY="…"   LEGAL_COUNTRY="…"
+> LEGAL_EMAIL="…"  LEGAL_PHONE="…"    LEGAL_REPRESENT="…"  LEGAL_SUPERVISORY="…"
+> ```
+>
+> Prüfen: `curl -s localhost:8080/impressum | grep -c "noch unvollständig"`
+> → `0` heißt vollständig, `1` heißt es fehlen Pflichtangaben.
+>
+> **Noch nicht abschließend geklärt und deshalb auf der Seite bewusst offen benannt:**
+> Übermittlung in Drittländer, Rechtsgrundlagen je Verarbeitung, Löschfristen, Einordnung der
+> Stimme nach Art. 9 DSGVO. Entwurf und Beleglage: `docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md`.
 
-**Secrets Strategy:**
-- All keys/tokens server-side; `VITE_*` only for publishable values.
-- GitHub Actions retrieves secrets from repository secrets (`HF_TOKEN`, `GHCR_USERNAME`, `GHCR_PASSWORD`, `SONAR_TOKEN`).
-- Logs redact secrets (`AiLogger.redactSecrets`).
-- Boundary scan (`scripts/validate-interface-boundaries.mjs`) enforces encapsulation of platform APIs.
+**Lizenz:** proprietär, alle Rechte vorbehalten — siehe [`LICENSE`](LICENSE). Eingebundene fremde
+Werke sind einzeln in `docs/LICENSE_EXTERNAL_RESOURCES.md` aufgeführt.
 
-## 5. Plugin Ecosystem
+**Rechte an mitgeliefertem Material:** Die Demo-Titel unter `public/music/` sind **nicht** Teil
+dieses Projekts, per `.gitignore` ausgeschlossen und **nur mit gültigem Zugangstoken** abrufbar
+(`/music/*`).
 
-**Registry:** `src/plugins/registry.ts` – **exactly 16 plugins** (`EXPECTED_PLUGIN_COUNT = 16`), states `OFF` | `AUTO_AI` | `PRO`, B2B locking via `src/core/session/locking.ts`. The registry is loaded at runtime from `public/plugin-manifest.json` (`discoverPlugins()`); if the count doesn't match, the built-in fallback registry applies. All terminals are code-split via `React.lazy`. System modules are **not** plugins and live outside the 16er registry.
+---
 
-| # | ID | Name | Terminal Component | Role |
-|---|---|---|---|---|
-| 1 | `mixer` | mixerMONK | `DJ4ChMixer` | DJ: mixer, gain, fader, pan, cue, main, monitor, routing |
-| 2 | `drop` | dropMONK | `DropTerminal` | DJ: live drops, one-shots, performance samples/events |
-| 3 | `song` | songMONK | `SongMonkTerminal` | DJ: song, track, arrangement, playlist, set |
-| 4 | `effect` | effectMONK | `FXEngineTerminal` | DJ: FX, effect chains, live effects, effect routing |
-| 5 | `syntisampler` | syntisamplerMONK | `SyntiSamplerTerminal` | Producing: synthesizer + sampler + MCP-driven control |
-| 6 | `drumsampler` | drumsamplerMONK | `DrumMachineTerminal` | Producing: drum machine, pads, samples, patterns, sequencing |
-| 7 | `instru` | instruMONK | `InstrumentsTerminal` | Producing: instruments, MIDI note control, presets |
-| 8 | `biblio` | biblioMONK | `LibraryTerminal` | Producing: library, samples, sounds, presets, metadata, search |
-| 9 | `voice` | voiceMONK | `VoiceGenTerminal` | AI: voice, TTS, voice generation/processing |
-| 10 | `sound` | soundMONK | `SoundTerminal` | AI: sound generation, sound design, generative audio |
-| 11 | `stem` | stemMONK | `StemExtractorTerminal` | AI: stem separation/analysis, Demucs |
-| 12 | `spatial` | spatialMONK | `SpatialScene` | AI: spatial audio, positioning, panning, 2.1/N.x, HRTF |
-| 13 | `eq` | eqMONK | `EQPluginTerminal` | Mastering: parametric EQ, frequency processing, automation |
-| 14 | `dsp` | dspMONK | `DSPTerminal` | Mastering: processing nodes, DSP chains, worklet processing |
-| 15 | `master` | masterMONK | `MasteringOverlay` | Mastering: dynamics, compression, limiting, loudness, PDC |
-| 16 | `record` | recordMONK | `RecorderTerminal` | Mastering: recording, capture, bounce, export, offline rendering |
+## 5. Betrieb und Kosten
 
-**System modules (no plugin slots, fixed, available to all 4 users):**
+**Betreiber** kAInplanmusic · **Hosting** Hetzner (nbg1) · **Proxy/DNS** Cloudflare ·
+**Datenbank** Supabase · **Objektspeicher** Cloudflare R2 · **GPU** RunPod-Serverless
 
-| ID | Name | Position | Terminal |
-|---|---|---|---|
-| `masterplayer` | masterplayerMONK | after HEAD | `MasterPlayerTerminal` (playback/waveform/info, view-only) |
-| `ai` | aiMONK | after recordMONK | `AiMonkTerminal` + `AiMonkDock` (chat/system-wide AI control) |
-| `perfor` | perforMONK | bottom | `PerformanceMonitorTerminal` (telemetry/diagnostics only) |
+Die Flotte läuft **stundenweise** und wird nach der Session gelöscht → **0 €/h**, wenn niemand
+arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 
-**MIDI/Controller:** no plugin slot. MIDI lives in **Settings → MIDI / Controllers** (`MIDIControllerTerminal` inside `SettingsDialog`). Path: `USB MIDI → MIDI Runtime → Mapping/Routing → MONK/Parameter/Transport`.
+| Grenze | Wert |
+|---|---|
+| Laufende Flotte (Hetzner + GPU zusammen) | **max. 10 €/h**, Zielband 5–7,5 €/h |
+| GPU-Endpunkte | max. 8 |
+| Hetzner-Server | max. 5 |
 
-**Activation Logic:** Top-bar icons → `ModuleStateContext`; `AUTO_AI` = periodic MOA suggestions; `PRO` = full terminal; locking per lease.
+**Die Hetzner-Flotte besteht aus fünf Knoten** (Rollen app / sfu / ai / master / edge):
 
-**Start State (P0-1):** When entering the studio, **all** plugins start in `OFF` mode. `audioEngine.init()` activates the silence gate (`setIdleSilence`), so the main output remains silent at idle.
+- Hetzner fleet: `app-1` (cx23), `sfu-1` (cx23), `ai-1` (cx23), `master-1` (cx23), `edge-1` (cx23) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
-## 6. AI Model Integration
+> Diese Zeile hat eine feste Form: `tests/test_hetzner_scripts.py` liest sie aus und
+> vergleicht die Typen mit den Vorgaben des Bereitstellungsskripts. Wer sie umschreibt, bricht
+> die Prüfung — und genau das ist gewollt: die README soll nicht von der Flotte abweichen können.
 
-| Model | Task | Version/Revision | Provider | Fine-Tuning |
-|---|---|---|---|---|
-| DeepSeek V4 Flash | LLM/MOA planner | `deepseek-v4-flash` | DeepSeek API | no |
-| DeepSeek V4 Pro | LLM (complex) | `deepseek-v4-pro` | DeepSeek API | no |
-| Qwen2.5-72B-Instruct | LLM fallback | HF router | HF serverless | no |
-| Mistral Small | LLM (EU) | `mistral-small-latest` | Mistral API | no |
-| Qwen2.5:7b | LLM local | `qwen2.5:7b` | Ollama (ai-1) | no |
-| MMS-TTS-deu | TTS | `5cbe5218…` (pin) | HF serverless/endpoint | no |
-| Bark | TTS/singing | `70a8a7d3…` (pin) | HF serverless/endpoint | no |
-| MusicGen small/medium | Music | `4c8334b0…` / `d3bd7b00…` | HF endpoint | no |
-| Whisper large-v3 | STT | `06f233fe…` (pin) | HF endpoint (pilot running) | no |
-| AST (Audioset) | Audio classification | `f826b80d…` (pin) | HF endpoint (custom) | no |
-| CLAP (larger_clap_music) | Audio embeddings | `a0b4534a…` (pin) | HF endpoint | no |
-| MERT-v1-95M | Music understanding | `12af15fe…` (pin) | HF endpoint (license private/research OK) | no |
-| PyAnnote Diarization | Speaker diarization | `84fd2591…` (pin) | HF endpoint | no |
-| Qwen2.5-Omni-7B | Multimodal | `ae9e1690…` (pin) | HF endpoint (RARE) | no |
-| Demucs (cjwbw/demucs) | Stem separation | latest_version resolved | Replicate | no |
-| htdemucs-ONNX | Stem separation local | `smank/htdemucs-onnx` | local/ONNX | no |
-| LocalEmbeddingProvider | Embeddings local | transformers.js (~80 MB) | browser/Node | no |
+**Not-Aus.** `KILL_SWITCH=1` (oder `MAINTENANCE_MODE=1`) sperrt alle `/api/*`-Aufträge mit
+HTTP 503. `/api/health` und `/api/metrics` bleiben absichtlich offen, damit „absichtlich in
+Wartung" von „abgestürzt" unterscheidbar bleibt; die Oberfläche wird weiter ausgeliefert.
+Laufende Sitzungen werden **nicht** getrennt — ein Not-Aus, der Verbindungen abreißt, würde aus
+einem Kostenstopp einen Datenverlust machen.
 
-**Verbindliche Quelle der Rollen-/Modellzuordnung:** `docs/INFRA_KONSTITUTION.md` §1.1
-(kanonische Rollenliste = `GPU_ROLE_IDS` in `src/config/aiInfrastructure.ts`);
-Historie: `docs/runpod-8-instances-complete-plan.md` (8 Rollen),
-`docs/RUNPOD_AI_V1_SPEC.md` (überholte 3-Rollen-Fassung).
-Jedes Modell gehört zu **genau einer** Flotten-Rolle (`brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/`orchestrator`); die
-Task-Mengen sind disjunkt. Maßgeblich ist der `roles`-Block in
-`services/audiomonastry-ai-runtime/model_manifest.json`, gespiegelt in
-`src/core/ai/orchestrator/endpointRegistry.ts` und per `tests/manifestRoles.test.ts`
-gegen Drift abgesichert. Modelle mit `status: "planned"` haben noch keinen echten
-Revisions-Pin und werden im Betrieb nicht geladen.
+**Ruhe-Modus.** Alarme werden 22–07 Uhr nicht sofort zugestellt, sondern gepuffert und danach als
+eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) kommen sofort.
 
-**Model Registry:** `services/audiomonastry-ai-runtime/model_manifest.json` + TS mirror `src/core/ai/orchestrator/modelRegistry.ts`. Load classes CORE/FREQUENT/ON_DEMAND/RARE, revision pinning (no `latest`).
-**Evaluation:** Rollen-/Modell-Manifest + `docs/runpod-8-instances-complete-plan.md`
-(`docs/RUNPOD_AI_V1_SPEC.md` = überholte 3-Rollen-Fassung).
+---
 
-## 7. Server Infrastructure
+## 6. Architektur
 
-**Deployment Targets:**
-- Hetzner fleet: `app-1` (cx23), `sfu-1` (cx23), `ai-1` (cx23), `master-1` (cx23), `edge-1` (cx23) — Rollen app/sfu/ai/master/edge, Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar (Fallback CLI `cx23`, Portal-Worker `cx33` für app/sfu/ai); Tabelle: `docs/SERVER_FLEET.md`
-- **RunPod Serverless – 8-Rollen-GPU-Flotte** (Verbindlich: `docs/INFRA_KONSTITUTION.md`; Details: `docs/runpod-8-instances-complete-plan.md` — die frühere 3-Rollen-Fassung `docs/RUNPOD_AI_V1_SPEC.md` ist überholt):
-  `brain` (lokales LLM, vLLM/OpenAI path), `ears` (STT/embeddings/classification), `voiceGen` (TTS/singing/song/SFX/stems), `music`, `imageHq`, `videoReal`, `videoAbstract`, `orchestrator` (MoA/MCP).
-  All with `workers_min=0` (scale-to-zero) and **session wake** on studio entry; with AI on the always-on roles (`brain`/`ears`/`voiceGen`/`music`/`orchestrator`) run at full, only the visual roles (`imageHq`/`videoReal`/`videoAbstract`) start on demand.
-  Limits: max. 8 endpoints, max. 5 Hetzner servers, running fleet cost (Hetzner + RunPod) max. 10 €/h, target band 5–7.5 €/h.
-  Die früheren HF-Dedicated-Endpoints (`audiomonastry-ai`, `audiomonastry-ai-pilot`, `audiomonastry-ai-clap`) sind abgelöst.
-- Cloudflare Worker (`portal-worker`), Supabase, Cloudflare R2
+```
+┌──────────────┐   HTTPS/WSS    ┌──────────────────────────────┐
+│ Browser (4×) │ ─────────────► │ app-1 · Express + Socket.io  │
+│ React 19     │ ◄───────────── │ server.ts (Token-Sperre)      │
+└──────────────┘   WebRTC/SSE   └───┬────────────┬─────────────┘
+                                    │            │
+                    ┌───────────────┘            └──────────────┐
+                    ▼                                           ▼
+        ┌────────────────────────┐                  ┌──────────────────────┐
+        │ KI-Orchestrierung      │                  │ SFU (mediasoup)      │
+        │ Jobs · Routing · MCP   │                  │ UDP/RTP              │
+        └───┬─────────┬──────────┘                  └──────────────────────┘
+            │         │
+            ▼         ▼
+  ┌────────────────┐ ┌──────────────────────┐
+  │ 8 GPU-Rollen   │ │ lokal (ohne Cloud):  │
+  │ RunPod         │ │ Ollama · ONNX ·      │
+  │ Serverless     │ │ deterministische     │
+  │ Scale-to-Zero  │ │ Ersatzwege           │
+  └────────────────┘ └──────────────────────┘
+            │
+            ▼
+  ┌───────────────────────────────────────────────────┐
+  │ Supabase (Metadaten, RLS) · Cloudflare R2 (Audio) │
+  │ OPFS/IndexedDB (lokal im Browser)                 │
+  └───────────────────────────────────────────────────┘
+```
 
-**Containerization:** `Dockerfile` (app), `Dockerfile.hetzner`, `Dockerfile.multistage`, `services/audiomonastry-ai-runtime/Dockerfile` (pytorch/pytorch base, no weights in image, `HF_HOME=/data/hf-cache`), `services/stem-ai/Dockerfile`, `services/master-player/Dockerfile`, `services/midi-bridge/Dockerfile`.
+**Audioschicht.** Es gibt genau **einen** Produktionsweg zur Ausgabe: `V2StudioGraph` →
+`V2LiveSink` / `WorkletGraphRuntime` mit samplegenauem Takt (`V2SampleClock`), SharedArrayBuffer-
+Ringpuffer und PDC-fähigem Mastering. Tone.js wurde am 2026-09-09 entfernt; die
+Tone-kompatible Fassade liefert `src/core/audio/compat/nativeAudioKit.ts`. **Kein zweiter Pfad
+zur Ausgabe** — Hörproben laufen ausschließlich über diesen Weg (2026-09-23 korrigiert, siehe
+`docs/AUDIT_REPORT_2026-09-23.md` §7).
 
-**Orchestration:** Docker Compose (dev/hetzner/ai/monitoring/sfu/fleet-test), optional Helm (`deploy/helm/`), Hetzner scripts (`scripts/hetzner/`: bring-up/delete-fleet, idle-shutdown, auto-repair, prometheus/alertmanager).
+**Dienste**
 
-## 8. Data Formats & Serialization
-
-| Format | Usage | Rationale |
+| Dienst | Ort | Aufgabe |
 |---|---|---|
-| JSON | State sync (LWW-CRDT), AudioGraph serialization, AI requests/responses, logs, manifest | readable, schemaless, JS-native, sufficient for 4 users |
-| WAV/PCM | Audio export, TTS/stem output | lossless, universal |
-| MP3/FLAC | Sample library | compact/lossless |
-| Float32Array + SAB/Atomics | Audio thread (worklets, ring buffer) | zero-copy, deterministic, sub-ms |
-| SSE | Stem progress | simple server-push semantics |
-| Socket.io / WebRTC DataChannels | Real-time sync | bidirectional, NAT-friendly |
-| Prometheus text format | `/api/metrics`, container `/metrics` | standard, Grafana-compatible |
-| Protobuf/Parquet | **intentionally not used** | YAGNI until >10 users or big-data analysis (documented) |
+| Anwendung/API | `server.ts` | REST, Socket.io, KI-Vermittlung, Metriken |
+| KI-Laufzeit | `services/audiomonastry-ai-runtime/` | GPU-Container: `/infer`, `/mcp/tools`, `/metrics` |
+| Master | `services/master-player/` | ffmpeg-Mastering, Analyse, Rendern |
+| Stem-KI (optional) | `services/stem-ai/` | lokale Stem-Trennung als Ersatzweg |
+| MIDI-Brücke | `services/midi-bridge/` | MIDI ↔ WebSocket |
+| Portal-Worker | `services/portal-worker/` | Cloudflare: Aufwecken, Proxy, Auto-Löschen |
+| SFU | `docker-compose.sfu.yml` | mediasoup, UDP 40000–40099 |
+| TURN | `docker-compose.turn.yml` | Relay für schwierige Netze |
 
-## 9. Security Concept
-
-**Authentication:** Studio token (`x-studio-token` header or HttpOnly `studio` cookie) for all `/api/*` (except `/api/health`) and the Socket.io handshake. Fail-closed: in `NODE_ENV=production` the API never runs unauthenticated (503 `STUDIO_TOKEN_MISSING`); local dev requires the explicit flag `AUDIOMONASTRY_DEV_NO_AUTH=1`. Production additionally enforces an Origin-Allowlist (`API_ALLOWED_ORIGINS`/`SIGNALING_ALLOWED_ORIGINS`). Token comparison is constant-time.
-**Authorization:** RBAC (`src/utils/rbac.ts`), plugin locking (lease per user), MCP permissions `READ < WRITE < EXECUTION < DESTRUCTIVE`, Supabase RLS (anon = read, service_role = write).
-**Data Encryption:** TLS (Caddy), R2 objects via signed URLs, secrets exclusively server-side, secret redaction in logs.
-**Hardening:** express-rate-limit per route, upload limits (busboy streaming, file limit), stem queue limits (429 + retry-after, idempotency → 409), audio cap 25 MB in AI container, no shell execution via AI, input validation (task/model lengths, model regex).
-Details: `docs/AI_SECURITY_GUIDE.md`.
-
-## 10. Monitoring & Observability
-
-**Logging:** Structured JSON (`AiLogger`, Python runtime `log_event`) with timestamp, level, service, sessionId, jobId, model, provider, durationMs, error; levels DEBUG/INFO/WARN/ERROR/FATAL; tracing via `X-Request-Id`.
-**Metrics:** `/api/metrics` (Prometheus: http/ai/stem/telemetry counters), container `/metrics` (uptime, models_loaded, vram_used, inference_count).
-**Dashboards:** Grafana (`scripts/hetzner/grafana-dashboards/`, `grafana-provisioning/`), Prometheus + Alertmanager (webhook `POST /api/alerts/webhook`).
-**Tracing:** `X-Request-Id` per request, `AuditLogger`, `errorTracker`.
-**Costs:** `CostTracker` (cost/session, cost/hour, cost/month, pricing sources documented in `docs/AI_COST_GUIDE.md`).
-
-## 11. Project Structure
-
-```
-server.ts                 Express + Socket.io + AI proxy (single-entry backend)
-src/
-  App.tsx, main.tsx       React 19 entry point, stream screen layout
-  components/             Terminal UIs per plugin (lazy loaded)
-  context/                Session, module, audio, project, access context
-  core/                   Engine core: audio, clock, routing, session (locking,
-                          state replication), ai/orchestrator, hardware, spatial,
-                          instrument, voice, gpu, workers, interfaces.ts
-  plugins/                registry.ts + plugin-specific modules (mischpult,
-                          instrumente, dsp-engine)
-  audio/, workers/        Worklets, WASM HRTF, web workers
-  utils/, hooks/, types/  RBAC, prompts, themes, shared types
-services/                 Micro-services (see section 3)
-scripts/                  Build, deploy, benchmark, and Hetzner automation
-tests/                    Vitest suites (156 files / 966 tests) + tests/e2e (Playwright)
-public/                   Static assets, plugin-manifest.json, routing.json
-docs/                     Architecture, AI, security, hardware, and ops docs
-database/                 Supabase schema & migrations
-deploy/                   Helm charts (optional)
-```
-
-## 12. Tests, Quality & CI
-
-**Local Gates:**
-- `npm run lint` – ESLint (`eslint . --max-warnings=0`)
-- `npm run typecheck` – TypeScript (`tsc --noEmit`)
-- `npm test` – Vitest (unit/integration, currently 173 files / 1155 tests, including `audioEngine.test.ts`, `lockFuzz.test.ts`, `goldenAudio.test.ts`, `aiOrchestrator.test.ts`, `pluginAudioRouter.test.ts`, `midiClockOut.test.ts`, `dynamicsProcessor.test.ts`, `spatialProcessor.test.ts`, `wasmHrtf.test.ts`, `securityAuthz.test.ts`, `v2Parity.test.ts`)
-- `npm run test:ci` – Vitest + JSON report gate that fails when a test is skipped or marked todo
-- `npm run verify:boundary` – Interface boundary scan: platform APIs may only be used in their designated adapters
-- `npm run verify` – Mandatory before every PR (typecheck + lint + Vitest + security + deep static audit)
-- `npm run audit:deep:static` – Deep Audit offline (tsc/eslint/knip/npm-audit/semgrep/boundary/bundle)
-- `npm run check:bundle` – Bundle budget gate (< 2.0 MiB)
-- `npm run check:memo` – React memo heuristic for terminal components
-- `npm run test:e2e` – Playwright (`smoke`, `collab`, `hardware`, `keyboard`, `visual`, `responsive`, `stress`, `live2browser`, `startState`, `pluginCloseSync`, `monitorCue`, `masterPlayerFixed`, `v2-live` audio gate)
-- `npx tsx scripts/spatial-regression.ts` – spatialMONK audio regression (ILD/ITD asserts + WAV artifacts)
-
-**GitHub Actions** (`.github/workflows/`): `ci.yml` (tsc, Vitest, boundary scan, build), `build.yml` (build, bundle, memo audit, Google-free check), `deep-audit.yml`, `nightly.yml` (verify + build + AI eval + prompt iteration), `ai.yml`, `hf-endpoint.yml` (endpoint management), `live-stress.yml`, `runpod-deploy.yml`, `sonarcloud.yml` (config in `sonar-project.properties`).
+**Compose-Dateien:** `docker-compose.yml` (Basis) · `.hetzner.yml` · `.ai.yml` · `.media.yml` ·
+`.monitoring.yml` · `.monitoring.proof.yml` · `.sfu.yml` · `.turn.yml` · `.fleet-test.yml`
 
 ---
 
-## Further Documentation
+## 7. Die 16 Module
 
-- `AGENTS.md` / `.cursorrules` – binding architecture and workflow rules
-- `docs/` – AI architecture, HF setup, deployment, registry, MCP, security, operations, troubleshooting, cost, hardware matrices, release gate
-- `MASTERTODOENDE.json` – **single source of truth** for all open work (audits,
-  conversions, live gates, environment blockers) with status + verification per item
-- `AGENTS.md` – binding architecture rules + canonical 16-MONK registry
-- `docs/INFRA_KONSTITUTION.md` – binding fleet/cost/operation limits (single source of truth)
-- `docs/runpod-8-instances-complete-plan.md` – RunPod GPU fleet, 8 roles (roles, endpoints, models)
-- `docs/RUNPOD_AI_V1_SPEC.md` – GPU fleet (superseded 3-role revision)
-- `docs/VISUALMONK_SPEC.md` – VisualMONK (image/clip/show)
+Genau **16** Module („MONKs"), geladen zur Laufzeit aus `public/plugin-manifest.json`;
+stimmt die Anzahl nicht, greift die eingebaute Liste. Zustände: **OFF** (transparenter Bypass) ·
+**AUTO_AI** (Vorschläge) · **PRO** (volle Oberfläche). Beim Betreten des Studios startet **alles
+in OFF**, die Ausgabe ist im Ruhezustand still.
+
+| # | ID | Name | Rolle |
+|---|---|---|---|
+| 1 | `mixer` | mixerMONK | Mischpult: Gain, Fader, Pan, Cue, Monitor, Routing |
+| 2 | `drop` | dropMONK | Drops, One-Shots, Performance-Samples |
+| 3 | `song` | songMONK | Song, Arrangement, Playlist, Set |
+| 4 | `effect` | effectMONK | Effekte und Effektketten |
+| 5 | `syntisampler` | syntisamplerMONK | Synthesizer + Sampler |
+| 6 | `drumsampler` | drumsamplerMONK | Drum-Machine, Pads, Patterns |
+| 7 | `instru` | instruMONK | Instrumente, MIDI-Notensteuerung, Presets |
+| 8 | `biblio` | biblioMONK | Bibliothek: Samples, Suche, Metadaten |
+| 9 | `voice` | voiceMONK | Stimme: TTS, Gesang, Sprachverarbeitung |
+| 10 | `sound` | soundMONK | Klangerzeugung und Sounddesign |
+| 11 | `stem` | stemMONK | Stem-Trennung und -Analyse |
+| 12 | `spatial` | spatialMONK | Räumlichkeit: Positionierung, 2.1/N.x, HRTF |
+| 13 | `eq` | eqMONK | Parametrischer EQ |
+| 14 | `dsp` | dspMONK | Verarbeitungsknoten und DSP-Ketten |
+| 15 | `master` | masterMONK | Dynamik, Limiting, Loudness, PDC |
+| 16 | `record` | recordMONK | Aufnahme, Bounce, Export, Offline-Rendern |
+
+**Außerhalb der 16** (feste Systemmodule, kein Plugin-Platz): `masterplayerMONK`
+(Wiedergabe/Wellenform, nur Ansicht), `aiMONK` (studio-weite KI-Steuerung), `perforMONK`
+(Telemetrie/Diagnose). MIDI belegt keinen Platz, sondern liegt unter **Einstellungen → MIDI**.
+
+**Vertrag jedes Moduls:** `initialize · setState · setParameter · process · handleCommand ·
+snapshot · restore · dispose`.
+
+---
+
+## 8. KI-Rollen
+
+**Acht GPU-Rollen** auf RunPod-Serverless, alle mit `workersMin: 0` (Scale-to-Zero) und
+Aufwecken beim Betreten der Session:
+
+| Rolle | Aufgabe |
+|---|---|
+| `brain` | Steuerung, Werkzeugaufrufe |
+| `ears` | Spracherkennung, Einbettungen, Klassifikation |
+| `voiceGen` | Sprachausgabe, Gesang, Effekte |
+| `music` | Musikerzeugung |
+| `imageHq` | Bilder in hoher Qualität |
+| `videoReal` | Video, realistische Pfade |
+| `videoAbstract` | Video, abstrakte Pfade |
+| `orchestrator` | Planung (Mehrfach-Agenten + MCP) |
+
+Jede Rolle ist **genau einem** Zweck zugeordnet; maßgeblich ist `GPU_ROLE_IDS` in
+`src/config/aiInfrastructure.ts`, gespiegelt in `model_manifest.json` und durch
+`tests/manifestRoles.test.ts` gegen Drift abgesichert.
+
+**Ohne Cloud:** Ollama (lokales Sprachmodell), ONNX (Stem-Trennung), WebSpeech und
+deterministische Ersatzwege — die Anwendung bleibt funktionsfähig.
+
+**Kostenbremse, gemessen:** 10 Anfragen/Minute auf den teuren Wegen · **10 €/h hartes
+Flottenbudget, geprüft _vor_ dem ersten Netzwerkaufruf** (bei Überschreitung startet nichts,
+HTTP 409) · harte Obergrenze ist das GPU-Guthaben. Details und offene Punkte:
+`docs/SEC_BLOCK2_ATTACKS.md`.
+
+---
+
+## 9. Sicherheitskonzept
+
+**Zugang.** Alle `/api/*` verlangen ein Token (Kopfzeile `x-studio-token`, `?token=` oder das
+HttpOnly-Cookie `studio`) — konstantzeit verglichen. Ohne Token ist die API geschlossen
+(fail-closed); es gibt keinen stillen Entwicklungsmodus. Für Besucher gibt es zwei Arten von
+kurzlebigen, signierten Sitzungstoken (`v1.<exp>.<hmac>`).
+
+**Datenbank (RLS, an der laufenden Datenbank gemessen am 2026-09-23).** Der `anon`-Schlüssel
+liegt im öffentlichen Client-Bundle und darf deshalb **genau zwei** Tabellen lesen:
+`samples` und `music_tracks`. Alles andere ist ausschließlich serverseitig mit `service_role`
+erreichbar. Nachgemessen: `anon_lesen_tabellen = 2`.
+
+> **Diese Zahl war bis 2026-09-23 falsch.** Die Härtung lag im Repo, war aber **nie auf die
+> Datenbank angewendet** — live erlaubte `anon` weiterhin SELECT auf 13 Tabellen, darunter
+> `system_prompts` und `ai_evaluations`. Eine Migrationsdatei ist kein Vollzug. Der Grund, warum
+> es niemandem auffiel: die Tests prüfen die **Dateien**, nicht die Datenbank. Offen als
+> `DB-P2-002` in `MASTERTODOENDE.json`.
+
+**Weitere Maßnahmen**
+
+| Bereich | Umsetzung |
+|---|---|
+| Testkopfzeilen | `nosniff`, `X-Frame-Options: DENY`, Referrer-Policy, Permissions-Policy, CSP |
+| Uploads | Art-beschränkt, Namensbereinigung, 100 MB Grenze, Chunks 32 MB, 240 Chunks/Minute |
+| ffmpeg | Argumentlisten ohne Shell, `-nostdin`, Timeouts, **Protokoll-Whitelist** |
+| Dekodier-Grenzen | Dauer wird **vor** dem Dekodieren aus den Metadaten geprüft; zusätzlich harte Ausgabegrenzen; unbekannte Dauer wird abgelehnt statt freigegeben |
+| Demo-Titel | `/music/*` nur mit gültigem Zugang |
+| Not-Aus | `KILL_SWITCH=1` |
+| Dateirechte | `.env*` mit `chmod 600`; nur `.example`-Vorlagen lesbar, ohne Werte |
+
+---
+
+## 10. Qualitätssicherung
+
+**`npm run verify` ist die Freigabeprüfung** und muss grün sein:
+
+```
+typecheck → lint → test → test:python → security → audio:gate → check:deadfiles → audit:deep:static
+```
+
+Gemessener Stand **2026-09-23** (dieser Zweig):
+
+| Prüfung | Ergebnis |
+|---|---|
+| `tsc --noEmit` | **0 Fehler** |
+| `eslint . --max-warnings=0` | **0 Fehler** |
+| `vitest run` | **284/284 Dateien, 2 169/2 169 Tests** |
+| `npm run verify` (vollständig) | **exit 0** |
+| `knip --include files,dependencies` | keine unerreichbaren Dateien, keine ungenutzten Pakete |
+| Grenzprüfung der Schnittstellen | 422 Dateien, 0 Verstöße |
+| `npm audit` | 0 blockierende Befunde |
+| Audio-Gate | I = −12,0 LUFS · TPK = −8,4 dBTP |
+| `proof:ffmpeg-whitelist` | 6/6, inkl. Gegenprobe |
+| `test:python:master` | 10/10 |
+| `tests/legalPages.test.ts` | 18/18 |
+
+**Warum das Totcode-Gate nur Dateien und Pakete prüft:** der vollständige knip-Bericht trägt
+zusätzlich ~199 ungenutzte Exporte und ~90 ungenutzte Typen. Das ist ein Kaskadenthema
+(`QUAL-P2-003`) und würde als Freigabekriterium dauerhaft rot stehen — ein Gate, das immer rot
+ist, wird ignoriert. Der vollständige Bericht bleibt mit `npm run check:deadcode` abrufbar.
+
+**Bekannte Warnung:** `jscpd` meldet 4 Duplikate. Sie sind bekannt und nicht blockierend.
+
+---
+
+## 11. Projektstruktur
+
+```
+server.ts                  Server-Einstieg: Express, Socket.io, Token-Sperre, KI-Vermittlung
+server/                    Server-Module: Not-Aus, Medienzugang, Ruhe-Modus, Rechtstexte,
+                           Routen (admin, agent, ai, cloud, master, media, ops, security,
+                           session, stem, upload, visual, voice)
+src/
+  App.tsx                  Oberfläche und Startseite
+  components/              Oberflächen je Modul (lazy geladen)
+  core/audio/              Audiokern: V2Graph, Worklets, Routing, Ringpuffer
+  core/ai/orchestrator/    Aufträge, Sitzungen, Vermittlung, MCP, Kosten
+  core/session/            Sperren, Zustandsspiegelung
+  plugins/                 registry.ts + die 16 Adapter
+  config/                  Grenzen, Rollen, Tarife
+services/                  Dienste (siehe Abschnitt 6)
+scripts/                   Bau, Betrieb, Prüfungen, Beweisläufe
+tests/                     Vitest + tests/e2e (Playwright)
+public/                    Statische Dateien, plugin-manifest.json
+docs/                      61 Dokumente: Architektur, KI, Sicherheit, Betrieb, Audits
+supabase/migrations/       der ANGEWENDETE Migrationssatz
+database/                  historischer Migrationssatz (siehe database/README.md)
+```
+
+---
+
+## 12. Offene Punkte — ehrlich
+
+Die verbindliche Liste steht in **[`MASTERTODOENDE.json`](MASTERTODOENDE.json)**:
+**164 Einträge = 142 erledigt · 16 teilweise · 5 offen · 1 blockiert.** Nur offene Punkte sind
+Einträge; Erledigtes steht in der Git-Historie.
+
+**Was bewusst noch nicht da ist**
+
+| Punkt | Warum |
+|---|---|
+| **Demo-Link und 15-Sekunden-GIF** | Die Flotte ist derzeit **heruntergefahren** (0 Server). Ein Link ganz oben würde ins Leere führen. |
+| **Betreiber-Angaben in Impressum/Datenschutz** | Name und Anschrift kann nur der Betreiber liefern (siehe Abschnitt 4). |
+| **Drittlandtransfer, Rechtsgrundlagen, Löschfristen** | Rechtliche Bewertung, keine Code-Angabe. Auf der Datenschutzseite steht deshalb offen, dass es fehlt — statt einer Vermutung. |
+| **`library_links`-Tabelle** | Kein Codepfad, live **0 Zeilen**. Ein Tabellen-Drop ist irreversibel und wird deshalb nicht stillschweigend ausgeführt. |
+| **Live-Prüfung mancher Angriffe** | Braucht eine laufende Umgebung: Lastversuch mit parallelen Uploads, Abruf direkt aus dem Objektspeicher. |
+
+**Was noch nie live geprüft wurde:** dass eine leere GPU-Rechnung die Dienste wirklich stoppt
+(der Codepfad ist belegt, ein echter `402` wurde nie ausgelöst). Das steht so im Infra-Audit.
+
+Meldungen bitte mit einem Beleg — Datei, Zeile oder Befehl mit Ausgabe. Dieses Projekt hat die
+Erfahrung gemacht, dass eine grüne Prüfung und eine wahre Aussage nicht dasselbe sind.
+
+---
+
+## 13. Dokumentation
+
+**Zuerst lesen**
+
+| Datei | Inhalt |
+|---|---|
+| `PRINCIPLES.md` | Grundsätze, Nicht-Ziele, Stille als Feature |
+| `MASTERTODOENDE.json` | **Einzige Quelle der Wahrheit** für offene Arbeit |
+| `docs/INFRA_KONSTITUTION.md` | Verbindliche Grenzen für Flotte und Kosten |
+| `docs/AUDIT_REPORT_2026-09-23.md` | Vollständiger Audit dieser Runde, inkl. eigener Fehlkorrekturen |
+| `docs/NEXT_SESSION.md` | Startzettel: Zustand, Fallstricke, nächste Schritte |
+| `AGENTS.md` | Verbindliche Architektur- und Arbeitsregeln |
+
+**Weitere Schwerpunkte:** `docs/AI_ARCHITECTURE.md`, `docs/AI_SECURITY_GUIDE.md`,
+`docs/AI_COST_GUIDE.md`, `docs/ENV_MATRIX.md`, `docs/SERVER_FLEET.md`,
+`docs/runpod-8-instances-complete-plan.md`, `docs/SEC_BLOCK2_ATTACKS.md`,
+`docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md`, `docs/SEC_CF_TOKEN_ROTATION.md`,
+`docs/HETZNER_DEPLOY.md`, `docs/PERFORMANCE_BUDGETS_2026.md`,
+`docs/QUALITY_TOOLING_2026.md`, `docs/LICENSE_EXTERNAL_RESOURCES.md`
+
+**Zahlen in diesem Dokument** sind am 2026-09-23 gemessen. Steht irgendwo eine Zahl ohne
+Belegweg, ist sie zu prüfen, nicht zu glauben.
