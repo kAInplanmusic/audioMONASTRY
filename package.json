@@ -81,7 +81,8 @@
     "proof:ffmpeg-whitelist": "tsx scripts/ffmpeg-whitelist-proof.ts",
     "probe:apis": "node scripts/browser-api-probe.mjs",
     "verify:rls-live": "tsx scripts/verify-rls-live.ts",
-    "proof:agentrun-race": "tsx scripts/agentrun-race-repro.ts"
+    "proof:agentrun-race": "tsx scripts/agentrun-race-repro.ts",
+    "proof:chunkupload-race": "tsx scripts/chunkupload-race-repro.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

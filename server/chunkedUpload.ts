@@ -31,7 +31,7 @@
  * Verarbeitung.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -197,6 +197,29 @@ export function chunkUploadDir(): string {
 /* ------------------------------------------------------------------ */
 
 export class ChunkedUploadStore {
+  /**
+   * QUAL-P3-002 (2026-09-23): Schreibsperre je Sitzung.
+   *
+   * `writeChunk()` liest die Metadaten, schreibt die Chunk-Daten und baut die
+   * Metadaten danach per read-modify-write neu auf. Laufen zwei Chunks derselben
+   * Sitzung gleichzeitig ein, lesen beide denselben Ausgangsstand, und der
+   * zweite ueberschreibt den Eintrag des ersten.
+   *
+   * GEMESSEN mit scripts/chunkupload-race-repro.ts: 8 gleichzeitig gesendete
+   * Chunks, alle 8 ohne Fehler - und danach stand GENAU EIN Eintrag in den
+   * Metadaten. 7 von 8 galten als fehlend, obwohl ihre Daten auf der Platte
+   * lagen. Der Client sendet sie erneut, und ohne Sperre verlieren sie sich
+   * wieder: der Upload kommt nie zum Abschluss.
+   *
+   * Die Sperre ist eine Promise-Kette je uploadId. Sie serialisiert NUR das
+   * Fortschreiben der Metadaten, nicht das Schreiben der Chunk-Daten - die
+   * gehen an verschiedene Offsets und duerfen parallel laufen.
+   */
+  private readonly metaLocks = new Map<string, Promise<void>>();
+
+  /** Zaehler fuer eindeutige Namen der temporaeren Schreibdateien (QUAL-P3-002). */
+  private tempZaehler = 0;
+
   constructor(
     private readonly dir: string = chunkUploadDir(),
     private readonly ttlMs: number = DEFAULT_UPLOAD_TTL_MS,
@@ -238,7 +261,9 @@ export class ChunkedUploadStore {
           fields: { ...existing.fields, ...(input.fields ?? {}) },
           updatedAt: Date.now(),
         };
-        await writeFile(this.metaPath(meta.uploadId), JSON.stringify(meta), 'utf8');
+        // QUAL-P3-002: unter der Sitzungssperre schreiben - auch hier ist es ein
+        // read-modify-write auf denselben Metadaten.
+        await this.withMetaLock(meta.uploadId, () => this.writeMetaAtomic(meta));
         return { meta, status: { ...status, resumed: true } };
       }
     }
@@ -257,7 +282,7 @@ export class ChunkedUploadStore {
       createdAt: now,
       updatedAt: now,
     };
-    await writeFile(this.metaPath(uploadId), JSON.stringify(meta), 'utf8');
+    await this.writeMetaAtomic(meta);
     // Leere Datei anlegen; das positionierte Schreiben dehnt sie spaerlich aus.
     const handle = await open(this.partPath(uploadId), 'w');
     await handle.close();
@@ -286,10 +311,67 @@ export class ChunkedUploadStore {
   }
 
   async readMeta(uploadId: string): Promise<ChunkUploadMeta> {
+    // QUAL-P3-002: "fehlt" und "nicht lesbar" sind NICHT dasselbe. Vorher wurde
+    // jeder Fehler zu UNKNOWN_UPLOAD - ein gleichzeitiges `status()` waehrend
+    // eines Schreibvorgangs konnte deshalb "unbekannte Upload-Sitzung" melden,
+    // obwohl die Sitzung existierte. Seit die Metadaten atomar geschrieben
+    // werden, kann dieser Fall nicht mehr durch eine laufende Speicherung
+    // entstehen; fuer beschaedigte Dateien aus einer aelteren Fassung wird kurz
+    // erneut versucht, statt sofort aufzugeben.
+    let letzterFehler: unknown;
+    for (let versuch = 0; versuch < 3; versuch += 1) {
+      try {
+        return JSON.parse(await readFile(this.metaPath(uploadId), 'utf8')) as ChunkUploadMeta;
+      } catch (error) {
+        letzterFehler = error;
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          throw new ChunkUploadError('UNKNOWN_UPLOAD', `unbekannte Upload-Sitzung: ${uploadId}`);
+        }
+        if (versuch < 2) await new Promise((r) => setTimeout(r, 5));
+      }
+    }
+    throw new ChunkUploadError(
+      'UNKNOWN_UPLOAD',
+      `Upload-Sitzung ${uploadId} ist nicht lesbar: ${(letzterFehler as Error)?.message ?? 'unbekannter Fehler'}`,
+    );
+  }
+
+  /**
+   * Metadaten ATOMAR schreiben (QUAL-P3-002): erst in eine temporaere Datei,
+   * dann umbenennen. `rename` ist auf POSIX atomar, ein Leser sieht also
+   * entweder den alten oder den neuen vollstaendigen Stand - nie eine halb
+   * geschriebene Datei. Gleiches Verfahren wie in `AgentRunStore` (QUAL-P2-008).
+   */
+  private async writeMetaAtomic(meta: ChunkUploadMeta): Promise<void> {
+    const ziel = this.metaPath(meta.uploadId);
+    const temp = `${ziel}.${(this.tempZaehler += 1)}.${Math.random().toString(36).slice(2, 8)}.tmp`;
     try {
-      return JSON.parse(await readFile(this.metaPath(uploadId), 'utf8')) as ChunkUploadMeta;
-    } catch {
-      throw new ChunkUploadError('UNKNOWN_UPLOAD', `unbekannte Upload-Sitzung: ${uploadId}`);
+      await writeFile(temp, JSON.stringify(meta), 'utf8');
+      await rename(temp, ziel);
+    } catch (error) {
+      await rm(temp, { force: true }).catch(() => {});
+      throw error;
+    }
+  }
+
+  /**
+   * Serialisiert eine Operation je Sitzung. Die Kette reisst nicht, wenn ein
+   * Vorgang fehlschlaegt (`catch` vor dem Anhaengen), und der Eintrag wird
+   * entfernt, wenn der letzte Vorgang fertig ist - sonst waechst die Map mit
+   * jeder Sitzung.
+   */
+  private async withMetaLock<T>(uploadId: string, fn: () => Promise<T>): Promise<T> {
+    const vorher = this.metaLocks.get(uploadId) ?? Promise.resolve();
+    const lauf = vorher.then(fn, fn);
+    const kette = lauf.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.metaLocks.set(uploadId, kette);
+    try {
+      return await lauf;
+    } finally {
+      if (this.metaLocks.get(uploadId) === kette) this.metaLocks.delete(uploadId);
     }
   }
 
@@ -344,9 +426,18 @@ export class ChunkedUploadStore {
       await handle.close();
     }
     // Erst die Daten, dann der Stand: bricht es dazwischen ab, gilt der Chunk als
-    // fehlend und wird erneut gesendet (idempotent) - nie umgekehrt.
-    const chunks = { ...(meta.chunks ?? {}), [index]: data.length };
-    await writeFile(this.metaPath(uploadId), JSON.stringify({ ...meta, chunks, updatedAt: Date.now() }), 'utf8');
+    // fehlend und erneut gesendet (idempotent) - nie umgekehrt.
+    //
+    // QUAL-P3-002: Der Stand wird UNTER DER SPERRE fortgeschrieben, und die
+    // Metadaten werden dabei NEU GELESEN. Vorher wurde der oben gelesene Stand
+    // benutzt: bei parallelen Chunks derselben Sitzung ueberschrieb der zweite
+    // Schreibvorgang den Eintrag des ersten. Gemessen: 8 gleichzeitige Chunks,
+    // alle ohne Fehler - danach stand 1 Eintrag statt 8.
+    await this.withMetaLock(uploadId, async () => {
+      const aktuell = await this.readMeta(uploadId);
+      const chunks = { ...(aktuell.chunks ?? {}), [index]: data.length };
+      await this.writeMetaAtomic({ ...aktuell, chunks, updatedAt: Date.now() });
+    });
     return { ...(await this.status(uploadId)), resumed: false };
   }
 

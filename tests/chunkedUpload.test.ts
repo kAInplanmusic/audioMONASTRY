@@ -214,3 +214,105 @@ describe('FEAT-P3-003 · robuste Metadaten', () => {
     expect(await store.list()).toEqual([]);
   });
 });
+
+/**
+ * QUAL-P3-002 (2026-09-23): gleichzeitige Chunks derselben Sitzung.
+ *
+ * ANLASS: Beim Suchen nach weiteren nicht-atomaren Schreibern (nach QUAL-P2-008)
+ * fiel auf, dass `writeChunk()` die Metadaten per read-modify-write neu aufbaut.
+ * Zwei gleichzeitige Chunks lesen denselben Ausgangsstand, und der zweite
+ * ueberschreibt den Eintrag des ersten.
+ *
+ * GEMESSEN mit scripts/chunkupload-race-repro.ts VOR dem Fix: 8 gleichzeitig
+ * gesendete Chunks, alle 8 ohne Fehler - danach stand GENAU EIN Eintrag in den
+ * Metadaten, 7 galten als fehlend. Der Client sendet sie erneut, und ohne Sperre
+ * verlieren sie sich wieder: der Upload kommt nie zum Abschluss.
+ *
+ * Die Schnittstelle laesst parallele Chunks ausdruecklich zu (ein Client mit
+ * mehreren Verbindungen ist der Normalfall), der Verlust war also kein
+ * Missbrauch, sondern ein Fehler.
+ */
+describe('QUAL-P3-002 · gleichzeitige Chunks derselben Sitzung', () => {
+  const TEILE = 8;
+
+  /** Sitzung mit TEILE Chunks anlegen. */
+  const sitzung = async (store: ChunkedUploadStore) => {
+    const { meta } = await store.init({
+      filename: 'parallel.bin',
+      size: CHUNK * TEILE,
+      chunkSize: CHUNK,
+      contentType: 'application/octet-stream',
+    });
+    return meta.uploadId;
+  };
+
+  it('verliert keinen Chunk-Eintrag, wenn alle Teile gleichzeitig eintreffen', async () => {
+    const store = new ChunkedUploadStore(dir);
+    const uploadId = await sitzung(store);
+
+    const ergebnisse = await Promise.allSettled(
+      Array.from({ length: TEILE }, (_, i) => store.writeChunk(uploadId, i, Buffer.alloc(CHUNK, i))),
+    );
+
+    // Gegenprobe, dass wirklich gemessen wurde: kein Aufruf darf fehlgeschlagen sein,
+    // sonst waere ein fehlender Eintrag die richtige Antwort.
+    expect(ergebnisse.filter((e) => e.status === 'rejected')).toEqual([]);
+
+    const meta = await store.readMeta(uploadId);
+    expect(Object.keys(meta.chunks ?? {}).sort((a, b) => Number(a) - Number(b))).toEqual(
+      Array.from({ length: TEILE }, (_, i) => String(i)),
+    );
+
+    // Und die Sitzung gilt als vollstaendig - das ist die Zusage, die vorher brach.
+    const status = await store.status(uploadId);
+    expect(status.missingChunks).toEqual([]);
+    expect(status.complete).toBe(true);
+  });
+
+  it('laesst paralleles Lesen waehrend des Schreibens nicht fehlschlagen', async () => {
+    const store = new ChunkedUploadStore(dir);
+    const uploadId = await sitzung(store);
+
+    // Lesen und Schreiben gleichzeitig: vorher konnte readMeta() eine halb
+    // geschriebene Datei erwischen und daraus UNKNOWN_UPLOAD machen.
+    let gelesen = 0;
+    const leser = Array.from({ length: 12 }, async () => {
+      const s = await store.status(uploadId);
+      gelesen += 1;
+      expect(s.uploadId).toBe(uploadId);
+    });
+    const schreiber = Array.from({ length: TEILE }, (_, i) =>
+      store.writeChunk(uploadId, i, Buffer.alloc(CHUNK, i)),
+    );
+
+    await expect(Promise.all([...leser, ...schreiber])).resolves.toBeDefined();
+    expect(gelesen).toBe(12);
+  });
+
+  it('laesst keine temporaeren Schreibdateien liegen', async () => {
+    const store = new ChunkedUploadStore(dir);
+    const uploadId = await sitzung(store);
+    await Promise.all(Array.from({ length: TEILE }, (_, i) => store.writeChunk(uploadId, i, Buffer.alloc(CHUNK, i))));
+
+    const { readdir } = await import('node:fs/promises');
+    const dateien = await readdir(dir);
+    expect(dateien.filter((f) => f.endsWith('.tmp'))).toEqual([]);
+    // Genau eine Sitzung - eine temporaere Datei waere sonst ein Phantom in list().
+    await expect(store.list()).resolves.toHaveLength(1);
+  });
+
+  it('setzt die Datei korrekt zusammen (Inhalt je Chunk unterscheidbar)', async () => {
+    const store = new ChunkedUploadStore(dir);
+    const uploadId = await sitzung(store);
+    await Promise.all(Array.from({ length: TEILE }, (_, i) => store.writeChunk(uploadId, i, Buffer.alloc(CHUNK, i))));
+
+    const { data, sha256 } = await store.assemble(uploadId);
+    expect(data.length).toBe(CHUNK * TEILE);
+    expect(sha256).toBe(createHash('sha256').update(data).digest('hex'));
+    // Jeder Chunk traegt seinen Index als Bytewert - so faellt ein falscher
+    // Offset oder ein ueberschriebener Bereich sofort auf.
+    for (let i = 0; i < TEILE; i += 1) {
+      expect(data[chunkOffset(CHUNK, i)]).toBe(i);
+    }
+  });
+});
