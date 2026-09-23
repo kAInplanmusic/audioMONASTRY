@@ -857,7 +857,16 @@ class IdleShutdownTimerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="p3f9-recreate-") as tmpdir:
             tmp = pathlib.Path(tmpdir)
             (tmp / "app.env").write_text("SCRAPE_TOKEN=token-aus-der-knoten-env\n", encoding="utf-8")
-            env = self._sandbox(tmp, FAKE_SSH_LOG=str(tmp / "ssh.log"), FAKE_SSH_REPO=str(ROOT))
+            # Der Fake-SSH-Stub setzt den Repo-Pfad TEXTUELL in eine Kommandozeile ein
+            # (`${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO}}`). Ein Pfad mit Leerzeichen
+            # zerfaellt dort, und der Stub kann ihn nicht selbst in Anfuehrungszeichen
+            # setzen - er weiss nicht, an welcher Stelle des Kommandos der Pfad steht.
+            # Deshalb zeigt der Ersatzpfad auf einen Symlink OHNE Leerzeichen. Der
+            # BASISNAME bleibt gleich, damit Ableitungen aus dem Pfad (z. B.
+            # registry_owner -> "kainplanmusic") weiter stimmen.
+            repo_ohne_leerzeichen = tmp / "audioMONASTRY"
+            repo_ohne_leerzeichen.symlink_to(ROOT, target_is_directory=True)
+            env = self._sandbox(tmp, FAKE_SSH_LOG=str(tmp / "ssh.log"), FAKE_SSH_REPO=str(repo_ohne_leerzeichen))
             ssh = tmp / "bin" / "ssh"
             ssh.write_text(FAKE_SSH_EXEC, encoding="utf-8")
             ssh.chmod(0o755)
@@ -3813,8 +3822,12 @@ class RegistryWegTest(unittest.TestCase):
 
     def _lib(self, script: str, **env: str | None) -> subprocess.CompletedProcess:
         """Faehrt Funktionen der gemeinsamen Bibliothek (echter Codepfad)."""
+        # shlex.quote: der Repo-Pfad kann Leerzeichen enthalten (seit dem Umzug am
+        # 2026-09-23 nach "AnunnakiTools Projekte/laufende Projekte/audioMONASTRY").
+        # Ohne Anfuehrungszeichen zerlegte die Shell ihn und `cd` scheiterte mit
+        # "Zu viele Argumente" - ein Fehler in der Pruefung, nicht im Skript.
         return subprocess.run(
-            [self.BASH, "-c", "cd " + str(ROOT) + " && source scripts/hetzner/lib/registry.sh\n" + script],
+            [self.BASH, "-c", "cd " + shlex.quote(str(ROOT)) + " && source scripts/hetzner/lib/registry.sh\n" + script],
             capture_output=True, text=True, cwd=ROOT, timeout=120, env=clean_env(**env),
         )
 
@@ -3826,7 +3839,7 @@ class RegistryWegTest(unittest.TestCase):
             ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
             cwd=ROOT, timeout=60,
         ).stdout.strip()
-        result = self._lib("registry_default_tag " + str(ROOT))
+        result = self._lib("registry_default_tag " + shlex.quote(str(ROOT)))
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), head)
         # Ohne .git (z. B. ein entpacktes Archiv) faellt der Tag auf die
@@ -3844,8 +3857,8 @@ class RegistryWegTest(unittest.TestCase):
         # `kAInplanmusic/audioMONASTRY`, die Referenz muss also `kainplanmusic`
         # nennen.
         result = self._lib(
-            "registry_owner " + str(ROOT) + "\n"
-            'registry_image "$(registry_owner ' + str(ROOT) + ')" "$(registry_app_name)" 1234abcd'
+            "registry_owner " + shlex.quote(str(ROOT)) + "\n"
+            'registry_image "$(registry_owner ' + shlex.quote(str(ROOT)) + ')" "$(registry_app_name)" 1234abcd'
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         zeilen = result.stdout.split()
@@ -3986,7 +3999,7 @@ class RegistryWegTest(unittest.TestCase):
             fake = self._fake_bin(tmpdir, rsync=False, curl=False)
             logs = self._logs(tmpdir)
             result = self._lib(
-                'registry_pull_images "" "root@10.0.0.1" "' + str(ROOT) + '" "' + str(self._env_file(tmpdir)) + '" '
+                'registry_pull_images "" "root@10.0.0.1" "' + shlex.quote(str(ROOT)) + '" "' + str(self._env_file(tmpdir)) + '" '
                 'audiomonastry:hetzner ghcr.io/probe/audiomonastry:probe123',
                 PATH=f"{fake}:{os.environ.get('PATH', '')}",
                 **logs,
