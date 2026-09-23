@@ -229,7 +229,10 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     return s.trim();
   }
 
-  // --- POST /api/ai/compose  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
+  // --- POST /api/ai/generate  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
+  // Hinweis: /api/ai/compose ist der deterministische Generator weiter oben
+  // (Zeile ~182); dieser Handler hier ist /api/ai/generate. Der Kommentar war
+  // bis 2026-09-23 falsch beschriftet (DOC-P3-002, reine Doku-Korrektur).
   app.post('/api/ai/generate', async (req, res) => {
     const parsed = AiPromptSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ error: 'invalid prompt', details: parsed.error.issues.slice(0, 5) });
