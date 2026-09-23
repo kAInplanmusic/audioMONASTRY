@@ -201,7 +201,7 @@ Gültigkeitsmessung 2026-09-17 gegen `GET https://api.cloudflare.com/client/v4/u
 
 | Token | Ergebnis | Konsequenz |
 |---|---|---|
-| `CF_API_TOKEN` | HTTP 200, `status: active` → **gültig** | aus der `.env` entfernt; **im Cloudflare-Dashboard widerrufen** (lokales Löschen macht den Token nicht ungültig) |
+| `CF_API_TOKEN` | HTTP 200, `status: active` → **gültig** | **Korrektur 2026-09-23:** Hier stand „aus der `.env` entfernt" — das war FALSCH. Der Wert lag weiter in `.env` und in zwei `.env.bak-*`-Dateien (`SEC-P1-005`). Am 2026-09-23 nachgemessen und **tatsächlich entfernt**: 0 Dateien mit Wert, 0 Commits in der gesamten Historie. Offen bleibt der **Widerruf im Cloudflare-Dashboard** — lokales Löschen macht einen Token nicht ungültig (siehe `docs/SEC_CF_TOKEN_ROTATION.md`). |
 | `CFR2_API_TOKEN` | HTTP 401 (Code 1000) → tot | entfernt |
 | `CF_ACCESS_TOKEN` | HTTP 401 (Code 1000) → tot | entfernt |
 | `CFR2_API_KEY`, `COMET_API_KEY` | nicht prüfbar / kein Repo-Konsument | entfernt (`COMET_API_KEY` gehört zur externen Deep-Code-Integration, nicht zum Repo) |

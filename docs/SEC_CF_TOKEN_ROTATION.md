@@ -4,6 +4,31 @@
 Sie widerrufen im Dashboard, ich prüfe danach, dass kein alter Wert mehr im
 Dateisystem oder in der Git-Historie steht.
 
+> **Stand 2026-09-23 — die Hälfte, die ich leisten kann, ist erledigt.**
+> Der Wert wurde aus allen drei Dateien entfernt, in denen er lag
+> (`.env`, `.env.bak-20260920-145010-template-override`,
+> `.env.bak-r2-20260921-171203`). Nachgemessen danach:
+>
+> * **0 Dateien** im Baum enthalten noch einen Wert (nur der Name steht in
+>   Kommentaren).
+> * **0 Commits** in der gesamten Historie enthalten den Wert
+>   (`git log --all -S"<wert>"`). Das Repo hat ihn also **nie** geleakt — die
+>   Exposition war rein lokal.
+> * **0 Treffer** außerhalb des Repos (`~/.hermes`, `~/.config`, `~/SECRETS`,
+>   `~/.bashrc`).
+> * Die Rechte der drei Dateien sind unverändert `600`.
+>
+> **Offen bleibt der Widerruf im Cloudflare-Dashboard.** Das ist der Teil, der
+> zählt: der Wert war am 2026-09-17 live als gültig gemessen (HTTP 200,
+> `status: active`), und lokales Löschen macht einen Token nicht ungültig. Bis
+> zum Widerruf gilt er als kompromittiert.
+>
+> **Und eine Lehre aus dem Vorgang:** `SEC-P1-002` und `ENV-006` standen auf
+> DONE mit der Aussage „danach liegt kein Cloudflare-Token mehr auf der Platte".
+> Gemessen war das falsch. Eine Beseitigung, die niemand nachmisst, ist eine
+> Behauptung — derselbe Fehlertyp wie bei der RLS-Härtung (`DB-P2-002`), wo die
+> Migration im Repo lag und nicht in der Datenbank.
+
 ## Warum überhaupt
 
 Befund `SEC-P1-005` (Audit 2026-09-23): Der `CF_API_TOKEN` liegt **wieder auf
