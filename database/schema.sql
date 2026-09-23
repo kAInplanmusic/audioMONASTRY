@@ -92,6 +92,20 @@ alter table public.music_tracks add column if not exists tags jsonb not null def
 -- ----------------------------------------------------------------------------
 -- LIBRARY LINKS (generische Querverweise quer über alle Module)
 -- ----------------------------------------------------------------------------
+-- ACHTUNG, STAND 2026-09-23 (DB-P3-001): Diese Tabelle ist NICHT MEHR TEIL DES
+-- ANGEWANDTEN SCHEMAS. Sie wird hier nur noch historisch angelegt; der gueltige
+-- Satz `supabase/migrations/` entfernt sie mit
+-- `015_drop_library_links.sql` (0 Codepfade, live 0 Zeilen).
+--
+-- WER DIESEN SATZ ERNEUT EINSPIELT, HOLT SIE ZURUECK. Das ist kein Fehler in
+-- diesem Skript - der Satz beschreibt den Stand seiner Zeit und wird nicht
+-- rueckwirkend umgeschrieben (sonst haetten Systeme, die ihn schon eingespielt
+-- haben, einen anderen Zustand als das Repo). Aber: danach
+-- `supabase/migrations/015_drop_library_links.sql` nachziehen, oder die Tabelle
+-- bleibt als leere Huelle stehen.
+--
+-- `database/reset.sql` loescht sie bereits (Zeile 14) - der Reset-Pfad raeumt
+-- sie also weg. Nur das erneute Anlegen hier ist die Stolperstelle.
 create table if not exists public.library_links (
   id           uuid primary key default gen_random_uuid(),
   src_table    text not null,                      -- 'samples' | 'music_tracks' | 'instruments' | 'playlists'
