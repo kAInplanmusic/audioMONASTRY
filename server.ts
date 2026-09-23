@@ -44,6 +44,25 @@ import { createRealtimeHub, type RealtimeHub } from './server/realtime.ts';
 import { createFleetWiring } from './server/fleetWiring.ts';
 import { resolveRateLimitIdentity, SESSION_IDENTITY_HEADER } from './server/rateLimitKeys.ts';
 import { buildCspPolicy, buildReportingHeaders, CSP_REPORT_PATH } from './server/csp.ts';
+// RC1-003: Laufzeit-Kill-Switch aus der Umgebung (KILL_SWITCH / MAINTENANCE_MODE).
+import {
+  isKillSwitchActive,
+  killSwitchAllowedPaths,
+  killSwitchPayload,
+  killSwitchSource,
+  shouldBlockRequest,
+  KILL_SWITCH_RETRY_AFTER_SECONDS,
+} from './server/killSwitch.ts';
+// RC1-008: Ersatzstempel fuer /api/health ohne Docker-Build-Args.
+import { primeBuildInfoFallback, readLocalGitCommit, readPackageVersion } from './server/buildInfo.ts';
+// PROD-P1-006: Zugriffsschutz fuer die fremdrechtlichen Demo-Tracks unter /music.
+import {
+  decideMediaAccess,
+  isMediaAccessDenied,
+  isProtectedMediaPath,
+  tokenFromCookieHeader,
+  tokenFromQueryString,
+} from './server/mediaAccess.ts';
 import { isAppActivityRequest } from './server/idleSignal.ts';
 import { registerSecurityRoutes, recordThrottledCspReport } from './server/routes/securityRoutes.ts';
 import { VisualFrameHub, tokenFromUrl } from './server/visualStream.ts';
@@ -52,6 +71,17 @@ import { catalogFromMcpTools, createMcpAgentExecutor } from './server/mcpAgentEx
 
 // DCT-101: Stem-Queue-Backpressure – harte Grenze für parallele Demucs-Jobs.
 const STEM_MAX_JOBS = Math.max(1, Number(process.env.STEM_MAX_JOBS ?? 2));
+
+// RC1-008: Ersatzstempel fuer /api/health, wenn die Docker-Build-Args fehlen.
+// Ohne das meldete ein frisch gebautes `dist/server.cjs` beim Rohstart
+// `version:"dev", commit:"unknown"` (gemessen 2026-09-23) - der Rollback-Nachweis
+// aus PROD-P0-003 war damit nur im gestempelten Container belastbar. Die
+// Umgebung hat weiterhin Vorrang; fehlt auch sie, kommt `unknown`/`dev` zurueck
+// und es wird KEINE Paritaet behauptet (siehe compareCommits).
+primeBuildInfoFallback({
+  version: readPackageVersion() ?? undefined,
+  commit: readLocalGitCommit() ?? undefined,
+});
 
 /**
  * audioMONASTRY Server – VENDOR-/CLOUD-FREI.
@@ -595,6 +625,35 @@ app.use(['/api/ai', '/api/voice', '/api/sound', '/api/song', '/api/separate-stem
 app.use('/api/upload/chunk', uploadChunkLimiter);
 app.use('/api/ai/agent/runs', agentLimiter);
 
+// ---------------------------------------------------------------------------
+// RC1-003: Kill-Switch. Wird aus der UMGEBUNG gelesen (KILL_SWITCH oder
+// MAINTENANCE_MODE = 1/true/yes/on/enabled), nicht aus dem Code - ein
+// Container-Neustart genuegt, kein Redeploy.
+//
+// Wirkung: `/api/*` antwortet 503 mit maschinenlesbarem Code, also startet KEIN
+// KI-/Stem-/Voice-/Cloud-Auftrag mehr (jeder Kostenpfad laeuft ueber /api/ai/*,
+// /api/voice/*, /api/sound/*, /api/song/*, /api/separate-stems, /api/cloud/*).
+// Erreichbar bleiben bewusst `/api/health` und `/api/metrics` (sonst sieht das
+// Monitoring "abgestuerzt" statt "absichtlich in Wartung") und der
+// CSP-Meldeweg. SPA/Assets und der Medienweg werden weiter ausgeliefert, damit
+// der Nutzer eine erklaerende Oberflaeche sieht. Socket.io bleibt unberuehrt:
+// bestehende Sessions duerfen ihren Zustand spiegeln, neue Arbeit entsteht nur
+// ueber /api/*.
+// ---------------------------------------------------------------------------
+const killSwitchOn = isKillSwitchActive(process.env);
+if (killSwitchOn) {
+  const allowed = killSwitchAllowedPaths(CSP_REPORT_PATH);
+  console.warn(
+    `[kill-switch] AKTIV (ENV ${killSwitchSource(process.env)}) - /api/* gesperrt bis auf ${allowed.join(', ')}; ` +
+      'keine AI-Aufrufe, keine Job-Starts.',
+  );
+  app.use((req: any, res: any, next: any) => {
+    if (!shouldBlockRequest(req.path, allowed)) return next();
+    res.setHeader('Retry-After', String(KILL_SWITCH_RETRY_AFTER_SECONDS));
+    return res.status(503).json(killSwitchPayload());
+  });
+}
+
 // F7-Fix: Meldeweg der CSP (tokenfrei, rate-limitiert, 204 ohne Inhalt).
 registerSecurityRoutes(app);
 
@@ -864,6 +923,57 @@ registerVoiceRoutes(app);
 // Static Asset delivery (Vite dev / production dist)
 // ===========================================================================
 async function startServer(port: number = PORT): Promise<{ httpServer: http.Server; io: unknown } | null> {
+  // ---------------------------------------------------------------------------
+  // PROD-P1-006: Zugriffsschutz fuer die Demo-Tracks unter /music.
+  //
+  // Gemessen (2026-09-23): `dist/music` ist ein SYMLINK auf `public/music`
+  // (`ls -la dist/music`), und `express.static(distPath)` (unten) folgt ihm.
+  // Ohne diese Sperre liefert jedes Produktions- und jedes Dev-Host die 45
+  // fremdrechtlichen Tracks ohne Anmeldung aus - an /api vorbei, weil die
+  // Auth-Middleware nur auf `/api` haengt.
+  //
+  // Die Regel ist dieselbe wie fuer die API (gueltiger Studio-Zugang), nur die
+  // Quellen sind breiter, weil `<audio>` keine eigenen Header setzen kann:
+  // Header, `?token=` und das `studio`-Cookie (Normalfall im Browser).
+  // Registriert VOR beiden Static-Zweigen (Vite-Dev unten, dist-Prod darunter),
+  // damit kein Static-Handler daran vorbeikommt.
+  // ---------------------------------------------------------------------------
+  app.use(async (req: any, res: any, next: any) => {
+    if (!isProtectedMediaPath(req.path)) return next();
+    const headerToken = String(req.headers?.['x-studio-token'] ?? '');
+    const cookieToken = tokenFromCookieHeader(req.headers?.cookie);
+    const queryToken = tokenFromQueryString(req.query) || tokenFromQueryString(req.originalUrl);
+    // Die Signaturpruefung des Session-Tokens ist asynchron und laeuft nur,
+    // wenn ueberhaupt ein Token vorliegt, das wie eines aussieht.
+    const maybeSession =
+      [headerToken, queryToken, cookieToken].find((t) => t !== '' && looksLikeStudioSession(t)) ?? '';
+    const sessionTokenValid =
+      maybeSession !== '' && !studioAuthOpen && !studioTokenMissing
+        ? await verifyStudioSession(maybeSession, STUDIO_SESSION_SECRET)
+        : false;
+    const decision = decideMediaAccess(
+      { headerToken, queryToken, cookieToken },
+      { studioTokenMissing, studioAuthOpen, accessToken: STUDIO_ACCESS_TOKEN },
+      sessionTokenValid,
+    );
+    // Nie in gemeinsamen Caches ablegen: der Inhalt haengt am Cookie.
+    res.setHeader('Cache-Control', 'private, no-cache');
+    res.setHeader('Vary', 'Cookie');
+    if (isMediaAccessDenied(decision)) {
+      // Fehlender Studio-Token in der Konfiguration ist fail-closed (503),
+      // alles andere ist eine fehlende Berechtigung (401).
+      const notConfigured = decision.status === 503;
+      return res
+        .status(decision.status)
+        .json(
+          notConfigured
+            ? { error: 'server not configured', code: decision.code }
+            : { error: 'unauthorized', code: decision.code },
+        );
+    }
+    return next();
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     // Lazy-Import: vite ist eine Dev-Dependency und darf im Produktions-Image
     // (npm prune --omit=dev) fehlen.
