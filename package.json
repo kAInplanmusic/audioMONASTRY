@@ -2,6 +2,7 @@
   "name": "audioMONASTRY",
   "private": true,
   "version": "1.210.001",
+  "license": "UNLICENSED",
   "type": "module",
   "engines": {
     "node": ">=22.0.0 <23"

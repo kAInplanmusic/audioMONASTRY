@@ -30,8 +30,11 @@ export const MUSIC_LIBRARY: MusicTrack[] = [
   L('Kotelett & Zadak - Hut Ab.mp3'),
   L('Kotelett & Zadak - Just Wait (Original Mix).mp3'),
   L('Kraak ＆ Smaak - No Sun In The Sky (Henrik Schwarz Remix).mp3'),
-  L('Landser - Freiheit (Rock gegen oben).mp3'),
-  L('Lass mich gehn Mutter - Lunikoff.mp3'),
+  // PROD-P1-007 (2026-09-23): 'Landser - Freiheit (Rock gegen oben).mp3' hier
+  // entfernt. Aufnahmen dieser Band wurden in DE eingezogen; das ist ein eigener
+  // Risikopfad und unabhaengig von der Betreiber-Freigabe vom 2026-09-21 fuer
+  // die uebrigen Demo-Tracks. Datei UND Katalogeintrag entfernt, damit kein
+  // Eintrag auf eine fehlende Datei zeigt.
   L('Leghau - Herborn Ep - Power - (Mike Wall Remix) - Flicker Rhythm.mp3'),
   L('Len Faki - Death by House.mp3'),
   L('Len Faki - figure 2.3 (original mix).mp3'),
@@ -68,7 +71,10 @@ export const MUSIC_LIBRARY: MusicTrack[] = [
   L('Tommy Four Seven - Surma (Chris Liebing Rmx) 2011.mp3'),
   L('Traversable Wormhole-Transducer(Brian Sanhaji Remix).mp3'),
   L('Two Em - Manjala (Spektre remix).mp3'),
-  L('Waffen SS - Erika (Marching song).flv.mp3'),
+  // PROD-P0-006 (2026-09-23): 'Waffen SS - Erika (Marching song).flv.mp3' hier
+  // entfernt. Das ist §86a-Material (Propagandamittel/Kennzeichen
+  // verfassungswidriger Organisationen) - Strafrecht, keine Lizenzfrage.
+  // Datei UND Katalogeintrag entfernt.
   L('Younger Brother - Crumblenaut (04).mp3'),
   L('Younger Brother - Crystalline.mp3'),
   L('Younger Brother - Even Dwarves Start Small.mp3'),
