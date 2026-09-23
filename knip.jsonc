@@ -16,10 +16,21 @@
     "scripts/**/*.{ts,mjs,cjs,js}",
     "services/*/index.{js,ts,mjs}",
     "services/*/src/index.{js,ts,mjs}",
-    "tests/**/*.{test,spec}.{ts,tsx,mjs}"
+    "tests/**/*.{test,spec}.{ts,tsx,mjs}",
+    // tests/setup.ts ist KEIN toter Code: vitest.config.ts:6 verdrahtet sie als
+    // setupFiles. knip kann vitest-Configs nicht folgen und meldete sie deshalb
+    // als ungenutzte Datei (gemessen 2026-09-23 mit `npx knip --files` -> exit 1).
+    // Sie ist ein echter Einstiegspunkt und steht hier mit Grund.
+    "tests/setup.ts"
   ],
   "project": [
     "src/**/*.{ts,tsx}",
+    // src/main.tsx:4 importiert './index.css'. Ohne CSS im project kann knip den
+    // Import nicht verfolgen und meldete dauerhaft den Config-Hinweis
+    // ".css - Compiled extension excluded by project". Gemessen 2026-09-23:
+    // mit dieser Zeile ist der Hinweis weg und knip bleibt exit 0. Ein
+    // Dauerhinweis im Gate-Output ist Rauschen, an das man sich gewoehnt.
+    "src/**/*.css",
     "server/**/*.{ts,mjs}",
     "services/**/*.{ts,js,mjs}",
     "scripts/**/*.{ts,mjs,cjs}",
@@ -67,8 +78,13 @@
     "tests/fixtures/routeDepGraph/twoBlocks.ts",
 
     // --- Gruppe E: erreichbar, aber knip folgt dem Pfad nicht ---------------
+    // src/config/webrtc.ts stand hier bis 2026-09-23 mit der Begruendung "von
+    // src/utils/WebRTCManager.ts importiert". Der Eintrag ist REDUNDANT und wurde
+    // entfernt - knip meldete ihn selbst als Config-Hinweis "Remove from ignore",
+    // kann den Import also aufloesen. Ein unnoetiger Ignorier-Eintrag ist genau
+    // der Fehlertyp aus ARCH-P2-003: er nimmt eine Datei aus der Analyse, ohne
+    // dass es dafuer einen Grund gibt.
     "src/components/drop/index.ts", // Barrel: von 8 Stellen importiert (dropAudioBridge, Tests) - knip sieht nur den Re-Export
-    "src/config/webrtc.ts", // von src/utils/WebRTCManager.ts importiert
     "src/hooks/useSessionSync.ts", // von scripts/deep-audit/config.ts als Pruefziel gelistet
     "src/lib/db.ts", // von src/context/SessionContext.tsx importiert
     "src/utils/presetStore.ts" // von src/lib/db.ts importiert
