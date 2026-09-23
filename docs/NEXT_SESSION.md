@@ -1,22 +1,26 @@
 # Startzettel für die nächste Sitzung
 
-**Stand: 2026-09-23 (nach ReleaseCycle Iteration 3). `main` = `6c2e3c8`, sieben Commits
-über `e71cb7d`. Arbeitsbaum sauber, nichts ungetrackt. Flotte AUS (0 Server).
-SSOT = `MASTERTODOENDE.json` mit 161 Einträgen (139 DONE · 15 PARTIAL · 6 OPEN · 1 BLOCKED).**
+**Stand: 2026-09-23 (nach ReleaseCycle Iteration 4). Arbeitsbaum sauber, nichts ungetrackt.
+Flotte AUS (0 Server). SSOT = `MASTERTODOENDE.json` mit 162 Einträgen
+(141 DONE · 15 PARTIAL · 5 OPEN · 1 BLOCKED).**
 
-Gates dieser Runde, gemessen: `tsc` exit 0 · `eslint` exit 0 · `vitest` **283/283 Dateien,
-2 150/2 150 Tests grün** · `npx knip` **keine ungenutzten Dateien** mehr.
+Audit-Basis war `e71cb7d`; darauf liegen die Commits aus Iteration 3 und 4. Die exakte Kette
+steht in git — bewusst nicht hier abgeschrieben, weil ein Amend die Hashes verschiebt:
 
 ```bash
-git log --oneline e71cb7d..HEAD
-# 6c2e3c8 docs: PRINCIPLES, Recht-Entwurf, Token-Rotation, README-Kopf, Audit-Report, SSOT
-# 096ba2e fix(db): supabase-Migrationssatz konsolidiert, database/ als historisch markiert
-# 130ea0f refactor: belegt-toten Code entfernt, knip.jsonc bereinigt
-# d357dca fix(legal): drei Demo-Tracks entfernt, Lizenz gesetzt
-# e2adc9e fix(audio): Hörprobe nur noch über den V2-Sink
-# 91eca69 feat(server): Kill-Switch, /music-Zugangsschutz, Build-Stempel, Ruhe-Modus
-# e547069 chore(security): .env-Rechte 600, Schlüssel-Muster in .gitignore
+git log --oneline e71cb7d..HEAD          # 7 Commits aus Iteration 3, danach Iteration 4
 ```
+
+Gates, gemessen: `tsc` exit 0 · `eslint` exit 0 · `vitest` grün ·
+**`npm run verify` exit 0** (seit Iteration 4 inklusive `check:deadfiles`) ·
+`knip --include files` exit 0 · `npm run proof:ffmpeg-whitelist` 6/6 ·
+`npm run test:python:master` 10/10.
+
+> Zur Richtigstellung: hier stand nach Iteration 3 „`npx knip` keine ungenutzten Dateien mehr".
+> Das war **falsch** — der gefilterte Aufruf hatte knips ANSI-Ausgabe nicht gematcht. Es war
+> eine ungenutzte Datei (`tests/setup.ts`, per `vitest.config.ts:6` verdrahtet, also kein toter
+> Code) plus zwei Config-Hinweise. Alle drei sind behoben; siehe Audit-Report §9.3.
+
 
 Die verbindliche Wahrheit steht in `MASTERTODOENDE.json`. Dieser Zettel nennt Reihenfolge und
 Kommandos. Vollständiger Audit: `docs/AUDIT_REPORT_2026-09-23.md` (mit Nachträgen für

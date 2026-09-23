@@ -336,4 +336,97 @@ Neu aufgenommen (nur offene Punkte): `PROD-P0-005`, `PROD-P1-005`,
 `PROD-P1-006`, `PROD-P1-007`, `DB-P2-001`, `DB-P3-001`, `PROD-P2-003`,
 `OPS-P2-002`, `VISUAL-P1-011`.
 
+---
+
+## 9. Nachtrag – ReleaseCycle Iteration 3 und 4 (2026-09-23)
+
+### 9.1 Iteration 3 — zehn Betreiber-Entscheidungen
+
+Acht umgesetzt, zwei bewusst bei der Betreiberschaft belassen (`SEC-P1-005`
+Token-Widerruf, `PROD-P0-005` Rechtstexte). Die Maßnahmen und ihre Messwerte
+stehen in `MASTERTODOENDE.json` (`lastConsolidation`) — hier nur die
+Kurzfassung: `.env`-Rechte auf 600 (vier Dateien), `PROD-P1-006`
+Medien-Zugangsschutz mit Kopf-Token, `PROD-P1-005` LICENSE, drei extremistische
+Demo-Tracks entfernt (davon einer, `Waffen SS - Erika`, als §86a-Material —
+ein Befund, den ich erst beim Durchsehen der Dateiliste fand), 26 tote Dateien
+gelöscht, Ruhe-Modus 22–07 Uhr, Migrations-Konsolidierung.
+
+### 9.2 Iteration 4 — Block-2-Angriffe 3 und 4 gehärtet
+
+**Angriff 4, ffmpeg-Protokoll-Whitelist.** Beide Aufrufstellen tragen jetzt
+`-protocol_whitelist` (`server/audioEncode.ts` → `file`,
+`server/visionShow.ts` → `file,concat`), jeweils **vor** dem `-i`. Vorher durfte
+ffmpeg jedes Protokoll lesen, das der Build kennt.
+
+Nachweis: `scripts/ffmpeg-whitelist-proof.ts`, 6 Prüfungen, alle bestanden.
+Die entscheidende ist die Gegenprobe — ffmpeg lehnt ab mit
+`Protocol 'http' not on whitelist 'file'!`. Eine Kontrollprobe bestätigt, dass
+der Build `http` überhaupt kennt, die Ablehnung also von der Whitelist kommt.
+Ein echter WAV→MP3-Lauf (42 285 Bytes) und der concat-Demuxer mit `file,concat`
+funktionieren weiter. Regressionssicherung im Gate:
+`tests/audioEncode.test.ts` und `tests/visualShowOrchestrator.test.ts`.
+
+**Angriff 3, Dekompressionsbombe.** Hier muss ich eine **eigene Fehlaussage aus
+§2 korrigieren**: ich hatte „kein decoded-duration cap" geschrieben. Das war
+falsch — `services/master-player/server.py` hatte `MAX_DURATION_SEC = 120` und
+`MAX_SAMPLES`. Der Fehler war die **Reihenfolge**, und er war ernster als ein
+fehlender Deckel:
+
+```
+vorher:  run_ffmpeg(...)  →  volle PCM in proc.stdout  →  DANN arr.size > MAX_SAMPLES
+```
+
+Ein 64-MB-MP3 kann komprimiert zu rund 4,4 GB PCM entpacken. Der Prozess wäre an
+der Speicher-Erschöpfung gestorben, **bevor die vorhandene Grenze gelesen
+wurde**. Behoben in drei Schritten: (a) `probe_duration_sec` liest die Dauer aus
+den **Metadaten**, bevor dekodiert wird; (b) `build_decode_args` setzt `-t` und
+`-fs` als **Ausgabe**grenzen (nach dem `-i` — davor wäre es eine
+Eingabegrenze); (c) die Sample-Prüfung bleibt als letzte Kontrolle, und wenn die
+Dauer nicht bestimmbar ist, wird **konservativ abgelehnt** (fail-closed statt
+stiller Freigabe).
+
+Zusätzlich gemessen und im Code dokumentiert: ffprobe liefert auf `pipe:0`
+wörtlich `N/A`, weil der Eingang nicht suchbar ist — auf einer regulären Datei
+dagegen `1.000000`. Mein erster Entwurf sondierte über die Pipe und war damit
+blind; **mein eigener Test hat das aufgedeckt**, nicht ich. Der Fix schreibt den
+Payload deshalb in eine temporäre Datei (begrenzt durch die bereits geprüfte
+`MAX_INPUT_BYTES`).
+
+Nachweis: `tests/test_master_player_limits.py`, 10/10 — inklusive einer **echten**
+Datei mit 200 s bei 8 kHz mono (wenig Bytes, viel Dauer = das Bombenmuster), die
+vor dem Dekodieren abgelehnt wird, und eines Stubs, der beweist, dass der
+Dekodierer für eine zu lange Datei gar nicht erst aufgerufen wird.
+
+### 9.3 Iteration 4 — Gate und Doku
+
+* **`QUAL-P2-006` DONE:** neuer Schritt `check:deadfiles` (`knip --include files`,
+  Datei-Scope) in `npm run verify`. Beweis: `npm run verify` **exit 0** mit dem
+  Schritt in der Kette, der Deep-Audit meldet darin `knip (0 Findings)`.
+* **`PROD-P2-003` DONE:** `README_DE.md` hat denselben Einstieg wie `README.md`.
+* **Dritte eigene Fehlaussage korrigiert:** in Iteration 3 hatte ich behauptet,
+  knip melde keine ungenutzten Dateien mehr. Mein `grep "^Unused files"` matchte
+  nichts, weil knips Ausgabe ANSI-Farbcodes enthält. Tatsächlich: `knip --files`
+  **exit 1** mit `tests/setup.ts` (kein toter Code — per
+  `vitest.config.ts:6` als `setupFiles` verdrahtet) und zwei Config-Hinweisen.
+  Alle drei behoben; zusätzlich entfernte ich den **redundanten**
+  Ignorier-Eintrag für `src/config/webrtc.ts`, den knip selbst als „Remove from
+  ignore" gemeldet hatte.
+
+### 9.4 Gates nach Iteration 4
+
+| Gate | Ergebnis |
+|---|---|
+| `npx tsc --noEmit` | exit **0** |
+| `npx eslint . --max-warnings=0` | exit **0** |
+| `npx vitest run` | grün (inkl. neuer Whitelist-Regressionen) |
+| `npm run verify` (vollständig) | **exit 0** — mit `check:deadfiles` in der Kette |
+| `knip --include files` | **exit 0** (keine ungenutzten Dateien) |
+| `npm run proof:ffmpeg-whitelist` | 6/6 Prüfungen bestanden |
+| `npm run test:python:master` | 10/10 |
+| `npx knip` (vollständig, informativ) | 199 ungenutzte Exporte, 90 Typen, 1 ungenutzte Abhängigkeit (`axios`) — Kaskadenthema `QUAL-P2-003` |
+
+SSOT danach: **162 Einträge = 141 DONE / 15 PARTIAL / 5 OPEN / 1 BLOCKED**.
+Neu aufgenommen: `SEC-P2-004` (die drei noch unbelegten Block-2-Angriffe).
+
+
 

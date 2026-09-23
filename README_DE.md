@@ -1,11 +1,45 @@
-# audioMONASTRY · AudioMONASTRY
+# audioMONASTRY
 
-> Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
+**Status: Alpha — privat / Forschung, keine kommerzielle Nutzung, keine öffentliche Freigabe**
 
-> Browser-basierte kollaborative Audio-Workstation für bis zu 4 Nutzer.
+> **audioMONASTRY ist ein browserbasiertes, kollaboratives Tonstudio (DAW) für bis zu vier
+> Personen gleichzeitig, mit dem ihr ohne proprietäre Plugins und ohne Bindung an einen
+> einzigen Cloud-Anbieter gemeinsam an derselben Session arbeitet.**
+
+**Für wen:** Musikproduzenten, DJs, Sounddesigner und Forschende, die zu mehreren an einer
+Session arbeiten wollen — und Menschen, die Wert darauf legen, dass die Audioarbeit im Browser
+und auf eigener Infrastruktur bleibt.
+
+**Kosten:** guthabenbasiert. Die Flotte läuft stundenweise (~0,054 EUR/h) und wird nach der
+Session gelöscht → 0 EUR/h. Es wird nur ausgegeben, was vorher gedeckt ist (`PRINCIPLES.md` §1.5).
+
+**Betrieb & Verantwortung:** Betreiber: `kAInplanmusic` · Hosting: Hetzner (nbg1) + Cloudflare
+vor dem Origin · Zugang: token-geschützt (`STUDIO_ACCESS_TOKEN`, fail-closed).
+
+**Abgrenzung — was audioMONASTRY nicht ist** (vollständig in `PRINCIPLES.md` §2):
+1. kein eigenes Audio-Interface (keine Hardware-/Treiber-Ebene),
+2. kein Kino-Audio (kein Dolby Atmos / THX),
+3. keine Lichtanlage (Visuals sind Bild-/Beamer-Ausgabe, kein DMX).
+
+**Vergleich:**
+
+| | audioMONASTRY | Audacity | iZotope RX | Colab-Notebooks |
+|---|---|---|---|---|
+| Läuft im Browser, ohne Installation | ✅ | ❌ | ❌ | ✅ |
+| Mehrere Nutzer in **einer** Session | ✅ bis 4, gespiegelter Zustand | ❌ | ❌ | ❌ |
+| Plugin-Locking inklusive | ✅ (B2B-Modus) | – | – | – |
+| DSP im AudioWorklet/WASM | ✅ 16 Worklets | nativ | nativ | – |
+| Zweck | privat / Forschung | freie Audiosoftware | Restaurierung | Experimente |
+
+> Verbindliche Zahlen: siehe `docs/INFRA_KONSTITUTION.md`.
 > Version: **1.210.001** (`V. 1|210|001`) · Codename „HyperAudioWorkstation" · Stand 2026-09-09.
 > Hauptzweig: `main` · Release-Gate: `npm run verify` muss grün sein.
 > Projektzweck: **privat / Forschung** (kein kommerzieller Zweck).
+
+> `TODO(operator):` **Demo-Link und GIF.** Die öffentliche Instanz ist im Register als live
+> geführt, die Flotte ist derzeit aber **heruntergefahren** (0 Server). Ein Link „above the fold"
+> wird erst gesetzt, wenn eine Instanz dauerhaft erreichbar ist — sonst führt der erste Klick
+> ins Leere (`VISUAL-P1-011`).
 
 ---
 
