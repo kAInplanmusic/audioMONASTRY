@@ -120,12 +120,22 @@ Puffer-Überlauf, Bündelung mit Deckelung).
    von Hand ausgegeben. Das ist der Deckel.
 3. **Es gibt keine öffentliche Instanz.** Die Flotte ist aus, wenn nicht
    gearbeitet wird — oder für einen geplanten Lauf an.
-4. **Obergrenze einer Sitzung: 4 Personen** — das ist eine *dokumentierte
-   Auslegungsgrenze*, **keine erzwungene**. Es gibt keine Konstante im Code, die
-   eine fünfte Verbindung abweist (gemessen am 2026-09-24: kein
-   `MAX_PARTICIPANTS`/`MAX_USERS` vorhanden). Wer sie überschreitet, merkt es an
-   der Qualität, nicht an einer Fehlermeldung. Das steht hier, damit sich niemand
-   auf eine Sperre verlässt, die es nicht gibt.
+4. **Obergrenze einer Sitzung: 4 Personen — im Code erzwungen.**
+   `MAX_SESSION_USERS = 4` (`server/realtime.ts`); ein fünfter Beitritt erhält
+   `session-full` und wird abgewiesen, **bevor** er den Raum betritt oder
+   Sitzungszustand sieht. Ausspielwege (`master-out` für die PA, `visual-out` für
+   den Beamer) zählen ausdrücklich **nicht** mit — das sind keine Teilnehmer.
+
+   *Korrektur vom 2026-09-24:* Hier stand bis heute, die Grenze sei „nicht
+   erzwungen, weil es keine Konstante gibt". Das war **falsch**. Ich hatte nach
+   `MAX_USERS` gesucht, die Konstante heißt aber `MAX_SESSION_USERS` — mein
+   Suchmuster war zu eng, und ich habe aus einem leeren Suchergebnis auf die
+   Abwesenheit geschlossen. Genau der Fehler, den dieses Projekt sonst bei anderen
+   findet: **ein leeres Suchergebnis ist kein Beweis.**
+
+   Was daran wirklich fehlte, war der Beleg: es gab **keinen Test** für die Grenze.
+   Seit 2026-09-24 gibt es ihn (`tests/sessionCapacity.test.ts`, 8 Fälle, inklusive
+   fail-closed bei unbekanntem Modus).
 5. **Kein Wachstumsziel.** Wenn jemals mehr Zugänge entstehen sollen, als
    begleitet werden können, wird **vorher** ein Deckel oder eine Warteliste
    gebaut — nicht nachträglich.
