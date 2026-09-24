@@ -90,7 +90,8 @@
     "test:rls": "tsx scripts/verify-rls-live.ts --gate",
     "demo:gif": "node scripts/make-demo-gif.mjs",
     "rls:status": "node scripts/rls-status.mjs",
-    "nightly:rls": "bash scripts/rls-nightly-check.sh"
+    "nightly:rls": "bash scripts/rls-nightly-check.sh",
+    "audit:lighthouse": "node scripts/lighthouse-audit.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
@@ -127,12 +128,14 @@
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^4.1.11",
     "@webgpu/types": "^0.1.72",
+    "chrome-launcher": "^1.2.1",
     "esbuild": "^0.25.0",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jscpd": "^5.1.2",
     "jsdom": "^30.0.1",
     "knip": "^6.34.0",
+    "lighthouse": "^13.5.0",
     "playwright": "^1.62.1",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
