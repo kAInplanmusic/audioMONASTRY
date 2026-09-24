@@ -729,3 +729,72 @@ Die Tests benutzen ein **gefälschtes `runpod`-SDK**, das jeden Kontakt in eine
 Logdatei schreibt. Genau dieses Log ist der Beleg für „kein API-Aufruf vor der
 Freigabe" (und für „kein API-Aufruf bei fehlgeschlagener VORAB-RECHNUNG"): nach
 einem abgelehnten Lauf ist es leer.
+
+---
+
+## GEMESSENER ERFOLGSL AUF: 2026-09-24, L40S in EU-NL-1
+
+Dieser Lauf ist durchgelaufen und das Ergebnis ist am Bild geprüft. Die
+folgenden Werte sind **gemessen**, nicht geschätzt.
+
+| Größe | Wert |
+| --- | --- |
+| Schritte | 1500/1500 |
+| Dauer | 1:14:54 |
+| **Sekunden pro Schritt** | **2,98** (die frühere Annahme von 2,0 war Faktor 1,5 zu optimistisch) |
+| VRAM | 36.687 MiB |
+| GPU-Auslastung | 91–100 % |
+| Loss | 0,35 → 0,15 (Schritt 100), pendelt danach 0,15–0,45 |
+| Hardware | L40S, 45 GB, EU-NL-1, **1,09 USD/h** |
+| Image | `ostris/aitoolkit:latest` (6,3 GB, braucht CUDA 13 auf dem Host) |
+| Gesamtkosten der Sitzung | **4,0185 USD** (inkl. sechs Fehlversuche und 54-GB-Download) |
+
+### Die vier Fallen, an denen es vorher scheiterte
+
+1. **`dtype: "bf16"` gehört in den `train:`-Block, nicht in `model:`.**
+   Belegt im Quellcode: `BaseSDTrainProcess.py` baut das Modell mit
+   `self.sd = ModelClass(..., dtype=self.train_config.dtype)`. Ohne den
+   Schlüssel lädt ai-toolkit **fp32 (~47 GB)** und stirbt am
+   `transformer.to(cuda:0)` mit CUDA out of memory — gemessen auf 24 GB
+   **und** auf 45 GB. Das war der letzte und einzige fehlende Schlüssel.
+
+2. **`quantize: true` ist auf 24 GB nicht hilfreich.** Die Quantisierung
+   passiert erst **nach** dem `.to(device)`, der fp32-Move scheitert also
+   vorher.
+
+3. **Das offizielle Image heißt `ostris/aitoolkit` — ohne Bindestrich.**
+   `ostris/ai-toolkit` existiert nicht. Sein Stack (torch 2.13.0 +
+   torchaudio 2.11.0 + CUDA 13) ist abgestimmt; ein selbst
+   zusammengesetztes PyTorch-Image plus `pip install -r requirements.txt`
+   erzeugt einen widersprüchlichen Stack (`libtorchaudio.so`,
+   `libcudart.so.13`).
+
+4. **Der Pod braucht ein 48-GB-Karten-Image UND CUDA 13.** Eine L4 mit
+   CUDA 12.8 läuft in eine Container-Crash-Schleife, weil das Image
+   `nvidia/cuda:13.0.3` mitbringt. Und ein 24-GB-Pod mit nur 42,8 GiB RAM
+   wird beim Laden vom OOM-Killer beendet (`Killed`) — erst ab ~57 GiB RAM
+   läuft es.
+
+### Der funktionierende Ablauf
+
+```
+1. Volume 100 GB im selben Rechenzentrum wie die Karte (Volumes sind DC-gebunden)
+2. Pod mit imageName ostris/aitoolkit:latest, 48-GB-Karte, CUDA 13
+3. HF_TOKEN als Datei in den Pod (nicht als Pod-env — das kam nicht an)
+4. hf download --max-workers 1 mit HF_HUB_ENABLE_HF_TRANSFER=0 HF_HUB_DISABLE_XET=1
+   (hf_transfer sprengt ein 4-GB-Containerlimit; Xet bläht den Cache auf)
+5. Datensatz nach dem Pfad aus folder_path verlinken
+6. python3 run.py <config>.yml
+```
+
+### Ergebnis
+
+`cosmic-r16.safetensors` (164 MB) plus Zwischenstände bei Schritt 1000 und
+1250, dazu sieben Probe-Bilder (Schritte 0/250/500/750/1000/1250/1500).
+Alles in R2 unter `lora/ergebnis/`.
+
+Am Bild geprüft: Schritt 0 zeigt weiche pastellige Spiralarme und einen
+diffusen Lichtschein, Schritt 1500 eine architektonische Licht-Kathedrale
+mit definierten Kanten, dichten Nebel mit scharfen Sternpunkten und klar
+konturierte volumetrische Strahlen. **Der Stil ist gelernt, nicht nur der
+Loss gefallen.**
