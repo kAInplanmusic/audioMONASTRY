@@ -623,9 +623,17 @@ class VorstagingTest(BaseCase):
                     ["git", "-c", "user.email=t@example.invalid", "-c", "user.name=Test", "commit", "-qm", "init"]):
             subprocess.run(cmd, cwd=str(self.repo), check=True, capture_output=True)
         # Stub statt hf_transfer: legt die erwartete Cache-Struktur an (2 MB).
+        #
+        # KORRIGIERT AM 2026-09-24: der Slub muss den Namen erzeugen, den HuggingFace
+        # WIRKLICH anlegt - `models--<org>--<name>`, der Schraegstrich wird zu ZWEI
+        # Bindestrichen. Vorher stand hier `tr '/' '-'` (ein Bindestrich). Damit
+        # spiegelte der Stub eine Wirklichkeit, die es nicht gibt: der Test blieb
+        # gruen, obwohl vorstaging.sh den eigenen Download nie fand. Auf dem Pod
+        # gemessen lag tatsaechlich models--black-forest-labs--FLUX.1-dev (54 GB),
+        # gesucht wurde models--black-forest-labs-FLUX.1-dev.
         self.hf_stub = self.tmp / "hf-stub.sh"
         self.hf_stub.write_text(
-            "#!/usr/bin/env bash\nset -eu\nmodel=\"$1\"\nslug=\"models--$(printf '%s' \"$model\" | tr '/' '-')\"\n"
+            "#!/usr/bin/env bash\nset -eu\nmodel=\"$1\"\nslug=\"models--$(printf '%s' \"$model\" | sed 's|/|--|')\"\n"
             "mkdir -p \"$HF_HOME/hub/$slug/snapshots/abc\"\n"
             "dd if=/dev/zero of=\"$HF_HOME/hub/$slug/snapshots/abc/model.safetensors\" bs=1024 count=2048 status=none\n"
             "echo \"[stub] $model -> $HF_HOME/hub/$slug\"\n",
@@ -824,6 +832,28 @@ class BootstrapAbschnittTest(BaseCase):
         status = self.status(work)
         self.assertIn("uebersprungen: Datensatz", status)
         self.assertIn("1 Bilder liegen schon", status)
+
+    def test_gewichte_werden_erkannt_wenn_der_hf_cache_name_stimmt(self) -> None:
+        """Regression 2026-09-24: die Vorstaging-Pruefung baute den Cache-Namen mit
+        `tr '/' '-'`, also mit EINEM Bindestrich. HuggingFace legt ein Modell aber als
+        `models--<org>--<name>` an - mit ZWEI. Die Pruefung schlug damit IMMER fehl: sie
+        meldete "nicht vorstaged", obwohl die Gewichte auf dem Volume lagen, und der
+        GPU-Pod lud die ~24 GB ein zweites Mal - zu GPU-Preisen statt zu CPU-Preisen.
+        Hier liegt der Ordner mit dem RICHTIGEN Namen, also muss der Lauf ihn finden."""
+        work = self.tmp / "work-gewichte"
+        work.mkdir()
+        hf_home = work / "hf-cache"
+        modell = "black-forest-labs/FLUX.1-dev"
+        richtig = "models--" + modell.replace("/", "--")       # ZWEI Bindestriche
+        falsch = "models--" + modell.replace("/", "-")         # EIN Bindestrich
+        self.assertNotEqual(richtig, falsch)
+        (hf_home / "hub" / richtig).mkdir(parents=True)
+        self.spec(work, train={"hf_home": str(hf_home), "base_model": modell})
+        result = self.run_script(BOOTSTRAP, env=self.bootstrap_env(work))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        status = self.status(work)
+        self.assertIn("uebersprungen: Gewichte", status)
+        self.assertNotIn("Gewichte NICHT vorstaged", status)
 
     def test_ohne_wiederverwendung_wird_geladen_und_scheitert_sichtbar(self) -> None:
         work = self.tmp / "work2"

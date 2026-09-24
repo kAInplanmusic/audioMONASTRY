@@ -118,6 +118,71 @@ class PatchTest(unittest.TestCase):
         self.assertIn("train.steps", keys)
         self.assertIn("datasets[0].folder_path", keys)
 
+    def test_patch_ergaenzt_train_dtype_bf16_trotz_vorhandenem_save_dtype(self) -> None:
+        """Regression 2026-09-24: ohne `dtype` im TRAIN-Block laedt ai-toolkit das
+        Modell in fp32 (~47 GB) und stirbt am `transformer.to(cuda:0)` mit CUDA out
+        of memory - gemessen auf 24 GB UND auf 45 GB.
+
+        Die Falle: die Vorlage hat bereits `save: dtype: float16`. Eine Suche nach
+        `^\\s*dtype:` ueber die GANZE Datei findet diese Zeile, haelt den Schluessel
+        fuer vorhanden und fuegt NICHTS ein. Deshalb muss INNERHALB des train-Blocks
+        gesucht werden - und der Datensatz muss eine Liste bleiben."""
+        import yaml  # noqa: PLC0415  (nur fuer diesen Test)
+
+        (self.root / "images").mkdir()
+        # Vorlage hat save.dtype, aber KEIN train.dtype
+        basis = self.config.read_text(encoding="utf-8")
+        self.assertIn("        dtype: float16", basis)   # die Falle ist wirklich da
+        self.assertNotIn("train:\n        batch_size: 1\n        dtype", basis)
+
+        result = self.patch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        keys = [e["key"] for e in report["patched"]]
+        self.assertIn("train.dtype", keys)
+
+        doc = yaml.safe_load(self.out.read_text(encoding="utf-8"))
+        process = doc["config"]["process"][0]
+        self.assertEqual(process["train"]["dtype"], "bf16")
+        # save.dtype bleibt unberuehrt
+        self.assertEqual(process["save"]["dtype"], "float16")
+        # genau EIN dtype im train-Block
+        self.assertEqual(sum(1 for k in process["train"] if k == "dtype"), 1)
+
+    def test_patch_laesst_die_datensatzliste_eine_liste_bleiben(self) -> None:
+        """Regression 2026-09-24: `patch_key` behielt nur die Leerzeichen, nicht das
+        Listenzeichen `- `. Aus `- folder_path: ...` wurde `folder_path: ...`, das
+        YAML zerbrach mit "expected <block end>, but found '<block mapping start>'".
+        Diesen Fehler haette der Projekt-Ablauf trainer-aitoolkit.sh bei JEDEM Lauf
+        produziert - er lief nur nie, weil von Hand direkt run.py aufgerufen wurde."""
+        import yaml  # noqa: PLC0415
+
+        (self.root / "images").mkdir()
+        result = self.patch()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        doc = yaml.safe_load(self.out.read_text(encoding="utf-8"))
+        datasets = doc["config"]["process"][0]["datasets"]
+        self.assertIsInstance(datasets, list)
+        self.assertEqual(datasets[0]["folder_path"], str(self.root / "images"))
+        self.assertEqual(datasets[0]["caption_ext"], "txt")   # Geschwister erhalten
+
+    def test_patch_ist_idempotent_bei_vorhandenem_train_dtype(self) -> None:
+        (self.root / "images").mkdir()
+        self.patch()
+        erste = self.out.read_text(encoding="utf-8")
+        zweite_datei = self.root / "zweite.yml"
+        result = run_helper(
+            "patch", "--config", str(self.out), "--out", str(zweite_datei),
+            "--name", "cosmic-r16", "--steps", "1000", "--save-every", "250",
+            "--images-dir", str(self.root / "images"),
+            "--training-folder", str(self.root / "out"), "--json",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = json.loads(result.stdout)
+        eintrag = next(e for e in report["patched"] if e["key"] == "train.dtype")
+        self.assertEqual(eintrag["old"], "vorhanden")
+        self.assertCountEqual(erste.splitlines(), zweite_datei.read_text(encoding="utf-8").splitlines())
+
     def test_patch_ohne_eindeutigen_schluessel_bricht_ab(self) -> None:
         (self.root / "images").mkdir()
         doppelt = self.config.read_text(encoding="utf-8") + "\n        steps: 42\n"
