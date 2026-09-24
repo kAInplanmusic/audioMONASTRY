@@ -116,6 +116,34 @@ runcmd:
   - ufw allow 22/tcp
   - ufw allow 80/tcp
   - ufw allow 443/tcp
+  # RTC-Medienports (INFRA-HETZNER-015, gemessen 2026-09-24).
+  #
+  # WARUM DAS GEFEHLT HAT: hier standen nur 22/80/443. Der SFU-Knoten laeuft
+  # trotzdem - aber nur halb, und die Ursache ist eine Falle:
+  #   * mediasoup laeuft als Container mit veroeffentlichten Ports. Docker setzt
+  #     eigene iptables-Regeln VOR ufw; die Ports sind deshalb auch bei
+  #     geschlossenem ufw erreichbar. Der SFU-Echtpfadtest lief durch (92
+  #     RTP-Pakete) - ufw sah nie ein Problem.
+  #   * coturn laeuft im NETZWERKMODUS HOST. Es bekommt diese Docker-Ausnahme
+  #     NICHT und unterliegt ufw direkt. Ergebnis: 3478 war von aussen zu,
+  #     waehrend der Medienpfad daneben funktionierte. Von innen getestet fiel
+  #     das nicht auf - erst der Test von einem fremden Rechner zeigte es.
+  # Nachgeprueft: /dev/tcp, nc und ein Python-Socket verbinden sich alle drei auf
+  # tcp/3478, und ein STUN-Binding-Request ueber udp/3478 bekommt eine gueltige
+  # Antwort (40 Bytes) zurueck.
+  #
+  # BEWUSST EINHEITLICH UND NICHT PRO ROLLE: welcher Knoten SFU ist, entscheidet
+  # die Rolle beim Aufbau und kann sich beim naechsten Aufbau aendern. Eine
+  # rollenabhaengige Regel waere genau der Schalter, den man vergisst - und dann
+  # faellt der Medienpfad still aus. Auf den anderen Knoten kostet es nichts,
+  # weil dort nichts auf diesen Ports lauscht.
+  #
+  # Zweite Schicht bleibt die Hetzner-Firewall (audiomonastry-sfu).
+  - ufw allow 3478/udp comment 'TURN UDP'
+  - ufw allow 3478/tcp comment 'TURN TCP'
+  - ufw allow 49152:49201/udp comment 'TURN Relay'
+  - ufw allow 40000:40099/udp comment 'RTC Medien UDP'
+  - ufw allow 40000:40099/tcp comment 'RTC Medien TCP'
   - ufw --force enable
   # F6: oeffentliche IP fuer die RTC-Verdrahtung ablegen (siehe write_files oben).
   # Ohne Wert bleibt der Deploy-Pfad bei der Live-Ermittlung (Metadata/ipify) und

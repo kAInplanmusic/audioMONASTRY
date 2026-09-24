@@ -446,6 +446,26 @@ else
   echo "    nicht erreichbar. Die Ursache steht oben; die Reihenfolge zum Pruefen auch."
 fi
 
+# --- 9c: Medienports auf dem SFU-Knoten ---------------------------------------
+# GEMESSEN AM 2026-09-24: der SFU-Echtpfadtest meldete 92 RTP-Pakete, und TROTZDEM
+# war TURN von aussen nicht erreichbar. Der Grund ist eine Falle, die man von innen
+# nicht sieht: mediasoup laeuft als Container mit veroeffentlichten Ports, und
+# Docker setzt eigene iptables-Regeln VOR ufw - diese Ports sind deshalb auch bei
+# geschlossenem ufw erreichbar. coturn laeuft dagegen im Netzwerkmodus host und
+# unterliegt ufw direkt. Nur ein Blick in die Host-Firewall zeigt den Unterschied.
+if [ -n "${SFU_IP:-}" ]; then
+  step "9c/9 Medienports auf dem SFU-Knoten pruefen (ufw, TURN, Relay)"
+  if ssh "${SSH_OPTS[@]}" "root@$SFU_IP" "bash -s" < scripts/hetzner/check-media-ports.sh; then
+    echo "  ✓ Medienports in Ordnung."
+  else
+    echo
+    echo "  ⚠ Auf dem SFU-Knoten ist mindestens ein Medienport auf dem HOST gesperrt."
+    echo "    Die Flotte laeuft und der Medienpfad kann trotzdem gehen - TURN faellt"
+    echo "    aber still aus, und nur Clients hinter strengem NAT merken es."
+    echo "    Dauerhaft beheben: scripts/hetzner/cloud-init.yaml (Abschnitt runcmd)."
+  fi
+fi
+
 # --- Fertig -------------------------------------------------------------------
 echo
 echo "=============================================================="
