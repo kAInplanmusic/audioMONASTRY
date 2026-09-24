@@ -35,6 +35,13 @@
 #      dem Status des Abgleichs - systemd markiert den Lauf dann als failed, und
 #      "systemctl --user status audioMONASTRY-rls-check" zeigt es.
 #
+#   6. Der Betreiber hat "nur Protokoll, kein Alarm" entschieden (2026-09-24).
+#      Damit ein Befund trotzdem auffindbar bleibt:
+#        logs/rls-nightly.log            rollierendes Protokoll
+#        logs/rls-nightly-problems.log   NUR Probleme, wird NIE rotiert
+#        logs/rls-nightly.status         eine Zeile, immer der letzte Lauf
+#      Schnell nachsehen: npm run rls:status
+#
 # RUECKGABE: 0 = Vertrag erfuellt, 1 = VERSTOSS, 2 = nicht messbar.
 #
 # Aufruf:    scripts/rls-nightly-check.sh
@@ -54,6 +61,15 @@ LOG="$LOG_DIR/rls-nightly.log"
 mkdir -p "$LOG_DIR"
 
 schreib() { printf '%s %s\n' "$(date -Is)" "$1" >>"$LOG"; }
+
+# Eigene Datei fuer Probleme - sie wird NIE rotiert.
+# Begruendung: der Betreiber hat "nur Protokoll, kein Alarm" entschieden. Dann
+# darf ein Befund nicht aus dem rotierenden Protokoll hinausfallen, sonst ist er
+# nach ein paar Wochen unbemerkt verschwunden.
+PROBLEM_LOG="$LOG_DIR/rls-nightly-problems.log"
+STATUS_DATEI="$LOG_DIR/rls-nightly.status"
+
+schreibProblem() { printf '%s [%s] %s\n' "$(date -Is)" "$1" "$2" >>"$PROBLEM_LOG"; }
 
 # Protokoll kurz halten: die letzten 2000 Zeilen behalten.
 if [ -f "$LOG" ] && [ "$(wc -l <"$LOG")" -gt 2000 ]; then
@@ -117,6 +133,15 @@ if [ "$CODE" != "0" ]; then
     schreib "HINWEIS: kein Alarmkanal konfiguriert (ALERT_WEBHOOK_URL/-TOKEN, DISCORD_WEBHOOK, SLACK_WEBHOOK, TELEGRAM_*). Der Befund steht NUR in diesem Protokoll und im systemd-Status: systemctl --user status audioMONASTRY-rls-check"
     echo "[rls] HINWEIS: kein Alarmkanal konfiguriert - Befund nur im Protokoll ($LOG)." >&2
   fi
+fi
+
+# Statusdatei: EINE Zeile, damit "cat" die Frage beantwortet, ohne das ganze
+# Protokoll zu lesen. Sie beschreibt immer den LETZTEN Lauf.
+printf '%s | %s | exit %s | %s\n' "$(date -Is)" "$PRIO" "$CODE" "$TEXT" >"$STATUS_DATEI"
+
+# Probleme zusaetzlich in die nicht rotierende Datei.
+if [ "$CODE" != "0" ]; then
+  schreibProblem "$PRIO" "$TEXT :: ${ZUSAMMENFASSUNG:-keine Ausgabe}"
 fi
 
 echo "[rls] Start $START, Ende $(date -Is), Protokoll: $LOG"

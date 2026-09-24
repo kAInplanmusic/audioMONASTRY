@@ -88,7 +88,9 @@
     "apply:prompts": "tsx scripts/apply-prompt-catalog.ts",
     "sync:env": "node scripts/sync-env-values.mjs",
     "test:rls": "tsx scripts/verify-rls-live.ts --gate",
-    "demo:gif": "node scripts/make-demo-gif.mjs"
+    "demo:gif": "node scripts/make-demo-gif.mjs",
+    "rls:status": "node scripts/rls-status.mjs",
+    "nightly:rls": "bash scripts/rls-nightly-check.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",

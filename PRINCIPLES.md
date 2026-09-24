@@ -110,12 +110,35 @@ Puffer-Überlauf, Bündelung mit Deckelung).
 ## 6. Nachhaltigkeit statt Wachstum
 
 **Regel:** Lieber kuratiert klein als unkontrolliert groß. Kein Wachstumsziel.
-Wenn mehr Zugänge entstehen als qualitativ begleitet werden können, wird eine
-Warteliste eingeführt.
 
-`TODO(operator):` Signup-Limit/Warteliste ist nicht implementiert. Aktuell ist
-der öffentliche Zugang token-geschützt (`STUDIO_ACCESS_TOKEN`, fail-closed) —
-das begrenzt faktisch, ist aber kein bewusstes Nachhaltigkeits-Instrument.
+**Die Zugangsregel, konkret (Betreiberentscheidung 2026-09-24):**
+
+1. **Es gibt keine Anmeldung.** Kein Signup, keine Registrierung, keine
+   Selbstbedienung — es gibt technisch nichts, wobei man sich anmelden könnte.
+2. **Zugang entsteht nur persönlich.** Wer dabei sein soll, bekommt den
+   Studio-Zugang (`STUDIO_ACCESS_TOKEN`, fail-closed: ohne Token kein Zugang)
+   von Hand ausgegeben. Das ist der Deckel.
+3. **Es gibt keine öffentliche Instanz.** Die Flotte ist aus, wenn nicht
+   gearbeitet wird — oder für einen geplanten Lauf an.
+4. **Obergrenze einer Sitzung: 4 Personen** — das ist eine *dokumentierte
+   Auslegungsgrenze*, **keine erzwungene**. Es gibt keine Konstante im Code, die
+   eine fünfte Verbindung abweist (gemessen am 2026-09-24: kein
+   `MAX_PARTICIPANTS`/`MAX_USERS` vorhanden). Wer sie überschreitet, merkt es an
+   der Qualität, nicht an einer Fehlermeldung. Das steht hier, damit sich niemand
+   auf eine Sperre verlässt, die es nicht gibt.
+5. **Kein Wachstumsziel.** Wenn jemals mehr Zugänge entstehen sollen, als
+   begleitet werden können, wird **vorher** ein Deckel oder eine Warteliste
+   gebaut — nicht nachträglich.
+
+**Warum kein Signup-Limit gebaut wurde:** Ein Limit für eine Anmeldung, die es
+nicht gibt, wäre Code ohne Wirkung. Das Nachhaltigkeits-Instrument ist hier die
+**geschlossene Ausgabe**: kein öffentlicher Weg hinein, keine Selbstregistrierung,
+Zugang nur persönlich. Damit ist „klein bleiben" keine Absichtserklärung, sondern
+der Zustand.
+
+`TODO(verify):` Bekommt dieses Projekt je einen öffentlichen Zugang, ist der Punkt
+neu zu bewerten: dann gehören Deckel und Warteliste wirklich gebaut und die
+4-Personen-Grenze im Code erzwungen. Solange es privat ist, wäre beides Theater.
 
 ## 7. Skriptorium — Ausgabe in Standardformaten
 
