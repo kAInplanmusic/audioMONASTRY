@@ -145,7 +145,16 @@ bytes_of_dir() {
   du -sb "$1" 2>/dev/null | cut -f1
 }
 
-model_slug() { printf 'models--%s' "$(printf '%s' "$1" | tr '/' '-')"; }
+# GEMESSEN AM 2026-09-24, und es war der Grund fuer vier gescheiterte Laeufe:
+# HuggingFace legt ein Modell als `models--<org>--<name>` ab - der Schraegstrich
+# wird zu ZWEI Bindestrichen. `tr '/' '-'` erzeugte nur EINEN. Das Skript suchte
+# damit ein Verzeichnis, das es nie gab, zaehlte 0 Bytes und brach ab - NACH einem
+# vollstaendigen Download. Belegt: tatsaechlich lag
+#   models--black-forest-labs--FLUX.1-dev   (54 GB)
+# und gesucht wurde
+#   models--black-forest-labs-FLUX.1-dev
+# Bindestriche INNERHALB von Organisation oder Modellname bleiben einzeln.
+model_slug() { printf 'models--%s' "$(printf '%s' "$1" | sed 's|/|--|')"; }
 
 steps=()
 FAILED=0
