@@ -64,6 +64,16 @@ const RETIRED: RetiredSecret[] = [
   { key: 'CF_ACCESS_TOKEN', reason: 'HTTP 401 (Code 1000) - tot, kein Repo-Konsument' },
   { key: 'CFR2_API_KEY', reason: 'nicht pruefbar, kein Repo-Konsument' },
   { key: 'COMET_API_KEY', reason: 'gehoert zur externen Deep-Code-Integration, nicht zum Repo' },
+  // SEC-P2-005, gemessen 2026-09-24: cfk_ ist der Cloudflare GLOBAL API KEY.
+  // Mit X-Auth-Email + X-Auth-Key gibt er Vollzugriff - /user 200, /zones 200,
+  // /accounts 200, /user/tokens 200 (er kann API-Token VERWALTEN),
+  // POST /certificates 200 - und er laesst sich nicht einschraenken.
+  // Kein Code liest ihn. Auf Betreiberauftrag entfernt, aus 10 Dateien: der
+  // eigenen .env, zwei Backup-Dateien und den Deploy-Verzeichnissen auf app-1
+  // und sfu-1 - meine eigenen Sicherungskopien hatten den Wert vervielfacht.
+  // Er darf nicht zurueckkehren: eine .env-Vorlage braucht ihn nicht, und ein
+  // Zugang mit Token-Verwaltungsrecht gehoert nicht in eine Projektdatei.
+  { key: 'CF_TOKEN_KEY', reason: 'Global API Key mit Vollzugriff - kein Konsument, entfernt 2026-09-24' },
 ];
 
 /** Platzhalter gelten NICHT als Wert - sonst waeren Vorlagen unbrauchbar. */
