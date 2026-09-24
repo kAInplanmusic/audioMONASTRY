@@ -39,14 +39,35 @@ DEPLOY_DIR="${DEPLOY_DIR:-/opt/audiomonastry}"
 NUR_PRUEFEN="${NUR_PRUEFEN:-0}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ConnectTimeout=12 -o BatchMode=yes)
-auf() { ssh "${SSH_OPTS[@]}" "root@$APP_IP" "$@"; }
+# `auf()` wird weiter unten definiert - erst nach der Pruefung, ob der Zielknoten
+# dieser Rechner selbst ist. Eine Definition an dieser Stelle ueberschriebe sie.
 
 if [ -z "$APP_IP" ]; then
   echo "❌ APP_IP fehlt." >&2
   exit 2
 fi
 
-echo "▶ TLS-Terminator auf $APP_IP prüfen (Domain $DOMAIN)"
+# Laeuft dieses Skript AUF dem Zielknoten selbst, ist SSH auf die eigene Adresse
+# unnoetig - und je nach Einrichtung unmoeglich. GEMESSEN AM 2026-09-24: in
+# diesem Fall meldete die Pruefung "Caddy-Container existiert nicht", obwohl
+# Caddy lief. Ein falsch-negatives Ergebnis ist schlimmer als keine Pruefung,
+# weil es Vertrauen in einen Pruefstand setzt, der nicht messen kann.
+# Der Flottenstart ruft das Skript vom Steuerrechner auf (SSH noetig); im
+# Gegenbeweis laeuft es auf dem Knoten (SSH schaedlich). Beides muss gehen.
+EIGENE_IPS="$(hostname -I 2>/dev/null || true)"
+if printf '%s' " $EIGENE_IPS " | grep -q " $APP_IP "; then
+  LOKAL=1
+else
+  LOKAL=0
+fi
+
+if [ "$LOKAL" = "1" ]; then
+  auf() { bash -c "$*"; }
+else
+  auf() { ssh "${SSH_OPTS[@]}" "root@$APP_IP" "$@"; }
+fi
+
+echo "▶ TLS-Terminator auf $APP_IP prüfen (Domain $DOMAIN)$([ "$LOKAL" = "1" ] && echo ' [lokal]')"
 
 # --- 1. Image vorhanden? Sonst bauen. ---------------------------------------
 if [ "$NUR_PRUEFEN" != "1" ]; then
@@ -117,5 +138,55 @@ if [ "${OEFFENTLICH:-000}" != "200" ]; then
   exit 1
 fi
 
-echo "✅ TLS-Terminator geprueft: Caddy stabil, 443 lauscht, Ursprung 200, öffentlich 200."
+# --- 6. Ist die Instanz BENUTZBAR - nicht nur erreichbar? -------------------
+# GEMESSEN AM 2026-09-24, und der Grund fuer diesen Schritt:
+#   POST /api/session -> HTTP 503 {"code":"STUDIO_TOKEN_MISSING"}
+# Die Auth ist fail-closed. Fehlt STUDIO_ACCESS_TOKEN auf dem Knoten, antwortet
+# JEDE /api-Route mit 503 - nur /api/health nicht. Die Startseite lieferte
+# trotzdem 200. Die Instanz sah von aussen heil aus und war unbenutzbar, und
+# diese Pruefung haette es gemeldet, wenn es sie damals schon gegeben haette.
+#
+# 503 mit STUDIO_TOKEN_MISSING = nicht konfiguriert  -> Fehler
+# 401                          = konfiguriert, Token verlangt -> RICHTIG
+# 200                          = offene Route -> auch in Ordnung
+PROBE="$(curl -s -m 30 "https://$DOMAIN/api/session" -X POST -H 'Content-Type: application/json' -d '{}' 2>/dev/null)"
+CODE="$(curl -s -o /dev/null -w '%{http_code}' -m 30 "https://$DOMAIN/api/session" -X POST -H 'Content-Type: application/json' -d '{}' 2>/dev/null)"
+echo "  Session-Route (Benutzbarkeit): HTTP ${CODE:-000}"
+case "${CODE:-000}" in
+  503)
+    echo "" >&2
+    echo "❌ DIE INSTANZ IST ERREICHBAR, ABER NICHT BENUTZBAR (HTTP 503)." >&2
+    echo "   Antwort: ${PROBE:0:120}" >&2
+    echo "   Das heisst: die Auth ist fail-closed und STUDIO_ACCESS_TOKEN fehlt auf dem Knoten." >&2
+    echo "   Sofort:  grep -c '^STUDIO_ACCESS_TOKEN=' $DEPLOY_DIR/.env   (auf dem Knoten)" >&2
+    echo "   Dauerhaft: der Portal-Worker muss das Secret haben, sonst faellt es beim" >&2
+    echo "              naechsten Neuaufbau wieder weg:" >&2
+    echo "                wrangler secret put STUDIO_ACCESS_TOKEN --name audiomonastry-portal" >&2
+    echo "   Ein Container-Neustart genuegt NICHT: env_file wird nur beim Erzeugen gelesen." >&2
+    exit 1
+    ;;
+  000)
+    echo "❌ Die Session-Route ist nicht abfragbar - die Erreichbarkeit oben war also nicht stabil." >&2
+    exit 1
+    ;;
+esac
+echo "  ✓ Token ist konfiguriert (401 = Token verlangt ist die richtige Antwort)"
+
+# --- 7. Und liefert sie auch Daten, wenn man den Token hat? -----------------
+# Der Scrape-Token ist ein EIGENES Secret (SCRAPE_TOKEN). Fehlt es, ist das
+# Monitoring blind - auch das fiel am 2026-09-24 erst durch 503/401 in den
+# Zugriffsprotokollen auf, nicht durch eine Pruefung.
+if [ -n "${SCRAPE_TOKEN:-}" ]; then
+  MCODE="$(curl -s -o /dev/null -w '%{http_code}' -m 30 -H "Authorization: Bearer $SCRAPE_TOKEN" "https://$DOMAIN/api/metrics?format=prometheus" 2>/dev/null)"
+  echo "  Metriken mit SCRAPE_TOKEN: HTTP ${MCODE:-000}"
+  if [ "${MCODE:-000}" != "200" ]; then
+    echo "❌ /api/metrics liefert mit gesetztem Token kein 200 - das Monitoring bleibt blind." >&2
+    exit 1
+  fi
+  echo "  ✓ Monitoring kann Daten holen"
+else
+  echo "  (SCRAPE_TOKEN nicht uebergeben - Metrik-Pruefung uebersprungen)"
+fi
+
+echo "✅ Geprueft: Caddy stabil, 443 lauscht, Ursprung 200, oeffentlich 200, Instanz benutzbar."
 exit 0
