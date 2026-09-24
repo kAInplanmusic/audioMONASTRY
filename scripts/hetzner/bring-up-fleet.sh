@@ -427,10 +427,37 @@ BASE_URL="$APP_URL" node scripts/hetzner/stress-test.mjs || echo "  ⚠ Stresste
 echo "  SFU-RTP-Echtpfad gegen sfu-1 ($SFU_IP) …"
 BASE_URL="http://$SFU_IP" node scripts/hetzner/sfu-rtp-run.mjs || echo "  ⚠ SFU-RTP-Test fehlgeschlagen (prüfen!)"
 
+# --- 9b. TLS-Terminator: PRUEFEN, nicht annehmen (PROD-P0-F1) -------------------
+# GEMESSEN AM 2026-09-24: der Start meldete stundenlang "bereit", waehrend auf
+# app-1 Caddy in einer Absturzschleife lag (fehlendes Origin-Zertifikat). Nichts
+# horte auf 80/443, Cloudflare antwortete 521/525 - die Instanz war oeffentlich
+# unerreichbar, obwohl alle App-Container healthy waren. KEINE der bisherigen
+# Pruefungen sah den TLS-Terminator an.
+# Das Skript baut das noetige Caddy-Image, wenn es fehlt, und prueft dann:
+# Container stabil (nicht "Restarting"), 443 lauscht, Ursprung 200, OEFFENTLICH 200.
+# Das Ergebnis ist verbindlich: ohne gesunden Terminator gibt es kein "bereit".
+step "9b/9 TLS-Terminator pruefen (Caddy, 443, Zertifikat, oeffentliche Erreichbarkeit)"
+if APP_IP="$APP_IP" DOMAIN="$DOMAIN" bash scripts/hetzner/ensure-tls-terminator.sh; then
+  TLS_TERMINATOR_OK=1
+else
+  TLS_TERMINATOR_OK=0
+  echo
+  echo "  ⚠ Der TLS-Terminator ist NICHT gesund - die Flotte laeuft, ist aber von aussen"
+  echo "    nicht erreichbar. Die Ursache steht oben; die Reihenfolge zum Pruefen auch."
+fi
+
 # --- Fertig -------------------------------------------------------------------
 echo
 echo "=============================================================="
-echo "✅ audioMONASTRY-Flotte ist bereit:"
+if [ "${TLS_TERMINATOR_OK:-0}" = "1" ]; then
+  echo "✅ audioMONASTRY-Flotte ist bereit (TLS-Terminator geprueft, oeffentlich erreichbar):"
+else
+  echo "⚠️  audioMONASTRY-Flotte LAEUFT, ist aber NICHT oeffentlich erreichbar:"
+  echo "    Der TLS-Terminator ist nicht gesund (siehe Schritt 9b). Die App-Container"
+  echo "    sind in Ordnung - der Fehler liegt davor (Caddy, Zertifikat, DNS, Worker)."
+fi
+echo "   (Hinweis: dieser Abschluss hing frueher an KEINER Pruefung - deshalb meldete"
+echo "    der Start 'bereit', waehrend die Instanz unerreichbar war.)"
 echo "   App:      $APP_URL"
 echo "   SFU:      http://$SFU_IP   (RTP 40000–40099, Signalisierung /sfu-signaling)"
 echo "   TURN:     turn:$SFU_IP:3478 (udp+tcp), Relay-Ports ${RTC_TURN_MIN_PORT}-${RTC_TURN_MAX_PORT}"
