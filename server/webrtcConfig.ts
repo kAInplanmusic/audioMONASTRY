@@ -88,7 +88,26 @@ export interface TurnInfo {
 
 /** Zustand/Adresse der SFU-Signalisierung (F6). */
 export interface SfuSignalingInfo {
-  /** Läuft auf DIESEM Knoten eine SFU (`ENABLE_SFU=1`)? Nur informativ. */
+  /**
+   * Darf der CLIENT eine SFU benutzen?
+   *
+   * ACHTUNG, hier lag bis 2026-09-24 ein Denkfehler: dieses Feld hing an
+   * `ENABLE_SFU`, und das beantwortet eine ANDERE Frage - naemlich "laeuft AUF
+   * DIESEM KNOTEN eine SFU?". Der Kommentar direkt darunter sagte sogar "Nur
+   * informativ", und trotzdem hing der Client daran.
+   *
+   * Folge, live gemessen: auf dem App-Knoten steht `ENABLE_SFU=0` (die SFU
+   * laeuft auf einem eigenen Knoten), also lieferte `/api/webrtc-config`
+   * `enabled: false`. Der Client wirft die SFU daraufhin weg
+   * (`WebRTCManager`: `this.sfu = enabled ? sfu : null`) und bleibt auf P2P -
+   * obwohl unter `SFU_SIGNALING_URL` ein vollstaendig betriebsbereiter SFU
+   * stand, der 92 RTP-Pakete in zwei Sekunden uebertrug.
+   *
+   * Jetzt gilt: der Client darf sie nutzen, sobald eine gueltige
+   * Signalisierungsadresse konfiguriert ist ODER auf diesem Knoten eine SFU
+   * laeuft. `ENABLE_SFU` bleibt damit das, was der Kommentar sagt: eine Angabe
+   * ueber diesen Knoten.
+   */
   enabled: boolean;
   /** Absolute Basis-URL der SFU (http/https) oder `null`, wenn nicht gesetzt. */
   url: string | null;
@@ -127,8 +146,15 @@ export function normalizeSfuSignalingPath(raw: unknown): string {
 export function resolveSfuSignaling(
   env: Record<string, string | undefined> = process.env,
 ): SfuSignalingInfo {
-  const enabled = String(env.ENABLE_SFU ?? '').trim() === '1';
+  // Zwei Fragen, die bis 2026-09-24 vermischt waren:
+  //   laeuftHier - laeuft AUF DIESEM KNOTEN eine SFU? (ENABLE_SFU)
+  //   enabled    - darf der CLIENT eine SFU benutzen?
+  // Eine konfigurierte Signalisierungsadresse ist der Beleg dafuer, dass es
+  // ueberhaupt eine erreichbare SFU gibt. Ohne sie koennte der Client ohnehin
+  // nichts verbinden.
+  const laeuftHier = String(env.ENABLE_SFU ?? '').trim() === '1';
   const url = normalizeSfuSignalingUrl(env.SFU_SIGNALING_URL);
+  const enabled = laeuftHier || url !== null;
   const path = normalizeSfuSignalingPath(env.SFU_SIGNALING_PATH);
   if (url === null) {
     const raw = String(env.SFU_SIGNALING_URL ?? '').trim();

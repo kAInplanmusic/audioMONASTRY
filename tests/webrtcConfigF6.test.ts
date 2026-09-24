@@ -89,9 +89,19 @@ describe('F6: buildWebRtcConfigResponse – TURN mit kurzlebigen Credentials', (
 
 describe('F6: SFU-Adresse im Server-Vertrag', () => {
   it('nimmt eine absolute http(s)-URL an und liefert Pfad + ready', () => {
+    // GEAENDERT AM 2026-09-24. Hier stand `enabled: false` fuer ENABLE_SFU=0.
+    // Das war die Vermischung zweier Fragen: ENABLE_SFU sagt, ob AUF DIESEM
+    // KNOTEN eine SFU laeuft (der Kommentar an der Schnittstelle nannte das
+    // selbst "nur informativ"), `enabled` sagt, ob der CLIENT eine benutzen
+    // darf. Live gemessen war die Folge: der App-Knoten hat ENABLE_SFU=0, also
+    // lieferte /api/webrtc-config enabled=false, der Client warf die SFU weg
+    // und blieb auf P2P - obwohl unter SFU_SIGNALING_URL ein betriebsbereiter
+    // SFU stand (92 RTP-Pakete in 2 s gemessen).
+    // Wer eine URL konfiguriert, will sie benutzen - unabhaengig davon, welcher
+    // Knoten die SFU hostet.
     const sfu = resolveSfuSignaling({ ENABLE_SFU: '0', SFU_SIGNALING_URL: SFU_URL });
     expect(sfu).toEqual({
-      enabled: false,
+      enabled: true,
       url: SFU_URL,
       path: DEFAULT_SFU_SIGNALING_PATH,
       ready: true,
