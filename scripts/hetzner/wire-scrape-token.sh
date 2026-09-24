@@ -40,7 +40,26 @@ for arg in "$@"; do
   esac
 done
 
-APP_IP="${APP_IP:-142.132.229.71}"
+# KEIN Standardwert mehr. Hier stand bis 2026-09-24:
+#     APP_IP="${APP_IP:-142.132.229.71}"
+# Das war die IP einer FRUEHEREN Flotte. Weil sie als stiller Standard dastand,
+# schrieb jeder Lauf sie ins Scrape-Ziel: Prometheus fragte monatelang einen
+# Server ab, den es nicht mehr gab, und meldete dabei nur "health=down" - das
+# Monitoring war blind, ohne dass irgendwo ein Fehler auftauchte.
+# GEMESSEN AM 2026-09-24: APP_TARGET=142.132.229.71:8080 auf edge-1, aktuell war
+# 49.13.75.14. Nach dem Setzen von APP_IP: job=audiomonastry health=up.
+# Ein Standardwert, der auf einen fremden Rechner zeigt, ist schlimmer als kein
+# Standardwert: er scheitert leise. Deshalb jetzt ein klarer Abbruch.
+APP_IP="${APP_IP:-}"
+if [ -z "$APP_IP" ]; then
+  echo "❌ APP_IP fehlt." >&2
+  echo "   Sie wird gebraucht, weil sie ins Prometheus-Scrape-Ziel geschrieben wird." >&2
+  echo "   Aufruf:  APP_IP=<ip-des-app-knotens> bash $0 <app|edge>" >&2
+  echo "   (Hier stand frueher die fest verdrahtete Alt-IP 142.132.229.71. Sie" >&2
+  echo "    fuehrte dazu, dass Prometheus einen laengst geloeschten Server abfragte." >&2
+  echo "    Die IP des laufenden app-Knotens:  bash scripts/hetzner/fleet-status.sh" >&2
+  exit 2
+fi
 PROJECT="$(fleet_compose_project)"
 ENV_FILE="${ENV_FILE:-$REPO/.env}"
 
