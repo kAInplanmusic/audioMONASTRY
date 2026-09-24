@@ -83,3 +83,7 @@ public/music/
 
 # Zwischenaufnahme des Demo-GIF (scripts/make-demo-gif.mjs)
 .demo-video/
+
+# Origin-Zertifikat (PROD-P0-F1): privater Schluessel, darf NIE ins Repo.
+# deploy.sh legt das Paar aus ORIGIN_CERT/ORIGIN_KEY hier ab.
+certs/
