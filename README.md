@@ -6,6 +6,15 @@
 > Personen gleichzeitig: gemeinsam an derselben Session arbeiten, ohne proprietäre Plugins
 > und ohne Bindung an einen einzigen Cloud-Anbieter.**
 
+![audioMONASTRY in 15 Sekunden: Startbildschirm, dann das Studio mit Masterplayer, Mixer und Wellenform](docs/media/audioMONASTRY-demo.gif)
+
+*15 Sekunden, ohne Schnitt: Startbildschirm, dann das Studio mit Masterplayer (132 BPM, C Minor),
+Mischer mit Wellenform und Hot Cues A-H sowie der aiMONK-Eingabezeile. Aufgenommen am 2026-09-24
+auf einem einzelnen Rechner - **nicht** in einer Vier-Personen-Sitzung und **nicht** auf der Flotte.*
+
+*Neu erzeugen: `npm run dev` in einem Terminal, dann `npm run demo:gif`.*
+
+---
 **Version** 1.210.001 (`V. 1|210|001`) · **Codename** „HyperAudioWorkstation" · **Zweig** `main`
 Stand: **2026-09-23**
 

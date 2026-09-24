@@ -213,10 +213,27 @@ export function buildConnectSources(env: EnvLike): string[] {
   return [...sources];
 }
 
-/** Ist die Policy im meldenden Modus? Default: ja (Verhalten der Installation). */
+/**
+ * Ist die Policy im meldenden Modus? Default: ja (Verhalten der Installation).
+ *
+ * AUSNAHME, gefunden am 2026-09-24: im Entwicklungsmodus wird NICHT scharf
+ * geschaltet, auch wenn `CSP_MODE=enforce` gesetzt ist.
+ *
+ * Warum: `npm run dev` liefert die Seite ueber den Vite-Dev-Server aus, und der
+ * bettet ein INLINE-Skript ein. Die scharfe Policy (`script-src 'self'`) blockt
+ * genau das - die Folge ist eine WEISSE SEITE ohne Fehlermeldung im Browser, nur
+ * mit einer CSP-Meldung in der Konsole. Wer das Repo klont und `npm run dev`
+ * startet, haelt die App fuer kaputt.
+ *
+ * In einem gebauten `dist/` gibt es kein Inline-Skript; dort greift `enforce`
+ * unveraendert. Die Regel lautet deshalb: scharf nur in Produktion.
+ */
 export function resolveCspMode(env: EnvLike): CspMode {
   const raw = String(env.CSP_MODE ?? '').trim().toLowerCase();
-  return raw === 'enforce' ? 'enforce' : 'report-only';
+  if (raw !== 'enforce') return 'report-only';
+  // Alles ausser Produktion bleibt meldend - sonst blockiert die eigene Policy
+  // das Entwicklungswerkzeug.
+  return String(env.NODE_ENV ?? '') === 'production' ? 'enforce' : 'report-only';
 }
 
 export interface CspPolicy {

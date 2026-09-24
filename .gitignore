@@ -80,3 +80,6 @@ runtime/
 # Demo-Tracks (kommerzielle Fremdaufnahmen, keine dokumentierte Freigabe):
 # NICHT im Repo/Image ausliefern - nur mit Betreiberentscheidung und Lizenzbeleg.
 public/music/
+
+# Zwischenaufnahme des Demo-GIF (scripts/make-demo-gif.mjs)
+.demo-video/
