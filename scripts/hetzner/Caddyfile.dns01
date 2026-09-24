@@ -1,0 +1,119 @@
+# Caddyfile.dns01 - audioMONASTRY mit Let's-Encrypt-Zertifikat ueber DNS-01
+# =============================================================================
+# WARUM ES DIESE VARIANTE GIBT (PROD-P0-F1, gemessen 2026-09-24):
+#
+# app-1 faehrt Origin-TLS hinter der Cloudflare-Worker-Route. Die bisherige
+# Caddyfile.origin erwartet ein Cloudflare-Origin-Zertifikat unter
+# /etc/caddy/certs/origin.crt|key. Dieses Zertifikat FEHLTE, Caddy lief in einer
+# Absturzschleife ("open /etc/caddy/certs/origin.crt: no such file or directory"),
+# nichts hoerte auf 80/443, und Cloudflare antwortete mit 521. Die App selbst war
+# die ganze Zeit healthy auf 8080.
+#
+# Die naheliegenden Wege funktionieren NICHT:
+#   * http-01/tls-alpn-01: hinter der Worker-Route kommen die Pruefungen nicht an,
+#     und die Hetzner-Firewall laesst nur Cloudflare herein (steht so in deploy.sh).
+#   * Selbstsigniert: der SSL-Modus der Zone ist "strict" (gemessen) -> 526. Den
+#     Modus auf "full" zu setzen waere eine Verschlechterung der
+#     Transportsicherheit und ist eine Betreiberentscheidung.
+#
+# DNS-01 LOEST ES: Caddy legt ueber die Cloudflare-API einen TXT-Record an und
+# loescht ihn wieder - kein eingehender Port noetig. Das Ergebnis ist ein
+# oeffentlich vertrautes Let's-Encrypt-Zertifikat, das "strict" akzeptiert, und es
+# erneuert sich selbst.
+#
+# VORAUSSETZUNG: das Image braucht das Plugin.
+#   Gemessen: caddy:2.8-alpine hat es NICHT (0 Treffer bei
+#   caddy list-modules | grep dns.providers.cloudflare). Gebaut wird deshalb:
+#     FROM caddy:2.9-builder AS builder
+#     RUN xcaddy build --with github.com/caddy-dns/cloudflare
+#     FROM caddy:2.9-alpine
+#     COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+#   (2.8 scheitert am Build: das Plugin braucht ein neueres zap,
+#    "undefined: zapslog.HandlerOptions".)
+#
+# ZWEI SITE-BLOECKE, und warum (im Caddy-Protokoll gemessen):
+#   * HTTPS auf origin.anunnakitools.de - so holt sich Caddy das Zertifikat.
+#   * HTTP auf anunnakitools.de - so fragt der PORTAL-WORKER den Ursprung an. Er
+#     schickt Host: anunnakitools.de und X-Forwarded-Proto: http. Ohne diesen
+#     Block kennt Caddy den Namen nicht und antwortet mit 308 auf HTTPS; der
+#     Worker bekommt eine Umleitung statt der App.
+#
+# Umgebungsvariablen:
+#   DOMAIN              anunnakitools.de
+#   ORIGIN_HOST         origin.anunnakitools.de
+#   CF_DNS_API_TOKEN    Cloudflare-Token MIT Zone:DNS:Edit
+#   SFU_SIGNALING_URL   Adresse des SFU-Knotens (nur fuer die Klartext-Fehlermeldung)
+# =============================================================================
+
+{
+	servers {
+		protocols h1 h2
+	}
+	acme_dns cloudflare {$CF_DNS_API_TOKEN}
+}
+
+# Der gemeinsame Rumpf. Steht VOR beiden Verwendungen - Caddy verlangt das
+# ("File to import not found", selbst gemessen).
+# WICHTIG: hier steht KEINE tls-Direktive. Die gehoert nur in den HTTPS-Block;
+# im HTTP-Block waere sie ungueltig.
+(app_rumpf) {
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# SFU-Signalisierung: hier gibt es keine SFU (ENABLE_SFU=0, F6). 404 mit Adresse
+	# statt SPA-HTML, damit der Fehler sofort zuzuordnen ist.
+	@sfuSignaling path /sfu-signaling/*
+	respond @sfuSignaling "{\"error\":\"sfu-signaling-nicht-auf-diesem-knoten\",\"sfu\":\"{$SFU_SIGNALING_URL}\",\"hinweis\":\"SFU_SIGNALING_URL zeigt auf den SFU-Knoten; auf dem App-Knoten ist ENABLE_SFU=0\"}" 404
+	@sfuPreflight {
+		method OPTIONS
+		path /sfu-signaling/*
+	}
+	respond @sfuPreflight 204
+
+	# App + API + Signaling (gleicher Ursprung, COOP/COEP-Header bleiben erhalten).
+	# WebSockets (Socket.io) tunnelt Caddy automatisch ueber den gleichen Pfad.
+	reverse_proxy audiomonastry:8080 {
+		transport http {
+			read_timeout 5m
+			write_timeout 30s
+		}
+	}
+
+	# Uploads duerfen groesser sein (Sample-Upload bis 100 MB)
+	request_body {
+		max_size 120MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(self), microphone=(self), midi=(self)"
+		-Server
+		-X-Powered-By
+	}
+
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+	header /worklets/* Cache-Control "public, max-age=86400"
+	header /index.html Cache-Control "no-cache"
+	header /api/* Cache-Control "no-store"
+}
+
+# 1) HTTPS: hier stellt Caddy das Zertifikat selbst aus (DNS-01, kein Port noetig).
+{$ORIGIN_HOST:origin.anunnakitools.de}, {$DOMAIN:anunnakitools.de} {
+	tls {
+		dns cloudflare {$CF_DNS_API_TOKEN}
+	}
+	import app_rumpf
+}
+
+# 2) HTTP: die Anfrage des Portal-Workers. Kein Zertifikat noetig, die Verbindung
+#    kommt von Cloudflare und nicht vom Betrachter.
+http://{$DOMAIN:anunnakitools.de} {
+	import app_rumpf
+}

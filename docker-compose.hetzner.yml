@@ -49,7 +49,23 @@ services:
   # --- HTTPS-Terminierung + Reverse-Proxy (automatische Zertifikate) -------
   # Hinweis: Caddy benötigt Port 80/443 und behält daher CAP_NET_BIND_SERVICE.
   caddy:
-    image: caddy:2.8-alpine
+    # PROD-P0-F1 (2026-09-24): NICHT caddy:2.8-alpine. Grund, gemessen:
+    #   1. Das Standard-Image hat das Cloudflare-DNS-Plugin NICHT
+    #      (caddy list-modules | grep dns.providers.cloudflare -> 0 Treffer).
+    #   2. Ohne DNS-01 kann Caddy hinter der Cloudflare-Worker-Route kein
+    #      Zertifikat holen: http-01/tls-alpn-01 kommen dort nicht an, und die
+    #      Hetzner-Firewall laesst nur Cloudflare herein.
+    #   3. Das Origin-Zertifikat, das Caddyfile.origin erwartet, fehlte -> Caddy
+    #      lief in einer Absturzschleife, nichts hoerte auf 80/443, Cloudflare
+    #      meldete 521.
+    # Das Image wird auf dem Knoten gebaut (Dockerfile siehe Caddyfile.dns01):
+    #   FROM caddy:2.9-builder AS builder
+    #   RUN xcaddy build --with github.com/caddy-dns/cloudflare
+    #   FROM caddy:2.9-alpine
+    #   COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+    # 2.8 scheitert am Build ("undefined: zapslog.HandlerOptions"), das Plugin
+    # braucht ein neueres zap.
+    image: audiomonastry-caddy-dns:2.9
     container_name: audiomonastry-caddy
     restart: unless-stopped
     ports:
@@ -64,6 +80,10 @@ services:
       # (Caddyfile.origin). Auf dem App-Knoten laeuft keine SFU - der 404-Body
       # nennt so die Adresse, an die der Client gehoert.
       SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-}
+      # PROD-P0-F1: DNS-01. Caddy legt den _acme-challenge-TXT-Record an -
+      # kein eingehender Port noetig. Token braucht Zone:DNS:Edit.
+      ORIGIN_HOST: ${ORIGIN_HOST:-origin.anunnakitools.de}
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./certs:/etc/caddy/certs:ro
