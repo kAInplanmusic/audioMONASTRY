@@ -50,6 +50,55 @@ const UPLOAD_MAX_MB = Number(process.env.UPLOAD_MAX_MB || 100);
 const UPLOAD_KINDS = new Set(['sample', 'recording', 'stem', 'sound', 'voice']);
 const AUDIO_EXT_RE = /\.(wav|mp3|flac|ogg|m4a|aac|aiff|aif)$/i;
 
+/**
+ * Erlaubte Audio-Endungen -> MIME-Typ.
+ *
+ * SEC-P2-004 / Angriff 5, LIVE BELEGT AM 2026-09-24:
+ * Vorher kam der Content-Type beim Ablegen aus der Anfrage
+ * (`input.contentType`). Eine Datei namens `harmlos.mp3` mit HTML-Inhalt und
+ * `Content-Type: text/html` passierte die Whitelist (die Endung allein genuegt),
+ * wurde in R2 mit genau diesem Typ gespeichert und ueber die oeffentliche
+ * R2-Adresse als `text/html` ausgeliefert - gemessen: HTTP 200,
+ * `Content-Type: text/html`, HTML-Rumpf unveraendert. Ohne `nosniff`, weil R2
+ * unseren Kopf nicht setzt. Damit liess sich beliebiges HTML/JS unter der
+ * R2-Adresse des Projekts ablegen.
+ *
+ * Deshalb wird der Typ jetzt SERVERSEITIG aus der Endung abgeleitet. Der
+ * Client-Wert wird nicht mehr verwendet; im Zweifel gilt
+ * `application/octet-stream`, nicht eine ausfuehrbare Kategorie.
+ */
+const AUDIO_MIME_BY_EXT: Record<string, string> = {
+  wav: 'audio/wav',
+  mp3: 'audio/mpeg',
+  flac: 'audio/flac',
+  ogg: 'audio/ogg',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  aiff: 'audio/aiff',
+  aif: 'audio/aiff',
+};
+
+/**
+ * Die Endung aus einem Dateinamen - verankert am ENDE und auf alphanumerische
+ * Zeichen begrenzt.
+ *
+ * Warum das sicherheitsrelevant ist (Angriff 5): aus dieser Endung entsteht der
+ * MIME-Typ, mit dem die Datei spaeter ausgeliefert wird. Wuerde hier der erste
+ * Punkt oder der ganze Rest genommen, koennte `harmlos.html.mp3` einen falschen
+ * Typ ergeben. Der Anker `$` sorgt dafuer, dass nur das LETZTE Segment zaehlt;
+ * `harmlos.html.mp3` ergibt also `mp3`, `harmlos.mp3.html` ergibt `html` und
+ * damit keinen Audio-Typ.
+ */
+export function audioExtFromFilename(name: string): string {
+  return (String(name || '').match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? '').toLowerCase();
+}
+
+/** Ableitung des MIME-Typs aus der Endung - die einzige zugelassene Quelle. */
+export function audioMimeForExt(ext: string): string {
+  const key = String(ext || '').replace(/^\./, '').toLowerCase();
+  return AUDIO_MIME_BY_EXT[key] ?? 'application/octet-stream';
+}
+
 /** Ergebnis der gemeinsamen Verarbeitung - beide Transportwege antworten damit. */
 export interface SampleUploadResult {
   httpStatus: number;
@@ -69,7 +118,7 @@ export async function processSampleUpload(
   const fields = input.fields ?? {};
 
   // --- Validierung ---
-  const ext = (input.filename.match(/\.([a-zA-Z0-9]+)$/)?.[1] ?? '').toLowerCase();
+  const ext = audioExtFromFilename(input.filename);
   if (!AUDIO_EXT_RE.test(input.filename) && !(input.contentType || '').startsWith('audio/')) {
     return {
       httpStatus: 415,
@@ -106,7 +155,8 @@ export async function processSampleUpload(
   // --- Ablage: Audio nach R2, Metadaten nach Supabase ---
   const safeName = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'audio';
   const objectKey = `uploads/${kind}s/${Date.now()}-${safeName}.${ext || 'wav'}`;
-  const uploaded = await uploadSampleToR2(objectKey, data, input.contentType || 'audio/wav');
+  // Der Typ kommt aus der Endung, NICHT aus der Anfrage (Angriff 5).
+    const uploaded = await uploadSampleToR2(objectKey, data, audioMimeForExt(ext));
 
   const sampleId = `${kind}-${Date.now().toString(36)}-${random().toString(36).slice(2, 7)}`;
   const category: AudioSample['category'] = kind === 'voice' || kind === 'recording' ? 'highs' : 'mids';
