@@ -74,7 +74,7 @@ writeFileSync(`${basis}.html`, ergebnis.report.find((r) => typeof r === 'string'
 
 console.log('');
 console.log('=== PUNKTE ===');
-for (const [id, kategorie] of Object.entries(bericht.categories)) {
+for (const kategorie of Object.values(bericht.categories)) {
   const punkte = Math.round((kategorie.score ?? 0) * 100);
   console.log(`  ${kategorie.title.padEnd(28)} ${String(punkte).padStart(3)}/100`);
 }

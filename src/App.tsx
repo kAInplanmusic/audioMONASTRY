@@ -577,7 +577,10 @@ function AppComponent() {
 
   if (!isStarted) {
       return (
-          <div className="min-h-screen relative flex flex-col items-center justify-center bg-black text-white overflow-hidden">
+          // QUAL-P2-011: main-Landmark. Lighthouse meldete "Document does not have a
+          // main landmark" - Screenreader springen ueber Landmarks, ohne main gibt es
+          // kein Sprungziel fuer den Hauptinhalt.
+          <main className="min-h-screen relative flex flex-col items-center justify-center bg-black text-white overflow-hidden">
               {/* Ambient-Aura passend zur Logofarbe (Teal/Cyan) */}
               <div className="absolute inset-0 pointer-events-none opacity-40"
                    style={{ background: 'radial-gradient(520px 380px at 50% 42%, rgba(16,120,130,0.35) 0%, rgba(8,20,24,0.2) 45%, transparent 75%)' }} />
@@ -586,7 +589,11 @@ function AppComponent() {
 
               <button type="button"
                 onClick={startApp}
-                aria-label="audioMONASTRY starten"
+                // QUAL-P2-011: KEIN aria-label. Es lautete "audioMONASTRY starten",
+                // der sichtbare Text ist aber "STUDIO BETRETEN" - Lighthouse hat den
+                // Widerspruch gemeldet (label-content-name-mismatch). Ohne aria-label
+                // ist der zugaengliche Name genau der sichtbare Text; das ist die
+                // einfachste richtige Loesung.
                 className="group relative flex flex-col items-center gap-6 outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70 rounded-2xl"
               >
                   {/* Logo mit sanftem Glow + Hover-Orbit */}
@@ -611,12 +618,22 @@ function AppComponent() {
                   {/* PROD-P0-005: Rechtstexte sind Pflicht und muessen VOR dem
                       Studio-Betreten erreichbar sein - hier, auf der Startseite,
                       ohne Zugangstoken. Neuer Tab, damit die Startseite bleibt. */}
-                  <div className="mt-4 flex items-center gap-3 text-[9px] font-mono tracking-[0.25em] uppercase">
+              </button>
+
+              {/* QUAL-P2-011 (2026-09-24): Die Rechtslinks standen INNERHALB des
+                  Start-Buttons. Ein Link in einem Button ist ungueltiges HTML und
+                  gibt unvorhersehbares Verhalten - ein Klick konnte den Button
+                  ausloesen statt den Link. Gefunden hat das Lighthouse
+                  (target-size am Pfad button.group und label-content-name-mismatch),
+                  eingebaut hatte es mein eigener Footer vom 2026-09-23.
+                  Jetzt stehen sie daneben, mit genug Flaeche: die Pruefung
+                  verlangt mindestens 24x24 px, vorher waren es 68,9x13,5 px. */}
+              <div className="mt-4 flex items-center gap-1 text-[9px] font-mono tracking-[0.25em] uppercase">
                     <a
                       href="/impressum"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-neutral-500 hover:text-cyan-300 transition-colors"
+                      className="inline-flex items-center px-3 py-2 min-h-6 text-neutral-500 hover:text-cyan-300 transition-colors"
                     >
                       Impressum
                     </a>
@@ -625,13 +642,12 @@ function AppComponent() {
                       href="/datenschutz"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-neutral-500 hover:text-cyan-300 transition-colors"
+                      className="inline-flex items-center px-3 py-2 min-h-6 text-neutral-500 hover:text-cyan-300 transition-colors"
                     >
                       Datenschutz
                     </a>
-                  </div>
-              </button>
-          </div>
+              </div>
+          </main>
       );
   }
 
