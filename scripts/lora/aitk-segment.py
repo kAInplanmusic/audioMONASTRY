@@ -165,6 +165,19 @@ def cmd_patch(args: argparse.Namespace) -> int:
     # `steps:` (train) – bewusst NICHT `sample_steps:`: das Praefix steht vor dem
     # Wort, deshalb greift ^\s*steps: nur bei der Trainingsangabe.
     patched.append(patch_key(lines, r"^\s*steps:\s*\d+\s*$", f"steps: {args.steps}", "train.steps"))
+    # GEMESSEN AM 2026-09-24 (L40S, 45 GB VRAM): ohne `dtype: "bf16"` im TRAIN-Block
+    # laedt ai-toolkit das Modell in fp32 (~47 GB) und scheitert am
+    # `transformer.to(cuda:0, dtype=dtype)` mit CUDA out of memory - auch auf einer
+    # 48-GB-Karte. Der dtype des MODELS kommt aus `self.train_config.dtype`
+    # (BaseSDTrainProcess.py, `self.sd = ModelClass(... dtype=self.train_config.dtype)`),
+    # NICHT aus `model.dtype`. Die R2-Vorlage hatte den Schluessel nicht; hier wird
+    # er garantiert, damit die Vorlage nie wieder in den fp32-Pfad laeuft.
+    dtype_lines = [i for i, line in enumerate(lines) if re.match(r"^\s*dtype:\s*\S+", line)]
+    if not dtype_lines:
+        batch_idx = next(i for i, line in enumerate(lines) if re.match(r"^\s*batch_size:", line))
+        indent_match = re.match(r"^(\s*)", lines[batch_idx])
+        lines.insert(batch_idx + 1, f"{indent_match.group(1)}dtype: \"bf16\"")
+        patched.append({"key": "train.dtype", "before": "(fehlte)", "after": 'dtype: "bf16"'})
     if args.save_every is not None:
         patched.append(
             patch_key(lines, r"^\s*save_every:\s*\d+\s*$", f"save_every: {args.save_every}", "save.save_every")
