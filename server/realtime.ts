@@ -860,9 +860,20 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
               if (t.appData?.direction === 'send') throw new Error('send-transport kann nicht konsumieren');
               const producer = sessionProducerMap.get(String(data?.producerId ?? ''));
               if (!producer) throw new Error('producer nicht gefunden');
+              // INFRA-HETZNER-015, GEMESSEN AM 2026-09-24: mediasoup erzeugt
+              // Consumer PAUSIERT. Ohne `paused: false` (oder ein anschliessendes
+              // `resume()`) laeuft die Signalisierung sauber durch - Socket
+              // verbunden, Transports aufgebaut, Producer und Consumer erzeugt -
+              // aber es fliesst NIE ein RTP-Paket. Der Echtpfadtest meldete genau
+              // das: "rtp-stats bytes=0 packets=0" bei sonst vollstaendiger
+              // Schrittkette. Im ganzen Modul gab es kein einziges resume().
               const consumer = await t.consume({
                 producerId: producer.id, rtpCapabilities: data.rtpCapabilities,
+                paused: false,
               });
+              // Doppelt gehalten: falls eine mediasoup-Version `paused` ignoriert,
+              // ist der explizite Aufruf der zweite Weg zum selben Ziel.
+              try { await consumer.resume(); } catch { /* schon aktiv */ }
               cb?.({
                 id: consumer.id, kind: consumer.kind,
                 rtpParameters: consumer.rtpParameters, producerId: producer.id,

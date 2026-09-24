@@ -321,7 +321,27 @@ if "${SSH[@]}" "root@$IP" "test -f $REMOTE_DIR/docker-compose.media.yml && [ -n 
   echo "--- Medien-Overlay aktiv ($REMOTE_DIR/media gefunden) ---"
 fi
 
-OVERLAYS="-f docker-compose.hetzner.yml$MEDIA_OVERLAY${TUNNEL:+ -f docker-compose.e2e-tunnel.yml}"
+# SFU-Overlay (INFRA-HETZNER-015). Nur auf dem SFU-Knoten noetig - dort aber
+# zwingend: docker-compose.sfu.yml veroeffentlicht die Medienports 40000-40099
+# (UDP und TCP) und docker-compose.turn.yml bringt coturn. Ohne die Overlays
+# startet der Knoten zwar und meldet gesund, aber ohne veroeffentlichte
+# Medienports - der Echtpfadtest scheitert dann mit "rtp-stats bytes=0
+# packets=0", waehrend die ganze Signalisierung sauber durchlaeuft. Genau dieser
+# Zustand wurde am 2026-09-24 gemessen.
+# Erkannt wird am ZUSTAND, nicht an einem Schalter: laeuft im Container
+# ENABLE_SFU=1, ist es ein SFU-Knoten. Ein Schalter, den man vergessen kann,
+# waere genau die Fehlerklasse, die hier schon mehrfach Zeit gekostet hat.
+SFU_OVERLAY=""
+if "${SSH[@]}" "root@$IP" "docker exec audiomonastry printenv ENABLE_SFU 2>/dev/null | grep -q '^1$'"; then
+  if "${SSH[@]}" "root@$IP" "test -f $REMOTE_DIR/docker-compose.sfu.yml"; then
+    SFU_OVERLAY=" -f docker-compose.sfu.yml -f docker-compose.turn.yml"
+    echo "--- SFU-Overlay aktiv (ENABLE_SFU=1 auf dem Knoten) ---"
+  else
+    echo "--- WARNUNG: ENABLE_SFU=1, aber docker-compose.sfu.yml fehlt auf dem Knoten ---"
+  fi
+fi
+
+OVERLAYS="-f docker-compose.hetzner.yml$MEDIA_OVERLAY$SFU_OVERLAY${TUNNEL:+ -f docker-compose.e2e-tunnel.yml}"
 
 if [[ "$REMOTE_BUILD" == "1" ]]; then
   step "3/4 Build auf dem Knoten (kein Image-Transfer)"
