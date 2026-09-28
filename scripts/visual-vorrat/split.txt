@@ -1,0 +1,6 @@
+p1 (7): comic 8_bit_retro_spiel abstrakt brainfuck_unmoeglich_surrealismus dark_ornament dinosaurier dj_club
+p2 (7): drohnenflug fantasy feuer_flammen geheimbund_moenche geometric gewitter_raining_day hdr_sternenhimmel
+p3 (6): horror_zombie industrial_techno krieg_tod lego licht_rauch nackte_haut
+p4 (6): natur_echt natur_fake natur_makro natur_tiere schwarz_weiss_schwarz_weiss_rot street_art_graffiti
+p5 (6): taenzer tattoo_maschinen tattoos_frauen vorsintflutliche_hochkultur wikinger_samurai zitate_inspirationssprueche
+gesamt: 32

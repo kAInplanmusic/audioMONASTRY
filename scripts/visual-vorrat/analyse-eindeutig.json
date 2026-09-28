@@ -1,0 +1,308 @@
+{
+  "8-Bit_Retro-Spiel": {
+    "csv_rows": 1084,
+    "treffer_eq_1": 544,
+    "treffer_le_2": 847,
+    "treffer_le_3": 990,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Abstrakt": {
+    "csv_rows": 835,
+    "treffer_eq_1": 185,
+    "treffer_le_2": 387,
+    "treffer_le_3": 505,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Brainfuck_Unmöglich_Surrealismus": {
+    "csv_rows": 1914,
+    "treffer_eq_1": 890,
+    "treffer_le_2": 1459,
+    "treffer_le_3": 1755,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Comic": {
+    "csv_rows": 1816,
+    "treffer_eq_1": 516,
+    "treffer_le_2": 1250,
+    "treffer_le_3": 1578,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "DJ_Club": {
+    "csv_rows": 665,
+    "treffer_eq_1": 327,
+    "treffer_le_2": 529,
+    "treffer_le_3": 620,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Dark Ornament": {
+    "csv_rows": 1771,
+    "treffer_eq_1": 273,
+    "treffer_le_2": 695,
+    "treffer_le_3": 1073,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Dinosaurier": {
+    "csv_rows": 246,
+    "treffer_eq_1": 97,
+    "treffer_le_2": 180,
+    "treffer_le_3": 216,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Drohnenflug": {
+    "csv_rows": 2211,
+    "treffer_eq_1": 855,
+    "treffer_le_2": 1327,
+    "treffer_le_3": 1703,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Fantasy": {
+    "csv_rows": 1250,
+    "treffer_eq_1": 194,
+    "treffer_le_2": 611,
+    "treffer_le_3": 908,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Feuer_Flammen": {
+    "csv_rows": 431,
+    "treffer_eq_1": 127,
+    "treffer_le_2": 263,
+    "treffer_le_3": 351,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Geheimbund_Mönche": {
+    "csv_rows": 956,
+    "treffer_eq_1": 388,
+    "treffer_le_2": 731,
+    "treffer_le_3": 868,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Geometric": {
+    "csv_rows": 1566,
+    "treffer_eq_1": 310,
+    "treffer_le_2": 675,
+    "treffer_le_3": 969,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Gewitter_Raining Day": {
+    "csv_rows": 706,
+    "treffer_eq_1": 419,
+    "treffer_le_2": 587,
+    "treffer_le_3": 658,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Günther": {
+    "csv_rows": 2723,
+    "treffer_eq_1": 1616,
+    "treffer_le_2": 2271,
+    "treffer_le_3": 2561,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "HDR_Sternenhimmel": {
+    "csv_rows": 304,
+    "treffer_eq_1": 69,
+    "treffer_le_2": 173,
+    "treffer_le_3": 245,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Horror_Zombie": {
+    "csv_rows": 2081,
+    "treffer_eq_1": 730,
+    "treffer_le_2": 1294,
+    "treffer_le_3": 1665,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Industrial_Techno": {
+    "csv_rows": 653,
+    "treffer_eq_1": 302,
+    "treffer_le_2": 504,
+    "treffer_le_3": 602,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Krieg_Tod": {
+    "csv_rows": 1444,
+    "treffer_eq_1": 565,
+    "treffer_le_2": 1079,
+    "treffer_le_3": 1276,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Lego": {
+    "csv_rows": 609,
+    "treffer_eq_1": 266,
+    "treffer_le_2": 433,
+    "treffer_le_3": 515,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Licht_Rauch": {
+    "csv_rows": 1103,
+    "treffer_eq_1": 260,
+    "treffer_le_2": 617,
+    "treffer_le_3": 886,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Nackte Haut": {
+    "csv_rows": 2760,
+    "treffer_eq_1": 465,
+    "treffer_le_2": 941,
+    "treffer_le_3": 1552,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Natur – Fake": {
+    "csv_rows": 2991,
+    "treffer_eq_1": 669,
+    "treffer_le_2": 1518,
+    "treffer_le_3": 2223,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Natur – Makro": {
+    "csv_rows": 1852,
+    "treffer_eq_1": 825,
+    "treffer_le_2": 1285,
+    "treffer_le_3": 1566,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Natur – Tiere": {
+    "csv_rows": 8191,
+    "treffer_eq_1": 5093,
+    "treffer_le_2": 6753,
+    "treffer_le_3": 7472,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Natur – echt": {
+    "csv_rows": 2942,
+    "treffer_eq_1": 430,
+    "treffer_le_2": 1190,
+    "treffer_le_3": 1981,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Schwarz-Weiß_Schwarz-Weiß-Rot": {
+    "csv_rows": 9159,
+    "treffer_eq_1": 4622,
+    "treffer_le_2": 7062,
+    "treffer_le_3": 8215,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Street Art_Graffiti": {
+    "csv_rows": 1862,
+    "treffer_eq_1": 952,
+    "treffer_le_2": 1482,
+    "treffer_le_3": 1663,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Tattoo-Maschinen": {
+    "csv_rows": 11261,
+    "treffer_eq_1": 1228,
+    "treffer_le_2": 2358,
+    "treffer_le_3": 3532,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Tattoos_Frauen": {
+    "csv_rows": 12939,
+    "treffer_eq_1": 796,
+    "treffer_le_2": 2097,
+    "treffer_le_3": 3792,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Tänzer": {
+    "csv_rows": 947,
+    "treffer_eq_1": 567,
+    "treffer_le_2": 774,
+    "treffer_le_3": 870,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Vorsintflutliche Hochkultur": {
+    "csv_rows": 804,
+    "treffer_eq_1": 335,
+    "treffer_le_2": 571,
+    "treffer_le_3": 665,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Wikinger_Samurai": {
+    "csv_rows": 1447,
+    "treffer_eq_1": 370,
+    "treffer_le_2": 703,
+    "treffer_le_3": 954,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "Zitate_Inspirationssprüche": {
+    "csv_rows": 3413,
+    "treffer_eq_1": 1837,
+    "treffer_le_2": 2657,
+    "treffer_le_3": 3028,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  },
+  "kAIn plan": {
+    "csv_rows": 1797,
+    "treffer_eq_1": 479,
+    "treffer_le_2": 1055,
+    "treffer_le_3": 1489,
+    "can_fill_25_with_treffer_le_1": true,
+    "can_fill_25_with_treffer_le_2": true,
+    "can_fill_25_with_treffer_le_3": true
+  }
+}

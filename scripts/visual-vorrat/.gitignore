@@ -1,0 +1,45 @@
+# Erzeugte Daten des Bild-Vorratslaufs gehoeren NICHT ins Repo.
+#
+# Der Code liegt hier, die Daten liegen im Arbeitsordner
+# ~/lora-themen-2026-09-27 (Stand 28.09.2026: 3,2 GB) bzw. auf dem
+# Network Volume und in R2. Diese Regeln sind die Bremse, falls jemand
+# ein `git add .` aus einem Ordner heraus laufen laesst, in dem die
+# Daten liegen.
+
+# --- Bilder und Ausgabestaende -------------------------------------------------
+*.png
+*.jpg
+*.jpeg
+*.webp
+bilder-*/
+out/
+out-v2/
+out-v3/
+bundle/
+bundle-v2/
+ergebnisse/
+referenz/
+
+# --- Protokolle und Fortschritt (wachsen waehrend eines Laufs) -----------------
+*.log
+manifest.jsonl
+
+# --- Grosse erzeugte Indizes und Tabellen -------------------------------------
+datei-index.json
+*.tsv
+
+# --- ZUGANGSDATEN: diese Dateien enthalten Schluessel im Klartext -------------
+# Am 28.09.2026 beim Uebernehmen des Arbeitsordners gefunden und deshalb
+# ausgeschlossen statt committet:
+#   pod-lora-*.json  -> rohe RunPod-Antworten mit RUNPOD_API_KEY=rpa_... und
+#                       HF_TOKEN=hf_... im Klartext
+#   build-urls.json  -> presignierte R2-URLs mit X-Amz-Credential und Signatur
+#                       (48 h gueltig ab 27.09.2026)
+# Die Pod-Antworten bleiben als Nachweis im Arbeitsordner liegen; wer sie
+# braucht, liest sie dort - nicht hier.
+pod-lora-*.json
+build-urls.json
+
+# --- Python-Reste --------------------------------------------------------------
+__pycache__/
+*.pyc
