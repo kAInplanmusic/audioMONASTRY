@@ -20,6 +20,35 @@ Dokumentierte Vertraege (live gemessen, Belege in `logs/probes/`):
   liefert die system_stats. Den Graphen liefert `workflows/music.json`.
 * **PrunaAI FLUX** (`imageHq`): prompt-basiert – `{prompt}` ->
   `{image_url: "data:image/png;base64,...", images: [<derselbe URI>], seed}`.
+* **worker-comfyui** (`imageLora`, seit 2026-09-27): workflow-basiert –
+  `{workflow: <ComfyUI-API-JSON>, images?: [...]}` ->
+  `{images: [{filename, type: "base64", data: "<rohes base64>"}]}`.
+  Die Gewichte liegen auf einem Network Volume (`/runpod-volume/models/...`,
+  Layout in `docs/VISUAL_LORA_STACK.md`); den Graphen liefern
+  `workflows/image_sdxl.json` und `workflows/image_flux1.json`.
+
+### `imageLora` – zwei Basismodelle, ein Endpoint
+
+Die Rolle faehrt **SDXL** und **FLUX.1-dev** in demselben Worker. Welcher
+Workflow laeuft, entscheidet der Aufruf ueber `base`:
+
+```
+{prompt, seed, base: "sdxl"|"flux1", lora_pairs: [{name, weight}], steps?, cfg?, width?, height?}
+```
+
+* `base` waehlt die Datei `workflows/image_<base>.json` (Default `sdxl`).
+* `lora_pairs` werden **in den Graphen eingekettet** (`apply_loras_to_workflow`):
+  eine `LoraLoader`-Kette zwischen Basismodell und Verbrauchern, gewichtet.
+  Die Namen werden gegen ein strenges Muster geprueft – ein Name mit `/` oder
+  `..` wird **abgelehnt**, nicht stillschweigend ignoriert.
+* Prompt/Seed/Steps/CFG/Aufloesung landen ueber
+  `apply_prompt_to_image_workflow` im Graphen, indem den **verdrahteten**
+  Verbindungen des Samplers gefolgt wird (nicht ueber Knoten-IDs geraten).
+
+Warum das noetig ist: ein Workflow-Worker kennt keinen `prompt`-Parameter. Ohne
+diesen Schritt erzeugt jeder Aufruf das im Workflow hinterlegte Demo-Bild,
+waehrend der Aufrufer sein Ergebnis fuer erledigt haelt – ein stiller Fehlschlag
+(dieselbe Falle wie beim ACE-Step-Demo-Song, §`apply_prompt_to_workflow`).
 
 `videoAbstract` lief bis 2026-09-16 auf dem generischen runpod-workers/worker-comfyui.
 Der bringt keine Gewichte mit, laedt auch keine nach, und der Endpoint hatte kein
@@ -40,6 +69,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -57,9 +87,66 @@ COMFY_ROLES: Dict[str, Dict[str, str]] = {
         "protocol": "prompt",
         "defaultModel": "wan22-ti2v-5b",
     },
+    "imageLora": {
+        # Anders als beim alten videoAbstract-Experiment bringt DIESER
+        # worker-comfyui die Gewichte mit bzw. liest sie von einem Network
+        # Volume (Release 5.11.0, Layout: /runpod-volume/models/...).
+        "worker": "comfyui",
+        "protocol": "workflow",
+        # `kind` steuert, WIE Prompt/Seed/LoRAs in den Graphen kommen.
+        # Ohne `kind` gilt der ACE-Step-Weg (Rueckwaertsvertraeglichkeit: music).
+        "kind": "image",
+        "defaultModel": "image-lora-stack",
+    },
 }
 
 WORKFLOW_DIR = pathlib.Path(__file__).resolve().parent / "workflows"
+
+#: Basis-Modelle der Rolle `imageLora` -> Workflow-Datei ohne `.json`.
+#: `base` ist der einzige Schalter im Aufruf; die Dateinamen sind bewusst
+#: identisch mit den Dateinamen im worker-comfyui-Image bzw. auf dem Volume
+#: (siehe docs/VISUAL_LORA_STACK.md), damit ein Umzug Image<->Volume die
+#: Workflows nicht aendert.
+IMAGE_BASES: Dict[str, str] = {
+    "sdxl": "image_sdxl",
+    "flux1": "image_flux1",
+}
+
+#: Basis, wenn der Aufrufer keine nennt. SDXL, weil es die kommerziell saubere
+#: Spur ist (openrail++) und die 32 eigenen Themen-LoRAs traegt.
+DEFAULT_IMAGE_BASE = "sdxl"
+
+#: Knoten, die ein Basisgewicht laden. Genau EINER darf im Graphen stehen –
+#: bei mehreren waere nicht entscheidbar, wo die LoRA-Kette ansetzt.
+IMAGE_BASE_LOADER_NODES = ("CheckpointLoaderSimple", "CheckpointLoader", "UNETLoader", "UnetLoaderGGUF")
+
+#: Sampler-Knoten, an denen Seed/Steps/CFG haengen.
+IMAGE_SAMPLER_NODES = ("KSampler", "KSamplerAdvanced")
+
+#: Latent-Knoten, an denen die Aufloesung haengt.
+IMAGE_LATENT_NODES = ("EmptyLatentImage", "EmptySD3LatentImage", "EmptyLatentImagePresets")
+
+#: Textknoten, in die der Prompt geschrieben wird.
+IMAGE_TEXT_NODES = ("CLIPTextEncode", "CLIPTextEncodeFlux", "T5TextEncode")
+
+#: Knoten, die eine Konditionierung unveraendert weiterreichen. Aus ComfyUI
+#: exportierte FLUX-Graphen haben regelmaessig ein `FluxGuidance` zwischen
+#: Sampler und Textknoten; ohne diese Liste kaeme der Prompt dort nicht an.
+CONDITIONING_PASSTHROUGH_NODES = (
+    "FluxGuidance",
+    "ConditioningConcat",
+    "ConditioningCombine",
+    "ConditioningSetArea",
+    "ConditioningSetAreaPercentage",
+    "ConditioningSetTimestepRange",
+    "ConditioningZeroOut",
+)
+
+#: LoRA-Dateinamen: nur Basename, nur .safetensors. Ein Name mit `/`, `\` oder
+#: `..` wird abgelehnt – sonst koennte ein Aufruf Dateien ausserhalb von
+#: models/loras/ laden, und auf einem geteilten Volume waere das eine
+#: Grenzueberschreitung.
+LORA_NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._\-]*\.safetensors$")
 
 #: ComfyUI-Knoten, die bei ACE-Step den Prompt tragen (1.0 und 1.5).
 ACE_TEXT_ENCODE_NODES = ("TextEncodeAceStepAudio1.5", "TextEncodeAceStepAudio")
@@ -72,13 +159,27 @@ ACE_LATENT_NODES = ("EmptyAceStep1.5LatentAudio", "EmptyAceStepLatentAudio")
 PRIMARY_MESSAGE_FIELDS = ("message", "image", "images", "video", "audio", "files", "output")
 
 
-def workflow_for(role: str, payload: Optional[Dict[str, Any]] = None, env: Optional[Dict[str, str]] = None) -> Optional[Dict[str, Any]]:
-    """Workflow-JSON einer Rolle: Payload > `COMFY_WORKFLOW_<ROLLE>` > `workflows/<rolle>.json`."""
+def workflow_for(
+    role: str,
+    payload: Optional[Dict[str, Any]] = None,
+    env: Optional[Dict[str, str]] = None,
+    name: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Workflow-JSON: Payload > `COMFY_WORKFLOW_<NAME>` > `workflows/<name>.json`.
+
+    ``name`` erlaubt eine Rolle mit MEHREREN Graphen (`imageLora` faehrt SDXL und
+    FLUX.1-dev aus einem Worker). Ohne Angabe ist ``name`` die Rolle selbst –
+    das bisherige Verhalten bleibt damit unveraendert.
+    """
     source = os.environ if env is None else env
     inline = (payload or {}).get("workflow")
     if isinstance(inline, dict):
         return inline
-    for candidate in (source.get(f"COMFY_WORKFLOW_{role.upper()}"), str(WORKFLOW_DIR / f"{role}.json")):
+    workflow_name = name or role
+    for candidate in (
+        source.get(f"COMFY_WORKFLOW_{workflow_name.upper()}"),
+        str(WORKFLOW_DIR / f"{workflow_name}.json"),
+    ):
         if not candidate:
             continue
         path = pathlib.Path(candidate)
@@ -172,6 +273,252 @@ def apply_prompt_to_workflow(workflow: Dict[str, Any], args: Dict[str, Any]) -> 
     return result
 
 
+def _loader_node_id(workflow: Dict[str, Any]) -> Optional[str]:
+    """Node-ID des Basisgewichts. Genau eine wird erwartet, sonst None."""
+    ids = [
+        nid
+        for nid, node in workflow.items()
+        if isinstance(node, dict) and node.get("class_type") in IMAGE_BASE_LOADER_NODES
+    ]
+    return ids[0] if len(ids) == 1 else None
+
+
+def parse_lora_pairs(lora_pairs: Any) -> List[Any]:
+    """LoRA-Eingaben in ``(name, weight)`` bringen – oder klar ablehnen.
+
+    Akzeptiert wird ``[{"name": "x.safetensors", "weight": 0.8}]`` (die Form des
+    Adapters), ``[["x.safetensors", 0.8]]`` und ``["x.safetensors"]``.
+    Ein ungueltiger Name wird **abgelehnt** statt still uebersprungen: eine
+    stillschweigend weggelassene LoRA sieht im Ergebnis wie eine
+    nicht-wirksame LoRA aus, und genau das soll der Qualitaetsnachweis
+    unterscheiden koennen.
+    """
+    if not lora_pairs:
+        return []
+    if not isinstance(lora_pairs, list):
+        raise ValueError("lora_pairs muss eine Liste sein")
+    parsed: List[Any] = []
+    for index, entry in enumerate(lora_pairs):
+        if isinstance(entry, str):
+            raw_name, raw_weight = entry, 1.0
+        elif isinstance(entry, (list, tuple)) and entry:
+            raw_name = entry[0]
+            raw_weight = entry[1] if len(entry) > 1 else 1.0
+        elif isinstance(entry, dict):
+            raw_name = entry.get("name") or entry.get("lora_name") or entry.get("lora")
+            raw_weight = entry.get("weight", entry.get("strength", 1.0))
+        else:
+            raise ValueError(f"lora_pairs[{index}]: weder Name noch Objekt: {entry!r}")
+        name = str(raw_name or "").strip()
+        if not LORA_NAME_PATTERN.match(name):
+            raise ValueError(
+                f"lora_pairs[{index}]: ungueltiger LoRA-Name {name!r} – erwartet wird ein "
+                "Dateiname wie 'mstyle_comic.safetensors' (kein Pfad, keine Ordner)"
+            )
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"lora_pairs[{index}]: Gewicht {raw_weight!r} ist keine Zahl") from exc
+        parsed.append((name, weight))
+    return parsed
+
+
+def apply_loras_to_workflow(workflow: Dict[str, Any], lora_pairs: Any) -> Dict[str, Any]:
+    """LoRA-Kette zwischen Basisgewicht und Verbraucher einziehen.
+
+    Der Graph wird **nicht** umgeschrieben, sondern erweitert: nach dem
+    Basis-Loader haengt eine `LoraLoader`-Kette (eine Stufe je LoRA, gewichtet),
+    und jede Verbindung, die vorher auf die MODEL-/CLIP-Ausgaenge des Loaders
+    zeigte, zeigt danach auf die Kette. Die VAE-Verbindung (Slot 2) bleibt
+    unangetastet – LoRAs aendern den VAE nicht.
+
+    Reihenfolge: die Liste wird von links nach rechts gekettet, die **letzte**
+    LoRA liegt also am naechsten am Sampler. Bei mehreren LoRAs ist das die
+    uebliche Konvention (die spezifischste zuletzt).
+    """
+    parsed = parse_lora_pairs(lora_pairs)
+    if not parsed:
+        return workflow
+    if not isinstance(workflow, dict) or not workflow:
+        raise ValueError("apply_loras_to_workflow: leerer Workflow")
+
+    loader_id = _loader_node_id(workflow)
+    if loader_id is None:
+        raise ValueError(
+            "apply_loras_to_workflow: der Workflow hat nicht genau einen Basis-Loader "
+            f"({', '.join(IMAGE_BASE_LOADER_NODES)}) – ohne ihn ist nicht entscheidbar, "
+            "wo die LoRA-Kette ansetzt"
+        )
+
+    result = copy.deepcopy(workflow)
+    previous = loader_id
+    chain: Dict[str, Any] = {}
+    for index, (name, weight) in enumerate(parsed, start=1):
+        node_id = f"lora{index}"
+        while node_id in result:  # Kollision mit einer echten Knoten-ID
+            node_id = f"_{node_id}"
+        chain[node_id] = {
+            "class_type": "LoraLoader",
+            "inputs": {
+                "lora_name": name,
+                "strength_model": weight,
+                "strength_clip": weight,
+                "model": [previous, 0],
+                "clip": [previous, 1],
+            },
+            "_meta": {"title": f"LoRA {index}: {name} ({weight})"},
+        }
+        previous = node_id
+
+    # Verbraucher umhaengen: [loader, 0|1] -> [letzte LoRA, 0|1]. Der VAE-Slot 2 bleibt.
+    for node in result.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            continue
+        for key, value in list(inputs.items()):
+            if (
+                isinstance(value, list)
+                and len(value) == 2
+                and str(value[0]) == str(loader_id)
+                and value[1] in (0, 1)
+            ):
+                inputs[key] = [previous, value[1]]
+    result.update(chain)
+    return result
+
+
+def _linked_node(workflow: Dict[str, Any], value: Any) -> Optional[str]:
+    """Node-ID hinter einer ComfyUI-Verbindung ``[node_id, slot]``."""
+    if isinstance(value, list) and len(value) == 2 and isinstance(value[0], (str, int)):
+        return str(value[0])
+    return None
+
+
+def _text_node_for(workflow: Dict[str, Any], start: Any) -> Optional[str]:
+    """Vom Sampler-Eingang zum Textknoten – auch durch Durchleit-Knoten.
+
+    In echten, aus ComfyUI exportierten FLUX-Graphen haengt zwischen Sampler und
+    Textknoten oft noch ein `FluxGuidance`. Ohne diesen Schritt wuerde der
+    Prompt dort nicht ankommen.
+    """
+    node_id = _linked_node(workflow, start)
+    for _ in range(8):  # begrenzt, damit ein Zyklus nicht endlos laeuft
+        if node_id is None:
+            return None
+        node = workflow.get(node_id)
+        if not isinstance(node, dict):
+            return None
+        class_type = str(node.get("class_type") or "")
+        if class_type in IMAGE_TEXT_NODES:
+            return node_id
+        if class_type not in CONDITIONING_PASSTHROUGH_NODES:
+            return None
+        inputs = node.get("inputs")
+        if not isinstance(inputs, dict):
+            return None
+        node_id = _linked_node(workflow, inputs.get("conditioning"))
+    return None
+
+
+def apply_prompt_to_image_workflow(workflow: Dict[str, Any], args: Dict[str, Any]) -> Dict[str, Any]:
+    """Prompt/Seed/Sampler/Aufloesung in einen Bild-Graphen schreiben.
+
+    Zugeordnet wird **ueber die Verdrahtung**, nicht ueber Knoten-IDs: der
+    Sampler nennt in `positive`/`negative`, welcher Textknoten gemeint ist, und
+    `latent_image` nennt den Latent-Knoten. Damit funktioniert derselbe Code fuer
+    SDXL und FLUX.1-dev, obwohl die beiden Graphen aehnlich, aber nicht gleich
+    sind.
+
+    Findet der Adapter den Sampler nicht, bleibt der Workflow unveraendert und
+    das wird als Warnung geloggt – nie ein stiller Fehlschlag.
+    """
+    if not isinstance(workflow, dict) or not workflow:
+        return workflow
+
+    prompt = str(args.get("prompt") or args.get("text") or "").strip()
+    negative = str(
+        args.get("negative_prompt") or args.get("negativePrompt") or args.get("negative") or ""
+    ).strip()
+    seed = args.get("seed")
+    steps = args.get("steps")
+    cfg = args.get("cfg", args.get("cfg_scale"))
+    denoise = args.get("denoise")
+    sampler_name = args.get("sampler_name")
+    scheduler = args.get("scheduler")
+    width, height = args.get("width"), args.get("height")
+
+    wants_text = bool(prompt or negative)
+    wants_sampler = any(v is not None for v in (seed, steps, cfg, denoise, sampler_name, scheduler))
+    wants_size = width is not None or height is not None
+    if not (wants_text or wants_sampler or wants_size):
+        return workflow
+
+    samplers = [
+        nid
+        for nid, node in workflow.items()
+        if isinstance(node, dict) and node.get("class_type") in IMAGE_SAMPLER_NODES
+    ]
+    if not samplers:
+        logger.warning(
+            "Bild-Workflow ohne Sampler (%s): Prompt/Seed/Groesse wurden NICHT eingesetzt",
+            sorted({str(node.get("class_type")) for node in workflow.values() if isinstance(node, dict)}),
+        )
+        return workflow
+
+    result = copy.deepcopy(workflow)
+    filled_text: List[str] = []
+    filled_size: List[str] = []
+    for sampler_id in samplers:
+        inputs = result[sampler_id].setdefault("inputs", {})
+        if isinstance(inputs, dict):
+            if prompt:
+                target = _text_node_for(result, inputs.get("positive"))
+                if target:
+                    result[target].setdefault("inputs", {})["text"] = prompt
+                    filled_text.append(target)
+            if negative:
+                target = _text_node_for(result, inputs.get("negative"))
+                if target:
+                    result[target].setdefault("inputs", {})["text"] = negative
+                    filled_text.append(target)
+            for key, value in (
+                ("seed", seed),
+                ("steps", steps),
+                ("cfg", cfg),
+                ("denoise", denoise),
+                ("sampler_name", sampler_name),
+                ("scheduler", scheduler),
+            ):
+                # Ein verdrahteter Eingang bleibt unangetastet (wie bei ACE-Step).
+                if value is not None and not isinstance(inputs.get(key), list):
+                    inputs[key] = value
+            if wants_size:
+                latent_id = _linked_node(result, inputs.get("latent_image"))
+                latent = result.get(latent_id) if latent_id else None
+                if isinstance(latent, dict) and latent.get("class_type") in IMAGE_LATENT_NODES:
+                    latent_inputs = latent.setdefault("inputs", {})
+                    if width is not None:
+                        latent_inputs["width"] = int(width)
+                    if height is not None:
+                        latent_inputs["height"] = int(height)
+                    filled_size.append(str(latent_id))
+
+    if prompt and not filled_text:
+        logger.warning(
+            "Bild-Workflow: Prompt %r kam an keinem Textknoten an (positive/negative nicht "
+            "verdrahtet) – der Aufruf wuerde das Demo-Bild erzeugen",
+            prompt[:60],
+        )
+        return workflow
+    if wants_size and not filled_size:
+        logger.warning(
+            "Bild-Workflow: Aufloesung %sx%s kam an keinem Latent-Knoten an", width, height
+        )
+    return result
+
+
 def build_workflow_request(
     role: str,
     args: Dict[str, Any],
@@ -179,6 +526,10 @@ def build_workflow_request(
     env: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Workflow-basierter Request (ACE-Step / worker-comfyui)."""
+    spec = COMFY_ROLES.get(role) or {}
+    if spec.get("kind") == "image":
+        return build_image_request(role, args, payload, env)
+
     workflow = workflow_for(role, {**(payload or {}), **args}, env)
     if workflow is None:
         raise ValueError(
@@ -190,6 +541,45 @@ def build_workflow_request(
     images = args.get("images")
     if isinstance(images, list) and images:
         request["images"] = [img for img in images if isinstance(img, dict) and img.get("name") and img.get("image")]
+    return request
+
+
+def build_image_request(
+    role: str,
+    args: Dict[str, Any],
+    payload: Optional[Dict[str, Any]] = None,
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Request der Bild-Rolle `imageLora`: Basis waehlen, Prompt setzen, LoRAs ketten.
+
+    Der Aufruf nennt nur `base` (`sdxl`/`flux1`) – welcher Dateiname dahinter
+    steht, weiss der Workflow. Damit kommt ein neues Basismodell ohne Aenderung
+    am Aufrufer dazu: Workflow ablegen, `IMAGE_BASES` ergaenzen.
+
+    Anders als `imageHq` liefert worker-comfyui **kein** `seed` in der Antwort
+    zurueck. Der Aufrufer behaelt den Seed aus seinem eigenen Request – die
+    Reproduzierbarkeit haengt nicht daran, dass der Worker ihn zurueckspiegelt.
+    """
+    base = str(args.get("base") or DEFAULT_IMAGE_BASE).strip().lower()
+    if base not in IMAGE_BASES:
+        raise ValueError(
+            f"{role}: unbekannte base {base!r} (erwartet: {', '.join(sorted(IMAGE_BASES))})"
+        )
+    name = IMAGE_BASES[base]
+    workflow = workflow_for(role, {**(payload or {}), **args}, env, name=name)
+    if workflow is None:
+        raise ValueError(
+            f"{role}: kein Workflow fuer base {base!r} – COMFY_WORKFLOW_{name.upper()} setzen "
+            f"oder workflows/{name}.json ablegen (Export aus der ComfyUI-UI mit 'Workflow → Export (API)')"
+        )
+    workflow = apply_prompt_to_image_workflow(workflow, args)
+    workflow = apply_loras_to_workflow(workflow, args.get("lora_pairs"))
+    request: Dict[str, Any] = {"workflow": workflow}
+    images = args.get("images")
+    if isinstance(images, list) and images:
+        request["images"] = [
+            img for img in images if isinstance(img, dict) and img.get("name") and img.get("image")
+        ]
     return request
 
 
@@ -236,6 +626,21 @@ def _classify_value(key: str, value: Any) -> Optional[str]:
     return None
 
 
+def _as_data_uri(kind: str, data: str) -> str:
+    """Rohes base64 -> `data:<mime>;base64,…`.
+
+    worker-comfyui liefert Bilder als **rohes** base64 ohne Praefix
+    (`{filename, type: "base64", data: "iVBORw0…"}`), `imageHq` dagegen als
+    `data:image/png;base64,…`. Der Aufrufer soll beide Formen gleich behandeln
+    koennen, deshalb wird hier angeglichen – ein blosses base64 ist im
+    Ergebnis-JSON sonst nicht von einem Textfeld zu unterscheiden.
+    """
+    if not data or data.startswith("data:"):
+        return data
+    mime = {"image": "image/png", "video": "video/mp4", "audio": "audio/mpeg"}.get(kind)
+    return f"data:{mime};base64,{data}" if mime else data
+
+
 def _item(kind: Optional[str], value: Dict[str, Any]) -> Dict[str, Any]:
     """Einen Ausgabe-Eintrag auf {kind, filename?, data?|url?, nodeId?} bringen."""
     entry: Dict[str, Any] = {"kind": kind or str(value.get("kind") or value.get("type") or "unknown")}
@@ -245,7 +650,12 @@ def _item(kind: Optional[str], value: Dict[str, Any]) -> Dict[str, Any]:
     for data_key in ("data", "image", "video", "audio", "base64"):
         data = value.get(data_key)
         if isinstance(data, str) and data:
-            entry["data"] = data
+            # Nur ein echtes base64 wird zum data:-URI. worker-comfyui liefert
+            # bei konfiguriertem S3 stattdessen `type: "s3"` mit einem Pfad.
+            if str(value.get("type") or "").lower() in ("s3", "url"):
+                entry.setdefault("url", data)
+            else:
+                entry["data"] = _as_data_uri(entry["kind"], data)
             break
     for url_key in ("url", "s3_url", "s3Url", "download_url"):
         url = value.get(url_key)
