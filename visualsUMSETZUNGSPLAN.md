@@ -30,10 +30,15 @@ behauptet, was offen ist.
 Alle acht: `workersMin 0`, `idleTimeout 120 s`, `max 1` (Ausnahme music/voice `max 2`).
 Ein Endpoint ohne Auftrag kostet nichts — er skaliert auf null.
 
-**Der wichtigste Satz für den Plan:** beide Video-Endpoints laufen auf **demselben
-ComfyUI-Worker** (`generate-video-ksampler`). Ein ComfyUI-Worker führt jeden
-Graph aus — Bild, Animation, Video. Damit ist ein eigener Bild-Endpoint
-technisch überflüssig.
+**Der wichtigste Satz für den Plan — korrigiert am 28.09. abends, live gemessen:**
+
+Beide Video-Endpoints laufen auf demselben Worker (`wlsdml1114-generate-video-ksampler`).
+Hier stand vorher: „ein ComfyUI-Worker führt jeden Graph aus, damit ist ein eigener
+Bild-Endpoint überflüssig." **Das ist widerlegt.** Der Video-Worker spricht eine
+prompt-basierte API, **nicht** den Workflow-Vertrag (`{input:{workflow}}`). Ob er
+überhaupt SDXL-/FLUX-Graphen fahren kann, ist offen. Der Bild-Endpoint ist also
+**nicht** ohne Weiteres ersetzbar — die Stilllegung (Abschnitt 2, Punkt 1) ruht,
+bis das geklärt ist. Messbelege in Abschnitt 11.
 
 ### 1.2 Templates (12 vorhanden, 4 davon brauchbar)
 
@@ -97,6 +102,12 @@ Ebenen trennen — sonst sucht er Modelle, die niemand gebaut hat.
 ---
 
 ## 2. Zielzustand
+
+> **Vorbehalt (28.09. abends, live gemessen):** Dieser Zielzustand setzt voraus,
+> dass der Video-Worker Graphen fährt. Das ist **nicht** belegt — er spricht eine
+> prompt-basierte API (§11). Der Umbau ist deshalb **aufzuhalten**, bis Punkt 8
+> der offenen Liste geklärt ist. Was schon läuft: Image-to-Video mit eigenem Foto
+> über eine signierte R2-URL (§11.3).
 
 ```
                     ┌───────────────────────────────────────────────┐
@@ -338,3 +349,61 @@ die Differenzmessung als objektiver Vergleich (Rauschboden ist 0,00).
 | 5 | `wzh9hcbitjnn95` nach einer Woche ohne Rückgriff löschen | Minuten | 0 |
 | 6 | Motiv/Stil-Frage klären: stilfreie Motive gegen dieselben LoRA-Stapel | ~15 min | ~0,25 USD |
 | 7 | `src/config/aiInfrastructure.ts` auf den echten Stand bringen (FLUX.2 steht dort, ist aber nicht gebaut) | Minuten | 0 |
+| 8 | Video-Worker auf einen SDXL/FLUX-Graph prüfen, erst dann Bild-Endpoint stilllegen (§11) | ~1 h | ~0,10 USD |
+| 9 | Startframes dauerhaft ablegen (R2 `visuals/start-frames/`), statt je Auftrag zu signieren | Minuten | 0 |
+
+---
+
+## 11. Nachtrag: der Video-Worker live gemessen (28.09.2026, abends)
+
+Drei echte Aufträge an `video-real` (`6ghy4fh00zb0j9`), Ergebnisse in
+`~/lora-themen-2026-09-27/visuals-live/`. Dauer insgesamt rund sieben Minuten,
+Kosten unter 0,10 USD.
+
+### 11.1 Der Vertrag, bestätigt
+
+```
+Eingabe  {prompt, negative_prompt, image_url, width, height, length, steps, cfg, seed}
+Ausgabe  {video: "<rohes base64 MP4>"}      ← genau ein Schlüssel, bestätigt
+```
+
+Gemessen: `width 480`, `height 832`, `length 49`, `steps 20`, `cfg 5.0` ergeben
+**480×832, 32 fps, 97 Frames, 3,03 s, h264, 0,6–1,4 MB**. Kaltstart 90–130 s
+(FlashBoot an), Rechnen ~120 s, Worker in EUR-IS-2 auf einer RTX 5090.
+
+### 11.2 Drei Funde, von denen jeder still Geld gekostet hätte
+
+1. **Ohne Bild nimmt der Worker ein eingebautes Beispielbild als Startframe.**
+   Ein reiner Text-Auftrag lieferte einen Clip, der mit einem **fremden Foto
+   (Mann im weißen Hemd)** beginnt und erst danach in Richtung Prompt kippt.
+   Kein Fehler, keine Warnung — dieselbe Fehlerklasse wie das Demo-Bild des
+   Workflow-Workers. **Text-to-Video gibt es hier praktisch nicht; der Weg ist
+   Image-to-Video.**
+2. **`image_url` wird per `wget` heruntergeladen.** Ein data-URI mit 142 KB
+   Base64 sprengte die Argumentliste:
+   `OSError: [Errno 7] Argument list too long: 'wget'` (nach 23 s, FAILED).
+   Das Feld braucht eine **echte http(s)-URL**.
+3. **Der Ausweg ist der Weg, den wir schon haben:** vorab signierte R2-URL.
+   `r2.py presign PUT` → hochladen → `r2.py presign GET` (48 h) → dieser Link
+   als `image_url`. So entstand der brauchbare Clip: **eigenes Foto**
+   (`am-visuals-themen-neu/Feuer_Flammen/…JPG`), die Flammen bewegen sich, die
+   Kamera fährt langsam heran.
+
+`image_base64` wird nicht gelesen (der Worker geht über `wget`); `lora_pairs`
+wurden nicht mitgeschickt — der Worker hat **kein Volume**, unsere LoRAs sind
+dort also nicht vorhanden. „Aus unseren Modellen" ist damit noch **nicht**
+erfüllt, nur „aus unseren Fotos".
+
+### 11.3 Der Rezept, der jetzt funktioniert
+
+```python
+import r2
+put = r2.presign("PUT", "visuals/start-frame.jpg", **r2._creds(), expires=3600)
+# curl -sS -X PUT --data-binary @startframe.jpg "$put"
+get = r2.presign("GET", "visuals/start-frame.jpg", **r2._creds(), expires=172800)
+# input = {prompt, negative_prompt, image_url: get,
+#          width: 480, height: 832, length: 49, steps: 20, cfg: 5.0, seed: 4711}
+```
+
+Ablage: `~/lora-themen-2026-09-27/visuals-live/` — `feuer_clip.mp4` ist der
+brauchbare, `erster_clip.mp4` zeigt den Beispielbild-Fund.
