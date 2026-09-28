@@ -10,8 +10,10 @@ import { VISUAL_PRESETS, presetById } from '../../core/visual/visualPresets';
 import { createRendererState, renderFrame } from '../../core/visual/canvasRenderer';
 import { createWebGLVisualRenderer, type VisualRendererKind, type WebGLVisualRenderer } from '../../core/visual/webglRenderer';
 import { IDLE_AUDIO_FEATURES, type AudioFeatures, type VisualParams } from '../../core/visual/types';
+import { composeLayers } from '../../visuals/layerCompositor';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
+import { VISUAL_BANK_SCENES } from '../../visuals/visualBank';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -95,6 +97,26 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const show = useVisualShow();
   const showRef = useRef(show);
   useEffect(() => { showRef.current = show; });
+
+  // Vorrats-Bank: die acht geprüften Clips als Show-Szenen laden (0 USD, kein
+  // RunPod-Aufruf). Einmalig beim Öffnen des Visualizers; StrictMode-fest per Ref.
+  const bankLoadedRef = useRef(false);
+  useEffect(() => {
+    if (bankLoadedRef.current) return;
+    bankLoadedRef.current = true;
+    if (show.scenes.length > 0) return;
+    for (const b of VISUAL_BANK_SCENES) {
+      show.addScene({ prompt: b.motiv, kind: 'clip', src: b.src, label: b.label, mediaDurationS: b.mediaDurationS });
+    }
+  }, [show]);
+
+  // Auto-Start: sobald Szenen da sind und nichts läuft, läuft die Show an — im
+  // laufenden Betrieb gibt der Visualizer sofort aus, ohne Handgriff.
+  useEffect(() => {
+    if (show.scenes.length > 0 && !show.playing && bankLoadedRef.current) {
+      show.startShow();
+    }
+  }, [show.scenes.length, show.playing, show]);
 
   // VisualMONK #2: generative Bilder (FLUX ueber /api/ai/vision).
   const [aiPrompt, setAiPrompt] = useState('');
@@ -348,7 +370,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         ? mapAudioToParams(IDLE_AUDIO_FEATURES, preset, 0)
         : mapAudioToParams(features, preset, animTimeS);
       // Reduced-Motion: ohne Glättungs-Animation direkt auf den Zielwert (Frames identisch).
-      paramsRef.current = reducedMotionRef.current ? target : blendParams(paramsRef.current, target, 0.35);
+      const smoothed = reducedMotionRef.current ? target : blendParams(paramsRef.current, target, 0.35);
+      // Layer-Compositor: L2–L5 (Abstraktion, Textgewicht, Atmosphäre) über die
+      // Preset-Parameter (L0) mischen; L6 = dieselben Audio-Features wie im Bus.
+      paramsRef.current = reducedMotionRef.current
+        ? smoothed
+        : composeLayers(features, smoothed);
 
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const cssW = canvas.clientWidth || 960;
