@@ -551,6 +551,34 @@ exec bash -c "${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO:?}}"
 """
 
 
+def fuseblk_permission_bit_artifact(meldung: str) -> bool:
+    """True, wenn eine systemd-analyze-Meldung ein ARTEFAKT des Dateisystems ist.
+
+    GEMESSEN (2026-09-29, Repo auf /mnt/wd-elements, `stat -f` => fuseblk/NTFS,
+    git core.fileMode=false): `systemd-analyze verify` meldet fuer die in ein
+    temporaeres Root kopierten Units
+
+      "Configuration file …/audiomonastry-idle-shutdown.service is marked
+       executable. Please remove executable permission bits. Proceeding anyway."
+
+    Auf fuseblk lassen sich Permission-Bits nicht setzen – die Warnung ist nicht
+    abstellbar und ist KEIN Unit-Fehler (systemd faehrt fort, returncode 0).
+    Belegt in docs/AUDIT-FIXPAKET-D.md (Stash-Roundtrip am unveraenderten HEAD)
+    und in docs/AUDIT-FIXPAKET-E.md.
+
+    Der Skip greift NUR, wenn BEIDES nachweisbar ist: das Repo liegt auf einem
+    fuseblk-Mount UND die Ausgabe besteht ausschliesslich aus genau dieser
+    Warnung. Auf ext4/tmpfs/CI bleibt die Zusicherung unveraendert streng.
+    """
+    mount = subprocess.run(["stat", "-f", "-c", "%T", str(ROOT)], capture_output=True, text=True)
+    if mount.stdout.strip() != "fuseblk":
+        return False
+    zeilen = [z.strip() for z in meldung.splitlines() if z.strip()]
+    return bool(zeilen) and all(
+        "is marked executable" in z and "remove executable permission bits" in z for z in zeilen
+    )
+
+
 class IdleShutdownTimerTest(unittest.TestCase):
     """PROD-P3-F9: Der Idle-Shutdown-Timer ist installierbar, idempotent, im
     Recreate-Pfad verankert - und der Installer stoppt nichts.
@@ -934,7 +962,14 @@ class IdleShutdownTimerTest(unittest.TestCase):
         for name, ergebnis in ergebnisse.items():
             with self.subTest(unit=name):
                 self.assertEqual(ergebnis.returncode, 0, ergebnis.stdout + ergebnis.stderr)
-                self.assertEqual(ergebnis.stdout + ergebnis.stderr, "", f"systemd-analyze meldet etwas: {name}")
+                meldung = ergebnis.stdout + ergebnis.stderr
+                if fuseblk_permission_bit_artifact(meldung):
+                    self.skipTest(
+                        "Artefakt des fuseblk/NTFS-Mounts: systemd-analyze warnt 'is marked executable … "
+                        "Proceeding anyway' fuer die kopierten Units, weil auf diesem Dateisystem keine "
+                        "Permission-Bits setzbar sind (Beleg: docs/AUDIT-FIXPAKET-E.md). Kein Unit-Fehler."
+                    )
+                self.assertEqual(meldung, "", f"systemd-analyze meldet etwas: {name}")
 
 
 class EdgeMonitoringLimitsTest(unittest.TestCase):
@@ -1412,6 +1447,14 @@ class _CloudflareWriteStub:
             def do_GET(self) -> None:  # noqa: N802 - Name kommt von BaseHTTPRequestHandler
                 stub.requests.append(("GET", self.path))
                 if self.path.startswith("/client/v4/zones?"):
+                    # Zonen-Lookup ist NAME-abhaengig (wie die echte API): wird
+                    # hier eine SUBDOMAIN als DOMAIN uebergeben, kommt KEINE Zone
+                    # zurueck. Genau daran ist Phase T2 am 2026-09-29 gescheitert
+                    # ("keine Zone fuer deeptest.anunnakitools.de").
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    name = (query.get("name") or [""])[0]
+                    if name and name != "anunnakitools.de":
+                        return self._send(200, {"success": True, "errors": [], "result": []})
                     return self._send(200, {"success": True, "errors": [], "result": [
                         {"id": "zone-4711", "name": "anunnakitools.de"},
                     ]})
@@ -1486,21 +1529,24 @@ class CfDnsEnsureTest(unittest.TestCase):
     def setUp(self) -> None:
         self.python = sys.executable
 
-    def _run(self, stub: _CloudflareWriteStub | None, *args: str, token: str | None = "cf-token-test"):
+    def _run(self, stub: _CloudflareWriteStub | None, *args: str, token: str | None = "cf-token-test",
+             **extra: str | None):
+        base: dict[str, str | None] = dict(
+            CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
+            CLOUDFLARE_API_TOKEN=token,
+            CLOUDFLARE_TOKEN=None,
+            DOMAIN="anunnakitools.de",
+            ORIGIN_HOST=self.ORIGIN,
+            APP_IP=self.APP_IP,
+            SFU_SUBDOMAIN="sfu",
+            SFU_HOST=self.SFU,
+            SFU_IP=self.SFU_IP,
+        )
+        base.update(extra)
         return subprocess.run(
             [self.python, str(CF_DNS_ENSURE), *args],
             capture_output=True, text=True, cwd=ROOT, timeout=60,
-            env=clean_env(
-                CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
-                CLOUDFLARE_API_TOKEN=token,
-                CLOUDFLARE_TOKEN=None,
-                DOMAIN="anunnakitools.de",
-                ORIGIN_HOST=self.ORIGIN,
-                APP_IP=self.APP_IP,
-                SFU_SUBDOMAIN="sfu",
-                SFU_HOST=self.SFU,
-                SFU_IP=self.SFU_IP,
-            ),
+            env=clean_env(**base),
         )
 
     def test_trockenlauf_schreibt_nichts(self) -> None:
@@ -1559,6 +1605,73 @@ class CfDnsEnsureTest(unittest.TestCase):
         with stub:
             ok = self._run(stub, "--apply", token="cf-geheim-4711")
         self.assertNotIn("cf-geheim-4711", ok.stdout + ok.stderr)
+
+    # --- Deep-Test-Vertrag (Befund 2026-09-29) -------------------------------
+
+    def test_zone_lookup_mit_subdomain_statt_zone_schlaegt_fehl(self) -> None:
+        """Der T2-Ausfall vom 2026-09-29 als Regressionstest.
+
+        `deep-test-run.sh` uebergab DOMAIN=$DEPLOY_DOMAIN (Subdomain). Der
+        Zonen-Lookup GET /zones?name=<subdomain> liefert keine Zone – T2 brach
+        ab, obwohl der Token gueltig war. Der Stub bildet den Namensbezug nach.
+        """
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply", DOMAIN="deeptest.anunnakitools.de")
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("keine Zone fuer deeptest.anunnakitools.de", combined)
+        self.assertEqual(len(stub.requests), 1, f"Nach dem Zonen-Fehlschlag darf kein weiterer Request folgen: {stub.requests}")
+        self.assertEqual(stub.requests[0][0], "GET")
+
+    def test_scope_guard_blockt_produktionsnamen_vor_jedem_schreiben(self) -> None:
+        """Der harte Guard: SUBDOMAIN=deeptest + Produktionshosts = Abbruch, kein POST/PUT.
+
+        Ohne diesen Guard haette ein Lauf mit Default-Hosts die Produktions-
+        records origin./sfu.anunnakitools.de auf die Testknoten umgebogen.
+        """
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply", SUBDOMAIN="deeptest")  # ORIGIN/SFU = Produktionsnamen
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("ABBRUCH (Scope-Guard)", combined)
+        self.assertIn(self.ORIGIN, combined)
+        self.assertEqual([m for m in stub.methods() if m != "GET"], [], "Der Guard muss VOR jedem Schreibzugriff greifen")
+        self.assertEqual(stub.records, [])
+
+    def test_scope_guard_erlaubt_test_subdomain_und_haelt_dns_vertrag(self) -> None:
+        """Mit korrektem Scope: origin/sfu innerhalb *.deeptest (DNS-only) + App-Host proxied."""
+        origin = "origin.deeptest.anunnakitools.de"
+        sfu = "sfu.deeptest.anunnakitools.de"
+        app = "deeptest.anunnakitools.de"
+        stub = _CloudflareWriteStub()
+        with stub:
+            dry = self._run(stub, DOMAIN="anunnakitools.de", SUBDOMAIN="deeptest",
+                            ORIGIN_HOST=origin, SFU_HOST=sfu, APP_HOST=app)
+            self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
+            self.assertEqual(stub.methods(), ["GET", "GET"], "Trockenlauf schreibt nichts")
+            self.assertEqual(stub.records, [])
+            self.assertIn(app, dry.stdout)
+
+            applied = self._run(stub, "--apply", DOMAIN="anunnakitools.de", SUBDOMAIN="deeptest",
+                                ORIGIN_HOST=origin, SFU_HOST=sfu, APP_HOST=app)
+        combined = applied.stdout + applied.stderr
+        self.assertEqual(applied.returncode, 0, combined)
+        for name, ip, proxied in ((origin, self.APP_IP, False), (sfu, self.SFU_IP, False), (app, self.APP_IP, True)):
+            record = stub.record_for(name)
+            self.assertEqual(record["type"], "A")
+            self.assertEqual(record["content"], ip)
+            self.assertIs(record["proxied"], proxied,
+                          f"{name}: proxied={proxied} erwartet (origin/sfu DNS-only, App-Host proxied)")
+
+    def test_ohne_app_host_bleibt_der_zwei_record_vertrag(self) -> None:
+        """APP_HOST ist optional – ohne ihn verhaelt sich das Werkzeug wie vorher (2 Records)."""
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(stub.records), 2)
 
 
 class ModellDownloadTest(unittest.TestCase):
