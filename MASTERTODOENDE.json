@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-24T22:20:00+00:00",
+  "generatedAt": "2026-09-29T15:58:00+00:00",
   "branch": "main",
-  "commit": "e3cdb5f",
+  "commit": "9016a7c",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -3123,7 +3123,7 @@
       "note": "Umgesetzt 2026-09-23 (Iteration 14). Offen bleibt nur der Vollzug in einer LAUFENDEN Umgebung: der Server liest die Prompts aus der Datenbank, und die ist jetzt englisch. Wenn die Flotte wieder laeuft, schreibt aiPersistence sie per upsert - ein zweiter Lauf aendert nichts (idempotent)."
     },
     {
-      "id": "INFRA-HETZNER-016",
+      "id": "INFRA-HETZNER-016a",
       "status": "DONE",
       "priority": "P3",
       "area": "Betrieb",
@@ -3131,7 +3131,8 @@
       "source": "Messung 2026-09-22",
       "problem": "Hetzner-Konto hat 0 Server; SSH auf alle Knoten laeuft ins Timeout. https://anunnakitools.de antwortet trotzdem mit 200 - das kommt von Cloudflare (Cache/Portal-Weg), NICHT von einer laufenden App. Also kein Defekt, sondern die vereinbarte Selbstabschaltung.",
       "rest": "Fuer die naechste Sitzung: vor jedem Live-Test zuerst die Flotte starten (LOCATION=nbg1 bring-up-fleet.sh) und die Cross-Node-Firewall-Regeln pruefen (firewall-ensure.py --dry-run muss 'geaendert=0' melden, weil die Firewalls den Abbau ueberleben).",
-      "evidence": "GET /v1/servers = 0; curl https://anunnakitools.de/api/health = 200 (Cloudflare)"
+      "evidence": "GET /v1/servers = 0; curl https://anunnakitools.de/api/health = 200 (Cloudflare)",
+      "note": "2026-09-29 von INFRA-HETZNER-016 in INFRA-HETZNER-016a umbenannt (Paket B): ID-Kollision mit dem P1-Eintrag ufw/TURN, der INFRA-HETZNER-016 bleibt. Inhalt unveraendert, Historie bleibt stehen."
     },
     {
       "id": "SEC-P1-004",
@@ -3875,6 +3876,111 @@
       ],
       "verification": "python3 -m unittest tests.test_lora_trainer_aitoolkit (19 OK) und tests.test_lora_segments (54 OK); Gegenbeweis auf HEAD: 3 bzw. 1 Fehlschlag",
       "note": "Beide Fehler waren unsichtbar, weil Tests und Stubs eine Wirklichkeit spiegelten, die es nicht gibt. Das ist dieselbe Fehlerklasse wie der falsche Image-Name (ostris/aitoolkit) und das falsche CLI (hf statt huggingface-cli)."
+    },
+    {
+      "id": "INFRA-RUNPOD-014",
+      "title": "imageHq-Vertrag: worker-comfyui mit Workflow statt prompt-Feld (Code b90f7a8) - SSOT-Nachzug",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/RunPod",
+      "source": "Commit b90f7a8 + src/core/ai/vision/runpodVision.ts:7-16 (\"SEIT 2026-09-27\")",
+      "problem": "Seit b90f7a8 (Commit-Datum 2026-09-28 13:48, im Code als \"SEIT 2026-09-27\" gefuehrt) baut runpodVision.ts den Endpoint-Input als { input: { workflow } } (ComfyUI-Workflow-API); der Prompt steckt im Graphen (Vorlage services/audiomonastry-ai-runtime/workflows/image_flux1.json), ein prompt-Feld kennt der Worker nicht mehr. Live-Endpoint bleibt wzh9hcbitjnn95 (Name audiomonastry-ai-image). Offen: die Deploy-/Template-Seite traegt teils noch das PrunaAI-Image (INFRA-RUNPOD-015); die BEFUND-Messung 2026-09-28 sah drei Worker, zwei davon noch mit dem alten PrunaAI-Image (Auftraege scheitern dort nach 1,3 s).",
+      "evidence": "git show --stat b90f7a8: src/core/ai/vision/runpodVision.ts (+82/-10), tests/vision.test.ts (+54, Vertragstests). runpodVision.ts:7-16 (Umschaltkommentar), :201-205 ({ workflow }). scripts/visual-vorrat/BEFUND.md Abschnitt 4b (GET /v1/endpoints/wzh9hcbitjnn95 -> image prunaai-...flux-1-dev...287a29201, Messung 2026-09-28).",
+      "remaining": "Endpoint-/Template-Seite live pruefen (APP-Touch, kostet Geld) und Deploy-Defaults umstellen (INFRA-RUNPOD-015).",
+      "files": [
+        "src/core/ai/vision/runpodVision.ts",
+        "services/audiomonastry-ai-runtime/workflows/image_flux1.json",
+        "tests/vision.test.ts",
+        "scripts/visual-vorrat/BEFUND.md"
+      ],
+      "updatedAt": "2026-09-29"
+    },
+    {
+      "id": "INFRA-RUNPOD-015",
+      "title": "Deploy-Default-Drift: runpod-deploy.py + Gate-Test halten das PrunaAI-Image fuer imageHq (Redeploy-Risiko)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra/RunPod",
+      "source": "docs/AUDIT-RESTTODOS.md C1 + scripts/runpod-deploy.py + tests/test_runpod_deploy_defaults.py",
+      "problem": "PREBUILT_IMAGES[\"FLUX_DEV\"] = registry.runpod.net/prunaai-runpod-worker-flux-1-dev-main-dockerfile:287a29201 (runpod-deploy.py:271) und ROLE_DEFAULTS[\"imageHq\"][\"imageDefault\"]=\"FLUX_DEV\" beschreiben das Image, das live durch worker-comfyui ersetzt ist; der Gate-Test tests/test_runpod_deploy_defaults.py:61-63 erzwingt genau diesen Altstand (assertEqual FLUX_DEV, assertIn prunaai). Ein Redeploy von imageHq wuerde das alte PrunaAI-Image wieder an den Endpoint haengen und den Workflow-Vertrag aus b90f7a8 brechen. Der Deploy-Pfad ist lebendig (Run 36580686816). Ziel-Image laut docs/VISUAL_LORA_STACK.md:64: runpod/worker-comfyui:5.11.0-flux1-dev-fp8.",
+      "evidence": "scripts/runpod-deploy.py:268-272 (PREBUILT_IMAGES.FLUX_DEV), :140-144 (ROLE_DEFAULTS.imageHq.imageDefault=\"FLUX_DEV\"); tests/test_runpod_deploy_defaults.py:61-63; docs/VISUAL_LORA_STACK.md:64; docs/AUDIT-RESTTODOS.md:9-14 (Run 36580686816); scripts/visual-vorrat/BEFUND.md Abschnitt 4b.",
+      "remaining": "PREBUILT_IMAGES um das worker-comfyui-Image ergaenzen, ROLE_DEFAULTS.imageHq umstellen, Gate-Test auf den neuen Vertrag umschreiben (Paket C1, docs/AUDIT-RESTTODOS.md).",
+      "files": [
+        "scripts/runpod-deploy.py",
+        "tests/test_runpod_deploy_defaults.py",
+        "docs/AUDIT-RESTTODOS.md"
+      ],
+      "updatedAt": "2026-09-29"
+    },
+    {
+      "id": "INFRA-RUNPOD-016",
+      "title": "imageLora-Vorratslauf: Werkzeuge im Repo (fa7dbf9), BEFUND widerlegt die Praemisse (9f6ea8f)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Visual/LoRA",
+      "source": "Commits fa7dbf9 (Werkzeuge) + 9f6ea8f (BEFUND), scripts/visual-vorrat/",
+      "problem": "Vorratslauf 2026-09-28: 2080 Auftraege geplant, 1061 Bilder erzeugt, dann gestoppt - nicht aus Zeitnot, sondern weil die Praemisse des Laufs messbar nicht traegt: bei gleichen Motiven sehen alle LoRA-Kombinationen gleich aus (Differenzmatrix, gleicher Seed 4711, byte-identische Wiederholung = deterministischer Worker); das Motiv/Prompt bestimmt das Bild, die LoRAs modulieren nur. Zwei Infra-Befunde: (a) die 12 Fehler 1041-1052 sind OOM des 16-GB-Workers beim Umschalten auf FLUX (16,06 GB Checkpoint), danach 58 s/Bild statt 20 s; (b) der Endpoint wzh9hcbitjnn95 trug bei der Messung noch das alte PrunaAI-Image. Der Vorschlag im BEFUND (10 Bilder mit stilfreien Motiven, ~0,25 USD) ist NICHT ausgefuehrt.",
+      "evidence": "git show --stat fa7dbf9 (scripts/visual-vorrat/, 24+ Dateien: Batch, Wache, Auswertung), git show --stat 9f6ea8f (BEFUND.md, 119 Zeilen); BEFUND.md Abschnitte 1-4 und 6.",
+      "remaining": "Gegenprobe mit stilfreien Motiven (BEFUND Abschnitt 6) oder Neuausrichtung des Vorratslaufs um die eigenen LoRAs; GPU-Klasse fuer FLUX-Laeufe wechseln (OOM).",
+      "files": [
+        "scripts/visual-vorrat/BEFUND.md",
+        "scripts/visual-vorrat/batch-bilder.py",
+        "scripts/visual-vorrat/vorrat-wache.sh"
+      ],
+      "updatedAt": "2026-09-29"
+    },
+    {
+      "id": "INFRA-RUNPOD-017",
+      "title": "Bild-Basis FLUX.1-dev komprimiert (FP8) statt FLUX.2 [dev] - 48-GB-Constraint (14113b7)",
+      "priority": "P2",
+      "status": "DONE",
+      "area": "Infra/RunPod",
+      "source": "Commit 14113b7 (2026-09-29) + docs/runpod-8-instances-complete-plan.md (Entscheidungs-Blockquote)",
+      "problem": "Entscheidung 2026-09-29 (Betreiber, in 14113b7 dokumentiert): FLUX.2 [dev] (~32 GB FP8) laesst auf 48 GB keinen Raum fuer LoRA-Training + Beispiel-Generierung; Basis fuer Generierung UND Training ist FLUX.1-dev komprimiert (FP8, ~12 GB, Revision 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21). 13 Dateien gezogen (model_manifest.json, endpointRegistry/mcpRuntime, Python-Runtime, Doku, Tests). SSOT-Nachzug 2026-09-29 (dieser Eintrag plus Korrektur von visionLive/budget auf worker-comfyui/120 s); der letzte Doku-Rest (MODELS_PRELOAD=flux2_fp8 in docs/runpod-8-instances-complete-plan.md:381, 60 Zeilen unter der Entscheidungs-Blockquote) wurde im selben Paket B korrigiert.",
+      "evidence": "git show --stat 14113b7 (13 Dateien, +49/-35); docs/runpod-8-instances-complete-plan.md: \"> Entscheidung 2026-09-29 (Betreiber): FLUX.2 [dev] ... verworfen\"; docs/audit-infra-runpod.md Nachtraege 2026-09-29 (imageHq -> flux1-dev).",
+      "files": [
+        "services/audiomonastry-ai-runtime/model_manifest.json",
+        "src/core/ai/orchestrator/endpointRegistry.ts",
+        "src/core/ai/orchestrator/mcpRuntime.ts",
+        "docs/runpod-8-instances-complete-plan.md",
+        "docs/VISUALMONK_SPEC.md",
+        "docs/VISUAL_LORA_TRAINING.md"
+      ],
+      "updatedAt": "2026-09-29"
+    },
+    {
+      "id": "INFRA-RUNPOD-018",
+      "title": "Deploy-Workflow-Idempotenz: Template-Anlage unique-sicher (save_template aktualisiert statt dupliziert); Deploy-Run 36580686816 belegt lebendigen Pfad",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "Infra/RunPod",
+      "source": "docs/AUDIT-RESTTODOS.md:13 + docs/audit-infra-runpod.md:367",
+      "problem": "Zwei belegte Fakten: (1) save_template() listet vorhandene Templates und aktualisiert statt neu anzulegen (runpod-deploy.py:385-455, Kommentar :393) - die Template-Anlage ist damit unique-sicher/idempotent (Audit-Befund, docs/audit-infra-runpod.md:367). (2) Deploy-Run 36580686816 am 2026-09-29 zeigt, dass der Deploy-Pfad lebendig ist (docs/AUDIT-RESTTODOS.md:13). Offen: das Ergebnis des Runs gegen die Flotte (keine Duplikat-Templates, keine ungewollten Endpoint-Aenderungen) ist nicht in der SSOT verzeichnet - Verifizierung steht aus (APP-/RunPod-Touch, kostet Geld, hier nur Repo).",
+      "evidence": "scripts/runpod-deploy.py:385-455 (save_template, Kommentar :393); docs/audit-infra-runpod.md:367; docs/AUDIT-RESTTODOS.md:12-14.",
+      "remaining": "Ergebnis von Run 36580686816 gegen die Flotte pruefen (Template-Zahl, Endpoint-Env) und hier nachtragen.",
+      "files": [
+        "scripts/runpod-deploy.py",
+        "docs/audit-infra-runpod.md",
+        "docs/AUDIT-RESTTODOS.md"
+      ],
+      "updatedAt": "2026-09-29"
+    },
+    {
+      "id": "LEGAL-P0-001",
+      "title": "FLUX.1-dev-Derivate (cosmic-r16-LoRA, erzeugte Bilder) auf kommerzieller Website - BFL-Lizenzklaerung noetig",
+      "priority": "P0",
+      "status": "DONE",
+      "area": "Legal",
+      "source": "docs/VISUAL_LORA_TRAINING.md:682 + Lizenz-Spalte in docs/runpod-8-instances-complete-plan.md",
+      "problem": "Ausgangsfrage (dokumentiert in docs/VISUAL_LORA_TRAINING.md:682-685, \"Rechte/Lizenz\"): das trainierte cosmic-r16-LoRA (VISUAL-P1-007, 2026-09-24) und die damit erzeugten Bilder sind Derivate der FLUX.1-dev-Basisgewichte (Black Forest Labs); die Lizenzspalte des Flottenplans fuehrt FLUX.1-dev als \"Non-Commercial frei / Kommerziell: BFL-Lizenz noetig\", und anunnakitools.de lief oefter als Referenz fuer einen kommerziellen Betrieb. Damit war unklar, ob die Derivate (LoRA + Bilder aus imageHq/imageLora/Vorratslauf) kommerziell eingesetzt werden duerfen. || GEKLAERT 2026-09-29 (Betreiber-Erklaerung): \"Es ist eine reine private/Forschungs-App, keinerlei kommerzielle Absichten.\"",
+      "evidence": "Betreiber-Erklaerung 2026-09-29 (\"reine private/Forschungs-App, keinerlei kommerzielle Absichten\"); docs/VISUAL_LORA_TRAINING.md:682-685 (Rechte/Lizenz, offener Punkt mit Verweis auf VISUALMONK_SPEC.md Abschnitt 9); docs/runpod-8-instances-complete-plan.md Lizenz-Tabelle (\"Non-Commercial frei / Kommerziell: BFL-Lizenz noetig\", Zeile FLUX.1-dev); VISUAL-P1-007 (cosmic-r16.safetensors auf FLUX.1-dev-Basis).",
+      "files": [
+        "docs/VISUAL_LORA_TRAINING.md",
+        "docs/runpod-8-instances-complete-plan.md",
+        "docs/VISUALMONK_SPEC.md"
+      ],
+      "updatedAt": "2026-09-29",
+      "note": "Konsequenz: solange die Nutzung nicht-kommerziell ist, deckt die BFL Non-Commercial-Lizenz von FLUX.1-dev die Derivate (cosmic-r16-LoRA, erzeugte Bilder) - kein offenes P0-Risiko mehr, der Punkt gilt als dokumentiert. WIEDERVORLAGE-TRIGGER: sobald eine Kommerzialisierung von anunnakitools.de oder der Visual-Pfade geplant ist (verkaufte Assets, Paid-Features, kommerzielle Nutzung der Bild-Ausgaben), ist die BFL-Lizenzfrage (Kommerz-Lizenz erwerben oder Derivate raus) erneut vorzulegen. Referenz: docs/VISUAL_LORA_TRAINING.md:682."
     }
   ],
   "visionSandbox": [
@@ -4111,14 +4217,14 @@
     "fleetEndpointsMax": 8,
     "fleetMaxEurPerHour": 10,
     "storageSnapshotsMaxEurPerMonth": 5,
-    "runpodCurrentImage": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:f9bc71cc0dc61e5bd038bccc3757422e462291ef (ears + voice, live abgeglichen 2026-09-13) · registry.runpod.net/...worker-vllm...76054c22c (brain) · registry.runpod.net/prunaai-...flux-1-dev...287a29201 (vision, Endpoint wzh9hcbitjnn95) · registry.runpod.net/wlsdml1114-...ksampler...a9247705c (video)",
+    "runpodCurrentImage": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:f9bc71cc0dc61e5bd038bccc3757422e462291ef (ears + voice, live abgeglichen 2026-09-13) · registry.runpod.net/...worker-vllm...76054c22c (brain) · runpod/worker-comfyui:5.11.0-flux1-dev-fp8 (vision/imageHq, Endpoint wzh9hcbitjnn95; Stand 2026-09-29, vorher registry.runpod.net/prunaai-...flux-1-dev...287a29201 bis 2026-09-27) · registry.runpod.net/wlsdml1114-...ksampler...a9247705c (video)",
     "hetznerFleet": "5 Server (app/sfu/ai/master/edge) - stundlich abgerechnet, ~0,054 EUR/h (~39 EUR/Monat NUR wenn 24/7 an). Nach der Session: delete-fleet.sh -> 0 EUR/h; Floating-IP 3 EUR/Monat bleibt.",
     "storageNowEurPerMonth": "~0,30 (5 Live-Snapshots, 25,47 GB)",
     "billingModel": "STUENDLICH: Hetzner + RunPod rechnen pro laufender Stunde ab; gestoppt/geloescht = 0 EUR (Hetzner: gestoppte Server kosten weiter Platte -> nur LOESCHEN stoppt Kosten).",
     "hetznerFleetEurPerHour": 0.054,
     "snapshotsBilling": "Snapshots kosten pro GB/Monat (Hetzner); 5 Snapshots 4,68 GB ~= 0,06 EUR/Monat.",
     "fleetEndpointsNote": "brain, ears, voiceGen, music, orchestrator (immer-Rollen) + imageHq, videoReal, videoAbstract (Visual, nur bei Abruf) - 8 Rollen, alle scale-to-zero; ~3,2-3,9 EUR/h bei Vollbetrieb.",
-    "runpodIdleTimeouts": "Scale-to-Zero greift NICHT sofort: ein Worker laeuft nach dem letzten Job noch idleTimeout Sekunden weiter und wird in dieser Zeit weiter abgerechnet. Werte je Rolle (ROLE_DEFAULTS in scripts/runpod-deploy.py, live 2026-09-13): voiceGen 900 s (live von 15 auf 900 gesetzt), vision 900 s, video 900 s, brain 20 s deklariert (live noch 15 s), ears 20 s deklariert (live noch 15 s). 900 s Leerlauf auf AMPERE_48 ~ 0,20 USD pro Aufwachphase - bewusst in Kauf genommen, damit wiederholte Einzelaufrufe (MOS-Hoerproben, Bild-/Video-Iteration) nicht jedes Mal einen Kaltstart zahlen. WICHTIG: die API setzt idleTimeout nur beim ANLEGEN eines Endpoints; ein Template-Update aendert den laufenden Wert nicht - scripts/runpod-deploy.py meldet Abweichungen deshalb jetzt als Warnung.",
+    "runpodIdleTimeouts": "Scale-to-Zero greift NICHT sofort: ein Worker laeuft nach dem letzten Job noch idleTimeout Sekunden weiter und wird in dieser Zeit weiter abgerechnet. Werte je Rolle (ROLE_DEFAULTS in scripts/runpod-deploy.py, live 2026-09-13): voiceGen 900 s (live von 15 auf 900 gesetzt), vision 900 s, video 900 s, brain 20 s deklariert (live noch 15 s), ears 20 s deklariert (live noch 15 s). 900 s Leerlauf auf AMPERE_48 ~ 0,20 USD pro Aufwachphase - bewusst in Kauf genommen, damit wiederholte Einzelaufrufe (MOS-Hoerproben, Bild-/Video-Iteration) nicht jedes Mal einen Kaltstart zahlen. WICHTIG: die API setzt idleTimeout nur beim ANLEGEN eines Endpoints; ein Template-Update aendert den laufenden Wert nicht - scripts/runpod-deploy.py meldet Abweichungen deshalb jetzt als Warnung. || KORREKTUR Stand 2026-09-29: seit 2026-09-16 gilt idleTimeout=120 s fuer die Visual- und Musik-Rollen (gemessen, ROLE_DEFAULTS in scripts/runpod-deploy.py + Test test_idle_timeout_der_gemessenen_rollen_ist_120); die 900-s-Werte oben sind der Stand vom 2026-09-13 und bleiben als Historie stehen.",
     "hetznerServersMax": 5,
     "fleetTargetEurPerHour": {
       "min": 5,
@@ -4147,14 +4253,14 @@
   "visionLive": {
     "endpointName": "audiomonastry-ai-image",
     "endpointId": "wzh9hcbitjnn95",
-    "templateId": "7xzd1v17dx",
-    "worker": "PrunaAI/runpod-worker-FLUX.1-dev 1.0.3",
+    "templateId": "35rilgx8er (visualplan.md, worker-comfyui; vorher 7xzd1v17dx, gebundenes PrunaAI-Template)",
+    "worker": "runpod/worker-comfyui:5.11.0-flux1-dev-fp8 (Workflow-Vertrag; vorher bis 2026-09-27: PrunaAI/runpod-worker-FLUX.1-dev 1.0.3)",
     "gpuPool": "AMPERE_48",
-    "model": "FLUX.1-dev",
+    "model": "FLUX.1-dev (komprimiert/FP8, ~12 GB, Revision 3de623fc3c33e44ffbe2bad470d0f45bccf2eb21; Commit 14113b7)",
     "measured": "2026-09-13 neu deployed + verifiziert: Kaltstart 32,4 s, 4 Steps 512x512 = 4,19 s, data-URI-PNG 168.598 Zeichen (seed 36068)",
-    "cost": "A6000 ~0,49 USD/h nur bei Generierung; workers 0..1, idle 900 s -> 0 USD idle",
+    "cost": "AMPERE_48 (A6000-Klasse) nur bei Generierung, idleTimeout 120 s (ROLE_DEFAULTS, gemessen 2026-09-16); Historie 2026-09-13-Stand: A6000 ~0,49 USD/h, idle 900 s",
     "test": "python3 scripts/verify-vision-endpoint.py",
-    "note": "Ersetzt den alten Endpoint 4gts9y4zph7ik9, der an einem gebundenen Template hing (Update nicht moeglich). [Name live \"audiomonastry-ai-image\" = Rolle imageHq; frueherer SSOT-Name \"audiomonastry-ai-vision\" korrigiert 2026-09-20.]"
+    "note": "Ersetzt den alten Endpoint 4gts9y4zph7ik9, der an einem gebundenen Template hing (Update nicht moeglich). [Name live \"audiomonastry-ai-image\" = Rolle imageHq; frueherer SSOT-Name \"audiomonastry-ai-vision\" korrigiert 2026-09-20.] || Stand 2026-09-29 (Paket B): Vertrag auf worker-comfyui + Workflow-Input { input: { workflow } } umgestellt (Commit b90f7a8, Commit-Datum 2026-09-28; Code-Kommentar \"SEIT 2026-09-27\", src/core/ai/vision/runpodVision.ts:7-16); Basis FLUX.1-dev komprimiert (14113b7). Die 2026-09-13-Messwerte im Feld measured bleiben als Historie stehen. Deploy-Defaults hinken noch hinterher -> INFRA-RUNPOD-015."
   },
   "liveState2026_09_11": {
     "app": "https://anunnakitools.de (200, /api/health ok) - app-1 159.69.102.29 (Floating IP)",
