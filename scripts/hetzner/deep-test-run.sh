@@ -502,8 +502,15 @@ t1() {
   rm -f "$junit" "$junit.summary" "$PWOUT/local/report.json"
   ( cd "$REPO" && unset E2E_BASE_URL && \
     NODE_ENV=test DEEPTEST_RUN=1 V2_LIVE_SKIP="$V2_LIVE_SKIP" PWOUTPUT="$PWOUT/local" PWREPORTERS="[[\"list\"],[\"json\",{\"outputFile\":\"$PWOUT/local/report.json\"}],[\"junit\",{\"outputFile\":\"$PWOUT/local/junit.xml\"}]]" \
-    npx playwright test --output="$PWOUT/local" ) || pw_rc=$?
-  echo "T1: Playwright-Prozess rc=$pw_rc"
+    npx playwright test --output="$PWOUT/local" --retries="${DEEPTEST_RETRIES:-1}" ) || pw_rc=$?
+  # WARUM --retries (Befund 2026-09-29): dieser Rechner erzeugt unter Last
+  # sporadische SIGSEGVs in beliebigen Prozessen (dmesg: "BUG: Bad page state",
+  # "segfault ... in libcrypto", auch in sudo/apt und im TypeScript-Compiler).
+  # Ein abgestuerzter Browser-Worker ist damit ERWARTBAR und darf nicht als
+  # App-Fehler erscheinen. Der Retry macht solche Aussetzer sichtbar (Playwright
+  # meldet sie als "flaky"), statt sie zu verschweigen – die Bewertung unten zählt
+  # Crashes getrennt und erklärt den Lauf bei Crashes fuer NICHT verwertbar.
+  echo "T1: Playwright-Prozess rc=$pw_rc (Retries: ${DEEPTEST_RETRIES:-1})"
   # UMGEBUNGS-CRASH-ERKENNUNG (Befund 2026-09-29): stirbt der Dev-Server
   # WAEHREND des Laufs, laufen alle folgenden Tests in ECONNREFUSED/Timeout und
   # sehen wie 40 App-Fehler aus – real ist es EIN Umgebungsausfall. Journal-Beleg
@@ -523,24 +530,79 @@ t1() {
   log "T1: lokales Ergebnis bewerten (skips sind erwartet: @ai-Route-Abhängige + Live-Gate)"
   sha_before="$(sha256sum "$junit" 2>/dev/null | cut -d' ' -f1)"
   junit_guard "$junit" "${PHASE_START_EPOCH:-$(date +%s)}" || ev_rc=1
-  python3 - "$junit" <<'PY' || ev_rc=1
-import sys, xml.etree.ElementTree as ET
-t = ET.parse(sys.argv[1]); r = t.getroot()
-cases = list(r.iter("testcase"))
-n = f = s = 0; failed = []
+  python3 - "$junit" <<'PY' || ev_rc=$?
+import json, os, re, sys, xml.etree.ElementTree as ET
+
+# Umgebungs-Crashes getrennt zaehlen (Befund 2026-09-29): dieser Rechner erzeugt
+# unter Last SIGSEGVs in Browser/Node (dmesg: "BUG: Bad page state", segfault in
+# libcrypto, Abstuerze in sudo/apt und im TypeScript-Compiler). Solche Roten sind
+# KEINE App-Fehler – aber sie machen den Lauf unverwertbar. Deshalb: getrennt
+# melden und einen eigenen Exitcode (2) vergeben, statt sie wegzupassen.
+CRASH = re.compile(
+    r"worker process exited unexpectedly|Target crashed|SIGSEGV|"
+    r"browser has been closed|Target page, context or browser has been closed",
+    re.I,
+)
+
+path = sys.argv[1]
+root = ET.parse(path).getroot()
+cases = list(root.iter("testcase"))
+n = f = s = 0
+failed, crashes = [], []
 for c in cases:
     n += 1
-    if c.find("failure") is not None or c.find("error") is not None:
-        f += 1; failed.append(c.get("classname", "") + "." + c.get("name", ""))
+    bad = c.find("failure")
+    if bad is None:
+        bad = c.find("error")
+    name = f"{c.get('classname', '')}.{c.get('name', '')}"
+    if bad is not None:
+        text = " ".join(t for t in (bad.get("message"), bad.text) if t)
+        if CRASH.search(text):
+            first = (text.strip().splitlines() or [""])[0][:110]
+            crashes.append(f"{name} | {first}")
+        else:
+            f += 1
+            failed.append(name)
     elif c.find("skipped") is not None:
         s += 1
-print(f"T1-DRYRUN: {n} Tests, {n-f-s} grün, {f} rot, {s} skipped")
-for x in failed: print("  ROT:", x)
-open(sys.argv[1] + ".summary", "w").write(f"total={n} failed={f} skipped={s}\n")
-for x in failed: open(sys.argv[1] + ".summary", "a").write(f"RED {x}\n")
-sys.exit(1 if f else 0)
+
+green = n - f - s - len(crashes)
+print(f"T1-DRYRUN: {n} Tests, {green} grün, {f} rot, {s} skipped, {len(crashes)} Umgebungs-Crash")
+for x in failed:
+    print("  ROT:", x)
+if crashes:
+    print(f"  UMGEBUNGS-CRASH ({len(crashes)}) – kein App-Fehler, aber der Lauf ist NICHT verwertbar:")
+    for x in crashes:
+        print("    CRASH:", x)
+
+# Retry-Sichtbarkeit: Playwright meldet Tests, die erst im Wiederholungslauf gruen
+# wurden, als "flaky" – das ist genau der SIGSEGV-Aussetzer dieses Rechners.
+try:
+    with open(os.path.join(os.path.dirname(path), "report.json"), encoding="utf-8") as handle:
+        stats = json.load(handle)["stats"]
+    print(f"  PLAYWRIGHT: erwartet {stats.get('expected')}, unerwartet {stats.get('unexpected')}, "
+          f"flaky {stats.get('flaky')} (erst im Retry gruen), skipped {stats.get('skipped')}")
+    if stats.get("flaky"):
+        print("    -> flaky heisst: der Retry hat den Test gerettet. Haeuft sich das, ist der Rechner das Problem, nicht die App.")
+except Exception as error:  # noqa: BLE001 - Diagnose darf den Lauf nicht kippen
+    print(f"  (report.json nicht lesbar: {error})")
+
+summary = f"total={n} failed={f} skipped={s} crashes={len(crashes)}\n"
+for x in failed:
+    summary += f"RED {x}\n"
+for x in crashes:
+    summary += f"CRASH {x}\n"
+open(path + ".summary", "w").write(summary)  # noqa: SIM115 - Kurzschreiben, kein Kontext noetig
+
+# Rueckgabecode: 2 = nicht verwertbar (Umgebungs-Crash), 1 = rote Tests, 0 = gruen.
+sys.exit(2 if crashes else (1 if f else 0))
 PY
-  if [[ $pw_rc -ne 0 ]]; then
+  if [[ $ev_rc = 2 ]]; then
+    echo "T1: ERGEBNIS NICHT VERWERTBAR – der Lauf enthaelt Umgebungs-Crashes (Browser-/Node-SIGSEGV)."
+    echo "    Das ist KEIN App-Fehler, aber auch kein gruener Lauf: auf stabilem Rechner wiederholen."
+    echo "    Beleg pruefen mit: dmesg -T | grep -E 'Bad page state|segfault' | tail"
+  fi
+  if [[ $pw_rc -ne 0 && $ev_rc != 2 ]]; then
     echo "T1: Playwright-prozess meldete rc=$pw_rc – das ist kein grüner Lauf (Exitcode wird nicht mehr verschluckt)."
     ev_rc=1
   fi
