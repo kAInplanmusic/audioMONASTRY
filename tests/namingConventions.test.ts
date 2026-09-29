@@ -52,6 +52,9 @@ const ALLOWED: Record<string, string> = {
   'visualsUMSETZUNGSPLAN.md': 'RunPod-Template-Inventar (2026-09-29 aus origin/main gemergt): listet Bestands-Templates '
     + 'eines ANDEREN Projekts, die real "samplemonk" heissen (Vermerk "nicht anfassen") - Messergebnis der '
     + 'Live-Enumeration, keine Nomenklatur im Projektcode.',
+  'docs/AUDIT-FIXPAKET-D.md': 'Abschlussreport der Legacy-Ausmusterung: der Titel und die Belege nennen den '
+    + 'ausgemusterten Shim beim Namen (Commit-Belege, Dateipfade) - das ist das Ergebnis, keine neue Nomenklatur. '
+    + 'Ohne den Namen waere der Report als Nachweis wertlos.',
 };
 
 function trackedFiles(): string[] {
