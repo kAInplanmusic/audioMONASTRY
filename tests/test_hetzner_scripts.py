@@ -5926,6 +5926,165 @@ def rule_set_of(rules: list[dict]) -> list[tuple]:
     )
 
 
+class DeepTestHarnessGuardTest(unittest.TestCase):
+    """Deep-Test-T1: die Schutzfunktionen gegen falsches "gruen" - funktional.
+
+    Anlass: Der Referenzlauf vom 2026-09-29 galt als "T1 gruen (74s)", obwohl
+    das JUnit 55 rote Tests enthielt. Die Kette: der Phasen-Timeout killte nur
+    die Subshell, ein verwaister Playwright-Prozess schrieb JUnit/Report bis
+    3,5 min NACH dem gemeldeten Phasenende weiter, Versuch 2 brach mit ENOTEMPTY
+    ab, `|| true` verschluckte den Exitcode, und der Bewerter las die leere
+    JUnit-Datei als "0 Testfaelle = 0 rot". `junit_guard` und der
+    Prozessgruppen-Kill sind die Antwort darauf - ein Textbeweis ("steht im
+    Skript") waere hier wertlos, deshalb faehrt der Test die Funktionen selbst.
+
+    Die Funktionen werden aus `deep-test-run.sh` extrahiert und isoliert
+    geladen: das Skript hat keinen `main`-Guard, ein `source` wuerde also den
+    ganzen Deep-Test starten (Flotte, Kosten) - das darf ein Unit-Test nie tun.
+    """
+
+    SCRIPT = HETZNER / "deep-test-run.sh"
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        self.functions = "\n".join(
+            self._extract(text, name) for name in ("own_pgid", "phase_group_kill", "junit_guard")
+        )
+
+    @staticmethod
+    def _extract(text: str, name: str) -> str:
+        """Schneidet eine Shell-Funktion heraus (auch einzeilige wie own_pgid)."""
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            if not line.startswith(f"{name}() {{"):
+                continue
+            collected = [line]
+            if line.rstrip().endswith("}"):  # Einzeiler
+                return "\n".join(collected)
+            for following in lines[index + 1:]:
+                collected.append(following)
+                if following.rstrip() == "}":
+                    return "\n".join(collected)
+        raise AssertionError(f"{name}() nicht in {DeepTestHarnessGuardTest.SCRIPT.name} gefunden")
+
+    def _run(self, script: str, *args: str) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory(prefix="deeptest-guard-") as tmp:
+            lib = pathlib.Path(tmp) / "guard-fn.sh"
+            lib.write_text(self.functions, encoding="utf-8")
+            return subprocess.run(
+                [self.bash, "-c", f'source "{lib}"\n{script}', "bash", *args],
+                capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+            )
+
+    @staticmethod
+    def _write_junit(path: pathlib.Path, cases: int = 3, age_hours: float = 0.0) -> pathlib.Path:
+        body = "".join(f'<testcase name="t{index}"/>' for index in range(cases))
+        path.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?><testsuites>'
+            f'<testsuite name="probe" tests="{cases}">{body}</testsuite></testsuites>',
+            encoding="utf-8",
+        )
+        if age_hours:
+            import time
+            old = time.time() - age_hours * 3600
+            os.utime(path, (old, old))
+        return path
+
+    @staticmethod
+    def _now() -> str:
+        import time
+        return str(int(time.time()))
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    # --- junit_guard: der Frische-Beweis ------------------------------------
+
+    def test_frischer_report_mit_testfaellen_ist_gueltig(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml")
+            result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("FRISCHE-BEWEIS OK", result.stdout)
+        self.assertIn("3 Testfaelle", result.stdout)
+
+    def test_fehlender_report_ist_kein_beweis(self) -> None:
+        # Vorher galt eine geloeschte Datei als "0 rot" - also als gruen.
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._run('junit_guard "$1" "$2"', str(pathlib.Path(tmp) / "nicht-da.xml"), self._now())
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("existiert nicht", result.stdout)
+
+    def test_alter_report_des_verwaisten_prozesses_wird_abgelehnt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml", age_hours=2)
+            result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("ist ALT", result.stdout)
+
+    def test_leerer_report_ist_kein_gruener_lauf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml", cases=0)
+            result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("0 Testfaelle", result.stdout)
+
+    def test_schreiber_waehrend_der_bewertung_wird_erkannt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml")
+            result = self._run('junit_guard "$1" "$2" "$3"', str(junit), self._now(), "0" * 64)
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("waehrend der Bewertung veraendert", result.stdout)
+
+    def test_abschlusszeile_behauptet_nur_bei_gueltigem_report_ok(self) -> None:
+        """Die Abschlusszeile stand vorher UNBEDINGT da.
+
+        Bei einem alten Report las man direkt nach der ROT-Meldung
+        "FRISCHE-BEWEIS: ... frisch (mtime alt >= start)" - ein Widerspruch im
+        Log, der einen textlesenden Auswerter in die Irre fuehrt. "OK" darf
+        deshalb nur bei gueltigem Report erscheinen.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            alt = self._write_junit(pathlib.Path(tmp) / "alt.xml", age_hours=2)
+            leer = self._write_junit(pathlib.Path(tmp) / "leer.xml", cases=0)
+            for junit in (alt, leer):
+                with self.subTest(report=junit.name):
+                    result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+                    self.assertEqual(result.returncode, 1, self._combined(result))
+                    self.assertNotIn("FRISCHE-BEWEIS OK", result.stdout)
+                    self.assertIn("NICHT verwertbar", result.stdout)
+
+    # --- Prozessgruppen-Kill: keine Waise, kein Schuss auf die eigene Shell --
+
+    def test_prozessgruppen_kill_schuetzt_die_eigene_shell(self) -> None:
+        """Der Guard muss die EIGENE Prozessgruppe verweigern.
+
+        Ohne diesen Schutz wuerde `kill -- -PGID` beim Aufruf aus einer Shell
+        ohne Jobsteuerung die aufrufende Shell mitreissen (dort ist die PGID
+        des Kindes gleich der eigenen).
+        """
+        result = self._run('phase_group_kill "$(own_pgid)" TERM; echo "SHELL-LEBT"')
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("SICHERHEITS-GUARD", result.stdout)
+        self.assertIn("SHELL-LEBT", result.stdout)
+
+    def test_prozessgruppen_kill_beendet_eine_echte_waise(self) -> None:
+        if shutil.which("setsid") is None:  # pragma: no cover - util-linux fehlt
+            self.skipTest("setsid nicht vorhanden")
+        script = (
+            "setsid sleep 60 >/dev/null 2>&1 & orphan=$!\n"
+            "sleep 0.3\n"
+            'phase_group_kill "$orphan" TERM\n'
+            "sleep 0.3\n"
+            'if kill -0 "$orphan" 2>/dev/null; then echo WAISE-LEBT; else echo WAISE-TOT; fi'
+        )
+        result = self._run(script)
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("WAISE-TOT", result.stdout, "Die verwaiste Prozessgruppe muss beendet werden")
+
+
 if __name__ == "__main__":
     unittest.main()
 

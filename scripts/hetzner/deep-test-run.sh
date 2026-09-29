@@ -439,7 +439,13 @@ n = sum(1 for _ in root.iter("testcase"))
 if n == 0:
     print(f"  FRISCHE-BEWEIS ROT: {path} enthaelt 0 Testfaelle – ein leerer Report ist KEIN gruener Lauf.")
     ok = False
-print(f"  FRISCHE-BEWEIS: {path} frisch (mtime {int(st.st_mtime)} >= {since}), {n} Testfaelle, sha {sha[:12]}")
+if ok:
+    print(f"  FRISCHE-BEWEIS OK: {path} frisch (mtime {int(st.st_mtime)} >= {since}), {n} Testfaelle, sha {sha[:12]}")
+else:
+    # WICHTIG: Die Abschlusszeile darf NUR bei ok=1 'frisch/gueltig' behaupten.
+    # Vorher stand sie unbedingt da – bei einem alten Report las man also direkt
+    # nach der ROT-Meldung "frisch (mtime alt >= start)", also einen Widerspruch.
+    print(f"  FRISCHE-BEWEIS ROT: {path} NICHT verwertbar ({n} Testfaelle, sha {sha[:12]}) - siehe Meldung oben.")
 raise SystemExit(0 if ok else 1)
 PY
 }
