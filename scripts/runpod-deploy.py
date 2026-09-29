@@ -692,7 +692,28 @@ def ensure_registry_auth(endpoint_name: str) -> Optional[str]:
         auth = runpod.create_container_registry_auth(name=f"{endpoint_name}-ghcr", username=ghcr_user, password=ghcr_pass)
         return auth.get("id", auth if isinstance(auth, str) else None)
     except Exception as exc:  # noqa: BLE001
-        print(f"[deploy] Registry-Auth konnte nicht angelegt werden: {exc}", file=sys.stderr)
+        # Einmalig wiederholen: der Create kann transient scheitern (API/Gateway),
+        # und das SDK bietet keinen Lesezugriff auf vorhandene Registry-Auths -
+        # `update_container_registry_auth` haette eine ID noetig, die wir ohne
+        # Listing nicht beschaffen koennen.
+        print(
+            f"[deploy] WARNUNG: Registry-Auth '{endpoint_name}-ghcr' konnte nicht angelegt "
+            f"werden ({type(exc).__name__}: {exc}) - ein Retry folgt.",
+            file=sys.stderr,
+        )
+    try:
+        auth = runpod.create_container_registry_auth(name=f"{endpoint_name}-ghcr", username=ghcr_user, password=ghcr_pass)
+        return auth.get("id", auth if isinstance(auth, str) else None)
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[deploy] FEHLER: Registry-Auth '{endpoint_name}-ghcr' auch im Retry nicht anlegbar "
+            f"({type(exc).__name__}: {exc}). Moegliche Ursachen: Name bereits von einer anderen "
+            f"Registry-Auth belegt, Token/Permissions des GHCR-Credentials, API-Stoerung. "
+            f"Abhilfe: RUNPOD_REGISTRY_AUTH_ID=<id eines vorhandenen Registry-Credentials> setzen "
+            f"(wird oben direkt verwendet, ohne Anlegen) oder Credentials in der RunPod-Konsole pruefen. "
+            f"Diese Rolle laeuft OHNE Registry-Auth weiter - ein privates Image ist damit nicht ziehbar.",
+            file=sys.stderr,
+        )
         return None
 
 
@@ -763,7 +784,10 @@ def rest_set_endpoint_template(
         return False, "keine Template-ID uebergeben"
     key = token or env("RP_API_KEY")
     if not key:
-        return False, "RP_API_KEY fehlt (REST-Zugang noetig)"
+        return False, (
+            "RP_API_KEY fehlt (REST-Zugang noetig). Gelesen wird die Env-Variable "
+            "RP_API_KEY - in CI mapped sie der Workflow aus dem Repo-Secret 'RP_API_KEY'."
+        )
     url = REST_ENDPOINT_URL.format(endpoint=endpoint_id)
     code, res = rest_transport("PATCH", url, {"templateId": template_id}, key)
     if code != 200:
@@ -834,23 +858,41 @@ def save_template(
         }}
         """
 
-    existing_template_id = env("RUNPOD_TEMPLATE_ID")
-    if not existing_template_id:
-        list_query = """
-        query {
-          myself {
-            podTemplates { id name imageName isServerless }
-          }
-        }
-        """
+    list_query = """
+    query {
+      myself {
+        podTemplates { id name imageName isServerless }
+      }
+    }
+    """
+
+    def find_existing_template() -> Optional[str]:
+        """ID des Templates mit genau diesem Namen; None bei Lesefehler, '' wenn nicht gelistet."""
         try:
             result = run_graphql_query(list_query)
-            for tpl in result.get("data", {}).get("myself", {}).get("podTemplates", []) or []:
-                if tpl.get("name") == template_name:
-                    existing_template_id = tpl.get("id", "")
-                    break
-        except Exception:  # noqa: BLE001
-            existing_template_id = ""
+        except Exception as exc:  # noqa: BLE001
+            # INFRA-RUNPOD-009: Das Listing ist der normale Update-Pfad - ohne es
+            # waere jeder Lauf ein Create. Es darf den Lauf nicht still killen:
+            # sichtbar machen und im Create-Zweig erneut suchen.
+            print(
+                f"[deploy] WARNUNG: Template-Liste (myself.podTemplates) nicht lesbar "
+                f"({type(exc).__name__}: {str(exc)[:160]}) - es wird beim Create erneut "
+                f"nach '{template_name}' gesucht.",
+                file=sys.stderr,
+            )
+            return None
+        for tpl in result.get("data", {}).get("myself", {}).get("podTemplates", []) or []:
+            if tpl.get("name") == template_name:
+                return str(tpl.get("id", "") or "")
+        return ""
+
+    explicit_template_id = env("RUNPOD_TEMPLATE_ID")
+    existing_template_id = explicit_template_id or find_existing_template()
+    # Die zweite Suche im Create-Zweig greift nur, wenn die ERSTE Lesung fehlgeschlagen
+    # ist (genau der Live-Fehlerpfad: QueryError, dann Create auf vergebenen Namen).
+    # War die erste Lesung ok (nur leer), ist ein sofortiger Zweitschritt kaum erfolg-
+    # versprechender und wuerde jeden Create mit einem zusaetzlichen API-Call belegen.
+    listing_failed = existing_template_id is None
 
     if not existing_template_id and fallback_template_id:
         existing_template_id = fallback_template_id
@@ -870,15 +912,27 @@ def save_template(
         except Exception as exc:  # noqa: BLE001
             if "unique" not in str(exc).lower():
                 raise
-            print(
-                f"[deploy] FEHLER: Der Name '{template_name}' ist vergeben, das Template "
-                f"wird aber von myself.podTemplates nicht gelistet (z. B. Rolle aus einer "
-                f"anderen Ansicht/Team). Diese Rolle wird uebersprungen - Abhilfe: "
-                f"RUNPOD_TEMPLATE_ID=<id der bestehenden Vorlage> setzen oder am "
-                f"bestehenden Endpoint die Vorlage belassen.",
-                file=sys.stderr,
-            )
-            return {}
+            # INFRA-RUNPOD-009: Create traf auf einen vergebenen Namen -> es MUSS
+            # ein bestehendes Template geben. Wenn die erste Lesung fehlgeschlagen
+            # war, jetzt erneut suchen und UPDATE statt Neuanlage.
+            retry_id = find_existing_template() if listing_failed else ""
+            if retry_id:
+                print(
+                    f"[deploy] Create traf auf vergebenen Namen ('{template_name}') - "
+                    f"bestehendes Template {retry_id} wurde zwischenzeitlich gelistet, "
+                    f"es wird AKTUALISIERT statt neu angelegt."
+                )
+                result = run_graphql_query(payload(retry_id))
+            else:
+                print(
+                    f"[deploy] FEHLER: Der Name '{template_name}' ist vergeben, das Template "
+                    f"wird aber von myself.podTemplates nicht gelistet (z. B. Rolle aus einer "
+                    f"anderen Ansicht/Team). Diese Rolle wird uebersprungen - Abhilfe: "
+                    f"RUNPOD_TEMPLATE_ID=<id der bestehenden Vorlage> setzen oder am "
+                    f"bestehenden Endpoint die Vorlage belassen.",
+                    file=sys.stderr,
+                )
+                return {}
     return result.get("data", {}).get("saveTemplate", {})
 
 
@@ -1052,7 +1106,13 @@ def planned_endpoint_names(roles: List[str]) -> List[str]:
 def main() -> int:
     api_key = env("RP_AGENT_KEY") or env("RP_API_KEY") or env("RUNPOD_API_KEY")
     if not api_key:
-        print("FEHLER: RP_AGENT_KEY/RP_API_KEY/RUNPOD_API_KEY fehlt", file=sys.stderr)
+        print(
+            "FEHLER: Kein RunPod-Token in der Prozess-Umgebung. Gelesen werden (in dieser "
+            "Reihenfolge) die Env-Variablen RP_AGENT_KEY, RP_API_KEY, RUNPOD_API_KEY. In CI "
+            "mapped .github/workflows/runpod-deploy.yml das Repo-Secret 'RP_API_KEY' auf die "
+            "Env-Variable RP_API_KEY - dort exakt diesen Secret-Namen pruefen.",
+            file=sys.stderr,
+        )
         return 2
 
     runpod.api_key = api_key
