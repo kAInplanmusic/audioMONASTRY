@@ -288,8 +288,9 @@ Verifiziert (read-only):
    selbst (`test.skip`) – die hier aktualisierten lokalen Baselines betreffen T4 nicht.
 5. **Arbeitsverzeichnis während T1 nicht ändern:** Mit `DISABLE_HMR=true` ist das Risiko
    entschärft; die Ursache (Vite-Full-Reload) ist im Harness dokumentiert.
-6. **Offen (App-Entscheidung, KMU):** §6.1 (Show-Orchestrator unter Reduced-Motion
-   einfrieren), damit die a11y-Zusicherung deterministisch wird.
+6. ~~**Offen (App-Entscheidung, KMU):** §6.1 (Show-Orchestrator unter Reduced-Motion
+   einfrieren), damit die a11y-Zusicherung deterministisch wird.~~ → **erledigt**, siehe
+   §10.1 (Freigabe durch den Betreiber 2026-09-29).
 
 ---
 
@@ -328,3 +329,115 @@ Verifiziert (read-only):
 Nicht angefasst: `src/`, `server.ts`, `server/`, `vite.config.ts`, `playwright.config.ts`
 (unverändert in diesem Paket), `.env*` (außer der Wiederherstellung in §7), keine
 Hetzner-/RunPod-Ressource, kein Push.
+
+> **Nachtrag §10 (Freigabe 2026-09-29):** Inzwischen ist `src/` **doch** angefasst – die
+> Reduced-Motion-Ursache aus §6.1 war eine App-Ursache und wurde behoben (§10.1). Der
+> Absatz oben beschreibt nur den Stand des ursprünglichen Pakets.
+
+---
+
+## 10. Nachtrag 2026-09-29 (nach Betreiber-Freigabe)
+
+Freigegeben wurden vier Punkte: (1) Push der Paket-Commits, (2) Reduced-Motion-Ursache
+beheben, (3) T1 gegen Host-Aussetzer härten, (4) Memtest86+ installieren/scharfstellen.
+
+### 10.1 §6.1 geschlossen: Die Liveshow lief an der Reduced-Motion-Zusage vorbei
+
+**Erste Annahme war falsch.** Der naheliegende „Einzeiler" (`showApi.tick(now, …)` an
+`reducedMotion` koppeln) half nicht: der Test blieb rot. Ursachenklärung mit temporärer
+Instrumentierung des Frame-Loops (danach wieder entfernt):
+
+```
+showPlaying: true, scenes: 8, rm: true, animDt: 0, animTimeS: 0, params: konstant
+Proben (400 ms): 12/12 VERSCHIEDEN
+```
+
+Damit stand fest: **nicht** die Feldbewegung war das Problem (die war korrekt eingefroren),
+sondern der **Show-Layer**. Zwei Gründe, beide im Hook `useVisualShow.ts`:
+
+1. `draw()`/`frame()` rechnen mit einer **eigenen Wanduhr** (`performanceNow()`) – sie
+   bekommen den `nowMs`-Wert des Aufrufers nie zu sehen. `tick()` steuert nur den
+   **Szenenwechsel**, nicht das Zeichnen.
+2. Die Szenen-Medien sind **`<video>`-Elemente ohne DOM-Bindung**, die per `media.play()`
+   von selbst weiterlaufen. Ein laufendes Video ist Bewegung, unabhängig von jeder Uhr.
+
+**Fix (3 App-Dateien + Spec):**
+* `src/hooks/useVisualShow.ts`: neuer Schalter `setFrozen(frozen)` in der Show-API.
+  Angehalten gilt eine feste Uhr (`clockNow()` statt `performanceNow()`), der Crossfade
+  steht auf `fade = 1`, und die Szenen-Videos werden pausiert (`pause()`) bzw. beim
+  Aufheben wieder angespielt. Neue Medien werden im angehaltenen Zustand nicht
+  angespielt.
+* `src/core/visual/canvasRenderer.ts`: neuer Parameter `trail` (Default `true` =
+  unverändert). Unter Reduced-Motion aus – der „Bewegungsschleier" (additives Nachziehen
+  des Hintergrunds) ist selbst Bewegung.
+* `src/components/visual/VisualMonkOverlay.tsx`: ruft pro Frame `showApi.setFrozen(...)`,
+  friert unter Reduced-Motion zusätzlich den Show-Zeitanker ein und übergibt
+  `trail = !reducedMotion`.
+* `tests/e2e/a11y.spec.ts`: Stillstands-Poll verlangt jetzt **drei** Folgeproben
+  (vorher zwei). Grund ist ein **gemessener legitimer** Wechsel, kein App-Fehler: die
+  Fläche ist nach dem Öffnen kurz ruhig (nur Feld, solange das Szenen-Video dekodiert)
+  und wechselt **einmal**, sobald die Szene erscheint (`6766112 → 6000180`, danach
+  dauerhaft stabil). Die harte Zusicherung `second === first` ist **unverändert**.
+
+**Wirkung für normale Nutzer: keine.** `setFrozen(false)` ist ein No-op, `trail` ist
+per Default `true`, `clockNow()` liefert dann `performanceNow()`. Belegt durch die
+visuellen Baselines (§10.4).
+
+**Messergebnis nach dem Fix:** 12/12 Proben identisch (`6000180` durchgehend) ·
+`a11y.spec.ts` **3/3 grün** (vorher 1 rot).
+
+### 10.2 T1 härten: Retries + ehrliche Crash-Klassifikation
+
+`scripts/hetzner/deep-test-run.sh`:
+* Playwright läuft in T1 mit `--retries` (Default `1`, überschreibbar über
+  `DEEPTEST_RETRIES`) – gegen die SIGSEGV-Aussetzer dieses Rechners (§10.5).
+* Der T1-Bewerter unterscheidet jetzt **Umgebungs-Crash** von **App-Fehler**. Signatur
+  (`worker process exited unexpectedly`, `Target crashed`, `SIGSEGV`, `browser has been
+  closed`) → eigener Rückgabecode **2 = „nicht verwertbar"** und eigene Liste, statt den
+  Lauf stillschweigend als roten App-Fehler zu buchen. Der Playwright-Exitcode wird
+  nicht mehr von einem `ev_rc=1` verschluckt.
+* `report.json` wird mitgelesen: `flaky` (im Retry grün) ist sichtbar – so fällt auf,
+  wenn ein Retry einen Aussetzer maskiert.
+
+Isoliert geprüft (Bewerter aus dem Skript extrahiert, drei synthetische JUnit-Fälle):
+
+| Fall | Ergebnis | Exitcode |
+|---|---|---|
+| alles grün | `3 grün, 0 rot, 0 Umgebungs-Crash` | **0** |
+| ein echter roter Test | `2 grün, 1 rot` + `ROT: a11y.spec.ts.t2` | **1** |
+| 2 Crash-Signaturen + 1 echter Roter | getrennte `UMGEBUNGS-CRASH`-Liste + `flaky 1` sichtbar | **2** |
+
+### 10.3 Nebenfund: Nomenklatur-Wache war rot (aus `cd572b5`)
+
+`npm test` (Unit-Suite) war **vor** diesem Nachtrag 2225/2226 grün: die Wache
+`tests/namingConventions.test.ts` fand den Altnamen in `docs/AUDIT-FIXPAKET-D.md` – also
+in genau dem Report, der die Legacy-Ausmusterung abschließt (Datei ist committet,
+kein Änderungsstand dieser Sitzung). Behoben über die **begründete Ausnahmeliste**
+(dieselbe Konvention wie bei den vier Audit-/Runbook-Dokumenten: Belegkapitel nennen den
+Altnamen zwangsläufig). Die Zusicherung selbst wurde nicht abgeschwächt.
+
+### 10.4 Regressionsnachweis nach dem App-Eingriff
+
+| Prüfung | Ergebnis |
+|---|---|
+| Unit-Suite (`vitest run`) | **2226/2226 grün**, 289/289 Dateien |
+| `visual.spec.ts` (Baselines: Start, Studio, 21 Ansichten) | **3/3 grün** → Standard-Renderpfad unverändert |
+| `a11y.spec.ts` | **3/3 grün** (inkl. der zuvor roten Zusicherung) |
+| Kernpfade (`smoke`, `startState`, `audio-smoke`, `audioAction`, `aiNegative`) | **15/15 grün** |
+
+**Nicht abschließend prüfbar auf diesem Rechner:** der Mehrbrowser-Block (`collab`,
+`keyboard`, `hardware`, `pluginCloseSync`, `monitorCue`) – zwei Anläufe endeten mit
+`worker process exited unexpectedly (signal=SIGSEGV)` und anschließend
+`ERR_CONNECTION_REFUSED`, weil die **Test-App selbst** abstürzte. Kernelbeleg:
+`node[…]: segfault at … in node` zur Laufzeit. Das ist die Umgebungsklasse aus §10.5,
+kein App-Befund; der Block ist auf stabilem Rechner nachzuholen.
+
+### 10.5 Umgebungsbelege (Host-Speicherfehler)
+
+`tsc` (Typecheck) stürzt **3/3 reproduzierbar** ab – mit beiden Node-Installationen
+(`~/.hermes/node` und nvm v22.23.3), jeweils „Speicherauszug". Als Ersatz dienten die
+LSP-Diagnosen im Editor und `esbuild` (Go, speicherarm). Weiter im Journal:
+`node[…]: segfault … in node`, `status=139` der Test-App, vorher bereits SIGSEGVs in
+`python3`, `sudo/apt-get` und `tirith-main`. Konsequenz: Memtest86+ 7.00 ist installiert
+und als **Einmal-Boot** scharfgestellt (`grubenv: next_entry=Memory test
+(memtest86+x64.efi)`) – nach dem Test startet der Rechner wieder normal.
