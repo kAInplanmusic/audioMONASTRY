@@ -23,8 +23,6 @@
 #   * deshalb: der Abbau laesst alles stehen und LISTET die Firewalls hier nur
 #     auf (lesend). Veraltete Quell-IPs sind erwartet - Schritt 3/9 von
 #     bring-up-fleet.sh gleicht sie auf die neuen Knoten-IPs ab.
-#   * geloescht wird nur fachlich Toter Bestand: ungenutzte Firewalls des
-#     Alt-Praefixes per scripts/hetzner/cleanup-legacy-firewalls.py [--apply].
 #
 # Aufruf:
 #   bash scripts/hetzner/delete-fleet.sh          (mit Rückfrage)
@@ -41,8 +39,8 @@ ENV_FILE="${DELETE_FLEET_ENV_FILE:-.env.deploy}"
 if [[ -f "$ENV_FILE" ]]; then set -a; . "$ENV_FILE"; set +a; fi
 [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt ($ENV_FILE)" >&2; exit 1; }
 
-# NOMEN-P1-001: Aufraeumen darf NICHTS uebersehen - ein Altname, der nicht
-# geloescht wird, kostet weiter Geld. Deshalb beide Schreibweisen.
+# NOMEN-P1-001: Namen aus der EINEN Quelle - es gibt nur noch die kanonische
+# Schreibweise.
 source "$(dirname "$0")/fleet-names.sh"
 NAMES=(audiomonastry-app-1 audiomonastry-sfu-1 audiomonastry-ai-1 audiomonastry-master-1 audiomonastry-edge-1)
 ALL_NAMES=()
@@ -107,8 +105,6 @@ for fw in sorted(firewalls, key=lambda f: str(f.get("name", ""))):
 print("  Die Quell-IPs der Cross-Node-Regeln zeigen jetzt auf GELOESCHTE Knoten - das ist")
 print("  erwartet; der naechste Flottenstart gleicht sie in Schritt 3/9 ab")
 print("  (python3 scripts/hetzner/firewall-ensure.py, Trockenlauf: --dry-run).")
-print("  Loeschen ist nur fuer ungenutzte Alt-Firewalls vorgesehen:")
-print("    python3 scripts/hetzner/cleanup-legacy-firewalls.py [--apply]")
 '
 echo
 echo "✅ Flotte gelöscht – es fallen keine Server-Kosten mehr an."

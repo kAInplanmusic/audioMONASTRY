@@ -21,7 +21,7 @@ const worker = portalWorker as unknown as {
 const FLEET_ROLES = ['app', 'sfu', 'ai', 'master', 'edge'];
 const FLEET_SERVERS = FLEET_ROLES.map((role, i) => ({
   id: i + 1,
-  name: `samplemonk-${role}-1`,
+  name: `audiomonastry-${role}-1`,
   status: 'running',
   labels: { role, app: 'audioMONASTRY', 'managed-by': 'portal-worker' },
   public_net: role === 'app' ? { ipv4: { ip: '1.2.3.4' } } : null,
@@ -122,7 +122,7 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
         ? (opts.servers ?? [])
         : (opts.servers && opts.servers.length > 0
             ? opts.servers
-            : [{ id: 1, name: 'samplemonk-app-1', status: 'running', labels: { role: 'app' }, public_net: { ipv4: { ip: '1.2.3.4' } } }]);
+            : [{ id: 1, name: 'audiomonastry-app-1', status: 'running', labels: { role: 'app' }, public_net: { ipv4: { ip: '1.2.3.4' } } }]);
       return Response.json({ servers });
     }
     if (path === '/v1/servers' && method === 'POST') {

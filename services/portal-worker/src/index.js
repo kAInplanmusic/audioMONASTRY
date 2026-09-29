@@ -17,10 +17,10 @@
 
 const HETZNER = 'https://api.hetzner.cloud/v1';
 
-// NOMEN-P1-001: Die Flotte heisst `audiomonastry-*`. Laufende Installationen
-// koennen noch die alten Knoten-/Firewall-/Snapshot-Namen tragen, deshalb
-// akzeptiert der Worker BEIDE Schreibweisen (Altname nur fuer Bestandsressourcen,
-// angelegt wird immer mit dem neuen Namen). Der Altpraefix steht genau hier.
+// NOMEN-P1-001: Die Flotte heisst `audiomonastry-*` - es gibt nur noch diese
+// eine Schreibweise (Altbestand ausgemustert: Flotte 2026-09-11 gestoppt und
+// geloescht, Alt-Firewalls 2026-09-20 geloescht; angelegt wird immer mit dem
+// neuen Namen).
 //
 // INFRA-HETZNER-007: `type` ist der FALLBACK der Rolle. Der produktive Pfad liest
 // dieselben Overrides wie die CLI (FLEET_TYPE_APP/SFU/AI/MASTER/EDGE, siehe
@@ -82,8 +82,6 @@ export function fleetServerType(env, role) {
 }
 
 const NAME_PREFIX = 'audiomonastry-';
-/** Altpraefix aus der Zeit vor der Umbenennung (nur lesend/Bestand). */
-const LEGACY_NAME_PREFIX = 'samplemonk-';
 /**
  * Compose-PROJEKTNAME der Flotte (F10).
  *
@@ -99,13 +97,10 @@ const LEGACY_NAME_PREFIX = 'samplemonk-';
  */
 const COMPOSE_PROJECT = NAME_PREFIX.replace(/-$/, '');
 
-/** Kanonischer Flotten-Name zu einem (moeglicherweise alten) Servernamen. */
+/** Kanonischer Flotten-Name zu einem (moeglicherweise fremden) Servernamen. */
 function canonicalFleetName(name) {
   const raw = String(name ?? '');
-  if (FLEET.some((f) => f.name === raw)) return raw;
-  if (!raw.startsWith(LEGACY_NAME_PREFIX)) return '';
-  const candidate = `${NAME_PREFIX}${raw.slice(LEGACY_NAME_PREFIX.length)}`;
-  return FLEET.some((f) => f.name === candidate) ? candidate : '';
+  return FLEET.some((f) => f.name === raw) ? raw : '';
 }
 
 const LOCATION = 'fsn1';
@@ -159,9 +154,9 @@ async function fleetServers(env) {
   const data = await hzGet(env, '/servers?per_page=50');
   const map = {};
   for (const s of data.servers ?? []) {
-    // Schluessel ist der kanonische Name; Altinstallationen liefern ihre alten
-    // Servernamen und werden darauf abgebildet (sonst waere die Flotte fuer den
-    // Portal-Worker unsichtbar, obwohl sie laeuft).
+    // Schluessel ist der kanonische Name. (Die fruehere Abbildung von
+    // Alt-Servernamen ist mit der Bestands-Ausmusterung entfallen - 0 Knoten
+    // seit 2026-09-11.)
     const key = canonicalFleetName(s.name);
     if (key) map[key] = s;
   }
@@ -186,12 +181,11 @@ function isFleetSnapshot(img) {
 function snapshotRoleOf(img) {
   const fromLabel = img?.labels?.role;
   if (fromLabel) return fromLabel;
-  // LIVE-BEFUND 2026-09-18: Die Portal-Snapshots tragen KEIN Label und KEINEN
-  // Namen - nur die Beschreibung ("samplemonk-snapshot-app-2026-09-18[-live]").
-  // Mit der reinen Label-Abfrage fand `findSnapshot()` nie etwas, jeder Wake
-  // lief deshalb als Kaltstart mit cloud-init + Build (gemessen: statt
-  // Snapshot-Start; `usedSnapshots: {}`). Die Rolle wird daher aus Name/
-  // Beschreibung abgeleitet, wenn das Label fehlt.
+  // LIVE-BEFUND 2026-09-18: Die Portal-Snapshots trugen KEIN Label und KEINEN
+  // Namen - nur die Beschreibung. Mit der reinen Label-Abfrage fand
+  // `findSnapshot()` nie etwas, jeder Wake lief deshalb als Kaltstart mit
+  // cloud-init + Build (gemessen: statt Snapshot-Start; `usedSnapshots: {}`).
+  // Die Rolle wird daher aus Name/Beschreibung abgeleitet, wenn das Label fehlt.
   const text = `${img?.name ?? ''} ${img?.description ?? ''}`;
   for (const prefix of ALL_SNAPSHOT_PREFIXES) {
     const match = text.match(new RegExp(`${prefix}(app|sfu|ai|master|edge)(?![a-z])`));
@@ -734,13 +728,8 @@ function wiringSummary(wiring) {
 async function syncAppFirewall(env) {
   const { ips: cfIps, error: cfError } = await cloudflareIpRangesDetailed();
   const failClosed = appHttpFailClosedReason(cfIps, cfError);
-  // Firewall des Bestands kann noch den Altnamen tragen -> beide probieren.
-  let fw = null;
-  for (const name of [`${NAME_PREFIX}app`, `${LEGACY_NAME_PREFIX}app`]) {
-    const list = await hzGet(env, `/firewalls?name=${name}`);
-    fw = (list.firewalls ?? [])[0] ?? null;
-    if (fw) break;
-  }
+  const list = await hzGet(env, `/firewalls?name=${NAME_PREFIX}app`);
+  const fw = (list.firewalls ?? [])[0] ?? null;
   if (!fw) return { ok: false, message: 'app-Firewall nicht gefunden' };
   // Monitoring-Knoten (edge-1) bestimmen: nur er darf den Metrik-Port 8080
   // erreichen. Faellt die Aufloesung aus, bleibt die Regel weg (der Scrape
@@ -1804,17 +1793,14 @@ async function openFleetPorts(env) {
 // wird laut gemeldet statt still Daten zu verlieren). Die Snapshots sind
 // gleichzeitig der schnelle Start-Pfad des naechsten Wake (findSnapshot()).
 //
-// Rolle eines Servers: Label des Portal-Workers; fuer die Bestandsflotte ohne
-// Label wird sie aus dem Namen abgeleitet (Praefix + app|sfu|ai|master|edge).
+// Rolle eines Servers: Label des Portal-Workers; ohne Label wird sie aus dem
+// kanonischen Namen abgeleitet (Praefix + app|sfu|ai|master|edge).
 function serverRole(server) {
   const label = String(server?.labels?.role ?? '').trim();
   if (label) return label;
   const name = String(server?.name ?? '');
-  for (const prefix of [NAME_PREFIX, LEGACY_NAME_PREFIX]) {
-    const match = name.match(new RegExp(`^${prefix}(app|sfu|ai|master|edge)(?![a-z])`));
-    if (match) return match[1];
-  }
-  return null;
+  const match = name.match(new RegExp(`^${NAME_PREFIX}(app|sfu|ai|master|edge)(?![a-z])`));
+  return match ? match[1] : null;
 }
 
 /** Action-Status bis `deadline` pollen (Hetzner: running|success|error). */
