@@ -29,8 +29,20 @@ bash scripts/backup-watchdog.sh          # Frische-Prüfung (Exit 1 = DB-Dump zu
 
 Ablauf: `pg_dump` (Schema+ Daten, `--no-owner --no-privileges --clean --if-exists`) → `gzip` →
 `scripts/r2-backup.mjs upload db/audiomonastry_db_<stamp>.sql.gz`. Dump-Treiber: lokal, sonst
-**Docker** (`postgres:16-alpine`, `--network=host` — nötig, weil die Supabase-DB nur per IPv6
-erreichbar ist). Retention: lokal 7 Tage, offsite 14 Dumps.
+**Docker** (`--network=host` — nötig, weil die direkte Supabase-DB nur per IPv6 erreichbar ist).
+
+**Dump-Client-Version passt sich an:** Supabase läuft auf PostgreSQL **17.6**. Das Skript startet mit
+`postgres:17-alpine`, liest bei einem „server version mismatch" die Server-Major-Version aus der
+Fehlermeldung und zieht das Image einmalig korrekt nach (Ergebnis wird in
+`~/.cache/monk/supabase-dump-image` gecacht). Das Passwort wird ausschließlich über `PGPASSWORD`
+übergeben — es erscheint nie in `ps`, `docker inspect` oder Logs (Logs maskieren immer zu `***`).
+
+Retention: lokal 7 Tage, offsite 14 Dumps. **Restore ist erprobt** (Dump aus dem Bucket geholt,
+Header/19 Tabellen/COPY-Blöcke geprüft).
+
+Erster echter Lauf: 2026-09-29 21:43 · 0,12 MB gzip · 19 Tabellen · offsite unter `db/`.
+(Der Bestand ist klein, weil die Masse der Daten — 6,28 GB Audio — in R2 liegt; die DB hält die
+Metadaten und Prompts.)
 
 Timer (systemd `--user`, läuft unabhängig von der Flotte):
 - `audiomonastry-dbbackup.timer` → täglich **03:30** (`Persistent=true`)

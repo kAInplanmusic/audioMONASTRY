@@ -52,16 +52,31 @@ DB_NAME="${SUPABASE_DB_NAME:-postgres}"
 DB_USER="${SUPABASE_DB_USER:-postgres}"
 
 if [[ -n "${SUPABASE_DB_URL:-}" ]]; then
-  CONN="$SUPABASE_DB_URL"
+  # DSN in Einzelteile zerlegen (per Python, damit Sonderzeichen in Passwoertern
+  # korrekt entschluesselt werden) – das Passwort wird danach NUR ueber
+  # PGPASSWORD uebergeben und erscheint nie in der Prozessliste/`ps`/`docker inspect`.
+  read -r DB_USER DB_PASSWORD DB_HOST DB_PORT DB_NAME < <(python3 - "$SUPABASE_DB_URL" <<'PY'
+import sys, urllib.parse as up
+u = up.urlsplit(sys.argv[1])
+print(u.username or "postgres", up.unquote(u.password or ""), u.hostname or "",
+      u.port or 5432, (u.path or "/postgres").lstrip("/"))
+PY
+)
+  DB_USER="${DB_USER:-$DB_USER_OVERRIDE}"
+  DB_PASSWORD="${DB_PASSWORD:?DSN ohne Passwort}"
+  DB_HOST="${DB_HOST:-db.pwtwtqbcynsjtkxlkrwh.supabase.co}"
+  DB_NAME="${DB_NAME:-postgres}"
+elif [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
+  DB_PASSWORD="$SUPABASE_DB_PASSWORD"
 else
-  [[ -n "${SUPABASE_DB_PASSWORD:-}" ]] || loud_fail \
-    "Kein DB-Secret. Bitte in ~/.config/monk/keys.env hinterlegen: SUPABASE_DB_URL=postgresql://postgres:PASSWORT@$DB_HOST:$DB_PORT/$DB_NAME (Datei chmod 600)."
-  CONN="postgresql://${DB_USER}:${SUPABASE_DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  loud_fail "Kein DB-Secret. Bitte in ~/.config/monk/keys.env hinterlegen: SUPABASE_DB_URL=postgresql://postgres:PASSWORT@$DB_HOST:$DB_PORT/$DB_NAME (Datei chmod 600)."
 fi
+
+export PGPASSWORD="$DB_PASSWORD"
 
 # Passwort nie auf der Kommandozeile zeigen: DSN an pg_dump uebergeben, aber
 # in Logs ausschliesslich maskiert ausgeben.
-MASKED="$(printf '%s' "$CONN" | sed -E 's#://([^:]+):[^@]+@#://\1:***@#')"
+MASKED="postgresql://${DB_USER}:***@${DB_HOST}:${DB_PORT}/${DB_NAME}"
 SCHEMAS="${SUPABASE_DB_SCHEMAS:-public}"
 DRIVER="${SUPABASE_DUMP_DRIVER:-auto}"   # auto | local | docker
 
@@ -91,17 +106,47 @@ if [[ "$DRY" == "1" ]]; then
 fi
 
 set +e
+ERRLOG="$(mktemp)"
+IMG_CACHE="$HOME/.cache/monk/supabase-dump-image"
+run_docker_dump() {  # $1 = Image
+  docker run --rm --network=host -e PGPASSWORD -e PGCONNECT_TIMEOUT=20 "$1" \
+    pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+    --no-owner --no-privileges --clean --if-exists "${SCHEMA_ARGS[@]}"
+}
+
 if [[ "$DRIVER" == "local" ]]; then
-  pg_dump "$CONN" --no-owner --no-privileges --clean --if-exists "${SCHEMA_ARGS[@]}" \
+  pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+    --no-owner --no-privileges --clean --if-exists "${SCHEMA_ARGS[@]}" \
     | gzip -9 > "$OUT"
   rc=${PIPESTATUS[0]}
 else
-  docker run --rm --network=host -e PGCONNECT_TIMEOUT=20 \
-    postgres:16-alpine \
-    pg_dump "$CONN" --no-owner --no-privileges --clean --if-exists "${SCHEMA_ARGS[@]}" \
-    | gzip -9 > "$OUT"
+  # Image passend zur Server-Major-Version. Reihenfolge: gecachtes Image ->
+  # EXPLIZIT gesetztes Image -> postgres:17-alpine. Bei Versions-Mismatch wird
+  # die Server-Major-Version aus der Fehlermeldung gelesen und EINMAL korrekt
+  # nachgezogen (pg_dump verweigert bei aelterer Client-Version den Dienst).
+  IMG="${SUPABASE_DUMP_IMAGE:-}"
+  if [[ -z "$IMG" && -f "$IMG_CACHE" ]]; then IMG="$(cat "$IMG_CACHE")"; fi
+  [[ -n "$IMG" ]] || IMG="postgres:17-alpine"
+
+  run_docker_dump "$IMG" 2>"$ERRLOG" | gzip -9 > "$OUT"
   rc=${PIPESTATUS[0]}
+
+  if [[ $rc -ne 0 ]] && grep -q 'server version' "$ERRLOG"; then
+    MAJOR="$(grep -oE 'server version: [0-9]+' "$ERRLOG" | head -1 | grep -oE '[0-9]+')"
+    if [[ -n "$MAJOR" ]]; then
+      NEWIMG="postgres:${MAJOR}-alpine"
+      log "Versions-Mismatch mit $IMG -> Retry mit $NEWIMG (Server-Major $MAJOR)"
+      run_docker_dump "$NEWIMG" 2>"$ERRLOG" | gzip -9 > "$OUT"
+      rc=${PIPESTATUS[0]}
+      if [[ $rc -eq 0 ]]; then
+        mkdir -p "$(dirname "$IMG_CACHE")"; echo "$NEWIMG" > "$IMG_CACHE"
+        log "Dump-Image gecacht: $NEWIMG"
+      fi
+    fi
+  fi
+  [[ $rc -eq 0 ]] || { echo "--- pg_dump-Fehlerausgabe ---" >&2; cat "$ERRLOG" >&2; }
 fi
+rm -f "$ERRLOG"
 set -e
 
 if [[ $rc -ne 0 || ! -s "$OUT" ]]; then
@@ -109,13 +154,17 @@ if [[ $rc -ne 0 || ! -s "$OUT" ]]; then
   loud_fail "pg_dump fehlgeschlagen (rc=$rc). Nichts hochgeladen." 2
 fi
 
-# Plausibilitaet: ein gueltiger Dump nennt PostgreSQL und enthaelt CREATE TABLE
-if ! gzip -dc "$OUT" | head -40 | grep -q "PostgreSQL database dump"; then
+# Plausibilitaet: ein gueltiger Dump nennt PostgreSQL und enthaelt CREATE TABLE.
+# ACHTUNG: kein `| head` direkt in der Bedingung — mit `set -o pipefail` wertet
+# SIGPIPE von head (gzip wird frueh geschlossen) die Pipeline faelschlich als Fehler.
+HEAD40="$(gzip -dc "$OUT" 2>/dev/null | head -40 || true)"
+if ! printf '%s' "$HEAD40" | grep -q "PostgreSQL database dump"; then
   loud_fail "Dump sieht unplausibel aus (kein pg_dump-Header): $OUT" 2
 fi
 SIZE="$(stat -c%s "$OUT")"
 TABLES="$(gzip -dc "$OUT" | grep -c '^CREATE TABLE' || true)"
-log "Dump fertig: $(printf '%.1f' "$(echo "$SIZE/1048576" | bc -l)") MB · $TABLES CREATE TABLE"
+SIZE_MB="$(awk -v s="$SIZE" 'BEGIN{printf "%.2f", s/1048576}')"
+log "Dump fertig: ${SIZE_MB} MB · $TABLES CREATE TABLE"
 
 # --- 4) Offsite-Upload ------------------------------------------------------
 REMOTE_KEY="db/$(basename "$OUT")"
