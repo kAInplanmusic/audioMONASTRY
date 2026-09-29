@@ -89,6 +89,12 @@ try {
       process.exit(3);
     }
     console.log(`S3-BACKUP: ok ${key} (${size} bytes, etag=${head.ETag})`);
+  } else if (cmd === 'delete') {
+    const key = arg;
+    if (!key) { console.error('delete <key>'); process.exit(2); }
+    const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
+    await client().send(new DeleteObjectCommand({ Bucket: target.bucket, Key: key }));
+    console.log(`S3-BACKUP: geloescht ${key}`);
   } else if (cmd === 'restore') {
     const key = arg;
     const dest = arg2;
@@ -98,7 +104,7 @@ try {
     await pipeline(obj.Body, createWriteStream(dest));
     console.log(`S3-BACKUP: restore ok ${key} -> ${dest} (${statSync(dest).size} bytes)`);
   } else {
-    console.error('Verwendung: r2-backup.mjs list [prefix] | upload <datei> [key] | restore <key> <ziel>');
+    console.error('Verwendung: r2-backup.mjs list [prefix] | upload <datei> [key] | restore <key> <ziel> | delete <key>');
     process.exit(2);
   }
 } catch (e) {
