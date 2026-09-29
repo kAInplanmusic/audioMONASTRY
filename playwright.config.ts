@@ -23,8 +23,8 @@ import { readFileSync } from 'node:fs';
  * tests/server.test.ts abgesichert. Deshalb bekommt die Suite einen Token (CI: env,
  * lokal: .env) und das `studio`-Cookie wird hier zentral für ALLE Kontexte gesetzt.
  */
-const E2E_BASE_URL = process.env.E2E_BASE_URL?.replace(/\/$/, '');
-const BASE_URL = E2E_BASE_URL ?? 'http://localhost:8080';
+const E2E_BASE_URL = (process.env.E2E_BASE_URL ?? '').replace(/\/$/, '') || '';
+const BASE_URL = E2E_BASE_URL || 'http://localhost:8080';
 
 /** Studio-Token aus der Umgebung oder (lokal) aus der `.env`. */
 function studioToken(): string {
@@ -72,10 +72,20 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
-  reporter: [['list']],
+  // Deep-Test-Lauf (scripts/hetzner/deep-test-run.sh): erweiterte Observability –
+  // list + JSON + JUnit, Artefakte (trace/video/screenshot) unter PWOUTPUT.
+  // Ohne Deep-Test bleibt alles beim bisherigen Verhalten (nur list).
+  ...(process.env.DEEPTEST_RUN
+    ? {
+        reporter: (process.env.PWREPORTERS && JSON.parse(process.env.PWREPORTERS)) || [['list']],
+        outputDir: process.env.PWOUTPUT || 'test-results/e2e',
+      }
+    : {}),
   use: {
     baseURL: BASE_URL,
     trace: 'retain-on-failure',
+    // Deep-Test: Video + Screenshot JEDEM Test mitgeben (Betreiber-Observability).
+    ...(process.env.DEEPTEST_RUN ? { video: 'on' as const, screenshot: 'on' as const } : {}),
     ...(storageState ? { storageState } : {}),
   },
   expect: {
