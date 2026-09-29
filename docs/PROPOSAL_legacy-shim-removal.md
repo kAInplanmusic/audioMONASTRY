@@ -1,6 +1,7 @@
 # PROPOSAL · samplemonk-Legacy-Shim-Ausmusterung (REPO-VORBEREITUNG)
 
-**Stand:** 2026-09-29, Basis `main @ d1fb16c` · **Autor:** Background-Worker (read-only Analyse + dieser Plan)
+**Stand:** 2026-09-29 · Basis `main @ d1fb16c` · **Autor:** Background-Worker (read-only Analyse + dieser Plan)
+**UMGESETZT 2026-09-29:** Phase 1 Commit `6e8a3d5`, Phase 2 Commit folgt (s. git log) · Umsetzung: Haupt-Agent nach Worker-Vorbereitung · Waechter-Nachher-Bild (10 Dateien) live verifiziert
 **Umfang:** Nur Repo. Kein Server-/Deploy-/API-Zugriff. Umsetzung später durch Betreiber/Haupt-Agent.
 
 ---
