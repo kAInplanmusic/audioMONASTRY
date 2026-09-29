@@ -130,6 +130,12 @@ export function renderFrame(
   params: VisualParams,
   state: RendererState,
   dtSeconds: number,
+  /**
+   * Bewegungsschleier. Unter Reduced-Motion aus (UI-P1-002): der Schleier ist
+   * selbst Bewegung und verhindert identische Frames – er zieht den Hintergrund
+   * pro Frame additiv nach, statt ihn zu setzen.
+   */
+  trail = true,
 ): void {
   const colors = preset.palette.colors;
   const bg = colors[0];
@@ -137,8 +143,15 @@ export function renderFrame(
   const hot = colors[2] ?? accent;
   const white = colors[colors.length - 1] ?? hot;
 
-  // Hintergrund mit leichtem Trailing (Bewegungsschleier).
-  ctx.fillStyle = rgba(bg, 0.28 + (1 - params.brightness) * 0.35);
+  if (trail) {
+    // Hintergrund mit leichtem Trailing (Bewegungsschleier).
+    ctx.fillStyle = rgba(bg, 0.28 + (1 - params.brightness) * 0.35);
+  } else {
+    // Ohne Schleier: der Hintergrund wird GESETZT (voll deckend), damit jeder
+    // Frame deterministisch aus demselben Ausgangszustand entsteht.
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = rgba(bg, 1);
+  }
   ctx.fillRect(0, 0, width, height);
 
   const mode = drawModeForPreset(preset);

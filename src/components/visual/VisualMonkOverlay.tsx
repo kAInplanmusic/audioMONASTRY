@@ -39,6 +39,10 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
   const reducedMotionRef = useRef(false);
+  // UI-P1-002: eigener Zeitanker für die Show. Unter Reduced-Motion läuft die
+  // Show-Uhr NICHT weiter (siehe tick-Aufruf im Frame) – ohne ihn wechselt die
+  // Szene mitten im Standbild und die Zusage „identische Frames" bricht.
+  const showClockRef = useRef<number | null>(null);
   useEffect(() => {
     const mq = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
       ? window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -386,7 +390,29 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       }
       // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie).
       const showApi = showRef.current;
-      showApi.tick(now, features);
+      // UI-P1-002: Reduced-Motion hält die GANZE Show an. `draw`/`frame` rechnen
+      // intern mit `performanceNow()` (eigene Uhr) und die Szenen-Clips sind
+      // Videos, die von selbst weiterlaufen – beides macht die Canvas-Fläche
+      // unruhig, obwohl Feldbewegung und Features längst eingefroren sind.
+      showApi.setFrozen(reducedMotionRef.current);
+      if (reducedMotionRef.current) {
+        // UI-P1-002 (Befund 2026-09-29): Bisher bekam der Orchestrator IMMER die
+        // Wanduhr – die Feldbewegung war eingefroren, sein Szenenwechsel nicht.
+        // Seine Regeln hängen an beidem:
+        //   * `elapsedS = (nowMs - startedAtMs)/1000` → bei laufender Uhr feuert
+        //     `elapsedS >= durationS` und es folgt ein NEUES Bild,
+        //   * ab `minDwellS` wechselt auch ein Beat (`features.onset`) oder ein
+        //     Energiesprung – ganz ohne Uhr.
+        // Reduced-Motion heisst hier: die Show PAUSIERT (Standbild), statt im
+        // Standbild weiterzuschalten. Deshalb der feste Zeitanker (erstes Frame
+        // nach Aktivierung; höchstens ein Wechsel, danach steht elapsedS auf 0)
+        // und dieselben Ruhe-Features, die oben schon die Parameter speisen.
+        showClockRef.current ??= now;
+        showApi.tick(showClockRef.current, IDLE_AUDIO_FEATURES);
+      } else {
+        showClockRef.current = null;
+        showApi.tick(now, features);
+      }
 
       const gpu = gpuRendererRef.current;
       const gl = gpu ? null : glRendererRef.current;
@@ -406,7 +432,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         gl.render(preset, paramsRef.current, animTimeS, scene);
       } else if (ctx) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, animDt);
+        renderFrame(ctx, cssW, cssH, preset, paramsRef.current, stateRef.current, animDt, !reducedMotionRef.current);
         // Canvas2D: Szene per drawImage über die Visualisierung (Crossfade).
         if (showApi.playing) showApi.draw(ctx, cssW, cssH);
       }

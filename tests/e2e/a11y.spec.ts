@@ -100,16 +100,26 @@ test.describe('A11y (UI-P1-002)', () => {
       // Deshalb: auf den Stillstand WARTEN (zwei Folgeproben identisch), erst dann
       // die eigentliche Zusicherung prüfen. Die Zusicherung selbst bleibt hart –
       // beruhigt sich der Canvas nie, läuft der poll in den Timeout = rot.
+      // BEFUND 2026-09-29 (zweite Messung, nach dem Reduced-Motion-Fix): Die
+      // Fläche ist nach dem Öffnen zunächst ruhig, wechselt aber EINMAL legitim,
+      // sobald das Szenen-Video dekodiert ist und die Show ihren ersten Frame
+      // zeichnet (gemessen: 1280x504:6766112 -> 1280x504:6000180, danach dauerhaft
+      // stabil über 12 Proben à 400 ms). Ein Poll auf nur ZWEI gleiche Proben
+      // konnte in dieses ruhige Fenster fallen und danach am echten Wechsel
+      // scheitern. Deshalb: Stillstand über DREI Folgeproben (~1,8 s Fenster) –
+      // das ist länger als jeder Settle-Schritt und weicht die eigentliche
+      // Zusicherung unten (second === first) nicht auf.
+      const stableOver = async (): Promise<string> => {
+        const a = await fingerprint();
+        await page.waitForTimeout(600);
+        const b = await fingerprint();
+        if (a !== b) return `instabil(${a} -> ${b})`;
+        await page.waitForTimeout(600);
+        const c = await fingerprint();
+        return b === c ? 'stabil' : `instabil(${b} -> ${c})`;
+      };
       await expect
-        .poll(
-          async () => {
-            const a = await fingerprint();
-            await page.waitForTimeout(500);
-            const b = await fingerprint();
-            return a === b ? 'stabil' : `instabil(${a} -> ${b})`;
-          },
-          { timeout: 20_000, intervals: [400] },
-        )
+        .poll(stableOver, { timeout: 25_000, intervals: [400] })
         .toBe('stabil');
 
       const first = await fingerprint();
