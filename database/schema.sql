@@ -92,6 +92,20 @@ alter table public.music_tracks add column if not exists tags jsonb not null def
 -- ----------------------------------------------------------------------------
 -- LIBRARY LINKS (generische Querverweise quer über alle Module)
 -- ----------------------------------------------------------------------------
+-- ACHTUNG, STAND 2026-09-23 (DB-P3-001): Diese Tabelle ist NICHT MEHR TEIL DES
+-- ANGEWANDTEN SCHEMAS. Sie wird hier nur noch historisch angelegt; der gueltige
+-- Satz `supabase/migrations/` entfernt sie mit
+-- `015_drop_library_links.sql` (0 Codepfade, live 0 Zeilen).
+--
+-- WER DIESEN SATZ ERNEUT EINSPIELT, HOLT SIE ZURUECK. Das ist kein Fehler in
+-- diesem Skript - der Satz beschreibt den Stand seiner Zeit und wird nicht
+-- rueckwirkend umgeschrieben (sonst haetten Systeme, die ihn schon eingespielt
+-- haben, einen anderen Zustand als das Repo). Aber: danach
+-- `supabase/migrations/015_drop_library_links.sql` nachziehen, oder die Tabelle
+-- bleibt als leere Huelle stehen.
+--
+-- `database/reset.sql` loescht sie bereits (Zeile 14) - der Reset-Pfad raeumt
+-- sie also weg. Nur das erneute Anlegen hier ist die Stolperstelle.
 create table if not exists public.library_links (
   id           uuid primary key default gen_random_uuid(),
   src_table    text not null,                      -- 'samples' | 'music_tracks' | 'instruments' | 'playlists'
@@ -115,18 +129,29 @@ alter table public.library_links enable row level security;
 
 -- anon/publishable darf Samples + Musik lesen (kein Schreiben)
 -- Idempotent: bestehende Policies zuerst entfernen (P-6, kein Fehler bei Re-Run).
+--
+-- RC1-004 (Audit 2026-09-23): anon-LESEN nur noch auf den Tabellen, die der
+-- BROWSER wirklich abfragt. Nachweis: src/lib/supabaseClient.ts:73 liest
+-- `samples` mit select('*'), :85 liest `music_tracks` mit select('*') - beides
+-- OHNE verschachtelten Join. Fuer `sample_tags` und `library_links` gibt es
+-- keinen Browser-Leser (sample_tags nur in server/cloud.ts +
+-- server/cloudAutomation.ts; library_links in KEINEM Codepfad:
+-- `rg -l "\.from\('library_links'\)" src/ server/` -> 0 Treffer).
+-- Ihre anon-Grants sind deshalb entfernt; die service_write-Policies bleiben.
+-- Fuer bereits provisionierte Datenbanken entzieht
+-- database/ai_migration_009_rls_harden.sql dieselben Rechte nachtraeglich
+-- (idempotent). Achtung Reihenfolge: diese Datei sortiert alphabetisch NACH
+-- ai_migration_009 - sie darf die Grants deshalb nicht erneut anlegen.
 drop policy if exists "anon_read_samples" on public.samples;
 create policy "anon_read_samples" on public.samples
   for select to anon using (true);
+-- anon auf sample_tags bewusst entfernt (kein Browser-Leser):
 drop policy if exists "anon_read_tags" on public.sample_tags;
-create policy "anon_read_tags" on public.sample_tags
-  for select to anon using (true);
 drop policy if exists "anon_read_music" on public.music_tracks;
 create policy "anon_read_music" on public.music_tracks
   for select to anon using (true);
+-- anon auf library_links bewusst entfernt (kein Codepfad liest die Tabelle):
 drop policy if exists "anon_read_links" on public.library_links;
-create policy "anon_read_links" on public.library_links
-  for select to anon using (true);
 
 -- service_role schreibt (Seed/Sync)
 drop policy if exists "service_write_samples" on public.samples;

@@ -2,12 +2,22 @@
  * audioMONASTRY · VisualMONK – RunPod-Vision-Client (FLUX)
  * ========================================================
  * Ruft den Serverless-Endpoint der Rolle `imageHq` auf (FLUX.1-dev) und liefert
- * das erzeugte Bild als data-URI (oder URL). Der Worker-Input ist
- * `{ input: { prompt, num_inference_steps, width, height } }`, der Output traegt
- * `image_url` (data-URI) bzw. `images`.
+ * das erzeugte Bild als data-URI (oder URL).
+ *
+ * SEIT 2026-09-27 laeuft dieser Endpoint auf `runpod/worker-comfyui` statt auf
+ * dem PrunaAI-FLUX-Image (Entscheidung „Weg A", visualplan.md §15/§16). Der
+ * Input ist damit `{ input: { workflow } }` — der ComfyUI-Worker kennt **keinen**
+ * `prompt`-Parameter, der Text steckt IM Graphen. Der Output ist
+ * `{ images: [{ filename, type: 'base64', data: '<rohes base64>' }] }`.
+ *
+ * Warum der Graph hier im Code steht und nicht als Datei geladen wird: dieser
+ * Pfad laeuft im Browser-/Node-Bundle der App und hat keinen Zugriff auf den
+ * Serverless-Ordner. Die Struktur ist bewusst **dieselbe** wie in
+ * `services/audiomonastry-ai-runtime/workflows/image_flux1.json`; die
+ * SDXL/LoRA-Fassung fuer den Adapter-Pfad liegt dort als Datei.
  *
  * SONDERWEG (begruendet, INFRA-RUNPOD-007): Dieser Pfad geht NICHT durch den
- * `RunPodProvider`, weil der Worker ein VORGEFERTIGTES PrunaAI-FLUX-Image ist
+ * `RunPodProvider`, weil der Worker ein VORGEFERTIGTES Image ist
  * (`warmupMode: 'endpoint'` in endpointRegistry.ts) und unser
  * `{task, model, input}`-Protokoll nicht kennt – ein Aufruf mit `task`-Feld
  * wuerde dort als ungueltiger Request enden. Alles, was NICHT worker-spezifisch
@@ -67,6 +77,49 @@ export function visionEndpointId(): string {
   return resolved || env('RP_ENDPOINT_ID_VISION') || env('RUNPOD_ENDPOINT_ID_VISION');
 }
 
+/**
+ * Der FLUX.1-dev-Graph fuer den ComfyUI-Worker.
+ *
+ * Gleiche Struktur wie `services/audiomonastry-ai-runtime/workflows/image_flux1.json`
+ * (dort als Datei, hier im Code, weil dieser Pfad im App-Bundle laeuft).
+ * CFG 1.0 ist bei FLUX.1-dev richtig — der Negative-Knoten bleibt verdrahtet,
+ * wirkt aber nicht; ComfyUI verlangt den Eingang.
+ */
+export function fluxVisionWorkflow(opts: {
+  prompt: string;
+  steps?: number;
+  width?: number;
+  height?: number;
+  seed?: number;
+}): Record<string, unknown> {
+  return {
+    '1': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'flux1-dev-fp8.safetensors' } },
+    '2': { class_type: 'CLIPTextEncode', inputs: { text: opts.prompt, clip: ['1', 1] } },
+    '3': { class_type: 'CLIPTextEncode', inputs: { text: '', clip: ['1', 1] } },
+    '4': {
+      class_type: 'EmptyLatentImage',
+      inputs: { width: opts.width ?? 1024, height: opts.height ?? 1024, batch_size: 1 },
+    },
+    '5': {
+      class_type: 'KSampler',
+      inputs: {
+        seed: opts.seed ?? 0,
+        steps: opts.steps ?? 25,
+        cfg: 1.0,
+        sampler_name: 'euler',
+        scheduler: 'simple',
+        denoise: 1.0,
+        model: ['1', 0],
+        positive: ['2', 0],
+        negative: ['3', 0],
+        latent_image: ['4', 0],
+      },
+    },
+    '6': { class_type: 'VAEDecode', inputs: { samples: ['5', 0], vae: ['1', 2] } },
+    '7': { class_type: 'SaveImage', inputs: { filename_prefix: 'vision', images: ['6', 0] } },
+  };
+}
+
 /** Sucht rekursiv das erste Bild (data-URI oder URL) in der Worker-Ausgabe. */
 export function extractVisionImage(output: unknown): string | null {
   if (typeof output === 'string') {
@@ -89,6 +142,13 @@ export function extractVisionImage(output: unknown): string | null {
         const found = extractVisionImage(rec[key]);
         if (found) return found;
       }
+    }
+    // worker-comfyui (ab 5.x): { filename, type: 'base64', data: '<rohes base64>' }.
+    // Das rohe base64 traegt kein "data:"-Praefix und wuerde unten durchfallen —
+    // ohne diese Zeilen liefert der neue Worker scheinbar "kein Bild".
+    if (typeof rec.data === 'string' && rec.data) {
+      if (rec.type === 's3') return rec.data;
+      return rec.data.startsWith('data:') ? rec.data : `data:image/png;base64,${rec.data}`;
     }
     for (const value of Object.values(rec)) {
       const found = extractVisionImage(value);
@@ -138,12 +198,16 @@ export async function generateVisionImage(prompt: string, opts: VisionOptions = 
     sleepImpl: opts.sleepImpl,
     retryBaseMs: opts.retryBaseMs,
     makeError: visionError,
-    // Worker-eigener Vertrag: FLUX kennt kein {task, model}-Umschlagfeld.
+    // Worker-eigener Vertrag (worker-comfyui): der Prompt steckt IM Graphen.
+    // Ein `prompt`-Feld wuerde der Worker ignorieren und immer das im Workflow
+    // hinterlegte Demo-Bild liefern — ein stiller Fehlschlag.
     input: {
-      prompt: clean,
-      num_inference_steps: opts.steps ?? 25,
-      width: opts.width ?? 1024,
-      height: opts.height ?? 1024,
+      workflow: fluxVisionWorkflow({
+        prompt: clean,
+        steps: opts.steps,
+        width: opts.width,
+        height: opts.height,
+      }),
     },
   });
 

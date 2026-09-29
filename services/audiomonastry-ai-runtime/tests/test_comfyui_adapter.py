@@ -148,6 +148,139 @@ class WorkflowRequestTest(unittest.TestCase):
         self.assertEqual(request["images"], [{"name": "a.png", "image": IMAGE_URI}])
 
 
+class ImageLoraRequestTest(unittest.TestCase):
+    """Rolle `imageLora`: zwei Basismodelle, LoRA-Kette, echter Prompt im Graphen.
+
+    Der Kern dieser Rolle ist, dass die LoRA **wirkt**. Eine LoRA, die im Request
+    steht, aber nicht im Graphen landet, erzeugt Bilder, die sich nicht
+    unterscheiden – und genau das kann man ohne diesen Test nicht von einer
+    wirkungslosen LoRA unterscheiden.
+    """
+
+    def _request(self, **args):
+        payload = {"prompt": "mstyle_taenzer, a dancer", "seed": 4711}
+        payload.update(args)
+        return adapter.build_request("image.lora", "imageLora", "image-lora-stack", payload)
+
+    def test_sdxl_ist_die_vorgabe_und_prompt_landet_im_graphen(self) -> None:
+        workflow = self._request()["workflow"]
+        self.assertEqual(workflow["1"]["inputs"]["ckpt_name"], "sd_xl_base_1.0.safetensors")
+        self.assertEqual(workflow["2"]["inputs"]["text"], "mstyle_taenzer, a dancer")
+        self.assertEqual(workflow["5"]["inputs"]["seed"], 4711)
+
+    def test_base_flux1_waehlt_den_anderen_graphen(self) -> None:
+        workflow = self._request(base="flux1")["workflow"]
+        self.assertEqual(workflow["1"]["inputs"]["ckpt_name"], "flux1-dev-fp8.safetensors")
+        # FLUX.1-dev laeuft mit cfg 1 – der Negative-Knoten ist wirkungslos,
+        # muss aber verdrahtet bleiben (ComfyUI verlangt den Eingang).
+        self.assertEqual(workflow["5"]["inputs"]["cfg"], 1.0)
+        self.assertEqual(workflow["3"]["inputs"]["text"], "")
+
+    def test_negative_und_samplerwerte_werden_gesetzt(self) -> None:
+        workflow = self._request(negative_prompt="blurry", steps=12, cfg=4.5, width=768, height=1344)["workflow"]
+        self.assertEqual(workflow["3"]["inputs"]["text"], "blurry")
+        self.assertEqual(workflow["5"]["inputs"]["steps"], 12)
+        self.assertEqual(workflow["5"]["inputs"]["cfg"], 4.5)
+        self.assertEqual(workflow["4"]["inputs"]["width"], 768)
+        self.assertEqual(workflow["4"]["inputs"]["height"], 1344)
+
+    def test_verdrahteter_seed_bleibt_verdrahtet(self) -> None:
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x.safetensors"}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "alt", "clip": ["1", 1]}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["1", 1]}},
+            "5": {
+                "class_type": "KSampler",
+                "inputs": {"seed": ["9", 0], "positive": ["2", 0], "negative": ["3", 0]},
+            },
+            "9": {"class_type": "PrimitiveInt", "inputs": {}},
+        }
+        request = adapter.build_request(
+            "image.lora", "imageLora", "m", {"workflow": workflow, "prompt": "x", "seed": 5}
+        )
+        self.assertEqual(request["workflow"]["5"]["inputs"]["seed"], ["9", 0])
+
+    def test_prompt_durch_durchleitknoten_hindurch(self) -> None:
+        # Aus ComfyUI exportierte FLUX-Graphen haben oft ein FluxGuidance
+        # zwischen Sampler und Textknoten.
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x.safetensors"}},
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "alt", "clip": ["1", 1]}},
+            "4": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024}},
+            "7": {"class_type": "FluxGuidance", "inputs": {"conditioning": ["2", 0], "guidance": 3.5}},
+            "5": {"class_type": "KSampler", "inputs": {"positive": ["7", 0], "negative": ["2", 0], "latent_image": ["4", 0]}},
+        }
+        request = adapter.build_request(
+            "image.lora", "imageLora", "m", {"workflow": workflow, "prompt": "neu"}
+        )
+        self.assertEqual(request["workflow"]["2"]["inputs"]["text"], "neu")
+
+    def test_prompt_ohne_textknoten_wird_gemeldet_statt_still_ignoriert(self) -> None:
+        workflow = {
+            "1": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "x.safetensors"}},
+            "5": {"class_type": "KSampler", "inputs": {"positive": ["2", 0], "negative": ["2", 0]}},
+        }
+        with self.assertLogs("comfyui_adapter", level="WARNING") as logs:
+            result = adapter.apply_prompt_to_image_workflow(workflow, {"prompt": "kommt nicht an"})
+        self.assertIs(result, workflow)
+        self.assertIn("Demo-Bild", " ".join(logs.output))
+
+    def test_lora_kette_wird_eingezogen_und_verbraucher_umgehaengt(self) -> None:
+        workflow = self._request(
+            lora_pairs=[
+                {"name": "mstyle_comic.safetensors", "weight": 0.8},
+                {"name": "dark_ornament.safetensors", "weight": 0.5},
+            ]
+        )["workflow"]
+        # Kette: loader -> lora1 -> lora2, jede Stufe gewichtet.
+        self.assertEqual(workflow["lora1"]["inputs"]["model"], ["1", 0])
+        self.assertEqual(workflow["lora1"]["inputs"]["clip"], ["1", 1])
+        self.assertEqual(workflow["lora1"]["inputs"]["strength_model"], 0.8)
+        self.assertEqual(workflow["lora2"]["inputs"]["model"], ["lora1", 0])
+        self.assertEqual(workflow["lora2"]["inputs"]["clip"], ["lora1", 1])
+        self.assertEqual(workflow["lora2"]["inputs"]["strength_clip"], 0.5)
+        # Und die Verbraucher zeigen auf das ENDE der Kette …
+        self.assertEqual(workflow["2"]["inputs"]["clip"], ["lora2", 1])
+        self.assertEqual(workflow["5"]["inputs"]["model"], ["lora2", 0])
+        # … aber der VAE nicht: LoRAs aendern den VAE nicht.
+        self.assertEqual(workflow["6"]["inputs"]["vae"], ["1", 2])
+
+    def test_ohne_lora_pairs_bleibt_der_graph_ohne_lora_knoten(self) -> None:
+        workflow = self._request()["workflow"]
+        self.assertNotIn("LoraLoader", {n["class_type"] for n in workflow.values()})
+
+    def test_lora_eintrag_als_string_und_liste_ergeben_gewicht_1(self) -> None:
+        for entry in ("mstyle_comic.safetensors", ["mstyle_comic.safetensors"]):
+            with self.subTest(entry=entry):
+                workflow = self._request(lora_pairs=[entry])["workflow"]
+                self.assertEqual(workflow["lora1"]["inputs"]["strength_model"], 1.0)
+
+    def test_ungueltiger_lora_name_wird_abgelehnt(self) -> None:
+        # Ein Pfad oder eine falsche Endung darf NIE still durchfallen: eine
+        # weggelassene LoRA sieht wie eine wirkungslose LoRA aus.
+        for name in ("../etc/passwd", "/abs/x.safetensors", "ordner/x.safetensors", "x.pt", ""):
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError) as ctx:
+                    self._request(lora_pairs=[{"name": name}])
+                self.assertIn("LoRA-Name", str(ctx.exception))
+
+    def test_ungueltiges_gewicht_wird_abgelehnt(self) -> None:
+        with self.assertRaises(ValueError):
+            self._request(lora_pairs=[{"name": "a.safetensors", "weight": "stark"}])
+
+    def test_unbekannte_base_wird_abgelehnt(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            self._request(base="sd15")
+        self.assertIn("sd15", str(ctx.exception))
+
+    def test_mitgelieferte_workflows_bleiben_unveraendert(self) -> None:
+        # Der Adapter arbeitet auf einer Kopie; die Datei im Repo ist die Vorlage.
+        path = adapter.WORKFLOW_DIR / "image_sdxl.json"
+        before = path.read_text(encoding="utf-8")
+        self._request(prompt="anders", seed=99, lora_pairs=["mstyle_comic.safetensors"])
+        self.assertEqual(path.read_text(encoding="utf-8"), before)
+
+
 class ApplyPromptToWorkflowTest(unittest.TestCase):
     """Prompt-Werte muessen IM Graphen landen – sonst erzeugt jedes Lied dasselbe."""
 
@@ -218,6 +351,27 @@ class NormalizeOutputTest(unittest.TestCase):
         result = adapter.normalize_output({"images": [{"filename": "out.png", "type": "base64", "data": IMAGE_URI}]})
         self.assertEqual(result["kind"], "image")
         self.assertEqual(result["items"][0]["filename"], "out.png")
+
+    def test_worker_comfyui_rohes_base64_wird_zum_data_uri(self) -> None:
+        """worker-comfyui liefert `type: "base64"` mit ROHEM base64 (kein Praefix).
+
+        Live-Form (handler.py des Workers, 5.11.0):
+        `{"images": [{"filename": "…png", "type": "base64", "data": "iVBORw0…"}]}`.
+        `imageHq` liefert dagegen `data:image/png;base64,…` – beide Formen muessen
+        beim Aufrufer als dasselbe ankommen.
+        """
+        result = adapter.normalize_output(
+            {"images": [{"filename": "out.png", "type": "base64", "data": "iVBORw0KGgoAAA"}]}
+        )
+        self.assertEqual(result["items"][0]["data"], "data:image/png;base64,iVBORw0KGgoAAA")
+        self.assertNotIn("url", result["items"][0])
+
+    def test_worker_comfyui_s3_ausgabe_wird_zur_url_nicht_zum_base64(self) -> None:
+        result = adapter.normalize_output(
+            {"images": [{"filename": "out.png", "type": "s3", "data": "s3://bucket/out.png"}]}
+        )
+        self.assertEqual(result["items"][0]["url"], "s3://bucket/out.png")
+        self.assertNotIn("data", result["items"][0])
 
     def test_legacy_message_field_is_unwrapped(self) -> None:
         result = adapter.normalize_output({"message": IMAGE_URI})

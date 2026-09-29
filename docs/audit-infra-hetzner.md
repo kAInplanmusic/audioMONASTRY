@@ -1,6 +1,6 @@
 # ARCHITEKTUR-AUDIT — Hetzner-Flottenintegration (audioMONASTRY)
 
-- **Repo:** `/home/patrick/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3`
+- **Repo:** `/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY` · **Branch:** `main` · **HEAD:** `902e9c3`
 - **Datum:** 2026-09-20 (CEST) · **Modus:** rein lesendes Audit, **kein Produktionscode geändert**
 - **Methode:** statische Belege aus dem Arbeitsbaum (`Datei:Zeile`), zusätzlich eine
   read-only Live-Enumeration gegen die Hetzner-Cloud-API (Bearer-Token, nur GET).

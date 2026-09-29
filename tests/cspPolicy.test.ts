@@ -150,14 +150,30 @@ describe('F7: CSP-Policy (Einheit)', () => {
     expect(sources).toContain('ws://127.0.0.1:11434');
   });
 
-  it('CSP_MODE=enforce schaltet dieselbe Policy scharf', () => {
-    const off = buildCspPolicy({ DOMAIN: 'app.example', CSP_MODE: 'report-only' });
-    const on = buildCspPolicy({ DOMAIN: 'app.example', CSP_MODE: 'enforce' });
-    expect(resolveCspMode({ CSP_MODE: 'enforce' })).toBe('enforce');
+  it('CSP_MODE=enforce schaltet dieselbe Policy scharf - aber nur in Produktion', () => {
+    const off = buildCspPolicy({ DOMAIN: 'app.example', CSP_MODE: 'report-only', NODE_ENV: 'production' });
+    const on = buildCspPolicy({ DOMAIN: 'app.example', CSP_MODE: 'enforce', NODE_ENV: 'production' });
+    expect(resolveCspMode({ CSP_MODE: 'enforce', NODE_ENV: 'production' })).toBe('enforce');
     expect(on.headerName).toBe('Content-Security-Policy');
     expect(on.value).toBe(off.value); // identischer Inhalt, nur andere Wirkung
     // Unbekannte Werte fallen auf den beobachtenden Modus zurueck (kein Unfall-Enforce).
     expect(resolveCspMode({ CSP_MODE: 'ja-bitte' })).toBe('report-only');
+  });
+
+  it('ausserhalb der Produktion bleibt enforce meldend - sonst ist npm run dev eine weisse Seite', () => {
+    // GEFUNDEN AM 2026-09-24: mit CSP_MODE=enforce (in der .env gesetzt) lieferte
+    // `npm run dev` eine WEISSE SEITE. Der Vite-Dev-Server bettet ein
+    // Inline-Skript ein, und `script-src 'self'` blockt genau das. Im Browser war
+    // davon nur eine CSP-Zeile in der Konsole zu sehen - wer das Repo klont,
+    // haelt die App fuer kaputt.
+    expect(resolveCspMode({ CSP_MODE: 'enforce' })).toBe('report-only');
+    expect(resolveCspMode({ CSP_MODE: 'enforce', NODE_ENV: 'development' })).toBe('report-only');
+    expect(resolveCspMode({ CSP_MODE: 'enforce', NODE_ENV: 'test' })).toBe('report-only');
+    // Der Inhalt der Policy bleibt gleich - nur die Wirkung ist im Dev-Modus aus.
+    const dev = buildCspPolicy({ DOMAIN: 'app.example', CSP_MODE: 'enforce', NODE_ENV: 'development' });
+    const prod = buildCspPolicy({ DOMAIN: 'app.example', CSP_MODE: 'enforce', NODE_ENV: 'production' });
+    expect(dev.value).toBe(prod.value);
+    expect(dev.headerName).toBe('Content-Security-Policy-Report-Only');
   });
 
   it('CSP_CONNECT_SRC übersteuert die Ableitung (Betreiber-Notausgang)', () => {

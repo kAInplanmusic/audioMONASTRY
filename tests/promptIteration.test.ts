@@ -30,7 +30,7 @@ function freshStores() {
 function catalogAwareModel(pluginId: string): PlanCompleteFn {
   const first = String(PLUGIN_COMMAND_CATALOG[pluginId] ?? 'status').split(',')[0].split('(')[0].trim();
   return async ({ prompt }) => {
-    const knowsCommands = /## Erlaubte Kommandos/.test(prompt) || prompt.includes(`${pluginId}: `);
+    const knowsCommands = /## Allowed commands/.test(prompt) || prompt.includes(`${pluginId}: `);
     return {
       text: knowsCommands ? JSON.stringify({ pluginId, command: first }) : 'Klar, ich mache das irgendwie.',
       provider: 'test-modell',
@@ -70,7 +70,7 @@ describe('P3-2 + INFRA-AI-002: Prompt-Iterations-Loop mit Wirkungs-Metrik', () =
     expect(report.status).toBe('KEEP');
     expect(report.score).toBe(1);
     expect(report.iterations).toBe(2); // Runde 1 ohne Kommandos, Runde 2 mit
-    expect(prompts.getActive('mixer')?.content).toContain('## Erlaubte Kommandos');
+    expect(prompts.getActive('mixer')?.content).toContain('## Allowed commands');
     // Der Eval-Record nennt das echte Modell, nicht 'heuristic'.
     expect(evals.listByPlugin('mixer')[0].model).toBe('scripted');
     expect(evals.listByPlugin('mixer')[0].metrics.metric).toBe('plan-effect');
@@ -78,7 +78,7 @@ describe('P3-2 + INFRA-AI-002: Prompt-Iterations-Loop mit Wirkungs-Metrik', () =
 
   it('behält einen bereits wirksamen Prompt (KEEP nach einer Iteration)', async () => {
     const { prompts, evals } = freshStores();
-    prompts.upsert('drumsampler', 'Drum-Agent. ## Erlaubte Kommandos\ndrumsampler: kit(kit), pattern_random, trigger', { version: 1 });
+    prompts.upsert('drumsampler', 'Drum-Agent. ## Allowed commands\ndrumsampler: kit(kit), pattern_random, trigger', { version: 1 });
     const report = await runPromptIteration('drumsampler', { prompts, evals, complete: catalogAwareModel('drumsampler') });
     expect(report.status).toBe('KEEP');
     expect(report.iterations).toBe(1);
@@ -100,11 +100,11 @@ describe('P3-2 + INFRA-AI-002: Prompt-Iterations-Loop mit Wirkungs-Metrik', () =
     expect(report.iterations).toBe(3);
     // Auch nach dem Anhaengen des Katalogs bleibt es falsch - die Metrik misst
     // die Modellantwort, nicht den Prompt-Text.
-    expect(prompts.getActive('eq')?.content).toContain('## Erlaubte Kommandos');
+    expect(prompts.getActive('eq')?.content).toContain('## Allowed commands');
   });
 
   it('misst die Antwort, nicht den Prompt-Text (direkter Vergleich)', async () => {
-    const goodPrompt = 'EQ-Agent. ## Erlaubte Kommandos\neq: automate';
+    const goodPrompt = 'EQ-Agent. ## Allowed commands\neq: automate';
     const withModel = await evaluatePlanEffectWithDetails('eq', 1, goodPrompt, { complete: catalogAwareModel('eq') });
     expect(withModel.score).toBe(1);
     expect(withModel.grade.reason).toBe('Plan exakt');
@@ -155,15 +155,15 @@ describe('P3-2 + INFRA-AI-002: Prompt-Iterations-Loop mit Wirkungs-Metrik', () =
   });
 
   it('evaluatePromptCoverage bleibt als Offline-Vorpruefung erhalten (kein Gate)', () => {
-    expect(evaluatePromptCoverage('mixer', 1, 'Du bist der Mix-Agent.')).toBe(0);
+    expect(evaluatePromptCoverage('mixer', 1, 'You are the mix agent.')).toBe(0);
     expect(evaluatePromptCoverage('mixer', 1, 'Nutze gain(db)')).toBeCloseTo(1 / 3, 5);
     expect(evaluatePromptCoverage('mixer', 1, 'Nutze gain(db), fade_in_main und channel')).toBe(1);
     expect(evaluatePromptCoverage('unbekannt', 1, 'egal')).toBe(0);
   });
 
   it('optimizePromptContent hängt den Kommando-Katalog genau einmal an', () => {
-    const once = optimizePromptContent('syntisampler', 'Du bist der Synth-Agent.');
-    expect(once).toContain('## Erlaubte Kommandos');
+    const once = optimizePromptContent('syntisampler', 'You are the synth agent.');
+    expect(once).toContain('## Allowed commands');
     expect(once).toContain('syntisampler: note(freq)');
     const twice = optimizePromptContent('syntisampler', once);
     expect(twice).toBe(once);
@@ -171,14 +171,14 @@ describe('P3-2 + INFRA-AI-002: Prompt-Iterations-Loop mit Wirkungs-Metrik', () =
 
   it('die Fehlerregel des Optimierers nennt nur Kommandos, die die Rolle kennt', () => {
     // `status` fehlt z. B. bei eq/dsp/instru/mixer/syntisampler – die alte
-    // Universalregel („wähle 'status'") war für 9 der 18 Rollen technisch falsch.
+    // Universalregel („choose 'status'") war für 9 der 18 Rollen technisch falsch.
     for (const roleId of ['eq', 'dsp', 'instru', 'mixer', 'syntisampler', 'drumsampler', 'biblio', 'voice', 'spatial']) {
       const optimized = optimizePromptContent(roleId, 'Rollen-Satz.');
-      expect(optimized, `${roleId} nennt 'status', obwohl es das Kommando nicht gibt`).not.toContain("wähle 'status'");
-      expect(optimized).toContain('## Fehlerregel');
+      expect(optimized, `${roleId} nennt 'status', obwohl es das Kommando nicht gibt`).not.toContain("choose 'status'");
+      expect(optimized).toContain('## Error rule');
     }
     for (const roleId of ['drop', 'song', 'effect', 'sound', 'stem', 'master', 'record', 'ai', 'perfor']) {
-      expect(optimizePromptContent(roleId, 'Rollen-Satz.'), roleId).toContain("wähle 'status'");
+      expect(optimizePromptContent(roleId, 'Rollen-Satz.'), roleId).toContain("choose 'status'");
     }
   });
 

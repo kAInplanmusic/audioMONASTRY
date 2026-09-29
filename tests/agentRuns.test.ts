@@ -408,3 +408,98 @@ describe('AI-P1-006 · Zeitlimit der Planung', () => {
     expect(result.succeeded).toBe(false); // leere Planung ist kein Erfolg
   });
 });
+
+/**
+ * QUAL-P2-008 (2026-09-23): Der AgentRunStore muss unter gleichzeitigem Lesen und
+ * Schreiben stabil sein.
+ *
+ * ANLASS: Zwei vollstaendige Laeufe von `npm run verify` auf demselben Stand
+ * ergaben exit 1 und exit 0. Der rote Lauf scheiterte oben mit "unbekannter Lauf",
+ * geworfen aus `cancel()` -> `store.load()`. Die Ursache lag NICHT im Test:
+ * `save()` schrieb mit `writeFile` (truncate + write), und `execute()` speichert
+ * bei jedem Schritt. Ein gleichzeitiges `load()` konnte die halb geschriebene
+ * Datei erwischen; `JSON.parse` warf, und `load()` meldete jeden Fehler als
+ * "nicht gefunden". Gemessen mit scripts/agentrun-race-repro.ts: 399 von 740
+ * Lesevorgaengen (53,9 %) lieferten null fuer einen Datensatz, den es gab.
+ *
+ * Das war kein Testproblem, sondern ein Fehler im Produktionspfad:
+ * `GET /api/ai/agent/runs/:runId` konnte 404 fuer einen laufenden Auftrag liefern.
+ *
+ * Dieser Test haelt den Fix fest: atomares Schreiben (temporaere Datei + rename).
+ * Er ist deterministisch - NACH dem Fix ist die Nullzahl immer 0. Ohne den Fix
+ * schlaegt er praktisch sicher fehl (die gemessene Rate lag bei rund der Haelfte).
+ */
+describe('QUAL-P2-008: AgentRunStore unter gleichzeitigem Lesen/Schreiben', () => {
+  /** Absichtlich grosser Datensatz: verbreitert das Zeitfenster beim Schreiben. */
+  const fetterLauf = (i: number) => ({
+    runId: 'rw1',
+    task: 'Aufgabe',
+    userId: 'u1',
+    status: 'running' as const,
+    createdAt: 1,
+    updatedAt: 1 + i,
+    executedCount: i,
+    steps: Array.from({ length: 120 }, (_, k) => ({
+      pluginId: 'p',
+      command: `c${k}`,
+      prompt: '',
+      result: { handled: true, output: 'x'.repeat(400) },
+    })),
+    corrections: 0,
+    cost: { totalEur: 0, byProvider: {} },
+    allowWrite: true,
+  });
+
+  it('liefert beim gleichzeitigen Lesen NIE null fuer einen vorhandenen Lauf', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'agentrun-race-'));
+    try {
+      const store = new AgentRunStore(dir);
+      await store.save(fetterLauf(0) as never);
+      expect(await store.load('rw1')).not.toBeNull();
+
+      // FESTE Rundenzahl statt Durchsatzmessung. Der erste Entwurf liess Leser und
+      // Schreiber frei laufen und pruefte nur `gelesen > 20` - das war selbst lastabhaengig
+      // und haette unter Belastung fehlschlagen koennen (genau der Fehler, den dieser Test
+      // behebt). Jetzt wird in JEDER Runde ein Schreibvorgang gestartet und gleichzeitig
+      // gelesen: die Zahl der Lesungen ist damit vorhersagbar, und die Ueberlappung ist
+      // garantiert, weil beide im selben Promise.all beginnen.
+      const RUNDEN = 40;
+      const LESUNGEN_JE_RUNDE = 5;
+      let gelesen = 0;
+      let faelschlichLeer = 0;
+
+      for (let i = 1; i <= RUNDEN; i += 1) {
+        const lesungen = Array.from({ length: LESUNGEN_JE_RUNDE }, async () => {
+          const got = await store.load('rw1');
+          gelesen += 1;
+          if (!got) faelschlichLeer += 1;
+        });
+        await Promise.all([store.save(fetterLauf(i) as never), ...lesungen]);
+      }
+
+      // Gegenprobe, dass wirklich gemessen wurde (kein Vacuous Truth) - exakt, nicht ungefaehr.
+      expect(gelesen).toBe(RUNDEN * LESUNGEN_JE_RUNDE);
+      expect(faelschlichLeer).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('laesst keine temporaeren Schreibdateien liegen', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'agentrun-tmp-'));
+    try {
+      const store = new AgentRunStore(dir);
+      await store.save(fetterLauf(0) as never);
+      await store.save(fetterLauf(1) as never);
+      const { readdir } = await import('node:fs/promises');
+      const dateien = await readdir(dir);
+      // Nach dem Umbenennen bleibt nur die Zieldatei - kein .tmp-Rest.
+      expect(dateien.filter((f) => f.endsWith('.tmp'))).toEqual([]);
+      expect(dateien).toContain('rw1.json');
+      // Und list() sieht genau einen Lauf (die temporaere Datei waere sonst ein Phantom).
+      await expect(store.list()).resolves.toHaveLength(1);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+});

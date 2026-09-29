@@ -34,6 +34,10 @@
  * tests/test_hetzner_scripts.py) halten das fest.
  */
 
+// RC1-008: best-effort-Ersatzstempel ohne Build-Args (fs-only, kein Subprozess).
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+
 /** Build-Metadaten, wie sie im Container aus der Umgebung gelesen werden. */
 export interface BuildInfo {
   /** Release-Version (package.json), `dev` ohne Stempel. */
@@ -54,6 +58,67 @@ export const FALLBACK_BUILD_VERSION = 'dev';
 const NON_COMMIT_VALUES = new Set(['', UNKNOWN_BUILD_VALUE, FALLBACK_BUILD_VERSION, 'none', 'null']);
 
 /**
+ * Optionaler Ersatzstempel, wenn die Build-Args fehlen (RC1-008).
+ *
+ * Befund 2026-09-23: `/api/health` meldete beim Rohstart eines frisch gebauten
+ * `dist/server.cjs` `version:"dev", commit:"unknown"` - die Rollback-Sichtbarkeit
+ * aus PROD-P0-003 greift also NUR im gestempelten Container. Lokal/auf einem
+ * Nicht-Docker-Start ist der Stand damit nicht nachweisbar.
+ *
+ * Bewusst OPT-IN ueber `primeBuildInfoFallback(...)`: `readBuildInfo({})` muss
+ * weiterhin `dev`/`unknown` liefern (der Vertrag ist in tests/buildInfo.test.ts
+ * festgehalten). Wer den Ersatz will, ruft `primeBuildInfoFallback` einmal beim
+ * Start auf - die Umgebung hat dabei immer Vorrang.
+ */
+export interface BuildInfoFallback {
+  version?: string;
+  commit?: string;
+}
+
+let primedFallback: BuildInfoFallback | null = null;
+
+/** Einmal beim Start setzen; `null` entfernt den Ersatz wieder (Tests). */
+export function primeBuildInfoFallback(fallback: BuildInfoFallback | null): void {
+  primedFallback = fallback;
+}
+
+/**
+ * Best-effort: Version aus `package.json` lesen (kein `resolveJsonModule`
+ * noetig, und im Container liegt die Datei neben dem Server-Bundle).
+ * Fehler werden verschluckt - ein fehlender Stempel darf den Start nicht kippen.
+ */
+export function readPackageVersion(dir: string = process.cwd()): string | null {
+  try {
+    const raw = readFileSync(path.join(dir, 'package.json'), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown };
+    const version = String(parsed.version ?? '').trim();
+    return version === '' ? null : version;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Best-effort: kurzen Commit aus `.git` lesen, OHNE Prozess zu starten.
+ * Deckt den Normalfall ab (Branch-Ref oder abgetrennter HEAD). Gepackte Refs
+ * (`packed-refs`) und fehlendes `.git` liefern `null` - dann bleibt es bei
+ * `unknown`, und niemand behauptet eine Paritaet, die nicht belegt ist.
+ */
+export function readLocalGitCommit(dir: string = process.cwd()): string | null {
+  try {
+    const gitDir = path.join(dir, '.git');
+    const head = readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    const refMatch = /^ref:\s*(.+)$/.exec(head);
+    const sha = refMatch
+      ? readFileSync(path.join(gitDir, refMatch[1].trim()), 'utf8').trim()
+      : head;
+    return /^[0-9a-f]{7,40}$/i.test(sha) ? sha.slice(0, 40) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build-Metadaten aus der Prozessumgebung lesen.
  *
  * Absichtlich ohne `process.env`-Zugriff im Modulkopf: der Aufrufer reicht die
@@ -62,14 +127,17 @@ const NON_COMMIT_VALUES = new Set(['', UNKNOWN_BUILD_VALUE, FALLBACK_BUILD_VERSI
  */
 export function readBuildInfo(
   env: Record<string, string | undefined> = process.env,
+  fallback: BuildInfoFallback | null = primedFallback,
 ): BuildInfo {
-  const pick = (raw: string | undefined, fallback: string): string => {
+  const pick = (raw: string | undefined, fallbackValue: string): string => {
     const value = String(raw ?? '').trim();
-    return value === '' ? fallback : value;
+    return value === '' ? fallbackValue : value;
   };
+  const altVersion = String(fallback?.version ?? '').trim();
+  const altCommit = String(fallback?.commit ?? '').trim();
   return {
-    version: pick(env.AUDIOMONASTRY_VERSION, FALLBACK_BUILD_VERSION),
-    commit: pick(env.AUDIOMONASTRY_COMMIT, UNKNOWN_BUILD_VALUE),
+    version: pick(env.AUDIOMONASTRY_VERSION, altVersion === '' ? FALLBACK_BUILD_VERSION : altVersion),
+    commit: pick(env.AUDIOMONASTRY_COMMIT, altCommit === '' ? UNKNOWN_BUILD_VALUE : altCommit),
     buildTime: pick(env.AUDIOMONASTRY_BUILD_TIME, UNKNOWN_BUILD_VALUE),
   };
 }

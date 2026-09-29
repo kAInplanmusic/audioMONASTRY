@@ -1,0 +1,58 @@
+audioMONASTRY — Lizenz / License
+================================
+
+Copyright (c) 2026 kAInplanmusic. Alle Rechte vorbehalten.
+Copyright (c) 2026 kAInplanmusic. All rights reserved.
+
+Deutsch
+-------
+
+Dieses Projekt ist **proprietär**. Es wird als privates Forschungs- und
+Entwicklungsprojekt betrieben (siehe README.md: "Project purpose: private /
+research (no commercial purpose)"). Es steht unter **keiner** Open-Source-Lizenz.
+
+Ohne vorherige ausdrückliche, schriftliche Zustimmung des Rechteinhabers ist
+insbesondere nicht gestattet:
+
+1. Vervielfältigung, Verbreitung, öffentliche Zugänglichmachung oder
+   Weitergabe des Quellcodes oder daraus erzeugter Artefakte (Images, Bundles,
+   Snapshots),
+2. kommerzielle Nutzung jedweder Art,
+3. Bearbeitung, Umdistribution oder Einbettung in eigene Produkte,
+4. Betrieb als eigener Dienst (gehostete Instanz für Dritte).
+
+Lesen, lokales Ausführen zum Zweck der Begutachtung und Bewertung bleiben
+gestattet, sofern dies nicht gegen diese Bedingungen oder geltendes Recht
+verstößt.
+
+Kein Anspruch auf Fehlerfreiheit oder Eignung. Nutzung auf eigenes Risiko.
+
+Ausdrückliche Ausnahme — Drittinhalte:
+Diese Lizenz gilt **ausschließlich für den eigenen Code** dieses Projekts. Für
+Samples, Instrument-Bibliotheken, Formate, Referenzimplementierungen und
+Medieninhalte Dritter gelten die Rechte ihrer jeweiligen Inhaber. Der
+verbindliche Stand ist in `docs/LICENSE_EXTERNAL_RESOURCES.md` dokumentiert.
+Nichts in dieser Datei ändert fremde Lizenzbedingungen und nichts hier erteilt
+Rechte an fremdem Material.
+
+English
+-------
+
+This project is **proprietary** and is run as a private research and
+development project. It is **not** released under any open-source licence.
+
+No permission is granted to copy, distribute, make publicly available, pass on,
+modify, sublicense, or commercially exploit the source code or any artifacts
+derived from it (images, bundles, snapshots) without the prior express written
+consent of the copyright holder.
+
+Reading and running the project locally for evaluation purposes remain
+permitted, provided this does not violate these terms or applicable law.
+
+Provided "as is", without warranty of any kind.
+
+Third-party content:
+This licence covers **only** the project's own code. Samples, instrument
+libraries, formats, reference implementations and media content owned by others
+remain governed by their respective holders' terms; the authoritative record is
+`docs/LICENSE_EXTERNAL_RESOURCES.md`.

@@ -1,0 +1,146 @@
+{
+  // knip-Konfiguration (ARCH-P2-003, 2026-09-23).
+  // Format ist bewusst .jsonc: die Ignorierliste war vorher eine unbegruendete
+  // Sammlung von 42 Pfaden und hat damit genau an der Stelle die Aussagekraft
+  // verloren, an der sie sie liefern soll. Jeder Eintrag traegt jetzt einen Grund.
+  //
+  // REGEL: Nur hier eintragen, was knip PRINZIPIELL nicht sehen kann
+  // (Laufzeit-Laden per URL, Service-Entrypoints ohne TS-Import) oder was
+  // bewusst geparkt ist. Reiner Totcode gehoert geloescht, nicht ignoriert -
+  // Gruppe D (24 tote Dateien) ist am 2026-09-23 genau deshalb geloescht worden.
+  "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+  // server.ts, vite.config.ts und die beiden playwright-Configs stehen hier bewusst
+  // NICHT mehr: knip erkennt sie selbst (Config-Hinweis "redundant", gemessen 2026-09-23).
+  "entry": [
+    "index.html",
+    "scripts/**/*.{ts,mjs,cjs,js}",
+    "services/*/index.{js,ts,mjs}",
+    "services/*/src/index.{js,ts,mjs}",
+    "tests/**/*.{test,spec}.{ts,tsx,mjs}",
+    // tests/setup.ts ist KEIN toter Code: vitest.config.ts:6 verdrahtet sie als
+    // setupFiles. knip kann vitest-Configs nicht folgen und meldete sie deshalb
+    // als ungenutzte Datei (gemessen 2026-09-23 mit `npx knip --files` -> exit 1).
+    // Sie ist ein echter Einstiegspunkt und steht hier mit Grund.
+    //
+    // HINWEIS BEWUSST AKZEPTIERT: knip meldet zu genau dieser Zeile
+    // "Remove redundant entry pattern". Das ist IRREFUEHREND - nachgemessen am
+    // 2026-09-23: mit entferntem Eintrag meldet `npx knip --files`
+    // "Unused files (1) tests/setup.ts" und exit 1. Der Gate-Schritt
+    // check:deadfiles wuerde also rot. Wer diesen Hinweis "aufraeumt", bricht das
+    // Gate - deshalb steht das Ergebnis der Gegenprobe hier und nicht nur die
+    // Vermutung, dass knip recht hat.
+    "tests/setup.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    // src/main.tsx:4 importiert './index.css'. Ohne CSS im project kann knip den
+    // Import nicht verfolgen und meldete dauerhaft den Config-Hinweis
+    // ".css - Compiled extension excluded by project". Gemessen 2026-09-23:
+    // mit dieser Zeile ist der Hinweis weg und knip bleibt exit 0. Ein
+    // Dauerhinweis im Gate-Output ist Rauschen, an das man sich gewoehnt.
+    "src/**/*.css",
+    "server/**/*.{ts,mjs}",
+    "services/**/*.{ts,js,mjs}",
+    "scripts/**/*.{ts,mjs,cjs}",
+    "tests/**/*.{ts,tsx,mjs}"
+  ],
+  "paths": {
+    "@/*": [
+      "src/*"
+    ]
+  },
+  "ignore": [
+    // --- Gruppe B: zur LAUFZEIT per URL geladen (audioWorklet.addModule) -----
+    // Beleg: src/core/audio/worklets/loadAudioWorklets.ts liest die URLs aus
+    // public/plugin-manifest.json und ruft addModule(url). Diese Dateien werden
+    // NICHT importiert; build-worklets.mjs uebersetzt sie nach public/worklets/.
+    // knip meldet 5 davon als "Unused files" - sie zu loeschen waere ein
+    // Audio-Ausfall. Deshalb hier mit Grund geparkt.
+    "src/audio/worklets/analyzerProcessor.ts",
+    "src/audio/worklets/fallbackProcessor.ts",
+    "src/audio/worklets/itSynthProcessor.ts",
+    "src/audio/worklets/lufsProcessor.ts",
+    "src/audio/worklets/synthProcessor.ts",
+
+    // --- Gruppe C: Service-Entrypoints ohne TypeScript-Import ----------------
+    // Werden von Docker/Compose direkt als Node-Skript gestartet.
+    "services/backend-core/node/index.js",
+    "services/backend-core/node/audio-routing.js",
+
+    // --- Gruppe D: ERLEDIGT am 2026-09-23 (ARCH-P3-001) ----------------------
+    // Hier standen 24 als tot belegte Dateien, deren Loeschung ausstand. Sie sind
+    // jetzt GELOESCHT (plus src/components/MasterPlayerTerminal.tsx, das knip
+    // zusaetzlich als unerreichbar meldete) - die Liste ist damit weg.
+    //
+    // Nachweis vor der Loeschung: mit dieser Gruppe D aus der Ignorierliste
+    // meldete `npx knip` 25 "Unused files" - genau diese 25. knip verfolgt echte
+    // Importe inklusive Barrels, das ist belastbarer als eine Textsuche. Nach der
+    // Loeschung: `npx tsc --noEmit` exit 0 (nichts Lebendiges hing daran).
+    // Historie: vollstaendig in git, jederzeit wiederherstellbar.
+
+    // --- Gruppe F: Fixtures, die ein Werkzeug per PFAD liest -----------------
+    // Eingaben fuer scripts/route-dependency-graph.py (Regression: Regex-Literale
+    // und transitive Importe). Werden nie importiert, nur eingesammelt.
+    "tests/fixtures/routeDepGraph/regexLiteral.ts",
+    "tests/fixtures/routeDepGraph/transitive.ts",
+    "tests/fixtures/routeDepGraph/twoBlocks.ts",
+
+    // --- Gruppe E: erreichbar, aber knip folgt dem Pfad nicht ---------------
+    // src/config/webrtc.ts stand hier bis 2026-09-23 mit der Begruendung "von
+    // src/utils/WebRTCManager.ts importiert". Der Eintrag ist REDUNDANT und wurde
+    // entfernt - knip meldete ihn selbst als Config-Hinweis "Remove from ignore",
+    // kann den Import also aufloesen. Ein unnoetiger Ignorier-Eintrag ist genau
+    // der Fehlertyp aus ARCH-P2-003: er nimmt eine Datei aus der Analyse, ohne
+    // dass es dafuer einen Grund gibt.
+    "src/components/drop/index.ts", // Barrel: von 8 Stellen importiert (dropAudioBridge, Tests) - knip sieht nur den Re-Export
+    "src/hooks/useSessionSync.ts", // von scripts/deep-audit/config.ts als Pruefziel gelistet
+    "src/lib/db.ts", // von src/context/SessionContext.tsx importiert
+    "src/utils/presetStore.ts" // von src/lib/db.ts importiert
+  ],
+  // Nur Pakete, die knip nicht als benutzt erkennen kann. jscpd und playwright
+  // sind am 2026-09-23 entfernt worden: knip findet beide selbst ueber die
+  // package.json-Skripte (Config-Hinweis "redundant").
+  // Alle Eintraege hier tragen einen BELEGTEN Grund. Stand 2026-09-23.
+  //
+  // Selbstkorrektur aus Iteration 6: ich hatte diese Liste zuerst komplett
+  // geleert, weil knip fuer jeden Eintrag "Remove from ignoreDependencies"
+  // meldete. Das war ein Fehlschluss - der Hinweis galt nur fuer den Scope, den
+  // ich abgefragt hatte (`--include files,dependencies`). Die Kategorie
+  // `unlisted` ist darin NICHT enthalten, also sahen Eintraege redundant aus,
+  // die ausschliesslich `unlisted` unterdruecken. Gegenprobe mit
+  // `npx knip --include unlisted,binaries` zeigte danach 21 + 6 Befunde.
+  // Mit dem vollen Bericht geprueft und einzeln nachgeschlagen:
+  //
+  //   ws, midi, osc  -> benutzt in services/midi-bridge/index.js:28/40/80.
+  //                     Stehen in services/midi-bridge/package.json (midi, osc,
+  //                     ws) und ws zusaetzlich in services/backend-core.
+  //                     Am Wurzelpaket nicht deklariert, weil es eigene
+  //                     Dienst-Pakete sind - fuer knip also "unlisted", obwohl
+  //                     die Deklaration existiert. Falsch-positiv ohne diesen
+  //                     Eintrag.
+  //   mixer-.*       -> 18 optionale Plattform-Binaries, dynamisch aufgeloest in
+  //                     services/mixer/index.js (z. B. :191 -gnu, :207 -musl).
+  //                     services/mixer/package.json deklariert keines davon;
+  //                     sie werden beim Installieren plattformabhaengig gewaehlt.
+  //
+  // tailwindcss stand hier ebenfalls und ist am 2026-09-23 ENTFERNT worden -
+  // dieser Eintrag war wirklich redundant: seit "src/**/*.css" im project-Glob
+  // steht, verfolgt knip den CSS-Import aus src/main.tsx:4 und loest das Paket
+  // selbst auf.
+  "ignoreDependencies": [
+    "ws", // deklariert in services/{midi-bridge,backend-core}/package.json
+    "midi", // deklariert in services/midi-bridge/package.json
+    "osc", // deklariert in services/midi-bridge/package.json
+    "mixer-.*" // 18 optionale Plattform-Binaries, zur Laufzeit gewaehlt
+  ],
+  // ffmpeg und ffprobe sind SYSTEMPROGRAMME, keine npm-Pakete - sie lassen sich
+  // in package.json nicht deklarieren. Benutzt in server/audioEncode.ts (execFile),
+  // in vier Proof-Skripten (scripts/master-out-audio-proof.mjs,
+  // mjpeg-live-proof.mjs, visual-beamer-live-proof.mjs, visual-stability-probe.mjs)
+  // und in tests/audioEncode.test.ts bzw. tests/audioGate.test.ts. Ohne diesen
+  // Eintrag meldet knip sechs "Unlisted binaries", die sich nicht beheben lassen.
+  "ignoreBinaries": [
+    "ffmpeg",
+    "ffprobe"
+  ]
+}

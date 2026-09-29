@@ -98,10 +98,10 @@ describe('Rollen-Prompt-Katalog: Abdeckung als Vertrag (je Knoten/Rolle)', () =>
       const spec: RolePromptSpec = ROLE_PROMPT_SPECS[roleId];
       // Rollensatz des Bestands ist enthalten (Ableitung, kein Neutext).
       expect(spec.systemPrompt).toContain(PLUGIN_MOA_SYSTEM_PROMPTS[roleId]);
-      expect(spec.systemPrompt).toContain('## Erlaubte Kommandos');
-      expect(spec.systemPrompt).toContain('## Fehlerregel');
-      expect(spec.systemPrompt).toContain('## Antwortformat');
-      expect(spec.systemPrompt).toContain('## Beispiele (Few-Shot)');
+      expect(spec.systemPrompt).toContain('## Allowed commands');
+      expect(spec.systemPrompt).toContain('## Error rule');
+      expect(spec.systemPrompt).toContain('## Response format');
+      expect(spec.systemPrompt).toContain('## Examples (few-shot)');
       for (const entry of spec.commands) {
         expect(spec.systemPrompt, `Kommando fehlt im Prompt: ${entry}`).toContain(commandNameOf(entry));
       }
@@ -120,10 +120,10 @@ describe('Rollen-Prompt-Katalog: Abdeckung als Vertrag (je Knoten/Rolle)', () =>
       const spec = ROLE_PROMPT_SPECS[roleId];
       if (commandNamesFor(roleId).includes('status')) {
         expect(spec.fallbackCommand).toBe('status');
-        expect(spec.systemPrompt).toContain(`wähle 'status'`);
+        expect(spec.systemPrompt).toContain(`choose 'status'`);
       } else {
         expect(spec.fallbackCommand).toBeNull();
-        expect(spec.systemPrompt).not.toContain(`wähle 'status'`);
+        expect(spec.systemPrompt).not.toContain(`choose 'status'`);
       }
     }
   });
@@ -229,7 +229,7 @@ describe('Seed-Vertrag: fehlender Rollenprompt ist ein Fehler, kein Fallback', (
     expect(planner?.enabled).toBe(true);
     for (const row of seed.system_prompts) {
       expect(row.content.trim().length, `content:${row.plugin_id}`).toBeGreaterThan(0);
-      expect(row.content, `Fallback-Text bei ${row.plugin_id}`).not.toContain('Du bist ein audioMONASTRY-Produktions-Agent');
+      expect(row.content, `Fallback-Text bei ${row.plugin_id}`).not.toContain('You are an audioMONASTRY production agent');
     }
   });
 });
@@ -251,6 +251,6 @@ describe('Planer-Rolle (MOA_GLOBAL_PROMPT_KEY) erreicht den echten Plan-Aufruf',
 
     expect(seen).toHaveLength(1);
     expect(seen[0].prompt).toContain(MOA_GLOBAL_SYSTEM_PROMPT);
-    expect(seen[0].prompt).not.toContain('Du bist ein audioMONASTRY-Produktions-Agent');
+    expect(seen[0].prompt).not.toContain('You are an audioMONASTRY production agent');
   });
 });

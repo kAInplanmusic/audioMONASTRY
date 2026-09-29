@@ -25,7 +25,14 @@ from envfile import read_required_env_file  # noqa: E402
 from restclient import portal_request  # noqa: E402
 
 
-def load_env(path='/home/patrick/audioMONASTRY/.env.deploy'):
+#: Repo-Wurzel aus der Lage DIESER Datei (scripts/<datei> -> eine Ebene hoch),
+#: nicht als absoluter Pfad. Grund: am 2026-09-23 wurde das Repo verschoben
+#: (nach "AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"); ein fest
+#: eingetragener Pfad waere danach still falsch gewesen.
+_REPO = pathlib.Path(__file__).resolve().parents[1]
+
+
+def load_env(path=_REPO / '.env.deploy'):
     """KEY=VALUE aus der Deploy-Env; fehlende Datei bricht laut ab (wie bisher)."""
     return read_required_env_file(pathlib.Path(path))
 

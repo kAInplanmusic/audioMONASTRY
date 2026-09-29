@@ -41,6 +41,14 @@ import {
 } from '../idleSignal.ts';
 import type { SocketLivenessEvaluation } from '../socketLiveness.ts';
 import { readBuildInfo } from '../buildInfo';
+import { isKillSwitchActive } from '../killSwitch';
+// OPS-P2-002: Ruhe-Modus fuer Alarmzustellung (22-07 Uhr, kritische ausgenommen).
+import {
+  createHeldBuffer,
+  planDelivery,
+  quietHoursFromEnv,
+  summarizeHeld,
+} from '../quietHours';
 import { getCloudStatus, getR2Counters } from '../r2Health';
 import { AlertsWebhookSchema, TelemetryPayloadSchema } from '../../src/types/zod/schemas';
 import { getCspReportStats } from './securityRoutes.ts';
@@ -112,6 +120,10 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // NUR den Zeitpunkt, seit dem keine Nutzung mehr messbar ist — bewusst kein
   // Zaehlerfile auf dem Knoten (ein Ort weniger, der driften kann).
   const idleWatcher: IdleWatcher = createIdleWatcher();
+  // OPS-P2-002: Puffer fuer Alarme, die waehrend der Ruhezeit (22-07) anfallen.
+  // Eine Instanz je Prozess, begrenzt (QUIET_HOURS_BUFFER_MAX), mit Zaehler statt
+  // stillem Verwerfen. Siehe server/quietHours.ts fuer Grenzen und Begruendung.
+  const heldAlerts = createHeldBuffer();
   // --- Health check ---
   // PROD-P0-003: zusaetzlich die Build-Version (kein Secret, additiv). Damit ist
   // nach einem Deploy/Rollback von aussen pruefbar, WELCHE Version laeuft.
@@ -121,7 +133,10 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
   // Portal-Worker und in scripts/hetzner/fleet-preflight.sh). Die Felder bleiben
   // additiv und secretfrei; ohne Build-Arg steht dort `dev`/`unknown`.
   app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', ...readBuildInfo() });
+    // RC1-003: Der Wartungszustand gehoert in die Liveness-Antwort. Sonst sieht
+    // ein Alarm im Kill-Switch-Fall nur "Host tot" und kann "absichtlich
+    // angehalten" nicht von "abgestuerzt" unterscheiden.
+    res.json({ status: isKillSwitchActive() ? 'maintenance' : 'ok', ...readBuildInfo(), killSwitch: isKillSwitchActive() });
   });
 
   // --- DCT-108: Metriken (keine Samples, keine Secrets, keine Keys) ---
@@ -445,9 +460,29 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
       return `[${status}] ${summary} (${inst})`;
     };
 
+    // OPS-P2-002: Ruhe-Modus (22-07 Uhr, kritische Alarme ausgenommen).
+    // Betreiber-Entscheidung vom 2026-09-23. Zurueckgehaltene Alarme landen in
+    // einem begrenzten Puffer und werden beim ersten Kontakt nach dem Fenster
+    // gebuendelt nachgeliefert - ein Filter, der sie wegwirft, waere Datenverlust.
+    const limited = alerts.slice(0, 20);
+    const texts = limited.map(format);
+    const plan = planDelivery(limited, texts, Date.now(), quietHoursFromEnv());
+    if (plan.quiet) {
+      for (const text of plan.hold) heldAlerts.push(text, Date.now());
+    } else if (heldAlerts.size() > 0) {
+      // Nach dem Fenster: erst die Nacht gebuendelt nachliefern, dann das Neue.
+      const summary = summarizeHeld(heldAlerts.drain());
+      if (summary) plan.deliver.unshift(summary);
+    }
+    if (heldAlerts.droppedCount() > 0) {
+      console.warn(
+        `[quiet-hours] Puffer voll - ${heldAlerts.droppedCount()} Alarm(e) nicht aufbewahrt. ` +
+          'Das ist ein Fehler, kein Normalbetrieb: ALERT_QUIET_HOURS pruefen.',
+      );
+    }
+
     let forwarded = 0;
-    for (const alert of alerts.slice(0, 20)) {
-      const text = format(alert);
+    for (const text of plan.deliver) {
       const payloads: Array<[string, string]> = [];
       if (discord) payloads.push([discord, JSON.stringify({ content: text })]);
       if (slack) payloads.push([slack, JSON.stringify({ text })]);
@@ -468,7 +503,13 @@ export function registerOpsRoutes(app: Express, deps: OpsDeps): void {
         }
       }
     }
-    res.status(202).json({ received: alerts.length, targets, forwarded });
+    res.status(202).json({
+      received: alerts.length,
+      targets,
+      forwarded,
+      quietHours: plan.quiet,
+      held: plan.hold.length,
+    });
   });
 
 }

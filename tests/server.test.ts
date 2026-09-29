@@ -15,6 +15,20 @@ beforeAll(async () => {
   // Test-Baseline: keine Studio-Token-Pflicht + hohes Test-Rate-Limit.
   delete process.env.STUDIO_ACCESS_TOKEN;
   process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
+  // Test-Baseline: RUHIGER MODUS AUS.
+  //
+  // GEFUNDEN AM 2026-09-23 UM 22:22, weil das Gate nachts rot wurde: der
+  // Alarmmanager puffert Zustellungen zwischen 22 und 7 Uhr (OPS-P2-002,
+  // Vorgabe in server/quietHours.ts). Der Webhook-Test unten erwartet
+  // `forwarded = 1` - um 22:22 kam aber 0 heraus, weil der Alarm gepuffert
+  // wurde. Der Test hing damit an der UHRZEIT:tagsueber gruen, nachts rot.
+  //
+  // Ein Freigabe-Gate, das von der Tageszeit abhaengt, ist unbrauchbar - man
+  // kann es nicht einmal zuverlaessig reproduzieren. Deshalb steht der
+  // Ruhe-Modus in der Test-Baseline auf AUS. Die Pufferlogik selbst bleibt
+  // geprueft: tests/quietHours.test.ts deckt sie mit festen Zeitpunkten ab
+  // (Grenzfaelle 21:59 / 22:00 / 07:00), ohne von der echten Uhr abzuhaengen.
+  process.env.ALERT_QUIET_HOURS_OFF = '1';
   // F8: Der Reset-Hook hängt jetzt zusätzlich an einem expliziten Schalter
   // (ohne ihn antwortet die Route 404). Dieser Testlauf prüft die Token-Schranke
   // (401) — dafür muss der Hook aktiv sein. Gesetzt VOR dem server-Import:

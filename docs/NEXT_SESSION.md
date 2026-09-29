@@ -1,29 +1,114 @@
 # Startzettel für die nächste Sitzung
 
-**Stand bei der Übergabe: `main` = 19294f7 (== origin), Flotte AUS (0 Server), SSOT = 144 Einträge.**
-Dieser Zettel ist die Einstiegsstelle. Die verbindliche Wahrheit steht in `MASTERTODOENDE.json`
-(18 offene Punkte: 15 PARTIAL, 3 OPEN) — hier stehen die Reihenfolge und die Kommandos.
+**Stand: 2026-09-23 (nach ReleaseCycle Iteration 6). Flotte AUS (0 Server).
+SSOT = `MASTERTODOENDE.json` mit 164 Einträgen
+(142 DONE · 16 PARTIAL · 5 OPEN · 1 BLOCKED).**
 
-## 1. Zuerst: Zustand übernehmen
+## 0. ZUERST LESEN: eine committete Migration ist kein Vollzug
+
+**Der schwerste Befund dieser Runde.** `RC1-004` (anon-SELECT entzogen) lag seit Iteration 2
+committet vor und war in der **laufenden Datenbank nie angewendet** worden. Live durfte `anon`
+weiterhin SELECT auf **13 Tabellen**, darunter `system_prompts` (53 Zeilen) und
+`ai_evaluations` (285) — und der anon-Key liegt im öffentlichen Client-Bundle.
+
+Nachgetragen und **live nachgemessen**: `anon` liest jetzt genau `music_tracks` und `samples`
+(2 Tabellen). Die Ursache bleibt offen als **`DB-P2-002`**: es gibt **keine** Prüfung, die
+Repo-Stand und Datenbank gegeneinander hält. `tests/supabaseRls.test.ts` prüft die
+Migrations**dateien** und blieb grün, während die Härtung live unwirksam war.
+
+> **Merksatz für jede künftige RLS-Aussage:** sie ist eine **Datei**-Aussage, bis sie an der
+> Datenbank gemessen wurde. Für die Sicherheit zählt nur, was dort steht.
+
+Werkzeug dafür: die Supabase-MCP-Werkzeuge (`list_tables`, `execute_sql` auf `pg_policies`,
+`apply_migration`). Projekt `audioMONASTRY` / `pwtwtqbcynsjtkxlkrwh`.
+
+---
+
+Block 2 ist abgearbeitet: Angriffe 3 und 4 gehärtet (Iteration 4), Angriffe 1, 2 und 5
+belegt — mit Datei- und Zeilenbeleg je Aussage in `docs/SEC_BLOCK2_ATTACKS.md`. Offen
+bleiben dort genau zwei Prüfungen, die eine laufende Umgebung brauchen: ein Lastversuch
+mit parallelen Uploads und der Abruf einer hochgeladenen Datei direkt aus R2.
+
+Audit-Basis war `e71cb7d`; darauf liegen die Commits aus Iteration 3 und 4. Die exakte Kette
+steht in git — bewusst nicht hier abgeschrieben, weil ein Amend die Hashes verschiebt:
 
 ```bash
-cd /home/patrick/audioMONASTRY
-git fetch origin && git log --oneline -1 origin/main        # muss 19294f7 oder neuer sein
-git worktree list                                           # drei Zweige können noch offen sein
-for b in portal scripts lora; do
-  echo "--- hermes/$b"; git log --oneline main..hermes/$b | head -5
-done
+git log --oneline e71cb7d..HEAD          # 7 Commits aus Iteration 3, danach Iteration 4
 ```
 
-Drei Aufträge aus der Vorsitzung lagen noch auf Zweigen. **Prüfen, dann mergen — nicht blind:**
+Gates, gemessen: `tsc` exit 0 · `eslint` exit 0 · `vitest` grün ·
+**`npm run verify` exit 0** (seit Iteration 4 inklusive `check:deadfiles`) ·
+`knip --include files` exit 0 · `npm run proof:ffmpeg-whitelist` 6/6 ·
+`npm run test:python:master` 10/10.
 
-| Zweig | Stand bei Übergabe | Was zu tun ist |
+> Zur Richtigstellung: hier stand nach Iteration 3 „`npx knip` keine ungenutzten Dateien mehr".
+> Das war **falsch** — der gefilterte Aufruf hatte knips ANSI-Ausgabe nicht gematcht. Es war
+> eine ungenutzte Datei (`tests/setup.ts`, per `vitest.config.ts:6` verdrahtet, also kein toter
+> Code) plus zwei Config-Hinweise. Alle drei sind behoben; siehe Audit-Report §9.3.
+
+
+Die verbindliche Wahrheit steht in `MASTERTODOENDE.json`. Dieser Zettel nennt Reihenfolge und
+Kommandos. Vollständiger Audit: `docs/AUDIT_REPORT_2026-09-23.md` (mit Nachträgen für
+Iteration 1 und 2).
+
+## 0. Zuerst: Zustand übernehmen
+
+```bash
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"
+git log --oneline -1                    # 602df4d oder neuer
+git status --porcelain                  # muss leer sein
+git worktree list                       # nur der Hauptbaum
+git branch -a | grep hermes             # nur noch hermes/lora-trainer-anbindung
+```
+
+### Der Rechner wurde am 2026-09-23 aufgeräumt
+
+Die vier laufenden Projekte liegen **nicht mehr direkt im Heimatverzeichnis**, sondern in
+Projektordnern:
+
+```
+~/AnunnakiTools Projekte/laufende Projekte/
+  audioMONASTRY/  cpsMONK/  ProjectArmageddon/  spyMONK/
+~/AnunnakiTools Projekte/fertige Projekte/      (noch leer)
+```
+
+**Was mitgewandert ist:**
+
+| vorher | nachher |
+|---|---|
+| `~/fixlogs/`, `~/fixprompts/` | `audioMONASTRY/logs/fixrunden-2026-09-20/` (nicht in Git, siehe dortiges README) |
+| `~/spyMONK_analysis_20260915_074800/` | Inhalt von `spyMONK/` |
+
+**Was gelöscht wurde:** zwei Worktree-Archive in `fixlogs/` (je 403 MB). Die Runden sind
+abgeschlossen und in `main` dokumentiert (`1de9e3b`, 81 Commits vom 2026-09-20); die Zweige
+existieren nicht mehr. **806 MB eingespart.** Begründung im README des Belegordners.
+
+**Was bewusst liegen blieb:** alles, was zu keinem der vier Projekte gehört —
+`~/am-hautcheck/` (Host-Werkzeuge: iCloud-Abgleich, Musik-Sortierung, Systemprüfung,
+venv), `~/Applications/`, `~/Quarantaene-*/`, `~/hermes-config-review-*/` sowie die
+persönlichen Ordner. `am-hautcheck` hat mit audioMONASTRY nichts zu tun: der Rechner
+*heißt* so (`hostname` → `audioMONASTRY`), das `am-` meint die Maschine, nicht das Projekt.
+
+**Geteilte Dateien gibt es keine.** Gemessen: 0 Querverweise zwischen den vier Projekten
+(`grep -rIl audioMONASTRY cpsMONK ProjectArmageddon spyMONK` → je 0 Treffer). Es musste
+also nichts kopiert werden.
+
+**Pfade sind angepasst.** Vorher hingen 11 Doku-Stellen und 3 Skripte am alten Pfad. Die
+Skripte leiten ihre Repo-Wurzel jetzt aus `__file__` ab und sind damit umzugsfest:
+`scripts/portal-wake-verify.py`, `scripts/runpod-vision-test.py`,
+`scripts/hetzner/firewall-inventory.py`. Auch `~/.hermes/scripts/runpod-wache.sh` ist
+angepasst (und per `AUDIOMONASTRY_REPO` übersteuerbar).
+
+Die drei Übergabe-Zweige aus der Vorsitzung sind **gemergt** – hier ist nichts mehr zu tun
+(Korrektur zum früheren Zettel, der sie noch als offen führte):
+
+| Zweig | Stand | Beleg |
 |---|---|---|
-| `hermes/portal` | fertig (f030645, 6 Dateien +558/−149) | Zieltests + Gate, dann mergen (PROD-P0-PORTAL-FAILOPEN, PROD-P2-PORTAL-DRIFT) |
-| `hermes/scripts` | **mitten in der Arbeit** (2 Dateien entfernt) | warten bis fertig; das Verfahren des Betreibers gilt: Recovery-Bündel zuerst, eine Datei pro Commit, Funktionstest nach JEDEM Schritt |
-| `hermes/lora` | **noch kein Commit** | warten; baut Checkpoints/Resume/Fortschrittsmarker/Vorab-Rechnung + Volume-Staging |
+| `hermes/portal` | gemergt | `f030645` → `96999f4` |
+| `hermes/scripts` | gemergt | `24fa7e8` |
+| `hermes/lora` | gemergt | `7bf688b` → `e71cb7d` |
 
-Prüf-Routine bei jedem Merge (aus dieser Sitzung bewährt):
+Prüf-Routine bei jedem Merge (bewährt):
 
 ```bash
 git merge --no-ff hermes/<zweig> -m "merge(hermes/<zweig>): <was>"
@@ -32,48 +117,79 @@ npm run verify                      # volles Gate VOR dem Push, im Hintergrund s
 git push origin main                # erst bei GATE_EXIT=0
 ```
 
+## 1. Offene Betreiber-Aufgaben (kein Agent kann das erledigen) – zuerst
+
+1. **`CF_API_TOKEN` im Cloudflare-Dashboard widerrufen und neu erzeugen** (`SEC-P1-005`, PARTIAL).
+   Anleitung und Prüfprozedur: `docs/SEC_CF_TOKEN_ROTATION.md`. Wichtig: der alte Worker-Token
+   hatte **kein DNS-Recht** (`wire-fleet` scheiterte mit „Cloudflare-Zone nicht gefunden") – beim
+   Neuanlegen `Zone → DNS → Edit` vergeben. Danach meldet der Betreiber, ich lasse die
+   Prüfprozedur laufen.
+2. **Rechts-Entwurf prüfen und veröffentlichen** (`PROD-P0-005`, PARTIAL). Entwurf liegt in
+   `docs/RECHT_ENTWURF_DATENSCHUTZ_IMPRESSUM.md`; die Anschrift und die rechtliche Bewertung
+   (Rechtsgrundlagen, Drittlandtransfer, Löschfristen, Einordnung der Stimme nach Art. 9) kann
+   ich nicht liefern. Die Seiten `/datenschutz` und `/impressum` sind **veröffentlicht**
+   (Iteration 7) und tragen die Betreiber-Angaben; offen bleiben die rechtlichen Bewertungen.
+3. **Entscheidungen offen:** `QUAL-P2-008` (flaky Test im Freigabe-Gate – Ursache klären, dann
+   fixen), `OPS-P2-002`-Rest (Signup-/Zugangs-Kurratierung).
+   Erledigt: `DB-P3-001` (Tabelle `library_links` am 2026-09-23 **entfernt** – 0 Codepfade,
+   0 Zeilen) und `PROD-P2-003` (README zusammengeführt).
+
+Zur Erinnerung: `SEC-P1-004` ist **erledigt** – vier weltlesbare `.env`-Dateien wurden am
+2026-09-23 auf 600 gesetzt; nur die drei `.example`-Templates sind noch lesbar und enthalten
+ausschließlich Platzhalter. `PROD-P1-005` (LICENSE) und `PROD-P1-007`/`PROD-P0-006` (drei
+extremistische Demo-Tracks entfernt) sind ebenfalls erledigt.
+
 ## 2. Vor JEDEM Live-Test: Flotte starten und Vernetzung prüfen
 
 ```bash
 LOCATION=nbg1 bash scripts/hetzner/bring-up-fleet.sh --yes     # ~6 min, legt 5 Knoten an
 python3 scripts/hetzner/firewall-ensure.py --dry-run           # MUSS "geaendert=0" melden
 ```
+
 Warum das wichtig ist: die Firewalls überleben den Abbau und werden über den Namen
-wiederverwendet — genau so wanderten früher die alten Quell-IPs in die neue Flotte
-(INFRA-HETZNER-014). Der Abgleich läuft beim Flottenstart automatisch (Schritt 3/9),
-`--dry-run` ist der Beweis. Die Flotte schaltet sich nach 15 Minuten ohne App-Nutzung
-selbst ab (gewollt, PROD-P3-F9); `https://anunnakitools.de` antwortet dann weiter mit 200
-— das kommt von Cloudflare, nicht von einer laufenden App.
+wiederverwendet – genau so wanderten früher die alten Quell-IPs in die neue Flotte
+(`INFRA-HETZNER-014`). Der Abgleich läuft beim Flottenstart automatisch, `--dry-run` ist der Beweis.
+Die Flotte schaltet sich nach 15 Minuten ohne App-Nutzung selbst ab (gewollt, `PROD-P3-F9`);
+`https://anunnakitools.de` antwortet dann weiter mit 200 – das kommt von Cloudflare, nicht von
+einer laufenden App.
 
-## 3. LoRA: Abschnittsbetrieb mit vorgefülltem Volume (entschieden, Budget ≤ 5 €)
+## 3. Nächste Arbeitspakete (Reihenfolge nach Wirkung)
 
-1. **Vorstagen (CPU-Pod, Cent-Betrag, ausdrücklich genehmigt):** Network Volume 50 GB
-   (2,50 USD/Monat ≈ 8 Cent/Tag) anlegen, darauf einmalig FLUX-Gewichte (~24 GB),
-   Dataset und Trainer-Checkout. Danach startet jeder GPU-Abschnitt in Minuten statt ~30.
-2. **Abschnitt fahren:** 1000 Schritte ≈ 0,35 USD. Danach Vorschaubilder rendern und
-   **entscheiden**, ob ein weiterer Abschnitt kommt (mehr Daten schlagen mehr Schritte:
-   37 Bilder sind nach 1000–2000 Schritten ausgereizt, mehr riskiert Überanpassung).
-3. **Aufräumen:** Volume nach der Trainingsphase löschen (`--print-config` nennt den Befehl).
-   Die 2,0 s/Schritt sind eine ANNAHME — der Fortschrittsmarker liefert erstmals echte Zahlen.
-   Bilder zum Ansehen: `/home/patrick/am-cosmic-vorschau/{rohdaten-40,datensatz-37}`.
+1. **SFU scharf** (`INFRA-HETZNER-015`, Entscheidung „go"): ACME-Caddyfile in den Flottenstart,
+   `ENABLE_SFU=1`, echte Sitzung gegen `wss://sfu.<domain>` prüfen. Ohne Vorteil: rückstandsfrei
+   zurückbauen.
+2. **Prompts auf Englisch** (`AI-P1-PROMPTS-002`): alle Rollen-Prompts englisch, Deutsch nur in
+   Kommentaren/Doku; masterplayer bleibt rein visuell (kein Prompt, keine Eingabe, kein Knopf – als
+   Testvertrag verankern); Score-Gate für Bild/Video, Gates 4.00/4.50 getrennt; Latein nur bei
+   belegten Wörtern (cantus, lumen, ordo, vox, silentium, imago, motus) – Auswahl dem Betreiber vorlegen.
+   Fundort der Texte: `src/core/ai/orchestrator/promptRoles.ts` (`composeRoleSystemPrompt`,
+   `MOA_GLOBAL_SYSTEM_PROMPT`) plus `server/routes/aiRoutes.ts` (`/api/ai/generate`, `/api/ai/describe`).
+3. **Weitere Themen** (`VISUAL-P1-009`): wartet auf `/home/patrick/am-vis-themen/<thema>/` vom Betreiber.
+4. **Deploy am Ende der Skript-Runde** (`PROD-P3-SKRIPTE-01`): aktueller Deploy + Push,
+   Recovery-Bündel und Dateien lokal bereithalten, erst nach erfolgreichem Deploy löschen.
 
-## 4. Nächste Arbeitspakete (Reihenfolge nach Wirkung)
+## 4. Offene technische Punkte aus dem Audit 2026-09-23
 
-1. **SFU scharf** (INFRA-HETZNER-015, Entscheidung „go"): ACME-Caddyfile in den Flottenstart,
-   `ENABLE_SFU=1`, echte Sitzung gegen `wss://sfu.<domain>` prüfen. Ohne Vorteil: rückstandsfrei zurückbauen.
-2. **Prompts auf Englisch** (AI-P1-PROMPTS-002): alle Rollen-Prompts englisch, Deutsch nur in
-   Kommentaren/Doku; masterplayer bleibt rein visuell (kein Prompt, keine Eingabe, kein Knopf —
-   als Testvertrag verankern); Score-Gate für Bild/Video, Gates 4.00/4.50 getrennt; Latein nur
-   bei belegten Wörtern (cantus, lumen, ordo, vox, silentium, imago, motus) — Auswahl dem Betreiber vorlegen.
-3. **Weitere Themen** (VISUAL-P1-009): wartet auf `/home/patrick/am-vis-themen/<thema>/` vom Betreiber.
-4. **Deploy am Ende der Skript-Runde** (PROD-P3-SKRIPTE-01): aktueller Deploy + Push, Recovery-Bündel
-   und Dateien lokal bereithalten, erst nach erfolgreichem Deploy löschen.
+| ID | Was |
+|---|---|
+| `ARCH-P2-003` | Ignorierliste erledigt (`knip.jsonc` mit Begründung je Eintrag, 4 tote Dateien entfernt). **Rest:** `MasterPlayerTerminal.tsx` ist als tot belegt – Entscheidung „weg oder wieder verdrahten" steht aus. |
+| `AUDIO-P3-001` | Drei `ctx.destination`-Zweige entfernt (Hörprobe klang doppelt). **Rest:** `connectLiveWorkletChain()` und `applyMasterOutputRouting()`/`outputGain` sind geparkt und im `init()`-Kommentar als solche benannt. |
+| net (neu) | **`npm run check:deadcode` (knip) ist rot** – `exit 1` mit 195 ungenutzten Exporten, 88 ungenutzten Typen, 1 ungenutzten Datei und 1 ungenutzten Abhängigkeit (`axios`). Das Gate läuft **nicht** in `verify`, deshalb ist es niemandem aufgefallen. |
 
-## 5. Was in der Vorsitzung bewiesen wurde (nicht erneut prüfen, nur nutzen)
+## 5. Was in dieser Runde gemessen wurde (nicht erneut prüfen, nur nutzen)
 
-Registry-Deploy ohne lokale Ressourcen (`DEPLOY_IMAGE_SOURCE=registry`, gemessen 1,43 GB in 168 s),
-Remote-Build als Flottenstart-Default, paralleler Medienweg über R2 (`--via-r2`), Firewall-Abgleich,
-Grafana-Panels repariert (inkl. korrigiertem Metrik-Präfix `audiomonastry_`) mit neuem Vertragstest,
-Duplikate 34 → 4, Deep-Audit 26 → 3 Findings. Zwei Zugangsdaten-Regeln gelten seither überall:
-**die `.env` schlägt die Prozessumgebung** (GHCR und R2), Overrides nur ausdrücklich; und bei
-Cloudflare-IP-Ausfall bleibt der Origin **zu** (fail-closed).
+Alle Gates am 2026-09-23 real ausgeführt:
+
+| Gate | Ergebnis |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| `npx eslint . --max-warnings=0` | exit 0 |
+| `npx vitest run` | 280/280 Dateien, **2097/2097 Tests** grün |
+| `node scripts/validate-interface-boundaries.mjs` | 451 Dateien, 0 Verstöße |
+| `public/plugin-manifest.json` | genau 16 `ui_plugins` |
+| `npx knip` | **exit 1** (siehe oben) |
+
+Ebenfalls geprüft und in Ordnung: Plugin-Lifecycle `OFF`/`AUTO_AI`/`PRO`, Monitor-Routing
+(`MAIN` wird nie getrennt), `BasePluginAdapter`-Vertrag (OFF-Bypass, Lock-Guard, idempotentes
+`dispose()`), RT-Safety der 16 Worklets, keine doppelten Routen, keine Secrets im Repo oder
+Client-Bundle.

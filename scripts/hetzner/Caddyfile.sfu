@@ -1,0 +1,84 @@
+# Caddyfile.sfu – TLS-Terminator fuer den SFU-Knoten (INFRA-HETZNER-015)
+# =============================================================================
+# WARUM ES DIESE DATEI GIBT (gemessen 2026-09-24):
+#
+# Die SFU-Compose ruft ausdruecklich einen Caddy mit:
+#     docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml \
+#                    -f docker-compose.turn.yml up -d caddy audiomonastry coturn
+# Auf dem Knoten liefen aber NUR audiomonastry und coturn - kein Caddy, kein
+# Listener auf 80/443. Folge: https://sfu.anunnakitools.de war nicht erreichbar,
+# und der SFU-RTP-Test des Flottenstarts scheiterte mit
+# "xhr poll error / ERR_CONNECTION_REFUSED".
+#
+# Der Grund ist derselbe wie auf app-1: die bisherige Variante
+# (Caddyfile.origin) erwartet ein Cloudflare-Origin-Zertifikat unter
+# /etc/caddy/certs/origin.crt|key. Fehlt es, startet Caddy nicht, sondern laeuft
+# in eine Absturzschleife ("open ...: no such file or directory").
+#
+# Geloest wird es wie auf app-1 ueber DNS-01: Caddy holt sich das Zertifikat
+# selbst ueber die Cloudflare-DNS-API. Das braucht KEINEN eingehenden Port fuer
+# die Pruefung - wichtig hier, weil die Hetzner-Firewall nur Cloudflare
+# hereinlaesst und Let's Encrypt sonst nicht validieren koennte. Das Ergebnis ist
+# ein oeffentlich vertrautes Zertifikat, das Cloudflares "strict" akzeptiert, und
+# es erneuert sich selbst.
+#
+# VORAUSSETZUNG: das Image braucht das Plugin. caddy:2.8-alpine hat es NICHT
+# (gemessen: 0 Treffer bei `caddy list-modules | grep dns.providers.cloudflare`).
+# Gebaut wird deshalb:
+#     FROM caddy:2.9-builder AS builder
+#     RUN xcaddy build --with github.com/caddy-dns/cloudflare
+#     FROM caddy:2.9-alpine
+#     COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+#
+# Umgebungsvariablen:
+#   SFU_HOST          sfu.anunnakitools.de  (DNS-only bei Cloudflare!)
+#   CF_DNS_API_TOKEN  Cloudflare-Token MIT Zone:DNS:Edit
+# =============================================================================
+
+{
+	servers {
+		protocols h1 h2
+	}
+	acme_dns cloudflare {$CF_DNS_API_TOKEN}
+}
+
+{$SFU_HOST:sfu.anunnakitools.de} {
+	tls {
+		dns cloudflare {$CF_DNS_API_TOKEN}
+	}
+
+	encode zstd gzip
+
+	log {
+		output stdout
+		format console
+	}
+
+	# Der Signalisierungspfad ist eine WebSocket-Strecke. Die Zeitgrenzen muessen
+	# dafuer grosszuegig sein, sonst reisst Caddy eine laufende Sitzung nach 30 s
+	# ab - der Client saehe nur ein "xhr poll error" ohne erkennbare Ursache.
+	@sig path /sfu-signaling/*
+	reverse_proxy @sig audiomonastry:8080 {
+		transport http {
+			read_timeout 5m
+			write_timeout 5m
+		}
+	}
+
+	# Alles andere am SFU-Knoten (Statusseiten, Health) ebenfalls an die App.
+	reverse_proxy audiomonastry:8080 {
+		transport http {
+			read_timeout 5m
+			write_timeout 30s
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+		-X-Powered-By
+	}
+}

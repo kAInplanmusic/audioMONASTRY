@@ -18,14 +18,23 @@
  *                            checked=false - ein vor F4 gebautes Image darf
  *                            keinen Alarm ausloesen.
  */
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   compareCommits,
   FALLBACK_BUILD_VERSION,
   normalizeCommit,
+  primeBuildInfoFallback,
   readBuildInfo,
+  readLocalGitCommit,
+  readPackageVersion,
   UNKNOWN_BUILD_VALUE,
 } from '../server/buildInfo';
+
+// Der Ersatzstempel ist modulweiter Zustand - vor jedem Test zuruecksetzen,
+// damit die Reihenfolge der Testdateien das Ergebnis nicht veraendert.
+beforeEach(() => primeBuildInfoFallback(null));
 
 describe('readBuildInfo (Build-Stempel im Image)', () => {
   it('liest Version, Commit und Build-Zeit aus der Umgebung', () => {
@@ -72,6 +81,47 @@ describe('normalizeCommit', () => {
     for (const value of ['', '   ', null, undefined, 'unknown', 'UNKNOWN', 'dev', 'none', 'null']) {
       expect(normalizeCommit(value as string)).toBe('');
     }
+  });
+});
+
+describe('RC1-008 · Ersatzstempel ohne Docker-Build-Args', () => {
+  it('liest die Version wirklich aus package.json (kein JSON-Import, fs-basiert)', () => {
+    // Gegenprobe gegen die echte Datei, kein Fixture: der Wert muss stimmen.
+    const pkg = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8')) as { version: string };
+    expect(readPackageVersion()).toBe(pkg.version);
+    expect(readPackageVersion()).not.toBe(FALLBACK_BUILD_VERSION);
+  });
+
+  it('liest den Commit aus .git (fs-only, ohne Subprozess)', () => {
+    const commit = readLocalGitCommit();
+    // In diesem Repo existiert .git; falls nicht (Archiv/Export), ist null ok.
+    if (commit !== null) {
+      expect(commit).toMatch(/^[0-9a-f]{7,40}$/);
+    } else {
+      expect(commit).toBeNull();
+    }
+  });
+
+  it('faellt bei fehlendem Verzeichnis still auf null zurueck (kein Throw)', () => {
+    expect(readPackageVersion('/nonexistent-audit-path-xyz')).toBeNull();
+    expect(readLocalGitCommit('/nonexistent-audit-path-xyz')).toBeNull();
+  });
+
+  it('nutzt den Stempel nur, wenn die Umgebung schweigt', () => {
+    primeBuildInfoFallback({ version: '9.9.9', commit: 'abc1234' });
+    expect(readBuildInfo({})).toMatchObject({ version: '9.9.9', commit: 'abc1234' });
+    // Umgebung hat IMMER Vorrang - ein gestempeltes Image darf nicht ueberschrieben werden.
+    expect(readBuildInfo({ AUDIOMONASTRY_VERSION: '1.210.001', AUDIOMONASTRY_COMMIT: 'ae5e749' }))
+      .toMatchObject({ version: '1.210.001', commit: 'ae5e749' });
+  });
+
+  it('behaelt dev/unknown, wenn weder Umgebung noch Stempel etwas liefern', () => {
+    primeBuildInfoFallback({ version: '   ', commit: '' });
+    expect(readBuildInfo({})).toEqual({
+      version: FALLBACK_BUILD_VERSION,
+      commit: UNKNOWN_BUILD_VALUE,
+      buildTime: UNKNOWN_BUILD_VALUE,
+    });
   });
 });
 

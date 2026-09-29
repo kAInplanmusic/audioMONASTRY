@@ -242,7 +242,7 @@ UPLOAD_MAX_MB=100
 
 ### Datenbank / Storage – Stand
 
-- **Supabase** (Metadaten: `samples`, `music_tracks`, `sample_tags`, `library_links`)
+- **Supabase** (Metadaten: `samples`, `music_tracks`, `sample_tags`)
   ist eingerichtet; `database/schema.sql` wurde ausgeführt und die Preset-Bibliothek
   ist bereits synchronisiert.
 - **Cloudflare R2** (Bucket `audiomonastrysamples`) ist eingerichtet und per S3-API
@@ -736,8 +736,8 @@ cd /tmp/f10-probe && docker compose -f docker-compose.hetzner.yml config | head 
 # 4. Vertragstests
 python3 tests/test_hetzner_scripts.py            # Ran 151 tests ... OK (skipped=1)
 # (im Worktree: node_modules des Haupt-Repos nutzen - das Repo-Root hat keine eigene Installation)
-/home/patrick/audioMONASTRY/node_modules/.bin/vitest run tests/namingConventions.test.ts   # 5 passed
-/home/patrick/audioMONASTRY/node_modules/.bin/tsc --noEmit                                 # 0 Fehler
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY" && ./node_modules/.bin/vitest run tests/namingConventions.test.ts   # 5 passed
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY" && ./node_modules/.bin/tsc --noEmit                                 # 0 Fehler
 ```
 
 Beobachtet am 2026-09-20 auf dem Arbeitszweig `hermes/fix-F10`: Schritte 1–4 wie

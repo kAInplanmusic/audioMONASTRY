@@ -228,7 +228,13 @@ fi
 
 # --- 2b) Vorstaging pruefen (Gewichte im Volume? sonst teurer Download) ------
 if [ -n "$BASE_MODEL" ] && [ -n "$HF_HOME_DIR" ]; then
-  MODEL_SLUG="models--$(printf '%s' "$BASE_MODEL" | tr '/' '-')"
+  # KORRIGIERT AM 2026-09-24: HuggingFace legt ein Modell als `models--<org>--<name>`
+  # ab - der Schraegstrich wird zu ZWEI Bindestrichen. `tr '/' '-'` erzeugte nur EINEN,
+  # diese Pruefung schlug deshalb IMMER fehl: sie meldete "nicht vorstaged", obwohl die
+  # Gewichte auf dem Volume lagen - und der GPU-Pod lud die ~24 GB ein zweites Mal, zu
+  # GPU-Preisen statt zu CPU-Preisen. Auf dem Pod gemessen lag tatsaechlich
+  # models--black-forest-labs--FLUX.1-dev (54 GB).
+  MODEL_SLUG="models--$(printf '%s' "$BASE_MODEL" | sed 's|/|--|')"
   if [ -d "$HF_HOME_DIR/hub/$MODEL_SLUG" ]; then
     log "WEIGHTS" "uebersprungen: Gewichte ($BASE_MODEL liegt schon in $HF_HOME_DIR – kein ~24-GB-Download im GPU-Pod)"
   else

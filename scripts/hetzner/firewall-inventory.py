@@ -15,7 +15,9 @@ import sys
 import urllib.error
 import urllib.request
 
-REPO = pathlib.Path("/home/patrick/audioMONASTRY")
+#: Repo-Wurzel aus der Lage DIESER Datei (scripts/hetzner/ -> zwei Ebenen hoch),
+#: nicht als absoluter Pfad: das Repo wurde am 2026-09-23 verschoben.
+REPO = pathlib.Path(__file__).resolve().parents[2]
 #: Ports, die eine sfu-Rolle laut Repo offen haben muss (Protokoll, Port)
 EXPECTED_SFU = (
     ("udp", "3478"),

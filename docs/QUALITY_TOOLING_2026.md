@@ -4,10 +4,23 @@ Bezug: `MASTERTODOENDE.json` → `QUAL-P2-001`, `QUAL-P2-002`, `CI-P1-001`.
 Alle Zahlen sind gemessen und über die genannten Befehle reproduzierbar.
 
 ```bash
-npm run check:deadcode   # knip (Konfiguration: knip.json)
+npm run check:deadfiles  # knip, NUR Datei-Scope - läuft im Gate (npm run verify)
+npm run check:deadcode   # knip, VOLLER Bericht (auch Exporte/Typen) - informativ
 npm run check:dupes      # jscpd (min-tokens 100)
 npm run test:ci          # Vitest + Gate gegen übersprungene/todo-Tests
 ```
+
+**Warum zwei knip-Schritte (2026-09-23).** Der volle Bericht trägt weiterhin
+199 ungenutzte Exporte und 90 ungenutzte Typen — das ist ein Kaskadenthema
+(`QUAL-P2-003`) und hat nichts mit totem Code zu tun. Als Gate-Schritt wäre er
+dauerhaft rot und würde damit ignoriert. `check:deadfiles` prüft deshalb genau
+das, was ein Gate prüfen soll: **unerreichbare Dateien** (aktuell 0). Er läuft in
+`npm run verify`.
+
+Wichtig für jeden, der knip-Ausgaben auswertet: die Ausgabe ist **farbig**. Ein
+`grep '^Unused files'` matcht deshalb nichts — das ist am 2026-09-23 passiert und
+hat eine ungenutzte Datei (`tests/setup.ts`) zwei Runden lang verdeckt. Voll
+lesen (`npx knip --files`) oder `| cat -v` benutzen.
 
 ---
 

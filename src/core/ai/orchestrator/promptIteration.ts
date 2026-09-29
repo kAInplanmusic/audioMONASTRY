@@ -99,7 +99,7 @@ export function evaluatePromptCoverage(pluginId: string, _version: number, promp
  * (`status` gibt es z. B. bei eq/dsp/instru nicht).
  */
 export function optimizePromptContent(pluginId: string, content: string): string {
-  if (content.includes('## Erlaubte Kommandos')) return content;
+  if (content.includes('## Allowed commands')) return content;
   return `${content.trim()}\n\n${roleCommandBlock(pluginId)}`;
 }
 
@@ -131,11 +131,11 @@ export async function evaluatePlanEffectWithDetails(
   options: { complete?: PlanCompleteFn; timeoutMs?: number; task?: string; withCatalog?: boolean } = {},
 ): Promise<PlanEffectResult> {
   const catalog = PLUGIN_COMMAND_CATALOG[pluginId];
-  const task = options.task ?? `Waehle das passende Kern-Kommando fuer ${evalSpecFor(pluginId).task}.`;
+  const task = options.task ?? `Choose the matching core command for ${evalSpecFor(pluginId).task}.`;
   const complete = options.complete ?? defaultPlanComplete;
   const instruction = options.withCatalog === true
     ? buildPlanPrompt(pluginId, catalog, task)
-    : `Aufgabe: ${task}\nAntworte NUR mit JSON, ohne Markdown: {"pluginId":"${pluginId}","command":"<kommando aus der Rolle>"}`;
+    : `Task: ${task}\nAnswer ONLY with JSON, without markdown: {"pluginId":"${pluginId}","command":"<command from the role>"}`;
   const prompt = `${promptContent.trim()}\n\n${instruction}`;
   const completion = await complete({
     prompt,

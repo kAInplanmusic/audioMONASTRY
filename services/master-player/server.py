@@ -17,9 +17,11 @@ Endpunkte:
 import asyncio
 import base64
 import json
+import math
 import os
 import re
 import subprocess
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -39,7 +41,33 @@ MAX_TRACKS = 8
 MAX_INPUT_BYTES = 64 * 1024 * 1024   # 64 MB JSON-Payload
 MAX_DURATION_SEC = 120               # max. 120 s pro Track
 MAX_SAMPLES = TARGET_SR * 2 * MAX_DURATION_SEC
+# Dekodier-Deckel in BYTES (f32le = 4 Byte je Sample). Siehe decode_to_f32: ohne
+# diesen Deckel entsteht die volle PCM im Speicher (proc.stdout), BEVOR die
+# Sample-Pruefung greift - ein 64-MB-MP3 kann zu ~4,4 GB PCM entpacken.
+MAX_OUTPUT_BYTES = MAX_SAMPLES * 4
+# Toleranz beim Sondieren: eine Datei mit exakt 120,0 s ist erlaubt.
+DURATION_TOLERANCE_SEC = 0.5
 FFMPEG_BIN = os.environ.get("FFMPEG_BIN", "ffmpeg")
+
+
+def _resolve_ffprobe_bin() -> str:
+    """ffprobe neben FFMPEG_BIN suchen (Debian-`ffmpeg` liefert beide).
+
+    Das Image installiert das ffmpeg-Paket, das ffprobe mitbringt. Ist
+    FFMPEG_BIN ein voller Pfad, wird der Nachbar bevorzugt; sonst bleibt es beim
+    PATH-Namen. Ein fehlendes ffprobe ist kein Abbruch - dann greift der
+    Byte-Deckel als Rueckfall (siehe decode_to_f32).
+    """
+    explicit = os.environ.get("FFPROBE_BIN", "").strip()
+    if explicit:
+        return explicit
+    directory = os.path.dirname(FFMPEG_BIN)
+    if directory:
+        return os.path.join(directory, "ffprobe")
+    return "ffprobe"
+
+
+FFPROBE_BIN = _resolve_ffprobe_bin()
 FFMPEG_INPUT_PIPE = "pipe:0"
 FFMPEG_OUTPUT_PIPE = "pipe:1"
 
@@ -83,20 +111,134 @@ def run_ffmpeg(args: list[str], input_data: bytes | None = None,
     return proc.stdout
 
 
-def decode_to_f32(data: bytes) -> np.ndarray:
-    """Decodiert beliebiges Audio (wav/mp3/flac/ogg/…) → 48 kHz Stereo float32 (2, N)."""
-    if len(data) > MAX_INPUT_BYTES:
-        raise ValueError("Audio-Payload zu groß (max. 64 MB)")
-    raw = run_ffmpeg([
+def build_decode_args() -> list[str]:
+    """ffmpeg-Argumente fuer die Dekodierung - MIT harten Ausgabegrenzen.
+
+    ``-t MAX_DURATION_SEC`` begrenzt die Ausgabedauer, ``-fs MAX_OUTPUT_BYTES``
+    begrenzt die Ausgabegroesse in Bytes. Beide sind Noetig, nicht doppelt
+    gemoppelt: ``-t`` wirkt auf der Zeitachse, ``-fs`` hart auf der Byte-Ebene
+    (faengt z. B. eine ueberraschende Abtastrate oder einen Dekoder-Ausreisser).
+
+    Beide stehen NACH ``-i`` - als Ausgabeoptionen. Vor ``-i`` waeren sie eine
+    Eingabegrenze und wuerden nur die Quelldauer begrenzen, nicht das, was
+    tatsaechlich im Speicher landet.
+    """
+    return [
         "-i", FFMPEG_INPUT_PIPE,
+        "-t", str(MAX_DURATION_SEC),
+        "-fs", str(MAX_OUTPUT_BYTES),
         "-f", "f32le", "-ac", "2", "-ar", str(TARGET_SR),
         FFMPEG_OUTPUT_PIPE,
-    ], input_data=data)
+    ]
+
+
+def probe_duration_sec(data: bytes) -> float | None:
+    """Dauer aus den METADATEN lesen - ohne das Audio zu dekodieren.
+
+    ffprobe liest nur den Kopfsatz. Das ist der Kern der Bombenabwehr: die
+    Entscheidung "zu lang" faellt, BEVOR Speicher fuer die PCM belegt wird.
+
+    WARUM UEBER EINE TEMPORAERE DATEI UND NICHT UEBER `pipe:0` (gemessen
+    2026-09-23): ffprobe kann die Dauer eines nicht suchbaren Eingangs nicht
+    bestimmen und meldet fuer `pipe:0` wortwoertlich `N/A` - auch bei einer WAV,
+    deren Dauer im Kopfsatz steht. Auf einer regulaeren Datei liefert derselbe
+    Aufruf `1.000000`. Ohne diesen Umweg waere die Vorabpruefung blind und
+    muesste jede Datei konservativ ablehnen.
+
+    Die temporaere Datei ist durch den Aufrufer begrenzt: `decode_to_f32` hat
+    MAX_INPUT_BYTES bereits geprueft, bevor hier geschrieben wird.
+
+    Best effort: fehlt ffprobe oder ist die Dauer nicht bestimmbar, kommt
+    ``None`` zurueck. Der Aufrufer muss dann konservativ entscheiden
+    (siehe decode_to_f32) - ein stilles "dann eben ohne Grenze" waere der Fehler.
+    """
+    tmp_path = None
+    try:
+        fd, tmp_path = tempfile.mkstemp(prefix="amprobe-", suffix=".bin")
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        return probe_duration_sec_from_path(tmp_path)
+    except OSError:
+        return None
+    finally:
+        if tmp_path is not None:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+def probe_duration_sec_from_path(path: str) -> float | None:
+    """Dauer einer DATEI aus den Metadaten lesen (ffprobe, ohne Dekodieren)."""
+    cmd = [
+        FFPROBE_BIN, "-hide_banner", "-loglevel", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        "-i", path,
+    ]
+    try:
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if proc.returncode != 0:
+        return None
+    return _parse_duration(proc.stdout)
+
+
+def _parse_duration(raw: bytes) -> float | None:
+    """`1.000000` -> 1.0; `N/A`, leer oder Unsinn -> None."""
+    try:
+        value = float(raw.decode(errors="replace").strip().splitlines()[0])
+    except (ValueError, IndexError):
+        return None
+    if not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
+def decode_to_f32(data: bytes) -> np.ndarray:
+    """Decodiert beliebiges Audio (wav/mp3/flac/ogg/…) → 48 kHz Stereo float32 (2, N).
+
+    REIHENFOLGE (2026-09-23 gehaertet, Block 2 / Angriff 2+3):
+    Ohne diese Reihenfolge entstand die volle PCM zuerst in ``proc.stdout`` und
+    wurde ERST DANACH gegen ``MAX_SAMPLES`` geprueft. Ein 64-MB-MP3 kann
+    komprimiert zu ~4,4 GB PCM entpacken - der Prozess waere vor der Pruefung
+    gestorben (Speicher-Erschoepfung). Jetzt gilt:
+
+      1. Payload-Groesse pruefen (billig, ohne ffmpeg),
+      2. DAUER aus den Metadaten sondieren - zu lang heisst: Abbruch ohne Dekodieren,
+      3. dekodieren mit ``-t`` und ``-fs`` als harte Obergrenze im ffmpeg selbst,
+      4. Sample-Zahl als letzte Kontrolle.
+
+    Wenn die Dauer nicht bestimmbar ist (kein ffprobe), wird KONSERVATIV
+    entschieden: erreicht die Dekodierung die Grenze, gilt die Datei als zu lang.
+    Lieber eine Datei abgelehnt als der Dienst wegen Speichermangels verloren.
+    """
+    if len(data) > MAX_INPUT_BYTES:
+        raise ValueError("Audio-Payload zu groß (max. 64 MB)")
+
+    probed = probe_duration_sec(data)
+    if probed is not None and probed > MAX_DURATION_SEC + DURATION_TOLERANCE_SEC:
+        raise ValueError(f"Audio zu lang (max. {MAX_DURATION_SEC} s)")
+
+    raw = run_ffmpeg(build_decode_args(), input_data=data)
     arr = np.frombuffer(raw, dtype=np.float32)
     if arr.size == 0:
         raise ValueError("Keine Audio-Frames decodiert")
     if arr.size > MAX_SAMPLES:
         raise ValueError(f"Audio zu lang (max. {MAX_DURATION_SEC} s)")
+    if probed is None and arr.size >= MAX_SAMPLES:
+        # Kein Sondieren moeglich UND die Dekodierung lief genau in die Grenze:
+        # das koennte eine abgeschnittene lange Datei sein. Bei bekannter Dauer
+        # waere das ein zulaessiger 120-s-Track - hier ist es nicht entscheidbar.
+        raise ValueError(
+            f"Audiodauer nicht bestimmbar und Ausgabegrenze erreicht "
+            f"(max. {MAX_DURATION_SEC} s) - abgelehnt"
+        )
     arr = arr.reshape(-1, 2).T
     return np.ascontiguousarray(arr, dtype=np.float32)
 

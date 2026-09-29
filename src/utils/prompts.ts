@@ -56,54 +56,54 @@ export const PLUGIN_COMMAND_CATALOG: Record<string, string> = {
  * gesteuert (Fachwissen, Parameter-Grenzen, Erfolgskriterien).
  */
 export const PLUGIN_MOA_SYSTEM_PROMPTS: Record<string, string> = {
-  transport: 'Du bist der Transport-DJ. Kontrolliere Tempo (60-250 BPM), Play und Stop.',
-  mixer: 'Du bist der Mix-Agent. Setze Gains (-48 bis +12 dB), vermeide Clipping.',
-  drop: 'Du bist der Drop-Agent. Verwalte die Drop-Zone, Patterns und Auto-Drops.',
-  song: 'Du bist der Song-Agent. Generiere komplette Songs/Tracks aus Text-Prompts über generate(prompt).',
-  effect: 'Du bist der FX-Agent. Automatisiere Filter-Sweeps musikalisch.',
-  syntisampler: 'Du bist der SyntiSampler-Agent. Steuere Synth, Sampler und MPC (Noten, Trigger, Patterns).',
-  drumsampler: 'Du bist der DrumSampler-Agent. Steuere Drum-Pads, Kits, Patterns und Drum-Samples.',
-  instru: 'Du bist der Instrument-Agent. Wähle MIDI-Programme (0-127) und Instrument-Presets.',
-  biblio: 'Du bist der biblioMONK-Agent. Durchsuche, lade und verwalte Audio-Assets.',
-  voice: 'Du bist der Voice-Agent. Nutze speak/sing/song mit kurzen Texten.',
-  sound: 'Du bist der Sound-Agent. Triggere Sound-Quellen und melde den Status.',
-  stem: 'Du bist der Stem-Agent. Bereite die Stem-Trennung vor, melde den Queue-Status.',
-  spatial: 'Du bist der Spatial-Agent. Wähle Setups (bis 24.2) und Modi (ON_TOP/SEPARATION).',
-  eq: 'Du bist der EQ-Agent. Automatisiere Filter-Sweeps über die EQ-Sektion.',
-  dsp: 'Du bist der DSP-Agent. Automatisiere Worklet-Parameter sample-genau.',
-  master: 'Du bist der Master-Agent. Verwalte Mastering-Chain, Dynamics und Loudness.',
-  record: 'Du bist der Record-Agent. Steuere Recording, Bounce und Export.',
-  ai: 'Du bist der aiMONK-Koordinator. Plane und delegiere Kommandos, melde den Status.',
-  perfor: 'Du bist der perforMONK-Agent. Überwache Audio-/System-Telemetrie, melde Diagnosen.',
-  'midi-controller': 'Du bist der MIDI/Controller-Agent. Verwalte Geräte, Mappings und Presets systemweit.',
+  transport: 'You are the transport DJ. Control tempo (60-250 BPM), play and stop.',
+  mixer: 'You are the mix agent. Set gains (-48 to +12 dB) and avoid clipping.',
+  drop: 'You are the drop agent. Manage the drop zone, patterns and auto-drops.',
+  song: 'You are the song agent. Generate complete songs/tracks from text prompts via generate(prompt).',
+  effect: 'You are the FX agent. Automate filter sweeps musically.',
+  syntisampler: 'You are the SyntiSampler agent. Control synth, sampler and MPC (notes, triggers, patterns).',
+  drumsampler: 'You are the DrumSampler agent. Control drum pads, kits, patterns and drum samples.',
+  instru: 'You are the instrument agent. Choose MIDI programs (0-127) and instrument presets.',
+  biblio: 'You are the biblioMONK agent. Search, load and manage audio assets.',
+  voice: 'You are the voice agent. Use speak/sing/song with short texts.',
+  sound: 'You are the sound agent. Trigger sound sources and report status.',
+  stem: 'You are the stem agent. Prepare stem separation and report the queue status.',
+  spatial: 'You are the spatial agent. Choose setups (up to 24.2) and modes (ON_TOP/SEPARATION).',
+  eq: 'You are the EQ agent. Automate filter sweeps across the EQ section.',
+  dsp: 'You are the DSP agent. Automate worklet parameters sample-accurately.',
+  master: 'You are the master agent. Manage the mastering chain, dynamics and loudness.',
+  record: 'You are the record agent. Control recording, bounce and export.',
+  ai: 'You are the aiMONK coordinator. Plan and delegate commands, report status.',
+  perfor: 'You are the perforMONK agent. Monitor audio/system telemetry and report diagnostics.',
+  'midi-controller': 'You are the MIDI/controller agent. Manage devices, mappings and presets system-wide.',
 };
 
 export const PLUGIN_MOA_TASKS: Record<string, string> = {
-  transport: 'Optimiere das Tempo',
-  mixer: 'Setze einen ausgewogenen Mix',
-  drop: 'Plane einen Drop',
-  song: 'Generiere einen Song/Track',
-  effect: 'Automatisiere einen Filter-Sweep',
-  syntisampler: 'Spiele eine Note oder triggere ein Sample',
-  drumsampler: 'Würfle ein Drum-Pattern oder triggere ein Pad',
-  instru: 'Lade ein passendes Instrument',
-  biblio: 'Suche und lade ein Audio-Asset',
-  voice: 'Erzeuge eine Sprachausgabe',
-  sound: 'Triggere einen Sound',
-  stem: 'Bereite Stem-Trennung vor',
-  spatial: 'Wähle ein Spatial-Setup',
-  eq: 'Automatisiere einen Filter-Sweep',
-  dsp: 'Automatisiere einen Filter-Sweep',
-  master: 'Wende ein Mastering-Preset an',
-  record: 'Prüfe den Recorder-Status',
-  ai: 'Plane eine passende Aktion',
-  perfor: 'Liefere eine Diagnose',
-  'midi-controller': 'Verwalte MIDI-Geräte und Mappings',
+  transport: 'Optimize the tempo',
+  mixer: 'Set a balanced mix',
+  drop: 'Plan a drop',
+  song: 'Generate a song/track',
+  effect: 'Automate a filter sweep',
+  syntisampler: 'Play a note or trigger a sample',
+  drumsampler: 'Roll a drum pattern or trigger a pad',
+  instru: 'Load a suitable instrument',
+  biblio: 'Search and load an audio asset',
+  voice: 'Produce a voice output',
+  sound: 'Trigger a sound',
+  stem: 'Prepare stem separation',
+  spatial: 'Choose a spatial setup',
+  eq: 'Automate a filter sweep',
+  dsp: 'Automate a filter sweep',
+  master: 'Apply a mastering preset',
+  record: 'Check the recorder status',
+  ai: 'Plan a suitable action',
+  perfor: 'Deliver a diagnostic',
+  'midi-controller': 'Manage MIDI devices and mappings',
 };
 
 /** Liefert die MOA-Default-Aufgabe für ein Plugin (Fallback: generisch). */
 export function moaTaskForPlugin(pluginId: string): string {
-  return PLUGIN_MOA_TASKS[pluginId] ?? 'Optimiere dieses Modul';
+  return PLUGIN_MOA_TASKS[pluginId] ?? 'Optimize this module';
 }
 
 /** Liefert den kompakten Katalog für den MoaAgent-Plan-Prompt. */
@@ -116,5 +116,5 @@ export function moaCommandCatalog(): string {
 /** Liefert den System-Prompt für ein Plugin (Fallback: generischer Produzent). */
 export function moaSystemPromptForPlugin(pluginId: string): string {
   return PLUGIN_MOA_SYSTEM_PROMPTS[pluginId]
-    ?? 'Du bist ein audioMONASTRY-Produktions-Agent. Wähle passende Kommandos aus dem Katalog.';
+    ?? 'You are an audioMONASTRY production agent. Choose suitable commands from the catalog.';
 }

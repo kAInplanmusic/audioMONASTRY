@@ -1,6 +1,6 @@
 # Architektur-Audit: RunPod-Integration in audioMONASTRY
 
-**Repo:** /home/patrick/audioMONASTRY · **Branch:** main · **HEAD:** 902e9c3 · **Arbeitsbaum:** sauber (Stand der Erstellung dieses Berichts)
+**Repo:** /home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY · **Branch:** main · **HEAD:** 902e9c3 · **Arbeitsbaum:** sauber (Stand der Erstellung dieses Berichts)
 **Audit-Typ:** lesend (read-only). Kein Quellcode geändert, kein Commit.
 **Ausgeschlossen:** node_modules/, dist/, coverage/, logs/
 **Beweisführung:** Jede Code-Aussage trägt `Datei:Zeile`. Nicht Zugreifbares/Nicht Gemessenes wird als solches gekennzeichnet. Es werden keine IDs, Zahlen oder Endpoint-Namen erfunden.
@@ -302,6 +302,22 @@ Auflösung: `resolveGpuRoles()` liest je Rolle `env(endpointIdEnv) || env(endpoi
 **Befund V3-3 (MITTEL) — `roleReady()` maskiert fehlende Konfiguration als Erfolg.** `fleetWake.ts:179-183`: `if (!status.configured) return true;`. Mit `const ok = roles.every(roleReady)` (`fleetWake.ts:215`) meldet `/api/ai/fleet/wake` `ok: true`, auch wenn Rollen gar nicht angesprochen wurden — der Bericht ist damit kein Beleg dafür, dass die Flotte wach ist. Das Detail steht nur im Log (`fleetWake.ts:220`) und im `roles[]`-Feld.
 
 **Befund V3-4 (MITTEL) — `wakeFleet()` weckt immer die komplette Flotte, ohne Kosten-Gate.** `resolveGpuRoles()` liefert alle acht Rollen, `Promise.all(resolved.map(wakeRole))` (`fleetWake.ts:201, 213`) setzt für jede `workersMin=1`, unabhängig vom anstehenden Task. Jeder geweckte Worker läuft danach mindestens `idleTimeout` Sekunden weiter (live 15 s bzw. 120 s, Abschnitt 4) und wird abgerechnet. Es gibt keinen rollenselektiven Wake-Einstiegspunkt und keine Prüfung gegen `AI_MAX_FLEET_EUR_PER_HOUR` vor dem Wecken.
+
+> **KORREKTUR 2026-09-23 (Iteration 5) — dieser Befund ist BEHOBEN.** Der Abschnitt
+> ist eine Momentaufnahme von vor dem Fix und sagt das selbst nicht; wer nur diese
+> Datei liest, hält ein geschlossenes Loch für offen. Stand heute:
+> `src/core/ai/orchestrator/fleetWake.ts:341` ruft `assertFleetHourlyBudget(toWakeRoles,
+> AI_HETZNER_EUR_PER_HOUR)` **vor** dem ersten Netzwerkaufruf auf; bei
+> Überschreitung startet nichts, der Bericht trägt `blocked: "budget"` und
+> `POST /api/ai/fleet/wake` antwortet **409**. `wakeFleet()` weckt außerdem nur noch
+> die Immer-Rollen, Visuals laufen über `wakeRoleOnDemand` beim Abruf. Belegt in
+> `MASTERTODOENDE.json` (DONE 2026-09-20) und in `tests/aiInfrastructure.test.ts`.
+> **Der strukturelle Teil des Befunds bleibt gültig und ist offen:** ein
+> `workersMax` ist für keinen der acht Endpunkte gesetzt (Abschnitt 4 zeigt nur
+> `n: 1` als Minimum), und `AI_RATE_CONCURRENCY_MAX` wird zwar gelesen, aber von
+> keiner Produktionsdatei durchgesetzt — die Parallelität begrenzt der EUR/h-Wächter
+> nicht. Details: `docs/SEC_BLOCK2_ATTACKS.md`, Angriff 1.
+
 
 ### 6.4 Vision-/Video-Pfade (Sonderweg außerhalb der Rollen-Registry)
 

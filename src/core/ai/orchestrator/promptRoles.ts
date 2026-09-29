@@ -215,7 +215,7 @@ export function evalCasesFor(roleId: string, spec: PluginEvalSpec = evalSpecFor(
  */
 export function composeRoleSystemPrompt(roleId: string): string {
   const roleSentence = PLUGIN_MOA_SYSTEM_PROMPTS[roleId]
-    ?? 'Du bist ein audioMONASTRY-Produktions-Agent. Wähle passende Kommandos aus dem Katalog.';
+    ?? 'You are an audioMONASTRY production agent. Choose suitable commands from the catalog.';
   return `${roleSentence}\n\n${roleCommandBlock(roleId)}`;
 }
 
@@ -228,22 +228,22 @@ export function roleCommandBlock(roleId: string): string {
   const catalog = PLUGIN_COMMAND_CATALOG[roleId] ?? 'status';
   const fallback = fallbackCommandFor(roleId);
   const errorRule = fallback
-    ? `Fehlerbehandlung: Wenn ein Kommando nicht verfügbar ist, wähle '${fallback}' und melde den Fehler im Feld "prompt".`
-    : 'Fehlerbehandlung: Wenn ein Kommando nicht verfügbar ist, melde den Fehler im Feld "prompt", wiederhole das Kommando nicht und nutze kein anderes als die oben erlaubten.';
+    ? `Error handling: if a command is unavailable, choose '${fallback}' and report the error in the "prompt" field.`
+    : 'Error handling: if a command is unavailable, report the error in the "prompt" field, do not repeat the command, and use nothing other than those allowed above.';
   const shots = fewShotsFor(roleId)
-    .map((shot) => `Eingabe: ${shot.task}\nAntwort: [${JSON.stringify(shot.answer)}]`)
+    .map((shot) => `Input: ${shot.task}\nAnswer: [${JSON.stringify(shot.answer)}]`)
     .join('\n');
 
   return [
-    '## Erlaubte Kommandos (nur diese, Syntax command(parameter))',
+    '## Allowed commands (these only, syntax command(parameter))',
     `${roleId}: ${catalog}`,
     '',
-    '## Fehlerregel',
+    '## Error rule',
     errorRule,
     '',
-    '## Antwortformat',
-    'Antworte NUR als JSON-Array, ohne Erklärung und ohne Markdown: [{"pluginId":"string","command":"string","prompt":"string"}]',
-    ...(shots ? ['', '## Beispiele (Few-Shot)', shots] : []),
+    '## Response format',
+    'Answer ONLY as a JSON array, without explanation and without markdown: [{"pluginId":"string","command":"string","prompt":"string"}]',
+    ...(shots ? ['', '## Examples (few-shot)', shots] : []),
   ].join('\n');
 }
 
@@ -259,14 +259,14 @@ export function roleCommandBlock(roleId: string): string {
 export const PLANNER_ROLE_ID = MOA_GLOBAL_PROMPT_KEY;
 
 export const MOA_GLOBAL_SYSTEM_PROMPT = [
-  'Du bist der MOA/MCP-Planer von audioMONASTRY. Zerlege die Aufgabe in klare Einzelschritte und antworte NUR als JSON-Array (keine Erklärung, kein Markdown):',
+  'You are the MOA/MCP planner of audioMONASTRY. Break the task into clear single steps and answer ONLY as a JSON array (no explanation, no markdown):',
   '[{"pluginId":"string","command":"string","prompt":"string"}]',
   '',
-  '## Erlaubte Kommandos (nur diese, Syntax command(parameter))',
+  '## Allowed commands (these only, syntax command(parameter))',
   Object.entries(PLUGIN_COMMAND_CATALOG).map(([id, cmds]) => `${id}: ${cmds}`).join('; '),
   '',
-  '## Antwortformat',
-  'Antworte NUR als JSON-Array, ohne Erklärung und ohne Markdown: [{"pluginId":"string","command":"string","prompt":"string"}]',
+  '## Response format',
+  'Answer ONLY as a JSON array, without explanation and without markdown: [{"pluginId":"string","command":"string","prompt":"string"}]',
 ].join('\n');
 
 function plannerFewShots(): PromptFewShot[] {

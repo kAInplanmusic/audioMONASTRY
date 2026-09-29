@@ -38,6 +38,7 @@ import {
 import { IdempotencyConflictError } from '../../src/core/ai/orchestrator/jobManager';
 import { MergeError, loadMergeSource, mergeClipBuffers } from '../visionShow.ts';
 import { VideoError, generateVideo, stripDataUri } from '../../src/core/ai/vision/runpodVideo';
+import { BANK_R2_SOURCES } from '../../src/visuals/visualBank';
 import { VisionError, generateVisionImage } from '../../src/core/ai/vision/runpodVision';
 import { aiOrchestrator } from '../../src/core/ai/orchestrator/aiOrchestrator';
 import { aiPersistence } from '../../src/core/ai/orchestrator/aiPersistence';
@@ -152,6 +153,27 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     return res.end(body);
   });
 
+  // --- GET /api/ai/vision/bank/:id  -> Vorlagen-Clip same-origin ausliefern ---
+  // Der R2-Bucket sendet keinen CORS-Header; ohne diese Route wäre das
+  // Show-Canvas beim Zeichnen der Clips „tainted“ und der Beamer/Main-Out
+  // schwarz. Whitelist = die acht geprüften Vorlagen-IDs, kein freies URL-Routing.
+  app.get('/api/ai/vision/bank/:id', async (req, res) => {
+    const id = String((req.params as { id?: string }).id ?? '');
+    const r2Url = BANK_R2_SOURCES[id];
+    if (!r2Url) return res.status(404).json({ error: 'unbekannte Vorlagen-ID' });
+    try {
+      const upstream = await fetch(r2Url);
+      if (!upstream.ok) return res.status(502).json({ error: `R2 antwortet ${upstream.status}` });
+      const body = Buffer.from(await upstream.arrayBuffer());
+      res.setHeader('Content-Type', 'video/mp4');
+      res.setHeader('Content-Length', String(body.length));
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      return res.end(body);
+    } catch (e) {
+      return res.status(502).json({ error: `Vorlagen-Clip nicht ladbar: ${String((e as Error).message).slice(0, 120)}` });
+    }
+  });
+
   // ===========================================================================
   // GAP-4: Eingangs-Validierung für /api/ai/* (Auth/Rate-Limit siehe Middleware)
   // ===========================================================================
@@ -229,7 +251,10 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     return s.trim();
   }
 
-  // --- POST /api/ai/compose  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
+  // --- POST /api/ai/generate  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
+  // Hinweis: /api/ai/compose ist der deterministische Generator weiter oben
+  // (Zeile ~182); dieser Handler hier ist /api/ai/generate. Der Kommentar war
+  // bis 2026-09-23 falsch beschriftet (DOC-P3-002, reine Doku-Korrektur).
   app.post('/api/ai/generate', async (req, res) => {
     const parsed = AiPromptSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ error: 'invalid prompt', details: parsed.error.issues.slice(0, 5) });

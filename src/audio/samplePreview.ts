@@ -37,7 +37,6 @@ export interface SamplePreviewDeps {
   triggerV2Sample(track: TrackType): void;
   getMusicBuffer(url: string): Promise<ToneBufferLike>;
   /** Tone-Erzeugung (injiziert, damit das Modul Tone-frei bleibt). */
-  createPlayerFromUrl(url: string): AudioPlayerLike;
   createPlayerFromBuffer(buffer: ToneBufferLike, connectTo: AudioNode | null): AudioPlayerLike;
   decodeToV2(url: string, onBuffer: (buffer: AudioBuffer) => void): void;
 }
@@ -51,13 +50,15 @@ export class SamplePreview {
   previewSample(track: TrackType, time?: number, url?: string): void {
     this.deps.ensureInitialized();
     if (url) {
-      // Vorherigen Preview-Player entsorgen, damit schnelles Klicken keinen
-      // Player-Leak erzeugt (jeder Player hält einen Decoder-Puffer).
+      // Vorherige Hörprobe entsorgen (jeder Player hält einen Decoder-Puffer).
       try { this.previewPlayer?.dispose?.(); } catch { /* ignore */ }
-      const player = this.deps.createPlayerFromUrl(url);
-      this.previewPlayer = player;
+      this.previewPlayer = null;
       this.previewUrl = url;
-      // AUDIO-P0-003: Preview hörbar in den V2-Sink laden und triggern.
+      // AUDIO-P3-001 (2026-09-23): EIN hörbarer Weg. Bis hierher lief zusätzlich
+      // ein `Tone.Player(url).toDestination()` mit autostart - das Sample klang
+      // dadurch DOPPELT (einmal direkt auf der Ausgabe, an Fader/EQ/Pan und der
+      // Monitor-/Cue-Policy vorbei, einmal korrekt über den V2-Sink). Der direkte
+      // Player ist entfernt; die Hörprobe läuft ausschließlich über den V2-Sink.
       this.deps.decodeToV2(url, (audioBuffer) => {
         if (audioBuffer && audioBuffer.numberOfChannels > 0) {
           this.deps.bridgeBufferToV2(track, audioBuffer);

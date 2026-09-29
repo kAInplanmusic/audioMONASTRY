@@ -21,6 +21,8 @@ function makeDeps(overrides: Partial<SamplePreviewDeps> = {}) {
   const calls = {
     bridge: vi.fn(), trigger: vi.fn(), ensureInit: vi.fn(), ensureChannel: vi.fn(),
     setPlayer: vi.fn(), deletePlayer: vi.fn(), setUrl: vi.fn(),
+    // AUDIO-P3-001: muss für die URL-Hörprobe UNGENUTZT bleiben.
+    createPlayer: vi.fn(() => makePlayer()),
   };
   const deps: SamplePreviewDeps = {
     ensureInitialized: calls.ensureInit,
@@ -35,8 +37,7 @@ function makeDeps(overrides: Partial<SamplePreviewDeps> = {}) {
     bridgeBufferToV2: calls.bridge,
     triggerV2Sample: calls.trigger,
     getMusicBuffer: async () => ({ get: () => ({ numberOfChannels: 2 } as unknown as AudioBuffer) }),
-    createPlayerFromUrl: () => makePlayer(),
-    createPlayerFromBuffer: () => makePlayer(),
+    createPlayerFromBuffer: calls.createPlayer,
     decodeToV2: (_url, onBuffer) => onBuffer({ numberOfChannels: 2 } as unknown as AudioBuffer),
     ...overrides,
   };
@@ -54,13 +55,23 @@ describe('SamplePreview', () => {
     expect(calls.trigger).toHaveBeenCalledWith('channel2');
   });
 
-  it('entsorgt den vorherigen Preview-Player (kein Leak) und stoppt sauber', () => {
-    const dispose = vi.fn();
-    const { deps } = makeDeps({ createPlayerFromUrl: () => ({ ...makePlayer(), dispose }) as unknown as AudioPlayerLike });
+  it('AUDIO-P3-001: die URL-Hörprobe erzeugt KEINEN Direkt-Player (nur V2-Sink)', () => {
+    const { deps, calls } = makeDeps();
+    const sp = new SamplePreview(deps);
+    sp.previewSample('channel2', undefined, 'a.mp3');
+    // Genau ein hörbarer Weg: decode -> V2. Kein Tone.Player auf ctx.destination,
+    // sonst klänge die Hörprobe doppelt und liefe an Fader/EQ/Pan vorbei.
+    expect(calls.createPlayer).not.toHaveBeenCalled();
+    expect(calls.bridge).toHaveBeenCalledWith('channel2', expect.any(Object));
+    expect(calls.trigger).toHaveBeenCalledWith('channel2');
+  });
+
+  it('wiederholtes Vorspielen hält den Zustand sauber und stoppt sauber', () => {
+    const { deps } = makeDeps();
     const sp = new SamplePreview(deps);
     sp.previewSample('channel2', undefined, 'a.mp3');
     sp.previewSample('channel2', undefined, 'b.mp3');
-    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(sp.getPreviewUrl()).toBe('b.mp3');
     sp.stopPreview();
     expect(sp.getPreviewUrl()).toBeNull();
   });

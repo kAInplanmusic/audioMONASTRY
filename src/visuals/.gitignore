@@ -1,0 +1,28 @@
+# Binaries / media
+**/*.mp4
+**/*.webm
+**/*.mov
+**/*.avi
+**/*.mkv
+**/*.wav
+**/*.mp3
+# Images
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+# Models / weights
+**/*.safetensors
+**/*.ckpt
+**/*.pt
+**/*.bin
+**/*.onnx
+# Large folders
+bank/
+vorlagen/*.mp4
+models/
+weights/
+downloads/
+# Temporary renders
+*.log
+*.tmp

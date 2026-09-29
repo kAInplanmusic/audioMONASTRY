@@ -200,7 +200,7 @@ Geändert: `server.ts`, `src/utils/rbac.ts`, `src/utils/WebRTCManager.ts`,
 ## 15. Exakte Befehle
 
 ```bash
-cd /home/patrick/audioMONASTRY
+cd "/home/patrick/AnunnakiTools Projekte/laufende Projekte/audioMONASTRY"
 
 # Lokaler Start (Dev)
 npm install

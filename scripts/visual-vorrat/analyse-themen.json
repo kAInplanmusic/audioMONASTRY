@@ -1,0 +1,290 @@
+{
+  "8-Bit_Retro-Spiel": {
+    "selected": 25,
+    "csv_rows": 1084,
+    "aesth_selected_min": 4.65,
+    "aesth_selected_median": 5.05,
+    "aesth_all_median": 4.9,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 1.0
+  },
+  "Abstrakt": {
+    "selected": 25,
+    "csv_rows": 835,
+    "aesth_selected_min": 5.98,
+    "aesth_selected_median": 6.11,
+    "aesth_all_median": 5.45,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Brainfuck_Unmöglich_Surrealismus": {
+    "selected": 25,
+    "csv_rows": 1914,
+    "aesth_selected_min": 5.05,
+    "aesth_selected_median": 5.92,
+    "aesth_all_median": 5.28,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 2.0
+  },
+  "Comic": {
+    "selected": 25,
+    "csv_rows": 1816,
+    "aesth_selected_min": 4.44,
+    "aesth_selected_median": 5.4,
+    "aesth_all_median": 5.08,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "DJ_Club": {
+    "selected": 25,
+    "csv_rows": 665,
+    "aesth_selected_min": 4.18,
+    "aesth_selected_median": 5.49,
+    "aesth_all_median": 5.17,
+    "treffer_selected_median": 4.0,
+    "treffer_all_median": 2.0
+  },
+  "Dark Ornament": {
+    "selected": 25,
+    "csv_rows": 1771,
+    "aesth_selected_min": 5.97,
+    "aesth_selected_median": 6.15,
+    "aesth_all_median": 5.46,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Dinosaurier": {
+    "selected": 25,
+    "csv_rows": 246,
+    "aesth_selected_min": 3.84,
+    "aesth_selected_median": 4.93,
+    "aesth_all_median": 5.07,
+    "treffer_selected_median": 4.0,
+    "treffer_all_median": 2.0
+  },
+  "Drohnenflug": {
+    "selected": 25,
+    "csv_rows": 2211,
+    "aesth_selected_min": 5.72,
+    "aesth_selected_median": 5.91,
+    "aesth_all_median": 5.15,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "Fantasy": {
+    "selected": 25,
+    "csv_rows": 1250,
+    "aesth_selected_min": 5.6,
+    "aesth_selected_median": 5.95,
+    "aesth_all_median": 5.19,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Feuer_Flammen": {
+    "selected": 25,
+    "csv_rows": 431,
+    "aesth_selected_min": 4.54,
+    "aesth_selected_median": 5.6,
+    "aesth_all_median": 5.18,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 2.0
+  },
+  "Geheimbund_Mönche": {
+    "selected": 25,
+    "csv_rows": 956,
+    "aesth_selected_min": 4.53,
+    "aesth_selected_median": 5.17,
+    "aesth_all_median": 5.26,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 2.0
+  },
+  "Geometric": {
+    "selected": 25,
+    "csv_rows": 1566,
+    "aesth_selected_min": 6.17,
+    "aesth_selected_median": 6.54,
+    "aesth_all_median": 5.49,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Gewitter_Raining Day": {
+    "selected": 25,
+    "csv_rows": 706,
+    "aesth_selected_min": 3.94,
+    "aesth_selected_median": 5.3,
+    "aesth_all_median": 5.14,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 1.0
+  },
+  "HDR_Sternenhimmel": {
+    "selected": 25,
+    "csv_rows": 304,
+    "aesth_selected_min": 4.72,
+    "aesth_selected_median": 5.76,
+    "aesth_all_median": 5.19,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 2.0
+  },
+  "Horror_Zombie": {
+    "selected": 25,
+    "csv_rows": 2081,
+    "aesth_selected_min": 5.96,
+    "aesth_selected_median": 6.08,
+    "aesth_all_median": 5.31,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "Industrial_Techno": {
+    "selected": 25,
+    "csv_rows": 653,
+    "aesth_selected_min": 4.71,
+    "aesth_selected_median": 5.37,
+    "aesth_all_median": 5.13,
+    "treffer_selected_median": 4.0,
+    "treffer_all_median": 2.0
+  },
+  "Krieg_Tod": {
+    "selected": 25,
+    "csv_rows": 1444,
+    "aesth_selected_min": 4.46,
+    "aesth_selected_median": 5.29,
+    "aesth_all_median": 5.11,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "Lego": {
+    "selected": 25,
+    "csv_rows": 609,
+    "aesth_selected_min": 4.79,
+    "aesth_selected_median": 5.03,
+    "aesth_all_median": 5.01,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 2.0
+  },
+  "Licht_Rauch": {
+    "selected": 25,
+    "csv_rows": 1103,
+    "aesth_selected_min": 3.89,
+    "aesth_selected_median": 4.26,
+    "aesth_all_median": 4.88,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 2.0
+  },
+  "Nackte Haut": {
+    "selected": 25,
+    "csv_rows": 2760,
+    "aesth_selected_min": 6.25,
+    "aesth_selected_median": 6.4,
+    "aesth_all_median": 5.57,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Natur – Fake": {
+    "selected": 25,
+    "csv_rows": 2991,
+    "aesth_selected_min": 4.57,
+    "aesth_selected_median": 5.47,
+    "aesth_all_median": 4.91,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "Natur – Makro": {
+    "selected": 25,
+    "csv_rows": 1852,
+    "aesth_selected_min": 5.64,
+    "aesth_selected_median": 5.83,
+    "aesth_all_median": 5.45,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "Natur – Tiere": {
+    "selected": 25,
+    "csv_rows": 8191,
+    "aesth_selected_min": 6.08,
+    "aesth_selected_median": 6.26,
+    "aesth_all_median": 5.3,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 1.0
+  },
+  "Natur – echt": {
+    "selected": 25,
+    "csv_rows": 2942,
+    "aesth_selected_min": 3.81,
+    "aesth_selected_median": 5.16,
+    "aesth_all_median": 4.7,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Schwarz-Weiß_Schwarz-Weiß-Rot": {
+    "selected": 25,
+    "csv_rows": 9159,
+    "aesth_selected_min": 5.87,
+    "aesth_selected_median": 5.98,
+    "aesth_all_median": 5.3,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 1.0
+  },
+  "Street Art_Graffiti": {
+    "selected": 25,
+    "csv_rows": 1862,
+    "aesth_selected_min": 4.43,
+    "aesth_selected_median": 5.33,
+    "aesth_all_median": 5.21,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 1.0
+  },
+  "Tattoo-Maschinen": {
+    "selected": 25,
+    "csv_rows": 11261,
+    "aesth_selected_min": 6.64,
+    "aesth_selected_median": 6.83,
+    "aesth_all_median": 5.47,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 5.0
+  },
+  "Tattoos_Frauen": {
+    "selected": 25,
+    "csv_rows": 12939,
+    "aesth_selected_min": 6.73,
+    "aesth_selected_median": 6.89,
+    "aesth_all_median": 5.54,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 5.0
+  },
+  "Tänzer": {
+    "selected": 25,
+    "csv_rows": 947,
+    "aesth_selected_min": 4.84,
+    "aesth_selected_median": 5.49,
+    "aesth_all_median": 5.11,
+    "treffer_selected_median": 5.0,
+    "treffer_all_median": 1.0
+  },
+  "Vorsintflutliche Hochkultur": {
+    "selected": 25,
+    "csv_rows": 804,
+    "aesth_selected_min": 4.02,
+    "aesth_selected_median": 5.49,
+    "aesth_all_median": 5.21,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 2.0
+  },
+  "Wikinger_Samurai": {
+    "selected": 25,
+    "csv_rows": 1447,
+    "aesth_selected_min": 6.06,
+    "aesth_selected_median": 6.18,
+    "aesth_all_median": 5.45,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 3.0
+  },
+  "Zitate_Inspirationssprüche": {
+    "selected": 25,
+    "csv_rows": 3413,
+    "aesth_selected_min": 5.71,
+    "aesth_selected_median": 5.9,
+    "aesth_all_median": 5.23,
+    "treffer_selected_median": 6.0,
+    "treffer_all_median": 1.0
+  }
+}

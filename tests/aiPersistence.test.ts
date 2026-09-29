@@ -1,12 +1,17 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { aiPersistence, setAiPersistenceClientForTests } from '../src/core/ai/orchestrator/aiPersistence';
 
-type Call = { table: string; op: 'upsert' | 'insert'; data: Record<string, unknown> };
+type Call = { table: string; op: 'upsert' | 'insert'; data: Record<string, unknown>; options?: Record<string, unknown> };
 
 function createMockClient(calls: Call[]) {
   return {
     from: (table: string) => ({
-      upsert: async (data: Record<string, unknown>) => { calls.push({ table, op: 'upsert', data }); },
+      // `options` wird mitgeschrieben: seit dem 2026-09-23 upsertet
+      // `saveSystemPrompt` gegen (plugin_id, role, version). Ohne diese
+      // Aufzeichnung koennte der Test nicht pruefen, WOGEGEN konfliktfrei
+      // geschrieben wird - und genau das verhindert die Duplikate, die es bis
+      // dahin gab (53 Zeilen fuer 22 Rollen).
+      upsert: async (data: Record<string, unknown>, options?: Record<string, unknown>) => { calls.push({ table, op: 'upsert', data, options }); },
       insert: async (data: Record<string, unknown>) => { calls.push({ table, op: 'insert', data }); },
     }),
   } as any;
@@ -83,9 +88,13 @@ describe('AI-Supabase-Persistenz (AITodo Phase 12, gemockt)', () => {
     await aiPersistence.savePromptVersion({ pluginId: 'mixer', version: 2, changelog: 'Kommando-Katalog ergänzt' });
 
     expect(calls).toHaveLength(2);
-    expect(calls[0]).toMatchObject({ table: 'system_prompts', op: 'insert' });
+    // upsert GEGEN den Schluessel, den die Datenbank wirklich hat - sonst
+    // kommen die Duplikate zurueck (53 Zeilen fuer 22 Rollen am 2026-09-23).
+    expect(calls[0]).toMatchObject({ table: 'system_prompts', op: 'upsert' });
+    expect(calls[0].options).toMatchObject({ onConflict: 'plugin_id,role,version' });
     expect(calls[0].data).toMatchObject({ plugin_id: 'mixer', version: 2, enabled: true });
-    expect(calls[1]).toMatchObject({ table: 'plugin_prompt_versions', op: 'insert' });
+    expect(calls[1]).toMatchObject({ table: 'plugin_prompt_versions', op: 'upsert' });
+    expect(calls[1].options).toMatchObject({ onConflict: 'plugin_id,version' });
     expect(calls[1].data).toMatchObject({ plugin_id: 'mixer', version: 2 });
   });
 });

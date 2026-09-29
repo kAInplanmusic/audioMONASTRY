@@ -57,6 +57,46 @@ import { normalizeSfuSignalingPath } from './webrtcConfig.ts';
  * Antwort auf einen Clock-Ping: t0 kommt vom Client, t1/t2 sind Serverzeit
  * (reines Echo ohne Zustand - siehe `socket.on('clock-ping')`).
  */
+/**
+ * Obergrenze einer Sitzung.
+ *
+ * Vier ist eine Auslegungsgrenze des Full-Mesh: bei vier Teilnehmern sind es
+ * sechs Verbindungen, und die traegt ein Browser noch. Darueber waechst der
+ * Aufwand quadratisch (n*(n-1)/2), und die Hoerqualitaet bricht ein.
+ *
+ * Hier auf Modulebene und exportiert, aus zwei Gruenden:
+ *   * Es gibt genau EINE Zahl. Vorher stand sie als lokales const in
+ *     createRealtimeHub - aenderbar an einer Stelle, aber von aussen unsichtbar.
+ *   * Sie ist damit pruefbar. Bis zum 2026-09-24 gab es KEINEN Test, der die
+ *     Grenze belegte; sie war eine Behauptung in einer Kommentarzeile.
+ *
+ * Hoer-Modi (master-out/visual-out) zaehlen ausdruecklich NICHT mit: das sind
+ * Ausspielwege an PA und Beamer, keine Teilnehmer (Szenario: vier iPads plus
+ * Laptop und Beamer).
+ */
+export const MAX_SESSION_USERS = 4;
+
+/**
+ * Darf dieser Beitritt noch angenommen werden?
+ *
+ * Reine Funktion, damit die Entscheidung ohne Socket pruefbar ist. `andere` ist
+ * die Zahl der BEREITS anwesenden Teilnehmer OHNE den Beitretenden.
+ *
+ * Die Trennung ist Absicht: erst entscheiden, dann Daten ausliefern. Wer
+ * abgewiesen wird, darf vorher keine Locks und keinen Sitzungszustand gesehen
+ * haben - sonst ist die Grenze eine Hoeflichkeitsfloskel.
+ */
+export function sessionCapacityCheck(
+  andere: number,
+  mode: string = 'member',
+  max: number = MAX_SESSION_USERS,
+): { erlaubt: boolean; grund: 'OK' | 'SESSION_FULL' } {
+  // Ausspielwege sind keine Teilnehmer.
+  if (mode === 'master-out' || mode === 'visual-out') return { erlaubt: true, grund: 'OK' };
+  if (andere >= max) return { erlaubt: false, grund: 'SESSION_FULL' };
+  return { erlaubt: true, grund: 'OK' };
+}
+
 export function buildClockPong(data: unknown, serverTime: number): { t0: number; t1: number; t2: number } {
   const raw = Number((data as { t0?: unknown })?.t0 ?? Number.NaN);
   return { t0: Number.isFinite(raw) ? raw : 0, t1: serverTime, t2: serverTime };
@@ -290,7 +330,6 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       //   an den Neuen, 'peer-joined' an alle anderen; bei >4: 'session-full'.
       // -------------------------------------------------------------------
       const SESSION_ROOM_ID = 'studio-session';
-      const MAX_SESSION_USERS = 4;
 
       const sessionMembers = (room: string, excludeSocketId: string) => {
         const members: { socketId: string; userId: string; role: string }[] = [];
@@ -341,6 +380,18 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // der PA (/master-out) + Beamer (/visual-out)).
         const mode = normalizeSessionMode(data?.mode);
         const room = `session:${SESSION_ROOM_ID}`;
+        // KAPAZITAET ZUERST (2026-09-24): die Entscheidung faellt, BEVOR der
+        // Raum betreten und BEVOR Locks oder Sitzungszustand gesendet werden.
+        // Vorher bekam der fuenfte Beitretende den vollstaendigen Zustand und
+        // danach die Absage - die Daten liefen also vor der Entscheidung.
+        const vorhandene = sessionMembers(room, socket.id).length;
+        const kapazitaet = sessionCapacityCheck(vorhandene, mode);
+        if (!kapazitaet.erlaubt) {
+          addServerAudit(userId, 'member', 'JOIN_REJECTED_SESSION_FULL', false, SESSION_ROOM_ID);
+          socket.emit('session-full', { roomId: SESSION_ROOM_ID, max: MAX_SESSION_USERS, current: vorhandene });
+          return;
+        }
+
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
         socket.data.sessionMode = mode;
@@ -382,11 +433,6 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           return;
         }
 
-        if (members.length >= MAX_SESSION_USERS) {
-          socket.emit('session-full', { roomId: SESSION_ROOM_ID, max: MAX_SESSION_USERS });
-          socket.leave(room);
-          return;
-        }
 
         // COLLAB-P0-002: Erst dem Raum den neuen Peer ankündigen, dann allen
         // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
@@ -814,9 +860,20 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
               if (t.appData?.direction === 'send') throw new Error('send-transport kann nicht konsumieren');
               const producer = sessionProducerMap.get(String(data?.producerId ?? ''));
               if (!producer) throw new Error('producer nicht gefunden');
+              // INFRA-HETZNER-015, GEMESSEN AM 2026-09-24: mediasoup erzeugt
+              // Consumer PAUSIERT. Ohne `paused: false` (oder ein anschliessendes
+              // `resume()`) laeuft die Signalisierung sauber durch - Socket
+              // verbunden, Transports aufgebaut, Producer und Consumer erzeugt -
+              // aber es fliesst NIE ein RTP-Paket. Der Echtpfadtest meldete genau
+              // das: "rtp-stats bytes=0 packets=0" bei sonst vollstaendiger
+              // Schrittkette. Im ganzen Modul gab es kein einziges resume().
               const consumer = await t.consume({
                 producerId: producer.id, rtpCapabilities: data.rtpCapabilities,
+                paused: false,
               });
+              // Doppelt gehalten: falls eine mediasoup-Version `paused` ignoriert,
+              // ist der explizite Aufruf der zweite Weg zum selben Ziel.
+              try { await consumer.resume(); } catch { /* schon aktiv */ }
               cb?.({
                 id: consumer.id, kind: consumer.kind,
                 rtpParameters: consumer.rtpParameters, producerId: producer.id,

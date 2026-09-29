@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VISION_STYLES, VISION_STYLE_SUFFIX, buildVisionPrompt, suggestVisionStyle } from '../src/core/ai/vision/visionPrompt';
-import { VisionError, extractVisionImage, generateVisionImage, visionEndpointId } from '../src/core/ai/vision/runpodVision';
+import {
+  VisionError,
+  extractVisionImage,
+  fluxVisionWorkflow,
+  generateVisionImage,
+  visionEndpointId,
+} from '../src/core/ai/vision/runpodVision';
 import { AiVisionFeedbackSchema, AiVisionSchema } from '../src/types/zod/schemas';
 import { aggregateFeedback, normalizeRating, normalizeTags, topStyles } from '../src/core/ai/vision/visualFeedback';
 import { VideoError, extractVideo, generateVideo, stripDataUri, videoEndpointId } from '../src/core/ai/vision/runpodVideo';
@@ -213,5 +219,51 @@ describe('VisualMONK – Video-Client (Wan2.2 image->video)', () => {
     expect(videoEndpointId()).toBe('video-ep-1');
     if (prev === undefined) delete process.env.RUNPOD_ENDPOINT_ID_VIDEO;
     else process.env.RUNPOD_ENDPOINT_ID_VIDEO = prev;
+  });
+});
+
+/**
+ * Weg A (2026-09-27): Der Bild-Endpoint laeuft auf runpod/worker-comfyui.
+ * Der kennt KEINEN prompt-Parameter — der Text muss im Graphen stehen, sonst
+ * liefert jeder Aufruf das Demo-Bild des Workflows, waehrend der Aufrufer sein
+ * Ergebnis fuer erledigt haelt. Diese Tests halten diesen Vertrag fest.
+ */
+describe('worker-comfyui-Vertrag (Bild-Rolle, Weg A)', () => {
+  it('legt den Prompt in den Textknoten, nicht in ein prompt-Feld', () => {
+    const wf = fluxVisionWorkflow({ prompt: 'neon alley', steps: 12, width: 768, height: 1344 }) as Record<
+      string,
+      { class_type: string; inputs: Record<string, unknown> }
+    >;
+    expect(wf['2'].inputs.text).toBe('neon alley');
+    expect(wf['3'].inputs.text).toBe('');
+    expect(wf['1'].inputs.ckpt_name).toBe('flux1-dev-fp8.safetensors');
+    expect(wf['5'].inputs.steps).toBe(12);
+    expect(wf['5'].inputs.cfg).toBe(1.0);
+    expect(wf['4'].inputs.width).toBe(768);
+    expect(wf['4'].inputs.height).toBe(1344);
+  });
+
+  it('verdrahtet den Sampler auf die Textknoten (sonst wirkt der Prompt nicht)', () => {
+    const wf = fluxVisionWorkflow({ prompt: 'x' }) as Record<string, { inputs: Record<string, unknown> }>;
+    expect(wf['5'].inputs.positive).toEqual(['2', 0]);
+    expect(wf['5'].inputs.negative).toEqual(['3', 0]);
+    expect(wf['5'].inputs.model).toEqual(['1', 0]);
+  });
+
+  it('macht aus rohem base64 der Worker-Antwort einen data-URI', () => {
+    // Live-Form von worker-comfyui: { filename, type: 'base64', data: 'iVBORw0…' }
+    expect(extractVisionImage({ images: [{ filename: 'vision_00001_.png', type: 'base64', data: 'iVBORw0KGgo' }] })).toBe(
+      'data:image/png;base64,iVBORw0KGgo',
+    );
+  });
+
+  it('nimmt bei S3-Ausgabe den Pfad als URL und verpackt ihn nicht', () => {
+    expect(extractVisionImage({ images: [{ filename: 'a.png', type: 's3', data: 's3://bucket/a.png' }] })).toBe(
+      's3://bucket/a.png',
+    );
+  });
+
+  it('laesst den alten image_url-Weg weiter funktionieren', () => {
+    expect(extractVisionImage({ image_url: DATA_URI })).toBe(DATA_URI);
   });
 });
