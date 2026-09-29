@@ -74,7 +74,7 @@ export function pickNextScene(
   pool: readonly PoolEntry[],
   state: DirectorState,
   features: AudioFeatures,
-  opts: Required<DirectorOptions>,
+  _opts: Required<DirectorOptions>,
 ): number {
   if (pool.length === 0) return -1;
   if (pool.length === 1) return 0;
