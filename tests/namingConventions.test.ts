@@ -33,8 +33,6 @@ const LEGACY_PATTERN = 'sample[-_]?monk';
 const ALLOWED: Record<string, string> = {
   'MASTERTODOENDE.json': 'Historische Notizen (Audit: Vergangenes wird nicht umgeschrieben).',
   'docs/HETZNER_DEPLOY.md': 'Migrationsliste alt -> neu + Betreiber-Schritte (nennt die Altwerte bewusst).',
-  'tests/portalWorkerSnapshots.test.ts': 'Snapshot-Fixtures mit Alt-Praefix (Phase-2-Ausmusterung folgt).',
-  'services/portal-worker/src/index.js': 'LEGACY_SNAPSHOT_PREFIXES (Alt-Snapshot-Bestand, Phase 2).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
   'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
@@ -151,10 +149,10 @@ describe('NOMEN-P1-001 · Nomenklatur', () => {
     expect(deploy).not.toMatch(/samplemonk/i);
 
     const portal = readFileSync('services/portal-worker/src/index.js', 'utf8');
-    // Neuer Praefix wird ANGELEGT, der Altpraefix nur noch akzeptiert.
+    // Ein einziger Praefix - der Alt-Praefix ist ausgemustert (Phase 2).
     expect(portal).toContain("const NAME_PREFIX = 'audiomonastry-'");
     expect(portal).toContain("const SNAPSHOT_PREFIX = 'audiomonastry-snapshot-'");
-    expect(portal).toContain('LEGACY_SNAPSHOT_PREFIXES');
+    expect(portal).not.toMatch(/samplemonk/i);
 
     // systemd-Units heissen ebenfalls neu.
     const idleCheck = readFileSync('scripts/hetzner/systemd/idle-check.sh', 'utf8');

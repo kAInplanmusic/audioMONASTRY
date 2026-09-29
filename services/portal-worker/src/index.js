@@ -109,13 +109,6 @@ const IMAGE = 'ubuntu-24.04';
 // Snapshots kosten ~0,01 €/GB/Monat (Cent-Beträge) und beschleunigen den
 // Flotten-Start deutlich (kein Docker-Build/cloud-init-Bootstrap je Knoten).
 const SNAPSHOT_PREFIX = 'audiomonastry-snapshot-';
-/**
- * Altbestand: Snapshots, die vor der Umbenennung entstanden sind. Sie werden
- * weiter gefunden (schneller Flotten-Start) und weiter aufgeraeumt (Retention) -
- * sonst blieben sie unbemerkt liegen und kosten Speicher.
- */
-const LEGACY_SNAPSHOT_PREFIXES = ['samplemonk-snapshot-'];
-const ALL_SNAPSHOT_PREFIXES = [SNAPSHOT_PREFIX, ...LEGACY_SNAPSHOT_PREFIXES];
 const SNAPSHOT_RETENTION = 2; // je Rolle die letzten 2 Snapshots behalten
 const PORTAL_DOMAIN = 'anunnakitools.de';
 const ORIGIN_HOST = 'origin.anunnakitools.de';
@@ -167,10 +160,9 @@ async function fleetServers(env) {
 // OPS-Snapshot: Rollen-Snapshots für schnellen Flotten-Start
 // ---------------------------------------------------------------------------
 function hasFleetSnapshotPrefix(img) {
-  return ALL_SNAPSHOT_PREFIXES.some(
-    (prefix) =>
-      String(img?.name ?? '').startsWith(prefix) ||
-      String(img?.description ?? '').startsWith(prefix),
+  return (
+    String(img?.name ?? '').startsWith(SNAPSHOT_PREFIX) ||
+    String(img?.description ?? '').startsWith(SNAPSHOT_PREFIX)
   );
 }
 
@@ -187,10 +179,8 @@ function snapshotRoleOf(img) {
   // cloud-init + Build (gemessen: statt Snapshot-Start; `usedSnapshots: {}`).
   // Die Rolle wird daher aus Name/Beschreibung abgeleitet, wenn das Label fehlt.
   const text = `${img?.name ?? ''} ${img?.description ?? ''}`;
-  for (const prefix of ALL_SNAPSHOT_PREFIXES) {
-    const match = text.match(new RegExp(`${prefix}(app|sfu|ai|master|edge)(?![a-z])`));
-    if (match) return match[1];
-  }
+  const match = text.match(new RegExp(`${SNAPSHOT_PREFIX}(app|sfu|ai|master|edge)(?![a-z])`));
+  if (match) return match[1];
   return null;
 }
 
@@ -202,16 +192,12 @@ async function listSnapshots(env) {
 /** Neuesten verfügbaren Snapshot einer Rolle finden (oder null). */
 function findSnapshot(images, role) {
   const candidates = images.filter((img) => img.status === 'available' && snapshotRoleOf(img) === role);
-  const matches = (img, prefix) =>
-    String(img.name ?? '').startsWith(`${prefix}${role}`) ||
-    String(img.description ?? '').startsWith(`${prefix}${role}`);
-  // Reihenfolge = ALL_SNAPSHOT_PREFIXES: der neue Name gewinnt, der Altbestand
-  // bleibt nutzbar (eine Umbenennung darf den schnellen Start nicht verhindern).
-  for (const prefix of ALL_SNAPSHOT_PREFIXES) {
-    const hit = candidates.find((img) => matches(img, prefix));
-    if (hit) return hit;
-  }
-  return null;
+  const matches = (img) =>
+    String(img.name ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`) ||
+    String(img.description ?? '').startsWith(`${SNAPSHOT_PREFIX}${role}`);
+  // Die Kandidaten kommen bereits role-gefiltert herein; der neueste gewinnt
+  // (die Liste ist nach created:desc sortiert).
+  return candidates.find(matches) ?? null;
 }
 
 async function createServerSnapshot(env, server, role, meta = {}) {

@@ -2559,7 +2559,6 @@ FIXTURE_CADDY = "audiomonastry-caddy"
 #: ein Befund: der Name darf nicht wandern.
 LEGACY_ALLOWED_FILES = {
     "services/audiomonastry-ai-runtime/Dockerfile.manifest",  # Alt-Basis-Image-Pfad (Build-Arg)
-    "services/portal-worker/src/index.js",  # LEGACY_SNAPSHOT_PREFIXES (Phase 2 entfernt es)
 }
 
 #: Wie ein Knoten antwortet (kein Docker, kein Netz): Container sind da, die App

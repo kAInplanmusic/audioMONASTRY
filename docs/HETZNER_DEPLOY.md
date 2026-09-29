@@ -594,6 +594,17 @@ Cloudflare → Hetzner LB11 (sticky WebSocket-Sessions) → app-1 / app-2
 
 ## NOMEN-P1-001 · Umbenennung der Ops-Ressourcen (`samplemonk` → `audiomonastry`)
 
+> **Nachtrag 2026-09-29 (Umsetzung PROPOSAL_legacy-shim-removal.md):** Die
+> Bestands-Kompatibilität ist entfernt — die Flotte wurde 2026-09-11 gestoppt
+> und gelöscht (0 Knoten), die Alt-Firewalls am 2026-09-20 gelöscht (Live-Zählung),
+> und die Alt-Präfix-Snapshots sind abgebaut (Live-Zählung 2026-09-29: 13
+> Snapshots gesamt, 0 mit Alt-Präfix). `migrate-project-name.sh` und
+> `cleanup-legacy-firewalls.py` sind gelöscht (Beleg: git-History + Audit-Dokus).
+> Die Skripte lösen nur noch kanonisch auf (`fleet-names.sh` als einzige Quelle).
+> Die Abschnitte **NOMEN-P1-001-Abschnitt unten (Migrationsliste Z. 595–660)**,
+> **Migration der bestehenden Flotte** und **Firewall-Lebenszyklus** bleiben als
+> historischer Beleg stehen — sie beschreiben den Stand VOR der Ausmusterung.
+
 Der Repo- und Flottenname ist seit längerem `audiomonastry` (Endpoints
 `audiomonastry-ai-*`, Image `ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod`).
 Die **Ops-Ressourcen** waren bewusst zurückgestellt, weil sie laufende
@@ -682,23 +693,22 @@ bleiben. Ein Watchdog, der nur den neuen Namen kennt, findet dort nichts.
 
 | Baustein | Datei | Wirkung |
 |---|---|---|
-| EINE Namensquelle | `scripts/hetzner/fleet-names.sh` | `FLEET_COMPOSE_PROJECT` / `LEGACY_COMPOSE_PROJECT`, `FLEET_HOME` / `LEGACY_FLEET_HOME`; `fleet_name_variants` (Server **und** Container **und** Projekt, neu zuerst), `fleet_compose_project`, `fleet_legacy_home`. Der Altname/Altpfad steht damit genau **einmal** im Repo. |
+| EINE Namensquelle | `scripts/hetzner/fleet-names.sh` | `FLEET_COMPOSE_PROJECT`, `FLEET_HOME`; `fleet_name_variants` (Passthrough — Server **und** Container **und** Projekt), `fleet_compose_project`. Seit der Ausmusterung (Nachtrag oben) gibt es nur noch die kanonische Schreibweise. |
 | Projektname deklarativ | `docker-compose.hetzner.yml` | top-level `name: audiomonastry` — der Projektname gilt auch für Handaufrufe und ist pfad-unabhängig. |
 | Projektname explizit im Aufruf | `deploy.sh`, `scripts/hetzner/bring-up-fleet.sh`, `scripts/hetzner/fleet-deploy-live.sh`, `scripts/hetzner/auto-repair.sh`, Portal-Worker (`userData`, Kaltstart) | jeder `docker compose`-Aufruf setzt `COMPOSE_PROJECT_NAME=audiomonastry`; `cloud-init.yaml` legt `/opt/audiomonastry` idempotent an (Pfad = Name). |
 
-**Health-/Snapshot-/Lifecycle-Skripte akzeptieren beide Schreibweisen**
-(nicht nur den neuen Namen — sonst wären sie auf dem Bestand stumm):
+**Health-/Snapshot-/Lifecycle-Skripte lösen nur noch kanonisch auf**
+(seit der Ausmusterung gibt es keine zweite Schreibweise mehr):
 
-* `fleet-status.sh`: App-Knoten-Muster kommen jetzt aus `FLEET_PREFIX`/`LEGACY_FLEET_PREFIX`;
-  die Container-Liste zeigt das Compose-Projekt je Container (`{{.Label "com.docker.compose.project"}}`)
-  und meldet ein Alt-Projekt laut mit Migrationstipp.
+* `fleet-status.sh`: App-Knoten-Muster kommt aus `FLEET_PREFIX`;
+  die Container-Liste zeigt das Compose-Projekt je Container (`{{.Label "com.docker.compose.project"}}`).
 * `auto-repair.sh`: löst den laufenden Container zur Laufzeit über `fleet_name_variants`
-  auf (App **und** Caddy) und repariert ihn im **kanonischen** Projekt; ein Altname
-  erscheint als Klartext-Hinweis im Log.
-* `fleet-deploy-live.sh`: der Guard liest das Compose-Arbeitsverzeichnis über beide
-  Container-Schreibweisen; `LEGACY_REMOTE_DIR` kommt aus `fleet-names.sh`.
+  auf (App **und** Caddy) und repariert ihn im **kanonischen** Projekt.
+* `fleet-deploy-live.sh`: der Guard liest das Compose-Arbeitsverzeichnis über
+  `fleet_name_variants`; das Remote-Verzeichnis kommt aus `FLEET_HOME`
+  (`DEPLOY_REMOTE_DIR` bleibt als Override).
 * `lifecycle.sh` (Snapshots) nutzt dieselbe Auflösung über `fleet_candidates`
-  (= `fleet_name_variants`) bereits seit NOMEN-P1-001.
+  (= `fleet_name_variants`).
 
 ### Trockenlauf-Belege (offline, ohne Flotte)
 
@@ -706,8 +716,7 @@ bleiben. Ein Watchdog, der nur den neuen Namen kennt, findet dort nichts.
 # 1. Syntax aller geänderten Skripte
 for f in deploy.sh scripts/hetzner/fleet-names.sh scripts/hetzner/provision-fleet.sh \
          scripts/hetzner/bring-up-fleet.sh scripts/hetzner/fleet-deploy-live.sh \
-         scripts/hetzner/auto-repair.sh scripts/hetzner/fleet-status.sh \
-         scripts/hetzner/migrate-project-name.sh; do bash -n "$f" && echo "OK $f"; done
+         scripts/hetzner/auto-repair.sh scripts/hetzner/fleet-status.sh; do bash -n "$f" && echo "OK $f"; done
 
 # 2. Projektname in den Trockenläufen
 bash scripts/hetzner/provision-fleet.sh --print-config
@@ -716,15 +725,13 @@ bash scripts/hetzner/bring-up-fleet.sh --print-config
 #   Projekt:   COMPOSE_PROJECT_NAME=audiomonastry   (Zielpfad /opt/audiomonastry, top-level 'name:' in docker-compose.hetzner.yml)
 bash scripts/hetzner/fleet-deploy-live.sh --print-config
 #   COMPOSE_PROJECT_NAME=audiomonastry   (aus scripts/hetzner/fleet-names.sh)
-#   APP_CONTAINER=audiomonastry samplemonk
+#   APP_CONTAINER=audiomonastry
 DEPLOY_PRINT_CONFIG=1 bash deploy.sh
 #   DEPLOY_REMOTE_DIR=/opt/audiomonastry
 #   COMPOSE_PROJECT_NAME=audiomonastry   (aus scripts/hetzner/fleet-names.sh)
 bash scripts/hetzner/auto-repair.sh --print-config
-#   App-Container akzeptiert:  audiomonastry samplemonk (neu zuerst, Aufloesung zur Laufzeit)
+#   App-Container akzeptiert:  audiomonastry (neu zuerst, Aufloesung zur Laufzeit)
 #   Compose-Projekt:           audiomonastry  (COMPOSE_PROJECT_NAME)
-bash scripts/hetzner/migrate-project-name.sh --print-config
-#   Compose-Projekt neu: audiomonastry | Compose-Projekt alt: samplemonk | Volumes: samplemonk_* -> audiomonastry_* (KOPIE)
 
 # 3. Der Projektname hängt NICHT mehr am Verzeichnisnamen (Verzeichnis "f10-probe"):
 mkdir -p /tmp/f10-probe && cp docker-compose.hetzner.yml docker-compose.monitoring.yml docker-compose.sfu.yml /tmp/f10-probe/
@@ -969,7 +976,15 @@ bash scripts/hetzner/parallel-transfer.sh <ip> --src public/models --dest /opt/a
   `.env` (dokumentiert in `lib/r2-sigv4.sh`) — für echte Läufe
   `env -u R2_ACCESS_KEY -u R2_SECRET_KEY …` benutzen.
 
-### Migration der bestehenden Flotte (nummeriert, idempotent, mit Rückweg)
+### Migration der bestehenden Flotte (historisch — Skript entfernt)
+
+> **Nachtrag 2026-09-29:** `scripts/hetzner/migrate-project-name.sh` ist gelöscht
+> (Betreiber-Entscheid, Umsetzung PROPOSAL_legacy-shim-removal.md): die Flotte
+> wurde 2026-09-11 gestoppt und gelöscht — es gab keinen Bestand mehr, auf den
+> das Skript hätte angewendet werden können. Die nachfolgenden Schritte bleiben
+> als **historischer Beleg** stehen (Ablauf-Dokumentation); der Weg zurück liegt
+> in der git-History des Skripts, ein Restore-Knoten wird kanonisch von
+> `bring-up-fleet.sh --yes` erzeugt.
 
 Das Skript `scripts/hetzner/migrate-project-name.sh` fasst **einen** Knoten an und
 prüft jeden Schritt auf seinen Ausgangszustand; ein zweiter Lauf ist ein No-Op.
@@ -1022,15 +1037,13 @@ Es verschiebt **nichts unwiederbringlich**: die Volumes des Alt-Projekts werden
 
 ### Regressionsschutz (Tests)
 
-* `tests/test_hetzner_scripts.py` → `NamespaceParitaetTest`: löst **beide**
-  Schreibweisen über `fleet-names.sh` auf denselben Namen ab (Server, Container,
-  Projekt, Pfad), prüft `name:` in der Compose-Datei gegen `fleet_compose_project`,
-  die Trockenläufe der drei Rollenskripte, den Watchdog gegen ein **gefaktes `docker`**
-  im PATH (echter Codepfad: Alt-Container gefunden, Reparatur im kanonischen Projekt,
-  Migrationshinweis im Log), den Migrations-Trockenlauf (kein `down -v`, Löschen nur
-  nach Bestätigung) und dass der Altname unter `scripts/`/`services/` **nur** in der
-  Namensquelle, im Bestands-Leser des Portal-Workers und im dokumentierten
-  Basis-Image-Pfad vorkommt.
+* `tests/test_hetzner_scripts.py` → `NamespaceParitaetTest`: löst die Namen
+  über `fleet-names.sh` auf (Server, Container, Projekt, Pfad — seit der
+  Ausmusterung einpräfig als Passthrough), prüft `name:` in der Compose-Datei
+  gegen `fleet_compose_project`, die Trockenläufe der drei Rollenskripte, den
+  Watchdog gegen ein **gefaktes `docker`** im PATH (echter Codepfad: kanonischer
+  Container gefunden und repariert) und dass der Altname unter `scripts/`/`services/`
+  **nur** im dokumentierten Basis-Image-Pfad vorkommt.
 * `tests/test_hetzner_scripts.py` → `FleetStartRemoteBuildDefaultTest` (PERF-P1-005,
   8 Tests): der Flottenstart setzt `DEPLOY_REMOTE_BUILD=1` als Default und zeigt
   den Weg im Trockenlauf; per Umgebung auf `0` stellbar (Gegenprobe zeigt den
@@ -1210,9 +1223,11 @@ Gegenprobe endet mit Exit ≠ 0.
   Regeln. Der Abgleich liest vorher und prüft nachher; ein dazwischenlaufender
   Schreiber würde als fehlgeschlagene Gegenprobe (Exit 3) sichtbar.
 * Firewalls kosten bei Hetzner nichts, sie werden beim Flotten-Abbau auch nicht
-  gelöscht — der Regelbestand bleibt damit zwischen Sitzungen erhalten. Alt-Regeln
-  aus früheren Namensschemata (`samplemonk-*`) räumt weiterhin nur
-  `scripts/hetzner/cleanup-legacy-firewalls.py` auf. Der Abbau-Entscheid ist
+  gelöscht — der Regelbestand bleibt damit zwischen Sitzungen erhalten.
+  Alt-Regeln aus früheren Namensschemata (`samplemonk-*`) sind mit der
+  Flotten-Ausmusterung entstanden und wurden am 2026-09-20 gelöscht (Live-Zählung,
+  Beleg: SSOT/OPS_RUNBOOK); das Werkzeug `cleanup-legacy-firewalls.py` ist mit
+  demselben Entscheid entfernt. Der Abbau-Entscheid ist
   unten belegt (**Firewall-Lebenszyklus beim Abbau**).
 
 ---
@@ -1248,8 +1263,9 @@ Begründung, in dieser Reihenfolge:
    Aufbau startet damit in genau dem Zustand, der vor dem Abbau galt — ein Reset
    wäre eine zweite, konkurrierende Wahrheit über denselben Regelsatz.
 4. **Gelöscht wird nur, was fachlich tot ist:** ungenutzte Firewalls des
-   Alt-Präfixes — `python3 scripts/hetzner/cleanup-legacy-firewalls.py [--apply]`
-   (löscht nur bei leerem `applied_to`).
+   Alt-Präfixes — dieser Bestand ist weg (2026-09-20 gelöscht, Live-Zählung);
+   das Werkzeug (`cleanup-legacy-firewalls.py`, löschte nur bei leerem
+   `applied_to`) ist mit der Ausmusterung entfernt.
 
 **Beleg (ohne Netz).** `FleetFirewallLebenszyklusTest` in
 `tests/test_hetzner_scripts.py` fährt den echten Pfad mit `--yes` gegen ein
