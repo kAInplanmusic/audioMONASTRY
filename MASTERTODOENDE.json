@@ -3881,7 +3881,7 @@
       "id": "INFRA-RUNPOD-014",
       "title": "imageHq-Vertrag: worker-comfyui mit Workflow statt prompt-Feld (Code b90f7a8) - SSOT-Nachzug",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Infra/RunPod",
       "source": "Commit b90f7a8 + src/core/ai/vision/runpodVision.ts:7-16 (\"SEIT 2026-09-27\")",
       "problem": "Seit b90f7a8 (Commit-Datum 2026-09-28 13:48, im Code als \"SEIT 2026-09-27\" gefuehrt) baut runpodVision.ts den Endpoint-Input als { input: { workflow } } (ComfyUI-Workflow-API); der Prompt steckt im Graphen (Vorlage services/audiomonastry-ai-runtime/workflows/image_flux1.json), ein prompt-Feld kennt der Worker nicht mehr. Live-Endpoint bleibt wzh9hcbitjnn95 (Name audiomonastry-ai-image). Offen: die Deploy-/Template-Seite traegt teils noch das PrunaAI-Image (INFRA-RUNPOD-015); die BEFUND-Messung 2026-09-28 sah drei Worker, zwei davon noch mit dem alten PrunaAI-Image (Auftraege scheitern dort nach 1,3 s).",
@@ -3893,7 +3893,8 @@
         "tests/vision.test.ts",
         "scripts/visual-vorrat/BEFUND.md"
       ],
-      "updatedAt": "2026-09-29"
+      "updatedAt": "2026-09-29",
+      "note": "NACHTRAG 2026-09-29 (Paket C, Commit 71388de): comfyui_adapter.py COMFY_ROLES.imageHq auf worker:comfyui/protocol:workflow umgestellt (Alt-Eintrag als Historien-Kommentar), offline-Contract-Test tests/test_comfyui_adapter_imagehq.py 5/5. Offen bleibt: Live-Verifikation am Endpoint."
     },
     {
       "id": "INFRA-RUNPOD-015",
@@ -3952,7 +3953,7 @@
       "id": "INFRA-RUNPOD-018",
       "title": "Deploy-Workflow-Idempotenz: Template-Anlage unique-sicher (save_template aktualisiert statt dupliziert); Deploy-Run 36580686816 belegt lebendigen Pfad",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Infra/RunPod",
       "source": "docs/AUDIT-RESTTODOS.md:13 + docs/audit-infra-runpod.md:367",
       "problem": "Zwei belegte Fakten: (1) save_template() listet vorhandene Templates und aktualisiert statt neu anzulegen (runpod-deploy.py:385-455, Kommentar :393) - die Template-Anlage ist damit unique-sicher/idempotent (Audit-Befund, docs/audit-infra-runpod.md:367). (2) Deploy-Run 36580686816 am 2026-09-29 zeigt, dass der Deploy-Pfad lebendig ist (docs/AUDIT-RESTTODOS.md:13). Offen: das Ergebnis des Runs gegen die Flotte (keine Duplikat-Templates, keine ungewollten Endpoint-Aenderungen) ist nicht in der SSOT verzeichnet - Verifizierung steht aus (APP-/RunPod-Touch, kostet Geld, hier nur Repo).",
@@ -3963,7 +3964,8 @@
         "docs/audit-infra-runpod.md",
         "docs/AUDIT-RESTTODOS.md"
       ],
-      "updatedAt": "2026-09-29"
+      "updatedAt": "2026-09-29",
+      "note": "NACHTRAG 2026-09-29 (Paket A, Commit 23df2e7): save_template unique-sicher implementiert (Update-Pfad bei 'name must be unique', Listing-Fehler sichtbar auf stderr, Registry-Auth-Retry); 7/7 Offline-Smoke-Tests. Offen bleibt: Live-Beweis per erstem manuellen workflow_dispatch."
     },
     {
       "id": "LEGAL-P0-001",

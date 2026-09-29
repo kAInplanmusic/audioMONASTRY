@@ -93,7 +93,9 @@
     "demo:gif": "node scripts/make-demo-gif.mjs",
     "rls:status": "node scripts/rls-status.mjs",
     "nightly:rls": "bash scripts/rls-nightly-check.sh",
-    "audit:lighthouse": "node scripts/lighthouse-audit.mjs"
+    "audit:lighthouse": "node scripts/lighthouse-audit.mjs",
+    "audit:ki": "python3 scripts/audit-ki-passes.py --pass all",
+    "audit:ki:free": "python3 scripts/audit-ki-passes.py --pass adversarial,archdrift"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
