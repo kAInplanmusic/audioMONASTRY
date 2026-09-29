@@ -1,3 +1,5 @@
+process.env.NODE_ENV ??= 'test';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import express from 'express';
 import { mkdtemp, rm } from 'node:fs/promises';

@@ -14,6 +14,8 @@
  * keine echten Credentials. Die Signaturprüfung von R2 selbst kann offline nicht
  * nachgestellt werden; der Stub antwortet mit der Original-XML von R2.
  */
+process.env.NODE_ENV ??= 'test';
+
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';

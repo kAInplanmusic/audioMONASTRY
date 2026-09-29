@@ -15,7 +15,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "security": "node scripts/npm-audit.mjs && node scripts/validate-interface-boundaries.mjs",
-    "test": "vitest run",
+    "test": "NODE_ENV=test vitest run",
     "test:ci": "vitest run --reporter=default --reporter=json --outputFile=.vitest-report.json && node scripts/assert-no-skipped-tests.mjs",
     "test:coverage": "vitest run --coverage",
     "test:parity": "vitest run tests/v2Parity.test.ts",

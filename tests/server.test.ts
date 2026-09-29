@@ -1,3 +1,5 @@
+process.env.NODE_ENV ??= 'test';
+
 import { afterAll, beforeAll, describe, expect, it, vi, afterEach } from 'vitest';
 import { setAiPersistenceClientForTests } from '../src/core/ai/orchestrator/aiPersistence';
 import type { Server } from 'node:http';

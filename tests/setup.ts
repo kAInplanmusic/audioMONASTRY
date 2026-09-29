@@ -1,4 +1,22 @@
 // Vitest-Setup: localStorage-Polyfill für jsdom/Node-Umgebungen.
+
+// FIXPAKET-C (AUDIT-RESTTODOS C3): Fail-Fast gegen ein vergiftetes Env.
+// vitest.config.ts pinnt NODE_ENV über test.env zentral auf 'test'. Läuft hier
+// trotzdem 'production' an, wurde die Suite ohne diese Pinning-Config gestartet
+// (fremder Runner/Config) – dann gehen die Server-Gates fail-closed
+// (STUDIO_TOKEN_MISSING -> Massen-503) und jsdom lädt React-Production-Builds
+// (`React.act is not a function`): ~90 Ausfälle ohne echten Code-Bug, die nach
+// Host-Env rot/grün schwanken. Statt das zu reproduzieren, sofort abbrechen.
+// Bewusst strenger als der RESTTODOS-Entwurf ("production && kein Token"): mit
+// Host-Token läuft die Suite in den Auth-Modus (401-Chaos) – gleiches Problem.
+if (process.env.NODE_ENV === 'production') {
+  throw new Error(
+    '[tests/setup.ts] NODE_ENV=production in der Testsuite – das Pinning aus '
+    + 'vitest.config.ts (test.env.NODE_ENV="test") ist nicht wirksam. Suite mit '
+    + '`npm test` bzw. `NODE_ENV=test node node_modules/vitest/vitest.mjs run` starten.',
+  );
+}
+
 if (typeof globalThis !== 'undefined' && !globalThis.localStorage) {
   const store = new Map<string, string>();
   const storage: Storage = {
