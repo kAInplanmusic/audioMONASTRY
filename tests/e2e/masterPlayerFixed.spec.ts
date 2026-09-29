@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV } from './helpers/studioNav';
 
 /**
  * P0-7-Prüfpunkt (masterplayerMONK fest oben, View-only):
@@ -9,7 +9,7 @@ import { STUDIO_NAV } from './helpers/studioNav';
  */
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .toBeVisible({ timeout: 15_000 });
 }

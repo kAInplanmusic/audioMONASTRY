@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton } from './helpers/studioNav';
 
 /**
  * E2E-Smoke: App lädt, Entry-Gate passieren, alle Nav-Buttons sind da,
@@ -22,7 +22,7 @@ import { STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton } from './helper
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .toBeVisible({ timeout: 15_000 });
 }

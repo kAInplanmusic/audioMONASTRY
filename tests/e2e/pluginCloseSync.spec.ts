@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV, navButton } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, navButton } from './helpers/studioNav';
 
 /**
  * P0-3-Prüfpunkt (Schließen + State):
@@ -27,7 +27,7 @@ import { STUDIO_NAV, navButton } from './helpers/studioNav';
  */
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV).getByTitle('eqMONK').first())
     .toBeVisible({ timeout: 15_000 });
 }
@@ -62,7 +62,7 @@ test('P0-3: Reload behält den OFF-Zustand (Start-OFF-Regel)', async ({ page }) 
   await expect(rack.getByLabel('eqMONK inaktiv')).toBeVisible();
 
   await page.reload();
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV).getByTitle('eqMONK').first())
     .toBeVisible({ timeout: 15_000 });
 

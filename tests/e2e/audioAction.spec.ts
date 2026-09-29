@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV } from './helpers/studioNav';
 
 // Nur Chromium: Der Kernfluss ist die Clipboard-Uebernahme der App; in WebKit bleibt die Anzeige 'CLIPBOARD (1)' aus.
 // CI-Fund 2026-09-17 (e2e-webkit): 'getByText(CLIPBOARD (1))' blieb unsichtbar.
@@ -14,7 +14,7 @@ test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: Clipbo
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV)).toBeVisible({ timeout: 15_000 });
 }
 

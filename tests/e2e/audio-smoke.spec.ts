@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 /**
  * PREP-1 UI-Smoke – verhindert Regressionen wie den AudioWorklet-Export-Bug:
@@ -18,7 +19,7 @@ test('App startet, Mixer ist offen und Audio wird RUNNING (kein Worklet-Crash)',
   });
 
   await page.goto('/');
-  await page.getByRole('button', { name: /starten/i }).click();
+  await entryButton(page).click();
 
   // Kein Einschalten nötig - der Mixer ist die Main-Einspeisung und startet aktiv.
   await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15000 });

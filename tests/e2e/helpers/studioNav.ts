@@ -52,10 +52,28 @@ export function navButton(page: Page, short: string) {
   return page.locator(STUDIO_NAV).getByTitle(SHORT_TO_NAME[short] ?? short).first();
 }
 
+/**
+ * Entry-Gate-Knopf („Studio betreten") lokalisieren.
+ *
+ * WARUM zentral (Befund Deep-Test T1, 2026-09-29): QUAL-P2-011 (2026-09-24) hat
+ * das `aria-label="audioMONASTRY starten"` ABSICHTLICH entfernt
+ * (Lighthouse `label-content-name-mismatch`: sichtbar „▶ Studio betreten" vs.
+ * Label „audioMONASTRY starten"). Der zugängliche Name ist seitdem der sichtbare
+ * Text. Die 17 Specs, die noch `getByLabel('audioMONASTRY starten')` nutzten,
+ * liefen dadurch in den 30-s-Test-Timeout - 55 rote Tests mit EINER Ursache.
+ * Nur stress.spec.ts hatte die robuste Rolle-Query und blieb grün.
+ *
+ * Der Alt-Name bleibt als Alternation erlaubt, damit ein (Wieder-)Einbau des
+ * Labels die Suite nicht erneut bricht.
+ */
+export function entryButton(page: Page) {
+  return page.getByRole('button', { name: /Studio betreten|audioMONASTRY starten/i });
+}
+
 /** Studio betreten und auf die Navigation warten. */
 export async function enterStudio(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 15_000 });
 }
 
