@@ -72,7 +72,7 @@ TOOL_CATALOG: Dict[str, Dict[str, str]] = {
     "music.generate": {"role": "music", "task": "song", "model": "acestep-v15-xl-base", "protocol": "comfyui"},
     "music.remix": {"role": "music", "task": "song", "model": "acestep-v15-xl-sft", "protocol": "comfyui"},
     "music.drop": {"role": "music", "task": "song", "model": "acestep-v15-xl-turbo", "protocol": "comfyui"},
-    "image.generate": {"role": "imageHq", "task": "image.generate", "model": "flux2-dev", "protocol": "comfyui"},
+    "image.generate": {"role": "imageHq", "task": "image.generate", "model": "flux1-dev", "protocol": "comfyui"},
     "image.img2img": {"role": "imageHq", "task": "image.generate", "model": "qwen-image-2512", "protocol": "comfyui"},
     "image.upscale": {"role": "imageHq", "task": "image.generate", "model": "realesrgan-x4", "protocol": "comfyui"},
     "video_real.text2video": {"role": "videoReal", "task": "video.generate", "model": "wan22-t2v-a14b", "protocol": "comfyui"},

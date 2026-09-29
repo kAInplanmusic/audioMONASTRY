@@ -544,7 +544,8 @@ nicht in Logs (dieselbe Regel wie in `scripts/hetzner/lib/r2-sigv4.sh`).
 - **Der Datenpfad ist leer** (live geprüft, s. o.). Ohne echte Bewertungen ist
   jeder Lauf ein Lauf ohne Daten – die Pipeline bricht dann mit Exit 3 ab.
 - **Rechte/Lizenz:** Stil-LoRAs aus Nutzerbildern und ggf. gated Basisgewichte
-  (`FLUX.1-dev`, `FLUX.2 [dev]`) sind ein eigenes Thema; das Skript prüft keine
+  (`FLUX.1-dev` — komprimiert/FP8, seit 2026-09-29 einzige Basis für Generierung + Training;
+  `FLUX.2 [dev]` verworfen, passt mit Training/Beispielen nicht in 48 GB) sind ein eigenes Thema; das Skript prüft keine
   Lizenzen (`docs/VISUALMONK_SPEC.md` §9 nennt es als offenen Punkt).
 - **Volume-Löschung ist bewusst manuell.** Das Skript löscht keine Volumes (dort
   liegen Gewichte, Datensatz, Checkpoints und das Ergebnis) – es nennt nur den

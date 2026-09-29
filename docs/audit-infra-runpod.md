@@ -63,6 +63,8 @@ Gelesen wurden die Felder `fundamentals`, `architectureDecisions`, `visionLive`,
 
 `visionLive.endpointId = wzh9hcbitjnn95` ist live vorhanden, heißt dort aber **`audiomonastry-ai-image`** (Live-Enumeration, Abschnitt 4). Der in `visionLive.endpointName` dokumentierte Name `audiomonastry-ai-vision` existiert live **nicht**. Zusätzlich nennt `visionLive.model` „FLUX.1-dev", während `budget.runpodCurrentImage` für dieselbe ID „prunaai-…flux-1-dev…" führt, die Rolle `imageHq` im Manifest aber **`flux2-dev`** als preload-Modell definiert (`model_manifest.json` roles.imageHq → preloadModels[0], s. Abschnitt 3). Drei Quellen, drei Modelle für dieselbe Rolle.
 
+> **Nachtrag 2026-09-29:** Der Manifest-Teil dieses Befunds ist behoben — `roles.imageHq` führt jetzt **`flux1-dev`** (FLUX.1-dev komprimiert/FP8, ~12 GB, Revision `3de623fc3c33e44ffbe2bad470d0f45bccf2eb21`) als preload/aktives Basismodell; FLUX.2 [dev] (~32 GB) wurde wegen des 48-GB-Budgets (Training + Beispiele) verworfen. Der Absatz oben bleibt als Beleg des Audit-Stands (2026-09) stehen.
+
 ### 2.5 Befund S-4 (MITTEL) — `fleetState2026_09_11` betrifft Hetzner, nicht RunPod, liegt aber in derselben SSOT
 
 `fleetState2026_09_11.state = "GELOESCHT (Kostenstopp) - 0 Server, 0 Floating-IPs"` beschreibt die **Hetzner**-Flotte (`budget.hetznerFleet: "5 Server (app/sfu/ai/master/edge)"`) und sagt nichts über RunPod aus. Wer die Datei liest, muss die Unterscheidung Hetzner↔RunPod selbst treffen; eine gemeinsame Flotten-Kostenaussage entsteht dadurch nicht.
@@ -106,6 +108,8 @@ Struktur: `{"runtime": …, "models": [39 Einträge], "roles": {8 Rollen}}`. Ges
 | orchestrator | `qwen3-4b`, `qwen3-8b` | 48 GB | 2 |
 
 (Rollen-Zeilen: s. o.; Preload-Zuordnung rolle→modelle aus `roles[<rolle>].preloadModels`.)
+
+> **Nachtrag 2026-09-29:** Tabelle = Audit-Stand (2026-09). Aktueller Manifest-Stand: `imageHq` → **`flux1-dev`** (FLUX.1-dev komprimiert, FP8, ~12 GB, Revision `3de623fc3c33e44ffbe2bad470d0f45bccf2eb21`) statt `flux2-dev`.
 
 ### 3.3 Befund V1-1 (HOCH) — Zwei divergente GPU-Pool-Wahrheiten für dieselben zwei Rollen
 

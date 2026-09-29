@@ -301,23 +301,27 @@ Env:
 - **WorkersMin:** 0
 - KEIN Cover-Generator, KEIN Text-in-Bild-Fokus
 
-### Modell-Stack (ALLES fest vorgeladen, ~48 GB – knapp)
+### Modell-Stack (fest vorgeladen, ~33 GB – Platz für LoRA-Training/Beispiele)
 
 | # | Komponente | Modell / Typ | Aufgabe | VRAM | Lizenz |
 |---|-----------|--------------|---------|------|--------|
-| 1 | Basismodell 1 | FLUX.2 [dev] FP8 | Höchste Bildqualität, Photorealismus | ~32 GB | Non-Commerical frei / Kommerziell: BFL-Lizenz nötig |
+| 1 | Basismodell 1 | FLUX.1-dev FP8 (komprimiert) | Hohe Bildqualität, Photorealismus, LoRA-Trainingsbasis | ~12 GB | Non-Commercial frei / Kommerziell: BFL-Lizenz nötig |
 | 2 | Basismodell 2 | Qwen-Image-2512 FP8 | Illustration, Comic, Texturen, abstrakt | ~15 GB | Apache 2.0 |
 | 3 | ControlNet 1 | Depth (Tiefenkarte) | Kompositionssteuerung | ~1,5 GB | Apache 2.0 |
 | 4 | ControlNet 2 | Canny / Edge | Kanten-/Formsteuerung | ~1,5 GB | Apache 2.0 |
 | 5 | IP-Adapter | FLUX + Qwen jeweils | Stil-Transfer aus Referenzbildern | ~2 GB | Apache 2.0 |
 | 6 | Upscaler | ESRGAN 4x / Real-ESRGAN | 2K/4K-Hochskalierung | ~1 GB | MIT |
 
-**Gesamt: ~32 + 15 + 6 = ~53 GB → passt NICHT in 48 GB gleichzeitig.**
+**Gesamt: ~12 + 15 + 6 = ~33 GB → passt in 48 GB; ~15 GB Reserve für LoRA-Training und Beispiele.**
+
+> **Entscheidung 2026-09-29 (Betreiber):** FLUX.2 [dev] (~32 GB FP8) wurde **verworfen** —
+> auf 48 GB VRAM bleibt damit kein Raum für LoRA-Training + Beispiel-Generierung. Basis für
+> Generierung **und** Training ist **FLUX.1-dev, komprimiert (FP8)**; Manifest führt `flux1-dev`.
 
 ### Lösung: Dynamisches Laden (kein on-demand im klassischen Sinne)
 Beide Basismodelle sind auf Platte verfügbar und vorkonfiguriert. Das aktive Modell wird je Aufgabe in < 10 Sekunden gewechselt. ControlNet, IP-Adapter und Upscaler bleiben immer im Speicher.
 
-- FLUX.2 aktiv: ~32 + 6 = ~38 GB → 10 GB Puffer
+- FLUX.1-dev aktiv: ~12 + 6 = ~18 GB → 30 GB Puffer (genug für Training + Beispiele)
 - Qwen-Image aktiv: ~15 + 6 = ~21 GB → 27 GB Puffer
 
 Grund für diese Lösung:
@@ -807,7 +811,7 @@ visual-assets/
 
 ## Phase 2: Neue Instanzen erstellen
 1. [ ] Music-Instanz (ACE-Step XL × 3 + 10 LoRAs)
-2. [ ] Image HQ Instanz (FLUX.2 FP8 + Qwen-Image-2512 FP8 + ControlNet + IP-Adapter + 15 LoRAs)
+2. [ ] Image HQ Instanz (FLUX.1-dev FP8 komprimiert + Qwen-Image-2512 FP8 + ControlNet + IP-Adapter + 15 LoRAs)
 3. [ ] Video Real Instanz (Wan 2.2 A14B + ControlNet + IP-Adapter + 15 LoRAs)
 4. [ ] Video Abstract Instanz (LTXVideo 13B + ControlNet + IP-Adapter + 15 LoRAs)
 5. [ ] Orchestrator Instanz (4 LLMs + MCP + Agent-Framework)
@@ -851,7 +855,7 @@ visual-assets/
 | HTDemucs | MIT | ✅ Ja |
 | Stable Audio Open 1.0 | Stability-AI-Community | ⚠️ Bedingt (Community-Lizenz prüfen) |
 | ACE-Step 1.5 XL | MIT | ✅ Ja |
-| FLUX.2 [dev] | Non-Commercial / BFL | ❌ Nicht kommerziell (kommerzielle Lizenz separat) |
+| FLUX.1-dev | Non-Commercial / BFL (FLUX.1 [dev] License) | ❌ Nicht kommerziell (kommerzielle Lizenz separat) |
 | Qwen-Image-2512 | Apache 2.0 | ✅ Ja |
 | Wan 2.2 A14B | Apache 2.0 | ✅ Ja |
 | LTXVideo 13B | LTX-Community | ⚠️ Bedingt (prüfen) |
@@ -860,7 +864,7 @@ visual-assets/
 | Ministral-8B (Katalog, ungenutzt) | Mistral Research License | ❌ Nicht kommerziell (nicht mehr einer Rolle zugeordnet) |
 
 **Wichtigste Lizenz-Risiken:**
-- FLUX.2 [dev]: Nicht kommerziell frei. Wenn audioMONASTRY monetarisiert wird → entweder BFL-Lizenz kaufen oder auf Qwen-Image + FLUX.2-klein (Apache 2.0) umsteigen.
+- FLUX.1-dev: Nicht kommerziell frei. Wenn audioMONASTRY monetarisiert wird → entweder BFL-Lizenz kaufen oder auf Qwen-Image + FLUX.1-schnell (Apache 2.0) umsteigen.
 - Stable Audio Open: Stability-Community-Lizenz → Nutzungsbedingungen prüfen.
 - LTXVideo: Lizenzbedingungen prüfen.
 
@@ -919,7 +923,7 @@ visual-assets/
       **Teilentschaerft 2026-09-16:** die *Rahmenparameter* sind jetzt vom Aufrufer
       vorgebbar (`roleDefaults` in `agent.orchestrate`: Aufloesung, Laenge, Tempo,
       Länge, LoRA-Paare je Rolle) – es fehlen nur noch echte Dateipfade.
-- [ ] FLUX.2 kommerzielle Lizenz klären (oder auf Qwen-Image-only setzen)
+- [ ] FLUX.1-dev kommerzielle Lizenz klären (oder auf Qwen-Image-only setzen)
 - [ ] Stable Audio Open Lizenz prüfen
 - [ ] LTXVideo Lizenz prüfen
 - [ ] Agent-Framework wählen (LangGraph vs. eigenes)

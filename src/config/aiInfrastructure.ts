@@ -7,7 +7,7 @@
 //   ears           Audio-Intelligence (STT, Embeddings, Klassifikation, Audio-LLM)
 //   voiceGen       TTS/SFX/Stem-Separation
 //   music          Musikgenerierung (ACE-Step 1.5 XL + LM-Planer + LoRAs)
-//   imageHq        Keyframes/Texturen (FLUX.2 [dev] + Qwen-Image-2512)
+//   imageHq        Keyframes/Texturen (FLUX.1-dev komprimiert + Qwen-Image-2512)
 //   videoReal      photorealistische Clips (Wan 2.2 A14B)
 //   videoAbstract  stylisierte/abstrakte Clips (LTXVideo 13B)
 //   orchestrator   MoA + MCP über die Fach-Instanzen 2–7
@@ -35,7 +35,7 @@
  *   ears           Audio-Analyse (STT, Embeddings, Klassifikation, Diarization)
  *   voiceGen       TTS (CustomVoice + VoiceDesign), Stems, SFX
  *   music          ACE-Step 1.5 XL (base/sft/turbo) + LM-Planer + Genre-LoRAs
- *   imageHq        FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter/LoRAs
+ *   imageHq        FLUX.1-dev (komprimiert, FP8) + Qwen-Image-2512 + ControlNet/IP-Adapter/LoRAs
  *   videoReal      Wan 2.2 A14B – photorealistische Clips
  *   videoAbstract  LTXVideo 13B – stylisierte/abstrakte Clips
  *   orchestrator   MoA aus 4 Anbieter-diversen kleinen LLMs + MCP-Tools

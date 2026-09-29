@@ -600,13 +600,14 @@
       "maxDuration": 120,
       "concurrency": 1,
       "timeout": 600,
-      "license": "FLUX.2-dev Non-Commercial / BFL commercial",
-      "id": "flux2-dev",
-      "repository": "black-forest-labs/FLUX.2-dev",
-      "revision": "26afe3a78bb242c0a8bb181dcc8937bb16e5c66c",
+      "license": "FLUX.1 [dev] Non-Commercial License (BFL) — kommerzielle Lizenz separat",
+      "id": "flux1-dev",
+      "repository": "black-forest-labs/FLUX.1-dev",
+      "revision": "3de623fc3c33e44ffbe2bad470d0f45bccf2eb21",
       "task": "image.generate",
-      "estimatedVRAM": 32,
-      "exclusiveGroup": "image-base"
+      "estimatedVRAM": 12,
+      "exclusiveGroup": "image-base",
+      "note": "Komprimiert (FP8). Entscheidung 2026-09-29: FLUX.2 [dev] (32B, ~32 GB FP8) verworfen — passt auf 48 GB VRAM nicht zusammen mit LoRA-Training + Beispielen; FLUX.1-dev ist zugleich die Trainingsbasis (docs/VISUAL_LORA_TRAINING.md)."
     },
     {
       "framework": "comfyui",
@@ -1232,14 +1233,14 @@
       "idleTimeoutSeconds": 120
     },
     "imageHq": {
-      "label": "Bild-Generierung (FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter)",
+      "label": "Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)",
       "gpuPoolId": "AMPERE_48",
       "gpuCount": 1,
       "vramBudgetGb": 48,
       "vramSafetyMarginGb": 6,
       "maxConcurrentInference": 1,
       "preloadModels": [
-        "flux2-dev",
+        "flux1-dev",
         "qwen-image-2512",
         "controlnet-depth",
         "controlnet-canny",
@@ -1247,7 +1248,7 @@
         "realesrgan-x4"
       ],
       "models": [
-        "flux2-dev",
+        "flux1-dev",
         "qwen-image-2512",
         "controlnet-depth",
         "controlnet-canny",
@@ -1255,7 +1256,7 @@
         "realesrgan-x4"
       ],
       "exclusiveGroups": {
-        "image-base": "flux2-dev"
+        "image-base": "flux1-dev"
       },
       "idleTimeoutSeconds": 120
     },
