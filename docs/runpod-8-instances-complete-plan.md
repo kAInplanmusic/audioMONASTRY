@@ -378,7 +378,10 @@ Env:
   AI_ROLE=visual_image
   COMFYUI_START=true
   HF_TOKEN=***
-  MODELS_PRELOAD=flux2_fp8,qwen_image_2512_fp8
+  # Korrektur 2026-09-29 (Paket B): Basis ist FLUX.1-dev komprimiert (Entscheidung
+  # 2026-09-29 oben, Commit 14113b7). Der alte Wert flux2_fp8 stammt aus der
+  # verworfenen FLUX.2-Planung und blieb hier 60 Zeilen darunter stehen.
+  MODELS_PRELOAD=flux1-dev-fp8,qwen_image_2512_fp8
   CONTROLNET_PRELOAD=depth,canny
   IPADAPTER_PRELOAD=true
   UPSCALER_PRELOAD=esrgan4x

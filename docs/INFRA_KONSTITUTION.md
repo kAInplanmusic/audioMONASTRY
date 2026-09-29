@@ -1,6 +1,7 @@
 # audioMONASTRY — Infrastruktur-Konstitution (verbindlich)
 
-**Stand:** 2026-09-20 · **Vorgabe:** Betreiber · **Geltung:** Alle Hetzner- und
+**Stand:** 2026-09-29 (Korrektur GPU-Preise + Idle-Timeout, Paket B; Grundlagen
+vom 2026-09-20 bleiben) · **Vorgabe:** Betreiber · **Geltung:** Alle Hetzner- und
 RunPod-Themen. Dieses Dokument ist die **einzige Quelle der Wahrheit** für
 Flotten-Größen, Kosten und Betriebsmodi. Jede andere Doku (SERVER_FLEET,
 HETZNER_DEPLOY, AI_*, RUNPOD_*, OPS_RUNBOOK, READMEs) verweist hierher und darf
@@ -54,8 +55,8 @@ Umgesetzt ist sie als **Betriebsmodus** in `src/core/ai/aiGate.ts` (SSOT im Code
 | Modus | aiMONK | Wirkung | Kostenrahmen |
 |---|---|---|---|
 | **AI aus** (`off`) | OFF | Kein RunPod-Job, kein `workersMin=1`, keine `LlmRouter`-Aufrufe an die GPU-Flotte, keine Visual-Abrufe. | **Nur Hetzner** (~0,054 €/h, ~39 €/Monat @24/7) + Speicher |
-| **AI an ohne Visuals** (`on-no-visuals`) | AUTO_AI | **Alle immer-verfügbaren Rollen Vollgas** (brain, ears, voiceGen, music, orchestrator); Visual-Rollen gesperrt. | bis ~2,5–3,0 €/h (5 Rollen × ~0,49–0,60) |
-| **AI an mit Visuals** (`on-with-visuals`) | PRO | Zusätzlich `imageHq`/`videoReal`/`videoAbstract` beim Abruf. | +~0,49 €/h je aktiver Visual-Rolle, danach scale-to-zero |
+| **AI an ohne Visuals** (`on-no-visuals`) | AUTO_AI | **Alle immer-verfügbaren Rollen Vollgas** (brain, ears, voiceGen, music, orchestrator); Visual-Rollen gesperrt. | bis ~2,0 $/h (5 Rollen × ~0,40 $/h, A6000-Klasse; Stand 2026-09-29, s. §3) |
+| **AI an mit Visuals** (`on-with-visuals`) | PRO | Zusätzlich `imageHq`/`videoReal`/`videoAbstract` beim Abruf. | +~0,40 $/h je AMPERE_48-Visual-Rolle (`imageHq`), ~1,10 $/h je ADA_24-Rolle (RTX 4090; 5090 ~1,58 $/h), danach scale-to-zero — Stand 2026-09-29, Quelle `model_manifest.json` (`gpuPoolNote`) |
 
 **Default ohne Einstellung:** `on-no-visuals` (Konstitution: „AI an“, Visuals
 erst bei Anforderung). `AI_MODE=off` in der Umgebung ist der harte
@@ -68,20 +69,32 @@ Sie starten **erst, wenn eine Visual-Aktion abgerufen/aktiviert wird**
 Lazy-Load-Ausnahme — alle übrigen Rollen laufen bei „AI an" voll, nicht
 bedarfsgesteuert.
 
+> **Korrektur 2026-09-29 (Paket B):** `AI_VISUAL_IDLE_MS` ist das App-seitige
+> Wake-Fenster, nicht die Endpoint-Abrechnung. Der Serverless-`idleTimeout` der
+> Visual-Endpoints liegt bei **120 s** (gemessen 2026-09-16, `ROLE_DEFAULTS` in
+> `scripts/runpod-deploy.py`, Gate `tests/test_runpod_deploy_defaults.py`).
+> Die 900 s oben bleiben als Historie des Stands 2026-09-20 stehen.
+
 ---
 
 ## 3. Kostenmodell (Rechenbeispiele)
 
-- **Vollast AI** (8 Rollen × ~0,49 €/h ≈ 3,9 €/h; lt.
-  `runpod-8-instances-complete-plan.md` ~3,2 €/h) + Hetzner 0,054 €/h
-  → **~3,3–4,0 €/h**, deutlich unter der 10-€/h-Grenze und innerhalb des
-  Zielbands nur bei den günstigeren Pools.
+- **Vollast AI** (5 Rollen AMPERE_48 × ~0,40 $/h + 3 Visual-Rollen: `imageHq`
+  ~0,40 $/h, `videoReal`/`videoAbstract` je ~1,10 $/h auf ADA_24/RTX 4090 —
+  5090 ~1,58 $/h; Quelle `model_manifest.json` `gpuPoolNote`, Stand 2026-09-29)
+  + Hetzner 0,054 €/h → **~2,3 $/h + 0,05 €/h** Vollbetrieb, deutlich unter der
+  10-€-Grenze. (Altstand 2026-09-20: pauschal 8 × ~0,49 €/h ≈ 3,9 €/h —
+  zurückgerechnet auf die alte 0,40-€-A6000-Basis.)
 - **Nur Hetzner** (AI aus): **~0,054 €/h** (~39 €/Monat bei 24/7-Betrieb).
 - **Speicher:** 10 Snapshots (Retention: 2 je Rolle) ~50,4 GB ≈ **0,50 €/Monat**
   (live gemessen 2026-09-20) — weit unter 5 €/Monat.
 - `idleTimeout` wird abgerechnet: scale-to-zero greift erst nach `idleTimeout`s.
-  Werte je Rolle: immer-Rollen klein (15–20 s), Visual-Rollen höher (900 s
-  deklariert) für Iterations-Läufe.
+  Werte je Rolle (Stand 2026-09-29): immer-Rollen klein (brain/ears 15 s,
+  live; `ROLE_DEFAULTS` in `scripts/runpod-deploy.py`), voiceGen/Music/Visual-
+  Rollen **120 s** (gemessen 2026-09-16; mit 900 s blieben Worker nach kurzen
+  Probes über die Zeitgrenze hinaus auf `RUNNING` und wurden weiter abgerechnet,
+  bis zu 3,66 $/h — `runpod-8-instances-complete-plan.md`). Altstand 2026-09-20:
+  Visual-Rollen 900 s deklariert.
 
 ---
 
