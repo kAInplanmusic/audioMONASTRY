@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-09-29T15:58:00+00:00",
+  "generatedAt": "2026-09-30T15:51:49+02:00",
   "branch": "main",
-  "commit": "9016a7c",
+  "commit": "d76e64b",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -3983,6 +3983,446 @@
       ],
       "updatedAt": "2026-09-29",
       "note": "Konsequenz: solange die Nutzung nicht-kommerziell ist, deckt die BFL Non-Commercial-Lizenz von FLUX.1-dev die Derivate (cosmic-r16-LoRA, erzeugte Bilder) - kein offenes P0-Risiko mehr, der Punkt gilt als dokumentiert. WIEDERVORLAGE-TRIGGER: sobald eine Kommerzialisierung von anunnakitools.de oder der Visual-Pfade geplant ist (verkaufte Assets, Paid-Features, kommerzielle Nutzung der Bild-Ausgaben), ist die BFL-Lizenzfrage (Kommerz-Lizenz erwerben oder Derivate raus) erneut vorzulegen. Referenz: docs/VISUAL_LORA_TRAINING.md:682."
+    },
+    {
+      "id": "DA-2026-09-29-001",
+      "title": "Verwundbarkeit: ip-address",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "ip-address: Address6.isLinkLocal() recognizes fe80::/64 rather than fe80::/10, allowing SSRF and trust-boundary bypass to on-link hosts Vorschlag: npm audit fix ausführen — Fundstelle: `package-lock.json (npm-audit)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-002",
+      "title": "Stat-Panel 'HTTP Errors (total)' rastet dauerhaft auf Rot ein",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Panel id 3 zeigt den monoton wachsenden Counter audiomonastry_http_requests... bzw. audiomonastry_http_errors_total direkt via reduceOptions.calcs=[\"lastNotNull\"] an und definiert eine rote Schwelle bei value=1. Da ein Counter niemals zurück auf 0 geht (außer bei Prozess-Restart), bleibt das Panel nach dem ersten aufgetretenen Fehler fuer immer rot – die Anzeige signalisiert damit 'aktuell fehlerh Vorschlag: Auf eine Rate/Zunahme umstellen, z.B. expr: 'sum(rate(audiomonastry_http_errors_total[5m]))' (oder increase[5m]) und die rote Schwelle an einer sinnvollen Fehlerrate ausrichten, statt am absoluten Counter-Stand. — Fundstelle: `scripts/hetzner/grafana-dashboards/audiomonastry-overview.json (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-003",
+      "title": "Kaputte LoRAs liegen ungetrennt neben den brauchbaren im selben Produktiv-Präfix",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die 7 defekten LoRAs (davon 6 noch nicht neu trainiert) verbleiben unverändert unter dem produktiv genutzten Präfix `lora-out/<thema>/`, während das neu trainierte, nachweislich gesunde Modell unter dem abweichenden Pfad `lora-themen-v2/out/<thema>__lr5e5cos/` abgelegt wird. Es gibt weder eine Quarantäne-/Versionierungskonvention noch ein Manifest-Flag, das Verbraucher vor den defekten Dateien sch Vorschlag: Defekte Artefakte sofort in ein Quarantäne-Präfix verschieben (z.B. `lora-out-broken-v1/`) bzw. die betroffenen Objekte löschen, und im `meta.json` je Thema ein maschinenlesbares Feld `\"status\": \"ok\"|\"broken\"|\"pending-retrain\"` führen, das der Consumer prüft. — Fundstelle: `scripts/visual-vorrat/BERICHT.md (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-004",
+      "title": "Session-Token wird ohne Signaturprüfung als Rate-Limit-Identität akzeptiert",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "resolveRateLimitIdentity ruft isStudioSessionToken (nur Formprüfung) auf und extrahiert das sub bzw. hasht das Token. Die kryptografische Signatur wird hier nicht verifiziert. Die Funktion verlässt sich darauf, dass eine Auth-Middleware vorher die Signatur geprüft hat; diese Kopplung ist weder im Code erzwungen noch dokumentiert. Wird die Funktion je in einem Kontext ohne vorherige Signaturprüfung Vorschlag: In dieser Funktion signierte Tokens erzwingen (z.B. Parameter nur für bereits verifizierte Auth-Identität) oder die Signaturprüfung hier durchführen. Zumindest per TypeScript-Typ/Assertion sicherstellen, dass nur nach Auth aufgerufen wird. — Fundstelle: `server/rateLimitKeys.ts:114 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-005",
+      "title": "Rate-Limit-Bypass durch clientseitig wählbaren x-session-id Header",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Header x-session-id wird unverschlüsselt als Limiter-Schlüssel verwendet (`sid:<hash>`). Da der Wert vom Client frei gewählt werden kann und nur hinter der Auth liegt, kann jeder authentifizierte Nutzer mit jedem Request einen neuen Wert senden und erhält so praktisch unbegrenzt frische Budgets. Zusätzlich werden beliebig viele Schlüssel im Limiter-Speicher erzeugt (Memory-DoS). Vorschlag: Limiter-Schlüssel nicht aus ungeprüftem Client-Header ableiten, sondern aus serverseitig verifizierter Identität (z.B. authentifizierte UserId aus Auth-Kontext, signiertem Session-Token mit sub). Falls der Header beibehalten werden muss, pro authentifizierter Identität/IP die Anzahl unterschiedliche — Fundstelle: `server/rateLimitKeys.ts:119 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-006",
+      "title": "Server importiert aus src (Client-Bereich)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Admin-Route importiert `llmRouter` aus `../../src/core/ai/LlmRouter`. Im Projekt liegt `server/` getrennt vom `src/`-Verzeichnis (üblicherweise Frontend/Client-Code). Dies verletzt die Schichtengrenze, kann zu zirkulären Abhängigkeiten, unerwarteter Bündelung von Client-Code im Server oder Ausführung von Browser-spezifischem Code in Node führen. Vorschlag: LLM-Router als gemeinsames Modul in ein shared/ oder lib/ Verzeichnis verschieben oder eine server-seitige Fassade verwenden, die nicht auf Client-Code basiert. — Fundstelle: `server/routes/adminRoutes.ts:13 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-007",
+      "title": "HTTP-Status wird über fragile String-Suche in Fehlermeldungen bestimmt",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "statusOf() leitet den Statuscode aus `message.includes('unbekannter Lauf')` bzw. `...includes('kann nicht fortgesetzt')` ab. Das koppelt Routing-Verhalten an den exakten Wortlaut von Fehlertexten; jede Änderung/Lokalisierung der Meldung im Runner lässt GET/CANCEL fälschlich 400 statt 404/409 liefern. Vorschlag: Strukturierte, typisierte Fehler verwenden (z.B. Fehlerklassen oder ein `code`-Feld wie UNKNOWN_RUN/NOT_RESUMABLE) und anhand dieses Codes den HTTP-Status mappen, nicht anhand des Meldungstextes. — Fundstelle: `server/routes/agentRoutes.ts:31 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-008",
+      "title": "Rohe interne Fehlermeldung wird an den Client geleakt",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "fail() gibt `(error as Error).message` unverändert an den Client zurück. Fehler aus dem Runner/LLM können interne Details (Pfade, Provider-/API-Fehlertexte, Stack-nahe Infos) enthalten, die nicht nach außen gehören. Vorschlag: Nach außen eine generische, code-basierte Meldung senden (nur `code`) und die Detailnachricht ausschließlich über deps.log serverseitig protokollieren. — Fundstelle: `server/routes/agentRoutes.ts:37 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-009",
+      "title": "userId wird per Doppel-Cast aus req gelesen und fällt unsicher auf 'localUser' zurück",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`(req as unknown as { userId?: string }).userId ?? 'localUser'` verlässt sich auf eine nicht typisierte, extern injizierte Eigenschaft. Ist keine Auth-Middleware aktiv, kollabieren ALLE nicht authentifizierten Aufrufer auf die Identität 'localUser' – zusammen mit der fehlenden Ownership-Prüfung ist damit keine Trennung zwischen Nutzern möglich. Zusätzlich umgeht der `as unknown as`-Cast jede Typpr Vorschlag: userId aus einer typisierten, verifizierten Auth-Quelle beziehen (Express.Request per Modul-Augmentation erweitern) und Requests ohne authentifizierten Nutzer explizit mit 401 ablehnen statt auf einen gemeinsamen Default-User abzubilden. — Fundstelle: `server/routes/agentRoutes.ts:49 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-010",
+      "title": "Fehlende Ownership-/RBAC-Prüfung auf Lauf-Zugriffen (IDOR)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der beim Start gespeicherte userId wird nur in /runs (POST) gesetzt, aber bei keiner Lese-/Steuer-Operation wieder geprüft. GET /runs listet ohne Filter die letzten 20 Läufe ALLER Nutzer (Zeile 64-65), und GET /:runId, /:runId/cancel sowie /:runId/resume greifen allein über die runId zu. In einer Architektur mit bis zu 4 gleichzeitigen Nutzern kann damit jeder authentifizierte (bzw. nicht authenti Vorschlag: Für jeden Zugriff prüfen, ob der Lauf dem aufrufenden userId gehört (z.B. record.userId === req.userId), sonst 403/404; runner.list() nur gefiltert nach req.userId aufrufen und cancel/resume ebenfalls an die Ownership binden. — Fundstelle: `server/routes/agentRoutes.ts:73 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-011",
+      "title": "Keine Auth/RBAC-Prüfung auf allen Cloud-Routen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`registerCloudRoutes(app)` registriert sämtliche Routen ohne jegliche Authentifizierungs-/Autorisierungs-Middleware. Damit kann jeder unauthentifizierte Aufrufer `/api/cloud/sync` (vollständiger Supabase-Seed), `/api/cloud/samples`, `/api/cloud/music` und insbesondere `/api/cloud/upload` (Binär-Upload bis 200 MB in R2 inkl. automatischem `ingestAudioObject`) auslösen. Das widerspricht der RBAC-/Lo Vorschlag: Auth-/RBAC-Middleware (z.B. `requireAuth`, Rollen-Check) an die Route-Registrierung koppeln, mindestens für alle schreibenden Routen (sync, samples, music, upload). Route-Factory sollte die Middleware als Abhängigkeit oder via `app.use('/api/cloud', requireAuth)` erhalten. — Fundstelle: `server/routes/cloudRoutes.ts:33 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-012",
+      "title": "State-änderndes GET (?probe=1) löst R2-Schreibprobe aus",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`GET /api/cloud/health?probe=1` (bzw. `force=1`) erzwingt laut Kommentar eine frische PUT/DELETE-Schreibprobe in R2 und umgeht den TTL-Cache. Ein GET-Endpunkt mit Seiteneffekt kann per `<img src=\"/api/cloud/health?probe=1\">`/Prefetch/CSRF von beliebigen Seiten getriggert werden und so wiederholt teure Schreiboperationen am R2-Bucket auslösen (Doppel-Side-Effect + DoS-Verstärker, da ohne Auth errei Vorschlag: Schreibprobe nur über authentifizierten POST (z.B. `POST /api/cloud/health/probe`) zulassen, Rate-Limiting ergänzen und GET `/api/cloud/health` rein lesend (Cache-only) halten. — Fundstelle: `server/routes/cloudRoutes.ts:35 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-013",
+      "title": "Unauthentifizierter 200-MB-Upload inkl. Auto-Ingest ohne Rate-Limit",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Binärpfad akzeptiert bis zu `200mb` pro Request und triggert nach `uploadSampleToR2` zusätzlich `ingestAudioObject`. In Kombination mit der fehlenden Auth (siehe oben) und ohne Rate-/Größen-Drosselung pro Client ist das ein direkter Ressourcen-/Kosten-DoS-Vektor (Speicher, R2-Storage, Analyse-Pipeline). Vorschlag: Auth + Rate-Limit + Quota pro Nutzer vor die Route schalten, Größenlimit an fachliche Grenzen koppeln und Ingest nur nach erfolgreicher Autorisierung ausführen. — Fundstelle: `server/routes/cloudRoutes.ts:73 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-014",
+      "title": "Ungeprüfter content-type erlaubt Stored-XSS/Hosting-Missbrauch",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der `contentType` stammt unvalidiert aus dem Query-String bzw. dem JSON-Body und wird direkt an `uploadSampleToR2(key, buf, contentType)` übergeben. Die Key-Whitelist erlaubt Dateiendungen wie `.html`/`.svg`, sodass ein Objekt mit von außen gesetztem Content-Type (z.B. `text/html`) abgelegt werden kann. Wird der R2-Bucket öffentlich/served ausgeliefert, ergibt das gespeichertes XSS bzw. Content-Ho Vorschlag: Content-Type gegen eine Whitelist erlaubter Audio-MIME-Typen prüfen (bzw. serverseitig aus der Datei-Endung/Inhalt ableiten) und die Key-Whitelist auf Audio-Endungen (.wav/.mp3/.ogg/.flac/…) einschränken. — Fundstelle: `server/routes/cloudRoutes.ts:82 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-015",
+      "title": "Cloud-Routen ohne Authentifizierung/RBAC",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "registerCloudRoutes registriert GET /api/cloud/health, POST /api/cloud/sync, POST /api/cloud/samples, POST /api/cloud/music und POST /api/cloud/upload ohne jede Middleware zur Authentifizierung oder Autorisierung. Jeder Netzwerkteilnehmer kann Datenbank-Syncs/Seeds starten, Cloud-Einträge upserten und bis zu 200 MB nach R2 schreiben. Dies verletzt die Sicherheitsregel 'fehlende Auth/RBAC-Prüfung'  Vorschlag: Gemeinsame Auth-/RBAC-Middleware vor den Cloud-Routen installieren; mindestens Admin-Rolle für sync/upload, Nutzer-/Plugin-Scope für samples/music. — Fundstelle: `server/routes/cloudRoutes.ts (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-016",
+      "title": "Unvalidierte konfigurierbare URLs für Metadata-/IP-Probe ermöglichen SSRF",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "SFU_METADATA_URL und SFU_IPIFY_URL werden aus der Umgebung gelesen und ohne Validierung an fetch übergeben. Ein Angreifer, der die Umgebungsvariablen kontrollieren kann, könnte beliebige interne HTTP(S)-Endpunkte abfragen (z.B. Cloud-Metadata, interne Dienste). Dies betrifft Zeile 122 (metaUrl) und 132 (ipifyUrl). Vorschlag: Protokoll und Ziel-Host/IP gegen eine Allowlist prüfen oder die URLs als Konstanten belassen und nicht aus der Umgebung überschreiben lassen. — Fundstelle: `server/sfuNetwork.ts:122 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-017",
+      "title": "instanceType ist kein gültiger AWS-Instanztyp",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "provider.vendor ist \"aws\", aber instanceType \"nvidia-a100\" ist kein AWS-Instanztyp (AWS exponiert A100 nur über p4d/p4de-Familien, z.B. p4d.24xlarge / trn1-nahe Typen). Wenn dieser Wert von einem AWS-/SageMaker-Backend konsumiert wird, schlägt das Provisioning fehl oder es wird still ein anderer Beschleuniger als der erwartete A100 gebucht – während AI_RUNTIME_DEVICE=\"cuda\" und ein CUDA-Image eine Vorschlag: Entweder einen vendor-validierten Instanztyp verwenden (z.B. \"p4d.24xlarge\") oder die Beschleuniger-Angabe in ein HF-/Provider-spezifisches Feld überführen (z.B. \"hardware\": \"nvidia-a100\") und vendor/region konsistent dazu setzen. — Fundstelle: `services/audiomonastry-ai-runtime/hf_endpoint.example.json:6 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-018",
+      "title": "Scale-to-Zero (min=0) kollidiert mit dem Ultra-Low-Latency-Mandat",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "replicas.min=0 zusammen mit scaleToZero.idleTimeoutMinutes=20 bedeutet, dass der AI-Runtime-Container nach 20 Minuten Idle komplett abgeschaltet wird. Der darauffolgende Cold Start (GPU-Scheduling + Modell-/Manifest-Load über AI_MODEL_MANIFEST und HF_HOME) dauert Sekunden bis Minuten und ist im laufenden Live-Audio-Pfad ein harter Latenz-/Dropout-Fehler gemäß der Architekturregel 1.3 (Sub-Millisek Vorschlag: Für den Live-Pfad mindestens eine warme Standby-Replica mit Readiness-Gating vorhalten (separater Warm-Pool mit reduziertem Idle-Timeout) und einen Health-/Readiness-Check einbauen, der kalte Endpunkte im Audio-Routing ausschließt; Scale-to-Zero nur für Offline-/Batch-Pipelines aktivieren. — Fundstelle: `services/audiomonastry-ai-runtime/hf_endpoint.example.json:10 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-019",
+      "title": "Container-Block ohne Image-/Artefakt-Referenz ist nicht deploybar",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der container-Block definiert nur healthRoute, readinessRoute und port, aber kein Image und keinen Digest. Damit ist das Deployment nicht reproduzierbar: der Endpoint kann nicht provisioniert werden bzw. zieht implizit ein \"latest\"-Image, wodurch AI-Runtime-Version und Model-Manifest auseinanderlaufen können (z.B. Manifest erwartet cuda, gezogenes Image ist CPU-only oder ein anderer Tag). Vorschlag: Ein image-Feld mit gepinntem Tag und Digest ergänzen (z.B. \"image\": \"ghcr.io/.../ai-runtime@sha256:...\") und das Image im CI gegen AI_MODEL_MANIFEST/Device-Anforderungen prüfen. — Fundstelle: `services/audiomonastry-ai-runtime/hf_endpoint.example.json:17 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-020",
+      "title": "Exception-Meldungen werden ungefiltert an den Client zurückgegeben",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "In invoke() wird bei einer Exception die rohe str(exc) an den Client zurückgegeben. Dadurch können interne Fehlermeldungen (Dateipfade, Modulnamen, ggf. Konfigurationsdetails) nach außen gelangen. Der Kommentar behauptet, MCP-Fehler sauber zurückzugeben, aber ein Client erhält zu viele Informationen. Vorschlag: Exception serverseitig loggen und dem Client nur eine generische Fehlermeldung (z.B. 'internal error') zurückgeben; optional Fehlercode. — Fundstelle: `services/audiomonastry-ai-runtime/mcp_runtime.py:83 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-021",
+      "title": "READ-Tool 'sample.search' führt EXECUTION-Inferenz aus (Privilege Escalation)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Das Tool sample.search ist mit permission READ deklariert, ruft aber im Handler _tool_sample_search self._infer('embed', payload) auf, was eine Manager-Inferenz startet. Dadurch kann ein Client mit nur READ-Berechtigung rechenintensive EXECUTION-Operationen (Audio-Embedding) auslösen und ein beliebiges Modell angeben, obwohl die Tool-Permission nur READ erlaubt. Das untergräbt das Permission-Model Vorschlag: Die Permission von sample.search auf EXECUTION anheben oder einen separaten, leichtgewichtigen Suchpfad ohne allgemeine Inferenz implementieren; außerdem prüfen, ob der Manager für READ-Operationen keine Modell-Inferenz starten darf. — Fundstelle: `services/audiomonastry-ai-runtime/mcp_runtime.py:120 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-022",
+      "title": "Unbeschränkte Versionsbereiche für scipy, soundfile und pyannote.audio",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "fastapi, uvicorn, pydantic und transformers haben Obergrenzen (<1, <3, <5). scipy>=1.13, soundfile>=0.12 und pyannote.audio>=3.3 haben keine Obergrenze. Ein Rebuild des Images zu einem späteren Zeitpunkt kann dadurch inkompatible Major-Versionen ziehen (z. B. pyannote.audio 4.x mit anderer API/Modell-Ladepfad oder scipy 2.x), ohne dass sich der Code geändert hat – nicht reproduzierbarer Build und  Vorschlag: Obergrenzen ergänzen (z. B. scipy>=1.13,<2; soundfile>=0.12,<1; pyannote.audio>=3.3,<4) und die aufgelösten Versionen plus Hashes in requirements.lock festschreiben. — Fundstelle: `services/audiomonastry-ai-runtime/pyproject.toml:15 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-023",
+      "title": "pyannote.audio zieht torch/torchaudio unkontrolliert nach – Konflikt mit CUDA-Basisimage",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Kommentar in Zeile 11-12 erklärt, dass torch bewusst nicht gependelt wird, weil es aus dem Basisimage (pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime) kommt. pyannote.audio>=3.3 deklariert jedoch selbst Abhängigkeiten auf torch und torchaudio. Beim Install dieser Distribution löst pip diese gegen PyPI auf (Default-Index = CPU-Wheels) und kann ein torchaudio-Build installieren, das nicht zum CUD Vorschlag: torch/torchaudio explizit mit exakt der Version des Basisimages (2.5.1+cu124) deklarieren und für die Installation den PyTorch-CUDA-Index verwenden, oder pyannote.audio mit --no-deps-Strategie installieren und benötigte Transitives selbst pinnen. Den in Zeile 12 referenzierten requirements.lock als  — Fundstelle: `services/audiomonastry-ai-runtime/pyproject.toml:16 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-024",
+      "title": "Transitive torch-Abhängigkeit widerspricht Basisimage",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Obwohl torch bewusst nicht als direkte Abhängigkeit gelistet wird (Kommentar Zeile 11–12, Basisimage pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime), installiert die transitive Abhängigkeit pyannote.audio bei einem pip install . trotzdem eine eigene torch-Version aus PyPI. Dies kann die im Basisimage vorhandene CUDA-optimierte torch-Version überschreiben oder zu Versionskonflikten führen und damit  Vorschlag: Entweder pyannote.audio mit --no-deps installieren und die zum Basisimage passende torch-Version explizit in requirements.lock festhalten, oder pyannote.audio auf eine Version pinnen, die mit dem Basisimage getestet wurde. — Fundstelle: `services/audiomonastry-ai-runtime/pyproject.toml:16 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-025",
+      "title": "Nur py-modules deklariert – Verzeichnis-Pakete und Datendateien fehlen im Wheel",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Distribution deklariert ausschließlich py-modules für app, handlers, model_manager, registry und mcp_runtime. py-modules deckt nur einzelne .py-Dateien ab. Sobald eine dieser Einheiten ein Verzeichnis-Paket ist (Verzeichnis mit __init__.py) oder Nicht-Python-Assets enthält (Modell-Configs, Prompt-Templates, Registry-JSONs), werden diese beim Build lautlos nicht in das Wheel aufgenommen, und de Vorschlag: Wenn es Pakete sind: packages = [\"app\", ...] bzw. [tool.setuptools.packages.find] mit where verwenden; benötigte Daten-Assets über [tool.setuptools.package-data] / MANIFEST.in explizit einschließen und im CI prüfen (pip install . in tmp venv + Import-Smoke-Test). — Fundstelle: `services/audiomonastry-ai-runtime/pyproject.toml:20 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-026",
+      "title": "music-Contract enthält nur System-Stats, kein Audio-Ausgabefeld",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der 'music'-Response-Contract listet ausschließlich die Keys 'comfyui' (dict mit 'devices','system'), 'status' und 'usage' – das entspricht der ComfyUI /system_stats-Antwort. Es fehlt jedes Feld, das das eigentliche Audio-Artefakt transportiert (URL/base64/Audio-Key). Damit ist für die Rolle 'music' nicht belegbar, wie das erzeugte Audio extrahiert wird; ein auf diesem Contract aufbauender Consume Vorschlag: Probe so konfigurieren, dass ein echter Musik-Generierungsjob gemessen wird, und den Response-Contract um den/die tatsächlichen Output-Keys (Audio-URL/Base64/Pfad) ergänzen. — Fundstelle: `services/audiomonastry-ai-runtime/workflows/contracts-20260916.json:29 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-027",
+      "title": "videoAbstract-Contract basiert auf einem Fehler-Payload, nicht auf einem Erfolgs-Response",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der für die Rolle 'videoAbstract' festgeschriebene Response enthält die Keys 'delayTime','error','executionTime','id','status','workerId' – das ist die Fehler-/Statusantwort eines RunPod-Jobs, kein Generierungsergebnis. Es fehlt jeglicher Video-/Output-Key, den die Rolle videoAbstract (analog zu videoReal mit 'video') liefern müsste. Der Contract dokumentiert damit als Soll-Form ein FAILED-Ergebni Vorschlag: Probe für videoAbstract wiederholen und nur einen COMPLETED-Job als Contract aufnehmen; bis dahin den Eintrag als 'status: failed' markieren bzw. aus dem Contract entfernen, damit kein Validator ein Fehler-Payload als Soll-Shape akzeptiert. — Fundstelle: `services/audiomonastry-ai-runtime/workflows/contracts-20260916.json:48 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-028",
+      "title": "videoReal-Contract ohne Größen-/Längenangabe – keine Buffer-Limit-Validierung möglich",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Für imageHq sind 'chars' und 'decodedBytes' (898676) gemessen, für 'video' in videoReal fehlen beide Angaben ersatzlos ('kein --out, weil der Lauf vor dem Schalter stattfand'). Damit lässt sich für die videoReal-Rolle kein Maximal-/Erwartungswert für die Base64-Nutzlast ableiten; Größengrenzen, Timeouts oder Speicherbudgets können nicht aus dem Contract geprüft werden, obwohl Video-Payloads die gr Vorschlag: Probe mit --out wiederholen und 'chars'/'decodedBytes' (plus Maximalgröße) für videoReal nachtragen. — Fundstelle: `services/audiomonastry-ai-runtime/workflows/contracts-20260916.json:78 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-029",
+      "title": "Inkonsistente Base64-Konvention zwischen imageHq (data:-Präfix) und videoReal (rohes Base64)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "imageHq dokumentiert 'dataUri': \"data:image/png;base64\" für beide Bild-Keys, während videoReal explizit 'rohes base64 MP4, KEIN data:-Praefix' festhält. Ein gemeinsamer Decoder/Normalizer, der – wie beim Bild – ein 'data:'-Präfix erwartet, würde das Video-Ergebnis falsch parsen (bzw. umgekehrt das PNG ohne Präfix-Handling). Die beiden Rollen-Contracts widersprechen sich in der Transportkodierung,  Vorschlag: Im Contract ein explizites Feld 'encoding'/'prefix' je Rolle ergänzen und im Runtime-Normalizer fallunabhängig (Präfix optional) dekodieren. — Fundstelle: `services/audiomonastry-ai-runtime/workflows/contracts-20260916.json:80 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-030",
+      "title": "LoRA wird im Meta-Titel versprochen, aber nie geladen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der Workflow deklariert in Node 1 den Titel 'SDXL 1.0 Basis (LoraLoader wird hier eingekettet)' und der Positive-Prompt (Zeile 14) verwendet das Trigger-Token 'mstyle_comic'. Es existiert jedoch kein LoraLoader-Node; MODEL, CLIP und VAE werden direkt aus CheckpointLoaderSimple (Node 1, Ausgänge 0/1/2) gespeist. Damit ist der Style-Trigger wirkungslos: Das erzeugte Bild entspricht nicht dem Comic-L Vorschlag: LoraLoader-Node (class_type 'LoraLoader', lora_name + strength_model/strength_clip) zwischen Node 1 und Node 5/2/3 einfügen und alle Referenzen auf den LoraLoader-Ausgang umbiegen (MODEL->0, CLIP->1). Falls der LoRA-Stil nicht mehr genutzt wird, Titel korrigieren und das Trigger-Token aus dem Prompt — Fundstelle: `services/audiomonastry-ai-runtime/workflows/image_sdxl.json:8 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-031",
+      "title": "Workflow ist komplett statisch - Runtime muss JSON-Text patchen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Prompt (Zeile 14/27), Checkpoint-Name (Zeile 5), Seed und Auflösung sind Literale ohne Input-Node oder Platzhalter. Damit muss der AI-Runtime-Code das JSON als String/Fragment manipulieren, um pro Nutzer Prompt, Seed oder Asset zu variieren. Das ist eine fragile Parallel-Implementierung derselben Logik (Template-Rendering vs. strukturiertes Node-Patching) und führt bei Änderungen am Workflow-Forma Vorschlag: Einen formalisierten Parameter-Vertrag definieren (z. B. dedizierte Input-Nodes oder dokumentiertes id/input-Patch-Schema) und die Runtime ausschließlich über diesen Vertrag patchen lassen; statische Strings nur als Defaults im Template belassen. — Fundstelle: `services/audiomonastry-ai-runtime/workflows/image_sdxl.json:14 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-032",
+      "title": "Hardcoded seed 0 macht jede Generierung deterministisch",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der KSampler hat fest 'seed': 0. Da kein Platzhalter-/Parameterisierungsmechanismus im Workflow existiert, liefert jeder Aufruf mit identischem Prompt exakt dasselbe Bild. Für den Multi-User-Betrieb (Regel 1.2 'up to 4 users') bedeutet das, dass alle Nutzer dieselbe Ausgabe sehen bzw. Wiederholungen keinerlei Variation erzeugen; ein Request-orientiertes Seed-Handling fehlt vollständig. Vorschlag: Seed zur Laufzeit setzen (z. B. Node-Input per Runtime-Patching oder ComfyUI-Style-Platzhalter), Standardverhalten auf random seed umstellen und den tatsächlich verwendeten Seed zusammen mit dem Job-Ergebnis persistieren, damit Ergebnisse reproduzierbar bleiben. — Fundstelle: `services/audiomonastry-ai-runtime/workflows/image_sdxl.json:51 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-033",
+      "title": "Unsanitized file paths in workflow config may allow path traversal",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Workflow-Konfiguration enthält Datei- und Pfadangaben (unet_name, vae_name, clip_name1, clip_name2, filename_prefix), die ohne sichtbare Validierung an das ComfyUI-Backend übergeben werden. Wenn diese JSON-Struktur als Vorlage für benutzergenerierte Workflows dient oder durch Benutzereingaben modifiziert werden kann, könnte ein Angreifer durch manipulierte Pfade beliebige Dateien laden oder üb Vorschlag: Validieren und bereinigen Sie alle Dateipfade aus Workflow-Konfigurationen serverseitig. Stellen Sie sicher, dass Dateinamen keine Pfadtrenner oder '..'-Sequenzen enthalten und auf ein erlaubtes Verzeichnis beschränkt sind. Verwenden Sie für Ausgabepfade einen sicheren Basisordner und erzwingen Sie  — Fundstelle: `services/audiomonastry-ai-runtime/workflows/music.json:116 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-034",
+      "title": "Benutzer-Presets in `localStorage` widersprechen dem Multi-User-State-Mirroring",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Architektur-Regel 1.2 fordert, dass bis zu 4 User in derselben Session einen 100% identischen, in Echtzeit gespiegelten UI-State sehen (Locking/Busy-Mode inklusive). `localStorage` ist per Definition browser-/origin-gebunden und wird nicht über Socket.io/WebRTC synchronisiert. Ein auf Client A gespeichertes Preset (`audiomonastry_local_presets`) ist für die anderen 3 User unsichtbar → State-De Vorschlag: Presets als server-autoritative Ressource in der Backend-DB halten und über den bestehenden State-Sync-Kanal broadcasten; `localStorage`/`indexedDB` höchstens als Offline-Cache mit Sync-Back und explizit dokumentierter Konfliktauflösung verwenden. — Fundstelle: `services/backend-core/ASSET_DB_SCHEMA.md:10 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-035",
+      "title": "`path` erlaubt absoluten Dateisystem-Pfad ohne Validierung → Path Traversal",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Das Schema deklariert `path` explizit als \"relativer ODER Dateisystem-Pfad\". Kombiniert mit Zeile 9 (\"werden vom Server direkt ausgeliefert\") bedeutet das: ein Asset-Eintrag kann einen absoluten Pfad wie `/etc/passwd` oder `../../.env` enthalten, der vom Server ungeprüft ausgeliefert wird. Es gibt im Schema keinerlei Normalisierung, Whitelist auf `public/samples/`, `path.resolve`-Check gegen eine  Vorschlag: Schema auf relative Pfade unterhalb einer festen Asset-Root einschränken (nur `[A-Za-z0-9._/-]`, kein fuehrendes `/`, keine `..`-Segmente). Serverseitig vor jedem Ausliefern `const resolved = path.resolve(ASSET_ROOT, entry.path); if (!resolved.startsWith(ASSET_ROOT + path.sep)) return 403;` und Ausl — Fundstelle: `services/backend-core/ASSET_DB_SCHEMA.md:18 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-036",
+      "title": "Preset-`data` ohne Schema-/Typ-Validierung → unsichere Deserialisierung in den Audio-Graph",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "`data`: Map (JSON-Repräsentation des Presets) ist ein frei strukturiertes, untypisiertes JSON-Objekt. Es wird als Preset-Repräsentation in den Audio-Graph geladen (Gain/Frequency/Detune etc.). Ohne Whitelist der erlaubten Parameter-Keys und ohne Number-Range-/Finite-Prüfung können (a) beliebige Node-Properties gesetzt werden und (b) `NaN`/`Infinity`/`null` in AudioParam-Werte fließen, was den Grap Vorschlag: Preset-`data` als versioniertes, strikt typisiertes Schema definieren (z. B. Zod-Schema pro Plugin-Typ) und beim Laden validieren: unbekannte Keys verwerfen, numerische Werte auf `Number.isFinite()` und definierte min/max-Clamps prüfen, `schemaVersion` mitführen und Migrationen ablehnen statt still  — Fundstelle: `services/backend-core/ASSET_DB_SCHEMA.md:29 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-037",
+      "title": "Audio-Routing ist nicht implementiert und wirft immer einen Fehler",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Funktion `routeAudio` führt keine Audio-Routing-Operation aus, sondern wirft immer einen Fehler mit dem Code `ERR_AUDIO_ROUTING_UNAVAILABLE`, da das native Addon `audio_core.node` nicht gebaut ist. Dadurch ist die zentrale Audio-Routing-Funktion des Backends vollständig funktionsunfähig und jeder Aufruf schlägt fehl. Laut Architektur-Regeln ('Main Sound' im Backend) ist Audio-Routing ein Kernb Vorschlag: Entweder das native Addon `audio_core.node` bauen und in das Projekt einbinden, oder eine alternative Implementierung (z.B. in JavaScript/WASM) bereitstellen, die das Audio-Routing ermöglicht. Falls dies bewusst als Fallback für Entwicklungszwecke gedacht ist, sollte die Funktion klarer als 'not imp — Fundstelle: `services/backend-core/node/audio-routing.js:15 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-038",
+      "title": "backend-core deklariert nur ws – Orchestrator-Dependencies (Express/Socket.io) fehlen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Das Paket heißt backend-core und ist laut Architektur der Orchestrator (State, Routing, Synchronisation, Multi-User-Locking, Master-Audio-Engine). Als einzige Runtime-Dependency ist jedoch `ws` deklariert; Express und Socket.io – die laut Architektur für HTTP-Orchestrierung und die identische Echtzeit-State-Spiegelung der bis zu 4 Nutzer vorgesehen sind – fehlen vollständig. Entweder importiert de Vorschlag: Entweder Express/Socket.io (mit festen Versionen) als explizite Dependencies dieses Pakets aufnehmen oder – falls bewusst nur ein roher ws-Transport verwendet wird – die Socket.io-Schicht entfernen und im Architektur-Dokument einen einzigen verbindlichen Transport festlegen, damit es keine Parallel- — Fundstelle: `services/backend-core/node/package.json:12 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-039",
+      "title": "Bash-Parameter-Expansion in npm script bricht auf Windows",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Das Skript start:python nutzt '${AI_BIND_HOST:-127.0.0.1}' was eine bash-spezifische Parameter-Expansion ist. npm führt Skripte unter Windows mit cmd.exe oder PowerShell aus, die diese Syntax nicht unterstützen. Dadurch schlägt der Start des Python-Dienstes auf Windows fehl. Vorschlag: Verwende eine plattformunabhängige Lösung wie das 'cross-env' Paket und einen Standard-Host, z.B. \"cross-env AI_BIND_HOST=$AI_BIND_HOST uvicorn ...\" oder lese die Variable im Python-Code selbst aus, sodass das npm-Skript nur 'uvicorn main:app --port 8000' ausführt. — Fundstelle: `services/backend-core/package.json:8 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-040",
+      "title": "AI_DEVICE aus ENV wird ungeprüft übernommen (kein Verfügbarkeits-Check)",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Wird AI_DEVICE auf 'cuda' gesetzt, übernimmt resolve_device den Wert ohne zu prüfen, ob CUDA überhaupt verfügbar ist (torch.cuda.is_available()). Auf einem CPU-only-Host oder in einem Container ohne GPU-Device-Passthrough liefert die Funktion damit dauerhaft 'cuda' (einmal pro Prozess gecacht), und nachgelagerte Inferenz-Aufrufe wie tensor.to('cuda') / model.to('cuda') schlagen zur Laufzeit hart f Vorschlag: Im ENV-Zweig ebenfalls validieren, z. B.: wenn env_dev == 'cuda' und torch vorhanden und nicht torch.cuda.is_available() → Warnung loggen und auf 'cpu' (oder Fehler werfen, je nach gewünschtem Fail-Fast-Verhalten) zurückfallen. Alternativ einen expliziten Schalter AI_DEVICE_STRICT einführen, der ung — Fundstelle: `services/backend-core/python/device_utils.py:27 (deepseek-flash)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-041",
+      "title": "AI_DEVICE=cuda/mps wird ohne Verfügbarkeitsprüfung zurückgegeben",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Wenn AI_DEVICE auf 'cuda' oder 'mps' gesetzt ist, gibt die Funktion diesen Wert sofort zurück, ohne zu prüfen, ob torch installiert oder das Gerät tatsächlich verfügbar ist. Bei nicht vorhandener CUDA/MPS führt das später zu Laufzeitfehlern in der Inferenz. Vorschlag: Vor der Rückgabe des env-Werts die Verfügbarkeit prüfen (torch.cuda.is_available() bzw. mps.is_available()) oder eine klare Fehlerbehandlung implementieren. — Fundstelle: `services/backend-core/python/device_utils.py:27 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-042",
+      "title": "Stale lockStatusRef durch useEffect-Update",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Der lockStatusRef wird erst in einem useEffect aktualisiert. Zwischen dem Rendern (Commit) und dem Ausführen des Effects kann updateState aufgerufen werden und liest einen veralteten Lock-Status, wodurch Lock-Änderungen umgangen werden können. Vorschlag: Aktualisiere den Ref direkt im Render (lockStatusRef.current = lockStatus;) oder führe den Lock-Check zur Ausführungszeit direkt mit pluginLocks[pluginId] durch, ohne Ref. — Fundstelle: `src/hooks/usePluginState.ts:31 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-043",
+      "title": "Null-Owner-Vergleich erlaubt unbefugten Zugriff",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "isOwner wird true, wenn current.active true und current.lockedBy === webRTCManager.userId. Da der Fallback lockedBy: null setzt und webRTCManager.userId vor Verbindungsaufbau null sein kann, würde ein Lock mit null-owner als eigener Lock interpretiert. Vorschlag: Explizit prüfen, dass lockedBy nicht null ist und userId nicht null ist: const isOwner = current.active && current.lockedBy != null && current.lockedBy === webRTCManager.userId; — Fundstelle: `src/hooks/usePluginState.ts:39 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
+    },
+    {
+      "id": "DA-2026-09-29-044",
+      "title": "Lock-Validierung nur im Client",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Deep-Audit",
+      "source": "audit:deep",
+      "note": "Die Sperrprüfung erfolgt ausschließlich im Client-Hook vor setModuleState. Ein modifizierter Client kann setModuleState direkt aufrufen und die Sperre umgehen. Die Architektur verlangt, dass der Backend-Orchestrator Sperren durchsetzt. Vorschlag: Stelle sicher, dass der Server (oder der ModuleStateContext) die Lock-Inhaberschaft validiert, bevor der Zustand übernommen wird. Der Client-Check ist nur UX. — Fundstelle: `src/hooks/usePluginState.ts:41 (deepseek-pro)`",
+      "detectedAt": "2026-09-29T17:39:04.024Z"
     }
   ],
   "visionSandbox": [
