@@ -15,7 +15,6 @@ from __future__ import annotations
 import argparse, base64, hashlib, json, os, re, subprocess, sys, tarfile, io, tempfile, time
 from concurrent.futures import ThreadPoolExecutor
 from urllib.request import urlopen, Request
-
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 LOCK = os.path.join(ROOT, "package-lock.json")
 NM = os.path.join(ROOT, "node_modules")
@@ -32,6 +31,29 @@ SCOPE_PATTERNS = {
 }
 
 MAX_TARBALL = 80 * 1024 * 1024  # Sicherung: ein einzelnes Riesenpaket darf den Lauf nicht sprengen
+
+# --- Bekannte, belegte Varianzen (keine Korruption) --------------------------
+# 1) bin/esbuild: Der npm-Tarball liefert an dieser Stelle einen JS-Wrapper
+#    (beginnt mit b'#!/usr/bin/env node'). esbuilds eigenes postinstall-Skript
+#    (scripts/postinstall.js) ERSETZT diese Datei danach durch das
+#    plattformspezifische ELF-Binary (Magic b'\x7fELF', hier ~10 MB). Das ist
+#    das dokumentierte Installationsverhalten von esbuild und kein Defekt.
+#    Die Erlaubnis gilt deshalb NUR fuer genau diesen Pfad und NUR wenn lokal
+#    tatsaechlich ein ELF-Binary liegt, waehrend der Tarball den JS-Wrapper
+#    enthaelt. Weicht die lokale Datei inhaltlich von BEIDEN zulaessigen
+#    Varianten ab (z. B. ein gekipptes Byte im ELF-Binary), bleibt es KORRUPT.
+#    Bewusst KEIN pauschales "ignoriere bin/*".
+ESBUILD_BIN = "bin/esbuild"
+ELF_MAGIC = b"\x7fELF"
+NODE_SHEBANG = b"#!"
+
+# 2) Optionale Plattform-Pakete: npm (und damit package-lock.json) listet die
+#    Fremdplattform-Binaries von rollup/esbuild/oxc etc. sowie fsevents als
+#    "optional": true (package-lock v3, Feld `optional`, zusaetzlich `os`/`cpu`).
+#    Auf Linux werden sie planmaessig NICHT installiert. Fehlt ein solches
+#    Paket lokal, ist das kein Defekt -> eigener Status SKIP-OPTIONAL.
+#    Kriterium (belegt gegen package-lock.json): meta["optional"] is True.
+OPTIONAL_NAME_RE = re.compile(r"(^|/)fsevents$|^node_modules/@rollup/rollup-")
 
 
 def sha512_b64(data: bytes) -> str:
@@ -58,6 +80,17 @@ def select(packages: dict, patterns: list[str]) -> list[tuple[str, dict]]:
     return out
 
 
+def is_optional_platform_pkg(path: str, meta: dict) -> bool:
+    """Optionales Plattform-Paket? Kriterium direkt aus package-lock.json
+    (lockfileVersion 3): meta["optional"] is True. Solche Pakete tragen
+    zusaetzlich os/cpu-Restriktionen; npm installiert unter Linux nur die
+    passende Variante, die Fremdplattform-Binaries fehlen planmaessig.
+    Der Namensmatch OPTIONAL_NAME_RE ist nur zusaetzlicher Beleg im Report."""
+    if meta.get("optional") is True:
+        return True
+    return bool(OPTIONAL_NAME_RE.search(path))
+
+
 def fetch_tarball(meta: dict) -> bytes | None:
     url = meta.get("resolved")
     if not url:
@@ -80,6 +113,13 @@ def check_one(item: tuple[str, dict]) -> dict:
     res = {"path": path, "name": name, "version": version, "status": "?", "details": []}
 
     if not os.path.isdir(local_dir):
+        if is_optional_platform_pkg(path, meta):
+            res["status"] = "SKIP-OPTIONAL"
+            res["details"].append(
+                "optional in package-lock (optional=true); "
+                f"os={meta.get('os')} cpu={meta.get('cpu')} -> auf dieser Plattform planmaessig nicht installiert"
+            )
+            return res
         res["status"] = "FEHLT-LOKAL"
         return res
 
@@ -107,7 +147,7 @@ def check_one(item: tuple[str, dict]) -> dict:
         res["details"].append(str(exc))
         return res
 
-    mismatched, missing, checked = [], [], 0
+    mismatched, missing, allowed_variant, checked = [], [], [], 0
     for member in tf.getmembers():
         if not member.isfile():
             continue
@@ -123,17 +163,24 @@ def check_one(item: tuple[str, dict]) -> dict:
         except Exception as exc:
             mismatched.append(f"{rel} (LESEFEHLER: {exc})")
             continue
-        if hashlib.sha512(local).digest() != hashlib.sha512(member.tobytes() if False else b"").digest() or True:
-            # echte Bytes des Tarball-Members lesen
-            extracted = tf.extractfile(member)
-            want = extracted.read() if extracted else b""
-            if hashlib.sha512(local).digest() != hashlib.sha512(want).digest():
-                mismatched.append(rel)
+        extracted = tf.extractfile(member)
+        want = extracted.read() if extracted else b""
+        if hashlib.sha512(local).digest() == hashlib.sha512(want).digest():
+            continue
+        # Byte-Unterschied. Nur die eine belegte postinstall-Variante zulassen:
+        # esbuild ersetzt bin/esbuild durch das plattformspezifische ELF-Binary.
+        if (rel == ESBUILD_BIN and name == "esbuild"
+                and local[:4] == ELF_MAGIC and want[:2] == NODE_SHEBANG):
+            allowed_variant.append(rel)
+            continue
+        mismatched.append(rel)
     tf.close()
 
     res["dateien_geprueft"] = checked
     res["abweichend"] = mismatched
     res["fehlend"] = missing
+    if allowed_variant:
+        res["erlaubte_variante"] = allowed_variant
     if mismatched or missing:
         res["status"] = "KORRUPT"
     else:
@@ -160,11 +207,14 @@ def main() -> int:
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
         for n, res in enumerate(pool.map(check_one, work), 1):
             results.append(res)
-            flag = {"OK": "ok", "KORRUPT": "KORRUPT", "FEHLT-LOKAL": "FEHLT", "NICHT-PRUEFBAR": "netz"}.get(res["status"], res["status"])
+            flag = {"OK": "ok", "KORRUPT": "KORRUPT", "FEHLT-LOKAL": "FEHLT",
+                    "NICHT-PRUEFBAR": "netz", "SKIP-OPTIONAL": "SKIP-OPT"}.get(res["status"], res["status"])
             print(f"[{n}/{len(work)}] {flag:8s} {res['name']}@{res['version']}" +
                   (f"  abweichend={len(res.get('abweichend') or [])} fehlend={len(res.get('fehlend') or [])}"
                    if res["status"] == "KORRUPT" else ""))
 
+    skip_optional = [r for r in results if r["status"] == "SKIP-OPTIONAL"]
+    korrupt = [r for r in results if r["status"] == "KORRUPT"]
     summary = {
         "scope": args.scope,
         "zeitpunkt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -172,16 +222,21 @@ def main() -> int:
         "pakete_geprueft": len(results),
         "dauer_s": round(time.time() - t0, 1),
         "ok": sum(1 for r in results if r["status"] == "OK"),
-        "korrupt": [r for r in results if r["status"] == "KORRUPT"],
+        "skip_optional": len(skip_optional),
+        "skip_optional_liste": [r["path"] for r in skip_optional],
+        "korrupt": korrupt,
         "fehlt_lokal": [r["path"] for r in results if r["status"] == "FEHLT-LOKAL"],
-        "nicht_pruefbar": [r["path"] for r in results if r["status"] != "OK" and r["status"] not in ("KORRUPT", "FEHLT-LOKAL")],
+        "nicht_pruefbar": [r["path"] for r in results
+                           if r["status"] not in ("OK", "KORRUPT", "FEHLT-LOKAL", "SKIP-OPTIONAL")],
         "ergebnisse": results,
     }
     with open(args.out, "w", encoding="utf-8") as fh:
         json.dump(summary, fh, ensure_ascii=False, indent=2)
 
     print("\n=== Zusammenfassung ===")
-    print(f"OK: {summary['ok']}  KORRUPT: {len(summary['korrupt'])}  fehlt: {len(summary['fehlt_lokal'])}  nicht pruefbar: {len(summary['nicht_pruefbar'])}  Dauer: {summary['dauer_s']}s")
+    print(f"OK: {summary['ok']}  SKIP-OPTIONAL: {summary['skip_optional']}  "
+          f"KORRUPT: {len(summary['korrupt'])}  fehlt: {len(summary['fehlt_lokal'])}  "
+          f"nicht pruefbar: {len(summary['nicht_pruefbar'])}  Dauer: {summary['dauer_s']}s")
     for r in summary["korrupt"]:
         print(f"  KORRUPT {r['name']}@{r['version']}: {len(r['abweichend'])} abweichende, {len(r['fehlend'])} fehlende Dateien")
         for f in (r["abweichend"] or [])[:5]:
@@ -189,6 +244,7 @@ def main() -> int:
         for f in (r["fehlend"] or [])[:5]:
             print(f"      - (fehlt) {f}")
     print(f"Report: {args.out}")
+    # Exit 1 nur bei echten Korruptionen; optionale Skips sind kein Fehler.
     return 0 if not summary["korrupt"] else 1
 
 
