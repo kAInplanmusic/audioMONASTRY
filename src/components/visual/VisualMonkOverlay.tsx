@@ -14,6 +14,14 @@ import { composeLayers } from '../../visuals/layerCompositor';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
 import { VISUAL_BANK_SCENES } from '../../visuals/visualBank';
+import { energyFromBpm } from '../../visuals/poolManifest';
+import {
+  PROMPT_KATALOG,
+  TEXTZEILEN_TRIGGER,
+  promptByTitel,
+  promptForSet,
+  type DirectorPrompt,
+} from '../../visuals/prompts';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -139,6 +147,8 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const [aiVideo, setAiVideo] = useState<string | null>(null);
   const [aiVideoBusy, setAiVideoBusy] = useState(false);
   const [aiVideoError, setAiVideoError] = useState('');
+  /** Der zuletzt benutzte Katalog-Satz — `motiv` und `motion` gehören zusammen. */
+  const letzterSatzRef = useRef<DirectorPrompt | null>(null);
 
   const generateAiVideo = useCallback(async () => {
     if (!aiImage || aiVideoBusy) return;
@@ -148,7 +158,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       const resp = await fetch('/api/ai/vision/video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: aiImage, prompt: aiPrompt.trim() || 'gentle camera push in, subtle motion', steps: 6 }),
+        body: JSON.stringify({
+          imageBase64: aiImage,
+          // Ohne getippten Prompt kommt der Bewegungs-Kern aus dem Katalog —
+          // und zwar der Satz, dessen `motiv` das Bild erzeugt hat.
+          prompt: aiPrompt.trim() || promptByTitel(letzterSatzRef.current?.titel ?? '').motion,
+          steps: 6,
+        }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || data?.status !== 'success' || !data?.video) {
@@ -162,6 +178,22 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     }
   }, [aiImage, aiPrompt, aiVideoBusy]);
   const featuresRef = useRef<AudioFeatures>(IDLE_AUDIO_FEATURES);
+
+  /**
+   * Prompt-Satz zum laufenden Set — der Nachschub-Pfad aus `docs/VISUALVORLAGEN.md`.
+   * Ein getippter Katalog-Titel gewinnt; sonst wählt der Katalog nach der
+   * Bewegungsenergie des Sets (`energyFromBpm`). Ohne diesen Katalog stünde in
+   * den Generierungs-Aufrufen nur ein Platzhalter wie „live set visual".
+   */
+  const satzFuerSet = useCallback((features: AudioFeatures): DirectorPrompt => {
+    const getippt = aiPrompt.trim().toLowerCase();
+    const ausKatalog = PROMPT_KATALOG.find((p) => p.titel.toLowerCase() === getippt);
+    if (ausKatalog) return ausKatalog;
+    return promptForSet({
+      energie: energyFromBpm(features.bpm),
+      seed: Math.round((features.energy || 0) * 100),
+    });
+  }, [aiPrompt]);
 
   const rateAi = useCallback(async (rating: number) => {
     if (!aiGenerationId) return;
@@ -178,9 +210,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const generateAiImage = useCallback(async () => {
     if (aiBusy) return;
     const features = featuresRef.current;
-    // Im AUTO-Modus darf der Prompt leer sein: Energie/Tempo/Stil kommen aus dem Set.
-    const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
+    // Nachschub (docs/VISUALVORLAGEN.md): im AUTO-Modus darf der Prompt leer
+    // sein — dann liefert der Katalog das Startbild-Motiv, und der Satz wird
+    // gemerkt, damit die Bewegung denselben Katalog-Eintrag trifft.
+    const satz = satzFuerSet(features);
+    const prompt = aiPrompt.trim() || (aiAuto ? satz.motiv : '');
     if (!prompt) return;
+    letzterSatzRef.current = satz;
     // AUTO: bevorzugt den gelernten (RAG-)Stil, sonst die Energie-/Tempo-Heuristik.
     const style = aiAuto
       ? (aiSuggestion ? aiSuggestion.style : suggestVisionStyle({ energy: features.energy, bpm: features.bpm }))
@@ -212,7 +248,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     } finally {
       setAiBusy(false);
     }
-  }, [aiPrompt, aiStyle, aiAuto, aiBusy, aiSuggestion]);
+  }, [aiPrompt, aiStyle, aiAuto, aiBusy, aiSuggestion, satzFuerSet]);
 
   /**
    * RAG-Vorschlag holen (`GET /api/ai/vision/styles`): der Server liest die
@@ -249,23 +285,25 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const addCurrentScene = useCallback(() => {
     const src = aiVideo ?? aiImage;
     if (!src) return;
+    // Ohne getippten Prompt benennt der Katalog die Szene (Titel statt Platzhalter).
+    const titel = aiPrompt.trim() || satzFuerSet(featuresRef.current).titel;
     show.addScene({
-      prompt: aiPrompt.trim() || 'live set visual',
+      prompt: titel,
       style: aiStyle,
       kind: aiVideo ? 'clip' : 'image',
       src,
-      label: aiPrompt.trim() || aiStyle,
+      label: titel,
     });
-  }, [aiImage, aiVideo, aiPrompt, aiStyle, show]);
+  }, [aiImage, aiVideo, aiPrompt, aiStyle, show, satzFuerSet]);
 
   // VisualMONK #5: Text → Clip (FLUX-Bild → Wan2.2-Bewegung, ein Aufruf).
   const buildSceneClip = useCallback(() => {
     const features = featuresRef.current;
     const style = aiAuto ? suggestVisionStyle({ energy: features.energy, bpm: features.bpm }) : aiStyle;
-    const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
+    const prompt = aiPrompt.trim() || (aiAuto ? satzFuerSet(features).motiv : '');
     if (!prompt) return;
     void show.makeClip({ prompt, style, bpm: features.bpm || undefined, energy: features.energy });
-  }, [aiAuto, aiPrompt, aiStyle, show]);
+  }, [aiAuto, aiPrompt, aiStyle, show, satzFuerSet]);
 
   // Auto-Show: alle 45 s ein neues Set-passendes Bild (kostenbewusst, nur wenn an).
   useEffect(() => {
@@ -465,6 +503,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
             : sceneIgnored ? 'Renderer: webgpu (Show-Szenen nur im WebGL-Pfad)' : `Renderer: ${rendererKind}`}
         >
           {rendererKind.toUpperCase()}
+        </span>
+        {/* L4 · Textzeile der Szene — aus dem Katalog, wechselt mit dem Szenenwechsel. */}
+        <span
+          className="text-[9px] px-1.5 py-0.5 rounded border border-neutral-700 text-neutral-300 tracking-widest"
+          title="L4 · Textzeile der Szene (TEXTZEILEN_TRIGGER)"
+        >
+          {TEXTZEILEN_TRIGGER[show.currentIndex % TEXTZEILEN_TRIGGER.length]}
         </span>
         <button
           type="button"
