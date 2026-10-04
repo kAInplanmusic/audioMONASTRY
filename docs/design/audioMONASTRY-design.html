@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="audioMONASTRY">
+<meta name="theme-color" content="#080c14">
+<title>audioMONASTRY – Design</title>
+<style>
+:root{--bg:#080c14;--pn:#101826;--ln:#1e2a40;--tx:#d9e2f2;--dm:#6f7f9d;--red:rgba(170,22,34,.55);--grn:rgba(61,220,132,.3);box-sizing:border-box}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.4 "Segoe UI",system-ui,sans-serif}
+.w{max-width:1120px;margin:0 auto;padding:calc(8px + env(safe-area-inset-top,0px)) 10px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
+.demo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--dm);font-size:12px;padding:6px 2px}
+.demo button{background:var(--pn);color:var(--tx);border:1px solid var(--ln);border-radius:8px;padding:4px 10px;cursor:pointer}
+.demo button.a{border-color:var(--c);box-shadow:0 0 0 1px var(--c)}
+.box{background:var(--pn);border:1px solid var(--ln);border-radius:12px}
+.head{display:flex;align-items:center;gap:14px;padding:10px 12px;flex-wrap:wrap}
+.logo{font-weight:700;font-size:17px;letter-spacing:.3px;min-width:120px}
+.logo small{display:block;font-weight:400;color:var(--dm);font-size:10px}
+.ics{display:flex;flex-wrap:wrap;gap:8px;flex:1;justify-content:center}
+.ic{width:52px;text-align:center;cursor:pointer;color:var(--dm);font-size:9px;background:none;border:0;padding:0}
+.ic i{display:grid;place-items:center;width:52px;height:44px;border-radius:11px;background:#0b111c;border:1px solid var(--ln);margin-bottom:2px}
+.ic svg{width:24px;height:24px;stroke:var(--c);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ic.free i{box-shadow:0 0 13px 2px var(--grn)}
+.ic.lock i{box-shadow:0 0 13px 2px var(--red)}
+.ic.mine i{box-shadow:0 0 0 2px var(--u),0 0 12px var(--u)}
+.us{display:flex;gap:6px;align-items:center;color:var(--dm)}
+.dot{width:14px;height:14px;border-radius:50%;background:var(--u);display:inline-block}
+.mp{display:grid;grid-template-columns:1fr auto auto;gap:16px;align-items:center;padding:10px 14px}
+.wf{height:46px;width:100%}
+.nfo{display:flex;gap:16px;text-align:center}.nfo b{display:block;font-size:17px}.nfo span{color:var(--dm);font-size:10px}
+.mt{display:flex;gap:3px;height:46px;align-items:flex-end}.mt div{width:7px;background:linear-gradient(0deg,#3ddc84 0,#3ddc84 60%,#ffb703 80%,#ff4d4d);border-radius:2px;height:5%;transition:height .12s}
+.lab{color:var(--dm);font-size:11px;padding:4px 4px 0}
+.st{display:flex;flex-direction:column;border-left:4px solid var(--c);border-radius:10px}
+.sh{display:flex;align-items:center;gap:10px;padding:8px 12px;min-height:46px}
+.sh svg.ni{width:20px;height:20px;stroke:var(--c);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nm{flex:1;font-weight:600}.nm small{font-weight:400;color:var(--dm);margin-left:8px}
+.sb{display:flex;gap:18px;align-items:center;padding:6px 14px 14px 44px;color:var(--dm)}
+.kn{width:34px;height:34px;border-radius:50%;border:2px solid var(--ln);position:relative}.kn:after{content:"";position:absolute;left:14px;top:3px;width:2px;height:11px;background:var(--c);border-radius:2px;transform:rotate(var(--r))}
+.pw{min-width:68px;height:34px;padding:0 12px;border-radius:999px;border:1.5px solid var(--dm);background:none;color:var(--dm);display:flex;gap:6px;align-items:center;justify-content:center;font:600 11px "Segoe UI",system-ui,sans-serif;letter-spacing:.4px;cursor:pointer}
+.pw svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.pw.on{background:var(--c);border-color:var(--c);color:#06101c}
+.pw.stby{border-color:var(--c);color:var(--c)}
+.pw.run{animation:gl 1.6s ease-in-out infinite}
+@keyframes gl{0%,100%{box-shadow:0 0 5px var(--c)}50%{box-shadow:0 0 16px 3px var(--c)}}
+.pw.tk{border-color:var(--u);color:var(--u);opacity:.7;cursor:not-allowed}
+.chip{background:#0b111c;border:1px solid var(--ln);color:var(--tx);border-radius:8px;padding:5px 10px;cursor:pointer;margin-left:6px}
+.chip:disabled{opacity:.5;cursor:default}
+.bn{margin:0 12px 8px;padding:8px 12px;border:1px solid var(--u);border-radius:8px;display:flex;gap:8px;align-items:center}
+.ch{display:grid;grid-template-columns:repeat(9,1fr);gap:6px;padding:4px 14px 14px}
+.cc{background:#0b111c;border:1px solid var(--ln);border-radius:8px;padding:6px 4px;text-align:center;font-size:10px;color:var(--dm)}
+.fd{height:78px;margin:6px auto;display:flex;gap:4px;justify-content:center}
+.fd .tr{width:4px;background:var(--ln);border-radius:2px;position:relative}.fd .tr:after{content:"";position:absolute;left:-6px;top:var(--p);width:16px;height:8px;background:var(--c);border-radius:2px}
+.fd .mt{height:78px}.fd .mt div{width:4px}
+.ft{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+.ft .box{padding:10px 14px}.ft b{font-size:12px}
+.ft .row{display:flex;gap:16px;margin-top:6px;color:var(--dm)}.ft .row span b{color:var(--tx);display:block;font-size:15px}
+.ai{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.ai input{flex:1;min-width:160px;background:#0b111c;border:1px solid var(--ln);color:var(--tx);border-radius:8px;padding:6px 10px}
+@media(max-width:700px){.mp{grid-template-columns:1fr}.ft{grid-template-columns:1fr}.ch{grid-template-columns:repeat(3,1fr)}}
+@media(prefers-reduced-motion:reduce){.pw.run{animation:none}.mt div{transition:none}}
+button:focus-visible{outline:2px solid #fff;outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="w" id="app"></div>
+<script>
+const P={
+mixer:"M6 4v16M12 4v16M18 4v16M4 9h4M10 15h4M16 8h4",
+biblio:"M5 4v16M10 4v16M15 5l4 14",
+drop:"M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z",
+song:"M9 18V5l10-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM19 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z",
+drumsampler:"M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z",
+syntisampler:"M2 12c2-8 4-8 6 0s4 8 6 0 4-8 6 0",
+instru:"M3 5h18v14H3zM9 5v14M15 5v14",
+voice:"M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM6 11a6 6 0 0 0 12 0M12 17v4",
+sound:"M4 9v6h4l5 4V5L8 9zM16 9a4 4 0 0 1 0 6",
+stem:"M12 3l9 5-9 5-9-5zM3 13l9 5 9-5",
+effect:"M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z",
+eq:"M3 17c4 0 4-10 8-10s4 10 8 10h2",
+dsp:"M7 7h10v10H7zM10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4",
+spatial:"M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z",
+master:"M3 12h4l2-6 4 12 2-6h6",
+record:"M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12zM12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"};
+const MODS=[["mixer","mixer","M"],["biblio","biblio","Q"],["drop","drop","Q"],["song","song","Q"],["drumsampler","drumsampler","Q"],["syntisampler","synti-sampler","Q"],["instru","instru","Q"],["voice","voice","Q"],["sound","sound","Q"],["stem","stem","Q"],["effect","effect","N"],["eq","eq","N"],["dsp","dsp","N"],["spatial","spatial","N"],["master","master","N"],["record","record","N"]]
+ .map((m,i)=>({id:m[0],n:m[0]+"MONK",s:m[1],g:m[2],c:`hsl(${(i*22.5+11)%360} 72% 64%)`,i}));
+const U=[null,{n:"Nutzer 1",c:"#4cc9f0"},{n:"Nutzer 2",c:"#ffb703"},{n:"Nutzer 3",c:"#e879f9"},{n:"Nutzer 4",c:"#f1f5f9"}];
+let me=1,playing=true,mix=1,own={drop:2,effect:1,eq:3,song:1},st={drop:"on",effect:"on",eq:"stby",song:"stby"};
+const svg=(p,c)=>`<svg viewBox="0 0 24 24" class="${c||""}"><path d="${p}"/></svg>`;
+const PW="M12 3v8M7 6.5a7 7 0 1 0 10 0",LK="M7 11V8a5 5 0 0 1 10 0v3M5 11h14v9H5z";
+const ow=id=>id=="mixer"?mix:own[id];
+function icon(m){const o=ow(m.id);const cl=o?(o==me?"mine":"lock"):"free";
+ const t=!o?"OFF · frei":(o==me?"du":U[o].n)+" · "+(m.id=="mixer"||st[m.id]=="on"?"ON":"STBY");
+ return `<button class="ic ${cl}" style="--c:${m.c};--u:${o?U[o].c:"#fff"}" title="${m.n}: ${t}" data-a="go:${m.id}"><i>${svg(P[m.id])}</i>${m.s}</button>`}
+function wave(){let h="";for(let k=0;k<110;k++){const v=8+Math.abs(Math.sin(k*.37)*Math.cos(k*.11))*30+((k*7919)%11);h+=`<rect x="${k*6}" y="${23-v/2}" width="4" height="${v}" rx="2" fill="${k<44?"#4cc9f0":"#2c4a6b"}"/>`}
+ return `<svg class="wf" viewBox="0 0 660 46" preserveAspectRatio="none">${h}</svg>`}
+const meter=()=>`<div class="mt">${"<div></div>".repeat(10)}</div>`;
+function mixer(){const m=MODS[0],o=mix,mine=o==me;
+ let act="";
+ if(mine){act=`<span style="color:var(--dm)">Übergeben an</span>`+[1,2,3,4].filter(u=>u!=me).map(u=>`<button class="chip" style="border-color:${U[u].c}" data-a="g:${u}">${U[u].n}</button>`).join("")}
+ else act="";
+ const bn="";
+ const names=["Drums","Bass","Synth","Vox","FX","Perc","Keys","Aux","Master"];
+ return `<div class="box st" id="mixer" style="--c:${m.c}"><div class="sh">${svg(P.mixer,"ni")}<div class="nm">mixerMONK<small>immer offen · ${mine?"du":U[o].n} · ON</small></div>${act}<span class="pw tk" style="--u:${U[o].c};margin-left:8px" title="Nicht schließbar, nur übergeben">${svg(LK)}ON</span></div>${bn}
+ <div class="ch">${names.map((n,k)=>`<div class="cc"><div class="fd"><div class="tr" style="--p:${10+k*5}px"></div>${meter()}</div>${n}</div>`).join("")}</div></div>`}
+function strip(m){const o=own[m.id],s=st[m.id],mine=o==me,on=s=="on";
+ const lab=!o?"OFF · frei für alle":(mine?"du":U[o].n)+" · "+(on?"ON":"STBY");
+ const btn=!o?`<button class="pw" data-a="t:${m.id}" title="Tippen: mounten (STBY)">OFF</button>`
+  :mine?`<button class="pw ${on?"on"+(playing?" run":""):"stby"}" data-a="t:${m.id}" title="${on?"Tippen: abschalten (OFF)":"Tippen: aktivieren (ON)"}">${on?"ON":"STBY"}</button>`
+  :`<span class="pw tk" style="--u:${U[o].c}" title="Belegt von ${U[o].n}">${svg(LK)}${on?"ON":"STBY"}</span>`;
+ const body=mine&&on?`<div class="sb">${[20,-40,60,0].map(r=>`<span class="kn" style="--r:${r}deg"></span>`).join("")}<span>Bedienfläche von ${m.n}</span></div>`:"";
+ const who=o&&!mine?`<span class="dot" style="--u:${U[o].c}"></span>`:"";
+ return `<div class="box st" id="${m.id}" style="--c:${m.c}"><div class="sh">${svg(P[m.id],"ni")}<div class="nm">${m.n}<small>${who} ${lab}</small></div>${btn}</div>${body}</div>`}
+function render(){const g=k=>MODS.filter(m=>m.g==k).map(strip).join("");
+ document.getElementById("app").innerHTML=`
+ <div class="demo">Demo – Ansicht als:${[1,2,3,4].map(u=>`<button class="${u==me?"a":""}" style="--c:${U[u].c}" data-a="me:${u}">${U[u].n}</button>`).join("")}<button data-a="pl">Ton läuft: ${playing?"an":"aus"}</button></div>
+ <div class="box head"><div class="logo">audioMONASTRY<small>Studio · fest für alle</small></div><div class="ics">${MODS.map(icon).join("")}</div><div class="us">${[1,2,3,4].map(u=>`<span class="dot" style="--u:${U[u].c}"></span>`).join("")} 4/4</div></div>
+ <div class="box mp"><div>${wave()}</div><div class="nfo"><div><b>02:34</b><span>Zeit</span></div><div><b>128</b><span>BPM</span></div><div><b>4/4</b><span>Takt</span></div><div><b>C Maj</b><span>Tonart</span></div></div>${meter()}</div>
+ ${mixer()}
+ <div class="lab">Quellen · speisen den Mixer</div>${g("Q")}
+ <div class="lab">Nachbearbeitung · nimmt den Mixer-Ausgang</div>${g("N")}
+ <div class="ft"><div class="box"><b>perfMONK</b><div class="row"><span><b>12%</b>CPU</span><span><b>28%</b>RAM</span><span><b>4,2 ms</b>Latenz</span></div></div>
+ <div class="box"><b>aiMONK</b><div class="ai"><input placeholder="Frag aiMONK … (analysieren, neuen Sound erzeugen, Mix verbessern)" aria-label="aiMONK Eingabe"></div></div></div>`}
+document.addEventListener("click",e=>{const b=e.target.closest("[data-a]");if(!b)return;const[a,v]=b.dataset.a.split(":");
+ if(a=="me"){me=+v}else if(a=="pl"){playing=!playing}
+ else if(a=="t"){const o=own[v];if(!o){own[v]=me;st[v]="stby"}else if(o==me){if(st[v]=="stby")st[v]="on";else{delete own[v];delete st[v]}}}
+ else if(a=="g"){mix=+v}
+ else if(a=="go"){document.getElementById(v).scrollIntoView({behavior:"smooth",block:"center"});return}
+ render()});
+setInterval(()=>document.querySelectorAll(".mt div").forEach(d=>d.style.height=playing?(8+Math.random()*80)+"%":"4%"),140);
+render();
+</script>
+</body>
+</html>

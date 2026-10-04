@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-10-04",
   "branch": "main",
-  "commit": "9f970ff",
+  "commit": "cc462ad",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -4494,6 +4494,166 @@
       "source": "~/.hermes/logs/gateway.log (2026-10-01)",
       "note": "GEMESSEN aus den Hermes-Logs (Sicherung /home/patrick/audioMONASTRY-resume/hermes-logs/): 'Previous gateway life (pid=1085, started_at=2026-09-30T23:08:49Z) exited UNCLEANLY (no exit path ran - SIGKILL / OOM / VM death)', letzter Heartbeat 2026-10-01T14:44:43Z, gemeldeter Stand last_mem={'rss_kib': 234936, 'mem_total_kib': 12129024, 'mem_available_kib': 8843224, 'swap_used_kib': 8}, suspected_oom=False. Bemerkenswert: 8,8 GB verfuegbar und TROTZDEM kein sauberer Exit-Pfad - das Muster passt zu einem Prozess, der an verfaelschten Speicherinhalten stirbt, nicht zu echtem Speichermangel. Ausserdem bestaetigt 'mem_total_kib' den RAM-Stand nach dem Tausch unabhaengig (12 GB, nicht 16). Nebenbefund aus denselben Logs: die eingebettete SQLite 3.45.1 hat den WAL-Reset-Bug und laeuft deshalb mit journal_mode=DELETE - 'hermes update' wuerde die Runtime reparieren (kein RAM-Thema). Belege: hermes-logs/errors_ramthema.txt, hermes-logs/gateway_ramthema.txt, hermes-logs/gateway-shutdown-diag_ramthema.txt.",
       "detectedAt": "2026-10-01T17:09:25+02:00"
+    },
+    {
+      "id": "UI2-P0-001",
+      "title": "Mixer: genau ein Halter, nur Übergabe",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Der mixerMONK ist bei genau einem Nutzer immer offen und nicht schließbar. Nur der Halter übergibt ihn an eine andere Person. Es gibt keine Anfrage. Verlässt der Halter die Sitzung, geht er automatisch an die Person, die am längsten in der Sitzung ist. Serverseitig erzwingen, nicht nur in der Oberfläche.\n\nAkzeptanz: Test: zweiter Halter unmöglich; Übergabe nur durch Halter; Auto-Übergabe beim Verlassen; Test analog tests/sessionCapacity.test.ts",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P0-002",
+      "title": "Plugin-Modi OFF / STBY / ON mit Zuordnung",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Die 15 Plugins ohne Mixer haben die Modi OFF (frei, jeder darf es holen), STBY (einem Nutzer gemountet, nicht aktiv) und ON (aktiv). Button schaltet OFF, STBY, ON, OFF. Fremde Plugins sind gesperrt, es gibt kein Anfragen und kein Übergeben. Keine Mindest- oder Höchstzahl pro Nutzer. Anbindung an die bestehenden Sperren (B2B-Locking) in core/session.\n\nAkzeptanz: Test: alle 16 durch einen Nutzer belegbar; fremdes Plugin nicht schaltbar; Zustand wird an alle gespiegelt",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P1-001",
+      "title": "Layout: Kopf, Masterplayer, Mixer, Quellen, Nachbearbeitung, Fuß",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P1-002",
+      "title": "Masterplayer auf reine Ansicht reduzieren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Play, CUE, LOOP und SYNC entfernen. Anzeigen: Wellenform des Ausgangs, Zeit, BPM, Takt, Tonart, L/R-Pegel. Passt zur README (Masterplayer nur Ansicht).\n\nAkzeptanz: Keine interaktiven Elemente im Masterplayer; Tastaturtest",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P1-003",
+      "title": "Kopf: 16 Icons mit eigenem Symbol und eigener Farbe",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Farbe entspricht der Modulfarbe im Rack. Status nur als Schein: frei grünlich, gesperrt dunkelrot, eigenes mit Ring in Nutzerfarbe. Das Icon-Raster im Entwurf enthielt mcp und control, aber nicht stem, master und record. Auf die 16 Module der README bringen.\n\nAkzeptanz: 16 Icons, alle verschieden in Symbol und Farbe; Test gegen public/plugin-manifest.json",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P1-004",
+      "title": "Verlabelung vereinheitlichen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Verbindlich sind die 16 Namen der README. Tippfehler beheben: masteringrevMONK (richtig masterplayerMONK), MiserMONK, audioMONKSTRY im Logo. Platzhalter TEXTEINGABE FELD MONK 1 bis 3 entfernen. database, send, controller, signal und info fallen weg. Die UI-Sprache festlegen (Deutsch oder Englisch), Fachbegriffe wie Cue und Bounce dürfen bleiben.\n\nAkzeptanz: Grep-Test: kein Name außerhalb der Liste; keine Platzhaltertexte",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P1-005",
+      "title": "Versionsangabe widerspricht sich",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Repo-Beschreibung nennt V. 1|001|420 AnunnakiDNA, README nennt 1.210.001 HyperAudioWorkstation, der Entwurf zeigt Version 1.0.0 und © 2024. Eine einzige Quelle festlegen und überall daraus ableiten.\n\nAkzeptanz: Eine Quelle (package.json), UI und README lesen daraus",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P1-006",
+      "title": "Mixer als echtes Bauteil, Kanalzahl klären",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Der Mixer im Entwurf ist in Bild 1, 3 und 4 identisch und wirkt wie ein eingefügtes Bild. Als echte Komponente bauen. README nennt 8 Kanäle, Entwürfe zeigen 4 oder 6. Vorschlag 8, schmal. Vom Betreiber noch nicht bestätigt.\n\nAkzeptanz: Kanalzahl entschieden; alle Regler bedienbar",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P2-001",
+      "title": "AUTO_AI und PRO entfallen: Doku angleichen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "README Abschnitt 7 und der Plugin-Vertrag nennen OFF, AUTO_AI und PRO. Die neue Oberfläche kennt OFF, STBY, ON. KI-Vorschläge laufen über aiMONK. README, AGENTS.md und Manifest anpassen. Annahme des Betreibers noch bestätigen.\n\nAkzeptanz: README und Code nennen dieselben Modi",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P2-002",
+      "title": "Signalweg sichtbar beschriften",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Gruppen Quellen (speisen den Mixer) und Nachbearbeitung (nimmt den Mixer-Ausgang). Reihenfolge effect, eq, dsp, spatial, master, record ist ein Vorschlag, mit dem tatsächlichen Signalweg (V2StudioGraph) abgleichen.\n\nAkzeptanz: Reihenfolge in UI und Graph stimmt überein",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P2-003",
+      "title": "Engine-Status sichtbar machen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Die Ausgabe ist im Ruhezustand still und der Browser verlangt eine Nutzergeste, um Audio zu starten. Ein klarer Status (Audio bereit oder angehalten) verhindert, dass die App kaputt wirkt.\n\nAkzeptanz: Status sichtbar; Test mit gesperrtem AudioContext",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P2-004",
+      "title": "ModuleContainer.tsx und ARCH-P3-001",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Der unerreichbare ✕-OFF-Button in ModuleContainer.tsx wird durch den neuen Moduswechsel-Button ersetzt. Die 24 unerreichbaren Dateien aus ARCH-P3-001 bei der Umstellung mitbereinigen.\n\nAkzeptanz: npm run check:deadfiles grün",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P2-005",
+      "title": "Nummern 01 bis 16 nicht anzeigen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Im Entwurf kommt 03 doppelt vor und 06 fehlt. Nummern aus der Oberfläche entfernen (Annahme, bestätigen). Die Reihenfolge ergibt sich aus der Gruppierung.\n\nAkzeptanz: Keine Nummern in der UI",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P3-001",
+      "title": "iPhone und iPad: Startbildschirm-App",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Die HTML-Vorlage hat die Meta-Tags für den Vollbildmodus. Als nächste Stufe Manifest und Service-Worker (installierbare Web-App), später optional Capacitor für eine echte iOS-App.\n\nAkzeptanz: Installation über Teilen, Zum Home-Bildschirm getestet",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P3-002",
+      "title": "Spezifikation für Agenten bereitstellen",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "docs/UI_SPEC.md zusätzlich als Skill unter .agents/skills ablegen (Markdown nach agentskills.io), damit Hermes, Claude Code und Cursor dieselben Regeln lesen. Wie Hermes Skills einliest, wurde nicht geprüft.\n\nAkzeptanz: Skill-Datei vorhanden und von einem Agenten erfolgreich gelesen",
+      "verification": ""
+    },
+    {
+      "id": "UI2-P3-003",
+      "title": "Barrierefreiheit der neuen Elemente",
+      "priority": "P3",
+      "status": "OPEN",
+      "area": "UI",
+      "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
+      "note": "Status nicht nur über Farbe (Text OFF, STBY, ON ist im Entwurf vorhanden). Kontrast der Schein-Farben prüfen. Pulsieren bei reduzierter Bewegung abschalten (im Entwurf vorhanden). Tastaturbedienung für alle Moduswechsel.\n\nAkzeptanz: e2e-Tastaturtest erweitert",
+      "verification": ""
     }
   ],
   "visionSandbox": [
