@@ -53,7 +53,7 @@ describe('visualDirector', () => {
       { id: 'a', src: 'a.mp4', kind: 'clip', source: 'erzeugtes-video', mood: 'duester', energy: 'hart', tags: ['neon'], durationS: 10 },
       { id: 'b', src: 'b.mp4', kind: 'clip', source: 'erzeugtes-video', mood: 'cool', energy: 'mittel', tags: ['geo'], durationS: 10 },
     ];
-    let state = createDirectorState(4711, 0);
+    const state = createDirectorState(4711, 0);
     // 2 s still stehen (minDwellS=3 → noch kein Beat-Wechsel), dann harter Onset.
     const quiet = tickDirector(state, longPool, { ...IDLE_AUDIO_FEATURES, onset: 0, energy: 0 }, 1000);
     expect(quiet.advanced).toBe(false);

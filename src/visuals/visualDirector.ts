@@ -74,7 +74,9 @@ export function pickNextScene(
   pool: readonly PoolEntry[],
   state: DirectorState,
   features: AudioFeatures,
-  opts: Required<DirectorOptions>,
+  // Teil der öffentlichen Signatur: bewusst (noch) ungenutzt, daher `_`-Präfix,
+  // damit @typescript-eslint/no-unused-vars es als Absicht liest.
+  _opts: Required<DirectorOptions>,
 ): number {
   if (pool.length === 0) return -1;
   if (pool.length === 1) return 0;
