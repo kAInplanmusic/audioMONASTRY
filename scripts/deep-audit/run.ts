@@ -5,7 +5,7 @@ import 'dotenv/config';
 import { appendToMasterTodo, dedupeFindings, writeReport } from './report.js';
 import { findRepoRoot, isFailSeverity, loadConfig, providerReady, resolveFailOn } from './config.js';
 import { exportFindings, runDeterministicStages } from './deterministic.js';
-import { addAgentsContext, makeReviewBatchesForFiles, runAiPass } from './ai.js';
+import { addAgentsContext, makeReviewBatchesForFiles, runAiPass, type BatchProgress } from './ai.js';
 import { selectFiles, type SelectedFile } from './files.js';
 import { runCommand } from './process.js';
 import type { AuditReport, Severity, StageResult } from './types.js';
@@ -168,16 +168,30 @@ async function main(): Promise<void> {
   if (options.providers !== 'none' && !options.offline && aiFiles.length > 0) {
     console.log('Stufe 2/2: KI-Review-Pässe laufen ...');
     const agentsContext = addAgentsContext(root);
+    /**
+     * Fortschritt pro Batch und eine Statuszeile MIT Zusammenfassung. Ohne die
+     * Fortschrittszeilen ist ein langer Lauf nicht von einem Hänger zu
+     * unterscheiden — belegt am 2026-10-03: 15 h Laufzeit ohne eine Zeile Ausgabe.
+     */
+    const onBatch = (stageName: string) => (info: BatchProgress): void => {
+      console.log(
+        `    [${String(info.done).padStart(3)}/${info.total}] ${stageName}: ${info.file} (${(info.ms / 1000).toFixed(1)} s)`,
+      );
+    };
+    const stageLine = (stage: StageResult): string =>
+      `  [${stage.status.toUpperCase().padEnd(7)}] ${stage.name} (${stage.summary ?? `${stage.findings.length} Findings`}, ${Math.round(stage.durationMs / 1000)} s)`;
     const wantDeepSeek = options.providers === 'all' || options.providers === 'deepseek';
     const wantHf = options.providers === 'all' || options.providers === 'hf';
 
     const flashProvider = config.providers.deepseekFlash;
     const flashBatches = makeReviewBatchesForFiles(root, config, aiFiles);
     if (wantDeepSeek && providerReady(flashProvider)) {
-      const stage = await runAiPass('deepseek-flash', flashProvider, flashBatches, config, agentsContext);
+      const stage = await runAiPass('deepseek-flash', flashProvider, flashBatches, config, agentsContext, {
+        onProgress: onBatch('deepseek-flash'),
+      });
       stages.push(stage);
       if (stage.status !== 'skipped') providersUsed.push(`deepseek:${flashProvider.model}`);
-      console.log(`  [${stage.status.toUpperCase().padEnd(7)}] deepseek-flash (${stage.findings.length} Findings, ${Math.round(stage.durationMs / 1000)} s)`);
+      console.log(stageLine(stage));
     } else if (wantDeepSeek) {
       stages.push(skippedStage('deepseek-flash', 'DeepSeek-API-Key fehlt'));
     }
@@ -190,10 +204,12 @@ async function main(): Promise<void> {
     const hfFiles = aiFiles.filter((file) => file.risk === 'hot' || filesWithFindings.has(file.path));
     if (wantHf && hfFiles.length > 0 && providerReady(hfProvider)) {
       const hfBatches = makeReviewBatchesForFiles(root, config, hfFiles);
-      const stage = await runAiPass('hf-qwen', hfProvider, hfBatches, config, agentsContext);
+      const stage = await runAiPass('hf-qwen', hfProvider, hfBatches, config, agentsContext, {
+        onProgress: onBatch('hf-qwen'),
+      });
       stages.push(stage);
       if (stage.status !== 'skipped') providersUsed.push(`hf:${hfProvider.model}`);
-      console.log(`  [${stage.status.toUpperCase().padEnd(7)}] hf-qwen (${stage.findings.length} Findings, ${Math.round(stage.durationMs / 1000)} s)`);
+      console.log(stageLine(stage));
     } else if (wantHf) {
       stages.push(skippedStage('hf-qwen', hfFiles.length === 0 ? 'keine Hot-Pfade/Findings im Scope' : 'HF-API-Key fehlt'));
     }
@@ -206,10 +222,12 @@ async function main(): Promise<void> {
     const proFiles = aiFiles.filter((file) => file.risk === 'hot' || highFiles.has(file.path));
     if (wantDeepSeek && proFiles.length > 0 && providerReady(proProvider)) {
       const proBatches = makeReviewBatchesForFiles(root, config, proFiles);
-      const stage = await runAiPass('deepseek-pro', proProvider, proBatches, config, agentsContext);
+      const stage = await runAiPass('deepseek-pro', proProvider, proBatches, config, agentsContext, {
+        onProgress: onBatch('deepseek-pro'),
+      });
       stages.push(stage);
       if (stage.status !== 'skipped') providersUsed.push(`deepseek:${proProvider.model}`);
-      console.log(`  [${stage.status.toUpperCase().padEnd(7)}] deepseek-pro (${stage.findings.length} Findings, ${Math.round(stage.durationMs / 1000)} s)`);
+      console.log(stageLine(stage));
     } else if (wantDeepSeek) {
       stages.push(skippedStage('deepseek-pro', proFiles.length === 0 ? 'keine Hot-Pfade im Scope' : 'DeepSeek-API-Key fehlt'));
     }

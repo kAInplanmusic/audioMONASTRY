@@ -32,6 +32,12 @@ export interface ProviderConfig {
   apiKeyEnv: string[];
   temperature: number;
   maxTokens: number;
+  /**
+   * Timeout EINES Requests. Ohne Obergrenze hängt ein stockender Anbieter den
+   * Lauf unbegrenzt auf; 5 min (Default) war zu lang, weil ein Lauf viele
+   * Batches hintereinander schickt.
+   */
+  requestTimeoutMs?: number;
 }
 
 export interface AuditConfig {
@@ -42,6 +48,12 @@ export interface AuditConfig {
   maxFileChars: number;
   maxAiBatchChars: number;
   maxAiFiles: number;
+  /**
+   * Gesamt-Budget für EINEN KI-Pass. Ohne dieses Budget kann ein Lauf
+   * rechnerisch `Batches × requestTimeoutMs` dauern — bei 120 Dateien also bis
+   * zu 10 h, ohne eine einzige Zeile Fortschritt auf dem Terminal.
+   */
+  maxAiTotalMs: number;
   providers: {
     deepseekFlash: ProviderConfig;
     deepseekPro: ProviderConfig;
