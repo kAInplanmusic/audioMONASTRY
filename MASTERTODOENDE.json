@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-10-01T17:37:55+02:00",
+  "generatedAt": "2026-10-04",
   "branch": "main",
-  "commit": "53d87c2",
+  "commit": "9f970ff",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -3988,10 +3988,11 @@
       "id": "DA-2026-09-29-001",
       "title": "Verwundbarkeit: ip-address",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Deep-Audit",
       "source": "audit:deep",
-      "note": "ip-address: Address6.isLinkLocal() recognizes fe80::/64 rather than fe80::/10, allowing SSRF and trust-boundary bypass to on-link hosts Vorschlag: npm audit fix ausführen — Fundstelle: `package-lock.json (npm-audit)` || TRIAGE 2026-10-01 (04:38): 1) trifft-zu: ja — package-lock.json: node_modules/ip-address = 10.5.0 (transitiv via express-rate-limit), Advisory GHSA-rpw4-54j3-4h4q / CVE-2026-101913, affected <=10.5.0, patched 10.5.1. 2) Aufwand ~15 min (Schaetzung); allein durch Code aenderbar: ja (reiner Dependency-Bump, kein App-Code betroffen; Vulnerable Pfad Address6.isLinkLocal wird im Repo selbst nicht aufgerufen). 3) Label: fixbar-jetzt. 4) package.json (dependencies/overrides) + package-lock.json: ip-address auf >=10.5.1 anheben (npm audit fix bzw. \"overrides\":{\"ip-address\":\"^10.5.1\"} + npm install --include=dev). Kein Testzwang: das Gate scripts/npm-audit.mjs:35 blockt nur high/critical, dieser Fund ist Moderate und blockt den Build nicht.",
+      "note": "ip-address: Address6.isLinkLocal() recognizes fe80::/64 rather than fe80::/10, allowing SSRF and trust-boundary bypass to on-link hosts Vorschlag: npm audit fix ausführen — Fundstelle: `package-lock.json (npm-audit)` || TRIAGE 2026-10-01 (04:38): 1) trifft-zu: ja — package-lock.json: node_modules/ip-address = 10.5.0 (transitiv via express-rate-limit), Advisory GHSA-rpw4-54j3-4h4q / CVE-2026-101913, affected <=10.5.0, patched 10.5.1. 2) Aufwand ~15 min (Schaetzung); allein durch Code aenderbar: ja (reiner Dependency-Bump, kein App-Code betroffen; Vulnerable Pfad Address6.isLinkLocal wird im Repo selbst nicht aufgerufen). 3) Label: fixbar-jetzt. 4) package.json (dependencies/overrides) + package-lock.json: ip-address auf >=10.5.1 anheben (npm audit fix bzw. \"overrides\":{\"ip-address\":\"^10.5.1\"} + npm install --include=dev). Kein Testzwang: das Gate scripts/npm-audit.mjs:35 blockt nur high/critical, dieser Fund ist Moderate und blockt den Build nicht. || FIX 2026-10-04: behoben — installierte und in package-lock.json eingetragene ip-address-Version ist 10.7.3 (node_modules/ip-address/package.json, package-lock.json:6619), gepatcht war ab 10.5.1; der Advisory trifft nicht mehr zu. Erledigt im Rahmen des npm-Advisory-Patches (Commit b1c3ed1).",
+      "verification": "node -e \"require('./node_modules/ip-address/package.json').version\" -> 10.7.3; package-lock.json: node_modules/ip-address version 10.7.3 (>= 10.5.1, Advisory GHSA-rpw4-54j3-4h4q / CVE-2026-101913 damit nicht mehr zutreffend)",
       "detectedAt": "2026-09-29T17:39:04.024Z"
     },
     {
