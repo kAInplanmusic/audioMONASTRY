@@ -56,6 +56,9 @@ const ALLOWED: Record<string, string> = {
     + 'real vorgefundenen Bestandsressourcen (/opt/samplemonk/certs, samplemonk-idle-shutdown.timer, Knotennamen '
     + 'samplemonk-* im Widerspruch zu audiomonastry-*) - Messergebnis, keine Nomenklatur. Der Befund wird nicht '
     + 'umgeschrieben, sonst waere das Belegkapitel falsch.',
+  'visualsUMSETZUNGSPLAN.md': 'Inventur der RunPod-Templates (Kapitel 1.2): nennt die zwei Templates des '
+    + 'Bestands-/Fremdprojekts unter ihrem ECHTEN Namen ("nicht anfassen"). Ein Umbenennen im Text wuerde die '
+    + 'Inventur falsch machen und den Betreiber dazu verleiten, die fremden Templates anzufassen.',
 };
 
 function trackedFiles(): string[] {
