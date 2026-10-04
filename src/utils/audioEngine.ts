@@ -39,6 +39,9 @@ import { InstrumentSynth } from '../audio/instrumentSynth';
 import { SpatialBus } from '../audio/spatialBus';
 import { ChannelStripState } from '../audio/channelStripState';
 import { SequencerState } from '../audio/sequencerState';
+import {
+  applyGraphState, readGraphState, type GraphStateSink, type GraphStateSource,
+} from '../audio/graphStateIO';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
@@ -187,6 +190,39 @@ class AudioEngine {
     }),
     now: () => this.ctx?.currentTime ?? Tone.now(),
   });
+
+  /**
+   * AUDIO-P1-002: Graph-State-Serialisierung liegt in `audio/graphStateIO`.
+   * Hier stehen nur die beiden Adapter: Leseseite (Strip/Sequencer/Spatial) und
+   * Schreibseite (dieselben Knoten, Ramp 0.03 s bleibt in der Serialisierung).
+   */
+  private readonly graphStateSource: GraphStateSource = {
+    bpm: () => Tone.Transport.bpm.value,
+    swing: () => this.swing,
+    gate: () => this.gate,
+    scaleName: () => String(this.currentScaleName),
+    allPatterns: () => this.sequencer.allPatterns(),
+    synthNotes: () => [...this.sequencer.getSynthNotes()],
+    masterVolumeDb: () => this.masterVolume?.volume.value,
+    spatialSetupId: () => this.spatial.getSetupId(),
+    channelGainDb: (track) => this.channelStrip.gainNode(track)?.volume.value,
+    channelPan: (track) => this.channelStrip.panNode(track)?.pan.value,
+  };
+
+  private readonly graphStateSink: GraphStateSink = {
+    setBpm: (bpm) => { Tone.Transport.bpm.value = bpm; },
+    setSwing: (value) => { this.swing = value; },
+    setGate: (value) => { this.gate = value; },
+    setScaleName: (name) => { this.currentScaleName = name; },
+    loadPatterns: (patterns, synthNotes, bpm) => this.loadPatterns(patterns, synthNotes, bpm),
+    hasTrack: (track) => track in this.sequencer.allPatterns(),
+    ensureChannelNode: (track) => { this.ensureChannelNode(track); },
+    rampChannelGainToDb: (track, db, ramp) => this.channelStrip.rampGainToDb(track, db, ramp),
+    setChannelPan: (track, pan) => this.channelStrip.setPan(track, pan),
+    rampMasterVolumeTo: (db, ramp) => { this.masterVolume.volume.rampTo(db, ramp); },
+    setSpatialSetup: (id) => { this.setSpatialSetup(id); },
+    warn: (message, cause) => console.warn(message, cause),
+  };
 
   private samplePlayers: Record<string, Tone.Player> = {};
   // AUDIO-P1-002: Preview/Track-Load in eigener Fassade (Tone-Erzeugung injiziert).
@@ -1881,28 +1917,13 @@ class AudioEngine {
     return this.v2LiveSink.setSampleBuffer(track, left, right ?? null, sourceRate);
   }
 
-  /** Exportiert den kompletten hörbaren Zustand als JSON-fähiges Objekt. */
+  /**
+   * Exportiert den kompletten hörbaren Zustand als JSON-fähiges Objekt.
+   * AUDIO-P1-002: Feldauswahl und Fallbacks liegen in `audio/graphStateIO`;
+   * hier steht nur der Adapter auf den Engine-Zustand.
+   */
   public exportGraphState(): AudioGraphState {
-    const gains: Record<string, number> = {};
-    const pans: Record<string, number> = {};
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
-      gains[t] = this.channelStrip.gainNode(t)?.volume.value ?? 0;
-      pans[t] = this.channelStrip.panNode(t)?.pan.value ?? 0;
-    });
-    return {
-      version: 1,
-      bpm: Tone.Transport.bpm.value,
-      swing: this.swing,
-      gate: this.gate,
-      scale: String(this.currentScaleName),
-      patterns: JSON.parse(JSON.stringify(this.sequencer.allPatterns())) as Record<string, boolean[]>,
-      synthNotes: [...this.sequencer.getSynthNotes()],
-      masterVolumeDb: this.masterVolume?.volume.value ?? -6,
-      spatialSetupId: this.spatial.getSetupId(),
-      channelGainsDb: gains,
-      channelPans: pans,
-      timestamp: Date.now(),
-    };
+    return readGraphState(this.graphStateSource);
   }
 
   /** Exportiert über die backend-unabhängige GraphStateBridge (Phase-1-Migration). */
@@ -2052,36 +2073,13 @@ class AudioEngine {
     });
   }
 
-  /** Stellt einen exportierten Audio-Graph-Zustand wieder her (validiert). */
-  public importGraphState(state: AudioGraphState): boolean { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
-    if (!isAudioGraphState(state)) return false;
-    try {
-      if (Number.isFinite(state.bpm) && state.bpm >= 20 && state.bpm <= 300) {
-        Tone.Transport.bpm.value = state.bpm;
-      }
-      this.swing = Math.max(0, Math.min(1, state.swing));
-      this.gate = Math.max(0.05, Math.min(1, state.gate));
-      if (typeof state.scale === 'string' && state.scale in MUSIC_SCALES) {
-        this.currentScaleName = state.scale as keyof typeof MUSIC_SCALES;
-      }
-      this.loadPatterns(state.patterns, state.synthNotes, state.bpm);
-      for (const [track, db] of Object.entries(state.channelGainsDb)) {
-        if (!(track in this.sequencer.allPatterns())) continue;
-        this.ensureChannelNode(track as TrackType);
-        if (Number.isFinite(db)) this.channelStrip.rampGainToDb(track as TrackType, db, 0.03);
-      }
-      for (const [track, pan] of Object.entries(state.channelPans)) {
-        if (!(track in this.sequencer.allPatterns())) continue;
-        this.ensureChannelNode(track as TrackType);
-        if (Number.isFinite(pan)) this.channelStrip.setPan(track as TrackType, pan);
-      }
-      if (Number.isFinite(state.masterVolumeDb)) this.masterVolume.volume.rampTo(state.masterVolumeDb, 0.03);
-      if (typeof state.spatialSetupId === 'string') this.setSpatialSetup(state.spatialSetupId);
-      return true;
-    } catch (e) {
-      console.warn('Audio-Graph-Import fehlgeschlagen:', e);
-      return false;
-    }
+  /**
+   * Stellt einen exportierten Audio-Graph-Zustand wieder her (validiert).
+   * AUDIO-P1-002: Validierung, Wertebereiche und Anwendungsreihenfolge liegen in
+   * `audio/graphStateIO` – dort ohne Engine-Zustand prüfbar.
+   */
+  public importGraphState(state: AudioGraphState): boolean {
+    return applyGraphState(state, this.graphStateSink);
   }
 
 

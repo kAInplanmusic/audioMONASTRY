@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 // Nur Chromium: Der Spec setzt die Berechtigung 'clipboard-write', die es nur in Chromium gibt.
 // CI-Fund 2026-09-17 (e2e-webkit): 'browserContext.newPage: Unknown permission: clipboard-write'.
@@ -22,7 +23,7 @@ const MONK_SCRATCH_MIME = 'application/x-monk-scratchpad';
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 30_000 });
 }
 

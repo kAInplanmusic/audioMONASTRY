@@ -680,7 +680,8 @@ eigener Beispielkonfiguration dokumentiert, wird also nicht erfunden.
   „keine bewerteten Paare“, und ein Lauf auf dem Bootstrap-Satz ist ein Lauf
   auf einem selbst erzeugten Stil, nicht auf Nutzer-Geschmack.
 - **Rechte/Lizenz:** Stil-LoRAs aus Nutzerbildern und ggf. gated Basisgewichte
-  (`FLUX.1-dev`, `FLUX.2 [dev]`) sind ein eigenes Thema; das Skript prüft keine
+  (`FLUX.1-dev` — komprimiert/FP8, seit 2026-09-29 einzige Basis für Generierung + Training;
+  `FLUX.2 [dev]` verworfen, passt mit Training/Beispielen nicht in 48 GB) sind ein eigenes Thema; das Skript prüft keine
   Lizenzen (`docs/VISUALMONK_SPEC.md` §9 nennt es als offenen Punkt).
 - **Volume-Löschung ist bewusst manuell.** Das Skript löscht keine Volumes (dort
   liegen Gewichte, Datensatz, Checkpoints und das Ergebnis) – es nennt nur den

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { STUDIO_NAV } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -49,8 +49,28 @@ test('Studio Baseline (Mixer + Modul-Grid)', async ({ page }) => {
   await resetSession(); // siehe Start-Screen: reproduzierbare Ansicht
   await freezeTime(page);
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
+  // BEFUND 2026-09-29 (Vollauf vs. Einzellauf): Das Mixer-Rack wird asynchron
+  // geladen. Die alte Baseline (147 px) hielt den LADEZUSTAND fest – bei warmem
+  // Modul rendert dasselbe Rack 2779 px, und der Vergleich schlug je nach
+  // Laufumgebung fehl (gemessen: 3 160 130 px = 91 % Unterschied).
+  // Deshalb erst auf den GELADENEN Mixer warten – Kriterium ist die Rack-Hoehe
+  // (> 400 px; Ladezustand ~147 px), NICHT ein Textknoten: dieser Spec friert die
+  // Uhr (freezeTime), und unter pausierter Uhr mounten Timer-getriebene
+  // Textknoten nicht zuverlaessig (gemessen im Vollauf: Text fehlte, Rack war
+  // geladen). Die Zusicherung selbst bleibt unveraendert.
+  const mixerRack = page.locator('#rack-mixer');
+  await expect
+    .poll(async () => (await mixerRack.boundingBox())?.height ?? 0, { timeout: 20_000, intervals: [250] })
+    .toBeGreaterThan(400);
+  let letzteHoehe = -1;
+  for (let i = 0; i < 8; i += 1) {
+    const hoehe = (await mixerRack.boundingBox())?.height ?? -1;
+    if (hoehe > 0 && Math.abs(hoehe - letzteHoehe) < 1) break;
+    letzteHoehe = hoehe;
+    await page.waitForTimeout(250);
+  }
   // VISUAL-P1-010: Canvas und Live-Anzeigen aendern sich permanent (Visual-Feld,
   // Pegel, Uptime) - `animations: 'disabled'` stoppt nur CSS, nicht JS. Ohne Maske
   // meldet Playwright 'Failed to take two consecutive stable screenshots'.
@@ -97,7 +117,7 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
   // kommt die Ansicht nicht voran (gemessen). Die Standbild-Baselines oben
   // brauchen sie dagegen, sonst sind sie nicht reproduzierbar.
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
   // masterplayer (feste Sektion) + aiMONK (Bottom-Dock) sind immer sichtbar.

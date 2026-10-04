@@ -9,6 +9,10 @@
  *   - `/api/visual/status` meldet die Zuschauerzahl (davon haengt ab, ob das
  *     Studio ueberhaupt enkodiert).
  */
+// FIXPAKET-C (C3): NODE_ENV-Pin VOR dem Top-level-`await import('../server')`:
+// ohne ihn lief der Server hier mit ambient NODE_ENV=production fail-closed.
+process.env.NODE_ENV ??= 'test';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AddressInfo } from 'node:net';
 

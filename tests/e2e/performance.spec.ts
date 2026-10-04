@@ -1,4 +1,5 @@
 import { test, expect, type Page, type CDPSession } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 // Nur Chromium: Die CPU-Messung laeuft ueber das Chrome DevTools Protocol (CDP).
 // CI-Fund 2026-09-17 (e2e-webkit): 'browserContext.newCDPSession: CDP session is only available in Chromium'.
@@ -34,7 +35,7 @@ async function openStudio(page: Page): Promise<void> {
   await expect(page).toHaveTitle(/audioMONASTRY/);
   // Tolerant gegen den Vite-Dep-Optimierungs-Reload: nach einem solchen Reload
   // steht wieder der Startbildschirm da, sonst ist das Studio schon offen.
-  const startButton = page.getByLabel('audioMONASTRY starten');
+  const startButton = entryButton(page);
   if ((await startButton.count()) > 0) await startButton.first().click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 30_000 });
 }

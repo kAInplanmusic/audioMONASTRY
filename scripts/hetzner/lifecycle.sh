@@ -20,16 +20,18 @@
 # INFRA-HETZNER-010: Ohne diese Retention wuchs der Snapshot-Bestand bei jedem
 # `stop` um fünf Images (5 Rollen), weil der CLI-Pfad sie zwar anlegte, aber nie
 # aufräumte - nur der Portal-Worker hatte eine (services/portal-worker/src/index.js,
-# SNAPSHOT_RETENTION=2 je Rolle). Erfasst werden BEIDE Familien: die des Workers
-# (`<prefix>snapshot-<rolle>-<datum>`, inkl. Alt-Präfix aus fleet-names.sh) und
-# die eigene (`<servername>-auto-<timestamp>`) - sonst wüchse der Bestand weiter.
+# SNAPSHOT_RETENTION=2 je Rolle). Erfasst werden beide Familien: die des Workers
+# (`<prefix>snapshot-<rolle>-<datum>`) und die eigene
+# (`<servername>-auto-<timestamp>`) - sonst wüchse der Bestand weiter.
+# (Der Alt-Präfix ist seit der Bestands-Ausmusterung 2026-09 entfallen.)
 # =============================================================================
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 if [[ -f .env.deploy ]]; then set -a; . ./.env.deploy; set +a; fi
 [[ -n "${HCLOUD_TOKEN:-}" ]] || { echo "HCLOUD_TOKEN fehlt (.env.deploy)" >&2; exit 1; }
 
-# NOMEN-P1-001: auch hier beide Schreibweisen (Altbestand darf nicht liegen bleiben).
+# NOMEN-P1-001: Namen aus der EINEN Quelle - es gibt nur noch die kanonische
+# Schreibweise.
 source "$(dirname "$0")/fleet-names.sh"
 CANONICAL_NAMES=(audiomonastry-app-1 audiomonastry-master-1 audiomonastry-edge-1 audiomonastry-sfu-1 audiomonastry-ai-1)
 NAMES=()
@@ -76,11 +78,10 @@ wait_snapshot_action() {
 
 # Aufraeumen nach der Retentionsregel. Rollen-Erkennung wie im Portal-Worker:
 # Label `role`, sonst aus Name/Beschreibung (`<prefix>snapshot-<rolle>-<datum>`
-# bzw. `<servername>-auto-<timestamp>`). Prefixes kommen aus fleet-names.sh -
-# der Altname steht damit weiterhin an GENAU einer Stelle im Repo.
+# bzw. `<servername>-auto-<timestamp>`). Prefix kommt aus fleet-names.sh.
 prune_snapshots() {
   echo "=== Snapshot-Retention: letzte ${SNAPSHOT_RETENTION} je Rolle behalten (Dry-Run=${PRUNE_DRY_RUN}) ==="
-  FLEET_PREFIX="$FLEET_PREFIX" LEGACY_FLEET_PREFIX="$LEGACY_FLEET_PREFIX" \
+  FLEET_PREFIX="$FLEET_PREFIX" \
   SNAPSHOT_RETENTION="$SNAPSHOT_RETENTION" PRUNE_DRY_RUN="$PRUNE_DRY_RUN" \
   python3 - <<'PY'
 import json, os, re, urllib.request
@@ -88,7 +89,7 @@ import json, os, re, urllib.request
 tok = os.environ["HCLOUD_TOKEN"]
 keep = int(os.environ["SNAPSHOT_RETENTION"])
 dry = os.environ.get("PRUNE_DRY_RUN") == "1"
-prefixes = [p for p in (os.environ.get("FLEET_PREFIX"), os.environ.get("LEGACY_FLEET_PREFIX")) if p]
+prefixes = [p for p in (os.environ.get("FLEET_PREFIX"),) if p]
 roles = "app|sfu|ai|master|edge"
 
 def api(method, path):

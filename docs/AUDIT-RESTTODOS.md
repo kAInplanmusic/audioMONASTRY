@@ -1,0 +1,74 @@
+# AUDIT-RESTTODOS (Paket C — startet nach Paket A/B, wegen Datei-Überlappung)
+
+Stand: 2026-09-29 · Quelle: Sub-Agent-Befunde (SSOT/Konsistenz-Track) + Deploy-Log-Analyse
+Regeln: Repo-only, lokale Commits, NICHTS pushen, NODE_ENV=test für Tests, NTFS (kein chmod).
+
+## C1 — Deploy-Defaults auf Weg-A-Stand ziehen (high, Redeploy-Risiko)
+> **Status 2026-09-29 (Paket C):** an Paket A übergeben — `scripts/runpod-deploy.py`
+> ist Paket-A-Datei (Parallel-Worker); hier bewusst NICHT berührt.
+- `scripts/runpod-deploy.py`: `PREBUILT_IMAGES` um worker-comfyui-Image ergänzen
+  (`runpod/worker-comfyui:5.11.0-flux1-dev-fp8` laut docs/VISUAL_LORA_STACK.md:64),
+  `ROLE_DEFAULTS.imageHq` von `FLUX_DEV` auf das neue Image umstellen.
+- `tests/test_runpod_deploy_defaults.py:63`: Gate auf neuen Vertrag umschreiben
+  (imageHq MUSS worker-comfyui sein, NICHT PrunaAI).
+- Grund: Live-Endpoint läuft seit 27.09. (b90f7a8) auf worker-comfyui/Workflow-Vertrag;
+  heutiger Deploy-Run 36580686816 zeigt, dass der Deploy-Pfad lebendig ist.
+
+## C2 — comfyui_adapter.py imageHq-Mapping (medium)
+> **Status 2026-09-29 (Paket C): erledigt** — Umstellung auf
+> `{worker: "comfyui", protocol: "workflow", defaultModel: "flux1-dev"}`;
+> Alt-Eintrag als „Historisch bis 2026-09-27 (b90f7a8)“-Kommentar erhalten;
+> Contract-Check als `tests/test_comfyui_adapter_imagehq.py` (5 Fälle,
+> offline unittest, grün).
+- `services/audiomonastry-ai-runtime/comfyui_adapter.py:80`: imageHq von
+  `{"worker": "flux", "protocol": "prompt"}` auf worker-comfyui/Workflow-Vertrag
+  umstellen (Muster existiert: imageLora-Eintrag Z.90-100); alten Eintrag als
+  "historisch bis 2026-09-27" markieren, nicht löschen.
+- Contract-Check ergänzen: imageHq-Request-Form vs. runpodVision.ts (sendet `{workflow}`).
+
+## C3 — NODE_ENV-Pinning (medium, 74+18 Test-Fails Prävention)
+> **Status 2026-09-29 (Paket C): erledigt** — `vitest.config.ts` pinnt
+> `test.env.NODE_ENV='test'` zentral (gewinnt gegen das Host-Env; Beweis:
+> aiRoutes ohne Pin im Host-Env 18 Fails, mit Pin 18/18 grün bei identischem
+> ambient production); `tests/setup.ts` fail-fast bei durchschlagendem
+> production (strenger als „&& kein Token“: mit Host-Token käme 401-Chaos);
+> alle 14 Server-Import-Testfiles mit `process.env.NODE_ENV ??= 'test'` am
+> Modulkopf; `package.json` `scripts.test = "NODE_ENV=test vitest run"`.
+> Production-Szenario-Files (cspPolicy, webrtcConfigF6, corsAllowedOrigins,
+> securityProductionAuth, sessionResetProduction) nicht angefasst.
+- `vitest.config.ts`: `test.env: { NODE_ENV: 'test' }` setzen (zentral).
+- `package.json`: `"test": "NODE_ENV=test vitest run"` (POSIX-safe hier).
+- 14 Server-Import-Dateien: `process.env.NODE_ENV ??= 'test'` am Modulkopf
+  (Liste im Code-Review-Bericht; Pflicht nur wo production-Szenario NICHT getestet wird —
+  production-Szenario-Tests setzen explizit 'production', nicht anfassen).
+- fail-fast in tests/setup.ts: klarer Fehler wenn NODE_ENV=production && kein Token.
+
+## C4 — Manifest-VRAM-Gate (medium)
+> **Status 2026-09-29 (Paket C): Gate erledigt, Nachmessung offen** — Assertion
+> in `tests/manifestRoles.test.ts` (Summe der Preload-estimatedVRAM ≤
+> vramBudgetGb − vramSafetyMarginGb), dokumentierte Ausnahmen statt
+> expect.fail: **videoReal** 41 GB vs. Deckel 18 (wan22-t2v-a14b est 32) und
+> **videoAbstract** 27 GB vs. 18 (ltx-video-13b est 18) — zusätzlicher Befund
+> über den ursprünglichen Befund hinaus. Manifestwerte bewusst NICHT gefälscht;
+> Verstöße bleiben als console.warn sichtbar. Gate negativ verifiziert
+> (Verstoß in Rolle ohne Ausnahme schlägt an). VRAM am live-Worker nachmessen
+> (APP-Touch → erst mit Freigabe) oder Budget/Pool anheben — Betreiber-Entscheid.
+- `tests/manifestRoles.test.ts`: Assertion ergänzen:
+  Summe(preload estimatedVRAM) <= vramBudgetGb − vramSafetyMarginGb je Rolle.
+- `wan22-t2v-a14b` (est. 32 GB vs ADA_24-Budget 24): VRAM real nachmessen (APP-Touch → erst
+  mit Freigabe) ODER Budge/Pool-Anhebung vorschlagen; bis dahin Test als expect.fail oder
+  documented-exception führen.
+
+## C5 — CI-Hygiene (low)
+> **Status 2026-09-29 (Paket C): main.yml erledigt** — gelöscht (Sonar-Platzhalter
+> `DEIN_PROJEKT_KEY`, workflow_dispatch-only, unbenutzbar); die 9 verbleibenden
+> Workflows YAML-parse-geprüft. „ai.yml in ci.yml aufgehen lassen“ bleibt offen
+> (ai.yml ist aktiv und inhaltlich eigenständig).
+- `.github/workflows/main.yml` (Sonar-Platzhalter, unbenutzbar) löschen.
+- Optional ai.yml in ci.yml aufgehen lassen.
+
+## Nicht-Repo-Punkte (brauchen Betreiber)
+- L: FLUX.1-Derivate auf kommerzieller Website (BFL-Lizenz) → SSOT LEGAL-P0 (Paket-B legt an).
+- APP: Live-Zählung Alt-Snapshots (Legacy-Phase-2-Vorbedingung) — RunPod/Hetzner-Token nötig.
+- APP: runpod-deploy workflow → deploy-Job an workflow_dispatch/environment binden (sonst
+  feuert er bei jedem main-Push); Decision Betreiber.

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -15,7 +15,7 @@ const SILENCE_RAMP = 0.05;
 
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(STUDIO_NAV).getByTitle('mixerMONK').first())
     .toBeVisible({ timeout: 15_000 });
 }

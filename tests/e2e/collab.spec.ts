@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { newStudioContext, resetSession, studioBaseUrl, studioToken } from './helpers/studioAuth';
+import { entryButton } from './helpers/studioNav';
 
 // Nur Chromium: Die Suite nutzt Chromium-Fake-Media-Args fuer getUserMedia und mehrere eigene Browser-Kontexte; in WebKit bricht der Start ab ('browserType.launch: Target page, context or browser has been closed').
 // CI-Fund 2026-09-17 (e2e-webkit): 'browserType.launch: Target page, context or browser has been closed'.
@@ -30,7 +31,7 @@ test.use({
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 

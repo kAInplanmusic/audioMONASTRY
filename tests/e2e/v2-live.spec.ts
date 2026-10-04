@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { collectErrors, navButton } from './helpers/studioNav';
+import { entryButton, collectErrors, navButton } from './helpers/studioNav';
 
 /**
  * ECHTER Live-V2-Pfad im Browser (Live-/Audio-Gate).
@@ -35,7 +35,7 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
   // eingeschaltet werden: er ist die Main-Einspeisung und startet seit der
   // Betreiberregel 2026-09-17 aktiv (COLLAB-P0-004) - der Power-Button ist bewusst
   // gesperrt, ein Klick darauf lief in den Timeout.
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15_000 });
 

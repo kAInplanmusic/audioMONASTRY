@@ -11,9 +11,13 @@ dependencies = [
   # torch wird bewusst NICHT hier gependelt: kommt aus dem Basisimage
   # (pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime) – siehe requirements.lock.
   "transformers>=4.44,<5",
-  "soundfile>=0.12",
-  "scipy>=1.13",
-  "pyannote.audio>=3.3",
+  "soundfile>=0.12,<1",
+  "scipy>=1.13,<2",
+  # DA-2026-09-29-022/-023/-024: pyannote.audio zieht torch und torchaudio transitiv
+  # nach. Ohne Obergrenze koennte ein spaeterer Rebuild eine inkompatible Major-Version
+  # ziehen (pyannote 4.x) bzw. ein CUDA-fremdes torch aus PyPI ueber das Basisimage
+  # legen. Obergrenze + sichtbarer Hinweis auf requirements.lock.
+  "pyannote.audio>=3.3,<4",
 ]
 
 [tool.setuptools]

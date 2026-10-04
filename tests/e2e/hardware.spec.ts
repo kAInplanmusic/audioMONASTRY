@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 /**
  * E2E-Hardware (ohne echte Geräte): mocked Web MIDI + WebHID via
@@ -49,7 +50,7 @@ async function mockWebMidi(page: Page): Promise<void> {
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 

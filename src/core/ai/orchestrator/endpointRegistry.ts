@@ -164,7 +164,7 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
   },
   imageHq: {
     role: 'imageHq',
-    label: 'Bild-Generierung (FLUX.2 [dev] + Qwen-Image-2512 + ControlNet/IP-Adapter)',
+    label: 'Bild-Generierung (FLUX.1-dev komprimiert + Qwen-Image-2512 + ControlNet/IP-Adapter)',
     endpointName: endpointNameForRole('imageHq'),
     endpointIdEnv: 'RP_ENDPOINT_ID_IMAGE',
     gpuPoolId: 'AMPERE_48',
@@ -174,11 +174,12 @@ export const GPU_ROLES: Record<GpuRoleId, GpuRoleDefinition> = {
     tasks: ['image.generate'],
     // Vorgefertigter ComfyUI-Worker: kennt unseren `warmup`-Task nicht.
     warmupMode: 'endpoint',
-    // FLUX.2 (~32 GB) und Qwen-Image (~15 GB) passen nicht gleichzeitig in 48 GB;
-    // beide liegen lokal vorkonfiguriert, der Wechsel dauert < 10 s. ControlNet,
-    // IP-Adapter und Upscaler bleiben dauerhaft resident.
+    // FLUX.1-dev komprimiert (FP8, ~12 GB) + Qwen-Image (~15 GB) passen zusammen in
+    // 48 GB (~27 GB + Aufsätze); FLUX.2 [dev] (~32 GB) wurde am 2026-09-29 verworfen
+    // (kein Raum für LoRA-Training + Beispiele). ControlNet, IP-Adapter und Upscaler
+    // bleiben dauerhaft resident; der Gruppenwechsel bleibt für Trainings-Läufe.
     preload: [
-      'flux2-dev',
+      'flux1-dev',
       'qwen-image-2512',
       'controlnet-depth',
       'controlnet-canny',
@@ -269,7 +270,7 @@ export const LONG_RUNNING_TASKS: ReadonlySet<AiTask> = new Set<AiTask>([
   'sing',
   'audio.generate',
   'stem.separate',
-  // Visual-Rollen: FLUX.2/Wan/LTX brauchen pro Bild bzw. Clip deutlich mehr
+  // Visual-Rollen: FLUX/Wan/LTX brauchen pro Bild bzw. Clip deutlich mehr
   // Zeit als das runsync-Fenster zulaesst (Diffusion ueber viele Schritte).
   'image.generate',
   'video.generate',

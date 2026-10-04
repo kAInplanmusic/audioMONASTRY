@@ -21,7 +21,7 @@ const worker = portalWorker as unknown as {
 const FLEET_ROLES = ['app', 'sfu', 'ai', 'master', 'edge'];
 const FLEET_SERVERS = FLEET_ROLES.map((role, i) => ({
   id: i + 1,
-  name: `samplemonk-${role}-1`,
+  name: `audiomonastry-${role}-1`,
   status: 'running',
   labels: { role, app: 'audioMONASTRY', 'managed-by': 'portal-worker' },
   public_net: role === 'app' ? { ipv4: { ip: '1.2.3.4' } } : null,
@@ -122,7 +122,7 @@ function setupFetchMock(opts: FetchMockOptions = {}) {
         ? (opts.servers ?? [])
         : (opts.servers && opts.servers.length > 0
             ? opts.servers
-            : [{ id: 1, name: 'samplemonk-app-1', status: 'running', labels: { role: 'app' }, public_net: { ipv4: { ip: '1.2.3.4' } } }]);
+            : [{ id: 1, name: 'audiomonastry-app-1', status: 'running', labels: { role: 'app' }, public_net: { ipv4: { ip: '1.2.3.4' } } }]);
       return Response.json({ servers });
     }
     if (path === '/v1/servers' && method === 'POST') {
@@ -201,7 +201,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const images = FLEET_ROLES.map((role, i) => ({
       id: 201 + i,
       name: null,
-      description: `samplemonk-snapshot-${role}-2026-09-18`,
+      description: `audiomonastry-snapshot-${role}-2026-09-18`,
       status: 'available',
       created: '2026-09-18T10:00:00+00:00',
       labels: {},
@@ -233,7 +233,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const images = FLEET_ROLES.map((role, i) => ({
       id: 301 + i,
       name: null,
-      description: `samplemonk-snapshot-${role}-2026-09-18`,
+      description: `audiomonastry-snapshot-${role}-2026-09-18`,
       status: 'available',
       created: '2026-09-18T10:00:00+00:00',
       labels: {},
@@ -258,7 +258,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
     const images = FLEET_ROLES.map((role, i) => ({
       id: 401 + i,
       name: null,
-      description: `samplemonk-snapshot-${role}-2026-09-18`,
+      description: `audiomonastry-snapshot-${role}-2026-09-18`,
       status: 'available',
       created: '2026-09-18T10:00:00+00:00',
       labels: {},
@@ -281,8 +281,8 @@ describe('Portal-Worker OPS-Snapshot', () => {
   it('startFleet nutzt das Rollen-Snapshot-Image statt cloud-init', async () => {
     const images = FLEET_ROLES.map((role, i) => ({
       id: 101 + i,
-      name: `samplemonk-snapshot-${role}-20260902`,
-      description: `samplemonk-snapshot-${role}-2026-09-02`,
+      name: `audiomonastry-snapshot-${role}-20260902`,
+      description: `audiomonastry-snapshot-${role}-2026-09-02`,
       status: 'available',
       created: '2026-09-02T10:00:00+00:00',
       labels: { app: 'audioMONASTRY', role },
@@ -349,10 +349,10 @@ describe('Portal-Worker OPS-Snapshot', () => {
 
   it('refresh-snapshots erzeugt je Rolle einen Snapshot und behält nur die letzten 2', async () => {
     const images = [
-      { id: 201, name: 'samplemonk-snapshot-app-20260902', description: 'samplemonk-snapshot-app-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' } },
-      { id: 202, name: 'samplemonk-snapshot-app-20260901', description: 'samplemonk-snapshot-app-2026-09-01', status: 'available', created: '2026-09-01T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' } },
-      { id: 203, name: 'samplemonk-snapshot-app-20260831', description: 'samplemonk-snapshot-app-2026-08-31', status: 'available', created: '2026-08-31T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' } },
-      { id: 204, name: 'samplemonk-snapshot-sfu-20260902', description: 'samplemonk-snapshot-sfu-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'sfu' } },
+      { id: 201, name: 'audiomonastry-snapshot-app-20260902', description: 'audiomonastry-snapshot-app-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' } },
+      { id: 202, name: 'audiomonastry-snapshot-app-20260901', description: 'audiomonastry-snapshot-app-2026-09-01', status: 'available', created: '2026-09-01T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' } },
+      { id: 203, name: 'audiomonastry-snapshot-app-20260831', description: 'audiomonastry-snapshot-app-2026-08-31', status: 'available', created: '2026-08-31T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' } },
+      { id: 204, name: 'audiomonastry-snapshot-sfu-20260902', description: 'audiomonastry-snapshot-sfu-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'sfu' } },
     ];
     const { imageActions, deletedImages } = setupFetchMock({ servers: FLEET_SERVERS, images });
 
@@ -438,7 +438,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
 
   it('GET /api/snapshots listet die Rollen-Snapshots', async () => {
     const images = [
-      { id: 301, name: 'samplemonk-snapshot-app-20260902', description: 'samplemonk-snapshot-app-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', disk_size: 40, labels: { app: 'audioMONASTRY', role: 'app', commit: 'abc123', version: '1.210.001' } },
+      { id: 301, name: 'audiomonastry-snapshot-app-20260902', description: 'audiomonastry-snapshot-app-2026-09-02', status: 'available', created: '2026-09-02T10:00:00+00:00', disk_size: 40, labels: { app: 'audioMONASTRY', role: 'app', commit: 'abc123', version: '1.210.001' } },
     ];
     setupFetchMock({ images });
 
@@ -459,14 +459,12 @@ describe('Portal-Worker OPS-Snapshot', () => {
 });
 
 /**
- * NOMEN-P1-001: Die Umbenennung darf laufende Installationen nicht brechen.
- * Der Portal-Worker akzeptiert daher BEIDE Schreibweisen: Bestandsressourcen mit
- * Altnamen bleiben bedienbar, Alt-Snapshots bleiben auffindbar und werden weiter
- * aufgeraeumt - neu angelegt wird immer mit dem neuen Namen.
+ * Die Flotte traegt durchgehend die kanonischen Namen `audiomonastry-*`.
+ * (Der fruehere Kompatibilitaetsblock fuer Alt-Namen ist mit der
+ * Bestands-Ausmusterung entfallen - docs/PROPOSAL_legacy-shim-removal.md.)
  */
-describe('NOMEN-P1-001 · Altnamen-Kompatibilitaet (Bestandsflotte)', () => {
-  it('erkennt eine Flotte, die noch die alten Servernamen traegt', async () => {
-    // Fixture bewusst mit ALTen Namen: genau das ist eine laufende Installation.
+describe('NOMEN-P1-001 · kanonische Namen durchgaengig', () => {
+  it('liefert die Fleet-Map unter den kanonischen Servernamen', async () => {
     setupFetchMock({ servers: FLEET_SERVERS, images: [] });
 
     const env = createEnv();
@@ -480,37 +478,10 @@ describe('NOMEN-P1-001 · Altnamen-Kompatibilitaet (Bestandsflotte)', () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { fleet?: Record<string, string> };
-    // Die Altflotte wird unter dem NEUEN Schluessel geliefert - genau so findet
-    // die umbenannte App ihre Knoten, ohne dass Server umbenannt werden muessen.
     expect(body.fleet?.['audiomonastry-app-1']).toBe('1.2.3.4');
-    // Alle fuenf Rollen erscheinen unter dem NEUEN Namen, obwohl die Fixture
-    // durchgehend Alt-Namen traegt (master/ai/... ohne oeffentliche IP im Fixture).
     expect(Object.keys(body.fleet ?? {}).sort()).toEqual(
       ['audiomonastry-ai-1', 'audiomonastry-app-1', 'audiomonastry-edge-1', 'audiomonastry-master-1', 'audiomonastry-sfu-1'],
     );
-    expect(Object.keys(body.fleet ?? {}).some((k) => k.startsWith('samplemonk-'))).toBe(false);
-  });
-
-  it('findet Snapshots mit Altpraefix weiter (schneller Start + Retention)', async () => {
-    const legacyImage = {
-      id: 91, name: 'samplemonk-snapshot-app-20260801',
-      description: 'samplemonk-snapshot-app-2026-08-01', status: 'available',
-      created: '2026-08-01T10:00:00+00:00', labels: { app: 'audioMONASTRY', role: 'app' },
-    };
-    setupFetchMock({ images: [legacyImage] });
-
-    const env = createEnv();
-    const cookie = await makeSessionCookie(String(env.SESSION_SECRET));
-    const res = await worker.fetch(
-      new Request('https://anunnakitools.de/api/snapshots', { headers: { cookie } }),
-      env,
-    );
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { snapshots?: { id: number }[] };
-    // Auch Alt-Snapshots werden gelistet - sonst blieben sie unbemerkt liegen
-    // (Speicherkosten) und der schnelle Flotten-Start waere unnoetig langsam.
-    expect((body.snapshots ?? []).map((s) => s.id)).toContain(91);
   });
 });
 

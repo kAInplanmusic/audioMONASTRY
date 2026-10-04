@@ -4,6 +4,16 @@ export default defineConfig({
   test: {
     environment: 'node',
     setupFiles: ['tests/setup.ts'],
+    // AUDIT-RESTTODOS C3: NODE_ENV zentral auf 'test' pinnen. Der Host-Shell
+    // schwimmt hier gelegentlich NODE_ENV=production mit (npm install prunt
+    // dann devDependencies, Server-Gates laufen fail-closed: STUDIO_TOKEN_MISSING,
+    // React-Production-Builds im jsdom -> ~90 falsche Ausfaelle ohne Code-Bug).
+    // Vitest selbst setzt nur `??= 'test'` (_CLI-API, prepareVitest) und
+    // verteilt config.env an die Worker-Umgebungen - ein ambient
+    // 'production' ueberlebte beides. test.env gewinnt gegen process.env.
+    env: {
+      NODE_ENV: 'test',
+    },
     // ARCH-PERF-001: Robuste Timeout-Budgets gegen Flaky-Timeouts unter
     // Volllast (Server-Integrationstests wie aiRoutes/aiSecurityPenTest
     // brauchen bei paralleler tsc-/CPU-Last mehr als die 5 s Default).

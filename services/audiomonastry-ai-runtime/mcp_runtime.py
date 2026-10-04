@@ -8,6 +8,7 @@ Permissions: READ | WRITE | EXECUTION | DESTRUCTIVE
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
 PERMISSION_LEVELS = {"READ": 1, "WRITE": 2, "EXECUTION": 3, "DESTRUCTIVE": 4}
@@ -22,7 +23,14 @@ TOOLS: Dict[str, Dict[str, Any]] = {
     "audio.transcribe": {"category": "analysis", "permission": "EXECUTION", "description": "Speech-to-Text (Whisper)"},
     "audio.embed": {"category": "analysis", "permission": "EXECUTION", "description": "Audio-Embeddings (CLAP/MERT)"},
     "audio.generate": {"category": "generation", "permission": "EXECUTION", "description": "Audio-/Musik-Generierung"},
-    "sample.search": {"category": "sample", "permission": "READ", "description": "Sample-Suche über Embeddings"},
+    "sample.search": {
+        # DA-2026-09-29-021: Der Handler ruft _infer('embed', ...), startet also eine
+        # EXECUTION-Inferenz. Mit READ deklariert konnte ein Client mit reiner
+        # Leseberechtigung ein beliebiges Modell anstossen - Berechtigung daher angehoben.
+        "category": "sample",
+        "permission": "EXECUTION",
+        "description": "Sample-Suche über Embeddings",
+    },
     "session.getState": {"category": "session", "permission": "READ", "description": "Session-Zustand"},
 }
 
@@ -88,7 +96,12 @@ class McpRuntime:
         try:
             return {"ok": True, "result": handler(payload)}
         except Exception as exc:  # noqa: BLE001 – MCP-Fehler sauber zurückgeben
-            return {"ok": False, "error": str(exc)}
+            # DA-2026-09-29-020: Die rohe Exception kann interne Details tragen
+            # (Dateipfade, Modulnamen, Konfiguration). Sie wird serverseitig
+            # protokolliert, nach aussen geht nur eine generische Meldung; der
+            # Exception-Typ bleibt als unterscheidbares Merkmal erhalten.
+            logging.warning("MCP-Tool %s fehlgeschlagen (%s): %s", tool_name, type(exc).__name__, exc)
+            return {"ok": False, "error": "internal error", "errorType": type(exc).__name__}
 
     # ---------------------------------------------------------------- Handler
     def _tool_runtime_status(self, _payload: Dict[str, Any]) -> Dict[str, Any]:

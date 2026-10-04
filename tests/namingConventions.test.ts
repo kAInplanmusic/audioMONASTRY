@@ -33,15 +33,6 @@ const LEGACY_PATTERN = 'sample[-_]?monk';
 const ALLOWED: Record<string, string> = {
   'MASTERTODOENDE.json': 'Historische Notizen (Audit: Vergangenes wird nicht umgeschrieben).',
   'docs/HETZNER_DEPLOY.md': 'Migrationsliste alt -> neu + Betreiber-Schritte (nennt die Altwerte bewusst).',
-  'tests/portalWorkerSnapshots.test.ts': 'Fixtures mit Alt-Namen + Tests der Kompatibilitaet.',
-  'tests/fleetWiring.test.ts': 'Fixture einer Bestandsflotte (Alt-Namen in der Fleet-Map) + Kompatibilitaetstest.',
-  'tests/test_hetzner_scripts.py': 'F10: Fixture eines Bestands-Knotens (Stack laeuft noch unter dem Altnamen) fuer den '
-    + 'Watchdog-Test - der Altname steht dort BEWUSST als Literal in der Testfixture, nicht im Produktionscode. '
-    + 'Eine Probe, die den Altnamen aus fleet-names.sh ableitet, wuerde sich selbst bestaetigen und nie auffallen.',
-  'services/portal-worker/src/index.js': 'LEGACY_NAME_PREFIX / LEGACY_SNAPSHOT_PREFIXES (Bestandsressourcen).',
-  'scripts/hetzner/fleet-names.sh': 'LEGACY_FLEET_PREFIX/LEGACY_COMPOSE_PROJECT/LEGACY_FLEET_HOME - die EINE Namens- '
-    + 'und Pfadquelle (F10). Alle Skripte loesen ueber sie auf, damit der Altname nicht wandert.',
-  'server/fleetWiring.ts': 'FLEET_LEGACY_NAME_PREFIX (Fleet-Map einer nicht aktualisierten Instanz).',
   'tests/namingConventions.test.ts': 'Der Waechter selbst - er dokumentiert und sucht den Altnamen.',
   'services/audiomonastry-ai-runtime/Dockerfile.manifest': 'Dokumentierter Alt-Basis-Image-Pfad als Build-Argument.',
   'docs/OPS_RUNBOOK.md': 'Live-Beweis-Kapitel 2026-09-18: beschreibt den TATSAECHLICHEN Zustand der laufenden '
@@ -56,9 +47,14 @@ const ALLOWED: Record<string, string> = {
     + 'real vorgefundenen Bestandsressourcen (/opt/samplemonk/certs, samplemonk-idle-shutdown.timer, Knotennamen '
     + 'samplemonk-* im Widerspruch zu audiomonastry-*) - Messergebnis, keine Nomenklatur. Der Befund wird nicht '
     + 'umgeschrieben, sonst waere das Belegkapitel falsch.',
-  'visualsUMSETZUNGSPLAN.md': 'Inventur der RunPod-Templates (Kapitel 1.2): nennt die zwei Templates des '
-    + 'Bestands-/Fremdprojekts unter ihrem ECHTEN Namen ("nicht anfassen"). Ein Umbenennen im Text wuerde die '
-    + 'Inventur falsch machen und den Betreiber dazu verleiten, die fremden Templates anzufassen.',
+  'docs/PROPOSAL_legacy-shim-removal.md': 'Entfernungsplan mit Zeilenbelegen; nennt die Altnamen zwangslaeufig '
+    + '(dieses Dokument).',
+  'visualsUMSETZUNGSPLAN.md': 'RunPod-Template-Inventar (2026-09-29 aus origin/main gemergt): listet Bestands-Templates '
+    + 'eines ANDEREN Projekts, die real "samplemonk" heissen (Vermerk "nicht anfassen") - Messergebnis der '
+    + 'Live-Enumeration, keine Nomenklatur im Projektcode.',
+  'docs/AUDIT-FIXPAKET-D.md': 'Abschlussreport der Legacy-Ausmusterung: der Titel und die Belege nennen den '
+    + 'ausgemusterten Shim beim Namen (Commit-Belege, Dateipfade) - das ist das Ergebnis, keine neue Nomenklatur. '
+    + 'Ohne den Namen waere der Report als Nachweis wertlos.',
 };
 
 function trackedFiles(): string[] {
@@ -156,10 +152,10 @@ describe('NOMEN-P1-001 · Nomenklatur', () => {
     expect(deploy).not.toMatch(/samplemonk/i);
 
     const portal = readFileSync('services/portal-worker/src/index.js', 'utf8');
-    // Neuer Praefix wird ANGELEGT, der Altpraefix nur noch akzeptiert.
+    // Ein einziger Praefix - der Alt-Praefix ist ausgemustert (Phase 2).
     expect(portal).toContain("const NAME_PREFIX = 'audiomonastry-'");
     expect(portal).toContain("const SNAPSHOT_PREFIX = 'audiomonastry-snapshot-'");
-    expect(portal).toContain('LEGACY_SNAPSHOT_PREFIXES');
+    expect(portal).not.toMatch(/samplemonk/i);
 
     // systemd-Units heissen ebenfalls neu.
     const idleCheck = readFileSync('scripts/hetzner/systemd/idle-check.sh', 'utf8');

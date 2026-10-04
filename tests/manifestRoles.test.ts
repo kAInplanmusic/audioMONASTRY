@@ -15,6 +15,7 @@ interface ManifestModel {
   revision: string;
   preload?: boolean;
   status?: string;
+  estimatedVRAM: number;
 }
 
 interface ManifestRole {
@@ -22,6 +23,7 @@ interface ManifestRole {
   gpuPoolId: string;
   gpuCount: number;
   vramBudgetGb: number;
+  vramSafetyMarginGb?: number;
   idleTimeoutSeconds?: number;
   preloadModels: string[];
   models: string[];
@@ -109,7 +111,7 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
     // Streichliste der 8-Instanzen-Architektur (qwen3-32b, glm-4.5-air,
     // mert-v1-95m, fish-speech, rvc ...) ist aus dem Manifest entfernt und
     // deshalb hier nicht mehr zu prüfen.
-    for (const id of ['qwen3-30b-a3b-awq', 'mert-v1-330m', 'flux2-dev', 'wan22-t2v-a14b', 'ltx-video-13b']) {
+    for (const id of ['qwen3-30b-a3b-awq', 'mert-v1-330m', 'flux1-dev', 'wan22-t2v-a14b', 'ltx-video-13b']) {
       const model = modelsById.get(id);
       expect(model, `${id} fehlt im Manifest`).toBeDefined();
       expect(model?.revision.toUpperCase().startsWith('TBD'), `${id} ist ungepinnt (${model?.revision})`).toBe(false);
@@ -133,5 +135,51 @@ describe('Rollen-Manifest ↔ TS-Flotten-Registry (Drift-Guard)', () => {
       if (!model.revision.toUpperCase().startsWith('TBD')) continue;
       expect(model.status, `${model.id}: TBD-Revision nur mit status="planned"`).toBe('planned');
     }
+  });
+
+  // AUDIT-RESTTODOS C4: VRAM-Gate. Die Summe der geschätzten Residency aller
+  // Preload-Modelle muss in das Rollen-Budget abzüglich Sicherheitsmarge passen.
+  // Die estimatedVRAM-Werte sind Schätzungen im Manifest (einzige VRAM-Quelle) –
+  // dieser Test verhindert, dass neue Preloads still über das Budget wachsen.
+  //
+  // DOKUMENTIERTE AUSNAHMEN (VRAM-Nachmessung offen, APP-Touch -> erst mit
+  // Freigabe; Manifestwerte werden bewusst NICHT gefälscht, um den Test grün
+  // zu bekommen):
+  //   * videoReal:     wan22-t2v-a14b est 32 GB, Preload-Summe 41 GB
+  //                    vs. ADA_24: 24 − 6 = 18 GB Deckel → −23 GB über Budget.
+  //                    (Der 32-GB-Schätzwert trägt vermutlich ein Parallel-Batch
+  //                    mit ein; die Messung am live-Worker steht aus.)
+  //   * videoAbstract: ltx-video-13b est 18 GB, Preload-Summe 27 GB
+  //                    vs. ADA_24: 24 − 6 = 18 GB Deckel → −9 GB über Budget.
+  const vramGateExceptions: Record<string, string> = {
+    videoReal: 'VRAM-Nachmessung offen (APP-Touch): wan22-t2v-a14b est 32 GB, Summe 41 GB vs. Deckel 18 GB',
+    videoAbstract: 'VRAM-Nachmessung offen (APP-Touch): ltx-video-13b est 18 GB, Summe 27 GB vs. Deckel 18 GB',
+  };
+
+  it('hält je Rolle die Preload-VRAM-Summe im Budget abzüglich Sicherheitsmarge (C4)', () => {
+    const violations: string[] = [];
+    for (const [role, spec] of Object.entries(manifest.roles)) {
+      const margin = spec.vramSafetyMarginGb ?? 0;
+      const cap = spec.vramBudgetGb - margin;
+      expect(cap, `${role}: Budget ${spec.vramBudgetGb} muss über der Marge ${margin} liegen`).toBeGreaterThan(0);
+      const sum = spec.preloadModels.reduce((acc, modelId) => {
+        const model = modelsById.get(modelId);
+        expect(model, `${role}: Preload-Modell ${modelId} fehlt im Manifest`).toBeDefined();
+        return acc + (model?.estimatedVRAM ?? 0);
+      }, 0);
+      if (sum > cap && vramGateExceptions[role]) {
+        // Ausnahme nur solange die Nachmessung offen ist – der Verstoß wird
+        // sichtbar gehalten statt still geschluckt.
+        console.warn(
+          `[C4][dokumentierte Ausnahme] ${role}: Preload-Summe ${sum} GB > Deckel ${cap} GB`
+          + ` (${vramGateExceptions[role]})`,
+        );
+        continue;
+      }
+      if (sum > cap) {
+        violations.push(`${role}: Summe ${sum} GB > Deckel ${cap} GB (Budget ${spec.vramBudgetGb} − Marge ${margin})`);
+      }
+    }
+    expect(violations, `VRAM-Budget überschritten:\n${violations.join('\n')}`).toEqual([]);
   });
 });

@@ -93,6 +93,9 @@ Anforderung „Audio-Thread bleibt frei“). Mapping → `VisualParams` ist bere
   `scripts/runpod-vision-test.py` ein echtes Bild ziehen.
 - **Tasks:** `image.generate` (Text→Bild), `image.style` (Bildupload→Stil via
   IP-Adapter/ControlNet), `video.generate` (leichtes Modell), `video.audioReactive`.
+- **Basis-Entscheidung 2026-09-29:** **FLUX.1-dev, komprimiert (FP8)** — Generierung,
+  LoRA-Training und Beispiele laufen auf derselben 48-GB-Karte; **FLUX.2 [dev]**
+  (32B, ~32 GB) wurde deshalb verworfen (Manifest: `flux1-dev`).
 - **Upgrade-Pfad:** FLUX.1-schnell (Apache-2.0) für Realismus; ein zweiter Satz
   Stil-LoRAs (Noir/Comic/Dystopie/psychedelisch) — pro Stil ein LoRA.
 - **Audio→Prompt:** `ears` (CLAP/AST/Whisper/Essentia) erzeugt Beschreibung/

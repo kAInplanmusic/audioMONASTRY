@@ -1,0 +1,15 @@
+{
+  "//": [
+    "T1-Reparatur (DEEP-TEST-PLAN): dieses Paket war leer und hat den Playwright-Start",
+    "blockiert. Es ist jetzt bewusst MINIMAL: keine eigenen Dependencies, keine Skripte -",
+    "die Suite laeuft ausschliesslich ueber das Root-Paket (deps @playwright/test 1.62 +",
+    "playwright 1.62 im Root-package.json, Config playwright.config.ts im Repo-Root).",
+    "Ausfuehrung: npx playwright test  (vom Repo-Root) bzw. scripts/hetzner/deep-test-run.sh.",
+    "Dieses package.json existiert nur, damit tools, die einen Ordner als Paket lesen",
+    "(Editor-Worker, npx-Aufrufe aus tests/e2e heraus), kein defektes/leeres Manifest sehen."
+  ],
+  "name": "@audiomonastry/e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module"
+}

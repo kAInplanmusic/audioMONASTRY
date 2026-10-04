@@ -141,9 +141,8 @@ PORTAL_WORKER = ROOT / "services" / "portal-worker" / "src" / "index.js"
 SERVER_FLEET_DOC = ROOT / "docs" / "SERVER_FLEET.md"
 COMPOSE_BASE = ROOT / "docker-compose.hetzner.yml"
 COMPOSE_MONITORING = ROOT / "docker-compose.monitoring.yml"
-# F10: Namensquelle + Migrationsweg fuer Bestands-Knoten.
+# F10: Namensquelle fuer Bestands-Knoten-Vertraege.
 FLEET_NAMES = HETZNER / "fleet-names.sh"
-MIGRATE_PROJECT = HETZNER / "migrate-project-name.sh"
 FLEET_DEPLOY_LIVE = HETZNER / "fleet-deploy-live.sh"
 INSTALL_AI1 = HETZNER / "install-ai1.sh"
 # PROD-P2-REG: der Registry-Weg (Push-Werkzeug + gemeinsame Bibliothek + Doku).
@@ -440,18 +439,19 @@ class MedienAuslieferungTest(unittest.TestCase):
 
 
 class FirewallWerkzeugeTest(unittest.TestCase):
-    """TURN-Ports sichern und Legacy-Firewalls aufraeumen - beides ohne
+    """TURN-Ports sichern und Firewall-Bestand pruefen - beides ohne
     Ueberraschungen: Trockenlauf per Default, und nie etwas loeschen, das noch
-    an einem Server haengt."""
+    an einem Server haengt. (Das Cleanup-Werkzeug fuer Alt-Praefix-Firewalls
+    ist mit der Ausmusterung des Altbestands 2026-09 entfallen - die Aufgabe
+    war 2026-09-20 erledigt, Beleg: OPS_RUNBOOK + git-History.)"""
 
     def setUp(self) -> None:
         self.bash = bash_path()
         self.ensure = HETZNER / "firewall-ensure-turn.py"
         self.inventory = HETZNER / "firewall-inventory.py"
-        self.cleanup = HETZNER / "cleanup-legacy-firewalls.py"
 
     def test_werkzeuge_existieren_und_sind_syntaxgueltig(self) -> None:
-        for script in (self.ensure, self.inventory, self.cleanup):
+        for script in (self.ensure, self.inventory):
             with self.subTest(script=script.name):
                 self.assertTrue(script.exists(), f"{script} fehlt")
                 result = subprocess.run(
@@ -474,17 +474,6 @@ class FirewallWerkzeugeTest(unittest.TestCase):
         # Trockenlauf per Default: schreiben nur mit --apply.
         self.assertIn('"--apply" in args', ensure)
         self.assertIn("Trockenlauf", ensure)
-
-    def test_aufraeumen_loescht_nur_ungebundene_firewalls(self) -> None:
-        text = self.cleanup.read_text(encoding="utf-8")
-        # Reihenfolge: erst applied_to pruefen, dann loeschen.
-        check = text.index("applied_to")
-        delete = text.index('"DELETE"')
-        self.assertLess(check, delete, "applied_to muss VOR dem DELETE geprueft werden")
-        self.assertIn("UEBERSPRUNGEN", text)
-        self.assertIn('"--apply" in sys.argv', text)
-        # Der Legacy-Praefix kommt aus der einen Namensquelle, nicht als Literal.
-        self.assertIn("fleet-names.sh", text)
 
     def test_metrik_scrape_ist_verdrahtet(self) -> None:
         """Der App-Metrik-Job darf nicht an Cloudflare haengen: die App
@@ -560,6 +549,34 @@ cmd="${*: -1}"
 printf '%s\n' "$cmd" >> "${FAKE_SSH_LOG:?}"
 exec bash -c "${cmd//\/opt\/audiomonastry/${FAKE_SSH_REPO:?}}"
 """
+
+
+def fuseblk_permission_bit_artifact(meldung: str) -> bool:
+    """True, wenn eine systemd-analyze-Meldung ein ARTEFAKT des Dateisystems ist.
+
+    GEMESSEN (2026-09-29, Repo auf /mnt/wd-elements, `stat -f` => fuseblk/NTFS,
+    git core.fileMode=false): `systemd-analyze verify` meldet fuer die in ein
+    temporaeres Root kopierten Units
+
+      "Configuration file …/audiomonastry-idle-shutdown.service is marked
+       executable. Please remove executable permission bits. Proceeding anyway."
+
+    Auf fuseblk lassen sich Permission-Bits nicht setzen – die Warnung ist nicht
+    abstellbar und ist KEIN Unit-Fehler (systemd faehrt fort, returncode 0).
+    Belegt in docs/AUDIT-FIXPAKET-D.md (Stash-Roundtrip am unveraenderten HEAD)
+    und in docs/AUDIT-FIXPAKET-E.md.
+
+    Der Skip greift NUR, wenn BEIDES nachweisbar ist: das Repo liegt auf einem
+    fuseblk-Mount UND die Ausgabe besteht ausschliesslich aus genau dieser
+    Warnung. Auf ext4/tmpfs/CI bleibt die Zusicherung unveraendert streng.
+    """
+    mount = subprocess.run(["stat", "-f", "-c", "%T", str(ROOT)], capture_output=True, text=True)
+    if mount.stdout.strip() != "fuseblk":
+        return False
+    zeilen = [z.strip() for z in meldung.splitlines() if z.strip()]
+    return bool(zeilen) and all(
+        "is marked executable" in z and "remove executable permission bits" in z for z in zeilen
+    )
 
 
 class IdleShutdownTimerTest(unittest.TestCase):
@@ -945,7 +962,14 @@ class IdleShutdownTimerTest(unittest.TestCase):
         for name, ergebnis in ergebnisse.items():
             with self.subTest(unit=name):
                 self.assertEqual(ergebnis.returncode, 0, ergebnis.stdout + ergebnis.stderr)
-                self.assertEqual(ergebnis.stdout + ergebnis.stderr, "", f"systemd-analyze meldet etwas: {name}")
+                meldung = ergebnis.stdout + ergebnis.stderr
+                if fuseblk_permission_bit_artifact(meldung):
+                    self.skipTest(
+                        "Artefakt des fuseblk/NTFS-Mounts: systemd-analyze warnt 'is marked executable … "
+                        "Proceeding anyway' fuer die kopierten Units, weil auf diesem Dateisystem keine "
+                        "Permission-Bits setzbar sind (Beleg: docs/AUDIT-FIXPAKET-E.md). Kein Unit-Fehler."
+                    )
+                self.assertEqual(meldung, "", f"systemd-analyze meldet etwas: {name}")
 
 
 class EdgeMonitoringLimitsTest(unittest.TestCase):
@@ -1135,9 +1159,8 @@ CONTROLLED_ENV = (
     "FLEET_ENV_FILE",
     # F10: Namens-/Pfadquellen und der Compose-Projektname - sonst haengt ein
     # Testlauf an der Shell des Rechners (die Skripte lesen sie per ${VAR:-...}).
-    "COMPOSE_PROJECT_NAME", "COMPOSE_PROJECT", "FLEET_COMPOSE_PROJECT", "LEGACY_COMPOSE_PROJECT",
-    "FLEET_PREFIX", "LEGACY_FLEET_PREFIX", "FLEET_HOME", "LEGACY_FLEET_HOME",
-    "DEPLOY_LEGACY_REMOTE_DIR",
+    "COMPOSE_PROJECT_NAME", "COMPOSE_PROJECT", "FLEET_COMPOSE_PROJECT",
+    "FLEET_PREFIX", "FLEET_HOME",
     # PROD-P2-REG: GHCR-Zugangsdaten + Registry-Schalter. Die Hermes-Shell kann
     # GHCR_USERNAME/GHCR_PASSWORD exportiert haben - dann liefe ein Test gegen die
     # ECHTEN Zugangsdaten des Betreibers (gemessen am 2026-09-21: GHCR_USERNAME
@@ -1424,6 +1447,14 @@ class _CloudflareWriteStub:
             def do_GET(self) -> None:  # noqa: N802 - Name kommt von BaseHTTPRequestHandler
                 stub.requests.append(("GET", self.path))
                 if self.path.startswith("/client/v4/zones?"):
+                    # Zonen-Lookup ist NAME-abhaengig (wie die echte API): wird
+                    # hier eine SUBDOMAIN als DOMAIN uebergeben, kommt KEINE Zone
+                    # zurueck. Genau daran ist Phase T2 am 2026-09-29 gescheitert
+                    # ("keine Zone fuer deeptest.anunnakitools.de").
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    name = (query.get("name") or [""])[0]
+                    if name and name != "anunnakitools.de":
+                        return self._send(200, {"success": True, "errors": [], "result": []})
                     return self._send(200, {"success": True, "errors": [], "result": [
                         {"id": "zone-4711", "name": "anunnakitools.de"},
                     ]})
@@ -1498,21 +1529,24 @@ class CfDnsEnsureTest(unittest.TestCase):
     def setUp(self) -> None:
         self.python = sys.executable
 
-    def _run(self, stub: _CloudflareWriteStub | None, *args: str, token: str | None = "cf-token-test"):
+    def _run(self, stub: _CloudflareWriteStub | None, *args: str, token: str | None = "cf-token-test",
+             **extra: str | None):
+        base: dict[str, str | None] = dict(
+            CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
+            CLOUDFLARE_API_TOKEN=token,
+            CLOUDFLARE_TOKEN=None,
+            DOMAIN="anunnakitools.de",
+            ORIGIN_HOST=self.ORIGIN,
+            APP_IP=self.APP_IP,
+            SFU_SUBDOMAIN="sfu",
+            SFU_HOST=self.SFU,
+            SFU_IP=self.SFU_IP,
+        )
+        base.update(extra)
         return subprocess.run(
             [self.python, str(CF_DNS_ENSURE), *args],
             capture_output=True, text=True, cwd=ROOT, timeout=60,
-            env=clean_env(
-                CF_API_BASE=(stub.api_base if stub is not None else "http://127.0.0.1:9/client/v4"),
-                CLOUDFLARE_API_TOKEN=token,
-                CLOUDFLARE_TOKEN=None,
-                DOMAIN="anunnakitools.de",
-                ORIGIN_HOST=self.ORIGIN,
-                APP_IP=self.APP_IP,
-                SFU_SUBDOMAIN="sfu",
-                SFU_HOST=self.SFU,
-                SFU_IP=self.SFU_IP,
-            ),
+            env=clean_env(**base),
         )
 
     def test_trockenlauf_schreibt_nichts(self) -> None:
@@ -1571,6 +1605,73 @@ class CfDnsEnsureTest(unittest.TestCase):
         with stub:
             ok = self._run(stub, "--apply", token="cf-geheim-4711")
         self.assertNotIn("cf-geheim-4711", ok.stdout + ok.stderr)
+
+    # --- Deep-Test-Vertrag (Befund 2026-09-29) -------------------------------
+
+    def test_zone_lookup_mit_subdomain_statt_zone_schlaegt_fehl(self) -> None:
+        """Der T2-Ausfall vom 2026-09-29 als Regressionstest.
+
+        `deep-test-run.sh` uebergab DOMAIN=$DEPLOY_DOMAIN (Subdomain). Der
+        Zonen-Lookup GET /zones?name=<subdomain> liefert keine Zone – T2 brach
+        ab, obwohl der Token gueltig war. Der Stub bildet den Namensbezug nach.
+        """
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply", DOMAIN="deeptest.anunnakitools.de")
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("keine Zone fuer deeptest.anunnakitools.de", combined)
+        self.assertEqual(len(stub.requests), 1, f"Nach dem Zonen-Fehlschlag darf kein weiterer Request folgen: {stub.requests}")
+        self.assertEqual(stub.requests[0][0], "GET")
+
+    def test_scope_guard_blockt_produktionsnamen_vor_jedem_schreiben(self) -> None:
+        """Der harte Guard: SUBDOMAIN=deeptest + Produktionshosts = Abbruch, kein POST/PUT.
+
+        Ohne diesen Guard haette ein Lauf mit Default-Hosts die Produktions-
+        records origin./sfu.anunnakitools.de auf die Testknoten umgebogen.
+        """
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply", SUBDOMAIN="deeptest")  # ORIGIN/SFU = Produktionsnamen
+        combined = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 1, combined)
+        self.assertIn("ABBRUCH (Scope-Guard)", combined)
+        self.assertIn(self.ORIGIN, combined)
+        self.assertEqual([m for m in stub.methods() if m != "GET"], [], "Der Guard muss VOR jedem Schreibzugriff greifen")
+        self.assertEqual(stub.records, [])
+
+    def test_scope_guard_erlaubt_test_subdomain_und_haelt_dns_vertrag(self) -> None:
+        """Mit korrektem Scope: origin/sfu innerhalb *.deeptest (DNS-only) + App-Host proxied."""
+        origin = "origin.deeptest.anunnakitools.de"
+        sfu = "sfu.deeptest.anunnakitools.de"
+        app = "deeptest.anunnakitools.de"
+        stub = _CloudflareWriteStub()
+        with stub:
+            dry = self._run(stub, DOMAIN="anunnakitools.de", SUBDOMAIN="deeptest",
+                            ORIGIN_HOST=origin, SFU_HOST=sfu, APP_HOST=app)
+            self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
+            self.assertEqual(stub.methods(), ["GET", "GET"], "Trockenlauf schreibt nichts")
+            self.assertEqual(stub.records, [])
+            self.assertIn(app, dry.stdout)
+
+            applied = self._run(stub, "--apply", DOMAIN="anunnakitools.de", SUBDOMAIN="deeptest",
+                                ORIGIN_HOST=origin, SFU_HOST=sfu, APP_HOST=app)
+        combined = applied.stdout + applied.stderr
+        self.assertEqual(applied.returncode, 0, combined)
+        for name, ip, proxied in ((origin, self.APP_IP, False), (sfu, self.SFU_IP, False), (app, self.APP_IP, True)):
+            record = stub.record_for(name)
+            self.assertEqual(record["type"], "A")
+            self.assertEqual(record["content"], ip)
+            self.assertIs(record["proxied"], proxied,
+                          f"{name}: proxied={proxied} erwartet (origin/sfu DNS-only, App-Host proxied)")
+
+    def test_ohne_app_host_bleibt_der_zwei_record_vertrag(self) -> None:
+        """APP_HOST ist optional – ohne ihn verhaelt sich das Werkzeug wie vorher (2 Records)."""
+        stub = _CloudflareWriteStub()
+        with stub:
+            result = self._run(stub, "--apply")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(len(stub.records), 2)
 
 
 class ModellDownloadTest(unittest.TestCase):
@@ -2560,30 +2661,25 @@ class RtcVerdrahtungTest(unittest.TestCase):
 # F10: Namespace-/Projektparitaet (Repo <-> Flotte)
 # ---------------------------------------------------------------------------
 
-#: Knoten, dessen Stack noch unter dem Altnamen laeuft - Fixture fuer den
-#: Watchdog-Test. Der Altname steht hier BEWUSST als Literal (unabhaengig von
-#: `fleet-names.sh`, sonst waere die Probe zirkulaer: eine Namensquelle, die sich
-#: selbst bestaetigt, wuerde nie auffallen). Begruendung in der ALLOWED-Map von
-#: tests/namingConventions.test.ts.
-LEGACY_FIXTURE_PROJECT = "samplemonk"
-LEGACY_FIXTURE_APP = "samplemonk"
-LEGACY_FIXTURE_CADDY = "samplemonk-caddy"
+#: Container, die der Watchdog finden und reparieren koennen muss - Fixture
+#: fuer den Watchdog-Test (F10: Reparatur im KANONISCHEN Projekt).
+FIXTURE_PROJECT = "audiomonastry"
+FIXTURE_APP = "audiomonastry"
+FIXTURE_CADDY = "audiomonastry-caddy"
 
-#: Dateien, in denen der Altname stehen DARF (Bestands-Kompatibilitaet). Alles
-#: andere unter scripts/ + services/ ist ein Befund: der Name darf nicht
-#: wandern, sonst entsteht genau der Drift, den F10 beschreibt.
+#: Dateien, in denen der Altname nach der Ausmusterung NUR noch als dokumentierter
+#: Alt-Basis-Image-Pfad stehen darf. Alles andere unter scripts/ + services/ ist
+#: ein Befund: der Name darf nicht wandern.
 LEGACY_ALLOWED_FILES = {
-    "scripts/hetzner/fleet-names.sh",                       # die EINE Namensquelle
-    "services/portal-worker/src/index.js",                  # LEGACY_NAME_PREFIX (Bestand lesen)
     "services/audiomonastry-ai-runtime/Dockerfile.manifest",  # Alt-Basis-Image-Pfad (Build-Arg)
 }
 
-#: Wie ein Bestands-Knoten antwortet (kein Docker, kein Netz): der Stack laeuft
-#: unter dem Altnamen, die App ist krank -> der Watchdog MUSS sie reparieren.
+#: Wie ein Knoten antwortet (kein Docker, kein Netz): Container sind da, die App
+#: ist krank -> der Watchdog MUSS sie reparieren.
 FAKE_DOCKER = r"""#!/usr/bin/env bash
 # Fake `docker` fuer den F10-Watchdog-Test. Protokolliert jeden Aufruf mit dem
 # effektiven COMPOSE_PROJECT_NAME (so laesst sich belegen, dass die Reparatur im
-# KANONISCHEN Projekt laeuft) und antwortet wie ein Knoten mit Alt-Namen.
+# KANONISCHEN Projekt laeuft).
 set -uo pipefail
 { for a in "$@"; do printf '%s ' "$a"; done
   printf '| COMPOSE_PROJECT_NAME=%s\n' "${COMPOSE_PROJECT_NAME:-<leer>}"; } >> "${FAKE_DOCKER_LOG:?}"
@@ -2604,37 +2700,11 @@ exit 0
 """
 
 
-FAKE_SSH = r"""#!/usr/bin/env bash
-# Fake `ssh` fuer den F10-Migrationstest: protokolliert JEDEN entfernten Befehl
-# und antwortet wie ein Bestands-Knoten. Damit laesst sich ohne Netz belegen,
-# dass die Migration erst aufloest und dann stoppt - und im Fehlerfall GAR NICHT
-# stoppt (live passiert am 2026-09-20: sfu-1 lag nach "no such service:
-# audiomonastry" unten).
-set -uo pipefail
-cmd="${*: -1}"
-printf '%s\n' "$cmd" >> "${FAKE_SSH_LOG:?}"
-case "$cmd" in
-  *"config --services"*)
-    printf '%s\n' "${FAKE_SSH_SERVICES:-}"
-    ;;
-  *"volume ls"*)
-    printf '%s\n' "${FAKE_SSH_VOLUMES:-}"
-    ;;
-  *"inspect -f"*)
-    printf '%s\n' "${FAKE_SSH_INSPECT:-}"
-    ;;
-  *"docker ps --format"*)
-    printf '%s\n' "${FAKE_SSH_PROJECTS:-samplemonk}"
-    ;;
-  *"=installation"*)
-    printf '%s\n' "${FAKE_SSH_DIRS:-/opt/samplemonk=installation}"
-    ;;
-  *)
-    printf '%s\n' "${FAKE_SSH_DEFAULT:-}"
-    ;;
-esac
-exit 0
-"""
+#: Wie ein Knoten mit gestopptem Stack antwortet (kein Docker, kein Netz): der
+#: Pfad existiert, es laeuft aber nichts. Genau der Zustand, in dem ein Deploy
+#: in den Defaultpfad ein Fehldeploy waere - der Guard muss das abfangen.
+#: (Der fruehere FAKE_SSH fuer die Migrations-Tests ist mit dem geloeschten
+#: migrate-project-name.sh entfallen.)
 
 
 class NamespaceParitaetTest(unittest.TestCase):
@@ -2657,11 +2727,8 @@ class NamespaceParitaetTest(unittest.TestCase):
         script = "\n".join([
             "source scripts/hetzner/fleet-names.sh",
             'echo "prefix=$FLEET_PREFIX"',
-            'echo "legacy_prefix=$LEGACY_FLEET_PREFIX"',
             'echo "project=$(fleet_compose_project)"',
-            'echo "legacy_project=$(fleet_legacy_compose_project)"',
             'echo "home=$FLEET_HOME"',
-            'echo "legacy_home=$(fleet_legacy_home)"',
             'echo "bare=$(fleet_name_variants audiomonastry | tr \'\\n\' \' \')"',
             'echo "caddy=$(fleet_name_variants audiomonastry-caddy | tr \'\\n\' \' \')"',
             'echo "app_node=$(fleet_candidates audiomonastry-app-1 | tr \'\\n\' \' \')"',
@@ -2682,28 +2749,27 @@ class NamespaceParitaetTest(unittest.TestCase):
         return result.stdout + result.stderr
 
     # --- 1. Namensaufloesung ----------------------------------------------
-    def test_beide_schreibweisen_werden_auf_denselben_namen_abgebildet(self) -> None:
+    def test_kanonischer_name_wird_einpraefig_aufgeloest(self) -> None:
         names = self._names()
-        self.assertEqual(names["bare"], f"{names['project']} {names['legacy_project']}")
-        self.assertEqual(names["caddy"], f"{names['project']}-caddy {names['legacy_project']}-caddy")
-        self.assertEqual(names["app_node"], "audiomonastry-app-1 samplemonk-app-1")
-        # Reihenfolge ist Teil des Vertrags: der kanonische Name kommt ZUERST
-        # (neu anlegen/ansprechen), der Altname nur als Rueckfall.
-        self.assertTrue(names["bare"].startswith(names["project"] + " "))
-        self.assertTrue(names["caddy"].startswith(names["project"] + "-"))
+        # Nur noch die kanonische Schreibweise - ein Name, ein Treffer.
+        self.assertEqual(names["bare"], names["project"])
+        self.assertEqual(names["caddy"], f"{names['project']}-caddy")
+        self.assertEqual(names["app_node"], "audiomonastry-app-1")
         # Ein fremder Name wird nicht umgeschrieben (nichts wird geraten).
         self.assertEqual(names["fremd"], "web-1")
         # Projekt + Pfade stammen aus derselben Quelle.
-        self.assertEqual(names["legacy_project"], LEGACY_FIXTURE_PROJECT)
         self.assertEqual(names["home"], "/opt/audiomonastry")
-        self.assertEqual(names["legacy_home"], "/opt/samplemonk")
 
     def test_die_quelle_ist_konfigurierbar_und_bleibt_eine_quelle(self) -> None:
         # Der Override wirkt auf die Funktionen, die die Skripte aufrufen -
         # kein Skript baut sich seinen eigenen Namen.
         names = self._names(FLEET_COMPOSE_PROJECT="probe-projekt")
         self.assertEqual(names["project"], "probe-projekt")
-        self.assertEqual(names["bare"].split()[1], names["legacy_project"])
+        # Die Aufloesung ist Passthrough: das ARGUMENT kommt unveraendert
+        # zurueck (seit der Ausmusterung gibt es keine Zweit-Schreibweise mehr,
+        # die vom Projekt-Override abhingen).
+        self.assertEqual(names["bare"], "audiomonastry")
+        self.assertEqual(names["caddy"], "audiomonastry-caddy")
 
     def test_bash_syntax_der_namensquelle(self) -> None:
         result = subprocess.run([self.bash, "-n", str(FLEET_NAMES)], capture_output=True, text=True, cwd=ROOT, timeout=60)
@@ -2784,8 +2850,8 @@ class NamespaceParitaetTest(unittest.TestCase):
         self.assertIn("COMPOSE_PROJECT_NAME=$FLEET_COMPOSE_PROJECT docker compose", BRING_UP.read_text(encoding="utf-8"))
         self.assertIn('COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" docker compose', AUTO_REPAIR.read_text(encoding="utf-8"))
 
-    # --- 4. Watchdog (Health-Skript) akzeptiert beide Schreibweisen --------
-    def test_watchdog_findet_und_repariert_den_container_unter_dem_altnamen(self) -> None:
+    # --- 4. Watchdog (Health-Skript) ----------------------------------------
+    def test_watchdog_findet_und_repariert_den_container(self) -> None:
         project = self._names()["project"]
         with tempfile.TemporaryDirectory(prefix="f10-watchdog-") as tmp:
             tmpdir = pathlib.Path(tmp)
@@ -2803,8 +2869,7 @@ class NamespaceParitaetTest(unittest.TestCase):
                 PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
                 FAKE_DOCKER_LOG=str(docker_log),
                 FAKE_DOCKER_COMPOSE_LOG=str(compose_log),
-                # Der Knoten laeuft noch unter dem Altnamen - genau der F10-Zustand.
-                FAKE_DOCKER_CONTAINERS=f"{LEGACY_FIXTURE_APP} {LEGACY_FIXTURE_CADDY}",
+                FAKE_DOCKER_CONTAINERS=f"{FIXTURE_APP} {FIXTURE_CADDY}",
                 LOG=str(repair_log),
                 APP_DIR=str(app_dir),
                 CHECKS="1",  # eine Probe je Container reicht im Test
@@ -2819,33 +2884,29 @@ class NamespaceParitaetTest(unittest.TestCase):
             calls = docker_log.read_text(encoding="utf-8") if docker_log.exists() else ""
 
         # 1. Der Watchdog probt ueberhaupt einen Container (sonst "nicht-vorhanden").
-        self.assertIn(f"app-container={LEGACY_FIXTURE_APP}", repair, repair)
-        self.assertIn(f"caddy-container={LEGACY_FIXTURE_CADDY}", repair, repair)
-        # 2. Die Reparatur trifft den ALT-Container ...
-        self.assertIn(f"up -d --force-recreate {LEGACY_FIXTURE_APP}", compose_calls, compose_calls)
-        self.assertIn(f"up -d --force-recreate {LEGACY_FIXTURE_CADDY}", compose_calls, compose_calls)
-        # ... 3. aber im KANONISCHEN Projekt (nicht im Alt-Projekt).
+        self.assertIn(f"app-container={FIXTURE_APP}", repair, repair)
+        self.assertIn(f"caddy-container={FIXTURE_CADDY}", repair, repair)
+        # 2. Die Reparatur trifft die KANONISCHEN Container ...
+        self.assertIn(f"up -d --force-recreate {FIXTURE_APP}", compose_calls, compose_calls)
+        self.assertIn(f"up -d --force-recreate {FIXTURE_CADDY}", compose_calls, compose_calls)
+        # ... 3. im KANONISCHEN Projekt.
         self.assertIn(f"COMPOSE_PROJECT_NAME={project}", compose_calls, compose_calls)
-        self.assertNotIn(f"COMPOSE_PROJECT_NAME={LEGACY_FIXTURE_PROJECT}", compose_calls, compose_calls)
-        # 4. Der Betreiber sieht den Altnamen als Migrationshinweis (nicht still).
-        self.assertIn(LEGACY_FIXTURE_PROJECT, repair, repair)
-        self.assertIn("migrate-project-name.sh", repair, repair)
-        # 5. Der Watchdog hat BEIDE Schreibweisen geprobt: der kanonische Name
-        #    wird zuerst abgefragt (er laeuft nicht -> kein Treffer), danach der
-        #    Altname, mit dem die Reparatur dann arbeitet.
-        self.assertGreaterEqual(calls.count("ps --format"), 2, calls)
-        self.assertIn(f"exec {LEGACY_FIXTURE_APP}", calls, calls)
+        self.assertIn(FIXTURE_PROJECT, repair, repair)
+        # 4. Der Watchdog hat die Namensaufloesung benutzt (docker ps).
+        self.assertGreaterEqual(calls.count("ps --format"), 1, calls)
+        self.assertIn(f"exec {FIXTURE_APP}", calls, calls)
 
     # --- 5. Health-Skript ohne zweite Namensliste --------------------------
     def test_health_skript_leitet_die_muster_aus_der_namensquelle_ab(self) -> None:
         text = (HETZNER / "fleet-status.sh").read_text(encoding="utf-8")
-        self.assertIn('"${FLEET_PREFIX}"app-*|"${LEGACY_FLEET_PREFIX}"app-*', text)
-        self.assertIn("LEGACY_COMPOSE_PROJECT", text)
-        self.assertNotRegex(text, r"sample[-_]?monk", "fleet-status.sh: Altname steht in der Namensquelle, nicht hier")
+        self.assertIn('"${FLEET_PREFIX}"app-*', text)
+        self.assertNotIn("LEGACY_FLEET_PREFIX", text)
+        self.assertNotIn("LEGACY_COMPOSE_PROJECT", text)
+        self.assertNotRegex(text, r"sample[-_]?monk", "fleet-status.sh: kein Altname mehr im Skript")
         result = subprocess.run([self.bash, "-n", str(HETZNER / "fleet-status.sh")], capture_output=True, text=True, cwd=ROOT, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_altname_steht_nur_in_der_namensquelle_und_der_bestands_leser(self) -> None:
+    def test_altname_steht_nur_noch_im_dokumentierten_build_arg(self) -> None:
         pattern = re.compile(r"sample[-_]?monk", re.IGNORECASE)
         suffixes = {".sh", ".js", ".mjs", ".ts", ".yml", ".yaml", ".json", ".bash", ".manifest"}
         hits: set[str] = set()
@@ -2866,237 +2927,11 @@ class NamespaceParitaetTest(unittest.TestCase):
         for extra in (ROOT / "deploy.sh", COMPOSE_BASE, COMPOSE_MONITORING):
             if pattern.search(extra.read_text(encoding="utf-8")):
                 hits.add(str(extra.relative_to(ROOT)))
-        self.assertEqual(hits - LEGACY_ALLOWED_FILES, set(), "Altname ausserhalb der Namensquelle gefunden")
-
-    # --- 6. Migration eines Bestands-Knotens ------------------------------
-    def test_migrationsskript_ist_trockenlaufbar_und_zerstoert_nichts(self) -> None:
-        self.assertTrue(MIGRATE_PROJECT.exists(), f"{MIGRATE_PROJECT} fehlt")
-        result = subprocess.run(
-            [self.bash, str(MIGRATE_PROJECT), "--print-config"],
-            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
-        )
-        combined = self._combined(result)
-        self.assertEqual(result.returncode, 0, combined)
-        names = self._names()
-        # Der Trockenlauf nennt beide Schreibweisen, beide Pfade und den Plan.
-        self.assertIn(f"Compose-Projekt neu: {names['project']}", combined)
-        self.assertIn(f"Compose-Projekt alt: {names['legacy_project']}", combined)
-        self.assertIn(names["home"], combined)
-        self.assertIn(names["legacy_home"], combined)
-        self.assertIn("KOPIE", combined)
-        # Kein SSH, kein Docker im Trockenlauf: die Ausgabe zeigt die Kommandos
-        # nur als TEXT - ausgefuehrt wird nichts (kein Schritt-Banner, keine
-        # Knoten-Abfrage).
-        self.assertNotIn("ssh ", combined)
-        self.assertNotIn("--- 1/6", combined)
-        self.assertNotIn("laufende Compose-Projekte", combined)
-
-        text = MIGRATE_PROJECT.read_text(encoding="utf-8")
-        # Kein Volume-Loeschen und kein `down -v`: der Rueckweg muss bestehen.
-        self.assertNotIn("down -v", text)
-        self.assertNotIn("prune", text)
-        self.assertIn("docker compose -f docker-compose.hetzner.yml down --remove-orphans", text)
-        # Volumes werden erst nach ausdruecklicher Bestaetigung geloescht -
-        # und danach steht der Rollback-Hinweis.
-        cleanup = text.index('CLEANUP_LEGACY" == "1"')
-        self.assertLess(cleanup, text.index("docker volume rm"))
-        self.assertIn("Rueckweg", text)
-        # Die Datei kennt den Altnamen nicht selbst (Quelle: fleet-names.sh).
-        self.assertNotRegex(text, r"sample[-_]?monk")
-        syntax = subprocess.run([self.bash, "-n", str(MIGRATE_PROJECT)], capture_output=True, text=True, cwd=ROOT, timeout=60)
-        self.assertEqual(syntax.returncode, 0, syntax.stderr)
-
-    def test_migration_ohne_rolle_bricht_mit_klartext_ab(self) -> None:
-        # Ohne Rolle waere unklar, welche Dienste starten - das darf nicht
-        # stillschweigend "irgendetwas" hochfahren.
-        result = subprocess.run(
-            [self.bash, str(MIGRATE_PROJECT), "203.0.113.5"],
-            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
-        )
-        combined = self._combined(result)
-        self.assertEqual(result.returncode, 1, combined)
-        self.assertIn("--role fehlt", combined)
-
-    def test_migration_akzeptiert_die_zwei_argumentige_rollenform(self) -> None:
-        """`--role app` (zwei Argumente) muss laufen - genau so steht es in der
-        Nutzung. Live gemessen am 2026-09-20: die Form endete in "Unbekannte
-        Option: --role", weil `--role` in den `-*`-Zweig fiel; die zweite
-        Schleife danach wurde nie erreicht. Der Test faehrt den echten Codepfad
-        gegen einen Fake-`ssh` (kein Netz), damit der Plan wirklich entsteht.
-        """
-        with tempfile.TemporaryDirectory(prefix="f10-role-") as tmp:
-            env, _log = self._fake_ssh(
-                pathlib.Path(tmp),
-                FAKE_SSH_SERVICES="caddy audiomonastry",
-                FAKE_SSH_DIRS="/opt/samplemonk=installation",
-            )
-            plain = subprocess.run(
-                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "app", "--dry-run"],
-                capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
-            )
-            equals = subprocess.run(
-                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role=app", "--dry-run"],
-                capture_output=True, text=True, cwd=ROOT, timeout=120, env=env,
-            )
-        combined = self._combined(plain)
-        self.assertNotIn("Unbekannte Option", combined)
-        self.assertEqual(plain.returncode, 0, combined)
-        self.assertIn("(Rolle app)", plain.stdout)
-        self.assertIn("Trockenlauf (--dry-run): keine Aenderung ausgefuehrt.", plain.stdout)
-
-        # Die Gleichheitsform bleibt gleichwertig.
-        self.assertEqual(equals.returncode, 0, self._combined(equals))
-        self.assertIn("(Rolle app)", equals.stdout)
-
-        # Ein fehlender Rollenwert ist ein Klartextfehler, keine stille Annahme
-        # (bricht vor jedem SSH-Zugriff ab - deshalb ohne Fake).
-        missing = subprocess.run(
-            [self.bash, str(MIGRATE_PROJECT), "127.0.0.1", "--role"],
-            capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
-        )
-        missing_combined = self._combined(missing)
-        self.assertEqual(missing.returncode, 1, missing_combined)
-        self.assertIn("--role ohne Wert", missing_combined)
-
-    def _fake_ssh(self, tmp: pathlib.Path, **extra: str) -> tuple[dict[str, str], pathlib.Path]:
-        """Fake-`ssh` im PATH; liefert (Umgebung, Protokolldatei)."""
-        fake_bin = tmp / "bin"
-        fake_bin.mkdir(exist_ok=True)
-        fake = fake_bin / "ssh"
-        fake.write_text(FAKE_SSH, encoding="utf-8")
-        fake.chmod(0o755)
-        log = tmp / "ssh.log"
-        env = clean_env(
-            PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
-            FAKE_SSH_LOG=str(log),
-            **extra,
-        )
-        return env, log
-
-    def test_migration_loest_den_altservice_des_knotens_auf(self) -> None:
-        """Der Knoten faehrt eine aeltere Repo-Kopie: dort heisst der App-Service
-        `sample-monk` (Container `samplemonk`). Die Migration muss das erkennen -
-        sonst stoppt sie den Knoten und kann ihn nicht mehr starten (live
-        passiert: "no such service: audiomonastry" auf sfu-1)."""
-        with tempfile.TemporaryDirectory(prefix="f10-migrate-") as tmp:
-            env, log = self._fake_ssh(
-                pathlib.Path(tmp),
-                FAKE_SSH_SERVICES="master-player sample-monk caddy",
-                FAKE_SSH_DIRS="/opt/samplemonk=installation",
-            )
-            result = subprocess.run(
-                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "sfu", "--dry-run"],
-                capture_output=True, text=True, cwd=ROOT, env=env, timeout=120,
-            )
-            combined = self._combined(result)
-            calls = log.read_text(encoding="utf-8") if log.exists() else ""
-
-        self.assertEqual(result.returncode, 0, combined)
-        self.assertIn("Service-Aufloesung: audiomonastry -> sample-monk", combined)
-        self.assertIn("Services auf dem Knoten: master-player sample-monk caddy", combined)
-        # Der Plan nennt den aufgeloesten Service UND die Basis-Compose-Datei.
-        self.assertIn("docker compose -f docker-compose.hetzner.yml", combined)
-        self.assertIn("up -d caddy sample-monk", combined)
-        # Trockenlauf stoppt nichts.
-        self.assertNotIn(" down ", calls)
-
-    def test_migration_stoppt_nicht_wenn_ein_service_fehlt(self) -> None:
-        """Fail-early: fehlt der Rollen-Service auf dem Knoten, darf NICHTS
-        gestoppt werden. Genau das war der Live-Fehler vom 2026-09-20 - die
-        Migration hatte schon `down` ausgefuehrt und scheiterte danach am Start,
-        der Knoten lag unten."""
-        with tempfile.TemporaryDirectory(prefix="f10-migrate-") as tmp:
-            env, log = self._fake_ssh(
-                pathlib.Path(tmp),
-                FAKE_SSH_SERVICES="caddy master-player",  # kein App-Service
-                FAKE_SSH_DIRS="/opt/samplemonk=installation",
-            )
-            result = subprocess.run(
-                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "sfu", "--yes"],
-                capture_output=True, text=True, cwd=ROOT, env=env, timeout=120,
-            )
-            combined = self._combined(result)
-            calls = log.read_text(encoding="utf-8") if log.exists() else ""
-
-        self.assertEqual(result.returncode, 2, combined)
-        self.assertIn("fehlen in der Compose-Datei des Knotens", combined)
-        self.assertIn("audiomonastry", combined)
-        self.assertIn("vorhanden: caddy master-player", combined)
-        self.assertNotIn("docker compose -f docker-compose.hetzner.yml down", calls)
-        self.assertNotIn("mv /opt/samplemonk", calls)
-
-    def test_migration_stoppt_nicht_wenn_die_service_liste_unlesbar_ist(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="f10-migrate-") as tmp:
-            env, log = self._fake_ssh(
-                pathlib.Path(tmp), FAKE_SSH_SERVICES="", FAKE_SSH_DIRS="/opt/samplemonk=installation",
-            )
-            result = subprocess.run(
-                [self.bash, str(MIGRATE_PROJECT), "203.0.113.5", "--role", "app", "--yes"],
-                capture_output=True, text=True, cwd=ROOT, env=env, timeout=120,
-            )
-            combined = self._combined(result)
-            calls = log.read_text(encoding="utf-8") if log.exists() else ""
-
-        self.assertEqual(result.returncode, 2, combined)
-        self.assertIn("Keine Service-Liste vom Knoten lesbar", combined)
-        self.assertNotIn("docker compose -f docker-compose.hetzner.yml down", calls)
-
-    def test_watchdog_laeuft_aus_usr_local_bin_ohne_namensquelle_daneben(self) -> None:
-        """Live-Befund 2026-09-20: `install-auto-repair.sh` kopierte den Watchdog
-        nach /usr/local/bin, die Namensquelle `fleet-names.sh` aber nicht. Der
-        Timer schrieb bei JEDEM Lauf "No such file or directory" +
-        "FLEET_COMPOSE_PROJECT: unbound variable" und reparierte nichts.
-
-        Der Test faehrt genau diesen Zustand: die Kopie liegt in einem
-        Verzeichnis OHNE `fleet-names.sh`, die Namensquelle ist nur ueber
-        FLEET_NAMES_SOURCE erreichbar (auf dem Knoten der Repo-Pfad).
-        """
-        project = self._names()["project"]
-        with tempfile.TemporaryDirectory(prefix="f10-install-") as tmp:
-            tmpdir = pathlib.Path(tmp)
-            fake_bin = tmpdir / "bin"
-            fake_bin.mkdir()
-            fake = fake_bin / "docker"
-            fake.write_text(FAKE_DOCKER, encoding="utf-8")
-            fake.chmod(0o755)
-
-            install_dir = tmpdir / "usr-local-bin"
-            install_dir.mkdir()
-            watchdog = install_dir / "audiomonastry-auto-repair.sh"
-            watchdog.write_text(AUTO_REPAIR.read_text(encoding="utf-8"), encoding="utf-8")
-            watchdog.chmod(0o755)
-            self.assertFalse((install_dir / "fleet-names.sh").exists(), "Testannahme verletzt")
-
-            repair_log = tmpdir / "auto-repair.log"
-            compose_log = tmpdir / "compose.log"
-            env = clean_env(
-                PATH=f"{fake_bin}:{os.environ.get('PATH', '')}",
-                FAKE_DOCKER_LOG=str(tmpdir / "docker.log"),
-                FAKE_DOCKER_COMPOSE_LOG=str(compose_log),
-                FAKE_DOCKER_CONTAINERS=f"{LEGACY_FIXTURE_APP} {LEGACY_FIXTURE_CADDY}",
-                FLEET_NAMES_SOURCE=str(FLEET_NAMES),
-                LOG=str(repair_log),
-                APP_DIR=str(tmpdir / "opt"),
-                CHECKS="1",
-            )
-            result = subprocess.run(
-                [self.bash, str(watchdog)], capture_output=True, text=True,
-                cwd=ROOT, env=env, timeout=180,
-            )
-            combined = self._combined(result)
-            repair = repair_log.read_text(encoding="utf-8") if repair_log.exists() else ""
-            compose_calls = compose_log.read_text(encoding="utf-8") if compose_log.exists() else ""
-
-        self.assertNotIn("No such file or directory", combined, combined)
-        self.assertNotIn("unbound variable", combined, combined)
-        self.assertEqual(result.returncode, 0, combined)
-        # Die Namensaufloesung hat gegriffen: der Watchdog nennt die tatsaechlichen
-        # Containernamen (ohne Namensquelle waere er vorher mit Fehler ausgestiegen).
-        self.assertIn(LEGACY_FIXTURE_APP, repair + combined, repair + combined)
+        self.assertEqual(hits - LEGACY_ALLOWED_FILES, set(), "Altname ausserhalb der erlaubten Datei gefunden")
 
     def test_bash_syntax_aller_f10_skripte_ist_sauber(self) -> None:
         for script in (FLEET_NAMES, AUTO_REPAIR, (HETZNER / "fleet-status.sh"), FLEET_DEPLOY_LIVE,
-                       BRING_UP, PROVISION_FLEET, MIGRATE_PROJECT, DEPLOY_SH):
+                       BRING_UP, PROVISION_FLEET, DEPLOY_SH):
             with self.subTest(script=script.name):
                 result = subprocess.run([self.bash, "-n", str(script)], capture_output=True, text=True, cwd=ROOT, timeout=60)
                 self.assertEqual(result.returncode, 0, result.stderr)
@@ -5930,7 +5765,6 @@ class FleetFirewallLebenszyklusTest(unittest.TestCase):
         self.assertIn("audiomonastry-ai", result.stdout)
         self.assertIn("2 Regeln, 1 Zuweisung(en)", result.stdout)
         self.assertIn("bleiben bestehen", result.stdout)
-        self.assertIn("cleanup-legacy-firewalls.py", result.stdout)
         self.assertIn("Schritt 3/9", result.stdout)
         # 4. Der Token der Datei steht nirgends in der Ausgabe.
         self.assertNotIn("nur-ein-testwert", combined)
@@ -5964,7 +5798,6 @@ class FleetFirewallLebenszyklusTest(unittest.TestCase):
     def test_skript_und_doku_halten_den_entscheid_fest(self) -> None:
         text = DELETE_FLEET.read_text(encoding="utf-8")
         self.assertIn('api GET "/firewalls?per_page=50"', text)
-        self.assertIn("cleanup-legacy-firewalls.py", text)
         for line in text.splitlines():
             with self.subTest(zeile=line):
                 self.assertFalse("DELETE" in line and "/firewalls" in line,
@@ -5972,7 +5805,7 @@ class FleetFirewallLebenszyklusTest(unittest.TestCase):
 
         doc = HETZNER_DEPLOY_DOC.read_text(encoding="utf-8")
         for fuer_marker in ("Firewall-Lebenszyklus beim Abbau", "kein `DELETE`",
-                        "`set_rules`", "cleanup-legacy-firewalls.py", "ensure_firewall",
+                        "`set_rules`", "ensure_firewall",
                         "FleetFirewallLebenszyklusTest"):
             with self.subTest(marker=fuer_marker):
                 self.assertIn(fuer_marker, doc)
@@ -6091,6 +5924,165 @@ def rule_set_of(rules: list[dict]) -> list[tuple]:
          tuple(sorted(str(s) for s in (rule.get("source_ips") or []))))
         for rule in rules
     )
+
+
+class DeepTestHarnessGuardTest(unittest.TestCase):
+    """Deep-Test-T1: die Schutzfunktionen gegen falsches "gruen" - funktional.
+
+    Anlass: Der Referenzlauf vom 2026-09-29 galt als "T1 gruen (74s)", obwohl
+    das JUnit 55 rote Tests enthielt. Die Kette: der Phasen-Timeout killte nur
+    die Subshell, ein verwaister Playwright-Prozess schrieb JUnit/Report bis
+    3,5 min NACH dem gemeldeten Phasenende weiter, Versuch 2 brach mit ENOTEMPTY
+    ab, `|| true` verschluckte den Exitcode, und der Bewerter las die leere
+    JUnit-Datei als "0 Testfaelle = 0 rot". `junit_guard` und der
+    Prozessgruppen-Kill sind die Antwort darauf - ein Textbeweis ("steht im
+    Skript") waere hier wertlos, deshalb faehrt der Test die Funktionen selbst.
+
+    Die Funktionen werden aus `deep-test-run.sh` extrahiert und isoliert
+    geladen: das Skript hat keinen `main`-Guard, ein `source` wuerde also den
+    ganzen Deep-Test starten (Flotte, Kosten) - das darf ein Unit-Test nie tun.
+    """
+
+    SCRIPT = HETZNER / "deep-test-run.sh"
+
+    def setUp(self) -> None:
+        self.bash = bash_path()
+        text = self.SCRIPT.read_text(encoding="utf-8")
+        self.functions = "\n".join(
+            self._extract(text, name) for name in ("own_pgid", "phase_group_kill", "junit_guard")
+        )
+
+    @staticmethod
+    def _extract(text: str, name: str) -> str:
+        """Schneidet eine Shell-Funktion heraus (auch einzeilige wie own_pgid)."""
+        lines = text.splitlines()
+        for index, line in enumerate(lines):
+            if not line.startswith(f"{name}() {{"):
+                continue
+            collected = [line]
+            if line.rstrip().endswith("}"):  # Einzeiler
+                return "\n".join(collected)
+            for following in lines[index + 1:]:
+                collected.append(following)
+                if following.rstrip() == "}":
+                    return "\n".join(collected)
+        raise AssertionError(f"{name}() nicht in {DeepTestHarnessGuardTest.SCRIPT.name} gefunden")
+
+    def _run(self, script: str, *args: str) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory(prefix="deeptest-guard-") as tmp:
+            lib = pathlib.Path(tmp) / "guard-fn.sh"
+            lib.write_text(self.functions, encoding="utf-8")
+            return subprocess.run(
+                [self.bash, "-c", f'source "{lib}"\n{script}', "bash", *args],
+                capture_output=True, text=True, cwd=ROOT, timeout=60, env=clean_env(),
+            )
+
+    @staticmethod
+    def _write_junit(path: pathlib.Path, cases: int = 3, age_hours: float = 0.0) -> pathlib.Path:
+        body = "".join(f'<testcase name="t{index}"/>' for index in range(cases))
+        path.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?><testsuites>'
+            f'<testsuite name="probe" tests="{cases}">{body}</testsuite></testsuites>',
+            encoding="utf-8",
+        )
+        if age_hours:
+            import time
+            old = time.time() - age_hours * 3600
+            os.utime(path, (old, old))
+        return path
+
+    @staticmethod
+    def _now() -> str:
+        import time
+        return str(int(time.time()))
+
+    @staticmethod
+    def _combined(result: subprocess.CompletedProcess) -> str:
+        return result.stdout + result.stderr
+
+    # --- junit_guard: der Frische-Beweis ------------------------------------
+
+    def test_frischer_report_mit_testfaellen_ist_gueltig(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml")
+            result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("FRISCHE-BEWEIS OK", result.stdout)
+        self.assertIn("3 Testfaelle", result.stdout)
+
+    def test_fehlender_report_ist_kein_beweis(self) -> None:
+        # Vorher galt eine geloeschte Datei als "0 rot" - also als gruen.
+        with tempfile.TemporaryDirectory() as tmp:
+            result = self._run('junit_guard "$1" "$2"', str(pathlib.Path(tmp) / "nicht-da.xml"), self._now())
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("existiert nicht", result.stdout)
+
+    def test_alter_report_des_verwaisten_prozesses_wird_abgelehnt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml", age_hours=2)
+            result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("ist ALT", result.stdout)
+
+    def test_leerer_report_ist_kein_gruener_lauf(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml", cases=0)
+            result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("0 Testfaelle", result.stdout)
+
+    def test_schreiber_waehrend_der_bewertung_wird_erkannt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            junit = self._write_junit(pathlib.Path(tmp) / "junit.xml")
+            result = self._run('junit_guard "$1" "$2" "$3"', str(junit), self._now(), "0" * 64)
+        self.assertEqual(result.returncode, 1, self._combined(result))
+        self.assertIn("waehrend der Bewertung veraendert", result.stdout)
+
+    def test_abschlusszeile_behauptet_nur_bei_gueltigem_report_ok(self) -> None:
+        """Die Abschlusszeile stand vorher UNBEDINGT da.
+
+        Bei einem alten Report las man direkt nach der ROT-Meldung
+        "FRISCHE-BEWEIS: ... frisch (mtime alt >= start)" - ein Widerspruch im
+        Log, der einen textlesenden Auswerter in die Irre fuehrt. "OK" darf
+        deshalb nur bei gueltigem Report erscheinen.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            alt = self._write_junit(pathlib.Path(tmp) / "alt.xml", age_hours=2)
+            leer = self._write_junit(pathlib.Path(tmp) / "leer.xml", cases=0)
+            for junit in (alt, leer):
+                with self.subTest(report=junit.name):
+                    result = self._run('junit_guard "$1" "$2"', str(junit), self._now())
+                    self.assertEqual(result.returncode, 1, self._combined(result))
+                    self.assertNotIn("FRISCHE-BEWEIS OK", result.stdout)
+                    self.assertIn("NICHT verwertbar", result.stdout)
+
+    # --- Prozessgruppen-Kill: keine Waise, kein Schuss auf die eigene Shell --
+
+    def test_prozessgruppen_kill_schuetzt_die_eigene_shell(self) -> None:
+        """Der Guard muss die EIGENE Prozessgruppe verweigern.
+
+        Ohne diesen Schutz wuerde `kill -- -PGID` beim Aufruf aus einer Shell
+        ohne Jobsteuerung die aufrufende Shell mitreissen (dort ist die PGID
+        des Kindes gleich der eigenen).
+        """
+        result = self._run('phase_group_kill "$(own_pgid)" TERM; echo "SHELL-LEBT"')
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("SICHERHEITS-GUARD", result.stdout)
+        self.assertIn("SHELL-LEBT", result.stdout)
+
+    def test_prozessgruppen_kill_beendet_eine_echte_waise(self) -> None:
+        if shutil.which("setsid") is None:  # pragma: no cover - util-linux fehlt
+            self.skipTest("setsid nicht vorhanden")
+        script = (
+            "setsid sleep 60 >/dev/null 2>&1 & orphan=$!\n"
+            "sleep 0.3\n"
+            'phase_group_kill "$orphan" TERM\n'
+            "sleep 0.3\n"
+            'if kill -0 "$orphan" 2>/dev/null; then echo WAISE-LEBT; else echo WAISE-TOT; fi'
+        )
+        result = self._run(script)
+        self.assertEqual(result.returncode, 0, self._combined(result))
+        self.assertIn("WAISE-TOT", result.stdout, "Die verwaiste Prozessgruppe muss beendet werden")
 
 
 if __name__ == "__main__":

@@ -18,14 +18,16 @@ Dokumentierte Vertraege (live gemessen, Belege in `logs/probes/`):
   workflow-basiert – `{workflow: <ComfyUI-API-JSON>}` ->
   `{files: [{filename, kind: "audio", node_id, ...}]}`; `{health_check: true}`
   liefert die system_stats. Den Graphen liefert `workflows/music.json`.
-* **PrunaAI FLUX** (`imageHq`): prompt-basiert – `{prompt}` ->
+* **PrunaAI FLUX** (`imageHq`, **historisch bis 2026-09-27**, b90f7a8):
+  prompt-basiert – `{prompt}` ->
   `{image_url: "data:image/png;base64,...", images: [<derselbe URI>], seed}`.
-* **worker-comfyui** (`imageLora`, seit 2026-09-27): workflow-basiert –
-  `{workflow: <ComfyUI-API-JSON>, images?: [...]}` ->
+* **worker-comfyui** (`imageHq` seit 2026-09-27 (b90f7a8), `imageLora`):
+  workflow-basiert – `{workflow: <ComfyUI-API-JSON>, images?: [...]}` ->
   `{images: [{filename, type: "base64", data: "<rohes base64>"}]}`.
   Die Gewichte liegen auf einem Network Volume (`/runpod-volume/models/...`,
   Layout in `docs/VISUAL_LORA_STACK.md`); den Graphen liefern
-  `workflows/image_sdxl.json` und `workflows/image_flux1.json`.
+  `workflows/image_sdxl.json` und `workflows/image_flux1.json` (bzw. fuer
+  `imageHq` der Code-Graph in `src/core/ai/vision/runpodVision.ts`).
 
 ### `imageLora` – zwei Basismodelle, ein Endpoint
 
@@ -77,7 +79,14 @@ logger = logging.getLogger(__name__)
 #: Rollen, die auf vorgefertigten Workern laufen, mit ihrem Erwartungsmodell.
 COMFY_ROLES: Dict[str, Dict[str, str]] = {
     "music": {"worker": "acestep", "protocol": "workflow", "defaultModel": "acestep-v15-xl-base"},
-    "imageHq": {"worker": "flux", "protocol": "prompt", "defaultModel": "flux1-dev-juiced"},
+    # Historisch bis 2026-09-27 (b90f7a8): lief auf PrunaAI-FLUX, prompt-basiert
+    #   {"worker": "flux", "protocol": "prompt", "defaultModel": "flux1-dev-juiced"},
+    # Seit 2026-09-27 laeuft imageHq auf demselben worker-comfyui wie imageLora
+    # (Entscheidung "Weg A", b90f7a8): Workflow-Vertrag, kein prompt-Feld - ein
+    # prompt wuerde stillschweigend ignoriert und das Demo-Bild des Graphen
+    # geliefert. Aufruf mit `workflow` inline oder workflows/imageHq.json /
+    # COMFY_WORKFLOW_IMAGEHQ; die Struktur von workflows/image_flux1.json passt.
+    "imageHq": {"worker": "comfyui", "protocol": "workflow", "defaultModel": "flux1-dev"},
     "videoReal": {"worker": "ti2v", "protocol": "prompt", "defaultModel": "wan22-ti2v-5b"},
     "videoAbstract": {
         # Seit 2026-09-16 derselbe Wan-Worker wie videoReal: das vorher deployte

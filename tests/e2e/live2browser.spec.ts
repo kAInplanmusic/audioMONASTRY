@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { chromium } from 'playwright';
 import { newStudioContext } from './helpers/studioAuth';
-import { navButton } from './helpers/studioNav';
+import { entryButton, navButton } from './helpers/studioNav';
 
 // Nur Chromium: Der Spec startet bewusst ZWEI eigene Chromium-Prozesse (eigener WebRTC-Stack, eigenes Fake-Mikrofon); im WebKit-Job fehlt die Chromium-Executable.
 // CI-Fund 2026-09-17 (e2e-webkit): 'Executable doesn't exist at .../chromium-...'.
@@ -31,7 +31,7 @@ const FAKE_MEDIA_ARGS = [
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 

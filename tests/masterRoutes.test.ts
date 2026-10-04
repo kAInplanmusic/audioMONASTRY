@@ -12,6 +12,8 @@
  *   * andere Routen behalten ihre strengeren Grenzen,
  *   * in Logs und Antworten landen keine Audio-Inhalte.
  */
+process.env.NODE_ENV ??= 'test';
+
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import http from 'node:http';
 import type { Server } from 'node:http';

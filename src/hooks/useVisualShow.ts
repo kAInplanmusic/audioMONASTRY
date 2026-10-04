@@ -45,6 +45,13 @@ export interface VisualShowApi {
   makeClip: (input: { prompt: string; style?: string; bpm?: number; energy?: number; durationS?: number }) => Promise<void>;
   startShow: () => void;
   stopShow: () => void;
+  /**
+   * UI-P1-002 (Reduced-Motion): Show anhalten/fortsetzen. Angehalten stehen die
+   * Show-Uhr UND die Szenen-Medien – sonst laufen `draw`/`frame` an der
+   * Reduced-Motion-Zusage vorbei (eigene `performanceNow()`-Uhr plus spielende
+   * Videos; Befund 2026-09-29).
+   */
+  setFrozen: (frozen: boolean) => void;
   tick: (nowMs: number, features: AudioFeatures) => void;
   /** Zeichnet die Show auf den Canvas. true = es wurde etwas gezeichnet. */
   draw: (ctx: CanvasRenderingContext2D, width: number, height: number) => boolean;
@@ -100,6 +107,38 @@ export function useVisualShow(): VisualShowApi {
   const mediaRef = useRef<Map<string, ShowMedia>>(new Map());
   const prevSrcRef = useRef<string | null>(null);
   const counterRef = useRef(0);
+  // UI-P1-002 (Reduced-Motion): anhaltbare Show-Uhr. `draw`/`frame` rechnen mit
+  // `performanceNow()` – ohne diesen Anker läuft die Show an jeder
+  // Reduced-Motion-Zusage vorbei (Befund 2026-09-29: die Canvas-Fläche wurde nie
+  // still, obwohl Feldbewegung und Show-Szenenwechsel längst eingefroren waren).
+  const frozenRef = useRef(false);
+  const frozenAtRef = useRef(0);
+  const clockNow = useCallback(() => (frozenRef.current ? frozenAtRef.current : performanceNow()), []);
+
+  /**
+   * Show anhalten/fortsetzen. Angehalten heisst: die Uhr steht UND die
+   * Szenen-Medien pausieren – ein laufendes Video ist Bewegung, auch wenn die
+   * Show-Uhr stillsteht. Fortsetzen spielt genau die Videos wieder an, die
+   * dieser Schalter angehalten hat.
+   */
+  const setFrozen = useCallback((frozen: boolean) => {
+    if (frozenRef.current === frozen) return;
+    frozenRef.current = frozen;
+    if (frozen) {
+      frozenAtRef.current = performanceNow();
+      for (const media of mediaRef.current.values()) {
+        if (media instanceof HTMLVideoElement) {
+          try { media.pause(); } catch { /* Anhalten ist best effort */ }
+        }
+      }
+    } else {
+      for (const media of mediaRef.current.values()) {
+        if (media instanceof HTMLVideoElement) {
+          void media.play().catch(() => { /* Autoplay verweigert – Standbild bleibt */ });
+        }
+      }
+    }
+  }, []);
 
   useEffect(() => { scenesRef.current = scenes; }, [scenes]);
 
@@ -127,7 +166,8 @@ export function useVisualShow(): VisualShowApi {
       media = img;
     }
     mediaRef.current.set(scene.src, media);
-    if (autoplay && media instanceof HTMLVideoElement) {
+    if (autoplay && media instanceof HTMLVideoElement && !frozenRef.current) {
+      // UI-P1-002: unter Reduced-Motion wird nicht angespielt.
       void media.play().catch(() => { /* Autoplay verweigert – Standbild bleibt */ });
     }
     return media;
@@ -209,9 +249,11 @@ export function useVisualShow(): VisualShowApi {
     const scene = list[Math.min(Math.max(index, 0), list.length - 1)];
     if (!scene) return false;
 
-    const elapsedS = Math.max(0, (performanceNow() - stateRef.current.startedAtMs) / 1000);
+    const elapsedS = Math.max(0, (clockNow() - stateRef.current.startedAtMs) / 1000);
     const fadeS = 0.8;
-    const fade = Math.min(1, elapsedS / fadeS);
+    // Angehalten (Reduced-Motion): kein Crossfade – die Szene steht voll deckend,
+    // damit aufeinanderfolgende Frames identisch sind.
+    const fade = frozenRef.current ? 1 : Math.min(1, elapsedS / fadeS);
     const prevSrc = prevSrcRef.current;
     if (prevSrc && fade < 1) {
       const prev = mediaRef.current.get(prevSrc);
@@ -222,7 +264,7 @@ export function useVisualShow(): VisualShowApi {
     // Video erst zeigen, wenn ein Bild dekodiert ist (sonst schwarzer Blitz).
     if (media instanceof HTMLVideoElement && media.readyState < 2) return false;
     return coverFit(ctx, media, width, height, fade);
-  }, [mediaFor]);
+  }, [clockNow, mediaFor]);
 
   /**
    * VISUAL-P1-008: derselbe Show-Frame wie `draw`, aber für den WebGL-Renderer.
@@ -236,9 +278,10 @@ export function useVisualShow(): VisualShowApi {
     const scene = list[Math.min(Math.max(index, 0), list.length - 1)];
     if (!scene) return { current: null, previous: null, fade: 1 };
 
-    const elapsedS = Math.max(0, (performanceNow() - stateRef.current.startedAtMs) / 1000);
+    const elapsedS = Math.max(0, (clockNow() - stateRef.current.startedAtMs) / 1000);
     const fadeS = 0.8;
-    const fade = Math.min(1, elapsedS / fadeS);
+    // Angehalten (Reduced-Motion): die Szene steht voll deckend (kein Crossfade).
+    const fade = frozenRef.current ? 1 : Math.min(1, elapsedS / fadeS);
     const prevSrc = prevSrcRef.current;
     const previous = prevSrc && fade < 1 ? mediaRef.current.get(prevSrc) ?? null : null;
     const media = mediaFor(scene, true);
@@ -247,7 +290,7 @@ export function useVisualShow(): VisualShowApi {
       return { current: null, previous, fade };
     }
     return { current: media, previous, fade };
-  }, [mediaFor]);
+  }, [clockNow, mediaFor]);
 
   /** Text→Clip: FLUX-Bild → Wan2.2 (ein Aufruf, ein Ergebnis). */
   const makeClip = useCallback(
@@ -354,6 +397,7 @@ export function useVisualShow(): VisualShowApi {
     makeClip,
     startShow,
     stopShow,
+    setFrozen,
     tick,
     draw,
     frame,

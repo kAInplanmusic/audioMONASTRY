@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { navButton } from './helpers/studioNav';
+import { entryButton, navButton } from './helpers/studioNav';
 
 /**
  * P0-6-Prüfpunkt (Main-/Monitor-Routing): Der Cue-Weg eines Users schaltet
@@ -24,7 +24,7 @@ const CUE_RAMP = 0.01;
 async function openStudio(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page).toHaveTitle(/audioMONASTRY/);
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 15_000 });
 }
 

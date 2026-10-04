@@ -181,7 +181,7 @@ class ModelManager:
         self._loader = None  # Callable(model_id, definition) -> instance
         # Exklusive VRAM-Gruppen: group -> aktuell residentes Modell.
         # Modelle derselben Gruppe teilen sich dasselbe VRAM-Fenster und
-        # verdrängen einander beim Laden (Instanz 5: FLUX.2 ⇄ Qwen-Image).
+        # verdrängen einander beim Laden (Instanz 5: FLUX.1-dev ⇄ Qwen-Image).
         self._exclusive_active: Dict[str, str] = {}
 
     # ------------------------------------------------------------------ Config

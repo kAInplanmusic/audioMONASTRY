@@ -20,8 +20,8 @@ KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
 S="ssh -i $KEY -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8"
 
 # NOMEN-P1-001 / F10: Namen aus der EINEN Quelle (Knoten, Container,
-# Compose-Projekt, Pfade). Sourcing ist seiteneffektfrei; der Altpraefix steht
-# ausschliesslich dort - dieses Skript kennt nur die Variablen.
+# Compose-Projekt, Pfade). Sourcing ist seiteneffektfrei; es gibt nur noch die
+# kanonische Schreibweise.
 source "$(dirname "$0")/fleet-names.sh"
 FLEET_PROJECT="$(fleet_compose_project)"
 
@@ -51,29 +51,23 @@ while IFS=$'\t' read -r name status ip; do
     echo "Server-Status: $status (nicht laufend)"
     continue
   fi
-  # F10: das Compose-Projekt je Container mit ausgeben. Ein Knoten, dessen
-  # Projekt noch alt heisst (Altname aus fleet-names.sh), wird unten laut
-  # gemeldet - das ist genau der Befund aus F10 (Container/Projekt laufen
-  # auseinander), und sichtbar wird er nur, wenn man ihn abfragt.
+  # F10: das Compose-Projekt je Container mit ausgeben - ein von
+  # COMPOSE_PROJECT_NAME abweichendes Projekt wird so sichtbar, statt still zu
+  # laufen. (Der fruehere Alt-Projekt-Vergleich ist mit der Ausmusterung des
+  # Altbestands entfallen - 0 Knoten seit 2026-09-11.)
   PS_OUT=$($S "root@$ip" 'docker ps --format "{{.Names}}({{.Status}})[projekt={{.Label \"com.docker.compose.project\"}}]" 2>/dev/null | tr "\n" " "; echo' 2>/dev/null) \
     || PS_OUT="SSH nicht erreichbar"
   echo "$PS_OUT"
-  if [[ "$PS_OUT" == *"[projekt=$LEGACY_COMPOSE_PROJECT]"* ]]; then
-    echo "   ⚠ mindestens ein Container laeuft im ALT-Projekt '$LEGACY_COMPOSE_PROJECT' (erwartet: $FLEET_PROJECT)"
-    echo "     Migration: bash scripts/hetzner/migrate-project-name.sh <ip> --role <rolle>  (docs/HETZNER_DEPLOY.md, F10)"
-  fi
 done < /tmp/hc_fleet.tsv
 
 echo ""
 echo "--- Health-Endpoints ---"
-# App-Knoten direkt prüfen. NOMEN-P1-001/F10: die Muster kommen aus
-# fleet-names.sh (FLEET_PREFIX/LEGACY_FLEET_PREFIX) - der Health-Check muss BEIDE
-# Schreibweisen akzeptieren, sonst bleibt er bei einer noch nicht umbenannten
-# Flotte stumm.
+# App-Knoten direkt prüfen. NOMEN-P1-001/F10: das Muster kommt aus
+# fleet-names.sh (FLEET_PREFIX) - es gibt nur noch die kanonische Schreibweise.
 while IFS=$'\t' read -r name status ip; do
   [ -n "$ip" ] || continue
   case "$name" in
-    "${FLEET_PREFIX}"app-*|"${LEGACY_FLEET_PREFIX}"app-*)
+    "${FLEET_PREFIX}"app-*)
       CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "http://$ip/api/health" 2>/dev/null || echo "000")
       echo "http://$ip/api/health ($name) -> HTTP $CODE"
       ;;

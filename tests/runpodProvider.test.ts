@@ -190,7 +190,7 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
     );
 
     const provider = new RunPodProvider('imageHq');
-    const output = await provider.run('image.generate', 'flux2-dev', { prompt: 'cityscape' });
+    const output = await provider.run('image.generate', 'flux1-dev', { prompt: 'cityscape' });
 
     expect(output).toEqual({ imageUrl: 'r2://key.png' });
     expect(calls.map((c) => c.url)).toEqual([
@@ -206,7 +206,7 @@ describe('RunPodProvider (8-Rollen-Flotte)', () => {
 
     const provider = new RunPodProvider('imageHq');
     expect(provider.available).toBe(false);
-    await expect(provider.run('image.generate', 'flux2-dev', { prompt: 'cityscape' })).rejects.toMatchObject({
+    await expect(provider.run('image.generate', 'flux1-dev', { prompt: 'cityscape' })).rejects.toMatchObject({
       code: 'AI_VISUALS_OFF',
       retryable: false,
     });

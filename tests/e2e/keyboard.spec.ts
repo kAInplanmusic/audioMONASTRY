@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 /**
  * Tastatur-Navigation: Skip-Link, Fokus-Falle im Settings-Dialog und
@@ -7,7 +8,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Tastatur-Navigation', () => {
   test('Skip-Link springt zum Studio-Inhalt', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('audioMONASTRY starten').click();
+    await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     await page.keyboard.press('Tab');
@@ -21,7 +22,7 @@ test.describe('Tastatur-Navigation', () => {
 
   test('Settings-Dialog hält den Fokus gefangen und schließt per Escape', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('audioMONASTRY starten').click();
+    await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
@@ -45,7 +46,7 @@ test.describe('Tastatur-Navigation', () => {
 test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', () => {
   test('Space ohne Halter lässt den Transport unberührt (P0-1: nur der DJ togglet)', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('audioMONASTRY starten').click();
+    await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     // P0-1 (revidiert): Play/Stop darf NUR der mixerMONK-Halter (DJ); App.tsx
@@ -63,7 +64,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
 
   test('Ctrl/Cmd+1 togglet das erste Registry-Plugin (dropMONK, Index 1)', async ({ page }) => {
     await page.goto('/');
-    await page.getByLabel('audioMONASTRY starten').click();
+    await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     // Hotkey-Mapping (App.tsx P1-6): Ctrl+N togglet getPluginRegistry()[n].
@@ -83,7 +84,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
   test('Hotkeys brechen Eingabefelder nicht (Space tippt Leerzeichen, Ctrl+1 togglet ohne die Eingabe zu verändern)', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 }); // ZWISCHENSPEICHER-Button ist xl-only.
     await page.goto('/');
-    await page.getByLabel('audioMONASTRY starten').click();
+    await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
     await page.getByRole('button', { name: 'Zwischenspeicher' }).click();

@@ -9,7 +9,7 @@ Liest model_manifest.json. Produktionsregeln:
   Rolle plus deren VRAM-Budget und Preload-Satz. Der Rollen-Block im Manifest
   ist die einzige Quelle der Rollen-Zuordnung. Gültige Rollen: ``ROLE_IDS``.
 - **Exklusive Modellgruppen**: Modelle mit gleichem ``exclusiveGroup`` belegen
-  dasselbe VRAM-Fenster und sind nie gleichzeitig resident (Instanz 5: FLUX.2
+  dasselbe VRAM-Fenster und sind nie gleichzeitig resident (Instanz 5: FLUX.1-dev
   bzw. Qwen-Image). ``roles[<rolle>].exclusiveGroups`` benennt je Gruppe das
   Modell, das beim Start geladen wird; die übrigen liegen vorkonfiguriert auf
   Platte und werden per Gruppenwechsel getauscht (kein klassisches on-demand,

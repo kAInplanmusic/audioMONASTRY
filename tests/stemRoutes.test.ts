@@ -1,6 +1,8 @@
 // PROD-P1-001: /api/separate-stems darf ohne Datei kein simuliertes Ergebnis
 // liefern; der Fallback-Stub ist nur bei STEM_AI_PROVIDER=fallback aktiv und
 // immer mit simulated: true markiert.
+process.env.NODE_ENV ??= 'test';
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Server } from 'node:http';
 

@@ -36,7 +36,14 @@ export const usePluginState = (pluginId: string, initialState: PluginState = 'OF
   const updateState = useCallback(
     (newState: PluginState) => {
       const current = lockStatusRef.current;
-      const isOwner = current.active && current.lockedBy === webRTCManager.userId;
+      // DA-2026-09-29-043: Ein Lock ohne Eigentuemer (lockedBy=null) darf NICHT als
+      // eigener Lock gelten. webRTCManager.userId ist vor dem Verbindungsaufbau
+      // null/undefined, und der Lock-Fallback oben setzt lockedBy: null - ohne die
+      // beiden expliziten Pruefungen waere isOwner dann true und ein unbefugter
+      // Client koennte im Namen eines Geister-Locks schreiben.
+      const ownerId = webRTCManager.userId;
+      const isOwner = current.active && current.lockedBy != null && ownerId != null
+        && current.lockedBy === ownerId;
       if (!current.active || isOwner) {
         setModuleState(pluginId, newState);
         logAuditEvent(webRTCManager.userId, 'PLUGIN_STATE', { pluginId, state: newState });

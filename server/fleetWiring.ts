@@ -58,23 +58,15 @@ export function buildFleetTarget(raw: unknown, defaultPort: number): string {
 
 /**
  * NOMEN-P1-001: Die Flotte heisst `audiomonastry-*`. Die Fleet-Map ist nach dem
- * Server-/Firewall-Namen verschluesselt, und eine LAUFENDE Installation kann noch
- * die alten Namen tragen (der Portal-Worker bildet sie inzwischen auf den neuen
- * Namen ab, aber nicht jede Installation ist aktualisiert). Deshalb: neuer Name
- * zuerst, Altname als Fallback - so verdrahten sich beide Flotten.
+ * Server-/Firewall-Namen verschluesselt. Seit der Bestands-Ausmusterung
+ * (Flotte 2026-09-11 gestoppt/geloescht, Alt-Namen ohne lebenden Bezug) gibt es
+ * nur noch die kanonische Schreibweise.
  */
-const FLEET_LEGACY_NAME_PREFIX = 'samplemonk-';
-
 export function fleetNodeAddress(
   map: Record<string, string>,
   node: string,
 ): string | undefined {
-  const direct = map[node];
-  if (direct) return direct;
-  const legacy = node.startsWith('audiomonastry-')
-    ? `${FLEET_LEGACY_NAME_PREFIX}${node.slice('audiomonastry-'.length)}`
-    : '';
-  return legacy ? map[legacy] : undefined;
+  return map[node];
 }
 
 export function createFleetWiring(options: {

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 /**
  * UI-P1-002 · A11y-Matrix
@@ -16,7 +17,7 @@ const VM_DIALOG = '[role="dialog"][aria-label="VisualMONK Liveshow"]';
 
 async function startStudio(page: Page) {
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(TOOLBAR)).toBeVisible({ timeout: 30_000 });
 }
 
@@ -89,7 +90,38 @@ test.describe('A11y (UI-P1-002)', () => {
         }, VM_DIALOG);
 
       // Erst nach dem Anlauf (Analyser-/Layout-Settle) messen, dann zwei Proben.
-      await page.waitForTimeout(2500);
+      // BEFUND 2026-09-29 (gemessen mit einer Ad-hoc-Probe, 20 Proben à 400 ms):
+      // Die Liveshow-Eröffnung ist auch unter reduced-motion eine kurze
+      // Transition – der Canvas steht erst ~4,2 s nach dem Öffnen still
+      // (Proben 2,5/2,9/3,3/3,7/4,1 s verändern sich, ab 4,5 s sind 16/16 Proben
+      // byte-identisch). Das frühere waitForTimeout(2500) sampelte MITTEN in
+      // diese Transition und der Vergleich schlug fehl, obwohl die
+      // Reduced-Motion-Zusage hält (data-reduced-motion=true, danach Stillstand).
+      // Deshalb: auf den Stillstand WARTEN (zwei Folgeproben identisch), erst dann
+      // die eigentliche Zusicherung prüfen. Die Zusicherung selbst bleibt hart –
+      // beruhigt sich der Canvas nie, läuft der poll in den Timeout = rot.
+      // BEFUND 2026-09-29 (zweite Messung, nach dem Reduced-Motion-Fix): Die
+      // Fläche ist nach dem Öffnen zunächst ruhig, wechselt aber EINMAL legitim,
+      // sobald das Szenen-Video dekodiert ist und die Show ihren ersten Frame
+      // zeichnet (gemessen: 1280x504:6766112 -> 1280x504:6000180, danach dauerhaft
+      // stabil über 12 Proben à 400 ms). Ein Poll auf nur ZWEI gleiche Proben
+      // konnte in dieses ruhige Fenster fallen und danach am echten Wechsel
+      // scheitern. Deshalb: Stillstand über DREI Folgeproben (~1,8 s Fenster) –
+      // das ist länger als jeder Settle-Schritt und weicht die eigentliche
+      // Zusicherung unten (second === first) nicht auf.
+      const stableOver = async (): Promise<string> => {
+        const a = await fingerprint();
+        await page.waitForTimeout(600);
+        const b = await fingerprint();
+        if (a !== b) return `instabil(${a} -> ${b})`;
+        await page.waitForTimeout(600);
+        const c = await fingerprint();
+        return b === c ? 'stabil' : `instabil(${b} -> ${c})`;
+      };
+      await expect
+        .poll(stableOver, { timeout: 25_000, intervals: [400] })
+        .toBe('stabil');
+
       const first = await fingerprint();
       await page.waitForTimeout(800);
       const second = await fingerprint();

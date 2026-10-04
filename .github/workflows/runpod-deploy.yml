@@ -28,14 +28,8 @@ on:
         required: false
         default: ''
         type: string
-  push:
-    # SSOT ist `main`; `runpod-migration` bleibt als historischer Deploy-Branch
-    # erlaubt, damit alte Pushes nicht ins Leere laufen.
-    branches: [main, runpod-migration]
-    paths:
-      - 'services/audiomonastry-ai-runtime/**'
-      - '.github/workflows/runpod-deploy.yml'
-      - 'scripts/runpod-deploy.py'
+  # INFRA-AUDIT 2026-09-29: Auto-Deploy deaktiviert (Betreiber-Entscheid) — Deploy
+  # nur noch manuell, bis Deploy-Defaults (imageHq worker-comfyui) konsistent sind.
 
 permissions:
   contents: read
@@ -326,12 +320,14 @@ jobs:
           RP_API_KEY: ${{ secrets.RP_API_KEY }}
         run: |
           if [ -z "${RP_API_KEY:-}" ]; then
-            echo "::error::Repo-Secret RP_API_KEY fehlt oder ist leer – RunPod-Deploy nicht möglich (siehe logs/run-2026-09-10/RUN_PROTOKOLL.md)."
+            echo "::error::Repo-Secret 'RP_API_KEY' fehlt oder ist leer – RunPod-Deploy nicht möglich."
+            echo "Gelesen wird GENAU dieser Name: secrets.RP_API_KEY (gemappt auf die Env-Variable RP_API_KEY dieses Steps; derselbe Mapping gilt im Deploy-Step unten)."
+            echo "Häufige Ursache: Secret unter anderem Namen angelegt (z. B. RUNPOD_API_KEY). Prüfen in Repo-Settings → Secrets and variables → Actions, ob ein Eintrag mit exakt dem Namen 'RP_API_KEY' existiert und einen Wert hat (siehe logs/run-2026-09-10/RUN_PROTOKOLL.md)."
             echo "Lokal funktioniert das Deploy stattdessen mit:"
             echo "  IMAGE=<ghcr-image> RUNPOD_GPU_ID=AMPERE_48 RUNPOD_IDLE_TIMEOUT=15 python3 scripts/runpod-deploy.py"
             exit 1
           fi
-          echo "RP_API_KEY ist gesetzt."
+          echo "RP_API_KEY ist gesetzt (gelesen aus secrets.RP_API_KEY)."
 
       - name: RunPod Serverless Endpoints deployen
         env:

@@ -1,4 +1,5 @@
 import { test, expect, devices, type Page } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
 
 /**
  * P1-1 Responsive-/Touch-Matrix
@@ -25,7 +26,7 @@ function mobileProfile(name: keyof typeof devices) {
 
 async function startStudio(page: Page) {
   await page.goto('/');
-  await page.getByLabel('audioMONASTRY starten').click();
+  await entryButton(page).click();
   await expect(page.locator(TOOLBAR)).toBeVisible({ timeout: 30_000 });
 }
 

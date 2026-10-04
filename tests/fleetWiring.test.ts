@@ -16,10 +16,6 @@ import {
  *      zur Laufzeit.
  */
 
-const legacyMap = {
-  'samplemonk-master-1': '10.0.0.5',
-  'samplemonk-ai-1': '10.0.0.6:9000',
-};
 const newMap = {
   'audiomonastry-master-1': '10.0.1.5',
   'audiomonastry-ai-1': '10.0.1.6',
@@ -53,10 +49,8 @@ describe('ARCH-P2-002 · Flotten-Verdrahtung', () => {
     expect(buildFleetTarget(42, 8000)).toBe('');
   });
 
-  it('findet Knoten unter neuem UND altem Namen (NOMEN-P1-001)', () => {
+  it('liest die Knoten unter dem kanonischen Namen aus der Map', () => {
     expect(fleetNodeAddress(newMap, 'audiomonastry-master-1')).toBe('10.0.1.5');
-    // Bestandsflotte: die Map liefert die alten Namen -> Fallback greift.
-    expect(fleetNodeAddress(legacyMap, 'audiomonastry-master-1')).toBe('10.0.0.5');
     expect(fleetNodeAddress({}, 'audiomonastry-master-1')).toBeUndefined();
   });
 
@@ -69,17 +63,6 @@ describe('ARCH-P2-002 · Flotten-Verdrahtung', () => {
     expect(wiring.targets.masterPlayer).toBe('http://10.0.1.5:8000');
     expect(wiring.targets.stemAi).toBe('http://10.0.1.6:8000');
     expect(wiring.targets.ollama).toBe('http://10.0.1.6:11434');
-  });
-
-  it('verdrahtet auch eine Altflotte (Bestandsnamen in der Map)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ fleet: legacyMap })));
-    const wiring = createFleetWiring({ studioToken: 'token', log: () => {} });
-
-    await wiring.wire();
-
-    expect(wiring.targets.masterPlayer).toBe('http://10.0.0.5:8000');
-    // Port aus der Map (9000) wird respektiert.
-    expect(wiring.targets.stemAi).toBe('http://10.0.0.6:9000');
   });
 
   it('laesst die Ziele bei Fehlern unveraendert und ruft ohne Token gar nicht ab', async () => {

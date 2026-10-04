@@ -34,12 +34,9 @@ set -uo pipefail
 
 # F10 · Namespace-Paritaet:
 #   Namen kommen aus der EINEN Quelle scripts/hetzner/fleet-names.sh (dort
-#   stehen Compose-Projekt, Container-Schreibweisen und Pfade). Befund F10:
-#   auf sfu-1/master-1 hiessen Container und Compose-Projekt noch nach dem
-#   Altpraefix (siehe fleet-names.sh) - ein Watchdog, der nur den neuen Namen
-#   kennt, findet dort NICHTS und repariert still nichts. Deshalb: Projektname
-#   explizit setzen und die tatsaechlichen Container ueber beide Schreibweisen
-#   aufloesen (fleet_name_variants).
+#   stehen Compose-Projekt und Pfade). Der Projektname wird explizit gesetzt
+#   und die tatsaechlichen Container ueber fleet_name_variants aufgeloest
+#   (seit der Bestands-Ausmusterung die kanonische Schreibweise).
 HERE_SRC="$(cd "$(dirname "$0")" && pwd)"
 # Die Namensquelle wird NEBEN dem Skript erwartet (so laeuft es im Repo) - der
 # Installer kopiert den Watchdog aber nach /usr/local/bin, und dort lag
@@ -189,12 +186,8 @@ fi
 
 # --- 2) App prüfen (nur wenn die App auf diesem Knoten läuft) ---
 APP_STATE="nicht-vorhanden"
-# F10: erst den TATSAECHLICH laufenden Namen aufloesen (neu oder Altname) - sonst
-# bleibt die Reparatur auf einer nicht migrierten Installation stumm.
+# F10: den TATSAECHLICH laufenden Namen aufloesen (Quelle fleet-names.sh).
 APP_CONTAINER="$(resolve_container "$APP_CONTAINER")"
-if [[ "$APP_CONTAINER" != "$FLEET_COMPOSE_PROJECT" ]]; then
-  log "Hinweis: App laeuft noch unter dem Altnamen ($APP_CONTAINER) - Migration: scripts/hetzner/migrate-project-name.sh (docs/HETZNER_DEPLOY.md, F10)"
-fi
 if container_running "$APP_CONTAINER"; then
   if app_health; then
     APP_STATE="ok"
