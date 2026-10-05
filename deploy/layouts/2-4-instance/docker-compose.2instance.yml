@@ -1,0 +1,142 @@
+# audioMONASTRY 2-Instance Layout
+# Node A: app + master  (app-1)
+# Node B: sfu + turn   (sfu-1)
+#
+# Deploy:
+# Node A: docker compose -f docker-compose.hetzner.yml -f docker-compose.overrides.app.yml up -d caddy audiomonastry master-player
+# Node B: docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml -f docker-compose.overrides.sfu.yml up -d caddy audiomonastry coturn
+#
+# Plugin placeholders remain functional: static files served from /public, worklets loaded via /worklets/*
+# No code changes required.
+
+name: audiomonastry
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-runtime: &default-runtime
+  restart: unless-stopped
+  logging: *default-logging
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  # Caddy HTTPS termination
+  caddy:
+    image: audiomonastry-caddy-dns:2.9
+    container_name: audiomonastry-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN:-:80}
+      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-}
+      ORIGIN_HOST: ${ORIGIN_HOST:-origin.anunnakitools.de}
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/etc/caddy/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+
+  # Main app + signaling
+  audiomonastry:
+    build:
+      context: .
+      dockerfile: Dockerfile.hetzner
+      args:
+        BUILD_VERSION: ${AUDIOMONASTRY_VERSION:-dev}
+        BUILD_COMMIT: ${AUDIOMONASTRY_COMMIT:-unknown}
+        BUILD_TIME: ${AUDIOMONASTRY_BUILD_TIME:-unknown}
+    image: audiomonastry:hetzner
+    container_name: audiomonastry
+    <<: *default-runtime
+    expose:
+      - "8080"
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      ENABLE_SFU: ${ENABLE_SFU:-0}
+      MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-http://master-player:8000}
+      SIGNALING_IDLE_TIMEOUT_MS: ${SIGNALING_IDLE_TIMEOUT_MS:-1200000}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-100}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://localhost:8080/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+    networks:
+      - audiomonastry_net
+
+  # Master player mixing/mastering
+  master-player:
+    build: ./services/master-player
+    image: audiomonastry-master-player:hetzner
+    container_name: audiomonastry-master
+    <<: *default-runtime
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    networks:
+      - audiomonastry_net
+
+networks:
+  audiomonastry_net:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

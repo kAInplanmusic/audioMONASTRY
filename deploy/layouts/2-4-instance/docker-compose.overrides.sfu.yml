@@ -1,0 +1,46 @@
+# Override for SFU+Turn node (Instance 2)
+# - ENABLE_SFU=1
+# - RTP ports published
+# - coturn in host network
+
+services:
+  audiomonastry:
+    environment:
+      ENABLE_SFU: "1"
+      SFU_LISTEN_IP: "0.0.0.0"
+      SFU_ANNOUNCED_IP: ${SFU_ANNOUNCED_IP:-}
+      SFU_SIGNALING_PATH: "/sfu-signaling"
+      SFU_RTC_MIN_PORT: ${SFU_RTC_MIN_PORT:-40000}
+      SFU_RTC_MAX_PORT: ${SFU_RTC_MAX_PORT:-40099}
+      MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-}
+    ports:
+      - "${SFU_PORTS:-40000-40099}:${SFU_PORTS:-40000-40099}/udp"
+      - "${SFU_PORTS:-40000-40099}:${SFU_PORTS:-40099}/tcp"
+
+  coturn:
+    image: coturn/coturn:4.18.0
+    container_name: audiomonastry-coturn
+    network_mode: host
+    restart: unless-stopped
+    init: true
+    user: "65534:65534"
+    command: ["--log-file=stdout","--no-tls","-c","/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./runtime/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+      - /var/lib/coturn:rw,size=16m
+    healthcheck:
+      test: ["CMD-SHELL","turnutils_stunclient 127.0.0.1 >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"

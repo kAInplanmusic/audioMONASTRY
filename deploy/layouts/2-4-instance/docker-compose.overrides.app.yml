@@ -1,0 +1,21 @@
+# Override for App+Master node (Instance 1)
+# - ENABLE_SFU=0
+# - MASTER_PLAYER_URL points to local master-player
+# - No RTP ports published
+
+services:
+  audiomonastry:
+    environment:
+      ENABLE_SFU: "0"
+      SFU_ANNOUNCED_IP: ""
+      SFU_SIGNALING_PATH: "/sfu-signaling"
+      SFU_RTC_MIN_PORT: "40000"
+      SFU_RTC_MAX_PORT: "40099"
+      MASTER_PLAYER_URL: "http://master-player:8000"
+      DOMAIN: ${DOMAIN:-anunnakitools.de}
+      # Client credentials for SFU
+      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-https://sfu.anunnakitools.de}
+
+  master-player:
+    environment:
+      PORT: 8000
