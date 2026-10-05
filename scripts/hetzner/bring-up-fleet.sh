@@ -188,6 +188,25 @@ EDGE_IP=$(get_ip audiomonastry-edge-1)
 }
 echo "app=$APP_IP sfu=$SFU_IP ai=$AI_IP master=$MASTER_IP edge=$EDGE_IP"
 
+# --- 2b. veraltete Host-Keys entfernen (INFRA-HETZNER-017) --------------------
+# Hetzner recycelt IPs. Traegt die neue Flotte eine IP, die schon einmal ein
+# anderer Server hatte, steht dessen Host-Key noch in known_hosts: SSH bricht
+# dann mit "REMOTE HOST IDENTIFICATION HAS CHANGED ... Host key verification
+# failed" ab, OBWOHL der Knoten erreichbar und bereit ist. 'accept-new' hilft
+# dabei nicht - es akzeptiert nur UNBEKANNTE, keinen geaenderten Key. Real
+# passiert: Schritt 4/9 lief 3x in einen 7,5- bzw. 21-min-Timeout, weil alle
+# fuenf IPs alte Keys trugen; nach dem Entfernen waren beide Knoten sofort
+# bereit. Deshalb hier einmal zentral die Keys der aktuellen Flotten-IPs
+# verwerfen. Nur Altbestand derselben IP - kein Schluessel wird erzeugt.
+step "2b/9 veraltete Host-Keys der Flotten-IPs entfernen (Hetzner recycelt IPs)"
+for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+  if ssh-keygen -f "$HOME/.ssh/known_hosts" -R "$ip" >/dev/null 2>&1; then
+    echo "  entfernt: $ip (alter Key verworfen)"
+  else
+    echo "  keine Eintraege: $ip"
+  fi
+done
+
 # --- 3. Cross-Node-Firewall-Regeln abgleichen (INFRA-HETZNER-014) -------------
 # Die Firewalls entstehen beim Provisionieren/Verdrahten aus festen Werten. Nach
 # einem Neuaufbau (neue IPs) zeigen ihre Quell-IPs deshalb auf Knoten der
