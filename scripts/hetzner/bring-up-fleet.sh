@@ -213,15 +213,35 @@ else
 fi
 
 # --- 4. SSH-Bereitschaft ------------------------------------------------------
-step "4/9 Auf Cloud-Init/SSH warten (kann 2–4 min dauern)"
+step "4/9 Auf Cloud-Init/SSH warten (kann 2–4 min dauern, Kaltstart bis ~20 min)"
+# INFRA-HETZNER-017: Der Kaltstart braucht laenger als 7,5 min. Die Markerdatei
+# (cloud-init.yaml:158) ist die LETZTE runcmd-Zeile; bei frischer Provisionierung
+# (Paketinstallation, fail2ban, sysctl, zram) faellt sie danach. Fenster daher
+# grosszuegig bemessen UND 'cloud-init status = done' als gleichwertigen Beweis
+# akzeptieren - sonst bricht der Lauf ab, obwohl der Knoten bereit ist.
+WAIT_TRIES="${FLEET_SSH_WAIT_TRIES:-360}"   # 360 x 5 s = 30 min
 for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
   echo -n "  $ip … "
   ok=0
-  for _ in $(seq 1 90); do
-    if ssh_host "$ip" 'test -f /root/.audiomonastry-bootstrap-done' 2>/dev/null; then ok=1; break; fi
+  reason=""
+  for _ in $(seq 1 "$WAIT_TRIES"); do
+    if ssh_host "$ip" 'test -f /root/.audiomonastry-bootstrap-done' 2>/dev/null; then
+      ok=1; reason="Markerdatei"; break
+    fi
+    # Gleichwertiger Beweis: cloud-init ist fertig (und SSH antwortet ueberhaupt).
+    if ssh_host "$ip" 'command -v cloud-init >/dev/null 2>&1 && cloud-init status 2>/dev/null | grep -q "status: done"' 2>/dev/null; then
+      ok=1; reason="cloud-init done (Markerdatei fehlt)"; break
+    fi
     sleep 5
   done
-  if [[ "$ok" == "1" ]]; then echo "bereit"; else echo "TIMEOUT"; exit 1; fi
+  if [[ "$ok" == "1" ]]; then
+    echo "bereit ($reason)"
+  else
+    echo "TIMEOUT nach $((WAIT_TRIES * 5))s – Knoten nicht bereit."
+    echo "  Pruefen: ssh root@$ip 'cloud-init status --long; tail -30 /var/log/cloud-init-output.log'"
+    echo "  Fenster verlaengern: FLEET_SSH_WAIT_TRIES=720 $0"
+    exit 1
+  fi
 done
 
 # --- 5. app-1 deployen --------------------------------------------------------

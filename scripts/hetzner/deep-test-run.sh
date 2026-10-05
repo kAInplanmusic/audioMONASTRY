@@ -644,9 +644,15 @@ t2() {
 
   log "T2: Flotte hochfahren (bring-up-fleet.sh --yes, DEPLOY_DOMAIN=$DEPLOY_DOMAIN, Snapshots 2026-09-25)"
   log "    Entlastung im Autolauf: Smoke/Stress/SFU-Echtpfad macht T2-Tail selbst, Deep-Test macht T4."
+  # INFRA-HETZNER-017: Der Trap-Vertrag muss VOR dem Aufbau gelten. Stand er
+  # danach, lief die Flotte nach einem Abbruch INNERHALB von bring-up-fleet.sh
+  # (z. B. Schritt 4/9 SSH-Timeout) ungestoppt weiter - der Trap fand keine
+  # .fleet-up und uebersprang lifecycle stop (real passiert: 5 Server liefen
+  # ~3 h weiter, manueller Stop noetig). Daher: Datei setzen, sobald der Aufbau
+  # beginnen soll; der Trap raeumt dann jeden Abbruch ab diesem Punkt.
+  touch "$RUNROOT/.fleet-up"
   DEPLOY_DOMAIN="$DEPLOY_DOMAIN" DEEPTEST_SKIP_TESTS=1 \
     bash scripts/hetzner/bring-up-fleet.sh --yes || return 1
-  touch "$RUNROOT/.fleet-up"   # Trap-Vertrag: ab jetzt räumt lifecycle stop ab
 
   log "T2: Knoten-IPs aus der API lesen"
   curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" 'https://api.hetzner.cloud/v1/servers?per_page=50' -o "$RUNROOT/t2-servers.json"
