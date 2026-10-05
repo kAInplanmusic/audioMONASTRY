@@ -482,6 +482,31 @@ const DJMixer = React.memo(function DJMixer() {
   const [group, setGroup] = useState({ left: 0.8, right: 0.8 });
   const [released, setReleased] = useState<Set<TrackType>>(new Set());
 
+  // Transport (P0-1): PLAY/STOP gehoert ausschliesslich dem mixerMONK-Halter.
+  // Der Zustand wird aus der Engine gespiegelt (nicht lokal geraten), damit
+  // auch engine-seitige Aenderungen - z. B. Idle-Suspend - sichtbar sind.
+  // Ist der Betrachter nicht der Halter, ist der Knopf deaktiviert und sagt
+  // warum: kein stiller Blindgaenger mehr.
+  const [isHolder, setIsHolder] = useState(() => webRTCManager.isMainOutOwner);
+  const [playing, setPlaying] = useState(() => audioEngine.getIsPlaying());
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setIsHolder(webRTCManager.isMainOutOwner);
+      setPlaying(audioEngine.getIsPlaying());
+    }, 500);
+    return () => window.clearInterval(t);
+  }, []);
+
+  const handlePlay = () => {
+    if (!webRTCManager.isMainOutOwner) return;
+    void audioEngine.play();
+  };
+
+  const handleStop = () => {
+    if (!webRTCManager.isMainOutOwner) return;
+    audioEngine.stop();
+  };
+
   const toggleRelease = (track: TrackType) => {
     const next = new Set(released);
     if (next.has(track)) next.delete(track);
@@ -594,7 +619,36 @@ const DJMixer = React.memo(function DJMixer() {
           <span className="text-sm font-black tracking-[0.35em] text-zinc-200">audioMONASTRY</span>
           <span className="text-[11px] font-mono text-orange-400 border border-orange-500/40 px-2 py-0.5 rounded-sm tracking-widest">mixerMONK · 6 CH</span>
         </div>
-        <span className="text-[10px] font-mono text-zinc-500 tracking-[0.3em]">DJM-A9</span>
+        <div className="flex items-center gap-3">
+          {/* Transport: PLAY/STOP im Mixer (mixerMONK ist der Master). */}
+          <div className="flex items-center gap-1.5" role="group" aria-label="Transport">
+            <button
+              type="button"
+              onClick={handlePlay}
+              disabled={!isHolder}
+              title={isHolder ? 'Transport starten' : 'Nur der mixerMONK-Halter steuert den Transport'}
+              className={`px-2.5 py-1 rounded-sm border text-[11px] font-black tracking-widest transition-colors ${isHolder ? 'border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/15' : 'border-zinc-700 text-zinc-600 cursor-not-allowed'}`}
+            >
+              ▶ PLAY
+            </button>
+            <button
+              type="button"
+              onClick={handleStop}
+              disabled={!isHolder}
+              title={isHolder ? 'Transport stoppen' : 'Nur der mixerMONK-Halter steuert den Transport'}
+              className={`px-2.5 py-1 rounded-sm border text-[11px] font-black tracking-widest transition-colors ${isHolder ? 'border-orange-500/50 text-orange-300 hover:bg-orange-500/15' : 'border-zinc-700 text-zinc-600 cursor-not-allowed'}`}
+            >
+              ■ STOP
+            </button>
+            <span
+              aria-live="polite"
+              className={`text-[10px] font-mono tracking-widest ${playing ? 'text-emerald-400' : 'text-zinc-500'}`}
+            >
+              {playing ? 'LÄUFT' : 'HALT'}
+            </span>
+          </div>
+          <span className="text-[10px] font-mono text-zinc-500 tracking-[0.3em]">DJM-A9</span>
+        </div>
       </div>
 
       {/* Controller links | 6 Kanalzüge + Utility + Master | Controller rechts */}
