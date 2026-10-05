@@ -84,8 +84,14 @@ export STUDIO_ACCESS_TOKEN DEEPTEST_RUN=1 PWOUT PWREPORTERS V2_LIVE_SKIP
 # 3 min NACH dem gemeldeten Phasenende 20:12), und T1 galt faelschlich als gruen.
 # Deshalb: eigene Defaults je Phase + Overrides.
 #   DEEPTEST_PHASE_TIMEOUT_<PHASE>  (z. B. _T4)  >  DEEPTEST_PHASE_TIMEOUT  >  Default
-DEFAULT_PHASE_TIMEOUT=1800        # T0/T2/T3/T5: Netz-/SSH-Phasen
+DEFAULT_PHASE_TIMEOUT=1800        # T0/T3/T5: Netz-/SSH-Phasen
 DEFAULT_PHASE_TIMEOUT_T1=3600     # lokaler Trockenlauf: Suite >34 min gemessen
+DEFAULT_PHASE_TIMEOUT_T2=5400     # Flottenstart: Provisionierung + Kaltstart (~20 min
+                                  #   bei Hetzner-IP-Recycling) + Remote-Build des
+                                  #   App-Images + TLS-Terminator. Mit den pauschalen
+                                  #   1800 s lief T2 real in den HARD-TIMEOUT, obwohl
+                                  #   er Schritt 9b/9 bereits erreicht hatte
+                                  #   (Lauf 20261005-134803, INFRA-HETZNER-017).
 DEFAULT_PHASE_TIMEOUT_T4=5400     # Hetzner-Suite: gleiche Suite + Netzlatenz
 phase_timeout_for() {             # $1 Phase -> Sekunden
   local specific="DEEPTEST_PHASE_TIMEOUT_$1" glob="DEEPTEST_PHASE_TIMEOUT" val=""
@@ -324,7 +330,7 @@ running=[s for s in d.get('servers',[]) if s.get('name','').startswith('audiomon
 print(1 if running else 0)
 " "$fleet_json" 2>/dev/null || echo 1)"
     if [[ "$still_there" = "1" ]]; then
-      bash scripts/hetzner/lifecycle.sh stop >> "$RUNROOT/lifecycle-stop.log" 2>&1
+      bash scripts/hetzner/lifecycle.sh stop --yes >> "$RUNROOT/lifecycle-stop.log" 2>&1
     else
       echo "0" > "$RUNROOT/.fleet-up"
       echo "$(date +%FT%TZ) Flotte laut API bereits weg (0 audiomonastry-*) – lifecycle stop übersprungen." >> "$RUNROOT/lifecycle-stop.log"
@@ -685,9 +691,19 @@ PY
     python3 scripts/hetzner/cf-dns-ensure.py --apply || { echo "DNS-Einrichtung FEHLGESCHLAGEN – Abbruch, keine Verwendung der Produktionsdomain."; return 1; }
   # Nachweis: der oeffentliche Smoke-Host muss in DNS existieren (der Smoke in
   # T2-Tail laeuft gegen https://$DEPLOY_DOMAIN). Ohne diesen Record lief T2
-  # frueher in einen Zeituberschlag bei ensure-tls-terminator.sh.
+  # frueher in einen Zeitueberschlag bei ensure-tls-terminator.sh.
+  # INFRA-HETZNER-017: Die Auflösung darf NICHT nur ueber den lokalen Resolver
+  # laufen - bei proxied Cloudflare-Records (orange Wolke) liefert getent hier
+  # regelmaessig nichts, obwohl der Record existiert und von aussen aufloest
+  # (real passiert: '-> <keine>' bei korrekt gesetztem deeptest-A-Record, Lauf
+  # danach an der Folgepruefung abgebrochen). Daher lokal pruefen und bei
+  # Misserfolg einen oeffentlichen Resolver nachziehen, bevor gewarnt wird.
   local app_host_ip
   app_host_ip="$(getent ahostsv4 "$DEPLOY_DOMAIN" 2>/dev/null | awk 'NR==1{print $1}')"
+  if [[ -z "$app_host_ip" ]]; then
+    app_host_ip="$(dig +short A "$DEPLOY_DOMAIN" @1.1.1.1 2>/dev/null | grep -E '^[0-9]+\.' | head -1)"
+    [[ -n "$app_host_ip" ]] && echo "  DNS-Aufloesung $DEPLOY_DOMAIN -> $app_host_ip (oeffentlicher Resolver 1.1.1.1; lokal nicht aufloesbar)"
+  fi
   echo "  DNS-Aufloesung $DEPLOY_DOMAIN -> ${app_host_ip:-<keine>}"
 
   log "T2: app-.env auf dem Knoten: AI_MODE=off erzwingen, kein RP_API_KEY"
@@ -926,7 +942,7 @@ for p in T0 T1 T2 T3 T4 T5; do
     if [[ -n "$STOP_AFTER" && "$p" == "$STOP_AFTER" ]]; then
       if [[ -f "$RUNROOT/.fleet-up" ]]; then
         log "Stopp nach $p gewünscht (--stop-after) – Flotte läuft, lifecycle stop folgt."
-        bash scripts/hetzner/lifecycle.sh stop || true
+        bash scripts/hetzner/lifecycle.sh stop --yes || true
       else
         log "Stopp nach $p gewünscht (--stop-after) – keine Flotte, kein Stop nötig."
       fi
