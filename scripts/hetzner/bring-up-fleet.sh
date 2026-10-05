@@ -396,7 +396,14 @@ echo "  app-1: SFU-Adresse + TURN_URLS in die .env, App neu hochfahren …"
 printf '%s\n' "$TURN_SECRET" | ssh_host_stdin "$APP_IP" \
   "cd /opt/audiomonastry && SFU_PUBLIC_IP=$SFU_IP bash scripts/hetzner/wire-rtc.sh app --secret-stdin" \
   || echo "  ⚠ RTC-Verdrahtung auf app-1 fehlgeschlagen (pruefen!)"
-ssh_host "$APP_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d audiomonastry" \
+# INFRA-HETZNER-017: caddy MUSS mit in die Service-Liste. Stand hier nur
+# 'audiomonastry', wurde der TLS-Terminator auf app-1 nie erstellt - Schritt 9b
+# fand dann keinen Container ("❌ Caddy-Container existiert nicht auf <app-ip>"),
+# nichts lauschte auf 443, Cloudflare antwortete 521 und T2 wurde rot, obwohl
+# App und Master healthy waren. sfu-1 und edge-1 nennen caddy laengst explizit;
+# app-1 fehlte in dieser Liste. Die Reihenfolge ist unkritisch (compose loest
+# depends_on selbst auf), caddy wird nach dem Zertifikats-Deploy gestartet.
+ssh_host "$APP_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.hetzner.yml up -d caddy audiomonastry" \
   || echo "  ⚠ App-Restart auf app-1 fehlgeschlagen (pruefen!)"
 # Beleg direkt nach dem Start: die Antwort MUSS turn:-Eintraege enthalten.
 echo "  Kontrolle /api/webrtc-config auf app-1 (erwartet: turn: + sfu.url):"
