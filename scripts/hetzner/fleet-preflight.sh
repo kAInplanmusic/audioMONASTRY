@@ -286,6 +286,54 @@ cmd_check() {
   # Einzeiler als Bruecke: der DNS-Zustand ist die zweite haeufige Ursache fuer
   # ein nicht erreichbares Portal (522) und braucht keinen Login.
   echo "Hinweis: Cloudflare-DNS-Verdrahtung pruefen: bash scripts/hetzner/fleet-preflight.sh dns"
+
+  # INFRA-HETZNER-017: Die dritte haeufige Ursache ist ein fehlendes
+  # Origin-Zertifikat. Ohne ORIGIN_CERT/ORIGIN_KEY in .env.deploy dekodiert
+  # deploy.sh kein certs/origin.crt - Caddy startet dann nicht ('Restarting (1)'
+  # in Endlosschleife), Cloudflare liefert 521 und der Flottenstart verbrennt
+  # seine ganze T2-Phase. Real passiert am 2026-10-05 (drei Laeufe). Der Check
+  # ist bewusst VOR dem Aufbau: er kostet nichts und verhindert den Fehlstart.
+  check_origin_certs
+}
+
+# INFRA-HETZNER-017: Origin-Zertifikat im Deploy-env pruefen (nicht leer/fehlend).
+check_origin_certs() {
+  local cert key cert_len key_len problems=0
+  cert="$(grep -m1 '^ORIGIN_CERT=' .env.deploy 2>/dev/null | cut -d= -f2- || true)"
+  key="$(grep -m1 '^ORIGIN_KEY=' .env.deploy 2>/dev/null | cut -d= -f2- || true)"
+  cert_len="${#cert}"; key_len="${#key}"
+  if [[ -z "$cert" || -z "$key" ]]; then
+    echo "❌ Origin-Zertifikat fehlt in .env.deploy (ORIGIN_CERT=${cert_len}B, ORIGIN_KEY=${key_len}B)."
+    echo "   Folge: deploy.sh dekodiert kein certs/origin.crt -> Caddy startet nicht"
+    echo "   ('Restarting (1)' in Endlosschleife) -> Cloudflare 521 -> T2 bricht ab."
+    echo "   Remediation: die base64-Werte aus .env.portal uebernehmen:"
+    echo "     python3 - <<'PY'"
+    echo "     import re; p=open('.env.portal').read(); d=open('.env.deploy').read()"
+    echo "     for k in ('ORIGIN_CERT','ORIGIN_KEY'):"
+    echo "         v=re.search(rf'^{k}=(.*)\$',p,re.M).group(1)"
+    echo "         d=re.sub(rf'^{k}=.*\$',f'{k}={v}',d,flags=re.M) if re.search(rf'^{k}=',d,re.M) else d+f'{k}={v}\\n'"
+    echo "     open('.env.deploy','w').write(d)"
+    echo "     PY"
+    problems=1
+  elif [[ "$cert_len" -lt 100 || "$key_len" -lt 100 ]]; then
+    echo "❌ Origin-Zertifikat in .env.deploy sieht unvollstaendig aus (CERT=${cert_len}B, KEY=${key_len}B)."
+    echo "   Erwartet: base64-PEM, typisch >2000 Zeichen je Wert (Vergleich: .env.portal)."
+    problems=1
+  else
+    echo "✅ Origin-Zertifikat in .env.deploy: CERT=${cert_len}B, KEY=${key_len}B"
+  fi
+  # Gegenprobe mit der zweiten Quelle, damit eine Abweichung auffaellt.
+  if [[ -s .env.portal ]]; then
+    local pcert pk
+    pcert="$(grep -m1 '^ORIGIN_CERT=' .env.portal 2>/dev/null | cut -d= -f2- || true)"
+    pk="$(grep -m1 '^ORIGIN_KEY=' .env.portal 2>/dev/null | cut -d= -f2- || true)"
+    if [[ -n "$cert" && -n "$pcert" && "$cert" != "$pcert" ]]; then
+      echo "⚠ .env.deploy und .env.portal haben UNTERSCHIEDLICHE ORIGIN_CERT-Werte."
+      echo "   Gleiche Werte verwenden, sonst weicht das Zertifikat je Pfad ab."
+      problems=1
+    fi
+  fi
+  return $problems
 }
 
 cmd_apply() {
