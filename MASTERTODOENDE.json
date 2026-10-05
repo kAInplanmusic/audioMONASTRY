@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-10-04",
+  "generatedAt": "2026-10-05",
   "branch": "main",
-  "commit": "cc462ad",
+  "commit": "7390f23",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -4654,6 +4654,56 @@
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
       "note": "Status nicht nur über Farbe (Text OFF, STBY, ON ist im Entwurf vorhanden). Kontrast der Schein-Farben prüfen. Pulsieren bei reduzierter Bewegung abschalten (im Entwurf vorhanden). Tastaturbedienung für alle Moduswechsel.\n\nAkzeptanz: e2e-Tastaturtest erweitert",
       "verification": ""
+    },
+    {
+      "id": "LIVE-P1-004",
+      "title": "AI_MODE auf Hetzner-Knoten setzen (aiNegative-Suite erwartet AI_DISABLED)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra",
+      "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
+      "note": "Beim Deep-Test gegen die frisch provisionierte Flotte (commit 7390f23) fielen 4 von 7 Tests in tests/e2e/aiNegative.spec.ts. Messung live: /api/ai/vision|generate-drop|compose antworten OHNE Token korrekt 401 (Studio-Gate fail-closed, kein Sicherheitsproblem); MIT Token liefern vision/generate-drop 400 (Schema) und compose 200 (Lokal-Pfad). Die Tests erwarten fuer die Vision-Routen HTTP 503 mit code=AI_DISABLED. Ursache: auf dem Knoten ist AI_MODE nicht gesetzt (im Container: 'AI_MODE nicht gesetzt'), der Kill-Switch greift also nicht. Der DEEP-TEST-PLAN fordert fuer den AI-freien Lauf ausdruecklich AI_MODE=off auf ai-1/app-1.",
+      "acceptance": "AI_MODE=off in der Knoten-.env (app-1) gesetzt; aiNegative.spec.ts 7/7 gruen; kein RunPod-DNS-Traffic (tcpdump-Probe auf ai-1)."
+    },
+    {
+      "id": "LIVE-P1-005",
+      "title": "live2browser: Peer-Verbindung scheitert (SFU/TURN-Kette nach Flottenstart)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra",
+      "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
+      "note": "tests/e2e/live2browser.spec.ts:109 schlaegt fehl: hasOpenPeer(pageB) wird nicht true innerhalb 25 s (Offer/Answer zwischen zwei echten Browsern). Die SFU/TURN-Kette war zum Testzeitpunkt noch nicht vollstaendig verdrahtet: coturn wurde erst NACH dem ersten Spec-Lauf auf sfu-1 gestartet, und sfu.anunnakitools.de zeigte bis zum DNS-Fix auf die alte IP 2.28.206.121. Kein App-Defekt belegt - die Kette war unvollstaendig.",
+      "acceptance": "Nach vollstaendiger RTC-Verdrahtung (coturn + wire-rtc.sh + DNS) live2browser.spec.ts gruen."
+    },
+    {
+      "id": "INFRA-HETZNER-017",
+      "title": "bring-up-fleet.sh versorgt Nicht-App-Rollen unvollstaendig",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Infra",
+      "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
+      "note": "Der Flottenstart lieferte auf sfu-1/master-1/edge-1 KEIN Repo nach /opt/audiomonastry ('open docker-compose.hetzner.yml: no such file'), auf ai-1 fehlten scripts/ ganz. Zusaetzlich fehlte auf allen Nicht-App-Knoten die fuer 'env_file: .env' noetige .env (Container-Start brach mit 'env file not found'). Und das Caddy-DNS-Image (audiomonastry-caddy-dns:2.9) wird nur auf app-1 gebaut, obwohl sfu-1 und edge-1 ebenfalls einen Caddy-Service fuehren ('pull access denied'). Reihenfolge im Live-Lauf: Schritt 4/9 brach mit SSH-TIMEOUT ab (alter Host-Key), danach fehlten die Rollen-Schritte.",
+      "acceptance": "bring-up-fleet.sh versorgt alle 5 Rollen mit Repo + rollen-.env + Caddy-Image; Live-Lauf ohne manuelle Nacharbeit."
+    },
+    {
+      "id": "INFRA-HETZNER-018",
+      "title": "cf-dns-ensure.py liest Token nicht aus .env.deploy",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra",
+      "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
+      "note": "cf-dns-ensure.py liest CLOUDFLARE_API_TOKEN aus der Umgebung, nicht aus .env.deploy - der Aufruf im Flottenstart scheiterte mit 'FEHLER keine Zone fuer anunnakitools.de', obwohl der Token in .env.deploy stand. Erst nach explizitem export (plus APP_IP/SFU_IP) lief die Verdrahtung. fleet-preflight.sh sourct .env.deploy dagegen selbst.",
+      "acceptance": "cf-dns-ensure.py nimmt den Token aus .env.deploy/.env.portal, wenn er nicht in der Umgebung steht; Test deckt den Fall."
+    },
+    {
+      "id": "PROD-P1-011",
+      "title": "Cloudflare-Token mit Zone:DNS:Read statt Edit in .env.deploy/.env.portal",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Infra",
+      "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
+      "note": "Der in .env.deploy/.env.portal hinterlegte Token (fp dd81a16a2dc5, cfut_) konnte die Zone LESEN (HTTP 200), aber NICHT schreiben (HTTP 403 '10000 Authentication error') - gemessen mit einem POST auf dns_records, derselbe Aufruf mit GET war 200. Der Token selbst meldete verify=200/active, aber /user/tokens/<id> und jeder Schreibzugriff wurden mit 9109 Unauthorized abgewiesen (Account-/Rollen-Bindung). Die Domain konnte erst verdrahtet werden, nachdem ein schreibfaehiger cfat_-Token (fp c30fb98d9051) aus dem Bestand eingesetzt wurde. Empfehlung: einen Token mit Zone:DNS:Edit ueber das Cloudflare-Template 'Edit zone DNS' anlegen und in .env.deploy + .env.portal hinterlegen.",
+      "acceptance": "cf-token-diagnose.py meldet fuer alle Fundstellen Schreibrecht (POST-Test gruen); cf-dns-ensure.py --apply verdrahtet ohne Token-Wechsel."
     }
   ],
   "visionSandbox": [
