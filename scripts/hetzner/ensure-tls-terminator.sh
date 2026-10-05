@@ -33,7 +33,16 @@ set -uo pipefail
 
 APP_IP="${APP_IP:-}"
 DOMAIN="${DOMAIN:-anunnakitools.de}"
-ORIGIN_HOST="${ORIGIN_HOST:-origin.$DOMAIN}"
+# INFRA-HETZNER-019: Die TLS-Pruefung muss den Namen anfragen, den der Caddyfile-
+# Site-Block auch bedient. Der Block lautet `{$DOMAIN}` - also genau $DOMAIN
+# (z. B. deeptest.anunnakitools.de). Stand hier `origin.$DOMAIN`, fragte die
+# Pruefung einen Host an, fuer den es KEINEN Site-Block gibt: Caddy antwortete
+# ohne 200, das Skript meldete "Der Ursprung antwortet nicht mit 200 - das
+# Zertifikat fehlt oder passt nicht" und T2 wurde rot, obwohl Caddy stabil lief
+# und das Origin-Zertifikat (SAN *.anunnakitools.de) den Namen abdeckt.
+# Das Zertifikat bleibt unveraendert; nur die geprueften SNI-Namen sind korrekt.
+# ORIGIN_HOST bleibt als Override erhalten, default ist jetzt $DOMAIN.
+ORIGIN_HOST="${ORIGIN_HOST:-$DOMAIN}"
 IMAGE="${CADDY_IMAGE:-audiomonastry-caddy-dns:2.9}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/audiomonastry}"
 NUR_PRUEFEN="${NUR_PRUEFEN:-0}"
@@ -130,7 +139,7 @@ if [ "${OEFFENTLICH:-000}" != "200" ]; then
   echo "" >&2
   echo "❌ DIE INSTANZ IST NICHT ÖFFENTLICH ERREICHBAR (HTTP ${OEFFENTLICH:-000})." >&2
   echo "   Der Knoten selbst ist in Ordnung - die Ursache liegt davor. Reihenfolge zum Pruefen:" >&2
-  echo "     1. DNS: zeigt $ORIGIN_HOST auf $APP_IP?  (scripts/hetzner/cf-dns-ensure.py)" >&2
+  echo "     1. DNS: zeigt $DOMAIN auf $APP_IP?  (scripts/hetzner/cf-dns-ensure.py)" >&2
   echo "     2. Worker-Route: ist die Hauptdomain eine Worker-Custom-Domain? Dann schickt der" >&2
   echo "        Worker SNI der Hauptdomain - die muss im TLS-Block der Caddyfile stehen." >&2
   echo "     3. Cloudflare-Status: 521 = Ursprung antwortet nicht, 525 = TLS-Handshake," >&2
