@@ -715,6 +715,22 @@ PY
       && grep -q "^RP_API_KEY=" .env && exit 9 || true' || return 1
   done
 
+  # INFRA-HETZNER-021: STUDIO_ACCESS_TOKEN auf den Knoten bringen - sonst fail-closed 503
+  # server.ts: studioTokenMissing -> 503 STUDIO_TOKEN_MISSING fuer alle /api/*-Routen
+  # (außer /api/health). Der Deep-Test prüft /api/session und sieht deshalb 503.
+  # Der Token ist im lokalen .env.deploy; wir setzen ihn idempotent in /opt/audiomonastry/.env
+  # und lassen die Container neu starten, damit er aus dem env_file gelesen wird.
+  if [[ -n "${STUDIO_ACCESS_TOKEN:-}" ]]; then
+    log "T2: STUDIO_ACCESS_TOKEN auf den Knoten schreiben (fail-closed vermeiden)"
+    for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+      ssh_root "$ip" "cd /opt/audiomonastry && \
+        grep -q '^STUDIO_ACCESS_TOKEN=' .env && sed -i 's|^STUDIO_ACCESS_TOKEN=.*|STUDIO_ACCESS_TOKEN=${STUDIO_ACCESS_TOKEN}|' .env || printf 'STUDIO_ACCESS_TOKEN=%s\n' '${STUDIO_ACCESS_TOKEN}' >> .env" \
+      && echo "  $ip: STUDIO_ACCESS_TOKEN gesetzt" || echo "  $ip: STUDIO_ACCESS_TOKEN konnte nicht gesetzt werden"
+    done
+  else
+    log "T2: WARN - STUDIO_ACCESS_TOKEN ist leer, API bleibt fail-closed (503)"
+  fi
+
   # INFRA-HETZNER-020: Rate-Limits fuer den AUTOLAUF anheben. Der Health-Limiter
   # zaehlt BEWUSST pro IP (server.ts: keyGenerator ipKeyGenerator). Im Deep-Test
   # laufen aber Smoke-, Stress-, RTC- und die wiederholten TLS-/Statuspruefungen
