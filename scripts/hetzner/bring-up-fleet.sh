@@ -284,6 +284,24 @@ DEPLOY_HOST="root@$APP_IP" DEPLOY_DOMAIN="$DOMAIN" DEPLOY_SSH_KEY="$SSH_KEY" \
   DEPLOY_SYNC_ENV="${DEPLOY_SYNC_ENV:-0}" DEPLOY_SMOKE=0 \
   DEPLOY_REMOTE_BUILD="$DEPLOY_REMOTE_BUILD" sg docker -c "bash deploy.sh"
 
+# --- 5b. Caddy-Image bauen (INFRA-HETZNER-019, Henne-Ei) ----------------------
+# Das Image wird HIER gebaut, BEVOR die Compose-Starts es brauchen. Stand der Bau
+# nur in Schritt 9b/9, lief jeder Compose-Start mit caddy vorher ins Leere:
+#   'caddy Error pull access denied for audiomonastry-caddy-dns'
+# -> Schritt 7 (up -d caddy audiomonastry auf app-1 UND sfu-1) scheiterte, der
+# -> Container wurde nie erstellt, Schritt 9b baute das Image DANN erst und fand
+#    keinen Container ('Caddy-Container existiert nicht').
+# Das Image ist rollenunabhaengig (xcaddy + Cloudflare-DNS-Plugin).
+step "5b/9 Caddy-DNS-Image auf app-1 bauen (Voraussetzung fuer die Compose-Starts)"
+ssh_host "$APP_IP" "cd /opt/audiomonastry && mkdir -p .caddybuild && cat > .caddybuild/Dockerfile <<'DOCKER'
+FROM caddy:2.9-builder AS builder
+RUN xcaddy build --with github.com/caddy-dns/cloudflare
+FROM caddy:2.9-alpine
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+DOCKER
+cd .caddybuild && docker build -t audiomonastry-caddy-dns:2.9 . 2>&1 | tail -3 && docker run --rm audiomonastry-caddy-dns:2.9 caddy list-modules 2>/dev/null | grep -q dns.providers.cloudflare && echo '  ✓ Caddy-Image mit Cloudflare-DNS-Plugin bereit'" \
+  || echo "  ⚠ Caddy-Image-Bau auf app-1 fehlgeschlagen (Compose-Starts mit caddy werden scheitern)"
+
 # --- 6. Übrige Rollen ---------------------------------------------------------
 step "6/9 sfu-1, master-1, edge-1, ai-1 einrichten"
 RSYNC_E="ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new"
