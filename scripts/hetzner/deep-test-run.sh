@@ -715,6 +715,46 @@ PY
       && grep -q "^RP_API_KEY=" .env && exit 9 || true' || return 1
   done
 
+  # INFRA-HETZNER-020: Rate-Limits fuer den AUTOLAUF anheben. Der Health-Limiter
+  # zaehlt BEWUSST pro IP (server.ts: keyGenerator ipKeyGenerator). Im Deep-Test
+  # laufen aber Smoke-, Stress-, RTC- und die wiederholten TLS-/Statuspruefungen
+  # ueber dieselbe Quell-IP (Cloudflare-Egress bzw. 127.0.0.1), und Prometheus
+  # scrapt /api/metrics im selben Fenster. Zusammen reisst das das Budget von
+  # 600/min und die Pruefung sieht HTTP 429 - kein Terminator-Defekt, sondern die
+  # eigene Messlast. Der Feed von 60/min ist ebenso betroffen (UPLOAD/TELEMETRY).
+  # Die Produktions-DEFAULTS bleiben unveraendert; nur der Testknoten bekommt
+  # grosszuegige Werte, damit der Lauf seine eigene Last tragen kann.
+  log "T2: Rate-Limits fuer den Autolauf anheben (nur Testknoten; Defaults unveraendert)"
+  for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+    ssh_root "$ip" 'cd /opt/audiomonastry \
+      && for kv in API_RATE_LIMIT_MAX=100000 HEALTH_RATE_LIMIT_MAX=100000 \
+                    UPLOAD_CHUNK_RATE_LIMIT_MAX=100000 AI_AGENT_RATE_LIMIT_MAX=100000 \
+                    CSP_REPORT_RATE_LIMIT_MAX=100000; do \
+           k="${kv%%=*}"; \
+           grep -q "^${k}=" .env && sed -i "s|^${k}=.*|${kv}|" .env || printf "%s\\n" "$kv" >> .env; \
+         done \
+      && grep -cE "^(API_RATE_LIMIT_MAX|HEALTH_RATE_LIMIT_MAX)=" .env' 2>/dev/null \
+      | xargs -I{} echo "  $ip: Rate-Limit-Zeilen gesetzt: {}"
+  done
+
+  # Ein geaendertes env_file wirkt erst nach einem Recreate des Containers -
+  # 'restart' behaelt die alten Variablen. Ohne diesen Schritt waeren AI_MODE=off
+  # und die Rate-Limits wirkungslos (der Container lief mit der .env vom Deploy).
+  # 'up -d' erkennt die geaenderte .env und erstellt die betroffenen Services neu.
+  # Projektname wie in bring-up-fleet.sh aus fleet-names.sh (nicht hart kodieren).
+  local FLEET_PROJ
+  FLEET_PROJ="$(bash -c 'source scripts/hetzner/fleet-names.sh 2>/dev/null; fleet_compose_project' 2>/dev/null || echo audiomonastry)"
+  log "T2: Container neu erstellen, damit die geaenderten env-Werte greifen (Projekt: $FLEET_PROJ)"
+  ssh_root "$APP_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_PROJ docker compose -f docker-compose.hetzner.yml up -d audiomonastry 2>&1 | tail -2" || true
+  ssh_root "$SFU_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_PROJ docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d audiomonastry 2>&1 | tail -2" || true
+  ssh_root "$MASTER_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_PROJ docker compose -f docker-compose.hetzner.yml up -d master-player 2>&1 | tail -2" || true
+  # Beleg: die Werte sind IM Container angekommen (nicht nur in der Datei).
+  for pair in "app:$APP_IP" "sfu:$SFU_IP"; do
+    rolle="${pair%%:*}"; ip="${pair##*:}"
+    ssh_root "$ip" 'docker exec audiomonastry sh -c "echo AI_MODE=${AI_MODE:-<leer>} HEALTH_MAX=${HEALTH_RATE_LIMIT_MAX:-<default 600>}"' 2>/dev/null \
+      | sed "s/^/  $rolle: /" || echo "  $rolle: env-Probe nicht lesbar"
+  done
+
   log "T2: TLS-Terminator gegen die Subdomain prüfen/herstellen"
   APP_IP="$APP_IP" DOMAIN="$DEPLOY_DOMAIN" bash scripts/hetzner/ensure-tls-terminator.sh || { echo "TLS-Terminator nicht gesund."; return 1; }
 
