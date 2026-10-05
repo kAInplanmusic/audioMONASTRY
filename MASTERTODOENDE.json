@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-10-05",
   "branch": "main",
-  "commit": "7390f23",
+  "commit": "e362439",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -4682,8 +4682,8 @@
       "status": "OPEN",
       "area": "Infra",
       "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
-      "note": "Der Flottenstart lieferte auf sfu-1/master-1/edge-1 KEIN Repo nach /opt/audiomonastry ('open docker-compose.hetzner.yml: no such file'), auf ai-1 fehlten scripts/ ganz. Zusaetzlich fehlte auf allen Nicht-App-Knoten die fuer 'env_file: .env' noetige .env (Container-Start brach mit 'env file not found'). Und das Caddy-DNS-Image (audiomonastry-caddy-dns:2.9) wird nur auf app-1 gebaut, obwohl sfu-1 und edge-1 ebenfalls einen Caddy-Service fuehren ('pull access denied'). Reihenfolge im Live-Lauf: Schritt 4/9 brach mit SSH-TIMEOUT ab (alter Host-Key), danach fehlten die Rollen-Schritte.",
-      "acceptance": "bring-up-fleet.sh versorgt alle 5 Rollen mit Repo + rollen-.env + Caddy-Image; Live-Lauf ohne manuelle Nacharbeit."
+      "note": "Der Flottenstart lieferte auf sfu-1/master-1/edge-1 KEIN Repo nach /opt/audiomonastry ('open docker-compose.hetzner.yml: no such file'), auf ai-1 fehlten scripts/ ganz. Zusaetzlich fehlte auf allen Nicht-App-Knoten die fuer 'env_file: .env' noetige .env (Container-Start brach mit 'env file not found'). Und das Caddy-DNS-Image (audiomonastry-caddy-dns:2.9) wird nur auf app-1 gebaut, obwohl sfu-1 und edge-1 ebenfalls einen Caddy-Service fuehren ('pull access denied'). Reihenfolge im Live-Lauf: Schritt 4/9 brach mit SSH-TIMEOUT ab (alter Host-Key), danach fehlten die Rollen-Schritte. || REPRODUZIERT 2026-10-05 (autonomer deep-test-run.sh, Lauf 20261005-074320, T2 nach 8,3 min rc=1): Schritt 4/9 brach erneut mit '78.47.65.129 … TIMEOUT' ab. GEGENPROBE am selben Knoten NACH dem Abbruch: ssh root@<ip> 'test -f /root/.audiomonastry-bootstrap-done' -> MARKER OK (rc=0), cloud-init status -> 'done', errors: [] - der Knoten WAR bereit. Ursache ist damit nicht der SSH-Zugang, sondern das WARTEFENSTER: Schritt 4/9 pollt 90x mit sleep 5 (= 450 s / 7,5 min) auf die Markerdatei, die cloud-init.yaml:158 als LETZTE runcmd-Zeile setzt. Bei frischer Provisionierung dauert cloud-init laenger (im Log sichtbar: Paketinstallation, fail2ban, sysctl, 'Job for zramswap.service failed'), der Marker faellt danach. Auch der Log zeigt den Marker-Zeitstempel 05:44 bei Serverstart ~05:37. Ausserdem: der EXIT-Trap des deep-test-run.sh stoppte die Flotte nach dem T2-Abbruch NICHT (5 Server liefen weiter, manueller lifecycle.sh stop noetig) - das ist eine zweite, eigenstaendige Luecke.",
+      "acceptance": "Schritt 4/9 wartet auf 'cloud-init status = done' ODER Markerdatei mit deutlich groesserem Fenster (>= 20 min) und meldet den Grund bei Zeitueberschreitung; deep-test-run.sh stoppt die Flotte auch bei einem Phasen-Abbruch ausserhalb des regulaeren T5-Pfads; beides durch einen Live-Kaltstart belegt."
     },
     {
       "id": "INFRA-HETZNER-018",
@@ -4704,6 +4704,16 @@
       "source": "Deep-Test 2026-10-05 (Hetzner-Lauf)",
       "note": "Der in .env.deploy/.env.portal hinterlegte Token (fp dd81a16a2dc5, cfut_) konnte die Zone LESEN (HTTP 200), aber NICHT schreiben (HTTP 403 '10000 Authentication error') - gemessen mit einem POST auf dns_records, derselbe Aufruf mit GET war 200. Der Token selbst meldete verify=200/active, aber /user/tokens/<id> und jeder Schreibzugriff wurden mit 9109 Unauthorized abgewiesen (Account-/Rollen-Bindung). Die Domain konnte erst verdrahtet werden, nachdem ein schreibfaehiger cfat_-Token (fp c30fb98d9051) aus dem Bestand eingesetzt wurde. Empfehlung: einen Token mit Zone:DNS:Edit ueber das Cloudflare-Template 'Edit zone DNS' anlegen und in .env.deploy + .env.portal hinterlegen.",
       "acceptance": "cf-token-diagnose.py meldet fuer alle Fundstellen Schreibrecht (POST-Test gruen); cf-dns-ensure.py --apply verdrahtet ohne Token-Wechsel."
+    },
+    {
+      "id": "VISUAL-P1-014",
+      "title": "visual.spec.ts: Ganzseiten-Baselines wieder flaky (vertikaler Render-Versatz)",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Test",
+      "source": "Deep-Test 2026-10-05 (T1-Trockenlauf, deep-test-run.sh)",
+      "note": "Wiederauftreten des mit VISUAL-P1-010 (DONE 2026-09-18) behandelten Themas. T1 des automatisierten Deep-Test-Laufs (deeptest-20261005-023406) brach mit rc=1 ab: 2 von 61 Tests rot, beide in tests/e2e/visual.spec.ts ('Studio Baseline (Mixer + Modul-Grid)' und 'P1-2: Screenshot-Baselines fuer alle 21 Plugin-/Sektions-Ansichten'); 52 gruen, 7 skipped, 0 Umgebungs-Crash. Diff-Analyse des Artefakts 03-plugin-effect-diff.png: die GESAMTE Seite ist ~10-15 px vertikal versetzt bzw. doppelt gezeichnet (alle Texte als Paar, zwei Balken vollflaechig abweichend) - KEIN fehlendes Element, KEINE Text- oder Farbaenderung. Also ein Render-/Capture-Zeitpunkt-Artefakt, kein Produktfehler: derselbe visual.spec.ts war im T4-Lauf gegen die Hetzner-Instanz am selben Tag gruen. Zusatzbeobachtung: die App steht im AI-502-Zustand ('Circuit breaker open: llamrunner-local'), die asynchron eintreffende Fehlermeldung aendert die Layout-Hoehe. NICHT per --update-snapshots 'beheben' - das schriebe das Artefakt als Referenz fest.",
+      "acceptance": "visual.spec.ts laeuft 3x hintereinander gruen; Aufnahme stabilisiert mit Begruendung im Test (stabiler Layout-/Netzwerkzustand abwarten, animations:'disabled' vollstaendig, Hoehe vor dem Screenshot fixieren) oder als dokumentierte Ausnahme mit Messwert."
     }
   ],
   "visionSandbox": [
