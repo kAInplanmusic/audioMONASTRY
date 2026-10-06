@@ -210,9 +210,9 @@ done
 # --- 3. Cross-Node-Firewall-Regeln abgleichen (INFRA-HETZNER-014) -------------
 # Die Firewalls entstehen beim Provisionieren/Verdrahten aus festen Werten. Nach
 # einem Neuaufbau (neue IPs) zeigen ihre Quell-IPs deshalb auf Knoten der
-# VORHERIGEN Flotte: app:8080 nur von der alten edge-1, ai:8000/11434 und
+# VORHERIGEN Flotte: app:8080 nur von der alten edge-1 und
 # master:8000 nur von der alten app-1. Der Querverkehr edge->app (Monitoring-
-# Scrape), app->ai (Stem-AI/Ollama) und app->master (master-player) war damit
+# Scrape) und app->master (master-player) war damit
 # stumm blockiert - nach aussen unsichtbar, weil alles Oeffentliche ueber
 # Cloudflare laeuft. Der Abgleich leitet den Soll-Zustand aus der LAUFENDEN
 # Flotte ab und ersetzt ausschliesslich die veralteten Quell-IPs; alles andere
