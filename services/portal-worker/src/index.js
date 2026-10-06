@@ -1113,6 +1113,7 @@ case "${role}" in
   ai)
     # Rolle ai wird von der 4er-Flotte (app/sfu/media/edge) nicht mehr
     # vergeben - der Zweig ist tot, bleibt aber fuer den manuellen Aufruf des
+    # stem-ai-Setups erhalten.
     cd services/stem-ai
     python3 -m venv .venv 2>/dev/null || { apt-get install -y -qq python3.12-venv; python3 -m venv .venv; }
     . .venv/bin/activate
