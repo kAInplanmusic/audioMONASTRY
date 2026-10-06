@@ -105,8 +105,6 @@ beforeAll(async () => {
   process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
   process.env.SUPABASE_URL = '';
   process.env.SUPABASE_SERVICE_ROLE = '';
-  process.env.OLLAMA_URL = 'http://127.0.0.1:1';
-
   // Mock des master-player: zählt Anfragen, spiegelt Größe und Spurzahl zurück.
   mockServer = http.createServer((req, res) => {
     if (req.method === 'GET') {

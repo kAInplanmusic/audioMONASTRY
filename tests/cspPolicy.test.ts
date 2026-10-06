@@ -143,11 +143,10 @@ describe('F7: CSP-Policy (Einheit)', () => {
   });
 
   it('nimmt wss-/ws-Varianten der abgeleiteten Hosts in connect-src auf (Signaling)', () => {
-    const sources = buildConnectSources({ DOMAIN: 'anunnakitools.de', OLLAMA_URL: 'http://127.0.0.1:11434/api' });
+    const sources = buildConnectSources({ DOMAIN: 'anunnakitools.de' });
     expect(sources).toContain('https://anunnakitools.de');
     expect(sources).toContain('wss://anunnakitools.de');
-    expect(sources).toContain('http://127.0.0.1:11434');
-    expect(sources).toContain('ws://127.0.0.1:11434');
+    // Ollama removed 2026-10-06, no longer a connect source
   });
 
   it('CSP_MODE=enforce schaltet dieselbe Policy scharf - aber nur in Produktion', () => {

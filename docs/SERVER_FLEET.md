@@ -70,9 +70,8 @@ bash scripts/hetzner/delete-fleet.sh
 
 > Der 5-Knoten-Bestand (`ai-1`, `master-1`) ist **ausgemustert und gelöscht**
 > (2026-09-11 gestoppt, Firewalls 2026-09-20 entfernt). Die Rollen `ai` und
-> `master` existieren nicht mehr; Ollama läuft im `app-1`-Container
-> (`AI_MODE=on`), master-player ebenfalls dort. Verbindlich ist allein die
-> Soll-Tabelle oben.
+> `master` existieren nicht mehr; master-player läuft mit auf `app-1`.
+> Verbindlich ist allein die Soll-Tabelle oben.
 
 Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 (Trockenlauf: `--print-config`)
@@ -81,7 +80,7 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
 | # | Name | Hetzner-Typ (Default) | Override | Zweck |
 |---|---|---|---|---|
-| 1 | **app-1** | cx43 | `FLEET_TYPE_APP` | Caddy + App/API/Signaling + master-player + TURN + Ollama (`AI_MODE=on`), Floating IP |
+| 1 | **app-1** | cx43 | `FLEET_TYPE_APP` | Caddy + App/API/Signaling + master-player + TURN, Floating IP |
 | 2 | **sfu-1** | cx33 | `FLEET_TYPE_SFU` | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
 | 3 | **media-1** | cx43 | `FLEET_TYPE_MEDIA` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume |
 | 4 | **edge-1** | cx23 | `FLEET_TYPE_EDGE` | **Nur** Monitoring-Stack (Prometheus/Grafana/cAdvisor/node-exporter) |
@@ -117,10 +116,7 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 > Primärpfad für Stems/Voice; ai-1 ist der lokale Fallback.
 
 ```bash
-# Ollama (MOA/LLM/TTS/Song-Fallback) – installiert via:
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5:7b
-systemctl enable --now ollama          # API: http://127.0.0.1:11434
+# Ollama (entfernt 2026-10-06)
 
 # Stem-AI (Demucs) als systemd-Dienst:
 cd /opt/audiomonastry/services/stem-ai

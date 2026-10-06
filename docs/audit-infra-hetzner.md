@@ -170,7 +170,7 @@ Ebenso existieren die Rollen `app-2`, `sfu-2`, `db-1` im Repo **nicht**
 | `redis` | `:141-173` | nur `expose 6379` (`:149-150`) | `redis-cli ping` (`:163-168`) | 384M / 0.5 (`:169-173`) | Profil `fleet` (`:145`), `user: redis` (`:148`), `appendonly`, `maxmemory 256mb` (`:151-157`) |
 | `midi-bridge` | `:178-195` | `9100:9100` (`:183-184`) | keiner | — | Profil `midi` (`:182`), braucht `/dev/snd` |
 | `stem-ai` | `:199-221` | auskommentiert | — | 16G/8 CPU + GPU-Reservation | nur Doku/Commented-out |
-| `ollama` | `:227-240` | auskommentiert | — | 12G/8 CPU | nur Doku/Commented-out |
+| `ollama (entfernt 2026-10-06)` | `:227-240` | auskommentiert | — | 12G/8 CPU | nur Doku/Commented-out |
 
 ### 2.2 Rollen-Overlays
 
@@ -207,7 +207,7 @@ Ebenso existieren die Rollen `app-2`, `sfu-2`, `db-1` im Repo **nicht**
 | sfu-1 | `-f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry` | `index.js:416`; `bring-up-fleet.sh:106` |
 | master-1 | `-f docker-compose.hetzner.yml up -d master-player` | `index.js:419`; `bring-up-fleet.sh:110` |
 | edge-1 | `-f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d` (**ohne** Service-Liste) | `index.js:422`; `bring-up-fleet.sh:114` |
-| ai-1 | host-nativ: Ollama (systemd) + stem-ai (systemd, Port 8000) | `index.js:424-454`; `scripts/hetzner/install-ai1.sh:27-83` |
+| ai-1 | host-nativ: ollama (entfernt 2026-10-06) (systemd) + stem-ai (systemd, Port 8000) | `index.js:424-454`; `scripts/hetzner/install-ai1.sh:27-83` |
 
 **Befund 2.1 (P1, Überbuchung + Rollenvermischung edge-1):** Weil auf edge-1 **ohne**
 Service-Liste gestartet wird, entstehen dort zusätzlich `caddy`, `audiomonastry` **und**
@@ -413,7 +413,7 @@ Nachweis-Metadaten am Snapshot).
   gesetzt (`index.js:368`).
 - Worker-seitig: `/api/fleet-map` erfordert den Token im Header `x-studio-token`
   (`index.js:954-958`) und liefert die Knoten-IPv4s; die App verdrahtet daraus
-  master-player/Ollama/stem-ai (`server/fleetWiring.ts:93-114`, Fallback auf das
+  master-player/ollama (entfernt 2026-10-06)/stem-ai (`server/fleetWiring.ts:93-114`, Fallback auf das
   Legacy-Präfix `:66-78`).
 - **Befund 4.3 (P2):** Der Worker akzeptiert das Master-Token direkt als Cookie, wenn kein
   `SESSION_SECRET` gesetzt ist (`index.js:556`), sonst ein kurzlebiges Session-Token

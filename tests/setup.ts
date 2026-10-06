@@ -35,7 +35,7 @@ if (typeof globalThis !== 'undefined' && !globalThis.localStorage) {
 // beeinflussen – sonst schlagen Reihenfolge-Tests je nach Umgebung rot/grün aus.
 // Entfernt NUR in der Test-Umgebung; echte Keys werden nicht geändert.
 for (const key of [
-  'HF_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY', 'OLLAMA_URL', 'OLLAMA_MODEL',
+  'HF_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY',
   'GEMINI_API_KEY', 'OPENAI_API_KEY', 'CB_API_KEY', 'OR_API_KEY', 'OPENROUTER_MODEL',
   'PUBLICAI_KEY', 'PUBLICAI_BASE_URL', 'PUBLICAI_MODEL', 'AI_EMERGENCY_PROVIDERS',
   // GPU-Flotte: RunPod-IDs/Keys aus der Host-Umgebung dürfen die Verfügbarkeit

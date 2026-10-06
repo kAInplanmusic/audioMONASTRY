@@ -46,10 +46,6 @@ STEM_AI_PROVIDER=replicate
 REPLICATE_API_TOKEN=r8_...
 REPLICATE_STEM_MODEL=ryan5453/demucs
 
-# Lokale KI (im app-1-Container, AI_MODE=on)
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen2.5:7b
-
 # Admin/Root
 ADMIN_TOKEN=<langes-zufalls-token>
 ```
@@ -60,12 +56,9 @@ Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar; Default-Spalte = CLI-Defa
 (`provision-fleet.sh`), der Portal-Worker liest dieselben Overrides
 (INFRA-HETZNER-007). Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
-Ollama läuft **mit im app-1-Container** (`AI_MODE=on`) – es gibt keinen eigenen
-`ai-1`-Knoten mehr. Stem-Backup läuft lokal im selben Container.
-
 | # | Instanz | Typ | Rolle |
 |---|---|---|---|
-| 1 | app-1 | cx43 | App/API/Signaling + Ollama (`AI_MODE=on`), Floating IP |
+| 1 | app-1 | cx43 | App/API/Signaling + master-player + TURN, Floating IP |
 | 2 | sfu-1 | cx33 | Mediasoup-SFU (UDP/TCP 40000–40099) |
 | 3 | media-1 | cx43 | R2-Sync-Worker + Audio-Streaming-Cache (lokale NVMe) |
 | 4 | edge-1 | cx23 | Monitoring-Stack (nur der Stack) |

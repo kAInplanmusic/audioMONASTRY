@@ -74,8 +74,6 @@ import type { Express } from 'express';
 export interface AiRouteDeps {
   /** Geteilte Metriken aus server.ts (aiRequests/aiFailures + Cache-Treffer). */
   metrics: { aiRequests: number; aiFailures: number; aiCacheHits: number; aiCacheMisses: number };
-  /** Geteilte Flotten-Ziele; ollama wird fuer den lokalen Fallback gelesen. */
-  fleetTargets: { ollama: string };
   /** Drop-Cache (Tests koennen eine eigene, kuerzere Instanz einhaengen). */
   dropCache?: DropCache;
 }
@@ -129,10 +127,9 @@ function localTechnoPatterns(seed: number) {
 export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
   // AI-P2-006: eine Instanz pro Serverprozess (Tests haengen ihre eigene ein).
   const cache: DropCache = deps.dropCache ?? dropCache;
-  // Geteilte Referenzen aus server.ts. Bewusst als Objekt-Referenz: die
-  // Flotten-Verdrahtung mutiert fleetTargets.ollama zur Laufzeit, und die
+  // Geteilte Referenzen aus server.ts.
   // Metriken sind derselbe Zaehler wie in server.ts (keine Wertkopie).
-  const { metrics, fleetTargets } = deps;
+  const { metrics } = deps;
 
   // --- GET /api/ai/vision/artifact/:name → lokal abgelegte Vision-Medien ---
   // Fallback-Ablage, wenn R2 nicht verfügbar ist (siehe server/visionArtifacts.ts).
@@ -216,33 +213,11 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
 
 
   // ---------------------------------------------------------------------------
-  // POST /api/ai/generate + /api/ai/describe  → Ollama (lokal, self-hosted)
+  // POST /api/ai/generate + /api/ai/describe  → LLM-Router (runpod-local Fallback)
   // ---------------------------------------------------------------------------
-  // Verdrahtet HyperSonicMOA-artige Anfragen an ein lokales Ollama-Modell.
-  // Nutzt node>=18 global fetch; bei Fehler fällt es auf den deterministischen
-  // lokalen Generator zurück (kein Cloud-Aufruf). Konfiguration via env:
-  //   OLLAMA_URL    (Default http://127.0.0.1:11434)
-  //   OLLAMA_MODEL  (Default qwen2.5:7b)
+  // Verdrahtet Anfragen an den LLM-Router (primär runpod-local). Bei Fehler
+  // fällt es auf den deterministischen lokalen Generator zurück (kein Cloud-Aufruf).
   // ---------------------------------------------------------------------------
-
-  async function ollamaGenerate(promptText: string): Promise<string | null> {
-    const url = (process.env.OLLAMA_URL || '').trim() || fleetTargets.ollama || 'http://127.0.0.1:11434';
-    const model = process.env.OLLAMA_MODEL || 'qwen2.5:7b';
-    try {
-      const resp = await fetch(`${url}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt: promptText, stream: false, options: { temperature: 0.7 } }),
-        signal: AbortSignal.timeout(30000),
-      });
-      if (!resp.ok) return null;
-      const data = await resp.json() as { response?: string };
-      return data.response ?? null;
-    } catch (e) {
-      console.warn('[ollama] nicht erreichbar:', (e as Error).message);
-      return null;
-    }
-  }
 
   function sanitizeJsonBlock(raw: string): string {
     let s = raw.trim();
@@ -251,7 +226,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     return s.trim();
   }
 
-  // --- POST /api/ai/generate  → Ollama-gestützte KI-Komposition (mit lokalem Fallback) ---
+  // --- POST /api/ai/generate  → LLM-Router KI-Komposition (mit lokalem Fallback) ---
   // Hinweis: /api/ai/compose ist der deterministische Generator weiter oben
   // (Zeile ~182); dieser Handler hier ist /api/ai/generate. Der Kommentar war
   // bis 2026-09-23 falsch beschriftet (DOC-P3-002, reine Doku-Korrektur).
@@ -265,14 +240,16 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       '{ bpm: number, genre: string, patterns: { kick:boolean[16], hat:boolean[16], clap:boolean[16], synth:boolean[16] }, synthNotes:number[16] } ' +
       'für einen Techno-Track basierend auf dem Prompt: "' + query + '".';
 
-    const raw = await ollamaGenerate(llmPrompt);
-    if (raw) {
+    try {
+      const completion = await llmRouter.complete({ prompt: llmPrompt, complexity: 'moderate', maxTokens: 1024, temperature: 0.7 });
       try {
-        const parsed = JSON.parse(sanitizeJsonBlock(raw));
-        return res.json({ task_id: 'ollama_' + Date.now(), source: 'ollama', ...parsed });
+        const parsedJson = JSON.parse(sanitizeJsonBlock(completion.text));
+        return res.json({ task_id: `llm-${Date.now()}`, source: completion.provider, provider: completion.provider, ...parsedJson });
       } catch (e) {
-        console.warn('[ollama] ungültiges JSON, Fallback.', e);
+        console.warn('[llm-router] ungültiges JSON, Fallback.', e);
       }
+    } catch (e) {
+      console.warn('[llm-router] nicht verfügbar:', (e as Error).message);
     }
 
     // Deterministischer lokaler Fallback (kein Netz).
@@ -284,7 +261,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     });
   });
 
-  // --- POST /api/ai/describe  → Ollama-gestützte Beschreibung (Style/Mix-Empfehlung) ---
+  // --- POST /api/ai/describe  → LLM-Router Beschreibung (Style/Mix-Empfehlung) ---
   app.post('/api/ai/describe', async (req, res) => {
     const parsed = AiPromptSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ error: 'invalid prompt', details: parsed.error.issues.slice(0, 5) });
@@ -293,11 +270,13 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     const llmPrompt =
       'Beantworte kurz (max 2 Sätze), auf Deutsch, fachlich für einen Musik-Produzenten: ' + query;
 
-    const raw = await ollamaGenerate(llmPrompt);
-    if (raw) {
-      return res.json({ ai: raw.trim() });
+    try {
+      const completion = await llmRouter.complete({ prompt: llmPrompt, complexity: 'simple', maxTokens: 512, temperature: 0.3 });
+      return res.json({ ai: completion.text.trim(), provider: completion.provider });
+    } catch (e) {
+      console.warn('[llm-router] describe nicht verfügbar:', (e as Error).message);
     }
-    return res.json({ ai: 'Ollama nicht erreichbar. (Lokaler Fallback: keine KI-Antwort verfügbar)' });
+    return res.json({ ai: 'LLM nicht erreichbar. (Lokaler Fallback: keine KI-Antwort verfügbar)' });
   });
 
   // --- POST /api/ai/voice/mos  → MOS-Harness (AI-P1-003 P2): Hörerwertung 1..5 ---
@@ -713,19 +692,7 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
       console.warn('[generate-drop] LLM-Router nicht nutzbar:', (err as Error).message);
     }
 
-    // 2) Lokales Ollama
-    const raw = await ollamaGenerate(llmPrompt);
-    if (raw) {
-      try {
-        const payload = { ...sanitizeAiDropResponse(raw, dropRequest), provider: 'ollama' };
-        cache.set(cacheKey, payload);
-        return res.json({ ...payload, cached: false });
-      } catch (err) {
-        console.warn('[generate-drop] ungültige Ollama-Antwort, Fallback.', (err as Error).message);
-      }
-    }
-
-    // 3) Deterministischer lokaler Fallback (kein Netz, immer verfügbar).
+    // 2) Deterministischer lokaler Fallback (kein Netz, immer verfügbar).
     // Bewusst NICHT gecacht: er kostet nichts, und ein Cache-Treffer wuerde
     // verdecken, dass gerade kein Modell antwortet.
     metrics.aiFailures += 1;
