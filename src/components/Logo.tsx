@@ -2,7 +2,7 @@
 
 /**
  * audioMONASTRY-Logo – aus public/logo.png (korrektes Logo;
- * logo.webp ist das alte Testlogo und wird nur als Fallback genutzt).
+ * public/assets/logo*.webp/png sind daraus verkleinert, Fallback und Favicon).
  * `size` steuert die Ausdehnung; optional `glow` für den Start-Effekt.
  */
 export function Logo({
