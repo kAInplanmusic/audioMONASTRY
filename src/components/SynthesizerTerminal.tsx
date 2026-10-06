@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Waves } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { WasmPluginHost } from '../audio/wasm/WasmPluginHost';
 import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
@@ -31,20 +32,35 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
   const { lockStatus } = usePluginState('syntisampler', 'PRO');
   const hostRef = React.useRef(new WasmPluginHost());
   const [isLoaded, setIsLoaded] = useState(false);
-  const [cutoff, setCutoff] = useState(DEFAULT_SYNTH_PARAMS.cutoff);
-  const [decay, setDecay] = useState(DEFAULT_SYNTH_PARAMS.decay);
-  const [engine, setEngine] = useState(DEFAULT_SYNTH_PARAMS.engine);
-  const [targetChannel, setTargetChannel] = useState<TrackType>('channel4');
+  // Beständige Plugins: Einstiegsstand = letzter Stand (syntisampler › synth).
+  const [saved] = useState(() => mergeKnown({
+    cutoff: DEFAULT_SYNTH_PARAMS.cutoff, decay: DEFAULT_SYNTH_PARAMS.decay, engine: DEFAULT_SYNTH_PARAMS.engine as string,
+    targetChannel: 'channel4' as string, seq: Array(16).fill(0) as number[], seqSemi: 0,
+    fm6PatchIdx: 0, grainSize: 480, grainDensity: 20, grainPitch: 1, grainFreeze: false,
+  }, readPluginSettings('syntisampler', { section: 'synth' })));
+  const [cutoff, setCutoff] = useState(saved.cutoff);
+  const [decay, setDecay] = useState(saved.decay);
+  const [engine, setEngine] = useState(saved.engine as typeof DEFAULT_SYNTH_PARAMS.engine);
+  const [targetChannel, setTargetChannel] = useState<TrackType>(saved.targetChannel as TrackType);
   // NEW-MONK-4: 16-Step-Notensequencer (C4 + Halbtöne).
-  const [seq, setSeq] = useState<number[]>(Array(16).fill(0));
-  const [seqSemi, setSeqSemi] = useState(0);
+  const [seq, setSeq] = useState<number[]>(saved.seq.length === 16 ? saved.seq : Array(16).fill(0));
+  const [seqSemi, setSeqSemi] = useState(saved.seqSemi);
   const [curStep, setCurStep] = useState(0);
   // 6-Op-FM (DX7) + Granular-Preview
-  const [fm6PatchIdx, setFm6PatchIdx] = useState(0);
-  const [grainSize, setGrainSize] = useState(480);
-  const [grainDensity, setGrainDensity] = useState(20);
-  const [grainPitch, setGrainPitch] = useState(1);
-  const [grainFreeze, setGrainFreeze] = useState(false);
+  const [fm6PatchIdx, setFm6PatchIdx] = useState(saved.fm6PatchIdx);
+  const [grainSize, setGrainSize] = useState(saved.grainSize);
+  const [grainDensity, setGrainDensity] = useState(saved.grainDensity);
+  const [grainPitch, setGrainPitch] = useState(saved.grainPitch);
+  const [grainFreeze, setGrainFreeze] = useState(saved.grainFreeze);
+  useEffect(() => {
+    writePluginSettings('syntisampler', {
+      cutoff, decay, engine, targetChannel, seq, seqSemi, fm6PatchIdx, grainSize, grainDensity, grainPitch, grainFreeze,
+    }, { section: 'synth' });
+  }, [cutoff, decay, engine, targetChannel, seq, seqSemi, fm6PatchIdx, grainSize, grainDensity, grainPitch, grainFreeze]);
+  // Übernahme: Filter-Cutoff einmal an die Engine (der Rest wirkt über State/Host).
+  useEffect(() => {
+    try { audioEngine.automateItSynthParam('cutoff', saved.cutoff); } catch { /* Graph noch nicht bereit */ }
+  }, [saved]);
 
   const loadFm6Patch = (idx: number) => {
     setFm6PatchIdx(idx);

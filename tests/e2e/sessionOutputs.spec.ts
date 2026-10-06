@@ -24,13 +24,13 @@ async function enter(page: Page): Promise<void> {
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 }
 
-test('4 UI-Plätze in eigenem Format + Main Sound + Main Visual, genau ein Beamer', async ({ browser }) => {
+test('4 UI-Plätze + genau ein Main Audio + genau ein Main Visual (zweites Gerät abgewiesen)', async ({ browser }) => {
   test.setTimeout(120_000);
   const pc = await newStudioContext(browser, { viewport: { width: 1440, height: 900 } });
   const phone = await newStudioContext(browser, { viewport: { width: 852, height: 393 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
   const pa = await newStudioContext(browser);
   const beamer = await newStudioContext(browser, { viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1.5 });
-  const beamer2 = await newStudioContext(browser, { viewport: { width: 1920, height: 1080 } });
+  const beamer2 = await newStudioContext(browser, { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 2 });
   try {
     const pcPage = await pc.newPage();
     await enter(pcPage);
@@ -51,9 +51,11 @@ test('4 UI-Plätze in eigenem Format + Main Sound + Main Visual, genau ein Beame
     await expect(panel.getByTestId('endpoint-sound-status')).not.toHaveText('nicht verbunden', { timeout: 15_000 });
     await expect(panel.getByTestId('endpoint-visual-status')).toContainText('Bildschirm 1920×1080', { timeout: 15_000 });
 
-    // Ein zweiter Beamer löst den ersten ab – es bleibt genau einer.
-    await (await beamer2.newPage()).goto('/visual-out');
-    await expect(beamerPage.getByTestId('output-replaced')).toBeVisible({ timeout: 15_000 });
+    // Genau EIN Main-Ausgang Bild: ein zweites Gerät wird abgewiesen, das erste bleibt.
+    const beamer2Page = await beamer2.newPage();
+    await beamer2Page.goto('/visual-out');
+    await expect(beamer2Page.getByTestId('output-busy')).toBeVisible({ timeout: 15_000 });
+    await expect(beamerPage.getByTestId('output-busy')).toHaveCount(0);
     await expect(panel.getByTestId('endpoint-visual-status')).toContainText('Bildschirm 1920×1080', { timeout: 15_000 });
     await expect(pcPage.getByRole('button', { name: 'Session-Ausgänge' })).toContainText('2/4');
   } finally {

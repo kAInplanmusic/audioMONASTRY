@@ -29,9 +29,9 @@ export const VisualOutPage = () => {
   const [state, setState] = useState<'connecting' | 'waiting' | 'live' | 'error'>('connecting');
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
-  /** Ein anderes Gerät ist jetzt der Main-Ausgang Bild (es gibt genau einen). */
-  const [replaced, setReplaced] = useState(false);
-  useEffect(() => webRTCManager.onOutputReplaced(() => setReplaced(true)), []);
+  /** Diese Adresse ist schon von einem anderen Gerät belegt (es gibt genau einen Main-Ausgang Bild). */
+  const [busy, setBusy] = useState(false);
+  useEffect(() => webRTCManager.onOutputBusy(() => setBusy(true)), []);
   /**
    * VISUAL-P1-001: MJPEG-Fallback. Der Spec-Punkt „Fallback ohne SFU" war nie
    * gebaut - genau er traegt den Beamer, wenn WebRTC/SFU nicht durchkommt (kein
@@ -108,9 +108,12 @@ export const VisualOutPage = () => {
 
   return (
     <div className="fixed inset-0 bg-black text-white select-none overflow-hidden">
-      {replaced && (
-        <div role="alert" data-testid="output-replaced" className="absolute inset-x-0 top-0 z-50 bg-amber-500/90 text-black text-center text-xs font-bold tracking-widest px-4 py-3">
-          Ein anderes Gerät ist jetzt der Main-Ausgang Bild. Dieses Gerät ist getrennt – zum Zurückholen Seite neu laden.
+      {busy && (
+        <div role="alert" data-testid="output-busy" className="absolute inset-0 z-50 flex items-center justify-center bg-black/90 px-6 text-center">
+          <p className="max-w-md text-sm font-bold tracking-wide text-amber-200">
+            Der Main-Ausgang Bild ist schon auf einem anderen Gerät geöffnet. Es gibt genau einen.
+            Dort schließen, dann diese Seite neu laden.
+          </p>
         </div>
       )}
       <video

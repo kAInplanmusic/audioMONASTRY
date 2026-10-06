@@ -9,8 +9,10 @@ import { endpointLabel, MAX_UI_ENDPOINTS, type SessionEndpoint } from '../core/s
  * ======================================================
  *   UI 1–4        Session-Nutzer: bekommen die UI, jeder in eigenem Format und
  *                 eigener Auflösung (Handy quer/hochkant, Pad, PC).
- *   MAIN SOUND    genau ein Ton-Ausgang  → /master-out (Ghostuser 5, PA)
- *   MAIN VISUAL   genau ein Bild-Ausgang → /visual-out (Ghostuser 6, Beamer)
+ *   MAIN AUDIO    genau ein Gerät  → /master-out (Ghostuser 5)
+ *   MAIN VISUALS  genau ein Gerät  → /visual-out (Ghostuser 6)
+ *   Beide über Internet oder LAN erreichbar; das erste Gerät hält die Adresse,
+ *   jedes weitere wird vom Server abgewiesen (output-busy).
  *
  * Die beiden Main-Ausgänge zählen NICHT zu den 4 Nutzern. Die URLs werden aus
  * der aktuellen Origin gebildet, damit sie auf jeder Instanz stimmen. Alles hier
@@ -20,20 +22,20 @@ import { endpointLabel, MAX_UI_ENDPOINTS, type SessionEndpoint } from '../core/s
 const MAIN_OUTPUTS = [
   {
     id: 'sound',
-    label: 'MAIN SOUND',
-    role: 'Ghostuser 5 · PA',
+    label: 'MAIN AUDIO',
+    role: 'genau 1 Gerät',
     path: '/master-out',
     alias: '/ghost/5',
-    hint: 'Laptop an der PA/Verstärker – gibt den Main-Ton aus.',
+    hint: 'Diese Adresse im Browser des Geräts öffnen, das den Main-Ton ausgibt (Internet oder LAN). Das erste Gerät hält sie, jedes weitere wird abgewiesen.',
     Icon: Radio,
   },
   {
     id: 'visual',
-    label: 'MAIN VISUAL',
-    role: 'Ghostuser 6 · Beamer',
+    label: 'MAIN VISUALS',
+    role: 'genau 1 Gerät',
     path: '/visual-out',
     alias: '/ghost/6',
-    hint: 'Beamer – Stream startet im Studio unter VISUAL → „AN GHOSTUSER 6“.',
+    hint: 'Diese Adresse im Browser des Geräts öffnen, das die Visuals zeigt (Internet oder LAN). Das erste Gerät hält sie, jedes weitere wird abgewiesen.',
     Icon: Monitor,
   },
 ] as const;
@@ -77,7 +79,7 @@ export const OutputsPanel: React.FC = () => {
         onClick={() => setOpen((v) => !v)}
         aria-label="Session-Ausgänge"
         aria-expanded={open}
-        title={`Ausgänge: ${usersOn}/${MAX_UI_ENDPOINTS} Nutzer · Main Sound · Main Visual`}
+        title={`Ausgänge: ${usersOn}/${MAX_UI_ENDPOINTS} Nutzer · Main Audio · Main Visuals`}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:border-emerald-400/50 hover:text-emerald-300 transition-colors cursor-pointer"
       >
         <MonitorSpeaker className="w-4 h-4" />
@@ -98,7 +100,7 @@ export const OutputsPanel: React.FC = () => {
             <span className="text-[10px] font-bold tracking-widest text-neutral-200">SESSION-AUSGÄNGE</span>
           </div>
 
-          <p className="text-[9px] tracking-widest text-neutral-500 mb-1">UI · 1–4 NUTZER · JEDER IN EIGENEM FORMAT</p>
+          <p className="text-[9px] tracking-widest text-neutral-500 mb-1">UI · 1–4 NUTZER</p>
           <ul className="mb-3 rounded-lg border border-white/5 bg-white/[0.02] divide-y divide-white/5">
             {slots.users.map((u, i) => (
               <li key={i} data-testid={`endpoint-user-${i + 1}`} className="flex items-center gap-2 px-2.5 py-1.5">
@@ -142,14 +144,14 @@ export const OutputsPanel: React.FC = () => {
                   </button>
                 </div>
                 <p className="mt-1 text-[9px] leading-snug text-neutral-500">{hint}</p>
-                <p className="mt-0.5 text-[9px] text-neutral-600">Alias: {alias} · zählt nicht als Nutzer</p>
+                <p className="mt-0.5 text-[9px] text-neutral-600">Alias: {alias} · zählt nicht als Nutzer · max. 1 Gerät</p>
               </div>
             );
           })}
 
           <p className="text-[9px] leading-snug text-neutral-500">
-            Je ein Main-Ausgang für Ton und Bild. Beide docken automatisch an die Studio-Session an; auf dem
-            Ausgabegerät ggf. einmal „aktivieren“ drücken (Autoplay-Regel des Browsers).
+            Genau ein Main-Ausgang Audio und einer Visuals, je über eine eigene Adresse. Auf dem Ausgabegerät
+            ggf. einmal „aktivieren“ drücken (Autoplay-Regel des Browsers).
           </p>
         </div>
       )}

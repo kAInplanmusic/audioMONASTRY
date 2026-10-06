@@ -7,25 +7,30 @@ import { MoaAssistant } from './MoaAssistant';
 import { OptionalDspPanel } from './dsp/OptionalDspPanel';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+
+const DEFAULT_AUTO_PARAMS = { cutoff: 1200, resonance: 0.4, modIndex: 5, gain: 0.8, lfoRate: 0, lfoDepth: 0 };
+/** P1-Dynamik: Kompressor/Gate/Dynamic-EQ-Insert (Default = Bypass). */
+const DEFAULT_DYNAMICS = {
+  enabled: false,
+  gateEnabled: false,
+  dynEqEnabled: false,
+  threshold: -18, ratio: 3, attack: 0.01, release: 0.12, makeup: 0,
+  gateThreshold: -60, gateRange: 40,
+  dynEqFreq: 3000, dynEqQ: 4, dynEqThreshold: -24, dynEqRange: 12,
+};
+type DspSettings = { power?: boolean; autoParams?: unknown; dynamics?: unknown };
 
 export const DSPTerminal = React.memo(function DSPTerminal() {
   const { state, lockStatus, updateState } = usePluginState('dsp', 'PRO');
-  const [power, setPower] = useState(true);
+  // Beständige Plugins: Einstiegsstand = letzter Stand in der Session.
+  const [saved] = useState(() => readPluginSettings<DspSettings>('dsp'));
+  const [power, setPower] = useState(typeof saved?.power === 'boolean' ? saved.power : true);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Worklet-Automation (Task 1/3): sichtbare Regler + aktive Stimmen.
-  const [autoParams, setAutoParams] = useState({
-    cutoff: 1200, resonance: 0.4, modIndex: 5, gain: 0.8, lfoRate: 0, lfoDepth: 0,
-  });
+  const [autoParams, setAutoParams] = useState(() => mergeKnown(DEFAULT_AUTO_PARAMS, saved?.autoParams));
   const [activeVoices, setActiveVoices] = useState(0);
-  // P1-Dynamik: Kompressor/Gate/Dynamic-EQ-Insert (Default = Bypass).
-  const [dynamics, setDynamics] = useState({
-    enabled: false,
-    gateEnabled: false,
-    dynEqEnabled: false,
-    threshold: -18, ratio: 3, attack: 0.01, release: 0.12, makeup: 0,
-    gateThreshold: -60, gateRange: 40,
-    dynEqFreq: 3000, dynEqQ: 4, dynEqThreshold: -24, dynEqRange: 12,
-  });
+  const [dynamics, setDynamics] = useState(() => mergeKnown(DEFAULT_DYNAMICS, saved?.dynamics));
   // Echtzeit-Performance-Snapshot (FPS, Jitter, Audio-Health).
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
   /**
@@ -50,10 +55,8 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
     return () => { clearInterval(timer); performanceMonitor.stop(); };
   }, []);
 
-  /** Dynamik-Parameter setzen und an den Worklet-Insert schicken. */
-  const updateDynamics = (patch: Partial<typeof dynamics>) => {
-    setDynamics((prev) => {
-      const next = { ...prev, ...patch };
+  /** Dynamik-Parameter an den Worklet-Insert schicken. */
+  const pushDynamics = (next: typeof dynamics) => {
       audioEngine.setDynamicsParams({
         enabled: next.enabled,
         compressor: {
@@ -66,9 +69,31 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
           threshold: next.dynEqThreshold, range: next.dynEqRange,
         },
       });
+  };
+
+  /** Dynamik-Parameter setzen und an den Worklet-Insert schicken. */
+  const updateDynamics = (patch: Partial<typeof dynamics>) => {
+    setDynamics((prev) => {
+      const next = { ...prev, ...patch };
+      pushDynamics(next);
       return next;
     });
   };
+
+  // Übernahme: gespeicherten Stand genau einmal an die Engine geben.
+  const didRestoreRef = useRef(false);
+  useEffect(() => {
+    if (didRestoreRef.current || !saved) return;
+    didRestoreRef.current = true;
+    (Object.keys(autoParams) as (keyof typeof autoParams)[]).forEach((k) => audioEngine.automateItSynthParam(k, autoParams[k], 0.02));
+    pushDynamics(dynamics);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Öffnen (Einstiegsstand)
+  }, []);
+
+  // Beständige Plugins: jeden Stand an die Session (der nächste Halter startet damit).
+  useEffect(() => {
+    writePluginSettings('dsp', { power, autoParams, dynamics });
+  }, [power, autoParams, dynamics]);
 
   const handleAutomate = (param: 'cutoff' | 'resonance' | 'modIndex' | 'gain' | 'lfoRate' | 'lfoDepth', value: number, rampTime = 0.02) => {
     setAutoParams(prev => ({ ...prev, [param]: value }));

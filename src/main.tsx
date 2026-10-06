@@ -18,6 +18,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import './core/voice/pluginCommandRegistry';
 import { trackError } from './utils/errorTracker';
 import { startDeviceLayoutWatch } from './hooks/useDeviceLayout';
+import { startPluginSettingsSync } from './utils/pluginSettings';
 
 // DCT-118: Boot-Diagnostics + Auto-Logging – globale Fehler sichtbar machen
 // (kein stiller White-Screen) und automatisch an /api/telemetry melden.
@@ -37,7 +38,11 @@ const bootMode = listenerModeForPath(window.location.pathname);
 
 // Formate: Gerät/Ausrichtung/Auflösung erkennen, bevor der erste Frame steht
 // (data-layout an <html>, Vollbild beim ersten Tippen in Handy quer/Pad quer).
-if (bootMode === 'member') startDeviceLayoutWatch();
+if (bootMode === 'member') {
+  startDeviceLayoutWatch();
+  // Beständige Plugins: Session-Stände der Plugins empfangen (vor dem ersten Join).
+  startPluginSettingsSync();
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

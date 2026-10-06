@@ -7,12 +7,21 @@ import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+
+const DEFAULT_FX = { power: true, activeFx: 'REVERB', wetDry: 50 };
 
 export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
   const { state, lockStatus, updateState } = usePluginState('effect', 'PRO');
-  const [power, setPower] = useState(true);
-  const [activeFx, setActiveFx] = useState('REVERB');
-  const [wetDry, setWetDry] = useState(50);
+  // Beständige Plugins: Einstiegsstand = letzter Stand in der Session (applyFx
+  // unten schickt ihn beim Öffnen an die Engine).
+  const [saved] = useState(() => mergeKnown(DEFAULT_FX, readPluginSettings('effect')));
+  const [power, setPower] = useState(saved.power);
+  const [activeFx, setActiveFx] = useState(saved.activeFx);
+  const [wetDry, setWetDry] = useState(saved.wetDry);
+  useEffect(() => {
+    writePluginSettings('effect', { power, activeFx, wetDry });
+  }, [power, activeFx, wetDry]);
   const [sourceSample, setSourceSample] = useState<AudioSample | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 

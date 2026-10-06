@@ -7,6 +7,7 @@ import { useSamples } from '../context/SampleContext';
 import { MoaAssistant } from './MoaAssistant';
 import { audioEngine } from '../utils/audioEngine';
 import { storageGetJson, storageSetJson } from '../utils/storage';
+import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { SpatialCluster, spatialAdapter } from '../audio/spatial/node';
 import { SpatialSourceIcon } from './SpatialSourceIcon';
 import { DEFAULT_SPATIAL_SCENE, SPATIAL_SCENE_PRESETS } from '../presets';
@@ -68,7 +69,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
   const stemSamples = useMemo(() => samples.filter((s) => s.type === 'Stem' && s.url), [samples]);
 
   const [scene, setScene] = useState<SpatialSceneState>(() => {
-    const saved = storageGetJson<SpatialSceneState>('spatialmonk-scene');
+    const saved = readPluginSettings<SpatialSceneState>('spatial', { legacyKey: 'spatialmonk-scene' });
     return saved?.version === 'spatialMONK-v1' ? saved : cloneScene(DEFAULT_SPATIAL_SCENE);
   });
   const [selectedId, setSelectedId] = useState<number | null>(scene.sources[0]?.id ?? null);
@@ -100,7 +101,8 @@ export const SpatialScene = React.memo(function SpatialScene() {
 
   // Scene persistieren (Presets & State, WhitePaper Abschnitt 7).
   useEffect(() => {
-    storageSetJson('spatialmonk-scene', scene);
+    // Beständige Plugins: Szene an die Session (der nächste Halter startet damit).
+    writePluginSettings('spatial', scene);
   }, [scene]);
 
   const syncLegacy = useCallback((s: SpatialSource) => {

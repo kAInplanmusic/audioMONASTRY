@@ -4,7 +4,7 @@ import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
-import { storageGetJson, storageSetJson } from '../utils/storage';
+import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { random } from '../utils/random';
 import type { AudioSample } from '../data/samples';
 import { webRTCManager } from '../utils/WebRTCManager';
@@ -60,7 +60,7 @@ export const McpTerminal = React.memo(function McpTerminal() {
   // Persistenz laden.
   useEffect(() => {
     try {
-      const parsed = storageGetJson<McpState>(STORAGE_KEY);
+      const parsed = readPluginSettings<McpState>('syntisampler', { section: 'mpc', legacyKey: STORAGE_KEY });
       if (parsed) {
         if (BANKS.includes(parsed.bank as Bank)) setBank(parsed.bank as Bank);
         if (parsed.seqCount === 16 || parsed.seqCount === 32) setSeqCount(parsed.seqCount);
@@ -73,7 +73,8 @@ export const McpTerminal = React.memo(function McpTerminal() {
 
   // Persistenz speichern.
   useEffect(() => {
-    storageSetJson(STORAGE_KEY, { bank, seqCount, swing, patterns, padSamples } satisfies McpState);
+    // Beständige Plugins: MPC-Bereich des syntisampler an die Session.
+    writePluginSettings('syntisampler', { bank, seqCount, swing, patterns, padSamples } satisfies McpState, { section: 'mpc' });
   }, [bank, seqCount, swing, patterns, padSamples]);
 
   // Step-Anzeige vom Master-Transport.

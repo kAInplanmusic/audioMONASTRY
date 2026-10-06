@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { audioEngine } from '../utils/audioEngine';
 import { analyzeMusic } from '../utils/audioAnalyzer';
@@ -12,6 +12,23 @@ import {
   saveAutoloadSong,
 } from '../core/session/autoloadSong';
 import { SIGNAL_CHAIN } from '../plugins/signalChain';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+
+/**
+ * Beständige Plugins: der Mixer-Stand liegt in der Session. Gespeichert werden
+ * nur Regler (keine geladenen Titel – die brauchen Audiodaten). Wer den Mixer
+ * übernimmt, bekommt genau diesen Stand – auch in die Audio-Engine.
+ */
+interface MixerSettings { channels?: unknown; xfd?: unknown; xfMode?: unknown; master?: unknown; group?: unknown }
+type ChannelControls = Pick<ChannelState, 'trim' | 'low' | 'mid' | 'high' | 'gain' | 'pan' | 'mute' | 'cue' | 'filter' | 'send'>;
+const controlsOf = (c: ChannelState): ChannelControls => ({
+  trim: c.trim, low: c.low, mid: c.mid, high: c.high, gain: c.gain, pan: c.pan, mute: c.mute, cue: c.cue, filter: c.filter, send: c.send,
+});
+function withSavedChannels(prev: ChannelState[], saved: unknown): ChannelState[] {
+  if (!Array.isArray(saved)) return prev;
+  return prev.map((c, i) => ({ ...c, ...mergeKnown(controlsOf(c), saved[i]) }));
+}
+const XF_MODES = ['A', 'THRU', 'B'];
 
 /**
  * audioMONASTRY mixerMONK – 6-Kanal-Hardware-Mischpult.
@@ -484,11 +501,13 @@ const DJMixer = React.memo(function DJMixer() {
       // Kanal 1 liegt bereit, ohne dass jemand klicken muss.
       init[0] = { ...init[0], loadName: autoloadTrackAtBoot.name, loaded: true, analyzing: true };
     }
-    return init;
+    // Beständige Plugins: Regler aus der Session übernehmen.
+    return withSavedChannels(init, readPluginSettings<MixerSettings>('mixer')?.channels);
   });
-  const [xfd, setXfd] = useState(0.5);
-  const [xfMode, setXfMode] = useState<XfMode>('THRU');
-  const [master, setMaster] = useState(0.8);
+  const [savedMixer] = useState(() => readPluginSettings<MixerSettings>('mixer'));
+  const [xfd, setXfd] = useState(() => mergeKnown({ v: 0.5 }, { v: savedMixer?.xfd }).v);
+  const [xfMode, setXfMode] = useState<XfMode>(() => (XF_MODES.includes(String(savedMixer?.xfMode)) ? (savedMixer?.xfMode as XfMode) : 'THRU'));
+  const [master, setMaster] = useState(() => mergeKnown({ v: 0.8 }, { v: savedMixer?.master }).v);
 
   // Eingehende Main-Out-Aenderungen anderer Clients auf den Fader spiegeln.
   // NICHT zuruecksenden (sonst Ping-Pong) - die AudioEngine setzt der zentrale
@@ -500,7 +519,7 @@ const DJMixer = React.memo(function DJMixer() {
   }), []);
   const [deckSkins, setDeckSkins] = useState<Record<'A' | 'B', MixerSkinId>>(loadDeckSkins);
   const [deckLabels, setDeckLabels] = useState<Record<'A' | 'B', string>>({ A: '', B: '' });
-  const [group, setGroup] = useState({ left: 0.8, right: 0.8 });
+  const [group, setGroup] = useState(() => mergeKnown({ left: 0.8, right: 0.8 }, savedMixer?.group));
   const [released, setReleased] = useState<Set<TrackType>>(new Set());
 
   // Transport (P0-1): PLAY/STOP gehoert ausschliesslich dem mixerMONK-Halter.
@@ -510,13 +529,6 @@ const DJMixer = React.memo(function DJMixer() {
   // warum: kein stiller Blindgaenger mehr.
   const [isHolder, setIsHolder] = useState(() => webRTCManager.isMainOutOwner);
   const [playing, setPlaying] = useState(() => audioEngine.getIsPlaying());
-  useEffect(() => {
-    const t = window.setInterval(() => {
-      setIsHolder(webRTCManager.isMainOutOwner);
-      setPlaying(audioEngine.getIsPlaying());
-    }, 500);
-    return () => window.clearInterval(t);
-  }, []);
 
   const handlePlay = () => {
     if (!webRTCManager.isMainOutOwner) return;
@@ -560,19 +572,58 @@ const DJMixer = React.memo(function DJMixer() {
 
   const db = (v: number) => (v - 1) * 18; // 0..2 -> -18 .. +18 dB (1 = neutral)
 
-  const groupFactor = (s: StripConfig) =>
-    s.index === 0 || s.index === 1 ? group.left : s.index === 4 || s.index === 5 ? group.right : 1;
+  const groupFactor = (s: StripConfig, grp = group) =>
+    s.index === 0 || s.index === 1 ? grp.left : s.index === 4 || s.index === 5 ? grp.right : 1;
 
   /** Schreibt den kompletten Kanalzug (Gain → EQ → Pan) in die AudioEngine. */
-  const pushStrip = (s: StripConfig, c: ChannelState, xf: number, mode: XfMode = xfMode) => {
+  const pushStrip = (s: StripConfig, c: ChannelState, xf: number, mode: XfMode = xfMode, grp = group) => {
     const deckMix = mode === 'THRU' ? 1 : xfGain(s.deck, xf);
-    const effective = c.mute ? 0 : c.trim * c.gain * deckMix * groupFactor(s);
+    const effective = c.mute ? 0 : c.trim * c.gain * deckMix * groupFactor(s, grp);
     audioEngine.setChannelGain(s.track, effective);
     audioEngine.setChannelEQ(s.track, 'low', db(c.low));
     audioEngine.setChannelEQ(s.track, 'mid', db(c.mid));
     audioEngine.setChannelEQ(s.track, 'high', db(c.high));
     audioEngine.setChannelPan(s.track, (c.pan - 0.5) * 2);
   };
+
+  // Beständige Plugins: jeden Stand an die Session (nur der Halter schreibt).
+  useEffect(() => {
+    writePluginSettings('mixer', { channels: ch.map(controlsOf), xfd, xfMode, master, group });
+  }, [ch, xfd, xfMode, master, group]);
+
+  // Beständige Plugins: Wer den Mixer übernimmt, startet mit dem letzten Stand
+  // aus der Session (Regler UND Audio-Engine). Der Mixer ist bei allen geladen,
+  // deshalb zählt hier der Moment der Übernahme, nicht das Öffnen.
+  const holderRef = useRef(false);
+  const restoreFromSession = () => {
+    const saved = readPluginSettings<MixerSettings>('mixer');
+    if (!saved) return;
+    const nextXfd = mergeKnown({ v: 0.5 }, { v: saved.xfd }).v;
+    const nextMode: XfMode = XF_MODES.includes(String(saved.xfMode)) ? (saved.xfMode as XfMode) : 'THRU';
+    const nextGroup = mergeKnown({ left: 0.8, right: 0.8 }, saved.group);
+    const nextMaster = mergeKnown({ v: 0.8 }, { v: saved.master }).v;
+    setXfd(nextXfd);
+    setXfMode(nextMode);
+    setGroup(nextGroup);
+    setMaster(nextMaster);
+    audioEngine.setMasterVolume(nextMaster);
+    setCh((prev) => {
+      const next = withSavedChannels(prev, saved.channels);
+      strips.forEach((st, i) => pushStrip(st, next[i], nextXfd, nextMode, nextGroup));
+      return next;
+    });
+  };
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const nowHolder = webRTCManager.isMainOutOwner;
+      if (nowHolder && !holderRef.current) restoreFromSession();
+      holderRef.current = nowHolder;
+      setIsHolder(nowHolder);
+      setPlaying(audioEngine.getIsPlaying());
+    }, 500);
+    return () => window.clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Intervall einmal; restoreFromSession liest den Stand frisch
+  }, []);
 
   const apply = (idx: number, patch: Partial<ChannelState>, xf = xfd, mode: XfMode = xfMode) => {
     const next = ch.map((c, i) => (i === idx ? { ...c, ...patch } : c));

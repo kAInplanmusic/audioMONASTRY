@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import { LockStatus } from '../plugins/types';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { parseSessionSnapshot } from '../core/session/sessionStateBridge';
+import { setPluginSettingsHolderCheck } from '../utils/pluginSettings';
 
 /** Default lock TTL: 5 Minuten clientseitig als Fallback-Obergrenze.
  * ARCH-#2: Der Server-Sweep läuft mit 60 s TTL (PLUGIN_LOCK_TTL_MS) und
@@ -37,6 +38,14 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
   const commit = useCallback((next: Record<string, LockStatus>) => {
     locksRef.current = next;
     setPluginLocks(next);
+  }, []);
+
+  // Beständige Plugins: nur der Halter schreibt den Plugin-Stand (zentraler Lock).
+  useEffect(() => {
+    setPluginSettingsHolderCheck((pluginId) => {
+      const lock = locksRef.current[pluginId];
+      return !!lock?.active && !!lock.lockedBy && lock.lockedBy === webRTCManager.userId;
+    });
   }, []);
 
   // K-2/K-5: Server-autoritative Lock-Replikation übernehmen.

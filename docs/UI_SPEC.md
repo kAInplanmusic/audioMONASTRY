@@ -42,18 +42,38 @@ Automatisch erkannt aus Gerät, Ausrichtung und Auflösung – keine Auswahl dur
 | Platz | Gerät | Was es bekommt | Meldet |
 |---|---|---|---|
 | UI 1–4 | Session-Nutzer (Handy, Pad, PC) | die gespiegelte UI, jeder im **eigenen Format und eigener Auflösung** (siehe Formate) | Format + Auflösung |
-| MAIN SOUND | genau einer: `/master-out` (Ghostuser 5, PA) | Main-Ton | Zustand, Abtastrate, Kanäle |
-| MAIN VISUAL | genau einer: `/visual-out` (Ghostuser 6, Beamer) | Visual-Stream in **eigener Auflösung** | Zustand, Bildschirm, ankommender Stream |
+| MAIN AUDIO | genau ein Gerät: `/master-out` (über Internet oder LAN) | Main-Ton | Zustand, Abtastrate, Kanäle |
+| MAIN VISUALS | genau ein Gerät: `/visual-out` (über Internet oder LAN) | Visual-Stream in **eigener Auflösung** | Zustand, Bildschirm, ankommender Stream |
 
 - Die Main-Ausgänge zählen nicht zu den 4 Nutzern.
 - Jedes Gerät meldet sich selbst (`endpoint-report`); die Art bestimmt der Server aus dem Modus des
   Sockets – ein Nutzer kann sich nicht als Beamer ausgeben. Die Liste (`session-endpoints`) geht an alle.
-- Genau ein Main-Ausgang je Art: Ein neuer Beamer/PA löst den alten ab (Reload, Gerätewechsel);
-  das alte Gerät zeigt „Ein anderes Gerät ist jetzt der Main-Ausgang …“.
+- Genau ein Gerät je Main-Ausgang (Betreiber 2026-10-06): Das erste Gerät hält die Adresse, jedes weitere
+  wird vom Server abgewiesen und zeigt „Der Main-Ausgang … ist schon auf einem anderen Gerät geöffnet“.
+  Schließt das erste Gerät die Seite, ist die Adresse wieder frei.
 - Knopf **AUSGÄNGE** im Kopf (in jedem Format): Zähler `n/4` und je ein Punkt für Ton und Bild;
   das Fenster zeigt die 6 Plätze mit Zustand und Auflösung sowie die Andock-URLs.
 - Code: `src/core/session/sessionEndpoints.ts`, `src/hooks/useSessionEndpoints.ts`,
   `src/components/OutputsPanel.tsx`; Prüfung: `tests/sessionEndpoints.test.ts`, `tests/e2e/sessionOutputs.spec.ts`.
+
+## Beständige Plugins (Betreiber 2026-10-06)
+
+„Wenn User 3 aus dem EQ rausgeht und User 4 rein, muss die Einstellung bleiben – für alle Plugins. So kann
+man switchen oder jemand anders kurz übernehmen lassen."
+
+- **Nicht gehaltene Plugins** sind für alle eingeklappt und zeigen nur, ob und von wem sie gehalten werden.
+- **Der Stand jedes Plugins liegt auf dem Server** (in der Session, mit ihr gesichert – übersteht Neuladen und
+  Server-Neustart). Schreiben darf nur der Halter.
+- Ändern: kurz entprellt (250 ms) an den Server. **Verlassen** (ON → OFF, Mixer übergeben, Seite schließen):
+  sofort. Der Server verteilt jeden Stand; wer das Plugin als Nächstes holt, **startet genau damit** – in der
+  Oberfläche und in der Audio-Engine.
+- Mixer: Er ist bei allen geladen; der Stand greift im Moment der **Übernahme**.
+- Gespeichert werden Einstellungen, keine Audiodaten: geladene Titel, aufgenommene Pad-Klänge und Takes
+  bleiben auf dem Gerät und gehören in die Bibliothek.
+- Umgestellt: mixer, eq, dsp, effect, master, spatial, drumsampler, syntisampler (Bereiche mpc/sampler/synth),
+  instru, song, voice, stem, record. Ohne Einstellungen: drop, sound (nur Anzeige), biblio (Suche).
+- Code: `src/core/session/pluginSettingsSync.ts`, `src/utils/pluginSettings.ts`,
+  `AuthoritativeSession.setPluginSettings`; Prüfung: `tests/pluginSettings.test.ts`, `tests/e2e/pluginPersistence.spec.ts`.
 
 ## Stream-Auflösung (Betreiber 2026-10-06)
 

@@ -4786,8 +4786,18 @@
       "status": "DONE",
       "area": "UI",
       "source": "Betreiber 2026-10-06",
-      "note": "„1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals.“\n\nAkzeptanz: 4 UI-Plätze mit eigenem Format/eigener Auflösung sichtbar; je genau ein Main-Ausgang Ton und Bild; Ausgänge zählen nicht als Nutzer.\n\nDONE 2026-10-06: src/core/session/sessionEndpoints.ts (Meldung je Modus bereinigt – Nutzer: Format/Auflösung, /master-out: Zustand/Abtastrate/Kanäle, /visual-out: Zustand/Bildschirm/Stream; 6 feste Plätze). Server: endpoint-report → session-endpoints an alle, Abmeldung bei Leave/Disconnect; ein neuer Ausgang gleicher Art löst den alten ab (output-replaced, Audit OUTPUT_REPLACED). UI: Knopf AUSGÄNGE in jedem Format mit n/4 und Ton/Bild-Punkten, Fenster mit 6 Plätzen und Andock-URLs.",
+      "note": "„1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals.“\n\nAkzeptanz: 4 UI-Plätze mit eigenem Format/eigener Auflösung sichtbar; je genau ein Main-Ausgang Ton und Bild; Ausgänge zählen nicht als Nutzer.\n\nDONE 2026-10-06: src/core/session/sessionEndpoints.ts (Meldung je Modus bereinigt – Nutzer: Format/Auflösung, /master-out: Zustand/Abtastrate/Kanäle, /visual-out: Zustand/Bildschirm/Stream; 6 feste Plätze). Server: endpoint-report → session-endpoints an alle, Abmeldung bei Leave/Disconnect; genau ein Gerät je Main-Ausgang – das erste hält die Adresse, weitere werden abgewiesen (output-busy, Audit OUTPUT_BUSY; Betreiber 2026-10-06). UI: Knopf AUSGÄNGE in jedem Format mit n/4 und Ton/Bild-Punkten, Fenster mit 6 Plätzen und Andock-URLs.",
       "verification": "tests/sessionEndpoints.test.ts; tests/e2e/sessionOutputs.spec.ts"
+    },
+    {
+      "id": "UI2-P1-010",
+      "title": "Beständige Plugins: letzter Stand auf dem Server, Übernahme startet damit",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "„Wenn User 3 aus dem EQ rausgeht und User 4 rein, muss die Einstellung bleiben – für alle Plugins. So kann man switchen oder jemand anders kurz übernehmen lassen.“ Nicht gehaltene Plugins eingeklappt, nur sichtbar ob und wer hält.\n\nAkzeptanz: Stand bleibt beim Halterwechsel, nach Neuladen und Server-Neustart; nur der Halter schreibt.\n\nDONE 2026-10-06: AuthoritativeSession.setPluginSettings (nur Halter, ≤ 64 KB, Revision, serialize/restore), Socket plugin-settings + Stände im session-state-Snapshot. Client: PluginSettingsStore (entprellt 250 ms, flush vor Freigabe/Übergabe/pagehide, Bereiche je Plugin, nur Halter sendet). Umgestellt: mixer (greift bei Übernahme), eq, dsp, effect, master, spatial, drumsampler, syntisampler (mpc/sampler/synth), instru, song, voice, stem, record; Werte aus fremden Ständen über mergeKnown geprüft. Nicht gespeichert: Audiodaten (geladene Titel, Pad-Klänge, Takes – gehören in die Bibliothek). Offen für v2: Audio-Seite jedes Plugins aus dem Stand herstellen (restore), Regler ohne Stand-Anbindung nachziehen.",
+      "verification": "tests/pluginSettings.test.ts; tests/e2e/pluginPersistence.spec.ts"
     }
   ],
   "visionSandbox": [

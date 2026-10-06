@@ -10,6 +10,7 @@ import { separateStemsWithDemucs } from '../ai/localDemucs';
 import { MoaAssistant } from './MoaAssistant';
 import { loadStemUsage, recordStemExtraction, formatUsd, type StemProvider } from '../utils/stemUsage';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 
 export const StemExtractorTerminal = React.memo(function StemExtractorTerminal() {
   const { addSample } = useSamples();
@@ -20,7 +21,14 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [usage, setUsage] = useState(loadStemUsage);
-  const [providerChoice, setProviderChoice] = useState<'auto' | 'local' | 'api'>('auto');
+  // Beständige Plugins: gewählter Trenn-Anbieter bleibt für den nächsten Halter.
+  const [providerChoice, setProviderChoice] = useState<'auto' | 'local' | 'api'>(() => {
+    const v = mergeKnown({ providerChoice: 'auto' }, readPluginSettings('stem')).providerChoice;
+    return v === 'local' || v === 'api' ? v : 'auto';
+  });
+  useEffect(() => {
+    writePluginSettings('stem', { providerChoice });
+  }, [providerChoice]);
   const [stemStatus, setStemStatus] = useState<{ provider: string; replicateActive: boolean; estimateUsdPerSong: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);

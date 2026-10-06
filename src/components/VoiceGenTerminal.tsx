@@ -1,4 +1,4 @@
-import React, {  useState, useRef  } from 'react';
+import React, {  useState, useRef, useEffect  } from 'react';
 import { random } from '../utils/random';
 import { Mic, Play, Download, RefreshCw, AlignLeft, Wand2 } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
@@ -10,19 +10,25 @@ import { audioEngine } from '../utils/audioEngine';
 import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { TerminalFrame } from './terminalShared';
 
 export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
   const { addSample } = useSamples();
   const { generateVoice } = useAudioAI();
   const { state, lockStatus, updateState } = usePluginState('voice', 'PRO');
-  const [prompt, setPrompt] = useState('Dark warehouse techno vocals saying "Are you ready to lose control"');
+  // Beständige Plugins: Einstiegsstand = letzter Prompt/Stil/Stimme/Modus.
+  const [saved] = useState(() => mergeKnown({ prompt: 'Dark warehouse techno vocals saying "Are you ready to lose control"', style: 'SPOKEN', voice: 'FEMALE_ROBOTIC', ttsMode: 'AI' }, readPluginSettings('voice')));
+  const [prompt, setPrompt] = useState(saved.prompt);
 
-  const [style, setStyle] = useState('SPOKEN'); // SPOKEN, CHANT, SINGING
-  const [voice, setVoice] = useState('FEMALE_ROBOTIC');
+  const [style, setStyle] = useState(saved.style); // SPOKEN, CHANT, SINGING
+  const [voice, setVoice] = useState(saved.voice);
   const [isGenerating, setIsGenerating] = useState(false);
   const [hasResult, setHasResult] = useState(false);
-  const [ttsMode, setTtsMode] = useState<'AI' | 'SPEECH'>('AI');
+  const [ttsMode, setTtsMode] = useState<'AI' | 'SPEECH'>(saved.ttsMode === 'SPEECH' ? 'SPEECH' : 'AI');
+  useEffect(() => {
+    writePluginSettings('voice', { prompt, style, voice, ttsMode });
+  }, [prompt, style, voice, ttsMode]);
   const [isRecordingMidi, setIsRecordingMidi] = useState(false);
   const midiIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { audioContext } = useAudio();

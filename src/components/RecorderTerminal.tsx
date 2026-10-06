@@ -9,6 +9,7 @@ import { audioEngine } from '../utils/audioEngine';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { sampleToContent } from '../core/audio/audioContent';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { TerminalFrame } from './terminalShared';
 import { bounceThroughPluginChain } from '../audio/pluginChainBounce';
 import { encodeWavFromChannels } from '../utils/wavEncode';
@@ -35,7 +36,12 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const [takes, setTakes] = useState<Take[]>([
     { id: 1, name: 'Main_Mix_Take_01.wav', duration: '03:45', size: '38 MB', date: '2026-07-18' }
   ]);
-  const [inputSource, setInputSource] = useState('MASTER_OUT');
+  // Beständige Plugins: gewählte Aufnahmequelle bleibt für den nächsten Halter
+  // (Aufnahmen selbst sind Audiodaten und gehen in die Bibliothek).
+  const [inputSource, setInputSource] = useState(() => mergeKnown({ inputSource: 'MASTER_OUT' }, readPluginSettings('record')).inputSource);
+  useEffect(() => {
+    writePluginSettings('record', { inputSource });
+  }, [inputSource]);
   const [bounceBusy, setBounceBusy] = useState(false);
   const [bounceInfo, setBounceInfo] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);

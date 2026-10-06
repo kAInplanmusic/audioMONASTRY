@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Waves, Power } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
-import { storageGetJson, storageSetJson } from '../utils/storage';
+import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { MoaAssistant } from './MoaAssistant';
 import { webRTCManager } from '../utils/WebRTCManager';
 
@@ -231,7 +231,7 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
   // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.
   const [loadedEqState] = useState(() => {
     try {
-      const parsed = storageGetJson<{ gains?: number[]; qs?: number[]; power?: boolean }>('eq-state');
+      const parsed = readPluginSettings<{ gains?: number[]; qs?: number[]; power?: boolean }>('eq', { legacyKey: 'eq-state' });
       if (parsed) {
         const gains = Array.isArray(parsed.gains) && parsed.gains.length === BAND_COUNT ? parsed.gains.map(Number) : BANDS.map(() => 0);
         const qs = Array.isArray(parsed.qs) && parsed.qs.length === BAND_COUNT ? parsed.qs.map(Number) : BANDS.map(() => 1);
@@ -267,7 +267,8 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
 
   // Persistenz speichern.
   useEffect(() => {
-    storageSetJson('eq-state', { gains: gainValues, qs: qValues, power });
+    // Beständige Plugins: Stand an die Session (der nächste Halter startet damit).
+    writePluginSettings('eq', { gains: gainValues, qs: qValues, power });
   }, [gainValues, qValues, power]);
 
   const handleGainChange = (idx: number, gain: number) => {
