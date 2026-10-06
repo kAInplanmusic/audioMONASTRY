@@ -987,12 +987,14 @@ class EdgeMonitoringLimitsTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         output = result.stdout
-        self.assertIn("app=cx23 sfu=cx23 ai=cx23 master=cx23 edge=cx23", output)
+        self.assertIn("app=cx43 sfu=cx33 media=cx43 edge=cx23", output)
         self.assertIn(
             "docker-compose.monitoring.yml up -d " + " ".join(monitoring_service_list()),
             output,
         )
-        for role in ("app-1", "sfu-1", "ai-1", "master-1", "edge-1"):
+        # v2, 4-Rollen-Layout (app/sfu/media/edge): ai-1/master-1 existieren nicht
+        # mehr - der master-player laeuft auf sfu-1 mit (AI_MODE=off).
+        for role in ("app-1", "sfu-1", "media-1", "edge-1"):
             with self.subTest(node=role):
                 self.assertIn(role, output)
 
@@ -1050,7 +1052,7 @@ class EdgeMonitoringLimitsTest(unittest.TestCase):
 class ServertypRollenDriftTest(unittest.TestCase):
     """INFRA-HETZNER-007: eine Tabelle, zwei Pfade, dieselben Overrides."""
 
-    ROLE_ORDER = ("app", "sfu", "ai", "master", "edge")
+    ROLE_ORDER = ("app", "sfu", "media", "edge")
 
     def _cli_defaults(self) -> dict[str, str]:
         text = PROVISION_FLEET.read_text(encoding="utf-8")
