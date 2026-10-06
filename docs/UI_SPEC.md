@@ -26,6 +26,14 @@ als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
 - Rechts daneben: 4 Effekt-Returns (A Hall, B Delay, C Chorus, D Drive) mit eigenem Fader, dann der Master-Bereich (Master, Booth, Kopfhörer Cue/Mix und Pegel, Limiter-Anzeige).
 - Darunter: **ein waagerechter Crossfader A ↔ B** mit Kurve Weich/Hart, 16 Pads (8 Drops, 8 Drum-Sounds), 3 Makros (Filter, FX-Anteil, Build-up), 8 Szenen.
 - Wer den Mixer nicht hält, sieht ihn eingeklappt mit Name des Halters und 8 kleinen Pegeln.
+- Pult nach Betreiber-Vorlage (2026-10-06): links Tastenleiste (EQ/DYN/FX/PAN/REC springen zum Plugin, FX LOCK, MIX LOCK = Übergabe), Deck mit Anzeige des gewählten Kanals, CUE/LOOP/SYNC und Jogwheel (Nudge), A/B-Taste = Bank; Master-Zug (High, Low, Gain, Fader); 4 Kanäle; rechts Effekt-Tabelle (An, Amount, Time, Feedback, Mix), 16 Trigger-Pads mit 4 Seiten (Drops, Drums, Akkord, Vox), Makro 1–3, Reihe „Mixer“ (Kanal aufs Deck, EDIT) und „Szene“ 1–8 mit SAVE; unten Crossfader A–B und Bankpegel I/II.
+
+## Plugin-Streifen (Entwurf 2026-10-06)
+
+- Kopfzeile: Nummer (Kopfreihenfolge 01–16), Name in Modulfarbe, Modus-Anzeige OFF/STBY/ON, Schloss, Halter, Vorbild-Gerät, L/R-Pegel, rechts der Modus-Button.
+- drumsamplerMONK hat vier Ansichten: Raster (8 × 16), Pads (Drive, Crush, Low Cut, High Cut), Smart Drums (Laut/Leise × Einfach/Komplex) und Kit (gezeichnetes Studio- bzw. chinesisches Set). Fünf Kits.
+- instruMONK wählt die Spielfläche nach Instrumentengruppe: Tastatur (Tasten, Blech, Holz, Perkussion, Weitere), Streicher (Violine/Viola/Cello/Kontrabass, gleitende Töne), Gitarre (Griffbrett, Chorus- und Echo-Pedal), Bass. Akkordstreifen und Autoplay 1–4 wie Smart Instruments.
+- Die Spielflächen sind selbst gezeichnet; die Bilder in `public/instruMONK` stammen aus GarageBand und gehören nicht ins Produkt.
 
 ## Modi der 15 Plugins (ohne Mixer)
 
@@ -95,5 +103,5 @@ Signalkette ist eine zweite, unabhängige Achse.
 ## Annahmen und offene Punkte
 
 - AUTO_AI und PRO entfallen (Annahme). KI-Vorschläge kommen über aiMONK.
-- Nummern 01–16 werden nicht angezeigt (Annahme). Kanalnummern 1–8 im Mixer bleiben.
+- Nummern 01–16 werden angezeigt, eindeutig nach Kopfreihenfolge (Betreiber-Vorlagen 2026-10-06). Kanalnummern 1–8 im Mixer bleiben.
 - Verlässt der Mixer-Halter die Sitzung, geht der Mixer automatisch an die Person, die am längsten in der Sitzung ist (Entscheidung Betreiber).
