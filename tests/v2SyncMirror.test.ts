@@ -22,11 +22,10 @@ function fakeSink() {
 describe('roleVoiceFor', () => {
   it('bildet die Rollen auf die V2-Stimmen ab', () => {
     expect(roleVoiceFor('channel1')).toEqual({ freq: 50, voice: 'kick' });
-    expect(roleVoiceFor('channel2')).toEqual({ freq: 6000, voice: 'hat' });
-    expect(roleVoiceFor('channel3')).toEqual({ freq: 1200, voice: 'clap' });
-    expect(roleVoiceFor('channel7')).toEqual({ freq: 55, voice: 'bass' });
-    expect(roleVoiceFor('channel8')).toEqual({ freq: 880, voice: 'lead' });
-    expect(roleVoiceFor('channel10')).toEqual({ freq: 440, voice: 'lead' });
+    expect(roleVoiceFor('channel2')).toEqual({ freq: 440, voice: 'lead' });
+    expect(roleVoiceFor('channel3')).toEqual({ freq: 6000, voice: 'hat' });
+    expect(roleVoiceFor('channel7')).toEqual({ freq: 440, voice: 'lead' });
+    expect(roleVoiceFor('channel8')).toEqual({ freq: 55, voice: 'bass' });
   });
 });
 

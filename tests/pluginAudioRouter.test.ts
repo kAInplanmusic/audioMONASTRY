@@ -16,11 +16,11 @@ vi.mock('../src/utils/audioEngine', () => ({
     // ARCH-PLUGIN-001: 16-MONK-Kanalziele (Spiegel der echten pluginChannelMap).
     const map: Record<string, string[]> = {
       ai: [], perfor: [], biblio: [], master: [], stem: [], record: [],
-      spatial: ['channel7'], mixer: ['channel1'],
-      syntisampler: ['channel4', 'channel5'],
-      drumsampler: ['channel2'], instru: ['channel4'],
-      voice: ['channel8'], sound: ['channel9'],
-      drop: ['channel10'], effect: ['channel6'], eq: ['channel6'], dsp: ['channel6'],
+      spatial: [], mixer: [],
+      syntisampler: ['channel4'],
+      drumsampler: ['channel3'], instru: ['channel5'],
+      voice: ['channel6'], sound: ['channel7'],
+      drop: ['channel1'], song: ['channel2'], effect: [], eq: [], dsp: [],
     };
     return (map[id] ?? []) as never;
   },

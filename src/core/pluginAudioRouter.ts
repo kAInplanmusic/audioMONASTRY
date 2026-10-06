@@ -51,20 +51,20 @@ export interface PluginRouteConfig {
 }
 
 const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> = [
-  ['mixer', 'channel', true],
+  ['mixer', 'ui-only', false],
   ['drop', 'sampler', true],
-  ['song', 'ui-only', false],
-  ['effect', 'channel', true],
+  ['song', 'sampler', true],
+  ['effect', 'ui-only', false],
   ['syntisampler', 'synth', true],
   ['drumsampler', 'drum', true],
   ['instru', 'synth', true],
   ['biblio', 'ui-only', false],
   ['voice', 'voice', true],
   ['sound', 'sampler', true],
-  ['stem', 'ui-only', false],
-  ['spatial', 'channel', true],
-  ['eq', 'channel', true],
-  ['dsp', 'channel', true],
+  ['stem', 'sampler', true],
+  ['spatial', 'ui-only', false],
+  ['eq', 'ui-only', false],
+  ['dsp', 'ui-only', false],
   ['master', 'ui-only', false],
   ['record', 'ui-only', false],
   // System-Module (keine Plugin-Slots, aber für State-Sync/Routing bekannt):

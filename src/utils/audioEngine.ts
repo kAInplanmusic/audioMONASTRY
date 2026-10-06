@@ -268,8 +268,7 @@ class AudioEngine {
   });
   private trackSampleUrl: Record<TrackType, string | null> = {
     channel1: null, channel2: null, channel3: null, channel4: null,
-    channel5: null, channel6: null, channel7: null, channel8: null,
-    channel9: null, channel10: null
+    channel5: null, channel6: null, channel7: null, channel8: null
   };
 
   public currentScaleName: keyof typeof MUSIC_SCALES = 'A Minor Pentatonic';
@@ -1619,7 +1618,6 @@ class AudioEngine {
     this.trackSampleUrl = {
       channel1: null, channel2: null, channel3: null, channel4: null,
       channel5: null, channel6: null, channel7: null, channel8: null,
-      channel9: null, channel10: null,
     };
 
     // Kanalzug-Zustand zurücksetzen (keine Audio-Nodes mehr – reine Zustände).
@@ -1884,7 +1882,7 @@ class AudioEngine {
 
   /** Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3). */
   public syncV2SamplesToLiveSink(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
       const player = this.samplePlayers[t];
       const audioBuffer = player?.buffer?.get?.();
       if (audioBuffer) this.bridgeAudioBufferToV2(t, audioBuffer);
