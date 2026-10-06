@@ -4758,6 +4758,16 @@
       "source": "Betreiber 2026-10-06",
       "note": "drop, song, syntisampler, drumsampler, instru, voice, sound, stem bekommen eine SYNC-Taste (Standard an): Start auf dem nächsten Main-Takt, taktgleiche Pattern-Position, Main-Tempo inkl. Warp der Stems, Pad-Quantisierung. SYNC aus = sofortiger Start, eigene Zählung. Vorlage und Verkabelungsvertrag: docs/design/audioMONASTRY-design.html, docs/design/V2_UI_VERKABELUNG.md (Abschnitt 3). Quantisierung sample-genau im Audio-Thread über die Master-Clock.\n\nAkzeptanz: Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts; ohne SYNC sofort; Stems folgen dem Main-Tempo.\n\nPARTIAL 2026-10-06: UI fertig. SYNC-Taste in der Kopfzeile der 8 spielenden Plugins (Standard an, nur der Halter schaltet), Zustand in src/core/session/pluginSync.ts (isPluginSynced/subscribePluginSync/pluginSyncSnapshot). Offen = Verkabelung (v2): sample-genaue Quantisierung im Audio-Thread über die Master-Clock, Stem-Warp, Replikation des SYNC-Zustands über die Session.",
       "verification": "tests/uiPluginModes.test.ts"
+    },
+    {
+      "id": "UI2-P1-007",
+      "title": "Formate: Handy quer, Handy hochkant (vereinfacht), Pad quer, PC/Laptop – automatisch erkannt",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "Gerät und Auflösung automatisch erkennen; Handy breit Vollbild, Handy hochkant vereinfachte Ansicht, Pad quer Vollbild, PC/Laptop Querformat.\n\nAkzeptanz: Format wird ohne Nutzerauswahl erkannt; kein waagerechter Überlauf; Vollbild in Handy quer/Pad quer; Drehen wechselt live.\n\nDONE 2026-10-06: src/core/ui/deviceLayout.ts (reine Einordnung aus Zeigerart, Bildschirm-Kurzseite, Ausrichtung, Pixeldichte, Home-Bildschirm-Modus), src/hooks/useDeviceLayout.ts (data-layout an <html>, --app-height, Vollbild beim ersten Tippen, Hinweis Zum Home-Bildschirm für iPhone-Safari). Layout je Format in App.tsx/RackRow/AiMonkDock/index.css (Varianten phone/pocket/simple/pad). Orientierungs-Lock entfernt. Offen: Test auf echten Geräten (iPhone, iPad, Android) durch den Betreiber.",
+      "verification": "tests/deviceLayout.test.ts; tests/e2e/formats.spec.ts"
     }
   ],
   "visionSandbox": [
