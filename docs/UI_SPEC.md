@@ -35,13 +35,33 @@ Automatisch erkannt aus Gerät, Ausrichtung und Auflösung – keine Auswahl dur
 - Kein Orientierungs-Lock mehr – Drehen wechselt live das Format.
 - Prüfung: `tests/deviceLayout.test.ts` (echte Geräteauflösungen), `tests/e2e/formats.spec.ts` (alle vier Formate, kein waagerechter Überlauf, Vollbild, Drehen).
 
+## Session-Ausgänge (Betreiber 2026-10-06)
+
+„1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals."
+
+| Platz | Gerät | Was es bekommt | Meldet |
+|---|---|---|---|
+| UI 1–4 | Session-Nutzer (Handy, Pad, PC) | die gespiegelte UI, jeder im **eigenen Format und eigener Auflösung** (siehe Formate) | Format + Auflösung |
+| MAIN SOUND | genau einer: `/master-out` (Ghostuser 5, PA) | Main-Ton | Zustand, Abtastrate, Kanäle |
+| MAIN VISUAL | genau einer: `/visual-out` (Ghostuser 6, Beamer) | Visual-Stream in **eigener Auflösung** | Zustand, Bildschirm, ankommender Stream |
+
+- Die Main-Ausgänge zählen nicht zu den 4 Nutzern.
+- Jedes Gerät meldet sich selbst (`endpoint-report`); die Art bestimmt der Server aus dem Modus des
+  Sockets – ein Nutzer kann sich nicht als Beamer ausgeben. Die Liste (`session-endpoints`) geht an alle.
+- Genau ein Main-Ausgang je Art: Ein neuer Beamer/PA löst den alten ab (Reload, Gerätewechsel);
+  das alte Gerät zeigt „Ein anderes Gerät ist jetzt der Main-Ausgang …“.
+- Knopf **AUSGÄNGE** im Kopf (in jedem Format): Zähler `n/4` und je ein Punkt für Ton und Bild;
+  das Fenster zeigt die 6 Plätze mit Zustand und Auflösung sowie die Andock-URLs.
+- Code: `src/core/session/sessionEndpoints.ts`, `src/hooks/useSessionEndpoints.ts`,
+  `src/components/OutputsPanel.tsx`; Prüfung: `tests/sessionEndpoints.test.ts`, `tests/e2e/sessionOutputs.spec.ts`.
+
 ## Stream-Auflösung (Betreiber 2026-10-06)
 
 „Ein eigener Stream kann eine eigene Auflösung haben." Die Auflösung eines Ausgabe-Streams ist
 **unabhängig vom Format des Senders** (Handy/Pad/PC). Umgesetzt für den Visual-Stream an den
 Beamer (Ghostuser 6, `/visual-out`):
 
-- Der Beamer meldet seinen Bildschirm (`output-display` → Server prüft → `output-displays` an die Session).
+- Der Beamer meldet seinen Bildschirm als Session-Ausgang (`endpoint-report` → Server prüft → `session-endpoints`, siehe unten).
 - Im Visual-Overlay wählt der Sender **Auflösung** und **FPS**:
   Auto (Beamer) · 720p · 1080p · 1440p · 4K · Hochkant 9:16 (1080×1920) · Quadrat 1:1 · 30/60 fps.
 - **Auto** übernimmt Seitenverhältnis und Auflösung des Beamers, höchstens 1080p-Pixelmenge

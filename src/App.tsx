@@ -119,6 +119,16 @@ function AppComponent() {
   // Pad quer · PC/Laptop – automatisch aus Gerät, Ausrichtung und Auflösung.
   const deviceLayout = useDeviceLayout();
   const simplified = deviceLayout.simplified;
+  // Session-Ausgänge: dieser Nutzer meldet Format und Auflösung, in der er die
+  // UI bekommt – jeder der 1–4 Nutzer hat seine eigene (Ausgänge-Panel).
+  useEffect(() => {
+    webRTCManager.sendEndpointReport({
+      layout: deviceLayout.layout,
+      width: deviceLayout.resolution.cssWidth,
+      height: deviceLayout.resolution.cssHeight,
+      devicePixelRatio: deviceLayout.resolution.dpr,
+    });
+  }, [deviceLayout.layout, deviceLayout.resolution.cssWidth, deviceLayout.resolution.cssHeight, deviceLayout.resolution.dpr]);
 
   // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
   const navPlugins = useMemo(

@@ -16,11 +16,22 @@ import { mjpegStreamUrl, studioTokenFromCookie } from '../utils/visualMjpeg';
 // Der Listener-Modus kommt aus der Andock-URL (sessionMode() -> listenerModeForPath);
 // ein Modul-Seiteneffekt war hier falsch, weil main.tsx beide Seiten eager importiert.
 
+function readScreen(): { width: number; height: number; devicePixelRatio: number } {
+  return {
+    width: window.screen?.width || window.innerWidth,
+    height: window.screen?.height || window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1,
+  };
+}
+
 export const VisualOutPage = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<'connecting' | 'waiting' | 'live' | 'error'>('connecting');
   const [activated, setActivated] = useState(false);
   const [error, setError] = useState('');
+  /** Ein anderes Gerät ist jetzt der Main-Ausgang Bild (es gibt genau einen). */
+  const [replaced, setReplaced] = useState(false);
+  useEffect(() => webRTCManager.onOutputReplaced(() => setReplaced(true)), []);
   /**
    * VISUAL-P1-001: MJPEG-Fallback. Der Spec-Punkt „Fallback ohne SFU" war nie
    * gebaut - genau er traegt den Beamer, wenn WebRTC/SFU nicht durchkommt (kein
@@ -31,29 +42,30 @@ export const VisualOutPage = () => {
   const [mjpegError, setMjpegError] = useState(false);
   /** Stream-Auflösung: was ankommt (Video) und was dieser Bildschirm kann. */
   const [incoming, setIncoming] = useState<{ width: number; height: number } | null>(null);
-  const [screenPx, setScreenPx] = useState('');
 
-  // Stream-Auflösung (Betreiber 2026-10-06): Der Beamer meldet seinen Bildschirm.
-  // Steht der Sender auf „Auto", rendert er den Stream genau in dieser Auflösung –
-  // unabhängig davon, ob er selbst auf Handy, Pad oder PC sendet.
+  // Main-Ausgang Bild (Betreiber 2026-10-06): Der Beamer meldet Bildschirm,
+  // Zustand und ankommende Stream-Auflösung (Session-Ausgänge). Steht der Sender
+  // auf „Auto", rendert er den Stream genau in dieser Auflösung – unabhängig
+  // davon, ob er selbst auf Handy, Pad oder PC sendet.
+  const [display, setDisplay] = useState(() => readScreen());
   useEffect(() => {
-    const report = () => {
-      const display = {
-        width: window.screen?.width || window.innerWidth,
-        height: window.screen?.height || window.innerHeight,
-        devicePixelRatio: window.devicePixelRatio || 1,
-      };
-      setScreenPx(`${Math.round(display.width * display.devicePixelRatio)}×${Math.round(display.height * display.devicePixelRatio)}`);
-      webRTCManager.sendOutputDisplay(display);
-    };
-    report();
-    window.addEventListener('resize', report);
-    window.addEventListener('orientationchange', report);
+    const update = () => setDisplay(readScreen());
+    window.addEventListener('resize', update);
+    window.addEventListener('orientationchange', update);
     return () => {
-      window.removeEventListener('resize', report);
-      window.removeEventListener('orientationchange', report);
+      window.removeEventListener('resize', update);
+      window.removeEventListener('orientationchange', update);
     };
   }, []);
+  useEffect(() => {
+    webRTCManager.sendEndpointReport({
+      ...display,
+      state,
+      streamWidth: incoming?.width ?? 0,
+      streamHeight: incoming?.height ?? 0,
+    });
+  }, [display, state, incoming]);
+  const screenPx = `${Math.round(display.width * display.devicePixelRatio)}×${Math.round(display.height * display.devicePixelRatio)}`;
 
   useEffect(() => {
     const attach = (stream: MediaStream) => {
@@ -96,6 +108,11 @@ export const VisualOutPage = () => {
 
   return (
     <div className="fixed inset-0 bg-black text-white select-none overflow-hidden">
+      {replaced && (
+        <div role="alert" data-testid="output-replaced" className="absolute inset-x-0 top-0 z-50 bg-amber-500/90 text-black text-center text-xs font-bold tracking-widest px-4 py-3">
+          Ein anderes Gerät ist jetzt der Main-Ausgang Bild. Dieses Gerät ist getrennt – zum Zurückholen Seite neu laden.
+        </div>
+      )}
       <video
         ref={videoRef}
         autoPlay
