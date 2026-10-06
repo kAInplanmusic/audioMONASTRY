@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-10-06",
   "branch": "main",
-  "commit": "08f1a12",
+  "commit": "a18d5c7",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -4753,11 +4753,49 @@
       "id": "UI2-P0-003",
       "title": "SYNC gegen Main für alle spielenden Plugins (v2)",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "Betreiber 2026-10-06",
-      "note": "drop, song, syntisampler, drumsampler, instru, voice, sound, stem bekommen eine SYNC-Taste (Standard an): Start auf dem nächsten Main-Takt, taktgleiche Pattern-Position, Main-Tempo inkl. Warp der Stems, Pad-Quantisierung. SYNC aus = sofortiger Start, eigene Zählung. Vorlage und Verkabelungsvertrag: docs/design/audioMONASTRY-design.html, docs/design/V2_UI_VERKABELUNG.md (Abschnitt 3). Quantisierung sample-genau im Audio-Thread über die Master-Clock.\n\nAkzeptanz: Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts; ohne SYNC sofort; Stems folgen dem Main-Tempo.",
-      "verification": ""
+      "problem": "Die spielenden Plugins starteten ohne Bezug zum Main-Takt: kein gemeinsamer Startpunkt, Patterns liefen auseinander, kein sichtbarer Sync-Zustand im Plugin-Kopf.",
+      "note": "DONE 2026-10-06: SYNC-Zustand liegt orthogonal zum PluginState (OFF/STBY/ON/PRO) in BasePluginAdapter: syncEnabled mit isSyncEnabled()/setSyncEnabled(), Parameter-Schlüssel `sync.<id>` (Alt-Schlüssel `sync` bleibt lesbar), Aufnahme in die Serialisierung, Export über PluginInterface. Taktgenauer Start über scheduleSyncStart(start, scheduleAtNextBar?): syncEnabled=false → sofort; vorhandene Audio-Thread-Planung (adapter.scheduleAtNextBar über audioEngine/Tone.Transport) hat Vorrang, weil sie den Klang wirklich erreicht; sonst ClockBridge.scheduleDrop(...'1bar') mit BPM-Fallback per setTimeout. Geplante Starts werden bei stop/dispose abgebrochen (cancelPendingSyncStart). Kopfzeilen-Anzeige in RackRow: `⟲ SYNC` / `FREI`, Standard an, klickbar; der Zustand kommt über Props aus dem echten Adapter (App.tsx liest plugin.adapter aus der Registry) — NICHT aus lokalem UI-State, sonst wäre die Anzeige eine Attrappe, die den Audio-Start nie erreicht. Commits: 444760b, 33e1c5d, ae7c42c (Anzeige an echten Adapter), a18d5c7 (Regression: ClockBridge hatte die vorhandene Taktplanung ersetzt → Stillstand), 82a0cc4-Vorgeschichte unberührt. BELEG: voller Lauf 298 Dateien / 2372 Tests, EXIT=0; tsc --noEmit 0; eslint 0; tests/dropPlayback.test.ts 10/10 (enthält die Invariante 'ohne scheduleAtNextBar wird trotzdem gespielt — kein Stillstand').",
+      "verification": [
+        "node_modules/.bin/vitest run -> 298 Dateien / 2372 Tests, EXIT=0",
+        "node_modules/.bin/tsc --noEmit -> exit 0",
+        "tests/dropPlayback.test.ts -> 10/10, inkl. 'kein Stillstand ohne Taktplanung'"
+      ],
+      "acceptance": [
+        "Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts",
+        "ohne SYNC sofort",
+        "Stems folgen dem Main-Tempo",
+        "Kopfzeile zeigt ⟲ SYNC / FREI und schaltet um"
+      ],
+      "files": [
+        "src/plugins/adapters/BasePluginAdapter.ts",
+        "src/plugins/adapters/DropPluginAdapter.ts",
+        "src/plugins/adapters/DrumSamplerPluginAdapter.ts",
+        "src/plugins/adapters/InstruPluginAdapter.ts",
+        "src/plugins/adapters/SoundPluginAdapter.ts",
+        "src/plugins/adapters/SyntiSamplerPluginAdapter.ts",
+        "src/components/RackRow.tsx",
+        "src/plugins/plugin_interface.ts",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "UI2-P0-003-F1",
+      "title": "song, voice, stem: Abspiel-/Startlogik im Adapter fehlt — SYNC kann dort nicht greifen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI/Audio",
+      "source": "Befund beim Einbau von UI2-P0-003 (2026-10-06)",
+      "problem": "Die SYNC-Taste gehört laut UI2-P0-003 auch zu song, voice und stem. Diese drei Adapter haben jedoch keine Abspiel-/Startlogik, an die sich ein taktgenauer Start hängen ließe: SongPluginAdapter und StemPluginAdapter führen nur Parameter, VoicePluginAdapter kennt nur die Befehle speak/sing. Der Sync-Schalter ist dort korrekt verdrahtet und umschaltbar, wirkt aber erst, wenn der Adapter überhaupt einen Transport-Start hat.",
+      "note": "Bewusst offen gelassen statt erfunden: Die Alternative wäre gewesen, den dreien eine Play-Anbindung anzudichten (größerer Umbau, nicht beauftragt) oder ihnen die von der Spec geforderte Taste zu nehmen (Widerspruch zur Betreiber-Vorgabe). Beides wäre schlechter als ein sichtbarer, dokumentierter Folgepunkt. Kein akutes Klangproblem: ohne Startlogik spielt der Adapter auch ohne SYNC nichts.",
+      "verification": [],
+      "acceptance": [
+        "song, voice, stem haben je einen definierten Transport-Start",
+        "der Start läuft über scheduleSyncStart und ist damit taktgleich zu Main",
+        "ein Test deckt je Adapter den Fall SYNC an/aus ab"
+      ]
     }
   ],
   "visionSandbox": [
