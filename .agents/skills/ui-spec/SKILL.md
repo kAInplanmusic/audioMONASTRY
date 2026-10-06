@@ -21,6 +21,15 @@ zeigt, wo sie im Code stehen. Bei Widerspruch gilt `docs/UI_SPEC.md`.
 Quellen → Mixer → Nachbearbeitung → Recorder → Main Out gilt nur für die
 Verkabelung; die App zeigt sie als Leiste (`src/components/SignalChainBar.tsx`).
 
+## Formate (automatisch)
+
+`src/core/ui/deviceLayout.ts` ordnet ein: Handy quer (Vollbild), Handy hochkant
+(vereinfacht), Pad quer (Vollbild), PC/Laptop. CSS-Varianten in `src/index.css`:
+`phone:` (beide Handy-Formate), `pocket:` (Handy quer), `simple:` (Handy hochkant),
+`pad:` (Pad quer). Neue Elemente müssen in allen vier Formaten ohne waagerechten
+Seitenüberlauf funktionieren (`tests/e2e/formats.spec.ts`); breite Bedienflächen
+scrollen in sich (`overflow-x-auto` im Streifen).
+
 ## Modi und Sperren
 
 - Modus-Button rechts am Streifen: **OFF → STBY → ON → OFF** (`src/core/session/pluginMode.ts`).

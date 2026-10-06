@@ -17,6 +17,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 // Registriert die Standard-Sprach-/KI-Kommandos für die Plugin-Steuerung.
 import './core/voice/pluginCommandRegistry';
 import { trackError } from './utils/errorTracker';
+import { startDeviceLayoutWatch } from './hooks/useDeviceLayout';
 
 // DCT-118: Boot-Diagnostics + Auto-Logging – globale Fehler sichtbar machen
 // (kein stiller White-Screen) und automatisch an /api/telemetry melden.
@@ -33,6 +34,10 @@ window.addEventListener('unhandledrejection', (event) => {
 // Fixe Andock-URLs für die Ghost-User: /master-out bzw. /ghost/5 (PA) und
 // /visual-out bzw. /ghost/6 (Beamer).
 const bootMode = listenerModeForPath(window.location.pathname);
+
+// Formate: Gerät/Ausrichtung/Auflösung erkennen, bevor der erste Frame steht
+// (data-layout an <html>, Vollbild beim ersten Tippen in Handy quer/Pad quer).
+if (bootMode === 'member') startDeviceLayoutWatch();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

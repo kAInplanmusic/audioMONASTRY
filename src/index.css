@@ -11,6 +11,16 @@
   }
 }
 
+/* Formate (src/core/ui/deviceLayout.ts → data-layout an <html>):
+   phone:  Handy quer und Handy hochkant
+   pocket: nur Handy quer (Vollbild, wenig Höhe)
+   simple: Handy hochkant / schmale Fenster (vereinfachte Ansicht)
+   pad:    Pad quer (Vollbild) */
+@custom-variant phone (&:where([data-layout="phone-landscape"] *, [data-layout="phone-portrait"] *));
+@custom-variant pocket (&:where([data-layout="phone-landscape"] *));
+@custom-variant simple (&:where([data-layout="phone-portrait"] *));
+@custom-variant pad (&:where([data-layout="tablet-landscape"] *));
+
 /* Grobe Zeiger (Touch): größere Trefferflächen für Step-Pads. */
 @custom-variant touch {
   @media (pointer: coarse) {
@@ -295,3 +305,43 @@ nav[aria-label="Studio-Navigation"] button {
 
 .hw-skin-mcp, .hw-skin-sampler { background-image: linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.7)); }
 .hw-skin-mcp button, .hw-skin-sampler button { border-radius: 10px; }
+
+/* ============================================================================
+   Formate (Betreiber 2026-10-06): Handy quer · Handy hochkant · Pad quer · PC
+   ----------------------------------------------------------------------------
+   Erkennung: src/core/ui/deviceLayout.ts. Hier nur, was sich nicht als
+   Utility-Klasse am Element ausdrücken lässt.
+   ========================================================================== */
+/* Vollbild/Home-Bildschirm: die echte sichtbare Höhe statt 100vh (iOS). */
+[data-fullscreen="true"] #studio-main {
+  min-height: var(--app-height, 100vh);
+}
+/* Handy: Ränder an Notch/Home-Indikator, keine Seitenbreite über den Schirm. */
+[data-layout^="phone-"] body {
+  overflow-x: hidden;
+}
+[data-layout^="phone-"] #studio-main {
+  padding-left: max(0.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.5rem, env(safe-area-inset-right, 0px));
+}
+/* Handy: Header (3 rem) ist die einzige feste Leiste – Anker darunter. */
+[data-layout^="phone-"] [id^="rack-"],
+[data-layout^="phone-"] #studio-main {
+  scroll-margin-top: 3.5rem;
+}
+/* Handy: Icons in EINER Reihe, waagerecht wischbar. */
+[data-layout^="phone-"] nav[aria-label="Studio-Navigation"] > div {
+  grid-template-rows: 1fr;
+  grid-auto-flow: column;
+  grid-template-columns: none;
+  grid-auto-columns: 3.25rem;
+  min-width: 0;
+}
+/* Pad quer: Visualizer flach, damit Mixer und Plugins Höhe bekommen. */
+[data-layout="tablet-landscape"] #visualizer-container {
+  height: 3.5rem;
+}
+/* Pad quer: Header ohne Überbreite, Racks nutzen die volle Breite. */
+[data-layout="tablet-landscape"] #studio-main .max-w-screen-xl {
+  max-width: none;
+}
