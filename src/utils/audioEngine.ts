@@ -1755,6 +1755,16 @@ class AudioEngine {
     this.masterTap.disconnectAnalyser(analyser);
   }
 
+  /** UI2-P1-002: Transport-Position in Sekunden (nur Anzeige im Masterplayer). */
+  public getTransportSeconds(): number {
+    try {
+      const sec = Tone.Transport.seconds;
+      return Number.isFinite(sec) && sec > 0 ? sec : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   /** Audio-Health-Snapshot für den Echtzeit-Performance-Monitor. */
   public getAudioHealth(): { state: string; sampleRate: number; baseLatencyMs: number; outputLatencyMs: number } {
     const ctx = this.ctx as unknown as {

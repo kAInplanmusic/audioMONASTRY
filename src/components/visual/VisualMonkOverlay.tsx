@@ -510,12 +510,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col outline-none"
       role="dialog"
       aria-modal="true"
-      aria-label="VisualMONK Liveshow"
+      aria-label="Visual-Liveshow"
       data-renderer={rendererKind}
       data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
-        <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUALMONK · LIVESHOW</span>
+        <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUAL · LIVESHOW</span>
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${audioLinked ? 'border-emerald-400/50 text-emerald-300' : 'border-neutral-600 text-neutral-400'}`}>
           {audioLinked ? 'AUDIO LIVE' : 'wartet auf Wiedergabe'}
         </span>
