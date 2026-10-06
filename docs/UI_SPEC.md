@@ -1,15 +1,31 @@
 # audioMONASTRY – Oberflächen-Spezifikation
 
-Stand: 2026-10-04 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README
+Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README
 
 ## Aufbau (von oben nach unten)
 
 1. **Kopf** – fest für alle. Logo, 16 Modul-Icons, Nutzerleiste (4/4), Einstellungen.
-2. **Masterplayer** – fest für alle, kein Plugin. Nur Ansicht, keine Buttons: Wellenform des Ausgangs, Zeit, BPM, Takt, Tonart, L/R-Pegel.
-3. **mixerMONK** – bei genau einem Nutzer immer offen, nicht schließbar. Nur der Halter kann ihn übergeben. Es gibt keine Anfrage.
-4. **Quellen** (liegen im Signalweg vor dem Mixer): biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem.
-5. **Nachbearbeitung** (liegen im Signalweg nach dem Mixer): effect, eq, dsp, spatial, master, record.
-6. **Fuß** – fest für alle: perfMONK, aiMONK.
+2. **Masterplayer** – fest für alle, kein Plugin. Nur Ansicht, keine Buttons: Wellenform des Ausgangs, Zeit, Takt, BPM, Tonart, Lautheit, L/R-Pegel.
+3. **mixerMONK** – steht immer oben. Bei genau einem Nutzer immer offen, nicht schließbar. Nur der Halter kann ihn übergeben. Es gibt keine Anfrage.
+4. **Die 15 anderen Plugins** – nacheinander in der Kopfreihenfolge (`plugins/registry.ts`):
+   drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record.
+5. **Fuß** – fest für alle: perfMONK, aiMONK.
+
+**Bildschirm ≠ Signalweg (Betreiber 2026-10-06).** Die lineare Reihenfolge
+Quellen → Mixer → Nachbearbeitung → Recorder gilt **nur für die Verkabelung**
+(Signalgraph, siehe „Signalkette“ unten). Auf dem Bildschirm steht der Mixer oben,
+die übrigen Plugins folgen in der Kopfreihenfolge. Der Mixer zeigt den Signalweg
+als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
+
+## Mixer (Entwurf 2026-10-06)
+
+- 8 Kanäle, sichtbar in **zwei Bänken à 4** (farbiger Umschalter A = Kanal 1–4, B = Kanal 5–8). Die unsichtbare Bank läuft weiter.
+- Kanal k ist fest mit einer Quelle verdrahtet: 1 drop · 2 song · 3 drumsampler · 4 syntisampler · 5 instru · 6 voice · 7 sound · 8 stem.
+- Pro Kanal von oben: Trim, Hi/Mid/Low (Kill bei −26 dB), Color-Filter (links Tiefpass, rechts Hochpass), Sends A–D, CUE/M/S, Pegel + **ein senkrechter Fader**, Crossfader-Zuweisung **A / THRU / B**, **▶ / ■**.
+- **▶ im Kanal ist die einzige Möglichkeit, Ton auf Main zu starten.** Nur der Mixer-Halter kann sie drücken. Ist die Quelle OFF, ist ▶ gesperrt; ist sie STBY, schaltet ▶ sie auf ON.
+- Rechts daneben: 4 Effekt-Returns (A Hall, B Delay, C Chorus, D Drive) mit eigenem Fader, dann der Master-Bereich (Master, Booth, Kopfhörer Cue/Mix und Pegel, Limiter-Anzeige).
+- Darunter: **ein waagerechter Crossfader A ↔ B** mit Kurve Weich/Hart, 16 Pads (8 Drops, 8 Drum-Sounds), 3 Makros (Filter, FX-Anteil, Build-up), 8 Szenen.
+- Wer den Mixer nicht hält, sieht ihn eingeklappt mit Name des Halters und 8 kleinen Pegeln.
 
 ## Modi der 15 Plugins (ohne Mixer)
 
@@ -79,5 +95,5 @@ Signalkette ist eine zweite, unabhängige Achse.
 ## Annahmen und offene Punkte
 
 - AUTO_AI und PRO entfallen (Annahme). KI-Vorschläge kommen über aiMONK.
-- Nummern 01–16 werden nicht angezeigt (Annahme).
+- Nummern 01–16 werden nicht angezeigt (Annahme). Kanalnummern 1–8 im Mixer bleiben.
 - Verlässt der Mixer-Halter die Sitzung, geht der Mixer automatisch an die Person, die am längsten in der Sitzung ist (Entscheidung Betreiber).
