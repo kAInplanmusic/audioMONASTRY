@@ -7,8 +7,12 @@
  * Transportzustand: Wer den Mixer hat, entscheidet, ob gespielt wird.
  *
  * Bewusst reine Speicher-/Validierungslogik ohne Engine- oder React-Bezug,
- * damit sie ohne Browser-Kontext prüfbar bleibt.
+ * damit sie ohne Browser-Kontext prüfbar bleibt. Der Speicherzugriff läuft über
+ * `utils/storage.ts` – laut Boundary-Regel 1.1 der einzige Ort, der
+ * localStorage berühren darf.
  */
+
+import { storageGet, storageRemove, storageSet } from '../../utils/storage';
 
 /** Ein Eintrag, eine Wahrheit: der Schlüssel steht nirgends sonst als Literal. */
 export const AUTOLOAD_STORAGE_KEY = 'audiomonastry_autoload_channel1';
@@ -41,9 +45,9 @@ export function parseAutoloadSong(raw: unknown): AutoloadSong | null {
 
 /** Gespeichertes Autoload-Lied oder `null`. Wirft nie. */
 export function loadAutoloadSong(): AutoloadSong | null {
+  const raw = storageGet(AUTOLOAD_STORAGE_KEY);
+  if (!raw) return null;
   try {
-    const raw = globalThis.localStorage?.getItem(AUTOLOAD_STORAGE_KEY);
-    if (!raw) return null;
     return parseAutoloadSong(JSON.parse(raw));
   } catch {
     return null;
@@ -52,20 +56,16 @@ export function loadAutoloadSong(): AutoloadSong | null {
 
 /** Setzt (oder überschreibt) das Autoload-Lied. Ungültige Eingaben werden ignoriert. */
 export function saveAutoloadSong(song: AutoloadSong): void {
+  const clean = parseAutoloadSong(song);
+  if (!clean) return;
   try {
-    const clean = parseAutoloadSong(song);
-    if (!clean) return;
-    globalThis.localStorage?.setItem(AUTOLOAD_STORAGE_KEY, JSON.stringify(clean));
+    storageSet(AUTOLOAD_STORAGE_KEY, JSON.stringify(clean));
   } catch {
-    /* Speicher gesperrt oder voll – die Sitzung laeuft trotzdem weiter. */
+    /* Nicht serialisierbar – die Sitzung laeuft trotzdem weiter. */
   }
 }
 
 /** Entfernt das Autoload-Lied: beim naechsten Start laeuft nichts von allein. */
 export function clearAutoloadSong(): void {
-  try {
-    globalThis.localStorage?.removeItem(AUTOLOAD_STORAGE_KEY);
-  } catch {
-    /* ignore */
-  }
+  storageRemove(AUTOLOAD_STORAGE_KEY);
 }
