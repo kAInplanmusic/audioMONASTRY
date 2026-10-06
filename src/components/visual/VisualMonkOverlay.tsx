@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useVisualStream } from '../../hooks/useVisualStream';
+import { useStreamResolution } from '../../hooks/useStreamResolution';
+import { STREAM_FPS, STREAM_PRESETS, isStreamFps, isStreamPresetId, logicalCanvas, streamSizeLabel } from '../../core/visual/streamResolution';
 import { createFallbackPublisher, studioTokenFromCookie } from '../../utils/visualMjpeg';
 import { createWebGpuVisualRenderer, type WebGpuVisualRenderer } from '../../core/visual/webgpuRenderer';
 import { webRTCManager } from '../../utils/WebRTCManager';
@@ -83,6 +85,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const presetRef = useRef(presetId);
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
+  // Stream-Auflösung (Betreiber 2026-10-06): eigene Auflösung des Streams,
+  // unabhängig vom Gerät, auf dem gesendet wird. Die Zeichenfläche hat genau
+  // diese Größe; die Vorschau zeigt sie eingepasst (Letterbox).
+  const streamRes = useStreamResolution();
+  const streamSizeRef = useRef(streamRes.size);
+  useEffect(() => { streamSizeRef.current = streamRes.size; }, [streamRes.size]);
   /**
    * VISUAL-P1-001: MJPEG-Fallback. Der Publisher laeuft die ganze Zeit, sendet
    * aber NUR, wenn ein Beamer am MJPEG-Strom haengt (Server meldet die
@@ -331,14 +339,14 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         });
         fallbackPublisherRef.current.start();
       }
-      const stream = startStream(canvasRef.current, 30);
+      const stream = startStream(canvasRef.current, streamRes.fps);
       const track = stream?.getVideoTracks()[0];
       if (track) {
         // An Ghostuser 6 senden (SFU-Producer bzw. P2P-Main-Stream).
         try { webRTCManager.publishVisualTrack(track); } catch { /* Transport nicht bereit */ }
       }
     }
-  }, [streamStatus, startStream, stopStream]);
+  }, [streamStatus, startStream, stopStream, streamRes.fps]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -419,13 +427,17 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         ? smoothed
         : composeLayers(features, smoothed);
 
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const cssW = canvas.clientWidth || 960;
-      const cssH = canvas.clientHeight || 540;
-      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssH * dpr);
+      // Zeichenfläche = Stream-Auflösung (nicht Bildschirm des Senders);
+      // captureStream folgt der Canvas-Größe auch während eines laufenden Streams.
+      const streamSize = streamSizeRef.current;
+      if (canvas.width !== streamSize.width || canvas.height !== streamSize.height) {
+        canvas.width = streamSize.width;
+        canvas.height = streamSize.height;
       }
+      const logical = logicalCanvas(streamSize);
+      const dpr = logical.scale;
+      const cssW = logical.width;
+      const cssH = logical.height;
       // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie).
       const showApi = showRef.current;
       // UI-P1-002: Reduced-Motion hält die GANZE Show an. `draw`/`frame` rechnen
@@ -514,7 +526,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       data-renderer={rendererKind}
       data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-white/10">
         <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUAL · LIVESHOW</span>
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${audioLinked ? 'border-emerald-400/50 text-emerald-300' : 'border-neutral-600 text-neutral-400'}`}>
           {audioLinked ? 'AUDIO LIVE' : 'wartet auf Wiedergabe'}
@@ -548,6 +560,36 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
           {rendererMode === 'gl' ? 'WEBGL' : rendererMode === 'gpu' ? 'WEBGPU' : 'CANVAS2D'}
         </button>
         <div className="flex-1" />
+        <label className="flex items-center gap-1 text-[9px] text-neutral-400 tracking-widest">
+          AUFLÖSUNG
+          <select
+            aria-label="Stream-Auflösung"
+            value={streamRes.preset}
+            onChange={(e) => { if (isStreamPresetId(e.target.value)) streamRes.setPreset(e.target.value); }}
+            className="bg-black/60 border border-neutral-700 rounded px-1.5 py-1 text-[10px] text-neutral-200"
+          >
+            {STREAM_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[9px] text-neutral-400 tracking-widest" title={streamStatus === 'live' ? 'Bildrate vor dem Start wählen' : 'Bildrate des Streams'}>
+          FPS
+          <select
+            aria-label="Stream-Bildrate"
+            value={streamRes.fps}
+            disabled={streamStatus === 'live'}
+            onChange={(e) => { const f = Number(e.target.value); if (isStreamFps(f)) streamRes.setFps(f); }}
+            className="bg-black/60 border border-neutral-700 rounded px-1.5 py-1 text-[10px] text-neutral-200 disabled:opacity-50"
+          >
+            {STREAM_FPS.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </label>
+        <span
+          data-testid="stream-size"
+          className="text-[9px] px-1.5 py-0.5 rounded-full border border-cyan-400/40 text-cyan-200 font-mono"
+          title={streamRes.receiver ? `Beamer meldet ${streamRes.receiver.width}×${streamRes.receiver.height} @${streamRes.receiver.devicePixelRatio}x` : 'Kein Beamer verbunden – Auto nutzt 1920×1080'}
+        >
+          {streamSizeLabel(streamRes.size)}
+        </span>
         <button
           type="button"
           onClick={toggleStream}
@@ -739,7 +781,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       <div className="flex-1 min-h-0 relative">
         {/* key: ein Canvas kann nur EINEN Kontexttyp haben — beim Renderer-Wechsel
             wird das Element bewusst neu erzeugt (VISUAL-P1-005). */}
-        <canvas key={rendererMode} ref={canvasRef} className="w-full h-full block" />
+        <canvas key={rendererMode} ref={canvasRef} data-testid="visual-canvas" className="w-full h-full block object-contain" />
         {aiImage && (
           <img
             src={aiImage}
