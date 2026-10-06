@@ -10,18 +10,18 @@
  *   4. GÜNSTIG:    Mistral (mistral-small-latest, EU, starkes Function-
  *                  Calling & Deutsch – MISTRAL_API_KEY)
  *   5. FALLBACK:   OpenRouter (OpenAI-kompatibel, OR_API_KEY)
- *   6. LOKAL:      Ollama (MOA/Sprachbefehle/TTS-Fallback auf der eigenen
- *                  CPU-Instanz – OLLAMA_URL/OLLAMA_MODEL)
- *   7. KOMPLEX:    DeepSeek V4 Pro
- *   8. NOTFALL:    Gemini / OpenAI (bezahlt; nur bei explizitem Enable,
+ *   6. KOMPLEX:    DeepSeek V4 Pro
+ *   7. NOTFALL:    Gemini / OpenAI (bezahlt; nur bei explizitem Enable,
  *                  z.B. AI_EMERGENCY_PROVIDERS=true – nicht im Default)
  *   (Groq ist bewusst entfernt – Pay-as-you-go/Freemium-Umstellung offen.)
+ *   (Ollama ist am 2026-10-06 komplett entfernt worden – es gab nie eine
+ *   lokale Instanz, die es haette bedienen koennen.)
  *
  * Hinweis: `deepseek-chat`/`deepseek-reasoner` sind seit 2026-07-24 deprecated;
  * wir nutzen `deepseek-v4-flash`/`deepseek-v4-pro` mit `reasoning_effort`.
  *
  * Priorität seit „AI nur lokal“ (2026-09-10): `runpod-local` (Brain der
- * GPU-Flotte) → `ollama` → externe Provider (nur mit `AI_ALLOW_EXTERNAL_LLM=true`).
+ * GPU-Flotte) → externe Provider (nur mit `AI_ALLOW_EXTERNAL_LLM=true`).
  * Details: docs/RUNPOD_AI_V1_SPEC.md.
  */
 import { RunPodProvider } from './orchestrator/runpodProvider';
@@ -360,7 +360,7 @@ class RunPodLocalProvider implements ILlmProvider {
   get available(): boolean {
     // INFRA-FEAT-001: Bei „AI aus“ ist das Brain nicht verfügbar – `rankProviders`
     // lässt den GPU-Provider dann aus und es geht nichts Richtung RunPod
-    // (lokale Pfade: Ollama/deterministisch).
+    // (lokale Pfade: runpod-local/deterministisch).
     if (!isRoleAllowed('brain')) return false;
     if (this.openAiUrl()) return Boolean(envKey('RP_AGENT_KEY') || envKey('RP_API_KEY') || envKey('RUNPOD_API_KEY'));
     return this.brainProvider().available;
@@ -618,7 +618,7 @@ export class LlmRouter {
 
   /**
    * MOA/MCP-Planung: bevorzugt DeepSeek V4 Flash (günstig, reasoning-fähig),
-   * fällt automatisch auf HF/Mistral/Ollama zurück.
+   * fällt automatisch auf HF/Mistral/DeepSeek zurück.
    */
   async plan(task: string, maxTokens = 1024): Promise<LlmCompletion> {
     const prompt =

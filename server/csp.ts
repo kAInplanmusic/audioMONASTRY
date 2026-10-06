@@ -18,9 +18,8 @@
  *      "welche Verstöße will ich vorher sehen" beantwortbar ist statt geraten.
  *
  * Default bleibt bewusst `report-only`: die verbleibenden Unsicherheiten sind
- * hosting-abhaengig (Medien von R2/Supabase, WSS-Hosts der SFU/Fleet, ein
- * browser-seitiges lokales Ollama am Operator-Rechner) und waren nicht durch
- * einen einzigen Lauf verifizierbar. Mit Meldeziel ist die Umstellung jetzt eine
+ * hosting-abhaengig (Medien von R2/Supabase, WSS-Hosts der SFU/Fleet) und waren
+ * nicht durch einen einzigen Lauf verifizierbar. Mit Meldeziel ist die Umstellung jetzt eine
  * Betreiber-Entscheidung auf Datenbasis (`CSP_MODE=enforce`), kein Blindflug.
  *
  * --- Drahtformate des Browsers (2026-09-21 mit echtem Chrome 153 gemessen) ----

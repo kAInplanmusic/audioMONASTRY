@@ -144,7 +144,7 @@ export class RunPodProvider implements IAiProvider {
     // INFRA-FEAT-001/002: Der AI-Betriebsmodus ist Teil der Verfügbarkeit.
     // Bei „AI aus“ bzw. für Visual-Rollen im Modus "ohne Visuals" ist der
     // Provider nicht verfügbar – der Router fällt dann auf lokale Pfade
-    // (Ollama/deterministisch) zurück statt eine GPU zu wecken.
+    // (deterministisch) zurück statt eine GPU zu wecken.
     return Boolean(this.endpointId && this.apiKey) && isRoleAllowed(this.roleId);
   }
 
