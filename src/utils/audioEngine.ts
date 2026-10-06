@@ -2313,6 +2313,29 @@ class AudioEngine {
     return this.musicBuffers.get(url);
   }
 
+  /**
+   * Kanaldaten einer Musik-URL für den Offline-Bounce durch die Signalkette.
+   * Nutzt denselben Cache wie der Realtime-Pfad (`getMusicBuffer`) – es wird
+   * nichts erneut geladen und nichts erneut decodiert. Die Kanäle sind KOPIEN:
+   * der Bounce darf den gecachten Buffer nicht verändern. `null` = nicht lesbar.
+   */
+  public async getMusicSampleChannels(url: string): Promise<Float32Array[] | null> {
+    try {
+      const tone = await this.getMusicBuffer(url);
+      const raw = (tone as unknown as { get?: () => AudioBuffer | undefined }).get?.();
+      if (!raw) return null;
+      const channels: Float32Array[] = [];
+      const count = Math.max(1, Number(raw.numberOfChannels) || 1);
+      for (let c = 0; c < count; c++) {
+        channels.push(new Float32Array(raw.getChannelData(c)));
+      }
+      return channels;
+    } catch (e) {
+      console.warn('getMusicSampleChannels fehlgeschlagen:', e);
+      return null;
+    }
+  }
+
   public async loadTrackSample(track: TrackType, url: string | null) {
     await this.samplePreview.loadTrackSample(track, url);
   }

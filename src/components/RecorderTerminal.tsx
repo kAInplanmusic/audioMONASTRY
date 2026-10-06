@@ -1,5 +1,5 @@
 import React, {  useState, useEffect, useRef, useCallback  } from 'react';
-import { Radio, Mic, Save, Download, Play, Square, Circle } from 'lucide-react';
+import { Radio, Mic, Save, Download, Play, Square, Circle, Layers } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
@@ -10,6 +10,8 @@ import { openAudioActionMenu } from './AudioActionMenuHost';
 import { sampleToContent } from '../core/audio/audioContent';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { TerminalFrame } from './terminalShared';
+import { bounceThroughPluginChain } from '../audio/pluginChainBounce';
+import { encodeWavFromChannels } from '../utils/wavEncode';
 
 interface Take {
   id: number;
@@ -34,6 +36,8 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
     { id: 1, name: 'Main_Mix_Take_01.wav', duration: '03:45', size: '38 MB', date: '2026-07-18' }
   ]);
   const [inputSource, setInputSource] = useState('MASTER_OUT');
+  const [bounceBusy, setBounceBusy] = useState(false);
+  const [bounceInfo, setBounceInfo] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
@@ -134,6 +138,49 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
     }
   }, [isRecording]);
 
+  /**
+   * Bounce durch die Signalkette: Das auf Kanal 1 geladene Lied läuft offline
+   * durch die 16 Adapter in Kettenreihenfolge (Quellen → Mixer → Nachbearbeitung
+   * → Recorder → Ausgang) und kommt als WAV in die Takes. Damit ist die Kette
+   * hörbar, bevor sie im Live-Pfad hängt – und der Live-Umzug ist danach ein
+   * Umzug derselben Ordnung, kein Blindflug.
+   */
+  const bounceThroughChain = useCallback(async () => {
+    if (bounceBusy) return;
+    const url = audioEngine.getTrackSampleUrl('channel1');
+    if (!url) {
+      setBounceInfo('Kein Lied auf Kanal 1 – erst im Mixer laden.');
+      return;
+    }
+    setBounceBusy(true);
+    setBounceInfo('Bounce läuft …');
+    try {
+      const channels = await audioEngine.getMusicSampleChannels(url);
+      if (!channels || channels.length === 0) {
+        setBounceInfo('Quelle nicht lesbar.');
+        return;
+      }
+      const result = await bounceThroughPluginChain(channels, {
+        sampleRate: audioContext?.sampleRate ?? 48000,
+      });
+      const blob = encodeWavFromChannels(result.output, result.sampleRate);
+      const newTake: Take = {
+        id: Date.now(),
+        name: `Chain_Bounce_${new Date().toISOString().replace(/[:.]/g, '-')}.wav`,
+        duration: formatTime(Math.round(result.durationSeconds)),
+        size: `${(blob.size / (1024 * 1024)).toFixed(1)} MB`,
+        date: new Date().toISOString().split('T')[0],
+        url: URL.createObjectURL(blob),
+      };
+      setTakes(prev => [newTake, ...prev]);
+      setBounceInfo(`Fertig: ${result.renderedFrames} Frames durch ${result.order.length} Plugins.`);
+    } catch (e) {
+      setBounceInfo(`Bounce fehlgeschlagen: ${(e as Error).message}`);
+    } finally {
+      setBounceBusy(false);
+    }
+  }, [audioContext, bounceBusy]);
+
   // MOA-Kommandos: Aufnahme starten/stoppen.
   useEffect(() => {
     const onStart = () => { void startRecording(); };
@@ -203,6 +250,24 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
                   {src}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
+            <h3 className="text-xs font-bold tracking-widest text-neutral-500 mb-3 flex items-center gap-2">
+              <Layers className="w-4 h-4" /> SIGNALKETTE
+            </h3>
+            <button
+              type="button"
+              onClick={() => { void bounceThroughChain(); }}
+              disabled={bounceBusy}
+              title="Kanal 1 offline durch die 16 Plugins in Kettenreihenfolge rendern (Quellen → Mixer → Nachbearbeitung → Recorder → Ausgang)"
+              className={`w-full py-2 px-3 rounded border text-[10px] font-mono font-bold transition-all ${bounceBusy ? 'bg-[#111] border-neutral-800 text-neutral-600 cursor-wait' : 'bg-indigo-950/40 border-indigo-800 text-indigo-300 hover:bg-indigo-900/40'}`}
+            >
+              {bounceBusy ? 'BOUNCE LÄUFT …' : 'BOUNCE DURCH DIE KETTE'}
+            </button>
+            <div className="mt-2 text-[10px] font-mono text-neutral-500 min-h-[1rem]">
+              {bounceInfo ?? 'Quelle: Kanal 1 des Mixers.'}
             </div>
           </div>
         </div>

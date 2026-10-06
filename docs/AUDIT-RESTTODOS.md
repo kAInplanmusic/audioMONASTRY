@@ -92,3 +92,27 @@ Stand: 2026-10-05, aus dem Umbau „linearer Insert-Pfad“. Gemessen, nicht ver
   Lebenszyklus konstruieren und den Block-Durchlauf im Live-Pfad an der Stelle einsetzen, an
   der heute `monitorRoutingFacade`/`channelStripState` hängen. Das ist der einzige hörbare
   Pfad — erst nach einer Gehörprobe auf der Flotte, nicht ohne.
+
+### C6a — Offline-Ausführer gebaut und bewiesen (erledigt 2026-10-05)
+- `src/audio/pluginChainBounce.ts`: `bounceThroughPluginChain(source, opts)` rendert die
+  Quelle Block für Block (Vorgabe 128 = ein Web-Audio-Quantum) durch die 16 Adapter in
+  `SIGNAL_CHAIN_ORDER`; Tail als Stille, Rückgabe mit `order`. Zustand wird über
+  `restore()`-Snapshots gesetzt — `setParameter()` bräuchte einen Runtime-Kontext und wäre
+  im Bounce wirkungslos.
+- Hörbar gemacht: Recorder-Terminal → Karte **SIGNALKETTE** → „BOUNCE DURCH DIE KETTE“
+  rendert das auf Kanal 1 geladene Lied durch die Kette und legt es als WAV in die Takes
+  (`encodeWavFromChannels`). Quelle kommt aus dem bestehenden Decoder-Cache
+  (`audioEngine.getMusicSampleChannels`, Kopien — der Cache wird nicht angefasst).
+- Beweise in `tests/pluginChainBounce.test.ts` (11 Fälle): OFF = bit-gleicher Bypass;
+  Master-Gain wirkt und wird auf 0…2 geklemmt; **Ordnungsbeweis** mit zwei
+  nicht-kommutierenden Test-Adaptern — `effect` (addiert 1) läuft vor `master`
+  (verdoppelt), Ergebnis `(x+1)*2` und Aufrufprotokoll `['effect','master']`; Ergebnis ist
+  blockgrößenunabhängig; Quelle bleibt unverändert; Leerquelle/Mehrkanal in Ordnung.
+- **Neuer Befund (der eigentliche Rest):** Kein einziger der 16 Adapter überschreibt
+  `onProcess()` — alle nutzen die Basis, die den Block unverändert zurückgibt. Die Kette ist
+  damit ausführbar und geordnet, aber bis auf `master` (Master-Gain, jetzt implementiert)
+  klanglich noch neutral. `rg "onProcess" src/plugins/adapters/` → nur die Basis.
+- Rest für den Live-Pfad: dieselbe Ordnung an die Stelle von
+  `monitorRoutingFacade`/`channelStripState` setzen, und die 15 übrigen Adapter brauchen
+  echte Block-Verarbeitung (oder eine Delegation an die vorhandenen Worklets) — sonst bleibt
+  der Live-Pfad still, egal wie korrekt die Reihenfolge ist.

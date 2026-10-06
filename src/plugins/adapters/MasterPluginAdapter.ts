@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginParameterValue } from '../plugin_interface';
+import type { PluginAudioBlock, PluginManifest, PluginParameterValue } from '../plugin_interface';
 import { BasePluginAdapter } from './BasePluginAdapter';
 
 /** masterMONK – Mastering-Dynamics, LUFS, PDC (kanonische ID `master`). */
@@ -26,6 +26,29 @@ export class MasterPluginAdapter extends BasePluginAdapter {
         audioEngine.updateMasterMe({ input_gain: value });
       }
     });
+  }
+
+  /**
+   * Block-Verarbeitung des Masters: lineare Ausgangsverstärkung aus dem
+   * Parameter `gain` (Vorgabe 1.0 = unverändert, geklemmt auf 0…2).
+   *
+   * Warum das hier steht und nicht in der Engine: Der Realtime-Pfad regelt den
+   * Master über `audioEngine.setMasterVolumeDb` (siehe `onParameter`). Im
+   * Offline-Bounce durch die Signalkette gibt es diese Engine nicht – dort ist
+   * der Block der einzige Ort, an dem der Master wirken kann.
+   *
+   * In-place, ohne Allokation (Adapter-Vertrag: `process()` ist echtzeit-sicher).
+   */
+  protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
+    const raw = this.parameters.gain;
+    const gain = typeof raw === 'number' && Number.isFinite(raw) ? Math.min(2, Math.max(0, raw)) : 1;
+    if (gain === 1) return block;
+    for (const channel of block.channels) {
+      for (let i = 0; i < channel.length; i++) {
+        channel[i] *= gain;
+      }
+    }
+    return block;
   }
 
   protected override async onCommand(command: {
