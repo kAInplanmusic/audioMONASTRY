@@ -4776,8 +4776,18 @@
       "status": "DONE",
       "area": "UI",
       "source": "Betreiber 2026-10-06",
-      "note": "„Ein eigener Stream kann eine eigene Auflösung haben.“ Bisher war der Visual-Stream an Ghostuser 6 so groß wie die Zeichenfläche des Senders (Bildschirm × Pixeldichte) – ein Handy hochkant schickte ein Hochkant-Bild an den Beamer.\n\nAkzeptanz: Stream-Auflösung unabhängig vom Sender-Format; Auto folgt dem Empfänger; feste Presets inkl. Hochkant.\n\nDONE 2026-10-06: Beamer meldet Bildschirm (Socket output-display, serverseitig geprüft, output-displays an die Session, Abmeldung beim Trennen). Visual-Canvas rendert in Stream-Pixeln (Auto ≤ 1080p-Pixelmenge, 720p–4K, 9:16, 1:1; 30/60 fps), Vorschau letterboxed. Offen: Master-Out (/master-out) ist reines Audio – keine Auflösung nötig; MJPEG-Fallback nutzt dieselbe Zeichenfläche (bei 4K größere JPEGs).",
+      "note": "„Ein eigener Stream kann eine eigene Auflösung haben.“ Bisher war der Visual-Stream an Ghostuser 6 so groß wie die Zeichenfläche des Senders (Bildschirm × Pixeldichte) – ein Handy hochkant schickte ein Hochkant-Bild an den Beamer.\n\nAkzeptanz: Stream-Auflösung unabhängig vom Sender-Format; Auto folgt dem Empfänger; feste Presets inkl. Hochkant.\n\nDONE 2026-10-06: Beamer meldet Bildschirm als Session-Ausgang (endpoint-report → session-endpoints, siehe UI2-P1-009). Visual-Canvas rendert in Stream-Pixeln (Auto ≤ 1080p-Pixelmenge, 720p–4K, 9:16, 1:1; 30/60 fps), Vorschau letterboxed. Offen: Master-Out (/master-out) ist reines Audio – keine Auflösung nötig; MJPEG-Fallback nutzt dieselbe Zeichenfläche (bei 4K größere JPEGs).",
       "verification": "tests/streamResolution.test.ts; tests/e2e/streamResolution.spec.ts"
+    },
+    {
+      "id": "UI2-P1-009",
+      "title": "Session-Ausgänge: 1–4 UI-Nutzer + genau ein Main Sound + genau ein Main Visual",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "„1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals.“\n\nAkzeptanz: 4 UI-Plätze mit eigenem Format/eigener Auflösung sichtbar; je genau ein Main-Ausgang Ton und Bild; Ausgänge zählen nicht als Nutzer.\n\nDONE 2026-10-06: src/core/session/sessionEndpoints.ts (Meldung je Modus bereinigt – Nutzer: Format/Auflösung, /master-out: Zustand/Abtastrate/Kanäle, /visual-out: Zustand/Bildschirm/Stream; 6 feste Plätze). Server: endpoint-report → session-endpoints an alle, Abmeldung bei Leave/Disconnect; ein neuer Ausgang gleicher Art löst den alten ab (output-replaced, Audit OUTPUT_REPLACED). UI: Knopf AUSGÄNGE in jedem Format mit n/4 und Ton/Bild-Punkten, Fenster mit 6 Plätzen und Andock-URLs.",
+      "verification": "tests/sessionEndpoints.test.ts; tests/e2e/sessionOutputs.spec.ts"
     }
   ],
   "visionSandbox": [

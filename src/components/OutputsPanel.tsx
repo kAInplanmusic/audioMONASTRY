@@ -1,41 +1,64 @@
 import React, { useState } from 'react';
-import { Link2, MonitorSpeaker, Monitor, Radio } from 'lucide-react';
+import { Link2, MonitorSpeaker, Monitor, Radio, UserRound } from 'lucide-react';
+import { webRTCManager } from '../utils/WebRTCManager';
+import { useSessionEndpoints } from '../hooks/useSessionEndpoints';
+import { endpointLabel, MAX_UI_ENDPOINTS, type SessionEndpoint } from '../core/session/sessionEndpoints';
 
 /**
- * OutputsPanel – Erreichbarkeit der beiden Ghost-User (fixe Andock-URLs).
+ * OutputsPanel – Session-Ausgänge (Betreiber 2026-10-06)
+ * ======================================================
+ *   UI 1–4        Session-Nutzer: bekommen die UI, jeder in eigenem Format und
+ *                 eigener Auflösung (Handy quer/hochkant, Pad, PC).
+ *   MAIN SOUND    genau ein Ton-Ausgang  → /master-out (Ghostuser 5, PA)
+ *   MAIN VISUAL   genau ein Bild-Ausgang → /visual-out (Ghostuser 6, Beamer)
  *
- *   Ghostuser 5  →  /master-out  (Mainsound an PA/Verstärker)
- *   Ghostuser 6  →  /visual-out  (Visualisierung an Beamer)
- *
- * Beide Seiten zählen NICHT zu den 4 Session-Usern. Die URLs werden aus der
- * aktuellen Origin gebildet, damit sie auf jeder Instanz (lokal, Hetzner,
- * anunnakitools.de) stimmen.
+ * Die beiden Main-Ausgänge zählen NICHT zu den 4 Nutzern. Die URLs werden aus
+ * der aktuellen Origin gebildet, damit sie auf jeder Instanz stimmen. Alles hier
+ * ist Anzeige – Zustand und Auflösung melden die Geräte selbst
+ * (src/core/session/sessionEndpoints.ts).
  */
-const OUTPUTS = [
+const MAIN_OUTPUTS = [
   {
-    id: 'master-out',
+    id: 'sound',
     label: 'MAIN SOUND',
-    role: 'Ghostuser 5',
+    role: 'Ghostuser 5 · PA',
     path: '/master-out',
     alias: '/ghost/5',
-    hint: 'Laptop an der PA/Verstärker – gibt den Master-Ton des Hosts aus.',
+    hint: 'Laptop an der PA/Verstärker – gibt den Main-Ton aus.',
     Icon: Radio,
   },
   {
-    id: 'visual-out',
-    label: 'VISUAL',
-    role: 'Ghostuser 6',
+    id: 'visual',
+    label: 'MAIN VISUAL',
+    role: 'Ghostuser 6 · Beamer',
     path: '/visual-out',
     alias: '/ghost/6',
-    hint: 'Beamer – im Studio „VISUAL" öffnen und „AN GHOSTUSER 6" drücken.',
+    hint: 'Beamer – Stream startet im Studio unter VISUAL → „AN GHOSTUSER 6“.',
     Icon: Monitor,
   },
 ] as const;
 
+/** Nutzerfarben laut docs/UI_SPEC.md (Platz 1–4). */
+const USER_COLORS = ['#4cc9f0', '#ffb703', '#e879f9', '#f1f5f9'];
+
+function dotClass(e: SessionEndpoint | null): string {
+  if (!e) return 'bg-neutral-700';
+  const r = e.report;
+  if (r && r.kind !== 'ui') {
+    if (r.state === 'live') return 'bg-emerald-400';
+    if (r.state === 'error') return 'bg-red-500';
+    return 'bg-amber-400';
+  }
+  return 'bg-emerald-400';
+}
+
 export const OutputsPanel: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string>('');
+  const { slots } = useSessionEndpoints();
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const me = webRTCManager.userId;
+  const usersOn = slots.users.filter(Boolean).length;
 
   const copy = async (url: string) => {
     try {
@@ -52,31 +75,62 @@ export const OutputsPanel: React.FC = () => {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Output-Verbindungen"
+        aria-label="Session-Ausgänge"
         aria-expanded={open}
-        title="Ausgabe-Endpunkte: Mainsound (PA) und Visualisierung (Beamer)"
-        className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:border-emerald-400/50 hover:text-emerald-300 transition-colors cursor-pointer"
+        title={`Ausgänge: ${usersOn}/${MAX_UI_ENDPOINTS} Nutzer · Main Sound · Main Visual`}
+        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:border-emerald-400/50 hover:text-emerald-300 transition-colors cursor-pointer"
       >
         <MonitorSpeaker className="w-4 h-4" />
-        <span className="text-[9px] font-bold tracking-widest">OUTPUTS</span>
+        <span className="hidden lg:inline text-[9px] font-bold tracking-widest">AUSGÄNGE</span>
+        <span className="text-[9px] font-mono text-neutral-400">{usersOn}/{MAX_UI_ENDPOINTS}</span>
+        <span className={`w-1.5 h-1.5 rounded-full ${dotClass(slots.sound)}`} aria-hidden="true" />
+        <span className={`w-1.5 h-1.5 rounded-full ${dotClass(slots.visual)}`} aria-hidden="true" />
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 z-[70] rounded-xl border border-white/10 bg-[#0b0f14]/98 backdrop-blur-xl shadow-2xl p-3">
+        <div
+          role="dialog"
+          aria-label="Session-Ausgänge"
+          className="absolute right-0 mt-2 w-[min(22rem,calc(100vw-1rem))] max-h-[calc(var(--app-height,100vh)-5rem)] overflow-y-auto z-[70] rounded-xl border border-white/10 bg-[#0b0f14]/98 backdrop-blur-xl shadow-2xl p-3"
+        >
           <div className="flex items-center gap-2 mb-2">
             <Link2 className="w-3.5 h-3.5 text-emerald-300" />
-            <span className="text-[10px] font-bold tracking-widest text-neutral-200">AUSGABE-ENDPUNKTE</span>
+            <span className="text-[10px] font-bold tracking-widest text-neutral-200">SESSION-AUSGÄNGE</span>
           </div>
 
-          {OUTPUTS.map(({ id, label, role, path, alias, hint, Icon }) => {
+          <p className="text-[9px] tracking-widest text-neutral-500 mb-1">UI · 1–4 NUTZER · JEDER IN EIGENEM FORMAT</p>
+          <ul className="mb-3 rounded-lg border border-white/5 bg-white/[0.02] divide-y divide-white/5">
+            {slots.users.map((u, i) => (
+              <li key={i} data-testid={`endpoint-user-${i + 1}`} className="flex items-center gap-2 px-2.5 py-1.5">
+                <span
+                  className="w-5 h-5 shrink-0 rounded-full border flex items-center justify-center text-[9px] font-bold"
+                  style={{ borderColor: USER_COLORS[i], color: USER_COLORS[i] }}
+                >
+                  {i + 1}
+                </span>
+                <UserRound className={`w-3.5 h-3.5 shrink-0 ${u ? 'text-neutral-300' : 'text-neutral-700'}`} aria-hidden="true" />
+                <span className="text-[10px] font-mono text-neutral-200 w-14 truncate">
+                  {u ? (u.userId === me ? 'du' : u.userId.replace(/^user-/, 'u')) : '—'}
+                </span>
+                <span className={`flex-1 min-w-0 truncate text-[10px] ${u ? 'text-neutral-300' : 'text-neutral-600'}`}>{endpointLabel(u)}</span>
+              </li>
+            ))}
+          </ul>
+
+          {MAIN_OUTPUTS.map(({ id, label, role, path, alias, hint, Icon }) => {
             const url = `${origin}${path}`;
+            const endpoint = id === 'sound' ? slots.sound : slots.visual;
             return (
-              <div key={id} className="mb-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
+              <div key={id} data-testid={`endpoint-${id}`} className="mb-2.5 rounded-lg border border-white/5 bg-white/[0.02] p-2.5">
                 <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${dotClass(endpoint)}`} aria-hidden="true" />
                   <Icon className="w-3.5 h-3.5 text-cyan-300" />
                   <span className="text-[10px] font-bold tracking-widest text-neutral-100">{label}</span>
-                  <span className="text-[9px] text-neutral-500">{role}</span>
+                  <span className="text-[9px] text-neutral-500 truncate">{role}</span>
                 </div>
+                <p className="mt-1 text-[10px] text-neutral-300" data-testid={`endpoint-${id}-status`}>
+                  {endpoint ? endpointLabel(endpoint) : 'nicht verbunden'}
+                </p>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   <code className="flex-1 truncate text-[10px] text-emerald-200/90 bg-black/40 rounded px-2 py-1">{url}</code>
                   <button
@@ -88,14 +142,14 @@ export const OutputsPanel: React.FC = () => {
                   </button>
                 </div>
                 <p className="mt-1 text-[9px] leading-snug text-neutral-500">{hint}</p>
-                <p className="mt-0.5 text-[9px] text-neutral-600">Alias: {alias} · zählt nicht als Session-User</p>
+                <p className="mt-0.5 text-[9px] text-neutral-600">Alias: {alias} · zählt nicht als Nutzer</p>
               </div>
             );
           })}
 
           <p className="text-[9px] leading-snug text-neutral-500">
-            Beide Seiten docken automatisch an die Studio-Session an. Auf dem Ausgabegerät ggf. einmal
-            „aktivieren" drücken (Autoplay-Policy).
+            Je ein Main-Ausgang für Ton und Bild. Beide docken automatisch an die Studio-Session an; auf dem
+            Ausgabegerät ggf. einmal „aktivieren“ drücken (Autoplay-Regel des Browsers).
           </p>
         </div>
       )}

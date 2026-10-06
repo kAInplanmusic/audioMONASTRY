@@ -81,13 +81,14 @@ describe('Empfänger-Meldung', () => {
     expect(sanitizeOutputDisplay(null)).toBeNull();
   });
 
-  it('nimmt den Visual-Empfänger aus der Server-Liste', () => {
-    const msg = { displays: [
-      { socketId: 'a', mode: 'master-out', width: 1440, height: 900, devicePixelRatio: 2 },
-      { socketId: 'b', mode: 'visual-out', width: 1920, height: 1080, devicePixelRatio: 1 },
+  it('nimmt den Main-Ausgang Bild aus der Ausgänge-Liste des Servers', () => {
+    const msg = { endpoints: [
+      { socketId: 'u', userId: 'user-a', mode: 'member', report: { layout: 'desktop', width: 1440, height: 900, devicePixelRatio: 2 } },
+      { socketId: 'a', userId: 'pa', mode: 'master-out', report: { state: 'live', sampleRate: 48000, channels: 2 } },
+      { socketId: 'b', userId: 'beamer', mode: 'visual-out', report: { state: 'waiting', width: 1920, height: 1080, devicePixelRatio: 1 } },
     ] };
     expect(visualReceiverFrom(msg)).toEqual({ width: 1920, height: 1080, devicePixelRatio: 1 });
-    expect(visualReceiverFrom({ displays: [] })).toBeNull();
+    expect(visualReceiverFrom({ endpoints: [] })).toBeNull();
     expect(visualReceiverFrom(undefined)).toBeNull();
   });
 

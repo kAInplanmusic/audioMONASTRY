@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { storageGetJson, storageSetJson } from '../utils/storage';
+import { endpointSlots, parseSessionEndpoints } from '../core/session/sessionEndpoints';
 import {
   isStreamFps,
   isStreamPresetId,
   resolveStreamSize,
-  sanitizeOutputDisplay,
   type OutputDisplay,
   type StreamFps,
   type StreamPresetId,
@@ -32,12 +32,11 @@ function load(): { preset: StreamPresetId; fps: StreamFps } {
   };
 }
 
-/** Bildschirm des Visual-Empfängers aus der Server-Meldung (erster visual-out). */
+/** Bildschirm des Main-Ausgangs Bild (Beamer) aus der Ausgänge-Liste des Servers. */
 export function visualReceiverFrom(msg: unknown): OutputDisplay | null {
-  const list = (msg as { displays?: unknown[] } | null)?.displays;
-  if (!Array.isArray(list)) return null;
-  const entry = list.find((d) => (d as { mode?: unknown })?.mode === 'visual-out');
-  return sanitizeOutputDisplay(entry);
+  const report = endpointSlots(parseSessionEndpoints(msg)).visual?.report;
+  if (!report || report.kind !== 'visual') return null;
+  return { width: report.width, height: report.height, devicePixelRatio: report.devicePixelRatio };
 }
 
 export interface StreamResolutionState {
@@ -53,7 +52,7 @@ export function useStreamResolution(): StreamResolutionState {
   const [settings, setSettings] = useState(load);
   const [receiver, setReceiver] = useState<OutputDisplay | null>(null);
 
-  useEffect(() => webRTCManager.onOutputDisplays((msg) => setReceiver(visualReceiverFrom(msg))), []);
+  useEffect(() => webRTCManager.onSessionEndpoints((msg) => setReceiver(visualReceiverFrom(msg))), []);
   useEffect(() => { storageSetJson(KEY, settings); }, [settings]);
 
   const size = useMemo(() => resolveStreamSize(settings.preset, receiver), [settings.preset, receiver]);
