@@ -29,6 +29,31 @@ export const VisualOutPage = () => {
    */
   const [mjpeg, setMjpeg] = useState(false);
   const [mjpegError, setMjpegError] = useState(false);
+  /** Stream-Auflösung: was ankommt (Video) und was dieser Bildschirm kann. */
+  const [incoming, setIncoming] = useState<{ width: number; height: number } | null>(null);
+  const [screenPx, setScreenPx] = useState('');
+
+  // Stream-Auflösung (Betreiber 2026-10-06): Der Beamer meldet seinen Bildschirm.
+  // Steht der Sender auf „Auto", rendert er den Stream genau in dieser Auflösung –
+  // unabhängig davon, ob er selbst auf Handy, Pad oder PC sendet.
+  useEffect(() => {
+    const report = () => {
+      const display = {
+        width: window.screen?.width || window.innerWidth,
+        height: window.screen?.height || window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      };
+      setScreenPx(`${Math.round(display.width * display.devicePixelRatio)}×${Math.round(display.height * display.devicePixelRatio)}`);
+      webRTCManager.sendOutputDisplay(display);
+    };
+    report();
+    window.addEventListener('resize', report);
+    window.addEventListener('orientationchange', report);
+    return () => {
+      window.removeEventListener('resize', report);
+      window.removeEventListener('orientationchange', report);
+    };
+  }, []);
 
   useEffect(() => {
     const attach = (stream: MediaStream) => {
@@ -71,7 +96,17 @@ export const VisualOutPage = () => {
 
   return (
     <div className="fixed inset-0 bg-black text-white select-none overflow-hidden">
-      <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-contain bg-black" />
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        onResize={(e) => {
+          const v = e.currentTarget;
+          if (v.videoWidth && v.videoHeight) setIncoming({ width: v.videoWidth, height: v.videoHeight });
+        }}
+        className="absolute inset-0 w-full h-full object-contain bg-black"
+      />
 
       {/* MJPEG-Fallback: reines <img> gegen den Server-Strom (kein SFU, kein Login) */}
       {mjpeg && state !== 'live' && !mjpegError && (
@@ -118,12 +153,14 @@ export const VisualOutPage = () => {
       {state === 'live' && (
         <div className="absolute bottom-4 right-4 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/50 border border-white/10 text-[10px] font-mono tracking-widest text-neutral-300">
           <Monitor className="w-3 h-3" /> LIVE
+          {incoming && <span data-testid="visual-out-resolution">· {incoming.width}×{incoming.height}</span>}
         </div>
       )}
 
       <div className="absolute bottom-4 left-4 flex items-center gap-2 text-neutral-600 text-[10px] font-mono tracking-widest">
         <Sparkles className="w-3 h-3" />
         {SESSION_MODE_LABEL['visual-out']} · /visual-out · /ghost/6
+        {screenPx && <span data-testid="visual-out-screen">· Bildschirm {screenPx}</span>}
       </div>
     </div>
   );

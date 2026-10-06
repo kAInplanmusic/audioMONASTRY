@@ -39,6 +39,11 @@ class WebRTCManager {
   private lastActivitySentAt = 0;
   // K-2/K-5: Server-autoritative Plugin-Locks (Client optimistisch, Server siegt).
   private pluginLockListeners = new Set<(msg: any) => void>();
+  /** Stream-Auflösung: zuletzt gemeldeter Bildschirm dieses Empfängers (wird nach jedem Join erneut gesendet). */
+  private outputDisplay: { width: number; height: number; devicePixelRatio: number } | null = null;
+  private outputDisplaysListeners = new Set<(msg: any) => void>();
+  /** Letzte Empfänger-Liste vom Server – neue Zuhörer (z. B. das spät geöffnete Visual-Overlay) bekommen sie sofort. */
+  private lastOutputDisplays: unknown = null;
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -465,6 +470,8 @@ class WebRTCManager {
     // Studio-Session beitreten (kein Raum-Erstellen im UI).
     this.socket.on('connect', () => {
       this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.sessionMode() });
+      // Stream-Auflösung: Meldung NACH dem Join, sonst verwirft der Server sie.
+      if (this.outputDisplay) this.socket?.emit('output-display', this.outputDisplay);
     });
 
     this.socket.on('session-members', (data: SessionMembersPayload) => {
@@ -500,6 +507,10 @@ class WebRTCManager {
     // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
     this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
+    this.socket.on('output-displays', (data: any) => {
+      this.lastOutputDisplays = data;
+      this.outputDisplaysListeners.forEach((l) => l(data));
+    });
     this.socket.on('plugin-unlock', (data: any) => this.pluginUnlockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
     // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
@@ -803,6 +814,22 @@ class WebRTCManager {
   public addMainOutUpdateListener(cb: (msg: any) => void): () => void {
     this.mainOutUpdateListeners.add(cb);
     return () => this.mainOutUpdateListeners.delete(cb);
+  }
+
+  /**
+   * Stream-Auflösung: Empfänger (Beamer /visual-out, PA /master-out) meldet
+   * seinen Bildschirm. Der Server nimmt die Meldung nur von Listenern an.
+   */
+  public sendOutputDisplay(display: { width: number; height: number; devicePixelRatio: number }): void {
+    this.outputDisplay = display;
+    if (this.socket?.connected) this.socket.emit('output-display', display);
+  }
+
+  /** Stream-Auflösung: gemeldete Empfänger-Bildschirme der Session empfangen. */
+  public onOutputDisplays(cb: (msg: any) => void): () => void {
+    this.outputDisplaysListeners.add(cb);
+    if (this.lastOutputDisplays) cb(this.lastOutputDisplays);
+    return () => { this.outputDisplaysListeners.delete(cb); };
   }
 
   /** COLLAB-P1-004: aktive Plugin-Navigation an die Session melden. */

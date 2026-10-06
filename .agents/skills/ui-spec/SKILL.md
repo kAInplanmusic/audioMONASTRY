@@ -30,6 +30,13 @@ Verkabelung; die App zeigt sie als Leiste (`src/components/SignalChainBar.tsx`).
 Seitenüberlauf funktionieren (`tests/e2e/formats.spec.ts`); breite Bedienflächen
 scrollen in sich (`overflow-x-auto` im Streifen).
 
+## Stream-Auflösung
+
+Ausgabe-Streams haben ihre eigene Auflösung, nie die des Sendergeräts
+(`src/core/visual/streamResolution.ts`): Auto = vom Empfänger gemeldet
+(`output-display`), sonst feste Presets. Zeichenflächen für Streams in
+Stream-Pixeln anlegen, nicht aus `clientWidth × devicePixelRatio`.
+
 ## Modi und Sperren
 
 - Modus-Button rechts am Streifen: **OFF → STBY → ON → OFF** (`src/core/session/pluginMode.ts`).

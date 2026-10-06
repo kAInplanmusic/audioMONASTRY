@@ -35,6 +35,23 @@ Automatisch erkannt aus Gerät, Ausrichtung und Auflösung – keine Auswahl dur
 - Kein Orientierungs-Lock mehr – Drehen wechselt live das Format.
 - Prüfung: `tests/deviceLayout.test.ts` (echte Geräteauflösungen), `tests/e2e/formats.spec.ts` (alle vier Formate, kein waagerechter Überlauf, Vollbild, Drehen).
 
+## Stream-Auflösung (Betreiber 2026-10-06)
+
+„Ein eigener Stream kann eine eigene Auflösung haben." Die Auflösung eines Ausgabe-Streams ist
+**unabhängig vom Format des Senders** (Handy/Pad/PC). Umgesetzt für den Visual-Stream an den
+Beamer (Ghostuser 6, `/visual-out`):
+
+- Der Beamer meldet seinen Bildschirm (`output-display` → Server prüft → `output-displays` an die Session).
+- Im Visual-Overlay wählt der Sender **Auflösung** und **FPS**:
+  Auto (Beamer) · 720p · 1080p · 1440p · 4K · Hochkant 9:16 (1080×1920) · Quadrat 1:1 · 30/60 fps.
+- **Auto** übernimmt Seitenverhältnis und Auflösung des Beamers, höchstens 1080p-Pixelmenge
+  (ein Handy rendert nicht ungefragt 4K); ohne Beamer 1920×1080. 1440p/4K nur als ausdrückliche Wahl.
+- Die Zeichenfläche hat genau die Stream-Größe; der Sender sieht sie eingepasst (Letterbox).
+  Auflösung lässt sich live wechseln, die Bildrate vor dem Start.
+- Der Beamer zeigt unten Bildschirm- und ankommende Stream-Auflösung.
+- Code: `src/core/visual/streamResolution.ts`, `src/hooks/useStreamResolution.ts`;
+  Prüfung: `tests/streamResolution.test.ts`, `tests/e2e/streamResolution.spec.ts`.
+
 ## Mixer (Entwurf 2026-10-06)
 
 - 8 Kanäle, sichtbar in **zwei Bänken à 4** (farbiger Umschalter A = Kanal 1–4, B = Kanal 5–8). Die unsichtbare Bank läuft weiter.

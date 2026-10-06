@@ -4768,6 +4768,16 @@
       "source": "Betreiber 2026-10-06",
       "note": "Gerät und Auflösung automatisch erkennen; Handy breit Vollbild, Handy hochkant vereinfachte Ansicht, Pad quer Vollbild, PC/Laptop Querformat.\n\nAkzeptanz: Format wird ohne Nutzerauswahl erkannt; kein waagerechter Überlauf; Vollbild in Handy quer/Pad quer; Drehen wechselt live.\n\nDONE 2026-10-06: src/core/ui/deviceLayout.ts (reine Einordnung aus Zeigerart, Bildschirm-Kurzseite, Ausrichtung, Pixeldichte, Home-Bildschirm-Modus), src/hooks/useDeviceLayout.ts (data-layout an <html>, --app-height, Vollbild beim ersten Tippen, Hinweis Zum Home-Bildschirm für iPhone-Safari). Layout je Format in App.tsx/RackRow/AiMonkDock/index.css (Varianten phone/pocket/simple/pad). Orientierungs-Lock entfernt. Offen: Test auf echten Geräten (iPhone, iPad, Android) durch den Betreiber.",
       "verification": "tests/deviceLayout.test.ts; tests/e2e/formats.spec.ts"
+    },
+    {
+      "id": "UI2-P1-008",
+      "title": "Eigene Stream-Auflösung je Ausgabe-Stream (unabhängig vom Sendergerät)",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "„Ein eigener Stream kann eine eigene Auflösung haben.“ Bisher war der Visual-Stream an Ghostuser 6 so groß wie die Zeichenfläche des Senders (Bildschirm × Pixeldichte) – ein Handy hochkant schickte ein Hochkant-Bild an den Beamer.\n\nAkzeptanz: Stream-Auflösung unabhängig vom Sender-Format; Auto folgt dem Empfänger; feste Presets inkl. Hochkant.\n\nDONE 2026-10-06: Beamer meldet Bildschirm (Socket output-display, serverseitig geprüft, output-displays an die Session, Abmeldung beim Trennen). Visual-Canvas rendert in Stream-Pixeln (Auto ≤ 1080p-Pixelmenge, 720p–4K, 9:16, 1:1; 30/60 fps), Vorschau letterboxed. Offen: Master-Out (/master-out) ist reines Audio – keine Auflösung nötig; MJPEG-Fallback nutzt dieselbe Zeichenfläche (bei 4K größere JPEGs).",
+      "verification": "tests/streamResolution.test.ts; tests/e2e/streamResolution.spec.ts"
     }
   ],
   "visionSandbox": [

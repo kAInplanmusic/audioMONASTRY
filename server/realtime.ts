@@ -37,6 +37,7 @@ import {
   PluginStateSocketSchema,
 } from '../src/types/zod/schemas';
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
+import { sanitizeOutputDisplay, type OutputDisplay } from '../src/core/visual/streamResolution';
 import type { SessionRuntime } from './sessionRuntime.ts';
 import {
   createSocketLivenessMonitor,
@@ -271,6 +272,13 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       }
     }
 
+    // Stream-Auflösung (Betreiber 2026-10-06): Empfänger (Beamer /visual-out,
+    // PA /master-out) melden ihren Bildschirm. Der Sender rendert den Stream bei
+    // „Auto" in genau dieser Auflösung – unabhängig vom eigenen Gerät.
+    const outputDisplays = new Map<string, { mode: string; display: OutputDisplay }>();
+    const outputDisplayList = () =>
+      [...outputDisplays.entries()].map(([socketId, v]) => ({ socketId, mode: v.mode, ...v.display }));
+
     io.on('connection', (socket: any) => {
       // F8-Fix: EIN Ort für die Liveness je Socket. Den Idle-Timer PRO Verbindung
       // gibt es nicht mehr — der Sweep trennt idle Sockets zentral (und räumt
@@ -439,6 +447,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
         broadcastSessionMembers(room);
         ensureMixerHolder(room);
+        if (outputDisplays.size > 0) socket.emit('output-displays', { roomId: SESSION_ROOM_ID, displays: outputDisplayList() });
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
@@ -667,6 +676,19 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
       });
 
+      // Stream-Auflösung: nur Empfänger (Listener) melden ihren Bildschirm; der
+      // Wert wird geprüft und an alle Session-Sockets verteilt.
+      socket.on('output-display', (data: unknown) => {
+        markSocketActivity();
+        const roomId = socket.data?.sessionRoom;
+        const mode = normalizeSessionMode(socket.data?.sessionMode);
+        if (!roomId || !isListenerMode(mode)) return;
+        const display = sanitizeOutputDisplay(data);
+        if (!display) return;
+        outputDisplays.set(socket.id, { mode, display });
+        io.to(`session:${roomId}`).emit('output-displays', { roomId, displays: outputDisplayList() });
+      });
+
       // COLLAB-P1-004: Aktives Plugin/Nav an die Session spiegeln. Reiner
       // UI-Hinweis (kein Audio-State, keine Lock-Wirkung) – egal welcher User
       // gerade welches Modul bedient, die anderen sehen es im Header.
@@ -751,6 +773,9 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       socket.on('disconnect', () => {
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        if (outputDisplays.delete(socket.id)) {
+          io.to(`session:${roomId}`).emit('output-displays', { roomId, displays: outputDisplayList() });
+        }
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
         const released = sessionRuntime.session.releaseUserLocks(userId);
