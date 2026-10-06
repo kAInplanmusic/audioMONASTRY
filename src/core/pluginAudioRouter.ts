@@ -51,7 +51,11 @@ export interface PluginRouteConfig {
 }
 
 const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> = [
-  ['mixer', 'ui-only', false],
+  // UI2-P0-001: mixer/effect/spatial/eq/dsp/master/record sind KEINE eigenen
+  // Kanaele mehr, sondern die Summe bzw. Stufen der Signalkette. Der Mixer
+  // bleibt Send-Ziel -> source 'channel' (isolation 'send'), damit FX-Sends
+  // weiter validierbar sind. Die 8 Quellen sind die einzigen Kanal-Feeder.
+  ['mixer', 'channel', true],
   ['drop', 'sampler', true],
   ['song', 'sampler', true],
   ['effect', 'ui-only', false],
@@ -94,7 +98,13 @@ function isolationFor(source: PluginRouteConfig['source']): PluginIsolationLevel
   return 'insert';
 }
 
-/** AM-E2-1: Routing-Matrix validieren (P2-4-Vorprüfung, serverlos). */
+/**
+ * AM-E2-1: Routing-Matrix validieren (P2-4-Vorprüfung, serverlos).
+ *
+ * UI2-P0-001: Nur `insert`-Routen sind echte Quellen und brauchen daher ein
+ * Kanalziel. `send`-Routen (Mixer) speisen in einen Bus ein — sie haben per
+ * Definition keinen eigenen Kanalzug mehr. `ui-only` hat gar keinen Graph.
+ */
 export function validateRoutingMatrix(ids: readonly string[]): string[] {
   const violations: string[] = [];
   for (const id of ids) {
@@ -103,11 +113,11 @@ export function validateRoutingMatrix(ids: readonly string[]): string[] {
       violations.push(`${id}: nicht registriert`);
       continue;
     }
-    if (route.isolation !== 'ui-only' && route.channels.length === 0) {
+    if (route.isolation === 'insert' && route.channels.length === 0) {
       violations.push(`${id}: Audio-Quelle ohne Kanalziel (isolation=${route.isolation})`);
     }
     for (const ch of route.channels) {
-      if (!/^channel([1-9]|10)$/.test(ch)) {
+      if (!/^channel[1-8]$/.test(ch)) {
         violations.push(`${id}: ungültiges Kanalziel ${ch}`);
       }
     }

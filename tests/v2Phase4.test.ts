@@ -74,8 +74,8 @@ describe('Phase 4 · pluginChannelMap/Monitor-Routing in V2', () => {
 
   it('pluginSoloCueTracks mappt Plugin-Kanäle auf Cue-Matrix', () => {
     const cue = pluginSoloCueTracks('drum');
-    expect(cue.channel2).toBeGreaterThan(0);
-    for (const track of ALL_TRACKS.filter((t) => t !== 'channel2')) {
+    expect(cue.channel3).toBeGreaterThan(0);
+    for (const track of ALL_TRACKS.filter((t) => t !== 'channel3')) {
       expect(cue[track]).toBe(0);
     }
   });

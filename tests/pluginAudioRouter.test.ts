@@ -13,14 +13,18 @@ vi.mock('../src/utils/audioEngine', () => ({
     deactivatePlugin: engineSpies.deactivate,
   },
   pluginAudioChannels: (id: string) => {
-    // ARCH-PLUGIN-001: 16-MONK-Kanalziele (Spiegel der echten pluginChannelMap).
+    // ARCH-PLUGIN-001: Spiegel der echten pluginChannelMap (UI2-P0-001,
+    // 8 feste Quellen-Kanäle). Bei Änderungen der echten Map MUSS dieser
+    // Spiegel mitgezogen werden — sonst prüft der Validator gegen eine
+    // veraltete Matrix (genau das ließ `stem` hier fälschlich als
+    // „Quelle ohne Kanalziel" erscheinen).
     const map: Record<string, string[]> = {
-      ai: [], perfor: [], biblio: [], master: [], stem: [], record: [],
-      spatial: [], mixer: [],
-      syntisampler: ['channel4'],
-      drumsampler: ['channel3'], instru: ['channel5'],
+      ai: [], perfor: [], biblio: [], master: [], record: [],
+      spatial: [], mixer: [], effect: [], eq: [], dsp: [],
+      stem: ['channel8'],
+      syntisampler: ['channel4'], drumsampler: ['channel3'], instru: ['channel5'],
       voice: ['channel6'], sound: ['channel7'],
-      drop: ['channel1'], song: ['channel2'], effect: [], eq: [], dsp: [],
+      drop: ['channel1'], song: ['channel2'],
     };
     return (map[id] ?? []) as never;
   },
