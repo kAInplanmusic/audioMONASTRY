@@ -28,6 +28,10 @@ export abstract class BasePluginAdapter implements PluginInterface {
 
   public state: PluginState = 'OFF';
 
+  private get syncParamName(): string {
+    return `sync.${this.manifest.id}`;
+  }
+
   public isSyncEnabled(): boolean {
     return this.syncEnabled;
   }
@@ -35,6 +39,8 @@ export abstract class BasePluginAdapter implements PluginInterface {
   public setSyncEnabled(enabled: boolean): void {
     this.assertNotDisposed();
     this.syncEnabled = !!enabled;
+    this.parameters[this.syncParamName] = this.syncEnabled;
+    // Backward compatibility
     this.parameters['sync'] = this.syncEnabled;
   }
 
@@ -70,7 +76,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     }
 
     this.parameters[parameter.name] = parameter.value;
-    if (parameter.name === 'sync') {
+    if (parameter.name === this.syncParamName || parameter.name === 'sync') {
       this.syncEnabled = !!parameter.value;
     }
     this.onParameter(parameter);
@@ -116,7 +122,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     return {
       pluginId: this.manifest.id,
       state: this.state,
-      parameters: { ...this.parameters, sync: this.syncEnabled },
+      parameters: { ...this.parameters, [this.syncParamName]: this.syncEnabled },
     };
   }
 
@@ -131,7 +137,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
 
     this.state = snapshot.state;
     this.parameters = { ...snapshot.parameters };
-    const syncParam = this.parameters['sync'];
+    const syncParam = this.parameters[this.syncParamName] ?? this.parameters['sync'];
     if (typeof syncParam === 'boolean') {
       this.syncEnabled = syncParam;
     } else if (typeof syncParam === 'string') {
