@@ -66,26 +66,13 @@ bash scripts/hetzner/delete-fleet.sh
 > Test-Skripte liegen im Repo unter `scripts/hetzner/`. Ein Docker-Image ist
 > für die Steuerung nicht nötig (die App selbst läuft auf den VMs in Docker).
 
-## Historische Live-Aufnahme (2026-08-30, Flotte gelöscht) – keine Soll-Konfiguration
+## Historischer Bestand – ausgemustert
 
-> Diese Tabelle ist ein **Messprotokoll** der damaligen Flotte (Typen/IPs zum
-> Aufnahmezeitpunkt), nicht der Soll-Zustand. Die Soll-Typen stehen in der Tabelle
-> oben; die Rolle `edge` trug damals Staging, heute ausschließlich den
-> Monitoring-Stack (INFRA-HETZNER-006).
-
-| # | Name | Typ (damals) | IP | Rolle |
-|---|---|---|---|---|
-| 1 | audiomonastry-app-1 | CX33 | 159.69.102.29 (Floating) | Caddy + App/API/Signaling + master-player |
-| 2 | audiomonastry-sfu-1 | CX33 | 49.13.0.226 | Caddy + Mediasoup-SFU (UDP/TCP 40000–40099) |
-| 3 | audiomonastry-ai-1 | CX33 | 49.13.65.150 | Ollama/Stem-CPU-Fallback (installiert + aktiv, systemd) |
-| 4 | audiomonastry-master-1 | CX23 | 167.233.22.157 | master-player (FFmpeg-Mixing/Mastering) |
-| 5 | audiomonastry-edge-1 | CX23 | 167.233.214.220 | Staging, Prometheus/Grafana/cAdvisor/node-exporter, Smoke |
-
-Alle 5 Einheiten haben Idle-Auto-Shutdown (20 min ohne aktive User/Session
-fährt die Instanz herunter – stündliche Abrechnung). **Replicate ist aktiv**
-(`REPLICATE_API_TOKEN` gesetzt, `STEM_AI_PROVIDER=replicate`,
-`VOICE_PROVIDER=replicate`): Demucs-Stems und Bark-TTS/Sing laufen über die
-GPU-Cloud. Verifiziert per `/api/admin/debug` (`replicateActive: true`).
+> Der 5-Knoten-Bestand (`ai-1`, `master-1`) ist **ausgemustert und gelöscht**
+> (2026-09-11 gestoppt, Firewalls 2026-09-20 entfernt). Die Rollen `ai` und
+> `master` existieren nicht mehr; Ollama läuft im `app-1`-Container
+> (`AI_MODE=on`), master-player ebenfalls dort. Verbindlich ist allein die
+> Soll-Tabelle oben.
 
 Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 (Trockenlauf: `--print-config`)
@@ -94,19 +81,20 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
 | # | Name | Hetzner-Typ (Default) | Override | Zweck |
 |---|---|---|---|---|
-| 1 | **app-1** | cx43 | `FLEET_TYPE_APP` | Caddy + App/API/Signaling + master-player + TURN, Floating IP |
+| 1 | **app-1** | cx43 | `FLEET_TYPE_APP` | Caddy + App/API/Signaling + master-player + TURN + Ollama (`AI_MODE=on`), Floating IP |
 | 2 | **sfu-1** | cx33 | `FLEET_TYPE_SFU` | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
 | 3 | **media-1** | cx43 | `FLEET_TYPE_MEDIA` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume |
 | 4 | **edge-1** | cx23 | `FLEET_TYPE_EDGE` | **Nur** Monitoring-Stack (Prometheus/Grafana/cAdvisor/node-exporter) |
 
-> Der Portal-Worker provisioniert dieselben Rollen mit seinen eigenen Fallbacks
-> (app/sfu/ai `cx33`, master/edge `cx23`) – siehe Tabelle oben. Ein Override muss
-> immer in dem Pfad gesetzt werden, der den Server anlegt.
+> Der Portal-Worker provisioniert dieselben Rollen mit denselben Fallbacks
+> (app `cx43`, sfu `cx33`, media `cx43`, edge `cx23`) und liest dieselben
+> `FLEET_TYPE_<ROLLE>`-Overrides (INFRA-HETZNER-007) – siehe Tabelle oben. Ein
+> Override muss immer in dem Pfad gesetzt werden, der den Server anlegt.
 
 ## Wichtige Erkenntnisse aus dem Fleet-Test (2026-08-29)
 
-1. **Hetzner-Limit:** Aktuell max. 5 Server pro Account – genau unsere 5er-Flotte.
-   Für mehr Knoten beim Hetzner-Support ein Limit-Upgrade anfragen.
+1. **Hetzner-Limit:** Aktuell max. 5 Server pro Account – die 4er-Flotte passt
+   mit Reserve hinein. Für mehr Knoten beim Hetzner-Support ein Limit-Upgrade anfragen.
 2. **SFU-Knoten braucht Caddy:** Ohne HTTP-Proxy ist `/sfu-signaling` nicht
    erreichbar → auf sfu-1 immer `caddy` mitstarten.
 3. **Redis-Adapter:** Mit `REDIS_URL` teilen mehrere App-Knoten die

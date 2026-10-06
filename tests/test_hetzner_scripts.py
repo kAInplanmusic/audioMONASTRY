@@ -1052,7 +1052,7 @@ class EdgeMonitoringLimitsTest(unittest.TestCase):
 class ServertypRollenDriftTest(unittest.TestCase):
     """INFRA-HETZNER-007: eine Tabelle, zwei Pfade, dieselben Overrides."""
 
-    ROLE_ORDER = ("app", "sfu", "ai", "master", "edge")
+    ROLE_ORDER = ("app", "sfu", "media", "edge")
 
     def _cli_defaults(self) -> dict[str, str]:
         text = PROVISION_FLEET.read_text(encoding="utf-8")
