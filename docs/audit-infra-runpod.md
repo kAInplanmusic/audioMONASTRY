@@ -293,7 +293,7 @@ Auflösung: `resolveGpuRoles()` liest je Rolle `env(endpointIdEnv) || env(endpoi
 ### 6.3 Ausfallverhalten
 
 - **Provider-Fallback:** `ProviderRouter.run()` iteriert die Kandidaten (`providerRouter.ts:91-105`); nach dem Rollen-Provider folgen `CerebrasProvider` und `LocalProvider` (`providerRouter.ts:62-64`), ein Circuit Breaker je Provider (`:96, :99`). Alle fehlgeschlagen ⇒ `ALL_PROVIDERS_FAILED` (`:105`).
-- **Task `llm`** umgeht die Provider-Liste und geht über `llmRouter.complete()` (`providerRouter.ts:80-86`); dort Rangfolge `runpod-local → ollama → externe` (`LlmRouter.ts:437-449`), externe nur mit `AI_ALLOW_EXTERNAL_LLM=true` (`:444-446`).
+- **Task `llm`** umgeht die Provider-Liste und geht über `llmRouter.complete()` (`providerRouter.ts:80-86`); dort Rangfolge `runpod-local → (Ollama entfernt 2026-10-06) → externe` (`LlmRouter.ts:437-449`), externe nur mit `AI_ALLOW_EXTERNAL_LLM=true` (`:444-446`).
 - **Queue/Concurrency/Timeout/Cancellation:** app-seitig in `AiJobRuntime` (`aiOrchestrator.ts:62-73`), Defaults `maxConcurrent: 4` und `AI_JOB_TIMEOUT_MS ?? 120_000` (`aiOrchestrator.ts:69-72`). Idle legt die Flotte schlafen: `SessionManager.onScaleToZero → sleepFleet()` (`aiOrchestrator.ts:75-80`).
 - **Wake:** `POST /api/ai/fleet/wake`, `/sleep`, `GET /api/ai/fleet/status` (`aiRoutes.ts:763-780`).
 - **Ausfall einer Rolle ohne Endpoint-ID:** `unconfiguredStatus()` (`fleetWake.ts:146-156`); `roleReady()` liefert für nicht-konfigurierte Rollen `true` (`fleetWake.ts:180`).

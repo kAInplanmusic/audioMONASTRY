@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install-ai1.sh – ai-1 (Ollama + Stem-AI-CPU-Fallback) idempotent einrichten
+# install-ai1.sh – ai-1 (Stem-AI-CPU-Fallback) idempotent einrichten
 # -----------------------------------------------------------------------------
 # Aufruf:  bash scripts/hetzner/install-ai1.sh root@<ai-1-ip>
 #
 # Macht (idempotent, kann mehrfach laufen):
 #   1. Repo per rsync nach /opt/audiomonastry syncen
-#   2. Ollama installieren (falls fehlt) + qwen2.5:7b pullen (falls fehlt)
-#   3. Stem-AI (Demucs) venv + systemd-Unit anlegen und starten
-#   4. Health-Check http://127.0.0.1:8000/health
+#   2. Stem-AI (Demucs) venv + systemd-Unit anlegen und starten
+#   3. Health-Check http://127.0.0.1:8000/health
+#
+# Hinweis: Ollama wurde am 2026-10-06 aus dem Projekt entfernt (es gab nie
+# eine lokale Instanz, die es bedienen konnte) - das Skript richtet nur noch
+# den Stem-AI-CPU-Fallback ein.
 # =============================================================================
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -33,29 +36,10 @@ rsync -az --delete -e "$RSYNC_E" \
   --exclude __pycache__ \
   ./ "$HOST:/opt/audiomonastry/"
 
-echo "== Installiere Ollama + Stem-AI (idempotent) =="
+echo "== Installiere Stem-AI (idempotent) =="
 ssh "${SSH_OPTS[@]}" "$HOST" 'bash -s' <<'REMOTE'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
-
-# --- Ollama (lokaler LLM-Fallback) ---
-if ! command -v ollama >/dev/null 2>&1; then
-  curl -fsSL https://ollama.com/install.sh | sh
-fi
-# FLEET-WIRING: Ollama muss von app-1 aus erreichbar sein (Firewall begrenzt
-# den Zugriff auf die app-1-IP, siehe Portal /api/wire-fleet).
-mkdir -p /etc/systemd/system/ollama.service.d
-cat > /etc/systemd/system/ollama.service.d/override.conf <<'OLLAMA'
-[Service]
-Environment="OLLAMA_HOST=0.0.0.0:11434"
-OLLAMA
-systemctl daemon-reload
-systemctl enable --now ollama >/dev/null 2>&1 || true
-systemctl restart ollama >/dev/null 2>&1 || true
-if ! ollama list 2>/dev/null | grep -q "qwen2.5:7b"; then
-  echo "[ai-1] qwen2.5:7b wird geladen (einmalig, ~4.7 GB) …"
-  ollama pull qwen2.5:7b
-fi
 
 # --- Stem-AI (Demucs CPU-Fallback) ---
 cd /opt/audiomonastry/services/stem-ai
@@ -92,4 +76,4 @@ sleep 5
 curl -fsS http://127.0.0.1:8000/health
 REMOTE
 
-echo "✅ ai-1 bereit: Ollama (qwen2.5:7b) + stem-ai (CPU) aktiv"
+echo "✅ ai-1 bereit: stem-ai (CPU) aktiv"

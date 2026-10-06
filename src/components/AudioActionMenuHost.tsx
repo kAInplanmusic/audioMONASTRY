@@ -94,16 +94,14 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 const trackNames: Record<TrackType, string> = {
-  channel1: 'KICK',
-  channel2: 'HAT',
-  channel3: 'CLAP',
-  channel4: 'SAMPLE',
-  channel5: 'SAMPLE',
-  channel6: 'SAMPLE',
-  channel7: 'BASS',
-  channel8: 'LEAD',
-  channel9: 'SOUND',
-  channel10: 'DROP',
+  channel1: 'DROP',
+  channel2: 'SONG',
+  channel3: 'DRUM',
+  channel4: 'SYNTH',
+  channel5: 'INSTR',
+  channel6: 'VOICE',
+  channel7: 'SOUND',
+  channel8: 'STEM',
 };
 
 /** Plugins, die bereits geöffnet sind und einen vorhandenen Audio-Eingang besitzen. */

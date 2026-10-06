@@ -6,11 +6,11 @@ Neuaufbau der Flotte (neue IPs) trugen drei Hetzner-Firewalls noch die
 Quell-IPs der VORHERIGEN Flotte:
 
   * `audiomonastry-app`    – 8080 nur von 167.233.192.196/32 (alte edge-1)
-  * `audiomonastry-ai`     – 8000 + 11434 nur von 142.132.229.71/32 (alte app-1)
+  * `audiomonastry-ai`     – 8000 nur von 142.132.229.71/32 (alte app-1)
   * `audiomonastry-master` – 8000 nur von derselben alten app-1-IP
 
-Folge: der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000/11434
-(Stem-AI/Ollama) und app->master:8000 (master-player) war stumm blockiert –
+Folge: der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000
+(Stem-AI) und app->master:8000 (master-player) war stumm blockiert –
 von aussen unsichtbar, weil alles Oeffentliche ueber Cloudflare laeuft. Die
 Regeln entstehen beim Provisionieren/Verdrahten aus festen Werten, deshalb
 wiederholt sich der Drift bei JEDEM Neuaufbau.
@@ -24,8 +24,8 @@ kein einziger Schreibaufruf an.
 Soll-Vertrag (Rolle -> Firewall -> Ports; Quelle = IP des Knotens):
   * Firewall {PREFIX}app    tcp/8080  <- edge-1   (Monitoring-Scrape)
   * Firewall {PREFIX}ai     tcp/8000  <- app-1    (Stem-AI)
-  * Firewall {PREFIX}ai     tcp/11434 <- app-1    (Ollama)
   * Firewall {PREFIX}master tcp/8000  <- app-1    (master-player)
+  (tcp/11434 fuer Ollama ist am 2026-10-06 entfallen - der Dienst existiert nicht.)
 
 Grenze: dieses Werkzeug LEGT KEINE Regeln AN und LOESCHT KEINE. Fehlt eine
 Regel ganz, wird das gemeldet (Exit bleibt 0) – ob ein Port offen sein soll,
@@ -34,8 +34,8 @@ scripts/hetzner/firewall-ensure-*.py). Rollen, die es in der laufenden Flotte
 nicht gibt, werden gemeldet statt geraten (Exit != 0, weil der Soll-Zustand
 dann nicht ableitbar ist).
 
-ZUSAMMENSPIEL MIT DEM PORTAL-WAKE (zwei Schreiber, dieselben vier Regeln):
-die Regeln ai:8000/ai:11434/master:8000 entstehen im Portal-Worker in
+ZUSAMMENSPIEL MIT DEM PORTAL-WAKE (zwei Schreiber, dieselben drei Regeln):
+die Regeln ai:8000/master:8000 entstehen im Portal-Worker in
 `openFleetPorts()`, app:8080 in `syncAppFirewall()` (jeweils
 `POST /firewalls/<id>/actions/set_rules`) - dieselben Ports/Quellen wie CONTRACT
 hier. Beide Seiten sind ERGEBNIS-idempotent (derselbe Zielzustand) und seit dem
@@ -106,7 +106,6 @@ EXIT_GEGENPROBE = 3      # frisch zurueckgelesener Zustand weicht vom Ziel ab
 CONTRACT = (
     ("app", "8080", "edge"),
     ("ai", "8000", "app"),
-    ("ai", "11434", "app"),
     ("master", "8000", "app"),
 )
 

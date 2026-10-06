@@ -9,6 +9,13 @@ import { MixerPluginAdapter } from '../src/plugins/adapters/MixerPluginAdapter';
 import { RecordPluginAdapter } from '../src/plugins/adapters/RecordPluginAdapter';
 import { SyntiSamplerPluginAdapter } from '../src/plugins/adapters/SyntiSamplerPluginAdapter';
 import { DrumSamplerPluginAdapter } from '../src/plugins/adapters/DrumSamplerPluginAdapter';
+import { InstruPluginAdapter } from '../src/plugins/adapters/InstruPluginAdapter';
+import { VoicePluginAdapter } from '../src/plugins/adapters/VoicePluginAdapter';
+import { SoundPluginAdapter } from '../src/plugins/adapters/SoundPluginAdapter';
+import { StemPluginAdapter } from '../src/plugins/adapters/StemPluginAdapter';
+import { SongPluginAdapter } from '../src/plugins/adapters/SongPluginAdapter';
+import { DropPluginAdapter } from '../src/plugins/adapters/DropPluginAdapter';
+import { BiblioPluginAdapter } from '../src/plugins/adapters/BiblioPluginAdapter';
 import type { PluginInterface, PluginParameterValue } from '../src/plugins/plugin_interface';
 import type { PluginState } from '../src/plugins/types';
 
@@ -539,4 +546,63 @@ describe('Adapter-Blockverarbeitung: record (Steuerungs-Adapter, KEIN DSP-Glied)
     const out = runBlock(new RecordPluginAdapter(), {}, 'PRO', 32)[0];
     expect(Array.from(out)).toEqual(Array.from(src[0]));
   });
+});
+
+describe('Adapter ohne DSP-Rolle: belegt KEIN onProcess (A9-A13)', () => {
+  // BELEGTE ENTSCHEIDUNG (jeder Adapter im Volltext gelesen, nicht geraten):
+  // Diese Adapter sind Quellen, Analyse oder Bibliothek - sie greifen NICHT in
+  // durchlaufendes Block-Audio ein. Alle fuehren ausschliesslich `onCommand`
+  // und deklarieren `latencySamples: 0, tailSamples: 0`. Ein Block-Eingriff
+  // waere erfunden (genau der Fehler, den A5 bei `record` gemacht hat).
+  //
+  // Wo der Code es selbst sagt:
+  //   drop: 'Analyse passiert async im Drop-Core, niemals im synchronen
+  //          process()-Pfad' (DropPluginAdapter.ts:31-32)
+  //   song: 'Server-/AI-Pfad: abbrechbar, niemals im Audio-Echtzeitpfad'
+  //          (SongPluginAdapter.ts:32)
+  //   stem: Datei-Picker/Queue-Pfad, Progress im StemExtractorTerminal
+  //          (StemPluginAdapter.ts:25-26)
+  const CASES = [
+    { name: 'instru', cls: InstruPluginAdapter, kind: 'audio-source', caps: ['audio-source', 'hardware'] },
+    { name: 'voice', cls: VoicePluginAdapter, kind: 'audio-source', caps: ['ai', 'audio-source'] },
+    { name: 'sound', cls: SoundPluginAdapter, kind: 'audio-source', caps: ['ai', 'audio-source'] },
+    { name: 'stem', cls: StemPluginAdapter, kind: 'analysis', caps: ['ai', 'analysis', 'audio-processor'] },
+    { name: 'song', cls: SongPluginAdapter, kind: 'audio-source', caps: ['ai', 'audio-source'] },
+    { name: 'drop', cls: DropPluginAdapter, kind: 'analysis', caps: ['analysis', 'library'] },
+    { name: 'biblio', cls: BiblioPluginAdapter, kind: 'library', caps: ['library', 'analysis'] },
+  ] as const;
+
+  for (const { name, cls, kind, caps } of CASES) {
+    describe(name, () => {
+      it('hat kein eigenes onProcess (nur onCommand)', () => {
+        const own = Object.getOwnPropertyNames(cls.prototype);
+        expect(own).not.toContain('onProcess');
+        expect(own).toContain('onCommand');
+      });
+
+      it(`deklariert kind=${kind} und die erwarteten Capabilities`, () => {
+        const manifest = (cls as unknown as {
+          MANIFEST: { kind: string; capabilities: string[]; latencySamples: number; tailSamples: number };
+        }).MANIFEST;
+        expect(manifest.kind).toBe(kind);
+        expect(manifest.capabilities).toEqual([...caps]);
+        // Kein Latenz-/Tail-Anteil: kein Verarbeitungsglied in der Kette.
+        expect(manifest.latencySamples).toBe(0);
+        expect(manifest.tailSamples).toBe(0);
+      });
+
+      it('ist fuer das Audiosignal transparent', () => {
+        const src = sine(32);
+        const out = runBlock(new cls(), {}, 'PRO', 32)[0];
+        expect(Array.from(out)).toEqual(Array.from(src[0]));
+      });
+
+      it('bleibt auch mit gesetzten Parametern transparent', () => {
+        // Ein Block-Eingriff darf nicht ueber Parameter "nachrutschen".
+        const src = sine(32);
+        const out = runBlock(new cls(), { gain: 0.25, velocity: 0.5, pan: -1 }, 'PRO', 32)[0];
+        expect(Array.from(out)).toEqual(Array.from(src[0]));
+      });
+    });
+  }
 });

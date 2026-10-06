@@ -111,17 +111,16 @@ app.use((req, res, next) => {
 const PORT = Number(process.env.PORT || 8080);
 
 // ---------------------------------------------------------------------------
-// FLEET-WIRING: Ziel-URLs der Flotten-Knoten (master-player, Ollama, stem-ai)
+// FLEET-WIRING: Ziel-URLs der Flotten-Knoten (master-player, stem-ai)
 // ---------------------------------------------------------------------------
 // Die Hetzner-IPs werden erst bei der Flotten-Erstellung vergeben. Deshalb
 // holt die App sie beim Start vom Portal-Worker (/api/fleet-map, geschützt
 // über den Studio-Token) und überschreibt damit die Default-/Env-Ziele.
-// Direkte Env-Variablen (MASTER_PLAYER_URL, OLLAMA_URL, STEM_AI_URL) haben
+// Direkte Env-Variablen (MASTER_PLAYER_URL, STEM_AI_URL) haben
 // weiterhin Vorrang (explizit gesetzt > Flotten-Map > interner Default).
 // ---------------------------------------------------------------------------
 // ARCH-P2-002: Flotten-Verdrahtung (FLEET_MAP_URL, Ziel-Validierung, Altnamen-
 // Fallback) liegt in server/fleetWiring.ts. `fleetTargets` wird bewusst als
-// Getter weitergereicht: die Routen und der Ollama-/Master-Player-Zugriff lesen
 // die Ziele zur Laufzeit, nicht als Kopie beim Start.
 const fleetWiring = createFleetWiring({});
 const fleetTargets = fleetWiring.targets;
@@ -717,7 +716,7 @@ registerCloudRoutes(app);
 // ARCH-P2-002: Die /api/ai-Routen liegen in server/routes/aiRoutes.ts (Factory).
 // Die Registrierung bleibt an dieser Stelle, damit die Reihenfolge relativ zu den
 // Middleware-/Rate-Limit-Ketten unveraendert ist.
-registerAiRoutes(app, { metrics, fleetTargets });
+registerAiRoutes(app, { metrics });
 
 // AI-P1-006: aiMONK-Agent-Loop (planen -> ausfuehren -> pruefen) mit Abbruch,
 // Wiederaufnahme und Kostenausweis. Der Loop selbst ist `MoaAgent.run` (seit

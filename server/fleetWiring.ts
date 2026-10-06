@@ -14,7 +14,6 @@
  */
 export interface FleetTargets {
   masterPlayer: string;
-  ollama: string;
   stemAi: string;
 }
 
@@ -72,13 +71,12 @@ export function fleetNodeAddress(
 export function createFleetWiring(options: {
   fleetMapUrl?: string;
   studioToken?: string;
-  fleetOllamaPort?: number;
   log?: (message: string) => void;
   warn?: (message: string, error?: unknown) => void;
 } = {}): FleetWiring {
   const log = options.log ?? ((message: string) => console.log(message));
   const warn = options.warn ?? ((message: string, error?: unknown) => console.warn(message, error ?? ''));
-  const targets: FleetTargets = { masterPlayer: '', ollama: '', stemAi: '' };
+  const targets: FleetTargets = { masterPlayer: '', stemAi: '' };
   return {
     get targets() { return targets; },
     async wire(): Promise<void> {
@@ -96,12 +94,6 @@ export function createFleetWiring(options: {
         if (masterTarget) targets.masterPlayer = masterTarget;
         const aiTarget = buildFleetTarget(fleetNodeAddress(f, 'audiomonastry-ai-1'), 8000);
         if (aiTarget) {
-          const ollamaPort = Number(options.fleetOllamaPort ?? process.env.FLEET_OLLAMA_PORT ?? 11434);
-          const ollamaTarget = buildFleetTarget(
-            fleetNodeAddress(f, 'audiomonastry-ai-1'),
-            Number.isFinite(ollamaPort) ? ollamaPort : 11434,
-          );
-          targets.ollama = ollamaTarget || '';
           targets.stemAi = aiTarget;
         }
         log(`[fleet] Knoten verdrahtet: ${JSON.stringify({ ...targets })}`);

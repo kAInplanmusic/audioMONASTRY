@@ -117,10 +117,10 @@ Cloudflare-Origin-Zertifikat (`certs/origin.crt|key`, 600, ausgestellt bis 2041)
 | app-1 (142.132.229.71) | `main` (Repo-Stand 1de9e3b, Image mit Commit-Stempel) | `audiomonastry` | audiomonastry, caddy, master-player | `/api/health` nennt den Commit; TURN-Config aktiv (`turn.available=true`, 2× `turn:` + STUN mit HMAC-Credentials); Origin-TLS-Zertifikat installiert; erreicht master-1/ai-1 (siehe unten) |
 | sfu-1 (142.132.231.146) | neuer Repo-Stand + neues App-Image | `audiomonastry` | audiomonastry, caddy, **coturn** | `ENABLE_SFU=1`, `SFU_ANNOUNCED_IP` gesetzt; coturn lauscht auf 3478 (udp+tcp), Relay 49152-49201; Firewall dafür geöffnet |
 | master-1 (167.233.112.182) | neues `audiomonastry-master-player:hetzner` | `audiomonastry` | master-player | `/health` 200 |
-| ai-1 (178.105.66.67) | Repo-Stand + Stem-AI-Fix | (kein Compose-Stack) | ollama (systemd), stem-ai (systemd) | `qwen2.5:7b` gepullt (4,7 GB), stem-ai `/health` 200 (war vorher tot, siehe unten); von app-1 aus erreichbar (11434/8000) |
+| ai-1 (178.105.66.67) | Repo-Stand + Stem-AI-Fix | (kein Compose-Stack) | ollama (entfernt 2026-10-06) (systemd), stem-ai (systemd) | `qwen2.5:7b` gepullt (4,7 GB), stem-ai `/health` 200 (war vorher tot, siehe unten); von app-1 aus erreichbar (11434/8000) |
 | edge-1 (167.233.192.196) | Monitoring-Compose + Configs aktualisiert | `audiomonastry` | prometheus, grafana, alertmanager, node-exporter, cadvisor | Prometheus läuft (war in der Restart-Schleife), Grafana 200 auf `127.0.0.1:3000` |
 
-Querverbindungen von app-1 gemessen: `master:8000` 200, `ollama:11434` 200
+Querverbindungen von app-1 gemessen: `master:8000` 200, `ollama (entfernt 2026-10-06):11434` 200
 (`qwen2.5:7b` vorhanden), `stem-ai:8000` 200.
 
 **Zwei weitere echte Defekte in diesem Lauf gefunden und behoben:**

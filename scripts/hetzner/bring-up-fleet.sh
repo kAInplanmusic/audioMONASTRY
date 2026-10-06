@@ -73,7 +73,7 @@ fi
 
 # INFRA-HETZNER-014 (gemessen 2026-09-21): Nach einem Neuaufbau trugen die
 # Firewalls app/ai/master noch die Quell-IPs der VORHERIGEN Flotte - der
-# Querverkehr edge->app:8080, app->ai:8000/11434 und app->master:8000 war damit
+# Querverkehr edge->app:8080, app->ai:8000 und app->master:8000 war damit
 # stumm blockiert (von aussen unsichtbar, weil alles Oeffentliche ueber
 # Cloudflare laeuft). Schritt 3 gleicht die Quell-IPs deshalb gegen die
 # TATSAECHLICHEN Knoten-IPs ab (idempotent, atomar auf die Quell-IPs begrenzt).
@@ -210,9 +210,9 @@ done
 # --- 3. Cross-Node-Firewall-Regeln abgleichen (INFRA-HETZNER-014) -------------
 # Die Firewalls entstehen beim Provisionieren/Verdrahten aus festen Werten. Nach
 # einem Neuaufbau (neue IPs) zeigen ihre Quell-IPs deshalb auf Knoten der
-# VORHERIGEN Flotte: app:8080 nur von der alten edge-1, ai:8000/11434 und
+# VORHERIGEN Flotte: app:8080 nur von der alten edge-1 und
 # master:8000 nur von der alten app-1. Der Querverkehr edge->app (Monitoring-
-# Scrape), app->ai (Stem-AI/Ollama) und app->master (master-player) war damit
+# Scrape) und app->master (master-player) war damit
 # stumm blockiert - nach aussen unsichtbar, weil alles Oeffentliche ueber
 # Cloudflare laeuft. Der Abgleich leitet den Soll-Zustand aus der LAUFENDEN
 # Flotte ab und ersetzt ausschliesslich die veralteten Quell-IPs; alles andere
@@ -221,14 +221,14 @@ done
 # Abschalten bewusst: FLEET_FIREWALL_ENSURE=0 (dann bleibt die Firewall, wie sie ist).
 step "3/9 Cross-Node-Firewall-Regeln auf die aktuellen Knoten-IPs abgleichen"
 if [[ "$FLEET_FIREWALL_ENSURE" == "1" ]]; then
-  echo "  Soll: app:8080 <- edge-1 | ai:8000,11434 <- app-1 | master:8000 <- app-1"
+  echo "  Soll: app:8080 <- edge-1 | ai:8000 <- app-1 | master:8000 <- app-1"
   echo "  (Trockenlauf dieses Schritts: python3 scripts/hetzner/firewall-ensure.py --dry-run)"
   python3 scripts/hetzner/firewall-ensure.py \
-    || echo "  ⚠ Firewall-Abgleich fehlgeschlagen - edge->app:8080 (Scrape), app->ai:8000/11434 und app->master:8000 koennen blockiert bleiben. Grund oben; Einzelheiten: docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014)."
+    || echo "  ⚠ Firewall-Abgleich fehlgeschlagen - edge->app:8080 (Scrape), app->ai:8000 und app->master:8000 koennen blockiert bleiben. Grund oben; Einzelheiten: docs/HETZNER_DEPLOY.md (INFRA-HETZNER-014)."
 else
   echo "  uebersprungen (FLEET_FIREWALL_ENSURE=0): die Firewall bleibt unveraendert."
   echo "  Achtung: nach einem Neuaufbau koennen die Quell-IPs noch auf die vorherige Flotte zeigen"
-  echo "  (edge->app:8080, app->ai:8000/11434, app->master:8000 blockiert)."
+  echo "  (edge->app:8080, app->ai:8000, app->master:8000 blockiert)."
 fi
 
 # --- 4. SSH-Bereitschaft ------------------------------------------------------

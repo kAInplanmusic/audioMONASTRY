@@ -54,7 +54,6 @@ export type AiProviderId =
   // den Orchestrator, und LlmRouter-Aufrufe tauchten im Kostenbuch gar nicht auf.
   | 'runpod-local'
   | 'mistral'
-  | 'ollama'
   | 'deepseek-flash'
   | 'deepseek-pro'
   | 'publicai'

@@ -156,7 +156,7 @@ vollständig (kein Netzwerkverkehr), `RUNPOD_WARMUP_TIMEOUT_MS` deckelt den Warm
 | Spatial per Text | HRTF/WASM-DSP; Brain emittiert nur den Tool-Call | Client |
 | MIDI-Routing | MIDI-Runtime/Mapping — deterministisch | Client |
 | Audio-Enhancer / Angleich | FFmpeg/`master-player` DSP (Hetzner) | nicht GPU |
-| Fallback | Client-deterministisch (`htdemucs-ONNX`, `LocalEmbeddingProvider`) + Ollama (ai-1) | Browser/Hetzner |
+| Fallback | Client-deterministisch (`htdemucs-ONNX`, `LocalEmbeddingProvider`) | Browser/Hetzner |
 
 **Konsequenz:** Die Lücken liegen **nicht** in der GPU, sondern in (a) der
 Bibliotheks-Indexierung und (b) dem mehrstufigen Agent-Loop (§6).

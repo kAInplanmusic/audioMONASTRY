@@ -29,8 +29,9 @@ seinem Commit und dem Wiederaufsetzpunkt beschrieben. Neuer Agent, neue Sitzung:
 |---|---|---|
 | Vorarbeit | Kette als Quelle, Router-Anker, Offline-Ausführer, Bounce im Recorder | **fertig** (`6bc5aac`) |
 | **C** | Flotte kurz hoch, Deploy prüfen, wieder löschen | **Abbruch nach Zeitbox, Flotte gelöscht** — Befund unten |
-| **A** | Block-Verarbeitung in den Adaptern (15 von 16 fehlen) | **läuft: A0–A3 fertig** (`6abe234`) |
-| **B** | Live-Pfad auf die Kette umziehen (hinter Flag) | **offen** |
+| **A** | Block-Verarbeitung in den Adaptern (15 von 16 fehlen) | **fertig: A0–A13** (`6bc5aac` … `c5d2685`) |
+| **UI** | Kanalmodell 8 Kanäle (UI2-P0-001), Signalweg-Leiste (UI2-P0-002), SYNC (UI2-P0-003) | **läuft** — UI2-P0-001 abgeschlossen (`157eddf` + Nacharbeit `d7f3934`); die übrigen beiden offen |
+| **B** | Live-Pfad auf die Kette umziehen (hinter Flag) | **offen** — wartet auf UI-Pakete, sonst stünde der Live-Tap auf falscher Kanalbasis |
 
 ### Phase C — was gemessen wurde (2026-10-05)
 
@@ -39,7 +40,7 @@ Schritt **5b/9 Caddy-DNS-Image gebaut** — der Fix aus der Vorsitzung (Caddy-Im
 **vor** den Compose-Starts) ist damit **live bestätigt**.
 
 Abgebrochen nach der Zeitbox: Schritt 6/9 (Rollen sfu/master/edge/ai einrichten,
-Ollama-Installation auf ai-1) lief noch, die Container standen noch nicht.
+Installation auf ai-1) lief noch, die Container standen noch nicht.
 **Konkreter nächster Fehler für einen erneuten Lauf:** nach dem Caddy-Build
 startet der Rollen-Compose auf sfu-1 erneut mit
 `pull access denied for audiomonastry-caddy-dns` — das Image existiert nur auf
@@ -107,16 +108,18 @@ Recorder.
 | A1 | `effect` | Bit-Tiefe (`bits`) + Dry/Wet (`wet`) | **fertig** (`e907fb7`) |
 | A2 | `eq` | 3-Band-Tonregelung (`low`/`mid`/`high` in dB) | **fertig** (`f27290c`) |
 | A3 | `dsp` | Resonanter Tiefpass (`cutoff`/`resonance`) + `drive` | **fertig** (`6abe234`) |
-| A4 | `spatial` | Pan/Breite pro Kanal | **offen** |
-| A5 | `record` | Block in den Aufnahmepuffer schreiben (Kettenende) | **offen** |
-| A6 | `mixer` | Kanal-Gains/Pan als Summe | **offen** |
-| A7 | `syntisampler` | Sample-Playback im Block | **offen** |
-| A8 | `drumsampler` | Drum-Voice-Playback im Block | **offen** |
-| A9 | `instru` | Instrument-Playback im Block | **offen** |
-| A10 | `voice` | Voice-Block | **offen** |
-| A11 | `sound` | Sound-Block | **offen** |
-| A12 | `stem` | Stem-Trennung im Block | **offen** |
-| A13 | `song`, `drop`, `biblio` | Katalog-/Auswahl-Rollen (kein Block-Audio) | **offen** |
+| A4 | `spatial` | Pan/Breite pro Kanal | **fertig** (`cbabfa9`) |
+| A5 | `record` | Block in den Aufnahmepuffer schreiben (Kettenende) | **fertig** (`6a6ac2e`) |
+| A6 | `mixer` | Kanal-Gains/Pan als Summe | **fertig** (`cbabfa9`) |
+| A7 | `syntisampler` | Sample-Playback im Block | **fertig** (`6a6ac2e`) |
+| A8 | `drumsampler` | Drum-Voice-Playback im Block | **fertig** (`6a6ac2e`) |
+| A9 | `instru` | Instrument-Playback im Block | **fertig** (`c5d2685`) |
+| A10 | `voice` | Voice-Block | **fertig** (`c5d2685`) |
+| A11 | `sound` | Sound-Block | **fertig** (`c5d2685`) |
+| A12 | `stem` | Stem-Trennung im Block | **fertig** (`c5d2685`) |
+| A13 | `song`, `drop`, `biblio` | Katalog-/Auswahl-Rollen (kein Block-Audio) | **fertig** (`c5d2685`) |
+
+**Phase A ist damit abgeschlossen** (A0–A13). Die Commits tragen im Betreff `[A<n>]`.
 
 **Regeln je Adapter**
 - In-place, ohne Allokation (Adapter-Vertrag: `process()` ist echtzeit-sicher).
@@ -135,6 +138,12 @@ Adapter im Betreff (`feat(plugins): <adapter> Block-Verarbeitung`).
 ---
 
 ## Phase B — Live-Pfad auf die Kette umziehen
+
+**Vorbedingung (2026-10-06 ergänzt):** Erst starten, wenn UI2-P0-001 (8-Kanal-
+Modell) und UI2-P0-003 (SYNC gegen Main) stehen. Der Live-Tap hängt an den
+Kanalzügen und am Main-Takt — auf der alten 10-Kanal-Basis gebaut, müsste er
+danach sofort wieder umgezogen werden. `UI2-P0-002` (Signalweg-Leiste) ist die
+sichtbare Seite desselben Umbaus.
 
 **Zweck:** Dieselbe Ordnung, die offline bewiesen ist, in den hörbaren Pfad
 bringen — **hinter einem Flag**, Vorgabe AUS. Nichts ändert sich hörbar, bevor

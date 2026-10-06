@@ -38,7 +38,6 @@ Nur mit Betreiber-Freigabe. Trigger:
 
 | Dienst | Konfiguration | Status |
 |---|---|---|
-| Ollama (ai-1) | `OLLAMA_URL`, `OLLAMA_MODEL` | dokumentiert in `.env.example` |
 | HF-Endpoint (audiomonastry-ai) | `HF_ENDPOINT_URL`, `HF_TOKEN`, `HF_API_KEY`, `AI_MAX_GPU_ENDPOINTS=8` | **überholt (Stand 2026-09-20):** HF-Dedicated-Endpoints sind abgelöst; GPU-Inferenz läuft auf **max. 8 RunPod-Rollen-Endpoints** (`brain`/`ears`/`voiceGen`/`music`/`imageHq`/`videoReal`/`videoAbstract`/`orchestrator`). Die frühere Angabe „Einziger GPU-Endpoint (`AI_MAX_GPU_ENDPOINTS=1`)" ist überholt (`docs/INFRA_KONSTITUTION.md` §1) |
 | Replicate | `REPLICATE_API_TOKEN`, `REPLICATE_STEM_MODEL` | Token/Credit Live-Check bei nächstem Zugang |
 | Supabase | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `VITE_SUPABASE_ANON_PUB` | RLS für AI-Tabellen offen (FA-P1-1) |

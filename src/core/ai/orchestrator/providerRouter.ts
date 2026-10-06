@@ -44,7 +44,7 @@ class LocalProvider implements IAiProvider {
   async run(task: AiTask, _model: string, input: unknown): Promise<unknown> {
     const prompt = typeof input === 'string' ? input : JSON.stringify(input ?? {});
     if (task === 'llm') {
-      // Bestehender Ollama-/deterministischer Pfad wird über den LlmRouter abgedeckt.
+      // Bestehender lokaler/deterministischer Pfad wird über den LlmRouter abgedeckt.
       throw new AiProviderError(this.id, 'LOCAL_LLM_NOT_DIRECT', 'LLM lokal über LlmRouter', false);
     }
     return { provider: 'local', text: prompt, hint: 'deterministischer Fallback' };
