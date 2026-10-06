@@ -72,3 +72,23 @@ Regeln: Repo-only, lokale Commits, NICHTS pushen, NODE_ENV=test für Tests, NTFS
 - APP: Live-Zählung Alt-Snapshots (Legacy-Phase-2-Vorbedingung) — RunPod/Hetzner-Token nötig.
 - APP: runpod-deploy workflow → deploy-Job an workflow_dispatch/environment binden (sonst
   feuert er bei jedem main-Push); Decision Betreiber.
+
+## C6 — Signalkette hat zur Laufzeit keinen Ausführer (high)
+Stand: 2026-10-05, aus dem Umbau „linearer Insert-Pfad“. Gemessen, nicht vermutet.
+- `src/audio/PluginAudioPipeline.ts` wird in `src/` **nirgends konstruiert** — der einzige
+  Erzeuger ist `tests/pluginAudioPipeline.test.ts` (`rg "PluginAudioPipeline" src/` liefert
+  nur die Datei selbst). Damit hat der lineare Insert-Pfad über die 16 Adapter **keine
+  Laufzeitwirkung**.
+- `audioEngine.bounceGraph(...)` und `bounceV2NodeChain(...)` haben in `src/` **keinen
+  Aufrufer**; der Offline-Renderpfad ist ebenfalls nicht angeschlossen.
+- Folge: Der hörbare Pfad ist die handverdrahtete Worklet-Kette (eq/effect/dynamics/v2Sink)
+  plus `pluginAudioRouter`. Genau deshalb lässt sich die Kette heute nicht „hören“.
+- Teilfix 2026-10-05: Die Pipeline nimmt ohne Argument `SIGNAL_CHAIN_ORDER` als
+  Verarbeitungsreihenfolge (vorher war die einzige je genutzte Ordnung die *Kopfreihenfolge*
+  — nachweislich falsch: `mixer` an Position 0, also **vor** die Quellen, und `spatial` vor
+  `eq`). `pluginAudioRouter` trägt jetzt `chainStage`/`chainIndex`, und
+  `missingChainRoutes()` beweist, dass die Kette keine Lücke im Router hat.
+- Zu schließen (nächster Schritt, bewusst nicht blind gemacht): Pipeline im Engine-
+  Lebenszyklus konstruieren und den Block-Durchlauf im Live-Pfad an der Stelle einsetzen, an
+  der heute `monitorRoutingFacade`/`channelStripState` hängen. Das ist der einzige hörbare
+  Pfad — erst nach einer Gehörprobe auf der Flotte, nicht ohne.

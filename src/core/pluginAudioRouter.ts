@@ -10,6 +10,12 @@
  */
 import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';
 import type { TrackType } from '../types';
+import {
+  SIGNAL_CHAIN_ORDER,
+  signalOrderIndex,
+  signalStageOf,
+  type SignalStageId,
+} from '../plugins/signalChain';
 
 export type PluginActiveState = 'AUTO_AI' | 'PRO';
 type PluginIsolationLevel = 'insert' | 'send' | 'ui-only';
@@ -29,6 +35,19 @@ export interface PluginRouteConfig {
    *   ui-only = kein Audio-Graph (z. B. biblio/master/record)
    */
   isolation: PluginIsolationLevel;
+  /**
+   * Stufe im **linearen Signalweg** (`plugins/signalChain.ts`): Quellen → Mixer
+   * → Nachbearbeitung → Recorder → Ausgang. `null` = kein Plugin der Kette
+   * (System-Module wie ai/perfor).
+   *
+   * Abgrenzung zu `isolation`: die Isolation sagt, *wie* eingespeist wird
+   * (insert/send/ui-only), die Stufe sagt, *wo* im Pfad das Plugin liegt. Beide
+   * Aussagen sind unabhängig – `biblio` ist z. B. eine Quelle (Stufe `sources`),
+   * speist aber selbst nichts in MAIN ein (`ui-only`).
+   */
+  chainStage: SignalStageId | null;
+  /** Position im Signalweg (0 = erste Quelle). `-1` = nicht in der Kette. */
+  chainIndex: number;
 }
 
 const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> = [
@@ -62,6 +81,8 @@ const ROUTES: Record<string, PluginRouteConfig> = Object.fromEntries(
       source,
       mainFeeder,
       isolation: isolationFor(source),
+      chainStage: signalStageOf(id)?.id ?? null,
+      chainIndex: signalOrderIndex(id),
     },
   ]),
 );
@@ -102,6 +123,22 @@ export function getPluginRoute(id: string): PluginRouteConfig | undefined {
 
 export function listPluginRoutes(): PluginRouteConfig[] {
   return Object.values(ROUTES);
+}
+
+/**
+ * Prüfpunkt Signalkette: Jedes Plugin der Kette muss im Router existieren.
+ * Ein fehlender Eintrag wäre ein Loch im Pfad – die Kette ist die Quelle, der
+ * Router die Ausführung. Leere Liste = deckungsgleich.
+ */
+export function missingChainRoutes(): string[] {
+  return SIGNAL_CHAIN_ORDER.filter((id) => !ROUTES[id]);
+}
+
+/** Die Routen in Signalweg-Reihenfolge (ohne die System-Module am Ende). */
+export function listRoutesInChainOrder(): PluginRouteConfig[] {
+  return SIGNAL_CHAIN_ORDER
+    .map((id) => ROUTES[id])
+    .filter((route): route is PluginRouteConfig => Boolean(route));
 }
 
 /**
