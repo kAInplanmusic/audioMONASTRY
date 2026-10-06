@@ -3,9 +3,9 @@
   "id": "MASTERTODOENDE",
   "project": "audioMONASTRY",
   "role": "SINGLE_SOURCE_OF_TRUTH",
-  "generatedAt": "2026-10-05",
+  "generatedAt": "2026-10-06",
   "branch": "main",
-  "commit": "0cff5b6",
+  "commit": "08f1a12",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -4569,11 +4569,35 @@
       "id": "UI2-P1-006",
       "title": "Mixer als echtes Bauteil, Kanalzahl klären",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Der Mixer im Entwurf ist in Bild 1, 3 und 4 identisch und wirkt wie ein eingefügtes Bild. Als echte Komponente bauen. README nennt 8 Kanäle, Entwürfe zeigen 4 oder 6. Vorschlag 8, schmal. Vom Betreiber noch nicht bestätigt.\n\nAkzeptanz: Kanalzahl entschieden; alle Regler bedienbar",
-      "verification": ""
+      "problem": "Der Mixer im Entwurf ist in Bild 1, 3 und 4 identisch und wirkt wie ein eingefügtes Bild. Als echte Komponente bauen. README nennt 8 Kanäle, Entwürfe zeigen 4 oder 6. Vorschlag 8, schmal. Vom Betreiber noch nicht bestätigt.",
+      "note": "DONE 2026-10-06: Betreiber-Entscheid gefallen — der Mixer hat genau 8 feste Quellen-Kanäle, jeder mit EINER Quelle: 1 drop · 2 song · 3 drumsampler · 4 syntisampler · 5 instru · 6 voice · 7 sound · 8 stem. biblio erzeugt keinen Ton. Die Nachbearbeitungs-Stufen effect/eq/dsp/spatial/master/record sind KEINE Kanäle mehr, sondern Stufen der Signalkette NACH dem Mixer (SIGNAL_CHAIN, src/plugins/signalChain.ts). Umgesetzt in drei Commits: (1) 157eddf Subagenten-Migration TrackType channel1–channel8 + pluginChannelMap; (2) d7f3934 Nacharbeit am Kanal-Vertrag — mixer bleibt isolation='send' (Send-Ziel, kein eigener Kanalzug), validateRoutingMatrix prüfte 'Quelle ohne Kanalziel' fälschlich für alles außer ui-only (jetzt nur insert), Kanal-Regex auf /^channel[1-8]$/, TRACK_ROLE_MAP mit V2SinkEngine-Rollen deckungsgleich gemacht (zwei Wahrheiten für dieselbe Kanalrolle beseitigt); (3) 82a0cc4 Folgefehler außerhalb des Auftragsumfangs — v2AudioGraph erwartete 10 Kanäle, audioGraphSerialization 10 Patterns, channelFlow fuhr die alte Zuordnung, und pluginChannelMap hatte syntisampler-Kommentar 'Synth(4)+Sampler/MPC(5)' bei nur ['channel4'] plus die Aliase sampler/synthesizer auf [] statt auf demselben Ziel.",
+      "verification": [
+        "grep -rn 'channel9|channel10' src --include=*.ts --include=*.tsx -> 0 Treffer",
+        "node_modules/.bin/tsc --noEmit -> exit 0",
+        "node_modules/.bin/vitest run -> 298 Dateien / 2372 Tests grün, EXIT=0 (nach 82a0cc4)"
+      ],
+      "acceptance": [
+        "Kanalzahl entschieden: 8 feste Quellen-Kanäle (Betreiber 2026-10-06)",
+        "Jeder Kanal genau EINER Quelle zugeordnet, kein Kanal doppelt belegt",
+        "Keine channel9/channel10-Referenz mehr im Quellcode"
+      ],
+      "files": [
+        "src/types.ts",
+        "src/core/audio/pluginChannelMap.ts",
+        "src/core/pluginAudioRouter.ts",
+        "src/core/audio/V2StudioGraph.ts",
+        "src/core/audio/live/V2SinkEngine.ts",
+        "src/core/audio/GraphStateBridge.ts",
+        "src/audio/channelStripState.ts",
+        "src/audio/sequencerState.ts",
+        "src/utils/audioEngine.ts",
+        "src/utils/audioGraphSerialization.ts",
+        "src/utils/aiRhythmGenerator.ts",
+        "src/components/AudioActionMenuHost.tsx"
+      ]
     },
     {
       "id": "UI2-P2-001",
