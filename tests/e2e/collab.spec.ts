@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { newStudioContext, resetSession, studioBaseUrl, studioToken } from './helpers/studioAuth';
-import { entryButton } from './helpers/studioNav';
+import { entryButton, modeButton, rackRow, switchPluginOn } from './helpers/studioNav';
 
 // Nur Chromium: Die Suite nutzt Chromium-Fake-Media-Args fuer getUserMedia und mehrere eigene Browser-Kontexte; in WebKit bricht der Start ab ('browserType.launch: Target page, context or browser has been closed').
 // CI-Fund 2026-09-17 (e2e-webkit): 'browserType.launch: Target page, context or browser has been closed'.
@@ -85,26 +85,28 @@ test('COLLAB-P1-004: aktive Plugin-Navigation wird an den anderen Client gespieg
   }
 });
 
+const rack = rackRow;
+
 test('COLLAB-P0-002: Nachzügler sieht Modul-Stand aus dem Server-Snapshot (kein Pumping)', async ({ browser }) => {
   const ctxA = await newStudioContext(browser);
   const pageA = await ctxA.newPage();
 
   try {
-    // Erst A: aktiviert eqMONK (AUTO_AI), BEVOR ein zweiter Client existiert.
+    // Erst A: holt und aktiviert eqMONK (ON), BEVOR ein zweiter Client existiert.
     await openStudio(pageA);
-    await pageA.getByTitle('eqMONK').first().click();
-    await expect(pageA.locator('#rack-eq').getByText('AUTO_AI').first()).toBeVisible();
+    await switchPluginOn(pageA, 'eq', 'eqMONK');
 
-    // Jetzt stößt B dazu. Der Server hat für eq bereits AUTO_AI im
-    // autoritativen Snapshot; B bekommt kein replays der alten Events.
+    // Jetzt stößt B dazu. Der Server hat für eq bereits Zustand und Lock im
+    // autoritativen Snapshot; B bekommt kein Replay der alten Events.
     const ctxB = await newStudioContext(browser);
     const pageB = await ctxB.newPage();
     try {
       await openStudio(pageB);
       await expect(
-        pageB.locator('#rack-eq').getByText('AUTO_AI').first(),
+        rack(pageB, 'eq'),
         'Client B muss den eqMONK-Stand aus dem session-state Snapshot wiederherstellen',
-      ).toBeVisible({ timeout: 20_000 });
+      ).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 20_000 });
+      await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'other');
     } finally {
       await ctxB.close();
     }
@@ -113,7 +115,7 @@ test('COLLAB-P0-002: Nachzügler sieht Modul-Stand aus dem Server-Snapshot (kein
   }
 });
 
-test('COLLAB-P0-002: Lock-Denial + Resync stellt Server-Wahrheit wieder her', async ({ browser }) => {
+test('COLLAB-P0-002: fremdes Plugin ist gesperrt, Resync stellt Server-Wahrheit wieder her', async ({ browser }) => {
   const ctxA = await newStudioContext(browser);
   const ctxB = await newStudioContext(browser);
   const pageA = await ctxA.newPage();
@@ -123,60 +125,43 @@ test('COLLAB-P0-002: Lock-Denial + Resync stellt Server-Wahrheit wieder her', as
     await openStudio(pageA);
     await openStudio(pageB);
 
-    // A übernimmt eqMONK per Rack-Menü (AUTO_AI → Lock → PRO).
-    await pageA.getByLabel('eqMONK Menü').click();
-    await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();
+    // A holt und aktiviert eqMONK.
+    await switchPluginOn(pageA, 'eq', 'eqMONK');
 
-    // B sieht den Fremd-Lock an der eq-Zeile ...
-    await expect(pageB.locator('#rack-eq').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+    // B sieht den Fremd-Halter: Zeile ON, Halter "other", Modus-Button gesperrt
+    // (kein Anfragen, kein Übernehmen - UI2-P0-002).
+    await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'other', { timeout: 15_000 });
+    await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 15_000 });
+    await expect(modeButton(pageB, 'eqMONK')).toBeDisabled();
 
-    // ... und muss As PRO-Stand übernommen haben, BEVOR der Power-Klick kommt.
-    // "LOCKED · REMOTE" beweist nur den Lock: Bs eigener Modul-State ist davon
-    // unabhängig und startet bei OFF. Klickt der Test zu früh, schaltet Power
-    // nicht PRO->OFF, sondern OFF->AUTO_AI - ein sichtbares "OFF" gibt es danach
-    // nie mehr, nur noch den versteckten <option>-Eintrag. Genau das war die
-    // Flakiness (2 von 4 Läufen rot, identisch auch auf dem Baseline-Commit).
-    await expect(pageB.locator('#rack-eq').getByText('PRO').first()).toBeVisible({ timeout: 15_000 });
-
-    // B versucht, eq per Power zu schalten. Der Server lehnt ab (Lock bei A);
-    // Bs lokaler Zustand ist danach optimistisch OFF.
-    await pageB.getByLabel('eqMONK Power').click();
-    // Und hier NICHT einfach getByText('OFF').first() nehmen: das Terminal-
-    // <select> der Zeile enthält zusätzlich <option value="OFF">OFF</option>,
-    // und die Option steht in der DOM-Reihenfolge vor dem Status-Span - .first()
-    // landet dort und toBeVisible() kann nie grün werden (Playwright-Log:
-    // "18 × resolved to <option value=OFF>, received hidden"). filter({ visible:
-    // true }) meint den Status-Span, den der Nutzer sieht.
-    await expect(
-      pageB.locator('#rack-eq').getByText('OFF').filter({ visible: true }).first(),
-    ).toBeVisible();
-
-    // A behält den Lock und den PRO-Zustand (Server-Wahrheit unverändert).
-    await expect(pageA.locator('#rack-eq').getByText('PRO').first()).toBeVisible();
-    await expect(pageA.locator('#rack-eq').getByText('LOCKED · REMOTE')).toHaveCount(0);
+    // A behält Lock und Zustand.
+    await expect(rack(pageA, 'eq')).toHaveAttribute('data-plugin-owner', 'me');
+    await expect(rack(pageA, 'eq')).toHaveAttribute('data-plugin-mode', 'ON');
 
     // Resync: B verbindet sich neu und übernimmt den autoritativen Server-Stand
-    // (Reconnect ohne Pumping) – eq ist wieder PRO und von A gelockt.
+    // (Reconnect ohne Pumping) – eq ist wieder ON und von A gehalten.
     //
     // WARUM NEU LADEN UND NICHT `requestSessionResync()`: der Debug-Hook
     // `window.__webRTCManager` wird ABSICHTLICH nur im Dev-Build gesetzt
-    // (`if (import.meta.env?.DEV)` in src/utils/WebRTCManager.ts). Ein Test, der
-    // ihn benutzt, kann gegen einen Produktions-Build oder eine echte Instanz
-    // grundsaetzlich nicht gruen werden - live und im lokalen Prod-Build sind
-    // genau diese zwei Tests daran gescheitert (5/7). Der Reconnect ist der Pfad,
-    // den ein Nutzer auch hat.
+    // (`if (import.meta.env?.DEV)` in src/utils/WebRTCManager.ts). Der Reconnect
+    // ist der Pfad, den ein Nutzer auch hat.
     await pageB.reload();
     await openStudio(pageB);
-    await pageB.locator('#rack-eq').evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
-    await expect(pageB.locator('#rack-eq').getByText('PRO').first()).toBeVisible({ timeout: 20_000 });
-    await expect(pageB.locator('#rack-eq').getByText('LOCKED · REMOTE')).toBeVisible();
+    await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 20_000 });
+    await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'other', { timeout: 20_000 });
+
+    // A gibt frei (ON → OFF): B sieht das Plugin wieder frei.
+    await modeButton(pageA, 'eqMONK').click();
+    await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-mode', 'OFF', { timeout: 15_000 });
+    await expect(rack(pageB, 'eq')).toHaveAttribute('data-plugin-owner', 'none', { timeout: 15_000 });
+    await expect(modeButton(pageB, 'eqMONK')).toBeEnabled();
   } finally {
     await ctxA.close();
     await ctxB.close();
   }
 });
 
-test('COLLAB-P0-004 Teil 2: Halter-Uebergabe des mixerMONK per Header-Auswahl (2 Browser)', async ({ browser }) => {
+test('UI2-P0-001: mixerMONK hat immer genau einen Halter, Übergabe nur durch den Halter (2 Browser)', async ({ browser }) => {
   const ctxA = await newStudioContext(browser);
   const ctxB = await newStudioContext(browser);
   const pageA = await ctxA.newPage();
@@ -184,37 +169,36 @@ test('COLLAB-P0-004 Teil 2: Halter-Uebergabe des mixerMONK per Header-Auswahl (2
 
   try {
     await openStudio(pageA);
+    // A ist zuerst da und wird automatisch Halter.
+    await expect(rack(pageA, 'mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
     await openStudio(pageB);
     await expect(pageA.getByText(/SESSION 2\/4/)).toBeVisible({ timeout: 20_000 });
+    await expect(rack(pageB, 'mixer')).toHaveAttribute('data-plugin-owner', 'other', { timeout: 15_000 });
 
-    // A wird Halter des mixerMONK (⋮-Menue = PRO + Lock).
-    await pageA.getByLabel('mixerMONK Menü').click();
-    await expect(pageA.locator('#rack-mixer').getByText('PRO').first()).toBeVisible({ timeout: 15_000 });
-    await expect(pageB.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
-
-    // Die Uebergabe-Auswahl erscheint NUR beim Halter und nennt B als Ziel.
-    const transferSelect = pageA.getByLabel('mixerMONK-Halter übergeben');
+    // Die Übergabe-Auswahl erscheint NUR beim Halter und nennt B als Ziel.
+    const transferSelect = pageA.getByLabel('mixerMONK übergeben');
     await expect(transferSelect).toBeVisible({ timeout: 15_000 });
+    await expect(pageB.getByLabel('mixerMONK übergeben')).toHaveCount(0);
     const targetUserId = await transferSelect.locator('option').nth(1).getAttribute('value');
-    expect(targetUserId, 'kein Uebergabe-Ziel in der Auswahl').toBeTruthy();
+    expect(targetUserId, 'kein Übergabe-Ziel in der Auswahl').toBeTruthy();
 
     await transferSelect.selectOption(targetUserId as string);
 
-    // B ist jetzt der Halter: eigener Lock, Zustand PRO bleibt.
-    await expect(pageB.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toHaveCount(0, { timeout: 15_000 });
-    await expect(pageB.locator('#rack-mixer').getByText('PRO').first()).toBeVisible();
-
-    // A ist nicht mehr Halter: Auswahl verschwindet, A sieht den Fremd-Lock.
+    // B ist jetzt der Halter; A sieht den Fremd-Halter, die Auswahl verschwindet.
+    await expect(rack(pageB, 'mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
+    await expect(rack(pageA, 'mixer')).toHaveAttribute('data-plugin-owner', 'other', { timeout: 15_000 });
     await expect(transferSelect).toHaveCount(0, { timeout: 15_000 });
-    await expect(pageA.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
 
-    // Und die Regel dahinter gilt weiter: B als NEUER Halter kann mixerMONK
-    // trotzdem nicht schliessen (MIXER_NEVER_CLOSES) - der Power-Button bleibt
-    // gesperrt. Genau das ist der Zweck des Haltermodells.
-    await expect(pageB.getByLabel('mixerMONK Power')).toBeDisabled();
+    // mixerMONK bleibt immer ON und ist nicht schließbar - auch für den Halter.
+    await expect(rack(pageB, 'mixer')).toHaveAttribute('data-plugin-mode', 'ON');
+    await expect(modeButton(pageB, 'mixerMONK')).toBeDisabled();
+
+    // Verlässt der Halter die Sitzung, geht der Mixer an das verbliebene Mitglied.
+    await ctxB.close();
+    await expect(rack(pageA, 'mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 20_000 });
   } finally {
     await ctxA.close();
-    await ctxB.close();
+    await ctxB.close().catch(() => undefined);
   }
 });
 
@@ -270,13 +254,16 @@ test('COLLAB-P1-005: Main-Out-Parameter laufen server-validiert und werden gespi
     await openStudio(pageB);
     await expect(pageA.getByText(/SESSION 2\/4/)).toBeVisible({ timeout: 20_000 });
 
-    // A wird Halter des mixerMONK -> A ist damit der Main-Out-Owner.
-    await pageA.getByLabel('mixerMONK Menü').click();
-    await expect(pageB.locator('#rack-mixer').getByText('LOCKED · REMOTE')).toBeVisible({ timeout: 15_000 });
+    // A war zuerst da und ist automatisch Halter des mixerMONK -> Main-Out-Owner.
+    await expect(rack(pageA, 'mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
+    await expect(rack(pageB, 'mixer')).toHaveAttribute('data-plugin-owner', 'other', { timeout: 15_000 });
 
     // Eindeutiger Name: das Pult hat vier "LEVEL"-Regler (Master, Booth, Phones).
     const levelA = pageA.getByRole('slider', { name: 'Main-Out LEVEL' });
-    const levelB = pageB.getByRole('slider', { name: 'Main-Out LEVEL' });
+    // B hält den Mixer nicht: er ist für B eingeklappt (UI_SPEC), bleibt aber
+    // versteckt gemountet, damit der gespiegelte Stand bei einer Übergabe stimmt.
+    const levelB = pageB.getByRole('slider', { name: 'Main-Out LEVEL', includeHidden: true });
+    await expect(pageB.getByRole('slider', { name: 'Main-Out LEVEL' })).toHaveCount(0);
     const start = Number(await levelA.getAttribute('aria-valuenow'));
     expect(Number.isFinite(start), 'LEVEL-Regler ohne aria-valuenow').toBe(true);
 
@@ -292,7 +279,7 @@ test('COLLAB-P1-005: Main-Out-Parameter laufen server-validiert und werden gespi
     // nicht - daran sind diese zwei Tests live und im lokalen Prod-Build
     // gescheitert). Produktionssichtbarer Beweis ist die Wirkung: nur der
     // Halter sendet `main-out-update`, der Server akzeptiert es und B spiegelt
-    // den Wert. Genau das wird hier geprueft (Spiegelung + Audit unten).
+    // den Wert (im versteckt gemounteten Pult). Genau das wird hier geprueft (Spiegelung + Audit unten).
     await expect(levelB).toHaveAttribute('aria-valuenow', String(expected), { timeout: 20_000 });
 
     // Und der Server hat den Vorgang gesehen: Audit-Eintrag mit param=wert.

@@ -438,6 +438,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
         socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
         broadcastSessionMembers(room);
+        ensureMixerHolder(room);
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
@@ -510,11 +511,31 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           reason: 'expired',
         });
         broadcastMainOutOwner(`session:${SESSION_ROOM_ID}`);
+        if (pluginId === 'mixer') ensureMixerHolder(`session:${SESSION_ROOM_ID}`);
       });
       // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel an den Raum
       // broadcasten – die Clients spiegeln sonst einen veralteten Owner.
       const broadcastMainOutOwner = (roomId: string): void => {
         io.to(roomId).emit('main-out-owner', { userId: resolveSessionMainOutUserId(), ts: Date.now() });
+      };
+      // UI2-P0-001: mixerMONK hat immer genau einen Halter. Beim ersten Beitritt
+      // bekommt ihn der Erste; verlaesst der Halter die Sitzung (oder laeuft sein
+      // Lease ab), geht er an das am laengsten anwesende Mitglied. Die Raumliste
+      // ist in Beitrittsreihenfolge (Socket.IO-Set), aeltester zuerst.
+      const ensureMixerHolder = (room: string, excludeSocketId = ''): void => {
+        const memberIds = sessionMembers(room, excludeSocketId).map((m) => m.userId);
+        const assigned = sessionRuntime.session.ensureHolder('mixer', memberIds);
+        if (!assigned) return;
+        sessionRuntime.persist();
+        io.to(room).emit('plugin-lock', {
+          pluginId: 'mixer',
+          lockedBy: assigned,
+          timestamp: Date.now(),
+          ttl: pluginLockTtlMs,
+          revision: sessionRuntime.session.revision,
+          reason: 'auto-holder',
+        });
+        broadcastMainOutOwner(room);
       };
       socket.on('plugin-unlock', (data: any) => {
         markSocketActivity();
@@ -524,6 +545,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const pluginId = parsed.data.pluginId;
+        // UI2-P0-001: mixerMONK ist nicht schliessbar - der Halter kann ihn nur
+        // uebergeben (plugin-lock-transfer), nicht freigeben.
+        if (pluginId === 'mixer') {
+          socket.emit('plugin-lock-denied', { pluginId, lockedBy: sessionRuntime.session.lockOwner(pluginId) ?? null, reason: 'mixer-transfer-only' });
+          return;
+        }
         if (!sessionRuntime.session.releaseLock(pluginId, senderUserId)) return;
         sessionRuntime.persist();
         socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId, revision: sessionRuntime.session.revision });
@@ -718,6 +745,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
+        if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
       });
 
       socket.on('disconnect', () => {
@@ -732,6 +760,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         sessionRuntime.persist();
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
+        if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
       });
     });
 
