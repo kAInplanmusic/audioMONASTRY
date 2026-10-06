@@ -3881,7 +3881,7 @@
       "id": "INFRA-RUNPOD-014",
       "title": "imageHq-Vertrag: worker-comfyui mit Workflow statt prompt-Feld (Code b90f7a8) - SSOT-Nachzug",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Infra/RunPod",
       "source": "Commit b90f7a8 + src/core/ai/vision/runpodVision.ts:7-16 (\"SEIT 2026-09-27\")",
       "problem": "Seit b90f7a8 (Commit-Datum 2026-09-28 13:48, im Code als \"SEIT 2026-09-27\" gefuehrt) baut runpodVision.ts den Endpoint-Input als { input: { workflow } } (ComfyUI-Workflow-API); der Prompt steckt im Graphen (Vorlage services/audiomonastry-ai-runtime/workflows/image_flux1.json), ein prompt-Feld kennt der Worker nicht mehr. Live-Endpoint bleibt wzh9hcbitjnn95 (Name audiomonastry-ai-image). Offen: die Deploy-/Template-Seite traegt teils noch das PrunaAI-Image (INFRA-RUNPOD-015); die BEFUND-Messung 2026-09-28 sah drei Worker, zwei davon noch mit dem alten PrunaAI-Image (Auftraege scheitern dort nach 1,3 s).",
@@ -3894,7 +3894,13 @@
         "scripts/visual-vorrat/BEFUND.md"
       ],
       "updatedAt": "2026-09-29",
-      "note": "NACHTRAG 2026-09-29 (Paket C, Commit 71388de): comfyui_adapter.py COMFY_ROLES.imageHq auf worker:comfyui/protocol:workflow umgestellt (Alt-Eintrag als Historien-Kommentar), offline-Contract-Test tests/test_comfyui_adapter_imagehq.py 5/5. Offen bleibt: Live-Verifikation am Endpoint."
+      "note": "NACHTRAG 2026-09-29 (Paket C, Commit 71388de): comfyui_adapter.py COMFY_ROLES.imageHq auf worker:comfyui/protocol:workflow umgestellt (Alt-Eintrag als Historien-Kommentar), offline-Contract-Test tests/test_comfyui_adapter_imagehq.py 5/5. Offen bleibt: Live-Verifikation am Endpoint.\n\nBEFUND + FIX 2026-10-06 (Audit-Lauf, im vollen `npm run verify` gefunden): Der imageHq-Umbau aus b90f7a8 hatte den Vertrag auf Workflow gestellt, aber das Feld `kind: image` in COMFY_ROLES nicht mitgezogen. Der Kommentar bei imageLora warnt ausdruecklich: ohne `kind` gilt der ACE-Step-Weg (Rueckwaertsvertraeglichkeit fuer music). Folge: `build_workflow_request` lief fuer imageHq in den ACE-Step-Pfad, `apply_prompt_to_workflow` suchte TextEncodeAceStep-Knoten, fand in einem Bildgraphen keine und liess den Graphen unveraendert - der Aufruf haette still das Demo-Bild des Workflows geliefert, waehrend der Aufrufer seinen Prompt fuer erledigt haelt. Genau der stille Fehlschlag, den der Umbau verhindern sollte.\nFix: imageHq traegt jetzt `kind: image` PLUS `imagePath: single`; build_workflow_request verzweigt darauf in die neue build_single_image_request (eigener Rollen-Workflow ueber workflow_for, Prompt/Seed/Groesse via apply_prompt_to_image_workflow ueber die Sampler-Verdrahtung) statt in build_image_request (das ist die imageLora-Logik mit Basismodell-Wahl und LoRA-Kette).\nZwei Altvertrag-Tests zogen mit: tests/test_comfyui_adapter.py prueft jetzt den Workflow-Vertrag von imageHq (prompt landet am Textknoten, KEIN prompt-Feld im Request; ohne Workflow kommt die meldende ValueError) und tests/test_moa_orchestrator.py erwartet die Workflow-Meldung statt 'leerer Request' - plus Gegenprobe, dass ein prompt OHNE Workflow weiter abgelehnt wird.\nBELEG: vorher 1 failure + 1 error in der Python-Suite (verify EXIT=1), jetzt `npm run test:python` 139 Tests OK; tests/test_comfyui_adapter.py 49/49, tests/test_moa_orchestrator.py 62/62. Am echten workflows/image_flux1.json geprueft: Textknoten 2 bekommt den Prompt, kein prompt-Feld im Request, Musik-Weg unveraendert. Damit ist der Vertrag am Code belegt; LIVE-Verifikation am RunPod-Endpoint bleibt offen (Konto/Endpoint).",
+      "verification": [
+        "npm run test:python -> 139 Tests OK (vorher EXIT=1)",
+        "services/audiomonastry-ai-runtime/tests/test_comfyui_adapter.py -> 49/49",
+        "services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py -> 62/62",
+        "Gegenprobe am echten workflows/image_flux1.json: Prompt am Textknoten 2, kein prompt-Feld, music unveraendert"
+      ]
     },
     {
       "id": "INFRA-RUNPOD-015",

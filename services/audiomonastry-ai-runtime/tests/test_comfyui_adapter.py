@@ -63,9 +63,39 @@ class PromptRequestTest(unittest.TestCase):
 
 
 class PromptRoleRoutingTest(unittest.TestCase):
-    def test_image_role_is_prompt_based(self) -> None:
-        request = adapter.build_request("image.generate", "imageHq", "flux1-dev-juiced", {"prompt": "a cat"})
-        self.assertEqual(request, {"prompt": "a cat"})
+    def test_imageHq_laeuft_jetzt_ueber_den_workflow_vertrag(self) -> None:
+        # Bis 2026-09-27 (b90f7a8) war imageHq prompt-basiert (PrunaAI-FLUX):
+        #   build_request("image.generate", "imageHq", ..., {"prompt": "a cat"}) == {"prompt": "a cat"}
+        # Seit der Entscheidung "Weg A" laeuft die Rolle auf demselben
+        # worker-comfyui wie imageLora: Workflow-Vertrag, KEIN prompt-Feld mehr.
+        # Ein prompt wuerde stillschweigend ignoriert und das Demo-Bild des
+        # Graphen geliefert - deshalb hier ein Workflow, der den Prompt traegt.
+        # Ein Minimalgraph in der Form von workflows/image_flux1.json: der
+        # Sampler nennt in `positive`/`negative`, welche Textknoten gemeint
+        # sind - darueber findet der Adapter sie (nicht ueber Knoten-IDs).
+        workflow = {
+            "2": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["1", 1]}},
+            "3": {"class_type": "CLIPTextEncode", "inputs": {"text": "", "clip": ["1", 1]}},
+            "5": {
+                "class_type": "KSampler",
+                "inputs": {"positive": ["2", 0], "negative": ["3", 0], "seed": 0},
+            },
+        }
+        request = adapter.build_request(
+            "image.generate", "imageHq", "flux1-dev", {"workflow": workflow, "prompt": "a cat"}
+        )
+        self.assertIn("workflow", request)
+        self.assertNotIn("prompt", request, "imageHq ist workflow-basiert - kein prompt-Feld")
+        self.assertEqual(request["workflow"]["2"]["inputs"]["text"], "a cat")
+
+    def test_imageHq_ohne_workflow_meldet_den_fehlenden_graphen(self) -> None:
+        # Ohne Workflow (kein inline, kein COMFY_WORKFLOW_IMAGEHQ, keine
+        # workflows/imageHq.json) muss die Meldung sagen, WAS fehlt - nicht
+        # still auf ein prompt-Feld zurueckfallen.
+        with self.assertRaises(ValueError) as ctx:
+            adapter.build_request("image.generate", "imageHq", "flux1-dev", {"prompt": "a cat"})
+        self.assertIn("kein Workflow", str(ctx.exception))
+        self.assertIn("COMFY_WORKFLOW_IMAGEHQ", str(ctx.exception))
 
     def test_video_role_is_prompt_based(self) -> None:
         request = adapter.build_request("video_real.text2video", "videoReal", "wan22", {"prompt": "drone shot"})
