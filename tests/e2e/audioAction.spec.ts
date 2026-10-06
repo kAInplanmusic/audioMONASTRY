@@ -59,7 +59,7 @@ test('Library-Sample → Action Menu → Project Clipboard → Send to Track', a
   const menu2 = page.getByRole('menu', { name: 'Audio-Aktionen' });
   await expect(menu2).toBeVisible();
   await menu2.getByRole('menuitem', { name: /Send to Track/ }).click();
-  await expect(menu2.getByRole('menuitem', { name: /CH 1 · KICK/ })).toBeVisible();
+  await expect(menu2.getByRole('menuitem', { name: /CH 1 · DROP/ })).toBeVisible();
 
   // P0-1: Kanaele darf NUR der DJ (mixerMONK-Halter) belegen. UI2-P0-001: der
   // Mixer hat immer genau einen Halter - in dieser Einzelsitzung ist das der
