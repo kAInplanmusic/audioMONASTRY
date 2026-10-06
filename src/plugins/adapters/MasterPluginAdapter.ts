@@ -40,8 +40,7 @@ export class MasterPluginAdapter extends BasePluginAdapter {
    * In-place, ohne Allokation (Adapter-Vertrag: `process()` ist echtzeit-sicher).
    */
   protected override onProcess(block: PluginAudioBlock): PluginAudioBlock {
-    const raw = this.parameters.gain;
-    const gain = typeof raw === 'number' && Number.isFinite(raw) ? Math.min(2, Math.max(0, raw)) : 1;
+    const gain = this.clampValue(this.numberFromParameters('gain', 1), 0, 2);
     if (gain === 1) return block;
     for (const channel of block.channels) {
       for (let i = 0; i < channel.length; i++) {

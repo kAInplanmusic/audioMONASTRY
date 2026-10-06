@@ -150,4 +150,24 @@ export abstract class BasePluginAdapter implements PluginInterface {
     const n = Number.isFinite(raw) ? raw : fallback;
     return Math.min(max, Math.max(min, n));
   }
+
+  /**
+   * Zahl aus den **gespeicherten** Parametern (gesetzt über `restore()` oder
+   * `setParameter()`), mit Vorgabe. Für die Block-Verarbeitung: `numberParam()`
+   * arbeitet auf einem eingehenden Parameter-Objekt, nicht auf dem Zustand.
+   */
+  protected numberFromParameters(name: string, fallback: number): number {
+    const raw = this.parameters[name];
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string') {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return n;
+    }
+    return fallback;
+  }
+
+  /** Klemmt einen Wert auf [min, max] – für Block-Verarbeitung ohne Allokation. */
+  protected clampValue(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
 }
