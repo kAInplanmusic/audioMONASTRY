@@ -37,6 +37,7 @@ import {
   PluginStateSocketSchema,
 } from '../src/types/zod/schemas';
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
+import { normalizeEndpointMode, sanitizeEndpointReport, type EndpointReport } from '../src/core/session/sessionEndpoints';
 import type { SessionRuntime } from './sessionRuntime.ts';
 import {
   createSocketLivenessMonitor,
@@ -271,6 +272,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       }
     }
 
+    // Session-Ausgänge (Betreiber 2026-10-06): 1–4 Nutzer (UI im eigenen Format
+    // und eigener Auflösung), EIN Main-Ausgang Ton (/master-out), EIN Main-
+    // Ausgang Bild (/visual-out). Jedes Gerät meldet, was es ist; die Art folgt
+    // dem Modus des Sockets (src/core/session/sessionEndpoints.ts).
+    const endpointReports = new Map<string, EndpointReport>();
+
     io.on('connection', (socket: any) => {
       // F8-Fix: EIN Ort für die Liveness je Socket. Den Idle-Timer PRO Verbindung
       // gibt es nicht mehr — der Sweep trennt idle Sockets zentral (und räumt
@@ -371,6 +378,27 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         }
       };
 
+      /** Alle Geräte im Raum in Beitrittsreihenfolge, mit ihrer letzten Meldung. */
+      const sessionEndpointList = (room: string) => {
+        const out: { socketId: string; userId: string; mode: string; report: EndpointReport | null }[] = [];
+        const sockets = io.sockets.adapter.rooms.get(room);
+        if (!sockets) return out;
+        for (const sid of sockets) {
+          const s = io.sockets.sockets.get(sid);
+          if (!s?.data?.sessionUserId) continue;
+          out.push({
+            socketId: sid,
+            userId: String(s.data.sessionUserId),
+            mode: normalizeEndpointMode(normalizeSessionMode(s.data.sessionMode)),
+            report: endpointReports.get(sid) ?? null,
+          });
+        }
+        return out;
+      };
+      const broadcastEndpoints = (room: string): void => {
+        io.to(room).emit('session-endpoints', { roomId: SESSION_ROOM_ID, endpoints: sessionEndpointList(room) });
+      };
+
       socket.on('join-session', (data: any) => {
         markSocketActivity();
         const userId = String(data?.userId ?? socket.id).trim();
@@ -421,6 +449,22 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
 
         const members = sessionMembers(room, socket.id);
         if (isListenerMode(mode)) {
+          // Session-Ausgänge: GENAU ein Main-Ausgang Ton und einer Bild. Ein neues
+          // Gerät im selben Modus löst das alte ab (Reload, Gerätewechsel) – das
+          // alte bekommt einen Hinweis und wird getrennt.
+          const replaced: any[] = [];
+          for (const sid of io.sockets.adapter.rooms.get(room) ?? []) {
+            if (sid === socket.id) continue;
+            const other = io.sockets.sockets.get(sid);
+            if (other && normalizeSessionMode(other.data?.sessionMode) === mode) replaced.push(other);
+          }
+          for (const other of replaced) {
+            endpointReports.delete(other.id);
+            other.emit('output-replaced', { roomId: SESSION_ROOM_ID, mode });
+            addServerAudit(String(other.data?.sessionUserId ?? other.id), 'member', 'OUTPUT_REPLACED', true, mode);
+            other.leave(room);
+            other.disconnect(true);
+          }
           // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
           // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
           // initiiert seine Verbindung selbst zum Host.
@@ -430,6 +474,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             selfMode: mode,
             mainOutUserId: resolveSessionMainOutUserId(),
           });
+          broadcastEndpoints(room);
           return;
         }
 
@@ -438,6 +483,8 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         // (inklusive dem Neuen) die autoritative Mitgliederliste schicken.
         socket.to(room).emit('peer-joined', { roomId: SESSION_ROOM_ID, socketId: socket.id, userId });
         broadcastSessionMembers(room);
+        ensureMixerHolder(room);
+        broadcastEndpoints(room);
       });
 
       // K-2/K-5: Server-autoritative Plugin-Locks (Client bleibt optimistisch).
@@ -510,11 +557,31 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           reason: 'expired',
         });
         broadcastMainOutOwner(`session:${SESSION_ROOM_ID}`);
+        if (pluginId === 'mixer') ensureMixerHolder(`session:${SESSION_ROOM_ID}`);
       });
       // P0-1 (revidiert): Main-Out-Owner bei jedem Lock-Wechsel an den Raum
       // broadcasten – die Clients spiegeln sonst einen veralteten Owner.
       const broadcastMainOutOwner = (roomId: string): void => {
         io.to(roomId).emit('main-out-owner', { userId: resolveSessionMainOutUserId(), ts: Date.now() });
+      };
+      // UI2-P0-001: mixerMONK hat immer genau einen Halter. Beim ersten Beitritt
+      // bekommt ihn der Erste; verlaesst der Halter die Sitzung (oder laeuft sein
+      // Lease ab), geht er an das am laengsten anwesende Mitglied. Die Raumliste
+      // ist in Beitrittsreihenfolge (Socket.IO-Set), aeltester zuerst.
+      const ensureMixerHolder = (room: string, excludeSocketId = ''): void => {
+        const memberIds = sessionMembers(room, excludeSocketId).map((m) => m.userId);
+        const assigned = sessionRuntime.session.ensureHolder('mixer', memberIds);
+        if (!assigned) return;
+        sessionRuntime.persist();
+        io.to(room).emit('plugin-lock', {
+          pluginId: 'mixer',
+          lockedBy: assigned,
+          timestamp: Date.now(),
+          ttl: pluginLockTtlMs,
+          revision: sessionRuntime.session.revision,
+          reason: 'auto-holder',
+        });
+        broadcastMainOutOwner(room);
       };
       socket.on('plugin-unlock', (data: any) => {
         markSocketActivity();
@@ -524,6 +591,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (!parsed.success) return;
         const senderUserId = String(socket.data?.sessionUserId ?? socket.id);
         const pluginId = parsed.data.pluginId;
+        // UI2-P0-001: mixerMONK ist nicht schliessbar - der Halter kann ihn nur
+        // uebergeben (plugin-lock-transfer), nicht freigeben.
+        if (pluginId === 'mixer') {
+          socket.emit('plugin-lock-denied', { pluginId, lockedBy: sessionRuntime.session.lockOwner(pluginId) ?? null, reason: 'mixer-transfer-only' });
+          return;
+        }
         if (!sessionRuntime.session.releaseLock(pluginId, senderUserId)) return;
         sessionRuntime.persist();
         socket.to(`session:${roomId}`).emit('plugin-unlock', { pluginId, userId: senderUserId, revision: sessionRuntime.session.revision });
@@ -640,6 +713,18 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
       });
 
+      // Session-Ausgänge: Meldung bereinigen (Art = Modus des Sockets) und an
+      // alle Geräte der Session verteilen.
+      socket.on('endpoint-report', (data: unknown) => {
+        markSocketActivity();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const report = sanitizeEndpointReport(normalizeEndpointMode(normalizeSessionMode(socket.data?.sessionMode)), data);
+        if (!report) return;
+        endpointReports.set(socket.id, report);
+        broadcastEndpoints(`session:${roomId}`);
+      });
+
       // COLLAB-P1-004: Aktives Plugin/Nav an die Session spiegeln. Reiner
       // UI-Hinweis (kein Audio-State, keine Lock-Wirkung) – egal welcher User
       // gerade welches Modul bedient, die anderen sehen es im Header.
@@ -718,11 +803,16 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
         socket.leave(`session:${roomId}`);
+        endpointReports.delete(socket.id);
+        broadcastEndpoints(`session:${roomId}`);
+        if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
       });
 
       socket.on('disconnect', () => {
         const roomId = socket.data?.sessionRoom;
         if (!roomId) return;
+        endpointReports.delete(socket.id);
+        broadcastEndpoints(`session:${roomId}`);
         const userId = String(socket.data?.sessionUserId ?? '');
         // K-5: Locks des getrennten Users sofort freigeben und verteilen.
         const released = sessionRuntime.session.releaseUserLocks(userId);
@@ -732,6 +822,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         sessionRuntime.persist();
         if (released.includes('mixer')) broadcastMainOutOwner(`session:${roomId}`);
         socket.to(`session:${roomId}`).emit('peer-left', { roomId, socketId: socket.id, userId: socket.data?.sessionUserId });
+        if (released.includes('mixer')) ensureMixerHolder(`session:${roomId}`, socket.id);
       });
     });
 

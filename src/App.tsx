@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
@@ -7,6 +7,10 @@ import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
 import { HeaderPluginIcon, headerIconStatus } from './components/HeaderPluginIcon';
+import { SignalChainBar } from './components/SignalChainBar';
+import { MasterplayerReadout } from './components/MasterplayerReadout';
+import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
+import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { BeatVisualizer } from './components/BeatVisualizer';
 import { EngineStatusBadge } from './components/EngineStatusBadge';
 import { TECHNO_PRESETS } from './presets';
@@ -24,7 +28,8 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
-import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles } from 'lucide-react';
+import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles, Maximize2, Minimize2, Play, Square } from 'lucide-react';
+import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
@@ -110,18 +115,20 @@ function AppComponent() {
   // COLLAB-P1-004: aktive Plugin-Navigation der anderen Session-User (userId → pluginId).
   const [remoteNav, setRemoteNav] = useState<Record<string, { pluginId: string; ts: number }>>({});
   const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
-  const [viewport, setViewport] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 0, h: typeof window !== 'undefined' ? window.innerHeight : 0 });
-
-  // Auflösung live erkennen (mixerMONK + Racks passen sich dynamisch an).
+  // Formate (Betreiber 2026-10-06): Handy quer · Handy hochkant (vereinfacht) ·
+  // Pad quer · PC/Laptop – automatisch aus Gerät, Ausrichtung und Auflösung.
+  const deviceLayout = useDeviceLayout();
+  const simplified = deviceLayout.simplified;
+  // Session-Ausgänge: dieser Nutzer meldet Format und Auflösung, in der er die
+  // UI bekommt – jeder der 1–4 Nutzer hat seine eigene (Ausgänge-Panel).
   useEffect(() => {
-    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
-    };
-  }, []);
+    webRTCManager.sendEndpointReport({
+      layout: deviceLayout.layout,
+      width: deviceLayout.resolution.cssWidth,
+      height: deviceLayout.resolution.cssHeight,
+      devicePixelRatio: deviceLayout.resolution.dpr,
+    });
+  }, [deviceLayout.layout, deviceLayout.resolution.cssWidth, deviceLayout.resolution.cssHeight, deviceLayout.resolution.dpr]);
 
   // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
   const navPlugins = useMemo(
@@ -147,18 +154,49 @@ function AppComponent() {
     }
   }, [moduleStates, bpm, isPlaying, sessionAutosave]);
 
-  // Header-Auswahl: aktiviert das Modul (Touch/Click) und scrollt zum Rack.
+  // UI2-P0-002: Hinweiszeile fuer abgelehnte Moduswechsel (fremdes Plugin, Mixer).
+  const [modeNotice, setModeNotice] = useState('');
+  useEffect(() => {
+    if (!modeNotice) return;
+    const t = window.setTimeout(() => setModeNotice(''), 3800);
+    return () => window.clearTimeout(t);
+  }, [modeNotice]);
+
+  /**
+   * UI2-P0-002: Modus-Button rechts am Plugin, OFF → STBY → ON → OFF.
+   * OFF = frei (kein Halter) · STBY = Lock gehalten, Modul aus (Bypass) ·
+   * ON = Lock gehalten, Modul aktiv (PRO, Bedienflaeche offen).
+   * Fremde Plugins: kein Anfragen, kein Uebernehmen. mixerMONK: nur Uebergabe.
+   */
+  const cycleMode = useCallback((id: string) => {
+    const me = webRTCManager.userId;
+    const lock = pluginLocks[id];
+    const owner = pluginOwnerOf(lock);
+    const mode = pluginModeOf(id, moduleStates[id], lock);
+    const step = nextModeStep(id, mode, owner, me);
+    if (step.kind === 'denied') { setModeNotice(step.reason); return; }
+    if (step.kind === 'acquire') {
+      if (!requestLock(id, me)) { setModeNotice('Gerade von jemand anderem geholt.'); return; }
+      if ((moduleStates[id] || 'OFF') !== 'OFF') setModuleState(id, 'OFF');
+      return;
+    }
+    if (step.kind === 'activate') { setModuleState(id, 'PRO'); return; }
+    setModuleState(id, 'OFF');
+    releaseLock(id, me);
+  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState]);
+
+  // UI2-P0-003: SYNC-Zustand (Standard an) fuer spielende Plugins.
+  useSyncExternalStore(subscribePluginSync, pluginSyncVersion, pluginSyncVersion);
+
+  // Header-Auswahl: springt zum Modul (Spec: „Tippen springt zum Modul“) und
+  // meldet die Ansicht an die Session. Der Modus aendert sich nur ueber den
+  // Modus-Button am Plugin.
   const handleNavSelect = useCallback((navId: string) => {
     setActiveNav(navId);
     // COLLAB-P1-004: aktive Navigation an die Session melden (Server-Relay).
     webRTCManager.sendSessionNav(navId);
-    const current = moduleStates[navId] || 'OFF';
-    if (current === 'OFF') {
-      releaseLock(navId, webRTCManager.userId);
-      setModuleState(navId, 'AUTO_AI');
-    }
     document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [moduleStates, releaseLock, setModuleState]);
+  }, []);
 
   // COLLAB-P1-004: Navigation der anderen User empfangen und anzeigen.
   useEffect(() => {
@@ -190,7 +228,8 @@ function AppComponent() {
   // MAIN-Berechtigung (revidiert): NUR der Halter (Lock-Owner) des mixerMONK-
   // Plugins ist der DJ und darf den Main-Sound steuern (Play/Stop/BPM/Fades).
   // Kein Admin, kein Superuser, kein Fallback.
-  const mainHolder = (moduleStates['mixer'] || 'OFF') === 'PRO'
+  // UI2-P0-001: mixerMONK ist immer ON; Halter = Lock-Owner (vom Server vergeben).
+  const mainHolder = (moduleStates['mixer'] || 'OFF') !== 'OFF'
     && Boolean(pluginLocks['mixer']?.active)
     && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
   useEffect(() => {
@@ -309,10 +348,17 @@ function AppComponent() {
           const plugins = getPluginRegistry();
           const target = plugins[n];
           if (target) {
-            const current = moduleStates[target.id] || 'OFF';
-            releaseLock(target.id, webRTCManager.userId);
-            const turningOn = current === 'OFF';
-            setModuleState(target.id, turningOn ? 'AUTO_AI' : 'OFF');
+            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → STBY → ON → OFF).
+            const lock = pluginLocks[target.id];
+            const step = nextModeStep(
+              target.id,
+              pluginModeOf(target.id, moduleStates[target.id], lock),
+              pluginOwnerOf(lock),
+              webRTCManager.userId,
+            );
+            cycleMode(target.id);
+            if (step.kind === 'denied') return;
+            const turningOn = step.kind !== 'release';
             // Konsistenz zum Nav-Icon (handleNavSelect): mit dem Modul auch die
             // ANSICHT markieren bzw. loesen und an die Session melden. Ohne das
             // bleibt nach dem Hotkey ein unmarkiertes Nav-Icon stehen (im Test
@@ -341,7 +387,7 @@ function AppComponent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPlaying, mainHolder, moduleStates, releaseLock, setModuleState]);
+  }, [isPlaying, mainHolder, moduleStates, pluginLocks, cycleMode]);
 
   // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
   useEffect(() => {
@@ -387,42 +433,6 @@ function AppComponent() {
     const interval = setInterval(sendLatency, 30_000);
     return () => clearInterval(interval);
   }, []);
-
-  // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
-  // P0-1: mixer ist kein Sonderfall mehr – jedes Plugin (auch mixerMONK) ist
-  // OFF-fähig und wird erst bei Aktivierung in die Signalkette eingespeist.
-  const togglePlugin = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
-    releaseLock(id, webRTCManager.userId);
-    setModuleState(id, nextState);
-  }, [moduleStates, releaseLock, setModuleState]);
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-  const promotePlugin = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'OFF') return;
-    const lockGranted = requestLock(id, webRTCManager.userId);
-    if (!lockGranted) return;
-    setModuleState(id, 'PRO');
-  }, [moduleStates, requestLock, setModuleState]);
-
-  // Rack-Promote (⋮): OFF → AUTO_AI → PRO, PRO → OFF (freigeben).
-  // ARCH-#6: PRO-Transition nur bei bestätigtem Lock – der Server emittiert
-  // sonst rbac-denied/lock-denied und der Client hätte lokal PRO, während
-  // die Session etwas anderes sieht (Desync).
-  const rackPromote = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'PRO') {
-      releaseLock(id, webRTCManager.userId);
-      setModuleState(id, 'OFF');
-      return;
-    }
-    if (currentState === 'OFF') setModuleState(id, 'AUTO_AI');
-    if (requestLock(id, webRTCManager.userId)) {
-      setModuleState(id, 'PRO');
-    }
-  }, [moduleStates, requestLock, releaseLock, setModuleState]);
 
   // P1-4: Session-Zwischenspeicher – Snapshot aus aktuellem Zustand bauen bzw. anwenden.
   const handleSaveScratchSnapshot = useCallback((name: string) => {
@@ -528,14 +538,9 @@ function AppComponent() {
       console.log('[startApp] isStarted=true setzen');
       setIsStarted(true);
       setIsPlaying(false);
-      // iPad/Phone: Querformat anstreben (nur möglich im Fullscreen/PWA-Kontext;
-      // im normalen Browser-Tab wird der Versuch still ignoriert).
-      try {
-        const so = screen.orientation as (ScreenOrientation & { lock?: (o: string) => Promise<void> }) | undefined;
-        if (so && typeof so.lock === 'function') {
-          so.lock('landscape').catch(() => { /* Browser erlaubt Lock nicht */ });
-        }
-      } catch { /* Orientierungs-Lock nicht verfügbar */ }
+      // Formate: KEIN Orientierungs-Lock mehr – Handy hochkant hat eine eigene,
+      // vereinfachte Ansicht. Vollbild fordert useDeviceLayout beim Tippen an
+      // (Handy quer, Pad quer); der Klick auf „Studio betreten" zählt bereits.
   };
 
   /** Rendert den Terminal-Inhalt eines Rack-Streifens (Special-Cases wie bisher). */
@@ -655,10 +660,10 @@ function AppComponent() {
   }
 
   return (
-    <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2">
+    <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2 phone:p-2! phone:pb-16!">
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
       {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 16 Plugin-Icons in zwei Reihen + Avatar */}
-      <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-[5.75rem] short-landscape:h-16 bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
+      <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-[5.75rem] short-landscape:h-16 phone:h-12! phone:-mx-2! phone:-mt-2! bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
         <div className="mx-auto flex h-full items-stretch max-w-[1800px]">
           {/* Logo-Block */}
           <a
@@ -671,7 +676,7 @@ function AppComponent() {
               <div className="absolute -inset-1 rounded-lg bg-cyan-400/15 blur-lg" />
               <Logo size={30} rounded={false} className="relative" />
             </div>
-            <div className="hidden sm:block leading-none min-w-0">
+            <div className="hidden sm:block phone:hidden! pad:hidden! leading-none min-w-0">
               <p className="text-[14px] font-black tracking-tight text-white whitespace-nowrap">
                 <span className="font-light text-neutral-300">audio</span>MONASTRY
               </p>
@@ -747,11 +752,12 @@ function AppComponent() {
               </div>
             )}
             <div
-              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/5 text-cyan-300 text-[9px] font-mono tracking-widest"
-              title="Aktuelle Viewport-Auflösung"
+              className="hidden 2xl:flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/5 text-cyan-300 text-[9px] font-mono tracking-widest whitespace-nowrap"
+              title="Erkanntes Format und Auflösung (CSS-Pixel × Pixeldichte)"
               role="status"
+              data-testid="layout-label"
             >
-              {viewport.w}×{viewport.h}
+              {deviceLayout.label}
             </div>
             <button type="button"
               onClick={() => setScratchOpen(v => !v)}
@@ -767,14 +773,25 @@ function AppComponent() {
             <button type="button"
               onClick={() => setVisualOpen(v => !v)}
               className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-fuchsia-400/10 border border-fuchsia-400/40 text-fuchsia-300 hover:bg-fuchsia-400/20 hover:border-fuchsia-300/70 transition-all duration-200 cursor-pointer"
-              aria-label="VisualMONK Liveshow oeffnen"
+              aria-label="Visual-Liveshow öffnen"
               aria-pressed={visualOpen}
-              title="VisualMONK Liveshow (Stream an Ghostuser 6 / Beamer)"
+              title="Visual-Liveshow (Stream an Ghostuser 6 / Beamer)"
             >
               <Sparkles className="w-4 h-4" />
               <span className="text-[9px] font-bold tracking-widest">VISUAL</span>
             </button>
             <OutputsPanel />
+            {deviceLayout.fullscreen.supported && !deviceLayout.standalone && deviceLayout.layout !== 'desktop' && (
+              <button type="button"
+                onClick={() => (deviceLayout.fullscreen.active ? exitAppFullscreen() : requestAppFullscreen())}
+                className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
+                aria-label={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                aria-pressed={deviceLayout.fullscreen.active}
+                title={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+              >
+                {deviceLayout.fullscreen.active ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              </button>
+            )}
             <button type="button"
               onClick={() => setSettingsOpen(true)}
               className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
@@ -783,7 +800,7 @@ function AppComponent() {
             >
               <Settings className="w-4 h-4" />
             </button>
-            <div className="hidden sm:flex w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-cyan-400/20 to-fuchsia-400/20 border border-cyan-400/30 items-center justify-center" title="Studio-User">
+            <div className="hidden sm:flex phone:hidden! w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-cyan-400/20 to-fuchsia-400/20 border border-cyan-400/30 items-center justify-center" title="Studio-User">
               <UserRound className="w-4 h-4 text-cyan-300" />
             </div>
           </div>
@@ -793,24 +810,25 @@ function AppComponent() {
       {/* 2. masterplayerMONK: feste View-only-Leiste (oben, sticky in der Rack-Scroll-Logik). */}
       <section
         id="rack-masterplayer"
-        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 short-landscape:top-16 z-30"
+        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 short-landscape:top-16 z-30 phone:static! phone:mb-2!"
       >
         <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+          <div className="w-10 h-10 phone:hidden! shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
             <Activity size={18} />
           </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
-          <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
+          <h3 className="text-sm phone:text-[11px]! phone:tracking-[0.12em]! font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
+          <span className="hidden sm:inline phone:hidden! text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
           <EngineStatusBadge />
 
-          <div className="ml-auto flex items-center gap-4 text-center">
+          <div className="ml-auto flex items-center gap-4 phone:gap-3! text-center">
             <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
             <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
-            <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
+            <MasterplayerReadout bpm={bpm} isPlaying={isPlaying} />
+            <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">4/4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">METRUM</div></div>
             <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
           </div>
         </div>
-        <div className="px-3 pb-3 border-t border-white/5">
+        <div className="px-3 pb-3 border-t border-white/5 phone:hidden">
           <BeatVisualizer isPlaying={isPlaying} />
         </div>
         {/* P0-1 (revidiert): masterplayerMONK ist REINE INFO/VISUALISIERUNG.
@@ -819,47 +837,100 @@ function AppComponent() {
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
 
-      {/* Rack-Liste: alle Module als Streifen */}
+      {/* Rack-Liste: alle Module als Streifen. UI2-P2-002: Signalweg-Leiste darueber. */}
       <div className="flex flex-col gap-3 max-w-screen-xl mx-auto">
-        {RACK_ORDER.map(id => {
+        <div className="phone:hidden">
+          <SignalChainBar moduleStates={moduleStates} pluginLocks={pluginLocks} />
+        </div>
+        {simplified && !rotateHintDismissed && (
+          <div role="note" data-testid="simplified-hint" className="flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-950/40 px-3 py-2 text-[11px] text-cyan-100">
+            <span aria-hidden="true">↻</span>
+            <span className="flex-1">Vereinfachte Ansicht: Modus, SYNC und Halter. Für Mixer-Pult und Bedienflächen das Handy quer drehen.</span>
+            <button type="button" onClick={() => setRotateHintDismissed(true)} aria-label="Hinweis schließen" className="px-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer">✕</button>
+          </div>
+        )}
+        {deviceLayout.installHint && (
+          <div role="note" data-testid="install-hint" className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100">
+            <span className="flex-1">Vollbild auf diesem Gerät: im Browser <b>Teilen → „Zum Home-Bildschirm“</b> wählen und das Studio von dort starten.</span>
+            <button type="button" onClick={dismissInstallHint} aria-label="Hinweis schließen" className="px-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer">✕</button>
+          </div>
+        )}
+        {modeNotice && (
+          <p role="status" aria-live="polite" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{modeNotice}</p>
+        )}
+        {RACK_ORDER.map((id, index) => {
           const plugin = getPluginRegistry().find(p => p.id === id);
           if (!plugin) return null;
           if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
-          const state = moduleStates[id] || 'OFF';
-          const lockStatus = pluginLocks[id];
-          const lockedByOther = !!lockStatus?.active && lockStatus.lockedBy !== webRTCManager.userId;
+          const me = webRTCManager.userId;
+          const lock = pluginLocks[id];
+          const owner = pluginOwnerOf(lock);
+          const mode = pluginModeOf(id, moduleStates[id], lock);
+          const ownedByMe = owner === me;
+          const lockedByOther = !!owner && owner !== me;
+          const ownerLabel = owner ? owner.replace(/^user-/, 'u') : null;
+          const panelOpen = pluginPanelOpen(id, mode, owner, me);
+          const peers = sessionPeers.filter((m) => m.userId !== me);
           return (
             <RackRow
               key={id}
               id={id}
               name={plugin.name}
               short={plugin.short}
+              number={String(index + 1).padStart(2, '0')}
               icon={plugin.icon}
-              state={state}
+              mode={mode}
+              ownerLabel={ownerLabel}
+              ownedByMe={ownedByMe}
               lockedByOther={lockedByOther}
-              onToggle={() => togglePlugin(id)}
-              // Betreiberregel 2026-09-17: mixerMONK entscheidet den Main-Out und
-              // laesst sich nicht schliessen (OFF stoppt Main und Clock).
-              toggleLockedReason={
+              panelOpen={panelOpen}
+              summary={pluginSummary(id, mode, owner, me, ownerLabel ?? '')}
+              running={mode === 'ON' && isPlaying}
+              onCycle={() => cycleMode(id)}
+              keepMounted={id === 'mixer'}
+              simplified={simplified}
+              cycleLockedReason={
                 id === 'mixer'
-                  ? 'mixerMONK entscheidet den Main-Out und lässt sich nicht schließen'
-                  : undefined
+                  ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
+                  : lockedByOther
+                    ? `Belegt von ${ownerLabel}. Anfragen oder Übernehmen gibt es nicht.`
+                    : undefined
               }
-              onPromote={() => rackPromote(id)}
-              // UI2-P0-003: SYNC-Zustand kommt aus dem echten Adapter (Registry),
-              // nicht aus lokalem UI-State — sonst zeigt die Anzeige etwas an,
-              // das den Audio-Start nie erreicht.
-              syncEnabled={plugin.adapter?.isSyncEnabled?.() ?? true}
-              onToggleSync={
-                plugin.adapter
-                  ? () => {
-                      const next = !plugin.adapter.isSyncEnabled();
-                      plugin.adapter.setSyncEnabled(next);
-                      // Neu rendern, damit die Anzeige dem Adapter folgt.
-                      setModuleState(id, (moduleStates[id] || 'OFF') as ModuleState);
-                    }
-                  : undefined
-              }
+              sync={isSyncPlugin(id) ? {
+                on: isPluginSynced(id),
+                disabled: !ownedByMe,
+                onToggle: () => { if (ownedByMe) setPluginSync(id, !isPluginSynced(id)); },
+              } : undefined}
+              headerExtra={id === 'mixer' && ownedByMe ? (
+                <>
+                  {simplified && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!mainHolder) return;
+                        if (isPlaying) { audioEngine.stop(); setIsPlaying(false); } else { audioEngine.play(); setIsPlaying(true); }
+                      }}
+                      disabled={!mainHolder}
+                      aria-label={isPlaying ? 'Main stoppen' : 'Main starten'}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-emerald-400/50 text-emerald-300 text-[10px] font-black tracking-widest cursor-pointer disabled:opacity-50"
+                    >
+                      {isPlaying ? <Square size={11} aria-hidden="true" /> : <Play size={11} aria-hidden="true" />}
+                      {isPlaying ? 'STOP' : 'PLAY'}
+                    </button>
+                  )}
+                  {peers.length > 0 && (
+                    <select
+                      aria-label="mixerMONK übergeben"
+                      className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1.5 py-0.5"
+                      value=""
+                      onChange={(e) => { if (e.target.value) transferLock('mixer', e.target.value); }}
+                    >
+                      <option value="">Übergeben an …</option>
+                      {peers.map((m) => <option key={m.socketId} value={m.userId}>{m.userId.replace(/^user-/, 'u')}</option>)}
+                    </select>
+                  )}
+                </>
+              ) : undefined}
               onCopy={() => {
                 try {
                   // P1-4: Plugin-State inkl. aktuellem Session-Snapshot in die
@@ -869,26 +940,22 @@ function AppComponent() {
                     pluginId: id,
                     name: plugin.name,
                     state: moduleStates[id] || 'OFF',
+                    mode,
                     snapshot,
                     ts: Date.now(),
                   }, null, 2));
                 } catch { /* Clipboard nicht verfügbar */ }
               }}
               onLoadScratch={(entry) => {
-                // Scratchpad-Eintrag auf dieses Modul gezogen: Modul aktivieren;
-                // passt der Eintrag zum Modul, wird dessen State übernommen.
-                // ARCH-#6: PRO nur bei bestätigtem Lock, sonst AUTO_AI-Fallback.
-                const apply = (entry.id === id && (entry.state === 'AUTO_AI' || entry.state === 'PRO'))
-                  ? entry.state
-                  : 'AUTO_AI';
-                if (apply === 'PRO' && !requestLock(id, webRTCManager.userId)) {
-                  setModuleState(id, 'AUTO_AI' as ModuleState);
-                  return;
+                // Scratchpad-Eintrag auf ein eigenes Modul gezogen: passt der
+                // Eintrag zum Modul, wird es aktiviert (ON). Nur der Halter darf das.
+                if (!ownedByMe || id === 'mixer') return;
+                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI')) {
+                  setModuleState(id, 'PRO' as ModuleState);
                 }
-                setModuleState(id, apply as ModuleState);
               }}
             >
-              {state !== 'OFF' && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
+              {(panelOpen || id === 'mixer') && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );
         })}
@@ -977,23 +1044,6 @@ function AppComponent() {
       {/* D7: aiMONK-Bottom-Dock (immer offen, ausblendbar) – ersetzt das
           „letzte Modul unten" für alle User. */}
       {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
-
-      {/* iPhone/iPad: Querformat-Hinweis (16:9-Studio) – nur Hochformat + Touch,
-          bewusst dezent und schließbar, blockiert nichts. */}
-      {!rotateHintDismissed && (
-        <div className="portrait:flex hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 items-center gap-2 px-3 py-2 rounded-full bg-cyan-950/90 border border-cyan-400/40 text-cyan-100 text-[10px] font-mono tracking-widest shadow-[0_8px_30px_rgba(0,0,0,0.5)] backdrop-blur">
-          <span aria-hidden="true">↻</span>
-          <span>Querformat für 16:9-Studio empfohlen</span>
-          <button
-            type="button"
-            onClick={() => setRotateHintDismissed(true)}
-            aria-label="Hinweis schließen"
-            className="px-1.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />

@@ -1,5 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, switchPluginOn } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
+
+test.beforeEach(async () => {
+  await resetSession();
+});
 
 // Nur Chromium: Der Kernfluss ist die Clipboard-Uebernahme der App; in WebKit bleibt die Anzeige 'CLIPBOARD (1)' aus.
 // CI-Fund 2026-09-17 (e2e-webkit): 'getByText(CLIPBOARD (1))' blieb unsichtbar.
@@ -19,8 +24,9 @@ async function openStudio(page: Page): Promise<void> {
 }
 
 async function openLibrary(page: Page): Promise<void> {
+  // Header-Icon navigiert nur; die Bedienfläche öffnet der Modus-Button (UI2-P0-002).
   await page.locator(STUDIO_NAV).getByTitle('biblioMONK').first().click();
-  await expect(page.getByText('biblioMONK').first()).toBeVisible({ timeout: 10_000 });
+  await switchPluginOn(page, 'biblio', 'biblioMONK');
 }
 
 test('Library-Sample → Action Menu → Project Clipboard → Send to Track', async ({ page }) => {
@@ -53,21 +59,19 @@ test('Library-Sample → Action Menu → Project Clipboard → Send to Track', a
   const menu2 = page.getByRole('menu', { name: 'Audio-Aktionen' });
   await expect(menu2).toBeVisible();
   await menu2.getByRole('menuitem', { name: /Send to Track/ }).click();
-  await expect(menu2.getByRole('menuitem', { name: /CH 1 · KICK/ })).toBeVisible();
+  await expect(menu2.getByRole('menuitem', { name: /CH 1 · DROP/ })).toBeVisible();
 
-  // P0-1: Kanaele darf NUR der DJ (mixerMONK-Halter) belegen - 'nur DJ / Freigabe'.
-  // Ohne Session-Halter (diese Umgebung) sind deshalb ALLE Ziele gesperrt; genau
-  // das wird geprueft. Live belegt am 2026-09-17: 10/10 Kanaele disabled mit dem
-  // Hinweis 'nur DJ / Freigabe'. Der erfolgreiche Send setzt einen Halter voraus
-  // und ist im Register als offene Luecke vermerkt (wie der Space-Transport).
+  // P0-1: Kanaele darf NUR der DJ (mixerMONK-Halter) belegen. UI2-P0-001: der
+  // Mixer hat immer genau einen Halter - in dieser Einzelsitzung ist das der
+  // einzige Nutzer, die Ziele sind also frei und der Send geht durch.
+  await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner', 'me');
   const channels = menu2.getByRole('menuitem').filter({ hasText: /^CH \d+ ·/ });
   await expect(channels.first()).toBeVisible();
-  const channelCount = await channels.count();
-  expect(channelCount).toBeGreaterThan(0);
-  for (let i = 0; i < channelCount; i += 1) {
-    await expect(channels.nth(i)).toBeDisabled();
-    await expect(channels.nth(i)).toContainText('nur DJ / Freigabe');
-  }
+  expect(await channels.count()).toBeGreaterThan(0);
+  await expect(channels.first()).toBeEnabled();
+  await expect(channels.first()).not.toContainText('nur DJ / Freigabe');
+  await channels.first().click();
+  await expect(menu2).not.toBeVisible();
 });
 
 test.describe('Touch', () => {
