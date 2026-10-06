@@ -24,11 +24,13 @@ export function pluginAudioChannels(pluginId: string): TrackType[] {
     recording: [],
     spatial: [],
     mixer: [],
-    // syntisamplerMONK: Synth (channel4) + Sampler/MPC (channel5)
+    // syntisamplerMONK: EIN Kanal (4) im 8-Kanal-Modell (UI2-P0-001).
+    // Die Alt-Aliase zeigen auf dasselbe Ziel, damit ungestellte Referenzen
+    // nicht still ins Leere laufen.
     syntisampler: ['channel4'],
     mcp: [],
-    sampler: [],
-    synthesizer: [],
+    sampler: ['channel4'],
+    synthesizer: ['channel4'],
     drumsampler: ['channel3'],
     drum: ['channel3'],
     instru: ['channel5'],

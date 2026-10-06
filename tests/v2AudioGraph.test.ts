@@ -13,11 +13,12 @@ function tone(freq: number, len = 128, sr = 48000): Float32Array {
 }
 
 describe('V2StudioGraph (NEW-D4-1)', () => {
-  it('baut 10 Kanäle Source→Gain→Pan→Master und kompiliert ohne Zyklus', () => {
+  it('baut 8 Quellen-Kanäle Source→Gain→Pan→Master und kompiliert ohne Zyklus', () => {
     const studio = new V2StudioGraph();
     const plan = studio.graph.compile();
     expect(plan.validated).toBe(true);
-    expect(plan.order.length).toBe(1 + 10 * 3); // Master + (Source, Gain, Pan) × 10
+    // UI2-P0-001: 8 feste Quellen-Kanäle (Master + (Source, Gain, Pan) × 8).
+    expect(plan.order.length).toBe(1 + 8 * 3);
   });
 
   it('rendert hörbaren Stereoblock (Sinus auf Channel 1)', () => {
