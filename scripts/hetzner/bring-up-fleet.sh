@@ -110,7 +110,7 @@ source "$(dirname "$0")/lib/rtc-fleet.sh"
 # ohne HCLOUD_TOKEN, ohne API-Aufruf, ohne Rückfrage.
 if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   echo "[dry-run] Flottenstart (keine API-Aufrufe, keine Server):"
-  echo "  Typen:     app=${FLEET_TYPE_APP:-cx23} sfu=${FLEET_TYPE_SFU:-cx23} ai=${FLEET_TYPE_AI:-cx23} master=${FLEET_TYPE_MASTER:-cx23} edge=${FLEET_TYPE_EDGE:-cx23}  (Override per FLEET_TYPE_<ROLLE>)"
+  echo "  Typen:     app=${FLEET_TYPE_APP:-cx42} sfu=${FLEET_TYPE_SFU:-cx32} media=${FLEET_TYPE_MEDIA:-cx42} edge=${FLEET_TYPE_EDGE:-cx22}  (Override per FLEET_TYPE_<ROLLE>)"
   # F10: Projektname + Zielpfad sind Teil des Namespace; beide kommen aus
   # fleet-names.sh und werden hier ohne Knoten belegt.
   echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME, top-level 'name:' in docker-compose.hetzner.yml)"

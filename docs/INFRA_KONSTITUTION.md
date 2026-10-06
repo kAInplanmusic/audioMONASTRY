@@ -38,12 +38,13 @@ Drift-Guard `tests/manifestRoles.test.ts` hält Code und Manifest zusammen.)
 Worker hat sie je gelesen; `AI_MAX_VRAM` in der TS-Simulation ist keine
 Flottenquelle.
 
-### 1.2 Die 5 Hetzner-Rollen
+### 1.2 Die 4 Hetzner-Rollen
 
-`app` (Caddy + API + Signaling) · `sfu` (mediasoup, RTP 40000–40099) ·
-`ai` (CPU-Fallback/Stem) · `master` (master-player, FFmpeg/NumPy) ·
+`app` (Caddy + API + Signaling + master-player + TURN) · `sfu` (mediasoup, RTP 40000–40099) ·
+`media` (R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume) ·
 `edge` (Monitoring/Smoke).
-Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default cx23.
+Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default app cx42, sfu cx32, media cx42, edge cx22.
+AI_MODE=off, kein ai-1.
 
 ---
 

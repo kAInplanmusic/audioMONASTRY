@@ -14,7 +14,7 @@
 > Rollenbild der früheren Fassung („5-Instanzen-Architektur", KI lokal auf ai-1)
 > sind überholt (`docs/INFRA_KONSTITUTION.md` §1.1/§1.2).
 
-## Rollen + Servertypen – die eine Tabelle (Stand 2026-09-20)
+## Rollen + Servertypen – die eine Tabelle
 
 > **Verbindlich für Code und Doku.** Beide Provisionierungspfade lesen dieselben
 > Override-Variablen `FLEET_TYPE_<ROLLE>` (Großschreibung); gesetzt werden sie dort,
@@ -24,11 +24,10 @@
 
 | Rolle | Knotenname | Typ-Override (Env) | Fallback CLI | Fallback Portal-Worker | Zweck |
 |---|---|---|---|---|---|
-| `app` | `audiomonastry-app-1` | `FLEET_TYPE_APP` | `cx23` | `cx33` | Caddy + App/REST/Signaling (+ Floating-IP für DNS) |
-| `sfu` | `audiomonastry-sfu-1` | `FLEET_TYPE_SFU` | `cx23` | `cx33` | mediasoup-SFU (RTP 40000–40099) |
-| `ai` | `audiomonastry-ai-1` | `FLEET_TYPE_AI` | `cx23` | `cx33` | Ollama + Stem-CPU-Fallback (host-nativ, systemd) |
-| `master` | `audiomonastry-master-1` | `FLEET_TYPE_MASTER` | `cx23` | `cx23` | master-player (FFmpeg/NumPy) |
-| `edge` | `audiomonastry-edge-1` | `FLEET_TYPE_EDGE` | `cx23` | `cx23` | Monitoring-Stack (nur der Stack), Staging/Smoke |
+| `app` | `audiomonastry-app-1` | `FLEET_TYPE_APP` | `cx42` | `cx42` | Caddy + API + Signaling + master-player + TURN, Floating IP |
+| `sfu` | `audiomonastry-sfu-1` | `FLEET_TYPE_SFU` | `cx32` | `cx32` | mediasoup-SFU (RTP 40000–40099) |
+| `media` | `audiomonastry-media-1` | `FLEET_TYPE_MEDIA` | `cx42` | `cx42` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe |
+| `edge` | `audiomonastry-edge-1` | `FLEET_TYPE_EDGE` | `cx22` | `cx22` | Monitoring-Stack (nur der Stack)
 
 - **CLI-Quelle:** `scripts/hetzner/provision-fleet.sh` (`TYPE_*`); Trockenlauf ohne
   API-Zugriff: `bash scripts/hetzner/provision-fleet.sh --print-config`.
@@ -95,11 +94,10 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
 | # | Name | Hetzner-Typ (Default) | Override | Zweck |
 |---|---|---|---|---|
-| 1 | **app-1** | cx23 | `FLEET_TYPE_APP` | Caddy + audiomonastry (App, API, Signaling) – ENABLE_SFU=0 |
-| 2 | **sfu-1** | cx23 | `FLEET_TYPE_SFU` | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
-| 3 | **ai-1** | cx23 | `FLEET_TYPE_AI` | Ollama (host-nativ, systemd) + Stem-CPU-Fallback (Demucs) |
-| 4 | **master-1** | cx23 | `FLEET_TYPE_MASTER` | master-player (FFmpeg-Mixing/Mastering) |
-| 5 | **edge-1** | cx23 | `FLEET_TYPE_EDGE` | **Nur** Monitoring-Stack (Prometheus/Grafana/cAdvisor/node-exporter), Smoke-Tests |
+| 1 | **app-1** | cx42 | `FLEET_TYPE_APP` | Caddy + App/API/Signaling + master-player + TURN, Floating IP |
+| 2 | **sfu-1** | cx32 | `FLEET_TYPE_SFU` | Caddy + audiomonastry mit `docker-compose.sfu.yml` (Mediasoup, UDP 40000–40099) |
+| 3 | **media-1** | cx42 | `FLEET_TYPE_MEDIA` | R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume |
+| 4 | **edge-1** | cx22 | `FLEET_TYPE_EDGE` | **Nur** Monitoring-Stack (Prometheus/Grafana/cAdvisor/node-exporter) |
 
 > Der Portal-Worker provisioniert dieselben Rollen mit seinen eigenen Fallbacks
 > (app/sfu/ai `cx33`, master/edge `cx23`) – siehe Tabelle oben. Ein Override muss

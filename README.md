@@ -197,9 +197,9 @@ arbeitet. Grenzen (verbindlich, `docs/INFRA_KONSTITUTION.md`):
 | GPU-Endpunkte | max. 8 |
 | Hetzner-Server | max. 5 |
 
-**Die Hetzner-Flotte besteht aus fünf Knoten** (Rollen app / sfu / ai / master / edge):
+**Die Hetzner-Flotte besteht aus vier Knoten** (Rollen app / sfu / media / edge):
 
-- Hetzner fleet: `app-1` (cx23), `sfu-1` (cx23), `ai-1` (cx23), `master-1` (cx23), `edge-1` (cx23) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
+- Hetzner fleet: `app-1` (cx42), `sfu-1` (cx32), `media-1` (cx42), `edge-1` (cx22) — der Typ je Rolle ist über `FLEET_TYPE_<ROLLE>` überschreibbar, Vorgabe im Skript `scripts/hetzner/provision-fleet.sh`. Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
 > Diese Zeile hat eine feste Form: `tests/test_hetzner_scripts.py` liest sie aus und
 > vergleicht die Typen mit den Vorgaben des Bereitstellungsskripts. Wer sie umschreibt, bricht
