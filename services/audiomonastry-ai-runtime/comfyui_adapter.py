@@ -86,7 +86,17 @@ COMFY_ROLES: Dict[str, Dict[str, str]] = {
     # prompt wuerde stillschweigend ignoriert und das Demo-Bild des Graphen
     # geliefert. Aufruf mit `workflow` inline oder workflows/imageHq.json /
     # COMFY_WORKFLOW_IMAGEHQ; die Struktur von workflows/image_flux1.json passt.
-    "imageHq": {"worker": "comfyui", "protocol": "workflow", "defaultModel": "flux1-dev"},
+    # `kind: image` ist PFLICHT: ohne es gilt der ACE-Step-Weg, und dann landen
+    # Prompt/Seed/Groesse an Musik-Knoten, die es im Bildgraphen nicht gibt.
+    # `imagePath: single` waehlt den eigenen Graphen statt der Basismodell-Wahl
+    # (die gehoert zu imageLora).
+    "imageHq": {
+        "worker": "comfyui",
+        "protocol": "workflow",
+        "kind": "image",
+        "imagePath": "single",
+        "defaultModel": "flux1-dev",
+    },
     "videoReal": {"worker": "ti2v", "protocol": "prompt", "defaultModel": "wan22-ti2v-5b"},
     "videoAbstract": {
         # Seit 2026-09-16 derselbe Wan-Worker wie videoReal: das vorher deployte
@@ -537,6 +547,10 @@ def build_workflow_request(
     """Workflow-basierter Request (ACE-Step / worker-comfyui)."""
     spec = COMFY_ROLES.get(role) or {}
     if spec.get("kind") == "image":
+        # `imageLora` waehlt aus mehreren Basismodellen und kettet LoRAs;
+        # `imageHq` faehrt EINEN eigenen Graphen (workflows/imageHq.json).
+        if spec.get("imagePath") == "single":
+            return build_single_image_request(role, args, payload, env)
         return build_image_request(role, args, payload, env)
 
     workflow = workflow_for(role, {**(payload or {}), **args}, env)
@@ -550,6 +564,36 @@ def build_workflow_request(
     images = args.get("images")
     if isinstance(images, list) and images:
         request["images"] = [img for img in images if isinstance(img, dict) and img.get("name") and img.get("image")]
+    return request
+
+
+def build_single_image_request(
+    role: str,
+    args: Dict[str, Any],
+    payload: Optional[Dict[str, Any]] = None,
+    env: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """Request einer Bild-Rolle mit EINEM eigenen Graphen (`imageHq`).
+
+    Anders als `imageLora` gibt es hier keine Basismodell-Wahl und keine
+    LoRA-Kette: der Graph kommt aus `workflow` inline, `COMFY_WORKFLOW_<ROLLE>`
+    oder `workflows/<rolle>.json`. Prompt/Seed/Groesse werden ueber die
+    Sampler-Verdrahtung eingesetzt (`apply_prompt_to_image_workflow`) - ohne
+    das wuerde jeder Aufruf das Demo-Bild des Graphen liefern.
+    """
+    workflow = workflow_for(role, {**(payload or {}), **args}, env)
+    if workflow is None:
+        raise ValueError(
+            f"{role}: kein Workflow konfiguriert – COMFY_WORKFLOW_{role.upper()} setzen "
+            f"(Export aus der ComfyUI-UI mit 'Workflow → Export (API)') oder workflows/{role}.json ablegen"
+        )
+    workflow = apply_prompt_to_image_workflow(workflow, args)
+    request: Dict[str, Any] = {"workflow": workflow}
+    images = args.get("images")
+    if isinstance(images, list) and images:
+        request["images"] = [
+            img for img in images if isinstance(img, dict) and img.get("name") and img.get("image")
+        ]
     return request
 
 
