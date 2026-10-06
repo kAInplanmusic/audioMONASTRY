@@ -38,6 +38,22 @@ Stand: 2026-10-04 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` 
 - Nutzerfarben: `#4cc9f0`, `#ffb703`, `#e879f9`, `#f1f5f9`
 - Schein frei `rgba(61,220,132,.30)` · Schein gesperrt `rgba(170,22,34,.55)`
 
+## Transport und Autoload (mixerMONK) — umgesetzt 2026-10-05
+
+**Transport.** PLAY und STOP sitzen in der Kopfzeile des Mixers, nicht in einem
+Plugin-Terminal. Der Mixer *ist* der Master; wer ihn hält, steuert den
+Transport. Ist man nicht der Halter, ist der Knopf deaktiviert und sagt im
+Tooltip warum — ein stiller Klick ohne Wirkung ist ausdrücklich nicht gewollt.
+Der Status (`LÄUFT` / `HALT`) wird aus der Audio-Engine gelesen, nicht lokal
+geraten, damit auch engine-seitige Änderungen (Idle-Suspend) sichtbar sind.
+
+**Autoload Kanal 1.** Ein Lied kann in der Kopfzeile als Autoload gepinnt
+werden (`AUTOLOAD`, ✕ entfernt es wieder). Beim Start des Studios liegt es auf
+Kanal 1 und läuft an, sobald der Browser nach der ersten Nutzergeste Audio
+erlaubt — die Autoplay-Sperre lässt vorher keinen Ton zu. Gepinnt wird bewusst
+nur, was auch in der Bibliothek liegt: Ein Eintrag ohne Datei wird verworfen,
+damit kein Autoload ins Leere greift.
+
 ## Annahmen und offene Punkte
 
 - AUTO_AI und PRO entfallen (Annahme). KI-Vorschläge kommen über aiMONK.

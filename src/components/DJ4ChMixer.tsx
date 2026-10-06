@@ -5,6 +5,12 @@ import { analyzeMusic } from '../utils/audioAnalyzer';
 import { ALL_TRACKS, TrackRole, TrackType, TRACK_ROLE_MAP } from '../types';
 import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
 import { DeckPanel, loadDeckSkins, saveDeckSkins, type MixerSkinId } from './mixer/DeckSkins';
+import {
+  type AutoloadSong,
+  clearAutoloadSong,
+  loadAutoloadSong,
+  saveAutoloadSong,
+} from '../core/session/autoloadSong';
 
 /**
  * audioMONASTRY mixerMONK – 6-Kanal-Hardware-Mischpult.
@@ -464,7 +470,21 @@ const DJMixer = React.memo(function DJMixer() {
     return () => window.removeEventListener('resize', onResize);
   }, []);
   const deckCol = vw >= 1500 ? '240px' : vw >= 1100 ? '200px' : '168px';
-  const [ch, setCh] = useState<ChannelState[]>(() => buildStrips().map(freshChannel));
+  // Autoload Kanal 1: beim Aufbau einmalig aufloesen - Katalog-Treffer oder
+  // nichts. Ein Eintrag ohne Datei im Katalog wird bewusst verworfen.
+  const autoloadSong = useMemo(() => loadAutoloadSong(), []);
+  const autoloadTrackAtBoot = useMemo<MusicTrack | null>(
+    () => (autoloadSong ? SORTED_MUSIC_LIBRARY.find((t) => t.url === autoloadSong.url) ?? null : null),
+    [autoloadSong],
+  );
+  const [ch, setCh] = useState<ChannelState[]>(() => {
+    const init = buildStrips().map(freshChannel);
+    if (autoloadTrackAtBoot) {
+      // Kanal 1 liegt bereit, ohne dass jemand klicken muss.
+      init[0] = { ...init[0], loadName: autoloadTrackAtBoot.name, loaded: true, analyzing: true };
+    }
+    return init;
+  });
   const [xfd, setXfd] = useState(0.5);
   const [xfMode, setXfMode] = useState<XfMode>('THRU');
   const [master, setMaster] = useState(0.8);
@@ -506,6 +526,11 @@ const DJMixer = React.memo(function DJMixer() {
     if (!webRTCManager.isMainOutOwner) return;
     audioEngine.stop();
   };
+
+  // Autoload Kanal 1: das gepinnte Lied. `ch1Track` ist die exakte
+  // Bibliotheks-Referenz auf Kanal 1 (kein Namensvergleich, keine Rate-logik).
+  const [autoload, setAutoload] = useState<AutoloadSong | null>(() => autoloadSong);
+  const [ch1Track, setCh1Track] = useState<MusicTrack | null>(() => autoloadTrackAtBoot);
 
   const toggleRelease = (track: TrackType) => {
     const next = new Set(released);
@@ -589,6 +614,7 @@ const DJMixer = React.memo(function DJMixer() {
   const loadSong = (idx: number, t: MusicTrack) => {
     const next = ch.map((c, i) => (i === idx ? { ...c, loadName: t.name, loaded: true, analyzing: true } : c));
     setCh(next);
+    if (idx === 0) setCh1Track(t); // exakte Referenz fuer das Autoload-Pinning
     audioEngine.loadTrackSample(strips[idx].track, t.url);
     pushStrip(strips[idx], next[idx], xfd);
 
@@ -606,6 +632,50 @@ const DJMixer = React.memo(function DJMixer() {
     const c = ch[idx];
     if (c.mute) return;
     audioEngine.triggerEvent(strips[idx].track, 0.9);
+  };
+
+  // ----------------------------------------------------------------------- //
+  // Autoload Kanal 1 (Vorgabe 2026-10-05):
+  //   1. Beim Start liegt das gepinnte Lied auf Kanal 1 - das setzt der
+  //      State-Initializer oben, nicht dieser Effekt (kein setState im Effekt).
+  //   2. Hier folgt nur die Engine-Seite plus die BPM/Key-Analyse.
+  // ----------------------------------------------------------------------- //
+  useEffect(() => {
+    if (!autoloadTrackAtBoot) return;
+    audioEngine.loadTrackSample(strips[0].track, autoloadTrackAtBoot.url);
+    analyzeMusic(autoloadTrackAtBoot.url).then((a) => {
+      setCh((prev) =>
+        prev.map((c, i) =>
+          i === 0 ? { ...c, bpm: a?.bpm, key: a?.key ?? a?.camelot, analyzing: false } : c,
+        ),
+      );
+    });
+  }, [autoloadTrackAtBoot, strips]);
+
+  useEffect(() => {
+    if (!autoload) return;
+    const start = () => {
+      if (webRTCManager.isMainOutOwner) void audioEngine.play();
+    };
+    window.addEventListener('pointerdown', start, { once: true });
+    window.addEventListener('keydown', start, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', start);
+      window.removeEventListener('keydown', start);
+    };
+  }, [autoload]);
+
+  /** Kanal 1 als Autoload pinnen - ab dem naechsten Start liegt es bereit. */
+  const pinAutoload = () => {
+    if (!ch1Track) return;
+    const song: AutoloadSong = { url: ch1Track.url, name: ch1Track.name, artist: ch1Track.artist };
+    saveAutoloadSong(song);
+    setAutoload(song);
+  };
+
+  const unpinAutoload = () => {
+    clearAutoloadSong();
+    setAutoload(null);
   };
 
   return (
@@ -646,6 +716,38 @@ const DJMixer = React.memo(function DJMixer() {
             >
               {playing ? 'LÄUFT' : 'HALT'}
             </span>
+          </div>
+          {/* Autoload Kanal 1: das gepinnte Lied liegt beim Start bereit und
+              laeuft nach der ersten Nutzergeste von allein. */}
+          <div className="flex items-center gap-1.5" role="group" aria-label="Autoload Kanal 1">
+            {autoload ? (
+              <>
+                <span
+                  className="text-[10px] font-mono tracking-widest text-sky-300"
+                  title={`Autoload Kanal 1: ${autoload.name}`}
+                >
+                  AUTOLOAD · {autoload.artist}
+                </span>
+                <button
+                  type="button"
+                  onClick={unpinAutoload}
+                  title="Autoload entfernen - beim naechsten Start laeuft nichts von allein"
+                  className="px-1.5 py-0.5 rounded-sm border border-sky-500/40 text-sky-300 text-[10px] font-black tracking-widest hover:bg-sky-500/15"
+                >
+                  ✕
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={pinAutoload}
+                disabled={!ch1Track}
+                title={ch1Track ? `Kanal 1 als Autoload pinnen: ${ch1Track.name}` : 'Erst ein Lied auf Kanal 1 laden'}
+                className={`px-2.5 py-1 rounded-sm border text-[11px] font-black tracking-widest transition-colors ${ch1Track ? 'border-sky-500/50 text-sky-300 hover:bg-sky-500/15' : 'border-zinc-700 text-zinc-600 cursor-not-allowed'}`}
+              >
+                AUTOLOAD
+              </button>
+            )}
           </div>
           <span className="text-[10px] font-mono text-zinc-500 tracking-[0.3em]">DJM-A9</span>
         </div>
