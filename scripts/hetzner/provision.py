@@ -159,7 +159,7 @@ def ensure_firewall(token: str, name: str, role: str = "app") -> int:
         # stillem Durchfallen (INFRA-HETZNER-007: die Rolle `edge` wurde vorher
         # nirgends behandelt, obwohl sie in --help und der Konstitution steht):
         #   app    – 22/80/443 + ICMP genuegen (Caddy terminiert; die App bleibt intern)
-        #   ai     – host-nativ (Ollama 11434, stem-ai 8000); diese Ports oeffnet der
+        #   ai     – host-nativ (stem-ai 8000); diesen Port oeffnet der
         #            Portal-Worker NUR fuer die app-1-IP (`/api/wire-fleet`)
         #   master – dito (master-player 8000, nur fuer app-1)
         #   edge   – Monitoring-Knoten: Grafana ist im Compose-Overlay nur auf
@@ -329,7 +329,7 @@ def main() -> None:
                         help="Name/ID der festen Floating IP; 'none' = keine Floating IP")
     parser.add_argument("--role", default=os.environ.get("ROLE", "app"),
                         help="Rolle: app (Default), sfu (öffnet RTP-Ports 40000-40099), "
-                             "ai (Ollama/Stem, host-nativ), master (master-player), "
+                             "ai (Stem, host-nativ), master (master-player), "
                              "edge (Monitoring-Knoten, nur 22/80/443 + ICMP)")
     parser.add_argument("--cloud-init", default=str(DEFAULT_CLOUD_INIT),
                         help="Cloud-Init-Datei (YAML)")

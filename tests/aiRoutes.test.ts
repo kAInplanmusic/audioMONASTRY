@@ -25,8 +25,7 @@ beforeAll(async () => {
   delete process.env.STUDIO_ACCESS_TOKEN;
   process.env.API_EXPENSIVE_RATE_LIMIT_MAX = '1000';
   // LLM-Fallback deterministisch halten: Provider-Keys leeren (dotenv.config()
-  // in server.ts würde gelöschte Keys sonst wieder einspielen), Ollama auf
-  // einen sofort abweisenden Port zeigen.
+  // in server.ts würde gelöschte Keys sonst wieder einspielen).
   process.env.DEEPSEEK_API_KEY = '';
   process.env.OPENAI_API_KEY = '';
   process.env.MISTRAL_API_KEY = '';
