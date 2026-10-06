@@ -234,7 +234,7 @@ eine Sammelmeldung nachgeliefert. Kritische Alarme (`critical`/`fatal`/`page`) k
             ▼         ▼
   ┌────────────────┐ ┌──────────────────────┐
   │ 8 GPU-Rollen   │ │ lokal (ohne Cloud):  │
-  │ RunPod         │ │ Ollama · ONNX ·      │
+  │ RunPod         │ │ ONNX · WebSpeech ·   │
   │ Serverless     │ │ deterministische     │
   │ Scale-to-Zero  │ │ Ersatzwege           │
   └────────────────┘ └──────────────────────┘
@@ -326,7 +326,7 @@ Jede Rolle ist **genau einem** Zweck zugeordnet; maßgeblich ist `GPU_ROLE_IDS` 
 `src/config/aiInfrastructure.ts`, gespiegelt in `model_manifest.json` und durch
 `tests/manifestRoles.test.ts` gegen Drift abgesichert.
 
-**Ohne Cloud:** Ollama (lokales Sprachmodell), ONNX (Stem-Trennung), WebSpeech und
+**Ohne Cloud:** ONNX (Stem-Trennung), WebSpeech und
 deterministische Ersatzwege — die Anwendung bleibt funktionsfähig.
 
 **Kostenbremse, gemessen:** 10 Anfragen/Minute auf den teuren Wegen · **10 €/h hartes

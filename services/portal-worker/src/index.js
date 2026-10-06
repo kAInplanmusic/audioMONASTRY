@@ -1113,7 +1113,6 @@ case "${role}" in
   ai)
     # Rolle ai wird von der 4er-Flotte (app/sfu/media/edge) nicht mehr
     # vergeben - der Zweig ist tot, bleibt aber fuer den manuellen Aufruf des
-    # stem-ai-Setups erhalten. Ollama wurde am 2026-10-06 entfernt.
     cd services/stem-ai
     python3 -m venv .venv 2>/dev/null || { apt-get install -y -qq python3.12-venv; python3 -m venv .venv; }
     . .venv/bin/activate
@@ -1707,7 +1706,7 @@ async function openFleetPorts(env) {
 
   const portsByRole = {
     [`${NAME_PREFIX}master`]: ['8000'],
-    [`${NAME_PREFIX}ai`]: ['8000', '11434'],
+    [`${NAME_PREFIX}ai`]: ['8000'],
   };
   const list = await hzGet(env, '/firewalls?per_page=100');
   const updated = {};

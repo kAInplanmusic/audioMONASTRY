@@ -3,7 +3,7 @@
 // Bewusst typ- und lint-sauber: tsconfig.json hat kein `include`, die Fixtures
 // werden also von tsc und eslint mitgeprüft.
 const app: any = {};
-const sharedTarget = { url: 'http://127.0.0.1:11434' };
+const sharedTarget = { url: 'http://127.0.0.1:8000' };
 let counter = 0;
 
 // Hilft der Demo-Route und zählt dabei die Aufrufe. Dieser Kommentar gehört zum

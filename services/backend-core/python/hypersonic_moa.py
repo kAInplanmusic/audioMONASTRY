@@ -5,25 +5,19 @@ HyperSonicMOA – GOOGLE/FIRESTORE-ENTKOPPELT (lokaler Rebuild).
 Dies ist eine vollstaendig NEUGEBAUTE, selbstgehostete Orchestrierung. Sie besteht
 ausschliesslich aus LOKALEN Komponenten:
 
-  * Optionaler lokaler LLM via Ollama (POST http://127.0.0.1:11434/api/generate)
-    → moderner, selbstgehosteter Standard (gleiche Auswahl wie in config.yaml).
-  * Deterministische, lokale Fallback-Generierung (regex-basierter Extraktor
-    + Template) WENN kein Ollama erreichbar ist.
+  * Deterministische, lokale Generierung (regex-basierter Extraktor + Template).
+    Kein Netzwerk, kein Modellaufruf - laeuft ohne externe Abhaengigkeit.
 
-Es wird KEINERLEI Google-, Firebase-, DeepSeek- oder HuggingFace-Endpunkt
-aufgerufen. Die Klasse behaelt die API (`HyperSonicMOA.run_pipeline`) bei, damit
-aufrufender Code unveraendert funktioniert.
+Es wird KEINERLEI Google-, Firebase-, DeepSeek-, HuggingFace- oder Ollama-Endpunkt
+aufgerufen. Ollama wurde am 2026-10-06 aus dem Projekt entfernt (es gab nie eine
+lokale Instanz, die es bedienen konnte). Die Klasse behaelt die API
+(`HyperSonicMOA.run_pipeline`) bei, damit aufrufender Code unveraendert funktioniert.
 """
 import asyncio
 import json
-import os
 import re
 
 import httpx
-
-# Optional: Ollama Endpunkt (self-hosted). Leer lassen => immer lokaler Fallback.
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434/api/generate")
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1")
 
 
 class HyperSonicMOA:
@@ -33,29 +27,6 @@ class HyperSonicMOA:
         # Fruehere Google/Cloud-Keys werden bewusst NICHT mehr benoetigt.
         # Sie werden ignoriert; nur die Client-/Konfiguration bleibt erhalten.
         self.client = httpx.AsyncClient(timeout=60.0)
-        self.ollama_url = OLLAMA_URL
-        self.ollama_model = OLLAMA_MODEL
-
-    # ------------------------------------------------------------------ #
-    #  Lokaler LLM (Ollama) mit graceful degradation
-    # ------------------------------------------------------------------ #
-    async def _ollama(self, prompt: str) -> str | None:
-        """Ruft ein lokales Ollama-Modell auf. Liefert None bei Fehler/Nichtverfügbarkeit."""
-        if not self.ollama_url:
-            return None
-        try:
-            payload = {
-                "model": self.ollama_model,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.7},
-            }
-            resp = await self.client.post(self.ollama_url, json=payload, timeout=60.0)
-            if resp.status_code == 200:
-                return resp.json().get("response", "")
-        except Exception as e:  # pragma: no cover
-            print(f"[HyperSonicMOA] Ollama nicht erreichbar ({e}); nutze lokalen Fallback.")
-        return None
 
     # ------------------------------------------------------------------ #
     #  Deterministischer lokaler Fallback-Generator (kein Netzwerk)
@@ -93,36 +64,13 @@ class HyperSonicMOA:
     # ------------------------------------------------------------------ #
     async def run_pipeline(self, report_text: str) -> str:
         """
-        Fuehrt die (frueher 4-stufige) MOA-Pipeline aus. Statt externer Gemini/
-        DeepSeek/HuggingFace nutzt sie Ollama (falls erreichbar) oder den
-        deterministischen lokalen Template-Generator.
+        Fuehrt die (frueher 4-stufige) MOA-Pipeline aus. Nutzt den
+        deterministischen lokalen Template-Generator - kein Netzwerk, kein
+        Modellaufruf.
         """
         report_text = (report_text or "").strip()
         if not report_text:
             report_text = "Ein analoger Polysynth mit vier Stimmen und charakteristischem Filter."
-        # 1) Versuche lokales LLM
-        prompt = (
-            "Generiere ein valides JSON-Modul fuer ein Vintage-Synthesizer-Effektgeraet. "
-            "Struktur: {id,name,kategorie,core_prinzip,controls[3],user_friendly_score,kosten,nutzen,"
-            "nachbau_idee,technische_details}. Nur das JSON, keine Erklärungen.\n\nReport:\n" + report_text
-        )
-        raw = await self._ollama(prompt)
-
-        if raw and raw.strip():
-            cleaned = raw.strip()
-            if cleaned.startswith("```json"):
-                cleaned = cleaned[7:]
-            if cleaned.endswith("```"):
-                cleaned = cleaned[:-3]
-            try:
-                # Validieren, dass es valides JSON und ein Objekt ist
-                parsed = json.loads(cleaned)
-                if not isinstance(parsed, dict):
-                    print("[HyperSonicMOA] Ollama-Antwort war kein JSON-Objekt; nutze Fallback.")
-                else:
-                    return json.dumps(parsed, ensure_ascii=False)
-            except json.JSONDecodeError:
-                print("[HyperSonicMOA] Ollama-Antwort war kein valides JSON; nutze Fallback.")
 
         module = self._template_module(report_text)
         return json.dumps(module, ensure_ascii=False)
