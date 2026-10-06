@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Power, Copy, GripVertical } from 'lucide-react';
 import { ModuleState } from '../context/ModuleStateContext';
 import { getPluginThemeClass } from '../utils/pluginTheme';
@@ -21,6 +21,9 @@ interface RackRowProps {
   onLoadScratch?: (entry: ScratchpadDragItem) => void;
   children?: React.ReactNode;
 }
+
+/** Plugins mit SYNC-Taste gemäß UI2-P0-003 / docs/UI_SPEC.md §SYNC gegen Main. */
+const SYNC_PLUGINS = new Set(['drop','song','syntisampler','drumsampler','instru','voice','sound','stem']);
 
 /**
  * RackRow – ein Modulstreifen im audioMONASTRY-Rack-Layout (Designvorlage).
@@ -45,6 +48,8 @@ export const RackRow = React.memo(function RackRow({
 }: RackRowProps) {
   const active = state !== 'OFF';
   const pro = state === 'PRO';
+  const isSyncPlugin = SYNC_PLUGINS.has(id);
+  const [syncEnabled, setSyncEnabled] = useState(true);
 
   return (
     <section
@@ -106,6 +111,16 @@ export const RackRow = React.memo(function RackRow({
           </h3>
           <div className="text-[9px] font-mono tracking-widest flex items-center gap-2">
             <span className={active ? 'text-cyan-400' : 'text-neutral-600'} style={active ? { color: 'var(--monk-accent)' } : undefined}>{state}</span>
+            {isSyncPlugin && (
+              <button
+                type="button"
+                onClick={(e)=>{e.stopPropagation(); setSyncEnabled(v=>!v);}}
+                title={syncEnabled ? 'SYNC: läuft synchron zu Main' : 'FREI: startet sofort'}
+                className={`text-[7px] font-mono px-1 py-0.5 rounded border ${syncEnabled ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' : 'text-neutral-500 border-neutral-700'}`}
+              >
+                {syncEnabled ? '⟲ SYNC' : 'FREI'}
+              </button>
+            )}
             {lockedByOther && <span className="text-red-400 font-bold">LOCKED · REMOTE</span>}
           </div>
         </div>
