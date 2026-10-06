@@ -14,6 +14,9 @@
  *   7. NOTFALL:    Gemini / OpenAI (bezahlt; nur bei explizitem Enable,
  *                  z.B. AI_EMERGENCY_PROVIDERS=true – nicht im Default)
  *   (Groq ist bewusst entfernt – Pay-as-you-go/Freemium-Umstellung offen.)
+ *   (Ein früherer Punkt 6 „LOKAL: Ollama" ist am 2026-10-06 entfallen – es gab
+ *   nie eine lokale Instanz, die ihn hätte bedienen können. Die Nummerierung
+ *   der übrigen Punkte ist bewusst unverändert geblieben.)
  *
  * Hinweis: `deepseek-chat`/`deepseek-reasoner` sind seit 2026-07-24 deprecated;
  * wir nutzen `deepseek-v4-flash`/`deepseek-v4-pro` mit `reasoning_effort`.
