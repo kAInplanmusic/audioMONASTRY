@@ -62,7 +62,6 @@ describe('ARCH-P2-002 · Flotten-Verdrahtung', () => {
 
     expect(wiring.targets.masterPlayer).toBe('http://10.0.1.5:8000');
     expect(wiring.targets.stemAi).toBe('http://10.0.1.6:8000');
-    expect(wiring.targets.ollama).toBe('http://10.0.1.6:11434');
   });
 
   it('laesst die Ziele bei Fehlern unveraendert und ruft ohne Token gar nicht ab', async () => {
@@ -70,7 +69,7 @@ describe('ARCH-P2-002 · Flotten-Verdrahtung', () => {
     vi.stubGlobal('fetch', fetchMock);
     const wiring = createFleetWiring({ studioToken: 'token', warn: () => {} });
     await wiring.wire();
-    expect(wiring.targets).toEqual({ masterPlayer: '', ollama: '', stemAi: '' });
+    expect(wiring.targets).toEqual({ masterPlayer: '', stemAi: '' });
 
     const noToken = vi.fn(async () => Response.json({ fleet: newMap }));
     vi.stubGlobal('fetch', noToken);

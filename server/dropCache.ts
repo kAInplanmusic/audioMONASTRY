@@ -7,7 +7,7 @@
  * bei GPU-Wakes doppelt teuer, weil schon der Wake Geld kostet. Der Cache
  * sitzt VOR dem Modellaufruf und ist bewusst konservativ:
  *
- *   - nur echte Modell-Ergebnisse werden gespeichert (LLM/Ollama). Der lokale
+ *   - nur echte Modell-Ergebnisse werden gespeichert (LLM). Der lokale
  *     deterministische Fallback ist gratis und wird nicht gecacht - sonst
  *     verdeckt ein Cache-Treffer, dass gerade gar kein Modell antwortet.
  *   - kurze Lebensdauer (`ttlMs`, Default 10 min) und harte Obergrenze

@@ -13,7 +13,6 @@
 | DeepSeek V4 Pro | text-generation | HTTP API | `deepseek-v4-pro` | ✅ konfiguriert |
 | Qwen2.5-72B-Instruct | text-generation | HF Router | HF-Default | ✅ konfiguriert |
 | Mistral Small | text-generation | HTTP API | `mistral-small-latest` | ✅ konfiguriert |
-| Qwen2.5:7b | text-generation | Ollama | `qwen2.5:7b` | ✅ live ai-1 |
 | MMS-TTS-deu | text-to-speech | transformers | `5cbe5218…` | ✅ Serverless live |
 | Bark | text-to-speech/gesang | transformers | `70a8a7d3…` | ✅ Serverless live |
 | MusicGen small | text-to-audio | transformers | `4c8334b0…` | ✅ Endpoint (Custom) |
@@ -32,7 +31,7 @@
 
 | Modell | Verantwortlicher Service/Plugin | Provider im Orchestrator |
 |---|---|---|
-| DeepSeek/Mistral/HF-Qwen/Ollama | `server.ts` `/api/ai/complete` → `LlmRouter` → `MoaAgent`/`clientLlm` | `llmRouter` (bestehend) |
+| DeepSeek/Mistral/HF-Qwen | `server.ts` `/api/ai/complete` → `LlmRouter` → `MoaAgent`/`clientLlm` | `llmRouter` (bestehend) |
 | MMS-TTS/Bark | `server.ts` `/api/voice/tts|sing` → `VoiceMonkService` | `HfServerlessProvider` |
 | MusicGen small/medium | `server.ts` `/api/voice/song` + `SongGenerator` | `HfServerlessProvider` / `HfEndpointProvider` |
 | Whisper/AST/CLAP/MERT/PyAnnote/Qwen-Omni | `services/audiomonastry-ai-runtime/` (`/infer`) | `HfEndpointProvider` |

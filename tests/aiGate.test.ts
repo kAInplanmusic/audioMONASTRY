@@ -29,8 +29,6 @@ const ENV_KEYS = [
   'RUNPOD_ENDPOINT_ID_BRAIN',
   'RP_BRAIN_OPENAI_URL',
   'RUNPOD_BRAIN_OPENAI_URL',
-  'OLLAMA_URL',
-  'OLLAMA_MODEL',
   'AI_ALLOW_EXTERNAL_LLM',
 ] as const;
 
@@ -214,7 +212,7 @@ describe('LlmRouter respektiert den AI-Schalter', () => {
 
     expect(llmRouter.rankProviders('moderate').map((p) => p.id)).not.toContain('runpod-local');
 
-    // Ohne GPU-Provider und ohne Ollama bleibt kein Provider → klarer Fehler
+    // Ohne GPU-Provider bleibt kein Provider → klarer Fehler
     // statt eines stillen RunPod-Aufrufs.
     await expect(llmRouter.complete({ prompt: 'hallo', complexity: 'moderate' })).rejects.toThrow(
       /Kein LLM-Provider verfügbar/,

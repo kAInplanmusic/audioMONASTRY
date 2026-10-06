@@ -52,7 +52,7 @@ export interface ChannelStripDeps {
 }
 
 /**
- * Echte per-Kanal-Mischung: Jeder Track (channel1..channel10) hat eine eigene
+ * Echte per-Kanal-Mischung: Jeder Track (channel1..channel8) hat eine eigene
  * Gain- und Pan-Stufe; die Mischpult-Fader steuern damit tatsächlich die
  * Audiokette (statt nur nachbildende UI-Werte). #DJ: zusätzlich 3-Band-EQ.
  */

@@ -540,10 +540,7 @@ Target abgelegt (36/70/52/108 Ein-Zeichen-Targets) — das Dashboard war gültig
 blieb in Grafana aber leer. Sichtbar wurde das nur an den Panels, nicht am Parser;
 der Vertragstest fällt auf genau diesem Stand (3 Tests rot, 270 Verstöße).
 
-### Lokale KI (Ollama) + Stem-AI
 
-Auf dem ai-1-Knoten (siehe `docs/SERVER_FLEET.md`) die kommentierten
-`ollama`-/`stem-ai`-Blöcke in `docker-compose.hetzner.yml` aktivieren.
 
 ### Auto-Shutdown (stündliche Abrechnung sparen)
 
@@ -1098,7 +1095,7 @@ der **vorherigen** Flotte:
 
 Folge: **stumm blockierter Querverkehr** — edge-1 durfte die App-Metriken auf
 8080 nicht scrapen (der Prometheus-Job `audiomonastry` blieb `health=down`),
-app-1 durfte weder Stem-AI/Ollama (`ai:8000`, `ai:11434`) noch master-player
+app-1 durfte weder Stem-AI (`ai:8000`) noch master-player
 (`master:8000`) erreichen. Von außen war davon nichts zu sehen, weil aller
 öffentliche Verkehr über den Cloudflare-Worker läuft: die Domain antwortete
 normal, nur die Knoten erreichten sich gegenseitig nicht.
@@ -1119,7 +1116,7 @@ jetzt Teil des Flottenstarts statt ein Handgriff nach dem Start.
 |---|---|---|---|
 | app-1 | `audiomonastry-app` | tcp/8080 (Monitoring-Scrape) | `edge-1` |
 | app-1 | `audiomonastry-ai` | tcp/8000 (Stem-AI) | `app-1` |
-| app-1 | `audiomonastry-ai` | tcp/11434 (Ollama) | `app-1` |
+| app-1 | `audiomonastry-ai` | *(entfernt)* | `app-1` |
 | app-1 | `audiomonastry-master` | tcp/8000 (master-player) | `app-1` |
 
 Die Zuordnung wird **zur Laufzeit** aus `GET /servers` gebildet (Server-Namen
@@ -1243,7 +1240,7 @@ weiterhin nur Server; die Firewalls werden **lesend aufgelistet**
 Begründung, in dieser Reihenfolge:
 
 1. **Die Cross-Node-Regeln sind nicht reproduzierbar.** Die vier Vertrags-Regeln
-   (app:tcp/8080 ← edge-1, ai:tcp/8000 + tcp/11434 ← app-1, master:tcp/8000 ←
+   (app:tcp/8080 ← edge-1, ai:tcp/8000 ← app-1, master:tcp/8000 ←
    app-1) legt **kein** Provisionierungspfad an: `provision.py` setzt nur
    22/80/443/ICMP (plus RTP/TURN für die Rolle `sfu`), und `firewall-ensure.py`
    passt ausschließlich **vorhandene** Quell-IPs an — fehlende Regeln werden

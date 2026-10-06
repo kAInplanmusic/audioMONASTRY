@@ -196,6 +196,34 @@ const audioEngineDropAdapter: DropAudioAdapter = {
 
   // Echter FFT-Frame am Master (null = kein Audio → Pegel-Weg in der Bridge).
   readSpectrumFrame,
+
+  // --- Einspiel-Weg (PREP-6): derselbe Pfad, den der Sprachbefehl schon nutzt --
+  // pluginCommandRegistry.ts:199-214 (auto_drop) macht genau diese Kette:
+  // loadTrackSample -> scheduleAtNextBar -> triggerEvent -> fadeChannelToMain.
+  // Hier wird sie als Adapter-Methode verfuegbar gemacht, damit der
+  // DropPluginAdapter einen Drop wirklich auf den Kanal spielen kann.
+  async loadTrackSample(channelId: string, url: string | null): Promise<boolean> {
+    if (!isChannel(channelId)) return false;
+    await audioEngine.loadTrackSample(channelId, url);
+    return true;
+  },
+
+  triggerEvent(channelId: string, velocity: number): boolean {
+    if (!isChannel(channelId)) return false;
+    audioEngine.triggerEvent(channelId, clamp(velocity, 0, 1));
+    return true;
+  },
+
+  fadeChannelToMain(channelId: string, rampSec: number, targetDb: number): boolean {
+    if (!isChannel(channelId)) return false;
+    const ramp = Number.isFinite(rampSec) ? Math.max(0, rampSec) : 4;
+    const db = Number.isFinite(targetDb) ? targetDb : 0;
+    return audioEngine.fadeChannelToMain(channelId, ramp, db);
+  },
+
+  scheduleAtNextBar(cb: () => void): void {
+    audioEngine.scheduleAtNextBar(cb);
+  },
 };
 
 let detachStepListener: (() => void) | null = null;

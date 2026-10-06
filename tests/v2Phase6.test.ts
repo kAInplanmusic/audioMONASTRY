@@ -25,7 +25,7 @@ function graphWithGains(gains: Partial<Record<TrackType, number>>): ReturnType<t
 
 describe('Phase 6 · V2 Session-State export/import/merge', () => {
   it('export → JSON → import erhält Graph/Monitor/Plugins/Transport', () => {
-    const graph = graphWithGains({ channel1: -6, channel9: 3, channel10: -2 });
+    const graph = graphWithGains({ channel1: -6, channel7: 3, channel8: -2 });
     const monitor = planMonitorRouting({ source: 'MON', mon: 'MON2', baseMix: { channel2: 0.5, channel6: 1.2 } });
     const state = exportV2SessionState({
       sessionId: 'session-a',
@@ -45,7 +45,7 @@ describe('Phase 6 · V2 Session-State export/import/merge', () => {
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
     expect(parsed.state.sessionId).toBe('session-a');
-    expect(parsed.state.graph.channelGainsDb.channel9).toBe(3);
+    expect(parsed.state.graph.channelGainsDb.channel7).toBe(3);
     expect(parsed.state.monitor.source).toBe('MON');
     expect(parsed.state.monitor.mon).toBe('MON2');
     expect(parsed.state.activePlugins).toEqual(['drum', 'sound']);
@@ -132,8 +132,8 @@ describe('Phase 6 · WebRTC/SFU-State mit V2-GraphState koppeln', () => {
   it('Fingerprint ist unabhängig von Objekt-Key-Reihenfolge', () => {
     const a = emptyAudioGraphState();
     const b = emptyAudioGraphState();
-    a.channelGainsDb = { channel10: -1, channel1: 2 };
-    b.channelGainsDb = { channel1: 2, channel10: -1 };
+    a.channelGainsDb = { channel8: -1, channel1: 2 };
+    b.channelGainsDb = { channel1: 2, channel8: -1 };
     expect(fingerprintV2GraphState(a)).toBe(fingerprintV2GraphState(b));
   });
 

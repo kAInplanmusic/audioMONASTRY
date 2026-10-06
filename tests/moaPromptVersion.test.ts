@@ -16,7 +16,7 @@ function capturingAgent(prompts: PromptStore): { agent: MoaAgent; seen: LlmReque
   const seen: LlmRequest[] = [];
   const complete = async (req: LlmRequest): Promise<LlmCompletion> => {
     seen.push(req);
-    return { provider: 'ollama', text: '[]', latencyMs: 1 };
+    return { provider: 'runpod-local', text: '[]', latencyMs: 1 };
   };
   // Signatur: complete, voice, estimateCost, planTimeoutMs, planCatalog, prompts
   const agent = new MoaAgent(

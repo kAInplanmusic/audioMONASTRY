@@ -136,28 +136,24 @@ export interface V2SynthSourceConfig {
 /** AUDIO-P0-001: Rollen-Default-Stimmen je V2-Kanal (V1-Parität kick/hat/clap/bass). */
 const ROLE_VOICE: Record<V2Channel, V2SynthVoice> = {
   channel1: 'kick',
-  channel2: 'hat',
-  channel3: 'clap',
+  channel2: 'lead',
+  channel3: 'hat',
   channel4: 'lead',
   channel5: 'lead',
   channel6: 'lead',
-  channel7: 'bass',
-  channel8: 'lead',
-  channel9: 'lead',
-  channel10: 'lead',
+  channel7: 'lead',
+  channel8: 'bass',
 };
 
 const ROLE_FREQ: Record<V2Channel, number> = {
   channel1: 50,   // kick
-  channel2: 6000, // hat
-  channel3: 1200, // clap
+  channel2: 440,
+  channel3: 6000, // hat
   channel4: 440,
   channel5: 440,
   channel6: 440,
-  channel7: 55,   // bass
-  channel8: 880,  // lead
-  channel9: 440,
-  channel10: 440,
+  channel7: 440,
+  channel8: 55,   // bass
 };
 
 const DEFAULT_TEST_FREQ = 440;

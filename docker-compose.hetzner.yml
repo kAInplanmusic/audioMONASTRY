@@ -9,7 +9,6 @@
 #   * redis          – OPTIONAL, Profil "fleet": Socket.io-Multi-Instanz-Adapter
 #   * stem-ai        – OPTIONAL Demucs-Stems (GROSS/GPU empfohlen; erst
 #                      aktivieren, wenn STEM_AI_URL gebraucht wird)
-#   * ollama         – OPTIONAL, Profil "ai": lokales LLM/TTS/Song-Fallback
 #
 #   Start:        docker compose -f docker-compose.hetzner.yml up -d --build
 #   Fleet (SFU):  docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml up -d caddy audiomonastry
@@ -277,27 +276,7 @@ services:
   #         devices:
   #           - capabilities: ["gpu"]
 
-  # --- OPTIONAL (Profil ai): lokales Ollama-LLM (MOA/TTS/Song-Fallback) --------
-  # Nur auf dem ai-1-Knoten (siehe docs/SERVER_FLEET.md). Großes Image,
-  # Models werden beim ersten Start gezogen.
-  # Start: docker compose -f docker-compose.hetzner.yml --profile ai up -d ollama
-  # ollama:
-  #   image: ollama/ollama:0.6
-  #   container_name: audiomonastry-ollama
-  #   <<: *default-runtime
-  #   profiles: ["ai"]
-  #   expose:
-  #     - "11434"
-  #   volumes:
-  #     - ollama_data:/root/.ollama
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 12G
-  #         cpus: "8.0"
-
 volumes:
   caddy_data:
   caddy_config:
   redis_data:
-  # ollama_data:

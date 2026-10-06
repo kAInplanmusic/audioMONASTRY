@@ -37,7 +37,7 @@ Firewalls überleben einen Flotten-Abbau (`delete-fleet.sh` löscht nur Server),
 ihre Regeln entstehen aber aus festen Werten — nach einem Neuaufbau zeigten
 `audiomonastry-app` (8080) sowie `audiomonastry-ai` (8000/11434) und
 `audiomonastry-master` (8000) deshalb auf die Quell-IPs der **vorherigen**
-Flotte: der Querverkehr edge→app (Scrape), app→ai (Stem-AI/Ollama) und
+Flotte: der Querverkehr edge→app (Scrape), app→ai (Stem-AI) und
 app→master (master-player) war stumm blockiert, während die Domain über
 Cloudflare weiter normal antwortete. `bring-up-fleet.sh` gleicht die Quell-IPs
 seit dem 2026-09-21 in **Schritt 3/9** gegen die tatsächlichen Knoten-IPs ab
@@ -1275,8 +1275,8 @@ Dazu die Knoten-Hygiene: `docker image prune -f` + `docker builder prune -f`
 Rollback-Image `audiomonastry:hetzner-rollback`, und Volumes werden nie
 angefasst - die kopierten Alt-Volumes sind der Rueckweg der Migration). Auf ai-1
 wurde der veraltete Altpfad `/opt/samplemonk` (6,0 GB, Kopie vom 18.09.) entfernt;
-die Dienste `ollama` und `stem-ai` laufen unveraendert aus
-`/opt/audiomonastry` + `/root/.ollama`.
+die Dienste `stem-ai` laufen unveraendert aus
+`/opt/audiomonastry`.
 
 ## App-Metriken direkt scrapen (SCRAPE_TOKEN + Monitoring-Pfad) - 2026-09-20
 
@@ -1375,7 +1375,7 @@ Erwartet: Allokation mit den App-Credentials gelingt, falsches Credential endet 
 ## CSP-Meldeweg auswerten und `CSP_MODE=enforce` entscheiden (F7/PROD-P2-F7) — 2026-09-21 lokal gemessen
 
 Die Content-Security-Policy wird in `server/csp.ts` aus der Umgebung abgeleitet
-(eigene Domain, Supabase/R2, SFU-/Master-Ziele, Ollama, Provider-Hosts) und läuft
+(eigene Domain, Supabase/R2, SFU-/Master-Ziele, Provider-Hosts) und läuft
 bewusst im **Report-Only**-Modus (`CSP_MODE`, Default `report-only`), weil es keine
 Beobachtungsdaten gab. Diese Daten sind jetzt erzeugbar UND ablesbar.
 
@@ -1417,7 +1417,7 @@ auch ein Container-Recreate kein Datenverlust.
 * **Art des Verstoßes:** `connect-src`/`media-src`/`img-src` gegen **fremde Hosts**
   sind echte Verstöße. Artefakte sind: `img-src` + `data`/`inline` (Favicon,
   Inline-Bild), `style-src` + `inline` (React-Inline-Styles), `script-src-elem` +
-  `inline`, sowie `connect-src` zu **lokalen** Ports (`127.0.0.1:11434` Ollama am
+  `inline`, sowie `connect-src` zu **lokalen** Ports am
   Betreiber-Rechner). Fehlte eine legitime Quelle, war das ein Policy-Fehler — so
   fehlte der **SFU-Signalisierungshost** (`SFU_SIGNALING_URL`, z. B.
   `sfu.<domain>`): der Client verbindet sich dorthin, der Host war aber nicht in

@@ -900,7 +900,7 @@ const ROLE_ENV_KEYS = {
     'SUPABASE_URL', 'SUPABASE_SERVICE_ROLE', 'SUPABASE_ANON_PUB',
     'CFR2_ACCOUNT_ID', 'CFR2_ACCESS_KEY_ID', 'CFR2_SECRET_ACCESS_KEY', 'CFR2_BUCKET', 'CFR2_PUBLIC_URL',
     'REPLICATE_API_TOKEN', 'DEEPSEEK_API_KEY', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY',
-    'OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL', 'MASTER_PLAYER_URL',
+    'STEM_AI_URL', 'MASTER_PLAYER_URL',
     // F6: Die RTC-Strecke des App-Knotens. Der Worker kennt die oeffentliche IP
     // des SFU-Knotens zum Cloud-Init-Zeitpunkt NICHT (sie wird erst beim
     // Server-Create vergeben) - sie kann deshalb nicht berechnet werden, sondern
@@ -920,7 +920,7 @@ const ROLE_ENV_KEYS = {
   sfu: ['TURN_STATIC_AUTH_SECRET', 'TURN_REALM'],
   master: [],
   edge: ['GF_SECURITY_ADMIN_PASSWORD'],
-  ai: ['OLLAMA_URL', 'OLLAMA_MODEL', 'STEM_AI_URL'],
+  ai: ['STEM_AI_URL'],
 };
 
 /**
@@ -1111,15 +1111,9 @@ case "${role}" in
     docker compose -f docker-compose.hetzner.yml -f docker-compose.monitoring.yml up -d ${MONITORING_SERVICES.join(' ')}
     ;;
   ai)
-    curl -fsSL https://ollama.com/install.sh | sh || true
-    # FLEET-WIRING: Ollama muss von app-1 aus erreichbar sein (Firewall
-    # begrenzt den Zugriff auf die app-1-IP, siehe /api/wire-fleet).
-    mkdir -p /etc/systemd/system/ollama.service.d
-    printf '[Service]\\nEnvironment="OLLAMA_HOST=0.0.0.0:11434"\\n' > /etc/systemd/system/ollama.service.d/override.conf
-    systemctl daemon-reload
-    systemctl enable --now ollama || true
-    systemctl restart ollama || true
-    ollama pull qwen2.5:7b || true
+    # Rolle ai wird von der 4er-Flotte (app/sfu/media/edge) nicht mehr
+    # vergeben - der Zweig ist tot, bleibt aber fuer den manuellen Aufruf des
+    # stem-ai-Setups erhalten.
     cd services/stem-ai
     python3 -m venv .venv 2>/dev/null || { apt-get install -y -qq python3.12-venv; python3 -m venv .venv; }
     . .venv/bin/activate
@@ -1680,8 +1674,8 @@ export function r2Summary(env) {
 }
 
 /**
- * Öffnet die Flotten-Service-Ports (master-player 8000, stem-ai 8000,
- * Ollama 11434) für die app-1-IP.
+ * Öffnet die Flotten-Service-Ports (master-player 8000, stem-ai 8000)
+ * für die app-1-IP.
  *
  * ZWEI SCHREIBER, DIESELBEN REGELN: genau diese Ports/Quellen pflegt auch
  * `scripts/hetzner/firewall-ensure.py` (CONTRACT) – dort als Abgleich im
@@ -1713,7 +1707,7 @@ async function openFleetPorts(env) {
 
   const portsByRole = {
     [`${NAME_PREFIX}master`]: ['8000'],
-    [`${NAME_PREFIX}ai`]: ['8000', '11434'],
+    [`${NAME_PREFIX}ai`]: ['8000'],
   };
   const list = await hzGet(env, '/firewalls?per_page=100');
   const updated = {};
@@ -2155,7 +2149,7 @@ export default {
 
       // FLEET-MAP: liefert die öffentlichen IPv4-Adressen aller Flotten-Knoten.
       // Geschützt über den Studio-Token – die App (app-1) ruft das beim Start
-      // auf und verdrahtet master-player/ollama/stem-ai damit zur Laufzeit.
+      // auf und verdrahtet master-player/stem-ai damit zur Laufzeit.
       if (url.pathname === '/api/fleet-map') {
         const token = (request.headers.get('x-studio-token') ?? '').trim();
         if (!token || token !== env.STUDIO_ACCESS_TOKEN) {
@@ -2170,7 +2164,7 @@ export default {
       }
 
       // FLEET-WIRING: Firewalls für master/ai auf die aktuelle app-1-IP
-      // verdrahten (master-player 8000, stem-ai 8000, Ollama 11434).
+      // verdrahten (master-player 8000, stem-ai 8000).
       if (url.pathname === '/api/wire-fleet' && request.method === 'POST') {
         if (!(await checkSession(env, request))) return json({ error: 'nicht eingeloggt' }, 401);
         const servers = await fleetServers(env);
