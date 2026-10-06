@@ -63,6 +63,6 @@ export function pluginPanelOpen(id: string, mode: PluginMode, owner: string | nu
 export function pluginSummary(id: string, mode: PluginMode, owner: string | null, me: string, ownerName = owner ?? ''): string {
   if (id === MIXER_ID) return owner === me ? '' : owner ? `Gehalten von ${ownerName}. Nur der Halter bedient den Mixer und startet Ton auf Main.` : 'Wird gerade vergeben.';
   if (!owner) return mode === 'ON' ? 'Läuft ohne Halter. Tippe den Modus-Button, um es zu holen.' : 'Frei. Jede Person kann es mit OFF → STBY holen.';
-  if (owner !== me) return `Belegt von ${ownerName} · ${mode} · für dich nicht einsehbar.`;
+  if (owner !== me) return `Gehalten von ${ownerName} · ${mode}.`;
   return mode === 'STBY' ? 'Dir zugeordnet, aber nicht aktiv (Bypass). Tippe STBY, um es zu aktivieren.' : '';
 }

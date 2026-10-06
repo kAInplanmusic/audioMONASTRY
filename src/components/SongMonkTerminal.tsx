@@ -1,6 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Music, Sparkles } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
 import type { AudioSample } from '../data/samples';
 
@@ -17,10 +18,15 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
   const { state, updateState } = usePluginState('song', 'PRO');
   const { addSample } = useSamples();
 
-  const [prompt, setPrompt] = useState('Dark warehouse techno mit treibendem Bass und hypnotischen Vocals');
-  const [style, setStyle] = useState('dark techno');
-  const [bpm, setBpm] = useState(128);
-  const [duration, setDuration] = useState(8);
+  // Beständige Plugins: Einstiegsstand = letzter Prompt/Stil/Tempo/Länge.
+  const [saved] = useState(() => mergeKnown({ prompt: 'Dark warehouse techno mit treibendem Bass und hypnotischen Vocals', style: 'dark techno', bpm: 128, duration: 8 }, readPluginSettings('song')));
+  const [prompt, setPrompt] = useState(saved.prompt);
+  const [style, setStyle] = useState(saved.style);
+  const [bpm, setBpm] = useState(saved.bpm);
+  const [duration, setDuration] = useState(saved.duration);
+  useEffect(() => {
+    writePluginSettings('song', { prompt, style, bpm, duration });
+  }, [prompt, style, bpm, duration]);
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
 

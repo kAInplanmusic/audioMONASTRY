@@ -81,6 +81,13 @@ Main-Uhr: im Entwurf ein Lookahead-Scheduler (25 ms Takt, 120 ms Vorlauf, 16tel-
 
 Das sind Sitzungsregeln: v2-Server und Collaboration-Lock müssen sie durchsetzen (UI2-P0-001/002), die Oberfläche spiegelt nur.
 
+**Beständige Plugins (Betreiber 2026-10-06):** Der Stand jedes Plugins liegt in der Session
+(`AuthoritativeSession.setPluginSettings`, Socket `plugin-settings`, nur der Halter schreibt). Wer ein Plugin
+übernimmt, startet mit diesem Stand. Für v2 heißt das: Die Audio-Seite eines Plugins muss ihren Zustand aus
+genau diesem Stand herstellen können (`restore`), und jede Reglerbewegung, die den Klang ändert, gehört in
+den Stand – nicht in lokalen UI-Zustand. Main-Ausgänge: genau ein Gerät je Adresse (`/master-out`,
+`/visual-out`), weitere werden abgewiesen (`output-busy`).
+
 ## 5. Nachbearbeitung (Stufen mit Bypass)
 
 Jede Stufe hat einen trockenen und einen nassen Pfad; aktiv nur bei Modus ON (sonst transparent).

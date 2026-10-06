@@ -420,6 +420,22 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           return;
         }
 
+        // Main-Ausgänge (Betreiber 2026-10-06): genau EINE Adresse für Ton und
+        // EINE für Bild; die erste Verbindung hält sie, jede weitere wird
+        // abgewiesen (wie die 4-Nutzer-Grenze: vor Raum und Zustand).
+        if (isListenerMode(mode)) {
+          const taken = [...(io.sockets.adapter.rooms.get(room) ?? [])].some((sid) => {
+            if (sid === socket.id) return false;
+            const other = io.sockets.sockets.get(sid);
+            return !!other?.data?.sessionUserId && normalizeSessionMode(other.data.sessionMode) === mode;
+          });
+          if (taken) {
+            addServerAudit(userId, 'member', 'OUTPUT_BUSY', false, mode);
+            socket.emit('output-busy', { roomId: SESSION_ROOM_ID, mode });
+            return;
+          }
+        }
+
         socket.data.sessionUserId = userId;
         socket.data.sessionRoom = SESSION_ROOM_ID;
         socket.data.sessionMode = mode;
@@ -444,27 +460,12 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
             locks: snapshot.locks,
             sequences: snapshot.sequences,
             serverTime: snapshot.serverTime,
+            pluginSettings: snapshot.pluginSettings,
           });
         }
 
         const members = sessionMembers(room, socket.id);
         if (isListenerMode(mode)) {
-          // Session-Ausgänge: GENAU ein Main-Ausgang Ton und einer Bild. Ein neues
-          // Gerät im selben Modus löst das alte ab (Reload, Gerätewechsel) – das
-          // alte bekommt einen Hinweis und wird getrennt.
-          const replaced: any[] = [];
-          for (const sid of io.sockets.adapter.rooms.get(room) ?? []) {
-            if (sid === socket.id) continue;
-            const other = io.sockets.sockets.get(sid);
-            if (other && normalizeSessionMode(other.data?.sessionMode) === mode) replaced.push(other);
-          }
-          for (const other of replaced) {
-            endpointReports.delete(other.id);
-            other.emit('output-replaced', { roomId: SESSION_ROOM_ID, mode });
-            addServerAudit(String(other.data?.sessionUserId ?? other.id), 'member', 'OUTPUT_REPLACED', true, mode);
-            other.leave(room);
-            other.disconnect(true);
-          }
           // Nicht an die Session-Mitglieder ankündigen (kein peer-joined), damit
           // niemand Mikrofon-Tracks an den Listener schickt. Der Listener
           // initiiert seine Verbindung selbst zum Host.
@@ -618,6 +619,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           locks: snapshot.locks,
           sequences: snapshot.sequences,
           serverTime: snapshot.serverTime,
+          pluginSettings: snapshot.pluginSettings,
         });
       });
 
@@ -711,6 +713,24 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         });
         socket.to(`session:${roomId}`).emit('plugin-state', payload);
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
+      });
+
+      // Beständige Plugins (Betreiber 2026-10-06): der Halter speichert den Stand
+      // seines Plugins; der Server prüft Halter + Größe, sichert ihn mit der
+      // Session und verteilt ihn, damit der nächste Halter genau damit startet.
+      socket.on('plugin-settings', (data: unknown) => {
+        markSocketActivity();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const userId = String(socket.data?.sessionUserId ?? '');
+        const pluginId = String((data as { pluginId?: unknown })?.pluginId ?? '').trim().slice(0, 64);
+        const result = sessionRuntime.session.setPluginSettings(pluginId, userId, (data as { settings?: unknown })?.settings);
+        if ('reason' in result) {
+          socket.emit('plugin-settings-rejected', { pluginId, reason: result.reason });
+          return;
+        }
+        sessionRuntime.persist();
+        socket.to(`session:${roomId}`).emit('plugin-settings', { pluginId, ...result.entry });
       });
 
       // Session-Ausgänge: Meldung bereinigen (Art = Modus des Sockets) und an

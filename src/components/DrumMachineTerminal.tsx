@@ -6,7 +6,7 @@ import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { isTrustedMediaUrl } from '../utils/mediaUrlGuard';
-import { storageGetJson, storageSetJson } from '../utils/storage';
+import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { SampleModuleWrapper } from './SampleModuleWrapper';
 import { MoaAssistant } from './MoaAssistant';
 import { DRUM_KITS } from '../data/drumKits';
@@ -48,7 +48,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   // Persistenz einmalig beim ersten Rendern laden – keine setState-Aufrufe im Effect.
   const [loadedDrumState] = useState(() => {
     try {
-      const parsed = storageGetJson<{ kit?: string; patterns?: Record<string, boolean[]>; stepSamples?: Record<string, Record<number, AudioSample>> }>('drum-state');
+      const parsed = readPluginSettings<{ kit?: string; patterns?: Record<string, boolean[]>; stepSamples?: Record<string, Record<number, AudioSample>> }>('drumsampler', { legacyKey: 'drum-state' });
       if (parsed) {
         const kit = parsed.kit && DRUM_KITS.some((k) => k.id === parsed.kit) ? parsed.kit : 'tr-808';
         const kitDef = DRUM_KITS.find((k) => k.id === kit) ?? DRUM_KITS[0];
@@ -104,7 +104,8 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   // Persistenz speichern.
   useEffect(() => {
     // NOSONAR: lokaler, JSON-serialisierter App-State; wird nicht als HTML gerendert
-    storageSetJson('drum-state', { kit: activeKit, patterns, stepSamples });
+    // Beständige Plugins: Stand an die Session (der nächste Halter startet damit).
+    writePluginSettings('drumsampler', { kit: activeKit, patterns, stepSamples });
   }, [activeKit, patterns, stepSamples]);
 
   // MOA-Kommando: sichtbare Zufalls-Patterns für das aktive Kit.

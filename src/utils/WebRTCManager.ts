@@ -44,7 +44,8 @@ class WebRTCManager {
   private sessionEndpointsListeners = new Set<(msg: any) => void>();
   /** Letzte Ausgänge-Liste vom Server – neue Zuhörer (z. B. ein spät geöffnetes Panel) bekommen sie sofort. */
   private lastSessionEndpoints: unknown = null;
-  private outputReplacedListeners = new Set<() => void>();
+  private outputBusyListeners = new Set<() => void>();
+  private pluginSettingsListeners = new Set<(msg: any) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -508,7 +509,8 @@ class WebRTCManager {
     // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
     this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
-    this.socket.on('output-replaced', () => this.outputReplacedListeners.forEach((l) => l()));
+    this.socket.on('output-busy', () => this.outputBusyListeners.forEach((l) => l()));
+    this.socket.on('plugin-settings', (data: any) => this.pluginSettingsListeners.forEach((l) => l(data)));
     this.socket.on('session-endpoints', (data: any) => {
       this.lastSessionEndpoints = data;
       this.sessionEndpointsListeners.forEach((l) => l(data));
@@ -828,10 +830,21 @@ class WebRTCManager {
     if (this.socket?.connected) this.socket.emit('endpoint-report', report);
   }
 
-  /** Session-Ausgänge: ein anderes Gerät hat diesen Main-Ausgang übernommen. */
-  public onOutputReplaced(cb: () => void): () => void {
-    this.outputReplacedListeners.add(cb);
-    return () => { this.outputReplacedListeners.delete(cb); };
+  /** Session-Ausgänge: dieser Main-Ausgang ist schon von einem anderen Gerät belegt (Server weist ab). */
+  public onOutputBusy(cb: () => void): () => void {
+    this.outputBusyListeners.add(cb);
+    return () => { this.outputBusyListeners.delete(cb); };
+  }
+
+  /** Beständige Plugins: Stand des gehaltenen Plugins an den Server (nur der Halter darf schreiben). */
+  public sendPluginSettings(pluginId: string, settings: Record<string, unknown>): void {
+    this.socket?.emit('plugin-settings', { pluginId, settings });
+  }
+
+  /** Beständige Plugins: gespeicherte Stände anderer Halter empfangen. */
+  public onPluginSettings(cb: (msg: any) => void): () => void {
+    this.pluginSettingsListeners.add(cb);
+    return () => { this.pluginSettingsListeners.delete(cb); };
   }
 
   /** Session-Ausgänge: Liste aller Geräte der Session empfangen (sofort die letzte bekannte). */

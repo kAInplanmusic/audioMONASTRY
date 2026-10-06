@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Power, CircleDot as Rec } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
@@ -34,16 +35,29 @@ const emptyPads = (): Pad[] =>
 export const SamplerTerminal = React.memo(() => {
   const { state, lockStatus, updateState } = usePluginState('syntisampler', 'PRO');
   const { takeoverRequest, clearTakeoverRequest } = useSamples();
-  const [pads, setPads] = useState<Pad[]>(emptyPads);
+  // Beständige Plugins (syntisampler › sampler): Muster und Pad-Regler. Die
+  // Pad-Klänge selbst sind Audiodaten auf diesem Gerät (gehören in die Bibliothek).
+  const [saved] = useState(() => readPluginSettings<{ pads?: unknown; seqs?: unknown; stepPitches?: unknown; quantize?: unknown; seqCount?: unknown; bank?: unknown }>('syntisampler', { section: 'sampler' }));
+  const [pads, setPads] = useState<Pad[]>(() => {
+    const base = emptyPads();
+    const list = Array.isArray(saved?.pads) ? saved.pads : [];
+    return base.map((p, i) => ({ ...p, ...mergeKnown({ slice: p.slice, loop: p.loop, reverse: p.reverse, pitch: p.pitch }, list[i]) }));
+  });
   const [capturing, setCapturing] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   // NEW-MONK-2: 16/32-Step-Sequencer je Pad + Bank A/B + Quantize + Step-Pitch.
-  const [seqs, setSeqs] = useState<Record<string, boolean[]>>({});
-  const [stepPitches, setStepPitches] = useState<Record<string, Record<number, number>>>({});
+  const [seqs, setSeqs] = useState<Record<string, boolean[]>>(() => (saved?.seqs && typeof saved.seqs === 'object' ? saved.seqs as Record<string, boolean[]> : {}));
+  const [stepPitches, setStepPitches] = useState<Record<string, Record<number, number>>>(() => (saved?.stepPitches && typeof saved.stepPitches === 'object' ? saved.stepPitches as Record<string, Record<number, number>> : {}));
   const [curStep, setCurStep] = useState(0);
-  const [quantize, setQuantize] = useState(true);
-  const [seqCount, setSeqCount] = useState<16 | 32>(16);
-  const [bank, setBank] = useState<'A' | 'B'>('A');
+  const [quantize, setQuantize] = useState(typeof saved?.quantize === 'boolean' ? saved.quantize : true);
+  const [seqCount, setSeqCount] = useState<16 | 32>(saved?.seqCount === 32 ? 32 : 16);
+  const [bank, setBank] = useState<'A' | 'B'>(saved?.bank === 'B' ? 'B' : 'A');
+  useEffect(() => {
+    writePluginSettings('syntisampler', {
+      pads: pads.map((p) => ({ slice: p.slice, loop: p.loop, reverse: p.reverse, pitch: p.pitch })),
+      seqs, stepPitches, quantize, seqCount, bank,
+    }, { section: 'sampler' });
+  }, [pads, seqs, stepPitches, quantize, seqCount, bank]);
 
   const seqKey = (padIdx: number) => `${bank}:${padIdx}`;
 

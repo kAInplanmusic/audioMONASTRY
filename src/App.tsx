@@ -30,6 +30,7 @@ import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
 import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles, Maximize2, Minimize2, Play, Square } from 'lucide-react';
 import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
+import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
@@ -181,6 +182,9 @@ function AppComponent() {
       return;
     }
     if (step.kind === 'activate') { setModuleState(id, 'PRO'); return; }
+    // Beständige Plugins: letzten Stand sichern, BEVOR der Lock frei wird
+    // (danach nimmt der Server keinen Stand dieses Nutzers mehr an).
+    flushPluginSettings(id);
     setModuleState(id, 'OFF');
     releaseLock(id, me);
   }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState]);
@@ -726,7 +730,7 @@ function AppComponent() {
                     aria-label="mixerMONK-Halter übergeben"
                     className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1 py-0.5"
                     value=""
-                    onChange={(e) => { if (e.target.value) transferLock('mixer', e.target.value); }}
+                    onChange={(e) => { if (e.target.value) { flushPluginSettings('mixer'); transferLock('mixer', e.target.value); } }}
                   >
                     <option value="">Halter übergeben …</option>
                     {sessionPeers
@@ -923,7 +927,7 @@ function AppComponent() {
                       aria-label="mixerMONK übergeben"
                       className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1.5 py-0.5"
                       value=""
-                      onChange={(e) => { if (e.target.value) transferLock('mixer', e.target.value); }}
+                      onChange={(e) => { if (e.target.value) { flushPluginSettings('mixer'); transferLock('mixer', e.target.value); } }}
                     >
                       <option value="">Übergeben an …</option>
                       {peers.map((m) => <option key={m.socketId} value={m.userId}>{m.userId.replace(/^user-/, 'u')}</option>)}

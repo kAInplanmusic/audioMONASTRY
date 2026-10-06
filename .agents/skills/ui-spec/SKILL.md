@@ -30,10 +30,19 @@ Verkabelung; die App zeigt sie als Leiste (`src/components/SignalChainBar.tsx`).
 Seitenüberlauf funktionieren (`tests/e2e/formats.spec.ts`); breite Bedienflächen
 scrollen in sich (`overflow-x-auto` im Streifen).
 
+## Beständige Plugins
+
+Plugin-Einstellungen gehören in die Session, nie nur in lokalen State oder
+Browser-Speicher: `readPluginSettings(id, { section, legacyKey })` als
+Einstiegsstand, `writePluginSettings(id, stand)` bei jeder Änderung
+(`src/utils/pluginSettings.ts`). Beim Verlassen ruft die App
+`flushPluginSettings`. Werte aus fremden Ständen immer mit `mergeKnown`
+prüfen. Nicht gehaltene Plugins sind eingeklappt (nur „ob und wer").
+
 ## Session-Ausgänge
 
-1–4 UI-Nutzer (jeder eigenes Format/eigene Auflösung) + genau ein Main Sound
-(`/master-out`) + genau ein Main Visual (`/visual-out`). Geräte melden sich per
+1–4 UI-Nutzer (jeder eigenes Format/eigene Auflösung) + genau ein Gerät Main Audio
+(`/master-out`) + genau ein Gerät Main Visuals (`/visual-out`); weitere werden abgewiesen. Geräte melden sich per
 `endpoint-report`, der Server verteilt `session-endpoints`
 (`src/core/session/sessionEndpoints.ts`). Ausgänge zählen nie als Nutzer.
 

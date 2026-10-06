@@ -13,6 +13,7 @@ import { PadGrid } from './instrument/PadGrid';
 import { InstrumentCanvas } from './instrument/InstrumentCanvas';
 import { GarageBandInstrumentView } from './instrument/GarageBandInstrumentView';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 
 // --- WAM2 / Instrument Standards ---
 type InstrumentType = 'sampler' | 'synth' | 'soundfont' | 'synth2';
@@ -109,16 +110,29 @@ const SYNTH_PRESET_INSTRUMENTS: Instrument[] = SYNTHESIS_INSTRUMENTS.map(d => ({
 
 export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
   const { state, lockStatus, updateState } = usePluginState('instru', 'PRO');
-  const [activeCategory, setActiveCategory] = useState('Alle');
+  // Beständige Plugins: Einstiegsstand = zuletzt gewähltes Instrument + Ansicht.
+  const [saved] = useState(() => mergeKnown({ instrumentId: -1, activeCategory: 'Alle', playView: 'keys' }, readPluginSettings('instru')));
+  const [activeCategory, setActiveCategory] = useState(saved.activeCategory);
   const [search, setSearch] = useState('');
   const [instruments] = useState<Instrument[]>([...PRESET_INSTRUMENTS, ...SYNTH_PRESET_INSTRUMENTS]);
-  const [activeInstrument, setActiveInstrument] = useState<Instrument | null>(null);
+  const [activeInstrument, setActiveInstrument] = useState<Instrument | null>(
+    () => [...PRESET_INSTRUMENTS, ...SYNTH_PRESET_INSTRUMENTS].find((i) => i.id === saved.instrumentId) ?? null,
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [droppedSample, setDroppedSample] = useState<AudioSample | null>(null);
   // Task 2: MIDI-Program-Change – zuletzt empfangene Programmnummer (UI-Spiegelung).
   const [midiProgram, setMidiProgram] = useState<number | null>(null);
   // Spielansichten: Pad-/Klavier-Eingabe als Standard (NEW-MONK-5).
-  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas' | 'garageband'>('keys');
+  const [playView, setPlayView] = useState<'preview' | 'keys' | 'pads' | 'canvas' | 'garageband'>(
+    ['preview', 'keys', 'pads', 'canvas', 'garageband'].includes(saved.playView) ? (saved.playView as 'keys') : 'keys',
+  );
+  // Übernahme: das gespeicherte Instrument einmal laden (Klang wie beim Vorgänger).
+  useEffect(() => {
+    if (saved.instrumentId >= 0) void instrumentBackend.load(saved.instrumentId).catch(() => { /* Instrument nicht verfügbar */ });
+  }, [saved]);
+  useEffect(() => {
+    writePluginSettings('instru', { instrumentId: activeInstrument?.id ?? -1, activeCategory, playView });
+  }, [activeInstrument, activeCategory, playView]);
 
   // MIDI-Program-Change via WebMIDIAdapter (controllerMONK) → instrumentBackend.
   useEffect(() => {

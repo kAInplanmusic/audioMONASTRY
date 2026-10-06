@@ -54,6 +54,26 @@ export interface SessionModuleState {
   updatedBy: string;
 }
 
+/**
+ * Plugin-Einstellungen (Betreiber 2026-10-06): Plugins sind beständig. Der
+ * letzte Stand eines Plugins liegt in der Session; wer es als Nächstes holt,
+ * startet genau damit. Schreiben darf nur der aktuelle Halter.
+ */
+export interface PluginSettingsEntry {
+  settings: Record<string, unknown>;
+  /** Session-Revision beim Speichern (monoton). */
+  revision: number;
+  updatedBy: string;
+  updatedAt: number;
+}
+
+/** Obergrenze je Plugin (JSON-Zeichen) – Einstellungen, keine Audiodaten. */
+export const MAX_PLUGIN_SETTINGS_CHARS = 64 * 1024;
+
+export type PluginSettingsResult =
+  | { ok: true; entry: PluginSettingsEntry }
+  | { ok: false; reason: 'invalid' | 'not-owner' | 'too-large' };
+
 export interface AuthoritativeSessionSnapshot {
   revision: number;
   serverTime: number;
@@ -61,6 +81,7 @@ export interface AuthoritativeSessionSnapshot {
   modules: Record<string, SessionModuleState>;
   sequences: Record<string, number>;
   recentEventCount: number;
+  pluginSettings: Record<string, PluginSettingsEntry>;
 }
 
 export interface SerializedAuthoritativeSession {
@@ -70,6 +91,8 @@ export interface SerializedAuthoritativeSession {
   modules: Array<[string, SessionModuleState]>;
   sequences: Array<[string, number]>;
   recentEventIds: string[];
+  /** Ab 2026-10-06; ältere Sicherungen haben das Feld nicht. */
+  pluginSettings?: Array<[string, PluginSettingsEntry]>;
 }
 
 export interface AuthoritativeSessionOptions {
@@ -89,6 +112,7 @@ export class AuthoritativeSession {
   private revisionCounter = 0;
   private readonly modules = new Map<string, SessionModuleState>();
   private readonly sequences = new Map<string, number>();
+  private readonly pluginSettings = new Map<string, PluginSettingsEntry>();
   private readonly recentEventIds: string[] = [];
   private readonly recentEventSet = new Set<string>();
 
@@ -266,6 +290,38 @@ export class AuthoritativeSession {
   }
 
   // -------------------------------------------------------------------------
+  // Plugin-Einstellungen (beständige Plugins)
+  // -------------------------------------------------------------------------
+
+  /** Speichert den Stand eines Plugins – nur vom aktuellen Halter. */
+  setPluginSettings(pluginId: string, userId: string, settings: unknown, now = Date.now()): PluginSettingsResult {
+    if (!pluginId || !userId || !settings || typeof settings !== 'object' || Array.isArray(settings)) {
+      return { ok: false, reason: 'invalid' };
+    }
+    if (this.locks.ownerOf(pluginId, now) !== userId) return { ok: false, reason: 'not-owner' };
+    let json: string;
+    try {
+      json = JSON.stringify(settings);
+    } catch {
+      return { ok: false, reason: 'invalid' };
+    }
+    if (json.length > MAX_PLUGIN_SETTINGS_CHARS) return { ok: false, reason: 'too-large' };
+    this.revisionCounter += 1;
+    const entry: PluginSettingsEntry = {
+      settings: JSON.parse(json) as Record<string, unknown>,
+      revision: this.revisionCounter,
+      updatedBy: userId,
+      updatedAt: now,
+    };
+    this.pluginSettings.set(pluginId, entry);
+    return { ok: true, entry };
+  }
+
+  getPluginSettings(pluginId: string): PluginSettingsEntry | null {
+    return this.pluginSettings.get(pluginId) ?? null;
+  }
+
+  // -------------------------------------------------------------------------
   // Snapshot / Persistenz
   // -------------------------------------------------------------------------
 
@@ -278,6 +334,7 @@ export class AuthoritativeSession {
       modules: Object.fromEntries(this.modules),
       sequences: Object.fromEntries(this.sequences),
       recentEventCount: this.recentEventIds.length,
+      pluginSettings: Object.fromEntries(this.pluginSettings),
     };
   }
 
@@ -290,6 +347,7 @@ export class AuthoritativeSession {
       modules: [...this.modules.entries()],
       sequences: [...this.sequences.entries()],
       recentEventIds: [...this.recentEventIds],
+      pluginSettings: [...this.pluginSettings.entries()],
     };
   }
 
@@ -313,6 +371,16 @@ export class AuthoritativeSession {
     }
     for (const id of Array.isArray(data.recentEventIds) ? data.recentEventIds : []) {
       if (typeof id === 'string' && id && !session.recentEventSet.has(id)) session.rememberEvent(id);
+    }
+    for (const [pluginId, entry] of Array.isArray(data.pluginSettings) ? data.pluginSettings : []) {
+      if (typeof pluginId === 'string' && entry && entry.settings && typeof entry.settings === 'object' && !Array.isArray(entry.settings)) {
+        session.pluginSettings.set(pluginId, {
+          settings: entry.settings,
+          revision: Number.isFinite(entry.revision) ? entry.revision : 0,
+          updatedBy: typeof entry.updatedBy === 'string' ? entry.updatedBy : '',
+          updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
+        });
+      }
     }
     return session;
   }
