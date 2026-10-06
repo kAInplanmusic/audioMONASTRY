@@ -22,7 +22,8 @@ export class SoundPluginAdapter extends BasePluginAdapter {
     payload?: Record<string, unknown>;
   }): Promise<unknown> {
     if (command.name === 'trigger') {
-      this.context?.audio.triggerEvent('channel8', 0.8);
+      const start = () => { this.context?.audio.triggerEvent('channel8', 0.8); };
+      this.scheduleSyncStart(start);
       return { ok: true, track: 'channel8' };
     }
     if (command.name === 'generate') {

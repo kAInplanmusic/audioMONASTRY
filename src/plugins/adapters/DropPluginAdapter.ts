@@ -77,10 +77,10 @@ export class DropPluginAdapter extends BasePluginAdapter {
         adapter.fadeChannelToMain?.(channel, rampSec, 0);
       };
 
-      if (payload.quantize === false || !adapter.scheduleAtNextBar) {
+      if (payload.quantize === false) {
         fire();
       } else {
-        adapter.scheduleAtNextBar(fire);
+        this.scheduleSyncStart(fire);
       }
       return { ok: true, channel, quantized: payload.quantize !== false };
     }

@@ -8,6 +8,7 @@ import type {
   PluginRuntimeContext,
   PluginSnapshot,
 } from '../plugin_interface';
+import { clockBridge } from '../../core/drop';
 
 /**
  * Gemeinsame Basis aller 16 kanonischen Plugin-Adapter.
@@ -25,6 +26,8 @@ export abstract class BasePluginAdapter implements PluginInterface {
   protected parameters: Record<string, number | string | boolean> = {};
   protected disposed = false;
   protected syncEnabled = true;
+  private scheduledSyncId?: string;
+  private syncStartTimeout?: number;
 
   public state: PluginState = 'OFF';
 
@@ -151,6 +154,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     }
 
     this.disposed = true;
+    this.cancelPendingSyncStart();
     await this.onDispose();
     this.context = null;
   }
@@ -195,5 +199,55 @@ export abstract class BasePluginAdapter implements PluginInterface {
   /** Klemmt einen Wert auf [min, max] – für Block-Verarbeitung ohne Allokation. */
   protected clampValue(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
+  }
+
+  /**
+   * Plant einen Start taktgenau über ClockBridge.
+   * Falls syncEnabled=false → sofort.
+   * Sonst scheduleDrop auf nächste Bar ('1bar'), fallback setTimeout bei Transport steht.
+   * Merkt scheduleId/Timeout, damit stop/dispose abbrechen kann.
+   */
+  protected scheduleSyncStart(start: () => void): void {
+    // Bereits geplante Starts abbrechen
+    if (this.scheduledSyncId) {
+      try { clockBridge.cancelScheduledDrop(this.scheduledSyncId); } catch {}
+      this.scheduledSyncId = undefined;
+    }
+    if (this.syncStartTimeout !== undefined) {
+      try { clearTimeout(this.syncStartTimeout); } catch {}
+      this.syncStartTimeout = undefined;
+    }
+
+    if (!this.syncEnabled) {
+      start();
+      return;
+    }
+
+    const clock = clockBridge.getClockState();
+    if (clock.isRunning) {
+      const id = clockBridge.scheduleDrop(() => {
+        this.scheduledSyncId = undefined;
+        start();
+      }, '1bar');
+      this.scheduledSyncId = id;
+    } else {
+      const delay = clockBridge.getDelayToQuantizationMs('1bar');
+      this.syncStartTimeout = window.setTimeout(() => {
+        this.syncStartTimeout = undefined;
+        start();
+      }, delay);
+    }
+  }
+
+  /** Bricht evtl. geplante Sync-Starts ab – aufrufer: stop/dispose. */
+  protected cancelPendingSyncStart(): void {
+    if (this.scheduledSyncId) {
+      try { clockBridge.cancelScheduledDrop(this.scheduledSyncId); } catch {}
+      this.scheduledSyncId = undefined;
+    }
+    if (this.syncStartTimeout !== undefined) {
+      try { clearTimeout(this.syncStartTimeout); } catch {}
+      this.syncStartTimeout = undefined;
+    }
   }
 }
