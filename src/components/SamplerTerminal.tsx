@@ -128,7 +128,7 @@ export const SamplerTerminal = React.memo(() => {
             <Activity className="w-4 h-4 text-indigo-400" />
           </div>
           <div>
-            <h2 className="text-sm font-black tracking-widest uppercase">samplerMONK</h2>
+            <h2 className="text-sm font-black tracking-widest uppercase">syntisamplerMONK · SAMPLER</h2>
             <p className="text-[8px] font-mono text-indigo-400 tracking-widest">16-PAD · CAPTURE · SLICE</p>
           </div>
         </div>

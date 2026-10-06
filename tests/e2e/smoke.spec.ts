@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, navButton } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, STUDIO_NAV_COUNT, SHORT_TO_NAME, modeButton, navButton, rackRow, switchPluginOn } from './helpers/studioNav';
+import { resetSession } from './helpers/studioAuth';
 
 /**
  * E2E-Smoke: App lädt, Entry-Gate passieren, alle Nav-Buttons sind da,
@@ -84,14 +85,15 @@ test('Session-Anzeige zeigt 1/4', async ({ page }) => {
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('Plugin-Toggle öffnet dropMONK ohne React-Crash', async ({ page }) => {
+test('Modus-Button schaltet dropMONK ohne React-Crash auf ON', async ({ page }) => {
   const errors = collectErrors(page);
+  await resetSession();
   await openStudio(page);
 
   // mcpMONK (früher hier geprüft) existiert nicht mehr - dropMONK ist ein
   // bestehendes, nicht Main-Out-gesperrtes Plugin.
   await navButton(page, 'DRP').click();
-  await expect(page.locator('#rack-drop').getByLabel('dropMONK aktiv')).toBeVisible({ timeout: 10_000 });
+  await switchPluginOn(page, 'drop', 'dropMONK');
 
   expect(errors.pageErrors).toEqual([]);
 });
@@ -111,16 +113,19 @@ test('Betreiberregel 2026-09-17: Startansicht ist mixerMONK, Module starten OFF-
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('P0-3: Power-Button schließt dropMONK und löst die Ansichtsmarkierung', async ({ page }) => {
+test('P0-3: Modus-Button schließt dropMONK (ON → OFF) und gibt es frei', async ({ page }) => {
   const errors = collectErrors(page);
+  await resetSession();
   await openStudio(page);
 
   await navButton(page, 'DRP').click();
-  const rack = page.locator('#rack-drop');
-  await expect(rack.getByLabel('dropMONK aktiv')).toBeVisible({ timeout: 10_000 });
+  await switchPluginOn(page, 'drop', 'dropMONK');
+  const rack = rackRow(page, 'drop');
+  await expect(rack).toHaveAttribute('data-plugin-owner', 'me');
 
-  await rack.getByLabel(/Power$/).click();
-  await expect(rack.getByLabel('dropMONK inaktiv')).toBeVisible();
+  await modeButton(page, 'dropMONK').click();
+  await expect(rack).toHaveAttribute('data-plugin-mode', 'OFF');
+  await expect(rack).toHaveAttribute('data-plugin-owner', 'none');
 
   expect(errors.pageErrors).toEqual([]);
 });

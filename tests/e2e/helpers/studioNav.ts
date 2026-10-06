@@ -96,3 +96,24 @@ export function collectErrors(page: Page): { pageErrors: string[]; consoleErrors
   });
   return { pageErrors, consoleErrors };
 }
+
+/**
+ * UI2-P0-002: Modus-Button rechts am Plugin-Streifen (OFF → STBY → ON → OFF).
+ * Ersetzt die alten „Power"/„Menü"-Knöpfe; das Header-Icon navigiert nur noch.
+ */
+export function modeButton(page: Page, name: string) {
+  return page.getByRole('button', { name: new RegExp(`^${name} Modus `) });
+}
+
+/** Plugin-Streifen `#rack-<id>`; Zustand über `data-plugin-mode` / `data-plugin-owner`. */
+export function rackRow(page: Page, id: string) {
+  return page.locator(`#rack-${id}`);
+}
+
+/** Schaltet ein freies Plugin in zwei Schritten auf ON (holen → aktivieren). */
+export async function switchPluginOn(page: Page, id: string, name: string): Promise<void> {
+  await modeButton(page, name).click();
+  await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'STBY', { timeout: 15_000 });
+  await modeButton(page, name).click();
+  await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 15_000 });
+}

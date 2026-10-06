@@ -5,7 +5,7 @@
   "role": "SINGLE_SOURCE_OF_TRUTH",
   "generatedAt": "2026-10-06",
   "branch": "main",
-  "commit": "a18d5c7",
+  "commit": "08f1a12",
   "supersedes": [
     "MASTER_TODO.md",
     "MASTERTODO.md",
@@ -4499,21 +4499,21 @@
       "id": "UI2-P0-001",
       "title": "Mixer: genau ein Halter, nur Übergabe",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Der mixerMONK ist bei genau einem Nutzer immer offen und nicht schließbar. Nur der Halter übergibt ihn an eine andere Person. Es gibt keine Anfrage. Verlässt der Halter die Sitzung, geht er automatisch an die Person, die am längsten in der Sitzung ist. Serverseitig erzwingen, nicht nur in der Oberfläche.\n\nAkzeptanz: Test: zweiter Halter unmöglich; Übergabe nur durch Halter; Auto-Übergabe beim Verlassen; Test analog tests/sessionCapacity.test.ts",
-      "verification": ""
+      "note": "Der mixerMONK ist bei genau einem Nutzer immer offen und nicht schließbar. Nur der Halter übergibt ihn an eine andere Person. Es gibt keine Anfrage. Verlässt der Halter die Sitzung, geht er automatisch an die Person, die am längsten in der Sitzung ist. Serverseitig erzwingen, nicht nur in der Oberfläche.\n\nAkzeptanz: Test: zweiter Halter unmöglich; Übergabe nur durch Halter; Auto-Übergabe beim Verlassen; Test analog tests/sessionCapacity.test.ts\n\nDONE 2026-10-06: Serverseitig erzwungen. AuthoritativeSession.ensureHolder vergibt mixerMONK an das erste bzw. am längsten anwesende Mitglied (Join, Leave, Disconnect, Lock-Ablauf; server/realtime.ts ensureMixerHolder). plugin-unlock für mixer wird mit 'mixer-transfer-only' abgelehnt; Übergabe nur durch den Halter (transferLock). Nicht-Halter sehen den Mixer eingeklappt, er bleibt versteckt gemountet (kein Desync bei Übergabe). Offen für v2: 8 kleine Pegel in der eingeklappten Zeile (brauchen Kanal-Metering).",
+      "verification": "tests/uiPluginModes.test.ts; tests/e2e/collab.spec.ts (UI2-P0-001, 2 Browser)"
     },
     {
       "id": "UI2-P0-002",
       "title": "Plugin-Modi OFF / STBY / ON mit Zuordnung",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Die 15 Plugins ohne Mixer haben die Modi OFF (frei, jeder darf es holen), STBY (einem Nutzer gemountet, nicht aktiv) und ON (aktiv). Button schaltet OFF, STBY, ON, OFF. Fremde Plugins sind gesperrt, es gibt kein Anfragen und kein Übergeben. Keine Mindest- oder Höchstzahl pro Nutzer. Anbindung an die bestehenden Sperren (B2B-Locking) in core/session.\n\nAkzeptanz: Test: alle 16 durch einen Nutzer belegbar; fremdes Plugin nicht schaltbar; Zustand wird an alle gespiegelt",
-      "verification": ""
+      "note": "Die 15 Plugins ohne Mixer haben die Modi OFF (frei, jeder darf es holen), STBY (einem Nutzer gemountet, nicht aktiv) und ON (aktiv). Button schaltet OFF, STBY, ON, OFF. Fremde Plugins sind gesperrt, es gibt kein Anfragen und kein Übergeben. Keine Mindest- oder Höchstzahl pro Nutzer. Anbindung an die bestehenden Sperren (B2B-Locking) in core/session.\n\nAkzeptanz: Test: alle 16 durch einen Nutzer belegbar; fremdes Plugin nicht schaltbar; Zustand wird an alle gespiegelt\n\nDONE 2026-10-06: src/core/session/pluginMode.ts bildet OFF/STBY/ON aus Modul-Zustand + zentralem Lock ab; Modus-Button rechts am Streifen (src/components/RackRow.tsx), Ctrl+1..9 = derselbe Schritt. Fremde Plugins gesperrt (Button deaktiviert, Begründung im Tooltip). Lock-Heartbeat 20 s hält gehaltene Plugins über die 60-s-Lease (PluginManagerContext). Streifen tragen data-plugin-mode/data-plugin-owner.",
+      "verification": "tests/uiPluginModes.test.ts; tests/e2e/collab.spec.ts; tests/e2e/keyboard.spec.ts; tests/e2e/pluginCloseSync.spec.ts"
     },
     {
       "id": "UI2-P1-001",
@@ -4522,18 +4522,18 @@
       "status": "PARTIAL",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage\n\n2026-10-06 Betreiber-Klarstellung: Die lineare Reihenfolge Quellen → Mixer → Nachbearbeitung → Recorder gilt NUR für die Verkabelung (SIGNAL_CHAIN). Auf dem Bildschirm steht der Mixer oben, danach die 15 Plugins in Kopfreihenfolge (RACK_ORDER = registry). Das entspricht dem bestehenden App-Layout; docs/UI_SPEC.md ist angepasst. Offen: Screenshot-Test gegen den Entwurf docs/design/audioMONASTRY-design.html.",
+      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage\n\n2026-10-06 Betreiber-Klarstellung: Die lineare Reihenfolge Quellen → Mixer → Nachbearbeitung → Recorder gilt NUR für die Verkabelung (SIGNAL_CHAIN). Auf dem Bildschirm steht der Mixer oben, danach die 15 Plugins in Kopfreihenfolge (RACK_ORDER = registry). Das entspricht dem bestehenden App-Layout; docs/UI_SPEC.md ist angepasst. Offen: Screenshot-Test gegen den Entwurf docs/design/audioMONASTRY-design.html.\n\n2026-10-06: Signalweg-Leiste in der App ergänzt. Offen bleibt der visuelle Screenshot-Test gegen den Entwurf (die vorhandenen Baselines in tests/e2e/visual.spec.ts sind veraltet und laufen in CI nicht).",
       "verification": ""
     },
     {
       "id": "UI2-P1-002",
       "title": "Masterplayer auf reine Ansicht reduzieren",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Play, CUE, LOOP und SYNC entfernen. Anzeigen: Wellenform des Ausgangs, Zeit, BPM, Takt, Tonart, L/R-Pegel. Passt zur README (Masterplayer nur Ansicht).\n\nAkzeptanz: Keine interaktiven Elemente im Masterplayer; Tastaturtest",
-      "verification": ""
+      "note": "Play, CUE, LOOP und SYNC entfernen. Anzeigen: Wellenform des Ausgangs, Zeit, BPM, Takt, Tonart, L/R-Pegel. Passt zur README (Masterplayer nur Ansicht).\n\nAkzeptanz: Keine interaktiven Elemente im Masterplayer; Tastaturtest\n\nDONE 2026-10-06: masterplayerMONK hat keine Bedienelemente. Anzeige: BPM, Transport, Zeit, Takt.Schlag, Metrum, Tonart, LUFS, Engine-Status, Wellenform (src/components/MasterplayerReadout.tsx, Abfrage im UI-Takt, audioEngine.getTransportSeconds). Offen für v2: L/R-Pegel (braucht Main-Metering-Tap) und Tonart aus dem laufenden Projekt statt Preset.",
+      "verification": "tests/uiMasterplayer.test.ts; tests/e2e/smoke.spec.ts (P0-7 View-only)"
     },
     {
       "id": "UI2-P1-003",
@@ -4549,11 +4549,11 @@
       "id": "UI2-P1-004",
       "title": "Verlabelung vereinheitlichen",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Verbindlich sind die 16 Namen der README. Tippfehler beheben: masteringrevMONK (richtig masterplayerMONK), MiserMONK, audioMONKSTRY im Logo. Platzhalter TEXTEINGABE FELD MONK 1 bis 3 entfernen. database, send, controller, signal und info fallen weg. Die UI-Sprache festlegen (Deutsch oder Englisch), Fachbegriffe wie Cue und Bounce dürfen bleiben.\n\nAkzeptanz: Grep-Test: kein Name außerhalb der Liste; keine Platzhaltertexte",
-      "verification": ""
+      "note": "Verbindlich sind die 16 Namen der README. Tippfehler beheben: masteringrevMONK (richtig masterplayerMONK), MiserMONK, audioMONKSTRY im Logo. Platzhalter TEXTEINGABE FELD MONK 1 bis 3 entfernen. database, send, controller, signal und info fallen weg. Die UI-Sprache festlegen (Deutsch oder Englisch), Fachbegriffe wie Cue und Bounce dürfen bleiben.\n\nAkzeptanz: Grep-Test: kein Name außerhalb der Liste; keine Platzhaltertexte\n\nDONE 2026-10-06: Sichtbare Namen auf die README-Liste gebracht (samplerMONK/mcpMONK → syntisamplerMONK · Sampler/MPC, drumMONK → drumsamplerMONK, VisualMONK → Visual-Liveshow, perfMONK → perforMONK in Spezifikation und Entwurf). Tippfehler und Platzhalter waren nicht mehr vorhanden; ein Grep-Test hält das fest. UI-Sprache: Deutsch, Fachbegriffe (Cue, Bounce, SYNC) bleiben.",
+      "verification": "tests/uiLabels.test.ts"
     },
     {
       "id": "UI2-P1-005",
@@ -4603,21 +4603,21 @@
       "id": "UI2-P2-001",
       "title": "AUTO_AI und PRO entfallen: Doku angleichen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "README Abschnitt 7 und der Plugin-Vertrag nennen OFF, AUTO_AI und PRO. Die neue Oberfläche kennt OFF, STBY, ON. KI-Vorschläge laufen über aiMONK. README, AGENTS.md und Manifest anpassen. Annahme des Betreibers noch bestätigen.\n\nAkzeptanz: README und Code nennen dieselben Modi",
-      "verification": ""
+      "note": "README Abschnitt 7 und der Plugin-Vertrag nennen OFF, AUTO_AI und PRO. Die neue Oberfläche kennt OFF, STBY, ON. KI-Vorschläge laufen über aiMONK. README, AGENTS.md und Manifest anpassen. Annahme des Betreibers noch bestätigen.\n\nAkzeptanz: README und Code nennen dieselben Modi\n\nDONE 2026-10-06: README Abschnitt 7 und AGENTS.md 2.2 nennen OFF/STBY/ON, Modus-Button, Halter-Regeln und SYNC. AUTO_AI bleibt nur als Altbestand im Laufzeitvertrag (ModuleState), KI-Vorschläge laufen über aiMONK. Das Manifest führt keine Modi.",
+      "verification": "README.md; AGENTS.md"
     },
     {
       "id": "UI2-P2-002",
       "title": "Signalweg sichtbar beschriften",
       "priority": "P2",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Gruppen Quellen (speisen den Mixer) und Nachbearbeitung (nimmt den Mixer-Ausgang). Reihenfolge effect, eq, dsp, spatial, master, record ist ein Vorschlag, mit dem tatsächlichen Signalweg (V2StudioGraph) abgleichen.\n\nAkzeptanz: Reihenfolge in UI und Graph stimmt überein\n\n2026-10-06: Reihenfolge im Signalweg ist SIGNAL_CHAIN (src/plugins/signalChain.ts): effect, eq, dsp, spatial, master, dann record. Die Verkabelung (V2) stellt der Betreiber gerade selbst linear um; der Entwurf zeigt den Weg als Leiste „Signalweg“ im Mixer. Offen: dieselbe Leiste in der App, nach Abschluss der V2-Verkabelung.",
-      "verification": ""
+      "note": "Gruppen Quellen (speisen den Mixer) und Nachbearbeitung (nimmt den Mixer-Ausgang). Reihenfolge effect, eq, dsp, spatial, master, record ist ein Vorschlag, mit dem tatsächlichen Signalweg (V2StudioGraph) abgleichen.\n\nAkzeptanz: Reihenfolge in UI und Graph stimmt überein\n\n2026-10-06: Reihenfolge im Signalweg ist SIGNAL_CHAIN (src/plugins/signalChain.ts): effect, eq, dsp, spatial, master, dann record. Die Verkabelung (V2) stellt der Betreiber gerade selbst linear um; der Entwurf zeigt den Weg als Leiste „Signalweg“ im Mixer. Offen: dieselbe Leiste in der App, nach Abschluss der V2-Verkabelung.\n\nDONE 2026-10-06: Leiste „Signalweg“ über dem Rack (src/components/SignalChainBar.tsx) zeigt SIGNAL_CHAIN Quellen → Mixer → Nachbearbeitung → Recorder → Main Out; Chips leuchten bei ON, Tippen springt zum Plugin. Abgleich mit dem tatsächlichen Graphen gehört zur v2-Verkabelung (SIGNAL_CHAIN ist dafür die eine Quelle).",
+      "verification": "tests/signalChain.test.ts; tests/uiPluginModes.test.ts"
     },
     {
       "id": "UI2-P2-003",
@@ -4633,51 +4633,51 @@
       "id": "UI2-P2-004",
       "title": "ModuleContainer.tsx und ARCH-P3-001",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Der unerreichbare ✕-OFF-Button in ModuleContainer.tsx wird durch den neuen Moduswechsel-Button ersetzt. Die 24 unerreichbaren Dateien aus ARCH-P3-001 bei der Umstellung mitbereinigen.\n\nAkzeptanz: npm run check:deadfiles grün",
-      "verification": ""
+      "note": "Der unerreichbare ✕-OFF-Button in ModuleContainer.tsx wird durch den neuen Moduswechsel-Button ersetzt. Die 24 unerreichbaren Dateien aus ARCH-P3-001 bei der Umstellung mitbereinigen.\n\nAkzeptanz: npm run check:deadfiles grün\n\nDONE 2026-10-06: ModuleContainer.tsx existiert nicht mehr; der Moduswechsel läuft über den Modus-Button in RackRow. npm run check:deadfiles ist grün.",
+      "verification": "npm run check:deadfiles"
     },
     {
       "id": "UI2-P2-005",
       "title": "Nummern 01 bis 16 nicht anzeigen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Im Entwurf kommt 03 doppelt vor und 06 fehlt. Nummern aus der Oberfläche entfernen (Annahme, bestätigen). Die Reihenfolge ergibt sich aus der Gruppierung.\n\nAkzeptanz: Keine Nummern in der UI",
-      "verification": ""
+      "note": "Im Entwurf kommt 03 doppelt vor und 06 fehlt. Nummern aus der Oberfläche entfernen (Annahme, bestätigen). Die Reihenfolge ergibt sich aus der Gruppierung.\n\nAkzeptanz: Keine Nummern in der UI\n\nDONE 2026-10-06 (Betreiber-Entscheidung geändert): Nummern 01–16 werden angezeigt, eindeutig nach Kopfreihenfolge (Betreiber-Vorlagen 2026-10-06), im Entwurf und in RackRow. Keine doppelten oder fehlenden Nummern mehr.",
+      "verification": "docs/UI_SPEC.md; src/App.tsx (number)"
     },
     {
       "id": "UI2-P3-001",
       "title": "iPhone und iPad: Startbildschirm-App",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Die HTML-Vorlage hat die Meta-Tags für den Vollbildmodus. Als nächste Stufe Manifest und Service-Worker (installierbare Web-App), später optional Capacitor für eine echte iOS-App.\n\nAkzeptanz: Installation über Teilen, Zum Home-Bildschirm getestet",
-      "verification": ""
+      "note": "Die HTML-Vorlage hat die Meta-Tags für den Vollbildmodus. Als nächste Stufe Manifest und Service-Worker (installierbare Web-App), später optional Capacitor für eine echte iOS-App.\n\nAkzeptanz: Installation über Teilen, Zum Home-Bildschirm getestet\n\nPARTIAL 2026-10-06: public/manifest.webmanifest (standalone, de, Icons 192/512/maskable), apple-touch-icon 180 px, Verlinkung in index.html; Titel liest die Version aus package.json. Bewusst kein cachender Service-Worker: die Live-Session braucht das Netz, und ein Cache würde nach Deploys alte Bundles ausliefern. Offen: Installation auf iPhone/iPad durch den Betreiber testen (Teilen → Zum Home-Bildschirm).",
+      "verification": "tests/pwaManifest.test.ts"
     },
     {
       "id": "UI2-P3-002",
       "title": "Spezifikation für Agenten bereitstellen",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "docs/UI_SPEC.md zusätzlich als Skill unter .agents/skills ablegen (Markdown nach agentskills.io), damit Hermes, Claude Code und Cursor dieselben Regeln lesen. Wie Hermes Skills einliest, wurde nicht geprüft.\n\nAkzeptanz: Skill-Datei vorhanden und von einem Agenten erfolgreich gelesen",
-      "verification": ""
+      "note": "docs/UI_SPEC.md zusätzlich als Skill unter .agents/skills ablegen (Markdown nach agentskills.io), damit Hermes, Claude Code und Cursor dieselben Regeln lesen. Wie Hermes Skills einliest, wurde nicht geprüft.\n\nAkzeptanz: Skill-Datei vorhanden und von einem Agenten erfolgreich gelesen\n\nDONE 2026-10-06: .agents/skills/ui-spec/SKILL.md (agentskills.io-Format mit name/description) fasst docs/UI_SPEC.md zusammen und verweist auf Code und Tests. Ob Hermes Skills aus .agents/skills einliest, ist weiterhin nicht geprüft.",
+      "verification": ".agents/skills/ui-spec/SKILL.md"
     },
     {
       "id": "UI2-P3-003",
       "title": "Barrierefreiheit der neuen Elemente",
       "priority": "P3",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Status nicht nur über Farbe (Text OFF, STBY, ON ist im Entwurf vorhanden). Kontrast der Schein-Farben prüfen. Pulsieren bei reduzierter Bewegung abschalten (im Entwurf vorhanden). Tastaturbedienung für alle Moduswechsel.\n\nAkzeptanz: e2e-Tastaturtest erweitert",
-      "verification": ""
+      "note": "Status nicht nur über Farbe (Text OFF, STBY, ON ist im Entwurf vorhanden). Kontrast der Schein-Farben prüfen. Pulsieren bei reduzierter Bewegung abschalten (im Entwurf vorhanden). Tastaturbedienung für alle Moduswechsel.\n\nAkzeptanz: e2e-Tastaturtest erweitert\n\nDONE 2026-10-06: Modus als Text (OFF/STBY/ON) an Chips und Button, Pulsieren nur mit motion-safe, Fokus-Ring an Modus- und SYNC-Taste, Moduswechsel per Enter und Ctrl+1..9. Kontrast der Schein-Farben nicht gemessen.",
+      "verification": "tests/e2e/keyboard.spec.ts (UI2-P3-003)"
     },
     {
       "id": "LIVE-P1-004",
@@ -4753,49 +4753,41 @@
       "id": "UI2-P0-003",
       "title": "SYNC gegen Main für alle spielenden Plugins (v2)",
       "priority": "P0",
+      "status": "PARTIAL",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "drop, song, syntisampler, drumsampler, instru, voice, sound, stem bekommen eine SYNC-Taste (Standard an): Start auf dem nächsten Main-Takt, taktgleiche Pattern-Position, Main-Tempo inkl. Warp der Stems, Pad-Quantisierung. SYNC aus = sofortiger Start, eigene Zählung. Vorlage und Verkabelungsvertrag: docs/design/audioMONASTRY-design.html, docs/design/V2_UI_VERKABELUNG.md (Abschnitt 3). Quantisierung sample-genau im Audio-Thread über die Master-Clock.\n\nAkzeptanz: Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts; ohne SYNC sofort; Stems folgen dem Main-Tempo.\n\nPARTIAL 2026-10-06: UI fertig. SYNC-Taste in der Kopfzeile der 8 spielenden Plugins (Standard an, nur der Halter schaltet), Zustand in src/core/session/pluginSync.ts (isPluginSynced/subscribePluginSync/pluginSyncSnapshot). Offen = Verkabelung (v2): sample-genaue Quantisierung im Audio-Thread über die Master-Clock, Stem-Warp, Replikation des SYNC-Zustands über die Session.",
+      "verification": "tests/uiPluginModes.test.ts"
+    },
+    {
+      "id": "UI2-P1-007",
+      "title": "Formate: Handy quer, Handy hochkant (vereinfacht), Pad quer, PC/Laptop – automatisch erkannt",
+      "priority": "P1",
       "status": "DONE",
       "area": "UI",
       "source": "Betreiber 2026-10-06",
-      "problem": "Die spielenden Plugins starteten ohne Bezug zum Main-Takt: kein gemeinsamer Startpunkt, Patterns liefen auseinander, kein sichtbarer Sync-Zustand im Plugin-Kopf.",
-      "note": "DONE 2026-10-06: SYNC-Zustand liegt orthogonal zum PluginState (OFF/STBY/ON/PRO) in BasePluginAdapter: syncEnabled mit isSyncEnabled()/setSyncEnabled(), Parameter-Schlüssel `sync.<id>` (Alt-Schlüssel `sync` bleibt lesbar), Aufnahme in die Serialisierung, Export über PluginInterface. Taktgenauer Start über scheduleSyncStart(start, scheduleAtNextBar?): syncEnabled=false → sofort; vorhandene Audio-Thread-Planung (adapter.scheduleAtNextBar über audioEngine/Tone.Transport) hat Vorrang, weil sie den Klang wirklich erreicht; sonst ClockBridge.scheduleDrop(...'1bar') mit BPM-Fallback per setTimeout. Geplante Starts werden bei stop/dispose abgebrochen (cancelPendingSyncStart). Kopfzeilen-Anzeige in RackRow: `⟲ SYNC` / `FREI`, Standard an, klickbar; der Zustand kommt über Props aus dem echten Adapter (App.tsx liest plugin.adapter aus der Registry) — NICHT aus lokalem UI-State, sonst wäre die Anzeige eine Attrappe, die den Audio-Start nie erreicht. Commits: 444760b, 33e1c5d, ae7c42c (Anzeige an echten Adapter), a18d5c7 (Regression: ClockBridge hatte die vorhandene Taktplanung ersetzt → Stillstand), 82a0cc4-Vorgeschichte unberührt. BELEG: voller Lauf 298 Dateien / 2372 Tests, EXIT=0; tsc --noEmit 0; eslint 0; tests/dropPlayback.test.ts 10/10 (enthält die Invariante 'ohne scheduleAtNextBar wird trotzdem gespielt — kein Stillstand').",
-      "verification": [
-        "node_modules/.bin/vitest run -> 298 Dateien / 2372 Tests, EXIT=0",
-        "node_modules/.bin/tsc --noEmit -> exit 0",
-        "tests/dropPlayback.test.ts -> 10/10, inkl. 'kein Stillstand ohne Taktplanung'"
-      ],
-      "acceptance": [
-        "Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts",
-        "ohne SYNC sofort",
-        "Stems folgen dem Main-Tempo",
-        "Kopfzeile zeigt ⟲ SYNC / FREI und schaltet um"
-      ],
-      "files": [
-        "src/plugins/adapters/BasePluginAdapter.ts",
-        "src/plugins/adapters/DropPluginAdapter.ts",
-        "src/plugins/adapters/DrumSamplerPluginAdapter.ts",
-        "src/plugins/adapters/InstruPluginAdapter.ts",
-        "src/plugins/adapters/SoundPluginAdapter.ts",
-        "src/plugins/adapters/SyntiSamplerPluginAdapter.ts",
-        "src/components/RackRow.tsx",
-        "src/plugins/plugin_interface.ts",
-        "src/App.tsx"
-      ]
+      "note": "Gerät und Auflösung automatisch erkennen; Handy breit Vollbild, Handy hochkant vereinfachte Ansicht, Pad quer Vollbild, PC/Laptop Querformat.\n\nAkzeptanz: Format wird ohne Nutzerauswahl erkannt; kein waagerechter Überlauf; Vollbild in Handy quer/Pad quer; Drehen wechselt live.\n\nDONE 2026-10-06: src/core/ui/deviceLayout.ts (reine Einordnung aus Zeigerart, Bildschirm-Kurzseite, Ausrichtung, Pixeldichte, Home-Bildschirm-Modus), src/hooks/useDeviceLayout.ts (data-layout an <html>, --app-height, Vollbild beim ersten Tippen, Hinweis Zum Home-Bildschirm für iPhone-Safari). Layout je Format in App.tsx/RackRow/AiMonkDock/index.css (Varianten phone/pocket/simple/pad). Orientierungs-Lock entfernt. Offen: Test auf echten Geräten (iPhone, iPad, Android) durch den Betreiber.",
+      "verification": "tests/deviceLayout.test.ts; tests/e2e/formats.spec.ts"
     },
     {
-      "id": "UI2-P0-003-F1",
-      "title": "song, voice, stem: Abspiel-/Startlogik im Adapter fehlt — SYNC kann dort nicht greifen",
+      "id": "UI2-P1-008",
+      "title": "Eigene Stream-Auflösung je Ausgabe-Stream (unabhängig vom Sendergerät)",
       "priority": "P1",
-      "status": "OPEN",
-      "area": "UI/Audio",
-      "source": "Befund beim Einbau von UI2-P0-003 (2026-10-06)",
-      "problem": "Die SYNC-Taste gehört laut UI2-P0-003 auch zu song, voice und stem. Diese drei Adapter haben jedoch keine Abspiel-/Startlogik, an die sich ein taktgenauer Start hängen ließe: SongPluginAdapter und StemPluginAdapter führen nur Parameter, VoicePluginAdapter kennt nur die Befehle speak/sing. Der Sync-Schalter ist dort korrekt verdrahtet und umschaltbar, wirkt aber erst, wenn der Adapter überhaupt einen Transport-Start hat.",
-      "note": "Bewusst offen gelassen statt erfunden: Die Alternative wäre gewesen, den dreien eine Play-Anbindung anzudichten (größerer Umbau, nicht beauftragt) oder ihnen die von der Spec geforderte Taste zu nehmen (Widerspruch zur Betreiber-Vorgabe). Beides wäre schlechter als ein sichtbarer, dokumentierter Folgepunkt. Kein akutes Klangproblem: ohne Startlogik spielt der Adapter auch ohne SYNC nichts.",
-      "verification": [],
-      "acceptance": [
-        "song, voice, stem haben je einen definierten Transport-Start",
-        "der Start läuft über scheduleSyncStart und ist damit taktgleich zu Main",
-        "ein Test deckt je Adapter den Fall SYNC an/aus ab"
-      ]
+      "status": "DONE",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "„Ein eigener Stream kann eine eigene Auflösung haben.“ Bisher war der Visual-Stream an Ghostuser 6 so groß wie die Zeichenfläche des Senders (Bildschirm × Pixeldichte) – ein Handy hochkant schickte ein Hochkant-Bild an den Beamer.\n\nAkzeptanz: Stream-Auflösung unabhängig vom Sender-Format; Auto folgt dem Empfänger; feste Presets inkl. Hochkant.\n\nDONE 2026-10-06: Beamer meldet Bildschirm als Session-Ausgang (endpoint-report → session-endpoints, siehe UI2-P1-009). Visual-Canvas rendert in Stream-Pixeln (Auto ≤ 1080p-Pixelmenge, 720p–4K, 9:16, 1:1; 30/60 fps), Vorschau letterboxed. Offen: Master-Out (/master-out) ist reines Audio – keine Auflösung nötig; MJPEG-Fallback nutzt dieselbe Zeichenfläche (bei 4K größere JPEGs).",
+      "verification": "tests/streamResolution.test.ts; tests/e2e/streamResolution.spec.ts"
+    },
+    {
+      "id": "UI2-P1-009",
+      "title": "Session-Ausgänge: 1–4 UI-Nutzer + genau ein Main Sound + genau ein Main Visual",
+      "priority": "P1",
+      "status": "DONE",
+      "area": "UI",
+      "source": "Betreiber 2026-10-06",
+      "note": "„1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals.“\n\nAkzeptanz: 4 UI-Plätze mit eigenem Format/eigener Auflösung sichtbar; je genau ein Main-Ausgang Ton und Bild; Ausgänge zählen nicht als Nutzer.\n\nDONE 2026-10-06: src/core/session/sessionEndpoints.ts (Meldung je Modus bereinigt – Nutzer: Format/Auflösung, /master-out: Zustand/Abtastrate/Kanäle, /visual-out: Zustand/Bildschirm/Stream; 6 feste Plätze). Server: endpoint-report → session-endpoints an alle, Abmeldung bei Leave/Disconnect; ein neuer Ausgang gleicher Art löst den alten ab (output-replaced, Audit OUTPUT_REPLACED). UI: Knopf AUSGÄNGE in jedem Format mit n/4 und Ton/Bild-Punkten, Fenster mit 6 Plätzen und Andock-URLs.",
+      "verification": "tests/sessionEndpoints.test.ts; tests/e2e/sessionOutputs.spec.ts"
     }
   ],
   "visionSandbox": [

@@ -10,7 +10,7 @@ Der Entwurf ist so gebaut, als liefe v2 schon: Jedes Bedienelement steuert einen
 
 | | Reihenfolge | Quelle |
 |---|---|---|
-| **Bildschirm** | Kopf → Masterplayer → mixerMONK → drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record → aiMONK → perfMONK | `plugins/registry.ts` (Kopfreihenfolge, Nummern 01–16, Farben) |
+| **Bildschirm** | Kopf → Masterplayer → mixerMONK → drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record → aiMONK → perforMONK | `plugins/registry.ts` (Kopfreihenfolge, Nummern 01–16, Farben) |
 | **Signalweg** | Quellen → Mixer → effect → eq → dsp → spatial → master → record → Main Out | `src/plugins/signalChain.ts` (`SIGNAL_CHAIN`) |
 
 Der Mixer zeigt den Signalweg als Leiste „Signalweg“. Ein Eintrag leuchtet, wenn die Stufe aktiv ist.
@@ -118,7 +118,7 @@ Effekte (`<id>`: `p1`/`p2`/`p3`):
 - Streifen: L/R-Pegel je Plugin (Quellen: Kanal, Nachbearbeitung: Summe).
 - dsp: Gate offen/zu, Kompressor- und Limiter-GR, Stimmenzahl (Budget 32).
 - master: LUFS kurz/integriert (BS.1770 im Worklet), True Peak, GR, Verlauf gegen Ziel.
-- perfMONK: Audio-Last, FPS, Speicher, Latenz (base + output), Dropouts, Worklets, SAB/crossOriginIsolated, Stimmen, Jitter, Netz ein/aus, Verbindungen 4/4, Laufzeit, Taktgeber-Verzug.
+- perforMONK: Audio-Last, FPS, Speicher, Latenz (base + output), Dropouts, Worklets, SAB/crossOriginIsolated, Stimmen, Jitter, Netz ein/aus, Verbindungen 4/4, Laufzeit, Taktgeber-Verzug.
 
 ## 8. Was im Entwurf nur nachgebaut ist
 

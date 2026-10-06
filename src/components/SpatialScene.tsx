@@ -666,7 +666,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
             key={t}
             onClick={(e) => openAudioActionMenu(mixerChannelContent(t), e.currentTarget)}
             className="px-1.5 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer"
-            title={`MixerMONK ${t.toUpperCase().replace('CHANNEL', 'K')} auf freien Spatial-Kanal übernehmen`}
+            title={`mixerMONK ${t.toUpperCase().replace('CHANNEL', 'K')} auf freien Spatial-Kanal übernehmen`}
           >
             {t.replace('channel', 'K')}
           </button>

@@ -1,6 +1,6 @@
 # audioMONASTRY – Oberflächen-Spezifikation
 
-Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README
+Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README · Kurzfassung für Agenten: `.agents/skills/ui-spec/SKILL.md`
 
 ## Aufbau (von oben nach unten)
 
@@ -9,13 +9,68 @@ Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` 
 3. **mixerMONK** – steht immer oben. Bei genau einem Nutzer immer offen, nicht schließbar. Nur der Halter kann ihn übergeben. Es gibt keine Anfrage.
 4. **Die 15 anderen Plugins** – nacheinander in der Kopfreihenfolge (`plugins/registry.ts`):
    drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record.
-5. **Fuß** – fest für alle: perfMONK, aiMONK.
+5. **Fuß** – fest für alle: perforMONK, aiMONK.
 
 **Bildschirm ≠ Signalweg (Betreiber 2026-10-06).** Die lineare Reihenfolge
 Quellen → Mixer → Nachbearbeitung → Recorder gilt **nur für die Verkabelung**
 (Signalgraph, siehe „Signalkette“ unten). Auf dem Bildschirm steht der Mixer oben,
 die übrigen Plugins folgen in der Kopfreihenfolge. Der Mixer zeigt den Signalweg
 als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
+
+## Formate (Betreiber 2026-10-06)
+
+Automatisch erkannt aus Gerät, Ausrichtung und Auflösung – keine Auswahl durch den Nutzer
+(`src/core/ui/deviceLayout.ts`, Browser-Anbindung `src/hooks/useDeviceLayout.ts`, `data-layout` an `<html>`).
+
+| Format | Erkennung | Darstellung |
+|---|---|---|
+| **Handy quer** | Touch, kürzere Bildschirmseite < 600 px, quer | Volle Oberfläche im **Vollbild**: Kopf 3 rem mit Icons in einer wischbaren Reihe, Masterplayer als schmale Zeile (nicht fixiert, ohne Visualizer), keine Signalweg-Leiste, aiMONK als kleiner Knopf |
+| **Handy hochkant** | wie oben, hochkant – oder jedes Fenster < 600 px im Hochformat | **Vereinfachte Ansicht**: Modus, SYNC, Halter je Plugin; Bedienflächen nur über „Hier öffnen“ (scrollen in sich, nie die Seite); Mixer-Halter hat PLAY/STOP in der Kopfzeile; Hinweis „Handy quer drehen“ |
+| **Pad quer** | Touch, kürzere Seite ≥ 600 px (iPad mit Trackpad: Mac + Touchpunkte), quer | Volle Oberfläche im **Vollbild**, flacher Visualizer, Racks auf voller Breite |
+| **PC/Laptop quer** | Maus/Trackpad als Hauptzeiger | Volle Oberfläche im Browserfenster; Format und Auflösung im Kopf (ab 2xl) |
+
+- Pad hochkant (nicht gefordert) zeigt die volle Oberfläche ohne Vollbild.
+- Vollbild kann der Browser nur nach einer Geste geben: Es wird beim ersten Tippen angefordert (schon „Studio betreten“ zählt), bei jedem Wechsel in Handy quer/Pad quer erneut – wer es verlässt, wird nicht bedrängt. Knopf „Vollbild“ im Kopf auf Handy/Pad.
+- iPhone-Safari erlaubt Seiten kein Vollbild: Hinweis „Teilen → Zum Home-Bildschirm“ (schließbar). Als Home-Bildschirm-App läuft das Studio ohne Browserleisten.
+- Kein Orientierungs-Lock mehr – Drehen wechselt live das Format.
+- Prüfung: `tests/deviceLayout.test.ts` (echte Geräteauflösungen), `tests/e2e/formats.spec.ts` (alle vier Formate, kein waagerechter Überlauf, Vollbild, Drehen).
+
+## Session-Ausgänge (Betreiber 2026-10-06)
+
+„1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals."
+
+| Platz | Gerät | Was es bekommt | Meldet |
+|---|---|---|---|
+| UI 1–4 | Session-Nutzer (Handy, Pad, PC) | die gespiegelte UI, jeder im **eigenen Format und eigener Auflösung** (siehe Formate) | Format + Auflösung |
+| MAIN SOUND | genau einer: `/master-out` (Ghostuser 5, PA) | Main-Ton | Zustand, Abtastrate, Kanäle |
+| MAIN VISUAL | genau einer: `/visual-out` (Ghostuser 6, Beamer) | Visual-Stream in **eigener Auflösung** | Zustand, Bildschirm, ankommender Stream |
+
+- Die Main-Ausgänge zählen nicht zu den 4 Nutzern.
+- Jedes Gerät meldet sich selbst (`endpoint-report`); die Art bestimmt der Server aus dem Modus des
+  Sockets – ein Nutzer kann sich nicht als Beamer ausgeben. Die Liste (`session-endpoints`) geht an alle.
+- Genau ein Main-Ausgang je Art: Ein neuer Beamer/PA löst den alten ab (Reload, Gerätewechsel);
+  das alte Gerät zeigt „Ein anderes Gerät ist jetzt der Main-Ausgang …“.
+- Knopf **AUSGÄNGE** im Kopf (in jedem Format): Zähler `n/4` und je ein Punkt für Ton und Bild;
+  das Fenster zeigt die 6 Plätze mit Zustand und Auflösung sowie die Andock-URLs.
+- Code: `src/core/session/sessionEndpoints.ts`, `src/hooks/useSessionEndpoints.ts`,
+  `src/components/OutputsPanel.tsx`; Prüfung: `tests/sessionEndpoints.test.ts`, `tests/e2e/sessionOutputs.spec.ts`.
+
+## Stream-Auflösung (Betreiber 2026-10-06)
+
+„Ein eigener Stream kann eine eigene Auflösung haben." Die Auflösung eines Ausgabe-Streams ist
+**unabhängig vom Format des Senders** (Handy/Pad/PC). Umgesetzt für den Visual-Stream an den
+Beamer (Ghostuser 6, `/visual-out`):
+
+- Der Beamer meldet seinen Bildschirm als Session-Ausgang (`endpoint-report` → Server prüft → `session-endpoints`, siehe unten).
+- Im Visual-Overlay wählt der Sender **Auflösung** und **FPS**:
+  Auto (Beamer) · 720p · 1080p · 1440p · 4K · Hochkant 9:16 (1080×1920) · Quadrat 1:1 · 30/60 fps.
+- **Auto** übernimmt Seitenverhältnis und Auflösung des Beamers, höchstens 1080p-Pixelmenge
+  (ein Handy rendert nicht ungefragt 4K); ohne Beamer 1920×1080. 1440p/4K nur als ausdrückliche Wahl.
+- Die Zeichenfläche hat genau die Stream-Größe; der Sender sieht sie eingepasst (Letterbox).
+  Auflösung lässt sich live wechseln, die Bildrate vor dem Start.
+- Der Beamer zeigt unten Bildschirm- und ankommende Stream-Auflösung.
+- Code: `src/core/visual/streamResolution.ts`, `src/hooks/useStreamResolution.ts`;
+  Prüfung: `tests/streamResolution.test.ts`, `tests/e2e/streamResolution.spec.ts`.
 
 ## Mixer (Entwurf 2026-10-06)
 
@@ -106,6 +161,6 @@ Signalkette ist eine zweite, unabhängige Achse.
 
 ## Annahmen und offene Punkte
 
-- AUTO_AI und PRO entfallen (Annahme). KI-Vorschläge kommen über aiMONK.
+- AUTO_AI und PRO entfallen in der Oberfläche (README, AGENTS.md angeglichen). Intern bleibt `PRO` der aktive Modul-Zustand, `AUTO_AI` nur Altbestand. KI-Vorschläge kommen über aiMONK.
 - Nummern 01–16 werden angezeigt, eindeutig nach Kopfreihenfolge (Betreiber-Vorlagen 2026-10-06). Kanalnummern 1–8 im Mixer bleiben.
 - Verlässt der Mixer-Halter die Sitzung, geht der Mixer automatisch an die Person, die am längsten in der Sitzung ist (Entscheidung Betreiber).

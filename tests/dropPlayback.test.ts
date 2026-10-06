@@ -9,7 +9,7 @@
  *   dropMONK `play` -> DropAudioAdapter.loadTrackSample(channel, url)
  *                     -> scheduleAtNextBar -> triggerEvent + fadeChannelToMain
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { DropPluginAdapter } from '../src/plugins/adapters/DropPluginAdapter';
 import {

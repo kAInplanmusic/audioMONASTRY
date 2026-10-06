@@ -39,6 +39,12 @@ class WebRTCManager {
   private lastActivitySentAt = 0;
   // K-2/K-5: Server-autoritative Plugin-Locks (Client optimistisch, Server siegt).
   private pluginLockListeners = new Set<(msg: any) => void>();
+  /** Session-Ausgänge: letzte eigene Meldung (wird nach jedem Join erneut gesendet). */
+  private endpointReport: Record<string, unknown> | null = null;
+  private sessionEndpointsListeners = new Set<(msg: any) => void>();
+  /** Letzte Ausgänge-Liste vom Server – neue Zuhörer (z. B. ein spät geöffnetes Panel) bekommen sie sofort. */
+  private lastSessionEndpoints: unknown = null;
+  private outputReplacedListeners = new Set<() => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -465,6 +471,8 @@ class WebRTCManager {
     // Studio-Session beitreten (kein Raum-Erstellen im UI).
     this.socket.on('connect', () => {
       this.socket?.emit('join-session', { userId: this.sessionUserId, mode: this.sessionMode() });
+      // Session-Ausgänge: Meldung NACH dem Join, sonst verwirft der Server sie.
+      if (this.endpointReport) this.socket?.emit('endpoint-report', this.endpointReport);
     });
 
     this.socket.on('session-members', (data: SessionMembersPayload) => {
@@ -500,6 +508,11 @@ class WebRTCManager {
     // Clock-Sync: Antwort des Servers an die Horcher weitergeben (siehe sendClockPing).
     this.socket.on('clock-pong', (data: any) => this.clockPongListeners.forEach((l) => l(data)));
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
+    this.socket.on('output-replaced', () => this.outputReplacedListeners.forEach((l) => l()));
+    this.socket.on('session-endpoints', (data: any) => {
+      this.lastSessionEndpoints = data;
+      this.sessionEndpointsListeners.forEach((l) => l(data));
+    });
     this.socket.on('plugin-unlock', (data: any) => this.pluginUnlockListeners.forEach((l) => l(data)));
     this.socket.on('plugin-locks-sync', (data: any) => this.pluginLocksSyncListeners.forEach((l) => l(data)));
     // ARCH-#1: Lock-Denial weiterreichen (Server-Ablehnung des optimistischen Locks).
@@ -803,6 +816,29 @@ class WebRTCManager {
   public addMainOutUpdateListener(cb: (msg: any) => void): () => void {
     this.mainOutUpdateListeners.add(cb);
     return () => this.mainOutUpdateListeners.delete(cb);
+  }
+
+  /**
+   * Session-Ausgänge: dieses Gerät meldet, was es ist – Nutzer ihr Format und
+   * ihre Auflösung, /master-out den Ton, /visual-out Bildschirm und Stream.
+   * Die Art bestimmt der Server aus dem Modus des Sockets.
+   */
+  public sendEndpointReport(report: Record<string, unknown>): void {
+    this.endpointReport = report;
+    if (this.socket?.connected) this.socket.emit('endpoint-report', report);
+  }
+
+  /** Session-Ausgänge: ein anderes Gerät hat diesen Main-Ausgang übernommen. */
+  public onOutputReplaced(cb: () => void): () => void {
+    this.outputReplacedListeners.add(cb);
+    return () => { this.outputReplacedListeners.delete(cb); };
+  }
+
+  /** Session-Ausgänge: Liste aller Geräte der Session empfangen (sofort die letzte bekannte). */
+  public onSessionEndpoints(cb: (msg: any) => void): () => void {
+    this.sessionEndpointsListeners.add(cb);
+    if (this.lastSessionEndpoints) cb(this.lastSessionEndpoints);
+    return () => { this.sessionEndpointsListeners.delete(cb); };
   }
 
   /** COLLAB-P1-004: aktive Plugin-Navigation an die Session melden. */

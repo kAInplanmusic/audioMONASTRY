@@ -34,10 +34,13 @@ This document defines the absolute, unbreakable core principles of this applicat
 * Each icon has a distinct color scheme. This color code dynamically dictates the entire visual design, borders, and theme of that specific plugin's window when opened.
 
 ### 2.2 The "Terminal Plugin" Concept
-Every plugin operates in one of three UI states:
-1. **OFF:** The plugin is inactive. The top bar icon is dimmed/non-glowing.
-2. **Auto AI Mode:** The plugin runs autonomously via AI. The top bar icon is glowing. The main workspace is clear.
-3. **Professional Mode:** The full "Terminal Plugin UI" (the advanced tweak interface) is completely visible in the workspace.
+Every plugin operates in one of three UI modes (mode button on the right of each plugin strip, cycling OFF → STBY → ON → OFF; spec: `docs/UI_SPEC.md`):
+1. **OFF:** Free and inactive (transparent bypass). Anyone may take it. The top bar icon is dimmed/non-glowing.
+2. **STBY:** Held by one user (central lock), not yet active. Others see it locked.
+3. **ON:** Active. The full "Terminal Plugin UI" is visible to the holder only; everyone else sees a collapsed, locked strip.
+* Foreign plugins are locked: no request, no takeover. `mixerMONK` is always ON and always has exactly one holder (server-enforced); only the holder can hand it over. When the holder leaves, it passes to the longest-present member.
+* Internally the modes map onto the replicated `ModuleState` (`OFF`/`PRO`) plus the central lock (`src/core/session/pluginMode.ts`). `AUTO_AI` remains in the runtime contract for compatibility only; AI suggestions run via `aiMONK`.
+* Every plugin that plays or creates-and-plays audio has a **SYNC** button against Main (default on; `src/core/session/pluginSync.ts`).
 
 ---
 

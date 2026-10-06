@@ -10,7 +10,12 @@ const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.met
 
 export default defineConfig(() => {
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      // UI2-P1-005: auch der Seitentitel liest die Version aus package.json.
+      { name: 'app-version-html', transformIndexHtml: (html: string) => html.replaceAll('%APP_VERSION%', APP_VERSION) },
+    ],
     define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
     build: {
       // P2-5 Bundle-Diät: modernes Browser-Target (Chrome/Edge/Firefox/Safari

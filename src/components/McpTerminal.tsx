@@ -193,7 +193,7 @@ export const McpTerminal = React.memo(function McpTerminal() {
             <Grid3X3 className="w-4 h-4 text-amber-400" />
           </div>
           <div>
-            <h2 className="text-sm font-black tracking-widest uppercase">mcpMONK</h2>
+            <h2 className="text-sm font-black tracking-widest uppercase">syntisamplerMONK · MPC</h2>
             <p className="text-[9px] font-mono text-amber-400 tracking-widest">MPC PADS · {seqCount} STEPS · BANK {bank}</p>
           </div>
           <img src="/uidesign/uipadsequenzer.jpg" alt="Pad-Sequenzer-Referenz" title="Pad-Sequenzer-Referenz (uipadsequenzer.jpg)"

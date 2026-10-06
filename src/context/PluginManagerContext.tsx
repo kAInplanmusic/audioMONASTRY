@@ -10,6 +10,8 @@ import { parseSessionSnapshot } from '../core/session/sessionStateBridge';
 const DEFAULT_LOCK_TTL = 5 * 60 * 1000;
 /** How often to check for expired locks */
 const LOCK_SWEEP_INTERVAL = 30_000;
+/** Heartbeat für eigene Locks (deutlich unter der Server-TTL von 60 s). */
+const LOCK_HEARTBEAT_MS = 20_000;
 
 interface PluginManagerContextType {
   pluginLocks: Record<string, LockStatus>;
@@ -130,6 +132,27 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
       if (changed) commit(next);
     }, LOCK_SWEEP_INTERVAL);
     return () => clearInterval(interval);
+  }, [commit]);
+
+  // UI2-P0-002: Gehaltene Plugins (STBY/ON) bleiben gehalten, bis der Halter sie
+  // freigibt oder die Sitzung verlaesst. Der Server-Lease laeuft nach 60 s ab;
+  // dieser Heartbeat verlaengert ihn (gleicher Halter = Verlaengerung).
+  useEffect(() => {
+    const beat = window.setInterval(() => {
+      const me = webRTCManager.userId;
+      const now = Date.now();
+      let changed = false;
+      const next = { ...locksRef.current };
+      for (const [id, lock] of Object.entries(next)) {
+        if (lock.active && lock.lockedBy === me) {
+          webRTCManager.sendPluginLock(id);
+          next[id] = { ...lock, timestamp: now };
+          changed = true;
+        }
+      }
+      if (changed) commit(next);
+    }, LOCK_HEARTBEAT_MS);
+    return () => window.clearInterval(beat);
   }, [commit]);
 
   const requestLock = useCallback((pluginId: string, userId: string) => {
