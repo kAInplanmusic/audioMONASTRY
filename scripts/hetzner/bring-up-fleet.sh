@@ -427,6 +427,7 @@ ssh_host "$APP_IP" "cd /opt/audiomonastry && docker compose -f docker-compose.he
 echo "  Kontrolle /api/webrtc-config auf app-1 (erwartet: turn: + sfu.url):"
 ssh_host "$APP_IP" "curl -fsS http://127.0.0.1:8080/api/webrtc-config" 2>/dev/null \
   | python3 -c 'import json,sys
+
 try:
     data = json.load(sys.stdin)
 except Exception as exc:
@@ -440,6 +441,16 @@ if not turn.get("available"):
 if not sfu.get("ready"):
     print("    ⚠ Keine SFU-Adresse - Grund:", sfu.get("reason"))' \
   || echo "  ⚠ Kontrolle nicht moeglich (Antwort/curl auf app-1)"
+
+# --- 7b. R2-Kaltstart-Sync (nicht-blockierend, parallel zum Container-Start) ---
+# Supabase -> R2 (einmalig) -> Knoten-NVMe via aria2c -x16 -s16, SHA256-geprüft,
+# presignierte URL ohne Keys auf dem Knoten. Läuft im Hintergrund, damit Container-Start nicht blockiert.
+step "7b/9 R2-Medien-Kaltstart-Sync starten (nicht-blockierend)"
+{
+  echo "  Starte Medien-Sync (Supabase→R2→NVMe) in Hintergrund ..."
+  ssh_host "$APP_IP" "cd /opt/audiomonastry && nohup bash scripts/hetzner/deliver-media.sh --via-r2 --no-start > /var/log/audiomonastry-media-sync.log 2>&1 &"
+  echo "  Medien-Sync läuft asynchron, Log: /var/log/audiomonastry-media-sync.log"
+} || echo "  ⚠ Medien-Sync konnte nicht gestartet werden"
 
 # --- 8. Idle-Auto-Shutdown + Backup-Timer -------------------------------------
 # PROD-P3-F9: Der Idle-Timer wird auf ALLEN Knoten installiert (Muster: der
