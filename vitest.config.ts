@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config';
+import { readFileSync } from 'node:fs';
+
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
 
 export default defineConfig({
+  // UI2-P1-005: wie vite.config.ts, damit Tests dieselbe Version sehen.
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   test: {
     environment: 'node',
     setupFiles: ['tests/setup.ts'],

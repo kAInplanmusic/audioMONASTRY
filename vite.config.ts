@@ -2,10 +2,16 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
+import {readFileSync} from 'node:fs';
+
+// UI2-P1-005: EINE Versionsquelle. Die Oberflaeche liest die Version aus
+// package.json (ueber __APP_VERSION__), statt sie im Code zu wiederholen.
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
 
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
     build: {
       // P2-5 Bundle-Diät: modernes Browser-Target (Chrome/Edge/Firefox/Safari
       // der Plattform-Matrix) statt ES2020-Downleveling. Spart Transpilierungs-

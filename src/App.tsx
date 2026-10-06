@@ -6,10 +6,13 @@ import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
+import { HeaderPluginIcon, headerIconStatus } from './components/HeaderPluginIcon';
 import { BeatVisualizer } from './components/BeatVisualizer';
+import { EngineStatusBadge } from './components/EngineStatusBadge';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
 import { FEATURE_FLAGS } from './config/featureFlags';
+import { APP_VERSION } from './config/appVersion';
 const VoiceGenTerminal = lazy(() => import('./components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m => ({ default: m.VoiceMonkPanel })));
 const VisualMonkOverlay = lazy(() => import('./components/visual/VisualMonkOverlay').then(m => ({ default: m.VisualMonkOverlay })));
@@ -609,7 +612,7 @@ function AppComponent() {
                   <span className="text-4xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-cyan-300 via-teal-200 to-fuchsia-400">
                     AUDIO MONASTRY
                   </span>
-                  <span className="text-[9px] font-mono tracking-[0.35em] text-cyan-300/70 uppercase">V. 1.210.001 · HYPERDAW</span>
+                  <span className="text-[9px] font-mono tracking-[0.35em] text-cyan-300/70 uppercase">V. {APP_VERSION} · HYPERDAW</span>
                   <span className="px-5 py-2.5 rounded-full border border-cyan-400/40 text-cyan-200 text-xs font-bold tracking-[0.3em] uppercase
                                  bg-cyan-500/8 hover:bg-cyan-500/18 hover:border-cyan-300/70 hover:shadow-[0_0_30px_-6px_var(--monk-glow-teal)]
                                  transition-all duration-300 active:scale-95">
@@ -673,53 +676,26 @@ function AppComponent() {
                 <span className="font-light text-neutral-300">audio</span>MONASTRY
               </p>
               <p className="text-[7px] font-mono tracking-[0.4em] text-neutral-500 uppercase mt-1">4-Person Studio</p>
-              <p className="text-[7px] font-mono tracking-[0.25em] text-cyan-300/80 uppercase mt-0.5 whitespace-nowrap">V. 1.210.001 · HYPERDAW</p>
+              <p className="text-[7px] font-mono tracking-[0.25em] text-cyan-300/80 uppercase mt-0.5 whitespace-nowrap">V. {APP_VERSION} · HYPERDAW</p>
             </div>
           </a>
 
           {/* Mitte: 16 Auswahl-Icons (zwei Reihen à 8) – ein Icon pro Plugin außer ai/masterplayer/perfor */}
           <nav className="flex-1 min-w-0 overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
             <div className="grid grid-rows-2 grid-cols-8 min-w-[600px] h-full">
-              {navPlugins.map((plugin) => {
-                const Icon = plugin.icon;
-                const state = moduleStates[plugin.id] || 'OFF';
-                const pluginOn = state !== 'OFF';
-                const active = activeNav === plugin.id;
-                return (
-                  <button
-                    key={plugin.id}
-                    type="button"
-                    data-plugin-id={plugin.id}
-                    onClick={() => handleNavSelect(plugin.id)}
-                    aria-current={active ? 'page' : undefined}
-                    title={plugin.name}
-                    className={`relative flex flex-col items-center justify-center gap-0.5 px-1 min-h-0 overflow-hidden text-center transition-colors cursor-pointer ${
-                      active ? 'bg-[#0f1a22]' : 'hover:bg-white/[0.03]'
-                    }`}
-                  >
-                    <Icon
-                      size={16}
-                      strokeWidth={active || pluginOn ? 2 : 1.6}
-                      className={`transition-colors ${
-                        active
-                          ? 'text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.45)]'
-                          : pluginOn
-                            ? 'text-cyan-300/90'
-                            : 'text-[#5fc9dc]'
-                      }`}
-                    />
-                    <span className={`text-[7px] font-bold tracking-[0.08em] uppercase leading-none truncate max-w-full ${
-                      active ? 'text-cyan-100' : pluginOn ? 'text-cyan-200' : 'text-[#8b9aa5]'
-                    }`}>
-                      {pluginNavLabel(plugin.name)}
-                    </span>
-                    <span className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] bg-cyan-400 rounded-full transition-all duration-300 ${active ? 'w-6 sm:w-8' : 'w-0'}`} />
-                    {pluginOn && (
-                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
-                    )}
-                  </button>
-                );
-              })}
+              {navPlugins.map((plugin) => (
+                <HeaderPluginIcon
+                  key={plugin.id}
+                  id={plugin.id}
+                  name={plugin.name}
+                  label={pluginNavLabel(plugin.name)}
+                  icon={plugin.icon}
+                  status={headerIconStatus(pluginLocks[plugin.id], webRTCManager.userId)}
+                  on={(moduleStates[plugin.id] || 'OFF') !== 'OFF'}
+                  active={activeNav === plugin.id}
+                  onSelect={() => handleNavSelect(plugin.id)}
+                />
+              ))}
             </div>
           </nav>
 
@@ -825,6 +801,7 @@ function AppComponent() {
           </div>
           <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
           <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
+          <EngineStatusBadge />
 
           <div className="ml-auto flex items-center gap-4 text-center">
             <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
