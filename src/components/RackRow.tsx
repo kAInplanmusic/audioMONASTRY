@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Power, Copy, GripVertical } from 'lucide-react';
 import { ModuleState } from '../context/ModuleStateContext';
 import { getPluginThemeClass } from '../utils/pluginTheme';
@@ -49,7 +49,17 @@ export const RackRow = React.memo(function RackRow({
   const active = state !== 'OFF';
   const pro = state === 'PRO';
   const isSyncPlugin = SYNC_PLUGINS.has(id);
-  const [syncEnabled, setSyncEnabled] = useState(true);
+  const [syncEnabled, setSyncEnabled] = useState(() => {
+    try {
+      const raw = localStorage.getItem(`sync.${id}`);
+      if (raw === null) return true;
+      return raw === 'true';
+    } catch { return true; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(`sync.${id}`, String(syncEnabled)); } catch {}
+  }, [id, syncEnabled]);
 
   return (
     <section

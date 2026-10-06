@@ -58,7 +58,8 @@ export class DrumSamplerPluginAdapter extends BasePluginAdapter {
       return { ok: true };
     }
     if (command.name === 'trigger') {
-      this.context?.audio.triggerEvent('channel2', 0.8);
+      const start = () => { this.context?.audio.triggerEvent('channel2', 0.8); };
+      this.scheduleSyncStart(start);
       return { ok: true, track: 'channel2' };
     }
     return super.onCommand(command);

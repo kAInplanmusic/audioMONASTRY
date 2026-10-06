@@ -30,8 +30,8 @@ export class InstruPluginAdapter extends BasePluginAdapter {
     }
     if (command.name === 'note') {
       const note = command.payload?.note ?? 60;
-      const { audioEngine } = await import('../../utils/audioEngine');
-      audioEngine.instrumentNote(note as string | number);
+      const start = () => { void import('../../utils/audioEngine').then(({ audioEngine }) => { audioEngine.instrumentNote(note as string | number); }); };
+      this.scheduleSyncStart(start);
       return { ok: true };
     }
     if (command.name === 'optional-voice') {

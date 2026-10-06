@@ -56,9 +56,11 @@ export class SyntiSamplerPluginAdapter extends BasePluginAdapter {
     const { controlBus } = await import('../../core/events/ControlBus');
 
     switch (command.name) {
-      case 'trigger':
-        this.context?.audio.triggerEvent('channel5', 0.8);
+      case 'trigger': {
+        const start = () => { this.context?.audio.triggerEvent('channel5', 0.8); };
+        this.scheduleSyncStart(start);
         return { ok: true, track: 'channel5' };
+      }
       case 'pattern_four':
       case 'pattern_random':
       case 'pattern_break': {
