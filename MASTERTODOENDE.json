@@ -4519,10 +4519,10 @@
       "id": "UI2-P1-001",
       "title": "Layout: Kopf, Masterplayer, Mixer, Quellen, Nachbearbeitung, Fuß",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage",
+      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage\n\n2026-10-06 Betreiber-Klarstellung: Die lineare Reihenfolge Quellen → Mixer → Nachbearbeitung → Recorder gilt NUR für die Verkabelung (SIGNAL_CHAIN). Auf dem Bildschirm steht der Mixer oben, danach die 15 Plugins in Kopfreihenfolge (RACK_ORDER = registry). Das entspricht dem bestehenden App-Layout; docs/UI_SPEC.md ist angepasst. Offen: Screenshot-Test gegen den Entwurf docs/design/audioMONASTRY-design.html.",
       "verification": ""
     },
     {
@@ -4539,11 +4539,11 @@
       "id": "UI2-P1-003",
       "title": "Kopf: 16 Icons mit eigenem Symbol und eigener Farbe",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Farbe entspricht der Modulfarbe im Rack. Status nur als Schein: frei grünlich, gesperrt dunkelrot, eigenes mit Ring in Nutzerfarbe. Das Icon-Raster im Entwurf enthielt mcp und control, aber nicht stem, master und record. Auf die 16 Module der README bringen.\n\nAkzeptanz: 16 Icons, alle verschieden in Symbol und Farbe; Test gegen public/plugin-manifest.json",
-      "verification": ""
+      "note": "Farbe entspricht der Modulfarbe im Rack. Status nur als Schein: frei grünlich, gesperrt dunkelrot, eigenes mit Ring in Nutzerfarbe. Das Icon-Raster im Entwurf enthielt mcp und control, aber nicht stem, master und record. Auf die 16 Module der README bringen.\n\nAkzeptanz: 16 Icons, alle verschieden in Symbol und Farbe; Test gegen public/plugin-manifest.json\n\nDONE 2026-10-06: 16 verschiedene Symbole (instru → Piano, eq → SlidersHorizontal, record → Disc3; Manifest + Registry) und 16 verschiedene Farben nach hsl(i*22.5+11, 72 %, 64 %) in src/index.css. Kopf-Icon (src/components/HeaderPluginIcon.tsx) färbt das Symbol in der Modulfarbe; Status nur als Schein aus dem zentralen Lock: frei grünlich, gesperrt dunkelrot, eigenes mit Ring. Status auch als Text (aria-label/title). Nachweis: tests/uiHeaderIcons.test.ts.",
+      "verification": "tests/uiHeaderIcons.test.ts"
     },
     {
       "id": "UI2-P1-004",
@@ -4559,11 +4559,11 @@
       "id": "UI2-P1-005",
       "title": "Versionsangabe widerspricht sich",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Repo-Beschreibung nennt V. 1|001|420 AnunnakiDNA, README nennt 1.210.001 HyperAudioWorkstation, der Entwurf zeigt Version 1.0.0 und © 2024. Eine einzige Quelle festlegen und überall daraus ableiten.\n\nAkzeptanz: Eine Quelle (package.json), UI und README lesen daraus",
-      "verification": ""
+      "note": "Repo-Beschreibung nennt V. 1|001|420 AnunnakiDNA, README nennt 1.210.001 HyperAudioWorkstation, der Entwurf zeigt Version 1.0.0 und © 2024. Eine einzige Quelle festlegen und überall daraus ableiten.\n\nAkzeptanz: Eine Quelle (package.json), UI und README lesen daraus\n\nDONE 2026-10-06: Quelle ist package.json. vite.config.ts und vitest.config.ts setzen __APP_VERSION__, die UI liest src/config/appVersion.ts. Die zwei fest eingetragenen Versionsstrings in App.tsx sind entfernt. Nachweis: tests/uiHeaderIcons.test.ts. Repo-Beschreibung auf GitHub (V. 1|001|420) muss der Betreiber selbst angleichen.",
+      "verification": "tests/uiHeaderIcons.test.ts"
     },
     {
       "id": "UI2-P1-006",
@@ -4589,21 +4589,21 @@
       "id": "UI2-P2-002",
       "title": "Signalweg sichtbar beschriften",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Gruppen Quellen (speisen den Mixer) und Nachbearbeitung (nimmt den Mixer-Ausgang). Reihenfolge effect, eq, dsp, spatial, master, record ist ein Vorschlag, mit dem tatsächlichen Signalweg (V2StudioGraph) abgleichen.\n\nAkzeptanz: Reihenfolge in UI und Graph stimmt überein",
+      "note": "Gruppen Quellen (speisen den Mixer) und Nachbearbeitung (nimmt den Mixer-Ausgang). Reihenfolge effect, eq, dsp, spatial, master, record ist ein Vorschlag, mit dem tatsächlichen Signalweg (V2StudioGraph) abgleichen.\n\nAkzeptanz: Reihenfolge in UI und Graph stimmt überein\n\n2026-10-06: Reihenfolge im Signalweg ist SIGNAL_CHAIN (src/plugins/signalChain.ts): effect, eq, dsp, spatial, master, dann record. Die Verkabelung (V2) stellt der Betreiber gerade selbst linear um; der Entwurf zeigt den Weg als Leiste „Signalweg“ im Mixer. Offen: dieselbe Leiste in der App, nach Abschluss der V2-Verkabelung.",
       "verification": ""
     },
     {
       "id": "UI2-P2-003",
       "title": "Engine-Status sichtbar machen",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Die Ausgabe ist im Ruhezustand still und der Browser verlangt eine Nutzergeste, um Audio zu starten. Ein klarer Status (Audio bereit oder angehalten) verhindert, dass die App kaputt wirkt.\n\nAkzeptanz: Status sichtbar; Test mit gesperrtem AudioContext",
-      "verification": ""
+      "note": "Die Ausgabe ist im Ruhezustand still und der Browser verlangt eine Nutzergeste, um Audio zu starten. Ein klarer Status (Audio bereit oder angehalten) verhindert, dass die App kaputt wirkt.\n\nAkzeptanz: Status sichtbar; Test mit gesperrtem AudioContext\n\nDONE 2026-10-06: src/components/EngineStatusBadge.tsx im Masterplayer, reine Anzeige (AUDIO LÄUFT / ANGEHALTEN / AUS) aus audioEngine.getAudioHealth().state, Abfrage im UI-Takt (500 ms), nicht im Audio-Thread. Nachweis: tests/uiHeaderIcons.test.ts (Zustandsabbildung).",
+      "verification": "tests/uiHeaderIcons.test.ts"
     },
     {
       "id": "UI2-P2-004",

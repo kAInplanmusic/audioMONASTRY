@@ -1,6 +1,7 @@
 import { 
   Sliders, Keyboard, Grid3X3, Box, Music, Speaker, Sparkles, Waves, 
-  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge, Bot, AudioLines
+  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge, Bot, AudioLines,
+  Piano, Disc3, SlidersHorizontal
 } from 'lucide-react';
 // Lazy-Code-Splitting: Jedes Terminal wird erst beim Aktivieren geladen
 // (reduziert das Hauptbundle erheblich; Vite erzeugt eigene Chunks).
@@ -27,7 +28,8 @@ const AiMonkTerminal = lazy(() => import('../components/AiMonkTerminal').then(m 
 
 const ICON_MAP: Record<string, any> = {
   Sliders, Keyboard, Grid3X3, Box, Music, Speaker, Sparkles, Waves, 
-  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge, Bot, AudioLines
+  Mic, Layers, Radio, Database, Activity, Zap, Cpu, Square, Gauge, Bot, AudioLines,
+  Piano, Disc3, SlidersHorizontal
 };
 
 // ============================================================================
@@ -89,16 +91,16 @@ const DEFAULT_PLUGIN_METADATA: Record<string, { name: string; short: string; ico
   effect: { name: 'effectMONK', short: 'FX', icon: 'Sparkles' },
   syntisampler: { name: 'syntisamplerMONK', short: 'SYSA', icon: 'Waves' },
   drumsampler: { name: 'drumsamplerMONK', short: 'DRSA', icon: 'Speaker' },
-  instru: { name: 'instruMONK', short: 'INS', icon: 'Music' },
+  instru: { name: 'instruMONK', short: 'INS', icon: 'Piano' },
   biblio: { name: 'biblioMONK', short: 'LIB', icon: 'Database' },
   voice: { name: 'voiceMONK', short: 'VOX', icon: 'Mic' },
   sound: { name: 'soundMONK', short: 'SND', icon: 'AudioLines' },
   stem: { name: 'stemMONK', short: 'RMX', icon: 'Radio' },
   spatial: { name: 'spatialMONK', short: '3D', icon: 'Box' },
-  eq: { name: 'eqMONK', short: 'EQ', icon: 'Activity' },
+  eq: { name: 'eqMONK', short: 'EQ', icon: 'SlidersHorizontal' },
   dsp: { name: 'dspMONK', short: 'DSP', icon: 'Cpu' },
   master: { name: 'masterMONK', short: 'MST', icon: 'Square' },
-  record: { name: 'recordMONK', short: 'REC', icon: 'Activity' },
+  record: { name: 'recordMONK', short: 'REC', icon: 'Disc3' },
 };
 
 const EXPECTED_PLUGIN_COUNT = 16;
