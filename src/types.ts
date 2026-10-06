@@ -22,25 +22,30 @@ export type TrackType =
   | 'channel8';
 
 // Semantische Rollen – legen fest, WELCHE Klangerzeugung pro Spur läuft.
+// UI2-P0-001 (2026-10-06): Die 8 Kanäle sind je EINER Quelle fest zugeordnet
+// (1 drop · 2 song · 3 drumsampler · 4 syntisampler · 5 instru · 6 voice ·
+// 7 sound · 8 stem). Die Rollen unten sind die Klang-Defaults der V2-Sink-
+// Engine und müssen mit `ROLE_VOICE`/`ROLE_FREQ` in V2SinkEngine deckungsgleich
+// bleiben (Wächter: tests/v2SyncMirror.test.ts).
 export type TrackRole =
-  | 'kick'      // Membran/Punch-Drum        → channel1
-  | 'hat'       // Hi-Hat / Metall            → channel2
-  | 'clap'      // Klatsche / Noise           → channel3
-  | 'perc'      // Percussion / perkussiv     → channel4 (Sampler)
-  | 'snare'     // Snare / Stack              → channel5 (Sampler)
-  | 'tom'       // Tom / Mids                 → channel6 (Sampler)
-  | 'bass'      // Bassline / MonoSynth       → channel7
-  | 'lead';     // Lead / Melodie             → channel8 (Sampler/Synth)
+  | 'kick'      // Membran/Punch-Drum        → channel1 (drop)
+  | 'hat'       // Hi-Hat / Metall           → channel3 (drumsampler)
+  | 'clap'      // Klatsche / Noise          → channel3 (drumsampler)
+  | 'perc'      // Percussion / perkussiv    → channel5 (instru)
+  | 'snare'     // Snare / Stack             → channel4 (syntisampler)
+  | 'tom'       // Tom / Mids                → channel4 (syntisampler)
+  | 'bass'      // Bassline / MonoSynth      → channel8 (stem)
+  | 'lead';     // Lead / Melodie            → channel2/6/7 (song/voice/sound)
 
 export const TRACK_ROLE_MAP: Record<TrackType, TrackRole> = {
   channel1: 'kick',
-  channel2: 'hat',
-  channel3: 'clap',
-  channel4: 'perc',
-  channel5: 'snare',
-  channel6: 'tom',
-  channel7: 'bass',
-  channel8: 'lead',
+  channel2: 'lead',
+  channel3: 'hat',
+  channel4: 'snare',
+  channel5: 'perc',
+  channel6: 'lead',
+  channel7: 'lead',
+  channel8: 'bass',
 };
 
 export const ALL_TRACKS: TrackType[] = ['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'];
