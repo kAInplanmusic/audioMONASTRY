@@ -8,6 +8,8 @@ import type {
   PluginRuntimeContext,
   PluginSnapshot,
 } from '../plugin_interface';
+import { clockBridge } from '../../core/drop';
+import { isPluginSynced, isSyncPlugin } from '../../core/session/pluginSync';
 
 /**
  * Gemeinsame Basis aller 16 kanonischen Plugin-Adapter.
@@ -24,8 +26,36 @@ export abstract class BasePluginAdapter implements PluginInterface {
   protected context: PluginRuntimeContext | null = null;
   protected parameters: Record<string, number | string | boolean> = {};
   protected disposed = false;
+  protected syncEnabled = true;
+  private scheduledSyncId?: string;
+  private syncStartTimeout?: ReturnType<typeof setTimeout>;
 
   public state: PluginState = 'OFF';
+
+  private get syncParamName(): string {
+    return `sync.${this.manifest.id}`;
+  }
+
+  public isSyncEnabled(): boolean {
+    // UI2-P0-003: Die UI-Wahrheit liegt in src/core/session/pluginSync.ts
+    // (die SYNC-Taste in der Kopfzeile schreibt dorthin). Der Adapter hat
+    // zusätzlich einen eigenen Wert für headless/Tests und für den
+    // Serialisierungs-Roundtrip. Ist das Plugin in der UI-Wahrheit geführt,
+    // gewinnt sie — sonst wäre die Taste eine Attrappe, die den Audio-Start
+    // nie erreicht.
+    try {
+      if (isSyncPlugin(this.manifest.id)) return isPluginSynced(this.manifest.id);
+    } catch { /* pluginSync nicht verfügbar (headless) → eigener Wert */ }
+    return this.syncEnabled;
+  }
+
+  public setSyncEnabled(enabled: boolean): void {
+    this.assertNotDisposed();
+    this.syncEnabled = !!enabled;
+    this.parameters[this.syncParamName] = this.syncEnabled;
+    // Backward compatibility
+    this.parameters['sync'] = this.syncEnabled;
+  }
 
   protected constructor(
     public readonly manifest: PluginManifest,
@@ -59,6 +89,9 @@ export abstract class BasePluginAdapter implements PluginInterface {
     }
 
     this.parameters[parameter.name] = parameter.value;
+    if (parameter.name === this.syncParamName || parameter.name === 'sync') {
+      this.syncEnabled = !!parameter.value;
+    }
     this.onParameter(parameter);
   }
 
@@ -102,7 +135,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     return {
       pluginId: this.manifest.id,
       state: this.state,
-      parameters: { ...this.parameters },
+      parameters: { ...this.parameters, [this.syncParamName]: this.syncEnabled },
     };
   }
 
@@ -117,6 +150,12 @@ export abstract class BasePluginAdapter implements PluginInterface {
 
     this.state = snapshot.state;
     this.parameters = { ...snapshot.parameters };
+    const syncParam = this.parameters[this.syncParamName] ?? this.parameters['sync'];
+    if (typeof syncParam === 'boolean') {
+      this.syncEnabled = syncParam;
+    } else if (typeof syncParam === 'string') {
+      this.syncEnabled = syncParam === 'true';
+    }
   }
 
   async dispose(): Promise<void> {
@@ -125,6 +164,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     }
 
     this.disposed = true;
+    this.cancelPendingSyncStart();
     await this.onDispose();
     this.context = null;
   }
@@ -169,5 +209,65 @@ export abstract class BasePluginAdapter implements PluginInterface {
   /** Klemmt einen Wert auf [min, max] – für Block-Verarbeitung ohne Allokation. */
   protected clampValue(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
+  }
+
+  /**
+   * Plant einen Start taktgenau.
+   *
+   * `syncEnabled === false` → sofort.
+   * `scheduleAtNextBar` gesetzt → dieses nutzen: es ist die ECHTE taktgenaue
+   *   Planung im Audio-Thread (Tone.Transport) und fällt selbst auf sofortigen
+   *   Aufruf zurück, wenn der Transport steht. Adapter, die eine solche
+   *   Mechanik haben (z. B. drop über den DropAudioAdapter), dürfen sie nicht
+   *   durch einen zweiten Zähler ersetzt werden — sonst stünde der Start still.
+   * Sonst → ClockBridge: scheduleDrop auf die nächste Bar ('1bar'), mit
+   *   BPM-Fallback per setTimeout, wenn der Transport nicht läuft.
+   */
+  protected scheduleSyncStart(start: () => void, scheduleAtNextBar?: (cb: () => void) => void): void {
+    // Bereits geplante Starts abbrechen
+    this.cancelPendingSyncStart();
+
+    if (!this.isSyncEnabled()) {
+      start();
+      return;
+    }
+
+    // Vorhandene, erprobte Audio-Thread-Planung bevorzugen.
+    if (scheduleAtNextBar) {
+      try {
+        scheduleAtNextBar(() => start());
+        return;
+      } catch { start(); return; }
+    }
+
+    const clock = clockBridge.getClockState();
+    if (clock.isRunning) {
+      const id = clockBridge.scheduleDrop(() => {
+        this.scheduledSyncId = undefined;
+        start();
+      }, '1bar');
+      this.scheduledSyncId = id;
+    } else {
+      const delay = clockBridge.getDelayToQuantizationMs('1bar');
+      // globales setTimeout statt window.setTimeout: der Adapter kann auch in
+      // einem Worker-Kontext laufen, wo `window` nicht existiert. Der Feldtyp
+      // ist ReturnType<typeof setTimeout>, damit beide Umgebungen passen.
+      this.syncStartTimeout = setTimeout(() => {
+        this.syncStartTimeout = undefined;
+        start();
+      }, delay);
+    }
+  }
+
+  /** Bricht evtl. geplante Sync-Starts ab – aufrufer: stop/dispose. */
+  protected cancelPendingSyncStart(): void {
+    if (this.scheduledSyncId) {
+      try { clockBridge.cancelScheduledDrop(this.scheduledSyncId); } catch {}
+      this.scheduledSyncId = undefined;
+    }
+    if (this.syncStartTimeout !== undefined) {
+      try { clearTimeout(this.syncStartTimeout); } catch {}
+      this.syncStartTimeout = undefined;
+    }
   }
 }
