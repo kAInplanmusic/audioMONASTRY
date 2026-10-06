@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { EffectPluginAdapter } from '../src/plugins/adapters/EffectPluginAdapter';
+import { DspPluginAdapter } from '../src/plugins/adapters/DspPluginAdapter';
 import { EqPluginAdapter } from '../src/plugins/adapters/EqPluginAdapter';
 import { MasterPluginAdapter } from '../src/plugins/adapters/MasterPluginAdapter';
 import type { PluginInterface, PluginParameterValue } from '../src/plugins/plugin_interface';
@@ -204,5 +205,57 @@ describe('Adapter-Blockverarbeitung: eq (3-Band-Tonregelung)', () => {
     const dryEnergy = settledEnergy(constant(2000)[0]);
     expect(settledEnergy(out[0])).toBeLessThan(dryEnergy * 0.01);
     expect(settledEnergy(out[1])).toBeLessThan(dryEnergy * 0.01);
+  });
+});
+
+describe('Adapter-Blockverarbeitung: dsp (resonanter Tiefpass + Drive)', () => {
+  const tone = (frames: number, hz: number) =>
+    [Float32Array.from({ length: frames }, (_, i) => Math.sin((2 * Math.PI * hz * i) / SR) * 0.5)];
+
+  it('ist ohne Parameter transparent (cutoff ueber Nyquist)', () => {
+    const src = sine(64);
+    expect(Array.from(runChannels(new DspPluginAdapter(), sine(64))[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('ist bei OFF transparent', () => {
+    const src = sine(64);
+    expect(Array.from(runChannels(new DspPluginAdapter(), sine(64), { cutoff: 400 }, 'OFF')[0])).toEqual(
+      Array.from(src[0]),
+    );
+  });
+
+  it('daempft oberhalb der Grenzfrequenz deutlich', () => {
+    const dry = settledEnergy(tone(4000, 3000)[0]);
+    const wet = settledEnergy(runChannels(new DspPluginAdapter(), tone(4000, 3000), { cutoff: 500 })[0]);
+    expect(wet).toBeLessThan(dry * 0.05);
+  });
+
+  it('laesst unterhalb der Grenzfrequenz durch', () => {
+    const dry = settledEnergy(tone(4000, 100)[0]);
+    const wet = settledEnergy(runChannels(new DspPluginAdapter(), tone(4000, 100), { cutoff: 500 })[0]);
+    expect(wet).toBeGreaterThan(dry * 0.8);
+  });
+
+  it('hebt bei Resonanz die Grenzfrequenz an', () => {
+    const dry = settledEnergy(tone(4000, 1000)[0]);
+    const wet = settledEnergy(runChannels(new DspPluginAdapter(), tone(4000, 1000), { cutoff: 1000, resonance: 0.9 })[0]);
+    expect(wet).toBeGreaterThan(dry * 5);
+  });
+
+  it('begrenzt mit Drive die Amplitude (Soft-Clip)', () => {
+    const loud = [Float32Array.from({ length: 2000 }, (_, i) => Math.sin(i / 7) * 4)];
+    const out = runChannels(new DspPluginAdapter(), loud, { drive: 1 }, 'PRO')[0];
+    let peak = 0;
+    for (let i = 0; i < out.length; i++) peak = Math.max(peak, Math.abs(out[i]));
+    expect(Number.isFinite(peak)).toBe(true);
+    expect(peak).toBeLessThanOrEqual(1.0001);
+    expect(peak).toBeGreaterThan(0.5);
+  });
+
+  it('arbeitet auf beiden Kanaelen', () => {
+    const out = runChannels(new DspPluginAdapter(), [tone(2000, 3000)[0], tone(2000, 3000)[0]], { cutoff: 500 });
+    expect(out.length).toBe(2);
+    expect(settledEnergy(out[0])).toBeLessThan(settledEnergy(tone(2000, 3000)[0]) * 0.05);
+    expect(settledEnergy(out[1])).toBeLessThan(settledEnergy(tone(2000, 3000)[0]) * 0.05);
   });
 });
