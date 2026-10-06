@@ -717,7 +717,7 @@ registerCloudRoutes(app);
 // ARCH-P2-002: Die /api/ai-Routen liegen in server/routes/aiRoutes.ts (Factory).
 // Die Registrierung bleibt an dieser Stelle, damit die Reihenfolge relativ zu den
 // Middleware-/Rate-Limit-Ketten unveraendert ist.
-registerAiRoutes(app, { metrics, fleetTargets });
+registerAiRoutes(app, { metrics });
 
 // AI-P1-006: aiMONK-Agent-Loop (planen -> ausfuehren -> pruefen) mit Abbruch,
 // Wiederaufnahme und Kostenausweis. Der Loop selbst ist `MoaAgent.run` (seit

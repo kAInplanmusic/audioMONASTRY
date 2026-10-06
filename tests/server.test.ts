@@ -187,8 +187,6 @@ describe('Server API', () => {
     delete process.env.PUBLICAI_KEY;
     delete process.env.CB_API_KEY;
     delete process.env.OR_API_KEY;
-    delete process.env.OLLAMA_URL;
-    delete process.env.OLLAMA_MODEL;
     delete process.env.GEMINI_API_KEY;
     delete process.env.OPENAI_API_KEY;
     const res = await fetch(`${baseUrl}/api/ai/complete`, {

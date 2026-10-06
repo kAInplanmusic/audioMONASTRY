@@ -149,8 +149,8 @@ Authorization: Bearer <RP_AGENT_KEY|RP_API_KEY|RUNPOD_API_KEY>
 | Erwartet | Verwendet | Default | Komponenten | Secret |
 |---|---|---|---|---|
 | `DEEPSEEK_API_KEY` | `DEEPSEEK_API_KEY` | – | src/core/ai/clientLlm.ts, LlmRouter | **ja** |
-| `OLLAMA_URL` | `OLLAMA_URL` | http://127.0.0.1:11434 | LlmRouter (lokaler Fallback) | nein |
-| `OLLAMA_MODEL` | `OLLAMA_MODEL` | qwen2.5:7b | LlmRouter | nein |
+| `OLLAMA_URL` entfernt 2026-10-06
+| `OLLAMA_MODEL` entfernt 2026-10-06
 | `AI_JOB_TIMEOUT_MS` | `AI_JOB_TIMEOUT_MS` | 120000 | aiOrchestrator.ts | nein |
 | `AI_SESSION_IDLE_TIMEOUT` | `AI_SESSION_IDLE_TIMEOUT` | – | SessionManager (Scale-to-Zero) | nein |
 | `AI_LOG_LEVEL` | `AI_LOG_LEVEL` | INFO | aiLogger.ts | nein |

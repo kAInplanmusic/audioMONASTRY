@@ -35,7 +35,6 @@ export type LlmComplexity = 'simple' | 'moderate' | 'complex';
 export type LlmProviderId =
   | 'runpod-local'
   | 'mistral'
-  | 'ollama'
   | 'deepseek-flash'
   | 'deepseek-pro'
   | 'publicai'
@@ -153,7 +152,6 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
   // glm-4.5-air per RUNPOD_BRAIN_MODEL, sobald die Revision gepinnt ist.
   'runpod-local': 'qwen3-14b',
   mistral: 'mistral-small-latest',
-  ollama: 'qwen2.5:7b',
   'deepseek-flash': 'deepseek-v4-flash',
   'deepseek-pro': 'deepseek-v4-pro',
   publicai: 'swiss-ai/apertus-v1.5-70b-thinking',
@@ -167,7 +165,7 @@ const DEFAULT_MODELS: Record<LlmProviderId, string> = {
  * Provider, die ohne externen Netzzugriff auskommen (lokal gehostet).
  * Seit „AI nur lokal“ sind das die einzigen, die per Default erlaubt sind.
  */
-const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local', 'ollama']);
+const LOCAL_LLM_PROVIDERS: ReadonlySet<LlmProviderId> = new Set<LlmProviderId>(['runpod-local']);
 
 /**
  * INFRA-AI-004: Kostenbuch aller `LlmRouter`-Aufrufe.
@@ -190,9 +188,9 @@ export const llmCostTracker = new CostTracker();
 function promoteQuality(order: LlmProviderId[]): LlmProviderId[] {
   if (!order.includes('deepseek-pro')) return order;
   const rest = order.filter((id) => id !== 'deepseek-pro');
-  // Lokale Provider bleiben vorn (`runpod-local`, `ollama`); das stärkere Modell
+  // Lokaler Provider bleibt vorn (`runpod-local`); das stärkere Modell
   // schiebt sich direkt DAHINTER, vor die schnellen Cloud-Wege.
-  const anchor = rest.indexOf('ollama');
+  const anchor = rest.indexOf('runpod-local');
   const at = anchor >= 0 ? anchor + 1 : 0;
   return [...rest.slice(0, at), 'deepseek-pro', ...rest.slice(at)];
 }
@@ -238,9 +236,6 @@ async function extractText(resp: Response): Promise<string> {
     const text = content?.parts?.map((p) => p.text ?? '').join('') ?? '';
     if (text) return text;
   }
-  // Ollama /api/chat liefert { message: { content } }.
-  const ollamaMessage = anyData?.message as Record<string, unknown> | undefined;
-  if (typeof ollamaMessage?.content === 'string') return ollamaMessage.content;
   if (typeof anyData?.response === 'string') return anyData.response;
   return JSON.stringify(data);
 }
@@ -272,30 +267,6 @@ class OpenAiCompatibleProvider implements ILlmProvider {
       body.reasoning_effort = req.reasoningEffort ?? 'low';
     }
     const resp = await postJson(this.baseUrl, { Authorization: `Bearer ${envKey(this.envName)}` }, body, req.signal);
-    return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
-  }
-}
-
-/** Lokaler Ollama-Provider (MOA/Sprachbefehle/TTS-Fallback auf der eigenen Instanz). */
-class OllamaProvider implements ILlmProvider {
-  readonly id = 'ollama' as const;
-  get available(): boolean {
-    return Boolean(envKey('OLLAMA_URL') || envKey('OLLAMA_MODEL'));
-  }
-
-  async complete(req: LlmRequest): Promise<LlmCompletion> {
-    const started = Date.now();
-    const base = (envKey('OLLAMA_URL') || 'http://localhost:11434').replace(/\/$/, '');
-    const model = envKey('OLLAMA_MODEL') || DEFAULT_MODELS.ollama;
-    const resp = await postJson(`${base}/api/chat`, {}, {
-      model,
-      messages: [{ role: 'user', content: req.prompt }],
-      stream: false,
-      options: {
-        temperature: req.temperature ?? 0.7,
-        num_predict: req.maxTokens ?? 512,
-      },
-    }, req.signal);
     return { provider: this.id, text: await extractText(resp), latencyMs: Date.now() - started, model };
   }
 }
@@ -510,7 +481,6 @@ export class LlmRouter {
     // Lokales Brain zuerst registrieren – es ist der primäre Provider.
     this.register(new RunPodLocalProvider());
     this.register(new OpenAiCompatibleProvider('mistral', 'https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'));
-    this.register(new OllamaProvider());
     this.register(new OpenAiCompatibleProvider('deepseek-flash', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
     this.register(new OpenAiCompatibleProvider('deepseek-pro', 'https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'));
     // PublicAI: OpenAI-kompatibel, Modell aus PUBLICAI_MODEL.
@@ -541,8 +511,7 @@ export class LlmRouter {
   /**
    * Liefert die Provider in der gültigen Reihenfolge.
    *
-   * Das lokale Brain (`runpod-local`) steht immer vorn; `ollama` ist der
-   * wirklich lokale Notfall-Fallback. Externe/bezahlte Provider bleiben
+   * Das lokale Brain (`runpod-local`) steht immer vorn. Externe/bezahlte Provider bleiben
    * registriert, werden aber nur mit `AI_ALLOW_EXTERNAL_LLM=true` zugelassen.
    *
    * INFRA-AI-005: Die Qualitätsstufe der Einstellung verschiebt die Reihenfolge –
@@ -552,10 +521,10 @@ export class LlmRouter {
   rankProviders(complexity: LlmComplexity): ILlmProvider[] {
     const base: LlmProviderId[] =
       complexity === 'complex'
-        ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-pro', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'gemini', 'openai']
+        ? ['runpod-local', 'cerebras', 'deepseek-pro', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'gemini', 'openai']
         : complexity === 'moderate'
-          ? ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'deepseek-pro']
-          : ['runpod-local', 'ollama', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai'];
+          ? ['runpod-local', 'cerebras', 'deepseek-flash', 'openrouter', 'mistral', 'publicai', 'deepseek-pro']
+          : ['runpod-local', 'cerebras', 'deepseek-flash', 'mistral', 'openrouter', 'publicai'];
     const order = aiQualityTier() === 'high' ? promoteQuality(base) : base;
     const allowExternal = envKey('AI_ALLOW_EXTERNAL_LLM') === 'true';
     return order
