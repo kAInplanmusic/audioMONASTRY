@@ -78,9 +78,15 @@ export class DropPluginAdapter extends BasePluginAdapter {
       };
 
       if (payload.quantize === false || !adapter.scheduleAtNextBar) {
+        // Keine Taktplanung verfügbar (oder Quantisierung ausdrücklich aus):
+        // sofort feuern. Ein Start, der auf eine Uhr wartet, die den
+        // Audio-Thread nicht erreicht, wäre ein Stillstand.
         fire();
       } else {
-        adapter.scheduleAtNextBar(fire);
+        // SYNC gegen Main: scheduleSyncStart entscheidet, OB quantisiert wird
+        // (syncEnabled); die taktgenaue Planung macht die vorhandene
+        // Audio-Thread-Mechanik (scheduleAtNextBar über Tone.Transport).
+        this.scheduleSyncStart(fire, adapter.scheduleAtNextBar);
       }
       return { ok: true, channel, quantized: payload.quantize !== false };
     }
