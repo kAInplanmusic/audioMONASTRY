@@ -407,7 +407,7 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Ordnerstruktur */}
-        <aside className="w-44 short-landscape:w-36 shrink-0 border-r border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-1.5 overflow-y-auto">
+        <aside className="w-44 shrink-0 border-r border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-1.5 overflow-y-auto">
           {(['FAVORITEN', 'SAMPLES', 'MUSIK'] as const).map((group) => (
             <div key={group}>
               <div className="text-[10px] font-mono tracking-[0.25em] text-neutral-600 uppercase mb-1">{group}</div>

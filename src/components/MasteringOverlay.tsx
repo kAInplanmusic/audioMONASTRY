@@ -138,7 +138,7 @@ export function MasteringOverlay({
   return (
     <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8">
       {/* Container - Command Center Style */}
-      <div className="relative w-full max-w-6xl h-full max-h-[800px] short-landscape:max-h-[92vh] bg-[#050508] border border-sky-500/30 rounded-2xl shadow-[0_0_50px_rgba(14,165,233,0.15)] flex flex-col overflow-hidden">
+      <div className="relative w-full max-w-6xl h-full max-h-[800px] bg-[#050508] border border-sky-500/30 rounded-2xl shadow-[0_0_50px_rgba(14,165,233,0.15)] flex flex-col overflow-hidden">
         <div className="px-6 py-2 border-b border-sky-500/20 bg-black/20">
           <MoaAssistant pluginId="mastering" placeholder="MOA: z. B. 'Preset anwenden'" />
         </div>

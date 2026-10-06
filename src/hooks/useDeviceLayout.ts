@@ -4,10 +4,11 @@ import {
   deviceLayoutKey,
   shouldRequestFullscreen,
   shouldShowInstallHint,
+  viewportContentFor,
+  DESIGN_WIDTH,
   type DeviceLayout,
   type DeviceSignals,
 } from '../core/ui/deviceLayout';
-import { storageGet, storageSet } from '../utils/storage';
 
 /**
  * Formate · Browser-Anbindung der Geräteerkennung (src/core/ui/deviceLayout.ts)
@@ -35,7 +36,6 @@ interface FullscreenEl {
   webkitRequestFullscreen?: () => void;
 }
 
-const INSTALL_HINT_KEY = 'am.formats.installHintDismissed';
 
 const hasWindow = (): boolean => typeof window !== 'undefined' && typeof document !== 'undefined';
 
@@ -121,10 +121,15 @@ let armed = true;
 let lastPreferred = false;
 let started = false;
 const listeners = new Set<() => void>();
-
-function installHintDismissed(): boolean {
-  return storageGet(INSTALL_HINT_KEY) === '1';
-}
+// Nichts auf dem Gerät speichern (Betreiber 2026-10-06): nur für diese Sitzung.
+let hintDismissed = false;
+/**
+ * Manche Browser ignorieren im Vollbild die Viewport-Angabe – dann wäre die
+ * Kopie nicht mehr dieselbe (gemessen: Chromium zeichnet im Vollbild wieder in
+ * Bildschirmbreite). In dem Fall verlässt die App das Vollbild sofort und
+ * verweist auf die Home-Bildschirm-App (Manifest display: fullscreen).
+ */
+let fullscreenBreaksCopy = false;
 
 function compute(): void {
   const base = classifyDevice(readDeviceSignals());
@@ -133,12 +138,23 @@ function compute(): void {
   // Jeder Wechsel IN ein Vollbild-Format schärft die Anforderung neu.
   if (base.fullscreenPreferred && !lastPreferred) armed = true;
   lastPreferred = base.fullscreenPreferred;
+  if (active && base.device !== 'desktop' && Math.abs(base.resolution.cssWidth - DESIGN_WIDTH) > 4) {
+    fullscreenBreaksCopy = true;
+    exitAppFullscreen();
+  }
+  const usable = supported && !fullscreenBreaksCopy;
   const next: DeviceLayoutState = {
     ...base,
-    fullscreen: { supported, active },
-    installHint: shouldShowInstallHint(base, { supported, dismissed: installHintDismissed() }),
+    fullscreen: { supported: usable, active: active && !fullscreenBreaksCopy },
+    installHint: shouldShowInstallHint(base, { supported: usable, dismissed: hintDismissed }),
   };
   const key = `${deviceLayoutKey(next)}|${supported}|${active}|${next.installHint}`;
+
+  // Gleiche Kopie auf jedem Gerät: Handy/Pad zeichnen die Referenzbreite und
+  // der Browser verkleinert sie (nur ändern, wenn nötig – sonst Neu-Layout).
+  const meta = document.querySelector('meta[name="viewport"]');
+  const content = viewportContentFor(next.device);
+  if (meta && meta.getAttribute('content') !== content) meta.setAttribute('content', content);
 
   const root = document.documentElement;
   root.dataset.layout = next.layout;
@@ -154,7 +170,7 @@ function compute(): void {
 }
 
 function onUserGesture(): void {
-  if (shouldRequestFullscreen(snapshot, { supported: snapshot.fullscreen.supported, active: fullscreenActive(), armed })) {
+  if (shouldRequestFullscreen(snapshot, { supported: snapshot.fullscreen.supported && !fullscreenBreaksCopy, active: fullscreenActive(), armed })) {
     armed = false;
     requestAppFullscreen();
   }
@@ -184,7 +200,7 @@ export function startDeviceLayoutWatch(): void {
 }
 
 export function dismissInstallHint(): void {
-  storageSet(INSTALL_HINT_KEY, '1');
+  hintDismissed = true;
   if (hasWindow()) compute();
 }
 

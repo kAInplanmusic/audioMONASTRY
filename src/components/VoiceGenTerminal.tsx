@@ -147,7 +147,7 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
-              className="w-full h-32 short-landscape:h-20 bg-[#111] border border-neutral-800 rounded-lg p-4 text-sm text-neutral-300 focus:outline-none focus:border-orange-500/50 resize-none font-mono"
+              className="w-full h-32 bg-[#111] border border-neutral-800 rounded-lg p-4 text-sm text-neutral-300 focus:outline-none focus:border-orange-500/50 resize-none font-mono"
               placeholder="Enter text to synthesize..."
             />
           </div>
@@ -211,7 +211,7 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
 
            {!hasResult && !isGenerating ? (
              <div className="flex-1 flex flex-col items-center justify-center opacity-20">
-               <Mic className="w-24 h-24 mb-4 short-landscape:w-14 short-landscape:h-14 short-landscape:mb-2" />
+               <Mic className="w-24 h-24 mb-4" />
                <p className="font-bold tracking-widest">READY TO SYNTHESIZE</p>
              </div>
            ) : isGenerating ? (

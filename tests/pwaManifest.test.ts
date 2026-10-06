@@ -16,10 +16,11 @@ function pngSize(rel: string): { w: number; h: number } {
 describe('Web-App-Manifest', () => {
   const manifest = JSON.parse(read('public/manifest.webmanifest').toString('utf8'));
 
-  it('beschreibt eine eigenständige App mit Start auf /', () => {
+  it('beschreibt eine Vollbild-App mit Start auf / (Home-Bildschirm = Vollbild bei gleicher Kopie)', () => {
     expect(manifest.name).toBe('audioMONASTRY');
     expect(manifest.start_url).toBe('/');
-    expect(manifest.display).toBe('standalone');
+    expect(manifest.display).toBe('fullscreen');
+    expect(manifest.display_override).toEqual(['fullscreen', 'standalone']);
     expect(manifest.lang).toBe('de');
   });
 

@@ -240,7 +240,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
             <DropTarget
                 label="Drop Sample to Slot"
                 onDrop={handleSampleDrop}
-                className="w-full h-40 short-landscape:h-24 flex flex-col items-center justify-center"
+                className="w-full h-40 flex flex-col items-center justify-center"
             >
                 {isLoading ? <Loader2 className="w-12 h-12 animate-spin text-purple-500" /> :
                 <div className="text-center font-black">

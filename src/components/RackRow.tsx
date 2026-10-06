@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Copy, GripVertical, Lock, LockOpen, RefreshCw } from 'lucide-react';
 import { getPluginThemeClass } from '../utils/pluginTheme';
 import type { PluginMode } from '../core/session/pluginMode';
@@ -38,8 +38,6 @@ interface RackRowProps {
   /** Bedienfläche auch eingeklappt gemountet halten (versteckt), damit ihr
    *  gespiegelter Zustand bei einer Übergabe erhalten bleibt (mixerMONK). */
   keepMounted?: boolean;
-  /** Formate: Handy hochkant – kompakte Kopfzeile, Bedienfläche nur auf Wunsch. */
-  simplified?: boolean;
   children?: React.ReactNode;
 }
 
@@ -71,13 +69,9 @@ export const RackRow = React.memo(function RackRow({
   onCopy,
   onLoadScratch,
   keepMounted = false,
-  simplified = false,
   children,
 }: RackRowProps) {
-  // Handy hochkant: Bedienflächen sind für das Querformat gebaut. Sie öffnen
-  // hier nur auf ausdrücklichen Wunsch und scrollen dann in sich, nie die Seite.
-  const [openHere, setOpenHere] = useState(false);
-  const showPanel = panelOpen && (!simplified || openHere);
+  const showPanel = panelOpen;
   const active = mode !== 'OFF';
   const nextHint = mode === 'OFF' ? 'Tippen: holen (STBY)' : mode === 'STBY' ? 'Tippen: aktivieren (ON)' : 'Tippen: freigeben (OFF)';
 
@@ -103,7 +97,7 @@ export const RackRow = React.memo(function RackRow({
       }}
     >
       <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-        {!simplified && <span
+        <span
           draggable
           onDragStart={(e) => {
             e.dataTransfer.setData(MONK_DRAG_MIME, JSON.stringify({ type: 'module', id, name, state: mode } satisfies ScratchpadDragItem));
@@ -113,7 +107,7 @@ export const RackRow = React.memo(function RackRow({
           className="shrink-0 text-neutral-700 hover:text-neutral-400 cursor-grab active:cursor-grabbing p-0.5"
         >
           <GripVertical size={14} />
-        </span>}
+        </span>
         <span
           className="w-9 h-9 shrink-0 rounded-lg border flex items-center justify-center bg-black/60"
           style={{ borderColor: 'var(--monk-accent)', color: 'var(--monk-accent)' }}
@@ -127,7 +121,7 @@ export const RackRow = React.memo(function RackRow({
             {number && <span className="font-mono text-neutral-500 mr-1.5">{number}</span>}
             {name}
           </h3>
-          {!simplified && <span className="inline-flex gap-1" role="img" aria-label={`Modus ${mode}`}>
+          <span className="inline-flex gap-1" role="img" aria-label={`Modus ${mode}`}>
             {MODES.map((m) => (
               <span
                 key={m}
@@ -137,7 +131,7 @@ export const RackRow = React.memo(function RackRow({
                 {m}
               </span>
             ))}
-          </span>}
+          </span>
           <span className={`inline-flex items-center gap-1 text-[10px] font-mono ${lockedByOther ? 'text-red-300' : 'text-neutral-400'}`}>
             {lockedByOther ? <Lock size={12} aria-hidden="true" /> : <LockOpen size={12} aria-hidden="true" />}
             {ownerLabel ? (ownedByMe ? 'du' : ownerLabel) : 'frei'}
@@ -159,7 +153,7 @@ export const RackRow = React.memo(function RackRow({
             <RefreshCw size={11} aria-hidden="true" /> SYNC
           </button>
         )}
-        {onCopy && ownedByMe && !simplified && (
+        {onCopy && ownedByMe && (
           <button
             type="button"
             onClick={onCopy}
@@ -192,22 +186,7 @@ export const RackRow = React.memo(function RackRow({
       </div>
 
       {!panelOpen && summary ? (
-        <p className={`px-3 pb-2.5 text-[11px] text-neutral-400 ${simplified ? '' : 'pl-[4.25rem]'}`}>{summary}</p>
-      ) : null}
-      {panelOpen && simplified ? (
-        <div className="flex items-center gap-2 px-3 pb-2.5 text-[11px] text-neutral-400" data-testid={`panel-hint-${id}`}>
-          <span className="flex-1">{openHere ? 'Bedienfläche hier geöffnet (waagerecht wischbar).' : 'Bedienfläche im Querformat – Handy drehen.'}</span>
-          <button
-            type="button"
-            onClick={() => setOpenHere((v) => !v)}
-            aria-expanded={openHere}
-            aria-label={`${name} Bedienfläche ${openHere ? 'ausblenden' : 'hier öffnen'}`}
-            className="px-2.5 py-1 rounded-full border text-[10px] font-bold tracking-widest cursor-pointer"
-            style={{ borderColor: 'var(--monk-accent)', color: 'var(--monk-accent)' }}
-          >
-            {openHere ? 'AUSBLENDEN' : 'HIER ÖFFNEN'}
-          </button>
-        </div>
+        <p className="px-3 pb-2.5 pl-[4.25rem] text-[11px] text-neutral-400">{summary}</p>
       ) : null}
       {children && (showPanel || keepMounted) ? (
         <div className="px-3 pb-3 border-t border-white/5 min-w-0 overflow-x-auto" hidden={!showPanel}>

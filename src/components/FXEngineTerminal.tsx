@@ -189,7 +189,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
                 <div className="flex flex-col gap-8 flex-1 justify-center">
                   {['HIGH', 'MID', 'LOW'].map(band => (
                     <div key={band} className="flex flex-col items-center gap-3">
-                      <div className="w-20 h-20 short-landscape:w-14 short-landscape:h-14 rounded-full border-[6px] border-[#111] bg-neutral-800 flex items-center justify-center relative cursor-pointer hover:border-rose-900 transition-colors shadow-xl">
+                      <div className="w-20 h-20 rounded-full border-[6px] border-[#111] bg-neutral-800 flex items-center justify-center relative cursor-pointer hover:border-rose-900 transition-colors shadow-xl">
                         <div className="absolute top-2 left-1/2 w-1.5 h-4 bg-rose-500 -translate-x-1/2 rounded-full shadow-[0_0_5px_rgba(244,63,94,0.8)]"></div>
                       </div>
                       <span className="text-xs font-bold text-neutral-500">{band}</span>
