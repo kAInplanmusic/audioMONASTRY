@@ -11,6 +11,7 @@ import {
   loadAutoloadSong,
   saveAutoloadSong,
 } from '../core/session/autoloadSong';
+import { SIGNAL_CHAIN } from '../plugins/signalChain';
 
 /**
  * audioMONASTRY mixerMONK – 6-Kanal-Hardware-Mischpult.
@@ -751,6 +752,25 @@ const DJMixer = React.memo(function DJMixer() {
           </div>
           <span className="text-[10px] font-mono text-zinc-500 tracking-[0.3em]">DJM-A9</span>
         </div>
+      </div>
+
+      {/* Signalkette: die Reihenfolge ist fest und unabhaengig davon, wer
+          welches Plugin haelt. Eine Quelle: plugins/signalChain.ts. */}
+      <div className="flex items-center gap-2 px-5 pb-1 overflow-x-auto" aria-label="Signalkette">
+        <span className="text-[9px] font-mono tracking-[0.25em] text-zinc-600 shrink-0">SIGNALKETTE</span>
+        {SIGNAL_CHAIN.map((stage, i) => (
+          <React.Fragment key={stage.id}>
+            {i > 0 && <span className="text-zinc-700 text-[10px] shrink-0">→</span>}
+            <span
+              title={stage.plugins.length > 0 ? stage.plugins.join(' → ') : 'Ausgang'}
+              className={`shrink-0 px-1.5 py-0.5 rounded-sm border text-[9px] font-mono tracking-widest ${
+                stage.id === 'mixer' ? 'border-orange-500/60 text-orange-300' : 'border-zinc-800 text-zinc-500'
+              }`}
+            >
+              {stage.id === 'mixer' ? 'mixerMONK' : stage.label}
+            </span>
+          </React.Fragment>
+        ))}
       </div>
 
       {/* Controller links | 6 Kanalzüge + Utility + Master | Controller rechts */}

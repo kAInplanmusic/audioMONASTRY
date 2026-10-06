@@ -54,6 +54,28 @@ erlaubt — die Autoplay-Sperre lässt vorher keinen Ton zu. Gepinnt wird bewuss
 nur, was auch in der Bibliothek liegt: Ein Eintrag ohne Datei wird verworfen,
 damit kein Autoload ins Leere greift.
 
+## Signalkette — die verbindliche Insert-Reihenfolge
+
+Die Reihenfolge im Signalweg ist **fest** und unabhängig davon, wer welches
+Plugin hält. Wer den Mixer hat, ändert nur, wer bedient — nicht den Pfad.
+
+| Stufe | Plugins |
+|---|---|
+| Quellen | biblio · drop · song · drumsampler · syntisampler · instru · voice · sound · stem |
+| **Mixer** | **mixer** |
+| Nachbearbeitung | effect · eq · dsp · spatial · master |
+| Recorder | record |
+| Ausgang | Main Out |
+
+Eine Quelle im Code: `src/plugins/signalChain.ts` (`SIGNAL_CHAIN`). Sie wird
+vom Mixer als Leiste angezeigt („SIGNALKETTE“) und von
+`tests/signalChain.test.ts` gegen die 16 kanonischen Plugins gehalten.
+
+**Nicht zu verwechseln mit der Kopfreihenfolge.** Die Reihenfolge der Icons im
+Kopf (`plugins/registry.ts`, DJ → PRODUCING → AI → MASTERING) ist die
+*Darstellung*; an ihr hängen die Modulfarben `hsl(i*22.5+11, …)`. Die
+Signalkette ist eine zweite, unabhängige Achse.
+
 ## Annahmen und offene Punkte
 
 - AUTO_AI und PRO entfallen (Annahme). KI-Vorschläge kommen über aiMONK.
