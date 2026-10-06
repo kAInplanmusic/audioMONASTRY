@@ -28,9 +28,32 @@ seinem Commit und dem Wiederaufsetzpunkt beschrieben. Neuer Agent, neue Sitzung:
 | Phase | Inhalt | Status |
 |---|---|---|
 | Vorarbeit | Kette als Quelle, Router-Anker, Offline-Ausführer, Bounce im Recorder | **fertig** (`6bc5aac`) |
-| **C** | Flotte kurz hoch, Deploy prüfen, wieder löschen | **offen** |
-| **A** | Block-Verarbeitung in den Adaptern (15 von 16 fehlen) | **offen** |
+| **C** | Flotte kurz hoch, Deploy prüfen, wieder löschen | **Abbruch nach Zeitbox, Flotte gelöscht** — Befund unten |
+| **A** | Block-Verarbeitung in den Adaptern (15 von 16 fehlen) | **läuft: A0–A3 fertig** (`6abe234`) |
 | **B** | Live-Pfad auf die Kette umziehen (hinter Flag) | **offen** |
+
+### Phase C — was gemessen wurde (2026-10-05)
+
+Gelaufen: Flotte provisioniert (5× `cx23`, alle `running`), Remote-Build auf app-1,
+Schritt **5b/9 Caddy-DNS-Image gebaut** — der Fix aus der Vorsitzung (Caddy-Image
+**vor** den Compose-Starts) ist damit **live bestätigt**.
+
+Abgebrochen nach der Zeitbox: Schritt 6/9 (Rollen sfu/master/edge/ai einrichten,
+Ollama-Installation auf ai-1) lief noch, die Container standen noch nicht.
+**Konkreter nächster Fehler für einen erneuten Lauf:** nach dem Caddy-Build
+startet der Rollen-Compose auf sfu-1 erneut mit
+`pull access denied for audiomonastry-caddy-dns` — das Image existiert nur auf
+app-1 (Kandidat: Image auf alle Knoten bringen oder Caddy dort aus der
+Startliste nehmen).
+
+Flotte gelöscht (`delete-fleet.sh --yes`), Kostenstopp gemessen:
+**0 Server · 0 Volumes · 0 Floating-IPs · 0 Primary-IPs**; übrig: 3 Snapshots
+(3,17 GB ≈ 0,04 €/Monat, Restposten vom 2026-09-27).
+
+**Korrektur eines früheren Fehlers:** „0 Snapshots" war falsch — ich hatte über
+`/v1/snapshots` gezählt (existiert nicht). Richtig ist
+`/v1/images?type=snapshot`. Vor dem Aufräumen: **13 Snapshots / 58 GB ≈
+0,83 €/Monat**; die 10 Test-Reste vom 2026-10-05 wurden gelöscht.
 
 ---
 
@@ -80,10 +103,10 @@ Recorder.
 
 | # | Adapter | Aufgabe im Block | Status |
 |---|---|---|---|
-| A0 | `master` | Master-Gain (Vorgabe 1.0, 0…2) | **fertig** |
-| A1 | `effect` | Dry/Wet-Mix + Effekt-Gain | **offen** |
-| A2 | `eq` | 3-Band (Low/Mid/High) als Shelves | **offen** |
-| A3 | `dsp` | Filter (Cutoff/Resonanz), Low-/High-Pass | **offen** |
+| A0 | `master` | Master-Gain (Vorgabe 1.0, 0…2) | **fertig** (`6bc5aac`) |
+| A1 | `effect` | Bit-Tiefe (`bits`) + Dry/Wet (`wet`) | **fertig** (`e907fb7`) |
+| A2 | `eq` | 3-Band-Tonregelung (`low`/`mid`/`high` in dB) | **fertig** (`f27290c`) |
+| A3 | `dsp` | Resonanter Tiefpass (`cutoff`/`resonance`) + `drive` | **fertig** (`6abe234`) |
 | A4 | `spatial` | Pan/Breite pro Kanal | **offen** |
 | A5 | `record` | Block in den Aufnahmepuffer schreiben (Kettenende) | **offen** |
 | A6 | `mixer` | Kanal-Gains/Pan als Summe | **offen** |
