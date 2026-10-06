@@ -134,7 +134,7 @@ Damit das Papier nicht nur behauptet, was es sagt:
 | Datenbank = Supabase/Postgres | `database/*.sql`, `src/config/supabaseKeys.ts` |
 | GPU-Rollen = RunPod-Serverless | `src/core/ai/aiGate.ts`, `.env`-Schlüssel `RP_*` |
 | Hosting = Hetzner, Proxy = Cloudflare | `Caddyfile`, `docs/HETZNER_DEPLOY.md`, `docs/ORIGIN_TLS_DNS_RUNBOOK.md` |
-| Lokale KI ohne Dritten möglich | `OLLAMA_URL` in `.env.example` (lokale Instanz) |
+| Lokale KI ohne Dritten möglich | *(entfernt)* |
 | Keine Nutzer-Benachrichtigungen/Tracker | Audit 2026-09-23: 0 × `Notification`, 0 × `alert()`, keine Werbe-SDKs im Bundle |
 | Cookies nur `portal` + `studio` | `src/core/session/studioSession.ts`, `tests/studioSession.test.ts` |
 | Zugang ist token-geschützt | `STUDIO_ACCESS_TOKEN`, fail-closed (`server.ts`) |

@@ -151,7 +151,7 @@ src/components/
 |--------|-----------|------------|
 | `MixerBridge` | `DropAudioAdapter.getChannels/setChannelLevel/setChannelPan/setChannelMute` | `getChannelGain/getChannelPan/setChannelGain/setChannelPan/getChannelStripInfo` |
 | `PluginParameterBridge` | `DropAudioAdapter.setPluginParameter` (Spec-Registry mit min/max) | `automateItSynthParam`, `automateEffect`, `automateDsp`, `automateMastering`, `setChannelGain/Pan` |
-| `AiServerBridge` / `AiDropGenerator` | `POST /api/ai/generate-drop` | LLM-Router (serverseitige Keys) → Ollama → lokaler Fallback |
+| `AiServerBridge` / `AiDropGenerator` | `POST /api/ai/generate-drop` | LLM-Router (serverseitige Keys) → lokaler Fallback |
 | `ClockBridge` | `attachDropBridges()` speist `updateClock(sample, isRunning)` | `addStepListener`, `getBpm`, `getIsPlaying`, `getAudioHealth().sampleRate` |
 
 ---
@@ -171,7 +171,7 @@ src/components/
 ### ✅ Phase 4 – abgeschlossen (2026-09-03)
 - [x] MixerBridge an die audioEngine verdrahtet (`DropAudioAdapter`)
 - [x] PluginParameterBridge an die Engine-Automation verdrahtet
-- [x] `/api/ai/generate-drop` implementiert (LLM-Router → Ollama → lokaler Fallback)
+- [x] `/api/ai/generate-drop` implementiert (LLM-Router → lokaler Fallback)
 - [x] ClockBridge an den Transport/Step-Listener gekoppelt (taktgenaue Drops)
 - [x] Unit-/Integrationstests (`tests/dropMonk.test.ts`, `tests/aiRoutes.test.ts`)
 - [x] Registry-Eintrag (`src/plugins/registry.ts`, `public/plugin-manifest.json`, Icon `Zap`, Rose/Pink)
@@ -218,7 +218,7 @@ Request:
 Response: `{ name, description, category, parameterSequence, buildupTime, dropDuration,
 quantization, intensity, confidence, tags, source, provider }`
 
-Ablauf (`server.ts`): LLM-Router (Keys bleiben serverseitig) → lokales Ollama →
+Ablauf (`server.ts`): LLM-Router (Keys bleiben serverseitig) →
 deterministischer Fallback (`src/core/drop/DropTemplateGenerator.ts`). Antworten werden
 gegen eine Parameter-Whitelist validiert und auf 0..1 bzw. 4 Takte geclamped.
 

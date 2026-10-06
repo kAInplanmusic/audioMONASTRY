@@ -111,13 +111,7 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
 
 ## ai-1 (CPU, cx23): lokale KI + Stem
 
-> Status 2026-08-30: **installiert + aktiv** (Ollama 0.33.2 mit `qwen2.5:7b`,
-> stem-ai systemd-Dienst auf Port 8000, `AI_DEVICE=cpu`). Replicate bleibt
-> Primärpfad für Stems/Voice; ai-1 ist der lokale Fallback.
-
 ```bash
-# Ollama (entfernt 2026-10-06)
-
 # Stem-AI (Demucs) als systemd-Dienst:
 cd /opt/audiomonastry/services/stem-ai
 python3 -m venv .venv && . .venv/bin/activate
@@ -128,8 +122,6 @@ systemctl enable --now stem-ai          # Health: http://127.0.0.1:8000/health
 
 ```bash
 # app-1/.env
-OLLAMA_URL=http://<ai-1>:11434
-OLLAMA_MODEL=qwen2.5:7b
 STEM_AI_URL=http://<ai-1>:8000
 ENABLE_STEMS=1
 ```
@@ -142,7 +134,6 @@ DOMAIN=anunnakitools.de
 ENABLE_SFU=0
 REDIS_URL=redis://<redis-host>:6379   # erst ab 2 App-Knoten nötig
 MASTER_PLAYER_URL=http://<master-1>:8000
-# STEM_AI_URL/OLLAMA_URL zeigen auf ai-1
 ```
 
 ```bash
@@ -198,11 +189,10 @@ bringen und dort einen zweiten Caddy für dieselbe Domain starten.
 ## AI-Routing (LlmRouter)
 
 1. DeepSeek V4 Flash (MOA/MCP) → 2. Hugging Face → 3. Mistral → 4. Groq Free
-→ 5. **Ollama (ai-1, lokal)** → 6. DeepSeek V4 Pro → Notfall Gemini/OpenAI.
+→ 5. DeepSeek V4 Pro → Notfall Gemini/OpenAI.
 
 > **Stand 2026-09-20:** Groq ist entfernt; das lokale LLM der Flotte läuft über
-> die RunPod-Rolle `brain` (`runpod-local` im `LlmRouter`), Ollama auf ai-1
-> bleibt Fallback. Betriebsmodi („AI an"/„AI aus", immer-Rollen vs.
+> die RunPod-Rolle `brain` (`runpod-local` im `LlmRouter`). Betriebsmodi („AI an"/„AI aus", immer-Rollen vs.
 > Visual-Rollen nur bei Abruf): `docs/INFRA_KONSTITUTION.md` §2.
 
 ## Qualitäts-Eckpunkte
