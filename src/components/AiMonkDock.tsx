@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Bot, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMoaRun, useQuickActions } from './terminalShared';
-import { useDeviceLayout } from '../hooks/useDeviceLayout';
 
 /**
  * aiMONK-Bottom-Dock (D7 / NEW-D7-1)
@@ -11,13 +10,7 @@ import { useDeviceLayout } from '../hooks/useDeviceLayout';
  * plugin-bewusst über MoaAgent → pluginCommandRegistry → PluginAudioRouter.
  */
 export const AiMonkDock = React.memo(function AiMonkDock() {
-  // Formate: auf dem Handy (quer und hochkant) startet das Dock eingeklappt als
-  // kleiner Knopf - sonst frisst die Leiste die knappe Höhe. Eine eigene Wahl
-  // des Nutzers gilt danach weiter.
-  const { layout } = useDeviceLayout();
-  const phone = layout === 'phone-landscape' || layout === 'phone-portrait';
-  const [collapsedChoice, setCollapsed] = useState<boolean | null>(null);
-  const collapsed = collapsedChoice ?? phone;
+  const [collapsed, setCollapsed] = useState(false);
   const [task, setTask] = useState('');
   const { run, results, meta, busy } = useMoaRun({
     pluginId: 'ai',
@@ -30,14 +23,12 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
 
   if (collapsed) {
     return (
-      <div className={phone ? 'fixed bottom-3 right-3 z-40' : 'fixed bottom-0 left-0 right-0 z-40'} style={phone ? { marginBottom: 'env(safe-area-inset-bottom, 0px)' } : undefined}>
+      <div className="fixed bottom-0 left-0 right-0 z-40">
         <button
           type="button"
           onClick={() => setCollapsed(false)}
           aria-label="aiMONK öffnen"
-          className={phone
-            ? 'flex items-center gap-1.5 px-3 py-2 rounded-full bg-[#0a0a0a]/95 border border-cyan-500/50 text-cyan-300 text-[10px] font-black tracking-[0.2em] uppercase shadow-[0_8px_30px_rgba(0,0,0,0.6)] cursor-pointer'
-            : 'w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#0a0a0a]/95 border-t border-cyan-900/40 text-cyan-300 text-[10px] font-black tracking-[0.3em] uppercase hover:bg-cyan-500/10 transition-colors cursor-pointer'}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#0a0a0a]/95 border-t border-cyan-900/40 text-cyan-300 text-[10px] font-black tracking-[0.3em] uppercase hover:bg-cyan-500/10 transition-colors cursor-pointer"
           aria-expanded="false"
         >
           <Bot className="w-3.5 h-3.5" /> aiMONK <ChevronUp className="w-3.5 h-3.5" />

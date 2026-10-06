@@ -151,7 +151,7 @@ function VFader({ value, onChange, disabled }: { value: number; onChange: (v: nu
         if (e.key === 'ArrowDown') onChange(clamp(round01(value - 0.5), -12, 12));
         if (e.key === '0') onChange(0);
       }}
-      className={`relative h-36 short-landscape:h-24 w-9 rounded-md border border-neutral-800 bg-black/70 shadow-inner select-none touch-none ${disabled ? 'opacity-40' : 'cursor-ns-resize hover:border-teal-500/50'}`}
+      className={`relative h-36 w-9 rounded-md border border-neutral-800 bg-black/70 shadow-inner select-none touch-none ${disabled ? 'opacity-40' : 'cursor-ns-resize hover:border-teal-500/50'}`}
     >
       {/* Skala */}
       <div className="absolute left-1/2 top-1/2 w-full -translate-x-1/2 -translate-y-1/2 pointer-events-none">
@@ -481,9 +481,9 @@ export const EQPluginTerminal = React.memo(function EQPluginTerminal() {
         </div>
       </div>
 
-      <div className={`flex-1 flex flex-col p-4 short-landscape:p-2 gap-4 short-landscape:gap-2 overflow-hidden transition-opacity duration-300 ${power ? 'opacity-100' : 'opacity-60'}`}>
+      <div className={`flex-1 flex flex-col p-4 gap-4 overflow-hidden transition-opacity duration-300 ${power ? 'opacity-100' : 'opacity-60'}`}>
         {/* Echter Frequenzgang */}
-        <div className="h-44 short-landscape:h-28 bg-black rounded-xl border border-neutral-800 shadow-inner p-1.5 relative overflow-hidden">
+        <div className="h-44 bg-black rounded-xl border border-neutral-800 shadow-inner p-1.5 relative overflow-hidden">
           <canvas ref={canvasRef} width={900} height={176} className="w-full h-full" />
           <div className="absolute top-2 left-3 bg-black/50 px-2 py-1 rounded text-[9px] font-mono text-teal-500 border border-teal-500/30 pointer-events-none">
             FREQUENZGANG · 20 Hz – 20 kHz · ±18 dB

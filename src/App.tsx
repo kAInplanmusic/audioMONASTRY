@@ -28,7 +28,7 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
-import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles, Maximize2, Minimize2, Play, Square } from 'lucide-react';
+import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
 import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
@@ -115,21 +115,20 @@ function AppComponent() {
   const [activeNav, setActiveNav] = useState<string>('mixer');
   // COLLAB-P1-004: aktive Plugin-Navigation der anderen Session-User (userId → pluginId).
   const [remoteNav, setRemoteNav] = useState<Record<string, { pluginId: string; ts: number }>>({});
-  const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
   // Formate (Betreiber 2026-10-06): Handy quer · Handy hochkant (vereinfacht) ·
   // Pad quer · PC/Laptop – automatisch aus Gerät, Ausrichtung und Auflösung.
   const deviceLayout = useDeviceLayout();
-  const simplified = deviceLayout.simplified;
   // Session-Ausgänge: dieser Nutzer meldet Format und Auflösung, in der er die
   // UI bekommt – jeder der 1–4 Nutzer hat seine eigene (Ausgänge-Panel).
   useEffect(() => {
     webRTCManager.sendEndpointReport({
       layout: deviceLayout.layout,
-      width: deviceLayout.resolution.cssWidth,
-      height: deviceLayout.resolution.cssHeight,
+      // Echter Bildschirm (nicht die gezeichnete Referenzbreite der Kopie).
+      width: deviceLayout.resolution.screenWidth,
+      height: deviceLayout.resolution.screenHeight,
       devicePixelRatio: deviceLayout.resolution.dpr,
     });
-  }, [deviceLayout.layout, deviceLayout.resolution.cssWidth, deviceLayout.resolution.cssHeight, deviceLayout.resolution.dpr]);
+  }, [deviceLayout.layout, deviceLayout.resolution.screenWidth, deviceLayout.resolution.screenHeight, deviceLayout.resolution.dpr]);
 
   // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
   const navPlugins = useMemo(
@@ -664,10 +663,10 @@ function AppComponent() {
   }
 
   return (
-    <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2 phone:p-2! phone:pb-16!">
+    <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="min-h-screen bg-transparent text-white p-6 pb-28">
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
       {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 16 Plugin-Icons in zwei Reihen + Avatar */}
-      <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-[5.75rem] short-landscape:h-16 phone:h-12! phone:-mx-2! phone:-mt-2! bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
+      <header className="sticky top-0 z-40 -mx-6 -mt-6 h-[5.75rem] bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
         <div className="mx-auto flex h-full items-stretch max-w-[1800px]">
           {/* Logo-Block */}
           <a
@@ -680,7 +679,7 @@ function AppComponent() {
               <div className="absolute -inset-1 rounded-lg bg-cyan-400/15 blur-lg" />
               <Logo size={30} rounded={false} className="relative" />
             </div>
-            <div className="hidden sm:block phone:hidden! pad:hidden! leading-none min-w-0">
+            <div className="hidden sm:block leading-none min-w-0">
               <p className="text-[14px] font-black tracking-tight text-white whitespace-nowrap">
                 <span className="font-light text-neutral-300">audio</span>MONASTRY
               </p>
@@ -804,7 +803,7 @@ function AppComponent() {
             >
               <Settings className="w-4 h-4" />
             </button>
-            <div className="hidden sm:flex phone:hidden! w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-cyan-400/20 to-fuchsia-400/20 border border-cyan-400/30 items-center justify-center" title="Studio-User">
+            <div className="hidden sm:flex w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-cyan-400/20 to-fuchsia-400/20 border border-cyan-400/30 items-center justify-center" title="Studio-User">
               <UserRound className="w-4 h-4 text-cyan-300" />
             </div>
           </div>
@@ -814,17 +813,17 @@ function AppComponent() {
       {/* 2. masterplayerMONK: feste View-only-Leiste (oben, sticky in der Rack-Scroll-Logik). */}
       <section
         id="rack-masterplayer"
-        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 short-landscape:top-16 z-30 phone:static! phone:mb-2!"
+        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 z-30"
       >
         <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-          <div className="w-10 h-10 phone:hidden! shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
+          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
             <Activity size={18} />
           </div>
-          <h3 className="text-sm phone:text-[11px]! phone:tracking-[0.12em]! font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
-          <span className="hidden sm:inline phone:hidden! text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
+          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
+          <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
           <EngineStatusBadge />
 
-          <div className="ml-auto flex items-center gap-4 phone:gap-3! text-center">
+          <div className="ml-auto flex items-center gap-4 text-center">
             <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
             <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
             <MasterplayerReadout bpm={bpm} isPlaying={isPlaying} />
@@ -832,7 +831,7 @@ function AppComponent() {
             <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
           </div>
         </div>
-        <div className="px-3 pb-3 border-t border-white/5 phone:hidden">
+        <div className="px-3 pb-3 border-t border-white/5">
           <BeatVisualizer isPlaying={isPlaying} />
         </div>
         {/* P0-1 (revidiert): masterplayerMONK ist REINE INFO/VISUALISIERUNG.
@@ -846,13 +845,6 @@ function AppComponent() {
         <div className="phone:hidden">
           <SignalChainBar moduleStates={moduleStates} pluginLocks={pluginLocks} />
         </div>
-        {simplified && !rotateHintDismissed && (
-          <div role="note" data-testid="simplified-hint" className="flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-950/40 px-3 py-2 text-[11px] text-cyan-100">
-            <span aria-hidden="true">↻</span>
-            <span className="flex-1">Vereinfachte Ansicht: Modus, SYNC und Halter. Für Mixer-Pult und Bedienflächen das Handy quer drehen.</span>
-            <button type="button" onClick={() => setRotateHintDismissed(true)} aria-label="Hinweis schließen" className="px-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer">✕</button>
-          </div>
-        )}
         {deviceLayout.installHint && (
           <div role="note" data-testid="install-hint" className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100">
             <span className="flex-1">Vollbild auf diesem Gerät: im Browser <b>Teilen → „Zum Home-Bildschirm“</b> wählen und das Studio von dort starten.</span>
@@ -892,7 +884,6 @@ function AppComponent() {
               running={mode === 'ON' && isPlaying}
               onCycle={() => cycleMode(id)}
               keepMounted={id === 'mixer'}
-              simplified={simplified}
               cycleLockedReason={
                 id === 'mixer'
                   ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
@@ -907,21 +898,6 @@ function AppComponent() {
               } : undefined}
               headerExtra={id === 'mixer' && ownedByMe ? (
                 <>
-                  {simplified && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!mainHolder) return;
-                        if (isPlaying) { audioEngine.stop(); setIsPlaying(false); } else { audioEngine.play(); setIsPlaying(true); }
-                      }}
-                      disabled={!mainHolder}
-                      aria-label={isPlaying ? 'Main stoppen' : 'Main starten'}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full border border-emerald-400/50 text-emerald-300 text-[10px] font-black tracking-widest cursor-pointer disabled:opacity-50"
-                    >
-                      {isPlaying ? <Square size={11} aria-hidden="true" /> : <Play size={11} aria-hidden="true" />}
-                      {isPlaying ? 'STOP' : 'PLAY'}
-                    </button>
-                  )}
                   {peers.length > 0 && (
                     <select
                       aria-label="mixerMONK übergeben"

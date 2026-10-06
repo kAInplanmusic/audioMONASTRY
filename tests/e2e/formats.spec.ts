@@ -1,15 +1,18 @@
-import { test, expect, type Page } from '@playwright/test';
-import { entryButton, rackRow } from './helpers/studioNav';
-import { resetSession } from './helpers/studioAuth';
+import { test, expect, type BrowserContextOptions } from '@playwright/test';
+import { entryButton } from './helpers/studioNav';
+import { newStudioContext, resetSession } from './helpers/studioAuth';
 
 /**
- * Formate (Betreiber 2026-10-06): Handy quer (Vollbild) · Handy hochkant
- * (vereinfachte Ansicht) · Pad quer (Vollbild) · PC/Laptop quer.
- * Erkennung automatisch aus Gerät, Ausrichtung und Auflösung
- * (src/core/ui/deviceLayout.ts → data-layout an <html>).
+ * Formate (Betreiber 2026-10-06): „Jedes Gerät gleiche Kopie, nur in klein."
+ * Handy und Pad zeichnen die Referenzbreite (1440 px) und der Browser
+ * verkleinert sie; der PC zeigt dieselbe Oberfläche in seiner Fensterbreite.
+ * Handy quer und Pad quer wollen Vollbild. Ignoriert der Browser im Vollbild
+ * die Viewport-Angabe (Chromium tut das, gemessen), verlässt die App das
+ * Vollbild sofort wieder – die gleiche Kopie geht vor – und zeigt den Hinweis
+ * auf die Home-Bildschirm-App (Manifest display: fullscreen).
  *
- * Nur Chromium: Touch-/Mobil-Emulation (isMobile) gibt es in Firefox nicht,
- * und WebKit meldet `pointer: coarse` in der Emulation nicht verlässlich.
+ * Nur Chromium: Mobil-Emulation (isMobile, Viewport-Angabe) gibt es in
+ * Firefox nicht, und WebKit meldet `pointer: coarse` nicht verlässlich.
  */
 test.skip(({ browserName }) => browserName !== 'chromium', 'nur Chromium: Mobil-Emulation');
 
@@ -17,104 +20,64 @@ test.beforeEach(async () => {
   await resetSession();
 });
 
-async function enter(page: Page): Promise<void> {
-  await page.goto('/');
-  await entryButton(page).click();
-  await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
-}
+const FORMATS: { name: string; layout: string; wantsFullscreen: boolean; options: BrowserContextOptions }[] = [
+  { name: 'Handy hochkant', layout: 'phone-portrait', wantsFullscreen: false, options: { viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 } },
+  { name: 'Handy quer', layout: 'phone-landscape', wantsFullscreen: true, options: { viewport: { width: 852, height: 393 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 } },
+  { name: 'Pad quer', layout: 'tablet-landscape', wantsFullscreen: true, options: { viewport: { width: 1180, height: 820 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } },
+  { name: 'PC/Laptop', layout: 'desktop', wantsFullscreen: false, options: { viewport: { width: 1440, height: 900 } } },
+];
 
-async function layoutOf(page: Page) {
-  return page.evaluate(() => ({
-    layout: document.documentElement.dataset.layout ?? '',
-    scrollWidth: document.documentElement.scrollWidth,
-    innerWidth: window.innerWidth,
-    fullscreen: !!document.fullscreenElement,
-  }));
-}
-
-test.describe('Handy hochkant – vereinfachte Ansicht', () => {
-  test.use({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
-
-  test('erkennt das Format, ohne waagerechten Überlauf, Bedienflächen nur auf Wunsch', async ({ page }) => {
-    await enter(page);
-    const l = await layoutOf(page);
-    expect(l.layout).toBe('phone-portrait');
-    expect(l.scrollWidth, 'Seite darf nicht breiter als der Bildschirm sein').toBeLessThanOrEqual(l.innerWidth);
-    expect(l.fullscreen).toBe(false);
-
-    await expect(page.getByTestId('simplified-hint')).toBeVisible();
-    // Signalweg-Leiste und Visualizer fallen weg.
-    await expect(page.getByRole('navigation', { name: 'Signalweg' })).toBeHidden();
-
-    // Der einzige Nutzer hält den Mixer: Pult eingeklappt, PLAY in der Kopfzeile.
-    const mixer = rackRow(page, 'mixer');
-    await expect(mixer).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
-    await expect(page.getByTestId('panel-hint-mixer')).toBeVisible();
-    await expect(page.getByRole('slider', { name: 'Main-Out LEVEL' })).toHaveCount(0);
-    await expect(mixer.getByRole('button', { name: 'Main starten' })).toBeVisible();
-
-    // „Hier öffnen" zeigt das Pult – es scrollt in sich, nicht die Seite.
-    await mixer.getByRole('button', { name: 'mixerMONK Bedienfläche hier öffnen' }).click();
-    await expect(page.getByRole('slider', { name: 'Main-Out LEVEL' })).toBeVisible();
-    const after = await layoutOf(page);
-    expect(after.scrollWidth).toBeLessThanOrEqual(after.innerWidth);
-  });
-});
-
-test.describe('Handy quer – Vollbild', () => {
-  test.use({ viewport: { width: 852, height: 393 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
-
-  test('erkennt das Format, geht beim Betreten ins Vollbild, aiMONK eingeklappt', async ({ page }) => {
-    await enter(page);
-    const l = await layoutOf(page);
-    expect(l.layout).toBe('phone-landscape');
-    expect(l.scrollWidth).toBeLessThanOrEqual(l.innerWidth);
-    expect(l.fullscreen, 'Vollbild nach dem Tippen auf „Studio betreten"').toBe(true);
-    await expect(page.getByRole('button', { name: 'aiMONK öffnen' })).toBeVisible();
-    // Volle Oberfläche: das Pult ist beim Halter offen.
-    await expect(page.getByRole('slider', { name: 'Main-Out LEVEL' })).toBeVisible({ timeout: 15_000 });
-  });
-});
-
-test.describe('Pad quer – Vollbild', () => {
-  test.use({ viewport: { width: 1180, height: 820 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
-
-  test('erkennt das Format und geht beim Betreten ins Vollbild', async ({ page }) => {
-    await enter(page);
-    const l = await layoutOf(page);
-    expect(l.layout).toBe('tablet-landscape');
-    expect(l.scrollWidth).toBeLessThanOrEqual(l.innerWidth);
-    expect(l.fullscreen).toBe(true);
-    await expect(page.getByRole('navigation', { name: 'Signalweg' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Vollbild beenden' })).toBeVisible();
-  });
-});
-
-test.describe('PC/Laptop quer', () => {
-  test.use({ viewport: { width: 1600, height: 900 } });
-
-  test('erkennt das Format, bleibt im Browserfenster und zeigt Format + Auflösung', async ({ page }) => {
-    await enter(page);
-    const l = await layoutOf(page);
-    expect(l.layout).toBe('desktop');
-    expect(l.scrollWidth).toBeLessThanOrEqual(l.innerWidth);
-    expect(l.fullscreen).toBe(false);
-    await expect(page.getByTestId('layout-label')).toHaveText(/PC\/Laptop · 1600×900 @1x/);
-    await expect(page.getByTestId('simplified-hint')).toHaveCount(0);
-    // Am PC kein eigener Vollbild-Knopf (Browser-Vollbild/F11 bleibt).
-    await expect(page.getByRole('button', { name: 'Vollbild' })).toHaveCount(0);
-  });
+test('jedes Gerät zeigt dieselbe Kopie in 1440 px – Handy und Pad nur verkleinert', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const results: Record<string, { innerWidth: number; mixerWidth: number; navRows: string; scrollWidth: number }> = {};
+  for (const f of FORMATS) {
+    const ctx = await newStudioContext(browser, f.options);
+    try {
+      const page = await ctx.newPage();
+      await page.goto('/');
+      await entryButton(page).click();
+      await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.dataset.layout), { message: f.name }).toBe(f.layout);
+      await expect.poll(() => page.evaluate(() => Math.abs(window.innerWidth - 1440) <= 2), { message: `${f.name}: Referenzbreite` }).toBe(true);
+      if (f.wantsFullscreen) {
+        // Chromium ignoriert im Vollbild die Viewport-Angabe → zurück, Hinweis auf die Home-Bildschirm-App.
+        await expect.poll(() => page.evaluate(() => !!document.fullscreenElement), { message: `${f.name}: Vollbild verlassen` }).toBe(false);
+        await expect(page.getByTestId('install-hint')).toBeVisible();
+      } else {
+        await expect(page.getByTestId('install-hint')).toHaveCount(0);
+      }
+      // Volle Oberfläche überall: das Pult ist beim Halter offen, keine Sonderansicht.
+      await expect(page.getByRole('slider', { name: 'Main-Out LEVEL' })).toBeVisible({ timeout: 15_000 });
+      results[f.name] = await page.evaluate(() => ({
+        innerWidth: window.innerWidth,
+        mixerWidth: Math.round(document.getElementById('rack-mixer')?.getBoundingClientRect().width ?? 0),
+        navRows: getComputedStyle(document.querySelector('nav[aria-label="Studio-Navigation"] > div') as Element).gridTemplateRows,
+        scrollWidth: document.documentElement.scrollWidth,
+      }));
+    } finally {
+      await ctx.close();
+    }
+  }
+  const pc = results['PC/Laptop'];
+  for (const f of FORMATS) {
+    const r = results[f.name];
+    expect(r.scrollWidth, `${f.name}: kein waagerechter Überlauf`).toBeLessThanOrEqual(r.innerWidth);
+    expect(Math.abs(r.mixerWidth - pc.mixerWidth), `${f.name}: Mixer gleich breit wie am PC`).toBeLessThanOrEqual(2);
+    expect(r.navRows, `${f.name}: Kopf gleich aufgebaut wie am PC`).toBe(pc.navRows);
+  }
 });
 
 test.describe('Drehen', () => {
   test.use({ viewport: { width: 393, height: 852 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
 
-  test('Handy hochkant → quer wechselt live in die volle Oberfläche', async ({ page }) => {
-    await enter(page);
-    expect((await layoutOf(page)).layout).toBe('phone-portrait');
+  test('Handy hochkant → quer: Format wechselt live, die Kopie bleibt dieselbe', async ({ page }) => {
+    await page.goto('/');
+    await entryButton(page).click();
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.layout)).toBe('phone-portrait');
     await page.setViewportSize({ width: 852, height: 393 });
-    await expect.poll(async () => (await layoutOf(page)).layout).toBe('phone-landscape');
-    await expect(page.getByTestId('simplified-hint')).toHaveCount(0);
-    await expect(page.getByRole('slider', { name: 'Main-Out LEVEL' })).toBeVisible({ timeout: 15_000 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.layout)).toBe('phone-landscape');
+    await expect.poll(() => page.evaluate(() => Math.abs(window.innerWidth - 1440) <= 2)).toBe(true);
+    await expect(page.getByRole('slider', { name: 'Main-Out LEVEL' })).toBeVisible();
   });
 });

@@ -1,15 +1,14 @@
 /**
  * Formate · Geräte- und Auflösungserkennung (Betreiber 2026-10-06)
  * ================================================================
- * Vier Zielformate, automatisch erkannt – keine Auswahl durch den Nutzer:
+ * Betreiber 2026-10-06: „Jedes Gerät gleiche Kopie, nur in klein." Alle Geräte
+ * zeigen DIESELBE Oberfläche. Handy und Pad zeichnen sie in der Referenzbreite
+ * (DESIGN_WIDTH) und der Browser verkleinert sie auf den Bildschirm – über die
+ * Viewport-Angabe, Zoomen mit zwei Fingern bleibt möglich. Erkannt wird nur noch:
  *
- *   phone-landscape   Handy quer      → volle Oberfläche, Vollbild
- *   phone-portrait    Handy hochkant  → vereinfachte Ansicht
- *   tablet-landscape  Pad quer        → volle Oberfläche, Vollbild
- *   desktop           PC/Laptop quer  → volle Oberfläche, Browserfenster
- *
- * Dazu `tablet-portrait` (Pad hochkant, nicht gefordert): volle Oberfläche
- * ohne Vollbild, damit ein gedrehtes Pad nicht in die Handy-Ansicht fällt.
+ *   phone-landscape / tablet-landscape → Vollbild beim ersten Tippen
+ *   phone-portrait / tablet-portrait   → gleiche Kopie, ohne Vollbild
+ *   desktop                             → Browserfenster, normale Breite
  *
  * Rein (kein Zugriff auf window/document) – die Browser-Signale liefert
  * `src/hooks/useDeviceLayout.ts`. Dadurch ist die Einordnung mit echten
@@ -44,18 +43,21 @@ export interface DeviceLayout {
   orientation: Orientation;
   /** Format will Vollbild (Handy quer, Pad quer). */
   fullscreenPreferred: boolean;
-  /** Vereinfachte Ansicht (Handy hochkant, schmale Fenster). */
-  simplified: boolean;
   standalone: boolean;
-  resolution: { cssWidth: number; cssHeight: number; dpr: number; pixelWidth: number; pixelHeight: number };
+  /**
+   * cssWidth/cssHeight: gezeichnete Fläche (bei Handy/Pad die Referenzbreite);
+   * screenWidth/screenHeight: echter Bildschirm in CSS-Pixeln, zur Ausrichtung
+   * gedreht; pixelWidth/pixelHeight: echter Bildschirm in Gerätepixeln.
+   */
+  resolution: { cssWidth: number; cssHeight: number; screenWidth: number; screenHeight: number; dpr: number; pixelWidth: number; pixelHeight: number };
   /** Kurztext für Anzeige/Diagnose, z. B. „Handy quer · 852×393 @3x". */
   label: string;
 }
 
 /** Kürzere Bildschirmseite, ab der ein Touch-Gerät als Pad gilt (CSS-Pixel). */
 export const TABLET_MIN_SHORT_SIDE = 600;
-/** Unter dieser Breite wird jedes Fenster im Hochformat vereinfacht dargestellt. */
-export const SIMPLIFIED_MAX_WIDTH = 600;
+/** Referenzbreite der Oberfläche: Handy und Pad zeigen genau diese Kopie, verkleinert. */
+export const DESIGN_WIDTH = 1440;
 
 const LABELS: Record<LayoutKind, string> = {
   'phone-landscape': 'Handy quer',
@@ -84,31 +86,44 @@ export function classifyDevice(s: DeviceSignals): DeviceLayout {
 
   const device: DeviceKind = !isTouchDevice(s) ? 'desktop' : shortSide < TABLET_MIN_SHORT_SIDE ? 'phone' : 'tablet';
 
-  let layout: LayoutKind =
+  const layout: LayoutKind =
     device === 'desktop' ? 'desktop' : (`${device}-${orientation}` as LayoutKind);
-  // Schmale Fenster im Hochformat (Pad im Split View, kleines Desktop-Fenster)
-  // bekommen dieselbe vereinfachte Ansicht wie das Handy hochkant.
-  if (orientation === 'portrait' && vw < SIMPLIFIED_MAX_WIDTH) layout = 'phone-portrait';
 
   const fullscreenPreferred = layout === 'phone-landscape' || layout === 'tablet-landscape';
-  const simplified = layout === 'phone-portrait';
+  // iOS dreht screen.width/height nicht mit – an die Ausrichtung anpassen.
+  const screenLong = Math.max(sw, sh);
+  const screenShort = Math.min(sw, sh);
+  const screenWidth = orientation === 'landscape' ? screenLong : screenShort;
+  const screenHeight = orientation === 'landscape' ? screenShort : screenLong;
   const resolution = {
     cssWidth: Math.round(vw),
     cssHeight: Math.round(vh),
+    screenWidth: Math.round(screenWidth),
+    screenHeight: Math.round(screenHeight),
     dpr: Math.round(dpr * 100) / 100,
-    pixelWidth: Math.round(vw * dpr),
-    pixelHeight: Math.round(vh * dpr),
+    pixelWidth: Math.round(screenWidth * dpr),
+    pixelHeight: Math.round(screenHeight * dpr),
   };
   return {
     layout,
     device,
     orientation,
     fullscreenPreferred,
-    simplified,
     standalone: !!s.standalone,
     resolution,
-    label: `${LABELS[layout]} · ${resolution.cssWidth}×${resolution.cssHeight} @${resolution.dpr}x`,
+    label: `${LABELS[layout]} · ${resolution.screenWidth}×${resolution.screenHeight} @${resolution.dpr}x`,
   };
+}
+
+/**
+ * Viewport-Angabe je Gerät: Handy und Pad bekommen die Referenzbreite (der
+ * Browser verkleinert die gleiche Kopie auf den Bildschirm), der PC seine
+ * eigene Fensterbreite.
+ */
+export function viewportContentFor(device: DeviceKind): string {
+  return device === 'desktop'
+    ? 'width=device-width, initial-scale=1.0, viewport-fit=cover'
+    : `width=${DESIGN_WIDTH}, viewport-fit=cover`;
 }
 
 /** Stabiler Schlüssel: gleiche Einordnung + Auflösung = gleicher Schlüssel (für Snapshots). */

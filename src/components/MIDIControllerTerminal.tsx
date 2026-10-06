@@ -200,7 +200,7 @@ export const MIDIControllerTerminal = React.memo(function MIDIControllerTerminal
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden p-6 short-landscape:p-3 gap-6 short-landscape:gap-3">
+      <div className="flex-1 flex overflow-hidden p-6 gap-6">
 
         {/* Left: Live-Hardware + Profile */}
         <div className="w-2/5 flex flex-col gap-4 overflow-y-auto pr-1">

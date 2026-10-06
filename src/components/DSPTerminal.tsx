@@ -297,7 +297,7 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
 
         {/* Right Col: Visualization & Settings */}
         <div className="col-span-8 flex flex-col gap-6">
-          <div className="h-48 short-landscape:h-28 bg-black rounded-xl border-4 border-neutral-800 shadow-inner p-2 relative overflow-hidden">
+          <div className="h-48 bg-black rounded-xl border-4 border-neutral-800 shadow-inner p-2 relative overflow-hidden">
              <canvas ref={canvasRef} width={800} height={200} className="w-full h-full opacity-80" />
              <div className="absolute top-2 left-3 bg-black/50 px-2 py-1 rounded text-[10px] font-mono text-teal-500 border border-teal-500/30">
                REALTIME PHASE MONITOR

@@ -4796,12 +4796,12 @@
     },
     {
       "id": "UI2-P1-007",
-      "title": "Formate: Handy quer, Handy hochkant (vereinfacht), Pad quer, PC/Laptop – automatisch erkannt",
+      "title": "Formate: jedes Gerät gleiche Kopie, nur verkleinert (Handy/Pad 1440 px)",
       "priority": "P1",
       "status": "DONE",
       "area": "UI",
       "source": "Betreiber 2026-10-06",
-      "note": "Gerät und Auflösung automatisch erkennen; Handy breit Vollbild, Handy hochkant vereinfachte Ansicht, Pad quer Vollbild, PC/Laptop Querformat.\n\nAkzeptanz: Format wird ohne Nutzerauswahl erkannt; kein waagerechter Überlauf; Vollbild in Handy quer/Pad quer; Drehen wechselt live.\n\nDONE 2026-10-06: src/core/ui/deviceLayout.ts (reine Einordnung aus Zeigerart, Bildschirm-Kurzseite, Ausrichtung, Pixeldichte, Home-Bildschirm-Modus), src/hooks/useDeviceLayout.ts (data-layout an <html>, --app-height, Vollbild beim ersten Tippen, Hinweis Zum Home-Bildschirm für iPhone-Safari). Layout je Format in App.tsx/RackRow/AiMonkDock/index.css (Varianten phone/pocket/simple/pad). Orientierungs-Lock entfernt. Offen: Test auf echten Geräten (iPhone, iPad, Android) durch den Betreiber.",
+      "note": "Gerät und Auflösung automatisch erkennen; Handy breit Vollbild, Handy hochkant vereinfachte Ansicht, Pad quer Vollbild, PC/Laptop Querformat.\n\nAkzeptanz: Format wird ohne Nutzerauswahl erkannt; kein waagerechter Überlauf; Vollbild in Handy quer/Pad quer; Drehen wechselt live.\n\nDONE 2026-10-06: src/core/ui/deviceLayout.ts (reine Einordnung aus Zeigerart, Bildschirm-Kurzseite, Ausrichtung, Pixeldichte, Home-Bildschirm-Modus), src/hooks/useDeviceLayout.ts (data-layout an <html>, --app-height, Vollbild beim ersten Tippen, Hinweis Zum Home-Bildschirm für iPhone-Safari). Layout je Format in App.tsx/RackRow/AiMonkDock/index.css (Varianten phone/pocket/simple/pad). Orientierungs-Lock entfernt. Offen: Test auf echten Geräten (iPhone, iPad, Android) durch den Betreiber.\n\nGEÄNDERT 2026-10-06 (Betreiber: „Jedes Gerät gleiche Kopie, nur in klein“): vereinfachte Handy-Ansicht und alle Geräte-Sonderlayouts entfernt (phone/pocket/simple/pad, short-landscape, touch). Handy und Pad zeichnen 1440 px und werden verkleinert (Viewport-Angabe). Vollbild nur, wenn der Browser dabei die Viewport-Angabe hält – sonst zurück und Hinweis auf die Home-Bildschirm-App (Manifest display: fullscreen).",
       "verification": "tests/deviceLayout.test.ts; tests/e2e/formats.spec.ts"
     },
     {

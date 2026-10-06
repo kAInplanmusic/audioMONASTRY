@@ -544,7 +544,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
         </div>
 
         {/* Inspector */}
-        <div className="w-64 short-landscape:w-52 shrink-0 border-l border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-3 overflow-y-auto">
+        <div className="w-64 shrink-0 border-l border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-3 overflow-y-auto">
           <h3 className="text-[10px] font-mono tracking-[0.25em] text-lime-500 uppercase">Inspector</h3>
           {selected ? (
             <>

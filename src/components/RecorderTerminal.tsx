@@ -227,14 +227,14 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
               {!isRecording ? (
                 <button type="button"
                   onClick={startRecording}
-                  className="w-20 h-20 short-landscape:w-14 short-landscape:h-14 rounded-full bg-[#222] border-4 border-[#111] flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] hover:border-red-900 transition-colors group"
+                  className="w-20 h-20 rounded-full bg-[#222] border-4 border-[#111] flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] hover:border-red-900 transition-colors group"
                 >
                   <Circle className="w-8 h-8 text-red-500 fill-current group-hover:drop-shadow-[0_0_10px_rgba(239,68,68,1)]" />
                 </button>
               ) : (
                 <button type="button"
                   onClick={handleStop}
-                  className="w-20 h-20 short-landscape:w-14 short-landscape:h-14 rounded-full bg-[#222] border-4 border-red-900 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
+                  className="w-20 h-20 rounded-full bg-[#222] border-4 border-red-900 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
                 >
                   <Square className="w-8 h-8 text-red-500 fill-current" />
                 </button>

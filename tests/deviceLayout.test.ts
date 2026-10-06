@@ -5,6 +5,8 @@ import {
   isTouchDevice,
   shouldRequestFullscreen,
   shouldShowInstallHint,
+  viewportContentFor,
+  DESIGN_WIDTH,
   type DeviceSignals,
 } from '../src/core/ui/deviceLayout';
 
@@ -59,10 +61,8 @@ describe('classifyDevice – Sonderfälle', () => {
     expect(classifyDevice(desk(1920, 1080, 1, { maxTouchPoints: 10 })).layout).toBe('desktop');
   });
 
-  it('schmales Fenster im Hochformat bekommt die vereinfachte Ansicht', () => {
-    expect(classifyDevice(desk(480, 900)).layout).toBe('phone-portrait');
-    // Pad im Split View hochkant
-    expect(classifyDevice(touch(507, 1180, 2, { screenWidth: 820, screenHeight: 1180, platform: 'iPad' })).layout).toBe('phone-portrait');
+  it('keine Sonderansicht für schmale Fenster: ein schmales PC-Fenster bleibt PC', () => {
+    expect(classifyDevice(desk(480, 900)).layout).toBe('desktop');
   });
 
   it('Drehen ändert nur die Ausrichtung, nicht das Gerät', () => {
@@ -87,23 +87,34 @@ describe('classifyDevice – Sonderfälle', () => {
 describe('Auflösung und Vollbild', () => {
   it('meldet CSS- und Gerätepixel', () => {
     const l = classifyDevice(touch(852, 393, 3));
-    expect(l.resolution).toEqual({ cssWidth: 852, cssHeight: 393, dpr: 3, pixelWidth: 2556, pixelHeight: 1179 });
+    expect(l.resolution).toEqual({ cssWidth: 852, cssHeight: 393, screenWidth: 852, screenHeight: 393, dpr: 3, pixelWidth: 2556, pixelHeight: 1179 });
     expect(l.label).toBe('Handy quer · 852×393 @3x');
   });
 
-  it('Vollbild nur für Handy quer und Pad quer, vereinfacht nur für Handy hochkant', () => {
+  it('Vollbild nur für Handy quer und Pad quer', () => {
     const map = Object.fromEntries(
       [touch(852, 393, 3), touch(393, 852, 3), touch(1180, 820, 2), touch(820, 1180, 2), desk(1440, 900)]
         .map(classifyDevice)
-        .map((l) => [l.layout, [l.fullscreenPreferred, l.simplified]]),
+        .map((l) => [l.layout, l.fullscreenPreferred]),
     );
     expect(map).toEqual({
-      'phone-landscape': [true, false],
-      'phone-portrait': [false, true],
-      'tablet-landscape': [true, false],
-      'tablet-portrait': [false, false],
-      desktop: [false, false],
+      'phone-landscape': true,
+      'phone-portrait': false,
+      'tablet-landscape': true,
+      'tablet-portrait': false,
+      desktop: false,
     });
+  });
+
+  it('gleiche Kopie, nur in klein: Handy und Pad zeichnen die Referenzbreite', () => {
+    expect(DESIGN_WIDTH).toBe(1440);
+    expect(viewportContentFor('phone')).toBe('width=1440, viewport-fit=cover');
+    expect(viewportContentFor('tablet')).toBe('width=1440, viewport-fit=cover');
+    expect(viewportContentFor('desktop')).toBe('width=device-width, initial-scale=1.0, viewport-fit=cover');
+    // Mit der Referenzbreite als Viewport bleibt das Gerät ein Handy (Bildschirm entscheidet).
+    const scaled = classifyDevice(touch(1440, 3121, 0.82, { screenWidth: 393, screenHeight: 852 }));
+    expect(scaled.device).toBe('phone');
+    expect(scaled.layout).toBe('phone-portrait');
   });
 
   it('fordert Vollbild einmal an – nicht als Home-Bildschirm-App, nicht ohne Browser-Unterstützung', () => {

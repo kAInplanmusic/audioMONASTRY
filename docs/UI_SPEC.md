@@ -17,23 +17,23 @@ Quellen → Mixer → Nachbearbeitung → Recorder gilt **nur für die Verkabelu
 die übrigen Plugins folgen in der Kopfreihenfolge. Der Mixer zeigt den Signalweg
 als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
 
-## Formate (Betreiber 2026-10-06)
+## Formate (Betreiber 2026-10-06): gleiche Kopie, nur in klein
 
-Automatisch erkannt aus Gerät, Ausrichtung und Auflösung – keine Auswahl durch den Nutzer
-(`src/core/ui/deviceLayout.ts`, Browser-Anbindung `src/hooks/useDeviceLayout.ts`, `data-layout` an `<html>`).
+„Jedes Gerät gleiche Kopie, nur in klein." Es gibt **keine** eigenen Handy- oder Pad-Ansichten.
 
-| Format | Erkennung | Darstellung |
-|---|---|---|
-| **Handy quer** | Touch, kürzere Bildschirmseite < 600 px, quer | Volle Oberfläche im **Vollbild**: Kopf 3 rem mit Icons in einer wischbaren Reihe, Masterplayer als schmale Zeile (nicht fixiert, ohne Visualizer), keine Signalweg-Leiste, aiMONK als kleiner Knopf |
-| **Handy hochkant** | wie oben, hochkant – oder jedes Fenster < 600 px im Hochformat | **Vereinfachte Ansicht**: Modus, SYNC, Halter je Plugin; Bedienflächen nur über „Hier öffnen“ (scrollen in sich, nie die Seite); Mixer-Halter hat PLAY/STOP in der Kopfzeile; Hinweis „Handy quer drehen“ |
-| **Pad quer** | Touch, kürzere Seite ≥ 600 px (iPad mit Trackpad: Mac + Touchpunkte), quer | Volle Oberfläche im **Vollbild**, flacher Visualizer, Racks auf voller Breite |
-| **PC/Laptop quer** | Maus/Trackpad als Hauptzeiger | Volle Oberfläche im Browserfenster; Format und Auflösung im Kopf (ab 2xl) |
-
-- Pad hochkant (nicht gefordert) zeigt die volle Oberfläche ohne Vollbild.
-- Vollbild kann der Browser nur nach einer Geste geben: Es wird beim ersten Tippen angefordert (schon „Studio betreten“ zählt), bei jedem Wechsel in Handy quer/Pad quer erneut – wer es verlässt, wird nicht bedrängt. Knopf „Vollbild“ im Kopf auf Handy/Pad.
-- iPhone-Safari erlaubt Seiten kein Vollbild: Hinweis „Teilen → Zum Home-Bildschirm“ (schließbar). Als Home-Bildschirm-App läuft das Studio ohne Browserleisten.
-- Kein Orientierungs-Lock mehr – Drehen wechselt live das Format.
-- Prüfung: `tests/deviceLayout.test.ts` (echte Geräteauflösungen), `tests/e2e/formats.spec.ts` (alle vier Formate, kein waagerechter Überlauf, Vollbild, Drehen).
+- Handy und Pad zeichnen die Oberfläche in der **Referenzbreite 1440 px**; der Browser verkleinert sie auf
+  den Bildschirm (Viewport-Angabe `width=1440`). Zoomen mit zwei Fingern bleibt möglich.
+- Der PC/Laptop zeigt dieselbe Oberfläche in seiner Fensterbreite.
+- Keine Sonderregeln mehr nach Höhe (früher „short-landscape“) oder Zeigerart (früher größere Touch-Flächen) –
+  sonst wäre die Kopie nicht dieselbe.
+- Erkannt wird das Gerät weiter automatisch (`src/core/ui/deviceLayout.ts`): für die Ausgänge-Übersicht
+  (echte Bildschirmauflösung) und fürs Vollbild.
+- **Vollbild** (Handy quer, Pad quer): beim ersten Tippen angefordert. Ignoriert der Browser im Vollbild die
+  Viewport-Angabe (Chromium tut das, gemessen), verlässt die App das Vollbild sofort wieder – die gleiche
+  Kopie geht vor – und weist auf die **Home-Bildschirm-App** hin (Manifest `display: fullscreen`), die
+  ohne Browserleisten läuft.
+- Prüfung: `tests/deviceLayout.test.ts`, `tests/e2e/formats.spec.ts` (alle vier Formate zeichnen 1440 px,
+  Mixer und Kopf gleich wie am PC, kein waagerechter Überlauf, Drehen).
 
 ## Session-Ausgänge (Betreiber 2026-10-06)
 

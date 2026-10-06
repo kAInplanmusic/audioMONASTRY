@@ -77,7 +77,7 @@ export const BeatVisualizer: React.FC<BeatVisualizerProps> = React.memo(({ isPla
   }, [isPlaying]);
 
   return (
-    <div id="visualizer-container" className="w-full h-28 short-landscape:h-16 bg-[#09090b] rounded-xl overflow-hidden border border-neutral-800/80 relative">
+    <div id="visualizer-container" className="w-full h-28 bg-[#09090b] rounded-xl overflow-hidden border border-neutral-800/80 relative">
       <canvas
         id="audio-visual-canvas"
         ref={canvasRef}

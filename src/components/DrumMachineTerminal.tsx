@@ -251,7 +251,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
 
   return (
     <SampleModuleWrapper onSelect={addSample}>
-      <div className={`drum-machine-ui p-4 short-landscape:p-2 rounded-xl border-2 border-black/80 bg-gradient-to-b from-[#2a2a2e] via-[#202024] to-[#17171a] text-white shadow-[0_15px_35px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] ${lockedByOther ? 'opacity-50 grayscale' : ''}`}>
+      <div className={`drum-machine-ui p-4 rounded-xl border-2 border-black/80 bg-gradient-to-b from-[#2a2a2e] via-[#202024] to-[#17171a] text-white shadow-[0_15px_35px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] ${lockedByOther ? 'opacity-50 grayscale' : ''}`}>
         <MoaAssistant pluginId="drum" placeholder="MOA: z. B. 'Kit auf 909, Pattern random'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
         {/* Kopfzeile */}
         <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
@@ -427,7 +427,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
                 <DropTarget
                   key={i}
                   onDrop={(sample) => handleSampleDrop(sample, i)}
-                  className={`h-9 short-landscape:h-7 rounded-[3px] border flex items-center justify-center px-1 text-[7px] font-mono transition-all cursor-pointer ${
+                  className={`h-9 rounded-[3px] border flex items-center justify-center px-1 text-[7px] font-mono transition-all cursor-pointer ${
                     isOn
                       ? 'bg-black border-neutral-600 text-neutral-200'
                       : 'bg-[#0d0d0f] border-neutral-800 text-neutral-600 hover:border-emerald-600/60'
