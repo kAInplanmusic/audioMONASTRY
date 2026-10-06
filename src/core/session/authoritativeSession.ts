@@ -215,6 +215,28 @@ export class AuthoritativeSession {
   }
 
 
+  /**
+   * UI2-P0-001: Sorgt dafuer, dass `pluginId` (mixerMONK) immer genau einen Halter
+   * hat. `memberIdsInJoinOrder` ist die Mitgliederliste in Beitrittsreihenfolge
+   * (aeltester zuerst). Hat das Plugin keinen Halter oder ist der Halter nicht
+   * mehr im Raum, bekommt es das am laengsten anwesende Mitglied.
+   * Liefert den neuen Halter oder `null`, wenn sich nichts geaendert hat.
+   */
+  ensureHolder(
+    pluginId: string,
+    memberIdsInJoinOrder: readonly string[],
+    now = Date.now(),
+    ttlMs = this.lockTtlMs,
+  ): string | null {
+    const members = memberIdsInJoinOrder.map((m) => (typeof m === 'string' ? m.trim() : '')).filter(Boolean);
+    const owner = this.locks.ownerOf(pluginId, now);
+    if (owner && members.includes(owner)) return null;
+    if (owner) this.locks.release(pluginId, owner, now);
+    const next = members[0];
+    if (!next) return null;
+    return this.locks.acquire(pluginId, next, ttlMs, now) ? next : null;
+  }
+
   lockOwner(pluginId: string, now = Date.now()): string | null {
     return this.locks.ownerOf(pluginId, now);
   }

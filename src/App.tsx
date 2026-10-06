@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
@@ -7,6 +7,9 @@ import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
 import { HeaderPluginIcon, headerIconStatus } from './components/HeaderPluginIcon';
+import { SignalChainBar } from './components/SignalChainBar';
+import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
+import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { BeatVisualizer } from './components/BeatVisualizer';
 import { EngineStatusBadge } from './components/EngineStatusBadge';
 import { TECHNO_PRESETS } from './presets';
@@ -147,18 +150,49 @@ function AppComponent() {
     }
   }, [moduleStates, bpm, isPlaying, sessionAutosave]);
 
-  // Header-Auswahl: aktiviert das Modul (Touch/Click) und scrollt zum Rack.
+  // UI2-P0-002: Hinweiszeile fuer abgelehnte Moduswechsel (fremdes Plugin, Mixer).
+  const [modeNotice, setModeNotice] = useState('');
+  useEffect(() => {
+    if (!modeNotice) return;
+    const t = window.setTimeout(() => setModeNotice(''), 3800);
+    return () => window.clearTimeout(t);
+  }, [modeNotice]);
+
+  /**
+   * UI2-P0-002: Modus-Button rechts am Plugin, OFF → STBY → ON → OFF.
+   * OFF = frei (kein Halter) · STBY = Lock gehalten, Modul aus (Bypass) ·
+   * ON = Lock gehalten, Modul aktiv (PRO, Bedienflaeche offen).
+   * Fremde Plugins: kein Anfragen, kein Uebernehmen. mixerMONK: nur Uebergabe.
+   */
+  const cycleMode = useCallback((id: string) => {
+    const me = webRTCManager.userId;
+    const lock = pluginLocks[id];
+    const owner = pluginOwnerOf(lock);
+    const mode = pluginModeOf(id, moduleStates[id], lock);
+    const step = nextModeStep(id, mode, owner, me);
+    if (step.kind === 'denied') { setModeNotice(step.reason); return; }
+    if (step.kind === 'acquire') {
+      if (!requestLock(id, me)) { setModeNotice('Gerade von jemand anderem geholt.'); return; }
+      if ((moduleStates[id] || 'OFF') !== 'OFF') setModuleState(id, 'OFF');
+      return;
+    }
+    if (step.kind === 'activate') { setModuleState(id, 'PRO'); return; }
+    setModuleState(id, 'OFF');
+    releaseLock(id, me);
+  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState]);
+
+  // UI2-P0-003: SYNC-Zustand (Standard an) fuer spielende Plugins.
+  useSyncExternalStore(subscribePluginSync, pluginSyncVersion, pluginSyncVersion);
+
+  // Header-Auswahl: springt zum Modul (Spec: „Tippen springt zum Modul“) und
+  // meldet die Ansicht an die Session. Der Modus aendert sich nur ueber den
+  // Modus-Button am Plugin.
   const handleNavSelect = useCallback((navId: string) => {
     setActiveNav(navId);
     // COLLAB-P1-004: aktive Navigation an die Session melden (Server-Relay).
     webRTCManager.sendSessionNav(navId);
-    const current = moduleStates[navId] || 'OFF';
-    if (current === 'OFF') {
-      releaseLock(navId, webRTCManager.userId);
-      setModuleState(navId, 'AUTO_AI');
-    }
     document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [moduleStates, releaseLock, setModuleState]);
+  }, []);
 
   // COLLAB-P1-004: Navigation der anderen User empfangen und anzeigen.
   useEffect(() => {
@@ -190,7 +224,8 @@ function AppComponent() {
   // MAIN-Berechtigung (revidiert): NUR der Halter (Lock-Owner) des mixerMONK-
   // Plugins ist der DJ und darf den Main-Sound steuern (Play/Stop/BPM/Fades).
   // Kein Admin, kein Superuser, kein Fallback.
-  const mainHolder = (moduleStates['mixer'] || 'OFF') === 'PRO'
+  // UI2-P0-001: mixerMONK ist immer ON; Halter = Lock-Owner (vom Server vergeben).
+  const mainHolder = (moduleStates['mixer'] || 'OFF') !== 'OFF'
     && Boolean(pluginLocks['mixer']?.active)
     && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
   useEffect(() => {
@@ -309,10 +344,17 @@ function AppComponent() {
           const plugins = getPluginRegistry();
           const target = plugins[n];
           if (target) {
-            const current = moduleStates[target.id] || 'OFF';
-            releaseLock(target.id, webRTCManager.userId);
-            const turningOn = current === 'OFF';
-            setModuleState(target.id, turningOn ? 'AUTO_AI' : 'OFF');
+            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → STBY → ON → OFF).
+            const lock = pluginLocks[target.id];
+            const step = nextModeStep(
+              target.id,
+              pluginModeOf(target.id, moduleStates[target.id], lock),
+              pluginOwnerOf(lock),
+              webRTCManager.userId,
+            );
+            cycleMode(target.id);
+            if (step.kind === 'denied') return;
+            const turningOn = step.kind !== 'release';
             // Konsistenz zum Nav-Icon (handleNavSelect): mit dem Modul auch die
             // ANSICHT markieren bzw. loesen und an die Session melden. Ohne das
             // bleibt nach dem Hotkey ein unmarkiertes Nav-Icon stehen (im Test
@@ -341,7 +383,7 @@ function AppComponent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPlaying, mainHolder, moduleStates, releaseLock, setModuleState]);
+  }, [isPlaying, mainHolder, moduleStates, pluginLocks, cycleMode]);
 
   // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
   useEffect(() => {
@@ -387,42 +429,6 @@ function AppComponent() {
     const interval = setInterval(sendLatency, 30_000);
     return () => clearInterval(interval);
   }, []);
-
-  // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
-  // P0-1: mixer ist kein Sonderfall mehr – jedes Plugin (auch mixerMONK) ist
-  // OFF-fähig und wird erst bei Aktivierung in die Signalkette eingespeist.
-  const togglePlugin = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
-    releaseLock(id, webRTCManager.userId);
-    setModuleState(id, nextState);
-  }, [moduleStates, releaseLock, setModuleState]);
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-  const promotePlugin = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'OFF') return;
-    const lockGranted = requestLock(id, webRTCManager.userId);
-    if (!lockGranted) return;
-    setModuleState(id, 'PRO');
-  }, [moduleStates, requestLock, setModuleState]);
-
-  // Rack-Promote (⋮): OFF → AUTO_AI → PRO, PRO → OFF (freigeben).
-  // ARCH-#6: PRO-Transition nur bei bestätigtem Lock – der Server emittiert
-  // sonst rbac-denied/lock-denied und der Client hätte lokal PRO, während
-  // die Session etwas anderes sieht (Desync).
-  const rackPromote = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'PRO') {
-      releaseLock(id, webRTCManager.userId);
-      setModuleState(id, 'OFF');
-      return;
-    }
-    if (currentState === 'OFF') setModuleState(id, 'AUTO_AI');
-    if (requestLock(id, webRTCManager.userId)) {
-      setModuleState(id, 'PRO');
-    }
-  }, [moduleStates, requestLock, releaseLock, setModuleState]);
 
   // P1-4: Session-Zwischenspeicher – Snapshot aus aktuellem Zustand bauen bzw. anwenden.
   const handleSaveScratchSnapshot = useCallback((name: string) => {
@@ -819,33 +825,65 @@ function AppComponent() {
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
 
-      {/* Rack-Liste: alle Module als Streifen */}
+      {/* Rack-Liste: alle Module als Streifen. UI2-P2-002: Signalweg-Leiste darueber. */}
       <div className="flex flex-col gap-3 max-w-screen-xl mx-auto">
-        {RACK_ORDER.map(id => {
+        <SignalChainBar moduleStates={moduleStates} pluginLocks={pluginLocks} />
+        {modeNotice && (
+          <p role="status" aria-live="polite" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{modeNotice}</p>
+        )}
+        {RACK_ORDER.map((id, index) => {
           const plugin = getPluginRegistry().find(p => p.id === id);
           if (!plugin) return null;
           if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
-          const state = moduleStates[id] || 'OFF';
-          const lockStatus = pluginLocks[id];
-          const lockedByOther = !!lockStatus?.active && lockStatus.lockedBy !== webRTCManager.userId;
+          const me = webRTCManager.userId;
+          const lock = pluginLocks[id];
+          const owner = pluginOwnerOf(lock);
+          const mode = pluginModeOf(id, moduleStates[id], lock);
+          const ownedByMe = owner === me;
+          const lockedByOther = !!owner && owner !== me;
+          const ownerLabel = owner ? owner.replace(/^user-/, 'u') : null;
+          const panelOpen = pluginPanelOpen(id, mode, owner, me);
+          const peers = sessionPeers.filter((m) => m.userId !== me);
           return (
             <RackRow
               key={id}
               id={id}
               name={plugin.name}
               short={plugin.short}
+              number={String(index + 1).padStart(2, '0')}
               icon={plugin.icon}
-              state={state}
+              mode={mode}
+              ownerLabel={ownerLabel}
+              ownedByMe={ownedByMe}
               lockedByOther={lockedByOther}
-              onToggle={() => togglePlugin(id)}
-              // Betreiberregel 2026-09-17: mixerMONK entscheidet den Main-Out und
-              // laesst sich nicht schliessen (OFF stoppt Main und Clock).
-              toggleLockedReason={
+              panelOpen={panelOpen}
+              summary={pluginSummary(id, mode, owner, me, ownerLabel ?? '')}
+              running={mode === 'ON' && isPlaying}
+              onCycle={() => cycleMode(id)}
+              keepMounted={id === 'mixer'}
+              cycleLockedReason={
                 id === 'mixer'
-                  ? 'mixerMONK entscheidet den Main-Out und lässt sich nicht schließen'
-                  : undefined
+                  ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
+                  : lockedByOther
+                    ? `Belegt von ${ownerLabel}. Anfragen oder Übernehmen gibt es nicht.`
+                    : undefined
               }
-              onPromote={() => rackPromote(id)}
+              sync={isSyncPlugin(id) ? {
+                on: isPluginSynced(id),
+                disabled: !ownedByMe,
+                onToggle: () => { if (ownedByMe) setPluginSync(id, !isPluginSynced(id)); },
+              } : undefined}
+              headerExtra={id === 'mixer' && ownedByMe && peers.length > 0 ? (
+                <select
+                  aria-label="mixerMONK übergeben"
+                  className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1.5 py-0.5"
+                  value=""
+                  onChange={(e) => { if (e.target.value) transferLock('mixer', e.target.value); }}
+                >
+                  <option value="">Übergeben an …</option>
+                  {peers.map((m) => <option key={m.socketId} value={m.userId}>{m.userId.replace(/^user-/, 'u')}</option>)}
+                </select>
+              ) : undefined}
               onCopy={() => {
                 try {
                   // P1-4: Plugin-State inkl. aktuellem Session-Snapshot in die
@@ -855,26 +893,22 @@ function AppComponent() {
                     pluginId: id,
                     name: plugin.name,
                     state: moduleStates[id] || 'OFF',
+                    mode,
                     snapshot,
                     ts: Date.now(),
                   }, null, 2));
                 } catch { /* Clipboard nicht verfügbar */ }
               }}
               onLoadScratch={(entry) => {
-                // Scratchpad-Eintrag auf dieses Modul gezogen: Modul aktivieren;
-                // passt der Eintrag zum Modul, wird dessen State übernommen.
-                // ARCH-#6: PRO nur bei bestätigtem Lock, sonst AUTO_AI-Fallback.
-                const apply = (entry.id === id && (entry.state === 'AUTO_AI' || entry.state === 'PRO'))
-                  ? entry.state
-                  : 'AUTO_AI';
-                if (apply === 'PRO' && !requestLock(id, webRTCManager.userId)) {
-                  setModuleState(id, 'AUTO_AI' as ModuleState);
-                  return;
+                // Scratchpad-Eintrag auf ein eigenes Modul gezogen: passt der
+                // Eintrag zum Modul, wird es aktiviert (ON). Nur der Halter darf das.
+                if (!ownedByMe || id === 'mixer') return;
+                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI')) {
+                  setModuleState(id, 'PRO' as ModuleState);
                 }
-                setModuleState(id, apply as ModuleState);
               }}
             >
-              {state !== 'OFF' && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
+              {(panelOpen || id === 'mixer') && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );
         })}
