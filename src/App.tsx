@@ -846,6 +846,20 @@ function AppComponent() {
                   : undefined
               }
               onPromote={() => rackPromote(id)}
+              // UI2-P0-003: SYNC-Zustand kommt aus dem echten Adapter (Registry),
+              // nicht aus lokalem UI-State — sonst zeigt die Anzeige etwas an,
+              // das den Audio-Start nie erreicht.
+              syncEnabled={plugin.adapter?.isSyncEnabled?.() ?? true}
+              onToggleSync={
+                plugin.adapter
+                  ? () => {
+                      const next = !plugin.adapter.isSyncEnabled();
+                      plugin.adapter.setSyncEnabled(next);
+                      // Neu rendern, damit die Anzeige dem Adapter folgt.
+                      setModuleState(id, (moduleStates[id] || 'OFF') as ModuleState);
+                    }
+                  : undefined
+              }
               onCopy={() => {
                 try {
                   // P1-4: Plugin-State inkl. aktuellem Session-Snapshot in die
