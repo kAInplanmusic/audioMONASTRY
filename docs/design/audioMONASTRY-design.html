@@ -239,6 +239,11 @@ button:disabled{cursor:not-allowed}
 .pp .play.on{background:var(--ok);border-color:var(--ok);color:#04140b;animation:glowg 1.6s ease-in-out infinite}
 .pp .stop.on{border-color:var(--hot);color:var(--hot)}
 .pp button:disabled{opacity:.35}
+.tg.sync{border-radius:999px;padding:3px 10px}
+.tg.sync.on{color:#06101c;background:var(--c);border-color:var(--c)}
+.syncb{font:700 9px var(--f-disp);letter-spacing:.06em;color:var(--dm2);border:1px solid #2a3446;border-radius:999px;padding:1px 8px}
+.syncb.on{color:var(--ok);border-color:rgba(61,220,132,.6)}
+.pp .play.wait{background:var(--warn);border-color:var(--warn);color:#1b1200;animation:none}
 .cuebtn{width:100%;height:26px;border-radius:5px;background:#0a0f18;border:1px solid #39465c;font:700 11px var(--f-disp);color:var(--tx)}
 .cuebtn.on{background:var(--warn);color:#1b1200;border-color:var(--warn)}
 @keyframes glowg{0%,100%{box-shadow:0 0 3px var(--ok)}50%{box-shadow:0 0 14px 2px var(--ok)}}
@@ -505,7 +510,7 @@ const S={
  own:{drop:1,song:1,effect:1,syntisampler:1,drumsampler:1,instru:1,biblio:1,voice:3,stem:1,spatial:1,eq:1,dsp:1,master:1,record:1,sound:2},
  mode:{drop:'on',song:'on',effect:'on',syntisampler:'on',drumsampler:'on',instru:'on',biblio:'on',voice:'stby',stem:'on',spatial:'on',eq:'on',dsp:'on',master:'on',record:'on',sound:'on'},
  bank:'A',play:Array(8).fill(false),bpm:124,root:9,scale:'Moll',prog:0,selCh:0,padPage:'drop',keyLock:false,fxLock:false,showHand:false,
- step:0,voices:0,playTime:0,chTime:Array(8).fill(0),sceneSave:false,scenes:{},scene:0,nudge:0,jogA:0,dropouts:0,t0:performance.now(),
+ step:0,off:Array(8).fill(0),startAt:Array(8).fill(0),voices:0,playTime:0,chTime:Array(8).fill(0),sceneSave:false,scenes:{},scene:0,nudge:0,jogA:0,dropouts:0,t0:performance.now(),
  drm:{cur:'A',chain:false,pat:{},view:'step',kit:'808',smart:{on:false,x:.4,y:.6,ins:{kick:1,snare:1,claps:1,hats:1,cym:0,shaker:1}}},
  syn:{seq:[0,-1,12,-1,0,-1,7,-1,0,-1,12,10,7,-1,3,-1]},
  song:{bar:-1,takes:[],take:0,sections:[['Intro',4],['Strophe',8],['Refrain',8],['Drop',8],['Outro',4]],tags:['Techno','Dunkel'],pk:null,hold:false},
@@ -702,19 +707,17 @@ function scheduler(){
   const sw=V['drm.swing']||0;A.next+=sixteenth()*(st%2===0?1+sw:1-sw);S.step++}
 }
 const chOn=k=>S.play[k]&&modeOf(CH[k])==='on'&&A;
+/** SYNC an: lokaler Schritt = Main-Schritt (taktgleich). SYNC aus: Zählung ab dem eigenen Start. */
+const isSync=k=>!!V['sync.'+CH[k]];
 function tick(st,t){
- const s=st%16,bar=Math.floor(st/16);
- if(s===0&&chOn(1)&&!S.song.hold)S.song.bar=(S.song.bar+1)%songLen();
- if(s===0&&chOn(1)&&S.song.bar<0)S.song.bar=0;
- if(chOn(0))dropTick(s,t,bar);
- if(chOn(1))songTick(s,t);
- if(chOn(2))drumTick(s,t,bar);
- if(chOn(3))synTick(s,t);
- if(chOn(4))insTick(s,t);
- if(chOn(5))vocTick(s,t);
- if(chOn(6)&&s===0)sndTick(bar,t);
- if(chOn(7))stemTick(s,t);
+ for(let k=0;k<8;k++){if(!chOn(k)||t<S.startAt[k]-1e-4)continue;const ls=isSync(k)?st:st-S.off[k];if(ls<0)continue;const s=ls%16,bar=Math.floor(ls/16);
+  switch(k){case 0:dropTick(s,t,bar);break;
+   case 1:if(s===0&&(!S.song.hold||S.song.bar<0))S.song.bar=(S.song.bar+1)%songLen();songTick(s,t);break;
+   case 2:drumTick(s,t,bar);break;case 3:synTick(s,t);break;case 4:insTick(s,t);break;case 5:vocTick(s,t);break;
+   case 6:if(s===0)sndTick(bar,t);break;case 7:stemTick(s,t);break}}
 }
+/** Zeitpunkt des nächsten Main-Takts (Zählzeit 1). */
+function nextBarTime(){const c=A.ctx;for(const e of A.q)if(e.st!=null&&e.t>c.currentTime+.01&&e.st%16===0)return {t:e.t,st:e.st};const base=Math.max(A.next,c.currentTime+.05);const rest=(16-(S.step%16))%16;return {t:base+rest*sixteenth(),st:S.step+rest}}
 function curBar(){return S.play[1]?Math.max(0,S.song.bar):Math.floor(S.step/16)}
 
 /* ---------- Drums: 5 Kits ---------- */
@@ -925,7 +928,7 @@ function loopStep(i,s,t){const c=A.ctx,out=A.ch[0].in,lv=V[`drp.loop.${i}.lvl`]?
   case 6:if([0,2,3,6,8,11,12,14].includes(s))drum(c,out,t,'WBL',s%3?-7:-3,.8,lv*.6);break;
   case 7:if(s===0){const n=noise(c,t,sixteenth()*16),f=c.createBiquadFilter(),g=c.createGain();f.type='highpass';f.frequency.value=3000;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(lv*.15,t+sixteenth()*12);g.gain.linearRampToValueAtTime(0,t+sixteenth()*16);n.connect(f).connect(g).connect(out)}break}}
 function dropTick(s,t){S.drop.loops.forEach((on,i)=>{if(on)loopStep(i,s,t)})}
-function qTime(){const q=V['drp.q'],c=A.ctx;if(q==='0')return c.currentTime+.005;const grid=q==='4'?4:16;for(const e of A.q){if(e.t>c.currentTime&&e.st!=null&&e.st%grid===0)return e.t}return A.next+((grid-(S.step%grid))%grid)*sixteenth()}
+function qTime(){const q=V['drp.q'],c=A.ctx;if(q==='0'||!V['sync.drop'])return c.currentTime+.005;const grid=q==='4'?4:16;for(const e of A.q){if(e.t>c.currentTime&&e.st!=null&&e.st%grid===0)return e.t}return A.next+((grid-(S.step%grid))%grid)*sixteenth()}
 function firePad(cat,i){if(!A||A.ctx.state!=='running'){toast('Erst oben „Audio starten“ tippen.');return}
  if(cat==='loop'){S.drop.loops[i]=!S.drop.loops[i];$$(`[data-a="dpad:loop:${i}"],[data-a="mpad:loop:${i}"]`).forEach(b=>b.classList.toggle('lit',S.drop.loops[i]));if(!S.play[0])toast('Kanal 1 (Drops) ist gestoppt. Im Mixer ▶ drücken.');return}
  if(!S.play[0])toast('Kanal 1 (Drops) ist gestoppt. Im Mixer ▶ drücken, dann klingt das Pad auf Main.');
@@ -973,7 +976,7 @@ function sndTick(bar,t){const every=+V['snd.every'];if(bar%every)return;const le
 /* ---------- Stems ---------- */
 const STEMS=[['Vocals','Gesang','#e879f9'],['Lows','Bass','#ff8a5b'],['Mids','Mitten','#ffd166'],['Highs','Höhen','#4cc9f0'],['Melody','Melodie','#a3e635']];
 const STEM={buf:null,src:null,t0:0,pk:null,pkBuf:null};
-const stemRate=()=>V['stm.warp']&&S.stem.bpm?effBpm()/S.stem.bpm:1;
+const stemRate=()=>V['sync.stem']&&S.stem.bpm?effBpm()/S.stem.bpm:1;
 function stemTick(s,t){if(STEM.src||!STEM.buf||s!==0)return;const src=A.ctx.createBufferSource();src.buffer=STEM.buf;src.loop=true;src.playbackRate.value=stemRate();A.stemF.forEach(f=>src.connect(f));src.start(t);STEM.src=src;STEM.t0=t}
 function stemStop(){if(STEM.src){try{STEM.src.stop()}catch(_){}STEM.src.disconnect();STEM.src=null}}
 function stemPos(){if(!STEM.src||!STEM.buf)return 0;const el=(A.ctx.currentTime-STEM.t0)*stemRate();return el<0?0:(el%STEM.buf.duration)/STEM.buf.duration}
@@ -1072,6 +1075,7 @@ function apply(p){
  if(/^drm\.(drv|crush|lc|hc)$/.test(p))return applyDrumBus();
  if(/^ins\.(pch|pec)$/.test(p))return applyIns();
  if(p==='voc.drv')return applyVoc();
+ if(p.startsWith('sync.')){applyStem();if($('#m-mixer'))renderMixer();return}
  if(p==='syn.lr'&&A)A.lfo.frequency.value=V['syn.lr'];
  if(p.startsWith('syn.'))drawSynth();
  if(p.startsWith('drp.'))drawPadWave();
@@ -1145,6 +1149,7 @@ const UIF=UI.createBiquadFilter();
  // Mastering
  V['ma.tgt']='-14';V['ma.comp']='glue';V['ma.lim']='clean';def('ma.drv',0,12,2,{u:'db'});def('ma.lo',-6,6,1,{u:'db'});def('ma.air',-6,6,1.5,{u:'db'});def('ma.gthr',-30,0,-16,{u:'db'});def('ma.ceil',-3,0,-1,{u:'db'});def('ma.rel',.01,.5,.06,{u:'s',log:1});
  // Recorder
+ CH.forEach(id=>V['sync.'+id]=true);
  V['rec.tap']='master';V['rec.arm']=false;V['rec.fmt']='24';
 })();
 const TARGETS={'-14':['Streaming −14',2,-1],'-9':['Club −9',8,-.3],'-16':['Podcast −16',1,-1.5],'-11':['Radio −11',5,-1]};
@@ -1331,7 +1336,7 @@ BODY.sound=()=>`<div class="row">${card('Beschreibung',`<textarea class="txt" id
  <div class="row c"><button class="btn" data-a="sndsave">In Bibliothek sichern</button><span class="hint">Ausgang: Kanal 7. Die echte Erzeugung läuft in der App serverseitig.</span></div>`;
 BODY.stem=()=>`<div class="row c"><label class="btn pri" style="cursor:pointer">Song importieren<input type="file" accept="audio/*" id="stemFile" hidden></label>
  <span><b>${esc(S.stem.name)}</b> <span class="hint">· ${S.stem.bpm||'–'} BPM · Tonart ${S.stem.key}</span></span>
- ${T('stm.warp','Warp an Projekt','','Tempo an das Projekt anpassen')}<span class="hint mono" id="stemRate"></span><button class="btn" data-a="stsep">Trennen</button><button class="btn" data-a="stall">Alle abspielen</button></div>
+ <span class="hint">Warp folgt SYNC (Kopfzeile)</span><span class="hint mono" id="stemRate"></span><button class="btn" data-a="stsep">Trennen</button><button class="btn" data-a="stall">Alle abspielen</button></div>
  <div style="position:relative;display:flex;flex-direction:column;gap:6px" id="stemLanes">${STEMS.map(([id,de,c],i)=>`<div class="stemr" style="--sc:${c};--c:${c}"><span class="tn"><i></i>${de}</span><canvas data-stem="${i}"></canvas>${K(`stm.${i}.lvl`,'',0,1,.8,{sz:'xs',t:de+' Pegel'})}${T(`stm.${i}.m`,'M','m')}${T(`stm.${i}.s`,'S','s')}</div>`).join('')}<i class="phd" id="stemPh" hidden></i></div>
  <p class="hint" style="margin:0">Fünf Stems: Gesang, Bass, Mitten, Höhen, Melodie. Im Entwurf trennen Frequenzfilter, in der App ein Trennmodell. Ausgang: Kanal 8.</p>`;
 BODY.spatial=()=>`<div class="row">${card('Modus',`${SEL('sp.mode',[['obj','Objektbasiert'],['ch','Kanalbasiert']],'obj','Modus')}<span class="lbl">Layout</span>${SEG('sp.lay',[['2.0','2.0'],['5.1','5.1'],['7.1','7.1'],['7.1.2','7.1.2']],'7.1.2')}<div class="knobs">${K('sp.w','Breite',0,2,1.2,{sz:'s'})}${K('sp.spd','Tempo',.1,2,.6,{sz:'s'})}</div>
@@ -1397,6 +1402,7 @@ function stripHead(id,extra=''){const m=MOD[id],o=id==='mixer'?S.mixer:S.own[id]
  <span class="chips3" role="img" aria-label="Modus ${md.toUpperCase()}">${['off','stby','on'].map(x=>`<span class="${x===md?'on '+(x==='stby'?'st2':x==='off'?'off':''):''}">${x.toUpperCase()}</span>`).join('')}</span>
  <svg class="lk ${o&&!mine?'red':''}" style="--u:${o?USERS[o].c:'#fff'}" viewBox="0 0 24 24" aria-hidden="true"><path d="${o&&!mine?LOCK:UNLOCK}"/></svg>
  <span class="who">${o?`<span class="udot" style="--u:${USERS[o].c};width:9px;height:9px"></span>`:''}${!o?'frei':ownerLabel(id)}${chn>=0?` · <span class="mono">Kanal ${chn+1}</span>`:''}</span><span class="vb">Vorbild: ${m.vb}</span>${extra}</div>
+ ${chn>=0?(mine||id==='mixer'?T('sync.'+id,'⟲ SYNC','sync','SYNC: startet auf dem nächsten Main-Takt, läuft taktgleich mit Main, Tempo und Tonart von Main'):`<span class="tg sync ${V['sync.'+id]?'on':''}" title="SYNC (nur der Halter kann es ändern)">⟲ SYNC</span>`):''}
  <div class="smeter" title="Pegel"><div class="vm"><i data-sm="${id}"></i></div><div class="vm"><i data-sm="${id}"></i></div></div>${btn}</div>`}
 function chStrip(k){const src=CH[k],m=MOD[src],p='ch'+k,md=modeOf(src);
  const why=md==='off'?`Quelle ${m.n} ist OFF. Erst muss sie jemand holen (STBY).`:'';
@@ -1406,6 +1412,7 @@ function chStrip(k){const src=CH[k],m=MOD[src],p='ch'+k,md=modeOf(src);
  <div class="r3">${T(p+'.mute','M','m','Stumm')}${T(p+'.solo','S','s','Solo')}</div>
  <div class="fz"><div class="vm"><i data-m="${k}"></i></div>${F(p+'.fader','Fader Kanal '+(k+1),.75)}</div>
  <div class="xf" role="group" aria-label="Crossfader-Zuweisung">${[['A','A'],['T','THRU'],['B','B']].map(([v,l])=>`<button type="button" data-s="${p}.xf" data-v="${v}">${l}</button>`).join('')}</div>
+ <span class="syncb ${V['sync.'+src]?'on':''}" title="${V['sync.'+src]?'Synchron zu Main: Start auf dem nächsten Takt':'Frei: startet sofort'}">${V['sync.'+src]?'⟲ SYNC':'FREI'}</span>
  <button type="button" class="cuebtn" data-t="${p}.cue" aria-pressed="false" title="Vorhören (Kopfhörer, im Browser nur Anzeige)">CUE</button>
  <div class="pp"><button class="play ${S.play[k]?'on':''}" data-a="play:${k}" ${md==='off'?'disabled':''} title="${why||'Start auf Main'}" aria-label="Kanal ${k+1} starten">▶</button><button class="stop ${S.play[k]?'':'on'}" data-a="stop:${k}" aria-label="Kanal ${k+1} stoppen">■</button></div></div>`}
 const PADCOL=['#b26bff','#c084fc','#e879f9','#f472b6','#4ade80','#38bdf8','#3b82f6','#60a5fa','#facc15','#a3e635','#4ade80','#22c55e','#f87171','#fb923c','#f59e0b','#fdba74'];
@@ -1431,7 +1438,7 @@ function renderMixer(){const m=MOD.mixer,el=$('#m-mixer'),hold=isHolder(),others
   ${K('mix.hpm','Cue',0,1,.5,{sz:'s',t:'Kopfhörer: Cue/Mix'})}<button class="ring ${S.fxLock?'':'off'}" style="--rc:#ff9f43" data-a="fxlock" aria-pressed="${S.fxLock}" title="FX LOCK: Makros und Szenen ändern die Effekte nicht">FX<br>LOCK</button>
   <button class="ring" style="--rc:${USERS[S.mixer].c}" data-a="mixlock" title="MIX LOCK: du hältst den Mixer. Tippen zeigt die Übergabe.">MIX<br>LOCK</button></div>
  <div class="unit deck"><div class="screen"><div class="ttl"><span id="deckT">${S.selCh+1} · ${CHN[S.selCh]} — ${MOD[CH[S.selCh]].n}</span><span>${S.play[S.selCh]?'▶ LÄUFT':'■ HALT'}</span></div><canvas id="deckc" aria-hidden="true"></canvas><div class="inf"><span id="deckBpm">${effBpm().toFixed(2)}</span><span id="deckTime">0:00</span></div></div>
-  <div class="dbtns"><button data-a="dcue" title="Kanal an den Anfang setzen">CUE</button><button data-a="dloop" class="${(S.selCh===1&&S.song.hold)||(S.selCh===7&&S.stem.loop)?'on':''}" title="1 Takt halten">LOOP</button><button data-a="dsync" class="${S.selCh===7&&V['stm.warp']?'on':''}" title="An Projekttempo anpassen">SYNC</button></div>
+  <div class="dbtns"><button data-a="dcue" title="Kanal an den Anfang setzen">CUE</button><button data-a="dloop" class="${(S.selCh===1&&S.song.hold)||(S.selCh===7&&S.stem.loop)?'on':''}" title="1 Takt halten">LOOP</button><button data-a="dsync" class="${V['sync.'+CH[S.selCh]]?'on':''}" title="Gewählten Kanal gegen Main synchronisieren">SYNC</button></div>
   <div class="jog" id="jog" title="Jogwheel: drehen schiebt das Tempo kurz an (Nudge)"><canvas id="jogc"></canvas></div>
   <div class="deckfoot"><button class="db" style="--bk:${bk}" data-a="bank:${S.bank==='A'?'B':'A'}" title="Bank wechseln">${S.bank==='A'?'A':'B'}/${S.bank==='A'?'B':'A'}</button><button class="tg ${S.keyLock?'on':''}" data-a="keylock" aria-pressed="${S.keyLock}">KEY LOCK</button></div></div>
  <div class="unit mcol"><span class="lbl">Master</span>${K('mix.hi','High',-12,6,0,{sz:'s',cls:'gold'})}${K('mix.lo','Low',-12,6,0,{sz:'s',cls:'gold'})}${K('mix.gain','Gain',-12,6,0,{sz:'s'})}
@@ -1612,9 +1619,11 @@ function afterMode(id){const k=CH.indexOf(id);if(k>=0&&modeOf(id)!=='on'&&S.play
  updateStages();renderHead();renderStrip(id);renderMixer();updateChain()}
 function play(k){if(!isHolder())return;const id=CH[k];if(modeOf(id)==='off'){toast(`${MOD[id].n} ist OFF. Erst muss es jemand holen (STBY).`);return}
  if(!A||A.ctx.state!=='running')startAudio();if(S.mode[id]==='stby'){S.mode[id]='on';renderStrip(id);renderHead()}
- S.play[k]=true;S.chTime[k]=0;if(id==='song')S.song.bar=-1;if(k===5)S.voc.n=-1;ramp(A.ch[k].gate.gain,1,.008);if(V['rec.arm']&&!S.rec)recToggle();
+ S.play[k]=true;S.chTime[k]=0;if(id==='song')S.song.bar=-1;if(k===5)S.voc.n=-1;
+ const g=A.ch[k].gate.gain,c=A.ctx;g.cancelScheduledValues(c.currentTime);
+ if(isSync(k)){const nb=nextBarTime();S.startAt[k]=nb.t;g.setValueAtTime(g.value,c.currentTime);g.setValueAtTime(1,nb.t)}else{S.startAt[k]=0;S.off[k]=S.step;g.setTargetAtTime(1,c.currentTime,.008)}if(V['rec.arm']&&!S.rec)recToggle();
  S.selCh=k;renderMixer();renderStrip(id);updateChain()}
-function stop(k){if(!isHolder())return;S.play[k]=false;if(A)ramp(A.ch[k].gate.gain,0,.03);if(k===7)stemStop();renderMixer();renderStrip(CH[k]);updateChain()}
+function stop(k){if(!isHolder())return;S.play[k]=false;S.startAt[k]=0;if(A){A.ch[k].gate.gain.cancelScheduledValues(A.ctx.currentTime);ramp(A.ch[k].gate.gain,0,.03)}if(k===7)stemStop();renderMixer();renderStrip(CH[k]);updateChain()}
 let taps=[];
 function setBpm(b){S.bpm=Math.round(clamp(b,60,200)*10)/10;const o=$('#bpmOut');if(o)o.textContent=S.bpm.toFixed(1);applyFx();applyStem();applyIns();$('#mpBpm').textContent=S.bpm.toFixed(S.bpm%1?1:0)}
 function give(u){if(!isHolder()||!S.present.includes(u))return;S.mixer=u;S.showHand=false;toast(`Mixer an ${USERS[u].n} übergeben.`);renderHead();renderMixer()}
@@ -1668,7 +1677,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');
   case 'edit':{const el=$('#m-'+CH[S.selCh]);el&&el.scrollIntoView({behavior:'smooth',block:'start'});break}
   case 'dcue':{const k=S.selCh;if(k===1)S.song.bar=-1;if(k===7&&STEM.src){stemStop()}S.chTime[k]=0;toast(`Kanal ${k+1} startet wieder am Anfang.`);break}
   case 'dloop':{const k=S.selCh;if(k===1){S.song.hold=!S.song.hold;toast(S.song.hold?'Song hält den aktuellen Takt (Loop).':'Song läuft weiter.')}else if(k===7&&STEM.buf){S.stem.loop=!S.stem.loop;if(STEM.src){const bar=60/S.stem.bpm*4,pos=stemPos()*STEM.buf.duration;STEM.src.loopStart=S.stem.loop?Math.floor(pos/bar)*bar:0;STEM.src.loopEnd=S.stem.loop?STEM.src.loopStart+bar:0}toast(S.stem.loop?'Stems wiederholen einen Takt.':'Stems laufen weiter.')}else toast(`${CHN[k]} läuft ohnehin als Schleife im Takt.`);renderMixer();break}
-  case 'dsync':{if(S.selCh===7){set('stm.warp',!V['stm.warp']);toast(V['stm.warp']?'Stems folgen dem Projekttempo.':'Stems spielen im Originaltempo.')}else toast(`${CHN[S.selCh]} ist immer synchron zum Projekttempo.`);renderMixer();break}
+  case 'dsync':{const id=CH[S.selCh];if(S.own[id]&&S.own[id]!==S.me){toast(`SYNC von ${MOD[id].n} kann nur ${USERS[S.own[id]].n} ändern.`);break}set('sync.'+id,!V['sync.'+id]);toast(V['sync.'+id]?`${CHN[S.selCh]} läuft synchron zu Main.`:`${CHN[S.selCh]} läuft frei.`);break}
   case 'pg':S.padPage=x;renderMixer();break;
   case 'mpad':firePad(x,+y);break;
   case 'mdrum':{if(!needAudio())break;if(!S.play[2])toast('Kanal 3 (Drums) ist gestoppt. Im Mixer ▶ drücken.');drumHit(+x,A.ctx.currentTime+.005,y==='1');break}
@@ -1801,6 +1810,7 @@ function frame(now){
  // Deck
  const dc=$('#deckc');if(dc){const k=S.selCh;if(k===7&&STEM.buf){if(!MP.deckBuf||MP.deckBuf!==STEM.buf){MP.deckBuf=STEM.buf}drawPeaks(dc,STEM.buf.getChannelData(0).subarray(0,Math.min(STEM.buf.length,STEM.buf.sampleRate*20)),'#ff8a3d',STEM.src?stemPos():null)}else scope(dc,running?A.ch[k].an:null,'#ff8a3d');
   const db=$('#deckBpm');if(db)db.textContent=effBpm().toFixed(2)+(S.nudge?` (${S.nudge>0?'+':''}${(S.nudge*100).toFixed(1)} %)`:'');const dtm=$('#deckTime');if(dtm)dtm.textContent=fm(S.chTime[k]||0)}
+ if(running)CH.forEach((_,k)=>{const w=S.play[k]&&A.ctx.currentTime<S.startAt[k];$$(`[data-a="play:${k}"]`).forEach(b=>b.classList.toggle('wait',w))});
  if(S.play[S.selCh]&&running&&$('#jogc'))S.jogA+=dt/1000*(effBpm()/60)*Math.PI/2;drawJog();
  // LUFS-Näherung, Messungen (4× pro Sekunde)
  const lufs=rmsAll>1e-5?20*Math.log10(rmsAll)-0.691:-99;
