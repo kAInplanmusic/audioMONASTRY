@@ -6,6 +6,9 @@ import { EqPluginAdapter } from '../src/plugins/adapters/EqPluginAdapter';
 import { MasterPluginAdapter } from '../src/plugins/adapters/MasterPluginAdapter';
 import { SpatialPluginAdapter } from '../src/plugins/adapters/SpatialPluginAdapter';
 import { MixerPluginAdapter } from '../src/plugins/adapters/MixerPluginAdapter';
+import { RecordPluginAdapter } from '../src/plugins/adapters/RecordPluginAdapter';
+import { SyntiSamplerPluginAdapter } from '../src/plugins/adapters/SyntiSamplerPluginAdapter';
+import { DrumSamplerPluginAdapter } from '../src/plugins/adapters/DrumSamplerPluginAdapter';
 import type { PluginInterface, PluginParameterValue } from '../src/plugins/plugin_interface';
 import type { PluginState } from '../src/plugins/types';
 
@@ -381,5 +384,159 @@ describe('Adapter-Blockverarbeitung: dsp (resonanter Tiefpass + Drive)', () => {
     expect(out.length).toBe(2);
     expect(settledEnergy(out[0])).toBeLessThan(settledEnergy(tone(2000, 3000)[0]) * 0.05);
     expect(settledEnergy(out[1])).toBeLessThan(settledEnergy(tone(2000, 3000)[0]) * 0.05);
+  });
+});
+
+describe('Adapter-Blockverarbeitung: syntisampler (Gain + Velocity)', () => {
+  it('ist ohne Parameter transparent', () => {
+    const adapter = new SyntiSamplerPluginAdapter();
+    const src = sine(32);
+    expect(Array.from(runBlock(adapter, {}, 'PRO', 32)[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('ist bei OFF transparent', () => {
+    const adapter = new SyntiSamplerPluginAdapter();
+    const src = sine(32);
+    expect(Array.from(runBlock(adapter, { gain: 0 }, 'OFF', 32)[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('haelt Pegel bei gain=1 und velocity=1', () => {
+    const src = sine(32);
+    const out = runBlock(new SyntiSamplerPluginAdapter(), { gain: 1, velocity: 1 }, 'PRO', 32)[0];
+    for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i], 6);
+  });
+
+  it('skaliert mit gain=0.5', () => {
+    const src = sine(32);
+    const out = runBlock(new SyntiSamplerPluginAdapter(), { gain: 0.5, velocity: 1 }, 'PRO', 32)[0];
+    for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i] * 0.5, 6);
+  });
+
+  it('skaliert mit velocity=0.5', () => {
+    const src = sine(32);
+    const out = runBlock(new SyntiSamplerPluginAdapter(), { gain: 1, velocity: 0.5 }, 'PRO', 32)[0];
+    for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i] * 0.5, 6);
+  });
+
+  it('klemmt gain auf 0…2', () => {
+    const src = sine(16);
+    const dbl = runBlock(new SyntiSamplerPluginAdapter(), { gain: 5 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(dbl[i]).toBeCloseTo(src[0][i] * 2, 6);
+    const silent = runBlock(new SyntiSamplerPluginAdapter(), { gain: -1 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(silent[i]).toBe(0);
+  });
+
+  it('kombiniert gain und velocity', () => {
+    const src = sine(16);
+    const out = runBlock(new SyntiSamplerPluginAdapter(), { gain: 2, velocity: 0.5 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(out[i]).toBeCloseTo(src[0][i] * 1, 6);
+  });
+
+  it('arbeitet auf beiden Kanaelen', () => {
+    const src = sine(32, 2);
+    const srcCopy = src.map(ch => ch.slice());
+    const out = runChannels(new SyntiSamplerPluginAdapter(), srcCopy, { gain: 0.5 });
+    expect(out.length).toBe(2);
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < 32; i++) {
+        expect(out[c][i]).toBeCloseTo(src[c][i] * 0.5, 6);
+      }
+    }
+  });
+});
+
+describe('Adapter-Blockverarbeitung: drumsampler (Gain + Velocity)', () => {
+  it('ist ohne Parameter transparent', () => {
+    const adapter = new DrumSamplerPluginAdapter();
+    const src = sine(32);
+    expect(Array.from(runBlock(adapter, {}, 'PRO', 32)[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('ist bei OFF transparent', () => {
+    const adapter = new DrumSamplerPluginAdapter();
+    const src = sine(32);
+    expect(Array.from(runBlock(adapter, { gain: 0 }, 'OFF', 32)[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('haelt Pegel bei gain=1 und velocity=1', () => {
+    const src = sine(32);
+    const out = runBlock(new DrumSamplerPluginAdapter(), { gain: 1, velocity: 1 }, 'PRO', 32)[0];
+    for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i], 6);
+  });
+
+  it('skaliert mit gain=0.5', () => {
+    const src = sine(32);
+    const out = runBlock(new DrumSamplerPluginAdapter(), { gain: 0.5, velocity: 1 }, 'PRO', 32)[0];
+    for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i] * 0.5, 6);
+  });
+
+  it('skaliert mit velocity=0.5', () => {
+    const src = sine(32);
+    const out = runBlock(new DrumSamplerPluginAdapter(), { gain: 1, velocity: 0.5 }, 'PRO', 32)[0];
+    for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i] * 0.5, 6);
+  });
+
+  it('klemmt gain auf 0…2', () => {
+    const src = sine(16);
+    const dbl = runBlock(new DrumSamplerPluginAdapter(), { gain: 5 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(dbl[i]).toBeCloseTo(src[0][i] * 2, 6);
+    const silent = runBlock(new DrumSamplerPluginAdapter(), { gain: -1 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(silent[i]).toBe(0);
+  });
+
+  it('klemmt velocity auf 0…1', () => {
+    const src = sine(16);
+    const clamped = runBlock(new DrumSamplerPluginAdapter(), { velocity: 2 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(clamped[i]).toBeCloseTo(src[0][i] * 1, 6);
+    const zero = runBlock(new DrumSamplerPluginAdapter(), { velocity: -0.1 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(zero[i]).toBe(0);
+  });
+
+  it('kombiniert gain und velocity', () => {
+    const src = sine(16);
+    const out = runBlock(new DrumSamplerPluginAdapter(), { gain: 2, velocity: 0.5 }, 'PRO', 16)[0];
+    for (let i = 0; i < 16; i++) expect(out[i]).toBeCloseTo(src[0][i] * 1, 6);
+  });
+
+  it('arbeitet auf beiden Kanaelen', () => {
+    const src = sine(32, 2);
+    const srcCopy = src.map(ch => ch.slice());
+    const out = runChannels(new DrumSamplerPluginAdapter(), srcCopy, { gain: 0.5 });
+    expect(out.length).toBe(2);
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < 32; i++) {
+        expect(out[c][i]).toBeCloseTo(src[c][i] * 0.5, 6);
+      }
+    }
+  });
+});
+
+describe('Adapter-Blockverarbeitung: record (Steuerungs-Adapter, KEIN DSP-Glied)', () => {
+  // BELEGTE ENTSCHEIDUNG: `record` ist laut MANIFEST `kind: 'recording'` mit
+  // `capabilities: ['recording']`, `latencySamples: 0`, `tailSamples: 0` und
+  // reagiert ausschliesslich ueber `onCommand` (start/stop/bounce). Der Ton
+  // fliesst NICHT durch den Adapter; aufgenommen wird von der Aufnahme-Engine
+  // ausserhalb der Plugin-Kette. Ein Verarbeitungsglied mit null Latenz und
+  // null Tail waere fuer eine Aufnahme widersinnig.
+  it('nutzt den Bypass der Basisklasse (kein eigener Block-Eingriff)', () => {
+    // BasePluginAdapter:79-81 liefert den Block unveraendert zurueck. `record`
+    // ueberschreibt onProcess NICHT - der Beleg, dass kein DSP-Eingriff gewollt
+    // ist. Ein eigener Eingriff muesste hier als eigene Methode stehen.
+    const own = Object.getOwnPropertyNames(RecordPluginAdapter.prototype);
+    expect(own).not.toContain('onProcess');
+    expect(own).toContain('onCommand');
+  });
+
+  it('ist NUR Steuerung: kind=recording, capabilities=[recording]', () => {
+    const manifest = (RecordPluginAdapter as unknown as { MANIFEST: { kind: string; capabilities: string[] } }).MANIFEST;
+    expect(manifest.kind).toBe('recording');
+    expect(manifest.capabilities).toEqual(['recording']);
+  });
+
+  it('laesst einen Block unveraendert durch die Kette', () => {
+    // Ohne onProcess ist der Adapter fuer das Audiosignal transparent.
+    const src = sine(32);
+    const out = runBlock(new RecordPluginAdapter(), {}, 'PRO', 32)[0];
+    expect(Array.from(out)).toEqual(Array.from(src[0]));
   });
 });
