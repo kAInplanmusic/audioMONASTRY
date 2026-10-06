@@ -4753,11 +4753,46 @@
       "id": "UI2-P0-003",
       "title": "SYNC gegen Main für alle spielenden Plugins (v2)",
       "priority": "P0",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "UI",
       "source": "Betreiber 2026-10-06",
-      "note": "drop, song, syntisampler, drumsampler, instru, voice, sound, stem bekommen eine SYNC-Taste (Standard an): Start auf dem nächsten Main-Takt, taktgleiche Pattern-Position, Main-Tempo inkl. Warp der Stems, Pad-Quantisierung. SYNC aus = sofortiger Start, eigene Zählung. Vorlage und Verkabelungsvertrag: docs/design/audioMONASTRY-design.html, docs/design/V2_UI_VERKABELUNG.md (Abschnitt 3). Quantisierung sample-genau im Audio-Thread über die Master-Clock.\n\nAkzeptanz: Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts; ohne SYNC sofort; Stems folgen dem Main-Tempo.\n\nPARTIAL 2026-10-06: UI fertig. SYNC-Taste in der Kopfzeile der 8 spielenden Plugins (Standard an, nur der Halter schaltet), Zustand in src/core/session/pluginSync.ts (isPluginSynced/subscribePluginSync/pluginSyncSnapshot). Offen = Verkabelung (v2): sample-genaue Quantisierung im Audio-Thread über die Master-Clock, Stem-Warp, Replikation des SYNC-Zustands über die Session.",
-      "verification": "tests/uiPluginModes.test.ts"
+      "note": "drop, song, syntisampler, drumsampler, instru, voice, sound, stem bekommen eine SYNC-Taste (Standard an): Start auf dem nächsten Main-Takt, taktgleiche Pattern-Position, Main-Tempo inkl. Warp der Stems, Pad-Quantisierung. SYNC aus = sofortiger Start, eigene Zählung. Vorlage und Verkabelungsvertrag: docs/design/audioMONASTRY-design.html, docs/design/V2_UI_VERKABELUNG.md (Abschnitt 3). Akzeptanz: Test: Start mit SYNC beginnt exakt auf Zählzeit 1 des nächsten Takts; ohne SYNC sofort; Stems folgen dem Main-Tempo. DONE 2026-10-06 in zwei Strängen gebaut und zusammengeführt. UI-Strang (Design): SYNC-Taste in der Kopfzeile der 8 spielenden Plugins, Standard an, nur der Halter schaltet (sonst disabled); Zustand in src/core/session/pluginSync.ts, angebunden über useSyncExternalStore in App.tsx; dazu SignalChainBar (UI2-P0-002) und die Modi OFF/STBY/ON. AUDIO-Strang (Kanal/Signalkette): syncEnabled liegt orthogonal zum PluginState im Adapter (isSyncEnabled/setSyncEnabled, Parameter-Schlüssel `sync.<id>`, Alt-Schlüssel `sync` bleibt lesbar, Aufnahme in die Serialisierung, im PluginInterface deklariert). Taktgenauer Start über scheduleSyncStart(start, scheduleAtNextBar?): syncEnabled=false → sofort; vorhandene Audio-Thread-Planung (adapter.scheduleAtNextBar über audioEngine/Tone.Transport) hat Vorrang, weil nur sie den Klang erreicht; sonst ClockBridge.scheduleDrop(..., '1bar') mit BPM-Fallback per setTimeout. Geplante Starts werden bei stop/dispose abgebrochen. VERDRAHTUNG: isSyncEnabled() liest die UI-Wahrheit (isSyncPlugin/isPluginSynced), wenn das Plugin dort geführt wird — sonst wäre die Taste eine Anzeige ohne Wirkung auf den Klang. syntisampler/drumsampler/instru/sound/drop rufen scheduleSyncStart in ihrem Start-Pfad. Offen: eigener Eintrag UI2-P0-003-F1 (song/voice/stem ohne Startlogik), Replikation des SYNC-Zustands über die Session, Stem-Warp.",
+      "verification": [
+        "tests/uiPluginModes.test.ts",
+        "tests/dropPlayback.test.ts (10/10, inkl. 'ohne scheduleAtNextBar wird trotzdem gespielt — kein Stillstand')",
+        "tests/adapterBlockProcessing.test.ts, tests/pluginInterface.test.ts",
+        "voller Lauf: 305 Dateien / 2449 Tests, EXIT=0",
+        "node_modules/.bin/tsc --noEmit -> exit 0"
+      ],
+      "files": [
+        "src/plugins/adapters/BasePluginAdapter.ts",
+        "src/plugins/adapters/DropPluginAdapter.ts",
+        "src/plugins/adapters/DrumSamplerPluginAdapter.ts",
+        "src/plugins/adapters/InstruPluginAdapter.ts",
+        "src/plugins/adapters/SoundPluginAdapter.ts",
+        "src/plugins/adapters/SyntiSamplerPluginAdapter.ts",
+        "src/plugins/plugin_interface.ts",
+        "src/core/session/pluginSync.ts",
+        "src/components/RackRow.tsx",
+        "src/components/SignalChainBar.tsx",
+        "src/App.tsx"
+      ]
+    },
+    {
+      "id": "UI2-P0-003-F1",
+      "title": "song, voice, stem: Abspiel-/Startlogik im Adapter fehlt — SYNC kann dort nicht greifen",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "UI/Audio",
+      "source": "Befund beim Einbau von UI2-P0-003 (2026-10-06)",
+      "problem": "Die SYNC-Taste gehört laut UI2-P0-003 auch zu song, voice und stem. Diese drei Adapter haben jedoch keine Abspiel-/Startlogik, an die sich ein taktgenauer Start hängen ließe: SongPluginAdapter und StemPluginAdapter führen nur Parameter, VoicePluginAdapter kennt nur die Befehle speak/sing. Der Sync-Schalter ist dort korrekt verdrahtet und umschaltbar, wirkt aber erst, wenn der Adapter einen Transport-Start hat.",
+      "note": "Bewusst offen gelassen statt erfunden: Die Alternative wäre gewesen, den dreien eine Play-Anbindung anzudichten (nicht beauftragt) oder ihnen die von der Spec geforderte Taste zu nehmen (Widerspruch zur Betreiber-Vorgabe). Kein akutes Klangproblem: ohne Startlogik spielt der Adapter auch ohne SYNC nichts.",
+      "acceptance": [
+        "song, voice, stem haben je einen definierten Transport-Start",
+        "der Start läuft über scheduleSyncStart und ist damit taktgleich zu Main",
+        "ein Test deckt je Adapter den Fall SYNC an/aus ab"
+      ],
+      "verification": []
     },
     {
       "id": "UI2-P1-007",
