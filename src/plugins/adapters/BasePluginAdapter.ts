@@ -202,25 +202,32 @@ export abstract class BasePluginAdapter implements PluginInterface {
   }
 
   /**
-   * Plant einen Start taktgenau über ClockBridge.
-   * Falls syncEnabled=false → sofort.
-   * Sonst scheduleDrop auf nächste Bar ('1bar'), fallback setTimeout bei Transport steht.
-   * Merkt scheduleId/Timeout, damit stop/dispose abbrechen kann.
+   * Plant einen Start taktgenau.
+   *
+   * `syncEnabled === false` → sofort.
+   * `scheduleAtNextBar` gesetzt → dieses nutzen: es ist die ECHTE taktgenaue
+   *   Planung im Audio-Thread (Tone.Transport) und fällt selbst auf sofortigen
+   *   Aufruf zurück, wenn der Transport steht. Adapter, die eine solche
+   *   Mechanik haben (z. B. drop über den DropAudioAdapter), dürfen sie nicht
+   *   durch einen zweiten Zähler ersetzt werden — sonst stünde der Start still.
+   * Sonst → ClockBridge: scheduleDrop auf die nächste Bar ('1bar'), mit
+   *   BPM-Fallback per setTimeout, wenn der Transport nicht läuft.
    */
-  protected scheduleSyncStart(start: () => void): void {
+  protected scheduleSyncStart(start: () => void, scheduleAtNextBar?: (cb: () => void) => void): void {
     // Bereits geplante Starts abbrechen
-    if (this.scheduledSyncId) {
-      try { clockBridge.cancelScheduledDrop(this.scheduledSyncId); } catch {}
-      this.scheduledSyncId = undefined;
-    }
-    if (this.syncStartTimeout !== undefined) {
-      try { clearTimeout(this.syncStartTimeout); } catch {}
-      this.syncStartTimeout = undefined;
-    }
+    this.cancelPendingSyncStart();
 
     if (!this.syncEnabled) {
       start();
       return;
+    }
+
+    // Vorhandene, erprobte Audio-Thread-Planung bevorzugen.
+    if (scheduleAtNextBar) {
+      try {
+        scheduleAtNextBar(() => start());
+        return;
+      } catch { start(); return; }
     }
 
     const clock = clockBridge.getClockState();
