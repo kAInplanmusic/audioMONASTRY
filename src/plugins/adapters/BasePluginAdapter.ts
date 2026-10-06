@@ -24,8 +24,19 @@ export abstract class BasePluginAdapter implements PluginInterface {
   protected context: PluginRuntimeContext | null = null;
   protected parameters: Record<string, number | string | boolean> = {};
   protected disposed = false;
+  protected syncEnabled = true;
 
   public state: PluginState = 'OFF';
+
+  public isSyncEnabled(): boolean {
+    return this.syncEnabled;
+  }
+
+  public setSyncEnabled(enabled: boolean): void {
+    this.assertNotDisposed();
+    this.syncEnabled = !!enabled;
+    this.parameters['sync'] = this.syncEnabled;
+  }
 
   protected constructor(
     public readonly manifest: PluginManifest,
@@ -59,6 +70,9 @@ export abstract class BasePluginAdapter implements PluginInterface {
     }
 
     this.parameters[parameter.name] = parameter.value;
+    if (parameter.name === 'sync') {
+      this.syncEnabled = !!parameter.value;
+    }
     this.onParameter(parameter);
   }
 
@@ -102,7 +116,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     return {
       pluginId: this.manifest.id,
       state: this.state,
-      parameters: { ...this.parameters },
+      parameters: { ...this.parameters, sync: this.syncEnabled },
     };
   }
 
@@ -117,6 +131,12 @@ export abstract class BasePluginAdapter implements PluginInterface {
 
     this.state = snapshot.state;
     this.parameters = { ...snapshot.parameters };
+    const syncParam = this.parameters['sync'];
+    if (typeof syncParam === 'boolean') {
+      this.syncEnabled = syncParam;
+    } else if (typeof syncParam === 'string') {
+      this.syncEnabled = syncParam === 'true';
+    }
   }
 
   async dispose(): Promise<void> {
