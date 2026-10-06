@@ -9,6 +9,7 @@ import type {
   PluginSnapshot,
 } from '../plugin_interface';
 import { clockBridge } from '../../core/drop';
+import { isPluginSynced, isSyncPlugin } from '../../core/session/pluginSync';
 
 /**
  * Gemeinsame Basis aller 16 kanonischen Plugin-Adapter.
@@ -36,6 +37,15 @@ export abstract class BasePluginAdapter implements PluginInterface {
   }
 
   public isSyncEnabled(): boolean {
+    // UI2-P0-003: Die UI-Wahrheit liegt in src/core/session/pluginSync.ts
+    // (die SYNC-Taste in der Kopfzeile schreibt dorthin). Der Adapter hat
+    // zusätzlich einen eigenen Wert für headless/Tests und für den
+    // Serialisierungs-Roundtrip. Ist das Plugin in der UI-Wahrheit geführt,
+    // gewinnt sie — sonst wäre die Taste eine Attrappe, die den Audio-Start
+    // nie erreicht.
+    try {
+      if (isSyncPlugin(this.manifest.id)) return isPluginSynced(this.manifest.id);
+    } catch { /* pluginSync nicht verfügbar (headless) → eigener Wert */ }
     return this.syncEnabled;
   }
 
@@ -217,7 +227,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
     // Bereits geplante Starts abbrechen
     this.cancelPendingSyncStart();
 
-    if (!this.syncEnabled) {
+    if (!this.isSyncEnabled()) {
       start();
       return;
     }
