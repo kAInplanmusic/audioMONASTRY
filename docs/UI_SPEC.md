@@ -28,6 +28,10 @@ als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
 - Wer den Mixer nicht hält, sieht ihn eingeklappt mit Name des Halters und 8 kleinen Pegeln.
 - Pult nach Betreiber-Vorlage (2026-10-06): links Tastenleiste (EQ/DYN/FX/PAN/REC springen zum Plugin, FX LOCK, MIX LOCK = Übergabe), Deck mit Anzeige des gewählten Kanals, CUE/LOOP/SYNC und Jogwheel (Nudge), A/B-Taste = Bank; Master-Zug (High, Low, Gain, Fader); 4 Kanäle; rechts Effekt-Tabelle (An, Amount, Time, Feedback, Mix), 16 Trigger-Pads mit 4 Seiten (Drops, Drums, Akkord, Vox), Makro 1–3, Reihe „Mixer“ (Kanal aufs Deck, EDIT) und „Szene“ 1–8 mit SAVE; unten Crossfader A–B und Bankpegel I/II.
 
+## SYNC gegen Main (Betreiber 2026-10-06)
+
+Jedes Plugin, das etwas abspielt oder erzeugt und abspielt (drop, song, syntisampler, drumsampler, instru, voice, sound, stem), hat eine SYNC-Taste in der Kopfzeile (Standard an). SYNC an: Start auf dem nächsten Main-Takt, Pattern taktgleich mit Main, Tempo/Tonart von Main, Stems gewarpt, Pads quantisiert. SYNC aus: sofortiger Start, eigene Zählung. Der Mixer-Kanal zeigt den Zustand, das Deck schaltet ihn für den gewählten Kanal. Details für die v2-Verkabelung: `docs/design/V2_UI_VERKABELUNG.md`.
+
 ## Plugin-Streifen (Entwurf 2026-10-06)
 
 - Kopfzeile: Nummer (Kopfreihenfolge 01–16), Name in Modulfarbe, Modus-Anzeige OFF/STBY/ON, Schloss, Halter, Vorbild-Gerät, L/R-Pegel, rechts der Modus-Button.
