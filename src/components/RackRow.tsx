@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Power, Copy, GripVertical } from 'lucide-react';
 import { ModuleState } from '../context/ModuleStateContext';
 import { getPluginThemeClass } from '../utils/pluginTheme';
@@ -19,6 +19,10 @@ interface RackRowProps {
   onCopy?: () => void;
   /** P1-4: Scratchpad-Eintrag auf dieses Modul ziehen → laden/anwenden. */
   onLoadScratch?: (entry: ScratchpadDragItem) => void;
+  /** UI2-P0-003: SYNC-Zustand des Plugins (nur für SYNC_PLUGINS relevant). */
+  syncEnabled?: boolean;
+  /** UI2-P0-003: Klick auf die Sync-Anzeige → Zustand umschalten. */
+  onToggleSync?: () => void;
   children?: React.ReactNode;
 }
 
@@ -44,22 +48,13 @@ export const RackRow = React.memo(function RackRow({
   onPromote,
   onCopy,
   onLoadScratch,
+  syncEnabled = true,
+  onToggleSync,
   children,
 }: RackRowProps) {
   const active = state !== 'OFF';
   const pro = state === 'PRO';
   const isSyncPlugin = SYNC_PLUGINS.has(id);
-  const [syncEnabled, setSyncEnabled] = useState(() => {
-    try {
-      const raw = localStorage.getItem(`sync.${id}`);
-      if (raw === null) return true;
-      return raw === 'true';
-    } catch { return true; }
-  });
-
-  useEffect(() => {
-    try { localStorage.setItem(`sync.${id}`, String(syncEnabled)); } catch {}
-  }, [id, syncEnabled]);
 
   return (
     <section
@@ -124,7 +119,7 @@ export const RackRow = React.memo(function RackRow({
             {isSyncPlugin && (
               <button
                 type="button"
-                onClick={(e)=>{e.stopPropagation(); setSyncEnabled(v=>!v);}}
+                onClick={(e)=>{e.stopPropagation(); onToggleSync?.();}}
                 title={syncEnabled ? 'SYNC: läuft synchron zu Main' : 'FREI: startet sofort'}
                 className={`text-[7px] font-mono px-1 py-0.5 rounded border ${syncEnabled ? 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' : 'text-neutral-500 border-neutral-700'}`}
               >

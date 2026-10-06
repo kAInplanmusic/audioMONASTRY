@@ -27,7 +27,7 @@ export abstract class BasePluginAdapter implements PluginInterface {
   protected disposed = false;
   protected syncEnabled = true;
   private scheduledSyncId?: string;
-  private syncStartTimeout?: number;
+  private syncStartTimeout?: ReturnType<typeof setTimeout>;
 
   public state: PluginState = 'OFF';
 
@@ -232,7 +232,10 @@ export abstract class BasePluginAdapter implements PluginInterface {
       this.scheduledSyncId = id;
     } else {
       const delay = clockBridge.getDelayToQuantizationMs('1bar');
-      this.syncStartTimeout = window.setTimeout(() => {
+      // globales setTimeout statt window.setTimeout: der Adapter kann auch in
+      // einem Worker-Kontext laufen, wo `window` nicht existiert. Der Feldtyp
+      // ist ReturnType<typeof setTimeout>, damit beide Umgebungen passen.
+      this.syncStartTimeout = setTimeout(() => {
         this.syncStartTimeout = undefined;
         start();
       }, delay);
