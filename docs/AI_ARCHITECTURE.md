@@ -10,7 +10,7 @@
 | Komplexe Reasoning-Tasks | **DeepSeek V4 Pro** | nur wenn Flash nicht reicht |
 | TTS, Gesang, Song-Generierung | **Hugging Face** (MMS-TTS, Bark, MusicGen) | Free-Tier/PRO, spezialisierte Audio-Modelle |
 | Stems (Demucs) | **Replicate** (`ryan5453/demucs`) | Serverless-GPU, ~3–5 Cent/Song, schnell (~25–45 s) |
-| Lokaler Fallback (MOA/Sprachbefehle/TTS) | **Ollama** (`qwen2.5:7b`) auf ai-1 | offline, keine API-Kosten |
+| Lokaler Fallback (MOA/Sprachbefehle/TTS) | *(entfernt)* | offline, keine API-Kosten |
 | Notfall | Gemini/OpenAI | nur `AI_EMERGENCY_PROVIDERS=true` |
 
 **Groq ist entfernt** (Pay-as-you-go-Umstellung offen).

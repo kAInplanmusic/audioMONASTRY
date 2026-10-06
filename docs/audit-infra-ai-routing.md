@@ -53,6 +53,8 @@ Verfügbarkeitsprüfung in drei Stufen:
 2. `.map((id) => this.providers.get(id))` (`:447`) — nicht registrierte IDs werden zu `undefined`.
 3. `.filter((p): p is ILlmProvider => Boolean(p) && p.available)` (`:448`).
 
+**BEHOBEN 2026-10-06: OllamaProvider und ollamaGenerate vollständig entfernt (kein lokaler Dienst).**
+
 **Kernbefund R-1 (Default-Konfiguration ohne Netz):** Ohne `AI_ALLOW_EXTERNAL_LLM=true` und mit nicht verfügbarem RunPod-Brain bleibt effektiv nur `ollama (entfernt 2026-10-06)`. Da `ollama (entfernt 2026-10-06)Provider.available` bereits bei gesetztem `ollama (entfernt 2026-10-06)_URL` **oder** `ollama (entfernt 2026-10-06)_MODEL` `true` ist (`LlmRouter.ts:185-187`) — ohne Erreichbarkeitsprüfung — kann `rankProviders` einen Provider als verfügbar melden, der nicht antwortet. Der Fehler fällt erst in `complete()` (`:457`) und wird nur als „alle Provider fehlgeschlagen“ sichtbar.
 
 **Kernbefund R-2 (Fallback ist stumm):** Die Fallback-Kette in `complete()` (`:451-463`) probiert sequenziell und fängt **jeden** Fehler (`catch { lastError = error }`, `:458-460`). Es gibt keine Telemetrie pro Fehlversuch, keine Latenz-/Kostenrücksicht: ein toter `runpod-local`-Call kostet erst einen vollen Netzwerk-/Poll-Zyklus (1.4), bevor `ollama (entfernt 2026-10-06)` drankommt.

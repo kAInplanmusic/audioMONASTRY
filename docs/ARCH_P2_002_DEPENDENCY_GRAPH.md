@@ -114,7 +114,7 @@ konzentriert in der Socket-/Session-Schicht und in den drei Routen `/api/online`
 | Zeilen | 764–1468 (GAP-4-Kommentar + Helfer + Routen) |
 | Statements | 29 (28 Routen + die `app.use`-Sammelzeile aus Z. 496, s. Grenzen oben) |
 | lokaler Zustand | **keiner** |
-| blockeigene Helfer | `AI_TASK_IDS`, `isValidAiTask`, `isValidModelId`, `ollamaGenerate`, `sanitizeJsonBlock` |
+| blockeigene Helfer | `AI_TASK_IDS`, `isValidAiTask`, `isValidModelId`, `sanitizeJsonBlock` |
 | Nutzung dieser Helfer außerhalb 768–1468 | **keine** (per `grep` geprüft) |
 | einzige geteilte Abhängigkeit | `metrics` |
 
@@ -150,7 +150,7 @@ Registrierung an der Originalposition, Paritätsprüfung per Assertion statt Aug
 | neu | `server/routes/aiRoutes.ts` (798 Zeilen, Factory `registerAiRoutes(app, deps)`) |
 | verschoben | 2 Blöcke: Zeilen 517–534 (token-freier Artifact-Endpoint) und 764–1468 (Hauptblock) = 723 Zeilen |
 | `server.ts` | 3.356 → **2.608 Zeilen** (−748); Routen 51 → **23** |
-| Dependencies | `metrics` (aiRequests/aiFailures, geteilter Zähler) und `fleetTargets.ollama` (transitiv, s. Grenze 1) |
+| Dependencies | `metrics` (aiRequests/aiFailures, geteilter Zähler) |
 | Importe | 43 der 45 betroffenen Importe wandern mit; `llmRouter` und `uploadSampleToR2` bleiben in `server.ts` (dort weiterhin gebraucht) |
 | Der Code | 1:1 verschoben, **nur** die Einrückung ist neu (Assertion: 662 Code-Zeilen in Reihenfolge, 12 Template-Zeilen byte-identisch) |
 

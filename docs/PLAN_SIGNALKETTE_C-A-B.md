@@ -39,7 +39,7 @@ Schritt **5b/9 Caddy-DNS-Image gebaut** — der Fix aus der Vorsitzung (Caddy-Im
 **vor** den Compose-Starts) ist damit **live bestätigt**.
 
 Abgebrochen nach der Zeitbox: Schritt 6/9 (Rollen sfu/master/edge/ai einrichten,
-Ollama-Installation auf ai-1) lief noch, die Container standen noch nicht.
+Installation auf ai-1) lief noch, die Container standen noch nicht.
 **Konkreter nächster Fehler für einen erneuten Lauf:** nach dem Caddy-Build
 startet der Rollen-Compose auf sfu-1 erneut mit
 `pull access denied for audiomonastry-caddy-dns` — das Image existiert nur auf

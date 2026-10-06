@@ -148,7 +148,7 @@ scale-to-zero. Das früher diskutierte 500-GB-Volume (28,60 €/Monat) entfällt
 
 **Was gegenüber dem 5-Knoten-Bestand entfällt:** die Rolle `ai`
 (CPU-Fallback/Stem). Ihre Aufgabe ist mit der RunPod-Flotte (8 Rollen) und dem
-lokalen, bei Bedarf als Container auf `app` mitlaufenden Ollama abgedeckt.
+lokalen, bei Bedarf als Container auf `app` mitlaufenden Diensten abgedeckt.
 `app`, `sfu`, `master` und `edge` bleiben in allen Profilen erhalten; die
 Obergrenze von 5 Knoten (§1) bleibt unverändert gültig.
 
