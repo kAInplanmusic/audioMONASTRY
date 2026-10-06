@@ -13,7 +13,7 @@ import { GainNode, MasterSumNode, SourceNode, StereoPanNode } from './nodes/basi
 import { v2GainDbToLinear } from './v2GainDb';
 import type { IProcessingContext } from './types';
 
-export const V2_CHANNELS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8', 'channel9', 'channel10'] as const;
+export const V2_CHANNELS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'] as const;
 export type V2Channel = (typeof V2_CHANNELS)[number];
 
 const SILENCE = (len: number): Float32Array => new Float32Array(len);

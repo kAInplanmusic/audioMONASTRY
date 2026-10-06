@@ -2,7 +2,7 @@
  * audioMONASTRY · Phase 1, Schritt 1 – GraphStateBridge
  * ======================================================
  * Hebt `AudioGraphState` (export/import) auf den backend-unabhängigen Graph.
- * Phase 4: unterstützt alle 10 V2-Kanäle (channel1..channel10).
+ * Phase 4: unterstützt 8 V2-Kanäle (channel1..channel8).
  */
 import { AudioGraph } from './AudioGraph';
 import type { AudioGraphState } from '../../utils/audioGraphSerialization';

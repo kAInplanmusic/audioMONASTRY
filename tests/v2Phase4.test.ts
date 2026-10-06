@@ -38,39 +38,37 @@ function blockRms(block: Float32Array[] | null | undefined): number {
   return count === 0 ? 0 : Math.sqrt(sum / count);
 }
 
-describe('Phase 4 · GraphStateBridge auf 10 Kanäle', () => {
-  it('import/export round-trip erhält channel9/channel10 Gain/Pan', () => {
+describe('Phase 4 · GraphStateBridge auf 8 Kanäle', () => {
+  it('import/export round-trip erhält channel7/channel8 Gain/Pan', () => {
     const state = emptyAudioGraphState();
     state.channelGainsDb = {
       channel1: 0, channel2: 0, channel3: 0, channel4: 0,
-      channel5: 0, channel6: 0, channel7: 0, channel8: 0,
-      channel9: -7, channel10: 3,
+      channel5: 0, channel6: 0, channel7: -7, channel8: 3,
     };
     state.channelPans = {
       channel1: 0, channel2: 0, channel3: 0, channel4: 0,
-      channel5: 0, channel6: 0, channel7: 0, channel8: 0,
-      channel9: -0.75, channel10: 0.5,
+      channel5: 0, channel6: 0, channel7: -0.75, channel8: 0.5,
     };
 
     const bridge = new GraphStateBridge();
     bridge.importState(state);
     const exported = bridge.exportState(state);
 
-    expect(bridge.gainNodes.size).toBe(10);
-    expect(bridge.panNodes.size).toBe(10);
-    expect(exported.channelGainsDb.channel9).toBeCloseTo(-7, 5);
-    expect(exported.channelGainsDb.channel10).toBeCloseTo(3, 5);
-    expect(exported.channelPans.channel9).toBeCloseTo(-0.75, 5);
-    expect(exported.channelPans.channel10).toBeCloseTo(0.5, 5);
+    expect(bridge.gainNodes.size).toBe(8);
+    expect(bridge.panNodes.size).toBe(8);
+    expect(exported.channelGainsDb.channel7).toBeCloseTo(-7, 5);
+    expect(exported.channelGainsDb.channel8).toBeCloseTo(3, 5);
+    expect(exported.channelPans.channel7).toBeCloseTo(-0.75, 5);
+    expect(exported.channelPans.channel8).toBeCloseTo(0.5, 5);
     expect(bridge.graph.compile().validated).toBe(true);
   });
 });
 
 describe('Phase 4 · pluginChannelMap/Monitor-Routing in V2', () => {
-  it('pluginChannelMap kennt die V2-Kanäle channel9/channel10', () => {
-    expect(pluginAudioChannels('sound')).toContain('channel9');
-    expect(pluginAudioChannels('drop')).toContain('channel10');
-    expect(pluginMonitorSoloTrack('drum')).toBe('channel2');
+  it('pluginChannelMap kennt die V2-Kanäle nach 8-Kanal-Zuordnung', () => {
+    expect(pluginAudioChannels('sound')).toContain('channel7');
+    expect(pluginAudioChannels('drop')).toContain('channel1');
+    expect(pluginMonitorSoloTrack('drum')).toBe('channel3');
     expect(pluginMonitorSoloTrack('masterplayer')).toBeNull();
   });
 
@@ -84,10 +82,10 @@ describe('Phase 4 · pluginChannelMap/Monitor-Routing in V2', () => {
 });
 
 describe('Phase 4 · V2MonitorGraph – Cue/Main/Monitor als V2-Graph', () => {
-  it('baut 10 Kanalzüge + Cue-Bus + Monitor-Mischer ohne Zyklus', () => {
+  it('baut 8 Kanalzüge + Cue-Bus + Monitor-Mischer ohne Zyklus', () => {
     const graph = new V2MonitorGraph();
-    expect(graph.sources.size).toBe(10);
-    expect(graph.cueGains.size).toBe(10);
+    expect(graph.sources.size).toBe(8);
+    expect(graph.cueGains.size).toBe(8);
     const plan = graph.graph.compile();
     expect(plan.validated).toBe(true);
   });
