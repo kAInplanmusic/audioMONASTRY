@@ -6,10 +6,10 @@
 # Default-Typ ist ueberall cx23 (2 vCPU / 4 GB / 40 GB) und je Rolle per
 # FLEET_TYPE_<ROLLE> ueberschreibbar (Hetzner-Knappheit beim Reservieren):
 #
-#   app-1     cx42   Rolle app     + Floating IP (DNS), Caddy+API+Signaling+master-player+TURN
-#   sfu-1     cx32   Rolle sfu     (RTP-Ports 40000-40099 offen)
-#   media-1   cx42   Rolle media   (R2-Sync-Worker + Audio-Streaming-Cache + NVMe)
-#   edge-1    cx22   Rolle edge    (NUR Monitoring-Stack)
+#   app-1     cx43   Rolle app     + Floating IP (DNS), Caddy+API+Signaling+master-player+TURN
+#   sfu-1     cx33   Rolle sfu     (RTP-Ports 40000-40099 offen)
+#   media-1   cx43   Rolle media   (R2-Sync-Worker + Audio-Streaming-Cache + NVMe)
+#   edge-1    cx23   Rolle edge    (NUR Monitoring-Stack)
 #
 # Dieselben Overrides liest der Portal-Worker (services/portal-worker/src/index.js,
 # fleetServerType) - dort als Worker-Variablen gesetzt, hier aus .env.deploy bzw.
@@ -32,7 +32,7 @@ if [[ -f .env.deploy ]]; then
 fi
 
 # Servertypen konfigurierbar (Hetzner-Knappheit: cx33/cx43/cx53 oft nicht verfügbar;
-# Fallback auf die 4-Rollen Vorgaben: app cx42, sfu cx32, media cx42, edge cx22).
+# Fallback auf die 4-Rollen Vorgaben: app cx43, sfu cx33, media cx43, edge cx23).
 # Der Default ist NICHT beliebig: cx23 war zuvor gesetzt, nun explizite Typen per
 # FLEET_TYPE_<ROLLE> (INFRA-HETZNER-006/007). Dieselben Variablennamen liest der
 # Portal-Worker (services/portal-worker/src/index.js, fleetServerType).
@@ -41,10 +41,10 @@ fi
 # shellcheck source=scripts/hetzner/fleet-names.sh
 # shellcheck disable=SC1091
 source scripts/hetzner/fleet-names.sh
-TYPE_APP="${FLEET_TYPE_APP:-cx42}"
-TYPE_SFU="${FLEET_TYPE_SFU:-cx32}"
-TYPE_MEDIA="${FLEET_TYPE_MEDIA:-cx42}"
-TYPE_EDGE="${FLEET_TYPE_EDGE:-cx22}"
+TYPE_APP="${FLEET_TYPE_APP:-cx43}"
+TYPE_SFU="${FLEET_TYPE_SFU:-cx33}"
+TYPE_MEDIA="${FLEET_TYPE_MEDIA:-cx43}"
+TYPE_EDGE="${FLEET_TYPE_EDGE:-cx23}"
 
 # Trockenlauf (INFRA-HETZNER-007): Rollen + effektive Typen ausgeben - ohne
 # HCLOUD_TOKEN und ohne API-Aufrufe. Das ist der Beleg-Pfad fuer den Abgleich
@@ -60,7 +60,7 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
     audiomonastry-sfu-1    "$TYPE_SFU"    sfu    "firewall=audiomonastry-sfu, floating-ip=none (RTP 40000-40099)" \
     audiomonastry-media-1  "$TYPE_MEDIA"  media  "firewall=audiomonastry-media, floating-ip=none (R2-Sync-Worker + Audio-Streaming-Cache + NVMe)" \
     audiomonastry-edge-1   "$TYPE_EDGE"   edge   "firewall=audiomonastry-edge, floating-ip=none (nur Monitoring)"
-  echo "[dry-run] Override je Rolle: FLEET_TYPE_APP/SFU/MEDIA/EDGE (Default cx42/cx32/cx42/cx22)"
+  echo "[dry-run] Override je Rolle: FLEET_TYPE_APP/SFU/MEDIA/EDGE (Default cx43/cx33/cx43/cx23)"
   exit 0
 fi
 

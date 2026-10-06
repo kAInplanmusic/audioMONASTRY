@@ -43,7 +43,7 @@ Flottenquelle.
 `app` (Caddy + API + Signaling + master-player + TURN) · `sfu` (mediasoup, RTP 40000–40099) ·
 `media` (R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume) ·
 `edge` (Monitoring/Smoke).
-Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default app cx42, sfu cx32, media cx42, edge cx22.
+Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default app cx43, sfu cx33, media cx43, edge cx23.
 AI_MODE=off, kein ai-1.
 
 ---

@@ -23,17 +23,15 @@ const HETZNER = 'https://api.hetzner.cloud/v1';
 // neuen Namen).
 //
 // INFRA-HETZNER-007: `type` ist der FALLBACK der Rolle. Der produktive Pfad liest
-// dieselben Overrides wie die CLI (FLEET_TYPE_APP/SFU/AI/MASTER/EDGE, siehe
+// dieselben Overrides wie die CLI (FLEET_TYPE_APP/SFU/MEDIA/EDGE, siehe
 // fleetServerType) - vorher waren die Env-Vorgaben im Portalbetrieb wirkungslos,
-// weil nur provision-fleet.sh sie las. Die Fallbacks selbst sind eine
-// Betreiber-Entscheidung: der Snapshot-Bestand vom 2026-09-18 zeigt fuer
-// app/sfu/ai 80-GB-Disks (cx33) und fuer master/edge 40 GB (cx23).
+// weil nur provision-fleet.sh sie las. Die Fallbacks sind die 4er-Flotte:
+// app/sfu/media/edge.
 const FLEET = [
-  { name: 'audiomonastry-app-1',    type: 'cx33', role: 'app' },
-  { name: 'audiomonastry-sfu-1',    type: 'cx33', role: 'sfu' },
-  { name: 'audiomonastry-ai-1',     type: 'cx33', role: 'ai' },
-  { name: 'audiomonastry-master-1', type: 'cx23', role: 'master' },
-  { name: 'audiomonastry-edge-1',   type: 'cx23', role: 'edge' },
+  { name: 'audiomonastry-app-1',   type: 'cx43', role: 'app' },
+  { name: 'audiomonastry-sfu-1',   type: 'cx33', role: 'sfu' },
+  { name: 'audiomonastry-media-1', type: 'cx43', role: 'media' },
+  { name: 'audiomonastry-edge-1',  type: 'cx23', role: 'edge' },
 ];
 
 // INFRA-HETZNER-006: edge-1 startet NUR den Monitoring-Stack - die explizite
@@ -179,7 +177,7 @@ function snapshotRoleOf(img) {
   // cloud-init + Build (gemessen: statt Snapshot-Start; `usedSnapshots: {}`).
   // Die Rolle wird daher aus Name/Beschreibung abgeleitet, wenn das Label fehlt.
   const text = `${img?.name ?? ''} ${img?.description ?? ''}`;
-  const match = text.match(new RegExp(`${SNAPSHOT_PREFIX}(app|sfu|ai|master|edge)(?![a-z])`));
+  const match = text.match(new RegExp(`${SNAPSHOT_PREFIX}(app|sfu|media|edge)(?![a-z])`));
   if (match) return match[1];
   return null;
 }
@@ -1785,7 +1783,7 @@ function serverRole(server) {
   const label = String(server?.labels?.role ?? '').trim();
   if (label) return label;
   const name = String(server?.name ?? '');
-  const match = name.match(new RegExp(`^${NAME_PREFIX}(app|sfu|ai|master|edge)(?![a-z])`));
+  const match = name.match(new RegExp(`^${NAME_PREFIX}(app|sfu|media|edge)(?![a-z])`));
   return match ? match[1] : null;
 }
 

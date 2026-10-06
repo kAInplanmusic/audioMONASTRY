@@ -46,31 +46,32 @@ STEM_AI_PROVIDER=replicate
 REPLICATE_API_TOKEN=r8_...
 REPLICATE_STEM_MODEL=ryan5453/demucs
 
-# Lokale KI (ai-1)
-OLLAMA_URL=http://<ai-1>:11434
+# Lokale KI (im app-1-Container, AI_MODE=on)
+OLLAMA_URL=http://localhost:11434
 OLLAMA_MODEL=qwen2.5:7b
 
 # Admin/Root
 ADMIN_TOKEN=<langes-zufalls-token>
 ```
 
-## Flotte (5 Hetzner-Rollen: app/sfu/ai/master/edge, ohne GPU)
+## Flotte (4 Hetzner-Rollen: app/sfu/media/edge, ohne GPU)
 
 Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar; Default-Spalte = CLI-Default
-(`provision-fleet.sh`), der Portal-Worker nutzt für app/sfu/ai `cx33`. Verbindliche
-Tabelle: `docs/SERVER_FLEET.md`.
+(`provision-fleet.sh`), der Portal-Worker liest dieselben Overrides
+(INFRA-HETZNER-007). Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
+
+Ollama läuft **mit im app-1-Container** (`AI_MODE=on`) – es gibt keinen eigenen
+`ai-1`-Knoten mehr. Stem-Backup läuft lokal im selben Container.
 
 | # | Instanz | Typ | Rolle |
 |---|---|---|---|
-| 1 | ai-1 | cx23 | Ollama (host-nativ) + Stem-CPU-Fallback |
-| 2 | app-1 | cx23 | App/API/Signaling |
-| 3 | sfu-1 | cx23 | Mediasoup-SFU |
-| 4 | master-1 | cx23 | FFmpeg-Mastering |
-| 5 | edge-1 | cx23 | Monitoring-Stack (nur der Stack), Smoke |
+| 1 | app-1 | cx43 | App/API/Signaling + Ollama (`AI_MODE=on`), Floating IP |
+| 2 | sfu-1 | cx33 | Mediasoup-SFU (UDP/TCP 40000–40099) |
+| 3 | media-1 | cx43 | R2-Sync-Worker + Audio-Streaming-Cache (lokale NVMe) |
+| 4 | edge-1 | cx23 | Monitoring-Stack (nur der Stack) |
 
-Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7 mit den Portal-Typen 3×cx33 + 2×cx23;
-mit dem CLI-Default 5×cx23 ≈ 30,45 €/Monat, s. `docs/SERVER_FLEET.md` §Kosten) +
-API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
+Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7 mit den Portal-Typen 2×cx43 + 1×cx33 + 1×cx23,
+s. `docs/SERVER_FLEET.md` §Kosten) + API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
 
 > **Stand 2026-09-20:** Die frühere Angabe **≈ 0,36 €/h** stammte aus dem
 > CCX33-Altbestand und ist überholt. GPU-Inferenz läuft **nicht** auf diesen

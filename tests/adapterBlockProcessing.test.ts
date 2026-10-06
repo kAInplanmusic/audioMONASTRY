@@ -4,6 +4,8 @@ import { EffectPluginAdapter } from '../src/plugins/adapters/EffectPluginAdapter
 import { DspPluginAdapter } from '../src/plugins/adapters/DspPluginAdapter';
 import { EqPluginAdapter } from '../src/plugins/adapters/EqPluginAdapter';
 import { MasterPluginAdapter } from '../src/plugins/adapters/MasterPluginAdapter';
+import { SpatialPluginAdapter } from '../src/plugins/adapters/SpatialPluginAdapter';
+import { MixerPluginAdapter } from '../src/plugins/adapters/MixerPluginAdapter';
 import type { PluginInterface, PluginParameterValue } from '../src/plugins/plugin_interface';
 import type { PluginState } from '../src/plugins/types';
 
@@ -205,6 +207,128 @@ describe('Adapter-Blockverarbeitung: eq (3-Band-Tonregelung)', () => {
     const dryEnergy = settledEnergy(constant(2000)[0]);
     expect(settledEnergy(out[0])).toBeLessThan(dryEnergy * 0.01);
     expect(settledEnergy(out[1])).toBeLessThan(dryEnergy * 0.01);
+  });
+});
+
+describe('Adapter-Blockverarbeitung: spatial (Pan/Breite je Kanal)', () => {
+  it('ist ohne Parameter transparent', () => {
+    const adapter = new SpatialPluginAdapter();
+    const src = sine(64, 2);
+    const out = runChannels(adapter, sine(64, 2));
+    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+    expect(Array.from(out[1])).toEqual(Array.from(src[1]));
+  });
+
+  it('ist bei OFF transparent', () => {
+    const adapter = new SpatialPluginAdapter();
+    const src = sine(64, 2);
+    const out = runChannels(adapter, sine(64, 2), { pan: 1, width: 2 }, 'OFF');
+    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('legt bei pan=-1 den linken Kanal auf Spitze, den rechten auf null', () => {
+    const src = constant(32, 2, 1);
+    const out = runChannels(new SpatialPluginAdapter(), [src[0].slice(), src[1].slice()], { pan: -1 });
+    // cos(0) = 1 \u2192 links unver\u00e4ndert, sin(0) = 0 \u2192 rechts still.
+    expect(out[0][31]).toBeCloseTo(1, 6);
+    expect(out[1][31]).toBeCloseTo(0, 6);
+  });
+
+  it('legt bei pan=+1 den rechten Kanal auf Spitze, den linken auf null', () => {
+    const src = constant(32, 2, 1);
+    const out = runChannels(new SpatialPluginAdapter(), [src[0].slice(), src[1].slice()], { pan: 1 });
+    expect(out[0][31]).toBeCloseTo(0, 6);
+    expect(out[1][31]).toBeCloseTo(1, 6);
+  });
+
+  it('haelt die Leistung bei pan=0 (Mitte) konstant', () => {
+    const src = constant(32, 2, 1);
+    const out = runChannels(new SpatialPluginAdapter(), [src[0].slice(), src[1].slice()], { pan: 0.0001 });
+    const power = out[0][31] ** 2 + out[1][31] ** 2;
+    expect(power).toBeCloseTo(1, 3);
+  });
+
+  it('klemmt pan auf -1…1', () => {
+    const src = constant(16, 2, 1);
+    const out = runChannels(new SpatialPluginAdapter(), [src[0].slice(), src[1].slice()], { pan: 99 });
+    expect(out[1][15]).toBeCloseTo(1, 6);
+  });
+
+  it('komprimiert bei width=0 auf Mono (beide Kanaele gleich)', () => {
+    const left = Float32Array.from({ length: 32 }, () => 1);
+    const right = Float32Array.from({ length: 32 }, () => -1);
+    const out = runChannels(new SpatialPluginAdapter(), [left, right], { width: 0 });
+    // M = (1 + -1)/2 = 0 \u2192 beide Kan\u00e4le 0.
+    expect(out[0][31]).toBeCloseTo(0, 6);
+    expect(out[1][31]).toBeCloseTo(0, 6);
+  });
+
+  it('verdoppelt bei width=2 die Differenz zum Mittenbild', () => {
+    const left = Float32Array.from({ length: 32 }, () => 0.4);
+    const right = Float32Array.from({ length: 32 }, () => 0.2);
+    const out = runChannels(new SpatialPluginAdapter(), [left, right], { width: 2 });
+    // M = 0.3; L = 0.3 + (0.4-0.3)*2 = 0.5; R = 0.3 + (0.2-0.3)*2 = 0.1
+    expect(out[0][31]).toBeCloseTo(0.5, 6);
+    expect(out[1][31]).toBeCloseTo(0.1, 6);
+  });
+});
+
+describe('Adapter-Blockverarbeitung: mixer (Kanal-Gains/Pan als Summe)', () => {
+  it('ist ohne Parameter transparent', () => {
+    const adapter = new MixerPluginAdapter();
+    const src = sine(64, 2);
+    const out = runChannels(adapter, sine(64, 2));
+    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+    expect(Array.from(out[1])).toEqual(Array.from(src[1]));
+  });
+
+  it('ist bei OFF transparent', () => {
+    const adapter = new MixerPluginAdapter();
+    const src = sine(64, 2);
+    const out = runChannels(adapter, sine(64, 2), { gain: 2 }, 'OFF');
+    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('halbiert bei gain=0.5 alle Kanaele', () => {
+    const src = sine(32, 2);
+    const out = runChannels(new MixerPluginAdapter(), sine(32, 2), { gain: 0.5 });
+    for (let i = 0; i < 32; i++) {
+      expect(out[0][i]).toBeCloseTo(src[0][i] * 0.5, 6);
+      expect(out[1][i]).toBeCloseTo(src[1][i] * 0.5, 6);
+    }
+  });
+
+  it('klemmt gain auf 0…2', () => {
+    const src = sine(16, 1);
+    const doubled = runChannels(new MixerPluginAdapter(), sine(16, 1), { gain: 9 })[0];
+    for (let i = 0; i < 16; i++) expect(doubled[i]).toBeCloseTo(src[0][i] * 2, 6);
+
+    const silent = runChannels(new MixerPluginAdapter(), sine(16, 1), { gain: -3 })[0];
+    for (let i = 0; i < 16; i++) expect(silent[i]).toBe(0);
+  });
+
+  it('summiert kanalweise Gains getrennt (gain:0 / gain:1)', () => {
+    const src = sine(32, 2);
+    const out = runChannels(new MixerPluginAdapter(), sine(32, 2), { 'gain:0': 0.5, 'gain:1': 0 });
+    for (let i = 0; i < 32; i++) {
+      expect(out[0][i]).toBeCloseTo(src[0][i] * 0.5, 6);
+      // gain=0 ergibt -0 statt +0 (Vorzeichen des Quellsignals) – beide sind null.
+      expect(Math.abs(out[1][i])).toBe(0);
+    }
+  });
+
+  it('schickt einen Kanal-Pan auf den anderen Kanal', () => {
+    const src = constant(32, 2, 1);
+    const out = runChannels(new MixerPluginAdapter(), [src[0].slice(), src[1].slice()], { pan: 1 });
+    expect(out[0][31]).toBeCloseTo(0, 6);
+    expect(out[1][31]).toBeCloseTo(1, 6);
+  });
+
+  it('haelt die Leistung bei Pan in der Mitte', () => {
+    const src = constant(32, 2, 1);
+    const out = runChannels(new MixerPluginAdapter(), [src[0].slice(), src[1].slice()], { pan: 0.0001 });
+    const power = out[0][31] ** 2 + out[1][31] ** 2;
+    expect(power).toBeCloseTo(1, 3);
   });
 });
 
