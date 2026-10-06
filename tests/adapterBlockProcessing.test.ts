@@ -1,22 +1,60 @@
 import { describe, expect, it } from 'vitest';
 
 import { EffectPluginAdapter } from '../src/plugins/adapters/EffectPluginAdapter';
+import { EqPluginAdapter } from '../src/plugins/adapters/EqPluginAdapter';
 import { MasterPluginAdapter } from '../src/plugins/adapters/MasterPluginAdapter';
 import type { PluginInterface, PluginParameterValue } from '../src/plugins/plugin_interface';
 import type { PluginState } from '../src/plugins/types';
 
 const SR = 8000;
 
+type Params = Record<string, PluginParameterValue['value']>;
+
 /** Deterministische Quelle (kein Rauschen) für bit-genaue Vergleiche. */
-function channelsOf(frames: number, count = 1): Float32Array[] {
+function sine(frames: number, count = 1): Float32Array[] {
   return Array.from({ length: count }, (_, c) =>
     Float32Array.from({ length: frames }, (_, i) => Math.sin((i + c) / 5) * 0.8),
   );
 }
 
-type Params = Record<string, PluginParameterValue['value']>;
+function constant(frames: number, count = 1, value = 1): Float32Array[] {
+  return Array.from({ length: count }, () => Float32Array.from({ length: frames }, () => value));
+}
+
+function alternating(frames: number): Float32Array[] {
+  return [Float32Array.from({ length: frames }, (_, i) => (i % 2 === 0 ? 1 : -1))];
+}
+
+/** Signalenergie – für Band-Aussagen („Band entfernt = Energie weg“). */
+function energy(samples: Float32Array): number {
+  let sum = 0;
+  for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+  return sum;
+}
+
+/** Energie des eingeschwungenen Teils (letztes Viertel) – ohne Einschwingen. */
+function settledEnergy(samples: Float32Array): number {
+  return energy(samples.subarray(Math.floor(samples.length * 0.75)));
+}
 
 /** Setzt Zustand/Parameter deterministisch und schickt EINEN Block durch. */
+function runChannels(
+  adapter: PluginInterface,
+  channels: Float32Array[],
+  params: Params = {},
+  state: PluginState = 'PRO',
+): Float32Array[] {
+  adapter.restore({ pluginId: adapter.manifest.id, state, parameters: params });
+  const block = adapter.process({
+    channels,
+    sampleRate: SR,
+    timestamp: 0,
+    frameCount: channels[0]?.length ?? 0,
+  });
+  return block.channels as Float32Array[];
+}
+
+/** Kurzform: ein Block aus Sinusquellen. */
 function runBlock(
   adapter: PluginInterface,
   params: Params = {},
@@ -24,52 +62,41 @@ function runBlock(
   frames = 64,
   count = 1,
 ): Float32Array[] {
-  adapter.restore({ pluginId: adapter.manifest.id, state, parameters: params });
-  const block = adapter.process({
-    channels: channelsOf(frames, count),
-    sampleRate: SR,
-    timestamp: 0,
-    frameCount: frames,
-  });
-  return block.channels as Float32Array[];
+  return runChannels(adapter, sine(frames, count), params, state);
 }
 
 describe('Adapter-Blockverarbeitung: effect (Bit-Tiefe + Dry/Wet)', () => {
   it('ist bei voller Bit-Tiefe transparent', () => {
     const adapter = new EffectPluginAdapter();
-    const src = channelsOf(64);
-    const out = runBlock(adapter, {}, 'PRO');
-    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+    const src = sine(64);
+    expect(Array.from(runBlock(adapter)[0])).toEqual(Array.from(src[0]));
   });
 
   it('ist bei OFF transparent, auch mit niedriger Bit-Tiefe', () => {
     const adapter = new EffectPluginAdapter();
-    const src = channelsOf(64);
-    const out = runBlock(adapter, { bits: 3 }, 'OFF');
-    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+    const src = sine(64);
+    expect(Array.from(runBlock(adapter, { bits: 3 }, 'OFF')[0])).toEqual(Array.from(src[0]));
   });
 
   it('quantisiert bei bits=4 auf Achtel-Schritte', () => {
     const adapter = new EffectPluginAdapter();
-    const src = channelsOf(64);
-    const out = runBlock(adapter, { bits: 4, wet: 1 });
+    const src = sine(64);
+    const out = runBlock(adapter, { bits: 4, wet: 1 })[0];
     for (let i = 0; i < 64; i++) {
-      expect(out[0][i]).toBeCloseTo(Math.round(src[0][i] * 8) / 8, 6);
-      expect(out[0][i] * 8).toBeCloseTo(Math.round(out[0][i] * 8), 6); // Vielfaches von 1/8
+      expect(out[i]).toBeCloseTo(Math.round(src[0][i] * 8) / 8, 6);
     }
-    expect(Array.from(out[0])).not.toEqual(Array.from(src[0]));
+    expect(Array.from(out)).not.toEqual(Array.from(src[0]));
   });
 
   it('laesst bei wet=0 das trockene Signal stehen', () => {
     const adapter = new EffectPluginAdapter();
-    const src = channelsOf(64);
-    const out = runBlock(adapter, { bits: 4, wet: 0 });
-    expect(Array.from(out[0])).toEqual(Array.from(src[0]));
+    const src = sine(64);
+    expect(Array.from(runBlock(adapter, { bits: 4, wet: 0 })[0])).toEqual(Array.from(src[0]));
   });
 
   it('klemmt bits auf 1…16', () => {
     const adapter = new EffectPluginAdapter();
-    const src = channelsOf(16);
+    const src = sine(16);
     // 99 -> 16 -> transparent
     expect(Array.from(runBlock(adapter, { bits: 99 }, 'PRO', 16)[0])).toEqual(Array.from(src[0]));
     // -3 -> 1 -> Stufen von 1.0 (alles auf -1/0/1 gerundet)
@@ -94,24 +121,88 @@ describe('Adapter-Blockverarbeitung: effect (Bit-Tiefe + Dry/Wet)', () => {
 describe('Adapter-Blockverarbeitung: master (Ausgangsverstaerkung)', () => {
   it('ist ohne Parameter transparent', () => {
     const adapter = new MasterPluginAdapter();
-    const src = channelsOf(32);
+    const src = sine(32);
     expect(Array.from(runBlock(adapter, {}, 'PRO', 32)[0])).toEqual(Array.from(src[0]));
   });
 
   it('halbiert bei gain=0.5', () => {
     const adapter = new MasterPluginAdapter();
-    const src = channelsOf(32);
+    const src = sine(32);
     const out = runBlock(adapter, { gain: 0.5 })[0];
     for (let i = 0; i < 32; i++) expect(out[i]).toBeCloseTo(src[0][i] * 0.5, 6);
   });
 
   it('klemmt gain auf 0…2', () => {
     const adapter = new MasterPluginAdapter();
-    const src = channelsOf(16);
+    const src = sine(16);
     const doubled = runBlock(adapter, { gain: 5 })[0];
     for (let i = 0; i < 16; i++) expect(doubled[i]).toBeCloseTo(src[0][i] * 2, 6);
 
     const silent = runBlock(adapter, { gain: -1 })[0];
     for (let i = 0; i < 16; i++) expect(silent[i]).toBe(0);
+  });
+});
+
+describe('Adapter-Blockverarbeitung: eq (3-Band-Tonregelung)', () => {
+  it('ist in Einheitsstellung transparent', () => {
+    const adapter = new EqPluginAdapter();
+    const src = sine(64);
+    expect(Array.from(runBlock(adapter, {}, 'PRO')[0])).toEqual(Array.from(src[0]));
+    expect(Array.from(runBlock(adapter, { low: 0, mid: 0, high: 0 }, 'PRO')[0])).toEqual(
+      Array.from(src[0]),
+    );
+  });
+
+  it('ist bei OFF transparent', () => {
+    const adapter = new EqPluginAdapter();
+    const src = sine(64);
+    expect(Array.from(runBlock(adapter, { low: 24 }, 'OFF')[0])).toEqual(Array.from(src[0]));
+  });
+
+  it('entfernt das Tiefton-Band bei low = -24 dB (Gleichanteil)', () => {
+    const adapter = new EqPluginAdapter();
+    const dry = constant(4000);
+    const wet = runChannels(adapter, constant(4000), { low: -24 });
+    // Eingeschwungen: -24 dB entspricht Faktor 0,063 -> rund 0,4 % der Energie.
+    expect(settledEnergy(wet[0])).toBeLessThan(settledEnergy(dry[0]) * 0.01);
+  });
+
+  it('daempft das Hochton-Band bei high = -24 dB und hebt es bei +24 dB', () => {
+    // Ein-Pol-Uebergaenge ueberlappen stark: das Mittenband traegt bei einem
+    // Wechselsignal auch Energie. Geprueft wird deshalb die RICHTUNG, nicht die
+    // vollstaendige Entfernung.
+    const dry = settledEnergy(alternating(4000)[0]);
+    const cut = settledEnergy(runChannels(new EqPluginAdapter(), alternating(4000), { high: -24 })[0]);
+    const boost = settledEnergy(runChannels(new EqPluginAdapter(), alternating(4000), { high: 24 })[0]);
+    expect(cut).toBeLessThan(dry);
+    expect(boost).toBeGreaterThan(dry);
+  });
+
+  it('daempft das Mittenband bei mittleren Frequenzen (1 kHz)', () => {
+    const mid = (frames: number) =>
+      Float32Array.from({ length: frames }, (_, i) => Math.sin((2 * Math.PI * 1000 * i) / SR));
+    const dryEnergy = settledEnergy(mid(4000));
+    const cut = settledEnergy(runChannels(new EqPluginAdapter(), [mid(4000)], { mid: -24 })[0]);
+    const boost = settledEnergy(runChannels(new EqPluginAdapter(), [mid(4000)], { mid: 24 })[0]);
+    expect(cut).toBeLessThan(dryEnergy * 0.2);
+    expect(boost).toBeGreaterThan(dryEnergy * 5);
+  });
+
+  it('verstaerkt das Tiefton-Band bei +24 dB und bleibt endlich', () => {
+    const adapter = new EqPluginAdapter();
+    const wet = runChannels(adapter, constant(4000), { low: 99 })[0];
+    expect(Number.isFinite(wet[3999])).toBe(true);
+    // +24 dB entspricht Faktor 15,85 auf dem Gleichanteil.
+    expect(wet[3999]).toBeGreaterThan(10);
+    expect(wet[3999]).toBeLessThan(20);
+  });
+
+  it('arbeitet auf beiden Kanaelen', () => {
+    const adapter = new EqPluginAdapter();
+    const out = runChannels(adapter, constant(2000, 2), { low: -24 });
+    expect(out.length).toBe(2);
+    const dryEnergy = settledEnergy(constant(2000)[0]);
+    expect(settledEnergy(out[0])).toBeLessThan(dryEnergy * 0.01);
+    expect(settledEnergy(out[1])).toBeLessThan(dryEnergy * 0.01);
   });
 });
