@@ -274,9 +274,15 @@ zur Ausgabe** — Hörproben laufen ausschließlich über diesen Weg (2026-09-23
 ## 7. Die 16 Module
 
 Genau **16** Module („MONKs"), geladen zur Laufzeit aus `public/plugin-manifest.json`;
-stimmt die Anzahl nicht, greift die eingebaute Liste. Zustände: **OFF** (transparenter Bypass) ·
-**AUTO_AI** (Vorschläge) · **PRO** (volle Oberfläche). Beim Betreten des Studios startet **alles
-in OFF**, die Ausgabe ist im Ruhezustand still.
+stimmt die Anzahl nicht, greift die eingebaute Liste. Modi in der Oberfläche (Modus-Button rechts
+am Plugin, OFF → STBY → ON → OFF): **OFF** (frei, transparenter Bypass, jede Person darf es holen) ·
+**STBY** (einer Person zugeordnet, noch nicht aktiv) · **ON** (aktiv, Bedienfläche beim Halter offen).
+Fremde Plugins sind gesperrt, es gibt kein Anfragen und kein Übernehmen. `mixerMONK` ist immer ON und
+hat immer genau einen Halter; nur der Halter übergibt ihn. KI-Vorschläge laufen über `aiMONK`.
+Intern bilden sich die Modi auf den replizierten Modul-Zustand (`OFF`/`PRO`) und den zentralen Lock ab
+(`src/core/session/pluginMode.ts`); `AUTO_AI` ist nur noch Altbestand im Vertrag. Spielende Plugins
+haben eine **SYNC**-Taste gegen Main (Standard an). Beim Betreten des Studios startet **alles in
+OFF**, die Ausgabe ist im Ruhezustand still.
 
 | # | ID | Name | Rolle |
 |---|---|---|---|

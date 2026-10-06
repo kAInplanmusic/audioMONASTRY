@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Layout: Kopf (Logo + 16 Kacheln) · Masterplayer (nur Ansicht) · mixerMONK (Hardware-Pult) · 15 Plugin-Streifen in Kopfreihenfolge · aiMONK + perfMONK.
+/* Layout: Kopf (Logo + 16 Kacheln) · Masterplayer (nur Ansicht) · mixerMONK (Hardware-Pult) · 15 Plugin-Streifen in Kopfreihenfolge · aiMONK + perforMONK.
    Dunkles Studio-Thema mit Neon-Konturen nach den Betreiber-Vorlagen (bewusst nur dunkel). Modulfarben aus docs/UI_SPEC.md. */
 :root{
   color-scheme:dark;
@@ -1467,7 +1467,7 @@ function renderFoot(){const act=MODS.filter(m=>modeOf(m.id)==='on').length;
   <div class="chips">${[['analyze','Diesen Track analysieren'],['sound','Neuen Sound erzeugen'],['mix','Mix optimieren'],['sample','Sample erzeugen']].map(([k,n])=>`<button class="chip" data-a="aiq:${k}">${n}</button>`).join('')}<button class="chip" data-a="ai:hilfe">Befehle</button></div></div>
  <div class="card" style="--c:#ff4fa8"><h3>Modell</h3><select class="sel" aria-label="Modell"><option>Lokal · Entwurf</option><option>Qwen3-14B (Server)</option></select><label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox"> Max. Denken</label><span class="hint">Im Entwurf antwortet aiMONK lokal; in der App über den Server.</span></div>
  <div class="card" style="--c:#ff4fa8"><h3>Projekt-Kontext</h3><div class="ctx"><span>Hört gerade <b id="aiNow">${esc(S.song.takes[S.song.take]||'Klosterhof (Demo)')}</b></span><span>BPM <b>${S.bpm}</b></span><span>Tonart <b>${keyName()}</b></span><span>Plugins aktiv <b id="aiAct">${act}/16</b></span></div></div></div></section>
- <section class="box" style="--c:#3ddc84;border-color:rgba(61,220,132,.4)" aria-label="perfMONK"><h2>${MARK}perfMONK <small>Leistung und Telemetrie · fest für alle</small></h2><div class="prf">
+ <section class="box" style="--c:#3ddc84;border-color:rgba(61,220,132,.4)" aria-label="perforMONK"><h2>${MARK}perforMONK <small>Leistung und Telemetrie · fest für alle</small></h2><div class="prf">
  <div class="kpi"><b id="pfCpu">–</b><span>Audio-Last (CPU)</span><i class="bud"><i id="pfCpuB"></i></i></div><div class="kpi"><b id="pfFps">–</b><span>Bilder/s · GPU</span><i class="bud"><i id="pfFpsB"></i></i></div>
  <div class="kpi"><b id="pfMem">–</b><span>Speicher</span></div><div class="kpi"><b id="pfLat">–</b><span>Latenz</span><i class="bud"><i id="pfLatB"></i></i></div>
  <div class="kpi"><b id="pfDrop">0</b><span>Dropouts</span></div><div class="kpi"><b id="pfWl">–</b><span>Worklets · SAB <span id="pfSab"></span></span></div>
@@ -1756,7 +1756,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');
   case 'aiq':aiQuick(x);break;
   case 'ai':ai(b.dataset.a.slice(3));break;
   case 'settings':{const p=$('#panel');p.hidden=!p.hidden;if(!p.hidden)p.innerHTML=`<h3>Einstellungen</h3><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="calm" ${document.body.classList.contains('calm')?'checked':''}> Leuchten und Pulsieren ausschalten</label>
-   <h3>Regeln dieser Oberfläche</h3><ul><li>Kopf, Masterplayer, perfMONK und aiMONK sind für alle fest.</li><li>Den Mixer hält genau eine Person. Er ist nicht schließbar und wird nur übergeben (MIX LOCK).</li><li>Die 15 Plugins: OFF = frei, STBY = gehalten, nicht aktiv, ON = aktiv.</li><li>Fremde Plugins sind gesperrt, ohne Anfragen.</li><li>Ton auf Main startet nur mit ▶ im Mixer-Kanal.</li><li>Verlässt der Halter die Sitzung, bekommt den Mixer, wer am längsten dabei ist.</li><li>Bildschirm: Mixer oben, dann Kopfreihenfolge. Die Leiste „Signalweg“ zeigt die Verkabelung.</li></ul><button class="btn" data-a="settings">Schließen</button>`;
+   <h3>Regeln dieser Oberfläche</h3><ul><li>Kopf, Masterplayer, perforMONK und aiMONK sind für alle fest.</li><li>Den Mixer hält genau eine Person. Er ist nicht schließbar und wird nur übergeben (MIX LOCK).</li><li>Die 15 Plugins: OFF = frei, STBY = gehalten, nicht aktiv, ON = aktiv.</li><li>Fremde Plugins sind gesperrt, ohne Anfragen.</li><li>Ton auf Main startet nur mit ▶ im Mixer-Kanal.</li><li>Verlässt der Halter die Sitzung, bekommt den Mixer, wer am längsten dabei ist.</li><li>Bildschirm: Mixer oben, dann Kopfreihenfolge. Die Leiste „Signalweg“ zeigt die Verkabelung.</li></ul><button class="btn" data-a="settings">Schließen</button>`;
    const cb=$('#calm');cb&&cb.addEventListener('change',()=>document.body.classList.toggle('calm',cb.checked));break}
  }});
 function flashEl(b){b.classList.add('hit');setTimeout(()=>b.classList.remove('hit'),130)}

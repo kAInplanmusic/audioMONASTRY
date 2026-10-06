@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { entryButton } from './helpers/studioNav';
+import { entryButton, modeButton, rackRow } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -92,6 +92,23 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await page.keyboard.press('Control+Digit1');
     await expect(dropRack).toHaveAttribute('data-plugin-mode', 'OFF');
     await expect(dropNav).not.toHaveAttribute('aria-current', /.+/);
+  });
+
+  test('UI2-P3-003: Modus-Button ist per Tastatur bedienbar (Enter: OFF → STBY → ON → OFF)', async ({ page }) => {
+    await page.goto('/');
+    await entryButton(page).click();
+    await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
+
+    const eq = rackRow(page, 'eq');
+    const button = modeButton(page, 'eqMONK');
+    await expect(eq).toHaveAttribute('data-plugin-mode', 'OFF');
+    for (const expected of ['STBY', 'ON', 'OFF']) {
+      await button.focus();
+      await page.keyboard.press('Enter');
+      await expect(eq).toHaveAttribute('data-plugin-mode', expected);
+    }
+    // Zustand steht als Text am Button, nicht nur als Farbe.
+    await expect(button).toHaveText(/OFF/);
   });
 
   test('Hotkeys brechen Eingabefelder nicht (Space tippt Leerzeichen, Ctrl+1 togglet ohne die Eingabe zu verändern)', async ({ page }) => {

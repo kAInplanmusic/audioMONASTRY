@@ -1,6 +1,6 @@
 # audioMONASTRY – Oberflächen-Spezifikation
 
-Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README
+Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` · Modulliste: die 16 aus der README · Kurzfassung für Agenten: `.agents/skills/ui-spec/SKILL.md`
 
 ## Aufbau (von oben nach unten)
 
@@ -9,7 +9,7 @@ Stand: 2026-10-06 · Sichtbare Vorlage: `docs/design/audioMONASTRY-design.html` 
 3. **mixerMONK** – steht immer oben. Bei genau einem Nutzer immer offen, nicht schließbar. Nur der Halter kann ihn übergeben. Es gibt keine Anfrage.
 4. **Die 15 anderen Plugins** – nacheinander in der Kopfreihenfolge (`plugins/registry.ts`):
    drop, song, effect, syntisampler, drumsampler, instru, biblio, voice, sound, stem, spatial, eq, dsp, master, record.
-5. **Fuß** – fest für alle: perfMONK, aiMONK.
+5. **Fuß** – fest für alle: perforMONK, aiMONK.
 
 **Bildschirm ≠ Signalweg (Betreiber 2026-10-06).** Die lineare Reihenfolge
 Quellen → Mixer → Nachbearbeitung → Recorder gilt **nur für die Verkabelung**
@@ -106,6 +106,6 @@ Signalkette ist eine zweite, unabhängige Achse.
 
 ## Annahmen und offene Punkte
 
-- AUTO_AI und PRO entfallen (Annahme). KI-Vorschläge kommen über aiMONK.
+- AUTO_AI und PRO entfallen in der Oberfläche (README, AGENTS.md angeglichen). Intern bleibt `PRO` der aktive Modul-Zustand, `AUTO_AI` nur Altbestand. KI-Vorschläge kommen über aiMONK.
 - Nummern 01–16 werden angezeigt, eindeutig nach Kopfreihenfolge (Betreiber-Vorlagen 2026-10-06). Kanalnummern 1–8 im Mixer bleiben.
 - Verlässt der Mixer-Halter die Sitzung, geht der Mixer automatisch an die Person, die am längsten in der Sitzung ist (Entscheidung Betreiber).

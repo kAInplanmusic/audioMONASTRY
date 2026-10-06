@@ -146,7 +146,7 @@ export const RackRow = React.memo(function RackRow({
             aria-pressed={sync.on}
             aria-label={`${name} SYNC gegen Main ${sync.on ? 'an' : 'aus'}`}
             title={sync.disabled ? 'SYNC kann nur der Halter ändern' : 'SYNC: Start auf dem nächsten Main-Takt, taktgleich mit Main, Tempo und Tonart von Main'}
-            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-bold tracking-widest transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
+            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-bold tracking-widest transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--monk-accent)]"
             style={sync.on ? { background: 'var(--monk-accent)', borderColor: 'var(--monk-accent)', color: '#06101c' } : { borderColor: '#3a465c', color: '#8b9aa5' }}
           >
             <RefreshCw size={11} aria-hidden="true" /> SYNC
@@ -168,7 +168,7 @@ export const RackRow = React.memo(function RackRow({
           disabled={!!cycleLockedReason}
           title={cycleLockedReason ?? nextHint}
           aria-label={`${name} Modus ${mode}`}
-          className={`min-w-[4.5rem] h-8 shrink-0 px-3 rounded-full border-[1.5px] inline-flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest transition-all cursor-pointer disabled:cursor-not-allowed ${running && mode === 'ON' ? 'animate-pulse' : ''}`}
+          className={`min-w-[4.5rem] h-8 shrink-0 px-3 rounded-full border-[1.5px] inline-flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest transition-all cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--monk-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-black ${running && mode === 'ON' ? 'motion-safe:animate-pulse' : ''}`}
           style={
             lockedByOther || cycleLockedReason
               ? { borderColor: '#7f1d1d', color: '#fca5a5', opacity: 0.85 }

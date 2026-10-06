@@ -8,6 +8,7 @@ import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
 import { HeaderPluginIcon, headerIconStatus } from './components/HeaderPluginIcon';
 import { SignalChainBar } from './components/SignalChainBar';
+import { MasterplayerReadout } from './components/MasterplayerReadout';
 import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
 import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { BeatVisualizer } from './components/BeatVisualizer';
@@ -773,9 +774,9 @@ function AppComponent() {
             <button type="button"
               onClick={() => setVisualOpen(v => !v)}
               className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-fuchsia-400/10 border border-fuchsia-400/40 text-fuchsia-300 hover:bg-fuchsia-400/20 hover:border-fuchsia-300/70 transition-all duration-200 cursor-pointer"
-              aria-label="VisualMONK Liveshow oeffnen"
+              aria-label="Visual-Liveshow öffnen"
               aria-pressed={visualOpen}
-              title="VisualMONK Liveshow (Stream an Ghostuser 6 / Beamer)"
+              title="Visual-Liveshow (Stream an Ghostuser 6 / Beamer)"
             >
               <Sparkles className="w-4 h-4" />
               <span className="text-[9px] font-bold tracking-widest">VISUAL</span>
@@ -812,7 +813,8 @@ function AppComponent() {
           <div className="ml-auto flex items-center gap-4 text-center">
             <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
             <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
-            <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
+            <MasterplayerReadout bpm={bpm} isPlaying={isPlaying} />
+            <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">4/4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">METRUM</div></div>
             <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
           </div>
         </div>
