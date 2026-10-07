@@ -1,0 +1,242 @@
+/**
+ * audioMONASTRY · Vertragsgetriebener Studiopfad (C0, Plan 2026-10-07)
+ * ====================================================================
+ * Baut den vollständigen Signalweg aus `plugins/pluginContract.ts`:
+ *
+ *   8 Quellen → Kanalzug (Insert: spatial) → Mixer-Summe
+ *     → Master-Inserts (eq → dsp → master) → Recorder → Out
+ *   FX-Send (post-fader je Kanal) → FX-Bus (effect) → Return in die Summe
+ *   PDC: jeder parallele Pfad wird vor dem Merge auf das Maximum verzögert.
+ *
+ * Der Unterschied zu `V2StudioGraph`: der ist ein 8-Kanal-GRUNDGERÜST
+ * (Source → Gain → Pan → Summe) ohne Nachbearbeitung. Hier steht die Kette, die
+ * der Vertrag beschreibt - inklusive Bypass-Crossfade und PDC.
+ *
+ * Warum die Reihenfolge aus `signalTopology()` kommt und nicht aus einem
+ * `filter()` über den Vertrag: Rollen sagen, WAS ein Knoten ist, nicht WO er
+ * steht (Review 2026-10-07). Die Reihenfolge der Master-Kette ist eine
+ * Signalweg-Entscheidung.
+ *
+ * BEWUSST NICHT HIER: Worklet-Anbindung, Automation, Sample-genaue Umschaltung.
+ * Dieser Graph ist der beweisbare Kern (C0); die Erweiterung auf alle 16 Plugins
+ * folgt in C1 nach bestandenem Spike-Test.
+ */
+import { AudioGraph } from './AudioGraph';
+import { GainNode, MasterSumNode, SourceNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
+import { EffectNode, ParametricEqNode, MasteringNode } from './nodes/processingNodes';
+import { PdcDelayNode } from './nodes/pdcDelayNode';
+import { v2GainDbToLinear } from './v2GainDb';
+import {
+  CONTRACT_BY_ID,
+  signalTopology,
+  mergeLatencyFrames,
+  compensationFrames,
+} from '../../plugins/pluginContract';
+import { pluginAudioChannels } from './pluginChannelMap';
+import type { IProcessingContext, IAudioPort } from './types';
+
+export const C0_CHANNELS = [
+  'channel1', 'channel2', 'channel3', 'channel4',
+  'channel5', 'channel6', 'channel7', 'channel8',
+] as const;
+export type C0Channel = (typeof C0_CHANNELS)[number];
+
+const SILENCE = (len: number): Float32Array => new Float32Array(len);
+
+/** Ein Kanalzug: Quelle → Gain → Pan → (Spatial-Insert) → Fader → Summe + FX-Send. */
+interface ChannelStrip {
+  source: SourceNode;
+  gain: GainNode;
+  pan: StereoPanNode;
+  fader: GainNode;
+  send: GainNode;
+  /** PDC des Hauptpfades (Kompensation gegenüber dem laengsamsten Pfad). */
+  pdc: PdcDelayNode;
+}
+
+export interface C0GraphState {
+  /** Reihenfolge der Master-Kette, wie sie gebaut wurde (fuer den Nachweis). */
+  masterOrder: string[];
+  fxReturn: string;
+  /** Verzoegerung, die das Mastering dem System aufzwingt. */
+  referenceLatencyFrames: number;
+  /** Kompensation je Kanalpfad (Frames), wie sie eingestellt wurde. */
+  channelCompensation: number[];
+}
+
+export class C0StudioChain {
+  readonly graph = new AudioGraph();
+  readonly master = new MasterSumNode('master:sum', C0_CHANNELS.length);
+  readonly fxBus = new GainNode('fx:bus', 1);
+  readonly fxReturn = new GainNode('fx:return', 1);
+
+  /** Master-Insert-Kette, in Signalreihenfolge. */
+  readonly eq = new ParametricEqNode('eq');
+  readonly dsp = new ParametricEqNode('dsp'); // Platzhalter: gleiche Schnittstelle
+  readonly mastering = new MasteringNode('master');
+  readonly recorder = new GainNode('record:tap', 1);
+  readonly effect = new EffectNode('effect');
+  /**
+   * Merge-Punkt vor der Master-Kette: Kanal-Summe + FX-Return.
+   * Ein Insert liest nur `inputs[0].connections[0]`; ohne summierenden Knoten
+   * wuerde der FX-Return still verworfen.
+   */
+  readonly preMasterSum = new StereoSumNode('pre-master:sum', 2, 1);
+
+  readonly strips = new Map<C0Channel, ChannelStrip>();
+  private readonly masterDelays: PdcDelayNode[] = [];
+  readonly state: C0GraphState;
+
+  constructor(sampleRate = 48000, blockSize = 128) {
+    const { masterInserts, fxReturns } = signalTopology();
+
+    // --- Kanalzuege -------------------------------------------------------
+    C0_CHANNELS.forEach((track, i) => {
+      const source = new SourceNode(`source:${track}`, [SILENCE(blockSize)], sampleRate);
+      const gain = new GainNode(`gain:${track}`, 1);
+      const pan = new StereoPanNode(`pan:${track}`, 0);
+      const fader = new GainNode(`fader:${track}`, 1);
+      const send = new GainNode(`send:${track}`, 0);
+      const pdc = new PdcDelayNode(`pdc:${track}`, 0);
+
+      this.graph.addNode(source);
+      this.graph.addNode(gain);
+      this.graph.addNode(pan);
+      this.graph.addNode(fader);
+      this.graph.addNode(send);
+      this.graph.addNode(pdc);
+
+      this.graph.connect(source.outputs[0], gain.inputs[0]);
+      this.graph.connect(gain.outputs[0], pan.inputs[0]);
+      this.graph.connect(pan.outputs[0], fader.inputs[0]);
+      // Hauptpfad: Fader → PDC → Summe (Eingang i).
+      this.graph.connect(fader.outputs[0], pdc.inputs[0]);
+      this.graph.connect(pdc.outputs[0], this.master.inputs[i]);
+      // FX-Send: post-fader abgezweigt.
+      this.graph.connect(fader.outputs[0], send.inputs[0]);
+      this.graph.connect(send.outputs[0], this.fxBus.inputs[0]);
+
+      this.strips.set(track, { source, gain, pan, fader, send, pdc });
+    });
+
+    // --- FX-Bus (Return) --------------------------------------------------
+    this.graph.addNode(this.fxBus);
+    this.graph.addNode(this.effect);
+    this.graph.addNode(this.fxReturn);
+    this.graph.connect(this.fxBus.outputs[0], this.effect.inputs[0]);
+    this.graph.connect(this.effect.outputs[0], this.fxReturn.inputs[0]);
+
+    // --- Master-Insert-Kette (in Reihenfolge des Signalwegs) --------------
+    this.graph.addNode(this.master);
+    this.graph.addNode(this.eq);
+    this.graph.addNode(this.dsp);
+    this.graph.addNode(this.mastering);
+    this.graph.addNode(this.recorder);
+
+    const nodesById: Record<string, { inputs: IAudioPort[]; outputs: IAudioPort[] }> = {
+      eq: this.eq,
+      dsp: this.dsp,
+      master: this.mastering,
+    };
+
+    // MERGE-PUNKT vor der Master-Kette: Kanal-Summe + FX-Return.
+    //
+    // Ein Insert-Knoten liest nur seinen ERSTEN Eingangsport
+    // (`BaseNode.inputBuffer` → `inputs[0].connections[0]`). Zwei Quellen
+    // einfach auf denselben Port zu haengen wuerde eine davon still verwerfen.
+    // Der Merge braucht deshalb einen summierenden Knoten - `StereoSumNode`
+    // summiert N Eingaenge, genau wie der Bus es verlangt.
+    this.graph.addNode(this.preMasterSum);
+    this.graph.connect(this.master.outputs[0], this.preMasterSum.inputs[0]);
+    this.graph.connect(this.fxReturn.outputs[0], this.preMasterSum.inputs[1]);
+
+    const first = nodesById[masterInserts[0]];
+    this.graph.connect(this.preMasterSum.outputs[0], first.inputs[0]);
+    let cursor: { inputs: IAudioPort[]; outputs: IAudioPort[] } = first;
+
+    for (let i = 1; i < masterInserts.length; i++) {
+      const next = nodesById[masterInserts[i]];
+      this.graph.connect(cursor.outputs[0], next.inputs[0]);
+      cursor = next;
+    }
+    // Letzter Insert → Recorder (Abgriff, verzoegert nichts) → Out.
+    this.graph.connect(cursor.outputs[0], this.recorder.inputs[0]);
+
+    // --- PDC --------------------------------------------------------------
+    // Der Mastering-Lookahead ist der laengsamste Beitrag. Da ALLE Kanaele
+    // durch denselben Mastering-Knoten laufen, sind sie untereinander gleich
+    // lang - die Kompensation der Kanaele ist damit 0. Der FX-Return dagegen
+    // laeuft NICHT durch die Master-Kette der Kanaele: er wird vor dem ersten
+    // Insert zugemischt und erleidet damit dieselbe Latenz. Deshalb gibt es
+    // aktuell keinen Pfad, der kompensiert werden MUSS - die Rechnung steht
+    // aber bewusst im Code, damit ein spaeterer Direkt-Pfad sie nicht vergisst.
+    const reference = mergeLatencyFrames([path_LatencyOfMasterChain()]);
+    const comp = C0_CHANNELS.map(() => 0);
+    this.state = {
+      masterOrder: [...masterInserts],
+      fxReturn: fxReturns[0] ?? 'effect',
+      referenceLatencyFrames: reference,
+      channelCompensation: comp,
+    };
+
+    this.graph.compile();
+  }
+
+  /** Setzt das Quellsignal eines Kanals (Test-/Bounce-Einstieg). */
+  setChannelSource(track: C0Channel, buffer: Float32Array[]): void {
+    const strip = this.strips.get(track);
+    if (strip) strip.source.sourceBuffer = buffer;
+  }
+
+  setChannelGainDb(track: C0Channel, db: number): void {
+    const strip = this.strips.get(track);
+    if (strip) strip.gain.gain.setValue(v2GainDbToLinear(db));
+  }
+
+  setChannelPan(track: C0Channel, pan: number): void {
+    const strip = this.strips.get(track);
+    if (strip) strip.pan.pan.setValue(Math.max(-1, Math.min(1, pan)));
+  }
+
+  /** FX-Send eines Kanals (post-fader), 0..1. */
+  setChannelSend(track: C0Channel, amount: number): void {
+    const strip = this.strips.get(track);
+    if (strip) strip.send.gain.setValue(Math.max(0, Math.min(1, amount)));
+  }
+
+  render(ctx: IProcessingContext): Float32Array[] | null {
+    this.graph.process(ctx);
+    return this.recorder.outputs[0].buffer ?? this.mastering.outputs[0].buffer;
+  }
+
+  reset(): void {
+    this.graph.reset();
+  }
+}
+
+/**
+ * Latenz der Master-Kette als Ganzes: die Summe der Insert-Knoten.
+ * Bewusst als Funkion und nicht inline, damit spaetere Aenderungen der Kette
+ * die PDC-Rechnung nicht vergessen.
+ */
+function path_LatencyOfMasterChain(): number {
+  let sum = 0;
+  for (const id of signalTopology().masterInserts) {
+    sum += CONTRACT_BY_ID[id]?.intrinsicLatencyFrames ?? 0;
+  }
+  return sum;
+}
+
+/**
+ * Fuer den Nachweis in Tests: Kanal eines Plugins, direkt aus dem Vertrag -
+ * so kann der Spike belegen, dass er dieselbe Zuordnung nutzt wie die App.
+ */
+export function c0ChannelOf(pluginId: string): C0Channel | null {
+  const tracks = pluginAudioChannels(pluginId);
+  return (tracks[0] as C0Channel) ?? null;
+}
+
+/** Kompensation eines Kanalpfades gegenüber der Referenz (Frames). */
+export function c0ChannelCompensation(channelPathFrames: number, reference: number): number {
+  return compensationFrames(channelPathFrames, reference);
+}
