@@ -401,6 +401,8 @@ export interface ResidentModel {
   status: 'manifest' | 'neu';
   /** true = Lizenzbedingungen (Umsatzgrenze/Gating) vor kommerziellem Einsatz prüfen. */
   licenseCheck?: boolean;
+  /** true = nur nicht-kommerziell frei; aufgenommen, weil alles Forschung/privat ist (Betreiber 2026-10-07). */
+  nonCommercial?: boolean;
 }
 
 /** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
@@ -434,6 +436,7 @@ export const AI_RESIDENT_FLEET = [
       { id: 'moss-audio-8b-thinking', vramGb: 18, license: 'Apache-2.0', status: 'neu' },
       { id: 'pyannote-diarization', vramGb: 3, license: 'gated (HF license acceptance required)', status: 'manifest', licenseCheck: true },
       { id: 'ast-audioset', vramGb: 3, license: 'MIT', status: 'manifest' },
+      { id: 'mert-v1-330m', vramGb: 3, license: 'CC-BY-NC-SA-4.0', status: 'manifest', nonCommercial: true },
       // Nur Wiederfinden vorhandener Bilder/Videos zur Musik (CLIP-Embeddings, 768-dim wie visual_embeddings) – keine Generierung.
       { id: 'clip-vit-l14', vramGb: 2, license: 'MIT', status: 'manifest' },
       { id: 'essentia', vramGb: 0, license: 'AGPL-3.0', status: 'manifest', licenseCheck: true },
@@ -457,6 +460,8 @@ export const AI_RESIDENT_FLEET = [
       { id: 'acestep-v15-xl-sft', vramGb: 9, license: 'MIT', status: 'manifest' },
       { id: 'acestep-v15-xl-turbo', vramGb: 9, license: 'MIT', status: 'manifest' },
       { id: 'acestep-5hz-lm-4b', vramGb: 8, license: 'MIT', status: 'manifest' },
+      // Musik + SFX + Inpainting + Fortsetzung, Minuten lang; Community-Lizenz = nur nicht-kommerziell. VRAM geschätzt (2B + Textencoder).
+      { id: 'stable-audio-3-medium', vramGb: 10, license: 'stability-community (nicht kommerziell)', status: 'neu', nonCommercial: true },
     ],
   },
 ] as const satisfies readonly ResidentInstance[];
