@@ -34,7 +34,7 @@ Serverless-Active-Worker: nicht geprüft.
 | Ears (Analyse) | Qwen2-Audio-7B, MERT | **MOSS-Audio-8B-Thinking** | Neuer (09/2026), Apache-2.0, Musikverständnis. **MERT entfällt** (CC-BY-NC-SA). Messwerte (BPM, Tonart, Lautheit, Takt) bleiben DSP (essentia, CPU), das LLM erklärt nur |
 | Stems | HTDemucs 6s | **bleibt**; BS-RoFormer = Kandidat | BS-RoFormer ~+2 dB Gesang-SDR (Sekundärquelle), im Repo nur Stub, erst auf GPU belegen |
 | Speech | Qwen3-TTS 1.7B (CustomVoice + VoiceDesign) | **bleibt** | Apache-2.0, 16,5 Mio. Downloads |
-| SFX | Stable Audio Open 1.0 | **bleibt vorerst** | Gated + Umsatzgrenze (Lizenz prüfen). Kandidat „Stable Audio 3" (arXiv 2605.17991), Gewichte nicht geprüft |
+| SFX / Geräusche | Stable Audio Open 1.0 | **MOSS-SoundEffect-v2.0** | Apache-2.0, 1,3B, 48 kHz, bis 30 s je Aufruf, Umwelt/Urban/Kreatur/Handlung + kurze perkussive Clips (HF-Modellkarte). Stable Audio Open war gegatet mit Umsatzgrenze. **Stable Audio 3 medium** (2B, Musik + SFX + Inpainting, Minuten) ist stärker, aber „Community License" = nur nicht-kommerziell, kommerziell separate Lizenz → nicht aufgenommen. Qualität gegen SAO ungehört, erst vergleichen |
 | Musik / Remix / Drop | ACE-Step 1.5 XL base+sft+turbo + LM-4B | **sft + turbo + LM-4B** | MIT. `base` entfällt (−9 GB). Cover/Repaint/Extract decken Remix und Übergänge ab |
 | Bild / Video | FLUX.1-dev, Qwen-Image, Wan 2.2, LTX 13B (3 Instanzen) | **entfällt** | Visuals aus vorhandenem Material, siehe §3a |
 
@@ -44,7 +44,7 @@ Serverless-Active-Worker: nicht geprüft.
 |---|---|---|---|
 | 1 | brain (+ Orchestrator) | Qwen3.6-35B-A3B FP8 | 36 |
 | 2 | ears | Whisper-v3, CLAP, MOSS-Audio-8B, pyannote, AST, CLIP ViT-L/14, essentia (CPU) | 35 |
-| 3 | voice | Qwen3-TTS ×2, HTDemucs-6s, Stable Audio Open | 34 |
+| 3 | voice | Qwen3-TTS ×2, HTDemucs-6s, MOSS-SoundEffect | 32 |
 | 4 | music | ACE-Step sft, turbo, LM-4B | 26 |
 
 4 Instanzen genügen und lassen Puffer; bis 6 wären im Budget (z. B. eine
@@ -86,7 +86,7 @@ ohne Folgen streichen (−2 GB).
 | 24/7 (720 h) | 1.404 € |
 
 - Puffer zur 4-€-Grenze: 2,05 €/h (51 %) mit A6000, 2,20 €/h mit A40.
-- **Speicher:** ~131 GB Gewichte ≈ 135 GB Network-Volume ≈ 9,5 $/Monat (0,07 $/GB)
+- **Speicher:** ~129 GB Gewichte ≈ 135 GB Network-Volume ≈ 9,5 $/Monat (0,07 $/GB)
   ≈ **8,7 €/Monat**. Die Konstitution erlaubt 5 €/Monat → **Widerspruch**
   (kleiner, aber vorhanden).
 - **Start:** Pod-Start + 26–36 GB je Instanz aus dem Volume in den VRAM, grob
@@ -120,12 +120,12 @@ gestoppt, Network Volume 0,07 $; in den Docs steht **kein Snapshot-Feature**.
 Heißt: Gewichte brauchen einen billigen Dauer-Speicher außerhalb des Pods, der
 Pod holt sie beim Start auf die Container-Disk (36 GB ≈ 0,005 $/h Laufzeit).
 
-| Ort | Kosten für ~131 GB | Egress | Bewertung |
+| Ort | Kosten für ~129 GB | Egress | Bewertung |
 |---|---|---|---|
 | **Cloudflare R2 (Empfehlung)** | 0,015 $/GB = **~2 $/Monat (≈ 1,8 €)** | **gratis** | S3-kompatibel, ein R2-Sync-Worker existiert schon (media-Knoten). Stabil, unabhängig von HF |
 | Backblaze B2 | 0,007 $/GB = ~0,9 $/Monat | 3× Speicher gratis (≈ 3 volle Starts/Monat), danach 0,01 $/GB = ~1,3 $ je Start | billiger bei wenigen Starts; B2-Bucket `audioMONASTRY` + Key liegen schon in der `.env`. RunPod steht nicht auf der Partnerliste für gratis Egress. Ab ≥ 4 Starts/Monat teurer als R2 |
-| Hugging Face direkt | 0 € | gratis | Gut als **Erstbefüllung** der Spiegel (gepinnte Revision). Als Laufzeitquelle nicht: Gating (pyannote, Stable Audio), Rate-Limits, und ein HF-Ausfall würde den AI-Start verhindern |
-| RunPod Network Volume | 131 GB × 0,07 = 9,2 $/Monat (≈ 8,4 €) | – | Schnellster Start (nur mounten), aber über deinen 5 €/Monat und an ein Rechenzentrum gebunden, das dann auch GPUs haben muss |
+| Hugging Face direkt | 0 € | gratis | Gut als **Erstbefüllung** der Spiegel (gepinnte Revision). Als Laufzeitquelle nicht: Gating (pyannote), Rate-Limits, und ein HF-Ausfall würde den AI-Start verhindern |
+| RunPod Network Volume | 129 GB × 0,07 = 9,2 $/Monat (≈ 8,4 €) | – | Schnellster Start (nur mounten), aber über deinen 5 €/Monat und an ein Rechenzentrum gebunden, das dann auch GPUs haben muss |
 | Image mit eingebackenen Gewichten (GHCR) | 0 € laut bisheriger Doku | – | Der heutige Weg. Pull je Host, danach Host-Cache. Unklar: GHCR-Limits bei 30–36 GB je Image, nicht geprüft |
 
 **Vorschlag:** R2 als Dauerspeicher (≈ 1,8 €/Monat, unter 5 €) → Erstbefüllung
@@ -147,10 +147,10 @@ Preis-Guard prüft den **tatsächlichen** Preis beim Anlegen (4 × L40S wären
 
 | | **8 → 4** | **8 → 5** |
 |---|---|---|
-| Instanzen | brain (+Orchestrator), ears, voice (TTS + Stems + SFX), music | brain (+Orchestrator), ears, voice (nur TTS), **stems** (HTDemucs + Stable Audio), music |
+| Instanzen | brain (+Orchestrator), ears, voice (TTS + Stems + SFX), music | brain (+Orchestrator), ears, voice (nur TTS), **stems** (HTDemucs + MOSS-SoundEffect), music |
 | Kosten (A6000 / A40) | **1,95 / 1,80 €/h** | **2,44 / 2,25 €/h** |
 | Puffer zu 4 €/h | 2,05 €/h | 1,56 €/h |
-| Gewichte / Speicher | 131 GB, ≈ 1,8 €/Monat (R2) | gleich |
+| Gewichte / Speicher | 129 GB, ≈ 1,8 €/Monat (R2) | gleich |
 | Vorteil | billigster Betrieb, wenig Teile | Lange Song-Trennungen und SFX blockieren die Sprachausgabe nicht; ein Absturz in Stems reißt TTS nicht mit; Platz für BS-RoFormer neben HTDemucs zum A/B-Test |
 | Nachteil | Stems/SFX und TTS teilen sich eine Karte (maxConcurrentInference 1) | +0,49 €/h (+25 %), eine Instanz mehr zu betreiben |
 | Monat bei 40 h | 78 € | 98 € |
