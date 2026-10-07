@@ -27,7 +27,7 @@ export const SyntiSamplerTerminal = React.memo(function SyntiSamplerTerminal() {
   const [tab, setTab] = useState<Tab>('synth');
 
   return (
-    <div className="am-c-wrap">
+    <div className="am-c-wrap am-c-ui">
       <AmCard title="Sektion" style={{ width: 104, flex: 'none' }}>
         <div className="am-c-vseg" role="tablist" aria-label="syntisamplerMONK Sektionen">
           {TABS.map((t) => {

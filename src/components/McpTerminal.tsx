@@ -190,7 +190,7 @@ export const McpTerminal = React.memo(function McpTerminal() {
     <div className={`am-rackrow ${lockedByOther ? 'am-c-locked' : ''}`}>
       <MoaAssistant pluginId="mcp" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
       {/* MPC-Pads: Sample je Pad (DnD/Touch-Armierung), Velocity aus der Tipp-Höhe */}
-      <AmCard title={`MPC-Pads · Bank ${bank}`} style={{ width: 236 }}
+      <AmCard title={`Pads · Bank ${bank}`} style={{ width: 236 }}
         right={(
           <AmToggle on={noteRepeat} kind="m" disabled={lockedByOther} onClick={() => setNoteRepeat(!noteRepeat)} title="Note Repeat beim Halten">
             REPEAT

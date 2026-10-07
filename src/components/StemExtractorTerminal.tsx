@@ -319,7 +319,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
         <span className="am-hint">Ergebnis: Mixer-Kanäle + Bibliothek</span>
       </AmCard>
 
-      <AmCard title="Pegel" style={{ width: 64 }}>
+      <AmCard className="am-pegel">
         <StemMeters />
       </AmCard>
     </div>

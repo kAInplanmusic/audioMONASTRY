@@ -498,11 +498,17 @@ export const SpatialScene = React.memo(function SpatialScene() {
           <AmToggle on={false} onClick={() => { void loadDefaultHrtf(); }} title="HRTF-Kernel + WASM-FFT laden">HRTF</AmToggle>
           <AmToggle on={false} onClick={() => clusterRef.current?.splitNow()} title="Quellen jetzt auf weitere Instanzen verteilen">SPLIT</AmToggle>
         </div>
-        <div className="am-sptrow">
+        <div className="am-sptrow am-sptkn">
+          <AmKnob size="xs" value={listenerRot} min={-180} max={180} def={0} unit="int" label="Kopf" title="Kopf-Drehung (Grad)"
+            onChange={(v) => { const r = Math.round(v); setListenerRot(r); applyGlobal({ listenerRot: r }); }} />
+          <AmKnob size="xs" value={global.masterGain} min={0} max={1.5} def={1} unit="pct" label="Gain" title="Gesamt-Gain"
+            onChange={(v) => applyGlobal({ masterGain: v })} />
           <select className="am-sel" defaultValue="" onChange={(e) => e.target.value && loadPreset(Number(e.target.value))} aria-label="Szenen-Preset">
             <option value="" disabled>Preset…</option>
             {SPATIAL_SCENE_PRESETS.map((p, i) => <option key={i} value={i}>{i === 0 ? 'Default' : 'Lead+Pad'}</option>)}
           </select>
+        </div>
+        <div className="am-sptrow">
           <button type="button" className="am-tg" onClick={snapshot} title="Snapshot speichern">SNAP</button>
           <button type="button" className="am-tg" onClick={undo} title="Snapshot wiederherstellen">UNDO</button>
           <button type="button" className="am-tg" onClick={exportScene} title="Scene-JSON in die Zwischenablage kopieren">JSON</button>
@@ -515,15 +521,7 @@ export const SpatialScene = React.memo(function SpatialScene() {
       </AmCard>
 
       {/* Mitte: Raum von oben */}
-      <AmCard title="Raum" style={{ width: 252 }}
-        right={(
-          <span className="am-sptrow">
-            <AmKnob size="xs" value={listenerRot} min={-180} max={180} def={0} unit="int" label="Kopf" title="Kopf-Drehung (Grad)"
-              onChange={(v) => { const r = Math.round(v); setListenerRot(r); applyGlobal({ listenerRot: r }); }} />
-            <AmKnob size="xs" value={global.masterGain} min={0} max={1.5} def={1} unit="pct" label="Gain" title="Gesamt-Gain"
-              onChange={(v) => applyGlobal({ masterGain: v })} />
-          </span>
-        )}>
+      <AmCard title="Raum" style={{ width: 252 }} right={<span className="am-vb">{sources.length} OBJ</span>}>
         <div
           ref={stageRef}
           onDoubleClick={handleStagePointer}

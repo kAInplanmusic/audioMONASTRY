@@ -257,7 +257,7 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   const tune = selectedSound?.freqStart ?? selectedSound?.freq;
 
   return (
-    <div className={`am-rackrow ${lockedByOther ? 'am-c-locked' : ''}`}>
+    <div className={`am-rackrow am-c-ui ${lockedByOther ? 'am-c-locked' : ''}`}>
       <MoaAssistant pluginId="drum" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
 
       {/* Kit-/Modell-Auswahl (TR-808, TR-909, …) + Sample-Suche + MIDI-Out */}

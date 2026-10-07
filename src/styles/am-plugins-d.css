@@ -1,6 +1,12 @@
 /* Plugin-Inhalte Gruppe d – Rack-Modul-Stil (Präfix am-), siehe src/styles/amDesign.css */
 /* biblioMONK · stemMONK · spatialMONK · recordMONK */
 
+/* `.am button{font:inherit}` (0,1,1) schlägt `.am-tg`/`.am-seg button`/`.am-sel` –
+   in unseren Modulen die Schrift des Design-Systems wiederherstellen. */
+:is(.am-bib,.am-stm,.am-spt,.am-rec) :is(.am-tg,.am-seg button){font:700 10px var(--f-disp);letter-spacing:.06em}
+:is(.am-bib,.am-stm,.am-spt,.am-rec) .am-btn{font:600 12px var(--f-body)}
+:is(.am-bib,.am-stm,.am-spt,.am-rec) .am-sel{font-size:12px}
+
 /* ---------- biblioMONK ---------- */
 .am-bib .am-list{min-width:0;gap:1px}
 .am-bib .am-list button{padding:2px 8px;font-size:11px}
@@ -47,6 +53,11 @@
 .am-bibimp input[type=file]{max-width:100%;font-size:10px}
 .am-bibimp .mt-2{margin-top:4px}
 .am-bibimp h3 .am-tool{width:26px;height:26px}
+.am-bibimp>div.rounded-lg>div:first-child{margin-bottom:4px}
+.am-bibimp input[aria-label="Upload-Tags"]{min-width:0!important;width:0}
+.am-bibimp select[aria-label="Upload-Kategorie"]{width:86px}
+.am-bibimp button.w-full{margin-top:0!important;padding:4px 8px!important;font:700 10px var(--f-disp)!important;letter-spacing:.06em}
+.am-bibimp>div.rounded-lg>.flex-wrap{gap:4px}
 
 /* ---------- stemMONK ---------- */
 .am-stmfile{width:100%;background:var(--pn2);color:var(--tx);font:600 11px var(--f-disp);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
@@ -59,7 +70,8 @@
 .am-stmch{font-size:10px;color:var(--dm);text-align:right}
 .am-stmerr{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--hot);border:1px solid color-mix(in srgb,var(--hot) 50%,var(--ln));border-radius:7px;padding:4px 8px}
 .am-stm .am-btn{font:700 11px var(--f-disp);letter-spacing:.06em;text-transform:uppercase}
-.am-stmvm,.am-recvm{display:flex;gap:4px;justify-content:center;height:110px;flex:1}
+.am-stmvm,.am-recvm{display:flex;gap:4px;justify-content:center;flex:1;min-height:90px}
+.am-pegel{padding:8px 7px}
 
 /* ---------- spatialMONK ---------- */
 .am-sptf{display:flex;flex-direction:column;gap:3px}

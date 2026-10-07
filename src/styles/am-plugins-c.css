@@ -75,3 +75,12 @@
 /* Probensuche im Kit-Feld (SampleModuleWrapper kompakt) */
 .am-c-search{display:flex;gap:6px;align-items:center}
 .am-c-search>div:first-child{flex:1;min-width:0}
+
+/* `.am button{font:inherit}` (amDesign.css) hebt die kompakte Schrift der Taster auf –
+   in diesen beiden Modulen gilt wieder die Entwurfsgröße (10px Chakra Petch). */
+.am .am-c-ui .am-tg,.am .am-c-ui .am-seg button,.am .am-c-ui .am-c-vseg button{font:700 10px var(--f-disp);letter-spacing:.06em}
+.am .am-c-ui .am-c-trk{font:700 9px var(--f-disp);letter-spacing:.06em}
+.am .am-c-ui .am-pad{font:700 9px var(--f-disp);line-height:1.1}
+.am .am-c-ui .am-c-st .am-stp{font:600 8px var(--f-mono)}
+.am .am-c-ui .am-c-tile{font:inherit}
+.am .am-c-ui .am-sel{font-size:11px}
