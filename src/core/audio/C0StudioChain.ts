@@ -25,6 +25,8 @@ import { AudioGraph } from './AudioGraph';
 import { GainNode, MasterSumNode, SourceNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
 import { EffectNode, ParametricEqNode, MasteringNode } from './nodes/processingNodes';
 import { PdcDelayNode } from './nodes/pdcDelayNode';
+import { WorkletChainNode } from './nodes/workletChainNode';
+import type { WorkletProcessFn } from './backends/WorkletAdapter';
 import { v2GainDbToLinear } from './v2GainDb';
 import {
   CONTRACT_BY_ID,
@@ -40,6 +42,19 @@ export const C0_CHANNELS = [
   'channel5', 'channel6', 'channel7', 'channel8',
 ] as const;
 export type C0Channel = (typeof C0_CHANNELS)[number];
+
+/**
+ * Welcher Kettenglied-Knoten mit welchem Worklet-Prozessor laeuft.
+ * Die Prozessor-Namen sind identisch mit `public/plugin-manifest.json`; dass
+ * sie zum Vertrag passen, prueft `pluginManifestContract.test.ts`.
+ */
+export const WORKLET_BINDING: Readonly<Record<string, string>> = {
+  eq: 'eq-processor',
+  dsp: 'dsp-processor',
+  master: 'mastering-processor',
+  effect: 'effect-processor',
+  spatial: 'spatial-processor',
+};
 
 const SILENCE = (len: number): Float32Array => new Float32Array(len);
 
@@ -62,6 +77,8 @@ export interface C0GraphState {
   referenceLatencyFrames: number;
   /** Kompensation je Kanalpfad (Frames), wie sie eingestellt wurde. */
   channelCompensation: number[];
+  /** Welcher Knoten mit welchem Worklet-Prozessor laeuft (Beleg der Anbindung). */
+  workletBinding: Record<string, string>;
 }
 
 export class C0StudioChain {
@@ -76,6 +93,19 @@ export class C0StudioChain {
   readonly mastering = new MasteringNode('master');
   readonly recorder = new GainNode('record:tap', 1);
   readonly effect = new EffectNode('effect');
+
+  /**
+   * Die austauschbaren Kettenglieder: je Nachbearbeitungs-Plugin ein
+   * WorkletChainNode. Er traegt den Referenz-Prozessor, bis ein echter
+   * einghaengt wird (`attachWorklet`). Die Verdrahtung aendert sich dabei NICHT.
+   */
+  readonly insertNodes: Record<string, WorkletChainNode> = {
+    eq: new WorkletChainNode('chain:eq', 'eq'),
+    dsp: new WorkletChainNode('chain:dsp', 'dsp'),
+    master: new WorkletChainNode('chain:master', 'master'),
+    effect: new WorkletChainNode('chain:effect', 'effect'),
+    spatial: new WorkletChainNode('chain:spatial', 'spatial'),
+  };
   /**
    * Merge-Punkt vor der Master-Kette: Kanal-Summe + FX-Return.
    * Ein Insert liest nur `inputs[0].connections[0]`; ohne summierenden Knoten
@@ -127,15 +157,27 @@ export class C0StudioChain {
     this.graph.connect(this.effect.outputs[0], this.fxReturn.inputs[0]);
 
     // --- Master-Insert-Kette (in Reihenfolge des Signalwegs) --------------
+    // Die Kettenglieder sind `WorkletChainNode`s: sie tragen den Referenz-
+    // Prozessor, bis ein echter einghaengt wird. Ein spaeterer Prozessorwechsel
+    // aendert die VERDRAHTUNG nicht (Review 6.3 - kein Reconnect).
+    //
+    // `master` ist die Ausnahme: der Mastering-Knoten braucht seinen
+    // Lookahead-Zustand (240 Frames). Er laeuft als `MasteringNode` und ist
+    // ueber denselben Pfad erreichbar; sein Worklet wird spaeter angebunden.
     this.graph.addNode(this.master);
-    this.graph.addNode(this.eq);
-    this.graph.addNode(this.dsp);
+    for (const id of masterInserts) this.graph.addNode(this.insertNodes[id]);
     this.graph.addNode(this.mastering);
     this.graph.addNode(this.recorder);
 
+    // --- FX-Bus (Return) --------------------------------------------------
+    // `effect` laeuft als eigener Worklet-Knoten im Bus-Pfad.
+    this.graph.addNode(this.insertNodes.effect);
+
     const nodesById: Record<string, { inputs: IAudioPort[]; outputs: IAudioPort[] }> = {
-      eq: this.eq,
-      dsp: this.dsp,
+      eq: this.insertNodes.eq,
+      dsp: this.insertNodes.dsp,
+      // `master` in der Kette ist das Mastering-Modul selbst (Latenz-Traeger);
+      // das zugehoerige Worklet haengt an `insertNodes.master`.
       master: this.mastering,
     };
 
@@ -177,9 +219,34 @@ export class C0StudioChain {
       fxReturn: fxReturns[0] ?? 'effect',
       referenceLatencyFrames: reference,
       channelCompensation: comp,
+      // Die Bindung an die Worklet-Prozessoren - die Namen stammen aus
+      // public/plugin-manifest.json und werden von `pluginManifestContract.test`
+      // gegen den Vertrag geprueft. Hier steht nur, welcher Knoten welchen
+      // Prozessor faehrt.
+      workletBinding: { ...WORKLET_BINDING },
     };
 
     this.graph.compile();
+  }
+
+  /**
+   * Ersetzt einen Knoten durch einen Worklet-Adapter mit demselben Prozessor-Namen.
+   *
+   * Der Zweck: `workletSpecs.ts` liefert REFERENZ-Prozessoren (reines
+   * Durchreichen fuer Offline/Tests). Im Browser laufen die ECHTEN Worklets im
+   * Audio-Thread. Damit beide denselben Graph nutzen, laesst sich hier ein
+   * Prozessor einhaengen, ohne die Verdrahtung anzufassen.
+   *
+   * Die Signatur ist bewusst identisch zu `WorkletProcessFn`, aber die
+   * Verkabelung wird NICHT neu gebaut: ein Prozessorwechsel darf die Kette
+   * nicht umstecken (Review 6.3 - kein Reconnect im laufenden Betrieb).
+   */
+  attachWorklet(pluginId: string, processFn: WorkletProcessFn): boolean {
+    const node = this.insertNodes[pluginId];
+    if (!node) return false;
+    node.setProcessFn(processFn);
+    this.state.workletBinding[pluginId] = processFn.name || 'inline';
+    return true;
   }
 
   /** Setzt das Quellsignal eines Kanals (Test-/Bounce-Einstieg). */
