@@ -66,13 +66,13 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
   useEffect(() => {
     writePluginSettings('stem', { providerChoice });
   }, [providerChoice]);
-  const [stemStatus, setStemStatus] = useState<{ provider: string; replicateActive: boolean; estimateUsdPerSong: number } | null>(null);
+  const [stemStatus, setStemStatus] = useState<{ provider: string; serverActive: boolean; estimateUsdPerSong: number } | null>(null);
   /** Ergebnis der letzten Trennung (nur Anzeige: welche Spur liegt auf welchem Kanal). */
   const [result, setResult] = useState<{ demucs: boolean; channels: Record<string, TrackType> } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Stem-Provider-Status vom Server (replicate aktiv? Kosten-Schätzung).
+  // Stem-Provider-Status vom Server (eigener stem-ai-Dienst aktiv?).
   useEffect(() => {
     fetch('/api/stem/status')
       .then((r) => r.json())
@@ -127,11 +127,12 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
     let realStems: { drums: string; bass: string; other: string; vocals: string } | null = null;
     let usedProvider: StemProvider = 'fallback';
 
-    // Provider-Priorität:
-    //  - 'api':  Replicate (Pay-per-Use) zuerst, lokales ONNX als Fallback
-    //  - 'auto': Replicate zuerst (wenn aktiv), sonst lokal
+    // Provider-Priorität (RT-AUDIT-P1-014: nur eigene Wege, keine Cloud):
+    //  - 'api' (UI: SERVER): eigener stem-ai-Dienst der Flotte zuerst, lokal als Fallback
+    //  - 'auto': Server zuerst (wenn aktiv), sonst lokal
     //  - 'local': NUR lokal (ONNX → DSP)
-    const apiFirst = providerChoice === 'api' || (providerChoice === 'auto' && !!stemStatus?.replicateActive);
+    // Der gespeicherte Wert heißt aus Kompatibilität weiter 'api'.
+    const apiFirst = providerChoice === 'api' || (providerChoice === 'auto' && !!stemStatus?.serverActive);
 
     const tryServer = async (): Promise<boolean> => {
       try {
@@ -141,7 +142,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
           if (typeof update === 'number') setProgress(update);
           else finalData = update;
         }
-        if (finalData?.provider === 'replicate' || finalData?.provider === 'stem-ai' || finalData?.provider === 'fallback') {
+        if (finalData?.provider === 'stem-ai' || finalData?.provider === 'fallback') {
           usedProvider = finalData.provider;
         }
         if (finalData?.stems && Object.values(finalData.stems).some((u) => typeof u === 'string' && u.length > 0)) {
@@ -170,7 +171,7 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
     if (apiFirst) {
       await tryServer();
       if (!stems && providerChoice !== 'api') await tryLocal();
-      if (!stems && providerChoice === 'api') await tryLocal(); // API gewählt, aber kein Guthaben/Fehler → lokal retten
+      if (!stems && providerChoice === 'api') await tryLocal(); // Server gewählt, aber nicht erreichbar → lokal retten
     } else {
       await tryLocal();
       if (!stems && providerChoice !== 'local') await tryServer();
@@ -264,18 +265,18 @@ export const StemExtractorTerminal = React.memo(function StemExtractorTerminal()
           {file ? file.name : 'Drop Audio File to Extract'}
         </button>
         <div className="am-seg" role="tablist" aria-label="Stem-Provider">
-          {([['auto', 'AUTO'], ['local', 'LOKAL'], ['api', 'API']] as const).map(([v, label]) => (
+          {([['auto', 'AUTO'], ['local', 'LOKAL'], ['api', 'SERVER']] as const).map(([v, label]) => (
             <button key={v} type="button" role="tab" aria-selected={providerChoice === v}
               className={providerChoice === v ? 'am-on' : ''}
               onClick={() => setProviderChoice(v)}
-              title={v === 'api' ? `API Call ≈ ${formatUsd(stemStatus?.estimateUsdPerSong ?? 0.05)}/Song` : v === 'local' ? 'Lokale ONNX-Extraktion (kostenlos)' : 'Automatisch: API zuerst, lokal als Fallback'}
+              title={v === 'api' ? 'Eigener stem-ai-Dienst der Flotte' : v === 'local' ? 'Lokale ONNX-Extraktion' : 'Automatisch: Server zuerst (wenn aktiv), lokal als Fallback'}
             >
-              {label}{v === 'api' ? ` ≈${formatUsd(stemStatus?.estimateUsdPerSong ?? 0.05)}` : ''}
+              {label}
             </button>
           ))}
         </div>
         <span className="am-hint">
-          {stemStatus ? (stemStatus.replicateActive ? 'API bereit' : 'API aus (lokal aktiv)') : '…'}
+          {stemStatus ? (stemStatus.serverActive ? 'Server bereit' : 'Server aus (lokal aktiv)') : '…'}
         </span>
         <span className="am-hint am-mono" title="Geschätzte Cloud-Kosten (lokal = 0)">
           Stem-Zähler: {usage.count} · {usage.lastProvider ? `${usage.lastProvider.toUpperCase()} · ` : ''}≈ {formatUsd(usage.estimatedCostUsd)}

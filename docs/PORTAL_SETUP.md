@@ -47,7 +47,7 @@ wrangler secret put CFR2_SECRET_ACCESS_KEY
 wrangler secret put CFR2_BUCKET
 wrangler secret put CFR2_PUBLIC_URL
 wrangler secret put REPLICATE_API_TOKEN
-# optional: DEEPSEEK_API_KEY, HF_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY
+# optional (einzige externe AI-Ausnahme, RT-AUDIT-P1-014): DEEPSEEK_API_KEY + AI_EXTERNAL_LLM_ALLOWLIST=deepseek-pro
 
 wrangler deploy
 ```

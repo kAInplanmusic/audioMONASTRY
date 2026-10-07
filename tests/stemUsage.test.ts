@@ -13,19 +13,18 @@ describe('Stem-Nutzungszähler', () => {
     expect(emptyUsage()).toEqual({ count: 0, estimatedCostUsd: 0, lastProvider: null, lastAt: null });
   });
 
-  it('schätzt Kosten ehrlich: lokal/stem-ai/fallback = 0, replicate ≈ 0.05 USD', () => {
+  it('alle verbliebenen Wege laufen auf eigener Hardware: Kosten 0 (RT-AUDIT-P1-014, Replicate entfernt)', () => {
     expect(estimateStemCost('local')).toBe(0);
     expect(estimateStemCost('stem-ai')).toBe(0);
     expect(estimateStemCost('fallback')).toBe(0);
-    expect(estimateStemCost('replicate')).toBe(0.05);
   });
 
-  it('zählt Extraktionen und akkumuliert geschätzte Kosten', () => {
+  it('zählt Extraktionen und merkt sich den letzten Provider', () => {
     recordStemExtraction('local', 1000);
-    const u1 = recordStemExtraction('replicate', 2000);
+    const u1 = recordStemExtraction('stem-ai', 2000);
     expect(u1.count).toBe(2);
-    expect(u1.estimatedCostUsd).toBeCloseTo(0.05);
-    expect(u1.lastProvider).toBe('replicate');
+    expect(u1.estimatedCostUsd).toBe(0);
+    expect(u1.lastProvider).toBe('stem-ai');
     expect(u1.lastAt).toBe(2000);
   });
 
@@ -35,9 +34,9 @@ describe('Stem-Nutzungszähler', () => {
   });
 
   it('persistiert über loadStemUsage (Studio-Speicher, nicht auf dem Gerät)', () => {
-    recordStemExtraction('replicate', 1234);
+    recordStemExtraction('stem-ai', 1234);
     const loaded = loadStemUsage();
     expect(loaded.count).toBe(1);
-    expect(loaded.lastProvider).toBe('replicate');
+    expect(loaded.lastProvider).toBe('stem-ai');
   });
 });
