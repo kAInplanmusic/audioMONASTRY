@@ -30,6 +30,7 @@ import type { GpuRoleId } from '../../../config/aiInfrastructure';
 import { AiGateError, assertRoleAllowed, isRoleAllowed, roleBlockCode } from '../aiGate';
 import { aiLogger } from './aiLogger';
 import { LONG_RUNNING_TASKS, resolveGpuRoles, type ResolvedGpuRole } from './endpointRegistry';
+import { fleetMode, podBaseUrl, podRoleFor, podToken } from './podRouting';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
 
 /** RunPod Serverless API-Basis (per RUNPOD_API_BASE überschreibbar, z. B. Tests). */
@@ -104,6 +105,12 @@ function apiBase(): string {
   return (env('RUNPOD_API_BASE') || DEFAULT_API_BASE).replace(/\/+$/, '');
 }
 
+/** Wohin ein Job geht: Serverless-Endpoint oder Pod (gleiche Pfade, anderer Host/Token). */
+interface JobTarget {
+  base: string;
+  auth: string;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -145,7 +152,20 @@ export class RunPodProvider implements IAiProvider {
     // Bei „AI aus“ bzw. für Visual-Rollen im Modus "ohne Visuals" ist der
     // Provider nicht verfügbar – der Router fällt dann auf lokale Pfade
     // (deterministisch) zurück statt eine GPU zu wecken.
+    if (fleetMode() === 'pods') {
+      const pod = podRoleFor(this.roleId);
+      return Boolean(pod && podBaseUrl(pod) && podToken()) && isRoleAllowed(this.roleId);
+    }
     return Boolean(this.endpointId && this.apiKey) && isRoleAllowed(this.roleId);
+  }
+
+  /** Ziel eines Jobs. Pods: je Aufgabe der passende Pod (Stem-Trennung → stems). */
+  private targetFor(task?: AiTask): JobTarget {
+    if (fleetMode() === 'pods') {
+      const pod = podRoleFor(this.roleId, task);
+      return { base: pod ? podBaseUrl(pod) : '', auth: podToken() };
+    }
+    return { base: `${apiBase()}/${encodeURIComponent(this.endpointId)}`, auth: this.apiKey };
   }
 
   /** Nur die Tasks der eigenen Rolle – die Task-Mengen sind disjunkt. */
@@ -161,17 +181,18 @@ export class RunPodProvider implements IAiProvider {
   }
 
   async run(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
-    this.assertConfigured();
+    this.assertConfigured(task);
 
     const started = Date.now();
     const deadline = started + this.timeoutMs;
     const body = { input: { task, model, input } };
+    const target = this.targetFor(task);
 
     if (LONG_RUNNING_TASKS.has(task)) {
-      return this.submitAndPoll(task, model, input, signal, started, deadline);
+      return this.submitAndPoll(target, task, model, input, signal, started, deadline);
     }
 
-    const sync = await this.submitWithRetry('runsync', body, signal, deadline);
+    const sync = await this.submitWithRetry(target, 'runsync', body, signal, deadline);
     // Kaltstart (scale-to-zero): runsync endet dann mit IN_QUEUE/IN_PROGRESS,
     // weil sein Wartefenster kuerzer ist als der Worker-Start. Der Job laeuft
     // serverseitig weiter - also denselben Job zu Ende pollen, statt einen
@@ -179,7 +200,7 @@ export class RunPodProvider implements IAiProvider {
     if (isNonTerminalStatus(sync.status)) {
       const jobId = String(sync.id ?? '');
       if (!jobId) throw new AiProviderError(this.id, 'NO_JOB_ID', 'RunPod lieferte keine Job-ID', false);
-      const finished = await this.pollUntilDone(jobId, signal, deadline);
+      const finished = await this.pollUntilDone(target, jobId, signal, deadline);
       return this.unwrap(finished, task, model, started);
     }
     return this.unwrap(sync, task, model, started);
@@ -194,13 +215,13 @@ export class RunPodProvider implements IAiProvider {
    * ueberbrueckt - der Batch-Lauf war damit nicht reproduzierbar.
    */
   async runLong(task: AiTask, model: string, input: unknown, signal?: AbortSignal): Promise<unknown> {
-    this.assertConfigured();
+    this.assertConfigured(task);
     const started = Date.now();
-    return this.submitAndPoll(task, model, input, signal, started, started + this.timeoutMs);
+    return this.submitAndPoll(this.targetFor(task), task, model, input, signal, started, started + this.timeoutMs);
   }
 
   /** Endpoint-ID + Key pruefen (identische Fehler wie bisher in `run`). */
-  private assertConfigured(): void {
+  private assertConfigured(task?: AiTask): void {
     // INFRA-FEAT-001/002: ZUERST der Betriebsmodus. Bei „AI aus“ (bzw. für
     // Visual-Rollen ohne Visual-Freigabe) darf überhaupt kein Endpoint-Kontakt
     // entstehen – auch dann nicht, wenn Endpoint-ID und Key gesetzt sind.
@@ -211,6 +232,19 @@ export class RunPodProvider implements IAiProvider {
         throw new AiProviderError(this.id, error.code, error.message, false);
       }
       throw error;
+    }
+    if (fleetMode() === 'pods') {
+      const pod = podRoleFor(this.roleId, task);
+      if (!pod) {
+        throw new AiProviderError(this.id, 'NO_POD_FOR_ROLE', `Für ${this.roleId} gibt es keinen Pod (keine Visual-Generierung)`, false);
+      }
+      if (!podBaseUrl(pod)) {
+        throw new AiProviderError(this.id, 'POD_NOT_CONFIGURED', `Pod ${pod} fehlt (RP_POD_ID_${pod.toUpperCase()})`, false);
+      }
+      if (!podToken()) {
+        throw new AiProviderError(this.id, 'NO_POD_TOKEN', 'AI_POD_TOKEN fehlt oder ist kürzer als 32 Zeichen', false);
+      }
+      return;
     }
     if (!this.endpointId) {
       throw new AiProviderError(
@@ -227,6 +261,7 @@ export class RunPodProvider implements IAiProvider {
 
   /** Submit per `/run` + Polling bis terminal - gemeinsamer Kern von run/runLong. */
   private async submitAndPoll(
+    target: JobTarget,
     task: AiTask,
     model: string,
     input: unknown,
@@ -234,10 +269,10 @@ export class RunPodProvider implements IAiProvider {
     started: number,
     deadline: number,
   ): Promise<unknown> {
-    const submitted = await this.submitWithRetry('run', { input: { task, model, input } }, signal, deadline);
+    const submitted = await this.submitWithRetry(target, 'run', { input: { task, model, input } }, signal, deadline);
     const jobId = String(submitted.id ?? '');
     if (!jobId) throw new AiProviderError(this.id, 'NO_JOB_ID', 'RunPod lieferte keine Job-ID', false);
-    const finished = await this.pollUntilDone(jobId, signal, deadline);
+    const finished = await this.pollUntilDone(target, jobId, signal, deadline);
     return this.unwrap(finished, task, model, started);
   }
 
@@ -258,8 +293,10 @@ export class RunPodProvider implements IAiProvider {
       return { role: this.roleId, ok: false, models, message: 'endpoint not configured' };
     }
     const deadline = Date.now() + this.warmupTimeoutMs;
+    const target = this.targetFor();
     try {
       const submitted = await this.submitWithRetry(
+        target,
         'run',
         // Die Rolle entscheidet im Worker, welche Preload-Modelle geladen werden.
         { input: { task: 'warmup', model: '', input: { role: this.roleId, models } } },
@@ -268,7 +305,7 @@ export class RunPodProvider implements IAiProvider {
       );
       const jobId = String(submitted.id ?? '');
       if (!jobId) return { role: this.roleId, ok: false, models, message: 'no job id' };
-      const finished = await this.pollUntilDone(jobId, signal, deadline);
+      const finished = await this.pollUntilDone(target, jobId, signal, deadline);
       const status = String(finished.status ?? '').toUpperCase();
       const ok = status === 'COMPLETED';
       return { role: this.roleId, ok, models, message: ok ? undefined : String(finished.error ?? status) };
@@ -308,6 +345,7 @@ export class RunPodProvider implements IAiProvider {
   }
 
   private async submitWithRetry(
+    target: JobTarget,
     path: 'run' | 'runsync',
     body: unknown,
     signal: AbortSignal | undefined,
@@ -321,7 +359,7 @@ export class RunPodProvider implements IAiProvider {
         throw new AiProviderError(this.id, 'TIMEOUT', `RunPod-Deadline überschritten (${this.timeoutMs} ms)`, true);
       }
       try {
-        return await this.post(path, body, signal, remaining);
+        return await this.post(target, path, body, signal, remaining);
       } catch (error) {
         if (signal?.aborted) throw new AiProviderError(this.id, 'CANCELLED', 'request cancelled', false);
         lastError = error;
@@ -335,15 +373,16 @@ export class RunPodProvider implements IAiProvider {
   }
 
   private async post(
+    target: JobTarget,
     path: string,
     body: unknown,
     signal: AbortSignal | undefined,
     timeoutMs: number,
   ): Promise<RunPodJobResponse> {
-    const url = `${apiBase()}/${encodeURIComponent(this.endpointId)}/${path}`;
+    const url = `${target.base}/${path}`;
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${target.auth}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
       signal: signal ?? AbortSignal.timeout(Math.max(1_000, timeoutMs)),
     });
@@ -362,11 +401,12 @@ export class RunPodProvider implements IAiProvider {
   }
 
   private async pollUntilDone(
+    target: JobTarget,
     jobId: string,
     signal: AbortSignal | undefined,
     deadline: number,
   ): Promise<RunPodJobResponse> {
-    const url = `${apiBase()}/${encodeURIComponent(this.endpointId)}/status/${encodeURIComponent(jobId)}`;
+    const url = `${target.base}/status/${encodeURIComponent(jobId)}`;
     let delay = 1_500;
     let last: RunPodJobResponse = { status: 'IN_QUEUE' };
 
@@ -374,7 +414,7 @@ export class RunPodProvider implements IAiProvider {
       if (signal?.aborted) throw new AiProviderError(this.id, 'CANCELLED', 'request cancelled', false);
       const remaining = deadline - Date.now();
       const resp = await fetch(url, {
-        headers: { Authorization: `Bearer ${this.apiKey}` },
+        headers: { Authorization: `Bearer ${target.auth}` },
         signal: signal ?? AbortSignal.timeout(Math.max(5_000, Math.min(remaining, 60_000))),
       });
       if (resp.status === 404) {

@@ -363,7 +363,7 @@ export function fleetBudgetReport(
 }
 
 // ============================================================================
-// SSOT Betreiber 2026-10-07: AI-Aufpreis <= 4 €/h, residente 48-GB-Instanzen (4 genutzt, bis 6 erlaubt)
+// SSOT Betreiber 2026-10-07: AI-Aufpreis <= 4 €/h, 5 residente 48-GB-Pods
 // ----------------------------------------------------------------------------
 // Bei "AI an" liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen, kein Tausch).
 // KEINE Bild-/Video-Generierung auf der GPU-Flotte: Visuals entstehen aus
@@ -417,8 +417,9 @@ export interface ResidentInstance {
 }
 
 /**
- * Zielbild: 4 Instanzen, alle Modelle resident, keine Visual-Generierung
- * (Betreiber 2026-10-07). Bis zu 6 wären im Budget; mehr Instanzen sind kein Ziel.
+ * Zielbild: 5 Instanzen (Betreiber 2026-10-07, Entscheidung 8 → 5), alle Modelle
+ * resident, keine Visual-Generierung. Deploy-Quelle mit den heute ladbaren Modellen:
+ * deploy/runpod/pod-fleet.json (gleiche Instanzen, Drift-Test tests/podRouting.test.ts).
  * Passung prüft `tests/aiResidentFleet.test.ts`.
  */
 export const AI_RESIDENT_FLEET = [
@@ -448,10 +449,15 @@ export const AI_RESIDENT_FLEET = [
     models: [
       { id: 'qwen3-tts-17b', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
       { id: 'qwen3-tts-voicedesign', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
-      { id: 'htdemucs-6s', vramGb: 8, license: 'MIT', status: 'manifest' },
       // SFX/Geräusche (30 s, 48 kHz, auch kurze perkussive Clips); ersetzt Stable Audio Open 1.0 (gated, Umsatzgrenze). VRAM geschätzt.
       { id: 'moss-soundeffect-v2.0', vramGb: 8, license: 'Apache-2.0', status: 'neu' },
     ],
+  },
+  {
+    // Eigene Instanz, damit lange Song-Trennungen die Sprachausgabe nicht blockieren.
+    id: 'stems',
+    covers: [],
+    models: [{ id: 'htdemucs-6s', vramGb: 8, license: 'MIT', status: 'manifest' }],
   },
   {
     id: 'music',
