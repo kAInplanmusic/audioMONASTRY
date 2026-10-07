@@ -4882,18 +4882,24 @@
       "id": "PLUGIN-V2-C1",
       "title": "Auf alle 16 Plugins erweitern + Worklet-Anbindung der Kette",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "Audio",
       "source": "Plan 2026-10-07, Phase C1 (nach bestandenem C0-Spike)",
       "problem": "C0 beweist EINEN vollstaendigen Pfad. Offen: die 16 Plugins einzeln an die Kette binden (jede Quelle ihr eigener Knoten statt eines generischen SourceNode), die AudioWorklets anschliessen (itSynth/mastering/eq liegen als Prozessoren vor), Bypass als latenztreues Dry/Wet-Crossfade, Automation sample-genau, und die Graph-Umschaltung an der Blockgrenze (Plan-Transaktion).",
-      "note": "Bewusst als eigener Schritt: die Review bestand darauf, erst nach bestandenem Spike auf alle 16 zu erweitern - sonst baut man 16 Knoten auf einer ungepruefte Struktur.",
+      "note": "Bewusst als eigener Schritt: die Review bestand darauf, erst nach bestandenem Spike auf alle 16 zu erweitern - sonst baut man 16 Knoten auf einer ungepruefte Struktur.\n\n2026-10-07 TEIL 1 GEBAUT (Commits 468f707 + Bypass-Nachbesserung):\nWorklet-Anbindung: `core/audio/nodes/workletChainNode.ts` - ein Kettenglied mit AUSTAUSCHBAREM Prozessor (`setProcessFn`). Grund: workletSpecs.ts liefert bewusst NEUTRALE Referenzen ('Referenz: neutrales 3-Band-EQ (kein Gain)'); sie halten die Struktur stabil, klingen aber nicht wie die echten Worklets. Der Prozessorwechsel steckt NICHT um - ein disconnect wuerde die Latenz aendern.\nBypass: Dry/Wet-Crossfade IM Knoten (Review 6.3), kein Umstecken. Der Prozessor rechnet immer weiter, damit die Latenz konstant bleibt; der trockene Weg laeuft durch eine Ausgleichsverzoegerung, die der Aufrufer auf die Latenz des nassen Wegs setzt. Ein Test prueft beide Faelle: richtiger Ausgleich -> trocken und nass liegen auf DERSELBEN Position; falscher Ausgleich -> der Bypass springt.\nVierte Doppelpflege-Stelle geschlossen: public/plugin-manifest.json fuehrt die 16 Plugins ein viertes Mal (eigene Reihenfolge, Name, Kuerzel, Symbol). tests/pluginManifestContract.test.ts prueft das Manifest gegen den Vertrag.\n\nZWEI ECHTE BEFUNDE beim Bau (beide behoben):\n1. Die Kanal-Summe war `MasterSumNode` - ein MASTER-Knoten mit Soft-Clip (tanh(v)*0.98). In der Kanal-Summe faerbt er den Klang, obwohl eine Summe nur addieren darf, und begrenzt DOPPELT (Summe + Merge + echtes Mastering danach). Gemessen: ein Impuls erreichte den ersten Master-Insert bei 0.597 statt 1.0. Jetzt `StereoSumNode` (neutral); das Mastering begrenzt dort, wo es hingehoert.\n2. Der Pan-Knoten bei Mitte daempft auf cos(pi/4) = 0.707 (Gesetz konstanter Leistung, -3 dB). Das ist KORREKT - aber der Spike-Test hatte den Rohpegel erwartet und war damit falsch. Test auf die Impuls-POSITION umgestellt (pegelfrei), weil hinter der Kette ohnehin ein Soft-Clip sitzt und Pegel keine belastbare Aussage mehr traegt.\n\nOFFEN (Teil 2): die 16 Plugins als je EIGENEN Knoten (heute generische SourceNode), Parameter-Automation sample-genau, Umschaltung des Graphen an der Blockgrenze (Plan-Transaktion).",
       "acceptance": [
         "Jedes der 16 Plugins hat einen eigenen Knoten in der Kette",
         "Worklets (itSynth/mastering/eq) haengen an ihren Knoten",
         "Bypass ist ein Crossfade ohne Latenzaenderung",
         "Parameter-Automation laeuft sample-genau"
       ],
-      "verification": []
+      "verification": [
+        "tests/c0StudioChain.test.ts 22/22 (inkl. 4 Bypass-Tests + 4 Anbindungs-Tests)",
+        "tests/pluginManifestContract.test.ts 7/7",
+        "tsc --noEmit 0",
+        "voller Lauf: 309 Dateien / 2505 Tests EXIT=0",
+        "Befund belegt: Impuls am ersten Master-Insert vorher 0.597, nach dem Summen-Fix 0.707 (= cos(pi/4) des Pan-Knotens)"
+      ]
     },
     {
       "id": "PLUGIN-V2-D",

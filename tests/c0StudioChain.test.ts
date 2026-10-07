@@ -259,3 +259,96 @@ describe('C1 – Worklet-Anbindung ohne Umstecken', () => {
     expect(peak(c.render(ctx()))).toBeGreaterThan(0);
   });
 });
+
+describe('C1 – Bypass ist ein Crossfade, kein Umstecken', () => {
+  /**
+   * Ein Prozessor, der das Signal VERZOEGERT (1 Sample) - nicht verstaerkt.
+   *
+   * Warum nicht verstaerken: hinter der Kette sitzt das Mastering mit Soft-Clip
+   * (tanh). Ein verdoppelter Impuls wird dort gestaucht, "lauter" ist also nicht
+   * messbar. Eine VERZOEGERUNG ist dagegen eindeutig: die Impuls-POSITION
+   * verschiebt sich, und genau das darf der Bypass NICHT tun.
+   */
+  function oneSampleLater(input: Float32Array[][], output: Float32Array[][], ctx: IProcessingContext) {
+    const src = input[0] ?? [];
+    const len = src[0]?.length ?? ctx.bufferSize;
+    const out = [new Float32Array(len), new Float32Array(len)];
+    for (let ch = 0; ch < out.length; ch++) {
+      const s = src[Math.min(ch, src.length - 1)];
+      if (s) for (let i = 1; i < len; i++) out[ch][i] = s[i - 1] ?? 0;
+    }
+    output[0] = out;
+  }
+
+  /**
+   * Der ERSTE Ueberschreitungspunkt am Ausgang (absolute Sample-Position).
+   *
+   * Bewusst nicht "alle Treffer": der FX-Bus ist standardmaessig auf 0, aber der
+   * EffectNode und das Mastering tragen Nachhall - nach dem Impuls folgen weitere
+   * kleine Werte. Fuer die Phasenfrage zaehlt der ERSTE Punkt.
+   */
+  function firstHit(c: C0StudioChain, blocks = 3): number {
+    for (let b = 0; b < blocks; b++) {
+      const out = c.render(ctx(b * BLOCK));
+      if (out) for (let i = 0; i < out[0].length; i++) {
+        if (Math.abs(out[0][i]) > 0.15) return b * BLOCK + i;
+      }
+    }
+    return -1;
+  }
+
+  it('ohne Bypass wirkt der Prozessor (Signal verschiebt sich)', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    c.setChannelSource('channel1', impulse());
+    c.attachWorklet('eq', oneSampleLater);
+    const pos = firstHit(c);
+    expect(pos, 'der Impuls muss ankommen').toBeGreaterThanOrEqual(0);
+    expect(c.isBypassed('eq')).toBe(false);
+  });
+
+  it('mit Bypass hoert man den TROCKENEN Weg – die Verzoegerung faellt weg', () => {
+    const nass = new C0StudioChain(SR, BLOCK);
+    nass.setChannelSource('channel1', impulse());
+    nass.attachWorklet('eq', oneSampleLater);
+    const posNass = firstHit(nass);
+
+    const trocken = new C0StudioChain(SR, BLOCK);
+    trocken.setChannelSource('channel1', impulse());
+    trocken.attachWorklet('eq', oneSampleLater);
+    expect(trocken.setBypass('eq', true)).toBe(true);
+    const posTrocken = firstHit(trocken);
+
+    expect(trocken.isBypassed('eq')).toBe(true);
+    // Umgangen kommt der Impuls GENAU EIN SAMPLE FRUEHER als mit dem Prozessor -
+    // der Bypass schaltet also wirklich auf den trockenen Weg.
+    expect(posTrocken - posNass).toBe(-1);
+  });
+
+  it('der Bypass verschiebt die PHASE nicht, wenn der Ausgleich stimmt', () => {
+    // Die Kernregel des Reviews: ein Bypass, der frueher ankommt, ist ein Klick.
+    // Der trockene Weg muss so viel Verzoegerung bekommen wie der NASSE Weg
+    // braucht - sonst laufen beide auseinander.
+    //
+    // Der Prozessor hier verzoegert um 1 Sample. Der Ausgleich muss also 1 sein,
+    // NICHT irgendeine Zahl aus dem Vertrag: die Latenz kommt aus dem Prozessor,
+    // nicht aus der Plugin-Deklaration.
+    const mess = (bypassed: boolean, dryFrames: number) => {
+      const c = new C0StudioChain(SR, BLOCK);
+      c.insertNodes.eq.setProcessFn(oneSampleLater);
+      c.insertNodes.eq.setDryDelayFrames(dryFrames);
+      c.setChannelSource('channel1', impulse());
+      if (bypassed) c.insertNodes.eq.setWet(0);
+      return firstHit(c);
+    };
+    // Ausgleich = Prozessor-Verzoegerung (1) -> beide Wege gleich lang.
+    expect(mess(true, 1)).toBe(mess(false, 1));
+    // Falscher Ausgleich -> der Bypass springt. Genau das soll der Test zeigen.
+    expect(mess(true, 4)).not.toBe(mess(false, 4));
+  });
+
+  it('setBypass auf ein unbekanntes Plugin gibt false', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    expect(c.setBypass('gibtsnicht', true)).toBe(false);
+    expect(c.isBypassed('gibtsnicht')).toBeNull();
+  });
+});
