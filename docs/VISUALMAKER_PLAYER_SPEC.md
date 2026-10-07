@@ -83,9 +83,13 @@ Ablauf, ohne dass jemand eingreift:
    (`visual_embeddings`, pgvector), gewichtet nach Tags, Stimmung, Energie und Lernwerten.
 4. **Schneiden:** Der Regisseur legt die Folge fest, **quantisiert auf Takt/Downbeat**, mit
    Übergangsart je Abschnitt. Der Ausgabe-Browser spielt sie.
-5. **Quellen:** eigener Bestand (Pflicht). Optional **öffentliche Quellen** (Pexels,
-   Pixabay, Wikimedia; Lizenzfeld im Pool-Manifest), von der Vis-Instanz geholt, transkodiert
-   und aufgenommen. API-Schlüssel nur serverseitig. Entscheidung §5.
+5. **Quellen (Betreiber 2026-10-07: „normal fast alles"):** eigener Bestand **und** öffentliche
+   Quellen, die die Vis-Instanz selbst durchsucht, holt, transkodiert und aufnimmt: Pexels,
+   Pixabay, Wikimedia Commons, Internet Archive, NASA-Medien u. ä. Je Quelle ein Schalter in den
+   Einstellungen, Lizenz und Herkunft im Pool-Feld (`license`, `source`), CC0/Public Domain
+   zuerst. Weil alles Forschung/privat ist, sind Nutzungsbedingungen bewusst locker, werden aber
+   je Eintrag mitgespeichert. API-Schlüssel nur serverseitig; Abrufe mit Ratenbegrenzung und
+   Cache, damit die Instanz nicht zum Crawler wird.
 
 Ohne `brain` gibt es **keinen neuen Plan**; die Vis-Instanz spielt den letzten Plan weiter
 und meldet „Planung nicht verfügbar". Es gibt keinen Ersatz-KI-Pfad.
@@ -165,13 +169,13 @@ B1 ist Voraussetzung für taktgenaue Übergänge (V3) und für Beatmatch.
 ## 5. Entscheidungen
 
 Geklärt am 2026-10-07: Zugriff per Browser/URL statt Rack-Streifen (§2.1), 1080p Standard
-mit 2K/4K hochskaliert oder gerendert, Vollautomatik als Hauptmodus, Namensregel.
+mit 2K/4K hochskaliert oder gerendert, Vollautomatik als Hauptmodus, Namensregel, Quellen
+(eigener Bestand plus öffentliche Quellen, fast alle).
 
 Offen:
 1. **Wo läuft die Vis-Instanz:** Container auf dem media-Knoten (Vorschlag) oder eigener Server.
 2. **URL-Schema:** Subdomains (`visuals.`/`sound.`) oder Pfade (`/visual-out`/`/master-out`);
    Zugriffsschutz (Token in der URL?) und lokales Zertifikat für IP-Zugriff.
-3. **Quellen:** nur eigener Bestand, oder zusätzlich öffentliche Quellen (Pexels/Pixabay/Wikimedia).
-4. **Lern-Signale:** welche Eingaben zählen (Daumen/Pads, Session-Umfrage, Verweildauer).
-5. **Videoformate und Größenobergrenze** beim Upload.
-6. **Reihenfolge:** Beatmatch (B1/B2) vor oder parallel zu den Visuals?
+3. **Lern-Signale:** welche Eingaben zählen (Daumen/Pads, Session-Umfrage, Verweildauer).
+4. **Videoformate und Größenobergrenze** beim Upload.
+5. **Reihenfolge:** Beatmatch (B1/B2) vor oder parallel zu den Visuals?
