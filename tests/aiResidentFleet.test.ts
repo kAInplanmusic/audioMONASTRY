@@ -60,8 +60,15 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
     for (const m of all.filter((x) => x.status === 'neu')) expect(byId.has(m.id), m.id).toBe(false);
   });
 
-  it('enthält keine Nicht-kommerziell-Lizenz; Lizenz-Vorbehalte sind bewusst gelistet', () => {
-    for (const m of all) expect(m.license, m.id).not.toMatch(/non-commercial|CC-BY-NC|research/i);
+  it('Nicht-kommerzielle Modelle sind bewusst markiert (Forschung/privat), alle anderen frei nutzbar', () => {
+    const isNc = (license: string) => /non-commercial|nicht kommerziell|CC-BY-NC/i.test(license);
+    for (const m of all) expect('nonCommercial' in m && m.nonCommercial === true, m.id).toBe(isNc(m.license));
+    expect(all.filter((m) => 'nonCommercial' in m && m.nonCommercial).map((m) => m.id).sort()).toEqual(
+      ['mert-v1-330m', 'stable-audio-3-medium'],
+    );
+  });
+
+  it('Lizenz-Vorbehalte (Gating/AGPL) sind bewusst gelistet', () => {
     expect(all.filter((m) => 'licenseCheck' in m && m.licenseCheck).map((m) => m.id).sort()).toEqual(
       ['essentia', 'pyannote-diarization'],
     );
