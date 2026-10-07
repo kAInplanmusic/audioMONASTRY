@@ -209,7 +209,7 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
         </div>
       </AmCard>
 
-      <AmCard title="Automation · it-synth" style={{ width: 300 }}
+      <AmCard title="Automation · it-synth" style={{ width: 316 }}
         right={<span className="am-vb" style={activeVoices > 0 ? { color: 'var(--ok)', borderColor: 'var(--ok)' } : undefined}>VOICES {activeVoices}</span>}>
         <div className={`am-knobs ${off ? 'am-boff' : ''}`}>
           {AUTO_CTL.map((c) => knob(c, autoParams[c.key], (v) => handleAutomate(c.key, v)))}
