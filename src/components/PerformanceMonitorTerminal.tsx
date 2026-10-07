@@ -145,7 +145,7 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
         </div>
         <div className="am-kgroup"><span className="am-lbl"><Activity className="am-ico" /> Audio</span>
           {kpi('Zustand', perf.audioState.toUpperCase(), perf.audioState === 'running', perf.audioState === 'closed' ? 'PLAY drücken, um Audio zu starten' : undefined)}
-          {kpi('Abtastrate', `${perf.audioSampleRate}`)}
+          {kpi('Abtastrate', `${perf.audioSampleRate} Hz`)}
           {kpi('Latenz lokal', `${perf.audioBaseLatencyMs}/15 ms`, perf.audioBaseLatencyMs < 15)}
         </div>
         <div className="am-kgroup"><span className="am-lbl"><Network className="am-ico" /> Netz</span>

@@ -210,7 +210,7 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
         <div className="am-hint" aria-live="polite">
           {isLoading ? 'lädt …' : activeInstrument ? `${activeInstrument.name} · ${activeInstrument.category}` : 'kein Instrument geladen'}
         </div>
-        <DropTarget label="Sample auf den Slot ziehen" onDrop={handleSampleDrop} className="am-drop">
+        <DropTarget onDrop={handleSampleDrop} className="am-drop">
           <span>{droppedSample ? `${droppedSample.name} geladen` : 'Sample hierher ziehen'}</span>
         </DropTarget>
       </AmCard>
