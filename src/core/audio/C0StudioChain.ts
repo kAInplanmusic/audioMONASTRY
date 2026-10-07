@@ -22,10 +22,11 @@
  * folgt in C1 nach bestandenem Spike-Test.
  */
 import { AudioGraph } from './AudioGraph';
-import { GainNode, MasterSumNode, SourceNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
+import { GainNode, SourceNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
 import { EffectNode, ParametricEqNode, MasteringNode } from './nodes/processingNodes';
 import { PdcDelayNode } from './nodes/pdcDelayNode';
 import { WorkletChainNode } from './nodes/workletChainNode';
+import { PluginSourceNode } from './nodes/pluginSourceNode';
 import type { WorkletProcessFn } from './backends/WorkletAdapter';
 import { v2GainDbToLinear } from './v2GainDb';
 import {
@@ -58,9 +59,18 @@ export const WORKLET_BINDING: Readonly<Record<string, string>> = {
 
 const SILENCE = (len: number): Float32Array => new Float32Array(len);
 
+/** Kanal → Plugin-ID, direkt aus dem Vertrag (channel1 → drop, …). */
+function channelPluginOf(track: string): string {
+  const n = Number(track.replace('channel', ''));
+  const hit = Object.values(CONTRACT_BY_ID).find((c) => c.channel === n);
+  return hit?.id ?? track;
+}
+
 /** Ein Kanalzug: Quelle → Gain → Pan → (Spatial-Insert) → Fader → Summe + FX-Send. */
 interface ChannelStrip {
-  source: SourceNode;
+  /** Kanonische Plugin-ID, die auf diesem Kanal liegt (aus dem Vertrag). */
+  pluginId: string;
+  source: PluginSourceNode;
   gain: GainNode;
   pan: StereoPanNode;
   fader: GainNode;
@@ -132,8 +142,12 @@ export class C0StudioChain {
     const { masterInserts, fxReturns } = signalTopology();
 
     // --- Kanalzuege -------------------------------------------------------
+    // Jeder Kanal traegt den Plugin-Knoten, den der VERTRAG dort vorsieht -
+    // nicht einen anonymen SourceNode. Damit laesst sich aus dem Graph ablesen,
+    // welches Plugin auf welchem Kanal liegt.
     C0_CHANNELS.forEach((track, i) => {
-      const source = new SourceNode(`source:${track}`, [SILENCE(blockSize)], sampleRate);
+      const pluginId = CONTRACT_BY_ID[channelPluginOf(track)] ? channelPluginOf(track) : track;
+      const source = new PluginSourceNode(pluginId, sampleRate);
       const gain = new GainNode(`gain:${track}`, 1);
       const pan = new StereoPanNode(`pan:${track}`, 0);
       const fader = new GainNode(`fader:${track}`, 1);
@@ -157,7 +171,7 @@ export class C0StudioChain {
       this.graph.connect(fader.outputs[0], send.inputs[0]);
       this.graph.connect(send.outputs[0], this.fxBus.inputs[0]);
 
-      this.strips.set(track, { source, gain, pan, fader, send, pdc });
+      this.strips.set(track, { pluginId, source, gain, pan, fader, send, pdc });
     });
 
     // --- FX-Bus (Return) --------------------------------------------------
@@ -283,7 +297,35 @@ export class C0StudioChain {
   /** Setzt das Quellsignal eines Kanals (Test-/Bounce-Einstieg). */
   setChannelSource(track: C0Channel, buffer: Float32Array[]): void {
     const strip = this.strips.get(track);
-    if (strip) strip.source.sourceBuffer = buffer;
+    if (strip) {
+      strip.source.setBuffer(buffer);
+      // Wer ein Sample setzt, will es auch hoeren - sonst muesste jeder
+      // Aufrufer zwei Schritte kennen.
+      strip.source.setPlaying(true);
+    }
+  }
+
+  /** Play/Stop eines Kanals (spielt eine Quelle mit Inhalt). */
+  setChannelPlaying(track: C0Channel, playing: boolean): void {
+    this.strips.get(track)?.source.setPlaying(playing);
+  }
+
+  /**
+   * SYNC gegen Main eines Kanals (UI2-P0-003). Gibt `false`, wenn das Plugin auf
+   * diesem Kanal laut Vertrag kein SYNC kann.
+   */
+  setChannelSynced(track: C0Channel, synced: boolean): boolean {
+    return this.strips.get(track)?.source.setSynced(synced) ?? false;
+  }
+
+  /** SYNC-Quantisierung: Startversatz in Frames innerhalb des Blocks. */
+  setChannelStartFrame(track: C0Channel, frame: number): void {
+    this.strips.get(track)?.source.setSampleStartFrame(frame);
+  }
+
+  /** Welches Plugin liegt auf diesem Kanal? (aus dem Vertrag) */
+  pluginOfChannel(track: C0Channel): string | null {
+    return this.strips.get(track)?.pluginId ?? null;
   }
 
   setChannelGainDb(track: C0Channel, db: number): void {
