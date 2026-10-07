@@ -1,5 +1,10 @@
-import React, {  useState, useEffect, useRef, useCallback  } from 'react';
-import { Radio, Mic, Save, Download, Play, Square, Circle, Layers } from 'lucide-react';
+/**
+ * recordMONK · Rack-Modul (Vorlage public/uidesign/uiübersichtapp.jpg, Zeile 16)
+ * ==========================================================================
+ * Eine Zeile: Eingang · Aufnahmeknopf + Zeit · laufende Wellenform · Takes ·
+ * Format/Export (Bounce durch die Kette) · Pegel. Aufnahme-/Bounce-Logik wie bisher.
+ */
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
@@ -10,7 +15,9 @@ import { openAudioActionMenu } from './AudioActionMenuHost';
 import { sampleToContent } from '../core/audio/audioContent';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
-import { TerminalFrame } from './terminalShared';
+import { MoaAssistant } from './MoaAssistant';
+import { AmCard, AmMeter } from './am/amUi';
+import { useMainLevel } from '../core/audio/mainLevel';
 import { bounceThroughPluginChain } from '../audio/pluginChainBounce';
 import { encodeWavFromChannels } from '../utils/wavEncode';
 
@@ -24,8 +31,72 @@ interface Take {
   url?: string;
 }
 
+const INPUT_SOURCES = ['MASTER_OUT', 'VOCAL_STEM', 'DRUM_BUS', 'SYNTH_GROUP'] as const;
 
+/** Format, das MediaRecorder hier tatsächlich verwendet (gleiche Reihenfolge wie beim Start). */
+function detectRecordFormat(): string {
+  try {
+    if (typeof MediaRecorder === 'undefined') return 'nicht verfügbar';
+    const t = ['audio/wav', 'audio/webm;codecs=pcm', 'audio/webm;codecs=opus'].find((m) => MediaRecorder.isTypeSupported(m));
+    if (t === 'audio/wav') return 'WAV';
+    if (t === 'audio/webm;codecs=pcm') return 'WebM · PCM';
+    if (t === 'audio/webm;codecs=opus') return 'WebM · Opus';
+    return 'Browser-Standard';
+  } catch {
+    return 'Browser-Standard';
+  }
+}
 
+const RecMeters = React.memo(function RecMeters() {
+  const main = useMainLevel();
+  return (
+    <div className="am-recvm" aria-label="Main-Pegel">
+      <AmMeter level={main.level} peak={main.peak} />
+      <AmMeter level={main.level} peak={main.peak} />
+    </div>
+  );
+});
+
+/**
+ * Laufende Wellenform des Main-Ausgangs (Spitzenwert je UI-Takt, ~60 ms) –
+ * liest den gemeinsamen Main-Pegel-Abgriff, berührt den Audio-Pfad nicht.
+ */
+const RecScope = React.memo(function RecScope({ recording }: { recording: boolean }) {
+  const main = useMainLevel();
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const hist = useRef<number[]>([]);
+  const color = useRef<string | null>(null);
+  useEffect(() => {
+    const h = hist.current;
+    h.push(main.raw);
+    if (h.length > 400) h.shift();
+    const cv = ref.current;
+    if (!cv) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = cv.clientWidth || 300;
+    const ht = cv.clientHeight || 70;
+    if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(ht * dpr)) {
+      cv.width = Math.round(w * dpr);
+      cv.height = Math.round(ht * dpr);
+    }
+    const g = cv.getContext('2d');
+    if (!g) return;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, ht);
+    const mid = ht / 2;
+    g.fillStyle = 'rgba(110,140,200,.25)';
+    g.fillRect(0, mid, w, 1);
+    color.current ??= getComputedStyle(cv).getPropertyValue('--c').trim() || '#4cc9f0';
+    g.fillStyle = recording ? '#ff4d4d' : color.current;
+    const n = Math.min(h.length, Math.floor(w / 2));
+    for (let i = 0; i < n; i++) {
+      const v = h[h.length - n + i];
+      const a = Math.max(1, v * (mid - 2));
+      g.fillRect(w - (n - i) * 2, mid - a, 1.5, a * 2);
+    }
+  }, [main, recording]);
+  return <canvas ref={ref} className="am-cv am-recscope" aria-label="Wellenform des Main-Ausgangs" />;
+});
 
 export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const { addSample } = useSamples();
@@ -46,6 +117,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
   const [bounceInfo, setBounceInfo] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordFormat = useMemo(detectRecordFormat, []);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>;
@@ -199,131 +271,96 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
     };
   }, [startRecording, handleStop]);
 
+  const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
+
   return (
-    <TerminalFrame
-      pluginId="recording"
-      moaPlaceholder="MOA: z. B. 'Aufnahme starten'"
-      title="Master Recorder"
-      badge="BIT-PERFECT"
-      icon={Radio}
-      accent="indigo"
-      lockStatus={lockStatus}
-      state={state}
-      updateState={updateState}
-    >
-      <div className="flex-1 p-6 flex gap-6 overflow-hidden">
-        {/* Left Column: Transport & Source */}
-        <div className="w-1/2 flex flex-col gap-6">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6 flex-1 flex flex-col items-center justify-center shadow-inner relative">
-            <div className="absolute top-4 left-4">
-               <span className="text-[10px] font-mono font-bold tracking-widest text-neutral-500">FORMAT: 32-BIT FLOAT / 96kHz</span>
-            </div>
+    <div className="am-rackrow am-rec" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
+      <MoaAssistant pluginId="recording" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+      <AmCard title="Eingang" style={{ width: 170 }}>
+        <select
+          className="am-sel"
+          aria-label="Aufnahmequelle"
+          value={inputSource}
+          disabled={locked}
+          onChange={(e) => { if (!locked) setInputSource(e.target.value); }}
+        >
+          {INPUT_SOURCES.map((src) => <option key={src} value={src}>{src}</option>)}
+        </select>
+        <span className="am-hint">{inputSource === 'MASTER_OUT' ? 'Main-Ausgang' : 'Mikrofon/Line-Eingang'}</span>
+      </AmCard>
 
-            <div className={`text-7xl font-mono font-black mb-8 transition-colors ${isRecording ? 'text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]' : 'text-neutral-700'}`}>
-              {formatTime(recordTime)}
-            </div>
-
-            <div className="flex items-center gap-6">
-              {!isRecording ? (
-                <button type="button"
-                  onClick={startRecording}
-                  className="w-20 h-20 rounded-full bg-[#222] border-4 border-[#111] flex items-center justify-center shadow-[0_0_20px_rgba(0,0,0,0.5)] hover:border-red-900 transition-colors group"
-                >
-                  <Circle className="w-8 h-8 text-red-500 fill-current group-hover:drop-shadow-[0_0_10px_rgba(239,68,68,1)]" />
-                </button>
-              ) : (
-                <button type="button"
-                  onClick={handleStop}
-                  className="w-20 h-20 rounded-full bg-[#222] border-4 border-red-900 flex items-center justify-center shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
-                >
-                  <Square className="w-8 h-8 text-red-500 fill-current" />
-                </button>
-              )}
-            </div>
+      <AmCard title="Aufnahme" style={{ width: 176 }}>
+        <div className="am-recrow">
+          <button type="button"
+            className={`am-recb ${isRecording ? 'am-on' : ''}`}
+            onClick={isRecording ? handleStop : () => { void startRecording(); }}
+            disabled={locked && !isRecording}
+            aria-label={isRecording ? 'Aufnahme stoppen' : 'Aufnahme starten'}
+            title={isRecording ? 'Aufnahme stoppen' : 'Aufnahme starten'}
+          ><i /></button>
+          <div>
+            <div className={`am-big ${isRecording ? 'am-recl' : ''}`}>{formatTime(recordTime)}</div>
+            <span className="am-hint">{isRecording ? '● REC' : 'bereit'}</span>
           </div>
+        </div>
+      </AmCard>
 
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 mb-3 flex items-center gap-2">
-              <Mic className="w-4 h-4" /> INPUT SOURCE
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              {['MASTER_OUT', 'VOCAL_STEM', 'DRUM_BUS', 'SYNTH_GROUP'].map(src => (
-                <button type="button"
-                  key={src}
-                  onClick={() => { if (!(lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId)) setInputSource(src); }}
-                  className={`py-2 px-3 rounded border text-[10px] font-mono font-bold transition-all ${inputSource === src ? 'bg-indigo-900/40 border-indigo-500 text-indigo-400' : 'bg-[#111] border-neutral-800 text-neutral-500 hover:bg-[#222]'}`}
-                >
-                  {src}
-                </button>
-              ))}
-            </div>
-          </div>
+      <AmCard title="Wellenform" style={{ flex: 1, minWidth: 240 }}>
+        <RecScope recording={isRecording} />
+      </AmCard>
 
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 mb-3 flex items-center gap-2">
-              <Layers className="w-4 h-4" /> SIGNALKETTE
-            </h3>
-            <button
-              type="button"
-              onClick={() => { void bounceThroughChain(); }}
-              disabled={bounceBusy}
-              title="Kanal 1 offline durch die 16 Plugins in Kettenreihenfolge rendern (Quellen → Mixer → Nachbearbeitung → Recorder → Ausgang)"
-              className={`w-full py-2 px-3 rounded border text-[10px] font-mono font-bold transition-all ${bounceBusy ? 'bg-[#111] border-neutral-800 text-neutral-600 cursor-wait' : 'bg-indigo-950/40 border-indigo-800 text-indigo-300 hover:bg-indigo-900/40'}`}
+      <AmCard title="Takes" style={{ width: 300 }} right={<span className="am-vb">{takes.length}</span>}>
+        <div className="am-recl-list">
+          {takes.map((take) => (
+            <div
+              key={take.id}
+              role="button"
+              tabIndex={0}
+              className="am-rectk"
+              onClick={(e) => openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget as HTMLElement);
+                }
+              }}
             >
-              {bounceBusy ? 'BOUNCE LÄUFT …' : 'BOUNCE DURCH DIE KETTE'}
-            </button>
-            <div className="mt-2 text-[10px] font-mono text-neutral-500 min-h-[1rem]">
-              {bounceInfo ?? 'Quelle: Kanal 1 des Mixers.'}
+              <button type="button" className="am-tg"
+                onClick={(e) => { e.stopPropagation(); if (take.url) audioEngine.previewSample('channel5', undefined, take.url); }}
+                title="Take anhören" aria-label={`Take anhören: ${take.name}`} disabled={!take.url}
+              >▶</button>
+              <span className="am-rectn"><b>{take.name}</b><em className="am-mono">{take.duration} · {take.size} · {take.date}</em></span>
+              <button type="button" className="am-tg"
+                onClick={(e) => { e.stopPropagation(); openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget); }}
+                title="Aktionen für diesen Take öffnen (Export, Bibliothek, Kanal)" aria-label={`Aktionen: ${take.name}`}
+              >⋮</button>
             </div>
-          </div>
+          ))}
         </div>
+      </AmCard>
 
-        {/* Right Column: Takes Library */}
-        <div className="w-1/2 bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6 flex flex-col shadow-inner">
-          <h3 className="font-bold text-sm tracking-widest uppercase text-neutral-400 mb-4 flex items-center gap-2">
-            <Save className="w-4 h-4 text-indigo-500" /> RECORDED TAKES
-          </h3>
+      <AmCard title="Format · Export" style={{ width: 220 }}>
+        <span className="am-recfmt">
+          <span className="am-lbl">Aufnahme</span><span className="am-vb">{recordFormat}</span>
+        </span>
+        <span className="am-recfmt">
+          <span className="am-lbl">Bounce</span><span className="am-vb">WAV · {Math.round((audioContext?.sampleRate ?? 48000) / 100) / 10} kHz</span>
+        </span>
+        <button
+          type="button"
+          className="am-btn am-pri"
+          onClick={() => { void bounceThroughChain(); }}
+          disabled={bounceBusy}
+          title="Kanal 1 offline durch die 16 Plugins in Kettenreihenfolge rendern (Quellen → Mixer → Nachbearbeitung → Recorder → Ausgang)"
+        >
+          {bounceBusy ? 'BOUNCE LÄUFT …' : 'BOUNCE DURCH DIE KETTE'}
+        </button>
+        <span className="am-hint">{bounceInfo ?? 'Quelle: Kanal 1 des Mixers.'}</span>
+      </AmCard>
 
-          <div className="flex-1 overflow-y-auto pr-2 flex flex-col gap-3 scrollbar-thin scrollbar-thumb-neutral-800">
-            {takes.map(take => (
-              <div
-                key={take.id}
-                role="button"
-                tabIndex={0}
-                onClick={(e) => openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget as HTMLElement);
-                  }
-                }}
-                className="p-4 rounded-lg bg-[#111] border border-neutral-800 flex items-center justify-between group hover:border-indigo-500/50 transition-colors cursor-pointer"
-              >
-                <div className="flex items-center gap-4">
-                  <button type="button"
-                    onClick={(e) => { e.stopPropagation(); if (take.url) audioEngine.previewSample('channel5', undefined, take.url); }}
-                    title="Take anhören"
-                    className="w-8 h-8 rounded-full bg-[#222] flex items-center justify-center group-hover:bg-indigo-600 transition-colors cursor-pointer"
-                  >
-                    <Play className="w-4 h-4 text-neutral-400 group-hover:text-white ml-0.5 fill-current" />
-                  </button>
-                  <div>
-                    <div className="text-xs font-bold tracking-wider text-neutral-200">{take.name}</div>
-                    <div className="text-[10px] font-mono text-neutral-500 mt-1">{take.duration} • {take.size} • {take.date}</div>
-                  </div>
-                </div>
-                <button type="button"
-                  onClick={(e) => { e.stopPropagation(); openAudioActionMenu(sampleToContent(takeToSample(take), 'recording'), e.currentTarget); }}
-                  className="px-3 py-1.5 rounded bg-[#222] border border-neutral-700 text-[10px] font-bold text-neutral-400 flex items-center gap-1 hover:bg-[#333] transition-colors cursor-pointer"
-                  title="Aktionen für diesen Take öffnen"
-                >
-                  <Download className="w-3 h-3" /> AKTIONEN
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </TerminalFrame>
+      <AmCard title="Pegel" style={{ width: 64 }}>
+        <RecMeters />
+      </AmCard>
+    </div>
   );
 });

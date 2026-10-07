@@ -211,7 +211,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
             aria-pressed={power} title={power ? 'Effekt umgehen (Bypass)' : 'Effekt einschalten'}>
             <span className="am-lbl">Ausgang</span>
             <b>{power ? 'ACTIVE' : 'BYPASS'}</b>
-            <small>{sourceSample?.name || 'MASTER BUS'}</small>
+            <small>zum Main</small>
           </button>
         </div>
         <canvas data-live-value="fx-scope" ref={canvasRef} width={600} height={64} className="am-cv am-fxscope" />
