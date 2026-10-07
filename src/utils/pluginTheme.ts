@@ -56,7 +56,7 @@ export const PLUGIN_SKIN_REFERENCES: Record<PluginThemeId, string> = {
   perfor: 'Performance-Monitor (Gauges)',
 };
 
-export const DEFAULT_THEME_CLASS = 'monk-theme-masterplayer';
+export const DEFAULT_THEME_CLASS = 'monk-theme-mastergraph';
 
 /** Liefert die CSS-Theme-Klasse für eine Plugin-ID (mit Fallback). */
 export function getPluginThemeClass(id: string | undefined | null): string {

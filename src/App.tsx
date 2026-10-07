@@ -29,7 +29,7 @@ import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
 import { useMasterStream } from './hooks/useMasterStream';
 import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amUi';
-import { StudioMasterplayer } from './components/am/StudioMasterplayer';
+import { StudioMastergraph } from './components/am/StudioMastergraph';
 import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
@@ -50,7 +50,7 @@ const VISUALS_KEY = 'am.visuals.on';
 //   AI:        voice(9) · sound(10) · stem(11) · spatial(12)
 //   MASTERING: eq(13) · dsp(14) · master(15) · record(16)
 // System-Module (fix, alle 4 User):
-//   oben  = masterplayerMONK · nach recordMONK = aiMONK · ganz unten = perforMONK
+//   oben  = mastergraphMONK · nach recordMONK = aiMONK · ganz unten = perforMONK
 // MIDI/Controller ist KEIN Plugin (Settings → MIDI / Controllers).
 const RACK_ORDER = [
   'mixer', 'drop', 'song', 'effect',
@@ -60,7 +60,7 @@ const RACK_ORDER = [
 ];
 
 // Header-Navigation: 16 Plugin-Icons in ZWEI Reihen à 8. System-Module
-// (aiMONK/perforMONK) haben kein Header-Icon; masterplayerMONK ist die
+// (aiMONK/perforMONK) haben kein Header-Icon; mastergraphMONK ist die
 // feste Kopfzeile oberhalb der Toolbar.
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
@@ -271,7 +271,7 @@ function AppComponent() {
   // Eine feste Session pro App-Sitzung: Full-Mesh-Peers live im Header anzeigen.
   // P4-1/P4-2: Host sendet Master-Stream an Peers/SFU; Gäste spielen Main ab.
   // P0-1 Login-Regel: ALLE Plugins starten geschlossen – auch mixerMONK
-  // (Mixer-Sonderfall entfernt). Nur masterplayer (oben) und aiMONK (unten)
+  // (Mixer-Sonderfall entfernt). Nur mastergraph (oben) und aiMONK (unten)
   // sind als feste Sektionen für alle 4 User immer sichtbar.
   const mainDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
@@ -685,7 +685,7 @@ function AppComponent() {
     <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="am min-h-screen pb-28"><div className="am-wrap" style={{ margin: '0 auto', padding: '8px 16px 40px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
       <AmDefs />
-      {/* Kopf + Masterplayer nach Entwurf (docs/design/audioMONASTRY-design.html) */}
+      {/* Kopf + Mastergraph nach Entwurf (docs/design/audioMONASTRY-design.html) */}
       <div className="am-top">
         <header className="am-box am-head">
           <a
@@ -805,7 +805,7 @@ function AppComponent() {
           </div>
         </header>
 
-        <StudioMasterplayer bpm={bpm} isPlaying={isPlaying} />
+        <StudioMastergraph bpm={bpm} isPlaying={isPlaying} />
       </div>
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}

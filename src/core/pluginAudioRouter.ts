@@ -5,7 +5,7 @@
  * deactivate() }`. OFF = raus aus der Signalkette, AUTO_AI/PRO = Einspeisung.
  *
  * ARCH-PLUGIN-001: Exakt die 16 echten MONKs sind registriert. System-Module
- * (masterplayer/ai/perfor) und der Settings-Layer (MIDI/Controller) sind
+ * (mastergraph/ai/perfor) und der Settings-Layer (MIDI/Controller) sind
  * bewusst KEINE Plugin-Routen. Unbekannte IDs werden geloggt und ignoriert.
  */
 import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';

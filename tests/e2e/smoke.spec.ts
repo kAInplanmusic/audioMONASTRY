@@ -132,15 +132,15 @@ test('P0-3: Modus-Button schließt dropMONK (ON → OFF) und gibt es frei', asyn
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('P0-7: masterplayerMONK ist fest oben sichtbar und View-only', async ({ page }) => {
+test('P0-7: mastergraphMONK ist fest oben sichtbar und View-only', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
-  // masterplayerMONK ist der erste feste Rack-Block direkt unter dem Header.
-  const master = page.locator('#rack-masterplayer');
+  // mastergraphMONK ist der erste feste Rack-Block direkt unter dem Header.
+  const master = page.locator('#rack-mastergraph');
   await expect(master).toBeVisible();
-  await expect(master.getByText('MASTERPLAYER · NUR ANSICHT')).toBeVisible();
-  // Keine Eingaben: es gibt im masterplayer-Rack keine Buttons.
+  await expect(master.getByText('MASTERGRAPH · NUR ANSICHT')).toBeVisible();
+  // Keine Eingaben: es gibt im mastergraph-Rack keine Buttons.
   await expect(master.locator('button')).toHaveCount(0);
 
   expect(errors.pageErrors).toEqual([]);

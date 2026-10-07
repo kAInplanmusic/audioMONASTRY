@@ -42,7 +42,7 @@ const ICON_MAP: Record<string, any> = {
 //   MASTERING: eq(13) · dsp(14) · master(15) · record(16)
 //
 // System-Module (KEINE Plugins, nicht in dieser Registry):
-//   masterplayerMONK (nach Head, fest) · aiMONK (nach recordMONK) ·
+//   mastergraphMONK (nach Head, fest) · aiMONK (nach recordMONK) ·
 //   perforMONK (ganz unten). MIDI/Controller läuft über Settings.
 //
 // Konsolidierung (Migration-Matrix in AGENTS.md §5):
@@ -75,7 +75,7 @@ const COMPONENT_MAP: Record<string, any> = {
 
 /** System-Module (bewusst außerhalb der 16er-Registry). */
 export const SYSTEM_MODULES = {
-  masterplayer: { name: 'masterplayerMONK', short: 'MPL', icon: 'Activity', component: null },
+  mastergraph: { name: 'mastergraphMONK', short: 'MGR', icon: 'Activity', component: null },
   ai: { name: 'aiMONK', short: 'AI', icon: 'Bot', component: AiMonkTerminal },
   perfor: { name: 'perforMONK', short: 'PRF', icon: 'Gauge', component: PerformanceMonitorTerminal },
 } as const;

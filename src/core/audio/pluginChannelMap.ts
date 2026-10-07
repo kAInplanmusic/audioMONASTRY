@@ -37,11 +37,11 @@ const LEGACY_ALIASES: Record<string, string> = {
  * System-Module und UI-only-Plugins OHNE eigenen Audio-Graph. Sie liefern ein
  * leeres Array. Bewusst als Liste statt als Vertrags-Eigenschaft: der Vertrag
  * beschreibt die 16 Plugins, diese Eintraege sind KEINE Plugin-Slots mehr
- * (masterplayer/ai/perfor sind System-Module, controller/performance sind in
+ * (mastergraph/ai/perfor sind System-Module, controller/performance sind in
  * die Settings gewandert).
  */
 const NON_AUDIO_IDS = new Set([
-  'masterplayer', 'ai', 'perfor',
+  'mastergraph', 'ai', 'perfor',
   'library', 'mastering', 'recording', // Alt-Namen der konsolidierten Plugins
   'mcp', 'controller', 'performance',
 ]);

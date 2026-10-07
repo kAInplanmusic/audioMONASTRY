@@ -12,7 +12,7 @@
  *     Start, Stop, BPM, Fades, Kanalzüge – ALLES.
  *   - produzierendeMONKS arbeiten dem mixerMONK zu (Vorbereitung).
  *   - soundengineeringMONKS verbessern den Ton NACH dem Mischpult.
- *   - masterplayerMONK ist reine Info/Visualisierung ohne Eingaben.
+ *   - mastergraphMONK ist reine Info/Visualisierung ohne Eingaben.
  *
  * `MAIN_OUT_USER_ID` (Env) ist nur ein expliziter Bootstrap-Pin, wenn noch
  * niemand den mixerMONK-Lock hält; im Betrieb gewinnt immer der Lock-Owner.
