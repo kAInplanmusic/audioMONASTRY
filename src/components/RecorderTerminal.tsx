@@ -358,7 +358,7 @@ export const RecorderTerminal = React.memo(function RecorderTerminal() {
         <span className="am-hint">{bounceInfo ?? 'Quelle: Kanal 1 des Mixers.'}</span>
       </AmCard>
 
-      <AmCard title="Pegel" style={{ width: 64 }}>
+      <AmCard className="am-pegel">
         <RecMeters />
       </AmCard>
     </div>

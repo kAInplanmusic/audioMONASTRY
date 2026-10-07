@@ -382,9 +382,9 @@
 @media (max-width:560px){.am-rail{flex-direction:row;flex-wrap:wrap;width:100%;justify-content:center}.am-mcol{width:100%;flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center}.am-jog{width:170px;height:170px}.am-brand img{width:44px;height:44px}.am-brand b{font-size:16px}.am-brand small{display:none}.am-users .am-hint{display:none}.am-ic{height:42px;font-size:9px}.am-ic svg{width:17px;height:17px}.am-cs{width:calc((100vw - 84px) / 4);min-width:72px}.am-cs .am-kn.am-s{width:34px}.am-cs .am-kn.am-s svg{width:26px;height:26px}.am-deck{width:100%}.am-rsec{min-width:0;flex-basis:100%}.am-chans{max-width:100%;overflow-x:auto}.am-macros{flex-direction:row}.am-rsec .am-unit:first-child{overflow-x:auto}.am-pads{grid-template-columns:repeat(4,44px)}.am-pad{width:44px;height:44px}}
 @media (max-width:760px){.am-smart{grid-template-columns:1fr!important;justify-items:center}.am-xy{width:100%}}
 .am{background:radial-gradient(1200px 600px at 50% -10%,#0d1a3a 0,transparent 60%),var(--bg);color:var(--tx);font:14px/1.4 var(--f-body);-webkit-font-smoothing:antialiased;min-height:100%}
-.am button,.am select,.am input,.am textarea{font:inherit;color:inherit}
-.am button{cursor:pointer}
-.am button:disabled{cursor:not-allowed}
+:where(.am) :where(button,select,input,textarea){font:inherit;color:inherit}
+:where(.am) :where(button){cursor:pointer}
+:where(.am) :where(button:disabled){cursor:not-allowed}
 
 /* ---- App-Ergänzungen zum Entwurf ---- */
 .am-wrap{max-width:1408px}
