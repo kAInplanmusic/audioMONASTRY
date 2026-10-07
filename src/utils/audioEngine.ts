@@ -43,6 +43,7 @@ import {
   applyGraphState, readGraphState, type GraphStateSink, type GraphStateSource,
 } from '../audio/graphStateIO';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
+import { SinkRecoveryController, type SinkRecoveryStatus } from '../core/audio/backends/sinkRecovery';
 import { EventCaptureLog } from '../core/capture/eventCaptureLog';
 import { AudioCaptureTap } from '../core/capture/audioCapture';
 import { buildCaptureResult, mergeCaptureBar, type CaptureResult } from '../core/capture/captureSession';
@@ -1606,14 +1607,19 @@ class AudioEngine {
     this.syncV2PatternsToLiveSink();
     this.syncV2SamplesToLiveSink();
     this.syncV2SynthSourcesToLiveSink();
+    this.startV2Transport();
+    this.captureTransportStartSec = this.ctx?.currentTime ?? null;
+    this.isPlaying = true;
+  }
+
+  /** Startet den sample-genauen V2-Transport mit den aktuellen Parametern. */
+  private startV2Transport(): void {
     this.v2LiveSink.startTransport({
       bpm: Tone.Transport.bpm.value,
       swing: this.swing,
       gate: this.gate,
       stepCount: this.stepCount,
     });
-    this.captureTransportStartSec = this.ctx?.currentTime ?? null;
-    this.isPlaying = true;
   }
 
   public stop() {
@@ -1847,7 +1853,47 @@ class AudioEngine {
   public v2Studio = new V2StudioGraph();
 
   /** V2-Live-Output-Sink: rendert V2StudioGraph im AudioWorklet zur Destination. */
-  public v2LiveSink = new V2LiveSink();
+  public v2LiveSink = new V2LiveSink({ onFault: (info) => { this.v2SinkRecovery.handleFault(info); } });
+
+  /**
+   * RT-AUDIT-P0-007: Fehlerpfad des V2-Live-Sinks. `processorerror` (Prozessor
+   * tot) bzw. dauerhafte `render-error` (≥ 50 in 2 s) → Neuaufbau mit
+   * vollständigem Zustandsabgleich; höchstens 3 Neuaufbauten pro 60 s, danach
+   * Fehlerzustand (UI: „Audio-Engine gestört – bitte neu laden“).
+   */
+  private readonly v2SinkRecovery = new SinkRecoveryController({ rebuild: () => this.rebuildV2LiveSink() });
+
+  /** RT-AUDIT-P0-007: Anzeige-Zustand des Fehlerpfads (EngineStatusBadge). */
+  public getV2SinkRecoveryStatus(): SinkRecoveryStatus {
+    return this.v2SinkRecovery.status();
+  }
+
+  /**
+   * RT-AUDIT-P0-007: V2-Live-Sink neu aufbauen (neuer Prozessor) und den
+   * kompletten Zustand abgleichen: Mix/Master/Monitor (`syncV2FromV1` in
+   * `connectV2LiveOutput`), Master-Stream-/Capture-Abgriff, Patterns, Samples,
+   * Synth-Quellen; ein laufender Transport startet wieder.
+   */
+  private async rebuildV2LiveSink(): Promise<boolean> {
+    const wasPlaying = this.isPlaying;
+    this.v2LiveSink.disconnect();
+    const ok = await this.connectV2LiveOutput();
+    if (!ok) return false;
+    this.syncV2PatternsToLiveSink();
+    this.syncV2SamplesToLiveSink();
+    this.syncV2SynthSourcesToLiveSink();
+    if (wasPlaying) {
+      if (this.isPlaying) {
+        // Der neue Prozessor startet den Transport bei Step 0 – Capture-Raster nachziehen.
+        this.startV2Transport();
+        this.captureTransportStartSec = this.ctx?.currentTime ?? null;
+      } else {
+        // Während des Neuaufbaus gestoppt: Zustand wie nach stop() herstellen.
+        this.v2LiveSink.disconnect();
+      }
+    }
+    return true;
+  }
 
   /** Verbindet den V2-Live-Output-Sink mit der AudioContext-Destination. */
   public async connectV2LiveOutput(): Promise<boolean> {
