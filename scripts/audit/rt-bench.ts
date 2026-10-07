@@ -19,7 +19,8 @@
  */
 import { PerformanceObserver, performance } from 'node:perf_hooks';
 import { V2SinkEngine, type V2StepRenderEvent } from '../../src/core/audio/live/V2SinkEngine';
-import { V2SampleClock } from '../../src/core/audio/live/V2SampleClock';
+import { V2SampleClock, type V2ScheduledStep } from '../../src/core/audio/live/V2SampleClock';
+import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../src/core/audio/live/V2StepQueue';
 import { V2MonitorGraph } from '../../src/core/audio/V2MonitorGraph';
 import { audioBufferPool } from '../../src/core/audio/BufferPool';
 import { AudioGraph } from '../../src/core/audio/AudioGraph';
@@ -56,24 +57,43 @@ function burstLength(): void {
 }
 
 // ---------------------------------------------------------------------------
-// [2] Swing: alle 16 Steps eines Takts müssen innerhalb eines Blocks feuern.
-//     Nachbildung des Filters aus v2SinkProcessor.process().
+// [2] Swing: alle Steps müssen feuern – auch die, deren Frame durch Swing
+//     hinter dem aktuellen Block liegt. Gemessen wird exakt die Logik aus
+//     v2SinkProcessor.process(): Clock (processBlockInto) → V2StepQueue →
+//     popDue. Gezählt werden „nicht gefeuerte Steps“ = geplant − gefeuert
+//     (inkl. Queue-Überläufe) plus Steps, die nicht an ihrem Frame feuern.
 // ---------------------------------------------------------------------------
 function swingSteps(): void {
   for (const swing of [0, 0.5]) {
     const clock = new V2SampleClock({ sampleRate: SR, stepCount: 16, bpm: 120, swing });
     clock.playing = true;
+    const queue = new V2StepQueue(V2_STEP_QUEUE_CAPACITY);
+    const planned: V2ScheduledStep[] = [{ step: 0, frame: 0, time: 0, swing: 0, gate: 0, secondsPerStep: 0 }];
+    const starts = new Int32Array(V2_STEP_QUEUE_CAPACITY);
+    const steps = new Int32Array(V2_STEP_QUEUE_CAPACITY);
+    const frames = new Float64Array(V2_STEP_QUEUE_CAPACITY);
+    const sps = new Float64Array(V2_STEP_QUEUE_CAPACITY);
+    let plannedCount = 0;
     let fired = 0;
-    let dropped = 0;
+    let misplaced = 0;
     // 2,1 s: 120 BPM → 16tel = 6000 Samples → 16 Steps in 96.000 Samples.
     for (let f = 0; f < SR * 2.1; f += N) {
-      for (const s of clock.processBlock(f, N)) {
-        const start = s.frame - f;
-        if (start < 0 || start >= N) dropped++; else fired++;
+      const count = clock.processBlockInto(f, N, planned);
+      for (let k = 0; k < count; k++) {
+        plannedCount++;
+        queue.push(planned[k].frame, planned[k].step, planned[k].secondsPerStep);
+      }
+      const n = queue.popDue(f, N, starts, steps, frames, sps);
+      for (let k = 0; k < n; k++) {
+        fired++;
+        // Sample-genau: Startsample muss exakt dem geplanten Frame entsprechen.
+        if (f + starts[k] !== frames[k]) misplaced++;
       }
     }
-    check(`RT-AUDIT-P0-003/swing${swing}`, `Swing ${swing}: verworfene Steps (Processor-Filter)`, dropped, 'Steps', '= 0', dropped === 0);
-    if (swing === 0) void fired;
+    // Was noch in der Queue liegt, ist erst NACH dem Messfenster fällig
+    // (popDue feuert alles mit frame < Blockende) und zählt nicht als Fehler.
+    const notFired = plannedCount - fired - queue.size + misplaced;
+    check(`RT-AUDIT-P0-003/swing${swing}`, `Swing ${swing}: nicht gefeuerte Steps (V2StepQueue)`, notFired, 'Steps', '= 0', notFired === 0);
   }
 }
 
