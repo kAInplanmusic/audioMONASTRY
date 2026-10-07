@@ -2,8 +2,9 @@
  * Masterplayer nach Entwurf – reine Ansicht des Main-Ausgangs
  * ===========================================================
  * Titel · laufende Wellenform des Main-Ausgangs · Zeit/BPM/Takt/Position/
- * Tonart/LUFS · L/R-Pegel. Keine Bedienelemente: Ton auf Main startet nur ▶ im
- * mixerMONK. Werte kommen aus der Engine (UI-Takt, nie im Audio-Thread).
+ * Tonart/LUFS · L/R-Pegel. Ton auf Main startet nur ▶ im mixerMONK. Einziges
+ * Bedienelement: „Capture“ (IDEA-2026-10-07-A, nur für den mixerMONK-Halter).
+ * Werte kommen aus der Engine (UI-Takt, nie im Audio-Thread).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
@@ -13,10 +14,11 @@ import { lufsLabel, transportReadout } from '../MasterplayerReadout';
 import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
 import { readMainLevel, useMainLevel } from '../../core/audio/mainLevel';
+import { CaptureControl } from './CaptureControl';
 
 const HISTORY = 240;
 
-export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, isPlaying }: { bpm: number; isPlaying: boolean }) {
+export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, isPlaying, mainHolder = false }: { bpm: number; isPlaying: boolean; mainHolder?: boolean }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [lufs, setLufs] = useState(0);
@@ -77,6 +79,7 @@ export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, 
         <small>Main Out · alle sehen dasselbe</small>
         <span className="am-tag">MASTERPLAYER · NUR ANSICHT</span>
         <div style={{ marginTop: 6 }}><EngineStatusBadge /></div>
+        <CaptureControl mainHolder={mainHolder} />
       </div>
       <div className="am-mpw"><canvas ref={canvas} aria-hidden="true" /></div>
       <dl className="am-mpi" style={{ gridTemplateColumns: 'repeat(4, auto)' }}>
