@@ -446,7 +446,8 @@ export const AI_RESIDENT_FLEET = [
       { id: 'qwen3-tts-17b', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
       { id: 'qwen3-tts-voicedesign', vramGb: 8, license: 'Apache-2.0', status: 'manifest' },
       { id: 'htdemucs-6s', vramGb: 8, license: 'MIT', status: 'manifest' },
-      { id: 'stable-audio-open-1.0', vramGb: 10, license: 'stability-community (gated)', status: 'manifest', licenseCheck: true },
+      // SFX/Geräusche (30 s, 48 kHz, auch kurze perkussive Clips); ersetzt Stable Audio Open 1.0 (gated, Umsatzgrenze). VRAM geschätzt.
+      { id: 'moss-soundeffect-v2.0', vramGb: 8, license: 'Apache-2.0', status: 'neu' },
     ],
   },
   {

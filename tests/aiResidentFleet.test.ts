@@ -63,7 +63,7 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
   it('enthält keine Nicht-kommerziell-Lizenz; Lizenz-Vorbehalte sind bewusst gelistet', () => {
     for (const m of all) expect(m.license, m.id).not.toMatch(/non-commercial|CC-BY-NC|research/i);
     expect(all.filter((m) => 'licenseCheck' in m && m.licenseCheck).map((m) => m.id).sort()).toEqual(
-      ['essentia', 'pyannote-diarization', 'stable-audio-open-1.0'],
+      ['essentia', 'pyannote-diarization'],
     );
   });
 
