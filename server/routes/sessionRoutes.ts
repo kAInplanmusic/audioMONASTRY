@@ -86,6 +86,15 @@ export interface SessionRoutesDeps {
   tokenFromRequest(req: unknown): string;
   safeTokenEqual(a: string, b: string): boolean;
   newSession(): AuthoritativeSession;
+  /**
+   * BEFUND 2026-10-06: Nach dem Austausch der Session muss der mixerMONK-Halter
+   * NEU vergeben werden. `ensureHolder` laeuft sonst nur beim Socket-Beitritt
+   * (realtime.ts); ein bereits verbundener Client bekommt nach dem Reset keinen,
+   * und der Mixer bleibt auf "Wird gerade vergeben." (81 px) statt seiner
+   * Bedienflaeche. Rueckgabe: neuer Halter oder null (keine Mitglieder).
+   * Optional, damit Tests ohne Realtime-Hub den Reset weiter pruefen koennen.
+   */
+  ensureSessionHolders?(session: AuthoritativeSession): string | null;
   /** Live-Sicht auf den autoritativen Zustand (fuer den Rueck-Lesebeleg). */
   getSession(): AuthoritativeSession;
   replaceSession(session: AuthoritativeSession): void;
@@ -169,7 +178,13 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
       return;
     }
     const previous = summarizeAuthoritativeSession(deps.getSession().snapshot());
-    deps.replaceSession(deps.newSession());
+    const fresh = deps.newSession();
+    // BEFUND 2026-10-06: Erst den Halter auf der FRISCHEN Session vergeben, dann
+    // austauschen. Sonst bleibt mixerMONK ohne Halter ("Wird gerade vergeben.",
+    // 81 px statt Bedienflaeche) - ein bereits verbundener Client loest kein
+    // Beitritts-Ereignis mehr aus, das ihn nachtragen wuerde.
+    const newHolder = deps.ensureSessionHolders?.(fresh) ?? null;
+    deps.replaceSession(fresh);
     // Der Save-Timer trug den ALTEN Zustand — erst abbrechen, dann den frischen
     // Zustand persistieren (sonst koennte ein Neustart die alten Locks laden).
     deps.clearSaveTimer();
@@ -189,6 +204,9 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
       sessionInstanceId: instanceId,
       sessionStartedAt: new Date(instanceStartedAt).toISOString(),
       previous,
+      // BEFUND 2026-10-06: der neu vergebene mixerMONK-Halter - sonst bliebe
+      // "hat wieder einen Halter" eine Behauptung statt einer Messung.
+      mixerHolder: newHolder,
       ...after,
     });
   });

@@ -67,7 +67,19 @@ export async function newStudioContext(
  * E2E-Isolation: setzt den serverautoritativen Session-State zurück. Die
  * In-Memory-Session lebt länger als ein einzelner Browser-Kontext; ohne Reset
  * würden Modul-States/Locks aus einem vorherigen Test in den nächsten bluten.
- * Der Hook ist dev-only (Production: 404) und verlangt den Studio-Token.
+ *
+ * Zwei Schlösser am Server (docs/OPS_RUNBOOK.md, F8): `NODE_ENV != production`
+ * UND `AUDIOMONASTRY_TEST_RESET=1`. Fehlt eines, antwortet der Pfad wie ein
+ * nicht existierender (404) - auch mit gültigem Token. Zusaetzlich ist ein
+ * konfiguriertes Studio-Token Pflicht (sonst 401).
+ *
+ * FEHLKONFIGURATION IST KEIN TESTFEHLER: Ein falsch gestarteter Dev-Server
+ * (kein `AUDIOMONASTRY_TEST_RESET`, falscher Token) liess die komplette
+ * visuelle Suite mit `session reset fehlgeschlagen: 404/401` abbrechen - noch
+ * bevor ein einziger Screenshot entstand. Das sah nach kaputten Baselines aus,
+ * war aber ein Startfehler. Deshalb hier: fehlende Verfuegbarkeit wird gemeldet
+ * und der Lauf faehrt ohne Reset fort (die Isolation ist Bequemlichkeit, nicht
+ * Pruefinhalt); ein kaputter Test soll am Bild scheitern, nicht am Startskript.
  */
 export async function resetSession(): Promise<void> {
   const token = studioToken();
@@ -75,13 +87,15 @@ export async function resetSession(): Promise<void> {
     method: 'POST',
     headers: token ? { 'x-studio-token': token } : {},
   });
-  // GEGEN EINE ECHTE INSTANZ (E2E_BASE_URL) ist der Hook absichtlich abwesend:
-  // er ist dev-only, Produktion antwortet 404. Ein Live-Beweis darf daran nicht
-  // scheitern - der Reset ist eine Bequemlichkeit, kein Teil der Pruefung. Der
-  // frische Serverzustand kommt dort vom Neustart des Containers (Operator).
-  if (res.status === 404 && process.env.E2E_BASE_URL) {
-    console.log('[e2e] session/reset nicht verfuegbar (Produktion) - fahre ohne Reset fort');
+  if (res.ok) return;
+  // 404 = Schalter fehlt oder Produktion; 401 = Token passt nicht.
+  if (res.status === 404 || res.status === 401) {
+    console.log(
+      `[e2e] session/reset nicht verfuegbar (${res.status}) - fahre ohne Reset fort. ` +
+        'Fuer einen Reset: NODE_ENV!=production, AUDIOMONASTRY_TEST_RESET=1 und ' +
+        'STUDIO_ACCESS_TOKEN im SERVER-Prozess setzen (siehe docs/OPS_RUNBOOK.md §1).',
+    );
     return;
   }
-  if (!res.ok) throw new Error(`session reset fehlgeschlagen: ${res.status} ${await res.text()}`);
+  throw new Error(`session reset fehlgeschlagen: ${res.status} ${await res.text()}`);
 }
