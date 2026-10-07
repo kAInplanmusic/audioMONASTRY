@@ -194,9 +194,18 @@ describe('V2SinkEngine · AUDIO-P0-001/003/004 (Drum-Stimmen, Mute, Master-Proce
     engine.triggerSynth('channel8', 1);
     const out = engine.render({ ...CTX, currentTime: 0 });
     expect(rmsOf(out)).toBeGreaterThan(0.01);
-    // Ohne erneuten Trigger ist der nächste Block wieder stumm.
-    const silent = engine.render({ ...CTX, currentTime: 128 / 48000 });
+    // RT-AUDIT-P0-001: Früher stand hier „der nächste Block ist wieder stumm“ –
+    // genau das war der Fehler (jede Stimme brach nach 2,67 ms ab). Jetzt klingt
+    // die Stimme im nächsten Block weiter aus und ist ohne erneuten Trigger
+    // spätestens nach der Maximaldauer (2 s) wieder still.
+    const next = engine.render({ ...CTX, currentTime: 128 / 48000 });
+    expect(rmsOf(next)).toBeGreaterThan(0.01);
+    let silent = next;
+    for (let b = 2; b < Math.ceil((2.1 * 48000) / 128); b++) {
+      silent = engine.render({ ...CTX, currentTime: (b * 128) / 48000 });
+    }
     expect(rmsOf(silent)).toBeLessThan(1e-6);
+    expect(engine.activeVoiceCount).toBe(0);
   });
 
   it('AUDIO-P0-004: Master-EQ-Boost hebt den Pegel eines Tons im Durchlassbereich an', () => {
