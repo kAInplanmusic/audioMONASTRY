@@ -786,6 +786,21 @@ registerSessionRoutes(app, {
   tokenFromRequest: studioTokenFromRequest,
   safeTokenEqual,
   newSession: () => new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS }),
+  // BEFUND 2026-10-06: Der Reset tauscht die Session aus und hinterlaesst
+  // `locks: []` - mixerMONK hat danach KEINEN Halter. `ensureHolder` laeuft
+  // sonst nur beim Socket-Beitritt (realtime.ts), ein bereits verbundener
+  // Client bekommt also nie einen. Folge: `pluginPanelOpen('mixer', ...)` ist
+  // false, der Mixer bleibt auf "Wird gerade vergeben."/81 px statt seine
+  // Bedienflaeche aufzubauen (gemessen im visuellen Lauf: erwartet >400 px).
+  // Der Halter wird deshalb auf der FRISCHEN Session vergeben - an das aelteste
+  // anwesende Mitglied, genau die Regel aus UI2-P0-001.
+  ensureSessionHolders: (session) => {
+    // Die Mitgliederliste kennt nur der Realtime-Hub (Socket-Scope). Er vergibt
+    // den Halter auf der frischen Session und broadcastet das an den Raum.
+    // Hier wird auf der ihm uebergebenen Session gearbeitet, damit der Zustand
+    // schon beim Austausch stimmt.
+    return serverIo ? realtimeHub!.ensureMixerHolderNow() : null;
+  },
   // F8: Der Rueck-Lesebeleg des Resets braucht die LIVE-Sicht (nach dem
   // Austausch) — eine Wertkopie wuerde den alten Zustand beschreiben.
   getSession: () => sessionRuntime.session,

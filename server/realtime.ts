@@ -123,6 +123,14 @@ export interface RealtimeHub {
   io: any;
   getActiveSocketConnections(): number;
   /**
+   * BEFUND 2026-10-06: Vergibt den mixerMONK-Halter neu, nachdem ein
+   * Session-Reset den Zustand ausgetauscht hat. `ensureMixerHolder` laeuft
+   * sonst nur beim Socket-Beitritt; ein bereits verbundener Client bliebe ohne
+   * Halter, und der Mixer zeigt nur "Wird gerade vergeben." (81 px) statt
+   * seiner Bedienflaeche. Liefert den neuen Halter oder `null`.
+   */
+  ensureMixerHolderNow(): string | null;
+  /**
    * Ergebnis des letzten Socket-Sweeps (F8): Geister/idle/online. `null`, solange
    * noch kein Sweep lief. Reine Diagnose — die Ops-Routen zeigen damit, dass der
    * Messwert aus dem Registry kommt und wie viele Geister entfernt wurden.
@@ -1011,9 +1019,48 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
     warn('Socket.io signaling disabled:', (e as Error).message);
   }
 
+  // BEFUND 2026-10-06: Der Socket-Scope oben endet mit dem try/catch; die
+  // Mitgliederliste und `ensureMixerHolder` gelten nur darin. Fuer den Aufruf
+  // von aussen (Session-Reset) wird der Halter hier neu vergeben - mit der
+  // EIGENEN Raum-Konstante, damit es auch greift, wenn der Socket-Aufbau
+  // fehlschlug (dann gibt es ohnehin keine Mitglieder und nichts zu tun).
+  let ensureMixerHolderOutside = (): string | null => null;
+  {
+    const room = 'session:studio-session'; // == SESSION_ROOM_ID im Socket-Scope oben
+    const members = (): string[] => {
+      const out: string[] = [];
+      const sockets = io.sockets?.adapter?.rooms?.get(room);
+      if (!sockets) return out;
+      for (const sid of sockets) {
+        const s = io.sockets.sockets.get(sid);
+        if (s?.data?.sessionUserId && !isListenerMode(normalizeSessionMode(s?.data?.sessionMode))) {
+          out.push(String(s.data.sessionUserId));
+        }
+      }
+      return out;
+    };
+    ensureMixerHolderOutside = (): string | null => {
+      const ids = members();
+      if (!ids.length) return null;
+      const assigned = sessionRuntime.session.ensureHolder('mixer', ids);
+      if (!assigned) return null;
+      sessionRuntime.persist();
+      io.to(room).emit('plugin-lock', {
+        pluginId: 'mixer',
+        lockedBy: assigned,
+        timestamp: Date.now(),
+        ttl: pluginLockTtlMs,
+        revision: sessionRuntime.session.revision,
+        reason: 'auto-holder-after-reset',
+      });
+      return assigned;
+    };
+  }
+
   return {
     io,
     getActiveSocketConnections: () => socketLiveness.online(),
+    ensureMixerHolderNow: () => ensureMixerHolderOutside(),
     socketLiveness: () => socketLiveness.lastEvaluation(),
   };
 }

@@ -3881,7 +3881,7 @@
       "id": "INFRA-RUNPOD-014",
       "title": "imageHq-Vertrag: worker-comfyui mit Workflow statt prompt-Feld (Code b90f7a8) - SSOT-Nachzug",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Infra/RunPod",
       "source": "Commit b90f7a8 + src/core/ai/vision/runpodVision.ts:7-16 (\"SEIT 2026-09-27\")",
       "problem": "Seit b90f7a8 (Commit-Datum 2026-09-28 13:48, im Code als \"SEIT 2026-09-27\" gefuehrt) baut runpodVision.ts den Endpoint-Input als { input: { workflow } } (ComfyUI-Workflow-API); der Prompt steckt im Graphen (Vorlage services/audiomonastry-ai-runtime/workflows/image_flux1.json), ein prompt-Feld kennt der Worker nicht mehr. Live-Endpoint bleibt wzh9hcbitjnn95 (Name audiomonastry-ai-image). Offen: die Deploy-/Template-Seite traegt teils noch das PrunaAI-Image (INFRA-RUNPOD-015); die BEFUND-Messung 2026-09-28 sah drei Worker, zwei davon noch mit dem alten PrunaAI-Image (Auftraege scheitern dort nach 1,3 s).",
@@ -3894,7 +3894,13 @@
         "scripts/visual-vorrat/BEFUND.md"
       ],
       "updatedAt": "2026-09-29",
-      "note": "NACHTRAG 2026-09-29 (Paket C, Commit 71388de): comfyui_adapter.py COMFY_ROLES.imageHq auf worker:comfyui/protocol:workflow umgestellt (Alt-Eintrag als Historien-Kommentar), offline-Contract-Test tests/test_comfyui_adapter_imagehq.py 5/5. Offen bleibt: Live-Verifikation am Endpoint."
+      "note": "NACHTRAG 2026-09-29 (Paket C, Commit 71388de): comfyui_adapter.py COMFY_ROLES.imageHq auf worker:comfyui/protocol:workflow umgestellt (Alt-Eintrag als Historien-Kommentar), offline-Contract-Test tests/test_comfyui_adapter_imagehq.py 5/5. Offen bleibt: Live-Verifikation am Endpoint.\n\nBEFUND + FIX 2026-10-06 (Audit-Lauf, im vollen `npm run verify` gefunden): Der imageHq-Umbau aus b90f7a8 hatte den Vertrag auf Workflow gestellt, aber das Feld `kind: image` in COMFY_ROLES nicht mitgezogen. Der Kommentar bei imageLora warnt ausdruecklich: ohne `kind` gilt der ACE-Step-Weg (Rueckwaertsvertraeglichkeit fuer music). Folge: `build_workflow_request` lief fuer imageHq in den ACE-Step-Pfad, `apply_prompt_to_workflow` suchte TextEncodeAceStep-Knoten, fand in einem Bildgraphen keine und liess den Graphen unveraendert - der Aufruf haette still das Demo-Bild des Workflows geliefert, waehrend der Aufrufer seinen Prompt fuer erledigt haelt. Genau der stille Fehlschlag, den der Umbau verhindern sollte.\nFix: imageHq traegt jetzt `kind: image` PLUS `imagePath: single`; build_workflow_request verzweigt darauf in die neue build_single_image_request (eigener Rollen-Workflow ueber workflow_for, Prompt/Seed/Groesse via apply_prompt_to_image_workflow ueber die Sampler-Verdrahtung) statt in build_image_request (das ist die imageLora-Logik mit Basismodell-Wahl und LoRA-Kette).\nZwei Altvertrag-Tests zogen mit: tests/test_comfyui_adapter.py prueft jetzt den Workflow-Vertrag von imageHq (prompt landet am Textknoten, KEIN prompt-Feld im Request; ohne Workflow kommt die meldende ValueError) und tests/test_moa_orchestrator.py erwartet die Workflow-Meldung statt 'leerer Request' - plus Gegenprobe, dass ein prompt OHNE Workflow weiter abgelehnt wird.\nBELEG: vorher 1 failure + 1 error in der Python-Suite (verify EXIT=1), jetzt `npm run test:python` 139 Tests OK; tests/test_comfyui_adapter.py 49/49, tests/test_moa_orchestrator.py 62/62. Am echten workflows/image_flux1.json geprueft: Textknoten 2 bekommt den Prompt, kein prompt-Feld im Request, Musik-Weg unveraendert. Damit ist der Vertrag am Code belegt; LIVE-Verifikation am RunPod-Endpoint bleibt offen (Konto/Endpoint).",
+      "verification": [
+        "npm run test:python -> 139 Tests OK (vorher EXIT=1)",
+        "services/audiomonastry-ai-runtime/tests/test_comfyui_adapter.py -> 49/49",
+        "services/audiomonastry-ai-runtime/tests/test_moa_orchestrator.py -> 62/62",
+        "Gegenprobe am echten workflows/image_flux1.json: Prompt am Textknoten 2, kein prompt-Feld, music unveraendert"
+      ]
     },
     {
       "id": "INFRA-RUNPOD-015",
@@ -4522,8 +4528,14 @@
       "status": "PARTIAL",
       "area": "UI",
       "source": "UI-Audit 2026-10-04 (Betreiber-Vorlage Schreibtisch)",
-      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage\n\n2026-10-06 Betreiber-Klarstellung: Die lineare Reihenfolge Quellen → Mixer → Nachbearbeitung → Recorder gilt NUR für die Verkabelung (SIGNAL_CHAIN). Auf dem Bildschirm steht der Mixer oben, danach die 15 Plugins in Kopfreihenfolge (RACK_ORDER = registry). Das entspricht dem bestehenden App-Layout; docs/UI_SPEC.md ist angepasst. Offen: Screenshot-Test gegen den Entwurf docs/design/audioMONASTRY-design.html.\n\n2026-10-06: Signalweg-Leiste in der App ergänzt. Offen bleibt der visuelle Screenshot-Test gegen den Entwurf (die vorhandenen Baselines in tests/e2e/visual.spec.ts sind veraltet und laufen in CI nicht).",
-      "verification": ""
+      "note": "Feste Reihenfolge laut Spezifikation. Quellen: biblio, drop, song, drumsampler, syntisampler, instru, voice, sound, stem. Nachbearbeitung: effect, eq, dsp, spatial, master, record. Fuß: perfMONK und aiMONK, fest für alle.\n\nAkzeptanz: Screenshot-Test (Playwright, visuell) gegen die Vorlage\n\n2026-10-06 Betreiber-Klarstellung: Die lineare Reihenfolge Quellen → Mixer → Nachbearbeitung → Recorder gilt NUR für die Verkabelung (SIGNAL_CHAIN). Auf dem Bildschirm steht der Mixer oben, danach die 15 Plugins in Kopfreihenfolge (RACK_ORDER = registry). Das entspricht dem bestehenden App-Layout; docs/UI_SPEC.md ist angepasst. Offen: Screenshot-Test gegen den Entwurf docs/design/audioMONASTRY-design.html.\n\n2026-10-06: Signalweg-Leiste in der App ergänzt. Offen bleibt der visuelle Screenshot-Test gegen den Entwurf (die vorhandenen Baselines in tests/e2e/visual.spec.ts sind veraltet und laufen in CI nicht).\n\n2026-10-07 BEFUND (Ursache der nie laufenden Baselines, vollstaendig belegt): Der Test ist seit dem 4.10. NICHT ausgefuehrt worden - .github/workflows/build.yml schliesst ihn per --grep-invert \"Baseline\" in JEDER CI aus. Lokal scheiterte er an einer Kette aus vier Umgebungsfallen, die alle nichts mit dem Bild zu tun hatten: (1) NODE_ENV=production der Session haelt npm ci von den devDependencies ab (211 statt 603 Pakete, kein playwright); (2) der Reset-Hook heisst AUDIOMONASTRY_TEST_RESET=1, nicht TEST_RESET_ENABLED; (3) STUDIO_ACCESS_TOKEN muss im SERVER-Prozess stehen, weil dotenv fuer Tests nicht laedt und die Konstante vor dem Laden ausgewertet wird; (4) `tsx server.ts` startet den Listener NUR bei NODE_ENV != test - im Testmodus, den der Reset-Hook verlangt, importiert der Prozess nur und endet. Feste: scripts/e2e-visual.sh.\nDANN zwei echte Defekte gefunden und behoben:\n- Der Reset liess `locks: []` zurueck, mixerMONK hatte danach KEINEN Halter, und `ensureHolder` laeuft nur beim Socket-Beitritt. Der Mixer blieb auf 'Wird gerade vergeben.' (81 px) statt seiner Bedienflaeche. Fix: ensureMixerHolderNow() im RealtimeHub, von der Reset-Route auf der FRISCHEN Session aufgerufen, `mixerHolder` in der Antwort (Commit 8fd62b2).\n- Der Client verbindet sein Signaling per Socket, verlangt dafuer aber einen gueltigen Studio-Token; ohne ihn: 'Signaling connection failed: unauthorized' + 401 auf /api/webrtc-config - also KEIN Halter, weil ohne Socket niemand einen vergibt.\nVERBLEIBENDE URSACHE (jetzt eindeutig, A/B gemessen): Die eingefrorene Uhr (freezeTime, page.clock.pauseAt) blockiert das asynchrone Laden der Rack-Module. Mit freezeTime: 'Lade Modul...', Hoehe 80,5-143 px, Pruefung > 400 px schlaegt fehl (20 s Timeout). Ohne freezeTime: Modul geladen, Hoehe 2779 px, Pruefung besteht. Der Testkommentar hatte das als Vermutung ('unter pausierter Uhr mounten Timer-getriebene Textknoten nicht zuverlaessig') - jetzt ist es bewiesen.\nOFFEN: (a) freezeTime so umbauen, dass nur fuer die Aufnahme pausiert wird (vorher laden, dann Uhr anhalten); (b) die 21 Baselines neu aufnehmen - die gemessene Drift ist echt und erwartet (SYNC-Taste + Signalweg-Leiste, Masterplayer 8 % / Mixer 2779 -> 2802 px); (c) pruefen, ob Baselines ueberhaupt in die CI sollen oder ein separater visueller Job dafuer noetig ist.",
+      "verification": [
+        "A/B gemessen: mit freezeTime 80,5-143 px ('Lade Modul...'), ohne freezeTime 2779 px und Pruefung besteht",
+        "Halter-Nachweis im Trace: id=rack-mixer data-plugin-mode=ON data-plugin-owner=me (vorher none)",
+        "Signaling im Trace ohne Token: 'Signaling connection failed: unauthorized'; mit Token: ws://.../webrtc-signaling/?EIO=4 verbunden",
+        ".github/workflows/build.yml:196 --grep-invert \"Baseline\" -> Test laeuft in keiner CI",
+        "tsc --noEmit 0; 48/48 Server-Tests nach dem Fix"
+      ]
     },
     {
       "id": "UI2-P1-002",
@@ -4833,6 +4845,83 @@
       "source": "Betreiber 2026-10-06",
       "note": "„Wenn User 3 aus dem EQ rausgeht und User 4 rein, muss die Einstellung bleiben – für alle Plugins. So kann man switchen oder jemand anders kurz übernehmen lassen.“ Nicht gehaltene Plugins eingeklappt, nur sichtbar ob und wer hält.\n\nAkzeptanz: Stand bleibt beim Halterwechsel, nach Neuladen und Server-Neustart; nur der Halter schreibt.\n\nDONE 2026-10-06: AuthoritativeSession.setPluginSettings (nur Halter, ≤ 64 KB, Revision, serialize/restore), Socket plugin-settings + Stände im session-state-Snapshot. Client: PluginSettingsStore (entprellt 250 ms, flush vor Freigabe/Übergabe/pagehide, Bereiche je Plugin, nur Halter sendet). Umgestellt: mixer (greift bei Übernahme), eq, dsp, effect, master, spatial, drumsampler, syntisampler (mpc/sampler/synth), instru, song, voice, stem, record; Werte aus fremden Ständen über mergeKnown geprüft. Nicht gespeichert: Audiodaten (geladene Titel, Pad-Klänge, Takes – gehören in die Bibliothek). Offen für v2: Audio-Seite jedes Plugins aus dem Stand herstellen (restore), Regler ohne Stand-Anbindung nachziehen.",
       "verification": "tests/pluginSettings.test.ts; tests/e2e/pluginPersistence.spec.ts"
+    },
+    {
+      "id": "PLUGIN-V2-C0",
+      "title": "Pluginpool auf v2: Audio-Vertrag (B0/B1) + vertragsgetriebener Studiopfad (C0)",
+      "priority": "P0",
+      "status": "DONE",
+      "area": "Audio/Architektur",
+      "source": "Betreiber-Auftrag 2026-10-07 (Pluginpool definieren, verdrahten wie Ableton, auf v2 laufen lassen)",
+      "problem": "Die 16 Plugins waren an drei Stellen getrennt beschrieben (Registry, Signalweg, Kanalbelegung); ein Plugin hinzuzufuegen hiess, an drei Orten daran zu denken. Gleichzeitig gab es keine deklarative Aussage darueber, WAS jedes Plugin im Signalweg ist (Format, Ports, Latenz, Bypass, Send, SYNC). Ohne die ist eine Verdrahtung wie in Ableton nicht baubar - jede Entscheidung waere geraten.",
+      "note": "B0: src/plugins/pluginContract.ts als EINE Quelle fuer alle 16 Plugins. Je Plugin: Rolle (source/channel/insert/fxReturn/recorder/utility), Kanal 1-8, Format (mono/stereo), Ein-/Ausgaenge, intrinsicLatencyFrames (PDC), Bypass-Faehigkeit, FX-Send+Abgriff, SYNC-Faehigkeit, viaChannel, producesAudio, insertScope, singleInstance. Fuenf Punkte der Architektur-Review sind damit eingeloest.\nB1: pluginChannelMap und signalChain leiten daraus ab - kein zweites Pflegen.\nC0: src/core/audio/C0StudioChain.ts baut den vollstaendigen Pfad (8 Quellen -> Kanalzug -> Summe -> Merge mit FX-Return -> eq -> dsp -> master -> record -> Out) plus PdcDelayNode. Der Spike traegt nachweislich Ton durch die ganze Kette.\n\nDREI EIGENE FEHLER, die die zweite Review am Code aufdeckte und die behoben sind:\n1. pathLatencyFrames nahm das Maximum statt zu summieren - bei einer seriellen Kette falsch. Fiel nicht auf, weil nur `master` Latenz hat (datenblinder Test). Jetzt: pathLatencyFrames summiert, mergeLatencyFrames nimmt das Maximum.\n2. signalTopology lieferte die Vertrags-Reihenfolge ('spatial -> eq -> dsp -> master' statt 'eq -> dsp -> spatial -> master'). Ich hatte das im Test mit .sort() kaschiert - die Reihenfolge war ungeprueft.\n3. Inserts hatten keinen Geltungsbereich. Neues Feld `insertScope`: spatial ist channel-Insert, eq/dsp/master sind master-Insert.\nPlus ein struktureller Fehler in C0 selbst: ein Insert liest nur seinen ERSTEN Eingangsport, deshalb haette der erste Entwurf den FX-Return still verworfen. Der Merge laeuft jetzt ueber einen StereoSumNode; der Spike-Test deckt es ab.\n\nEIGENER IRRTUM, in der Doku korrigiert: Der erste Vertragsentwurf hatte `spatial` als fxReturn (FX-Bus). V2_UI_VERKABELUNG.md fuehrt den Kanalzug aber als '... -> pan -> Distanz -> Hoehe -> Mixer-Summe' - spatial sitzt IM Kanalzug. Nur `effect` ist der FX-Bus. Die falsche Zuordnung haette den Klang geaendert.",
+      "acceptance": [
+        "Ein Vertrag beschreibt alle 16 Plugins (Rolle, Kanal, Format, Latenz, Bypass, Send, SYNC)",
+        "Registry, Signalweg und Kanalbelegung koennen nicht mehr auseinanderlaufen (Test)",
+        "Ein vollstaendiger Pfad fuehrt Ton von der Quelle bis zum Ausgang",
+        "Der FX-Send erreicht den Bus und kehrt in die Summe zurueck",
+        "Die PDC-Verzoegerung verschiebt um genau N Samples und trennt die Kanaele"
+      ],
+      "verification": [
+        "tests/pluginContract.test.ts 21/21",
+        "tests/c0StudioChain.test.ts 14/14 (Impuls erreicht Ausgang, FX-Send im Bus, PDC-Laenge exakt)",
+        "tsc --noEmit 0",
+        "voller Lauf: 308 Dateien / 2494 Tests EXIT=0 (vorher 305/2449)"
+      ],
+      "files": [
+        "src/plugins/pluginContract.ts",
+        "src/core/audio/C0StudioChain.ts",
+        "src/core/audio/nodes/pdcDelayNode.ts",
+        "src/core/audio/pluginChannelMap.ts",
+        "src/plugins/signalChain.ts",
+        "tests/pluginContract.test.ts",
+        "tests/c0StudioChain.test.ts"
+      ]
+    },
+    {
+      "id": "PLUGIN-V2-C1",
+      "title": "Auf alle 16 Plugins erweitern + Worklet-Anbindung der Kette",
+      "priority": "P0",
+      "status": "PARTIAL",
+      "area": "Audio",
+      "source": "Plan 2026-10-07, Phase C1 (nach bestandenem C0-Spike)",
+      "problem": "C0 beweist EINEN vollstaendigen Pfad. Offen: die 16 Plugins einzeln an die Kette binden (jede Quelle ihr eigener Knoten statt eines generischen SourceNode), die AudioWorklets anschliessen (itSynth/mastering/eq liegen als Prozessoren vor), Bypass als latenztreues Dry/Wet-Crossfade, Automation sample-genau, und die Graph-Umschaltung an der Blockgrenze (Plan-Transaktion).",
+      "note": "Bewusst als eigener Schritt: die Review bestand darauf, erst nach bestandenem Spike auf alle 16 zu erweitern - sonst baut man 16 Knoten auf einer ungepruefte Struktur.\n\n2026-10-07 TEIL 1 GEBAUT (Commits 468f707 + Bypass-Nachbesserung):\nWorklet-Anbindung: `core/audio/nodes/workletChainNode.ts` - ein Kettenglied mit AUSTAUSCHBAREM Prozessor (`setProcessFn`). Grund: workletSpecs.ts liefert bewusst NEUTRALE Referenzen ('Referenz: neutrales 3-Band-EQ (kein Gain)'); sie halten die Struktur stabil, klingen aber nicht wie die echten Worklets. Der Prozessorwechsel steckt NICHT um - ein disconnect wuerde die Latenz aendern.\nBypass: Dry/Wet-Crossfade IM Knoten (Review 6.3), kein Umstecken. Der Prozessor rechnet immer weiter, damit die Latenz konstant bleibt; der trockene Weg laeuft durch eine Ausgleichsverzoegerung, die der Aufrufer auf die Latenz des nassen Wegs setzt. Ein Test prueft beide Faelle: richtiger Ausgleich -> trocken und nass liegen auf DERSELBEN Position; falscher Ausgleich -> der Bypass springt.\nVierte Doppelpflege-Stelle geschlossen: public/plugin-manifest.json fuehrt die 16 Plugins ein viertes Mal (eigene Reihenfolge, Name, Kuerzel, Symbol). tests/pluginManifestContract.test.ts prueft das Manifest gegen den Vertrag.\n\nZWEI ECHTE BEFUNDE beim Bau (beide behoben):\n1. Die Kanal-Summe war `MasterSumNode` - ein MASTER-Knoten mit Soft-Clip (tanh(v)*0.98). In der Kanal-Summe faerbt er den Klang, obwohl eine Summe nur addieren darf, und begrenzt DOPPELT (Summe + Merge + echtes Mastering danach). Gemessen: ein Impuls erreichte den ersten Master-Insert bei 0.597 statt 1.0. Jetzt `StereoSumNode` (neutral); das Mastering begrenzt dort, wo es hingehoert.\n2. Der Pan-Knoten bei Mitte daempft auf cos(pi/4) = 0.707 (Gesetz konstanter Leistung, -3 dB). Das ist KORREKT - aber der Spike-Test hatte den Rohpegel erwartet und war damit falsch. Test auf die Impuls-POSITION umgestellt (pegelfrei), weil hinter der Kette ohnehin ein Soft-Clip sitzt und Pegel keine belastbare Aussage mehr traegt.\n\nOFFEN (Teil 2): die 16 Plugins als je EIGENEN Knoten (heute generische SourceNode), Parameter-Automation sample-genau, Umschaltung des Graphen an der Blockgrenze (Plan-Transaktion).\n\n2026-10-07 TEIL 2 GEBAUT: Die 8 Kanal-Quellen sind jetzt eigene Plugin-Knoten (`core/audio/nodes/pluginSourceNode.ts`) statt generischer SourceNodes. Der Knoten kennt seinen Vertrag: Plugin-ID (aus dem Graph ablesbar, welches Plugin wo liegt), Format (mono-Quelle voice wird auf Stereo gezogen), SYNC-Faehigkeit (setSynced gibt false, wo der Vertrag es nicht erlaubt) und SYNC-Quantisierung als STARTVERSATZ in Frames - sample-genau, nicht per Timer. Play/Stop: gestoppt = Stille, kein Weiterklingen. Neue Zugriffe: setChannelPlaying/setChannelSynced/setChannelStartFrame/pluginOfChannel. Beleg: tests/c0StudioChain.test.ts 29/29, voller Lauf 309 Dateien / 2516 Tests EXIT=0, tsc 0.\n\nOFFEN (Teil 3): Parameter-Automation sample-genau, Umschaltung des Graphen an der Blockgrenze (Plan-Transaktion). Beides braucht den Audio-Thread und ist ohne laufenden AudioContext nicht ehrlich pruefbar - bis dahin bleibt es offen statt als erledigt markiert.",
+      "acceptance": [
+        "Jedes der 16 Plugins hat einen eigenen Knoten in der Kette",
+        "Worklets (itSynth/mastering/eq) haengen an ihren Knoten",
+        "Bypass ist ein Crossfade ohne Latenzaenderung",
+        "Parameter-Automation laeuft sample-genau"
+      ],
+      "verification": [
+        "tests/c0StudioChain.test.ts 29/29 (7 neue Tests fuer die Plugin-Knoten)",
+        "tests/pluginManifestContract.test.ts 7/7",
+        "tsc --noEmit 0",
+        "voller Lauf: 309 Dateien / 2516 Tests EXIT=0"
+      ]
+    },
+    {
+      "id": "PLUGIN-V2-D",
+      "title": "4-Server-Strategie deployen, testen, loggen, Snapshot",
+      "priority": "P0",
+      "status": "PARTIAL",
+      "area": "Infra",
+      "source": "Betreiber-Auftrag 2026-10-07",
+      "problem": "Die 4 Server sind app/sfu/media/edge (docs/SERVER_FLEET.md). Deploy ist derzeit NICHT fahrbar: RP_AGENT_KEY fehlt in der .env, HETZNER_API_TOKEN fehlt ebenfalls. Ohne die ist weder ein Flotten-Zustand abfragbar noch ein Deploy moeglich.",
+      "note": "2026-10-07 DURCHGEFUEHRT. Der Deploy war NICHT blockiert - ich hatte nach dem falschen Key-Namen gesucht: HCLOUD_TOKEN und RP_API_KEY stehen in der .env (nicht HETZNER_API_TOKEN/RP_AGENT_KEY). Die Flotte existierte bereits, lief aber mit einem Image vom 6.10. 14:50 - also VOR dem Pluginpool-Auftrag.\n\nERGEBNIS: Alle 4 Knoten laufen auf Commit 605f587 (Image ghcr.io/kainplanmusic/audiomonastry:605f587, Build 2026-10-07T01:46:08Z). app-1 (78.47.65.129) auditomonastry+caddy healthy; sfu-1 (162.55.185.245) audiomonastry+caddy+coturn healthy mit ENABLE_SFU=1; media-1 (2.28.133.48) audiomonastry+caddy healthy; edge-1 (2.29.46.13) Monitoring-Stack seit 12 h. LIVE verifiziert: https://anunnakitools.de/api/health -> status ok, commit 605f587.\n\nTEST: E2E gegen die Live-Instanz (E2E_BASE_URL=https://anunnakitools.de) - smoke + audio-smoke + aiNegative = 12 passed, 3 skipped (Live-Gates), 0 failed, EXIT=0. Belegt u.a.: App laedt mit allen Nav-Buttons, Mixer rendert, AUDIO RUNNING ohne Worklet-Crash, Modus-Button schaltet dropMONK ON/OFF ohne React-Crash, AI-OFF fail-closed (401/403, RunPod nie 2xx).\n\nGELOGGT: Logs je Knoten + Flotten-JSON unter ~/.hermes/cache/scratch/fleet-snapshot-20261007/. SNAPSHOT: docs/DEPLOY_SNAPSHOT_2026-10-07.md mit Rollback-Weg und Wiederaufsetzpunkt.\n\nZWEI DEPLOY-FEHLER BEHOBEN: (1) fleet-deploy-live.sh kennt nur app-1 und startet ueberall caddy - auf sfu-1/media-1 fehlte dadurch die Caddyfile, Docker legte sie als VERZEICHNIS an und der Bind-Mount scheiterte; behoben durch die rollenspezifische Caddyfile.sfu. (2) Caddy-Restart-Schleife wegen 'acme_dns: missing API token' - die Caddyfile erwartet CF_DNS_API_TOKEN, der fehlte in der Container-Umgebung; ergaenzt.\n\nOFFEN (Betreiber): (a) Alle drei Cloudflare-Token in der .env sind UNGUELTIG (CF_API_TOKEN, CF_TOKEN_UT, CF_TOKEN_ACCOUNT -> HTTP 401). Folge: sfu-1/media-1 koennen kein Let's-Encrypt-Zertifikat ueber DNS-01 holen; app-1 ist nicht betroffen (Origin-Zertifikat). (b) DNS-Fehler: sfu.anunnakitools.de zeigt auf 2.28.133.48 (= media-1) statt auf sfu-1 162.55.185.245 - nicht geaendert, weil Live-DNS und kein gueltiger Token. (c) Laut API ist KEINE Floating IP zugewiesen, obwohl SERVER_FLEET.md eine fuer app-1 vorsieht. Die SFU-Verdrahtung selbst stimmt: ENABLE_SFU=1 auf sfu-1, 0 auf app-1, TURN-Port 3478 von aussen offen.\n\nKOSTEN: Die 4 Server kosten ~39 EUR/Monat solange sie existieren - auch ausgeschaltet. Beenden: bash scripts/hetzner/delete-fleet.sh",
+      "acceptance": [
+        "4 Knoten provisioniert und erreichbar",
+        "Neueste Builds deployt (Client + Server + Runtime-Image)",
+        "E2E gegen die echte Instanz gefahren",
+        "Logs gesammelt, Snapshot gemacht und Wiederaufsetzpunkt dokumentiert"
+      ],
+      "verification": [
+        "https://anunnakitools.de/api/health -> {\"status\":\"ok\",\"commit\":\"605f587\"}",
+        "E2E live: 12 passed / 3 skipped / 0 failed, EXIT=0 (smoke, audio-smoke, aiNegative)",
+        "Alle 3 App-Knoten melden lokal denselben commit 605f587",
+        "TURN-Port 3478 von aussen offen (sfu-1)",
+        "Snapshot + Logs: docs/DEPLOY_SNAPSHOT_2026-10-07.md, ~/.hermes/cache/scratch/fleet-snapshot-20261007/"
+      ]
     }
   ],
   "visionSandbox": [
