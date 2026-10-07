@@ -76,6 +76,8 @@ logs/
 # NUR auf den Knoten - niemals ins Repo (dieselbe Regel wie fuer .env).
 runtime/
 .worktrees/
+# Agenten-Worktrees von Claude Code (Hintergrund-Agenten mit isolation: worktree)
+.claude/worktrees/
 
 # Demo-Tracks (kommerzielle Fremdaufnahmen, keine dokumentierte Freigabe):
 # NICHT im Repo/Image ausliefern - nur mit Betreiberentscheidung und Lizenzbeleg.
