@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { entryButton, modeButton, rackRow } from './helpers/studioNav';
+import { entryButton, modeButton, rackRow, openStudioMenu } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 /**
@@ -26,6 +26,7 @@ test.describe('Tastatur-Navigation', () => {
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
+    await openStudioMenu(page);
     await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
     // autoFocus setzt den Fokus auf den Schließen-Button.
     const initial = await page.evaluate(() => (document.activeElement as HTMLElement | null)?.getAttribute('aria-label') ?? '');
@@ -117,6 +118,7 @@ test.describe('Keyboard-Hotkeys (P1-6): Space, Ctrl/Cmd+1..9, Eingabefelder', ()
     await entryButton(page).click();
     await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
+    await openStudioMenu(page);
     await page.getByRole('button', { name: 'Zwischenspeicher' }).click();
     const nameInput = page.getByPlaceholder('Name');
     await nameInput.fill('abc');

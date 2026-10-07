@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton } from './helpers/studioNav';
+import { entryButton, openStudioMenu } from './helpers/studioNav';
 import { newStudioContext, resetSession } from './helpers/studioAuth';
 
 /**
@@ -40,6 +40,7 @@ test('4 UI-Plätze + genau ein Main Audio + genau ein Main Visual (zweites Gerä
     const beamerPage = await beamer.newPage();
     await beamerPage.goto('/visual-out');
 
+    await openStudioMenu(pcPage);
     await pcPage.getByRole('button', { name: 'Session-Ausgänge' }).click();
     const panel = pcPage.getByRole('dialog', { name: 'Session-Ausgänge' });
     await expect(panel.getByTestId('endpoint-user-1')).toContainText('du', { timeout: 15_000 });

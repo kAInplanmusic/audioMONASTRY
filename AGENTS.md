@@ -30,7 +30,8 @@ This document defines the absolute, unbreakable core principles of this applicat
 ## 2. UI/UX & Plugin Interface Conventions
 
 ### 2.1 Top Navigation Bar
-* All plugin icons are positioned in a single, horizontal row at the very top of the UI.
+* Head (operator 2026-10-07): logo · the 16 plugin icons in two rows of 8 · user display with the menu/settings button attached · a Visuals on/off switch (mixer holder only). No stream or scratchpad button in the head (Main is always on; the rest lives in the menu).
+* Fixed parts (not closable, not movable, not sticky): masterplayerMONK at the top; aiMONK and perforMONK at the bottom after the rack. In between: mixerMONK and the 15 plugins as collapsible rack modules (collapsed: name, holder, OFF/STBY/ON, SYNC, mini meter, ▶/■, fold arrow).
 * Each icon has a distinct color scheme. This color code dynamically dictates the entire visual design, borders, and theme of that specific plugin's window when opened.
 
 ### 2.2 The "Terminal Plugin" Concept

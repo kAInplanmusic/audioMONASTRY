@@ -12,6 +12,7 @@ import { loadAutoloadSong } from '../../core/session/autoloadSong';
 import { lufsLabel, transportReadout } from '../MasterplayerReadout';
 import { EngineStatusBadge } from '../EngineStatusBadge';
 import { AmMeter } from './amUi';
+import { readMainLevel, useMainLevel } from '../../core/audio/mainLevel';
 
 const HISTORY = 240;
 
@@ -19,8 +20,6 @@ export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, 
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [lufs, setLufs] = useState(0);
-  const [level, setLevel] = useState(0);
-  const [peak, setPeak] = useState(0);
   const [key, setKey] = useState('–');
   const [title] = useState(() => loadAutoloadSong()?.name ?? 'Main Out');
 
@@ -35,53 +34,39 @@ export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, 
     return () => window.clearInterval(id);
   }, []);
 
-  // Wellenform als Verlauf der Spitzenwerte + Pegel.
+  // Wellenform als Verlauf des Main-Pegels (gemeinsamer Abgriff, src/core/audio/mainLevel.ts).
+  const main = useMainLevel();
   useEffect(() => {
-    let analyser: AnalyserNode | null = null;
-    let buf: Float32Array | null = null;
     const hist: number[] = Array(HISTORY).fill(0);
-    let pk = 0;
     const tick = () => {
       setSeconds(audioEngine.getTransportSeconds());
       setLufs(audioEngine.getLufsValue());
-      if (!analyser) {
-        try { analyser = audioEngine.createVisualAnalyser(1024); } catch { analyser = null; }
-        if (analyser) buf = new Float32Array(analyser.fftSize);
-      }
-      let p = 0;
-      if (analyser && buf) {
-        analyser.getFloatTimeDomainData(buf as Float32Array<ArrayBuffer>);
-        for (let i = 0; i < buf.length; i += 2) p = Math.max(p, Math.abs(buf[i]));
-      }
-      const lv = Math.max(0, Math.min(1, (20 * Math.log10(Math.max(p, 1e-5)) + 48) / 48));
-      pk = Math.max(lv, pk - 0.02);
-      setLevel(lv);
-      setPeak(pk);
-      hist.push(Math.min(1, p));
+      hist.push(readMainLevel().raw);
       hist.shift();
       const cv = canvas.current;
       const g = cv?.getContext('2d');
-      if (!cv || !g) return;
+      if (!cv || !g || cv.clientWidth < 4) return;
       const w = (cv.width = cv.clientWidth * devicePixelRatio);
       const h = (cv.height = cv.clientHeight * devicePixelRatio);
       g.clearRect(0, 0, w, h);
-      // Taktraster
       g.strokeStyle = 'rgba(70,130,255,.10)';
       for (let x = 0; x < w; x += w / 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
+      // Farbverlauf wie in der Vorlage (uiübersichtapp): Violett → Blau → Cyan → Grün.
+      const grad = g.createLinearGradient(0, 0, w, 0);
+      grad.addColorStop(0, '#8b5cf6'); grad.addColorStop(0.35, '#3b82f6'); grad.addColorStop(0.7, '#22d3ee'); grad.addColorStop(1, '#4ade80');
+      g.fillStyle = grad;
       const bw = w / HISTORY;
       for (let i = 0; i < HISTORY; i += 1) {
-        const v = hist[i];
-        const bh = Math.max(1, v * h * 0.95);
-        g.fillStyle = i > HISTORY - 6 ? '#ffffff' : `rgba(76,201,240,${0.35 + v * 0.65})`;
-        g.fillRect(i * bw, (h - bh) / 2, Math.max(1, bw - 1), bh);
+        const v = Math.max(0.015, hist[i]);
+        const bh = v * h * 0.95;
+        g.fillRect(i * bw, (h - bh) / 2, Math.max(1, bw - 0.6), bh);
       }
+      g.fillStyle = '#ffffff';
+      g.fillRect(w - 2 * devicePixelRatio, 0, 2 * devicePixelRatio, h);
     };
     tick();
-    const id = window.setInterval(tick, isPlaying ? 50 : 400);
-    return () => {
-      window.clearInterval(id);
-      if (analyser) try { audioEngine.disconnectVisualAnalyser(analyser); } catch { /* noop */ }
-    };
+    const id = window.setInterval(tick, isPlaying ? 60 : 400);
+    return () => window.clearInterval(id);
   }, [isPlaying]);
 
   const r = transportReadout(seconds, bpm);
@@ -105,8 +90,8 @@ export const StudioMasterplayer = React.memo(function StudioMasterplayer({ bpm, 
       </dl>
       <div className="am-lrw" aria-label="Pegel Main L/R">
         <div className="am-sc"><span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-48</span></div>
-        <AmMeter level={level} peak={peak} width={9} />
-        <AmMeter level={level} peak={peak} width={9} />
+        <AmMeter level={main.level} peak={main.peak} width={9} />
+        <AmMeter level={main.level} peak={main.peak} width={9} />
       </div>
     </section>
   );

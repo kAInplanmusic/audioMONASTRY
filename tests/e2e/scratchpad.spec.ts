@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton } from './helpers/studioNav';
+import { entryButton, openStudioMenu } from './helpers/studioNav';
 
 // Nur Chromium: Der Spec setzt die Berechtigung 'clipboard-write', die es nur in Chromium gibt.
 // CI-Fund 2026-09-17 (e2e-webkit): 'browserContext.newPage: Unknown permission: clipboard-write'.
@@ -28,6 +28,7 @@ async function openStudio(page: Page): Promise<void> {
 }
 
 async function openScratchpad(page: Page): Promise<void> {
+  await openStudioMenu(page);
   await page.getByRole('button', { name: 'Zwischenspeicher' }).click();
   await expect(page.getByRole('dialog', { name: 'Zwischenspeicher' })).toBeVisible();
 }

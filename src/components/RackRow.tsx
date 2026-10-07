@@ -1,5 +1,8 @@
-import React from 'react';
-import { AM_MODULE, AM_PATH, AmMark, AmSvg, amColor } from './am/amUi';
+import React, { useEffect, useState } from 'react';
+import { AM_MODULE, AM_PATH, AmMark, AmMeter, AmSvg, amColor } from './am/amUi';
+import { useMainLevel } from '../core/audio/mainLevel';
+import { readPluginTransport, setPluginTransport } from '../core/session/pluginTransport';
+import { audioEngine } from '../utils/audioEngine';
 import { getPluginThemeClass } from '../utils/pluginTheme';
 import type { PluginMode } from '../core/session/pluginMode';
 import { MONK_DRAG_MIME, MONK_SCRATCH_MIME, readMonkDragItem, type ScratchpadDragItem } from '../core/session/sessionScratchpad';
@@ -40,7 +43,32 @@ interface RackRowProps {
   /** Bedienfläche auch eingeklappt gemountet halten (versteckt), damit ihr
    *  gespiegelter Zustand bei einer Übergabe erhalten bleibt (mixerMONK). */
   keepMounted?: boolean;
+  /** ▶/■ im Streifen: nur für klingende Plugins (Session, pluginTransport.ts). */
+  playable?: boolean;
   children?: React.ReactNode;
+}
+
+/** Mini-Pegel im Streifen: Main-Pegel, solange das Plugin an ist und spielt. */
+const StripMeter = React.memo(function StripMeter({ active }: { active: boolean }) {
+  const main = useMainLevel();
+  const lv = active && audioEngine.getIsPlaying() ? main.level : 0;
+  return (
+    <div className="am-smeter" title="Pegel" aria-hidden="true">
+      <AmMeter level={lv} />
+      <AmMeter level={lv * 0.94} />
+    </div>
+  );
+});
+
+/** ▶/■-Stand eines Plugins aus der Session (UI-Takt). */
+function usePluginPlaying(id: string, enabled: boolean): boolean {
+  const [playing, setPlaying] = useState(() => readPluginTransport(id).playing);
+  useEffect(() => {
+    if (!enabled) return;
+    const t = window.setInterval(() => setPlaying(readPluginTransport(id).playing), 500);
+    return () => window.clearInterval(t);
+  }, [id, enabled]);
+  return playing;
 }
 
 const MODES: PluginMode[] = ['OFF', 'STBY', 'ON'];
@@ -72,9 +100,13 @@ export const RackRow = React.memo(function RackRow({
   onCopy,
   onLoadScratch,
   keepMounted = false,
+  playable = false,
   children,
 }: RackRowProps) {
-  const showPanel = panelOpen;
+  // Aufklapp-Pfeil: nur die eigene Ansicht (andere sehen fremde Plugins ohnehin eingeklappt).
+  const [expanded, setExpanded] = useState(true);
+  const showPanel = panelOpen && expanded;
+  const playing = usePluginPlaying(id, playable);
   const active = mode !== 'OFF';
   const nextHint = mode === 'OFF' ? 'Tippen: holen (STBY)' : mode === 'STBY' ? 'Tippen: aktivieren (ON)' : 'Tippen: freigeben (OFF)';
 
@@ -105,7 +137,7 @@ export const RackRow = React.memo(function RackRow({
         }
       }}
     >
-      <div className="am-sh">
+      <div className="am-sh" title={!showPanel && summary ? summary : undefined}>
         <span
           draggable
           onDragStart={(e) => {
@@ -157,6 +189,17 @@ export const RackRow = React.memo(function RackRow({
             <AmSvg d={AM_PATH.clip} />
           </button>
         )}
+        {playable && (
+          <div className="am-tp" role="group" aria-label={`${name} auf Main`}>
+            <button type="button" className={playing ? 'am-on' : ''} aria-pressed={playing} disabled={!ownedByMe}
+              aria-label={`${name} spielen`} title={ownedByMe ? 'Auf Main spielen' : 'Nur der Halter'}
+              onClick={() => setPluginTransport(id, true)}>▶</button>
+            <button type="button" className={!playing ? 'am-on am-stop' : ''} aria-pressed={!playing} disabled={!ownedByMe}
+              aria-label={`${name} stoppen`} title={ownedByMe ? 'Auf Main stumm schalten' : 'Nur der Halter'}
+              onClick={() => setPluginTransport(id, false)}>■</button>
+          </div>
+        )}
+        <StripMeter active={mode === 'ON' && (!playable || playing)} />
         <button
           type="button"
           onClick={onCycle}
@@ -168,9 +211,19 @@ export const RackRow = React.memo(function RackRow({
           {locked && <AmSvg d={AM_PATH.lock} />}
           {mode}
         </button>
+        <button
+          type="button"
+          className={`am-fold ${showPanel ? 'am-open' : ''}`}
+          onClick={() => setExpanded((v) => !v)}
+          disabled={!panelOpen}
+          aria-expanded={showPanel}
+          aria-label={`${name} ${showPanel ? 'zuklappen' : 'aufklappen'}`}
+          title={panelOpen ? (showPanel ? 'Zuklappen' : 'Aufklappen') : 'Aufklappen kann nur der Halter, wenn ON'}
+        >
+          <AmSvg d="M6 9l6 6 6-6" />
+        </button>
       </div>
 
-      {!showPanel && summary ? <div className="am-sum">{summary}</div> : null}
       {children && (showPanel || keepMounted) ? (
         <div className="am-sb" hidden={!showPanel}>{children}</div>
       ) : null}

@@ -18,16 +18,16 @@ const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m =
 const VisualMonkOverlay = lazy(() => import('./components/visual/VisualMonkOverlay').then(m => ({ default: m.VisualMonkOverlay })));
 import { MoaHistoryPanel } from './components/MoaHistoryPanel';
 import { AudioActionMenuHost } from './components/AudioActionMenuHost';
-import { MasteringOverlay } from './components/MasteringOverlay';
+import { MasterRack } from './components/master/MasterRack';
 import { useAudio } from './context/AudioContext';
 import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
-import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
 import { Gauge } from 'lucide-react';
 import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
 import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
+import { useMasterStream } from './hooks/useMasterStream';
 import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amUi';
 import { StudioMasterplayer } from './components/am/StudioMasterplayer';
 import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
@@ -39,7 +39,10 @@ import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadI
 const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
-import { storageGetJson } from './utils/storage';
+import { storageGetJson, storageSetJson } from './utils/storage';
+
+/** Main-Visual an/aus – gilt für die ganze Session (Studio-Speicher am Server). */
+const VISUALS_KEY = 'am.visuals.on';
 
 // Rack-Reihenfolge (ARCH-PLUGIN-001, 16 echte MONKs):
 //   DJ:        mixer(1) · drop(2) · song(3) · effect(4)
@@ -98,9 +101,26 @@ function AppComponent() {
   const [bpm, setBpm] = useState(128);
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [masteringOpen, setMasteringOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [visualOpen, setVisualOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Menü schließt bei einem Klick außerhalb.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && !t.closest('.am-menuwrap') && !t.closest('[role="dialog"]')) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [menuOpen]);
+  // Main-Visual an/aus: ein Schalter für die ganze Session (Studio-Speicher am
+  // Server). Schalten darf nur der Mixer-Halter; sein Gerät erzeugt den Stream.
+  const [visualsOn, setVisualsOn] = useState(() => storageGetJson<boolean>(VISUALS_KEY) === true);
+  useEffect(() => {
+    const id = window.setInterval(() => setVisualsOn(storageGetJson<boolean>(VISUALS_KEY) === true), 1000);
+    return () => window.clearInterval(id);
+  }, []);
   const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
   const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
     MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
@@ -230,6 +250,20 @@ function AppComponent() {
   const mainHolder = (moduleStates['mixer'] || 'OFF') !== 'OFF'
     && Boolean(pluginLocks['mixer']?.active)
     && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
+  // Main ist immer an (Betreiber 2026-10-07): im SFU-Betrieb sendet der
+  // Mixer-Halter den Main-Ton automatisch – kein Knopf mehr.
+  const masterStream = useMasterStream();
+  useEffect(() => {
+    if (mainHolder && webRTCManager.isSfuMode) void masterStream.start();
+    else if (!mainHolder) masterStream.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Halterwechsel
+  }, [mainHolder]);
+  const toggleVisuals = () => {
+    const next = !visualsOn;
+    storageSetJson(VISUALS_KEY, next);
+    setVisualsOn(next);
+    setVisualOpen(next);
+  };
   useEffect(() => {
     audioEngine.setMainHolderActive(mainHolder);
   }, [mainHolder]);
@@ -562,18 +596,7 @@ function AppComponent() {
       );
     }
     if (plugin.id === 'master') {
-      return (
-        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
-          <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />
-          <button
-            type="button"
-            onClick={() => setMasteringOpen(true)}
-            className="w-full px-4 py-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-200 text-xs font-mono tracking-widest hover:bg-sky-500/15 transition-all cursor-pointer"
-          >
-            NEXUS KONTROL ÖFFNEN
-          </button>
-        </Suspense>
-      );
+      return <MasterRack />;
     }
     return (
       <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Modul…</div>}>
@@ -707,72 +730,77 @@ function AppComponent() {
             })}
           </nav>
 
-          <div className="am-hr am-hr2">
-            <div className="am-users" role="status" aria-live="polite" title="Aktive Studio-Session (eine feste Session, max. 4 Nutzer)">
+          <div className="am-hr am-hr3">
+            <button type="button"
+              onClick={() => { if (mainHolder) toggleVisuals(); }}
+              disabled={!mainHolder}
+              className={`am-vistg ${visualsOn ? 'am-on' : ''}`}
+              aria-label="Visual-Liveshow öffnen"
+              aria-pressed={visualsOn}
+              title={mainHolder ? 'Main-Visual an/aus (Ausgabe auf /visual-out)' : `Main-Visual ${visualsOn ? 'an' : 'aus'} – schalten darf nur der Mixer-Halter`}
+            >
+              <AmSvg d={AM_PATH.visual} />
+              <span>VISUALS</span>
+              <i>{visualsOn ? 'AN' : 'AUS'}</i>
+            </button>
+            <div className="am-usermenu">
+            <div className="am-users" role="status" aria-live="polite" title="Wer ist in der Session (max. 4 Nutzer)">
               {[0, 1, 2, 3].map((k) => {
                 const p = people.people[k];
                 return (
                   <span
                     key={k}
-                    className={`am-udot ${p ? '' : 'am-away'}`}
+                    className={`am-uav ${p ? '' : 'am-away'}`}
                     style={{ ['--u' as string]: p?.color ?? '#445a82' }}
-                    title={p ? `Nutzer ${p.no}${p.me ? ' · du' : ''}` : 'frei'}
-                  />
+                    title={p ? `Nutzer ${p.no}${p.me ? ' · du' : ''}` : 'Platz frei'}
+                  >
+                    {p ? p.no : ''}
+                  </span>
                 );
               })}
-              <span className="am-hint" style={{ marginLeft: 4, color: sessionFull ? 'var(--hot)' : undefined }}>
+              <span className="am-ucount" style={{ color: sessionFull ? 'var(--hot)' : undefined }}>
                 {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
               </span>
               {Object.entries(remoteNav).slice(0, 3).map(([userId, nav]) => (
-                <span key={userId} className="am-hint" style={{ marginLeft: 6, color: personColor(userId, people) }} title="Wo die anderen gerade sind">
+                <span key={userId} className="am-hint" style={{ marginLeft: 4, color: personColor(userId, people), fontSize: 10 }} title="Wo die anderen gerade sind">
                   {userId.replace(/^user-/, 'u')}→{nav.pluginId}
                 </span>
               ))}
-              <span className="am-hint" data-testid="layout-label" title="Erkanntes Format und Auflösung" style={{ marginLeft: 6 }}>{deviceLayout.label}</span>
             </div>
-            <div className="am-tools">
+            <div className="am-menuwrap">
               <button type="button"
-                onClick={() => setScratchOpen(v => !v)}
-                className={`am-tool ${scratchOpen ? 'am-on' : ''}`}
-                style={{ ['--c' as string]: '#ffb703' }}
-                aria-label="Zwischenspeicher"
-                aria-pressed={scratchOpen}
-                title="Zwischenspeicher der Session"
-              >
-                <AmSvg d={AM_PATH.board} />
-              </button>
-              <Scratchpad />
-              <MasterStreamToggle />
-              <button type="button"
-                onClick={() => setVisualOpen(v => !v)}
-                className={`am-tool ${visualOpen ? 'am-on' : ''}`}
-                style={{ ['--c' as string]: '#e879f9' }}
-                aria-label="Visual-Liveshow öffnen"
-                aria-pressed={visualOpen}
-                title="Visual-Liveshow (Main Visual)"
-              >
-                <AmSvg d={AM_PATH.visual} />
-              </button>
-              <OutputsPanel />
-              {deviceLayout.fullscreen.supported && !deviceLayout.standalone && deviceLayout.layout !== 'desktop' && (
-                <button type="button"
-                  onClick={() => (deviceLayout.fullscreen.active ? exitAppFullscreen() : requestAppFullscreen())}
-                  className="am-tool"
-                  aria-label={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
-                  aria-pressed={deviceLayout.fullscreen.active}
-                  title={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
-                >
-                  <AmSvg d={deviceLayout.fullscreen.active ? AM_PATH.unfull : AM_PATH.full} />
-                </button>
-              )}
-              <button type="button"
-                onClick={() => setSettingsOpen(true)}
-                className="am-gear"
-                title="Audio / I-O Einstellungen"
-                aria-label="Audio / I-O Einstellungen öffnen"
+                onClick={() => setMenuOpen((v) => !v)}
+                className={`am-menubtn ${menuOpen ? 'am-on' : ''}`}
+                aria-label="Menü"
+                aria-expanded={menuOpen}
+                aria-haspopup="true"
+                title="Einstellungen und Menü"
               >
                 <AmSvg d={AM_PATH.gear} />
               </button>
+              {menuOpen && (
+                <div className="am-box am-menu" role="group" aria-label="Menü" onKeyDown={(e) => { if (e.key === 'Escape') setMenuOpen(false); }}>
+                  <button type="button" className="am-mi" onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} aria-label="Audio / I-O Einstellungen öffnen">
+                    <AmSvg d={AM_PATH.gear} /> Einstellungen · Audio / I-O
+                  </button>
+                  <div className="am-mi am-mi-row"><OutputsPanel /> <span>Ausgänge (Main Audio, Main Visual, Nutzer)</span></div>
+                  <div className="am-mi am-mi-row"><Scratchpad /> <span>Projekt-Clipboard</span></div>
+                  <button type="button" className={`am-mi ${scratchOpen ? 'am-on' : ''}`} onClick={() => { setScratchOpen((v) => !v); setMenuOpen(false); }} aria-label="Zwischenspeicher" aria-pressed={scratchOpen}>
+                    <AmSvg d={AM_PATH.board} /> Zwischenspeicher der Session
+                  </button>
+                  {deviceLayout.fullscreen.supported && !deviceLayout.standalone && deviceLayout.layout !== 'desktop' && (
+                    <button type="button" className="am-mi"
+                      onClick={() => (deviceLayout.fullscreen.active ? exitAppFullscreen() : requestAppFullscreen())}
+                      aria-label={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                      aria-pressed={deviceLayout.fullscreen.active}
+                    >
+                      <AmSvg d={deviceLayout.fullscreen.active ? AM_PATH.unfull : AM_PATH.full} /> {deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                    </button>
+                  )}
+                  <div className="am-mi am-mi-info" data-testid="layout-label" title="Erkanntes Format und Auflösung">{deviceLayout.label}</div>
+                </div>
+              )}
+            </div>
             </div>
           </div>
         </header>
@@ -824,6 +852,7 @@ function AppComponent() {
               running={mode === 'ON' && isPlaying}
               onCycle={() => cycleMode(id)}
               keepMounted={id === 'mixer'}
+              playable={isSyncPlugin(id)}
               cycleLockedReason={
                 id === 'mixer'
                   ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
@@ -903,22 +932,20 @@ function AppComponent() {
         </div>
       )}
 
-      {/* FIX BOTTOM: aiMONK (nach recordMONK) + perforMONK (ganz unten) – fest
-          für alle User. Die Monitor-Wahl liegt hier bei perforMONK. */}
-      <section
-        id="rack-perfor"
-        className="rounded-xl border border-emerald-400/60 bg-[#0a0f15]/95 shadow-[0_0_24px_-8px_rgba(52,211,153,0.35)] mb-4"
-      >
-        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-emerald-400/70 bg-emerald-900/40 text-emerald-300 flex items-center justify-center shadow-[0_0_12px_rgba(52,211,153,0.35)]">
-            <Gauge size={18} />
+      {/* FEST UNTEN (Betreiber 2026-10-07): aiMONK, dann perforMONK – für alle
+          sichtbar, nicht schließbar, nicht verschiebbar. */}
+      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
+      <section id="rack-perfor" className="am-box am-fixedmod" style={{ ['--c' as string]: '#3ddc84' }} aria-label="perforMONK">
+        <div className="am-sh">
+          <span className="am-fixedico"><Gauge size={18} /></span>
+          <div className="am-nm">
+            <h2><em style={{ color: 'var(--c)' }}>perfor</em>MONK</h2>
+            <span className="am-vb">Leistung und Telemetrie · fest für alle</span>
           </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">perforMONK</h3>
-          <span className="hidden sm:inline text-[9px] font-mono text-emerald-400 tracking-widest">FIXED · MONITOR</span>
 
           {/* Monitor-Ausgabe pro User: MAIN → MIX (MAIN+PLUGIN) → NUR PLUGIN */}
-          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
-            <span className="hidden lg:inline text-[9px] font-mono text-neutral-500 tracking-widest">MONITOR</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="am-lbl">Monitor</span>
             <select
               value={monitorUser}
               onChange={(e) => {
@@ -926,7 +953,7 @@ function AppComponent() {
                 setMonitorUser(user);
                 applyMonitorMix(user, monitorMixes[user]);
               }}
-              className="appearance-none pl-2 pr-5 py-1 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-emerald-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 transition-colors cursor-pointer"
+              className="am-sel"
               title="Monitor-User wählen (User 1-4)"
               aria-label="Monitor-User wählen"
             >
@@ -943,28 +970,19 @@ function AppComponent() {
               }}
               aria-pressed={monitorMixes[monitorUser] !== 'MAIN'}
               title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN → MIX → NUR PLUGIN`}
-              className={`px-2.5 py-1 rounded-full border text-[9px] font-bold tracking-widest transition-all cursor-pointer ${
-                monitorMixes[monitorUser] === 'PLUGIN_ONLY'
-                  ? 'bg-fuchsia-600/20 border-fuchsia-400/60 text-fuchsia-200'
-                  : monitorMixes[monitorUser] === 'MIX'
-                    ? 'bg-amber-500/15 border-amber-400/60 text-amber-200'
-                    : 'bg-emerald-500/10 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/20'
-              }`}
+              className={`am-tg ${monitorMixes[monitorUser] !== 'MAIN' ? 'am-on' : ''}`}
             >
               {monitorMixes[monitorUser] === 'MAIN' ? '🎧 MAIN' : monitorMixes[monitorUser] === 'MIX' ? '🎧 MAIN + PLUGIN' : '🎧 NUR PLUGIN'}
             </button>
           </div>
         </div>
-        <div className="px-3 pb-3 border-t border-white/5">
-          <Suspense fallback={<div className="h-16 flex items-center justify-center text-neutral-500 text-xs">Lade perforMONK…</div>}>
+        <div className="am-sb">
+          <Suspense fallback={<div className="am-hint">Lade perforMONK…</div>}>
             <PerformanceMonitorTerminal />
           </Suspense>
         </div>
       </section>
 
-      {/* D7: aiMONK-Bottom-Dock (immer offen, ausblendbar) – ersetzt das
-          „letzte Modul unten" für alle User. */}
-      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -972,7 +990,7 @@ function AppComponent() {
       {/* VisualMONK Liveshow (Ghostuser 6 / Beamer) – guarded, default aus */}
       {visualOpen && (
         <Suspense fallback={null}>
-          <VisualMonkOverlay onClose={() => setVisualOpen(false)} />
+          <VisualMonkOverlay onClose={() => { setVisualOpen(false); storageSetJson(VISUALS_KEY, false); setVisualsOn(false); }} />
         </Suspense>
       )}
 

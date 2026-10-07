@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton } from './helpers/studioNav';
+import { entryButton, openStudioMenu } from './helpers/studioNav';
 
 /**
  * E2E-Hardware (ohne echte Geräte): mocked Web MIDI + WebHID via
@@ -66,6 +66,7 @@ test('Hardware-Terminal zeigt virtuelle MIDI-Geräte und bleibt stabil', async (
   // den Timeout). Es liegt jetzt als System-Layer in
   // Einstellungen → MIDI → Controller-Dashboard (SettingsDialog rendert
   // MIDIControllerTerminal, ARCH-PLUGIN-005).
+  await openStudioMenu(page);
   await page.getByLabel('Audio / I-O Einstellungen öffnen').click();
 
   // MIDI aktivieren (mit gemocktem requestMIDIAccess), damit Geräte erscheinen.

@@ -49,13 +49,14 @@ test('P0-3: Modus-Button des Rack-Streifens schließt das Terminal (ON → OFF)'
   const { rack, mode } = await openEqRack(page);
 
   // Terminal ist offen: das EQ-Panel rendert seine eigenen Bedienelemente.
-  await expect(rack.locator('select').first()).toBeVisible();
+  await expect(rack.locator('.am-sb')).toBeVisible();
+  await expect(rack.locator('.am-sb button').first()).toBeVisible();
 
   await mode.click();
 
   await expect(rack).toHaveAttribute('data-plugin-mode', 'OFF');
   await expect(rack).toHaveAttribute('data-plugin-owner', 'none');
-  await expect(rack.locator('select')).toHaveCount(0);
+  await expect(rack.locator('.am-sb')).toHaveCount(0);
 });
 
 test('P0-3: Reload behält den OFF-Zustand (Start-OFF-Regel)', async ({ page }) => {
