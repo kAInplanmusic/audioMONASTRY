@@ -10,19 +10,37 @@
  * WebAudio-Verdrahtung.
  *
  * In Node/jsdom (Tests, CI) sind alle Aufrufe sichere No-Ops.
+ *
+ * RT-AUDIT-P0-007: Fehler des Prozessors (`processorerror` = Prozessor tot,
+ * `render-error`/`message-error` = im Worklet gefangen) gehen an `onFault`.
+ * Die Reaktion (Neuaufbau, UI-Hinweis) entscheidet die Audio-Engine.
  */
 import type { V2Channel } from '../V2StudioGraph';
 import type { V2SinkMessage, V2SynthVoice } from '../live/V2SinkEngine';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import { v2OutputChannelCount } from '../V2OutputGraph';
+import type { V2SinkFaultInfo } from './sinkRecovery';
 
 const V2_SINK_PROCESSOR_NAME = 'v2-sink-processor';
 const V2_SINK_WORKLET_URL = '/worklets/v2SinkProcessor.js';
+
+export interface V2LiveSinkOptions {
+  /** RT-AUDIT-P0-007: Fehler-Callback (Prozessor tot oder Fehler im Worklet gefangen). */
+  onFault?: (info: V2SinkFaultInfo) => void;
+}
 
 export class V2LiveSink {
   private context: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private outputLayoutId = 'stereo';
+  /** RT-AUDIT-P0-007: Fehler-Callback; kann jederzeit gesetzt werden. */
+  onFault: ((info: V2SinkFaultInfo) => void) | null;
+  /** Abmelde-Funktion der Fehler-Listener des aktuellen Knotens. */
+  private detachFaultListeners: (() => void) | null = null;
+
+  constructor(options: V2LiveSinkOptions = {}) {
+    this.onFault = options.onFault ?? null;
+  }
 
   get isConnected(): boolean {
     return this.node !== null && this.context !== null;
@@ -67,6 +85,7 @@ export class V2LiveSink {
         numberOfOutputs: 1,
         outputChannelCount: [Math.max(2, Math.min(24, v2OutputChannelCount(this.outputLayoutId)))],
       });
+      this.attachFaultListeners(node);
       node.connect(ctx.destination);
       this.context = ctx;
       this.node = node;
@@ -96,6 +115,8 @@ export class V2LiveSink {
 
   /** Trennt den Sink von der Destination (idempotent). */
   disconnect(): void {
+    this.detachFaultListeners?.();
+    this.detachFaultListeners = null;
     if (this.node) {
       try {
         this.node.port.postMessage({ type: 'test-tone', active: false } satisfies V2SinkMessage);
@@ -279,6 +300,54 @@ export class V2LiveSink {
   sfzNoteOff(channel: V2Channel, note: number): boolean {
     if (!Number.isFinite(note)) return false;
     return this.post({ type: 'sfz-note-off', channel, note });
+  }
+
+  /**
+   * RT-AUDIT-P0-007: `processorerror` und die Fehler-Meldungen des Prozessors
+   * abonnieren. `onprocessorerror` wird auf dem frisch erzeugten Knoten gesetzt
+   * (dort gibt es noch keinen anderen Handler). Der Port-Listener wird per
+   * `addEventListener` angehängt statt `port.onmessage` zu überschreiben, damit
+   * andere Abnehmer (step/cpu-stats) nicht verdrängt werden. Meldungen eines
+   * bereits ersetzten Knotens werden ignoriert.
+   */
+  private attachFaultListeners(node: AudioWorkletNode): void {
+    this.detachFaultListeners?.();
+    this.detachFaultListeners = null;
+    const onProcessorError = (ev: Event | undefined) => {
+      if (this.node !== node) return;
+      const message = (ev as ErrorEvent | undefined)?.message;
+      this.emitFault({ kind: 'processorerror', message: message || 'AudioWorklet-Prozessor abgestürzt' });
+    };
+    const onPortMessage = (ev: MessageEvent) => {
+      if (this.node !== node) return;
+      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown } | null | undefined;
+      if (!data || (data.type !== 'render-error' && data.type !== 'message-error')) return;
+      this.emitFault({
+        kind: data.type,
+        message: typeof data.message === 'string' ? data.message : '',
+        count: typeof data.count === 'number' ? data.count : undefined,
+        messageType: typeof data.messageType === 'string' ? data.messageType : undefined,
+      });
+    };
+    node.onprocessorerror = onProcessorError;
+    const port = node.port as MessagePort | undefined;
+    try {
+      port?.addEventListener?.('message', onPortMessage);
+      // Bei addEventListener startet der Port erst mit start() (onmessage täte das implizit).
+      port?.start?.();
+    } catch { /* Port nicht verfügbar */ }
+    this.detachFaultListeners = () => {
+      if (node.onprocessorerror === onProcessorError) node.onprocessorerror = null;
+      try { port?.removeEventListener?.('message', onPortMessage); } catch { /* ignore */ }
+    };
+  }
+
+  private emitFault(info: V2SinkFaultInfo): void {
+    try {
+      this.onFault?.(info);
+    } catch (e) {
+      console.warn('[v2-sink] Fehler-Callback fehlgeschlagen:', e);
+    }
   }
 
   private post(message: V2SinkMessage): boolean {
