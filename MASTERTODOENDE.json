@@ -433,7 +433,7 @@
       "id": "RT-AUDIT-P0-007",
       "title": "Fehlerpfad im Audio-Thread: Exception → Stille + Meldung + automatischer Neuaufbau statt dauerhafter Stummschaltung",
       "priority": "P0",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "Robustheit",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-007)",
       "detectedAt": "2026-10-07",
@@ -483,7 +483,45 @@
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
       ],
-      "note": "IN_PROGRESS 2026-10-07: Hintergrund-Agent im eigenen Worktree (parallel zu RT-AUDIT-P0-002; Abgrenzung: P0-007 fasst Nodes/V2SinkEngine/V2MonitorGraph nicht an, P0-002 im Processor nur ctx-Literal + sfzBanks-Iteration). "
+      "note": "DONE 2026-10-07 (Commit 191cbd0, Merge bcee7f7, Hintergrund-Agent): v2SinkProcessor.process() = try/catch um renderBlock() (Rumpf unveraendert), Fehler -> Stille fuer den Block, Zaehler, render-error gedrosselt (erster + max. 1/s Audio-Zeit), return true; onmessage mit try/catch -> message-error; V2RenderFaultGuard (neu, allokationsfrei im fehlerfreien Pfad); V2StudioGraph-Setter ignorieren unbekannte Kanaele; V2LiveSink.onFault (processorerror + Port-Meldungen per addEventListener, alte Knoten ignoriert); sinkRecovery.ts (Policy: processorerror -> Neuaufbau, render-error ab 50/2 s, max. 3 Neuaufbauten/60 s, dann failed); audioEngine.rebuildV2LiveSink (disconnect -> connectV2LiveOutput -> patterns/samples/synth -> Transport neu); EngineStatusBadge zeigt \"Audio-Engine neu gestartet\"/\"Audio-Engine gestoert – bitte neu laden\". Nachweis: tests/v2SinkFaults.test.ts (21); Chromium-Probe: 20 Render-Fehler vorher processorerror + RMS 0,0977 -> 0, nachher Ton laeuft weiter (0,0974); Dauerfehler und Konstruktor-Fehler -> automatischer Neuaufbau, Ton wieder da. Auf main nach Merge: tsc 0, eslint 0, 315 Dateien/2604 Tests, knip 0, Boundary 0, Worklet-Build ok. Offene Luecken -> RT-AUDIT-P0-007-F1."
+    },
+    {
+      "id": "RT-AUDIT-P0-007-F1",
+      "title": "Neuaufbau des Sinks uebertraegt die komplette Master-Kette; Monitor-Plan validieren",
+      "priority": "P1",
+      "status": "OPEN",
+      "area": "Robustheit",
+      "source": "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md (P0-007-Abschlussbericht)",
+      "detectedAt": "2026-10-07",
+      "problem": "Nach rebuildV2LiveSink (und ebenso nach stop()/play()) werden Master-EQ/DSP/FX/Dynamics/Reverb/ModMatrix und SFZ-Baenke nicht neu an den Sink uebertragen – der Klang aendert sich nach einem Neuaufbau still. Der Transport startet bei Step 0 statt phasengleich. Ein strukturloser monitor-plan setzt Monitor-Gains auf NaN (Ausgang still bis zum naechsten gueltigen Plan).",
+      "files": [
+        "src/utils/audioEngine.ts (rebuildV2LiveSink, syncV2FromV1, v2Master*-Felder)",
+        "src/audio/sfzBridge.ts",
+        "src/core/audio/V2MonitorGraph.ts (applyMonitorPlan)",
+        "tests/v2SinkFaults.test.ts"
+      ],
+      "steps": [
+        "1. Eine Methode syncV2MasterChainToLiveSink() bauen, die alle zuletzt gesetzten Master-Parameter (EQ/DSP/FX/Dynamics/Mastering/Reverb/ModMatrix) aus den Engine-Feldern erneut sendet; in rebuildV2LiveSink und connectV2LiveOutput aufrufen.",
+        "2. SFZ-Baenke nach Neuaufbau erneut laden (sfzBridge kennt die zuletzt geladene Definition).",
+        "3. V2MonitorGraph.applyMonitorPlan: jeden Gain mit Number.isFinite pruefen, ungueltige Plaene komplett verwerfen.",
+        "4. Optional: Transport-Phase uebernehmen (letzten gemeldeten Step + Frame-Versatz).",
+        "5. Tests: nach Neuaufbau identische Master-Parameter im Fake-Sink; kaputter Plan aendert nichts."
+      ],
+      "acceptance": [
+        "Klang vor/nach Neuaufbau identisch (Parameter-Vergleich im Test)",
+        "Ungueltiger monitor-plan wird verworfen"
+      ],
+      "verification": [
+        "npm test",
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P0-007"
+      ],
+      "reports": [
+        "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md"
+      ]
     },
     {
       "id": "RT-AUDIT-P1-008",
