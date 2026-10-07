@@ -195,3 +195,67 @@ describe('C0 – PDC-Rechnung der Kette', () => {
     expect(c.state.channelCompensation.every((f) => f === 0)).toBe(true);
   });
 });
+
+describe('C1 – Worklet-Anbindung ohne Umstecken', () => {
+  it('jedes Kettenglied ist an einen Prozessor-Namen gebunden', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    expect(c.state.workletBinding).toEqual({
+      eq: 'eq-processor',
+      dsp: 'dsp-processor',
+      master: 'mastering-processor',
+      effect: 'effect-processor',
+      spatial: 'spatial-processor',
+    });
+  });
+
+  it('ein einghaengter Prozessor veraendert das Signal – und die Kabel bleiben', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    c.setChannelSource('channel1', impulse());
+    c.setChannelGainDb('channel1', 0);
+    const vorher = peak(c.render(ctx()));
+
+    // Ein "echter" Prozessor: halbiert das Signal. Wuerde das Umstecken etwas
+    // kosten (disconnect/connect), waere hier ein Klick oder ein Abbruch.
+    // Der Funktionsname ist der Beleg der Anbindung - deshalb eine benannte
+    // Funktion statt einer Zuweisung an `.name` (das ist read-only).
+    const halbierer: import('../src/core/audio/backends/WorkletAdapter').WorkletProcessFn =
+      function halbierer(input, output, c2) {
+        const src = input[0] ?? [];
+        const len = src[0]?.length ?? c2.bufferSize;
+        const out: Float32Array[] = [new Float32Array(len), new Float32Array(len)];
+        for (let ch = 0; ch < out.length; ch++) {
+          const s = src[Math.min(ch, src.length - 1)];
+          if (s) for (let i = 0; i < len; i++) out[ch][i] = (s[i] ?? 0) * 0.5;
+        }
+        output[0] = out;
+      };
+
+    expect(c.attachWorklet('eq', halbierer), 'eq muss anbindbar sein').toBe(true);
+    const nachher = peak(c.render(ctx()));
+
+    // Der Prozessor wirkt: das Signal ist deutlich kleiner geworden.
+    expect(nachher).toBeLessThan(vorher);
+    // Der Knoten meldet die Anbindung (der exakte Name kann vom Bundler
+    // umbenannt werden - geprueft wird, dass es NICHT mehr der Startwert ist).
+    expect(c.state.workletBinding.eq).not.toBe('eq-processor');
+    // Nur der angebundene Knoten wechselt - alle anderen bleiben.
+    expect(c.state.workletBinding.master).toBe('mastering-processor');
+    expect(c.state.workletBinding.dsp).toBe('dsp-processor');
+  });
+
+  it('ein unbekanntes Plugin laesst sich nicht anbinden (kein stiller No-Op)', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    expect(c.attachWorklet('gibtsnicht', () => {})).toBe(false);
+  });
+
+  it('die Kette traegt auch nach einem Prozessorwechsel weiter Ton', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    c.setChannelSource('channel1', impulse());
+    c.attachWorklet('dsp', (input, output, cc) => {
+      const src = input[0] ?? [];
+      const len = src[0]?.length ?? cc.bufferSize;
+      output[0] = [new Float32Array(len).fill(0.25), new Float32Array(len).fill(0.25)];
+    });
+    expect(peak(c.render(ctx()))).toBeGreaterThan(0);
+  });
+});
