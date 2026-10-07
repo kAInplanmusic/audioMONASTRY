@@ -4904,18 +4904,24 @@
       "id": "PLUGIN-V2-D",
       "title": "4-Server-Strategie deployen, testen, loggen, Snapshot",
       "priority": "P0",
-      "status": "BLOCKED",
+      "status": "PARTIAL",
       "area": "Infra",
       "source": "Betreiber-Auftrag 2026-10-07",
       "problem": "Die 4 Server sind app/sfu/media/edge (docs/SERVER_FLEET.md). Deploy ist derzeit NICHT fahrbar: RP_AGENT_KEY fehlt in der .env, HETZNER_API_TOKEN fehlt ebenfalls. Ohne die ist weder ein Flotten-Zustand abfragbar noch ein Deploy moeglich.",
-      "note": "Vorbereitet: Zielbild belegt (docs/SERVER_FLEET.md: app cx43 mit Floating IP, sfu cx33 mit RTP 40000-40099, media cx43 mit NVMe, edge cx23 nur Monitoring), Bring-up ueber scripts/hetzner/bring-up-fleet.sh. Blockiert an den fehlenden Zugangsdaten - Betreiber muss RP_AGENT_KEY (und ggf. HETZNER_API_TOKEN) setzen.",
+      "note": "2026-10-07 DURCHGEFUEHRT. Der Deploy war NICHT blockiert - ich hatte nach dem falschen Key-Namen gesucht: HCLOUD_TOKEN und RP_API_KEY stehen in der .env (nicht HETZNER_API_TOKEN/RP_AGENT_KEY). Die Flotte existierte bereits, lief aber mit einem Image vom 6.10. 14:50 - also VOR dem Pluginpool-Auftrag.\n\nERGEBNIS: Alle 4 Knoten laufen auf Commit 605f587 (Image ghcr.io/kainplanmusic/audiomonastry:605f587, Build 2026-10-07T01:46:08Z). app-1 (78.47.65.129) auditomonastry+caddy healthy; sfu-1 (162.55.185.245) audiomonastry+caddy+coturn healthy mit ENABLE_SFU=1; media-1 (2.28.133.48) audiomonastry+caddy healthy; edge-1 (2.29.46.13) Monitoring-Stack seit 12 h. LIVE verifiziert: https://anunnakitools.de/api/health -> status ok, commit 605f587.\n\nTEST: E2E gegen die Live-Instanz (E2E_BASE_URL=https://anunnakitools.de) - smoke + audio-smoke + aiNegative = 12 passed, 3 skipped (Live-Gates), 0 failed, EXIT=0. Belegt u.a.: App laedt mit allen Nav-Buttons, Mixer rendert, AUDIO RUNNING ohne Worklet-Crash, Modus-Button schaltet dropMONK ON/OFF ohne React-Crash, AI-OFF fail-closed (401/403, RunPod nie 2xx).\n\nGELOGGT: Logs je Knoten + Flotten-JSON unter ~/.hermes/cache/scratch/fleet-snapshot-20261007/. SNAPSHOT: docs/DEPLOY_SNAPSHOT_2026-10-07.md mit Rollback-Weg und Wiederaufsetzpunkt.\n\nZWEI DEPLOY-FEHLER BEHOBEN: (1) fleet-deploy-live.sh kennt nur app-1 und startet ueberall caddy - auf sfu-1/media-1 fehlte dadurch die Caddyfile, Docker legte sie als VERZEICHNIS an und der Bind-Mount scheiterte; behoben durch die rollenspezifische Caddyfile.sfu. (2) Caddy-Restart-Schleife wegen 'acme_dns: missing API token' - die Caddyfile erwartet CF_DNS_API_TOKEN, der fehlte in der Container-Umgebung; ergaenzt.\n\nOFFEN (Betreiber): (a) Alle drei Cloudflare-Token in der .env sind UNGUELTIG (CF_API_TOKEN, CF_TOKEN_UT, CF_TOKEN_ACCOUNT -> HTTP 401). Folge: sfu-1/media-1 koennen kein Let's-Encrypt-Zertifikat ueber DNS-01 holen; app-1 ist nicht betroffen (Origin-Zertifikat). (b) DNS-Fehler: sfu.anunnakitools.de zeigt auf 2.28.133.48 (= media-1) statt auf sfu-1 162.55.185.245 - nicht geaendert, weil Live-DNS und kein gueltiger Token. (c) Laut API ist KEINE Floating IP zugewiesen, obwohl SERVER_FLEET.md eine fuer app-1 vorsieht. Die SFU-Verdrahtung selbst stimmt: ENABLE_SFU=1 auf sfu-1, 0 auf app-1, TURN-Port 3478 von aussen offen.\n\nKOSTEN: Die 4 Server kosten ~39 EUR/Monat solange sie existieren - auch ausgeschaltet. Beenden: bash scripts/hetzner/delete-fleet.sh",
       "acceptance": [
         "4 Knoten provisioniert und erreichbar",
         "Neueste Builds deployt (Client + Server + Runtime-Image)",
         "E2E gegen die echte Instanz gefahren",
         "Logs gesammelt, Snapshot gemacht und Wiederaufsetzpunkt dokumentiert"
       ],
-      "verification": []
+      "verification": [
+        "https://anunnakitools.de/api/health -> {\"status\":\"ok\",\"commit\":\"605f587\"}",
+        "E2E live: 12 passed / 3 skipped / 0 failed, EXIT=0 (smoke, audio-smoke, aiNegative)",
+        "Alle 3 App-Knoten melden lokal denselben commit 605f587",
+        "TURN-Port 3478 von aussen offen (sfu-1)",
+        "Snapshot + Logs: docs/DEPLOY_SNAPSHOT_2026-10-07.md, ~/.hermes/cache/scratch/fleet-snapshot-20261007/"
+      ]
     }
   ],
   "visionSandbox": [
