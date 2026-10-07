@@ -1,1 +1,83 @@
 /* Plugin-Inhalte Gruppe a – Rack-Modul-Stil (Präfix am-), siehe src/styles/amDesign.css */
+/* dropMONK · songMONK · soundMONK · voiceMONK (VoiceGenTerminal + VoiceMonkPanel) */
+
+/* Gemeinsam */
+.am-a-inline{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
+.am-a-ell{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.am-a-scroll{max-height:150px;overflow-y:auto}
+.am-a-ta{resize:none;font-family:var(--f-body);line-height:1.35;min-height:44px}
+.am-a-ok{color:var(--ok)}
+.am-a-err{color:var(--hot)}
+.am-a-field{display:flex;flex-direction:column;gap:3px}
+.am-a-ph{stroke:#fff;stroke-width:1.5;vector-effect:non-scaling-stroke;filter:drop-shadow(0 0 3px #fff)}
+.am-a-prog{height:6px;border-radius:3px;background:#050a14;border:1px solid var(--ln);overflow:hidden}
+.am-a-prog i{display:block;height:100%;background:var(--c);box-shadow:0 0 8px var(--c);transition:width .1s linear}
+.am-rackrow .am-list button>span{min-width:0}
+
+/* dropMONK: 2×8 Pads + Parameter-Verlauf */
+.am-a-padrow{display:flex;gap:10px;align-items:stretch;min-width:0}
+.am-pads.am-a-pads8{grid-template-columns:repeat(8,44px);gap:5px;padding:6px;flex:none}
+.am-a-pads8 .am-pad{width:44px;height:44px;font-size:8px;overflow:hidden;word-break:break-word}
+.am-a-pads8 .am-pad.am-a-empty{background:#0a0f19;border-style:dashed;border-color:#1b2538;box-shadow:none}
+.am-a-envcol{flex:1;min-width:180px;display:flex;flex-direction:column;gap:4px}
+.am-a-env{width:100%;height:64px;display:block;background:#040912;border:1px solid #10204a;border-radius:7px}
+.am-a-env .am-a-grid{stroke:#0f1d3a;stroke-width:1;vector-effect:non-scaling-stroke}
+.am-a-meta{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:10px;color:var(--dm)}
+.am-a-drop .am-libq{flex:1;min-width:160px;width:auto}
+.am-a-drop .am-a-inline>.am-hint{flex:1 1 140px}
+.am-a-drop .am-sel{flex:1;min-width:0}
+.am-a-drop .am-btn.am-pri{width:100%}
+
+/* songMONK: Prompt + Spur mit Playhead */
+.am-a-top{align-items:flex-end;flex-wrap:nowrap}
+.am-a-song .am-a-ta{flex:1;min-width:0}
+.am-a-lane{position:relative;display:flex;gap:2px;height:30px;padding:4px;background:#040912;border:1px solid #10204a;border-radius:7px;overflow:hidden}
+.am-a-lane i{flex:1;min-width:2px;border-radius:2px;background:color-mix(in srgb,var(--pc) 55%,#050b16);box-shadow:inset 0 0 6px rgba(255,255,255,.12)}
+.am-a-lane b{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 6px #fff;transition:left .25s linear}
+.am-a-lanelbl{position:absolute;left:8px;top:50%;transform:translateY(-50%);font-size:10px;color:#e8f0ff;text-shadow:0 0 4px #000,0 0 2px #000;pointer-events:none;max-width:90%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.am-a-song .am-a-scroll{max-height:96px}
+.am-a-log{font-size:10px;display:flex;flex-direction:column;gap:2px}
+.am-a-log>div{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* soundMONK: Varianten mit Wellenform */
+.am-a-variants{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.am-a-var{position:relative;display:flex;flex-direction:column;gap:3px;background:var(--pn2);border:1px solid var(--ln);border-radius:7px;padding:4px 6px;text-align:left;font-size:10px;color:var(--tx);min-width:0}
+.am-a-var:hover{border-color:color-mix(in srgb,var(--c) 55%,var(--ln))}
+.am-a-var svg{width:100%;height:30px;display:block;background:#040912;border-radius:4px}
+.am-a-var em{position:absolute;top:6px;right:9px;font:700 8px var(--f-disp);font-style:normal;color:var(--c)}
+.am-a-sound .am-mono{font-size:10px}
+
+/* voiceMONK: Take-Wellenform, Regler-Raster, Aktionsknöpfe */
+.am-a-wave{height:48px;display:flex;align-items:center;justify-content:center;gap:2px;padding:0 6px;background:#040912;border:1px solid #10204a;border-radius:7px}
+.am-a-wave i{flex:1;max-width:5px;border-radius:2px;background:var(--c);box-shadow:0 0 4px var(--c)}
+.am-a-wave.am-a-busy i{animation:am-a-eq .8s ease-in-out infinite alternate}
+@keyframes am-a-eq{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+@media (prefers-reduced-motion:reduce){.am-a-wave.am-a-busy i{animation:none}}
+.am-a-voice .am-a-inline>b{font-size:11px}
+.am-a-grid3{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;align-items:center}
+.am-a-btn2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.am-a-btn2 .am-btn{padding:6px 6px;font-size:11px}
+.am-a-voice2 .am-a-scroll{max-height:96px}
+
+/* Schmal: Karten untereinander, nichts quer scrollen */
+@media (max-width:760px){
+  .am-a-drop>.am-card,.am-a-song>.am-card,.am-a-sound>.am-card,.am-a-voice>.am-card,.am-a-voice2>.am-card{width:100%!important;min-width:0!important;flex:1 1 100%!important}
+  .am-a-padrow{flex-direction:column}
+  .am-pads.am-a-pads8{grid-template-columns:repeat(8,minmax(0,1fr));width:100%}
+  .am-a-pads8 .am-pad{width:auto;height:auto;aspect-ratio:1}
+  .am-a-top{flex-wrap:wrap}
+  .am-a-variants{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+/* dropMONK · Erweitert (eingeklappt): vollständige Panels kompakt nebeneinander */
+.am-a-more{flex:1 1 100%;min-width:0;border:1px solid var(--ln);border-radius:8px;background:var(--pn2);padding:4px 10px}
+.am-a-more>summary{cursor:pointer;padding:3px 0;list-style-position:inside}
+.am-a-more[open]>summary{color:var(--c)}
+.am-a-moregrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:6px 0 4px}
+.am-a-morebox{max-height:280px;overflow-y:auto;min-width:0}
+.am-a-morebox .space-y-6>:not(:first-child),.am-a-morebox .space-y-4>:not(:first-child){margin-top:8px!important}
+.am-a-morebox [class*="p-8"],.am-a-morebox [class*="p-5"],.am-a-morebox [class*="p-4"]{padding:8px!important}
+.am-a-morebox [class*="py-8"],.am-a-morebox [class*="py-4"]{padding-top:6px!important;padding-bottom:6px!important}
+.am-a-morebox [class*="text-2xl"]{font-size:14px!important}
+.am-a-morebox .h-64{height:120px!important}
+@media (max-width:760px){.am-a-moregrid{grid-template-columns:1fr}}

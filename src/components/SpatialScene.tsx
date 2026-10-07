@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Plus, Trash2, Camera, RotateCcw, Gauge, Volume2, Radio } from 'lucide-react';
 import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { usePluginState } from '../hooks/usePluginState';
 import { useProject } from '../context/ProjectContext';
@@ -16,6 +15,7 @@ import type { SpatialQuality, SpatialSceneState, SpatialSource} from '../types';
 import { ALL_TRACKS } from '../types';
 import { openAudioActionMenu } from './AudioActionMenuHost';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { AmBar, AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import {
   isStreamContent,
   masterStreamContent,
@@ -29,10 +29,11 @@ import {
 } from '../core/session/projectState';
 
 /**
- * spatialMONK – neue schlichte 2D-Scene-UI (WhitePaper Abschnitt 6)
- * =================================================================
- * Top-Down-Scene: Mitte = Listener, Quellen dragbar, Inspector rechts,
- * Qualität/CPU oben, Quick-Actions unten. Positionen laufen über den
+ * spatialMONK – Rack-Modul (Vorlage public/uidesign/uiübersichtapp.jpg, Zeile 12)
+ * ==========================================================================
+ * Eine Zeile: links Modus/Layout/Qualität, Mitte Raum von oben (Listener in
+ * der Mitte, Quellen dragbar), rechts Objekt-Liste mit L/R · Höhe · Distanz ·
+ * Gain und eine kleine 3D-Ansicht samt Übernahme-Leiste. Positionen laufen über den
  * neuen SpatialCluster (Worklet-Protokoll) UND – als Übergang – über die
  * bestehende audioEngine (Legacy-Audio-Pfad, Adapter-Rollout).
  */
@@ -54,8 +55,50 @@ function azDistFromPointer(nx: number, ny: number): { az: number; dist: number }
   return { az: Math.round(az), dist: Math.round(dist * 10) / 10 };
 }
 
+/**
+ * Kleine 3D-Ansicht (schräg von vorne oben): Raumquader, Quellen nach
+ * Azimut/Distanz auf dem Boden, Höhe als Stab. Nur Darstellung der Szene.
+ */
+const Spatial3D = React.memo(function Spatial3D({ sources, selectedId }: { sources: SpatialSource[]; selectedId: number | null }) {
+  const W = 212;
+  const H = 96;
+  // Projektion: x (links/rechts), z (vorne/hinten), y (Höhe) → Bildpunkt.
+  const proj = (x: number, z: number, y: number) => ({
+    px: W / 2 + x * 62 + z * 26,
+    py: H / 2 + 18 - z * 14 - y * 30,
+  });
+  const box = [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const;
+  const floor = box.map(([x, z]) => proj(x, z, 0));
+  const top = box.map(([x, z]) => proj(x, z, 1));
+  const path = (pts: { px: number; py: number }[]) => `M${pts.map((p) => `${p.px.toFixed(1)},${p.py.toFixed(1)}`).join('L')}Z`;
+  return (
+    <svg className="am-spt3d" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="3D-Ansicht der Quellen">
+      <path d={path(floor)} className="am-spt3f" />
+      <path d={path(top)} className="am-spt3e" />
+      {box.map((_, i) => <line key={i} x1={floor[i].px} y1={floor[i].py} x2={top[i].px} y2={top[i].py} className="am-spt3e" />)}
+      {sources.map((s) => {
+        const r = Math.min(1, s.dist / 2);
+        const rad = (s.az * Math.PI) / 180;
+        const x = Math.sin(rad) * r;
+        const z = Math.cos(rad) * r;
+        const y = Math.max(-0.2, Math.min(1, (s.el + 90) / 180));
+        const base = proj(x, z, 0);
+        const p = proj(x, z, y);
+        const c = s.color ?? '#a78bfa';
+        return (
+          <g key={s.id} opacity={s.muted ? 0.3 : 1}>
+            <line x1={base.px} y1={base.py} x2={p.px} y2={p.py} stroke={c} strokeOpacity={0.5} />
+            <circle cx={p.px} cy={p.py} r={selectedId === s.id ? 4.5 : 3.2} fill={c} stroke={selectedId === s.id ? '#fff' : 'none'} />
+          </g>
+        );
+      })}
+      <circle cx={proj(0, 0, 0).px} cy={proj(0, 0, 0).py} r={3} className="am-spt3l" />
+    </svg>
+  );
+});
+
 export const SpatialScene = React.memo(function SpatialScene() {
-  const { state, lockStatus, updateState } = usePluginState('spatial', 'PRO');
+  const { lockStatus } = usePluginState('spatial', 'PRO');
   const lockedByOther = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   const {
     spatialAssignments,
@@ -91,7 +134,6 @@ export const SpatialScene = React.memo(function SpatialScene() {
 
   const sources = scene.sources;
   const global = scene.global;
-  const selected = useMemo(() => sources.find((s) => s.id === selectedId) ?? null, [sources, selectedId]);
 
   // Source-ID-Generator oberhalb vorhandener IDs halten (Stem-Batch, Presets).
   useEffect(() => {
@@ -418,291 +460,186 @@ export const SpatialScene = React.memo(function SpatialScene() {
     addSourceAt(nx, ny);
   };
 
-  return (
-    <div className={`w-full h-full flex flex-col bg-[#0a0a0a] rounded-xl border ${lockedByOther ? 'border-red-500 opacity-60 grayscale' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative`}>
-      <div className="px-4 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="spatial" placeholder="MOA: z. B. 'Quelle links vorne platzieren'" />
-      </div>
+  const cpuPct = Math.round(metrics.cpuEstimate * 100);
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-linear-to-r from-lime-900/20 to-[#0a0a0a] border-b border-lime-900/30 gap-2 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-lime-500/20 flex items-center justify-center border border-lime-500/50 shadow-[0_0_15px_rgba(132,204,22,0.3)]">
-            <Box className="w-5 h-5 text-lime-400" />
-          </div>
-          <div>
-            <h2 className="text-lg font-black tracking-widest text-neutral-100 uppercase leading-none">spatialMONK</h2>
-            <p className="text-[9px] font-mono text-lime-400/80 tracking-widest mt-0.5">2D SCENE · WORKLET · {metrics.instances} INSTANZ</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
+  return (
+    <div className="am-rackrow am-spt" style={lockedByOther ? { opacity: 0.6, filter: 'grayscale(1)' } : undefined}>
+      <MoaAssistant pluginId="spatial" />
+
+      {/* Links: Modus / Layout */}
+      <AmCard title="Modus" style={{ width: 210 }} right={<span className="am-vb">{metrics.instances} INST</span>}>
+        <label className="am-sptf">
+          <span className="am-lbl">Layout</span>
           <select
+            className="am-sel"
             value={global.layout ?? '10.0'}
             onChange={(e) => {
               const layout = e.target.value;
-              applyGlobal({ layout } as any);
+              applyGlobal({ layout });
               audioEngine.setSpatialSetup(layout);
             }}
-            className="bg-black text-white text-xs p-1 rounded border border-neutral-700"
             title="Ausgabe-Layout (2.0 / 2.2 / 4.0 / 4.1 / 4.2 …)"
           >
             {SPATIAL_SETUPS.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
-          <select
-            value={global.quality}
-            onChange={(e) => applyGlobal({ quality: e.target.value as SpatialQuality })}
-            className="bg-black text-white text-xs p-1 rounded border border-neutral-700"
-            title="Qualität: IR-Länge/FFT-Block/Interpolation"
-          >
-            <option value="low">LOW</option>
-            <option value="medium">MEDIUM</option>
-            <option value="high">HIGH</option>
-          </select>
-          <div className="flex items-center gap-1.5">
-            <span className="text-[9px] font-mono text-neutral-500">HEAD</span>
-            <input type="range" min={-180} max={180} value={listenerRot}
-              onChange={(e) => { const v = Number(e.target.value); setListenerRot(v); applyGlobal({ listenerRot: v }); }}
-              className="w-20 accent-lime-500" />
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Volume2 className="w-3 h-3 text-neutral-500" />
-            <input type="range" min={0} max={1.5} step={0.01} value={global.masterGain}
-              onChange={(e) => applyGlobal({ masterGain: Number(e.target.value) })}
-              className="w-20 accent-lime-500" />
-          </div>
-          <button type="button" onClick={() => clusterRef.current?.splitNow()}
-            className="px-2 py-1 rounded border border-lime-500/40 bg-lime-500/10 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/20 cursor-pointer">
-            SPLIT
-          </button>
-          <button type="button" onClick={() => applyRouting(!routingEnabled)}
-            className={`px-2 py-1 rounded border text-[9px] font-bold tracking-widest cursor-pointer ${routingEnabled ? 'bg-lime-500/20 border-lime-400 text-lime-200' : 'border-neutral-700 text-neutral-400 hover:text-lime-300 hover:border-lime-500/40'}`}>
-            {routingEnabled ? 'WORKLET ROUTING ON' : 'WORKLET ROUTING OFF'}
-          </button>
-          <button type="button" onClick={loadDefaultHrtf}
-            className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer">
-            HRTF
-          </button>
-          <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
-          </select>
+        </label>
+        <AmSeg<SpatialQuality>
+          label="Qualität: IR-Länge/FFT-Block/Interpolation"
+          value={global.quality}
+          options={[['low', 'LOW'], ['medium', 'MED'], ['high', 'HIGH']]}
+          onChange={(q) => applyGlobal({ quality: q })}
+        />
+        <div className="am-sptrow">
+          <AmToggle on={routingEnabled} onClick={() => applyRouting(!routingEnabled)} title="Spuren auf die Worklet-Eingänge routen (sonst Legacy-Pfad)">
+            {routingEnabled ? 'ROUTING ON' : 'ROUTING OFF'}
+          </AmToggle>
+          <AmToggle on={false} onClick={() => { void loadDefaultHrtf(); }} title="HRTF-Kernel + WASM-FFT laden">HRTF</AmToggle>
+          <AmToggle on={false} onClick={() => clusterRef.current?.splitNow()} title="Quellen jetzt auf weitere Instanzen verteilen">SPLIT</AmToggle>
         </div>
-      </div>
+        <div className="am-sptrow">
+          <select className="am-sel" defaultValue="" onChange={(e) => e.target.value && loadPreset(Number(e.target.value))} aria-label="Szenen-Preset">
+            <option value="" disabled>Preset…</option>
+            {SPATIAL_SCENE_PRESETS.map((p, i) => <option key={i} value={i}>{i === 0 ? 'Default' : 'Lead+Pad'}</option>)}
+          </select>
+          <button type="button" className="am-tg" onClick={snapshot} title="Snapshot speichern">SNAP</button>
+          <button type="button" className="am-tg" onClick={undo} title="Snapshot wiederherstellen">UNDO</button>
+          <button type="button" className="am-tg" onClick={exportScene} title="Scene-JSON in die Zwischenablage kopieren">JSON</button>
+        </div>
+        <div className="am-sptcpu" title={`CPU-Schätzung ${cpuPct}% · ${metrics.activeSources} Quellen`}>
+          <span className="am-lbl">CPU {cpuPct}%</span>
+          <i><b style={{ width: `${Math.min(100, cpuPct)}%`, background: metrics.cpuEstimate > 0.65 ? 'var(--hot)' : 'var(--c)' }} /></i>
+        </div>
+        {metrics.cpuEstimate > 0.65 && <span className="am-hint" style={{ color: 'var(--warn)' }}>CPU hoch — Qualität umstellen oder splitten.</span>}
+      </AmCard>
 
-      {/* Hauptbereich */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Scene Canvas */}
-        <div className="flex-1 flex items-center justify-center p-4 relative">
-          <div
-            ref={stageRef}
-            onDoubleClick={handleStagePointer}
-            className="relative w-full max-w-[520px] aspect-square rounded-full bg-[radial-gradient(circle_at_50%_50%,#101418_0%,#0a0c0e_70%,#060708_100%)] border border-neutral-800 shadow-[0_0_60px_rgba(0,0,0,0.6),inset_0_0_60px_rgba(0,0,0,0.55)] select-none touch-none"
-            title="Doppelklick = Quelle hinzufügen"
-          >
-            {/* Distanz-Ringe */}
-            {[0.33, 0.66, 1].map((r) => (
-              <div key={r} className="absolute rounded-full border border-neutral-800/60 pointer-events-none"
-                style={{ left: `${50 - r * 50}%`, top: `${50 - r * 50}%`, width: `${r * 100}%`, height: `${r * 100}%` }} />
-            ))}
-            <span className="absolute top-1.5 left-1/2 -translate-x-1/2 text-[8px] font-mono tracking-[0.35em] text-neutral-600 pointer-events-none">VORNE</span>
-            <span className="absolute bottom-1.5 left-1/2 -translate-x-1/2 text-[8px] font-mono tracking-[0.35em] text-neutral-600 pointer-events-none">HINTEN</span>
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-mono tracking-[0.25em] text-neutral-600 pointer-events-none">LINKS</span>
-            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-mono tracking-[0.25em] text-neutral-600 pointer-events-none">RECHTS</span>
-
-            {/* Listener Mitte + Orientierung */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none">
-              <div className="w-6 h-6 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center">
-                <div className="w-1 h-3 rounded-full bg-lime-400 origin-top"
-                  style={{ transform: `rotate(${listenerRot}deg) translateY(2px)` }} />
-              </div>
-            </div>
-
-            {sources.map((s) => (
-              <div key={s.id} className="absolute" style={posStyle(s)}>
-                <SpatialSourceIcon
-                  source={s}
-                  selected={selectedId === s.id}
-                  onSelect={setSelectedId}
-                  onDragMove={moveFromPointer}
-                  onDoubleClick={(id) => setRenamingId(id)}
+      {/* Mitte: Raum von oben */}
+      <AmCard title="Raum" style={{ width: 252 }}
+        right={(
+          <span className="am-sptrow">
+            <AmKnob size="xs" value={listenerRot} min={-180} max={180} def={0} unit="int" label="Kopf" title="Kopf-Drehung (Grad)"
+              onChange={(v) => { const r = Math.round(v); setListenerRot(r); applyGlobal({ listenerRot: r }); }} />
+            <AmKnob size="xs" value={global.masterGain} min={0} max={1.5} def={1} unit="pct" label="Gain" title="Gesamt-Gain"
+              onChange={(v) => applyGlobal({ masterGain: v })} />
+          </span>
+        )}>
+        <div
+          ref={stageRef}
+          onDoubleClick={handleStagePointer}
+          className="am-sptstage"
+          title="Doppelklick = Quelle hinzufügen"
+        >
+          {[0.33, 0.66, 1].map((r) => (
+            <div key={r} className="am-sptring"
+              style={{ left: `${50 - r * 50}%`, top: `${50 - r * 50}%`, width: `${r * 100}%`, height: `${r * 100}%` }} />
+          ))}
+          <span className="am-sptlab" style={{ top: 3, left: '50%', transform: 'translateX(-50%)' }}>VORNE</span>
+          <span className="am-sptlab" style={{ bottom: 3, left: '50%', transform: 'translateX(-50%)' }}>HINTEN</span>
+          <span className="am-sptlab" style={{ left: 4, top: '50%', transform: 'translateY(-50%)' }}>L</span>
+          <span className="am-sptlab" style={{ right: 4, top: '50%', transform: 'translateY(-50%)' }}>R</span>
+          <div className="am-sptlis">
+            <i style={{ transform: `rotate(${listenerRot}deg)` }} />
+          </div>
+          {sources.map((s) => (
+            <div key={s.id} className="am-sptsrc" style={posStyle(s)}>
+              <SpatialSourceIcon
+                source={s}
+                selected={selectedId === s.id}
+                onSelect={setSelectedId}
+                onDragMove={moveFromPointer}
+                onDoubleClick={(id) => setRenamingId(id)}
+              />
+              {renamingId === s.id && (
+                <input
+                  autoFocus
+                  defaultValue={s.name}
+                  aria-label="Quelle umbenennen"
+                  onBlur={(e) => { patchSource(s.id, { name: e.target.value || s.name }); setRenamingId(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                  className="am-sptren"
                 />
-                {renamingId === s.id && (
-                  <input
-                    autoFocus
-                    defaultValue={s.name}
-                    onBlur={(e) => { patchSource(s.id, { name: e.target.value || s.name }); setRenamingId(null); }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                    className="absolute -top-6 left-1/2 -translate-x-1/2 w-24 bg-black border border-lime-500/50 rounded px-1 py-0.5 text-[9px] text-white z-10"
-                  />
-                )}
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          ))}
         </div>
+      </AmCard>
 
-        {/* Inspector */}
-        <div className="w-64 shrink-0 border-l border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-3 overflow-y-auto">
-          <h3 className="text-[10px] font-mono tracking-[0.25em] text-lime-500 uppercase">Inspector</h3>
-          {selected ? (
-            <>
-              <div>
-                <span className="text-[9px] font-mono text-neutral-500">NAME</span>
-                <input value={selected.name} onChange={(e) => patchSource(selected.id, { name: e.target.value })}
-                  className="w-full bg-black border border-neutral-800 rounded px-2 py-1 text-xs text-white mt-0.5" />
-              </div>
-              <div>
-                <span className="text-[9px] font-mono text-neutral-500">AZIMUT · {Math.round(selected.az)}°</span>
-                <input type="range" min={-180} max={180} value={selected.az}
-                  onChange={(e) => patchSource(selected.id, { az: Number(e.target.value) })}
-                  className="w-full accent-lime-500" />
-              </div>
-              <div>
-                <span className="text-[9px] font-mono text-neutral-500">DISTANZ · {selected.dist.toFixed(1)}</span>
-                <input type="range" min={0} max={4} step={0.1} value={selected.dist}
-                  onChange={(e) => patchSource(selected.id, { dist: Number(e.target.value) })}
-                  className="w-full accent-lime-500" />
-              </div>
-              <div>
-                <span className="text-[9px] font-mono text-neutral-500">GAIN · {selected.gain.toFixed(2)}</span>
-                <input type="range" min={0} max={1.5} step={0.01} value={selected.gain}
-                  onChange={(e) => patchSource(selected.id, { gain: Number(e.target.value) })}
-                  className="w-full accent-lime-500" />
-              </div>
-              <div className="flex gap-2">
-                <button type="button" onClick={() => patchSource(selected.id, { muted: !selected.muted })}
-                  className={`flex-1 py-1.5 rounded border text-[9px] font-bold tracking-widest cursor-pointer ${selected.muted ? 'bg-red-500/20 border-red-500/50 text-red-300' : 'border-neutral-700 text-neutral-400 hover:text-lime-300'}`}>
-                  {selected.muted ? 'MUTED' : 'MUTE'}
-                </button>
-                <button type="button" onClick={removeSelected}
-                  className="flex-1 py-1.5 rounded border border-red-500/40 text-red-400 text-[9px] font-bold tracking-widest hover:bg-red-500/10 cursor-pointer">
-                  ENTFERNEN
-                </button>
-              </div>
-              <p className="text-[9px] font-mono text-neutral-600 leading-relaxed">
-                Pfeiltasten ±1°, Shift ±5°, Ctrl ±15°. Doppelklick auf Quelle = Umbenennen.
-              </p>
-            </>
-          ) : (
-            <p className="text-[10px] font-mono text-neutral-600">Keine Quelle gewählt. Doppelklick in die Scene = neue Quelle.</p>
-          )}
-
-          {/* Diagnose-Overlay */}
-          <div className="mt-auto pt-2 border-t border-neutral-800">
-            <div className="flex items-center gap-1.5 text-[9px] font-mono text-neutral-500 mb-1">
-              <Gauge className="w-3 h-3" /> CPU SCHÄTZUNG
+      {/* Rechts: Objekt-Liste mit L/R · Höhe · Distanz · Gain */}
+      <AmCard title="Objekte" style={{ flex: 1, minWidth: 360 }}
+        right={(
+          <span className="am-sptrow">
+            <button type="button" className="am-tg" onClick={() => addSourceAt(0, 0.4)} disabled={lockedByOther} title="Neue Quelle vorne">+ QUELLE</button>
+            <button type="button" className="am-tg" onClick={removeSelected} disabled={selectedId == null} title="Gewählte Quelle entfernen">ENTFERNEN</button>
+          </span>
+        )}>
+        <div className="am-sptobj">
+          <div className="am-sptoh am-lbl"><span>Objekt</span><span>L / R</span><span>Höhe</span><span>Distanz</span><span>Gain</span><span /></div>
+          {sources.length === 0 && <span className="am-hint">Keine Quelle. Doppelklick in den Raum = neue Quelle.</span>}
+          {sources.map((s) => (
+            <div key={s.id} className={`am-sptor ${selectedId === s.id ? 'am-on' : ''}`} onClick={() => setSelectedId(s.id)}>
+              <span className="am-sptnm">
+                <i style={{ background: s.color ?? '#a78bfa' }} />
+                {selectedId === s.id ? (
+                  <input value={s.name} aria-label="Name der Quelle" onChange={(e) => patchSource(s.id, { name: e.target.value })} />
+                ) : <b>{s.name}</b>}
+              </span>
+              <span className="am-sptv">
+                <AmBar label={`${s.name} links/rechts`} color={s.color ?? '#a78bfa'} value={(s.az + 180) / 360} disabled={lockedByOther}
+                  onChange={(n) => patchSource(s.id, { az: Math.round(n * 360 - 180) })} />
+                <em>{Math.round(s.az)}°</em>
+              </span>
+              <span className="am-sptv">
+                <AmBar label={`${s.name} Höhe`} color={s.color ?? '#a78bfa'} value={(s.el + 90) / 180} disabled={lockedByOther}
+                  onChange={(n) => patchSource(s.id, { el: Math.round(n * 180 - 90) })} />
+                <em>{Math.round(s.el)}°</em>
+              </span>
+              <span className="am-sptv">
+                <AmBar label={`${s.name} Distanz`} color={s.color ?? '#a78bfa'} value={s.dist / 4} disabled={lockedByOther}
+                  onChange={(n) => patchSource(s.id, { dist: Math.round(n * 40) / 10 })} />
+                <em>{s.dist.toFixed(1)}</em>
+              </span>
+              <span className="am-sptv">
+                <AmBar label={`${s.name} Gain`} color={s.color ?? '#a78bfa'} value={s.gain / 1.5} disabled={lockedByOther}
+                  onChange={(n) => patchSource(s.id, { gain: Math.round(n * 150) / 100 })} />
+                <em>{s.gain.toFixed(2)}</em>
+              </span>
+              <AmToggle kind="m" on={s.muted} onClick={() => patchSource(s.id, { muted: !s.muted })} ariaLabel={`${s.name} stumm`} disabled={lockedByOther}>M</AmToggle>
             </div>
-            <div className="h-2 rounded bg-black border border-neutral-800 overflow-hidden">
-              <div className={`h-full ${metrics.cpuEstimate > 0.65 ? 'bg-red-500' : 'bg-lime-500'}`} style={{ width: `${Math.min(100, metrics.cpuEstimate * 100)}%` }} />
-            </div>
-            <div className="text-[9px] font-mono text-neutral-500 mt-1">
-              {Math.round(metrics.cpuEstimate * 100)}% · {metrics.activeSources} QUELLEN · {metrics.instances} INSTANZ
-            </div>
-            {metrics.cpuEstimate > 0.65 && (
-              <div className="text-[9px] font-mono text-amber-400 mt-1">CPU hoch — Qualität umstellen oder Quellen splitten.</div>
-            )}
-          </div>
+          ))}
         </div>
-      </div>
+      </AmCard>
 
-      {/* Bottom Bar / Quick Actions */}
-      <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-2 flex-wrap">
-        <button type="button" onClick={() => stageRef.current && (() => { const _r = stageRef.current.getBoundingClientRect(); addSourceAt(0, 0.4); })()}
-          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer">
-          <Plus className="w-3 h-3" /> QUELLE
-        </button>
-        <button type="button" onClick={removeSelected} disabled={selectedId == null}
-          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-red-300 disabled:opacity-40 cursor-pointer">
-          <Trash2 className="w-3 h-3" /> ENTFERNEN
-        </button>
-        <button type="button" onClick={snapshot}
-          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
-          <Camera className="w-3 h-3" /> SNAPSHOT
-        </button>
-        <button type="button" onClick={undo}
-          className="flex items-center gap-1 px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
-          <RotateCcw className="w-3 h-3" /> UNDO
-        </button>
-        <select defaultValue="" onChange={(e) => e.target.value && loadPreset(Number(e.target.value))}
-          className="bg-black text-neutral-400 text-[9px] p-1 rounded border border-neutral-700">
-          <option value="" disabled>Preset…</option>
-          {SPATIAL_SCENE_PRESETS.map((p, i) => <option key={i} value={i}>{i === 0 ? 'Default' : 'Lead+Pad'}</option>)}
-        </select>
-        <button type="button" onClick={exportScene}
-          className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 cursor-pointer">
-          JSON KOPIEREN
-        </button>
-      </div>
-
-      {/* Setup-Referenzen: 12.2 / 18.2 / 24.2 (Bilder aus public/) */}
-      <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-2 overflow-x-auto">
-        <span className="text-[8px] font-mono tracking-widest text-neutral-500">SETUPS</span>
-        {[
-          { src: '/spatialMONK/12-2-setup.png', label: '12.2' },
-          { src: '/spatialMONK/18-2-setup.png', label: '18.2' },
-          { src: '/spatialMONK/24-2-setup.png', label: '24.2' },
-        ].map((s) => (
-          <img key={s.src} src={s.src} alt={s.label} title={`${s.label} Setup (Referenz)`}
-            className="h-12 rounded border border-neutral-800 hover:border-lime-500/60 transition-colors cursor-zoom-in object-cover" />
-        ))}
-        <span className="text-[8px] font-mono text-neutral-600">Referenzbilder · Kanalrechnung in docs/SPATIAL_BRIDGE_SPEC.md</span>
-      </div>
-
-      {/* Takeover-Leiste: vorhandene Live-Streams + Stems über das einheitliche
-          Action-Menu auf freie Spatial-Kanäle übernehmen (kein 3D, kein neues
-          Engine-Feature – nutzt routeChannelToSpatialInput + Master-Bus-Tap). */}
-      <div className="px-4 py-2 border-t border-neutral-800 bg-black/20 flex items-center gap-1.5 flex-wrap">
-        <Radio className="w-3 h-3 text-lime-400" />
-        <span className="text-[8px] font-mono tracking-[0.2em] text-lime-500">ÜBERNEHMEN</span>
-        <button type="button"
-          onClick={(e) => openAudioActionMenu(masterStreamContent(), e.currentTarget)}
-          className="px-2 py-1 rounded border border-lime-500/40 bg-lime-500/10 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/20 cursor-pointer"
-          title="Master-Player-Stream auf einen freien Spatial-Kanal übernehmen"
-        >
-          MASTER
-        </button>
-        {ALL_TRACKS.map((t) => (
-          <button type="button"
-            key={t}
-            onClick={(e) => openAudioActionMenu(mixerChannelContent(t), e.currentTarget)}
-            className="px-1.5 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 hover:border-lime-500/40 cursor-pointer"
-            title={`mixerMONK ${t.toUpperCase().replace('CHANNEL', 'K')} auf freien Spatial-Kanal übernehmen`}
-          >
-            {t.replace('channel', 'K')}
-          </button>
-        ))}
-        <select
-          value={stemPick}
-          onChange={(e) => setStemPick(e.target.value)}
-          className="bg-black text-neutral-400 text-[9px] p-1 rounded border border-neutral-700 max-w-[140px]"
-          title="Vorhandenen Stem wählen (aus stemMONK/Library)"
-        >
-          <option value="">Stem…</option>
-          {stemSamples.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <button type="button"
-          disabled={!stemPick}
-          onClick={(e) => {
-            const stem = stemSamples.find((s) => s.id === stemPick);
-            if (stem) openAudioActionMenu(sampleToContent(stem, 'stem'), e.currentTarget);
-          }}
-          className="px-2 py-1 rounded border border-neutral-700 text-neutral-400 text-[9px] font-bold tracking-widest hover:text-lime-300 disabled:opacity-40 cursor-pointer"
-          title="Einzelnen Stem über das Action-Menu übernehmen"
-        >
-          STEM
-        </button>
-        <button type="button"
-          onClick={takeAllStems}
-          disabled={stemSamples.length === 0}
-          className="px-2 py-1 rounded border border-lime-500/40 text-lime-300 text-[9px] font-bold tracking-widest hover:bg-lime-500/10 disabled:opacity-40 cursor-pointer"
-          title="Alle vorhandenen Stems auf je einen eigenen freien Spatial-Kanal legen"
-        >
-          ALLE STEMS
-        </button>
-        {status && <span className="text-[9px] font-mono text-lime-400">{status}</span>}
-      </div>
+      {/* Kleine 3D-Ansicht + Übernahme */}
+      <AmCard title="3D · Übernehmen" style={{ width: 236 }}>
+        <Spatial3D sources={sources} selectedId={selectedId} />
+        <div className="am-sptrow am-spttk">
+          <button type="button" className="am-tg am-on"
+            onClick={(e) => openAudioActionMenu(masterStreamContent(), e.currentTarget)}
+            title="Master-Player-Stream auf einen freien Spatial-Kanal übernehmen">MASTER</button>
+          {ALL_TRACKS.map((t) => (
+            <button type="button" key={t} className="am-tg"
+              onClick={(e) => openAudioActionMenu(mixerChannelContent(t), e.currentTarget)}
+              title={`mixerMONK ${t.toUpperCase().replace('CHANNEL', 'K')} auf freien Spatial-Kanal übernehmen`}
+            >{t.replace('channel', 'K')}</button>
+          ))}
+        </div>
+        <div className="am-sptrow">
+          <select className="am-sel" value={stemPick} onChange={(e) => setStemPick(e.target.value)} aria-label="Stem wählen" title="Vorhandenen Stem wählen (aus stemMONK/Library)">
+            <option value="">Stem…</option>
+            {stemSamples.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <button type="button" className="am-tg" disabled={!stemPick}
+            onClick={(e) => {
+              const stem = stemSamples.find((s) => s.id === stemPick);
+              if (stem) openAudioActionMenu(sampleToContent(stem, 'stem'), e.currentTarget);
+            }}
+            title="Einzelnen Stem über das Action-Menu übernehmen">STEM</button>
+          <button type="button" className="am-tg" onClick={takeAllStems} disabled={stemSamples.length === 0}
+            title="Alle vorhandenen Stems auf je einen eigenen freien Spatial-Kanal legen">ALLE</button>
+        </div>
+        {status && <span className="am-hint am-mono">{status}</span>}
+      </AmCard>
     </div>
   );
 });

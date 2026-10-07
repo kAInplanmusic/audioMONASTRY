@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Grid3X3 } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
+import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import { readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { random } from '../utils/random';
 import type { AudioSample } from '../data/samples';
@@ -182,179 +182,113 @@ export const McpTerminal = React.memo(function McpTerminal() {
 
   useEffect(() => () => stopNoteRepeat(), []);
 
+  const step = currentStep % seqCount;
+  const selPattern = patterns[key(selPad)] ?? [];
+  const selColor = PAD_COLORS[selPad] ?? PAD_COLORS[0];
+
   return (
-    <div className={`w-full h-full flex flex-col bg-[#0d0d0f] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-sans shadow-2xl relative overflow-hidden ${lockedByOther ? 'opacity-50 grayscale' : ''}`}>
-      <div className="px-5 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="mcp" placeholder="MOA: z. B. 'Pattern Four-on-the-Floor'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-
-      <div className="flex items-center justify-between px-5 py-3 bg-linear-to-r from-amber-900/20 to-[#0d0d0f] border-b border-amber-900/30">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/50 shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-            <Grid3X3 className="w-4 h-4 text-amber-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-black tracking-widest uppercase">syntisamplerMONK · MPC</h2>
-            <p className="text-[9px] font-mono text-amber-400 tracking-widest">MPC PADS · {seqCount} STEPS · BANK {bank}</p>
-          </div>
-          <img src="/uidesign/uipadsequenzer.jpg" alt="Pad-Sequenzer-Referenz" title="Pad-Sequenzer-Referenz (uipadsequenzer.jpg)"
-            className="h-10 rounded border border-neutral-800 hover:border-amber-500/60 transition-colors object-cover" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border ${currentStep >= 0 ? 'text-amber-300 border-amber-500/40 bg-amber-500/10' : 'text-neutral-500 border-neutral-700'}`}>
-            STEP {currentStep + 1}/{seqCount}
-          </span>
-          <select value={state} onChange={(e) => updateState(e.target.value as any)} disabled={lockedByOther} className="bg-black text-white text-[10px] p-1 rounded border border-neutral-700">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="flex-1 p-4 grid grid-cols-2 gap-4 overflow-y-auto">
-        {/* MPC-Pads */}
-        <div className="bg-[#141416] rounded-lg border border-neutral-800 p-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[9px] font-mono tracking-[0.25em] text-amber-500">PADS · SAMPLE JE PAD</span>
-            <button
-              type="button"
-              onClick={() => setNoteRepeat(!noteRepeat)}
-              disabled={lockedByOther}
-              className={`text-[8px] font-bold px-2 py-0.5 rounded border ${noteRepeat ? 'bg-amber-500 text-black border-amber-300' : 'border-neutral-700 text-neutral-500'}`}
-            >
-              NOTE REPEAT {noteRepeat ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          <div className="grid grid-cols-4 gap-2 flex-1 min-h-[120px]">
-            {PAD_COLORS.map((color, i) => {
-              const sample = padSamples[i];
-              const selected = selPad === i;
-              return (
-                <button
-                  type="button"
-                  key={i}
-                  onPointerDown={(e) => {
-                    if (lockedByOther) return;
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const velocity = Math.max(0.2, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
-                    startNoteRepeat(i, velocity);
-                  }}
-                  onPointerUp={stopNoteRepeat}
-                  onPointerLeave={stopNoteRepeat}
-                  onClick={(e) => {
-                    // Touch-Fallback: armiertes Sample hat Vorrang vor Trigger.
-                    if (pendingSample && !lockedByOther) {
-                      e.preventDefault();
-                      setPadSamples((prev) => ({ ...prev, [i]: pendingSample }));
-                      setPendingSample(null);
-                      setSelPad(i);
-                      return;
-                    }
-                  }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-                  onDrop={(e) => {
+    <div className={`am-rackrow ${lockedByOther ? 'am-c-locked' : ''}`}>
+      <MoaAssistant pluginId="mcp" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+      {/* MPC-Pads: Sample je Pad (DnD/Touch-Armierung), Velocity aus der Tipp-Höhe */}
+      <AmCard title={`MPC-Pads · Bank ${bank}`} style={{ width: 236 }}
+        right={(
+          <AmToggle on={noteRepeat} kind="m" disabled={lockedByOther} onClick={() => setNoteRepeat(!noteRepeat)} title="Note Repeat beim Halten">
+            REPEAT
+          </AmToggle>
+        )}>
+        <div className="am-c-pads">
+          {PAD_COLORS.map((color, i) => {
+            const sample = padSamples[i];
+            const selected = selPad === i;
+            return (
+              <button
+                type="button"
+                key={i}
+                aria-label={`Pad ${i + 1}${sample ? `: ${sample.name}` : ''}`}
+                title={sample ? sample.name : `Pad ${i + 1} (leer) – Sample hierher ziehen`}
+                onPointerDown={(e) => {
+                  if (lockedByOther) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const velocity = Math.max(0.2, Math.min(1, 1 - (e.clientY - rect.top) / rect.height));
+                  startNoteRepeat(i, velocity);
+                }}
+                onPointerUp={stopNoteRepeat}
+                onPointerLeave={stopNoteRepeat}
+                onClick={(e) => {
+                  // Touch-Fallback: armiertes Sample hat Vorrang vor Trigger.
+                  if (pendingSample && !lockedByOther) {
                     e.preventDefault();
-                    if (lockedByOther) return;
-                    try {
-                      const sample = JSON.parse(e.dataTransfer.getData('application/json')) as AudioSample;
-                      setPadSamples((prev) => ({ ...prev, [i]: sample }));
-                      if (sample.url) void audioEngine.loadTrackSample('channel5', sample.url).catch(() => {});
-                      setSelPad(i);
-                    } catch { /* kein gültiges Sample */ }
-                  }}
-                  disabled={lockedByOther}
-                  className={`aspect-square rounded-[4px] border flex flex-col items-center justify-center gap-1 transition-all duration-75 active:scale-95 cursor-pointer disabled:opacity-40 ${
-                    selected ? 'ring-2 ring-white/80' : ''
-                  }`}
-                  style={{
-                    borderColor: flashPad === i ? '#fff' : sample ? color : '#26262b',
-                    background: flashPad === i ? `${color}cc` : sample ? `${color}33` : `${color}22`,
-                    boxShadow: flashPad === i ? `0 0 14px -2px ${color}` : 'none',
-                  }}
-                >
-                  <span className="text-[7px] font-mono text-neutral-500">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
-                  <span className="text-[7px] font-black tracking-widest truncate max-w-[90%] text-neutral-200">
-                    {sample ? sample.name.slice(0, 8) : 'PAD'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    setPadSamples((prev) => ({ ...prev, [i]: pendingSample }));
+                    setPendingSample(null);
+                    setSelPad(i);
+                    return;
+                  }
+                }}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (lockedByOther) return;
+                  try {
+                    const sample = JSON.parse(e.dataTransfer.getData('application/json')) as AudioSample;
+                    setPadSamples((prev) => ({ ...prev, [i]: sample }));
+                    if (sample.url) void audioEngine.loadTrackSample('channel5', sample.url).catch(() => {});
+                    setSelPad(i);
+                  } catch { /* kein gültiges Sample */ }
+                }}
+                disabled={lockedByOther}
+                className={`am-pad ${sample ? '' : 'am-c-empty'} ${selected ? 'am-c-sel' : ''} ${flashPad === i ? 'am-hit' : ''}`}
+                style={{ ['--pc' as string]: color }}
+              >
+                <span>{sample ? sample.name.slice(0, 8) : String(i + 1).padStart(2, '0')}</span>
+              </button>
+            );
+          })}
         </div>
+      </AmCard>
 
-        {/* Step-Sequencer */}
-        <div className="bg-[#141416] rounded-lg border border-neutral-800 p-3 flex flex-col gap-2">
-          <div className="flex items-center justify-between flex-wrap gap-1">
-            <span className="text-[9px] font-mono tracking-[0.25em] text-amber-500">STEP SEQ · PAD {selPad + 1}</span>
-            <span className="text-[8px] font-mono text-neutral-600">{(patterns[key(selPad)] ?? []).filter(Boolean).length}/{seqCount} STEPS</span>
-          </div>
-          <div className="grid grid-cols-8 gap-1.5 flex-1 content-start">
-            {[...Array(seqCount)].map((_, i) => {
-              const isOn = patterns[key(selPad)]?.[i] ?? false;
-              return (
+      {/* Step-Sequencer des gewählten Pads */}
+      <AmCard title={`Step-Sequenzer · Pad ${selPad + 1}`} style={{ flex: 1, minWidth: 440 }}
+        right={<span className="am-c-stat"><span data-live-value="step">STEP {step + 1}/{seqCount}</span> · {selPattern.filter(Boolean).length} aktiv</span>}>
+        <div className="am-c-row">
+          <AmSeg<Bank> label="Bank" value={bank} onChange={setBank} disabled={lockedByOther} options={BANKS.map((b) => [b, b] as const)} />
+          <AmSeg label="Steps" value={String(seqCount) as '16' | '32'} disabled={lockedByOther}
+            onChange={(v) => setSeqCount(v === '32' ? 32 : 16)} options={[['16', '16'], ['32', '32']]} />
+          {(['four', 'break', 'random'] as const).map((p) => (
+            <button type="button" key={p} className="am-tg" onClick={() => applyPreset(p)} disabled={lockedByOther}>
+              {p.toUpperCase()}
+            </button>
+          ))}
+        </div>
+        <div className="am-c-seq am-c-st" style={{ ['--n' as string]: Math.min(seqCount, 16) }} role="group" aria-label={`Steps Pad ${selPad + 1}`}>
+          {[...Array(seqCount)].map((_, i) => {
+            const isOn = selPattern[i] ?? false;
+            return (
+              <React.Fragment key={i}>
+                {i % 16 === 0 && <span className="am-c-trk am-on" style={{ ['--c' as string]: selColor }}>PAD {selPad + 1}{seqCount === 32 ? (i === 0 ? ' ·1' : ' ·2') : ''}</span>}
                 <button
                   type="button"
-                  key={i}
+                  aria-label={`Step ${i + 1} ${isOn ? 'aus' : 'an'}`}
+                  aria-pressed={isOn}
                   onClick={() => toggleStep(i)}
                   disabled={lockedByOther}
-                  className={`h-8 rounded-[3px] border transition-all cursor-pointer disabled:opacity-40 ${isOn ? 'bg-amber-500 border-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.6)]' : 'bg-[#0d0d0f] border-neutral-800 hover:border-amber-600/60'} ${currentStep % seqCount === i ? 'ring-2 ring-white/80' : ''}`}
+                  className={`am-stp ${isOn ? 'am-v2' : ''} ${i % 4 === 0 ? 'am-q' : ''} ${step === i ? 'am-ph' : ''}`}
+                  style={{ ['--c' as string]: selColor }}
                 >
-                  <span className="text-[7px] font-mono text-black/80">{i + 1}</span>
+                  {i + 1}
                 </button>
-              );
-            })}
-          </div>
-          <div className="flex gap-1.5 flex-wrap items-center">
-            {BANKS.map((b) => (
-              <button
-                type="button"
-                key={b}
-                onClick={() => setBank(b)}
-                disabled={lockedByOther}
-                className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${bank === b ? 'bg-amber-500 text-black border-amber-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}
-              >
-                {b}
-              </button>
-            ))}
-            {([16, 32] as const).map((n) => (
-              <button
-                type="button"
-                key={n}
-                onClick={() => setSeqCount(n)}
-                disabled={lockedByOther}
-                className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${seqCount === n ? 'bg-amber-500 text-black border-amber-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}
-              >
-                {n}
-              </button>
-            ))}
-            {(['four', 'break', 'random'] as const).map((p) => (
-              <button
-                type="button"
-                key={p}
-                onClick={() => applyPreset(p)}
-                disabled={lockedByOther}
-                className="px-2 py-1 rounded-[3px] bg-[#111] border border-neutral-800 text-[8px] font-bold tracking-widest text-neutral-400 hover:text-amber-300 hover:border-amber-600/60 uppercase cursor-pointer disabled:opacity-40"
-              >
-                {p}
-              </button>
-            ))}
-            <div className="flex items-center gap-1">
-              <span className="text-[8px] font-mono text-neutral-600">SWING</span>
-              <input
-                type="range" min={0} max={100} value={Math.round(swing * 100)}
-                onChange={(e) => setSwing(Number(e.target.value) / 100)}
-                className="w-16 accent-amber-500"
-              />
-            </div>
-          </div>
+              </React.Fragment>
+            );
+          })}
         </div>
-      </div>
+      </AmCard>
 
-      <p className="px-5 pb-3 text-[9px] font-mono text-neutral-600 leading-relaxed">
-        NEW-MONK-3: Sample je Pad (DnD/Touch-Armierung), 16-Level-Velocity, Note Repeat, Bank A–D, 16/32 Steps, Swing → MAIN via mixerMONK (channel5).
-      </p>
+      <AmCard title="Groove" style={{ width: 120 }}>
+        <div className="am-knobs">
+          <AmKnob value={swing} min={0} max={1} def={0} unit="pct" label="Swing" title="Swing (systemweit)" disabled={lockedByOther}
+            onChange={(v) => setSwing(Math.round(v * 100) / 100)} />
+        </div>
+        <span className="am-hint" style={{ fontSize: 10 }}>→ MAIN · CH5</span>
+      </AmCard>
     </div>
   );
 });

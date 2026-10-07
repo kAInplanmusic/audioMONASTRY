@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Waves } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { WasmPluginHost } from '../audio/wasm/WasmPluginHost';
 import { MoaAssistant } from './MoaAssistant';
+import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import { audioEngine } from '../utils/audioEngine';
 import { DX7_REFERENCE_PATCHES } from '../core/instrument/dx7Presets';
 import type { TrackType } from '../types';
@@ -29,7 +29,8 @@ const TARGET_CHANNELS: TrackType[] = ['channel1', 'channel2', 'channel3', 'chann
  * die Preview-Noten sind direkt hörbar. Der WASM-Host bleibt optionaler Zusatz.
  */
 export const SynthesizerTerminal: React.FC = React.memo(() => {
-  const { lockStatus } = usePluginState('syntisampler', 'PRO');
+  // Plugin-Stand/Lock registrieren (Sperre zeigt der Streifenkopf).
+  usePluginState('syntisampler', 'PRO');
   const hostRef = React.useRef(new WasmPluginHost());
   const [isLoaded, setIsLoaded] = useState(false);
   // Beständige Plugins: Einstiegsstand = letzter Stand (syntisampler › synth).
@@ -157,8 +158,7 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
     }
   };
 
-  const handleEngineChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
+  const handleEngineChange = (value: string) => {
     if (validateAndSetParameter('engine', value)) {
       setEngine(value);
     }
@@ -174,133 +174,149 @@ export const SynthesizerTerminal: React.FC = React.memo(() => {
     }
   };
 
+  const stepIdx = curStep % 16;
+  const chIdx = TARGET_CHANNELS.indexOf(targetChannel) + 1;
+
   return (
-    <div className={`p-6 bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-mono shadow-2xl`}>
-      <div className="mb-4 -mt-2">
-        <MoaAssistant pluginId="synthesizer" placeholder="MOA: z. B. 'Spiele Note 440 Hz'" />
-      </div>
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-sm font-black uppercase tracking-widest text-neutral-400 flex items-center gap-2">
-            <Waves className="w-4 h-4 text-violet-400" /> Synth MONK
-        </h3>
-        <select value={engine} onChange={handleEngineChange} className="bg-black text-white text-xs p-1 rounded">
-            <option value="SUBTRACTIVE">SUBTRACTIVE</option>
-            <option value="FM">FM</option>
-            <option value="WAVETABLE">WAVETABLE</option>
-        </select>
-      </div>
-
-      {!isLoaded && <div className="text-xs text-yellow-500 mb-4">WASM optional – Worklet-Synth aktiv</div>}
-
-      <div className="grid grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <label className="text-[10px] text-neutral-500" htmlFor="synth-filter-cutoff">FILTER CUTOFF</label>
-            <input id="synth-filter-cutoff" type="range" min="20" max="20000" value={cutoff} onChange={e => handleCutoffChange(Number(e.target.value))} className="w-full accent-violet-500" />
-            <div className="text-xs">{cutoff} Hz</div>
-          </div>
-          <div className="space-y-4">
-            <label className="text-[10px] text-neutral-500" htmlFor="synth-adsr-decay">ADSR DECAY</label>
-            <input id="synth-adsr-decay" type="range" min="0" max="1" step="0.01" value={decay} onChange={e => handleDecayChange(Number(e.target.value))} className="w-full accent-violet-500" />
-          </div>
-      </div>
-
-      {/* P0-5: Routing-Ziel + direkt hörbares Preview-Keyboard */}
-      <div className="mt-6 pt-4 border-t border-neutral-800">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Routing-Ziel</span>
-          <select
-            value={targetChannel}
-            onChange={(e) => setTargetChannel(e.target.value as TrackType)}
-            className="bg-black text-white text-xs p-1 rounded"
-          >
+    <div className="am-rackrow">
+      <MoaAssistant pluginId="synthesizer" />
+      <AmCard title="Klang" style={{ width: 214 }}
+        right={<span className="am-vb" title={isLoaded ? 'WASM-Synth geladen' : 'WASM optional – Worklet-Synth aktiv'}>{isLoaded ? 'WASM' : 'WORKLET'}</span>}>
+        <AmSeg label="Synth-Engine" value={engine} onChange={handleEngineChange}
+          options={[['SUBTRACTIVE', 'SUB'], ['FM', 'FM'], ['WAVETABLE', 'WAVE']]} />
+        <div className="am-c-row">
+          <span className="am-lbl">Ziel</span>
+          <select className="am-sel am-c-grow" aria-label="Routing-Ziel" value={targetChannel}
+            onChange={(e) => setTargetChannel(e.target.value as TrackType)}>
             {TARGET_CHANNELS.map((ch, i) => <option key={ch} value={ch}>CH{i + 1}</option>)}
           </select>
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="am-c-row" role="group" aria-label="Vorhören">
           {PREVIEW_NOTES.map((note) => (
-            <button
-              key={note.label}
-              type="button"
-              onClick={() => previewNote(note.frequency)}
-              className="px-2 py-3 rounded-lg border border-violet-500/40 bg-violet-500/10 text-violet-200 text-xs font-black tracking-widest hover:bg-violet-500/25 active:scale-95 transition-all cursor-pointer"
-            >
+            <button key={note.label} type="button" className="am-tg am-c-grow" onClick={() => previewNote(note.frequency)}
+              title={`Note ${note.label} auf CH${chIdx} vorhören`}>
               {note.label}
             </button>
           ))}
         </div>
+      </AmCard>
 
-        {/* NEW-MONK-4: 16-Step-Notensequencer */}
-        <div className="mt-4">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] text-neutral-500 uppercase tracking-widest">Step-Seq</span>
-            <span className="text-[9px] font-mono text-neutral-600">{curStep + 1}/16</span>
-            <input type="range" min={0} max={12} value={seqSemi}
-              onChange={(e) => setSeqSemi(Number(e.target.value))}
-              className="w-20 accent-violet-500" />
-            <span className="text-[9px] font-mono text-violet-300">+{seqSemi} HT</span>
-          </div>
-          <div className="grid grid-cols-16 gap-1">
-            {[...Array(16)].map((_, i) => {
-              const on = seq[i] > 0;
+      <AmCard title="Filter · Hüllkurve" style={{ flex: 1, minWidth: 250 }}>
+        <div className="am-chainmini" aria-label="Signalweg">
+          {[engine === 'SUBTRACTIVE' ? 'OSC SUB' : `OSC ${engine === 'FM' ? 'FM' : 'WAVE'}`, 'FILTER', 'DECAY', `CH${chIdx}`].map((n, i) => (
+            <React.Fragment key={n}>{i > 0 && <span>→</span>}<b>{n}</b></React.Fragment>
+          ))}
+        </div>
+        <div className="am-knobs" style={{ justifyContent: 'flex-start' }}>
+          <AmKnob value={cutoff} min={20} max={20000} log def={DEFAULT_SYNTH_PARAMS.cutoff} unit="hz" label="Cutoff" title="Filter-Cutoff"
+            onChange={(v) => handleCutoffChange(Math.round(v))} />
+          <AmKnob value={decay} min={0} max={1} def={DEFAULT_SYNTH_PARAMS.decay} unit="pct" label="Decay" title="Hüllkurve Decay"
+            onChange={(v) => handleDecayChange(Math.round(v * 100) / 100)} />
+        </div>
+        <div className="am-c-row">
+          <span className="am-lbl">DX7</span>
+          <select className="am-sel am-c-grow" aria-label="6-Op-FM-Patch (DX7)" value={fm6PatchIdx} onChange={(e) => loadFm6Patch(Number(e.target.value))}>
+            {DX7_REFERENCE_PATCHES.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}
+          </select>
+          <button type="button" className="am-tg" title="DX7-Note C4 spielen" onClick={() => audioEngine.fm6NoteOn(261.63, 0.8)}>▶</button>
+        </div>
+      </AmCard>
+
+      <AmCard title="XY · Cutoff / Decay" style={{ width: 180 }}>
+        <SynthXY cutoff={cutoff} decay={decay}
+          onChange={(c, d) => { handleCutoffChange(c); handleDecayChange(d); }} />
+      </AmCard>
+
+      <AmCard title="Granular · Makros" style={{ width: 236 }}>
+        <div className="am-knobs">
+          <AmKnob size="s" value={grainSize} min={64} max={4096} def={480} unit="int" label="Grain" title="Grain-Größe (Samples)"
+            onChange={(v) => { const n = Math.round(v / 64) * 64; setGrainSize(n); audioEngine.setGranularParams({ grainSize: n }); }} />
+          <AmKnob size="s" value={grainDensity} min={1} max={100} def={20} unit="int" label="Density" title="Grain-Dichte"
+            onChange={(v) => { const n = Math.round(v); setGrainDensity(n); audioEngine.setGranularParams({ density: n }); }} />
+          <AmKnob size="s" value={grainPitch} min={0.25} max={4} def={1} display={grainPitch.toFixed(2)} label="Pitch" title="Grain-Tonhöhe"
+            onChange={(v) => { const n = Math.round(v * 100) / 100; setGrainPitch(n); audioEngine.setGranularParams({ pitch: n }); }} />
+        </div>
+        <div className="am-c-row">
+          <AmToggle on={grainFreeze} title="Granular einfrieren"
+            onClick={() => { const n = !grainFreeze; setGrainFreeze(n); audioEngine.setGranularParams({ freeze: n }); }}>
+            FREEZE
+          </AmToggle>
+          <button type="button" className="am-tg am-c-grow" onClick={loadGranularPreview} title="Granular-Source laden">▶ SOURCE</button>
+        </div>
+      </AmCard>
+
+      <AmCard title="Step-Sequenzer · 16" style={{ flexBasis: '100%' }}
+        right={<span className="am-c-stat" data-live-value="step">STEP {stepIdx + 1}/16</span>}>
+        <div className="am-c-row" style={{ flexWrap: 'nowrap', gap: 10 }}>
+          <AmKnob size="xs" value={seqSemi} min={0} max={12} def={0} display={`+${seqSemi}`} label="HT" title="Transponieren neuer Steps (Halbtöne)"
+            onChange={(v) => setSeqSemi(Math.round(v))} />
+          <div className="am-c-seq am-c-st am-c-grow" role="group" aria-label="Synth-Steps">
+            <span className="am-c-trk am-on">SYNTH</span>
+            {seq.map((f, i) => {
+              const on = f > 0;
               return (
                 <button type="button" key={i}
+                  aria-label={`Step ${i + 1} ${on ? 'aus' : 'an'}`} aria-pressed={on}
+                  className={`am-stp ${on ? 'am-v2' : ''} ${i % 4 === 0 ? 'am-q' : ''} ${stepIdx === i ? 'am-ph' : ''}`}
                   onClick={() => setSeq((prev) => {
                     const next = [...prev];
                     next[i] = next[i] > 0 ? 0 : 261.63 * Math.pow(2, seqSemi / 12);
                     return next;
-                  })}
-                  className={`h-7 rounded-[3px] border transition-all cursor-pointer ${on ? 'bg-violet-500 border-violet-300' : 'bg-black/60 border-neutral-800 hover:border-violet-500/50'} ${curStep % 16 === i ? 'ring-1 ring-white/70' : ''}`} />
+                  })}>
+                  {i + 1}
+                </button>
               );
             })}
           </div>
         </div>
-
-        {/* 6-Op-FM (DX7) + Granular – Worklet-Preview */}
-        <div className="mt-4 pt-4 border-t border-neutral-800">
-          <div className="text-[10px] text-neutral-500 uppercase tracking-widest mb-2">6-Op-FM / DX7</div>
-          <div className="flex items-center gap-2">
-            <select
-              value={fm6PatchIdx}
-              onChange={(e) => loadFm6Patch(Number(e.target.value))}
-              className="bg-black text-white text-xs p-1 rounded flex-1"
-            >
-              {DX7_REFERENCE_PATCHES.map((p, i) => <option key={p.name} value={i}>{p.name}</option>)}
-            </select>
-            <button type="button" onClick={() => audioEngine.fm6NoteOn(261.63, 0.8)}
-              className="px-2 py-1 rounded border border-violet-500/40 text-violet-200 text-xs hover:bg-violet-500/25 cursor-pointer">
-              ▶ Note
-            </button>
-          </div>
-
-          <div className="text-[10px] text-neutral-500 uppercase tracking-widest mt-3 mb-2">Granular</div>
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
-            <label className="text-neutral-500">Grain {grainSize}
-              <input type="range" min={64} max={4096} step={64} value={grainSize}
-                onChange={(e) => { setGrainSize(Number(e.target.value)); audioEngine.setGranularParams({ grainSize: Number(e.target.value) }); }}
-                className="w-full accent-violet-500" />
-            </label>
-            <label className="text-neutral-500">Density {grainDensity}
-              <input type="range" min={1} max={100} value={grainDensity}
-                onChange={(e) => { setGrainDensity(Number(e.target.value)); audioEngine.setGranularParams({ density: Number(e.target.value) }); }}
-                className="w-full accent-violet-500" />
-            </label>
-            <label className="text-neutral-500">Pitch {grainPitch.toFixed(2)}
-              <input type="range" min={25} max={400} value={Math.round(grainPitch * 100)}
-                onChange={(e) => { const v = Number(e.target.value) / 100; setGrainPitch(v); audioEngine.setGranularParams({ pitch: v }); }}
-                className="w-full accent-violet-500" />
-            </label>
-            <label className="text-neutral-500 flex items-center gap-1 mt-1">
-              <input type="checkbox" checked={grainFreeze}
-                onChange={(e) => { setGrainFreeze(e.target.checked); audioEngine.setGranularParams({ freeze: e.target.checked }); }} />
-              Freeze
-            </label>
-          </div>
-          <button type="button" onClick={loadGranularPreview}
-            className="mt-2 px-2 py-1 rounded border border-violet-500/40 text-violet-200 text-xs hover:bg-violet-500/25 cursor-pointer">
-            ▶ Granular-Source laden
-          </button>
-        </div>
-      </div>
+      </AmCard>
     </div>
   );
 });
+
+/** XY-Feld: X = Cutoff (logarithmisch 20 Hz–20 kHz), Y = Decay (oben = lang). */
+function SynthXY({ cutoff, decay, onChange }: { cutoff: number; decay: number; onChange: (cutoff: number, decay: number) => void }) {
+  const drag = React.useRef(false);
+  const LOG = Math.log(20000 / 20);
+  const x = Math.min(1, Math.max(0, Math.log(cutoff / 20) / LOG));
+  const y = Math.min(1, Math.max(0, decay));
+  const set = (nx: number, ny: number) => {
+    const cx = Math.min(1, Math.max(0, nx));
+    const cy = Math.min(1, Math.max(0, ny));
+    onChange(Math.round(20 * Math.exp(cx * LOG)), Math.round(cy * 100) / 100);
+  };
+  const at = (el: HTMLElement, clientX: number, clientY: number) => {
+    const r = el.getBoundingClientRect();
+    set((clientX - r.left) / r.width, 1 - (clientY - r.top) / r.height);
+  };
+  return (
+    <div
+      className="am-c-xy"
+      role="group"
+      tabIndex={0}
+      aria-label={`XY-Feld: Cutoff ${Math.round(cutoff)} Hz, Decay ${Math.round(decay * 100)} %. Pfeiltasten: links/rechts Cutoff, hoch/runter Decay`}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        e.currentTarget.focus({ preventScroll: true });
+        drag.current = true;
+        at(e.currentTarget, e.clientX, e.clientY);
+      }}
+      onPointerMove={(e) => { if (drag.current) at(e.currentTarget, e.clientX, e.clientY); }}
+      onPointerUp={() => { drag.current = false; }}
+      onPointerCancel={() => { drag.current = false; }}
+      onKeyDown={(e) => {
+        const d = e.shiftKey ? 0.01 : 0.05;
+        const map: Record<string, [number, number]> = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, d], ArrowDown: [0, -d] };
+        const m = map[e.key];
+        if (!m) return;
+        e.preventDefault();
+        set(x + m[0], y + m[1]);
+      }}
+    >
+      <span style={{ left: 5, bottom: 3 }}>CUTOFF →</span>
+      <span style={{ left: 5, top: 3 }}>DECAY ↑</span>
+      <b style={{ left: `${x * 100}%`, top: `${(1 - y) * 100}%` }} />
+    </div>
+  );
+}

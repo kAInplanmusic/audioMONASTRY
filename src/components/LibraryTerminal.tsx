@@ -1,5 +1,11 @@
+/**
+ * biblioMONK · Rack-Modul (Vorlagen public/uidesign/uibiblioMONK.jpg und
+ * uiübersichtapp.jpg, Zeile 08): links Suche + Ordner, Mitte Liste als Tabelle,
+ * rechts Vorschau des gewählten Eintrags (Hüllkurve + Preset-Werte + Aktionen),
+ * ganz rechts Upload / USB-Import / Cloud – alles in einer Zeile.
+ */
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Database, Download, Clipboard, GripVertical, ChevronLeft, ChevronRight, Cloud, CloudOff, Upload, Heart, Folder, FolderOpen, Search } from 'lucide-react';
+import { Heart } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
 import { SORTED_MUSIC_LIBRARY, MusicTrack } from '../data/musicLibrary';
@@ -7,6 +13,7 @@ import { fetchCloudMusic, CloudMusicRow, pushMusicToCloud } from '../lib/supabas
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
 import { analyzeMusic } from '../utils/audioAnalyzer';
+import { AmCard, AmKnob } from './am/amUi';
 import { SemanticSampleSearch } from './SemanticSampleSearch';
 import { Scratchpad } from './Scratchpad';
 import { CloudStatusBadge } from './CloudStatusBadge';
@@ -23,6 +30,65 @@ type FolderId = 'all' | 'favorites' | 'bass' | 'mids' | 'highs' | 'music';
 function cloudRowToTrack(row: CloudMusicRow): MusicTrack {
   return { id: row.id, name: row.name, artist: row.artist, url: row.url, bpm: row.bpm ?? undefined };
 }
+
+type Osc = (frac: number) => number;
+const OSC: Record<string, Osc> = {
+  sine: (f) => Math.sin(2 * Math.PI * f),
+  square: (f) => (f < 0.5 ? 1 : -1),
+  sawtooth: (f) => 2 * f - 1,
+  triangle: (f) => 1 - 4 * Math.abs(f - 0.5),
+};
+
+/**
+ * Zeichnet die Hüllkurve eines Synth-Presets (Frequenz, Decay, Pitch-Decay,
+ * Oszillator) – rein rechnerisch aus den Preset-Werten, kein Audio-Pfad.
+ * Ohne Parameter (Datei-Sample, Musik) bleibt nur die Mittellinie.
+ */
+function drawPresetShape(cv: HTMLCanvasElement, p: AudioSample['parameters'] | null): void {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth || 220;
+  const h = cv.clientHeight || 58;
+  cv.width = Math.round(w * dpr);
+  cv.height = Math.round(h * dpr);
+  const g = cv.getContext('2d');
+  if (!g) return;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const mid = h / 2;
+  g.fillStyle = 'rgba(110,140,200,.28)';
+  g.fillRect(0, mid, w, 1);
+  if (!p?.frequency) return;
+  const color = getComputedStyle(cv).getPropertyValue('--c').trim() || '#4cc9f0';
+  const osc = OSC[p.oscillatorType ?? 'sine'] ?? OSC.sine;
+  const decay = Math.max(0.02, p.decay ?? 0.3);
+  const pd = p.pitchDecay ?? 0;
+  const span = Math.min(2, decay * 1.2);
+  const sub = 6;
+  const dt = span / (Math.ceil(w) * sub);
+  let phase = 0;
+  g.fillStyle = color;
+  for (let x = 0; x < w; x++) {
+    let lo = 1;
+    let hi = -1;
+    for (let k = 0; k < sub; k++) {
+      const t = (x * sub + k) * dt;
+      const f = p.frequency * (pd > 0 ? 1 + 3 * Math.exp(-t / pd) : 1);
+      phase = (phase + f * dt) % 1;
+      const v = osc(phase) * Math.exp((-4 * t) / decay);
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+    g.fillRect(x, mid - hi * (mid - 2), 1, Math.max(1, (hi - lo) * (mid - 2)));
+  }
+}
+
+const PresetShape = React.memo(function PresetShape({ params }: { params: AudioSample['parameters'] | null }) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => { if (ref.current) drawPresetShape(ref.current, params); }, [params]);
+  return <canvas ref={ref} className="am-disp" aria-label="Hüllkurve des Presets" />;
+});
+
+const noop = () => { /* nur Anzeige */ };
 
 const FOLDERS: { id: FolderId; label: string; group: string }[] = [
   { id: 'favorites', label: 'Favoriten', group: 'FAVORITEN' },
@@ -196,323 +262,205 @@ export const LibraryTerminal = React.memo(function LibraryTerminal() {
 
   }, [paginatedMusic, showMusic, showFavorites]);
 
-  const renderMusicCard = (t: MusicTrack) => {
-    const isFav = favorites.music.includes(t.id);
-    return (
-      <div
-        key={t.id}
-        role="button"
-        tabIndex={0}
-        onClick={(e) => openAudioActionMenu(musicToContent(t), e.currentTarget)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openAudioActionMenu(musicToContent(t), e.currentTarget as HTMLElement);
-          }
-        }}
-        className="bg-[#161616] border border-neutral-800 rounded-lg p-4 flex flex-col gap-2 hover:border-amber-500/50 transition-colors group cursor-pointer"
-      >
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
-            <div>
-              <h4 className="font-bold text-sm text-neutral-200 line-clamp-1">{t.name}</h4>
-              <span className="text-[11px] font-mono text-amber-400 uppercase">{t.artist}</span>
-            </div>
-          </div>
-          <button type="button"
-            onClick={(e) => { e.stopPropagation(); toggleFavoriteMusic(t.id); }}
-            title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${isFav ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-[#111] text-neutral-500 hover:text-rose-400 border border-neutral-800'}`}
-          >
-            <Heart className="w-4 h-4" fill={isFav ? 'currentColor' : 'none'} />
-          </button>
-        </div>
-        <p className="text-[11px] text-neutral-500 font-mono">Track aus deiner Musik-Bibliothek</p>
-        <div className="flex gap-3 text-[11px] font-mono">
-          <span className="flex items-center gap-1"><span className="text-amber-500">BPM</span>
-            {analysis[t.url]?.bpm ?? <span className="text-neutral-600 animate-pulse">…</span>}
-          </span>
-          <span className="flex items-center gap-1"><span className="text-amber-500">KEY</span>
-            {analysis[t.url]?.key ?? <span className="text-neutral-600">--</span>}
-          </span>
-        </div>
-        <div className="mt-auto pt-4 flex justify-between items-center">
-          <span className="text-[11px] font-mono text-neutral-600 bg-black px-2 py-1 rounded truncate">{t.url}</span>
-          <div className="flex gap-2">
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); openAudioActionMenu(musicToContent(t), e.currentTarget); }}
-              title="Aktionen öffnen"
-              className="text-[11px] font-bold text-neutral-400 hover:text-cyan-300 cursor-pointer"
-            >⋮</button>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); audioEngine.previewSample('channel5', undefined, t.url); }}
-              className="text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer"
-            >LOAD</button>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); handlePushMusic(t); }}
-              disabled={cloudBusy}
-              title="In externe Musik-Datenbank (Supabase) pushen"
-              className="text-[11px] font-bold text-neutral-400 hover:text-emerald-300 disabled:opacity-40 cursor-pointer"
-            >PUSH</button>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); audioEngine.loadTrackSample('channel1', t.url); }}
-              title="In Mischpult-Kanal 1 laden"
-              className="text-[11px] font-bold text-neutral-400 hover:text-amber-300 cursor-pointer"
-            >ADD</button>
-          </div>
-        </div>
-      </div>
-    );
+  // --- Auswahl für die Vorschau (nur Ansicht; fällt auf den ersten Eintrag zurück) ---
+  const [selId, setSelId] = useState<string | null>(null);
+  const selSample = useMemo(() => samples.find((s) => s.id === selId) ?? null, [samples, selId]);
+  const selMusic = useMemo(() => musicTracks.find((t) => t.id === selId) ?? null, [musicTracks, selId]);
+  const previewSample = selSample ?? (!selMusic && !showMusic ? paginatedSamples[0] ?? null : null);
+  const previewMusic = selMusic ?? (!selSample && showMusic ? paginatedMusic[0] ?? null : null);
+
+  const counts = useMemo(() => {
+    const c: Record<FolderId, number> = { all: samples.length, favorites: favorites.samples.length + favorites.music.length, bass: 0, mids: 0, highs: 0, music: musicTracks.length };
+    samples.forEach((s) => { c[s.category] += 1; });
+    return c;
+  }, [samples, musicTracks.length, favorites]);
+
+  const openMusic = (t: MusicTrack, el: HTMLElement) => { setSelId(t.id); openAudioActionMenu(musicToContent(t), el); };
+  const openSample = (sample: AudioSample, el: HTMLElement) => { setSelId(sample.id); openAudioActionMenu(sampleToContent(sample, 'library'), el); };
+  const onRowKey = (e: React.KeyboardEvent<HTMLTableRowElement>, open: (el: HTMLElement) => void) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      open(e.currentTarget);
+    }
   };
 
-  const renderSampleCard = (sample: AudioSample) => {
-    const isFav = favorites.samples.includes(sample.id);
-    return (
-      <div
-        key={sample.id}
-        role="button"
-        tabIndex={0}
-        draggable
-        onDragStart={(e) => handleDragStart(e, sample)}
-        onClick={(e) => openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget as HTMLElement);
-          }
-        }}
-        className={`bg-[#161616] border rounded-lg p-4 flex flex-col gap-2 transition-colors group cursor-pointer ${
-          pendingSample?.id === sample.id
-            ? 'border-fuchsia-500 ring-2 ring-fuchsia-500/50 shadow-[0_0_18px_-4px_rgba(217,70,239,0.5)]'
-            : 'border-neutral-800 hover:border-fuchsia-500/50'
-        }`}
-      >
-        <div className="flex justify-between items-start">
-          <div className="flex items-center gap-2">
-            <GripVertical className="w-4 h-4 text-neutral-700 group-hover:text-fuchsia-500" />
-            <div>
-              <h4 className="font-bold text-sm text-neutral-200">{sample.name}</h4>
-              <span className="text-[11px] font-mono text-fuchsia-400 uppercase">{sample.type}</span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); toggleFavoriteSample(sample.id); }}
-            title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
-            className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors cursor-pointer ${isFav ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40' : 'bg-[#111] text-neutral-500 hover:text-rose-400 border border-neutral-800'}`}
-          >
-            <Heart className="w-4 h-4" fill={isFav ? 'currentColor' : 'none'} />
-          </button>
-        </div>
-        <p className="text-[11px] text-neutral-500 font-mono line-clamp-2">{sample.description}</p>
-        <div className="mt-auto pt-4 flex justify-between items-center">
-          <span className="text-[11px] font-mono text-neutral-600 bg-black px-2 py-1 rounded">ID: {sample.id}</span>
-          <div className="flex gap-2">
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); openAudioActionMenu(sampleToContent(sample, 'library'), e.currentTarget); }}
-              title="Aktionen öffnen"
-              className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-cyan-300 cursor-pointer"
-            >
-              ⋮
-            </button>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); handleCopy(sample); }}
-              className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-fuchsia-300 cursor-pointer"
-            >
-              <Clipboard className="w-3 h-3" /> COPY
-            </button>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); handlePushSample(sample); }}
-              disabled={cloudBusy}
-              title="In externe Sample-Datenbank (Supabase) pushen"
-              className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-emerald-300 disabled:opacity-40 cursor-pointer"
-            >
-              <Upload className="w-3 h-3" /> PUSH
-            </button>
-            <button type="button"
-              onClick={(e) => { e.stopPropagation(); if (sample.url) audioEngine.loadTrackSample('channel5', sample.url); }}
-              title={sample.url ? 'Sample in Mischpult-Kanal 5 laden' : 'Synthetisches Sample – über Instrumente spielbar'}
-              className="flex items-center gap-1 text-[11px] font-bold text-neutral-400 hover:text-white cursor-pointer"
-            >
-              <Download className="w-3 h-3" /> ADD
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const favButton = (isFav: boolean, toggle: () => void) => (
+    <button type="button"
+      onClick={(e) => { e.stopPropagation(); toggle(); }}
+      title={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+      aria-label={isFav ? 'Aus Favoriten entfernen' : 'Zu Favoriten hinzufügen'}
+      className={`am-bibfav ${isFav ? 'am-on' : ''}`}
+    >
+      <Heart fill={isFav ? 'currentColor' : 'none'} />
+    </button>
+  );
+
+  const renderMusicRow = (t: MusicTrack) => (
+    <tr
+      key={t.id}
+      tabIndex={0}
+      className={previewMusic?.id === t.id ? 'am-on' : ''}
+      onClick={(e) => openMusic(t, e.currentTarget)}
+      onKeyDown={(e) => onRowKey(e, (el) => openMusic(t, el))}
+    >
+      <td>{favButton(favorites.music.includes(t.id), () => toggleFavoriteMusic(t.id))}</td>
+      <td className="am-n"><h4>{t.name}</h4></td>
+      <td className="am-bibt">{t.artist}</td>
+      <td className="am-mono">
+        {analysis[t.url]?.bpm ?? '…'} BPM · {analysis[t.url]?.key ?? '--'}
+      </td>
+    </tr>
+  );
+
+  const renderSampleRow = (sample: AudioSample) => (
+    <tr
+      key={sample.id}
+      tabIndex={0}
+      draggable
+      onDragStart={(e) => handleDragStart(e, sample)}
+      className={`${previewSample?.id === sample.id ? 'am-on' : ''} ${pendingSample?.id === sample.id ? 'am-pend' : ''}`}
+      onClick={(e) => openSample(sample, e.currentTarget)}
+      onKeyDown={(e) => onRowKey(e, (el) => openSample(sample, el))}
+    >
+      <td>{favButton(favorites.samples.includes(sample.id), () => toggleFavoriteSample(sample.id))}</td>
+      <td className="am-n"><h4>{sample.name}</h4></td>
+      <td className="am-bibt">{sample.type}</td>
+      <td className="am-mono" title={sample.description}>{sample.id}</td>
+    </tr>
+  );
+
+  const pager = showMusic
+    ? { page: safeMusicPage, total: musicTotalPages, prev: () => setMusicPage((p) => Math.max(1, p - 1)), next: () => setMusicPage((p) => Math.min(musicTotalPages, p + 1)), shown: paginatedMusic.length, of: filteredMusic.length, unit: 'Tracks' }
+    : { page: safePage, total: totalPages, prev: () => changePage(currentPage - 1), next: () => changePage(currentPage + 1), shown: paginatedSamples.length, of: filteredSamples.length, unit: 'Samples' };
+
+  const params = previewSample?.parameters?.frequency ? previewSample.parameters : null;
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans shadow-2xl">
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <div className="flex items-center gap-2">
-          <MoaAssistant pluginId="library" placeholder="MOA: z. B. 'Cloud-Sync starten'" />
+    <div className="am-rackrow am-bib">
+      <MoaAssistant pluginId="library" />
+      <AmCard title="Suche" style={{ width: 200 }}>
+        <input
+          type="text"
+          className="am-libq"
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setCurrentPage(1); }}
+          placeholder="Suche Samples & Musik…"
+          aria-label="Bibliothek durchsuchen"
+        />
+        <SemanticSampleSearch onSelect={addSample} />
+        <div className="am-list" role="group" aria-label="Ordner">
+          {FOLDERS.map((f) => (
+            <button
+              type="button"
+              key={f.id}
+              className={folder === f.id ? 'am-on' : ''}
+              aria-pressed={folder === f.id}
+              onClick={() => { setFolder(f.id); setCurrentPage(1); }}
+            >
+              <span>{f.label}</span><i>{counts[f.id]}</i>
+            </button>
+          ))}
+        </div>
+      </AmCard>
+
+      <AmCard
+        title={showFavorites ? 'Favoriten' : FOLDERS.find((f) => f.id === folder)?.label ?? 'Liste'}
+        style={{ flex: 1, minWidth: 380 }}
+        right={(
+          <span className="am-bibpg">
+            <span className="am-hint">{pager.shown} / {pager.of} {pager.unit}</span>
+            <button type="button" className="am-tg" onClick={pager.prev} disabled={pager.page === 1} aria-label="Vorherige Seite">‹</button>
+            <span className="am-mono">{pager.page}/{pager.total}</span>
+            <button type="button" className="am-tg" onClick={pager.next} disabled={pager.page === pager.total} aria-label="Nächste Seite">›</button>
+          </span>
+        )}
+      >
+        <div className="am-bibscroll">
+          <table className="am-tbl">
+            <thead>
+              <tr>
+                <th aria-label="Favorit" />
+                <th>Name</th>
+                <th>{showMusic ? 'Artist' : 'Typ'}</th>
+                <th>{showMusic ? 'Tempo · Key' : 'ID'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {showFavorites && (
+                <tr className="am-bibsec"><td colSpan={4}>Favorisierte Musik</td></tr>
+              )}
+              {showFavorites && (filteredMusic.length === 0
+                ? <tr className="am-bibsec"><td colSpan={4} className="am-hint">Keine favorisierten Tracks …</td></tr>
+                : filteredMusic.map(renderMusicRow))}
+              {showFavorites && <tr className="am-bibsec"><td colSpan={4}>Favorisierte Samples</td></tr>}
+              {showMusic ? paginatedMusic.map(renderMusicRow) : paginatedSamples.map(renderSampleRow)}
+            </tbody>
+          </table>
+        </div>
+      </AmCard>
+
+      <AmCard title="Vorschau" style={{ width: 250 }}>
+        {previewMusic ? (
+          <>
+            <div className="am-bibname"><b>{previewMusic.name}</b><span className="am-hint">{previewMusic.artist}</span></div>
+            <PresetShape params={null} />
+            <div className="am-bibkv am-mono">
+              <span>BPM <b>{analysis[previewMusic.url]?.bpm ?? '…'}</b></span>
+              <span>KEY <b>{analysis[previewMusic.url]?.key ?? '--'}</b></span>
+            </div>
+            <div className="am-bibact">
+              <button type="button" className="am-btn" onClick={(e) => openAudioActionMenu(musicToContent(previewMusic), e.currentTarget)} title="Aktionen öffnen">⋮</button>
+              <button type="button" className="am-btn" onClick={() => audioEngine.previewSample('channel5', undefined, previewMusic.url)} title="Vorhören (Kanal 5)">LOAD</button>
+              <button type="button" className="am-btn" onClick={() => { void handlePushMusic(previewMusic); }} disabled={cloudBusy} title="In externe Musik-Datenbank (Supabase) pushen">PUSH</button>
+              <button type="button" className="am-btn am-pri" onClick={() => audioEngine.loadTrackSample('channel1', previewMusic.url)} title="In Mischpult-Kanal 1 laden">ADD</button>
+            </div>
+          </>
+        ) : previewSample ? (
+          <>
+            <div className="am-bibname"><b>{previewSample.name}</b><span className="am-hint">{previewSample.type}</span></div>
+            <PresetShape params={params} />
+            {params ? (
+              <div className="am-knobs">
+                <AmKnob size="xs" disabled value={params.frequency ?? 0} min={20} max={12000} log unit="hz" label="Freq" title="Frequenz (Preset-Wert)" onChange={noop} />
+                <AmKnob size="xs" disabled value={params.decay ?? 0} min={0} max={2} unit="ms" label="Decay" title="Decay (Preset-Wert)" onChange={noop} />
+                <AmKnob size="xs" disabled value={params.pitchDecay ?? 0} min={0} max={0.5} unit="ms" label="P-Dec" title="Pitch-Decay (Preset-Wert)" onChange={noop} />
+                <span className="am-vb" title="Oszillator">{params.oscillatorType ?? 'sine'}</span>
+              </div>
+            ) : (
+              <span className="am-hint am-bibdesc">{previewSample.description}</span>
+            )}
+            <div className="am-bibact">
+              <button type="button" className="am-btn" onClick={(e) => openAudioActionMenu(sampleToContent(previewSample, 'library'), e.currentTarget)} title="Aktionen öffnen">⋮</button>
+              <button type="button" className="am-btn" onClick={() => handleCopy(previewSample)} title="Als JSON kopieren">COPY</button>
+              <button type="button" className="am-btn" onClick={() => { void handlePushSample(previewSample); }} disabled={cloudBusy} title="In externe Sample-Datenbank (Supabase) pushen">PUSH</button>
+              <button type="button" className="am-btn am-pri"
+                onClick={() => { if (previewSample.url) audioEngine.loadTrackSample('channel5', previewSample.url); }}
+                title={previewSample.url ? 'Sample in Mischpult-Kanal 5 laden' : 'Synthetisches Sample – über Instrumente spielbar'}
+              >ADD</button>
+            </div>
+          </>
+        ) : (
+          <span className="am-hint">Eintrag in der Liste anklicken.</span>
+        )}
+      </AmCard>
+
+      <AmCard
+        title="Import · Cloud"
+        className="am-bibimp"
+        style={{ width: 270 }}
+        right={<Scratchpad />}
+      >
+        <SampleUploadPanel />
+        <QuickImportPanel />
+        <div className="am-bibcloud">
           <CloudStatusBadge />
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-fuchsia-900/20 to-[#111] border-b border-fuchsia-900/30 gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-fuchsia-500/20 flex items-center justify-center border border-fuchsia-500/50 shadow-[0_0_15px_rgba(192,38,211,0.3)]">
-            <Database className="w-5 h-5 text-fuchsia-400" />
-          </div>
-          <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase">biblioMONK</h2>
-        </div>
-
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-fuchsia-400/70" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => { setQuery(e.target.value); setCurrentPage(1); }}
-              placeholder="Suche Samples & Musik…"
-              aria-label="Bibliothek durchsuchen"
-              className="w-full bg-black/60 border border-neutral-800 rounded-lg pl-9 pr-3 py-2 text-sm text-neutral-200 focus:outline-none focus:border-fuchsia-500/60 placeholder:text-neutral-600"
-            />
-          </div>
-          <SemanticSampleSearch onSelect={addSample} />
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <SampleUploadPanel />
-          <QuickImportPanel />
-          <Scratchpad />
-          <span
-            title="Externe Sample-/Musik-Datenbank (Supabase, Lesen via anon-key)"
-            className={`flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded border ${
-              cloudEnabled
-                ? 'text-emerald-400 border-emerald-900/60 bg-emerald-950/30'
-                : 'text-neutral-600 border-neutral-800 bg-black'
-            }`}
-          >
-            {cloudEnabled ? <Cloud className="w-3 h-3" /> : <CloudOff className="w-3 h-3" />}
+          <span className={`am-vb ${cloudEnabled ? 'am-on' : ''}`} title="Externe Sample-/Musik-Datenbank (Supabase, Lesen via anon-key)">
             CLOUD {cloudEnabled ? 'READ' : 'OFF'}
           </span>
-          <button type="button"
-            onClick={handleCloudSync}
-            disabled={cloudBusy}
-            className="flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded bg-fuchsia-900/30 border border-fuchsia-800/50 text-fuchsia-300 hover:bg-fuchsia-800/40 disabled:opacity-40 cursor-pointer"
-          >
-            <Upload className="w-3 h-3" /> SYNC
-          </button>
-          {cloudStatus && (
-            <span className="text-[11px] font-mono text-neutral-500 max-w-[140px] truncate" title={cloudStatus}>
-              {cloudStatus}
-            </span>
-          )}
+          <button type="button" className="am-tg" onClick={() => { void handleCloudSync(); }} disabled={cloudBusy} title="Eingebaute Presets in die externe Datenbank syncen">SYNC</button>
         </div>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        {/* Ordnerstruktur */}
-        <aside className="w-44 shrink-0 border-r border-neutral-800 bg-[#0c0c0e] p-3 flex flex-col gap-1.5 overflow-y-auto">
-          {(['FAVORITEN', 'SAMPLES', 'MUSIK'] as const).map((group) => (
-            <div key={group}>
-              <div className="text-[10px] font-mono tracking-[0.25em] text-neutral-600 uppercase mb-1">{group}</div>
-              {FOLDERS.filter((f) => f.group === group).map((f) => {
-                const active = folder === f.id;
-                return (
-                  <button
-                    type="button"
-                    key={f.id}
-                    onClick={() => { setFolder(f.id); setCurrentPage(1); }}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-sm transition-colors cursor-pointer ${
-                      active ? 'bg-fuchsia-900/30 border border-fuchsia-500/40 text-fuchsia-300' : 'border border-transparent text-neutral-400 hover:bg-[#161616] hover:text-neutral-200'
-                    }`}
-                  >
-                    {active ? <FolderOpen className="w-4 h-4 text-fuchsia-400" /> : <Folder className="w-4 h-4 text-neutral-600" />}
-                    <span className="text-[11px] font-medium">{f.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-          <div className="mt-auto pt-2 text-[10px] font-mono text-neutral-600 leading-relaxed">
-            {favorites.samples.length + favorites.music.length} Favoriten
-          </div>
-        </aside>
-
-        {/* Inhalt */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {showFavorites && (
-            <div className="mb-6">
-              <h3 className="text-[11px] font-bold tracking-[0.3em] text-rose-400 uppercase mb-3">Favorisierte Musik</h3>
-              {filteredMusic.length === 0 ? (
-                <div className="text-[11px] font-mono text-neutral-600">Keine favorisierten Tracks …</div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{filteredMusic.map(renderMusicCard)}</div>
-              )}
-            </div>
-          )}
-
-          {showMusic ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {paginatedMusic.map(renderMusicCard)}
-            </div>
-          ) : (
-            <>
-              {showFavorites && <h3 className="text-[11px] font-bold tracking-[0.3em] text-rose-400 uppercase mb-3">Favorisierte Samples</h3>}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {paginatedSamples.map(renderSampleCard)}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Pagination Controls */}
-      <div className="px-6 py-4 bg-[#111] border-t border-neutral-800 flex justify-between items-center">
-        <div className="text-[11px] text-neutral-500 font-mono">
-          {showMusic
-            ? `SHOWING ${paginatedMusic.length} OF ${filteredMusic.length} MUSIC TRACKS`
-            : `SHOWING ${paginatedSamples.length} OF ${filteredSamples.length} SAMPLES`}
-        </div>
-        <div className="flex items-center gap-4">
-          {showMusic ? (
-            <>
-              <button type="button"
-                onClick={() => setMusicPage((p) => Math.max(1, p - 1))}
-                disabled={safeMusicPage === 1}
-                className={`p-1 rounded ${safeMusicPage === 1 ? 'text-neutral-700' : 'text-amber-400 hover:bg-amber-900/20 cursor-pointer'}`}
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-xs font-bold font-mono">
-                PAGE <span className="text-amber-400">{safeMusicPage}</span> / {musicTotalPages}
-              </span>
-              <button type="button"
-                onClick={() => setMusicPage((p) => Math.min(musicTotalPages, p + 1))}
-                disabled={safeMusicPage === musicTotalPages}
-                className={`p-1 rounded ${safeMusicPage === musicTotalPages ? 'text-neutral-700' : 'text-amber-400 hover:bg-amber-900/20 cursor-pointer'}`}
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button"
-                onClick={() => changePage(currentPage - 1)}
-                disabled={currentPage === 1}
-                className={`p-1 rounded ${currentPage === 1 ? 'text-neutral-700' : 'text-fuchsia-400 hover:bg-fuchsia-900/20 cursor-pointer'}`}
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <span className="text-xs font-bold font-mono">
-                PAGE <span className="text-fuchsia-400">{currentPage}</span> / {totalPages}
-              </span>
-              <button type="button"
-                onClick={() => changePage(currentPage + 1)}
-                disabled={currentPage === totalPages}
-                className={`p-1 rounded ${currentPage === totalPages ? 'text-neutral-700' : 'text-fuchsia-400 hover:bg-fuchsia-900/20 cursor-pointer'}`}
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+        {cloudStatus && <span className="am-hint am-mono am-bibst" title={cloudStatus}>{cloudStatus}</span>}
+      </AmCard>
     </div>
   );
 });
