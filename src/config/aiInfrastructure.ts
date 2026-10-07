@@ -457,7 +457,12 @@ export const AI_RESIDENT_FLEET = [
     id: 'image',
     covers: ['imageHq'],
     models: [
+      // Material-Umbauer: Edit, Stil-Transfer, Mehrbild-Referenz (ersetzt IP-Adapter + FLUX.1-dev).
       { id: 'qwen-image-edit-2511', vramGb: 28, license: 'Apache-2.0', status: 'neu' },
+      // Stil-Motor: Basis der 32 fertig trainierten Themen-LoRAs (nicht tauschbar) + 15 Stil-LoRAs.
+      { id: 'sdxl-base-1.0', vramGb: 7, license: 'openrail++', status: 'neu' },
+      { id: 'controlnet-depth', vramGb: 2, license: 'Apache-2.0', status: 'manifest' },
+      { id: 'controlnet-canny', vramGb: 2, license: 'Apache-2.0', status: 'manifest' },
       { id: 'realesrgan-x4', vramGb: 1, license: 'MIT', status: 'manifest' },
     ],
   },
@@ -465,7 +470,9 @@ export const AI_RESIDENT_FLEET = [
     id: 'video',
     covers: ['videoReal', 'videoAbstract'],
     models: [
+      // Ein Modell für I2V, V2V und Audio-to-Video; real vs. abstrakt über LoRA/Prompt.
       { id: 'ltx-2.3-22b-distilled', vramGb: 34, license: 'ltx-2-community-license', status: 'neu', licenseCheck: true },
+      { id: 'rife-interpolation', vramGb: 1, license: 'MIT', status: 'manifest' },
       { id: 'realesrgan-video-x4', vramGb: 2, license: 'MIT', status: 'manifest' },
     ],
   },
