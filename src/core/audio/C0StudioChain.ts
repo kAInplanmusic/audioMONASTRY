@@ -83,7 +83,18 @@ export interface C0GraphState {
 
 export class C0StudioChain {
   readonly graph = new AudioGraph();
-  readonly master = new MasterSumNode('master:sum', C0_CHANNELS.length);
+  /**
+   * Die Kanal-Summe.
+   *
+   * BEWUSST `StereoSumNode` und NICHT `MasterSumNode`: der Master-Knoten bringt
+   * einen Soft-Clip (`tanh(v)*0.98`) mit - als MASTER-Schutz gedacht. In der
+   * Kanal-Summe faerbt er den Klang, obwohl eine Summe nur addieren darf:
+   * gemessen erreichte ein Impuls den ersten Master-Insert schon bei 0.597
+   * statt 1.0, weil Summe UND Merge ihn je einmal begrenzten. Das echte
+   * Mastering (Knoten `master`) sitzt ohnehin danach und begrenzt dort, wo es
+   * hingehoert.
+   */
+  readonly master = new StereoSumNode('master:sum', C0_CHANNELS.length, 1);
   readonly fxBus = new GainNode('fx:bus', 1);
   readonly fxReturn = new GainNode('fx:return', 1);
 
@@ -247,6 +258,26 @@ export class C0StudioChain {
     node.setProcessFn(processFn);
     this.state.workletBinding[pluginId] = processFn.name || 'inline';
     return true;
+  }
+
+  /**
+   * Umgangenen Knoten setzen (Bypass). Nutzt das Dry/Wet-Crossfade des Knotens
+   * mit GLEICHER Latenz - kein disconnect, keine Phasenverschiebung
+   * (Review 6.3). `bypassed=true` blendet auf den trockenen Weg.
+   */
+  setBypass(pluginId: string, bypassed: boolean): boolean {
+    const node = this.insertNodes[pluginId];
+    if (!node) return false;
+    // Der trockene Weg muss so spaet kommen wie der nasse: die Latenz des
+    // Knotens steht im Vertrag. Ohne diesen Ausgleich waere der Bypass frueher.
+    node.setDryDelayFrames(CONTRACT_BY_ID[pluginId]?.intrinsicLatencyFrames ?? 0);
+    node.setWet(bypassed ? 0 : 1);
+    return true;
+  }
+
+  /** Ist der Knoten umgangen? */
+  isBypassed(pluginId: string): boolean | null {
+    return this.insertNodes[pluginId]?.isBypassed() ?? null;
   }
 
   /** Setzt das Quellsignal eines Kanals (Test-/Bounce-Einstieg). */
