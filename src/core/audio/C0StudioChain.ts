@@ -22,7 +22,7 @@
  * folgt in C1 nach bestandenem Spike-Test.
  */
 import { AudioGraph } from './AudioGraph';
-import { GainNode, SourceNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
+import { GainNode, StereoPanNode, StereoSumNode } from './nodes/basicNodes';
 import { EffectNode, ParametricEqNode, MasteringNode } from './nodes/processingNodes';
 import { PdcDelayNode } from './nodes/pdcDelayNode';
 import { WorkletChainNode } from './nodes/workletChainNode';
@@ -57,7 +57,6 @@ export const WORKLET_BINDING: Readonly<Record<string, string>> = {
   spatial: 'spatial-processor',
 };
 
-const SILENCE = (len: number): Float32Array => new Float32Array(len);
 
 /** Kanal → Plugin-ID, direkt aus dem Vertrag (channel1 → drop, …). */
 function channelPluginOf(track: string): string {
@@ -138,7 +137,7 @@ export class C0StudioChain {
   private readonly masterDelays: PdcDelayNode[] = [];
   readonly state: C0GraphState;
 
-  constructor(sampleRate = 48000, blockSize = 128) {
+  constructor(sampleRate = 48000, _blockSize = 128) {
     const { masterInserts, fxReturns } = signalTopology();
 
     // --- Kanalzuege -------------------------------------------------------

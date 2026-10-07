@@ -1,5 +1,5 @@
 import { ALL_TRACKS, type TrackType } from '../../types';
-import { PLUGIN_CONTRACTS, CONTRACT_BY_ID } from '../../plugins/pluginContract';
+import { CONTRACT_BY_ID } from '../../plugins/pluginContract';
 
 /**
  * P0-2: Kanal-Zuordnung der Audio-einspeisenden Plugins (PluginAudioRouter-Kern).
