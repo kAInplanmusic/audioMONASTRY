@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AI_MAX_AI_EUR_PER_HOUR,
   AI_RESIDENT_FLEET,
+  AI_RETIRED_VISUAL_ROLES,
   GPU_ROLE_IDS,
   RESIDENT_USABLE_VRAM_GB,
   assertResidentFleetBudget,
@@ -19,9 +20,17 @@ const byId = new Map(manifest.models.map((m) => [m.id, m]));
 const all = AI_RESIDENT_FLEET.flatMap((i) => [...i.models]);
 
 describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
-  it('hat 6 Instanzen und deckt jede der 8 bestehenden Rollen genau einmal ab', () => {
-    expect(AI_RESIDENT_FLEET).toHaveLength(6);
-    expect(AI_RESIDENT_FLEET.flatMap((i) => [...i.covers]).sort()).toEqual([...GPU_ROLE_IDS].sort());
+  it('hat 4 Instanzen (max. 6), deckt alle Nicht-Visual-Rollen genau einmal ab, Visuals haben keine GPU', () => {
+    expect(AI_RESIDENT_FLEET).toHaveLength(4);
+    expect(AI_RESIDENT_FLEET.length).toBeLessThanOrEqual(6);
+    const covered = AI_RESIDENT_FLEET.flatMap((i) => [...i.covers]);
+    expect(new Set(covered).size).toBe(covered.length);
+    expect([...covered, ...AI_RETIRED_VISUAL_ROLES].sort()).toEqual([...GPU_ROLE_IDS].sort());
+  });
+
+  it('enthält kein Bild-/Video-Generierungsmodell', () => {
+    const forbidden = /flux|qwen-image|sdxl|stable-diffusion|wan2|ltx|hunyuan|video|controlnet|ip-adapter|esrgan|rife/i;
+    for (const m of all) expect(m.id, m.id).not.toMatch(forbidden);
   });
 
   it('nutzt dieselbe Nutzgrenze wie das Manifest (48 GB − Marge)', () => {
@@ -54,25 +63,19 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
   it('enthält keine Nicht-kommerziell-Lizenz; Lizenz-Vorbehalte sind bewusst gelistet', () => {
     for (const m of all) expect(m.license, m.id).not.toMatch(/non-commercial|CC-BY-NC|research/i);
     expect(all.filter((m) => 'licenseCheck' in m && m.licenseCheck).map((m) => m.id).sort()).toEqual(
-      ['essentia', 'ltx-2.3-22b-distilled', 'pyannote-diarization', 'stable-audio-open-1.0'],
+      ['essentia', 'pyannote-diarization', 'stable-audio-open-1.0'],
     );
-  });
-
-  it('übernimmt die Visual-Fähigkeiten der alten Instanzen (Stil-LoRAs, Struktur, Hochskalieren, Interpolation)', () => {
-    const ids = (inst: string) => AI_RESIDENT_FLEET.find((i) => i.id === inst)!.models.map((m) => m.id);
-    expect(ids('image')).toEqual(expect.arrayContaining(['sdxl-base-1.0', 'qwen-image-edit-2511', 'controlnet-depth', 'controlnet-canny', 'realesrgan-x4']));
-    expect(ids('video')).toEqual(expect.arrayContaining(['ltx-2.3-22b-distilled', 'rife-interpolation', 'realesrgan-video-x4']));
   });
 
   it('bleibt mit Pods (A40/A6000) unter dem AI-Budget von 4 €/h', () => {
     expect(AI_MAX_AI_EUR_PER_HOUR).toBe(4);
     expect(() => assertResidentFleetBudget('pod', 'A40')).not.toThrow();
     expect(() => assertResidentFleetBudget('pod', 'A6000')).not.toThrow();
-    expect(estimateResidentFleetEurPerHour('pod', 'A6000')).toBeCloseTo(2.93, 2);
+    expect(estimateResidentFleetEurPerHour('pod', 'A6000')).toBeCloseTo(1.95, 2);
   });
 
   it('sprengt das Budget als Serverless-Flex – die 0,50-€-Annahme gilt nur für Pods', () => {
     expect(() => assertResidentFleetBudget('serverlessFlex', 'A6000')).toThrow(/4 €\/h/);
-    expect(estimateResidentFleetEurPerHour('serverlessFlex', 'A6000')).toBeCloseTo(6.73, 2);
+    expect(estimateResidentFleetEurPerHour('serverlessFlex', 'A6000')).toBeCloseTo(4.49, 2);
   });
 });
