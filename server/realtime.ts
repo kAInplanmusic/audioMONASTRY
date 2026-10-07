@@ -723,6 +723,32 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
         socket.emit('plugin-state-ack', { pluginId, eventId, revision: applied.revision });
       });
 
+      // Studio-Speicher (Betreiber 2026-10-06: nichts auf den Geräten): Einträge,
+      // die früher im Browser lagen, liegen in der Session; Änderungen gehen an alle.
+      socket.on('store-set', (data: unknown) => {
+        markSocketActivity();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const key = String((data as { key?: unknown })?.key ?? '');
+        const value = (data as { value?: unknown })?.value;
+        const result = sessionRuntime.session.storeSet(key, typeof value === 'string' ? value : '', String(socket.data?.sessionUserId ?? ''));
+        if ('reason' in result) {
+          socket.emit('store-rejected', { key, reason: result.reason });
+          return;
+        }
+        sessionRuntime.persist();
+        socket.to(`session:${roomId}`).emit('store-update', { key, value });
+      });
+      socket.on('store-remove', (data: unknown) => {
+        markSocketActivity();
+        const roomId = socket.data?.sessionRoom;
+        if (!roomId) return;
+        const key = String((data as { key?: unknown })?.key ?? '');
+        if (!sessionRuntime.session.storeRemove(key)) return;
+        sessionRuntime.persist();
+        socket.to(`session:${roomId}`).emit('store-update', { key, value: null });
+      });
+
       // Beständige Plugins (Betreiber 2026-10-06): der Halter speichert den Stand
       // seines Plugins; der Server prüft Halter + Größe, sichert ihn mit der
       // Session und verteilt ihn, damit der nächste Halter genau damit startet.

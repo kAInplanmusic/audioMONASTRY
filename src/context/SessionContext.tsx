@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { AudioSample } from '../data/samples';
-import { saveToDB, openDB } from '../utils/db';
+import { storageGetJson, storageSetJson } from '../utils/storage';
+
+/** Zwischenablage im Studio-Speicher (Server) – nichts auf dem Gerät. */
+const SCRATCHPAD_KEY = 'audiomonastry_scratchpad';
 
 interface ScratchpadItem extends AudioSample {
   lastModified: number;
@@ -15,39 +18,30 @@ interface SessionContextType {
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
 
 export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [scratchpadItems, setScratchpadItems] = useState<ScratchpadItem[]>([]);
-
-  // Load from IDB on init
-  useEffect(() => {
-    const loadData = async () => {
-      const db = await openDB();
-      const tx = db.transaction('scratchpad', 'readonly');
-      const items = await new Promise<ScratchpadItem[]>((res) => {
-        const req = tx.objectStore('scratchpad').getAll();
-        req.onsuccess = () => res(req.result);
-      });
-      setScratchpadItems(items);
-    };
-    loadData();
-  }, []);
+  const [scratchpadItems, setScratchpadItems] = useState<ScratchpadItem[]>(
+    () => storageGetJson<ScratchpadItem[]>(SCRATCHPAD_KEY) ?? [],
+  );
 
   const addToScratchpad = (sample: AudioSample) => {
     const newItem = { ...sample, lastModified: Date.now() };
-    saveToDB(newItem);
     setScratchpadItems(prev => {
         // LWW-CRDT Merge
         const existing = prev.find(i => i.id === sample.id);
         if (!existing || newItem.lastModified > existing.lastModified) {
-            return [...prev.filter(i => i.id !== sample.id), newItem];
+            const next = [...prev.filter(i => i.id !== sample.id), newItem];
+            storageSetJson(SCRATCHPAD_KEY, next);
+            return next;
         }
         return prev;
     });
   };
 
-  const removeFromScratchpad = async (id: string) => {
-      const db = await openDB();
-      db.transaction('scratchpad', 'readwrite').objectStore('scratchpad').delete(id);
-      setScratchpadItems(prev => prev.filter(i => i.id !== id));
+  const removeFromScratchpad = (id: string) => {
+      setScratchpadItems(prev => {
+        const next = prev.filter(i => i.id !== id);
+        storageSetJson(SCRATCHPAD_KEY, next);
+        return next;
+      });
   };
 
   return (

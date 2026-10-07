@@ -35,6 +35,22 @@ als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
 - Prüfung: `tests/deviceLayout.test.ts`, `tests/e2e/formats.spec.ts` (alle vier Formate zeichnen 1440 px,
   Mixer und Kopf gleich wie am PC, kein waagerechter Überlauf, Drehen).
 
+## Nichts auf den Geräten (Betreiber 2026-10-06)
+
+„NICHTS wird auf den Geräten der Nutzer gespeichert. Keine Sounds, keine Audio, nichts."
+
+- Kein localStorage, sessionStorage, keine Browser-Datenbank (IndexedDB), keine Dateien im Gerät (OPFS).
+- Studio-Daten (Presets, Favoriten, Autoload, Mappings, Stream-Einstellung, Scratchpad …) liegen im
+  **Studio-Speicher der Session auf dem Server**: beim Start vorgeladen (`GET /api/store`), geschrieben über
+  den Socket (`store-set`/`store-remove`), Änderungen anderer Geräte kommen live zurück (`store-update`).
+  Adapter: `src/utils/storage.ts`, Abgleich: `src/utils/studioStoreSync.ts`.
+- Nur im Arbeitsspeicher (weg nach Neuladen): Protokolle, Zwischenspeicher, gewählter Audio-Eingang,
+  Name/Farbe/Kennung des Fensters (`MEMORY_ONLY_KEYS`). Neues Laden = neuer Platz in der Session.
+- Audio (Samples, Aufnahmen, Stems, Stimmen) geht immer auf den Server (Cloud-Speicher, sonst
+  `data/uploads` am Server, ausgeliefert ohne Cache). Schlägt das Hochladen fehl, steht „NICHT gespeichert“ dran.
+- Alte Gerätedaten werden beim ersten Start einmal auf den Server übernommen und danach vom Gerät gelöscht.
+- Prüfung: `tests/storageRecovery.test.ts`, `tests/e2e/noDeviceStorage.spec.ts`.
+
 ## Session-Ausgänge (Betreiber 2026-10-06)
 
 „1–4 Nutzer, die die UI gestreamt bekommen, ein Main-Ausgang Sound und ein Main-Ausgang Visuals."

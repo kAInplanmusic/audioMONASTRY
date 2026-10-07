@@ -28,6 +28,14 @@ Jedes Gerät zeigt dieselbe Oberfläche. Handy und Pad zeichnen 1440 px
 Regeln, die je Gerät, Höhe oder Zeigerart anders aussehen (kein phone:, touch:,
 short-landscape: o. ä.). Prüfung: `tests/e2e/formats.spec.ts`.
 
+## Nichts auf den Geräten
+
+Kein Browser-Speicher, keine Gerätedateien. Nur `storageGet/storageSet`
+(`src/utils/storage.ts`) benutzen: Studio-Daten gehen in den Studio-Speicher der
+Session (Server), `MEMORY_ONLY_KEYS` bleiben im Arbeitsspeicher. Audio immer auf
+den Server hochladen; bei Fehler sichtbar „NICHT gespeichert“. Prüfung:
+`tests/e2e/noDeviceStorage.spec.ts`.
+
 ## Beständige Plugins
 
 Plugin-Einstellungen gehören in die Session, nie nur in lokalen State oder

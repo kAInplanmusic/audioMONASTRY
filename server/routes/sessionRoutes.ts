@@ -217,6 +217,17 @@ export function registerSessionRoutes(app: Express, deps: SessionRoutesDeps): vo
    * vergleicht `sessionInstanceId`/`revision` VOR und NACH dem Reset; ohne
    * diesen Pfad bliebe „wirklich zurückgesetzt“ eine Vermutung.
    */
+  /**
+   * Studio-Speicher vorladen (Betreiber 2026-10-06: „Nichts wird auf den Geräten
+   * der Nutzer gespeichert"). Der Client holt beim Start alle Einträge; Schreiben
+   * läuft über den Socket (`store-set`), damit alle Geräte die Änderung sehen.
+   * Geschützt wie jedes /api (Studio-Token).
+   */
+  app.get('/api/store', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ status: 'ok', entries: deps.getSession().storeAll() });
+  });
+
   app.get('/api/session/state', (req, res) => {
     if (!resetHookEnabled()) {
       res.status(404).end();

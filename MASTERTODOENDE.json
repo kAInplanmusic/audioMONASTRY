@@ -4847,6 +4847,16 @@
       "verification": "tests/pluginSettings.test.ts; tests/e2e/pluginPersistence.spec.ts"
     },
     {
+      "id": "UI2-P0-004",
+      "title": "Nichts auf den Geräten der Nutzer speichern",
+      "priority": "P0",
+      "status": "DONE",
+      "area": "UI/Architektur",
+      "source": "Betreiber 2026-10-06",
+      "note": "„NICHTS WIRD AUF DEN GERÄTEN DER NUTZER GESPEICHERT. Keine Sounds, keine Audio, nichts.“\n\nAkzeptanz: nach Benutzung sind localStorage, sessionStorage, IndexedDB und OPFS leer; Studio-Daten liegen am Server und sind nach Neuladen wieder da.\n\nDONE 2026-10-07: storage.ts ohne Browser-Speicher (Studio-Speicher am Server + Arbeitsspeicher für MEMORY_ONLY_KEYS); AuthoritativeSession.storeSet/storeRemove/storeAll (Grenzen je Schlüssel/Wert/gesamt, serialize/restore); GET /api/store (Vorladen vor dem ersten Zeichnen, eigenes Rate-Limit-Budget), Socket store-set/store-remove/store-update; einmalige Übernahme alter Gerätedaten, danach Löschen (localStorage, sessionStorage, IndexedDB, OPFS); Scratchpad im Studio-Speicher; Samples/Aufnahmen/Stems immer auf den Server (ohne Cloud-Speicher: data/uploads, /api/media/uploads, /api/library/uploads); db.ts entfernt. Nach dem Zeichnen fordert die App den Session-Stand einmal nach (Mixer-Halter des Beitritts sonst verpasst). Folge: Neuladen = neuer Platz in der Session (Kennung nur im Arbeitsspeicher).",
+      "verification": "tests/storageRecovery.test.ts; tests/uploadChunkRoutes.test.ts; tests/e2e/noDeviceStorage.spec.ts"
+    },
+    {
       "id": "PLUGIN-V2-C0",
       "title": "Pluginpool auf v2: Audio-Vertrag (B0/B1) + vertragsgetriebener Studiopfad (C0)",
       "priority": "P0",

@@ -2,9 +2,8 @@ import React, { useRef, useState } from 'react';
 import { Upload, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import {
-  UPLOAD_KINDS, UploadKind, validateAudioFile, tagsFrom, localSampleId,
+  UPLOAD_KINDS, UploadKind, validateAudioFile, tagsFrom,
 } from '../utils/sampleUpload';
-import { persistFile } from '../utils/opfs';
 import { uploadFileInChunks } from '../utils/chunkedUpload';
 import type { AudioSample } from '../data/samples';
 
@@ -64,23 +63,11 @@ export const SampleUploadPanel: React.FC = () => {
         }
         throw new Error(data.message || 'Server meldete keinen Erfolg');
       } catch (cloudError) {
-        // Lokaler Fallback: OPFS + Sample-Liste (Cloud optional).
-        const id = localSampleId(kind, name);
-        const blobUrl = URL.createObjectURL(file);
-        const sample: AudioSample = {
-          id,
-          name,
-          category: kind === 'voice' || kind === 'recording' ? 'highs' : 'mids',
-          type: kind,
-          url: blobUrl,
-          description: `Lokaler Upload (${kind}) – Cloud nicht verfügbar: ${(cloudError as Error).message}`,
-          tags,
-          parameters: {},
-        };
-        addSample(sample);
-        try { await persistFile(`${id}.${validation.ext || 'wav'}`, file); } catch { /* OPFS optional */ }
-        setStatus('local');
-        setMessage(`Lokal gespeichert (OPFS): ${name} – Cloud-Upload übersprungen.`);
+        // Betreiber 2026-10-06: nichts auf den Geräten – kein lokaler Fallback.
+        // Ohne Cloud-Ablage speichert der Server selbst; scheitert auch das,
+        // ist der Upload NICHT gespeichert und das wird so gesagt.
+        setStatus('error');
+        setMessage(`Nicht gespeichert: ${name} – Server-Upload fehlgeschlagen (${(cloudError as Error).message}).`);
       }
     } catch (e) {
       setStatus('error');

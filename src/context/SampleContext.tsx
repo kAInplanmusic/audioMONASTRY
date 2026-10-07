@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
 import { PRESET_SAMPLE_DATABASE, AudioSample } from '../data/samples';
-import { persistFile, listSamples } from '../utils/opfs';
+import { uploadFileInChunks } from '../utils/chunkedUpload';
 import { fetchCloudSamples, CloudSampleRow, isCloudAvailable, pushSampleToCloud as pushSampleToCloudApi, syncCloudDatabase as syncCloudDatabaseApi, CloudActionResult } from '../lib/supabaseClient';
 
 interface SampleContextType {
@@ -81,32 +81,23 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
      
   }, []);
 
-  // P7: OPFS-basierte Samples beim Provider-Mount laden und in den State
-  // einbinden (nur neue, noch nicht vorhandene Einträge). Läuft deterministisch
-  // und offline im Hintergrund; bei OPFS-Verfügbarkeit werden die Dateinamen
-  // als nutzbare Samples ergänzt.
+  // Betreiber 2026-10-06: nichts auf den Geräten. Hochgeladene/erzeugte Audios
+  // liegen auf dem Server (data/uploads, wenn keine Cloud-Ablage) – hier die
+  // Liste für alle Nutzer laden, statt Dateien aus dem Gerät (früher OPFS).
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const names = await listSamples();
-      if (cancelled) return;
-      const existing = new Set(samples.map((s) => s.id));
-      const news: AudioSample[] = names
-        .filter((n) => !existing.has(n))
-        .map((n) => ({
-          id: n,
-          name: n.replace(/\.(wav|mp3|ogg|flac|aiff)$/i, '').replace(/_/g, ' '),
-          category: 'mids' as const,
-          type: 'OPFS',
-          description: 'Lokale OPFS-Datei',
-          tags: ['local', 'opfs'],
-          url: undefined,
-          parameters: {},
-        }));
-      if (news.length > 0) setSamples((prev) => [...prev, ...news]);
-    })();
+    void fetch('/api/library/uploads', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { samples?: AudioSample[] } | null) => {
+        if (cancelled || !Array.isArray(body?.samples) || body.samples.length === 0) return;
+        const server = body.samples.filter((x) => x && typeof x.id === 'string' && typeof x.url === 'string');
+        setSamples((prev) => {
+          const ids = new Set(prev.map((x) => x.id));
+          return [...prev, ...server.filter((x) => !ids.has(x.id))];
+        });
+      })
+      .catch(() => { /* Bibliothek ohne Server-Uploads */ });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // O(1)-Lookup statt O(n)-Suche (biblioMONK/Sampler fragen häufig nach IDs).
@@ -115,12 +106,25 @@ export const SampleProvider: React.FC<{ children: ReactNode }> = ({ children }) 
 
   const addSample = useCallback((sample: AudioSample) => {
     setSamples(prev => [...prev, sample]);
-    // Task 15: bei Blob-URLs das Sample zusätzlich im OPFS zwischenspeichern.
+    // Betreiber 2026-10-06: nichts auf den Geräten. Neu erzeugtes Audio
+    // (Aufnahme, Stimme, Stems …) geht still in die Bibliothek auf dem SERVER;
+    // danach zeigt das Sample auf die Server-Adresse statt auf den Browser-Speicher.
     if (sample.url && sample.url.startsWith('blob:')) {
-      fetch(sample.url)
-        .then(r => r.blob())
-        .then(blob => persistFile(sample.id + '.wav', blob))
-        .catch(() => { /* OPFS optional, Fehler ignorieren */ });
+      const kind = /voice/i.test(sample.type) ? 'voice' : /record/i.test(sample.type) ? 'recording' : /stem/i.test(sample.type) ? 'stem' : 'sample';
+      void fetch(sample.url)
+        .then((r) => r.blob())
+        .then((blob) => uploadFileInChunks(new File([blob], `${sample.id}.wav`, { type: blob.type || 'audio/wav' }), {
+          kind,
+          fields: { kind, name: sample.name, tags: (sample.tags ?? []).join(',') },
+        }))
+        .then((data) => {
+          const stored = (data as { status?: string; sample?: AudioSample }).sample;
+          if ((data as { status?: string }).status !== 'ok' || !stored?.url) throw new Error('Server meldete keinen Erfolg');
+          setSamples((prev) => prev.map((x) => (x.id === sample.id ? { ...x, url: stored.url, description: `${x.description ?? ''} · auf dem Server gespeichert`.trim() } : x)));
+        })
+        .catch((e: Error) => {
+          setSamples((prev) => prev.map((x) => (x.id === sample.id ? { ...x, description: `NICHT gespeichert (Server-Upload fehlgeschlagen: ${e.message}) – nur bis zum Neuladen` } : x)));
+        });
     }
   }, []);
 

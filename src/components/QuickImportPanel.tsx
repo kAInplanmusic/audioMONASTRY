@@ -2,7 +2,6 @@ import React, { useRef, useState } from 'react';
 import { FolderOpen, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useSamples } from '../context/SampleContext';
 import { validateAudioFile, tagsFrom, localSampleId } from '../utils/sampleUpload';
-import { persistFile } from '../utils/opfs';
 import { buildQuickImportEntries } from '../core/library/quickImport';
 import type { AudioSample } from '../data/samples';
 
@@ -64,7 +63,7 @@ export const QuickImportPanel: React.FC = () => {
             parameters: {},
           };
           addSample(sample);
-          try { await persistFile(`${id}.${validation.ext || 'wav'}`, file); } catch { /* OPFS optional */ }
+          // Kein Gerätespeicher: addSample lädt das Audio still in die Server-Bibliothek.
           ok++;
         }
       } catch { failed++; }

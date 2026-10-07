@@ -19,6 +19,7 @@ import './core/voice/pluginCommandRegistry';
 import { trackError } from './utils/errorTracker';
 import { startDeviceLayoutWatch } from './hooks/useDeviceLayout';
 import { startPluginSettingsSync } from './utils/pluginSettings';
+import { startStudioStoreSync } from './utils/studioStoreSync';
 
 // DCT-118: Boot-Diagnostics + Auto-Logging – globale Fehler sichtbar machen
 // (kein stiller White-Screen) und automatisch an /api/telemetry melden.
@@ -44,7 +45,11 @@ if (bootMode === 'member') {
   startPluginSettingsSync();
 }
 
-createRoot(document.getElementById('root')!).render(
+// Nichts auf den Geräten (Betreiber 2026-10-06): Studio-Daten kommen vom Server
+// und werden vor dem ersten Zeichnen vorgeladen (höchstens 2,5 s).
+const studioStoreReady = bootMode === 'member' ? startStudioStoreSync() : Promise.resolve();
+
+void studioStoreReady.finally(() => createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       {bootMode === 'master-out' ? (
@@ -70,4 +75,4 @@ createRoot(document.getElementById('root')!).render(
       )}
     </ErrorBoundary>
   </StrictMode>,
-);
+));

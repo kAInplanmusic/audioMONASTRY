@@ -1,11 +1,12 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import { resetStorageForTests } from '../src/utils/storage';
 import {
   loadStemUsage, recordStemExtraction, estimateStemCost, formatUsd, emptyUsage,
 } from '../src/utils/stemUsage';
 
 describe('Stem-Nutzungszähler', () => {
   beforeEach(() => {
-    if (typeof localStorage !== 'undefined') localStorage.clear();
+    resetStorageForTests();
   });
 
   it('startet leer', () => {
@@ -33,7 +34,7 @@ describe('Stem-Nutzungszähler', () => {
     expect(formatUsd(2)).toBe('$2.00');
   });
 
-  it('persistiert über loadStemUsage (localStorage)', () => {
+  it('persistiert über loadStemUsage (Studio-Speicher, nicht auf dem Gerät)', () => {
     recordStemExtraction('replicate', 1234);
     const loaded = loadStemUsage();
     expect(loaded.count).toBe(1);
