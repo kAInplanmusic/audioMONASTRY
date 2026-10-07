@@ -4969,6 +4969,52 @@
         "budget",
         "gpu-orchestration"
       ]
+    },
+    {
+      "id": "VISUAL-P0-010",
+      "title": "visualMONK: Maker + Player fuer Live-Visuals aus eigenen Bildern/Videos",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Visuals",
+      "source": "Betreiber-Auftrag 2026-10-07",
+      "problem": "Visuals sollen aus vorhandenen Bildern/Videos live entstehen (keine KI-Generierung). Es fehlen Import eigener Medien, Maker (Tags, Loops, Looks, Sets) und Player (Decks, quantisierte Uebergaenge, Pads). Der Regisseur schneidet auf beliebige Onsets statt auf Takt.",
+      "note": "Audit + Zielbild + Phasen V0-V4 in docs/VISUALMAKER_PLAYER_SPEC.md. Baut auf vorhandenem Feature-Bus, Renderern, Regisseur, Schicht-Mischer und /visual-out auf. Taktgenaue Uebergaenge brauchen das Beat-Grid (AUDIO-P0-BEATMATCH-B1). Erzeugungsreste (makeClip, runpodVision/Video) entfallen mit der Flotten-Migration (AI-INFRA-001).",
+      "acceptance": [
+        "Eigene Bilder/Videos hochladen, serverseitig transkodiert und getaggt",
+        "Player mit 2 Decks, Crossfader, 8 Pads, Uebergaenge auf Downbeat",
+        "Sets in der Server-Session gespeichert, nichts auf dem Geraet",
+        "60 fps im perforMONK gemessen",
+        "Keine GPU-Generierung im Pfad"
+      ],
+      "files": [
+        "docs/VISUALMAKER_PLAYER_SPEC.md",
+        "src/visuals/",
+        "src/core/visual/",
+        "src/components/visual/VisualMonkOverlay.tsx",
+        "src/hooks/useVisualShow.ts"
+      ]
+    },
+    {
+      "id": "AUDIO-P0-BEATMATCH-B1",
+      "title": "Beatmatch: Beat-/Downbeat-Grid je Track, Time-Stretch, Phase-Lock",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Audio",
+      "source": "Betreiber-Auftrag 2026-10-07",
+      "problem": "Es gibt kein Beat-Grid je Track, keinen Time-Stretch ohne Tonhoehenaenderung und kein Phase-Lock zweier Decks. Vorhanden ist nur das Multi-User-Sync (MonastryMasterClock, PhaseLockedLoop).",
+      "note": "Plan in docs/VISUALMAKER_PLAYER_SPEC.md §3. B1 Grid beim Import (essentia-Handler existiert), B2 Stretch + Key-Lock (WASM/AudioWorklet, Kandidat Rubber Band, ungemessen) + Phase-Lock + SYNC. Kein Netzwerk im process(). Hoertest und Messung des Phasenfehlers noetig.",
+      "acceptance": [
+        "Beat/Downbeat-Grid je Track gespeichert und gemessen",
+        "Tempo-Anpassung ohne Tonhoehenaenderung, Latenz gemessen",
+        "Phasenfehler nach SYNC unter Grenzwert",
+        "Hoertest bestanden"
+      ],
+      "files": [
+        "docs/VISUALMAKER_PLAYER_SPEC.md",
+        "src/core/clock/MonastryMasterClock.ts",
+        "src/utils/PhaseLockedLoop.ts",
+        "services/audiomonastry-ai-runtime/handlers.py"
+      ]
     }
   ],
   "visionSandbox": [
