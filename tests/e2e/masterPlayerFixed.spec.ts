@@ -16,22 +16,22 @@ async function openStudio(page: Page): Promise<void> {
 
 const masterSection = (page: Page) => page.locator('#rack-masterplayer');
 
-test('P0-7: masterplayerMONK bleibt beim Scrollen sichtbar', async ({ page }) => {
+test('P0-7: masterplayerMONK steht fest direkt unter dem Kopf und scrollt mit (nichts klebt)', async ({ page }) => {
+  // Betreiber 2026-10-07: Kopf und Masterplayer sind fest (nicht schließbar,
+  // nicht verschiebbar), kleben beim Scrollen aber nicht.
   await openStudio(page);
 
   const master = masterSection(page);
   await expect(master).toBeVisible();
   const topBefore = (await master.boundingBox())?.y ?? -1;
   expect(topBefore).toBeGreaterThanOrEqual(0);
+  expect(topBefore).toBeLessThan(220);
+  await expect(master.locator('button')).toHaveCount(0);
 
   await page.mouse.wheel(0, 1500);
   await page.waitForTimeout(300);
-
-  await expect(master).toBeInViewport();
-  const box = await master.boundingBox();
-  expect(box).not.toBeNull();
-  // Bleibt oben im Viewport (direkt unter dem 80 px hohen Header).
-  expect(box!.y).toBeLessThan(200);
+  const after = (await master.boundingBox())?.y ?? 0;
+  expect(after).toBeLessThan(topBefore);
 });
 
 test('P0-7: masterplayerMONK ist View-only (keine Buttons, BPM sichtbar)', async ({ page }) => {

@@ -117,3 +117,14 @@ export async function switchPluginOn(page: Page, id: string, name: string): Prom
   await modeButton(page, name).click();
   await expect(rackRow(page, id)).toHaveAttribute('data-plugin-mode', 'ON', { timeout: 15_000 });
 }
+
+/**
+ * Menü im Kopf öffnen (Betreiber 2026-10-07): Einstellungen, Ausgänge,
+ * Clipboard und Zwischenspeicher liegen hinter dem Menüknopf neben der
+ * Nutzer-Anzeige.
+ */
+export async function openStudioMenu(page: Page): Promise<void> {
+  const btn = page.getByRole('button', { name: 'Menü', exact: true });
+  if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
+  await expect(btn).toHaveAttribute('aria-expanded', 'true');
+}

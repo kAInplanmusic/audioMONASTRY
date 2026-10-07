@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { entryButton, STUDIO_NAV, switchPluginOn } from './helpers/studioNav';
+import { entryButton, STUDIO_NAV, switchPluginOn, openStudioMenu } from './helpers/studioNav';
 import { resetSession } from './helpers/studioAuth';
 
 test.beforeEach(async () => {
@@ -41,6 +41,7 @@ test('Library-Sample → Action Menu → Project Clipboard → Send to Track', a
   // In den gemeinsamen Project Clipboard übernehmen.
   await menu.getByRole('menuitem', { name: /Copy to Project Clipboard/ }).click();
   await expect(menu).not.toBeVisible();
+  await openStudioMenu(page);
   await expect(page.getByRole('button', { name: 'CLIPBOARD (1)' }).first()).toBeVisible();
 
   // Lokalen Upload erzeugen (Audio mit URL) – Cloud-Fallback liefert eine Blob-URL.

@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { Bot, ChevronDown, ChevronUp } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { useMoaRun, useQuickActions } from './terminalShared';
 import { AgentRunPanel } from './AgentRunPanel';
 
 /**
  * aiMONK-Bottom-Dock (D7 / NEW-D7-1)
  * ====================================
- * Immer offenes KI-Dock für alle User (ersetzt „aiMONK als letztes Modul
- * unten"). Ausblendbar (Collapse), Fehler-/Log-Panel sichtbar, Aktionen
+ * Fest unten nach dem Rack (Betreiber 2026-10-07): für alle sichtbar, nicht
+ * schließbar, nicht verschiebbar. Fehler-/Log-Panel sichtbar, Aktionen
  * plugin-bewusst über MoaAgent → pluginCommandRegistry → PluginAudioRouter.
  */
 export const AiMonkDock = React.memo(function AiMonkDock() {
-  const [collapsed, setCollapsed] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [task, setTask] = useState('');
   const { run, results, meta, busy } = useMoaRun({
@@ -23,24 +22,8 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
   });
   const quickActions = useQuickActions(run);
 
-  if (collapsed) {
-    return (
-      <div className="fixed bottom-0 left-0 right-0 z-40">
-        <button
-          type="button"
-          onClick={() => setCollapsed(false)}
-          aria-label="aiMONK öffnen"
-          className="am-aidock-min"
-          aria-expanded="false"
-        >
-          <Bot className="w-3.5 h-3.5" /> aiMONK <ChevronUp className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div id="ai-monk-dock" className="am am-aidock">
+    <section id="ai-monk-dock" className="am-box am-aidock" style={{ ['--c' as string]: '#ff4fa8' }} aria-label="aiMONK">
       {agentOpen && (
         <div className="am-aidock-agent">
           <AgentRunPanel />
@@ -75,9 +58,6 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
         <button type="button" onClick={() => setAgentOpen((v) => !v)} aria-pressed={agentOpen} className={`am-tool ${agentOpen ? 'am-on' : ''}`} style={{ ['--c' as string]: '#ff4fa8' }} title="Agent-Lauf: planen → ausführen → prüfen">
           AGENT
         </button>
-        <button type="button" onClick={() => setCollapsed(true)} aria-label="aiMONK-Dock einklappen" className="am-tool">
-          <ChevronDown className="w-4 h-4" />
-        </button>
       </div>
 
       {results.length > 0 && (
@@ -90,6 +70,6 @@ export const AiMonkDock = React.memo(function AiMonkDock() {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 });

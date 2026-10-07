@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Music, Piano, Guitar, Layers, Loader2, Cpu, Radio, Drum, Sparkles } from 'lucide-react';
+import { Music, Piano, Guitar, Layers, Cpu, Radio, Drum, Sparkles } from 'lucide-react';
+import { AmCard } from './am/amUi';
 import { DropTarget } from './DropTarget';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
@@ -192,107 +193,48 @@ export const InstrumentsTerminal = React.memo(function InstrumentsTerminal() {
     return true;
   });
 
+  const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   return (
-    <div className={`w-full h-full flex flex-col bg-[#161616] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-sans shadow-2xl ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="instrument" placeholder="MOA: z. B. 'Program 25 laden'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-      <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-purple-900/20 to-[#161616] border-b border-purple-900/30">
-        <h2 className="text-xl font-black uppercase flex items-center gap-2">
-          <Music className="w-5 h-5 text-purple-400" />
-          Instruments <span className="text-[10px] font-mono text-purple-400 border border-purple-500/30 px-2 rounded">WAM 2.0</span>
-          <span className={`text-[10px] font-mono px-2 rounded border ${midiProgram !== null ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800'}`}>
-            MIDI PGM {midiProgram ?? '—'}
-          </span>
-        </h2>
-        <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
+    <div className="am-rackrow" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
+      <MoaAssistant pluginId="instrument" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+      <AmCard title="Instrument" right={<span className="am-vb">MIDI PGM {midiProgram ?? '—'}</span>} style={{ width: 300 }}>
+        <select className="am-sel" aria-label="Kategorie" value={activeCategory} onChange={(e) => setActiveCategory(e.target.value)}>
+          {INSTRUMENT_CATEGORIES.map((cat) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
         </select>
-      </div>
-
-      <div className="flex-1 flex overflow-hidden">
-        <div className="w-1/3 border-r border-neutral-800 bg-[#111] p-4 flex flex-col">
-            <input
-                placeholder="Search..."
-                className="w-full bg-[#1a1a1a] border border-neutral-800 rounded p-2 text-sm mb-4"
-                onChange={(e) => setSearch(e.target.value)}
-            />
-            <div className="grid grid-cols-3 gap-2 mb-4">
-                {INSTRUMENT_CATEGORIES.map(cat => (
-                    <button type="button" key={cat.name} onClick={() => setActiveCategory(cat.name)} className={`p-2 rounded border text-xs ${activeCategory === cat.name ? 'bg-purple-900/40 border-purple-500' : 'bg-[#1a1a1a] border-neutral-800'}`}>
-                        {cat.name}
-                    </button>
-                ))}
-            </div>
-            <div className="text-[10px] font-mono text-neutral-500 mb-2">{filtered.length} / {instruments.length} Instrumente</div>
-            <div className="flex-1 overflow-y-auto">
-                {filtered.map(inst => (
-                    <button type="button" key={inst.id} onClick={() => loadInstrument(inst)} className={`w-full p-2 text-left text-sm ${activeInstrument?.id === inst.id ? 'text-purple-300 bg-purple-900/20' : ''}`}>
-                        {inst.name}
-                    </button>
-                ))}
-            </div>
+        <input className="am-libq" placeholder="Instrument suchen …" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Instrument suchen" />
+        <select className="am-sel" aria-label="Instrument wählen" value={activeInstrument?.id ?? ''}
+          onChange={(e) => { const inst = instruments.find((x) => x.id === Number(e.target.value)); if (inst) void loadInstrument(inst); }}>
+          <option value="">{filtered.length} Instrumente – wählen …</option>
+          {filtered.map((inst) => <option key={inst.id} value={inst.id}>{inst.name}</option>)}
+        </select>
+        <div className="am-hint" aria-live="polite">
+          {isLoading ? 'lädt …' : activeInstrument ? `${activeInstrument.name} · ${activeInstrument.category}` : 'kein Instrument geladen'}
         </div>
-
-        <div className="flex-1 p-8 flex flex-col items-center justify-center gap-4">
-            <DropTarget
-                label="Drop Sample to Slot"
-                onDrop={handleSampleDrop}
-                className="w-full h-40 flex flex-col items-center justify-center"
-            >
-                {isLoading ? <Loader2 className="w-12 h-12 animate-spin text-purple-500" /> :
-                <div className="text-center font-black">
-                    {droppedSample ? `${droppedSample.name} LOADED` : 'DROP SAMPLE HERE'}
-                </div>}
-            </DropTarget>
-
-            {/* Spielansichten (View 1/2/3) */}
-            <div className="w-full bg-black/40 rounded-lg border border-neutral-800 p-3">
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono text-purple-400 uppercase tracking-widest">Spielansicht</span>
-                    <span className="text-[10px] text-neutral-500 truncate max-w-[50%]">
-                        {activeInstrument ? activeInstrument.name : 'kein Instrument'}
-                    </span>
-                </div>
-                <div className="flex gap-1 mb-3" role="tablist" aria-label="Spielansicht">
-                    {([['preview', 'PREVIEW'], ['keys', 'KEYS'], ['pads', 'PADS'], ['canvas', 'CANVAS'], ['garageband', 'ECHTBILD']] as const).map(([v, label]) => (
-                        <button type="button" key={v} role="tab" aria-selected={playView === v}
-                            onClick={() => setPlayView(v)}
-                            className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest border ${
-                                playView === v ? 'bg-purple-900/40 border-purple-400 text-purple-200' : 'border-neutral-800 text-neutral-500 hover:text-neutral-300'
-                            }`}
-                        >
-                            {label}
-                        </button>
-                    ))}
-                </div>
-
-                {playView === 'preview' && (
-                    <div className="flex gap-1 overflow-x-auto pb-1">
-                        {['C4','D4','E4','F4','G4','A4','B4','C5'].map(note => (
-                            <button type="button"
-                                key={note}
-                                onMouseDown={(e) => { e.preventDefault(); previewNote(note); }}
-                                onMouseUp={releaseNote}
-                                onMouseLeave={releaseNote}
-                                className="flex-1 min-w-[28px] h-16 rounded shadow-inner bg-linear-to-b from-neutral-300 to-neutral-400 text-neutral-900 text-xs font-bold hover:from-neutral-200 active:from-purple-300"
-                            >
-                                {note}
-                            </button>
-                        ))}
-                    </div>
-                )}
-                {playView === 'keys' && <UniversalKeyboard baseNote={48} octaves={2} />}
-                {playView === 'pads' && <PadGrid rows={4} cols={4} baseNote={48} />}
-                {playView === 'canvas' && (
-                    <InstrumentCanvas instrumentName={activeInstrument?.name ?? 'Guitar'} />
-                )}
-                {playView === 'garageband' && <GarageBandInstrumentView />}
-            </div>
-        </div>
-      </div>
+        <DropTarget label="Sample auf den Slot ziehen" onDrop={handleSampleDrop} className="am-drop">
+          <span>{droppedSample ? `${droppedSample.name} geladen` : 'Sample hierher ziehen'}</span>
+        </DropTarget>
+      </AmCard>
+      <AmCard title="Spielen" style={{ flex: 1, minWidth: 520 }}
+        right={(
+          <div className="am-seg" role="tablist" aria-label="Spielansicht">
+            {([['keys', 'TASTEN'], ['pads', 'PADS'], ['canvas', 'INSTRUMENT'], ['garageband', 'ECHTBILD'], ['preview', 'NOTEN']] as const).map(([v, label]) => (
+              <button type="button" key={v} role="tab" aria-selected={playView === v} className={playView === v ? 'am-on' : ''} onClick={() => setPlayView(v)}>{label}</button>
+            ))}
+          </div>
+        )}>
+        {playView === 'preview' && (
+          <div style={{ display: 'flex', gap: 4 }}>
+            {['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'].map((note) => (
+              <button type="button" key={note} className="am-btn" style={{ flex: 1, height: 60 }}
+                onMouseDown={(e) => { e.preventDefault(); previewNote(note); }} onMouseUp={releaseNote} onMouseLeave={releaseNote}>{note}</button>
+            ))}
+          </div>
+        )}
+        {playView === 'keys' && <UniversalKeyboard baseNote={48} octaves={2} />}
+        {playView === 'pads' && <PadGrid rows={4} cols={4} baseNote={48} />}
+        {playView === 'canvas' && <InstrumentCanvas instrumentName={activeInstrument?.name ?? 'Guitar'} />}
+        {playView === 'garageband' && <GarageBandInstrumentView />}
+      </AmCard>
     </div>
   );
 });

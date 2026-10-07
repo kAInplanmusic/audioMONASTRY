@@ -17,6 +17,26 @@ Quellen → Mixer → Nachbearbeitung → Recorder gilt **nur für die Verkabelu
 die übrigen Plugins folgen in der Kopfreihenfolge. Der Mixer zeigt den Signalweg
 als eigene Leiste („Signalweg“), damit beides sichtbar bleibt.
 
+## Aufbau (Betreiber 2026-10-07) – verbindlich
+
+Vorlage: `public/uidesign/uiübersichtapp.jpg` (ganze App), `uimixerMONKdigital.png`,
+`uimixerMONKechtbild.PNG`, `uimixercontroller1–3.jpg` (Mixer und Controller).
+
+- **Kopf:** Logo · 16 Plugin-Symbole in **2 Reihen à 8**, jedes in seiner Modulfarbe
+  (die Farbe trägt auch das Modul) · Nutzer-Anzeige (wer ist da, n/4) mit direkt
+  angesetztem **Menü-/Einstellknopf** · **Visuals an/aus** (nur Mixer-Halter, gilt für
+  die Session). Kein Stream-Knopf (Main ist immer an), kein Zwischenspeicher-Knopf im Kopf
+  (Zwischenspeicher, Clipboard, Ausgänge, Vollbild, Einstellungen liegen im Menü).
+- **Fest, nicht schließbar, nicht verschiebbar, nicht klebend:** oben masterplayerMONK;
+  unten nach dem Rack aiMONK, dann perforMONK – für alle sichtbar.
+- **Rack:** mixerMONK, dann die 15 Plugins in Kopfreihenfolge. Eingeklappt einzeilig:
+  Name, Halter, OFF/STBY/ON, SYNC, Mini-Pegel, ▶/■ (Session, nur Halter), Aufklapp-Pfeil.
+  Aufgeklappt nur so groß wie nötig. Mehrere dürfen gleichzeitig offen sein.
+- **mixerMONK:** 8 Kanäle in 2 Bänken (A 1–4 / B 5–8), jeder Kanal mit ▶ und SYNC.
+  Controller links/rechts ein-/ausblendbar (0–2), Skins **CDJ · Pads · Bibliothek**
+  (auch zweimal derselbe). Nicht übernommen: Effekt-Tabelle, Szenen, Booth/Kopfhörer/Mic.
+- KI-Eingaben stehen nur im aiMONK, nicht in den Plugins.
+
 ## Formate (Betreiber 2026-10-06): gleiche Kopie, nur in klein
 
 „Jedes Gerät gleiche Kopie, nur in klein." Es gibt **keine** eigenen Handy- oder Pad-Ansichten.
