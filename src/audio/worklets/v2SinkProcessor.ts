@@ -31,6 +31,7 @@ import { V2SampleClock, type V2ScheduledStep } from '../../core/audio/live/V2Sam
 import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../core/audio/live/V2StepQueue';
 import { V2_CHANNELS, type V2Channel } from '../../core/audio/V2StudioGraph';
 import { SfzVoiceBank, type SfzSourceMap } from '../../core/instrument/sfzVoice';
+import { V2RenderFaultGuard } from '../../core/audio/live/V2RenderFaultGuard';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
 /** Kapazität der vorallokierten Clock-Ausgabe pro Block (128er-Block: max. 1 Step). */
@@ -71,6 +72,12 @@ class V2SinkProcessor extends AudioWorkletProcessor {
    * (`V2SinkEngine.render`, External-Blöcke werden nur gelesen), Wiederverwendung ist daher unkritisch.
    */
   private readonly sfzScratch = new Map<V2Channel, { buffer: Float32Array; block: Float32Array[] }>();
+  /**
+   * RT-AUDIT-P0-007: Fehlerpfad. Eine Exception in `process()` würde den
+   * Prozessor dauerhaft abschalten (DAW stumm). Fehler werden gefangen:
+   * Stille für diesen Block, Zähler, gedrosselte `render-error`-Meldung.
+   */
+  private readonly faults = new V2RenderFaultGuard(sampleRate);
 
   // --- CPU-Budget-Messung (PERF-P3-001) -------------------------------------
   // Ausschliesslich opt-in ueber `processorOptions.measure` (Default aus, im
@@ -132,7 +139,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // Scheitern – der Knoten lieferte danach Stille und es kamen keine
     // Nachrichten an. Die Messung meldet sich deshalb im ersten process()-Block
     // (recordCpu sendet den ersten Bericht sofort).
-    this.port.onmessage = (e: MessageEvent<V2SinkMessage>) => {
+    const handleMessage = (e: MessageEvent<V2SinkMessage>) => {
       const msg = e.data;
       if (!msg || typeof msg.type !== 'string') return;
       switch (msg.type) {
@@ -290,9 +297,33 @@ class V2SinkProcessor extends AudioWorkletProcessor {
           break;
       }
     };
+    // RT-AUDIT-P0-007: eine kaputte Nachricht darf weder den Port-Handler noch
+    // den Prozessor beschädigen – Fehler fangen und als `message-error` melden.
+    this.port.onmessage = (e: MessageEvent<V2SinkMessage>) => {
+      try {
+        handleMessage(e);
+      } catch (err) {
+        this.faults.onMessageError(err, (e?.data as { type?: unknown } | null | undefined)?.type, this.port);
+      }
+    };
   }
 
-  process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+  /**
+   * RT-AUDIT-P0-007: Jeder Fehler im Render wird gefangen. Ausgang bleibt für
+   * diesen Block stumm, der Prozessor bleibt am Leben (`return true`) und der
+   * nächste Block rendert normal. Im fehlerfreien Pfad kostet das try/catch
+   * nichts und allokiert nichts.
+   */
+  process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
+    try {
+      return this.renderBlock(inputs, outputs);
+    } catch (e) {
+      this.faults.onRenderError(e, outputs, currentFrame, this.port);
+      return true;
+    }
+  }
+
+  private renderBlock(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const output = outputs[0];
     if (!output || !output[0]) return true;
 

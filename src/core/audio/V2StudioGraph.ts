@@ -30,16 +30,20 @@ export abstract class V2ChannelStripGraph {
   readonly gains = new Map<V2Channel, GainNode>();
   readonly pans = new Map<V2Channel, StereoPanNode>();
 
+  // RT-AUDIT-P0-007: Ein unbekannter Kanal (z. B. aus einer Port-Nachricht)
+  // wird ignoriert. Vorher warf der `!`-Zugriff einen TypeError – im Render-
+  // bzw. Nachrichtenpfad des Worklets genügte das, um die DAW stummzuschalten.
   setSourceBuffer(track: V2Channel, buffer: Float32Array[]): void {
-    this.sources.get(track)!.sourceBuffer = buffer;
+    const source = this.sources.get(track);
+    if (source) source.sourceBuffer = buffer;
   }
 
   setGainDb(track: V2Channel, db: number): void {
-    this.gains.get(track)!.gain.setValue(v2GainDbToLinear(db));
+    this.gains.get(track)?.gain.setValue(v2GainDbToLinear(db));
   }
 
   setPan(track: V2Channel, pan: number): void {
-    this.pans.get(track)!.pan.setValue(Math.max(-1, Math.min(1, pan)));
+    this.pans.get(track)?.pan.setValue(Math.max(-1, Math.min(1, pan)));
   }
 }
 
