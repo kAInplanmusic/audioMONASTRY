@@ -22,7 +22,7 @@ import { V2SinkEngine, type V2StepRenderEvent } from '../../src/core/audio/live/
 import { V2SampleClock, type V2ScheduledStep } from '../../src/core/audio/live/V2SampleClock';
 import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../src/core/audio/live/V2StepQueue';
 import { V2MonitorGraph } from '../../src/core/audio/V2MonitorGraph';
-import { audioBufferPool } from '../../src/core/audio/BufferPool';
+import { getPortBufferAllocations } from '../../src/core/audio/PortBuffers';
 import { AudioGraph } from '../../src/core/audio/AudioGraph';
 import { SourceNode } from '../../src/core/audio/nodes/basicNodes';
 import { EffectNode } from '../../src/core/audio/nodes/processingNodes';
@@ -110,22 +110,28 @@ async function budgetAndGc(): Promise<void> {
   obs.observe({ entryTypes: ['gc'] });
   const BLOCKS = 375 * 60;
   const times = new Float64Array(BLOCKS);
-  const before = audioBufferPool.getStats();
+  // RT-AUDIT-P0-002: BufferPool entfernt – gezählt werden jetzt die von den
+  // festen Port-/Scratch-Puffern angelegten Kanäle (einziger Allokationsweg
+  // der Nodes). SOLL unverändert: 0 pro Block. Der erste Block legt die festen
+  // Puffer einmalig an (Setup, wie das Anlegen der Engine); gezählt wird der
+  // Dauerbetrieb ab Block 1. Die Zeitmessung umfasst weiterhin alle Blöcke.
+  let before = getPortBufferAllocations();
   const tracks: V2Channel[] = ['channel1', 'channel3', 'channel8'];
   for (let b = 0; b < BLOCKS; b++) {
     const ev: V2StepRenderEvent[] = b % 23 === 0 ? tracks.map((track) => ({ track, startSample: 5, velocity: 0.8, freq: 60 })) : [];
     const t0 = performance.now();
     engine.render(ctx(b), ev);
     times[b] = performance.now() - t0;
+    if (b === 0) before = getPortBufferAllocations();
   }
-  const after = audioBufferPool.getStats();
+  const after = getPortBufferAllocations();
   await new Promise((r) => setTimeout(r, 50));
   obs.disconnect();
   const sorted = Array.from(times).sort((a, b) => a - b);
   const p999 = sorted[Math.floor(0.999 * (sorted.length - 1))];
   const over = sorted.filter((t) => t > BUDGET_MS).length;
-  const allocPerBlock = (after.size - before.size) / BLOCKS;
-  check('RT-AUDIT-P0-002/alloc', 'Neue Pool-Puffer pro Block', allocPerBlock, 'Arrays/Block', '= 0', allocPerBlock === 0);
+  const allocPerBlock = (after - before) / (BLOCKS - 1);
+  check('RT-AUDIT-P0-002/alloc', 'Neue Port-Puffer pro Block', allocPerBlock, 'Arrays/Block', '= 0', allocPerBlock === 0);
   check('RT-AUDIT-P0-002/gcmax', 'Längste GC-Pause (60 s)', gcMax, 'ms', '< 1 ms', gcMax < 1);
   check('RT-AUDIT-P0-002/gc', 'GC-Ereignisse pro Sekunde', gcCount / 60, '1/s', '< 0,2', gcCount / 60 < 0.2);
   check('RT-AUDIT-P0-002/p999', 'Renderzeit p99,9', p999, 'ms', `< ${(BUDGET_MS / 2).toFixed(2)} ms (50 % Budget)`, p999 < BUDGET_MS / 2);

@@ -61,6 +61,11 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
   readonly monitorBus: StereoSumNode;
 
   private routingPlan: MonitorRoutingPlan;
+  /**
+   * RT-AUDIT-P0-002: EIN Ergebnisobjekt für alle `render()`-Aufrufe (vorher ein
+   * neues Objekt pro Block). Der Aufrufer liest es bis zum nächsten Render.
+   */
+  private readonly renderResult: V2MonitorRenderResult = { main: null, cue: null, monitor: null };
 
   constructor(sampleRate = 48000, blockSize = 128) {
     super();
@@ -222,15 +227,19 @@ export class V2MonitorGraph extends V2ChannelStripGraph {
     }
   }
 
-  /** Verarbeitet den Graphen und liefert Main/Cue/Monitor-Blöcke. */
+  /**
+   * Verarbeitet den Graphen und liefert Main/Cue/Monitor-Blöcke. Liefert jedes
+   * Mal DASSELBE Ergebnisobjekt (nur die Felder werden gesetzt); die Puffer
+   * sind die festen Port-Puffer der Nodes und gelten bis zum nächsten Render.
+   */
   render(ctx: IProcessingContext): V2MonitorRenderResult {
     this.graph.process(ctx);
-    return {
-      // AUDIO-P0-004: `main` ist der Post-Processing-Master (nach Mastering/Limiter).
-      main: this.masterMastering.outputs[0].buffer ?? this.mainBus.outputs[0].buffer,
-      cue: this.cueBus.outputs[0].buffer,
-      monitor: this.monitorBus.outputs[0].buffer,
-    };
+    const result = this.renderResult;
+    // AUDIO-P0-004: `main` ist der Post-Processing-Master (nach Mastering/Limiter).
+    result.main = this.masterMastering.outputs[0].buffer ?? this.mainBus.outputs[0].buffer;
+    result.cue = this.cueBus.outputs[0].buffer;
+    result.monitor = this.monitorBus.outputs[0].buffer;
+    return result;
   }
 
   /** Kompatibler Ein-Ausgangs-Render für V2SinkEngine: lokaler Monitor-Ausgang. */

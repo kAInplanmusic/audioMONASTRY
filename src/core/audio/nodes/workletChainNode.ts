@@ -20,18 +20,25 @@
  * ein Bypass, der 3 ms frueher ankommt, ist ein Klick, kein Bypass.
  */
 import { BaseNode } from './basicNodes';
-import { audioBufferPool } from '../BufferPool';
+import { copyChannel, ensureBufferSet } from '../PortBuffers';
 import type { IProcessingContext } from '../types';
 import type { WorkletProcessFn } from '../backends/WorkletAdapter';
 
-/** Durchreichen: der neutrale Zustand, wenn kein Prozessor gesetzt ist. */
+const NO_CHANNELS: Float32Array[] = [];
+
+/**
+ * Durchreichen: der neutrale Zustand, wenn kein Prozessor gesetzt ist.
+ * RT-AUDIT-P0-002: schreibt in den vom Aufrufer bereitgestellten Puffer
+ * `output[0]` (fest je Knoten); nur ohne passenden Puffer wird angelegt.
+ */
 const PASSTHROUGH: WorkletProcessFn = (input, output, ctx) => {
-  const src = input[0] ?? [];
+  const src = input[0] ?? NO_CHANNELS;
   const len = src[0]?.length ?? ctx.bufferSize;
   const chans = Math.max(1, src.length);
-  const out = audioBufferPool.acquire(chans, len);
+  const out = ensureBufferSet(output[0], chans, len);
   for (let ch = 0; ch < chans; ch++) {
-    if (src[ch]) out[ch].set(src[ch].subarray(0, len));
+    const s = src[ch];
+    if (s) copyChannel(out[ch], s, len);
     else out[ch].fill(0);
   }
   output[0] = out;
@@ -57,6 +64,15 @@ export class WorkletChainNode extends BaseNode {
   private dryWrite = 0;
   private dryDelay = 0;
   private dryChannels = 2;
+  /**
+   * RT-AUDIT-P0-002: feste Puffer statt Pool/Literal pro Block – Nass-Scratch
+   * (Ziel des Prozessors), Ein-/Ausgabe-Container der Prozessor-Signatur und
+   * der verzögerte trockene Weg.
+   */
+  private wetScratch: Float32Array[] | null = null;
+  private readonly wetOut: Float32Array[][] = [NO_CHANNELS];
+  private readonly processInput: Float32Array[][] = [NO_CHANNELS];
+  private dryOut: Float32Array[] | null = null;
 
   constructor(id: string, public readonly pluginId: string, inputs = 1, outputs = 1) {
     super(id, `worklet:${pluginId}`, inputs, outputs);
@@ -121,13 +137,21 @@ export class WorkletChainNode extends BaseNode {
 
     // 1) Nass: der Prozessor rechnet IMMER - auch im Bypass. Nur so bleibt die
     //    Latenz des Knotens konstant und ein Umschalten kann ueberblenden.
-    const wetOut: Float32Array[][] = [audioBufferPool.acquire(chans, len)];
-    this.processFn([input], wetOut, ctx);
-    const wetBuf = wetOut[0] ?? input;
+    //    Der Prozessor bekommt einen festen, geleerten Scratch (wie frueher den
+    //    frischen Pool-Puffer); er darf hineinschreiben oder `output[0]` ersetzen.
+    const scratch = ensureBufferSet(this.wetScratch, chans, len);
+    this.wetScratch = scratch;
+    for (let ch = 0; ch < chans; ch++) scratch[ch].fill(0);
+    this.wetOut[0] = scratch;
+    this.processInput[0] = input;
+    this.processFn(this.processInput, this.wetOut, ctx);
+    const wetBuf = this.wetOut[0] ?? input;
 
     // 2) Voll nass ohne Verzoegerung: direkt ausgeben (nichts zu mischen).
+    //    Nie den Eingang selbst weiterreichen (Fan-out/In-Place-Falle): liefert
+    //    der Prozessor keinen eigenen Puffer, wird in den Port-Puffer kopiert.
     if (this.wet >= 1 && this.dryDelay === 0) {
-      this.outputs[0].buffer = wetBuf;
+      this.outputs[0].buffer = wetBuf === input ? this.copyToPort(input, len) : wetBuf;
       return;
     }
 
@@ -135,7 +159,7 @@ export class WorkletChainNode extends BaseNode {
     const dry = this.delayedDry(input, len, chans);
 
     // 4) Ueberblenden. Rechenrisiko: bei wet=1 ist das exakt das nasse Signal.
-    const out = audioBufferPool.acquire(chans, len);
+    const out = this.ensureOutput(chans, len);
     const w = this.wet;
     const d = 1 - w;
     for (let ch = 0; ch < chans; ch++) {
@@ -143,17 +167,27 @@ export class WorkletChainNode extends BaseNode {
       const dryCh = dry[ch] ?? dry[0];
       const dst = out[ch];
       for (let i = 0; i < len; i++) {
-        dst[i] = (wetCh?.[i] ?? 0) * w + (dryCh?.[i] ?? 0) * d;
+        const wv = wetCh !== undefined && i < wetCh.length ? wetCh[i] : 0;
+        const dv = dryCh !== undefined && i < dryCh.length ? dryCh[i] : 0;
+        dst[i] = wv * w + dv * d;
       }
     }
     this.outputs[0].buffer = out;
   }
 
-  /** Trockener Weg mit Ausgleichsverzoegerung (0 = unveraenderter Eingang). */
+  /** Kopie des Eingangs in den festen Port-Puffer (gleiche Kanalzahl). */
+  private copyToPort(input: Float32Array[], len: number): Float32Array[] {
+    const out = this.ensureOutput(input.length, len);
+    for (let ch = 0; ch < out.length; ch++) copyChannel(out[ch], input[ch], len);
+    return out;
+  }
+
+  /** Trockener Weg mit Ausgleichsverzoegerung (0 = unveraenderter Eingang, nur gelesen). */
   private delayedDry(input: Float32Array[], len: number, chans: number): Float32Array[] {
     if (this.dryDelay === 0) return input;
     if (this.dryChannels < chans) this.allocateDry(chans);
-    const out = audioBufferPool.acquire(chans, len);
+    const out = ensureBufferSet(this.dryOut, chans, len);
+    this.dryOut = out;
     const size = Math.max(1, this.dryDelay);
     for (let ch = 0; ch < chans; ch++) {
       const ring = this.dryRing[ch];
@@ -163,7 +197,7 @@ export class WorkletChainNode extends BaseNode {
       for (let i = 0; i < len; i++) {
         const r = (w + size - this.dryDelay) % size;
         dst[i] = ring[r];
-        ring[w] = src?.[i] ?? 0;
+        ring[w] = src !== undefined && i < src.length ? src[i] : 0;
         w = (w + 1) % size;
       }
       if (ch === chans - 1) this.dryWrite = w;

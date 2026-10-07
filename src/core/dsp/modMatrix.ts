@@ -45,6 +45,22 @@ export interface ModMatrixResult {
 
 const finite = (v: unknown, fallback = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
 
+/**
+ * Beitrag EINER Route (RT-AUDIT-P0-002: allokationsfreier Kern, den
+ * `applyModMatrix` und der Audio-Thread-Node `ModMatrixNode` gemeinsam nutzen).
+ * Vorbedingung: `rawSource` und `depth` sind endlich und `depth !== 0`.
+ */
+export function modRouteContribution(rawSource: number, depth: number, polarity?: ModPolarity): number {
+  const clampedDepth = Math.max(-1, Math.min(1, depth));
+  const shaped = polarity === 'bipolar' ? rawSource * 2 - 1 : rawSource;
+  return shaped * clampedDepth;
+}
+
+/** Klemmt einen summierten Zielwert wie `applyModMatrix` (NaN/Inf → 0). */
+export function clampModulation(value: number, lo: number, hi: number): number {
+  return Math.max(lo, Math.min(hi, Number.isFinite(value) ? value : 0));
+}
+
 /** Wendet die Matrix an. Reine Funktion, keine Nebenwirkungen. */
 export function applyModMatrix(
   routes: readonly ModRoute[],
@@ -75,15 +91,13 @@ export function applyModMatrix(
       skipped.push(route.id);
       continue;
     }
-    const clampedDepth = Math.max(-1, Math.min(1, depth));
-    const shaped = route.polarity === 'bipolar' ? rawSource * 2 - 1 : rawSource;
-    const contribution = shaped * clampedDepth;
+    const contribution = modRouteContribution(rawSource, depth, route.polarity);
     values[route.destination] = (values[route.destination] ?? 0) + contribution;
     applied += 1;
   }
 
   for (const [destination, value] of Object.entries(values)) {
-    values[destination] = Math.max(lo, Math.min(hi, Number.isFinite(value) ? value : 0));
+    values[destination] = clampModulation(value, lo, hi);
   }
 
   return { values, applied, skipped };

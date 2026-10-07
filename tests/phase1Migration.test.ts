@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AudioGraph } from '../src/core/audio/AudioGraph';
-import { BufferPool } from '../src/core/audio/BufferPool';
+import { ensureBufferSet } from '../src/core/audio/PortBuffers';
 import { GraphStateBridge } from '../src/core/audio/GraphStateBridge';
 import { WorkletProcessorAdapter } from '../src/core/audio/backends/WorkletAdapter';
 import { WorkletGraphRuntime } from '../src/core/audio/WorkletGraphRuntime';
@@ -75,13 +75,16 @@ describe('Phase 1, Schritt 3 – Worklet-Adapter + Optimierung', () => {
     expect(worklet.outputs[0].buffer![0][0]).toBeCloseTo(2, 5);
   });
 
-  it('BufferPool wiederverwendet Buffer statt neu zu allokieren', () => {
-    const pool = new BufferPool();
-    const a = pool.acquire(2, 128);
-    pool.release(a);
-    const b = pool.acquire(2, 128);
+  // RT-AUDIT-P0-002: der BufferPool (release() wurde nie aufgerufen) ist durch
+  // feste Port-Puffer ersetzt; geprueft wird dieselbe Eigenschaft – Wiederverwendung.
+  it('feste Port-Puffer werden wiederverwendet statt neu allokiert', () => {
+    const a = ensureBufferSet(null, 2, 128);
+    const b = ensureBufferSet(a, 2, 128);
+    expect(b).toBe(a);
     expect(b[0]).toBe(a[0]);
-    expect(pool.getStats().acquired).toBe(2);
+    const c = ensureBufferSet(b, 2, 256);
+    expect(c).not.toBe(a);
+    expect(c[0].length).toBe(256);
   });
 });
 
