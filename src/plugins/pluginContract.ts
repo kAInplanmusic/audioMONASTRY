@@ -70,8 +70,21 @@ export interface PluginAudioContract {
   readonly syncCapable: boolean;
   /** Geht er durch die Kanalzüge (Quelle) oder direkt in die Summe (Insert)? */
   readonly viaChannel: boolean;
-  /** Erzeugt selbst Ton (im Gegensatz zu reiner Steuerung wie biblio). */
+  /**
+   * Erzeugt dieser Knoten Ton, ohne dass Audio hineingeht (Generator)?
+   *
+   * Bewusst NICHT „gibt Audio aus": effect und mixer geben ebenfalls Audio aus,
+   * erzeugen aber keines. Gemeint ist der Generator-Fall (Quellen, die aus
+   * Samples/Patterns Ton machen). Der Review-Punkt, dass der Name das
+   * verwechselbar macht, ist berechtigt - der Kommentar hier ist die Antwort.
+   */
   readonly producesAudio: boolean;
+  /**
+   * Wo greift ein Insert? 'channel' = im Kanalzug (vor der Summe, je Quelle),
+   * 'master' = in der Summe (nach dem Merge). `null` fuer Nicht-Inserts.
+   * Ohne diese Angabe ist nicht entscheidbar, WO ein Insert sitzt.
+   */
+  readonly insertScope: 'channel' | 'master' | null;
   /**
    * Ist der Knoten im Audio-Graph 1× instanziiert? IMMER true.
    *
@@ -106,6 +119,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -123,6 +137,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -140,6 +155,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -156,6 +172,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: null,
     singleInstance: true,
   },
   // ---- PRODUCING ----
@@ -174,6 +191,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -191,6 +209,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -208,6 +227,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -224,6 +244,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: null,
     singleInstance: true,
   },
   // ---- AI ----
@@ -243,6 +264,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -260,6 +282,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -281,6 +304,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: true,
     viaChannel: true,
     producesAudio: true,
+    insertScope: null,
     singleInstance: true,
   },
   {
@@ -298,6 +322,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: 'channel',
     singleInstance: true,
   },
   // ---- MASTERING ----
@@ -316,6 +341,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: 'master',
     singleInstance: true,
   },
   {
@@ -335,6 +361,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: 'master',
     singleInstance: true,
   },
   {
@@ -357,6 +384,7 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: 'master',
     singleInstance: true,
   },
   {
@@ -374,15 +402,34 @@ export const PLUGIN_CONTRACTS: readonly PluginAudioContract[] = [
     syncCapable: false,
     viaChannel: false,
     producesAudio: false,
+    insertScope: null,
     singleInstance: true,
   },
 ];
+
+/**
+ * Die ENGINE-SAMPLERATE, auf die sich `intrinsicLatencyFrames` bezieht.
+ *
+ * Die Werte im Vertrag sind Frames, keine Sekunden - sie gelten nur bei genau
+ * dieser Rate. 48 kHz ist die Invariante des Projekts (gleiche Zahl in
+ * `v2Pdc.ts`: 5 ms ≙ 240 Frames). Wer die Engine-Rate aendert, MUSS die
+ * Latenzwerte umrechnen; der Test haelt die Kopplung fest.
+ */
+export const CONTRACT_SAMPLE_RATE = 48000;
+
+/** Der Mastering-Lookahead in Sekunden - die Quelle der 240 Frames. */
+export const MASTERING_LOOKAHEAD_SEC = 0.005;
+
+/** Lookahead in Frames bei beliebiger Rate (fuer andere Sampleraten). */
+export function masteringLookaheadFrames(sampleRate = CONTRACT_SAMPLE_RATE): number {
+  return Math.round(MASTERING_LOOKAHEAD_SEC * sampleRate);
+}
 
 /** Nachschlagen per ID. */
 export const CONTRACT_BY_ID: Readonly<Record<string, PluginAudioContract>> =
   Object.freeze(Object.fromEntries(PLUGIN_CONTRACTS.map((c) => [c.id, c])));
 
-/** Die 9 Quellen, die über die Kanalzüge laufen (in Signalreihenfolge). */
+/** Die 8 Quellen, die über die Kanalzüge laufen (biblio nicht - kein Ton). */
 export const CHANNEL_SOURCES: readonly PluginAudioContract[] =
   PLUGIN_CONTRACTS.filter((c) => c.viaChannel);
 
@@ -401,14 +448,33 @@ export function syncCapableIds(): string[] {
 }
 
 /**
- * Die serielle Master-Kette (Insert-Pfad) und die parallele Effektebene (Return)
- * - getrennt, weil ein Plugin nie beides sein darf (Review-Punkt 6.5).
+ * Die serielle Master-Kette (Insert-Pfad) und die parallele Effektebene (Return).
+ *
+ * Die REIHENFOLGE wird hier ausgeschrieben, nicht aus der Vertrags-Reihenfolge
+ * gefiltert: Rollen sagen, WAS ein Knoten ist, nicht WO er in der Kette steht.
+ * Ein `filter()` ueber PLUGIN_CONTRACTS liefert die Vertrags-Reihenfolge und
+ * damit `spatial -> eq -> dsp -> master` - falsch. Gefordert ist die Reihenfolge
+ * des Signalwegs (V2_UI_VERKABELUNG.md, signalkette).
+ *
+ * `insertScope`: 'channel' = im Kanalzug (vor der Summe), 'master' = in der
+ * Summe (nach dem Merge). Ohne diese Angabe ist nicht entscheidbar, wo ein
+ * Insert greift - und `spatial` braucht beides nicht gleichzeitig.
  */
-export function signalTopology() {
-  const inserts = PLUGIN_CONTRACTS.filter((c) => c.role === 'insert').map((c) => c.id);
-  const fxReturns = PLUGIN_CONTRACTS.filter((c) => c.role === 'fxReturn').map((c) => c.id);
-  const recorders = PLUGIN_CONTRACTS.filter((c) => c.role === 'recorder').map((c) => c.id);
-  return { inserts, fxReturns, recorders };
+export function signalTopology(): {
+  channelInserts: string[];
+  masterInserts: string[];
+  fxReturns: string[];
+  recorders: string[];
+} {
+  return {
+    // Im Kanalzug, vor der Mixer-Summe: Pan/Distanz/Hoehe je Quelle.
+    channelInserts: ['spatial'],
+    // In der Master-Summe, nach dem Merge - strikt in dieser Reihenfolge.
+    masterInserts: ['eq', 'dsp', 'master'],
+    // Parallele Effektebene (Send/Return). NUR effect.
+    fxReturns: ['effect'],
+    recorders: ['record'],
+  };
 }
 
 /**
@@ -418,15 +484,30 @@ export function signalTopology() {
  * Bewusst als reine Funktion: sie beschreibt die REGEL, nicht die Ausführung.
  * Die Ausführung (Verzögerungsleitung im Audio-Thread) gehört in den Graph.
  */
+/**
+ * Latenz eines SERIELLEN Pfads: die Summen der Knoten auf dem Weg.
+ *
+ * Ein Pfad ist eine Kette - liegen zwei Knoten mit je 100 Frames hintereinander,
+ * verzoegert der Pfad um 200. (Frueher stand hier `Math.max`; das war falsch und
+ * fiel nicht auf, weil nur `master` ueberhaupt Latenz hat. Der Review-Punkt ist
+ * berechtigt.)
+ */
 export function pathLatencyFrames(ids: readonly string[]): number {
-  return ids.reduce((max, id) => {
-    const c = CONTRACT_BY_ID[id];
-    // Bypass-ter Knoten zaehlt MIT: sein Crossfade haelt die Latenz (Review 6.3).
-    return Math.max(max, c?.intrinsicLatencyFrames ?? 0);
-  }, 0);
+  return ids.reduce((sum, id) => sum + (CONTRACT_BY_ID[id]?.intrinsicLatencyFrames ?? 0), 0);
 }
 
-/** Kompensation, die ein Pfad gegenüber dem Referenzpfad braucht (nie negativ). */
-export function compensationFrames(ids: readonly string[], referenceFrames: number): number {
-  return Math.max(0, referenceFrames - pathLatencyFrames(ids));
+/**
+ * Latenz am MERGE: das Maximum der beteiligten Pfade.
+ *
+ * Erst hier wird `max` richtig: parallele Pfade (Kanal i gegen Kanal j, Dry
+ * gegen Wet) kommen unterschiedlich spaet an; der laengsamste gibt das Mass, um
+ * das alle anderen verzoegert werden.
+ */
+export function mergeLatencyFrames(pathLatencies: readonly number[]): number {
+  return pathLatencies.reduce((max, l) => Math.max(max, l), 0);
+}
+
+/** Kompensation, die ein Pfad gegenüber der Merge-Referenz braucht (nie negativ). */
+export function compensationFrames(pathLatency: number, referenceFrames: number): number {
+  return Math.max(0, referenceFrames - pathLatency);
 }
