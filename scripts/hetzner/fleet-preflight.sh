@@ -297,10 +297,17 @@ cmd_check() {
 }
 
 # INFRA-HETZNER-017: Origin-Zertifikat im Deploy-env pruefen (nicht leer/fehlend).
+# Gelesen wird dieselbe Datei wie oben (FLEET_ENV_FILE); "none" (Tests/CI)
+# heisst: keine Deploy-Datei vorhanden - dann gibt es nichts zu pruefen.
 check_origin_certs() {
   local cert key cert_len key_len problems=0
-  cert="$(grep -m1 '^ORIGIN_CERT=' .env.deploy 2>/dev/null | cut -d= -f2- || true)"
-  key="$(grep -m1 '^ORIGIN_KEY=' .env.deploy 2>/dev/null | cut -d= -f2- || true)"
+  local env_file="$FLEET_ENV_FILE"
+  if [[ "$env_file" == "none" ]]; then
+    echo "Hinweis: Origin-Zertifikat nicht geprueft (FLEET_ENV_FILE=none)."
+    return 0
+  fi
+  cert="$(grep -m1 '^ORIGIN_CERT=' "$env_file" 2>/dev/null | cut -d= -f2- || true)"
+  key="$(grep -m1 '^ORIGIN_KEY=' "$env_file" 2>/dev/null | cut -d= -f2- || true)"
   cert_len="${#cert}"; key_len="${#key}"
   if [[ -z "$cert" || -z "$key" ]]; then
     echo "❌ Origin-Zertifikat fehlt in .env.deploy (ORIGIN_CERT=${cert_len}B, ORIGIN_KEY=${key_len}B)."
