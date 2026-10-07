@@ -5,9 +5,9 @@
 
 | Auftrag | To-Do-IDs | Ausführung | Status (bei Archivierung) |
 |---|---|---|---|
-| A1 · Voice-Pool + Event-Queue | RT-AUDIT-P0-001, RT-AUDIT-P0-003 | Hintergrund-Agent, eigener Worktree; einmal durch API-Rate-Limit unterbrochen und fortgesetzt | läuft |
-| A2 · Feature Capture (Idee A) | IDEA-2026-10-07-A | Hintergrund-Agent, eigener Worktree | läuft |
-| A3 · AI nur lokal | RT-AUDIT-P1-014 | Haupt-Sitzung, Branch `ai/local-only` | läuft |
+| A1 · Voice-Pool + Event-Queue | RT-AUDIT-P0-001, RT-AUDIT-P0-003 | Hintergrund-Agent, eigener Worktree; einmal durch API-Rate-Limit unterbrochen und fortgesetzt | **DONE** (e07fdcf, Merge d5fe48b) – Kick 2,67 → 395 ms, Swing 0 verworfene Steps |
+| A2 · Feature Capture (Idee A) | IDEA-2026-10-07-A | Hintergrund-Agent, eigener Worktree | **DONE** (3e35260, Merge 8969ed9) – offene Punkte: IDEA-2026-10-07-A-F1 |
+| A3 · AI nur lokal | RT-AUDIT-P1-014 | Haupt-Sitzung, Branch `ai/local-only` | **DONE** (a1c6a77) – Folgepunkte P1-014-F1/F2 |
 
 ---
 
