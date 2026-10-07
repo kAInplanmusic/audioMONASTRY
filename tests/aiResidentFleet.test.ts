@@ -20,8 +20,8 @@ const byId = new Map(manifest.models.map((m) => [m.id, m]));
 const all = AI_RESIDENT_FLEET.flatMap((i) => [...i.models]);
 
 describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
-  it('hat 4 Instanzen (max. 6), deckt alle Nicht-Visual-Rollen genau einmal ab, Visuals haben keine GPU', () => {
-    expect(AI_RESIDENT_FLEET).toHaveLength(4);
+  it('hat 5 Instanzen (max. 6), deckt alle Nicht-Visual-Rollen genau einmal ab, Visuals haben keine GPU', () => {
+    expect(AI_RESIDENT_FLEET.map((i) => i.id)).toEqual(['brain', 'ears', 'voice', 'stems', 'music']);
     expect(AI_RESIDENT_FLEET.length).toBeLessThanOrEqual(6);
     const covered = AI_RESIDENT_FLEET.flatMap((i) => [...i.covers]);
     expect(new Set(covered).size).toBe(covered.length);
@@ -78,11 +78,11 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
     expect(AI_MAX_AI_EUR_PER_HOUR).toBe(4);
     expect(() => assertResidentFleetBudget('pod', 'A40')).not.toThrow();
     expect(() => assertResidentFleetBudget('pod', 'A6000')).not.toThrow();
-    expect(estimateResidentFleetEurPerHour('pod', 'A6000')).toBeCloseTo(1.95, 2);
+    expect(estimateResidentFleetEurPerHour('pod', 'A6000')).toBeCloseTo(2.44, 2);
   });
 
   it('sprengt das Budget als Serverless-Flex – die 0,50-€-Annahme gilt nur für Pods', () => {
     expect(() => assertResidentFleetBudget('serverlessFlex', 'A6000')).toThrow(/4 €\/h/);
-    expect(estimateResidentFleetEurPerHour('serverlessFlex', 'A6000')).toBeCloseTo(4.49, 2);
+    expect(estimateResidentFleetEurPerHour('serverlessFlex', 'A6000')).toBeCloseTo(5.61, 2);
   });
 });

@@ -78,7 +78,10 @@ def safe_extract(archive: str, target: str) -> None:
                 link = os.path.realpath(os.path.join(os.path.dirname(dest), member.linkname))
                 if not link.startswith(root + os.sep):
                     raise ValueError(f"Link zeigt aus dem Ziel heraus: {member.name}")
-        tar.extractall(root)  # noqa: S202 – oben geprüft
+        try:
+            tar.extractall(root, filter="data")  # zusätzlich zur Prüfung oben
+        except TypeError:  # Python ohne tarfile-Filter
+            tar.extractall(root)  # noqa: S202 – oben geprüft
 
 
 def fetch_weights(entries: List[Dict[str, Any]], hf_home: str, workdir: str, parallel: int = 4) -> None:

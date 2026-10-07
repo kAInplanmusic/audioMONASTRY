@@ -71,7 +71,7 @@
     "test:python:services": "python3 tests/test_stem_ai_import.py",
     "test:python:master": "python3 tests/test_master_player_limits.py",
     "test:python:guard": "python3 tests/test_runpod_health_guard.py",
-    "test:python:pods": "python3 tests/test_s3lite.py && python3 tests/test_runpod_pods.py",
+    "test:python:pods": "python3 tests/test_s3lite.py && python3 tests/test_runpod_pods.py && python3 tests/test_weights_mirror.py",
     "test:python:runtime": "python3 -m unittest discover -s services/audiomonastry-ai-runtime/tests -p 'test_*.py'",
     "test:python": "npm run test:python:deploy && npm run test:python:warm && npm run test:python:guard && npm run test:python:pods && npm run test:python:lora && npm run test:python:lora:segments && npm run test:python:lora:aitk && npm run test:python:fleet && npm run test:python:services && npm run test:python:master && npm run test:python:runtime",
     "perf:worklet": "node scripts/worklet-cpu-gate.cjs",
