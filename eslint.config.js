@@ -37,6 +37,7 @@ export default tseslint.config(
       // diesen Eintrag zaehlt jede Datei doppelt und der Parser findet mehrere
       // tsconfig-Wurzeln (siehe Kommentar oben).
       '.worktrees/**',
+      '.claude/worktrees/**',
       '**/*.min.js',
       '**/*.d.ts',
     ],
