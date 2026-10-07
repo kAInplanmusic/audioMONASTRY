@@ -70,13 +70,41 @@ export class V2SampleClock {
    *
    * `bpmParam` kann ein k-rate-Wert (number) oder ein a-rate-Verlauf
    * (Float32Array mit einem Wert pro Sample) sein – wie beim clockProcessor.
+   *
+   * Hinweis: Der Swing-Versatz kann den `frame` eines ungeraden Steps HINTER
+   * das aktuelle Quantum legen. Der Aufrufer muss solche Steps vormerken
+   * (V2StepQueue) statt sie zu verwerfen (RT-AUDIT-P0-003).
+   *
+   * Allokiert pro Aufruf ein Ergebnis-Array (API für Tests/Werkzeuge). Im
+   * Audio-Thread `processBlockInto` verwenden.
    */
   processBlock(frameStart: number, length: number, bpmParam?: number | Float32Array): V2ScheduledStep[] {
-    if (!this.playing || length <= 0 || !Number.isFinite(frameStart)) return [];
+    const result: V2ScheduledStep[] = [];
+    this.processBlockInto(frameStart, length, result, bpmParam);
+    return result;
+  }
+
+  /**
+   * Allokationsfreie Variante von `processBlock` (RT-AUDIT-P0-003): schreibt die
+   * Steps in die vorallokierten Objekte von `out` (ab Index 0) und liefert ihre
+   * Anzahl. Einträge ab dem Rückgabewert sind veraltet und zu ignorieren.
+   *
+   * Reicht `out` nicht aus, wird es um ein neues Objekt erweitert (kein Step
+   * geht verloren). Das passiert nur bei zu kleiner Kapazität – bei 128er-Blöcken
+   * fällt höchstens ein Step pro Block an (≥ 400 Samples pro 16tel bei 300 BPM
+   * und 8 kHz), eine Kapazität von wenigen Einträgen genügt also.
+   */
+  processBlockInto(
+    frameStart: number,
+    length: number,
+    out: V2ScheduledStep[],
+    bpmParam?: number | Float32Array,
+  ): number {
+    if (!this.playing || length <= 0 || !Number.isFinite(frameStart)) return 0;
 
     const perSample = typeof bpmParam === 'object' && bpmParam.length > 1;
     const bpmArr = perSample ? bpmParam as Float32Array : undefined;
-    const result: V2ScheduledStep[] = [];
+    let count = 0;
 
     for (let i = 0; i < length; i++) {
       const bpm = Math.min(300, Math.max(30, perSample ? bpmArr![i] : (typeof bpmParam === 'number' ? bpmParam : this.bpm)));
@@ -97,18 +125,22 @@ export class V2SampleClock {
         // Ereignis landet nach dem Lookahead wieder auf dem Raster).
         const frame = Math.max(0, rawFrame - this.pdcCompensationSamples);
 
-        result.push({
-          step,
-          frame,
-          time: frame / this.sampleRate,
-          swing: this.swing,
-          gate: this.gate,
-          secondsPerStep,
-        });
+        if (count >= out.length) {
+          // Nur bei zu kleiner Kapazität (siehe Doku oben) – einmalig erweitern.
+          out.push({ step: 0, frame: 0, time: 0, swing: 0, gate: 0, secondsPerStep: 0 });
+        }
+        const target = out[count];
+        target.step = step;
+        target.frame = frame;
+        target.time = frame / this.sampleRate;
+        target.swing = this.swing;
+        target.gate = this.gate;
+        target.secondsPerStep = secondsPerStep;
+        count++;
         this.stepIndex = (this.stepIndex + 1) % this.stepCount;
       }
     }
 
-    return result;
+    return count;
   }
 }

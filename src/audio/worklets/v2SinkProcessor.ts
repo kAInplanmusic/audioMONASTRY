@@ -11,6 +11,12 @@
  * Aktive Steps aus den übergebenen Patterns werden als Step-Bursts exakt an
  * ihrem Sample-Frame in den V2-Graph eingespeist – kein setInterval-Jitter.
  *
+ * RT-AUDIT-P0-003: Steps laufen über eine vorallokierte Queue mit absoluten
+ * Frames (`V2StepQueue`). Swing-verzögerte Steps, deren Frame hinter dem
+ * aktuellen Block liegt, werden vorgemerkt und im richtigen Block gefeuert
+ * (vorher verworfen). Die `step`-Meldung an den Main-Thread geht erst beim
+ * tatsächlichen Feuern raus.
+ *
  * Steuerung über Port-Nachrichten (V2SinkMessage):
  *   { type: 'test-tone',  active, freq?, amplitude? }
  *   { type: 'gain-db',    channel, db }
@@ -20,12 +26,15 @@
  *   { type: 'pattern',    channel, steps }
  */
 import { V2SinkEngine } from '../../core/audio/live/V2SinkEngine';
-import type { V2SinkMessage, V2StepRenderEvent } from '../../core/audio/live/V2SinkEngine';
-import { V2SampleClock } from '../../core/audio/live/V2SampleClock';
+import type { V2SampleTriggerOptions, V2SinkMessage } from '../../core/audio/live/V2SinkEngine';
+import { V2SampleClock, type V2ScheduledStep } from '../../core/audio/live/V2SampleClock';
+import { V2StepQueue, V2_STEP_QUEUE_CAPACITY } from '../../core/audio/live/V2StepQueue';
 import { V2_CHANNELS, type V2Channel } from '../../core/audio/V2StudioGraph';
 import { SfzVoiceBank, type SfzSourceMap } from '../../core/instrument/sfzVoice';
 
 const DEFAULT_STEP_VELOCITY = 0.8;
+/** Kapazität der vorallokierten Clock-Ausgabe pro Block (128er-Block: max. 1 Step). */
+const CLOCK_OUT_CAPACITY = 8;
 
 function emptyPattern(length: 16 | 32): boolean[] {
   return Array.from({ length }, () => false);
@@ -37,12 +46,29 @@ class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
   private readonly sfzBanks = new Map<V2Channel, SfzVoiceBank>();
   /**
+   * RT-AUDIT-P0-003: Steps mit absolutem Frame vormerken statt verwerfen.
+   * Swing legt ungerade Steps hinter das aktuelle Quantum; sie feuern jetzt
+   * genau in dem Block, in den ihr Frame fällt. Alles vorallokiert.
+   */
+  private readonly stepQueue = new V2StepQueue(V2_STEP_QUEUE_CAPACITY);
+  private readonly clockOut: V2ScheduledStep[] = Array.from({ length: CLOCK_OUT_CAPACITY }, () => ({
+    step: 0, frame: 0, time: 0, swing: 0, gate: 0, secondsPerStep: 0,
+  }));
+  private readonly firedStart = new Int32Array(V2_STEP_QUEUE_CAPACITY);
+  private readonly firedStep = new Int32Array(V2_STEP_QUEUE_CAPACITY);
+  private readonly firedFrame = new Float64Array(V2_STEP_QUEUE_CAPACITY);
+  private readonly firedSps = new Float64Array(V2_STEP_QUEUE_CAPACITY);
+  /** Wiederverwendete Optionen für Step-getriggerte Samples (kein Objekt-Literal pro Step). */
+  private readonly stepSampleOptions: V2SampleTriggerOptions = { loop: false, rate: 1, offset: 0, startSample: 0 };
+  /** Letzter `currentFrame` (Zeitsprung rückwärts → Queue leeren). */
+  private lastQueueFrame = -1;
+  /**
    * Wiederverwendbarer Render-Scratch je SFZ-Kanal (Mono-Puffer + das
    * einelementige Block-Array). Vorher entstanden hier pro Block und Kanal ein
    * `new Float32Array(length)` und ein `[mono]` – Allokationen im
    * Audio-Render-Pfad (AGENTS.md §5). `V2SinkEngine.setExternalSource` reicht
    * die Referenz nur bis zum Ende desselben `render()`-Aufrufs durch
-   * (`V2SinkEngine.ts:395-399`), Wiederverwendung ist daher unkritisch.
+   * (`V2SinkEngine.render`, External-Blöcke werden nur gelesen), Wiederverwendung ist daher unkritisch.
    */
   private readonly sfzScratch = new Map<V2Channel, { buffer: Float32Array; block: Float32Array[] }>();
 
@@ -136,6 +162,8 @@ class V2SinkProcessor extends AudioWorkletProcessor {
             }
           }
           if (typeof msg.playing === 'boolean') {
+            // RT-AUDIT-P0-003: Stopp/Neustart verwirft vorgemerkte Steps.
+            this.stepQueue.clear();
             if (msg.playing) {
               this.clock.reset();
               this.clock.playing = true;
@@ -274,7 +302,6 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // PERF-P3-002: Deadline-Treue ueber den Audio-Zaehler – unabhaengig von der
     // groben Wall-Clock. Ebenfalls nur bei aktivierter Messung.
     const gapQuanta = this.measure ? this.trackFrameGap(length) : 1;
-    const events: V2StepRenderEvent[] = [];
 
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
     // Hot-Path ohne Allokation: Scratch-Puffer + Block-Array werden je Kanal
@@ -286,39 +313,50 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       this.engine.setExternalSource(channel, scratch.block);
     }
 
+    // RT-AUDIT-P0-003: Zeitsprung rückwärts (Kontext-Neustart) → Queue leeren.
+    if (currentFrame < this.lastQueueFrame) this.stepQueue.clear();
+    this.lastQueueFrame = currentFrame;
+
+    // Neue Steps der Clock (allokationsfrei) mit absolutem Frame vormerken.
     if (this.clock.playing) {
-      const steps = this.clock.processBlock(currentFrame, length);
-      for (const step of steps) {
-        const startSample = step.frame - currentFrame;
-        if (startSample < 0 || startSample >= length) continue;
+      const count = this.clock.processBlockInto(currentFrame, length, this.clockOut);
+      for (let k = 0; k < count; k++) {
+        const planned = this.clockOut[k];
+        this.stepQueue.push(planned.frame, planned.step, planned.secondsPerStep);
+      }
+    }
 
-        // UI-/State-Sync: Step-Impuls mit exakter Audio-Zeit an den Main-Thread.
-        this.port.postMessage({
-          type: 'step',
-          step: step.step,
-          time: step.time,
-          swing: step.swing,
-          gate: step.gate,
-          secondsPerStep: step.secondsPerStep,
-        });
+    // Alle Steps feuern, deren Frame in diesen Block fällt (verspätete bei 0).
+    const fired = this.stepQueue.popDue(currentFrame, length, this.firedStart, this.firedStep, this.firedFrame, this.firedSps);
+    for (let k = 0; k < fired; k++) {
+      const startSample = this.firedStart[k];
+      const step = this.firedStep[k];
 
-        for (const channel of V2_CHANNELS) {
-          if (!this.patterns.get(channel)?.[step.step]) continue;
-          // AUDIO-P0-001: Mute-Parität – stummgeschaltete Kanäle triggern nicht.
-          if (this.engine.isChannelMuted(channel)) continue;
-          if (this.engine.hasSample(channel)) {
-            // Phase 3: Sample-Player als V2-Source – Step retriggert das Sample.
-            this.engine.triggerSample(channel, { loop: false, rate: 1, offset: 0 });
-          } else {
-            // Synth-/Step-Quelle: registrierte Frequenz oder Rollen-Default.
-            const source = this.engine.getSynthSource(channel);
-            events.push({
-              track: channel,
-              startSample,
-              velocity: DEFAULT_STEP_VELOCITY,
-              freq: source.freq,
-            });
-          }
+      // UI-/State-Sync: Step-Impuls mit exakter Audio-Zeit an den Main-Thread –
+      // erst jetzt, wo der Step tatsächlich erklingt.
+      this.port.postMessage({
+        type: 'step',
+        step,
+        time: this.firedFrame[k] / sampleRate,
+        swing: this.clock.swing,
+        gate: this.clock.gate,
+        secondsPerStep: this.firedSps[k],
+      });
+
+      for (let c = 0; c < V2_CHANNELS.length; c++) {
+        const channel = V2_CHANNELS[c];
+        if (!this.patterns.get(channel)?.[step]) continue;
+        // AUDIO-P0-001: Mute-Parität – stummgeschaltete Kanäle triggern nicht.
+        if (this.engine.isChannelMuted(channel)) continue;
+        if (this.engine.hasSample(channel)) {
+          // Phase 3: Sample-Player als V2-Source – Step retriggert das Sample
+          // sample-genau am Step (nicht mehr am Blockanfang).
+          this.stepSampleOptions.startSample = startSample;
+          this.engine.triggerSample(channel, this.stepSampleOptions);
+        } else {
+          // Synth-/Step-Quelle (registrierte Frequenz oder Rollen-Default) als
+          // Stimme im persistenten Voice-Pool der Engine (RT-AUDIT-P0-001).
+          this.engine.scheduleSynth(channel, startSample, DEFAULT_STEP_VELOCITY);
         }
       }
     }
@@ -328,7 +366,7 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       bufferSize: length,
       quantum: length / sampleRate,
       currentTime,
-    }, events);
+    });
 
     const channels = Math.min(output.length, rendered.length);
     for (let ch = 0; ch < channels; ch++) {
