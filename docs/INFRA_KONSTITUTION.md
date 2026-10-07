@@ -9,6 +9,20 @@ die Zahlen **nicht** eigenständig wiederholen oder abweichen lassen.
 
 ---
 
+## 0. Entscheidung 2026-10-07 (geht den Abschnitten unten vor)
+
+- **AI-Flotte = 5 RunPod-Pods** (brain+orchestrator, ears, voice, stems, music), alle Modelle
+  resident, **Pods statt Serverless**, AI-Aufpreis **max. 4 €/h** (Ist: 2,25–2,44 €/h).
+  Quelle: `deploy/runpod/pod-fleet.json`, Betrieb: `docs/RUNPOD_PODS_RUNBOOK.md`.
+- **Keine Bild-/Video-Generierung** auf GPUs; `imageHq`, `videoReal`, `videoAbstract` entfallen.
+  Visuals entstehen aus vorhandenem Material auf einer **eigenen Vis-Instanz** (GPU-Pod mit NVENC,
+  ≈ 0,25 €/h, vorbereitet, aus).
+- **Gewichte** liegen als Archive in R2 (≈ 2 €/Monat); Pods laden sie beim Start.
+- **Medien-Archiv** (BRAIN-Platte u. a.) über `scripts/media-ingest.py`; eine volle 2-TB-Platte
+  kostet 13–28 €/Monat und sprengt die 5 €/Monat unten → Betreiber entscheidet Budget/Auswahl.
+- Die Zahlen in §1–§3 zur 8-Endpoint-Serverless-Flotte gelten nur noch für den Serverless-Weg,
+  bis er nach dem ersten erfolgreichen Pod-Lauf entfernt wird.
+
 ## 1. Harte Obergrenzen
 
 | Größe | Grenze | Zielband | Quelle im Code |
