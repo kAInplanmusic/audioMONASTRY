@@ -87,3 +87,6 @@ public/music/
 # Origin-Zertifikat (PROD-P0-F1): privater Schluessel, darf NIE ins Repo.
 # deploy.sh legt das Paar aus ORIGIN_CERT/ORIGIN_KEY hier ab.
 certs/
+
+# Server-Ablage für Audio ohne R2 (Betreiber 2026-10-06: nichts auf den Geräten)
+data/uploads/

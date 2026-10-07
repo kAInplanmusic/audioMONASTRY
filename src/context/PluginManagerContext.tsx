@@ -124,6 +124,14 @@ export const PluginManagerProvider: React.FC<{ children: ReactNode }> = ({ child
     });
   }, [commit]);
 
+  // Die Oberfläche zeichnet erst nach dem Vorladen des Studio-Speichers
+  // (src/utils/studioStoreSync.ts); der Socket ist da oft schon beigetreten und
+  // der Beitritts-Snapshot samt Mixer-Halter ist vorbei. Einmal nachfordern –
+  // die Antwort erreicht alle jetzt angemeldeten Horcher (auch ModuleState).
+  useEffect(() => {
+    webRTCManager.requestSessionResync();
+  }, []);
+
   // Sweep expired locks periodically
   useEffect(() => {
     const interval = setInterval(() => {

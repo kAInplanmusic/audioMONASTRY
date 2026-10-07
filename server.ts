@@ -492,6 +492,17 @@ const isHealthRequest = (req: { originalUrl?: string; url?: string }): boolean =
   return path === '/api/health';
 };
 
+/**
+ * Start-Vorladen des Studio-Speichers und der Server-Bibliothek: jede Seite
+ * lädt beides einmal beim Start (nichts liegt mehr auf dem Gerät). Reine
+ * Lesezugriffe – eigenes Budget, damit Neuladen nicht das Nutzer-Budget frisst.
+ */
+const isStartupReadRequest = (req: { method?: string; originalUrl?: string; url?: string }): boolean => {
+  if (String(req.method || '').toUpperCase() !== 'GET') return false;
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  return path === '/api/store' || path === '/api/library/uploads';
+};
+
 /** Meldeweg der CSP (tokenfrei, siehe server/routes/securityRoutes.ts). */
 const isCspReportRequest = (req: { method?: string; originalUrl?: string; url?: string }): boolean => {
   if (String(req.method || '').toUpperCase() !== 'POST') return false;
@@ -567,6 +578,20 @@ const cspReportLimiter = rateLimit({
   keyGenerator: (req: any) => ipKeyGenerator(req.ip),
 });
 
+// Start-Vorladen (Studio-Speicher, Server-Bibliothek): eigenes Budget pro
+// Nutzer/Session, Default 600/min.
+const STARTUP_READ_RATE_LIMIT_MAX = Number(process.env.STARTUP_READ_RATE_LIMIT_MAX || 600);
+
+const startupReadLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: STARTUP_READ_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.', code: 'STARTUP_READ_RATE_LIMIT' },
+  keyGenerator: studioKeyGenerator,
+  skip: (req) => !isStartupReadRequest(req),
+});
+
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
   max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute je Session/IP
@@ -577,7 +602,11 @@ const apiLimiter = rateLimit({
   // Eigene Budgets bleiben eigene Budgets: Chunks, Agent-Laeufe, Health und der
   // CSP-Meldeweg laufen NICHT unter dem allgemeinen Limit.
   skip: (req) =>
-    isChunkUploadRequest(req) || isAgentRequest(req) || isHealthRequest(req) || isCspReportRequest(req),
+    isChunkUploadRequest(req) ||
+    isAgentRequest(req) ||
+    isHealthRequest(req) ||
+    isCspReportRequest(req) ||
+    isStartupReadRequest(req),
 });
 
 // Chunk-Stream: eigenes, groesseres Budget (Default 240/min = 4 Chunks/s bei
@@ -618,6 +647,7 @@ app.use(CSP_REPORT_PATH, (_req, res, next) => {
   next();
 });
 app.use(CSP_REPORT_PATH, cspReportLimiter);
+app.use('/api', startupReadLimiter);
 app.use('/api', apiLimiter);
 // `/api/upload/sample` (Scan + Ablage) bleibt unter der Kostenbremse; die
 // Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.

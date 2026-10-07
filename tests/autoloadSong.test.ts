@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
+import { resetStorageForTests, storageGet, storageSet } from '../src/utils/storage';
 
 import {
   AUTOLOAD_STORAGE_KEY,
@@ -11,7 +12,7 @@ import {
 
 describe('Autoload-Lied Kanal 1 (mixerMONK)', () => {
   beforeEach(() => {
-    localStorage.clear();
+    resetStorageForTests();
   });
 
   it('liefert ohne Persistenz null (kein Autostart von allein)', () => {
@@ -25,18 +26,19 @@ describe('Autoload-Lied Kanal 1 (mixerMONK)', () => {
       name: 'Len Faki - Death by House',
       artist: 'Len Faki',
     });
-    expect(localStorage.getItem(AUTOLOAD_STORAGE_KEY)).toContain('Death by House');
+    expect(storageGet(AUTOLOAD_STORAGE_KEY)).toContain('Death by House');
+    expect(localStorage.getItem(AUTOLOAD_STORAGE_KEY)).toBeNull(); // nichts auf dem Gerät
   });
 
   it('faellt bei kaputtem JSON auf null zurueck, statt zu werfen', () => {
-    localStorage.setItem(AUTOLOAD_STORAGE_KEY, '{kaputt');
+    storageSet(AUTOLOAD_STORAGE_KEY, '{kaputt');
     expect(loadAutoloadSong()).toBeNull();
   });
 
   it('verwirft Eintraege ohne url oder name (kein Verweis auf fehlende Dateien)', () => {
-    localStorage.setItem(AUTOLOAD_STORAGE_KEY, JSON.stringify({ name: 'ohne url', artist: 'x' }));
+    storageSet(AUTOLOAD_STORAGE_KEY, JSON.stringify({ name: 'ohne url', artist: 'x' }));
     expect(loadAutoloadSong()).toBeNull();
-    localStorage.setItem(AUTOLOAD_STORAGE_KEY, JSON.stringify({ url: '/music/x.mp3' }));
+    storageSet(AUTOLOAD_STORAGE_KEY, JSON.stringify({ url: '/music/x.mp3' }));
     expect(loadAutoloadSong()).toBeNull();
     expect(parseAutoloadSong(null)).toBeNull();
     expect(parseAutoloadSong('nope')).toBeNull();
@@ -54,6 +56,6 @@ describe('Autoload-Lied Kanal 1 (mixerMONK)', () => {
     saveAutoloadSong({ url: '/music/x.mp3', name: 'x', artist: 'y' });
     clearAutoloadSong();
     expect(loadAutoloadSong()).toBeNull();
-    expect(localStorage.getItem(AUTOLOAD_STORAGE_KEY)).toBeNull();
+    expect(storageGet(AUTOLOAD_STORAGE_KEY)).toBeNull();
   });
 });

@@ -74,6 +74,22 @@ export type PluginSettingsResult =
   | { ok: true; entry: PluginSettingsEntry }
   | { ok: false; reason: 'invalid' | 'not-owner' | 'too-large' };
 
+/**
+ * Studio-Speicher (Betreiber 2026-10-06: „Nichts wird auf den Geräten der
+ * Nutzer gespeichert"). Alles, was früher im Browser lag (Presets, Favoriten,
+ * Autoload, Mappings …), liegt hier – in der Session auf dem Server.
+ */
+export interface StudioStoreEntry {
+  /** JSON-Text des Werts. */
+  value: string;
+  updatedBy: string;
+  updatedAt: number;
+}
+export const MAX_STORE_KEY_CHARS = 128;
+export const MAX_STORE_VALUE_CHARS = 512 * 1024;
+export const MAX_STORE_TOTAL_CHARS = 16 * 1024 * 1024;
+export type StudioStoreResult = { ok: true } | { ok: false; reason: 'invalid' | 'too-large' | 'full' };
+
 export interface AuthoritativeSessionSnapshot {
   revision: number;
   serverTime: number;
@@ -93,6 +109,8 @@ export interface SerializedAuthoritativeSession {
   recentEventIds: string[];
   /** Ab 2026-10-06; ältere Sicherungen haben das Feld nicht. */
   pluginSettings?: Array<[string, PluginSettingsEntry]>;
+  /** Ab 2026-10-06 (Studio-Speicher statt Browser-Speicher). */
+  studioStore?: Array<[string, StudioStoreEntry]>;
 }
 
 export interface AuthoritativeSessionOptions {
@@ -113,6 +131,7 @@ export class AuthoritativeSession {
   private readonly modules = new Map<string, SessionModuleState>();
   private readonly sequences = new Map<string, number>();
   private readonly pluginSettings = new Map<string, PluginSettingsEntry>();
+  private readonly studioStore = new Map<string, StudioStoreEntry>();
   private readonly recentEventIds: string[] = [];
   private readonly recentEventSet = new Set<string>();
 
@@ -322,6 +341,37 @@ export class AuthoritativeSession {
   }
 
   // -------------------------------------------------------------------------
+  // Studio-Speicher (statt Browser-Speicher)
+  // -------------------------------------------------------------------------
+
+  /** Setzt einen Eintrag; `value` ist JSON-Text. Jeder Session-Nutzer darf schreiben. */
+  storeSet(key: string, value: string, userId: string, now = Date.now()): StudioStoreResult {
+    if (typeof key !== 'string' || !key || key.length > MAX_STORE_KEY_CHARS || typeof value !== 'string') {
+      return { ok: false, reason: 'invalid' };
+    }
+    try {
+      JSON.parse(value);
+    } catch {
+      return { ok: false, reason: 'invalid' };
+    }
+    if (value.length > MAX_STORE_VALUE_CHARS) return { ok: false, reason: 'too-large' };
+    let total = value.length;
+    for (const [k, e] of this.studioStore) if (k !== key) total += e.value.length;
+    if (total > MAX_STORE_TOTAL_CHARS) return { ok: false, reason: 'full' };
+    this.studioStore.set(key, { value, updatedBy: userId, updatedAt: now });
+    return { ok: true };
+  }
+
+  storeRemove(key: string): boolean {
+    return this.studioStore.delete(key);
+  }
+
+  /** Alle Einträge (für das Vorladen beim Start). */
+  storeAll(): Record<string, string> {
+    return Object.fromEntries([...this.studioStore.entries()].map(([k, e]) => [k, e.value]));
+  }
+
+  // -------------------------------------------------------------------------
   // Snapshot / Persistenz
   // -------------------------------------------------------------------------
 
@@ -348,6 +398,7 @@ export class AuthoritativeSession {
       sequences: [...this.sequences.entries()],
       recentEventIds: [...this.recentEventIds],
       pluginSettings: [...this.pluginSettings.entries()],
+      studioStore: [...this.studioStore.entries()],
     };
   }
 
@@ -377,6 +428,15 @@ export class AuthoritativeSession {
         session.pluginSettings.set(pluginId, {
           settings: entry.settings,
           revision: Number.isFinite(entry.revision) ? entry.revision : 0,
+          updatedBy: typeof entry.updatedBy === 'string' ? entry.updatedBy : '',
+          updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
+        });
+      }
+    }
+    for (const [key, entry] of Array.isArray(data.studioStore) ? data.studioStore : []) {
+      if (typeof key === 'string' && entry && typeof entry.value === 'string') {
+        session.studioStore.set(key, {
+          value: entry.value,
           updatedBy: typeof entry.updatedBy === 'string' ? entry.updatedBy : '',
           updatedAt: Number.isFinite(entry.updatedAt) ? entry.updatedAt : 0,
         });

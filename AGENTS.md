@@ -42,6 +42,7 @@ Every plugin operates in one of three UI modes (mode button on the right of each
 * Internally the modes map onto the replicated `ModuleState` (`OFF`/`PRO`) plus the central lock (`src/core/session/pluginMode.ts`). `AUTO_AI` remains in the runtime contract for compatibility only; AI suggestions run via `aiMONK`.
 * Every plugin that plays or creates-and-plays audio has a **SYNC** button against Main (default on; `src/core/session/pluginSync.ts`).
 * **Plugins are persistent:** the last settings of every plugin live in the server session (only the holder writes; saved on every change and immediately on leaving). Whoever takes a plugin next starts with exactly that state (`src/core/session/pluginSettingsSync.ts`, `src/utils/pluginSettings.ts`). Plugin settings must never live only in local component state or browser storage.
+* **Nothing on user devices:** no localStorage/sessionStorage/IndexedDB/OPFS, no audio or files on the device. Studio data lives in the session's server-side studio store (`src/utils/storage.ts`, `src/utils/studioStoreSync.ts`); only `MEMORY_ONLY_KEYS` stay in memory. Audio always goes to the server.
 * **Main outputs:** exactly one device per main output — `/master-out` (audio) and `/visual-out` (visuals), reachable via internet or LAN. The first device holds the address; every further device is refused by the server.
 
 ---

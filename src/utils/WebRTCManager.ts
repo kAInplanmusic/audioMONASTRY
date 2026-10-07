@@ -46,6 +46,7 @@ class WebRTCManager {
   private lastSessionEndpoints: unknown = null;
   private outputBusyListeners = new Set<() => void>();
   private pluginSettingsListeners = new Set<(msg: any) => void>();
+  private storeUpdateListeners = new Set<(msg: any) => void>();
   private pluginUnlockListeners = new Set<(msg: any) => void>();
   private pluginLocksSyncListeners = new Set<(msg: any) => void>();
   // ARCH-#1: Lock-Denial (Server lehnt optimistischen Lock ab) — ohne diesen
@@ -511,6 +512,7 @@ class WebRTCManager {
     this.socket.on('plugin-lock', (data: any) => this.pluginLockListeners.forEach((l) => l(data)));
     this.socket.on('output-busy', () => this.outputBusyListeners.forEach((l) => l()));
     this.socket.on('plugin-settings', (data: any) => this.pluginSettingsListeners.forEach((l) => l(data)));
+    this.socket.on('store-update', (data: any) => this.storeUpdateListeners.forEach((l) => l(data)));
     this.socket.on('session-endpoints', (data: any) => {
       this.lastSessionEndpoints = data;
       this.sessionEndpointsListeners.forEach((l) => l(data));
@@ -834,6 +836,21 @@ class WebRTCManager {
   public onOutputBusy(cb: () => void): () => void {
     this.outputBusyListeners.add(cb);
     return () => { this.outputBusyListeners.delete(cb); };
+  }
+
+  /** Studio-Speicher: Eintrag auf dem Server setzen (JSON-Text) bzw. entfernen. */
+  public sendStoreSet(key: string, value: string): void {
+    this.socket?.emit('store-set', { key, value });
+  }
+
+  public sendStoreRemove(key: string): void {
+    this.socket?.emit('store-remove', { key });
+  }
+
+  /** Studio-Speicher: Änderungen anderer Geräte empfangen ({ key, value | null }). */
+  public onStoreUpdate(cb: (msg: any) => void): () => void {
+    this.storeUpdateListeners.add(cb);
+    return () => { this.storeUpdateListeners.delete(cb); };
   }
 
   /** Beständige Plugins: Stand des gehaltenen Plugins an den Server (nur der Halter darf schreiben). */
