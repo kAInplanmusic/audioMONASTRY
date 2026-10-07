@@ -100,7 +100,7 @@ verbindliches Gate. Der gezeigte Wert ist der Default von `evalSpecFor()`
 
 ## Befunde: Drift zwischen Katalog, Matrix und Doku
 
-1. **Altnamen in der alten Tabelle** – `masterplayer`, `instrument`,
+1. **Altnamen in der alten Tabelle** – `mastergraph`, `instrument`,
    `synthesizer`, `drum`, `sampler`, `mcp`, `controller`, `library`,
    `mastering`, `recording`, `performance` sind der Vor-Umbenennungs-Stand.
    Verbindlich sind die 18 IDs aus `EVAL_PLUGIN_IDS`. Für 10 dieser Altnamen gab
@@ -113,7 +113,7 @@ verbindliches Gate. Der gezeigte Wert ist der Default von `evalSpecFor()`
    `pluginAudioRouter`, keine Registry-Karte. Sie sind im Katalog ausdrücklich
    als `NON_ROLE_CATALOG_IDS` festgehalten und getestet – eine bewusste
    Zuordnung, kein Zufall.
-3. **`masterplayer`** ist laut `src/plugins/registry.ts` ein System-Modul
+3. **`mastergraph`** ist laut `src/plugins/registry.ts` ein System-Modul
    (`SYSTEM_MODULES`, ohne Plugin-Slot, ohne Komponente). Die alte Tabelle
    führte ihn als Plugin mit „v2 / PASS“ – beides falsch. Er hat weder
    Kommando-Katalog noch Prompt; ein Prompt dafür wäre geraten (Betreiberfrage).

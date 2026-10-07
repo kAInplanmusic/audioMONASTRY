@@ -56,7 +56,7 @@ describe('Audiokanalfluss · Plugin-Routing-Matrix', () => {
   });
 
   it('UI-only-Plugins speisen keine Audio-Quelle ein', () => {
-    for (const id of ['masterplayer', 'ai', 'controller', 'library', 'mastering', 'recording', 'performance']) {
+    for (const id of ['mastergraph', 'ai', 'controller', 'library', 'mastering', 'recording', 'performance']) {
       expect(pluginAudioChannels(id)).toEqual([]);
     }
   });

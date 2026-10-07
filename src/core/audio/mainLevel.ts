@@ -1,7 +1,7 @@
 /**
  * Main-Pegel – EIN Analyser-Abgriff am hörbaren Ausgang für die ganze Oberfläche
  * ==========================================================================
- * Masterplayer, Mixer und die Mini-Pegel der Plugin-Streifen lesen denselben
+ * Mastergraph, Mixer und die Mini-Pegel der Plugin-Streifen lesen denselben
  * Wert. Der Abgriff ist ein reiner Fan-out (`audioEngine.createVisualAnalyser`),
  * er verändert den Ton nicht und läuft nur, solange jemand zuhört.
  * Abfrage im UI-Takt (~60 ms), nie im Audio-Thread.

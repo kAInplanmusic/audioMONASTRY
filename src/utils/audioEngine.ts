@@ -1753,7 +1753,7 @@ class AudioEngine {
     this.masterTap.disconnectAnalyser(analyser);
   }
 
-  /** UI2-P1-002: Transport-Position in Sekunden (nur Anzeige im Masterplayer). */
+  /** UI2-P1-002: Transport-Position in Sekunden (nur Anzeige im Mastergraph). */
   public getTransportSeconds(): number {
     try {
       const sec = Tone.Transport.seconds;

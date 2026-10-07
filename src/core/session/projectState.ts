@@ -32,7 +32,7 @@ export interface AudioContentRef {
   id: string;
   name: string;
   kind: AudioContentKind;
-  /** Herkunfts-Modul/-Bereich (library, clipboard, stem, mixer, masterplayer, …). */
+  /** Herkunfts-Modul/-Bereich (library, clipboard, stem, mixer, …). */
   source: string;
   /** Referenz auf ein bestehendes Audio-Asset (wenn vorhanden). */
   sample?: AudioSample;

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { entryButton, STUDIO_NAV } from './helpers/studioNav';
 
 /**
- * P0-7-Prüfpunkt (masterplayerMONK fest oben, View-only):
+ * P0-7-Prüfpunkt (mastergraphMONK fest oben, View-only):
  *  - bleibt beim Scrollen im Viewport (sticky unter dem Header),
  *  - hat KEINE Eingabeelemente (keine Buttons/Selects) – nur Anzeige,
  *  - Leertaste wirkt nicht in Eingabefeldern (kein Transport-Fehlauslöser).
@@ -14,10 +14,10 @@ async function openStudio(page: Page): Promise<void> {
     .toBeVisible({ timeout: 15_000 });
 }
 
-const masterSection = (page: Page) => page.locator('#rack-masterplayer');
+const masterSection = (page: Page) => page.locator('#rack-mastergraph');
 
-test('P0-7: masterplayerMONK steht fest direkt unter dem Kopf und scrollt mit (nichts klebt)', async ({ page }) => {
-  // Betreiber 2026-10-07: Kopf und Masterplayer sind fest (nicht schließbar,
+test('P0-7: mastergraphMONK steht fest direkt unter dem Kopf und scrollt mit (nichts klebt)', async ({ page }) => {
+  // Betreiber 2026-10-07: Kopf und Mastergraph sind fest (nicht schließbar,
   // nicht verschiebbar), kleben beim Scrollen aber nicht.
   await openStudio(page);
 
@@ -34,11 +34,11 @@ test('P0-7: masterplayerMONK steht fest direkt unter dem Kopf und scrollt mit (n
   expect(after).toBeLessThan(topBefore);
 });
 
-test('P0-7: masterplayerMONK ist View-only (keine Buttons, BPM sichtbar)', async ({ page }) => {
+test('P0-7: mastergraphMONK ist View-only (keine Buttons, BPM sichtbar)', async ({ page }) => {
   await openStudio(page);
 
   const master = masterSection(page);
-  await expect(master.getByText('MASTERPLAYER · NUR ANSICHT')).toBeVisible();
+  await expect(master.getByText('MASTERGRAPH · NUR ANSICHT')).toBeVisible();
   await expect(master.locator('button')).toHaveCount(0);
   await expect(master.locator('select')).toHaveCount(0);
   await expect(master.getByText(/BPM/)).toBeVisible();
@@ -67,6 +67,6 @@ test('P0-7: Leertaste in Eingabefeldern löst keinen Transport aus', async ({ pa
   // Layout-Teile die Seite verschieben (CI-Fund 2026-09-17: 2217 px). Geprueft wird
   // deshalb die Regel selbst: das Feld hat das Leerzeichen bekommen (oben) und der
   // Transport zeigt kein PLAY.
-  await expect(page.locator('#rack-masterplayer').getByText('PLAY', { exact: true })).toHaveCount(0);
+  await expect(page.locator('#rack-mastergraph').getByText('PLAY', { exact: true })).toHaveCount(0);
   void scrollBefore;
 });

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // UI2-P1-004: Verbindlich sind die Modulnamen der README (16 Plugins plus
-// masterplayerMONK, aiMONK, perforMONK). Sichtbare Texte dürfen keine anderen
+// mastergraphMONK, aiMONK, perforMONK). Sichtbare Texte dürfen keine anderen
 // *MONK-Namen tragen, keine Tippfehler und keine Platzhalter.
 // ---------------------------------------------------------------------------
 
@@ -12,7 +12,7 @@ const ALLOWED = new Set([
   'mixerMONK', 'dropMONK', 'songMONK', 'effectMONK', 'syntisamplerMONK', 'drumsamplerMONK',
   'instruMONK', 'biblioMONK', 'voiceMONK', 'soundMONK', 'stemMONK', 'spatialMONK',
   'eqMONK', 'dspMONK', 'masterMONK', 'recordMONK',
-  'masterplayerMONK', 'aiMONK', 'perforMONK',
+  'mastergraphMONK', 'aiMONK', 'perforMONK',
 ]);
 
 function sourceFiles(dir: string): string[] {
