@@ -37,6 +37,7 @@ import {
   PluginStateSocketSchema,
 } from '../src/types/zod/schemas';
 import { createRedisKeyValueStore } from '../src/core/persistence/redisKeyValueStore';
+import { FileSessionPersistence, resolveSessionStateFile } from './fileSessionPersistence';
 import { normalizeEndpointMode, sanitizeEndpointReport, type EndpointReport } from '../src/core/session/sessionEndpoints';
 import type { SessionRuntime } from './sessionRuntime.ts';
 import {
@@ -256,6 +257,7 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
       warn('[signaling] REDIS_URL ungültig (Schema) – In-Memory-Adapter aktiv.');
       redisUrl = '';
     }
+    let redisSessionActive = false;
     if (redisUrl) {
       try {
         const [{ createClient }, { createAdapter }] = await Promise.all([
@@ -274,9 +276,23 @@ export async function createRealtimeHub(server: http.Server, deps: RealtimeDeps)
           createRedisKeyValueStore(pubClient),
         );
         const rev = sessionRuntime.session.revision;
+        redisSessionActive = true;
         log(`Redis-Adapter aktiv (Socket.io Multi-Instanz). Session-State ${restored ? `wiederhergestellt (rev=${rev})` : snapshotRestored ? `aus Snapshot (rev=${rev})` : 'neu'}. Snapshots liegen in Redis.`);
       } catch (e) {
         warn('Redis-Adapter nicht aktiv:', (e as Error).message);
+      }
+    }
+    // RT-AUDIT-P1-008: ohne Redis den Session-Zustand in einer Datei sichern,
+    // statt ihn nur im RAM zu halten (Neustart/Deploy = Totalverlust).
+    if (!redisSessionActive) {
+      const stateFile = resolveSessionStateFile();
+      if (stateFile) {
+        const { restored } = await sessionRuntime.restoreFromPersistence(
+          new FileSessionPersistence(stateFile, (m) => warn(m)),
+        );
+        log(`[session] Datei-Persistenz aktiv (${stateFile}) – Zustand ${restored ? `wiederhergestellt (rev=${sessionRuntime.session.revision})` : 'neu'}.`);
+      } else {
+        warn('[session] KEINE Persistenz (kein Redis, SESSION_STATE_FILE=off/Test) – ein Neustart verliert Plugin-Settings und Studio-Store.');
       }
     }
 
