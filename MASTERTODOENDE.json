@@ -1169,7 +1169,7 @@
       "id": "IDEA-2026-10-07-A",
       "title": "Idee A · Nachträglich aufnehmen (\"Capture\"): die letzten 16 Takte Noten/Pads/Steps und 60 s Main-Audio auf Knopfdruck behalten",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "area": "Feature-Idee",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu IDEA-2026-10-07-A)",
       "detectedAt": "2026-10-07",
@@ -1209,99 +1209,7 @@
         "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
       ],
       "estimate": "2–3 Agenten-Tage",
-      "note": "Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox."
-    },
-    {
-      "id": "IDEA-2026-10-07-B",
-      "title": "Idee B · Mix-Doktor: Pegel-, Clip-, Phasen- und Bass-Konflikt-Check pro Kanal mit Ein-Klick-Gain-Staging",
-      "priority": "P2",
-      "status": "OPEN",
-      "area": "Feature-Idee",
-      "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu IDEA-2026-10-07-B)",
-      "detectedAt": "2026-10-07",
-      "problem": "Niemand sieht, welcher Kanal übersteuert, wo Kick und Bass sich maskieren oder ob die Summe mono-kompatibel ist. Es gibt kein Gain-Staging (grep: 0 Treffer).",
-      "evidence": "Nutzerwert: bessere Mixe ohne Tontechnik-Wissen, Schutz im Live-Betrieb; optional Erklärung durch aiMONK (lokales Qwen).",
-      "files": [
-        "src/core/audio/live/V2ChannelMeters.ts (neu)",
-        "src/audio/worklets/v2SinkProcessor.ts",
-        "src/components/mixer/",
-        "src/core/ai/"
-      ],
-      "dependsOn": [],
-      "related": [],
-      "steps": [
-        "1. Pro Kanal im Sink: Peak, RMS, Clip-Zähler, Korrelation, Energie < 120 Hz (Bandpass). Werte per SAB an die UI.",
-        "2. Regeln: Clip > 0 → rot; RMS > −10 dBFS → Headroom-Warnung; Korrelation < 0 → Phasenwarnung; Kick und Bass beide > −20 dBFS im Sub-Band gleichzeitig → Maskierungshinweis.",
-        "3. Ein-Klick-Gain-Staging (nur Mixer-Halter): Kanal-Gains so setzen, dass jeder Kanal −18 dBFS RMS erreicht, Master-Headroom −6 dB; rückgängig machbar.",
-        "4. Optional aiMONK-Erklärung in Klartext."
-      ],
-      "acceptance": [
-        "Ampel pro Kanal live; Gain-Staging erreicht −18 ± 1 dBFS RMS je Kanal"
-      ],
-      "verification": [
-        "npx tsc --noEmit  → 0 Fehler",
-        "npx eslint . --max-warnings=0  → 0 Findings",
-        "npm test  → alle Tests grün, KEIN Test gelöscht/geskippt/abgeschwächt",
-        "npm run check:deadfiles  → exit 0",
-        "npm run verify:boundary  → 0 Verstöße",
-        "npm run audit:rt  → Tabelle VOR und NACH der Änderung in den Commit-Text bzw. die note kopieren"
-      ],
-      "forbidden": [
-        "Keine Allokation (new, Array-/Objekt-Literal, Spread, Closure, map/filter/slice, Set/Map-Neubau) in process()/render() oder in Funktionen, die pro Block/Sample aufgerufen werden",
-        "Kein Netzwerk, kein Storage, kein console.* pro Block, kein React-State im Audio-Pfad (AGENTS.md §5)",
-        "Bestehende Tests nicht löschen, nicht skippen, Grenzwerte nicht lockern; ein Test, der nachweislich den Bug festschreibt, darf nur mit Begründung in der note geändert werden",
-        "Keine SOLL-Grenze in scripts/audit/rt-bench.ts lockern, um grün zu werden",
-        "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
-      ],
-      "estimate": "2 Agenten-Tage",
-      "note": "Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox."
-    },
-    {
-      "id": "IDEA-2026-10-07-C",
-      "title": "Idee C · Jam-Sync: Netz-Ampel pro Nutzer und taktgenaue Ausführung entfernter Eingaben",
-      "priority": "P2",
-      "status": "OPEN",
-      "area": "Feature-Idee",
-      "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu IDEA-2026-10-07-C)",
-      "detectedAt": "2026-10-07",
-      "problem": "Bei 4 entfernten Nutzern kommen Pad-/Step-Eingaben mit 20–80 ms Netzverzögerung beim Mixer-Halter an und landen neben dem Raster. Niemand sieht, wessen Verbindung schlecht ist.",
-      "evidence": "Nutzerwert: Remote-Jam wird musikalisch nutzbar (Kernversprechen 4-User-Collab); Transparenz über Verbindungsqualität.",
-      "files": [
-        "server/realtime.ts (clock-ping existiert)",
-        "src/core/clock/",
-        "src/utils/audioEngine.ts (triggerEvent)",
-        "src/components/ (User-Anzeige)"
-      ],
-      "dependsOn": [
-        "RT-AUDIT-P0-003"
-      ],
-      "related": [],
-      "steps": [
-        "1. Pro Nutzer RTT, Jitter, Uhren-Offset aus dem vorhandenen clock-ping; Ausgabelatenz aus getOutputTimestamp. Ampel in der Nutzeranzeige (grün < 30 ms, gelb < 80 ms, rot).",
-        "2. Entfernte Eingaben tragen eine Ziel-Musikzeit (nächste 16tel + Sicherheitsabstand = gemessener Jitter) statt \"jetzt\"; der Halter plant sie über die Event-Queue (RT-AUDIT-P0-003) sample-genau.",
-        "3. Einstellbar: Quantisierung aus/16tel/8tel.",
-        "4. Tests: Planung mit simulierten Verzögerungen landet exakt auf dem Raster."
-      ],
-      "acceptance": [
-        "Entfernte Trigger landen auf dem Raster (±1 Sample) bei simulierter 60-ms-Verzögerung"
-      ],
-      "verification": [
-        "npx tsc --noEmit  → 0 Fehler",
-        "npx eslint . --max-warnings=0  → 0 Findings",
-        "npm test  → alle Tests grün, KEIN Test gelöscht/geskippt/abgeschwächt",
-        "npm run check:deadfiles  → exit 0",
-        "npm run verify:boundary  → 0 Verstöße",
-        "npm run audit:rt  → Tabelle VOR und NACH der Änderung in den Commit-Text bzw. die note kopieren"
-      ],
-      "forbidden": [
-        "Keine Allokation (new, Array-/Objekt-Literal, Spread, Closure, map/filter/slice, Set/Map-Neubau) in process()/render() oder in Funktionen, die pro Block/Sample aufgerufen werden",
-        "Kein Netzwerk, kein Storage, kein console.* pro Block, kein React-State im Audio-Pfad (AGENTS.md §5)",
-        "Bestehende Tests nicht löschen, nicht skippen, Grenzwerte nicht lockern; ein Test, der nachweislich den Bug festschreibt, darf nur mit Begründung in der note geändert werden",
-        "Keine SOLL-Grenze in scripts/audit/rt-bench.ts lockern, um grün zu werden",
-        "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
-      ],
-      "estimate": "2–3 Agenten-Tage",
-      "note": "Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox."
+      "note": "Betreiber-Auswahl 2026-10-07: Idee A wird umgesetzt (Hintergrund-Agent, eigener Worktree). Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox."
     },
     {
       "id": "AI-P1-001",
@@ -6203,6 +6111,98 @@
     }
   ],
   "visionSandbox": [
+    {
+      "id": "IDEA-2026-10-07-B",
+      "title": "Idee B · Mix-Doktor: Pegel-, Clip-, Phasen- und Bass-Konflikt-Check pro Kanal mit Ein-Klick-Gain-Staging",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Feature-Idee",
+      "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu IDEA-2026-10-07-B)",
+      "detectedAt": "2026-10-07",
+      "problem": "Niemand sieht, welcher Kanal übersteuert, wo Kick und Bass sich maskieren oder ob die Summe mono-kompatibel ist. Es gibt kein Gain-Staging (grep: 0 Treffer).",
+      "evidence": "Nutzerwert: bessere Mixe ohne Tontechnik-Wissen, Schutz im Live-Betrieb; optional Erklärung durch aiMONK (lokales Qwen).",
+      "files": [
+        "src/core/audio/live/V2ChannelMeters.ts (neu)",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/components/mixer/",
+        "src/core/ai/"
+      ],
+      "dependsOn": [],
+      "related": [],
+      "steps": [
+        "1. Pro Kanal im Sink: Peak, RMS, Clip-Zähler, Korrelation, Energie < 120 Hz (Bandpass). Werte per SAB an die UI.",
+        "2. Regeln: Clip > 0 → rot; RMS > −10 dBFS → Headroom-Warnung; Korrelation < 0 → Phasenwarnung; Kick und Bass beide > −20 dBFS im Sub-Band gleichzeitig → Maskierungshinweis.",
+        "3. Ein-Klick-Gain-Staging (nur Mixer-Halter): Kanal-Gains so setzen, dass jeder Kanal −18 dBFS RMS erreicht, Master-Headroom −6 dB; rückgängig machbar.",
+        "4. Optional aiMONK-Erklärung in Klartext."
+      ],
+      "acceptance": [
+        "Ampel pro Kanal live; Gain-Staging erreicht −18 ± 1 dBFS RMS je Kanal"
+      ],
+      "verification": [
+        "npx tsc --noEmit  → 0 Fehler",
+        "npx eslint . --max-warnings=0  → 0 Findings",
+        "npm test  → alle Tests grün, KEIN Test gelöscht/geskippt/abgeschwächt",
+        "npm run check:deadfiles  → exit 0",
+        "npm run verify:boundary  → 0 Verstöße",
+        "npm run audit:rt  → Tabelle VOR und NACH der Änderung in den Commit-Text bzw. die note kopieren"
+      ],
+      "forbidden": [
+        "Keine Allokation (new, Array-/Objekt-Literal, Spread, Closure, map/filter/slice, Set/Map-Neubau) in process()/render() oder in Funktionen, die pro Block/Sample aufgerufen werden",
+        "Kein Netzwerk, kein Storage, kein console.* pro Block, kein React-State im Audio-Pfad (AGENTS.md §5)",
+        "Bestehende Tests nicht löschen, nicht skippen, Grenzwerte nicht lockern; ein Test, der nachweislich den Bug festschreibt, darf nur mit Begründung in der note geändert werden",
+        "Keine SOLL-Grenze in scripts/audit/rt-bench.ts lockern, um grün zu werden",
+        "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
+      ],
+      "estimate": "2 Agenten-Tage",
+      "note": "Betreiber-Auswahl 2026-10-07: nicht gewählt (A wurde gewählt) – in visionSandbox geparkt, Plan bleibt vollständig erhalten. Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox."
+    },
+    {
+      "id": "IDEA-2026-10-07-C",
+      "title": "Idee C · Jam-Sync: Netz-Ampel pro Nutzer und taktgenaue Ausführung entfernter Eingaben",
+      "priority": "VISION",
+      "status": "SANDBOX",
+      "area": "Feature-Idee",
+      "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu IDEA-2026-10-07-C)",
+      "detectedAt": "2026-10-07",
+      "problem": "Bei 4 entfernten Nutzern kommen Pad-/Step-Eingaben mit 20–80 ms Netzverzögerung beim Mixer-Halter an und landen neben dem Raster. Niemand sieht, wessen Verbindung schlecht ist.",
+      "evidence": "Nutzerwert: Remote-Jam wird musikalisch nutzbar (Kernversprechen 4-User-Collab); Transparenz über Verbindungsqualität.",
+      "files": [
+        "server/realtime.ts (clock-ping existiert)",
+        "src/core/clock/",
+        "src/utils/audioEngine.ts (triggerEvent)",
+        "src/components/ (User-Anzeige)"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P0-003"
+      ],
+      "related": [],
+      "steps": [
+        "1. Pro Nutzer RTT, Jitter, Uhren-Offset aus dem vorhandenen clock-ping; Ausgabelatenz aus getOutputTimestamp. Ampel in der Nutzeranzeige (grün < 30 ms, gelb < 80 ms, rot).",
+        "2. Entfernte Eingaben tragen eine Ziel-Musikzeit (nächste 16tel + Sicherheitsabstand = gemessener Jitter) statt \"jetzt\"; der Halter plant sie über die Event-Queue (RT-AUDIT-P0-003) sample-genau.",
+        "3. Einstellbar: Quantisierung aus/16tel/8tel.",
+        "4. Tests: Planung mit simulierten Verzögerungen landet exakt auf dem Raster."
+      ],
+      "acceptance": [
+        "Entfernte Trigger landen auf dem Raster (±1 Sample) bei simulierter 60-ms-Verzögerung"
+      ],
+      "verification": [
+        "npx tsc --noEmit  → 0 Fehler",
+        "npx eslint . --max-warnings=0  → 0 Findings",
+        "npm test  → alle Tests grün, KEIN Test gelöscht/geskippt/abgeschwächt",
+        "npm run check:deadfiles  → exit 0",
+        "npm run verify:boundary  → 0 Verstöße",
+        "npm run audit:rt  → Tabelle VOR und NACH der Änderung in den Commit-Text bzw. die note kopieren"
+      ],
+      "forbidden": [
+        "Keine Allokation (new, Array-/Objekt-Literal, Spread, Closure, map/filter/slice, Set/Map-Neubau) in process()/render() oder in Funktionen, die pro Block/Sample aufgerufen werden",
+        "Kein Netzwerk, kein Storage, kein console.* pro Block, kein React-State im Audio-Pfad (AGENTS.md §5)",
+        "Bestehende Tests nicht löschen, nicht skippen, Grenzwerte nicht lockern; ein Test, der nachweislich den Bug festschreibt, darf nur mit Begründung in der note geändert werden",
+        "Keine SOLL-Grenze in scripts/audit/rt-bench.ts lockern, um grün zu werden",
+        "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
+      ],
+      "estimate": "2–3 Agenten-Tage",
+      "note": "Betreiber-Auswahl 2026-10-07: nicht gewählt (A wurde gewählt) – in visionSandbox geparkt, Plan bleibt vollständig erhalten. Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox."
+    },
     {
       "id": "V1.1",
       "title": "WASM-SIMD-DSP-Kernel (Mixer/Summe, 128 Kanaele)",
