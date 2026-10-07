@@ -1,4 +1,4 @@
-# AI-Flotte neu: 4 × 48 GB, alles resident, ohne Visual-Generierung (Entwurf 2026-10-07)
+# AI-Flotte neu: 5 × 48 GB als Pods, alles resident, ohne Visual-Generierung (Stand 2026-10-07)
 
 Auftrag Betreiber: AI-Aufpreis max. 4 €/h, 48-GB-Instanzen (5–6 wären möglich),
 bei „AI an" liegen **alle** Modelle dauerhaft im VRAM (Laden beim App-Start,
@@ -8,6 +8,16 @@ die drei Visual-Rollen (imageHq, videoReal, videoAbstract) bekommen keine GPU
 mehr. Zahlen im Code: `src/config/aiInfrastructure.ts` (`AI_RESIDENT_FLEET`),
 Gate: `tests/aiResidentFleet.test.ts`, Resident-Modus: `AI_RESIDENT_ONLY=1`.
 Entwurf; verbindlich wird es erst in `docs/INFRA_KONSTITUTION.md` (siehe §5).
+
+> **Entschieden und umgesetzt (2026-10-07):** Pods statt Serverless · **8 → 5** (brain mit
+> Orchestrator, ears, voice, stems, music) · Gewichte als Archive in R2 · Vis-Instanz als eigener
+> Pod (vorbereitet, aus) · Werkzeug und Anleitung: `scripts/runpod-pods.py`,
+> `docs/RUNPOD_PODS_RUNBOOK.md`. **Phase 1** startet mit den Modellen, die das Runtime-Image heute
+> laden kann (`deploy/runpod/pod-fleet.json`); die neueren Modelle aus §2 (Qwen3.6, MOSS-Audio,
+> MOSS-SoundEffect, Stable Audio 3) folgen als **Phase 2**, sobald Manifest-Einträge mit gepinnter
+> Revision und Handler dafür stehen. Begründung für 5 statt 4: lange Stem-Trennungen sollen die
+> Sprachausgabe nicht blockieren, und ein Absturz in einem Teil reißt den anderen nicht mit
+> (+0,49 €/h, gesamt 2,25–2,44 €/h).
 
 ## 1. Befund zum Preis
 
@@ -39,18 +49,19 @@ Serverless-Active-Worker: nicht geprüft.
 | Musik / Remix / Drop | ACE-Step 1.5 XL base+sft+turbo + LM-4B | **sft + turbo + LM-4B** | MIT. `base` entfällt (−9 GB). Cover/Repaint/Extract decken Remix und Übergänge ab |
 | Bild / Video | FLUX.1-dev, Qwen-Image, Wan 2.2, LTX 13B (3 Instanzen) | **entfällt** | Visuals aus vorhandenem Material, siehe §3a |
 
-## 3. Belegung (nutzbar je Karte: 48 − 6 Marge = 42 GB)
+## 3. Belegung, Zielbild Phase 2 (nutzbar je Karte: 48 − 6 Marge = 42 GB)
+
+Phase 1 (heute startbar) steht in `docs/RUNPOD_PODS_RUNBOOK.md`.
 
 | # | Instanz | Modelle | Summe |
 |---|---|---|---|
 | 1 | brain (+ Orchestrator) | Qwen3.6-35B-A3B FP8 | 36 |
 | 2 | ears | Whisper-v3, CLAP, MOSS-Audio-8B, MERT, pyannote, AST, CLIP ViT-L/14, essentia (CPU) | 38 |
-| 3 | voice | Qwen3-TTS ×2, HTDemucs-6s, MOSS-SoundEffect | 32 |
-| 4 | music | ACE-Step sft, turbo, LM-4B, Stable Audio 3 medium | 36 |
+| 3 | voice | Qwen3-TTS ×2, MOSS-SoundEffect | 24 |
+| 4 | stems | HTDemucs-6s (Platz für BS-RoFormer zum Vergleich) | 8 |
+| 5 | music | ACE-Step sft, turbo, LM-4B, Stable Audio 3 medium | 36 |
 
-4 Instanzen genügen und lassen Puffer; bis 6 wären im Budget (z. B. eine
-eigene Stem-Instanz, damit lange Song-Trennungen die Sprachausgabe nicht
-blockieren). Mehr ist kein Ziel („keine Aufblähung").
+5 Instanzen (entschieden 2026-10-07). Mehr ist kein Ziel („keine Aufblähung").
 Die Werte der neuen Modelle (brain, MOSS) sind **Schätzungen** aus
 Parameterzahl × Bytes; brain (KV-Cache) ist die engste Stelle und **muss auf der
 echten Karte gemessen werden**.
@@ -77,19 +88,19 @@ bleiben im Speicher, werden aber nicht mehr bedient. Das CLIP-Modell ist das
 **einzige** visuell verwandte Modell und nur zum Wiederfinden; es lässt sich
 ohne Folgen streichen (−2 GB).
 
-## 4. Hochrechnung (4 Instanzen, Pod A6000 = 1,95 €/h)
+## 4. Hochrechnung (5 Instanzen, Pod A6000 = 2,44 €/h)
 
 | Nutzung pro Monat | Kosten GPU |
 |---|---|
-| 10 h | 20 € |
-| 40 h | 78 € |
-| 100 h | 195 € |
-| 24/7 (720 h) | 1.404 € |
+| 10 h | 24 € |
+| 40 h | 98 € |
+| 100 h | 244 € |
+| 24/7 (720 h) | 1.756 € |
 
-- Puffer zur 4-€-Grenze: 2,05 €/h (51 %) mit A6000, 2,20 €/h mit A40.
-- **Speicher:** ~142 GB Gewichte als Network-Volume ≈ 9,9 $/Monat (0,07 $/GB)
-  ≈ **9,1 €/Monat**. Die Konstitution erlaubt 5 €/Monat → **Widerspruch**
-  (kleiner, aber vorhanden).
+- Puffer zur 4-€-Grenze: 1,56 €/h mit A6000, 1,75 €/h mit A40; mit Vis-Pod (≈ 0,25 €/h)
+  2,69 €/h gesamt.
+- **Speicher:** Gewichte als Archive in R2 (≈ 2 €/Monat, §6.1). Ein Network-Volume
+  (≈ 9 €/Monat) wird nicht gebraucht.
 - **Start:** Pod-Start + 26–36 GB je Instanz aus dem Volume in den VRAM, grob
   2–4 Minuten (Schätzung, ungemessen), alle Instanzen parallel. Ein gestoppter
   Pod bekommt nicht garantiert dieselbe GPU zurück; sicherer ist Neu-Deploy aus
@@ -97,10 +108,12 @@ ohne Folgen streichen (−2 GB).
 
 ## 5. Entscheidungen
 
-1. ~~Pods oder Serverless~~ **Pods** (Betreiber 2026-10-07).
-2. ~~Speicherbudget~~ gelöst durch den Speicher-Vorschlag in §6.1 (≈ 2 €/Monat).
-3. **Variante wählen:** 8 → 4 oder 8 → 5 (§6.2).
-4. Freigabe der Migration (§6.3).
+1. ~~Pods oder Serverless~~ **Pods**.
+2. ~~Speicherbudget~~ Gewichte in R2 (≈ 2 €/Monat).
+3. ~~4 oder 5~~ **5** (siehe Kasten oben).
+4. ~~Migration~~ freigegeben; umgesetzt als Pod-Modus neben Serverless (`AI_FLEET_MODE=pods`).
+   Die alten Serverless-Rollen bleiben bis zum ersten erfolgreichen Pod-Lauf im Code (Umschalten
+   per Einstellung, kein automatischer Fallback) und werden danach entfernt (§6.3 Schritt 6).
 
 Neue Modelle brauchen vor dem Einsatz Manifest-Einträge mit gepinnter Revision
 und Lizenzprüfung (`status: 'neu'` in `AI_RESIDENT_FLEET`).

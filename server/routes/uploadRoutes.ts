@@ -49,7 +49,7 @@ export interface UploadDeps {
 
 const UPLOAD_MAX_MB = Number(process.env.UPLOAD_MAX_MB || 100);
 const UPLOAD_KINDS = new Set(['sample', 'recording', 'stem', 'sound', 'voice']);
-const AUDIO_EXT_RE = /\.(wav|mp3|flac|ogg|m4a|aac|aiff|aif)$/i;
+const AUDIO_EXT_RE = /\.(wav|mp3|flac|ogg|oga|opus|weba|m4a|aac|aiff|aif)$/i;
 
 /**
  * Erlaubte Audio-Endungen -> MIME-Typ.
@@ -73,6 +73,9 @@ const AUDIO_MIME_BY_EXT: Record<string, string> = {
   mp3: 'audio/mpeg',
   flac: 'audio/flac',
   ogg: 'audio/ogg',
+  oga: 'audio/ogg',
+  opus: 'audio/ogg',
+  weba: 'audio/webm',
   m4a: 'audio/mp4',
   aac: 'audio/aac',
   aiff: 'audio/aiff',
@@ -123,7 +126,7 @@ export async function processSampleUpload(
   if (!AUDIO_EXT_RE.test(input.filename) && !(input.contentType || '').startsWith('audio/')) {
     return {
       httpStatus: 415,
-      body: { status: 'error', message: `Nicht unterstütztes Audio-Format (.${ext || '?'}). Erlaubt: wav/mp3/flac/ogg/m4a/aac/aiff.` },
+      body: { status: 'error', message: `Nicht unterstütztes Audio-Format (.${ext || '?'}). Erlaubt: wav/mp3/flac/ogg/oga/opus/weba/m4a/aac/aiff.` },
     };
   }
   if (data.length === 0) {

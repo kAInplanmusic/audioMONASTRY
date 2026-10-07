@@ -56,17 +56,23 @@ Einstellungen (Schalter, Status „lädt/bereit", URL zum Kopieren, QR-Code).
 
 - **Ein Gerät je Ausgang** (AGENTS.md): das erste Gerät hält die Adresse, weitere lehnt
   der Server ab. Die Ausgabe-Geräte sind Listener und zählen nicht zu den vier Nutzern.
-- **Wer rendert?** Der **Ausgabe-Browser** (am Beamer) rendert selbst mit WebGL/WebGPU.
-  Die Vis-Instanz liefert Szenenplan, Takt und Audio-Features (WebSocket/Datenkanal, mit
-  Zeitstempeln der Master-Clock) sowie die Proxy-Videos. Ein Server-Rendering schließt sich
-  aus: die Hetzner-Knoten haben keine GPU, 1080p60 per CPU wäre nicht zu halten.
-- **Wo läuft sie?** Vorschlag: als Container `vis` auf dem **media-Knoten** (hat ffmpeg, NVMe,
-  R2-Sync), Subdomain per Caddy, kein neuer Server. Alternative: eigener 5. Hetzner-Server
-  (Konstitution erlaubt 5, genutzt sind 4).
-- **Browser-Regel für IP-Zugriff:** Über `http://<IP>` ist die Seite kein „sicherer Kontext".
-  Dort fehlen WebGPU, WebCodecs und AudioWorklet; WebGL bleibt. Für 1080p-Rendering reicht
-  WebGL, für den Main-Sound reicht ein `<audio>`-Element mit WebRTC. Volle Funktionen gibt es
-  über HTTPS (Domain oder lokales Zertifikat).
+- **Wer rendert? (entschieden 2026-10-07: eigene Instanz)** Die **Vis-Instanz ist ein eigener
+  GPU-Pod** (RunPod, Karte mit Hardware-Encoder NVENC, z. B. RTX A5000/RTX 4000 Ada,
+  ≈ 0,25 €/h; vorbereitet in `deploy/runpod/pod-fleet.json` → `visPod`). Sie rendert die
+  Visuals selbst (Headless-Chromium mit GPU, dieselben WebGL/WebGPU-Renderer wie heute) und
+  schickt den fertigen Videostrom über den bestehenden SFU-Weg an `/visual-out`. Das
+  Ausgabegerät spielt nur einen Videostrom ab: jeder Browser, jeder Beamer-Rechner, auch über
+  `http://<IP>` ohne WebGPU. Kein 5. Hetzner-Server.
+- **Synchronität trotz Streaming:** Die Instanz kennt Track, Abspielposition und Beat-Grid aus
+  der Session und rendert mit **Vorlauf** gegen die Master-Clock. Schnitte auf Downbeats sind
+  damit planbar und kommen pünktlich an, obwohl der Strom 100–300 ms Laufzeit hat; die
+  Audio-Features liest sie vorab aus der Track-Datei statt aus dem Live-Signal.
+- **URL und Zugriff (entschieden):** Subdomains `visuals.<domain>` und `sound.<domain>` als
+  Aliase von `/visual-out` und `/master-out`, zusätzlich per IP im LAN. Zugriff über einen
+  **Kopplungslink mit Token** aus den Einstellungen; das erste Gerät bindet die Adresse, weitere
+  lehnt der Server ab (wie heute). Für IP-Zugriff über HTTPS ein lokales Zertifikat (Caddy
+  `tls internal`), ohne HTTPS spielt der Strom trotzdem (`<video>`/`<audio>` brauchen keinen
+  sicheren Kontext).
 - **Auflösung:** Standard **1080p60**. **2K/4K** wird **hochskaliert** (Shader im Ausgabe-
   Browser) oder, wenn die GPU es hergibt, **nativ gerendert**; wählbar je Ausgabe
   (`streamResolution.ts` kann das schon je Ausgabe). 4K nativ nur nach Messung.
@@ -96,7 +102,7 @@ und meldet „Planung nicht verfügbar". Es gibt keinen Ersatz-KI-Pfad.
 
 ### 2.3 Selbstlernen (ohne GPU-Training)
 
-- **Signale:** Daumen hoch/runter auf Szene und Übergang (Pad), Überspringen, manuelle
+- **Signale (entschieden: alle drei):** Daumen hoch/runter auf Szene und Übergang (Pad), Überspringen, manuelle
   Eingriffe (Override im Deck), Session-Ende-Bewertung (`visual_feedback` existiert),
   Verweildauer.
 - **Lernen:** Gewichte je Clip, Tag, Übergang und Kontext (Struktur-Slot × Energie ×
@@ -154,7 +160,7 @@ Bausteine:
 | Phase | Inhalt | Abnahme |
 |---|---|---|
 | V0 | Erzeugungspfade abtrennen, `layerCompositor`/`poolManifest` testen | `verify` grün |
-| V1 | Vis-Instanz: Container, Aktivierung in den Einstellungen, Status, URL, Ausgabe-Seite, Exklusivität | Seite per Browser erreichbar, zweites Gerät abgelehnt |
+| V1 | Vis-Pod: Image (Headless-Chromium + GPU + NVENC), Start aus den Einstellungen, Status, Kopplungslink, Strom zu `/visual-out`, Exklusivität, `visPod.enabled=true` | Strom per Browser erreichbar, zweites Gerät abgelehnt |
 | V2 | Medien-Pipeline: Upload, ffmpeg-Proxy, Tags, CLIP-Index | Datei hochladen, Proxy + Tags erscheinen |
 | V3 | Ausgabe-Browser rendert Plan + Takt, quantisierte Übergänge, 1080p60 | 60 fps im Browser-Test gemessen |
 | V4 | Story-Engine: Struktur → Plan (`brain`) → Suche → Schnitt, Auto-Modus | Track läuft ohne Eingriff, nachvollziehbarer Plan im Log |
@@ -168,14 +174,26 @@ B1 ist Voraussetzung für taktgenaue Übergänge (V3) und für Beatmatch.
 
 ## 5. Entscheidungen
 
-Geklärt am 2026-10-07: Zugriff per Browser/URL statt Rack-Streifen (§2.1), 1080p Standard
-mit 2K/4K hochskaliert oder gerendert, Vollautomatik als Hauptmodus, Namensregel, Quellen
-(eigener Bestand plus öffentliche Quellen, fast alle).
+Geklärt am 2026-10-07:
+- Zugriff per Browser/URL statt Rack-Streifen; Subdomains `visuals.`/`sound.` + IP, Kopplungslink mit Token.
+- Vis-Instanz = **eigener GPU-Pod**, rendert und streamt (kein 5. Hetzner-Server).
+- 1080p Standard, 2K/4K hochskaliert oder gerendert.
+- Vollautomatik als Hauptmodus; Quellen: eigener Bestand plus öffentliche Quellen (fast alle).
+- Lernsignale: Daumen/Pads, Session-Umfrage und Verweildauer.
+- Upload-Formate: alles an Ton (auch verlustfrei/HQ: WAV/BWF/RF64, AIFF, FLAC, ALAC, WavPack,
+  APE, DSD), Bilder inkl. Kamera-RAW, Videos aller gängigen Container, dazu MIDI und Farb-LUTs
+  (`docs/MEDIA_INGEST.md`). Die Bulk-Übernahme läuft über `scripts/media-ingest.py`.
+
+### Beatmatch: was es ist und warum zuerst
+
+Beatmatch heißt, zwei Tracks so anzugleichen, dass ihre Schläge **gleich schnell** (Tempo) und
+**zur gleichen Zeit** (Phase) kommen, ohne dass sich die Tonhöhe ändert. Erst dann lassen sie
+sich sauber überblenden. Der Unterschied zum heutigen Stand: heute läuft nur die gemeinsame Uhr
+aller Nutzer synchron; ob zwei Tracks im Takt zueinander liegen, prüft niemand.
+
+Die bessere Reihenfolge: **B1 zuerst** (Beat-/Downbeat-Grid je Track), weil Beatmatch **und**
+die taktgenauen Visual-Schnitte darauf aufbauen. Danach laufen **B2** (Time-Stretch + Phase-Lock)
+und die Visual-Phasen **V1–V3 parallel**.
 
 Offen:
-1. **Wo läuft die Vis-Instanz:** Container auf dem media-Knoten (Vorschlag) oder eigener Server.
-2. **URL-Schema:** Subdomains (`visuals.`/`sound.`) oder Pfade (`/visual-out`/`/master-out`);
-   Zugriffsschutz (Token in der URL?) und lokales Zertifikat für IP-Zugriff.
-3. **Lern-Signale:** welche Eingaben zählen (Daumen/Pads, Session-Umfrage, Verweildauer).
-4. **Videoformate und Größenobergrenze** beim Upload.
-5. **Reihenfolge:** Beatmatch (B1/B2) vor oder parallel zu den Visuals?
+- Upload-Größenobergrenze in der App (heute 100 MB je Datei, Chunk-Upload für mehr vorhanden).
