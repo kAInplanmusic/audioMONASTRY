@@ -203,6 +203,19 @@ const sessionRuntime = createSessionRuntime({
 });
 sessionRuntime.start();
 
+// RT-AUDIT-P1-008: beim geordneten Herunterfahren (docker stop → SIGTERM) den
+// entprellten Session-Save sofort schreiben – sonst gingen die letzten
+// Änderungen verloren. Höchstens 3 s warten, dann beenden.
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+  const flushAndExit = (signal: string) => {
+    console.log(`[session] ${signal} – Session-Zustand wird gesichert …`);
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3000).unref?.());
+    void Promise.race([sessionRuntime.flush(), timeout]).finally(() => process.exit(0));
+  };
+  process.once('SIGTERM', () => flushAndExit('SIGTERM'));
+  process.once('SIGINT', () => flushAndExit('SIGINT'));
+}
+
 // DCT-108: Request/Trace-ID-Middleware (Korrelation User-Action → HTTP → AI).
 app.use((req, res, next) => {
   const id = (req.headers['x-request-id'] as string) || `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
