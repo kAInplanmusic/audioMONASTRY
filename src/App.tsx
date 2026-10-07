@@ -805,7 +805,7 @@ function AppComponent() {
           </div>
         </header>
 
-        <StudioMasterplayer bpm={bpm} isPlaying={isPlaying} />
+        <StudioMasterplayer bpm={bpm} isPlaying={isPlaying} mainHolder={mainHolder} />
       </div>
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
