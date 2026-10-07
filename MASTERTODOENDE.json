@@ -4935,29 +4935,24 @@
     },
     {
       "id": "AI-INFRA-001",
-      "title": "RunPod AI Infrastructure: 5-6 Instanzen à 48GB VRAM, 4€/h Budget, On-Demand Model-Loading",
+      "title": "AI-Flotte neu: 6 x 48 GB, alles resident, max. 4 EUR/h (Pods), Visuals neu gewaehlt",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "PARTIAL",
       "area": "AI Infrastruktur",
       "source": "Betreiber-Auftrag 2026-10-07",
-      "problem": "Die aktuelle RunPod-Flotte (8 Endpoints) nutzt zu viele parallele Modell-Instanzen, was Kosten treibt. Anforderung: Maximale 4€/h zusätzlich für AI, nur 5-6 Instanzen à 48GB VRAM, Modelle nur beim Einsatz laden (kein paralleles Pre-Loading), null Fallbacks (weder lokal noch externe APIs).",
-      "requirements": [
-        "Budget: max. 4€/h on-top für AI (5-6 Instanzen à ~0.50€/h ≈ 2.50-3€/h, mit Snapshots + Overhead + Puffer)",
-        "Keine parallele Modell-Nutzung: Modelle werden nur geladen, wenn AI aktiv ist",
-        "Instanz-Architektur: Visuals (Bild/Video aus Bestand), DAW-LLM (Text→Steuerung/Tool-Calls/AudioWorklet), Audio-Analyse (Messwerte/Musik-Theorie/Routing/Takt), Stem-Separation, Speech-Generator, Music/Song-Generator, Sound/SFX-Generator, Remix/Drop/Mixer-Übergang-KI",
-        "Zero-Fallback-Policy: keine lokalen Fallbacks, keine Replicate/HF/externe API-Fallbacks",
-        "Keine Secrets in Client-Code oder Bundles"
-      ],
-      "note": "AKTUELLER STAND: aiInfrastructure.ts zeigt 8 Rollen (brain, ears, voiceGen, music, imageHq, videoReal, videoAbstract, orchestrator) mit Kosten-Tracking. SCHRITTE: (1) aiInfrastructure.ts auf 5-6 Instanzen redimensionieren und 4€/h-Budget einhalten. (2) Modell-Ladelogik: nur bei AI-Aktivierung, kein paralleles Pre-Loading. (3) GPU-Rollen den 8 Fähigkeiten zuordnen oder neu strukturieren. (4) Zero-Fallback in providerRouter/endpointRegistry durchsetzen.",
+      "problem": "Betreiber 2026-10-07: AI-Aufpreis max. 4 EUR/h, 5-6 Instanzen mit 48 GB, bei AI an liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen/Tauschen), keine lokalen/API-Fallbacks. Die 3 Visual-Rollen sind ueberholt. Preisbefund: 0,49 EUR/h gilt fuer Pods; Serverless Flex kostet 1,22 USD/h (6 Instanzen = 6,73 EUR/h, reisst die 4 EUR).",
+      "note": "STAND 2026-10-07: Bestandsaufnahme + Zielbild in docs/AI_FLEET_6X48_PLAN.md; Zielbild und Gate im Code (AI_RESIDENT_FLEET, tests/aiResidentFleet.test.ts). NICHT umgesetzt: Migration 8->6 Rollen, Pod-Betrieb, Manifest-Eintraege der neuen Modelle. Offene Betreiber-Entscheidungen: Pods statt Serverless; Speicherbudget 5 -> ~13 EUR/Monat; Video LTX-2.3 (Lizenzpruefung) vs Wan 2.2 I2V; Freigabe Migration.",
       "acceptance": [
-        "Kosten-Tracker zeigt max 4€/h für 5-6 Instanzen (48GB VRAM, ~0.50€/h je Instanz)",
-        "Modelle werden NICHT parallel vorgeladen - nur beim Bedarf",
-        "8 AI-Fähigkeiten sind den GPU-Rollen zugeordnet (oder Rollen neu strukturiert)",
-        "Zero-Fallback durchgesetzt: POST scheitert ehrlich bei RunPod-Fehler, keine Replicate/HF-Fallback",
-        "Live-Test: eine AI-Anfrage lädt nur erforderliche Modelle"
+        "6 Instanzen, je Modellsumme <= 42 GB, keine exclusiveGroup (Test gruen)",
+        "6 Pods A6000/A40 <= 4 EUR/h (Test gruen)",
+        "Neue Modelle mit gepinnter Revision im Manifest, Lizenz geprueft",
+        "Echtmessung VRAM fuer brain, image, video auf 48-GB-Karte",
+        "Migration 8->6 inkl. Deploy-Skripte und Endpoint-Registry"
       ],
       "files": [
         "src/config/aiInfrastructure.ts",
+        "tests/aiResidentFleet.test.ts",
+        "docs/AI_FLEET_6X48_PLAN.md",
         "src/core/ai/orchestrator/costTracker.ts",
         "src/core/ai/orchestrator/providerRouter.ts",
         "src/core/ai/orchestrator/endpointRegistry.ts",
