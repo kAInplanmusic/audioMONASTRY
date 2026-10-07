@@ -794,7 +794,7 @@ registerSessionRoutes(app, {
   // Bedienflaeche aufzubauen (gemessen im visuellen Lauf: erwartet >400 px).
   // Der Halter wird deshalb auf der FRISCHEN Session vergeben - an das aelteste
   // anwesende Mitglied, genau die Regel aus UI2-P0-001.
-  ensureSessionHolders: (session) => {
+  ensureSessionHolders: (_session) => {
     // Die Mitgliederliste kennt nur der Realtime-Hub (Socket-Scope). Er vergibt
     // den Halter auf der frischen Session und broadcastet das an den Raum.
     // Hier wird auf der ihm uebergebenen Session gearbeitet, damit der Zustand
