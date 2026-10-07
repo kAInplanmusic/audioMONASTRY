@@ -26,7 +26,18 @@ import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
 
 type BiquadType = 'peaking' | 'lowshelf' | 'highshelf' | 'highpass' | 'lowpass';
-type BiquadCoefficients = [number, number, number, number, number];
+/**
+ * b0, b1, b2, a1, a2 (normiert auf a0). RT-AUDIT-P0-002: ein vorhandenes
+ * Float64Array(5) statt eines neuen Arrays pro Berechnung – Float64 hält die
+ * Double-Werte exakt, der Klang bleibt bitgleich.
+ */
+type BiquadCoefficients = Float64Array;
+
+function createBiquadCoefficients(): BiquadCoefficients {
+  const co = new Float64Array(5);
+  co[0] = 1;
+  return co;
+}
 
 // ---------------------------------------------------------------------------
 // Pure DSP-Helfer: Rechenkern in src/core/dsp/dynamicsMath.ts, hier re-exportiert
@@ -35,12 +46,17 @@ type BiquadCoefficients = [number, number, number, number, number];
 
 export { compressorCurveDb, fromDb, smoothingCoefficient, toDb } from '../../dsp/dynamicsMath';
 
+/**
+ * Berechnet die RBJ-Biquad-Koeffizienten und schreibt sie in `out`
+ * (RT-AUDIT-P0-002/P2-017: allokationsfrei, kein Array-Literal/`slice`).
+ */
 function computeBiquadCoefficients(
   type: BiquadType,
   freq: number,
   gainDb: number,
   q: number,
   sampleRate: number,
+  out: BiquadCoefficients,
 ): BiquadCoefficients {
   const sr = Math.max(8000, Number.isFinite(sampleRate) ? sampleRate : 48000);
   const f = Math.max(5, Math.min(sr / 2 - 1, Number.isFinite(freq) ? freq : 1000));
@@ -49,19 +65,27 @@ function computeBiquadCoefficients(
   // ARCH-AUDIO-002: Bei 0 dB Gain muss ein Shelf-/Peaking-Filter exakt
   // transparent sein (RBJ-Formeln degenerieren bei A=1 sonst zu b1≠a1).
   if (type !== 'highpass' && type !== 'lowpass' && Math.abs(g) < 1e-9) {
-    return [1, 0, 0, 0, 0];
+    out[0] = 1;
+    out[1] = 0;
+    out[2] = 0;
+    out[3] = 0;
+    out[4] = 0;
+    return out;
   }
   const w = (2 * Math.PI * f) / sr;
   const cw = Math.cos(w);
   const sn = Math.sin(w);
-  let co: number[];
   if (type === 'highpass' || type === 'lowpass') {
     const alpha = sn / (2 * qq);
     const a0 = 1 + alpha;
     const b0 = (1 + (type === 'highpass' ? cw : -cw)) / 2;
     const b1 = (type === 'highpass' ? -1 : 1) * (1 + (type === 'highpass' ? cw : -cw));
     const b2 = b0;
-    co = [b0 / a0, b1 / a0, b2 / a0, (-2 * cw) / a0, (1 - alpha) / a0];
+    out[0] = b0 / a0;
+    out[1] = b1 / a0;
+    out[2] = b2 / a0;
+    out[3] = (-2 * cw) / a0;
+    out[4] = (1 - alpha) / a0;
   } else {
     const A = Math.pow(10, g / 40);
     const sign = type === 'lowshelf' ? -1 : 1;
@@ -73,7 +97,11 @@ function computeBiquadCoefficients(
       const a0 = 1 + alpha / A;
       const a1 = -2 * cw;
       const a2 = 1 - alpha / A;
-      co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+      out[0] = b0 / a0;
+      out[1] = b1 / a0;
+      out[2] = b2 / a0;
+      out[3] = a1 / a0;
+      out[4] = a2 / a0;
     } else {
       // Low-/High-Shelf (RBJ)
       const alpha = (sn / 2) * Math.sqrt((A + 1 / A) * (1 / qq - 1) + 2);
@@ -88,20 +116,27 @@ function computeBiquadCoefficients(
         ? -2 * ((A + 1) + (A - 1) * cw)
         : 2 * ((A - 1) - (A + 1) * cw);
       const a2 = (A + 1) - sign * (A - 1) * cw - twoSqrtAAlpha;
-      co = [b0 / a0, b1 / a0, b2 / a0, a1 / a0, a2 / a0];
+      out[0] = b0 / a0;
+      out[1] = b1 / a0;
+      out[2] = b2 / a0;
+      out[3] = a1 / a0;
+      out[4] = a2 / a0;
     }
   }
-  const out = co.slice(0, 5) as BiquadCoefficients;
   for (let i = 0; i < 5; i++) if (!Number.isFinite(out[i])) out[i] = 0;
   return out;
 }
 
 class BiquadState {
-  private co: BiquadCoefficients = [1, 0, 0, 0, 0];
+  /**
+   * Referenz auf einen GETEILTEN Koeffizientensatz (je Band bzw. je Filter);
+   * Neuberechnungen schreiben dort hinein, die Zustände sehen sie sofort.
+   */
+  private readonly co: BiquadCoefficients;
   private z1 = 0;
   private z2 = 0;
 
-  setCoefficients(co: BiquadCoefficients): void {
+  constructor(co: BiquadCoefficients) {
     this.co = co;
   }
 
@@ -111,7 +146,13 @@ class BiquadState {
   }
 
   process(x: number): number {
-    const [b0, b1, b2, a1, a2] = this.co;
+    // Indexzugriff statt Array-Destrukturierung (kein Iterator pro Sample).
+    const co = this.co;
+    const b0 = co[0];
+    const b1 = co[1];
+    const b2 = co[2];
+    const a1 = co[3];
+    const a2 = co[4];
     let y = b0 * x + this.z1;
     if (!Number.isFinite(y)) y = 0;
     let z1 = b1 * x - a1 * y + this.z2;
@@ -145,6 +186,15 @@ export class ParametricEqNode extends BaseNode implements AutomatableV2Node {
   readonly bandGains = new Map<string, AudioParameter>();
   private readonly states: BiquadState[][];
   private readonly bands: EqBandSpec[];
+  /** Gain-Parameter je Band in Bandreihenfolge (kein Map-Lookup pro Block). */
+  private readonly bandParams: (AudioParameter | undefined)[];
+  /**
+   * RT-AUDIT-P0-002: Koeffizienten je Band, nur bei geändertem Gain bzw.
+   * geänderter Sample-Rate neu berechnet (vorher `bands.map` + `slice` pro Block).
+   */
+  private readonly coeffs: BiquadCoefficients[];
+  private readonly coeffGain: Float64Array;
+  private coeffSampleRate = Number.NaN;
 
   constructor(id: string, bands: EqBandSpec[] = DEFAULT_EQ_BANDS) {
     super(id, 'eq', 1, 1);
@@ -155,6 +205,9 @@ export class ParametricEqNode extends BaseNode implements AutomatableV2Node {
       this.bandGains.set(band.id, param);
       this.parameters.push(param);
     }
+    this.bandParams = bands.map((band) => this.bandGains.get(band.id));
+    this.coeffs = bands.map(() => createBiquadCoefficients());
+    this.coeffGain = new Float64Array(bands.length).fill(Number.NaN);
   }
 
   setBandGain(bandId: string, gainDb: number): void {
@@ -170,28 +223,28 @@ export class ParametricEqNode extends BaseNode implements AutomatableV2Node {
     const block = this.prepareProcess(ctx);
     if (!block) return;
     const { input, out, len } = block;
-    const coeffs = this.bands.map((band) =>
-      computeBiquadCoefficients(
-        band.type,
-        band.freq,
-        this.bandGains.get(band.id)?.getValueAtTime(ctx.currentTime) ?? 0,
-        band.q,
-        ctx.sampleRate,
-      ));
+    const sampleRateChanged = ctx.sampleRate !== this.coeffSampleRate;
+    this.coeffSampleRate = ctx.sampleRate;
+    for (let b = 0; b < this.bands.length; b++) {
+      const gain = this.bandParams[b]?.getValueAtTime(ctx.currentTime) ?? 0;
+      // Object.is: NaN-Startwert erzwingt die erste Berechnung, −0/+0 bleiben getrennt.
+      if (!sampleRateChanged && Object.is(gain, this.coeffGain[b])) continue;
+      this.coeffGain[b] = gain;
+      const band = this.bands[b];
+      computeBiquadCoefficients(band.type, band.freq, gain, band.q, ctx.sampleRate, this.coeffs[b]);
+    }
     for (let ch = 0; ch < input.length; ch++) {
       if (!this.states[0][ch]) {
         for (let band = 0; band < this.bands.length; band++) {
-          this.states[band][ch] = new BiquadState();
+          this.states[band][ch] = new BiquadState(this.coeffs[band]);
         }
       }
     }
     for (let ch = 0; ch < out.length; ch++) {
       for (let i = 0; i < len; i++) {
-        let s = out[ch][i] ?? 0;
+        let s = out[ch][i];
         for (let band = 0; band < this.bands.length; band++) {
-          const state = this.states[band][ch];
-          state.setCoefficients(coeffs[band]);
-          s = state.process(s);
+          s = this.states[band][ch].process(s);
         }
         out[ch][i] = Number.isFinite(s) ? s : 0;
       }
@@ -211,12 +264,17 @@ export class ParametricEqNode extends BaseNode implements AutomatableV2Node {
 // DspFilterNode
 // ---------------------------------------------------------------------------
 
+/** RT-AUDIT-P2-017: Koeffizienten-Update höchstens alle 16 Samples (16 − 1 als Bitmaske). */
+const DSP_COEFF_INTERVAL_MASK = 15;
+
 export class DspFilterNode extends BaseNode implements AutomatableV2Node {
   readonly cutoff: AudioParameter;
   readonly resonance: AudioParameter;
   readonly depth: AudioParameter;
   readonly drive: AudioParameter;
   private readonly lowpassStates: BiquadState[] = [];
+  /** Geteilter Lowpass-Koeffizientensatz aller Kanäle (in-place aktualisiert). */
+  private readonly lowpassCoeffs = createBiquadCoefficients();
   private env = 0;
 
   constructor(id: string) {
@@ -232,39 +290,49 @@ export class DspFilterNode extends BaseNode implements AutomatableV2Node {
     const block = this.prepareProcess(ctx);
     if (!block) return;
     const { input, out, len, sr } = block;
-    const att = smoothingCoefficient(0.02, sr);
-    const rel = smoothingCoefficient(0.08, sr);
     const drive = this.drive.getValueAtTime(ctx.currentTime);
-    const baseCutoff = this.cutoff.getValueAtTime(ctx.currentTime);
-    const q = this.resonance.getValueAtTime(ctx.currentTime);
     const depth = this.depth.getValueAtTime(ctx.currentTime);
     // AUDIO-P0-004: Tiefe 0 + Drive 0 = bit-transparenter Bypass (kein Filter-Tail).
+    // RT-AUDIT-P0-002: Bypass vor den übrigen (reinen) Berechnungen prüfen.
     if (drive <= 0 && depth <= 0) {
       this.outputs[0].buffer = out;
       return;
     }
+    const att = smoothingCoefficient(0.02, sr);
+    const rel = smoothingCoefficient(0.08, sr);
+    const baseCutoff = this.cutoff.getValueAtTime(ctx.currentTime);
+    const q = this.resonance.getValueAtTime(ctx.currentTime);
     const driveNorm = Math.tanh(1 + drive * 1.6);
 
     for (let ch = 0; ch < out.length; ch++) {
-      if (!this.lowpassStates[ch]) this.lowpassStates[ch] = new BiquadState();
+      if (!this.lowpassStates[ch]) this.lowpassStates[ch] = new BiquadState(this.lowpassCoeffs);
     }
 
     let lastCutoff = -1;
     for (let i = 0; i < len; i++) {
       let mono = 0;
-      for (let ch = 0; ch < input.length; ch++) mono += Math.abs(input[ch]?.[i] ?? 0);
+      for (let ch = 0; ch < input.length; ch++) {
+        const inCh = input[ch];
+        mono += Math.abs(i < inCh.length ? inCh[i] : 0);
+      }
       mono /= Math.max(1, input.length);
       const coef = mono > this.env ? att : rel;
       this.env += coef * (mono - this.env);
       if (this.env < 0) this.env = 0;
-      const modCutoff = Math.min(sr / 2 - 1, Math.max(20, baseCutoff + depth * this.env * 4000));
-      if (Math.abs(modCutoff - lastCutoff) > 0.1) {
-        lastCutoff = modCutoff;
-        for (const state of this.lowpassStates) state.setCoefficients(computeBiquadCoefficients('lowpass', modCutoff, 0, q, sr));
+      // RT-AUDIT-P2-017: Koeffizienten höchstens alle 16 Samples (die Hüllkurve
+      // läuft weiter pro Sample) und in den vorhandenen Satz geschrieben – vorher
+      // pro Sample mit neuem Array. Bei statischer Hüllkurve identisch (Sample 0).
+      if ((i & DSP_COEFF_INTERVAL_MASK) === 0) {
+        const modCutoff = Math.min(sr / 2 - 1, Math.max(20, baseCutoff + depth * this.env * 4000));
+        if (Math.abs(modCutoff - lastCutoff) > 0.1) {
+          lastCutoff = modCutoff;
+          computeBiquadCoefficients('lowpass', modCutoff, 0, q, sr, this.lowpassCoeffs);
+        }
       }
       for (let ch = 0; ch < out.length; ch++) {
-        let s = out[ch]?.[i] ?? 0;
-        s = this.lowpassStates[ch]?.process(s) ?? s;
+        // Zustände existieren für alle Kanäle (oben angelegt); ohne `?.`/`??`,
+        // die den Double-Wert pro Sample boxen würden (RT-AUDIT-P0-002).
+        let s = this.lowpassStates[ch].process(out[ch][i]);
         if (drive > 0) s = Math.tanh(s * (1 + drive * 2)) / driveNorm;
         out[ch][i] = Number.isFinite(s) ? s : 0;
       }
@@ -341,7 +409,7 @@ export class EffectNode extends BaseNode implements AutomatableV2Node {
     for (let i = 0; i < len; i++) {
       const t = (i / sr) + ctx.currentTime;
       for (let ch = 0; ch < out.length; ch++) {
-        const x = out[ch]?.[i] ?? 0;
+        const x = out[ch][i];
         const rvb = this.reverb(x, fb);
         const chrs = this.chorusProcess(x, chorusRate, chorusDepth, t, sr);
         const crs = this.crush(x, crushLevels, crushReduction);
@@ -452,7 +520,10 @@ export class DynamicsNode extends BaseNode implements AutomatableV2Node {
 
     for (let i = 0; i < len; i++) {
       let peak = 0;
-      for (let ch = 0; ch < input.length; ch++) peak = Math.max(peak, Math.abs(input[ch]?.[i] ?? 0));
+      for (let ch = 0; ch < input.length; ch++) {
+        const inCh = input[ch];
+        peak = Math.max(peak, Math.abs(i < inCh.length ? inCh[i] : 0));
+      }
       const levelDb = toDb(peak);
       const targetGrDb = Math.max(0, levelDb - compressorCurveDb(levelDb, threshold, ratio, knee));
       const coef = targetGrDb > this.compEnvDb ? att : rel;
@@ -460,7 +531,7 @@ export class DynamicsNode extends BaseNode implements AutomatableV2Node {
       if (this.compEnvDb < 0) this.compEnvDb = 0;
       const gain = fromDb(makeupDb - this.compEnvDb);
       for (let ch = 0; ch < out.length; ch++) {
-        let s = (out[ch]?.[i] ?? 0) * gain;
+        let s = out[ch][i] * gain;
         if (!Number.isFinite(s)) s = 0;
         out[ch][i] = Math.max(-4, Math.min(4, s));
       }
@@ -512,7 +583,10 @@ export class MasteringNode extends BaseNode implements AutomatableV2Node {
 
     for (let i = 0; i < len; i++) {
       let peak = 0;
-      for (let ch = 0; ch < input.length; ch++) peak = Math.max(peak, Math.abs(input[ch]?.[i] ?? 0));
+      for (let ch = 0; ch < input.length; ch++) {
+        const inCh = input[ch];
+        peak = Math.max(peak, Math.abs(i < inCh.length ? inCh[i] : 0));
+      }
       const dbPeak = toDb(peak);
       const grDb = Math.max(0, dbPeak - compressorCurveDb(dbPeak, threshold, ratio, knee));
       const gr = fromDb(-grDb);
@@ -521,7 +595,7 @@ export class MasteringNode extends BaseNode implements AutomatableV2Node {
       const limiterGain = Math.min(1, ceiling / Math.max(this.peak, 1e-8));
       const gain = gr * limiterGain * makeup;
       for (let ch = 0; ch < out.length; ch++) {
-        let s = (out[ch]?.[i] ?? 0) * gain;
+        let s = out[ch][i] * gain;
         if (!Number.isFinite(s)) s = 0;
         out[ch][i] = Math.max(-1, Math.min(1, s));
       }

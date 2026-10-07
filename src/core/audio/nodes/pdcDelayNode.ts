@@ -14,7 +14,7 @@
  * (`pluginContract.ts`: pathLatencyFrames/mergeLatencyFrames/compensationFrames).
  */
 import { BaseNode } from './basicNodes';
-import { audioBufferPool } from '../BufferPool';
+import { copyChannel } from '../PortBuffers';
 import type { IProcessingContext } from '../types';
 
 export class PdcDelayNode extends BaseNode {
@@ -62,10 +62,15 @@ export class PdcDelayNode extends BaseNode {
     }
     const len = input[0]?.length ?? ctx.bufferSize;
 
-    // Keine Verzögerung: durchreichen (Kopie, damit der Pool-Vertrag gilt).
+    // Keine Verzögerung: durchreichen – als Kopie in den EIGENEN Port-Puffer
+    // (RT-AUDIT-P0-002: nie den Eingang weiterreichen, Fan-out-sicher).
     if (this.delayFrames === 0) {
-      const out = audioBufferPool.acquire(Math.max(1, input.length), len);
-      for (let ch = 0; ch < input.length; ch++) out[ch].set(input[ch].subarray(0, len));
+      const out = this.ensureOutput(Math.max(1, input.length), len);
+      for (let ch = 0; ch < out.length; ch++) {
+        const src = ch < input.length ? input[ch] : undefined;
+        if (src) copyChannel(out[ch], src, len);
+        else out[ch].fill(0);
+      }
       this.outputs[0].buffer = out;
       return;
     }
@@ -73,7 +78,7 @@ export class PdcDelayNode extends BaseNode {
     const chans = Math.max(input.length, 1);
     if (this.channels < chans) this.allocate(chans);
 
-    const out = audioBufferPool.acquire(chans, len);
+    const out = this.ensureOutput(chans, len);
     const size = Math.max(1, this.delayFrames);
     for (let ch = 0; ch < chans; ch++) {
       const ring = this.rings[ch];
@@ -85,7 +90,7 @@ export class PdcDelayNode extends BaseNode {
         // kommt damit genau das Signal von vor `delayFrames` Samples.
         const r = (w + size - this.delayFrames) % size;
         dst[i] = ring[r];
-        ring[w] = src[i] ?? 0;
+        ring[w] = i < src.length ? src[i] : 0;
         w = (w + 1) % size;
       }
       if (ch === chans - 1) this.writePos = w;

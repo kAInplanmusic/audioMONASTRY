@@ -16,8 +16,9 @@
  */
 import { AudioParameter } from '../AudioGraph';
 import { BaseNode } from './basicNodes';
-import { applyModMatrix, type ModRoute } from '../../dsp/modMatrix';
+import { clampModulation, modRouteContribution } from '../../dsp/modMatrix';
 import { HighQualityReverb } from '../../dsp/hqReverb';
+import { ensureBufferSet } from '../PortBuffers';
 import type { IProcessingContext } from '../types';
 import type { AutomatableV2Node } from '../state/v2NodeAutomation';
 
@@ -62,14 +63,14 @@ export class ModMatrixNode extends BaseNode implements AutomatableV2Node {
 
     for (let i = 0; i < len; i++) {
       // 0..1-LFO als Quelle; die Matrix bildet sie bipolar auf −depth..+depth ab.
-      const sources = { lfo1: 0.5 + 0.5 * Math.sin(this.phase) };
-      const routes: ModRoute[] = [
-        { id: 'lfo1->master.gain', source: 'lfo1', destination: 'master.gain', depth, polarity: 'bipolar' },
-      ];
-      const modulation = applyModMatrix(routes, sources, { clampMin: -1, clampMax: 1 }).values['master.gain'] ?? 0;
+      // RT-AUDIT-P0-002: derselbe Rechenkern wie `applyModMatrix` (eine Route
+      // lfo1 → master.gain, Summe 0 + Beitrag, Klemmung −1..1), aber ohne
+      // Objekt-/Array-Literale pro Sample. depth > 0 ist hier garantiert.
+      const lfo1 = 0.5 + 0.5 * Math.sin(this.phase);
+      const modulation = clampModulation(0 + modRouteContribution(lfo1, depth, 'bipolar'), -1, 1);
       const gain = Math.min(2, Math.max(0, 1 + modulation));
       for (let ch = 0; ch < out.length; ch++) {
-        const s = (out[ch]?.[i] ?? 0) * gain;
+        const s = out[ch][i] * gain;
         out[ch][i] = Number.isFinite(s) ? s : 0;
       }
       this.phase += step;
@@ -98,7 +99,14 @@ export class HqReverbNode extends BaseNode implements AutomatableV2Node {
   readonly damping: AudioParameter;
   readonly sizeScale: AudioParameter;
   private reverbs: HighQualityReverb[] = [];
-  private configKey = '';
+  /** Konfiguration der aktuellen Hall-Zustände (Zahlen statt String-Schlüssel pro Block). */
+  private cfgChannels = -1;
+  private cfgSampleRate = Number.NaN;
+  private cfgDecayS = Number.NaN;
+  private cfgDamping = Number.NaN;
+  private cfgSizeScale = Number.NaN;
+  /** RT-AUDIT-P0-002: fester Nass-Puffer je Kanal (vorher neues Array pro Block). */
+  private wetBlock: Float32Array[] | null = null;
 
   constructor(id: string) {
     super(id, 'hq-reverb', 1, 1);
@@ -116,9 +124,16 @@ export class HqReverbNode extends BaseNode implements AutomatableV2Node {
 
   /** Legt die Hall-Zustände neu an, wenn sich die Konfiguration ändert. */
   private ensureReverbs(channels: number, sampleRate: number, decayS: number, damping: number, sizeScale: number): void {
-    const key = `${channels}|${sampleRate}|${decayS}|${damping}|${sizeScale}`;
-    if (key === this.configKey && this.reverbs.length === channels) return;
-    this.configKey = key;
+    if (
+      channels === this.cfgChannels && sampleRate === this.cfgSampleRate && decayS === this.cfgDecayS
+      && damping === this.cfgDamping && sizeScale === this.cfgSizeScale && this.reverbs.length === channels
+    ) return;
+    // Nur bei Parameteränderung (nicht pro Block): neue Delay-Längen erfordern neue Leitungen.
+    this.cfgChannels = channels;
+    this.cfgSampleRate = sampleRate;
+    this.cfgDecayS = decayS;
+    this.cfgDamping = damping;
+    this.cfgSizeScale = sizeScale;
     this.reverbs = Array.from({ length: channels }, () => new HighQualityReverb({ sampleRate, decayS, damping, sizeScale, mix: 1 }));
   }
 
@@ -137,15 +152,18 @@ export class HqReverbNode extends BaseNode implements AutomatableV2Node {
     const damping = this.damping.getValueAtTime(ctx.currentTime);
     const sizeScale = this.sizeScale.getValueAtTime(ctx.currentTime);
     this.ensureReverbs(out.length, Math.max(8000, ctx.sampleRate), decayS, damping, sizeScale);
+    const wetBlocks = ensureBufferSet(this.wetBlock, out.length, len);
+    this.wetBlock = wetBlocks;
 
     for (let ch = 0; ch < out.length; ch++) {
       const reverb = this.reverbs[ch];
       if (!reverb) continue;
-      const wetBlock = reverb.process(out[ch]);
+      const wetBlock = wetBlocks[ch];
+      reverb.processInto(out[ch], wetBlock);
       // Interner Reverb-Mix = 1 (nur nass); der Dry-Anteil kommt hier dazu.
       for (let i = 0; i < len; i++) {
-        const dry = out[ch]?.[i] ?? 0;
-        const s = dry * (1 - wet) + (wetBlock[i] ?? 0) * wet;
+        const dry = out[ch][i];
+        const s = dry * (1 - wet) + wetBlock[i] * wet;
         out[ch][i] = Number.isFinite(s) ? s : 0;
       }
     }
@@ -160,7 +178,7 @@ export class HqReverbNode extends BaseNode implements AutomatableV2Node {
     this.sizeScale.reset();
     for (const reverb of this.reverbs) reverb.reset();
     this.reverbs = [];
-    this.configKey = '';
+    this.cfgChannels = -1;
     this.outputs[0].buffer = null;
   }
 }

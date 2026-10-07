@@ -58,8 +58,24 @@ export class Stereo21Crossover {
     const len = Math.min(left.length, right.length);
     const outL = new Float32Array(len);
     const outR = new Float32Array(len);
-    const outLfe = this.mode === '2.1' ? new Float32Array(len) : new Float32Array(len);
+    const outLfe = new Float32Array(len);
+    this.processInto(left, right, outL, outR, outLfe);
+    return { left: outL, right: outR, lfe: outLfe };
+  }
 
+  /**
+   * RT-AUDIT-P0-002: allokationsfreie Variante für den Audio-Thread – schreibt
+   * in vorhandene Puffer (Länge ≥ min(left, right)). Identische Rechnung wie
+   * `process()`.
+   */
+  processInto(
+    left: Float32Array,
+    right: Float32Array,
+    outL: Float32Array,
+    outR: Float32Array,
+    outLfe: Float32Array,
+  ): void {
+    const len = Math.min(left.length, right.length);
     for (let i = 0; i < len; i++) {
       const mono = (left[i] + right[i]) * 0.5;
       const sub = this.biquad(mono, this.coefs.lowpass, this.lpL);
@@ -77,7 +93,6 @@ export class Stereo21Crossover {
         outR[i] = hr + sub * 0.5;
       }
     }
-    return { left: outL, right: outR, lfe: outLfe };
   }
 
   private biquad(x: number, c: CrossoverCoefficients['lowpass'], s: BiquadState): number {

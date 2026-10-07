@@ -32,6 +32,11 @@ export class V2OutputGraph {
   private outputNode: IAudioNode | null = null;
   private currentLayoutId = 'stereo';
   private readonly sampleRate: number;
+  /**
+   * RT-AUDIT-P0-002: festes Zwei-Element-Array für den Quell-Block (vorher
+   * pro Block `[left, right]`); nur die Einträge werden gesetzt.
+   */
+  private readonly stereoInput: Float32Array[] = [new Float32Array(0), new Float32Array(0)];
 
   constructor(sampleRate = 48000) {
     this.sampleRate = sampleRate;
@@ -46,13 +51,15 @@ export class V2OutputGraph {
   /** Übergibt den Stereo-Master-Block (planar) an den Ausgangs-Graph. */
   setInput(input: Float32Array[]): void {
     if (!input || input.length === 0) return;
-    const left = input[0] ?? new Float32Array(input[0]?.length ?? 0);
-    const right = input[1] ?? left;
-    this.source.sourceBuffer = [left, right];
+    const left = input[0];
+    this.setInputStereo(left, input[1] ?? left);
   }
 
   setInputStereo(left: Float32Array, right?: Float32Array | null): void {
-    this.source.sourceBuffer = [left, right ?? left];
+    const block = this.stereoInput;
+    block[0] = left;
+    block[1] = right ?? left;
+    this.source.sourceBuffer = block;
   }
 
   /**
