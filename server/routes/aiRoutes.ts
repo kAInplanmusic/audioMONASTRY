@@ -728,6 +728,27 @@ export function registerAiRoutes(app: Express, deps: AiRouteDeps): void {
     }
   });
 
+  // --- POST /api/ai/second-opinion → lokales Brain + (optional) DeepSeek V4 Pro ---
+  // RT-AUDIT-P1-014: „zweites Augenpaar“. Beide Antworten getrennt; DeepSeek nur,
+  // wenn per AI_EXTERNAL_LLM_ALLOWLIST freigeschaltet (sonst second = null).
+  app.post('/api/ai/second-opinion', async (req, res) => {
+    metrics.aiRequests += 1;
+    const parsed = AiCompleteSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'invalid payload' });
+    }
+    const { prompt, complexity, maxTokens, temperature, reasoningEffort } = parsed.data;
+    const result = await llmRouter.secondOpinion({
+      prompt,
+      complexity: complexity ?? 'moderate',
+      maxTokens,
+      temperature,
+      reasoningEffort,
+    });
+    if ('error' in result.primary && (result.second === null || 'error' in result.second)) metrics.aiFailures += 1;
+    return res.json(result);
+  });
+
   // ===========================================================================
   // AI Orchestrator – zentrale AI-Infrastruktur (Hetzner ↔ HF/Replicate/Supabase)
   // ===========================================================================

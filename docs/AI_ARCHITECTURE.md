@@ -1,5 +1,10 @@
 # audioMONASTRY – AI-Architektur (Deep Audit, 2026-08-29)
 
+> **⚠️ ÜBERHOLT seit 2026-10-07 (RT-AUDIT-P1-014):** Produkt-AI läuft **nur lokal** (eigene GPU-Flotte/Runpod, Qwen quantisiert).
+> Cloud-Anbieter (Replicate, Hugging Face Inference, Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI) sind aus dem Code entfernt.
+> Einzige Ausnahme: DeepSeek V4 per `AI_EXTERNAL_LLM_ALLOWLIST` (Notfall/Zweitmeinung). Verbindlich: `docs/audit/AUDIT_2026-10-07_AI_LOKAL.md`.
+> Der Rest dieser Datei ist Historie.
+
 > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
 
 ## Rollen & Zuständigkeiten (final)

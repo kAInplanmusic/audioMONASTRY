@@ -21,10 +21,11 @@ function mockProvider(id: ILlmProvider['id']): ILlmProvider {
 }
 
 /**
- * Diese Datei prüft die EXTERNEN LLM-Provider (DeepSeek/HF/Gemini/OpenAI).
- * Seit „AI nur lokal“ ist das lokale Brain der einzige Default-Provider – die
- * externe Kette muss explizit mit AI_ALLOW_EXTERNAL_LLM=true freigeschaltet
- * werden (siehe docs/RUNPOD_AI_V1_SPEC.md, Abschnitt 2.1).
+ * Diese Datei prüft den einzigen zulässigen EXTERNEN LLM-Weg (DeepSeek V4).
+ * Seit „AI nur lokal“ ist das lokale Brain der einzige Default-Provider – DeepSeek
+ * muss explizit freigeschaltet werden. Hier über den Legacy-Alias
+ * AI_ALLOW_EXTERNAL_LLM=true (= beide DeepSeek-Wege); die Positivliste
+ * AI_EXTERNAL_LLM_ALLOWLIST prüft tests/aiLocalOnly.test.ts (RT-AUDIT-P1-014).
  */
 function allowExternalLlm(): void {
   process.env.AI_ALLOW_EXTERNAL_LLM = 'true';
@@ -40,7 +41,7 @@ describe('LlmRouter (Kosten-Priorität)', () => {
 
   it('simple: DeepSeek Flash zuerst, HF dahinter, kein Pro', () => {
     const router = new LlmRouter();
-    for (const p of ['deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
+    for (const p of ['deepseek-flash', 'deepseek-pro'] as const) {
       router.register(mockProvider(p));
     }
     const ids = router.rankProviders('simple').map((p) => p.id);
@@ -48,14 +49,13 @@ describe('LlmRouter (Kosten-Priorität)', () => {
         expect(ids).not.toContain('deepseek-pro');
   });
 
-  it('complex: Pro zuerst, dann Free/Flash, Paid zuletzt', () => {
+  it('complex: Pro zuerst, dann Flash – keine weiteren Cloud-Provider (RT-AUDIT-P1-014)', () => {
     const router = new LlmRouter();
-    for (const p of ['deepseek-flash', 'deepseek-pro', 'gemini', 'openai'] as const) {
+    for (const p of ['deepseek-flash', 'deepseek-pro'] as const) {
       router.register(mockProvider(p));
     }
     const ids = router.rankProviders('complex').map((p) => p.id);
-    expect(ids[0]).toBe('deepseek-pro');
-    expect(ids[ids.length - 1]).toBe('openai');
+    expect(ids).toEqual(['deepseek-pro', 'deepseek-flash']);
   });
 
   it('moderate: DeepSeek-Flash ist der MOA/MCP-Planer (vor Free/Pro)', () => {
@@ -115,30 +115,16 @@ describe('LlmRouter Notfall-Provider + clientLlm + env', () => {
     delete process.env.HF_TTS_MODEL;
   });
 
-  it('gemini läuft nur mit AI_EMERGENCY_PROVIDERS=true (gemocktes Fetch)', async () => {
+  it('Gemini/OpenAI-Keys + AI_EMERGENCY_PROVIDERS werden ignoriert: kein Cloud-Aufruf (RT-AUDIT-P1-014)', async () => {
     process.env.AI_EMERGENCY_PROVIDERS = 'true';
     process.env.GEMINI_API_KEY = 'test';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
-      JSON.stringify({ candidates: [{ content: { parts: [{ text: 'gemini ok' }] } }] }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    )));
-    const router = new LlmRouter();
-    const completion = await router.complete({ prompt: 'Hi', complexity: 'complex' });
-    expect(completion.provider).toBe('gemini');
-    expect(completion.text).toBe('gemini ok');
-  });
-
-  it('openai läuft nur mit AI_EMERGENCY_PROVIDERS=true (gemocktes Fetch)', async () => {
-    process.env.AI_EMERGENCY_PROVIDERS = 'true';
     process.env.OPENAI_API_KEY = 'test';
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(
-      JSON.stringify({ choices: [{ message: { content: 'openai ok' } }] }),
-      { status: 200, headers: { 'content-type': 'application/json' } },
-    )));
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }));
+    vi.stubGlobal('fetch', fetchSpy);
     const router = new LlmRouter();
-    const completion = await router.complete({ prompt: 'Hi', complexity: 'complex' });
-    expect(completion.provider).toBe('openai');
-    expect(completion.text).toBe('openai ok');
+    expect(router.providerIds()).toEqual(['runpod-local', 'deepseek-flash', 'deepseek-pro']);
+    await expect(router.complete({ prompt: 'Hi', complexity: 'complex' })).rejects.toThrow(/Kein LLM-Provider/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('clientLlm nutzt in Node den LlmRouter (gemocktes Fetch)', async () => {

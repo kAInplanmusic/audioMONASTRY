@@ -51,17 +51,50 @@ export interface PluginCommandResult {
   error?: string;
 }
 
-/** Cerebras-NLU-Fallback: freie Sprachkommandos in {action, parameters} übersetzen. */
-async function cerebrasNluIntent(command: string, pluginId?: string): Promise<{ action?: string; parameters?: Record<string, string> } | null> {
+/**
+ * NLU-Fallback (aiMONK): freie Sprachkommandos in {action, parameters} übersetzen.
+ *
+ * RT-AUDIT-P1-014: läuft über `completeLlm` → im Browser `/api/ai/complete` →
+ * serverseitiger `LlmRouter` (lokales Brain zuerst, DeepSeek nur per
+ * Positivliste). Vorher baute dieser Pfad im Browser einen eigenen
+ * ProviderRouter und forderte das Cerebras-Modell `gpt-oss-120b` an.
+ */
+async function localNluIntent(command: string, pluginId?: string): Promise<{ action?: string; parameters?: Record<string, string> } | null> {
   try {
-    const { ProviderRouter } = await import('../ai/orchestrator/providerRouter');
-    const res = await new ProviderRouter().run('nlu', 'gpt-oss-120b', {
-      prompt: JSON.stringify({ command, pluginId }),
-      json: true,
-      complexity: 'complex',
+    const { completeLlm } = await import('../ai/clientLlm');
+    const completion = await completeLlm({
+      prompt: buildNluPrompt(command, pluginId),
+      complexity: 'simple',
+      maxTokens: 256,
+      temperature: 0.1,
     });
-    const obj = (res?.result ?? {}) as { action?: string; parameters?: Record<string, string> };
-    return (typeof obj.action === 'string' && obj.action) ? obj : null;
+    return parseNluIntent(completion.text);
+  } catch { return null; }
+}
+
+/** Prompt für den NLU-Fallback: nur JSON im Schema {action, parameters}. */
+export function buildNluPrompt(command: string, pluginId?: string): string {
+  return 'Du bist ein präziser Intent-Parser der DAW audioMONASTRY. Antworte NUR mit '
+    + 'einem JSON-Objekt der Form {"action":"string","parameters":{"name":"wert"}} – '
+    + 'ohne Erklärung, ohne Markdown. '
+    + `Plugin: ${JSON.stringify(pluginId ?? '')}. Kommando: ${JSON.stringify(command)}`;
+}
+
+/** Robuste JSON-Extraktion aus einer LLM-Antwort (auch mit Text drumherum). */
+export function parseNluIntent(text: string): { action?: string; parameters?: Record<string, string> } | null {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try {
+    const obj = JSON.parse(text.slice(start, end + 1)) as { action?: unknown; parameters?: unknown };
+    if (typeof obj.action !== 'string' || !obj.action) return null;
+    const parameters: Record<string, string> = {};
+    if (obj.parameters && typeof obj.parameters === 'object') {
+      for (const [k, v] of Object.entries(obj.parameters as Record<string, unknown>)) {
+        if (v !== undefined && v !== null) parameters[k] = String(v);
+      }
+    }
+    return { action: obj.action, parameters };
   } catch { return null; }
 }
 
@@ -187,8 +220,8 @@ export class VoiceControlService {
     }
     const match = exact ?? keyword?.candidate;
     if (!match) {
-      // Cerebras-NLU-Fallback (aiMONK): freie Sprache -> {action, parameters}
-      const nlu = await cerebrasNluIntent(command, pluginId);
+      // NLU-Fallback (aiMONK, lokales Brain): freie Sprache -> {action, parameters}
+      const nlu = await localNluIntent(command, pluginId);
       if (nlu?.action) {
         const nluMatch = this.pluginCommands.find((c) => c.pluginId === pluginId && c.action === nlu.action);
         if (nluMatch) {

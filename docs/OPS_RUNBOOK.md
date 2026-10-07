@@ -9,7 +9,7 @@ HF, GitHub) gehen. Kein Code nötig – aber jeder Punkt ist ein Security/Compli
 1. HuggingFace-Konto → *Settings → Access Tokens*.
 2. Neues Token erzeugen (`read` für Inference-Endpoints genügt; für Deployment `write`).
 3. In `~/.env` (bzw. Remote-`.env` im Flotten-Root) `HF_TOKEN=…` ersetzen.
-4. `npm run verify` + Smoke: `npx tsx scripts/replicate-smoke.ts` (nur Replicate),
+4. `npm run verify` + Smoke: ~~`npx tsx scripts/replicate-smoke.ts`~~ (Replicate seit 2026-10-07 entfernt, RT-AUDIT-P1-014),
    AI-Fallback-Test: `node scripts/verify-ai.ts` (falls vorhanden) bzw. einen
    echten LLM-Aufruf via DeepSeek/HF-Router starten.
 5. Altes Token sofort widerrufen.
@@ -406,8 +406,8 @@ korrigieren, seit AI-P1-003 P5 im Einsatz). Darum herum liegt
 **Weiteres live gefundenes Problem (offen, separat erfasst):** der LLM-Weg ist
 zurzeit nicht benutzbar: der lokale Brain-Provider (Worker) lehnt das Payload ab
 (`Job input must contain one of: openai_input (+openai_route), route (+body), or
-prompt/messages.`), und der externe Provider (`AI_ALLOW_EXTERNAL_LLM=true`,
-DeepSeek) antwortet nicht (Zeitlimit greift). Deshalb zeigt der Agent-Lauf live
+prompt/messages.`), und der externe Provider (damals `AI_ALLOW_EXTERNAL_LLM=true`,
+seit 2026-10-07 `AI_EXTERNAL_LLM_ALLOWLIST=deepseek-pro`, DeepSeek) antwortet nicht (Zeitlimit greift). Deshalb zeigt der Agent-Lauf live
 `failed` mit `Zeitlimit überschritten` bzw. den Worker-Fehler — **die Mechanik ist
 davon unabhängig** und durch die Tests abgedeckt. Neu: `AI_AGENT_PLAN_TIMEOUT_MS`
 (Default 45 s) verhindert, dass ein hängender Aufruf den Lauf endlos „running"

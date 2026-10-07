@@ -18,7 +18,6 @@ import { llmRouter } from '../LlmRouter';
 import { aiLogger } from './aiLogger';
 import { assertGpuEndpointBudget } from '../../../config/aiInfrastructure';
 import { CircuitBreaker } from './circuitBreaker';
-import { CerebrasProvider } from './cerebrasProvider';
 import { GPU_ROLE_LIST, auditRoleEndpointIds } from './endpointRegistry';
 import { RunPodProvider } from './runpodProvider';
 import { AiProviderError, type AiProviderId, type AiTask, type IAiProvider } from './types';
@@ -61,7 +60,9 @@ export class ProviderRouter {
   // hier ist die Provider-Priorität, nicht die Rollen-Reihenfolge.
   private providers: IAiProvider[] = [
     ...GPU_ROLE_LIST.map((role) => new RunPodProvider(role.role)),
-    new CerebrasProvider(), // NLU/Struktur – schnell & kostengestaffelt
+    // RT-AUDIT-P1-014: kein Cloud-Provider mehr. `nlu` gehört dem lokalen Brain
+    // (endpointRegistry, Rolle brain); vorher fiel `nlu` auf Cerebras zurück –
+    // an der Lokal-Sperre des LlmRouter vorbei.
     new LocalProvider(),
   ];
   private breakers = new Map<string, CircuitBreaker>();

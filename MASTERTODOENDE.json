@@ -794,7 +794,7 @@
       "id": "RT-AUDIT-P1-014",
       "title": "AI nur lokal (Produkt): Cloud-Provider entfernen, DeepSeek V4 nur per Positivliste als Notfall/Zweitmeinung",
       "priority": "P1",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "AI",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-014)",
       "detectedAt": "2026-10-07",
@@ -855,7 +855,71 @@
         "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
         "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md"
       ],
-      "note": "IN_PROGRESS 2026-10-07: Betreiber-Freigabe (\"Ja!!\"), Umsetzung auf Branch ai/local-only (Auftrag A3)."
+      "note": "DONE 2026-10-07 (Branch ai/local-only, Auftrag A3): LlmRouter kennt nur runpod-local, deepseek-flash, deepseek-pro; Positivliste AI_EXTERNAL_LLM_ALLOWLIST (unbekannte IDs ignoriert, AI_ALLOW_EXTERNAL_LLM=true = Legacy-Alias fuer beide DeepSeek-Wege mit Warnung); secondOpinion() + POST /api/ai/second-opinion (lokal + DeepSeek Pro getrennt, DeepSeek nur mit Freigabe); Orchestrator-CerebrasProvider geloescht, nlu nur noch lokal; VoiceControlService-NLU ueber completeLlm -> /api/ai/complete -> LlmRouter; voiceRoutes ohne HF-Inference/HF_ENDPOINT_URL/Replicate (nur eigene Runtime VOICE_AI_RUNTIME_URL + eigene ACE-Step/DiffRhythm, sonst 503 mit Hinweis); stemRoutes/mediaRoutes/adminRoutes/StemExtractorTerminal/stemUsage ohne Replicate (UI-Schalter heisst SERVER = eigener stem-ai); CSP connect-src ohne AI-Provider-Hosts; scripts/replicate-smoke.ts geloescht; .env.hetzner.example + Doku-Banner. Nachweis: tests/aiLocalOnly.test.ts (19 Tests inkl. statischem Waechter gegen 11 Cloud-AI-Hosts in src/server, fetch-Spy-Tests), angepasste Tests in aiControl/llmRouter/server/stemUsage; tsc 0, eslint 0, npm test 309 Dateien/2530 Tests gruen, knip 0, Boundary-Scan 0. Abweichung vom Plan: voiceRoutes nicht auf RunPodProvider(voiceGen) umgebaut, sondern auf die eigene Runtime-URL beschraenkt (gleiches Ergebnis: kein Cloud-Aufruf); Umbau auf voiceGen-Rolle = RT-AUDIT-P1-014-F2."
+    },
+    {
+      "id": "RT-AUDIT-P1-014-F1",
+      "title": "Secret-Provisionierung bereinigen: entfernte Cloud-AI-Keys nicht mehr an Knoten verteilen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI/Deploy",
+      "source": "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
+      "detectedAt": "2026-10-07",
+      "problem": "Der Code kennt Replicate, HF-Inference, Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI nicht mehr, aber Deploy-Werkzeuge reichen deren Secret-NAMEN noch an die Knoten durch.",
+      "files": [
+        "services/portal-worker/src/index.js (~Z. 902)",
+        "services/portal-worker/wrangler.toml (~Z. 20)",
+        "scripts/hetzner/fix-fleet-20261006.sh (~Z. 76)",
+        "scripts/llm-latency-probe.py (Entwicklerwerkzeug, darf bleiben)"
+      ],
+      "steps": [
+        "1. In den drei Deploy-Dateien die Namen REPLICATE_API_TOKEN, HF_API_KEY (falls nur fuer Inference), GROQ_API_KEY, MISTRAL_API_KEY, OPENAI_API_KEY, CB_API_KEY, OR_API_KEY, PUBLICAI_KEY, GEMINI_API_KEY entfernen; DEEPSEEK_API_KEY + AI_EXTERNAL_LLM_ALLOWLIST bleiben.",
+        "2. Python-Tests der Fleet-Skripte (npm run test:python:fleet) anpassen und gruen halten.",
+        "3. Betreiber: die Secrets in Cloudflare/Knoten-.env loeschen (humanVerification)."
+      ],
+      "acceptance": [
+        "Kein entfernter Provider-Key wird mehr provisioniert"
+      ],
+      "verification": [
+        "npm run test:python:fleet",
+        "grep -rn \"MISTRAL_API_KEY\\|CB_API_KEY\\|REPLICATE_API_TOKEN\" services scripts"
+      ],
+      "reports": [
+        "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
+      ]
+    },
+    {
+      "id": "RT-AUDIT-P1-014-F2",
+      "title": "Voice/Song/Sound ueber die Runpod-Rolle voiceGen statt ueber eine feste Runtime-URL",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "AI",
+      "source": "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md",
+      "detectedAt": "2026-10-07",
+      "problem": "voiceRoutes sprechen seit RT-AUDIT-P1-014 nur noch VOICE_AI_RUNTIME_URL (eigene Runtime) an. Die Flotte hat aber eine eigene Rolle voiceGen (endpointRegistry: tts, audio.generate, stem.separate; music: sing, song) mit Job-/Polling-Logik im RunPodProvider.",
+      "files": [
+        "server/routes/voiceRoutes.ts",
+        "src/core/ai/orchestrator/providerRouter.ts",
+        "src/core/ai/orchestrator/runpodProvider.ts",
+        "src/core/ai/orchestrator/endpointRegistry.ts"
+      ],
+      "steps": [
+        "1. Payload-Vertrag der Rollen voiceGen/music fuer tts/sing/song aus handlers_runpod.py lesen.",
+        "2. In voiceRoutes zuerst providerRouter.run(task, model, input) versuchen, wenn die Rolle verfuegbar ist; VOICE_AI_RUNTIME_URL bleibt Rueckfall.",
+        "3. Tests mit gemocktem RunPodProvider (kein Netz)."
+      ],
+      "acceptance": [
+        "TTS/Sing/Song laufen ohne VOICE_AI_RUNTIME_URL ueber die voiceGen-/music-Rolle"
+      ],
+      "verification": [
+        "npm test"
+      ],
+      "dependsOn": [
+        "RT-AUDIT-P1-014"
+      ],
+      "reports": [
+        "docs/audit/AUDIT_2026-10-07_AI_LOKAL.md"
+      ]
     },
     {
       "id": "RT-AUDIT-P1-015",
