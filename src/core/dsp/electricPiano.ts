@@ -39,34 +39,79 @@ export function pianoSampleCount(opts: ElectricPianoOptions): number {
   return Math.floor(rate * duration);
 }
 
-/** Rendert eine E-Piano-Note als Buffer (−1..1). */
-export function renderElectricPiano(frequencyHz: number, opts: ElectricPianoOptions = {}): Float32Array {
+/**
+ * Vorberechnete, geklemmte Parameter einer E-Piano-Note (RT-AUDIT-P0-001).
+ * Ein Objekt dieses Typs wird EINMAL angelegt (z. B. je Voice-Slot im
+ * AudioWorklet) und per `configureElectricPiano` bei jedem Anschlag neu
+ * befüllt – so lässt sich die Note sample-weise über beliebig viele
+ * Render-Blöcke fortsetzen, ohne pro Anschlag/Block einen Puffer zu allokieren.
+ */
+export interface ElectricPianoParams {
+  rate: number;
+  freq: number;
+  modFreq: number;
+  detuneHz: number;
+  modIndex: number;
+  modDecayS: number;
+  ampDecayS: number;
+  attackS: number;
+  gain: number;
+  detune: number;
+}
+
+/** Legt einen (neutralen) Parameter-Satz an – nur außerhalb des Render-Pfads aufrufen. */
+export function createElectricPianoParams(): ElectricPianoParams {
+  return {
+    rate: 48000, freq: 220, modFreq: 440, detuneHz: 220, modIndex: 2.4,
+    modDecayS: 0.35, ampDecayS: 1.8, attackS: 0.004, gain: 0.8, detune: 0.12,
+  };
+}
+
+/**
+ * Befüllt `target` mit den geklemmten Parametern einer Note (allokationsfrei).
+ * Dieselben Grenzen/Defaults wie `renderElectricPiano` – beide teilen sich
+ * diese Funktion, damit Puffer- und Sample-Variante bit-identisch klingen.
+ */
+export function configureElectricPiano(
+  target: ElectricPianoParams,
+  frequencyHz: number,
+  opts: ElectricPianoOptions,
+): ElectricPianoParams {
   const rate = Math.max(8000, safe(opts.sampleRate, 48000));
   const freq = Math.min(rate / 2.5, Math.max(20, safe(frequencyHz, 220)));
-  const length = pianoSampleCount(opts);
-  const modRatio = Math.min(8, Math.max(0.5, safe(opts.modRatio, 2)));
-  const modIndex = Math.min(12, Math.max(0, safe(opts.modIndex, 2.4)));
-  const modDecayS = Math.max(0.01, safe(opts.modDecayS, 0.35));
-  const ampDecayS = Math.max(0.05, safe(opts.ampDecayS, 1.8));
-  const attackS = Math.max(0.0005, safe(opts.attackS, 0.004));
-  const gain = Math.min(1, Math.max(0, safe(opts.gain, 0.8)));
   const detune = Math.min(1, Math.max(0, safe(opts.detune, 0.12)));
+  target.rate = rate;
+  target.freq = freq;
+  target.modFreq = freq * Math.min(8, Math.max(0.5, safe(opts.modRatio, 2)));
+  target.detuneHz = freq * (1 + 0.0009 * detune * 100); // wenige Cent
+  target.modIndex = Math.min(12, Math.max(0, safe(opts.modIndex, 2.4)));
+  target.modDecayS = Math.max(0.01, safe(opts.modDecayS, 0.35));
+  target.ampDecayS = Math.max(0.05, safe(opts.ampDecayS, 1.8));
+  target.attackS = Math.max(0.0005, safe(opts.attackS, 0.004));
+  target.gain = Math.min(1, Math.max(0, safe(opts.gain, 0.8)));
+  target.detune = detune;
+  return target;
+}
 
+/** Ein Sample (Index `i` ab Anschlag) der Note – reine Funktion, keine Allokation. */
+export function electricPianoSample(p: ElectricPianoParams, i: number): number {
+  const t = i / p.rate;
+  const attack = 1 - Math.exp(-t / p.attackS);
+  const ampEnv = attack * Math.exp(-t / p.ampDecayS);
+  const index = p.modIndex * Math.exp(-t / p.modDecayS);
+  const mod = Math.sin(TAU * p.modFreq * t);
+  const carrier = Math.sin(TAU * p.freq * t + index * mod);
+  const second = p.detune > 0 ? Math.sin(TAU * p.detuneHz * t + index * mod * 0.5) : 0;
+  const value = (carrier + second * p.detune) / (1 + p.detune) * ampEnv * p.gain;
+  return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+}
+
+/** Rendert eine E-Piano-Note als Buffer (−1..1). */
+export function renderElectricPiano(frequencyHz: number, opts: ElectricPianoOptions = {}): Float32Array {
+  const params = configureElectricPiano(createElectricPianoParams(), frequencyHz, opts);
+  const length = pianoSampleCount(opts);
   const out = new Float32Array(length);
-  const modFreq = freq * modRatio;
-  const detuneHz = freq * (1 + 0.0009 * detune * 100); // wenige Cent
-
-  for (let i = 0; i < length; i++) {
-    const t = i / rate;
-    const attack = 1 - Math.exp(-t / attackS);
-    const ampEnv = attack * Math.exp(-t / ampDecayS);
-    const index = modIndex * Math.exp(-t / modDecayS);
-    const mod = Math.sin(TAU * modFreq * t);
-    const carrier = Math.sin(TAU * freq * t + index * mod);
-    const second = detune > 0 ? Math.sin(TAU * detuneHz * t + index * mod * 0.5) : 0;
-    const value = (carrier + second * detune) / (1 + detune) * ampEnv * gain;
-    out[i] = Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
-  }
+  for (let i = 0; i < length; i++) out[i] = electricPianoSample(params, i);
   return out;
 }
 
