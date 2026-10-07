@@ -30,7 +30,7 @@
   "rule": "Nur offene Punkte. 100 % Erledigtes ist entfernt (Historie in git).",
   "fundamentals": {
     "build": "tsc 0 Fehler · eslint --max-warnings=0 0 Findings · 1412 Tests gruen (205 Dateien) · Boundary-Scan 428 Dateien 0 Verstoesse · Python-Smoke 13 Tests gruen (Stand 2026-09-13)",
-    "audioLive": "KORREKTUR 2026-10-07 (Echtzeit-Audit, docs/audit/AUDIT_2026-10-07_ECHTZEIT.md): Der V2-Live-Pfad ist der einzige hörbare Pfad, hat aber P0-Fehler: Synth-Stimmen enden nach 2,67 ms, Swing verwirft Steps, 46 Allokationen pro Block (GC-Pausen bis 9,6 ms), Masterkette 17 % THD bei -6 dBFS, Dropout-Erkennung blind, itSynth unhörbar. Siehe RT-AUDIT-P0-001..007. Vorher stand hier: V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
+    "audioLive": "STAND 2026-10-07 abends: RT-AUDIT-P0-001 und P0-003 DONE (Stimmen klingen aus, Swing vollstaendig, audit:rt 3/12). Offen bleiben P0-002/004/005/006/007. KORREKTUR 2026-10-07 (Echtzeit-Audit, docs/audit/AUDIT_2026-10-07_ECHTZEIT.md): Der V2-Live-Pfad ist der einzige hörbare Pfad, hat aber P0-Fehler: Synth-Stimmen enden nach 2,67 ms, Swing verwirft Steps, 46 Allokationen pro Block (GC-Pausen bis 9,6 ms), Masterkette 17 % THD bei -6 dBFS, Dropout-Erkennung blind, itSynth unhörbar. Siehe RT-AUDIT-P0-001..007. Vorher stand hier: V2-Live-Pfad funktional (Gain/Pan/Master/Monitor/2.1 + Processing + Drum-Voices + Trigger/Preview + Master-Stream-Tap)",
     "aiFleet": "8 Endpoints live (brain, ears, voiceGen, music, imageHq, videoReal, videoAbstract, orchestrator), alle scale-to-zero",
     "collab": "Socket.io-Relay + Plugin-Locks (in-memory), optional Redis; kein serverautoritativer State"
   },
@@ -39,7 +39,7 @@
       "id": "RT-AUDIT-P0-001",
       "title": "Stimmen im V2-Live-Pfad dürfen nicht nach einem Block (2,67 ms) abbrechen – persistenter Voice-Pool",
       "priority": "P0",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "Audio-Engine",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-001)",
       "detectedAt": "2026-10-07",
@@ -93,7 +93,7 @@
         "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
       ],
       "estimate": "1–2 Agenten-Tage",
-      "note": "IN_PROGRESS 2026-10-07: Umsetzung zusammen mit RT-AUDIT-P0-003 (gleiche Umbaustelle: Voice-Pool + Event-Queue) auf separatem Worktree-Branch.",
+      "note": "DONE 2026-10-07 (Commit e07fdcf, Merge d5fe48b, Auftrag A1): Voice-Pool mit 32 vorallokierten Stimmen in V2SinkEngine (eigener Zustand je Stimme inkl. Bass-Filter; Ende bei Huellkurve < 1e-4 oder 2 s + 64-Sample-Fade; Stealing aelteste; kick/bass monophon mit 64-Sample-Choke; Mute: keine neuen Stimmen, klingende in 64 Samples aus; reset leert). Klang erster Block bit-identisch zu renderStepBurst (E-Piano 1,5e-8 Float32-Rundung); E-Piano per Sample (electricPiano.configureElectricPiano/electricPianoSample), keine Allokation pro Anschlag. audit:rt RT-AUDIT-P0-001: 2,667 ms -> 394,667 ms (OK). Tests: tests/v2VoicePool.test.ts (14). Angepasster Test: tests/v2SinkEngine.test.ts \"AUDIO-P0-003 triggerSynth\" erwartete Stille im Folgeblock (= kodierter P0-001-Bug), prueft jetzt Ausklingen + Pool leer nach 2,1 s. Verifikation auf main nach Merge: tsc 0, eslint 0, 313 Dateien/2574 Tests gruen, knip 0, Boundary 0. Rest-Allokationen ausserhalb des Stimmenpfads (postMessage step, ctx-Literal im Processor, renderToneBlock, for..of sfzBanks, 46 Graph-Puffer) -> RT-AUDIT-P0-002.",
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
@@ -183,7 +183,7 @@
       "id": "RT-AUDIT-P0-003",
       "title": "Swing verwirft keine Steps mehr; Steps und Sample-Trigger sample-genau über eine Event-Queue mit absoluten Frames",
       "priority": "P0",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "Audio-Engine",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-003)",
       "detectedAt": "2026-10-07",
@@ -232,7 +232,7 @@
         "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
       ],
       "estimate": "0,5–1 Agenten-Tag",
-      "note": "IN_PROGRESS 2026-10-07: gemeinsam mit RT-AUDIT-P0-001.",
+      "note": "DONE 2026-10-07 (Commit e07fdcf, Auftrag A1): V2StepQueue (sortierter Ring 64, typisierte Arrays, Ueberlaufzaehler), V2SampleClock.processBlockInto (allokationsfrei, processBlock API-kompatibel), v2SinkProcessor feuert faellige Steps mit exaktem Startsample (verspaetete bei 0), step-Meldung erst beim Feuern, Queue leer bei Transport-Stopp/-Start/Ruecksprung; triggerSample mit startSample, Playback-Zustand wiederverwendet. audit:rt RT-AUDIT-P0-003/swing0.5: 8 -> 0 nicht gefeuerte Steps (OK); Test: 32/32 Steps, ungerade exakt Raster + 1500 Samples.",
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
@@ -1328,7 +1328,7 @@
       "id": "IDEA-2026-10-07-A",
       "title": "Idee A · Nachträglich aufnehmen (\"Capture\"): die letzten 16 Takte Noten/Pads/Steps und 60 s Main-Audio auf Knopfdruck behalten",
       "priority": "P2",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "Feature-Idee",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu IDEA-2026-10-07-A)",
       "detectedAt": "2026-10-07",
@@ -1368,10 +1368,49 @@
         "Nicht mehrere RT-AUDIT-Punkte in einem Commit mischen (ein Punkt = ein Commit, Ausnahme ausdrücklich in dependsOn genannt)"
       ],
       "estimate": "2–3 Agenten-Tage",
-      "note": "Betreiber-Auswahl 2026-10-07: Idee A wird umgesetzt (Hintergrund-Agent, eigener Worktree). Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox.",
+      "note": "DONE 2026-10-07 (Commit 3e35260, Merge 8969ed9, Auftrag A2): src/core/capture/* (EventCaptureLog 4096 Slots, quantizeCapture, captureRing mit Atomics, audioCapture, captureSession, capturePatternStore im serverseitigen Studio-Speicher, max. 32), Worklet captureTapProcessor (allokationsfrei, paralleler Fan-out, keine Latenz im Hauptpfad), CaptureControl im masterplayerMONK (nur mixerMONK-Halter; WAV still ueber addSample an den Server; Pattern-Vorschlag 8x16 mit Takt-Auswahl; \"In Sequencer uebernehmen\" nur mit Lock von drumsampler). Live-Probe Chromium (COOP/COEP, crossOriginIsolated=true): 440-Hz-Sinus 0,5 -> 88.192 Frames/2,0 s, Peak 0,500, RMS 0,354, 439,8 Hz. Tests: captureLog/captureRing/captureControl. Offene Punkte -> IDEA-2026-10-07-A-F1. Vorher: Betreiber-Auswahl 2026-10-07: Idee A wird umgesetzt (Hintergrund-Agent, eigener Worktree). Vorschlag 2026-10-07, Auswahl durch den Betreiber ausstehend. Nur der ausgewählte Vorschlag wird OPEN/IN_PROGRESS, die anderen wandern in visionSandbox.",
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md",
+        "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md"
+      ]
+    },
+    {
+      "id": "IDEA-2026-10-07-A-F1",
+      "title": "Capture nachschaerfen: Sequencer-Ziel bestaetigen, drumsamplerMONK-Eingaben und exakten Transport-Start erfassen",
+      "priority": "P2",
+      "status": "OPEN",
+      "area": "Feature",
+      "source": "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md (A2-Abschlussbericht)",
+      "detectedAt": "2026-10-07",
+      "problem": "1) Es gibt kein eigenes Sequencer-Plugin; Ziel ist die Konstante CAPTURE_SEQUENCER_PLUGIN_ID = drumsampler (Betreiber-Bestaetigung fehlt). \"Uebernehmen\" ergaenzt das 8x16-Engine-Pattern per ODER; die Drum-Pattern-Ansicht des drumsamplerMONK zeigt das nicht. 2) triggerDrumSound (drumsamplerMONK-Pads/Steps) und Worklet-Sequencer-Steps werden nicht geloggt. 3) Transport-Start = ctx.currentTime beim play()-Post, kein exakter Frame aus dem Worklet. 4) Vorschlags-Fenster nur beim Halter, nicht gespiegelt. 5) Bei Layout-Wechsel stereo/2.1 haengt der Abgriff erst beim naechsten connectV2LiveOutput() wieder (wie MasterStreamTap).",
+      "files": [
+        "src/components/am/CaptureControl.tsx",
+        "src/utils/audioEngine.ts",
+        "src/audio/worklets/v2SinkProcessor.ts",
+        "src/core/capture/quantizeCapture.ts"
+      ],
+      "steps": [
+        "1. Betreiber fragen: Ziel-Plugin fuer \"In Sequencer uebernehmen\" (drumsampler bestaetigen oder aendern).",
+        "2. captureLog.record in triggerDrumSound ergaenzen.",
+        "3. v2SinkProcessor meldet beim Transport-Start {type:\"transport-started\", frame}; audioEngine setzt captureTransportStartSec = frame/sampleRate.",
+        "4. Pattern-Uebernahme so umsetzen, dass die Drum-Pattern-Ansicht sie zeigt (gemeinsame Quelle).",
+        "5. Abgriff bei setOutputLayout automatisch nachhaengen (MasterStreamTap mitziehen)."
+      ],
+      "acceptance": [
+        "Capture enthaelt drumsamplerMONK-Eingaben",
+        "Raster exakt am Worklet-Frame",
+        "Uebernommene Takte sichtbar in der Pattern-Ansicht"
+      ],
+      "verification": [
+        "npm test",
+        "npx tsc --noEmit",
+        "npx eslint . --max-warnings=0"
+      ],
+      "dependsOn": [
+        "IDEA-2026-10-07-A"
+      ],
+      "reports": [
         "docs/audit/AGENTENAUFTRAEGE_2026-10-07.md"
       ]
     },
