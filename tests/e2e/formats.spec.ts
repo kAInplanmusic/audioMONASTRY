@@ -51,7 +51,7 @@ test('jedes Gerät zeigt dieselbe Kopie in 1440 px – Handy und Pad nur verklei
       results[f.name] = await page.evaluate(() => ({
         innerWidth: window.innerWidth,
         mixerWidth: Math.round(document.getElementById('rack-mixer')?.getBoundingClientRect().width ?? 0),
-        navRows: getComputedStyle(document.querySelector('nav[aria-label="Studio-Navigation"] > div') as Element).gridTemplateRows,
+        navRows: getComputedStyle(document.querySelector('nav[aria-label="Studio-Navigation"]') as Element).gridTemplateColumns,
         scrollWidth: document.documentElement.scrollWidth,
       }));
     } finally {

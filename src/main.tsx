@@ -1,7 +1,16 @@
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
+import '@fontsource/chakra-petch/500.css';
+import '@fontsource/chakra-petch/600.css';
+import '@fontsource/chakra-petch/700.css';
+import '@fontsource/barlow/400.css';
+import '@fontsource/barlow/500.css';
+import '@fontsource/barlow/600.css';
+import '@fontsource/jetbrains-mono/400.css';
+import '@fontsource/jetbrains-mono/600.css';
 import './index.css';
+import './styles/amDesign.css';
 import { MasterOutPage } from './pages/MasterOutPage';
 import { VisualOutPage } from './pages/VisualOutPage';
 import { listenerModeForPath } from './core/session/listenerMode';

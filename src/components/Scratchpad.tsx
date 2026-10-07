@@ -15,9 +15,9 @@ export const Scratchpad: React.FC = () => {
 
   return (
     <div className="relative group">
-      <button type="button" className="flex items-center gap-2 bg-[#1a1a1a] border border-neutral-800 rounded-lg p-2 hover:border-fuchsia-500 transition-colors cursor-pointer">
-        <ClipboardCopy className="w-4 h-4 text-fuchsia-400" />
-        <span className="text-[10px] font-bold text-fuchsia-200">CLIPBOARD ({clipboard.length})</span>
+      <button type="button" className={`am-tool ${clipboard.length > 0 ? 'am-on' : ''}`} style={{ ['--c' as string]: '#e879f9' }} title={`Projekt-Clipboard: ${clipboard.length} Einträge`} aria-label={`CLIPBOARD (${clipboard.length})`}>
+        <ClipboardCopy />
+        <span className="am-cnt" aria-hidden="true">{clipboard.length}</span>
       </button>
 
       {/* Flyout panel */}

@@ -38,7 +38,7 @@ test('P0-7: masterplayerMONK ist View-only (keine Buttons, BPM sichtbar)', async
   await openStudio(page);
 
   const master = masterSection(page);
-  await expect(master.getByText('FIXED · VIEW ONLY')).toBeVisible();
+  await expect(master.getByText('MASTERPLAYER · NUR ANSICHT')).toBeVisible();
   await expect(master.locator('button')).toHaveCount(0);
   await expect(master.locator('select')).toHaveCount(0);
   await expect(master.getByText(/BPM/)).toBeVisible();

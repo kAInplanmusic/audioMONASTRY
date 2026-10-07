@@ -80,10 +80,11 @@ export const OutputsPanel: React.FC = () => {
         aria-label="Session-Ausgänge"
         aria-expanded={open}
         title={`Ausgänge: ${usersOn}/${MAX_UI_ENDPOINTS} Nutzer · Main Audio · Main Visuals`}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 hover:border-emerald-400/50 hover:text-emerald-300 transition-colors cursor-pointer"
+        className={`am-tool ${open ? 'am-on' : ''}`}
+        style={{ ['--c' as string]: '#3ddc84' }}
       >
-        <MonitorSpeaker className="w-4 h-4" />
-        <span className="hidden lg:inline text-[9px] font-bold tracking-widest">AUSGÄNGE</span>
+        <MonitorSpeaker />
+        
         <span className="text-[9px] font-mono text-neutral-400">{usersOn}/{MAX_UI_ENDPOINTS}</span>
         <span className={`w-1.5 h-1.5 rounded-full ${dotClass(slots.sound)}`} aria-hidden="true" />
         <span className={`w-1.5 h-1.5 rounded-full ${dotClass(slots.visual)}`} aria-hidden="true" />
