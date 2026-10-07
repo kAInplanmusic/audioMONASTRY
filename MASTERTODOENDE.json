@@ -4845,6 +4845,72 @@
       "source": "Betreiber 2026-10-06",
       "note": "„Wenn User 3 aus dem EQ rausgeht und User 4 rein, muss die Einstellung bleiben – für alle Plugins. So kann man switchen oder jemand anders kurz übernehmen lassen.“ Nicht gehaltene Plugins eingeklappt, nur sichtbar ob und wer hält.\n\nAkzeptanz: Stand bleibt beim Halterwechsel, nach Neuladen und Server-Neustart; nur der Halter schreibt.\n\nDONE 2026-10-06: AuthoritativeSession.setPluginSettings (nur Halter, ≤ 64 KB, Revision, serialize/restore), Socket plugin-settings + Stände im session-state-Snapshot. Client: PluginSettingsStore (entprellt 250 ms, flush vor Freigabe/Übergabe/pagehide, Bereiche je Plugin, nur Halter sendet). Umgestellt: mixer (greift bei Übernahme), eq, dsp, effect, master, spatial, drumsampler, syntisampler (mpc/sampler/synth), instru, song, voice, stem, record; Werte aus fremden Ständen über mergeKnown geprüft. Nicht gespeichert: Audiodaten (geladene Titel, Pad-Klänge, Takes – gehören in die Bibliothek). Offen für v2: Audio-Seite jedes Plugins aus dem Stand herstellen (restore), Regler ohne Stand-Anbindung nachziehen.",
       "verification": "tests/pluginSettings.test.ts; tests/e2e/pluginPersistence.spec.ts"
+    },
+    {
+      "id": "PLUGIN-V2-C0",
+      "title": "Pluginpool auf v2: Audio-Vertrag (B0/B1) + vertragsgetriebener Studiopfad (C0)",
+      "priority": "P0",
+      "status": "DONE",
+      "area": "Audio/Architektur",
+      "source": "Betreiber-Auftrag 2026-10-07 (Pluginpool definieren, verdrahten wie Ableton, auf v2 laufen lassen)",
+      "problem": "Die 16 Plugins waren an drei Stellen getrennt beschrieben (Registry, Signalweg, Kanalbelegung); ein Plugin hinzuzufuegen hiess, an drei Orten daran zu denken. Gleichzeitig gab es keine deklarative Aussage darueber, WAS jedes Plugin im Signalweg ist (Format, Ports, Latenz, Bypass, Send, SYNC). Ohne die ist eine Verdrahtung wie in Ableton nicht baubar - jede Entscheidung waere geraten.",
+      "note": "B0: src/plugins/pluginContract.ts als EINE Quelle fuer alle 16 Plugins. Je Plugin: Rolle (source/channel/insert/fxReturn/recorder/utility), Kanal 1-8, Format (mono/stereo), Ein-/Ausgaenge, intrinsicLatencyFrames (PDC), Bypass-Faehigkeit, FX-Send+Abgriff, SYNC-Faehigkeit, viaChannel, producesAudio, insertScope, singleInstance. Fuenf Punkte der Architektur-Review sind damit eingeloest.\nB1: pluginChannelMap und signalChain leiten daraus ab - kein zweites Pflegen.\nC0: src/core/audio/C0StudioChain.ts baut den vollstaendigen Pfad (8 Quellen -> Kanalzug -> Summe -> Merge mit FX-Return -> eq -> dsp -> master -> record -> Out) plus PdcDelayNode. Der Spike traegt nachweislich Ton durch die ganze Kette.\n\nDREI EIGENE FEHLER, die die zweite Review am Code aufdeckte und die behoben sind:\n1. pathLatencyFrames nahm das Maximum statt zu summieren - bei einer seriellen Kette falsch. Fiel nicht auf, weil nur `master` Latenz hat (datenblinder Test). Jetzt: pathLatencyFrames summiert, mergeLatencyFrames nimmt das Maximum.\n2. signalTopology lieferte die Vertrags-Reihenfolge ('spatial -> eq -> dsp -> master' statt 'eq -> dsp -> spatial -> master'). Ich hatte das im Test mit .sort() kaschiert - die Reihenfolge war ungeprueft.\n3. Inserts hatten keinen Geltungsbereich. Neues Feld `insertScope`: spatial ist channel-Insert, eq/dsp/master sind master-Insert.\nPlus ein struktureller Fehler in C0 selbst: ein Insert liest nur seinen ERSTEN Eingangsport, deshalb haette der erste Entwurf den FX-Return still verworfen. Der Merge laeuft jetzt ueber einen StereoSumNode; der Spike-Test deckt es ab.\n\nEIGENER IRRTUM, in der Doku korrigiert: Der erste Vertragsentwurf hatte `spatial` als fxReturn (FX-Bus). V2_UI_VERKABELUNG.md fuehrt den Kanalzug aber als '... -> pan -> Distanz -> Hoehe -> Mixer-Summe' - spatial sitzt IM Kanalzug. Nur `effect` ist der FX-Bus. Die falsche Zuordnung haette den Klang geaendert.",
+      "acceptance": [
+        "Ein Vertrag beschreibt alle 16 Plugins (Rolle, Kanal, Format, Latenz, Bypass, Send, SYNC)",
+        "Registry, Signalweg und Kanalbelegung koennen nicht mehr auseinanderlaufen (Test)",
+        "Ein vollstaendiger Pfad fuehrt Ton von der Quelle bis zum Ausgang",
+        "Der FX-Send erreicht den Bus und kehrt in die Summe zurueck",
+        "Die PDC-Verzoegerung verschiebt um genau N Samples und trennt die Kanaele"
+      ],
+      "verification": [
+        "tests/pluginContract.test.ts 21/21",
+        "tests/c0StudioChain.test.ts 14/14 (Impuls erreicht Ausgang, FX-Send im Bus, PDC-Laenge exakt)",
+        "tsc --noEmit 0",
+        "voller Lauf: 308 Dateien / 2494 Tests EXIT=0 (vorher 305/2449)"
+      ],
+      "files": [
+        "src/plugins/pluginContract.ts",
+        "src/core/audio/C0StudioChain.ts",
+        "src/core/audio/nodes/pdcDelayNode.ts",
+        "src/core/audio/pluginChannelMap.ts",
+        "src/plugins/signalChain.ts",
+        "tests/pluginContract.test.ts",
+        "tests/c0StudioChain.test.ts"
+      ]
+    },
+    {
+      "id": "PLUGIN-V2-C1",
+      "title": "Auf alle 16 Plugins erweitern + Worklet-Anbindung der Kette",
+      "priority": "P0",
+      "status": "OPEN",
+      "area": "Audio",
+      "source": "Plan 2026-10-07, Phase C1 (nach bestandenem C0-Spike)",
+      "problem": "C0 beweist EINEN vollstaendigen Pfad. Offen: die 16 Plugins einzeln an die Kette binden (jede Quelle ihr eigener Knoten statt eines generischen SourceNode), die AudioWorklets anschliessen (itSynth/mastering/eq liegen als Prozessoren vor), Bypass als latenztreues Dry/Wet-Crossfade, Automation sample-genau, und die Graph-Umschaltung an der Blockgrenze (Plan-Transaktion).",
+      "note": "Bewusst als eigener Schritt: die Review bestand darauf, erst nach bestandenem Spike auf alle 16 zu erweitern - sonst baut man 16 Knoten auf einer ungepruefte Struktur.",
+      "acceptance": [
+        "Jedes der 16 Plugins hat einen eigenen Knoten in der Kette",
+        "Worklets (itSynth/mastering/eq) haengen an ihren Knoten",
+        "Bypass ist ein Crossfade ohne Latenzaenderung",
+        "Parameter-Automation laeuft sample-genau"
+      ],
+      "verification": []
+    },
+    {
+      "id": "PLUGIN-V2-D",
+      "title": "4-Server-Strategie deployen, testen, loggen, Snapshot",
+      "priority": "P0",
+      "status": "BLOCKED",
+      "area": "Infra",
+      "source": "Betreiber-Auftrag 2026-10-07",
+      "problem": "Die 4 Server sind app/sfu/media/edge (docs/SERVER_FLEET.md). Deploy ist derzeit NICHT fahrbar: RP_AGENT_KEY fehlt in der .env, HETZNER_API_TOKEN fehlt ebenfalls. Ohne die ist weder ein Flotten-Zustand abfragbar noch ein Deploy moeglich.",
+      "note": "Vorbereitet: Zielbild belegt (docs/SERVER_FLEET.md: app cx43 mit Floating IP, sfu cx33 mit RTP 40000-40099, media cx43 mit NVMe, edge cx23 nur Monitoring), Bring-up ueber scripts/hetzner/bring-up-fleet.sh. Blockiert an den fehlenden Zugangsdaten - Betreiber muss RP_AGENT_KEY (und ggf. HETZNER_API_TOKEN) setzen.",
+      "acceptance": [
+        "4 Knoten provisioniert und erreichbar",
+        "Neueste Builds deployt (Client + Server + Runtime-Image)",
+        "E2E gegen die echte Instanz gefahren",
+        "Logs gesammelt, Snapshot gemacht und Wiederaufsetzpunkt dokumentiert"
+      ],
+      "verification": []
     }
   ],
   "visionSandbox": [
