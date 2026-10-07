@@ -579,3 +579,14 @@
 /* Doppelte Modus-Auswahl (OFF/AI/ACTIVE) in alten Terminals: das macht der 3-Wege-Knopf. */
 .am-sb select:has(> option[value="AUTO_AI"]){display:none!important}
 .am-sb [class*="text-neutral-5"],.am-sb [class*="text-neutral-6"],.am-sb [class*="text-zinc-5"]{color:var(--dm)!important}
+/* perforMONK kompakt */
+.am-perf{display:flex;flex-direction:column;gap:6px}
+.am-perfgrid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr)) minmax(0,1.4fr);gap:8px}
+.am-kgroup{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;align-content:start;background:var(--pn2);border:1px solid var(--ln);border-radius:9px;padding:6px}
+.am-kgroup>.am-lbl{grid-column:1/-1;display:flex;align-items:center;gap:5px}
+.am-kgroup.am-kscope{grid-template-columns:1fr}
+.am-ico{width:12px;height:12px;display:inline-block;vertical-align:-2px}
+.am-kpi{min-width:0}
+.am-kpi b{display:block;font:600 13px var(--f-mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-kpi span{font-size:9px;color:var(--dm)}
+.am-scope{width:100%;height:46px;background:#040912;border:1px solid #10204a;border-radius:6px}
