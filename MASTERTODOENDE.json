@@ -4935,19 +4935,20 @@
     },
     {
       "id": "AI-INFRA-001",
-      "title": "AI-Flotte neu: 6 x 48 GB, alles resident, max. 4 EUR/h (Pods), Visuals neu gewaehlt",
+      "title": "AI-Flotte neu: 4 x 48 GB (bis 6), alles resident, max. 4 EUR/h (Pods), keine Visual-Generierung",
       "priority": "P0",
       "status": "PARTIAL",
       "area": "AI Infrastruktur",
       "source": "Betreiber-Auftrag 2026-10-07",
-      "problem": "Betreiber 2026-10-07: AI-Aufpreis max. 4 EUR/h, 5-6 Instanzen mit 48 GB, bei AI an liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen/Tauschen), keine lokalen/API-Fallbacks. Die 3 Visual-Rollen sind ueberholt. Preisbefund: 0,49 EUR/h gilt fuer Pods; Serverless Flex kostet 1,22 USD/h (6 Instanzen = 6,73 EUR/h, reisst die 4 EUR).",
-      "note": "STAND 2026-10-07: Bestandsaufnahme + Zielbild in docs/AI_FLEET_6X48_PLAN.md; Zielbild und Gate im Code (AI_RESIDENT_FLEET, tests/aiResidentFleet.test.ts). NICHT umgesetzt: Migration 8->6 Rollen, Pod-Betrieb, Manifest-Eintraege der neuen Modelle. Offene Betreiber-Entscheidungen: Pods statt Serverless; Speicherbudget 5 -> ~13 EUR/Monat; Video LTX-2.3 (Lizenzpruefung) vs Wan 2.2 I2V; Freigabe Migration.",
+      "problem": "Betreiber 2026-10-07: AI-Aufpreis max. 4 EUR/h, 48-GB-Instanzen, bei AI an liegen ALLE Modelle dauerhaft im VRAM (Laden beim App-Start, kein Tauschen), keine Fallbacks. Visuals entstehen aus vorhandenen Bildern/Videos, NICHT per KI-Generierung: imageHq/videoReal/videoAbstract bekommen keine GPU. Preisbefund: 0,49 EUR/h gilt fuer Pods; Serverless Flex kostet 1,22 USD/h (4 Instanzen = 4,49 EUR/h).",
+      "note": "STAND 2026-10-07: Bestandsaufnahme + Zielbild in docs/AI_FLEET_6X48_PLAN.md; Zielbild und Gate im Code (AI_RESIDENT_FLEET, tests/aiResidentFleet.test.ts); Resident-Modus ohne Verdraengen in TS und Python (AI_RESIDENT_ONLY). NICHT umgesetzt: Migration 8->4 Rollen, Pod-Betrieb, Flottenstart beim App-Start, Manifest-Eintraege der neuen Modelle (Qwen3.6-35B-A3B, MOSS-Audio-8B). Offene Betreiber-Entscheidungen: Pods statt Serverless; Speicherbudget 5 -> ~9 EUR/Monat; Instanzzahl 4 vs bis 6; Freigabe Migration.",
       "acceptance": [
-        "6 Instanzen, je Modellsumme <= 42 GB, keine exclusiveGroup (Test gruen)",
-        "6 Pods A6000/A40 <= 4 EUR/h (Test gruen)",
+        "4 Instanzen, je Modellsumme <= 42 GB, keine exclusiveGroup, kein Bild-/Video-Modell (Test gruen)",
+        "4 Pods A6000/A40 <= 4 EUR/h (Test gruen)",
         "Neue Modelle mit gepinnter Revision im Manifest, Lizenz geprueft",
-        "Echtmessung VRAM fuer brain, image, video auf 48-GB-Karte",
-        "Migration 8->6 inkl. Deploy-Skripte und Endpoint-Registry"
+        "Echtmessung VRAM fuer brain auf 48-GB-Karte",
+        "Migration 8->4 Rollen inkl. Deploy-Skripte, Endpoint-Registry, aiGate",
+        "Visuals: Auswahl aus vorhandenem Material per CLIP-Embeddings + Audio-Features"
       ],
       "files": [
         "src/config/aiInfrastructure.ts",

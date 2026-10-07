@@ -363,9 +363,11 @@ export function fleetBudgetReport(
 }
 
 // ============================================================================
-// SSOT Betreiber 2026-10-07: AI-Aufpreis <= 4 €/h, 6 residente 48-GB-Instanzen
+// SSOT Betreiber 2026-10-07: AI-Aufpreis <= 4 €/h, residente 48-GB-Instanzen (4 genutzt, bis 6 erlaubt)
 // ----------------------------------------------------------------------------
 // Bei "AI an" liegen ALLE Modelle dauerhaft im VRAM (kein Nachladen, kein Tausch).
+// KEINE Bild-/Video-Generierung auf der GPU-Flotte: Visuals entstehen aus
+// vorhandenen Bildern/Videos (Auswahl + Schnitt + Shader), nicht aus Diffusion.
 // Die 0,50 €/h je 48-GB-Instanz gelten nur für PODS (A40 0,49 $, A6000 0,53 $);
 // als Serverless-Flex-Worker kostet dieselbe Karte 1,22 $/h (L40S 1,75 $).
 // Quelle Preise: runpod.io/pricing, Stand 2026-10-07.
@@ -401,6 +403,9 @@ export interface ResidentModel {
   licenseCheck?: boolean;
 }
 
+/** Rollen ohne GPU-Instanz: Visuals entstehen aus vorhandenem Material (Betreiber 2026-10-07). */
+export const AI_RETIRED_VISUAL_ROLES = AI_VISUAL_ROLES;
+
 /** Eine residente 48-GB-Instanz. */
 export interface ResidentInstance {
   id: string;
@@ -410,10 +415,8 @@ export interface ResidentInstance {
 }
 
 /**
- * Zielbild: 6 Instanzen, alle Modelle resident. Visuals sind NEU gewählt
- * (Betreiber 2026-10-07: die frühere Aufteilung in 3 Visual-Rollen ist überholt):
- * Bilder/Videos entstehen aus vorhandenem Material (Edit / Image-to-Video /
- * Video-to-Video / Audio-to-Video), nicht aus dem Nichts.
+ * Zielbild: 4 Instanzen, alle Modelle resident, keine Visual-Generierung
+ * (Betreiber 2026-10-07). Bis zu 6 wären im Budget; mehr Instanzen sind kein Ziel.
  * Passung prüft `tests/aiResidentFleet.test.ts`.
  */
 export const AI_RESIDENT_FLEET = [
@@ -431,6 +434,8 @@ export const AI_RESIDENT_FLEET = [
       { id: 'moss-audio-8b-thinking', vramGb: 18, license: 'Apache-2.0', status: 'neu' },
       { id: 'pyannote-diarization', vramGb: 3, license: 'gated (HF license acceptance required)', status: 'manifest', licenseCheck: true },
       { id: 'ast-audioset', vramGb: 3, license: 'MIT', status: 'manifest' },
+      // Nur Wiederfinden vorhandener Bilder/Videos zur Musik (CLIP-Embeddings, 768-dim wie visual_embeddings) – keine Generierung.
+      { id: 'clip-vit-l14', vramGb: 2, license: 'MIT', status: 'manifest' },
       { id: 'essentia', vramGb: 0, license: 'AGPL-3.0', status: 'manifest', licenseCheck: true },
     ],
   },
@@ -451,29 +456,6 @@ export const AI_RESIDENT_FLEET = [
       { id: 'acestep-v15-xl-sft', vramGb: 9, license: 'MIT', status: 'manifest' },
       { id: 'acestep-v15-xl-turbo', vramGb: 9, license: 'MIT', status: 'manifest' },
       { id: 'acestep-5hz-lm-4b', vramGb: 8, license: 'MIT', status: 'manifest' },
-    ],
-  },
-  {
-    id: 'image',
-    covers: ['imageHq'],
-    models: [
-      // Material-Umbauer: Edit, Stil-Transfer, Mehrbild-Referenz (ersetzt IP-Adapter + FLUX.1-dev).
-      { id: 'qwen-image-edit-2511', vramGb: 28, license: 'Apache-2.0', status: 'neu' },
-      // Stil-Motor: Basis der 32 fertig trainierten Themen-LoRAs (nicht tauschbar) + 15 Stil-LoRAs.
-      { id: 'sdxl-base-1.0', vramGb: 7, license: 'openrail++', status: 'neu' },
-      { id: 'controlnet-depth', vramGb: 2, license: 'Apache-2.0', status: 'manifest' },
-      { id: 'controlnet-canny', vramGb: 2, license: 'Apache-2.0', status: 'manifest' },
-      { id: 'realesrgan-x4', vramGb: 1, license: 'MIT', status: 'manifest' },
-    ],
-  },
-  {
-    id: 'video',
-    covers: ['videoReal', 'videoAbstract'],
-    models: [
-      // Ein Modell für I2V, V2V und Audio-to-Video; real vs. abstrakt über LoRA/Prompt.
-      { id: 'ltx-2.3-22b-distilled', vramGb: 34, license: 'ltx-2-community-license', status: 'neu', licenseCheck: true },
-      { id: 'rife-interpolation', vramGb: 1, license: 'MIT', status: 'manifest' },
-      { id: 'realesrgan-video-x4', vramGb: 2, license: 'MIT', status: 'manifest' },
     ],
   },
 ] as const satisfies readonly ResidentInstance[];
