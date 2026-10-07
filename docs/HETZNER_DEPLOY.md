@@ -494,7 +494,7 @@ Ab 2 App-Knoten teilen sich die Instanzen die Socket.io-Räume über Redis:
 
 ```bash
 # Auf einem Knoten (z. B. app-1 oder eigener kleiner Knoten):
-docker compose -f docker-compose.hetzner.yml --profile fleet up -d redis
+docker compose -f docker-compose.hetzner.yml up -d redis   # seit 2026-10-07 Standard-Dienst (RT-AUDIT-P1-008), kein Profil mehr
 
 # In der .env aller App-Knoten:
 REDIS_URL=redis://<redis-host>:6379

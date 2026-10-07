@@ -489,7 +489,7 @@
       "id": "RT-AUDIT-P1-008",
       "title": "Session-State überlebt Neustarts: Redis mit AOF auch auf dem Einzelknoten, Datei-Rückfall ohne Redis",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Betrieb/Persistenz",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-008)",
       "detectedAt": "2026-10-07",
@@ -537,7 +537,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-07 (Branch rt-audit/p1-008-persistence): server/fileSessionPersistence.ts (atomar tmp+rename, Schreibkette, beschaedigte Datei -> .corrupt-<zeit>), sessionRuntime.restoreFromPersistence + flush(); realtime: ohne Redis Datei-Rueckfall SESSION_STATE_FILE (Default data/state/session-state.json, in Tests aus, \"off\" = aus) mit Startlog; server.ts: SIGTERM/SIGINT -> flush (max. 3 s) -> exit. docker-compose.hetzner.yml: redis ohne Profil (Standard-Dienst, AOF), REDIS_URL-Default redis://redis:6379, depends_on service_healthy; ZUSATZBEFUND behoben: maxmemory-policy allkeys-lru -> volatile-lru (allkeys-lru haette den Session-Schluessel bei Speicherdruck verdraengen koennen). Nachweis: tests/sessionPersistenceRestart.test.ts (9: Datei-Neustart identisch, entprellter Save, atomar ohne Temp-Reste, Korrupt-Datei, Pfadaufloesung, Redis-Fake-Neustart, Compose-Vertrag); tests/test_hetzner_scripts.py Default-Profil-Erwartung um redis erweitert (bewusst). tsc 0, eslint 0, 314 Dateien/2583 Tests gruen, knip 0, Boundary 0. Hinweis Betrieb: Auf dem SFU-Knoten startet \"up -d caddy audiomonastry\" jetzt auch einen lokalen Redis (eigene, nun persistente Session statt RAM). Datei-Rueckfall braucht ein beschreibbares Verzeichnis – im Hetzner-Container (read_only) greift Redis; fuer andere Setups SESSION_STATE_FILE auf ein Volume legen."
     },
     {
       "id": "RT-AUDIT-P1-009",

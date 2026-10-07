@@ -3364,8 +3364,11 @@ class FleetStartRemoteBuildDefaultTest(unittest.TestCase):
                 capture_output=True, text=True, cwd=tmp, timeout=120,
             )
         self.assertEqual(dienste.returncode, 0, dienste.stderr)
+        # RT-AUDIT-P1-008 (2026-10-07): redis gehoert bewusst zum Default-Profil
+        # (Session-Persistenz auch auf dem Einzelknoten; die App startet ihn per
+        # depends_on/service_healthy mit).
         self.assertEqual(
-            set(dienste.stdout.split()), {"audiomonastry", "caddy", "master-player"},
+            set(dienste.stdout.split()), {"audiomonastry", "caddy", "master-player", "redis"},
             "Default-Profil hat sich geaendert - der Remote-Build fasst andere Dienste an",
         )
         self.assertEqual(config.returncode, 0, config.stderr)
