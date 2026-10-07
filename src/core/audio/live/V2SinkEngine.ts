@@ -289,6 +289,13 @@ export class V2SinkEngine {
   private sampleOutR: Float32Array[] = [];
   private sampleBlockMono: Float32Array[][] = [];
   private sampleBlockStereo: Float32Array[][] = [];
+  /**
+   * RT-AUDIT-P0-002: vorallokierter Testton-Puffer + Ein-Element-Block (vorher
+   * pro Block `new Float32Array` + `[tone]`) und Stille-Stereo-Rückfall.
+   */
+  private toneBuffer = new Float32Array(0);
+  private toneBlock: Float32Array[] = [this.toneBuffer];
+  private silentStereo: Float32Array[] = [new Float32Array(0), new Float32Array(0)];
   /** Extern erzeugte Blöcke (z. B. SFZ) je Kanalindex für den nächsten Render. */
   private readonly externalBlocks: (Float32Array[] | null)[] = [];
   /** Ringpuffer ausstehender Synth-Trigger (Pads/Instruments/Steps). */
@@ -671,8 +678,8 @@ export class V2SinkEngine {
     }
 
     if (!this.channelUsed[0] && this.testToneActive) {
-      const tone = this.renderToneBlock(length, ctx.sampleRate);
-      this.studio.setSourceBuffer('channel1', [tone]);
+      this.renderToneBlock(length, ctx.sampleRate);
+      this.studio.setSourceBuffer('channel1', this.toneBlock);
       this.channelUsed[0] = true;
     }
 
@@ -686,7 +693,7 @@ export class V2SinkEngine {
 
     // Phase 4: Der Live-Output ist der lokale Monitor-Ausgang (MAIN/Cue/Monitor).
     const rendered = this.studio.renderMonitor(ctx);
-    const stereo = rendered ?? [new Float32Array(length), new Float32Array(length)];
+    const stereo = rendered ?? this.silentStereo;
     // Phase 4: Ausgangs-Graph für 2.1-/Mehrkanal-Layouts (Stereo bleibt Stereo).
     this.outputGraph.setInputStereo(stereo[0], stereo[1] ?? stereo[0]);
     const output = this.outputGraph.render(ctx) ?? stereo;
@@ -759,8 +766,15 @@ export class V2SinkEngine {
         state.position %= state.left.length;
         idx = Math.floor(state.position);
       }
-      outL[i] = state.left[idx] ?? 0;
-      if (outR) outR[i] = state.right?.[idx] ?? state.left[idx] ?? 0;
+      // RT-AUDIT-P0-002: explizite Grenzprüfung statt `?? 0` (der
+      // Nullish-Rückfall boxt Doubles pro Sample); idx < left.length ist oben
+      // geprüft, idx < 0 nur bei leerem Sample (dann Stille wie bisher).
+      const l = idx >= 0 ? state.left[idx] : 0;
+      outL[i] = l;
+      if (outR) {
+        const r = state.right;
+        outR[i] = r !== undefined && idx >= 0 && idx < r.length ? r[idx] : l;
+      }
       state.position += advance;
     }
 
@@ -958,8 +972,9 @@ export class V2SinkEngine {
     }
   }
 
+  /** Rendert den Testton in den vorallokierten `toneBuffer` (RT-AUDIT-P0-002). */
   private renderToneBlock(length: number, sampleRate: number): Float32Array {
-    const buffer = new Float32Array(length);
+    const buffer = this.toneBuffer;
     const dt = this.freq / sampleRate;
     for (let i = 0; i < length; i++) {
       buffer[i] = Math.sin(2 * Math.PI * this.phase) * this.amplitude;
@@ -973,6 +988,10 @@ export class V2SinkEngine {
     if (this.silenceBuffer.length !== length) {
       this.silenceBuffer = new Float32Array(length);
       this.silenceBlock = [this.silenceBuffer];
+      // RT-AUDIT-P0-002: Testton-/Stille-Puffer nur bei geänderter Blockgröße neu.
+      this.toneBuffer = new Float32Array(length);
+      this.toneBlock = [this.toneBuffer];
+      this.silentStereo = [new Float32Array(length), new Float32Array(length)];
     }
     // RT-AUDIT-P0-001: Stimmen-/Sample-Puffer nur bei geänderter Blockgröße neu anlegen.
     if (this.voiceBuffers.length === 0 || this.voiceBuffers[0].length !== length) {
