@@ -17,9 +17,10 @@
  * höchstens EINEN Schreibvorgang gleichzeitig. Die Laufzeit ist deshalb kein
  * Nebenläufigkeitskonstrukt, sondern der Ort, an dem diese eine Wahrheit liegt.
  *
- * Wichtig fuer den Betrieb (PERSIST-P1-003): `restoreFromRedis` ist die einzige
- * Stelle, die `session` austauscht - ein zweiter Pfad würde die Wiederherstellung
- * wieder verstreuen. Und `stop()` existiert, weil Intervalle ohne Haltepunkt in
+ * Wichtig fuer den Betrieb (PERSIST-P1-003): `restoreFromRedis` und (seit
+ * RT-AUDIT-P1-008) `restoreFromPersistence` sind die einzigen Stellen, die
+ * `session` austauschen - ein weiterer Pfad würde die Wiederherstellung wieder
+ * verstreuen. Und `stop()` existiert, weil Intervalle ohne Haltepunkt in
  * Tests und bei sauberem Shutdown weiterlaufen würden.
  */
 import { AuthoritativeSession, MemorySessionPersistence, type AuthoritativeSessionPersistence, type SerializedAuthoritativeSession } from '../src/core/session/authoritativeSession';
@@ -73,6 +74,16 @@ export interface SessionRuntime {
    */
   restoreFromRedis(client: RedisLikeClient, snapshotKv: KeyValueStore):
     Promise<{ restored: boolean; snapshotRestored: boolean }>;
+  /**
+   * RT-AUDIT-P1-008: Wiederherstellung aus einer beliebigen Persistenz (z. B.
+   * Datei-Rückfall ohne Redis). Setzt sie danach als aktive Persistenz.
+   */
+  restoreFromPersistence(next: AuthoritativeSessionPersistence): Promise<{ restored: boolean }>;
+  /**
+   * RT-AUDIT-P1-008: ausstehenden (entprellten) Save SOFORT schreiben – für den
+   * Shutdown (SIGTERM), damit die letzten 250 ms nicht verloren gehen.
+   */
+  flush(): Promise<void>;
   /** Laufenden (debounced) Save abbrechen - z. B. beim Session-Reset. */
   stopSaveTimer(): void;
   /** Intervalle starten (idempotent). */
@@ -184,6 +195,20 @@ export function createSessionRuntime(options: SessionRuntimeOptions = {}): Sessi
         }
       }
       return { restored: Boolean(restoredState), snapshotRestored };
+    },
+    async restoreFromPersistence(next) {
+      const state = await next.load().catch(() => null);
+      if (state) session = AuthoritativeSession.restore(state, { lockTtlMs });
+      persistence = next;
+      return { restored: Boolean(state) };
+    },
+    async flush() {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      try {
+        await persistence.save(session.serialize());
+      } catch (err) {
+        log(`[session] Speichern beim Herunterfahren fehlgeschlagen: ${(err as Error).message}`);
+      }
     },
     stopSaveTimer() {
       if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }

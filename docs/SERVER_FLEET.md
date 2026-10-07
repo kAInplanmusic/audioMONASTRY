@@ -98,7 +98,7 @@ Provisionierung: `bash scripts/hetzner/provision-fleet.sh`
    erreichbar → auf sfu-1 immer `caddy` mitstarten.
 3. **Redis-Adapter:** Mit `REDIS_URL` teilen mehrere App-Knoten die
    Socket.io-Räume (Session-/Plugin-State über Prozessgrenzen).
-   Redis läuft als Compose-Profil: `--profile fleet up -d redis`.
+   Redis läuft seit 2026-10-07 standardmäßig mit (Session-Persistenz, RT-AUDIT-P1-008; früher Compose-Profil `fleet`).
 4. **Stem:** Ohne `STEM_AI_URL` nutzt `/api/separate-stems` den lokalen
    Fallback. GPU-Stem nur auf ai-1 aktivieren.
 5. **Provisioning nach Rolle:** `ROLE=sfu` öffnet die RTP-Ports in der
