@@ -1,1 +1,65 @@
 /* Plugin-Inhalte Gruppe b – Rack-Modul-Stil (Präfix am-), siehe src/styles/amDesign.css */
+/* effectMONK · eqMONK · dspMONK. Farbe kommt als --c vom Rack-Streifen. */
+
+/* ---- gemeinsam ---- */
+.am-boff{opacity:.4;filter:grayscale(.6)}
+.am-dspknobs.am-boff,.am-knobs.am-boff,.am-fxxy.am-boff{pointer-events:none}
+.am-fxarr{color:var(--c);opacity:.75;font:600 13px var(--f-disp);flex:none;align-self:center}
+.am-fxchain,.am-dspchain{display:flex;align-items:stretch;gap:5px;flex-wrap:wrap}
+.am-fxbox,.am-dspbox{flex:1 1 0;min-width:84px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:5px 8px;background:var(--pn2);border:1px solid var(--ln2);border-radius:8px;text-align:left;color:var(--tx);overflow:hidden}
+.am-fxbox b,.am-dspbox b{font:600 12px var(--f-disp);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;color:var(--tx)}
+.am-fxbox small{font-size:10px;color:var(--dm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.am-fxbox.am-on,.am-dspbox.am-on{border-color:var(--c);box-shadow:0 0 10px -3px var(--c),inset 0 0 12px color-mix(in srgb,var(--c) 12%,transparent)}
+.am-fxbox.am-on b,.am-dspbox.am-on b{color:var(--c)}
+button.am-fxbox,button.am-dspbox{cursor:pointer}
+button.am-fxbox:disabled,button.am-dspbox:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---- effectMONK ---- */
+.am-fxl{display:flex;flex-direction:column;gap:2px}
+.am-fxl button{display:flex;align-items:center;gap:7px;background:none;border:1px solid transparent;border-radius:6px;padding:2px 7px;font:600 10px var(--f-disp);letter-spacing:.08em;color:var(--dm);text-align:left}
+.am-fxl button i{width:6px;height:6px;border-radius:50%;background:var(--ln2);flex:none}
+.am-fxl button:hover{color:var(--tx)}
+.am-fxl button.am-on{color:var(--tx);border-color:color-mix(in srgb,var(--c) 55%,var(--ln2));background:color-mix(in srgb,var(--c) 14%,transparent)}
+.am-fxl button.am-on i{background:var(--c);box-shadow:0 0 6px var(--c)}
+.am-fxl button:disabled{opacity:.45}
+.am-fxsrc{border-style:dashed;cursor:copy}
+.am-fxscope{height:58px}
+.am-fxxy{position:relative;height:122px;border-radius:8px;border:1px solid color-mix(in srgb,var(--c) 35%,var(--ln2));background-color:#040912;background-image:linear-gradient(var(--ln) 1px,transparent 1px),linear-gradient(90deg,var(--ln) 1px,transparent 1px);background-size:25% 25%;touch-action:none;cursor:crosshair}
+.am-fxxy b{position:absolute;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--c);box-shadow:0 0 14px var(--c),inset 0 0 0 2px #fff;pointer-events:none}
+.am-fxxy span{position:absolute;font:600 8px var(--f-disp);letter-spacing:.1em;color:var(--dm2);pointer-events:none}
+.am-fxxy-x{right:5px;bottom:3px}
+.am-fxxy-y{left:2px;bottom:6px;writing-mode:vertical-rl;transform:rotate(180deg)}
+
+/* ---- eqMONK ---- */
+.am-eqrow{display:flex;gap:6px;align-items:center}
+.am-eqflat{padding:4px 10px;font:700 10px var(--f-disp);letter-spacing:.06em}
+.am-eqcv{height:120px;cursor:crosshair}
+.am-eqbank{display:grid;grid-template-columns:repeat(36,minmax(0,1fr));gap:2px;height:46px}
+.am-eqf{position:relative;height:100%;min-width:0;border-radius:3px;background:#050b16;border:1px solid var(--ln);touch-action:none;user-select:none;-webkit-user-select:none;cursor:ns-resize}
+.am-eqf::before{content:"";position:absolute;left:1px;right:1px;top:calc(min(50%, (1 - var(--n)) * 100%));bottom:calc(min(50%, var(--n) * 100%));background:color-mix(in srgb,var(--bh) 35%,transparent)}
+.am-eqf i{position:absolute;left:0;right:0;top:50%;height:1px;background:var(--ln2)}
+.am-eqf b{position:absolute;left:1px;right:1px;height:4px;border-radius:2px;bottom:calc(var(--n) * 100% - 2px);background:var(--bh);box-shadow:0 0 5px var(--bh)}
+.am-eqf.am-on{border-color:#fff;box-shadow:0 0 6px -1px var(--bh)}
+.am-eqf.am-boff{cursor:not-allowed}
+.am-eqf:focus-visible{outline:2px solid var(--c);outline-offset:1px}
+.am-eqband{display:flex;flex-direction:column;align-items:center;gap:2px}
+.am-eqband b{font-size:20px;line-height:1.1}
+
+/* ---- dspMONK ---- */
+.am-dspbox{min-width:78px}
+.am-dspknobs{display:flex;gap:8px;flex-wrap:wrap}
+.am-dspgrp{display:flex;flex-direction:column;gap:3px;padding:4px 6px;border:1px solid var(--ln);border-radius:8px;background:var(--pn2)}
+.am-dspgrp .am-knobs{flex-wrap:nowrap;justify-content:flex-start}
+.am-dsp .am-kn.am-xs{width:42px}
+.am-dspmon{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.am-dspmon .am-kpi{padding:3px 6px}
+.am-dspmon .am-kpi b{font-size:12px}
+.am-dspmon .am-kpi span{font-size:9px}
+.am-dspx{flex-basis:100%;border:1px solid var(--ln);border-radius:9px;padding:3px 10px;background:var(--pn2)}
+.am-dspx summary{cursor:pointer;padding:3px 0}
+.am-dspxgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:6px;padding:4px 0 6px}
+
+@media (max-width:560px){
+  .am-eqbank{grid-template-columns:repeat(18,minmax(0,1fr));height:auto;grid-auto-rows:40px}
+  .am-dspgrp .am-knobs{flex-wrap:wrap}
+}

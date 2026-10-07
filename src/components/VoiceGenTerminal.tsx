@@ -1,6 +1,4 @@
-import React, {  useState, useRef, useEffect  } from 'react';
-import { random } from '../utils/random';
-import { Mic, Play, Download, RefreshCw, AlignLeft, Wand2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useSamples } from '../context/SampleContext';
 import { AudioSample } from '../data/samples';
 import { usePluginState } from '../hooks/usePluginState';
@@ -11,7 +9,10 @@ import { useAudio } from '../context/AudioContext';
 import { requestUserMedia } from '../utils/mediaDevices';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
-import { TerminalFrame } from './terminalShared';
+import { MoaAssistant } from './MoaAssistant';
+import { AmCard, AmSeg, AmToggle } from './am/amUi';
+
+const STYLE_OPTIONS = [['SPOKEN', 'Spoken'], ['CHANT', 'Chant'], ['SINGING', 'Singing']] as const;
 
 export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled = true }: { enabled?: boolean }) {
   const { addSample } = useSamples();
@@ -35,9 +36,7 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
 
   if (!enabled) {
     return (
-        <div className="w-full h-full flex items-center justify-center bg-[#111] rounded-xl border border-neutral-800 text-neutral-600 font-mono text-xs uppercase tracking-widest">
-            Voice Generator Disabled
-        </div>
+        <div className="am-hint am-mono">Voice Generator Disabled</div>
     );
   }
 
@@ -123,141 +122,50 @@ export const VoiceGenTerminal = React.memo(function VoiceGenTerminal({ enabled =
     synth.speak(utter);
   };
 
+  const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
+  // Feste Balken je Text (kein Zufall im Render) für die Ergebnis-Anzeige.
+  const bars = Array.from({ length: 28 }, (_, i) => 18 + ((prompt.charCodeAt(i % Math.max(1, prompt.length)) || 64) * (i + 7)) % 70);
+
   return (
-    <TerminalFrame
-      pluginId="voice"
-      moaPlaceholder="MOA: z. B. 'Singe Hallo meine Freunde'"
-      title="Voice Generator"
-      badge="AI VOCALIST"
-      icon={Mic}
-      accent="orange"
-      lockStatus={lockStatus}
-      state={state}
-      updateState={updateState}
-    >
-      <div className="flex-1 flex overflow-hidden">
-
-        {/* Left Side: Input & Settings */}
-        <div className="w-1/2 p-8 border-r border-neutral-800 flex flex-col gap-6 bg-[#161616]">
-
-          <div>
-            <label className="text-xs font-bold tracking-widest text-neutral-500 mb-2 flex items-center gap-2">
-              <AlignLeft className="w-4 h-4" /> LYRICS / PROMPT
-            </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              className="w-full h-32 bg-[#111] border border-neutral-800 rounded-lg p-4 text-sm text-neutral-300 focus:outline-none focus:border-orange-500/50 resize-none font-mono"
-              placeholder="Enter text to synthesize..."
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <span className="text-xs font-bold tracking-widest text-neutral-500 mb-2 block">DELIVERY STYLE</span>
-              <div className="flex flex-col gap-2">
-                {['SPOKEN', 'CHANT', 'SINGING'].map(s => (
-                  <button type="button"
-                    key={s}
-                    onClick={() => setStyle(s)}
-                    className={`py-2 rounded-md border text-xs font-bold tracking-widest transition-all ${style === s ? 'bg-orange-900/40 border-orange-500 text-orange-400' : 'bg-[#111] border-neutral-800 text-neutral-500 hover:text-neutral-400'}`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <span className="text-xs font-bold tracking-widest text-neutral-500 mb-2 block">VOICE MODEL</span>
-              <div className="flex flex-col gap-2 overflow-y-auto max-h-32 scrollbar-thin scrollbar-thumb-neutral-800 pr-2">
-                {voices.map(v => (
-                  <button type="button"
-                    key={v}
-                    onClick={() => setVoice(v)}
-                    className={`py-2 px-3 rounded-md border text-[10px] font-mono text-left transition-all truncate ${voice === v ? 'bg-neutral-800 border-neutral-600 text-neutral-200' : 'bg-[#111] border-transparent text-neutral-500 hover:bg-[#1a1a1a]'}`}
-                  >
-                    {v.replace('_', ' ')}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-auto pt-6 border-t border-neutral-800 flex flex-col gap-3">
-            <button type="button"
-              onClick={startRecordingForMIDI}
-              className={`w-full py-3 rounded-lg font-bold tracking-widest flex justify-center items-center gap-2 transition-all ${isRecordingMidi ? 'bg-red-900/50 text-red-400' : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700'}`}
-            >
-              <Mic className="w-4 h-4" /> {isRecordingMidi ? 'STOP RECORDING' : 'RECORD VOICE-TO-MIDI'}
-            </button>
-            <button type="button"
-              onClick={generate}
-              disabled={isGenerating}
-              className={`w-full py-4 rounded-lg font-black tracking-widest flex justify-center items-center gap-3 transition-all ${isGenerating ? 'bg-neutral-800 text-neutral-500 cursor-wait' : 'bg-orange-600 hover:bg-orange-500 text-white shadow-[0_0_20px_rgba(249,115,22,0.4)]'}`}
-            >
-              {isGenerating ? (
-                <><RefreshCw className="w-5 h-5 animate-spin" /> SYNTHESIZING...</>
-              ) : (
-                <><Wand2 className="w-5 h-5" /> GENERATE VOCAL</>
-              )}
-            </button>
-          </div>
-
+    <div className="am-rackrow am-a-voice" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
+      <MoaAssistant pluginId="voice" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+      <AmCard title="Lyrics / Prompt" style={{ flex: 1.3, minWidth: 360 }}>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={2}
+          className="am-libq am-a-ta"
+          aria-label="Lyrics / Prompt"
+          placeholder="Enter text to synthesize..."
+        />
+        <div className="am-a-inline">
+          <select className="am-sel" aria-label="Voice Model" value={voice} onChange={(e) => setVoice(e.target.value)}>
+            {voices.map(v => <option key={v} value={v}>{v.replace('_', ' ')}</option>)}
+          </select>
+          <AmSeg label="Delivery Style" value={style} options={STYLE_OPTIONS} onChange={setStyle} />
+          <AmToggle on={isRecordingMidi} onClick={() => void startRecordingForMIDI()} kind="m" title="Stimme aufnehmen und als MIDI auslösen">
+            {isRecordingMidi ? 'STOP REC' : 'VOICE→MIDI'}
+          </AmToggle>
+          <button type="button" className="am-btn am-pri" onClick={generate} disabled={isGenerating}>
+            {isGenerating ? 'SYNTHESIZING …' : 'GENERATE VOCAL'}
+          </button>
         </div>
+      </AmCard>
 
-        {/* Right Side: Result & Processing */}
-        <div className="w-1/2 p-8 flex flex-col bg-[#111] relative">
-
-           {!hasResult && !isGenerating ? (
-             <div className="flex-1 flex flex-col items-center justify-center opacity-20">
-               <Mic className="w-24 h-24 mb-4" />
-               <p className="font-bold tracking-widest">READY TO SYNTHESIZE</p>
-             </div>
-           ) : isGenerating ? (
-             <div className="flex-1 flex flex-col items-center justify-center">
-               <div className="w-full flex items-center justify-center gap-2 mb-8">
-                 {[...Array(20)].map((_, i) => (
-                   <div
-                     key={i}
-                     className="w-1.5 bg-orange-500 rounded-full animate-pulse"
-                     style={{ height: `${random() * 40 + 10}px`, animationDelay: `${i * 0.1}s` }}
-                   ></div>
-                 ))}
-               </div>
-               <p className="text-orange-400 font-mono text-xs animate-pulse">Running TTS Model...</p>
-             </div>
-           ) : (
-             <div className="flex-1 flex flex-col justify-center animate-in fade-in duration-500">
-
-               <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6 shadow-inner relative overflow-hidden group">
-                 <div className="relative z-10 flex items-center justify-between">
-                   <div className="flex items-center gap-4">
-                     <button type="button" onClick={playResult} className="w-16 h-16 rounded-full bg-orange-600 flex items-center justify-center text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] hover:scale-105 transition-transform">
-                       <Play className="w-6 h-6 ml-1 fill-current" />
-                     </button>
-                     <div>
-                       <h4 className="font-black text-lg tracking-widest">vocal_take_01.wav</h4>
-                       <p className="text-xs text-neutral-400 font-mono mt-1">
-                         {style} • {voice}
-                         {ttsMode === 'SPEECH' && (
-                           <span className="ml-2 text-[9px] text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded">WEB SPEECH OFFLINE</span>
-                         )}
-                       </p>
-                     </div>
-                   </div>
-
-                   <button type="button" className="px-4 py-2 bg-[#222] border border-neutral-700 hover:bg-[#333] rounded flex items-center gap-2 text-xs font-bold transition-colors">
-                     <Download className="w-4 h-4" /> EXPORT TO LIB
-                   </button>
-                 </div>
-               </div>
-             </div>
-           )}
-
+      <AmCard title="Take" style={{ width: 320 }} right={ttsMode === 'SPEECH' && hasResult ? <span className="am-vb am-a-ok">WEB SPEECH OFFLINE</span> : null}>
+        <div className={`am-a-wave ${isGenerating ? 'am-a-busy' : ''}`} aria-label={isGenerating ? 'Running TTS Model' : hasResult ? 'Ergebnis' : 'Ready to synthesize'}>
+          {hasResult || isGenerating
+            ? bars.map((h, i) => <i key={i} style={{ height: `${h}%`, animationDelay: `${(i % 10) * 0.08}s` }} />)
+            : <span className="am-hint">Ready to synthesize</span>}
         </div>
-
-      </div>
-    </TerminalFrame>
+        <div className="am-a-inline">
+          <button type="button" className="am-tg am-on" onClick={playResult} disabled={!hasResult} aria-label="Take abspielen">▶</button>
+          <div className="am-a-ell">
+            <b className="am-mono">vocal_take_01.wav</b>
+            <div className="am-hint am-a-ell">{style} • {voice} · → biblioMONK</div>
+          </div>
+        </div>
+      </AmCard>
+    </div>
   );
 });

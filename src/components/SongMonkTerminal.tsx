@@ -1,22 +1,24 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Music, Sparkles } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
+import { webRTCManager } from '../utils/WebRTCManager';
 import type { AudioSample } from '../data/samples';
+import { AmCard, AmKnob } from './am/amUi';
+
+const STYLE_PRESETS = ['dark techno', 'minimal techno', 'melodic techno', 'tech house', 'ambient', 'breaks', 'acid'];
+const DURATIONS = [4, 6, 8, 12, 16, 20, 30];
 
 /**
- * songMONK – AI-Song-Generator (Suno-artig)
- * =========================================
- * Eigenständiges Terminal, vorbereitet für die Plugin-Registry.
- * Aktuell wird es noch nicht als 22. Plugin registriert (das würde die
- * hart verdrahteten 21-Plugin-Invarianten vieler Module/Tests anfassen);
- * die Komponente kann aber direkt gemountet werden und nutzt den neuen
+ * songMONK – AI-Song-Generator (Suno-artig) · Rack-Modul
+ * =====================================================
+ * Vorlage public/uidesign/uiübersichtapp, Zeile 03: links Stil, Mitte Prompt +
+ * Spur mit Playhead, rechts Playlist (erzeugte Songs aus biblioMONK).
  * Server-Endpoint `POST /api/song/generate` (Runtime-first, HF-Fallback).
  */
 export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
-  const { state, updateState } = usePluginState('song', 'PRO');
-  const { addSample } = useSamples();
+  const { lockStatus } = usePluginState('song', 'PRO');
+  const { samples, addSample } = useSamples();
 
   // Beständige Plugins: Einstiegsstand = letzter Prompt/Stil/Tempo/Länge.
   const [saved] = useState(() => mergeKnown({ prompt: 'Dark warehouse techno mit treibendem Bass und hypnotischen Vocals', style: 'dark techno', bpm: 128, duration: 8 }, readPluginSettings('song')));
@@ -30,8 +32,40 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<string[]>([]);
 
+  // Vorschau einer erzeugten Datei (Playhead in der Spur).
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+
   const pushLog = useCallback((line: string) => {
     setLog(prev => [...prev.slice(-9), line]);
+  }, []);
+
+  const stopPreview = useCallback(() => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    setPlayingId(null);
+    setProgress(0);
+  }, []);
+
+  useEffect(() => () => { audioRef.current?.pause(); }, []);
+
+  const playUrl = useCallback((id: string, url: string) => {
+    audioRef.current?.pause();
+    try {
+      const audio = new Audio(url);
+      audio.volume = 0.9;
+      audio.addEventListener('timeupdate', () => {
+        if (audio.duration > 0) setProgress(audio.currentTime / audio.duration);
+      });
+      audio.addEventListener('ended', () => {
+        if (audioRef.current === audio) { audioRef.current = null; setPlayingId(null); setProgress(0); }
+      });
+      audioRef.current = audio;
+      setPlayingId(id);
+      setProgress(0);
+      void audio.play().catch(() => { /* Autoplay-Block ignorieren */ });
+    } catch { /* Audio nur im Browser verfügbar */ }
   }, []);
 
   const generate = useCallback(async () => {
@@ -72,90 +106,88 @@ export const SongMonkTerminal = React.memo(function SongMonkTerminal() {
         parameters: { frequency: 0 },
       };
       addSample(sample);
-      try {
-        const audio = new Audio(url);
-        audio.volume = 0.9;
-        void audio.play().catch(() => { /* Autoplay-Block ignorieren */ });
-      } catch { /* Audio nur im Browser verfügbar */ }
+      playUrl(sample.id, url);
       pushLog(`✓ Song erzeugt (${duration}s @ ${bpm} BPM) → biblioMONK (${sample.name})`);
     } catch (err) {
       pushLog(`✗ ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setBusy(false);
     }
-  }, [addSample, bpm, duration, prompt, pushLog, style]);
+  }, [addSample, bpm, duration, playUrl, prompt, pushLog, style]);
+
+  const playlist = useMemo(
+    () => samples.filter((s) => s.tags?.includes('songmonk') && s.url).slice(-8).reverse(),
+    [samples],
+  );
+  const playing = playlist.find((s) => s.id === playingId);
+  // Spur: Takte der eingestellten Länge (4/4), in 4-Takt-Phrasen gefärbt.
+  const bars = Math.max(1, Math.round((Number(duration) * Number(bpm)) / 240));
+  const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
+  const lastLog = log.slice(-2);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans">
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Music className="w-4 h-4 text-amber-400" />
-          <span className="text-[10px] font-bold tracking-[0.25em] text-neutral-400 uppercase">AI Song Generator</span>
+    <div className="am-rackrow am-a-song" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
+      <AmCard title="Stil" style={{ width: 190 }}>
+        <input className="am-libq" aria-label="Style" value={style} onChange={(e) => setStyle(e.target.value)} />
+        <div className="am-list am-a-scroll" role="listbox" aria-label="Stil-Vorlagen">
+          {STYLE_PRESETS.map((s) => (
+            <button key={s} type="button" role="option" aria-selected={style === s} className={style === s ? 'am-on' : ''} onClick={() => setStyle(s)}>{s}</button>
+          ))}
         </div>
-        <select value={state} onChange={(e) => updateState(e.target.value as never)} className="bg-black text-white text-xs p-1 rounded">
-          <option value="OFF">OFF</option>
-          <option value="AUTO_AI">AI</option>
-          <option value="PRO">ACTIVE</option>
-        </select>
-      </div>
+      </AmCard>
 
-      <div className="flex-1 p-6 overflow-y-auto space-y-5">
-        <div className="flex items-center gap-3 border-b border-amber-900/30 pb-3">
-          <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/50">
-            <Music className="w-5 h-5 text-amber-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase">songMONK</h2>
-            <p className="text-[10px] text-neutral-500">Text → Song · Runtime-first (MusicGen, später ACE-Step/DiffRhythm)</p>
-          </div>
-        </div>
-
-        <label className="block text-xs text-neutral-400">
-          Song-Prompt
+      <AmCard title="Song" style={{ flex: 1, minWidth: 480 }} right={<span className="am-vb">{bars} Takte · {bpm} BPM</span>}>
+        <div className="am-a-inline am-a-top">
           <textarea
+            className="am-libq am-a-ta"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            rows={3}
-            className="mt-1 w-full bg-black border border-neutral-800 rounded p-2 text-sm text-neutral-200"
+            rows={2}
+            aria-label="Song-Prompt"
             placeholder="Beschreibe Stil, Energie, Instrumente, Vocals …"
           />
-        </label>
-
-        <div className="grid grid-cols-3 gap-3">
-          <label className="text-xs text-neutral-400">
-            Style
-            <input value={style} onChange={(e) => setStyle(e.target.value)} className="mt-1 w-full bg-black border border-neutral-800 rounded px-2 py-1.5 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-400">
-            BPM
-            <input type="number" min={40} max={220} value={bpm} onChange={(e) => setBpm(Number(e.target.value))} className="mt-1 w-full bg-black border border-neutral-800 rounded px-2 py-1.5 text-sm" />
-          </label>
-          <label className="text-xs text-neutral-400">
-            Dauer (s)
-            <select value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="mt-1 w-full bg-black border border-neutral-800 rounded px-2 py-1.5 text-sm">
-              {[4, 6, 8, 12, 16, 20, 30].map(sec => <option key={sec} value={sec}>{sec} s</option>)}
+          <AmKnob size="s" value={bpm} min={40} max={220} def={128} unit="int" label="BPM" title="Tempo" onChange={(v) => setBpm(Math.round(v))} />
+          <label className="am-a-field">
+            <span className="am-lbl">Dauer</span>
+            <select className="am-sel" aria-label="Dauer (s)" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+              {DURATIONS.map(sec => <option key={sec} value={sec}>{sec} s</option>)}
             </select>
           </label>
+          <button type="button" className="am-btn am-pri" onClick={generate} disabled={busy}>
+            {busy ? 'Generiere Song …' : 'Song generieren'}
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={generate}
-          disabled={busy}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-600/20 border border-amber-500/50 text-amber-200 font-bold text-sm hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-wait transition-all"
-        >
-          <Sparkles className={`w-4 h-4 ${busy ? 'animate-pulse' : ''}`} />
-          {busy ? 'Generiere Song …' : 'Song generieren'}
-        </button>
-
-        <div className="bg-black/40 border border-neutral-800 rounded-xl p-4 min-h-[90px]">
-          <h3 className="text-[10px] font-bold tracking-[0.3em] text-neutral-500 uppercase mb-2">Generator-Log</h3>
-          <div className="space-y-1 font-mono text-[11px]">
-            {log.length === 0 && <div className="text-neutral-600">Noch keine Generierung.</div>}
-            {log.map((line, i) => <div key={i} className={line.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}>{line}</div>)}
-          </div>
+        <div className="am-a-lane" aria-label={playing ? `Vorschau ${playing.name}` : `Struktur ${bars} Takte`}>
+          {Array.from({ length: Math.min(bars, 64) }, (_, i) => (
+            <i key={i} style={{ ['--pc' as string]: `hsl(${(Math.floor(i / 4) * 52 + 30) % 360} 70% 58%)` }} />
+          ))}
+          {playing ? <b className="am-a-ph" style={{ left: `${progress * 100}%` }} /> : null}
+          <span className="am-a-lanelbl am-mono">{playing ? playing.name : `${duration} s · ${bars} Takte`}</span>
         </div>
-      </div>
+      </AmCard>
+
+      <AmCard title="Playlist" style={{ width: 280 }} right={playingId ? <button type="button" className="am-tg am-on" onClick={stopPreview}>■</button> : null}>
+        <div className="am-list am-a-scroll" role="listbox" aria-label="Erzeugte Songs">
+          {playlist.length === 0 ? <span className="am-hint">Noch keine Songs – erzeugte Songs erscheinen hier.</span> : null}
+          {playlist.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="option"
+              aria-selected={playingId === s.id}
+              className={playingId === s.id ? 'am-on' : ''}
+              title={s.description}
+              onClick={() => (playingId === s.id ? stopPreview() : s.url && playUrl(s.id, s.url))}
+            >
+              <span className="am-a-ell">{s.name}</span><i>{playingId === s.id ? '■' : '▶'}</i>
+            </button>
+          ))}
+        </div>
+        <div className="am-a-log am-mono" aria-live="polite">
+          {lastLog.length === 0 && <div className="am-hint">Noch keine Generierung.</div>}
+          {lastLog.map((line, i) => <div key={i} className={line.startsWith('✓') ? 'am-a-ok' : 'am-a-err'}>{line}</div>)}
+        </div>
+      </AmCard>
     </div>
   );
 });

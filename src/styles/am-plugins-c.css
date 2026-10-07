@@ -1,1 +1,77 @@
 /* Plugin-Inhalte Gruppe c – Rack-Modul-Stil (Präfix am-), siehe src/styles/amDesign.css */
+/* syntisamplerMONK + drumsamplerMONK · eigene Ergänzungen mit Präfix am-c- */
+
+/* Gesperrt (fremder Halter): ausgegraut */
+.am-c-locked{opacity:.5;filter:grayscale(1)}
+
+/* Sektionswahl links (SYNTH / SAMPLE / MPC) – senkrechtes Segment */
+.am-c-wrap{display:flex;gap:8px;align-items:stretch}
+.am-c-wrap>.am-rackrow{flex:1 1 0;min-width:0}
+.am-c-vseg{display:flex;flex-direction:column;border:1px solid var(--ln2);border-radius:7px;overflow:hidden;background:var(--pn2)}
+.am-c-vseg button{background:none;border:0;padding:7px 10px;font:700 10px var(--f-disp);letter-spacing:.08em;color:var(--dm);text-align:left}
+.am-c-vseg button+button{border-top:1px solid var(--ln)}
+.am-c-vseg button.am-on{background:var(--c);color:#06101c}
+
+/* Kleine Zeilen */
+.am-c-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.am-c-row .am-sel{padding:3px 6px;font-size:11px}
+.am-c-grow{flex:1;min-width:0}
+.am-c-stat{font:600 10px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--dm);white-space:nowrap}
+.am-c-name{font:600 12px var(--f-disp);letter-spacing:.06em;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Nur-Lese-Werte (Kit-Parameter) */
+.am-c-kv{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+.am-c-kv div{background:var(--pn2);border:1px solid var(--ln);border-radius:6px;padding:3px 5px;min-width:0}
+.am-c-kv b{display:block;font:600 12px var(--f-mono);color:var(--tx);white-space:nowrap}
+.am-c-kv span{font:600 8px var(--f-disp);letter-spacing:.1em;text-transform:uppercase;color:var(--dm)}
+
+/* XY-Feld (Vorlage: dunkles Raster, leuchtendes Quadrat) */
+.am-c-xy{position:relative;width:100%;height:112px;background:#040912;border:1px solid #10204a;border-radius:8px;touch-action:none;cursor:crosshair;
+  background-image:linear-gradient(color-mix(in srgb,var(--c) 14%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--c) 14%,transparent) 1px,transparent 1px);background-size:25% 25%}
+.am-c-xy:focus-visible{outline:2px solid var(--c);outline-offset:1px}
+.am-c-xy b{position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:3px;background:var(--c);box-shadow:0 0 14px 2px var(--c);pointer-events:none}
+.am-c-xy span{position:absolute;font:600 8px var(--f-disp);letter-spacing:.1em;color:var(--dm2);pointer-events:none}
+
+/* Pads (kompakt, Farbe pro Pad über --pc) */
+.am-c-pads{display:grid;grid-template-columns:repeat(var(--cols,4),minmax(0,1fr));gap:4px}
+.am-c-pads .am-pad{width:auto;height:30px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;color:rgba(0,0,0,.72);overflow:hidden;cursor:pointer;user-select:none;-webkit-user-select:none}
+.am-c-pads .am-pad span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.am-c-pads .am-pad small{font:600 7px var(--f-mono);opacity:.75}
+.am-c-pads .am-pad.am-c-empty{background:color-mix(in srgb,var(--pc) 16%,#050b16);border-color:color-mix(in srgb,var(--pc) 40%,var(--ln));color:var(--dm);box-shadow:none}
+.am-c-pads .am-pad.am-c-sel{outline:2px solid #fff;outline-offset:1px}
+.am-c-pads .am-pad:disabled{opacity:.4;cursor:not-allowed}
+
+/* Step-Raster: Spuren × Steps (Vorlage uisequenzer / TR-808) */
+.am-c-seq{display:grid;grid-template-columns:44px repeat(var(--n,16),minmax(0,1fr));gap:3px;align-items:center}
+.am-c-seq .am-stp{width:auto;height:22px}
+/* farbige Steps (Farbe je Spur/Step über --c) */
+.am-c-st .am-stp{cursor:pointer;font:600 8px var(--f-mono);color:rgba(0,0,0,.7);overflow:hidden;white-space:nowrap}
+.am-c-st .am-stp:disabled{cursor:not-allowed}
+.am-c-st .am-stp:not(.am-v2){background:color-mix(in srgb,var(--c) 12%,#050b16);border-color:color-mix(in srgb,var(--c) 30%,var(--ln));color:var(--dm2)}
+.am-c-st .am-stp.am-q:not(.am-v2){background:color-mix(in srgb,var(--c) 22%,#050b16)}
+.am-c-st .am-stp.am-v2{background:var(--c);border-color:#fff;box-shadow:0 0 8px var(--c)}
+.am-c-trk{font:700 9px var(--f-disp);letter-spacing:.06em;color:var(--c);background:none;border:1px solid transparent;border-radius:4px;padding:3px 2px;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.am-c-trk.am-on{border-color:var(--c);box-shadow:0 0 6px -2px var(--c)}
+.am-c-seqbox{max-height:150px;overflow:auto;padding-right:2px}
+
+/* drumsampler: Instrument-Kacheln (Vorlage Zeile 06) */
+.am-c-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:5px}
+.am-c-tile{position:relative;height:40px;border-radius:6px;border:1px solid rgba(255,255,255,.12);padding:3px 6px;text-align:left;display:flex;flex-direction:column;justify-content:space-between;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--pc) 75%,#000),color-mix(in srgb,var(--pc) 35%,#050b16));box-shadow:inset 0 0 10px rgba(255,255,255,.12);color:#fff;transition:filter .08s}
+.am-c-tile b{font:700 9px var(--f-disp);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 2px rgba(0,0,0,.8)}
+.am-c-tile small{font:600 8px var(--f-mono);color:rgba(255,255,255,.75)}
+.am-c-tile.am-c-sel{border-color:#fff;box-shadow:0 0 0 1px #fff,0 0 12px var(--pc)}
+.am-c-tile.am-hit{filter:brightness(1.6)}
+.am-c-tile:disabled{opacity:.4;cursor:not-allowed}
+
+/* drumsampler: Step als Drop-Ziel (DropTarget-Rahmen nur beim Armieren) */
+.am-c-dstep{border:1px dashed transparent!important;border-radius:5px!important;background:none!important;padding:0;min-width:0}
+.am-c-dstep:hover{border-color:color-mix(in srgb,var(--c) 50%,transparent)!important}
+.am-c-dstep[class*="border-fuchsia-500/80"]{border-color:#e879f9!important}
+.am-c-dstep .am-stp{width:100%;height:28px;position:relative}
+.am-c-dstep .am-stp i{position:absolute;left:3px;top:3px;width:5px;height:5px;border-radius:50%;background:#fbbf24;box-shadow:0 0 5px #fbbf24}
+.am-c-drumseq{display:grid;grid-template-columns:repeat(16,minmax(0,1fr));gap:4px}
+
+/* Probensuche im Kit-Feld (SampleModuleWrapper kompakt) */
+.am-c-search{display:flex;gap:6px;align-items:center}
+.am-c-search>div:first-child{flex:1;min-width:0}

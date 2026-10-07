@@ -14,9 +14,11 @@ import { useMIDI } from '../hooks/useMIDI';
 import { useMidiClockOut } from '../hooks/useMidiClockOut';
 import { drumNoteFor } from '../core/hardware/midiClockOut';
 import { webRTCManager } from '../utils/WebRTCManager';
+import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 
 /**
- * audioMONASTRY drumMONK – TR-8S-Optik + echter 16-Step-Sequencer.
+ * audioMONASTRY drumsamplerMONK – Rack-Modul (Vorlage uiübersichtapp, Zeile 06)
+ * + echter 16-Step-Sequencer im TR-808-Farbschema.
  * ---------------------------------------------------------------
  * - Instrument-Pad wählen → dessen 16 Steps im TR-8S-Layout editieren
  * - Steps triggern beim globalen Transport (isPlaying/currentStep)
@@ -24,6 +26,9 @@ import { webRTCManager } from '../utils/WebRTCManager';
  * - Sample-Drop auf Step = One-Shot-Sample statt Kit-Sound
  * - Pattern-Presets (Four/Offbeat/Fill/Random), Clear, Persistenz
  */
+
+/** TR-808: Step-Tasten in vier Farbgruppen (rot, orange, gelb, weiß). */
+const TR808_STEP_COLORS = ['#ff4a2a', '#ff9524', '#ffd43b', '#efe8d8'] as const;
 
 const TYPE_COLORS: Record<string, string> = {
   kick: '#f97316',
@@ -247,91 +252,50 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
   };
 
   const activeSteps = useMemo(() => selectedPattern.filter(Boolean).length, [selectedPattern]);
-  const soundColor = TYPE_COLORS[selectedSound?.type ?? 'perc'] ?? '#34d399';
+
+  const stepNow = currentStep % stepCount;
+  const tune = selectedSound?.freqStart ?? selectedSound?.freq;
 
   return (
-    <SampleModuleWrapper onSelect={addSample}>
-      <div className={`drum-machine-ui p-4 rounded-xl border-2 border-black/80 bg-gradient-to-b from-[#2a2a2e] via-[#202024] to-[#17171a] text-white shadow-[0_15px_35px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.05)] ${lockedByOther ? 'opacity-50 grayscale' : ''}`}>
-        <MoaAssistant pluginId="drum" placeholder="MOA: z. B. 'Kit auf 909, Pattern random'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-        {/* Kopfzeile */}
-        <div className="flex justify-between items-center mb-3 gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-black uppercase tracking-[0.2em] text-neutral-200">
-              drum<span className="text-emerald-400">MONK</span>
-            </h3>
-            <span className="text-[9px] font-mono text-emerald-400 border border-emerald-500/40 px-1.5 py-0.5 rounded-sm tracking-widest">TR-8S</span>
-            <span className="text-[8px] font-mono text-neutral-500 border border-neutral-700 px-1.5 py-0.5 rounded-sm hidden sm:inline">STEP SEQ · BUFFER SOURCE</span>
-          </div>
-          <img src="/uidesign/uisequenzer.jpg" alt="Sequencer-Referenz" title="Sequencer-Referenz (uisequenzer.jpg)"
-            className="h-10 rounded border border-neutral-800 hover:border-emerald-500/60 transition-colors object-cover" />
-          <div className="flex items-center gap-2">
-            <span className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border ${isPlaying ? 'text-emerald-300 border-emerald-500/40 bg-emerald-500/10' : 'text-neutral-500 border-neutral-700'}`}>
-              {isPlaying ? `RUN · STEP ${currentStep % stepCount + 1}/${stepCount}` : `STOP · ${bpm} BPM`}
-            </span>
-            {/* NEW-MONK-1: MIDI-Out/Clock an externe Hardware (24 PPQN). */}
-            <button
-              type="button"
-              onClick={() => midiOut.setEnabled(!midiOut.enabled)}
-              disabled={lockedByOther || !midiOut.connected}
-              title={midiOut.connected ? 'MIDI-Clock (24 PPQN) + Note-Out an Hardware senden' : 'Kein MIDI-Ausgang gefunden'}
-              className={`text-[9px] font-mono tracking-widest px-2 py-1 rounded border cursor-pointer disabled:opacity-40 ${
-                midiOut.enabled ? 'text-amber-300 border-amber-500/50 bg-amber-500/10' : 'text-neutral-500 border-neutral-700'
-              }`}
-            >
-              MIDI OUT {midiOut.enabled ? 'ON' : 'OFF'}
-            </button>
-            {midiOut.ports.length > 1 && (
-              <select
-                value={midiOut.portId}
-                onChange={(e) => midiOut.selectPort(e.target.value)}
-                disabled={lockedByOther}
-                title="MIDI-Ausgabeport"
-                className="bg-black text-amber-300 text-[9px] p-1 rounded border border-neutral-700 cursor-pointer max-w-[120px]"
-              >
-                <option value="">AUTO</option>
-                {midiOut.ports.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            )}
-            <select value={state} onChange={(e) => updateState(e.target.value as any)} disabled={lockedByOther} className="bg-black text-emerald-300 text-xs p-1 rounded border border-neutral-700 cursor-pointer">
-              <option value="OFF">OFF</option>
-              <option value="AUTO_AI">AI</option>
-              <option value="PRO">ACTIVE</option>
-            </select>
-          </div>
-        </div>
+    <div className={`am-rackrow ${lockedByOther ? 'am-c-locked' : ''}`}>
+      <MoaAssistant pluginId="drum" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
 
-        {/* Grünes LED-Display */}
-        <div className="mb-3 rounded-md bg-[#06140a] border border-emerald-900/70 px-3 py-2 flex items-center justify-between font-mono shadow-[inset_0_0_12px_rgba(16,185,129,0.15)]">
-          <span className="text-[11px] font-bold text-emerald-400 tracking-widest" style={{ textShadow: '0 0 8px rgba(16,185,129,0.8)' }}>
-            {selectedSound ? `${activeDrumKit.name} · ${selectedSound.name}` : activeDrumKit.name}
-          </span>
-          <span className="text-[9px] text-emerald-600 tracking-widest">
-            {activeDrumKit.origin} · {activeDrumKit.year} · {activeDrumKit.sounds.length} SOUNDS
-          </span>
-        </div>
-
-        {/* Kit-Auswahl */}
-        <div className="flex gap-1.5 mb-3 overflow-x-auto touch-scroll pb-1">
-          {DRUM_KITS.map((kit) => (
-            <button type="button"
-              key={kit.id}
-              onClick={() => handleKitChange(kit.id)}
+      {/* Kit-/Modell-Auswahl (TR-808, TR-909, …) + Sample-Suche + MIDI-Out */}
+      <AmCard title="Kit" style={{ width: 236 }} right={<span className="am-vb">{activeDrumKit.origin} · {activeDrumKit.year}</span>}>
+        <select className="am-sel" aria-label="Drum-Kit (Modell)" value={activeKit} disabled={lockedByOther}
+          onChange={(e) => handleKitChange(e.target.value)}>
+          {DRUM_KITS.map((kit) => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
+        </select>
+        <SampleModuleWrapper onSelect={addSample} />
+        <div className="am-c-row">
+          {/* NEW-MONK-1: MIDI-Out/Clock an externe Hardware (24 PPQN). */}
+          <AmToggle on={midiOut.enabled} kind="m" onClick={() => midiOut.setEnabled(!midiOut.enabled)}
+            disabled={lockedByOther || !midiOut.connected}
+            title={midiOut.connected ? 'MIDI-Clock (24 PPQN) + Note-Out an Hardware senden' : 'Kein MIDI-Ausgang gefunden'}>
+            MIDI OUT {midiOut.enabled ? 'ON' : 'OFF'}
+          </AmToggle>
+          {midiOut.ports.length > 1 && (
+            <select
+              className="am-sel am-c-grow"
+              value={midiOut.portId}
+              onChange={(e) => midiOut.selectPort(e.target.value)}
               disabled={lockedByOther}
-              className={`px-3 py-1.5 rounded-[3px] text-[10px] font-black tracking-widest whitespace-nowrap border transition-all cursor-pointer disabled:opacity-40 ${
-                activeKit === kit.id
-                  ? 'bg-emerald-500 text-black border-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.6)]'
-                  : 'bg-[#111] text-neutral-500 border-neutral-800 hover:border-emerald-600/60 hover:text-emerald-300'
-              }`}
+              title="MIDI-Ausgabeport"
+              aria-label="MIDI-Ausgabeport"
             >
-              {kit.name}
-            </button>
-          ))}
+              <option value="">AUTO</option>
+              {midiOut.ports.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
         </div>
+      </AmCard>
 
-        {/* Instrument-Pads (wählen = Step-Spur editieren) */}
-        <div className="grid gap-2 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))' }}>
+      {/* Instrument-Spuren als farbige Kacheln (wählen = Step-Spur editieren) */}
+      <AmCard title={`Instrumente · ${activeDrumKit.name}`} style={{ flex: 1, minWidth: 420 }}
+        right={<span className="am-c-stat">{activeDrumKit.sounds.length} SOUNDS</span>}>
+        <div className="am-c-tiles">
           {activeDrumKit.sounds.map((s) => {
             const color = TYPE_COLORS[s.type] ?? '#34d399';
             const selected = selectedSound?.id === s.id;
@@ -342,132 +306,84 @@ export const DrumMachineTerminal: React.FC<DrumMachineProps> = React.memo(({ isP
                 key={s.id}
                 onClick={() => handlePad(s)}
                 disabled={lockedByOther}
+                aria-pressed={selected}
                 title={`${s.name} (${s.type}) – Steps: ${stepsCount}/${stepCount}`}
-                className={`aspect-square rounded-[4px] border flex flex-col items-center justify-center gap-1 transition-all duration-75 active:scale-95 cursor-pointer disabled:opacity-40 shadow-[0_3px_8px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.12)] ${
-                  selected ? 'border-white ring-2 ring-white/70' : 'border-black/80'
-                } ${flashId === s.id ? 'brightness-150' : ''}`}
-                style={{ background: `linear-gradient(180deg, ${color}cc, ${color}66 55%, #0c0c0e 56%)` }}
+                className={`am-c-tile ${selected ? 'am-c-sel' : ''} ${flashId === s.id ? 'am-hit' : ''}`}
+                style={{ ['--pc' as string]: color }}
               >
-                <span className="w-2 h-2 rounded-full" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
-                <span className="text-[8px] font-black tracking-wider text-white uppercase" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>
-                  {s.name.length > 10 ? s.name.slice(0, 10) : s.name}
-                </span>
-                <span className="text-[6px] font-mono text-black/70 uppercase tracking-widest">{s.type}</span>
-                <span className="text-[7px] font-mono text-black/80 font-bold">{stepsCount}/{stepCount}</span>
+                <b>{s.name}</b>
+                <small>{s.type} · {stepsCount}/{stepCount}</small>
               </button>
             );
           })}
         </div>
+      </AmCard>
 
-        {/* Pattern-Tools für den gewählten Sound */}
-        <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-          <span className="text-[8px] font-mono tracking-[0.25em] text-emerald-500 mr-1">PATTERN · {selectedSound?.name ?? ''}</span>
+      {/* Gewählter Sound: Kit-Werte (fest, aus dem Modell) + Groove */}
+      <AmCard title={selectedSound ? selectedSound.name : 'Sound'} style={{ width: 236 }}
+        right={<span className="am-c-stat" data-live-value="transport">{isPlaying ? `RUN ${stepNow + 1}/${stepCount}` : `STOP · ${bpm}`}</span>}>
+        <div className="am-c-kv" title="Werte des Original-Modells (Kit-Preset)">
+          <div><b>{tune !== undefined ? `${Math.round(tune)}` : '–'}</b><span>Tune Hz</span></div>
+          <div><b>{selectedSound?.decay !== undefined ? `${Math.round(selectedSound.decay * 1000)}` : '–'}</b><span>Decay ms</span></div>
+          <div><b>{selectedSound?.noiseFilter !== undefined ? `${(selectedSound.noiseFilter / 1000).toFixed(1)}k` : '–'}</b><span>Filter</span></div>
+        </div>
+        <div className="am-c-row" style={{ flexWrap: 'nowrap' }}>
+          <AmKnob size="s" value={swing} min={0} max={1} def={0} unit="pct" label="Swing" title="Swing (systemweit)"
+            onChange={(v) => { const n = Math.round(v * 100) / 100; setSwing(n); audioEngine.setSwing(n); }} />
+          <AmToggle on={flam} kind="m" disabled={lockedByOther} onClick={() => setFlam(!flam)} title="Flam: zweiter Schlag nach 30 ms">FLAM</AmToggle>
+          <AmToggle on={roll} kind="m" disabled={lockedByOther} onClick={() => setRoll(!roll)} title="Roll: zwei Nachschläge">ROLL</AmToggle>
+        </div>
+      </AmCard>
+
+      {/* 16-Step-Raster im TR-808-Farbschema (Steps 1–4 rot, 5–8 orange, 9–12 gelb, 13–16 weiß) */}
+      <AmCard title={`Step-Sequenzer · ${selectedSound?.name ?? ''}`} style={{ flexBasis: '100%' }}
+        right={<span className="am-c-stat">{activeSteps}/{stepCount} STEPS · DOWNBEAT = AKZENT · SAMPLE AUF STEP = ONE-SHOT</span>}>
+        <div className="am-c-row">
           {(['FOUR', 'OFF', 'FILL', 'RANDOM'] as const).map((p) => (
-            <button type="button"
-              key={p}
-              onClick={() => applyPatternPreset(p)}
-              disabled={lockedByOther}
-              className="px-2 py-1 rounded-[3px] bg-[#111] border border-neutral-800 text-[8px] font-bold tracking-widest text-neutral-400 hover:text-emerald-300 hover:border-emerald-600/60 cursor-pointer disabled:opacity-40"
-            >
-              {p}
-            </button>
+            <button type="button" key={p} className="am-tg" onClick={() => applyPatternPreset(p)} disabled={lockedByOther}>{p}</button>
           ))}
-          <button type="button"
-            onClick={clearSelected}
-            disabled={lockedByOther}
-            className="px-2 py-1 rounded-[3px] bg-[#111] border border-neutral-800 text-[8px] font-bold tracking-widest text-red-400/80 hover:text-red-300 hover:border-red-500/60 cursor-pointer disabled:opacity-40"
-          >
-            CLEAR
-          </button>
-          {(['A', 'B'] as const).map((b) => (
-            <button type="button" key={b} onClick={() => setBank(b)} disabled={lockedByOther}
-              className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${bank === b ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
-              {b}
-            </button>
-          ))}
-          <button type="button" onClick={() => setChain(!chain)} disabled={lockedByOther}
-            className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${chain ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
-            CHAIN
-          </button>
-          {([16, 32] as const).map((n) => (
-            <button type="button" key={n} onClick={() => setStepCount(n)} disabled={lockedByOther}
-              className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${stepCount === n ? 'bg-emerald-500 text-black border-emerald-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
-              {n}
-            </button>
-          ))}
-          <button type="button" onClick={() => setFlam(!flam)} disabled={lockedByOther}
-            className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${flam ? 'bg-amber-500 text-black border-amber-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
-            FLAM
-          </button>
-          <button type="button" onClick={() => setRoll(!roll)} disabled={lockedByOther}
-            className={`px-2 py-1 rounded-[3px] border text-[8px] font-bold tracking-widest cursor-pointer disabled:opacity-40 ${roll ? 'bg-amber-500 text-black border-amber-300' : 'bg-[#111] border-neutral-800 text-neutral-400'}`}>
-            ROLL
-          </button>
-          <div className="flex items-center gap-1">
-            <span className="text-[8px] font-mono text-neutral-600">SWING</span>
-            <input type="range" min={0} max={100} value={Math.round(swing * 100)}
-              onChange={(e) => { const v = Number(e.target.value) / 100; setSwing(v); audioEngine.setSwing(v); }}
-              className="w-16 accent-emerald-500" />
-          </div>
-          <span className="ml-auto text-[8px] font-mono text-neutral-600">{activeSteps}/{stepCount} STEPS · DOWNBEAT = ACCENT</span>
+          <button type="button" className="am-tg am-m" onClick={clearSelected} disabled={lockedByOther} title="Spur leeren">CLEAR</button>
+          <span className="am-lbl" style={{ marginLeft: 6 }}>Bank</span>
+          <AmSeg<'A' | 'B'> label="Pattern-Bank" value={bank} onChange={setBank} disabled={lockedByOther} options={[['A', 'A'], ['B', 'B']]} />
+          <AmToggle on={chain} disabled={lockedByOther} onClick={() => setChain(!chain)} title="A → B im Wechsel spielen">CHAIN</AmToggle>
+          <AmSeg label="Steps" value={String(stepCount) as '16' | '32'} disabled={lockedByOther}
+            onChange={(v) => setStepCount(v === '32' ? 32 : 16)} options={[['16', '16'], ['32', '32']]} />
         </div>
-
-        {/* 16 Step-Pads (TR-8S: 2×8) */}
-        <div className="rounded-md bg-black/40 border border-neutral-800 p-2">
-          <div className="flex items-center justify-between mb-1.5 px-1">
-            <span className="text-[8px] font-mono tracking-[0.25em] text-emerald-500">STEP SEQUENCER · {stepCount} STEPS</span>
-            <span className="text-[8px] font-mono text-neutral-600">SAMPLE-DROP AUF STEP = ONE-SHOT</span>
-          </div>
-          <div className={`grid gap-1.5 ${stepCount === 16 ? 'grid-cols-8' : 'grid-cols-8'}`}>
-            {[...Array(stepCount)].map((_, i) => {
-              const isOn = selectedPattern[i] ?? false;
-              const sample = selectedSamples[i];
-              const isCurrent = isPlaying && (currentStep % stepCount) === i;
-              return (
-                <DropTarget
-                  key={i}
-                  onDrop={(sample) => handleSampleDrop(sample, i)}
-                  className={`h-9 rounded-[3px] border flex items-center justify-center px-1 text-[7px] font-mono transition-all cursor-pointer ${
-                    isOn
-                      ? 'bg-black border-neutral-600 text-neutral-200'
-                      : 'bg-[#0d0d0f] border-neutral-800 text-neutral-600 hover:border-emerald-600/60'
-                  } ${isCurrent ? 'ring-2 ring-white/80 animate-pulse' : ''}`}
+        <div className="am-c-drumseq am-c-st">
+          {[...Array(stepCount)].map((_, i) => {
+            const isOn = selectedPattern[i] ?? false;
+            const sample = selectedSamples[i];
+            const isCurrent = isPlaying && stepNow === i;
+            return (
+              <DropTarget
+                key={i}
+                onDrop={(sample) => handleSampleDrop(sample, i)}
+                className="am-c-dstep"
+              >
+                <button type="button"
+                  onClick={() => {
+                    // Touch-Fallback: armiertes Sample hat Vorrang vor Step-Toggle.
+                    if (pendingSample) {
+                      handleSampleDrop(pendingSample, i);
+                      setPendingSample(null);
+                    } else {
+                      toggleStep(i);
+                    }
+                  }}
+                  disabled={lockedByOther}
+                  className={`am-stp ${isOn ? 'am-v2' : ''} ${isCurrent ? 'am-ph' : ''}`}
+                  style={{ ['--c' as string]: TR808_STEP_COLORS[Math.floor((i % 16) / 4)] }}
+                  title={sample ? `Step ${i + 1}: ${sample.name}` : `Step ${i + 1}`}
+                  aria-label={`Step ${i + 1} ${isOn ? 'aus' : 'an'}`}
                 >
-                  <button type="button"
-                    onClick={() => {
-                      // Touch-Fallback: armiertes Sample hat Vorrang vor Step-Toggle.
-                      if (pendingSample) {
-                        handleSampleDrop(pendingSample, i);
-                        setPendingSample(null);
-                      } else {
-                        toggleStep(i);
-                      }
-                    }}
-                    disabled={lockedByOther}
-                    className="w-full h-full relative flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
-                    aria-label={`Step ${i + 1} ${isOn ? 'aus' : 'an'}`}
-                  >
-                    <span
-                      className="absolute left-1 top-1 w-1.5 h-1.5 rounded-full"
-                      style={{
-                        background: isOn ? (sample ? '#fbbf24' : soundColor) : '#27272a',
-                        boxShadow: isOn ? `0 0 6px ${sample ? '#fbbf24' : soundColor}` : 'none',
-                      }}
-                    />
-                    <span className="truncate w-full text-center">
-                      {sample ? sample.name.slice(0, 6) : `${i + 1}`}
-                    </span>
-                  </button>
-                </DropTarget>
-              );
-            })}
-          </div>
+                  {sample && <i />}
+                  {sample ? sample.name.slice(0, 6) : `${i + 1}`}
+                </button>
+              </DropTarget>
+            );
+          })}
         </div>
-
-        <p className="mt-2 text-[8px] font-mono text-neutral-600 leading-relaxed">
-          Instrument-Pad wählen → Steps klicken zum Schalten · Sample aus der Library auf einen Step ziehen = One-Shot · Läuft synchron zum Master-Transport.
-        </p>
-      </div>
-    </SampleModuleWrapper>
+      </AmCard>
+    </div>
   );
 });

@@ -1,5 +1,14 @@
-import React, {  useState, useEffect, useRef  } from 'react';
-import { Activity, Power, Cpu, Zap, SlidersHorizontal, Gauge } from 'lucide-react';
+/**
+ * dspMONK · Rack-Modul (Vorlagen public/uidesign/uibspdsp1–5, uiübersichtapp Zeile 14)
+ * ===============================================================================
+ * Eine Zeile: Signalkette Input → Gate → Compressor → Dyn-EQ → Output als
+ * Modul-Kästchen (antippen = an/aus), darunter die Regler je Stufe ·
+ * it-synth-Automation mit Stimmen-Monitor · Engine-Parameter · Live-Monitor.
+ * Optionale DSP-Bausteine kompakt aufklappbar.
+ * Engine: setDynamicsParams / automateItSynthParam / setWorkletParam (wie bisher).
+ * Stand in der Session (`writePluginSettings('dsp', …)`).
+ */
+import React, { useState, useEffect, useRef } from 'react';
 import { usePluginState } from '../hooks/usePluginState';
 import { audioEngine } from '../utils/audioEngine';
 import { masterClock } from '../core/clock/MonastryMasterClock';
@@ -8,6 +17,7 @@ import { OptionalDspPanel } from './dsp/OptionalDspPanel';
 import { performanceMonitor, PerformanceSnapshot } from '../utils/PerformanceMonitor';
 import { webRTCManager } from '../utils/WebRTCManager';
 import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
+import { AmCard, AmKnob, AmToggle } from './am/amUi';
 
 const DEFAULT_AUTO_PARAMS = { cutoff: 1200, resonance: 0.4, modIndex: 5, gain: 0.8, lfoRate: 0, lfoDepth: 0 };
 /** P1-Dynamik: Kompressor/Gate/Dynamic-EQ-Insert (Default = Bypass). */
@@ -19,18 +29,62 @@ const DEFAULT_DYNAMICS = {
   gateThreshold: -60, gateRange: 40,
   dynEqFreq: 3000, dynEqQ: 4, dynEqThreshold: -24, dynEqRange: 12,
 };
-type DspSettings = { power?: boolean; autoParams?: unknown; dynamics?: unknown };
+/** Worklet-Engine-Parameter (Startwerte = bisherige feste Anzeige). */
+const DEFAULT_ENGINE = { oversampling: 8, lookahead: 1.5, transient: 0.8, stereoLink: 1 };
+type DspSettings = { power?: boolean; autoParams?: unknown; dynamics?: unknown; engine?: unknown };
+type AutoParam = keyof typeof DEFAULT_AUTO_PARAMS;
+type DynKey = Exclude<keyof typeof DEFAULT_DYNAMICS, 'enabled' | 'gateEnabled' | 'dynEqEnabled'>;
+type EngineKey = keyof typeof DEFAULT_ENGINE;
+
+const snap = (v: number, step: number) => Math.round(v / step) * step;
+const fmtHz = (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `${Math.round(v)}`);
+const fmtDb = (v: number, d = 1) => `${v > 0 ? '+' : ''}${v.toFixed(d)}`;
+
+interface Ctl<K extends string> { key: K; label: string; title: string; min: number; max: number; step: number; log?: boolean; fmt: (v: number) => string }
+
+const GATE_CTL: Ctl<DynKey>[] = [
+  { key: 'gateThreshold', label: 'Thr', title: 'Gate-Schwelle (dB)', min: -100, max: 0, step: 1, fmt: (v) => v.toFixed(0) },
+  { key: 'gateRange', label: 'Range', title: 'Gate-Bereich (dB)', min: 0, max: 90, step: 1, fmt: (v) => v.toFixed(0) },
+];
+const COMP_CTL: Ctl<DynKey>[] = [
+  { key: 'threshold', label: 'Thr', title: 'Kompressor-Schwelle (dB)', min: -60, max: 0, step: 0.5, fmt: (v) => v.toFixed(1) },
+  { key: 'ratio', label: 'Ratio', title: 'Ratio', min: 1, max: 20, step: 0.1, log: true, fmt: (v) => `${v.toFixed(1)}:1` },
+  { key: 'attack', label: 'Att ms', title: 'Attack', min: 0.001, max: 0.1, step: 0.001, log: true, fmt: (v) => (v * 1000).toFixed(0) },
+  { key: 'release', label: 'Rel ms', title: 'Release', min: 0.01, max: 1, step: 0.01, log: true, fmt: (v) => (v * 1000).toFixed(0) },
+  { key: 'makeup', label: 'Makeup', title: 'Makeup-Gain (dB)', min: -12, max: 24, step: 0.5, fmt: (v) => fmtDb(v) },
+];
+const EQ_CTL: Ctl<DynKey>[] = [
+  { key: 'dynEqFreq', label: 'Freq', title: 'Dyn-EQ-Frequenz (Hz)', min: 40, max: 16000, step: 10, log: true, fmt: fmtHz },
+  { key: 'dynEqQ', label: 'Q', title: 'Dyn-EQ-Güte', min: 0.3, max: 18, step: 0.1, log: true, fmt: (v) => v.toFixed(1) },
+  { key: 'dynEqThreshold', label: 'Thr', title: 'Dyn-EQ-Schwelle (dB)', min: -80, max: 0, step: 1, fmt: (v) => v.toFixed(0) },
+  { key: 'dynEqRange', label: 'Range', title: 'Dyn-EQ-Bereich (dB)', min: 0, max: 24, step: 0.5, fmt: (v) => v.toFixed(1) },
+];
+const AUTO_CTL: Ctl<AutoParam>[] = [
+  { key: 'cutoff', label: 'Cutoff', title: 'Cutoff (Hz)', min: 40, max: 16000, step: 10, log: true, fmt: fmtHz },
+  { key: 'resonance', label: 'Reso', title: 'Resonanz', min: 0, max: 16, step: 0.1, fmt: (v) => v.toFixed(1) },
+  { key: 'modIndex', label: 'Mod-Idx', title: 'Modulationsindex', min: 0, max: 32, step: 0.5, fmt: (v) => v.toFixed(1) },
+  { key: 'gain', label: 'Gain', title: 'Gain', min: 0, max: 1.5, step: 0.01, fmt: (v) => v.toFixed(2) },
+  { key: 'lfoRate', label: 'LFO Hz', title: 'LFO-Rate (Hz)', min: 0, max: 20, step: 0.1, fmt: (v) => v.toFixed(1) },
+  { key: 'lfoDepth', label: 'LFO Tiefe', title: 'LFO-Tiefe', min: 0, max: 1, step: 0.01, fmt: (v) => v.toFixed(2) },
+];
+const ENGINE_CTL: Ctl<EngineKey>[] = [
+  { key: 'oversampling', label: 'Oversmp', title: 'Oversampling (x)', min: 1, max: 8, step: 0.1, fmt: (v) => `${v.toFixed(1)}x` },
+  { key: 'lookahead', label: 'Lookahd', title: 'Lookahead (ms)', min: 0, max: 10, step: 0.1, fmt: (v) => v.toFixed(1) },
+  { key: 'transient', label: 'Transnt', title: 'Transienten-Erkennung', min: 0, max: 1, step: 0.1, fmt: (v) => v.toFixed(1) },
+  { key: 'stereoLink', label: 'St-Link', title: 'Stereo-Link', min: 0, max: 1, step: 0.1, fmt: (v) => v.toFixed(1) },
+];
 
 export const DSPTerminal = React.memo(function DSPTerminal() {
   const { state, lockStatus, updateState } = usePluginState('dsp', 'PRO');
+  const locked = lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId;
   // Beständige Plugins: Einstiegsstand = letzter Stand in der Session.
   const [saved] = useState(() => readPluginSettings<DspSettings>('dsp'));
   const [power, setPower] = useState(typeof saved?.power === 'boolean' ? saved.power : true);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   // Worklet-Automation (Task 1/3): sichtbare Regler + aktive Stimmen.
   const [autoParams, setAutoParams] = useState(() => mergeKnown(DEFAULT_AUTO_PARAMS, saved?.autoParams));
   const [activeVoices, setActiveVoices] = useState(0);
   const [dynamics, setDynamics] = useState(() => mergeKnown(DEFAULT_DYNAMICS, saved?.dynamics));
+  const [engine, setEngine] = useState(() => mergeKnown(DEFAULT_ENGINE, saved?.engine));
   // Echtzeit-Performance-Snapshot (FPS, Jitter, Audio-Health).
   const [perf, setPerf] = useState<PerformanceSnapshot>(() => performanceMonitor.snapshot());
   /**
@@ -40,7 +94,8 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
    */
   const [clock, setClock] = useState(() => masterClock.getDiagnostics());
 
-  const handleParamChange = (name: string, value: number) => {
+  const handleParamChange = (name: EngineKey, value: number) => {
+      setEngine((prev) => ({ ...prev, [name]: value }));
       audioEngine.setWorkletParam(name, value);
   };
 
@@ -87,15 +142,16 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
     didRestoreRef.current = true;
     (Object.keys(autoParams) as (keyof typeof autoParams)[]).forEach((k) => audioEngine.automateItSynthParam(k, autoParams[k], 0.02));
     pushDynamics(dynamics);
+    if (saved.engine) (Object.keys(engine) as EngineKey[]).forEach((k) => audioEngine.setWorkletParam(k, engine[k]));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Öffnen (Einstiegsstand)
   }, []);
 
   // Beständige Plugins: jeden Stand an die Session (der nächste Halter startet damit).
   useEffect(() => {
-    writePluginSettings('dsp', { power, autoParams, dynamics });
-  }, [power, autoParams, dynamics]);
+    writePluginSettings('dsp', { power, autoParams, dynamics, engine });
+  }, [power, autoParams, dynamics, engine]);
 
-  const handleAutomate = (param: 'cutoff' | 'resonance' | 'modIndex' | 'gain' | 'lfoRate' | 'lfoDepth', value: number, rampTime = 0.02) => {
+  const handleAutomate = (param: AutoParam, value: number, rampTime = 0.02) => {
     setAutoParams(prev => ({ ...prev, [param]: value }));
     audioEngine.automateItSynthParam(param, value, rampTime);
   };
@@ -106,320 +162,96 @@ export const DSPTerminal = React.memo(function DSPTerminal() {
     return () => { audioEngine.onItSynthStates = () => {}; };
   }, []);
 
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let frameId: number;
-    let phase = 0;
-
-    const draw = () => {
-      ctx.fillStyle = 'rgba(17, 17, 17, 0.2)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      if (power) {
-        ctx.beginPath();
-        for (let i = 0; i < canvas.width; i++) {
-          const y = canvas.height / 2 +
-                    Math.sin(i * 0.05 + phase) * 20 +
-                    Math.cos(i * 0.1 + phase * 1.5) * 10;
-          if (i === 0) ctx.moveTo(i, y);
-          else ctx.lineTo(i, y);
-        }
-        ctx.strokeStyle = '#8b5cf6'; // violet-500
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // Draw corrected phase line
-        ctx.beginPath();
-        for (let i = 0; i < canvas.width; i++) {
-          const y = canvas.height / 2 + Math.sin(i * 0.05 + phase) * 20;
-          if (i === 0) ctx.moveTo(i, y);
-          else ctx.lineTo(i, y);
-        }
-        ctx.strokeStyle = 'rgba(16, 185, 129, 0.5)'; // emerald-500
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-
-      phase -= 0.1;
-      frameId = requestAnimationFrame(draw);
-    };
-
-    draw();
-    return () => cancelAnimationFrame(frameId);
-  }, [power]);
-
-  const modules = [
-    { name: 'PHASE CORRECTION', active: true, value: 'LINEAR' },
-    { name: 'DYNAMIC FILTER', active: true, value: 'MULTI-BAND' },
-    { name: 'RESONANCE SUPPRESSION', active: false, value: 'OFF' },
-    { name: 'SURGICAL SHAPING', active: true, value: 'ACTIVE' },
-  ];
+  const off = locked || !power;
+  const ins = dynamics.enabled;
+  const knob = <K extends string>(c: Ctl<K>, value: number, onChange: (v: number) => void) => (
+    <AmKnob key={c.key} size="xs" value={value} min={c.min} max={c.max} log={c.log} label={c.label} title={c.title}
+      display={c.fmt(value)} disabled={off} onChange={(v) => onChange(snap(v, c.step))} />
+  );
+  const dynKnob = (c: Ctl<DynKey>) => knob(c, dynamics[c.key], (v) => updateDynamics({ [c.key]: v }));
+  const stage = (label: string, value: string, on: boolean, onClick?: () => void, title?: string) => {
+    const body = (<><span className="am-lbl">{label}</span><b className="am-mono">{value}</b></>);
+    return onClick ? (
+      <button type="button" className={`am-dspbox ${on ? 'am-on' : ''}`} aria-pressed={on} title={title} disabled={locked} onClick={onClick}>{body}</button>
+    ) : (
+      <div className={`am-dspbox ${on ? 'am-on' : ''}`} title={title}>{body}</div>
+    );
+  };
+  const kpi = (label: string, value: React.ReactNode, ok: boolean) => (
+    <div className="am-kpi"><b style={{ color: ok ? 'var(--ok)' : 'var(--warn)' }}>{value}</b><span>{label}</span></div>
+  );
 
   return (
-    <div className={`w-full h-full flex flex-col bg-[#111] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} overflow-hidden text-neutral-300 font-sans shadow-2xl relative ${lockStatus.active && lockStatus.lockedBy !== webRTCManager.userId ? 'opacity-50 grayscale' : ''}`}>
-      <div className="px-4 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="dsp" placeholder="MOA: z. B. 'Filter-Sweep automatisieren'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-      <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-violet-900/20 to-[#111] border-b border-violet-900/30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center border border-violet-500/50 shadow-[0_0_15px_rgba(139,92,246,0.3)]">
-            <Activity className="w-5 h-5 text-violet-400" />
-          </div>
-          <div>
-            <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase flex items-center gap-2">
-              DSP Engine <span className="text-[10px] font-mono text-violet-400 border border-violet-500/30 px-2 py-0.5 rounded-sm">ZERO JITTER</span>
-            </h2>
-          </div>
+    <div className="am-rackrow am-dsp" style={locked ? { opacity: 0.5, filter: 'grayscale(1)' } : undefined}>
+      <MoaAssistant pluginId="dsp" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+
+      <AmCard title="Signalkette · Dynamik" style={{ flex: 1, minWidth: 'min(560px, 100%)' }}
+        right={(
+          <AmToggle on={power} onClick={() => setPower(!power)} disabled={locked} ariaLabel={power ? 'DSP-Bedienung sperren' : 'DSP-Bedienung freigeben'}>
+            {power ? 'DSP AN' : 'DSP AUS'}
+          </AmToggle>
+        )}>
+        <div className="am-dspchain" aria-label="Signalkette">
+          {stage('Input', ins ? 'INSERT' : 'BYPASS', ins, () => updateDynamics({ enabled: !ins }), 'Dynamik-Insert an/aus')}
+          <span className="am-fxarr">→</span>
+          {stage('Gate', `${dynamics.gateThreshold.toFixed(0)} dB`, ins && dynamics.gateEnabled, () => updateDynamics({ gateEnabled: !dynamics.gateEnabled }), 'Gate an/aus')}
+          <span className="am-fxarr">→</span>
+          {stage('Compressor', `${dynamics.ratio.toFixed(1)}:1`, ins, undefined, 'Kompressor läuft, sobald der Insert an ist')}
+          <span className="am-fxarr">→</span>
+          {stage('Dyn-EQ', `${fmtHz(dynamics.dynEqFreq)} Hz`, ins && dynamics.dynEqEnabled, () => updateDynamics({ dynEqEnabled: !dynamics.dynEqEnabled }), 'Dynamic EQ an/aus')}
+          <span className="am-fxarr">→</span>
+          {stage('Output', `${fmtDb(dynamics.makeup)} dB`, ins, undefined, 'Ausgang (Makeup-Gain)')}
         </div>
-
-        {/* DSP-Referenz-Looks (uibspdsp1-5) */}
-        <div className="flex items-center gap-2 overflow-x-auto px-1">
-          {['/uidesign/uibspdsp1.jpg', '/uidesign/uibspdsp2.jpg', '/uidesign/uibspdsp3.WEBP', '/uidesign/uibspdsp4.PNG', '/uidesign/uibspdsp5.WEBP'].map((src) => (
-            <img key={src} src={src} alt="DSP-Referenz" className="h-12 rounded border border-neutral-800 hover:border-violet-500/60 transition-colors object-cover" />
-          ))}
+        <div className={`am-dspknobs ${off ? 'am-boff' : ''}`}>
+          <div className="am-dspgrp"><span className="am-lbl">Gate</span><div className="am-knobs">{GATE_CTL.map(dynKnob)}</div></div>
+          <div className="am-dspgrp"><span className="am-lbl">Compressor</span><div className="am-knobs">{COMP_CTL.map(dynKnob)}</div></div>
+          <div className="am-dspgrp"><span className="am-lbl">Dyn-EQ</span><div className="am-knobs">{EQ_CTL.map(dynKnob)}</div></div>
         </div>
+      </AmCard>
 
-        <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-            <option value="OFF">OFF</option>
-            <option value="AUTO_AI">AI</option>
-            <option value="PRO">ACTIVE</option>
-        </select>
+      <AmCard title="Automation · it-synth" style={{ width: 300 }}
+        right={<span className="am-vb" style={activeVoices > 0 ? { color: 'var(--ok)', borderColor: 'var(--ok)' } : undefined}>VOICES {activeVoices}</span>}>
+        <div className={`am-knobs ${off ? 'am-boff' : ''}`}>
+          {AUTO_CTL.map((c) => knob(c, autoParams[c.key], (v) => handleAutomate(c.key, v)))}
+        </div>
+        <span className="am-lbl">Engine</span>
+        <div className={`am-knobs ${off ? 'am-boff' : ''}`}>
+          {ENGINE_CTL.map((c) => knob(c, engine[c.key], (v) => handleParamChange(c.key, v)))}
+        </div>
+      </AmCard>
 
-        <button type="button"
-          onClick={() => setPower(!power)}
-          className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${power ? 'bg-violet-500 border-violet-600 text-white shadow-[0_0_20px_rgba(139,92,246,0.6)]' : 'bg-[#222] border-[#333] text-neutral-500 hover:bg-[#333]'}`}
+      <AmCard title="Monitor" style={{ width: 210 }}>
+        {/* VISUAL-P1-010: Live-Werte (FPS/Jitter/Latenz) aendern sich staendig -
+            visuelle Baselines blenden den Bereich ueber [data-live-value] aus. */}
+        <div
+          className="am-dspmon"
+          data-live-value="perf"
+          data-clock-values={clock.syncCount}
+          // Schätzwert der Serveruhr (Serverzeit-Epoche minus lokale performance.now())
+          // - damit laesst sich vergleichen, ob zwei Clients dieselbe Serverzeit sehen.
+          data-clock-offset-ms={Math.round(clock.syncedOffsetMs)}
         >
-          <Power className="w-5 h-5" />
-        </button>
-      </div>
+          {kpi('UI FPS', perf.fps, perf.fps >= 30)}
+          {kpi('Jitter ms', perf.jitterMs, perf.jitterMs < 2)}
+          {kpi('Latenz ms', perf.audioBaseLatencyMs, perf.audioBaseLatencyMs < 15)}
+          {kpi(`Audio ${perf.audioSampleRate ? `${(perf.audioSampleRate / 1000).toFixed(1)}k` : '--'}`, perf.audioState.toUpperCase(), perf.audioState === 'running')}
+          {kpi('Clock RTT', clock.serverRttMs > 0 ? `${clock.serverRttMs.toFixed(1)}` : '–', clock.serverRttMs > 0 && clock.serverRttMs < 50)}
+          {kpi('Clock Drift', clock.syncCount > 0 ? `${clock.offsetDriftMs.toFixed(1)}` : '–', Math.abs(clock.offsetDriftMs) < 5)}
+          {kpi('Messungen', clock.syncCount, clock.syncCount > 0)}
+          {kpi('Frames verl.', perf.droppedFrames, perf.droppedFrames === 0)}
+        </div>
+      </AmCard>
 
       {/* FEAT-P3-002: optionale DSP-Bausteine – je Baustein sichtbar, welchem MONK er gehört. */}
-      <div className="px-4 py-2 border-b border-neutral-800 bg-black/20 grid grid-cols-1 md:grid-cols-2 gap-2">
-        <OptionalDspPanel block="mod-matrix" />
-        <OptionalDspPanel block="hq-reverb" />
-        <OptionalDspPanel block="phase-distortion" />
-        <OptionalDspPanel block="electric-piano" />
-      </div>
-
-      <div className={`flex-1 p-6 grid grid-cols-12 gap-6 transition-opacity duration-1000 ${power ? 'opacity-100' : 'opacity-40 grayscale pointer-events-none'}`}>
-        {/* Left Col: DSP Modules */}
-        <div className="col-span-4 flex flex-col gap-4">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4 shadow-inner flex flex-col gap-3">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-2">
-              <Cpu className="w-4 h-4" /> CORE PROCESSING
-            </h3>
-            {modules.map(mod => (
-              <div key={mod.name} className={`p-3 rounded-lg border ${mod.active ? 'bg-violet-900/10 border-violet-500/30' : 'bg-[#111] border-neutral-800'} flex items-center justify-between`}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${mod.active ? 'bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.8)]' : 'bg-neutral-700'}`}></div>
-                  <span className={`text-[10px] font-bold tracking-wider ${mod.active ? 'text-neutral-200' : 'text-neutral-500'}`}>{mod.name}</span>
-                </div>
-                <span className={`text-[9px] font-mono ${mod.active ? 'text-violet-400' : 'text-neutral-600'}`}>{mod.value}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4 shadow-inner">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-4">
-              <Zap className="w-4 h-4" /> LATENCY & JITTER
-            </h3>
-            {/* VISUAL-P1-010: Live-Werte (FPS/Jitter/Latenz) aendern sich staendig -
-                visuelle Baselines blenden den Bereich ueber [data-live-value] aus. */}
-            <div
-              className="space-y-3"
-              data-live-value="perf"
-              data-clock-values={clock.syncCount}
-              // Schätzwert der Serveruhr (Serverzeit-Epoche minus lokale performance.now())
-              // - damit laesst sich vergleichen, ob zwei Clients dieselbe Serverzeit sehen.
-              data-clock-offset-ms={Math.round(clock.syncedOffsetMs)}
-            >
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
-                  <span>UI FPS</span>
-                  <span className="text-emerald-400">{perf.fps} fps</span>
-                </div>
-                <div className="w-full h-1 bg-neutral-800 rounded overflow-hidden">
-                  <div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, (perf.fps / 60) * 100)}%` }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
-                  <span>FRAME JITTER</span>
-                  <span className={perf.jitterMs < 2 ? 'text-emerald-400' : 'text-amber-400'}>{perf.jitterMs}ms</span>
-                </div>
-                <div className="w-full h-1 bg-neutral-800 rounded overflow-hidden">
-                  <div className={`h-full ${perf.jitterMs < 2 ? 'bg-emerald-500' : 'bg-amber-500'} transition-all`} style={{ width: `${Math.min(100, perf.jitterMs * 10)}%` }}></div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-[10px] font-mono text-neutral-400 mb-1">
-                  <span>AUDIO LATENCY</span>
-                  <span className="text-emerald-400">{perf.audioBaseLatencyMs}ms</span>
-                </div>
-                <div className="w-full h-1 bg-neutral-800 rounded overflow-hidden">
-                  <div className="h-full bg-emerald-500 transition-all" style={{ width: `${Math.min(100, perf.audioBaseLatencyMs * 4)}%` }}></div>
-                </div>
-              </div>
-              <div className="flex justify-between text-[10px] font-mono">
-                <span className="text-neutral-500">AUDIO STATE</span>
-                <span className={perf.audioState === 'running' ? 'text-emerald-400' : 'text-amber-400'}>
-                  {perf.audioState.toUpperCase()} · {perf.audioSampleRate ? `${(perf.audioSampleRate / 1000).toFixed(1)}kHz` : '--'}
-                </span>
-              </div>
-              <div className="flex justify-between text-[10px] font-mono">
-                <span className="text-neutral-500">CLOCK RTT</span>
-                <span className={clock.serverRttMs > 0 && clock.serverRttMs < 50 ? 'text-emerald-400' : 'text-neutral-400'}>
-                  {clock.serverRttMs > 0 ? `${clock.serverRttMs.toFixed(1)}ms` : 'keine Messung'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-mono">
-                <span className="text-neutral-500">CLOCK DRIFT</span>
-                <span className={Math.abs(clock.offsetDriftMs) < 5 ? 'text-emerald-400' : 'text-amber-400'}>
-                  {clock.syncCount > 0 ? `${clock.offsetDriftMs.toFixed(1)}ms` : '-'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-mono">
-                <span className="text-neutral-500">CLOCK MESSUNGEN</span>
-                <span className={clock.syncCount > 0 ? 'text-emerald-400' : 'text-amber-400'}>{clock.syncCount}</span>
-              </div>
-              <div className="flex items-center justify-between text-[10px] font-mono">
-                <span className="text-neutral-500">DROPPED FRAMES</span>
-                <span className={perf.droppedFrames === 0 ? 'text-emerald-400' : 'text-amber-400'}>{perf.droppedFrames}</span>
-              </div>
-            </div>
-          </div>
+      <details className="am-dspx">
+        <summary className="am-lbl">Zusatz-Bausteine · Mod-Matrix · HQ-Reverb · Phase-Distortion · E-Piano</summary>
+        <div className="am-dspxgrid">
+          <OptionalDspPanel block="mod-matrix" />
+          <OptionalDspPanel block="hq-reverb" />
+          <OptionalDspPanel block="phase-distortion" />
+          <OptionalDspPanel block="electric-piano" />
         </div>
-
-        {/* Right Col: Visualization & Settings */}
-        <div className="col-span-8 flex flex-col gap-6">
-          <div className="h-48 bg-black rounded-xl border-4 border-neutral-800 shadow-inner p-2 relative overflow-hidden">
-             <canvas ref={canvasRef} width={800} height={200} className="w-full h-full opacity-80" />
-             <div className="absolute top-2 left-3 bg-black/50 px-2 py-1 rounded text-[10px] font-mono text-teal-500 border border-teal-500/30">
-               REALTIME PHASE MONITOR
-             </div>
-          </div>
-
-          <div className="flex-1 bg-[#1a1a1a] rounded-xl border border-neutral-800 p-6 shadow-inner grid grid-cols-4 gap-6">
-            {[
-                { name: 'OVERSAMPLING', id: 'oversampling', min: 1, max: 8, val: 8 },
-                { name: 'LOOKAHEAD', id: 'lookahead', min: 0, max: 10, val: 1.5 },
-                { name: 'TRANSIENT DETECT', id: 'transient', min: 0, max: 1, val: 0.8 },
-                { name: 'STEREO LINK', id: 'stereoLink', min: 0, max: 1, val: 1 }
-            ].map((param, _i) => (
-              <div key={param.name} className="flex flex-col items-center justify-center gap-4">
-                <input
-                    type="range"
-                    min={param.min} max={param.max} step="0.1"
-                    value={param.val}
-                    onChange={(e) => handleParamChange(param.id, Number.parseFloat(e.target.value))}
-                    className="w-16 h-16 rounded-full border-4 border-[#111] bg-neutral-800 accent-violet-500 appearance-none cursor-pointer"
-                />
-                <div className="text-center">
-                  <span className="text-[9px] font-mono font-bold text-neutral-500">{param.name}</span>
-                  <div className="text-xs font-black text-violet-400 mt-1">{param.val}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* instrumentMONK Worklet-Automation (Task 1/3) */}
-          <div className="bg-[#1a1a1a] rounded-xl border border-violet-500/30 p-4 shadow-inner">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4" /> IT-SYNTH AUTOMATION
-              </h3>
-              <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${activeVoices > 0 ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}>
-                VOICES {activeVoices}
-              </span>
-            </div>
-            <div className="grid grid-cols-6 gap-4">
-              {([
-                { label: 'CUTOFF', param: 'cutoff' as const, min: 40, max: 16000, step: 10, fmt: (v: number) => `${Math.round(v)} Hz` },
-                { label: 'RESO', param: 'resonance' as const, min: 0, max: 16, step: 0.1, fmt: (v: number) => v.toFixed(1) },
-                { label: 'MOD INDEX', param: 'modIndex' as const, min: 0, max: 32, step: 0.5, fmt: (v: number) => v.toFixed(1) },
-                { label: 'GAIN', param: 'gain' as const, min: 0, max: 1.5, step: 0.01, fmt: (v: number) => v.toFixed(2) },
-                { label: 'LFO RATE', param: 'lfoRate' as const, min: 0, max: 20, step: 0.1, fmt: (v: number) => `${v.toFixed(1)} Hz` },
-                { label: 'LFO DEPTH', param: 'lfoDepth' as const, min: 0, max: 1, step: 0.01, fmt: (v: number) => v.toFixed(2) },
-              ]).map((c) => (
-                <div key={c.param} className="flex flex-col items-center gap-1">
-                  <input
-                    type="range"
-                    min={c.min} max={c.max} step={c.step}
-                    value={autoParams[c.param]}
-                    onChange={(e) => handleAutomate(c.param, Number.parseFloat(e.target.value))}
-                    className="w-full h-2 accent-violet-500 cursor-pointer"
-                  />
-                  <span className="text-[9px] font-mono font-bold text-neutral-500">{c.label}</span>
-                  <span className="text-[10px] font-black text-violet-400">{c.fmt(autoParams[c.param])}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* P1-Dynamik: Kompressor + Gate + Dynamic EQ (dynamicsProcessor) */}
-          <div className="bg-[#1a1a1a] rounded-xl border border-violet-500/30 p-4 shadow-inner">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2">
-                <Gauge className="w-4 h-4" /> DYNAMICS · COMP / GATE / DYN-EQ
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => updateDynamics({ enabled: !dynamics.enabled })}
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${dynamics.enabled ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}
-                >
-                  INSERT {dynamics.enabled ? 'ON' : 'BYPASS'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateDynamics({ gateEnabled: !dynamics.gateEnabled })}
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${dynamics.gateEnabled ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}
-                >
-                  GATE
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateDynamics({ dynEqEnabled: !dynamics.dynEqEnabled })}
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded border cursor-pointer ${dynamics.dynEqEnabled ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30' : 'text-neutral-600 border-neutral-800 bg-black'}`}
-                >
-                  DYN-EQ
-                </button>
-              </div>
-            </div>
-            <div className="grid grid-cols-6 gap-4">
-              {([
-                { label: 'THRESHOLD', key: 'threshold' as const, min: -60, max: 0, step: 0.5, fmt: (v: number) => `${v.toFixed(1)} dB` },
-                { label: 'RATIO', key: 'ratio' as const, min: 1, max: 20, step: 0.1, fmt: (v: number) => `${v.toFixed(1)}:1` },
-                { label: 'ATTACK', key: 'attack' as const, min: 0.001, max: 0.1, step: 0.001, fmt: (v: number) => `${(v * 1000).toFixed(0)} ms` },
-                { label: 'RELEASE', key: 'release' as const, min: 0.01, max: 1, step: 0.01, fmt: (v: number) => `${(v * 1000).toFixed(0)} ms` },
-                { label: 'MAKEUP', key: 'makeup' as const, min: -12, max: 24, step: 0.5, fmt: (v: number) => `${v.toFixed(1)} dB` },
-                { label: 'GATE THR', key: 'gateThreshold' as const, min: -100, max: 0, step: 1, fmt: (v: number) => `${v.toFixed(0)} dB` },
-                { label: 'GATE RANGE', key: 'gateRange' as const, min: 0, max: 90, step: 1, fmt: (v: number) => `${v.toFixed(0)} dB` },
-                { label: 'EQ FREQ', key: 'dynEqFreq' as const, min: 40, max: 16000, step: 10, fmt: (v: number) => `${Math.round(v)} Hz` },
-                { label: 'EQ Q', key: 'dynEqQ' as const, min: 0.3, max: 18, step: 0.1, fmt: (v: number) => v.toFixed(1) },
-                { label: 'EQ THR', key: 'dynEqThreshold' as const, min: -80, max: 0, step: 1, fmt: (v: number) => `${v.toFixed(0)} dB` },
-                { label: 'EQ RANGE', key: 'dynEqRange' as const, min: 0, max: 24, step: 0.5, fmt: (v: number) => `${v.toFixed(1)} dB` },
-              ]).map((c) => (
-                <div key={c.key} className="flex flex-col items-center gap-1">
-                  <input
-                    type="range"
-                    min={c.min} max={c.max} step={c.step}
-                    value={dynamics[c.key]}
-                    onChange={(e) => updateDynamics({ [c.key]: Number.parseFloat(e.target.value) })}
-                    className="w-full h-2 accent-violet-500 cursor-pointer"
-                  />
-                  <span className="text-[9px] font-mono font-bold text-neutral-500">{c.label}</span>
-                  <span className="text-[10px] font-black text-violet-400">{c.fmt(dynamics[c.key])}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+      </details>
     </div>
   );
 });
