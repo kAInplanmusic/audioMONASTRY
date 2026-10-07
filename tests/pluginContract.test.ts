@@ -6,7 +6,11 @@ import {
   syncCapableIds,
   signalTopology,
   pathLatencyFrames,
+  mergeLatencyFrames,
   compensationFrames,
+  CONTRACT_SAMPLE_RATE,
+  MASTERING_LOOKAHEAD_SEC,
+  masteringLookaheadFrames,
 } from '../src/plugins/pluginContract';
 import { SIGNAL_CHAIN, SIGNAL_CHAIN_ORDER } from '../src/plugins/signalChain';
 import { pluginAudioChannels } from '../src/core/audio/pluginChannelMap';
@@ -107,15 +111,29 @@ describe('pluginContract – Signalweg deckt sich mit signalChain', () => {
 
 describe('pluginContract – fachliche Regeln (Review 2026-10-07)', () => {
   it('FX-Bus ist NUR effect – spatial liegt im Kanalzug (Doku: pan → Distanz → Höhe)', () => {
-    // V2_UI_VERKABELUNG.md, Kanalzug: "→ fader → GATE → mute/solo →
-    // crossfader → pan → Distanz → Höhe → Mixer-Summe". spatial sitzt damit IM
-    // Kanalzug, nicht im FX-Bus. Nur `effect` ist der FX-Bus ("FX-Bus → 5
-    // parallele Effekte → Returns → zurück in die Summe"). Ein erster Entwurf
-    // dieses Vertrags hatte spatial faelschlich als fxReturn - das haette den
-    // Klang geaendert (Spatialisierung als Send statt im Kanal).
-    const { inserts, fxReturns } = signalTopology();
-    expect(fxReturns).toEqual(['effect']);
-    expect(inserts.sort()).toEqual(['dsp', 'eq', 'master', 'spatial']);
+    // V2_UI_VERKABELUNG.md, Kanalzug: "→ pan → Distanz → Höhe → Mixer-Summe".
+    // spatial sitzt damit IM Kanalzug (vor der Summe). Nur `effect` ist der
+    // FX-Bus ("FX-Bus → 5 parallele Effekte → Returns → zurück in die Summe").
+    const t = signalTopology();
+    expect(t.fxReturns).toEqual(['effect']);
+    expect(t.channelInserts).toEqual(['spatial']);
+    // Die Master-Kette hat eine FESTE Reihenfolge. Ein filter() ueber den
+    // Vertrag lieferte frueher 'spatial -> eq -> dsp -> master' - falsch.
+    expect(t.masterInserts).toEqual(['eq', 'dsp', 'master']);
+  });
+
+  it('jeder Insert nennt seinen Geltungsbereich', () => {
+    // Ohne `insertScope` ist nicht entscheidbar, WO ein Insert greift.
+    for (const c of PLUGIN_CONTRACTS) {
+      if (c.role === 'insert') {
+        expect(c.insertScope, `${c.id} braucht insertScope`).not.toBeNull();
+      } else {
+        expect(c.insertScope, `${c.id} darf keinen insertScope haben`).toBeNull();
+      }
+    }
+    const scope: Record<string, string> = {};
+    for (const c of PLUGIN_CONTRACTS) if (c.insertScope) scope[c.id] = c.insertScope;
+    expect(scope).toEqual({ spatial: 'channel', eq: 'master', dsp: 'master', master: 'master' });
   });
 
   it('mixerMONK ist nicht bypassbar und nicht sync-faehig', () => {
@@ -155,28 +173,46 @@ describe('pluginContract – PDC-Regeln', () => {
     expect(CONTRACT_BY_ID['master'].intrinsicLatencyFrames).toBe(240); // 5 ms @ 48 kHz
   });
 
-  it('Pfadlatenz ist das Maximum der beteiligten Knoten', () => {
+  it('die Latenzwerte haengen an der Engine-Samplerate 48 kHz', () => {
+    // 240 Frames gelten NUR bei 48 kHz. Aendert jemand die Rate, muss der Wert
+    // mitwandern - sonst kompensiert die PDC die falsche Zahl.
+    expect(CONTRACT_SAMPLE_RATE).toBe(48000);
+    expect(MASTERING_LOOKAHEAD_SEC).toBe(0.005);
+    expect(masteringLookaheadFrames(48000)).toBe(240);
+    expect(masteringLookaheadFrames(44100)).toBe(221);
+    expect(CONTRACT_BY_ID['master'].intrinsicLatencyFrames).toBe(masteringLookaheadFrames());
+  });
+
+  it('Pfadlatenz SUMMIERT (serielle Kette), nicht Maximum', () => {
+    // Ein Pfad ist eine Kette: zwei Knoten mit je 100 Frames verzoegern um 200.
+    // Frueher stand hier Math.max - das fiel nicht auf, weil nur master Latenz
+    // hat. Dieser Test prueft die Regel, nicht den Zufall der Daten.
     expect(pathLatencyFrames(['drop', 'mixer'])).toBe(0);
     expect(pathLatencyFrames(['drop', 'eq', 'master'])).toBe(240);
     expect(pathLatencyFrames([])).toBe(0);
     expect(pathLatencyFrames(['unbekannt'])).toBe(0);
+    // Kunslticher Doppel-Fall: zweimal master hintereinander = 480.
+    expect(pathLatencyFrames(['master', 'master'])).toBe(480);
+  });
+
+  it('am MERGE gilt das Maximum der Pfade', () => {
+    // Erst hier ist max richtig: parallele Pfade unterschiedlicher Laenge.
+    expect(mergeLatencyFrames([0, 240, 0])).toBe(240);
+    expect(mergeLatencyFrames([])).toBe(0);
+    expect(mergeLatencyFrames([16, 32])).toBe(32);
   });
 
   it('ein Bypass-ter Knoten zaehlt MIT (Crossfade haelt die Latenz)', () => {
     // Review 6.3: Bypass ist ein Dry/Wet-Crossfade, kein Disconnect. Ein
-    // disconnecteter Master wuerde die 240 Frames verlieren und alles verschieben.
-    const mitMaster = pathLatencyFrames(['drop', 'master']);
-    const ohneMaster = pathLatencyFrames(['drop']);
-    expect(mitMaster).toBe(240);
-    expect(ohneMaster).toBe(0);
+    // disconnecteter Master wuerde die 240 Frames verlieren.
+    expect(pathLatencyFrames(['drop', 'master'])).toBe(240);
+    expect(pathLatencyFrames(['drop'])).toBe(0);
   });
 
   it('Kompensation ist nie negativ und gleicht auf die Referenz an', () => {
-    const reference = pathLatencyFrames(['drop', 'eq', 'master']); // 240
-    expect(compensationFrames(['drop'], reference)).toBe(240);
-    expect(compensationFrames(['drop', 'master'], reference)).toBe(0);
-    expect(compensationFrames(['drop', 'eq', 'master'], reference)).toBe(0);
-    // Ein "schnellerer" Pfad als die Referenz ergibt keine negative Verzoegerung.
-    expect(compensationFrames(['drop'], 0)).toBe(0);
+    const reference = mergeLatencyFrames([pathLatencyFrames(['drop', 'eq', 'master']), 0]); // 240
+    expect(compensationFrames(0, reference)).toBe(240);
+    expect(compensationFrames(240, reference)).toBe(0);
+    expect(compensationFrames(0, 0)).toBe(0);
   });
 });
