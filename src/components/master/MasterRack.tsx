@@ -91,8 +91,8 @@ export const MasterRack = React.memo(function MasterRack() {
           <AmKnob size="s" gold value={me.tilt_gain} min={-6} max={6} def={0} unit="db" label="Tilt" title="Klang kippen: dunkel ↔ hell" onChange={(v) => setParam('tilt_gain', v)} />
           <AmKnob size="s" gold value={me.target_loudness} min={-20} max={-6} def={-10} unit="db" label="Ziel LUFS" title="Ziel-Lautheit" onChange={(v) => setParam('target_loudness', v)} />
           <AmKnob size="s" value={me.strength} min={0} max={100} def={60} unit="int" label="Stärke" title="Stärke der Kompression" onChange={(v) => setParam('strength', v)} />
-          <AmKnob size="s" value={me.attack} min={0.5} max={30} def={5} unit="int" label="Attack ms" title="Attack" onChange={(v) => setParam('attack', v)} />
-          <AmKnob size="s" value={me.release} min={20} max={300} def={80} unit="int" label="Release ms" title="Release" onChange={(v) => setParam('release', v)} />
+          <AmKnob size="s" value={me.attack} min={0.5} max={30} def={5} unit="int" label="Attack" title="Attack in ms" onChange={(v) => setParam('attack', v)} />
+          <AmKnob size="s" value={me.release} min={20} max={300} def={80} unit="int" label="Release" title="Release in ms" onChange={(v) => setParam('release', v)} />
           <AmKnob size="s" value={me.limiter_threshold} min={-6} max={0} def={-1} unit="db" label="Ceiling" title="Limiter-Obergrenze (True Peak)" onChange={(v) => setParam('limiter_threshold', v)} />
         </div>
       </AmCard>

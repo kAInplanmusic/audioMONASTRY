@@ -189,7 +189,7 @@ export const FXEngineTerminal = React.memo(function FXEngineTerminal() {
       <AmCard title="Signalkette" style={{ flex: 1, minWidth: 'min(420px, 100%)' }}
         right={<span className="am-vb" style={{ color: power ? 'var(--ok)' : 'var(--hot)' }}>{power ? 'ACTIVE' : 'BYPASS'}</span>}>
         <div className="am-fxchain">
-          <DropTarget label="Drop Sample to FX" onDrop={handleSampleDrop} className="am-fxbox am-fxsrc">
+          <DropTarget onDrop={handleSampleDrop} className="am-fxbox am-fxsrc">
             <span className="am-lbl">Quelle</span>
             <b title={sourceSample?.name}>{sourceSample ? sourceSample.name : 'MASTER BUS'}</b>
             <small>Sample hierher ziehen</small>
