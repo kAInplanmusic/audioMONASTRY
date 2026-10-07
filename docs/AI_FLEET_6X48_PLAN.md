@@ -94,16 +94,12 @@ ohne Folgen streichen (−2 GB).
   Pod bekommt nicht garantiert dieselbe GPU zurück; sicherer ist Neu-Deploy aus
   Template + Volume (zu verifizieren).
 
-## 5. Entscheidungen, die bei dir liegen
+## 5. Entscheidungen
 
-1. **Pods statt Serverless** für die Flotte (Serverless wäre bei 4 Instanzen mit 4,49 €/h knapp über der Grenze).
-2. **Speicherbudget** 5 → ~9 €/Monat anheben oder Gewichte verkleinern.
-3. **Instanzzahl:** 4 (empfohlen) oder bis 6 (z. B. eigene Stem-Instanz).
-4. **Migration 8 → 4 Rollen** freigeben (die drei Visual-Rollen entfallen). Sie
-   berührt ~30 Dateien (Endpoint-Registry, `runpod-deploy.py`, Warm-/Smoke-Skripte,
-   aiGate inkl. Modus „mit Visuals", `runpodVision.ts`, Tests, `RP_ENDPOINT_ID_*`).
-   Bis dahin laufen die 8 Rollen unverändert; im Code sind nur Zielbild, Gate und
-   der Resident-Modus ergänzt.
+1. ~~Pods oder Serverless~~ **Pods** (Betreiber 2026-10-07).
+2. ~~Speicherbudget~~ gelöst durch den Speicher-Vorschlag in §6.1 (≈ 1,8 €/Monat).
+3. **Variante wählen:** 8 → 4 oder 8 → 5 (§6.2).
+4. Freigabe der Migration (§6.3).
 
 Neue Modelle brauchen vor dem Einsatz Manifest-Einträge mit gepinnter Revision
 und Lizenzprüfung (`status: 'neu'` in `AI_RESIDENT_FLEET`).
@@ -113,3 +109,80 @@ und Lizenzprüfung (`status: 'neu'` in `AI_RESIDENT_FLEET`).
 - RunPod-Preise: https://www.runpod.io/pricing
 - https://huggingface.co/Qwen/Qwen3.6-35B-A3B · https://huggingface.co/OpenMOSS-Team/MOSS-Audio-8B-Thinking
 - https://huggingface.co/ACE-Step/Ace-Step1.5 · https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+
+## 6. Vorschlag (Pods, Speicher, Migration)
+
+### 6.1 Wo die Gewichte liegen und wie sie nach und nach geladen werden
+
+Geprüfte Preise (2026-10-07). RunPod: Container-Disk 0,10 $/GB/Monat **nur
+solange der Pod läuft** (beim Stoppen gelöscht), Volume-Disk 0,10 → 0,20 $
+gestoppt, Network Volume 0,07 $; in den Docs steht **kein Snapshot-Feature**.
+Heißt: Gewichte brauchen einen billigen Dauer-Speicher außerhalb des Pods, der
+Pod holt sie beim Start auf die Container-Disk (36 GB ≈ 0,005 $/h Laufzeit).
+
+| Ort | Kosten für ~131 GB | Egress | Bewertung |
+|---|---|---|---|
+| **Cloudflare R2 (Empfehlung)** | 0,015 $/GB = **~2 $/Monat (≈ 1,8 €)** | **gratis** | S3-kompatibel, ein R2-Sync-Worker existiert schon (media-Knoten). Stabil, unabhängig von HF |
+| Backblaze B2 | 0,007 $/GB = ~0,9 $/Monat | 3× Speicher gratis (≈ 3 volle Starts/Monat), danach 0,01 $/GB = ~1,3 $ je Start | billiger bei wenigen Starts; B2-Bucket `audioMONASTRY` + Key liegen schon in der `.env`. RunPod steht nicht auf der Partnerliste für gratis Egress. Ab ≥ 4 Starts/Monat teurer als R2 |
+| Hugging Face direkt | 0 € | gratis | Gut als **Erstbefüllung** der Spiegel (gepinnte Revision). Als Laufzeitquelle nicht: Gating (pyannote, Stable Audio), Rate-Limits, und ein HF-Ausfall würde den AI-Start verhindern |
+| RunPod Network Volume | 131 GB × 0,07 = 9,2 $/Monat (≈ 8,4 €) | – | Schnellster Start (nur mounten), aber über deinen 5 €/Monat und an ein Rechenzentrum gebunden, das dann auch GPUs haben muss |
+| Image mit eingebackenen Gewichten (GHCR) | 0 € laut bisheriger Doku | – | Der heutige Weg. Pull je Host, danach Host-Cache. Unklar: GHCR-Limits bei 30–36 GB je Image, nicht geprüft |
+
+**Vorschlag:** R2 als Dauerspeicher (≈ 1,8 €/Monat, unter 5 €) → Erstbefüllung
+aus HF mit gepinnter Revision und SHA-256-Liste → jeder Pod zieht seine
+Gewichte beim Start auf die Container-Disk (parallele Range-Requests) und
+prüft die Hashes.
+
+**„Nach und nach":** Beim App-Start (AI an) starten alle Pods **parallel**; jede
+Instanz meldet sich einzeln `ready`, sobald ihre Modelle geladen sind
+(Reihenfolge nach `loadPriority`). Die App schaltet Funktionen frei, sobald ihre
+Instanz bereit ist, zuerst `brain`. Danach gilt der Resident-Modus: nichts wird
+verdrängt, nichts nachgeladen. Fällt eine Instanz aus oder bekommt keine GPU, meldet
+die Funktion ehrlich „nicht verfügbar", kein Fallback. Grobe Startzeit
+2–4 Minuten (Schätzung, ungemessen). GPU-Klasse: A40 und A6000 zugelassen; ein
+Preis-Guard prüft den **tatsächlichen** Preis beim Anlegen (4 × L40S wären
+4,0 €/h und damit zu viel).
+
+### 6.2 Zwei Varianten
+
+| | **8 → 4** | **8 → 5** |
+|---|---|---|
+| Instanzen | brain (+Orchestrator), ears, voice (TTS + Stems + SFX), music | brain (+Orchestrator), ears, voice (nur TTS), **stems** (HTDemucs + Stable Audio), music |
+| Kosten (A6000 / A40) | **1,95 / 1,80 €/h** | **2,44 / 2,25 €/h** |
+| Puffer zu 4 €/h | 2,05 €/h | 1,56 €/h |
+| Gewichte / Speicher | 131 GB, ≈ 1,8 €/Monat (R2) | gleich |
+| Vorteil | billigster Betrieb, wenig Teile | Lange Song-Trennungen und SFX blockieren die Sprachausgabe nicht; ein Absturz in Stems reißt TTS nicht mit; Platz für BS-RoFormer neben HTDemucs zum A/B-Test |
+| Nachteil | Stems/SFX und TTS teilen sich eine Karte (maxConcurrentInference 1) | +0,49 €/h (+25 %), eine Instanz mehr zu betreiben |
+| Monat bei 40 h | 78 € | 98 € |
+
+**Empfehlung: 8 → 5**, wenn die Sprachausgabe im Live-Betrieb verlässlich
+reagieren soll; sonst 8 → 4 und die Stem-Instanz später abspalten (die
+Belegung ist so geschnitten, dass das ohne Modellwechsel geht).
+
+### 6.3 Migrationsplan (gilt für beide Varianten, Unterschied nur Schritt 5)
+
+1. **Pod-Anbieter statt Serverless-Queue.** `runpodProvider.ts` spricht heute die
+   Serverless-API (`/v2/<id>/run`). Neu: Pods per RunPod-API anlegen/beenden,
+   Anfragen an die HTTP-Runtime der Instanz (`app.py`, existiert) über die
+   Pod-URL. Das ist der größte Posten.
+2. **Spiegel:** R2-Bucket befüllen (HF → R2, gepinnte Revisionen, Hash-Liste),
+   Download-/Verify-Skript im Pod-Start.
+3. **Manifest:** neue Modelle (Qwen3.6-35B-A3B, MOSS-Audio-8B) mit Revision
+   eintragen; Rollen auf 4 bzw. 5 umstellen, `residentOnly: true`.
+4. **Flottenstart:** `fleetWake.ts` startet beim AI-Start alle Pods parallel,
+   führt `ready` je Instanz, beendet sie bei AI aus (+ Leerlauf-Frist);
+   `aiGate.ts` verliert den Modus „mit Visuals".
+5. **Rollen:** 8 → 4 (`brain`, `ears`, `voice`, `music`) bzw. 8 → 5 (zusätzlich
+   `stems`). `imageHq`, `videoReal`, `videoAbstract`, `orchestrator` entfallen
+   aus `GPU_ROLE_IDS`.
+6. **Aufräumen:** ComfyUI-Adapter/-Workflows, `runpodVision.ts`/`runpodVideo.ts`,
+   `runpod-comfyui-probe`, `write-comfyui-contracts`, Visual-Deploy-Defaults,
+   MoA-Orchestrator-Pfad; Tests und Drift-Guards (`manifestRoles`, `endpointRegistry`,
+   `fleetWake`, `aiGate`, `aiInfrastructure`, `test_runpod_*`) nachziehen.
+7. **Messen vor Freigabe:** echte 48-GB-Karte: VRAM brain (KV-Cache), Startzeit,
+   Kosten über eine Stunde; erst danach Zahlen in die Konstitution.
+
+Betroffen sind ~30 Dateien; die 8 Rollen laufen bis zum Umschalten unverändert
+weiter. Sinnvoller erster Schritt: **Pod-Spike mit einer Instanz** (`brain`
+mit Qwen3.6, Pod anlegen, Hash-geprüft laden, VRAM messen, beenden) vor dem
+großen Umbau.
