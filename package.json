@@ -41,6 +41,7 @@
     "audit:deep:static": "tsx scripts/deep-audit/run.ts --mode full --offline",
     "audit:deep:smoke": "tsx scripts/deep-audit/run.ts --mode files --files server.ts src/context/PluginManagerContext.tsx --smoke",
     "audit:deep:help": "tsx scripts/deep-audit/run.ts --help",
+    "audit:rt": "tsx scripts/audit/rt-bench.ts",
     "eval:ai": "tsx scripts/eval-ai.ts",
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run test:python && npm run security && npm run audio:gate && npm run test:rls && npm run check:deadfiles && npm run audit:deep:static",
