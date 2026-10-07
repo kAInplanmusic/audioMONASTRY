@@ -1,5 +1,5 @@
 import React from 'react';
-import { Copy, GripVertical, Lock, LockOpen, RefreshCw } from 'lucide-react';
+import { AM_MODULE, AM_PATH, AmMark, AmSvg, amColor } from './am/amUi';
 import { getPluginThemeClass } from '../utils/pluginTheme';
 import type { PluginMode } from '../core/session/pluginMode';
 import { MONK_DRAG_MIME, MONK_SCRATCH_MIME, readMonkDragItem, type ScratchpadDragItem } from '../core/session/sessionScratchpad';
@@ -15,6 +15,8 @@ interface RackRowProps {
   mode: PluginMode;
   /** Anzeigename des Halters (null = frei). */
   ownerLabel: string | null;
+  /** Farbe des Halters (Nutzer 1–4). */
+  ownerColor?: string;
   ownedByMe: boolean;
   lockedByOther: boolean;
   /** Bedienfläche sichtbar (nur Halter bei ON; mixerMONK: nur Halter). */
@@ -54,9 +56,10 @@ export const RackRow = React.memo(function RackRow({
   name,
   short,
   number,
-  icon: Icon,
+  icon: _icon,
   mode,
   ownerLabel,
+  ownerColor,
   ownedByMe,
   lockedByOther,
   panelOpen,
@@ -75,13 +78,19 @@ export const RackRow = React.memo(function RackRow({
   const active = mode !== 'OFF';
   const nextHint = mode === 'OFF' ? 'Tippen: holen (STBY)' : mode === 'STBY' ? 'Tippen: aktivieren (ON)' : 'Tippen: freigeben (OFF)';
 
+  const color = amColor(id);
+  const sub = AM_MODULE[id];
+  const locked = lockedByOther || (!!cycleLockedReason && mode === 'ON');
+  const pwClass = locked ? 'am-tk' : mode === 'ON' ? `am-on${running ? ' am-run' : ''}` : mode === 'STBY' ? 'am-stby' : '';
+
   return (
     <section
       id={`rack-${id}`}
       data-plugin-mode={mode}
       data-plugin-owner={ownedByMe ? 'me' : ownerLabel ? 'other' : 'none'}
-      className={`rounded-xl border transition-all duration-300 ${getPluginThemeClass(id)} ${active ? 'bg-cyan-950/10' : 'border-neutral-800/80 bg-black/50'}`}
-      style={active ? { borderColor: 'var(--monk-accent)', boxShadow: '0 0 24px -10px var(--monk-glow-accent)' } : undefined}
+      className={`am-box am-st ${showPanel ? 'am-open' : ''} ${getPluginThemeClass(id)}`}
+      style={{ ['--c' as string]: color, ['--u' as string]: ownerColor ?? '#ffffff', ...(active ? { borderColor: `color-mix(in srgb, ${color} 55%, var(--ln2))` } : {}) }}
+      aria-label={name}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes(MONK_SCRATCH_MIME)) {
           e.preventDefault();
@@ -96,7 +105,7 @@ export const RackRow = React.memo(function RackRow({
         }
       }}
     >
-      <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
+      <div className="am-sh">
         <span
           draggable
           onDragStart={(e) => {
@@ -104,38 +113,29 @@ export const RackRow = React.memo(function RackRow({
             e.dataTransfer.effectAllowed = 'copy';
           }}
           aria-label={`${name} in den Zwischenspeicher ziehen`}
-          className="shrink-0 text-neutral-700 hover:text-neutral-400 cursor-grab active:cursor-grabbing p-0.5"
+          title={`${short}: in den Zwischenspeicher ziehen`}
+          style={{ cursor: 'grab', display: 'inline-flex' }}
         >
-          <GripVertical size={14} />
+          <AmMark />
         </span>
-        <span
-          className="w-9 h-9 shrink-0 rounded-lg border flex items-center justify-center bg-black/60"
-          style={{ borderColor: 'var(--monk-accent)', color: 'var(--monk-accent)' }}
-          title={short}
-        >
-          <Icon size={18} />
-        </span>
-
-        <div className="min-w-0 flex-1 flex items-center gap-2 flex-wrap">
-          <h3 className="text-sm font-black tracking-[0.12em] truncate" style={{ color: 'var(--monk-accent)' }}>
-            {number && <span className="font-mono text-neutral-500 mr-1.5">{number}</span>}
-            {name}
-          </h3>
-          <span className="inline-flex gap-1" role="img" aria-label={`Modus ${mode}`}>
+        <div className="am-nm">
+          <h2>
+            {number && <i>{number}</i>}
+            <em style={{ color: 'var(--c)' }}>{name.replace(/MONK$/, '')}</em>MONK
+          </h2>
+          <span className="am-chips3" role="img" aria-label={`Modus ${mode}`}>
             {MODES.map((m) => (
-              <span
-                key={m}
-                className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider border ${m === mode ? '' : 'border-neutral-700 text-neutral-600'}`}
-                style={m === mode ? (m === 'ON' ? { background: 'var(--monk-accent)', borderColor: 'var(--monk-accent)', color: '#06101c' } : { borderColor: 'var(--monk-accent)', color: m === 'OFF' ? '#d9e2f2' : 'var(--monk-accent)' }) : undefined}
-              >
-                {m}
-              </span>
+              <span key={m} className={m === mode ? `am-on ${m === 'STBY' ? 'am-st2' : m === 'OFF' ? 'am-off' : ''}` : ''}>{m}</span>
             ))}
           </span>
-          <span className={`inline-flex items-center gap-1 text-[10px] font-mono ${lockedByOther ? 'text-red-300' : 'text-neutral-400'}`}>
-            {lockedByOther ? <Lock size={12} aria-hidden="true" /> : <LockOpen size={12} aria-hidden="true" />}
+          <svg className={`am-lk ${lockedByOther ? 'am-red' : ''}`} viewBox="0 0 24 24" aria-hidden="true">
+            <path d={lockedByOther ? AM_PATH.lock : AM_PATH.unlock} />
+          </svg>
+          <span className="am-who">
+            {ownerLabel ? <span className="am-udot" style={{ width: 9, height: 9 }} /> : null}
             {ownerLabel ? (ownedByMe ? 'du' : ownerLabel) : 'frei'}
           </span>
+          {sub ? <span className="am-vb">Vorbild: {sub.vb}</span> : null}
           {headerExtra}
         </div>
 
@@ -147,20 +147,14 @@ export const RackRow = React.memo(function RackRow({
             aria-pressed={sync.on}
             aria-label={`${name} SYNC gegen Main ${sync.on ? 'an' : 'aus'}`}
             title={sync.disabled ? 'SYNC kann nur der Halter ändern' : 'SYNC: Start auf dem nächsten Main-Takt, taktgleich mit Main, Tempo und Tonart von Main'}
-            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] font-bold tracking-widest transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--monk-accent)]"
-            style={sync.on ? { background: 'var(--monk-accent)', borderColor: 'var(--monk-accent)', color: '#06101c' } : { borderColor: '#3a465c', color: '#8b9aa5' }}
+            className={`am-tg am-sync ${sync.on ? 'am-on' : ''}`}
           >
-            <RefreshCw size={11} aria-hidden="true" /> SYNC
+            ⟲ SYNC
           </button>
         )}
         {onCopy && ownedByMe && (
-          <button
-            type="button"
-            onClick={onCopy}
-            aria-label={`${name} in Zwischenablage senden`}
-            className="w-8 h-8 shrink-0 rounded-full border border-neutral-700 text-neutral-400 hover:text-amber-300 hover:border-amber-400/40 flex items-center justify-center transition-colors cursor-pointer"
-          >
-            <Copy size={13} />
+          <button type="button" onClick={onCopy} aria-label={`${name} in Zwischenablage senden`} title="Stand als JSON in die Zwischenablage" className="am-tool">
+            <AmSvg d={AM_PATH.clip} />
           </button>
         )}
         <button
@@ -169,29 +163,16 @@ export const RackRow = React.memo(function RackRow({
           disabled={!!cycleLockedReason}
           title={cycleLockedReason ?? nextHint}
           aria-label={`${name} Modus ${mode}`}
-          className={`min-w-[4.5rem] h-8 shrink-0 px-3 rounded-full border-[1.5px] inline-flex items-center justify-center gap-1.5 text-[11px] font-black tracking-widest transition-all cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--monk-accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-black ${running && mode === 'ON' ? 'motion-safe:animate-pulse' : ''}`}
-          style={
-            lockedByOther
-              ? { borderColor: '#7f1d1d', color: '#fca5a5', opacity: 0.85 }
-              : mode === 'ON'
-                ? { background: 'var(--monk-accent)', borderColor: 'var(--monk-accent)', color: '#06101c', boxShadow: '0 0 14px var(--monk-glow-accent)' }
-                : mode === 'STBY'
-                  ? { borderColor: 'var(--monk-accent)', color: 'var(--monk-accent)' }
-                  : { borderColor: '#3a465c', color: '#8b9aa5' }
-          }
+          className={`am-pw ${pwClass}`}
         >
-          {lockedByOther && <Lock size={12} aria-hidden="true" />}
+          {locked && <AmSvg d={AM_PATH.lock} />}
           {mode}
         </button>
       </div>
 
-      {!panelOpen && summary ? (
-        <p className="px-3 pb-2.5 pl-[4.25rem] text-[11px] text-neutral-400">{summary}</p>
-      ) : null}
+      {!showPanel && summary ? <div className="am-sum">{summary}</div> : null}
       {children && (showPanel || keepMounted) ? (
-        <div className="px-3 pb-3 border-t border-white/5 min-w-0 overflow-x-auto" hidden={!showPanel}>
-          <div className="pt-3">{children}</div>
-        </div>
+        <div className="am-sb" hidden={!showPanel}>{children}</div>
       ) : null}
     </section>
   );

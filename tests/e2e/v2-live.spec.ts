@@ -37,7 +37,7 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
   // gesperrt, ein Klick darauf lief in den Timeout.
   await entryButton(page).click();
   await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/mixerMONK · 8 CH/i)).toBeVisible({ timeout: 15_000 });
 
   // UI2-P0-001: mixerMONK hat immer genau einen Halter. In einer Einzelbrowser-
   // Sitzung vergibt der Server ihn an den einzigen Nutzer - der ist damit

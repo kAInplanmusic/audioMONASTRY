@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
@@ -6,13 +6,9 @@ import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
-import { HeaderPluginIcon, headerIconStatus } from './components/HeaderPluginIcon';
-import { SignalChainBar } from './components/SignalChainBar';
-import { MasterplayerReadout } from './components/MasterplayerReadout';
+import { headerIconStatus } from './components/HeaderPluginIcon';
 import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
 import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
-import { BeatVisualizer } from './components/BeatVisualizer';
-import { EngineStatusBadge } from './components/EngineStatusBadge';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
 import { FEATURE_FLAGS } from './config/featureFlags';
@@ -28,10 +24,13 @@ import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
 import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
-import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
+import { Gauge } from 'lucide-react';
 import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
 import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
+import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amUi';
+import { StudioMasterplayer } from './components/am/StudioMasterplayer';
+import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
@@ -60,13 +59,11 @@ const RACK_ORDER = [
 // Header-Navigation: 16 Plugin-Icons in ZWEI Reihen à 8. System-Module
 // (aiMONK/perforMONK) haben kein Header-Icon; masterplayerMONK ist die
 // feste Kopfzeile oberhalb der Toolbar.
-const NAV_EXCLUDED = new Set(['ai']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
 type MonMix = 'MAIN' | 'MIX' | 'PLUGIN_ONLY';
 
-const pluginNavLabel = (name: string) => name.replace(/MONK$/i, '').toUpperCase();
 
 
 export default function App() {
@@ -81,6 +78,9 @@ function AppComponent() {
   const { startAudio } = useAudio();
   const { moduleStates, setModuleState } = useModuleState();
   const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
+  const people = useSessionPeople();
+  // Eigene Kennung sofort eintragen (vor dem ersten Session-Update).
+  useEffect(() => { setSessionPeople(webRTCManager.userId, []); }, []);
 
   // COLLAB-P1-005: eingehende Main-Out-Parameter anderer Session-User anwenden.
   // EINE Stelle fuer die AudioEngine (die Terminals spiegeln nur ihre Anzeige),
@@ -130,11 +130,6 @@ function AppComponent() {
     });
   }, [deviceLayout.layout, deviceLayout.resolution.screenWidth, deviceLayout.resolution.screenHeight, deviceLayout.resolution.dpr]);
 
-  // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
-  const navPlugins = useMemo(
-    () => getPluginRegistry().filter(p => !NAV_EXCLUDED.has(p.id)),
-    [],
-  );
 
   // PERSIST-P1-002: lokaler Autosave (IndexedDB-Fallback) + flush bei pagehide
   // + best-effort Remote-Sync. Der Payload wird bei jeder relevanten
@@ -323,6 +318,7 @@ function AppComponent() {
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionPeers(info.members.map((m) => ({ socketId: m.socketId, userId: m.userId })));
+      setSessionPeople(webRTCManager.userId, info.members.map((m) => m.userId));
       setSessionFull(info.full);
       if (webRTCManager.isMainOutOwner) {
         startHostMain();
@@ -663,188 +659,131 @@ function AppComponent() {
   }
 
   return (
-    <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="min-h-screen bg-transparent text-white p-6 pb-28">
+    <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="am min-h-screen pb-28"><div className="am-wrap" style={{ margin: '0 auto', padding: '8px 16px 40px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
-      {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 16 Plugin-Icons in zwei Reihen + Avatar */}
-      <header className="sticky top-0 z-40 -mx-6 -mt-6 h-[5.75rem] bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
-        <div className="mx-auto flex h-full items-stretch max-w-[1800px]">
-          {/* Logo-Block */}
+      <AmDefs />
+      {/* Kopf + Masterplayer nach Entwurf (docs/design/audioMONASTRY-design.html) */}
+      <div className="am-top">
+        <header className="am-box am-head">
           <a
             href="#studio-main"
             onClick={(e) => { e.preventDefault(); setActiveNav(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            className="flex items-center gap-2.5 shrink-0 pl-3 pr-3 border-r border-[#16242e]"
+            className="am-brand"
             aria-label="audioMONASTRY Dashboard"
+            style={{ textDecoration: 'none', color: 'inherit' }}
           >
-            <div className="relative shrink-0">
-              <div className="absolute -inset-1 rounded-lg bg-cyan-400/15 blur-lg" />
-              <Logo size={30} rounded={false} className="relative" />
-            </div>
-            <div className="hidden sm:block leading-none min-w-0">
-              <p className="text-[14px] font-black tracking-tight text-white whitespace-nowrap">
-                <span className="font-light text-neutral-300">audio</span>MONASTRY
-              </p>
-              <p className="text-[7px] font-mono tracking-[0.4em] text-neutral-500 uppercase mt-1">4-Person Studio</p>
-              <p className="text-[7px] font-mono tracking-[0.25em] text-cyan-300/80 uppercase mt-0.5 whitespace-nowrap">V. {APP_VERSION} · HYPERDAW</p>
+            <Logo size={56} rounded={false} />
+            <div>
+              <b>audio<span>MONASTRY</span></b>
+              <small>4-Person Studio · V. {APP_VERSION}</small>
             </div>
           </a>
 
-          {/* Mitte: 16 Auswahl-Icons (zwei Reihen à 8) – ein Icon pro Plugin außer ai/masterplayer/perfor */}
-          <nav className="flex-1 min-w-0 overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
-            <div className="grid grid-rows-2 grid-cols-8 min-w-[600px] h-full">
-              {navPlugins.map((plugin) => (
-                <HeaderPluginIcon
-                  key={plugin.id}
-                  id={plugin.id}
-                  name={plugin.name}
-                  label={pluginNavLabel(plugin.name)}
-                  icon={plugin.icon}
-                  status={headerIconStatus(pluginLocks[plugin.id], webRTCManager.userId)}
-                  on={(moduleStates[plugin.id] || 'OFF') !== 'OFF'}
-                  active={activeNav === plugin.id}
-                  onSelect={() => handleNavSelect(plugin.id)}
-                />
-              ))}
-            </div>
+          <nav className="am-ics" aria-label="Studio-Navigation">
+            {AM_MODULES.map((m) => {
+              const lock = pluginLocks[m.id];
+              const status = headerIconStatus(lock, webRTCManager.userId);
+              const owner = pluginOwnerOf(lock);
+              const on = (moduleStates[m.id] || 'OFF') !== 'OFF';
+              const statusText = status === 'free' ? 'frei' : status === 'mine' ? 'von dir gehalten' : `gesperrt, gehalten von ${personLabel(owner, people)}`;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  data-plugin-id={m.id}
+                  data-lock-status={status}
+                  className={`am-ic am-${status === 'locked' ? 'lock' : status} ${activeNav === m.id ? 'am-cur' : ''}`}
+                  style={{ ['--c' as string]: m.color, ['--u' as string]: personColor(owner, people) }}
+                  onClick={() => handleNavSelect(m.id)}
+                  aria-current={activeNav === m.id ? 'page' : undefined}
+                  aria-label={`${m.name}, ${statusText}${on ? ', aktiv' : ''}`}
+                  title={`${m.name} · ${statusText}`}
+                >
+                  <AmSvg d={AM_ICON[m.id]} />
+                  <span>{m.short}</span>
+                  {on && <i className="am-ondot" aria-hidden="true" />}
+                </button>
+              );
+            })}
           </nav>
 
-          {/* Rechts: Session + kompakte Steuerung + Avatar */}
-          <div className="flex items-center gap-1.5 shrink-0 pl-2 pr-3 border-l border-[#16242e]">
-            <div
-              className={`hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-[9px] font-mono tracking-widest ${
-                sessionFull
-                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                  : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300'
-              }`}
-              title="Aktive Studio-Session (eine feste Session, max. 4 User)"
-              role="status"
-              aria-live="polite"
-            >
-              <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
-              {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
-              {/* COLLAB-P0-004 Teil 2: Nur der Halter des Mixers kann ihn weitergeben.
-                  Der neue Halter ist danach der Einzige, der den Mainsound beeinflusst. */}
-              {pluginLocks.mixer?.active && pluginLocks.mixer?.lockedBy === webRTCManager.userId
-                && sessionPeers.some((m) => m.userId !== webRTCManager.userId) && (
-                  <select
-                    aria-label="mixerMONK-Halter übergeben"
-                    className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1 py-0.5"
-                    value=""
-                    onChange={(e) => { if (e.target.value) { flushPluginSettings('mixer'); transferLock('mixer', e.target.value); } }}
-                  >
-                    <option value="">Halter übergeben …</option>
-                    {sessionPeers
-                      .filter((m) => m.userId !== webRTCManager.userId)
-                      .map((m) => (
-                        <option key={m.socketId} value={m.userId}>{m.userId}</option>
-                      ))}
-                  </select>
-                )}
+          <div className="am-hr am-hr2">
+            <div className="am-users" role="status" aria-live="polite" title="Aktive Studio-Session (eine feste Session, max. 4 Nutzer)">
+              {[0, 1, 2, 3].map((k) => {
+                const p = people.people[k];
+                return (
+                  <span
+                    key={k}
+                    className={`am-udot ${p ? '' : 'am-away'}`}
+                    style={{ ['--u' as string]: p?.color ?? '#445a82' }}
+                    title={p ? `Nutzer ${p.no}${p.me ? ' · du' : ''}` : 'frei'}
+                  />
+                );
+              })}
+              <span className="am-hint" style={{ marginLeft: 4, color: sessionFull ? 'var(--hot)' : undefined }}>
+                {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
+              </span>
+              {Object.entries(remoteNav).slice(0, 3).map(([userId, nav]) => (
+                <span key={userId} className="am-hint" style={{ marginLeft: 6, color: personColor(userId, people) }} title="Wo die anderen gerade sind">
+                  {userId.replace(/^user-/, 'u')}→{nav.pluginId}
+                </span>
+              ))}
+              <span className="am-hint" data-testid="layout-label" title="Erkanntes Format und Auflösung" style={{ marginLeft: 6 }}>{deviceLayout.label}</span>
             </div>
-            {Object.keys(remoteNav).length > 0 && (
-              <div
-                className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/5 text-fuchsia-300 text-[9px] font-mono tracking-widest"
-                title="Aktive Plugin-Navigation der Session-User"
-                role="status"
-                aria-live="polite"
-              >
-                {Object.entries(remoteNav).slice(0, 3).map(([userId, nav]) => (
-                  <span key={userId} className="whitespace-nowrap">
-                    {userId.replace(/^user-/, 'u')}→{nav.pluginId}
-                  </span>
-                ))}
-              </div>
-            )}
-            <div
-              className="hidden 2xl:flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/5 text-cyan-300 text-[9px] font-mono tracking-widest whitespace-nowrap"
-              title="Erkanntes Format und Auflösung (CSS-Pixel × Pixeldichte)"
-              role="status"
-              data-testid="layout-label"
-            >
-              {deviceLayout.label}
-            </div>
-            <button type="button"
-              onClick={() => setScratchOpen(v => !v)}
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/40 text-amber-300 hover:bg-amber-400/20 hover:border-amber-300/70 transition-all duration-200 cursor-pointer"
-              aria-label="Zwischenspeicher"
-              aria-pressed={scratchOpen}
-            >
-              <ClipboardCopy className="w-4 h-4" />
-              <span className="text-[9px] font-bold tracking-widest">ZWISCHENSPEICHER</span>
-            </button>
-            <div className="hidden xl:block"><Scratchpad /></div>
-            <div className="hidden lg:block"><MasterStreamToggle /></div>
-            <button type="button"
-              onClick={() => setVisualOpen(v => !v)}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-fuchsia-400/10 border border-fuchsia-400/40 text-fuchsia-300 hover:bg-fuchsia-400/20 hover:border-fuchsia-300/70 transition-all duration-200 cursor-pointer"
-              aria-label="Visual-Liveshow öffnen"
-              aria-pressed={visualOpen}
-              title="Visual-Liveshow (Stream an Ghostuser 6 / Beamer)"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span className="text-[9px] font-bold tracking-widest">VISUAL</span>
-            </button>
-            <OutputsPanel />
-            {deviceLayout.fullscreen.supported && !deviceLayout.standalone && deviceLayout.layout !== 'desktop' && (
+            <div className="am-tools">
               <button type="button"
-                onClick={() => (deviceLayout.fullscreen.active ? exitAppFullscreen() : requestAppFullscreen())}
-                className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
-                aria-label={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
-                aria-pressed={deviceLayout.fullscreen.active}
-                title={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                onClick={() => setScratchOpen(v => !v)}
+                className={`am-tool ${scratchOpen ? 'am-on' : ''}`}
+                style={{ ['--c' as string]: '#ffb703' }}
+                aria-label="Zwischenspeicher"
+                aria-pressed={scratchOpen}
+                title="Zwischenspeicher der Session"
               >
-                {deviceLayout.fullscreen.active ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                <AmSvg d={AM_PATH.board} />
               </button>
-            )}
-            <button type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
-              title="Audio / I-O Einstellungen"
-              aria-label="Audio / I-O Einstellungen öffnen"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            <div className="hidden sm:flex w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-cyan-400/20 to-fuchsia-400/20 border border-cyan-400/30 items-center justify-center" title="Studio-User">
-              <UserRound className="w-4 h-4 text-cyan-300" />
+              <Scratchpad />
+              <MasterStreamToggle />
+              <button type="button"
+                onClick={() => setVisualOpen(v => !v)}
+                className={`am-tool ${visualOpen ? 'am-on' : ''}`}
+                style={{ ['--c' as string]: '#e879f9' }}
+                aria-label="Visual-Liveshow öffnen"
+                aria-pressed={visualOpen}
+                title="Visual-Liveshow (Main Visual)"
+              >
+                <AmSvg d={AM_PATH.visual} />
+              </button>
+              <OutputsPanel />
+              {deviceLayout.fullscreen.supported && !deviceLayout.standalone && deviceLayout.layout !== 'desktop' && (
+                <button type="button"
+                  onClick={() => (deviceLayout.fullscreen.active ? exitAppFullscreen() : requestAppFullscreen())}
+                  className="am-tool"
+                  aria-label={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                  aria-pressed={deviceLayout.fullscreen.active}
+                  title={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                >
+                  <AmSvg d={deviceLayout.fullscreen.active ? AM_PATH.unfull : AM_PATH.full} />
+                </button>
+              )}
+              <button type="button"
+                onClick={() => setSettingsOpen(true)}
+                className="am-gear"
+                title="Audio / I-O Einstellungen"
+                aria-label="Audio / I-O Einstellungen öffnen"
+              >
+                <AmSvg d={AM_PATH.gear} />
+              </button>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* 2. masterplayerMONK: feste View-only-Leiste (oben, sticky in der Rack-Scroll-Logik). */}
-      <section
-        id="rack-masterplayer"
-        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 z-30"
-      >
-        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
-            <Activity size={18} />
-          </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
-          <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
-          <EngineStatusBadge />
-
-          <div className="ml-auto flex items-center gap-4 text-center">
-            <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
-            <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
-            <MasterplayerReadout bpm={bpm} isPlaying={isPlaying} />
-            <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">4/4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">METRUM</div></div>
-            <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
-          </div>
-        </div>
-        <div className="px-3 pb-3 border-t border-white/5">
-          <BeatVisualizer isPlaying={isPlaying} />
-        </div>
-        {/* P0-1 (revidiert): masterplayerMONK ist REINE INFO/VISUALISIERUNG.
-            Keine Eingaben, keine Play/Stop-Buttons, kein Terminal. */}
-      </section>
+        <StudioMasterplayer bpm={bpm} isPlaying={isPlaying} />
+      </div>
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
 
-      {/* Rack-Liste: alle Module als Streifen. UI2-P2-002: Signalweg-Leiste darueber. */}
-      <div className="flex flex-col gap-3 max-w-screen-xl mx-auto">
-        <div className="phone:hidden">
-          <SignalChainBar moduleStates={moduleStates} pluginLocks={pluginLocks} />
-        </div>
+      {/* Rack-Liste: alle Module als Streifen (Signalweg steht im mixerMONK, wie im Entwurf). */}
+      <div className="am-rack">
         {deviceLayout.installHint && (
           <div role="note" data-testid="install-hint" className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100">
             <span className="flex-1">Vollbild auf diesem Gerät: im Browser <b>Teilen → „Zum Home-Bildschirm“</b> wählen und das Studio von dort starten.</span>
@@ -864,7 +803,7 @@ function AppComponent() {
           const mode = pluginModeOf(id, moduleStates[id], lock);
           const ownedByMe = owner === me;
           const lockedByOther = !!owner && owner !== me;
-          const ownerLabel = owner ? owner.replace(/^user-/, 'u') : null;
+          const ownerLabel = owner ? personLabel(owner, people) : null;
           const panelOpen = pluginPanelOpen(id, mode, owner, me);
           const peers = sessionPeers.filter((m) => m.userId !== me);
           return (
@@ -877,6 +816,7 @@ function AppComponent() {
               icon={plugin.icon}
               mode={mode}
               ownerLabel={ownerLabel}
+              ownerColor={personColor(owner, people)}
               ownedByMe={ownedByMe}
               lockedByOther={lockedByOther}
               panelOpen={panelOpen}
@@ -901,12 +841,13 @@ function AppComponent() {
                   {peers.length > 0 && (
                     <select
                       aria-label="mixerMONK übergeben"
-                      className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1.5 py-0.5"
+                      className="am-sel"
+                      style={{ fontSize: 11, padding: '2px 6px' }}
                       value=""
                       onChange={(e) => { if (e.target.value) { flushPluginSettings('mixer'); transferLock('mixer', e.target.value); } }}
                     >
                       <option value="">Übergeben an …</option>
-                      {peers.map((m) => <option key={m.socketId} value={m.userId}>{m.userId.replace(/^user-/, 'u')}</option>)}
+                      {peers.map((m) => <option key={m.socketId} value={m.userId}>{personLabel(m.userId, people)}</option>)}
                     </select>
                   )}
                 </>
@@ -1057,6 +998,7 @@ function AppComponent() {
           Datenschutz
         </a>
       </footer>
+    </div>
     </div>
   );
 }

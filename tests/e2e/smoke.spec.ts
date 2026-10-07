@@ -59,13 +59,15 @@ test('App lädt mit korrektem Titel und allen Nav-Buttons', async ({ page }) => 
   expect(errors.pageErrors).toEqual([]);
 });
 
-test('Mixer-Terminal rendert und MOA-Leiste ist sichtbar', async ({ page }) => {
+test('Mixer-Pult rendert und die KI-Eingabe steht im aiMONK-Dock', async ({ page }) => {
   const errors = collectErrors(page);
   await openStudio(page);
 
   await page.locator(STUDIO_NAV).getByTitle('mixerMONK').first().click();
-  await expect(page.getByText('mixerMONK · 6 CH')).toBeVisible();
-  await expect(page.getByPlaceholder(/MOA/).first()).toBeVisible();
+  await expect(page.getByText(/mixerMONK · 8 CH/)).toBeVisible();
+  // Design: keine KI-Zeilen in den Plugins, die Eingabe steht im aiMONK-Dock.
+  await expect(page.locator('#ai-monk-dock').getByPlaceholder(/Aufgabe/)).toBeVisible();
+  await expect(page.locator('#rack-mixer').getByPlaceholder(/MOA/)).toHaveCount(0);
 
   expect(errors.pageErrors).toEqual([]);
 });
@@ -135,9 +137,9 @@ test('P0-7: masterplayerMONK ist fest oben sichtbar und View-only', async ({ pag
   await openStudio(page);
 
   // masterplayerMONK ist der erste feste Rack-Block direkt unter dem Header.
-  const master = page.locator('section').filter({ has: page.getByText('masterplayerMONK') }).first();
+  const master = page.locator('#rack-masterplayer');
   await expect(master).toBeVisible();
-  await expect(master.getByText('FIXED · VIEW ONLY')).toBeVisible();
+  await expect(master.getByText('MASTERPLAYER · NUR ANSICHT')).toBeVisible();
   // Keine Eingaben: es gibt im masterplayer-Rack keine Buttons.
   await expect(master.locator('button')).toHaveCount(0);
 

@@ -41,7 +41,7 @@ test('Library-Sample → Action Menu → Project Clipboard → Send to Track', a
   // In den gemeinsamen Project Clipboard übernehmen.
   await menu.getByRole('menuitem', { name: /Copy to Project Clipboard/ }).click();
   await expect(menu).not.toBeVisible();
-  await expect(page.getByText('CLIPBOARD (1)').first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'CLIPBOARD (1)' }).first()).toBeVisible();
 
   // Lokalen Upload erzeugen (Audio mit URL) – Cloud-Fallback liefert eine Blob-URL.
   const wavHeader = Buffer.from('52494646'.padEnd(8, '0') + '57415645', 'hex');
