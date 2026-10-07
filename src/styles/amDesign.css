@@ -60,6 +60,21 @@
 .am-mpi dd.am-big{font-size:22px}
 .am-lrw{display:flex;gap:4px;align-items:stretch;height:70px}
 .am-lrw .am-sc{display:flex;flex-direction:column;justify-content:space-between;font:500 8px var(--f-mono);color:var(--dm);text-align:right}
+/* Capture (IDEA-2026-10-07-A) */
+.am-cap{position:relative;margin-top:6px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.am-cap .am-hint{font-size:10px;max-width:190px}
+.am-cap-btn{padding:4px 10px;font:700 10px var(--f-disp);letter-spacing:.1em;color:#ffd1ea;border-color:#ff4fa8}
+.am-cap-pop{position:absolute;z-index:40;top:100%;left:0;margin-top:6px;padding:10px;display:flex;flex-direction:column;gap:8px;width:min(420px,calc(100vw - 32px))}
+.am-cap-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.am-cap-nav{margin-left:auto;display:flex;align-items:center;gap:6px;font:600 11px var(--f-mono)}
+.am-cap-nav .am-btn{padding:2px 8px}
+.am-cap-grid{display:flex;flex-direction:column;gap:2px}
+.am-cap-row{display:grid;grid-template-columns:14px repeat(16,minmax(0,1fr));gap:2px;align-items:center}
+.am-cap-lab{font:600 9px var(--f-mono);color:var(--dm);text-align:right}
+.am-cap-cell{height:14px;border-radius:3px;background:color-mix(in srgb,var(--sc) 14%,#0a0f18);border:1px solid color-mix(in srgb,var(--sc) 30%,#2a3446)}
+.am-cap-cell.am-beat{border-color:color-mix(in srgb,var(--sc) 55%,#2a3446)}
+.am-cap-cell.am-on{background:var(--sc);box-shadow:0 0 6px var(--sc)}
+.am-cap-act{display:flex;gap:6px;flex-wrap:wrap}
 @media (max-width:900px){.am-mp{grid-template-columns:minmax(0,1fr) auto}.am-mpt{grid-column:1/-1}.am-mpw{grid-column:1}.am-lrw{grid-column:2;grid-row:2}.am-mpi{grid-column:1/-1}}
 
 /* Pegel */

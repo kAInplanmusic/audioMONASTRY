@@ -43,6 +43,10 @@ import {
   applyGraphState, readGraphState, type GraphStateSink, type GraphStateSource,
 } from '../audio/graphStateIO';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
+import { EventCaptureLog } from '../core/capture/eventCaptureLog';
+import { AudioCaptureTap } from '../core/capture/audioCapture';
+import { buildCaptureResult, mergeCaptureBar, type CaptureResult } from '../core/capture/captureSession';
+import type { CaptureBar } from '../core/capture/quantizeCapture';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
 import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatency';
@@ -157,6 +161,15 @@ class AudioEngine {
     getSink: () => this.v2LiveSink,
     getLegacyTap: () => this.masterStreamTap,
   });
+
+  // IDEA-2026-10-07-A Capture: Eingabe-Log (16 Takte) + 60-s-Audio-Abgriff am V2-Ausgang.
+  public readonly captureLog = new EventCaptureLog();
+  private readonly captureTap = new AudioCaptureTap({
+    getContext: () => (this.ctx as AudioContext | undefined) ?? null,
+    getSink: () => this.v2LiveSink,
+  });
+  /** AudioContext-Zeit des letzten Transport-Starts (Capture-Raster), sonst null. */
+  private captureTransportStartSec: number | null = null;
 
   // AUDIO-P1-002: instrumentMONK-Noten/Worklet-Steuerung in eigener Fassade.
   private readonly instrumentNotes = new InstrumentNoteBridge({
@@ -942,6 +955,7 @@ class AudioEngine {
   }
 
   public sfzNoteOn(note: number, velocity = 100): void {
+    this.captureLog.record(this.ctx?.currentTime ?? 0, 'note-on', this.sfz.channel, note, velocity / 127);
     this.sfz.noteOn(note, velocity);
   }
 
@@ -1413,6 +1427,7 @@ class AudioEngine {
   public triggerEvent(track: TrackType, velocity: number = 1.0) {
     // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
     if (!this.monitor.isMainHolderActive()) return;
+    this.captureLog.record(this.ctx?.currentTime ?? 0, 'trigger', track, -1, velocity);
     // AUDIO-P0-003/Phase 9: Trigger hörbar in den V2-Sink leiten.
     const player = this.samplePlayers[track];
     const buffer = player?.buffer?.get?.();
@@ -1572,6 +1587,7 @@ class AudioEngine {
 
   /** Steuert den Synth (Note-On) – Phase 9: hörbar über den V2-Sink. */
   public noteOnWorklet(freq: number, velocity = 1, _osc = 'saw') {
+    this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, 'channel8', freq, velocity);
     this.instrumentNotes.noteOn(freq, velocity);
   }
   public noteOffWorklet() {
@@ -1596,12 +1612,14 @@ class AudioEngine {
       gate: this.gate,
       stepCount: this.stepCount,
     });
+    this.captureTransportStartSec = this.ctx?.currentTime ?? null;
     this.isPlaying = true;
   }
 
   public stop() {
     if (!this.monitor.isMainHolderActive()) return;
     this.isPlaying = false;
+    this.captureTransportStartSec = null;
     this.v2LiveSink.stopTransport();
     this.v2LiveSink.disconnect();
   }
@@ -1670,6 +1688,7 @@ class AudioEngine {
 
     // V2-Live-Sink trennen (falls verbunden).
     this.v2LiveSink.disconnect();
+    this.captureTap.stop();
 
     this.initialized = false;
   }
@@ -1840,8 +1859,33 @@ class AudioEngine {
       this.syncV2FromV1();
       // AUDIO-P0-002: Master-Stream-Destination an den V2-Ausgang hängen.
       this.masterTap.reattach();
+      // IDEA-2026-10-07-A: Capture-Abgriff (paralleler Fan-out) starten bzw. nachhängen.
+      void this.captureTap.attach();
     }
     return ok;
+  }
+
+  /** Capture möglich (SharedArrayBuffer + Cross-Origin-Isolation)? */
+  public isCaptureSupported(): boolean {
+    return this.captureTap.supported;
+  }
+
+  /** IDEA-2026-10-07-A: letzte 60 s Main-Audio + Pattern-Vorschlag aus den letzten 16 Takten. */
+  public async captureNow(): Promise<CaptureResult> {
+    return buildCaptureResult({
+      log: this.captureLog,
+      handle: this.captureTap.current,
+      supported: this.captureTap.supported,
+      nowSec: this.ctx?.currentTime ?? 0,
+      bpm: Tone.Transport.bpm.value,
+      transportStartSec: this.captureTransportStartSec,
+    });
+  }
+
+  /** Ergänzt das Sequencer-Pattern (ODER) um einen Capture-Takt (Step 1–16). */
+  public mergeCapturedBar(bar: CaptureBar): void {
+    const merged = mergeCaptureBar(this.sequencer.allPatterns(), bar);
+    for (const track of Object.keys(merged) as TrackType[]) this.sequencer.setPattern(track, merged[track]);
   }
 
   /** Startet einen hörbaren V2-Testton (Phase-1-Nachweis). */
@@ -2107,6 +2151,7 @@ class AudioEngine {
         ? Tone.Frequency(note, 'midi').toFrequency()
         : Tone.Frequency(note).toFrequency();
       this.v2LiveSink.setSynthSource(instChannel, v2Freq, def.kind === 'drum' ? 'clap' : 'lead');
+      this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, instChannel, v2Freq, velocity);
       this.v2LiveSink.synthTrigger(instChannel, Math.max(0.2, Math.min(1, velocity)));
     }
 
