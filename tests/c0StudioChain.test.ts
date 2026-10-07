@@ -38,6 +38,23 @@ const peak = (buf: Float32Array[] | null): number => {
   return m;
 };
 
+/**
+ * Der ERSTE Ueberschreitungspunkt am Ausgang (absolute Sample-Position).
+ *
+ * Bewusst nicht "alle Treffer": der EffectNode und das Mastering tragen Nachhall,
+ * nach dem Impuls folgen weitere kleine Werte. Fuer die Phasenfrage zaehlt der
+ * ERSTE Punkt. Auf Modulebene, weil mehrere Bloecke ihn brauchen.
+ */
+function firstHit(c: C0StudioChain, blocks = 3): number {
+  for (let b = 0; b < blocks; b++) {
+    const out = c.render(ctx(b * BLOCK));
+    if (out) for (let i = 0; i < out[0].length; i++) {
+      if (Math.abs(out[0][i]) > 0.15) return b * BLOCK + i;
+    }
+  }
+  return -1;
+}
+
 describe('C0 – der vertikale Pfad steht und traegt Ton', () => {
   it('baut die Kette in der Reihenfolge des Signalwegs, nicht der Vertragsliste', () => {
     // Rollen sagen WAS ein Knoten ist, nicht WO er steht. Ein filter() ueber
@@ -280,23 +297,6 @@ describe('C1 – Bypass ist ein Crossfade, kein Umstecken', () => {
     output[0] = out;
   }
 
-  /**
-   * Der ERSTE Ueberschreitungspunkt am Ausgang (absolute Sample-Position).
-   *
-   * Bewusst nicht "alle Treffer": der FX-Bus ist standardmaessig auf 0, aber der
-   * EffectNode und das Mastering tragen Nachhall - nach dem Impuls folgen weitere
-   * kleine Werte. Fuer die Phasenfrage zaehlt der ERSTE Punkt.
-   */
-  function firstHit(c: C0StudioChain, blocks = 3): number {
-    for (let b = 0; b < blocks; b++) {
-      const out = c.render(ctx(b * BLOCK));
-      if (out) for (let i = 0; i < out[0].length; i++) {
-        if (Math.abs(out[0][i]) > 0.15) return b * BLOCK + i;
-      }
-    }
-    return -1;
-  }
-
   it('ohne Bypass wirkt der Prozessor (Signal verschiebt sich)', () => {
     const c = new C0StudioChain(SR, BLOCK);
     c.setChannelSource('channel1', impulse());
@@ -350,5 +350,107 @@ describe('C1 – Bypass ist ein Crossfade, kein Umstecken', () => {
     const c = new C0StudioChain(SR, BLOCK);
     expect(c.setBypass('gibtsnicht', true)).toBe(false);
     expect(c.isBypassed('gibtsnicht')).toBeNull();
+  });
+});
+
+
+describe('C1.2 – die 9 Quellen sind eigene Plugin-Knoten', () => {
+  it('jeder Kanal weiss, welches Plugin auf ihm liegt (aus dem Vertrag)', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    // Die Zuordnung kommt aus dem Vertrag, nicht aus einer zweiten Liste.
+    expect(c.pluginOfChannel('channel1')).toBe('drop');
+    expect(c.pluginOfChannel('channel2')).toBe('song');
+    expect(c.pluginOfChannel('channel3')).toBe('drumsampler');
+    expect(c.pluginOfChannel('channel4')).toBe('syntisampler');
+    expect(c.pluginOfChannel('channel5')).toBe('instru');
+    expect(c.pluginOfChannel('channel6')).toBe('voice');
+    expect(c.pluginOfChannel('channel7')).toBe('sound');
+    expect(c.pluginOfChannel('channel8')).toBe('stem');
+  });
+
+  it('jeder Kanal traegt genau EIN Plugin – keines doppelt', () => {
+    // Betreiber-Regel: ein Plugin ist 1x da. Zwei Kanaele mit demselben Plugin
+    // waeren ein zweites Vorkommen im Signalweg.
+    const c = new C0StudioChain(SR, BLOCK);
+    const ids = [
+      'channel1','channel2','channel3','channel4',
+      'channel5','channel6','channel7','channel8',
+    ].map((t) => c.pluginOfChannel(t as C0Channel));
+    expect(new Set(ids).size).toBe(8);
+  });
+
+  it('nur die spielenden Plugins koennen SYNC – aus dem Vertrag', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    // Alle 8 Kanal-Quellen sind laut Vertrag sync-faehig.
+    for (const t of ['channel1','channel2','channel3','channel4',
+                     'channel5','channel6','channel7','channel8'] as C0Channel[]) {
+      expect(c.setChannelSynced(t, false), `${t} muss SYNC koennen`).toBe(true);
+      expect(c.setChannelSynced(t, true)).toBe(true);
+    }
+  });
+
+  it('SYNC an verschiebt den Start sample-genau – SYNC aus nicht', () => {
+    // UI2-P0-003: SYNC an startet auf der naechsten Zaehlzeit, SYNC aus sofort.
+    // Das ist eine QUANTISIERUNG des Starts, kein Effekt auf den Klang.
+    //
+    // Gemessen wird nicht mit einem Einzelimpuls an Frame 0 (der laege bei
+    // Versatz 16 komplett in der Stille davor), sondern mit einem Signal, das
+    // den ganzen Block traegt: dann ist messbar, AB WELCHEM FRAME Ton kommt.
+    const ramp = (): Float32Array[] => {
+      const a = new Float32Array(BLOCK).fill(0.5); // ab Frame 0 durchgehend
+      return [a, new Float32Array(BLOCK)];
+    };
+    const ersterTon = (synced: boolean, offset: number) => {
+      const c = new C0StudioChain(SR, BLOCK);
+      c.setChannelSource('channel1', ramp());
+      c.setChannelSynced('channel1', synced);
+      c.setChannelStartFrame('channel1', offset);
+      const out = c.render(ctx());
+      if (!out) return -1;
+      for (let i = 0; i < out[0].length; i++) if (Math.abs(out[0][i]) > 0.05) return i;
+      return -1;
+    };
+    // Ohne SYNC wirkt der Versatz nicht - Ton ab dem ersten Frame.
+    expect(ersterTon(false, 16)).toBe(0);
+    // Mit SYNC beginnt er beim 16. Frame: davor liegt Stille.
+    expect(ersterTon(true, 16)).toBe(16);
+    // Versatz 0 mit SYNC = sofort (die Zaehlzeit ist erreicht).
+    expect(ersterTon(true, 0)).toBe(0);
+  });
+
+  it('eine gestoppte Quelle ist still (kein Weiterklingen)', () => {
+    const c = new C0StudioChain(SR, BLOCK);
+    c.setChannelSource('channel1', impulse());
+    c.setChannelPlaying('channel1', false);
+    const out = c.render(ctx());
+    expect(peak(out)).toBe(0);
+  });
+
+  it('eine mono-Quelle (voice) wird im Kanalzug auf Stereo gezogen', () => {
+    // Vertrag: voice ist mono. Der Kanalzug muss trotzdem 2 Kanaele sehen,
+    // sonst greifen Pan/Insert-Kette auf einen Kanal, den es nicht gibt.
+    const c = new C0StudioChain(SR, BLOCK);
+    const mono: Float32Array[] = [(() => { const a = new Float32Array(BLOCK); a[0] = 1; return a; })()];
+    c.setChannelSource('channel6', mono); // voice
+    const out = c.render(ctx());
+    expect(out).not.toBeNull();
+    expect(out!.length).toBeGreaterThanOrEqual(2);
+    // Beide Kanaele tragen das Signal (mono auf Stereo dupliziert).
+    expect(Math.abs(out![0].reduce((m, v) => Math.max(m, Math.abs(v)), 0))).toBeGreaterThan(0);
+    expect(Math.abs(out![1].reduce((m, v) => Math.max(m, Math.abs(v)), 0))).toBeGreaterThan(0);
+  });
+
+  it('die acht Quellen sind verschieden beschriftet im Graph', () => {
+    // Vorher hiessen alle `source:channelN` - aus dem Graph war nicht ablesbar,
+    // welches Plugin dort liegt. Jetzt traegt der Knoten die Plugin-ID.
+    const c = new C0StudioChain(SR, BLOCK);
+    const ids = new Set<string>();
+    for (const t of ['channel1','channel2','channel3','channel4',
+                     'channel5','channel6','channel7','channel8'] as C0Channel[]) {
+      ids.add(c.pluginOfChannel(t)!);
+    }
+    expect(ids.size).toBe(8);
+    expect(ids.has('drop')).toBe(true);
+    expect(ids.has('stem')).toBe(true);
   });
 });
