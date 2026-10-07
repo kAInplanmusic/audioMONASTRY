@@ -41,11 +41,39 @@ function emptyPattern(length: 16 | 32): boolean[] {
   return Array.from({ length }, () => false);
 }
 
+/**
+ * RT-AUDIT-P0-002: SFZ-Bänke je Kanal mit Map-kompatiblem `get`/`set`, intern
+ * als parallele Arrays. `process()` iteriert per Index – vorher lief dort ein
+ * `for…of` über die Map (Iterator + `[key, value]`-Tupel pro Block).
+ */
+class SfzBankRegistry {
+  readonly channels: V2Channel[] = [];
+  readonly banks: SfzVoiceBank[] = [];
+
+  get(channel: V2Channel): SfzVoiceBank | undefined {
+    const i = this.channels.indexOf(channel);
+    return i < 0 ? undefined : this.banks[i];
+  }
+
+  set(channel: V2Channel, bank: SfzVoiceBank): this {
+    const i = this.channels.indexOf(channel);
+    if (i < 0) {
+      this.channels.push(channel);
+      this.banks.push(bank);
+    } else {
+      this.banks[i] = bank;
+    }
+    return this;
+  }
+}
+
 class V2SinkProcessor extends AudioWorkletProcessor {
   private readonly engine = new V2SinkEngine(sampleRate, 128);
   private readonly clock = new V2SampleClock({ sampleRate, stepCount: 16, bpm: 120, swing: 0, gate: 0.9 });
   private readonly patterns = new Map<V2Channel, boolean[]>(V2_CHANNELS.map((c) => [c, emptyPattern(16)]));
-  private readonly sfzBanks = new Map<V2Channel, SfzVoiceBank>();
+  private readonly sfzBanks = new SfzBankRegistry();
+  /** RT-AUDIT-P0-002: wiederverwendeter Render-Kontext (vorher Objekt-Literal pro Block). */
+  private readonly renderCtx = { sampleRate, bufferSize: 128, quantum: 128 / sampleRate, currentTime: 0 };
   /**
    * RT-AUDIT-P0-003: Steps mit absolutem Frame vormerken statt verwerfen.
    * Swing legt ungerade Steps hinter das aktuelle Quantum; sie feuern jetzt
@@ -337,7 +365,9 @@ class V2SinkProcessor extends AudioWorkletProcessor {
     // Phase 3 Rest: SFZ-/Instrument-Voices als V2-Quelle rendern (AudioWorklet).
     // Hot-Path ohne Allokation: Scratch-Puffer + Block-Array werden je Kanal
     // wiederverwendet und nur bei geaenderter Blocklaenge einmalig nachgezogen.
-    for (const [channel, bank] of this.sfzBanks) {
+    for (let b = 0; b < this.sfzBanks.banks.length; b++) {
+      const bank = this.sfzBanks.banks[b];
+      const channel = this.sfzBanks.channels[b];
       if (!bank.hasActiveVoices()) continue;
       const scratch = this.sfzScratchFor(channel, length);
       bank.renderBlock(scratch.buffer, length);
@@ -392,12 +422,11 @@ class V2SinkProcessor extends AudioWorkletProcessor {
       }
     }
 
-    const rendered = this.engine.render({
-      sampleRate,
-      bufferSize: length,
-      quantum: length / sampleRate,
-      currentTime,
-    });
+    const renderCtx = this.renderCtx;
+    renderCtx.bufferSize = length;
+    renderCtx.quantum = length / sampleRate;
+    renderCtx.currentTime = currentTime;
+    const rendered = this.engine.render(renderCtx);
 
     const channels = Math.min(output.length, rendered.length);
     for (let ch = 0; ch < channels; ch++) {

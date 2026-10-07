@@ -23,11 +23,9 @@
  *   weiterklingen.
  */
 import { BaseNode } from './basicNodes';
-import { audioBufferPool } from '../BufferPool';
+import { copyChannel } from '../PortBuffers';
 import { CONTRACT_BY_ID } from '../../../plugins/pluginContract';
 import type { IProcessingContext } from '../types';
-
-const SILENCE = (len: number): Float32Array[] => [new Float32Array(len), new Float32Array(len)];
 
 export class PluginSourceNode extends BaseNode {
   /** Kanonische Plugin-ID - der Knoten weiss, wer er ist. */
@@ -105,26 +103,30 @@ export class PluginSourceNode extends BaseNode {
 
     // Nicht spielend oder keine Daten: Stille. Ein umgangener/stummer Kanal
     // darf NICHT weiterklingen.
+    // RT-AUDIT-P0-002: fester Port-Puffer statt Pool/Literal pro Block.
     if (!this.playing || !this.buffer) {
-      this.outputs[0].buffer = SILENCE(len);
+      const silent = this.ensureOutput(2, len);
+      silent[0].fill(0);
+      silent[1].fill(0);
+      this.outputs[0].buffer = silent;
       return;
     }
 
     if (this.format === 'mono') {
       // Mono-Quelle auf Stereo ziehen - der Kanalzug sieht immer 2 Kanaele.
-      const src = this.buffer[0] ?? new Float32Array(len);
-      const out = audioBufferPool.acquire(2, len);
-      out[0].set(src.subarray(0, Math.min(len, src.length)));
-      out[1].set(src.subarray(0, Math.min(len, src.length)));
+      const src = this.buffer[0] ?? this.silence.get(len);
+      const out = this.ensureOutput(2, len);
+      copyChannel(out[0], src, len);
+      copyChannel(out[1], src, len);
       this.applyStartOffset(out, len);
       this.outputs[0].buffer = out;
       return;
     }
 
-    const out = audioBufferPool.acquire(Math.max(2, this.buffer.length), len);
+    const out = this.ensureOutput(Math.max(2, this.buffer.length), len);
     for (let ch = 0; ch < out.length; ch++) {
       const src = this.buffer[ch] ?? this.buffer[this.buffer.length - 1];
-      if (src) out[ch].set(src.subarray(0, Math.min(len, src.length)));
+      if (src) copyChannel(out[ch], src, len);
       else out[ch].fill(0);
     }
     this.applyStartOffset(out, len);
@@ -135,7 +137,7 @@ export class PluginSourceNode extends BaseNode {
   private applyStartOffset(out: Float32Array[], len: number): void {
     const start = this.synced ? Math.min(this.sampleStartFrame, len) : 0;
     if (start <= 0) return;
-    for (const ch of out) ch.fill(0, 0, start);
+    for (let ch = 0; ch < out.length; ch++) out[ch].fill(0, 0, start);
   }
 
   reset(): void {
