@@ -58,6 +58,12 @@ describe('Residente 6×48-GB-Flotte (SSOT 2026-10-07)', () => {
     );
   });
 
+  it('übernimmt die Visual-Fähigkeiten der alten Instanzen (Stil-LoRAs, Struktur, Hochskalieren, Interpolation)', () => {
+    const ids = (inst: string) => AI_RESIDENT_FLEET.find((i) => i.id === inst)!.models.map((m) => m.id);
+    expect(ids('image')).toEqual(expect.arrayContaining(['sdxl-base-1.0', 'qwen-image-edit-2511', 'controlnet-depth', 'controlnet-canny', 'realesrgan-x4']));
+    expect(ids('video')).toEqual(expect.arrayContaining(['ltx-2.3-22b-distilled', 'rife-interpolation', 'realesrgan-video-x4']));
+  });
+
   it('bleibt mit Pods (A40/A6000) unter dem AI-Budget von 4 €/h', () => {
     expect(AI_MAX_AI_EUR_PER_HOUR).toBe(4);
     expect(() => assertResidentFleetBudget('pod', 'A40')).not.toThrow();
