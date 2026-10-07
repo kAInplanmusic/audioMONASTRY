@@ -104,7 +104,7 @@
       "id": "RT-AUDIT-P0-002",
       "title": "Audio-Thread allokationsfrei: BufferPool ersetzen, feste Port-Puffer, keine GC-Pausen",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "area": "Audio-Engine",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-002)",
       "detectedAt": "2026-10-07",
@@ -177,7 +177,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "IN_PROGRESS 2026-10-07: Hintergrund-Agent im eigenen Worktree (parallel zu RT-AUDIT-P0-007; Abgrenzung: P0-007 fasst Nodes/V2SinkEngine/V2MonitorGraph nicht an, P0-002 im Processor nur ctx-Literal + sfzBanks-Iteration). P2-017 (DspFilterNode) wird hier miterledigt. "
     },
     {
       "id": "RT-AUDIT-P0-003",
@@ -432,7 +433,7 @@
       "id": "RT-AUDIT-P0-007",
       "title": "Fehlerpfad im Audio-Thread: Exception → Stille + Meldung + automatischer Neuaufbau statt dauerhafter Stummschaltung",
       "priority": "P0",
-      "status": "OPEN",
+      "status": "IN_PROGRESS",
       "area": "Robustheit",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-007)",
       "detectedAt": "2026-10-07",
@@ -481,7 +482,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "IN_PROGRESS 2026-10-07: Hintergrund-Agent im eigenen Worktree (parallel zu RT-AUDIT-P0-002; Abgrenzung: P0-007 fasst Nodes/V2SinkEngine/V2MonitorGraph nicht an, P0-002 im Processor nur ctx-Literal + sfzBanks-Iteration). "
     },
     {
       "id": "RT-AUDIT-P1-008",
