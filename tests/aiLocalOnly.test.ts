@@ -224,3 +224,26 @@ describe('RT-AUDIT-P1-014 · statischer Wächter gegen Cloud-AI im Produktcode',
     }
   });
 });
+
+describe('RT-AUDIT-P1-014-F1 · keine Cloud-AI-Secrets in der Knoten-Provisionierung', () => {
+  const DEPLOY_FILES = [
+    'services/portal-worker/src/index.js',
+    'services/portal-worker/wrangler.toml',
+    'scripts/hetzner/fix-fleet-20261006.sh',
+  ];
+  const REMOVED_KEYS = [
+    'REPLICATE_API_TOKEN', 'HF_API_KEY', 'GROQ_API_KEY', 'MISTRAL_API_KEY', 'OPENAI_API_KEY',
+    'CB_API_KEY', 'OR_API_KEY', 'PUBLICAI_KEY', 'GEMINI_API_KEY', 'VOICE_PROVIDER=replicate', 'STEM_AI_PROVIDER=replicate',
+  ];
+
+  it.each(DEPLOY_FILES)('%s verteilt keine Schlüssel entfernter Anbieter', (rel) => {
+    const text = readFileSync(path.join(ROOT, rel), 'utf8');
+    for (const key of REMOVED_KEYS) expect(text, `${rel}: ${key}`).not.toContain(key);
+  });
+
+  it.each(DEPLOY_FILES)('%s reicht DeepSeek nur zusammen mit der Positivliste weiter', (rel) => {
+    const text = readFileSync(path.join(ROOT, rel), 'utf8');
+    expect(text).toContain('DEEPSEEK_API_KEY');
+    expect(text).toContain('AI_EXTERNAL_LLM_ALLOWLIST');
+  });
+});
