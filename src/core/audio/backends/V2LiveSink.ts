@@ -34,10 +34,29 @@ import { parseSfz } from '../../instrument/sfzParser';
 import type { SfzRegion } from '../../instrument/sfzRegion';
 import { V2_CHANNELS, type V2Channel } from '../V2StudioGraph';
 import { CONTROL_OP, ControlRing, sharedMemoryAvailable, type ControlOp } from '../live/controlRing';
+import { METER_LAYOUT, isMainUnderrun } from '../live/V2Meters';
 import type { V2SinkMessage, V2SynthVoice } from '../live/V2SinkEngine';
 import type { MonitorRoutingPlan } from '../monitorRouting';
 import { v2OutputChannelCount } from '../V2OutputGraph';
 import type { V2SinkFaultInfo } from './sinkRecovery';
+
+/** RT-AUDIT-P0-005: Messwerte aus dem SAB des Prozessors (Peak/True-Peak/RMS/Korrelation/LUFS/Xruns). */
+export interface V2MeterValues {
+  peakL: number;
+  peakR: number;
+  truePeakL: number;
+  truePeakR: number;
+  rmsL: number;
+  rmsR: number;
+  correlation: number;
+  lufsM: number;
+  lufsS: number;
+  underrunsWorklet: number;
+  underrunsMain: number;
+  /** Spitzenwert-Hold (~20 ms) – für Peak-Anzeigen ohne Sample-Verlust. */
+  peakHoldL: number;
+  peakHoldR: number;
+}
 import type { InstrumentPitchDef } from '../../instrument/itSynthVoice';
 
 const V2_SINK_PROCESSOR_NAME = 'v2-sink-processor';
@@ -95,6 +114,8 @@ export class V2LiveSink {
   /** RT-AUDIT-P0-005: Metering SharedArrayBuffer. */
   private meterSab: SharedArrayBuffer | null = null;
   private meterView: Float32Array | null = null;
+  /** RT-AUDIT-P0-005: Timer der Main-Thread-Underrun-Messung (null = aus). */
+  private underrunTimer: number | null = null;
 
   /** Last rendered left/right channel buffers (for metering). */
   private _lastLeftChannel: Float32Array = new Float32Array(0);
@@ -605,8 +626,15 @@ export class V2LiveSink {
     };
     const onPortMessage = (ev: MessageEvent) => {
       if (this.node !== node) return;
-      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown } | null | undefined;
-      if (!data || (data.type !== 'render-error' && data.type !== 'message-error')) return;
+      const data = ev?.data as { type?: unknown; message?: unknown; count?: unknown; messageType?: unknown; sab?: unknown } | null | undefined;
+      if (!data) return;
+      // RT-AUDIT-P0-005: Mess-SAB vom Prozessor übernehmen (geteilt, nicht kopiert).
+      if (data.type === 'meter-sab' && data.sab instanceof SharedArrayBuffer) {
+        this.meterSab = data.sab;
+        this.meterView = new Float32Array(data.sab);
+        return;
+      }
+      if (data.type !== 'render-error' && data.type !== 'message-error') return;
       this.emitFault({
         kind: data.type,
         message: typeof data.message === 'string' ? data.message : '',
@@ -632,6 +660,79 @@ export class V2LiveSink {
       this.onFault?.(info);
     } catch (e) {
       console.warn('[v2-sink] Fehler-Callback fehlgeschlagen:', e);
+    }
+  }
+
+  /**
+   * RT-AUDIT-P0-005: letzte Messwerte aus dem SAB des Prozessors. `null`,
+   * solange der Prozessor den SAB noch nicht übergeben hat (erster Block).
+   */
+  getMeterValues(): V2MeterValues | null {
+    const v = this.meterView;
+    if (!v) return null;
+    return {
+      peakL: v[METER_LAYOUT.PEAK_L],
+      peakR: v[METER_LAYOUT.PEAK_R],
+      truePeakL: v[METER_LAYOUT.TRUE_PEAK_L],
+      truePeakR: v[METER_LAYOUT.TRUE_PEAK_R],
+      rmsL: v[METER_LAYOUT.RMS_L],
+      rmsR: v[METER_LAYOUT.RMS_R],
+      correlation: v[METER_LAYOUT.CORRELATION],
+      lufsM: v[METER_LAYOUT.LUFS_M],
+      lufsS: v[METER_LAYOUT.LUFS_S],
+      underrunsWorklet: v[METER_LAYOUT.UNDERRUNS_WORKLET],
+      underrunsMain: v[METER_LAYOUT.UNDERRUNS_MAIN],
+      peakHoldL: v[METER_LAYOUT.PEAK_HOLD_L],
+      peakHoldR: v[METER_LAYOUT.PEAK_HOLD_R],
+    };
+  }
+
+  /** RT-AUDIT-P0-005: Wellenform-Ring (linker Kanal, letzter Render-Block). */
+  getWaveform(out: Float32Array): boolean {
+    const v = this.meterView;
+    if (!v || out.length === 0) return false;
+    const n = Math.min(out.length, METER_LAYOUT.WAVEFORM_LEN);
+    for (let i = 0; i < n; i++) out[i] = v[METER_LAYOUT.WAVEFORM_START + i];
+    return true;
+  }
+
+  /**
+   * RT-AUDIT-P0-005 (Schritt 3): Main-Thread-Underrun-Erkennung. Alle 250 ms
+   * `getOutputTimestamp()` lesen und die verstrichene Wanduhr-Zeit gegen die
+   * verstrichene Audio-Zeit stellen. Liegt die Wanduhr mehr als 1,5 Render-
+   * Quanten voraus, hat der Audio-Thread eine Deadline verpasst → Zähler im SAB
+   * (UNDERRUNS_MAIN) + `onUnderrun`-Callback. Gibt eine Stop-Funktion zurück.
+   */
+  startUnderrunWatch(onUnderrun?: (total: number) => void): () => void {
+    if (this.underrunTimer !== null) return () => { /* bereits aktiv */ };
+    const ctx = this.node?.context as (BaseAudioContext & { getOutputTimestamp?: () => AudioTimestamp }) | undefined;
+    if (!ctx || typeof ctx.getOutputTimestamp !== 'function') return () => { /* nicht verfügbar */ };
+    const blockMs = (128 / ctx.sampleRate) * 1000;
+    let lastPerf = performance.now();
+    let lastCtx = ctx.getOutputTimestamp?.().contextTime ?? ctx.currentTime;
+    this.underrunTimer = window.setInterval(() => {
+      const v = this.meterView;
+      const ts = ctx.getOutputTimestamp?.();
+      if (!v || !ts || typeof ts.contextTime !== 'number') return;
+      const nowPerf = performance.now();
+      const dPerf = nowPerf - lastPerf;
+      const dCtx = (ts.contextTime - lastCtx) * 1000;
+      lastPerf = nowPerf;
+      lastCtx = ts.contextTime;
+      // > 1,5 Quanten Rückstand der Audio-Zeit gegen die Wanduhr = Dropout.
+      if (isMainUnderrun(dPerf, dCtx, blockMs)) {
+        v[METER_LAYOUT.UNDERRUNS_MAIN] += 1;
+        onUnderrun?.(v[METER_LAYOUT.UNDERRUNS_MAIN]);
+      }
+    }, 250);
+    return () => this.stopUnderrunWatch();
+  }
+
+  /** RT-AUDIT-P0-005: beendet die Main-Thread-Underrun-Messung. */
+  stopUnderrunWatch(): void {
+    if (this.underrunTimer !== null) {
+      window.clearInterval(this.underrunTimer);
+      this.underrunTimer = null;
     }
   }
 
