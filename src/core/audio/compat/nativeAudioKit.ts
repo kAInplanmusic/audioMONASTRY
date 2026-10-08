@@ -50,6 +50,16 @@ export function setContextOptions(options: AudioContextOptions): boolean {
   return !_ctxCreated;
 }
 
+/**
+ * RT-AUDIT-P1-012: Kanonischer Name für `setContextOptions`. Die AudioSettings
+ * (sampleRate, latencyHint) müssen VOR dem ersten `ensureCtx()` ankommen, weil
+ * beide nach der Erzeugung unveränderlich sind. Rückgabe wie dort: true, wenn
+ * die Optionen noch greifen (Context existiert noch nicht).
+ */
+export function configureContext(options: AudioContextOptions): boolean {
+  return setContextOptions(options);
+}
+
 /** Liest die momentan gespeicherten Optionen aus (für Diagnose/Tests). */
 export function getContextOptions(): AudioContextOptions {
   return { ..._pendingOptions };
