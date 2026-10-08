@@ -13,6 +13,7 @@
  * werden kann (z. B. offline installierte Instanz).
  */
 import { encodeWavFromChannels } from '../utils/wavEncode';
+import { DemucsOlaAccumulator } from './demucsOla';
 
 const DEMUCS_MODEL_URL = '/models/htdemucs.onnx';
 const DEMUCS_SEGMENT = 343980; // ~7,8 s @ 44,1 kHz
@@ -36,12 +37,6 @@ function getOrt(): Promise<Ort> {
   return ortPromise;
 }
 
-/** Linearer Overlap-Add-Fenster-Anteil für Position `i` im Segment. */
-function windowWeight(i: number, segLen: number, ramp: number): number {
-  if (i < ramp) return i / ramp;
-  if (i >= segLen - ramp) return (segLen - i) / ramp;
-  return 1;
-}
 
 /**
  * Führt die vollständige HTDemucs-Inferenz auf einer Audio-Datei aus.
@@ -107,8 +102,9 @@ export async function separateStemsWithDemucs( // NOSONAR: bewusst komplexe Audi
   const seg = DEMUCS_SEGMENT;
   const ramp = Math.round(seg * DEMUCS_OVERLAP);
   const hop = seg - ramp;
-  const nChunks = Math.max(1, Math.ceil((total - ramp) / hop));
-  const stems = [0, 1, 2, 3].map(() => [new Float32Array(total), new Float32Array(total)]);
+  // RT-AUDIT-P2-018: Overlap-Add mit Randregel + Gewichtsnormierung (src/ai/demucsOla.ts).
+  const nChunks = DemucsOlaAccumulator.chunkCount(total, seg, ramp);
+  const ola = new DemucsOlaAccumulator(total, seg, ramp, 4, 2);
   const inputName = session.inputNames[0];
   const outputName = session.outputNames[0];
 
@@ -127,21 +123,10 @@ export async function separateStemsWithDemucs( // NOSONAR: bewusst komplexe Audi
     const out = results[outputName];
     const outData = out.data as Float32Array; // [1, S, 2, seg]
     const S = out.dims[1] ?? 4;
-
-    for (let s = 0; s < Math.min(S, 4); s++) {
-      for (let ch = 0; ch < 2; ch++) {
-        const stem = stems[s][ch];
-        for (let i = 0; i < seg; i++) {
-          const srcIdx = offset + i;
-          if (srcIdx >= total) break;
-          const v = outData[((s * 2 + ch) * seg) + i];
-          const w = windowWeight(i, seg, ramp);
-          stem[srcIdx] += (Number.isFinite(v) ? v : 0) * w;
-        }
-      }
-    }
+    ola.add(offset, outData, S, c === 0, c === nChunks - 1);
     onProgress?.(15 + Math.round(80 * ((c + 1) / nChunks)));
   }
+  const stems = ola.finalize();
 
   // --- WAV-Encode pro Stem ---
   const names: (keyof DemucsStems)[] = ['drums', 'bass', 'other', 'vocals'];
