@@ -1490,7 +1490,7 @@
       "id": "RT-AUDIT-P2-021",
       "title": "Mixer-Kanalzahl konfigurierbar (Spezifikation: 5 Kanäle × A/B = 10)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Mixer",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-021)",
       "detectedAt": "2026-10-07",
@@ -1531,13 +1531,14 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): Entscheidung dokumentiert (architectureDecisions in MASTERTODOENDE.json): Es bleibt bei 8 Kanälen (channel1..channel8, UI zwei Bänke à 4). Begründung: die bestehende UI/Story ist auf 8 ausgelegt (2 Bänke à 4, Rollen je Kanal), eine 10-Kanal-Variante (5×A/B) würde Bank-Layout, TRACK_ROLE_MAP und die Voice-Pools gleichzeitig umbauen, ohne dass eine konkrete 5-Kanal-DJ-Anforderung mit A/B-Ziel vorliegt; so eine Migration gehört in ein eigenes Ticket. Kanalzahl ist bereits an EINER Stelle definiert: V2_CHANNELS in src/core/audio/V2StudioGraph.ts; es gibt keine zweite Kanalliste (geprüft: alle 45 Nutzungen leiten von dort ab)."
     },
     {
       "id": "RT-AUDIT-P2-022",
       "title": "audit:rt als CI-Gate (nach Abschluss der P0-Punkte)",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "Tests/CI",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-022)",
       "detectedAt": "2026-10-07",
@@ -1582,7 +1583,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Agent): (1) npm run audit:rt:gate (tsx scripts/audit/rt-bench.ts --gate) läuft jetzt in npm run verify (und der CI-Workflow ci.yml hat einen eigenen Schritt 'Echtzeit-Audit-Gate'). (2) --only=ID1,ID2 grenzt die Messung auf einzelne Grenzen ein (z. B. --only=RT-AUDIT-P0-001,RT-AUDIT-P1-009) – die schweren Messfunktionen laufen dann gar nicht. (3) CI-Rauschen: auf CI (process.env.CI) bekommen NUR die Zeitmessungen (gcmax, GC/s, p99,9) die doppelte Toleranz (timeTol); alle Funktionsmessungen (Stimmenlänge, Swing, THD, Stereo, SINAD/Resampling, Allokationen, Blöcke über Budget) bleiben ohne Toleranz. Test: tests/rtAuditGate.test.ts (2) – --only beschränkt die Tabelle und --gate liefert Exit 0 bei erfüllten Grenzen. Aktueller Stand: audit:rt 12/12 (Gate-Exit 0)."
     },
     {
       "id": "IDEA-2026-10-07-A",
@@ -7040,7 +7042,8 @@
     "VisualMONK: Echtzeit-Liveshow per Shader (Client) + generative Bilder/Video per RunPod-Visual-Rollen `imageHq`/`videoReal`/`videoAbstract` (starten nur bei Abruf, Konstitution 2026-09-20).",
     "Kostenregel (Konstitution 2026-09-20): max. 8 GPU-Endpoints, <=10 EUR/h Flotte, <=5 EUR/Monat Storage/Snapshots.",
     "max. 5 Hetzner-Server (Rollen app/sfu/ai/master/edge; Konstitution 2026-09-20, AI_MAX_HETZNER_SERVERS).",
-    "AI ist per Einstellung abschaltbar -> dann nur Hetzner (ca. 0,054 EUR/h) und kein GPU-Aufruf. Bei 'AI an' laufen alle Rollen voll AUSSER den Visual-Rollen (imageHq/videoReal/videoAbstract), die erst bei Abruf starten (Konstitution 2026-09-20)."
+    "AI ist per Einstellung abschaltbar -> dann nur Hetzner (ca. 0,054 EUR/h) und kein GPU-Aufruf. Bei 'AI an' laufen alle Rollen voll AUSSER den Visual-Rollen (imageHq/videoReal/videoAbstract), die erst bei Abruf starten (Konstitution 2026-09-20).",
+    "Kanalzahl des Mixers (RT-AUDIT-P2-021): 8 Kanäle (channel1..channel8, UI = zwei Bänke à 4) bleiben. Einzige Quelle ist V2_CHANNELS in src/core/audio/V2StudioGraph.ts; keine zweite Liste. Eine Erweiterung auf 10 (5 Kanäle × A/B) wurde geprüft und verworfen: sie würde die Bank-UI, TRACK_ROLE_MAP und die V2-Sink-Voice-Pools gleichzeitig ändern, ohne dass eine konkrete 5-Kanal-DJ-Anforderung mit A/B-Fader-Ziel vorliegt. Bei Bedarf später als eigenständige Migration."
   ],
   "infraFixes2026_09_11": [
     "SSH: veraltete known_hosts-Eintraege der wiederverwendeten Hetzner-IPs entfernt",

@@ -13,6 +13,11 @@ import { GainNode, MasterSumNode, SourceNode, StereoPanNode } from './nodes/basi
 import { v2GainDbToLinear } from './v2GainDb';
 import type { IProcessingContext } from './types';
 
+/**
+ * RT-AUDIT-P2-021: EINZIGE Quelle der Mixer-Kanalzahl. Entscheidung (siehe
+ * MASTERTODOENDE.json/architectureDecisions): 8 Kanäle, UI = zwei Bänke à 4.
+ * Keine zweite Kanalliste anlegen – alles leitet von hier ab.
+ */
 export const V2_CHANNELS = ['channel1', 'channel2', 'channel3', 'channel4', 'channel5', 'channel6', 'channel7', 'channel8'] as const;
 export type V2Channel = (typeof V2_CHANNELS)[number];
 
