@@ -1,5 +1,5 @@
 # AudioMONASTRY AI Runtime – deterministisches Dependency-Lock
-# torch ist NICHT enthalten: kommt aus dem Basisimage pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime.
+# torch ist NICHT enthalten: kommt aus dem Basisimage pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime (RT-AUDIT-P2-019, gleich in Dockerfile und Dockerfile.runpod).
 # Direkte Dependencies inkl. sha256-Pins (Transitive werden weiterhin von pip aufgelöst).
 fastapi==0.115.6 \
     --hash=sha256:e9240b29e36fa8f4bb7290316988e90c381e5092e0cbe84e7818cc3713bcf305
