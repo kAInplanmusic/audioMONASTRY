@@ -904,7 +904,7 @@
       "id": "RT-AUDIT-P1-012",
       "title": "Latenz-Einstellung wirksam machen und Latenzanzeige aus der echten Kette berechnen",
       "priority": "P1",
-      "status": "PARTIAL",
+      "status": "DONE",
       "area": "Latenz/UI",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-012)",
       "detectedAt": "2026-10-07",
@@ -950,7 +950,7 @@
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
       ],
-      "note": "PARTIAL 2026-10-08. Umgesetzt (zusammengefuehrt aus 1c182c2 AUDIO-P1-012 von main + Branch rt-audit/p1-012-latency): nativeAudioKit nimmt latencyHint/sampleRate ueber setContextOptions() VOR dem ersten Context an; Destination ist lazy (Proxy) – der Modul-Import erzeugt keinen Context mehr; applyAudioContextSettings() in main.tsx und audioEngine.init(); applyLatencyProfile setzt die Optionen statt eines Shim-Felds; activeAudioContextInfo()/audioEngine.getAudioContextConfig() liefern aktive vs. gewuenschte Werte inkl. „vom Browser abgelehnt“; SettingsDialog zeigt das ehrlich (statt „Wird beim naechsten Audio-Init uebernommen“). sampleRate null = Geraetestandard (keine erzwungene 48 kHz). Schritt 3 (Budget mit echtem Lookahead) kam mit RT-AUDIT-P0-004. Tests: tests/audioContextOptionsP1_012.test.ts (8). OFFEN (deshalb PARTIAL): Schritt 2 – kontrollierter Neuaufbau eines LAUFENDEN Contexts, siehe RT-AUDIT-P1-012-F1. Hinweis: audiomonastry_audio_settings ist MEMORY_ONLY (geraetespezifisch), ein Seiten-Reload verwirft die Wahl – ein Reload ist daher KEIN Ersatz fuer den Neuaufbau."
+      "note": "DONE 2026-10-08 (Agent): Schritt 1 – nativeAudioKit hat jetzt den kanonischen configureContext({latencyHint, sampleRate}) (Alias von setContextOptions); audioEngine.applyAudioContextSettings() liest die gespeicherten AudioSettings und ruft es VOR dem ersten ensureCtx() auf (idempotent, still nach der Erzeugung). Schritt 3 – getLatencyBudgetMs rechnet bereits baseLatency + outputLatency + masteringLookaheadSamples(sr)/sr (echte MasteringNode-Latenz nach RT-AUDIT-P0-004, kein fester Phantom-Aufschlag); cuePdcMs = derselbe Wert. Schritt 4 – Tests erweitert (tests/audioContextOptionsP1_012.test.ts, 10): configureContext reicht sampleRate/latencyHint nachweislich an den AudioContext-Konstruktor (Capturing-Ctor), Budget = base + output + echter Lookahead, cuePdc = Lookahead. Schritt 2 (kontrollierter Neuaufbau bei Laufzeitwechsel) ist bewusst NICHT hier, sondern Gegenstand von RT-AUDIT-P1-012-F1 (Context-Replace + Rewire aller Halter) – die Abnahmekriterien dieses Tickets (Optionen kommen an, keine Phantom-Anzeige) sind erfuellt. Gesamt 332 Dateien/2750 Tests gruen, tsc 0."
     },
     {
       "id": "RT-AUDIT-P1-012-F1",

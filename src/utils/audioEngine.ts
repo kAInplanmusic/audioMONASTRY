@@ -30,7 +30,7 @@ export function applyAudioContextSettings(): boolean {
     } else if (parsed.bufferHint === 'interactive') {
       options.latencyHint = 'interactive';
     }
-    return Tone.setContextOptions(options);
+    return Tone.configureContext(options);
   } catch {
     return false;
   }

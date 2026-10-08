@@ -135,4 +135,36 @@ describe('AUDIO-P1-012 · AudioContext-Optionen', () => {
     mod.setContextOptions({ sampleRate: undefined, latencyHint: 'balanced' });
     expect(mod.getContextOptions()).toEqual({ latencyHint: 'balanced' });
   });
+
+  it('RT-AUDIT-P1-012: configureContext ist der kanonische Name und reicht die Optionen an den Konstruktor', async () => {
+    const captured: AudioContextOptions[] = [];
+    class CapturingCtx {
+      sampleRate = 96000;
+      state: AudioContextState = 'suspended';
+      constructor(options: AudioContextOptions = {}) { captured.push(options); }
+      resume() { return Promise.resolve(); }
+      get destination() { return {}; }
+    }
+    (globalThis as unknown as { window: { AudioContext?: unknown } }).window.AudioContext = CapturingCtx as unknown as typeof AudioContext;
+    const mod = await import('../src/core/audio/compat/nativeAudioKit');
+    expect(mod.configureContext({ sampleRate: 96000, latencyHint: 'playback' })).toBe(true);
+    // Erst der Zugriff erzeugt den Context – mit genau diesen Optionen.
+    void (mod.Destination as unknown as { connect: unknown }).connect;
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toMatchObject({ sampleRate: 96000, latencyHint: 'playback' });
+  });
+
+  it('RT-AUDIT-P1-012: Latenz-Budget = base + output + echter Mastering-Lookahead (kein Phantom)', async () => {
+    const { audioEngine } = await import('../src/utils/audioEngine');
+    const budget = audioEngine.getLatencyBudgetMs();
+    const health = audioEngine.getAudioHealth();
+    // Zusammensetzung exakt nachvollziehbar (kein zweiter, fester 5-ms-Aufschlag).
+    expect(budget.totalMs).toBeCloseTo(
+      health.baseLatencyMs + health.outputLatencyMs + budget.masteringLookaheadMs,
+      9,
+    );
+    // Der ausgewiesene Lookahead ist die ECHTE MasteringNode-Latenz (≈ 5 ms @48 kHz).
+    expect(budget.masteringLookaheadMs).toBeCloseTo((240 / 48000) * 1000, 3);
+    expect(budget.cuePdcMs).toBe(budget.masteringLookaheadMs);
+  });
 });
