@@ -104,7 +104,7 @@
       "id": "RT-AUDIT-P0-002",
       "title": "Audio-Thread allokationsfrei: BufferPool ersetzen, feste Port-Puffer, keine GC-Pausen",
       "priority": "P0",
-      "status": "IN_PROGRESS",
+      "status": "DONE",
       "area": "Audio-Engine",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P0-002)",
       "detectedAt": "2026-10-07",
@@ -178,7 +178,7 @@
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
       ],
-      "note": "IN_PROGRESS 2026-10-07: Hintergrund-Agent im eigenen Worktree (parallel zu RT-AUDIT-P0-007; Abgrenzung: P0-007 fasst Nodes/V2SinkEngine/V2MonitorGraph nicht an, P0-002 im Processor nur ctx-Literal + sfzBanks-Iteration). P2-017 (DspFilterNode) wird hier miterledigt. "
+      "note": "DONE 2026-10-08 (Commit f92187b, Merge 6f2655c, Hintergrund-Agent): BaseNode.ensureOutput – fester Puffersatz je Ausgangsport (PortBuffers.ts), BufferPool.ts geloescht; prepareProcess kopiert immer in den eigenen Port-Puffer (Fan-out/In-Place-Falle: alle Bypass-Pfade liefern Kopien); V2MonitorGraph.render liefert festes Ergebnisobjekt; ParametricEq-Koeffizienten nur bei Aenderung in vorhandene Arrays; Stereo21Crossover.processInto; V2OutputGraph/V2SinkEngine-Rueckfaelle vorallokiert; geboxte Nullish-Rueckfaelle pro Sample (MasteringNode 8,2 KB/Block) und ModMatrix/HqReverb-Allokationen entfernt; Processor: ctx-Feld + SfzBankRegistry per Index. Klang: 22 Szenarien bitgleich (Pruefsummen), einzige gewollte Abweichung DSP-Filter mit bewegter Huellkurve (P2-017, -47..-51 dB). audit:rt auf main nach Merge (3 Laeufe): alloc 46 -> 0; GC 3,1/s -> 0,067-0,083/s; gcmax 0,63-0,99 ms (vorher bis 9,6); p99,9 0,40-0,58 ms (vorher 1,9-4,8); over 1/0/1 von 22.500. Bewertung over: allokationsfreie Kontrollschleife OHNE Engine bei gleicher mittlerer Last (0,18 ms) erzeugt in derselben VM 1/3/4 Ueberschreitungen je 22.500 (max 2,7-5,0 ms) -> Rest ist VM-Scheduling-Jitter, nicht Code. Echter Nachweis \"0 Xruns\" auf Zielhardware im Browser bleibt Teil von LIVE-P1-003 (Messung ueber RT-AUDIT-P0-005). Tests: tests/v2AllocFree.test.ts (10); tests/phase1Migration.test.ts BufferPool-Statistiktest durch Wiederverwendungstest ersetzt (BufferPool existiert nicht mehr). Auf main: tsc 0, eslint 0, 316 Dateien/2614 Tests, knip 0, Boundary 0, Worklet-Build ok. Rest: ~250 B/Block geboxte Zwischenwerte (WASM = visionSandbox V1.1)."
     },
     {
       "id": "RT-AUDIT-P0-003",
@@ -1078,7 +1078,7 @@
       "id": "RT-AUDIT-P2-017",
       "title": "DspFilterNode: Koeffizienten-Update gedrosselt und allokationsfrei",
       "priority": "P2",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "DSP",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P2-017)",
       "detectedAt": "2026-10-07",
@@ -1117,7 +1117,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 zusammen mit RT-AUDIT-P0-002 (f92187b): Koeffizienten hoechstens alle 16 Samples, ohne Allokation; statische Huellkurve identisch (<1e-5), bewegte -47..-51 dB Abweichung (gewollt). Wer Bitgleichheit will: Drosselung entfernen, bleibt allokationsfrei."
     },
     {
       "id": "RT-AUDIT-P2-018",
