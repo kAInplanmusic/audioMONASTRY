@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { lufsLabel, transportReadout } from '../src/components/MasterplayerReadout';
+import { lufsLabel, transportReadout } from '../src/components/MastergraphReadout';
 
-// UI2-P1-002: Masterplayer ist reine Ansicht - Zeit, Takt.Schlag, LUFS.
+// UI2-P1-002: Mastergraph ist reine Ansicht - Zeit, Takt.Schlag, LUFS.
 describe('transportReadout', () => {
   it('startet bei 00:00 auf Takt 1.1', () => {
     expect(transportReadout(0, 128)).toEqual({ time: '00:00', position: '1.1' });

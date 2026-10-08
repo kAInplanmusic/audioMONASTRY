@@ -12,7 +12,7 @@ type UploadStatus = 'idle' | 'uploading' | 'ok' | 'local' | 'error';
 /**
  * SampleUploadPanel – Audio-Dateien hochladen (Cloud ODER lokaler Fallback).
  * ---------------------------------------------------------------
- * 1. Validiert Format (wav/mp3/flac/ogg/m4a/aac/aiff)
+ * 1. Validiert Format (wav/mp3/flac/ogg/oga/opus/weba/m4a/aac/aiff)
  * 2. Lädt über POST /api/upload/sample (R2 + Supabase inkl. Scan/Tagging)
  * 3. Fällt die Cloud aus (nicht konfiguriert/Fehler), wird die Datei lokal
  *    in OPFS persistiert und als lokales Sample eingereiht (kein Datenverlust).
@@ -108,7 +108,7 @@ export const SampleUploadPanel: React.FC = () => {
         <input
           ref={fileRef}
           type="file"
-          accept=".wav,.mp3,.flac,.ogg,.m4a,.aac,.aiff,.aif,audio/*"
+          accept=".wav,.mp3,.flac,.ogg,.oga,.opus,.weba,.m4a,.aac,.aiff,.aif,audio/*"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); }}
           className="text-[10px] text-neutral-400 file:mr-2 file:px-2 file:py-1 file:rounded file:border file:border-neutral-700 file:bg-neutral-900 file:text-cyan-300 file:text-[10px]"
         />

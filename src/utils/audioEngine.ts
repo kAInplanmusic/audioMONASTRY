@@ -407,30 +407,55 @@ class AudioEngine {
   }
 
   /**
-   * P1-3/P2-1: Gespeicherte Audio-Settings tatsächlich anwenden.
-   * - Latency-Profil steuert das Scheduler-Lookahead adaptiv (8–15 ms).
-   * - Die Sample-Rate wird als Präferenz gespeichert und beim nächsten
-   *   AudioContext-Aufbau (bzw. Tone.Context) berücksichtigt.
+   * P1-3/P2-1 + RT-AUDIT-P1-012: Audio-Settings anwenden.
+   * - Latency-Profil steuert das Scheduler-Lookahead adaptiv (8–15 ms) – sofort.
+   * - `latencyHint` und Sample-Rate wirken nur im AudioContext-Konstruktor:
+   *   `Tone.setContextOptions` übergibt sie dem Live-Context, solange er
+   *   noch nicht existiert. Läuft er bereits mit anderen Werten, meldet
+   *   `getAudioContextConfig().restartRequired` das ehrlich (kein Shim-Wert,
+   *   der eine Wirkung nur vortäuscht).
    */
   public applyLatencyProfile(hint: LatencyProfile, sampleRate?: number): void {
     this.latencyPolicy.applyProfile(hint);
     this.lookahead = this.latencyPolicy.snapshot().lookaheadMs;
     try {
-      const toneCtx = Tone.getContext() as unknown as { lookAhead?: number; latencyHint?: string };
+      const toneCtx = Tone.getContext() as unknown as { lookAhead?: number };
       if (toneCtx && Number.isFinite(toneCtx.lookAhead as number)) {
         toneCtx.lookAhead = this.lookahead / 1000;
-      }
-      if (toneCtx && typeof toneCtx.latencyHint === 'string') {
-        toneCtx.latencyHint = hint;
       }
     } catch { /* Tone-Context noch nicht verfügbar */ }
     if (Number.isFinite(sampleRate as number) && (sampleRate as number) > 0) {
       this.preferredSampleRate = sampleRate as number;
     }
+    Tone.setContextOptions({ latencyHint: hint, sampleRate: this.preferredSampleRate ?? undefined });
   }
 
-  /** P1-3: Vom Nutzer gewünschte Sample-Rate (wird beim Context-Aufbau genutzt). */
-  public preferredSampleRate = 48000;
+  /**
+   * P1-3: Vom Nutzer gewünschte Sample-Rate (wird beim Context-Aufbau genutzt).
+   * null = Gerätestandard – keine erzwungene Rate, damit der Browser nicht
+   * ungefragt zwischen Context- und Hardware-Rate resamplen muss.
+   */
+  public preferredSampleRate: number | null = null;
+
+  /**
+   * RT-AUDIT-P1-012: Gewünschte vs. tatsächlich aktive Context-Einstellungen.
+   * `restartRequired`: der laufende Context weicht ab – die Werte greifen erst
+   * mit einem neuen AudioContext.
+   */
+  public getAudioContextConfig(): {
+    desired: { sampleRate: number | null; latencyHint: string | number | null };
+    active: { sampleRate: number; latencyHint: string | number | null; optionsRejected: boolean } | null;
+    restartRequired: boolean;
+  } {
+    const wanted = Tone.getContextOptions();
+    const desired = { sampleRate: wanted.sampleRate ?? null, latencyHint: wanted.latencyHint ?? null };
+    const info = Tone.activeAudioContextInfo();
+    const active = info ? { sampleRate: info.sampleRate, latencyHint: info.latencyHint, optionsRejected: info.optionsRejected } : null;
+    const restartRequired = active !== null
+      && ((desired.sampleRate !== null && active.sampleRate !== desired.sampleRate)
+        || active.latencyHint !== desired.latencyHint);
+    return { desired, active, restartRequired };
+  }
 
   /** NEW-MONK-8/P2-2: Swing systemweit setzen (Worklet-Clock + Scheduler). */
   public setSwing(swing: number): void {
@@ -1794,7 +1819,7 @@ class AudioEngine {
     this.masterTap.disconnectAnalyser(analyser);
   }
 
-  /** UI2-P1-002: Transport-Position in Sekunden (nur Anzeige im Masterplayer). */
+  /** UI2-P1-002: Transport-Position in Sekunden (nur Anzeige im Mastergraph). */
   public getTransportSeconds(): number {
     try {
       const sec = Tone.Transport.seconds;

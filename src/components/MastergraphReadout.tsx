@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { audioEngine } from '../utils/audioEngine';
 
 /**
- * UI2-P1-002 · Masterplayer = reine Ansicht
+ * UI2-P1-002 · Mastergraph = reine Ansicht
  * Zeit, Takt.Schlag und Lautheit des Main-Ausgangs. Keine Bedienelemente:
  * Ton auf Main startet nur ▶ im mixerMONK. Abgefragt wird im UI-Takt, nie im
  * Audio-Thread; die Werte kommen aus der Engine, nicht aus lokalem UI-State.
@@ -38,7 +38,7 @@ const Cell = ({ value, label, wide = false }: { value: string; label: string; wi
   </div>
 );
 
-export const MasterplayerReadout = React.memo(function MasterplayerReadout({
+export const MastergraphReadout = React.memo(function MastergraphReadout({
   bpm,
   isPlaying,
   pollMs = 100,

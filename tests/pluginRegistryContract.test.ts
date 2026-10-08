@@ -28,7 +28,7 @@ describe('Plugin-Registry-Vertrag (16 kanonische Plugins)', () => {
 
   it('Systemmodule sind nicht in der Registry', () => {
     const ids = new Set(getPluginRegistry().map((p) => p.id));
-    expect(ids.has('masterplayer')).toBe(false);
+    expect(ids.has('mastergraph')).toBe(false);
     expect(ids.has('ai')).toBe(false);
     expect(ids.has('performance')).toBe(false);
     expect(ids.has('perfor')).toBe(false);
@@ -60,7 +60,7 @@ describe('Plugin-Registry-Vertrag (16 kanonische Plugins)', () => {
   });
 
   it('Systemmodule werden nicht als kanonische Plugins aufgelöst', () => {
-    for (const id of ['masterplayer', 'ai', 'performance', 'perfor', 'controller']) {
+    for (const id of ['mastergraph', 'ai', 'performance', 'perfor', 'controller']) {
       expect(resolveCanonicalPluginId(id)).toBeNull();
     }
   });

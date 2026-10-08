@@ -1,0 +1,95 @@
+{
+  "$comment": "EINZIGE Quelle der RunPod-Pod-Flotte (Betreiber 2026-10-07: Pods statt Serverless, alles resident, AI-Aufpreis max. 4 EUR/h). Gelesen von scripts/runpod-pods.py und server/podFleet.ts, geprueft von tests/podFleetConfig.test.ts. Plan und Herleitung: docs/AI_FLEET_6X48_PLAN.md, Betrieb: docs/RUNPOD_PODS_RUNBOOK.md.",
+  "schemaVersion": 1,
+  "namePrefix": "audiomonastry-pod-",
+  "imageEnv": "RP_POD_IMAGE",
+  "imageExample": "ghcr.io/kainplanmusic/audiomonastry-ai-runtime-runpod:<git-sha>",
+  "port": 8000,
+  "cloudType": "SECURE",
+  "budget": { "maxEurPerHour": 4, "usdToEur": 0.92 },
+  "gpuPools": {
+    "48gb": [
+      { "id": "NVIDIA A40", "usdPerHour": 0.49 },
+      { "id": "NVIDIA RTX A6000", "usdPerHour": 0.53 }
+    ],
+    "24gb-nvenc": [
+      { "id": "NVIDIA RTX A5000", "usdPerHour": 0.27 },
+      { "id": "NVIDIA RTX 4000 Ada Generation", "usdPerHour": 0.28 }
+    ]
+  },
+  "weights": {
+    "$comment": "Gewichte liegen als tar je Modell im R2-Bucket unter <prefix>/<model-id>/<revision>.tar mit <prefix>/<model-id>/<revision>.sha256; befuellt von scripts/weights-mirror.py. Der Pod bekommt nur zeitlich begrenzte Presigned-URLs.",
+    "prefix": "weights",
+    "urlTtlSeconds": 21600
+  },
+  "pods": [
+    {
+      "role": "brain",
+      "label": "Gehirn: App-/DAW-Steuerung per Text, Tool-Calls, MoA-Planung",
+      "aiRole": "brain+orchestrator",
+      "models": ["qwen3-30b-a3b-awq", "qwen3-4b"],
+      "gpuPool": "48gb",
+      "containerDiskGb": 120,
+      "covers": ["brain", "orchestrator"],
+      "env": {
+        "MOA_CLASSIFIER_MODEL": "qwen3-4b",
+        "MOA_PLANNER_A_MODEL": "qwen3-30b-a3b-awq",
+        "MOA_PLANNER_B_MODEL": "qwen3-4b",
+        "MOA_AGGREGATOR_MODEL": "qwen3-30b-a3b-awq"
+      },
+      "startOrder": 1
+    },
+    {
+      "role": "ears",
+      "label": "Analyse: Sprache, Klang, Musikverstaendnis, Sprecher, Messwerte",
+      "aiRole": "ears",
+      "models": ["whisper-large-v3", "clap-music", "mert-v1-330m", "qwen2-audio-7b", "pyannote-diarization", "ast-audioset", "essentia"],
+      "gpuPool": "48gb",
+      "containerDiskGb": 120,
+      "covers": ["ears"],
+      "secretEnv": ["HF_TOKEN"],
+      "startOrder": 2
+    },
+    {
+      "role": "voice",
+      "label": "Sprache + Geraeusche: TTS, Stimmdesign, SFX",
+      "aiRole": "voiceGen",
+      "models": ["qwen3-tts-17b", "qwen3-tts-voicedesign", "stable-audio-open-1.0"],
+      "gpuPool": "48gb",
+      "containerDiskGb": 120,
+      "covers": ["voiceGen"],
+      "secretEnv": ["HF_TOKEN"],
+      "startOrder": 3
+    },
+    {
+      "role": "stems",
+      "label": "Stem-Trennung (lange Song-Jobs, blockieren die Sprache nicht)",
+      "aiRole": "voiceGen",
+      "models": ["htdemucs-6s"],
+      "gpuPool": "48gb",
+      "containerDiskGb": 80,
+      "covers": [],
+      "tasks": ["stem.separate"],
+      "startOrder": 4
+    },
+    {
+      "role": "music",
+      "label": "Musik, Remix, Drop/Uebergang: ACE-Step 1.5",
+      "aiRole": "music",
+      "models": ["acestep-v15-xl-sft", "acestep-v15-xl-turbo", "acestep-5hz-lm-4b"],
+      "gpuPool": "48gb",
+      "containerDiskGb": 150,
+      "covers": ["music"],
+      "startOrder": 5
+    }
+  ],
+  "visPod": {
+    "role": "vis",
+    "label": "Vis-Instanz: rendert Visuals auf GPU (NVENC) und streamt zu /visual-out",
+    "enabled": false,
+    "enabledNote": "Wird mit Phase V1 (docs/VISUALMAKER_PLAYER_SPEC.md) eingeschaltet; Image dafuer existiert noch nicht.",
+    "gpuPool": "24gb-nvenc",
+    "containerDiskGb": 100
+  },
+  "retiredRoles": ["imageHq", "videoReal", "videoAbstract"]
+}

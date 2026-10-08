@@ -172,6 +172,7 @@ class ModelManager:
         self._errors: Dict[str, str] = {}
         self._budget_vram_gb = 80.0
         self._safety_margin_gb = 6.0
+        self._resident_only = os.environ.get("AI_RESIDENT_ONLY", "0") == "1"
         self._device = os_env_device()
         self._used_vram_gb = 0.0
         self._inference_count = 0
@@ -197,6 +198,10 @@ class ModelManager:
             runtime = manifest.get("runtime", {})
             self._budget_vram_gb = float(runtime.get("vramBudgetGb", 80.0))
             self._safety_margin_gb = float(runtime.get("vramSafetyMarginGb", 6.0))
+            # Resident-Modus: alles Geladene bleibt dauerhaft, es wird nie verdraengt.
+            self._resident_only = bool(runtime.get("residentOnly", False)) or (
+                os.environ.get("AI_RESIDENT_ONLY", "0") == "1"
+            )
             if runtime.get("device") and not os.environ.get("AI_RUNTIME_DEVICE"):
                 self._device = str(runtime["device"])
             self._models = {}
@@ -297,11 +302,20 @@ class ModelManager:
                     and sibling.exclusiveGroup == group
                     and sibling_id in self._loaded
                 ):
+                    if self._resident_only:
+                        raise ModelUnavailableError(
+                            f"resident-only: {definition.id} verdraengt {sibling_id} (Gruppe {group}) nicht"
+                        )
                     self.unload(sibling_id)
             self._exclusive_active[group] = definition.id
 
         required = definition.estimatedVRAM
         if required > self._available_vram_gb():
+            if self._resident_only:
+                raise ModelUnavailableError(
+                    f"resident-only: VRAM reicht nicht fuer {definition.id} (required {required} GB, "
+                    f"available {self._available_vram_gb():.1f} GB) - es wird nichts verdraengt"
+                )
             evicted = self._evict_for(required)
             if evicted:
                 time.sleep(0.2)  # GPU-Freigabe abwarten

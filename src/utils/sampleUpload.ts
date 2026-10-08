@@ -5,7 +5,9 @@
  * Genutzt von der Upload-UI und vom Server-Pendant (server.ts).
  */
 
-const AUDIO_EXTENSIONS = ['wav', 'mp3', 'flac', 'ogg', 'm4a', 'aac', 'aiff', 'aif'] as const;
+// Nur Formate, die der Browser selbst dekodiert (kein Server-Transcode im Upload-Pfad).
+// Alles Weitere (DSD, APE, WavPack, RAW …) geht über scripts/media-ingest.py ins Archiv.
+const AUDIO_EXTENSIONS = ['wav', 'mp3', 'flac', 'ogg', 'oga', 'opus', 'weba', 'm4a', 'aac', 'aiff', 'aif'] as const;
 export type AudioExtension = (typeof AUDIO_EXTENSIONS)[number];
 
 export const UPLOAD_KINDS = ['sample', 'recording', 'stem', 'sound', 'voice'] as const;

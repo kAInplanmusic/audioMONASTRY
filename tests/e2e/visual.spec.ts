@@ -120,11 +120,11 @@ test('P1-2: Screenshot-Baselines für alle 21 Plugin-/Sektions-Ansichten', async
   await entryButton(page).click();
   await expect(page.getByTitle('mixerMONK').first()).toBeVisible({ timeout: 20_000 });
 
-  // masterplayer (feste Sektion) + aiMONK (Bottom-Dock) sind immer sichtbar.
-  await page.locator('#rack-masterplayer').evaluate((el) => el.scrollIntoView({ block: 'start' }));
+  // mastergraph (feste Sektion) + aiMONK (Bottom-Dock) sind immer sichtbar.
+  await page.locator('#rack-mastergraph').evaluate((el) => el.scrollIntoView({ block: 'start' }));
   await page.waitForTimeout(400);
   await page.mouse.move(0, 0);
-  await expect(page).toHaveScreenshot('03-plugin-masterplayer.png', {
+  await expect(page).toHaveScreenshot('03-plugin-mastergraph.png', {
     animations: 'disabled',
     maxDiffPixelRatio: 0.06,
     mask: [page.locator('canvas')],
