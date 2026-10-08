@@ -16,6 +16,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { V2SinkEngine, V2_MAX_VOICES, V2_VOICE_FADE_SAMPLES } from '../src/core/audio/live/V2SinkEngine';
 import { V2SampleClock, type V2ScheduledStep } from '../src/core/audio/live/V2SampleClock';
 import { V2StepQueue } from '../src/core/audio/live/V2StepQueue';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 import { renderElectricPiano } from '../src/core/dsp/electricPiano';
 import type { V2Channel } from '../src/core/audio/V2StudioGraph';
 import type { IProcessingContext } from '../src/core/audio/types';
@@ -360,9 +361,13 @@ describe('RT-AUDIT-P0-003: v2SinkProcessor feuert mit Swing alle Steps', () => {
     }
     const stepMsgs = messages.filter((m) => m.type === 'step');
     expect(stepMsgs.length).toBe(32);
-    // Ungerade Steps liegen exakt 1500 Samples hinter dem Raster.
-    expect(Math.round((stepMsgs[1].time as number) * SR)).toBe(12000 + 1500);
-    // Der erste Kick (Frame 6000 = Block 46) klingt deutlich länger als einen Block.
+    // Ungerade Steps liegen exakt 1500 Samples hinter dem Raster; zusätzlich
+    // trägt die Meldung seit RT-AUDIT-P0-004-F1 den hörbaren Onset
+    // (Scheduler-Frame + Mastering-Lookahead).
+    const look = v2MasteringLookaheadSamples(SR);
+    expect(Math.round((stepMsgs[1].time as number) * SR)).toBe(12000 + 1500 + look);
+    // Der erste Kick klingt deutlich länger als einen Block (Audible Onset bei
+    // 6000 + Lookahead = 6240 → Block 48).
     const audible = blockRms.slice(46, 46 + 40).filter((v) => v > 1e-3).length;
     expect(audible).toBeGreaterThan(30);
   });
