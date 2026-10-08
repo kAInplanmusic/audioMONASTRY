@@ -690,7 +690,7 @@
       "id": "RT-AUDIT-P1-011",
       "title": "EffectNode und effectProcessor: Delay-Lines, Chorus und Crusher pro Kanal (Stereo-Isolation)",
       "priority": "P1",
-      "status": "OPEN",
+      "status": "DONE",
       "area": "FX",
       "source": "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md (Abschnitt zu RT-AUDIT-P1-011)",
       "detectedAt": "2026-10-07",
@@ -731,7 +731,8 @@
       "reports": [
         "docs/audit/AUDIT_2026-10-07_ECHTZEIT.md",
         "docs/audit/AUDIT_2026-10-07_GESAMTBERICHT.md"
-      ]
+      ],
+      "note": "DONE 2026-10-08 (Branch rt-audit/p1-011-fx-stereo): EffectNode mit FxChannelState je Kanal (Combs/Allpaesse/Chorus/Crusher), Zustaende nur bei geaenderter Kanalzahl angelegt (nicht im Block-Takt); Chorus-LFO einmal pro Sample statt pro Kanal. Mono-Verhalten unveraendert (alle v2-Tests gruen). audit:rt RT-AUDIT-P1-011: 0,435 -> 0 (OK). Tests: tests/v2EffectStereo.test.ts (5: rechts exakt still bei Impuls links; Impuls links = Mono-Lauf; L=R = Mono je Kanal; Ausgangsreferenz stabil; reset leert). tsc 0, eslint 0, 317 Dateien/2619 Tests, knip 0, Boundary 0. Abweichung vom Plan: der Legacy-Worklet src/audio/worklets/effectProcessor.ts hat denselben Fehler, haengt aber nicht im Live-Pfad (unverbunden) – wird mit RT-AUDIT-P2-020 entfernt statt repariert. Optionaler Freeverb-Spread (Stereo-Breite) nicht umgesetzt."
     },
     {
       "id": "RT-AUDIT-P1-012",
