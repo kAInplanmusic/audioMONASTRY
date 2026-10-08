@@ -5,6 +5,7 @@ import { signalTopology, CONTRACT_BY_ID } from '../src/plugins/pluginContract';
 import { AudioGraph } from '../src/core/audio/AudioGraph';
 import { SourceNode, GainNode } from '../src/core/audio/nodes/basicNodes';
 import type { IProcessingContext } from '../src/core/audio/types';
+import { v2MasteringLookaheadSamples } from '../src/core/audio/live/v2Pdc';
 
 /**
  * C0 – VERTIKALER SPIKE.
@@ -23,6 +24,19 @@ const ctx = (t = 0): IProcessingContext => ({
   currentTime: t,
   quantum: BLOCK,
 });
+
+/**
+ * RT-AUDIT-P0-004: Das Mastering (Knoten `master`) hat jetzt seinen ECHTEN
+ * Lookahead (240 Frames = `referenceLatencyFrames`). Der erste Block am Ausgang
+ * ist deshalb noch still; `settled()` rendert die Latenz weg und liefert den
+ * ersten eingeschwungenen Block (die Quellen wiederholen ihren Block).
+ */
+const LOOKAHEAD = v2MasteringLookaheadSamples(SR);
+const SETTLE_BLOCKS = Math.ceil(LOOKAHEAD / BLOCK);
+const settled = (c: C0StudioChain): Float32Array[] | null => {
+  for (let b = 0; b < SETTLE_BLOCKS; b++) c.render(ctx(b * BLOCK));
+  return c.render(ctx(SETTLE_BLOCKS * BLOCK));
+};
 
 /** Impuls in Kanal 0, sonst Stille. */
 const impulse = (len = BLOCK): Float32Array[] => {
@@ -75,7 +89,7 @@ describe('C0 – der vertikale Pfad steht und traegt Ton', () => {
     const c = new C0StudioChain(SR, BLOCK);
     c.setChannelSource('channel1', impulse());
     c.setChannelGainDb('channel1', 0);
-    const out = c.render(ctx());
+    const out = settled(c);
     expect(peak(out), 'ein Impuls muss den Pfad erreichen').toBeGreaterThan(0.1);
   });
 
@@ -84,7 +98,7 @@ describe('C0 – der vertikale Pfad steht und traegt Ton', () => {
     expect(c.strips.size).toBe(8);
     // Jeder Kanal kann einzeln befeuert werden.
     c.setChannelSource('channel8', impulse());
-    const out = c.render(ctx());
+    const out = settled(c);
     expect(peak(out)).toBeGreaterThan(0.1);
   });
 
@@ -100,12 +114,12 @@ describe('C0 – der vertikale Pfad steht und traegt Ton', () => {
     const loud = new C0StudioChain(SR, BLOCK);
     loud.setChannelSource('channel1', impulse());
     loud.setChannelGainDb('channel1', 0);
-    const p1 = peak(loud.render(ctx()));
+    const p1 = peak(settled(loud));
 
     const quiet = new C0StudioChain(SR, BLOCK);
     quiet.setChannelSource('channel1', impulse());
     quiet.setChannelGainDb('channel1', -12);
-    const p2 = peak(quiet.render(ctx()));
+    const p2 = peak(settled(quiet));
 
     expect(p1).toBeGreaterThan(p2);
     expect(p2).toBeGreaterThan(0);
@@ -229,7 +243,7 @@ describe('C1 – Worklet-Anbindung ohne Umstecken', () => {
     const c = new C0StudioChain(SR, BLOCK);
     c.setChannelSource('channel1', impulse());
     c.setChannelGainDb('channel1', 0);
-    const vorher = peak(c.render(ctx()));
+    const vorher = peak(settled(c));
 
     // Ein "echter" Prozessor: halbiert das Signal. Wuerde das Umstecken etwas
     // kosten (disconnect/connect), waere hier ein Klick oder ein Abbruch.
@@ -248,7 +262,7 @@ describe('C1 – Worklet-Anbindung ohne Umstecken', () => {
       };
 
     expect(c.attachWorklet('eq', halbierer), 'eq muss anbindbar sein').toBe(true);
-    const nachher = peak(c.render(ctx()));
+    const nachher = peak(settled(c));
 
     // Der Prozessor wirkt: das Signal ist deutlich kleiner geworden.
     expect(nachher).toBeLessThan(vorher);
@@ -273,7 +287,7 @@ describe('C1 – Worklet-Anbindung ohne Umstecken', () => {
       const len = src[0]?.length ?? cc.bufferSize;
       output[0] = [new Float32Array(len).fill(0.25), new Float32Array(len).fill(0.25)];
     });
-    expect(peak(c.render(ctx()))).toBeGreaterThan(0);
+    expect(peak(settled(c))).toBeGreaterThan(0);
   });
 });
 
@@ -400,14 +414,18 @@ describe('C1.2 – die 9 Quellen sind eigene Plugin-Knoten', () => {
       const a = new Float32Array(BLOCK).fill(0.5); // ab Frame 0 durchgehend
       return [a, new Float32Array(BLOCK)];
     };
+    // RT-AUDIT-P0-004: gemessen am Ausgang, also um den Mastering-Lookahead
+    // verschoben; zurückgegeben wird die Position RELATIV zum Lookahead.
     const ersterTon = (synced: boolean, offset: number) => {
       const c = new C0StudioChain(SR, BLOCK);
       c.setChannelSource('channel1', ramp());
       c.setChannelSynced('channel1', synced);
       c.setChannelStartFrame('channel1', offset);
-      const out = c.render(ctx());
-      if (!out) return -1;
-      for (let i = 0; i < out[0].length; i++) if (Math.abs(out[0][i]) > 0.05) return i;
+      for (let b = 0; b <= SETTLE_BLOCKS; b++) {
+        const out = c.render(ctx(b * BLOCK));
+        if (!out) return -1;
+        for (let i = 0; i < out[0].length; i++) if (Math.abs(out[0][i]) > 0.05) return b * BLOCK + i - LOOKAHEAD;
+      }
       return -1;
     };
     // Ohne SYNC wirkt der Versatz nicht - Ton ab dem ersten Frame.
@@ -432,7 +450,7 @@ describe('C1.2 – die 9 Quellen sind eigene Plugin-Knoten', () => {
     const c = new C0StudioChain(SR, BLOCK);
     const mono: Float32Array[] = [(() => { const a = new Float32Array(BLOCK); a[0] = 1; return a; })()];
     c.setChannelSource('channel6', mono); // voice
-    const out = c.render(ctx());
+    const out = settled(c);
     expect(out).not.toBeNull();
     expect(out!.length).toBeGreaterThanOrEqual(2);
     // Beide Kanaele tragen das Signal (mono auf Stereo dupliziert).
