@@ -28,6 +28,8 @@ import { V2MonitorGraph } from '../V2MonitorGraph';
 import { V2OutputGraph } from '../V2OutputGraph';
 import type { IProcessingContext } from '../types';
 import type { MonitorRoutingPlan } from '../monitorRouting';
+import type { SfzRegion } from '../../instrument/sfzRegion';
+import type { ControlRingBuffers } from './controlRing';
 import { phaseDistortionSample } from '../../dsp/phaseDistortion';
 import {
   configureElectricPiano,
@@ -39,10 +41,12 @@ import {
 
 export interface V2SinkMessage {
   type: 'test-tone' | 'gain-db' | 'pan' | 'master-gain' | 'transport' | 'pattern'
-    | 'sample-set' | 'sample-trigger' | 'sample-stop' | 'synth-source'
-    | 'sfz-load' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
+    | 'sample-load' | 'sample-assign' | 'sample-unload' | 'sample-trigger' | 'sample-stop' | 'synth-source'
+    | 'sfz-regions' | 'sfz-note-on' | 'sfz-note-off' | 'monitor-plan' | 'output-layout'
     | 'master-eq' | 'master-dsp' | 'master-fx' | 'master-dynamics' | 'master-mastering'
-    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb';
+    | 'mute' | 'synth-trigger' | 'master-mod-matrix' | 'master-reverb' | 'control-ring';
+  /** RT-AUDIT-P1-010 (Schritt 2): Steuer-Ring (SharedArrayBuffer, nur bei crossOriginIsolated). */
+  ring?: ControlRingBuffers;
   active?: boolean;
   freq?: number;
   amplitude?: number;
@@ -56,13 +60,25 @@ export interface V2SinkMessage {
   gate?: number;
   stepCount?: 16 | 32;
   steps?: boolean[];
+  /**
+   * RT-AUDIT-P1-010: Sample-Pool. `sample-load {id, left, right, sourceRate}`
+   * kommt MIT Transfer-Liste (kein Klonen im Audio-Thread), danach ordnet
+   * `sample-assign {channel, id}` das Sample einem Kanal zu; `sample-unload {id}`
+   * gibt es frei. Die frühere `sample-set`-Nachricht (Arrays pro Kanal, ohne
+   * Transfer) gibt es nicht mehr.
+   */
+  id?: string;
   left?: Float32Array;
   right?: Float32Array | null;
   sourceRate?: number;
   loop?: boolean;
   rate?: number;
   offset?: number;
-  sfzText?: string;
+  /**
+   * RT-AUDIT-P1-010: `sfz-regions` – im Main-Thread geparste Regionen-Tabelle;
+   * `sources` kommen per Transfer. Kein SFZ-Text mehr im Audio-Thread.
+   */
+  regions?: SfzRegion[];
   sources?: Record<string, Float32Array>;
   note?: number;
   velocity?: number;

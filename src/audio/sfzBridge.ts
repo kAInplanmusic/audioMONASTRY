@@ -4,10 +4,16 @@
  * Verwaltet SFZ-Instrumente (Sample-Map-Voices) im Realtime-Pfad und den
  * 64-MB-Streaming-Cache für große Samples. Ohne Engine-Zustand: Sample-Rate und
  * V2-Live-Sink werden hereingereicht, die Bank-Factory ist für Tests injizierbar.
+ *
+ * RT-AUDIT-P1-010: Der SFZ-Text wird HIER (Main-Thread) genau einmal geparst.
+ * Der V2-Sink bekommt nur die fertige Regionen-Tabelle und Kopien der Quellen
+ * per Transfer (`loadSfzRegions`) – kein Parsing und kein Klonen großer Arrays
+ * im Audio-Thread. Der Aufrufer behält seine Quell-Arrays.
  */
 import { SfzVoiceBank } from '../core/instrument/sfzVoice';
+import { parseSfz } from '../core/instrument/sfzParser';
 import { SfzSampleCache, planChunkRanges } from '../core/sampler/sfzStreaming';
-import type { V2LiveSink } from '../core/audio/backends/V2LiveSink';
+import { copySfzSources, type V2LiveSink } from '../core/audio/backends/V2LiveSink';
 import type { TrackType } from '../types';
 
 export interface SfzBridgeDeps {
@@ -38,12 +44,16 @@ export class SfzBridge {
       const bank = this.deps.createBank
         ? this.deps.createBank(this.deps.getSampleRate())
         : new SfzVoiceBank(this.deps.getSampleRate());
-      const errors = bank.load(sfzText, sources);
+      // RT-AUDIT-P1-010: einmal im Main-Thread parsen, Regionen weiterreichen.
+      const parsed = parseSfz(sfzText);
+      bank.loadParsed(parsed.regions, sources);
       this.bank = bank;
       this.v2Channel = channel;
-      // Phase 3 Rest: SFZ-Bank auch im V2-Sink als Quelle ablegen.
-      this.deps.getSink().loadSfzBank(channel, sfzText, sources);
-      return errors;
+      // Phase 3 Rest: SFZ-Bank auch im V2-Sink als Quelle ablegen – fertige
+      // Regionen + kopierte Quellen per Transfer (die Bank hier behält die Originale).
+      const sink = this.deps.getSink();
+      if (sink.isConnected) sink.loadSfzRegions(channel, parsed.regions, copySfzSources(sources));
+      return parsed.errors;
     } catch {
       return ['SFZ konnte nicht geladen werden'];
     }
