@@ -30,6 +30,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const REQUIRED = ['id', 'title', 'status'];
 /** Kanonische Feldreihenfolge - neue Items erscheinen damit lesbar sortiert. */
@@ -45,7 +46,7 @@ if (!payloadArg) {
 }
 const dryRun = flags.includes('--dry-run');
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const todoPath = path.join(root, 'MASTERTODOENDE.json');
 
 function orderItem(item) {

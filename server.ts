@@ -111,17 +111,16 @@ app.use((req, res, next) => {
 const PORT = Number(process.env.PORT || 8080);
 
 // ---------------------------------------------------------------------------
-// FLEET-WIRING: Ziel-URLs der Flotten-Knoten (master-player, Ollama, stem-ai)
+// FLEET-WIRING: Ziel-URLs der Flotten-Knoten (master-player, stem-ai)
 // ---------------------------------------------------------------------------
 // Die Hetzner-IPs werden erst bei der Flotten-Erstellung vergeben. Deshalb
 // holt die App sie beim Start vom Portal-Worker (/api/fleet-map, geschützt
 // über den Studio-Token) und überschreibt damit die Default-/Env-Ziele.
-// Direkte Env-Variablen (MASTER_PLAYER_URL, OLLAMA_URL, STEM_AI_URL) haben
+// Direkte Env-Variablen (MASTER_PLAYER_URL, STEM_AI_URL) haben
 // weiterhin Vorrang (explizit gesetzt > Flotten-Map > interner Default).
 // ---------------------------------------------------------------------------
 // ARCH-P2-002: Flotten-Verdrahtung (FLEET_MAP_URL, Ziel-Validierung, Altnamen-
 // Fallback) liegt in server/fleetWiring.ts. `fleetTargets` wird bewusst als
-// Getter weitergereicht: die Routen und der Ollama-/Master-Player-Zugriff lesen
 // die Ziele zur Laufzeit, nicht als Kopie beim Start.
 const fleetWiring = createFleetWiring({});
 const fleetTargets = fleetWiring.targets;
@@ -203,6 +202,19 @@ const sessionRuntime = createSessionRuntime({
   checksum: (input: string) => createHash('sha256').update(input).digest('hex'),
 });
 sessionRuntime.start();
+
+// RT-AUDIT-P1-008: beim geordneten Herunterfahren (docker stop → SIGTERM) den
+// entprellten Session-Save sofort schreiben – sonst gingen die letzten
+// Änderungen verloren. Höchstens 3 s warten, dann beenden.
+if (process.env.NODE_ENV !== 'test' && !process.env.VITEST) {
+  const flushAndExit = (signal: string) => {
+    console.log(`[session] ${signal} – Session-Zustand wird gesichert …`);
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 3000).unref?.());
+    void Promise.race([sessionRuntime.flush(), timeout]).finally(() => process.exit(0));
+  };
+  process.once('SIGTERM', () => flushAndExit('SIGTERM'));
+  process.once('SIGINT', () => flushAndExit('SIGINT'));
+}
 
 // DCT-108: Request/Trace-ID-Middleware (Korrelation User-Action → HTTP → AI).
 app.use((req, res, next) => {
@@ -493,6 +505,17 @@ const isHealthRequest = (req: { originalUrl?: string; url?: string }): boolean =
   return path === '/api/health';
 };
 
+/**
+ * Start-Vorladen des Studio-Speichers und der Server-Bibliothek: jede Seite
+ * lädt beides einmal beim Start (nichts liegt mehr auf dem Gerät). Reine
+ * Lesezugriffe – eigenes Budget, damit Neuladen nicht das Nutzer-Budget frisst.
+ */
+const isStartupReadRequest = (req: { method?: string; originalUrl?: string; url?: string }): boolean => {
+  if (String(req.method || '').toUpperCase() !== 'GET') return false;
+  const path = String(req.originalUrl || req.url || '').split('?')[0];
+  return path === '/api/store' || path === '/api/library/uploads';
+};
+
 /** Meldeweg der CSP (tokenfrei, siehe server/routes/securityRoutes.ts). */
 const isCspReportRequest = (req: { method?: string; originalUrl?: string; url?: string }): boolean => {
   if (String(req.method || '').toUpperCase() !== 'POST') return false;
@@ -568,6 +591,20 @@ const cspReportLimiter = rateLimit({
   keyGenerator: (req: any) => ipKeyGenerator(req.ip),
 });
 
+// Start-Vorladen (Studio-Speicher, Server-Bibliothek): eigenes Budget pro
+// Nutzer/Session, Default 600/min.
+const STARTUP_READ_RATE_LIMIT_MAX = Number(process.env.STARTUP_READ_RATE_LIMIT_MAX || 600);
+
+const startupReadLimiter = rateLimit({
+  windowMs: API_RATE_LIMIT_WINDOW_MS,
+  max: STARTUP_READ_RATE_LIMIT_MAX,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.', code: 'STARTUP_READ_RATE_LIMIT' },
+  keyGenerator: studioKeyGenerator,
+  skip: (req) => !isStartupReadRequest(req),
+});
+
 const apiLimiter = rateLimit({
   windowMs: API_RATE_LIMIT_WINDOW_MS, // Standard: 1 Minute
   max: API_RATE_LIMIT_MAX, // Standard: 60 Requests/Minute je Session/IP
@@ -578,7 +615,11 @@ const apiLimiter = rateLimit({
   // Eigene Budgets bleiben eigene Budgets: Chunks, Agent-Laeufe, Health und der
   // CSP-Meldeweg laufen NICHT unter dem allgemeinen Limit.
   skip: (req) =>
-    isChunkUploadRequest(req) || isAgentRequest(req) || isHealthRequest(req) || isCspReportRequest(req),
+    isChunkUploadRequest(req) ||
+    isAgentRequest(req) ||
+    isHealthRequest(req) ||
+    isCspReportRequest(req) ||
+    isStartupReadRequest(req),
 });
 
 // Chunk-Stream: eigenes, groesseres Budget (Default 240/min = 4 Chunks/s bei
@@ -619,6 +660,7 @@ app.use(CSP_REPORT_PATH, (_req, res, next) => {
   next();
 });
 app.use(CSP_REPORT_PATH, cspReportLimiter);
+app.use('/api', startupReadLimiter);
 app.use('/api', apiLimiter);
 // `/api/upload/sample` (Scan + Ablage) bleibt unter der Kostenbremse; die
 // Chunk-Routen nicht - sie laufen dafuer unter `uploadChunkLimiter`.
@@ -717,7 +759,7 @@ registerCloudRoutes(app);
 // ARCH-P2-002: Die /api/ai-Routen liegen in server/routes/aiRoutes.ts (Factory).
 // Die Registrierung bleibt an dieser Stelle, damit die Reihenfolge relativ zu den
 // Middleware-/Rate-Limit-Ketten unveraendert ist.
-registerAiRoutes(app, { metrics, fleetTargets });
+registerAiRoutes(app, { metrics });
 
 // AI-P1-006: aiMONK-Agent-Loop (planen -> ausfuehren -> pruefen) mit Abbruch,
 // Wiederaufnahme und Kostenausweis. Der Loop selbst ist `MoaAgent.run` (seit
@@ -787,6 +829,21 @@ registerSessionRoutes(app, {
   tokenFromRequest: studioTokenFromRequest,
   safeTokenEqual,
   newSession: () => new AuthoritativeSession({ lockTtlMs: PLUGIN_LOCK_TTL_MS }),
+  // BEFUND 2026-10-06: Der Reset tauscht die Session aus und hinterlaesst
+  // `locks: []` - mixerMONK hat danach KEINEN Halter. `ensureHolder` laeuft
+  // sonst nur beim Socket-Beitritt (realtime.ts), ein bereits verbundener
+  // Client bekommt also nie einen. Folge: `pluginPanelOpen('mixer', ...)` ist
+  // false, der Mixer bleibt auf "Wird gerade vergeben."/81 px statt seine
+  // Bedienflaeche aufzubauen (gemessen im visuellen Lauf: erwartet >400 px).
+  // Der Halter wird deshalb auf der FRISCHEN Session vergeben - an das aelteste
+  // anwesende Mitglied, genau die Regel aus UI2-P0-001.
+  ensureSessionHolders: (_session) => {
+    // Die Mitgliederliste kennt nur der Realtime-Hub (Socket-Scope). Er vergibt
+    // den Halter auf der frischen Session und broadcastet das an den Raum.
+    // Hier wird auf der ihm uebergebenen Session gearbeitet, damit der Zustand
+    // schon beim Austausch stimmt.
+    return serverIo ? realtimeHub!.ensureMixerHolderNow() : null;
+  },
   // F8: Der Rueck-Lesebeleg des Resets braucht die LIVE-Sicht (nach dem
   // Austausch) — eine Wertkopie wuerde den alten Zustand beschreiben.
   getSession: () => sessionRuntime.session,

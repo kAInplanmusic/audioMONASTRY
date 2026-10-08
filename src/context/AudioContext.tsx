@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useRef, useEffect, useState } from 'react';
+import { withMusicOpus } from '../core/transport/opusMusicSdp';
 import * as Tone from '../core/audio/compat/nativeAudioKit';
 import { SIGNALING_HTTP_EXPLICIT, SIGNALING_HTTP_URL, SIGNALING_TRANSPORT_URL } from '../config/runtime';
 import { CrdtClock, CrdtLwwMap, CrdtClockMerger, CrdtSyncMessage } from '../utils/crdt';
@@ -161,7 +162,8 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
             // Function to handle signaling over network
             const performSignaling = async () => { // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
                 try {
-                const offer = await pc.createOffer();
+                // RT-AUDIT-P1-013: Empfänger signalisiert Stereo/Musik-Bitrate (sonst sendet die Gegenseite mono).
+                const offer = withMusicOpus(await pc.createOffer());
                 await pc.setLocalDescription(offer);
 
                 let answer;
@@ -227,7 +229,7 @@ export const AudioProvider = ({ children }: { children: React.ReactNode }) => {
                 }
 
                 if (answer) {
-                  await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                  await pc.setRemoteDescription(new RTCSessionDescription(withMusicOpus(answer)));
                   // Remote Description bewusst nicht in localStorage persistieren (S8475)
                 } else {
                   console.warn('Keine Signaling-Antwort (Peer) erhalten; WebRTC bleibt lokal/offline.');

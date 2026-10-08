@@ -74,7 +74,7 @@ erfasst sein.
 
 INFRA-HETZNER-014 (2026-09-21): Nach dem Neuaufbau der Flotte trugen drei
 Hetzner-Firewalls noch die Quell-IPs der VORHERIGEN Flotte (app:8080 von der
-alten edge-1, ai:8000/11434 und master:8000 von der alten app-1) - der
+alten edge-1, ai:8000 und master:8000 von der alten app-1) - der
 Querverkehr edge->app, app->ai und app->master war stumm blockiert, von aussen
 unsichtbar, weil alles Oeffentliche ueber Cloudflare laeuft. Zwei Klassen halten
 den Fix fest: `CrossNodeFirewallAbgleichTest` faehrt den ECHTEN Codepfad von
@@ -987,12 +987,14 @@ class EdgeMonitoringLimitsTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         output = result.stdout
-        self.assertIn("app=cx23 sfu=cx23 ai=cx23 master=cx23 edge=cx23", output)
+        self.assertIn("app=cx43 sfu=cx33 media=cx43 edge=cx23", output)
         self.assertIn(
             "docker-compose.monitoring.yml up -d " + " ".join(monitoring_service_list()),
             output,
         )
-        for role in ("app-1", "sfu-1", "ai-1", "master-1", "edge-1"):
+        # v2, 4-Rollen-Layout (app/sfu/media/edge): ai-1/master-1 existieren nicht
+        # mehr - der master-player laeuft auf sfu-1 mit (AI_MODE=off).
+        for role in ("app-1", "sfu-1", "media-1", "edge-1"):
             with self.subTest(node=role):
                 self.assertIn(role, output)
 
@@ -1050,7 +1052,7 @@ class EdgeMonitoringLimitsTest(unittest.TestCase):
 class ServertypRollenDriftTest(unittest.TestCase):
     """INFRA-HETZNER-007: eine Tabelle, zwei Pfade, dieselben Overrides."""
 
-    ROLE_ORDER = ("app", "sfu", "ai", "master", "edge")
+    ROLE_ORDER = ("app", "sfu", "media", "edge")
 
     def _cli_defaults(self) -> dict[str, str]:
         text = PROVISION_FLEET.read_text(encoding="utf-8")
@@ -3362,8 +3364,11 @@ class FleetStartRemoteBuildDefaultTest(unittest.TestCase):
                 capture_output=True, text=True, cwd=tmp, timeout=120,
             )
         self.assertEqual(dienste.returncode, 0, dienste.stderr)
+        # RT-AUDIT-P1-008 (2026-10-07): redis gehoert bewusst zum Default-Profil
+        # (Session-Persistenz auch auf dem Einzelknoten; die App startet ihn per
+        # depends_on/service_healthy mit).
         self.assertEqual(
-            set(dienste.stdout.split()), {"audiomonastry", "caddy", "master-player"},
+            set(dienste.stdout.split()), {"audiomonastry", "caddy", "master-player", "redis"},
             "Default-Profil hat sich geaendert - der Remote-Build fasst andere Dienste an",
         )
         self.assertEqual(config.returncode, 0, config.stderr)
@@ -4858,10 +4863,10 @@ class R2CredentialPrecedenceTest(unittest.TestCase):
 # Befund (live gemessen): drei Firewalls trugen nach dem Neuaufbau der Flotte
 # noch die Quell-IPs der VORHERIGEN Flotte -
 #   audiomonastry-app:    8080 nur von 167.233.192.196/32 (alte edge-1)
-#   audiomonastry-ai:     8000 + 11434 nur von 142.132.229.71/32 (alte app-1)
+#   audiomonastry-ai:     8000 nur von 142.132.229.71/32 (alte app-1)
 #   audiomonastry-master: 8000 nur von derselben alten app-1-IP.
-# Der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000/11434
-# (Stem-AI/Ollama) und app->master:8000 (master-player) war damit stumm
+# Der Querverkehr edge->app:8080 (Monitoring-Scrape), app->ai:8000
+# (Stem-AI) und app->master:8000 (master-player) war damit stumm
 # blockiert - von aussen unsichtbar, weil alles Oeffentliche ueber Cloudflare
 # laeuft. `scripts/hetzner/firewall-ensure.py` gleicht die Quell-IPs gegen die
 # TATSAECHLICHEN Knoten-IPs ab (idempotent, non-destruktiv).
@@ -4878,7 +4883,6 @@ class R2CredentialPrecedenceTest(unittest.TestCase):
 CROSS_NODE_CONTRACT = (
     ("app", "8080", "edge"),
     ("ai", "8000", "app"),
-    ("ai", "11434", "app"),
     ("master", "8000", "app"),
 )
 
@@ -4929,12 +4933,11 @@ def app_firewall_rules(old_edge_ip: str = ALTE_EDGE_IP) -> list[dict]:
 
 
 def ai_firewall_rules(old_app_ip: str = ALTE_APP_IP) -> list[dict]:
-    """Firewall `audiomonastry-ai`: Stem-AI 8000 + Ollama 11434 nur fuer die alte app-1."""
+    """Firewall `audiomonastry-ai`: Stem-AI 8000 nur fuer die alte app-1."""
     return [
         {"direction": "in", "protocol": "icmp", "source_ips": ["0.0.0.0/0", "::/0"], "description": "ICMP"},
         {"direction": "in", "protocol": "tcp", "port": "22", "source_ips": ["0.0.0.0/0", "::/0"], "description": "SSH"},
         {"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{old_app_ip}/32"], "description": "Stem-AI"},
-        {"direction": "in", "protocol": "tcp", "port": "11434", "source_ips": [f"{old_app_ip}/32"], "description": "Ollama"},
     ]
 
 
@@ -5136,7 +5139,6 @@ class CrossNodeFirewallAbgleichTest(unittest.TestCase):
         # Soll-Quellen stehen in der API (nachgelesener Zustand, nicht die Antwort).
         self.assertEqual(stub.rule("audiomonastry-app", "8080")["source_ips"], [f"{FLEET_TEST_IPS['edge']}/32"])
         self.assertEqual(stub.rule("audiomonastry-ai", "8000")["source_ips"], [f"{FLEET_TEST_IPS['app']}/32"])
-        self.assertEqual(stub.rule("audiomonastry-ai", "11434")["source_ips"], [f"{FLEET_TEST_IPS['app']}/32"])
         self.assertEqual(stub.rule("audiomonastry-master", "8000")["source_ips"], [f"{FLEET_TEST_IPS['app']}/32"])
         # Die ALTEN IPs sind weg - und die volle Regel-Liste ging raus (set_rules
         # ersetzt alles, deshalb muss sie vollstaendig sein).
@@ -5158,8 +5160,8 @@ class CrossNodeFirewallAbgleichTest(unittest.TestCase):
         # Vorher/Nachher, Zaehler und Firewall-IDs stehen im Log.
         self.assertIn(f"{ALTE_EDGE_IP}/32 -> {FLEET_TEST_IPS['edge']}/32", combined)
         self.assertIn(f"{ALTE_APP_IP}/32 -> {FLEET_TEST_IPS['app']}/32", combined)
-        self.assertIn("geaendert=4", combined)
-        self.assertIn("geprueft=4", combined)
+        self.assertIn("geaendert=3", combined)
+        self.assertIn("geprueft=3", combined)
         self.assertIn("audiomonastry-app=4711", combined)
         self.assertIn("audiomonastry-ai=4712", combined)
         self.assertIn("audiomonastry-master=4713", combined)
@@ -5180,7 +5182,7 @@ class CrossNodeFirewallAbgleichTest(unittest.TestCase):
         self.assertEqual(len(zweiter_writes), 3, "der zweite Lauf darf nicht erneut schreiben")
         self.assertIn("unveraendert", zweiter.stdout)
         self.assertIn("geaendert=0", zweiter.stdout)
-        self.assertIn("geprueft=4", zweiter.stdout)
+        self.assertIn("geprueft=3", zweiter.stdout)
 
     # --- (b) schon aktuell: kein Schreibaufruf, Exit 0 ---------------------
     def test_bereits_aktuell_schreibt_nichts_und_exit_null(self) -> None:
@@ -5200,7 +5202,7 @@ class CrossNodeFirewallAbgleichTest(unittest.TestCase):
         self.assertEqual(stub.methods(), ["GET", "GET"])
         self.assertIn("unveraendert", result.stdout)
         self.assertIn("geaendert=0", result.stdout)
-        self.assertIn("geprueft=4", result.stdout)
+        self.assertIn("geprueft=3", result.stdout)
 
     # --- (c) fehlender Token: Exit != 0, kein Schreibaufruf ----------------
     def test_ohne_token_kein_request_und_exit_ungleich_null(self) -> None:
@@ -5266,7 +5268,7 @@ class CrossNodeFirewallAbgleichTest(unittest.TestCase):
         self.assertEqual(before, after, "der Trockenlauf hat den Zustand veraendert")
         self.assertIn(f"{ALTE_EDGE_IP}/32 -> {FLEET_TEST_IPS['edge']}/32", combined)
         self.assertIn("Trockenlauf", combined)
-        self.assertIn("geaendert=4", combined)
+        self.assertIn("geaendert=3", combined)
         self.assertNotIn(self.TOKEN, combined)
 
     # --- (e) Gegenprobe schlaegt fehl -------------------------------------
@@ -5287,7 +5289,7 @@ class CrossNodeFirewallAbgleichTest(unittest.TestCase):
 
     # --- Grenzen: kein Erfinden, keine Einschraenkung ---------------------
     def test_fehlende_rolle_wird_gemeldet_und_nicht_geraten(self) -> None:
-        # app-1 fehlt: die Quelle fuer ai:8000/11434 und master:8000 ist unbekannt -
+        # app-1 fehlt: die Quelle fuer ai:8000 und master:8000 ist unbekannt -
         # das Skript muss das melden und darf nichts schreiben.
         stub = _HetznerFleetStub(
             servers=fleet_stub_servers(("sfu", "ai", "master", "edge")),
@@ -5588,7 +5590,7 @@ class PortalWakeVertragTest(unittest.TestCase):
         self.assertEqual(stub.methods(), ["GET", "GET"])
         self.assertIn("unveraendert", result.stdout)
         self.assertIn("geaendert=0", result.stdout)
-        self.assertIn("geprueft=4", result.stdout)
+        self.assertIn("geprueft=3", result.stdout)
 
     def test_beide_schreiber_zielen_auf_dieselbe_quelle(self) -> None:
         # Nach dem Abgleich steht je Vertrags-Regel genau die IP des zustaendigen
@@ -5698,8 +5700,7 @@ FAKE_FIREWALLS_JSON = json.dumps({"firewalls": [
     {"id": 4711, "name": "audiomonastry-app", "applied_to": [],
      "rules": [{"direction": "in", "protocol": "tcp", "port": "8080", "source_ips": [f"{ALTE_EDGE_IP}/32"]}]},
     {"id": 4712, "name": "audiomonastry-ai", "applied_to": [{"server": {"id": 4242}}],
-     "rules": [{"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{ALTE_APP_IP}/32"]},
-               {"direction": "in", "protocol": "tcp", "port": "11434", "source_ips": [f"{ALTE_APP_IP}/32"]}]},
+     "rules": [{"direction": "in", "protocol": "tcp", "port": "8000", "source_ips": [f"{ALTE_APP_IP}/32"]}]},
 ]})
 
 
@@ -5763,7 +5764,7 @@ class FleetFirewallLebenszyklusTest(unittest.TestCase):
         # 3. Die Auflistung nennt Name + Regelzahl + Zuweisungen und den Entscheid.
         self.assertIn("audiomonastry-app", result.stdout)
         self.assertIn("audiomonastry-ai", result.stdout)
-        self.assertIn("2 Regeln, 1 Zuweisung(en)", result.stdout)
+        self.assertIn("1 Regeln, 1 Zuweisung(en)", result.stdout)
         self.assertIn("bleiben bestehen", result.stdout)
         self.assertIn("Schritt 3/9", result.stdout)
         # 4. Der Token der Datei steht nirgends in der Ausgabe.
@@ -5793,7 +5794,7 @@ class FleetFirewallLebenszyklusTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, combined)
         self.assertEqual([line for line in lines if "-X DELETE" in line], [])
         self.assertIn("Überspringe audiomonastry-app-1 (existiert nicht).", result.stdout)
-        self.assertIn("2 Regeln, 1 Zuweisung(en)", result.stdout)
+        self.assertIn("1 Regeln, 1 Zuweisung(en)", result.stdout)
 
     def test_skript_und_doku_halten_den_entscheid_fest(self) -> None:
         text = DELETE_FLEET.read_text(encoding="utf-8")

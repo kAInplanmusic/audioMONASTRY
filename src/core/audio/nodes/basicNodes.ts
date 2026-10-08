@@ -4,19 +4,51 @@
  * Gain/Pan/EQ-Kette als reine IAudioNode-Implementierungen ohne WebAudio.
  */
 import { AudioParameter, AudioPort } from '../AudioGraph';
-import { audioBufferPool } from '../BufferPool';
+import { ensureBufferSet, SilenceBuffer } from '../PortBuffers';
 import { Stereo21Crossover } from '../../output/crossover';
 import type { IAudioNode, IAudioPort, IProcessingContext } from '../types';
+
+/**
+ * Wiederverwendetes Ergebnis von `prepareProcess()` (RT-AUDIT-P0-002: vorher
+ * ein neues Objekt-Literal pro Block und Node).
+ */
+export interface ProcessBlock {
+  input: Float32Array[];
+  out: Float32Array[];
+  len: number;
+  sr: number;
+}
+
+const NO_CHANNELS: Float32Array[] = [];
 
 export abstract class BaseNode implements IAudioNode {
   readonly inputs: AudioPort[];
   readonly outputs: AudioPort[];
   readonly parameters: AudioParameter[];
+  /** RT-AUDIT-P0-002: EIN fester Puffersatz je Ausgangsport. */
+  private readonly portBuffers: (Float32Array[] | null)[];
+  private readonly block: ProcessBlock = { input: NO_CHANNELS, out: NO_CHANNELS, len: 0, sr: 0 };
+  /** Vorallokierte Stille für fehlende Eingangskanäle (statt `?? new Float32Array(len)`). */
+  protected readonly silence = new SilenceBuffer();
 
   constructor(public readonly id: string, public readonly type: string, inputs = 1, outputs = 1) {
     this.inputs = Array.from({ length: inputs }, (_, i) => new AudioPort(this, 'input', `${id}:in${i}`));
     this.outputs = Array.from({ length: outputs }, (_, i) => new AudioPort(this, 'output', `${id}:out${i}`));
     this.parameters = [];
+    this.portBuffers = Array.from({ length: outputs }, () => null);
+  }
+
+  /**
+   * RT-AUDIT-P0-002: Fester Puffersatz des Ausgangsports `port`. Wird nur bei
+   * geänderter Kanalzahl/Länge neu angelegt (dann genullt), sonst ist es jeden
+   * Block derselbe Satz – mit dem Inhalt des Vorblocks. Der Node muss daher
+   * jedes ausgegebene Sample schreiben (oder bewusst leeren).
+   */
+  protected ensureOutput(channels: number, length: number, port = 0): Float32Array[] {
+    const current = this.portBuffers[port];
+    const next = ensureBufferSet(current, channels, length);
+    if (next !== current) this.portBuffers[port] = next;
+    return next;
   }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
@@ -39,16 +71,19 @@ export abstract class BaseNode implements IAudioNode {
    * anlegen, Blocklaenge und Sample-Rate bestimmen. Gibt `null`, wenn kein
    * Eingang anliegt - der Ausgang ist dann bereits geleert.
    */
-  protected prepareProcess(ctx: IProcessingContext): {
-    input: Float32Array[]; out: Float32Array[]; len: number; sr: number;
-  } | null {
+  protected prepareProcess(ctx: IProcessingContext): ProcessBlock | null {
     const input = this.inputBuffer(ctx);
     if (!input) {
       this.outputs[0].buffer = null;
       return null;
     }
     const len = input[0]?.length ?? ctx.bufferSize;
-    return { input, out: copyInput(input, len), len, sr: ctx.sampleRate };
+    const block = this.block;
+    block.input = input;
+    block.out = copyInput(input, len, this.ensureOutput(Math.max(1, input.length), len));
+    block.len = len;
+    block.sr = ctx.sampleRate;
+    return block;
   }
 
   abstract process(ctx: IProcessingContext): void;
@@ -56,12 +91,22 @@ export abstract class BaseNode implements IAudioNode {
 }
 
 /**
- * Kopiert den Eingang in einen Pool-Puffer (gemeinsam fuer alle Nodes).
- * `Math.max(1, ...)` haelt den Pool-Aufruf auch bei leerem Eingang gueltig.
+ * Kopiert den Eingang in den festen Port-Puffer `out` (gemeinsam fuer alle
+ * Nodes). Auch Bypass-Pfade geben damit immer den EIGENEN Puffer aus, nie den
+ * Eingang (Fan-out-sicher). Kanaele/Samples ohne Eingang werden geleert, damit
+ * kein Inhalt des Vorblocks stehen bleibt.
  */
-export function copyInput(input: Float32Array[], len: number): Float32Array[] {
-  const out = audioBufferPool.acquire(Math.max(1, input.length), len);
-  for (let ch = 0; ch < input.length; ch++) out[ch].set(input[ch]);
+function copyInput(input: Float32Array[], len: number, out: Float32Array[]): Float32Array[] {
+  for (let ch = 0; ch < out.length; ch++) {
+    const src = ch < input.length ? input[ch] : undefined;
+    const dst = out[ch];
+    if (!src) {
+      dst.fill(0);
+      continue;
+    }
+    dst.set(src);
+    if (src.length < len) dst.fill(0, src.length);
+  }
   return out;
 }
 
@@ -73,8 +118,7 @@ export class SourceNode extends BaseNode {
 
   process(ctx: IProcessingContext): void {
     const len = this.sourceBuffer[0]?.length ?? ctx.bufferSize;
-    const out = audioBufferPool.acquire(this.sourceBuffer.length, len);
-    for (let ch = 0; ch < this.sourceBuffer.length; ch++) out[ch].set(this.sourceBuffer[ch]);
+    const out = copyInput(this.sourceBuffer, len, this.ensureOutput(this.sourceBuffer.length, len));
     this.outputs[0].buffer = out;
   }
 }
@@ -92,7 +136,7 @@ export class GainNode extends BaseNode {
     const input = this.inputBuffer(ctx);
     if (!input) { this.outputs[0].buffer = null; return; }
     const len = input[0]?.length ?? ctx.bufferSize;
-    const out = audioBufferPool.acquire(input.length, len);
+    const out = this.ensureOutput(input.length, len);
     const g = this.gain.getValueAtTime(ctx.currentTime);
     for (let ch = 0; ch < input.length; ch++) {
       for (let i = 0; i < len; i++) out[ch][i] = input[ch][i] * g;
@@ -119,13 +163,15 @@ export class StereoPanNode extends BaseNode {
     const input = this.inputBuffer(ctx);
     if (!input) { this.outputs[0].buffer = null; return; }
     const len = input[0]?.length ?? ctx.bufferSize;
-    const out = audioBufferPool.acquire(Math.max(2, input.length), len);
+    const out = this.ensureOutput(Math.max(2, input.length), len);
     const p = Math.max(-1, Math.min(1, this.pan.getValueAtTime(ctx.currentTime)));
     const theta = (p + 1) * Math.PI / 4;
     const lg = Math.cos(theta);
     const rg = Math.sin(theta);
-    const left = input[0] ?? new Float32Array(len);
-    const right = input[1] ?? input[0] ?? new Float32Array(len);
+    const left = input[0] ?? this.silence.get(len);
+    const right = input[1] ?? input[0] ?? this.silence.get(len);
+    // Kanaele ab 2 bleiben (wie frueher beim frischen Pool-Puffer) still.
+    for (let ch = 2; ch < out.length; ch++) out[ch].fill(0);
     for (let i = 0; i < len; i++) {
       out[0][i] = left[i] * lg;
       out[1][i] = right[i] * rg;
@@ -157,7 +203,7 @@ export class ThreeBandEqNode extends BaseNode {
     const input = this.inputBuffer(ctx);
     if (!input) { this.outputs[0].buffer = null; return; }
     const len = input[0]?.length ?? ctx.bufferSize;
-    const out = audioBufferPool.acquire(input.length, len);
+    const out = this.ensureOutput(input.length, len);
     const lo = Math.pow(10, this.lowGain.getValueAtTime(ctx.currentTime) / 20);
     const mid = Math.pow(10, this.midGain.getValueAtTime(ctx.currentTime) / 20);
     const hi = Math.pow(10, this.highGain.getValueAtTime(ctx.currentTime) / 20);
@@ -178,7 +224,7 @@ export class ThreeBandEqNode extends BaseNode {
   }
 }
 
-/** Master-Summe: N Mono-Eingänge → Stereo-Ausgang (NaN/Inf-sicher, Soft-Clip). */
+/** Master-Summe: N Eingänge → Stereo-Ausgang (linear, NaN/Inf-sicher; RT-AUDIT-P0-004). */
 export class MasterSumNode extends BaseNode {
   readonly masterGain: AudioParameter;
 
@@ -190,12 +236,12 @@ export class MasterSumNode extends BaseNode {
 
   process(ctx: IProcessingContext): void {
     const len = ctx.bufferSize;
-    const out = audioBufferPool.acquire(2, len);
+    const out = this.ensureOutput(2, len);
     out[0].fill(0);
     out[1].fill(0);
     const g = this.masterGain.getValueAtTime(ctx.currentTime);
-    for (const input of this.inputs) {
-      const src = input.connections[0]?.buffer;
+    for (let n = 0; n < this.inputs.length; n++) {
+      const src = this.inputs[n].connections[0]?.buffer;
       if (!src) continue;
       const left = src[0];
       const right = src[1] ?? src[0];
@@ -205,13 +251,14 @@ export class MasterSumNode extends BaseNode {
         out[1][i] += (right[i] ?? left[i]) * g;
       }
     }
-    // P0-4/AM-E1-7: NaN/Inf-Guards + Soft-Clip.
+    // P0-4/AM-E1-7: NaN/Inf-Guards. RT-AUDIT-P0-004: KEIN Soft-Clip mehr – die
+    // Summe ist linear (vorher `tanh(v) * 0.98` auf jedes Signal: 0,13 % THD
+    // schon bei −18 dBFS, −0,18 dB Pegelverlust). Pegelschutz macht allein der
+    // Lookahead-Limiter im MasteringNode (mit harter Sicherung ±ceiling).
     for (let ch = 0; ch < 2; ch++) {
+      const o = out[ch];
       for (let i = 0; i < len; i++) {
-        let v = out[ch][i];
-        if (!Number.isFinite(v)) v = 0;
-        v = Math.tanh(v) * 0.98;
-        out[ch][i] = v;
+        if (!Number.isFinite(o[i])) o[i] = 0;
       }
     }
     this.outputs[0].buffer = out;
@@ -240,11 +287,11 @@ export class StereoSumNode extends BaseNode {
 
   process(ctx: IProcessingContext): void {
     const len = ctx.bufferSize;
-    const out = audioBufferPool.acquire(this.outputChannels, len);
-    for (const ch of out) ch.fill(0);
+    const out = this.ensureOutput(this.outputChannels, len);
+    for (let ch = 0; ch < out.length; ch++) out[ch].fill(0);
     const g = this.gain.getValueAtTime(ctx.currentTime);
-    for (const input of this.inputs) {
-      const src = input.connections[0]?.buffer;
+    for (let n = 0; n < this.inputs.length; n++) {
+      const src = this.inputs[n].connections[0]?.buffer;
       if (!src || src.length === 0) continue;
       for (let ch = 0; ch < this.outputChannels; ch++) {
         const srcCh = src[Math.min(ch, src.length - 1)] ?? src[0];
@@ -253,7 +300,8 @@ export class StereoSumNode extends BaseNode {
       }
     }
     // NaN/Inf-Schutz analog MasterSumNode – ein defekter Input darf den Bus nicht kippen.
-    for (const ch of out) {
+    for (let c = 0; c < out.length; c++) {
+      const ch = out[c];
       for (let i = 0; i < len; i++) {
         const v = ch[i];
         if (!Number.isFinite(v)) ch[i] = 0;
@@ -287,10 +335,13 @@ export class Stereo21OutputNode extends BaseNode {
       return;
     }
     const len = input[0]?.length ?? ctx.bufferSize;
-    const left = input[0] ?? new Float32Array(len);
+    const left = input[0] ?? this.silence.get(len);
     const right = input[1] ?? left;
-    const result = this.crossover.process(left, right);
-    this.outputs[0].buffer = [result.left, result.right, result.lfe];
+    // RT-AUDIT-P0-002: Crossover schreibt in den festen L/R/LFE-Port-Puffer
+    // (vorher 3 neue Arrays + Ergebnisobjekt + Array-Literal pro Block).
+    const out = this.ensureOutput(3, Math.min(left.length, right.length));
+    this.crossover.processInto(left, right, out[0], out[1], out[2]);
+    this.outputs[0].buffer = out;
   }
 
   reset(): void {
@@ -337,10 +388,10 @@ export class MultichannelBusNode extends BaseNode {
       return;
     }
     const len = input[0]?.length ?? ctx.bufferSize;
-    const left = input[0] ?? new Float32Array(len);
+    const left = input[0] ?? this.silence.get(len);
     const right = input[1] ?? left;
-    const out = audioBufferPool.acquire(this.outputChannels, len);
-    for (const ch of out) ch.fill(0);
+    const out = this.ensureOutput(this.outputChannels, len);
+    for (let ch = 0; ch < out.length; ch++) out[ch].fill(0);
     for (let i = 0; i < len; i++) {
       const mono = (left[i] + right[i]) * 0.5;
       for (let ch = 0; ch < this.outputChannels; ch++) {

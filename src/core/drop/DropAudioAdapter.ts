@@ -44,6 +44,22 @@ export interface DropAudioAdapter {
    * unverändert über die Kanal-Pegel.
    */
   readSpectrumFrame?(): SpectrumFrame | null;
+
+  // --- Einspiel-Weg (PREP-6): Drop hörbar auf einen Mixer-Kanal bringen -------
+  // Ohne diese Methoden konnte dropMONK einen Drop analysieren und ankuendigen,
+  // aber NICHT auf einen Kanal spielen - der Pfad war halb gebaut. Fehlen sie
+  // (Tests/SSR/kein Audio), bleibt der Einspiel-Weg no-op statt zu werfen.
+  /**
+   * Sample auf den Kanal laden. `url` = null entlaedt den Kanal.
+   * Liefert `false`, wenn der Kanal ungueltig ist.
+   */
+  loadTrackSample?(channelId: string, url: string | null): Promise<boolean>;
+  /** Kanal-Event feuern (One-Shot). `false` = ungueltiger Kanal. */
+  triggerEvent?(channelId: string, velocity: number): boolean;
+  /** Kanal auf MAIN einblenden. `false` = ungueltiger Kanal. */
+  fadeChannelToMain?(channelId: string, rampSec: number, targetDb: number): boolean;
+  /** Callback an der naechsten vollen Bar ausloesen. */
+  scheduleAtNextBar?(cb: () => void): void;
 }
 
 let currentAdapter: DropAudioAdapter | null = null;

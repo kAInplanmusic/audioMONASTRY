@@ -1,8 +1,9 @@
-# audioMONASTRY – AI Runtime (lokal/Hetzner-Test ohne HF-Endpoint)
+# audioMONASTRY – AI Runtime (eigene Runtime, lokal/Hetzner/Runpod)
 # =================================================================
-# Baut und startet den Custom Container lokal (CPU/Simulationsmodus) für
-# Smoke-Tests. Produktion läuft als HF-Inference-Endpoint (siehe
-# hf_endpoint.example.json), NICHT dauerhaft auf Hetzner.
+# Baut und startet den Custom Container (CPU/Simulationsmodus für Smoke-Tests,
+# AI_RUNTIME_DEVICE=cuda auf einem GPU-Host). Produktion: eigene Runtime auf der
+# GPU-Flotte (Runpod), angesprochen über VOICE_AI_RUNTIME_URL – KEIN
+# HF-Inference-Endpoint mehr (AI nur lokal, RT-AUDIT-P1-014).
 services:
   ai-runtime:
     build:

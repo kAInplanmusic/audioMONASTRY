@@ -22,7 +22,7 @@ test('App startet, Mixer ist offen und Audio wird RUNNING (kein Worklet-Crash)',
   await entryButton(page).click();
 
   // Kein Einschalten nötig - der Mixer ist die Main-Einspeisung und startet aktiv.
-  await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/mixerMONK · 8 CH/i)).toBeVisible({ timeout: 15000 });
 
   // perfMONK Audio-Health muss RUNNING melden
   // Die Audio-Health-Anzeige nennt den Zustand als "Engine: running · 44100 Hz · …"

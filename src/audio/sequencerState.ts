@@ -22,7 +22,7 @@ import { normalizeNotes, normalizeSteps } from '../core/audio/state/sequenceUtil
 /** Alle adressierbaren Sequencer-Spuren (Reihenfolge wie in der Engine). */
 export const SEQUENCER_TRACKS: TrackType[] = [
   'channel1', 'channel2', 'channel3', 'channel4', 'channel5',
-  'channel6', 'channel7', 'channel8', 'channel9', 'channel10',
+  'channel6', 'channel7', 'channel8',
 ];
 
 /** Spuren, die das Demo-Pattern befüllt (Sampler-Spuren bewusst ausgenommen). */

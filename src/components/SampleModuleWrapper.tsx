@@ -5,19 +5,21 @@ import { AudioSample } from '../data/samples';
 
 interface SampleModuleWrapperProps {
   onSelect: (sample: AudioSample) => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
+/**
+ * Sample-Suche + Projekt-Clipboard als eine kompakte Zeile (Rack-Modul-Stil).
+ * Wird in einer Karte des drumsamplerMONK eingesetzt; `children` stehen rechts daneben.
+ */
 export const SampleModuleWrapper: React.FC<SampleModuleWrapperProps> = ({ onSelect, children }) => {
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center gap-2 mb-4 bg-black/20 p-2 rounded-lg border border-neutral-800">
+    <div className="am-c-search">
+      <div>
         <SemanticSampleSearch onSelect={onSelect} />
-        <Scratchpad />
       </div>
-      <div className="flex-1">
-        {children}
-      </div>
+      <Scratchpad />
+      {children}
     </div>
   );
 };

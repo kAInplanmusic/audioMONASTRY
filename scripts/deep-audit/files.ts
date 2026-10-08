@@ -15,6 +15,12 @@ export interface SelectedFile {
 export interface FileBatch {
   files: SelectedFile[];
   content: string;
+  /**
+   * Zeilen, die je Datei TATSÄCHLICH im `content` stehen (nach der Kürzung auf
+   * `maxFileChars`). Damit lässt sich eine vom Modell gemeldete Zeilennummer
+   * prüfen, statt sie ungeprüft in den Report zu schreiben.
+   */
+  lineCounts?: Record<string, number>;
 }
 
 export async function listGitFiles(root: string): Promise<string[]> {
@@ -131,6 +137,31 @@ export function readFileContent(root: string, filePath: string, maxChars: number
   return redactSecrets(raw.slice(0, maxChars));
 }
 
+/**
+ * Präfixiert jede Zeile mit ihrer Nummer (`  12| code`).
+ *
+ * WARUM: Der Report verlangt „Datei und Zeile". Ohne Nummern im Prompt muss das
+ * Modell die Zeile schätzen — gemessen am 2026-10-03 lagen 6 von 6 hf-qwen-
+ * Findings um ~63 Zeilen daneben, mit Titeln, die auf echten Code passten.
+ * Mit Nummern kann es ablesen statt raten.
+ */
+export function numberLines(text: string): string {
+  return text
+    .split('\n')
+    .map((line, index) => `${String(index + 1).padStart(4, ' ')}| ${line}`)
+    .join('\n');
+}
+
+/** Nummerierter Inhalt plus die Anzahl der Zeilen, die wirklich gesendet werden. */
+export function readFileNumbered(
+  root: string,
+  filePath: string,
+  maxChars: number,
+): { text: string; lines: number } {
+  const raw = redactSecrets(readFileSync(path.join(root, filePath), 'utf8').slice(0, maxChars));
+  return { text: numberLines(raw), lines: raw.split('\n').length };
+}
+
 export function buildBatches(
   root: string,
   files: SelectedFile[],
@@ -142,13 +173,15 @@ export function buildBatches(
 
   const flush = () => {
     if (currentFiles.length === 0) return;
+    const lineCounts: Record<string, number> = {};
     const content = currentFiles
       .map((file) => {
-        const body = readFileContent(root, file.path, maxChars);
-        return `\n===== DATEI: ${file.path} (Risiko: ${file.risk}) =====\n${body}\n`;
+        const { text, lines } = readFileNumbered(root, file.path, maxChars);
+        lineCounts[file.path] = lines;
+        return `\n===== DATEI: ${file.path} (Risiko: ${file.risk}) =====\n${text}\n`;
       })
       .join('\n');
-    batches.push({ files: [...currentFiles], content });
+    batches.push({ files: [...currentFiles], content, lineCounts });
     currentFiles = [];
     currentLength = 0;
   };

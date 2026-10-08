@@ -75,7 +75,6 @@ function aiFirewallRules(appIp = IPS.app): Rule[] {
     { direction: 'in', protocol: 'icmp', source_ips: ['0.0.0.0/0', '::/0'], description: 'ICMP' },
     { direction: 'in', protocol: 'tcp', port: '22', source_ips: ['0.0.0.0/0', '::/0'], description: 'SSH' },
     { direction: 'in', protocol: 'tcp', port: '8000', source_ips: [`${appIp}/32`], description: 'Stem-AI' },
-    { direction: 'in', protocol: 'tcp', port: '11434', source_ips: [`${appIp}/32`], description: 'Ollama' },
   ];
 }
 function masterFirewallRules(appIp = IPS.app): Rule[] {
@@ -225,11 +224,10 @@ describe('Portal-Wake <-> firewall-ensure (Cross-Node-Firewall-Regeln)', () => {
 
     expect(status).toBe(200);
     const contract = contractFromPython();
-    // Vier Vertrags-Zeilen - sonst prueft der Test etwas anderes als der Betrieb.
+    // Drei Vertrags-Zeilen - sonst prueft der Test etwas anderes als der Betrieb.
     expect(contract.map((entry) => `${entry.firewall}/tcp/${entry.port}`)).toEqual([
       'audiomonastry-app/tcp/8080',
       'audiomonastry-ai/tcp/8000',
-      'audiomonastry-ai/tcp/11434',
       'audiomonastry-master/tcp/8000',
     ]);
     for (const entry of contract) {
@@ -238,7 +236,7 @@ describe('Portal-Wake <-> firewall-ensure (Cross-Node-Firewall-Regeln)', () => {
     }
     // Der Wake meldet die Zuordnung zurueck (Betreiber-Sicht im Ladebildschirm).
     expect(body.ports.appIp).toBe(IPS.app);
-    expect(body.ports.detail['audiomonastry-ai'].rules).toContain(`in/tcp/11434→${IPS.app}/32`);
+    expect(body.ports.detail['audiomonastry-ai'].rules).toContain(`in/tcp/8000→${IPS.app}/32`);
     expect(body.appFirewall.ok).toBe(true);
   });
 
@@ -265,7 +263,6 @@ describe('Portal-Wake <-> firewall-ensure (Cross-Node-Firewall-Regeln)', () => {
     // Befund, identisch mit tests/test_hetzner_scripts.py). So hat der erste Lauf
     // echte Aenderungen und der zweite keine mehr.
     firewalls[1].rules[2].source_ips = [`${ALTE_APP_IP}/32`];
-    firewalls[1].rules[3].source_ips = [`${ALTE_APP_IP}/32`];
     firewalls[2].rules[1].source_ips = [`${ALTE_APP_IP}/32`];
     const { writes } = setupFetchMock({ firewalls });
     const worker = await loadWorker();
@@ -277,7 +274,7 @@ describe('Portal-Wake <-> firewall-ensure (Cross-Node-Firewall-Regeln)', () => {
     const zweiter = await wireFleet(worker, env);
 
     expect(firewalls).toEqual(nachErstem);
-    // Erster Lauf: ai (8000+11434) und master (8000) - die app-Firewall ist
+    // Erster Lauf: ai (8000) und master (8000) - die app-Firewall ist
     // bereits korrekt (Cloudflare-Bereiche + 8080 von edge-1).
     expect(writesErsterLauf).toBe(2);
     // Zweiter Lauf: Zielzustand erreicht -> KEIN Schreibaufruf (Punkt c).

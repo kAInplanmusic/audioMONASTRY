@@ -1,4 +1,4 @@
-import {  Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState  } from 'react';
+import {  Suspense, lazy, useCallback, useEffect, useRef, useState, useSyncExternalStore  } from 'react';
 import { getPluginRegistry, discoverPlugins } from './plugins/registry';
 import { audioEngine } from './utils/audioEngine';
 import { masterClock } from './core/clock/MonastryMasterClock';
@@ -6,23 +6,31 @@ import { usePluginManager } from './context/PluginManagerContext';
 import { useModuleState, ModuleState } from './context/ModuleStateContext';
 import { useSessionAutosave } from './hooks/useSessionAutosave';
 import { RackRow } from './components/RackRow';
-import { BeatVisualizer } from './components/BeatVisualizer';
+import { headerIconStatus } from './components/HeaderPluginIcon';
+import { nextModeStep, pluginModeOf, pluginOwnerOf, pluginPanelOpen, pluginSummary } from './core/session/pluginMode';
+import { isPluginSynced, isSyncPlugin, pluginSyncVersion, setPluginSync, subscribePluginSync } from './core/session/pluginSync';
 import { TECHNO_PRESETS } from './presets';
 import { SafeModuleBoundary } from './components/SafeModuleBoundary';
 import { FEATURE_FLAGS } from './config/featureFlags';
+import { APP_VERSION } from './config/appVersion';
 const VoiceGenTerminal = lazy(() => import('./components/VoiceGenTerminal').then(m => ({ default: m.VoiceGenTerminal })));
 const VoiceMonkPanel = lazy(() => import('./components/VoiceMonkPanel').then(m => ({ default: m.VoiceMonkPanel })));
 const VisualMonkOverlay = lazy(() => import('./components/visual/VisualMonkOverlay').then(m => ({ default: m.VisualMonkOverlay })));
 import { MoaHistoryPanel } from './components/MoaHistoryPanel';
 import { AudioActionMenuHost } from './components/AudioActionMenuHost';
-import { MasteringOverlay } from './components/MasteringOverlay';
+import { MasterRack } from './components/master/MasterRack';
 import { useAudio } from './context/AudioContext';
 import { useSamples } from './context/SampleContext';
 import { SettingsDialog } from './components/SettingsDialog';
-import { MasterStreamToggle } from './components/MasterStreamToggle';
 import { OutputsPanel } from './components/OutputsPanel';
-import { Settings, Activity, ClipboardCopy, UserRound, Gauge, Sparkles } from 'lucide-react';
+import { Gauge } from 'lucide-react';
+import { useDeviceLayout, requestAppFullscreen, exitAppFullscreen, dismissInstallHint } from './hooks/useDeviceLayout';
+import { flushPluginSettings } from './utils/pluginSettings';
 import { Logo } from './components/Logo';
+import { useMasterStream } from './hooks/useMasterStream';
+import { AM_ICON, AM_MODULES, AM_PATH, AmDefs, AmSvg } from './components/am/amUi';
+import { StudioMasterplayer } from './components/am/StudioMasterplayer';
+import { personColor, personLabel, setSessionPeople, useSessionPeople } from './core/session/sessionPeople';
 import { AiMonkDock } from './components/AiMonkDock';
 import { Scratchpad } from './components/Scratchpad';
 import { SessionScratchpadPanel } from './components/SessionScratchpadPanel';
@@ -31,7 +39,10 @@ import { buildSessionSnapshot, createScratchpadSnapshot, type SessionScratchpadI
 const PerformanceMonitorTerminal = lazy(() => import('./components/PerformanceMonitorTerminal').then(m => ({ default: m.PerformanceMonitorTerminal })));
 const DrumMachineTerminal = lazy(() => import('./components/DrumMachineTerminal').then(m => ({ default: m.DrumMachineTerminal })));
 import { webRTCManager } from './utils/WebRTCManager';
-import { storageGetJson } from './utils/storage';
+import { storageGetJson, storageSetJson } from './utils/storage';
+
+/** Main-Visual an/aus – gilt für die ganze Session (Studio-Speicher am Server). */
+const VISUALS_KEY = 'am.visuals.on';
 
 // Rack-Reihenfolge (ARCH-PLUGIN-001, 16 echte MONKs):
 //   DJ:        mixer(1) · drop(2) · song(3) · effect(4)
@@ -51,13 +62,11 @@ const RACK_ORDER = [
 // Header-Navigation: 16 Plugin-Icons in ZWEI Reihen à 8. System-Module
 // (aiMONK/perforMONK) haben kein Header-Icon; masterplayerMONK ist die
 // feste Kopfzeile oberhalb der Toolbar.
-const NAV_EXCLUDED = new Set(['ai']);
 
 const MON_USERS = ['MON1', 'MON2', 'MON3', 'MON4'] as const;
 type MonUser = (typeof MON_USERS)[number];
 type MonMix = 'MAIN' | 'MIX' | 'PLUGIN_ONLY';
 
-const pluginNavLabel = (name: string) => name.replace(/MONK$/i, '').toUpperCase();
 
 
 export default function App() {
@@ -72,6 +81,9 @@ function AppComponent() {
   const { startAudio } = useAudio();
   const { moduleStates, setModuleState } = useModuleState();
   const { requestLock, releaseLock, pluginLocks, transferLock } = usePluginManager();
+  const people = useSessionPeople();
+  // Eigene Kennung sofort eintragen (vor dem ersten Session-Update).
+  useEffect(() => { setSessionPeople(webRTCManager.userId, []); }, []);
 
   // COLLAB-P1-005: eingehende Main-Out-Parameter anderer Session-User anwenden.
   // EINE Stelle fuer die AudioEngine (die Terminals spiegeln nur ihre Anzeige),
@@ -89,9 +101,26 @@ function AppComponent() {
   const [bpm, setBpm] = useState(128);
   const [isStarted, setIsStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [masteringOpen, setMasteringOpen] = useState(false);
   const [scratchOpen, setScratchOpen] = useState(false);
   const [visualOpen, setVisualOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Menü schließt bei einem Klick außerhalb.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && !t.closest('.am-menuwrap') && !t.closest('[role="dialog"]')) setMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [menuOpen]);
+  // Main-Visual an/aus: ein Schalter für die ganze Session (Studio-Speicher am
+  // Server). Schalten darf nur der Mixer-Halter; sein Gerät erzeugt den Stream.
+  const [visualsOn, setVisualsOn] = useState(() => storageGetJson<boolean>(VISUALS_KEY) === true);
+  useEffect(() => {
+    const id = window.setInterval(() => setVisualsOn(storageGetJson<boolean>(VISUALS_KEY) === true), 1000);
+    return () => window.clearInterval(id);
+  }, []);
   const [monitorUser, setMonitorUser] = useState<MonUser>('MON1');
   const [monitorMixes, setMonitorMixes] = useState<Record<MonUser, MonMix>>({
     MON1: 'MAIN', MON2: 'MAIN', MON3: 'MAIN', MON4: 'MAIN',
@@ -106,25 +135,21 @@ function AppComponent() {
   const [activeNav, setActiveNav] = useState<string>('mixer');
   // COLLAB-P1-004: aktive Plugin-Navigation der anderen Session-User (userId → pluginId).
   const [remoteNav, setRemoteNav] = useState<Record<string, { pluginId: string; ts: number }>>({});
-  const [rotateHintDismissed, setRotateHintDismissed] = useState(false);
-  const [viewport, setViewport] = useState({ w: typeof window !== 'undefined' ? window.innerWidth : 0, h: typeof window !== 'undefined' ? window.innerHeight : 0 });
-
-  // Auflösung live erkennen (mixerMONK + Racks passen sich dynamisch an).
+  // Formate (Betreiber 2026-10-06): Handy quer · Handy hochkant (vereinfacht) ·
+  // Pad quer · PC/Laptop – automatisch aus Gerät, Ausrichtung und Auflösung.
+  const deviceLayout = useDeviceLayout();
+  // Session-Ausgänge: dieser Nutzer meldet Format und Auflösung, in der er die
+  // UI bekommt – jeder der 1–4 Nutzer hat seine eigene (Ausgänge-Panel).
   useEffect(() => {
-    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener('resize', onResize);
-    window.addEventListener('orientationchange', onResize);
-    return () => {
-      window.removeEventListener('resize', onResize);
-      window.removeEventListener('orientationchange', onResize);
-    };
-  }, []);
+    webRTCManager.sendEndpointReport({
+      layout: deviceLayout.layout,
+      // Echter Bildschirm (nicht die gezeichnete Referenzbreite der Kopie).
+      width: deviceLayout.resolution.screenWidth,
+      height: deviceLayout.resolution.screenHeight,
+      devicePixelRatio: deviceLayout.resolution.dpr,
+    });
+  }, [deviceLayout.layout, deviceLayout.resolution.screenWidth, deviceLayout.resolution.screenHeight, deviceLayout.resolution.dpr]);
 
-  // 18 Plugin-Icons für den Header (zwei Reihen à 9) – ohne ai/mixer/masterplayer.
-  const navPlugins = useMemo(
-    () => getPluginRegistry().filter(p => !NAV_EXCLUDED.has(p.id)),
-    [],
-  );
 
   // PERSIST-P1-002: lokaler Autosave (IndexedDB-Fallback) + flush bei pagehide
   // + best-effort Remote-Sync. Der Payload wird bei jeder relevanten
@@ -144,18 +169,52 @@ function AppComponent() {
     }
   }, [moduleStates, bpm, isPlaying, sessionAutosave]);
 
-  // Header-Auswahl: aktiviert das Modul (Touch/Click) und scrollt zum Rack.
+  // UI2-P0-002: Hinweiszeile fuer abgelehnte Moduswechsel (fremdes Plugin, Mixer).
+  const [modeNotice, setModeNotice] = useState('');
+  useEffect(() => {
+    if (!modeNotice) return;
+    const t = window.setTimeout(() => setModeNotice(''), 3800);
+    return () => window.clearTimeout(t);
+  }, [modeNotice]);
+
+  /**
+   * UI2-P0-002: Modus-Button rechts am Plugin, OFF → STBY → ON → OFF.
+   * OFF = frei (kein Halter) · STBY = Lock gehalten, Modul aus (Bypass) ·
+   * ON = Lock gehalten, Modul aktiv (PRO, Bedienflaeche offen).
+   * Fremde Plugins: kein Anfragen, kein Uebernehmen. mixerMONK: nur Uebergabe.
+   */
+  const cycleMode = useCallback((id: string) => {
+    const me = webRTCManager.userId;
+    const lock = pluginLocks[id];
+    const owner = pluginOwnerOf(lock);
+    const mode = pluginModeOf(id, moduleStates[id], lock);
+    const step = nextModeStep(id, mode, owner, me);
+    if (step.kind === 'denied') { setModeNotice(step.reason); return; }
+    if (step.kind === 'acquire') {
+      if (!requestLock(id, me)) { setModeNotice('Gerade von jemand anderem geholt.'); return; }
+      if ((moduleStates[id] || 'OFF') !== 'OFF') setModuleState(id, 'OFF');
+      return;
+    }
+    if (step.kind === 'activate') { setModuleState(id, 'PRO'); return; }
+    // Beständige Plugins: letzten Stand sichern, BEVOR der Lock frei wird
+    // (danach nimmt der Server keinen Stand dieses Nutzers mehr an).
+    flushPluginSettings(id);
+    setModuleState(id, 'OFF');
+    releaseLock(id, me);
+  }, [pluginLocks, moduleStates, requestLock, releaseLock, setModuleState]);
+
+  // UI2-P0-003: SYNC-Zustand (Standard an) fuer spielende Plugins.
+  useSyncExternalStore(subscribePluginSync, pluginSyncVersion, pluginSyncVersion);
+
+  // Header-Auswahl: springt zum Modul (Spec: „Tippen springt zum Modul“) und
+  // meldet die Ansicht an die Session. Der Modus aendert sich nur ueber den
+  // Modus-Button am Plugin.
   const handleNavSelect = useCallback((navId: string) => {
     setActiveNav(navId);
     // COLLAB-P1-004: aktive Navigation an die Session melden (Server-Relay).
     webRTCManager.sendSessionNav(navId);
-    const current = moduleStates[navId] || 'OFF';
-    if (current === 'OFF') {
-      releaseLock(navId, webRTCManager.userId);
-      setModuleState(navId, 'AUTO_AI');
-    }
     document.getElementById(`rack-${navId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, [moduleStates, releaseLock, setModuleState]);
+  }, []);
 
   // COLLAB-P1-004: Navigation der anderen User empfangen und anzeigen.
   useEffect(() => {
@@ -187,9 +246,24 @@ function AppComponent() {
   // MAIN-Berechtigung (revidiert): NUR der Halter (Lock-Owner) des mixerMONK-
   // Plugins ist der DJ und darf den Main-Sound steuern (Play/Stop/BPM/Fades).
   // Kein Admin, kein Superuser, kein Fallback.
-  const mainHolder = (moduleStates['mixer'] || 'OFF') === 'PRO'
+  // UI2-P0-001: mixerMONK ist immer ON; Halter = Lock-Owner (vom Server vergeben).
+  const mainHolder = (moduleStates['mixer'] || 'OFF') !== 'OFF'
     && Boolean(pluginLocks['mixer']?.active)
     && pluginLocks['mixer']?.lockedBy === webRTCManager.userId;
+  // Main ist immer an (Betreiber 2026-10-07): im SFU-Betrieb sendet der
+  // Mixer-Halter den Main-Ton automatisch – kein Knopf mehr.
+  const masterStream = useMasterStream();
+  useEffect(() => {
+    if (mainHolder && webRTCManager.isSfuMode) void masterStream.start();
+    else if (!mainHolder) masterStream.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur bei Halterwechsel
+  }, [mainHolder]);
+  const toggleVisuals = () => {
+    const next = !visualsOn;
+    storageSetJson(VISUALS_KEY, next);
+    setVisualsOn(next);
+    setVisualOpen(next);
+  };
   useEffect(() => {
     audioEngine.setMainHolderActive(mainHolder);
   }, [mainHolder]);
@@ -278,6 +352,7 @@ function AppComponent() {
     webRTCManager.onSessionUpdate = (info) => {
       setSessionMembers(info.members.length);
       setSessionPeers(info.members.map((m) => ({ socketId: m.socketId, userId: m.userId })));
+      setSessionPeople(webRTCManager.userId, info.members.map((m) => m.userId));
       setSessionFull(info.full);
       if (webRTCManager.isMainOutOwner) {
         startHostMain();
@@ -306,10 +381,17 @@ function AppComponent() {
           const plugins = getPluginRegistry();
           const target = plugins[n];
           if (target) {
-            const current = moduleStates[target.id] || 'OFF';
-            releaseLock(target.id, webRTCManager.userId);
-            const turningOn = current === 'OFF';
-            setModuleState(target.id, turningOn ? 'AUTO_AI' : 'OFF');
+            // UI2-P0-002: Hotkey = Modus-Button des Plugins (OFF → STBY → ON → OFF).
+            const lock = pluginLocks[target.id];
+            const step = nextModeStep(
+              target.id,
+              pluginModeOf(target.id, moduleStates[target.id], lock),
+              pluginOwnerOf(lock),
+              webRTCManager.userId,
+            );
+            cycleMode(target.id);
+            if (step.kind === 'denied') return;
+            const turningOn = step.kind !== 'release';
             // Konsistenz zum Nav-Icon (handleNavSelect): mit dem Modul auch die
             // ANSICHT markieren bzw. loesen und an die Session melden. Ohne das
             // bleibt nach dem Hotkey ein unmarkiertes Nav-Icon stehen (im Test
@@ -338,7 +420,7 @@ function AppComponent() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPlaying, mainHolder, moduleStates, releaseLock, setModuleState]);
+  }, [isPlaying, mainHolder, moduleStates, pluginLocks, cycleMode]);
 
   // P0: Dropout-/Underrun-Telemetrie aus dem Audio-Thread an /api/telemetry.
   useEffect(() => {
@@ -384,42 +466,6 @@ function AppComponent() {
     const interval = setInterval(sendLatency, 30_000);
     return () => clearInterval(interval);
   }, []);
-
-  // UX: EIN Klick schaltet an/aus (OFF <-> AUTO_AI), Doppelklick aktiviert PRO.
-  // P0-1: mixer ist kein Sonderfall mehr – jedes Plugin (auch mixerMONK) ist
-  // OFF-fähig und wird erst bei Aktivierung in die Signalkette eingespeist.
-  const togglePlugin = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    const nextState: ModuleState = currentState === 'OFF' ? 'AUTO_AI' : 'OFF';
-    releaseLock(id, webRTCManager.userId);
-    setModuleState(id, nextState);
-  }, [moduleStates, releaseLock, setModuleState]);
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- bewusst beibehalten (Runde 3)
-  const promotePlugin = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'OFF') return;
-    const lockGranted = requestLock(id, webRTCManager.userId);
-    if (!lockGranted) return;
-    setModuleState(id, 'PRO');
-  }, [moduleStates, requestLock, setModuleState]);
-
-  // Rack-Promote (⋮): OFF → AUTO_AI → PRO, PRO → OFF (freigeben).
-  // ARCH-#6: PRO-Transition nur bei bestätigtem Lock – der Server emittiert
-  // sonst rbac-denied/lock-denied und der Client hätte lokal PRO, während
-  // die Session etwas anderes sieht (Desync).
-  const rackPromote = useCallback((id: string) => {
-    const currentState = moduleStates[id] || 'OFF';
-    if (currentState === 'PRO') {
-      releaseLock(id, webRTCManager.userId);
-      setModuleState(id, 'OFF');
-      return;
-    }
-    if (currentState === 'OFF') setModuleState(id, 'AUTO_AI');
-    if (requestLock(id, webRTCManager.userId)) {
-      setModuleState(id, 'PRO');
-    }
-  }, [moduleStates, requestLock, releaseLock, setModuleState]);
 
   // P1-4: Session-Zwischenspeicher – Snapshot aus aktuellem Zustand bauen bzw. anwenden.
   const handleSaveScratchSnapshot = useCallback((name: string) => {
@@ -525,14 +571,9 @@ function AppComponent() {
       console.log('[startApp] isStarted=true setzen');
       setIsStarted(true);
       setIsPlaying(false);
-      // iPad/Phone: Querformat anstreben (nur möglich im Fullscreen/PWA-Kontext;
-      // im normalen Browser-Tab wird der Versuch still ignoriert).
-      try {
-        const so = screen.orientation as (ScreenOrientation & { lock?: (o: string) => Promise<void> }) | undefined;
-        if (so && typeof so.lock === 'function') {
-          so.lock('landscape').catch(() => { /* Browser erlaubt Lock nicht */ });
-        }
-      } catch { /* Orientierungs-Lock nicht verfügbar */ }
+      // Formate: KEIN Orientierungs-Lock mehr – Handy hochkant hat eine eigene,
+      // vereinfachte Ansicht. Vollbild fordert useDeviceLayout beim Tippen an
+      // (Handy quer, Pad quer); der Klick auf „Studio betreten" zählt bereits.
   };
 
   /** Rendert den Terminal-Inhalt eines Rack-Streifens (Special-Cases wie bisher). */
@@ -555,18 +596,7 @@ function AppComponent() {
       );
     }
     if (plugin.id === 'master') {
-      return (
-        <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Mastering…</div>}>
-          <MasteringOverlay isOpen={masteringOpen} onClose={() => setMasteringOpen(false)} />
-          <button
-            type="button"
-            onClick={() => setMasteringOpen(true)}
-            className="w-full px-4 py-3 rounded-lg border border-sky-500/30 bg-sky-500/5 text-sky-200 text-xs font-mono tracking-widest hover:bg-sky-500/15 transition-all cursor-pointer"
-          >
-            NEXUS KONTROL ÖFFNEN
-          </button>
-        </Suspense>
-      );
+      return <MasterRack />;
     }
     return (
       <Suspense fallback={<div className="h-16 text-neutral-500 text-xs">Lade Modul…</div>}>
@@ -609,7 +639,7 @@ function AppComponent() {
                   <span className="text-4xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-linear-to-r from-cyan-300 via-teal-200 to-fuchsia-400">
                     AUDIO MONASTRY
                   </span>
-                  <span className="text-[9px] font-mono tracking-[0.35em] text-cyan-300/70 uppercase">V. 1.210.001 · HYPERDAW</span>
+                  <span className="text-[9px] font-mono tracking-[0.35em] text-cyan-300/70 uppercase">V. {APP_VERSION} · HYPERDAW</span>
                   <span className="px-5 py-2.5 rounded-full border border-cyan-400/40 text-cyan-200 text-xs font-bold tracking-[0.3em] uppercase
                                  bg-cyan-500/8 hover:bg-cyan-500/18 hover:border-cyan-300/70 hover:shadow-[0_0_30px_-6px_var(--monk-glow-teal)]
                                  transition-all duration-300 active:scale-95">
@@ -652,223 +682,205 @@ function AppComponent() {
   }
 
   return (
-    <div id="studio-main" tabIndex={-1} className="min-h-screen bg-transparent text-white p-6 pb-28 short-landscape:p-2">
+    <div id="studio-main" tabIndex={-1} data-layout-label={deviceLayout.label} className="am min-h-screen pb-28"><div className="am-wrap" style={{ margin: '0 auto', padding: '8px 16px 40px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <a href="#studio-main" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-cyan-500 focus:text-black focus:rounded focus:font-bold">Zum Studio-Inhalt springen</a>
-      {/* 1. Header (Designvorlage uioben.jpg): Logo-Block + 16 Plugin-Icons in zwei Reihen + Avatar */}
-      <header className="sticky top-0 z-40 -mx-6 short-landscape:-mx-2 -mt-6 short-landscape:-mt-2 h-[5.75rem] short-landscape:h-16 bg-[#0a0e13]/95 backdrop-blur-xl border-b border-[#16242e] shadow-[0_10px_30px_-18px_rgba(0,0,0,0.9)]">
-        <div className="mx-auto flex h-full items-stretch max-w-[1800px]">
-          {/* Logo-Block */}
+      <AmDefs />
+      {/* Kopf + Masterplayer nach Entwurf (docs/design/audioMONASTRY-design.html) */}
+      <div className="am-top">
+        <header className="am-box am-head">
           <a
             href="#studio-main"
             onClick={(e) => { e.preventDefault(); setActiveNav(''); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-            className="flex items-center gap-2.5 shrink-0 pl-3 pr-3 border-r border-[#16242e]"
+            className="am-brand"
             aria-label="audioMONASTRY Dashboard"
+            style={{ textDecoration: 'none', color: 'inherit' }}
           >
-            <div className="relative shrink-0">
-              <div className="absolute -inset-1 rounded-lg bg-cyan-400/15 blur-lg" />
-              <Logo size={30} rounded={false} className="relative" />
-            </div>
-            <div className="hidden sm:block leading-none min-w-0">
-              <p className="text-[14px] font-black tracking-tight text-white whitespace-nowrap">
-                <span className="font-light text-neutral-300">audio</span>MONASTRY
-              </p>
-              <p className="text-[7px] font-mono tracking-[0.4em] text-neutral-500 uppercase mt-1">4-Person Studio</p>
-              <p className="text-[7px] font-mono tracking-[0.25em] text-cyan-300/80 uppercase mt-0.5 whitespace-nowrap">V. 1.210.001 · HYPERDAW</p>
+            <Logo size={56} rounded={false} />
+            <div>
+              <b>audio<span>MONASTRY</span></b>
+              <small>4-Person Studio · V. {APP_VERSION}</small>
             </div>
           </a>
 
-          {/* Mitte: 16 Auswahl-Icons (zwei Reihen à 8) – ein Icon pro Plugin außer ai/masterplayer/perfor */}
-          <nav className="flex-1 min-w-0 overflow-x-auto no-scrollbar" aria-label="Studio-Navigation">
-            <div className="grid grid-rows-2 grid-cols-8 min-w-[600px] h-full">
-              {navPlugins.map((plugin) => {
-                const Icon = plugin.icon;
-                const state = moduleStates[plugin.id] || 'OFF';
-                const pluginOn = state !== 'OFF';
-                const active = activeNav === plugin.id;
-                return (
-                  <button
-                    key={plugin.id}
-                    type="button"
-                    data-plugin-id={plugin.id}
-                    onClick={() => handleNavSelect(plugin.id)}
-                    aria-current={active ? 'page' : undefined}
-                    title={plugin.name}
-                    className={`relative flex flex-col items-center justify-center gap-0.5 px-1 min-h-0 overflow-hidden text-center transition-colors cursor-pointer ${
-                      active ? 'bg-[#0f1a22]' : 'hover:bg-white/[0.03]'
-                    }`}
-                  >
-                    <Icon
-                      size={16}
-                      strokeWidth={active || pluginOn ? 2 : 1.6}
-                      className={`transition-colors ${
-                        active
-                          ? 'text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.45)]'
-                          : pluginOn
-                            ? 'text-cyan-300/90'
-                            : 'text-[#5fc9dc]'
-                      }`}
-                    />
-                    <span className={`text-[7px] font-bold tracking-[0.08em] uppercase leading-none truncate max-w-full ${
-                      active ? 'text-cyan-100' : pluginOn ? 'text-cyan-200' : 'text-[#8b9aa5]'
-                    }`}>
-                      {pluginNavLabel(plugin.name)}
-                    </span>
-                    <span className={`absolute bottom-0 left-1/2 -translate-x-1/2 h-[2px] bg-cyan-400 rounded-full transition-all duration-300 ${active ? 'w-6 sm:w-8' : 'w-0'}`} />
-                    {pluginOn && (
-                      <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+          <nav className="am-ics" aria-label="Studio-Navigation">
+            {AM_MODULES.map((m) => {
+              const lock = pluginLocks[m.id];
+              const status = headerIconStatus(lock, webRTCManager.userId);
+              const owner = pluginOwnerOf(lock);
+              const on = (moduleStates[m.id] || 'OFF') !== 'OFF';
+              const statusText = status === 'free' ? 'frei' : status === 'mine' ? 'von dir gehalten' : `gesperrt, gehalten von ${personLabel(owner, people)}`;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  data-plugin-id={m.id}
+                  data-lock-status={status}
+                  className={`am-ic am-${status === 'locked' ? 'lock' : status} ${activeNav === m.id ? 'am-cur' : ''}`}
+                  style={{ ['--c' as string]: m.color, ['--u' as string]: personColor(owner, people) }}
+                  onClick={() => handleNavSelect(m.id)}
+                  aria-current={activeNav === m.id ? 'page' : undefined}
+                  aria-label={`${m.name}, ${statusText}${on ? ', aktiv' : ''}`}
+                  title={`${m.name} · ${statusText}`}
+                >
+                  <AmSvg d={AM_ICON[m.id]} />
+                  <span>{m.short}</span>
+                  {on && <i className="am-ondot" aria-hidden="true" />}
+                </button>
+              );
+            })}
           </nav>
 
-          {/* Rechts: Session + kompakte Steuerung + Avatar */}
-          <div className="flex items-center gap-1.5 shrink-0 pl-2 pr-3 border-l border-[#16242e]">
-            <div
-              className={`hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-[9px] font-mono tracking-widest ${
-                sessionFull
-                  ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                  : 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300'
-              }`}
-              title="Aktive Studio-Session (eine feste Session, max. 4 User)"
-              role="status"
-              aria-live="polite"
+          <div className="am-hr am-hr3">
+            <button type="button"
+              onClick={() => { if (mainHolder) toggleVisuals(); }}
+              disabled={!mainHolder}
+              className={`am-vistg ${visualsOn ? 'am-on' : ''}`}
+              aria-label="Visual-Liveshow öffnen"
+              aria-pressed={visualsOn}
+              title={mainHolder ? 'Main-Visual an/aus (Ausgabe auf /visual-out)' : `Main-Visual ${visualsOn ? 'an' : 'aus'} – schalten darf nur der Mixer-Halter`}
             >
-              <span className={`inline-block w-1.5 h-1.5 rounded-full ${sessionFull ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
-              {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
-              {/* COLLAB-P0-004 Teil 2: Nur der Halter des Mixers kann ihn weitergeben.
-                  Der neue Halter ist danach der Einzige, der den Mainsound beeinflusst. */}
-              {pluginLocks.mixer?.active && pluginLocks.mixer?.lockedBy === webRTCManager.userId
-                && sessionPeers.some((m) => m.userId !== webRTCManager.userId) && (
-                  <select
-                    aria-label="mixerMONK-Halter übergeben"
-                    className="bg-black/60 border border-neutral-700 text-[10px] font-mono text-neutral-300 rounded px-1 py-0.5"
-                    value=""
-                    onChange={(e) => { if (e.target.value) transferLock('mixer', e.target.value); }}
+              <AmSvg d={AM_PATH.visual} />
+              <span>VISUALS</span>
+              <i>{visualsOn ? 'AN' : 'AUS'}</i>
+            </button>
+            <div className="am-usermenu">
+            <div className="am-users" role="status" aria-live="polite" title="Wer ist in der Session (max. 4 Nutzer)">
+              {[0, 1, 2, 3].map((k) => {
+                const p = people.people[k];
+                return (
+                  <span
+                    key={k}
+                    className={`am-uav ${p ? '' : 'am-away'}`}
+                    style={{ ['--u' as string]: p?.color ?? '#445a82' }}
+                    title={p ? `Nutzer ${p.no}${p.me ? ' · du' : ''}` : 'Platz frei'}
                   >
-                    <option value="">Halter übergeben …</option>
-                    {sessionPeers
-                      .filter((m) => m.userId !== webRTCManager.userId)
-                      .map((m) => (
-                        <option key={m.socketId} value={m.userId}>{m.userId}</option>
-                      ))}
-                  </select>
-                )}
-            </div>
-            {Object.keys(remoteNav).length > 0 && (
-              <div
-                className="hidden xl:flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/5 text-fuchsia-300 text-[9px] font-mono tracking-widest"
-                title="Aktive Plugin-Navigation der Session-User"
-                role="status"
-                aria-live="polite"
-              >
-                {Object.entries(remoteNav).slice(0, 3).map(([userId, nav]) => (
-                  <span key={userId} className="whitespace-nowrap">
-                    {userId.replace(/^user-/, 'u')}→{nav.pluginId}
+                    {p ? p.no : ''}
                   </span>
-                ))}
-              </div>
-            )}
-            <div
-              className="hidden md:flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-cyan-400/30 bg-cyan-400/5 text-cyan-300 text-[9px] font-mono tracking-widest"
-              title="Aktuelle Viewport-Auflösung"
-              role="status"
-            >
-              {viewport.w}×{viewport.h}
+                );
+              })}
+              <span className="am-ucount" style={{ color: sessionFull ? 'var(--hot)' : undefined }}>
+                {sessionFull ? 'SESSION VOLL' : `SESSION ${sessionMembers + 1}/4`}
+              </span>
+              {Object.entries(remoteNav).slice(0, 3).map(([userId, nav]) => (
+                <span key={userId} className="am-hint" style={{ marginLeft: 4, color: personColor(userId, people), fontSize: 10 }} title="Wo die anderen gerade sind">
+                  {userId.replace(/^user-/, 'u')}→{nav.pluginId}
+                </span>
+              ))}
             </div>
-            <button type="button"
-              onClick={() => setScratchOpen(v => !v)}
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-amber-400/10 border border-amber-400/40 text-amber-300 hover:bg-amber-400/20 hover:border-amber-300/70 transition-all duration-200 cursor-pointer"
-              aria-label="Zwischenspeicher"
-              aria-pressed={scratchOpen}
-            >
-              <ClipboardCopy className="w-4 h-4" />
-              <span className="text-[9px] font-bold tracking-widest">ZWISCHENSPEICHER</span>
-            </button>
-            <div className="hidden xl:block"><Scratchpad /></div>
-            <div className="hidden lg:block"><MasterStreamToggle /></div>
-            <button type="button"
-              onClick={() => setVisualOpen(v => !v)}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-fuchsia-400/10 border border-fuchsia-400/40 text-fuchsia-300 hover:bg-fuchsia-400/20 hover:border-fuchsia-300/70 transition-all duration-200 cursor-pointer"
-              aria-label="VisualMONK Liveshow oeffnen"
-              aria-pressed={visualOpen}
-              title="VisualMONK Liveshow (Stream an Ghostuser 6 / Beamer)"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span className="text-[9px] font-bold tracking-widest">VISUAL</span>
-            </button>
-            <OutputsPanel />
-            <button type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-400 hover:text-cyan-300 hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-all duration-200 active:scale-95 cursor-pointer"
-              title="Audio / I-O Einstellungen"
-              aria-label="Audio / I-O Einstellungen öffnen"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            <div className="hidden sm:flex w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-cyan-400/20 to-fuchsia-400/20 border border-cyan-400/30 items-center justify-center" title="Studio-User">
-              <UserRound className="w-4 h-4 text-cyan-300" />
+            <div className="am-menuwrap">
+              <button type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className={`am-menubtn ${menuOpen ? 'am-on' : ''}`}
+                aria-label="Menü"
+                aria-expanded={menuOpen}
+                aria-haspopup="true"
+                title="Einstellungen und Menü"
+              >
+                <AmSvg d={AM_PATH.gear} />
+              </button>
+              {menuOpen && (
+                <div className="am-box am-menu" role="group" aria-label="Menü" onKeyDown={(e) => { if (e.key === 'Escape') setMenuOpen(false); }}>
+                  <button type="button" className="am-mi" onClick={() => { setSettingsOpen(true); setMenuOpen(false); }} aria-label="Audio / I-O Einstellungen öffnen">
+                    <AmSvg d={AM_PATH.gear} /> Einstellungen · Audio / I-O
+                  </button>
+                  <div className="am-mi am-mi-row"><OutputsPanel /> <span>Ausgänge (Main Audio, Main Visual, Nutzer)</span></div>
+                  <div className="am-mi am-mi-row"><Scratchpad /> <span>Projekt-Clipboard</span></div>
+                  <button type="button" className={`am-mi ${scratchOpen ? 'am-on' : ''}`} onClick={() => { setScratchOpen((v) => !v); setMenuOpen(false); }} aria-label="Zwischenspeicher" aria-pressed={scratchOpen}>
+                    <AmSvg d={AM_PATH.board} /> Zwischenspeicher der Session
+                  </button>
+                  {deviceLayout.fullscreen.supported && !deviceLayout.standalone && deviceLayout.layout !== 'desktop' && (
+                    <button type="button" className="am-mi"
+                      onClick={() => (deviceLayout.fullscreen.active ? exitAppFullscreen() : requestAppFullscreen())}
+                      aria-label={deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                      aria-pressed={deviceLayout.fullscreen.active}
+                    >
+                      <AmSvg d={deviceLayout.fullscreen.active ? AM_PATH.unfull : AM_PATH.full} /> {deviceLayout.fullscreen.active ? 'Vollbild beenden' : 'Vollbild'}
+                    </button>
+                  )}
+                  <div className="am-mi am-mi-info" data-testid="layout-label" title="Erkanntes Format und Auflösung">{deviceLayout.label}</div>
+                </div>
+              )}
+            </div>
             </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* 2. masterplayerMONK: feste View-only-Leiste (oben, sticky in der Rack-Scroll-Logik). */}
-      <section
-        id="rack-masterplayer"
-        className="rounded-xl border border-cyan-400/60 bg-[#0a0f15]/95 backdrop-blur-xl shadow-[0_0_24px_-8px_rgba(34,211,238,0.45),0_20px_40px_-24px_rgba(0,0,0,0.9)] mb-4 sticky top-20 short-landscape:top-16 z-30"
-      >
-        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-cyan-400/70 bg-cyan-900/40 text-cyan-300 flex items-center justify-center shadow-[0_0_12px_rgba(34,211,238,0.35)]">
-            <Activity size={18} />
-          </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">masterplayerMONK</h3>
-          <span className="hidden sm:inline text-[9px] font-mono text-cyan-400 tracking-widest">FIXED · VIEW ONLY</span>
-
-          <div className="ml-auto flex items-center gap-4 text-center">
-            <div><div className="font-mono text-sm font-bold text-white">{bpm}.00</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">BPM</div></div>
-            <div><div className="font-mono text-sm font-bold text-white">{isPlaying ? 'PLAY' : 'STOP'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TRANSPORT</div></div>
-            <div><div className="font-mono text-sm font-bold text-white">4 / 4</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">TIME</div></div>
-            <div className="hidden sm:block"><div className="font-mono text-sm font-bold text-white">{TECHNO_PRESETS[0]?.key ?? 'C maj'}</div><div className="text-[7px] font-mono text-neutral-500 tracking-widest">KEY</div></div>
-          </div>
-        </div>
-        <div className="px-3 pb-3 border-t border-white/5">
-          <BeatVisualizer isPlaying={isPlaying} />
-        </div>
-        {/* P0-1 (revidiert): masterplayerMONK ist REINE INFO/VISUALISIERUNG.
-            Keine Eingaben, keine Play/Stop-Buttons, kein Terminal. */}
-      </section>
+        <StudioMasterplayer bpm={bpm} isPlaying={isPlaying} mainHolder={mainHolder} />
+      </div>
 
       {/* Icon-Toolbar entfernt (doppelte Navigation, kein Mehrwert). */}
 
-      {/* Rack-Liste: alle Module als Streifen */}
-      <div className="flex flex-col gap-3 max-w-screen-xl mx-auto">
-        {RACK_ORDER.map(id => {
+      {/* Rack-Liste: alle Module als Streifen (Signalweg steht im mixerMONK, wie im Entwurf). */}
+      <div className="am-rack">
+        {deviceLayout.installHint && (
+          <div role="note" data-testid="install-hint" className="flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-950/40 px-3 py-2 text-[11px] text-amber-100">
+            <span className="flex-1">Vollbild auf diesem Gerät: im Browser <b>Teilen → „Zum Home-Bildschirm“</b> wählen und das Studio von dort starten.</span>
+            <button type="button" onClick={dismissInstallHint} aria-label="Hinweis schließen" className="px-2 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer">✕</button>
+          </div>
+        )}
+        {modeNotice && (
+          <p role="status" aria-live="polite" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">{modeNotice}</p>
+        )}
+        {RACK_ORDER.map((id, index) => {
           const plugin = getPluginRegistry().find(p => p.id === id);
           if (!plugin) return null;
           if (id === 'ai' && FEATURE_FLAGS.AI_MONK_DOCK_ENABLED) return null;
-          const state = moduleStates[id] || 'OFF';
-          const lockStatus = pluginLocks[id];
-          const lockedByOther = !!lockStatus?.active && lockStatus.lockedBy !== webRTCManager.userId;
+          const me = webRTCManager.userId;
+          const lock = pluginLocks[id];
+          const owner = pluginOwnerOf(lock);
+          const mode = pluginModeOf(id, moduleStates[id], lock);
+          const ownedByMe = owner === me;
+          const lockedByOther = !!owner && owner !== me;
+          const ownerLabel = owner ? personLabel(owner, people) : null;
+          const panelOpen = pluginPanelOpen(id, mode, owner, me);
+          const peers = sessionPeers.filter((m) => m.userId !== me);
           return (
             <RackRow
               key={id}
               id={id}
               name={plugin.name}
               short={plugin.short}
+              number={String(index + 1).padStart(2, '0')}
               icon={plugin.icon}
-              state={state}
+              mode={mode}
+              ownerLabel={ownerLabel}
+              ownerColor={personColor(owner, people)}
+              ownedByMe={ownedByMe}
               lockedByOther={lockedByOther}
-              onToggle={() => togglePlugin(id)}
-              // Betreiberregel 2026-09-17: mixerMONK entscheidet den Main-Out und
-              // laesst sich nicht schliessen (OFF stoppt Main und Clock).
-              toggleLockedReason={
+              panelOpen={panelOpen}
+              summary={pluginSummary(id, mode, owner, me, ownerLabel ?? '')}
+              running={mode === 'ON' && isPlaying}
+              onCycle={() => cycleMode(id)}
+              keepMounted={id === 'mixer'}
+              playable={isSyncPlugin(id)}
+              cycleLockedReason={
                 id === 'mixer'
-                  ? 'mixerMONK entscheidet den Main-Out und lässt sich nicht schließen'
-                  : undefined
+                  ? 'mixerMONK ist immer an und nicht schließbar. Der Halter kann ihn nur übergeben.'
+                  : lockedByOther
+                    ? `Belegt von ${ownerLabel}. Anfragen oder Übernehmen gibt es nicht.`
+                    : undefined
               }
-              onPromote={() => rackPromote(id)}
+              sync={isSyncPlugin(id) ? {
+                on: isPluginSynced(id),
+                disabled: !ownedByMe,
+                onToggle: () => { if (ownedByMe) setPluginSync(id, !isPluginSynced(id)); },
+              } : undefined}
+              headerExtra={id === 'mixer' && ownedByMe ? (
+                <>
+                  {peers.length > 0 && (
+                    <select
+                      aria-label="mixerMONK übergeben"
+                      className="am-sel"
+                      style={{ fontSize: 11, padding: '2px 6px' }}
+                      value=""
+                      onChange={(e) => { if (e.target.value) { flushPluginSettings('mixer'); transferLock('mixer', e.target.value); } }}
+                    >
+                      <option value="">Übergeben an …</option>
+                      {peers.map((m) => <option key={m.socketId} value={m.userId}>{personLabel(m.userId, people)}</option>)}
+                    </select>
+                  )}
+                </>
+              ) : undefined}
               onCopy={() => {
                 try {
                   // P1-4: Plugin-State inkl. aktuellem Session-Snapshot in die
@@ -878,26 +890,22 @@ function AppComponent() {
                     pluginId: id,
                     name: plugin.name,
                     state: moduleStates[id] || 'OFF',
+                    mode,
                     snapshot,
                     ts: Date.now(),
                   }, null, 2));
                 } catch { /* Clipboard nicht verfügbar */ }
               }}
               onLoadScratch={(entry) => {
-                // Scratchpad-Eintrag auf dieses Modul gezogen: Modul aktivieren;
-                // passt der Eintrag zum Modul, wird dessen State übernommen.
-                // ARCH-#6: PRO nur bei bestätigtem Lock, sonst AUTO_AI-Fallback.
-                const apply = (entry.id === id && (entry.state === 'AUTO_AI' || entry.state === 'PRO'))
-                  ? entry.state
-                  : 'AUTO_AI';
-                if (apply === 'PRO' && !requestLock(id, webRTCManager.userId)) {
-                  setModuleState(id, 'AUTO_AI' as ModuleState);
-                  return;
+                // Scratchpad-Eintrag auf ein eigenes Modul gezogen: passt der
+                // Eintrag zum Modul, wird es aktiviert (ON). Nur der Halter darf das.
+                if (!ownedByMe || id === 'mixer') return;
+                if (entry.id === id && (entry.state === 'ON' || entry.state === 'PRO' || entry.state === 'AUTO_AI')) {
+                  setModuleState(id, 'PRO' as ModuleState);
                 }
-                setModuleState(id, apply as ModuleState);
               }}
             >
-              {state !== 'OFF' && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
+              {(panelOpen || id === 'mixer') && <SafeModuleBoundary>{renderRackContent(plugin)}</SafeModuleBoundary>}
             </RackRow>
           );
         })}
@@ -924,22 +932,20 @@ function AppComponent() {
         </div>
       )}
 
-      {/* FIX BOTTOM: aiMONK (nach recordMONK) + perforMONK (ganz unten) – fest
-          für alle User. Die Monitor-Wahl liegt hier bei perforMONK. */}
-      <section
-        id="rack-perfor"
-        className="rounded-xl border border-emerald-400/60 bg-[#0a0f15]/95 shadow-[0_0_24px_-8px_rgba(52,211,153,0.35)] mb-4"
-      >
-        <div className="flex items-center gap-3 px-3 py-2 flex-wrap">
-          <div className="w-10 h-10 shrink-0 rounded-lg border border-emerald-400/70 bg-emerald-900/40 text-emerald-300 flex items-center justify-center shadow-[0_0_12px_rgba(52,211,153,0.35)]">
-            <Gauge size={18} />
+      {/* FEST UNTEN (Betreiber 2026-10-07): aiMONK, dann perforMONK – für alle
+          sichtbar, nicht schließbar, nicht verschiebbar. */}
+      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
+      <section id="rack-perfor" className="am-box am-fixedmod" style={{ ['--c' as string]: '#3ddc84' }} aria-label="perforMONK">
+        <div className="am-sh">
+          <span className="am-fixedico"><Gauge size={18} /></span>
+          <div className="am-nm">
+            <h2><em style={{ color: 'var(--c)' }}>perfor</em>MONK</h2>
+            <span className="am-vb">Leistung und Telemetrie · fest für alle</span>
           </div>
-          <h3 className="text-sm font-black tracking-[0.25em] uppercase text-neutral-100">perforMONK</h3>
-          <span className="hidden sm:inline text-[9px] font-mono text-emerald-400 tracking-widest">FIXED · MONITOR</span>
 
           {/* Monitor-Ausgabe pro User: MAIN → MIX (MAIN+PLUGIN) → NUR PLUGIN */}
-          <div className="ml-auto flex items-center gap-1.5 flex-wrap">
-            <span className="hidden lg:inline text-[9px] font-mono text-neutral-500 tracking-widest">MONITOR</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span className="am-lbl">Monitor</span>
             <select
               value={monitorUser}
               onChange={(e) => {
@@ -947,7 +953,7 @@ function AppComponent() {
                 setMonitorUser(user);
                 applyMonitorMix(user, monitorMixes[user]);
               }}
-              className="appearance-none pl-2 pr-5 py-1 rounded-full bg-neutral-900/80 border border-neutral-800 text-neutral-300 text-[10px] font-mono hover:border-emerald-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60 transition-colors cursor-pointer"
+              className="am-sel"
               title="Monitor-User wählen (User 1-4)"
               aria-label="Monitor-User wählen"
             >
@@ -964,45 +970,19 @@ function AppComponent() {
               }}
               aria-pressed={monitorMixes[monitorUser] !== 'MAIN'}
               title={`Monitor-Mix für ${monitorUser.replace('MON', 'USER ')}: MAIN → MIX → NUR PLUGIN`}
-              className={`px-2.5 py-1 rounded-full border text-[9px] font-bold tracking-widest transition-all cursor-pointer ${
-                monitorMixes[monitorUser] === 'PLUGIN_ONLY'
-                  ? 'bg-fuchsia-600/20 border-fuchsia-400/60 text-fuchsia-200'
-                  : monitorMixes[monitorUser] === 'MIX'
-                    ? 'bg-amber-500/15 border-amber-400/60 text-amber-200'
-                    : 'bg-emerald-500/10 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/20'
-              }`}
+              className={`am-tg ${monitorMixes[monitorUser] !== 'MAIN' ? 'am-on' : ''}`}
             >
               {monitorMixes[monitorUser] === 'MAIN' ? '🎧 MAIN' : monitorMixes[monitorUser] === 'MIX' ? '🎧 MAIN + PLUGIN' : '🎧 NUR PLUGIN'}
             </button>
           </div>
         </div>
-        <div className="px-3 pb-3 border-t border-white/5">
-          <Suspense fallback={<div className="h-16 flex items-center justify-center text-neutral-500 text-xs">Lade perforMONK…</div>}>
+        <div className="am-sb">
+          <Suspense fallback={<div className="am-hint">Lade perforMONK…</div>}>
             <PerformanceMonitorTerminal />
           </Suspense>
         </div>
       </section>
 
-      {/* D7: aiMONK-Bottom-Dock (immer offen, ausblendbar) – ersetzt das
-          „letzte Modul unten" für alle User. */}
-      {FEATURE_FLAGS.AI_MONK_DOCK_ENABLED && <AiMonkDock />}
-
-      {/* iPhone/iPad: Querformat-Hinweis (16:9-Studio) – nur Hochformat + Touch,
-          bewusst dezent und schließbar, blockiert nichts. */}
-      {!rotateHintDismissed && (
-        <div className="portrait:flex hidden fixed bottom-3 left-1/2 -translate-x-1/2 z-40 items-center gap-2 px-3 py-2 rounded-full bg-cyan-950/90 border border-cyan-400/40 text-cyan-100 text-[10px] font-mono tracking-widest shadow-[0_8px_30px_rgba(0,0,0,0.5)] backdrop-blur">
-          <span aria-hidden="true">↻</span>
-          <span>Querformat für 16:9-Studio empfohlen</span>
-          <button
-            type="button"
-            onClick={() => setRotateHintDismissed(true)}
-            aria-label="Hinweis schließen"
-            className="px-1.5 py-0.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* Settings / Audio-I/O */}
       <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
@@ -1010,7 +990,7 @@ function AppComponent() {
       {/* VisualMONK Liveshow (Ghostuser 6 / Beamer) – guarded, default aus */}
       {visualOpen && (
         <Suspense fallback={null}>
-          <VisualMonkOverlay onClose={() => setVisualOpen(false)} />
+          <VisualMonkOverlay onClose={() => { setVisualOpen(false); storageSetJson(VISUALS_KEY, false); setVisualsOn(false); }} />
         </Suspense>
       )}
 
@@ -1036,6 +1016,7 @@ function AppComponent() {
           Datenschutz
         </a>
       </footer>
+    </div>
     </div>
   );
 }

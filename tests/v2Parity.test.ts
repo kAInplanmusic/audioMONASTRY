@@ -28,17 +28,15 @@ function sha256(channel: Float32Array): string {
 registerReferenceWorkletSpecs(workletGraphRuntime);
 
 describe('Phase 8 · V1↔V2 Paritätstest (VISIONS B8)', () => {
-  it('GraphStateBridge: V1-State → V2-Graph → zurück ist für alle 10 Kanäle identisch', () => {
+  it('GraphStateBridge: V1-State → V2-Graph → zurück ist für alle 8 Kanäle identisch', () => {
     const state = emptyAudioGraphState();
     state.channelGainsDb = {
       channel1: -6, channel2: -3, channel3: 0, channel4: 2,
       channel5: -1, channel6: 3, channel7: -2, channel8: 0,
-      channel9: 4, channel10: -5,
     };
     state.channelPans = {
       channel1: -0.75, channel2: 0.5, channel3: 0, channel4: -0.25,
       channel5: 1, channel6: -1, channel7: 0.25, channel8: 0,
-      channel9: 0.6, channel10: -0.4,
     };
 
     const bridge = new GraphStateBridge();

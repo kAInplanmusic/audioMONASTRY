@@ -129,163 +129,49 @@ export const PerformanceMonitorTerminal = React.memo(function PerformanceMonitor
   const worklets = tel.worklets;
   const xruns = tel.xruns;
 
+  // Kompakt nach Vorlage (uiübersichtapp, Zeile „PERFORMANCE / TELEMETRY"): eine Zeile Kennzahlen.
+  const worst = worklets.reduce((m, w) => Math.max(m, w.lastMs / Math.max(0.001, w.budgetMs)), 0);
+  const kpi = (label: string, value: React.ReactNode, ok = true, hint?: string) => (
+    <div className="am-kpi" title={hint}><b style={{ color: ok ? 'var(--ok)' : 'var(--warn)' }}>{value}</b><span>{label}</span></div>
+  );
   return (
-    <div className="w-full h-full flex flex-col bg-[#111] rounded-xl border border-neutral-800 overflow-hidden text-neutral-300 font-sans">
-      <div className="px-6 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="performance" placeholder="MOA: z. B. 'Monitoring reset'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-      <div className="flex items-center justify-between px-6 py-4 bg-linear-to-r from-teal-900/20 to-[#111] border-b border-teal-900/30">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-teal-500/20 flex items-center justify-center border border-teal-500/50">
-            <Gauge className="w-5 h-5 text-teal-400" />
-          </div>
-          <h2 className="text-xl font-black tracking-widest text-neutral-100 uppercase flex items-center gap-2">
-            Performance <span className="text-[10px] font-mono text-teal-400 border border-teal-500/30 px-2 py-0.5 rounded-sm">SLOT 17</span>
-          </h2>
+    <div className="am-perf">
+      <MoaAssistant pluginId="performance" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+      <div className="am-perfgrid">
+        <div className="am-kgroup"><span className="am-lbl"><Cpu className="am-ico" /> System</span>
+          {kpi('UI FPS', perf.fps, perf.fps >= 30)}
+          {kpi('Jitter', `${perf.jitterMs} ms`, perf.jitterMs < 8)}
+          {kpi('Frames verloren', perf.droppedFrames, perf.droppedFrames < 30)}
         </div>
-        <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-xs p-1 rounded">
-          <option value="OFF">OFF</option>
-          <option value="AUTO_AI">AI</option>
-          <option value="PRO">ACTIVE</option>
-        </select>
-      </div>
-
-      <div className="flex-1 p-6 grid grid-cols-12 gap-6 overflow-y-auto">
-        <div className="col-span-4 space-y-4">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-3">
-              <Cpu className="w-4 h-4" /> MAIN THREAD
-            </h3>
-            <div className="space-y-2 text-[11px] font-mono">
-              <div className="flex justify-between"><span className="text-neutral-500">UI FPS</span><span className="text-emerald-400">{perf.fps}</span></div>
-              <div className="flex justify-between"><span className="text-neutral-500">FRAME JITTER</span><span className="text-emerald-400">{perf.jitterMs} ms</span></div>
-              <div className="flex justify-between"><span className="text-neutral-500">DROPPED FRAMES</span><span className="text-emerald-400">{perf.droppedFrames}</span></div>
-            </div>
-          </div>
+        <div className="am-kgroup"><span className="am-lbl"><Activity className="am-ico" /> Audio</span>
+          {kpi('Zustand', perf.audioState.toUpperCase(), perf.audioState === 'running', perf.audioState === 'closed' ? 'PLAY drücken, um Audio zu starten' : undefined)}
+          {kpi('Abtastrate', `${perf.audioSampleRate} Hz`)}
+          {kpi('Latenz lokal', `${perf.audioBaseLatencyMs}/15 ms`, perf.audioBaseLatencyMs < 15)}
         </div>
-
-        <div className="col-span-4 space-y-4">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-3">
-              <Activity className="w-4 h-4" /> AUDIO HEALTH
-            </h3>
-            <div className="space-y-2 text-[11px] font-mono">
-              <div className="flex justify-between"><span className="text-neutral-500">STATE</span><span className="text-teal-400">{perf.audioState.toUpperCase()}</span></div>
-              <div className="flex justify-between"><span className="text-neutral-500">SAMPLE RATE</span><span className="text-teal-400">{perf.audioSampleRate} Hz</span></div>
-              <div className="flex justify-between"><span className="text-neutral-500">BASE LATENCY</span><span className="text-teal-400">{perf.audioBaseLatencyMs} ms</span></div>
-            </div>
-            {/* L-6: Browser-Richtlinie — AudioContext startet erst nach User-Geste.
-                Ohne Hinweis wirkt STATE: CLOSED wie ein Fehler. */}
-            {perf.audioState === 'closed' && (
-              <div className="mt-3 flex items-center gap-2 rounded-md border border-orange-500/40 bg-orange-500/10 px-3 py-2 text-[10px] font-bold text-orange-300">
-                <Play className="h-3.5 w-3.5" /> PLAY drücken, um Audio zu starten
-              </div>
-            )}
-          </div>
+        <div className="am-kgroup"><span className="am-lbl"><Network className="am-ico" /> Netz</span>
+          {kpi('RTT', `${net.rttMs}/50 ms`, net.rttMs < 50)}
+          {kpi('Dropouts', net.dropouts, net.dropouts === 0)}
+          {kpi('Xruns', xruns.count, xruns.count === 0)}
         </div>
-
-        <div className="col-span-4 space-y-4">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-3">
-              <Network className="w-4 h-4" /> LATENCY BUDGETS
-            </h3>
-            <div className="space-y-2 text-[11px] font-mono">
-              {/* P2-1: End-to-End-Latenz-Ziele: lokal < 15 ms, Netz < 50 ms. */}
-              <div className="flex justify-between">
-                <span className="text-neutral-500 uppercase">LOCAL (Audio)</span>
-                <span className={perf.audioBaseLatencyMs < 15 ? 'text-emerald-400' : 'text-amber-400'}>
-                  {perf.audioBaseLatencyMs} / 15 ms
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500 uppercase">NET (RTT)</span>
-                <span className={net.rttMs > 0 && net.rttMs < 50 ? 'text-emerald-400' : 'text-amber-400'}>
-                  {net.rttMs} / 50 ms
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500 uppercase">DROPOUTS</span>
-                <span className={net.dropouts === 0 ? 'text-emerald-400' : 'text-amber-400'}>{net.dropouts}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500 uppercase">MASTERING LOOKAHEAD</span>
-                <span className="text-emerald-400">{latencyBudget.masteringLookaheadMs.toFixed(1)} ms</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-neutral-500 uppercase">CUE PDC</span>
-                <span className="text-emerald-400">{latencyBudget.cuePdcMs.toFixed(1)} ms</span>
-              </div>
-              {budgets.map((b) => (
-                <div key={b.pipeline} className="flex justify-between">
-                  <span className="text-neutral-500 uppercase">{b.pipeline}</span>
-                  <span className={b.violations > 0 ? 'text-amber-400' : 'text-emerald-400'}>
-                    {b.lastMs} / {b.budgetMs} ms
-                  </span>
-                </div>
-              ))}
-              <div className="flex justify-between">
-                <span className="text-neutral-500 uppercase">XRUNS</span>
-                <span className={xruns.count === 0 ? 'text-emerald-400' : 'text-amber-400'}>{xruns.count}</span>
-              </div>
-              {xruns.history.slice(-4).reverse().map((x, i) => (
-                <div key={`${x.ts}-${i}`} className="flex justify-between">
-                  <span className="text-neutral-600">{x.source}</span>
-                  <span className="text-neutral-600">{new Date(x.ts).toLocaleTimeString()}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="am-kgroup"><span className="am-lbl"><Gauge className="am-ico" /> Budgets</span>
+          {kpi('Lookahead', `${latencyBudget.masteringLookaheadMs.toFixed(1)} ms`)}
+          {kpi('Cue PDC', `${latencyBudget.cuePdcMs.toFixed(1)} ms`)}
+          {kpi('Worklets', worklets.length ? `${Math.round(worst * 100)} %` : '–', worst < 1, budgets.map((b) => `${b.pipeline} ${b.lastMs}/${b.budgetMs} ms`).join(' · '))}
         </div>
-
-        {/* AM-E6-1: Worklet-CPU-Budgets + Per-Sample-Allokationen */}
-        <div className="col-span-12">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2 mb-3">
-              <Activity className="w-4 h-4" /> WORKLET CPU BUDGETS / ALLOCATIONEN
-            </h3>
-            <div className="grid grid-cols-4 gap-3 text-[11px] font-mono">
-              {worklets.length === 0 && (
-                <div className="text-neutral-600 col-span-4">Noch keine Worklet-Messungen – Budgets erscheinen nach dem ersten Render-Quantum.</div>
-              )}
-              {worklets.map((w) => (
-                <div key={w.worklet} className="bg-black/40 rounded border border-neutral-800 p-2">
-                  <div className="text-neutral-400 uppercase truncate">{w.worklet}</div>
-                  <div className={w.violations > 0 ? 'text-amber-400' : 'text-emerald-400'}>
-                    {w.lastMs} / {w.budgetMs} ms
-                  </div>
-                  <div className="text-neutral-600">Verletzungen: {w.violations}</div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 text-[11px] font-mono flex justify-between">
-              <span className="text-neutral-500 uppercase">PER-SAMPLE-ALLOKATIONEN (Worklets)</span>
-              <span className={tel.counters['worklet.allocations'] > 0 ? 'text-amber-400' : 'text-emerald-400'}>
-                {tel.counters['worklet.allocations'] ?? 0}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Signal-Monitor (aus visMONK in perfMONK integriert) */}
-        <div className="col-span-12">
-          <div className="bg-[#1a1a1a] rounded-xl border border-neutral-800 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold tracking-widest text-neutral-500 flex items-center gap-2">
-                <Waves className="w-4 h-4" /> SIGNAL MONITOR
-              </h3>
-              <select
-                value={signalMode}
-                onChange={(e) => setSignalMode(e.target.value as SignalMode)}
-                className="bg-black text-white text-xs p-1 rounded border border-neutral-700"
-              >
-                <option value="OSCILLOSCOPE">Oszilloskop</option>
-                <option value="SPECTROGRAM">Spektrogramm</option>
-              </select>
-            </div>
-            <canvas ref={signalCanvasRef} width={560} height={180} className="w-full bg-black rounded" />
-          </div>
+        <div className="am-kgroup am-kscope"><span className="am-lbl"><Waves className="am-ico" /> Signal
+          <select value={signalMode} onChange={(e) => setSignalMode(e.target.value as SignalMode)} aria-label="Signal-Monitor Ansicht" className="am-sel" style={{ marginLeft: 6, padding: '1px 4px', fontSize: 10 }}>
+            <option value="OSCILLOSCOPE">Oszilloskop</option>
+            <option value="SPECTROGRAM">Spektrogramm</option>
+          </select></span>
+          <canvas ref={signalCanvasRef} width={560} height={60} className="am-scope" />
         </div>
       </div>
+      {perf.audioState === 'closed' && (
+        <div className="am-hint" style={{ color: 'var(--warn)' }}><Play className="am-ico" /> PLAY drücken, um Audio zu starten</div>
+      )}
+      {tel.counters['worklet.allocations'] > 0 && (
+        <div className="am-hint" style={{ color: 'var(--warn)' }}>Per-Sample-Allokationen in Worklets: {tel.counters['worklet.allocations']}</div>
+      )}
     </div>
   );
 });

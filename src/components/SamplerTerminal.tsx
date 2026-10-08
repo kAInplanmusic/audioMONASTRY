@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Power, CircleDot as Rec } from 'lucide-react';
 import { usePluginState } from '../hooks/usePluginState';
+import { mergeKnown, readPluginSettings, writePluginSettings } from '../utils/pluginSettings';
 import { useSamples } from '../context/SampleContext';
 import { audioEngine } from '../utils/audioEngine';
 import { MoaAssistant } from './MoaAssistant';
+import { AmCard, AmKnob, AmSeg, AmToggle } from './am/amUi';
 import { TrackType } from '../types';
 import { MUSIC_LIBRARY } from '../data/musicLibrary';
 import { analyzeMusic } from '../utils/audioAnalyzer';
@@ -32,18 +33,31 @@ const emptyPads = (): Pad[] =>
   }));
 
 export const SamplerTerminal = React.memo(() => {
-  const { state, lockStatus, updateState } = usePluginState('syntisampler', 'PRO');
+  const { state, updateState } = usePluginState('syntisampler', 'PRO');
   const { takeoverRequest, clearTakeoverRequest } = useSamples();
-  const [pads, setPads] = useState<Pad[]>(emptyPads);
+  // Beständige Plugins (syntisampler › sampler): Muster und Pad-Regler. Die
+  // Pad-Klänge selbst sind Audiodaten auf diesem Gerät (gehören in die Bibliothek).
+  const [saved] = useState(() => readPluginSettings<{ pads?: unknown; seqs?: unknown; stepPitches?: unknown; quantize?: unknown; seqCount?: unknown; bank?: unknown }>('syntisampler', { section: 'sampler' }));
+  const [pads, setPads] = useState<Pad[]>(() => {
+    const base = emptyPads();
+    const list = Array.isArray(saved?.pads) ? saved.pads : [];
+    return base.map((p, i) => ({ ...p, ...mergeKnown({ slice: p.slice, loop: p.loop, reverse: p.reverse, pitch: p.pitch }, list[i]) }));
+  });
   const [capturing, setCapturing] = useState(false);
   const [sel, setSel] = useState<number | null>(null);
   // NEW-MONK-2: 16/32-Step-Sequencer je Pad + Bank A/B + Quantize + Step-Pitch.
-  const [seqs, setSeqs] = useState<Record<string, boolean[]>>({});
-  const [stepPitches, setStepPitches] = useState<Record<string, Record<number, number>>>({});
+  const [seqs, setSeqs] = useState<Record<string, boolean[]>>(() => (saved?.seqs && typeof saved.seqs === 'object' ? saved.seqs as Record<string, boolean[]> : {}));
+  const [stepPitches, setStepPitches] = useState<Record<string, Record<number, number>>>(() => (saved?.stepPitches && typeof saved.stepPitches === 'object' ? saved.stepPitches as Record<string, Record<number, number>> : {}));
   const [curStep, setCurStep] = useState(0);
-  const [quantize, setQuantize] = useState(true);
-  const [seqCount, setSeqCount] = useState<16 | 32>(16);
-  const [bank, setBank] = useState<'A' | 'B'>('A');
+  const [quantize, setQuantize] = useState(typeof saved?.quantize === 'boolean' ? saved.quantize : true);
+  const [seqCount, setSeqCount] = useState<16 | 32>(saved?.seqCount === 32 ? 32 : 16);
+  const [bank, setBank] = useState<'A' | 'B'>(saved?.bank === 'B' ? 'B' : 'A');
+  useEffect(() => {
+    writePluginSettings('syntisampler', {
+      pads: pads.map((p) => ({ slice: p.slice, loop: p.loop, reverse: p.reverse, pitch: p.pitch })),
+      seqs, stepPitches, quantize, seqCount, bank,
+    }, { section: 'sampler' });
+  }, [pads, seqs, stepPitches, quantize, seqCount, bank]);
 
   const seqKey = (padIdx: number) => `${bank}:${padIdx}`;
 
@@ -117,154 +131,126 @@ export const SamplerTerminal = React.memo(() => {
     }, 600);
   };
 
+  const step = curStep % seqCount;
+  const selPad = sel !== null ? pads[sel] : null;
+  // Spuren im Raster: Pads mit Klang oder Muster in dieser Bank + das gewählte.
+  const rows = pads.map((p, i) => i).filter((i) => i === sel || pads[i].filled || (seqs[seqKey(i)] ?? []).some(Boolean));
+  const padInfo = (p: Pad) => (p.filled
+    ? `SL${p.slice}${p.loop ? ' ∞' : ''}${p.reverse ? ' RVS' : ''}${p.pitch !== 0 ? ` ${p.pitch > 0 ? '+' : ''}${p.pitch}st` : ''}`
+    : 'LEER');
+
   return (
-    <div className={`w-full h-full flex flex-col bg-[#0d0d0f] rounded-xl border ${lockStatus.active ? 'border-red-500' : 'border-neutral-800'} text-neutral-300 font-sans shadow-2xl relative overflow-hidden`}>
-      <div className="px-5 py-2 border-b border-neutral-800 bg-black/20">
-        <MoaAssistant pluginId="sampler" placeholder="MOA: z. B. 'Pad triggern'" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
-      </div>
-      <div className="flex items-center justify-between px-5 py-3 bg-linear-to-r from-indigo-900/20 to-[#0d0d0f] border-b border-indigo-900/30">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/50">
-            <Activity className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-black tracking-widest uppercase">samplerMONK</h2>
-            <p className="text-[8px] font-mono text-indigo-400 tracking-widest">16-PAD · CAPTURE · SLICE</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={capture} disabled={capturing}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-red-500/50 text-red-400 text-[10px] font-bold tracking-widest disabled:opacity-50 hover:bg-red-500/10">
-            <Rec className={`w-3.5 h-3.5 ${capturing ? 'animate-pulse text-red-500' : ''}`} /> CAPTURE
+    <div className="am-rackrow">
+      <MoaAssistant pluginId="sampler" onActivity={(active) => updateState(active ? 'AUTO_AI' : state)} autoMode={state === 'AUTO_AI'} />
+      <AmCard title="Pads · 16" style={{ width: 236 }}
+        right={(
+          <button type="button" onClick={capture} disabled={capturing} className={`am-tg am-cue ${capturing ? 'am-on' : ''}`} title="Aus der laufenden Quelle in Pad 1–4 aufnehmen">
+            ● CAPTURE
           </button>
-          <select value={state} onChange={(e) => updateState(e.target.value as any)} className="bg-black text-white text-[10px] p-1 rounded border border-neutral-700">
-            <option value="OFF">OFF</option><option value="AUTO_AI">AI</option><option value="PRO">ACTIVE</option>
-          </select>
-          <Power className={`w-4 h-4 text-neutral-600 ${state !== 'OFF' ? 'text-emerald-400' : ''}`} />
-        </div>
-      </div>
-
-      <div className="flex-1 p-4 grid grid-cols-4 gap-2">
-        {pads.map((p, i) => ( // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
-          <div key={i}
-            role="button"
-            tabIndex={0}
-            onClick={() => { triggerPad(i); setSel(i); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerPad(i); setSel(i); } }}
-            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
-            onDrop={(e) => { e.preventDefault(); updatePad(i, { filled: true, name: e.dataTransfer.getData('text/plain') || p.name }); }}
-            className="relative rounded-lg border flex flex-col items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 select-none"
-            style={{
-              borderColor: p.filled ? p.color : '#26262b',
-              background: p.filled ? `${p.color}22` : 'rgba(20,20,22,0.6)',
-              boxShadow: p.filled ? `0 0 14px -4px ${p.color}` : 'none',
-            }}>
-            <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-lg" style={{ background: p.color }} />
-            <span className="text-[7px] font-mono text-neutral-500 absolute top-1 left-1.5">{String(i + 1).padStart(2, '0')}</span>
-            <div className="w-3 h-3 rounded-full" style={{ background: p.color, boxShadow: `0 0 8px ${p.color}` }} />
-            <span className="text-[8px] font-black tracking-widest truncate max-w-[85%]">{p.name}</span>
-            <span className="text-[6.5px] font-mono text-neutral-600">
-              {p.filled ? `SL${p.slice}${p.loop ? ' ∞' : ''}${p.reverse ? ' RVS' : ''}${p.pitch !== 0 ? ` ${p.pitch > 0 ? '+' : ''}${p.pitch}st` : ''}` : 'LEER'}
-            </span>
-            {p.filled && (
-              <span className="text-[6.5px] font-mono text-neutral-500">
-                {p.analyzing ? 'ANALYSE…' : `${p.bpm ?? ''}${p.bpm && p.key ? ' · ' : ''}${p.key ?? ''}`}
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* NEW-MONK-2: Step-Sequencer für das gewählte Pad (16/32, Bank A/B) */}
-      {/* VISUAL-P1-010: enthält den laufenden Step (curStep) - data-live-value haelt
-          ihn aus visuellen Baselines heraus, weil er sich mit dem Transport aendert. */}
-      <div className="px-4 pb-3" data-live-value="step-sequencer">
-        <div className="flex items-center gap-2 mb-1 flex-wrap">
-          <span className="text-[8px] font-mono tracking-[0.25em] text-indigo-500">
-            STEP SEQ · PAD {sel !== null ? String(sel + 1).padStart(2, '0') : '—'} · BANK {bank} · {curStep + 1}/{seqCount}
-          </span>
-          <button type="button" onClick={() => setQuantize(!quantize)}
-            className={`text-[8px] font-bold px-2 py-0.5 rounded border ${quantize ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'border-neutral-700 text-neutral-500'}`}>
-            QUANT {quantize ? 'ON' : 'OFF'}
-          </button>
-          {(['A', 'B'] as const).map((b) => (
-            <button type="button" key={b} onClick={() => setBank(b)}
-              className={`text-[8px] font-bold px-2 py-0.5 rounded border ${bank === b ? 'bg-indigo-500 text-white border-indigo-300' : 'border-neutral-700 text-neutral-400'}`}>
-              BANK {b}
-            </button>
-          ))}
-          {([16, 32] as const).map((n) => (
-            <button type="button" key={n} onClick={() => setSeqCount(n)}
-              className={`text-[8px] font-bold px-2 py-0.5 rounded border ${seqCount === n ? 'bg-indigo-500 text-white border-indigo-300' : 'border-neutral-700 text-neutral-400'}`}>
-              {n} STEPS
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-16 gap-1">
-          {[...Array(seqCount)].map((_, i) => {
-            const on = sel !== null && (seqs[seqKey(sel)]?.[i] ?? false);
-            return (
-              <button type="button" key={i}
-                onClick={() => sel !== null && toggleSeq(sel, i)}
-                className={`h-6 rounded-[2px] border transition-all ${on ? 'bg-indigo-500 border-indigo-300' : 'bg-black/60 border-neutral-800 hover:border-indigo-500/50'} ${curStep % seqCount === i ? 'ring-1 ring-white/70' : ''}`} />
-            );
-          })}
-        </div>
-        {sel !== null && (
-          <div className="flex items-center gap-2 mt-2">
-            <span className="text-[8px] font-mono text-neutral-500">STEP PITCH (Step {(curStep % seqCount) + 1})</span>
-            <input
-              type="range" min={-12} max={12}
-              value={stepPitches[seqKey(sel)]?.[curStep % seqCount] ?? 0}
-              onChange={(e) => setStepPitch(sel, curStep % seqCount, Number(e.target.value))}
-              className="w-28 accent-indigo-500"
-            />
-            <span className="text-[9px] font-mono text-indigo-300 w-8">
-              {stepPitches[seqKey(sel)]?.[curStep % seqCount] ?? 0}st
-            </span>
-          </div>
-        )}
-      </div>
-
-      {sel !== null && (
-        <div className="px-4 pb-4">
-          <div className="rounded-lg bg-black/50 border border-neutral-800 p-3 flex flex-wrap items-center gap-4">
-            <span className="text-[8px] font-mono text-neutral-500 truncate max-w-[140px]">{pads[sel].name}</span>
-            <button type="button" onClick={() => updatePad(sel, { slice: (pads[sel].slice % 4) + 1 })}
-              className="text-[9px] font-bold text-indigo-300 px-2 py-1 rounded border border-indigo-500/30">SLICE {pads[sel].slice}</button>
-            <button type="button" onClick={() => updatePad(sel, { loop: !pads[sel].loop })}
-              className={`text-[9px] font-bold px-2 py-1 rounded border ${pads[sel].loop ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'border-neutral-700 text-neutral-400'}`}>LOOP {pads[sel].loop ? 'ON' : 'OFF'}</button>
-            <button type="button" onClick={() => updatePad(sel, { reverse: !pads[sel].reverse })}
-              className={`text-[9px] font-bold px-2 py-1 rounded border ${pads[sel].reverse ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'border-neutral-700 text-neutral-400'}`}>REVERSE {pads[sel].reverse ? 'ON' : 'OFF'}</button>
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-mono text-neutral-500">PITCH {pads[sel].pitch > 0 ? '+' : ''}{pads[sel].pitch}</span>
-              <input type="range" min={-12} max={12} value={pads[sel].pitch}
-                onChange={(e) => updatePad(sel, { pitch: Number(e.target.value) })}
-                className="w-24 accent-indigo-500" />
+        )}>
+        <div className="am-c-pads">
+          {pads.map((p, i) => ( // NOSONAR: bewusst komplexe Audio-/DSP-/UI-Logik; Refactoring wuerde Risiko erhoehen
+            <div key={i}
+              role="button"
+              tabIndex={0}
+              aria-label={`Pad ${i + 1}: ${p.name}`}
+              title={`${p.name} · ${padInfo(p)}${p.filled && (p.bpm || p.key) ? ` · ${p.bpm ?? ''} ${p.key ?? ''}` : ''}`}
+              onClick={() => { triggerPad(i); setSel(i); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); triggerPad(i); setSel(i); } }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }}
+              onDrop={(e) => { e.preventDefault(); updatePad(i, { filled: true, name: e.dataTransfer.getData('text/plain') || p.name }); }}
+              className={`am-pad ${p.filled ? '' : 'am-c-empty'} ${sel === i ? 'am-c-sel' : ''}`}
+              style={{ ['--pc' as string]: p.color }}>
+              <span>{p.filled ? p.name : String(i + 1).padStart(2, '0')}</span>
+              {p.filled && <small>{p.analyzing ? 'ANALYSE…' : padInfo(p)}</small>}
             </div>
-            <select
-              onChange={(e) => {
-                const t = MUSIC_LIBRARY.find((x) => x.name === e.target.value);
-                if (t) {
-                  updatePad(sel, { filled: true, name: t.name, analyzing: true });
-                  audioEngine.loadTrackSample(SAMPLE_TRACKS[sel % SAMPLE_TRACKS.length], t.url);
-                  analyzeMusic(t.url).then((a) =>
-                    updatePad(sel, { bpm: a?.bpm, key: a?.key, analyzing: false }),
-                  );
-                }
-              }}
-              className="bg-black text-[8px] text-neutral-300 px-1 py-1 rounded border border-neutral-700"
-            >
-              <option value="">+ MUSIK LADEN</option>
-              {MUSIC_LIBRARY.map((t) => (
-                <option key={t.id} value={t.name}>{t.name}</option>
-              ))}
-            </select>
-            <button type="button" onClick={() => updatePad(sel, { filled: false })}
-              className="ml-auto text-[9px] font-bold text-red-400 px-2 py-1 rounded border border-red-500/40 hover:bg-red-500/10">CLEAR</button>
-          </div>
+          ))}
         </div>
-      )}
+      </AmCard>
+
+      <AmCard title={selPad ? `Pad ${String((sel ?? 0) + 1).padStart(2, '0')}` : 'Pad'} style={{ width: 250 }}
+        right={selPad?.filled ? <span className="am-vb">{selPad.analyzing ? 'ANALYSE…' : [selPad.bpm, selPad.key].filter(Boolean).join(' · ') || '—'}</span> : undefined}>
+        {sel !== null && selPad ? (
+          <>
+            <div className="am-c-name" title={selPad.name}>{selPad.name}</div>
+            <div className="am-c-row">
+              <button type="button" className="am-tg am-on" onClick={() => updatePad(sel, { slice: (selPad.slice % 4) + 1 })} title="Slices 1–4">SLICE {selPad.slice}</button>
+              <AmToggle on={selPad.loop} onClick={() => updatePad(sel, { loop: !selPad.loop })}>LOOP</AmToggle>
+              <AmToggle on={selPad.reverse} kind="m" onClick={() => updatePad(sel, { reverse: !selPad.reverse })}>REVERSE</AmToggle>
+              <AmKnob size="xs" value={selPad.pitch} min={-12} max={12} def={0} unit="int" label="Pitch" title="Pad-Tonhöhe (Halbtöne)"
+                onChange={(v) => updatePad(sel, { pitch: Math.round(v) })} />
+            </div>
+            <div className="am-c-row">
+              <select
+                className="am-sel am-c-grow"
+                aria-label="Musik auf Pad laden"
+                value=""
+                onChange={(e) => {
+                  const t = MUSIC_LIBRARY.find((x) => x.name === e.target.value);
+                  if (t) {
+                    updatePad(sel, { filled: true, name: t.name, analyzing: true });
+                    audioEngine.loadTrackSample(SAMPLE_TRACKS[sel % SAMPLE_TRACKS.length], t.url);
+                    analyzeMusic(t.url).then((a) =>
+                      updatePad(sel, { bpm: a?.bpm, key: a?.key, analyzing: false }),
+                    );
+                  }
+                }}
+              >
+                <option value="">+ MUSIK LADEN</option>
+                {MUSIC_LIBRARY.map((t) => (
+                  <option key={t.id} value={t.name}>{t.name}</option>
+                ))}
+              </select>
+              <button type="button" className="am-tg am-m" onClick={() => updatePad(sel, { filled: false })} title="Pad leeren">CLEAR</button>
+            </div>
+          </>
+        ) : (
+          <span className="am-hint">Pad antippen oder Sample auf ein Pad ziehen.</span>
+        )}
+      </AmCard>
+
+      {/* NEW-MONK-2: Step-Sequencer (16/32, Bank A/B) – Spuren = Pads.
+          VISUAL-P1-010: enthält den laufenden Step (curStep) - data-live-value haelt
+          ihn aus visuellen Baselines heraus, weil er sich mit dem Transport aendert. */}
+      <AmCard title={`Step-Sequenzer · Bank ${bank}`} style={{ flex: 1, minWidth: 420 }}
+        right={<span className="am-c-stat" data-live-value="step">STEP {step + 1}/{seqCount}</span>}>
+        <div className="am-c-row">
+          <AmToggle on={quantize} kind="sync" onClick={() => setQuantize(!quantize)} title="Steps am Master-Transport auslösen">QUANT</AmToggle>
+          <AmSeg<'A' | 'B'> label="Bank" value={bank} onChange={setBank} options={[['A', 'BANK A'], ['B', 'BANK B']]} />
+          <AmSeg label="Steps" value={String(seqCount) as '16' | '32'} onChange={(v) => setSeqCount(v === '32' ? 32 : 16)} options={[['16', '16'], ['32', '32']]} />
+          {sel !== null && (
+            <AmKnob size="xs" value={stepPitches[seqKey(sel)]?.[step] ?? 0} min={-12} max={12} def={0} unit="int"
+              label={`St ${step + 1}`} title={`Step-Pitch (Step ${step + 1})`}
+              onChange={(v) => setStepPitch(sel, step, Math.round(v))} />
+          )}
+        </div>
+        <div className="am-c-seqbox" data-live-value="step-sequencer">
+          {rows.length === 0 ? (
+            <span className="am-hint">Pad wählen – dann Steps setzen.</span>
+          ) : (
+            <div className="am-c-seq am-c-st" style={{ ['--n' as string]: seqCount }}>
+              {rows.map((i) => (
+                <React.Fragment key={i}>
+                  <button type="button" className={`am-c-trk ${sel === i ? 'am-on' : ''}`} style={{ ['--c' as string]: pads[i].color }}
+                    onClick={() => setSel(i)} title={`Spur Pad ${i + 1} wählen`}>
+                    {String(i + 1).padStart(2, '0')}
+                  </button>
+                  {[...Array(seqCount)].map((_, s) => {
+                    const on = seqs[seqKey(i)]?.[s] ?? false;
+                    return (
+                      <button type="button" key={s}
+                        aria-label={`Pad ${i + 1} Step ${s + 1} ${on ? 'aus' : 'an'}`} aria-pressed={on}
+                        onClick={() => toggleSeq(i, s)}
+                        className={`am-stp ${on ? 'am-v2' : ''} ${s % 4 === 0 ? 'am-q' : ''} ${step === s ? 'am-ph' : ''}`}
+                        style={{ ['--c' as string]: pads[i].color }} />
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+          )}
+        </div>
+      </AmCard>
     </div>
   );
 });

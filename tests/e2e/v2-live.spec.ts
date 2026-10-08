@@ -37,20 +37,18 @@ const LIVE_GATE_ACTIVE = Boolean(process.env.DISPLAY) && process.env.CI !== 'tru
   // gesperrt, ein Klick darauf lief in den Timeout.
   await entryButton(page).click();
   await expect(navButton(page, 'MIX')).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText(/mixerMONK · 6 CH/i)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/mixerMONK · 8 CH/i)).toBeVisible({ timeout: 15_000 });
 
-  // MAIN-Schutz (P0-1/COLLAB-P0-004): den PRO-Halter (Main-Out) darf nur der
-  // jeweilige Lock-Owner erlangen - in einer Einzelbrowser-Sitzung ohne Halter
-  // bleibt die Promotion deshalb AUS. Genau diese Sperre wird geprueft; der
-  // V2-Wiedergabepfad MIT Halter braucht eine Zwei-Client-Session und ist im
-  // Register als offene Luecke vermerkt.
-  await page.getByRole('button', { name: /mixerMONK Menü/i }).click();
+  // UI2-P0-001: mixerMONK hat immer genau einen Halter. In einer Einzelbrowser-
+  // Sitzung vergibt der Server ihn an den einzigen Nutzer - der ist damit
+  // Main-Out-Owner, ohne dass ein Klick noetig ist (es gibt keinen mehr).
+  await expect(page.locator('#rack-mixer')).toHaveAttribute('data-plugin-owner', 'me', { timeout: 15_000 });
   await expect
     .poll(async () => page.evaluate(() => {
       const w = window as unknown as { __audioMonastry: { audioEngine: { isMainHolderActive: () => boolean } } };
       return w.__audioMonastry.audioEngine.isMainHolderActive();
     }), { timeout: 10_000 })
-    .toBe(false);
+    .toBe(true);
 
   // Engine muss im V2-Modus stehen.
   await expect

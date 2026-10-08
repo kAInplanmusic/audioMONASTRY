@@ -68,6 +68,7 @@ import { roleVoiceFor, syncV2Mix, syncV2Patterns, syncV2Voices } from '../audio/
 import { MonitorRoutingState } from '../audio/monitorRoutingFacade';
 import { MasterStreamTap } from '../audio/masterStreamTap';
 import { SfzBridge } from '../audio/sfzBridge';
+import { V2SampleUploader } from '../audio/v2SampleUploader';
 import { MusicBufferCache } from '../audio/musicBufferCache';
 import { SamplePreview, type AudioPlayerLike } from '../audio/samplePreview';
 import { InstrumentSynth } from '../audio/instrumentSynth';
@@ -78,6 +79,12 @@ import {
   applyGraphState, readGraphState, type GraphStateSink, type GraphStateSource,
 } from '../audio/graphStateIO';
 import { V2LiveSink } from '../core/audio/backends/V2LiveSink';
+import { masteringLookaheadSamples } from '../core/dsp/masteringDynamics';
+import { SinkRecoveryController, type SinkRecoveryStatus } from '../core/audio/backends/sinkRecovery';
+import { EventCaptureLog } from '../core/capture/eventCaptureLog';
+import { AudioCaptureTap } from '../core/capture/audioCapture';
+import { buildCaptureResult, mergeCaptureBar, type CaptureResult } from '../core/capture/captureSession';
+import type { CaptureBar } from '../core/capture/quantizeCapture';
 import { validateRouting } from './routingValidator';
 import { validatePreset } from './presetValidator';
 import { AdaptiveLatencyController, type LatencyProfile } from './adaptiveLatency';
@@ -193,6 +200,15 @@ class AudioEngine {
     getLegacyTap: () => this.masterStreamTap,
   });
 
+  // IDEA-2026-10-07-A Capture: Eingabe-Log (16 Takte) + 60-s-Audio-Abgriff am V2-Ausgang.
+  public readonly captureLog = new EventCaptureLog();
+  private readonly captureTap = new AudioCaptureTap({
+    getContext: () => (this.ctx as AudioContext | undefined) ?? null,
+    getSink: () => this.v2LiveSink,
+  });
+  /** AudioContext-Zeit des letzten Transport-Starts (Capture-Raster), sonst null. */
+  private captureTransportStartSec: number | null = null;
+
   // AUDIO-P1-002: instrumentMONK-Noten/Worklet-Steuerung in eigener Fassade.
   private readonly instrumentNotes = new InstrumentNoteBridge({
     getSink: () => this.v2LiveSink,
@@ -303,8 +319,7 @@ class AudioEngine {
   });
   private trackSampleUrl: Record<TrackType, string | null> = {
     channel1: null, channel2: null, channel3: null, channel4: null,
-    channel5: null, channel6: null, channel7: null, channel8: null,
-    channel9: null, channel10: null
+    channel5: null, channel6: null, channel7: null, channel8: null
   };
 
   public currentScaleName: keyof typeof MUSIC_SCALES = 'A Minor Pentatonic';
@@ -982,6 +997,7 @@ class AudioEngine {
   }
 
   public sfzNoteOn(note: number, velocity = 100): void {
+    this.captureLog.record(this.ctx?.currentTime ?? 0, 'note-on', this.sfz.channel, note, velocity / 127);
     this.sfz.noteOn(note, velocity);
   }
 
@@ -1453,10 +1469,17 @@ class AudioEngine {
   public triggerEvent(track: TrackType, velocity: number = 1.0) {
     // MAIN-Schutz: nur der mixerMONK-Halter spielt auf den MAIN-Kanälen.
     if (!this.monitor.isMainHolderActive()) return;
+    this.captureLog.record(this.ctx?.currentTime ?? 0, 'trigger', track, -1, velocity);
     // AUDIO-P0-003/Phase 9: Trigger hörbar in den V2-Sink leiten.
     const player = this.samplePlayers[track];
     const buffer = player?.buffer?.get?.();
     if (buffer && buffer.numberOfChannels > 0) {
+      // RT-AUDIT-P1-010: KEIN Sample-Versand pro Schlag. Das Sample liegt seit
+      // dem Laden im Pool des Sinks; `bridgeAudioBufferToV2` ist zwischen-
+      // gespeichert und sendet bei unverändertem Sample nichts. Nur wenn die
+      // Kanal-Zuordnung zwischenzeitlich wechselte (z. B. Hörprobe auf dem
+      // Kanal) geht eine kleine `sample-assign`-Nachricht raus, und nur bei
+      // neuem Prozessor ohne dieses Sample einmalig die Daten (per Transfer).
       this.bridgeAudioBufferToV2(track, buffer);
       this.v2LiveSink.triggerSample(track, { loop: false, rate: 1, offset: 0 });
     } else {
@@ -1612,6 +1635,7 @@ class AudioEngine {
 
   /** Steuert den Synth (Note-On) – Phase 9: hörbar über den V2-Sink. */
   public noteOnWorklet(freq: number, velocity = 1, _osc = 'saw') {
+    this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, 'channel8', freq, velocity);
     this.instrumentNotes.noteOn(freq, velocity);
   }
   public noteOffWorklet() {
@@ -1630,18 +1654,25 @@ class AudioEngine {
     this.syncV2PatternsToLiveSink();
     this.syncV2SamplesToLiveSink();
     this.syncV2SynthSourcesToLiveSink();
+    this.startV2Transport();
+    this.captureTransportStartSec = this.ctx?.currentTime ?? null;
+    this.isPlaying = true;
+  }
+
+  /** Startet den sample-genauen V2-Transport mit den aktuellen Parametern. */
+  private startV2Transport(): void {
     this.v2LiveSink.startTransport({
       bpm: Tone.Transport.bpm.value,
       swing: this.swing,
       gate: this.gate,
       stepCount: this.stepCount,
     });
-    this.isPlaying = true;
   }
 
   public stop() {
     if (!this.monitor.isMainHolderActive()) return;
     this.isPlaying = false;
+    this.captureTransportStartSec = null;
     this.v2LiveSink.stopTransport();
     this.v2LiveSink.disconnect();
   }
@@ -1658,7 +1689,6 @@ class AudioEngine {
     this.trackSampleUrl = {
       channel1: null, channel2: null, channel3: null, channel4: null,
       channel5: null, channel6: null, channel7: null, channel8: null,
-      channel9: null, channel10: null,
     };
 
     // Kanalzug-Zustand zurücksetzen (keine Audio-Nodes mehr – reine Zustände).
@@ -1711,6 +1741,7 @@ class AudioEngine {
 
     // V2-Live-Sink trennen (falls verbunden).
     this.v2LiveSink.disconnect();
+    this.captureTap.stop();
 
     this.initialized = false;
   }
@@ -1794,6 +1825,16 @@ class AudioEngine {
     this.masterTap.disconnectAnalyser(analyser);
   }
 
+  /** UI2-P1-002: Transport-Position in Sekunden (nur Anzeige im Masterplayer). */
+  public getTransportSeconds(): number {
+    try {
+      const sec = Tone.Transport.seconds;
+      return Number.isFinite(sec) && sec > 0 ? sec : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   /** Audio-Health-Snapshot für den Echtzeit-Performance-Monitor. */
   public getAudioHealth(): { state: string; sampleRate: number; baseLatencyMs: number; outputLatencyMs: number } {
     const ctx = this.ctx as unknown as {
@@ -1808,13 +1849,20 @@ class AudioEngine {
     };
   }
 
-  /** A-4: Latenz-Budget inkl. Mastering-Lookahead/PDC je Stufe. */
+  /**
+   * A-4: Latenz-Budget inkl. Mastering-Lookahead/PDC je Stufe.
+   * RT-AUDIT-P0-004: `masteringLookaheadMs` ist die ECHTE Latenz des
+   * MasteringNode im V2-Live-Pfad (lookaheadSamples / sampleRate, dieselbe
+   * Funktion wie Node und PDC – z. B. 221/44100 = 5,011 ms). Der V2-Cue-Weg zum
+   * Monitor ist um denselben Betrag kompensiert (V2MonitorGraph.cuePdc).
+   */
   public getLatencyBudgetMs(): { masteringLookaheadMs: number; cuePdcMs: number; outputLatencyMs: number; totalMs: number } {
     const health = this.getAudioHealth();
-    const masteringLookaheadMs = this.PDC_MASTERING_LOOKAHEAD_SEC * 1000;
+    const sr = health.sampleRate > 0 ? health.sampleRate : 48000;
+    const masteringLookaheadMs = (masteringLookaheadSamples(sr) / sr) * 1000;
     return {
       masteringLookaheadMs,
-      cuePdcMs: this.cuePdcDelay ? this.PDC_MASTERING_LOOKAHEAD_SEC * 1000 : 0,
+      cuePdcMs: masteringLookaheadMs,
       outputLatencyMs: health.outputLatencyMs,
       totalMs: health.baseLatencyMs + health.outputLatencyMs + masteringLookaheadMs,
     };
@@ -1859,7 +1907,47 @@ class AudioEngine {
   public v2Studio = new V2StudioGraph();
 
   /** V2-Live-Output-Sink: rendert V2StudioGraph im AudioWorklet zur Destination. */
-  public v2LiveSink = new V2LiveSink();
+  public v2LiveSink = new V2LiveSink({ onFault: (info) => { this.v2SinkRecovery.handleFault(info); } });
+
+  /**
+   * RT-AUDIT-P0-007: Fehlerpfad des V2-Live-Sinks. `processorerror` (Prozessor
+   * tot) bzw. dauerhafte `render-error` (≥ 50 in 2 s) → Neuaufbau mit
+   * vollständigem Zustandsabgleich; höchstens 3 Neuaufbauten pro 60 s, danach
+   * Fehlerzustand (UI: „Audio-Engine gestört – bitte neu laden“).
+   */
+  private readonly v2SinkRecovery = new SinkRecoveryController({ rebuild: () => this.rebuildV2LiveSink() });
+
+  /** RT-AUDIT-P0-007: Anzeige-Zustand des Fehlerpfads (EngineStatusBadge). */
+  public getV2SinkRecoveryStatus(): SinkRecoveryStatus {
+    return this.v2SinkRecovery.status();
+  }
+
+  /**
+   * RT-AUDIT-P0-007: V2-Live-Sink neu aufbauen (neuer Prozessor) und den
+   * kompletten Zustand abgleichen: Mix/Master/Monitor (`syncV2FromV1` in
+   * `connectV2LiveOutput`), Master-Stream-/Capture-Abgriff, Patterns, Samples,
+   * Synth-Quellen; ein laufender Transport startet wieder.
+   */
+  private async rebuildV2LiveSink(): Promise<boolean> {
+    const wasPlaying = this.isPlaying;
+    this.v2LiveSink.disconnect();
+    const ok = await this.connectV2LiveOutput();
+    if (!ok) return false;
+    this.syncV2PatternsToLiveSink();
+    this.syncV2SamplesToLiveSink();
+    this.syncV2SynthSourcesToLiveSink();
+    if (wasPlaying) {
+      if (this.isPlaying) {
+        // Der neue Prozessor startet den Transport bei Step 0 – Capture-Raster nachziehen.
+        this.startV2Transport();
+        this.captureTransportStartSec = this.ctx?.currentTime ?? null;
+      } else {
+        // Während des Neuaufbaus gestoppt: Zustand wie nach stop() herstellen.
+        this.v2LiveSink.disconnect();
+      }
+    }
+    return true;
+  }
 
   /** Verbindet den V2-Live-Output-Sink mit der AudioContext-Destination. */
   public async connectV2LiveOutput(): Promise<boolean> {
@@ -1871,8 +1959,33 @@ class AudioEngine {
       this.syncV2FromV1();
       // AUDIO-P0-002: Master-Stream-Destination an den V2-Ausgang hängen.
       this.masterTap.reattach();
+      // IDEA-2026-10-07-A: Capture-Abgriff (paralleler Fan-out) starten bzw. nachhängen.
+      void this.captureTap.attach();
     }
     return ok;
+  }
+
+  /** Capture möglich (SharedArrayBuffer + Cross-Origin-Isolation)? */
+  public isCaptureSupported(): boolean {
+    return this.captureTap.supported;
+  }
+
+  /** IDEA-2026-10-07-A: letzte 60 s Main-Audio + Pattern-Vorschlag aus den letzten 16 Takten. */
+  public async captureNow(): Promise<CaptureResult> {
+    return buildCaptureResult({
+      log: this.captureLog,
+      handle: this.captureTap.current,
+      supported: this.captureTap.supported,
+      nowSec: this.ctx?.currentTime ?? 0,
+      bpm: Tone.Transport.bpm.value,
+      transportStartSec: this.captureTransportStartSec,
+    });
+  }
+
+  /** Ergänzt das Sequencer-Pattern (ODER) um einen Capture-Takt (Step 1–16). */
+  public mergeCapturedBar(bar: CaptureBar): void {
+    const merged = mergeCaptureBar(this.sequencer.allPatterns(), bar);
+    for (const track of Object.keys(merged) as TrackType[]) this.sequencer.setPattern(track, merged[track]);
   }
 
   /** Startet einen hörbaren V2-Testton (Phase-1-Nachweis). */
@@ -1921,9 +2034,13 @@ class AudioEngine {
     syncV2Patterns(this.v2LiveSink, this.sequencer.allPatterns());
   }
 
-  /** Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3). */
+  /**
+   * Spiegelt geladene Tone.js-/Browser-Player-Samples in den V2-Sink (Phase 3).
+   * RT-AUDIT-P1-010: sendet nur, was der aktuelle Prozessor noch nicht hat
+   * (z. B. nach Neuaufbau); bei `play()` mit unveränderten Samples: nichts.
+   */
   public syncV2SamplesToLiveSink(): void {
-    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8','channel9','channel10'] as TrackType[]).forEach((t) => {
+    (['channel1','channel2','channel3','channel4','channel5','channel6','channel7','channel8'] as TrackType[]).forEach((t) => {
       const player = this.samplePlayers[t];
       const audioBuffer = player?.buffer?.get?.();
       if (audioBuffer) this.bridgeAudioBufferToV2(t, audioBuffer);
@@ -1938,22 +2055,35 @@ class AudioEngine {
     syncV2Voices(this.v2LiveSink);
   }
 
-  /** Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source. */
+  /**
+   * RT-AUDIT-P1-010: Sample-Pool-Anbindung. Lädt jedes Sample einmal pro
+   * Prozessor (copyFromChannel + Transfer) und ordnet es danach nur noch zu.
+   * Einfügepunkt für Resampling (RT-AUDIT-P1-009): Option `prepare`.
+   */
+  private readonly v2Samples = new V2SampleUploader({ getSink: () => this.v2LiveSink });
+
+  /**
+   * Bridge: decodierter AudioBuffer (Tone.js/Browser) → V2-Sample-Source.
+   * RT-AUDIT-P1-010: unverändertes Sample (gleicher AudioBuffer, Prozessor kennt
+   * es) → keine Port-Nachricht; der AudioBuffer bleibt unangetastet (es werden
+   * Kopien übertragen, nie `getChannelData`-Ansichten).
+   */
   public bridgeAudioBufferToV2(track: TrackType, audioBuffer: AudioBuffer): boolean {
-    if (!audioBuffer || audioBuffer.numberOfChannels === 0) return false;
-    const left = audioBuffer.getChannelData(0);
-    const right = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
-    return this.v2LiveSink.setSampleBuffer(track, left, right, audioBuffer.sampleRate);
+    return this.v2Samples.bridgeAudioBuffer(track, audioBuffer);
   }
 
-  /** Bridge: bereits dekodierte planare Samples (z. B. SFZ-/OPFS-Cache) → V2. */
+  /**
+   * Bridge: bereits dekodierte planare Samples (z. B. SFZ-/OPFS-Cache) → V2.
+   * RT-AUDIT-P1-010: zwischengespeichert über die Identität von `left`; der
+   * Aufrufer behält seine Arrays.
+   */
   public bridgeDecodedSamplesToV2(
     track: TrackType,
     left: Float32Array,
     right?: Float32Array | null,
     sourceRate = 48000,
   ): boolean {
-    return this.v2LiveSink.setSampleBuffer(track, left, right ?? null, sourceRate);
+    return this.v2Samples.bridgeDecoded(track, left, right ?? null, sourceRate);
   }
 
   /**
@@ -2138,6 +2268,7 @@ class AudioEngine {
         ? Tone.Frequency(note, 'midi').toFrequency()
         : Tone.Frequency(note).toFrequency();
       this.v2LiveSink.setSynthSource(instChannel, v2Freq, def.kind === 'drum' ? 'clap' : 'lead');
+      this.captureLog.recordNoteFreq(this.ctx?.currentTime ?? 0, instChannel, v2Freq, velocity);
       this.v2LiveSink.synthTrigger(instChannel, Math.max(0.2, Math.min(1, velocity)));
     }
 
@@ -2350,6 +2481,29 @@ class AudioEngine {
   /** WF-2: Lädt/decodiert eine Musik-URL genau einmal und cached den Buffer. */
   private async getMusicBuffer(url: string): Promise<Tone.ToneAudioBuffer> {
     return this.musicBuffers.get(url);
+  }
+
+  /**
+   * Kanaldaten einer Musik-URL für den Offline-Bounce durch die Signalkette.
+   * Nutzt denselben Cache wie der Realtime-Pfad (`getMusicBuffer`) – es wird
+   * nichts erneut geladen und nichts erneut decodiert. Die Kanäle sind KOPIEN:
+   * der Bounce darf den gecachten Buffer nicht verändern. `null` = nicht lesbar.
+   */
+  public async getMusicSampleChannels(url: string): Promise<Float32Array[] | null> {
+    try {
+      const tone = await this.getMusicBuffer(url);
+      const raw = (tone as unknown as { get?: () => AudioBuffer | undefined }).get?.();
+      if (!raw) return null;
+      const channels: Float32Array[] = [];
+      const count = Math.max(1, Number(raw.numberOfChannels) || 1);
+      for (let c = 0; c < count; c++) {
+        channels.push(new Float32Array(raw.getChannelData(c)));
+      }
+      return channels;
+    } catch (e) {
+      console.warn('getMusicSampleChannels fehlgeschlagen:', e);
+      return null;
+    }
   }
 
   public async loadTrackSample(track: TrackType, url: string | null) {

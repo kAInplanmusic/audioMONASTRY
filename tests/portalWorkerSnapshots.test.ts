@@ -18,7 +18,7 @@ const worker = portalWorker as unknown as {
   fetch: (request: Request, env: Record<string, unknown>) => Promise<Response>;
 };
 
-const FLEET_ROLES = ['app', 'sfu', 'ai', 'master', 'edge'];
+const FLEET_ROLES = ['app', 'sfu', 'media', 'edge'];
 const FLEET_SERVERS = FLEET_ROLES.map((role, i) => ({
   id: i + 1,
   name: `audiomonastry-${role}-1`,
@@ -307,7 +307,7 @@ describe('Portal-Worker OPS-Snapshot', () => {
       fallbackRoles: string[];
     };
     expect(body.started).toBe(true);
-    expect(body.created).toHaveLength(5);
+    expect(body.created).toHaveLength(FLEET_ROLES.length);
     expect(body.fallbackRoles).toEqual([]);
     expect(Object.keys(body.usedSnapshots)).toEqual(FLEET_ROLES);
 
@@ -375,8 +375,8 @@ describe('Portal-Worker OPS-Snapshot', () => {
       retention: { keepPerRole: number };
     };
     expect(body.ok).toBe(true);
-    expect(body.created).toHaveLength(5);
-    expect(imageActions).toHaveLength(5);
+    expect(body.created).toHaveLength(FLEET_ROLES.length);
+    expect(imageActions).toHaveLength(FLEET_ROLES.length);
     expect(body.created.map((c) => c.role)).toEqual(FLEET_ROLES);
     expect(body.created.every((c) => c.commit === 'abc123def' && c.version === '1.210.001')).toBe(true);
 
@@ -480,7 +480,7 @@ describe('NOMEN-P1-001 · kanonische Namen durchgaengig', () => {
     const body = (await res.json()) as { fleet?: Record<string, string> };
     expect(body.fleet?.['audiomonastry-app-1']).toBe('1.2.3.4');
     expect(Object.keys(body.fleet ?? {}).sort()).toEqual(
-      ['audiomonastry-ai-1', 'audiomonastry-app-1', 'audiomonastry-edge-1', 'audiomonastry-master-1', 'audiomonastry-sfu-1'],
+      ['audiomonastry-app-1', 'audiomonastry-edge-1', 'audiomonastry-media-1', 'audiomonastry-sfu-1'],
     );
   });
 });

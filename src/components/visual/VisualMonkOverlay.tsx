@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { audioEngine } from '../../utils/audioEngine';
 import { useVisualStream } from '../../hooks/useVisualStream';
+import { useStreamResolution } from '../../hooks/useStreamResolution';
+import { STREAM_FPS, STREAM_PRESETS, isStreamFps, isStreamPresetId, logicalCanvas, streamSizeLabel } from '../../core/visual/streamResolution';
 import { createFallbackPublisher, studioTokenFromCookie } from '../../utils/visualMjpeg';
 import { createWebGpuVisualRenderer, type WebGpuVisualRenderer } from '../../core/visual/webgpuRenderer';
 import { webRTCManager } from '../../utils/WebRTCManager';
@@ -14,6 +16,14 @@ import { composeLayers } from '../../visuals/layerCompositor';
 import { VISION_STYLES, suggestVisionStyle, type VisionStyle } from '../../core/ai/vision/visionPrompt';
 import { useVisualShow } from '../../hooks/useVisualShow';
 import { VISUAL_BANK_SCENES } from '../../visuals/visualBank';
+import { energyFromBpm } from '../../visuals/poolManifest';
+import {
+  PROMPT_KATALOG,
+  TEXTZEILEN_TRIGGER,
+  promptByTitel,
+  promptForSet,
+  type DirectorPrompt,
+} from '../../visuals/prompts';
 
 interface VisualMonkOverlayProps {
   onClose: () => void;
@@ -75,6 +85,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const presetRef = useRef(presetId);
   useEffect(() => { presetRef.current = presetId; }, [presetId]);
   const { status: streamStatus, start: startStream, stop: stopStream } = useVisualStream();
+  // Stream-Auflösung (Betreiber 2026-10-06): eigene Auflösung des Streams,
+  // unabhängig vom Gerät, auf dem gesendet wird. Die Zeichenfläche hat genau
+  // diese Größe; die Vorschau zeigt sie eingepasst (Letterbox).
+  const streamRes = useStreamResolution();
+  const streamSizeRef = useRef(streamRes.size);
+  useEffect(() => { streamSizeRef.current = streamRes.size; }, [streamRes.size]);
   /**
    * VISUAL-P1-001: MJPEG-Fallback. Der Publisher laeuft die ganze Zeit, sendet
    * aber NUR, wenn ein Beamer am MJPEG-Strom haengt (Server meldet die
@@ -143,6 +159,8 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const [aiVideo, setAiVideo] = useState<string | null>(null);
   const [aiVideoBusy, setAiVideoBusy] = useState(false);
   const [aiVideoError, setAiVideoError] = useState('');
+  /** Der zuletzt benutzte Katalog-Satz — `motiv` und `motion` gehören zusammen. */
+  const letzterSatzRef = useRef<DirectorPrompt | null>(null);
 
   const generateAiVideo = useCallback(async () => {
     if (!aiImage || aiVideoBusy) return;
@@ -152,7 +170,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       const resp = await fetch('/api/ai/vision/video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: aiImage, prompt: aiPrompt.trim() || 'gentle camera push in, subtle motion', steps: 6 }),
+        body: JSON.stringify({
+          imageBase64: aiImage,
+          // Ohne getippten Prompt kommt der Bewegungs-Kern aus dem Katalog —
+          // und zwar der Satz, dessen `motiv` das Bild erzeugt hat.
+          prompt: aiPrompt.trim() || promptByTitel(letzterSatzRef.current?.titel ?? '').motion,
+          steps: 6,
+        }),
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || data?.status !== 'success' || !data?.video) {
@@ -166,6 +190,22 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     }
   }, [aiImage, aiPrompt, aiVideoBusy]);
   const featuresRef = useRef<AudioFeatures>(IDLE_AUDIO_FEATURES);
+
+  /**
+   * Prompt-Satz zum laufenden Set — der Nachschub-Pfad aus `docs/VISUALVORLAGEN.md`.
+   * Ein getippter Katalog-Titel gewinnt; sonst wählt der Katalog nach der
+   * Bewegungsenergie des Sets (`energyFromBpm`). Ohne diesen Katalog stünde in
+   * den Generierungs-Aufrufen nur ein Platzhalter wie „live set visual".
+   */
+  const satzFuerSet = useCallback((features: AudioFeatures): DirectorPrompt => {
+    const getippt = aiPrompt.trim().toLowerCase();
+    const ausKatalog = PROMPT_KATALOG.find((p) => p.titel.toLowerCase() === getippt);
+    if (ausKatalog) return ausKatalog;
+    return promptForSet({
+      energie: energyFromBpm(features.bpm),
+      seed: Math.round((features.energy || 0) * 100),
+    });
+  }, [aiPrompt]);
 
   const rateAi = useCallback(async (rating: number) => {
     if (!aiGenerationId) return;
@@ -182,9 +222,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const generateAiImage = useCallback(async () => {
     if (aiBusy) return;
     const features = featuresRef.current;
-    // Im AUTO-Modus darf der Prompt leer sein: Energie/Tempo/Stil kommen aus dem Set.
-    const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
+    // Nachschub (docs/VISUALVORLAGEN.md): im AUTO-Modus darf der Prompt leer
+    // sein — dann liefert der Katalog das Startbild-Motiv, und der Satz wird
+    // gemerkt, damit die Bewegung denselben Katalog-Eintrag trifft.
+    const satz = satzFuerSet(features);
+    const prompt = aiPrompt.trim() || (aiAuto ? satz.motiv : '');
     if (!prompt) return;
+    letzterSatzRef.current = satz;
     // AUTO: bevorzugt den gelernten (RAG-)Stil, sonst die Energie-/Tempo-Heuristik.
     const style = aiAuto
       ? (aiSuggestion ? aiSuggestion.style : suggestVisionStyle({ energy: features.energy, bpm: features.bpm }))
@@ -216,7 +260,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
     } finally {
       setAiBusy(false);
     }
-  }, [aiPrompt, aiStyle, aiAuto, aiBusy, aiSuggestion]);
+  }, [aiPrompt, aiStyle, aiAuto, aiBusy, aiSuggestion, satzFuerSet]);
 
   /**
    * RAG-Vorschlag holen (`GET /api/ai/vision/styles`): der Server liest die
@@ -253,23 +297,25 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
   const addCurrentScene = useCallback(() => {
     const src = aiVideo ?? aiImage;
     if (!src) return;
+    // Ohne getippten Prompt benennt der Katalog die Szene (Titel statt Platzhalter).
+    const titel = aiPrompt.trim() || satzFuerSet(featuresRef.current).titel;
     show.addScene({
-      prompt: aiPrompt.trim() || 'live set visual',
+      prompt: titel,
       style: aiStyle,
       kind: aiVideo ? 'clip' : 'image',
       src,
-      label: aiPrompt.trim() || aiStyle,
+      label: titel,
     });
-  }, [aiImage, aiVideo, aiPrompt, aiStyle, show]);
+  }, [aiImage, aiVideo, aiPrompt, aiStyle, show, satzFuerSet]);
 
   // VisualMONK #5: Text → Clip (FLUX-Bild → Wan2.2-Bewegung, ein Aufruf).
   const buildSceneClip = useCallback(() => {
     const features = featuresRef.current;
     const style = aiAuto ? suggestVisionStyle({ energy: features.energy, bpm: features.bpm }) : aiStyle;
-    const prompt = aiPrompt.trim() || (aiAuto ? 'live set visual' : '');
+    const prompt = aiPrompt.trim() || (aiAuto ? satzFuerSet(features).motiv : '');
     if (!prompt) return;
     void show.makeClip({ prompt, style, bpm: features.bpm || undefined, energy: features.energy });
-  }, [aiAuto, aiPrompt, aiStyle, show]);
+  }, [aiAuto, aiPrompt, aiStyle, show, satzFuerSet]);
 
   // Auto-Show: alle 45 s ein neues Set-passendes Bild (kostenbewusst, nur wenn an).
   useEffect(() => {
@@ -293,14 +339,14 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         });
         fallbackPublisherRef.current.start();
       }
-      const stream = startStream(canvasRef.current, 30);
+      const stream = startStream(canvasRef.current, streamRes.fps);
       const track = stream?.getVideoTracks()[0];
       if (track) {
         // An Ghostuser 6 senden (SFU-Producer bzw. P2P-Main-Stream).
         try { webRTCManager.publishVisualTrack(track); } catch { /* Transport nicht bereit */ }
       }
     }
-  }, [streamStatus, startStream, stopStream]);
+  }, [streamStatus, startStream, stopStream, streamRes.fps]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -381,13 +427,17 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         ? smoothed
         : composeLayers(features, smoothed);
 
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      const cssW = canvas.clientWidth || 960;
-      const cssH = canvas.clientHeight || 540;
-      if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
-        canvas.width = Math.round(cssW * dpr);
-        canvas.height = Math.round(cssH * dpr);
+      // Zeichenfläche = Stream-Auflösung (nicht Bildschirm des Senders);
+      // captureStream folgt der Canvas-Größe auch während eines laufenden Streams.
+      const streamSize = streamSizeRef.current;
+      if (canvas.width !== streamSize.width || canvas.height !== streamSize.height) {
+        canvas.width = streamSize.width;
+        canvas.height = streamSize.height;
       }
+      const logical = logicalCanvas(streamSize);
+      const dpr = logical.scale;
+      const cssW = logical.width;
+      const cssH = logical.height;
       // Show-Orchestrator: entscheidet den Szenenwechsel (Dauer/Beat/Energie).
       const showApi = showRef.current;
       // UI-P1-002: Reduced-Motion hält die GANZE Show an. `draw`/`frame` rechnen
@@ -472,12 +522,12 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       className="fixed inset-0 z-[80] bg-black/95 backdrop-blur-sm flex flex-col outline-none"
       role="dialog"
       aria-modal="true"
-      aria-label="VisualMONK Liveshow"
+      aria-label="Visual-Liveshow"
       data-renderer={rendererKind}
       data-reduced-motion={reducedMotion ? 'true' : 'false'}
     >
-      <div className="flex items-center gap-2 px-3 py-2 border-b border-white/10">
-        <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUALMONK · LIVESHOW</span>
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-white/10">
+        <span className="text-[10px] font-bold tracking-widest text-fuchsia-300">VISUAL · LIVESHOW</span>
         <span className={`text-[9px] px-1.5 py-0.5 rounded-full border ${audioLinked ? 'border-emerald-400/50 text-emerald-300' : 'border-neutral-600 text-neutral-400'}`}>
           {audioLinked ? 'AUDIO LIVE' : 'wartet auf Wiedergabe'}
         </span>
@@ -492,6 +542,13 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
         >
           {rendererKind.toUpperCase()}
         </span>
+        {/* L4 · Textzeile der Szene — aus dem Katalog, wechselt mit dem Szenenwechsel. */}
+        <span
+          className="text-[9px] px-1.5 py-0.5 rounded border border-neutral-700 text-neutral-300 tracking-widest"
+          title="L4 · Textzeile der Szene (TEXTZEILEN_TRIGGER)"
+        >
+          {TEXTZEILEN_TRIGGER[show.currentIndex % TEXTZEILEN_TRIGGER.length]}
+        </span>
         <button
           type="button"
           onClick={() => setRendererMode((m) => (m === 'canvas2d' ? 'gl' : m === 'gl' ? 'gpu' : 'canvas2d'))}
@@ -503,6 +560,36 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
           {rendererMode === 'gl' ? 'WEBGL' : rendererMode === 'gpu' ? 'WEBGPU' : 'CANVAS2D'}
         </button>
         <div className="flex-1" />
+        <label className="flex items-center gap-1 text-[9px] text-neutral-400 tracking-widest">
+          AUFLÖSUNG
+          <select
+            aria-label="Stream-Auflösung"
+            value={streamRes.preset}
+            onChange={(e) => { if (isStreamPresetId(e.target.value)) streamRes.setPreset(e.target.value); }}
+            className="bg-black/60 border border-neutral-700 rounded px-1.5 py-1 text-[10px] text-neutral-200"
+          >
+            {STREAM_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-[9px] text-neutral-400 tracking-widest" title={streamStatus === 'live' ? 'Bildrate vor dem Start wählen' : 'Bildrate des Streams'}>
+          FPS
+          <select
+            aria-label="Stream-Bildrate"
+            value={streamRes.fps}
+            disabled={streamStatus === 'live'}
+            onChange={(e) => { const f = Number(e.target.value); if (isStreamFps(f)) streamRes.setFps(f); }}
+            className="bg-black/60 border border-neutral-700 rounded px-1.5 py-1 text-[10px] text-neutral-200 disabled:opacity-50"
+          >
+            {STREAM_FPS.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+        </label>
+        <span
+          data-testid="stream-size"
+          className="text-[9px] px-1.5 py-0.5 rounded-full border border-cyan-400/40 text-cyan-200 font-mono"
+          title={streamRes.receiver ? `Beamer meldet ${streamRes.receiver.width}×${streamRes.receiver.height} @${streamRes.receiver.devicePixelRatio}x` : 'Kein Beamer verbunden – Auto nutzt 1920×1080'}
+        >
+          {streamSizeLabel(streamRes.size)}
+        </span>
         <button
           type="button"
           onClick={toggleStream}
@@ -694,7 +781,7 @@ export const VisualMonkOverlay: React.FC<VisualMonkOverlayProps> = ({ onClose })
       <div className="flex-1 min-h-0 relative">
         {/* key: ein Canvas kann nur EINEN Kontexttyp haben — beim Renderer-Wechsel
             wird das Element bewusst neu erzeugt (VISUAL-P1-005). */}
-        <canvas key={rendererMode} ref={canvasRef} className="w-full h-full block" />
+        <canvas key={rendererMode} ref={canvasRef} data-testid="visual-canvas" className="w-full h-full block object-contain" />
         {aiImage && (
           <img
             src={aiImage}

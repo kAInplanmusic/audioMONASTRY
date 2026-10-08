@@ -84,8 +84,14 @@ export STUDIO_ACCESS_TOKEN DEEPTEST_RUN=1 PWOUT PWREPORTERS V2_LIVE_SKIP
 # 3 min NACH dem gemeldeten Phasenende 20:12), und T1 galt faelschlich als gruen.
 # Deshalb: eigene Defaults je Phase + Overrides.
 #   DEEPTEST_PHASE_TIMEOUT_<PHASE>  (z. B. _T4)  >  DEEPTEST_PHASE_TIMEOUT  >  Default
-DEFAULT_PHASE_TIMEOUT=1800        # T0/T2/T3/T5: Netz-/SSH-Phasen
+DEFAULT_PHASE_TIMEOUT=1800        # T0/T3/T5: Netz-/SSH-Phasen
 DEFAULT_PHASE_TIMEOUT_T1=3600     # lokaler Trockenlauf: Suite >34 min gemessen
+DEFAULT_PHASE_TIMEOUT_T2=5400     # Flottenstart: Provisionierung + Kaltstart (~20 min
+                                  #   bei Hetzner-IP-Recycling) + Remote-Build des
+                                  #   App-Images + TLS-Terminator. Mit den pauschalen
+                                  #   1800 s lief T2 real in den HARD-TIMEOUT, obwohl
+                                  #   er Schritt 9b/9 bereits erreicht hatte
+                                  #   (Lauf 20261005-134803, INFRA-HETZNER-017).
 DEFAULT_PHASE_TIMEOUT_T4=5400     # Hetzner-Suite: gleiche Suite + Netzlatenz
 phase_timeout_for() {             # $1 Phase -> Sekunden
   local specific="DEEPTEST_PHASE_TIMEOUT_$1" glob="DEEPTEST_PHASE_TIMEOUT" val=""
@@ -324,7 +330,7 @@ running=[s for s in d.get('servers',[]) if s.get('name','').startswith('audiomon
 print(1 if running else 0)
 " "$fleet_json" 2>/dev/null || echo 1)"
     if [[ "$still_there" = "1" ]]; then
-      bash scripts/hetzner/lifecycle.sh stop >> "$RUNROOT/lifecycle-stop.log" 2>&1
+      bash scripts/hetzner/lifecycle.sh stop --yes >> "$RUNROOT/lifecycle-stop.log" 2>&1
     else
       echo "0" > "$RUNROOT/.fleet-up"
       echo "$(date +%FT%TZ) Flotte laut API bereits weg (0 audiomonastry-*) – lifecycle stop übersprungen." >> "$RUNROOT/lifecycle-stop.log"
@@ -644,9 +650,15 @@ t2() {
 
   log "T2: Flotte hochfahren (bring-up-fleet.sh --yes, DEPLOY_DOMAIN=$DEPLOY_DOMAIN, Snapshots 2026-09-25)"
   log "    Entlastung im Autolauf: Smoke/Stress/SFU-Echtpfad macht T2-Tail selbst, Deep-Test macht T4."
+  # INFRA-HETZNER-017: Der Trap-Vertrag muss VOR dem Aufbau gelten. Stand er
+  # danach, lief die Flotte nach einem Abbruch INNERHALB von bring-up-fleet.sh
+  # (z. B. Schritt 4/9 SSH-Timeout) ungestoppt weiter - der Trap fand keine
+  # .fleet-up und uebersprang lifecycle stop (real passiert: 5 Server liefen
+  # ~3 h weiter, manueller Stop noetig). Daher: Datei setzen, sobald der Aufbau
+  # beginnen soll; der Trap raeumt dann jeden Abbruch ab diesem Punkt.
+  touch "$RUNROOT/.fleet-up"
   DEPLOY_DOMAIN="$DEPLOY_DOMAIN" DEEPTEST_SKIP_TESTS=1 \
     bash scripts/hetzner/bring-up-fleet.sh --yes || return 1
-  touch "$RUNROOT/.fleet-up"   # Trap-Vertrag: ab jetzt räumt lifecycle stop ab
 
   log "T2: Knoten-IPs aus der API lesen"
   curl -s -H "Authorization: Bearer $HCLOUD_TOKEN" 'https://api.hetzner.cloud/v1/servers?per_page=50' -o "$RUNROOT/t2-servers.json"
@@ -679,9 +691,19 @@ PY
     python3 scripts/hetzner/cf-dns-ensure.py --apply || { echo "DNS-Einrichtung FEHLGESCHLAGEN – Abbruch, keine Verwendung der Produktionsdomain."; return 1; }
   # Nachweis: der oeffentliche Smoke-Host muss in DNS existieren (der Smoke in
   # T2-Tail laeuft gegen https://$DEPLOY_DOMAIN). Ohne diesen Record lief T2
-  # frueher in einen Zeituberschlag bei ensure-tls-terminator.sh.
+  # frueher in einen Zeitueberschlag bei ensure-tls-terminator.sh.
+  # INFRA-HETZNER-017: Die Auflösung darf NICHT nur ueber den lokalen Resolver
+  # laufen - bei proxied Cloudflare-Records (orange Wolke) liefert getent hier
+  # regelmaessig nichts, obwohl der Record existiert und von aussen aufloest
+  # (real passiert: '-> <keine>' bei korrekt gesetztem deeptest-A-Record, Lauf
+  # danach an der Folgepruefung abgebrochen). Daher lokal pruefen und bei
+  # Misserfolg einen oeffentlichen Resolver nachziehen, bevor gewarnt wird.
   local app_host_ip
   app_host_ip="$(getent ahostsv4 "$DEPLOY_DOMAIN" 2>/dev/null | awk 'NR==1{print $1}')"
+  if [[ -z "$app_host_ip" ]]; then
+    app_host_ip="$(dig +short A "$DEPLOY_DOMAIN" @1.1.1.1 2>/dev/null | grep -E '^[0-9]+\.' | head -1)"
+    [[ -n "$app_host_ip" ]] && echo "  DNS-Aufloesung $DEPLOY_DOMAIN -> $app_host_ip (oeffentlicher Resolver 1.1.1.1; lokal nicht aufloesbar)"
+  fi
   echo "  DNS-Aufloesung $DEPLOY_DOMAIN -> ${app_host_ip:-<keine>}"
 
   log "T2: app-.env auf dem Knoten: AI_MODE=off erzwingen, kein RP_API_KEY"
@@ -691,6 +713,62 @@ PY
       && { grep -q "^AI_MODE=" .env && sed -i "s|^AI_MODE=.*|AI_MODE=off|" .env || printf "AI_MODE=off\n" >> .env; } \
       && sed -i "/^RP_API_KEY=/d" .env \
       && grep -q "^RP_API_KEY=" .env && exit 9 || true' || return 1
+  done
+
+  # INFRA-HETZNER-021: STUDIO_ACCESS_TOKEN auf den Knoten bringen - sonst fail-closed 503
+  # server.ts: studioTokenMissing -> 503 STUDIO_TOKEN_MISSING fuer alle /api/*-Routen
+  # (außer /api/health). Der Deep-Test prüft /api/session und sieht deshalb 503.
+  # Der Token ist im lokalen .env.deploy; wir setzen ihn idempotent in /opt/audiomonastry/.env
+  # und lassen die Container neu starten, damit er aus dem env_file gelesen wird.
+  if [[ -n "${STUDIO_ACCESS_TOKEN:-}" ]]; then
+    log "T2: STUDIO_ACCESS_TOKEN auf den Knoten schreiben (fail-closed vermeiden)"
+    for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+      ssh_root "$ip" "cd /opt/audiomonastry && \
+        grep -q '^STUDIO_ACCESS_TOKEN=' .env && sed -i 's|^STUDIO_ACCESS_TOKEN=.*|STUDIO_ACCESS_TOKEN=${STUDIO_ACCESS_TOKEN}|' .env || printf 'STUDIO_ACCESS_TOKEN=%s\n' '${STUDIO_ACCESS_TOKEN}' >> .env" \
+      && echo "  $ip: STUDIO_ACCESS_TOKEN gesetzt" || echo "  $ip: STUDIO_ACCESS_TOKEN konnte nicht gesetzt werden"
+    done
+  else
+    log "T2: WARN - STUDIO_ACCESS_TOKEN ist leer, API bleibt fail-closed (503)"
+  fi
+
+  # INFRA-HETZNER-020: Rate-Limits fuer den AUTOLAUF anheben. Der Health-Limiter
+  # zaehlt BEWUSST pro IP (server.ts: keyGenerator ipKeyGenerator). Im Deep-Test
+  # laufen aber Smoke-, Stress-, RTC- und die wiederholten TLS-/Statuspruefungen
+  # ueber dieselbe Quell-IP (Cloudflare-Egress bzw. 127.0.0.1), und Prometheus
+  # scrapt /api/metrics im selben Fenster. Zusammen reisst das das Budget von
+  # 600/min und die Pruefung sieht HTTP 429 - kein Terminator-Defekt, sondern die
+  # eigene Messlast. Der Feed von 60/min ist ebenso betroffen (UPLOAD/TELEMETRY).
+  # Die Produktions-DEFAULTS bleiben unveraendert; nur der Testknoten bekommt
+  # grosszuegige Werte, damit der Lauf seine eigene Last tragen kann.
+  log "T2: Rate-Limits fuer den Autolauf anheben (nur Testknoten; Defaults unveraendert)"
+  for ip in "$APP_IP" "$SFU_IP" "$AI_IP" "$MASTER_IP" "$EDGE_IP"; do
+    ssh_root "$ip" 'cd /opt/audiomonastry \
+      && for kv in API_RATE_LIMIT_MAX=100000 HEALTH_RATE_LIMIT_MAX=100000 \
+                    UPLOAD_CHUNK_RATE_LIMIT_MAX=100000 AI_AGENT_RATE_LIMIT_MAX=100000 \
+                    CSP_REPORT_RATE_LIMIT_MAX=100000; do \
+           k="${kv%%=*}"; \
+           grep -q "^${k}=" .env && sed -i "s|^${k}=.*|${kv}|" .env || printf "%s\\n" "$kv" >> .env; \
+         done \
+      && grep -cE "^(API_RATE_LIMIT_MAX|HEALTH_RATE_LIMIT_MAX)=" .env' 2>/dev/null \
+      | xargs -I{} echo "  $ip: Rate-Limit-Zeilen gesetzt: {}"
+  done
+
+  # Ein geaendertes env_file wirkt erst nach einem Recreate des Containers -
+  # 'restart' behaelt die alten Variablen. Ohne diesen Schritt waeren AI_MODE=off
+  # und die Rate-Limits wirkungslos (der Container lief mit der .env vom Deploy).
+  # 'up -d' erkennt die geaenderte .env und erstellt die betroffenen Services neu.
+  # Projektname wie in bring-up-fleet.sh aus fleet-names.sh (nicht hart kodieren).
+  local FLEET_PROJ
+  FLEET_PROJ="$(bash -c 'source scripts/hetzner/fleet-names.sh 2>/dev/null; fleet_compose_project' 2>/dev/null || echo audiomonastry)"
+  log "T2: Container neu erstellen, damit die geaenderten env-Werte greifen (Projekt: $FLEET_PROJ)"
+  ssh_root "$APP_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_PROJ docker compose -f docker-compose.hetzner.yml up -d audiomonastry 2>&1 | tail -2" || true
+  ssh_root "$SFU_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_PROJ docker compose -f docker-compose.hetzner.yml -f docker-compose.sfu.yml -f docker-compose.turn.yml up -d audiomonastry 2>&1 | tail -2" || true
+  ssh_root "$MASTER_IP" "cd /opt/audiomonastry && COMPOSE_PROJECT_NAME=$FLEET_PROJ docker compose -f docker-compose.hetzner.yml up -d master-player 2>&1 | tail -2" || true
+  # Beleg: die Werte sind IM Container angekommen (nicht nur in der Datei).
+  for pair in "app:$APP_IP" "sfu:$SFU_IP"; do
+    rolle="${pair%%:*}"; ip="${pair##*:}"
+    ssh_root "$ip" 'docker exec audiomonastry sh -c "echo AI_MODE=${AI_MODE:-<leer>} HEALTH_MAX=${HEALTH_RATE_LIMIT_MAX:-<default 600>}"' 2>/dev/null \
+      | sed "s/^/  $rolle: /" || echo "  $rolle: env-Probe nicht lesbar"
   done
 
   log "T2: TLS-Terminator gegen die Subdomain prüfen/herstellen"
@@ -920,7 +998,7 @@ for p in T0 T1 T2 T3 T4 T5; do
     if [[ -n "$STOP_AFTER" && "$p" == "$STOP_AFTER" ]]; then
       if [[ -f "$RUNROOT/.fleet-up" ]]; then
         log "Stopp nach $p gewünscht (--stop-after) – Flotte läuft, lifecycle stop folgt."
-        bash scripts/hetzner/lifecycle.sh stop || true
+        bash scripts/hetzner/lifecycle.sh stop --yes || true
       else
         log "Stopp nach $p gewünscht (--stop-after) – keine Flotte, kein Stop nötig."
       fi

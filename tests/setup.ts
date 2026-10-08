@@ -35,7 +35,7 @@ if (typeof globalThis !== 'undefined' && !globalThis.localStorage) {
 // beeinflussen – sonst schlagen Reihenfolge-Tests je nach Umgebung rot/grün aus.
 // Entfernt NUR in der Test-Umgebung; echte Keys werden nicht geändert.
 for (const key of [
-  'HF_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY', 'OLLAMA_URL', 'OLLAMA_MODEL',
+  'HF_API_KEY', 'DEEPSEEK_API_KEY', 'MISTRAL_API_KEY',
   'GEMINI_API_KEY', 'OPENAI_API_KEY', 'CB_API_KEY', 'OR_API_KEY', 'OPENROUTER_MODEL',
   'PUBLICAI_KEY', 'PUBLICAI_BASE_URL', 'PUBLICAI_MODEL', 'AI_EMERGENCY_PROVIDERS',
   // GPU-Flotte: RunPod-IDs/Keys aus der Host-Umgebung dürfen die Verfügbarkeit
@@ -50,6 +50,8 @@ for (const key of [
   // Legacy-Namen der Vorarchitektur (Fallback in runpodVision/runpodVideo).
   'RP_ENDPOINT_ID_VISION', 'RP_ENDPOINT_ID_VIDEO',
   'RUNPOD_ENDPOINT_ID_VISION', 'RUNPOD_ENDPOINT_ID_VIDEO', 'RUNPOD_BRAIN_MODEL', 'AI_ALLOW_EXTERNAL_LLM',
+  // RT-AUDIT-P1-014: Positivliste + eigene Voice-Runtime aus der Host-Shell isolieren.
+  'AI_EXTERNAL_LLM_ALLOWLIST', 'VOICE_AI_RUNTIME_URL', 'VOICE_AI_RUNTIME_TOKEN', 'HF_ENDPOINT_URL',
   // R2-Ablage: Tests dürfen NICHT gegen den echten Bucket schreiben. Ohne Keys
   // weicht `saveArtifact` auf die lokale Artefakt-Ablage aus — genau der Pfad,
   // den tests/visualShowOrchestrator.test.ts prüft.

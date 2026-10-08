@@ -239,7 +239,7 @@ describe('Planer-Rolle (MOA_GLOBAL_PROMPT_KEY) erreicht den echten Plan-Aufruf',
     const seen: LlmRequest[] = [];
     const complete = async (req: LlmRequest): Promise<LlmCompletion> => {
       seen.push(req);
-      return { provider: 'ollama', text: '[]', latencyMs: 1 };
+      return { provider: 'runpod-local', text: '[]', latencyMs: 1 };
     };
     const store = new PromptStore();
     const seed = buildPromptEvalSeed();

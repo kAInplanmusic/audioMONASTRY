@@ -104,6 +104,14 @@ export interface PluginInterface {
   setParameter(parameter: PluginParameterValue): void;
 
   /**
+   * UI2-P0-003: SYNC gegen Main. Orthogonal zum PluginState (OFF/STBY/ON/PRO) —
+   * ein abgeschaltetes Plugin kann SYNC an haben und umgekehrt. Nur die
+   * spielenden Quellen-Adapter nutzen es; alle Adapter erben die Implementierung.
+   */
+  isSyncEnabled(): boolean;
+  setSyncEnabled(enabled: boolean): void;
+
+  /**
    * Synchroner Echtzeitpfad.
    * Keine Promises, kein fetch(), kein Storage und kein React-State hier.
    */

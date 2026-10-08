@@ -41,6 +41,7 @@
     "audit:deep:static": "tsx scripts/deep-audit/run.ts --mode full --offline",
     "audit:deep:smoke": "tsx scripts/deep-audit/run.ts --mode files --files server.ts src/context/PluginManagerContext.tsx --smoke",
     "audit:deep:help": "tsx scripts/deep-audit/run.ts --help",
+    "audit:rt": "tsx scripts/audit/rt-bench.ts",
     "eval:ai": "tsx scripts/eval-ai.ts",
     "iterate:prompts": "tsx scripts/iterate-prompts.ts",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run test:python && npm run security && npm run audio:gate && npm run test:rls && npm run check:deadfiles && npm run audit:deep:static",
@@ -99,6 +100,9 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
+    "@fontsource/barlow": "^5.3.0",
+    "@fontsource/chakra-petch": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@socket.io/redis-adapter": "^8.3.0",
     "@supabase/postgrest-js": "^2.112.3",
     "@supabase/supabase-js": "^2.112.3",

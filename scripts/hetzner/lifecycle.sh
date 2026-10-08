@@ -161,12 +161,32 @@ snapshot_all() {
   prune_snapshots
 }
 
+get_server_ip() {
+  local name="$1"
+  hz_get "/servers?name=$name" | python3 -c "import sys,json; d=json.load(sys.stdin); s=d['servers'][0] if d['servers'] else None; print(s['public_net']['ipv4']['ip'] if s else '')"
+}
+
 cmd_stop() {
   if [[ "${1:-}" != "--yes" ]]; then
     echo "Stoppt die Flotte: Snapshot-Backup (inkl. Retention-Aufraeumen) + Server-LÖSCHEN (0 €/Monat)."
     read -r -p "Fortfahren? [j/N] " ans
     [[ "$ans" == "j" || "$ans" == "J" ]] || { echo "Abgebrochen."; exit 0; }
   fi
+  # Strategie 2: persistente Medien-NVMe via Snapshot, KEIN Hetzner-Volume
+  # Medien müssen vor dem Snapshot konsistent auf dem Knoten liegen:
+  # Supabase -> R2 -> Knoten-NVMe via aria2c -x16 -s16, SHA256-geprüft, presignierte URL ohne Keys auf dem Knoten
+  SSH_KEY="${DEPLOY_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+  for NAME in "${NAMES[@]}"; do
+    if [[ "$NAME" == *app* ]]; then
+      IP=$(get_server_ip "$NAME")
+      if [[ -n "$IP" ]]; then
+        echo "=== Medien-Sync vor Snapshot ($NAME → $IP) ==="
+        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -o BatchMode=yes "root@$IP" \
+          "cd /opt/audiomonastry && bash scripts/hetzner/deliver-media.sh --via-r2 --no-start" \
+          || echo "⚠ Medien-Sync für $NAME fehlgeschlagen – Snapshot wird trotzdem erstellt (Medien könnten unvollständig sein)"
+      fi
+    fi
+  done
   snapshot_all
   echo "=== Server löschen ==="
   bash scripts/hetzner/delete-fleet.sh --yes

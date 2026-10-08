@@ -38,12 +38,13 @@ Drift-Guard `tests/manifestRoles.test.ts` hält Code und Manifest zusammen.)
 Worker hat sie je gelesen; `AI_MAX_VRAM` in der TS-Simulation ist keine
 Flottenquelle.
 
-### 1.2 Die 5 Hetzner-Rollen
+### 1.2 Die 4 Hetzner-Rollen
 
-`app` (Caddy + API + Signaling) · `sfu` (mediasoup, RTP 40000–40099) ·
-`ai` (CPU-Fallback/Stem) · `master` (master-player, FFmpeg/NumPy) ·
+`app` (Caddy + API + Signaling + master-player + TURN) · `sfu` (mediasoup, RTP 40000–40099) ·
+`media` (R2-Sync-Worker + Audio-Streaming-Cache + Mediendaten auf lokaler NVMe, KEIN Hetzner-Volume) ·
 `edge` (Monitoring/Smoke).
-Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default cx23.
+Typen per `FLEET_TYPE_*`-Env überschreibbar (Placement-Scarcity), Default app cx43, sfu cx33, media cx43, edge cx23.
+AI_MODE=off, kein ai-1.
 
 ---
 
@@ -95,6 +96,61 @@ bedarfsgesteuert.
   Probes über die Zeitgrenze hinaus auf `RUNNING` und wurden weiter abgerechnet,
   bis zu 3,66 $/h — `runpod-8-instances-complete-plan.md`). Altstand 2026-09-20:
   Visual-Rollen 900 s deklariert.
+
+### 3.1 Knotengrößen und 2–3-Knoten-Betriebsprofil (Stand 2026-10-05)
+
+**Vorgabe des Betreibers (2026-10-05, verbindlich):** Hetzner ≤ **5–6 €/h**;
+**2–3 Knoten** sind der Zielrahmen (mehr nur bei echtem Mehrwert);
+**lieber ein stärkerer als mehrere schwache**; **keine dauerhaften Kosten** —
+bezahlt wird Nutzung, nicht Besitz.
+
+**Live gemessen** über `GET /v1/pricing` und `GET /v1/server_types`
+(Hetzner API, 2026-10-05, netto, ohne MwSt.; Monat = Preis-Cap):
+
+| Typ | vCPU (shared) | RAM | Disk | €/h | €/Monat (Cap) |
+|---|---|---|---|---|---|
+| `cx23` | 2 | 4 GB | 40 GB | 0,0088 | 5,49 |
+| `cx33` | 4 | 8 GB | 80 GB | 0,0136 | 8,49 |
+| `cx43` | 8 | 16 GB | 160 GB | 0,0256 | 15,99 |
+| `cx53` | 16 | 32 GB | 320 GB | 0,0473 | 29,49 |
+| `cpx21` | 3 | 4 GB | 80 GB | 0,0152 | 9,49 |
+| `cpx31` | 4 | 8 GB | 160 GB | 0,0280 | 17,49 |
+| `cpx41` | 8 | 16 GB | 240 GB | 0,0521 | 32,49 |
+| `cax21` (ARM) | 4 | 8 GB | 80 GB | 0,0168 | 10,49 |
+| `ccx13` (dediziert) | 2 | 8 GB | 80 GB | 0,0697 | 43,49 |
+
+**Dauerhafte Posten (existenz-basiert, unabhängig von Last):**
+Volume `0,0572 €/GB/Monat` · Snapshot `0,0143 €/GB/Monat` ·
+Primär-IPv4 `0,50 €/Monat` je Knoten · Backup `+20 %` der Serverrate.
+Ein **gestoppter** Server wird zum vollen Satz weiterberechnet —
+Abrechnung endet **nur durch Löschen** (Hetzner-FAQ: „we will bill you for
+them, regardless of their state“).
+
+**Profil „3 Knoten“ (Standard):**
+
+| Rolle | Typ | €/h | €/Monat | Dienste |
+|---|---|---|---|---|
+| `app` | `cpx41` (8 vCPU/16 GB) | 0,0521 | 32,49 | Caddy + API/Signaling + master-player |
+| `sfu` | `cpx31` (4 vCPU/8 GB) | 0,0280 | 17,49 | mediasoup + coturn, eigene öffentliche IP, UDP 40000–40099 |
+| `edge` | `cx23` (2 vCPU/4 GB) | 0,0088 | 5,49 | Monitoring (Prometheus/Grafana/cAdvisor/node-exporter) |
+| **Summe** | | **0,0889** | **55,47** | 24/7-Betrieb, netto |
+
+**Profil „2 Knoten“ (schlank):** `cpx41` (app+master+sfu) + `cx23` (edge)
+= **0,0609 €/h · 37,98 €/Monat**. Der zusätzliche SFU-Knoten im 3-Knoten-Profil
+kostet 17,49 €/Monat und ist die empfohlene Trennung: eigene öffentliche IP,
+eigene CPU für RTP, kein Konflikt mit dem App-Prozess.
+
+**Kein Dauerposten im Standardprofil:** keine Volumes, keine Snapshots,
+keine Floating IPs — alles drei ist per Live-Abfrage 2026-10-05 zu **0** gezählt.
+Medien liegen in Cloudflare R2 (Nutzungspreis, `$0,015/GB-Monat`, 10 GB frei,
+Egress frei) und in Supabase; AI läuft als RunPod-Serverless mit
+scale-to-zero. Das früher diskutierte 500-GB-Volume (28,60 €/Monat) entfällt.
+
+**Was gegenüber dem 5-Knoten-Bestand entfällt:** die Rolle `ai`
+(CPU-Fallback/Stem). Ihre Aufgabe ist mit der RunPod-Flotte (8 Rollen) und dem
+lokalen, bei Bedarf als Container auf `app` mitlaufenden Diensten abgedeckt.
+`app`, `sfu`, `master` und `edge` bleiben in allen Profilen erhalten; die
+Obergrenze von 5 Knoten (§1) bleibt unverändert gültig.
 
 ---
 

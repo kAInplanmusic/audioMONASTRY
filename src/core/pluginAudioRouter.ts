@@ -10,6 +10,12 @@
  */
 import { audioEngine, pluginAudioChannels } from '../utils/audioEngine';
 import type { TrackType } from '../types';
+import {
+  SIGNAL_CHAIN_ORDER,
+  signalOrderIndex,
+  signalStageOf,
+  type SignalStageId,
+} from '../plugins/signalChain';
 
 export type PluginActiveState = 'AUTO_AI' | 'PRO';
 type PluginIsolationLevel = 'insert' | 'send' | 'ui-only';
@@ -29,23 +35,40 @@ export interface PluginRouteConfig {
    *   ui-only = kein Audio-Graph (z. B. biblio/master/record)
    */
   isolation: PluginIsolationLevel;
+  /**
+   * Stufe im **linearen Signalweg** (`plugins/signalChain.ts`): Quellen → Mixer
+   * → Nachbearbeitung → Recorder → Ausgang. `null` = kein Plugin der Kette
+   * (System-Module wie ai/perfor).
+   *
+   * Abgrenzung zu `isolation`: die Isolation sagt, *wie* eingespeist wird
+   * (insert/send/ui-only), die Stufe sagt, *wo* im Pfad das Plugin liegt. Beide
+   * Aussagen sind unabhängig – `biblio` ist z. B. eine Quelle (Stufe `sources`),
+   * speist aber selbst nichts in MAIN ein (`ui-only`).
+   */
+  chainStage: SignalStageId | null;
+  /** Position im Signalweg (0 = erste Quelle). `-1` = nicht in der Kette. */
+  chainIndex: number;
 }
 
 const PLUGIN_ROUTE_DEFS: Array<[string, PluginRouteConfig['source'], boolean]> = [
+  // UI2-P0-001: mixer/effect/spatial/eq/dsp/master/record sind KEINE eigenen
+  // Kanaele mehr, sondern die Summe bzw. Stufen der Signalkette. Der Mixer
+  // bleibt Send-Ziel -> source 'channel' (isolation 'send'), damit FX-Sends
+  // weiter validierbar sind. Die 8 Quellen sind die einzigen Kanal-Feeder.
   ['mixer', 'channel', true],
   ['drop', 'sampler', true],
-  ['song', 'ui-only', false],
-  ['effect', 'channel', true],
+  ['song', 'sampler', true],
+  ['effect', 'ui-only', false],
   ['syntisampler', 'synth', true],
   ['drumsampler', 'drum', true],
   ['instru', 'synth', true],
   ['biblio', 'ui-only', false],
   ['voice', 'voice', true],
   ['sound', 'sampler', true],
-  ['stem', 'ui-only', false],
-  ['spatial', 'channel', true],
-  ['eq', 'channel', true],
-  ['dsp', 'channel', true],
+  ['stem', 'sampler', true],
+  ['spatial', 'ui-only', false],
+  ['eq', 'ui-only', false],
+  ['dsp', 'ui-only', false],
   ['master', 'ui-only', false],
   ['record', 'ui-only', false],
   // System-Module (keine Plugin-Slots, aber für State-Sync/Routing bekannt):
@@ -62,6 +85,8 @@ const ROUTES: Record<string, PluginRouteConfig> = Object.fromEntries(
       source,
       mainFeeder,
       isolation: isolationFor(source),
+      chainStage: signalStageOf(id)?.id ?? null,
+      chainIndex: signalOrderIndex(id),
     },
   ]),
 );
@@ -73,7 +98,13 @@ function isolationFor(source: PluginRouteConfig['source']): PluginIsolationLevel
   return 'insert';
 }
 
-/** AM-E2-1: Routing-Matrix validieren (P2-4-Vorprüfung, serverlos). */
+/**
+ * AM-E2-1: Routing-Matrix validieren (P2-4-Vorprüfung, serverlos).
+ *
+ * UI2-P0-001: Nur `insert`-Routen sind echte Quellen und brauchen daher ein
+ * Kanalziel. `send`-Routen (Mixer) speisen in einen Bus ein — sie haben per
+ * Definition keinen eigenen Kanalzug mehr. `ui-only` hat gar keinen Graph.
+ */
 export function validateRoutingMatrix(ids: readonly string[]): string[] {
   const violations: string[] = [];
   for (const id of ids) {
@@ -82,11 +113,11 @@ export function validateRoutingMatrix(ids: readonly string[]): string[] {
       violations.push(`${id}: nicht registriert`);
       continue;
     }
-    if (route.isolation !== 'ui-only' && route.channels.length === 0) {
+    if (route.isolation === 'insert' && route.channels.length === 0) {
       violations.push(`${id}: Audio-Quelle ohne Kanalziel (isolation=${route.isolation})`);
     }
     for (const ch of route.channels) {
-      if (!/^channel([1-9]|10)$/.test(ch)) {
+      if (!/^channel[1-8]$/.test(ch)) {
         violations.push(`${id}: ungültiges Kanalziel ${ch}`);
       }
     }
@@ -102,6 +133,22 @@ export function getPluginRoute(id: string): PluginRouteConfig | undefined {
 
 export function listPluginRoutes(): PluginRouteConfig[] {
   return Object.values(ROUTES);
+}
+
+/**
+ * Prüfpunkt Signalkette: Jedes Plugin der Kette muss im Router existieren.
+ * Ein fehlender Eintrag wäre ein Loch im Pfad – die Kette ist die Quelle, der
+ * Router die Ausführung. Leere Liste = deckungsgleich.
+ */
+export function missingChainRoutes(): string[] {
+  return SIGNAL_CHAIN_ORDER.filter((id) => !ROUTES[id]);
+}
+
+/** Die Routen in Signalweg-Reihenfolge (ohne die System-Module am Ende). */
+export function listRoutesInChainOrder(): PluginRouteConfig[] {
+  return SIGNAL_CHAIN_ORDER
+    .map((id) => ROUTES[id])
+    .filter((route): route is PluginRouteConfig => Boolean(route));
 }
 
 /**

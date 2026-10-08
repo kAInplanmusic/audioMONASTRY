@@ -1,0 +1,42 @@
+```mermaid
+flowchart LR
+    subgraph Internet
+        CF[Cloudflare DNS/WAF]
+        Client[Browser / iOS]
+    end
+
+    CF --> C1[Caddy app-1 :80/443]
+    CF --> C2[Caddy sfu-1 :80/443]
+
+    subgraph Instance_1_App_Master
+        direction TB
+        C1 --> App[audiomonastry :8080<br/>ENABLE_SFU=0]
+        App --> Master[master-player :8000]
+        App --> Redis[(redis optional)]
+        App --> Supabase
+    end
+
+    subgraph Instance_2_SFU
+        direction TB
+        C2 --> App2[audiomonastry :8080<br/>ENABLE_SFU=1<br/>RTP 40000-40099]
+        App2 --> Coturn[coturn :3478<br/>network_mode:host]
+        App2 --> Redis
+    end
+
+    subgraph Instance_3_Edge
+        direction TB
+        NodeExporter[node-exporter]
+        cAdvisor[cadvisor]
+        Prometheus[prometheus :9090]
+        Grafana[Grafana :3000<br/>127.0.0.1 only]
+    end
+
+    Client <--> C1
+    Client <--> C2
+    Client -.-> App2
+
+    style App fill:#f9f,stroke:#333
+    style App2 fill:#bbf,stroke:#333
+    style Master fill:#ffa,stroke:#333
+    style Coturn fill:#faa,stroke:#333
+```

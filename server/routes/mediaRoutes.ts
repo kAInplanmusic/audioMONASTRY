@@ -231,13 +231,13 @@ export function registerMediaRoutes(app: Express): void {
   });
 
   // --- Stem-Provider-Status (öffentlich, ohne Secrets) --------------------------
+  // RT-AUDIT-P1-014: nur noch eigene Wege (stem-ai der Flotte, lokal ONNX) – keine Cloud-Kosten.
   app.get('/api/stem/status', (_req, res) => {
-    const provider = (process.env.STEM_AI_PROVIDER || 'fallback').trim();
-    const replicateActive = provider === 'replicate' && Boolean((process.env.REPLICATE_API_TOKEN || '').trim());
+    const serverActive = (process.env.ENABLE_STEMS || '').trim() === '1';
     res.json({
-      provider: replicateActive ? 'replicate' : provider,
-      replicateActive,
-      estimateUsdPerSong: 0.05, // ehrliche Schätzung inkl. Kaltstart-Overhead (Stand 2026)
+      provider: serverActive ? 'stem-ai' : 'local',
+      serverActive,
+      estimateUsdPerSong: 0,
     });
   });
 

@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # =============================================================================
-# provision-fleet.sh – audioMONASTRY 5er-Hetzner-Flotte provisionieren
+# provision-fleet.sh – audioMONASTRY 4er-Hetzner-Flotte provisionieren
 # -----------------------------------------------------------------------------
-# Die fuenf Rollen der Konstitution (docs/INFRA_KONSTITUTION.md §1.2).
+# Die vier Rollen der Konstitution (docs/INFRA_KONSTITUTION.md §1.2).
 # Default-Typ ist ueberall cx23 (2 vCPU / 4 GB / 40 GB) und je Rolle per
 # FLEET_TYPE_<ROLLE> ueberschreibbar (Hetzner-Knappheit beim Reservieren):
 #
-#   app-1     cx23   Rolle app     + Floating IP (DNS)
-#   sfu-1     cx23   Rolle sfu     (RTP-Ports 40000-40099 offen)
-#   ai-1      cx23   Rolle ai      (host-nativ: Ollama + Stem-CPU-Fallback)
-#   master-1  cx23   Rolle master  (master-player/FFmpeg)
-#   edge-1    cx23   Rolle edge    (NUR Monitoring-Stack, Staging/Smoke)
+#   app-1     cx43   Rolle app     + Floating IP (DNS), Caddy+API+Signaling+master-player+TURN
+#   sfu-1     cx33   Rolle sfu     (RTP-Ports 40000-40099 offen)
+#   media-1   cx43   Rolle media   (R2-Sync-Worker + Audio-Streaming-Cache + NVMe)
+#   edge-1    cx23   Rolle edge    (NUR Monitoring-Stack)
 #
 # Dieselben Overrides liest der Portal-Worker (services/portal-worker/src/index.js,
 # fleetServerType) - dort als Worker-Variablen gesetzt, hier aus .env.deploy bzw.
@@ -33,10 +32,8 @@ if [[ -f .env.deploy ]]; then
 fi
 
 # Servertypen konfigurierbar (Hetzner-Knappheit: cx33/cx43/cx53 oft nicht verfügbar;
-# Fallback cx23 überall, cpx22 für SFU/AI falls mehr Leistung nötig).
-# Der Default ist NICHT beliebig: cx23 hat 4 GB RAM und traegt die deklarierten
-# Limits der Rollen (app: 2,0 GiB App + 0,125 GiB Caddy, master: 1 GiB,
-# edge: 1,44 GiB Monitoring) - groessere Typen also nur bewusst und per
+# Fallback auf die 4-Rollen Vorgaben: app cx43, sfu cx33, media cx43, edge cx23).
+# Der Default ist NICHT beliebig: cx23 war zuvor gesetzt, nun explizite Typen per
 # FLEET_TYPE_<ROLLE> (INFRA-HETZNER-006/007). Dieselben Variablennamen liest der
 # Portal-Worker (services/portal-worker/src/index.js, fleetServerType).
 # F10: Namespace (Compose-Projekt, Zielpfad) kommt aus der EINEN Quelle
@@ -44,10 +41,9 @@ fi
 # shellcheck source=scripts/hetzner/fleet-names.sh
 # shellcheck disable=SC1091
 source scripts/hetzner/fleet-names.sh
-TYPE_APP="${FLEET_TYPE_APP:-cx23}"
-TYPE_SFU="${FLEET_TYPE_SFU:-cx23}"
-TYPE_AI="${FLEET_TYPE_AI:-cx23}"
-TYPE_MASTER="${FLEET_TYPE_MASTER:-cx23}"
+TYPE_APP="${FLEET_TYPE_APP:-cx43}"
+TYPE_SFU="${FLEET_TYPE_SFU:-cx33}"
+TYPE_MEDIA="${FLEET_TYPE_MEDIA:-cx43}"
 TYPE_EDGE="${FLEET_TYPE_EDGE:-cx23}"
 
 # Trockenlauf (INFRA-HETZNER-007): Rollen + effektive Typen ausgeben - ohne
@@ -60,12 +56,11 @@ if [[ "${1:-}" == "--print-config" || "${1:-}" == "--help" || "${1:-}" == "-h" ]
   # docker-compose.hetzner.yml und COMPOSE_PROJECT_NAME in den Deploy-Skripten.
   echo "  Projekt:   COMPOSE_PROJECT_NAME=$(fleet_compose_project)   (Zielpfad $FLEET_HOME)"
   printf '  %-28s %-12s %-7s %s\n' \
-    audiomonastry-app-1    "$TYPE_APP"    app    "firewall=audiomonastry-app, floating-ip=none (DNS nutzt die primaere IPv4)" \
+    audiomonastry-app-1    "$TYPE_APP"    app    "firewall=audiomonastry-app, floating-ip=none (DNS nutzt die primaere IPv4), Caddy+API+Signaling+master-player+TURN" \
     audiomonastry-sfu-1    "$TYPE_SFU"    sfu    "firewall=audiomonastry-sfu, floating-ip=none (RTP 40000-40099)" \
-    audiomonastry-ai-1     "$TYPE_AI"     ai     "firewall=audiomonastry-ai, floating-ip=none (host-nativ)" \
-    audiomonastry-master-1 "$TYPE_MASTER" master "firewall=audiomonastry-master, floating-ip=none" \
+    audiomonastry-media-1  "$TYPE_MEDIA"  media  "firewall=audiomonastry-media, floating-ip=none (R2-Sync-Worker + Audio-Streaming-Cache + NVMe)" \
     audiomonastry-edge-1   "$TYPE_EDGE"   edge   "firewall=audiomonastry-edge, floating-ip=none (nur Monitoring)"
-  echo "[dry-run] Override je Rolle: FLEET_TYPE_APP/SFU/AI/MASTER/EDGE (Default cx23)"
+  echo "[dry-run] Override je Rolle: FLEET_TYPE_APP/SFU/MEDIA/EDGE (Default cx43/cx33/cx43/cx23)"
   exit 0
 fi
 
@@ -97,8 +92,7 @@ provision_one() {
 # Wer sie bewusst will: FLOATING_IP_NAME=<name> und den provision.py-Aufruf anpassen.
 provision_one audiomonastry-app-1    "$TYPE_APP" app    audiomonastry-app    none
 provision_one audiomonastry-sfu-1    "$TYPE_SFU" sfu    audiomonastry-sfu    none
-provision_one audiomonastry-ai-1     "$TYPE_AI"  ai     audiomonastry-ai     none
-provision_one audiomonastry-master-1 "$TYPE_MASTER" master audiomonastry-master none
+provision_one audiomonastry-media-1  "$TYPE_MEDIA" media audiomonastry-media  none
 # INFRA-HETZNER-007: edge-1 laeuft als Rolle `edge` (wie im Portal-Worker und in
 # der Konstitution) - vorher stand hier die Rolle `app`, obwohl der Knoten nur den
 # Monitoring-Stack traegt. Kein zusaetzlicher Firewall-Port: Grafana ist auf dem
@@ -114,8 +108,7 @@ echo "  app-1:    DEPLOY_HOST=root@<app-1-ip>    DEPLOY_DOMAIN=anunnakitools.de 
 echo "            (DEPLOY_SYNC_ENV=1 nur fuer einen FRISCHEN Knoten ohne Portal - sonst"
 echo "             wuerde die rollen-skopierte Knoten-.env des Portal-Workers ersetzt, s. deploy.sh)"
 echo "  sfu-1:    DEPLOY_HOST=root@<sfu-1-ip>    DEPLOY_DOMAIN= bash deploy.sh  + docker-compose.sfu.yml"
-echo "  ai-1:     SSH ai-1  -> Ollama + Stem-AI (siehe docs/SERVER_FLEET.md)"
-echo "  master-1: SSH master-1 -> docker compose -f docker-compose.hetzner.yml up -d master-player"
+echo "  media-1:  R2-Sync-Worker + Audio-Streaming-Cache auf lokaler NVMe starten"
 echo "  edge-1:   SSH edge-1 -> Monitoring-Stack (nur der Stack) + Smoke-Tests"
 echo "            Grafana per Tunnel: ssh -L 3000:127.0.0.1:3000 root@<edge-1-ip> -> http://127.0.0.1:3000"
 echo "  Auto-Shutdown: ssh root@<ip> 'bash /opt/audiomonastry/scripts/hetzner/install-idle-shutdown.sh'"

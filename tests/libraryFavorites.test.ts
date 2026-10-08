@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
+import { resetStorageForTests, storageSet } from '../src/utils/storage';
 import { LIBRARY_FAVORITES_KEY, loadFavorites, saveFavorites, toggleFavoriteId } from '../src/utils/libraryFavorites';
 
 describe('biblioMONK Favoriten-Helfer', () => {
   beforeEach(() => {
-    localStorage.clear();
+    resetStorageForTests();
   });
 
   it('rundet Favoriten über den Storage-Adapter', () => {
@@ -18,7 +19,7 @@ describe('biblioMONK Favoriten-Helfer', () => {
   });
 
   it('toleriert kaputtes JSON (Rückfall leer)', () => {
-    localStorage.setItem(LIBRARY_FAVORITES_KEY, '{kaputt');
+    storageSet(LIBRARY_FAVORITES_KEY, '{kaputt');
     expect(loadFavorites()).toEqual({ samples: [], music: [] });
   });
 

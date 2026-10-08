@@ -42,19 +42,21 @@ import { PLUGIN_ROUTE_IDS, validateRoutingMatrix, getPluginRoute } from '../src/
  */
 describe('Audiokanalfluss · Plugin-Routing-Matrix', () => {
   it('ordnet alle audio-einspeisenden Plugins einem Kanalzug zu', () => {
-    expect(pluginAudioChannels('drum')[0]).toBe('channel2');
+    // UI2-P0-001 (2026-10-06): 8 feste Quellen — 1 drop · 2 song ·
+    // 3 drumsampler · 4 syntisampler · 5 instru · 6 voice · 7 sound · 8 stem.
+    expect(pluginAudioChannels('drop')[0]).toBe('channel1');
+    expect(pluginAudioChannels('song')[0]).toBe('channel2');
+    expect(pluginAudioChannels('drum')[0]).toBe('channel3');
     expect(pluginAudioChannels('synthesizer')[0]).toBe('channel4');
-    expect(pluginAudioChannels('instrument')[0]).toBe('channel4');
-    expect(pluginAudioChannels('sampler')[0]).toBe('channel5');
-    expect(pluginAudioChannels('effect')[0]).toBe('channel6');
-    expect(pluginAudioChannels('dsp')[0]).toBe('channel6');
-    expect(pluginAudioChannels('eq')[0]).toBe('channel6');
-    expect(pluginAudioChannels('voice')[0]).toBe('channel8');
-    expect(pluginAudioChannels('spatial')[0]).toBe('channel7');
+    expect(pluginAudioChannels('sampler')[0]).toBe('channel4');
+    expect(pluginAudioChannels('instrument')[0]).toBe('channel5');
+    expect(pluginAudioChannels('voice')[0]).toBe('channel6');
+    expect(pluginAudioChannels('sound')[0]).toBe('channel7');
+    expect(pluginAudioChannels('stem')[0]).toBe('channel8');
   });
 
   it('UI-only-Plugins speisen keine Audio-Quelle ein', () => {
-    for (const id of ['masterplayer', 'ai', 'controller', 'library', 'mastering', 'stem', 'recording', 'performance']) {
+    for (const id of ['masterplayer', 'ai', 'controller', 'library', 'mastering', 'recording', 'performance']) {
       expect(pluginAudioChannels(id)).toEqual([]);
     }
   });

@@ -1,0 +1,146 @@
+# audioMONASTRY 4-Instance Layout
+# Node 1: app (app-1)
+# Node 2: sfu + turn (sfu-1)
+# Node 3: master (master-1)
+# Node 4: edge monitoring (edge-1)
+#
+# Each node runs a minimal compose file. No service co-location.
+# Plugin placeholders remain functional on all nodes: static assets served by app node only.
+
+name: audiomonastry
+
+services:
+  # Instance 1 – App only
+  audiomonastry-app:
+    image: audiomonastry:hetzner
+    container_name: audiomonastry-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      ENABLE_SFU: "0"
+      MASTER_PLAYER_URL: ${MASTER_PLAYER_URL:-http://master-1:8000}
+      REDIS_URL: ${REDIS_URL:-}
+      SFU_SIGNALING_URL: ${SFU_SIGNALING_URL:-https://sfu.anunnakitools.de}
+    ports:
+      - "8080:8080"
+    networks:
+      - audiomonastry_net
+
+  caddy-app:
+    image: audiomonastry-caddy-dns:2.9
+    container_name: audiomonastry-caddy-app
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-anunnakitools.de}
+    networks:
+      - audiomonastry_net
+
+  # Instance 2 – SFU + TURN
+  audiomonastry-sfu:
+    image: audiomonastry:hetzner
+    container_name: audiomonastry-sfu
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      ENABLE_SFU: "1"
+      SFU_ANNOUNCED_IP: ${SFU_ANNOUNCED_IP:-}
+      SFU_RTC_MIN_PORT: 40000
+      SFU_RTC_MAX_PORT: 40099
+    ports:
+      - "8080:8080"
+      - "40000-40099:40000-40099/udp"
+      - "40000-40099:40000-40099/tcp"
+    networks:
+      - audiomonastry_net
+
+  caddy-sfu:
+    image: audiomonastry-caddy-dns:2.9
+    container_name: audiomonastry-caddy-sfu
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-sfu.anunnakitools.de}
+    networks:
+      - audiomonastry_net
+
+  coturn:
+    image: coturn/coturn:4.18.0
+    container_name: audiomonastry-coturn
+    network_mode: host
+    restart: unless-stopped
+    command: ["--log-file=stdout","--no-tls","-c","/etc/coturn/turnserver.conf"]
+    volumes:
+      - ./runtime/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    read_only: true
+
+  # Instance 3 – Master player
+  master-player:
+    image: audiomonastry-master-player:hetzner
+    container_name: audiomonastry-master
+    restart: unless-stopped
+    environment:
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    networks:
+      - audiomonastry_net
+
+  # Instance 4 – Edge monitoring
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: audiomonastry-node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /:/rootfs:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    expose:
+      - "9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: audiomonastry-cadvisor
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+    expose:
+      - "8080"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: audiomonastry-prometheus
+    restart: unless-stopped
+    volumes:
+      - prometheus_data:/prometheus
+    expose:
+      - "9090"
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: audiomonastry-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-admin}
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+networks:
+  audiomonastry_net:
+    driver: bridge
+    attachable: true
+
+volumes:
+  prometheus_data:
+  grafana_data:

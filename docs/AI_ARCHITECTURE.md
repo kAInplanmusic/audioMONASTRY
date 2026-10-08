@@ -1,5 +1,10 @@
 # audioMONASTRY – AI-Architektur (Deep Audit, 2026-08-29)
 
+> **⚠️ ÜBERHOLT seit 2026-10-07 (RT-AUDIT-P1-014):** Produkt-AI läuft **nur lokal** (eigene GPU-Flotte/Runpod, Qwen quantisiert).
+> Cloud-Anbieter (Replicate, Hugging Face Inference, Cerebras, OpenRouter, Mistral, PublicAI, Gemini, OpenAI) sind aus dem Code entfernt.
+> Einzige Ausnahme: DeepSeek V4 per `AI_EXTERNAL_LLM_ALLOWLIST` (Notfall/Zweitmeinung). Verbindlich: `docs/audit/AUDIT_2026-10-07_AI_LOKAL.md`.
+> Der Rest dieser Datei ist Historie.
+
 > Verbindliche Zahlen: siehe docs/INFRA_KONSTITUTION.md.
 
 ## Rollen & Zuständigkeiten (final)
@@ -10,7 +15,7 @@
 | Komplexe Reasoning-Tasks | **DeepSeek V4 Pro** | nur wenn Flash nicht reicht |
 | TTS, Gesang, Song-Generierung | **Hugging Face** (MMS-TTS, Bark, MusicGen) | Free-Tier/PRO, spezialisierte Audio-Modelle |
 | Stems (Demucs) | **Replicate** (`ryan5453/demucs`) | Serverless-GPU, ~3–5 Cent/Song, schnell (~25–45 s) |
-| Lokaler Fallback (MOA/Sprachbefehle/TTS) | **Ollama** (`qwen2.5:7b`) auf ai-1 | offline, keine API-Kosten |
+| Lokaler Fallback (MOA/Sprachbefehle/TTS) | *(entfernt)* | offline, keine API-Kosten |
 | Notfall | Gemini/OpenAI | nur `AI_EMERGENCY_PROVIDERS=true` |
 
 **Groq ist entfernt** (Pay-as-you-go-Umstellung offen).
@@ -46,31 +51,25 @@ STEM_AI_PROVIDER=replicate
 REPLICATE_API_TOKEN=r8_...
 REPLICATE_STEM_MODEL=ryan5453/demucs
 
-# Lokale KI (ai-1)
-OLLAMA_URL=http://<ai-1>:11434
-OLLAMA_MODEL=qwen2.5:7b
-
 # Admin/Root
 ADMIN_TOKEN=<langes-zufalls-token>
 ```
 
-## Flotte (5 Hetzner-Rollen: app/sfu/ai/master/edge, ohne GPU)
+## Flotte (4 Hetzner-Rollen: app/sfu/media/edge, ohne GPU)
 
 Typ je Rolle per `FLEET_TYPE_<ROLLE>` überschreibbar; Default-Spalte = CLI-Default
-(`provision-fleet.sh`), der Portal-Worker nutzt für app/sfu/ai `cx33`. Verbindliche
-Tabelle: `docs/SERVER_FLEET.md`.
+(`provision-fleet.sh`), der Portal-Worker liest dieselben Overrides
+(INFRA-HETZNER-007). Verbindliche Tabelle: `docs/SERVER_FLEET.md`.
 
 | # | Instanz | Typ | Rolle |
 |---|---|---|---|
-| 1 | ai-1 | cx23 | Ollama (host-nativ) + Stem-CPU-Fallback |
-| 2 | app-1 | cx23 | App/API/Signaling |
-| 3 | sfu-1 | cx23 | Mediasoup-SFU |
-| 4 | master-1 | cx23 | FFmpeg-Mastering |
-| 5 | edge-1 | cx23 | Monitoring-Stack (nur der Stack), Smoke |
+| 1 | app-1 | cx43 | App/API/Signaling + master-player + TURN, Floating IP |
+| 2 | sfu-1 | cx33 | Mediasoup-SFU (UDP/TCP 40000–40099) |
+| 3 | media-1 | cx43 | R2-Sync-Worker + Audio-Streaming-Cache (lokale NVMe) |
+| 4 | edge-1 | cx23 | Monitoring-Stack (nur der Stack) |
 
-Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7 mit den Portal-Typen 3×cx33 + 2×cx23;
-mit dem CLI-Default 5×cx23 ≈ 30,45 €/Monat, s. `docs/SERVER_FLEET.md` §Kosten) +
-API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
+Kosten: **≈ 0,054 €/h** (~39 €/Monat @24/7 mit den Portal-Typen 2×cx43 + 1×cx33 + 1×cx23,
+s. `docs/SERVER_FLEET.md` §Kosten) + API-Verbrauch (Replicate ~3–5 Cent/Stem-Job).
 
 > **Stand 2026-09-20:** Die frühere Angabe **≈ 0,36 €/h** stammte aus dem
 > CCX33-Altbestand und ist überholt. GPU-Inferenz läuft **nicht** auf diesen
